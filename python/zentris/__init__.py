@@ -1,4 +1,4 @@
-"""Zentris: a Tetris Effect inspired game that plays any playlist."""
+"""Tetris Universe: a Tetris Effect inspired game that plays any playlist."""
 
 from importlib.metadata import PackageNotFoundError, version
 

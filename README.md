@@ -1,4 +1,4 @@
-# Zentris
+# Tetris Universe
 
 A Tetris game inspired by **Tetris Effect** that plays **any music you like**: your own folder or a YouTube
 playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, chorus, drop...) and the game stages

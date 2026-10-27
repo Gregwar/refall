@@ -1,4 +1,4 @@
-// Zentris: a minimalist, music-driven Tetris.
+// Tetris Universe: a minimalist, music-driven Tetris.
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -617,7 +617,7 @@ int App::run() {
     GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
     int ww = opt_.width, wh = opt_.height;
     if (mon) { const GLFWvidmode* vm = glfwGetVideoMode(mon); ww = vm->width; wh = vm->height; }
-    win_ = glfwCreateWindow(ww, wh, "Zentris", mon, nullptr);
+    win_ = glfwCreateWindow(ww, wh, "Tetris Universe", mon, nullptr);
     if (!win_) { std::fprintf(stderr, "could not create an OpenGL 3.3 window\n"); glfwTerminate(); return 1; }
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);

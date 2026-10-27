@@ -1,4 +1,4 @@
-// zenscope: shows what Zentris "hears" in a song — structure (segments, groups), scene levels and
+// zenscope: shows what Tetris Universe "hears" in a song — structure (segments, groups), scene levels and
 // changes, pulse zones, spectrum, loudness / intensity / onsets and the beat grid — while playing it.
 //
 //   zenscope [--song ID|TITLE] [--at SEC] [songs or folders...]   (default: the built-in playlist)
@@ -948,7 +948,7 @@ int Scope::run(int argc, char** argv) {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_SAMPLES, 4);
     if (hidden || shot) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    win_ = glfwCreateWindow(1680, 960, "Zentris - scope", nullptr, nullptr);
+    win_ = glfwCreateWindow(1680, 960, "Tetris Universe - scope", nullptr, nullptr);
     if (!win_) return 1;
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shot ? 0 : 1);
