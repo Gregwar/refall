@@ -1,13 +1,18 @@
 #pragma once
-// CITY's shaders (see city.cpp). Everything is drawn in board units on a flat orthographic view, into an HDR target:
-//  - sky: the gradient, the city's glow on the horizon, a few stars, fog, the searchlights of a peak;
-//  - buildings: instanced rectangles from the back to the front, each one a building with its own grid of small
-//    windows (lit slowly one by one, or switched into a pattern by a drop) and, at a peak, a lit crown;
-//  - tower: the big facade in front, whose 10 x 20 windows are the board (two small textures carry each window's
-//    light, its interior, the ghost), with its piers, its lobby and its crown;
-//  - windows: the previews, small lit windows in the HUD columns;
-//  - dots: additive lights (beacons, traffic, the glow of the lit windows, fireworks, rain, snow, the gauge);
-//  - final: a soft shoulder, sRGB, dim and fade, before the HUD.
+// CITY's shaders (see city.cpp). A 3D night city seen through a shift lens (the board plane z = 0 keeps the layout's
+// pixels), rendered into an HDR target with a depth texture:
+//  - sky: a dark gradient, the city's light pollution on the horizon, clouds lit from below, a few stars;
+//  - ground: the streets far below (sodium lamps, the traffic), in the haze;
+//  - boxes: the buildings (instanced boxes), their faces lit by the night (a dim moon, the sky, the streets' glow
+//    from below), glass reflecting the sky, small windows lit and put out slowly (or switched into the drop's
+//    patterns), lit crowns, all in the haze;
+//  - tower: the facade facing the camera whose 10 x 20 windows are the board: recessed openings (their reveals seen
+//    in perspective), glass reflecting the sky, and behind each one a real room (interior mapping: back wall, side
+//    walls, floor and ceiling traced per pixel, furnished per window, lit by the window's light), the frame lit by
+//    the rooms next to it;
+//  - windows: the previews; dots: beacons, fireworks, rain, snow, the gauge (3D points, depth tested);
+//  - bloom (bright pass, blur), then final: the searchlights' volumetric beams (against the depth), the bloom, a
+//    filmic curve, sRGB, before the HUD.
 
 namespace city_shaders {
 
@@ -19,370 +24,473 @@ float vnoise(vec2 p) {
     return mix(mix(hash12(i), hash12(i + vec2(1, 0)), f.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), f.x), f.y);
 }
 float lumv(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-// A lit room seen through its window (uv 0..1 over the glass, y up). L: the light (color x level, linear), s: the
-// interior (one per piece type), open: 1 for the falling piece (blinds raised: the room itself, brighter).
-vec3 room(vec2 uv, int s, vec3 L, float seed, float t, float open) {
-    float yy = uv.y;
-    vec3 c = L * (0.5 + 0.5 * smoothstep(0.15, 1.0, yy));
-    vec2 lp = vec2(0.22 + 0.56 * fract(seed * 7.31), 0.66);
-    c += L * 0.5 * exp(-dot(uv - lp, uv - lp) * 9.0);
-    c *= 1.0 - 0.5 * (1.0 - smoothstep(0.08, 0.2, yy)); // the floor
-    // a diffuser (blind, curtain, paper): flatter and a little paler than the room
-    vec3 diff = mix(L, vec3(lumv(L)), 0.18) * 1.05;
-    float k = 1.0 - 0.65 * open;
-    if (s == 0) { // I: venetian blinds, light between the slats
-        float f = fract(yy * 6.0 + 0.1);
-        float slat = smoothstep(0.06, 0.16, f) * (1.0 - smoothstep(0.66, 0.78, f));
-        c = mix(c, mix(c * 0.3, diff * 1.1, slat), k);
-    } else if (s == 1) { // O: an open living room, a lamp and a sofa
-        float sx = 0.5 + (seed - 0.5) * 0.3;
-        float sofa = step(0.17, yy) * step(yy, 0.33) * step(abs(uv.x - sx), 0.3);
-        c *= 1.0 - 0.6 * sofa;
-        vec2 q = uv - vec2(lp.x, 0.86);
-        c += L * 0.6 * exp(-dot(q, q) * 40.0);
-    } else if (s == 2) { // T: drapes drawn to both sides
-        float inD = step(uv.x, 0.27) + step(0.73, uv.x);
-        float folds = 0.7 + 0.3 * sin(uv.x * 60.0 + seed * 6.0);
-        c = mix(c, diff * folds * 0.95, inD * k);
-    } else if (s == 3) { // S: vertical blinds
-        float f = fract(uv.x * 5.0);
-        float slat = smoothstep(0.04, 0.14, f) * (1.0 - smoothstep(0.8, 0.92, f));
-        c = mix(c, mix(c * 0.35, diff, slat), k);
-    } else if (s == 4) { // Z: a roller blind half down, its hem
-        float hy = 0.42 + 0.2 * seed;
-        float inB = step(hy, yy);
-        c = mix(c, diff * 1.15, inB * k);
-        c *= 1.0 - 0.7 * k * (1.0 - smoothstep(0.0, 0.035, abs(yy - hy)));
-    } else if (s == 5) { // J: a paper screen on a lattice
-        vec2 g = abs(fract(uv * vec2(2.0, 3.0)) - 0.5);
-        float bar = smoothstep(0.42, 0.46, max(g.x, g.y));
-        c = mix(c, diff * mix(1.05, 0.3, bar), k);
-    } else { // L: an office, a strip light, desks and screens
-        c += L * 0.9 * exp(-pow((yy - 0.86) / 0.05, 2.0)) * step(0.08, uv.x) * step(uv.x, 0.92);
-        float desk = step(0.2, yy) * step(yy, 0.27);
-        float scr = step(0.27, yy) * step(yy, 0.4) * step(0.55, fract(uv.x * 3.0 + seed));
-        c *= 1.0 - 0.55 * desk;
-        c = mix(c, vec3(lumv(L)) * vec3(0.7, 0.9, 1.25) * 1.2, scr * 0.8);
-    }
-    // someone in the room now and then
-    if (s == 1 || s == 2 || s == 6) {
-        float ep = floor(t / 9.0 + seed * 5.0);
-        if (hash12(vec2(seed * 31.0, ep)) < 0.22) {
-            float px = 0.3 + 0.4 * hash12(vec2(ep, seed * 17.0)) + 0.06 * sin(t * 0.35 + seed * 9.0);
-            vec2 hq = uv - vec2(px, 0.6);
-            float head = 1.0 - smoothstep(0.065, 0.08, length(hq));
-            vec2 bq = vec2(max(abs(uv.x - px) - 0.05, 0.0), max(yy - 0.46, 0.0));
-            float body = (1.0 - smoothstep(0.07, 0.085, length(bq))) * step(yy, 0.5);
-            c *= 1.0 - 0.7 * max(head, body);
-        }
-    }
+uniform vec3 uSkyTop, uSkyHor, uGlowCol;
+uniform float uGlowK;
+// the night sky in a direction (no clouds, no stars: for reflections and the haze)
+vec3 skyColor(vec3 d) {
+    float h = d.y;
+    vec3 c = mix(uSkyHor, uSkyTop, smoothstep(-0.02, 0.5, h));
+    c += uGlowCol * uGlowK * exp(-max(h, 0.0) / 0.07);
+    if (h < 0.0) c = mix(c, uSkyHor * 0.5 + uGlowCol * uGlowK * 0.6, smoothstep(0.0, -0.1, h));
     return c;
+}
+)";
+
+// Fullscreen triangle with the world ray.
+inline const char* FULL_VS = R"(#version 330 core
+out vec2 vUv;
+void main() {
+    vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 1.0, 1.0);
 }
 )";
 
 inline const char* SKY_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform vec4 uView;
-uniform vec3 uTop, uMid, uHor, uGlowCol, uFogCol;
-uniform float uHorY, uGlow, uStars, uFog, uTime;
-uniform vec4 uBeam[4];   // origin x, angle from vertical, width, intensity
-uniform vec3 uBeamCol[4];
-uniform float uBridge;
-uniform vec3 uBridgeColor;
-float fbm3(vec2 p) {
+uniform mat4 uInvVP;
+uniform vec3 uEye;
+uniform float uStars, uClouds, uTime;
+uniform vec3 uCloudCol;
+float fbm(vec2 p) {
     float s = 0.0, a = 0.5;
-    for (int i = 0; i < 3; i++) { s += a * vnoise(p); p = p * 2.07 + vec2(17.1, 9.7); a *= 0.5; }
-    return s / 0.875;
+    for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.7); a *= 0.5; }
+    return s / 0.9375;
 }
 void main() {
-    vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    float h = p.y - uHorY;
-    vec3 c = mix(uHor, uMid, smoothstep(0.0, 10.0, h));
-    c = mix(c, uTop, smoothstep(8.0, 24.0, h));
-    c += uGlowCol * uGlow * exp(-max(h, 0.0) / 4.0);
-    if (uStars > 0.0) {
-        vec2 g = p * 2.6;
-        vec2 i = floor(g);
-        float r = hash12(i);
-        if (r > 0.982) {
-            vec2 f = fract(g) - 0.5 - (vec2(hash12(i + 3.1), hash12(i + 7.7)) - 0.5) * 0.6;
-            float s = exp(-dot(f, f) * 500.0) * (0.75 + 0.25 * sin(uTime * (0.6 + r * 2.0) + r * 50.0));
-            c += vec3(0.75, 0.8, 1.0) * s * uStars * smoothstep(6.0, 16.0, h);
+    vec4 w = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+    vec3 d = normalize(w.xyz / w.w - uEye);
+    vec3 c = skyColor(d);
+    if (d.y > 0.01) {
+        vec2 sp = d.xz / d.y;
+        if (uStars > 0.0) {
+            vec2 g = sp * 60.0;
+            vec2 i = floor(g);
+            float r = hash12(i);
+            if (r > 0.992) {
+                vec2 f = fract(g) - 0.5;
+                float s = exp(-dot(f, f) * 60.0) * (0.7 + 0.3 * sin(uTime * (0.5 + r * 2.0) + r * 40.0));
+                c += vec3(0.7, 0.75, 0.9) * s * uStars * smoothstep(0.08, 0.3, d.y) * (1.0 - uClouds * 0.8);
+            }
+        }
+        if (uClouds > 0.0) {
+            // a low deck of clouds lit from below by the city
+            float n = fbm(sp * 1.6 + vec2(uTime * 0.004, 0.0));
+            float cov = smoothstep(0.45, 0.85, n) * uClouds;
+            vec3 cc = uCloudCol * (0.4 + 0.6 * exp(-d.y / 0.15));
+            c = mix(c, cc, cov * smoothstep(0.02, 0.12, d.y));
         }
     }
-    for (int i = 0; i < 4; i++) {
-        if (uBeam[i].w <= 0.001) continue;
-        vec2 o = vec2(uBeam[i].x, uHorY - 2.0);
-        vec2 d = vec2(sin(uBeam[i].y), cos(uBeam[i].y));
-        vec2 v = p - o;
-        float along = dot(v, d);
-        if (along <= 0.0) continue;
-        float perp = abs(dot(v, vec2(-d.y, d.x)));
-        float w = uBeam[i].z * (0.2 + along * 0.05);
-        float k = exp(-perp * perp / (w * w)) * exp(-along / 26.0) * smoothstep(0.0, 3.0, along);
-        c += uBeamCol[i] * k * uBeam[i].w * (0.85 + 0.15 * vnoise(vec2(along * 0.4 - uTime * 0.3, perp)));
-    }
-    if (uFog > 0.0) {
-        float fg = fbm3(vec2(p.x * 0.07 + uTime * 0.008, p.y * 0.3));
-        c = mix(c, uFogCol, clamp(uFog * smoothstep(16.0, -2.0, h) * (0.65 + 0.35 * fg), 0.0, 1.0));
-    }
-    c = mix(c, uBridgeColor, uBridge);
     frag = vec4(c, 1.0);
 }
 )";
 
-// Instanced rectangles (buildings, the tower, previews): a0 = the rectangle (x0, y0, x1, y1), board units.
-inline const char* RECT_VS = R"(#version 330 core
+inline const char* GROUND_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
-layout(location = 1) in vec4 aA0;
-layout(location = 2) in vec4 aA1;
-layout(location = 3) in vec4 aA2;
-layout(location = 4) in vec4 aA3;
 uniform mat4 uVP;
-out vec2 vP;
-out vec2 vUv;
+uniform vec4 uExtent; // x0, z0, x1, z1
+uniform float uY;
+out vec3 vW;
+void main() {
+    vec2 t = aCorner * 0.5 + 0.5;
+    vW = vec3(mix(uExtent.x, uExtent.z, t.x), uY, mix(uExtent.y, uExtent.w, t.y));
+    gl_Position = uVP * vec4(vW, 1.0);
+}
+)";
+inline const char* GROUND_FS = R"(#version 330 core
+in vec3 vW;
+out vec4 frag;
+uniform vec3 uEye, uFogCol, uStreetCol, uAmb;
+uniform float uFogD, uTime, uTraffic, uBlack;
+void main() {
+    vec3 P = vW;
+    float dist = length(P - uEye);
+    const float PITCH = 22.0, ST = 4.0;
+    vec2 g = (P.xz + vec2(11.0, 0.0)) / PITCH;
+    vec2 cell = floor(g);
+    vec2 f = fract(g) * PITCH;
+    vec2 fw = fwidth(P.xz);
+    float far = smoothstep(0.6, 2.0, max(fw.x, fw.y));
+    float sx = smoothstep(ST + fw.x, ST - fw.x, f.x); // a street along z
+    float sz = smoothstep(ST + fw.y, ST - fw.y, f.y); // a street along x
+    float street = max(sx, sz);
+    vec3 c = uAmb * 0.15;
+    // the street lamps' pools along the streets
+    float lampZ = 0.5 + 0.5 * cos(P.z * 0.9);
+    float lampX = 0.5 + 0.5 * cos(P.x * 0.9);
+    vec3 e = uStreetCol * (sx * (0.25 + 0.75 * lampZ * lampZ) + sz * (0.25 + 0.75 * lampX * lampX)) * 0.35;
+    // the traffic on the streets along x: head lights one way, tail lights the other
+    float lane = f.y < ST * 0.5 ? 1.0 : -1.0;
+    float spd = 7.0 + 5.0 * hash12(cell.yy + 3.0);
+    float u = P.x / 6.0 - lane * uTime * spd / 6.0 + hash12(cell.yy) * 9.0;
+    float car = step(hash12(vec2(floor(u), cell.y * 7.0 + lane)), 0.35 * uTraffic);
+    float shape = smoothstep(0.5, 0.2, abs(fract(u) - 0.5)) * smoothstep(0.8, 0.3, abs(f.y - ST * (lane > 0.0 ? 0.25 : 0.75)));
+    vec3 carCol = lane > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.08, 0.03);
+    e += carCol * car * shape * sz * 1.2;
+    // the cross streets' traffic, along z
+    float lz = f.x < ST * 0.5 ? 1.0 : -1.0;
+    float uz = P.z / 6.0 - lz * uTime * 8.0 / 6.0 + hash12(cell.xx) * 9.0;
+    float carz = step(hash12(vec2(floor(uz), cell.x * 5.0 + lz)), 0.25 * uTraffic);
+    float shz = smoothstep(0.5, 0.2, abs(fract(uz) - 0.5)) * smoothstep(0.8, 0.3, abs(f.x - ST * (lz > 0.0 ? 0.25 : 0.75)));
+    e += (lz > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.08, 0.03)) * carz * shz * sx;
+    // far away: the average glow of the streets
+    e = mix(e, uStreetCol * 0.12 * (ST * 2.0 / PITCH), far);
+    e *= 1.0 - uBlack * 0.8;
+    float fog = 1.0 - exp(-dist * uFogD);
+    c = mix(c, uFogCol, fog) + e * (1.0 - 0.75 * fog);
+    frag = vec4(c, 1.0);
+}
+)";
+
+// Instanced boxes. a0 = center x, center z, half width, half depth; a1 = y0, y1, seed, style (0 glass, 1 stone,
+// 2 solid: masts, crane); a2 = lit factor, crown, patterned, quiet; a3 = body albedo, reflectivity
+inline const char* BOX_VS = R"(#version 330 core
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNor;
+layout(location = 2) in vec4 aA0;
+layout(location = 3) in vec4 aA1;
+layout(location = 4) in vec4 aA2;
+layout(location = 5) in vec4 aA3;
+uniform mat4 uVP;
+out vec3 vW;
+out vec3 vN;
 flat out vec4 vA0, vA1, vA2, vA3;
 void main() {
     vA0 = aA0; vA1 = aA1; vA2 = aA2; vA3 = aA3;
-    vec2 t = aCorner * 0.5 + 0.5;
-    vUv = t;
-    vP = mix(aA0.xy, aA0.zw, t);
-    gl_Position = uVP * vec4(vP, 0.0, 1.0);
+    vec3 p = vec3(aA0.x + aPos.x * aA0.z, mix(aA1.x, aA1.y, aPos.y * 0.5 + 0.5), aA0.y + aPos.z * aA0.w);
+    vW = p;
+    vN = aNor;
+    gl_Position = uVP * vec4(p, 1.0);
 }
 )";
-
-// a1 = body (rgb), haze; a2 = window light (rgb), lit fraction; a3 = seed, style, layer, crown
-// styles: 0 flat top, 1 setback, 2 slanted top, 3 solid (masts, crane), 4 pointed spire
-inline const char* BLDG_FS = R"(#version 330 core
-in vec2 vP;
-in vec2 vUv;
+inline const char* BOX_FS = R"(#version 330 core
+in vec3 vW;
+in vec3 vN;
 flat in vec4 vA0, vA1, vA2, vA3;
 out vec4 frag;
-uniform vec3 uHaze;
-uniform float uTime, uDropK, uPatEpoch, uPatPhase, uBlack, uFlash, uSnow, uStreetY;
+uniform vec3 uEye, uMoonDir, uMoonCol, uAmb, uUpCol, uFogCol, uCityLight, uDropA, uDropB, uCrownCol, uSnowCol;
+uniform float uFogD, uTime, uLitFrac, uDropK, uPatEpoch, uPatPhase, uBlack, uFlash, uSnow, uGroundY;
 uniform float uEq[8];
-uniform vec3 uDropA, uDropB, uCrownCol, uSnowCol;
-uniform float uBridge;
-uniform vec3 uBridgeColor;
+uniform vec4 uQuiet[2]; // the HUD's columns, in pixels (gl_FragCoord): the windows there are dimmer
 void main() {
-    vec2 p = vP;
-    vec2 r0 = vA0.xy, r1 = vA0.zw;
-    float W = r1.x - r0.x, H = r1.y - r0.y;
-    int st = int(vA3.y + 0.5);
-    int layer = int(vA3.z + 0.5);
-    float top = r1.y;
-    if (st == 1) {
-        float sb = r1.y - min(1.4, H * 0.14);
-        if (p.y > sb && (p.x < r0.x + W * 0.2 || p.x > r1.x - W * 0.2)) discard;
-        if (p.y <= sb) top = sb;
-    } else if (st == 2) {
-        float cut = r1.y - 1.1 * (p.x - r0.x) / max(W, 0.1);
-        if (p.y > cut) discard;
-        top = cut;
-    } else if (st == 4) {
-        float sh = min(2.5, H * 0.3);
-        if (p.y > r1.y - sh) {
-            float half = W * 0.5 * (r1.y - p.y) / sh;
-            if (abs(p.x - (r0.x + r1.x) * 0.5) > half) discard;
-        }
-        top = r1.y - sh;
+    vec3 n = normalize(vN);
+    vec3 V = normalize(vW - uEye);
+    float dist = length(vW - uEye);
+    float seed = vA1.z;
+    int st = int(vA1.w + 0.5);
+    vec3 alb = vA3.rgb;
+    float H = vA1.y - vA1.x;
+    float quiet = 1.0;
+    for (int i = 0; i < 2; i++) {
+        vec2 q = gl_FragCoord.xy;
+        vec4 r = uQuiet[i];
+        float k = smoothstep(r.x - 40.0, r.x + 10.0, q.x) * smoothstep(r.z + 40.0, r.z - 10.0, q.x) *
+                  smoothstep(r.y - 40.0, r.y + 10.0, q.y) * smoothstep(r.w + 40.0, r.w - 10.0, q.y);
+        quiet = min(quiet, 1.0 - 0.6 * k * vA2.w);
     }
-    vec3 body = vA1.rgb * (0.85 + 0.25 * smoothstep(r0.y, r1.y, p.y));
-    float haze = vA1.a;
-    vec3 light = vec3(0.0);
-    if (st != 3) {
-        vec2 sp = layer == 0 ? vec2(0.42, 0.5) : (layer == 1 ? vec2(0.32, 0.36) : vec2(0.24, 0.27));
-        float mx = sp.x * 0.45;
-        vec2 o = vec2(r0.x + mx, uStreetY);
-        vec2 q = (p - o) / sp;
+    // the night's light on a face: the sky above, a dim moon, the streets' glow from below
+    float up = exp(-max(vW.y - uGroundY, 0.0) / 30.0);
+    vec3 lightIn = uAmb * (0.6 + 0.4 * n.y) + uMoonCol * max(dot(n, uMoonDir), 0.0) + uUpCol * up * (0.5 - 0.5 * n.y);
+    vec3 c;
+    vec3 emit = vec3(0.0);
+    if (n.y > 0.5) {
+        c = alb * 0.6 * lightIn;
+        vec2 e = vec2(vA0.z - abs(vW.x - vA0.x), vA0.w - abs(vW.z - vA0.y));
+        float edge = smoothstep(0.5, 0.0, min(e.x, e.y));
+        emit += uCrownCol * vA2.y * edge * 2.0;
+        if (uSnow > 0.0) c = mix(c, uSnowCol * (0.5 + lightIn), uSnow * 0.9);
+    } else if (n.y < -0.5 || st == 2) {
+        c = alb * lightIn;
+    } else {
+        float u = abs(n.x) > 0.5 ? vW.z : vW.x;
+        float v = vW.y - vA1.x;
+        float bay = mix(0.9, 1.5, fract(seed * 7.7));
+        vec2 q = vec2(u / bay, v);
         vec2 id = floor(q);
         vec2 f = fract(q);
-        vec2 aa = fwidth(q) * 0.8;
-        // the building's windows: punched, ribbons along the floors, or tall slots
-        int ws = int(fract(vA3.x * 3.31) * 3.0);
-        vec2 lo = ws == 0 ? vec2(0.3, 0.32) : (ws == 1 ? vec2(0.05, 0.36) : vec2(0.36, 0.14));
+        vec2 fw = fwidth(q);
+        int ws = int(fract(seed * 3.31) * 3.0);
+        vec2 lo = ws == 0 ? vec2(0.16, 0.2) : (ws == 1 ? vec2(0.03, 0.24) : vec2(0.3, 0.12));
+        if (st == 1) lo = vec2(0.28, 0.26);
         vec2 hi = vec2(1.0) - lo;
-        vec2 m2 = smoothstep(lo - aa, lo + aa, f) * (1.0 - smoothstep(hi - aa, hi + aa, f));
-        float inW = m2.x * m2.y;
-        float cols = floor((W - 2.0 * mx) / sp.x);
-        inW *= step(0.0, id.x) * step(id.x, cols - 1.0) * step(p.y, top - sp.y * 0.55) * step(0.0, id.y);
-        if (inW > 0.0) {
-            float s = vA3.x;
-            vec2 key = id + vec2(s * 37.0, s * 11.0);
-            float h = hash12(key);
-            float per = 22.0 + 55.0 * h;
-            float ep = floor((uTime + h * per) / per);
-            float lit = step(hash12(key * 1.37 + ep * 3.7), vA2.w);
-            vec3 wc = vA2.rgb * (0.55 + 0.7 * hash12(key + ep * 3.1));
-            if (hash12(key * 2.1 + ep) < 0.22) wc = vec3(lumv(wc)) * vec3(0.72, 0.88, 1.15);
-            if (uDropK > 0.001) {
-                float rows = max(1.0, floor((top - sp.y * 0.55 - uStreetY) / sp.y));
-                int pat = int(mod(floor(s * 7.0) + uPatEpoch, 5.0));
-                float on;
-                if (pat == 0) on = mod(id.y + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
-                else if (pat == 1) on = mod(id.x + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
-                else if (pat == 2) on = mod(id.x + id.y + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
-                else if (pat == 3) on = id.y < uEq[int(mod(floor(s * 13.0), 8.0))] * rows ? 1.0 : 0.0;
-                else on = mod(id.x + id.y - uPatPhase * 2.0, 4.0) < 1.5 ? 1.0 : 0.0;
-                vec3 dc = mod(floor(s * 5.0), 2.0) < 1.0 ? uDropA : uDropB;
-                // the near buildings and some of the blocks behind switch into the pattern, the rest keep their
-                // scattered windows in the drop's colors
-                bool patterned = layer == 0 || (layer == 1 && fract(s * 5.7) < 0.4);
-                if (patterned) lit = mix(lit, on, uDropK);
-                wc = mix(wc, dc * (patterned ? 1.0 + 1.2 * uFlash : 0.8 + 0.6 * uFlash), uDropK * (patterned ? 1.0 : 0.75));
-            }
-            light = wc * lit * inW * (1.0 - uBlack);
-            body *= 1.0 - 0.3 * inW;
+        vec2 m = smoothstep(lo - fw, lo + fw, f) * (1.0 - smoothstep(hi - fw, hi + fw, f));
+        float win = m.x * m.y;
+        float tiny = smoothstep(0.2, 0.55, max(fw.x, fw.y));
+        float area = (hi.x - lo.x) * (hi.y - lo.y);
+        win = mix(win, area, tiny);
+        win *= step(v, H - 0.8);
+        vec2 key = id + vec2(seed * 37.0, seed * 11.0) + n.xz * 13.0;
+        float h = hash12(key);
+        float per = 22.0 + 55.0 * h;
+        float ep = floor((uTime + h * per) / per);
+        float frac = uLitFrac * vA2.x;
+        float lit = mix(step(hash12(key * 1.37 + ep * 3.7), frac), frac, tiny);
+        vec3 wc = uCityLight * (0.5 + 0.8 * hash12(key + ep * 3.1));
+        if (hash12(key * 2.1 + ep) < 0.22) wc = vec3(lumv(wc)) * vec3(0.72, 0.88, 1.15);
+        if (uDropK > 0.001) {
+            float rows = max(1.0, floor(H - 0.8));
+            int pat = int(mod(floor(seed * 7.0) + uPatEpoch, 5.0));
+            float on;
+            if (pat == 0) on = mod(id.y + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
+            else if (pat == 1) on = mod(id.x + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
+            else if (pat == 2) on = mod(id.x + id.y + uPatPhase, 2.0) < 1.0 ? 1.0 : 0.0;
+            else if (pat == 3) on = id.y < uEq[int(mod(floor(seed * 13.0), 8.0))] * rows ? 1.0 : 0.0;
+            else on = mod(id.x + id.y - uPatPhase * 2.0, 4.0) < 1.5 ? 1.0 : 0.0;
+            on = mix(on, 0.5, tiny);
+            vec3 dc = mod(floor(seed * 5.0), 2.0) < 1.0 ? uDropA : uDropB;
+            bool patterned = vA2.z > 0.5;
+            if (patterned) lit = mix(lit, on, uDropK);
+            wc = mix(wc, dc * (patterned ? 0.45 + 0.6 * uFlash : 0.35 + 0.3 * uFlash), uDropK * (patterned ? 1.0 : 0.75));
         }
+        // the room behind: brighter under its ceiling
+        float room = mix(0.75 + 0.5 * smoothstep(0.3, 0.8, f.y), 1.0, tiny);
+        emit += wc * lit * win * room * (1.0 - uBlack) * quiet;
+        // the face: glass (dark, reflecting the sky) or stone, the unlit windows darker
+        vec3 body = alb * lightIn;
+        vec3 R = reflect(V, n);
+        float fres = 0.04 + 0.96 * pow(1.0 - max(dot(-V, n), 0.0), 5.0);
+        float refl = vA3.a * (st == 0 ? 1.0 : 0.25);
+        vec3 glass = alb * 0.25 * lightIn;
+        c = mix(body, glass, win) + skyColor(R) * fres * refl * (1.0 - lit * win) * mix(1.0, 1.6, win);
+        // a floor's slab line on glass towers
+        if (st == 0) c *= 1.0 - 0.3 * smoothstep(0.06, 0.0, abs(f.y - 0.04)) * (1.0 - tiny);
+        if (uSnow > 0.0 && st == 1) c = mix(c, uSnowCol * lightIn * 2.0, uSnow * 0.6 * smoothstep(0.05, 0.0, abs(f.y - lo.y + 0.03)) * m.x * (1.0 - tiny));
     }
-    if (vA3.w > 0.001 && st != 3) {
-        float e = smoothstep(0.09, 0.0, abs(top - 0.045 - p.y));
-        light += uCrownCol * vA3.w * e * (1.0 - uBlack);
-    }
-    if (uSnow > 0.0 && st != 3) body = mix(body, uSnowCol, uSnow * smoothstep(0.09, 0.02, top - p.y));
-    vec3 c = mix(body, uHaze, haze) + light * (1.0 - 0.6 * haze);
-    c = mix(c, uBridgeColor, uBridge);
+    float fog = 1.0 - exp(-dist * uFogD);
+    c = mix(c, uFogCol, fog) + emit * (1.0 - 0.7 * fog);
     frag = vec4(c, 1.0);
 }
 )";
 
-// The tower: the facade whose windows are the board.
+// The tower's facade: a quad on the board plane (z = 0). a0 = rectangle (x0, y0, x1, y1).
+inline const char* TOWER_VS = R"(#version 330 core
+layout(location = 0) in vec2 aCorner;
+uniform mat4 uVP;
+uniform vec4 uRect;
+out vec3 vW;
+void main() {
+    vec2 t = aCorner * 0.5 + 0.5;
+    vW = vec3(mix(uRect.xy, uRect.zw, t), 0.0);
+    gl_Position = uVP * vec4(vW, 1.0);
+}
+)";
 inline const char* TOWER_FS = R"(#version 330 core
-in vec2 vP;
-in vec2 vUv;
-flat in vec4 vA0, vA1, vA2, vA3;
+in vec3 vW;
 out vec4 frag;
-uniform sampler2D uCellA; // 10 x 20 (row 0 at the top): rgb the window's light (color x level), a style + 1 (0: dark)
-uniform sampler2D uCellB; // r ghost, g falling, b seed
-uniform vec3 uFrame, uGlass, uReflTop, uReflBot, uReflLights, uGhostCol, uPierCol, uCrownCol, uLobby, uSnowCol;
-uniform float uMull, uSpand, uRecess, uReflK, uSpill, uPier, uCrown, uSnow, uRain, uTime, uChase;
+uniform sampler2D uCellA; // 10 x 20 (row 0 at the top): rgb the window's light (color x level)
+uniform sampler2D uCellB; // r ghost, g falling
+uniform vec3 uEye, uFrame, uGlassTint, uGhostCol, uPierCol, uCrownCol, uAmb, uUpCol, uMoonCol, uMoonDir, uSnowCol, uReflCity;
+uniform vec3 uFlood;
+uniform float uFrameLight, uMull, uSpand, uRecess, uReflK, uPier, uCrown, uSnow, uRain, uTime, uChase, uRoomAmb, uGroundY;
 uniform vec4 uContact[4];  // x0, x1, y, intensity
 uniform vec3 uContactCol[4];
+uniform vec3 uChaseCol[7];
 uniform float uBridge;
 uniform vec3 uBridgeColor, uBridgeInk;
-uniform vec3 uChaseCol[7];
 
-float boxSd(vec2 p, vec2 c, vec2 h) { vec2 d = abs(p - c) - h; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
-
-vec3 glassAt(vec2 p, vec2 uv, float seed) {
-    vec3 refl = mix(uReflBot, uReflTop, clamp(uv.y * 0.35 + (p.y + 11.0) / 26.0, 0.0, 1.0));
-    float sheen = 0.5 + 0.5 * sin(p.x * 0.32 + p.y * 0.11 + 1.3);
-    vec3 c = uGlass + refl * uReflK * (0.55 + 0.45 * sheen);
-    vec2 g = p * vec2(1.6, 2.2) + vec2(3.1, 1.7);
+// what the glass reflects: the sky, and the city behind the camera (dark blocks, a few lights) below the horizon
+vec3 reflection(vec3 R) {
+    vec3 c = skyColor(R);
+    // the city behind the camera: towers against the glow, their windows
+    float bl = smoothstep(0.1, 0.0, R.y - 0.12 * vnoise(vec2(R.x * 5.0, 1.0)));
+    c = mix(c, uAmb * 0.5 + uGlowCol * uGlowK * 0.15, bl * 0.8);
+    vec2 g = vec2(R.x / max(0.05, R.z), R.y / max(0.05, R.z)) * vec2(16.0, 26.0);
     vec2 i = floor(g);
     vec2 f = fract(g) - 0.5;
     float r = hash12(i);
-    if (r > 0.88) c += uReflLights * exp(-dot(f, f) * 90.0) * (r - 0.88) * 6.0;
-    c *= 0.85 + 0.3 * seed;
-    if (uRain > 0.0) {
-        float s = vnoise(vec2(p.x * 26.0, p.y * 1.3 + uTime * 1.6));
-        c += (refl * 0.5 + uReflLights * 0.3) * uRain * smoothstep(0.72, 0.95, s);
-    }
+    if (r > 0.72) c += uReflCity * bl * exp(-dot(f, f) * 40.0) * (r - 0.72) * 2.5;
     return c;
 }
 
+// The furnished room behind a window, traced per pixel (interior mapping). Q: the point on the glass, r: the view
+// ray, (lo, hi): the room's box. kind: 0 office, 1 flat, 2 hotel; t: the window's own seed.
+vec3 roomAt(vec3 Q, vec3 r, vec3 lo, vec3 hi, vec3 L, int kind, float s, float amb) {
+    if (abs(r.x) < 1e-5) r.x = 1e-5;
+    if (abs(r.y) < 1e-5) r.y = 1e-5;
+    vec3 tt = vec3((r.x > 0.0 ? hi.x - Q.x : lo.x - Q.x) / r.x,
+                   (r.y > 0.0 ? hi.y - Q.y : lo.y - Q.y) / r.y,
+                   (lo.z - Q.z) / r.z);
+    float t = min(tt.x, min(tt.y, tt.z));
+    vec3 H = Q + r * t;
+    vec3 sz = hi - lo;
+    vec3 u = (H - lo) / sz; // 0..1 in the room
+    int surf = t == tt.z ? 0 : (t == tt.x ? 1 : (r.y < 0.0 ? 2 : 3)); // back, side, floor, ceiling
+    // the lamp: a ceiling light (office, hotel) or a floor lamp in a corner (flat)
+    vec3 lamp = kind == 1 ? vec3(mix(lo.x, hi.x, 0.2 + 0.6 * fract(s * 7.31)), lo.y + sz.y * 0.55, mix(lo.z, hi.z, 0.3))
+                          : vec3(mix(lo.x, hi.x, 0.5), hi.y - 0.02, mix(lo.z, hi.z, 0.5));
+    vec3 dl = lamp - H;
+    float d2 = dot(dl, dl);
+    float alb = surf == 0 ? 0.75 : (surf == 1 ? 0.6 : (surf == 2 ? 0.3 : 0.85));
+    float k = 0.18 + 1.4 / (1.0 + d2 * 7.0);
+    float dark = 1.0;
+    vec3 add = vec3(0.0);
+    if (kind == 0) {
+        // an office: strip lights on the ceiling, desks and screens against the back wall
+        if (surf == 3) add += L * 2.2 * smoothstep(0.08, 0.03, abs(fract(u.z * 2.0) - 0.5)) * step(0.1, u.x) * step(u.x, 0.9);
+        if (surf == 0 && u.y < 0.32 && u.y > 0.24) dark = 0.35;
+        if (surf == 0 && u.y > 0.32 && u.y < 0.46 && fract(u.x * 2.5 + s) < 0.5)
+            add += vec3(lumv(L)) * vec3(0.6, 0.85, 1.3) * 0.9;
+        if (surf == 2) dark = 0.6 + 0.4 * step(0.5, fract(u.x * 3.0 + u.z * 0.0));
+    } else if (kind == 1) {
+        // a flat: a sofa against the back wall, a picture, the lamp's shade glowing
+        float sx = 0.5 + (fract(s * 3.7) - 0.5) * 0.3;
+        if (surf == 0 && u.y < 0.3 && abs(u.x - sx) < 0.3) dark = 0.3;
+        if (surf == 0 && abs(u.y - 0.62) < 0.1 && abs(u.x - (1.0 - sx)) < 0.12) dark = 0.45;
+        if (surf == 1) dark = 0.75 + 0.25 * step(0.5, fract(u.y * 4.0 + s)); // shelves
+        if (surf == 2) dark = 0.75;
+        vec3 sh = H - (lamp + vec3(0.0, 0.12, 0.0));
+        add += L * 1.6 * exp(-dot(sh, sh) * 90.0);
+    } else {
+        // a hotel room: a bed's head against the back wall, a warm ceiling light
+        if (surf == 0 && u.y < 0.36 && abs(u.x - 0.5) < 0.35) dark = 0.45;
+        if (surf == 0 && u.y < 0.5 && u.y > 0.36 && abs(u.x - 0.5) < 0.35) dark = 0.7;
+        if (surf == 3) add += L * 1.5 * exp(-dot(u.xz - 0.5, u.xz - 0.5) * 40.0);
+    }
+    vec3 lit = L * (alb * k * dark) + add;
+    // a little light from outside, the corner shading
+    float ao = 0.7 + 0.3 * smoothstep(0.0, 0.15, min(min(u.x, 1.0 - u.x), min(u.y, 1.0 - u.y)));
+    return lit * ao + vec3(amb) * alb * dark;
+}
+
 void main() {
-    vec2 p = vP;
+    vec3 P = vW;
+    vec3 r = normalize(P - uEye);
     vec3 c;
-    float px = fwidth(p.x);
-    if (abs(p.x) > 5.5) discard;
-    if (p.y > 11.1) {
-        bool box = p.x > -3.4 && p.x < 0.4 && p.y < 11.75;
-        bool mast = abs(p.x - 2.6) < 0.06 + 0.03 * step(p.y, 11.5) && p.y < 13.5;
+    float px = fwidth(P.x);
+    if (abs(P.x) > 5.5) discard;
+    float up = exp(-max(P.y - uGroundY, 0.0) / 30.0);
+    vec3 lightIn = (uAmb + uMoonCol * max(uMoonDir.z, 0.0) + uUpCol * up * 0.5) * uFrameLight
+                 + uFlood * (0.35 + 0.65 * smoothstep(12.0, -12.0, P.y));
+    if (P.y > 11.1) {
+        bool box = P.x > -3.4 && P.x < 0.4 && P.y < 11.75;
+        bool mast = abs(P.x - 2.6) < 0.06 + 0.03 * step(P.y, 11.5) && P.y < 14.5;
         if (!box && !mast) discard;
-        c = uFrame * (box ? 0.55 : 0.45);
-        if (box) c += uCrownCol * uCrown * 0.6 * smoothstep(0.06, 0.0, 11.75 - p.y);
-    } else if (p.y > 10.0) {
-        if (p.y < 10.2) c = uFrame * 0.9;
-        else if (p.y < 10.95) {
-            float l = fract(p.y * 12.0);
-            c = uFrame * mix(0.45, 0.9, smoothstep(0.2, 0.5, l) * (1.0 - smoothstep(0.75, 0.95, l)));
-            c += uCrownCol * 0.04 * uCrown;
+        c = uFrame * lightIn * (box ? 0.7 : 0.6);
+        if (box) c += uCrownCol * uCrown * 0.6 * smoothstep(0.06, 0.0, 11.75 - P.y);
+    } else if (P.y > 10.0) {
+        if (P.y < 10.2) c = uFrame * lightIn;
+        else if (P.y < 10.95) {
+            float l = fract(P.y * 12.0);
+            c = uFrame * lightIn * mix(0.35, 1.1, smoothstep(0.2, 0.5, l) * (1.0 - smoothstep(0.75, 0.95, l)));
+            c += uCrownCol * 0.03 * uCrown;
         } else {
-            c = uFrame * 1.05;
-            c += uCrownCol * uCrown * smoothstep(0.05, 0.0, abs(p.y - 11.02));
+            c = uFrame * lightIn * 1.2;
+            c += uCrownCol * uCrown * smoothstep(0.05, 0.0, abs(P.y - 11.02));
         }
-        if (uSnow > 0.0) c = mix(c, uSnowCol, uSnow * smoothstep(0.06, 0.0, 11.1 - p.y));
-    } else if (p.y < -10.0) {
-        if (p.y > -10.28) c = uFrame * 0.9;
-        else {
-            float m = abs(fract((p.x + 5.5) / 1.375) - 0.5) * 1.375;
-            float mull = smoothstep(0.05, 0.03, m);
-            c = uLobby * (0.55 + 0.45 * smoothstep(-11.8, -10.5, p.y));
-            c = mix(c, uFrame * 0.7, mull);
-        }
-    } else if (abs(p.x) > 5.0) {
+        if (uSnow > 0.0) c = mix(c, uSnowCol * lightIn * 3.0, uSnow * smoothstep(0.06, 0.0, 11.1 - P.y));
+    } else if (P.y < -10.0) {
+        // a plant floor under the board: louvres, then the facade going on down
+        float l = fract(P.y * 12.0);
+        c = uFrame * lightIn * mix(0.35, 1.0, smoothstep(0.2, 0.5, l) * (1.0 - smoothstep(0.75, 0.95, l)));
+        c *= smoothstep(-13.0, -10.2, P.y) * 0.6 + 0.4;
+    } else if (abs(P.x) > 5.0) {
         // the piers: stone, a vertical light strip in each
-        float ax = abs(p.x);
-        c = uFrame * (1.05 + 0.1 * smoothstep(5.5, 5.0, ax));
-        float strip = smoothstep(0.045, 0.015, abs(ax - 5.25));
+        float ax = abs(P.x);
+        c = uFrame * lightIn * 1.25;
+        float strip = smoothstep(0.04, 0.012, abs(ax - 5.25));
         vec3 sc = uPierCol * uPier;
         if (uChase > 0.001) {
-            int k = int(mod(floor((p.y + 10.0) / 2.0) - uTime * 6.0, 7.0));
+            int k = int(mod(floor((P.y + 10.0) / 2.0) - uTime * 6.0, 7.0));
             sc += uChaseCol[k] * uChase * 1.5;
         }
         c += sc * strip;
-        // the light of the floors next to it
-        vec2 tc = vec2(p.x < 0.0 ? 0.5 / 10.0 : 9.5 / 10.0, (10.0 - p.y) / 20.0);
-        c += texture(uCellA, tc).rgb * uSpill * 0.35 * smoothstep(5.5, 5.0, ax);
+        vec2 tc = vec2(P.x < 0.0 ? 0.5 / 10.0 : 9.5 / 10.0, (10.0 - P.y) / 20.0);
+        c += texture(uCellA, tc).rgb * 0.06 * smoothstep(5.5, 5.0, ax);
     } else {
-        int col = clamp(int(floor(p.x + 5.0)), 0, 9);
-        int row = clamp(int(floor(10.0 - p.y)), 0, 19);
+        int col = clamp(int(floor(P.x + 5.0)), 0, 9);
+        int row = clamp(int(floor(10.0 - P.y)), 0, 19);
         vec2 ctr = vec2(float(col) - 4.5, 9.5 - float(row));
-        vec2 lp = p - ctr;
-        vec4 A = texelFetch(uCellA, ivec2(col, row), 0);
+        vec2 lp = P.xy - ctr;
+        vec3 A = texelFetch(uCellA, ivec2(col, row), 0).rgb;
         vec4 B = texelFetch(uCellB, ivec2(col, row), 0);
+        // the window: an opening in the frame, the glass set back in it
         float gx = 0.5 - uMull * 0.5;
         float gt = 0.5 - uSpand * 0.3, gb = -(0.5 - uSpand * 0.7);
-        vec2 gc = vec2(0.0, (gt + gb) * 0.5), gh = vec2(gx, (gt - gb) * 0.5);
-        float sd = boxSd(lp, gc, gh);
-        float inG = 1.0 - smoothstep(-px * 0.7, px * 0.7, sd);
-        vec2 uv = (lp - (gc - gh)) / (2.0 * gh);
-        // the frame: mullions and spandrels, lit by the rooms next to it
-        vec3 fr = uFrame;
-        float spd = smoothstep(gb - 0.02, gb - 0.06, lp.y); // the spandrel band, a shade darker
-        fr *= 1.0 - 0.12 * spd;
-        fr *= 1.0 - 0.4 * uRecess * smoothstep(0.1, 0.0, sd); // a deep reveal around the window
-        vec3 spill = texture(uCellA, vec2((p.x + 5.0) / 10.0, (10.0 - p.y) / 20.0)).rgb;
-        fr += spill * uSpill * (0.35 + 0.65 * smoothstep(0.12, 0.0, sd));
-        if (uSnow > 0.0) fr = mix(fr, uSnowCol, uSnow * smoothstep(0.035, 0.0, abs(lp.y - (gb - 0.03))) * step(0.0, gx - abs(lp.x) + 0.04));
-        // the glass: a lit room or a dark pane
-        vec3 g;
-        int st = int(A.a + 0.5) - 1;
-        float seed = B.b;
-        if (st >= 0) {
-            g = room(uv, st, A.rgb, seed, uTime, B.g);
-            // a deep-set window: the top of the room in the frame's shadow
-            g *= 1.0 - uRecess * 0.6 * smoothstep(0.75, 1.0, uv.y);
-            g += uGlass * 0.2;
-        } else {
-            g = glassAt(p, uv, seed);
-            g *= 1.0 - uRecess * 0.5 * smoothstep(0.7, 1.0, uv.y);
+        vec2 oc = vec2(0.0, (gt + gb) * 0.5), oh = vec2(gx, (gt - gb) * 0.5);
+        vec2 d = abs(lp - oc) - oh;
+        float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+        float inO = 1.0 - smoothstep(-px * 0.7, px * 0.7, sd);
+        // each floor its use (offices, flats, a hotel), each window its own furnishings and blinds
+        float fs = hash12(vec2(floor(float(row) / 3.0) * 1.7 + 0.3, 5.1));
+        int kind = fs < 0.4 ? 0 : (fs < 0.8 ? 1 : 2);
+        float s = hash12(vec2(float(col) * 3.1 + 0.7, float(row) * 1.9 + 0.2));
+        // the frame: mullions and spandrels, a sill under each window lit by its room
+        vec3 fr = uFrame * lightIn;
+        float sill = smoothstep(gb - 0.09, gb - 0.06, lp.y) * smoothstep(gb + 0.005, gb - 0.02, lp.y) * step(abs(lp.x), gx + 0.04);
+        fr *= 1.0 + 0.5 * sill;
+        vec3 spill = texture(uCellA, vec2((P.x + 5.0) / 10.0, (10.0 - P.y) / 20.0)).rgb;
+        fr += spill * 0.05 + A * 0.35 * sill + A * 0.18 * smoothstep(0.1, 0.0, sd);
+        fr += reflection(reflect(r, vec3(0.0, 0.0, 1.0))) * 0.06 * uReflK;
+        if (uSnow > 0.0) fr = mix(fr, uSnowCol * (lightIn * 3.0 + A * 0.5), uSnow * sill);
+        vec3 g = vec3(0.0);
+        if (inO > 0.0) {
+            // the reveal: the depth of the opening, seen in perspective
+            float rd = 0.05 + 0.28 * uRecess;
+            vec3 Q = P + r * (rd / -r.z);
+            vec2 ql = Q.xy - ctr - oc;
+            if (abs(ql.x) > oh.x || abs(ql.y) > oh.y) {
+                vec3 rv = uFrame * lightIn * 0.6 + A * 0.4;
+                if (ql.y > oh.y) rv *= 0.5; // the head of the opening, in its own shadow
+                g = rv;
+            } else {
+                vec2 uv = ql / (2.0 * oh) + 0.5;
+                vec3 lo = vec3(ctr.x - 0.49, ctr.y - 0.47, -rd - 1.3);
+                vec3 hi = vec3(ctr.x + 0.49, ctr.y + 0.48, -rd);
+                bool on = lumv(A) > 0.0005;
+                vec3 Lr = A + uGhostCol * B.r * 0.08;
+                vec3 room = roomAt(Q, r, lo, hi, Lr, kind, s, uRoomAmb);
+                // what hangs at the glass: blinds, drapes, a roller blind, a sheer, or nothing
+                float tsel = kind == 0 ? (s < 0.6 ? 0.0 : 5.0) : floor(s * 5.0);
+                vec3 diff = (A + uGhostCol * B.r * 0.08) * 0.75 + vec3(uRoomAmb) * 0.6;
+                if (tsel == 1.0) { // venetian blinds over the top part
+                    float cov = 0.35 + 0.5 * fract(s * 13.0);
+                    float sl = smoothstep(0.1, 0.25, fract(uv.y * 9.0)) * (1.0 - smoothstep(0.65, 0.8, fract(uv.y * 9.0)));
+                    if (uv.y > 1.0 - cov) room = mix(room * 0.25, diff * 1.1, sl);
+                } else if (tsel == 2.0) { // drapes at both sides
+                    float w = 0.18 + 0.12 * fract(s * 17.0);
+                    float inD = step(uv.x, w) + step(1.0 - w, uv.x);
+                    room = mix(room, diff * (0.65 + 0.35 * sin(uv.x * 70.0 + s * 9.0)), inD);
+                } else if (tsel == 3.0) { // a roller blind half down
+                    float hy = 0.35 + 0.4 * fract(s * 23.0);
+                    room = mix(room, diff * 1.05, step(hy, uv.y));
+                    room *= 1.0 - 0.6 * smoothstep(0.03, 0.0, abs(uv.y - hy));
+                } else if (tsel == 4.0) { // a sheer curtain
+                    room = mix(room, diff * 0.9, 0.55);
+                } else if (tsel == 5.0) { // office vertical blinds, half turned
+                    float sl = smoothstep(0.1, 0.3, fract(uv.x * 7.0)) * (1.0 - smoothstep(0.6, 0.8, fract(uv.x * 7.0)));
+                    room = mix(room, mix(room * 0.4, diff, sl), 0.8);
+                }
+                room *= uGlassTint;
+                float cosT = -r.z;
+                float F = (0.08 + 0.3 * uReflK) * (0.75 + 0.5 * s) + pow(1.0 - cosT, 5.0);
+                vec3 refl = reflection(vec3(r.x, r.y, -r.z));
+                if (uRain > 0.0) {
+                    float sN = vnoise(vec2(Q.x * 26.0, Q.y * 1.3 + uTime * 1.6));
+                    refl += (refl + uReflCity * 0.2) * uRain * smoothstep(0.7, 0.95, sN) * 2.0;
+                }
+                g = room + refl * F * (on ? 0.5 : 1.0);
+            }
         }
-        // the ghost: the window's frame lit in the piece's light, a dim room behind
+        // the ghost: the window's frame lit in the piece's light
         if (B.r > 0.001) {
-            float line = 1.0 - smoothstep(0.0, max(px * 1.2, 0.02), abs(sd + 0.045));
-            g += uGhostCol * B.r * (0.13 + 0.03 * smoothstep(0.2, 1.0, uv.y));
-            g = mix(g, uGhostCol * 1.4, line * B.r);
-            fr += uGhostCol * B.r * 0.25 * smoothstep(0.1, 0.0, sd);
+            float line = 1.0 - smoothstep(0.0, max(px * 1.4, 0.022), abs(sd - 0.03));
+            fr = mix(fr, uGhostCol * 1.1, line * B.r);
         }
-        c = mix(fr, g, inG);
+        c = mix(fr, g, inO);
     }
-    // the contact light under a piece that just landed
+    // the light under a piece that just landed, along the ledge (a soft glow, no flash)
     for (int i = 0; i < 4; i++) {
         if (uContact[i].w <= 0.001) continue;
-        float hx = smoothstep(uContact[i].x - 0.25, uContact[i].x + 0.1, p.x) * (1.0 - smoothstep(uContact[i].y - 0.1, uContact[i].y + 0.25, p.x));
-        float dy = (p.y - uContact[i].z) / 0.13;
+        float hx = smoothstep(uContact[i].x - 0.25, uContact[i].x + 0.1, P.x) * (1.0 - smoothstep(uContact[i].y - 0.1, uContact[i].y + 0.25, P.x));
+        float dy = (P.y - uContact[i].z) / 0.12;
         c += uContactCol[i] * uContact[i].w * hx * exp(-dy * dy);
     }
-    // the bridge: the world to the bridge's color, the lit windows to its ink
     if (uBridge > 0.0) {
         float lit = 0.0;
-        if (abs(p.x) < 5.0 && abs(p.y) < 10.0) {
-            int col = clamp(int(floor(p.x + 5.0)), 0, 9), row = clamp(int(floor(10.0 - p.y)), 0, 19);
-            vec4 A = texelFetch(uCellA, ivec2(col, row), 0);
-            lit = A.a > 0.5 ? clamp(lumv(A.rgb) * 3.0, 0.0, 1.0) : 0.0;
+        if (abs(P.x) < 5.0 && abs(P.y) < 10.0) {
+            int col = clamp(int(floor(P.x + 5.0)), 0, 9), row = clamp(int(floor(10.0 - P.y)), 0, 19);
+            lit = clamp(lumv(texelFetch(uCellA, ivec2(col, row), 0).rgb) * 4.0, 0.0, 1.0);
         }
         c = mix(c, mix(uBridgeColor, uBridgeInk, lit), uBridge);
     }
@@ -390,31 +498,46 @@ void main() {
 }
 )";
 
-// The previews: small lit windows. a1 = light (rgb), style; a2 = seed, alpha
+// The previews: small lit windows on the board plane. a0 = rectangle; a1 = light (rgb), alpha
+inline const char* RECT_VS = R"(#version 330 core
+layout(location = 0) in vec2 aCorner;
+layout(location = 1) in vec4 aA0;
+layout(location = 2) in vec4 aA1;
+layout(location = 3) in vec4 aA2;
+layout(location = 4) in vec4 aA3;
+uniform mat4 uVP;
+out vec2 vUv;
+flat out vec4 vA0, vA1, vA2;
+void main() {
+    vA0 = aA0; vA1 = aA1; vA2 = aA2;
+    vec2 t = aCorner * 0.5 + 0.5;
+    vUv = t;
+    gl_Position = uVP * vec4(mix(aA0.xy, aA0.zw, t), 0.0, 1.0);
+}
+)";
 inline const char* WIN_FS = R"(#version 330 core
-in vec2 vP;
 in vec2 vUv;
-flat in vec4 vA0, vA1, vA2, vA3;
+flat in vec4 vA0, vA1, vA2;
 out vec4 frag;
-uniform vec3 uFrame;
-uniform float uTime, uBridge;
-uniform vec3 uBridgeInk;
+uniform vec3 uFrame, uBridgeInk;
+uniform float uBridge;
 void main() {
     vec2 uv = vUv;
     float e = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
     float fw = max(fwidth(uv.x), fwidth(uv.y));
-    float inG = smoothstep(0.09 - fw, 0.09 + fw, e);
-    vec2 g = (uv - 0.09) / 0.82;
-    vec3 c = room(clamp(g, 0.0, 1.0), int(vA1.a + 0.5), vA1.rgb, vA2.x, uTime, 0.0);
+    float inG = smoothstep(0.1 - fw, 0.1 + fw, e);
+    vec3 L = vA1.rgb;
+    vec3 c = L * (0.55 + 0.45 * smoothstep(0.1, 0.9, uv.y));
+    c += L * 0.6 * exp(-dot(uv - vec2(0.5, 0.85), uv - vec2(0.5, 0.85)) * 18.0);
     c = mix(uFrame, c, inG);
     c = mix(c, uBridgeInk, uBridge);
-    float a = vA2.y;
+    float a = vA1.a;
     frag = vec4(c * a, a);
 }
 )";
 
-// Additive lights. a0 = center, radius, streak length; a1 = color, alpha; a2 = direction, kind (0 soft dot, 1 a
-// trail fading behind, 2 a crisp square, 3 a core and its glow)
+// Additive lights in 3D (depth tested). a0 = center, radius; a1 = color, alpha; a2 = direction (streak), length;
+// a3.x = kind (0 soft dot, 1 a trail fading behind, 2 a crisp square, 3 a core and its glow)
 inline const char* DOT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aA0;
@@ -423,35 +546,35 @@ layout(location = 3) in vec4 aA2;
 layout(location = 4) in vec4 aA3;
 uniform mat4 uVP;
 out vec2 vQ;
-flat out vec4 vA0, vA1, vA2;
+flat out vec4 vA0, vA1, vA2, vA3;
 void main() {
-    vA0 = aA0; vA1 = aA1; vA2 = aA2;
+    vA0 = aA0; vA1 = aA1; vA2 = aA2; vA3 = aA3;
     vec2 d = length(aA2.xy) > 1e-4 ? normalize(aA2.xy) : vec2(1.0, 0.0);
     vec2 n = vec2(-d.y, d.x);
-    float r = aA0.z * (aA2.z > 1.5 ? 1.0 : 2.2);
-    float hl = aA0.w * 0.5 + r, hw = r;
+    float r = aA0.w * (aA3.x > 1.5 && aA3.x < 2.5 ? 1.0 : 2.2);
+    float hl = aA2.w * 0.5 + r, hw = r;
     vQ = vec2(aCorner.x * hl, aCorner.y * hw);
-    vec2 w = aA0.xy + d * vQ.x + n * vQ.y;
-    gl_Position = uVP * vec4(w, 0.0, 1.0);
+    vec3 w = aA0.xyz + vec3(d * vQ.x + n * vQ.y, 0.0);
+    gl_Position = uVP * vec4(w, 1.0);
 }
 )";
 inline const char* DOT_FS = R"(#version 330 core
 in vec2 vQ;
-flat in vec4 vA0, vA1, vA2;
+flat in vec4 vA0, vA1, vA2, vA3;
 out vec4 frag;
 void main() {
-    float r = vA0.z, L = vA0.w * 0.5;
-    int kind = int(vA2.z + 0.5);
+    float r = vA0.w, L = vA2.w * 0.5;
+    int kind = int(vA3.x + 0.5);
     float a;
     if (kind == 2) {
         vec2 q = abs(vQ) / r;
         float fw = fwidth(q.x);
-        a = (1.0 - smoothstep(1.0 - fw, 1.0 + fw, max(q.x, q.y)));
+        a = 1.0 - smoothstep(1.0 - fw, 1.0 + fw, max(q.x, q.y));
     } else {
         float dx = max(abs(vQ.x) - L, 0.0);
         float d = length(vec2(dx, vQ.y)) / r;
         a = exp(-d * d * 2.0);
-        if (kind == 3) a = a * 0.35 + (1.0 - smoothstep(0.35, 0.5, d));
+        if (kind == 3) a = a * 0.3 + (1.0 - smoothstep(0.35, 0.5, d));
         if (kind == 1 && L > 0.0) a *= mix(0.05, 1.0, clamp((vQ.x + L) / (2.0 * L), 0.0, 1.0));
     }
     a *= vA1.a;
@@ -459,21 +582,82 @@ void main() {
 }
 )";
 
+// Bloom: a bright pass (soft knee) into a reduced target, then separable blurs.
+inline const char* BRIGHT_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uTex;
+uniform vec2 uTexel;
+void main() {
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+        vec2 o = vec2(i & 1, i >> 1) - 0.5;
+        c += texture(uTex, vUv + o * uTexel).rgb;
+    }
+    c *= 0.25;
+    float L = lumv(c);
+    float k = smoothstep(0.08, 0.6, L);
+    frag = vec4(c * k, 1.0);
+}
+)";
+inline const char* BLUR_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uTex;
+uniform vec2 uDir;
+void main() {
+    const float W[5] = float[](0.227, 0.1945, 0.1216, 0.054, 0.0162);
+    vec3 c = texture(uTex, vUv).rgb * W[0];
+    for (int i = 1; i < 5; i++) {
+        c += texture(uTex, vUv + uDir * float(i)).rgb * W[i];
+        c += texture(uTex, vUv - uDir * float(i)).rgb * W[i];
+    }
+    frag = vec4(c, 1.0);
+}
+)";
+
 inline const char* FINAL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform sampler2D uScene;
-uniform float uMul;
+uniform sampler2D uScene, uDepth, uBloom, uBloom2;
+uniform mat4 uInvVP;
+uniform vec3 uEye;
+uniform float uMul, uExposure, uBloomK;
+uniform vec4 uBeamO[4];   // origin, intensity
+uniform vec4 uBeamD[4];   // direction, width
+uniform vec3 uBeamCol[4];
 void main() {
     vec3 c = texture(uScene, vUv).rgb;
-    const float K = 0.55;
-    float L = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float Lm = L < K ? L : K + (1.0 - K) * (1.0 - exp(-(L - K) / (1.0 - K)));
-    c *= Lm / max(L, 1e-5);
-    float mx = max(c.r, max(c.g, c.b));
-    if (mx > 1.0) c = mix(c / mx, vec3(1.0), clamp((mx - 1.0) * 0.5, 0.0, 0.6));
+    float z = texture(uDepth, vUv).r;
+    vec4 wp = uInvVP * vec4(vUv * 2.0 - 1.0, min(z, 0.99999) * 2.0 - 1.0, 1.0);
+    vec3 P = wp.xyz / wp.w;
+    vec3 rd = normalize(P - uEye);
+    float tS = z >= 0.99999 ? 1e5 : length(P - uEye);
+    // the searchlights: volumetric beams in the haze, hidden behind what stands in front of them
+    for (int i = 0; i < 4; i++) {
+        if (uBeamO[i].w <= 0.0001) continue;
+        vec3 O = uBeamO[i].xyz, D = uBeamD[i].xyz;
+        vec3 w = uEye - O;
+        float b = dot(rd, D), d = dot(rd, w), e = dot(D, w);
+        float den = max(1.0 - b * b, 1e-4);
+        float t = (b * e - d) / den;
+        float s = (e - b * d) / den;
+        if (t <= 0.0 || s <= 0.0) continue;
+        float vis = smoothstep(tS + 2.0, tS - 2.0, t);
+        float dist = length(uEye + rd * t - (O + D * s));
+        float wd = uBeamD[i].w * (1.0 + s * 0.035);
+        float k = exp(-dist * dist / (wd * wd)) * exp(-s / 420.0) * smoothstep(0.0, 25.0, s);
+        // thicker where the ray runs along the beam
+        k *= 1.0 / sqrt(den);
+        c += uBeamCol[i] * k * uBeamO[i].w * vis;
+    }
+    c += (texture(uBloom, vUv).rgb * 0.6 + texture(uBloom2, vUv).rgb * 0.4) * uBloomK;
+    c *= uExposure;
+    // a filmic curve: deep blacks, the lit windows rolling off without burning to white
+    vec3 x = max(c, 0.0);
+    c = (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14);
     c *= uMul;
-    c = pow(max(c, 0.0), vec3(1.0 / 2.2));
+    c = pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
     c += (hash12(gl_FragCoord.xy) - 0.5) / 255.0;
     frag = vec4(c, 1.0);
 }

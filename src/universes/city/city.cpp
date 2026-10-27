@@ -1,29 +1,32 @@
-// CITY: a tower's facade at night, its windows the board.
+// CITY: a tower's facade in a 3D night city, its windows the board.
 //
-// One world: a modern tower seen straight on fills the well, its 10 x 20 windows are the board. A block is a lit
-// window: a room behind the glass in the piece's own light, each piece type its own interior (venetian blinds,
-// an open living room, drapes, vertical blinds, a roller blind, a paper screen, an office under a strip light),
-// someone passing in a room now and then. An empty cell is a dark pane reflecting the sky and the city. The
-// falling piece is four windows lighting up as it moves (blinds raised, brighter), the ghost four window frames lit
-// in its color. Lights switch like lights: a quick warm-up (a fluorescent flicker when the stack's floors step
-// down), a short fade when they go out. Around it the city in three layers of depth (the far skyline in the haze,
-// the blocks behind, the buildings flanking the tower), their small windows lit and put out one by one, slowly; red
-// aircraft beacons, a crane, a highway's traffic low between the buildings.
+// One world, in 3D: we look across at a tall modern tower from about thirty floors up, through a shift lens (the
+// camera looks straight ahead and its image is shifted so that the board plane keeps the layout's pixels): the
+// tower's facade faces the camera and fills the well, its 10 x 20 windows are the board. Each window is a recessed
+// opening (its reveals seen in perspective), glass reflecting the night, and behind it a real room traced per pixel
+// (back wall, side walls, floor, ceiling): each window is its own room, furnished its own way, each floor its own
+// use (offices with strip lights and screens, flats with a lamp and a sofa, hotel rooms), with its own blinds,
+// drapes, roller blind or sheer. A block is a lit window: its room lit by the piece's light (the seven pieces told
+// apart by their light's color only); an empty cell is a dark room behind dark glass. The falling piece is four
+// rooms lighting up as it moves, brighter, settling softly when it lands; the ghost four window frames lit in its
+// color. Lights only change smoothly (short eased blends); only a cleared floor goes dark quickly.
 //
-// Staging: a break is the city asleep (few windows, the beacons blinking on their own); mid wakes it (more
-// windows, the traffic, the beacons on the beat grid every two beats); a chorus lights the crowns of the towers and
-// the tower's piers, two searchlights sweeping slowly behind the skyline; a drop switches the whole city at once
-// into its pattern: every building's windows turn to the drop's two colors in stripes, checks, diagonals or a level
-// meter following the music, changing every two bars, with four colored searchlights, the crowns and piers lit, the
-// beacons hitting with the kicks. Nothing pulses the whole scene.
+// Around it the city at night, in perspective: blocks of towers on a street grid far below (glass or stone, their
+// faces lit by a dim moon, the sky and the streets' glow from below, the glass reflecting the sky), their small
+// windows lit and put out slowly; the streets with their lamps and traffic; light pollution on the horizon, a deck
+// of clouds lit from below, haze; red aircraft beacons, a crane; bloom on every light.
 //
-// Events: a lock surges the piece's windows and lights the ledge under it (a hard drop makes the lights below it
-// flicker); a cleared floor's windows go out (a last surge, a flicker, dark: nothing drawn over the row), then the
-// floors above step down one by one, switching; a Tetris sends fireworks up beside the skyline and a chase of light
-// up the tower's piers; slow motion is a long exposure (light trails, a colder sky, the city's lights low); game over
-// is a blackout floor by floor from the top, the city going dark with it.
+// Staging: a break is the city asleep (few windows, thick haze, the beacons blinking on their own); mid wakes it
+// (more windows, the traffic, the beacons on the beat grid every two beats); a chorus lights the crowns and the
+// tower's piers, two searchlights sweeping slowly in the haze; a drop switches the city at once: the near towers'
+// windows turn to the drop's two colors in patterns and level meters (changing every two bars), the others in the
+// drop's colors, four colored searchlights, the beacons with the kicks. Nothing pulses the whole scene.
 //
-// Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like LIGHTSOURCE).
+// Events: a lock leaves the piece lit (it settles from the falling brightness) with a soft glow along the ledge
+// under it; a cleared floor's rooms go dark (nothing drawn over the row), then the floors above step down one by one
+// in smooth crossfades; a Tetris sends fireworks up over the city and a chase of light up the piers; slow motion is
+// a long exposure (a colder night, cold city lights, the bloom wider); game over is a blackout floor by floor from
+// the top, the city going dark with it.
 #include "universes/city/city.hpp"
 
 #include <algorithm>
@@ -63,58 +66,85 @@ vec2 v2(float x, float y) { return vec2{x, y}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
-// The variants: the sky (top, middle, horizon, the city's glow, fog), the three layers of buildings, the tower
-// (frame, glass, what the glass reflects), the city's window light, the accent (crowns, piers), the HUD's text and
-// its halo, the lobby, the seven pieces' lights (I O T S Z J L), the facade's mullions, spandrels and the depth of
-// its windows, the glass's reflection, stars, fog, rain, snow.
+mat4 inverse(const mat4& m) {
+    const float* a = m.m;
+    float inv[16];
+    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] + a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
+    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] - a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
+    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] + a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
+    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] - a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
+    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] - a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
+    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] + a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
+    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] - a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
+    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] + a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
+    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] + a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
+    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] - a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
+    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] + a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
+    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] - a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
+    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] - a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
+    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] + a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
+    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] - a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
+    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] + a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
+    const float det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
+    mat4 r{};
+    if (std::fabs(det) < 1e-12f) return mat4::identity();
+    for (int i = 0; i < 16; i++) r.m[i] = inv[i] / det;
+    return r;
+}
+
+// The variants: the sky (top, horizon, the city's light pollution, fog, the clouds lit from below), the night's
+// light (ambient, moon, the streets' glow from below), the streets' sodium, the city's window light, the tower
+// (frame, glass tint), the buildings' albedo (near, far), the accent, the HUD's text and halo, what the glass
+// reflects of the city, the seven pieces' lights (I O T S Z J L, each its own hue), fog density, the facade
+// (mullions, spandrels, depth of the windows), reflectivity, stars, clouds, rain, snow, glow, exposure.
 struct VariantDef {
     const char* name;
-    unsigned top, mid, hor, glow, fog, far, midB, nearB, frame, glass, reflTop, reflBot, city, accent, text, shade, lobby;
+    unsigned top, hor, glow, fog, cloud, amb, moon, upl, street, city, frame, tint, nearB, farB, accent, text, shade, reflCity;
     unsigned piece[7];
-    float mull, spand, recess, reflK, stars, fogK, rain, snow, glowK;
+    float fogD, mull, spand, recess, reflK, stars, clouds, rain, snow, glowK, exposure;
 };
 const VariantDef VARIANTS[] = {
-    // a glass tower in the blue hour, a warm band left on the horizon
-    {"BLUE HOUR", 0x0a1530, 0x1c3866, 0x6c8fb8, 0xe0a080, 0x5a7aa0, 0x2c4670, 0x1a2c4e, 0x0e182c, 0x1c2534, 0x0c1626,
-     0x3a5a8a, 0x1a2a48, 0xffd6a0, 0x8fd8ff, 0xe8f0fa, 0x040810, 0xffcf98,
-     {0xe2f4ff, 0xffc066, 0xff8cae, 0x86f0bc, 0xff8a58, 0x76b4ff, 0xf4ea76},
-     0.1f, 0.2f, 0.1f, 0.55f, 0.25f, 0.f, 0.f, 0.f, 0.35f},
-    // downtown at midnight: bronze frames, warm rooms, a sodium glow
-    {"MIDNIGHT", 0x04060c, 0x0b1020, 0x2c2230, 0xff9040, 0x2c2230, 0x1a1a26, 0x10111a, 0x07080d, 0x2a221c, 0x080a10,
-     0x26222a, 0x0e0e14, 0xffbf6a, 0xffb45a, 0xf2e6d6, 0x040302, 0xffb060,
-     {0xfff0d2, 0xffae40, 0xff5e4e, 0x52e0c4, 0xffd860, 0x9a88ff, 0xff94cc},
-     0.12f, 0.24f, 0.25f, 0.4f, 0.6f, 0.f, 0.f, 0.f, 0.3f},
-    // a rainy night in neon: magenta haze, wet glass
-    {"NEON RAIN", 0x090514, 0x1c0c30, 0x5a2468, 0xff40a8, 0x3a1850, 0x2a1844, 0x180e2a, 0x0c0716, 0x15131e, 0x0e0a18,
-     0x4a2a6a, 0x1a1030, 0x80eeff, 0xff4ad8, 0xf4e8ff, 0x050209, 0xff60c0,
-     {0x4cf0ff, 0xffe04c, 0xff4ad4, 0x66ff78, 0xff683a, 0x5a78ff, 0xc47aff},
-     0.08f, 0.18f, 0.05f, 0.6f, 0.f, 0.25f, 1.f, 0.f, 0.4f},
-    // a foggy dawn: a pale sky, the far towers lost in the fog, the last lights on
-    {"FOG DAWN", 0x7f93aa, 0xb8c0ca, 0xead2c0, 0xffc8a0, 0xd6d4d2, 0xaab0ba, 0x8a929e, 0x56606c, 0x3a424e, 0x1a222e,
-     0x7a8aa0, 0x2e3a4a, 0xffd090, 0xff9a62, 0x1a222c, 0xe8e6e4, 0xffd8a8,
-     {0xfff0c8, 0xffa830, 0xff5c70, 0x3ed0a0, 0xff7a28, 0x4a92ff, 0xe6dc4a},
-     0.1f, 0.2f, 0.1f, 0.5f, 0.f, 0.55f, 0.f, 0.f, 0.2f},
-    // a brutalist block at dusk: raw concrete, deep-set windows, colored loggias
-    {"BRUTALIST", 0x1a2030, 0x46465a, 0xd88a58, 0xff8a48, 0x6a5a5a, 0x5a5462, 0x3a3842, 0x222129, 0x77746e, 0x101114,
-     0x5a5260, 0x202024, 0xffc888, 0xff4a30, 0xf2ede6, 0x0a0908, 0xffc890,
-     {0xf6f0e2, 0xffc014, 0xe8381e, 0x38a864, 0xff7614, 0x2c6ae0, 0x62c4e8},
-     0.26f, 0.34f, 1.f, 0.3f, 0.1f, 0.f, 0.f, 0.f, 0.3f},
-    // a snowy evening: brick, snow on the ledges, warm rooms
-    {"SNOWFALL", 0x0e1530, 0x283258, 0x6a6290, 0xffa868, 0x5a6080, 0x545a7c, 0x323856, 0x1c2036, 0x2c2426, 0x10141f,
-     0x3c4468, 0x161a2a, 0xffc47c, 0xbfdcff, 0xeef2ff, 0x04050a, 0xffc080,
-     {0xfff0d8, 0xffaa48, 0xff5858, 0x7ce09c, 0xffd06a, 0x86acff, 0xd68cff},
-     0.14f, 0.26f, 0.4f, 0.4f, 0.f, 0.15f, 0.f, 1.f, 0.3f},
+    // a glass tower after the blue hour: the last deep blue in the sky, cold glass
+    {"BLUE HOUR", 0x02050e, 0x0d1a33, 0x3a3040, 0x0b1426, 0x1a1e30, 0x060a14, 0x0c1426, 0x2a1e18, 0xff9a40, 0xffd2a0,
+     0x161a22, 0xc8d8ff, 0x10141c, 0x0c1220, 0x8fd8ff, 0xe4ecf6, 0x02040a, 0xffd8a8,
+     {0x58e6ff, 0xffd640, 0xc070ff, 0x5ef078, 0xff4848, 0x4a78ff, 0xff9030},
+     0.0045f, 0.1f, 0.22f, 0.2f, 0.7f, 0.25f, 0.f, 0.f, 0.f, 0.5f, 1.f},
+    // downtown at midnight: bronze frames, a sodium haze, warm rooms
+    {"MIDNIGHT", 0x010204, 0x0c0a0e, 0x40220e, 0x0e0a08, 0x2a1a10, 0x040406, 0x06070c, 0x3a2410, 0xffa040, 0xffc070,
+     0x1c1610, 0xffe8c8, 0x0e0c0c, 0x0c0a0a, 0xffb45a, 0xf0e4d4, 0x020100, 0xffc080,
+     {0x8af0e0, 0xffd050, 0xff6ad0, 0x9ef060, 0xff4030, 0x6a80ff, 0xff9030},
+     0.005f, 0.12f, 0.26f, 0.35f, 0.5f, 0.35f, 0.5f, 0.f, 0.f, 0.6f, 1.f},
+    // a rainy night in neon: a magenta haze, wet glass
+    {"NEON RAIN", 0x030108, 0x14081e, 0x3a0c38, 0x120818, 0x2a0e2e, 0x05030a, 0x08060e, 0x2a0c28, 0xff50c0, 0x80eeff,
+     0x100e16, 0xe0c8ff, 0x0c0a12, 0x0e0a14, 0xff4ad8, 0xf4e8ff, 0x030106, 0xff70d0,
+     {0x30eaff, 0xfff030, 0xff30e0, 0x40ff60, 0xff3048, 0x4a5aff, 0xff8020},
+     0.008f, 0.08f, 0.2f, 0.1f, 0.9f, 0.f, 0.8f, 1.f, 0.f, 0.7f, 1.f},
+    // fog before dawn: the far towers lost, the lights blooming in the fog
+    {"FOG DAWN", 0x0a0e16, 0x1c222c, 0x30241e, 0x161a20, 0x1a1c22, 0x0a0c12, 0x0c1018, 0x201812, 0xffb060, 0xffd090,
+     0x1a1e24, 0xd8e0ea, 0x12161c, 0x141820, 0xffa070, 0xe2e6ea, 0x04060a, 0xffd0a0,
+     {0x90e8f0, 0xffe070, 0xe080ff, 0x80f090, 0xff6058, 0x7098ff, 0xffa860},
+     0.02f, 0.1f, 0.22f, 0.2f, 0.6f, 0.f, 0.3f, 0.f, 0.f, 0.4f, 1.1f},
+    // a brutalist block at dusk's end: raw concrete, deep windows, rooms in the colors of modernist loggias
+    {"BRUTALIST", 0x03050a, 0x1a1418, 0x50281a, 0x120e0e, 0x30201a, 0x080808, 0x0e0c0c, 0x30201a, 0xff9040, 0xffc888,
+     0x5a5650, 0xfff0e0, 0x16151a, 0x121116, 0xff4a30, 0xf2ede6, 0x030202, 0xffc090,
+     {0x70d8f0, 0xffc810, 0xb050e0, 0x30c058, 0xe82818, 0x2850e8, 0xff7010},
+     0.0055f, 0.26f, 0.34f, 1.f, 0.25f, 0.2f, 0.3f, 0.f, 0.f, 0.6f, 1.f},
+    // a snowy evening: brick, snow falling and lying on the ledges and roofs
+    {"SNOWFALL", 0x03050c, 0x161a2c, 0x382a30, 0x141828, 0x22242e, 0x080a12, 0x10141e, 0x2a2020, 0xffa050, 0xffc47c,
+     0x221a1a, 0xffffff, 0x101218, 0x12141c, 0xbfdcff, 0xeef2ff, 0x020308, 0xffc890,
+     {0xa8f0ff, 0xffd060, 0xf070e0, 0x70e080, 0xff4848, 0x7088ff, 0xffa040},
+     0.007f, 0.14f, 0.26f, 0.45f, 0.4f, 0.f, 0.6f, 0.f, 1.f, 0.5f, 1.05f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
-constexpr int FOG_DAWN = 3;
 
 // A drop's two colors (linear): designed pairs of saturated hues, a new pair each drop.
 const vec3 HUES[] = {{1.f, 0.05f, 0.55f}, {0.f, 0.85f, 1.f}, {1.f, 0.55f, 0.f}, {0.35f, 0.15f, 1.f},
                      {0.3f, 1.f, 0.2f}, {1.f, 0.85f, 0.05f}, {1.f, 0.1f, 0.15f}, {0.05f, 0.4f, 1.f}};
 const int PAIRS[][2] = {{0, 1}, {2, 3}, {4, 0}, {5, 7}, {6, 1}, {3, 2}, {1, 5}, {7, 6}};
 constexpr int PAIR_COUNT = (int)(sizeof(PAIRS) / sizeof(PAIRS[0]));
-constexpr float STREET_Y = -11.8f, HIGHWAY_Y = -9.35f, HORIZON_Y = -9.f;
-const vec3 BEACON_RED{1.f, 0.07f, 0.02f};
+constexpr float GROUND_Y = -30.f, EYE_Y = 1.f, PITCH = 22.f;
+const vec3 BEACON_RED{1.f, 0.06f, 0.02f};
+const vec3 MOON_DIR = vec3(-0.45f, 0.55f, 0.7f) * (1.f / std::sqrt(0.45f * 0.45f + 0.55f * 0.55f + 0.7f * 0.7f));
 
 float hashf(float x) {
     const float s = std::sin(x * 127.1f + 311.7f) * 43758.5453f;
@@ -128,12 +158,15 @@ float hashf(float x) {
 // =====================================================================================================
 
 bool CityUniverse::init(int width, int height) {
-    progSky_ = compile(ugl::FULLSCREEN_VS, shaders::SKY_FS, "city sky");
-    progBldg_ = compile(shaders::RECT_VS, shaders::BLDG_FS, "city buildings");
-    progTower_ = compile(shaders::RECT_VS, shaders::TOWER_FS, "city tower");
+    progSky_ = compile(shaders::FULL_VS, shaders::SKY_FS, "city sky");
+    progGround_ = compile(shaders::GROUND_VS, shaders::GROUND_FS, "city ground");
+    progBox_ = compile(shaders::BOX_VS, shaders::BOX_FS, "city boxes");
+    progTower_ = compile(shaders::TOWER_VS, shaders::TOWER_FS, "city tower");
     progWin_ = compile(shaders::RECT_VS, shaders::WIN_FS, "city windows");
     progDot_ = compile(shaders::DOT_VS, shaders::DOT_FS, "city dots");
-    progFinal_ = compile(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "city final");
+    progBright_ = compile(shaders::FULL_VS, shaders::BRIGHT_FS, "city bright");
+    progBlur_ = compile(shaders::FULL_VS, shaders::BLUR_FS, "city blur");
+    progFinal_ = compile(shaders::FULL_VS, shaders::FINAL_FS, "city final");
     progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "city text");
     progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "city panel");
 
@@ -141,6 +174,12 @@ bool CityUniverse::init(int width, int height) {
     glGenBuffers(1, &quadVbo_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+    // a plain quad (the ground, the tower)
+    glGenVertexArrays(1, &quadVao_);
+    glBindVertexArray(quadVao_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    // instanced quads (previews, dots)
     glGenVertexArrays(1, &instVao_);
     glGenBuffers(1, &instVbo_);
     glBindVertexArray(instVao_);
@@ -153,6 +192,38 @@ bool CityUniverse::init(int width, int height) {
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Inst), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
+    // instanced boxes (the buildings): a unit cube with its face normals
+    {
+        std::vector<float> v;
+        const int F[6][3] = {{0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}};
+        for (auto& f : F) {
+            const vec3 n((float)f[0], (float)f[1], (float)f[2]);
+            const vec3 a = std::fabs(n.y) > 0.5f ? vec3(1.f, 0.f, 0.f) : vec3(0.f, 1.f, 0.f);
+            const vec3 b = cross(n, a);
+            const vec3 c[4] = {n - a - b, n + a - b, n + a + b, n - a + b};
+            const int idx[6] = {0, 1, 2, 0, 2, 3};
+            for (int i : idx) {
+                v.insert(v.end(), {c[i].x, c[i].y, c[i].z, n.x, n.y, n.z});
+            }
+        }
+        glGenVertexArrays(1, &cubeVao_);
+        glGenBuffers(1, &cubeVbo_);
+        glGenBuffers(1, &cubeInstVbo_);
+        glBindVertexArray(cubeVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+        glBindBuffer(GL_ARRAY_BUFFER, cubeInstVbo_);
+        for (int i = 0; i < 4; i++) {
+            glEnableVertexAttribArray(2 + i);
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Inst), (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(2 + i, 1);
+        }
+    }
+    glGenVertexArrays(1, &emptyVao_);
     glGenVertexArrays(1, &textVao_);
     glGenBuffers(1, &textVbo_);
     glBindVertexArray(textVao_);
@@ -184,11 +255,11 @@ bool CityUniverse::init(int width, int height) {
         for (int c = 0; c < COLS; c++) {
             pendingOff_[r][c] = 0;
             pendingDelay_[r][c] = 0.f;
-            win_[r][c].seed = hashf(r * 17.f + c * 3.1f);
         }
     for (int& o : off_) o = 0;
     Rng fr(99);
-    for (int i = 0; i < 220; i++) flakes_.push_back({v2(fr.range(-22.f, 22.f), fr.range(-12.f, 13.f)), fr.range(0.6f, 1.4f), fr.range(0.f, TAU)});
+    for (int i = 0; i < 360; i++)
+        flakes_.push_back({vec3(fr.range(-60.f, 60.f), fr.range(-30.f, 45.f), fr.range(-110.f, -18.f)), fr.range(0.6f, 1.4f), fr.range(0.f, TAU)});
     buildFont(font_, FONT_BARLOW);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
@@ -238,25 +309,64 @@ void CityUniverse::buildFont(Font& f, const unsigned char* ttf) {
     f.ok = true;
 }
 
+// The layout's reference camera raised to EYE_Y and looking straight ahead, its image shifted back down: the board
+// plane lands exactly on the reference camera's pixels.
 void CityUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
+    const layout::Camera ref = layout::camera(width_, height_);
     const float aspect = (float)width_ / height_;
-    const layout::Camera cam = layout::camera(width_, height_);
-    const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect;
-    viewH_ = v2(hw, hh);
-    viewC_ = v2(cam.target.x, cam.target.y);
-    vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
-    sceneT_.destroy();
-    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    const float half = ref.fovDeg * 0.5f * PI / 180.f;
+    const float f = 1.f / std::tan(half);
+    eye_ = vec3(ref.target.x, EYE_Y, ref.target.z + ref.dist);
+    const mat4 view = mat4::lookAt(eye_, eye_ + vec3(0.f, 0.f, -1.f), vec3(0.f, 1.f, 0.f));
+    mat4 shift = mat4::identity();
+    shift.at(1, 3) = f * (EYE_Y - ref.target.y) / ref.dist;
+    vp_ = shift * mat4::perspective(2.f * half, aspect, 1.f, 3000.f) * view;
+    invVP_ = inverse(vp_);
+
+    if (sceneFbo_) glDeleteFramebuffers(1, &sceneFbo_);
+    if (sceneTex_) glDeleteTextures(1, &sceneTex_);
+    if (depthTex_) glDeleteTextures(1, &depthTex_);
+    glGenFramebuffers(1, &sceneFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
+    glGenTextures(1, &sceneTex_);
+    glBindTexture(GL_TEXTURE_2D, sceneTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width_, height_, 0, GL_RGBA, GL_HALF_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneTex_, 0);
+    glGenTextures(1, &depthTex_);
+    glBindTexture(GL_TEXTURE_2D, depthTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width_, height_, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex_, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    const int bw = std::max(1, width_ / 4), bh = std::max(1, height_ / 4);
+    for (ugl::Target* t : {&bloomA_, &bloomB_}) {
+        t->destroy();
+        t->create(bw, bh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    }
+    for (ugl::Target* t : {&bloomC_, &bloomD_}) {
+        t->destroy();
+        t->create(std::max(1, bw / 4), std::max(1, bh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    }
 }
 
 CityUniverse::~CityUniverse() {
-    sceneT_.destroy();
-    for (GLuint p : {progSky_, progBldg_, progTower_, progWin_, progDot_, progFinal_, progText_, progPanel_}) glDeleteProgram(p);
-    for (GLuint v : {instVao_, textVao_, panelVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, instVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
-    for (GLuint t : {cellA_, cellB_}) glDeleteTextures(1, &t);
+    for (ugl::Target* t : {&bloomA_, &bloomB_, &bloomC_, &bloomD_}) t->destroy();
+    if (sceneFbo_) glDeleteFramebuffers(1, &sceneFbo_);
+    for (GLuint t : {sceneTex_, depthTex_, cellA_, cellB_}) glDeleteTextures(1, &t);
+    for (GLuint p : {progSky_, progGround_, progBox_, progTower_, progWin_, progDot_, progBright_, progBlur_, progFinal_,
+                     progText_, progPanel_})
+        glDeleteProgram(p);
+    for (GLuint v : {instVao_, cubeVao_, quadVao_, textVao_, panelVao_, emptyVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, instVbo_, cubeVbo_, cubeInstVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
     if (font_.tex) glDeleteTextures(1, &font_.tex);
     delete (stbtt_fontinfo*)font_.info;
 }
@@ -268,8 +378,8 @@ CityUniverse::~CityUniverse() {
 void CityUniverse::setSong(const SongLook& t, float seconds) {
     if (t.variant >= 0) variant_ = t.variant % VARIANT_COUNT;
     else {
-        // night songs downtown or in the rain, bright ones in the blue hour or the dawn fog, heavy ones in concrete,
-        // slow quiet ones in the snow
+        // night songs downtown or in the rain, bright ones after the blue hour or in the dawn fog, heavy ones in
+        // concrete, slow quiet ones in the snow
         int v;
         if (t.bassWeight > 0.62f && t.dynamics > 0.5f) v = 4;
         else if (t.bpm < 100.f && t.density < 0.5f) v = 5;
@@ -320,7 +430,6 @@ void CityUniverse::drop(float strength) {
 void CityUniverse::refresh(float strength) {
     // a new section: the city's windows are put out and lit again elsewhere (the same number of them)
     if (strength > 0.2f) cityShift_ += 97.f;
-    refreshT_ = 0.f;
 }
 
 void CityUniverse::forceFx(int slow, int tetris) {
@@ -347,9 +456,9 @@ vec2 CityUniverse::project(const vec3& p) const { return layout::project(vp_, p,
 TransitionHints CityUniverse::hints() const {
     const VariantDef& d = VARIANTS[variant_];
     TransitionHints h;
-    h.light = variant_ == FOG_DAWN;
-    h.background = h.light ? lin(d.mid) : lin(d.mid) * 0.5f;
-    h.ink = h.light ? lin(d.nearB) : lin(d.text) * 0.8f;
+    h.light = false;
+    h.background = lin(d.hor) * 0.6f;
+    h.ink = lin(d.text) * 0.8f;
     h.accent = lin(d.accent);
     h.styles = TS_TILES | TS_LUMA | TS_REBUILD;
     return h;
@@ -362,45 +471,66 @@ TransitionHints CityUniverse::hints() const {
 void CityUniverse::buildCity(int variant) {
     bldgs_.clear();
     Rng r(0xC1C1ull + (uint64_t)variant * 7919ull);
-    auto add = [&](float x0, float x1, float top, int layer, int style, float lit, float crown, bool beacon) {
+    const VariantDef& d = VARIANTS[variant];
+    const float dist = eye_.z;
+    auto add = [&](float x0, float x1, float z0, float z1, float h, int style, float crown, bool beacon, bool patterned) {
         Bldg b;
-        b.x0 = x0; b.x1 = x1; b.y0 = STREET_Y; b.y1 = top;
-        b.layer = layer; b.style = style;
+        b.cx = (x0 + x1) * 0.5f; b.cz = (z0 + z1) * 0.5f;
+        b.hw = (x1 - x0) * 0.5f; b.hd = (z1 - z0) * 0.5f;
+        b.y0 = GROUND_Y; b.y1 = GROUND_Y + h;
+        b.style = style;
         b.seed = r.uniform();
-        b.lit = lit; b.crown = crown; b.beacon = beacon;
+        b.lit = r.range(0.6f, 1.25f);
+        b.crown = crown;
+        b.beacon = beacon;
+        b.patterned = patterned;
+        const vec3 base = lin(std::fabs(b.cz) < 60.f ? d.nearB : d.farB);
+        b.alb = style == 1 ? base * r.range(1.6f, 2.6f) : base * r.range(0.8f, 1.3f);
+        b.refl = style == 0 ? r.range(0.6f, 1.f) : 0.3f;
         bldgs_.push_back(b);
     };
-    // the far skyline, in the haze, two landmark spires
-    for (float x = -22.5f; x < 22.5f;) {
-        const float w = r.range(1.0f, 2.6f);
-        const float side = std::fabs(x + w * 0.5f);
-        float top = r.range(-3.5f, 3.5f) + (side > 12.f ? r.range(0.f, 2.f) : 0.f);
-        const int st = r.chance(0.2f) ? 1 : (r.chance(0.12f) ? 2 : 0);
-        const bool hud = side > 5.f && side < 12.f; // (quiet under the HUD's columns)
-        add(x, x + w, top, 2, st, r.range(0.6f, 1.2f) * (hud ? 0.45f : 1.f), r.chance(0.35f) && !hud ? 1.f : 0.f, false);
-        x += w + r.range(0.f, 0.5f);
+    // the blocks between the streets, from near to far; the tower's own block left to it
+    for (int m = -1; m >= -16; m--) {
+        const float z1 = PITCH * m + PITCH, z0 = PITCH * m + 4.f; // (z0 < z1, both negative)
+        const float reach = (dist - z0) * 0.75f + 20.f;
+        const int kmax = (int)std::ceil(reach / PITCH);
+        for (int k = -kmax; k <= kmax; k++) {
+            const float x0 = PITCH * k - 7.f, x1 = PITCH * k + 11.f;
+            if (m == -1 && k >= -1 && k <= 1) continue; // the tower's block, and the near corners (set below)
+            if (m == -2 && k == 0) {
+                // right behind the tower: low, so it never peeks over its crown
+                add(x0 + 1.f, x1 - 1.f, z0 + 1.f, z1 - 1.f, r.range(10.f, 24.f), 1, 0.f, false, false);
+                continue;
+            }
+            const float far = saturate((-z0 - 60.f) / 250.f);
+            const int split = r.irange(0, 2);
+            auto height = [&]() {
+                float h = r.range(10.f, 30.f) + far * r.range(0.f, 25.f);
+                if (far > 0.3f && r.chance(0.07f)) h = r.range(65.f, 105.f); // a landmark tower
+                return h;
+            };
+            auto one = [&](float a0, float a1, float b0, float b1) {
+                const float h = height();
+                const int st = r.chance(0.55f) ? 0 : 1;
+                const float in = r.range(0.4f, 1.6f);
+                add(a0 + in, a1 - in, b0 + in, b1 - in, h, st, h > 40.f && r.chance(0.5f) ? 1.f : 0.f, h > 55.f,
+                    -z0 > 55.f && -z0 < 200.f && r.chance(0.6f));
+            };
+            if (split == 0) one(x0, x1, z0, z1);
+            else if (split == 1) {
+                const float xm = r.range(x0 + 6.f, x1 - 6.f);
+                one(x0, xm, z0, z1);
+                one(xm, x1, z0, z1);
+            } else {
+                const float xm = (x0 + x1) * 0.5f, zm = (z0 + z1) * 0.5f;
+                one(x0, xm, z0, zm); one(xm, x1, z0, zm); one(x0, xm, zm, z1); one(xm, x1, zm, z1);
+            }
+        }
     }
-    const float sx = (variant % 2) ? 1.f : -1.f;
-    add(sx * 15.6f - 0.8f, sx * 15.6f + 0.8f, 9.6f + r.range(-0.5f, 0.6f), 2, 4, 1.f, 1.f, true);
-    add(-sx * 17.2f - 0.9f, -sx * 17.2f + 0.9f, 7.4f + r.range(-0.5f, 0.6f), 2, 1, 1.f, 1.f, true);
-    // the blocks behind
-    for (float x = -22.5f; x < 22.5f;) {
-        const float w = r.range(1.6f, 3.4f);
-        const float cx = std::fabs(x + w * 0.5f);
-        float top = r.range(-6.5f, 0.5f);
-        if (cx > 12.f) top += r.range(0.f, 2.5f);
-        else if (cx > 5.f) top = std::min(top, r.range(-5.5f, -3.5f)); // (low under the HUD's columns)
-        const int st = r.chance(0.18f) ? 1 : (r.chance(0.12f) ? 2 : 0);
-        add(x, x + w, top, 1, st, r.range(0.6f, 1.2f), r.chance(0.4f) ? 1.f : 0.f, top > 1.5f && r.chance(0.5f));
-        x += w + r.range(0.1f, 0.8f);
-    }
-    // the buildings flanking the tower: low under the HUD's columns, tall at the edges of the screen
-    add(-21.8f, -16.0f, 5.4f, 0, 0, 0.8f, 1.f, true);
-    add(-15.8f, -12.6f, -1.2f, 0, 2, 0.9f, 0.f, false);
-    add(-12.4f, -6.1f, -8.3f, 0, 0, 1.f, 1.f, false);
-    add(6.1f, 12.3f, -8.7f, 0, 0, 1.f, 1.f, false);
-    add(12.5f, 15.4f, 0.6f, 0, 1, 0.9f, 1.f, false);
-    add(15.6f, 21.8f, 3.6f, 0, 0, 0.8f, 1.f, true);
+    // the near corners, at the edges of the screen: tall, their inner faces seen at an angle
+    add(-38.f, -16.f, -17.f, -3.f, 36.f, 0, 1.f, true, false);
+    add(16.f, 34.f, -17.f, -5.f, 31.f, 1, 1.f, false, false);
+    bldgs_[bldgs_.size() - 1].lit = bldgs_[bldgs_.size() - 2].lit = 0.6f;
     builtFor_ = variant;
 }
 
@@ -409,18 +539,19 @@ void CityUniverse::spawnFireworks() {
     const VariantDef& d = VARIANTS[variant_];
     for (int b = 0; b < 6; b++) {
         const float side = (b % 2) ? 1.f : -1.f;
-        const vec2 c = v2(side * r.range(12.8f, 19.5f), r.range(4.5f, 10.5f));
+        const vec3 c(side * r.range(55.f, 85.f), r.range(22.f, 50.f), r.range(-170.f, -130.f));
         const vec3 col = lin(d.piece[r.irange(0, 6)]);
-        const int n = 46;
+        const int n = 54;
         for (int i = 0; i < n; i++) {
-            const float a = TAU * (i + r.uniform() * 0.5f) / n;
-            const float s = r.range(2.4f, 4.0f);
+            // a sphere of sparks
+            const float a = TAU * (i + r.uniform() * 0.5f) / n, e = std::asin(r.range(-1.f, 1.f));
+            const float s = r.range(11.f, 16.f);
             Particle p;
             p.p = c;
-            p.v = v2(std::cos(a) * s, std::sin(a) * s);
+            p.v = vec3(std::cos(a) * std::cos(e), std::sin(e), std::sin(a) * std::cos(e)) * s;
             p.c = col;
             p.t = 0.f;
-            p.life = r.range(1.2f, 1.8f);
+            p.life = r.range(1.4f, 2.0f);
             p.delay = b * 0.3f + r.range(0.f, 0.03f);
             sparks_.push_back(p);
         }
@@ -431,37 +562,6 @@ void CityUniverse::spawnFireworks() {
 // The facade's windows
 // =====================================================================================================
 
-float CityUniverse::onLevel(const Win& w) const {
-    const float t = w.t;
-    if (w.onKind == 0) return lerpf(w.from, 1.f, smoothstepf(0.f, 0.035f, t));
-    // a tube warming up: on, a flicker, on
-    float v = smoothstepf(0.f, 0.03f, t);
-    if (t > 0.05f && t < 0.085f) v *= 0.25f;
-    if (t > 0.13f && t < 0.15f) v *= 0.6f;
-    return std::max(v, w.from * (1.f - smoothstepf(0.f, 0.03f, t)));
-}
-
-float CityUniverse::offLevel(const Win& w) const {
-    const float t = w.t, a = w.from;
-    if (w.offKind == 1) {
-        // a cleared floor: a last surge, a flicker, out (under a third of a second)
-        if (t < 0.06f) return a * 1.4f;
-        if (t < 0.1f) return a * 0.1f;
-        if (t < 0.15f) return a * 0.9f;
-        return a * 0.7f * (1.f - smoothstepf(0.15f, 0.32f, t));
-    }
-    if (w.offKind == 2) {
-        // the blackout
-        if (t < 0.f) return a;
-        if (t < 0.08f) return a * 0.3f;
-        if (t < 0.16f) return a * 0.85f;
-        return a * 0.85f * (1.f - smoothstepf(0.16f, 0.6f, t));
-    }
-    // (the falling piece's windows go out at once behind it: no trail)
-    if (w.offKind == 3) return t > 0.06f ? 0.f : a * std::exp(-t / 0.018f);
-    return t > 0.25f ? 0.f : a * std::exp(-t / 0.045f);
-}
-
 void CityUniverse::updateWindows(const Game& g, float dt) {
     // the stack's floors stepping down after a clear
     bool stepping = false;
@@ -470,8 +570,8 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
         if (offHold_ > 0.f) offHold_ -= dt;
         else {
             offStep_ += dt;
-            while (offStep_ >= 0.05f) {
-                offStep_ -= 0.05f;
+            while (offStep_ >= 0.08f) {
+                offStep_ -= 0.08f;
                 for (int& o : off_) o = std::max(0, o - 1);
             }
         }
@@ -487,7 +587,7 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
             want[vr][x].on = true;
             want[vr][x].type = t;
         }
-    float ghost[ROWS][COLS] = {};
+    bool ghost[ROWS][COLS] = {};
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -505,7 +605,7 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
             for (auto& c : gc) {
                 const int vr = c[1] - Game::HIDDEN;
                 if (vr < 0 || vr >= ROWS || c[0] < 0 || c[0] >= COLS || want[vr][c[0]].on) continue;
-                ghost[vr][c[0]] = 1.f;
+                ghost[vr][c[0]] = true;
             }
         }
     }
@@ -513,32 +613,29 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
         for (int c = 0; c < COLS; c++) {
             Win& w = win_[r][c];
             const Want& q = want[r][c];
-            if (q.on) {
-                if (!w.on || w.style != q.type) {
-                    w.from = w.style == q.type ? w.level : w.level * 0.3f;
-                    w.on = true;
-                    w.t = 0.f;
-                    w.onKind = q.falling ? 0 : 1;
-                    if (w.style != q.type) w.seed = hashf(r * 7.3f + c * 1.9f + time_ * 3.7f);
-                    w.style = q.type;
-                }
-                w.falling = q.falling;
-            } else if (w.on) {
-                w.on = false;
-                w.from = w.level;
-                w.offKind = pendingOff_[r][c] ? pendingOff_[r][c] : (w.falling ? 3 : 0);
-                w.t = -pendingDelay_[r][c];
-                w.falling = false;
+            const vec3 target = q.on ? pal_.piece[std::clamp(q.type, 0, 6)] * (q.falling ? 1.35f : 1.f) : vec3(0.f);
+            const vec3 dd = target - w.to;
+            if (std::fabs(dd.x) + std::fabs(dd.y) + std::fabs(dd.z) > 1e-3f) {
+                // a new state: an eased blend from what the window shows now (never a jump)
+                float dur;
+                w.delay = 0.f;
+                if (!q.on && pendingOff_[r][c] == 1) dur = 0.14f;                     // a cleared floor going dark
+                else if (!q.on && pendingOff_[r][c] == 2) { dur = 0.55f; w.delay = pendingDelay_[r][c]; } // blackout
+                else if (q.falling || w.falling) dur = (q.on && w.falling && !q.falling) ? 0.3f : 0.06f; // moving, landing
+                else dur = 0.14f;                                                        // the stack stepping down
+                w.from = w.cur;
+                w.to = target;
+                w.t = 0.f;
+                w.dur = dur;
             }
+            w.falling = q.on && q.falling;
             pendingOff_[r][c] = 0;
             pendingDelay_[r][c] = 0.f;
-            w.t += dt;
-            w.level = w.on ? onLevel(w) : offLevel(w);
-            if (!w.on && w.level < 0.002f && w.t > 0.f) w.level = 0.f;
-            w.surge = std::max(0.f, w.surge - dt / 0.35f);
-            w.dip = std::max(0.f, w.dip - dt / 0.25f);
-            w.ghost = ghost[r][c] > 0.f ? 1.f : approach(w.ghost, 0.f, 30.f, dt);
-            w.col = lin(VARIANTS[variant_].piece[std::clamp(w.style, 0, 6)]);
+            if (w.delay > 0.f) w.delay -= dt;
+            else w.t = std::min(w.dur, w.t + dt);
+            w.cur = lerp(w.from, w.to, smoothstepf(0.f, 1.f, w.t / std::max(1e-3f, w.dur)));
+            w.fall = w.falling ? 1.f : std::max(0.f, w.fall - dt / 0.3f);
+            w.ghost = ghost[r][c] ? std::min(1.f, w.ghost + dt / 0.06f) : std::max(0.f, w.ghost - dt / 0.06f);
         }
 }
 
@@ -547,32 +644,24 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
     switch (ev.type) {
     case GameEvent::HardDrop: hardPending_ = true; break;
     case GameEvent::Lock: {
+        // a soft glow along the ledge under the piece (no surge, no flicker: the windows simply stay lit)
         float lowY = 1e9f, x0 = 1e9f, x1 = -1e9f;
         int type = 0;
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= COLS) continue;
             type = c.type;
-            const int vr = c.y - off_[c.y] - Game::HIDDEN;
-            if (vr >= 0 && vr < ROWS) win_[vr][c.x].surge = hardPending_ ? 1.f : 0.6f;
             const float y = (float)(Game::H - 1 - c.y) - 9.5f;
             if (y < lowY - 0.1f) { lowY = y; x0 = x1 = c.x - 4.5f; }
             else if (std::fabs(y - lowY) < 0.1f) { x0 = std::min(x0, c.x - 4.5f); x1 = std::max(x1, c.x - 4.5f); }
-            // a hard drop shakes the lights of the floors under it
-            if (hardPending_) {
-                for (int k = 1; k <= 2; k++) {
-                    const int below = vr + k;
-                    if (below >= 0 && below < ROWS) win_[below][c.x].dip = std::max(win_[below][c.x].dip, k == 1 ? 1.f : 0.5f);
-                }
-            }
         }
         if (lowY < 1e8f && lowY > -10.f) {
             Contact ct;
             ct.x0 = x0 - 0.5f;
             ct.x1 = x1 + 0.5f;
             ct.y = lowY - 0.5f;
-            ct.col = lin(VARIANTS[variant_].piece[std::clamp(type, 0, 6)]);
-            ct.power = hardPending_ ? 1.f : 0.5f;
-            ct.life = hardPending_ ? 0.45f : 0.3f;
+            ct.col = pal_.piece[std::clamp(type, 0, 6)];
+            ct.power = hardPending_ ? 0.5f : 0.25f;
+            ct.life = hardPending_ ? 0.6f : 0.45f;
             contacts_.push_back(ct);
             if (contacts_.size() > 4) contacts_.erase(contacts_.begin());
         }
@@ -587,7 +676,7 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
                 const int vr = c.y - off_[c.y] - Game::HIDDEN;
                 if (vr >= 0 && vr < ROWS && c.x >= 0 && c.x < COLS) pendingOff_[vr][c.x] = 1;
             }
-        // the floors above keep their windows until the cleared floor is out, then step down
+        // the floors above keep their lights until the cleared floor is dark, then step down
         int noff[Game::H] = {};
         int dst = Game::H - 1;
         for (int y = Game::H - 1; y >= 0; y--) {
@@ -596,7 +685,8 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
             dst--;
         }
         std::memcpy(off_, noff, sizeof(noff));
-        offHold_ = 0.24f;
+        contacts_.clear(); // (nothing lingers where the floors went dark)
+        offHold_ = 0.16f;
         offStep_ = 0.f;
         if (ev.count >= 4) {
             tetrisT_ = 0.f;
@@ -763,6 +853,7 @@ void CityUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<Hu
     }
 }
 
+
 // =====================================================================================================
 // Frame
 // =====================================================================================================
@@ -773,6 +864,11 @@ void CityUniverse::drawInst(const std::vector<Inst>& v) {
     glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Inst), v.data(), GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)v.size());
+}
+
+void CityUniverse::fullscreen() {
+    glBindVertexArray(emptyVao_);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 void CityUniverse::render(const Frame& f, GLuint fbo) {
@@ -786,13 +882,14 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         palSet_ = true;
         auto ease = [&](vec3& a, unsigned v) { a = lerp(a, lin(v), k); };
         auto easef = [&](float& a, float v) { a = lerpf(a, v, k); };
-        ease(pal_.top, d.top); ease(pal_.mid, d.mid); ease(pal_.hor, d.hor); ease(pal_.glow, d.glow); ease(pal_.fog, d.fog);
-        ease(pal_.far, d.far); ease(pal_.midB, d.midB); ease(pal_.nearB, d.nearB); ease(pal_.frame, d.frame);
-        ease(pal_.glass, d.glass); ease(pal_.reflTop, d.reflTop); ease(pal_.reflBot, d.reflBot); ease(pal_.city, d.city);
-        ease(pal_.accent, d.accent); ease(pal_.text, d.text); ease(pal_.shade, d.shade); ease(pal_.lobby, d.lobby);
+        ease(pal_.top, d.top); ease(pal_.hor, d.hor); ease(pal_.glow, d.glow); ease(pal_.fog, d.fog); ease(pal_.cloud, d.cloud);
+        ease(pal_.amb, d.amb); ease(pal_.moon, d.moon); ease(pal_.upl, d.upl); ease(pal_.street, d.street); ease(pal_.city, d.city);
+        ease(pal_.frame, d.frame); ease(pal_.tint, d.tint); ease(pal_.near, d.nearB); ease(pal_.far, d.farB);
+        ease(pal_.accent, d.accent); ease(pal_.text, d.text); ease(pal_.shade, d.shade); ease(pal_.reflCity, d.reflCity);
         for (int i = 0; i < 7; i++) ease(pal_.piece[i], d.piece[i]);
-        easef(pal_.mull, d.mull); easef(pal_.spand, d.spand); easef(pal_.recess, d.recess); easef(pal_.reflK, d.reflK);
-        easef(pal_.stars, d.stars); easef(pal_.fogK, d.fogK); easef(pal_.rain, d.rain); easef(pal_.snow, d.snow);
+        easef(pal_.fogD, d.fogD); easef(pal_.mull, d.mull); easef(pal_.spand, d.spand); easef(pal_.recess, d.recess);
+        easef(pal_.reflK, d.reflK); easef(pal_.stars, d.stars); easef(pal_.clouds, d.clouds); easef(pal_.rain, d.rain);
+        easef(pal_.snow, d.snow); easef(pal_.glowK, d.glowK); easef(pal_.exposure, d.exposure);
     }
     // the section, from the HUD (a drop, or any other peak: a chorus)
     sectionKnown_ = false;
@@ -816,7 +913,6 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         dropT_ += dt;
         tetrisT_ += dt;
         overT_ += dt;
-        refreshT_ += dt;
         dropWait_ = std::max(0.f, dropWait_ - dt);
         const bool dropish = sectionKnown_ ? sectionDrop_
                                            : (music.hasSong ? music.speed > 1.33f || (inDrop_ && music.speed > 1.26f) : inDrop_);
@@ -841,10 +937,9 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         for (Particle& p : sparks_) {
             if (p.delay > 0.f) { p.delay -= dt; continue; }
             p.t += dt;
-            p.v.y -= 1.6f * dt;
-            const float dr = std::exp(-1.1f * dt);
-            p.v.x *= dr; p.v.y *= dr;
-            p.p.x += p.v.x * dt; p.p.y += p.v.y * dt;
+            p.v.y -= 7.f * dt;
+            p.v = p.v * std::exp(-1.1f * dt);
+            p.p = p.p + p.v * dt;
         }
         sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Particle& p) { return p.delay <= 0.f && p.t >= p.life; }), sparks_.end());
         gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
@@ -855,219 +950,154 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     const float lvm = smoothstepf(0.f, 1.f, lv_), lvp = smoothstepf(1.f, 2.f, lv_);
     const float worldOn = (1.f - smoothstepf(0.f, 0.8f, bridge)) * (1.f - 0.35f * dimT_);
     const float swell = inDrop_ && dropT_ < 12.f ? smoothstepf(0.f, 0.15f, dropT_) * std::exp(-std::max(0.f, dropT_ - 0.15f) / 2.5f) * dropAmp_ : 0.f;
-    const float flash = dropT_ < 3.f ? std::exp(-dropT_ / 0.5f) * dropAmp_ : 0.f;
+    const float flash = dropT_ < 3.f ? smoothstepf(0.f, 0.06f, dropT_) * std::exp(-dropT_ / 0.6f) * dropAmp_ : 0.f;
     const float tet = tetrisT_ < 6.f ? smoothstepf(0.f, 0.2f, tetrisT_) * (1.f - smoothstepf(1.5f, 3.f, tetrisT_)) : 0.f;
-    // the blackout (game over): the city goes dark, then wakes up again
     const float black = overT_ < 9.f ? smoothstepf(0.2f, 1.8f, overT_) * (1.f - smoothstepf(4.5f, 8.f, overT_)) : 0.f;
     const float peakK = std::max(chorus_ * lvp, drop_);
     const float kickK = music.kick * lvp; // (small lights only: the beacons, the crowns)
     const float crown = std::max(0.f, 0.55f * chorus_ * lvp + 1.1f * drop_ + 0.6f * tet) * worldOn * (1.f - black);
     const vec3 crownCol = lerp(pal_.accent, dropA_, smoothstepf(0.f, 0.5f, drop_)) * (1.f + 0.5f * kickK * drop_ + 1.2f * flash);
-    const float litFrac = (lerpf(0.09f, 0.22f, lvm) + 0.14f * chorus_ * lvp) * lerpf(1.f, 0.45f, slow_);
+    const float litFrac = (lerpf(0.07f, 0.2f, lvm) + 0.12f * chorus_ * lvp) * lerpf(1.f, 0.45f, slow_);
     const float cityTime = world_ + cityShift_;
+    const float bri = smoothstepf(0.f, 1.f, bridge);
+    // slow motion, a long exposure: a colder, deeper night
+    const vec3 cold = lin(0x0a1a48);
+    const vec3 skyTop = lerp(pal_.top, cold * 0.15f, 0.6f * slow_), skyHor = lerp(pal_.hor, cold * 0.6f, 0.6f * slow_);
+    const vec3 glowCol = lerp(lerp(pal_.glow, (dropA_ + dropB_) * 0.15f, 0.5f * smoothstepf(0.f, 0.5f, drop_)), cold * 0.3f, 0.6f * slow_);
+    const float glowK = pal_.glowK * (lerpf(0.7f, 1.f, lvm) + 0.25f * peakK + 0.5f * swell) * (1.f - 0.6f * black);
+    const vec3 cityLight = lerp(pal_.city, vec3(0.45f, 0.7f, 1.f), 0.7f * slow_) * (worldOn * lerpf(1.f, 1.3f, peakK));
+    const vec3 fogCol = lerp(lerp(pal_.fog, skyHor, 0.3f), glowCol * 0.5f, 0.2f) * (1.f - bri) + bridge_.color * bri;
+    const float fogD = pal_.fogD * (1.f + 0.5f * (1.f - lvm));
+    auto setSky = [&](GLuint p) {
+        set3f(p, "uSkyTop", lerp(skyTop, bridge_.color, bri));
+        set3f(p, "uSkyHor", lerp(skyHor, bridge_.color, bri));
+        set3f(p, "uGlowCol", glowCol * (1.f - bri));
+        set1f(p, "uGlowK", glowK);
+    };
+    // the HUD's columns on screen (gl_FragCoord), where the city's windows are dimmer
+    float quiet[8];
+    {
+        const float* cols[2] = {layout::LEFT_COLUMN, layout::RIGHT_COLUMN};
+        for (int i = 0; i < 2; i++) {
+            const vec2 a = project(vec3(cols[i][0], cols[i][1], 0.f)), b = project(vec3(cols[i][2], cols[i][3], 0.f));
+            quiet[i * 4 + 0] = std::min(a.x, b.x);
+            quiet[i * 4 + 1] = height_ - std::max(a.y, b.y);
+            quiet[i * 4 + 2] = std::max(a.x, b.x);
+            quiet[i * 4 + 3] = height_ - std::min(a.y, b.y);
+        }
+    }
 
-    // ---- The sky.
-    glDisable(GL_DEPTH_TEST);
+    // ---- The scene, into the HDR target.
+    glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
+    glViewport(0, 0, width_, height_);
+    glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-    sceneT_.bind();
-    const vec3 slowSky = lin(0x0a1a48);
-    vec3 top = pal_.top, mid = pal_.mid, hor = pal_.hor;
-    if (slow_ > 0.001f) {
-        // slow motion, a long exposure: a colder, deeper sky
-        const float k = 0.75f * slow_;
-        top = lerp(top, slowSky * 0.5f, k);
-        mid = lerp(mid, slowSky, k);
-        hor = lerp(hor, slowSky * 2.f, k);
-    }
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glClear(GL_DEPTH_BUFFER_BIT);
     glUseProgram(progSky_);
-    set4f(progSky_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progSky_, "uTop", top);
-    set3f(progSky_, "uMid", mid);
-    set3f(progSky_, "uHor", hor);
-    const vec3 glowCol = lerp(pal_.glow, (dropA_ + dropB_) * 0.5f, 0.6f * smoothstepf(0.f, 0.5f, drop_));
-    set3f(progSky_, "uGlowCol", glowCol);
-    set1f(progSky_, "uGlow", d.glowK * (lerpf(0.5f, 0.8f, lvm) + 0.25f * peakK + 0.5f * swell) * (1.f - 0.6f * black) * (1.f - 0.4f * slow_));
-    set3f(progSky_, "uFogCol", pal_.fog);
-    set1f(progSky_, "uFog", pal_.fogK * (1.f + 0.4f * (1.f - lvm)));
-    set1f(progSky_, "uHorY", HORIZON_Y);
-    set1f(progSky_, "uStars", pal_.stars * (1.f - 0.5f * peakK));
+    setSky(progSky_);
+    setMat(progSky_, "uInvVP", invVP_);
+    set3f(progSky_, "uEye", eye_);
+    set1f(progSky_, "uStars", pal_.stars * (1.f - 0.5f * peakK) * (1.f - bri));
+    set1f(progSky_, "uClouds", pal_.clouds * (1.f - bri));
+    set3f(progSky_, "uCloudCol", lerp(pal_.cloud, glowCol * 0.6f, 0.3f * peakK) * (1.f - 0.6f * black));
     set1f(progSky_, "uTime", world_);
-    {
-        // the searchlights: two in a chorus, four in a drop, swaying slowly behind the skyline
-        float beam[16] = {}, bcol[12] = {};
-        const float xs[4] = {-14.f, 14.5f, -19.f, 18.5f};
-        const float periods[4] = {13.f, 17.f, 11.f, 15.f};
-        for (int i = 0; i < 4; i++) {
-            const float on = (i < 2 ? std::max(chorus_ * lvp, drop_) : drop_) * worldOn * (1.f - black);
-            if (on < 0.002f) continue;
-            const float sgn = xs[i] < 0.f ? 1.f : -1.f;
-            beam[i * 4 + 0] = xs[i];
-            beam[i * 4 + 1] = sgn * (0.25f + 0.3f * std::sin(world_ * TAU / periods[i] + i * 1.7f));
-            beam[i * 4 + 2] = 0.55f;
-            beam[i * 4 + 3] = on * (0.18f + 0.1f * swell);
-            vec3 c = drop_ > 0.01f ? lerp(pal_.accent, (i % 2) ? dropB_ : dropA_, smoothstepf(0.f, 0.6f, drop_)) : pal_.accent;
-            c = c * (0.6f / std::max(0.05f, ugl::luma(c)));
-            c = lerp(c, vec3(1.f), 0.35f);
-            bcol[i * 3] = c.x; bcol[i * 3 + 1] = c.y; bcol[i * 3 + 2] = c.z;
-        }
-        glUniform4fv(ugl::U(progSky_, "uBeam"), 4, beam);
-        glUniform3fv(ugl::U(progSky_, "uBeamCol"), 4, bcol);
-    }
-    set1f(progSky_, "uBridge", smoothstepf(0.f, 1.f, bridge));
-    set3f(progSky_, "uBridgeColor", bridge_.color);
-    ugl::drawFullscreen();
+    fullscreen();
 
-    // ---- The buildings, from the back.
-    glUseProgram(progBldg_);
-    setMat(progBldg_, "uVP", vp_);
-    set3f(progBldg_, "uHaze", lerp(pal_.fog, pal_.hor, 0.4f));
-    set1f(progBldg_, "uTime", cityTime);
-    set1f(progBldg_, "uDropK", smoothstepf(0.f, 0.4f, drop_) * (1.f - black));
-    set1f(progBldg_, "uPatEpoch", patEpoch_);
-    set1f(progBldg_, "uPatPhase", patPhase_);
-    set1f(progBldg_, "uBlack", black);
-    set1f(progBldg_, "uFlash", flash);
-    set1f(progBldg_, "uSnow", pal_.snow);
-    set3f(progBldg_, "uSnowCol", lin(0xdfe6f4) * 0.55f);
-    set1f(progBldg_, "uStreetY", STREET_Y);
-    glUniform1fv(ugl::U(progBldg_, "uEq"), 8, eq_);
-    set3f(progBldg_, "uDropA", dropA_);
-    set3f(progBldg_, "uDropB", dropB_);
-    set3f(progBldg_, "uCrownCol", crownCol);
-    set1f(progBldg_, "uBridge", smoothstepf(0.f, 1.f, bridge));
-    set3f(progBldg_, "uBridgeColor", bridge_.color);
-    const float hazeK[3] = {0.06f + 0.25f * pal_.fogK, 0.2f + 0.45f * pal_.fogK, 0.42f + 0.45f * pal_.fogK};
-    // (slow motion: the city's lights turn cold, a time stretch)
-    const vec3 cityLight = lerp(pal_.city, vec3(0.45f, 0.7f, 1.f), 0.7f * slow_) * (worldOn * lerpf(1.f, 1.4f, peakK));
-    auto bldgInst = [&](const Bldg& b) {
-        const vec3 body = b.layer == 0 ? pal_.nearB : (b.layer == 1 ? pal_.midB : pal_.far);
-        Inst in{{b.x0, b.y0, b.x1, b.y1},
-                {body.x, body.y, body.z, std::min(0.92f, hazeK[b.layer] * (1.f + 0.3f * (1.f - lvm) * pal_.fogK))},
-                {cityLight.x, cityLight.y, cityLight.z, litFrac * b.lit},
-                {b.seed, (float)b.style, (float)b.layer, b.crown * crown}};
-        inst_.push_back(in);
-    };
-    auto solid = [&](float x0, float y0, float x1, float y1, const vec3& c, float haze) {
-        Inst in{{x0, y0, x1, y1}, {c.x, c.y, c.z, haze}, {0.f, 0.f, 0.f, 0.f}, {0.f, 3.f, 0.f, 0.f}};
-        inst_.push_back(in);
-    };
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    // the streets far below
+    glUseProgram(progGround_);
+    setMat(progGround_, "uVP", vp_);
+    set4f(progGround_, "uExtent", -1500.f, 20.f, 1500.f, -2500.f);
+    set1f(progGround_, "uY", GROUND_Y);
+    set3f(progGround_, "uEye", eye_);
+    set3f(progGround_, "uFogCol", fogCol);
+    set3f(progGround_, "uStreetCol", lerp(pal_.street, cold, 0.6f * slow_) * worldOn);
+    set3f(progGround_, "uAmb", pal_.amb);
+    set1f(progGround_, "uFogD", fogD);
+    set1f(progGround_, "uTime", world_);
+    set1f(progGround_, "uTraffic", lerpf(0.35f, 1.f, lvm) * worldOn);
+    set1f(progGround_, "uBlack", black);
+    glBindVertexArray(quadVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    // the buildings, and the crane
     inst_.clear();
-    for (int layer = 2; layer >= 1; layer--)
-        for (const Bldg& b : bldgs_)
-            if (b.layer == layer) bldgInst(b);
-    // the highway's deck, low between the buildings
-    solid(-23.f, HIGHWAY_Y - 0.32f, 23.f, HIGHWAY_Y - 0.1f, pal_.nearB * 0.9f, hazeK[1] * 0.6f);
-    drawInst(inst_);
-
-    // ---- The traffic (behind the near buildings): headlights one way, tail lights the other; in slow motion, a
-    // long exposure (light trails).
-    dots_.clear();
-    auto dot = [&](float x, float y, float r, float len, const vec3& c, float a, float dx, float dy, float kind) {
-        Inst in{{x, y, r, len}, {c.x, c.y, c.z, a}, {dx, dy, kind, 0.f}, {0.f, 0.f, 0.f, 0.f}};
-        dots_.push_back(in);
-    };
-    {
-        const float traffic = lerpf(0.25f, 1.f, lvm) * worldOn * (1.f - black);
-        const float trail = lerpf(0.25f, 4.f, slow_);
-        for (int i = 0; i < 36; i++) {
-            const float h = hashf(i * 3.17f + 0.5f);
-            if (h > lerpf(0.35f, 1.f, lvm)) continue; // fewer cars in a break
-            const bool head = i % 2 == 0;
-            const float speed = (head ? 1.f : -1.f) * (2.6f + 1.6f * hashf(i * 1.3f));
-            float x = std::fmod(h * 46.f + speed * world_, 46.f);
-            if (x < 0.f) x += 46.f;
-            x -= 23.f;
-            const float y = HIGHWAY_Y + (head ? -0.04f : 0.1f);
-            const vec3 c = head ? vec3(1.f, 0.92f, 0.8f) : vec3(1.f, 0.1f, 0.05f);
-            dot(x, y, 0.05f, trail, c, traffic * (head ? 0.9f : 0.7f), speed, 0.f, 1.f);
-        }
+    for (const Bldg& b : bldgs_) {
+        inst_.push_back(Inst{{b.cx, b.cz, b.hw, b.hd}, {b.y0, b.y1, b.seed, (float)b.style},
+                             {b.lit, b.crown * crown, b.patterned ? 1.f : 0.f, 1.f}, {b.alb.x, b.alb.y, b.alb.z, b.refl}});
     }
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
-    glUseProgram(progDot_);
-    setMat(progDot_, "uVP", vp_);
-    drawInst(dots_);
-    glDisable(GL_BLEND);
-
-    // ---- The near buildings, the crane.
-    inst_.clear();
+    const Bldg* craneHost = nullptr;
     for (const Bldg& b : bldgs_)
-        if (b.layer == 0) bldgInst(b);
-    {
-        // the crane on the tall building at the left, its jib turning very slowly
-        const Bldg* host = nullptr;
-        for (const Bldg& b : bldgs_)
-            if (b.layer == 0 && b.beacon && (!host || b.x0 > host->x0)) host = &b;
-        if (host) {
-            const vec3 c = pal_.nearB * 1.15f;
-            const float mx = host->x0 + (host->x1 - host->x0) * 0.62f, base = host->y1;
-            solid(mx - 0.07f, base, mx + 0.07f, base + 3.2f, c, 0.f);
-            const float turn = std::cos(world_ * TAU / 150.f + 2.f);
-            const float jl = 4.4f * (0.55f + 0.45f * std::fabs(turn)), cl = 1.5f * (0.55f + 0.45f * std::fabs(turn));
-            const float sgn = turn >= 0.f ? 1.f : -1.f;
-            const float jy = base + 2.9f;
-            solid(std::min(mx, mx + sgn * jl), jy, std::max(mx, mx + sgn * jl), jy + 0.09f, c, 0.f);
-            solid(std::min(mx, mx - sgn * cl), jy, std::max(mx, mx - sgn * cl), jy + 0.12f, c, 0.f);
-            solid(mx - sgn * cl * 0.8f - 0.18f, jy - 0.28f, mx - sgn * cl * 0.8f + 0.18f, jy, c * 0.9f, 0.f);
-            solid(mx - 0.04f, jy, mx + 0.04f, jy + 0.7f, c, 0.f);
-            const float blink = 0.55f + 0.45f * (std::fmod(world_ * 0.5f, 1.f) < 0.5f ? 1.f : 0.f);
-            dot(mx + sgn * jl, jy + 0.06f, 0.07f, 0.f, BEACON_RED * 2.f, blink * worldOn, 1.f, 0.f, 3.f);
+        if (b.cz < -45.f && b.cz > -100.f && b.cx > 25.f && b.cx < 70.f && b.y1 - b.y0 < 40.f && (!craneHost || b.y1 > craneHost->y1)) craneHost = &b;
+    vec3 craneTip(0.f);
+    if (craneHost) {
+        const vec3 c = pal_.near * 1.4f;
+        const float mx = craneHost->cx + craneHost->hw * 0.3f, mz = craneHost->cz, base = craneHost->y1;
+        auto solid = [&](float x0, float x1, float y0, float y1, float z0, float z1) {
+            inst_.push_back(Inst{{(x0 + x1) * 0.5f, (z0 + z1) * 0.5f, (x1 - x0) * 0.5f, (z1 - z0) * 0.5f}, {y0, y1, 0.f, 2.f},
+                                 {0.f, 0.f, 0.f, 0.f}, {c.x, c.y, c.z, 0.f}});
+        };
+        solid(mx - 0.3f, mx + 0.3f, base, base + 9.f, mz - 0.3f, mz + 0.3f);
+        const float ang = world_ * TAU / 160.f + 2.f;
+        const float ca = std::cos(ang), sa = std::sin(ang);
+        // the jib: a chain of small boxes along its direction (it turns very slowly)
+        for (int i = -3; i <= 14; i++) {
+            const float u = i * 0.9f;
+            const float x = mx + ca * u, z = mz + sa * u;
+            solid(x - 0.3f, x + 0.3f, base + 8.6f, base + 9.f, z - 0.3f, z + 0.3f);
         }
+        solid(mx - ca * 2.4f - 0.6f, mx - ca * 2.4f + 0.6f, base + 7.8f, base + 8.6f, mz - sa * 2.4f - 0.6f, mz - sa * 2.4f + 0.6f);
+        craneTip = vec3(mx + ca * 12.6f, base + 9.2f, mz + sa * 12.6f);
     }
-    glUseProgram(progBldg_);
-    drawInst(inst_);
-
-    // ---- The weather, behind the tower: rain, snow.
-    {
-        dots_.clear();
-        const float wv = worldOn * (pal_.rain > 0.01f ? pal_.rain : pal_.snow);
-        if (pal_.rain > 0.01f) {
-            const vec3 rc = lerp(pal_.city, pal_.accent, 0.3f) * 0.07f;
-            for (int i = 0; i < 160; i++) {
-                const Flake& fl = flakes_[i];
-                float y = std::fmod(fl.p.y + 12.f - world_ * 24.f * fl.s, 25.f);
-                if (y < 0.f) y += 25.f;
-                y -= 12.f;
-                const float x = fl.p.x + (y + 12.f) * 0.12f;
-                dot(x, y, 0.018f, 0.9f, rc, wv * (0.5f + 0.5f * fl.s), 0.12f, -1.f, 0.f);
-            }
-        }
-        if (pal_.snow > 0.01f) {
-            const vec3 sc = lin(0xe8eeff) * 0.4f;
-            for (const Flake& fl : flakes_) {
-                float y = std::fmod(fl.p.y + 12.f - world_ * 0.7f * fl.s, 25.f);
-                if (y < 0.f) y += 25.f;
-                y -= 12.f;
-                const float x = fl.p.x + 0.5f * std::sin(world_ * 0.4f * fl.s + fl.ph);
-                dot(x, y, 0.035f + 0.025f * fl.s, 0.f, sc, wv * (0.4f + 0.4f * fl.s), 1.f, 0.f, 0.f);
-            }
-        }
-        if (!dots_.empty()) {
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_ONE, GL_ONE);
-            glUseProgram(progDot_);
-            drawInst(dots_);
-            glDisable(GL_BLEND);
-        }
-    }
+    glUseProgram(progBox_);
+    setSky(progBox_);
+    setMat(progBox_, "uVP", vp_);
+    set3f(progBox_, "uEye", eye_);
+    set3f(progBox_, "uMoonDir", MOON_DIR);
+    set3f(progBox_, "uMoonCol", pal_.moon * (1.f - 0.3f * slow_));
+    set3f(progBox_, "uAmb", pal_.amb);
+    set3f(progBox_, "uUpCol", pal_.upl * (1.f - 0.6f * black));
+    set3f(progBox_, "uFogCol", fogCol);
+    set1f(progBox_, "uFogD", fogD);
+    set3f(progBox_, "uCityLight", cityLight);
+    set3f(progBox_, "uDropA", dropA_);
+    set3f(progBox_, "uDropB", dropB_);
+    set3f(progBox_, "uCrownCol", crownCol);
+    set3f(progBox_, "uSnowCol", lin(0xdfe6f4) * 0.4f);
+    set1f(progBox_, "uTime", cityTime);
+    set1f(progBox_, "uLitFrac", litFrac);
+    set1f(progBox_, "uDropK", smoothstepf(0.f, 0.4f, drop_) * (1.f - black));
+    set1f(progBox_, "uPatEpoch", patEpoch_);
+    set1f(progBox_, "uPatPhase", patPhase_);
+    set1f(progBox_, "uBlack", black);
+    set1f(progBox_, "uFlash", flash);
+    set1f(progBox_, "uSnow", pal_.snow);
+    set1f(progBox_, "uGroundY", GROUND_Y);
+    glUniform1fv(ugl::U(progBox_, "uEq"), 8, eq_);
+    glUniform4fv(ugl::U(progBox_, "uQuiet"), 2, quiet);
+    glBindVertexArray(cubeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, cubeInstVbo_);
+    glBufferData(GL_ARRAY_BUFFER, inst_.size() * sizeof(Inst), inst_.data(), GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, (GLsizei)inst_.size());
 
     // ---- The tower: the windows' light into the two textures, then the facade.
     {
         std::vector<float> a(ROWS * COLS * 4), b(ROWS * COLS * 4);
-        const float bright = (1.f + 0.12f * peakK) * worldOn * (1.f - 0.25f * slow_);
+        const float bright = (1.f + 0.1f * peakK) * worldOn * (1.f - 0.2f * slow_);
         for (int r = 0; r < ROWS; r++)
             for (int c = 0; c < COLS; c++) {
                 const Win& w = win_[r][c];
                 const int i = (r * COLS + c) * 4;
-                float lv = w.level * (w.falling ? 1.55f : 1.f) * (1.f + 0.6f * w.surge);
-                if (w.dip > 0.f) lv *= 1.f - 0.6f * w.dip * (0.6f + 0.4f * std::sin(time_ * 90.f + c));
-                const vec3 col = w.col * (lv * bright);
-                a[i] = col.x; a[i + 1] = col.y; a[i + 2] = col.z;
-                a[i + 3] = (w.level > 0.003f && w.style >= 0) ? (float)(w.style + 1) : 0.f;
+                const vec3 col = w.cur * bright;
+                a[i] = col.x; a[i + 1] = col.y; a[i + 2] = col.z; a[i + 3] = 1.f;
                 b[i] = w.ghost * worldOn;
-                b[i + 1] = w.falling ? 1.f : 0.f;
-                b[i + 2] = w.seed;
+                b[i + 1] = w.fall;
+                b[i + 2] = 0.f;
                 b[i + 3] = 0.f;
             }
         glBindTexture(GL_TEXTURE_2D, cellA_);
@@ -1076,7 +1106,9 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, COLS, ROWS, GL_RGBA, GL_FLOAT, b.data());
     }
     glUseProgram(progTower_);
+    setSky(progTower_);
     setMat(progTower_, "uVP", vp_);
+    set4f(progTower_, "uRect", -5.5f, -40.f, 5.5f, 14.6f);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, cellA_);
     glActiveTexture(GL_TEXTURE1);
@@ -1084,31 +1116,37 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1i(progTower_, "uCellA", 0);
     set1i(progTower_, "uCellB", 1);
+    set3f(progTower_, "uEye", eye_);
     set3f(progTower_, "uFrame", pal_.frame * (1.f - 0.5f * black));
-    set3f(progTower_, "uGlass", pal_.glass);
-    set3f(progTower_, "uReflTop", lerp(pal_.reflTop, mid, 0.3f * slow_));
-    set3f(progTower_, "uReflBot", pal_.reflBot);
-    set3f(progTower_, "uReflLights", pal_.city * (0.12f * (1.f - black)) + crownCol * (0.05f * crown));
+    set3f(progTower_, "uGlassTint", pal_.tint);
     {
-        vec3 gc = lin(d.piece[0]);
-        if (game.hasPiece()) gc = lin(d.piece[std::clamp(game.piece().type, 0, 6)]);
-        set3f(progTower_, "uGhostCol", gc * 0.9f);
+        vec3 gc = pal_.piece[0];
+        if (game.hasPiece()) gc = pal_.piece[std::clamp(game.piece().type, 0, 6)];
+        set3f(progTower_, "uGhostCol", gc * 0.8f);
     }
     set3f(progTower_, "uPierCol", crownCol);
     set3f(progTower_, "uCrownCol", crownCol);
-    set3f(progTower_, "uLobby", pal_.lobby * (0.14f * worldOn * (1.f - black)));
-    set3f(progTower_, "uSnowCol", lin(0xdfe6f4) * 0.5f);
+    set3f(progTower_, "uAmb", pal_.amb);
+    set3f(progTower_, "uUpCol", pal_.upl * (1.f - 0.6f * black));
+    set3f(progTower_, "uMoonCol", pal_.moon);
+    set3f(progTower_, "uMoonDir", MOON_DIR);
+    set3f(progTower_, "uSnowCol", lin(0xdfe6f4) * 0.4f);
+    set3f(progTower_, "uReflCity", pal_.reflCity * (0.25f * (1.f - black) * worldOn) + crownCol * (0.05f * crown));
     set1f(progTower_, "uMull", pal_.mull);
     set1f(progTower_, "uSpand", pal_.spand);
     set1f(progTower_, "uRecess", pal_.recess);
-    set1f(progTower_, "uReflK", pal_.reflK * (1.f - 0.4f * black));
-    set1f(progTower_, "uSpill", 0.22f);
+    set1f(progTower_, "uReflK", pal_.reflK);
     set1f(progTower_, "uPier", (0.5f * chorus_ * lvp + 0.9f * drop_ + 0.4f * kickK * drop_) * worldOn * (1.f - black));
     set1f(progTower_, "uCrown", (0.25f + crown) * worldOn * (1.f - black));
     set1f(progTower_, "uSnow", pal_.snow);
     set1f(progTower_, "uRain", pal_.rain);
     set1f(progTower_, "uTime", world_);
     set1f(progTower_, "uChase", tet * worldOn);
+    set1f(progTower_, "uRoomAmb", 0.0035f);
+    set1f(progTower_, "uFrameLight", 4.f);
+    // the facade's floodlights, from the ledge of each floor and from below
+    set3f(progTower_, "uFlood", pal_.upl * (variant_ == 4 ? 14.f : 3.f) * (1.f - 0.7f * black) * worldOn);
+    set1f(progTower_, "uGroundY", GROUND_Y);
     {
         float cc[21];
         for (int i = 0; i < 7; i++) { cc[i * 3] = pal_.piece[i].x; cc[i * 3 + 1] = pal_.piece[i].y; cc[i * 3 + 2] = pal_.piece[i].z; }
@@ -1118,20 +1156,88 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
             const Contact& c = contacts_[i];
             const float u = c.t / c.life;
             ct[i * 4] = c.x0; ct[i * 4 + 1] = c.x1; ct[i * 4 + 2] = c.y;
-            ct[i * 4 + 3] = c.power * smoothstepf(0.f, 0.1f, u) * (1.f - u) * (1.f - u) * worldOn * 0.9f;
+            ct[i * 4 + 3] = c.power * smoothstepf(0.f, 0.25f, u) * (1.f - smoothstepf(0.3f, 1.f, u)) * worldOn;
             ccol[i * 3] = c.col.x; ccol[i * 3 + 1] = c.col.y; ccol[i * 3 + 2] = c.col.z;
         }
         glUniform4fv(ugl::U(progTower_, "uContact"), 4, ct);
         glUniform3fv(ugl::U(progTower_, "uContactCol"), 4, ccol);
     }
-    set1f(progTower_, "uBridge", smoothstepf(0.f, 1.f, bridge));
+    set1f(progTower_, "uBridge", bri);
     set3f(progTower_, "uBridgeColor", bridge_.color);
     set3f(progTower_, "uBridgeInk", bridge_.ink);
-    inst_.clear();
-    inst_.push_back(Inst{{-5.5f, -12.5f, 5.5f, 13.6f}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}});
-    drawInst(inst_);
+    glBindVertexArray(quadVao_);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    // ---- The previews: small lit windows, the next one brightest.
+    // ---- The lights: beacons, the crane's tip, fireworks, rain, snow (depth tested, additive).
+    dots_.clear();
+    auto dot = [&](const vec3& p, float r, const vec3& c, float a, const vec3& dir, float len, float kind) {
+        dots_.push_back(Inst{{p.x, p.y, p.z, r}, {c.x, c.y, c.z, a}, {dir.x, dir.y, dir.z, len}, {kind, 0.f, 0.f, 0.f}});
+    };
+    {
+        // the beacons: blinking on their own in a break, every two beats on the beat grid from mid, hitting with
+        // the kicks at a peak
+        std::vector<vec3> bs;
+        for (const Bldg& b : bldgs_)
+            if (b.beacon) bs.push_back(vec3(b.cx, b.y1 + 0.4f, b.cz));
+        bs.push_back(vec3(-5.38f, 11.18f, 0.05f));
+        bs.push_back(vec3(5.38f, 11.18f, 0.05f));
+        bs.push_back(vec3(2.6f, 14.4f, 0.05f));
+        const bool grid = music.hasSong && lv_ > 0.5f;
+        for (size_t i = 0; i < bs.size(); i++) {
+            float on;
+            if (grid) {
+                const float ph = (float)std::fmod(music.beat / 2.0 + (i % 2) * 0.5, 1.0);
+                on = std::exp(-ph * 5.f);
+            } else {
+                const float ph = std::fmod(world_ / 2.4f + hashf((float)i), 1.f);
+                on = ph < 0.18f ? smoothstepf(0.f, 0.05f, ph) : std::exp(-(ph - 0.18f) * 12.f);
+            }
+            on = std::max(on, 0.06f) * (1.f + 0.8f * kickK * drop_);
+            const float dz = eye_.z - bs[i].z;
+            const float r = 0.09f * dz / eye_.z + 0.05f * slow_ * dz / eye_.z;
+            dot(bs[i], r, BEACON_RED * 3.f, on * worldOn * (1.f - 0.8f * black), vec3(1.f, 0.f, 0.f), 0.f, 3.f);
+        }
+        if (craneHost) {
+            const float blink = 0.55f + 0.45f * (std::fmod(world_ * 0.5f, 1.f) < 0.5f ? 1.f : 0.f);
+            dot(craneTip, 0.2f, BEACON_RED * 3.f, blink * worldOn, vec3(1.f, 0.f, 0.f), 0.f, 3.f);
+        }
+    }
+    for (const Particle& p : sparks_) {
+        if (p.delay > 0.f) continue;
+        const float u = p.t / p.life;
+        const float a = std::pow(1.f - u, 1.5f) * smoothstepf(0.f, 0.05f, p.t) * worldOn;
+        const float sp = length(p.v);
+        dot(p.p, 0.28f, p.c * 4.f, a, p.v, sp * 0.12f, 1.f);
+    }
+    if (pal_.rain > 0.01f) {
+        const vec3 rc = lerp(pal_.city, pal_.accent, 0.3f) * 0.12f;
+        for (const Flake& fl : flakes_) {
+            float y = std::fmod(fl.p.y + 30.f - world_ * 40.f * fl.s, 75.f);
+            if (y < 0.f) y += 75.f;
+            y -= 30.f;
+            dot(vec3(fl.p.x + (y + 30.f) * 0.1f, y, fl.p.z), 0.05f, rc, worldOn * pal_.rain * (0.5f + 0.5f * fl.s), vec3(0.1f, -1.f, 0.f), 2.4f, 0.f);
+        }
+    }
+    if (pal_.snow > 0.01f) {
+        const vec3 sc = lin(0xe8eeff) * 0.25f;
+        for (const Flake& fl : flakes_) {
+            float y = std::fmod(fl.p.y + 30.f - world_ * 2.4f * fl.s, 75.f);
+            if (y < 0.f) y += 75.f;
+            y -= 30.f;
+            const float x = fl.p.x + 1.2f * std::sin(world_ * 0.4f * fl.s + fl.ph);
+            dot(vec3(x, y, fl.p.z), 0.1f + 0.08f * fl.s, sc, worldOn * pal_.snow * (0.4f + 0.4f * fl.s), vec3(1.f, 0.f, 0.f), 0.f, 0.f);
+        }
+    }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glUseProgram(progDot_);
+    setMat(progDot_, "uVP", vp_);
+    drawInst(dots_);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+
+    // ---- The previews (small lit windows) and the gauge, on the board plane.
     wins_.clear();
     auto preview = [&](int type, vec2 center, float sc, float level) {
         if (type < 0) return;
@@ -1147,76 +1253,24 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         for (int i = 0; i < 4; i++) {
             const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
             const float h = sc * 0.5f;
-            wins_.push_back(Inst{{pos.x - h, pos.y - h, pos.x + h, pos.y + h}, {L.x, L.y, L.z, (float)type},
-                                 {hashf(pos.x * 3.f + pos.y), 1.f, 0.f, 0.f}, {0, 0, 0, 0}});
+            wins_.push_back(Inst{{pos.x - h, pos.y - h, pos.x + h, pos.y + h}, {L.x, L.y, L.z, 1.f}, {0, 0, 0, 0}, {0, 0, 0, 0}});
         }
     };
-    preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 0.9f);
+    preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.3f : 0.85f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.1f : 0.8f);
+        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.05f : 0.75f);
     }
     if (!wins_.empty()) {
-        glEnable(GL_BLEND);
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         glUseProgram(progWin_);
         setMat(progWin_, "uVP", vp_);
-        set3f(progWin_, "uFrame", pal_.frame * 0.8f);
-        set1f(progWin_, "uTime", world_);
-        set1f(progWin_, "uBridge", smoothstepf(0.f, 1.f, bridge));
+        set3f(progWin_, "uFrame", pal_.frame * 0.3f);
+        set1f(progWin_, "uBridge", bri);
         set3f(progWin_, "uBridgeInk", bridge_.ink);
         drawInst(wins_);
-        glDisable(GL_BLEND);
     }
-
-    // ---- The lights: the windows' glow in the night, the beacons, the fireworks, the gauge.
     dots_.clear();
-    {
-        // the lit windows glow a little into the night (more in slow motion: a long exposure)
-        const float gk = (0.05f + 0.06f * slow_) * worldOn;
-        for (int r = 0; r < ROWS; r++)
-            for (int c = 0; c < COLS; c++) {
-                const Win& w = win_[r][c];
-                if (w.level < 0.01f) continue;
-                const float lv = w.level * (w.falling ? 1.8f : 1.f) * (1.f + 0.8f * w.surge);
-                dot(c - 4.5f, 9.5f - r, 0.42f + 0.2f * slow_, 0.f, w.col, gk * lv, 1.f, 0.f, 0.f);
-            }
-        for (const Inst& wi : wins_) {
-            const vec3 L(wi.a1[0], wi.a1[1], wi.a1[2]);
-            dot((wi.a0[0] + wi.a0[2]) * 0.5f, (wi.a0[1] + wi.a0[3]) * 0.5f, 0.3f, 0.f, L, 0.05f, 1.f, 0.f, 0.f);
-        }
-    }
-    {
-        // the beacons: blinking on their own in a break, every two beats on the beat grid from mid, hitting with
-        // the kicks at a peak; a long exposure leaves them as soft smears
-        std::vector<vec2> bs;
-        for (const Bldg& b : bldgs_)
-            if (b.beacon) bs.push_back(v2((b.x0 + b.x1) * 0.5f, b.y1 + 0.08f));
-        bs.push_back(v2(-5.38f, 11.18f));
-        bs.push_back(v2(5.38f, 11.18f));
-        bs.push_back(v2(2.6f, 12.1f));
-        const bool grid = music.hasSong && lv_ > 0.5f;
-        for (size_t i = 0; i < bs.size(); i++) {
-            float on;
-            if (grid) {
-                const float ph = (float)std::fmod(music.beat / 2.0 + (i % 2) * 0.5, 1.0);
-                on = std::exp(-ph * 5.f);
-            } else {
-                const float ph = std::fmod(world_ / 2.4f + hashf((float)i) , 1.f);
-                on = ph < 0.18f ? 1.f : std::exp(-(ph - 0.18f) * 12.f);
-            }
-            on = std::max(on, 0.08f) * (1.f + 0.8f * kickK * drop_);
-            const float far = bs[i].y > 8.f && std::fabs(bs[i].x) > 10.f ? 0.7f : 1.f;
-            dot(bs[i].x, bs[i].y, 0.08f * far + 0.06f * slow_, 0.f, BEACON_RED * 2.2f, on * worldOn * (1.f - 0.8f * black) * far, 1.f, 0.f, 3.f);
-        }
-    }
-    for (const Particle& p : sparks_) {
-        if (p.delay > 0.f) continue;
-        const float u = p.t / p.life;
-        const float a = std::pow(1.f - u, 1.5f) * smoothstepf(0.f, 0.05f, p.t) * worldOn;
-        const float sp = std::sqrt(p.v.x * p.v.x + p.v.y * p.v.y);
-        dot(p.p.x, p.p.y, 0.055f, sp * 0.14f, p.c * 2.2f, a, p.v.x, p.v.y, 1.f);
-    }
     {
         // the gauge: twelve small windows in a ring, lit one by one as it charges (a step per line)
         const vec3 gc = layout::GAUGE_CENTER;
@@ -1225,29 +1279,87 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         const float pulse = ready && music.hasSong ? 0.75f + 0.25f * std::cos((float)std::fmod(music.beat / 2.0, 1.0) * TAU) : 1.f;
         for (int i = 0; i < 12; i++) {
             const float a = PI * 0.5f - TAU * (i + 0.5f) / 12.f;
-            const float x = gc.x + std::cos(a) * layout::GAUGE_R, y = gc.y + std::sin(a) * layout::GAUGE_R;
+            const vec3 p(gc.x + std::cos(a) * layout::GAUGE_R, gc.y + std::sin(a) * layout::GAUGE_R, 0.f);
             const float k = ready ? 1.f : saturate(fill * 12.f - i);
-            const vec3 lc = lerp(pal_.text * 0.06f, pal_.accent * (active ? 1.2f : 0.9f) * pulse, k);
-            dot(x, y, 0.1f, 0.f, lc, worldOn * (1.f - 0.4f * dimT_), 1.f, 0.f, 2.f);
+            const vec3 lc = lerp(pal_.text * 0.03f, pal_.accent * (active ? 1.2f : 0.9f) * pulse, k);
+            dot(p, 0.1f, lc, worldOn * (1.f - 0.4f * dimT_), vec3(1.f, 0.f, 0.f), 0.f, 2.f);
         }
     }
-    glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
     glUseProgram(progDot_);
-    setMat(progDot_, "uVP", vp_);
     drawInst(dots_);
     glDisable(GL_BLEND);
 
-    // ---- The final pass, then the HUD.
+    // ---- Bloom: the lit windows and lights glow in the night air (wider in slow motion).
+    glUseProgram(progBright_);
+    bloomA_.bind();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sceneTex_);
+    set1i(progBright_, "uTex", 0);
+    set2f(progBright_, "uTexel", 1.f / width_, 1.f / height_);
+    fullscreen();
+    auto blur = [&](ugl::Target& src, ugl::Target& dst, float dx, float dy) {
+        dst.bind();
+        glUseProgram(progBlur_);
+        glBindTexture(GL_TEXTURE_2D, src.tex);
+        set1i(progBlur_, "uTex", 0);
+        set2f(progBlur_, "uDir", dx / src.w, dy / src.h);
+        fullscreen();
+    };
+    blur(bloomA_, bloomB_, 1.f, 0.f);
+    blur(bloomB_, bloomA_, 0.f, 1.f);
+    blur(bloomA_, bloomC_, 1.5f, 0.f);
+    blur(bloomC_, bloomD_, 0.f, 1.5f);
+    blur(bloomD_, bloomC_, 1.5f, 0.f);
+    blur(bloomC_, bloomD_, 0.f, 1.5f);
+
+    // ---- The final pass: the searchlights' beams, the bloom, the filmic curve; then the HUD.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glUseProgram(progFinal_);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    glBindTexture(GL_TEXTURE_2D, sceneTex_);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, depthTex_);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, bloomD_.tex);
+    glActiveTexture(GL_TEXTURE0);
     set1i(progFinal_, "uScene", 0);
+    set1i(progFinal_, "uDepth", 1);
+    set1i(progFinal_, "uBloom", 2);
+    set1i(progFinal_, "uBloom2", 3);
+    setMat(progFinal_, "uInvVP", invVP_);
+    set3f(progFinal_, "uEye", eye_);
+    {
+        // the searchlights: two in a chorus, four in a drop, swaying slowly in the haze over the city
+        float bo[16] = {}, bd[16] = {}, bc[12] = {};
+        const float xs[4] = {-70.f, 85.f, -150.f, 160.f}, zs[4] = {-200.f, -230.f, -320.f, -300.f};
+        const float periods[4] = {13.f, 17.f, 11.f, 15.f};
+        for (int i = 0; i < 4; i++) {
+            const float on = (i < 2 ? std::max(chorus_ * lvp, drop_) : drop_) * worldOn * (1.f - black);
+            if (on < 0.002f) continue;
+            const float sgn = xs[i] < 0.f ? 1.f : -1.f;
+            const float a = sgn * (0.2f + 0.25f * std::sin(world_ * TAU / periods[i] + i * 1.7f));
+            const float b = 0.25f * std::sin(world_ * TAU / (periods[i] * 1.3f) + i);
+            const vec3 D = normalize(vec3(std::sin(a), std::cos(a), b));
+            bo[i * 4] = xs[i]; bo[i * 4 + 1] = GROUND_Y; bo[i * 4 + 2] = zs[i];
+            bo[i * 4 + 3] = on * (0.035f + 0.025f * swell);
+            bd[i * 4] = D.x; bd[i * 4 + 1] = D.y; bd[i * 4 + 2] = D.z; bd[i * 4 + 3] = 1.6f;
+            vec3 c = drop_ > 0.01f ? lerp(pal_.accent, (i % 2) ? dropB_ : dropA_, smoothstepf(0.f, 0.6f, drop_)) : pal_.accent;
+            c = lerp(c * (1.f / std::max(0.05f, ugl::luma(c))), vec3(1.f), 0.4f);
+            bc[i * 3] = c.x; bc[i * 3 + 1] = c.y; bc[i * 3 + 2] = c.z;
+        }
+        glUniform4fv(ugl::U(progFinal_, "uBeamO"), 4, bo);
+        glUniform4fv(ugl::U(progFinal_, "uBeamD"), 4, bd);
+        glUniform3fv(ugl::U(progFinal_, "uBeamCol"), 4, bc);
+    }
+    set1f(progFinal_, "uBloomK", lerpf(0.9f, 1.6f, slow_));
+    set1f(progFinal_, "uExposure", pal_.exposure);
     const float fade = (1.f - 0.5f * dimT_) * saturate(f.fade);
     set1f(progFinal_, "uMul", fade);
-    ugl::drawFullscreen();
+    fullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(f.hud, f.panels, fade);
@@ -1260,7 +1372,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_city() {
     static const UniverseEntry e{
-        "CITY", "a tower's facade at night, its lit windows the blocks, a skyline around it",
+        "CITY", "a tower's facade in a night city, its lit rooms the blocks",
         [] { return std::unique_ptr<Universe>(new CityUniverse()); },
         // Busy, driving songs suit it best (a city at night), any tempo.
         [](const SongLook& l) { return 0.75f + 0.25f * l.density + 0.15f * (1.f - l.brightness); },

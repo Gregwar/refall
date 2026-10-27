@@ -1,5 +1,5 @@
 #pragma once
-// CITY: a tower's facade at night, its windows the board (see city.cpp).
+// CITY: a tower's facade in a 3D night city, its windows the board (see city.cpp).
 #include <string>
 #include <vector>
 
@@ -28,41 +28,37 @@ public:
 private:
     struct Inst { float a0[4], a1[4], a2[4], a3[4]; };
 
-    // ---- The facade's windows (visual rows 0 = top of the board .. 19), each one a light that switches like a
-    // real one: a quick warm-up (with a flicker for a fluorescent tube), a fade when it goes out.
+    // ---- The facade's windows (visual rows 0 = top of the board .. 19). A window's light only ever changes
+    // smoothly: each change of what it should show starts a short eased blend from what it shows now.
     struct Win {
-        bool on = false, falling = false;
-        int style = -1;
-        vec3 col{0.f};
-        float level = 0.f, from = 0.f, t = 10.f;
-        int onKind = 0, offKind = 0;
-        float surge = 0.f, dip = 0.f, ghost = 0.f;
-        float seed = 0.f;
+        vec3 cur{0.f}, from{0.f}, to{0.f};
+        float t = 1.f, dur = 0.1f, delay = 0.f;
+        float fall = 0.f; // 1 while the falling piece is in it (eased)
+        float ghost = 0.f;
+        bool falling = false;
     };
     static constexpr int ROWS = 20, COLS = 10;
     Win win_[ROWS][COLS];
-    int pendingOff_[ROWS][COLS]; // how the next switch-off goes (0 plain, 1 a cleared floor, 2 the blackout, 3 the falling piece moving on)
+    int pendingOff_[ROWS][COLS]; // how the next switch-off goes (0 plain, 1 a cleared floor, 2 the blackout)
     float pendingDelay_[ROWS][COLS];
-    // the stack's floors step down after a clear (each one a light switch), after the cleared floor went out
+    // the stack's floors step down after a clear, one by one, after the cleared floor went out
     int off_[22];
     float offHold_ = 0.f, offStep_ = 0.f;
     void updateWindows(const Game& g, float dt);
-    float onLevel(const Win& w) const;
-    float offLevel(const Win& w) const;
 
-    struct Contact { float x0, x1, y, t = 0.f, life = 0.35f, power = 1.f; vec3 col; };
+    struct Contact { float x0, x1, y, t = 0.f, life = 0.5f, power = 1.f; vec3 col; };
     std::vector<Contact> contacts_;
     bool hardPending_ = false;
 
-    // ---- The city: buildings in three layers (generated per variant), the traffic, the crane.
-    struct Bldg { float x0, y0, x1, y1; int layer, style; float seed, lit, crown; bool beacon; };
+    // ---- The city: boxes on a street grid far below, generated per variant.
+    struct Bldg { float cx, cz, hw, hd, y0, y1; int style; float seed, lit, crown; bool beacon, patterned; vec3 alb; float refl; };
     std::vector<Bldg> bldgs_;
     int builtFor_ = -1;
     void buildCity(int variant);
-    struct Particle { vec2 p, v; vec3 c; float t, life; float delay; };
+    struct Particle { vec3 p, v; vec3 c; float t, life; float delay; };
     std::vector<Particle> sparks_;
     void spawnFireworks();
-    struct Flake { vec2 p; float s, ph; };
+    struct Flake { vec3 p; float s, ph; };
     std::vector<Flake> flakes_;
 
     // ---- Text.
@@ -82,22 +78,26 @@ private:
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul);
 
     // ---- GL.
-    GLuint progSky_ = 0, progBldg_ = 0, progTower_ = 0, progWin_ = 0, progDot_ = 0, progFinal_ = 0, progText_ = 0, progPanel_ = 0;
-    GLuint quadVbo_ = 0, instVao_ = 0, instVbo_ = 0, textVao_ = 0, textVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
+    GLuint progSky_ = 0, progGround_ = 0, progBox_ = 0, progTower_ = 0, progWin_ = 0, progDot_ = 0, progBright_ = 0,
+           progBlur_ = 0, progFinal_ = 0, progText_ = 0, progPanel_ = 0;
+    GLuint quadVbo_ = 0, instVao_ = 0, instVbo_ = 0, cubeVbo_ = 0, cubeVao_ = 0, cubeInstVbo_ = 0, quadVao_ = 0;
+    GLuint textVao_ = 0, textVbo_ = 0, panelVao_ = 0, panelVbo_ = 0, emptyVao_ = 0;
     GLuint cellA_ = 0, cellB_ = 0;
-    ugl::Target sceneT_;
-    mat4 vp_;
-    vec2 viewC_{0, 0.4f}, viewH_{22, 12.4f};
+    GLuint sceneFbo_ = 0, sceneTex_ = 0, depthTex_ = 0;
+    ugl::Target bloomA_, bloomB_, bloomC_, bloomD_;
+    mat4 vp_, invVP_;
+    vec3 eye_{0.f};
     void drawInst(const std::vector<Inst>& v);
+    void fullscreen();
     std::vector<Inst> inst_, dots_, wins_;
 
     // ---- Variant (colors eased toward it).
     int variant_ = 0;
     bool palSet_ = false;
     struct Pal {
-        vec3 top, mid, hor, glow, fog, far, midB, nearB, frame, glass, reflTop, reflBot, city, accent, text, shade, lobby;
+        vec3 top, hor, glow, fog, cloud, amb, moon, upl, street, city, frame, tint, near, far, accent, text, shade, reflCity;
         vec3 piece[7];
-        float mull, spand, recess, reflK, stars, fogK, rain, snow;
+        float fogD, mull, spand, recess, reflK, stars, clouds, rain, snow, glowK, exposure;
     };
     Pal pal_{};
     vec3 dropA_{1.f}, dropB_{1.f};
@@ -111,7 +111,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     bool inDrop_ = false, sectionKnown_ = false, sectionDrop_ = false;
     float dropWait_ = 0.f, dropT_ = 99.f, dropAmp_ = 0.f;
-    float drop_ = 0.f, chorus_ = 0.f, refreshT_ = 99.f;
+    float drop_ = 0.f, chorus_ = 0.f;
     float tetrisT_ = 99.f, overT_ = 99.f, cityShift_ = 0.f;
     float slow_ = 0.f;
     bool slowOn_ = false;
