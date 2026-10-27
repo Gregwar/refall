@@ -3,7 +3,7 @@
 scene per song, the game played at a calm pace), stitched together with crossfades.
 
 usage: tools/promo.py [OUT.mp4] [--songs N] [--before SEC] [--after SEC] [--fade SEC] [--size WxH]
-Needs a built zentris (build/zentris), yt-dlp and ffmpeg.
+Needs a built tetris-universe (build/tetris-universe), yt-dlp and ffmpeg.
 """
 import argparse
 import os
@@ -85,7 +85,7 @@ def main():
     ap.add_argument("--size", default="1920x1080")
     args = ap.parse_args()
     if not os.path.exists(ZENTRIS):
-        sys.exit(f"build zentris first ({ZENTRIS} is missing)")
+        sys.exit(f"build tetris-universe first ({ZENTRIS} is missing)")
 
     ids = playlist_ids(default_playlist_id())
     random.shuffle(ids)

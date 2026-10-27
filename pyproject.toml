@@ -27,6 +27,7 @@ dependencies = ["yt-dlp[default]", "imageio-ffmpeg"]
 Homepage = "https://github.com/Gregwar/zentris"
 
 [project.scripts]
+tetris-universe = "zentris._launcher:main"
 zentris = "zentris._launcher:main"
 zenscope = "zentris._launcher:scope"
 zenscene = "zentris._launcher:scene"
@@ -45,7 +46,7 @@ ZENTRIS_BUNDLE_GLFW = "ON"
 [tool.cibuildwheel]
 build = "cp312-*"
 skip = "*-musllinux_* *-win32 *_i686"
-test-command = "zentris --help"
+test-command = "tetris-universe --help"
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]

@@ -10,7 +10,7 @@ Node.js, and Node.js is picked up automatically). Songs are downloaded when queu
 `~/.cache/zentris/youtube/`. Downloading from YouTube is against its terms of service: personal use only.
 
 ```sh
-./build/zentris "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
+./build/tetris-universe "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
 ./build/zenscope "https://www.youtube.com/watch?v=..."
 ```
 
@@ -25,7 +25,7 @@ with `--transition NAME`, saves N frames across the change and exits),
 with the game played at a calm pace; `--clip-before` / `--clip-after SEC` change the span).
 
 `tools/scenereview.py` reviews universes: `generate` renders 100 random snapshots (each for a downloaded song, at a
-calm, mid or peak part of it, with a filled board; `zentris --review-shot OUT.png` makes one), and `serve [--lan]`
+calm, mid or peak part of it, with a filled board; `tetris-universe --review-shot OUT.png` makes one), and `serve [--lan]`
 opens a dashboard, on a computer or a phone, to skip scenes or comment on them. Comments become threads that
 `pending` / `watch` hand to whoever processes them, and `reply` answers one with before/after snapshots to accept
 or discuss further.

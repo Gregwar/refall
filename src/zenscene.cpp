@@ -112,7 +112,7 @@ void SceneViewer::show(bool transition) {
     } else {
         R_.setUniverse(universe_, look, level_, levelEnergy(level_));
     }
-    std::printf("[zenscene] %s  |  %s %s\n  zentris --universe '%s'\n", R_.label().c_str(), segmentName(section_),
+    std::printf("[zenscene] %s  |  %s %s\n  tetris-universe --universe '%s'\n", R_.label().c_str(), segmentName(section_),
                 LEVEL_NAMES[level_], spec().c_str());
     std::fflush(stdout);
 }

@@ -41,9 +41,9 @@ Commands:
 Everything lives in the user data folder (~/.local/share/zentris/scene-review/): one folder per batch (snapshots,
 scenes.jsonl with what reproduces each scene), threads.json (the threads and their state) and feedback.jsonl (every
 message, appended, for later processing).
-Needs a built zentris (build/zentris), and zenscene (build/zenscene) for the scenes it sends.
+Needs a built tetris-universe (build/tetris-universe), and zenscene (build/zenscene) for the scenes it sends.
 
-With universes, a scene "code" is a universe and its variant ("VECTOR:P3 AMBER", as zentris --universe and
+With universes, a scene "code" is a universe and its variant ("VECTOR:P3 AMBER", as tetris-universe --universe and
 zenscene take it); "scene" is its label ("VECTOR · P3 AMBER"). Old threads keep their old scene codes, which the
 current binaries no longer understand (re-rendering those falls back to a random universe).
 """
@@ -137,7 +137,7 @@ def render(i, song, level, folder, size):
 
 def generate(args):
     if not os.path.exists(ZENTRIS):
-        sys.exit(f"build zentris first ({ZENTRIS} is missing)")
+        sys.exit(f"build tetris-universe first ({ZENTRIS} is missing)")
     songs = cached_songs()
     if not songs:
         sys.exit(f"no downloaded song in {CACHE}: play the default playlist a little first")
@@ -583,7 +583,7 @@ function showScene(s, list) {
     <div class="dim" style="font-size:12px">song phases (blue calm, amber mid, red peak); white: the snapshot</div>
     <dl><dt>song</dt><dd>${esc(s.title)}</dd><dt>at</dt><dd>${fmt(s.time)} of ${fmt(s.duration)} · ${s.bpm} BPM</dd>
       <dt>energy</dt><dd>${s.energy.toFixed(2)}</dd><dt>code</dt><dd><code>${esc(s.code)}</code></dd></dl>
-    <div class="dim" style="font-size:12px">same universe: <code>zentris --universe '${esc(s.code)}' 'ytdl:${esc(s.video)}'</code></div>`
+    <div class="dim" style="font-size:12px">same universe: <code>tetris-universe --universe '${esc(s.code)}' 'ytdl:${esc(s.video)}'</code></div>`
     : `<div><span class="level l${s.level}">${LV[s.level]}</span> ${esc(s.section)} · ${s.branch ? "suggestion, branch <code>" + esc(s.branch) + "</code>" : "sent from zenscene"}</div>
     <dl><dt>code</dt><dd><code>${esc(s.code)}</code></dd></dl>
     <div class="dim" style="font-size:12px">same universe: <code>zenscene --section ${esc(s.section.toLowerCase())} --level ${s.level} '${esc(s.code)}'</code></div>`}

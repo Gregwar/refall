@@ -129,7 +129,7 @@ endforeach()
 target_include_directories(zenrender PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
 # The game.
-add_executable(zentris
+add_executable(tetris-universe
   src/main.cpp
   src/game.cpp
   src/input.cpp
@@ -139,15 +139,15 @@ add_executable(zentris
 if(UNIX AND NOT APPLE)
   find_package(OpenGL QUIET COMPONENTS EGL)
   if(OpenGL_EGL_FOUND)
-    target_link_libraries(zentris PRIVATE OpenGL::EGL)
-    target_compile_definitions(zentris PRIVATE ZEN_HAVE_EGL)
+    target_link_libraries(tetris-universe PRIVATE OpenGL::EGL)
+    target_compile_definitions(tetris-universe PRIVATE ZEN_HAVE_EGL)
   endif()
 endif()
-target_link_libraries(zentris PRIVATE zenrender zencore glfw glad)
+target_link_libraries(tetris-universe PRIVATE zenrender zencore glfw glad)
 # Gamepad mappings (SDL_GameControllerDB): looked up next to the executable, then in the sources.
-target_compile_definitions(zentris PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_custom_command(TARGET zentris POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                   ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:zentris>/gamecontrollerdb.txt)
+target_compile_definitions(tetris-universe PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_custom_command(TARGET tetris-universe POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                   ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:tetris-universe>/gamecontrollerdb.txt)
 
 # zenscope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
 add_executable(zenscope src/zenscope.cpp)
@@ -162,7 +162,7 @@ target_link_libraries(zenscene PRIVATE zenrender zencore glfw glad)
 # Its "send to dashboard" runs tools/scenereview.py from the sources.
 target_compile_definitions(zenscene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
-foreach(t zencore zenrender zentris zenscope zenscene)
+foreach(t zencore zenrender tetris-universe zenscope zenscene)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
@@ -171,6 +171,6 @@ endforeach()
 
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
-  install(TARGETS zentris zenscope zenscene RUNTIME DESTINATION zentris/bin)
+  install(TARGETS tetris-universe zenscope zenscene RUNTIME DESTINATION zentris/bin)
   install(FILES third_party/gamecontrollerdb.txt DESTINATION zentris/bin)
 endif()

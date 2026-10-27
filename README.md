@@ -122,7 +122,7 @@ game are in [docs/reference.md](docs/reference.md).
 ```sh
 sudo apt install cmake g++ libglfw3-dev libglew-dev    # Debian/Ubuntu
 cmake -S . -B build && cmake --build build -j
-./build/zentris ~/Music
+./build/tetris-universe ~/Music
 ```
 
 `-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden"` (the default) lists the universes left out of the build;

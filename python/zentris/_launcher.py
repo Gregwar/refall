@@ -1,4 +1,4 @@
-"""Console entry points: run the bundled native binaries (zentris, zenscope, zenscene)."""
+"""Console entry points: run the bundled native binaries (tetris-universe, zenscope, zenscene)."""
 
 import os
 import shutil
@@ -41,7 +41,7 @@ def _run(name: str) -> None:
 
 
 def main() -> None:
-    _run("zentris")
+    _run("tetris-universe")
 
 
 def scope() -> None:
