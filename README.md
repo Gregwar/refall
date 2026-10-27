@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Nineteen universes so far:
+song, and songs change universe with a transition on the beat. Eighteen universes so far:
 
 <table>
 <tr>
@@ -41,7 +41,7 @@ song, and songs change universe with a transition on the beat. Nineteen universe
 <td><img src="https://raw.githubusercontent.com/Gregwar/zentris/210013d9eb38de1166e8753be86cea34904be746/docs/universes/garden.jpg"><br><b>GARDEN</b>: tiles of earth growing pixel grass and flowers</td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/f5b149393574b12b9a47ec4ab30cb19c21c6283f/docs/universes/sea.jpg"><br><b>SEA</b>: glass cubes of water over a rising 3D sea</td>
+<td><img src="docs/universes/biome.jpg"><br><b>BIOME</b>: glass cubes of water or seeds bringing a 3D world to life: a sea rising over dry sand, or a jungle growing on parched clay</td>
 <td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/fluo.jpg"><br><b>FLUO</b>: fluorescent paint splashed on a dark wall, glowing under a blacklight on drops</td>
 </tr>
 <tr>
@@ -51,10 +51,6 @@ song, and songs change universe with a transition on the beat. Nineteen universe
 <tr>
 <td><img src="https://raw.githubusercontent.com/Gregwar/zentris/cb76251de16f7e81e5f2641e610ecb2f19a82a2e/docs/universes/lightsource.jpg"><br><b>LIGHTSOURCE</b>: a dim room lit by the falling piece, the stack casting its shadows</td>
 <td><img src="docs/universes/notepad.jpg"><br><b>NOTEPAD</b>: a squared notebook drawn by hand in stop motion, erased and redrawn</td>
-</tr>
-<tr>
-<td><img src="docs/universes/rewild.jpg"><br><b>REWILD</b>: glass cubes of seeds broken by the clears, a parched land growing into a jungle</td>
-<td></td>
 </tr>
 </table>
 
