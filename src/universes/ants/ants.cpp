@@ -105,8 +105,8 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float ANT_L = 0.3f;    // an ant's length unit (board units; the body is ~0.8 of it)
 constexpr float CUBE = 0.43f;    // a sugar cube's half size (a cell is 0.5)
-constexpr float TAU_FOOD = 22.f; // pheromone evaporation (seconds)
-constexpr float TAU_HOME = 9.f;
+constexpr float TAU_FOOD = 24.f; // pheromone evaporation (seconds)
+constexpr float TAU_HOME = 20.f;
 constexpr int MAX_GRAINS = 1400;
 
 std::string titleCase(const std::string& s) {
@@ -326,7 +326,7 @@ void AntsUniverse::drop(float strength) {
     if (level_ < 2) return;
     inDrop_ = true;
     swell_ = std::max(swell_, 0.6f + 0.4f * saturate(strength));
-    const int n = 45 + (int)(45 * saturate(strength));
+    const int n = 40 + (int)(40 * saturate(strength));
     pour(0, n);
     pour(1, n);
 }
@@ -439,13 +439,10 @@ void AntsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             sy += p.y;
             n++;
         }
-        if (n) {
-            excite_ = v2(0.f, sy / n);
-            exciteT_ = ev.count >= 4 ? 5.f : 2.5f;
-        }
+        (void)sy;
         if (ev.count >= 4) {
-            pour(0, 45);
-            pour(1, 45);
+            pour(0, 25);
+            pour(1, 25);
         }
         // the nibbles follow the cubes down
         float nn[Game::H][Game::W] = {}, ss[Game::H][Game::W] = {};
@@ -561,34 +558,21 @@ void AntsUniverse::wear(vec2 p, float amount) {
     r1[1] = std::min(1.5f, r1[1] + amount * tx * ty);
 }
 
-void AntsUniverse::spawn(int nest, bool burstOut, bool scout) {
+// A new ant leaves the nest in a random direction. A recruit (called out by a forager that brought sugar home)
+// follows trails faithfully; a wanderer explores, half-heeding what it smells.
+void AntsUniverse::spawn(int nest, bool recruit) {
     Ant a;
     const vec2 c = nest_[nest];
-    float toward = nest == 0 ? 0.f : PI;
-    if (!scout) {
-        // followers leave along the strongest trail
-        float best = 0.03f;
-        for (int k = 0; k < 24; k++) {
-            const float t = toward + (k / 23.f - 0.5f) * 2.6f;
-            const float v = pher(food_, c + dirOf(t) * (nestR_ * 0.9f));
-            if (v > best) { best = v; toward = t; }
-        }
-    }
-    const float ang = toward + rng_.range(-1.f, 1.f) * (scout ? 1.2f : 0.35f);
-    a.p = c + dirOf(ang) * rng_.range(0.f, nestR_ * 0.3f);
-    a.a = ang + rng_.range(-0.4f, 0.4f);
-    a.speed = rng_.range(0.82f, 1.18f) * (burstOut ? 1.15f : 1.f);
+    const float toward = nest == 0 ? 0.f : PI;
+    const float ang = toward + rng_.range(-1.f, 1.f) * 1.35f;
+    a.p = c + dirOf(ang) * rng_.range(0.f, nestR_ * 0.35f);
+    a.a = ang + rng_.range(-0.5f, 0.5f);
+    a.speed = rng_.range(0.85f, 1.15f);
     a.gait = rng_.range(0.f, TAU);
     a.nest = nest;
     a.lustre = rng_.range(0.08f, 0.2f);
-    a.scout = scout;
-    if (!scout && foodAge_[nest] < 45.f) {
-        a.hasGoal = true;
-        a.goal = food_at_[nest] + v2(rng_.range(-0.6f, 0.6f), rng_.range(-0.6f, 0.6f));
-    } else if (!scout && burstOut && hasSugar_) {
-        a.hasGoal = true; // poured out: straight for the sugar
-        a.goal = v2(rng_.range(-4.f, 4.f), sugarC_.y);
-    }
+    a.fid = recruit ? rng_.range(0.85f, 1.f) : rng_.range(0.3f, 0.75f);
+    a.life = recruit ? rng_.range(40.f, 80.f) : rng_.range(35.f, 110.f);
     ants_.push_back(a);
 }
 
@@ -612,20 +596,22 @@ void AntsUniverse::syncCells(const Game& game) {
     // a whole stack at once (a scene review's board): the colony has had time to find it
     if (appeared > 24) warm_ = false;
     openTop_ = top + 1.25f;
-    // the sugar the scouts smell: the stack's top surface, near its middle
-    hasSugar_ = top > -9.9f;
-    sugarC_ = v2(0.f, top - 0.6f);
 }
 
-void AntsUniverse::stepAnts(const Game& game, float dt, float speedK) {
-    (void)game;
-    const float sense = 0.6f;
+// The colony, as a classic ant-colony model: no ant knows where the sugar is. Each one only feels the two
+// pheromones under its three antennae-sensors (ahead-left, ahead, ahead-right) and the sugar right in front of it.
+// Searching ants lay "home" pheromone and climb the "food" one; ants carrying a crumb lay "food" pheromone (weaker
+// the further they have walked from the sugar) and climb the "home" one, helped by their sense of the nest's
+// direction. Both fields diffuse and evaporate, so the trails that are walked most (the shorter ones) win.
+void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
+    const float sense = 0.5f, sideA = 0.55f;
     const float nestIn = nestR_ * 0.6f;
     for (size_t i = 0; i < ants_.size(); i++) {
         Ant& a = ants_[i];
-        a.since += dt;
         a.alpha = std::min(1.f, a.alpha + dt * 2.f);
         a.panic = std::max(0.f, a.panic - dt);
+        a.meetCd -= dt;
+        a.stray -= dt;
         // stuck inside a cube that just landed: out to the nearest free side, or gone
         if (sugarAt(a.p, 0.5f)) {
             bool out = false;
@@ -638,86 +624,61 @@ void AntsUniverse::stepAnts(const Game& game, float dt, float speedK) {
             }
             if (!out) { a.alpha = -1.f; continue; }
         }
+        // stopped, antennae touching another's
+        if (a.pause > 0.f) {
+            a.pause -= dt;
+            continue;
+        }
+        a.since += dt;
         const vec2 nest = nest_[a.nest];
         const bool homing = a.state != 0 || a.retire;
-        // wander: a smooth random turn
-        a.w += rng_.range(-1.f, 1.f) * (a.scout || homing ? 16.f : 10.f) * dt;
-        a.w *= std::exp(-2.5f * dt);
-        a.w = clampf(a.w, -2.4f, 2.4f);
+        // a correlated random walk
+        a.w += rng_.range(-1.f, 1.f) * (homing ? 9.f : 13.f) * explore * dt;
+        a.w *= std::exp(-3.f * dt);
+        a.w = clampf(a.w, -2.6f, 2.6f);
         float turn = a.w;
-        // the pheromone ahead: left, straight, right
+        // the pheromone under the three sensors
         const std::vector<float>& F = homing ? home_ : food_;
-        const float l = pher(F, a.p + dirOf(a.a + 0.6f) * sense), c = pher(F, a.p + dirOf(a.a) * sense),
-                    r = pher(F, a.p + dirOf(a.a - 0.6f) * sense);
+        const float l = pher(F, a.p + dirOf(a.a + sideA) * sense), c = pher(F, a.p + dirOf(a.a) * sense),
+                    r = pher(F, a.p + dirOf(a.a - sideA) * sense);
         const float mx = std::max(c, std::max(l, r));
-        if (mx > 0.025f) {
-            // an ant that knows its way only leans toward the trail (no trail loops on its own)
-            const float k = homing ? 0.25f : a.hasGoal ? 0.35f : 1.f;
-            if (c < mx) turn += (l > r ? 1.f : -1.f) * 4.f * k;
-            else turn += (l - r) / (l + r + c + 0.05f) * 2.f * k;
-            a.offTrail = 0.f;
-        } else {
-            a.offTrail += dt;
+        a.trail = mx > 0.03f && a.stray <= 0.f;
+        if (a.trail) {
+            const float k = homing ? 1.f : a.fid;
+            turn *= 1.f - 0.6f * k;
+            if (c >= l && c >= r) turn += (l - r) / (l + r + c + 1e-3f) * 2.5f * k;
+            else turn += (l > r ? 1.f : -1.f) * 3.8f * k;
+            // now and then one wanders off the trail: a branch, that dies out unless it leads somewhere
+            if (!homing && rng_.chance(dt * 0.04f * explore)) a.stray = rng_.range(1.f, 3.f);
         }
-        // the way around the HUD columns: under them
-        auto via = [&](vec2 goal) {
-            const float side = (std::fabs(goal.x) > std::fabs(a.p.x) ? goal.x : a.p.x) < 0.f ? -1.f : 1.f;
+        if (homing) {
+            // the sense of the nest's direction (around the HUD columns: under them)
+            const float side = a.p.x < 0.f ? -1.f : 1.f;
             const vec2 corner = side < 0.f ? v2(layout::LEFT_COLUMN[0] - 0.6f, layout::LEFT_COLUMN[1] - 1.9f)
                                            : v2(layout::RIGHT_COLUMN[2] + 0.6f, layout::RIGHT_COLUMN[1] - 2.3f);
-            const bool inside = std::fabs(a.p.x) < std::fabs(corner.x) - 0.2f, beyond = std::fabs(goal.x) > std::fabs(corner.x);
-            return inside == beyond && a.p.y > corner.y - 0.5f && a.p.y < 10.8f ? corner : goal;
-        };
-        if (homing) {
-            const vec2 g = via(nest);
+            const bool under = std::fabs(a.p.x) < std::fabs(corner.x) - 0.2f && a.p.y > corner.y - 0.5f && a.p.y < 10.8f;
+            const vec2 g = under ? corner : nest;
             const float dn = len(nest - a.p);
-            turn += clampf(wrapAngle(std::atan2(g.y - a.p.y, g.x - a.p.x) - a.a), -1.f, 1.f) * (2.2f + 8.f / (dn + 0.5f));
+            const float kN = (a.trail ? 0.5f : 1.5f) + 7.f / (dn + 0.5f);
+            turn += clampf(wrapAngle(std::atan2(g.y - a.p.y, g.x - a.p.x) - a.a), -1.f, 1.f) * kN;
         } else {
-            // the smell of sugar close by: the stack, and loose grains
-            float best = 1e9f;
-            vec2 target{};
-            if (std::fabs(a.p.x) < 7.f && a.p.y < openTop_ + 1.5f) {
-                const int cx = (int)std::floor(a.p.x + 5.f), cy = (int)std::floor(12.f - a.p.y);
-                for (int y = std::max(Game::HIDDEN, cy - 2); y <= std::min(Game::H - 1, cy + 2); y++)
-                    for (int x = std::max(0, cx - 2); x <= std::min(Game::W - 1, cx + 2); x++) {
-                        if (occ_[y][x] < 0) continue;
-                        const vec2 q = v2(x - 4.5f, 11.5f - y);
-                        const float d = len2(q - a.p);
-                        if (d < best) { best = d; target = q; }
+            // the antennae touch sugar just ahead: a cube, or a loose grain
+            int gx = 0, gy = 0;
+            const vec2 ahead = a.p + dirOf(a.a) * 0.32f;
+            if (sugarAt(ahead, CUBE + 0.14f, &gx, &gy)) {
+                const vec2 q = v2(gx - 4.5f, 11.5f - gy);
+                turn += clampf(wrapAngle(std::atan2(q.y - a.p.y, q.x - a.p.x) - a.a), -1.f, 1.f) * 5.f;
+            } else {
+                for (const Grain& g : grains_)
+                    if (g.food && len2(g.p - ahead) < 0.16f) {
+                        turn += clampf(wrapAngle(std::atan2(g.p.y - a.p.y, g.p.x - a.p.x) - a.a), -1.f, 1.f) * 5.f;
+                        break;
                     }
             }
-            for (const Grain& g : grains_) {
-                if (!g.food) continue;
-                const float d = len2(g.p - a.p);
-                if (d < 2.6f && d < best) { best = d; target = g.p; }
-            }
-            if (best < 6.25f) {
-                const float k = 1.f - std::sqrt(best) / 2.5f;
-                turn += clampf(wrapAngle(std::atan2(target.y - a.p.y, target.x - a.p.x) - a.a), -1.f, 1.f) * 5.f * k;
-            }
-            // led by memory toward the sugar
-            if (a.hasGoal) {
-                const vec2 g = via(a.goal);
-                const float dg = len(a.goal - a.p);
-                if (dg < 1.2f) a.hasGoal = false;
-                else turn += clampf(wrapAngle(std::atan2(g.y - a.p.y, g.x - a.p.x) - a.a), -1.f, 1.f) * 2.6f;
-                a.offTrail = 0.f;
-            }
-            // a scout smells the stack from afar
-            if (a.scout && hasSugar_) {
-                const float d2 = len2(sugarC_ - a.p);
-                const vec2 g = via(sugarC_);
-                if (d2 < 400.f)
-                    turn += clampf(wrapAngle(std::atan2(g.y - a.p.y, g.x - a.p.x) - a.a), -1.f, 1.f) *
-                            0.9f * (1.f - std::sqrt(d2) / 20.f);
-            }
-            // excited by a clear: toward it
-            if (exciteT_ > 0.f && len2(excite_ - a.p) < 100.f)
-                turn += clampf(wrapAngle(std::atan2(excite_.y - a.p.y, excite_.x - a.p.x) - a.a), -1.f, 1.f) * 1.2f;
         }
         if (a.panic > 0.f) turn = a.w * 0.2f;
         a.a = wrapAngle(a.a + turn * dt);
-        const float excited = (exciteT_ > 0.f && len2(excite_ - a.p) < 64.f) ? 1.3f : 1.f;
-        const float sp = a.speed * speedK * excited * (a.panic > 0.f ? 1.6f + a.panic * 2.f : 1.f);
+        const float sp = a.speed * speedK * (a.panic > 0.f ? 1.6f + a.panic * 2.f : 1.f);
         vec2 np = a.p + dirOf(a.a) * (sp * dt);
         if (blocked(np)) {
             // feel along the obstacle: the closest free heading
@@ -736,25 +697,28 @@ void AntsUniverse::stepAnts(const Game& game, float dt, float speedK) {
         }
         const float moved = len(np - a.p);
         a.p = np;
+        a.dist += moved;
         a.gait += moved / (ANT_L * 0.42f) * PI;
-        // the trails
-        wear(a.p, dt * (a.state == 1 ? 1.2f : 0.45f));
-        if (a.state == 1) deposit(food_, a.p, dt * 7.f * std::exp(-a.since / 30.f));
-        else if (a.state == 0) deposit(home_, a.p, dt * 2.5f * std::exp(-a.since / 14.f));
-        // sugar under the jaws
+        // the pheromones, and the paths worn on the ground (by the foragers)
+        if (a.state == 1) {
+            deposit(food_, a.p, dt * layK * 4.f * std::exp(-a.dist / 20.f));
+            wear(a.p, dt * 1.f);
+        } else if (a.state == 0 && !a.retire) {
+            deposit(home_, a.p, dt * layK * 1.2f * std::exp(-a.dist / 25.f));
+            if (a.trail) wear(a.p, dt * 0.3f);
+        }
+        // sugar under the jaws: a crumb, and back home
         if (a.state == 0 && !a.retire) {
             const vec2 head = a.p + dirOf(a.a) * (ANT_L * 0.42f);
             int gx = 0, gy = 0;
             bool found = false;
             if (sugarAt(head, CUBE + 0.07f, &gx, &gy)) {
-                a.goal = head;
-                a.crumb = lerp(pieceColor(occ_[gy][gx]), vec3(1.f), 0.15f);
+                a.crumb = lerp(pieceColor(occ_[gy][gx]), vec3(1.f), 0.45f);
                 nib_[gy][gx] = std::min(1.f, nib_[gy][gx] + 0.06f);
                 found = true;
             } else {
                 for (Grain& g : grains_)
                     if (g.food && g.life > 0.f && len2(g.p - head) < 0.03f) {
-                        a.goal = g.p;
                         a.crumb = g.col;
                         g.life = -1.f;
                         g.food = false;
@@ -765,86 +729,146 @@ void AntsUniverse::stepAnts(const Game& game, float dt, float speedK) {
             if (found) {
                 a.state = 1;
                 a.since = 0.f;
+                a.dist = 0.f;
+                a.stray = 0.f;
                 a.a = wrapAngle(a.a + PI + rng_.range(-0.5f, 0.5f));
                 a.w = 0.f;
-            } else if (a.since > 55.f) {
-                a.state = 2; // lost: home
-            } else if (!a.scout && !a.hasGoal && a.offTrail > 4.f) {
-                a.state = 2; // no trail to follow: back to the nest
+            } else if (a.since > a.life) {
+                a.state = 2; // tired of searching: home
             }
         }
         // home
         if (homing && len2(a.p - nest) < nestIn * nestIn) {
-            if (a.retire) { a.alpha = -1.f; continue; }
-            if (a.state == 1) {
-                recruits_[a.nest] += 1.f + 1.f * smoothstepf(0.5f, 2.f, lv_) + 2.f * dropMix_;
-                food_at_[a.nest] = a.goal;
-                foodAge_[a.nest] = 0.f;
-                a.hasGoal = true; // back to the sugar
-            } else if (!a.scout) {
-                a.alpha = -1.f; // nothing to follow: it stays in
-                continue;
-            }
+            if (a.retire || a.state == 2) { a.alpha = -1.f; continue; }
+            // a crumb brought home calls others out (recruitment), and the forager goes back out on its trail
+            recruits_[a.nest] += 1.2f + 2.f * dropMix_;
             a.state = 0;
             a.since = 0.f;
+            a.dist = 0.f;
+            a.fid = std::max(a.fid, 0.9f);
+            a.life = rng_.range(40.f, 80.f);
             a.a = wrapAngle(a.a + PI + rng_.range(-0.6f, 0.6f));
         }
     }
     ants_.erase(std::remove_if(ants_.begin(), ants_.end(), [](const Ant& a) { return a.alpha < 0.f; }), ants_.end());
+
+    // ants meeting head-on on a trail stop and touch antennae; a searcher touched by a forager carrying sugar
+    // takes to the trail
+    const float HC = 0.5f;
+    const int hw = (int)std::ceil(2.f * viewH_.x / HC) + 8, hh = (int)std::ceil(2.f * viewH_.y / HC) + 8;
+    const vec2 h0 = v2(viewC_.x - viewH_.x - 2.f * HC, viewC_.y - viewH_.y - 2.f * HC);
+    bucket_.assign(hw * hh, -1);
+    chain_.assign(ants_.size(), -1);
+    auto cellOf = [&](vec2 p, int& x, int& y) {
+        x = std::clamp((int)((p.x - h0.x) / HC), 0, hw - 1);
+        y = std::clamp((int)((p.y - h0.y) / HC), 0, hh - 1);
+    };
+    for (size_t i = 0; i < ants_.size(); i++) {
+        int x, y;
+        cellOf(ants_[i].p, x, y);
+        chain_[i] = bucket_[y * hw + x];
+        bucket_[y * hw + x] = (int)i;
+    }
+    for (size_t i = 0; i < ants_.size(); i++) {
+        Ant& a = ants_[i];
+        if (a.meetCd > 0.f || a.pause > 0.f || a.panic > 0.f || a.alpha < 0.5f) continue;
+        if (a.state != 1 && !a.trail) continue;
+        int x, y;
+        cellOf(a.p, x, y);
+        for (int yy = std::max(0, y - 1); yy <= std::min(hh - 1, y + 1) && a.pause <= 0.f; yy++)
+            for (int xx = std::max(0, x - 1); xx <= std::min(hw - 1, x + 1) && a.pause <= 0.f; xx++)
+                for (int j = bucket_[yy * hw + xx]; j >= 0; j = chain_[j]) {
+                    if ((size_t)j == i) continue;
+                    Ant& b = ants_[j];
+                    if (b.meetCd > 0.f || b.pause > 0.f || b.panic > 0.f || b.state == 2) continue;
+                    if (len2(b.p - a.p) > 0.3f * 0.3f) continue;
+                    if (std::cos(b.a - a.a) > -0.55f) continue; // head-on only
+                    const float t = rng_.range(0.3f, 0.65f);
+                    a.pause = b.pause = t;
+                    a.meetCd = rng_.range(2.f, 4.f);
+                    b.meetCd = rng_.range(2.f, 4.f);
+                    // face each other
+                    a.a = std::atan2(b.p.y - a.p.y, b.p.x - a.p.x);
+                    b.a = wrapAngle(a.a + PI);
+                    Ant* searcher = a.state == 1 && b.state == 0 ? &b : b.state == 1 && a.state == 0 ? &a : nullptr;
+                    if (searcher) {
+                        searcher->fid = 1.f;
+                        searcher->stray = 0.f;
+                        searcher->life = std::max(searcher->life, searcher->since + 30.f);
+                    }
+                    break;
+                }
+    }
+}
+
+// The fields spread a little and fade.
+void AntsUniverse::relax(std::vector<float>& f, float tau, float dt) {
+    const float ke = std::exp(-dt / tau);
+    const float kd = 0.5f * (1.f - std::exp(-dt * 2.f));
+    tmp_.resize(f.size());
+    for (int y = 0; y < gh_; y++)
+        for (int x = 0; x < gw_; x++) {
+            const int i = y * gw_ + x;
+            if (x == 0 || y == 0 || x == gw_ - 1 || y == gh_ - 1) { tmp_[i] = f[i] * ke; continue; }
+            const float avg = 0.25f * (f[i - 1] + f[i + 1] + f[i - gw_] + f[i + gw_]);
+            tmp_[i] = (f[i] + kd * (avg - f[i])) * ke;
+        }
+    f.swap(tmp_);
 }
 
 void AntsUniverse::simulate(const Game& game, float wdt, float dt, const MusicState& music) {
+    (void)game;
+    (void)dt;
     // the staging
     lv_ = approach(lv_, lvTarget_, 0.9f, dt);
     dropMix_ = approach(dropMix_, inDrop_ ? 1.f : 0.f, inDrop_ ? 5.f : 0.8f, dt);
     swell_ = approach(swell_, 0.f, 0.35f, dt);
-    exciteT_ = std::max(0.f, exciteT_ - wdt);
-    foodAge_[0] += wdt;
-    foodAge_[1] += wdt;
     const float pm = smoothstepf(0.f, 1.f, lv_), pk = smoothstepf(1.f, 2.f, lv_);
     const float kick = music.hasSong ? music.kick : 0.f;
-    const float target = 40.f + 70.f * pm + 80.f * pk + 120.f * dropMix_;
-    const float speedK = (1.05f + 0.45f * pm + 0.4f * pk + 1.3f * dropMix_) * (1.f + 0.5f * kick * dropMix_);
+    const float target = 75.f + 35.f * pm + 45.f * pk + 110.f * dropMix_;
+    const float speedK = (1.25f + 0.3f * pm + 0.35f * pk + 1.05f * dropMix_) * (1.f + 0.4f * kick * dropMix_);
+    const float explore = 1.f + 0.3f * pk + 0.6f * dropMix_;
+    const float layK = 1.f + 0.4f * pk + 1.f * dropMix_ + 0.5f * swell_;
 
-    // the nests: a few scouts always out; followers called out by the crumbs brought home (recruitment), a stream
-    // when the colony pours out
-    int scouts[2] = {0, 0};
-    for (const Ant& a : ants_)
-        if (a.scout && !a.retire) scouts[a.nest]++;
-    const float scoutWant = 7.f + 4.f * pm + 5.f * pk + 8.f * dropMix_;
-    const float recruitRate = 3.f + 5.f * pk + 14.f * dropMix_;
-    for (int n = 0; n < 2; n++) {
-        if (scouts[n] < scoutWant) {
-            scoutAcc_[n] += wdt * 1.2f;
-            if (scoutAcc_[n] >= 1.f) { spawn(n, false, true); scoutAcc_[n] = 0.f; }
-        }
-        if (pourLeft_[n] > 0) {
-            spawnAcc_[n] += wdt * 32.f;
-            while (spawnAcc_[n] >= 1.f && pourLeft_[n] > 0) {
-                spawn(n, true, rng_.chance(0.25f));
-                pourLeft_[n]--;
-                spawnAcc_[n] -= 1.f;
-            }
-        } else if (recruits_[n] >= 1.f && (float)ants_.size() < target) {
-            spawnAcc_[n] += wdt * recruitRate;
-            while (spawnAcc_[n] >= 1.f && recruits_[n] >= 1.f) {
-                spawn(n, false, false);
-                recruits_[n] -= 1.f;
-                spawnAcc_[n] -= 1.f;
+    // the nests: wanderers keep going out, a few at a time; recruits follow the foragers' news; a stream when the
+    // colony pours out
+    const float n = (float)ants_.size();
+    const float recruitRate = 2.f + 3.f * pk + 8.f * dropMix_;
+    for (int k = 0; k < 2; k++) {
+        if (pourLeft_[k] > 0) {
+            spawnAcc_[k] += wdt * 24.f;
+            while (spawnAcc_[k] >= 1.f && pourLeft_[k] > 0) {
+                spawn(k, rng_.chance(0.6f));
+                pourLeft_[k]--;
+                spawnAcc_[k] -= 1.f;
             }
         } else {
-            spawnAcc_[n] = 0.f;
+            spawnAcc_[k] = 0.f;
         }
-        recruits_[n] = std::min(recruits_[n], 40.f);
+        if (n < target) {
+            wanderAcc_[k] += wdt * 2.5f;
+            if (wanderAcc_[k] >= 1.f) { spawn(k, false); wanderAcc_[k] -= 1.f; }
+        }
+        if (recruits_[k] >= 1.f && n < target * 1.6f) {
+            recruitAcc_[k] += wdt * recruitRate;
+            while (recruitAcc_[k] >= 1.f && recruits_[k] >= 1.f) {
+                spawn(k, true);
+                recruits_[k] -= 1.f;
+                recruitAcc_[k] -= 1.f;
+            }
+        } else {
+            recruitAcc_[k] = 0.f;
+        }
+        recruits_[k] = std::min(recruits_[k], 30.f) * std::exp(-wdt / 25.f);
     }
     // too many: some go back in
     {
-        int excess = (int)ants_.size() - (int)(target * 1.08f) - 6;
+        int excess = (int)ants_.size() - (int)(target * 1.7f) - 6;
         for (size_t i = 0; i < ants_.size() && excess > 0; i++) {
             Ant& a = ants_[(i * 7919 + (size_t)(clock_ * 13.f)) % ants_.size()];
             if (a.retire || a.state == 1) continue;
-            if (rng_.chance(wdt * 0.6f)) { a.retire = true; excess--; }
-            else excess--;
+            if (rng_.chance(wdt * 0.6f)) a.retire = true;
+            excess--;
         }
     }
     // scattered by impacts
@@ -854,16 +878,15 @@ void AntsUniverse::simulate(const Game& game, float wdt, float dt, const MusicSt
             if (d2 < 2.6f) {
                 a.a = std::atan2(a.p.y - at.y, a.p.x - at.x) + rng_.range(-0.4f, 0.4f);
                 a.panic = 0.35f + 0.3f * (1.f - d2 / 2.6f);
+                a.pause = 0.f;
             }
         }
     lockAt_.clear();
 
-    stepAnts(game, wdt, speedK);
+    stepAnts(wdt, speedK, explore, layK);
 
-    // evaporation
-    const float kf = std::exp(-wdt / TAU_FOOD), kh = std::exp(-wdt / TAU_HOME);
-    for (float& v : food_) v *= kf;
-    for (float& v : home_) v *= kh;
+    relax(food_, TAU_FOOD, wdt);
+    relax(home_, TAU_HOME, wdt);
     const float kt = std::exp(-wdt / 50.f);
     for (float& v : trace_) v *= kt;
 }
@@ -1218,14 +1241,15 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
         (g.food || inWell ? under_ : over_).push_back(sp);
     }
     // the ants
-    for (const Ant& a : ants_) {
+    for (size_t i = 0; i < ants_.size(); i++) {
+        const Ant& a = ants_[i];
         // inside the well (over the blocks) an ant is a faint shadow, fading in across the border
         const float inside = std::min(std::min(5.f - std::fabs(a.p.x), a.p.y + 10.f), 10.f - a.p.y);
         const float al = saturate(a.alpha) * world * (1.f - 0.66f * smoothstepf(-0.3f, 0.3f, inside));
         if (al <= 0.f) continue;
         const float h = ANT_L * 0.62f;
         antsV_.push_back({{a.p.x, a.p.y, h, h}, {a.a, 2.f, 0.f, al}, {a.crumb.x, a.crumb.y, a.crumb.z, a.lustre * V.lustre * 6.f},
-                          {ANT_L, a.gait, a.state == 1 ? 1.f : 0.f, 0.f}});
+                          {ANT_L, a.gait, a.state == 1 ? 1.f : 0.f, a.pause > 0.f ? std::sin(clock_ * 31.f + i * 1.7f) : 0.f}});
     }
     // the bonus gauge: twelve grains of sugar in a ring
     {
@@ -1294,6 +1318,7 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSprite_, "uBridge", b);
     set3f(progSprite_, "uBridgeInk", bridgeInk);
     set1f(progSprite_, "uSparkle", kick * dropMix_);
+    set1f(progSprite_, "uSugarTint", (V.light ? 0.56f : 0.85f) + 0.15f * dropMix_);
     drawSprites(under_);
     drawSprites(stack_);
     drawSprites(antsV_);
