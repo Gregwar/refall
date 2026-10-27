@@ -1,4 +1,4 @@
-// SEA: glass cubes of water over a rising sea, a 3D diorama.
+// BIOME's sea: glass cubes of water over a rising sea, a 3D diorama.
 //
 // One world in 3D, seen by a fixed lens raised above the sea and shifted back down (so the board plane keeps the
 // layout's pixels while the world behind the well is seen from above): a sandy bed of low dunes, a beach under the
@@ -27,16 +27,17 @@
 // cracks the stack row by row and throws it out, a change of universe fades the world to the bridge.
 //
 // Layout contract: the board plane (z = 0) falls exactly on the layout's reference camera (the shift lens).
-#include "universes/sea/sea.hpp"
+#include "universes/biome/sea.hpp"
 
 #include <algorithm>
 #include <cstdio>
 
 #include "layout.hpp"
-#include "universes/registry.hpp"
-#include "universes/sea/world.hpp"
+#include "universes/biome/gl.hpp"
 
-using namespace sea_world;
+namespace biome {
+
+using namespace sea;
 
 namespace {
 
@@ -97,9 +98,6 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-static_assert(sizeof(Palette) % sizeof(float) == 0, "a palette is floats only");
-constexpr int PAL_FLOATS = (int)(sizeof(Palette) / sizeof(float));
-
 // The cubes' water: the sea's own color (its near water's hue, a little more saturated, light), each piece type a
 // small shift around it (hue, brightness, saturation) so the pieces stay apart in the stack and what pours out of
 // them is the sea's water.
@@ -133,11 +131,6 @@ vec3 seaWater(unsigned seaHex, int type, float night) {
 }
 
 // ---- quaternions (x, y, z, w)
-vec3 qRot(const float q[4], const vec3& v) {
-    const vec3 u(q[0], q[1], q[2]);
-    const vec3 t = cross(u, v) * 2.f;
-    return v + t * q[3] + cross(u, t);
-}
 vec3 qRotInv(const float q[4], const vec3& v) {
     const float c[4] = {-q[0], -q[1], -q[2], q[3]};
     return qRot(c, v);
@@ -159,32 +152,34 @@ constexpr float INERTIA = (2.f * CH) * (2.f * CH) / 6.f;
 
 } // namespace
 
-namespace sea_world {
-Palette paletteOf(int v) {
+Palette SeaWorld::palette(int v) const {
     const VariantDef& d = VARIANTS[((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT];
-    auto L = [](unsigned c) { return ugl::toLinear(hex(c)); };
-    Palette p;
-    p.skyTop = L(d.skyTop); p.skyLow = L(d.skyLow); p.sun = L(d.sun); p.cloud = L(d.cloud); p.stormSky = L(d.stormSky);
-    p.stormCloud = L(d.stormCloud); p.sea0 = L(d.sea0); p.sea1 = L(d.sea1); p.sea2 = L(d.sea2); p.deep = L(d.deep);
-    p.foam = L(d.foam); p.haze = L(d.haze); p.stormSea = L(d.stormSea); p.panel = L(d.panel);
-    p.hull = L(d.hull); p.super_ = L(d.super_); p.sail = L(d.sail); p.baccent = L(d.baccent); p.window = L(d.window);
-    p.cont0 = L(d.cont0); p.cont1 = L(d.cont1); p.cont2 = L(d.cont2);
-    p.ink = L(d.ink); p.accent = L(d.accent); p.dusk = L(d.dusk);
-    for (int i = 0; i < 7; i++) p.piece[i] = L(d.piece[i]);
-    for (int i = 0; i < 7; i++) p.glass[i] = seaWater(d.sea2, i, d.night);
+    Palette p{};
+    p.skyTop = lin(d.skyTop); p.skyLow = lin(d.skyLow); p.sun = lin(d.sun); p.cloud = lin(d.cloud); p.stormSky = lin(d.stormSky);
+    p.stormCloud = lin(d.stormCloud); p.sea0 = lin(d.sea0); p.sea1 = lin(d.sea1); p.sea2 = lin(d.sea2); p.deep = lin(d.deep);
+    p.foam = lin(d.foam); p.haze = lin(d.haze); p.stormSea = lin(d.stormSea); p.panel = lin(d.panel);
+    p.hull = lin(d.hull); p.super_ = lin(d.super_); p.sail = lin(d.sail); p.baccent = lin(d.baccent); p.window = lin(d.window);
+    p.cont0 = lin(d.cont0); p.cont1 = lin(d.cont1); p.cont2 = lin(d.cont2);
+    p.ink = lin(d.ink); p.accent = lin(d.accent); p.dusk = lin(d.dusk);
+    for (int i = 0; i < 7; i++) p.piece[i] = lin(d.piece[i]);
+    for (int i = 0; i < 7; i++) p.cell[i] = seaWater(d.sea2, i, d.night);
     p.sunX = d.sunX; p.sunY = d.sunY; p.sunR = d.sunR; p.moon = d.moon; p.stars = d.stars; p.panelA = d.panelA;
     p.clouds = d.clouds; p.lightPanel = d.lightPanel; p.night = d.night;
     p.sunAz = d.sunAz; p.sunEl = d.sunEl; p.lightK = d.lightK; p.ambK = d.ambK; p.shadowK = d.shadowK;
+    // the well's edge, the HUD (the day variants veil the well in a dark glass, but their HUD panels stay light; the ink
+    // dark over a light sky or panel, pale over the sea)
+    p.edge = lerp(p.panel, p.haze, 0.5f);
+    p.hudPanel = d.lightPanel > 0.5f ? lin(0xf0f5f6) : p.panel;
+    const bool inkDark = ugl::luma(p.ink) < 0.2f;
+    p.inkDark = inkDark ? p.ink : lin(0x1b2a38);
+    p.inkLight = inkDark ? lin(0xf2f5f4) : p.ink;
+    // the cubes reflect the sea under the horizon; the gauge fills with the first water
+    p.envLow = p.sea2 * 0.5f;
+    p.gauge = p.piece[0];
     return p;
 }
-void lerpPalette(Palette& a, const Palette& b, float k) {
-    float* pa = reinterpret_cast<float*>(&a);
-    const float* pb = reinterpret_cast<const float*>(&b);
-    for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
-}
-int variantCount() { return VARIANT_COUNT; }
-const char* variantName(int i) { return VARIANTS[i].name; }
-} // namespace sea_world
+int sea::variantCount() { return VARIANT_COUNT; }
+const char* sea::variantName(int i) { return VARIANTS[i].name; }
 
 // =====================================================================================================
 // Song, level
@@ -192,7 +187,7 @@ const char* variantName(int i) { return VARIANTS[i].name; }
 
 // The sea from the song: bright major songs at noon or at the golden hour; minor songs on the grey North Sea or in a
 // night harbor; the key's hue picks among them.
-int SeaUniverse::pickVariant(const SongLook& t) const {
+int SeaWorld::pickVariant(const SongLook& t) const {
     float h = std::fmod(t.hue / TAU, 1.f);
     if (h < 0) h += 1.f;
     int v;
@@ -203,70 +198,61 @@ int SeaUniverse::pickVariant(const SongLook& t) const {
     return v;
 }
 
-void SeaUniverse::setSong(const SongLook& look, float seconds) {
-    variant_ = look.variant >= 0 ? look.variant % VARIANT_COUNT : pickVariant(look);
-    seed_ = look.seed;
-    rng_ = Rng(look.seed ^ 0x5EAull);
+void SeaWorld::setSong(const SongLook& look, float seconds, bool fresh) {
     dir_ = (look.seed >> 7) & 1 ? 1.f : -1.f;
     // a new song: the sea goes back down (at once before the first frame, else it drains over a few seconds)
     waterLines_ = 0.f;
-    if (seconds <= 0.f) {
-        palSet_ = false;
+    if (seconds <= 0.f || fresh) {
         rise_ = 0.f;
         boats_.clear();
         critters_.clear();
+        bodies_.clear();
+        parts_.clear();
     }
 }
 
-void SeaUniverse::setLevel(int level, float energy, float seconds, float impact) {
-    (void)impact;
-    level = std::clamp(level, 0, 2);
-    energy_ = energy;
-    if (!hasLevel_ || seconds < 0.1f) {
-        hasLevel_ = true;
-        level_ = level;
-        lv_ = lvFrom_ = lvTo_ = (float)level;
-        lvT_ = 1.f;
-        return;
+void SeaWorld::dropHit() {
+    // a gust tearing spray off the crests far out
+    for (int i = 0; i < 4; i++) {
+        float x, z;
+        sprayAt(x, z);
+        sprayBurst(x, z, 18, 1.3f);
     }
-    level_ = level;
-    lvFrom_ = lv_;
-    lvTo_ = (float)level;
-    lvT_ = 0.f;
-    lvDur_ = std::clamp(seconds, 1.5f, 6.f);
+    // the life under it startles: the fish dart away
+    for (Critter& c : critters_)
+        if (c.kind == L_FISH) {
+            c.dart = 1.f;
+            c.dyv = ctx.rng.range(-1.6f, 1.6f);
+        }
 }
 
-// The drop's first downbeat: its hit fires as soon as the section is known to be a drop (a chorus stays a breeze).
-void SeaUniverse::drop(float strength) {
-    (void)strength;
-    dropPending_ = 2.5f;
+// a kick at a peak: spray torn off the crests
+void SeaWorld::kick() {
+    float x, z;
+    if (ctx.storm > 0.5f) {
+        for (int i = 0; i < 2; i++) {
+            sprayAt(x, z);
+            sprayBurst(x, z, 12, 1.2f);
+        }
+    } else {
+        sprayAt(x, z);
+        sprayBurst(x, z, 5, 0.6f);
+    }
 }
 
-void SeaUniverse::refresh(float strength) { gust_ = std::max(gust_, 0.4f * strength); }
-
-vec2 SeaUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
-
-TransitionHints SeaUniverse::hints() const {
-    const Palette p = paletteOf(variant_);
-    TransitionHints h;
-    h.background = lerp(p.skyLow, p.sea1, 0.4f);
-    h.light = ugl::luma(h.background) > 0.28f;
-    h.ink = p.piece[0];
-    h.accent = p.accent;
-    h.styles = TS_RIPPLE | TS_LUMA | TS_INK;
-    return h;
+// a spot of the sea for spray, at the sides of the well
+void SeaWorld::sprayAt(float& x, float& z) {
+    z = -ctx.rng.range(2.f, 22.f);
+    x = (ctx.rng.chance(0.5f) ? -1.f : 1.f) * ctx.rng.range(7.f, ctx.hwAt(z) - 1.f);
 }
 
 // =====================================================================================================
 // The sea
 // =====================================================================================================
 
-float SeaUniverse::riseTarget() const { return std::min(1.f, waterLines_ / SEA_FULL_LINES); }
-float SeaUniverse::seaLevel() const { return lerpf(SEA_LOW, SEA_HIGH, rise_); }
-float SeaUniverse::hwAt(float z) const { return viewH_.x * (camDist_ - z) / camDist_; }
 
 // The swell (WORLD_GLSL's waveH).
-float SeaUniverse::waveH(float x, float z) const {
+float SeaWorld::waveH(float x, float z) const {
     const float A = amp_ * calmAt(x, z);
     auto nd = [](float a, float b) { const float l = std::sqrt(a * a + b * b); return v2(a / l, b / l); };
     const vec2 d1 = nd(dir_, 0.42f), d2 = nd(dir_ * 0.7f, -0.7f), d3 = nd(dir_ * 0.25f, 1.f), d4 = nd(-dir_, 0.6f);
@@ -280,17 +266,17 @@ float SeaUniverse::waveH(float x, float z) const {
 
 // A boat comes in from one side (or is already out there when the song starts): the deeper the sea, the bigger; the
 // small ones near, the big ships far out, each where the water is deep enough for it.
-bool SeaUniverse::spawnBoat(bool onScreen) {
+bool SeaWorld::spawnBoat(bool onScreen) {
     if (boats_.size() >= 9) return false;
     const float S = seaLevel();
     if (S < BOAT_LEVEL) return false;
     const int maxT = std::clamp((int)(1.f + (S - BOAT_LEVEL) / 2.6f), 1, 5);
     const int minT = std::max(0, maxT - 2);
-    const int type = rng_.chance(0.45f) ? maxT : rng_.irange(minT, maxT);
+    const int type = ctx.rng.chance(0.45f) ? maxT : ctx.rng.irange(minT, maxT);
     static const float Z0[6] = {8.f, 10.f, 16.f, 45.f, 75.f, 85.f}, Z1[6] = {30.f, 40.f, 60.f, 110.f, 160.f, 170.f};
     static const float DRAFT[6] = {0.45f, 0.6f, 0.8f, 1.1f, 1.3f, 1.3f};
     static const float SPEED[6] = {0.6f, 0.9f, 1.0f, 1.6f, 2.2f, 2.6f};
-    float z = -rng_.range(Z0[type], Z1[type]);
+    float z = -ctx.rng.range(Z0[type], Z1[type]);
     // out to where it floats (over the highest dunes at that distance)
     auto deep = [&](float zz) {
         const float base = -9.2f - 3.6f * smoothstepf(3.f, 48.f, -zz), k = 1.f - 0.4f * smoothstepf(10.f, 60.f, -zz);
@@ -301,13 +287,13 @@ bool SeaUniverse::spawnBoat(bool onScreen) {
     Boat b;
     b.type = type;
     b.z = z;
-    b.scale = rng_.range(0.9f, 1.1f);
-    b.dir = rng_.chance(0.5f) ? 1.f : -1.f;
-    b.speed = SPEED[type] * rng_.range(0.8f, 1.2f);
-    b.phase = rng_.range(0.f, TAU);
-    b.seed = rng_.range(0.f, 50.f);
-    const float len = BOAT_LEN[type] * b.scale, hw = hwAt(z);
-    b.x = onScreen ? rng_.range(-hw * 0.9f, hw * 0.9f) : -b.dir * (hw + len * 0.6f + 1.f);
+    b.scale = ctx.rng.range(0.9f, 1.1f);
+    b.dir = ctx.rng.chance(0.5f) ? 1.f : -1.f;
+    b.speed = SPEED[type] * ctx.rng.range(0.8f, 1.2f);
+    b.phase = ctx.rng.range(0.f, TAU);
+    b.seed = ctx.rng.range(0.f, 50.f);
+    const float len = BOAT_LEN[type] * b.scale, hw = ctx.hwAt(z);
+    b.x = onScreen ? ctx.rng.range(-hw * 0.9f, hw * 0.9f) : -b.dir * (hw + len * 0.6f + 1.f);
     for (const Boat& o : boats_)
         if (std::fabs(o.z - b.z) < 3.f + 0.25f * (len + BOAT_LEN[o.type]) && std::fabs(o.x - b.x) < len + BOAT_LEN[o.type] * o.scale + 2.f)
             return false;
@@ -320,14 +306,14 @@ bool SeaUniverse::spawnBoat(bool onScreen) {
 // Life in the sea
 // =====================================================================================================
 
-float SeaUniverse::waterDepth() const { return seaLevel() - sandH(0.f, FRONT_Z - 2.f); }
-float SeaUniverse::critterY(const Critter& c) const {
+float SeaWorld::waterDepth() const { return seaLevel() - sandH(0.f, FRONT_Z - 2.f); }
+float SeaWorld::critterY(const Critter& c) const {
     const float bed = sandH(c.x, c.z) + 0.45f, surf = seaLevel() - 0.45f;
     return lerpf(bed, surf, c.u + c.du) + c.dartY;
 }
 
 // Something new comes into the water (or is already there): what the sea's depth asks for and is missing.
-void SeaUniverse::spawnLife(bool onScreen) {
+void SeaWorld::spawnLife(bool onScreen) {
     const float D = waterDepth();
     int have[5] = {0, 0, 0, 0, 0};
     for (const Critter& c : critters_)
@@ -336,7 +322,7 @@ void SeaUniverse::spawnLife(bool onScreen) {
     const int want[5] = {D > 2.f ? std::min(4, 1 + (int)((D - 2.f) / 3.5f)) : 0, D > 6.f ? std::min(5, 1 + (int)((D - 6.f) / 2.2f)) : 0,
                          D > 11.f ? 1 : 0, D > 10.f ? (D > 13.f ? 2 : 1) : 0, D > 9.f ? std::min(16, (int)((D - 9.f) * 2.5f)) : 0};
     int kind = -1;
-    const int start = rng_.irange(0, 4);
+    const int start = ctx.rng.irange(0, 4);
     for (int i = 0; i < 5 && kind < 0; i++) {
         const int k = (start + i) % 5;
         if (have[k] < want[k]) kind = k;
@@ -344,80 +330,80 @@ void SeaUniverse::spawnLife(bool onScreen) {
     if (kind < 0) return;
     Critter c{};
     c.kind = kind;
-    c.dir = rng_.chance(0.5f) ? 1.f : -1.f;
-    c.phase = rng_.range(0.f, TAU);
-    c.seed = rng_.range(0.f, 50.f);
+    c.dir = ctx.rng.chance(0.5f) ? 1.f : -1.f;
+    c.phase = ctx.rng.range(0.f, TAU);
+    c.seed = ctx.rng.range(0.f, 50.f);
     c.alpha = onScreen ? 1.f : 0.f;
     // behind the cut face, near enough to be seen through the water
-    c.z = FRONT_Z - rng_.range(0.6f, kind == L_MOTE ? 9.f : 6.5f);
-    const float hw = hwAt(c.z);
+    c.z = FRONT_Z - ctx.rng.range(0.6f, kind == L_MOTE ? 9.f : 6.5f);
+    const float hw = ctx.hwAt(c.z);
     // a depth under the surface, as a place in the water column (so that it rises with the sea)
-    auto under = [&](float lo, float hi) { return saturate(1.f - std::clamp(rng_.range(lo, hi), 0.f, D) / std::max(D, 0.5f)); };
+    auto under = [&](float lo, float hi) { return saturate(1.f - std::clamp(ctx.rng.range(lo, hi), 0.f, D) / std::max(D, 0.5f)); };
     const float margin = 2.5f;
-    const float x0 = onScreen ? rng_.range(-hw + 1.f, hw - 1.f) : -c.dir * (hw + margin);
+    const float x0 = onScreen ? ctx.rng.range(-hw + 1.f, hw - 1.f) : -c.dir * (hw + margin);
     c.x = x0;
     if (kind == L_FISH) {
         // a small school near the surface or in the middle water, now and then one in the accent color
-        const int n = rng_.irange(5, 9);
-        c.speed = rng_.range(0.7f, 1.3f);
-        c.size = rng_.range(0.24f, 0.32f);
+        const int n = ctx.rng.irange(5, 9);
+        c.speed = ctx.rng.range(0.7f, 1.3f);
+        c.size = ctx.rng.range(0.24f, 0.32f);
         c.u = under(0.9f, std::min(5.f, D * 0.6f));
         c.school = nextSchool_++;
-        const bool accent = rng_.chance(0.25f);
-        c.col = accent ? lerp(pal_.baccent, pal_.foam, 0.2f) : lerp(pal_.sea2, pal_.foam, 0.62f);
+        const bool accent = ctx.rng.chance(0.25f);
+        c.col = accent ? lerp(ctx.pal.baccent, ctx.pal.foam, 0.2f) : lerp(ctx.pal.sea2, ctx.pal.foam, 0.62f);
         for (int i = 0; i < n; i++) {
             Critter f = c;
-            f.x = x0 - c.dir * (i == 0 ? 0.f : rng_.range(0.3f, 2.2f));
-            f.z = c.z + (i == 0 ? 0.f : rng_.range(-0.6f, 0.6f));
-            f.du = i == 0 ? 0.f : rng_.range(-0.6f, 0.6f) / std::max(D, 1.f);
+            f.x = x0 - c.dir * (i == 0 ? 0.f : ctx.rng.range(0.3f, 2.2f));
+            f.z = c.z + (i == 0 ? 0.f : ctx.rng.range(-0.6f, 0.6f));
+            f.du = i == 0 ? 0.f : ctx.rng.range(-0.6f, 0.6f) / std::max(D, 1.f);
             if (i > 0 && f.du == 0.f) f.du = 1e-4f;
-            f.phase = rng_.range(0.f, TAU);
-            f.size = c.size * rng_.range(0.85f, 1.1f);
+            f.phase = ctx.rng.range(0.f, TAU);
+            f.size = c.size * ctx.rng.range(0.85f, 1.1f);
             critters_.push_back(f);
         }
         return;
     }
     if (kind == L_JELLY) {
         // jellyfish: slowly pulsing bells, translucent, a soft glow of their own
-        c.speed = rng_.range(0.05f, 0.14f);
-        c.size = rng_.range(0.32f, 0.5f);
+        c.speed = ctx.rng.range(0.05f, 0.14f);
+        c.size = ctx.rng.range(0.32f, 0.5f);
         c.u = under(2.5f, std::min(D * 0.75f, 8.f));
-        const vec3 hues[3] = {pal_.piece[2], pal_.piece[0], lerp(pal_.baccent, pal_.piece[2], 0.4f)};
-        c.col = lerp(hues[rng_.irange(0, 2)], vec3(1.f), 0.45f);
+        const vec3 hues[3] = {ctx.pal.piece[2], ctx.pal.piece[0], lerp(ctx.pal.baccent, ctx.pal.piece[2], 0.4f)};
+        c.col = lerp(hues[ctx.rng.irange(0, 2)], vec3(1.f), 0.45f);
         c.glow = c.col;
     } else if (kind == L_ANGLER) {
         // an anglerfish in the dark: a near-black shape, only its lure lit
-        c.speed = rng_.range(0.1f, 0.18f);
+        c.speed = ctx.rng.range(0.1f, 0.18f);
         c.size = 0.6f;
-        c.u = rng_.range(0.06f, 0.2f);
-        c.col = pal_.deep * 0.35f + vec3(0.012f, 0.016f, 0.024f);
+        c.u = ctx.rng.range(0.06f, 0.2f);
+        c.col = ctx.pal.deep * 0.35f + vec3(0.012f, 0.016f, 0.024f);
         c.glow = vec3(1.f, 0.88f, 0.55f);
     } else if (kind == L_SIPHON) {
         // a siphonophore: a long chain of small lit beads drifting slowly
-        c.speed = rng_.range(0.04f, 0.09f);
-        c.size = rng_.range(1.6f, 2.4f);
-        c.u = rng_.range(0.12f, 0.3f);
-        c.col = lerp(pal_.piece[0], vec3(1.f), 0.35f);
+        c.speed = ctx.rng.range(0.04f, 0.09f);
+        c.size = ctx.rng.range(1.6f, 2.4f);
+        c.u = ctx.rng.range(0.12f, 0.3f);
+        c.col = lerp(ctx.pal.piece[0], vec3(1.f), 0.35f);
         c.glow = c.col;
     } else {
         // a point of light in the dark, drifting
-        c.speed = rng_.range(0.02f, 0.06f);
-        c.size = rng_.range(0.12f, 0.2f);
-        c.u = rng_.range(0.03f, 0.4f) * std::min(1.f, 10.f / std::max(D, 1.f));
-        c.glow = rng_.chance(0.5f) ? vec3(0.35f, 0.9f, 1.f) : vec3(0.6f, 1.f, 0.75f);
+        c.speed = ctx.rng.range(0.02f, 0.06f);
+        c.size = ctx.rng.range(0.12f, 0.2f);
+        c.u = ctx.rng.range(0.03f, 0.4f) * std::min(1.f, 10.f / std::max(D, 1.f));
+        c.glow = ctx.rng.chance(0.5f) ? vec3(0.35f, 0.9f, 1.f) : vec3(0.6f, 1.f, 0.75f);
         c.col = c.glow;
     }
-    if (onScreen && kind != L_FISH) c.x = rng_.range(-hw + 2.f, hw - 2.f);
+    if (onScreen && kind != L_FISH) c.x = ctx.rng.range(-hw + 2.f, hw - 2.f);
     critters_.push_back(c);
 }
 
-void SeaUniverse::simulateLife(float dt, float wdt, float world) {
+void SeaWorld::simulateLife(float dt, float wdt, float world) {
     lifeT_ -= wdt;
-    if (lifeT_ <= 0.f && world > 0.5f && !over_) {
+    if (lifeT_ <= 0.f && world > 0.5f && !ctx.over) {
         spawnLife(false);
-        lifeT_ = rng_.range(1.f, 3.f);
+        lifeT_ = ctx.rng.range(1.f, 3.f);
     }
-    glowUp_ = approach(glowUp_, storm_, 1.f, dt);
+    glowUp_ = approach(glowUp_, ctx.storm, 1.f, dt);
     const float surf = seaLevel();
     for (Critter& c : critters_) {
         c.dart = approach(c.dart, 0.f, 0.6f, dt);
@@ -434,7 +420,7 @@ void SeaUniverse::simulateLife(float dt, float wdt, float world) {
                                    [&](const Critter& c) {
                                        const float y = critterY(c);
                                        const bool wet = y < surf - c.size * 0.6f;
-                                       return c.dir * c.x > hwAt(c.z) + c.size * 2.f + 3.f || (!wet && c.alpha <= 0.f);
+                                       return c.dir * c.x > ctx.hwAt(c.z) + c.size * 2.f + 3.f || (!wet && c.alpha <= 0.f);
                                    }),
                      critters_.end());
 }
@@ -443,7 +429,7 @@ void SeaUniverse::simulateLife(float dt, float wdt, float world) {
 // The thrown cubes
 // =====================================================================================================
 
-void SeaUniverse::throwCube(const vec3& p, int type, const vec3& v, const vec3& w, float delay, float water) {
+void SeaWorld::throwCube(const vec3& p, int type, const vec3& v, const vec3& w, float delay, float water) {
     if (bodies_.size() >= 260) return;
     Body b{};
     b.p = p;
@@ -452,7 +438,7 @@ void SeaUniverse::throwCube(const vec3& p, int type, const vec3& v, const vec3& 
     b.q[0] = b.q[1] = b.q[2] = 0.f;
     b.q[3] = 1.f;
     b.type = std::clamp(type, 0, 6);
-    b.seed = rng_.range(0.f, 50.f);
+    b.seed = ctx.rng.range(0.f, 50.f);
     b.delay = delay;
     b.fill = 1.f;
     b.water = water;
@@ -461,7 +447,7 @@ void SeaUniverse::throwCube(const vec3& p, int type, const vec3& v, const vec3& 
 
 // The crack opens at the corner that hit first (the cube's frame: it turns with it); the water jets out of it a moment
 // later, along the outward normal there.
-void SeaUniverse::crackAt(Body& b, const vec3& corner) {
+void SeaWorld::crackAt(Body& b, const vec3& corner) {
     if (b.hit) return;
     b.hit = true;
     b.hitT = b.age;
@@ -473,7 +459,7 @@ void SeaUniverse::crackAt(Body& b, const vec3& corner) {
 // The rigid bodies: gravity; in the water, buoyancy and drag; contacts with the dunes at the cube's eight corners
 // (impulses with restitution and friction, so they tumble, bounce and come to rest on a face); collisions between the
 // cubes (as spheres); the glass of the diorama's front once they are behind it. Real time, small substeps.
-void SeaUniverse::simulateBodies(float dt) {
+void SeaWorld::simulateBodies(float dt) {
     const int N = 4;
     const float h = std::min(dt, 0.05f) / N;
     static const vec3 K[8] = {vec3(-1, -1, -1), vec3(1, -1, -1), vec3(-1, 1, -1), vec3(1, 1, -1),
@@ -604,7 +590,7 @@ void SeaUniverse::simulateBodies(float dt) {
 
 // The crack opens, then the water jets out of it: a blast, then a fine strong jet tapering off over a couple of
 // seconds as the pressure drops (the cube stays full while under pressure, then its level drops); empty, it sinks.
-void SeaUniverse::leak(Body& b, float dt) {
+void SeaWorld::leak(Body& b, float dt) {
     if (!b.hit) return;
     const float since = b.age - b.hitT;
     b.crack = smoothstepf(0.f, 0.18f, since);
@@ -632,7 +618,7 @@ void SeaUniverse::leak(Body& b, float dt) {
         b.v += d * (-(0.8f * pr + 4.f * blast) * dt);
         b.w += cross(qRot(b.q, b.crackL), d * (-(0.8f * pr + 4.f * blast) * dt)) * (0.6f / INERTIA);
     }
-    const vec3 glass = pal_.glass[b.type];
+    const vec3 glass = ctx.pal.cell[b.type];
     const vec3 jetCol = lerp(glass * (1.f / std::max({glass.x, glass.y, glass.z, 1e-3f})), WATER, 0.25f);
     if (m.y < surfY(m.x, m.z)) {
         // under the sea: the jet churns out as a pale plume, bubbles rising from it
@@ -641,24 +627,24 @@ void SeaUniverse::leak(Body& b, float dt) {
         while (b.acc >= 1.f && parts_.size() < 6000) {
             b.acc -= 1.f;
             Particle q{};
-            const bool plume = rng_.chance(0.55f);
-            const float sp = plume ? (1.5f + 5.f * pr + 3.f * blast) * rng_.range(0.7f, 1.1f) : rng_.range(0.5f, 1.5f);
-            q.p = m + vec3(rng_.range(-0.04f, 0.04f), rng_.range(-0.04f, 0.04f), rng_.range(-0.04f, 0.04f));
-            q.v = d * sp + vec3(rng_.range(-0.4f, 0.4f), rng_.range(0.2f, 1.f), rng_.range(-0.4f, 0.4f));
+            const bool plume = ctx.rng.chance(0.55f);
+            const float sp = plume ? (1.5f + 5.f * pr + 3.f * blast) * ctx.rng.range(0.7f, 1.1f) : ctx.rng.range(0.5f, 1.5f);
+            q.p = m + vec3(ctx.rng.range(-0.04f, 0.04f), ctx.rng.range(-0.04f, 0.04f), ctx.rng.range(-0.04f, 0.04f));
+            q.v = d * sp + vec3(ctx.rng.range(-0.4f, 0.4f), ctx.rng.range(0.2f, 1.f), ctx.rng.range(-0.4f, 0.4f));
             if (plume) {
-                q.life = rng_.range(0.9f, 1.6f);
-                q.size = rng_.range(0.14f, 0.26f) * (0.7f + 0.6f * pr);
+                q.life = ctx.rng.range(0.9f, 1.6f);
+                q.size = ctx.rng.range(0.14f, 0.26f) * (0.7f + 0.6f * pr);
                 q.grav = -0.6f; q.drag = 2.4f;
                 q.kind = P_PLUME;
                 q.col = lerp(lerp(WATER, jetCol, 0.3f), vec3(1.f), 0.45f);
             } else {
-                q.life = rng_.range(2.f, 3.5f);
-                q.size = rng_.range(0.03f, 0.075f);
+                q.life = ctx.rng.range(2.f, 3.5f);
+                q.size = ctx.rng.range(0.03f, 0.075f);
                 q.grav = -3.5f; q.drag = 1.6f;
                 q.kind = P_BUBBLE;
                 q.col = vec3(0.85f, 0.93f, 1.f);
             }
-            q.real = true; q.seed = rng_.uniform();
+            q.real = true; q.seed = ctx.rng.uniform();
             parts_.push_back(q);
         }
     } else {
@@ -672,18 +658,18 @@ void SeaUniverse::leak(Body& b, float dt) {
         for (int i = 0; i < k && parts_.size() < 6000; i++) {
             Particle q{};
             // most of it the jet's core; some spray around it, wider and finer
-            const bool spray = rng_.chance(0.16f + 0.2f * pr + 0.3f * blast);
+            const bool spray = ctx.rng.chance(0.16f + 0.2f * pr + 0.3f * blast);
             const float s = spray ? 0.45f * (1.f + blast) : 0.022f;
-            const vec3 dd = normalize(d + u * rng_.range(-s, s) + w * rng_.range(-s, s));
-            const float sp = (2.2f + 8.5f * pr + 4.f * blast) * (spray ? rng_.range(0.55f, 1.05f) : rng_.range(0.98f, 1.02f));
+            const vec3 dd = normalize(d + u * ctx.rng.range(-s, s) + w * ctx.rng.range(-s, s));
+            const float sp = (2.2f + 8.5f * pr + 4.f * blast) * (spray ? ctx.rng.range(0.55f, 1.05f) : ctx.rng.range(0.98f, 1.02f));
             q.p = m + dd * 0.02f;
             q.v = dd * sp + b.v;
             q.age = -(float)i / (float)k * dt;
             q.life = 3.f;
-            q.size = spray ? rng_.range(0.035f, 0.06f) : rng_.range(0.065f, 0.09f) * (0.8f + 0.5f * (1.f - pr));
+            q.size = spray ? ctx.rng.range(0.035f, 0.06f) : ctx.rng.range(0.065f, 0.09f) * (0.8f + 0.5f * (1.f - pr));
             q.grav = 15.f; q.drag = spray ? 0.6f : 0.15f;
-            q.kind = P_JET; q.real = true; q.seed = rng_.uniform();
-            q.col = spray ? lerp(WATER, vec3(1.f), 0.5f) : lerp(lerp(WATER, pal_.sea1, 0.12f + 0.1f * rng_.uniform()), jetCol, 0.5f);
+            q.kind = P_JET; q.real = true; q.seed = ctx.rng.uniform();
+            q.col = spray ? lerp(WATER, vec3(1.f), 0.5f) : lerp(lerp(WATER, ctx.pal.sea1, 0.12f + 0.1f * ctx.rng.uniform()), jetCol, 0.5f);
             q.water = b.pend / (float)k;
             parts_.push_back(q);
         }
@@ -694,58 +680,53 @@ void SeaUniverse::leak(Body& b, float dt) {
 
 // A whole stack appearing at once (a board filled for a review, a game joined in progress): its sea has risen
 // already, deep, with its boats and its life.
-void SeaUniverse::watchBoard(const Game& g) {
-    int n = 0;
-    for (int y = 0; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++) n += g.cell(x, y).type >= 0;
-    if (n - boardCount_ >= 12 && waterLines_ < 48.f) {
-        waterLines_ = 48.f;
-        rise_ = riseTarget();
-        boats_.clear();
-        for (int i = 0; i < 6; i++) spawnBoat(true);
-        critters_.clear();
-        for (int i = 0; i < 30; i++) spawnLife(true);
-    }
-    boardCount_ = n;
+void SeaWorld::grown() {
+    if (waterLines_ >= 48.f) return;
+    waterLines_ = 48.f;
+    rise_ = riseTarget();
+    boats_.clear();
+    for (int i = 0; i < 6; i++) spawnBoat(true);
+    critters_.clear();
+    for (int i = 0; i < 30; i++) spawnLife(true);
 }
 
 // =====================================================================================================
 // Game events
 // =====================================================================================================
 
-void SeaUniverse::splash(const vec3& p, float power, const vec3& col) {
+void SeaWorld::splash(const vec3& p, float power, const vec3& col) {
     if (parts_.size() > 5500) return;
     const int n = 2 + (int)(power * 4.f);
     for (int i = 0; i < n; i++) {
         Particle q{};
-        q.p = p + vec3(rng_.range(-0.1f, 0.1f), 0.f, rng_.range(-0.1f, 0.1f));
-        q.v = vec3(rng_.range(-1.2f, 1.2f), rng_.range(1.5f, 4.f) * power, rng_.range(-1.2f, 1.2f));
-        q.life = rng_.range(0.35f, 0.6f);
-        q.size = rng_.range(0.03f, 0.055f);
+        q.p = p + vec3(ctx.rng.range(-0.1f, 0.1f), 0.f, ctx.rng.range(-0.1f, 0.1f));
+        q.v = vec3(ctx.rng.range(-1.2f, 1.2f), ctx.rng.range(1.5f, 4.f) * power, ctx.rng.range(-1.2f, 1.2f));
+        q.life = ctx.rng.range(0.35f, 0.6f);
+        q.size = ctx.rng.range(0.03f, 0.055f);
         q.grav = 14.f; q.drag = 0.5f;
-        q.kind = P_SPLASH; q.real = true; q.seed = rng_.uniform();
-        q.col = lerp(col, pal_.foam, 0.6f);
+        q.kind = P_SPLASH; q.real = true; q.seed = ctx.rng.uniform();
+        q.col = lerp(col, ctx.pal.foam, 0.6f);
         parts_.push_back(q);
     }
 }
 
 // Spray torn off a crest by the wind.
-void SeaUniverse::sprayBurst(float x, float z, int n, float power) {
+void SeaWorld::sprayBurst(float x, float z, int n, float power) {
     for (int i = 0; i < n && parts_.size() < 3000; i++) {
         Particle q{};
-        const float px = x + rng_.range(-0.6f, 0.6f), pz = z + rng_.range(-0.6f, 0.6f);
-        q.p = vec3(px, surfY(px, pz) + rng_.range(-0.05f, 0.1f), pz);
-        q.v = vec3(dir_ * rng_.range(2.f, 6.f) * power, rng_.range(1.f, 3.5f) * power, rng_.range(-0.6f, 0.6f));
-        q.life = rng_.range(0.8f, 1.4f);
-        q.size = rng_.range(0.035f, 0.07f);
+        const float px = x + ctx.rng.range(-0.6f, 0.6f), pz = z + ctx.rng.range(-0.6f, 0.6f);
+        q.p = vec3(px, surfY(px, pz) + ctx.rng.range(-0.05f, 0.1f), pz);
+        q.v = vec3(dir_ * ctx.rng.range(2.f, 6.f) * power, ctx.rng.range(1.f, 3.5f) * power, ctx.rng.range(-0.6f, 0.6f));
+        q.life = ctx.rng.range(0.8f, 1.4f);
+        q.size = ctx.rng.range(0.035f, 0.07f);
         q.grav = 5.f; q.drag = 0.7f;
-        q.kind = P_SPRAY; q.real = false; q.seed = rng_.uniform();
-        q.col = pal_.foam;
+        q.kind = P_SPRAY; q.real = false; q.seed = ctx.rng.uniform();
+        q.col = ctx.pal.foam;
         parts_.push_back(q);
     }
 }
 
-void SeaUniverse::onEvent(const GameEvent& ev, const Game&) {
+void SeaWorld::onEvent(const GameEvent& ev, const Game&) {
     switch (ev.type) {
     case GameEvent::Clear: {
         // The row's cubes are thrown out of the well into the world behind it (the row itself is gone from the board
@@ -756,55 +737,38 @@ void SeaUniverse::onEvent(const GameEvent& ev, const Game&) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             const float dx = c.x - (Game::W - 1) * 0.5f;
             const float side = dx < 0.f ? -1.f : 1.f;
-            const float x = side * (6.4f + std::fabs(dx) * 0.5f + rng_.range(0.f, 8.f));
-            const float z = -rng_.range(2.6f, 9.f);
+            const float x = side * (6.4f + std::fabs(dx) * 0.5f + ctx.rng.range(0.f, 8.f));
+            const float z = -ctx.rng.range(2.6f, 9.f);
             const float ty = sandH(x, z) + 0.7f;
-            const float T = 0.72f + 0.03f * std::fabs(x - p.x) + rng_.range(0.f, 0.15f);
+            const float T = 0.72f + 0.03f * std::fabs(x - p.x) + ctx.rng.range(0.f, 0.15f);
             const vec3 v((x - p.x) / T, (ty - p.y) / T + 0.5f * GRAV * T, (z - p.z) / T);
             // tumbling on all axes
-            const vec3 axis = normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f)));
+            const vec3 axis = normalize(vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f)));
             // each cube's water: a tenth of a line of sea (more for a Tetris)
-            throwCube(vec3(p.x, p.y, 0.f), c.type, v, axis * rng_.range(3.f, 9.f), 0.f, (n >= 4 ? 1.5f : 1.f) / Game::W);
+            throwCube(vec3(p.x, p.y, 0.f), c.type, v, axis * ctx.rng.range(3.f, 9.f), 0.f, (n >= 4 ? 1.5f : 1.f) / Game::W);
         }
         if (ev.count >= 4) {
             // a Tetris: the sea answers with spray up from both sides
-            gust_ = std::max(gust_, 0.8f);
+            ctx.gust = std::max(ctx.gust, 0.8f);
             for (int i = 0; i < 4; i++) {
                 const float side = i % 2 ? 1.f : -1.f;
-                const float z = -rng_.range(3.f, 14.f);
-                const float x = side * rng_.range(7.f, hwAt(z) - 2.f);
+                const float z = -ctx.rng.range(3.f, 14.f);
+                const float x = side * ctx.rng.range(7.f, ctx.hwAt(z) - 2.f);
                 for (int k = 0; k < 26; k++) {
                     Particle q{};
-                    const float px = x + rng_.range(-0.5f, 0.5f), pz = z + rng_.range(-0.5f, 0.5f);
+                    const float px = x + ctx.rng.range(-0.5f, 0.5f), pz = z + ctx.rng.range(-0.5f, 0.5f);
                     q.p = vec3(px, surfY(px, pz), pz);
-                    q.v = vec3(rng_.range(-1.f, 1.f), rng_.range(4.f, 9.f), rng_.range(-1.f, 1.f));
-                    q.age = -rng_.range(0.f, 0.3f) - i * 0.12f;
-                    q.life = rng_.range(1.f, 1.5f);
-                    q.size = rng_.range(0.04f, 0.08f);
+                    q.v = vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(4.f, 9.f), ctx.rng.range(-1.f, 1.f));
+                    q.age = -ctx.rng.range(0.f, 0.3f) - i * 0.12f;
+                    q.life = ctx.rng.range(1.f, 1.5f);
+                    q.size = ctx.rng.range(0.04f, 0.08f);
                     q.grav = 9.f; q.drag = 0.4f;
-                    q.kind = P_SPLASH; q.real = true; q.seed = rng_.uniform();
-                    q.col = pal_.foam;
+                    q.kind = P_SPLASH; q.real = true; q.seed = ctx.rng.uniform();
+                    q.col = ctx.pal.foam;
                     parts_.push_back(q);
                 }
             }
         }
-        break;
-    }
-    case GameEvent::TopOut: {
-        // game over: the stack cracks row by row from the top, and each cube is thrown out
-        int top = Game::H;
-        for (auto& c : ev.cells) top = std::min(top, c.y);
-        for (auto& c : ev.cells) {
-            if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            Dying d;
-            d.x = p.x; d.y = p.y; d.type = std::clamp((int)c.type, 0, 6);
-            d.delay = 0.15f + (c.y - top) * 0.07f + std::fabs(c.x - 4.5f) * 0.015f;
-            d.t = 0.f;
-            d.gone = false;
-            dying_.push_back(d);
-        }
-        over_ = true;
         break;
     }
     default: break;
@@ -815,17 +779,17 @@ void SeaUniverse::onEvent(const GameEvent& ev, const Game&) {
 // Simulation
 // =====================================================================================================
 
-void SeaUniverse::simulateParticles(float dt, float wdt) {
+void SeaWorld::simulateParticles(float dt, float wdt) {
     struct Hit { vec3 p; vec3 col; float power; };
     std::vector<Hit> hits;
     for (Particle& p : parts_) {
         const float pdt = p.real ? dt : wdt;
         p.age += pdt;
         if (p.age < 0.f) continue;
-        if (p.kind == P_SPRAY) p.v.x += dir_ * 2.f * (storm_ + gust_) * pdt;
+        if (p.kind == P_SPRAY) p.v.x += dir_ * 2.f * (ctx.storm + ctx.gust) * pdt;
         // bubbles wobble up and pop at the surface
         if (p.kind == P_BUBBLE) {
-            p.v.x += std::sin(time_ * 5.f + p.seed * 40.f) * 1.5f * pdt;
+            p.v.x += std::sin(ctx.time * 5.f + p.seed * 40.f) * 1.5f * pdt;
             if (p.p.y > surfY(p.p.x, p.p.z) - p.size) p.age = p.life + 1.f;
         }
         p.v.y -= p.grav * pdt;
@@ -840,7 +804,7 @@ void SeaUniverse::simulateParticles(float dt, float wdt) {
             // water from a cube: into the sea it splashes; on the sand it runs on downhill and soaks in
             const float sea = surfY(p.p.x, p.p.z), sand = sandH(p.p.x, p.p.z);
             if (p.p.y < sea) {
-                if (rng_.chance(0.3f)) hits.push_back({vec3(p.p.x, sea, p.p.z), p.col, 0.8f});
+                if (ctx.rng.chance(0.3f)) hits.push_back({vec3(p.p.x, sea, p.p.z), p.col, 0.8f});
                 waterLines_ += p.water;
                 p.water = 0.f;
                 p.age = p.life + 1.f;
@@ -851,11 +815,11 @@ void SeaUniverse::simulateParticles(float dt, float wdt) {
                 dh = l > 1e-4f ? dh / l : vec3(p.p.x < 0.f ? -1.f : 1.f, 0.f, 0.f);
                 p.kind = P_RUN;
                 p.age = 0.f;
-                p.life = rng_.range(0.35f, 0.7f);
+                p.life = ctx.rng.range(0.35f, 0.7f);
                 p.p.y = sand + 0.02f;
-                p.v = dh * rng_.range(1.2f, 2.8f) + vec3(p.v.x * 0.25f, 0.f, p.v.z * 0.25f);
+                p.v = dh * ctx.rng.range(1.2f, 2.8f) + vec3(p.v.x * 0.25f, 0.f, p.v.z * 0.25f);
                 p.grav = 0.f; p.drag = 2.f;
-                if (rng_.chance(0.25f)) hits.push_back({vec3(p.p.x, sand, p.p.z), p.col, 0.5f});
+                if (ctx.rng.chance(0.25f)) hits.push_back({vec3(p.p.x, sand, p.p.z), p.col, 0.5f});
             }
             continue;
         }
@@ -877,100 +841,34 @@ void SeaUniverse::simulateParticles(float dt, float wdt) {
     for (const Hit& h : hits) splash(h.p, h.power, h.col);
 }
 
-void SeaUniverse::simulate(const Game& game, const MusicState& music, float dt, float wdt) {
-    worldTime_ += wdt;
-    if (lvT_ < 1.f) {
-        lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
-        lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
-    }
-    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    const float world = 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
-
-    // Is this peak a drop? The HUD's section says it when there is one; else the song's drive.
-    const float dropish = sectionKnown_ ? (sectionDrop_ ? 1.f : 0.f) : smoothstepf(1.27f, 1.42f, music.speed);
-    const bool stormOn = level_ == 2 && dropish > 0.5f && !over_;
-    // the storm comes in over about a second, and calms over a few
-    stormLin_ = stormOn ? std::min(1.f, stormLin_ + dt / 1.0f) : std::max(0.f, stormLin_ - dt / 4.f);
-    storm_ = smoothstepf(0.f, 1.f, stormLin_);
-    auto spot = [&](float& x, float& z) {
-        z = -rng_.range(2.f, 22.f);
-        x = (rng_.chance(0.5f) ? -1.f : 1.f) * rng_.range(7.f, hwAt(z) - 1.f);
-    };
-    if (dropPending_ > 0.f) {
-        dropPending_ -= dt;
-        if (stormOn) {
-            // the hit: lightning in the clouds far out, a gust tearing spray off the crests
-            dropPending_ = 0.f;
-            flash_ = 1.f;
-            flashAz_ = (rng_.chance(0.5f) ? -1.f : 1.f) * rng_.range(14.f, 30.f);
-            gust_ = 1.f;
-            for (int i = 0; i < 4; i++) {
-                float x, z;
-                spot(x, z);
-                sprayBurst(x, z, 18, 1.3f);
-            }
-            // the life under it startles: the fish dart away
-            for (Critter& c : critters_)
-                if (c.kind == L_FISH) {
-                    c.dart = 1.f;
-                    c.dyv = rng_.range(-1.6f, 1.6f);
-                }
-        }
-    }
-    gust_ = approach(gust_, 0.f, 0.5f, dt);
-    flash_ = approach(flash_, 0.f, 4.f, dt);
-    const float chorus = wp * (1.f - storm_);
-    const float calmSlow = 1.f - 0.75f * slow_;
-    amp_ = lerpf(0.05f + 0.07f * wm + 0.12f * wp, 1.15f, storm_) * calmSlow * (1.f - 0.6f * smoothstepf(0.f, 0.6f, bridge_.amount));
-    sharp_ = 0.15f + 0.2f * wp + 0.65f * storm_;
-    caps_ = std::min(1.f, 0.4f * chorus + storm_ + 0.3f * gust_ * wp) * calmSlow;
-    glint_ = (0.45f + 0.3f * wm + 0.25f * wp) * (1.f - storm_) * (1.f - 0.7f * slow_);
-    rock_ = (0.025f + 0.02f * wm + 0.035f * wp + 0.16f * storm_) * calmSlow;
-    waveT_ += wdt * (0.3f + 0.08f * wm + 0.14f * wp + 0.7f * storm_ + 0.25f * gust_);
-    cloudT_ += wdt * (0.008f + 0.05f * storm_);
+void SeaWorld::simulate(const Game& game, const MusicState& music, float dt, float wdt) {
+    (void)game;
+    (void)music;
+    const float wm = ctx.wm(), wp = ctx.wp();
+    const float world = ctx.world();
+    const float chorus = wp * (1.f - ctx.storm);
+    const float calmSlow = 1.f - 0.75f * ctx.slow;
+    amp_ = lerpf(0.05f + 0.07f * wm + 0.12f * wp, 1.15f, ctx.storm) * calmSlow * (1.f - 0.6f * smoothstepf(0.f, 0.6f, ctx.bridge.amount));
+    sharp_ = 0.15f + 0.2f * wp + 0.65f * ctx.storm;
+    caps_ = std::min(1.f, 0.4f * chorus + ctx.storm + 0.3f * ctx.gust * wp) * calmSlow;
+    glint_ = (0.45f + 0.3f * wm + 0.25f * wp) * (1.f - ctx.storm) * (1.f - 0.7f * ctx.slow);
+    rock_ = (0.025f + 0.02f * wm + 0.035f * wp + 0.16f * ctx.storm) * calmSlow;
+    waveT_ += wdt * (0.3f + 0.08f * wm + 0.14f * wp + 0.7f * ctx.storm + 0.25f * ctx.gust);
 
     // the sea rises with the water poured in (or drains back for a new song)
     rise_ = approach(rise_, riseTarget(), 2.f, dt);
 
-    // Spray off the crests through the storm, bursts on its kicks; a lightning glow every four bars.
-    if (storm_ > 0.05f && world > 0.5f && !over_) {
-        sprayAcc_ += 26.f * storm_ * wdt;
+    // Spray off the crests through the storm.
+    if (ctx.storm > 0.05f && world > 0.5f && !ctx.over) {
+        sprayAcc_ += 26.f * ctx.storm * wdt;
         int guard = 0;
         while (sprayAcc_ >= 1.f && guard++ < 20) {
             sprayAcc_ -= 1.f;
             float x, z;
-            spot(x, z);
-            sprayBurst(x, z, 1, 0.7f + 0.6f * storm_);
+            sprayAt(x, z);
+            sprayBurst(x, z, 1, 0.7f + 0.6f * ctx.storm);
         }
     } else sprayAcc_ = 0.f;
-    sinceKick_ += dt;
-    const float kick = std::max(music.kick, kickIn_);
-    kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
-    if (kick > 0.5f && prevKick_ <= 0.5f && sinceKick_ > 0.4f && world > 0.5f && !over_ && wp > 0.5f) {
-        sinceKick_ = 0.f;
-        float x, z;
-        if (storm_ > 0.5f) {
-            for (int i = 0; i < 2; i++) {
-                spot(x, z);
-                sprayBurst(x, z, 12, 1.2f);
-            }
-        } else {
-            spot(x, z);
-            sprayBurst(x, z, 5, 0.6f);
-        }
-    }
-    prevKick_ = kick;
-    if (music.hasSong) {
-        const double bar = std::floor(music.beat / 4.0 + 1e-4);
-        if (lastBar_ < 0.0 || bar < lastBar_ - 4.0) lastBar_ = bar;
-        if (bar > lastBar_) {
-            lastBar_ = bar;
-            if (storm_ > 0.6f && ((long long)bar % 4) == 0 && world > 0.5f) {
-                flash_ = std::max(flash_, 0.65f);
-                flashAz_ = (rng_.chance(0.5f) ? -1.f : 1.f) * rng_.range(14.f, 30.f);
-            }
-        }
-    }
 
     // Boats: a few out at sea, more in a chorus, sailing slowly; they keep coming as long as the world is there.
     {
@@ -979,18 +877,18 @@ void SeaUniverse::simulate(const Game& game, const MusicState& music, float dt, 
         const int want = !afloat ? 0 : (int)(3.f + 1.f * wp + 2.f * rise_);
         boatT_ -= wdt;
         if ((int)boats_.size() < want && boatT_ <= 0.f && world > 0.5f) {
-            if (spawnBoat(false)) boatT_ = rng_.range(3.f, 8.f);
+            if (spawnBoat(false)) boatT_ = ctx.rng.range(3.f, 8.f);
             else boatT_ = 1.f;
         }
         for (Boat& b : boats_) {
-            b.x += b.dir * b.speed * wdt * (1.f + 0.4f * storm_);
+            b.x += b.dir * b.speed * wdt * (1.f + 0.4f * ctx.storm);
             // the sea draining (a new song): they fade before they would sit on the sand
             const bool deep = S - sandH(b.x, b.z) > 0.4f;
             b.alpha = approach(b.alpha, deep ? 1.f : 0.f, 1.5f, dt);
         }
         boats_.erase(std::remove_if(boats_.begin(), boats_.end(),
                                     [&](const Boat& b) {
-                                        return b.dir * b.x > hwAt(b.z) + BOAT_LEN[b.type] * b.scale + 1.f || (b.alpha <= 0.01f && b.dir * b.x > -hwAt(b.z) && !afloat);
+                                        return b.dir * b.x > ctx.hwAt(b.z) + BOAT_LEN[b.type] * b.scale + 1.f || (b.alpha <= 0.01f && b.dir * b.x > -ctx.hwAt(b.z) && !afloat);
                                     }),
                      boats_.end());
     }
@@ -1000,37 +898,15 @@ void SeaUniverse::simulate(const Game& game, const MusicState& music, float dt, 
 
     simulateLife(dt, wdt, world);
 
-    // Game over: the stack cracks row by row, and each cube is thrown out behind the well.
-    for (Dying& d : dying_) {
-        d.t += dt;
-        if (!d.gone && d.t >= d.delay) {
-            d.gone = true;
-            const float side = d.x < 0.f ? -1.f : 1.f;
-            const vec3 axis = normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f)));
-            throwCube(vec3(d.x, d.y, 0.f), d.type, vec3(side * rng_.range(1.5f, 6.f), rng_.range(2.f, 7.f), -rng_.range(4.f, 9.f)),
-                      axis * rng_.range(2.f, 7.f), 0.f, 0.5f / Game::W);
-        }
-    }
-    dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.gone; }), dying_.end());
-
     simulateParticles(dt, wdt);
-
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
-// =====================================================================================================
-// Registry
-// =====================================================================================================
-
-const UniverseEntry& universe_sea() {
-    static const UniverseEntry e{
-        "SEA", "glass cubes of water over a rising sea", [] { return std::unique_ptr<Universe>(new SeaUniverse()); },
-        // Songs with a swell and a drop to storm on suit it best; any of them a little.
-        [](const SongLook& l) { return 0.75f + 0.2f * l.dynamics + 0.15f * l.airWeight + 0.1f * l.bassWeight; },
-        [] {
-            std::vector<std::string> v;
-            for (int i = 0; i < variantCount(); i++) v.push_back(variantName(i));
-            return v;
-        }()};
-    return e;
+// Game over: a cracked cube of the stack is thrown out behind the well, as a cleared one.
+void SeaWorld::breakOut(const vec3& p, int type) {
+    const float side = p.x < 0.f ? -1.f : 1.f;
+    const vec3 axis = normalize(vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f)));
+    throwCube(p, type, vec3(side * ctx.rng.range(1.5f, 6.f), ctx.rng.range(2.f, 7.f), -ctx.rng.range(4.f, 9.f)),
+              axis * ctx.rng.range(2.f, 7.f), 0.f, 0.5f / Game::W);
 }
+
+} // namespace biome
