@@ -1143,7 +1143,8 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
             const Cell& c = game.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
-            shadow(under_, p.x + 0.06f, p.y - 0.08f, CUBE, 0.07f, shA);
+            shadow(under_, p.x + 0.07f, p.y - 0.1f, CUBE, 0.08f, shA);
+            shadow(under_, p.x + 0.015f, p.y - 0.06f, CUBE, 0.02f, shA * 0.7f); // the contact
             cube(stack_, p.x, p.y, 1.f, pieceColor(c.type), 1.f, nib_[y][x], seed_[y][x], glint, false, 0.f);
         }
     // cleared cubes crumbling
@@ -1195,7 +1196,8 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
         }
         for (auto& c : cells) {
             const vec2 pos = v2(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc);
-            shadow(under_, pos.x + 0.05f * sc, pos.y - 0.07f * sc, CUBE * sc, 0.06f * sc, shA * alpha);
+            shadow(under_, pos.x + 0.06f * sc, pos.y - 0.09f * sc, CUBE * sc, 0.07f * sc, shA * alpha);
+            shadow(under_, pos.x + 0.015f * sc, pos.y - 0.06f * sc, CUBE * sc, 0.02f * sc, shA * 0.7f * alpha);
             cube(top_, pos.x, pos.y, sc, pieceColor(type), alpha, 0.f, 5.f + type * 13.f + c[0] * 3.f + c[1], glint, false, 0.f);
         }
     };
@@ -1217,7 +1219,9 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     }
     // the ants
     for (const Ant& a : ants_) {
-        const float al = saturate(a.alpha) * world;
+        // inside the well (over the blocks) an ant is a faint shadow, fading in across the border
+        const float inside = std::min(std::min(5.f - std::fabs(a.p.x), a.p.y + 10.f), 10.f - a.p.y);
+        const float al = saturate(a.alpha) * world * (1.f - 0.66f * smoothstepf(-0.3f, 0.3f, inside));
         if (al <= 0.f) continue;
         const float h = ANT_L * 0.62f;
         antsV_.push_back({{a.p.x, a.p.y, h, h}, {a.a, 2.f, 0.f, al}, {a.crumb.x, a.crumb.y, a.crumb.z, a.lustre * V.lustre * 6.f},

@@ -142,13 +142,10 @@ uniform float uBridge;
 uniform vec3 uBridgeInk;
 uniform float uSparkle;
 
-vec4 cube(vec2 q) {
-    float h = vD.x;
-    float nib = vC.w;
-    float seed = vB.z;
-    float fw = max(fwidth(q.x), 1e-4);
-    float d = sdRBox(q, vec2(h), h * 0.14);
-    // nibbled: a few bites along the edges and corners, growing with the nibbling, never past a quarter of the cube
+// the bites taken out of a cube: > 0 inside a bite (a few along the edges and corners, growing with the
+// nibbling, never past a quarter of the cube)
+float bites(vec2 q, float h, float nib, float seed) {
+    float cut = -1e3;
     for (int i = 0; i < 6; i++) {
         float fi = float(i);
         float grow = clamp((nib - fi * 0.15) / 0.25, 0.0, 1.0);
@@ -159,10 +156,36 @@ vec4 cube(vec2 q) {
         if (fi < 2.0) t = sign(r.y - 0.5) * h; // the first bites at corners
         vec2 c = side < 1.0 ? vec2(t, h) : side < 2.0 ? vec2(h, t) : side < 3.0 ? vec2(t, -h) : vec2(-h, t);
         float rad = h * (0.12 + 0.13 * hash1(seed + fi * 1.3)) * grow;
-        // a crumbly bite edge
         float a = atan(q.y - c.y, q.x - c.x);
-        rad *= 1.0 + 0.18 * sin(a * 7.0 + fi * 2.0 + seed);
-        d = max(d, rad - length(q - c));
+        rad *= 1.0 + 0.18 * sin(a * 7.0 + fi * 2.0 + seed); // a crumbly bite edge
+        cut = max(cut, rad - length(q - c));
+    }
+    return cut;
+}
+
+float topD(vec2 q, float h, float nib, float seed) {
+    return max(sdRBox(q, vec2(h), h * 0.1), bites(q, h, nib, seed));
+}
+
+// A raised sugar cube seen from above and a little in front: a top face with chamfered edges lit from the upper
+// left, its front wall showing below it, the bites notched through both.
+vec4 cube(vec2 q) {
+    float h = vD.x;
+    float nib = vC.w;
+    float seed = vB.z;
+    float fw = max(fwidth(q.x), 1e-4);
+    float wall = h * 0.13;
+    float d = topD(q, h, nib, seed);
+    // the whole footprint: the top swept down by the wall's height
+    float box = sdRBox(q - vec2(0.0, -wall * 0.5), vec2(h, h + wall * 0.5), h * 0.1);
+    float ds = max(box, min(bites(q, h, nib, seed), bites(q + vec2(0.0, wall), h, nib, seed)));
+    if (vD.z > 0.5) {
+        // the ghost: the footprint's outline, the top's edge fainter, a breath of its color inside
+        vec3 tint = mix(vC.rgb, uBridgeInk, uBridge);
+        float line = clamp(0.5 - (abs(ds + fw * 1.2) - fw * 0.9) / fw, 0.0, 1.0);
+        float lineT = clamp(0.5 - (abs(d + fw * 0.6) - fw * 0.5) / fw, 0.0, 1.0) * step(ds, -fw * 2.0);
+        float a = clamp(0.5 - ds / fw, 0.0, 1.0);
+        return vec4(tint, 1.0) * (line * 0.75 + lineT * 0.35 + a * 0.1);
     }
     // the sugar's grains: small crystals, each a facet of its own
     vec2 g = q / h * 4.6 + seed * 13.0;
@@ -178,30 +201,41 @@ vec4 cube(vec2 q) {
             else if (dd < f2) f2 = dd;
         }
     float hId = hash2(id + 0.37);
-    float crumbled = vD.w;
     // crumbling (a cleared cube): grain by grain, from the outside in
-    float edgeK = clamp(-d / h, 0.0, 1.0);
-    if (crumbled > 0.0 && hId * 0.7 + edgeK * 0.5 < crumbled * 1.25) d = 1.0;
-    vec3 n = normalize(vec3(hash22(id + 3.1) * 2.0 - 1.0, 2.4));
-    float lit = dot(n, uLightDir);
+    float crumbled = vD.w;
+    float edgeK = clamp(-ds / h, 0.0, 1.0);
+    if (crumbled > 0.0 && hId * 0.7 + edgeK * 0.5 < crumbled * 1.25) return vec4(0.0);
     vec3 tint = vC.rgb;
-    // the body: a soft light across the cube's top, each crystal a touch brighter or darker
-    float across = dot(q / h, normalize(uLightDir.xy)) * 0.5;
-    vec3 col = tint * (0.9 + 0.1 * across + 0.12 * (lit - 0.8) + 0.05 * (hId - 0.5));
-    col *= 0.96 + 0.04 * smoothstep(0.0, 0.1, f2 - f1);
-    // the edges catch the light (translucent sugar)
-    float rim = smoothstep(-h * 0.16, 0.0, d);
-    col = mix(col, mix(tint, vec3(1.0), 0.55), rim * 0.4);
+    vec3 L = uLightDir;
+    vec2 jit = (hash22(id + 3.1) * 2.0 - 1.0) * 0.16;
+    // the top: flat in the middle, a chamfer round its edge (and round the bites)
+    float bev = h * 0.24;
+    float e = h * 0.02;
+    vec2 gr = vec2(topD(q + vec2(e, 0.0), h, nib, seed) - d, topD(q + vec2(0.0, e), h, nib, seed) - d) / e;
+    float onBev = 1.0 - smoothstep(-0.5, 0.5, (-d - bev) / max(fw, bev * 0.1));
+    float gl = length(gr);
+    vec2 out2 = gl > 1e-4 ? gr / gl : vec2(0.0);
+    vec3 n = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(out2 * 0.95, 1.0), onBev) + vec3(jit * (1.0 - 0.6 * onBev), 0.0));
+    float dif = max(dot(n, L), 0.0) / L.z; // 1 on the flat top
+    float shade = 0.4 + 0.6 * dif;
+    vec3 col = tint * min(shade, 1.0) + (vec3(1.0) - tint) * max(shade - 1.0, 0.0) * 1.2;
+    // a highlight along the lit edges
+    vec3 rf = reflect(-L, n);
+    col += vec3(1.0) * pow(max(rf.z, 0.0), 24.0) * 0.28 * onBev;
+    // the front wall: in the shade, darker toward the ground
+    float onTop = clamp(0.5 - d / fw, 0.0, 1.0);
+    float wy = clamp((-h - q.y) / wall, 0.0, 1.0);
+    vec3 wcol = tint * (0.58 - 0.12 * wy + 0.06 * (hId - 0.5));
+    col = mix(wcol, col, onTop);
+    // the crystals: each a touch brighter or darker, their edges just visible
+    col *= 1.0 + 0.07 * (hId - 0.5);
+    col *= 0.965 + 0.035 * smoothstep(0.0, 0.1, f2 - f1);
     // sparkles: a few facets turned to the light
-    float sp = step(0.8, hash2(id + 9.1)) * pow(max(lit, 0.0), 6.0);
+    float lit = dot(normalize(vec3(hash22(id + 3.1) * 2.0 - 1.0, 2.4)), L);
+    float sp = step(0.8, hash2(id + 9.1)) * pow(max(lit, 0.0), 6.0) * onTop;
     col += vec3(1.0) * sp * (0.3 + 0.6 * vD.y + 0.35 * uSparkle) * smoothstep(0.3, 0.0, f1);
     col = mix(col, uBridgeInk, uBridge);
-    float a = clamp(0.5 - d / fw, 0.0, 1.0);
-    if (vD.z > 0.5) {
-        // the ghost: the cube's outline, a breath of its color inside
-        float line = clamp(0.5 - (abs(d + fw * 1.2) - fw * 0.9) / fw, 0.0, 1.0);
-        return vec4(mix(tint, uBridgeInk, uBridge), 1.0) * (line * 0.75 + a * 0.1);
-    }
+    float a = clamp(0.5 - ds / fw, 0.0, 1.0);
     return vec4(col, 1.0) * a;
 }
 
