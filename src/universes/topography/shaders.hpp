@@ -26,6 +26,9 @@ uniform float uWater, uWaterOn, uPhase, uRiver, uFlow, uWellCalm, uSlow, uDark, 
 uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform vec4 uLeftCol, uRightCol;
+uniform float uHalf, uDropFx, uShoreKick;
+uniform vec4 uHud[40];
+uniform int uHudN;
 
 vec4 cubicW(float v) {
     vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
@@ -88,6 +91,16 @@ void main() {
     float inWell = box(w, vec4(-5.0, -10.0, 5.0, 10.0));
     float inCols = max(box(w, uLeftCol), box(w, uRightCol));
     float quiet = mix(1.0, uWellCalm, inWell) * mix(1.0, 0.5, inCols);
+    // behind the HUD's text and the previews the map nearly fades out
+    vec2 pix = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+    float hud = 0.0;
+    for (int i = 0; i < uHudN; i++) {
+        vec4 r = uHud[i];
+        vec2 dd = max(r.xy - pix, pix - r.zw);
+        float k = length(max(dd, 0.0)) + min(max(dd.x, dd.y), 0.0); // rounded box
+        hud = max(hud, 1.0 - smoothstep(-6.0, 16.0, k));
+    }
+    quiet *= 1.0 - 0.85 * hud;
 
     // ---- Water: the lakes (with the lines along their shores) and the rivers.
     // the ponds the rain fills in the hollows (their spill level, rising with the rain) and the flood
@@ -108,19 +121,24 @@ void main() {
     vec3 lc = mix(uLine, uIndex, idx);
     float la = uLineAlpha * quiet * mix(1.0, 0.8, uSlow);
     col = mix(col, mix(lc, uWaterLine, wet), line * la * mix(1.0, 0.22, wet));
+    // the drop's half-interval contours: the map gets denser
+    float dh = abs(fract(h) - 0.5) / fw;
+    float hl = stroke(dh, max(uLineW * 0.85, 0.8)) * smoothstep(4.0, 9.0, spacing) * uHalf;
+    col = mix(col, mix(uLine, uWaterLine, wet), hl * la * 0.6 * mix(1.0, 0.22, wet));
 
     // shoreline and water lines (parallel to the shore, sparser and fainter offshore, moving out with the music)
     float sd = abs(depth) / fw;
-    float shore = stroke(sd, max(uLineW * 1.6, 1.0)) * uWaterOn;
+    float shore = stroke(sd, max(uLineW * (1.6 + 1.6 * uShoreKick), 1.0)) * uWaterOn;
     float wd = depth * 3.0 - uPhase;
     float wfw = max(fwidth(wd), 1e-5);
     float wl = stroke(abs(fract(wd + 0.5) - 0.5) / wfw, max(uLineW, 0.85)) * smoothstep(0.05, 0.2, depth) *
                exp(-depth * 1.1) * smoothstep(2.5, 6.0, 1.0 / wfw);
-    col = mix(col, uWaterLine, clamp(shore * 0.9 + wl * wet, 0.0, 1.0) * mix(1.0, 0.55, inWell));
+    col = mix(col, uWaterLine, clamp(shore * 0.9 + wl * wet, 0.0, 1.0) * mix(1.0, 0.55, inWell) * (1.0 - 0.85 * hud));
 
     // rivers (their coverage drawn beforehand), with a slow flow downhill
-    float riv = texture(uRivers, vUv).r * uRiver * (1.0 - wet);
-    float flow = 0.72 + 0.28 * sin(6.2832 * (h * 1.3 + uFlow));
+    float riv = texture(uRivers, vUv).r * uRiver * (1.0 - wet) * (1.0 - hud);
+    float fa = mix(0.28, 0.6, uDropFx);
+    float flow = 1.0 - fa + fa * sin(6.2832 * (h * 1.3 + uFlow));
     col = mix(col, uWaterLine, riv * flow * mix(1.0, 0.6, inWell) * mix(1.0, 0.6, inCols));
 
     // ---- Map furniture: the well's neat line with ticks, a scale bar and a north arrow.

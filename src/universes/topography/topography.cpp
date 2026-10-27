@@ -81,6 +81,17 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
+// The drop's colors, per variant: the pieces take another set of seven tints (sRGB, I O T S Z J L) and the
+// contours turn toward the water's ink.
+const unsigned DROP_PIECES[][7] = {
+    {0xe8505b, 0x2ab7a9, 0xf2b134, 0x6c5ce7, 0x3fa7d6, 0xe36397, 0x8cc152}, // SWISS
+    {0xffd27f, 0x7fd8ff, 0xff9ec7, 0xb7a6ff, 0x9ef0b0, 0xffa07a, 0xf5f5a0}, // NIGHT SURVEY
+    {0xd23c77, 0x1f9e89, 0xf2a900, 0x4b3fa0, 0x2e86de, 0xe8603c, 0x6aa121}, // QUADRANGLE
+    {0xe4572e, 0x29a19c, 0xf3a712, 0x5f4bb6, 0x3c91e6, 0xc33c8f, 0x8bbf3f}, // GRAPHITE
+    {0x5b6ee1, 0xff7a59, 0x2ec4b6, 0xf6b93b, 0xb5179e, 0x26a269, 0xe8505b}, // GLACIER
+};
+static_assert(sizeof(DROP_PIECES) / sizeof(DROP_PIECES[0]) == VARIANT_COUNT, "a drop set per variant");
+
 using Palette = TopographyUniverse::Palette;
 static_assert(sizeof(Palette) % sizeof(float) == 0, "a palette is floats only");
 constexpr int PAL_FLOATS = (int)(sizeof(Palette) / sizeof(float));
@@ -94,6 +105,15 @@ Palette paletteOf(int v) {
     p.accent = L(d.accent);
     for (int i = 0; i < 7; i++) p.piece[i] = L(d.piece[i]);
     p.dark = d.dark; p.lineAlpha = d.lineAlpha; p.woodAmt = d.woodAmt; p.shade = d.shade;
+    return p;
+}
+
+Palette dropPaletteOf(int v) {
+    v = ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT;
+    Palette p = paletteOf(v);
+    for (int i = 0; i < 7; i++) p.piece[i] = ugl::toLinear(hex(DROP_PIECES[v][i]));
+    p.line = lerp(p.line, p.water, 0.55f);
+    p.index = lerp(p.index, p.water, 0.45f);
     return p;
 }
 
@@ -365,6 +385,11 @@ void TopographyUniverse::buildGround() {
             wood_[(size_t)j * gw_ + i] = saturate((wn - 0.52f) * 5.f + 0.5f) * saturate(away) * (b < 1.8f ? 1.f : 0.f);
         }
     // spot heights: the tops of the highest hills in the outer margins
+    peaks_.clear();
+    for (int i = 0; i < 6; i++) {
+        Peak p{0, 0, i % 3, 1.f, 1.f};
+        if (placePeak(p)) peaks_.push_back(p);
+    }
     spots_.clear();
     for (int tries = 0; tries < 3; tries++) {
         float best = -1e9f;
@@ -532,6 +557,50 @@ void TopographyUniverse::buildRivers() {
     }
 }
 
+// A place for a living peak: in the outer margins, clear of the HUD's corners and of the other peaks.
+bool TopographyUniverse::placePeak(Peak& p) {
+    for (int tries = 0; tries < 30; tries++) {
+        const float side = rng_.chance(0.5f) ? -1.f : 1.f;
+        const float x = side * rng_.range(13.5f, std::max(13.6f, viewH_.x - 2.f));
+        const float y = rng_.range(viewC_.y - viewH_.y + 2.5f, viewC_.y + viewH_.y - 2.5f);
+        if (x < -11.f && std::fabs(y - viewC_.y) > 7.f) continue; // the title, the section
+        if (x > 11.f && y < viewC_.y - 7.5f) continue;             // the scale bar
+        bool ok = true;
+        for (const Peak& q : peaks_)
+            if (q.wT > 0.f && (q.x - x) * (q.x - x) + (q.y - y) * (q.y - y) < 30.f) ok = false;
+        if (!ok) continue;
+        p.x = x;
+        p.y = y;
+        return true;
+    }
+    return false;
+}
+
+// The HUD's text and the previews, as boxes in pixels (padded): the map fades behind them.
+void TopographyUniverse::buildHudRects(const std::vector<HudText>& hud) {
+    hudRects_.clear();
+    auto add = [&](float x0, float y0, float x1, float y1) {
+        if (hudRects_.size() / 4 >= 40) return;
+        hudRects_.insert(hudRects_.end(), {x0, y0, x1, y1});
+    };
+    for (const HudText& h : hud) {
+        if (h.alpha <= 0.05f || h.text.empty() || h.role == HUD_DIALOG || h.role == HUD_HELP) continue;
+        const float base = h.scale * 12.f;
+        const bool spaced = h.role == HUD_LABEL || h.role == HUD_SECTION || h.role == HUD_TOAST;
+        const float size = base * (h.role == HUD_VALUE ? 1.05f : h.role == HUD_TITLE || h.role == HUD_UNIVERSE ? 1.25f : 0.95f);
+        float w = textWidth(fontRoman_, h.text, size, spaced ? base * 0.45f : base * 0.05f);
+        if (h.role == HUD_UNIVERSE) w *= 1.25f;
+        const float x0 = ugl::hudLeft(h, w, width_), pad = size * 0.35f;
+        add(x0 - pad, h.y - pad, x0 + w + pad, h.y + size * 1.1f + pad);
+    }
+    auto piece = [&](const vec3& c, float sc) {
+        const vec2 a = project(vec3(c.x - 2.1f * sc, c.y + 1.4f * sc, 0.f)), b = project(vec3(c.x + 2.1f * sc, c.y - 1.4f * sc, 0.f));
+        add(a.x, a.y, b.x, b.y);
+    };
+    piece(layout::HOLD_CENTER, layout::previewScale(0));
+    for (int i = 0; i < 3; i++) piece(layout::nextCenter(i), layout::previewScale(i));
+}
+
 float TopographyUniverse::waterPercentile(float p) {
     if (sorted_.empty()) return -99.f;
     if (p <= 0.f) return sorted_.front() - 1.f + p * 10.f;
@@ -576,7 +645,18 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt) {
 
     const size_t n = target_.size();
     for (size_t k = 0; k < n; k++)
-        target_[k] = base_[k] + STACK_H * mask_[k] + FOOTHILLS * big_[k] + sed_[k] - eros_[k];
+        target_[k] = base_[k] + STACK_H * mask_[k] + (FOOTHILLS + 9.f * heave_) * big_[k] + sed_[k] - eros_[k];
+    // the drop's living relief: peaks in the margins following the bands
+    for (const Peak& pk : peaks_) {
+        const float amp = pk.w * relief_ * (0.8f + 5.f * bandLv_[pk.band]);
+        if (amp < 0.01f) continue;
+        const int ci = (int)((pk.x - gx0_) / gs_), cj = (int)((pk.y - gy0_) / gs_);
+        for (int j = std::max(0, cj - 30); j <= std::min(gh_ - 1, cj + 30); j++)
+            for (int i = std::max(0, ci - 30); i <= std::min(gw_ - 1, ci + 30); i++) {
+                const float dx = gx0_ + i * gs_ - pk.x, dy = gy0_ + j * gs_ - pk.y;
+                target_[(size_t)j * gw_ + i] += amp * std::exp(-(dx * dx + dy * dy) / 6.5f);
+            }
+    }
     for (const Impact& im : impacts_) {
         const float env = smoothstepf(0.f, 0.06f, im.t) * (1.f - smoothstepf(0.1f, 0.8f, im.t)) * im.amp;
         const int ci = (int)((im.x - gx0_) / gs_), cj = (int)((im.y - gy0_) / gs_);
@@ -700,6 +780,8 @@ void TopographyUniverse::setLevel(int level, float energy, float seconds, float 
 void TopographyUniverse::drop(float strength) {
     dropMode_ = true;
     surge_ = std::max(surge_, 0.6f + 0.4f * strength);
+    heave_ = std::max(heave_, 0.6f + 0.4f * strength); // the land heaves around the stack
+    for (auto& pk : peaks_) pk.w = std::max(pk.w, 0.6f);
 }
 
 void TopographyUniverse::refresh(float strength) {
@@ -1148,8 +1230,8 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     const float dt = f.dt;
     {
         const Palette target = paletteOf(variant_);
-        if (!palSet_) { pal_ = target; palSet_ = true; }
-        else lerpPalette(pal_, target, 1.f - std::exp(-dt * 1.0f));
+        if (!palSet_) { basePal_ = target; palSet_ = true; }
+        else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
     }
     syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
@@ -1169,6 +1251,30 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     dropAmt_ = approach(dropAmt_, dropMode_ ? 1.f : 0.f, dropMode_ ? 3.f : 0.4f, dt);
+    {
+        // the drop's colors come in with the flood (and leave slowly after it)
+        // (switched quickly on the downbeat, so the pieces never pass through muddy in-between tints)
+        colAmt_ = approach(colAmt_, dropMode_ ? wp : 0.f, dropMode_ ? 7.f : 0.5f, dt);
+        pal_ = basePal_;
+        lerpPalette(pal_, dropPaletteOf(variant_), smoothstepf(0.f, 1.f, colAmt_));
+    }
+    heave_ = approach(heave_, 0.f, 0.45f, dt);
+    half_ = approach(half_, dropAmt_ * wp, 1.5f, dt);
+    // the relief that lives with the bands: strong in a drop, a breath in a chorus
+    relief_ = approach(relief_, wp * (0.22f + 0.78f * dropAmt_), 1.5f, dt);
+    {
+        const int lo[3] = {0, 4, 10}, hi[3] = {4, 10, NUM_BANDS};
+        for (int g = 0; g < 3; g++) {
+            float v = 0.f;
+            for (int b = lo[g]; b < hi[g]; b++) v += music.bandsFast[b];
+            v /= (float)(hi[g] - lo[g]);
+            bandMax_[g] = std::max(bandMax_[g] * std::exp(-dt * 0.05f), std::max(v, 0.02f));
+            const float t = saturate(v / bandMax_[g]);
+            bandLv_[g] = approach(bandLv_[g], t, t > bandLv_[g] ? 6.f : 2.2f, dt);
+        }
+    }
+    for (auto& pk : peaks_) pk.w = approach(pk.w, pk.wT, 0.8f, dt);
+    peaks_.erase(std::remove_if(peaks_.begin(), peaks_.end(), [](const Peak& p) { return p.wT <= 0.f && p.w < 0.01f; }), peaks_.end());
     surge_ = approach(surge_, 0.f, 0.22f, dt);
     tetrisFlood_ = approach(tetrisFlood_, 0.f, 0.2f, dt);
     const float kick = std::max(music.kick, kickIn_);
@@ -1183,14 +1289,23 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
                 lastBeat_ = beat;
                 beatCount_++;
                 const bool bar = std::fmod(beat, 4.0) < 0.5;
+                const int bar4 = (int)std::floor(beat / 16.0);
+                if (std::fmod(beat, 16.0) < 0.5 && bar4 != lastBar4_ && dropAmt_ > 0.5f) {
+                    lastBar4_ = bar4;
+                    // the oldest active peak sinks, a new one pushes up elsewhere
+                    for (auto& pk : peaks_)
+                        if (pk.wT > 0.f) { pk.wT = 0.f; break; }
+                    Peak np{0, 0, rng_.irange(0, 2), 0.f, 1.f};
+                    if (placePeak(np)) peaks_.push_back(np);
+                }
                 if (bar && wm > 0.5f && wp < 0.5f && overT_ < 0.f) {
                     const float side = rng_.chance(0.5f) ? -1.f : 1.f;
                     shower(side * rng_.range(12.5f, viewH_.x - 2.f), rng_.range(-8.f, 9.f), rng_.range(2.5f, 4.f), rng_.range(1.f, 2.f));
                 }
             }
         }
-        phase_ += wdt * (0.1f + 0.2f * wp + 1.4f * kick * wp * (0.4f + 0.6f * dropAmt_));
-        flow_ += wdt * (0.3f + 0.4f * wm) * std::clamp(music.bpm / 120.f, 0.6f, 1.6f);
+        phase_ += wdt * (0.1f + 0.2f * wp + (1.2f + 1.6f * dropAmt_) * kick * wp * (0.4f + 0.6f * dropAmt_));
+        flow_ += wdt * (0.3f + 0.4f * wm) * (1.f + 2.f * dropAmt_) * std::clamp(music.bpm / 120.f, 0.6f, 1.6f);
     }
     // the lakes: a share of the sheet under water (none when calm, pools in mid parts, the flood at the peak,
     // swelling slowly over two bars)
@@ -1285,6 +1400,12 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uFurn", 1.f - over_ * 0.7f);
     set1f(progMap_, "uBridge", bridge);
     set3f(progMap_, "uBridgeCol", bridge_.color);
+    buildHudRects(f.hud);
+    set1i(progMap_, "uHudN", (int)(hudRects_.size() / 4));
+    if (!hudRects_.empty()) glUniform4fv(ugl::U(progMap_, "uHud"), (GLsizei)(hudRects_.size() / 4), hudRects_.data());
+    set1f(progMap_, "uHalf", half_);
+    set1f(progMap_, "uDropFx", dropAmt_ * wp);
+    set1f(progMap_, "uShoreKick", std::max(music.kick, kickIn_) * dropAmt_ * wp);
     set4f(progMap_, "uLeftCol", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progMap_, "uRightCol", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     ugl::drawFullscreen();

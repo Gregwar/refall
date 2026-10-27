@@ -58,6 +58,18 @@ private:
     std::vector<RiverInst> rivers_;
     void buildRivers();
     float drizzle_ = 0.3f;
+
+    // ---- The drop: peaks in the margins rising and falling with the bands (one moves every four bars), the land
+    // heaving around the stack on the downbeat, the half-interval contours, the drop's colors.
+    struct Peak { float x, y; int band; float w, wT; };
+    std::vector<Peak> peaks_;
+    float bandLv_[3] = {}, bandMax_[3] = {0.2f, 0.2f, 0.2f};
+    float heave_ = 0.f, colAmt_ = 0.f, half_ = 0.f, relief_ = 0.f;
+    int lastBar4_ = -1;
+    bool placePeak(Peak& p);
+    Palette basePal_{};
+    std::vector<float> hudRects_; // pixels x0 y0 x1 y1: where the map keeps quiet behind the HUD
+    void buildHudRects(const std::vector<HudText>& hud);
     void splat(std::vector<float>& f, float x, float y, float v);
     float waterPercentile(float p);
     std::vector<float> sorted_;
