@@ -85,17 +85,13 @@ private:
     };
     struct Transient { vec2 a, b, vel; float width, alpha, from, until; vec3 col; int tool; uint64_t id; float residue; bool world; };
     struct Dying { int x, y, type, mask; uint64_t key; float t, dur; float reveal = 1.f; };
-    // A cell of the stack: which piece it belongs to, and its colouring in time (base colouring, then the drop's
-    // stronger layer over it, and that layer rubbed out again).
+    // A cell of the stack: which piece it belongs to, and when it is coloured in (a landed piece, over a few drawings).
     struct InkCell {
         uint64_t id = 0;
         int idx = 0;
         int type = -1;
         double baseT0 = -1e9; // its colouring starts (coloured in over baseDur)
         float baseDur = 0.2f;
-        double ovT0 = 1e18, ovOffT0 = 1e18; // the drop's layer: drawn in from ovT0, rubbed out from ovOffT0
-        bool recolour = false; // stepping down after a clear: drawn again once it has arrived
-        int order = 0;         // its row among those stepping down (from the bottom)
     };
     enum { IT_CELL = 0, IT_OUTLINE = 1, IT_STROKE = 2, IT_DOODLE = 3, IT_PIE = 4, IT_TEXT = 5, IT_SCRIBBLE = 6, IT_MOVER = 7 };
     // A drop's travelling drawings: redrawn at a new pose on every drawing, the old pose rubbed out.
@@ -198,9 +194,7 @@ private:
     std::vector<Doodle> doodles_;
     std::vector<Mover> movers_;
     double beatNow_ = 0; // the song's beat at the current drawing
-    bool animating_ = false;  // cells are being coloured in (or rubbed back): drawings come fast
-    bool strongWanted_ = false; // the drop's stronger colouring is wanted (a drop)
-    double sweepT0_ = -1e9;     // when the last sweep (drop start or end) began
+    bool animating_ = false; // a landed piece is being coloured in: drawings come fast
     float overT_ = -1;       // game over: time since the top out
     std::vector<Item> dead_; // the stack at the top out: scribbled over, then erased
     float deadTop_ = 0;

@@ -68,8 +68,6 @@ uint64_t strHash(const std::string& s) {
     return h;
 }
 uint64_t tag(char t, uint64_t v) { return mix((uint64_t)(unsigned char)t << 48, v); }
-const float OV_DUR = 0.3f; // one cell's drop colouring drawn in (or rubbed out)
-const float SWEEP = 0.85f; // a drop's start (or end) going across the whole stack, from the first cell to the last
 
 enum Tool { T_PENCIL = 0, T_PEN = 1, T_MARKER = 2, T_CHALK = 3, T_SMUDGE = 4, T_CPENCIL = 5, T_HIGHLIGHT = 6 };
 enum Pattern { P_HATCH = 0, P_CROSS = 1, P_SCRIBBLE = 2, P_BANDS = 3, P_STIPPLE = 4, P_RUB = 5 };
@@ -581,25 +579,14 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 doodles_.push_back(d);
             }
         }
-        // collapse the bookkeeping like the board
-        // (what steps down is drawn again in its new place: outlined, then coloured in again from the bottom up)
+        // collapse the bookkeeping like the board (what steps down keeps its colouring)
         InkCell next[Game::H][Game::W];
-        int dst = Game::H - 1, moved = 0;
+        int dst = Game::H - 1;
         for (int y = Game::H - 1; y >= 0; y--) {
             if (cleared[y]) continue;
-            bool any = false;
-            for (int x = 0; x < Game::W; x++) {
-                next[dst][x] = ink_[y][x];
-                if (dst != y && ink_[y][x].id != 0) {
-                    next[dst][x].recolour = true;
-                    next[dst][x].order = moved;
-                    any = true;
-                }
-            }
-            moved += any;
+            for (int x = 0; x < Game::W; x++) next[dst][x] = ink_[y][x];
             dst--;
         }
-        if (moved) animating_ = true;
         std::memcpy(ink_, next, sizeof(ink_));
         dirty_ = true;
         break;
@@ -923,44 +910,14 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 gr->n++;
             }
         const vec3 o = cellPos(0, 0);
-        // the drop's stronger colouring: a sweep across the stack (bottom up, left to right) when a drop starts,
-        // the same rubbing it out when it ends
-        const bool strong = stage_ >= 3;
-        if (strong != strongWanted_) { strongWanted_ = strong; sweepT0_ = clock_; }
-        int topY = Game::H - 1;
-        for (int y = Game::HIDDEN; y < Game::H; y++) {
-            bool any = false;
-            for (int x = 0; x < Game::W; x++) any |= g.cell(x, y).type >= 0;
-            if (any) { topY = y; break; }
-        }
-        const float rows = (float)std::max(1, Game::H - 1 - topY);
+        // a landed piece is coloured in over a few drawings: drawings come fast meanwhile
         animating_ = false;
         for (int y = Game::HIDDEN; y < Game::H; y++)
-            for (int x = 0; x < Game::W; x++) {
-                if (g.cell(x, y).type < 0) continue;
-                InkCell& ic = ink_[y][x];
-                const float rank = 0.7f * (float)(Game::H - 1 - y) / rows + 0.3f * x / (float)(Game::W - 1);
-                if (ic.recolour) {
-                    // arrived after stepping down: drawn again there, an outline, then coloured in from the bottom up
-                    animating_ = true;
-                    if (std::fabs(g.rowOffset(y)) > 0.3f) continue; // (nearly there)
-                    const float pace = stage_ >= 3 ? 0.7f : 1.f;
-                    ic.recolour = false;
-                    ic.baseT0 = clock_ + pace * (0.04f + 0.08f * ic.order + 0.1f * x / (float)(Game::W - 1));
-                    ic.baseDur = 0.24f * pace;
-                    ic.ovT0 = ic.ovOffT0 = 1e18; // its drop colouring too, once coloured in again
-                }
-                const double baseEnd = ic.baseT0 + ic.baseDur;
-                if (strong) {
-                    ic.ovOffT0 = 1e18;
-                    if (ic.ovT0 > 1e17) ic.ovT0 = std::max(baseEnd, sweepT0_ + SWEEP * rank);
-                } else if (ic.ovT0 < 1e17 && ic.ovOffT0 > 1e17) {
-                    ic.ovOffT0 = std::max((double)clock_, sweepT0_ + SWEEP * rank);
-                }
-                if (ic.ovOffT0 < 1e17 && clock_ >= ic.ovOffT0 + OV_DUR) ic.ovT0 = ic.ovOffT0 = 1e18; // rubbed out
-                if (clock_ < baseEnd || (ic.ovT0 < 1e17 && clock_ < ic.ovT0 + OV_DUR) || ic.ovOffT0 < 1e17)
-                    animating_ = true;
-            }
+            for (int x = 0; x < Game::W; x++)
+                if (g.cell(x, y).type >= 0 && clock_ < ink_[y][x].baseT0 + ink_[y][x].baseDur) animating_ = true;
+        // the drop's stronger colouring: a second, crossing layer over every coloured-in cell, there at once on the
+        // drop's downbeat and gone at once when it ends (the eraser leaves a ghost of it)
+        const bool strong = stage_ >= 3;
         for (const Group& gr : groups) {
             const size_t first = out.size();
             addPiece(out, mix(gr.id, 0xC311), gr.cells, gr.n, v2(o.x, o.y), 1.f, gr.type, 1.f, false, 0.38f, 0.12f);
@@ -974,13 +931,10 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 const float base = saturate((float)(clock_ - ic.baseT0) / ic.baseDur);
                 if (base < 1.f) { out[i].i2 |= 32; out[i].b = base; }
                 out[i].key = mix(gr.id, 1 + (uint64_t)gr.idx[k]);
-                // the drop's layer over it: drawn in stroke by stroke, rubbed out the same way
-                if (ic.ovT0 < 1e17 && clock_ > ic.ovT0) {
+                if (strong && base >= 1.f) {
                     Item ov = out[i];
                     ov.key = mix(out[i].key, 0x0E7);
-                    ov.i2 = 16 | 32 | 64;
-                    ov.b = saturate((float)(clock_ - ic.ovT0) / OV_DUR);
-                    ov.a = ic.ovOffT0 < 1e17 ? saturate((float)(clock_ - ic.ovOffT0) / OV_DUR) : 0.f;
+                    ov.i2 = 16 | 64;
                     ov.col = lerp(out[i].col, outlineCol_, V.light ? 0.22f : 0.f);
                     ov.c = 0.9f;
                     ov.residue = 0.3f;
