@@ -50,6 +50,7 @@ public:
         int i0 = 0, i1 = 0, i2 = 0;       // by kind
         vec3 col{0.f};
         float alpha = 1;
+        float wt = 1, wob = 0.03f; // the hand when it was drawn (stroke weight, wobble): kept while it stays
         int tool = 0;
         std::string text;
         int n = 0;          // outline: its cells (offsets in cells from x, y)
@@ -84,7 +85,18 @@ private:
     };
     struct Transient { vec2 a, b, vel; float width, alpha, from, until; vec3 col; int tool; uint64_t id; float residue; bool world; };
     struct Dying { int x, y, type, mask; uint64_t key; float t, dur; float reveal = 1.f; };
-    struct InkCell { uint64_t id = 0; int idx = 0; int type = -1; };
+    // A cell of the stack: which piece it belongs to, and its colouring in time (base colouring, then the drop's
+    // stronger layer over it, and that layer rubbed out again).
+    struct InkCell {
+        uint64_t id = 0;
+        int idx = 0;
+        int type = -1;
+        double baseT0 = -1e9; // its colouring starts (coloured in over baseDur)
+        float baseDur = 0.2f;
+        double ovT0 = 1e18, ovOffT0 = 1e18; // the drop's layer: drawn in from ovT0, rubbed out from ovOffT0
+        bool recolour = false; // stepping down after a clear: drawn again once it has arrived
+        int order = 0;         // its row among those stepping down (from the bottom)
+    };
     enum { IT_CELL = 0, IT_OUTLINE = 1, IT_STROKE = 2, IT_DOODLE = 3, IT_PIE = 4, IT_TEXT = 5, IT_SCRIBBLE = 6, IT_MOVER = 7 };
     // A drop's travelling drawings: redrawn at a new pose on every drawing, the old pose rubbed out.
     enum { MV_CUBE = 0, MV_BALL = 1, MV_RUNNER = 2, MV_PLANE = 3, MV_ROCKET = 4, MV_COUNT = 5 };
@@ -109,6 +121,7 @@ private:
     void spawnMover(int kind, int side);
     void marginBox(int side, float& x0, float& y0, float& x1, float& y1) const;
     void emitMover(const Item& it, std::vector<Mark>& out);
+    void emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text);
     void spawnDoodle(bool burst);
     bool freeSpot(float size, vec2& out);
     void syncInk(const Game& game);
@@ -185,10 +198,9 @@ private:
     std::vector<Doodle> doodles_;
     std::vector<Mover> movers_;
     double beatNow_ = 0; // the song's beat at the current drawing
-    uint64_t landId_ = 0;  // the piece that landed last: coloured in over a few drawings
-    double landT0_ = -1e9; // when it landed
-    float landDrawn_ = 1.f; // how far it was coloured in on the last drawing
-    float landProgress() const;
+    bool animating_ = false;  // cells are being coloured in (or rubbed back): drawings come fast
+    bool strongWanted_ = false; // the drop's stronger colouring is wanted (a drop)
+    double sweepT0_ = -1e9;     // when the last sweep (drop start or end) began
     float overT_ = -1;       // game over: time since the top out
     std::vector<Item> dead_; // the stack at the top out: scribbled over, then erased
     float deadTop_ = 0;

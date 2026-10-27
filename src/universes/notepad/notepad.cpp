@@ -68,8 +68,8 @@ uint64_t strHash(const std::string& s) {
     return h;
 }
 uint64_t tag(char t, uint64_t v) { return mix((uint64_t)(unsigned char)t << 48, v); }
-// One cell's share of a landed piece's colouring: the cells one after another, overlapping a little.
-float landReveal(float progress, int idx) { return saturate((progress * 5.2f - (float)idx) / 2.2f); }
+const float OV_DUR = 0.3f; // one cell's drop colouring drawn in (or rubbed out)
+const float SWEEP = 0.85f; // a drop's start (or end) going across the whole stack, from the first cell to the last
 
 enum Tool { T_PENCIL = 0, T_PEN = 1, T_MARKER = 2, T_CHALK = 3, T_SMUDGE = 4, T_CPENCIL = 5, T_HIGHLIGHT = 6 };
 enum Pattern { P_HATCH = 0, P_CROSS = 1, P_SCRIBBLE = 2, P_BANDS = 3, P_STIPPLE = 4, P_RUB = 5 };
@@ -262,7 +262,7 @@ const float WEIGHT[4] = {0.95f, 1.f, 1.1f, 1.32f};      // stroke weight
 const float WOBBLE[4] = {0.02f, 0.025f, 0.03f, 0.038f}; // the hand's wobble, board units
 const float BOIL[4] = {0.f, 0.f, 0.f, 0.f};             // no boil: what stays is not redrawn (stop motion, not jitter)
 const float COLOR[4] = {0.92f, 1.f, 1.f, 1.f};          // colour against pencil
-const float FILLA[4] = {0.9f, 0.96f, 1.f, 1.f};         // how dense the colouring is
+const float FILLA[4] = {0.9f, 1.f, 1.f, 1.f};             // how dense the colouring is
 const float HAND[4] = {0.35f, 0.55f, 0.75f, 1.f};       // how fast new things get drawn
 const int DOODLES[4] = {0, 2, 5, 11};                   // doodles in the margins
 const float RESIDUE_FADE = 0.36f;                       // the eraser going over the ghosts again (per second)
@@ -483,13 +483,6 @@ void NotepadUniverse::drop(float strength) {
     lastTick_ = -1; // draw now
 }
 
-// How far the landed piece is coloured in (0..1): about half a second, a third in a drop.
-float NotepadUniverse::landProgress() const {
-    if (landId_ == 0) return 1.f;
-    const float dur = stage_ >= 3 ? 0.3f : 0.48f;
-    return saturate((float)(clock_ - landT0_) / dur);
-}
-
 void NotepadUniverse::refresh(float strength) { refreshPending_ = std::max(refreshPending_, strength); }
 
 vec2 NotepadUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
@@ -518,12 +511,20 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     case GameEvent::Lock: {
         // The falling scribble becomes a piece: outlined at once, then coloured in over a few drawings.
-        landId_ = activeId_;
-        landT0_ = clock_;
-        landDrawn_ = 0.f;
-        for (size_t i = 0; i < ev.cells.size(); i++) {
-            const auto& c = ev.cells[i];
-            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ink_[c.y][c.x] = {activeId_, (int)i, c.type};
+        {
+            const float dur = stage_ >= 3 ? 0.3f : 0.48f;
+            for (size_t i = 0; i < ev.cells.size(); i++) {
+                const auto& c = ev.cells[i];
+                if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+                InkCell ic;
+                ic.id = activeId_;
+                ic.idx = (int)i;
+                ic.type = c.type;
+                ic.baseT0 = clock_ + dur * (float)i / 5.2f; // the cells one after another, overlapping a little
+                ic.baseDur = dur * 2.2f / 5.2f;
+                ink_[c.y][c.x] = ic;
+            }
+            animating_ = true;
         }
         hardPending_ = false;
         dirty_ = true;
@@ -544,7 +545,7 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (same(c.x + 1, c.y, ic.id)) mask |= 2;
             if (same(c.x, c.y + 1, ic.id)) mask |= 4;
             if (same(c.x, c.y - 1, ic.id)) mask |= 8;
-            const float rv = ic.id == landId_ ? landReveal(landProgress(), ic.idx) : 1.f;
+            const float rv = saturate((float)(clock_ - ic.baseT0) / ic.baseDur);
             dying_.push_back({c.x, c.y, c.type, mask, mix(ic.id, 1 + (uint64_t)ic.idx), 0.f, 0.32f, rv});
         }
         // the eraser's crumbs, rolled off the rows
@@ -581,13 +582,24 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
         }
         // collapse the bookkeeping like the board
+        // (what steps down is drawn again in its new place: outlined, then coloured in again from the bottom up)
         InkCell next[Game::H][Game::W];
-        int dst = Game::H - 1;
+        int dst = Game::H - 1, moved = 0;
         for (int y = Game::H - 1; y >= 0; y--) {
             if (cleared[y]) continue;
-            for (int x = 0; x < Game::W; x++) next[dst][x] = ink_[y][x];
+            bool any = false;
+            for (int x = 0; x < Game::W; x++) {
+                next[dst][x] = ink_[y][x];
+                if (dst != y && ink_[y][x].id != 0) {
+                    next[dst][x].recolour = true;
+                    next[dst][x].order = moved;
+                    any = true;
+                }
+            }
+            moved += any;
             dst--;
         }
+        if (moved) animating_ = true;
         std::memcpy(ink_, next, sizeof(ink_));
         dirty_ = true;
         break;
@@ -830,7 +842,7 @@ void NotepadUniverse::addPiece(std::vector<Item>& out, uint64_t base, const int 
     o.col = ghost ? gcol : outlineCol_;
     o.tool = ghost ? (V.light ? T_CPENCIL : T_CHALK) : outlineTool_;
     o.alpha = ghost ? 0.9f * alpha : alpha;
-    o.b = (ghost ? 1.05f : 1.f) * weight_;
+    o.b = ghost ? 1.05f : 1.f;
     o.d = pseed;
     o.residue = ghost ? 0.f : residue * 0.8f;
     o.moveResidue = ghost ? 0.f : moveResidue;
@@ -858,7 +870,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 it.y = a.y - d.y * o0 + (pass ? -0.02f : 0.f);
                 it.a = b.x + d.x * o1 + (pass ? 0.02f : 0.f);
                 it.b = b.y + d.y * o1 + (pass ? 0.025f : 0.f);
-                it.c = V.outlineW * 1.25f * weight_;
+                it.c = V.outlineW * 1.25f;
                 it.col = outlineCol_;
                 it.tool = outlineTool_;
                 it.alpha = pass ? 0.55f : 1.f;
@@ -893,7 +905,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
 
     // ---- the stack: one item per cell (its colouring) and one outline per piece
     if (overT_ < 0.f || g.over() == false) {
-        struct Group { uint64_t id; int type; int n; int cells[4][2]; int idx[4]; };
+        struct Group { uint64_t id; int type; int n; int cells[4][2]; int idx[4]; int ys[4]; };
         std::vector<Group> groups;
         for (int y = Game::HIDDEN; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) {
@@ -907,20 +919,75 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 gr->cells[gr->n][0] = x;
                 gr->cells[gr->n][1] = row;
                 gr->idx[gr->n] = ic.idx;
+                gr->ys[gr->n] = y;
                 gr->n++;
             }
         const vec3 o = cellPos(0, 0);
+        // the drop's stronger colouring: a sweep across the stack (bottom up, left to right) when a drop starts,
+        // the same rubbing it out when it ends
+        const bool strong = stage_ >= 3;
+        if (strong != strongWanted_) { strongWanted_ = strong; sweepT0_ = clock_; }
+        int topY = Game::H - 1;
+        for (int y = Game::HIDDEN; y < Game::H; y++) {
+            bool any = false;
+            for (int x = 0; x < Game::W; x++) any |= g.cell(x, y).type >= 0;
+            if (any) { topY = y; break; }
+        }
+        const float rows = (float)std::max(1, Game::H - 1 - topY);
+        animating_ = false;
+        for (int y = Game::HIDDEN; y < Game::H; y++)
+            for (int x = 0; x < Game::W; x++) {
+                if (g.cell(x, y).type < 0) continue;
+                InkCell& ic = ink_[y][x];
+                const float rank = 0.7f * (float)(Game::H - 1 - y) / rows + 0.3f * x / (float)(Game::W - 1);
+                if (ic.recolour) {
+                    // arrived after stepping down: drawn again there, an outline, then coloured in from the bottom up
+                    animating_ = true;
+                    if (std::fabs(g.rowOffset(y)) > 0.3f) continue; // (nearly there)
+                    const float pace = stage_ >= 3 ? 0.7f : 1.f;
+                    ic.recolour = false;
+                    ic.baseT0 = clock_ + pace * (0.04f + 0.08f * ic.order + 0.1f * x / (float)(Game::W - 1));
+                    ic.baseDur = 0.24f * pace;
+                    ic.ovT0 = ic.ovOffT0 = 1e18; // its drop colouring too, once coloured in again
+                }
+                const double baseEnd = ic.baseT0 + ic.baseDur;
+                if (strong) {
+                    ic.ovOffT0 = 1e18;
+                    if (ic.ovT0 > 1e17) ic.ovT0 = std::max(baseEnd, sweepT0_ + SWEEP * rank);
+                } else if (ic.ovT0 < 1e17 && ic.ovOffT0 > 1e17) {
+                    ic.ovOffT0 = std::max((double)clock_, sweepT0_ + SWEEP * rank);
+                }
+                if (ic.ovOffT0 < 1e17 && clock_ >= ic.ovOffT0 + OV_DUR) ic.ovT0 = ic.ovOffT0 = 1e18; // rubbed out
+                if (clock_ < baseEnd || (ic.ovT0 < 1e17 && clock_ < ic.ovT0 + OV_DUR) || ic.ovOffT0 < 1e17)
+                    animating_ = true;
+            }
         for (const Group& gr : groups) {
             const size_t first = out.size();
             addPiece(out, mix(gr.id, 0xC311), gr.cells, gr.n, v2(o.x, o.y), 1.f, gr.type, 1.f, false, 0.38f, 0.12f);
             // the cells keep their own keys (the piece's index of each cell), so they survive clears and moves
-            const float lp = gr.id == landId_ ? landProgress() : 1.f;
             int k = 0;
-            for (size_t i = first; i < out.size(); i++) {
+            const size_t last = out.size();
+            for (size_t i = first; i < last; i++) {
                 out[i].i2 |= 16;
                 if (out[i].kind != IT_CELL) continue;
-                if (lp < 1.f) { out[i].i2 |= 32; out[i].b = landReveal(lp, gr.idx[k]); }
-                out[i].key = mix(gr.id, 1 + (uint64_t)gr.idx[k++]);
+                const InkCell& ic = ink_[gr.ys[k]][gr.cells[k][0]];
+                const float base = saturate((float)(clock_ - ic.baseT0) / ic.baseDur);
+                if (base < 1.f) { out[i].i2 |= 32; out[i].b = base; }
+                out[i].key = mix(gr.id, 1 + (uint64_t)gr.idx[k]);
+                // the drop's layer over it: drawn in stroke by stroke, rubbed out the same way
+                if (ic.ovT0 < 1e17 && clock_ > ic.ovT0) {
+                    Item ov = out[i];
+                    ov.key = mix(out[i].key, 0x0E7);
+                    ov.i2 = 16 | 32 | 64;
+                    ov.b = saturate((float)(clock_ - ic.ovT0) / OV_DUR);
+                    ov.a = ic.ovOffT0 < 1e17 ? saturate((float)(clock_ - ic.ovOffT0) / OV_DUR) : 0.f;
+                    ov.col = lerp(out[i].col, outlineCol_, V.light ? 0.22f : 0.f);
+                    ov.c = 0.9f;
+                    ov.residue = 0.3f;
+                    ov.moveResidue = 0.1f;
+                    out.push_back(ov);
+                }
+                k++;
             }
         }
     }
@@ -1010,7 +1077,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             sc.col = col;
             sc.tool = slow_ > 0.5f ? (V.light ? T_CPENCIL : T_CHALK) : V.fillTool;
             sc.alpha = 1.f;
-            sc.b = weight_;
+            sc.b = 1.f;
             sc.d = hseed(sc.key);
             sc.residue = 0.36f;
             sc.moveResidue = 0.26f;
@@ -1067,7 +1134,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
         it.y = t.a.y + dp.y;
         it.a = t.b.x + dp.x;
         it.b = t.b.y + dp.y;
-        it.c = t.width * weight_;
+        it.c = t.width;
         it.col = t.col;
         it.tool = t.tool;
         it.alpha = t.alpha;
@@ -1225,7 +1292,7 @@ void NotepadUniverse::hudItems(const Frame& f, std::vector<Item>& out) {
             u.y = viewC_.y + viewH_.y - yb * px_;
             u.a = viewC_.x - viewH_.x + (it.x + w + size * 0.15f) * px_;
             u.b = viewC_.y + viewH_.y - (yb + size * 0.05f) * px_;
-            u.c = V.outlineW * 0.75f * weight_;
+            u.c = V.outlineW * 0.75f;
             u.col = pencil;
             u.tool = V.light ? T_PENCIL : T_CHALK;
             u.alpha = it.alpha * 0.7f;
@@ -1277,13 +1344,23 @@ void NotepadUniverse::emitPolyline(const std::vector<vec2>& pts, float width, ve
 }
 
 void NotepadUniverse::emit(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text) {
+    // drawn with the hand it was first drawn with: a change of section doesn't redraw what stays
+    const float keepWeight = weight_, keepWobble = wobble_;
+    weight_ = it.wt;
+    wobble_ = it.wob;
+    emitKind(it, age, residue, out, text);
+    weight_ = keepWeight;
+    wobble_ = keepWobble;
+}
+
+void NotepadUniverse::emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text) {
     eraseNow = 0.f;
     switch (it.kind) {
     case IT_CELL: emitCell(it, age, residue, out); break;
     case IT_OUTLINE: emitOutline(it, age, residue, out); break;
     case IT_STROKE: {
         const float reveal = residue || it.i1 <= 0 ? 1.f : saturate((age + 1) * (0.5f + handSpeed_) / (float)it.i1);
-        stroke(out, v2(it.x, it.y), v2(it.a, it.b), it.c, inkOf(it.col), it.alpha, it.tool, it.seed, wobble_, reveal,
+        stroke(out, v2(it.x, it.y), v2(it.a, it.b), it.c * weight_, inkOf(it.col), it.alpha, it.tool, it.seed, wobble_, reveal,
                it.r, 0.f, it.world);
         break;
     }
@@ -1399,7 +1476,7 @@ void NotepadUniverse::emitCell(const Item& it, int age, bool residue, std::vecto
     const float reveal = (it.i2 & 32) ? saturate(it.b) : 1.f;
     eraseNow = residue ? 0.f : it.a;
     eraseSeedNow = it.seed * 3.1f;
-    const float calm = stage_ == 0 ? 1.06f : stage_ == 3 ? 0.9f : 1.f;
+    const float calm = 1.f;
     Mark m{};
     m.head[0] = 1.f;
     m.head[1] = (float)it.tool;
@@ -1407,13 +1484,14 @@ void NotepadUniverse::emitCell(const Item& it, int age, bool residue, std::vecto
     m.head[3] = it.c * it.alpha * (residue ? 0.6f : 1.f);
     m.p[0] = it.x; m.p[1] = it.y; m.p[2] = h; m.p[3] = h;
     m.q[0] = (float)V.pattern[type];
-    m.q[1] = V.angle[type] * PI / 180.f + (std::fmod(it.d, 1.f) - 0.5f) * 0.3f;
-    m.q[2] = V.spacing[type] * s * calm;
+    const bool layer = (it.i2 & 64) != 0; // the drop's stronger colouring, across the first
+    m.q[1] = V.angle[type] * PI / 180.f + (std::fmod(it.d, 1.f) - 0.5f) * 0.3f + (layer ? 1.25f : 0.f);
+    m.q[2] = V.spacing[type] * s * calm * (layer ? 1.15f : 1.f);
     m.q[3] = 0.075f * s;
     const vec3 ink = inkOf(it.col);
     m.c[0] = ink.x; m.c[1] = ink.y; m.c[2] = ink.z; m.c[3] = (float)it.i1;
     m.e[0] = std::max(reveal, 0.001f); m.e[1] = V.fillLw * (0.85f + 0.15f * weight_); m.e[2] = inset * 0.6f;
-    m.e[3] = V.fillTool == T_CPENCIL ? 0.5f : V.light ? 0.f : 0.24f; // the colour rubbed in under the hatching
+    m.e[3] = layer ? 0.f : V.fillTool == T_CPENCIL ? 0.5f : V.light ? 0.f : 0.24f; // colour rubbed in under the hatching
     m.f[0] = eraseNow; m.f[1] = eraseSeedNow;
     if (reveal > 0.f) out.push_back(m);
     if (it.i2 & 8) {
@@ -1492,7 +1570,7 @@ void NotepadUniverse::emitOutline(const Item& it, int age, bool residue, std::ve
     const float drawnRuns = (float)runs.size();
     auto toWorld = [&](float gx, float gy) { return v2(it.x + (gx - 0.5f) * s, it.y + (gy - 0.5f) * s); };
     const vec3 ink = inkOf(it.col);
-    const float width = V.outlineW * it.b * (ghost ? 0.8f : scribble ? (it.tool == T_MARKER ? 1.7f : 1.9f) : 1.f) * (0.75f + 0.25f * s);
+    const float width = V.outlineW * it.b * weight_ * (ghost ? 0.8f : scribble ? (it.tool == T_MARKER ? 1.7f : 1.9f) : 1.f) * (0.75f + 0.25f * s);
     for (size_t k = 0; k < runs.size(); k++) {
         const float reveal = saturate(drawnRuns - (float)k);
         if (reveal <= 0.f) break;
@@ -1793,7 +1871,6 @@ void NotepadUniverse::tick(const Frame& f, float since) {
     boilSeedNow = 0;
     style(f.music);
     beatNow_ = f.music.hasSong ? f.music.beat : clock_ * 2.0;
-    landDrawn_ = landProgress();
     manageDoodles();
     manageMovers();
     if (levelUpPending_) {
@@ -1858,13 +1935,21 @@ void NotepadUniverse::tick(const Frame& f, float since) {
     // ---- the new drawing: what stayed keeps its exact hand, what changed is drawn anew
     for (Item& n : next) {
         auto ito = index_.find(n.key);
+        n.wt = weight_;
+        n.wob = wobble_;
         if (ito == index_.end()) {
             n.born = drawing_;
             n.seed = rng_.range(0.f, 1000.f);
         } else {
             const Item& o = items_[ito->second];
             n.born = o.born;
-            n.seed = sameItem(o, n) ? o.seed : rng_.range(0.f, 1000.f);
+            if (sameItem(o, n)) {
+                n.seed = o.seed;
+                n.wt = o.wt;
+                n.wob = o.wob;
+            } else {
+                n.seed = rng_.range(0.f, 1000.f);
+            }
         }
     }
     items_.swap(next);
@@ -1910,7 +1995,7 @@ void NotepadUniverse::drawText(const std::vector<float>& v, bool residue) {
     set1i(progText_, "uFont", 0);
     set2f(progText_, "uRes", (float)width_, (float)height_);
     set1f(progText_, "uResidue", residue ? 1.f : 0.f);
-    set1f(progText_, "uBias", 0.02f + 0.02f * weight_);
+    set1f(progText_, "uBias", 0.04f);
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE);
     glBindVertexArray(textVao_);
@@ -1982,7 +2067,7 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
         }
         if (dirty_ && since >= 1.0 / 24.0) due = true;
         if (!dying_.empty() && since >= 1.0 / 16.0) due = true;
-        if (landDrawn_ < 1.f && since >= 1.0 / 11.0) due = true; // the colouring, stroke by stroke
+        if (animating_ && since >= 1.0 / 11.0) due = true; // the colouring, stroke by stroke
         if (bridge_.amount > 0.f && since >= 1.0 / 12.0) due = true;
         if (due) tick(f, (float)std::min(since, 0.5));
     } else if (lastTick_ < 0) {
