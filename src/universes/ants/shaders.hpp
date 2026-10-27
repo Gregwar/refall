@@ -141,6 +141,7 @@ uniform vec3 uLightDir;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
 uniform float uSparkle;
+uniform float uSugarTint;
 
 // the bites taken out of a cube: > 0 inside a bite (a few along the edges and corners, growing with the
 // nibbling, never past a quarter of the cube)
@@ -187,27 +188,36 @@ vec4 cube(vec2 q) {
         float a = clamp(0.5 - ds / fw, 0.0, 1.0);
         return vec4(tint, 1.0) * (line * 0.75 + lineT * 0.35 + a * 0.1);
     }
-    // the sugar's grains: small crystals, each a facet of its own
-    vec2 g = q / h * 4.6 + seed * 13.0;
+    // the sugar: compressed grains, each a crystal of its own, some coloured, some white
+    vec2 g = q / h * 8.0 + seed * 13.0;
     vec2 cell = floor(g);
     float f1 = 9.0, f2 = 9.0;
     vec2 id = vec2(0.0);
     for (int j = -1; j <= 1; j++)
         for (int i = -1; i <= 1; i++) {
             vec2 c = cell + vec2(i, j);
-            vec2 o = c + 0.15 + 0.7 * hash22(c);
+            vec2 o = c + 0.1 + 0.8 * hash22(c);
             float dd = length(g - o);
             if (dd < f1) { f2 = f1; f1 = dd; id = c; }
             else if (dd < f2) f2 = dd;
         }
     float hId = hash2(id + 0.37);
+    float hId2 = hash2(id + 5.71);
+    // a crumbly edge: grains missing along it
+    float rim = -ds / h;
+    if (rim < 0.05 && hId2 < 0.28) return vec4(0.0);
+    if (rim < 0.025 && hId2 < 0.55) return vec4(0.0);
     // crumbling (a cleared cube): grain by grain, from the outside in
     float crumbled = vD.w;
-    float edgeK = clamp(-ds / h, 0.0, 1.0);
+    float edgeK = clamp(rim, 0.0, 1.0);
     if (crumbled > 0.0 && hId * 0.7 + edgeK * 0.5 < crumbled * 1.25) return vec4(0.0);
-    vec3 tint = vC.rgb;
     vec3 L = uLightDir;
-    vec2 jit = (hash22(id + 3.1) * 2.0 - 1.0) * 0.16;
+    // each grain's colour: the piece's tint over white sugar, a touch more or less
+    vec3 white = vec3(0.975, 0.97, 0.955);
+    float tk = uSugarTint * (0.86 + 0.24 * hId2);
+    vec3 tint = mix(white, vC.rgb, clamp(tk, 0.0, 1.0));
+    // each grain a facet tilted its own way
+    vec2 jit = (hash22(id + 3.1) * 2.0 - 1.0) * 0.28;
     // the top: flat in the middle, a chamfer round its edge (and round the bites)
     float bev = h * 0.24;
     float e = h * 0.02;
@@ -215,25 +225,30 @@ vec4 cube(vec2 q) {
     float onBev = 1.0 - smoothstep(-0.5, 0.5, (-d - bev) / max(fw, bev * 0.1));
     float gl = length(gr);
     vec2 out2 = gl > 1e-4 ? gr / gl : vec2(0.0);
-    vec3 n = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(out2 * 0.95, 1.0), onBev) + vec3(jit * (1.0 - 0.6 * onBev), 0.0));
+    vec3 n = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(out2 * 0.95, 1.0), onBev) + vec3(jit * (1.0 - 0.5 * onBev), 0.0));
     float dif = max(dot(n, L), 0.0) / L.z; // 1 on the flat top
-    float shade = 0.4 + 0.6 * dif;
+    // matte: soft light, the shadowed chamfer lifted by the light passing through the sugar
+    float shade = 0.5 + 0.5 * dif;
     vec3 col = tint * min(shade, 1.0) + (vec3(1.0) - tint) * max(shade - 1.0, 0.0) * 1.2;
+    // the gaps between grains
+    float gap = smoothstep(0.0, 0.18, f2 - f1);
+    col *= 0.93 + 0.07 * gap;
+    col *= 0.96 + 0.08 * hId;
+    // and finer still: the dust of tiny crystals
+    col *= 0.97 + 0.06 * vnoise(q / h * 30.0 + seed);
     // a highlight along the lit edges
     vec3 rf = reflect(-L, n);
-    col += vec3(1.0) * pow(max(rf.z, 0.0), 24.0) * 0.28 * onBev;
-    // the front wall: in the shade, darker toward the ground
+    col += vec3(1.0) * pow(max(rf.z, 0.0), 24.0) * 0.22 * onBev;
+    // the front wall: in the shade, light glowing through it in the piece's colour
     float onTop = clamp(0.5 - d / fw, 0.0, 1.0);
     float wy = clamp((-h - q.y) / wall, 0.0, 1.0);
-    vec3 wcol = tint * (0.58 - 0.12 * wy + 0.06 * (hId - 0.5));
+    vec3 wtint = mix(white, vC.rgb, clamp(uSugarTint * 1.25, 0.0, 1.0));
+    vec3 wcol = wtint * (0.66 - 0.14 * wy + 0.08 * (hId - 0.5)) * (0.9 + 0.1 * gap);
     col = mix(wcol, col, onTop);
-    // the crystals: each a touch brighter or darker, their edges just visible
-    col *= 1.0 + 0.07 * (hId - 0.5);
-    col *= 0.965 + 0.035 * smoothstep(0.0, 0.1, f2 - f1);
-    // sparkles: a few facets turned to the light
-    float lit = dot(normalize(vec3(hash22(id + 3.1) * 2.0 - 1.0, 2.4)), L);
-    float sp = step(0.8, hash2(id + 9.1)) * pow(max(lit, 0.0), 6.0) * onTop;
-    col += vec3(1.0) * sp * (0.3 + 0.6 * vD.y + 0.35 * uSparkle) * smoothstep(0.3, 0.0, f1);
+    // sparkles: tiny facets turned to the light
+    float lit = dot(normalize(vec3(hash22(id + 3.1) * 2.0 - 1.0, 1.6)), L);
+    float sp = step(0.6, hash2(id + 9.1)) * pow(max(lit, 0.0), 6.0) * onTop;
+    col += vec3(1.0) * sp * (0.55 + 0.6 * vD.y + 0.35 * uSparkle) * smoothstep(0.2, 0.0, f1);
     col = mix(col, uBridgeInk, uBridge);
     float a = clamp(0.5 - ds / fw, 0.0, 1.0);
     return vec4(col, 1.0) * a;
@@ -244,12 +259,12 @@ vec4 ant(vec2 l) {
     vec2 p = l / L;
     float fw = max(fwidth(p.x), 1e-4);
     float gait = vD.y;
-    float lw = max(0.022, fw * 0.55);
+    float lw = max(0.016, fw * 0.5);
     // gaster, petiole, thorax, head
-    float d = sdEll(p - vec2(-0.27, 0.0), vec2(0.2, 0.135));
-    d = min(d, length(p - vec2(-0.075, 0.0)) - 0.035);
-    d = min(d, sdEll(p - vec2(0.04, 0.0), vec2(0.12, 0.058)));
-    d = min(d, sdEll(p - vec2(0.255, 0.0), vec2(0.095, 0.085)));
+    float d = sdEll(p - vec2(-0.27, 0.0), vec2(0.19, 0.11));
+    d = min(d, length(p - vec2(-0.075, 0.0)) - 0.028);
+    d = min(d, sdEll(p - vec2(0.04, 0.0), vec2(0.12, 0.046)));
+    d = min(d, sdEll(p - vec2(0.255, 0.0), vec2(0.088, 0.072)));
     // six legs, two segments each, walking in tripods
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
@@ -271,7 +286,9 @@ vec4 ant(vec2 l) {
     for (int s = 0; s < 2; s++) {
         float sg = s == 0 ? 1.0 : -1.0;
         float w = sin(gait * 0.5 + sg * 1.3) * 0.02;
-        vec2 b = vec2(0.31, sg * 0.03), e = vec2(0.38, sg * 0.13), t = vec2(0.5 + w, sg * (0.1 + w));
+        float touch = vD.w * sg;
+        vec2 b = vec2(0.31, sg * 0.03), e = vec2(0.39, sg * (0.12 - abs(vD.w) * 0.03));
+        vec2 t = vec2(0.5 + w + abs(vD.w) * 0.06, sg * (0.1 + w) + touch * 0.05);
         d = min(d, sdSeg(p, b, e) - lw * 0.75);
         d = min(d, sdSeg(p, e, t) - lw * 0.7);
     }

@@ -49,12 +49,15 @@ private:
         bool retire = false;      // goes back into the nest for good
         vec3 crumb{1.f, 1.f, 1.f};
         float since = 0;          // seconds since it left the nest or found food
+        float dist = 0;           // distance walked since (the pheromone it lays weakens with it)
+        float life = 60;          // how long it searches before heading home
+        float fid = 0.6f;         // how faithfully it follows a trail
+        float stray = 0;          // seconds left wandering off the trail (a branch)
+        float pause = 0;          // stopped, antennae touching another's
+        float meetCd = 0;
+        bool trail = false;       // a trail under its sensors
         float panic = 0;          // scattered by an impact
         float lustre = 0.1f;
-        bool scout = false;       // explores far; the others stay by the nest until a trail leads somewhere
-        float offTrail = 0;       // seconds without a trail under its antennae
-        bool hasGoal = false;     // remembers where the sugar is (it found it, or was led there)
-        vec2 goal;
     };
     struct Grain {
         vec2 p, v;
@@ -66,8 +69,9 @@ private:
 
     // sim
     void simulate(const Game& game, float wdt, float dt, const MusicState& music);
-    void stepAnts(const Game& game, float wdt, float speedK);
-    void spawn(int nest, bool burst, bool scout);
+    void stepAnts(float dt, float speedK, float explore, float layK);
+    void relax(std::vector<float>& f, float tau, float dt);
+    void spawn(int nest, bool recruit);
     void pour(int nest, int n) { pourLeft_[nest] += n; }
     bool blocked(vec2 p) const;
     bool sugarAt(vec2 p, float half, int* gx = nullptr, int* gy = nullptr) const;
@@ -102,7 +106,8 @@ private:
     static constexpr float CELL = 0.2f;
     int gw_ = 1, gh_ = 1;
     vec2 g0_;
-    std::vector<float> food_, home_;
+    std::vector<float> food_, home_, tmp_;
+    std::vector<int> bucket_, chain_; // who is near whom
     // the worn paths the ground shows: where the ants walk a lot (a finer field)
     static constexpr float TCELL = 0.1f;
     int tw_ = 1, th_ = 1;
@@ -120,15 +125,9 @@ private:
     int8_t occ_[22][10] = {};  // the board as the ants know it (-1 empty, else the piece type)
     bool hard_ = false;        // the next lock is a hard drop's
     float openTop_ = -8.7f;   // ants walk inside the well only below this (just above the stack)
-    float spawnAcc_[2] = {0, 0}, scoutAcc_[2] = {0, 0};
-    float recruits_[2] = {0, 0}; // followers called out by the crumbs brought home
-    vec2 food_at_[2];            // where the last crumb brought to each nest came from
-    float foodAge_[2] = {1e9f, 1e9f};
-    vec2 sugarC_{0, -8};         // where the stack's sugar is (the scouts smell it from afar)
-    bool hasSugar_ = false;
+    float spawnAcc_[2] = {0, 0}, wanderAcc_[2] = {0, 0}, recruitAcc_[2] = {0, 0};
+    float recruits_[2] = {0, 0}; // ants called out by the crumbs brought home
     int pourLeft_[2] = {0, 0};
-    vec2 excite_{0, 0};
-    float exciteT_ = 0;
     bool warm_ = false;
     std::vector<vec2> lockAt_; // impacts this frame (ants scatter)
 
