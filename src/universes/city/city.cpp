@@ -95,7 +95,8 @@ mat4 inverse(const mat4& m) {
 // The variants: the sky (top, horizon, the city's light pollution, fog, the clouds lit from below), the night's
 // light (ambient, moon, the streets' glow from below), the streets' sodium, the city's window light, the tower
 // (frame, glass tint), the buildings' albedo (near, far), the accent, the HUD's text and halo, what the glass
-// reflects of the city, the seven pieces' lights (I O T S Z J L, each its own hue), fog density, the facade
+// reflects of the city, the seven pieces' lamps (I fluorescent, O tungsten, T a red lantern, S a TV, Z halogen, J sodium,
+// L an aquarium; one family tilted to each night, O, J and Z parted by value and saturation), fog density, the facade
 // (mullions, spandrels, depth of the windows), reflectivity, stars, clouds, rain, snow, glow, exposure.
 struct VariantDef {
     const char* name;
@@ -105,42 +106,43 @@ struct VariantDef {
 };
 const VariantDef VARIANTS[] = {
     // a glass tower after the blue hour: the last deep blue in the sky, cold glass
-    {"BLUE HOUR", 0x02050e, 0x0d1a33, 0x3a3040, 0x0b1426, 0x1a1e30, 0x060a14, 0x0c1426, 0x2a1e18, 0xff9a40, 0xffd2a0,
-     0x161a22, 0xc8d8ff, 0x10141c, 0x0c1220, 0x8fd8ff, 0xe4ecf6, 0x02040a, 0xffd8a8,
-     {0x58e6ff, 0xffd640, 0xc070ff, 0x5ef078, 0xff4848, 0x4a78ff, 0xff9030},
+    {"BLUE HOUR", 0x02050e, 0x0d1a33, 0x382a26, 0x0b1426, 0x1a1e30, 0x060a14, 0x0c1426, 0x2a1e18, 0xff9a40, 0xffd2a0,
+     0x161a22, 0xc8d8ff, 0x10141c, 0x0c1220, 0x8ab8f0, 0xe4ecf6, 0x02040a, 0xffd8a8,
+     {0xaff1d2, 0xfba041, 0xd43c3d, 0x6da8ed, 0xfbe3b4, 0xbd600a, 0x4ec6bc},
      0.0045f, 0.1f, 0.22f, 0.2f, 0.7f, 0.25f, 0.f, 0.f, 0.f, 0.5f, 1.f},
     // downtown at midnight: bronze frames, a sodium haze, warm rooms
     {"MIDNIGHT", 0x010204, 0x0c0a0e, 0x40220e, 0x0e0a08, 0x2a1a10, 0x040406, 0x06070c, 0x3a2410, 0xffa040, 0xffc070,
      0x1c1610, 0xffe8c8, 0x0e0c0c, 0x0c0a0a, 0xffb45a, 0xf0e4d4, 0x020100, 0xffc080,
-     {0x8af0e0, 0xffd050, 0xff6ad0, 0x9ef060, 0xff4030, 0x6a80ff, 0xff9030},
+     {0xb0f3c0, 0xff991a, 0xe1342f, 0x6ba8e0, 0xffdf9c, 0xc75d00, 0x40c8ae},
      0.005f, 0.12f, 0.26f, 0.35f, 0.5f, 0.35f, 0.5f, 0.f, 0.f, 0.6f, 1.f},
-    // a rainy night in neon: a magenta haze, wet glass
-    {"NEON RAIN", 0x030108, 0x14081e, 0x3a0c38, 0x120818, 0x2a0e2e, 0x05030a, 0x08060e, 0x2a0c28, 0xff50c0, 0x80eeff,
-     0x100e16, 0xe0c8ff, 0x0c0a12, 0x0e0a14, 0xff4ad8, 0xf4e8ff, 0x030106, 0xff70d0,
-     {0x30eaff, 0xfff030, 0xff30e0, 0x40ff60, 0xff3048, 0x4a5aff, 0xff8020},
+    // a rainy night: a low sodium haze, wet glass, the streets shining
+    {"RAIN", 0x020407, 0x0e1116, 0x34220e, 0x101318, 0x221c16, 0x05070a, 0x07090d, 0x2c1c0e, 0xff9a40, 0xffc890,
+     0x101216, 0xe0e6ee, 0x0c0e12, 0x0e1014, 0x6fd0c4, 0xeef0f0, 0x020304, 0xffc890,
+     {0xb3f2cb, 0xff9f3f, 0xd93c3b, 0x70a8e5, 0xffe3ad, 0xc1600a, 0x4fc7b5},
      0.008f, 0.08f, 0.2f, 0.1f, 0.9f, 0.f, 0.8f, 1.f, 0.f, 0.7f, 1.f},
     // fog before dawn: the far towers lost, the lights blooming in the fog
     {"FOG DAWN", 0x0a0e16, 0x1c222c, 0x30241e, 0x161a20, 0x1a1c22, 0x0a0c12, 0x0c1018, 0x201812, 0xffb060, 0xffd090,
      0x1a1e24, 0xd8e0ea, 0x12161c, 0x141820, 0xffa070, 0xe2e6ea, 0x04060a, 0xffd0a0,
-     {0x90e8f0, 0xffe070, 0xe080ff, 0x80f090, 0xff6058, 0x7098ff, 0xffa860},
+     {0xb8f0d2, 0xf6a35a, 0xce4646, 0x76a7e3, 0xfbe4b9, 0xb8632d, 0x62c5b9},
      0.02f, 0.1f, 0.22f, 0.2f, 0.6f, 0.f, 0.3f, 0.f, 0.f, 0.4f, 1.1f},
     // a brutalist block at dusk's end: raw concrete, deep windows, rooms in the colors of modernist loggias
     {"BRUTALIST", 0x03050a, 0x1a1418, 0x50281a, 0x120e0e, 0x30201a, 0x080808, 0x0e0c0c, 0x30201a, 0xff9040, 0xffc888,
-     0x5a5650, 0xfff0e0, 0x16151a, 0x121116, 0xff4a30, 0xf2ede6, 0x030202, 0xffc090,
-     {0x70d8f0, 0xffc810, 0xb050e0, 0x30c058, 0xe82818, 0x2850e8, 0xff7010},
+     0x5a5650, 0xfff0e0, 0x16151a, 0x121116, 0xe0603c, 0xf2ede6, 0x030202, 0xffc090,
+     {0xabf4c9, 0xff9801, 0xe12f2f, 0x67a8ed, 0xffe1a4, 0xc75c00, 0x33c9b7},
      0.0055f, 0.26f, 0.34f, 1.f, 0.25f, 0.2f, 0.3f, 0.f, 0.f, 0.6f, 1.f},
     // a snowy evening: brick, snow falling and lying on the ledges and roofs
     {"SNOWFALL", 0x03050c, 0x161a2c, 0x382a30, 0x141828, 0x22242e, 0x080a12, 0x10141e, 0x2a2020, 0xffa050, 0xffc47c,
      0x221a1a, 0xffffff, 0x101218, 0x12141c, 0xbfdcff, 0xeef2ff, 0x020308, 0xffc890,
-     {0xa8f0ff, 0xffd060, 0xf070e0, 0x70e080, 0xff4848, 0x7088ff, 0xffa040},
+     {0xadf0d9, 0xf1a04e, 0xcb4043, 0x6ea7f1, 0xf3e2bc, 0xb5611d, 0x54c5c1},
      0.007f, 0.14f, 0.26f, 0.45f, 0.4f, 0.f, 0.6f, 0.f, 1.f, 0.5f, 1.05f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-// A drop's two colors (linear): designed pairs of saturated hues, a new pair each drop.
-const vec3 HUES[] = {{1.f, 0.05f, 0.55f}, {0.f, 0.85f, 1.f}, {1.f, 0.55f, 0.f}, {0.35f, 0.15f, 1.f},
-                     {0.3f, 1.f, 0.2f}, {1.f, 0.85f, 0.05f}, {1.f, 0.1f, 0.15f}, {0.05f, 0.4f, 1.f}};
-const int PAIRS[][2] = {{0, 1}, {2, 3}, {4, 0}, {5, 7}, {6, 1}, {3, 2}, {1, 5}, {7, 6}};
+// A drop's two colors, from the night's own lamps: 0 tungsten (O), 1 sodium (J), 2 halogen (Z), 3 fluorescent (I),
+// 4 the night's accent lamp (one of the cooler or redder pieces), a new pair each drop.
+const int DROP_LAMPS[5] = {1, 5, 4, 0, -1};
+const int ACCENT_PIECE[6] = {3, 2, 6, 3, 2, 3}; // per variant: S blue, T red, L teal
+const int PAIRS[][2] = {{0, 4}, {1, 2}, {2, 4}, {0, 2}, {1, 4}, {2, 0}, {0, 3}, {1, 0}}; // the first always warm
 constexpr int PAIR_COUNT = (int)(sizeof(PAIRS) / sizeof(PAIRS[0]));
 constexpr float GROUND_Y = -30.f, EYE_Y = 1.f, PITCH = 22.f;
 const vec3 BEACON_RED{1.f, 0.06f, 0.02f};
@@ -445,9 +447,15 @@ void CityUniverse::pickDropColors() {
     int h = r.irange(0, PAIR_COUNT - 1);
     if (h == lastPair_) h = (h + 1 + r.irange(0, PAIR_COUNT - 3)) % PAIR_COUNT;
     lastPair_ = h;
-    const bool swap = r.uniform() < 0.5f;
-    dropA_ = HUES[PAIRS[h][swap ? 1 : 0]];
-    dropB_ = HUES[PAIRS[h][swap ? 0 : 1]];
+    const VariantDef& d = VARIANTS[variant_];
+    auto lamp = [&](int i) {
+        const int p = DROP_LAMPS[i] < 0 ? ACCENT_PIECE[variant_ % 6] : DROP_LAMPS[i];
+        vec3 c = lin(d.piece[p]);
+        const float m = std::max(c.x, std::max(c.y, c.z));
+        return c * (1.15f / std::max(m, 1e-3f)); // brighter than the rooms, the lamp's own hue
+    };
+    dropA_ = lamp(PAIRS[h][0]); // the warm one: the glow, the crowns
+    dropB_ = lamp(PAIRS[h][1]);
     dropIndex_++;
 }
 
@@ -963,7 +971,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     // slow motion, a long exposure: a colder, deeper night
     const vec3 cold = lin(0x0a1a48);
     const vec3 skyTop = lerp(pal_.top, cold * 0.15f, 0.6f * slow_), skyHor = lerp(pal_.hor, cold * 0.6f, 0.6f * slow_);
-    const vec3 glowCol = lerp(lerp(pal_.glow, (dropA_ + dropB_) * 0.15f, 0.5f * smoothstepf(0.f, 0.5f, drop_)), cold * 0.3f, 0.6f * slow_);
+    const vec3 glowCol = lerp(lerp(pal_.glow, dropA_ * 0.3f, 0.5f * smoothstepf(0.f, 0.5f, drop_)), cold * 0.3f, 0.6f * slow_);
     const float glowK = pal_.glowK * (lerpf(0.7f, 1.f, lvm) + 0.25f * peakK + 0.5f * swell) * (1.f - 0.6f * black);
     const vec3 cityLight = lerp(pal_.city, vec3(0.45f, 0.7f, 1.f), 0.7f * slow_) * (worldOn * lerpf(1.f, 1.3f, peakK));
     const vec3 fogCol = lerp(lerp(pal_.fog, skyHor, 0.3f), glowCol * 0.5f, 0.2f) * (1.f - bri) + bridge_.color * bri;
@@ -1065,6 +1073,21 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progBox_, "uFogCol", fogCol);
     set1f(progBox_, "uFogD", fogD);
     set3f(progBox_, "uCityLight", cityLight);
+    {
+        // the city's lamps: the night's own tungsten, fluorescent, halogen, a dim TV and sodium (unit luminance),
+        // all turning cold in slow motion
+        const vec3 src[5] = {pal_.city, pal_.piece[0], pal_.piece[4], lerp(pal_.piece[3], pal_.piece[0], 0.35f), pal_.piece[5]};
+        float lc[15];
+        for (int i = 0; i < 5; i++) {
+            vec3 c = src[i];
+            const float y = std::max(0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z, 1e-4f);
+            c = c * ((i == 3 ? 0.55f : 1.f) / y);
+            if (i == 1) c = lerp(c, vec3(1.f), 0.45f); // fluorescent tubes read nearly white from afar
+            c = lerp(c, vec3(0.45f, 0.7f, 1.f) * 1.4f, 0.7f * slow_);
+            lc[i * 3] = c.x; lc[i * 3 + 1] = c.y; lc[i * 3 + 2] = c.z;
+        }
+        glUniform3fv(ugl::U(progBox_, "uLamp"), 5, lc);
+    }
     set3f(progBox_, "uDropA", dropA_);
     set3f(progBox_, "uDropB", dropB_);
     set3f(progBox_, "uCrownCol", crownCol);
@@ -1118,7 +1141,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progTower_, "uCellB", 1);
     set3f(progTower_, "uEye", eye_);
     set3f(progTower_, "uFrame", pal_.frame * (1.f - 0.5f * black));
-    set3f(progTower_, "uGlassTint", pal_.tint);
+    set3f(progTower_, "uGlassTint", lerp(pal_.tint, vec3(1.f), 0.6f)); // only a hint of the glass color: the lamps keep their own
     {
         vec3 gc = pal_.piece[0];
         if (game.hasPiece()) gc = pal_.piece[std::clamp(game.piece().type, 0, 6)];
@@ -1131,7 +1154,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progTower_, "uMoonCol", pal_.moon);
     set3f(progTower_, "uMoonDir", MOON_DIR);
     set3f(progTower_, "uSnowCol", lin(0xdfe6f4) * 0.4f);
-    set3f(progTower_, "uReflCity", pal_.reflCity * (0.25f * (1.f - black) * worldOn) + crownCol * (0.05f * crown));
+    set3f(progTower_, "uReflCity", pal_.reflCity * (0.25f * (1.f - black) * worldOn) + crownCol * (0.02f * crown));
     set1f(progTower_, "uMull", pal_.mull);
     set1f(progTower_, "uSpand", pal_.spand);
     set1f(progTower_, "uRecess", pal_.recess);

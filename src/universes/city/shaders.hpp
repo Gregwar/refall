@@ -172,6 +172,7 @@ out vec4 frag;
 uniform vec3 uEye, uMoonDir, uMoonCol, uAmb, uUpCol, uFogCol, uCityLight, uDropA, uDropB, uCrownCol, uSnowCol;
 uniform float uFogD, uTime, uLitFrac, uDropK, uPatEpoch, uPatPhase, uBlack, uFlash, uSnow, uGroundY;
 uniform float uEq[8];
+uniform vec3 uLamp[5]; // the city's room lights (unit luminance): tungsten, fluorescent, halogen, a TV, sodium
 uniform vec4 uQuiet[2]; // the HUD's columns, in pixels (gl_FragCoord): the windows there are dimmer
 void main() {
     vec3 n = normalize(vN);
@@ -226,8 +227,10 @@ void main() {
         float ep = floor((uTime + h * per) / per);
         float frac = uLitFrac * vA2.x;
         float lit = mix(step(hash12(key * 1.37 + ep * 3.7), frac), frac, tiny);
-        vec3 wc = uCityLight * (0.5 + 0.8 * hash12(key + ep * 3.1));
-        if (hash12(key * 2.1 + ep) < 0.22) wc = vec3(lumv(wc)) * vec3(0.72, 0.88, 1.15);
+        // each window a real lamp: mostly tungsten, some fluorescent offices, halogen, the odd TV, a sodium stairwell
+        float pk = hash12(key * 2.1 + ep);
+        vec3 lampC = pk < 0.52 ? uLamp[0] : (pk < 0.74 ? uLamp[1] : (pk < 0.88 ? uLamp[2] : (pk < 0.95 ? uLamp[3] : uLamp[4])));
+        vec3 wc = lampC * lumv(uCityLight) * (0.5 + 0.8 * hash12(key + ep * 3.1));
         if (uDropK > 0.001) {
             float rows = max(1.0, floor(H - 0.8));
             int pat = int(mod(floor(seed * 7.0) + uPatEpoch, 5.0));
@@ -322,12 +325,23 @@ vec3 roomAt(vec3 Q, vec3 r, vec3 lo, vec3 hi, vec3 L, int kind, float s, float a
     vec3 dl = lamp - H;
     float d2 = dot(dl, dl);
     float alb = surf == 0 ? 0.75 : (surf == 1 ? 0.6 : (surf == 2 ? 0.3 : 0.85));
-    float k = 0.18 + 1.4 / (1.0 + d2 * 7.0);
+    // the surfaces' own colors, gently: off-white walls, the floor carpet or wood
+    vec3 tint = surf == 2 ? (kind == 1 ? vec3(1.15, 0.9, 0.72) : (kind == 0 ? vec3(0.95, 0.97, 1.02) : vec3(1.1, 0.88, 0.82)))
+                          : vec3(1.04, 1.0, 0.94);
+    // a real lamp: a pool of light falling off with distance, the walls far from it in shadow
+    float k = 0.05 + 1.9 / (1.0 + d2 * 10.0);
+    // the light under a shade or a ceiling light throws a soft cone on the back wall
+    if (surf == 0) {
+        float dx = (H.x - lamp.x) / sz.x, dy = (H.y - lamp.y) / sz.y;
+        k += (kind == 1 ? 0.9 : 0.45) * exp(-dx * dx * 14.0) * smoothstep(-0.05, 0.25, kind == 1 ? dy : -dy) * exp(-abs(dy) * 2.5);
+    }
+    // near the lamp its light reads paler (a hot filament), its color deepens with the falloff
+    vec3 Lk = mix(L * 1.08, vec3(lumv(L)) * 1.15, 0.12 * smoothstep(0.9, 1.9, k));
     float dark = 1.0;
     vec3 add = vec3(0.0);
     if (kind == 0) {
         // an office: strip lights on the ceiling, desks and screens against the back wall
-        if (surf == 3) add += L * 2.2 * smoothstep(0.08, 0.03, abs(fract(u.z * 2.0) - 0.5)) * step(0.1, u.x) * step(u.x, 0.9);
+        if (surf == 3) add += mix(L, vec3(lumv(L)), 0.45) * 2.2 * smoothstep(0.08, 0.03, abs(fract(u.z * 2.0) - 0.5)) * step(0.1, u.x) * step(u.x, 0.9);
         if (surf == 0 && u.y < 0.32 && u.y > 0.24) dark = 0.35;
         if (surf == 0 && u.y > 0.32 && u.y < 0.46 && fract(u.x * 2.5 + s) < 0.5)
             add += vec3(lumv(L)) * vec3(0.6, 0.85, 1.3) * 0.9;
@@ -340,14 +354,14 @@ vec3 roomAt(vec3 Q, vec3 r, vec3 lo, vec3 hi, vec3 L, int kind, float s, float a
         if (surf == 1) dark = 0.75 + 0.25 * step(0.5, fract(u.y * 4.0 + s)); // shelves
         if (surf == 2) dark = 0.75;
         vec3 sh = H - (lamp + vec3(0.0, 0.12, 0.0));
-        add += L * 1.6 * exp(-dot(sh, sh) * 90.0);
+        add += mix(L, vec3(lumv(L)), 0.3) * 1.6 * exp(-dot(sh, sh) * 90.0);
     } else {
         // a hotel room: a bed's head against the back wall, a warm ceiling light
         if (surf == 0 && u.y < 0.36 && abs(u.x - 0.5) < 0.35) dark = 0.45;
         if (surf == 0 && u.y < 0.5 && u.y > 0.36 && abs(u.x - 0.5) < 0.35) dark = 0.7;
         if (surf == 3) add += L * 1.5 * exp(-dot(u.xz - 0.5, u.xz - 0.5) * 40.0);
     }
-    vec3 lit = L * (alb * k * dark) + add;
+    vec3 lit = Lk * tint * (alb * k * dark) + add;
     // a little light from outside, the corner shading
     float ao = 0.7 + 0.3 * smoothstep(0.0, 0.15, min(min(u.x, 1.0 - u.x), min(u.y, 1.0 - u.y)));
     return lit * ao + vec3(amb) * alb * dark;
@@ -420,7 +434,7 @@ void main() {
         float sill = smoothstep(gb - 0.09, gb - 0.06, lp.y) * smoothstep(gb + 0.005, gb - 0.02, lp.y) * step(abs(lp.x), gx + 0.04);
         fr *= 1.0 + 0.5 * sill;
         vec3 spill = texture(uCellA, vec2((P.x + 5.0) / 10.0, (10.0 - P.y) / 20.0)).rgb;
-        fr += spill * 0.05 + A * 0.35 * sill + A * 0.18 * smoothstep(0.1, 0.0, sd);
+        fr += spill * 0.04 + A * 0.2 * sill + A * 0.06 * smoothstep(0.08, 0.0, sd);
         fr += reflection(reflect(r, vec3(0.0, 0.0, 1.0))) * 0.06 * uReflK;
         if (uSnow > 0.0) fr = mix(fr, uSnowCol * (lightIn * 3.0 + A * 0.5), uSnow * sill);
         vec3 g = vec3(0.0);
@@ -430,7 +444,7 @@ void main() {
             vec3 Q = P + r * (rd / -r.z);
             vec2 ql = Q.xy - ctr - oc;
             if (abs(ql.x) > oh.x || abs(ql.y) > oh.y) {
-                vec3 rv = uFrame * lightIn * 0.6 + A * 0.4;
+                vec3 rv = uFrame * lightIn * 0.6 + A * 0.22 * (0.4 + 0.6 * smoothstep(-oh.y, oh.y, ql.y));
                 if (ql.y > oh.y) rv *= 0.5; // the head of the opening, in its own shadow
                 g = rv;
             } else {
@@ -438,11 +452,14 @@ void main() {
                 vec3 lo = vec3(ctr.x - 0.49, ctr.y - 0.47, -rd - 1.3);
                 vec3 hi = vec3(ctr.x + 0.49, ctr.y + 0.48, -rd);
                 bool on = lumv(A) > 0.0005;
-                vec3 Lr = A + uGhostCol * B.r * 0.08;
+                vec3 Lr = (A + uGhostCol * B.r * 0.08) * 0.85;
                 vec3 room = roomAt(Q, r, lo, hi, Lr, kind, s, uRoomAmb);
                 // what hangs at the glass: blinds, drapes, a roller blind, a sheer, or nothing
                 float tsel = kind == 0 ? (s < 0.6 ? 0.0 : 5.0) : floor(s * 5.0);
-                vec3 diff = (A + uGhostCol * B.r * 0.08) * 0.75 + vec3(uRoomAmb) * 0.6;
+                float lampU = kind == 1 ? 0.2 + 0.6 * fract(s * 7.31) : 0.5;
+                float glow = kind == 1 ? 0.55 + 0.6 * exp(-(uv.x - lampU) * (uv.x - lampU) * 8.0) * (1.0 - 0.4 * uv.y)
+                                       : 0.5 + 0.55 * uv.y;
+                vec3 diff = (A + uGhostCol * B.r * 0.08) * 0.62 * glow + vec3(uRoomAmb) * 0.6;
                 if (tsel == 1.0) { // venetian blinds over the top part
                     float cov = 0.35 + 0.5 * fract(s * 13.0);
                     float sl = smoothstep(0.1, 0.25, fract(uv.y * 9.0)) * (1.0 - smoothstep(0.65, 0.8, fract(uv.y * 9.0)));
@@ -467,9 +484,9 @@ void main() {
                 vec3 refl = reflection(vec3(r.x, r.y, -r.z));
                 if (uRain > 0.0) {
                     float sN = vnoise(vec2(Q.x * 26.0, Q.y * 1.3 + uTime * 1.6));
-                    refl += (refl + uReflCity * 0.2) * uRain * smoothstep(0.7, 0.95, sN) * 2.0;
+                    refl += (refl + uReflCity * 0.1) * uRain * smoothstep(0.75, 0.95, sN);
                 }
-                g = room + refl * F * (on ? 0.5 : 1.0);
+                g = room + refl * F * (on ? 0.3 : 1.0);
             }
         }
         // the ghost: the window's frame lit in the piece's light
