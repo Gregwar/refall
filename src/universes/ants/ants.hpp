@@ -1,0 +1,152 @@
+#pragma once
+// ANTS: sugar cubes on the ground, and a colony finding them (see ants.cpp).
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "ugl.hpp"
+#include "universe.hpp"
+
+class AntsUniverse : public Universe {
+public:
+    ~AntsUniverse() override;
+    bool init(int width, int height) override;
+    void resize(int width, int height) override;
+    void setSong(const SongLook& look, float seconds) override;
+    void setLevel(int level, float energy, float seconds, float impact) override;
+    void drop(float strength) override;
+    void refresh(float strength) override;
+    void onEvent(const GameEvent& ev, const Game& game) override;
+    void setBonus(bool on) override { slowOn_ = on; }
+    void levelUp() override { pour(0, 14); pour(1, 14); }
+    void render(const Frame& f, GLuint fbo) override;
+    vec2 project(const vec3& p) const override;
+    TransitionHints hints() const override;
+    int variant() const override { return variant_; }
+    bool bridgeable() const override { return true; }
+    void setBridge(const Bridge& b) override { bridge_ = b; }
+
+    // One instanced quad (see SPRITE_FS for the kinds).
+    struct Sprite { float a[4], b[4], c[4], d[4]; };
+
+private:
+    struct Glyph { float x0 = 0, y0 = 0, x1 = 0, y1 = 0, ox = 0, oy = 0, w = 0, h = 0, adv = 0; };
+    struct Font {
+        bool ok = false;
+        GLuint tex = 0;
+        float px = 64.f, scaleTT = 1.f, capH = 40.f;
+        Glyph g[96];
+        void* info = nullptr;
+    };
+    struct Ant {
+        vec2 p;
+        float a = 0, w = 0;       // heading, its wandering turn rate
+        float speed = 1;          // its own pace
+        float gait = 0;
+        float alpha = 0;
+        int nest = 0;
+        int state = 0;            // 0 searching, 1 carrying home, 2 going home empty-handed
+        bool retire = false;      // goes back into the nest for good
+        vec3 crumb{1.f, 1.f, 1.f};
+        float since = 0;          // seconds since it left the nest or found food
+        float panic = 0;          // scattered by an impact
+        float lustre = 0.1f;
+        bool scout = false;       // explores far; the others stay by the nest until a trail leads somewhere
+        float offTrail = 0;       // seconds without a trail under its antennae
+        bool hasGoal = false;     // remembers where the sugar is (it found it, or was led there)
+        vec2 goal;
+    };
+    struct Grain {
+        vec2 p, v;
+        vec3 col;
+        float size = 0.05f, rot = 0, spin = 0, t = 0, life = 1, delay = 0;
+        bool food = false;        // lies on the ground for the ants (outside the well)
+    };
+    struct Dying { float x, y; int type; float t, delay, seed, nib; bool over; };
+
+    // sim
+    void simulate(const Game& game, float wdt, float dt, const MusicState& music);
+    void stepAnts(const Game& game, float wdt, float speedK);
+    void spawn(int nest, bool burst, bool scout);
+    void pour(int nest, int n) { pourLeft_[nest] += n; }
+    bool blocked(vec2 p) const;
+    bool sugarAt(vec2 p, float half, int* gx = nullptr, int* gy = nullptr) const;
+    float pher(const std::vector<float>& f, vec2 p) const;
+    void deposit(std::vector<float>& f, vec2 p, float amount);
+    void wear(vec2 p, float amount);
+    void burst(float x, float y, int type, int n, float speedK, bool tetris);
+    void syncCells(const Game& game);
+    void warmUp(const Game& game);
+
+    // drawing
+    void buildFont(Font& f, const unsigned char* ttf);
+    float textWidth(const Font& f, const std::string& s, float size, float track) const;
+    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
+    void drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias);
+    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawSprites(const std::vector<Sprite>& v);
+    void cube(std::vector<Sprite>& out, float x, float y, float scale, const vec3& col, float alpha, float nib,
+              float seed, float glint, bool ghost, float crumbled);
+    void shadow(std::vector<Sprite>& out, float x, float y, float half, float blur, float alpha);
+    vec3 pieceColor(int type) const;
+
+    GLuint progGround_ = 0, progSprite_ = 0, progText_ = 0, progVeil_ = 0, progShape_ = 0;
+    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, textVao_ = 0, textVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+    GLuint pherTex_ = 0;
+    Font fontSerif_, fontSans_;
+    mat4 vp_;
+    vec2 viewC_{0, 0.4f}, viewH_{21, 11.9f};
+    float px_ = 0.02f;
+
+    // the pheromones: two coarse fields over the view (toward food, toward home)
+    static constexpr float CELL = 0.2f;
+    int gw_ = 1, gh_ = 1;
+    vec2 g0_;
+    std::vector<float> food_, home_;
+    // the worn paths the ground shows: where the ants walk a lot (a finer field)
+    static constexpr float TCELL = 0.1f;
+    int tw_ = 1, th_ = 1;
+    vec2 t0_;
+    std::vector<float> trace_;
+
+    // the world
+    vec2 nest_[2];
+    float nestR_ = 1.6f;
+    std::vector<Ant> ants_;
+    std::vector<Grain> grains_;
+    std::vector<Dying> dying_;
+    float nib_[22][10] = {};
+    float seed_[22][10] = {};
+    int8_t occ_[22][10] = {};  // the board as the ants know it (-1 empty, else the piece type)
+    bool hard_ = false;        // the next lock is a hard drop's
+    float openTop_ = -8.7f;   // ants walk inside the well only below this (just above the stack)
+    float spawnAcc_[2] = {0, 0}, scoutAcc_[2] = {0, 0};
+    float recruits_[2] = {0, 0}; // followers called out by the crumbs brought home
+    vec2 food_at_[2];            // where the last crumb brought to each nest came from
+    float foodAge_[2] = {1e9f, 1e9f};
+    vec2 sugarC_{0, -8};         // where the stack's sugar is (the scouts smell it from afar)
+    bool hasSugar_ = false;
+    int pourLeft_[2] = {0, 0};
+    vec2 excite_{0, 0};
+    float exciteT_ = 0;
+    bool warm_ = false;
+    std::vector<vec2> lockAt_; // impacts this frame (ants scatter)
+
+    // the song and its staging
+    int variant_ = 0;
+    int level_ = 1;
+    bool inDrop_ = false;
+    float lv_ = 1, lvTarget_ = 1;  // continuous level
+    float dropMix_ = 0;            // the drop's colors
+    float swell_ = 0;              // the drop's swell (the trails glow, the colony pours out)
+    float energy_ = 0.5f;
+    bool slowOn_ = false;
+    float slow_ = 0;
+    float dimT_ = 0;
+    float overT_ = -1;
+    float gaugeShown_ = 0;
+    float clock_ = 0;
+    Bridge bridge_;
+    Rng rng_{0xA175};
+    std::vector<Sprite> under_, stack_, antsV_, over_, top_;
+};
