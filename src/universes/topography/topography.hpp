@@ -43,6 +43,12 @@ private:
     bool fresh_ = true;
     void buildGrid();
     void buildGround();
+    // The ground keeps changing, slowly: its noise drifts and warps with time (the octaves each their own way).
+    void evolveGround();
+    bool spotFree(float x, float y) const;
+    float evo_ = 0.f, evoSpeed_ = 0.7f;
+    std::vector<float> nC_, wC_;
+    int woodRow_ = 0; // the ground's noise and woodland on the coarse grid
     void updateTerrain(const Game& game, float dt, float wdt);
     // ---- Rivers: a drainage network on a coarser grid (every other sample): each node drains to its lowest
     // neighbour, the rain gathers downstream, a river shows where enough of it runs, and it carves its valley.

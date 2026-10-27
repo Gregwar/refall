@@ -149,6 +149,26 @@ float fbm(float x, float y, uint64_t s) {
     return sum / norm;
 }
 
+// The same fbm, alive: a slow warp whose own noise drifts, and each octave drifting its own way, so the hills
+// swell, part and merge rather than slide.
+float fbmT(float x, float y, uint64_t s, float t) {
+    const float wx = vnoise(x * 0.45f + t * 0.021f, y * 0.45f - t * 0.013f, s + 501) - 0.5f;
+    const float wy = vnoise(x * 0.45f - t * 0.017f + 7.3f, y * 0.45f + t * 0.019f, s + 503) - 0.5f;
+    x += 1.1f * wx;
+    y += 1.1f * wy;
+    static const float DX[3] = {0.019f, -0.034f, 0.041f}, DY[3] = {-0.012f, -0.026f, 0.052f};
+    float sum = 0, amp = 0.5f, norm = 0;
+    for (int i = 0; i < 3; i++) {
+        sum += amp * vnoise(x + DX[i] * t, y + DY[i] * t, s + (uint64_t)i * 977);
+        norm += amp;
+        const float nx = 0.8f * x - 0.6f * y, ny = 0.6f * x + 0.8f * y;
+        x = nx * 2.03f + 1.7f;
+        y = ny * 2.03f - 0.9f;
+        amp *= 0.5f;
+    }
+    return sum / norm;
+}
+
 // A separable box blur (zero outside), `passes` times: three passes are close to a gaussian.
 void boxBlur(std::vector<float>& f, std::vector<float>& tmp, int w, int h, int r, int passes) {
     tmp.resize(f.size());
@@ -366,24 +386,8 @@ void TopographyUniverse::buildGrid() {
 // under the HUD columns, the well a shallow valley; woodland patches on the low, gentle ground.
 void TopographyUniverse::buildGround() {
     if (gw_ <= 0) return;
-    const uint64_t s = seed_ * 31 + 7;
-    for (int j = 0; j < gh_; j++)
-        for (int i = 0; i < gw_; i++) {
-            const float x = gx0_ + i * gs_, y = gy0_ + j * gs_;
-            const float ax = std::fabs(x);
-            const float amp = lerpf(0.3f, 1.f, smoothstepf(9.5f, 14.5f, ax));
-            const float n = fbm(x / 8.5f + 3.1f, y / 8.5f - 1.7f, s);
-            const float wellX = 1.f - smoothstepf(4.f, 8.f, ax), wellY = 1.f - smoothstepf(9.f, 13.f, std::fabs(y));
-            // the HUD's corners on the left (the song's title, the section) stay dry ground
-            const float corner = smoothstepf(-10.f, -13.f, x) * smoothstepf(7.f, 9.5f, std::fabs(y - viewC_.y));
-            // the well: a level terrace (no hollows behind the pieces), a little above the valleys around
-            const float well = wellX * wellY;
-            float b = lerpf(amp * 16.f * (n - 0.47f), WELL_FLOOR + 1.2f * (n - 0.5f), well) + 3.f * corner;
-            base_[(size_t)j * gw_ + i] = b;
-            const float wn = fbm(x / 3.2f - 11.f, y / 3.2f + 5.f, s + 99);
-            const float away = smoothstepf(12.f, 13.5f, ax) + (1.f - smoothstepf(9.f, 11.f, ax)) * smoothstepf(10.6f, 11.8f, std::fabs(y));
-            wood_[(size_t)j * gw_ + i] = saturate((wn - 0.52f) * 5.f + 0.5f) * saturate(away) * (b < 1.8f ? 1.f : 0.f);
-        }
+    nC_.clear(); // everything afresh
+    evolveGround();
     // spot heights: the tops of the highest hills in the outer margins
     peaks_.clear();
     for (int i = 0; i < 6; i++) {
@@ -397,7 +401,7 @@ void TopographyUniverse::buildGround() {
         for (int j = 4; j < gh_ - 4; j++)
             for (int i = 4; i < gw_ - 4; i++) {
                 const float x = gx0_ + i * gs_, y = gy0_ + j * gs_;
-                if (std::fabs(x) < 13.f || std::fabs(x) > viewH_.x - 1.5f || std::fabs(y - viewC_.y) > viewH_.y - 1.5f || y < -8.f) continue;
+                if (!spotFree(x, y)) continue;
                 bool far = true;
                 for (const Spot& sp : spots_)
                     if ((sp.x - x) * (sp.x - x) + (sp.y - y) * (sp.y - y) < 36.f) far = false;
@@ -407,6 +411,56 @@ void TopographyUniverse::buildGround() {
             }
         if (bi < 0 || best < 1.5f) break;
         spots_.push_back({gx0_ + bi * gs_, gy0_ + bj * gs_, (int)std::lround(400.f + best * 25.f * 4.f)});
+    }
+}
+
+// Where a spot height may stand: the outer margins, clear of the HUD's corners.
+bool TopographyUniverse::spotFree(float x, float y) const {
+    if (std::fabs(x) < 13.f || std::fabs(x) > viewH_.x - 1.5f || y < -8.f || y > viewC_.y + viewH_.y - 3.f) return false;
+    return !(x < -9.f && (y > viewC_.y + 5.5f || y < -6.f));
+}
+
+void TopographyUniverse::evolveGround() {
+    if (gw_ <= 0) return;
+    const uint64_t s = seed_ * 31 + 7;
+    const float t = evo_;
+    // the noise on the coarse grid (a quarter of the samples), bilinear in between
+    // (the woodland, slower still, a quarter of its rows a frame)
+    const bool all = nC_.size() != (size_t)cw_ * ch_;
+    nC_.resize((size_t)cw_ * ch_);
+    wC_.resize((size_t)cw_ * ch_);
+    woodRow_ = (woodRow_ + 1) & 3;
+    for (int j = 0; j < ch_; j++)
+        for (int i = 0; i < cw_; i++) {
+            const float x = gx0_ + 2 * i * gs_, y = gy0_ + 2 * j * gs_;
+            nC_[(size_t)j * cw_ + i] = fbmT(x / 8.5f + 3.1f, y / 8.5f - 1.7f, s, t);
+            if (all || (j & 3) == woodRow_) wC_[(size_t)j * cw_ + i] = fbmT(x / 3.2f - 11.f, y / 3.2f + 5.f, s + 99, t * 0.6f);
+        }
+    for (int j = 0; j < gh_; j++) {
+        const int cj = std::min(j / 2, ch_ - 2);
+        const float fy = (j - 2 * cj) * 0.5f;
+        const float y = gy0_ + j * gs_;
+        for (int i = 0; i < gw_; i++) {
+            const int ci = std::min(i / 2, cw_ - 2);
+            const float fx = (i - 2 * ci) * 0.5f;
+            const size_t c = (size_t)cj * cw_ + ci;
+            auto bil = [&](const std::vector<float>& v) {
+                return lerpf(lerpf(v[c], v[c + 1], fx), lerpf(v[c + cw_], v[c + cw_ + 1], fx), fy);
+            };
+            const float n = bil(nC_), wn = bil(wC_);
+            const float x = gx0_ + i * gs_;
+            const float ax = std::fabs(x);
+            const float amp = lerpf(0.3f, 1.f, smoothstepf(9.5f, 14.5f, ax));
+            const float wellX = 1.f - smoothstepf(4.f, 8.f, ax), wellY = 1.f - smoothstepf(9.f, 13.f, std::fabs(y));
+            // the HUD's corners on the left (the song's title, the section) stay dry ground
+            const float corner = smoothstepf(-10.f, -13.f, x) * smoothstepf(7.f, 9.5f, std::fabs(y - viewC_.y));
+            // the well: a level terrace (no hollows behind the pieces), a little above the valleys around
+            const float well = wellX * wellY;
+            const float b = lerpf(amp * 16.f * (n - 0.47f), WELL_FLOOR + 1.2f * (n - 0.5f), well) + 3.f * corner;
+            base_[(size_t)j * gw_ + i] = b;
+            const float away = smoothstepf(12.f, 13.5f, ax) + (1.f - smoothstepf(9.f, 11.f, ax)) * smoothstepf(10.6f, 11.8f, std::fabs(y));
+            wood_[(size_t)j * gw_ + i] = saturate((wn - 0.52f) * 5.f + 0.5f) * saturate(away) * smoothstepf(2.2f, 1.4f, b);
+        }
     }
 }
 
@@ -611,6 +665,30 @@ float TopographyUniverse::waterPercentile(float p) {
 }
 
 void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt) {
+    // The ground drifts on, slowly at a break, a little faster in a chorus and in a drop.
+    {
+        const float sp = 0.7f + 0.35f * smoothstepf(0.2f, 1.f, lv_) + 0.35f * smoothstepf(1.1f, 2.f, lv_) + 0.6f * dropAmt_;
+        evoSpeed_ = approach(evoSpeed_, sp, 0.3f, dt);
+        evo_ += wdt * evoSpeed_;
+        evolveGround();
+        // the rivers' record heals slowly as the land moves under it
+        const float heal = std::exp(-dt * 0.012f);
+        for (size_t k = 0; k < eros_.size(); k++) { eros_[k] *= heal; sed_[k] *= heal; }
+        // the spot heights follow their hilltops
+        for (Spot& sp2 : spots_) {
+            int i = (int)std::lround((sp2.x - gx0_) / gs_), j = (int)std::lround((sp2.y - gy0_) / gs_);
+            if (i < 1 || j < 1 || i >= gw_ - 1 || j >= gh_ - 1) continue;
+            int bi = i, bj = j;
+            for (int dj = -1; dj <= 1; dj++)
+                for (int di = -1; di <= 1; di++)
+                    if (base_[(size_t)(j + dj) * gw_ + i + di] > base_[(size_t)bj * gw_ + bi]) { bi = i + di; bj = j + dj; }
+            const float tx = gx0_ + bi * gs_, ty = gy0_ + bj * gs_;
+            const float k = 1.f - std::exp(-dt * 0.8f);
+            if (spotFree(tx, ty)) { sp2.x += (tx - sp2.x) * k; sp2.y += (ty - sp2.y) * k; }
+            const int v = (int)std::lround((400.f + base_[(size_t)bj * gw_ + bi] * 100.f) / 5.f) * 5;
+            if (std::abs(v - sp2.value) >= 10) sp2.value = v;
+        }
+    }
     // The stack's mass: each locked cell's coverage of the grid (cells sit higher the deeper they are in the stack,
     // so a tall stack is a mountain and its flanks rise unevenly).
     std::fill(mask_.begin(), mask_.end(), 0.f);
@@ -1439,6 +1517,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
         if (a > 0.01f) {
             std::vector<float> dots, nums;
             for (const Spot& sp : spots_) {
+                if (!spotFree(sp.x, sp.y)) continue;
                 const vec2 p = project(vec3(sp.x, sp.y, 0.f));
                 const float ts = std::max(9.f, 17.f * s);
                 textQuads(fontRoman_, ".", p.x - ts * 0.15f, p.y - ts * 1.25f, ts * 1.8f, 0.f, dots);
