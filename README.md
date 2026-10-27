@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Twenty-one universes so far:
+song, and songs change universe with a transition on the beat. Twenty universes so far:
 
 <table>
 <tr>
@@ -56,10 +56,6 @@ song, and songs change universe with a transition on the beat. Twenty-one univer
 <td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower in a dark 3D night city, its lit rooms the blocks</td>
 <td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, rivers in the rain, a flood on the drop</td>
 </tr>
-<tr>
-<td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar-cube pieces nibbled by a pheromone colony that wears trails between two nests</td>
-<td></td>
-</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
@@ -70,6 +66,7 @@ Disabled for now (not built; their code stays in the repository):
 | SYNTHWAVE | To be redesigned (minimal neon) |
 | CLOUDSCAPE | To be reworked (nights only) |
 | MAGNETS | Iron filings on paper; not convincing yet, waiting for a better idea |
+| ANTS | Sugar cubes and a pheromone colony; on hold |
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
@@ -130,5 +127,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;ants"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
