@@ -814,12 +814,21 @@ void LightsourceUniverse::buildBlocks(const Game& g, float ember) {
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
         // (the palette's deepest values lifted a little: a small piece in the dark must still read)
-        vec3 pc = pieceCol(type);
+        vec3 pc = pieceCol(type, monoG_); // (in a drop: its side's color at its value, as it will spawn)
         pc = pc * std::min(1.f / std::max(0.05f, std::max(pc.x, std::max(pc.y, pc.z))), std::max(1.f, 0.2f / std::max(0.01f, lum(pc))));
+        vec3 dropEm(0.f);
+        {
+            // in a drop, the full fluorescent color at the piece's value (it eases in and out with the drop's color)
+            vec3 mt = monoTint(type);
+            const float mx = std::max(0.05f, std::max(mt.x, std::max(mt.y, mt.z)));
+            mt = mt * (std::max(mx, 0.5f) / mx);
+            pc = lerp(pc, mt, monoG_);
+            dropEm = mt * (0.45f * monoG_); // and lit from within, like the relit stack
+        }
         for (int i = 0; i < 4; i++) {
             const int conn = connMask(cells, i);
             const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
-            block(pos, sc, pc * albK, 2.f, lightOf(type) * warm, conn, alpha);
+            block(pos, sc, pc * albK, 2.f, lightOf(type, monoG_) * warm + dropEm, conn, alpha);
         }
     };
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.65f : 1.f, 0.f);
