@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Nineteen universes so far:
+song, and songs change universe with a transition on the beat. Twenty universes so far:
 
 <table>
 <tr>
@@ -54,7 +54,7 @@ song, and songs change universe with a transition on the beat. Nineteen universe
 </tr>
 <tr>
 <td><img src="docs/universes/rewild.jpg"><br><b>REWILD</b>: glass cubes of seeds broken by the clears, a parched land growing into a jungle</td>
-<td></td>
+<td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, rivers in the rain, a flood on the drop</td>
 </tr>
 </table>
 
