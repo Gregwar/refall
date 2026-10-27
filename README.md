@@ -53,7 +53,7 @@ song, and songs change universe with a transition on the beat. Nineteen universe
 <td><img src="docs/universes/notepad.jpg"><br><b>NOTEPAD</b>: a squared notebook drawn by hand in stop motion, erased and redrawn</td>
 </tr>
 <tr>
-<td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower's facade at night, its lit windows the blocks, a modern skyline around it</td>
+<td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower in a dark 3D night city, its lit rooms the blocks</td>
 <td></td>
 </tr>
 </table>
