@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat.
+song, and songs change universe with a transition on the beat. Nineteen universes so far:
 
 <table>
 <tr>
@@ -54,6 +54,7 @@ song, and songs change universe with a transition on the beat.
 </tr>
 <tr>
 <td><img src="docs/universes/rewild.jpg"><br><b>REWILD</b>: glass cubes of seeds broken by the clears, a parched land growing into a jungle</td>
+<td></td>
 </tr>
 </table>
 
@@ -66,8 +67,8 @@ Disabled for now (not built; their code stays in the repository):
 | CLOUDSCAPE | To be reworked (nights only) |
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 
-More in [docs/universes.md](https://github.com/Gregwar/zentris/blob/main/docs/universes.md): every universe and its variants, the transitions, and the
-roadmap of 100 universes. To make a new one, see [docs/adding-a-universe.md](https://github.com/Gregwar/zentris/blob/main/docs/adding-a-universe.md).
+More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
+roadmap of 100 universes. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
 
 ## Install
 
@@ -114,7 +115,7 @@ missing from it still works with a generic layout.
 - `zenscene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
 
 Both come with the package (`uvx --from zentris zenscope`). Every option, the tools and how the music drives the
-game are in [docs/reference.md](https://github.com/Gregwar/zentris/blob/main/docs/reference.md).
+game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source
 
