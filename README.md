@@ -54,7 +54,7 @@ song, and songs change universe with a transition on the beat. Twenty universes 
 </tr>
 <tr>
 <td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower in a dark 3D night city, its lit rooms the blocks</td>
-<td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, rivers in the rain, a flood on the drop</td>
+<td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, a slowly shifting land; rivers in the rain, a flood and living peaks on the drop</td>
 </tr>
 </table>
 
