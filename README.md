@@ -78,7 +78,7 @@ Disabled for now (not built; their code stays in the repository):
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
-roadmap of 100 universes. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
+roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
 
 ## Install
 

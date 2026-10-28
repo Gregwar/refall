@@ -217,11 +217,19 @@ the stack turns plain, in their own tones; so the two halves meet in a neutral s
 
 ## Roadmap
 
-The list below is the roadmap, in implementation order. After the universes already built, ideas are ranked by how
-well they fit what play testing showed works: minimalist worlds with one strong, original idea first (the family of
-WATERCOLOR, SUMI, VECTOR and SMOKE), then ideas that need restraint to avoid clutter, and last the busy, kitsch or
-classical ones (a retro handheld or arcade look is too close to an ordinary Tetris). Universes marked ✅ exist, the
-others are ideas waiting to be built. To build one, see [Adding a universe](adding-a-universe.md).
+The list below is the roadmap, in implementation order: first the universes already built (✅, or disabled), then
+the ideas waiting to be built. The ideas are ranked by how well they fit what play testing showed works:
+
+- one material or medium rendered for real (ink, paper, glass, stone, metal, sand), minimal, with one strong idea;
+- the stack drives the world and the world keeps its memory over the song (FLUO's stains, TOPOGRAPHY's rivers,
+  HEAT's cooling, MARBLES' felt, BLUEPRINT's revisions);
+- light in the dark or a quiet surface, calm and eased: no flashes or shakes, and the drop is one big change of the
+  world (a colormap, a blacklight, a flood);
+- not a backdrop that ignores the stack (CLOUDSCAPE), not a retro game or kitsch look (PIXEL, SYNTHWAVE), and not too
+  close to a universe that exists (SHADOW PLAY and LIGHTSOURCE, CRYSTAL CAVE and PRISM, CHALKBOARD and NOTEPAD).
+
+The ideas rated A in review (very interesting) come first, then those rated B (maybe), then the unrated ones; the
+busy, kitsch or classical ideas and those rated C (not interesting, like DE STIJL) come last. To build one, see [Adding a universe](adding-a-universe.md).
 
 | # | Universe | Look | How the music plays it | Status |
 |---|---|---|---|---|
@@ -231,7 +239,7 @@ others are ideas waiting to be built. To build one, see [Adding a universe](addi
 | 4 | PIXEL | Native 320×180 pixel art, 16-color palette, Bayer dithering, parallax layers | Sprites animate on the beat; peak adds parallax layers and weather; clears are pixel explosions | ✅ |
 | 5 | SYNTHWAVE | Cinematic night drive: a soft low sun in the haze, a wet road, fine lines into the fog, frosted glass pieces | The road moves with the tempo; light pulses on the beat; peak = light trails and anamorphic flares on the kicks | ✅ |
 | 6 | CLOUDSCAPE | Above the clouds, volumetric light, endless sky | Calm = still dawn sea of clouds; peak = towering cumulus and sun rays; clears drift away as mist | ✅ |
-| 7 | ABYSS | Deep-sea darkness, bioluminescent jelly pieces, marine snow | Creatures pulse their light with the beat; peak brings a giant glowing whale passing by; clears break into points of light |✅ |
+| 7 | ABYSS | Deep-sea darkness, bioluminescent jelly pieces, marine snow | Creatures pulse their light with the beat; peak brings a giant glowing whale passing by; clears break into points of light | ✅ |
 | 8 | POLAR NIGHT | Snowfield under the stars, aurora ribbons, water pieces freezing into ice cubes | Aurora ribbons follow the frequency bands; peak fills the sky; pieces freeze on lock, clears shatter; slow motion freezes the falling snow | ✅ |
 | 9 | WATERCOLOR | A landscape in transparent washes on cold-press paper: granulation, blooms, dried rims; pigment-wash pieces, pencil ghost | Beats drop pigment into wet washes; peak adds saturated glazes; clears dissolve back into the paper | ✅ |
 | 10 | SMOKE | Volumetric smoke and one hard spotlight on a black stage; satin blocks caught in the key light | The smoke swirls with the bass; peak = more light cuts through; a Tetris blows a smoke ring | ✅ |
@@ -244,93 +252,99 @@ others are ideas waiting to be built. To build one, see [Adding a universe](addi
 | 17 | MARBLES | Big clear glass marbles (refraction, ribbon/cat's-eye/swirl cores, bubbles) prisoners of faint glass boxes, a palette per variant; a dark table seen from above (felt, slate, brushed metal) under the well; slow beams grazing it, traced through the marbles (caustics, tinted shadows) | Cleared tiles pop and their marbles shoot out from under the well across the table, billiard collisions staining the felt with their colors (dark at the start of a song, colorful at its end); colors soft, rich in a drop; a drop sends waves of light flowing through the marbles every two beats, each drop its own shape | ✅ |
 | 18 | PRISM | Glass cubes in the dark, slow beams of light through haze | Beams drift across the well and refract, reflect and pipe through the glass; the light the cubes receive lights them; a drop disperses every beam into rainbow fans and sets the light rig swinging on the bar grid; clears shatter into spectral sparks | ✅ |
 | 19 | LIGHTSOURCE | A dim room lit by the falling piece itself, real 2D shadows cast by the stack | A locked piece keeps shining and dims smoothly while the next one falls; a chorus adds a corner spot, a drop crosses two spots and relights every piece of the stack in a pair of fluorescent colors picked per drop (one per side of the two-color palette) (a ripple on the downbeat, then pieces swelling in turn); cleared blocks flare into light and burn out | ✅ |
-| 20 | OP ART | Black and white Bridget Riley stripes and moirés, calm and never flickering | The stripe field bends around the stack; beats ripple it gently; peak makes the whole field undulate | |
-| 21 | SHADOW PLAY | Silhouettes behind a backlit paper screen, warm lamp | Puppets dance on the beat; the lamp flickers; peak brings more puppets | |
-| 22 | BLUEPRINT | Technical drawing (cyanotype, vellum, CAD, diazo): drafted, hatched parts, a sheet with its title block | Locks get hatched and dimensioned, the stack's height too; the pen draws a machine in the margins as the song goes on; the drop changes the print and runs the machine on the beat; clears are rubbed out and counted as revisions | ✅ |
-| 23 | LANTERNS | Paper lanterns floating on a dark lake | Each clear releases lanterns; peak fills the sky; beats ripple the reflections | |
-| 24 | TOPOGRAPHY | Contour map whose terrain is the stack: tinted plateau pieces, isolines hugging the stack and running out over the margins | Rain gathers into rivers that carve the land for the whole song, hollows fill into ponds; the drop floods the valleys and makes the stack an island; clears slump the land | ✅ |
-| 25 | ORIGAMI | Folded paper pieces with crease shading, soft paper light | Pieces unfold on lock; cleared rows fold into paper cranes that fly off; peak fills the sky with cranes | |
-| 26 | ZEN GARDEN | Raked sand seen from above, stones, moss | Rake lines ripple from the stones on beats; cleared blocks sink into the sand | |
-| 27 | SWISS POSTER | International typographic style: huge words from the song title, strict grid | Words recompose on bars; beats shift the grid; peak sets the title giant | |
-| 28 | X-RAY | Radiograph: glowing bones of the blocks on dark blue | Beats pulse like a heartbeat monitor; clears fade out like an exposure | |
-| 29 | LIMBO | Monochrome silhouettes in fog | Fog thickens and opens with the phases; distant shapes move on beats | |
-| 30 | BAUHAUS | Flat primaries, circles, triangles and squares in a strict composition | The composition recomposes on each bar; peak rotates the big forms; clears slide out as flat shapes | |
-| 31 | DE STIJL | Mondrian grid: the stack itself becomes a composition | New grid lines are drawn on bars; peak reorganizes the color blocks | |
-| 32 | BRUTALIST | Raw concrete, hard sunlight, deep geometric shadows | Shadows move with the sun across the phases; beats are dust in the light shafts | |
-| 33 | HEAT | Thermal camera: pieces land white hot and cool through the colormap, each type a material of its own emissivity; a cold room, heat rising over the stack (FORGE merged in) | Heat conducts through the stack and rises as air; chorus warmer, breaks cold; the drop flares the stack and switches the colormap; clears vent a plume | ✅ |
-| 34 | STAR CHART | Antique engraved celestial map, gold on navy | Constellations are drawn on bars; peak animates the zodiac figures | |
-| 35 | SONAR | A dark sea where shapes surface from the black, no sweeping beam | Shapes glow up from the dark on beats; peak reveals a sunken city; cleared cells sink into the dark | |
-| 36 | KANDINSKY | Abstract musical painting: one shape family per instrument band | Bass, mids and highs paint circles, lines and dots; peak fills the canvas | |
-| 37 | CRYSTAL CAVE | Geodes, refracting crystals, dripping water | Crystals ring and glow with the highs; peak lights the whole cave | |
-| 38 | GLOWING FOREST | Night forest of bioluminescent mushrooms and plants | Plants pulse with the bass; peak = a wave of light across the forest | |
-| 39 | ORBIT | A space station window, Earth slowly turning below | Calm = night side and city lights; peak = sunrise over the limb; clears float away weightless | |
-| 40 | MIRAGE | Desert dunes, heat haze, white sun | Haze shimmers with the highs; drops raise a sandstorm; clears blow away as sand | |
-| 41 | TRANSIT MAP | Vignelli subway map: colored lines and stations | New lines are drawn on bars; trains (dots) run with the beat | |
-| 42 | UKIYO-E | Colored woodblock print, Prussian blue, a great wave, wood grain in the inks | The wave grows with energy and breaks on drops; clears are wiped by foam | |
-| 43 | NOIR | High-contrast black and white, venetian blind shadows, rain and smoke | The blinds' shadows sway on beats; peak = lightning; clears dissolve into smoke | |
-| 44 | MANGA | Black and white screentones, ink speed lines | Drops add dramatic focus lines; cleared cells crumble into screentone dots | |
-| 45 | STAINED GLASS | Cathedral window: lead between cells, colored light shafts on stone | The sun moves behind the window through the phases; beats glint the glass; clears crack and fall as shards | |
-| 46 | BLACK-FIGURE | Ancient Greek vase painting, terracotta and black | Figures run around the vase at tempo; clears crack the pottery | |
-| 47 | GIRIH | Islamic geometric star patterns, tiles unfolding | The pattern unfolds from the center with the energy; peak = full star field | |
-| 48 | AZULEJO | Blue and white glazed tiles, cracks, glaze sheen | Tile patterns rotate on bars; peak adds a figurative panel | |
-| 49 | MOSAIC | Roman tesserae, grout lines, slight irregularity | A mosaic picture reveals itself as lines are cleared; peak shines the gold tesserae | |
-| 50 | FORGE | Molten metal, a blacksmith's anvil, cooling steel | Merged into HEAT (#33): pieces glowing and darkening as they cool | ✅ (HEAT) |
-| 51 | TYPEWRITER | Typed paper, ribbon ink, carriage | Pieces are typed glyphs; the carriage returns on bars; clears are crossed out with x's | |
-| 52 | CHALKBOARD | Chalk on slate, smudges, dusty light | Equations and diagrams scribbled to the beat; clears erased by a sponge leaving wet streaks | |
-| 53 | NOTEPAD | A squared notebook page drawn by hand in stop motion: wobbly outlines, pieces coloured in felt pen, pencil or chalk, eraser ghosts | The page is redrawn a few times a second; what changed is erased (a ghost stays, fading) and redrawn; a break is drawn slowly in pencil outlines (the pieces still solidly coloured in), a drop is a frantic hand with doodles and travelling drawings in the margins; clears are rubbed out | ✅ |
-| 54 | SOAP BUBBLES | Thin-film iridescence on a soft backdrop | Bubbles drift and pop on beats; clears burst into droplets | |
-| 55 | FLUO | Fluorescent paint splashed on a dark textured wall; flashy fluo pieces | Every cleared block splashes its paint on the wall and the paint stays for the whole song; a drop turns the lights off and a blacklight on, the stains glowing | ✅ |
-| 56 | RAINY WINDOW | Droplets on a window, a blurred city behind (bokeh) | Drops run down on beats; peak = downpour; the city lights pulse with the bass | |
-| 57 | SHORELINE | Beach from above: waves washing sand, foam | Waves come in on bars; drops = big wave; clears are washed off by the foam | |
-| 58 | MICROSCOPE | Petri dish under a microscope, cells, stained colors | Cells divide on beats; peak brings a bloom of organisms; clears are absorbed by a cell | |
-| 59 | CIRCUIT | PCB green, copper traces, chips | Signals run along the traces on beats; peak lights the whole board; clears blow fuses | |
-| 60 | MOEBIUS | Clean-line French comic, flat colors, desert planets and giant birds | Calm = still vistas, peak = flying creatures crossing; clears are inked away | |
-| 61 | IMPRESSIONIST | Monet-like visible brush strokes, water lilies, dappled light | The brush strokes shimmer with the highs; phases move the light across the pond | |
-| 62 | CAMPFIRE | Night forest clearing, fire light on trees, sparks | The fire breathes with the bass; sparks rise on kicks; peak = a big blaze, clears turn to embers | |
-| 63 | FIREWORKS | Harbor at night, reflections | Fireworks launch on kicks; peak = the finale | |
-| 64 | AUTUMN PARK | Falling leaves, low warm sun, puddles | Leaves fall with the beat; gusts on drops; clears are swept up as leaves | |
-| 65 | ART DECO | Gold lines on black lacquer, fans and sunbursts, strict symmetry | Gold sunburst rays open with energy; beats glint the gold; clears slide away as gold leaf | |
-| 66 | KILIM | Woven rug geometry, natural dyes | Patterns are woven row by row; beats shift the weave | |
-| 67 | HERBARIUM | Scientific botanical plates, labels, pressed flowers | Specimens are drawn and labelled as the song advances | |
-| 68 | MANUSCRIPT | Medieval vellum, gold leaf, illuminated drop caps | Ornaments are drawn with the song's progress; gold catches the light on beats | |
-| 69 | FELT | Stop-motion felt and wool, stitches, 12 fps motion | Everything boils slightly; beats squash the felt; clears are cut out with scissors | |
-| 70 | CARDBOARD | Cardboard cut-outs, tape, craft knife edges | The set pieces wobble on their stands with the beat; peak adds more layers of cardboard scenery | |
-| 71 | KNIT | Wool knit stitches, yarn texture, warm light | Rows are knitted in; clears unravel into loose yarn | |
-| 72 | EMBROIDERY | Cross-stitch on linen, thread sheen, hoop frame | The design is stitched across the song; beats tug the threads | |
-| 73 | TERRARIUM | A glass jar ecosystem, moss, condensation | Fog and condensation follow the phases; a beetle wanders; peak = fireflies | |
-| 74 | ORRERY | A brass planetarium machine, planets on arms | Planets orbit at tempo fractions; peak opens the whole machine | |
-| 75 | SNOW GLOBE | The board inside a snow globe on a shelf | Drops shake the globe; snow settles in calm parts | |
-| 76 | GREENHOUSE | Victorian glasshouse, plants, warm humid light | Plants grow and unfold with the song's progress; peak opens flowers; rain on the glass in calm parts | |
-| 77 | MUSIC BOX | A wooden music box, brass comb, rotating pinned cylinder | The cylinder turns at the tempo; locks pluck the comb; the dancer spins at peak | |
-| 78 | TOMB | Hieroglyph wall, gold and lapis, torchlight | Torches flicker on beats; peak reveals gold hieroglyphs | |
-| 79 | VOXEL VALLEY | Voxel landscape with rivers and trees | Seasons follow the phases (spring → summer → autumn); the voxel water ripples on kicks | |
-| 80 | CORAL REEF | Sunny shallows, caustics, colorful reef | Fish schools follow the melody; kicks pulse the caustics; clears burst into bubbles | |
-| 81 | ANIME SKY | Makoto Shinkai skies, painted clouds, lens flares | Clouds race with energy; peak = golden hour; Tetris = a meteor across the sky | |
-| 82 | MEMPHIS | 80s Memphis design: squiggles, terrazzo, pastels with black outlines | Squiggles bounce on beats; peak spawns more shapes and pattern swaps | |
-| 83 | ART NOUVEAU | Mucha arabesques, organic frames, floral ornaments | Vines grow around the board with the song; peak blooms the ornaments | |
-| 84 | JAZZ CLUB | Velvet, brass, a smoky single spotlight | The spotlight breathes with the music; peak opens the stage lights | |
-| 85 | TRAIN WINDOW | Landscape rushing past a train window | The landscape's speed follows the tempo; tunnels on drops; calm = countryside at dusk | |
-| 86 | SUPER 8 | Faded home movie, warm light leaks, gate weave | Light leaks flare on kicks; peak = sunny summer footage | |
-| 87 | HOLOGRAM | Sci-fi holographic UI, cyan scanlines, depth layers | Hologram jitter on kicks; peak opens extra panels around the board | |
-| 88 | WET NEON STREET | Rainy Tokyo alley at night, reflections on wet asphalt, signs | Signs flicker on beats, rain thickens with energy, a train passes on drops | |
-| 89 | NIGHT DRIVE | Highway at night, headlights, lane markers | Lane markers flash past on beats; peak = city lights and tunnels | |
-| 90 | LO-FI ROOM | Cozy bedroom at night, desk lamp, the city through the window | The cat's tail and the plant sway on the beat; peak lights the city; slow motion = a sleepy, blurred room | |
-| 91 | DATAMOSH | Compression artifacts, pixel sorting, glitch blocks | Glitches only on strong hits; drops pixel-sort the screen; clears datamosh away | |
-| 92 | SILENT FILM | Sepia, grain, scratches, iris transitions | Frame rate stutters gently with the tempo; phase changes are iris wipes and intertitles | |
-| 93 | COMIC | Ben-Day dots, panels, speed lines | Clears shout onomatopoeias (POW, BAM); peak splits the screen into panels | |
-| 94 | VAPORWAVE | Marble busts, 90s desktop windows, pink and teal | Windows pop up on bars; peak = slowed, chorused visuals with a sunset | |
-| 95 | Y2K CHROME | Liquid chrome, iridescent bubbles, blobby type | Chrome blobs melt and reform on beats; peak = full liquid metal | |
-| 96 | DISCO | Mirror ball, light dots, a lit dance floor | Floor tiles light up on beats; the mirror ball speeds up at peak | |
-| 97 | TOY ROOM | Plastic bricks with studs, a child's room floor, tilt-shift | Bricks click into place on locks; peak brings toy trains and spinning tops; clears scatter bricks | |
-| 98 | CANDY SHOP | Glossy candy and gummy pieces, sugar crystals, pastel kitchen | Pieces wobble like jelly on beats; clears burst into sprinkles | |
-| 99 | CLOCKWORK | Brass gears and springs, steampunk | Gears tick on beats; peak spins the mechanism; clears pop springs | |
-| 100 | BAROQUE CEILING | Trompe-l'œil fresco sky, clouds and gilded frames | The painted sky opens with energy; light rays at peak | |
-| 101 | PUPPET THEATER | A small stage, velvet curtains, spotlights | Phases are acts; spotlights follow the active piece; Tetris gets a curtain call | |
-| 102 | PINBALL | A pinball playfield, bumpers, lights, chrome | Bumpers flash on beats; Tetris = multiball and jackpot lights | |
-| 103 | ARCADE CABINET | The game seen inside a cabinet in a dark arcade, bezel art, CRT glare | Neighboring cabinets light up with the music; peak = the arcade's neon wakes up | |
-| 104 | TERMINAL | Text mode: everything is characters on an 80×25 grid, ANSI colors | Characters cascade on beats; peak floods the screen with scrolling logs; clears are typed away | |
-| 105 | POCKET LCD | 4-shade green handheld LCD, visible pixel grid, ghosting | Peak uses the screen's full contrast and LCD smearing; the bonus fades the screen as if the batteries were low | |
-| 106 | CITY | A tall modern tower in a dark 3D night city, seen straight on through a shift lens, its 10 × 20 windows the board (real rooms behind glass, furnished per floor and per window); towers on a street grid far below, haze, beacons, a crane, traffic | Lit rooms are the blocks, told apart by their light's color; mid wakes the city, a chorus lights the crowns and volumetric searchlights, a drop switches the towers' windows into patterns and level meters; cleared floors go dark | ✅ |
-| 107 | MAGNETS | Magnets on paper, iron filings tracing their real field | The filings turn and gather around the poles and keep the stack's memory; the music taps the paper; a drop turns every polarity over (every filing spins at once) | disabled |
-| 108 | ANTS | Sugar-cube pieces, two ant nests at the sides, a pheromone colony | Ants nibble the cubes and wear trails to them; clears burst cubes into grains the ants fetch; a drop pours out faster ants and candy colours | ✅ |
-| 109 | RECYCLE | A table seen from above: heaps of loose cubes beside the well, the pieces made of the same cubes | A new piece takes its cubes from the heaps, a cleared row flies back to them; the chorus tidies the heaps on the beat; a drop throws them up into colored formations (rows, rings, towers) that hop with the kicks | ✅ |
+| 20 | BLUEPRINT | Technical drawing (cyanotype, vellum, CAD, diazo): drafted, hatched parts, a sheet with its title block | Locks get hatched and dimensioned, the stack's height too; the pen draws a machine in the margins as the song goes on; the drop changes the print and runs the machine on the beat; clears are rubbed out and counted as revisions | ✅ |
+| 21 | TOPOGRAPHY | Contour map whose terrain is the stack: tinted plateau pieces, isolines hugging the stack and running out over the margins | Rain gathers into rivers that carve the land for the whole song, hollows fill into ponds; the drop floods the valleys and makes the stack an island; clears slump the land | ✅ |
+| 22 | HEAT | Thermal camera: pieces land white hot and cool through the colormap, each type a material of its own emissivity; a cold room, heat rising over the stack (FORGE merged in) | Heat conducts through the stack and rises as air; chorus warmer, breaks cold; the drop flares the stack and switches the colormap; clears vent a plume | ✅ |
+| 23 | FORGE | Molten metal, a blacksmith's anvil, cooling steel | Merged into HEAT: pieces glowing and darkening as they cool | ✅ (HEAT) |
+| 24 | NOTEPAD | A squared notebook page drawn by hand in stop motion: wobbly outlines, pieces coloured in felt pen, pencil or chalk, eraser ghosts | The page is redrawn a few times a second; what changed is erased (a ghost stays, fading) and redrawn; a break is drawn slowly in pencil outlines (the pieces still solidly coloured in), a drop is a frantic hand with doodles and travelling drawings in the margins; clears are rubbed out | ✅ |
+| 25 | FLUO | Fluorescent paint splashed on a dark textured wall; flashy fluo pieces | Every cleared block splashes its paint on the wall and the paint stays for the whole song; a drop turns the lights off and a blacklight on, the stains glowing | ✅ |
+| 26 | CITY | A tall modern tower in a dark 3D night city, seen straight on through a shift lens, its 10 × 20 windows the board (real rooms behind glass, furnished per floor and per window); towers on a street grid far below, haze, beacons, a crane, traffic | Lit rooms are the blocks, told apart by their light's color; mid wakes the city, a chorus lights the crowns and volumetric searchlights, a drop switches the towers' windows into patterns and level meters; cleared floors go dark | ✅ |
+| 27 | MAGNETS | Magnets on paper, iron filings tracing their real field | The filings turn and gather around the poles and keep the stack's memory; the music taps the paper; a drop turns every polarity over (every filing spins at once) | disabled |
+| 28 | ANTS | Sugar-cube pieces, two ant nests at the sides, a pheromone colony | Ants nibble the cubes and wear trails to them; clears burst cubes into grains the ants fetch; a drop pours out faster ants and candy colours | ✅ |
+| 29 | RECYCLE | A table seen from above: heaps of loose cubes beside the well, the pieces made of the same cubes | A new piece takes its cubes from the heaps, a cleared row flies back to them; the chorus tidies the heaps on the beat; a drop throws them up into colored formations (rows, rings, towers) that hop with the kicks | ✅ |
+| 30 | SUNPRINT | A cyanotype photogram: sun-sensitive paper exposed under the stack, which casts the shadows | The paper darkens where the stack does not cover it, so the sheet records the stack's history as blues; phases move the sun; the drop rinses the print and it develops deep Prussian blue; clears leave pale ghosts of the rows |  |
+| 31 | LANTERNS | Paper lanterns floating on a dark lake, the pieces lit from inside | Each clear releases its lanterns, which drift and stay lit for the whole song; beats ripple the reflections; the drop lifts every lantern into the sky |  |
+| 32 | ORIGAMI | Folded paper pieces with crease shading, soft paper light | Pieces unfold on lock; cleared rows fold into paper cranes that settle around the well and stay; the drop sets every crane flying |  |
+| 33 | RAINY WINDOW | Droplets on a window, a blurred city behind (bokeh) | Drops run down the glass and around the stack on the beats; the peak is a downpour; the city's lights pulse with the bass; clears are wiped by a running sheet of water |  |
+| 34 | EMBROIDERY | Cross-stitch on linen in a hoop, thread sheen | Locks are stitched in; a design is stitched in the margins over the song; beats tug the threads; clears are unpicked |  |
+| 35 | SONAR | A dark sea where shapes surface from the black, no sweeping beam | Shapes glow up from the dark on beats; the peak reveals a sunken city; cleared cells sink into the dark |  |
+| 36 | MICROSCOPE | A Petri dish under a microscope, empty at the start of the song | Each cleared row releases microorganisms (paramecia, amoebas, diatoms) that swim around the dish for the rest of the song, so the dish fills with life as you play; beats pulse their cilia; the drop changes the stain |  |
+| 37 | MARBLING | Suminagashi / ebru: inks floating on a water bath, the pieces dropped into it as pigment | The stack combs the floating inks into veins that drift and keep the whole song; beats drop new rings of ink; the drop lays a sheet of paper on the bath and pulls the print (a fresh bath, the print kept in the margin); clears dissolve into the swirls |  |
+| 38 | ZEN GARDEN | Raked sand seen from above, the stack as stones, a little moss | Rake lines flow around the stack and keep its memory as it grows; beats ripple them from the stones; the drop rakes the whole garden into a new pattern; cleared blocks sink into the sand and leave their imprint |  |
+| 39 | SAND ART | Layers of colored sand in a glass frame, the pieces poured sand | Locks settle and slump a little; a cleared row pours down into the frame's bottom as one clean stripe dyed by the part of the song (not the mixed colors of its pieces), so the layers record the song's structure; the drop turns the frame over and the sand flows |  |
+| 40 | STAINED GLASS | A cathedral window: lead between cells, colored light falling on a stone floor | The sun moves behind the window through the phases and the floor shows its colors; beats glint the glass; the drop is the sun striking full through it; clears crack and fall as shards |  |
+| 41 | OP ART | Black and white Bridget Riley stripes and moirés, calm and never flickering | The stripe field bends around the stack; beats ripple it gently; the peak makes the whole field undulate |  |
+| 42 | FROST | Frost ferns growing on a dark window pane | Frost crystals grow out of the stack across the glass for the whole song; the highs sparkle on their edges; the drop is a breath that fogs and refreezes the pane; clears melt clear |  |
+| 43 | MOSAIC | Roman tesserae, grout lines, slight irregularity | A picture reveals itself in the margins tile by tile as lines are cleared; the drop shines its gold tesserae |  |
+| 44 | UKIYO-E | Colored woodblock print, Prussian blue, wood grain in the inks | A great wave grows with the energy and breaks on the drop; clears are wiped by foam |  |
+| 45 | LIGHT PAINTING | A long-exposure photograph in the dark: the falling piece is a light that paints its own trail | Trails build up on the exposure over a bar and fade; the stack is what the shutter kept; the drop opens a new exposure in another color; clears burn out as streaks |  |
+| 46 | PATINA | Copper and bronze pieces that oxidize over the song into verdigris | Each piece greens with age, so the stack shows its own history; beats bead the condensation; the drop polishes the stack bright again; clears expose raw metal before they fall |  |
+| 47 | TYPEWRITER | Typed paper, ribbon ink, the carriage | Pieces are typed glyphs; the carriage returns on bars; clears are crossed out with x's; the drop switches the ribbon to red |  |
+| 48 | SHORELINE | A beach from above: waves washing the sand, foam | Waves come in on bars and wear the sand around the stack; the drop is a big wave; clears are washed off by the foam |  |
+| 49 | TRANSIT MAP | A Vignelli subway map: colored lines and stations | Lines route between the pieces as the stack grows; trains (dots) run with the beat; the drop opens a new line across the map |  |
+| 50 | STAR CHART | An antique engraved celestial map, gold on navy | Constellations are drawn through the stack's corners on bars; the drop animates the zodiac figures |  |
+| 51 | MIRAGE | Desert dunes, heat haze, a white sun | Wind piles sand around the stack into dunes; the haze shimmers with the highs; the drop raises a sandstorm; clears blow away as sand |  |
+| 52 | SOAP BUBBLES | Thin-film iridescence on a soft backdrop | The films thin and change color as they age; bubbles drift and pop on beats; clears burst into droplets |  |
+| 53 | X-RAY | A radiograph: the glowing bones of the blocks on dark blue | Beats pulse like a heart monitor; the drop takes a new exposure; clears fade out like an exposure |  |
+| 54 | SHADOW PLAY | Silhouettes behind a backlit paper screen, warm lamp | Puppets dance on the beat; the lamp flickers; peak brings more puppets |  |
+| 55 | SWISS POSTER | International typographic style: huge words from the song title, strict grid | Words recompose on bars; beats shift the grid; peak sets the title giant |  |
+| 56 | LIMBO | Monochrome silhouettes in fog | Fog thickens and opens with the phases; distant shapes move on beats |  |
+| 57 | BAUHAUS | Flat primaries, circles, triangles and squares in a strict composition | The composition recomposes on each bar; peak rotates the big forms; clears slide out as flat shapes |  |
+| 58 | BRUTALIST | Raw concrete, hard sunlight, deep geometric shadows | Shadows move with the sun across the phases; beats are dust in the light shafts |  |
+| 59 | KANDINSKY | Abstract musical painting: one shape family per instrument band | Bass, mids and highs paint circles, lines and dots; peak fills the canvas |  |
+| 60 | CRYSTAL CAVE | Geodes, refracting crystals, dripping water | Crystals ring and glow with the highs; peak lights the whole cave |  |
+| 61 | GLOWING FOREST | Night forest of bioluminescent mushrooms and plants | Plants pulse with the bass; peak = a wave of light across the forest |  |
+| 62 | ORBIT | A space station window, Earth slowly turning below | Calm = night side and city lights; peak = sunrise over the limb; clears float away weightless |  |
+| 63 | NOIR | High-contrast black and white, venetian blind shadows, rain and smoke | The blinds' shadows sway on beats; peak = lightning; clears dissolve into smoke |  |
+| 64 | MANGA | Black and white screentones, ink speed lines | Drops add dramatic focus lines; cleared cells crumble into screentone dots |  |
+| 65 | BLACK-FIGURE | Ancient Greek vase painting, terracotta and black | Figures run around the vase at tempo; clears crack the pottery |  |
+| 66 | GIRIH | Islamic geometric star patterns, tiles unfolding | The pattern unfolds from the center with the energy; peak = full star field |  |
+| 67 | AZULEJO | Blue and white glazed tiles, cracks, glaze sheen | Tile patterns rotate on bars; peak adds a figurative panel |  |
+| 68 | CHALKBOARD | Chalk on slate, smudges, dusty light | Equations and diagrams scribbled to the beat; clears erased by a sponge leaving wet streaks |  |
+| 69 | CIRCUIT | PCB green, copper traces, chips | Signals run along the traces on beats; peak lights the whole board; clears blow fuses |  |
+| 70 | MOEBIUS | Clean-line French comic, flat colors, desert planets and giant birds | Calm = still vistas, peak = flying creatures crossing; clears are inked away |  |
+| 71 | IMPRESSIONIST | Monet-like visible brush strokes, water lilies, dappled light | The brush strokes shimmer with the highs; phases move the light across the pond |  |
+| 72 | CAMPFIRE | Night forest clearing, fire light on trees, sparks | The fire breathes with the bass; sparks rise on kicks; peak = a big blaze, clears turn to embers |  |
+| 73 | FIREWORKS | Harbor at night, reflections | Fireworks launch on kicks; peak = the finale |  |
+| 74 | AUTUMN PARK | Falling leaves, low warm sun, puddles | Leaves fall with the beat; gusts on drops; clears are swept up as leaves |  |
+| 75 | ART DECO | Gold lines on black lacquer, fans and sunbursts, strict symmetry | Gold sunburst rays open with energy; beats glint the gold; clears slide away as gold leaf |  |
+| 76 | KILIM | Woven rug geometry, natural dyes | Patterns are woven row by row; beats shift the weave |  |
+| 77 | HERBARIUM | Scientific botanical plates, labels, pressed flowers | Specimens are drawn and labelled as the song advances |  |
+| 78 | MANUSCRIPT | Medieval vellum, gold leaf, illuminated drop caps | Ornaments are drawn with the song's progress; gold catches the light on beats |  |
+| 79 | FELT | Stop-motion felt and wool, stitches, 12 fps motion | Everything boils slightly; beats squash the felt; clears are cut out with scissors |  |
+| 80 | CARDBOARD | Cardboard cut-outs, tape, craft knife edges | The set pieces wobble on their stands with the beat; peak adds more layers of cardboard scenery |  |
+| 81 | KNIT | Wool knit stitches, yarn texture, warm light | Rows are knitted in; clears unravel into loose yarn |  |
+| 82 | TERRARIUM | A glass jar ecosystem, moss, condensation | Fog and condensation follow the phases; a beetle wanders; peak = fireflies |  |
+| 83 | ORRERY | A brass planetarium machine, planets on arms | Planets orbit at tempo fractions; peak opens the whole machine |  |
+| 84 | SNOW GLOBE | The board inside a snow globe on a shelf | Drops shake the globe; snow settles in calm parts |  |
+| 85 | GREENHOUSE | Victorian glasshouse, plants, warm humid light | Plants grow and unfold with the song's progress; peak opens flowers; rain on the glass in calm parts |  |
+| 86 | MUSIC BOX | A wooden music box, brass comb, rotating pinned cylinder | The cylinder turns at the tempo; locks pluck the comb; the dancer spins at peak |  |
+| 87 | TOMB | Hieroglyph wall, gold and lapis, torchlight | Torches flicker on beats; peak reveals gold hieroglyphs |  |
+| 88 | VOXEL VALLEY | Voxel landscape with rivers and trees | Seasons follow the phases (spring → summer → autumn); the voxel water ripples on kicks |  |
+| 89 | CORAL REEF | Sunny shallows, caustics, colorful reef | Fish schools follow the melody; kicks pulse the caustics; clears burst into bubbles |  |
+| 90 | ANIME SKY | Makoto Shinkai skies, painted clouds, lens flares | Clouds race with energy; peak = golden hour; Tetris = a meteor across the sky |  |
+| 91 | MEMPHIS | 80s Memphis design: squiggles, terrazzo, pastels with black outlines | Squiggles bounce on beats; peak spawns more shapes and pattern swaps |  |
+| 92 | ART NOUVEAU | Mucha arabesques, organic frames, floral ornaments | Vines grow around the board with the song; peak blooms the ornaments |  |
+| 93 | JAZZ CLUB | Velvet, brass, a smoky single spotlight | The spotlight breathes with the music; peak opens the stage lights |  |
+| 94 | TRAIN WINDOW | Landscape rushing past a train window | The landscape's speed follows the tempo; tunnels on drops; calm = countryside at dusk |  |
+| 95 | SUPER 8 | Faded home movie, warm light leaks, gate weave | Light leaks flare on kicks; peak = sunny summer footage |  |
+| 96 | HOLOGRAM | Sci-fi holographic UI, cyan scanlines, depth layers | Hologram jitter on kicks; peak opens extra panels around the board |  |
+| 97 | WET NEON STREET | Rainy Tokyo alley at night, reflections on wet asphalt, signs | Signs flicker on beats, rain thickens with energy, a train passes on drops |  |
+| 98 | NIGHT DRIVE | Highway at night, headlights, lane markers | Lane markers flash past on beats; peak = city lights and tunnels |  |
+| 99 | LO-FI ROOM | Cozy bedroom at night, desk lamp, the city through the window | The cat's tail and the plant sway on the beat; peak lights the city; slow motion = a sleepy, blurred room |  |
+| 100 | DATAMOSH | Compression artifacts, pixel sorting, glitch blocks | Glitches only on strong hits; drops pixel-sort the screen; clears datamosh away |  |
+| 101 | SILENT FILM | Sepia, grain, scratches, iris transitions | Frame rate stutters gently with the tempo; phase changes are iris wipes and intertitles |  |
+| 102 | COMIC | Ben-Day dots, panels, speed lines | Clears shout onomatopoeias (POW, BAM); peak splits the screen into panels |  |
+| 103 | VAPORWAVE | Marble busts, 90s desktop windows, pink and teal | Windows pop up on bars; peak = slowed, chorused visuals with a sunset |  |
+| 104 | Y2K CHROME | Liquid chrome, iridescent bubbles, blobby type | Chrome blobs melt and reform on beats; peak = full liquid metal |  |
+| 105 | DISCO | Mirror ball, light dots, a lit dance floor | Floor tiles light up on beats; the mirror ball speeds up at peak |  |
+| 106 | TOY ROOM | Plastic bricks with studs, a child's room floor, tilt-shift | Bricks click into place on locks; peak brings toy trains and spinning tops; clears scatter bricks |  |
+| 107 | CANDY SHOP | Glossy candy and gummy pieces, sugar crystals, pastel kitchen | Pieces wobble like jelly on beats; clears burst into sprinkles |  |
+| 108 | CLOCKWORK | Brass gears and springs, steampunk | Gears tick on beats; peak spins the mechanism; clears pop springs |  |
+| 109 | BAROQUE CEILING | Trompe-l'œil fresco sky, clouds and gilded frames | The painted sky opens with energy; light rays at peak |  |
+| 110 | PUPPET THEATER | A small stage, velvet curtains, spotlights | Phases are acts; spotlights follow the active piece; Tetris gets a curtain call |  |
+| 111 | PINBALL | A pinball playfield, bumpers, lights, chrome | Bumpers flash on beats; Tetris = multiball and jackpot lights |  |
+| 112 | ARCADE CABINET | The game seen inside a cabinet in a dark arcade, bezel art, CRT glare | Neighboring cabinets light up with the music; peak = the arcade's neon wakes up |  |
+| 113 | TERMINAL | Text mode: everything is characters on an 80×25 grid, ANSI colors | Characters cascade on beats; peak floods the screen with scrolling logs; clears are typed away |  |
+| 114 | POCKET LCD | 4-shade green handheld LCD, visible pixel grid, ghosting | Peak uses the screen's full contrast and LCD smearing; the bonus fades the screen as if the batteries were low |  |
+| 115 | DE STIJL | A Mondrian grid: the stack itself is the composition | New grid lines are drawn on bars; the drop reorganizes the color blocks |  |
