@@ -35,6 +35,26 @@ float fbm(vec2 p) {
     for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = p * 2.03 + 17.1; a *= 0.5; }
     return s;
 }
+vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+// Terrazzo: small irregular stone chips set in the surface (sparse, muted), at one scale (chips per board unit).
+vec3 chips(vec2 p, vec3 c, float scale, float rmax, float px, float amt) {
+    vec2 g = p * scale, i = floor(g);
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 cell = i + vec2(x, y);
+            vec2 h = hash2(cell), h2 = hash2(cell + 41.7);
+            if (h2.x > 0.38) continue;
+            vec2 q = g - cell - h;
+            float r = rmax * (0.35 + 0.65 * h2.y * h2.y);
+            float a = atan(q.y, q.x);
+            float d = length(q) * (1.0 + 0.12 * sin(a * 3.0 + h.x * 6.28) + 0.06 * sin(a * 5.0 + h.y * 6.28));
+            float m = 1.0 - smoothstep(r - px * scale, r + px * scale, d);
+            float k = fract(h.x * 7.13 + h.y * 3.71);
+            vec3 stone = k < 0.3 ? vec3(0.42, 0.20, 0.13) : k < 0.55 ? vec3(0.25, 0.29, 0.22) : k < 0.8 ? vec3(0.13, 0.12, 0.11) : vec3(0.92, 0.90, 0.87);
+            c = mix(c, stone, m * amt);
+        }
+    return c;
+}
 // Signed distance to a rectangle.
 float boxSd(vec2 p, vec2 h) { vec2 q = abs(p) - h; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
 
@@ -44,7 +64,16 @@ void main() {
     // a broad, still light from the upper left (never moving)
     c *= 1.0 + uLamp * (0.5 - length((p - vec2(-14.0, 16.0)) / vec2(62.0, 44.0)));
     // concrete's mottling / the fine tooth of the surface
-    c *= 1.0 + uMottle * ((fbm(p * 0.55) - 0.5) * 0.9 + (fbm(p * 3.1 + 5.0) - 0.5) * 0.5);
+    float px0 = 2.0 * uView.w / uRes.y;
+    if (uMottle > 0.0) {
+        // terrazzo: a soft tonal drift and sparse chips of stone, quieter in the tray (the stack stays clean)
+        // (quiet in the middle band too: the tray and the HUD's columns stay clean)
+        float mid = 1.0 - smoothstep(11.0, 12.5, abs(p.x));
+        c *= 1.0 + 0.06 * uMottle * (fbm(p * 0.3) - 0.5);
+        float amt = uMottle * mix(1.0, 0.3, mid);
+        c = chips(p, c, 1.3, 0.13, px0, 0.38 * amt);
+        c = chips(p + 13.1, c, 3.6, 0.11, px0, 0.3 * amt);
+    }
     // the tray: a shallow recess the well's cubes rest in; its upper-left walls shade the floor
     float sd = boxSd(p, vec2(5.12, 10.12));
     float px = 2.0 * uView.w / uRes.y;

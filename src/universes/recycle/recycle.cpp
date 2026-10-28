@@ -63,20 +63,20 @@ struct VariantDef {
 };
 const VariantDef VARIANTS[] = {
     // White porcelain: matte white cubes on a cool white table, pastel pieces; color only where the play is.
-    {"PORCELAIN", 0xedeef0, 0xe2e4e7, 0x8d939c, 0x2a2e35, 0x3f7fe0, 0xe6e7e9,
+    {"PORCELAIN", 0xedeef0, 0xe2e4e7, 0xa7aeb9, 0x2a2e35, 0x3f7fe0, 0xe6e7e9,
      {0x4fb0cb, 0xf0bd45, 0x9f83d6, 0x6dbd84, 0xec7a6c, 0x5a82dc, 0xf19a50},
      {0xff4f6d, 0x14b8a6, 0xffb000, 0x7c5cff, 0x2f9bff, 0xff7a3d, 0x2ec27e},
-     0.62f, 0.f, 0.022f, 0.10f, 0.55f, 0.f, 0.f, 0.f, 0.f, 0.10f, 1.f},
+     0.46f, 0.f, 0.022f, 0.10f, 0.45f, 0.f, 0.f, 0.f, 0.f, 0.10f, 1.f},
     // Onyx: glossy graphite cubes on a black table, jewel pieces.
     {"ONYX", 0x111214, 0x0b0c0d, 0x202020, 0xd9dde3, 0xffd166, 0x2b2d32,
      {0x2ec4d6, 0xffd166, 0xb58cff, 0x52d996, 0xff6b81, 0x5b8cff, 0xff9f4a},
      {0xff3d7f, 0x00e0c6, 0xffe14d, 0x8f6bff, 0x3db4ff, 0xff8a3d, 0x9dff6b},
      0.75f, 0.f, 0.03f, 0.35f, 0.7f, 1.f, 1.f, 0.f, 0.f, 0.16f, 1.2f},
-    // Concrete: maple blocks on a concrete slab, painted pieces like a wooden toy's.
-    {"CONCRETE", 0xa9a8a4, 0x9d9c98, 0x5a5b60, 0x232427, 0xd9822b, 0xcfae80,
+    // Terrazzo: honey-oak blocks on a pale warm terrazzo floor under a window's light, painted pieces like a wooden toy's.
+    {"TERRAZZO", 0xddd8d1, 0xd3cec6, 0x9c9186, 0x2a2724, 0xc4552f, 0xb98f68,
      {0x3d8fb3, 0xe5b53e, 0x8b5aa1, 0x5c9c5a, 0xcc553f, 0x2f4f8f, 0xdc7f2d},
      {0xf25c54, 0x1fb5a4, 0xf7b538, 0x6c63ff, 0x3a86ff, 0xff6fa3, 0x8ac926},
-     0.6f, 0.07f, 0.04f, 0.12f, 0.6f, 0.f, 0.f, 1.f, 0.45f, 0.05f, 1.f},
+     0.5f, 1.f, 0.025f, 0.22f, 0.5f, 0.f, 0.f, 1.f, 0.45f, 0.06f, 1.f},
     // Night: slate-blue cubes on a navy table under a soft lamp, pastel pieces.
     {"NIGHT", 0x151b29, 0x10151f, 0x0a0d14, 0xc9d2e4, 0x9fb4f5, 0x3a4560,
      {0x8fd6ea, 0xf6da8c, 0xc9a9f2, 0xa6e2a0, 0xf4a3ab, 0xa2b6f7, 0xf7bf8e},
@@ -331,15 +331,16 @@ void RecycleUniverse::buildForm(Form f, std::vector<Pile>& out) {
                         Slot sl;
                         sl.home = pos(0.5f + i * (W - 1.f) / (n - 1), v, L * CUBE);
                         sl.rot = 0.f;
-                        sl.key = L * 100.f + i;
+                        sl.key = i + L * 0.5f; // two courses as it goes: shorter rows, more air
                         p.slots.push_back(sl);
                     }
+                std::sort(p.slots.begin(), p.slots.end(), [](const Slot& a, const Slot& b2) { return a.key < b2.key; });
                 p.weight = 1.f;
                 out.push_back(std::move(p));
             }
         } else {
             // concentric rectangles drawn with cubes, a gap between the rings, each ring its own color; they fill
-            // from the middle outward, then a second course on the inner ones
+            // from the middle outward, each ring two courses high before the next
             Pile p;
             p.side = side;
             p.colorIdx = -2;
@@ -381,8 +382,8 @@ void RecycleUniverse::buildForm(Form f, std::vector<Pile>& out) {
                     p.slots.push_back(sl);
                 }
             };
-            for (int k = 0; k <= K; k++) ring(k, 0, k * 100.f);
-            for (int k = 0; k < K; k++) ring(k, 1, (K + 1 + k) * 100.f);
+            for (int k = 0; k <= K; k++) ring(k, 0, k * 200.f);
+            for (int k = 0; k < K; k++) ring(k, 1, k * 200.f + 100.f); // each inner ring doubled before the next one
             std::sort(p.slots.begin(), p.slots.end(), [](const Slot& a, const Slot& b2) { return a.key < b2.key; });
             p.weight = 1.f;
             out.push_back(std::move(p));
@@ -1016,7 +1017,9 @@ void RecycleUniverse::addCube(const vec3& p, float rot, const vec3& col, float a
 
 void RecycleUniverse::flushCubes() {
     std::stable_sort(drawn_.begin(), drawn_.end(), [](const Drawn& a, const Drawn& b) { return a.p.z < b.p.z; });
-    const float len = 0.62f * (1.f + 1.7f * slow_);
+    // light tables get short, diffuse shadows and a delicate contact shade (airy); dark ones longer, crisper ones
+    const float dk = saturate(pal_.dark);
+    const float len = lerpf(0.36f, 0.62f, dk) * (1.f + 1.7f * slow_);
     const vec2 sd = {-LIGHT.x * len, -LIGHT.y * len};
     for (const Drawn& d : drawn_) {
         // the long-lens parallax: higher cubes a little larger and further from the middle
@@ -1027,15 +1030,23 @@ void RecycleUniverse::flushCubes() {
         // its shadow on the table
         {
             const float h = z + CUBE * 0.5f;
+            const float blur = lerpf(0.17f + 0.16f * z, 0.07f + 0.09f * z, dk);
             Inst s{{d.p.x + sd.x * h, d.p.y + sd.y * h, d.half + 0.03f + 0.02f * z, d.rot},
-                   {0.f, d.alpha * 0.75f / (1.f + 0.18f * z), 0.f, 0.f}, {-1.f, z, 0.f, 0.f}, {0.f, 0.f, 0.07f + 0.09f * z, 0.f}};
+                   {0.f, d.alpha * lerpf(0.42f, 0.75f, dk) / (1.f + 0.25f * z), 0.f, 0.f}, {-1.f, z, 0.f, 0.f}, {0.f, 0.f, blur, 0.f}};
             shadows_.push_back(s);
+            // the contact shade right around a cube resting on the table
+            const float ao = d.alpha * 0.6f * (1.f - smoothstepf(0.05f, 0.6f, z)) * (1.f - dk);
+            if (ao > 0.01f) {
+                Inst a{{d.p.x + sd.x * 0.1f, d.p.y + sd.y * 0.1f, d.half + 0.05f, d.rot}, {0.f, ao, 0.f, 0.f}, {-1.f, 0.f, 0.f, 0.f},
+                       {0.f, 0.f, 0.09f, 0.f}};
+                shadows_.push_back(a);
+            }
         }
         // its soft shadow on the cubes under it
         if (z > 0.6f) {
             const float h = std::min(z, 1.8f) * 0.55f;
-            Inst s{{x + sd.x * h, y + sd.y * h, half * (1.f + 0.04f * h), d.rot}, {0.f, 0.f, 0.f, d.alpha * 0.5f * pal_.shadowAmt / (1.f + 0.2f * z)},
-                   {1.f, z, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}};
+            Inst s{{x + sd.x * h, y + sd.y * h, half * (1.f + 0.04f * h), d.rot},
+                   {0.f, 0.f, 0.f, d.alpha * lerpf(0.3f, 0.5f, dk) * pal_.shadowAmt / (1.f + 0.2f * z)}, {1.f, z, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}};
             cubes_.push_back(s);
         }
         Inst c{{x, y, half, d.rot}, {d.col.x, d.col.y, d.col.z, d.alpha}, {0.f, z, d.seed, 0.f}, {d.gloss, d.wood, d.squash, d.edge}};
