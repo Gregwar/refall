@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Twenty-three universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Twenty-four universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -63,7 +63,7 @@ song, and songs change universe with a transition on the beat. Twenty-three univ
 </tr>
 <tr>
 <td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
@@ -75,7 +75,6 @@ Disabled for now (not built; their code stays in the repository):
 | SYNTHWAVE | To be redesigned (minimal neon) |
 | CLOUDSCAPE | To be reworked (nights only) |
 | MAGNETS | Iron filings on paper; not convincing yet, waiting for a better idea |
-| ANTS | Sugar cubes and a pheromone colony; on hold |
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
@@ -136,5 +135,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;ants"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
