@@ -496,7 +496,8 @@ void LightsourceUniverse::onEvent(const GameEvent& ev, const Game& g) {
         pieceOn_ = 0.f;
         break;
     case GameEvent::Lock: {
-        syncBoard(g); // (the cleared rows are already gone from the board: only fills unknown cells)
+        // (no syncBoard here: the game has already compacted the board when a clear follows, while ids_ is only
+        // collapsed by the Clear event; syncing now would mismatch the two and split the pieces above the clear)
         const int id = nextId_++;
         if (nextId_ > 1000000) nextId_ = 1;
         int type = 0;
