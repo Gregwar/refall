@@ -13,55 +13,56 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Twenty-three universes so far:
+song, and songs change universe with a transition on the beat. Twenty-three universes so far, each with its status:
+✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/vector.jpg"><br><b>VECTOR</b>: phosphor beams on a dark CRT</td>
-<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/sumi.jpg"><br><b>SUMI</b>: ink on washi paper</td>
+<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/vector.jpg"><br><b>VECTOR</b>: phosphor beams on a dark CRT<br><sub>✅ <i>ok</i></sub></td>
+<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/sumi.jpg"><br><b>SUMI</b>: ink on washi paper<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/diorama.jpg"><br><b>DIORAMA</b>: a sunlit clay island</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/abyss.jpg"><br><b>ABYSS</b>: the deep sea, lit by living things</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/diorama.jpg"><br><b>DIORAMA</b>: a sunlit clay island<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/abyss.jpg"><br><b>ABYSS</b>: the deep sea, lit by living things<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/smoke.jpg"><br><b>SMOKE</b>: a dark stage, slow smoke and one hard spotlight</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/watercolor.jpg"><br><b>WATERCOLOR</b>: transparent washes on cold-press paper</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/smoke.jpg"><br><b>SMOKE</b>: a dark stage, slow smoke and one hard spotlight<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/watercolor.jpg"><br><b>WATERCOLOR</b>: transparent washes on cold-press paper<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/polar.jpg"><br><b>POLAR NIGHT</b>: a snowfield under the aurora</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/risograph.jpg"><br><b>RISOGRAPH</b>: a two-ink risograph print</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/polar.jpg"><br><b>POLAR NIGHT</b>: a snowfield under the aurora<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/risograph.jpg"><br><b>RISOGRAPH</b>: a two-ink risograph print<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/049bab4ddf4aea7d90c768546e006132082e7ead/docs/universes/white_room.jpg"><br><b>WHITE ROOM</b>: a seamless white studio, matte blocks and soft shadows</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/kintsugi.jpg"><br><b>KINTSUGI</b>: dark polished stone, ceramic mended with gold</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/049bab4ddf4aea7d90c768546e006132082e7ead/docs/universes/white_room.jpg"><br><b>WHITE ROOM</b>: a seamless white studio, matte blocks and soft shadows<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/kintsugi.jpg"><br><b>KINTSUGI</b>: dark polished stone, ceramic mended with gold<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/laser.jpg"><br><b>LASER SHOW</b>: every piece projected by its own laser</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/210013d9eb38de1166e8753be86cea34904be746/docs/universes/garden.jpg"><br><b>GARDEN</b>: tiles of earth growing pixel grass and flowers</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/laser.jpg"><br><b>LASER SHOW</b>: every piece projected by its own laser<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/210013d9eb38de1166e8753be86cea34904be746/docs/universes/garden.jpg"><br><b>GARDEN</b>: tiles of earth growing pixel grass and flowers<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/biome.jpg"><br><b>BIOME</b>: glass cubes of water or seeds bringing a 3D world to life: a sea rising over dry sand, or a jungle growing on parched clay</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/fluo.jpg"><br><b>FLUO</b>: fluorescent paint splashed on a dark wall, glowing under a blacklight on drops</td>
+<td><img src="docs/universes/biome.jpg"><br><b>BIOME</b>: glass cubes of water or seeds bringing a 3D world to life: a sea rising over dry sand, or a jungle growing on parched clay<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/fluo.jpg"><br><b>FLUO</b>: fluorescent paint splashed on a dark wall, glowing under a blacklight on drops<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/marbles.jpg"><br><b>MARBLES</b>: glass marbles in square tiles, shot out across a dark table where they collide and stain the felt</td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/412230bfad663a226675f239505670847baf2334/docs/universes/prism.jpg"><br><b>PRISM</b>: glass cubes in the dark, slow beams of light, a rainbow on the drop</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/marbles.jpg"><br><b>MARBLES</b>: glass marbles in square tiles, shot out across a dark table where they collide and stain the felt<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/412230bfad663a226675f239505670847baf2334/docs/universes/prism.jpg"><br><b>PRISM</b>: glass cubes in the dark, slow beams of light, a rainbow on the drop<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/cb76251de16f7e81e5f2641e610ecb2f19a82a2e/docs/universes/lightsource.jpg"><br><b>LIGHTSOURCE</b>: a dim room lit by the falling piece, the stack casting its shadows</td>
-<td><img src="docs/universes/notepad.jpg"><br><b>NOTEPAD</b>: a squared notebook drawn by hand in stop motion, erased and redrawn</td>
+<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/cb76251de16f7e81e5f2641e610ecb2f19a82a2e/docs/universes/lightsource.jpg"><br><b>LIGHTSOURCE</b>: a dim room lit by the falling piece, the stack casting its shadows<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/notepad.jpg"><br><b>NOTEPAD</b>: a squared notebook drawn by hand in stop motion, erased and redrawn<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower in a dark 3D night city, its lit rooms the blocks</td>
-<td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, a slowly shifting land; rivers in the rain, a flood and living peaks on the drop</td>
+<td><img src="docs/universes/city.jpg"><br><b>CITY</b>: a tower in a dark 3D night city, its lit rooms the blocks<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/topography.jpg"><br><b>TOPOGRAPHY</b>: a contour map whose terrain is the stack, a slowly shifting land; rivers in the rain, a flood and living peaks on the drop<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/heat.jpg"><br><b>HEAT</b>: a thermal camera; pieces land white hot and cool down, the heat conducts through the stack and rises, the drop flares into another colormap</td>
-<td><img src="docs/universes/blueprint.jpg"><br><b>BLUEPRINT</b>: a technical drawing of hatched, dimensioned parts; a machine drawn in the margins comes alive on the drop</td>
+<td><img src="docs/universes/heat.jpg"><br><b>HEAT</b>: a thermal camera; pieces land white hot and cool down, the heat conducts through the stack and rises, the drop flares into another colormap<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/blueprint.jpg"><br><b>BLUEPRINT</b>: a technical drawing of hatched, dimensioned parts; a machine drawn in the margins comes alive on the drop<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them</td>
+<td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
 <td></td>
 </tr>
 </table>
