@@ -65,6 +65,10 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 <td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/sunprint.jpg"><br><b>SUNPRINT</b>: a cyanotype exposed under glass plates in the sun, the paper recording where the stack lay; the drop develops the print<br><sub>🔍 <i>to review</i></sub></td>
+<td></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
