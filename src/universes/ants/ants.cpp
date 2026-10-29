@@ -95,8 +95,8 @@ const Variant VARIANTS[] = {
      0xf0d0c0, 0x6d4a52, 0.3f, 0.03f, 0.7f, 0.35f, 0.18f,
      {0x93e4f2, 0xffe08a, 0xc9a6ff, 0xa8f0b8, 0xffa0c4, 0x7fa4ff, 0xffbf86},
      {0x4ff4ff, 0xfff05c, 0xb27cff, 0x6dffa0, 0xff74b4, 0x5f8bff, 0xffa94d}},
-    // Pale ash, red ants, deep sugar.
-    {"ASH", true, 0xd5d7d8, 0xcdd0d2, 0xbcc0c3, 0x2c2d2f, 0xbfc2c5, 0x8e2414, 0x2a2c2f, 0x80858a, 0xb3321f,
+    // Pale ash, graphite ants, deep sugar.
+    {"ASH", true, 0xd5d7d8, 0xcdd0d2, 0xbcc0c3, 0x2c2d2f, 0xbfc2c5, 0x34302e, 0x2a2c2f, 0x80858a, 0xb3321f,
      0x7d8287, 0xbcc6d6, 0.34f, 0.03f, 0.75f, 0.22f, 0.2f,
      {0x1f7894, 0xd09a1c, 0x5d3c96, 0x2f8552, 0xb8333d, 0x2b4ea3, 0xcc5a20},
      {0x00a8cc, 0xffb300, 0x8a3df0, 0x00b45c, 0xf0263f, 0x1f4dff, 0xff6200}},
@@ -677,10 +677,16 @@ void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
             }
         }
         if (a.panic > 0.f) turn = a.w * 0.2f;
+        // left standing where it may not be (a clear lowered the stack's top under it), or boxed in with no free
+        // step for a while: it walks through, home
+        const bool trapped = a.stuck > 0.5f || blocked(a.p);
+        if (trapped) turn = clampf(wrapAngle(std::atan2(nest.y - a.p.y, nest.x - a.p.x) - a.a), -1.f, 1.f) * 6.f;
         a.a = wrapAngle(a.a + turn * dt);
         const float sp = a.speed * speedK * (a.panic > 0.f ? 1.6f + a.panic * 2.f : 1.f);
         vec2 np = a.p + dirOf(a.a) * (sp * dt);
-        if (blocked(np)) {
+        if (trapped) {
+            if (!blocked(np)) a.stuck = 0.f;
+        } else if (blocked(np)) {
             // feel along the obstacle: the closest free heading
             bool ok = false;
             const float sgn = rng_.chance(0.5f) ? 1.f : -1.f;
@@ -692,7 +698,8 @@ void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
                 }
                 if (ok) break;
             }
-            if (!ok) { a.a = wrapAngle(a.a + PI); np = a.p; }
+            if (!ok) { a.a = wrapAngle(a.a + PI); np = a.p; a.stuck += dt; }
+            else a.stuck = 0.f;
             a.w *= 0.3f;
         }
         const float moved = len(np - a.p);

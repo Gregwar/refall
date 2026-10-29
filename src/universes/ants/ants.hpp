@@ -57,6 +57,7 @@ private:
         float meetCd = 0;
         bool trail = false;       // a trail under its sensors
         float panic = 0;          // scattered by an impact
+        float stuck = 0;          // seconds without a free step
         float lustre = 0.1f;
     };
     struct Grain {
