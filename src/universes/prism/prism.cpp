@@ -18,8 +18,13 @@
 // bar; a chorus brings a third, low and raking, and the faintest fringes of color. A drop (the HUD's section, or
 // the song's drive) is a rainbow: on its downbeat the beams swell (one swell that settles) and turn white, and the
 // glass disperses them, each ray splitting into a spectrum that fans out of the cubes into rainbow bands across
-// the room and rainbow pools on the floor, for the whole drop; a glint every two beats. Nothing pulses with the
-// beat, the beams never move fast, the stack and the HUD never move.
+// the room and rainbow pools on the floor, for the whole drop; a glint every two beats. And the light rig moves:
+// each beam swings to a new pose on its own bar line (the second answers the first two beats later, the third
+// every other bar) in an eased move of under a second, so the paths through the glass re-route and the fans
+// sweep across the room; three thin beams snap in from the dark on the downbeat and swing like stage lights over
+// two bars (the two from above crossing like scissors, one raking up and down the stack); the kick widens the
+// spectra for an instant (the light's paths only). Nothing pulses the room with the beat, no move is jerky,
+// the stack and the HUD never move.
 //
 // A lock flashes a glint where the piece touched down (a hard drop a brighter one with a few sparks along the
 // contact); a cleared row's cubes vanish at once and the row becomes a short burst of light traced through the
@@ -110,6 +115,23 @@ const BeamDef BEAMS[3] = {
     {-0.52f, 0.14f, 1.0f, 4.0f, -6.5f, 1.4f, 97.f, 2.1f},  // from the upper right
     {1.10f, 0.10f, -1.5f, 2.0f, -7.0f, 1.2f, 61.f, 4.0f},  // low and raking, from the left (the peaks)
 };
+
+// The drop's rig: three thin beams that swing in from out of frame on the drop's downbeat, each from its pivot,
+// swinging to and fro like stage lights over two bars (at rest on the bar lines), the two from above in
+// counter-phase (they cross like scissors), the low one raking up and down the stack.
+struct RigDef { float px, py, theta0, amp, phase, width; };
+const RigDef RIG[3] = {
+    {-15.f, 15.f, 0.62f, 0.34f, 0.f, 0.7f},        // from the upper left
+    {15.f, 15.f, -0.62f, 0.34f, 3.14159f, 0.7f},   // from the upper right, answering it
+    {21.f, -5.f, -1.42f, 0.11f, 1.5708f, 0.6f},    // low and raking, from the right
+};
+constexpr int RIG_RAYS = 6;       // rays per rig beam
+// a drop's beam moves: an eased swing (zero speed at both ends, most of the way covered early: decisive, soft settle)
+float swingEase(float x) {
+    x = std::clamp(x, 0.f, 1.f);
+    const float a = 1.f - x;
+    return 1.f - a * a * a * (1.f + 3.f * x);
+}
 
 constexpr float FLOOR_Y = -10.06f;
 constexpr int RAYS = 11;          // rays per beam
@@ -1138,8 +1160,15 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         const float on[3] = {0.75f + 0.15f * lvm + 0.1f * lvp, 0.75f * lvm + 0.1f * lvp, 0.8f * lvp};
         for (int i = 0; i < 3; i++) beams_[i].on = approach(beams_[i].on, on[i], 1.2f, dt);
         const float dispT = 0.035f * chorus_ * lvp + 0.24f * rainbow_ + 0.2f * tet;
-        disp_ = approach(disp_, dispT, rainbow_ > 0.5f ? 4.f : 2.f, dt);
-        airK_ = 1.f - 0.75f * rainbow_;
+        dispBase_ = approach(dispBase_, dispT, rainbow_ > 0.5f ? 4.f : 2.f, dt);
+        // in a drop the kick makes the spectra breathe: the fans widen on the hit and close again (only the light's
+        // paths change, the room's brightness does not)
+        kickFan_ = std::max(kickFan_ * std::exp(-dt / 0.22f), std::max(kickIn_, music.kick));
+        disp_ = dispBase_ + 0.11f * kickFan_ * rainbow_;
+        airK_ = 1.f - 0.72f * rainbow_;
+        // the rig snaps in on the drop's downbeat and fades out slowly after it
+        const bool rigOn = rainbow_ > 0.f && inDrop_ && level_ >= 2;
+        rig_ = rigOn ? std::min(1.f, rig_ + dt / 0.15f) : std::max(0.f, rig_ - dt / 2.f);
     }
     buildGlass(game);
     if (game.hasPiece() && !game.over()) game.pieceCells(game.piece(), pieceCell_);
@@ -1149,13 +1178,42 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     glow_.clear();
     segs_ = 0;
     const float worldOn = (1.f - smoothstepf(0.f, 0.7f, bridge)) * (1.f - 0.4f * dimT_);
+    // A drop sets the light rig moving on the bar grid: each beam swings to a new pose on its own bar line (the
+    // second answers the first two beats later, the third on the off bars), an eased move over most of a second,
+    // so the paths through the glass re-route and the rainbow fans sweep across the room.
+    const double beatNow = music.hasSong ? music.beat : (double)time_ * 2.0;
+    const float secPerBeat = 60.f / std::clamp(music.hasSong ? music.bpm : 120.f, 60.f, 200.f);
+    const float moveDur = std::min(0.85f, 1.8f * secPerBeat);
+    const float drive = smoothstepf(0.f, 1.f, rainbow_);
+    auto beamPose = [&](int bi, float& dth, float& dx) {
+        dth = dx = 0.f;
+        if (drive <= 0.f) return;
+        static const float OFF[3] = {0.f, 2.f, 4.f}; // beats after the bar line (the third moves every other bar)
+        const float period = bi == 2 ? 8.f : 4.f;
+        const double rel = beatNow - OFF[bi];
+        const double k = std::floor(rel / period);
+        const float e = swingEase((float)(rel - k * period) * secPerBeat / moveDur);
+        auto target = [&](double kk, float& th, float& x) {
+            const float kf = (float)std::fmod(kk, 977.0);
+            const float side = (((long long)kk + bi) & 1) ? 1.f : -1.f; // alternately to either side of the well
+            x = side * (1.2f + 2.8f * hashf(kf * 3.17f + bi * 11.1f));
+            th = (hashf(kf * 5.31f + bi * 7.7f + 0.5f) - 0.5f) * (bi == 2 ? 0.22f : 0.5f) - side * 0.12f;
+        };
+        float th0, x0, th1, x1;
+        target(k - 1.0, th0, x0);
+        target(k, th1, x1);
+        dth = drive * lerpf(th0, th1, e);
+        dx = drive * lerpf(x0, x1, e);
+    };
     for (int bi = 0; bi < 3; bi++) {
         const BeamDef& B = BEAMS[bi];
         const float on = beams_[bi].on * worldOn * (1.f + 0.25f * swell + 0.15f * tet);
         if (on < 0.01f) continue;
         const float w = TAU / B.period;
-        const float th = B.theta0 + B.thetaAmp * std::sin(world_ * w * 0.73f + B.phase * 1.7f);
-        const float ax = B.xC + B.xAmp * std::sin(world_ * w + B.phase);
+        float dth, dx;
+        beamPose(bi, dth, dx);
+        const float th = B.theta0 + B.thetaAmp * std::sin(world_ * w * 0.73f + B.phase * 1.7f) * (1.f - drive) + dth;
+        const float ax = lerpf(B.xC + B.xAmp * std::sin(world_ * w + B.phase), 0.f, drive) + dx;
         const vec2 d = v2(std::sin(th), -std::cos(th));
         const vec2 aim = v2(ax, B.yAim);
         const vec2 perp = v2(-d.y, d.x);
@@ -1177,6 +1235,34 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             r.n = N_GLASS;
             r.split = false;
             trace(r);
+        }
+    }
+    // the drop's rig: three thin white beams snapping in from the dark on the downbeat (a little stronger at
+    // first), swinging like stage lights on the two-bar grid, dispersed by the glass like the others
+    if (rig_ > 0.01f) {
+        const float entry = 1.f + 0.6f * std::exp(-dropT_ / 1.2f) * (inDrop_ ? 1.f : 0.f);
+        for (int ri = 0; ri < 3; ri++) {
+            const RigDef& R = RIG[ri];
+            const float on = rig_ * worldOn * 0.5f * entry;
+            const float th = R.theta0 + R.amp * std::cos((float)(beatNow * (PI / 4.0)) + R.phase);
+            const vec2 d = v2(std::sin(th), -std::cos(th));
+            const vec2 perp = v2(-d.y, d.x);
+            const vec3 col = lerp(light_a_, vec3(1.f, 0.97f, 0.93f), 0.75f);
+            for (int k = 0; k < RIG_RAYS; k++) {
+                const float u = 2.f * k / (RIG_RAYS - 1) - 1.f;
+                Ray r;
+                r.o = add(v2(R.px, R.py), mul(perp, u * R.width * 0.5f));
+                r.d = d;
+                r.c = col * (on * std::exp(-u * u * 1.6f));
+                r.w = R.width / RIG_RAYS * 1.5f;
+                r.dw = 0.f;
+                r.depth = 0;
+                r.box = -1;
+                r.bounces = 0;
+                r.n = N_GLASS;
+                r.split = false;
+                trace(r);
+            }
         }
     }
     // the cleared rows' bursts of light, through the same glass

@@ -53,6 +53,9 @@ private:
     vec2 litDir_[SLOTS];
     float airK_ = 1.f;        // how bright a white shaft is in the haze (dimmer on a drop: the colors lead)
     float disp_ = 0.f;        // dispersion (0: white light through the glass .. a full spectrum fanning out)
+    float dispBase_ = 0.f;    // the dispersion before the kick's breath
+    float kickFan_ = 0.f;     // the kick's envelope, widening the spectra in a drop
+    float rig_ = 0.f;         // the drop's rig of thin beams (0 .. 1)
     vec3 tintOf(int type) const { return tint_[type < 0 ? 0 : type > 6 ? 6 : type]; }
 
     struct Beam { float on = 0.f; };
