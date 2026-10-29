@@ -1549,7 +1549,8 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     ss.clear();
     if (pieceDim_.alive && overT_ < 0.f) {
         const Dim& d = pieceDim_;
-        const float a = (1.f - smoothstepf(3.0f, 4.0f, d.t + d.life)) * world;
+        // half the ink of the other dimensions: it lies inside the well
+        const float a = 0.5f * (1.f - smoothstepf(3.0f, 4.0f, d.t + d.life)) * world;
         const float y = d.y + 0.72f;
         dimH(d.x0, d.x1, y, d.y, d.y, saturate(d.t / 0.4f), a, R_DIM, ss);
         if (d.t > 0.25f) labels_.push_back({std::to_string(d.value), V((d.x0 + d.x1) * 0.5f, y + 0.5f), 0.46f * pxPerUnit_, a * saturate((d.t - 0.25f) / 0.2f), R_DIM, false, true});
