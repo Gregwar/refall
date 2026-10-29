@@ -1,23 +1,22 @@
 // SUNPRINT: a cyanotype photogram exposed under the stack.
 //
 // One world: a sheet of paper brushed with sensitizer, lying in the sun, the pieces glass plates laid on it. The
-// paper darkens wherever the light reaches it, so the sheet records the stack's history: where the plates lay
-// long, the paper stays pale, and a cleared row leaves its pale ghost on the print that the sun slowly fills in.
-// The plates cast soft shadows that keep the glass's color; the falling plate, held above the sheet, casts a longer,
-// softer shadow that tightens as it lands. Pressed ferns lie in the margins, as in Anna Atkins's prints: their white
-// silhouettes come up as the sheet darkens around them over the song.
+// sheet goes over from one of its two close tints to the other on the bar grid, except where a plate lies or the
+// falling plate is held at that moment: there the paper keeps its tint, so the sheet records where the stack was,
+// and a cleared row leaves the stack's old shape in the other tint until the sheet turns again. The plates cast soft
+// shadows that keep the glass's color; the falling plate, held above the sheet, casts a longer, softer shadow that
+// tightens as it lands. Pressed ferns lie in the margins, as in Anna Atkins's prints, and print the same way.
 //
-// The song is the sun. Calm parts are a low sun behind passing clouds (long soft shadows, the print slow); a chorus
-// raises it (shorter shadows, the ferns stirring every two beats); a peak is full sun (crisp colored shadows, glints
-// running along the plates' bevels on the kicks). The drop develops the print: the latent image deepens into the
-// rinsed print's colors (Prussian blue on white) on the downbeat, and stays developed for the whole drop. A cleared
-// row's plates are lifted off the sheet (they fade as they rise, their shadows growing soft); a Tetris is a burst of
-// sun over the well that burns the moment into the print. Slow motion is the sun going behind a cloud (a cool, quiet
-// afternoon); game over lifts the plates off from the top down, leaving the stack's white silhouette on the print.
-// A new song rinses the sheet back to fresh paper over a few seconds.
+// The song is the sun. Calm parts are a low sun behind passing clouds (long soft shadows, the sheet turning every
+// eight bars); a chorus raises it (shorter shadows, the ferns stirring every two beats, every four bars); a peak is
+// full sun (crisp colored shadows, glints running along the plates' bevels on the kicks, every two bars). The drop
+// brings both tints up a little more saturated on the downbeat. A cleared row's plates are lifted off the sheet
+// (they fade as they rise, their shadows growing soft); a Tetris is a burst of sun over the well. Slow motion is the
+// sun going behind a cloud (a cool, quiet afternoon); game over turns the sheet once more and lifts the plates off
+// from the top down, leaving the stack's silhouette in the old tint. A new song rinses the sheet to its tint.
 //
-// Cost: the shadows are two half-resolution coverage targets (blurred into penumbras), the exposure a
-// half-resolution float target the light is added into each frame; one full-screen pass lights the sheet.
+// Cost: the shadows are two half-resolution coverage targets (blurred into penumbras), the tint map two
+// half-resolution float targets (each frame reads the last); one full-screen pass lights the sheet.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/sunprint/sunprint.hpp"
@@ -57,37 +56,41 @@ using ugl::setMat;
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
-// The processes: the bare paper, the coat unexposed and fully exposed before the drop (the latent print) and after
-// it (the developed print), the ink of the lettering, an accent, the sky's light in the shadows, the seven glasses.
+// The processes: the bare paper, the coat's two close tints (the sheet goes from one to the other on the bar grid)
+// and the same two a little more saturated for the drop, the ink of the lettering, an accent, the sky's light in
+// the shadows, the seven glasses.
 struct VariantDef {
     const char* name;
-    unsigned paper, base0, full0, base1, full1, ink, accent, sky;
+    unsigned paper, tint0, tint1, drop0, drop1, ink, accent, sky;
     unsigned piece[7]; // I O T S Z J L
 };
 const VariantDef VARIANTS[] = {
-    // the classic cyanotype: a grey-blue latent image, developed into Prussian blue on white
-    {"PRUSSIAN", 0xf3f2ee, 0xf3f2ee, 0x86a2d2, 0xf6f6f3, 0x123f7d, 0x0f2748, 0xd9822b, 0xb7c4d6,
-     {0x3db7d3, 0xebc33f, 0x9b62cc, 0x45ab68, 0xdb4a5f, 0xef8a35, 0xd76bb5}},
-    // toned in tannin: mauve grey, developed into a violet black
-    {"TANNIN", 0xf2f1ec, 0xf2f1ec, 0x9a8c98, 0xf4f2ee, 0x35213a, 0x2b1b2d, 0xe0a03a, 0xc8c0cc,
-     {0x4fc4b6, 0xead06a, 0x6d90e2, 0x8ec95b, 0xe2675a, 0xf09b48, 0xc58ae2}},
-    // a Van Dyke brown print: sand grey, developed into a deep chocolate
-    {"VAN DYKE", 0xf2f0ea, 0xf2f0ea, 0xa79784, 0xf4f1ea, 0x4b2d1d, 0x3a2417, 0x3c8fbf, 0xd0c7bc,
-     {0x4cb2dd, 0xf1d25c, 0x8b7ad8, 0x5ac08c, 0xe2566b, 0x3e7ed2, 0xe78fc6}},
-    // an anthotype: paper dyed with berry juice, bleaching where the light reaches it (the drop deepens the dye)
-    {"ANTHOTYPE", 0xf3f1ee, 0xa64873, 0xeed9e0, 0x6a1640, 0xd27aa2, 0x4a1230, 0xe8a23c, 0xd6c3cf,
-     {0x45c3b1, 0xf1d469, 0x6e9ae8, 0x92d36b, 0xf28a52, 0x3c78c8, 0xe9e4d2}},
+    // the classic cyanotype: two pale blues
+    {"PRUSSIAN", 0xf4f3ef, 0xdfe9f3, 0xc8d9ec, 0xd3e6f7, 0xb5cdee, 0x15294a, 0xd9822b, 0xb7c4d6,
+     {0x1e9cc4, 0xe2a526, 0x8a4fc4, 0x2f9a58, 0xd63c52, 0xec7a24, 0xcc4fa4}},
+    // toned in tannin: two mauves
+    {"TANNIN", 0xf3f1ed, 0xede3ec, 0xdccbe0, 0xf0dcec, 0xd6bde0, 0x2e1c33, 0xe0a03a, 0xc8c0cc,
+     {0x22a596, 0xd9a92c, 0x4f73d6, 0x5ea33a, 0xd84a3e, 0xe8802a, 0x9e5fc8}},
+    // a Van Dyke brown print: two sands
+    {"VAN DYKE", 0xf3f0ea, 0xf1e7d6, 0xe3d1b5, 0xf6e2c6, 0xe6c79c, 0x3a2417, 0x3c8fbf, 0xd0c7bc,
+     {0x2a96c8, 0xd9a21e, 0x6f5cc8, 0x34a06a, 0xd43c56, 0x2f68c0, 0xd2609e}},
+    // a chlorophyll print (a leaf's own green, printed by the sun): two pale greens
+    {"CHLOROPHYLL", 0xf2f2ec, 0xe4ecdc, 0xcfdec4, 0xe2f0d4, 0xc3e0b0, 0x1e2b1c, 0xc8452c, 0xc4cfc0,
+     {0x2a8fd0, 0xe39a1c, 0x8a58c8, 0x1f7f8c, 0xd8434e, 0xe8702a, 0xc7509c}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-// The print's color at an exposure p (0..1), between the coat unexposed and fully exposed (mixed in display
-// space, as the paper shader does), linear.
-vec3 printColor(const vec3& base, const vec3& full, float p) {
-    return ugl::toLinear(lerp(ugl::toSrgb(base), ugl::toSrgb(full), p));
+// The coat's color at a tint t (0..1) between its two tints, the drop's when dev is 1 (mixed in display space, as
+// the paper shader does), linear.
+vec3 coatColor(const VariantDef& V, float t, float dev) {
+    const vec3 a = lerp(hex(V.tint0), hex(V.drop0), dev), b = lerp(hex(V.tint1), hex(V.drop1), dev);
+    return ugl::toLinear(lerp(a, b, t));
 }
 
-// How much light each glass lets through to the paper (the print under it advances that much slower).
-constexpr float DENSITY = 0.9f;
+// How opaque the glass is (its shadow keeps its color).
+constexpr float DENSITY = 1.f;
+// How fast the open paper takes a new tint (per second).
+constexpr float TINT_RATE = 3.f;
 // Heights above the sheet (board units): a plate's thickness, the falling plate held up, a lifted plate.
 constexpr float H_FLAT = 0.6f, H_RAISED = 2.2f;
 
@@ -241,13 +244,14 @@ void SunprintUniverse::resize(int width, int height) {
     fallT_.create(hw2, hh2, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     blurT_.create(hw2, hh2, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     expoT_.create(hw2, hh2, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    expoB_.create(hw2, hh2, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     expoClear_ = true;
     placeFronds();
 }
 
 SunprintUniverse::~SunprintUniverse() {
-    for (ugl::Target* t : {&occT_, &fallT_, &blurT_, &expoT_, &sceneT_}) t->destroy();
+    for (ugl::Target* t : {&occT_, &fallT_, &blurT_, &expoT_, &expoB_, &sceneT_}) t->destroy();
     for (GLuint p : {progOcc_, progPlate_, progLeaf_, progBlur_, progExpose_, progPaper_, progFinal_, progShape_, progText_})
         glDeleteProgram(p);
     for (GLuint v : {cellVao_, leafVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
@@ -341,7 +345,7 @@ void SunprintUniverse::setSong(const SongLook& t, float seconds) {
     sunAngle_ = rng_.range(-0.85f, -0.45f);
     if (old != seed_) placeFronds();
     // a new song: the sheet is rinsed back to fresh paper (at once for the first one)
-    if (seconds <= 0.1f) { expoClear_ = true; marginE_ = 0.f; }
+    if (seconds <= 0.1f) expoClear_ = true;
     else rinse_ = 1.f;
 }
 
@@ -392,12 +396,10 @@ vec2 SunprintUniverse::project(const vec3& p) const { return layout::project(vp_
 
 TransitionHints SunprintUniverse::hints() const {
     const VariantDef& V = VARIANTS[variant_];
-    const float p = 1.f - std::exp(-marginE_);
-    const vec3 m = printColor(lerp(lin(V.base0), lin(V.base1), dev_), lerp(lin(V.full0), lin(V.full1), dev_), p);
     TransitionHints h;
-    h.background = m;
-    h.light = ugl::luma(m) > 0.22f;
-    h.ink = h.light ? lin(V.ink) : lin(V.paper);
+    h.background = coatColor(V, tintShown_, dev_);
+    h.light = true;
+    h.ink = lin(V.ink);
     h.accent = lin(V.accent);
     h.styles = TS_LUMA | TS_INK | TS_REBUILD;
     return h;
@@ -487,7 +489,7 @@ void SunprintUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(glint_, ng, sizeof(glint_));
         }
-        // a Tetris: a burst of sun over the cleared rows, burning the moment into the print
+        // a Tetris: a burst of sun over the cleared rows
         if (ev.count >= 4 && lowest >= 0) {
             flare_ = 1.f;
             flareY_ = 0.5f * (layout::cellPos(0.f, (float)lowest).y + layout::cellPos(0.f, (float)highest).y);
@@ -719,16 +721,11 @@ void SunprintUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The lettering in ink on the sheet: its color follows the paper behind it (dark ink while the margins are pale,
-// paper white once the print has gone dark there), the bonus gauge a fine ring whose charge is drawn in the accent.
+// The lettering in ink on the sheet, the bonus gauge a fine ring whose charge is drawn in the accent.
 void SunprintUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
     const float s = height_ / 1080.f;
-    const float p = 1.f - std::exp(-marginE_);
-    const vec3 m = printColor(lerp(lin(V.base0), lin(V.base1), dev_), lerp(lin(V.full0), lin(V.full1), dev_), p);
-    const float dark = smoothstepf(0.19f, 0.25f, ugl::luma(m)); // 1: dark ink on pale paper
-    const vec3 inkL = lerp(lin(V.paper), lin(V.ink), dark), haloL = lerp(lin(V.ink), lin(V.paper), dark);
-    const vec3 ink = ugl::toSrgb(inkL), halo = ugl::toSrgb(haloL), accent = hex(V.accent);
+    const vec3 ink = hex(V.ink), halo = hex(V.paper), accent = hex(V.accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty()) {
@@ -873,7 +870,7 @@ void SunprintUniverse::render(const Frame& f, GLuint fbo) {
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    // the print develops on the drop's downbeat (quickly: no muddy in-between) and goes back slowly after it
+    // the drop's tints come up on its downbeat and go back slowly after it
     dev_ = approach(dev_, dropMode_ ? wp : 0.f, dropMode_ ? 4.f : 0.25f, dt);
     swell_ = approach(swell_, 0.f, 0.5f, dt);
     flare_ = approach(flare_, 0.f, 0.9f, dt);
@@ -953,29 +950,34 @@ void SunprintUniverse::render(const Frame& f, GLuint fbo) {
     fallT_.bind();
     glClear(GL_COLOR_BUFFER_BIT);
     drawCells(raised_, 0);
-    const float texelPerUnit = occT_.h / (2.f * viewH_.y);
-    blur(occT_, std::max(0.8f, texelPerUnit * shadowLen * 0.12f));
-    blur(fallT_, std::max(1.2f, texelPerUnit * shadowLen * 0.45f));
 
-    // ---- The exposure: the light reaching the paper this frame is added to the sheet's (a new song rinses it).
-    expoT_.bind();
+    // ---- The tints: on the bar grid the sheet goes over to its other tint (more often as the song rises), except
+    // where a plate lies or the falling plate is at that moment; there the paper keeps the tint it had, so the
+    // sheet records where the stack was. A game over turns the sheet once more under the stack's silhouette; a new
+    // song rinses the whole sheet to its tint over a few seconds.
+    {
+        const int bars = wp > 0.5f ? 2 : wm > 0.5f ? 4 : 8;
+        const double period = music.hasSong ? 4.0 * bars : 0.0;
+        const long turn = music.hasSong ? (long)std::floor(music.beat / period) : (long)std::floor(worldTime_ / 8.f);
+        int t = (int)(turn & 1);
+        if (overT_ >= 0.f) t ^= 1;
+        tint_ = t;
+    }
+    tintShown_ = approach(tintShown_, (float)tint_, TINT_RATE * 0.5f, wdt);
     if (expoClear_) {
-        glClearColor(0.f, 0.f, 0.f, 0.f);
+        glClearColor((float)tint_, 0.f, 0.f, 0.f);
+        expoT_.bind();
         glClear(GL_COLOR_BUFFER_BIT);
         expoClear_ = false;
+        tintShown_ = (float)tint_;
     }
     float keep = 1.f;
     if (rinse_ > 0.f) {
         keep = std::exp(-dt * 1.4f);
         rinse_ = std::max(0.f, rinse_ - dt / 3.f);
-        marginE_ *= keep;
     }
-    // full sun darkens the open sheet over about a minute; a game over burns the stack's silhouette in
-    const float rate = 0.034f * sun * (1.f + 0.6f * dev_ + 2.5f * over_) * (1.f - smoothstepf(0.f, 1.f, bridge_.amount)) * wdt;
-    marginE_ += rate * (1.f - 0.3f * cloud);
-    glEnable(GL_BLEND);
-    glBlendColor(0.f, 0.f, 0.f, keep);
-    glBlendFunc(GL_ONE, GL_CONSTANT_ALPHA);
+    expoB_.bind();
+    glDisable(GL_BLEND);
     glUseProgram(progExpose_);
     common(progExpose_);
     glActiveTexture(GL_TEXTURE0);
@@ -984,16 +986,22 @@ void SunprintUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, fallT_.tex);
     set1i(progExpose_, "uFall", 1);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, expoT_.tex);
+    set1i(progExpose_, "uPrev", 2);
     glActiveTexture(GL_TEXTURE0);
-    set2f(progExpose_, "uOffFlat", offFlat.x, offFlat.y);
-    set2f(progExpose_, "uOffRaised", offRaised.x, offRaised.y);
-    set1f(progExpose_, "uRate", rate);
-    set1f(progExpose_, "uCloud", cloud);
-    set1f(progExpose_, "uTime", worldTime_);
-    set4f(progExpose_, "uFlare", 0.f, flareY_, 5.5f, 1.6f * flare_ * wdt);
+    set1f(progExpose_, "uTint", (float)tint_);
+    set1f(progExpose_, "uRate", (1.f - std::exp(-TINT_RATE * wdt)) * (1.f - smoothstepf(0.f, 1.f, bridge_.amount)));
+    set1f(progExpose_, "uKeep", keep);
     set4f(progExpose_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progExpose_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     ugl::drawFullscreen();
+    std::swap(expoT_, expoB_);
+
+    // the shadows' penumbras
+    const float texelPerUnit = occT_.h / (2.f * viewH_.y);
+    blur(occT_, std::max(0.8f, texelPerUnit * shadowLen * 0.12f));
+    blur(fallT_, std::max(1.2f, texelPerUnit * shadowLen * 0.45f));
 
     // ---- The sheet in the sun.
     sceneT_.bind();
@@ -1013,10 +1021,13 @@ void SunprintUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progPaper_, "uOffFlat", offFlat.x, offFlat.y);
     set2f(progPaper_, "uOffRaised", offRaised.x, offRaised.y);
     set3f(progPaper_, "uPaper", lin(V.paper));
-    set3f(progPaper_, "uBase", lerp(lin(V.base0), lin(V.base1), dev_));
-    set3f(progPaper_, "uFull", lerp(lin(V.full0), lin(V.full1), dev_));
+    set3f(progPaper_, "uTintA", lin(V.tint0));
+    set3f(progPaper_, "uTintB", lin(V.tint1));
+    set3f(progPaper_, "uDropA", lin(V.drop0));
+    set3f(progPaper_, "uDropB", lin(V.drop1));
+    set1f(progPaper_, "uDev", dev_);
     set3f(progPaper_, "uSky", lin(V.sky) * 0.62f);
-    set1f(progPaper_, "uBright", lerpf(0.92f, 1.03f, saturate(sun)) + 0.05f * swell_);
+    set1f(progPaper_, "uBright", lerpf(0.97f, 1.02f, saturate(sun)) + 0.03f * swell_);
     set1f(progPaper_, "uShadow", shadowK);
     set1f(progPaper_, "uGlassT", 0.75f);
     set1f(progPaper_, "uCloud", cloud);
@@ -1072,7 +1083,7 @@ void SunprintUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_sunprint() {
     static const UniverseEntry e{
-        "SUNPRINT", "a cyanotype exposed under the stack: the paper records where the pieces lay, the drop develops it",
+        "SUNPRINT", "glass plates on a sheet that turns between two tints on the bar grid, keeping the old tint where the stack lay",
         [] { return std::unique_ptr<Universe>(new SunprintUniverse()); },
         // Bright, airy songs suit the sun best; it fits most songs.
         [](const SongLook& l) { return 0.75f + 0.25f * l.brightness + 0.15f * l.airWeight; },

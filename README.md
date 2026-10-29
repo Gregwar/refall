@@ -65,10 +65,6 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 <td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
-<tr>
-<td><img src="docs/universes/sunprint.jpg"><br><b>SUNPRINT</b>: a cyanotype exposed under glass plates in the sun, the paper recording where the stack lay; the drop develops the print<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/embroidery.jpg"><br><b>EMBROIDERY</b>: cross-stitch on aida, the pieces embroidered and a sampler stitched in the margins with the thread of the cleared rows<br><sub>🔍 <i>to review</i></sub></td>
-</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
@@ -80,6 +76,8 @@ Disabled for now (not built; their code stays in the repository):
 | CLOUDSCAPE | To be reworked (nights only) |
 | MAGNETS | Iron filings on paper; not convincing yet, waiting for a better idea |
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
+| SUNPRINT | A sheet turning between two tints, keeping the old one under the stack; to be judged later |
+| EMBROIDERY | Cross-stitch on aida; to be judged later |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).

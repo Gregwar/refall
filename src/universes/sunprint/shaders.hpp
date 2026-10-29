@@ -1,7 +1,8 @@
 #pragma once
 // SUNPRINT's shaders (see sunprint.cpp).
 //
-// The sheet keeps an exposure map (EXPOSE_FS adds the light each frame reaching the paper past the pieces' shadows);
+// The sheet keeps a tint map (EXPOSE_FS turns the open paper to the sheet's current tint, and keeps the tint under
+// what lies on it or is held right above it);
 // PAPER_FS turns it into the print's colors and lights the sheet with the sun (the live shadows, tinted by the glass);
 // PLATE_FS draws the glass plates over it, LEAF_FS the pressed ferns; FINAL_FS encodes the frame. The occluders
 // (the stack and what is raised above the sheet) are first drawn as coverage and tint into two half-resolution
@@ -214,23 +215,22 @@ void main() {
 inline const char* EXPOSE_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform sampler2D uOcc, uFall;
-uniform vec2 uOffFlat, uOffRaised; // where a shadow falls from what casts it (board units)
-uniform float uRate;               // exposure this frame in full sun
-uniform float uCloud, uTime;
-uniform vec4 uFlare;               // a Tetris: x, y, radius, exposure this frame
-uniform vec4 uHudL, uHudR;         // the HUD columns (x0, y0, x1, y1): the previews there leave no print
+uniform sampler2D uOcc, uFall, uPrev;
+uniform float uTint;       // the tint the open paper goes to (0, 1)
+uniform float uRate;       // how far it gets there this frame
+uniform float uKeep;       // the rinse of a new song (1: none)
+uniform vec4 uHudL, uHudR; // the HUD columns (x0, y0, x1, y1): the previews there leave no print
 float hud(vec2 w, vec4 r) { return step(r.x, w.x) * step(w.x, r.z) * step(r.y, w.y) * step(w.y, r.w); }
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    float o0 = texture(uOcc, viewUv(w)).a, o1 = texture(uOcc, viewUv(w - uOffFlat * 0.5)).a, o2 = texture(uOcc, viewUv(w - uOffFlat)).a;
-    float flat_ = max(o0, max(o1, o2)) * (1.0 - max(hud(w, uHudL), hud(w, uHudR)));
-    float raised = texture(uFall, viewUv(w - uOffRaised)).a;
-    float open = (1.0 - clamp(flat_, 0.0, 1.0)) * (1.0 - clamp(raised, 0.0, 1.0));
-    float light = 1.0 - 0.55 * uCloud * clouds(w, uTime);
-    vec2 fq = (w - uFlare.xy) / max(uFlare.z, 0.01);
-    float flare = uFlare.w * exp(-dot(fq, fq));
-    frag = vec4((uRate * light + flare) * open * coated(w), 0.0, 0.0, 1.0);
+    // what lies on the sheet (the plates, the ferns) and the falling plate right above it keep the paper's tint
+    float lying = smoothstep(0.45, 0.7, texture(uOcc, vUv).a);
+    float held = smoothstep(0.45, 0.7, texture(uFall, vUv).a);
+    float cover = max(lying, held) * (1.0 - max(hud(w, uHudL), hud(w, uHudR)));
+    float t = texture(uPrev, vUv).r;
+    t = mix(t, uTint, 1.0 - uKeep);
+    t = mix(t, uTint, uRate * (1.0 - cover));
+    frag = vec4(t, 0.0, 0.0, 1.0);
 }
 )";
 
@@ -241,7 +241,9 @@ out vec4 frag;
 uniform sampler2D uExpo, uOcc, uFall;
 uniform vec2 uOffFlat, uOffRaised;
 uniform vec3 uPaper;          // the bare paper (outside the coat)
-uniform vec3 uBase, uFull;    // the coat unexposed, fully exposed (this moment's mix of the latent and developed print)
+uniform vec3 uTintA, uTintB;  // the coat's two tints
+uniform vec3 uDropA, uDropB;  // the same, for the drop
+uniform float uDev;           // the drop's tints 0..1
 uniform float uBright, uShadow, uGlassT, uCloud, uTime, uVig;
 uniform vec3 uSky;            // the light in the shadows (a cool sky)
 uniform vec4 uFlare;          // x, y, radius, brightness
@@ -249,13 +251,13 @@ void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     float px = 2.0 * uView.w / float(textureSize(uExpo, 0).y);
     // the print
-    float E = texture(uExpo, vUv).r;
-    float p = 1.0 - exp(-E);
+    float p = texture(uExpo, vUv).r;
     float coat = coated(w);
-    // (mixed in display space: a linear mix toward a dark pigment stays washed out until the very end)
-    vec3 print_ = pow(mix(pow(uBase, vec3(1.0 / 2.2)), pow(uFull, vec3(1.0 / 2.2)), p), vec3(2.2));
-    // the pigment settles unevenly: a faint mottling where it is dense
-    print_ *= 1.0 + 0.07 * (vnoise(w * 1.4) - 0.5) * p + 0.04 * (vnoise(w * 4.3 + 9.0) - 0.5) * p;
+    // (mixed in display space)
+    vec3 a = pow(mix(uTintA, uDropA, uDev), vec3(1.0 / 2.2)), b = pow(mix(uTintB, uDropB, uDev), vec3(1.0 / 2.2));
+    vec3 print_ = pow(mix(a, b, p), vec3(2.2));
+    // the pigment settles unevenly: a faint mottling
+    print_ *= 1.0 + 0.035 * (vnoise(w * 1.4) - 0.5) + 0.02 * (vnoise(w * 4.3 + 9.0) - 0.5);
     vec3 c = mix(uPaper, print_, coat);
     // the paper: a fine fiber, a soft tooth
     float fib = vnoise(w * vec2(9.0, 3.0)) * 0.5 + vnoise(w * 23.0) * 0.5;

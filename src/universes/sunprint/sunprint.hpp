@@ -69,7 +69,7 @@ private:
            progFinal_ = 0, progShape_ = 0, progText_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, leafVao_ = 0, leafVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
            textVao_ = 0, textVbo_ = 0;
-    ugl::Target occT_, fallT_, blurT_, expoT_, sceneT_;
+    ugl::Target occT_, fallT_, blurT_, expoT_, expoB_, sceneT_; // expoT_: the tint map (expoB_: the next one)
     bool expoClear_ = true;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
@@ -86,12 +86,13 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false;
-    float dev_ = 0.f;         // the print developed (the drop's deep colors) 0..1
+    float dev_ = 0.f;         // the drop's tints 0..1
     float swell_ = 0.f;       // the drop's light swell
     float flare_ = 0.f;       // a Tetris: a burst of sun over the well
     float flareY_ = 0.f;      // where (board y)
-    float rinse_ = 0.f;       // a new song: the sheet bleaches back to fresh paper
-    float marginE_ = 0.f;     // the margins' exposure (the HUD's ink follows it)
+    float rinse_ = 0.f;       // a new song: the sheet is rinsed to its tint
+    int tint_ = 0;            // the tint the open paper is going to (0, 1)
+    float tintShown_ = 0.f;   // the open paper's tint, as it eases there
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float sunAngle_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
