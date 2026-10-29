@@ -67,7 +67,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/sunprint.jpg"><br><b>SUNPRINT</b>: a cyanotype exposed under glass plates in the sun, the paper recording where the stack lay; the drop develops the print<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/embroidery.jpg"><br><b>EMBROIDERY</b>: cross-stitch on aida, the pieces embroidered and a sampler stitched in the margins with the thread of the cleared rows<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
