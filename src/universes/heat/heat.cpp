@@ -19,8 +19,8 @@
 // game over the stack cooling into the room from the top down.
 //
 // The frame is one thermal image: the room, the air and the pieces are written as temperatures into a float
-// target, then mapped through the colormap; the camera's overlay (a scale bar with the range in degrees, a spot
-// marker with the hottest piece's temperature, the lettering) is drawn on top.
+// target, then mapped through the colormap; the camera's overlay (a scale bar with the range in degrees, the
+// lettering) is drawn on top.
 //
 // Cost: the heat of the 10 x 22 cells and the air on a ~150 x 85 grid are simulated on the CPU (a few microseconds
 // and a semi-Lagrangian step a frame); two full-screen passes.
@@ -915,8 +915,8 @@ void HeatUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge, a spot marker on
-// the hottest piece of the stack with its reading, the bonus gauge as a thin ring.
+// The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge, the bonus gauge
+// as a thin ring.
 void HeatUniverse::drawOverlay(const Game& g) {
     const float s = height_ / 1080.f;
     const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_);
@@ -944,30 +944,6 @@ void HeatUniverse::drawOverlay(const Game& g) {
         textQuads(hiS, x1 - textWidth(hiS, ts, 0.f), y0 - ts * 1.9f, ts, 0.f, q);
         textQuads(loS, x1 - textWidth(loS, ts, 0.f), y1 + ts * 0.9f, ts, 0.f, q);
         drawText(q, ink, 0.75f * vis);
-    }
-    // ---- the spot marker on the hottest piece
-    if (hotShown_ > 0.01f && overT_ < 0.f) {
-        const vec2 c = project(vec3(hotX_, hotY_, 0.f));
-        const float u = project(vec3(1.f, 0.f, 0.f)).x - project(vec3(0.f, 0.f, 0.f)).x; // pixels per cell
-        const float gap = 0.32f * u, len = 0.3f * u, th = std::max(1.f, 1.4f * s);
-        const float a = 0.8f * hotShown_ * vis;
-        for (int pass = 0; pass < 2; pass++) {
-            const vec3 col = pass == 0 ? shadow : ink;
-            const float o = pass == 0 ? 1.f * s : 0.f, aa = pass == 0 ? a * 0.5f : a;
-            rect(c.x - gap - len + o, c.y - th * 0.5f + o, c.x - gap + o, c.y + th * 0.5f + o, col, aa);
-            rect(c.x + gap + o, c.y - th * 0.5f + o, c.x + gap + len + o, c.y + th * 0.5f + o, col, aa);
-            rect(c.x - th * 0.5f + o, c.y - gap - len + o, c.x + th * 0.5f + o, c.y - gap + o, col, aa);
-            rect(c.x - th * 0.5f + o, c.y + gap + o, c.x + th * 0.5f + o, c.y + gap + len + o, col, aa);
-        }
-        flushShapes();
-        q.clear();
-        const float ts = 15.f * s;
-        std::snprintf(buf, sizeof(buf), "%.1f\x7f", degrees(hotD_));
-        const std::string t = buf;
-        const bool left = hotX_ > 1.5f;
-        const float tx = left ? c.x - gap - len - 6.f * s - textWidth(t, ts, 0.f) : c.x + gap + len + 6.f * s;
-        textQuads(t, tx, c.y - gap - len - ts * 0.4f, ts, 0.f, q);
-        drawText(q, ink, a);
     }
     // ---- the bonus gauge: a thin ring, its charge an arc in the hot color
     {
@@ -1158,36 +1134,6 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     conduct(game, wdt);
     updateAir(game, wdt);
     const float gain = (0.92f + 0.12f * saturate(warm) + 0.25f * flare_) * (1.f - over_);
-
-    // the hottest piece, for the spot marker
-    {
-        float best = -1.f;
-        int bx = -1, by = -1;
-        for (int y = Game::HIDDEN; y < Game::H; y++)
-            for (int x = 0; x < Game::W; x++) {
-                const int t = game.cell(x, y).type;
-                if (t < 0) continue;
-                const float d = cellTemp(t, heat_[y][x], gain);
-                if (d > best) { best = d; bx = x; by = y; }
-            }
-        if (bx >= 0) {
-            float cx = 0, cy = 0;
-            int n = 0;
-            for (int y = Game::HIDDEN; y < Game::H; y++)
-                for (int x = 0; x < Game::W; x++)
-                    if (ids_[y][x] == ids_[by][bx]) {
-                        const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
-                        cx += p.x; cy += p.y; n++;
-                    }
-            cx /= std::max(1, n);
-            cy /= std::max(1, n);
-            if (!hotSet_) { hotX_ = cx; hotY_ = cy; hotSet_ = true; }
-            hotX_ = approach(hotX_, cx, 9.f, dt);
-            hotY_ = approach(hotY_, cy, 9.f, dt);
-            hotD_ = best;
-        }
-        hotShown_ = approach(hotShown_, bx >= 0 && best > 0.45f ? 1.f : 0.f, 3.f, dt);
-    }
 
     // ---- Upload the heat map (12 x 23: the walls left and right, the floor below; empty cells take their
     // neighbours' heat so the pieces' edges sample cleanly) and the air.

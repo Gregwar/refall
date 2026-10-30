@@ -3,7 +3,7 @@
 //
 // The frame is one thermal image: BG_FS and CELL_FS write a temperature (r, 0 cold .. 1 white hot) and the stack's
 // coverage (g) into a float target, MAP_FS then maps it through the camera's colormap (a 256 x 2 lookup texture:
-// the variant's palette and the drop's), and the overlay (the camera's lettering, scale bar and spot marker) is
+// the variant's palette and the drop's), and the overlay (the camera's lettering and scale bar) is
 // drawn on top in display colors.
 
 namespace heat_shaders {

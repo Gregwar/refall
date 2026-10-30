@@ -83,8 +83,6 @@ private:
     std::vector<float> shapes_;
     void rect(float x0, float y0, float x1, float y1, const vec3& c, float a);
     void flushShapes();
-    float hotX_ = 0, hotY_ = 0, hotD_ = 0, hotShown_ = 0;
-    bool hotSet_ = false;
 
     // ---- GL.
     GLuint progBg_ = 0, progCell_ = 0, progMap_ = 0, progBlur_ = 0, progShape_ = 0, progText_ = 0;
