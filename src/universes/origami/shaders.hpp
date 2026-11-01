@@ -30,12 +30,51 @@ uniform float uLight, uDark;  // the light's level; 1 on a dark sheet
 uniform vec2 uLightXY;        // where the light comes from (screen direction)
 uniform sampler2D uShadow;    // r: shadow coverage
 uniform vec2 uShadowTexel;
+uniform float uCrease, uPattern, uWarm;
+// The sheet was folded before: a giant crease pattern over the whole view, each facet tilted a little and lit by the
+// light (pattern 0: a square base, 1: a sixteen-fold star, 2: a square base set lower and turned, and so on).
+vec2 creaseTilt(vec2 w, out float edge) {
+    float k = mod(uPattern, 3.0);
+    vec2 cen = k < 0.5 ? vec2(0.0, 0.4) : k < 1.5 ? vec2(0.0, -3.0) : vec2(0.0, 2.5);
+    float rot = k < 1.5 ? 0.0 : 0.3927;
+    vec2 d = w - cen;
+    d = vec2(d.x * cos(rot) - d.y * sin(rot), d.x * sin(rot) + d.y * cos(rot));
+    vec2 q = d / 21.0;
+    float n = k > 0.5 && k < 1.5 ? 16.0 : 8.0;
+    float a = atan(q.y, q.x) + 3.14159265;
+    float sw = 6.2831853 / n;
+    float sec = floor(a / sw);
+    float ac = (sec + 0.5) * sw - 3.14159265;
+    float sg = mod(sec, 2.0) < 1.0 ? 1.0 : -1.0;
+    // rings: the pleats turn over at a square around the centre and again further out
+    vec2 r45 = vec2(q.x + q.y, q.x - q.y) * 0.7071;
+    float ring = max(abs(r45.x), abs(r45.y));
+    float band = floor(ring / 0.42);
+    if (mod(band, 2.0) > 0.5) sg = -sg;
+    float fa = fract(a / sw);
+    edge = min(min(fa, 1.0 - fa) * sw * length(q) * 21.0, abs(fract(ring / 0.42 + 0.5) - 0.5) * 0.42 * 21.0);
+    return vec2(cos(ac), sin(ac)) * sg;
+}
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     vec3 c = uSheet;
     // the paper's fibres: a fine, soft grain (no visible pattern)
     float grain = (vnoise(w * 9.0) - 0.5) * 0.018 + (vnoise(w * 1.3 + 7.0) - 0.5) * 0.03 + (hash(floor(w * 60.0)) - 0.5) * 0.008;
     c *= 1.0 + grain;
+    // the old creases: facets catching the light, a fine pressed line between them
+    {
+        float edge;
+        vec2 tilt = creaseTilt(w, edge);
+        vec2 ld = normalize(uLightXY);
+        float inWell = (abs(w.x) < 5.0 && w.y > -10.0) ? 0.5 : 1.0;
+        float lit = uCrease * inWell * dot(tilt, ld);
+        c *= 1.0 + lit * 1.6;
+        c += uDark * lit * 0.12 * (uSheet + vec3(0.05)); // a dark sheet: the facets catch a little light of their own
+        float pxw = 2.0 * uView.w / uRes.y;
+        float line = 1.0 - smoothstep(0.4 * pxw, 1.4 * pxw, edge);
+        c *= 1.0 - line * uCrease * inWell * 1.2;
+        c += uDark * line * uCrease * inWell * 0.25 * (uSheet + vec3(0.05));
+    }
     // the well: a shallow tray folded into the sheet, open at the top
     float inX = 5.0 - abs(w.x), inY = w.y + 10.0;
     if (inX > 0.0 && inY > 0.0) {
@@ -68,6 +107,10 @@ void main() {
     // a soft light across the sheet, from its side
     vec2 v = vUv * 2.0 - 1.0;
     float light = uLight * (1.0 + 0.06 * dot(v, uLightXY)) * (1.0 - 0.14 * dot(v * vec2(0.7, 1.0), v * vec2(0.7, 1.0)));
+    // a two-tone light: warm where it comes from, cool across the sheet, warmer at a peak
+    float lside = clamp(0.5 + 0.45 * dot(v, normalize(uLightXY)), 0.0, 1.0);
+    vec3 tint = mix(vec3(0.965, 0.985, 1.03), vec3(1.04, 1.0, 0.95), lside);
+    c *= mix(vec3(1.0), tint, uWarm);
     frag = vec4(c * light, 0.0);
 }
 )";

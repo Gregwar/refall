@@ -1,25 +1,27 @@
-// ORIGAMI: folded paper pieces on a sheet, each cleared row folded into a paper crane that gathers around the well.
+// ORIGAMI: folded paper pieces on a sheet, each cleared row folded into a paper crane before your eyes.
 //
 // One world: a large sheet of paper under a soft light from its upper left, the well a shallow tray folded into it
-// (two valley creases and a floor, open at the top). The pieces are folded paper, each of its own colour: a lattice
-// of diamond facets (creases on both diagonals, pleated along one, gently twisted along the other) lit facet by
-// facet, a fine pressed line on every crease and the paper's cut edge lit on its sides toward the light; every piece
-// lies on the sheet and casts a soft shadow, so two pieces of one colour never merge. The falling piece is folded
-// tight (deep facets) and held above the sheet (its shadow wider and further); on lock it unfolds and settles flat,
-// its creases relaxing. The ghost is a dashed valley-fold line, as in folding diagrams.
+// (two valley creases and a floor, open at the top). The sheet was folded before: a giant crease pattern lies over
+// it, its facets catching the light faintly at calm and more at a peak (a new pattern after each drop), and the light
+// is warm where it comes from, cool across the sheet. The pieces are folded paper, each of its own colour: a strip
+// folded along a ridge through its cells' centres (mitred where it turns), lit facet by facet, its cut edge lit on
+// its sides toward the light; every piece lies on the sheet with a soft shadow, so two pieces of one colour never
+// merge. The falling piece looks exactly like a locked one, only held a little above the sheet (its shadow further);
+// its shadow settles on lock. The ghost is a dashed valley-fold line, as in folding diagrams.
 //
-// A cleared row folds away: each cell's upper half folds down over its lower half (its white back turning up),
-// then the fold closes on the crease, in a third of a second. Each row becomes a paper crane of its most common
-// colour, folded at the well's side, that flies to a place around the well (below the HUD columns, then up the
-// outer margins) and settles there for the rest of the song: the margins fill up with the play. A Tetris folds a
-// larger crane in the accent paper and a ripple of wing beats runs through the whole flock.
+// A cleared row slides out of the well through one of its walls (the other one than the last row's) as one strip of
+// paper, pleating against the wall, and the pleated packet glides to a folding corner on that side (under the right
+// HUD column, or in the left margin above the corner texts), turns over into a square and is folded into a crane
+// step by step, every flap turning about its crease in 3D. The crane then flies to a place around the well, where it
+// settles for the rest of the song: the margins fill up with the play. A Tetris folds a larger crane in the accent
+// paper and a ripple of wing beats runs through the whole flock.
 //
-// Staging: calm, the cranes are still and the light is soft; at mid, every two beats a few of them lift their
-// wings; at a peak, half the flock beats its wings in turn every two beats and the kicks make one hop. The drop
-// turns the sheet over to its coloured side and sets every crane flying: they take off one after another and fly
-// slow loops in the margins (wings on the two-beat grid), until the peak ends and they land back in their places.
-// Slow motion is the blue hour, a low light from the right (the facets light the other way, shadows long). Game
-// over folds the stack away row by row from the top. A new song sends the cranes away and starts a new flock.
+// Staging: calm, the cranes are still, the light soft and the creases faint; at mid, every two beats a few cranes
+// beat their wings; at a peak, half the flock beats its wings in turn every two beats, the kicks make one hop, the
+// creases come up and the light warms. The drop turns the sheet over to its coloured side and sets every crane
+// flying in slow loops in the margins (wings on the two-beat grid), until the peak ends and they land back. Slow
+// motion is the blue hour, a low light from the right. Game over folds the stack away row by row from the top. A new
+// song sends the cranes away and starts a new flock.
 //
 // Cost: one full-screen pass for the sheet (the shadows from a half-resolution target), the pieces as instanced
 // cells drawing their facets procedurally, the cranes as a few triangles each.
@@ -129,7 +131,7 @@ std::string ascii(const std::string& s) {
     return o;
 }
 
-constexpr float FOLD_REST = 0.42f, FOLD_TIGHT = 1.25f;
+constexpr float FOLD_REST = 0.42f;
 
 } // namespace
 
@@ -293,10 +295,11 @@ void OrigamiUniverse::planSlots() {
     // the corner texts (the song's title, the section and the universe's name)
     const float TITLE[4] = {x0 - 2.f, 8.6f, -12.2f, 20.f}, CORNER[4] = {x0 - 2.f, -20.f, -11.6f, -6.6f};
     // the HUD columns, down to the last line set in them (the best score, the combo notice under the gauge)
-    const float LEFT[4] = {layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1] - 2.4f, layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]};
+    // (under the left one: the lane the rows folded on the left glide along)
+    const float LEFT[4] = {layout::LEFT_COLUMN[0], -20.f, layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]};
     const float RIGHT[4] = {layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1] - 2.0f, layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]};
     // the corner where the rows are folded into cranes
-    const float FOLDING[4] = {6.0f, -12.f, 11.6f, -5.6f};
+    const float FOLDING[4] = {6.0f, -12.f, 11.6f, -5.6f}, FOLDING_L[4] = {-21.f, -6.4f, -12.6f, -0.3f};
     const float sx = 2.55f, sy = 2.2f;
     int row = 0;
     for (float y = y0; y <= y1; y += sy, row++)
@@ -306,7 +309,7 @@ void OrigamiUniverse::planSlots() {
             if (inRect(jx, jy, WELL, 0.5f)) continue;
             if (inRect(jx, jy, LEFT, 0.35f) || inRect(jx, jy, RIGHT, 0.35f)) continue;
             if (inRect(jx, jy, TITLE, 0.2f) || inRect(jx, jy, CORNER, 0.2f)) continue;
-            if (inRect(jx, jy, FOLDING, 0.f)) continue;
+            if (inRect(jx, jy, FOLDING, 0.f) || inRect(jx, jy, FOLDING_L, 0.f)) continue;
             // the order: close to the well's foot first
             const float dx = std::max(0.f, std::fabs(jx) - 5.f), dy = std::max(0.f, jy + 10.f);
             const float key = std::sqrt(dx * dx + dy * dy * 0.55f) + r.range(0.f, 0.6f);
@@ -317,12 +320,15 @@ void OrigamiUniverse::planSlots() {
     slotUsed_.assign(slots_.size(), 0);
 }
 
-int OrigamiUniverse::takeSlot() {
-    for (size_t i = 0; i < slots_.size(); i++)
-        if (!slotUsed_[i]) { slotUsed_[i] = 1; return (int)i; }
+int OrigamiUniverse::takeSlot(float side) {
+    // a place on the side the crane is folded on, else anywhere
+    for (int pass = 0; pass < 2; pass++)
+        for (size_t i = 0; i < slots_.size(); i++)
+            if (!slotUsed_[i] && (pass == 1 || (slots_[i].x < 0.f) == (side < 0.f))) { slotUsed_[i] = 1; return (int)i; }
     // all taken: the oldest crane flies away and leaves its place to the new one
+    for (int pass = 0; pass < 2; pass++)
     for (Crane& c : cranes_)
-        if (!c.leaving && c.slot >= 0 && c.age > c.arrive) {
+        if (!c.leaving && c.slot >= 0 && c.age > c.arrive && (pass == 1 || (c.home.x < 0.f) == (side < 0.f))) {
             const int s = c.slot;
             c.leaving = true;
             c.slot = -1;
@@ -339,8 +345,7 @@ constexpr float SLIDE = 0.45f;      // the row is out of the well
 constexpr float PLEAT = 0.62f;      // the pleats are pressed
 constexpr float STEP = 0.3f;        // one fold step
 constexpr int STEPS = 7;            // turn over, kite, petal, legs, neck and tail, head, wings
-constexpr float FOLD0 = 0.85f;     // the packet has glided to its folding spot
-constexpr float FOLD_END = FOLD0 + STEP * STEPS;
+constexpr float FOLD0_R = 0.85f, FOLD0_L = 1.4f; // the packet has glided to its folding spot (right, left)
 constexpr float FOLD_SCALE = 1.35f; // the model's size while it is folded
 constexpr float THETA = 1.47f;      // the pleats' angle when pressed (84 degrees)
 
@@ -352,24 +357,27 @@ vec3 rotAbout(const vec3& p, const vec3& a, const vec3& k, float phi) {
 float ease(float u) { u = saturate(u); return u * u * (3.f - 2.f * u); }
 } // namespace
 
-void OrigamiUniverse::addCrane(float rowY, const int* strip, int color, float scale) {
-    const int s = takeSlot();
+void OrigamiUniverse::addCrane(float rowY, float side, const int* strip, int color, float scale) {
+    const int s = takeSlot(side);
     if (s < 0) return;
     Crane c;
     c.slot = s;
     c.home = slots_[s];
     c.stripY = rowY;
-    // the row leaves by the right wall; it is folded in the free corner under the right HUD column (a spot of its
-    // own when several rows are folded at once)
-    const float side = 1.f;
+    // the row leaves by one wall; it is folded in a free corner on that side (under the right HUD column, or in the
+    // left margin above the corner texts), a spot of its own when several rows are folded at once
     c.side = side;
+    c.fold0 = side > 0.f ? FOLD0_R : FOLD0_L;
+    c.foldEnd = c.fold0 + STEP * STEPS;
     for (int i = 0; i < 10; i++) c.strip[i] = strip[i];
-    const vec2 SPOTS[4] = {{7.4f, -7.7f}, {10.4f, -7.7f}, {7.4f, -10.1f}, {10.4f, -10.1f}};
+    const vec2 SPOTS_R[4] = {{7.4f, -7.7f}, {10.4f, -7.7f}, {7.4f, -10.1f}, {10.4f, -10.1f}};
+    const vec2 SPOTS_L[4] = {{-14.6f, -4.3f}, {-17.9f, -4.3f}, {-14.6f, -1.9f}, {-17.9f, -1.9f}};
+    const vec2* SPOTS = side > 0.f ? SPOTS_R : SPOTS_L;
     int si = 0;
     for (; si < 4; si++) {
         bool used = false;
         for (const Crane& o : cranes_)
-            if (!o.leaving && o.age < FOLD_END && std::fabs(o.spot.x - SPOTS[si].x) + std::fabs(o.spot.y - SPOTS[si].y) < 0.1f) used = true;
+            if (!o.leaving && o.age < o.foldEnd && std::fabs(o.spot.x - SPOTS[si].x) + std::fabs(o.spot.y - SPOTS[si].y) < 0.1f) used = true;
         if (!used) break;
     }
     c.spot = SPOTS[si % 4];
@@ -378,7 +386,7 @@ void OrigamiUniverse::addCrane(float rowY, const int* strip, int color, float sc
     c.color = color;
     c.scale = scale * (0.82f + 0.18f * rng_.uniform());
     c.age = 0.f;
-    c.arrive = FOLD_END + (c.home.x < 0.f ? 3.6f : 1.4f + 0.25f * std::fabs(c.home.x - c.spot.x) / 6.f + 0.1f * std::fabs(c.home.y - c.spot.y) / 6.f);
+    c.arrive = c.foldEnd + ((c.home.x < 0.f) != (side < 0.f) ? 3.6f : 1.4f + 0.25f * std::fabs(c.home.x - c.spot.x) / 6.f + 0.1f * std::fabs(c.home.y - c.spot.y) / 6.f);
     c.face = side;
     c.phase = rng_.range(-0.18f, 0.18f);
     c.flyDelay = rng_.range(0.f, 1.4f);
@@ -436,7 +444,7 @@ void OrigamiUniverse::updateCranes(const MusicState& m, float dt, float wdt, boo
     for (Crane& c : cranes_) {
         const vec2 prev = c.pos;
         // the row and the folding at the real speed, the rest in the world's time
-        const float step = c.age < FOLD_END ? (paused ? 0.f : dt) : wdt;
+        const float step = c.age < c.foldEnd ? (paused ? 0.f : dt) : wdt;
         c.age += step;
         if (c.wingT < 1.f) {
             if (c.wingDelay > 0.f) c.wingDelay -= wdt;
@@ -452,21 +460,21 @@ void OrigamiUniverse::updateCranes(const MusicState& m, float dt, float wdt, boo
             const float side = c.pos.x < 0.f ? -1.f : 1.f;
             c.vel = vec2{c.vel.x + side * 0.5f * wdt, std::min(3.2f, c.vel.y + 1.6f * wdt)};
             c.pos = vec2{c.pos.x + c.vel.x * wdt, c.pos.y + c.vel.y * wdt};
-        } else if (c.age < FOLD_END) {
+        } else if (c.age < c.foldEnd) {
             c.pos = c.spot;
             c.face = c.side;
         } else if (c.age < c.arrive) {
             // the finished crane takes off to its place
-            const float t = saturate((c.age - FOLD_END) / (c.arrive - FOLD_END));
-            if (c.home.x < 0.f) {
+            const float t = saturate((c.age - c.foldEnd) / (c.arrive - c.foldEnd));
+            if ((c.home.x < 0.f) != (c.from.x < 0.f)) {
                 // to the other side: up beside the well, over its top (behind the pieces), down the other side
-                const float top = 11.3f;
+                const float top = 11.3f, sd = c.from.x < 0.f ? -1.f : 1.f;
                 const float up = smoothstepf(0.f, 0.32f, t), across = smoothstepf(0.25f, 0.72f, t), down = smoothstepf(0.66f, 1.f, t);
-                const float x0 = lerpf(c.from.x, 5.7f, smoothstepf(0.f, 0.2f, t));
-                const float x1 = lerpf(-5.7f, c.home.x, smoothstepf(0.8f, 1.f, t));
+                const float x0 = lerpf(c.from.x, sd * 5.7f, smoothstepf(0.f, 0.2f, t));
+                const float x1 = lerpf(-sd * 5.7f, c.home.x, smoothstepf(0.8f, 1.f, t));
                 c.pos = vec2{lerpf(x0, x1, across), lerpf(lerpf(c.from.y, top, up), c.home.y, down)};
             } else {
-                // out of the corner under the HUD column first, then up the outer margin to its place
+                // out of the corner first, then up (or down) the outer margin to its place
                 const float out = smoothstepf(0.f, 0.55f, t), up = smoothstepf(0.3f, 1.f, t);
                 c.pos = vec2{lerpf(c.from.x, c.home.x, out), lerpf(c.from.y, c.home.y, up) + 0.6f * std::sin(PI * t)};
             }
@@ -488,7 +496,7 @@ void OrigamiUniverse::updateCranes(const MusicState& m, float dt, float wdt, boo
             const float lift = std::sin(PI * e) * 1.4f;
             c.pos = vec2{lerpf(c.home.x, track.x, e), lerpf(c.home.y, track.y, e) + lift + c.hop};
         }
-        if (c.age >= FOLD_END) {
+        if (c.age >= c.foldEnd) {
             const float vx = (c.pos.x - prev.x) / std::max(1e-4f, wdt);
             if (wdt > 0.f && std::fabs(vx) > 0.25f) c.face = vx > 0.f ? 1.f : -1.f;
             else if (!c.leaving && c.age >= c.arrive && c.fly <= 0.01f) c.face = c.home.x < 0.f ? 1.f : -1.f; // perched: toward the well
@@ -516,24 +524,51 @@ void OrigamiUniverse::stripFaces(const Crane& c, float t, float flipX, std::vect
     // the trailing end slides flat until it reaches the wall; the pleated stack then glides to the folding spot
     const float xT = 5.f + s - 10.f;
     const float stackC = xT + total * 0.5f;
-    const float spot = std::fabs(c.spot.x);
-    const float glide = smoothstepf(SLIDE, FOLD0, t);
-    const float shift = (spot - (5.f + total * 0.5f)) * glide;
+    const float glide = smoothstepf(SLIDE, c.fold0, t);
+    // the packet's centre: at the wall, then gliding to its spot (on the left, along the well's wall and under the
+    // HUD column, clear of its text)
+    vec2 cen{c.side * stackC, c.stripY};
+    if (t > SLIDE) {
+        const vec2 p0{c.side * (5.f + total * 0.5f), c.stripY};
+        vec2 pts[5] = {p0, c.spot, c.spot, c.spot, c.spot};
+        int n = 2;
+        if (c.side < 0.f) {
+            const float low = std::min(c.stripY, -10.45f);
+            pts[1] = vec2{-5.75f, low};
+            pts[2] = vec2{-11.9f, low};
+            pts[3] = vec2{-11.9f, c.spot.y};
+            pts[4] = c.spot;
+            n = 5;
+        }
+        float len[5] = {0.f}, total2 = 0.f;
+        for (int i = 1; i < n; i++) {
+            const float dx = pts[i].x - pts[i - 1].x, dy = pts[i].y - pts[i - 1].y;
+            total2 += std::sqrt(dx * dx + dy * dy);
+            len[i] = total2;
+        }
+        const float at = glide * total2;
+        cen = pts[n - 1];
+        for (int i = 1; i < n; i++)
+            if (at <= len[i]) {
+                const float f = (at - len[i - 1]) / std::max(1e-4f, len[i] - len[i - 1]);
+                cen = vec2{lerpf(pts[i - 1].x, pts[i].x, f), lerpf(pts[i - 1].y, pts[i].y, f)};
+                break;
+            }
+    }
     const float col = smoothstepf(SLIDE * 0.7f, PLEAT, t);
     const vec3 target = paper(c.color);
-    const vec3 back = lin(VARIANTS[variant_].back);
     float x = xT, z = 0.f;
     for (int k = 9; k >= 0; k--) {
         const int column = c.side > 0.f ? 9 - k : k;
         const float x1 = x + w[k];
         const float z1 = z + ((k % 2) ? 1.f : -1.f) * std::sin(th[k]);
-        auto X = [&](float xx) { return c.side * (stackC + shift + (xx - stackC) * flipX); };
+        auto X = [&](float xx) { return cen.x + c.side * (xx - stackC) * flipX; };
         const vec3 p = ugl::toLinear(lerp(ugl::toSrgb(paper(c.strip[column])), ugl::toSrgb(target), col));
-        const float yc = lerpf(c.stripY, c.spot.y, glide);
-        const float y0 = yc - 0.5f, y1 = yc + 0.5f;
+        const float y0 = cen.y - 0.5f, y1 = cen.y + 0.5f;
         const vec3 a(X(x), y0, z), b(X(x1), y0, z1), cc(X(x1), y1, z1), d(X(x), y1, z);
-        out.push_back({{a, b, cc}, p, back, 0.f});
-        out.push_back({{a, cc, d}, p, back, 0.f});
+        // (a pleat never shows its back face on: mirrored for the left wall, it keeps its paper)
+        out.push_back({{a, b, cc}, p, p, 0.f});
+        out.push_back({{a, cc, d}, p, p, 0.f});
         x = x1;
         z = z1;
     }
@@ -736,12 +771,12 @@ void OrigamiUniverse::buildCranes() {
         if (a <= 0.01f) continue;
         faces.clear();
         // the folding: the row's strip, then the model step by step
-        if (!c.leaving && c.age < FOLD_END) {
-            const float F = std::max(0.f, (c.age - FOLD0) / STEP);
+        if (!c.leaving && c.age < c.foldEnd) {
+            const float F = std::max(0.f, (c.age - c.fold0) / STEP);
             if (F < 0.5f) {
-                const float flipX = c.age < FOLD0 ? 1.f : std::fabs(std::cos(PI * F));
+                const float flipX = c.age < c.fold0 ? 1.f : std::fabs(std::cos(PI * F));
                 stripFaces(c, c.age, flipX, faces);
-                const float lift = 0.08f + 0.25f * std::sin(PI * smoothstepf(SLIDE, FOLD0, c.age));
+                const float lift = 0.08f + 0.25f * std::sin(PI * smoothstepf(SLIDE, c.fold0, c.age));
                 emitFaces(faces, vec2{0, 0}, 1.f, 1.f, a, lift, 0.5f * a, false);
             } else {
                 craneModel(F, 0.f, paper(c.color), faces);
@@ -755,17 +790,17 @@ void OrigamiUniverse::buildCranes() {
         if (flying) {
             const float ph = flapPhase_ + c.phase;
             const float beat = -0.25f + 1.9f * 0.5f * (1.f + std::sin(TAU * ph));
-            const float k = c.leaving ? 1.f : c.age < c.arrive ? smoothstepf(FOLD_END, FOLD_END + 0.4f, c.age) : smoothstepf(0.f, 0.4f, c.fly);
+            const float k = c.leaving ? 1.f : c.age < c.arrive ? smoothstepf(c.foldEnd, c.foldEnd + 0.4f, c.age) : smoothstepf(0.f, 0.4f, c.fly);
             flap = beat * k;
         }
         if (c.wingT < 1.f && c.wingDelay <= 0.f) flap += 1.7f * std::sin(PI * c.wingT);
         // grows from its folding size to its own on the way to its place
-        const float sc = c.leaving ? c.scale : lerpf(FOLD_SCALE, c.scale, smoothstepf(FOLD_END, c.arrive, c.age));
+        const float sc = c.leaving ? c.scale : lerpf(FOLD_SCALE, c.scale, smoothstepf(c.foldEnd, c.arrive, c.age));
         // perched cranes a shade quieter than the pieces (blended toward the sheet in display space)
         const float quiet = 0.2f * (flying ? 0.f : 1.f);
         const vec3 base = ugl::toLinear(lerp(ugl::toSrgb(paper(c.color)), ugl::toSrgb(sheet()), quiet));
         craneModel((float)STEPS, flap, base, faces);
-        const float alt = c.leaving ? 1.f : std::max(c.age < c.arrive ? std::sin(PI * saturate((c.age - FOLD_END) / (c.arrive - FOLD_END))) : 0.f,
+        const float alt = c.leaving ? 1.f : std::max(c.age < c.arrive ? std::sin(PI * saturate((c.age - c.foldEnd) / (c.arrive - c.foldEnd))) : 0.f,
                                                      std::sin(0.5f * PI * smoothstepf(0.f, 1.f, c.fly)));
         const float off = 0.14f + 0.9f * alt + c.hop * 0.5f;
         emitFaces(faces, c.pos, sc, c.face, a, off, a * lerpf(0.5f, 0.2f, alt), true);
@@ -857,6 +892,7 @@ void OrigamiUniverse::setLevel(int level, float energy, float seconds, float imp
 
 // The drop: the sheet turns over to its coloured side and the whole flock takes off.
 void OrigamiUniverse::drop(float strength) {
+    patternOut_ = true; // the sheet's creases change: the old pattern fades, a new one comes up
     // the flock's loops: each side's cranes spread evenly around their margin
     if (!dropMode_) {
         for (int side = -1; side <= 1; side += 2) {
@@ -947,7 +983,7 @@ void OrigamiUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
-            fold_[c.y][c.x] = 0.f; // time since it landed: it unfolds
+            fold_[c.y][c.x] = 0.f; // time since it landed: its shadow settles
         }
         break;
     }
@@ -970,7 +1006,15 @@ void OrigamiUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 if (counts[y][t] > counts[y][best]) best = t;
             const vec3 p = layout::cellPos(0.f, (float)y);
             const bool special = ev.count >= 4 && k == 1;
-            addCrane(p.y, strips[y], special ? 7 : best, special ? 1.25f : 1.f);
+            // each row leaves by the other wall than the last one (a double clear sends one row each way), unless that
+            // side's folding corner is full
+            float side = -lastSide_;
+            int busy = 0;
+            for (const Crane& o : cranes_)
+                if (!o.leaving && o.age < o.foldEnd && (o.side < 0.f) == (side < 0.f)) busy++;
+            if (busy >= 4) side = -side;
+            lastSide_ = side;
+            addCrane(p.y, side, strips[y], special ? 7 : best, special ? 1.25f : 1.f);
             k++;
         }
         if (ev.count >= 4) {
@@ -1080,9 +1124,9 @@ void OrigamiUniverse::buildBoard(const Game& g) {
                 return g.cell(nx, ny).type == c.type;
             };
             const vec3 p = layout::cellPos((float)x, y - off);
-            // unfolding after the lock: from tight to flat with a little give
+            // after the lock: the shadow settles
             const float t = fold_[y][x];
-            const float fold = FOLD_REST + (FOLD_TIGHT - FOLD_REST) * std::exp(-6.f * t) * std::cos(7.f * t);
+            const float fold = FOLD_REST; // a piece looks the same falling and locked; only its shadow settles
             const float lift = 0.1f + 0.25f * std::exp(-9.f * t);
             push(p.x, p.y, 0.5f, maskOf(x, y, same), paper(c.type), 1.f, 0, 0.f, std::max(0.f, fold), lift);
             shadow(p.x, p.y, 0.5f, lift, 0.9f);
@@ -1092,7 +1136,7 @@ void OrigamiUniverse::buildBoard(const Game& g) {
         const float k = saturate((u.t - u.delay) / (u.delay > 0.f ? 0.5f : 0.32f));
         push(u.x, u.y, 0.5f, u.mask, paper(u.type), 1.f, 3, k, FOLD_REST, 0.1f, u.ridge);
     }
-    // The falling piece, folded tight and held above the sheet.
+    // The falling piece, held a little above the sheet.
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1104,7 +1148,7 @@ void OrigamiUniverse::buildBoard(const Game& g) {
         };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         const float lp = g.lockProgress();
-        const float fold = FOLD_TIGHT - 0.25f * lp, lift = 0.38f - 0.12f * lp;
+        const float fold = FOLD_REST, lift = 0.38f - 0.12f * lp;
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
@@ -1130,7 +1174,7 @@ void OrigamiUniverse::buildBoard(const Game& g) {
         };
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            push(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), paper(type), alpha, 0, 0.f, 0.6f, 0.1f);
+            push(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), paper(type), alpha, 0, 0.f, FOLD_REST, 0.1f);
             shadow(px, py, 0.5f * sc, 0.08f, 0.7f * alpha);
         }
     };
@@ -1379,6 +1423,10 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     dev_ = approach(dev_, dropMode_ ? wp : 0.f, dropMode_ ? 1.2f : 0.3f, dt);
     flock_ = dropMode_ && wp > 0.3f ? 1.f : 0.f;
     swell_ = approach(swell_, 0.f, 0.4f, dt);
+    if (patternOut_) {
+        patternA_ = std::max(0.f, patternA_ - dt / 1.2f);
+        if (patternA_ <= 0.f) { pattern_++; patternOut_ = false; }
+    } else patternA_ = std::min(1.f, patternA_ + dt / 3.f);
     for (auto& row : fold_)
         for (float& t : row) t = std::min(t + dt, 10.f);
     // the wings' two-beat cycle (flight)
@@ -1433,6 +1481,10 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPaper_, "uLight", 0.95f + 0.03f * wm + 0.04f * wp + 0.04f * swell_);
     set1f(progPaper_, "uDark", dark);
     set2f(progPaper_, "uLightXY", L.x, L.y);
+    // the sheet's old creases: faint at calm, catching the light at a peak; a new pattern after each drop
+    set1f(progPaper_, "uCrease", (0.022f + 0.02f * wm + 0.035f * wp + 0.03f * swell_) * patternA_);
+    set1f(progPaper_, "uPattern", (float)pattern_);
+    set1f(progPaper_, "uWarm", 0.35f + 0.25f * wm + 0.4f * wp);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, shadowT_.tex);
     set1i(progPaper_, "uShadow", 0);
