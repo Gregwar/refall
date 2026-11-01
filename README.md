@@ -67,7 +67,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/lanterns.jpg"><br><b>LANTERNS</b>: paper lanterns on a night lake; each clear releases lanterns that stay lit on the water, the drop lifts them all into the sky<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/origami.jpg"><br><b>ORIGAMI</b>: folded paper pieces on a sheet; each cleared row folds into a paper crane that settles around the well, and the drop sets the whole flock flying<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
