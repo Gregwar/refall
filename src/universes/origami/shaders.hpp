@@ -111,19 +111,23 @@ bool has(int m, int b) { return ((m >> b) & 1) != 0; }
 // from neighbour to neighbour (mitred where the strip turns, a valley crease in the inner corner), its two sides
 // sloping down to the cut edges. r: the cell's neighbours of the same piece (bits: left, right, down, up); fold: the
 // slope (tight when falling, flatter once settled).
-vec3 facetNormal(vec2 p, int r, float fold) {
+vec3 facetNormal(vec2 p, int r, float fold, out float dist, out vec2 g) {
     bool L = has(r, 0), R = has(r, 1), D = has(r, 2), U = has(r, 3);
     // a strip's end: the ridge runs through to the cut
     if ((L || R) && !(D || U)) { L = true; R = true; }
     if ((D || U) && !(L || R)) { D = true; U = true; }
     float best = 1e3;
-    vec2 g = vec2(0.0);
+    g = vec2(0.0);
     if ((R && p.x >= 0.0) || (L && p.x <= 0.0)) { best = abs(p.y); g = vec2(0.0, sign(p.y)); }
     if (((U && p.y >= 0.0) || (D && p.y <= 0.0)) && abs(p.x) < best) { best = abs(p.x); g = vec2(sign(p.x), 0.0); }
     if (best > 1e2) {
-        // no ridge over this corner: two flat facets down to the corner (a mitre), or a point for a lone cell
-        g = abs(p.x) > abs(p.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));
+        // no ridge over this corner: two flat facets down to the corner (a mitre); a lone cell is a square folded
+        // on its diagonal
+        best = max(abs(p.x), abs(p.y));
+        if (r == 0) g = (p.x - p.y > 0.0 ? vec2(0.7071, -0.7071) : vec2(-0.7071, 0.7071));
+        else g = abs(p.x) > abs(p.y) ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));
     }
+    dist = best;
     return normalize(vec3(g * fold * 0.75, 1.0));
 }
 vec3 litPaper(vec3 col, vec3 n, float foil) {
@@ -195,7 +199,8 @@ void main() {
         if (abs(y) > 0.5) discard;
         if (y > 0.0 && y > top) discard;
         bool flap = y > 0.0 || (k > 0.5 && y > top);
-        vec3 n = facetNormal(vec2(p.x, y), int(vD.x + 0.5), fold);
+        float dd; vec2 gg;
+        vec3 n = facetNormal(vec2(p.x, y), int(vD.x + 0.5), fold, dd, gg);
         vec3 c = litPaper(col, n, uFoil);
         if (flap) {
             if (k > 0.5) c = uBack * (0.8 + 0.25 * (1.0 - k));
@@ -204,7 +209,18 @@ void main() {
         frag = vec4(c * cov, cov) * vB.w;
         return;
     }
-    vec3 n = facetNormal(p, m, fold);
+    float dist; vec2 g;
+    vec3 n = facetNormal(p, m, fold, dist, g);
+    // the paper's width across its fold: a tightly folded strip is narrower, it widens as it opens
+    float w = vD.y;
+    if (w < 0.999) {
+        float e = 0.5 * w - dist;
+        float cw = smoothstep(-aa, aa, e);
+        if (cw <= 0.0) discard;
+        cov = min(cov, cw);
+        float facing = dot(g, normalize(uLightDir.xy));
+        rim = min(rim, 0.0) + (1.0 - smoothstep(aa * 0.5, aa * 2.2, e)) * (facing > 0.0 ? 0.5 : -1.0) * (0.4 + 0.6 * abs(facing));
+    }
     vec3 c = litPaper(col, n, uFoil * (0.4 + 0.6 * fold));
     // the creases themselves: a fine pressed line where the facets meet
     float cl = clamp(length(fwidth(n.xy)) * 4.0, 0.0, 1.0);

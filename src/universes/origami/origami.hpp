@@ -46,8 +46,12 @@ private:
         float scale = 1.f;
         int color = 0;           // 0..6 a piece's paper, 7 the accent (a Tetris)
         int slot = -1;
-        float age = 0.f;         // since it was folded (negative: waiting for its row to vanish)
-        float arrive = 1.6f;     // the flight to its place
+        float age = 0.f;         // since its row was cleared (the row slides out, is folded into a crane, flies off)
+        float arrive = 4.f;      // when it is in its place (the folding, then the flight)
+        int strip[10] = {};      // the row's papers (0..6), from the left
+        float stripY = 0.f;      // the row's height
+        float side = 1.f;        // the side the row slides out to
+        vec2 spot{0, 0};         // where it is folded, outside the well
         float wingT = 1.f;       // a wing beat in progress (0..1)
         float wingDelay = 0.f;
         float hop = 0.f, hopV = 0.f;
@@ -64,8 +68,14 @@ private:
     std::vector<int> slotUsed_;   // crane count per slot (0 free)
     void planSlots();
     int takeSlot();
-    void addCrane(vec2 from, int color, float delay, float scale);
-    void updateCranes(const MusicState& m, float wdt, bool paused);
+    void addCrane(float rowY, const int* strip, int color, float scale);
+    // The paper model: a face of folded paper (local units, z toward the viewer), its two sides' colours.
+    struct PFace { vec3 v[3]; vec3 front, back; float key; };
+    void craneModel(float F, float flap, const vec3& col, std::vector<PFace>& out) const;
+    void stripFaces(const Crane& c, float t, float flipX, std::vector<PFace>& out) const;
+    void emitFaces(std::vector<PFace>& faces, vec2 pos, float scale, float face, float alpha, float shadowOff,
+                   float shadowA, bool outline);
+    void updateCranes(const MusicState& m, float dt, float wdt, bool paused);
     void buildCranes();
     std::vector<float> craneTris_, craneShadow_; // x, y, r, g, b, a (board space)
 
