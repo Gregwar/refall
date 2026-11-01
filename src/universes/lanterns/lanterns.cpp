@@ -4,7 +4,7 @@
 // shift keeps the board's plane on its pixels), the lake a true plane at the well's floor receding to a far shore of
 // low hills, a few faint stars. The water reflects the sky through rippled normals and a planar reflection of the
 // scene (rendered mirrored). The well is two bamboo poles standing in the water, and the stack floats on the lake.
-// The pieces are paper lanterns: every cell a box one cell deep, the faces inside a piece removed, so each piece is
+// The pieces are paper lanterns: every cell a thin opaque box, the faces inside a piece removed, so each piece is
 // one volume of lit paper (darker toward its thin wooden frame, ribs and fibers seen through the paper, its candle at
 // the piece's heart), each of the seven types its own paper. The cleared row becomes lanterns: each run of one piece
 // in it slides out of the well to its side as a box of its paper (in the 0.3 s the row stays empty), folds into a box
@@ -61,6 +61,7 @@ vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 constexpr float EYE_Y = 3.0f;    // the camera's height: the horizon on screen (board units)
 constexpr float WATER = -10.0f; // the lake's plane: the well's floor
 constexpr float FLOAT_Y = 0.42f; // a floating lantern's center above the water
+constexpr float CELL_D = 0.35f;  // a cell's depth behind the board's plane (cells: thin lantern panels)
 constexpr int MAX_LAKE = 90;     // lanterns floating at once
 
 // The nights: the sky (top, horizon), the near water, the far shore, the poles, the seven papers, the accent, and
@@ -494,7 +495,7 @@ void LanternsUniverse::updateLanterns(float dt, float wdt) {
             L.t += dt;
             const float e = smoothstepf(0.f, 1.f, L.t / L.dur);
             L.x = lerpf(L.x0, L.lx, e);
-            L.z = lerpf(-0.5f, -1.7f, e);
+            L.z = lerpf(-0.5f * CELL_D, -1.7f, e);
             if (L.t >= L.dur) {
                 L.state = L_DESCEND;
                 L.t = 0.f;
@@ -518,7 +519,7 @@ void LanternsUniverse::updateLanterns(float dt, float wdt) {
             L.y = lerpf(L.y0, WATER + FLOAT_Y, ey);
             L.sx = lerpf(L.sx0, 0.75f, es);
             L.sy = lerpf(1.f, 0.9f, es);
-            L.sz = lerpf(1.f, 0.75f, es);
+            L.sz = lerpf(CELL_D, 0.75f, es);
             L.cap = smoothstepf(0.15f, 0.8f, u);
             if (u >= 1.f) {
                 L.state = L_TRAVEL;
@@ -641,6 +642,18 @@ void LanternsUniverse::syncIds(const Game& g) {
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
             if ((g.cell(x, y).type >= 0) != (ids_[y][x] != 0)) wrong++;
+    // a piece's id over two papers (the board replaced behind our back): every id is made again
+    bool mixed = false;
+    for (int y = 0; y < Game::H && !mixed; y++)
+        for (int x = 0; x + 1 < Game::W; x++)
+            if (ids_[y][x] && ids_[y][x] == ids_[y][x + 1] && g.cell(x, y).type != g.cell(x + 1, y).type) { mixed = true; break; }
+    for (int y = 0; y + 1 < Game::H && !mixed; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (ids_[y][x] && ids_[y][x] == ids_[y + 1][x] && g.cell(x, y).type != g.cell(x, y + 1).type) { mixed = true; break; }
+    if (mixed) {
+        std::memset(ids_, 0, sizeof(ids_));
+        wrong++;
+    }
     if (!wrong) return;
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
@@ -755,9 +768,10 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 L.state = L_LEAVE;
                 L.x = L.x0 = p.x;
                 L.y = L.y0 = p.y;
-                L.z = -0.5f;
+                L.z = -0.5f * CELL_D;
                 L.sx = L.sx0 = (float)(r.x1 - r.x0 + 1);
-                L.sy = L.sz = 1.f;
+                L.sy = 1.f;
+                L.sz = CELL_D;
                 L.cap = 0.f;
                 L.dur = 0.3f;
                 L.lx = side < 0 ? p.x - (edgeL + 5.75f) : p.x + (5.75f - edgeR);
@@ -808,8 +822,8 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             const int id = ids_[c.y][c.x];
             int m = 0;
-            const int dx[4] = {-1, 1, 0, 0}, dy[4] = {0, 0, 1, -1};
-            for (int i = 0; i < 4; i++) {
+            const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, -1, -1, 1, 1}; // sides, then corners
+            for (int i = 0; i < 8; i++) {
                 const int nx = c.x + dx[i], ny = c.y + dy[i];
                 if (id && idAt(nx, ny) == id && inEv(nx, ny)) m |= 1 << i;
             }
@@ -842,9 +856,9 @@ void LanternsUniverse::buildBoard(const Game& g) {
     poles_.clear();
     const float light = light_;
     auto maskOf = [&](int x, int y, auto same) {
-        const int dx[4] = {-1, 1, 0, 0}, dy[4] = {0, 0, 1, -1};
+        const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, -1, -1, 1, 1}; // sides, then corners
         int m = 0;
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 8; i++)
             if (same(x + dx[i], y + dy[i])) m |= 1 << i;
         return m;
     };
@@ -852,8 +866,8 @@ void LanternsUniverse::buildBoard(const Game& g) {
     auto push = [&](std::vector<BoxInst>& v, float x, float y, float s, int mask, const vec3& c, float alpha, int kind,
                     float l, float seed, float cx, float cy, float r) {
         if (alpha <= 0.003f) return;
-        v.push_back({{x, y, -0.5f * s, (float)mask}, {s, s, s, (float)kind}, {c.x, c.y, c.z, alpha}, {l, 0.f, seed, 0.f},
-                     {cx, cy, -0.5f * s, r}});
+        v.push_back({{x, y, -0.5f * CELL_D * s, (float)mask}, {s, s, CELL_D * s, (float)kind}, {c.x, c.y, c.z, alpha}, {l, 0.f, seed, 0.f},
+                     {cx, cy, -0.5f * CELL_D * s, r}});
     };
     // the well's poles, standing in the water
     for (int side = -1; side <= 1; side += 2) {
@@ -913,6 +927,7 @@ void LanternsUniverse::buildBoard(const Game& g) {
                 auto same = [&](int nx, int ny) {
                     if (nx < 0 || nx >= Game::W || ny < Game::HIDDEN || ny >= Game::H) return false;
                     if (std::fabs(g.rowOffset(ny) - off) > 0.02f) return false;
+                    if (g.cell(nx, ny).type != c.type) return false; // (stale ids never merge two papers)
                     if (ids_[y][x] && ids_[ny][nx]) return ids_[ny][nx] == ids_[y][x];
                     return g.cell(nx, ny).type == c.type;
                 };

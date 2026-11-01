@@ -210,30 +210,40 @@ void main() {
             frag = vec4(tint * a, 0.0);
             return;
         }
-        const float ft = 0.075;
-        float frame = 1.0 - smoothstep(ft - uPx, ft + uPx, d);
+        const float ft = 0.07;
+        if (face != 0) {
+            // the rim (the top and the sides of a thin panel): plain, darker paper by its frame
+            float rimL = face == 4 ? 0.3 : face == 5 ? 0.12 : 0.2;
+            vec3 c = mix(uWood * 0.8, tint * light, rimL);
+            frag = vec4(c, uStackA * vC.w);
+            return;
+        }
+        // inner corners of the piece (two sides of the piece, the diagonal cell another piece): a frame corner too
         float g = 1.0;
-        if (eL) g *= smoothstep(ft, ft + 0.5, (q.x + 0.5) * qs.x);
-        if (eR) g *= smoothstep(ft, ft + 0.5, (0.5 - q.x) * qs.x);
-        if (eB) g *= smoothstep(ft, ft + 0.5, (q.y + 0.5) * qs.y);
-        if (eT) g *= smoothstep(ft, ft + 0.5, (0.5 - q.y) * qs.y);
-        // paper lit from inside: darker toward the frame, the candle at the piece's heart
-        float hd = length(vW - vE.xyz) / max(vE.w, 0.1);
-        float hot = exp(-hd * hd * 1.6);
-        float paper = 0.14 + 0.42 * pow(g, 0.8) + 0.4 * hot * (0.4 + 0.6 * g);
+        vec2 e0 = (q + 0.5) * qs, e1 = (0.5 - q) * qs;
+        if (has(m, 0) && has(m, 3) && !has(m, 4)) { float k = max(e0.x, e1.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
+        if (has(m, 1) && has(m, 3) && !has(m, 5)) { float k = max(e1.x, e1.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
+        if (has(m, 0) && has(m, 2) && !has(m, 6)) { float k = max(e0.x, e0.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
+        if (has(m, 1) && has(m, 2) && !has(m, 7)) { float k = max(e1.x, e0.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
+        float frame = 1.0 - smoothstep(ft - uPx, ft + uPx, d);
+        if (eL) g *= smoothstep(ft, ft + 0.45, e0.x);
+        if (eR) g *= smoothstep(ft, ft + 0.45, e1.x);
+        if (eB) g *= smoothstep(ft, ft + 0.45, e0.y);
+        if (eT) g *= smoothstep(ft, ft + 0.45, e1.y);
+        // paper lit from inside: darker toward the frame, a soft warmth at the candle in the piece's heart
+        float hd = length(vW.xy - vE.xy) / max(vE.w, 0.1);
+        float hot = exp(-hd * hd * 1.2);
+        float paper = 0.22 + 0.5 * pow(g, 0.7) + 0.2 * hot * g;
+        // the ribs seen through the paper (between the cells' junctions, never on them), a fine fiber
         float rib = abs(fract(vW.y * 2.0 + 0.5) - 0.5) * 0.5;
-        if (face <= 3) paper *= 1.0 - 0.1 * (1.0 - smoothstep(0.0, 0.03 + uPx, rib));
-        float cloud = vnoise(fc * vec2(1.3, 1.9) + vD.z) * 0.6 + vnoise(fc * 4.1 + vD.z * 3.0) * 0.4;
-        float fib = vnoise(fc * vec2(1.6, 9.0) + vD.z) * 0.55 + vnoise(fc * vec2(5.0, 30.0) + vD.z * 3.0) * 0.45;
-        float strand = 1.0 - abs(vnoise(fc * vec2(2.2, 5.5) + vD.z * 7.0) * 2.0 - 1.0);
-        paper *= 0.8 + 0.2 * cloud + 0.14 * (fib - 0.5) + 0.12 * smoothstep(0.9, 0.98, strand);
-        // the sides and the top glow less than the front (the light crosses the paper at a slant)
-        paper *= face == 0 ? 1.0 : face == 4 ? 0.78 : face == 5 ? 0.5 : 0.68;
-        vec3 deep = pow(tint, vec3(1.7));
-        vec3 col = mix(deep, tint, smoothstep(0.0, 0.5, g + hot * 0.5)) * paper;
-        col = mix(col, col * uFlame * 1.25 + uFlame * 0.05, 0.45 * hot * hot);
+        paper *= 1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.025 + uPx, rib));
+        float fib = vnoise(fc * vec2(3.0, 16.0) + vD.z) * 0.6 + vnoise(fc * vec2(9.0, 40.0) + vD.z * 3.0) * 0.4;
+        paper *= 0.95 + 0.08 * fib;
+        vec3 deep = pow(tint, vec3(1.5));
+        vec3 col = mix(deep, tint, smoothstep(0.0, 0.6, g)) * paper;
+        col = mix(col, col * uFlame * 1.15, 0.35 * hot);
         vec3 c = max(col * light, tint * 0.05 * paper);
-        vec3 wood = uWood * (face == 4 ? 0.8 : 0.6) + tint * 0.05 * light;
+        vec3 wood = uWood * 0.6 + tint * 0.04 * light;
         c = mix(c, wood, frame);
         frag = vec4(c, uStackA * vC.w);
         return;
@@ -309,7 +319,7 @@ void main() {
         for (int i = -1; i <= 1; i += 2) c += texture(uScene, vUv + vec2(i, j) * uTexel).rgb;
     c *= 0.25;
     float l = max(c.r, max(c.g, c.b));
-    c *= smoothstep(0.3, 1.0, l);
+    c *= smoothstep(0.6, 1.4, l);
     frag = vec4(c, 1.0);
 }
 )";
