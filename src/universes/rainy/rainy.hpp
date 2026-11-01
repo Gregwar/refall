@@ -33,6 +33,7 @@ private:
     int ids_[22][10] = {};
     float glint_[22][10] = {};
     float pool_[22][10] = {};  // water resting on a cell's top face (0..1)
+    float poolShow_[22][10] = {}; // the pools as drawn, easing toward pool_
     int nextId_ = 1;
     void syncIds(const Game& g);
     void buildBoard(const Game& g);
@@ -52,6 +53,11 @@ private:
         int row = 0;           // SLIDE: the row whose top face it slides on
         float wig = 0.f;       // meander phase
         float fade = 1.f;      // GONE: shrinking away
+        bool merging = false;  // GONE: flowing into the drop that took it, at (mx, my)
+        float mx = 0.f, my = 0.f;
+        // what is drawn eases toward the simulation, so a drop never jumps: its radius, its stretch, an offset
+        // left when it is set onto a piece's top
+        float rv = -1.f, el = 0.f, oy = 0.f;
     };
     std::vector<Drop> drops_;
     struct Bead { float x, y, r, grow, dry, dryMax; }; // dry > 0: a trail bead drying away
@@ -63,7 +69,7 @@ private:
     int mw_ = 0, mh_ = 0;
     float rainAcc_ = 0.f, stuckAcc_ = 0.f;
     void spawnBead(float x, float y, float r, float grow);
-    void spawnStuck(bool anywhere);
+    bool spawnStuck(bool anywhere);
     void releaseRuns(int n, bool upper);
     void stepWater(const Game& g, float dt);
     bool occupied(const Game& g, int cx, int cy) const;

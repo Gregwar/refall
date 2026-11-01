@@ -524,7 +524,7 @@ void RainyUniverse::onEvent(const GameEvent& ev, const Game& game) {
             d.y = 12.f - cy - 0.6f;
             d.st = RUN;
             d.vy = 1.5f;
-            d.grow = 1.f;
+            d.grow = 0.f;
             d.wig = rng_.range(0.f, 6.f);
             drops_.push_back(d);
         }
@@ -546,18 +546,20 @@ void RainyUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         {
             int nb[Game::H][Game::W] = {};
-            float ng[Game::H][Game::W] = {}, np[Game::H][Game::W] = {};
+            float ng[Game::H][Game::W] = {}, np[Game::H][Game::W] = {}, ns[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (rows[y]) continue;
                 std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
                 std::memcpy(ng[dst], glint_[y], sizeof(glint_[y]));
                 std::memcpy(np[dst], pool_[y], sizeof(pool_[y]));
+                std::memcpy(ns[dst], poolShow_[y], sizeof(poolShow_[y]));
                 dst--;
             }
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(glint_, ng, sizeof(glint_));
             std::memcpy(pool_, np, sizeof(pool_));
+            std::memcpy(poolShow_, ns, sizeof(poolShow_));
         }
         if (ev.count >= 4) {
             // a Tetris: every drop lets go, and the rows' colors rise into the city as lanterns
@@ -643,15 +645,16 @@ void RainyUniverse::spawnBead(float x, float y, float r, float grow) {
     if (std::fabs(std::fabs(x) - MULLION) < MULLION_HW + r || y - r < RAIL) return;
     const size_t cap = 900;
     if (beads_.size() >= cap) {
-        // the glass is full: the newest rain lands on an old bead's place
-        beads_[(size_t)rng_.irange(0, (int)beads_.size() - 1)] = Bead{x, y, r, grow, 0.f, 0.f};
-        return;
+        // the glass is full: an old bead dries away for each new one
+        Bead& o = beads_[(size_t)rng_.irange(0, (int)beads_.size() - 1)];
+        if (o.dryMax <= 0.f) o.dry = o.dryMax = 0.4f;
+        if (beads_.size() >= cap + 200) return;
     }
     beads_.push_back(Bead{x, y, r, grow, 0.f, 0.f});
 }
 
 // A drop hanging on the glass (anywhere: a new one fed by the rain; else from the top of the pane).
-void RainyUniverse::spawnStuck(bool anywhere) {
+bool RainyUniverse::spawnStuck(bool anywhere) {
     for (int tries = 0; tries < 6; tries++) {
         Drop d;
         d.x = rng_.range(-viewH_.x + 0.5f, viewH_.x - 0.5f);
@@ -663,8 +666,9 @@ void RainyUniverse::spawnStuck(bool anywhere) {
         d.grow = anywhere ? 0.f : 1.f;
         d.wig = rng_.range(0.f, 6.28f);
         drops_.push_back(d);
-        return;
+        return true;
     }
+    return false;
 }
 
 // Lets n hanging drops go (the biggest, the highest first), or new ones from above the pane when there are too few.
@@ -682,7 +686,7 @@ void RainyUniverse::releaseRuns(int n, bool upper) {
             drops_[(size_t)best].st = RUN;
             drops_[(size_t)best].vy = 0.4f;
         } else {
-            spawnStuck(false);
+            if (!spawnStuck(false)) continue;
             drops_.back().st = RUN;
             drops_.back().vy = 2.f;
             drops_.back().r = rng_.range(0.24f, 0.36f);
@@ -745,15 +749,23 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
     for (size_t i = 0; i < drops_.size(); i++) {
         Drop& d = drops_[i];
         d.grow = std::min(1.f, d.grow + dt * 5.f);
-        if (d.st == GONE) { d.fade -= dt * 2.2f; continue; }
+        if (d.st == GONE) {
+            if (d.merging) {
+                d.x += (d.mx - d.x) * (1.f - std::exp(-dt * 12.f));
+                d.y += (d.my - d.y) * (1.f - std::exp(-dt * 12.f));
+                d.r = approach(d.r, 0.f, 11.f, dt);
+                d.fade -= dt * 3.5f;
+            } else d.fade -= dt * 2.2f;
+            continue;
+        }
         const bool inWell = std::fabs(d.x) < 5.f;
         if (d.st == STUCK) {
-            if (inWell && occupied(g, colOf(d.x), rowOf(d.y)) && rowOf(d.y) < Game::H) d.st = GONE, d.fade = 0.f;
+            if (inWell && occupied(g, colOf(d.x), rowOf(d.y)) && rowOf(d.y) < Game::H) { d.st = GONE; }
             continue;
         }
         if (d.st == SLIDE) {
             const int cx = colOf(d.x);
-            if (occupied(g, cx, d.row - 1) && d.row - 1 >= 0) { d.st = GONE; d.fade = 0.f; continue; }
+            if (occupied(g, cx, d.row - 1) && d.row - 1 >= 0) { d.st = GONE; continue; }
             const float dir = d.tx > d.x ? 1.f : -1.f;
             d.x += dir * std::min(std::fabs(d.tx - d.x), dt * 2.4f);
             if (occupied(g, cx, d.row) && d.row < Game::H) pool_[d.row][cx] = std::min(1.f, pool_[d.row][cx] + dt * 0.35f);
@@ -791,9 +803,10 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
             const float dx = b.x - d.x, dy = b.y - d.y;
             if (b.dry <= 0.f && dx * dx + dy * dy < (d.r * 0.9f + b.r) * (d.r * 0.9f + b.r)) {
                 d.r = std::min(0.48f, std::sqrt(d.r * d.r + b.r * b.r * 0.6f));
-                beads_[k] = beads_.back();
-                beads_.pop_back();
-            } else k++;
+                // drawn away into the drop in a tenth of a second
+                beads_[k].dry = beads_[k].dryMax = 0.1f;
+            }
+            k++;
         }
         for (size_t k = 0; k < drops_.size(); k++) {
             if (k == i) continue;
@@ -803,7 +816,10 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
             if (dx * dx + dy * dy < (d.r + o.r) * (d.r + o.r) * 0.6f) {
                 d.r = std::min(0.5f, std::sqrt(d.r * d.r + o.r * o.r));
                 o.st = GONE;
-                o.fade = 0.f;
+                o.fade = 1.f;
+                o.merging = true;
+                o.mx = d.x;
+                o.my = d.y;
             }
         }
         if (d.r < 0.13f) { d.st = STUCK; d.vy = 0.f; continue; }
@@ -813,8 +829,13 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
         // the stack: onto a piece's top, then along it to its edge (or into a pool in a pit)
         if (std::fabs(d.x) < 5.f) {
             const int cx = colOf(d.x), cy = rowOf(bottom);
-            if (cy >= Game::HIDDEN && occupied(g, cx, cy)) {
-                d.y = 12.f - cy + d.r * 0.85f;
+            if (cy >= Game::HIDDEN && occupied(g, cx, cy) && (12.f - cy) - bottom > 0.35f) {
+                // deep inside a cell: a piece locked over it, it fades out under the glass
+                d.st = GONE;
+            } else if (cy >= Game::HIDDEN && occupied(g, cx, cy)) {
+                const float ny = 12.f - cy + d.r * 0.85f;
+                d.oy -= ny - d.y;
+                d.y = ny;
                 if (cy < Game::H) pool_[cy][cx] = std::min(1.f, pool_[cy][cx] + d.r * 0.8f);
                 float bestD = 1e9f, bestX = 0.f;
                 for (int dir = -1; dir <= 1; dir += 2) {
@@ -832,10 +853,20 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
             }
         }
     }
+    // what is drawn eases toward the simulation
+    for (Drop& d : drops_) {
+        const float target = d.st == RUN ? std::min(0.7f, d.vy * 0.09f) : d.st == SLIDE ? 0.1f : 0.f;
+        if (d.rv < 0.f) { d.rv = d.r; d.el = target; }
+        d.rv = approach(d.rv, d.r, d.merging ? 18.f : 9.f, dt);
+        d.el = approach(d.el, target, 9.f, dt);
+        d.oy = approach(d.oy, 0.f, 12.f, dt);
+    }
     drops_.erase(std::remove_if(drops_.begin(), drops_.end(), [](const Drop& d) {
                      return (d.st == GONE && d.fade <= 0.f) || d.y < -14.f;
                  }), drops_.end());
-    if (drops_.size() > 160) drops_.erase(drops_.begin(), drops_.begin() + (drops_.size() - 160));
+    if (drops_.size() > 160)
+        for (size_t k = 0, n = drops_.size() - 160; k < drops_.size() && n > 0; k++)
+            if (drops_[k].st == STUCK) { drops_[k].st = GONE; drops_[k].fade = std::min(drops_[k].fade, 1.f); n--; }
 
     // beads: appear, trails dry away, the stack covers some
     for (size_t k = 0; k < beads_.size();) {
@@ -857,6 +888,9 @@ void RainyUniverse::stepWater(const Game& g, float dt) {
             p = face ? std::max(0.f, p - dt * 0.004f) : std::max(0.f, p - dt * 3.f);
         }
 
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) poolShow_[y][x] = approach(poolShow_[y][x], pool_[y][x], 5.f, dt);
+
     // the mist grows back over the trails
     const float mistTo = std::clamp(0.62f - 0.12f * wm - 0.2f * wp + 0.25f * slow_ + 0.4f * over_, 0.f, 1.f);
     const float k = 1.f - std::exp(-dt * 0.11f);
@@ -871,29 +905,28 @@ void RainyUniverse::buildWater(const Game& g) {
         water_.push_back({{x, y, r, elong}, {h, 0.f, 0.f, 0.f}});
     };
     for (const Bead& b : beads_) {
-        float r = b.r * (0.4f + 0.6f * b.grow);
+        float r = b.r * smoothstepf(0.f, 1.f, b.grow);
         if (b.dryMax > 0.f) r *= std::sqrt(saturate(b.dry / b.dryMax));
         push(b.x, b.y, r, 0.f, 0.8f);
     }
     for (const Drop& d : drops_) {
-        const float r = d.r * (0.3f + 0.7f * d.grow);
-        const float elong = d.st == RUN ? std::min(0.7f, d.vy * 0.09f) : d.st == SLIDE ? 0.1f : 0.f;
-        push(d.x, d.y, r, elong, d.st == GONE ? saturate(d.fade) : 1.f);
+        const float r = (d.rv < 0.f ? d.r : d.rv) * smoothstepf(0.f, 1.f, d.grow);
+        const float elong = d.el;
+        const float h = d.st == GONE ? smoothstepf(0.f, 1.f, d.fade) : 1.f;
+        push(d.x, d.y + d.oy, r, elong, h);
     }
     // the pools resting on the tops of the pieces
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
-            const float p = pool_[y][x];
-            if (p < 0.03f || g.cell(x, y).type < 0) continue;
+            const float p = poolShow_[y][x];
+            if (p < 0.005f || g.cell(x, y).type < 0) continue;
             const float off = g.rowOffset(y);
             const float topY = 12.f - (y - off);
-            const float h = (float)((ids_[y][x] * 37 + x * 13) % 100) / 100.f;
-            const float r = 0.07f + 0.17f * std::sqrt(p);
+            const float h = (float)((x * 37 + 11) % 100) / 100.f;
+            const float r = (0.07f + 0.17f * std::sqrt(p)) * smoothstepf(0.f, 0.06f, p);
             push((float)x - 4.5f + (h - 0.5f) * 0.5f, topY + r * 0.5f, r, 0.f, 0.9f);
-            if (p > 0.45f) {
-                const float r2 = 0.06f + 0.08f * p;
-                push((float)x - 4.5f + (0.5f - h) * 0.6f, topY + r2 * 0.5f, r2, 0.f, 0.9f);
-            }
+            const float r2 = (0.06f + 0.08f * p) * smoothstepf(0.35f, 0.6f, p);
+            if (r2 > 0.01f) push((float)x - 4.5f + (0.5f - h) * 0.6f, topY + r2 * 0.5f, r2, 0.f, 0.9f);
         }
 }
 
