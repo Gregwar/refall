@@ -15,11 +15,12 @@
 // repainted on the way) and snaps into place. A finished model turns once, glowing softly, and leaves for the gallery
 // at the back of the table, where the play's models stay, receding into the studio's haze.
 //
-// The song: a calm part is a slow turntable under a soft light; mid parts hop a brick of each model on the beat grid
-// (every two beats); a peak lights the studio a little more and its kicks hop a few more bricks. The drop spins the
-// turntables up and the models come apart and back together every two bars, in step with the beat grid (a spiral, a
-// burst hovering around the model, a cascade into a twisted column), and settle again after it. A lock is the
-// piece clicking onto the board; a Tetris throws its bricks high and the models ripple and turn once. Slow motion is an
+// The song: outside the drop a model never comes apart. A calm part is a slow turntable under a soft light; mid parts
+// lift each model gently, whole, on the beat grid (every two beats); a peak lights the studio a little more, lifts them
+// a little higher and its kicks give them a soft glow. The drop spins the turntables up and the models come apart and
+// back together every two bars, in step with the beat grid (a spiral staircase, an exploded view, a twisted column),
+// and come home quickly when it ends. A lock is the piece clicking onto the board; a Tetris throws its bricks high and
+// the models glow, lift and turn once. Slow motion is an
 // evening light raking in from the right; game over pops the stack's bricks off the board, from the top down.
 #include "universes/bricks/bricks.hpp"
 
@@ -491,13 +492,20 @@ void BricksUniverse::drop(float strength) {
     swell_ = std::max(swell_, 0.5f + 0.5f * strength);
 }
 
+// A new section: the models on the turntables lift gently, whole (outside the drop a model never comes apart).
 void BricksUniverse::refresh(float strength) {
-    if (strength > 0.3f && lv_ > 0.5f) hopRandom(3);
+    if (strength > 0.3f && lv_ > 0.5f) liftModels(1.f);
 }
 
-void BricksUniverse::levelUp() {
-    for (int s = 0; s < 2; s++)
-        if (Model* m = model(cur_[s])) wave(*m, 0.35f);
+void BricksUniverse::levelUp() { liftModels(0.8f); }
+
+// Both models on their turntables rise a little and settle (the whole model, its bricks never move apart).
+void BricksUniverse::liftModels(float amount) {
+    for (int s = 0; s < 2; s++) {
+        if (liftT_[s] < 0.4f) continue;
+        liftT_[s] = 0.f;
+        liftA_[s] = amount;
+    }
 }
 
 vec2 BricksUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
@@ -545,8 +553,6 @@ BricksUniverse::Model& BricksUniverse::newModel(int side, float readyAt) {
     const size_t n = d.bricks.size();
     m.state.assign(n, 0);
     m.snap.assign(n, 1.f);
-    m.hopT.assign(n, 9.f);
-    m.hopA.assign(n, 0.f);
     m.readyAt = readyAt;
     m.appear = 0.f;
     m.pos = tableCenter(side) + vec3(0.f, TT_H, 0.f);
@@ -626,8 +632,8 @@ vec3 BricksUniverse::brickColor(int def, int i) const {
     return lin(V.neutral[r - 7]);
 }
 
-// A brick of a model in the world (its center) and its turn; withMotion adds what the music does to it (hops, the
-// drop's choreography, its snap).
+// A brick of a model in the world (its center) and its turn; withMotion adds its snap and the drop's choreography
+// (the only time a model comes apart).
 vec3 BricksUniverse::brickWorld(const Model& m, int i, Quat* qo, bool withMotion) const {
     const bm::ModelDef& d = bm::all()[m.def];
     const bm::BrickDef& b = d.bricks[i];
@@ -641,10 +647,6 @@ vec3 BricksUniverse::brickWorld(const Model& m, int i, Quat* qo, bool withMotion
         q = qMul(r, q);
     }
     if (withMotion) {
-        if (m.hopT[i] >= 0.f && m.hopT[i] < 0.5f) {
-            const float u = m.hopT[i] / 0.5f;
-            c.y += m.hopA[i] * 4.f * u * (1.f - u);
-        }
         if (m.snap[i] < 1.f) c.y += SNAP_H * (1.f - easeOutBack(m.snap[i]));
         if (m.onTable && dropS_ > 0.f && i < (int)m.rank.size()) {
             // the drop's choreography (top bricks leave first and come back last, so it rebuilds bottom-up); the
@@ -696,44 +698,6 @@ vec3 BricksUniverse::brickWorld(const Model& m, int i, Quat* qo, bool withMotion
         qo->x = w.x; qo->y = w.y; qo->z = w.z; qo->w = w.w;
     }
     return m.pos + qRot(qYaw(m.yaw), c);
-}
-
-void BricksUniverse::wave(Model& m, float amp) {
-    const bm::ModelDef& d = bm::all()[m.def];
-    for (size_t i = 0; i < d.bricks.size(); i++) {
-        if (m.state[i] != 2) continue;
-        m.hopT[i] = -0.07f * d.bricks[i].layer;
-        m.hopA[i] = amp * PLATE * 2.f;
-    }
-}
-
-// A few bricks on top of the models hop (the beat grid, kicks).
-void BricksUniverse::hopRandom(int count) {
-    for (int s = 0; s < 2; s++) {
-        Model* m = model(cur_[s]);
-        if (!m || m->doneT >= 0.f) continue;
-        const bm::ModelDef& d = bm::all()[m->def];
-        const int n = (int)d.bricks.size();
-        for (int c = 0; c < count; c++) {
-            int pick = -1, seen = 0;
-            for (int i = 0; i < n; i++) {
-                if (m->state[i] != 2 || m->hopT[i] < 0.6f || m->snap[i] < 1.f) continue;
-                // only a brick with nothing on it
-                bool covered = false;
-                for (int j = 0; j < n && !covered; j++) {
-                    const bm::BrickDef& a = d.bricks[i];
-                    const bm::BrickDef& b = d.bricks[j];
-                    if (m->state[j] == 0 || b.layer != a.layer + 1) continue;
-                    covered = a.x0 < b.x0 + b.fx && b.x0 < a.x0 + a.fx && a.z0 < b.z0 + b.fz && b.z0 < a.z0 + a.fz;
-                }
-                if (covered) continue;
-                if (rng_.irange(0, seen++) == 0) pick = i;
-            }
-            if (pick < 0) break;
-            m->hopT[pick] = 0.f;
-            m->hopA[pick] = PLATE * 1.4f;
-        }
-    }
 }
 
 // The gallery: the finished models of a side, receding along the table into the haze.
@@ -795,7 +759,6 @@ void BricksUniverse::updateModels(float dt, float wdt) {
             if (m.state[i] != 0) m.rank[i] = r++;
         for (size_t i = 0; i < n; i++) {
             if (m.snap[i] < 1.f) m.snap[i] = std::min(1.f, m.snap[i] + dt / 0.28f);
-            if (m.hopT[i] < 9.f) m.hopT[i] += wdt;
         }
         m.glow = approach(m.glow, 0.f, 1.2f, dt);
         // a windmill's sails start turning once it is finished (faster with the music, fastest in the drop)
@@ -808,11 +771,13 @@ void BricksUniverse::updateModels(float dt, float wdt) {
             if (time_ >= m.readyAt) m.appear = std::min(1.f, m.appear + dt / 0.6f);
             const float extra = m.doneT >= 0.f ? TAU * smoother(m.doneT / 1.8f) : 0.f;
             m.yaw = tableYaw_[m.side] + (m.side ? -extra : extra);
-            m.pos = tableCenter(m.side) + vec3(0.f, TT_H, 0.f);
+            // the beat grid's gentle lift of the whole model (a smooth bump, zero speed at both ends)
+            const float lu = saturate(liftT_[m.side] / 0.7f);
+            const float sb = std::sin(PI * lu);
+            m.pos = tableCenter(m.side) + vec3(0.f, TT_H + 0.22f * liftA_[m.side] * sb * sb, 0.f);
             if (m.placed >= (int)n && m.doneT < 0.f) {
-                // finished: a soft glow, a ripple through it and one turn, then it leaves for the gallery
+                // finished: a soft glow and one turn, then it leaves for the gallery
                 m.doneT = 0.f;
-                wave(m, 0.5f);
             }
             if (m.doneT >= 0.f) {
                 m.doneT += dt;
@@ -1037,14 +1002,10 @@ void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(pressV_, nv, sizeof(pressV_));
         }
         if (tetris) {
-            // the models ripple and turn once
-            for (int s = 0; s < 2; s++)
-                if (Model* m = model(cur_[s])) {
-                    wave(*m, 0.8f);
-                    m->glow = std::max(m->glow, 0.1f);
-                }
+            // the models glow softly, lift whole and turn once (the gallery's models glow too)
             for (Model& m : models_)
-                if (!m.onTable && !m.dying) wave(m, 0.6f);
+                if (!m.dying) m.glow = std::max(m.glow, m.onTable ? 0.12f : 0.08f);
+            liftModels(1.6f);
             extraSpin_[0] += TAU;
             extraSpin_[1] += TAU;
         }
@@ -1599,7 +1560,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     swell_ = approach(swell_, 0.f, 0.4f, dt);
-    if (!dropMode_) dropRelease_ = std::max(0.f, dropRelease_ - dt / 1.6f);
+    if (!dropMode_) dropRelease_ = std::max(0.f, dropRelease_ - dt / 1.1f); // home, eased per brick
     // the lock's click: a stiff spring onto the board
     if (!f.paused)
         for (int y = 0; y < Game::H; y++)
@@ -1632,7 +1593,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
         if (dropS_ < 0.f) dropS_ = 0.f;
     }
 
-    // ---- The beat grid (every two beats): from mid on, a brick of each model hops; more at a peak.
+    // ---- The beat grid (every two beats): from mid on, the models lift gently, whole; higher at a peak.
     if (!f.paused) {
         bool tick = false;
         if (music.hasSong) {
@@ -1643,11 +1604,16 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
             beatClock_ += wdt;
             if (beatClock_ > 1.f) { beatClock_ = 0.f; tick = true; }
         }
-        if (tick && overT_ < 0.f && dropS_ <= 0.f && lv_ > 0.6f) hopRandom(wp > 0.5f ? 2 : 1);
+        // mid and peak: the models lift gently, whole, every two beats (never during the drop's figures)
+        if (tick && overT_ < 0.f && dropRelease_ <= 0.f && lv_ > 0.6f) liftModels(0.5f + 0.5f * wp);
     }
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
-    if (!f.paused && overT_ < 0.f && wp > 0.5f && dropS_ <= 0.f && kick > 0.45f && kickPrev_ <= 0.3f) hopRandom(1);
+    // a peak's kicks: a soft glow on the models (local, small)
+    if (!f.paused && overT_ < 0.f && wp > 0.5f && kick > 0.45f && kickPrev_ <= 0.3f)
+        for (int s = 0; s < 2; s++)
+            if (Model* m = model(cur_[s])) m->glow = std::max(m->glow, 0.05f * kick);
+    for (int s = 0; s < 2; s++) liftT_[s] += wdt;
     kickPrev_ = kick;
 
     // the Tetris' extra turn, eased out

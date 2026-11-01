@@ -54,7 +54,7 @@ private:
         float yaw = 0.f;
         bool onTable = true;     // on its turntable (else in the gallery)
         std::vector<unsigned char> state; // per brick: 0 free, 1 reserved (in flight), 2 placed
-        std::vector<float> snap, hopT, hopA;
+        std::vector<float> snap;
         std::vector<int> rank;   // order among the bricks it has (the drop's figures)
         int reserved = 0, placed = 0;
         float readyAt = 0.f;     // when its baseplate is on the turntable (bricks land after it)
@@ -86,8 +86,8 @@ private:
     void layoutGallery(int side);
     void updateModels(float dt, float wdt);
     void buildModels();
-    void hopRandom(int count);
-    void wave(Model& m, float amp);
+    void liftModels(float amount);
+    float liftT_[2] = {9.f, 9.f}, liftA_[2] = {0.f, 0.f}; // the whole model's gentle lift
 
     // ---- Bricks in flight: ejected from a cleared row, flying to a model; and the stack falling at game over.
     struct Flight {
