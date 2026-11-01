@@ -71,7 +71,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/rainy.jpg"><br><b>RAINY WINDOW</b>: a night window in the rain, the city out of focus behind it; drops run around the stained glass pieces on the beat, the drop turns the city's lights<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/bricks.jpg"><br><b>BRICKS</b>: glossy toy bricks in a photo studio; each cleared row flies off as bricks that build models on turntables, the drop takes them apart and rebuilds them<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
