@@ -27,46 +27,46 @@ public:
     void setBridge(const Bridge& b) override { bridge_ = b; }
 
 private:
-    // ---- Pieces: instanced cells (board units).
-    struct CellInst { float a[4], b[4], c[4], d[4]; }; // x, y, half, mask | tint, alpha | kind, progress, light, seed | candle x, y, r, ripple
-    std::vector<CellInst> cells_;
+    // ---- Boxes (world units, the board's cells on z = 0, the water at y = WATER): pieces, lanterns, poles.
+    struct BoxInst { float a[4], b[4], c[4], d[4], e[4]; }; // center, mask | size, kind | paper, alpha | light, cap, seed | candle, r
+    std::vector<BoxInst> stack_, lamps_, poles_, ghost_;
     int ids_[22][10] = {};
     float flare_[22][10] = {};    // a piece's candle catching (lock, kick)
     int nextId_ = 1;
     void syncIds(const Game& g);
     void buildBoard(const Game& g);
-    struct Fade { float x, y; int type, mask; float t, cx, cy, r, seed; }; // a cell going out (a clear)
-    std::vector<Fade> fades_;
     struct OverCell { float x, y; int row, type, mask; float cx, cy, r, seed; }; // the stack at game over
     std::vector<OverCell> overCells_;
 
-    // ---- The lake's lanterns (released by the clears), the sky lanterns (the drop), the far lights, embers.
-    enum LanternState { L_TRAVEL, L_FLOAT, L_RISE };
+    // ---- The lanterns: the runs of a cleared row leaving the well and landing on the water, the lake's lanterns,
+    // the sky lanterns of the drop; the far lights; embers.
+    enum LanternState { L_LEAVE, L_DESCEND, L_TRAVEL, L_FLOAT, L_RISE };
     struct Lantern {
-        float x = 0, y = 0;        // the base on the water (floating), its position (rising)
-        float x0 = 0, y0 = 0, tx = 0, ty = 0;
-        float t = 0, travel = 5.f, delay = 0;
-        int type = 0, state = L_TRAVEL;
-        bool sky = false;          // a sky lantern (no base on the lake)
-        float w = 0.5f;            // width while rising (sky lanterns)
-        float wy = 0;              // the water under it when it lifted
-        float vy = 0, rise = 0, phase = 0, flick = 0, seed = 0, alpha = 1.f, fade = 0.f;
-        bool dying = false;
-        bool pendingLift = false;  // lifts when it reaches its place
+        float x = 0, y = 0, z = 0;          // the box's center
+        float sx = 0.75f, sy = 0.9f, sz = 0.75f;
+        float x0 = 0, y0 = 0, z0 = 0, sx0 = 1, tx = 0, tz = 0; // a leg's start, the place on the lake
+        float lx = 0, lz = 0;               // where it lands on the water (after leaving the well)
+        float t = 0, dur = 1.f, delay = 0;
+        int type = 0, state = L_FLOAT;
+        bool sky = false;                   // a sky lantern of the drop (never floated on the lake)
+        float cap = 1.f;                    // 0: still the piece's paper .. 1: a lantern (cap and base)
+        float vy = 0, phase = 0, flick = 0, seed = 0, alpha = 1.f, fade = 0.f;
+        bool dying = false, pendingLift = false;
+        int slot = 0;                       // its order on its side when leaving the row (0: nearest the pole)
     };
     std::vector<Lantern> lanterns_;
-    struct Ember { float x, y, vx, vy, t, life; int type; };
+    struct Ember { float x, y, z, vx, vy, t, life; int type; };
     std::vector<Ember> embers_;
-    struct SpriteInst { float a[4], b[4], c[4]; }; // x, y, w, kind | tint, alpha | light, ripple, seed, length
-    std::vector<SpriteInst> sprites_, glows_;
-    float lakeScale(float y) const;
-    bool pickTarget(int side, float& x, float& y);
-    void release(int type, int side, float delay, float jitter);
+    struct SpriteInst { float a[4], b[4]; }; // x, y, z, size | color, alpha
+    std::vector<SpriteInst> sprites_;
+    bool pickTarget(int side, float& x, float& z);
     void spawnSky(int side, bool far);
     void liftAll(float spread);
     void liftOne(Lantern& L, float spread);
     void updateLanterns(float dt, float wdt);
-    void buildSprites(float ripple);
+    void buildLamps();
+    vec2 screenBoard(const vec3& p) const; // a world point on screen, in the board plane's units
+    float hudDim(const vec3& p) const;     // 1 .. dimmed behind the HUD's lettering
 
     // ---- Text.
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
@@ -87,13 +87,17 @@ private:
     void flushShapes();
 
     // ---- GL.
-    GLuint progLake_ = 0, progCell_ = 0, progSprite_ = 0, progBright_ = 0, progBlur_ = 0, progFinal_ = 0, progShape_ = 0,
+    GLuint progEnv_ = 0, progBox_ = 0, progSprite_ = 0, progBright_ = 0, progBlur_ = 0, progFinal_ = 0, progShape_ = 0,
            progText_ = 0;
-    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
-           textVao_ = 0, textVbo_ = 0;
-    ugl::Target sceneT_, bloomA_, bloomB_;
-    mat4 vp_;
+    GLuint cubeVbo_ = 0, quadVbo_ = 0, boxVao_ = 0, boxVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0,
+           shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    ugl::Target sceneT_, reflT_, bloomA_, bloomB_;
+    mat4 vp_, mirrorVp_;
+    vec3 eye_{0, 3, 34};
+    float focal_ = 1.f, shift_ = 0.f, dist_ = 34.f;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
+    void drawBoxes(const std::vector<BoxInst>& v, const mat4& vp, bool mirror, float stackA);
+    void drawSprites(const mat4& vp, bool mirror);
 
     // ---- Song, variant.
     int variant_ = 0;
@@ -115,6 +119,7 @@ private:
     double lastHalf_ = -1.0;
     float beatClock_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
+    float light_ = 1.f, ripple_ = 0.f;
 
     bool slowOn_ = false;
     float slow_ = 0.f;
