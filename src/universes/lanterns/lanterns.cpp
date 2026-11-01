@@ -373,7 +373,7 @@ TransitionHints LanternsUniverse::hints() const {
 // The drop: every lantern on the lake lifts into the sky, more rise from the whole lake for as long as it lasts.
 void LanternsUniverse::drop(float strength) {
     dropMode_ = true;
-    swell_ = std::max(swell_, 0.6f + 0.4f * strength);
+    swellIn_ = std::max(swellIn_, 0.6f + 0.4f * strength); // the swell rises from it over a second, never in one frame
     liftAll(2.5f);
     for (int i = 0; i < 8; i++) spawnSky(i % 2 ? 1 : -1, i >= 3);
 }
@@ -1235,7 +1235,8 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     dev_ = approach(dev_, dropMode_ ? wp : 0.f, dropMode_ ? 1.2f : 0.25f, dt);
-    swell_ = approach(swell_, 0.f, 0.45f, dt);
+    swellIn_ = approach(swellIn_, 0.f, 0.45f, dt);
+    swell_ = approach(swell_, swellIn_, 2.5f, dt);
     pulse_ = approach(pulse_, 0.f, 2.2f, dt);
     for (auto& row : flare_)
         for (float& v : row) v = approach(v, 0.f, 2.5f, dt);

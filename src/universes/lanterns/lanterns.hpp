@@ -113,7 +113,8 @@ private:
     float energy_ = 0.5f;
     bool dropMode_ = false;
     float dev_ = 0.f;          // the drop's sky 0..1
-    float swell_ = 0.f;        // the drop's single swell
+    float swell_ = 0.f;        // the drop's single swell (eased toward swellIn_)
+    float swellIn_ = 0.f;
     float pulse_ = 0.f;        // the ripple of the beat grid (every two beats)
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     double lastHalf_ = -1.0;
