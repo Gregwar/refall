@@ -66,7 +66,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 <td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/lanterns.jpg"><br><b>LANTERNS</b>: paper lanterns on a night lake; each clear releases lanterns that stay lit on the water, the drop lifts them all into the sky<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/lanterns.jpg"><br><b>LANTERNS</b>: a 3D night lake of paper lanterns; each cleared row slides out of the well and floats onto the water as lanterns that stay lit, the drop lifts them all into the sky<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/origami.jpg"><br><b>ORIGAMI</b>: folded paper pieces on a sheet; each cleared row slides out of the well and is folded into a paper crane step by step, the cranes gather around the well and the drop sets the flock flying<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
