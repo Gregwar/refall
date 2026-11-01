@@ -52,6 +52,7 @@ private:
         float stripY = 0.f;      // the row's height
         float side = 1.f;        // the side the row slides out to
         vec2 spot{0, 0};         // where it is folded, outside the well
+        float fold0 = 0.85f, foldEnd = 2.95f; // the folding starts, ends
         float wingT = 1.f;       // a wing beat in progress (0..1)
         float wingDelay = 0.f;
         float hop = 0.f, hopV = 0.f;
@@ -67,8 +68,9 @@ private:
     std::vector<vec2> slots_;
     std::vector<int> slotUsed_;   // crane count per slot (0 free)
     void planSlots();
-    int takeSlot();
-    void addCrane(float rowY, const int* strip, int color, float scale);
+    int takeSlot(float side);
+    void addCrane(float rowY, float side, const int* strip, int color, float scale);
+    float lastSide_ = -1.f;      // the wall the last row left by
     // The paper model: a face of folded paper (local units, z toward the viewer), its two sides' colours.
     struct PFace { vec3 v[3]; vec3 front, back; float key; };
     void craneModel(float F, float flap, const vec3& col, std::vector<PFace>& out) const;
@@ -123,6 +125,9 @@ private:
     float dev_ = 0.f;          // the sheet turned to its coloured side (the drop) 0..1
     float swell_ = 0.f;        // the drop's light swell
     float flock_ = 0.f;        // the cranes asked to fly
+    int pattern_ = 0;          // the sheet's crease pattern
+    float patternA_ = 1.f;
+    bool patternOut_ = false;
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     double lastHalf_ = -1.0;
     float beatClock_ = 0.f, flapPhase_ = 0.f;
