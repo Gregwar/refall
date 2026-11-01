@@ -122,7 +122,7 @@ out vec4 frag;
 void main() {
     // a teardrop: the upper half narrows
     vec2 p = vP;
-    if (p.y > 0.0) p.x /= 1.0 - 0.28 * p.y;
+    if (p.y > 0.0) p.x /= 1.0 - 0.32 * p.y * p.y; // smooth at the equator (no crease in the slope)
     float d2 = dot(p, p);
     if (d2 >= 1.0) discard;
     frag = vec4(vH * sqrt(1.0 - d2), 0.0, 0.0, 1.0);
@@ -144,9 +144,10 @@ void main() {
     vec2 px = 1.0 / uRes;
     float hud = hudMask(w);
     float h = texture(uWater, vUv).r;
-    float hx = texture(uWater, vUv + vec2(px.x, 0.0)).r - texture(uWater, vUv - vec2(px.x, 0.0)).r;
-    float hy = texture(uWater, vUv + vec2(0.0, px.y)).r - texture(uWater, vUv - vec2(0.0, px.y)).r;
-    vec2 g = vec2(hx, hy) / (2.0 * pxw);
+    // the slope over a pixel and a half each side (bilinear taps): a smooth normal, no crawling highlight
+    float hx = texture(uWater, vUv + vec2(1.5 * px.x, 0.0)).r - texture(uWater, vUv - vec2(1.5 * px.x, 0.0)).r;
+    float hy = texture(uWater, vUv + vec2(0.0, 1.5 * px.y)).r - texture(uWater, vUv - vec2(0.0, 1.5 * px.y)).r;
+    vec2 g = vec2(hx, hy) / (3.0 * pxw);
     float gl = length(g);
     if (gl > 3.0) g *= 3.0 / gl;
     gl = min(gl, 3.0);
@@ -160,15 +161,17 @@ void main() {
 
     // the water: each drop a small lens, the city upside down inside it, sharper than through the mist
     if (wet > 0.0) {
-        vec2 off = g * uLens * (1.0 - 0.5 * hud);
+        vec2 off = g * min(1.0, 2.2 / max(gl, 1e-3)) * uLens * (1.0 - 0.5 * hud);
         vec2 uv = vUv + off / (2.0 * uView.zw);
-        vec3 inside = texture(uCity, uv).rgb * 1.2 + blur * 0.35 + uMistTint * 0.2;
+        // toward the rim the lens is steep: the blurred city there, so far lights never crawl as thin slivers
+        vec3 seen = mix(texture(uCity, uv).rgb, texture(uBlur, uv).rgb, smoothstep(1.0, 2.2, gl));
+        vec3 inside = seen * 1.2 + blur * 0.35 + uMistTint * 0.2;
         // the light gathered in the lower part of the lens, the rim reflecting the dark room, a small highlight
         inside += (blur * 2.4 + uMistTint * 0.6) * smoothstep(0.6, 2.6, g.y) * (1.0 - 0.5 * hud);
         inside *= 1.0 - 0.6 * smoothstep(1.2, 2.9, gl) * smoothstep(-0.5, -2.5, g.y + 0.6 * abs(g.x));
         vec3 n = normalize(vec3(-g, 1.0));
         vec3 hv = normalize(vec3(-0.35, 0.55, 1.0) + vec3(0.0, 0.0, 1.0));
-        float spec = pow(max(dot(n, hv), 0.0), 90.0) * uSpec * smoothstep(0.03, 0.09, h);
+        float spec = pow(max(dot(n, hv), 0.0), 40.0) * uSpec * 0.8 * smoothstep(0.04, 0.12, h) * (1.0 - smoothstep(1.4, 2.6, gl));
         inside += vec3(spec);
         c = mix(c, inside, wet * (1.0 - 0.45 * hud));
     }
