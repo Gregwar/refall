@@ -33,6 +33,7 @@ private:
         int mineral = 0;  // 0 calm, 1 mid, 2 peak, 3 drop
         int tone = 0;     // which of the mineral's tones (a section)
         float px = 0, py = 0; // where its facet pattern was cut (the board cell at lock), kept as rows fall
+        float seed = 0;       // its own cut (the reflections inside it)
     };
     Stone st_[22][10];
     int ids_[22][10] = {};
@@ -52,7 +53,7 @@ private:
     std::vector<ShardInst> shardInst_;
     void shatter(float x, float y, const vec3& col, int n, float dull);
     // ---- Game over: the stack's stones (the game has emptied its board), their light going out, then crumbling.
-    struct Dead { int x, y, type, mask; vec3 col; float px, py; bool gone; };
+    struct Dead { int x, y, type, mask; vec3 col; float px, py, seed; bool gone; };
     std::vector<Dead> dead_;
 
     // ---- The cave's crystals (instanced pointed prisms) and their light.

@@ -393,6 +393,20 @@ float shapeSdf(vec2 p, int m) {
     if (has(m, db)) return -1.0;
     return rc - length(max(vec2(c + rc) - q, 0.0));
 }
+// The same outline for the facets: its inner corners sharp (mitred steps, no rounded fillets).
+float cutSdf(vec2 p, int m) {
+    const float g = 0.035;
+    vec2 q = abs(p);
+    bool hx = p.x < 0.0 ? has(m, 0) : has(m, 1);
+    bool vy = p.y < 0.0 ? has(m, 2) : has(m, 3);
+    int db = p.x < 0.0 ? (p.y < 0.0 ? 4 : 6) : (p.y < 0.0 ? 5 : 7);
+    float c = 0.5 - g;
+    if (!hx && !vy) return max(q.x, q.y) - c;
+    if (hx && !vy) return q.y - c;
+    if (!hx && vy) return q.x - c;
+    if (has(m, db)) return -1.0;
+    return -max(c - q.x, c - q.y);
+}
 bool ownCell(vec2 p, int m) {
     if (p.x < -0.5 && has(m, 0)) return false;
     if (p.x > 0.5 && has(m, 1)) return false;
@@ -429,54 +443,80 @@ void main() {
     if (cov <= 0.0) discard;
     float type = vC.x;
     // (clamped to half a cell: every cell then agrees with its neighbours where they meet)
-    float depth = clamp(-sd, 0.0, 0.465);
+    float cs = cutSdf(vLocal, m);
+    float depth = clamp(-cs, 0.0, 0.465);
     // the outline's normal (outward), cut into facets every 45 degrees
     const float e = 0.02;
-    vec2 n = vec2(shapeSdf(vLocal + vec2(e, 0.0), m) - shapeSdf(vLocal - vec2(e, 0.0), m),
-                  shapeSdf(vLocal + vec2(0.0, e), m) - shapeSdf(vLocal - vec2(0.0, e), m));
+    vec2 n = vec2(cutSdf(vLocal + vec2(e, 0.0), m) - cutSdf(vLocal - vec2(e, 0.0), m),
+                  cutSdf(vLocal + vec2(0.0, e), m) - cutSdf(vLocal - vec2(0.0, e), m));
     n = length(n) > 1e-4 ? normalize(n) : vec2(0.0, 1.0);
     float ang = atan(n.y, n.x);
-    ang = floor(ang / 0.785398 + 0.5) * 0.785398;
-    vec2 nq = vec2(cos(ang), sin(ang));
-    // A step cut (as an emerald is cut): two tiers of crown facets following the outline, mitred at the corners,
-    // then the table, through which the pavilion's steps are seen as concentric reflections.
-    const float T1 = 0.07, T2 = 0.16;
-    float tA = smoothstep(T1 - 0.6 * aa, T1 + 0.6 * aa, depth); // 0: outer tier
-    float tB = smoothstep(T2 - 0.6 * aa, T2 + 0.6 * aa, depth); // 1: the table
-    vec3 N0 = normalize(vec3(nq * 0.92, 0.4)), N1 = normalize(vec3(nq * 0.52, 0.85)), N2 = vec3(0.0, 0.0, 1.0);
-    vec3 N = mix(mix(N0, N1, tA), N2, tB);
+    float sec = floor(ang / 0.785398 + 0.5);          // which side of the stone (8 directions: mitred corners)
+    vec2 nq = vec2(cos(sec * 0.785398), sin(sec * 0.785398));
+    sec = mod(sec + 8.0, 8.0);
+    // A step cut over the whole stone: facets in concentric steps that follow its outline, mitred at the corners.
+    // Seen through a gem, each facet mirrors another part of the stone: its brightness and its shade of the color
+    // are the stone's own (seeded per piece), not a lighting gradient; the steps' spacing is the piece type's.
+    float seed = vD.z;
+    float period = 5.2 + 1.6 * mod(type, 3.0);
+    // each side cut on its own: the steps of neighbouring sides do not line up (an irregular, hand-cut stone)
+    float kf = depth * period + 0.9 * hash(vec2(sec * 2.3 + 1.0, seed + 9.1));
+    float k = floor(kf), fk = fract(kf);
+    float kmax = 0.465 * period;
+    // and each step broken along its length by slanted cuts (zigzagging from step to step), at the stone's own places
+    vec2 tang0 = vec2(-nq.y, nq.x);
+    float along = dot(vD.xy + vLocal, tang0);
+    float zig = mod(k, 2.0) < 0.5 ? 1.0 : -1.0;
+    float sf = (along + zig * depth * 1.3) * 0.8 + hash(vec2(k + sec * 3.7, seed + 2.2)) * 3.0;
+    float sg = floor(sf), fs = fract(sf);
+    float h = hash(vec2(k * 7.13 + sec * 1.71 + sg * 0.37, seed));
+    float h2 = hash(vec2(k * 3.17 + sec * 5.31 + sg * 1.13, seed + 4.7));
+    // the table (where the stone is wider than a cell): facets of its own, cut in the stone's frame
+    float table = step(0.4649, -cs);
+    vec3 tf = facets((vD.xy + vLocal) * 1.4, seed + 11.0);
+    if (table > 0.5) {
+        h = tf.y;
+        h2 = tf.z;
+        sec = floor(tf.z * 8.0);
+        nq = vec2(cos(sec * 0.785398), sin(sec * 0.785398)) * 0.4;
+        k = kmax;
+    }
+    // the facet's tilt: steep at the girdle, flatter toward the table, each a little off
+    float slope = mix(0.95, 0.12, clamp(k / max(kmax - 1.0, 1.0), 0.0, 1.0));
+    vec2 tang = vec2(-nq.y, nq.x);
+    vec3 N = normalize(vec3(nq * slope + tang * (h2 - 0.5) * 0.5, 1.0));
     vec3 L = normalize(uLight);
     float diff = dot(N, L);
-    float spec = pow(max(dot(N, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 60.0) * (1.0 - tB);
+    float spec = pow(max(dot(N, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 90.0);
     vec3 tint = vB.rgb;
     vec3 white = vec3(1.0, 0.98, 0.94);
-    // the crown: lit facets bright, the others deep in the stone's color
-    float lam = max(diff, 0.0);
-    vec3 crownC = tint * (0.1 + 1.3 * lam * lam) + white * spec * (0.6 + 0.5 * uSpark);
-    // the table: the pavilion's steps (their spacing the piece type's own), light glowing from the heart
-    float period = 4.2 + 1.6 * mod(type, 3.0);
-    float stepv = abs(fract((depth - T2) * period + 0.3 * mod(type, 2.0)) - 0.5) * 2.0;
-    stepv = smoothstep(0.15, 0.85, stepv);
-    float heart = smoothstep(0.1, 0.465, depth);
-    vec3 tableC = tint * (0.3 + 0.2 * stepv + 0.75 * heart);
-    // faint inclusions drifting in the stone (cut in its own frame: they travel with it)
-    float ta = type * 0.9;
-    mat2 rot = mat2(cos(ta), sin(ta), -sin(ta), cos(ta));
-    vec2 pp = rot * (vD.xy + vLocal);
-    tableC *= 1.0 + 0.12 * (vnoise(pp * 1.7 + type * 3.1) - 0.5);
-    // a soft reflection band across the table (in the piece's frame)
-    float band = exp(-pow(fract(dot(pp, vec2(0.6, 0.8)) * 0.22 + 0.13 * type) - 0.5, 2.0) * 70.0);
-    tableC += mix(tint, white, 0.5) * band * 0.1;
-    vec3 c = mix(crownC, tableC, tB);
-    // fine lines where the tiers meet (light on the lit side, dark on the other)
-    float lines = exp(-pow((depth - T1) / 0.009, 2.0)) + exp(-pow((depth - T2) / 0.011, 2.0));
+    float lum = dot(tint, vec3(0.2126, 0.7152, 0.0722));
+    // the stone's colors: a deep, saturated body, paler light at its edges
+    vec3 deep = max(mix(vec3(lum), tint, 1.4), vec3(0.0)) * 0.55;
+    vec3 pale = mix(tint, white, 0.4);
+    // the facet: somewhere between the deep body and the color lit through (dark and bright facets side by side)
+    float bright = h * h * h * 1.2;
+    vec3 fcol = mix(deep, tint * 1.05, smoothstep(0.1, 0.9, h));
+    // dispersion: each facet's shade turns a little (and a rare one catches the complementary fire)
+    fcol = mix(fcol, h2 > 0.5 ? fcol.gbr : fcol.brg, abs(h2 - 0.5) * 0.22);
+    vec3 comp = max(vec3(2.0 * lum) - tint, vec3(0.0));
+    fcol += comp * 0.35 * step(0.93, h2) * (0.5 + 0.5 * h);
+    vec3 c = fcol * (0.3 + 0.95 * bright + 0.35 * max(diff, 0.0));
+    // light from within: the core glows deep and saturated
+    c += deep * 0.45 * smoothstep(0.2, 0.465, depth);
+    // the facets' edges: fine crisp lines (light where they face the light, dark on the other side)
+    float kw = max(fwidth(kf), 1e-4);
+    float sw = max(fwidth(sf), 1e-4);
+    float edge = table > 0.5 ? (1.0 - smoothstep(0.0, 0.02, tf.x)) * 0.8 : max((1.0 - smoothstep(0.0, 1.3 * kw, fk)) * step(0.5, k), (1.0 - smoothstep(0.0, 1.3 * sw, min(fs, 1.0 - fs))) * 0.45);
     float litSide = dot(nq, normalize(L.xy));
-    c = mix(c, litSide > 0.0 ? mix(tint, white, 0.6) : tint * 0.12, 0.45 * lines * abs(litSide));
-    // the very edge: a thin rim of light on the lit side
-    float rim = 1.0 - smoothstep(0.0, 0.022, depth);
-    c += mix(tint, white, 0.5) * rim * max(litSide, 0.0) * 0.5;
-    // a glint (a lock, the highs): the crown flashes softly, a star on its lit corner
-    c += mix(tint, white, 0.6) * vC.y * (0.3 * (1.0 - tB) + 0.1 + 0.8 * spec);
+    c = mix(c, litSide > 0.0 ? pale * 1.05 : deep * 0.35, edge * (0.18 + 0.3 * abs(litSide)));
+    // crisp highlights on the facets that catch the light (sharp, small)
+    c += white * spec * (0.9 + 0.5 * uSpark) * (0.4 + 0.6 * step(0.45, h2));
+    // the girdle: a thin paler rim, brighter where it faces the light
+    float rim = 1.0 - smoothstep(0.0, 0.03, depth);
+    c = mix(c, litSide > -0.2 ? pale * (0.5 + 0.6 * max(litSide, 0.0)) : deep * 0.5, rim * 0.7);
+    // a glint (a lock, the highs): the facets flash softly
+    c += mix(tint, white, 0.6) * vC.y * (0.15 + 0.5 * bright + 0.8 * spec);
     // game over: the light goes out of the stone
     float g = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(c, vec3(g) * vec3(0.36, 0.36, 0.4), vC.w);
@@ -495,7 +535,7 @@ void main() {
     for (int y = -1; y <= 1; y++)
         for (int x = -1; x <= 1; x++) c += texture(uSrc, vUv + vec2(float(x), float(y)) * uTexel).rgb;
     c /= 9.0;
-    frag = vec4(max(c - vec3(0.16), vec3(0.0)), 1.0);
+    frag = vec4(max(c - vec3(0.42), vec3(0.0)), 1.0);
 }
 )";
 inline const char* BLUR_FS = R"(#version 330 core

@@ -2,9 +2,11 @@
 //
 // One world: a dark cave inside a geode, its walls lined with crystal clusters that glow softly from within, a
 // still pool on its floor, water dripping from the crystals hanging from the vault. The pieces are cut gems: each
-// piece one stone (its cells merged, a thin seam between stones), a crown of facets cut every 45 degrees around its
-// outline, a table of inner facets and fine fractures, a dark girdle line, light glowing from its heart, sharp
-// highlights.
+// piece one stone (its cells merged, a thin seam between stones), faceted over its whole outline like an emerald cut
+// (steps that follow the outline, mitred at the corners, each side stepped on its own and broken by slanted cuts, a
+// table of irregular facets where the stone is wide). Each facet mirrors another part of the stone: its brightness and
+// shade are seeded per stone (the falling piece already has the cut it will lock with), with a slight dispersion and
+// rare complementary sparks, a deep glowing core, a paler girdle and crisp highlights.
 //
 // The song chooses the mineral. Each level of the song has its own (calm, mid, peak) and the drop a special one;
 // a new section of the same level moves the mineral on to another of its three tones, so two choruses stay apart.
@@ -106,6 +108,9 @@ vec3 shade(const vec3& linCol, float deg, float val) {
     o = o * val;
     return ugl::toLinear(vec3(saturate(o.x), saturate(o.y), saturate(o.z)));
 }
+// A stone's own cut (the reflections inside it), from its id: the falling piece takes the id it will lock with.
+float seedOf(int id) { return std::fmod((float)id * 0.618034f, 1.f) * 97.f + 3.f; }
+
 vec3 typeTint(const vec3& linCol, int type) {
     type = std::clamp(type, 0, 6);
     return shade(linCol, TYPE_HUE[type], TYPE_VAL[type]);
@@ -534,7 +539,7 @@ void CrystalUniverse::syncIds(const Game& g) {
             while (sp > 0 && count < 4) {
                 sp--;
                 const int cx = stack[sp][0], cy = stack[sp][1];
-                st_[cy][cx] = Stone{col, m, tone, (float)cx, (float)cy};
+                st_[cy][cx] = Stone{col, m, tone, (float)cx, (float)cy, seedOf(id)};
                 count++;
                 const int d[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
                 for (auto& dd : d) {
@@ -559,7 +564,7 @@ void CrystalUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
-            st_[c.y][c.x] = Stone{col, mineral_, tone_[mineral_], (float)c.x, (float)c.y};
+            st_[c.y][c.x] = Stone{col, mineral_, tone_[mineral_], (float)c.x, (float)c.y, seedOf(id)};
             glint_[c.y][c.x] = 0.45f;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             sx += p.x;
@@ -657,7 +662,7 @@ void CrystalUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             const Stone& st = st_[c.y][c.x];
             const vec3 col = id ? st.col : currentColor();
-            dead_.push_back({c.x, c.y, c.type, m, col, id ? st.px : (float)c.x, id ? st.py : (float)c.y, false});
+            dead_.push_back({c.x, c.y, c.type, m, col, id ? st.px : (float)c.x, id ? st.py : (float)c.y, id ? st.seed : seedOf(nextId_), false});
         }
         break;
     }
@@ -699,8 +704,8 @@ void CrystalUniverse::buildBoard(const Game& g) {
         return m;
     };
     auto gem = [&](float x, float y, float half, int mask, int type, const vec3& col, float alpha, float glint, float dull,
-                   float px, float py, int kind) {
-        cells_.push_back({{x, y, half, (float)mask}, {col.x, col.y, col.z, alpha}, {(float)type, glint, (float)kind, dull}, {px, py, 0.f, 0.f}});
+                   float px, float py, int kind, float seed) {
+        cells_.push_back({{x, y, half, (float)mask}, {col.x, col.y, col.z, alpha}, {(float)type, glint, (float)kind, dull}, {px, py, seed, 0.f}});
     };
     // The ghost: a fine line of the mineral's light.
     if (g.hasPiece() && !g.over()) {
@@ -719,7 +724,7 @@ void CrystalUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                gem(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), p.type, gcCol, 0.5f, 0.f, 0.f, 0.f, 0.f, 1);
+                gem(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), p.type, gcCol, 0.5f, 0.f, 0.f, 0.f, 0.f, 1, 0.f);
             }
         }
     }
@@ -738,7 +743,7 @@ void CrystalUniverse::buildBoard(const Game& g) {
             const vec3 p = layout::cellPos((float)x, y - off);
             const Stone& s = st_[y][x];
             const float dull = 0.f;
-            gem(p.x, p.y, 0.5f, maskOf(x, y, same), c.type, typeTint(s.col, c.type), 1.f, glint_[y][x], dull, s.px, -s.py, 0);
+            gem(p.x, p.y, 0.5f, maskOf(x, y, same), c.type, typeTint(s.col, c.type), 1.f, glint_[y][x], dull, s.px, -s.py, 0, s.seed);
         }
     // Game over: the stones' light goes out row by row from the top, then each row crumbles into the pool.
     for (Dead& d : dead_) {
@@ -753,7 +758,7 @@ void CrystalUniverse::buildBoard(const Game& g) {
             continue;
         }
         const vec3 p = layout::cellPos((float)d.x, (float)d.y);
-        gem(p.x, p.y, 0.5f, d.mask, d.type, col, 1.f, 0.f, dull, d.px, -d.py, 0);
+        gem(p.x, p.y, 0.5f, d.mask, d.type, col, 1.f, 0.f, dull, d.px, -d.py, 0, d.seed);
     }
     // The falling piece: cut from the mineral of the moment (exactly as it will lock).
     if (g.hasPiece() && !g.over()) {
@@ -770,11 +775,11 @@ void CrystalUniverse::buildBoard(const Game& g) {
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            gem(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), p.type, col, 1.f, 0.f, 0.f, (float)c[0], -(float)c[1], 0);
+            gem(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), p.type, col, 1.f, 0.f, 0.f, (float)c[0], -(float)c[1], 0, seedOf(nextId_));
         }
     }
     // Previews.
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+    auto preview = [&](int type, vec2 center, float sc, float alpha, float seed) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
@@ -792,13 +797,13 @@ void CrystalUniverse::buildBoard(const Game& g) {
         const vec3 col = typeTint(curLin, type);
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            gem(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), type, col, alpha, 0.f, 0.f, (float)c[0], -(float)c[1], 0);
+            gem(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), type, col, alpha, 0.f, 0.f, (float)c[0], -(float)c[1], 0, seed);
         }
     };
-    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f, seedOf(nextId_ + 7));
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
     }
 }
 
@@ -1467,7 +1472,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
-    set1f(progFinal_, "uBloomK", (0.45f + 0.2f * wp + 0.35f * dropEnv_) * worldK);
+    set1f(progFinal_, "uBloomK", (0.16f + 0.08f * wp + 0.2f * dropEnv_) * worldK);
     set1f(progFinal_, "uSlow", slow_ * 0.85f);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
