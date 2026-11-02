@@ -42,10 +42,10 @@
 
 namespace {
 
-// Cantarell Light (labels, numbers) and EB Garamond Italic (the song, the section, the celebrations), SIL Open Font
-// License, see OFL-Cantarell.txt and OFL-EBGaramond.txt.
+// Lato Regular (labels, numbers) and EB Garamond Italic (the song, the section, the celebrations), SIL Open Font
+// License, see OFL-Lato.txt and OFL-EBGaramond.txt.
 const unsigned char FONT_SANS[] = {
-#include "universes/limbo/Cantarell-Light.ttf.inc"
+#include "universes/limbo/Lato-Regular.ttf.inc"
 };
 const unsigned char FONT_SERIF[] = {
 #include "universes/limbo/EBGaramond12-Italic.ttf.inc"
