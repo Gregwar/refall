@@ -75,7 +75,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/crystal.jpg"><br><b>CRYSTAL CAVE</b>: gemstone pieces in a geode cave; each phase of the song is its own mineral, frozen into the stack at lock time, so the stack grows in strata that record the song<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a Swiss typographic poster set from the song's words, recomposed on the bar grid; flat pieces lock in each section's palette, the drop sets the title giant<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
