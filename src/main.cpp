@@ -4,6 +4,7 @@
 
 #include "headless.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -123,6 +124,7 @@ private:
     SongLook look_;              // the song's inputs to universes
     int forcedUniverse_ = -1, forcedVariant_ = -1;
     float universeAge_ = 0;      // seconds in the current universe
+    std::vector<int> recentUniverses_; // the last universes played, oldest first (left out of the next picks)
     // Song phases: detected sections, with long sections split into sub-phases so the scene keeps evolving.
     SongPlan plan_;
     int lastPhase_ = 0;
@@ -212,7 +214,7 @@ void App::startTrack(std::shared_ptr<Track> t) {
 int App::songUniverse(int* variant) {
     *variant = forcedVariant_;
     if (forcedUniverse_ >= 0) return forcedUniverse_;
-    return universes::pick(look_, look_.seed, R_.universe());
+    return universes::pick(look_, look_.seed, R_.universe(), recentUniverses_);
 }
 
 void App::changeUniverse(int index, int variant, transitions::Reason why, bool instant) {
@@ -221,6 +223,10 @@ void App::changeUniverse(int index, int variant, transitions::Reason why, bool i
     const int lv = phaseLevel(lastPhase_);
     const float en = phaseEnergy(lastPhase_);
     universeAge_ = 0;
+    recentUniverses_.erase(std::remove(recentUniverses_.begin(), recentUniverses_.end(), index), recentUniverses_.end());
+    recentUniverses_.push_back(index);
+    if ((int)recentUniverses_.size() > universes::RECENT_UNIVERSES)
+        recentUniverses_.erase(recentUniverses_.begin());
     if (instant) {
         R_.setUniverse(index, l, lv, en);
         return;
@@ -913,7 +919,7 @@ int App::run() {
                             opt_.shotPrefix.empty() && opt_.clipPath.empty()) {
                             sceneCounter_++;
                             look_.seed = splitmix64(look_.seed ^ sceneCounter_);
-                            changeUniverse(universes::pick(look_, look_.seed, R_.universe()), -1, transitions::PHASE_PEAK, false);
+                            changeUniverse(universes::pick(look_, look_.seed, R_.universe(), recentUniverses_), -1, transitions::PHASE_PEAK, false);
                         }
                         lastSeg_ = to.seg;
                         const Segment& sg = an.segments[to.seg];

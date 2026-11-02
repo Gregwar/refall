@@ -6,7 +6,7 @@ Tetris, slow motion, game over). A universe is one world, not a set of random op
 the intensity inside that world, never a different world.
 
 A universe is picked for each song from its footprint (each universe says how well it suits a song: tempo,
-brightness, density...) and the run's seed, never the same one twice in a row; `--universe` forces one, T / Y
+brightness, density...) and the run's seed, never one of the last 10 played (while another one can play); `--universe` forces one, T / Y
 moves on to the next. Every universe ships a few curated **variants**, picked per song or forced
 (`--universe VECTOR:AMBER`, `--universe SUMI:AIZOME`); the bottom-left corner shows `UNIVERSE · VARIANT`.
 

@@ -28,9 +28,12 @@ int find(const std::string& name);
 int parse(const std::string& spec, int* variant);
 // How often a universe is picked (registry.def: 1 for generic atmospheres, lower for specific worlds).
 float weight(int i);
-// A universe for a song: weighted by affinity times weight, never `current` again when another one can play (no immediate
-// repeat), hidden universes left out.
-int pick(const SongLook& look, uint64_t seed, int current);
+// How many of the last universes played are left out of the next pick (no repeats).
+inline constexpr int RECENT_UNIVERSES = 10;
+// A universe for a song: weighted by affinity times weight, hidden universes left out. `recent` lists the last universes
+// played (oldest first): none of them plays again while another one can, then only the oldest come back (and never
+// `current` while another one can).
+int pick(const SongLook& look, uint64_t seed, int current, const std::vector<int>& recent = {});
 // "VECTOR · P3 AMBER": a universe and one of its variants, as the HUD shows them (UTF-8 middle dot).
 std::string label(int universe, int variant);
 // Checks a --universe spec ("NAME" or "NAME:VARIANT"): true if it names a universe (and, when one is given, a

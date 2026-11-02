@@ -94,7 +94,7 @@ std::string label(int universe, int variant) {
     return s;
 }
 
-int pick(const SongLook& look, uint64_t seed, int current) {
+int pick(const SongLook& look, uint64_t seed, int current, const std::vector<int>& recent) {
     std::vector<int> cand;
     std::vector<float> w;
     for (int i = 0; i < count(); i++) {
@@ -109,6 +109,19 @@ int pick(const SongLook& look, uint64_t seed, int current) {
     if (cand.size() > 1)
         for (size_t k = 0; k < cand.size(); k++)
             if (cand[k] == current) w[k] = 0.f;
+    // leave out the recent ones, as many as can be (the newest first) while something can still play
+    for (size_t n = std::min(recent.size(), (size_t)RECENT_UNIVERSES); n > 0; n--) {
+        std::vector<float> wn = w;
+        for (size_t k = 0; k < cand.size(); k++)
+            for (size_t j = recent.size() - n; j < recent.size(); j++)
+                if (cand[k] == recent[j]) wn[k] = 0.f;
+        float s = 0;
+        for (float x : wn) s += x;
+        if (s > 0) {
+            w = wn;
+            break;
+        }
+    }
     float sum = 0;
     for (float x : w) sum += x;
     if (sum <= 0) return cand[0];
