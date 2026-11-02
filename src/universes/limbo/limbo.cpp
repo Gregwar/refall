@@ -15,8 +15,8 @@
 // beats, the gear turns a notch every two beats); a peak opens it (the far planes clear, the light brighter, the fog
 // banks drifting faster, the lanterns brighten on the kicks). The drop tears the fog open, eased in over a beat or two:
 // the banks part from the middle and roll away, a vast mountain range appears, the light sinks into a big low sun
-// with occluded light shafts through the trees, rim-lit silhouettes, a gust, a large flock taking off, every lantern
-// lit, the gears spinning; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
+// with occluded light shafts through the trees, rim-lit silhouettes (the pieces turn flat black), a gust, a large
+// flock taking off, every lantern lit, the gears spinning, herons, crows, deer, a far train and a balloon passing; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
 // row dissolves into the fog (its edges erode into mist, a few motes drift off); a Tetris sends a flock up from the
 // forest. Slow motion is a still, moonlit fog; game over dissolves the stack from the top down as the fog closes in.
 // Changes of universe: the fog closes in to the bridge's color.
@@ -659,7 +659,185 @@ void LimboUniverse::buildWorld(float sway, float beatStep) {
         }
         flockPrims_.push_back({{b.p.x, b.p.y, 0, 0}, {0.06f * b.size, 0.f, 1.f, layerFog_[L_MID]}, {a, 0.f, 0.f, 0.f}});
     }
+    buildPassers();
     (void)beatStep;
+}
+
+
+// =====================================================================================================
+// What passes during a drop
+// =====================================================================================================
+
+// The top of the hills of a layer at x (board units).
+float LimboUniverse::groundY(float x, int layer) const {
+    float y = layer == L_NEAR ? Y_NEAR - 0.5f : Y_MID - 0.5f;
+    for (const Thing& t : things_) {
+        if (t.kind != K_HILL || t.layer != layer) continue;
+        const float dx = x - t.x;
+        if (std::fabs(dx) >= t.size) continue;
+        y = std::max(y, t.y - t.size + std::sqrt(t.size * t.size - dx * dx));
+    }
+    return y;
+}
+
+// A heron or a few crows crossing a side sky, from below the HUD's height out through the screen's edge (never over
+// the well or the lettering).
+void LimboUniverse::spawnFlyer(int kind, float side) {
+    const float W = viewH_.x;
+    if (kind == P_HERON) {
+        const float s = rng_.range(0.9f, 1.5f);
+        Passer p{P_HERON, rng_.chance(0.5f) ? L_NEAR : L_MID, V2(side * rng_.range(14.f, 15.f), rng_.range(-4.5f, 0.5f)),
+                 V2(side * rng_.range(0.55f, 0.85f), rng_.range(0.15f, 0.45f)), -rng_.range(0.f, 1.f), 0.f, s, rng_.range(0.f, TAU), side};
+        p.life = (W + 3.f - std::fabs(p.p.x)) / std::fabs(p.v.x) + 1.f;
+        passers_.push_back(p);
+    } else {
+        const int n = rng_.irange(3, 5);
+        const vec2 o = V2(side * (W + 1.5f), rng_.range(1.f, 6.f));
+        const vec2 v = V2(-side * rng_.range(0.9f, 1.3f), rng_.range(-0.1f, 0.2f));
+        for (int k = 0; k < n; k++) {
+            Passer p{P_CROW, L_NEAR, V2(o.x + side * k * rng_.range(0.6f, 1.1f), o.y + rng_.range(-0.6f, 0.6f)), v,
+                     -k * 0.3f, 0.f, rng_.range(1.1f, 1.5f), rng_.range(0.f, TAU), -side};
+            // they turn back out before the HUD column: a slow arc up and away
+            p.life = (W - 11.5f) / std::fabs(v.x) + 5.f;
+            passers_.push_back(p);
+        }
+    }
+}
+
+void LimboUniverse::spawnPassers() {
+    passers_.erase(std::remove_if(passers_.begin(), passers_.end(), [](const Passer& p) { return p.kind == P_LEAF; }), passers_.end());
+    if (passers_.size() > 30) return;
+    const float W = viewH_.x;
+    // herons on both sides
+    spawnFlyer(P_HERON, 1.f);
+    spawnFlyer(P_HERON, -1.f);
+    // deer walking along the near hills on the right, toward the well (they fade out behind the HUD column)
+    const int nd = rng_.irange(2, 3);
+    for (int k = 0; k < nd; k++)
+        passers_.push_back({P_DEER, L_NEAR, V2(W + 1.5f + k * rng_.range(1.8f, 2.6f), 0.f), V2(-0.5f, 0.f), -k * 0.2f, 40.f,
+                            rng_.range(1.2f, 1.45f) * (k == 0 ? 1.1f : 1.f), rng_.range(0.f, 1.f), -1.f});
+    // a far train crossing the plain behind everything
+    {
+        const float d = rng_.chance(0.5f) ? 1.f : -1.f;
+        passers_.push_back({P_TRAIN, L_FAR, V2(-d * (W + 9.f), Y_FAR + 0.2f), V2(d * 1.4f, 0.f), 0.f, 2.f * (W + 9.f) / 1.4f, 0.8f, 0.f, d});
+    }
+    // a balloon rising in the right sky
+    passers_.push_back({P_BALLOON, L_MID, V2(rng_.range(17.5f, std::max(17.6f, W - 1.f)), -2.f), V2(0.f, 0.2f), 0.f, 45.f,
+                        rng_.range(0.9f, 1.1f), rng_.range(0.f, TAU), 1.f});
+    // leaves torn off by the gust, from the big tree's crown, blowing out to the right
+    for (int k = 0; k < 26; k++)
+        passers_.push_back({P_LEAF, L_NEAR, V2(rng_.range(13.f, 19.f), rng_.range(-4.f, 1.5f)),
+                            V2(rng_.range(0.6f, 2.f), rng_.range(-0.3f, 0.6f)), -rng_.range(0.f, 2.f), rng_.range(5.f, 8.f),
+                            rng_.range(0.7f, 1.3f), rng_.range(0.f, TAU), 1.f});
+}
+
+// Each passer's primitives (calm motion: wings and legs on the beat grid, a stroke or a stride every two beats).
+void LimboUniverse::buildPassers() {
+    const float B = (float)(beat_ * PI); // a full cycle every two beats
+    for (const Passer& p : passers_) {
+        if (p.t < 0.f) continue;
+        const float a = smoothstepf(0.f, 0.8f, p.t) * (1.f - smoothstepf(p.life - 1.5f, p.life, p.t));
+        if (a <= 0.003f) continue;
+        const float s = p.size, d = p.dir;
+        std::vector<Prim>& L = layer_[p.layer];
+        const float fog = layerFog_[p.layer];
+        auto cap = [&](float x0, float y0, float x1, float y1, float r0, float r1) {
+            L.push_back({{p.p.x + d * x0 * s, p.p.y + y0 * s, p.p.x + d * x1 * s, p.p.y + y1 * s}, {r0 * s, r1 * s, 0.f, fog}, {a, 0.f, 0.f, 0.f}});
+        };
+        auto disc = [&](float x, float y, float r) {
+            L.push_back({{p.p.x + d * x * s, p.p.y + y * s, 0, 0}, {r * s, 0.f, 1.f, fog}, {a, 0.f, 0.f, 0.f}});
+        };
+        auto box = [&](float x, float y, float hx, float hy, float ang) {
+            L.push_back({{p.p.x + d * x * s, p.p.y + y * s, 0, 0}, {hx * s, hy * s, 2.f, fog}, {a, ang, 0.f, 0.f}});
+        };
+        switch (p.kind) {
+        case P_HERON: {
+            // a slow stroke every two beats, long glides between
+            const float th = 0.95f * std::sin(B + p.phase);
+            cap(-0.45f, 0.f, 0.35f, 0.05f, 0.12f, 0.1f);                       // body
+            cap(0.35f, 0.05f, 0.48f, 0.22f, 0.05f, 0.045f);                    // neck, tucked in an S
+            cap(0.48f, 0.22f, 0.62f, 0.18f, 0.045f, 0.04f);
+            disc(0.66f, 0.19f, 0.06f);                                          // head
+            cap(0.68f, 0.19f, 0.98f, 0.14f, 0.025f, 0.004f);                    // beak
+            cap(-0.42f, -0.02f, -1.1f, -0.1f, 0.025f, 0.012f);                  // legs trailing
+            for (int k = 0; k < 2; k++) {                                       // both wings (the far one a little behind)
+                const float o = k ? 0.12f : 0.f, t2 = th * (k ? 0.85f : 1.f);
+                const float ex = -0.2f - o, ey = 0.08f + 0.75f * t2;
+                const float tx = ex - 0.5f, ty = ey + 0.55f * std::sin(B + p.phase - 0.6f) * 0.9f;
+                cap(0.05f - o, 0.08f, ex, ey, 0.15f, 0.1f);
+                cap(ex, ey, tx, ty, 0.1f, 0.02f);
+            }
+            break;
+        }
+        case P_CROW: {
+            const float th = 0.7f * std::sin(B * 2.f + p.phase);
+            for (int k = -1; k <= 1; k += 2) {
+                const float ex = 0.f, ey = 0.05f + 0.32f * th * k * k, tx = -0.2f, ty = ey + 0.25f * std::sin(B * 2.f + p.phase - 0.5f);
+                cap(0.f, 0.05f, ex - 0.05f * k, ey + 0.05f * k, 0.07f, 0.05f);
+                cap(ex - 0.05f * k, ey + 0.05f * k, tx, ty, 0.05f, 0.01f);
+            }
+            cap(-0.25f, 0.f, 0.2f, 0.02f, 0.07f, 0.06f);
+            disc(0.25f, 0.04f, 0.055f);
+            cap(0.28f, 0.04f, 0.38f, 0.02f, 0.025f, 0.005f);
+            cap(-0.22f, 0.f, -0.42f, -0.02f, 0.05f, 0.02f);
+            break;
+        }
+        case P_DEER: {
+            const float bob = 0.03f * std::sin(B * 2.f + p.phase * TAU);
+            cap(-0.45f, 0.95f + bob, 0.35f, 1.f + bob, 0.2f, 0.18f);           // body
+            cap(0.33f, 1.05f + bob, 0.55f, 1.45f + bob, 0.09f, 0.065f);       // neck
+            cap(0.55f, 1.5f + bob, 0.8f, 1.42f + bob, 0.08f, 0.045f);         // head
+            cap(0.56f, 1.56f + bob, 0.5f, 1.86f + bob, 0.016f, 0.012f);       // antlers
+            cap(0.52f, 1.72f + bob, 0.41f, 1.9f + bob, 0.012f, 0.008f);
+            cap(0.6f, 1.56f + bob, 0.7f, 1.86f + bob, 0.016f, 0.012f);
+            cap(0.66f, 1.74f + bob, 0.78f, 1.9f + bob, 0.012f, 0.008f);
+            cap(-0.48f, 1.05f + bob, -0.6f, 0.92f + bob, 0.05f, 0.03f);       // tail
+            const float hips[4][2] = {{0.28f, 0.f}, {0.22f, PI}, {-0.36f, PI * 0.5f}, {-0.42f, PI * 1.5f}};
+            for (auto& h : hips) {
+                const float sw = std::sin(B + h[1] + p.phase * TAU);
+                const float lift = std::max(0.f, std::cos(B + h[1] + p.phase * TAU)) * 0.08f;
+                const float kx = h[0] + 0.12f * sw, ky = 0.45f + lift;
+                cap(h[0], 0.9f + bob, kx, ky, 0.065f, 0.045f);
+                cap(kx, ky, h[0] + 0.24f * sw - 0.02f, lift * 0.6f, 0.04f, 0.028f);
+            }
+            break;
+        }
+        case P_TRAIN: {
+            box(0.f, 0.35f, 0.6f, 0.28f, 0.f);                                  // engine
+            box(-0.45f, 0.62f, 0.22f, 0.26f, 0.f);                              // cab
+            box(0.38f, 0.78f, 0.07f, 0.16f, 0.f);                               // chimney
+            for (int k = 0; k < 5; k++) box(-1.35f - k * 1.25f, 0.33f, 0.55f, 0.26f, 0.f);
+            // its smoke: a puff every two beats, rising and spreading behind it
+            for (int k = 0; k < 8; k++) {
+                const float age = std::fmod((float)(beat_ * 0.5) + k, 8.f) / 8.f;
+                const float r = 0.14f + 0.5f * age;
+                L.push_back({{p.p.x + d * (0.38f - 3.2f * age) * s, p.p.y + (1.f + 1.6f * age) * s, 0, 0}, {r * s, 0.f, 1.f, std::min(0.97f, fog + 0.35f * age + 0.15f)}, {a * (1.f - age), 0.f, 0.f, 0.f}});
+            }
+            break;
+        }
+        case P_BALLOON: {
+            const float sway = 0.04f * std::sin(B * 0.25f + p.phase);
+            const float c = std::cos(sway), sn = std::sin(sway);
+            auto rot = [&](float x, float y) { return V2(x * c - y * sn, x * sn + y * c); };
+            const vec2 e = rot(0.f, 1.25f), ta = rot(0.f, 0.3f), tb = rot(0.f, 1.1f);
+            disc(e.x, e.y, 0.85f);
+            L.push_back({{p.p.x + ta.x * s, p.p.y + ta.y * s, p.p.x + tb.x * s, p.p.y + tb.y * s}, {0.72f * s, 0.f, 4.f, fog}, {a, 0.f, 0.f, 0.f}});
+            for (int k = -1; k <= 1; k += 2) {
+                const vec2 l0 = rot(0.3f * k, 0.35f), l1 = rot(0.15f * k, -0.05f);
+                cap(l0.x, l0.y, l1.x, l1.y, 0.012f, 0.012f);
+            }
+            const vec2 bk = rot(0.f, -0.16f);
+            box(bk.x, bk.y, 0.17f, 0.12f, sway);
+            break;
+        }
+        case P_LEAF: {
+            const float ang = p.phase + p.t * 3.f;
+            box(0.f, 0.f, 0.07f, 0.03f * (0.4f + 0.6f * std::fabs(std::sin(ang))), ang);
+            break;
+        }
+        default: break;
+        }
+    }
 }
 
 // =====================================================================================================
@@ -711,6 +889,7 @@ void LimboUniverse::drop(float strength) {
     dropHold_ = 16.f; // a drop called outside a peak (or a short peak) still holds its look this long
     swellGoal_ = std::max(swellGoal_, 0.7f + 0.3f * strength);
     gustGoal_ = 1.f;
+    spawnPassers();
     // a large flock takes off from the forest edge on both sides and crosses the sky, slowly
     for (int k = 0; k < 40; k++) {
         const float s = k % 2 ? 1.f : -1.f;
@@ -1135,7 +1314,7 @@ void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
             return t;
         };
         // the bottom corner's lines sit over the dark hills: a fuller halo there
-        haloA_ = (h.role == HUD_UNIVERSE || h.role == HUD_SECTION) ? 0.95f : 0.5f;
+        haloA_ = (h.role == HUD_UNIVERSE || h.role == HUD_SECTION || V.dark) ? 0.95f : 0.5f;
         switch (h.role) {
         case HUD_UNIVERSE:
             place(fontSans_, upper(h.text), base * 0.86f, base * 0.3f, base * 0.08f);
@@ -1320,6 +1499,31 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         b.flap += wdt * 11.f;
     }
     flock_.erase(std::remove_if(flock_.begin(), flock_.end(), [](const Bird& b) { return b.t > 10.f; }), flock_.end());
+    // the passers: walking on the hills, gliding, turning away from the HUD column, drifting in the gust
+    beat_ = music.hasSong ? music.beat : worldTime_ * 2.0;
+    for (Passer& p : passers_) {
+        p.t += wdt;
+        if (p.t < 0.f) continue;
+        p.p = mad(p.p, p.v, wdt);
+        if (p.kind == P_DEER) p.p.y = groundY(p.p.x, p.layer) - 0.02f;
+        if (p.kind == P_CROW && std::fabs(p.p.x) < 13.5f) {
+            // turn back out in a slow climbing arc
+            p.v.x = approach(p.v.x, (p.p.x > 0 ? 1.f : -1.f) * 1.1f, 0.5f, wdt);
+            p.v.y = approach(p.v.y, 0.7f, 0.5f, wdt);
+            p.dir = p.v.x > 0 ? 1.f : -1.f;
+        }
+        if (p.kind == P_LEAF) { p.v.y = approach(p.v.y, -0.25f, 0.6f, wdt); p.v.x = approach(p.v.x, 0.4f, 0.3f, wdt); }
+    }
+    passers_.erase(std::remove_if(passers_.begin(), passers_.end(), [](const Passer& p) { return p.t > p.life; }), passers_.end());
+    // more of them every two bars while the fog is open
+    if (part_ > 0.5f && music.hasSong) {
+        const long bar = (long)std::floor(music.beat / 8.0);
+        if (bar != passBar_) {
+            if (passBar_ >= 0 && passers_.size() < 40) spawnFlyer((passCount_ % 3 == 2) ? P_CROW : P_HERON, passCount_ % 2 ? 1.f : -1.f);
+            passCount_++;
+            passBar_ = bar;
+        }
+    }
     for (Fading& l : fading_) l.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(),
                                  [](const Fading& l) { return l.t > l.delay + (l.delay > 0.f ? 0.95f : 0.45f); }),
@@ -1360,6 +1564,9 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uDiskR", 1.4f + 1.1f * part_);
     set1f(progSky_, "uDisk", (0.08f * wm + 0.16f * wp + 0.34f * part_ + 0.06f * swell_) * (1.f - 0.7f * slow_) * V.glowK * 1.6f);
     set3f(progSky_, "uSil", lin(V.sil));
+    set4f(progSky_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+    set4f(progSky_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    set4f(progSky_, "uQuietTL", -viewH_.x - 2.f, 8.2f, -10.2f, viewH_.y + 2.f);
     ugl::drawFullscreen();
 
     // the world, far to near, a fog bank drifting between each depth (the frame's alpha is kept for the stack)
@@ -1395,10 +1602,8 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         if (l == L_FAR) drawBank(0.75f * bankK, Y_FAR + 0.5f, 3.2f, drift_ * 0.35f, 0.16f, 1.f, 1.02f);
         if (l == L_EDGE) drawBank(0.7f * bankK, Y_EDGE - 0.8f, 2.4f, drift_ * 0.6f, 0.22f, 2.f, 1.03f);
         if (l == L_MID) {
-            // the flock flies over everything (never faded behind the HUD)
-            set1f(progSil_, "uQuietK", 0.f);
+            // the flocks (faded behind the HUD like the rest)
             drawPrims(flockPrims_);
-            set1f(progSil_, "uQuietK", 0.75f);
         }
         if (l == L_MID) drawBank(0.6f * bankK, Y_MID - 0.8f, 1.6f, drift_, 0.3f, 3.f, 1.04f);
     }
@@ -1439,7 +1644,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progPiece_, "uVP", vp_);
     set3f(progPiece_, "uInk", lin(V.ink));
     set3f(progPiece_, "uMist", fogLo * 1.08f + glowCol * (0.25f * glow));
-    set1f(progPiece_, "uRim", V.rimK * (0.85f + 0.15f * wp) * (1.f - 0.3f * slow_));
+    set1f(progPiece_, "uRim", V.rimK * (0.85f + 0.15f * wp) * (1.f - 0.3f * slow_) * (1.f - part_)); // the drop: flat black
     set1f(progPiece_, "uGhostA", V.dark ? 1.6f : 1.f);
     glBindVertexArray(cellVao_);
     glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);

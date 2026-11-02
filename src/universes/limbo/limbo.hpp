@@ -75,6 +75,18 @@ private:
     std::vector<MoteInst> moteInst_;
     struct Bird { vec2 p, v; float flap, t, size; };
     std::vector<Bird> flock_;
+    // What passes through the scene during a drop, in black against the bright fog: herons gliding across the side
+    // skies, crows, deer walking along the near hills, a far train, a balloon rising, leaves in the gust.
+    enum PassKind { P_HERON, P_CROW, P_DEER, P_TRAIN, P_BALLOON, P_LEAF };
+    struct Passer { int kind, layer; vec2 p, v; float t, life, size, phase, dir; };
+    std::vector<Passer> passers_;
+    long passBar_ = -1;
+    int passCount_ = 0;
+    double beat_ = 0.0;
+    void spawnPassers();
+    void spawnFlyer(int kind, float side);
+    void buildPassers();
+    float groundY(float x, int layer) const;
 
     // ---- Text.
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
