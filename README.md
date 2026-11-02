@@ -73,6 +73,10 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 <td><img src="docs/universes/rainy.jpg"><br><b>RAINY WINDOW</b>: a night window in the rain, the city out of focus behind it; drops run around the stained glass pieces on the beat, the drop turns the city's lights<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/bricks.jpg"><br><b>BRICKS</b>: glossy toy bricks in a photo studio; each cleared row flies off as bricks that build models on turntables, the drop takes them apart and rebuilds them<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/crystal.jpg"><br><b>CRYSTAL CAVE</b>: gemstone pieces in a geode cave; each phase of the song is its own mineral, frozen into the stack at lock time, so the stack grows in strata that record the song<br><sub>🔍 <i>to review</i></sub></td>
+<td></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
