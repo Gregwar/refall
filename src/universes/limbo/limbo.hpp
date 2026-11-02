@@ -96,11 +96,11 @@ private:
     void flushShapes();
 
     // ---- GL.
-    GLuint progSky_ = 0, progSil_ = 0, progBank_ = 0, progPiece_ = 0, progMote_ = 0, progFinal_ = 0, progShape_ = 0,
+    GLuint progRays_ = 0, progSky_ = 0, progSil_ = 0, progBank_ = 0, progPiece_ = 0, progMote_ = 0, progFinal_ = 0, progShape_ = 0,
            progText_ = 0;
     GLuint quadVbo_ = 0, primVao_ = 0, primVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, moteVao_ = 0, moteVbo_ = 0,
            shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
-    ugl::Target sceneT_;
+    ugl::Target sceneT_, rayT_; // rayT_: the light shafts (quarter resolution)
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
     void drawPrims(const std::vector<Prim>& v);
@@ -118,7 +118,10 @@ private:
     bool dropMode_ = false;
     float partGoal_ = 0.f, partMid_ = 0.f, part_ = 0.f; // the drop's parting fog (eased twice: no jump)
     float swellGoal_ = 0.f, swell_ = 0.f;              // the drop's light swell (eased in, settling over seconds)
-    float celebrate_ = 0.f;                            // a Tetris: the light warms for a moment
+    float celebrate_ = 0.f;
+    float dropHold_ = 0.f;                             // a drop outside a peak holds its look this long (seconds)
+    float gustGoal_ = 0.f, gust_ = 0.f;                // the drop's gust bending the trees outward (eased)
+    float gearSpin_ = 0.f;                             // the gears spinning through a drop                            // a Tetris: the light warms for a moment
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float lampKick_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;

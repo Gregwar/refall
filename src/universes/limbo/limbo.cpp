@@ -13,8 +13,10 @@
 // The song is the fog. Calm parts are thick fog (the far planes gone, only the nearest shapes dark, a dim diffuse
 // light); a chorus thins it (the forest edge and the towers come through, the shapes sway on the beat grid, every two
 // beats, the gear turns a notch every two beats); a peak opens it (the far planes clear, the light brighter, the fog
-// banks drifting faster, the lanterns brighten on the kicks). The drop parts the fog: eased in over a beat or two, a
-// vast landscape appears far away, the light swells into a low sun with shafts, and settles over seconds. A cleared
+// banks drifting faster, the lanterns brighten on the kicks). The drop tears the fog open, eased in over a beat or two:
+// the banks part from the middle and roll away, a vast mountain range appears, the light sinks into a big low sun
+// with occluded light shafts through the trees, rim-lit silhouettes, a gust, a large flock taking off, every lantern
+// lit, the gears spinning; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
 // row dissolves into the fog (its edges erode into mist, a few motes drift off); a Tetris sends a flock up from the
 // forest. Slow motion is a still, moonlit fog; game over dissolves the stack from the top down as the fog closes in.
 // Changes of universe: the fog closes in to the bridge's color.
@@ -138,6 +140,7 @@ bool LimboUniverse::init(int width, int height) {
     progPiece_ = ugl::program(shaders::CELL_VS, withCommon(shaders::PIECE_FS, true).c_str(), "limbo pieces");
     progMote_ = ugl::program(shaders::MOTE_VS, shaders::MOTE_FS, "limbo motes");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "limbo final");
+    progRays_ = ugl::program(ugl::FULLSCREEN_VS, shaders::RAYS_FS, "limbo rays");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "limbo shape");
     progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "limbo text");
 
@@ -241,12 +244,14 @@ void LimboUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    rayT_.create(std::max(1, width_ / 4), std::max(1, height_ / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     placeWorld();
 }
 
 LimboUniverse::~LimboUniverse() {
     sceneT_.destroy();
-    for (GLuint p : {progSky_, progSil_, progBank_, progPiece_, progMote_, progFinal_, progShape_, progText_}) glDeleteProgram(p);
+    rayT_.destroy();
+    for (GLuint p : {progRays_, progSky_, progSil_, progBank_, progPiece_, progMote_, progFinal_, progShape_, progText_}) glDeleteProgram(p);
     for (GLuint v : {primVao_, cellVao_, moteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, primVbo_, cellVbo_, moteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
     for (Font* f : {&fontSans_, &fontSerif_}) {
@@ -435,13 +440,14 @@ void LimboUniverse::buildWorld(float sway, float beatStep) {
         prim(layer, top.x, top.y - 0.22f * s - 2.f * h - 0.04f * s, 0, 0, w * 0.8f, 0.04f * s, 2, alpha);
         glows_.push_back({{top.x, top.y - 0.22f * s - h, 0, 0}, {1.5f * s, 0.f, 5.f, 0.f}, {alpha * glowK, 0.f, 0.f, 0.f}});
     };
-    const float lampK = 0.3f + 0.25f * lampKick_;
+    const float lampK = 0.3f + 0.25f * lampKick_ + 0.45f * part_;
 
     for (size_t i = 0; i < things_.size(); i++) {
         const Thing& t = things_[i];
         if (t.shown <= 0.002f) continue;
         const float g = smoothstepf(0.f, 1.f, t.shown);
-        const float sw = sway * (0.75f + 0.5f * std::sin(t.phase)); // each its own share of the motion
+        // each its own share of the motion; the drop's gust bends everything outward, away from the light
+        const float sw = sway * (0.75f + 0.5f * std::sin(t.phase)) + gust_ * 0.55f * (t.x > 0.f ? -1.f : 1.f);
         std::vector<vec2>* perch = i < 64 ? &perches_[i] : nullptr;
         Rng r(t.seed);
         switch (t.kind) {
@@ -645,7 +651,7 @@ void LimboUniverse::buildWorld(float sway, float beatStep) {
     }
     // the flock of a Tetris, flying off over the forest
     for (const Bird& b : flock_) {
-        const float a = smoothstepf(0.f, 0.4f, b.t) * (1.f - smoothstepf(6.f, 8.f, b.t));
+        const float a = smoothstepf(0.f, 0.4f, b.t) * (1.f - smoothstepf(7.5f, 10.f, b.t));
         const float flap = std::sin(b.flap) * 0.55f;
         for (int k = -1; k <= 1; k += 2) {
             const vec2 w = mad(b.p, dirOf(PI * 0.5f - k * (1.2f - flap)), 0.3f * b.size);
@@ -682,7 +688,7 @@ void LimboUniverse::setSong(const SongLook& t, float seconds) {
 void LimboUniverse::setLevel(int level, float energy, float seconds, float impact) {
     level = std::clamp(level, 0, 2);
     energy_ = energy;
-    if (level < 2) { dropMode_ = false; partGoal_ = 0.f; }
+    if (level < 2) dropMode_ = false; // (the parting closes in render, once a drop's hold is over)
     if (!hasLevel_ || seconds < 0.1f) {
         hasLevel_ = true;
         level_ = level;
@@ -702,8 +708,20 @@ void LimboUniverse::setLevel(int level, float energy, float seconds, float impac
 // The drop: the fog parts on a vast landscape and the light swells into a low sun (both eased in, see render).
 void LimboUniverse::drop(float strength) {
     dropMode_ = true;
-    partGoal_ = 1.f;
+    dropHold_ = 16.f; // a drop called outside a peak (or a short peak) still holds its look this long
     swellGoal_ = std::max(swellGoal_, 0.7f + 0.3f * strength);
+    gustGoal_ = 1.f;
+    // a large flock takes off from the forest edge on both sides and crosses the sky, slowly
+    for (int k = 0; k < 40; k++) {
+        const float s = k % 2 ? 1.f : -1.f;
+        Bird b;
+        b.p = V2(s * rng_.range(3.f, 17.f), Y_EDGE + rng_.range(1.f, 3.5f));
+        b.v = V2(s * rng_.range(0.7f, 1.6f), rng_.range(0.6f, 1.3f));
+        b.flap = rng_.range(0.f, TAU);
+        b.t = -rng_.range(0.2f, 2.2f);
+        b.size = rng_.range(0.75f, 1.15f);
+        flock_.push_back(b);
+    }
 }
 
 // A new section: one piece's rim catches the light.
@@ -1198,6 +1216,7 @@ void LimboUniverse::drawBank(float density, float y, float thick, float drift, f
     set1f(progBank_, "uScale", scale);
     set1f(progBank_, "uLayer", layer);
     set1f(progBank_, "uBright", bright);
+    set1f(progBank_, "uPart", part_);
     ugl::drawFullscreen();
 }
 
@@ -1228,9 +1247,15 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     const float wm = smoothstepf(0.15f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     // the drop's parting, eased twice (it starts gently, with no jump, and settles); the swell follows it in and
     // settles over several seconds
-    const float partRate = partGoal_ > partMid_ ? 2.4f : 0.45f;
-    partMid_ = approach(partMid_, partGoal_ * wp, partRate, dt);
+    // (held for the whole peak after a drop, or dropHold_ seconds for a drop outside one; then it closes slowly)
+    dropHold_ = std::max(0.f, dropHold_ - dt);
+    partGoal_ = (overT_ < 0.f && ((dropMode_ && level_ == 2) || dropHold_ > 0.f)) ? 1.f : 0.f;
+    const float partRate = partGoal_ > partMid_ ? 2.6f : 0.3f;
+    partMid_ = approach(partMid_, partGoal_, partRate, dt);
     part_ = approach(part_, partMid_, partRate, dt);
+    gust_ = approach(gust_, gustGoal_, 1.6f, dt);
+    gustGoal_ = approach(gustGoal_, 0.f, 0.3f, dt);
+    gearSpin_ += dt * 1.4f * part_;
     swell_ = approach(swell_, swellGoal_, 1.8f, dt);
     swellGoal_ = approach(swellGoal_, 0.f, 0.22f, dt);
     celebrate_ = approach(celebrate_, 0.f, 0.6f, dt);
@@ -1244,17 +1269,17 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
 
     // how thick the fog is: calm thick, a chorus thinner, a peak open, the drop parting it; slow motion and a game
     // over close it in
-    float fog = lerpf(lerpf(1.f, 0.72f, wm), 0.5f, wp) - 0.3f * part_;
+    float fog = lerpf(lerpf(lerpf(1.f, 0.72f, wm), 0.5f, wp), 0.06f, part_);
     fog = lerpf(fog, 1.1f, std::max(0.6f * slow_, over_ * 0.8f));
     fog = std::clamp(fog, 0.f, 1.2f);
     layerFog_[L_FAR] = std::min(0.98f, 0.4f + 0.58f * fog);
     layerFog_[L_EDGE] = std::min(0.96f, 0.24f + 0.64f * fog);
     layerFog_[L_MID] = std::min(0.9f, 0.1f + 0.56f * fog);
     layerFog_[L_NEAR] = 0.02f + 0.2f * fog;
-    const float glow = (V.glowK * (lerpf(0.75f, 1.f, wm) + 0.18f * wp + 0.28f * part_ + 0.14f * swell_ + 0.12f * celebrate_)) *
+    const float glow = (V.glowK * (lerpf(0.75f, 1.f, wm) + 0.18f * wp + 0.22f * part_ + 0.08f * swell_ + 0.12f * celebrate_)) *
                        (1.f - 0.45f * slow_);
     drift_ += wdt * (0.18f + 0.25f * wm + 0.45f * wp);
-    millAngle_ += wdt * (0.06f + 0.12f * wm + 0.2f * wp);
+    millAngle_ += wdt * (0.06f + 0.12f * wm + 0.2f * wp + 0.5f * part_);
 
     // ---- Motion on the beat grid: the shapes sway to one side, then the other, every two beats (a breeze when calm).
     float sway = 0.35f * std::sin(worldTime_ * 0.35f);
@@ -1266,7 +1291,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         notch = (float)std::floor(b2) + smoothstepf(0.f, 0.35f, fr);
     }
     sway *= 1.f - over_;
-    gearAngle_ = notch * (TAU / 24.f);
+    gearAngle_ = notch * (TAU / 24.f) + gearSpin_;
 
     // ---- The world filling up with the play.
     grownTarget_ = std::min(game.lines(), GROW_COUNT);
@@ -1294,7 +1319,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         b.v.y = approach(b.v.y, 0.35f, 0.4f, wdt);
         b.flap += wdt * 11.f;
     }
-    flock_.erase(std::remove_if(flock_.begin(), flock_.end(), [](const Bird& b) { return b.t > 8.f; }), flock_.end());
+    flock_.erase(std::remove_if(flock_.begin(), flock_.end(), [](const Bird& b) { return b.t > 10.f; }), flock_.end());
     for (Fading& l : fading_) l.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(),
                                  [](const Fading& l) { return l.t > l.delay + (l.delay > 0.f ? 0.95f : 0.45f); }),
@@ -1308,8 +1333,9 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The scene.
     const vec3 fogLo = lin(V.fogLo), fogHi = lin(V.fogHi), glowCol = lin(V.glow);
-    const float sunY = 1.5f - 0.5f * part_;
-    const float sunR = lerpf(10.5f, 8.f, wp) + 1.5f * part_;
+    // the drop: the light sinks into a low sun near the horizon, behind the well, and its halo widens
+    const float sunY = 1.5f - 2.3f * part_;
+    const float sunR = lerpf(10.5f, 8.f, wp) + 0.5f * part_;
     const float seedU = (float)(seed_ % 1000) * 0.137f;
     auto common = [&](GLuint p) {
         set4f(p, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
@@ -1330,8 +1356,9 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     common(progSky_);
     set1f(progSky_, "uReveal", part_ * (1.f - over_));
     set1f(progSky_, "uFar", saturate(1.f - fog));
-    set1f(progSky_, "uShaft", (0.1f * wp + 0.45f * part_ + 0.15f * swell_) * (1.f - slow_));
-    set1f(progSky_, "uDisk", (0.08f * wm + 0.16f * wp + 0.26f * part_ + 0.1f * swell_) * (1.f - 0.7f * slow_) * V.glowK * 1.6f);
+    set1f(progSky_, "uShaft", (0.1f * wp + 0.15f * part_ + 0.1f * swell_) * (1.f - slow_));
+    set1f(progSky_, "uDiskR", 1.4f + 1.1f * part_);
+    set1f(progSky_, "uDisk", (0.08f * wm + 0.16f * wp + 0.34f * part_ + 0.06f * swell_) * (1.f - 0.7f * slow_) * V.glowK * 1.6f);
     set3f(progSky_, "uSil", lin(V.sil));
     ugl::drawFullscreen();
 
@@ -1347,6 +1374,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSil_, "uSil", lin(V.sil));
     set3f(progSil_, "uLamp", lin(V.lamp));
     set1f(progSil_, "uVeil", 0.55f);
+    set1f(progSil_, "uRimLit", (0.12f * wp + 0.75f * part_) * (1.f - slow_));
     set4f(progSil_, "uQuiet", -5.4f, -10.1f, 5.4f, 11.f);
     set4f(progSil_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progSil_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
@@ -1384,6 +1412,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progSil_);
         set1f(progSil_, "uQuietK", 0.f);
         set1f(progSil_, "uVeil", 0.f);
+        set1f(progSil_, "uRimLit", 0.f);
         drawPrims(frame);
     }
 
@@ -1425,6 +1454,22 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
 
+    // ---- The light shafts: the bright fog smeared toward the sun, occluded by every silhouette (and the stack)
+    const float rays = (0.1f * wp + 1.f * part_ + 0.25f * swell_) * (1.f - slow_) * (1.f - over_);
+    if (rays > 0.01f) {
+        rayT_.bind();
+        glDisable(GL_BLEND);
+        glUseProgram(progRays_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+        set1i(progRays_, "uScene", 0);
+        set2f(progRays_, "uSunUv", (0.f - viewC_.x) / viewH_.x * 0.5f + 0.5f, (sunY - viewC_.y) / viewH_.y * 0.5f + 0.5f);
+        set1f(progRays_, "uThr", ugl::luma(fogLo) * 1.08f);
+        set1f(progRays_, "uTime", worldTime_);
+        set1f(progRays_, "uAspect", (float)width_ / height_);
+        ugl::drawFullscreen();
+    }
+
     // ---- The frame.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
@@ -1433,6 +1478,12 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, rayT_.tex);
+    set1i(progFinal_, "uRays", 1);
+    glActiveTexture(GL_TEXTURE0);
+    set1f(progFinal_, "uRayK", rays);
+    set3f(progFinal_, "uRayCol", glowCol);
     set1f(progFinal_, "uSlow", slow_ * 0.85f);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));

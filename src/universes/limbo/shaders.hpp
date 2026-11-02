@@ -54,6 +54,7 @@ uniform float uFar;     // how much of the far ridge shows through the fog anywa
 uniform float uShaft;   // light shafts
 uniform float uDisk;    // the light's disk through the fog
 uniform vec3 uSil;      // the silhouettes' black
+uniform float uDiskR;   // the light's disk radius
 float ridge(float x, float base, float amp, float freq, float s) {
     float n = fbm(vec2(x * freq, s));
     float sharp = 1.0 - abs(vnoise(vec2(x * freq * 2.7, s + 3.0)) * 2.0 - 1.0);
@@ -65,7 +66,7 @@ void main() {
     vec3 c = fog;
     // the light's disk, softened by the fog (a low sun behind the well)
     float dr = length(w - uSun.xy);
-    c += uGlowCol * uDisk * (smoothstep(1.55, 1.2, dr) * 0.55 + exp(-dr * dr * 0.35) * 0.35);
+    c += uGlowCol * uDisk * (smoothstep(uDiskR + 0.3, uDiskR, dr) * 0.6 + exp(-dr * dr * 0.35 / (uDiskR * uDiskR / 2.0)) * 0.4);
     // light shafts fanning out from the light (slowly turning)
     vec2 d = w - uSun.xy;
     float a = atan(d.y, d.x);
@@ -74,17 +75,20 @@ void main() {
     float fall = exp(-length(d) * 0.09) * smoothstep(1.0, 5.0, length(d));
     c += uGlowCol * uShaft * rays * fall * 0.3;
     // the far landscape: a vast range and a nearer plateau, revealed by the parting fog (always a trace of them)
-    float h1 = ridge(w.x, -3.2, 7.5, 0.035, 11.0 + uSeed * 0.01);
-    float h2 = ridge(w.x + 40.0, -6.4, 3.6, 0.07, 23.0 + uSeed * 0.01);
+    float h1 = ridge(w.x, -4.0, 10.0, 0.033, 11.0 + uSeed * 0.01);
+    float h2 = ridge(w.x + 40.0, -6.6, 4.6, 0.07, 23.0 + uSeed * 0.01);
     float aa = 2.0 * uView.w / 540.0;
     float m1 = 1.0 - smoothstep(h1 - aa, h1 + aa, w.y);
     float m2 = 1.0 - smoothstep(h2 - aa, h2 + aa, w.y);
     float veil = 1.0 - 0.6 * glowAt(w);
-    float k1 = (0.07 * uFar + 0.2 * uReveal) * veil;
-    float k2 = (0.12 * uFar + 0.26 * uReveal) * veil;
+    float veil2 = 1.0 - 0.35 * glowAt(w);
+    float k1 = 0.07 * uFar * veil + 0.62 * uReveal * veil2;
+    float k2 = 0.12 * uFar * veil + 0.78 * uReveal * veil2;
     // the range catches the light on its ridges' sides facing it
     c = mix(c, mix(fog, uSil, 0.6), m1 * k1);
     c = mix(c, mix(fog, uSil, 0.75), m2 * k2);
+    // the low sun catching the crests: a thin line of light along each ridge
+    c += uGlowCol * uReveal * glowAt(w) * 0.9 * (exp(-max(h1 - w.y, 0.0) * 9.0) * m1 * (1.0 - m2) + exp(-max(h2 - w.y, 0.0) * 9.0) * m2);
     // mist pooling in the valleys between them
     float pool = smoothstep(2.5, -1.0, w.y - h2) * m1 * (1.0 - m2);
     c = mix(c, fog * 1.03, pool * 0.25 * uReveal);
@@ -152,6 +156,7 @@ uniform vec4 uQuiet;    // the well's rectangle (x0, y0, x1, y1): the fog stays 
 uniform vec4 uHudL, uHudR;
 uniform vec4 uQuietTL; // the song's title
 uniform float uQuietK;  // the least fog behind the well and the HUD columns
+uniform float uRimLit;  // the low sun rim-lighting the silhouettes (the drop)
 float box(vec2 w, vec4 r, float soft) {
     vec2 q = max(vec2(r.x, r.y) - w, w - vec2(r.z, r.w));
     return 1.0 - smoothstep(0.0, soft, max(q.x, q.y));
@@ -160,10 +165,12 @@ void main() {
     int kind = int(vB.z + 0.5);
     vec2 p = vW;
     float d;
+    float thick = 1.0; // the shape's half thickness (thin twigs get no rim: it would sparkle)
     if (kind == 0) {
         vec2 a = vA.xy, b = vA.zw, ba = b - a;
         float h = clamp(dot(p - a, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
-        d = length(p - a - ba * h) - mix(vB.x, vB.y, h);
+        thick = mix(vB.x, vB.y, h);
+        d = length(p - a - ba * h) - thick;
     } else if (kind == 1) {
         d = length(p - vA.xy) - vB.x;
     } else if (kind == 2) {
@@ -224,6 +231,15 @@ void main() {
     // a lit tone (a lantern's glass) or the black
     vec3 ink = mix(uSil, uLamp, vC.w);
     vec3 col = mix(ink, fog, clamp(k, 0.0, 1.0));
+    // the low sun's rim on the edges facing it (thin twigs glow whole)
+    if (uRimLit > 0.0 && kind != 5 && kind != 1) {
+        vec2 gd = vec2(dFdx(d), dFdy(d));
+        vec2 n = length(gd) > 1e-6 ? normalize(gd) : vec2(0.0);
+        vec2 toS = normalize(uSun.xy - p);
+        float band = 1.0 - smoothstep(aa, aa + 0.035, -d);
+        float face = smoothstep(0.0, 0.8, dot(n, toS));
+        col += uGlowCol * (0.35 + glowAt(p)) * band * face * uRimLit * (1.0 - k) * (1.0 - k) * 0.6 * smoothstep(3.0 * aa, 7.0 * aa, thick);
+    }
     frag = vec4(col * cov, cov);
 }
 )";
@@ -239,14 +255,18 @@ uniform vec2 uDrift;     // its drift (board units)
 uniform float uScale;    // its puffs' size
 uniform float uLayer;
 uniform float uBright;   // lit a little (1) or plain
+uniform float uPart;     // the drop: the bank tears open from the middle and rolls away to the sides
 void main() {
     vec2 w = worldOf(vUv);
-    vec2 q = (w + uDrift) * uScale + vec2(uLayer * 13.7, uLayer * 5.1);
+    float side = w.x < 0.0 ? -1.0 : 1.0;
+    vec2 q = (w + uDrift - vec2(side * uPart * 10.0, 0.0)) * uScale + vec2(uLayer * 13.7, uLayer * 5.1);
     // wisps stretched sideways, rolling slowly
     float n = fbm(q * vec2(0.55, 1.25) + vec2(0.0, uTime * 0.015));
     n = smoothstep(0.32, 0.78, n);
     float h = exp(-max(w.y - uY, 0.0) / max(uThick, 0.1)) * smoothstep(uY - uThick * 3.0, uY, w.y + uThick * 2.0);
-    float a = clamp(n * h * uDensity, 0.0, 0.92);
+    float edge = uPart * (uView.z + 4.0);
+    float gap = mix(1.0, smoothstep(edge - 7.0, edge + 1.0, abs(w.x)) * (1.0 + 0.8 * uPart), uPart);
+    float a = clamp(n * h * uDensity * gap, 0.0, 0.92);
     vec3 c = fogColor(w) * uBright;
     frag = vec4(c * a, a);
 }
@@ -390,17 +410,52 @@ void main() {
 }
 )";
 
+// ---------------------------------------------------------------- the light shafts (quarter resolution)
+// The bright fog behind everything smeared toward the sun: every silhouette (and the stack, through the frame's
+// alpha) casts its shadow into the shafts; a slow angular modulation makes them sweep.
+inline const char* RAYS_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uScene;
+uniform vec2 uSunUv;
+uniform float uThr, uTime, uAspect;
+float h1(float x) { return fract(sin(x * 91.7) * 43758.5453); }
+float n1(float x) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(h1(i), h1(i + 1.0), f); }
+void main() {
+    vec2 d = uSunUv - vUv;
+    const int N = 48;
+    vec2 stp = d / float(N) * 0.92;
+    vec2 uv = vUv;
+    float acc = 0.0, wgt = 1.0;
+    for (int i = 0; i < N; i++) {
+        uv += stp;
+        vec4 s = texture(uScene, uv);
+        float l = dot(s.rgb, vec3(0.2126, 0.7152, 0.0722));
+        acc += smoothstep(uThr, uThr + 1.4, l) * (1.0 - s.a) * wgt;
+        wgt *= 0.972;
+    }
+    acc /= float(N) * 0.5;
+    float a = atan(d.y, d.x * uAspect);
+    float sweep = 0.55 + 0.45 * n1(a * 5.0 + uTime * 0.06) * n1(a * 11.0 - uTime * 0.04 + 7.0) * 1.6;
+    frag = vec4(vec3(acc * sweep), 1.0);
+}
+)";
+
 // ---------------------------------------------------------------- the frame
 inline const char* FINAL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform sampler2D uScene;
+uniform sampler2D uScene, uRays;
+uniform float uRayK;
+uniform vec3 uRayCol;
 uniform float uSlow, uDim, uFade, uBridge, uVig, uGrain, uTime;
 uniform vec3 uBridgeCol, uBridgeInk; // linear
 uniform vec3 uNight;                 // the slow motion's cool light
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = s.rgb;
+    // the light shafts, never over the stack
+    c += uRayCol * texture(uRays, vUv).r * uRayK * 0.4 * (1.0 - clamp(s.a, 0.0, 1.0));
     // slow motion: the fog goes still under a cold, moonlit light
     float g = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(c, vec3(g) * uNight, uSlow);
