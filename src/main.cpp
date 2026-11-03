@@ -157,6 +157,7 @@ private:
     // Slow-motion bonus: gravity runs at BONUS_GAME_SPEED (real time) while the music keeps its speed (only a
     // short tape bend marks the start and the end).
     static constexpr float BONUS_GAME_SPEED = 0.25f;
+    static constexpr float TRANSITION_GAME_SPEED = 0.25f; // gravity during a change of universe
     double rowAcc_ = 0, lastSongBeat_ = -1; // gravity rows accumulated, song beat at the last update
     float gameRate_ = 1.f; // gravity speed in real time (eased)
     float pace_ = -1, fallbackTimer_ = 0; // section pace (rows per beat before level scaling), eased
@@ -381,7 +382,10 @@ void App::handleEvents() {
 // drop), and the level scales it up gradually to x10 at level 20 (capped at 28 rows/s).
 void App::updateGravity(double songTime, float dt) {
     const float diff = game_.difficulty();
-    gameRate_ = approach(gameRate_, game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, 3.f, dt);
+    // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
+    // blend) and the slow-motion bonus; it eases back over about a second.
+    const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
+    gameRate_ = approach(gameRate_, rateGoal, 3.f, dt);
     if (gameRate_ > 0.999f) gameRate_ = 1.f;
     if (!track_ || songFinished()) {
         fallbackTimer_ += dt * gameRate_;
