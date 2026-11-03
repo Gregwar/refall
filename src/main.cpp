@@ -35,6 +35,7 @@ struct Options {
     uint64_t seed = 0;
     std::string clipPath; // --clip: record a video around the first drop of the first song, then exit
     float clipBefore = 4.f, clipAfter = 6.f;
+    float clipAt = -1.f; // the clip's moment (song seconds), the first drop when < 0
     std::string universe;   // forced universe "NAME" or "NAME:VARIANT" (as shown in the corner), "" = picked per song
     bool universeOnPeak = false; // also change universe when a long song rises into a peak
     std::string toUniverse, transition; // --transition-shots: the universe changed to, the transition forced
@@ -75,7 +76,8 @@ static void usage() {
         "                       universe (--universe) to --to NAME[:VARIANT] (default: the next one) with --transition\n"
         "                       NAME (default: picked), saves N frames across the transition, then exits (testing)\n"
         "  --clip OUT.mp4       record a video (with sound, needs ffmpeg) around the first drop of the first\n"
-        "                       song, then exit; --clip-before / --clip-after SEC set the span (default 4 / 6)\n");
+        "                       song, then exit; --clip-before / --clip-after SEC set the span (default 4 / 6),\n"
+        "                       --clip-at SEC records around that song time instead of the drop\n");
 }
 
 class App {
@@ -694,10 +696,10 @@ int App::run() {
         }
         if (clipMode && track_) {
             if (clipStart_ < 0) {
-                const double drop = firstDropTime();
+                const double drop = opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
                 clipStart_ = std::max(0.0, drop - opt_.clipBefore);
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
-                std::printf("[clip] first drop at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
+                std::printf("[clip] moment at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
                             clipStart_ + opt_.clipBefore + opt_.clipAfter);
             }
             simSongTime_ += dt; // real song time: the recorded audio is cut from the same span
@@ -1124,6 +1126,7 @@ int main(int argc, char** argv) {
         else if (a == "--review-shot" && i + 1 < argc) { o.reviewPath = argv[++i]; o.shotPrefix = o.reviewPath; o.shotCount = 1; }
         else if (a == "--review-level" && i + 1 < argc) o.reviewLevel = std::atoi(argv[++i]);
         else if (a == "--clip" && i + 1 < argc) o.clipPath = argv[++i];
+        else if (a == "--clip-at" && i + 1 < argc) o.clipAt = std::stof(argv[++i]);
         else if (a == "--clip-before" && i + 1 < argc) o.clipBefore = std::stof(argv[++i]);
         else if (a == "--clip-after" && i + 1 < argc) o.clipAfter = std::stof(argv[++i]);
         else o.paths.push_back(a);
