@@ -19,11 +19,12 @@
 // Calm is sparse (a small title stacked in one zone, one field, much ground); mid adds the section's name set
 // vertically up the other zone and a second field; a peak is dense (bigger type running across, a stripe across the
 // whole poster, a disc, three fields). Every two beats a thin rule steps along the grid and a small square moves along
-// it; at a peak the kicks thicken the rules for an instant. The drop sets the song's title giant across the poster in
-// the drop's palette, eased in over two beats. A cleared row closes into a flat bar and slides out of the well
-// sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets "tetris" up the free zone in the
-// signature color for two bars. Slow motion is the negative print (ground and ink swap). Game over slides the stack
-// out row by row from the top.
+// it; at a peak the kicks thicken the rules for an instant. The drop is a hard cut on its downbeat to the negative
+// print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
+// drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
+// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets
+// "tetris" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
+// swap). Game over slides the stack out row by row from the top.
 //
 // Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
 //
@@ -316,12 +317,12 @@ void SwissUniverse::setLevel(int level, float energy, float seconds, float impac
     lvDur_ = std::clamp(seconds, 1.f, 5.f);
 }
 
-// The drop: the title is set giant across the poster in the drop's palette, eased in over two beats.
+// The drop: a hard cut on its downbeat to the negative print, the title set giant across the poster in the drop's
+// palette; it holds while the drop lasts.
 void SwissUniverse::drop(float strength) {
     (void)strength;
     dropMode_ = true;
     dropPending_ = true;
-    dropDur_ = std::max(1.f, 2.f * 60.f / bpm_);
 }
 
 void SwissUniverse::refresh(float strength) { (void)strength; }
@@ -1416,10 +1417,14 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         if (dropMode_) p = 4;
         palIdx_ = p;
         const vec3 g0 = hex(V.ground), i0 = hex(V.ink);
-        const float neg = smoothstepf(0.f, 1.f, slow_);
+        // the negative print: slow motion eases into it; the drop cuts to it on its downbeat, holds it while it
+        // lasts and eases back after (both at once print positive again)
+        dropNeg_ = dropMode_ ? 1.f : approach(dropNeg_, 0.f, 1.25f, dt);
+        const float sn = smoothstepf(0.f, 1.f, slow_), dn = smoothstepf(0.f, 1.f, dropNeg_);
+        const float neg = sn + dn - 2.f * sn * dn;
         const vec3 gT = lerp(g0, i0, neg), iT = lerp(i0, g0, neg);
         const vec3 targ[4] = {iT, hex(V.pal[p][0]), hex(V.pal[p][1]), hex(V.pal[p][2])};
-        if (!palInit_) {
+        if (!palInit_ || dropPending_) { // the drop cuts to its palette
             for (int i = 0; i < 4; i++) palShown_[i] = targ[i];
             palInit_ = true;
         }
@@ -1442,7 +1447,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         } else if (dropPending_) {
             dropPending_ = false;
             bar_ = bar;
-            compose(bar, dropDur_, false);
+            compose(bar, 0.f, true); // a hard cut on the downbeat
         } else if (bar != bar_ && overT_ < 0.f) {
             bar_ = bar;
             compose(bar, std::clamp(barS * 0.75f, 1.2f, 2.4f), false);
