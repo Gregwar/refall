@@ -678,7 +678,7 @@ void SeaWorld::leak(Body& b, float dt) {
     if (b.fill <= 0.f) { waterLines_ += b.pend; b.pend = 0.f; }
 }
 
-// A whole stack appearing at once (a board filled for a review, a game joined in progress): its sea has risen
+// A whole stack filled at once while shown (a board filled for a review): its sea has risen
 // already, deep, with its boats and its life.
 void SeaWorld::grown() {
     if (waterLines_ >= 48.f) return;
