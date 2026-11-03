@@ -1518,19 +1518,43 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
             rects.insert(rects.end(), {x0, y0, x1, y1});
             soft.insert(soft.end(), {feather, k});
         };
-        // the game's band, from grid line -12 to +12
-        const vec2 a = px(-12.f, 1e3f), b = px(12.f, -1e3f);
-        add(a.x, -10.f, b.x, height_ + 10.f, 1.f, VEIL);
-        // the HUD's corner lines (the title, the section...): a quiet patch under each
+        // The veil covers only what is played or read: the well, and a crisp box behind each HUD element
+        // (the hold and next previews, the gauge, each group of lettering), so the poster runs at full strength
+        // everywhere else. Boxes that touch are merged, so a column of lines reads as one block.
+        const float pad = 12.f * height_ / 1080.f;
+        std::vector<vec4> boxes;
+        auto boardBox = [&](float x0, float y0, float x1, float y1) {
+            const vec2 p0 = px(x0, y1), p1 = px(x1, y0);
+            boxes.push_back({p0.x, p0.y, p1.x, p1.y});
+        };
+        const vec2 a = px(-5.45f, 1e3f), b = px(5.45f, -1e3f);
+        add(a.x, -10.f, b.x, height_ + 10.f, 1.f, VEIL); // the well
+        boardBox(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_LABEL.y + 0.7f);
+        boardBox(layout::nextCenter(0).x - 2.f, layout::nextCenter(2).y - 1.1f, layout::nextCenter(0).x + 2.f, layout::NEXT_LABEL.y + 0.7f);
+        boardBox(layout::GAUGE_CENTER.x - 2.f, layout::GAUGE_CENTER.y - 1.9f, layout::GAUGE_CENTER.x + 2.f, layout::GAUGE_CENTER.y + 1.3f);
         for (const HudText& h : f.hud) {
             if (h.alpha <= 0.02f || h.text.empty()) continue;
             const float base = h.scale * 12.f;
             const float w = capWidth(reg_, ascii(h.text), 0.06f) * base * 0.6f;
             const float x0 = ugl::hudLeft(h, w, width_);
-            if (x0 + w > a.x && x0 < b.x) continue; // inside the band already
-            const float pad = 10.f * height_ / 1080.f;
-            add(x0 - pad, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad, 14.f * height_ / 1080.f, 0.9f);
+            const vec4 r{x0 - pad, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad};
+            if (r.z > a.x && r.x < b.x) continue; // over the well, veiled already
+            boxes.push_back(r);
         }
+        // merge boxes that touch or overlap (until stable)
+        for (bool merged = true; merged;) {
+            merged = false;
+            for (size_t i = 0; i < boxes.size() && !merged; i++)
+                for (size_t j = i + 1; j < boxes.size() && !merged; j++) {
+                    vec4 &p = boxes[i], &q = boxes[j];
+                    if (p.x <= q.z + 1.f && q.x <= p.z + 1.f && p.y <= q.w + 1.f && q.y <= p.w + 1.f) {
+                        p = {std::min(p.x, q.x), std::min(p.y, q.y), std::max(p.z, q.z), std::max(p.w, q.w)};
+                        boxes.erase(boxes.begin() + j);
+                        merged = true;
+                    }
+                }
+        }
+        for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f, VEIL);
         const int n = (int)rects.size() / 4;
         set1i(progComp_, "uCount", n);
         if (n) {
