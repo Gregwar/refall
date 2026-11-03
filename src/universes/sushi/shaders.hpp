@@ -560,20 +560,20 @@ void main() {
     AA = max(length(fwidth(p)) * 0.75, 1e-4);
     P = vec3(0.0); A = 0.0;
     vec3 pc = vC.rgb;
-    // the maki stands on its own, a short roll seen from a little above: the cut face on top (an ellipse), the
+    // the maki stands on its own, a roll seen nearly from the side: the cut face on top (an ellipse), the
     // nori wrapped around its side below
     float sc = max(vC.w, 0.05);
     vec2 s = p / sc;
     float qa = AA / sc;
-    const float R = 0.43, K = 0.7, YC = 0.1, H = 0.16;
+    const float R = 0.44, K = 0.42, YC = 0.175, H = 0.34;
     vec2 e = vec2(s.x, (s.y - YC) / K);
-    float topD = (length(e) - R) * K;
-    float botD = (length(vec2(s.x, (s.y - YC + H) / K)) - R) * K;
+    float topD = sdEll(s - vec2(0.0, YC), vec2(R, R * K));
+    float botD = sdEll(s - vec2(0.0, YC - H), vec2(R, R * K));
     float sideD = max(abs(s.x) - R, abs(s.y - YC + H * 0.5) - H * 0.5);
     float bodyD = min(min(topD, botD), sideD);
     if (kind == 1) {
         // the ghost: the roll's outline, faint
-        float l = fillA(abs(bodyD + 0.02) - 0.02, qa);
+        float l = clamp(fillA(bodyD, qa) - fillA(bodyD + 0.04, qa), 0.0, 1.0);
         float a = l * 0.55 * vB.y;
         if (a <= 0.002) discard;
         frag = vec4(pc * a, a);
@@ -602,6 +602,8 @@ void main() {
         // the nori's fine ribs
         side *= 0.92 + 0.08 * smoothstep(0.3, 0.7, vnoise(vec2(s.x * 30.0, s.y * 4.0)));
     }
+    // a little darker toward the bottom, where it sits
+    side *= 0.82 + 0.18 * smoothstep(YC - H - R * K, YC, s.y);
     over(side, fillA(bodyD, qa) * makiA);
     // the cut face
     vec2 q = rot2(e, vB.w);

@@ -2,7 +2,7 @@
 //
 // One world: a small kaiten sushi bar in soft pastel colors, drawn flat with rounded shapes and thick soft outlines.
 // The well is a lacquered bento box standing on the counter; a conveyor belt runs along the counter behind it,
-// carrying dishes. Each cell is one maki standing on its own, seen from a little above (the cut face on top, the
+// carrying dishes. Each cell is one maki standing on its own, seen nearly from the side (the cut face on top, the
 // nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an inside-out roll with sesame.
 // The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats (white,
 // calico, black with white socks, ginger and grey tabbies, a cream colorpoint), each with a collar and a little bell.
