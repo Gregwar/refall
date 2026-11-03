@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Twenty-four universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Twenty-three universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -79,7 +79,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/sushi.jpg"><br><b>SUSHI</b>: blocky maki rolls in a hinoki bento box at a kawaii kaiten counter; cleared rows hop to the cats sitting there, who catch and eat them, more cats come with the lines, the drop is a festival of cheering cats<br><sub>🔍 <i>to review</i></sub></td>
+<td></td>
 </tr>
 </table>
 
@@ -94,6 +94,7 @@ Disabled for now (not built; their code stays in the repository):
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 | SUNPRINT | A sheet turning between two tints, keeping the old one under the stack; to be judged later |
 | EMBROIDERY | Cross-stitch on aida; to be judged later |
+| SUSHI | Maki in a bento box fed to kawaii cats; on hold |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -153,5 +154,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
