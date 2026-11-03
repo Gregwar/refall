@@ -1111,7 +1111,10 @@ void SwissUniverse::drawBoard(const Game& g) {
         rectPx(std::round(a.x) - 2.f * th, std::round(b.y) + th, std::round(b.x) + 2.f * th, std::round(b.y) + 2.f * th, c, al);
     }
 
-    // the ghost: the piece's outline, a fine rule
+    // the ghost: the piece's outline, a fine rule along the edge of the piece's flat shape (inset by the gutter like
+    // a locked piece), one closed line: a side runs to the inset corner where the piece turns outward, straight on
+    // into its neighbor's side where the piece continues, and across its neighbor's rule where the piece turns
+    // inward (a concave corner), so every corner closes.
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -1126,20 +1129,26 @@ void SwissUniverse::drawBoard(const Game& g) {
             };
             const float th = std::max(1.f, std::round(height_ / 1080.f * 2.f));
             const vec3 c = tone(lerp(ground_, ink_, 0.45f));
+            auto X = [&](float bx) { return std::round(px(bx, 0.f).x); };
+            auto Y = [&](float by) { return std::round(px(0.f, by).y); };
+            const float gg = GAP;
             for (auto& cc : gc) {
                 if (cc[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
-                const int m = mask8(cc[0], cc[1], in);
-                const float gg = GAP;
-                const float x0 = w.x - 0.5f + ((m & 1) ? 0.f : gg), x1 = w.x + 0.5f - ((m & 2) ? 0.f : gg);
-                const float yb = w.y - 0.5f + ((m & 4) ? 0.f : gg), yt = w.y + 0.5f - ((m & 8) ? 0.f : gg);
-                vec2 p0 = px(x0, yt), p1 = px(x1, yb);
-                p0 = vec2{std::round(p0.x), std::round(p0.y)};
-                p1 = vec2{std::round(p1.x), std::round(p1.y)};
-                if (!(m & 1)) rectPx(p0.x, p0.y, p0.x + th, p1.y, c, 1.f);
-                if (!(m & 2)) rectPx(p1.x - th, p0.y, p1.x, p1.y, c, 1.f);
-                if (!(m & 8)) rectPx(p0.x, p0.y, p1.x, p0.y + th, c, 1.f);
-                if (!(m & 4)) rectPx(p0.x, p1.y - th, p1.x, p1.y, c, 1.f);
+                auto has = [&](int dx, int dy) { return in(cc[0] + dx, cc[1] + dy); };
+                const float xl = w.x - 0.5f, xr = w.x + 0.5f, yb = w.y - 0.5f, yt = w.y + 0.5f;
+                // the inset outline (pixels, y down)
+                const float L = X(xl + gg), R = X(xr - gg), T = Y(yt - gg), B = Y(yb + gg);
+                // a side's ends: the inset corner (convex), the cell's edge (straight on), or across the next
+                // side's rule (concave). Game y grows downward: dy -1 is above.
+                auto topEnd = [&](int ox) { return !has(0, -1) ? T : has(ox, -1) ? Y(yt + gg) - th : Y(yt); };
+                auto botEnd = [&](int ox) { return !has(0, 1) ? B : has(ox, 1) ? Y(yb - gg) + th : Y(yb); };
+                auto leftEnd = [&](int oy) { return !has(-1, 0) ? L : has(-1, oy) ? X(xl - gg) - th : X(xl); };
+                auto rightEnd = [&](int oy) { return !has(1, 0) ? R : has(1, oy) ? X(xr + gg) + th : X(xr); };
+                if (!has(-1, 0)) rectPx(L, topEnd(-1), L + th, botEnd(-1), c, 1.f);
+                if (!has(1, 0)) rectPx(R - th, topEnd(1), R, botEnd(1), c, 1.f);
+                if (!has(0, -1)) rectPx(leftEnd(-1), T, rightEnd(-1), T + th, c, 1.f);
+                if (!has(0, 1)) rectPx(leftEnd(1), B - th, rightEnd(1), B, c, 1.f);
             }
         }
     }
