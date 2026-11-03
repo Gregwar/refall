@@ -9,8 +9,8 @@
 // marbles (glass balls refracting, reflecting, tinting and focusing the light: caustics opening behind them, colored
 // shadows, a marble lighting its neighbors), each marble shaded by the light that actually crosses it.
 //
-// A cleared row pops: its tiles vanish at once and each marble drops onto the table under the well and is shot out in a
-// random direction (mostly out to its side), rolling out from under the pane across the table, slowing on the felt,
+// A cleared row pops: its tiles vanish at once and each marble drops onto the table under the well and is shot out
+// along its row to its own side, rolling out from under the pane across the table, slowing on the felt,
 // knocking into the marbles already lying there (elastic collisions, billiard chains; a marble at rest sleeps until
 // it is hit). Pushed off the edge of the picture, a marble is gone. Every hit spreads the marbles' colors into the
 // felt (soft stains, the harder the hit the wider, faint traces where they roll): a song starts on a dark, empty
@@ -488,7 +488,9 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const Slot& s = slots_[c.y][c.x];
             const int type = std::clamp(c.type, 0, 6);
-            const vec3 p = layout::cellPos((float)c.x, c.y - game.rowOffset(c.y));
+            // where the row was: the board is already compacted, so rowOffset(c.y) is the slide of the row that took
+            // its place, not this one's
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             pops_.push_back({p.x, p.y, 0.f, 0.f, type});
             launch(v2(p.x, p.y), type, s.known ? s.seed : hashf((float)c.x, (float)c.y), s.known ? s.rot : 0.f, 0.f, tetris ? 1.25f : 1.f);
         }
@@ -560,8 +562,8 @@ float MarblesUniverse::bounceOf(const Slot& s) const { return jolt(s.bounce, s.b
 // The marbles on the table
 // =====================================================================================================
 
-// A marble leaves its tile: dropped onto the table under it and shot out in a random direction, mostly out to its
-// side, at a real speed (it rolls out from under the well and on past the HUD's columns).
+// A marble leaves its tile: dropped onto the table under it and shot out along its row to its own side (a slight
+// spread), at a real speed (it rolls out from under the well and on past the HUD's columns).
 void MarblesUniverse::launch(vec2 from, int type, float seed, float rot, float delay, float vigor) {
     Marble m;
     m.p = from;
@@ -570,8 +572,10 @@ void MarblesUniverse::launch(vec2 from, int type, float seed, float rot, float d
     m.rot = rot;
     m.delay = delay;
     m.r = rng_.range(R_MIN, R_MAX);
+    // Out along its row, to its own side: it is hidden while it crosses under the pane, so a steep angle would bring
+    // it out of the well's edge rows away from the cleared line (or out of the well's top or bottom).
     const float side = std::fabs(from.x) < 0.6f ? (rng_.chance(0.5f) ? -1.f : 1.f) : (from.x < 0.f ? -1.f : 1.f);
-    const float ang = rng_.chance(0.85f) ? (side > 0.f ? 0.f : PI) + rng_.range(-1.15f, 1.15f) : rng_.range(0.f, TAU);
+    const float ang = (side > 0.f ? 0.f : PI) + rng_.range(-0.22f, 0.22f);
     const float sp = rng_.range(8.5f, 12.5f) * vigor;
     m.v = v2(std::cos(ang), std::sin(ang)) * sp;
     m.spin = rng_.range(-1.f, 1.f);
