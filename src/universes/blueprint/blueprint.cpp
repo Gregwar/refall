@@ -6,7 +6,7 @@
 // their type (45 degrees, cross-hatch, stipple, horizontal, 135 degrees, vertical, steel), so the seven types read
 // apart at a glance; the ghost is a hidden line (the whole part's outline, each straight run dashed to fit, every
 // corner closed). Every placed piece is dimensioned (extension lines, arrows, its width lettered above it, fading
-// after a few seconds); the stack's overall height is dimensioned beside the well and glides when it changes; the
+// out quickly); the stack's overall height is dimensioned beside the well and glides when it changes; the
 // well's width is dimensioned below it.
 //
 // The drafter draws: every line comes in as a pen stroke. The song is the drawing. A break is sparse paper with a
@@ -1058,7 +1058,7 @@ void BlueprintUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        if (pieceDim_.alive) pieceDim_.life = std::max(pieceDim_.life, 3.5f); // lifted with the row
+        if (pieceDim_.alive) pieceDim_.life = std::max(pieceDim_.life, DIM_HOLD - pieceDim_.t); // lifted with the row
         rev_++;
         revT_ = 0.f;
         if (ev.count >= 4) cloudT_ = 0.f;
@@ -1563,10 +1563,11 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
             if (cy < pieceDim_.y || cy > pieceDim_.y + 1.5f) continue;
             for (int x = 0; x < Game::W; x++) {
                 const float cx = layout::cellPos((float)x, 0.f).x;
-                if (cx > pieceDim_.x0 && cx < pieceDim_.x1 && game.cell(x, y).type >= 0) pieceDim_.life = std::max(pieceDim_.life, 3.4f);
+                if (cx > pieceDim_.x0 && cx < pieceDim_.x1 && game.cell(x, y).type >= 0)
+                    pieceDim_.life = std::max(pieceDim_.life, DIM_HOLD - pieceDim_.t);
             }
         }
-        if (pieceDim_.t > 4.2f + pieceDim_.life) pieceDim_.alive = false;
+        if (pieceDim_.t + pieceDim_.life > DIM_HOLD + DIM_FADE) pieceDim_.alive = false;
     }
     {
         const int rows = std::min(20, game.stackHeight());
@@ -1617,7 +1618,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     if (pieceDim_.alive && overT_ < 0.f) {
         const Dim& d = pieceDim_;
         // half the ink of the other dimensions: it lies inside the well
-        const float a = 0.5f * (1.f - smoothstepf(3.0f, 4.0f, d.t + d.life)) * world;
+        const float a = 0.5f * (1.f - smoothstepf(DIM_HOLD, DIM_HOLD + DIM_FADE, d.t + d.life)) * world;
         const float y = d.y + 0.72f;
         dimH(d.x0, d.x1, y, d.y, d.y, saturate(d.t / 0.4f), a, R_DIM, ss);
         if (d.t > 0.25f) labels_.push_back({std::to_string(d.value), V((d.x0 + d.x1) * 0.5f, y + 0.5f), 0.46f * pxPerUnit_, a * saturate((d.t - 0.25f) / 0.2f), R_DIM, false, true});

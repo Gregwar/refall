@@ -79,6 +79,9 @@ private:
     void gear(std::vector<Stroke>& out, vec2 c, float r, int teeth, float ang, int holes, bool detail) const;
 
     // ---- Dimensions: the last placed piece, the stack's height, the well's width.
+    // The last part's dimension: drawn in over 0.4 s, held, then faded out quickly; anything landing above the
+    // part or a clear lifts it at once (life jumps it to the start of its fade).
+    static constexpr float DIM_HOLD = 1.5f, DIM_FADE = 0.3f;  // seconds (from the lock)
     struct Dim { float x0, x1, y; float t; float life; bool alive; int value; };
     Dim pieceDim_{};
     float stackShown_ = 0.f;     // the stack's dimensioned height (rows), gliding
