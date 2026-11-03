@@ -37,7 +37,7 @@ public:
 private:
     // ---- Pen strokes: polylines in board units, drawn progressively.
     enum Weight { W_THIN, W_MED, W_THICK };
-    enum Pattern { P_SOLID, P_HIDDEN, P_CENTER, P_DOT };
+    enum Pattern { P_SOLID, P_HIDDEN, P_CENTER, P_DOT, P_BUTT };  // P_BUTT: solid, square-cut ends
     enum Role { R_LINE, R_CONS, R_DIM, R_ACCENT, R_MACH };
     struct Stroke {
         std::vector<vec2> pts;
@@ -106,6 +106,11 @@ private:
     void cell(float x, float y, float half, int mask, const vec3& tint, float alpha, int kind, int style, float hatchA,
               float erase, const vec3& line, float front);
     void buildBoard(const Game& g);
+    // The ghost: a hidden line around the part's outline only, dashed run by run (pen-line instances, butt-ended
+    // segments in the line color, drawn in their own MAX layer under the pieces).
+    std::vector<LineInst> ghost_;
+    void buildGhost(const int (&cells)[4][2], const vec3& color, float alpha);
+    float cellLineW() const;  // the parts' outline width (pixels)
     struct Fading { float x, y; int type, mask; float t; };  // a cleared cell being rubbed out
     std::vector<Fading> fading_;
     struct LockFx { int id; float minY, maxY, t; };          // a part's hatching drawn up from the impact
