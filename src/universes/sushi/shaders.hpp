@@ -3,7 +3,7 @@
 //
 // BACK_FS paints the shop in one pass (the wall, the conveyor belt, the counter, the lacquered bento box the well
 // is); SPRITE_FS draws the small things (petals, lanterns and their glow, the noren, the dishes on the belt,
-// hearts, sparkles); CAT_FS the cats (one quad each, all signed distances); MAKI_FS the maki on their plates (the
+// hearts, sparkles); CAT_FS the cats (one quad each, all signed distances); MAKI_FS the maki, each a little roll on its own (the
 // stack, the falling piece, the ghost, the previews, the maki in the air). FINAL_FS encodes the frame.
 #include <string>
 
@@ -488,7 +488,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- the maki on their plates
+// ---------------------------------------------------------------- the maki
 inline const char* MAKI_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
@@ -560,38 +560,53 @@ void main() {
     AA = max(length(fwidth(p)) * 0.75, 1e-4);
     P = vec3(0.0); A = 0.0;
     vec3 pc = vC.rgb;
+    // the maki stands on its own, a short roll seen from a little above: the cut face on top (an ellipse), the
+    // nori wrapped around its side below
+    float sc = max(vC.w, 0.05);
+    vec2 s = p / sc;
+    float qa = AA / sc;
+    const float R = 0.43, K = 0.7, YC = 0.1, H = 0.16;
+    vec2 e = vec2(s.x, (s.y - YC) / K);
+    float topD = (length(e) - R) * K;
+    float botD = (length(vec2(s.x, (s.y - YC + H) / K)) - R) * K;
+    float sideD = max(abs(s.x) - R, abs(s.y - YC + H * 0.5) - H * 0.5);
+    float bodyD = min(min(topD, botD), sideD);
     if (kind == 1) {
-        // the ghost: the plate's outline, faint
-        if (!ownCell(p, m)) discard;
-        float sd = shapeSdf(p, m);
-        float l = fillA(abs(sd + 0.05) - 0.022, AA);
+        // the ghost: the roll's outline, faint
+        float l = fillA(abs(bodyD + 0.02) - 0.02, qa);
         float a = l * 0.55 * vB.y;
         if (a <= 0.002) discard;
         frag = vec4(pc * a, a);
         return;
     }
-    // the plate (a glazed dish in the piece's color, its cells one shape)
-    float plateA = vB.z;
-    if (plateA > 0.0 && ownCell(p, m)) {
-        float sd = shapeSdf(p, m);
-        float f = fillA(sd, AA);
-        vec3 c = pc;
-        c = mix(c, mix(pc, vec3(1.0), 0.35), (1.0 - smoothstep(0.0, AA * 1.5, abs(-sd - 0.11) - 0.012)) * 0.7);
-        c = mix(c, pc * 0.5, 1.0 - smoothstep(0.0, 0.055, -sd));
-        over(c, f * plateA);
-    }
-    // the maki: seen from above, a round slice
-    float sc = max(vC.w, 0.05);
-    vec2 q = rot2(p, vB.w) / sc;
-    float qa = AA / sc;
-    float R = 0.39;
     int type = int(vB.x + 0.5);
     float makiA = vD.y;
-    // its soft shadow on the plate
-    float shd = length(q - vec2(0.035, -0.05)) - R;
-    over(pc * 0.35, vD.z * 0.45 * (1.0 - smoothstep(-0.05, 0.06, shd)) * makiA);
+    // its soft shadow on the lacquer
+    float shd = (length(vec2(s.x - 0.03, (s.y - YC + H + 0.05) / (K * 0.8))) - R * 1.02) * K;
+    over(vec3(0.0), vD.z * 0.4 * (1.0 - smoothstep(-0.06, 0.05, shd)) * makiA);
+    // the side: nori (rice and sesame for the inside-out roll), round shading across it
+    float u = clamp(s.x / R, -1.0, 1.0);
+    float roundS = sqrt(1.0 - u * u);
+    vec3 side;
+    if (type == 2) {
+        side = uRice * (0.7 + 0.3 * roundS);
+        // sesame seeds scattered on the rice
+        vec2 sg = s * vec2(14.0, 18.0);
+        vec2 sid = floor(sg), sf = fract(sg) - 0.5;
+        vec2 so = vec2(fract(sin(dot(sid, vec2(12.9, 78.2))) * 43758.5), fract(sin(dot(sid, vec2(39.3, 11.1))) * 24634.6)) - 0.5;
+        float seed = sdEll(rot2(sf - so * 0.5, so.x * 3.0), vec2(0.09, 0.16));
+        side = mix(side, so.y > 0.2 ? vec3(0.88, 0.76, 0.5) : vec3(0.15, 0.12, 0.1), fillA(seed, 0.05) * 0.9);
+    } else {
+        side = uNori * (0.75 + 0.5 * roundS);
+        side = mix(side, mix(uNori, vec3(1.0), 0.35), 0.5 * (1.0 - smoothstep(0.0, 0.12, abs(u + 0.45) - 0.05)));
+        // the nori's fine ribs
+        side *= 0.92 + 0.08 * smoothstep(0.3, 0.7, vnoise(vec2(s.x * 30.0, s.y * 4.0)));
+    }
+    over(side, fillA(bodyD, qa) * makiA);
+    // the cut face
+    vec2 q = rot2(e, vB.w);
     float r = length(q);
-    float disc = fillA(r - R, qa);
+    float disc = fillA(topD, qa);
     vec3 c;
     if (type == 2) {
         // uramaki: rice outside, sesame on it, a thin nori ring, avocado and salmon inside
@@ -613,11 +628,15 @@ void main() {
         // hosomaki: the nori outside, white rice, the filling in the middle
         c = uNori * (1.0 + 0.6 * (1.0 - smoothstep(0.0, 0.5, length(q / R - vec2(-0.5, 0.55)))));
         vec3 rice = uRice * (0.94 + 0.08 * smoothstep(-0.35, 0.35, q.y - q.x * 0.4));
-        float inR = R - 0.075;
+        float inR = R - 0.05;
         c = mix(c, rice, fillA(r - inR, qa));
         // a hint of grains along the rice's edge
         float gr = vnoise(vec2(atan(q.y, q.x) * 9.0, r * 18.0));
         c = mix(c, uRice * 0.86, fillA(r - inR, qa) * (1.0 - fillA(r - (inR - 0.04), qa)) * smoothstep(0.55, 0.75, gr));
+        // grains all over the rice
+        c = mix(c, uRice * 0.88, fillA(r - inR, qa) * 0.5 * smoothstep(0.6, 0.8, vnoise(rot2(q, 0.5) * vec2(34.0, 20.0))));
+        // the filling, a bit larger than the plain disc gives it
+        q /= 1.22; r = length(q); qa /= 1.22;
         vec3 f = c;
         float fa = 0.0;
         if (type == 0) {
@@ -666,12 +685,15 @@ void main() {
             f = mix(f, vec3(0.86, 0.33, 0.16), 1.0 - smoothstep(0.0, 0.03, -d));
         }
         c = mix(c, f, fa);
+        q *= 1.22; r = length(q); qa *= 1.22;
     }
     // a little shine
     c = mix(c, vec3(1.0), 0.35 * fillA(sdEll(rot2(q - vec2(-0.2, 0.22), 0.7), vec2(0.07, 0.035)), qa) * (type == 2 ? 0.4 : 1.0));
     // its outline
     c = mix(c, uLine, 1.0 - smoothstep(0.0, 0.035 / sc, R - r + 0.0));
     over(c, disc * makiA);
+    // the roll's soft outline
+    over(uLine, fillA(abs(bodyD) - 0.014, qa) * makiA);
     float a = A * vB.y;
     if (a <= 0.002) discard;
     frag = vec4(P * vB.y, a);

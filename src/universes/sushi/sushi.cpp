@@ -1,12 +1,12 @@
-// SUSHI: the pieces are maki on little plates, and the cleared rows feed kawaii cats sitting at the counter.
+// SUSHI: the pieces are maki, one roll per cell, and the cleared rows feed kawaii cats sitting at the counter.
 //
 // One world: a small kaiten sushi bar in soft pastel colors, drawn flat with rounded shapes and thick soft outlines.
 // The well is a lacquered bento box standing on the counter; a conveyor belt runs along the counter behind it,
-// carrying dishes. Each piece is a glazed plate in its own color (its cells merged into one rounded dish) with one
-// maki per cell, seen from above: salmon, tuna, cucumber, tamago, avocado, crab, and an inside-out roll with sesame.
+// carrying dishes. Each cell is one maki standing on its own, seen from a little above (the cut face on top, the
+// nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an inside-out roll with sesame.
 // The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats (white,
 // calico, black with white socks, ginger and grey tabbies, a cream colorpoint), each with a collar and a little bell.
-// A cleared row's maki slide off their plates out of the box, the left half to the left and the right half to the
+// A cleared row's maki slide out of the box, the left half to the left and the right half to the
 // right (out of the row before the stack settles), then hop in arcs to the cats, who open their mouths, catch them
 // and chew, eyes squeezed shut with joy, a heart rising, a little "nom". The more lines, the more cats pop up from
 // behind the counter (a Tetris is a feast and brings two more). Lanterns hang on cords on both sides, a noren hangs
@@ -770,17 +770,12 @@ void SushiUniverse::buildBoard(const Game& g) {
                 return g.cell(nx, ny).type == c.type;
             };
             const vec3 p = layout::cellPos((float)x, y - off);
-            // a lock: the maki give a small bounce on their plate
+            // a lock: the maki give a small bounce
             const float t = (1.f - c.flash) * Game::LOCK_FX_SECONDS;
             const float bump = t < 0.32f ? std::sin(t / 0.32f * PI) * (1.f - t / 0.32f) * (c.dropped ? 0.2f : 0.12f) : 0.f;
             addMaki(p.x, p.y, 0.5f, maskOf(x, y, same), c.type, 1.f, 1.f, 0.f, 1.f + bump, 0, 1.f, 1.f);
         }
-    // a cleared row's plates, emptied, fading in place
-    for (const Fading& fd : fading_) {
-        const float k = saturate(fd.t / 0.2f);
-        addMaki(fd.x, fd.y, 0.5f * (1.f - 0.85f * k * k), fd.mask, fd.type, 1.f - k * k * k, 1.f, 0.f, 1.f, 0, 0.f, 0.f);
-    }
-    // the falling piece: the same plate and maki
+    // the falling piece: the same maki
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1470,7 +1465,7 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_sushi() {
     static const UniverseEntry e{
-        "SUSHI", "maki on little plates in a bento box at a kaiten counter; cleared rows hop to kawaii cats who eat them",
+        "SUSHI", "maki rolls in a bento box at a kaiten counter; cleared rows hop to kawaii cats who eat them",
         [] { return std::unique_ptr<Universe>(new SushiUniverse()); },
         // A cheerful world: bright, mid-tempo songs suit it best.
         [](const SongLook& l) { return 0.6f + 0.35f * l.brightness + 0.15f * (1.f - l.bassWeight); },
