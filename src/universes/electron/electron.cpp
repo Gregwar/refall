@@ -564,10 +564,10 @@ void ElectronUniverse::wear(vec2 p, float amount) {
     const float tx = fx - ix, ty = fy - iy;
     float* r0 = &trace_[iy * tw_ + ix];
     float* r1 = r0 + tw_;
-    r0[0] = std::min(1.5f, r0[0] + amount * (1 - tx) * (1 - ty));
-    r0[1] = std::min(1.5f, r0[1] + amount * tx * (1 - ty));
-    r1[0] = std::min(1.5f, r1[0] + amount * (1 - tx) * ty);
-    r1[1] = std::min(1.5f, r1[1] + amount * tx * ty);
+    r0[0] = std::min(1.2f, r0[0] + amount * (1 - tx) * (1 - ty));
+    r0[1] = std::min(1.2f, r0[1] + amount * tx * (1 - ty));
+    r1[0] = std::min(1.2f, r1[0] + amount * (1 - tx) * ty);
+    r1[1] = std::min(1.2f, r1[1] + amount * tx * ty);
 }
 
 // A new ant leaves the nest in a random direction. A recruit (called out by a forager that brought sugar home)
@@ -721,10 +721,10 @@ void ElectronUniverse::stepAnts(float dt, float speedK, float explore, float lay
         // the pheromones, and the paths worn on the ground (by the foragers)
         if (a.state == 1) {
             deposit(food_, a.p, dt * layK * 4.f * std::exp(-a.dist / 20.f));
-            wear(a.p, dt * 1.f);
+            wear(a.p, dt * 3.f);
         } else if (a.state == 0 && !a.retire) {
             deposit(home_, a.p, dt * layK * 1.2f * std::exp(-a.dist / 25.f));
-            if (a.trail) wear(a.p, dt * 0.3f);
+            if (a.trail) wear(a.p, dt * 0.8f);
         }
         // sugar under the jaws: a crumb, and back home
         if (a.state == 0 && !a.retire) {
@@ -922,7 +922,8 @@ void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const Mus
 
     relax(food_, TAU_FOOD, wdt);
     relax(home_, TAU_HOME, wdt);
-    const float kt = std::exp(-wdt / 50.f);
+    // the traces fade fast once no one walks them (a route left behind is gone in ~15 s)
+    const float kt = std::exp(-wdt / 6.f);
     for (float& v : trace_) v *= kt;
 }
 
