@@ -1527,8 +1527,8 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
             const vec2 p0 = px(x0, y1), p1 = px(x1, y0);
             boxes.push_back({p0.x, p0.y, p1.x, p1.y});
         };
-        const vec2 a = px(-5.45f, 1e3f), b = px(5.45f, -1e3f);
-        add(a.x, -10.f, b.x, height_ + 10.f, 1.f, VEIL); // the well
+        const vec2 a = px(-5.45f, 10.f), b = px(5.45f, -10.45f);
+        add(a.x, a.y, b.x, b.y, 1.f, VEIL); // the well, from its top edge to just under its baseline
         boardBox(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_LABEL.y + 0.7f);
         boardBox(layout::nextCenter(0).x - 2.f, layout::nextCenter(2).y - 1.1f, layout::nextCenter(0).x + 2.f, layout::NEXT_LABEL.y + 0.7f);
         boardBox(layout::GAUGE_CENTER.x - 2.f, layout::GAUGE_CENTER.y - 1.9f, layout::GAUGE_CENTER.x + 2.f, layout::GAUGE_CENTER.y + 1.3f);
