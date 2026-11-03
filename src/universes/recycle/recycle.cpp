@@ -646,6 +646,7 @@ void RecycleUniverse::sendHome(const vec3& from, int type, float delay, float du
 // A new piece: four cubes from the top of a heap fly to it.
 void RecycleUniverse::assemblePiece(const Game& g, bool instant) {
     pieceIn_ = true;
+    fallAge_ = 0.f;
     pieceType_ = g.piece().type;
     for (int k = 0; k < 4; k++) pieceArrived_[k] = instant;
     if (instant) {
@@ -667,6 +668,8 @@ void RecycleUniverse::assemblePiece(const Game& g, bool instant) {
     // the cell nearest the heaps gets the first cube
     int order[4] = {0, 1, 2, 3};
     std::sort(order, order + 4, [&](int a, int b) { return c[a][0] * side > c[b][0] * side; });
+    // the cubes land within about two rows of the piece's fall (0.45 s at a calm pace, down to 0.09 s)
+    const float pace = std::clamp(2.f / (std::max(fallRate_, 0.1f) * 0.45f), 0.2f, 1.f);
     for (int j = 0; j < 4; j++) {
         const int k = order[j];
         Flight fl;
@@ -678,9 +681,9 @@ void RecycleUniverse::assemblePiece(const Game& g, bool instant) {
         fl.spin = (rng_.chance(0.5f) ? 1.f : -1.f) * PI * 0.5f;
         fl.target = T_PIECE;
         fl.a = k;
-        fl.delay = 0.03f * j;
-        fl.dur = 0.36f + 0.02f * j;
-        fl.arc = 1.3f;
+        fl.delay = 0.03f * j * pace;
+        fl.dur = (0.36f + 0.02f * j) * pace;
+        fl.arc = 1.3f * (0.5f + 0.5f * pace);
         fl.type = pieceType_;
         fl.fromType = tint;
         fl.fromTint = 1.f;
@@ -1389,6 +1392,15 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     const float rdt = f.paused ? 0.f : dt;                       // real time (the play: clears, new pieces)
     const float wdt = rdt * lerpf(1.f, 0.4f, slow_);              // the world's time (slower in slow motion)
     worldTime_ += wdt;
+    // the fall speed, from the piece's own motion in its first half second (the time the cubes take to come;
+    // hard drops and new pieces left out)
+    fallAge_ += rdt;
+    if (game.hasPiece() && rdt > 0.f) {
+        const float y = game.pieceVisualY(), dy = std::abs(y - fallY_);
+        if (fallOk_ && dy < 2.f && fallAge_ < 0.5f) fallRate_ = lerpf(fallRate_, dy / rdt, 1.f - std::exp(-rdt * 1.5f));
+        fallY_ = y;
+        fallOk_ = true;
+    } else fallOk_ = false;
 
     // ---- Staging.
     if (lvT_ < 1.f) {

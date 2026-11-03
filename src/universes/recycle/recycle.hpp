@@ -93,6 +93,9 @@ private:
     int lastPieceType_ = -1;
     bool fresh_ = true;
     int total_ = 176;              // the cubes in the world
+    float fallRate_ = 1.5f;        // how fast pieces fall (rows a second, smoothed): a fast game assembles faster
+    float fallY_ = 0.f, fallAge_ = 9.f; // fallAge_: seconds since the piece spawned
+    bool fallOk_ = false;
     void assemblePiece(const Game& g, bool instant);
     void sendHome(const vec3& from, int type, float delay, float dur, float arc, bool realTime);
     void reconcile(const Game& g);
