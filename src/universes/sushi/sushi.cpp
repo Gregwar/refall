@@ -1,9 +1,10 @@
 // SUSHI: the pieces are maki, one roll per cell, and the cleared rows feed kawaii cats sitting at the counter.
 //
 // One world: a small kaiten sushi bar in light, quiet tones, drawn flat with rounded shapes and soft outlines. The
-// wall is shoji; the well is a pale hinoki bento box with a lacquered rim, standing on the counter; a conveyor belt runs along the counter behind it,
-// carrying dishes. Each cell is one maki standing on its own, seen nearly from the side (the cut face on top, the
-// nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an inside-out roll with sesame.
+// wall is shoji; the well is a pale hinoki bento box with a lacquered rim, standing on the counter; a conveyor belt
+// runs along the counter behind it, carrying dishes. Each cell is one squared maki, as blocky as a cube, seen nearly
+// from the side (the cut face on top, the nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an
+// inside-out roll coated in orange tobiko.
 // The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats (white,
 // calico, black with white socks, ginger and grey tabbies, a cream colorpoint), each with a collar and a little bell.
 // A cleared row's maki slide out of the box, the left half to the left and the right half to the
