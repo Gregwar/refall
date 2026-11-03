@@ -19,11 +19,12 @@
 // Calm is sparse (a small title stacked in one zone, one field, much ground); mid adds the section's name set
 // vertically up the other zone and a second field; a peak is dense (bigger type running across, a stripe across the
 // whole poster, a disc, three fields). Every two beats a thin rule steps along the grid and a small square moves along
-// it; at a peak the kicks thicken the rules for an instant. The drop sets the song's title giant across the poster in
-// the drop's palette, eased in over two beats. A cleared row closes into a flat bar and slides out of the well
-// sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets "tetris" up the free zone in the
-// signature color for two bars. Slow motion is the negative print (ground and ink swap). Game over slides the stack
-// out row by row from the top.
+// it; at a peak the kicks thicken the rules for an instant. The drop is a hard cut on its downbeat to the negative
+// print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
+// drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
+// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets
+// "tetris" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
+// swap). Game over slides the stack out row by row from the top.
 //
 // Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
 //
@@ -316,12 +317,12 @@ void SwissUniverse::setLevel(int level, float energy, float seconds, float impac
     lvDur_ = std::clamp(seconds, 1.f, 5.f);
 }
 
-// The drop: the title is set giant across the poster in the drop's palette, eased in over two beats.
+// The drop: a hard cut on its downbeat to the negative print, the title set giant across the poster in the drop's
+// palette; it holds while the drop lasts.
 void SwissUniverse::drop(float strength) {
     (void)strength;
     dropMode_ = true;
     dropPending_ = true;
-    dropDur_ = std::max(1.f, 2.f * 60.f / bpm_);
 }
 
 void SwissUniverse::refresh(float strength) { (void)strength; }
@@ -1111,7 +1112,10 @@ void SwissUniverse::drawBoard(const Game& g) {
         rectPx(std::round(a.x) - 2.f * th, std::round(b.y) + th, std::round(b.x) + 2.f * th, std::round(b.y) + 2.f * th, c, al);
     }
 
-    // the ghost: the piece's outline, a fine rule
+    // the ghost: the piece's outline, a fine rule along the edge of the piece's flat shape (inset by the gutter like
+    // a locked piece), one closed line: a side runs to the inset corner where the piece turns outward, straight on
+    // into its neighbor's side where the piece continues, and across its neighbor's rule where the piece turns
+    // inward (a concave corner), so every corner closes.
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -1126,20 +1130,26 @@ void SwissUniverse::drawBoard(const Game& g) {
             };
             const float th = std::max(1.f, std::round(height_ / 1080.f * 2.f));
             const vec3 c = tone(lerp(ground_, ink_, 0.45f));
+            auto X = [&](float bx) { return std::round(px(bx, 0.f).x); };
+            auto Y = [&](float by) { return std::round(px(0.f, by).y); };
+            const float gg = GAP;
             for (auto& cc : gc) {
                 if (cc[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
-                const int m = mask8(cc[0], cc[1], in);
-                const float gg = GAP;
-                const float x0 = w.x - 0.5f + ((m & 1) ? 0.f : gg), x1 = w.x + 0.5f - ((m & 2) ? 0.f : gg);
-                const float yb = w.y - 0.5f + ((m & 4) ? 0.f : gg), yt = w.y + 0.5f - ((m & 8) ? 0.f : gg);
-                vec2 p0 = px(x0, yt), p1 = px(x1, yb);
-                p0 = vec2{std::round(p0.x), std::round(p0.y)};
-                p1 = vec2{std::round(p1.x), std::round(p1.y)};
-                if (!(m & 1)) rectPx(p0.x, p0.y, p0.x + th, p1.y, c, 1.f);
-                if (!(m & 2)) rectPx(p1.x - th, p0.y, p1.x, p1.y, c, 1.f);
-                if (!(m & 8)) rectPx(p0.x, p0.y, p1.x, p0.y + th, c, 1.f);
-                if (!(m & 4)) rectPx(p0.x, p1.y - th, p1.x, p1.y, c, 1.f);
+                auto has = [&](int dx, int dy) { return in(cc[0] + dx, cc[1] + dy); };
+                const float xl = w.x - 0.5f, xr = w.x + 0.5f, yb = w.y - 0.5f, yt = w.y + 0.5f;
+                // the inset outline (pixels, y down)
+                const float L = X(xl + gg), R = X(xr - gg), T = Y(yt - gg), B = Y(yb + gg);
+                // a side's ends: the inset corner (convex), the cell's edge (straight on), or across the next
+                // side's rule (concave). Game y grows downward: dy -1 is above.
+                auto topEnd = [&](int ox) { return !has(0, -1) ? T : has(ox, -1) ? Y(yt + gg) - th : Y(yt); };
+                auto botEnd = [&](int ox) { return !has(0, 1) ? B : has(ox, 1) ? Y(yb - gg) + th : Y(yb); };
+                auto leftEnd = [&](int oy) { return !has(-1, 0) ? L : has(-1, oy) ? X(xl - gg) - th : X(xl); };
+                auto rightEnd = [&](int oy) { return !has(1, 0) ? R : has(1, oy) ? X(xr + gg) + th : X(xr); };
+                if (!has(-1, 0)) rectPx(L, topEnd(-1), L + th, botEnd(-1), c, 1.f);
+                if (!has(1, 0)) rectPx(R - th, topEnd(1), R, botEnd(1), c, 1.f);
+                if (!has(0, -1)) rectPx(leftEnd(-1), T, rightEnd(-1), T + th, c, 1.f);
+                if (!has(0, 1)) rectPx(leftEnd(1), B - th, rightEnd(1), B, c, 1.f);
             }
         }
     }
@@ -1407,10 +1417,14 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         if (dropMode_) p = 4;
         palIdx_ = p;
         const vec3 g0 = hex(V.ground), i0 = hex(V.ink);
-        const float neg = smoothstepf(0.f, 1.f, slow_);
+        // the negative print: slow motion eases into it; the drop cuts to it on its downbeat, holds it while it
+        // lasts and eases back after (both at once print positive again)
+        dropNeg_ = dropMode_ ? 1.f : approach(dropNeg_, 0.f, 1.25f, dt);
+        const float sn = smoothstepf(0.f, 1.f, slow_), dn = smoothstepf(0.f, 1.f, dropNeg_);
+        const float neg = sn + dn - 2.f * sn * dn;
         const vec3 gT = lerp(g0, i0, neg), iT = lerp(i0, g0, neg);
         const vec3 targ[4] = {iT, hex(V.pal[p][0]), hex(V.pal[p][1]), hex(V.pal[p][2])};
-        if (!palInit_) {
+        if (!palInit_ || dropPending_) { // the drop cuts to its palette
             for (int i = 0; i < 4; i++) palShown_[i] = targ[i];
             palInit_ = true;
         }
@@ -1433,7 +1447,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         } else if (dropPending_) {
             dropPending_ = false;
             bar_ = bar;
-            compose(bar, dropDur_, false);
+            compose(bar, 0.f, true); // a hard cut on the downbeat
         } else if (bar != bar_ && overT_ < 0.f) {
             bar_ = bar;
             compose(bar, std::clamp(barS * 0.75f, 1.2f, 2.4f), false);

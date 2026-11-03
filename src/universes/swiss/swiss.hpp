@@ -118,7 +118,7 @@ private:
     bool hasLevel_ = false;
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     bool dropMode_ = false, dropPending_ = false;
-    float dropDur_ = 1.f;
+    float dropNeg_ = 0.f; // the drop's negative print (1 while the drop lasts)
     float kickIn_ = 0.f, kickShown_ = 0.f;
     float lockLine_ = 0.f, lockX0_ = 0.f, lockX1_ = 0.f, lockY_ = 0.f;
     float time_ = 0.f;
