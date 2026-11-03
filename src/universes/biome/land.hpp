@@ -135,7 +135,7 @@ private:
     void growPlants(float wdt);
     void spreadWild(float wdt, bool instant);
     int pickKind(float x, float z, int type);
-    void seedInstant(float lines);   // a land already grown by `lines` cleared lines (a stack joined in progress)
+    void seedInstant(float lines);   // a land already grown by `lines` cleared lines (a review's stack)
     void plantStumps();              // the dead trees of the parched land
     void resetLand();
 

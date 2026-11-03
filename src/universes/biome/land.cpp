@@ -193,7 +193,7 @@ void LandWorld::dropHit() {
 // A kick at a peak: a gust through the leaves.
 void LandWorld::kick() { ctx.gust = std::max(ctx.gust, 0.35f + 0.3f * ctx.storm); }
 
-// A whole stack at once: the land has grown already.
+// A whole stack filled at once while shown (a review): the land has grown already.
 void LandWorld::grown() {
     if (lines_ < 40.f) seedInstant(46.f);
 }
@@ -363,7 +363,7 @@ void LandWorld::spreadWild(float wdt, bool instant) {
     }
 }
 
-// A land already grown (a review's stack, a game joined in progress): as if `lines` lines had been
+// A land already grown (a review's stack): as if `lines` lines had been
 // cleared over the last minutes, the oldest plants grown, the latest still young.
 void LandWorld::seedInstant(float lines) {
     lines_ = std::max(lines_, lines);

@@ -3,9 +3,9 @@
 // One world: a poster on a strict modular grid, the grid of the well's own cells (one unit per cell, every element
 // sits on whole units). Huge flush-left lowercase words taken from the song (its title, its artist, the section's
 // name), flat color fields, a disc, thin rules and small blocks of information, in asymmetric balance with a lot of
-// empty ground. The game sits on the poster as on a translucent sheet: a band from grid line -12 to +12 (the well
-// and both HUD columns) where the poster shows only faintly, so the words and fields run behind it without ever
-// competing with the stack or the HUD; the free zones on both sides carry the poster at full strength.
+// empty ground. The poster runs at full strength everywhere except behind what is played or read: the well and a
+// crisp box behind each HUD element (previews, gauge, lettering) veil it, so the words and fields run behind them
+// without ever competing with the stack or the HUD.
 //
 // The pieces are flat, crisp color blocks on the grid: one clean shape per piece (its cells merge, a narrow gutter
 // of ground around it, so two pieces never fuse), no bevels, no gradients. Every section of the song has its own
@@ -19,11 +19,12 @@
 // Calm is sparse (a small title stacked in one zone, one field, much ground); mid adds the section's name set
 // vertically up the other zone and a second field; a peak is dense (bigger type running across, a stripe across the
 // whole poster, a disc, three fields). Every two beats a thin rule steps along the grid and a small square moves along
-// it; at a peak the kicks thicken the rules for an instant. The drop sets the song's title giant across the poster in
-// the drop's palette, eased in over two beats. A cleared row closes into a flat bar and slides out of the well
-// sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets "tetris" up the free zone in the
-// signature color for two bars. Slow motion is the negative print (ground and ink swap). Game over slides the stack
-// out row by row from the top.
+// it; at a peak the kicks thicken the rules for an instant. The drop is a hard cut on its downbeat to the negative
+// print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
+// drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
+// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets
+// "tetris" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
+// swap). Game over slides the stack out row by row from the top.
 //
 // Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
 //
@@ -97,7 +98,7 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 // The gutter around a piece (board units, each side), the clear's slide (seconds).
 constexpr float GAP = 0.055f;
 constexpr float WIPE_S = 0.3f;
-// How much of the poster shows through the game's band.
+// How much of the poster is veiled behind the well and the HUD's boxes.
 constexpr float VEIL = 0.93f;
 
 float ease(float t) {
@@ -316,12 +317,12 @@ void SwissUniverse::setLevel(int level, float energy, float seconds, float impac
     lvDur_ = std::clamp(seconds, 1.f, 5.f);
 }
 
-// The drop: the title is set giant across the poster in the drop's palette, eased in over two beats.
+// The drop: a hard cut on its downbeat to the negative print, the title set giant across the poster in the drop's
+// palette; it holds while the drop lasts.
 void SwissUniverse::drop(float strength) {
     (void)strength;
     dropMode_ = true;
     dropPending_ = true;
-    dropDur_ = std::max(1.f, 2.f * 60.f / bpm_);
 }
 
 void SwissUniverse::refresh(float strength) { (void)strength; }
@@ -1111,7 +1112,10 @@ void SwissUniverse::drawBoard(const Game& g) {
         rectPx(std::round(a.x) - 2.f * th, std::round(b.y) + th, std::round(b.x) + 2.f * th, std::round(b.y) + 2.f * th, c, al);
     }
 
-    // the ghost: the piece's outline, a fine rule
+    // the ghost: the piece's outline, a fine rule along the edge of the piece's flat shape (inset by the gutter like
+    // a locked piece), one closed line: a side runs to the inset corner where the piece turns outward, straight on
+    // into its neighbor's side where the piece continues, and across its neighbor's rule where the piece turns
+    // inward (a concave corner), so every corner closes.
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -1126,20 +1130,26 @@ void SwissUniverse::drawBoard(const Game& g) {
             };
             const float th = std::max(1.f, std::round(height_ / 1080.f * 2.f));
             const vec3 c = tone(lerp(ground_, ink_, 0.45f));
+            auto X = [&](float bx) { return std::round(px(bx, 0.f).x); };
+            auto Y = [&](float by) { return std::round(px(0.f, by).y); };
+            const float gg = GAP;
             for (auto& cc : gc) {
                 if (cc[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
-                const int m = mask8(cc[0], cc[1], in);
-                const float gg = GAP;
-                const float x0 = w.x - 0.5f + ((m & 1) ? 0.f : gg), x1 = w.x + 0.5f - ((m & 2) ? 0.f : gg);
-                const float yb = w.y - 0.5f + ((m & 4) ? 0.f : gg), yt = w.y + 0.5f - ((m & 8) ? 0.f : gg);
-                vec2 p0 = px(x0, yt), p1 = px(x1, yb);
-                p0 = vec2{std::round(p0.x), std::round(p0.y)};
-                p1 = vec2{std::round(p1.x), std::round(p1.y)};
-                if (!(m & 1)) rectPx(p0.x, p0.y, p0.x + th, p1.y, c, 1.f);
-                if (!(m & 2)) rectPx(p1.x - th, p0.y, p1.x, p1.y, c, 1.f);
-                if (!(m & 8)) rectPx(p0.x, p0.y, p1.x, p0.y + th, c, 1.f);
-                if (!(m & 4)) rectPx(p0.x, p1.y - th, p1.x, p1.y, c, 1.f);
+                auto has = [&](int dx, int dy) { return in(cc[0] + dx, cc[1] + dy); };
+                const float xl = w.x - 0.5f, xr = w.x + 0.5f, yb = w.y - 0.5f, yt = w.y + 0.5f;
+                // the inset outline (pixels, y down)
+                const float L = X(xl + gg), R = X(xr - gg), T = Y(yt - gg), B = Y(yb + gg);
+                // a side's ends: the inset corner (convex), the cell's edge (straight on), or across the next
+                // side's rule (concave). Game y grows downward: dy -1 is above.
+                auto topEnd = [&](int ox) { return !has(0, -1) ? T : has(ox, -1) ? Y(yt + gg) - th : Y(yt); };
+                auto botEnd = [&](int ox) { return !has(0, 1) ? B : has(ox, 1) ? Y(yb - gg) + th : Y(yb); };
+                auto leftEnd = [&](int oy) { return !has(-1, 0) ? L : has(-1, oy) ? X(xl - gg) - th : X(xl); };
+                auto rightEnd = [&](int oy) { return !has(1, 0) ? R : has(1, oy) ? X(xr + gg) + th : X(xr); };
+                if (!has(-1, 0)) rectPx(L, topEnd(-1), L + th, botEnd(-1), c, 1.f);
+                if (!has(1, 0)) rectPx(R - th, topEnd(1), R, botEnd(1), c, 1.f);
+                if (!has(0, -1)) rectPx(leftEnd(-1), T, rightEnd(-1), T + th, c, 1.f);
+                if (!has(0, 1)) rectPx(leftEnd(1), B - th, rightEnd(1), B, c, 1.f);
             }
         }
     }
@@ -1407,10 +1417,14 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         if (dropMode_) p = 4;
         palIdx_ = p;
         const vec3 g0 = hex(V.ground), i0 = hex(V.ink);
-        const float neg = smoothstepf(0.f, 1.f, slow_);
+        // the negative print: slow motion eases into it; the drop cuts to it on its downbeat, holds it while it
+        // lasts and eases back after (both at once print positive again)
+        dropNeg_ = dropMode_ ? 1.f : approach(dropNeg_, 0.f, 1.25f, dt);
+        const float sn = smoothstepf(0.f, 1.f, slow_), dn = smoothstepf(0.f, 1.f, dropNeg_);
+        const float neg = sn + dn - 2.f * sn * dn;
         const vec3 gT = lerp(g0, i0, neg), iT = lerp(i0, g0, neg);
         const vec3 targ[4] = {iT, hex(V.pal[p][0]), hex(V.pal[p][1]), hex(V.pal[p][2])};
-        if (!palInit_) {
+        if (!palInit_ || dropPending_) { // the drop cuts to its palette
             for (int i = 0; i < 4; i++) palShown_[i] = targ[i];
             palInit_ = true;
         }
@@ -1433,7 +1447,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         } else if (dropPending_) {
             dropPending_ = false;
             bar_ = bar;
-            compose(bar, dropDur_, false);
+            compose(bar, 0.f, true); // a hard cut on the downbeat
         } else if (bar != bar_ && overT_ < 0.f) {
             bar_ = bar;
             compose(bar, std::clamp(barS * 0.75f, 1.2f, 2.4f), false);
@@ -1487,7 +1501,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     glClear(GL_COLOR_BUFFER_BIT);
     drawPoster();
 
-    // ---- On screen: the poster, faint behind the game's band.
+    // ---- On screen: the poster, faint behind the well and the HUD's boxes.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glDisable(GL_BLEND);
@@ -1504,19 +1518,43 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
             rects.insert(rects.end(), {x0, y0, x1, y1});
             soft.insert(soft.end(), {feather, k});
         };
-        // the game's band, from grid line -12 to +12
-        const vec2 a = px(-12.f, 1e3f), b = px(12.f, -1e3f);
-        add(a.x, -10.f, b.x, height_ + 10.f, 1.f, VEIL);
-        // the HUD's corner lines (the title, the section...): a quiet patch under each
+        // The veil covers only what is played or read: the well, and a crisp box behind each HUD element
+        // (the hold and next previews, the gauge, each group of lettering), so the poster runs at full strength
+        // everywhere else. Boxes that touch are merged, so a column of lines reads as one block.
+        const float pad = 12.f * height_ / 1080.f;
+        std::vector<vec4> boxes;
+        auto boardBox = [&](float x0, float y0, float x1, float y1) {
+            const vec2 p0 = px(x0, y1), p1 = px(x1, y0);
+            boxes.push_back({p0.x, p0.y, p1.x, p1.y});
+        };
+        const vec2 a = px(-5.45f, 10.f), b = px(5.45f, -10.45f);
+        add(a.x, a.y, b.x, b.y, 1.f, VEIL); // the well, from its top edge to just under its baseline
+        boardBox(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_LABEL.y + 0.7f);
+        boardBox(layout::nextCenter(0).x - 2.f, layout::nextCenter(2).y - 1.1f, layout::nextCenter(0).x + 2.f, layout::NEXT_LABEL.y + 0.7f);
+        boardBox(layout::GAUGE_CENTER.x - 2.f, layout::GAUGE_CENTER.y - 1.9f, layout::GAUGE_CENTER.x + 2.f, layout::GAUGE_CENTER.y + 1.3f);
         for (const HudText& h : f.hud) {
             if (h.alpha <= 0.02f || h.text.empty()) continue;
             const float base = h.scale * 12.f;
             const float w = capWidth(reg_, ascii(h.text), 0.06f) * base * 0.6f;
             const float x0 = ugl::hudLeft(h, w, width_);
-            if (x0 + w > a.x && x0 < b.x) continue; // inside the band already
-            const float pad = 10.f * height_ / 1080.f;
-            add(x0 - pad, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad, 14.f * height_ / 1080.f, 0.9f);
+            const vec4 r{x0 - pad, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad};
+            if (r.z > a.x && r.x < b.x) continue; // over the well, veiled already
+            boxes.push_back(r);
         }
+        // merge boxes that touch or overlap (until stable)
+        for (bool merged = true; merged;) {
+            merged = false;
+            for (size_t i = 0; i < boxes.size() && !merged; i++)
+                for (size_t j = i + 1; j < boxes.size() && !merged; j++) {
+                    vec4 &p = boxes[i], &q = boxes[j];
+                    if (p.x <= q.z + 1.f && q.x <= p.z + 1.f && p.y <= q.w + 1.f && q.y <= p.w + 1.f) {
+                        p = {std::min(p.x, q.x), std::min(p.y, q.y), std::max(p.z, q.z), std::max(p.w, q.w)};
+                        boxes.erase(boxes.begin() + j);
+                        merged = true;
+                    }
+                }
+        }
+        for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f, VEIL);
         const int n = (int)rects.size() / 4;
         set1i(progComp_, "uCount", n);
         if (n) {

@@ -202,8 +202,20 @@ void main() {
         if (eR) d = min(d, (0.5 - q.x) * qs.x);
         if (eB) d = min(d, (q.y + 0.5) * qs.y);
         if (eT) d = min(d, (0.5 - q.y) * qs.y);
+        // inner corners of the piece (two sides of the piece, the diagonal cell not): the outline turns there too,
+        // so it runs on unbroken around the whole piece (the distance to the corner, square like the edges')
+        vec2 e0 = (q + 0.5) * qs, e1 = (0.5 - q) * qs;
+        float kc[4] = float[4](9.0, 9.0, 9.0, 9.0);
+        if (face == 0) {
+            if (has(m, 0) && has(m, 3) && !has(m, 4)) kc[0] = max(e0.x, e1.y);
+            if (has(m, 1) && has(m, 3) && !has(m, 5)) kc[1] = max(e1.x, e1.y);
+            if (has(m, 0) && has(m, 2) && !has(m, 6)) kc[2] = max(e0.x, e0.y);
+            if (has(m, 1) && has(m, 2) && !has(m, 7)) kc[3] = max(e1.x, e0.y);
+        }
         if (kind == 1) {
-            // the ghost: a fine outline of the paper's light where the piece will land
+            // the ghost: a fine outline of the paper's light where the piece will land, one closed line around the
+            // whole piece (the edges and the inner corners, nothing between its own cells)
+            d = min(d, min(min(kc[0], kc[1]), min(kc[2], kc[3])));
             float line = 1.0 - smoothstep(0.035 - uPx, 0.035 + uPx, abs(d - 0.06));
             float fill = 0.05 * smoothstep(0.05, 0.2, d);
             float a = max(line * 0.55, fill) * vC.w;
@@ -215,16 +227,14 @@ void main() {
             // the rim (the top and the sides of a thin panel): plain, darker paper by its frame
             float rimL = face == 4 ? 0.3 : face == 5 ? 0.12 : 0.2;
             vec3 c = mix(uWood * 0.8, tint * light, rimL);
+            if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
             frag = vec4(c, uStackA * vC.w);
             return;
         }
-        // inner corners of the piece (two sides of the piece, the diagonal cell another piece): a frame corner too
+        // the inner corners (kc, above): a frame corner too
         float g = 1.0;
-        vec2 e0 = (q + 0.5) * qs, e1 = (0.5 - q) * qs;
-        if (has(m, 0) && has(m, 3) && !has(m, 4)) { float k = max(e0.x, e1.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
-        if (has(m, 1) && has(m, 3) && !has(m, 5)) { float k = max(e1.x, e1.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
-        if (has(m, 0) && has(m, 2) && !has(m, 6)) { float k = max(e0.x, e0.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
-        if (has(m, 1) && has(m, 2) && !has(m, 7)) { float k = max(e1.x, e0.y); d = min(d, k); g *= smoothstep(ft, ft + 0.3, k); }
+        for (int i = 0; i < 4; i++)
+            if (kc[i] < 9.0) { d = min(d, kc[i]); g *= smoothstep(ft, ft + 0.3, kc[i]); }
         float frame = 1.0 - smoothstep(ft - uPx, ft + uPx, d);
         if (eL) g *= smoothstep(ft, ft + 0.45, e0.x);
         if (eR) g *= smoothstep(ft, ft + 0.45, e1.x);
@@ -245,6 +255,7 @@ void main() {
         vec3 c = max(col * light, tint * 0.05 * paper);
         vec3 wood = uWood * 0.6 + tint * 0.04 * light;
         c = mix(c, wood, frame);
+        if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
         frag = vec4(c, uStackA * vC.w);
         return;
     }

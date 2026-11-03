@@ -2,15 +2,15 @@
 //
 // One world, seen from above: a dark table (felt, slate or brushed metal, one per variant, a fine grain, never busy)
 // with the well floating over it as a dark smoked glass pane: everything on the table (the marbles, the dye, the light)
-// lies under the well and the HUD, never over the game (under the pane a marble is at most a dim shape). Each cell of a piece is a big clear glass marble held in a
-// faint glass box: the table under it seen through it upside down, a core in two layers (ribbon, cat's eye or swirl,
-// one per piece type), tiny bubbles. Each variant's palette is a few related hues and an accent, soft through the song
-// and rich in a drop. Real light: two slow beams grazing the table from its sides, their rays traced in 2D through the
+// lies under the well and the HUD, never over the game (under the pane a marble is at most a dim shape). Each cell of a piece is a big glass marble held in a
+// faint glass box: colored glass, the table under it seen through it upside down and tinted, a core in two layers (ribbon, cat's eye or swirl,
+// one per piece type), tiny bubbles. Each variant's palette is seven saturated jewel colors, rich through the song
+// and richer in a drop. Real light: two slow beams grazing the table from its sides, their rays traced in 2D through the
 // marbles (glass balls refracting, reflecting, tinting and focusing the light: caustics opening behind them, colored
 // shadows, a marble lighting its neighbors), each marble shaded by the light that actually crosses it.
 //
-// A cleared row pops: its tiles vanish at once and each marble drops onto the table under the well and is shot out in a
-// random direction (mostly out to its side), rolling out from under the pane across the table, slowing on the felt,
+// A cleared row pops: its tiles vanish at once and each marble drops onto the table under the well and is shot out
+// along its row to its own side, rolling out from under the pane across the table, slowing on the felt,
 // knocking into the marbles already lying there (elastic collisions, billiard chains; a marble at rest sleeps until
 // it is hit). Pushed off the edge of the picture, a marble is gone. Every hit spreads the marbles' colors into the
 // felt (soft stains, the harder the hit the wider, faint traces where they roll): a song starts on a dark, empty
@@ -105,17 +105,20 @@ struct VariantDef {
 };
 // Pieces in the game's order: I, O, T, S, Z, J, L.
 const VariantDef VARIANTS[] = {
-    // Midnight: ink-blue felt, jewel marbles, a cool white lamp; the drop's light is warm gold.
+    // Midnight: ink-blue felt, jewel marbles (sapphire, cyan, amethyst, emerald, magenta, cornflower, a gold accent), a
+    // cool white lamp; the drop's light is warm gold.
     {"MIDNIGHT", 0x060914, 0x18203c, 0x070a14, 0x3a4668, 0x8a9ac8, 0xdfe6ff, 0xffd27a, 0xffe6b0, 0x040818, 0xe0e6ff,
-     {0x62c8e8, 0xf0b54a, 0x7a86f0, 0x3fa8c0, 0x2f55c8, 0xcfdcf5, 0x8fb0f0},
+     {0x10c8f4, 0xffaa18, 0x9a54ff, 0x12c49a, 0x3064ff, 0xe03ce0, 0x5aa4ff},
      0.35f, 0.16f, 0.93f, 0.f, 1.f, 0.42f, 0.f, 1.f},
-    // Sea glass: dark teal slate, pastel sea-glass marbles, a pale sea light; the drop's light is cyan white.
+    // Sea glass: dark teal slate, the deep colors of sea glass (aqua, seafoam, sky, emerald, cobalt, amber, a coral
+    // accent), a pale sea light; the drop's light is cyan white.
     {"SEA GLASS", 0x081214, 0x1e3234, 0x061012, 0x3a5a5e, 0xbfe8e8, 0xe0f4f2, 0xa8fff0, 0xd8fff8, 0x061418, 0xd8f4f0,
-     {0x8fe8e0, 0xb8e0c0, 0xa8d0f0, 0x7ad0a0, 0xf0907a, 0x4a9ac8, 0xd8f4e4},
+     {0x18e6d6, 0x6ae890, 0x48a8ff, 0x12b860, 0xff6a48, 0x2a64f0, 0xf0b030},
      0.30f, 0.16f, 0.93f, 1.f, 1.f, 0.36f, 0.f, 1.f},
-    // Obsidian: black brushed metal, vivid marbles; the drop's light is white.
+    // Obsidian: black brushed metal, fire marbles (crimson, vermilion, amber, yellow, raspberry, violet, an ice-blue
+    // accent); the drop's light is white.
     {"OBSIDIAN", 0x060607, 0x1a1a20, 0x040405, 0x34343e, 0xffffff, 0xe8e8ee, 0xffffff, 0xffffff, 0x04060e, 0xfff8f0,
-     {0xd8e4f0, 0xff8a2a, 0x9a9aa8, 0x6a7a88, 0xff3a2a, 0x8a9ab0, 0xffc84a},
+     {0x30b8ff, 0xffa418, 0xff2a78, 0xff5a14, 0xe0102a, 0x9a48ff, 0xffe040},
      0.25f, 0.08f, 0.94f, 2.f, 0.8f, 0.34f, 0.f, 1.f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
@@ -485,7 +488,9 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const Slot& s = slots_[c.y][c.x];
             const int type = std::clamp(c.type, 0, 6);
-            const vec3 p = layout::cellPos((float)c.x, c.y - game.rowOffset(c.y));
+            // where the row was: the board is already compacted, so rowOffset(c.y) is the slide of the row that took
+            // its place, not this one's
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             pops_.push_back({p.x, p.y, 0.f, 0.f, type});
             launch(v2(p.x, p.y), type, s.known ? s.seed : hashf((float)c.x, (float)c.y), s.known ? s.rot : 0.f, 0.f, tetris ? 1.25f : 1.f);
         }
@@ -557,8 +562,8 @@ float MarblesUniverse::bounceOf(const Slot& s) const { return jolt(s.bounce, s.b
 // The marbles on the table
 // =====================================================================================================
 
-// A marble leaves its tile: dropped onto the table under it and shot out in a random direction, mostly out to its
-// side, at a real speed (it rolls out from under the well and on past the HUD's columns).
+// A marble leaves its tile: dropped onto the table under it and shot out along its row to its own side (a slight
+// spread), at a real speed (it rolls out from under the well and on past the HUD's columns).
 void MarblesUniverse::launch(vec2 from, int type, float seed, float rot, float delay, float vigor) {
     Marble m;
     m.p = from;
@@ -567,8 +572,10 @@ void MarblesUniverse::launch(vec2 from, int type, float seed, float rot, float d
     m.rot = rot;
     m.delay = delay;
     m.r = rng_.range(R_MIN, R_MAX);
+    // Out along its row, to its own side: it is hidden while it crosses under the pane, so a steep angle would bring
+    // it out of the well's edge rows away from the cleared line (or out of the well's top or bottom).
     const float side = std::fabs(from.x) < 0.6f ? (rng_.chance(0.5f) ? -1.f : 1.f) : (from.x < 0.f ? -1.f : 1.f);
-    const float ang = rng_.chance(0.85f) ? (side > 0.f ? 0.f : PI) + rng_.range(-1.15f, 1.15f) : rng_.range(0.f, TAU);
+    const float ang = (side > 0.f ? 0.f : PI) + rng_.range(-0.22f, 0.22f);
     const float sp = rng_.range(8.5f, 12.5f) * vigor;
     m.v = v2(std::cos(ang), std::sin(ang)) * sp;
     m.spin = rng_.range(-1.f, 1.f);
@@ -589,15 +596,15 @@ void MarblesUniverse::buildGrid() {
     }
 }
 
-// A stain of dye on the felt (queued: painted into the dye target with the frame), in a richer shade of the glass's
-// color (pale glass would leave a gray haze).
+// A stain of dye on the felt (queued: painted into the dye target with the frame), in a slightly richer shade of the
+// glass's color (the glass is already saturated: more would turn the dye louder than the marbles).
 void MarblesUniverse::stain(vec2 p, float radius, const vec3& col, float alpha, vec2 stretch) {
     if (stains_.size() > 6000 || alpha <= 0.002f) return;
     // no dye settles under the HUD
     for (const KeepOut& o : keepOut_)
         if (p.x > o.x0 - 0.2f && p.x < o.x1 + 0.2f && p.y > o.y0 - 0.2f && p.y < o.y1 + 0.2f) return;
     const float l = lum3(col);
-    const vec3 c = vec3(std::max(0.f, l + (col.x - l) * 1.7f), std::max(0.f, l + (col.y - l) * 1.7f), std::max(0.f, l + (col.z - l) * 1.7f));
+    const vec3 c = vec3(std::max(0.f, l + (col.x - l) * 1.2f), std::max(0.f, l + (col.y - l) * 1.2f), std::max(0.f, l + (col.z - l) * 1.2f));
     stains_.push_back({{p.x, p.y, radius, rng_.uniform()}, {c.x, c.y, c.z, alpha}, {stretch.x, stretch.y, 0.f, 0.f}});
 }
 
@@ -844,7 +851,7 @@ void MarblesUniverse::simulate(const Game& game, const MusicState& music, float 
         }
     }
     drive_ = approach(drive_, driveT, driveT > drive_ ? 1.5f : 0.5f, dt);
-    // the colors: soft through the song, a little richer in a chorus, rich and glowing for a drop (in quickly at its
+    // the colors: rich through the song, a little richer in a chorus, rich and glowing for a drop (in quickly at its
     // start, settling back over a few seconds after it)
     {
         const float vt = std::max(drive_, 0.3f * wp * (1.f - drive_));
@@ -1221,9 +1228,9 @@ void MarblesUniverse::flush() {
     set3f(progMarble_, "uLightCol", lerp(vec3(1.f, 0.98f, 0.95f), pal_.wave, 0.2f) * (1.f - 0.35f * slow_));
     set3f(progMarble_, "uBridgeInk", bridge_.ink);
     set3f(progMarble_, "uPanelEdge", pal_.panelEdge);
-    // the marbles' colors: soft through the song, rich at a drop
-    set1f(progMarble_, "uSat", lerpf(0.78f, 1.25f, vivid_));
-    set1f(progMarble_, "uCore", lerpf(0.85f, 1.15f, vivid_));
+    // the marbles' colors: rich through the song, richer at a drop (never below their own saturation)
+    set1f(progMarble_, "uSat", lerpf(1.f, 1.2f, vivid_));
+    set1f(progMarble_, "uCore", lerpf(1.f, 1.15f, vivid_));
     set4f(progMarble_, "uPanel", pal_.panel.x, pal_.panel.y, pal_.panel.z, pal_.panelAlpha);
     set4f(progMarble_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set4f(progMarble_, "uKey", keyDir_.x, keyDir_.y, keyAmt_, 0.f);

@@ -153,6 +153,10 @@ private:
     bool dropOn_ = false;    // the drop's look, until the peak ends
     int markerBorn_ = -100;  // the drawing the well's marker retrace started on
     int stage_ = 1;          // 0 break, 1 mid, 2 chorus, 3 drop
+    float stageF_ = 1.f;     // the stage the hand's style is at: up at once, down slowly when the music calms
+    float markerA_ = 0.f;    // the drop's marker over the well, fading out after the drop
+    float layerA_ = 0.f;     // the drop's second layer of colour on the stack, rubbed lighter after the drop
+    double moverOut_ = 0.0;  // when the next travelling drawing is rubbed out after the drop
     float kick_ = 0;
     bool slowOn_ = false;
     float slow_ = 0;

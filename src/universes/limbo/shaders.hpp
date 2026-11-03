@@ -49,22 +49,9 @@ vec2 worldOf(vec2 uv) { return uView.xy + (uv * 2.0 - 1.0) * uView.zw; }
 inline const char* SKY_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform float uReveal;  // the drop's parting fog: the vast landscape far away
-uniform float uFar;     // how much of the far ridge shows through the fog anyway
 uniform float uShaft;   // light shafts
 uniform float uDisk;    // the light's disk through the fog
-uniform vec3 uSil;      // the silhouettes' black
 uniform float uDiskR;   // the light's disk radius
-uniform vec4 uHudL, uHudR, uQuietTL; // the HUD's columns and the title: the far range stays faint there
-float qbox(vec2 w, vec4 r, float soft) {
-    vec2 q = max(vec2(r.x, r.y) - w, w - vec2(r.z, r.w));
-    return 1.0 - smoothstep(0.0, soft, max(q.x, q.y));
-}
-float ridge(float x, float base, float amp, float freq, float s) {
-    float n = fbm(vec2(x * freq, s));
-    float sharp = 1.0 - abs(vnoise(vec2(x * freq * 2.7, s + 3.0)) * 2.0 - 1.0);
-    return base + amp * (n * 0.8 + sharp * 0.25);
-}
 void main() {
     vec2 w = worldOf(vUv);
     vec3 fog = fogColor(w);
@@ -79,24 +66,6 @@ void main() {
     rays = smoothstep(0.35, 0.9, rays);
     float fall = exp(-length(d) * 0.09) * smoothstep(1.0, 5.0, length(d));
     c += uGlowCol * uShaft * rays * fall * 0.3;
-    // the far landscape: a vast range and a nearer plateau, revealed by the parting fog (always a trace of them)
-    float h1 = ridge(w.x, -4.0, 10.0, 0.033, 11.0 + uSeed * 0.01);
-    float h2 = ridge(w.x + 40.0, -6.6, 4.6, 0.07, 23.0 + uSeed * 0.01);
-    float aa = 2.0 * uView.w / 540.0;
-    float m1 = 1.0 - smoothstep(h1 - aa, h1 + aa, w.y);
-    float m2 = 1.0 - smoothstep(h2 - aa, h2 + aa, w.y);
-    float veil = 1.0 - 0.6 * glowAt(w);
-    float veil2 = (1.0 - 0.35 * glowAt(w)) * (1.0 - 0.7 * max(max(qbox(w, uHudL, 6.0), qbox(w, uHudR, 6.0)), qbox(w, uQuietTL, 4.0)));
-    float k1 = 0.07 * uFar * veil + 0.62 * uReveal * veil2;
-    float k2 = 0.12 * uFar * veil + 0.78 * uReveal * veil2;
-    // the range catches the light on its ridges' sides facing it
-    c = mix(c, mix(fog, uSil, 0.6), m1 * k1);
-    c = mix(c, mix(fog, uSil, 0.75), m2 * k2);
-    // the low sun catching the crests: a thin line of light along each ridge
-    c += uGlowCol * uReveal * glowAt(w) * 0.9 * (exp(-max(h1 - w.y, 0.0) * 9.0) * m1 * (1.0 - m2) + exp(-max(h2 - w.y, 0.0) * 9.0) * m2);
-    // mist pooling in the valleys between them
-    float pool = smoothstep(2.5, -1.0, w.y - h2) * m1 * (1.0 - m2);
-    c = mix(c, fog * 1.03, pool * 0.25 * uReveal);
     frag = vec4(c, 0.0);
 }
 )";
@@ -281,7 +250,7 @@ void main() {
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
-layout(location = 2) in vec4 aB; // rim tint (linear), alpha
+layout(location = 2) in vec4 aB; // (unused), alpha
 layout(location = 3) in vec4 aC; // kind (0 piece, 1 ghost), dissolve, glint, seed
 uniform mat4 uVP;
 out vec2 vLocal;
@@ -334,7 +303,6 @@ flat in vec4 vC;
 out vec4 frag;
 uniform vec3 uInk;      // the pieces' black (linear)
 uniform vec3 uMist;     // the mist a dissolving piece turns to
-uniform float uRim;     // the rim light's strength
 uniform float uGhostA;
 void main() {
     int kind = int(vC.x + 0.5);
@@ -362,25 +330,8 @@ void main() {
         a *= smoothstep(thr - 0.05, thr + 0.05, e) * (1.0 - smoothstep(0.75, 1.0, k));
     }
     if (a <= 0.002) discard;
-    // the outline's normal (outward, cell units)
-    const float ee = 0.02;
-    vec2 n = vec2(shapeSdf(vLocal + vec2(ee, 0.0), m) - shapeSdf(vLocal - vec2(ee, 0.0), m),
-                  shapeSdf(vLocal + vec2(0.0, ee), m) - shapeSdf(vLocal - vec2(0.0, ee), m));
-    n = length(n) > 1e-4 ? normalize(n) : vec2(0.0);
-    vec2 toLight = normalize(uSun.xy - vW + vec2(0.0, 6.0));
-    float facing = dot(n, toLight);
-    vec3 tint = vB.rgb;
-    vec3 glow = fogColor(vW);
-    // the body: deep black, with the fog's light scattered faintly into its edges in the piece's own tint
-    float inner = exp(-depth * 14.0);
-    vec3 c = uInk + tint * glow * 0.05 * inner * uRim;
-    // the rim: a thin line of light where the edge faces the glow, a trace of it all around
-    float px = aa * 1.4142;
-    float rim = exp(-max(depth - px, 0.0) / 0.022);
-    float lit = smoothstep(-0.4, 1.0, facing);
-    c += mix(glow, tint * glow * 1.3, 0.5) * rim * (0.2 + 1.3 * lit * lit) * uRim;
-    // a glint (a kick of a peak, the drop): the rim brightens for a moment
-    c += glow * vC.z * rim * 0.9 * min(uRim, 1.0);
+    // the body: flat deep black, a sharp edge (no rim, no tint)
+    vec3 c = uInk;
     if (k > 0.0) c = mix(c, uMist, smoothstep(0.0, 0.8, k) * 0.7);
     frag = vec4(c * a, a);
 }
@@ -456,6 +407,7 @@ uniform vec3 uRayCol;
 uniform float uSlow, uDim, uFade, uBridge, uVig, uGrain, uTime;
 uniform vec3 uBridgeCol, uBridgeInk; // linear
 uniform vec3 uNight;                 // the slow motion's cool light
+uniform float uInvert;               // the drop: the whole scene in negative
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = s.rgb;
@@ -471,6 +423,7 @@ void main() {
     c = mix(c, mix(uBridgeCol, uBridgeInk, clamp(s.a, 0.0, 1.0)), uBridge);
     c *= (1.0 - uDim * 0.5) * uFade;
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+    c = mix(c, 1.0 - c, uInvert);
     // a film grain, finer than a pixel's worth of value: it only keeps the fog from banding
     vec2 px = floor(gl_FragCoord.xy);
     float n = fract(sin(dot(px + fract(uTime * 7.31) * 113.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;

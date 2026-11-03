@@ -4,9 +4,10 @@
 // border, zone marks and title block. The well is a container drawn in section (hatched walls, an open top, center
 // line stubs). The pieces are drafted parts: a crisp outline, a light wash of their tint and the section hatching of
 // their type (45 degrees, cross-hatch, stipple, horizontal, 135 degrees, vertical, steel), so the seven types read
-// apart at a glance; the ghost is a hidden line (dashed outline). Every placed piece is dimensioned (extension lines,
-// arrows, its width lettered above it, fading after a few seconds); the stack's overall height is dimensioned beside
-// the well and glides when it changes; the well's width is dimensioned below it.
+// apart at a glance; the ghost is a hidden line (the whole part's outline, each straight run dashed to fit, every
+// corner closed). Every placed piece is dimensioned (extension lines, arrows, its width lettered above it, fading
+// out quickly); the stack's overall height is dimensioned beside the well and glides when it changes; the
+// well's width is dimensioned below it.
 //
 // The drafter draws: every line comes in as a pen stroke. The song is the drawing. A break is sparse paper with a
 // few construction lines (an earlier machine left as a faint ghost); verse and mid parts draw a machine elevation in
@@ -1057,7 +1058,7 @@ void BlueprintUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        if (pieceDim_.alive) pieceDim_.life = std::max(pieceDim_.life, 3.5f); // lifted with the row
+        if (pieceDim_.alive) pieceDim_.life = std::max(pieceDim_.life, DIM_HOLD - pieceDim_.t); // lifted with the row
         rev_++;
         revT_ = 0.f;
         if (ev.count >= 4) cloudT_ = 0.f;
@@ -1080,6 +1081,81 @@ void BlueprintUniverse::cell(float x, float y, float half, int mask, const vec3&
     if (alpha <= 0.003f) return;
     cells_.push_back({{x, y, half, (float)mask}, {tint.x, tint.y, tint.z, alpha}, {(float)kind, (float)style, hatchA, erase},
                       {line.x, line.y, line.z, front}});
+}
+
+float BlueprintUniverse::cellLineW() const { return std::max(1.2f, 2.2f * (height_ / 1080.f)); }
+
+// The ghost as a clean hidden line: the outline of the whole part (the cells' edges shared inside the part are
+// never drawn), traced as a polygon and inset to where the parts' solid outline runs; each straight run of it is
+// dashed on its own, its dash count fitted to its length so that it starts and ends on a dash with equal dashes
+// and gaps between, so the two dashes meeting at every corner (outer and inner) close it. Only whole cells and
+// fixed fractions of them: the pattern is the same wherever the part stands, nothing crawls when it moves.
+void BlueprintUniverse::buildGhost(const int (&cells)[4][2], const vec3& color, float alpha) {
+    // cell (x, y) spans the integer corners (x, -y) .. (x + 1, -y + 1), y up; its edges counterclockwise
+    struct E { int x0, y0, x1, y1; };
+    std::vector<E> edges;
+    for (auto& c : cells) {
+        if (c[1] < Game::HIDDEN) continue;
+        const int i = c[0], j = -c[1];
+        const E ce[4] = {{i, j, i + 1, j}, {i + 1, j, i + 1, j + 1}, {i + 1, j + 1, i, j + 1}, {i, j + 1, i, j}};
+        for (const E& e : ce) {
+            // an edge shared with another cell of the part comes back reversed: both go
+            auto rev = std::find_if(edges.begin(), edges.end(), [&](const E& o) {
+                return o.x0 == e.x1 && o.y0 == e.y1 && o.x1 == e.x0 && o.y1 == e.y0;
+            });
+            if (rev != edges.end()) edges.erase(rev);
+            else edges.push_back(e);
+        }
+    }
+    const vec3 o3 = layout::cellPos(0.f, 0.f);
+    const vec2 base{o3.x - 0.5f, o3.y - 0.5f};
+    const float px = pxPerUnit_;
+    const float lw = cellLineW();
+    const float width = lw + 1.f;                       // the parts' outline profile (full lw, a pixel of falloff)
+    const float inset = 0.035f + (lw + 1.f) * 0.5f / px; // the parts' outline center (cell gap + half the band)
+    const float half = width * 0.5f / px;                 // a corner's dashes run on by half the line: a square corner
+    const float P0 = 1.f / 3.f, DASH = 0.62f;           // the hidden line: three dashes a cell, 62% ink
+    while (!edges.empty()) {
+        // chain one loop and keep its corners (where the direction turns)
+        std::vector<E> loop{edges.front()};
+        edges.erase(edges.begin());
+        for (;;) {
+            const E& last = loop.back();
+            auto nx = std::find_if(edges.begin(), edges.end(), [&](const E& o) { return o.x0 == last.x1 && o.y0 == last.y1; });
+            if (nx == edges.end()) break;
+            loop.push_back(*nx);
+            edges.erase(nx);
+        }
+        const int n = (int)loop.size();
+        std::vector<vec2> corners;
+        for (int k = 0; k < n; k++) {
+            const E& a = loop[(k + n - 1) % n];
+            const E& b = loop[k];
+            const vec2 da{(float)(a.x1 - a.x0), (float)(a.y1 - a.y0)}, db{(float)(b.x1 - b.x0), (float)(b.y1 - b.y0)};
+            if (da.x == db.x && da.y == db.y) continue;
+            // inward (left of a counterclockwise loop) along both edges' normals: right for convex and concave corners
+            const vec2 nIn{-da.y - db.y, da.x + db.x};
+            corners.push_back({base.x + b.x0 + nIn.x * inset, base.y + b.y0 + nIn.y * inset});
+        }
+        const int m = (int)corners.size();
+        for (int k = 0; k < m; k++) {
+            const vec2 p0 = corners[k], p1 = corners[(k + 1) % m];
+            const vec2 d = sub(p1, p0);
+            const float L = len(d);
+            if (L < 1e-4f) continue;
+            const vec2 t = mul(d, 1.f / L);
+            const int count = std::max(1, (int)std::lround((L + (1.f - DASH) * P0) / P0));
+            const float unit = L / (count * DASH + (count - 1) * (1.f - DASH));
+            const float D = unit * DASH, G = unit * (1.f - DASH);
+            for (int q = 0; q < count; q++) {
+                float s0 = q * (D + G), s1 = s0 + D;
+                if (q == 0) s0 -= half;
+                if (q == count - 1) s1 += half;
+                const vec2 a = add(p0, mul(t, s0)), b = add(p0, mul(t, s1));
+                ghost_.push_back({{a.x, a.y, b.x, b.y}, {color.x, color.y, color.z, alpha}, {width, (float)P_BUTT, 0.f, 1.f}});
+            }
+        }
+    }
 }
 
 void BlueprintUniverse::buildBoard(const Game& g) {
@@ -1138,16 +1214,7 @@ void BlueprintUniverse::buildBoard(const Game& g) {
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
-            auto inGhost = [&](int x, int y) {
-                for (auto& c : gc)
-                    if (c[0] == x && c[1] == y) return true;
-                return false;
-            };
-            for (auto& c : gc) {
-                if (c[1] < Game::HIDDEN) continue;
-                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), tintOf(p.type), 0.8f, 1, p.type, 0.f, 0.f, lineOf(p.type), 1e4f);
-            }
+            buildGhost(gc, lineOf(p.type), 0.8f);
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) {
@@ -1496,10 +1563,11 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
             if (cy < pieceDim_.y || cy > pieceDim_.y + 1.5f) continue;
             for (int x = 0; x < Game::W; x++) {
                 const float cx = layout::cellPos((float)x, 0.f).x;
-                if (cx > pieceDim_.x0 && cx < pieceDim_.x1 && game.cell(x, y).type >= 0) pieceDim_.life = std::max(pieceDim_.life, 3.4f);
+                if (cx > pieceDim_.x0 && cx < pieceDim_.x1 && game.cell(x, y).type >= 0)
+                    pieceDim_.life = std::max(pieceDim_.life, DIM_HOLD - pieceDim_.t);
             }
         }
-        if (pieceDim_.t > 4.2f + pieceDim_.life) pieceDim_.alive = false;
+        if (pieceDim_.t + pieceDim_.life > DIM_HOLD + DIM_FADE) pieceDim_.alive = false;
     }
     {
         const int rows = std::min(20, game.stackHeight());
@@ -1550,7 +1618,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     if (pieceDim_.alive && overT_ < 0.f) {
         const Dim& d = pieceDim_;
         // half the ink of the other dimensions: it lies inside the well
-        const float a = 0.5f * (1.f - smoothstepf(3.0f, 4.0f, d.t + d.life)) * world;
+        const float a = 0.5f * (1.f - smoothstepf(DIM_HOLD, DIM_HOLD + DIM_FADE, d.t + d.life)) * world;
         const float y = d.y + 0.72f;
         dimH(d.x0, d.x1, y, d.y, d.y, saturate(d.t / 0.4f), a, R_DIM, ss);
         if (d.t > 0.25f) labels_.push_back({std::to_string(d.value), V((d.x0 + d.x1) * 0.5f, y + 0.5f), 0.46f * pxPerUnit_, a * saturate((d.t - 0.25f) / 0.2f), R_DIM, false, true});
@@ -1564,6 +1632,10 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
             labels_.push_back({std::to_string(stackRows_ * 10), V(x + 0.1f, -10.f + stackShown_ * 0.5f), 0.4f * pxPerUnit_, ta, R_DIM, true, true});
     }
     for (const Stroke& s : ss) emit(s, 1.f, 1.f);
+
+    cells_.clear();
+    ghost_.clear();
+    buildBoard(game);
 
     // ---- Pen lines into their layer (MAX: joints and crossings of one ink never darken).
     lineT_.bind();
@@ -1607,14 +1679,39 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progLayer_, "uLayer", 0);
     ugl::drawFullscreen();
 
-    // ---- Pieces, ghost, previews, gauge.
-    cells_.clear();
-    buildBoard(game);
+    // ---- The ghost: its dashes in their own layer (MAX: the dashes meeting at a corner never double), under the parts.
+    if (!ghost_.empty()) {
+        const float bi = smoothstepf(0.2f, 0.9f, bridge);
+        for (LineInst& li : ghost_) {
+            const vec3 c = lerp(vec3(li.b[0], li.b[1], li.b[2]), bridge_.ink, bi);
+            li.b[0] = c.x; li.b[1] = c.y; li.b[2] = c.z;
+        }
+        lineT_.bind();
+        glClearColor(0.f, 0.f, 0.f, 0.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glBlendEquation(GL_MAX);
+        glUseProgram(progLine_);
+        setMat(progLine_, "uVP", vp_);
+        set1f(progLine_, "uPxPerUnit", pxPerUnit_);
+        glBindVertexArray(lineVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
+        glBufferData(GL_ARRAY_BUFFER, ghost_.size() * sizeof(LineInst), ghost_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)ghost_.size());
+        glBlendEquation(GL_FUNC_ADD);
+        sceneT_.bind();
+        glUseProgram(progLayer_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, lineT_.tex);
+        set1i(progLayer_, "uLayer", 0);
+        ugl::drawFullscreen();
+    }
+
+    // ---- Pieces, previews, gauge.
     if (!cells_.empty()) {
         const float s = height_ / 1080.f;
         glUseProgram(progCell_);
         setMat(progCell_, "uVP", vp_);
-        set1f(progCell_, "uLineW", std::max(1.2f, 2.2f * s));
+        set1f(progCell_, "uLineW", cellLineW());
         set1f(progCell_, "uHatchW", std::max(0.8f, 1.25f * s));
         set1f(progCell_, "uSpacing", 0.2f);
         set1f(progCell_, "uPxPerUnit", pxPerUnit_);

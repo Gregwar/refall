@@ -457,7 +457,7 @@ void NotepadUniverse::setSong(const SongLook& look, float seconds) {
 
 void NotepadUniverse::setLevel(int level, float, float, float) {
     level_ = std::clamp(level, 0, 2);
-    if (level_ < 2) { dropOn_ = false; movers_.clear(); }
+    if (level_ < 2) dropOn_ = false;
     dirty_ = true;
 }
 
@@ -740,13 +740,19 @@ void NotepadUniverse::manageDoodles() {
 void NotepadUniverse::style(const MusicState& music) {
     (void)music;
     const Variant& V = VARIANTS[variant_];
-    const int st = stage_;
-    weight_ = WEIGHT[st];
-    wobble_ = WOBBLE[st];
-    boil_ = BOIL[st];
-    colorAmt_ = COLOR[st];
-    fillAlpha_ = FILLA[st];
-    handSpeed_ = HAND[st];
+    // the style follows the eased stage, so a calm part settles in over a few drawings instead of one
+    // (in half stages: what changes is drawn anew, so the hand redoes the colouring a few times, not every drawing)
+    const float sf = std::clamp(std::round(stageF_ * 2.f) * 0.5f, 0.f, 3.f);
+    const int s0 = std::min(2, (int)sf);
+    const float u = sf - (float)s0;
+    auto at = [&](const float* t) { return t[s0] + (t[s0 + 1] - t[s0]) * u; };
+    const int st = (int)std::lround(sf);
+    weight_ = at(WEIGHT);
+    wobble_ = at(WOBBLE);
+    boil_ = at(BOIL);
+    colorAmt_ = at(COLOR);
+    fillAlpha_ = at(FILLA);
+    handSpeed_ = at(HAND);
     graphite_ = hexc(V.graphite);
     outlineCol_ = hexc(V.outline); // a firm outline in every phase (a break only changes the tool)
     outlineTool_ = st == 0 ? V.calmTool : V.outlineTool;
@@ -854,7 +860,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 it.residue = 0.3f;
                 out.push_back(it);
             }
-        if (dropOn_ && stage_ == 3) {
+        if (markerA_ > 0.03f) {
             for (int e = 0; e < 3; e++) {
                 Item it;
                 it.key = tag('M', (uint64_t)e);
@@ -868,7 +874,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 it.c = V.accentTool == T_HIGHLIGHT ? 0.32f : 0.15f;
                 it.col = hexc(V.accent);
                 it.tool = V.accentTool;
-                it.alpha = V.accentTool == T_HIGHLIGHT ? 0.55f : 0.9f;
+                it.alpha = (V.accentTool == T_HIGHLIGHT ? 0.55f : 0.9f) * std::ceil(markerA_ * 4.f) / 4.f;
                 it.r = 0.05f;
                 it.i1 = 3;
                 it.residue = 0.35f;
@@ -898,8 +904,10 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             }
         const vec3 o = cellPos(0, 0);
         // the drop's stronger colouring: a second, crossing layer over every coloured-in cell, there at once on the
-        // drop's downbeat (and on a piece landing in a drop) and gone at once when it ends (the eraser leaves a ghost)
-        const bool strong = stage_ >= 3;
+        // drop's downbeat (and on a piece landing in a drop); when it ends it is rubbed lighter in a few passes
+        // over two or three seconds (quarter steps, each pass leaving its eraser ghost)
+        const float layerK = std::round(layerA_ * 4.f) / 4.f;
+        const bool strong = layerK > 0.f;
         for (const Group& gr : groups) {
             const size_t first = out.size();
             addPiece(out, mix(gr.id, 0xC311), gr.cells, gr.n, v2(o.x, o.y), 1.f, gr.type, 1.f, false, 0.38f, 0.12f);
@@ -916,6 +924,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                     ov.i2 = 16 | 64;
                     ov.col = lerp(out[i].col, outlineCol_, V.light ? 0.22f : 0.f);
                     ov.c = 0.9f;
+                    ov.alpha *= layerK;
                     ov.residue = 0.3f;
                     ov.moveResidue = 0.1f;
                     out.push_back(ov);
@@ -1633,9 +1642,16 @@ void NotepadUniverse::spawnMover(int kind, int side) {
     movers_.push_back(m);
 }
 
-// They live through the drop: gone (rubbed out) as soon as it ends.
+// They live through the drop; when it ends they are rubbed out one after the other.
 void NotepadUniverse::manageMovers() {
-    if (stage_ < 3) { movers_.clear(); return; }
+    if (stage_ < 3) {
+        if (!movers_.empty() && clock_ >= moverOut_) {
+            movers_.erase(movers_.begin());
+            moverOut_ = clock_ + 0.6;
+        }
+        return;
+    }
+    moverOut_ = clock_ + 0.8;
     // a drop reached without its downbeat (a review shot, a seek): bring them in anyway
     if (movers_.empty()) {
         const int side = rng_.irange(0, 1);
@@ -1958,6 +1974,10 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
         if (peak && drive_ > 0.6f) dropOn_ = true;
         int st = level_ == 0 ? 0 : level_ == 1 ? 1 : (dropOn_ || dropHeld_ > 0.f) ? 3 : 2;
         if (st != stage_) { stage_ = st; dirty_ = true; }
+        // the hand's style: a lift is at once (a chorus, a drop hit), calming down takes a few seconds
+        stageF_ = (float)st >= stageF_ ? (float)st : approach(stageF_, (float)st, 0.9f, dt);
+        markerA_ = st == 3 && dropOn_ ? 1.f : approach(markerA_, 0.f, 1.2f, dt);
+        layerA_ = st == 3 ? 1.f : approach(layerA_, 0.f, 0.9f, dt);
         // beats
         if (music.hasSong) {
             const long b = (long)std::floor(music.beat);

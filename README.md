@@ -63,7 +63,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/electron.jpg"><br><b>ELECTRON</b>: solid cubes on a dark substrate, wired up by roaming charges whose glowing connections emerge between two terminals<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/lanterns.jpg"><br><b>LANTERNS</b>: a 3D night lake of paper lanterns; each cleared row slides out of the well and floats onto the water as lanterns that stay lit, the drop lifts them all into the sky<br><sub>🔍 <i>to review</i></sub></td>
@@ -75,10 +75,10 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/crystal.jpg"><br><b>CRYSTAL CAVE</b>: gemstone pieces in a geode cave; each phase of the song is its own mineral, frozen into the stack at lock time, so the stack grows in strata that record the song<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a Swiss typographic poster set from the song's words, recomposed on the bar grid; flat pieces lock in each section's palette, the drop sets the title giant<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a Swiss typographic poster set from the song's words, recomposed on the bar grid; flat pieces lock in each section's palette, the drop cuts to the negative print, the title giant<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog and turns the scene to negative<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>

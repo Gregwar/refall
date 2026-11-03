@@ -125,11 +125,6 @@ const VariantDef VARIANTS[] = {
      0x1a1e24, 0xd8e0ea, 0x12161c, 0x141820, 0xffa070, 0xe2e6ea, 0x04060a, 0xffd0a0,
      {0xb8f0d2, 0xf6a35a, 0xce4646, 0x76a7e3, 0xfbe4b9, 0xb8632d, 0x62c5b9},
      0.02f, 0.1f, 0.22f, 0.2f, 0.6f, 0.f, 0.3f, 0.f, 0.f, 0.4f, 1.1f},
-    // a brutalist block at dusk's end: raw concrete, deep windows, rooms in the colors of modernist loggias
-    {"BRUTALIST", 0x03050a, 0x1a1418, 0x50281a, 0x120e0e, 0x30201a, 0x080808, 0x0e0c0c, 0x30201a, 0xff9040, 0xffc888,
-     0x5a5650, 0xfff0e0, 0x16151a, 0x121116, 0xe0603c, 0xf2ede6, 0x030202, 0xffc090,
-     {0xabf4c9, 0xff9801, 0xe12f2f, 0x67a8ed, 0xffe1a4, 0xc75c00, 0x33c9b7},
-     0.0055f, 0.26f, 0.34f, 1.f, 0.25f, 0.2f, 0.3f, 0.f, 0.f, 0.6f, 1.f},
     // a snowy evening: brick, snow falling and lying on the ledges and roofs
     {"SNOWFALL", 0x03050c, 0x161a2c, 0x382a30, 0x141828, 0x22242e, 0x080a12, 0x10141e, 0x2a2020, 0xffa050, 0xffc47c,
      0x221a1a, 0xffffff, 0x101218, 0x12141c, 0xbfdcff, 0xeef2ff, 0x020308, 0xffc890,
@@ -380,11 +375,10 @@ CityUniverse::~CityUniverse() {
 void CityUniverse::setSong(const SongLook& t, float seconds) {
     if (t.variant >= 0) variant_ = t.variant % VARIANT_COUNT;
     else {
-        // night songs downtown or in the rain, bright ones after the blue hour or in the dawn fog, heavy ones in
-        // concrete, slow quiet ones in the snow
+        // night songs downtown or in the rain, bright ones after the blue hour or in the dawn fog, slow quiet ones
+        // in the snow
         int v;
-        if (t.bassWeight > 0.62f && t.dynamics > 0.5f) v = 4;
-        else if (t.bpm < 100.f && t.density < 0.5f) v = 5;
+        if (t.bpm < 100.f && t.density < 0.5f) v = 4;
         else if (t.minor && t.brightness < 0.55f) v = (t.bpm > 118.f || t.airWeight > 0.55f) ? 2 : 1;
         else v = (t.brightness > 0.6f && t.dynamics < 0.5f) ? 3 : 0;
         if ((t.seed % 5) == 0) v = (v + 1 + (int)((t.seed >> 8) % 4)) % VARIANT_COUNT;
@@ -1168,7 +1162,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progTower_, "uRoomAmb", 0.0035f);
     set1f(progTower_, "uFrameLight", 4.f);
     // the facade's floodlights, from the ledge of each floor and from below
-    set3f(progTower_, "uFlood", pal_.upl * (variant_ == 4 ? 14.f : 3.f) * (1.f - 0.7f * black) * worldOn);
+    set3f(progTower_, "uFlood", pal_.upl * 3.f * (1.f - 0.7f * black) * worldOn);
     set1f(progTower_, "uGroundY", GROUND_Y);
     {
         float cc[21];

@@ -1,5 +1,5 @@
 #pragma once
-// ANTS: sugar cubes on the ground, and a colony finding them (see ants.cpp).
+// ELECTRON: solid cubes on a dark substrate, and charges finding them (see electron.cpp).
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -7,9 +7,9 @@
 #include "ugl.hpp"
 #include "universe.hpp"
 
-class AntsUniverse : public Universe {
+class ElectronUniverse : public Universe {
 public:
-    ~AntsUniverse() override;
+    ~ElectronUniverse() override;
     bool init(int width, int height) override;
     void resize(int width, int height) override;
     void setSong(const SongLook& look, float seconds) override;
@@ -66,6 +66,8 @@ private:
         float size = 0.05f, rot = 0, spin = 0, t = 0, life = 1, delay = 0;
         bool food = false;        // lies on the ground for the ants (outside the well)
     };
+    struct Spark { vec2 p, v; vec3 col; float t = 0, life = 0.2f, w = 0.012f; };
+    struct Flash { vec2 p; vec3 col; float t, life, r; };
     struct Dying { float x, y; int type; float t, delay, seed, nib; bool over; };
 
     // sim
@@ -80,6 +82,7 @@ private:
     void deposit(std::vector<float>& f, vec2 p, float amount);
     void wear(vec2 p, float amount);
     void burst(float x, float y, int type, int n, float speedK, bool tetris);
+    void sparks(vec2 at, vec2 dir, const vec3& col, int n, float speed, float spread, float flash);
     void syncCells(const Game& game);
     void warmUp(const Game& game);
 
@@ -121,6 +124,10 @@ private:
     std::vector<Ant> ants_;
     std::vector<Grain> grains_;
     std::vector<Dying> dying_;
+    std::vector<Spark> sparks_;
+    std::vector<Flash> flashes_;
+    float sparkTok_ = 0;       // sparking contacts allowed (refills over time)
+    static constexpr int MAX_SPARKS = 600;
     float nib_[22][10] = {};
     float seed_[22][10] = {};
     int8_t occ_[22][10] = {};  // the board as the ants know it (-1 empty, else the piece type)

@@ -3,8 +3,7 @@
 // One world: layered planes of black shapes (dead trees, a forest edge, distant towers and a windmill, hanging
 // ropes, a gear, grasses on low hills) fading into a luminous grey fog, a soft light behind it all, low behind the
 // well. The pieces are deep black silhouettes standing in front of that light: a piece's cells merge into one shape,
-// a thin rim of the fog's glow runs along its edges (brighter where they face the light), and the faint color each
-// piece type scatters into its edges is the only color on the stack. The falling piece is the same silhouette.
+// flat black with a sharp edge. The falling piece is the same silhouette.
 //
 // The world fills up with the play: each cleared row adds something to the landscape, for good (a bird lands on a
 // branch, a lantern is lit, a tree grows, a distant tower rises out of the fog, grass comes up, a fence post...), so
@@ -14,9 +13,9 @@
 // light); a chorus thins it (the forest edge and the towers come through, the shapes sway on the beat grid, every two
 // beats, the gear turns a notch every two beats); a peak opens it (the far planes clear, the light brighter, the fog
 // banks drifting faster, the lanterns brighten on the kicks). The drop tears the fog open, eased in over a beat or two:
-// the banks part from the middle and roll away, a vast mountain range appears, the light sinks into a big low sun
-// with occluded light shafts through the trees, rim-lit silhouettes (the pieces turn flat black), a gust, a large
-// flock taking off, every lantern lit, the gears spinning, herons, crows, deer, a far train and a balloon passing; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
+// the banks part from the middle and roll away, the whole scene turns to negative, the light sinks into a big low sun
+// with occluded light shafts through the trees, rim-lit silhouettes, a gust, a large flock taking off, every
+// lantern lit, the gears spinning, herons, crows, a far train and a balloon passing; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
 // row dissolves into the fog (its edges erode into mist, a few motes drift off); a Tetris sends a flock up from the
 // forest. Slow motion is a still, moonlit fog; game over dissolves the stack from the top down as the fog closes in.
 // Changes of universe: the fog closes in to the bridge's color.
@@ -668,18 +667,6 @@ void LimboUniverse::buildWorld(float sway, float beatStep) {
 // What passes during a drop
 // =====================================================================================================
 
-// The top of the hills of a layer at x (board units).
-float LimboUniverse::groundY(float x, int layer) const {
-    float y = layer == L_NEAR ? Y_NEAR - 0.5f : Y_MID - 0.5f;
-    for (const Thing& t : things_) {
-        if (t.kind != K_HILL || t.layer != layer) continue;
-        const float dx = x - t.x;
-        if (std::fabs(dx) >= t.size) continue;
-        y = std::max(y, t.y - t.size + std::sqrt(t.size * t.size - dx * dx));
-    }
-    return y;
-}
-
 // A heron or a few crows crossing a side sky, from below the HUD's height out through the screen's edge (never over
 // the well or the lettering).
 void LimboUniverse::spawnFlyer(int kind, float side) {
@@ -711,11 +698,6 @@ void LimboUniverse::spawnPassers() {
     // herons on both sides
     spawnFlyer(P_HERON, 1.f);
     spawnFlyer(P_HERON, -1.f);
-    // deer walking along the near hills on the right, toward the well (they fade out behind the HUD column)
-    const int nd = rng_.irange(2, 3);
-    for (int k = 0; k < nd; k++)
-        passers_.push_back({P_DEER, L_NEAR, V2(W + 1.5f + k * rng_.range(1.8f, 2.6f), 0.f), V2(-0.5f, 0.f), -k * 0.2f, 40.f,
-                            rng_.range(1.2f, 1.45f) * (k == 0 ? 1.1f : 1.f), rng_.range(0.f, 1.f), -1.f});
     // a far train crossing the plain behind everything
     {
         const float d = rng_.chance(0.5f) ? 1.f : -1.f;
@@ -780,26 +762,6 @@ void LimboUniverse::buildPassers() {
             disc(0.25f, 0.04f, 0.055f);
             cap(0.28f, 0.04f, 0.38f, 0.02f, 0.025f, 0.005f);
             cap(-0.22f, 0.f, -0.42f, -0.02f, 0.05f, 0.02f);
-            break;
-        }
-        case P_DEER: {
-            const float bob = 0.03f * std::sin(B * 2.f + p.phase * TAU);
-            cap(-0.45f, 0.95f + bob, 0.35f, 1.f + bob, 0.2f, 0.18f);           // body
-            cap(0.33f, 1.05f + bob, 0.55f, 1.45f + bob, 0.09f, 0.065f);       // neck
-            cap(0.55f, 1.5f + bob, 0.8f, 1.42f + bob, 0.08f, 0.045f);         // head
-            cap(0.56f, 1.56f + bob, 0.5f, 1.86f + bob, 0.016f, 0.012f);       // antlers
-            cap(0.52f, 1.72f + bob, 0.41f, 1.9f + bob, 0.012f, 0.008f);
-            cap(0.6f, 1.56f + bob, 0.7f, 1.86f + bob, 0.016f, 0.012f);
-            cap(0.66f, 1.74f + bob, 0.78f, 1.9f + bob, 0.012f, 0.008f);
-            cap(-0.48f, 1.05f + bob, -0.6f, 0.92f + bob, 0.05f, 0.03f);       // tail
-            const float hips[4][2] = {{0.28f, 0.f}, {0.22f, PI}, {-0.36f, PI * 0.5f}, {-0.42f, PI * 1.5f}};
-            for (auto& h : hips) {
-                const float sw = std::sin(B + h[1] + p.phase * TAU);
-                const float lift = std::max(0.f, std::cos(B + h[1] + p.phase * TAU)) * 0.08f;
-                const float kx = h[0] + 0.12f * sw, ky = 0.45f + lift;
-                cap(h[0], 0.9f + bob, kx, ky, 0.065f, 0.045f);
-                cap(kx, ky, h[0] + 0.24f * sw - 0.02f, lift * 0.6f, 0.04f, 0.028f);
-            }
             break;
         }
         case P_TRAIN: {
@@ -1254,12 +1216,15 @@ void LimboUniverse::flushShapes() {
 void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
     const float s = height_ / 1080.f;
-    const vec3 ink = hex(V.text), halo = hex(V.halo), accent = hex(V.accent);
+    // the drop's negative turns the lettering over with the scene
+    const float inv = smoothstepf(0.f, 1.f, invert_) * (1.f - saturate(bridge_.amount));
+    auto neg = [&](vec3 c) { return vec3(lerpf(c.x, 1.f - c.x, inv), lerpf(c.y, 1.f - c.y, inv), lerpf(c.z, 1.f - c.z, inv)); };
+    const vec3 ink = neg(hex(V.text)), halo = neg(hex(V.halo)), accent = neg(hex(V.accent));
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
+            const vec3 c = r.custom ? neg(r.color) : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
@@ -1432,6 +1397,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     const float partRate = partGoal_ > partMid_ ? 2.6f : 0.3f;
     partMid_ = approach(partMid_, partGoal_, partRate, dt);
     part_ = approach(part_, partMid_, partRate, dt);
+    invert_ = approach(invert_, partGoal_, 9.f, dt); // the drop flips the scene to negative (quick: no grey midway)
     gust_ = approach(gust_, gustGoal_, 1.6f, dt);
     gustGoal_ = approach(gustGoal_, 0.f, 0.3f, dt);
     gearSpin_ += dt * 1.4f * part_;
@@ -1505,7 +1471,6 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         p.t += wdt;
         if (p.t < 0.f) continue;
         p.p = mad(p.p, p.v, wdt);
-        if (p.kind == P_DEER) p.p.y = groundY(p.p.x, p.layer) - 0.02f;
         if (p.kind == P_CROW && std::fabs(p.p.x) < 13.5f) {
             // turn back out in a slow climbing arc
             p.v.x = approach(p.v.x, (p.p.x > 0 ? 1.f : -1.f) * 1.1f, 0.5f, wdt);
@@ -1558,15 +1523,9 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_BLEND);
     glUseProgram(progSky_);
     common(progSky_);
-    set1f(progSky_, "uReveal", part_ * (1.f - over_));
-    set1f(progSky_, "uFar", saturate(1.f - fog));
     set1f(progSky_, "uShaft", (0.1f * wp + 0.15f * part_ + 0.1f * swell_) * (1.f - slow_));
     set1f(progSky_, "uDiskR", 1.4f + 1.1f * part_);
     set1f(progSky_, "uDisk", (0.08f * wm + 0.16f * wp + 0.34f * part_ + 0.06f * swell_) * (1.f - 0.7f * slow_) * V.glowK * 1.6f);
-    set3f(progSky_, "uSil", lin(V.sil));
-    set4f(progSky_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-    set4f(progSky_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
-    set4f(progSky_, "uQuietTL", -viewH_.x - 2.f, 8.2f, -10.2f, viewH_.y + 2.f);
     ugl::drawFullscreen();
 
     // the world, far to near, a fog bank drifting between each depth (the frame's alpha is kept for the stack)
@@ -1644,7 +1603,6 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progPiece_, "uVP", vp_);
     set3f(progPiece_, "uInk", lin(V.ink));
     set3f(progPiece_, "uMist", fogLo * 1.08f + glowCol * (0.25f * glow));
-    set1f(progPiece_, "uRim", V.rimK * (0.85f + 0.15f * wp) * (1.f - 0.3f * slow_) * (1.f - part_)); // the drop: flat black
     set1f(progPiece_, "uGhostA", V.dark ? 1.6f : 1.f);
     glBindVertexArray(cellVao_);
     glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
@@ -1696,6 +1654,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uGrain", 2.2f / 255.f);
     set1f(progFinal_, "uTime", time_);
     set3f(progFinal_, "uNight", lin(V.night) * (V.dark ? 1.1f : 0.82f));
+    set1f(progFinal_, "uInvert", smoothstepf(0.f, 1.f, invert_) * (1.f - saturate(bridge_.amount)));
     set1f(progFinal_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
     set3f(progFinal_, "uBridgeCol", bridge_.color);
     set3f(progFinal_, "uBridgeInk", bridge_.ink);

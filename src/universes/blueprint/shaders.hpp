@@ -47,7 +47,8 @@ void main() {
 
 // ---------------------------------------------------------------- pen lines
 // One instance per segment: endpoints in board units, a color, a width in pixels and a pattern (solid, hidden line
-// dashes, center line dash-dot) continued along the polyline (dist0: the distance from the stroke's start).
+// dashes, center line dash-dot, dots) continued along the polyline (dist0: the distance from the stroke's start);
+// pattern 4 is a solid segment with butt ends instead of round ones (the ghost's dashes, laid out on the CPU).
 inline const char* LINE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x0 y0 x1 y1
@@ -83,14 +84,20 @@ flat in vec4 vC;
 out vec4 frag;
 uniform float uPxPerUnit;
 void main() {
-    float dx = max(max(-vSeg.x, vSeg.x - vLen), 0.0);
-    float d = length(vec2(dx, vSeg.y)) * uPxPerUnit;
-    float hw = vC.x * 0.5;
-    // thin lines keep their darkness (coverage spread over a pixel instead of fading out)
-    float a = clamp(hw + 0.5 - d, 0.0, 1.0);
-    if (hw < 0.5) a = clamp(1.0 - d, 0.0, 1.0) * (hw * 2.0);
     int pat = int(vC.y + 0.5);
-    if (pat > 0) {
+    float dx = max(max(-vSeg.x, vSeg.x - vLen), 0.0);
+    float hw = vC.x * 0.5;
+    float a;
+    if (pat == 4) {
+        // butt ends: a solid segment cut square at its endpoints (the ghost's dashes)
+        a = clamp(hw + 0.5 - abs(vSeg.y) * uPxPerUnit, 0.0, 1.0) * clamp(0.5 - max(-vSeg.x, vSeg.x - vLen) * uPxPerUnit, 0.0, 1.0);
+    } else {
+        float d = length(vec2(dx, vSeg.y)) * uPxPerUnit;
+        // thin lines keep their darkness (coverage spread over a pixel instead of fading out)
+        a = clamp(hw + 0.5 - d, 0.0, 1.0);
+        if (hw < 0.5) a = clamp(1.0 - d, 0.0, 1.0) * (hw * 2.0);
+    }
+    if (pat > 0 && pat < 4) {
         float s = max(vC.w, 1e-3);
         float u = (vC.z + clamp(vSeg.x, 0.0, vLen)) / s;
         float px = uPxPerUnit * s; // pixels per pattern unit
@@ -241,20 +248,6 @@ void main() {
         if ((hx && abs(vLocal.x) > 0.5) || (vy && abs(vLocal.y) > 0.5)) discard;
     }
     float sd = shapeSdf(vLocal, mk);
-    if (kind == 1) {
-        // the ghost: a hidden line, dashed along the part's outline
-        float lw = uLineW * aa;
-        float band = 1.0 - smoothstep(lw * 0.5, lw * 0.5 + aa, abs(sd + lw * 0.5 + aa * 0.5));
-        // dash along x on horizontal edges, along y on vertical ones
-        float ex = abs(abs(vLocal.x) - 0.5), ey = abs(abs(vLocal.y) - 0.5);
-        float along = ex < ey ? vWorld.y : vWorld.x;
-        float f = fract(along * 3.0);
-        float fa = max(fwidth(along * 3.0), 1e-4);
-        float dash = smoothstep(0.62 + fa, 0.62 - fa, f);
-        float a = band * dash * vB.a;
-        frag = vec4(lineC * a, a);
-        return;
-    }
     // a drafted part: a light wash of its tint, its section hatching, a crisp outline
     float inside = 1.0 - smoothstep(-aa, aa * 0.5, sd);
     float lw = uLineW * aa;

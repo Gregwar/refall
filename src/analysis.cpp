@@ -439,6 +439,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
         std::sort(bounds.begin(), bounds.end());
 
         std::vector<double> eventBounds; // boundaries that start with a salient event
+        std::vector<double> returnBounds; // boundaries where the full bass comes back (see below)
         // ---- Boundary localization (change-point detection at beat resolution).
         // The coarse detectors above say *that* the song changes around a time, but they work on wide,
         // smoothed windows, so they are imprecise (typically late). A listener hears a new section as
@@ -623,6 +624,61 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                     break;
                 }
             }
+
+            // ---- Bass returns: a drop is heard where the full bass comes back after a cut. The smoothed
+            // intensity rises seconds before that (it averages the build into the drop), so the coarse
+            // boundaries often start a drop on its build, or miss a drop inside a long loud stretch. A bass
+            // return is a beat whose bass reaches the level of the next two bars after a bar of clearly
+            // lower bass, with loud material following. Each one becomes a section boundary: a boundary
+            // within a bar of it moves onto it; a boundary up to four bars late moves back onto it; a
+            // boundary up to four bars early stays (it starts the build or the break before the drop) and
+            // the return is added; with no boundary near, the return is added.
+            {
+                const double bar = 4 * beatLen, minLen = std::max(6.0, 8 * beatLen);
+                for (int i = 4; i + 8 < nb; i++) {
+                    std::vector<float> next(beatBass.begin() + i, beatBass.begin() + i + 8);
+                    const float after = percentile(next, 0.5f);
+                    // the return beat reaches the new level and the bass holds there (a riser's bass does not)
+                    if (after < 0.5f || beatBass[i] < 0.85f * after) continue;
+                    if (std::min(beatBass[i + 1], beatBass[i + 2]) < 0.6f * after) continue;
+                    float before = 0.f;
+                    for (int j = i - 4; j < i; j++) before += beatBass[j];
+                    if (before / 4 > 0.6f * after) continue;
+                    const double te = an.beats[i];
+                    if (an.intensity[std::clamp((int)((te + 6.0) / an.hop), 0, nFrames - 1)] < 0.8f) continue;
+                    i += 8; // one return per two bars
+                    if (te < minLen || te > dur - minLen) continue;
+                    int k = -1;
+                    for (int j = 0; j < (int)bounds.size(); j++)
+                        if (k < 0 || std::fabs(bounds[j] - te) < std::fabs(bounds[k] - te)) k = j;
+                    // A short cut (up to a bar and a half) inside a section that already had the full bass is a
+                    // fill, not a drop. A long cut (a breakdown) or a section with less bass before it is.
+                    {
+                        const int e = i - 8;
+                        int cut = e;
+                        while (cut > std::max(0, e - 32) && beatBass[cut - 1] < 0.75f * after) cut--;
+                        const int j0 = std::max(0, cut - 16), j1 = std::max(j0 + 1, cut);
+                        float sb = 0.f;
+                        for (int j = j0; j < j1; j++) sb += beatBass[j];
+                        if (e - cut <= 6 && sb / (j1 - j0) >= 0.85f * after) continue;
+                    }
+                    const double d = k >= 0 ? bounds[k] - te : 1e9;
+                    const double prevB = k >= 0 && d > 0 ? (k > 0 ? bounds[k - 1] : 0.0) : (k >= 0 ? bounds[k] : 0.0);
+                    if (std::fabs(d) <= bar || (d > 0 && d <= 4 * bar && te - prevB >= minLen)) {
+                        bounds[k] = te; // on the return (from a bar either side, or from up to four bars late)
+                    } else if (d < 0 && -d <= 4 * bar && -d < minLen) {
+                        bounds[k] = te; // too close to keep both: the drop wins
+                    } else {
+                        bool room = true;
+                        for (double b : bounds) room = room && std::fabs(b - te) >= minLen;
+                        if (!room) continue;
+                        bounds.push_back(te);
+                        std::sort(bounds.begin(), bounds.end());
+                    }
+                    returnBounds.push_back(te);
+                    eventBounds.push_back(te);
+                }
+            }
         }
         bounds.insert(bounds.begin(), 0.0);
         bounds.push_back(dur);
@@ -640,7 +696,16 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
             sg.start = bounds[i];
             sg.end = bounds[i + 1];
             double len = sg.end - sg.start;
-            sg.energy = meanIntensity(sg.start, sg.end);
+            // Its energy is that of its body: a fade at its tail (the song ending, the sound dropping out into
+            // a break) is left out, so a final drop is not taken for a quieter section because the song ends.
+            {
+                int fa = std::clamp((int)(sg.start / an.hop), 0, nFrames - 1), fb = std::clamp((int)(sg.end / an.hop), fa + 1, nFrames);
+                std::vector<float> v(an.intensity.begin() + fa, an.intensity.begin() + fb);
+                const float floorE = 0.6f * percentile(v, 0.75f);
+                int body = fb;
+                while (body - 1 > fa + (fb - fa) / 2 && an.intensity[body - 1] < floorE) body--;
+                sg.energy = meanIntensity(sg.start, body * an.hop);
+            }
             for (double e : eventBounds)
                 if (std::fabs(e - sg.start) < 0.05) sg.announced = true;
             sg.rise = meanIntensity(sg.start + 0.75 * len, sg.end) - meanIntensity(sg.start, sg.start + 0.25 * len);
@@ -708,6 +773,15 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                 else if (peakGroup(sg.cluster) && sg.energy >= 0.65f) sg.kind = SEG_CHORUS;
                 else if (sg.energy < 0.4f) sg.kind = SEG_BREAK;
                 else sg.kind = SEG_VERSE;
+            }
+            // Two loud sections in a row: when the second is clearly fuller, the first was the way up to it
+            // (a pre-drop, a build that already has the beat) and the drop is the second.
+            for (int i = 0; i + 1 < n; i++) {
+                Segment &a = an.segments[i], &b = an.segments[i + 1];
+                if (a.kind == SEG_DROP && (b.kind == SEG_DROP || b.kind == SEG_CHORUS) && b.energy >= a.energy + 0.06f) {
+                    a.kind = SEG_BUILD;
+                    b.kind = SEG_DROP;
+                }
             }
         }
 

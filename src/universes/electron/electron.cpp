@@ -1,22 +1,23 @@
-// ANTS: sugar cubes on the ground, and a colony finding them.
+// ELECTRON: solid cubes on a dark substrate, and charges finding them.
 //
-// A plain ground seen from straight above. The well is a hairline frame on it and the pieces are sugar cubes, each
-// cell a small cube of tinted rock sugar (crystals catching the light). Two nests open at the edges of the frame, one
-// on the left, one on the right, half out of the picture: a dark hole in a ring of dug-out pellets.
+// A dark, softly textured slab seen from straight above. The well is a hairline frame on it and the pieces are plain
+// solid cubes. Two terminals sit at the edges of the picture, one on the left, one on the right, half out of it: a
+// dark plate with a ring of contact pads and a glowing core.
 //
-// The ants are a real (small) colony: they leave the nests and wander; the ones that touch a cube bite a crumb off
-// it and carry it home, laying a pheromone on the way; the others follow the pheromone, so trails form between the
-// nests and the stack, and they show as worn paths on the ground. The cubes get nibbled (a few bites at their
-// corners and edges) but never eaten away.
+// The charges are a real (small) ant-colony model, only drawn abstract: hot points with a short tail. They leave the
+// terminals and wander; the ones that touch a cube take a little of its charge (the contact throws sparks, the cube's
+// edges light up for a moment) and carry it home, laying a field on the way; the others follow the field, so
+// connections form between the terminals and the stack, and they show as glowing conductive traces with a hot
+// filament along their middle.
 //
-// A cleared row's cubes crumble grain by grain and burst into loose grains; the ones thrown out of the well stay on
-// the ground until ants fetch them. A drop pours the colony out of both nests: twice as many ants, much faster,
-// surging on the kicks, the trails darker, and the sugar turns to vivid candy colors. A chorus is a busy colony, a
-// break a few slow ants on fading trails. A lock scatters the ants around the impact; slow motion slows the colony
-// at dusk; a game over crumbles the whole stack.
+// A cleared row's cubes shatter into shards and burst into fragments with sparks; the fragments thrown out of the
+// well stay on the substrate until charges fetch them. A drop pours charges out of both terminals: many more, much
+// faster, the traces brighter, more sparks, the cubes in vivid colors. A chorus is a busy circuit, a break a few slow
+// charges on fading traces. A lock scatters the charges around the impact (a hard one sparks there); slow motion slows
+// the circuit; a game over shatters the whole stack.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
-#include "universes/ants/ants.hpp"
+#include "universes/electron/electron.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -25,7 +26,7 @@
 #include <cstring>
 
 #include "layout.hpp"
-#include "universes/ants/shaders.hpp"
+#include "universes/electron/shaders.hpp"
 #include "universes/registry.hpp"
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
@@ -33,16 +34,16 @@
 
 namespace {
 
-// EB Garamond Italic (the song, the section, the celebrations) and Manrope Light (labels and numbers), SIL Open Font
-// License, see OFL-*.txt beside this file.
+// Jura Medium (the song, the section, the celebrations) and Jura Light (labels and numbers), SIL Open Font License,
+// see OFL-Jura.txt beside this file.
 const unsigned char FONT_SERIF[] = {
-#include "universes/ants/EBGaramond12-Italic.ttf.inc"
+#include "universes/electron/Jura-Medium.ttf.inc"
 };
 const unsigned char FONT_SANS[] = {
-#include "universes/ants/Manrope-Light.ttf.inc"
+#include "universes/electron/Jura-Light.ttf.inc"
 };
 
-namespace sh = ants_shaders;
+namespace sh = electron_shaders;
 using ugl::set1f;
 using ugl::set1i;
 using ugl::set2f;
@@ -70,36 +71,35 @@ float wrapAngle(float a) {
     return a;
 }
 
-// The grounds. Colors are sRGB (the whole frame is drawn in display colors). Each has its own seven sugars, and the
-// drop's candy colors.
+// The substrates, all dark. Colors are sRGB (the whole frame is drawn in display colors). Each has its own seven
+// cubes, and the drop's vivid ones.
 struct Variant {
     const char* name;
-    bool light;
-    uint32_t ground, mottle, trail, hole, mound, ant, ink, dim, accent, frame, slow;
-    float frameA, grain, trailAmt, shadow, lustre;
+    uint32_t ground, mottle, panel, trace, core, term, charge, ink, dim, accent, frame, slow;
+    float frameA, grain, traceAmt, shadow;
     uint32_t piece[7], drop[7];
 };
 const Variant VARIANTS[] = {
-    // Daylight on a pale linen-grey ground: black ants, rock-candy sugar.
-    {"LINEN", true, 0xe9e8e4, 0xe1dfda, 0xc9c5bd, 0x2f2925, 0xcfc9bf, 0x1a1411, 0x2b2724, 0x8b857e, 0xd0482e,
-     0x8f8a84, 0xc9d0dc, 0.32f, 0.03f, 0.75f, 0.2f, 0.16f,
-     {0x3db4da, 0xf0b22c, 0x9a69d6, 0x55bd70, 0xe85a58, 0x4470df, 0xf0873a},
-     {0x00c9ef, 0xffc800, 0xc04dff, 0x10d67a, 0xff3466, 0x2f55ff, 0xff6812}},
-    // Night on dark slate: the ants darker still, the worn paths pale, pastel sugar glowing.
-    {"NIGHT", false, 0x2b323c, 0x2f3641, 0x45515e, 0x0a0c0f, 0x363e49, 0x050607, 0xdfe3ea, 0x7b8693, 0x9ad0ff,
-     0x8494a6, 0x161d2c, 0.22f, 0.025f, 0.7f, 0.5f, 0.22f,
-     {0x8fd6ef, 0xffd68a, 0xc4a6f2, 0x9fe0ad, 0xf59c9c, 0x98b2f7, 0xffbb88},
-     {0x3ff0ff, 0xffe04a, 0xd77cff, 0x55ff9c, 0xff5c88, 0x6e8bff, 0xff983a}},
-    // Red clay: dusty paths, near-white candy sugar.
-    {"TERRACOTTA", false, 0x9a5440, 0x934f3c, 0xb7735b, 0x2a140e, 0xb06650, 0x140907, 0xf7ebe4, 0xdcb3a4, 0xfff0c8,
-     0xf0d0c0, 0x6d4a52, 0.3f, 0.03f, 0.7f, 0.35f, 0.18f,
-     {0x93e4f2, 0xffe08a, 0xc9a6ff, 0xa8f0b8, 0xffa0c4, 0x7fa4ff, 0xffbf86},
-     {0x4ff4ff, 0xfff05c, 0xb27cff, 0x6dffa0, 0xff74b4, 0x5f8bff, 0xffa94d}},
-    // Pale ash, graphite ants, deep sugar.
-    {"ASH", true, 0xd5d7d8, 0xcdd0d2, 0xbcc0c3, 0x2c2d2f, 0xbfc2c5, 0x34302e, 0x2a2c2f, 0x80858a, 0xb3321f,
-     0x7d8287, 0xbcc6d6, 0.34f, 0.03f, 0.75f, 0.22f, 0.2f,
-     {0x1f7894, 0xd09a1c, 0x5d3c96, 0x2f8552, 0xb8333d, 0x2b4ea3, 0xcc5a20},
-     {0x00a8cc, 0xffb300, 0x8a3df0, 0x00b45c, 0xf0263f, 0x1f4dff, 0xff6200}},
+    // Graphite: a cold dark grey, blue-white current.
+    {"GRAPHITE", 0x16181c, 0x1e2126, 0x121417, 0x2c8cff, 0xdff3ff, 0x0d0f12, 0x7fd4ff, 0xe4e9f0, 0x7b8594, 0x6cc8ff,
+     0x5a6575, 0x101a2c, 0.5f, 0.022f, 1.f, 0.55f,
+     {0x3fa7c9, 0xe0a83c, 0x9370d8, 0x52b874, 0xd85a5e, 0x5277de, 0xe0843f},
+     {0x1ed0ff, 0xffc21a, 0xb45cff, 0x22e07e, 0xff3a5c, 0x3d66ff, 0xff7a1a}},
+    // Oxide: dark rusted iron, amber current.
+    {"OXIDE", 0x1c1512, 0x261c17, 0x15100e, 0xff8a2a, 0xfff0d6, 0x0f0b09, 0xffbd6e, 0xf3e7dc, 0x96837a, 0xffb25a,
+     0x76604f, 0x1e1428, 0.5f, 0.022f, 1.f, 0.55f,
+     {0x5fb3c0, 0xe8c25a, 0xa982d0, 0x7dbd6a, 0xe0705a, 0x6f8fd8, 0xf09a50},
+     {0x2fe0ff, 0xffd83a, 0xc070ff, 0x5cf060, 0xff4a3a, 0x5a80ff, 0xffa020}},
+    // Verdigris: a deep green-black like an old board, mint current.
+    {"VERDIGRIS", 0x0f1916, 0x15221e, 0x0c1412, 0x22e0a0, 0xe4fff4, 0x080e0c, 0x8affd6, 0xe0f2ea, 0x77908a, 0x5af0c0,
+     0x4f6f66, 0x0f1626, 0.5f, 0.022f, 1.f, 0.55f,
+     {0x48a8d0, 0xe2b94a, 0xa07ad8, 0xb0d060, 0xe0606a, 0x5f80e0, 0xe89048},
+     {0x20d8ff, 0xffd020, 0xc060ff, 0xc8ff30, 0xff3a62, 0x4870ff, 0xff8a1e}},
+    // Plasma: dark indigo, violet-white current.
+    {"PLASMA", 0x15121f, 0x1d182c, 0x110f19, 0xb060ff, 0xf6e8ff, 0x0c0a12, 0xd8a8ff, 0xece6f6, 0x8a82a0, 0xd090ff,
+     0x675d80, 0x0e1530, 0.5f, 0.022f, 1.f, 0.55f,
+     {0x4ab4d4, 0xe8b850, 0xc07ad0, 0x5cc08a, 0xe85c78, 0x6a7ce8, 0xf08c5a},
+     {0x18e0ff, 0xffd02a, 0xf060ff, 0x20f0a0, 0xff3070, 0x5060ff, 0xff7a30}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -147,12 +147,12 @@ std::string ascii(const std::string& s) {
 // GL
 // =====================================================================================================
 
-bool AntsUniverse::init(int width, int height) {
-    progGround_ = compile(ugl::FULLSCREEN_VS, sh::GROUND_FS, "ants ground");
-    progSprite_ = compile(sh::SPRITE_VS, sh::SPRITE_FS, "ants sprites");
-    progText_ = compile(sh::TEXT_VS, sh::TEXT_FS, "ants text");
-    progShape_ = compile(sh::SHAPE_VS, sh::SHAPE_FS, "ants shapes");
-    progVeil_ = compile(ugl::FULLSCREEN_VS, sh::VEIL_FS, "ants veil");
+bool ElectronUniverse::init(int width, int height) {
+    progGround_ = compile(ugl::FULLSCREEN_VS, sh::GROUND_FS, "electron ground");
+    progSprite_ = compile(sh::SPRITE_VS, sh::SPRITE_FS, "electron sprites");
+    progText_ = compile(sh::TEXT_VS, sh::TEXT_FS, "electron text");
+    progShape_ = compile(sh::SHAPE_VS, sh::SHAPE_FS, "electron shapes");
+    progVeil_ = compile(ugl::FULLSCREEN_VS, sh::VEIL_FS, "electron veil");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -196,7 +196,7 @@ bool AntsUniverse::init(int width, int height) {
     return glGetError() == GL_NO_ERROR;
 }
 
-AntsUniverse::~AntsUniverse() {
+ElectronUniverse::~ElectronUniverse() {
     for (GLuint p : {progGround_, progSprite_, progText_, progVeil_, progShape_}) glDeleteProgram(p);
     for (GLuint v : {spriteVao_, textVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, textVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -207,7 +207,7 @@ AntsUniverse::~AntsUniverse() {
     }
 }
 
-void AntsUniverse::resize(int width, int height) {
+void ElectronUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
     const float aspect = (float)width_ / height_;
@@ -245,7 +245,7 @@ void AntsUniverse::resize(int width, int height) {
     t0_ = v2(viewC_.x - hw - TCELL, viewC_.y - hh - TCELL);
 }
 
-void AntsUniverse::buildFont(Font& f, const unsigned char* ttf) {
+void ElectronUniverse::buildFont(Font& f, const unsigned char* ttf) {
     stbtt_fontinfo* info = new stbtt_fontinfo;
     if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
         std::fprintf(stderr, "[gl] ants font init failed\n");
@@ -294,7 +294,7 @@ void AntsUniverse::buildFont(Font& f, const unsigned char* ttf) {
 // Song, staging, events
 // =====================================================================================================
 
-void AntsUniverse::setSong(const SongLook& t, float seconds) {
+void ElectronUniverse::setSong(const SongLook& t, float seconds) {
     int v = 0;
     if (t.variant >= 0) {
         v = t.variant % VARIANT_COUNT;
@@ -302,8 +302,8 @@ void AntsUniverse::setSong(const SongLook& t, float seconds) {
         const int r = (int)((t.seed >> 9) % 100);
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.minor && t.brightness < 0.45f) v = r < 65 ? 1 : 2;      // dark songs: night, or the clay
-        else if (!t.minor && t.brightness > 0.58f) v = r < 60 ? 0 : 3; // bright ones: daylight, or ash
+        if (t.minor && t.brightness < 0.45f) v = r < 55 ? 1 : 3;      // dark songs: oxide, or plasma
+        else if (!t.minor && t.brightness > 0.58f) v = r < 60 ? 0 : 2; // bright ones: graphite, or verdigris
         else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % (VARIANT_COUNT - 1))) % VARIANT_COUNT;
     }
@@ -312,7 +312,7 @@ void AntsUniverse::setSong(const SongLook& t, float seconds) {
     if (seconds <= 0.f) warm_ = false;
 }
 
-void AntsUniverse::setLevel(int level, float energy, float seconds, float impact) {
+void ElectronUniverse::setLevel(int level, float energy, float seconds, float impact) {
     (void)impact;
     level_ = std::clamp(level, 0, 2);
     energy_ = energy;
@@ -321,8 +321,8 @@ void AntsUniverse::setLevel(int level, float energy, float seconds, float impact
     if (seconds <= 0.1f) lv_ = lvTarget_;
 }
 
-// The drop's first downbeat: the colony pours out of both nests, the sugar turns to candy, the trails darken.
-void AntsUniverse::drop(float strength) {
+// The drop's first downbeat: the charges pour out of both terminals, the cubes turn vivid, the traces brighten.
+void ElectronUniverse::drop(float strength) {
     if (level_ < 2) return;
     inDrop_ = true;
     swell_ = std::max(swell_, 0.6f + 0.4f * saturate(strength));
@@ -331,26 +331,26 @@ void AntsUniverse::drop(float strength) {
     pour(1, n);
 }
 
-void AntsUniverse::refresh(float strength) {
+void ElectronUniverse::refresh(float strength) {
     const int n = 4 + (int)(10 * saturate(strength));
     pour(0, n);
     pour(1, n);
 }
 
-vec2 AntsUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
+vec2 ElectronUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
 
-TransitionHints AntsUniverse::hints() const {
+TransitionHints ElectronUniverse::hints() const {
     const Variant& V = VARIANTS[variant_];
     TransitionHints h;
     h.background = ugl::toLinear(hex(V.ground));
-    h.ink = ugl::toLinear(V.light ? hex(V.ink) * 0.9f + hex(V.ground) * 0.1f : hex(V.piece[0]));
+    h.ink = ugl::toLinear(hex(V.ink));
     h.accent = ugl::toLinear(hex(V.accent));
-    h.light = V.light;
+    h.light = false;
     h.styles = TS_INK | TS_LUMA | TS_REBUILD;
     return h;
 }
 
-vec3 AntsUniverse::pieceColor(int type) const {
+vec3 ElectronUniverse::pieceColor(int type) const {
     const Variant& V = VARIANTS[variant_];
     type = std::clamp(type, 0, 6);
     return lerp(hex(V.piece[type]), hex(V.drop[type]), dropMix_);
@@ -358,7 +358,7 @@ vec3 AntsUniverse::pieceColor(int type) const {
 
 // Loose grains of a cube: thrown out mostly sideways, along the row (the ones that land outside the well stay there
 // for the ants; inside the well they melt away at once).
-void AntsUniverse::burst(float x, float y, int type, int n, float speedK, bool tetris) {
+void ElectronUniverse::burst(float x, float y, int type, int n, float speedK, bool tetris) {
     const vec3 c = pieceColor(type);
     for (int k = 0; k < n && (int)grains_.size() < MAX_GRAINS; k++) {
         Grain g;
@@ -377,7 +377,23 @@ void AntsUniverse::burst(float x, float y, int type, int n, float speedK, bool t
     }
 }
 
-void AntsUniverse::onEvent(const GameEvent& ev, const Game& game) {
+// Sparks thrown from a point, mostly along dir (fast, short-lived, slowed by drag), with a flash where they start.
+void ElectronUniverse::sparks(vec2 at, vec2 dir, const vec3& col, int n, float speed, float spread, float flash) {
+    const float base = std::atan2(dir.y, dir.x);
+    for (int k = 0; k < n && (int)sparks_.size() < MAX_SPARKS; k++) {
+        Spark s;
+        s.p = at;
+        const float a = base + rng_.range(-spread, spread);
+        s.v = dirOf(a) * (speed * rng_.range(0.45f, 1.25f));
+        s.col = col;
+        s.life = rng_.range(0.12f, 0.3f);
+        s.w = rng_.range(0.009f, 0.016f);
+        sparks_.push_back(s);
+    }
+    if (flash > 0.f && (int)flashes_.size() < 64) flashes_.push_back({at, col, 0.f, 0.12f + 0.05f * flash, 0.16f + 0.14f * flash});
+}
+
+void ElectronUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
     case GameEvent::HardDrop:
@@ -404,20 +420,11 @@ void AntsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const vec2 at = v2(sx / nb, minY - 0.5f);
             lockAt_.push_back(at);
             if (hard_) {
-                const vec3 col = pieceColor(ev.cells.empty() ? 0 : ev.cells[0].type);
-                const int n = 5;
-                for (int k = 0; k < n; k++) {
-                    Grain g;
-                    const float side = k % 2 ? 1.f : -1.f;
-                    g.p = v2(at.x + side * rng_.range(0.2f, nb * 0.5f), at.y + rng_.range(0.f, 0.08f));
-                    g.v = v2(side * rng_.range(0.6f, 1.6f), rng_.range(-0.3f, 0.2f));
-                    g.col = col * 0.95f;
-                    g.size = rng_.range(0.025f, 0.045f);
-                    g.rot = rng_.range(0.f, TAU);
-                    g.spin = rng_.range(-6.f, 6.f);
-                    g.life = rng_.range(0.35f, 0.6f);
-                    grains_.push_back(g);
-                }
+                // a hard landing: a short spray of sparks out from under the piece, to both sides
+                const vec3 col = lerp(hex(VARIANTS[variant_].charge), vec3(1.f), 0.3f);
+                const float half = nb * 0.5f;
+                sparks(v2(at.x - half, at.y + 0.02f), v2(-1.f, -0.25f), col, 4, 4.5f, 0.45f, 0.f);
+                sparks(v2(at.x + half, at.y + 0.02f), v2(1.f, -0.25f), col, 4, 4.5f, 0.45f, 0.f);
             }
         }
         hard_ = false;
@@ -435,7 +442,12 @@ void AntsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     nib_[c.y][c.x], false};
             if (d.seed <= 0.f) d.seed = rng_.range(1.f, 97.f);
             dying_.push_back(d);
-            burst(p.x, p.y, d.type, ev.count >= 4 ? 13 : 10, ev.count >= 4 ? 1.35f : 1.f, ev.count >= 4);
+            burst(p.x, p.y, d.type, ev.count >= 4 ? 9 : 7, ev.count >= 4 ? 1.35f : 1.f, ev.count >= 4);
+            {
+                const float side = p.x + rng_.range(-2.f, 2.f) > 0.f ? 1.f : -1.f;
+                sparks(v2(p.x, p.y), v2(side, rng_.range(-0.5f, 0.5f)), lerp(pieceColor(d.type), vec3(1.f), 0.5f),
+                       ev.count >= 4 ? 2 : 1, 7.f, 0.6f, 0.f);
+            }
             sy += p.y;
             n++;
         }
@@ -483,7 +495,7 @@ void AntsUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // The colony
 // =====================================================================================================
 
-bool AntsUniverse::sugarAt(vec2 p, float half, int* gx, int* gy) const {
+bool ElectronUniverse::sugarAt(vec2 p, float half, int* gx, int* gy) const {
     const int cx = (int)std::floor(p.x + 5.f), cy = (int)std::floor(12.f - p.y); // the cell under p
     for (int y = cy - 1; y <= cy + 1; y++) {
         if (y < Game::HIDDEN || y >= Game::H) continue;
@@ -500,7 +512,7 @@ bool AntsUniverse::sugarAt(vec2 p, float half, int* gx, int* gy) const {
     return false;
 }
 
-bool AntsUniverse::blocked(vec2 p) const {
+bool ElectronUniverse::blocked(vec2 p) const {
     const float x0 = viewC_.x - viewH_.x + 0.15f, x1 = viewC_.x + viewH_.x - 0.15f;
     const float y0 = viewC_.y - viewH_.y + 0.15f, y1 = viewC_.y + viewH_.y - 0.15f;
     if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) {
@@ -522,7 +534,7 @@ bool AntsUniverse::blocked(vec2 p) const {
     return sugarAt(p, 0.56f);
 }
 
-float AntsUniverse::pher(const std::vector<float>& f, vec2 p) const {
+float ElectronUniverse::pher(const std::vector<float>& f, vec2 p) const {
     const float fx = (p.x - g0_.x) / CELL - 0.5f, fy = (p.y - g0_.y) / CELL - 0.5f;
     const int ix = (int)std::floor(fx), iy = (int)std::floor(fy);
     if (ix < 0 || iy < 0 || ix + 1 >= gw_ || iy + 1 >= gh_) return 0.f;
@@ -532,7 +544,7 @@ float AntsUniverse::pher(const std::vector<float>& f, vec2 p) const {
     return lerpf(lerpf(r0[0], r0[1], tx), lerpf(r1[0], r1[1], tx), ty);
 }
 
-void AntsUniverse::deposit(std::vector<float>& f, vec2 p, float amount) {
+void ElectronUniverse::deposit(std::vector<float>& f, vec2 p, float amount) {
     const float fx = (p.x - g0_.x) / CELL - 0.5f, fy = (p.y - g0_.y) / CELL - 0.5f;
     const int ix = (int)std::floor(fx), iy = (int)std::floor(fy);
     if (ix < 0 || iy < 0 || ix + 1 >= gw_ || iy + 1 >= gh_) return;
@@ -545,22 +557,22 @@ void AntsUniverse::deposit(std::vector<float>& f, vec2 p, float amount) {
     r1[1] = std::min(3.f, r1[1] + amount * tx * ty);
 }
 
-void AntsUniverse::wear(vec2 p, float amount) {
+void ElectronUniverse::wear(vec2 p, float amount) {
     const float fx = (p.x - t0_.x) / TCELL - 0.5f, fy = (p.y - t0_.y) / TCELL - 0.5f;
     const int ix = (int)std::floor(fx), iy = (int)std::floor(fy);
     if (ix < 0 || iy < 0 || ix + 1 >= tw_ || iy + 1 >= th_) return;
     const float tx = fx - ix, ty = fy - iy;
     float* r0 = &trace_[iy * tw_ + ix];
     float* r1 = r0 + tw_;
-    r0[0] = std::min(1.5f, r0[0] + amount * (1 - tx) * (1 - ty));
-    r0[1] = std::min(1.5f, r0[1] + amount * tx * (1 - ty));
-    r1[0] = std::min(1.5f, r1[0] + amount * (1 - tx) * ty);
-    r1[1] = std::min(1.5f, r1[1] + amount * tx * ty);
+    r0[0] = std::min(1.2f, r0[0] + amount * (1 - tx) * (1 - ty));
+    r0[1] = std::min(1.2f, r0[1] + amount * tx * (1 - ty));
+    r1[0] = std::min(1.2f, r1[0] + amount * (1 - tx) * ty);
+    r1[1] = std::min(1.2f, r1[1] + amount * tx * ty);
 }
 
 // A new ant leaves the nest in a random direction. A recruit (called out by a forager that brought sugar home)
 // follows trails faithfully; a wanderer explores, half-heeding what it smells.
-void AntsUniverse::spawn(int nest, bool recruit) {
+void ElectronUniverse::spawn(int nest, bool recruit) {
     Ant a;
     const vec2 c = nest_[nest];
     const float toward = nest == 0 ? 0.f : PI;
@@ -576,7 +588,7 @@ void AntsUniverse::spawn(int nest, bool recruit) {
     ants_.push_back(a);
 }
 
-void AntsUniverse::syncCells(const Game& game) {
+void ElectronUniverse::syncCells(const Game& game) {
     float top = -10.f;
     int appeared = 0;
     for (int y = 0; y < Game::H; y++)
@@ -603,7 +615,7 @@ void AntsUniverse::syncCells(const Game& game) {
 // Searching ants lay "home" pheromone and climb the "food" one; ants carrying a crumb lay "food" pheromone (weaker
 // the further they have walked from the sugar) and climb the "home" one, helped by their sense of the nest's
 // direction. Both fields diffuse and evaporate, so the trails that are walked most (the shorter ones) win.
-void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
+void ElectronUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
     const float sense = 0.5f, sideA = 0.55f;
     const float nestIn = nestR_ * 0.6f;
     for (size_t i = 0; i < ants_.size(); i++) {
@@ -709,10 +721,10 @@ void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
         // the pheromones, and the paths worn on the ground (by the foragers)
         if (a.state == 1) {
             deposit(food_, a.p, dt * layK * 4.f * std::exp(-a.dist / 20.f));
-            wear(a.p, dt * 1.f);
+            wear(a.p, dt * 3.f);
         } else if (a.state == 0 && !a.retire) {
             deposit(home_, a.p, dt * layK * 1.2f * std::exp(-a.dist / 25.f));
-            if (a.trail) wear(a.p, dt * 0.3f);
+            if (a.trail) wear(a.p, dt * 0.8f);
         }
         // sugar under the jaws: a crumb, and back home
         if (a.state == 0 && !a.retire) {
@@ -720,9 +732,17 @@ void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
             int gx = 0, gy = 0;
             bool found = false;
             if (sugarAt(head, CUBE + 0.07f, &gx, &gy)) {
-                a.crumb = lerp(pieceColor(occ_[gy][gx]), vec3(1.f), 0.45f);
-                nib_[gy][gx] = std::min(1.f, nib_[gy][gx] + 0.06f);
+                const vec3 cc = pieceColor(occ_[gy][gx]);
+                a.crumb = lerp(cc, vec3(1.f), 0.35f);
+                nib_[gy][gx] = std::min(1.f, nib_[gy][gx] + 0.55f);
                 found = true;
+                // the connection: sparks off the contact, back toward the charge (a few contacts a second at most)
+                if (sparkTok_ >= 1.f) {
+                    sparkTok_ -= 1.f;
+                    const vec3 hot = lerp(hex(VARIANTS[variant_].charge), cc, 0.35f);
+                    sparks(head, dirOf(a.a + PI), hot, 3 + (int)rng_.range(0.f, 2.99f) + (int)(2.f * dropMix_),
+                           2.6f + 1.4f * dropMix_, 1.0f, 0.6f + 0.4f * dropMix_);
+                }
             } else {
                 for (Grain& g : grains_)
                     if (g.food && g.life > 0.f && len2(g.p - head) < 0.03f) {
@@ -809,7 +829,7 @@ void AntsUniverse::stepAnts(float dt, float speedK, float explore, float layK) {
 }
 
 // The fields spread a little and fade.
-void AntsUniverse::relax(std::vector<float>& f, float tau, float dt) {
+void ElectronUniverse::relax(std::vector<float>& f, float tau, float dt) {
     const float ke = std::exp(-dt / tau);
     const float kd = 0.5f * (1.f - std::exp(-dt * 2.f));
     tmp_.resize(f.size());
@@ -823,7 +843,7 @@ void AntsUniverse::relax(std::vector<float>& f, float tau, float dt) {
     f.swap(tmp_);
 }
 
-void AntsUniverse::simulate(const Game& game, float wdt, float dt, const MusicState& music) {
+void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const MusicState& music) {
     (void)game;
     (void)dt;
     // the staging
@@ -889,20 +909,31 @@ void AntsUniverse::simulate(const Game& game, float wdt, float dt, const MusicSt
             }
         }
     lockAt_.clear();
+    // the budget of sparking contacts (more at a peak, many more in a drop)
+    sparkTok_ = std::min(4.f, sparkTok_ + wdt * (5.f + 4.f * pk + 12.f * dropMix_));
+    // a cube's charge drains away after a touch
+    {
+        const float kc = std::exp(-wdt * 2.2f);
+        for (auto& row : nib_)
+            for (float& v : row) v *= kc;
+    }
 
     stepAnts(wdt, speedK, explore, layK);
 
     relax(food_, TAU_FOOD, wdt);
     relax(home_, TAU_HOME, wdt);
-    const float kt = std::exp(-wdt / 50.f);
+    // the traces fade fast once no one walks them (a route left behind is gone in ~15 s)
+    const float kt = std::exp(-wdt / 6.f);
     for (float& v : trace_) v *= kt;
 }
 
-void AntsUniverse::warmUp(const Game& game) {
+void ElectronUniverse::warmUp(const Game& game) {
     // the colony has been there a while: its trails already lead to the stack
     MusicState quiet;
     syncCells(game);
     for (int i = 0; i < 900; i++) simulate(game, 0.05f, 0.05f, quiet);
+    sparks_.clear();
+    flashes_.clear();
     warm_ = true;
 }
 
@@ -915,7 +946,7 @@ int slotOf(unsigned char c) { return c == 0x7f ? 95 : (c >= 32 && c < 127 ? c - 
 int codeOf(unsigned char c) { return c == 0x7f ? 0xB7 : c; }
 } // namespace
 
-float AntsUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
+float ElectronUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
     if (!f.ok || s.empty()) return s.size() * size * 0.5f;
     const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
     const float k = size / f.px;
@@ -929,7 +960,7 @@ float AntsUniverse::textWidth(const Font& f, const std::string& s, float size, f
     return w - track;
 }
 
-float AntsUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
+float ElectronUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
                               std::vector<float>& out) const {
     if (!f.ok) return 0.f;
     const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
@@ -952,7 +983,7 @@ float AntsUniverse::textQuads(const Font& f, const std::string& s, float x, floa
     return pen - track - x;
 }
 
-void AntsUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias) {
+void ElectronUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias) {
     if (q.empty() || !f.ok) return;
     const Variant& V = VARIANTS[variant_];
     const float b = smoothstepf(0.f, 1.f, bridge_.amount);
@@ -972,15 +1003,15 @@ void AntsUniverse::drawText(const Font& f, const std::vector<float>& q, const ve
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
 }
 
-// The HUD as a naturalist's field notes: an italic serif for the song, the section and the celebrations, small spaced
-// capitals for the labels, light numbers.
-void AntsUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD as an instrument panel: Jura Medium for the song, the section and the celebrations, small spaced capitals
+// for the labels, light numbers.
+void ElectronUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const Variant& V = VARIANTS[variant_];
     const float s = height_ / 1080.f;
     if (!panels.empty()) {
         std::vector<float> v;
         for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? hex(V.accent) : hex(V.ground) * (V.light ? 0.97f : 0.8f);
+            const vec3 c = r.custom ? r.color : r.accent ? hex(V.accent) : hex(V.ground) * 0.8f;
             const float a = r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f);
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
             const float q[6][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}};
@@ -1013,13 +1044,13 @@ void AntsUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<Hu
             if (dot != std::string::npos) { var = name.substr(dot + 1); name = name.substr(0, dot); }
             while (!name.empty() && name.back() == ' ') name.pop_back();
             while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.45f, vsz = base * 0.62f, vtr = vsz * 0.42f;
-            const float wName = textWidth(fontSerif_, name, sz, 0.f);
+            name = upper(name);
+            const float sz = base * 1.3f, vsz = base * 0.62f, vtr = vsz * 0.42f, ntr = sz * 0.22f;
+            const float wName = textWidth(fontSerif_, name, sz, ntr);
             const float wVar = var.empty() ? 0.f : textWidth(fontSans_, var, vsz, vtr);
             const float gap = base * 0.8f;
             const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontSerif_, name, x, h.y - base * 0.12f, sz, 0.f, q);
+            textQuads(fontSerif_, name, x, h.y - base * 0.06f, sz, ntr, q);
             const float a = saturate(0.35f + h.alpha * 1.6f);
             drawText(fontSerif_, q, ink, a, 0.04f);
             if (!var.empty()) {
@@ -1086,18 +1117,18 @@ void AntsUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<Hu
 // Frame
 // =====================================================================================================
 
-void AntsUniverse::cube(std::vector<Sprite>& out, float x, float y, float scale, const vec3& col, float alpha, float nib,
+void ElectronUniverse::cube(std::vector<Sprite>& out, float x, float y, float scale, const vec3& col, float alpha, float nib,
                         float seed, float glint, bool ghost, float crumbled) {
     const float h = 0.5f * scale;
     out.push_back({{x, y, h, h}, {0.f, 0.f, seed, alpha}, {col.x, col.y, col.z, nib}, {CUBE * scale, glint, ghost ? 1.f : 0.f, crumbled}});
 }
 
-void AntsUniverse::shadow(std::vector<Sprite>& out, float x, float y, float half, float blur, float alpha) {
+void ElectronUniverse::shadow(std::vector<Sprite>& out, float x, float y, float half, float blur, float alpha) {
     const float h = half + blur * 1.5f;
     out.push_back({{x, y, h, h}, {0.f, 1.f, 0.f, alpha}, {0.f, 0.f, 0.f, 0.f}, {half, blur, 0.f, 0.f}});
 }
 
-void AntsUniverse::drawSprites(const std::vector<Sprite>& v) {
+void ElectronUniverse::drawSprites(const std::vector<Sprite>& v) {
     if (v.empty()) return;
     glBindVertexArray(spriteVao_);
     glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
@@ -1105,7 +1136,7 @@ void AntsUniverse::drawSprites(const std::vector<Sprite>& v) {
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)v.size());
 }
 
-void AntsUniverse::render(const Frame& f, GLuint fbo) {
+void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
@@ -1143,6 +1174,17 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
         grains_.erase(std::remove_if(grains_.begin(), grains_.end(),
                                      [](const Grain& g) { return g.life < 0.f || g.t > g.delay + g.life; }),
                       grains_.end());
+        // sparks and flashes: real time
+        for (Spark& sp : sparks_) {
+            sp.t += dt;
+            sp.p = sp.p + sp.v * dt;
+            sp.v = sp.v * std::exp(-7.f * dt);
+        }
+        sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& sp) { return sp.t > sp.life; }),
+                      sparks_.end());
+        for (Flash& fl : flashes_) fl.t += dt;
+        flashes_.erase(std::remove_if(flashes_.begin(), flashes_.end(), [](const Flash& fl) { return fl.t > fl.life; }),
+                       flashes_.end());
         for (Dying& d : dying_) d.t += dt;
         dying_.erase(std::remove_if(dying_.begin(), dying_.end(),
                                     [](const Dying& d) { return d.t > d.delay + (d.over ? 1.4f : 0.5f); }),
@@ -1156,8 +1198,7 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     const float b = smoothstepf(0.f, 1.f, bridge_.amount);
     const float world = 1.f - b;
     const vec3 bridgeCol = ugl::toSrgb(bridge_.color), bridgeInk = ugl::toSrgb(bridge_.ink);
-    const float pk = smoothstepf(1.f, 2.f, lv_);
-    const float kick = music.hasSong ? music.kick : 0.f;
+    const float pm = smoothstepf(0.f, 1.f, lv_), pk = smoothstepf(1.f, 2.f, lv_);
 
     // ---- build the sprites
     under_.clear();
@@ -1243,20 +1284,45 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
         float a = g.food ? (1.f - smoothstepf(0.93f, 1.f, k)) * world : 1.f - smoothstepf(0.55f, 1.f, k);
         const float s = g.food ? g.size : g.size * (1.f - 0.5f * smoothstepf(0.5f, 1.f, k));
         if (a <= 0.f) continue;
-        Sprite sp{{g.p.x, g.p.y, s * 1.6f, s * 1.6f}, {g.rot, 3.f, 0.f, a}, {g.col.x, g.col.y, g.col.z, 0.f}, {s, 0.f, 0.f, 0.f}};
+        Sprite sp{{g.p.x, g.p.y, s * 2.6f, s * 2.6f}, {g.rot, 3.f, 0.f, a}, {g.col.x, g.col.y, g.col.z, g.food ? 0.5f : 0.9f}, {s, 0.f, 0.f, 0.f}};
         const bool inWell = std::fabs(g.p.x) < 5.05f && g.p.y > -10.05f;
         (g.food || inWell ? under_ : over_).push_back(sp);
     }
-    // the ants
+    // the charges: searching ones in the circuit's color, carrying ones in the color of the cube they touched
+    const float tailK = 1.f + 0.6f * dropMix_ + 0.2f * pk;
+    const vec3 chargeC = hex(V.charge);
     for (size_t i = 0; i < ants_.size(); i++) {
         const Ant& a = ants_[i];
-        // inside the well (over the blocks) an ant is a faint shadow, fading in across the border
+        // inside the well (over the blocks) a charge is faint, fading in across the border
         const float inside = std::min(std::min(5.f - std::fabs(a.p.x), a.p.y + 10.f), 10.f - a.p.y);
-        const float al = saturate(a.alpha) * world * (1.f - 0.66f * smoothstepf(-0.3f, 0.3f, inside));
+        float al = saturate(a.alpha) * world * (1.f - 0.66f * smoothstepf(-0.3f, 0.3f, inside));
+        const bool carry = a.state == 1;
+        if (!carry) al *= a.state == 2 || a.retire ? 0.3f : 0.5f;
         if (al <= 0.f) continue;
-        const float h = ANT_L * 0.62f;
-        antsV_.push_back({{a.p.x, a.p.y, h, h}, {a.a, 2.f, 0.f, al}, {a.crumb.x, a.crumb.y, a.crumb.z, a.lustre * V.lustre * 6.f},
-                          {ANT_L, a.gait, a.state == 1 ? 1.f : 0.f, a.pause > 0.f ? std::sin(clock_ * 31.f + i * 1.7f) : 0.f}});
+        const float r = carry ? 0.055f : 0.032f;
+        const float tail = (carry ? 0.26f : 0.24f) * tailK * (a.pause > 0.f ? 0.3f : 1.f);
+        const float h = tail + r * 3.f;
+        const vec3 c = carry ? a.crumb : chargeC;
+        antsV_.push_back({{a.p.x, a.p.y, h, h}, {a.a, 2.f, 0.f, al},
+                          {c.x, c.y, c.z, a.pause > 0.f ? std::sin(clock_ * 31.f + i * 1.7f) : 0.f},
+                          {r, tail, carry ? 1.f : 0.f, 0.f}});
+    }
+    // sparks and flashes (over everything, small and brief)
+    for (const Spark& sp : sparks_) {
+        const float k = sp.t / sp.life;
+        const float spd = len(sp.v);
+        const vec2 d = spd > 1e-4f ? sp.v * (1.f / spd) : v2(1.f, 0.f);
+        const float Lh = clampf(spd * 0.03f, 0.03f, 0.2f);
+        const vec2 c = sp.p - d * Lh;
+        const float al = std::pow(1.f - k, 1.5f) * world;
+        over_.push_back({{c.x, c.y, Lh, sp.w * 3.f}, {std::atan2(d.y, d.x), 5.f, 0.f, al}, {sp.col.x, sp.col.y, sp.col.z, 1.f - k},
+                         {Lh, sp.w, 0.f, 0.f}});
+    }
+    for (const Flash& fl : flashes_) {
+        const float k = fl.t / fl.life;
+        const float al = (1.f - k) * (1.f - k) * world;
+        over_.push_back({{fl.p.x, fl.p.y, fl.r * 1.3f, fl.r * 1.3f}, {0.f, 6.f, 0.f, al}, {fl.col.x, fl.col.y, fl.col.z, 0.f},
+                         {fl.r * (0.7f + 0.3f * k), 0.f, 0.f, 0.f}});
     }
     // the bonus gauge: twelve grains of sugar in a ring
     {
@@ -1274,7 +1340,7 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
             top_.push_back({{p.x, p.y, 0.14f, 0.14f}, {0.f, 4.f, 0.f, 0.35f}, {hex(V.dim).x, hex(V.dim).y, hex(V.dim).z, 1.f},
                             {s * 0.75f, 0.012f, 0.f, 0.f}});
             if (fill > 0.f)
-                top_.push_back({{p.x, p.y, s * 1.6f, s * 1.6f}, {ang + PI * 0.25f, 3.f, 0.f, fill}, {lit.x, lit.y, lit.z, 0.f}, {s, 0.f, 0.f, 0.f}});
+                top_.push_back({{p.x, p.y, s * 2.6f, s * 2.6f}, {ang + PI * 0.25f, 3.f, 0.f, fill}, {lit.x, lit.y, lit.z, ready || active ? 0.8f : 0.f}, {s, 0.f, 0.f, 0.f}});
         }
     }
 
@@ -1285,10 +1351,11 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     {
-        vec3 ground = hex(V.ground), mottle = hex(V.mottle);
+        vec3 ground = hex(V.ground), mottle = hex(V.mottle), panel = hex(V.panel);
         if (slow_ > 0.001f) {
             ground = lerp(ground, hex(V.slow), 0.35f * slow_);
             mottle = lerp(mottle, hex(V.slow), 0.35f * slow_);
+            panel = lerp(panel, hex(V.slow), 0.2f * slow_);
         }
         glUseProgram(progGround_);
         glActiveTexture(GL_TEXTURE0);
@@ -1296,22 +1363,27 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progGround_, "uPher", 0);
         set4f(progGround_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set4f(progGround_, "uPherRect", t0_.x, t0_.y, tw_ * TCELL, th_ * TCELL);
+        set2f(progGround_, "uPherTexel", 1.f / tw_, 1.f / th_);
         set1f(progGround_, "uPx", px_);
         set3f(progGround_, "uGround", ground);
         set3f(progGround_, "uMottle", mottle);
-        set3f(progGround_, "uTrail", hex(V.trail));
-        set3f(progGround_, "uHole", hex(V.hole));
-        set3f(progGround_, "uMound", hex(V.mound));
+        set3f(progGround_, "uPanel", panel);
+        set3f(progGround_, "uTrace", lerp(hex(V.trace), hex(V.charge), 0.25f * dropMix_));
+        set3f(progGround_, "uCore", hex(V.core));
+        set3f(progGround_, "uTerm", hex(V.term));
+        set3f(progGround_, "uCharge", hex(V.charge));
         set3f(progGround_, "uFrame", hex(V.frame));
         set1f(progGround_, "uFrameA", V.frameA);
         set1f(progGround_, "uGrain", V.grain);
-        set1f(progGround_, "uTrailAmt", V.trailAmt * saturate(0.75f + 0.15f * pk + 0.25f * dropMix_ + 0.3f * swell_));
+        // a steady glow per section, brighter at a peak, a swell on the drop that settles
+        set1f(progGround_, "uTraceAmt", V.traceAmt * (0.62f + 0.12f * pm + 0.16f * pk + 0.3f * dropMix_ + 0.3f * swell_));
+        set1f(progGround_, "uTermGlow", 0.25f * pk + 0.6f * dropMix_ + 0.6f * swell_);
+        set1f(progGround_, "uTime", clock_);
         set1f(progGround_, "uWorld", world);
         set4f(progGround_, "uNest0", nest_[0].x, nest_[0].y, nestR_, 0.f);
         set4f(progGround_, "uNest1", nest_[1].x, nest_[1].y, nestR_, 0.f);
         set3f(progGround_, "uBridgeCol", bridgeCol);
         set1f(progGround_, "uBridge", b);
-        set1f(progGround_, "uLight", V.light ? 1.f : 0.f);
         ugl::drawFullscreen();
     }
     glEnable(GL_BLEND);
@@ -1319,13 +1391,11 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     glUseProgram(progSprite_);
     setMat(progSprite_, "uVP", vp_);
     set1f(progSprite_, "uPx", px_);
-    set3f(progSprite_, "uAnt", hex(V.ant));
     const vec3 ld = normalize(vec3(-0.45f, 0.6f, 0.8f));
     set3f(progSprite_, "uLightDir", ld);
     set1f(progSprite_, "uBridge", b);
     set3f(progSprite_, "uBridgeInk", bridgeInk);
-    set1f(progSprite_, "uSparkle", kick * dropMix_);
-    set1f(progSprite_, "uSugarTint", (V.light ? 0.56f : 0.85f) + 0.15f * dropMix_);
+    set3f(progSprite_, "uRim", lerp(hex(V.charge), hex(V.core), 0.4f));
     drawSprites(under_);
     drawSprites(stack_);
     drawSprites(antsV_);
@@ -1337,7 +1407,7 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
     const float veil = std::max(1.f - saturate(f.fade), dimT_ * 0.5f);
     if (veil > 0.001f) {
         glUseProgram(progVeil_);
-        const vec3 vc = V.light ? hex(V.ink) * 0.3f : vec3(0.f);
+        const vec3 vc(0.f, 0.f, 0.f);
         set4f(progVeil_, "uVeil", vc.x, vc.y, vc.z, veil);
         ugl::drawFullscreen();
     }
@@ -1350,11 +1420,11 @@ void AntsUniverse::render(const Frame& f, GLuint fbo) {
 // Registry
 // =====================================================================================================
 
-const UniverseEntry& universe_ants() {
+const UniverseEntry& universe_electron() {
     static const UniverseEntry e{
-        "ANTS", "sugar cubes on the ground, and a colony finding them",
-        [] { return std::unique_ptr<Universe>(new AntsUniverse()); },
-        // busy, lively songs suit the colony a little better
+        "ELECTRON", "solid cubes on a dark substrate, and charges wiring themselves to them",
+        [] { return std::unique_ptr<Universe>(new ElectronUniverse()); },
+        // busy, lively songs suit the circuit a little better
         [](const SongLook& l) { return 0.8f + 0.3f * l.density; },
         [] {
             std::vector<std::string> v;

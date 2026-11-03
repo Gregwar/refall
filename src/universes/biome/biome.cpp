@@ -150,12 +150,14 @@ void BiomeUniverse::onEvent(const GameEvent& ev, const Game& game) {
     w_->onEvent(ev, game);
 }
 
-// A whole stack appearing at once (a board filled for a review, a game joined in progress): the world has grown already.
+// A whole stack filled at once while the world is shown (a board filled for a review): the world has grown already.
+// The stack found on entering the universe (a game going on when the song or a peak switches to BIOME) grows nothing:
+// the world always starts bare and grows only from the lines cleared in it.
 void BiomeUniverse::watchBoard(const Game& g) {
     int n = 0;
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) n += g.cell(x, y).type >= 0;
-    if (n - boardCount_ >= 12) w_->grown();
+    if (boardCount_ >= 0 && n - boardCount_ >= 12) w_->grown();
     boardCount_ = n;
 }
 
