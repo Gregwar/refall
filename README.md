@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Twenty-three universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Twenty-four universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -79,7 +79,7 @@ song, and songs change universe with a transition on the beat. Twenty-three univ
 </tr>
 <tr>
 <td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
