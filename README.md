@@ -79,7 +79,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/sushi.jpg"><br><b>SUSHI</b>: blocky maki rolls in a hinoki bento box at a kawaii kaiten counter; cleared rows hop to the cats sitting there, who catch and eat them, more cats come with the lines, the drop is a festival of cheering cats<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
@@ -94,6 +94,7 @@ Disabled for now (not built; their code stays in the repository):
 | GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
 | SUNPRINT | A sheet turning between two tints, keeping the old one under the stack; to be judged later |
 | EMBROIDERY | Cross-stitch on aida; to be judged later |
+| SUSHI | Maki in a bento box fed to kawaii cats; on hold |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -153,5 +154,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
