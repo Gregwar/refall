@@ -63,7 +63,7 @@ song, and songs change universe with a transition on the beat. Twenty-three univ
 </tr>
 <tr>
 <td><img src="docs/universes/recycle.jpg"><br><b>RECYCLE</b>: a table seen from above, the pieces assembled from heaps of cubes beside the well and cleared rows recycled into them<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/ants.jpg"><br><b>ANTS</b>: sugar cubes foraged by a pheromone colony whose trails emerge between two nests<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/electron.jpg"><br><b>ELECTRON</b>: solid cubes on a dark substrate, wired up by roaming charges whose glowing connections emerge between two terminals<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/lanterns.jpg"><br><b>LANTERNS</b>: a 3D night lake of paper lanterns; each cleared row slides out of the well and floats onto the water as lanterns that stay lit, the drop lifts them all into the sky<br><sub>🔍 <i>to review</i></sub></td>
