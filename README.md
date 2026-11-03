@@ -78,7 +78,7 @@ song, and songs change universe with a transition on the beat. Twenty-three univ
 <td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a Swiss typographic poster set from the song's words, recomposed on the bar grid; flat pieces lock in each section's palette, the drop sets the title giant<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog and turns the scene to negative<br><sub>🔍 <i>to review</i></sub></td>
 <td></td>
 </tr>
 </table>
