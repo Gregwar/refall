@@ -215,8 +215,8 @@ vec2 coreLayer(vec2 qi, int style, float sd) {
     }
     return vec2(core, face);
 }
-// A glass marble (q: -1..1 over its disc, center and R in board units). The glass is clear: through it the world
-// behind is seen upside down and shrunk (the ball is a lens), slightly tinted, darker toward the rim where the light
+// A glass marble (q: -1..1 over its disc, center and R in board units). The glass is colored, like a jewel: through it the world
+// behind is seen upside down and shrunk (the ball is a lens), tinted by the glass (which holds a little light in its color), darker toward the rim where the light
 // is bent away; inside, deeper than the surface and magnified by it, its colored core in two layers (the far one dim
 // and shifted: depth): a twisted ribbon (style 0), a cat's eye of three curved vanes (1) or a swirl of strands (2).
 // A sharp highlight of the window up left, a soft secondary reflection low right, the sky caught in the rim, the light
@@ -231,8 +231,10 @@ vec3 glassMarble(vec2 q, vec2 center, float R, vec3 col, float rot, float seed, 
     // what is behind, refracted: inverted and shrunk through the lens (behind a tile: its back, lighter low where the
     // light from above comes out)
     vec3 env = inTile ? tileEnv * (1.0 - 0.35 * q.y) : bgAt(center - q * R * 1.4) * 1.15 + 0.004;
-    vec3 tint = mix(vec3(1.0), c0, 0.4);
-    vec3 m = env * tint * (0.35 + 0.6 * z);
+    // colored glass: what is seen through it takes its color, and the glass itself holds a little light in its color
+    // (thickest in the middle), so that over a dark table it still reads as its color, not as a gray bead
+    vec3 tint = mix(vec3(1.0), c0, 0.85);
+    vec3 m = env * tint * (0.35 + 0.6 * z) + c0 * (0.035 + 0.085 * z);
     // the core, inside: magnified by the front of the glass; the far layer deeper (shifted toward the light, dimmer)
     float cr = cos(rot), sr = sin(rot);
     mat2 rm = mat2(cr, sr, -sr, cr);
@@ -250,7 +252,8 @@ vec3 glassMarble(vec2 q, vec2 center, float R, vec3 col, float rot, float seed, 
     m += c0 * core * glow * 1.7 + c0 * glow * 0.3 * z + vec3(0.05) * glow * near.x * fade;
     // the rim: dark where the light is bent away, then the sky caught at the very edge (darker low: the ground)
     m *= 1.0 - mix(0.32, 0.2, uLightGround) * smoothstep(0.6, 1.0, rl);
-    m = mix(m, uLightCol * mix(0.1, 0.45, smoothstep(-0.6, 0.8, q.y)), fres * 0.55);
+    vec3 rimCol = mix(uLightCol, uLightCol * c0 * 1.3, 0.5);   // the sky caught in colored glass
+    m = mix(m, rimCol * mix(0.1, 0.45, smoothstep(-0.6, 0.8, q.y)), fres * 0.45);
     // The light it receives (traced through the heaps: Lc, travelling along ld). Glass is a ball lens: the light
     // crossing it is tinted by the glass and the core and focused into a bright spot inside, on the far side; the
     // side facing the light catches it along the rim (Fresnel); the window of the source is a sharp highlight on
