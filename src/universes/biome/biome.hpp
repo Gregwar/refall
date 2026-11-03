@@ -110,7 +110,7 @@ public:
     virtual void breakOut(const vec3& p, int type) = 0;   // game over: a cracked cube leaves the stack
     virtual void dropHit() = 0;                           // the drop's hit (the shell flashes the lightning)
     virtual void kick() = 0;                              // a kick at a peak
-    virtual void grown() = 0;                             // a whole stack at once (a review, a game joined)
+    virtual void grown() = 0;                             // a whole stack filled at once while shown (a review)
     virtual void simulate(const Game& game, const MusicState& music, float dt, float wdt) = 0;
 
     virtual float eyeY() const = 0;                       // the camera's height
@@ -180,7 +180,7 @@ private:
     // A game over: the stack cracks row by row from the top, each cube then leaves it as a cleared one does.
     struct Dying { float x, y, delay, t; int type; bool gone; };
     std::vector<Dying> dying_;
-    int boardCount_ = 0;
+    int boardCount_ = -1; // the stack's cells last frame (-1: not seen yet)
     void watchBoard(const Game& game);
 
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
