@@ -3,9 +3,9 @@
 // One world: a poster on a strict modular grid, the grid of the well's own cells (one unit per cell, every element
 // sits on whole units). Huge flush-left lowercase words taken from the song (its title, its artist, the section's
 // name), flat color fields, a disc, thin rules and small blocks of information, in asymmetric balance with a lot of
-// empty ground. The game sits on the poster as on a translucent sheet: a band from grid line -12 to +12 (the well
-// and both HUD columns) where the poster shows only faintly, so the words and fields run behind it without ever
-// competing with the stack or the HUD; the free zones on both sides carry the poster at full strength.
+// empty ground. The poster runs at full strength everywhere except behind what is played or read: the well and a
+// crisp box behind each HUD element (previews, gauge, lettering) veil it, so the words and fields run behind them
+// without ever competing with the stack or the HUD.
 //
 // The pieces are flat, crisp color blocks on the grid: one clean shape per piece (its cells merge, a narrow gutter
 // of ground around it, so two pieces never fuse), no bevels, no gradients. Every section of the song has its own
@@ -98,7 +98,7 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 // The gutter around a piece (board units, each side), the clear's slide (seconds).
 constexpr float GAP = 0.055f;
 constexpr float WIPE_S = 0.3f;
-// How much of the poster shows through the game's band.
+// How much of the poster is veiled behind the well and the HUD's boxes.
 constexpr float VEIL = 0.93f;
 
 float ease(float t) {
@@ -1501,7 +1501,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     glClear(GL_COLOR_BUFFER_BIT);
     drawPoster();
 
-    // ---- On screen: the poster, faint behind the game's band.
+    // ---- On screen: the poster, faint behind the well and the HUD's boxes.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glDisable(GL_BLEND);

@@ -227,6 +227,7 @@ void main() {
             // the rim (the top and the sides of a thin panel): plain, darker paper by its frame
             float rimL = face == 4 ? 0.3 : face == 5 ? 0.12 : 0.2;
             vec3 c = mix(uWood * 0.8, tint * light, rimL);
+            if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
             frag = vec4(c, uStackA * vC.w);
             return;
         }
@@ -254,6 +255,7 @@ void main() {
         vec3 c = max(col * light, tint * 0.05 * paper);
         vec3 wood = uWood * 0.6 + tint * 0.04 * light;
         c = mix(c, wood, frame);
+        if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
         frag = vec4(c, uStackA * vC.w);
         return;
     }

@@ -1186,6 +1186,9 @@ void LanternsUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, c
 // Frame
 // =====================================================================================================
 
+// How strongly the stack shows in the water under the well (its color and coverage in the mirrored render).
+constexpr float STACK_REFLECTION = 0.4f;
+
 void LanternsUniverse::drawBoxes(const std::vector<BoxInst>& v, const mat4& vp, bool mirror, float stackA) {
     if (v.empty()) return;
     glUseProgram(progBox_);
@@ -1301,7 +1304,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     drawBoxes(poles_, mirrorVp_, true, 1.f);
-    drawBoxes(stack_, mirrorVp_, true, 1.f);
+    drawBoxes(stack_, mirrorVp_, true, STACK_REFLECTION); // the stack mirrored faintly under the well
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawBoxes(lamps_, mirrorVp_, true, 1.f);
