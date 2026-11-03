@@ -1,24 +1,22 @@
 // SUSHI: the pieces are maki, one roll per cell, and the cleared rows feed kawaii cats sitting at the counter.
 //
-// One world: a small kaiten sushi bar in light, quiet tones, drawn flat with rounded shapes and soft outlines. The
-// wall is shoji; the well is a pale hinoki bento box with a lacquered rim, standing on the counter; a conveyor belt
+// One world: a small kaiten sushi bar in light, quiet tones, drawn flat and minimal. The wall is plain plaster;
+// the well is a pale hinoki bento box with a lacquered rim, standing on the counter; a conveyor belt
 // runs along the counter behind it, carrying dishes. Each cell is one squared maki, as blocky as a cube, seen nearly
 // from the side (the cut face on top, the nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an
 // inside-out roll coated in orange tobiko.
-// The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats (white,
-// calico, black with white socks, ginger and grey tabbies, a cream colorpoint), each with a collar and a little bell.
+// The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats, each one
+// flat color with dot eyes (white, sand, black, ginger, grey, a cream colorpoint).
 // A cleared row's maki slide out of the box, the left half to the left and the right half to the
 // right (out of the row before the stack settles), then hop in arcs to the cats, who open their mouths, catch them
 // and chew, eyes squeezed shut with joy, a heart rising, a little "nom". The more lines, the more cats pop up from
-// behind the counter (a Tetris is a feast and brings two more). Lanterns hang on cords on both sides, a noren hangs
-// in the upper right, sakura petals drift down behind the box.
+// behind the counter (a Tetris is a feast and brings two more). The one ornament is a noren in the upper right.
 //
-// The song: calm parts are a quiet shop (the belt still, the cats dozing, one lantern glowing); a chorus starts the
-// belt and the cats bob their heads on the beat grid (every two beats), the noren and lanterns sway; a peak lights
-// every lantern, the petals thicken, the cats bounce and the maneki-neko among them wave. The drop is a festival:
-// eased in over a beat or two, every cat cheers with both paws up, the lanterns swell, a shower of petals, the belt
-// runs faster; it settles back over the following bars. Slow motion is dusk at the counter (lanterns warm, the
-// cats sleepy); game over feeds the whole stack to the cats, from the top down.
+// The song: calm parts are a quiet shop (the belt still, the cats dozing); a chorus starts the belt and the cats bob
+// their heads on the beat grid (every two beats), the noren sways; a peak warms the wall, the cats bounce and the
+// maneki-neko among them wave. The drop is a festival: eased in over a beat or two, every cat cheers with both paws
+// up, the belt runs faster; it settles back over the following bars. Slow motion is dusk at the counter (the cats
+// sleepy); game over feeds the whole stack to the cats, from the top down.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/sushi/sushi.hpp"
@@ -59,36 +57,36 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
 // A shop (sRGB): the wall (top, bottom), the counter's wood (light, dark), the belt, the box's lacquer and rim, the
-// HUD ink, an accent, the outlines, the petals, the lanterns' two papers, the noren and its lettering, the warm tint of
-// a peak; the seven plates (I O T S Z J L); night (lanterns glow more), petal density.
+// HUD ink, an accent, the outlines, the noren and its lettering, the warm tint of a peak; the seven plates (the ghost's
+// tints, I O T S Z J L); night.
 struct VariantDef {
     const char* name;
-    unsigned wallTop, wallBot, wood, woodDark, belt, lacquer, rim, ink, accent, line, petal, lanternA, lanternB, noren,
+    unsigned wallTop, wallBot, wood, woodDark, belt, lacquer, rim, ink, accent, line, noren,
         norenText, warm;
     unsigned plate[7];
-    float night, petals;
+    float night;
 };
 const VariantDef VARIANTS[] = {
-    // hinoki: white plaster and shoji, a pale cypress box with a charcoal lacquer rim, an indigo noren
+    // hinoki: white plaster, a pale cypress box with a charcoal lacquer rim, an indigo noren
     {"HINOKI", 0xf4f1ea, 0xe7e1d5, 0xdcc39c, 0xb99a6f, 0xd9d4ca, 0xecdfc6, 0x3a393e, 0x2f2d33, 0xc0473a, 0x34302f,
-     0xf0d8d6, 0xfbf7ef, 0xb9483d, 0x2f4b6e, 0xf6f2ea, 0xfff3e2,
-     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.35f},
+     0x2f4b6e, 0xf6f2ea, 0xfff3e2,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f},
     // sumi: cool pale stone and ink, a black rim; the minor songs
     {"SUMI", 0xefefec, 0xdedfdb, 0xd0c3ad, 0xa8987e, 0xd1d1cd, 0xe6dfd2, 0x24272c, 0x23262b, 0x9a3b33, 0x26282c,
-     0xe9dfdf, 0xf7f5f0, 0x3b3e44, 0x26282c, 0xf0efe9, 0xfff4e6,
-     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.25f},
+     0x26282c, 0xf0efe9, 0xfff4e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f},
     // matcha: a pale sage tea house, a moss lacquer rim
     {"MATCHA", 0xeff1e8, 0xe0e4d4, 0xd9c49f, 0xb3a079, 0xd6dbcc, 0xeadcc1, 0x4a5a3f, 0x2c3428, 0xb5523f, 0x2e3329,
-     0xebdcd7, 0xf8f5ea, 0x6f8155, 0x4a5a3f, 0xf3f1e6, 0xfff3e0,
-     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.35f},
-    // sakura: a faint blush wall, a plum lacquer rim, a few more petals
+     0x4a5a3f, 0xf3f1e6, 0xfff3e0,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f},
+    // sakura: a faint blush wall, a plum lacquer rim
     {"SAKURA", 0xf6f0ee, 0xebe0dd, 0xdcc4a4, 0xbca07e, 0xe1d8d5, 0xeddcc6, 0x6e3b44, 0x3a2a2e, 0xc75b6b, 0x3a2a2e,
-     0xf0cbd2, 0xfbf6f2, 0xc4636f, 0x6e3b44, 0xfaf3f0, 0xfff1e6,
-     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.9f},
+     0x6e3b44, 0xfaf3f0, 0xfff1e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f},
     // ai: indigo and white, a navy lacquer rim
     {"AI", 0xf1f3f4, 0xe0e5ea, 0xd7c4a6, 0xb19b7b, 0xd4dae0, 0xe9dfcd, 0x24344f, 0x1f2a3d, 0xc0563f, 0x1f2a3d,
-     0xeadfe3, 0xf7f7f4, 0x2f4b7a, 0x24344f, 0xeef2f6, 0xfff3e6,
-     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.3f},
+     0x24344f, 0xeef2f6, 0xfff3e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -101,10 +99,10 @@ Palette paletteOf(int v) {
     Palette p;
     p.wallTop = lin(d.wallTop); p.wallBot = lin(d.wallBot); p.wood = lin(d.wood); p.woodDark = lin(d.woodDark);
     p.belt = lin(d.belt); p.lacquer = lin(d.lacquer); p.rim = lin(d.rim); p.ink = lin(d.ink); p.accent = lin(d.accent);
-    p.line = lin(d.line); p.petal = lin(d.petal); p.lanternA = lin(d.lanternA); p.lanternB = lin(d.lanternB);
+    p.line = lin(d.line);
     p.noren = lin(d.noren); p.norenText = lin(d.norenText); p.warm = lin(d.warm);
     for (int i = 0; i < 7; i++) p.plate[i] = lin(d.plate[i]);
-    p.night = d.night; p.petals = d.petals;
+    p.night = d.night;
     return p;
 }
 void lerpPalette(Palette& a, const Palette& b, float k) {
@@ -113,17 +111,16 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-// The cats' coats: white, calico, black (white socks, amber eyes), ginger tabby, grey tabby, cream colorpoint.
+// The cats' coats, each one flat color: white, sand, black (pale eyes), ginger, grey, cream with a darker face.
 struct CoatDef { unsigned base, patch, patch2; };
 const CoatDef COATS[6] = {
-    {0xfffaf4, 0xd9dbe6, 0xd9dbe6},
-    {0xfffaf3, 0xf6a25a, 0x4b4049},
-    {0x463d4d, 0x463d4d, 0x5c5266},
-    {0xf8b46c, 0xfff4e6, 0xe3893f},
-    {0xbcc2d2, 0xfbfbff, 0x959db2},
-    {0xf8ecd9, 0x8b6a55, 0x8b6a55},
+    {0xfbf8f2, 0xfbf8f2, 0xfbf8f2},
+    {0xe6d5bf, 0xe6d5bf, 0xe6d5bf},
+    {0x3f3a42, 0x3f3a42, 0x3f3a42},
+    {0xeaa66a, 0xeaa66a, 0xeaa66a},
+    {0xb3b8c2, 0xb3b8c2, 0xb3b8c2},
+    {0xf3e7d6, 0x8b6a55, 0x8b6a55},
 };
-const unsigned COLLARS[5] = {0xb9483d, 0x4f6f9a, 0x5f8a6a, 0x8a7299, 0xc58b8b};
 // The dishes on the belt (the plate, the topping, fat stripes or not).
 const unsigned DISH_PLATES[3] = {0xf7f4ee, 0x3a393e, 0xc9d1da};
 const unsigned DISH_TOPS[4] = {0xe0875a, 0xb8404f, 0xe6c25a, 0xe8b5a8};
@@ -353,7 +350,7 @@ bool SushiUniverse::addCat(int side, bool instant) {
     c.coat = CYCLE[(coatCycle_++ + (int)(seed_ % 5)) % 12];
     const CoatDef& cd = COATS[c.coat];
     c.base = hex(cd.base); c.patch = hex(cd.patch); c.patch2 = hex(cd.patch2);
-    c.collar = hex(COLLARS[rng_.irange(0, 4)]);
+    c.collar = vec3(0.f);
     // under the left HUD column (which reaches lower than the right one) the cats are a little smaller
     c.scale = (side < 0 && slotX_[0][slot] < 11.8f) ? rng_.range(0.94f, 1.0f) : rng_.range(1.04f, 1.16f);
     c.appear = instant ? 1.f : 0.f;
@@ -480,13 +477,12 @@ void SushiUniverse::drop(float strength) {
     dropMode_ = true;
     dropT_ = 0.f;
     swell_ = std::max(swell_, 0.6f + 0.4f * strength);
-    for (int i = 0; i < 46; i++) spawnPetal(true);
     for (const Cat& c : cats_) {
         if (c.leave >= 0.f) continue;
         const vec2 m = mouthOf(c);
         for (int k = 0; k < 2; k++)
             pops_.push_back({m.x + rng_.range(-1.2f, 1.2f), m.y + rng_.range(0.8f, 1.8f), -rng_.range(0.f, 0.6f), 0.9f, 1,
-                             pal_.lanternB * 0.5f + vec3(0.5f, 0.45f, 0.3f), rng_.range(0.18f, 0.28f)});
+                             pal_.accent * 0.5f + vec3(0.5f, 0.45f, 0.4f), rng_.range(0.18f, 0.28f)});
     }
 }
 
@@ -821,60 +817,14 @@ void SushiUniverse::buildBoard(const Game& g) {
     }
 }
 
-void SushiUniverse::spawnPetal(bool top) {
-    Petal p;
-    p.x = rng_.range(-viewH_.x - 1.f, viewH_.x + 1.f);
-    p.y = top ? viewC_.y + viewH_.y + rng_.range(0.3f, 4.f) : rng_.range(-viewH_.y, viewH_.y) + viewC_.y;
-    p.vx = rng_.range(0.15f, 0.6f);
-    p.vy = -rng_.range(0.9f, 1.6f);
-    p.rot = rng_.range(0.f, TAU);
-    p.spin = rng_.range(-1.4f, 1.4f);
-    p.size = rng_.range(0.17f, 0.27f);
-    p.phase = rng_.range(0.f, TAU);
-    petals_.push_back(p);
-}
-
-// The shop's small things (behind the cats): the lanterns on their cords, the noren, the petals; the belt's dishes
+// The shop's one ornament (behind the cats): the noren; the belt's dishes
 // and the pops go to front_.
 void SushiUniverse::buildShop(float beat, float wm, float wp) {
     auto push = [&](std::vector<Inst>& v, float x, float y, float hw, float hh, int kind, float rot, float alpha, float param,
                     const vec3& c, float pc = 0.f, const vec3& d = vec3(0.f), float pd = 0.f) {
         v.push_back({{x, y, hw, hh}, {(float)kind, rot, alpha, param}, {c.x, c.y, c.z, pc}, {d.x, d.y, d.z, pd}});
     };
-    // ---- petals (behind everything, never inside the box)
-    for (const Petal& p : petals_)
-        push(back_, p.x, p.y, p.size * 0.75f, p.size, 0, p.rot, 0.9f, 0.f, pal_.petal);
-
-    // ---- lanterns: a cord on each side, sagging, four paper lanterns; they light up with the song
-    const float lit0 = 0.12f + 0.35f * pal_.night + 0.25f * wm + 0.45f * wp + 0.4f * fest_ + 0.5f * slow_;
     const float top = viewC_.y + viewH_.y;
-    for (int side = -1; side <= 1; side += 2) {
-        const float xa = side * 12.3f, xb = side * (viewH_.x - 0.2f);
-        const float y0 = std::min(top - 2.4f, 9.9f);
-        push(back_, (xa + xb) * 0.5f, y0 - 0.3f, std::fabs(xb - xa) * 0.5f + 0.1f, 0.45f, 9, 0.f, 1.f, 0.035f, pal_.line * 1.4f, 0.f,
-             vec3(std::min(xa, xb), std::max(xa, xb), y0), 0.6f);
-        const float us[4] = {0.13f, 0.38f, 0.63f, 0.88f};
-        for (int i = 0; i < 4; i++) {
-            const float u = us[i];
-            const float ax = lerpf(xa, xb, u), ay = y0 - 0.6f * 4.f * u * (1.f - u);
-            const float amp = 0.025f + 0.04f * wm + 0.04f * wp + 0.03f * fest_;
-            const float ang = amp * (float)std::sin(PI * beat * 0.5 + i * 0.9 + (side > 0 ? 0.5 : 0.0)) +
-                              0.015f * std::sin(worldTime_ * 0.7f + i);
-            const float len = 0.38f;
-            const vec2 dir{std::sin(ang), -std::cos(ang)};
-            push(back_, ax + dir.x * len * 0.5f, ay + dir.y * len * 0.5f, 0.024f, len * 0.5f + 0.03f, 3, ang, 1.f, 0.f, pal_.line);
-            const float cx = ax + dir.x * (len + 0.6f), cy = ay + dir.y * (len + 0.6f);
-            const float lit = saturate(lit0 * 4.f - (side > 0 ? i : 3 - i) * 0.9f);
-            const bool red = (i + (side > 0 ? 1 : 0)) % 2 == 0;
-            const vec3 paper = red ? pal_.lanternA : pal_.lanternB;
-            const vec3 band = red ? pal_.lanternB : pal_.lanternA;
-            // their warm glow on the wall (added)
-            const float g = lit * (0.2f + 0.16f * pal_.night + 0.2f * swell_);
-            if (g > 0.01f) push(back_, cx, cy, 1.7f, 1.7f, 2, 0.f, g, 0.f, vec3(1.f, 0.66f, 0.32f));
-            push(back_, cx, cy, 0.5f, 0.66f, 1, ang, 1.f, lit, paper, 0.f, band, 0.85f);
-        }
-    }
-
     // ---- the noren in the upper right: two panels with "su" "shi", swaying on the beat grid
     {
         const float x0 = 13.2f, pw = 2.55f, gap = 0.16f;
@@ -1256,27 +1206,10 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
 
-    // ---- The belt, the petals, the pops (real time for what the play drives, world time for the shop).
+    // ---- The belt, the pops (real time for what the play drives, world time for the shop).
     const float beltT = 0.65f * smoothstepf(0.3f, 1.f, lv_) + 0.6f * wp + 0.9f * fest_;
     beltSpeed_ = approach(beltSpeed_, beltT * (1.f - 0.6f * slow_), 0.6f, wdt);
     beltOff_ = std::fmod(beltOff_ + beltSpeed_ * wdt, 3.45f * 64.f);
-    {
-        const float target = (5.f + 9.f * wm + 14.f * wp + 10.f * fest_) * pal_.petals;
-        const float rate = target / 14.f;
-        petalAcc_ += rate * wdt;
-        while (petalAcc_ >= 1.f) { petalAcc_ -= 1.f; spawnPetal(true); }
-        if (petals_.empty() && target > 0.f && worldTime_ < 0.5f)
-            for (int i = 0; i < (int)target; i++) spawnPetal(false);
-        for (Petal& p : petals_) {
-            p.x += (p.vx + 0.35f * std::sin(worldTime_ * 1.1f + p.phase)) * wdt;
-            p.y += p.vy * wdt;
-            p.rot += p.spin * wdt;
-        }
-        const float bottom = viewC_.y - viewH_.y - 0.5f, right = viewH_.x + 1.5f;
-        petals_.erase(std::remove_if(petals_.begin(), petals_.end(),
-                                     [&](const Petal& p) { return p.y < bottom || p.x > right; }),
-                      petals_.end());
-    }
     for (Pop& p : pops_) {
         p.t += dt;
         if (p.t > 0.f) p.y += dt * (p.kind == 0 ? 0.9f : p.kind == 1 ? 0.25f : p.kind == 2 ? 0.7f : 0.45f);
@@ -1367,12 +1300,6 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progSprite_);
         set3f(progSprite_, "uLine", pal_.line);
         set4f(progSprite_, "uWell", BOX_HX + BOX_RIM, BOX_HY + BOX_RIM, 0.f, 0.f);
-        set4f(progSprite_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-        set4f(progSprite_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
-        // the song's title and info (top left), the section and the universe (bottom left)
-        const float top = viewC_.y + viewH_.y, bot = viewC_.y - viewH_.y;
-        set4f(progSprite_, "uTitle", -viewH_.x, top - 2.4f, -viewH_.x + 11.f, top + 1.f);
-        set4f(progSprite_, "uCorner", -viewH_.x, bot - 1.f, -viewH_.x + 7.f, bot + 2.6f);
     };
     spriteUniforms();
     drawInst(progSprite_, spriteVao_, back_);
@@ -1404,9 +1331,7 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progCat_);
         setMat(progCat_, "uVP", vp_);
         set3f(progCat_, "uLine", pal_.line);
-        set3f(progCat_, "uBlush", lin(0xff8fa8));
         set3f(progCat_, "uEye", lin(0x2b2230));
-        set3f(progCat_, "uPink", lin(0xf7a6b8));
         set3f(progCat_, "uMouth", lin(0x8c2e44));
         set1f(progCat_, "uClipY", BELT_TOP);
         glBindVertexArray(catVao_);

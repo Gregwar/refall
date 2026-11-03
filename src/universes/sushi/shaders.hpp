@@ -2,9 +2,9 @@
 // SUSHI's shaders (see sushi.cpp).
 //
 // BACK_FS paints the shop in one pass (the wall, the conveyor belt, the counter, the lacquered bento box the well
-// is); SPRITE_FS draws the small things (petals, lanterns and their glow, the noren, the dishes on the belt,
-// hearts, sparkles); CAT_FS the cats (one quad each, all signed distances); MAKI_FS the maki, each a little roll on its own (the
-// stack, the falling piece, the ghost, the previews, the maki in the air). FINAL_FS encodes the frame.
+// is); SPRITE_FS draws the small things (the noren, the dishes on the belt, hearts, sparkles); CAT_FS the cats
+// (one quad each, flat signed-distance shapes); MAKI_FS the maki, each a little roll on its own (the stack, the
+// falling piece, the ghost, the previews, the maki in the air). FINAL_FS encodes the frame.
 #include <string>
 
 namespace sushi_shaders {
@@ -62,17 +62,6 @@ void main() {
     vec3 c = mix(uWallBot, uWallTop, t);
     c *= 1.0 + 0.05 * exp(-dot(w * vec2(0.055, 0.05), w * vec2(0.055, 0.05)));
     c = mix(c, c * uWarmCol, uWarm);
-    // shoji panels: a fine wooden lattice over the paper, a heavier frame every third bar
-    if (w.y > uBeltTop + 0.15) {
-        vec2 g = vec2(w.x / 1.8, (w.y - uBeltTop) / 2.2);
-        vec2 dl = (0.5 - abs(fract(g) - 0.5)) * vec2(1.8, 2.2);
-        float thin = 1.0 - smoothstep(0.025, 0.05, min(dl.x, dl.y));
-        vec2 G = vec2(w.x / 5.4, (w.y - uBeltTop) / 6.6);
-        vec2 dL = (0.5 - abs(fract(G) - 0.5)) * vec2(5.4, 6.6);
-        float thick = 1.0 - smoothstep(0.07, 0.1, min(dL.x, dL.y));
-        c = mix(c, uWood, 0.22 * max(thin, thick));
-        c = mix(c, uWoodDark, 0.1 * thick);
-    }
     // a soft shade on the wall just above the counter
     c *= 1.0 - 0.07 * smoothstep(uBeltTop + 2.2, uBeltTop, w.y);
     // the conveyor belt: a band of plates moving along, the rail on top
@@ -153,12 +142,7 @@ flat in vec4 vC;
 flat in vec4 vD;
 out vec4 frag;
 uniform vec3 uLine;
-uniform vec4 uWell; // the box's outer half extents and center (x, y, cx, cy): petals pass behind it
-uniform vec4 uHudL, uHudR, uTitle, uCorner; // the HUD's areas (x0, y0, x1, y1): petals fade out there
-float inRect(vec2 w, vec4 r) {
-    float d = sdBox(w - 0.5 * (r.xy + r.zw), 0.5 * (r.zw - r.xy));
-    return 1.0 - smoothstep(-0.3, 0.3, d);
-}
+uniform vec4 uWell; // the box's outer half extents and center (x, y, cx, cy): the dishes pass behind it
 void main() {
     int kind = int(vB.x + 0.5);
     float alpha = vB.z;
@@ -167,46 +151,8 @@ void main() {
     float aa = max(length(fwidth(q)) * 0.75, 1e-4);
     vec3 col = vC.rgb;
     float a = 0.0;
-    if (kind == 0) {
-        // a sakura petal: a rounded drop with a notch at its tip, paler at its base
-        if (abs(vW.x - uWell.z) < uWell.x && abs(vW.y - uWell.w) < uWell.y) discard;
-        vec2 p = q / h.y;
-        float d = sdEll(p - vec2(0.0, 0.05), vec2(0.62, 0.92));
-        d = max(d, -(length(p - vec2(0.0, 1.0)) - 0.24));
-        aa = max(length(fwidth(p)) * 0.75, 1e-4);
-        a = fillA(d, aa) * (1.0 - max(max(inRect(vW, uHudL), inRect(vW, uHudR)), max(inRect(vW, uTitle), inRect(vW, uCorner))));
-        col = mix(vec3(1.0, 0.97, 0.97), col, smoothstep(-0.9, 0.5, p.y));
-        col = mix(col, col * 0.86, 1.0 - smoothstep(0.0, 0.12, -d));
-    } else if (kind == 1) {
-        // a paper lantern: a round belly with ribs, dark caps, lit from inside
-        float lit = vB.w;
-        vec2 p = q;
-        float body = sdEll(p, vec2(h.x * 0.96, h.y * 0.78));
-        float capT = sdBox(p - vec2(0.0, h.y * 0.82), vec2(h.x * 0.42, h.y * 0.12)) - 0.03;
-        float capB = sdBox(p - vec2(0.0, -h.y * 0.82), vec2(h.x * 0.42, h.y * 0.12)) - 0.03;
-        float caps = min(capT, capB);
-        float sil = min(body, caps);
-        a = fillA(sil, aa);
-        float rr = length(p / vec2(h.x, h.y * 0.8));
-        vec3 paper = vC.rgb;
-        vec3 glow = mix(paper, vec3(1.0, 0.8, 0.42), 0.6) * 1.4;
-        vec3 pc = mix(paper * 0.9, glow, lit * (1.0 - 0.45 * rr * rr));
-        float rib = abs(fract(p.y / (h.y * 0.26) + 0.5) - 0.5) * h.y * 0.26;
-        pc *= 1.0 - 0.14 * (1.0 - smoothstep(0.0, 0.035, rib)) * (1.0 - 0.5 * lit);
-        // a band of the second color around the middle
-        pc = mix(pc, mix(vD.rgb, vD.rgb * 1.3 + 0.1, lit), (1.0 - smoothstep(0.0, aa * 1.5, abs(p.y) - h.y * 0.12)) * vD.w);
-        pc = mix(pc, uLine, 1.0 - smoothstep(0.0, 0.06, -body));
-        vec3 cc = uLine * 1.2;
-        col = mix(pc, cc, fillA(caps, aa));
-        col = mix(col, uLine, (1.0 - smoothstep(0.0, 0.05, -caps)) * fillA(caps, aa));
-    } else if (kind == 2) {
-        // a soft glow (added: premultiplied with no alpha)
-        float r = length(q / h);
-        float g = exp(-3.2 * r * r) * (1.0 - smoothstep(0.8, 1.0, r));
-        frag = vec4(col * g * alpha, 0.0);
-        return;
-    } else if (kind == 3) {
-        // a cord or a rod (a rounded bar)
+    if (kind == 3) {
+        // a rod (a rounded bar)
         float d = sdBox(q, h - h.y) - h.y;
         a = fillA(d, aa);
     } else if (kind == 4) {
@@ -257,14 +203,6 @@ void main() {
         tc = mix(tc, uLine, 1.0 - smoothstep(0.0, 0.045, -top));
         col = mix(cc, tc, fillA(top, aa));
         col = mix(col, uLine, (1.0 - smoothstep(0.0, 0.045, -min(dish, foot))) * (1.0 - fillA(min(rice, top), aa)));
-    } else if (kind == 9) {
-        // a cord sagging between two points (vD: x0, x1, y, sag)
-        float u = clamp((vW.x - vD.x) / (vD.y - vD.x), 0.0, 1.0);
-        float yc = vD.z - vD.w * 4.0 * u * (1.0 - u);
-        float slope = -vD.w * 4.0 * (1.0 - 2.0 * u) / (vD.y - vD.x);
-        float d = abs(vW.y - yc) / sqrt(1.0 + slope * slope) - vB.w;
-        float ab = max(fwidth(vW.y) * 0.75, 1e-4);
-        a = fillA(d, ab);
     } else if (kind == 8) {
         // a disc (a bell, an emblem)
         float d = length(q) - h.x;
@@ -306,13 +244,13 @@ in vec2 vP;
 in vec2 vW;
 flat in vec4 v0, v1, v2, v3, v4, v5, v6, v7;
 out vec4 frag;
-uniform vec3 uLine, uBlush, uEye, uPink, uMouth;
+uniform vec3 uLine, uEye, uMouth;
 uniform float uClipY;
-const float LW = 0.085;
+const float LW = 0.03;
 vec3 C;
 float A;
 float AA;
-// A shape with its own soft outline (inside its edge).
+// A flat shape with a hairline edge (inside it).
 void layer(float d, vec3 col) {
     float f = fillA(d, AA);
     float inner = fillA(d + LW, AA);
@@ -324,7 +262,7 @@ void line(float d, float w, vec3 col) { C = mix(C, col, fillA(abs(d) - w, AA)); 
 void main() {
     if (vW.y < uClipY) discard;
     int coat = int(v1.w + 0.5);
-    vec3 base = v1.rgb, patch = v2.rgb, patch2 = v3.rgb, collar = v4.rgb;
+    vec3 base = v1.rgb, patch = v2.rgb;
     vec2 p = vP;
     AA = max(length(fwidth(p)) * 0.75, 1e-4);
     C = vec3(0.0); A = 0.0;
@@ -333,8 +271,6 @@ void main() {
     pb.y /= v7.y;
     vec2 hc = vec2(0.0, 1.98);
     vec2 ph = rot2(pb - hc, -tilt);
-    bool socks = coat != 5;
-    vec3 pawCol = coat == 5 ? patch : (coat == 2 ? vec3(0.98, 0.96, 0.95) : (coat == 0 ? base : vec3(0.99, 0.97, 0.95)));
 
     // ---- the tail: a curl rising beside the body (a chain of capsules)
     {
@@ -348,38 +284,13 @@ void main() {
             d = min(d, sdSeg(pb, prev, b) - mix(0.15, 0.115, t));
             prev = b;
         }
-        vec3 tc = base;
-        if (coat == 1) tc = patch;
-        if (coat == 5) tc = patch;
-        if (coat == 3 || coat == 4) {
-            float ring = abs(fract(length(pb - p0) * 2.6) - 0.5);
-            tc = mix(base, patch2, 1.0 - smoothstep(0.12, 0.16, ring));
-        }
-        layer(d, tc);
+        layer(d, coat == 5 ? patch : base);
     }
     // ---- the body
     {
         vec2 q = pb - vec2(0.0, 0.8);
         float d = sdEll(q, vec2(0.92, 0.95));
-        vec3 bc = base;
-        if (coat == 1) {
-            bc = mix(bc, patch2, fillA(length(q - vec2(0.48, 0.25)) - 0.42, AA));
-            bc = mix(bc, patch, fillA(length(q - vec2(-0.55, -0.35)) - 0.38, AA));
-        }
-        if (coat == 3 || coat == 4) bc = mix(bc, patch, fillA(sdEll(q - vec2(0.0, -0.2), vec2(0.46, 0.62)), AA));
-        if (coat == 2) bc = mix(bc, vec3(0.98, 0.96, 0.95), fillA(sdEll(q - vec2(0.0, 0.15), vec2(0.22, 0.3)), AA) * 0.0);
-        bc *= 0.9 + 0.1 * smoothstep(-0.9, 0.6, q.y);
-        layer(d, bc);
-    }
-    // ---- the collar and its bell
-    {
-        vec2 q = pb - vec2(0.0, 1.1);
-        float d = sdBox(q, vec2(0.52, 0.04)) - 0.07;
-        layer(d, collar);
-        float b = length(pb - vec2(0.0, 0.94)) - 0.13;
-        layer(b, vec3(1.0, 0.82, 0.32));
-        line(sdSeg(pb, vec2(-0.075, 0.9), vec2(0.075, 0.9)), 0.013, uLine);
-        paint(length(pb - vec2(-0.045, 0.98)) - 0.032, vec3(1.0, 0.97, 0.85), 1.0);
+        layer(d, base);
     }
     // ---- the front legs: resting on the counter, or raised (a cheer, a wave)
     for (int s = 0; s < 2; s++) {
@@ -392,15 +303,7 @@ void main() {
         float d = sdSeg(pb, sh, paw) - 0.19;
         d = min(d, sdEll(pb - paw, vec2(0.22, 0.19)));
         if (up < 0.02) d = max(d, -(pb.y - 0.0) - 0.0);
-        layer(d, mix(base, pawCol, smoothstep(0.75, 0.3, length(pb - paw))));
-        // toes
-        vec2 tq = pb - paw;
-        if (up < 0.5) {
-            line(sdSeg(tq, vec2(-0.06, -0.17), vec2(-0.06, -0.07)), 0.014, uLine);
-            line(sdSeg(tq, vec2(0.06, -0.17), vec2(0.06, -0.07)), 0.014, uLine);
-        } else {
-            paint(length(tq - vec2(0.0, -0.02)) - 0.07, uPink, 0.9);
-        }
+        layer(d, base);
     }
     // ---- the head with its ears
     {
@@ -411,35 +314,9 @@ void main() {
         float earR = sdTri(q, vec2(-l0.x, l0.y), vec2(-l1.x, l1.y), vec2(-l2.x, l2.y)) - 0.07;
         float d = smin(head, min(earL, earR), 0.08);
         vec3 hcol = base;
-        if (coat == 1) {
-            hcol = mix(hcol, patch, fillA(length(q - vec2(0.5, 0.42)) - 0.45, AA));
-            hcol = mix(hcol, patch2, fillA(length(q - vec2(-0.62, 0.62)) - 0.34, AA));
-        }
-        if (coat == 3 || coat == 4) {
-            hcol = mix(hcol, patch, fillA(sdEll(q - vec2(0.0, -0.3), vec2(0.42, 0.3)), AA));
-            for (int i = -1; i <= 1; i++) {
-                float x = float(i) * 0.17;
-                hcol = mix(hcol, patch2, fillA(sdSeg(q, vec2(x, 0.5 - 0.04 * abs(float(i))), vec2(x * 1.1, 0.7)) - 0.045, AA));
-            }
-        }
-        if (coat == 5) {
-            float m = 1.0 - smoothstep(-0.04, 0.1, sdEll(q - vec2(0.0, -0.2), vec2(0.42, 0.3)));
-            hcol = mix(hcol, patch, 0.85 * m);
-            hcol = mix(hcol, patch, fillA(min(earL, earR) + 0.02, AA));
-        }
-        if (coat == 0) hcol = mix(hcol, patch, fillA(length(q - vec2(0.62, 0.62)) - 0.32, AA));
-        hcol *= 0.94 + 0.06 * smoothstep(-0.8, 0.6, q.y);
+        // a colorpoint keeps its darker face and ears, as one flat shape
+        if (coat == 5) hcol = mix(hcol, patch, fillA(min(sdEll(q - vec2(0.0, -0.2), vec2(0.42, 0.3)), min(earL, earR) + 0.02), AA));
         layer(d, hcol);
-        // inner ears
-        vec2 c0 = (l0 + l1 + l2) / 3.0;
-        float inL = sdTri(q, mix(l0, c0, 0.45), mix(l1, c0, 0.4), mix(l2, c0, 0.45)) - 0.03;
-        float inR = sdTri(q, vec2(-mix(l0, c0, 0.45).x, mix(l0, c0, 0.45).y), vec2(-mix(l1, c0, 0.4).x, mix(l1, c0, 0.4).y),
-                          vec2(-mix(l2, c0, 0.45).x, mix(l2, c0, 0.45).y)) - 0.03;
-        paint(min(inL, inR), coat == 2 ? mix(uPink, base, 0.45) : uPink, 0.9);
-
-        // blush
-        float blush = v5.z;
-        paint(sdEll(vec2(abs(q.x), q.y) - vec2(0.58, -0.2), vec2(0.15, 0.085)), uBlush, 0.65 * blush);
         // eyes
         float open = v3.w;
         float look = v7.w;
@@ -448,14 +325,8 @@ void main() {
             vec2 e = q - vec2(0.34 * sg + 0.05 * look, 0.02);
             if (open > 0.18) {
                 float o = open;
-                if (coat == 2) {
-                    paint(sdEll(e, vec2(0.135, 0.165 * o)), vec3(0.98, 0.78, 0.3), 1.0);
-                    paint(sdEll(e, vec2(0.07, 0.13 * o)), uEye, 1.0);
-                } else {
-                    paint(sdEll(e, vec2(0.12, 0.155 * o)), uEye, 1.0);
-                }
-                paint(length(e - vec2(-0.035, 0.055 * o)) - 0.048, vec3(1.0), 1.0);
-                paint(length(e - vec2(0.045, -0.06 * o)) - 0.022, vec3(1.0), 0.9);
+                // two plain dots
+                paint(sdEll(e, vec2(0.075, 0.095 * o)), coat == 2 ? vec3(0.96, 0.92, 0.84) : uEye, 1.0);
             } else {
                 vec3 lc = coat == 2 ? vec3(0.98, 0.9, 0.8) : uEye;
                 if (v4.w > 0.5) {
@@ -471,17 +342,13 @@ void main() {
                 }
             }
         }
-        // nose
-        paint(sdEll(q - vec2(0.0, -0.13), vec2(0.055, 0.038)), uPink * 0.9, 1.0);
         // mouth: a little w, or open (catching, cheering), chewing
         float mo = v5.x;
         vec3 mc = coat == 2 ? vec3(0.95, 0.88, 0.85) : uLine;
         if (mo > 0.06) {
             vec2 m = q - vec2(0.0, -0.31);
             float d2 = sdEll(m, vec2(0.11, 0.13 * mo));
-            paint(d2, uMouth, 1.0);
-            paint(sdEll(m - vec2(0.0, -0.08 * mo), vec2(0.07, 0.05 * mo)), uPink, 1.0);
-            line(d2, 0.018, mc);
+            paint(d2, coat == 2 ? vec3(0.96, 0.92, 0.84) : uMouth, 1.0);
         } else {
             float ch = v5.y;
             float r = 0.065 * (1.0 + 0.25 * ch);
@@ -740,7 +607,7 @@ uniform vec3 uBridgeCol, uBridgeInk, uDusk;
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = s.rgb;
-    // slow motion: dusk at the counter (the lanterns stay warm)
+    // slow motion: dusk at the counter
     float g = dot(c, vec3(0.2126, 0.7152, 0.0722));
     vec3 dusk = mix(vec3(g), c, 0.7) * uDusk;
     dusk += max(c - vec3(0.85), 0.0) * 0.8;

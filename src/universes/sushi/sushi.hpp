@@ -28,10 +28,10 @@ public:
 
     // A variant's colors (linear RGB): floats only, so two palettes blend.
     struct Palette {
-        vec3 wallTop, wallBot, wood, woodDark, belt, lacquer, rim, ink, accent, line, petal, lanternA, lanternB, noren,
+        vec3 wallTop, wallBot, wood, woodDark, belt, lacquer, rim, ink, accent, line, noren,
             norenText, warm;
         vec3 plate[7];
-        float night, petals;
+        float night;
     };
 
 private:
@@ -88,11 +88,7 @@ private:
     std::vector<Flight> flights_;
     void updateFlights(float dt);
 
-    // ---- The shop: petals, lanterns, the noren, the belt.
-    struct Petal { float x, y, vx, vy, rot, spin, size, phase; };
-    std::vector<Petal> petals_;
-    float petalAcc_ = 0.f;
-    void spawnPetal(bool top);
+    // ---- The shop: the noren, the belt.
     struct Pop { float x, y, t, life; int kind; vec3 col; float size; }; // 0 heart, 1 sparkle, 2 "nom", 3 "z"
     std::vector<Pop> pops_;
     float beltOff_ = 0.f, beltSpeed_ = 0.f;
