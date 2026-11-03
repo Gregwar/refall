@@ -79,7 +79,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 </tr>
 <tr>
 <td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog on a vast landscape and a low sun<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/sushi.jpg"><br><b>SUSHI</b>: maki rolls in a bento box at a kawaii kaiten counter; cleared rows hop to the cats sitting there, who catch and eat them, more cats come with the lines, the drop is a festival of cheering cats, lanterns and petals<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/sushi.jpg"><br><b>SUSHI</b>: blocky maki rolls in a hinoki bento box at a kawaii kaiten counter; cleared rows hop to the cats sitting there, who catch and eat them, more cats come with the lines, the drop is a festival of cheering cats, lanterns and petals<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 

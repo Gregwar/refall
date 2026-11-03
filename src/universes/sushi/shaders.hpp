@@ -62,6 +62,17 @@ void main() {
     vec3 c = mix(uWallBot, uWallTop, t);
     c *= 1.0 + 0.05 * exp(-dot(w * vec2(0.055, 0.05), w * vec2(0.055, 0.05)));
     c = mix(c, c * uWarmCol, uWarm);
+    // shoji panels: a fine wooden lattice over the paper, a heavier frame every third bar
+    if (w.y > uBeltTop + 0.15) {
+        vec2 g = vec2(w.x / 1.8, (w.y - uBeltTop) / 2.2);
+        vec2 dl = (0.5 - abs(fract(g) - 0.5)) * vec2(1.8, 2.2);
+        float thin = 1.0 - smoothstep(0.025, 0.05, min(dl.x, dl.y));
+        vec2 G = vec2(w.x / 5.4, (w.y - uBeltTop) / 6.6);
+        vec2 dL = (0.5 - abs(fract(G) - 0.5)) * vec2(5.4, 6.6);
+        float thick = 1.0 - smoothstep(0.07, 0.1, min(dL.x, dL.y));
+        c = mix(c, uWood, 0.22 * max(thin, thick));
+        c = mix(c, uWoodDark, 0.1 * thick);
+    }
     // a soft shade on the wall just above the counter
     c *= 1.0 - 0.07 * smoothstep(uBeltTop + 2.2, uBeltTop, w.y);
     // the conveyor belt: a band of plates moving along, the rail on top
@@ -99,8 +110,10 @@ void main() {
         vec3 rim = uRim * (0.92 + 0.12 * smoothstep(-uBox.w, 0.0, -dOut + 0.0));
         rim = mix(rim, rim * 1.25 + 0.05, 0.5 * (1.0 - smoothstep(0.0, 0.07, abs(dOut + uBox.w * 0.45))) * 0.4);
         rim *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.05, -dOut));
-        vec3 inside = uLacq * (1.0 + 0.12 * smoothstep(-10.0, 10.0, bp.y));
-        inside *= 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.45, -dIn));
+        // pale hinoki wood, its fine grain running up the box
+        vec3 inside = uLacq * (1.0 + 0.06 * smoothstep(-10.0, 10.0, bp.y));
+        inside *= 0.97 + 0.04 * vnoise(vec2(bp.x * 5.0, bp.y * 0.35)) + 0.02 * vnoise(vec2(bp.x * 17.0, bp.y * 0.8));
+        inside *= 1.0 - 0.14 * (1.0 - smoothstep(0.0, 0.45, -dIn));
         vec3 bc = mix(rim, inside, fillA(dIn, aa));
         c = mix(c, bc, fillA(dOut, aa));
     }
@@ -553,6 +566,14 @@ void tint(vec3 col, float a, float inside) {
     float k = a * inside;
     P = mix(P, col * A, k);
 }
+// A rounded square of half size h (corners cr) flattened vertically by k, its distance in unflattened units
+// (the gradient's stretch divided out, so outlines keep one width all around).
+float flatRR(vec2 e, float h, float cr, float k) {
+    vec2 q = abs(e) - vec2(h - cr);
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - cr;
+    vec2 g = (q.x > 0.0 && q.y > 0.0) ? normalize(q) : (q.x > q.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+    return d / length(vec2(g.x, g.y / k));
+}
 void main() {
     int kind = int(vD.x + 0.5);
     int m = int(vA.w + 0.5);
@@ -560,15 +581,16 @@ void main() {
     AA = max(length(fwidth(p)) * 0.75, 1e-4);
     P = vec3(0.0); A = 0.0;
     vec3 pc = vC.rgb;
-    // the maki stands on its own, a roll seen nearly from the side: the cut face on top (an ellipse), the
-    // nori wrapped around its side below
+    // the maki stands on its own, a squared roll seen nearly from the side, as blocky as a cube: the cut face on
+    // top (a rounded square, flattened), the nori wrapped around its side below
     float sc = max(vC.w, 0.05);
     vec2 s = p / sc;
     float qa = AA / sc;
-    const float R = 0.44, K = 0.42, YC = 0.175, H = 0.34;
+    const float R = 0.46, K = 0.55, YC = 0.2, H = 0.4, CR = 0.13;
     vec2 e = vec2(s.x, (s.y - YC) / K);
-    float topD = sdEll(s - vec2(0.0, YC), vec2(R, R * K));
-    float botD = sdEll(s - vec2(0.0, YC - H), vec2(R, R * K));
+    float fe = sdBox(e, vec2(R - CR)) - CR; // the face, unflattened
+    float topD = flatRR(e, R, CR, K);
+    float botD = flatRR(vec2(s.x, (s.y - YC + H) / K), R, CR, K);
     float sideD = max(abs(s.x) - R, abs(s.y - YC + H * 0.5) - H * 0.5);
     float bodyD = min(min(topD, botD), sideD);
     if (kind == 1) {
@@ -582,23 +604,27 @@ void main() {
     int type = int(vB.x + 0.5);
     float makiA = vD.y;
     // its soft shadow on the lacquer
-    float shd = (length(vec2(s.x - 0.03, (s.y - YC + H + 0.05) / (K * 0.8))) - R * 1.02) * K;
+    float shd = flatRR(vec2(s.x - 0.03, (s.y - YC + H + 0.04) / K), R * 1.02, CR, K);
     over(vec3(0.0), vD.z * 0.4 * (1.0 - smoothstep(-0.06, 0.05, shd)) * makiA);
     // the side: nori (rice and sesame for the inside-out roll), round shading across it
     float u = clamp(s.x / R, -1.0, 1.0);
-    float roundS = sqrt(1.0 - u * u);
+    float roundS = 1.0 - 0.7 * pow(abs(u), 5.0);
     vec3 side;
     if (type == 2) {
-        side = uRice * (0.7 + 0.3 * roundS);
-        // sesame seeds scattered on the rice
-        vec2 sg = s * vec2(14.0, 18.0);
+        // coated in orange tobiko (fine roe beads), a few sesame seeds on it
+        const vec3 TOBIKO = vec3(0.93, 0.42, 0.12);
+        side = TOBIKO * (0.72 + 0.28 * roundS);
+        vec2 bg = s * 34.0;
+        float bead = length(fract(bg + vec2(0.5 * floor(bg.y), 0.0) * 0.0) - 0.5);
+        side *= 0.9 + 0.18 * (1.0 - smoothstep(0.15, 0.4, bead));
+        vec2 sg = s * vec2(9.0, 12.0);
         vec2 sid = floor(sg), sf = fract(sg) - 0.5;
         vec2 so = vec2(fract(sin(dot(sid, vec2(12.9, 78.2))) * 43758.5), fract(sin(dot(sid, vec2(39.3, 11.1))) * 24634.6)) - 0.5;
         float seed = sdEll(rot2(sf - so * 0.5, so.x * 3.0), vec2(0.09, 0.16));
-        side = mix(side, so.y > 0.2 ? vec3(0.88, 0.76, 0.5) : vec3(0.15, 0.12, 0.1), fillA(seed, 0.05) * 0.9);
+        side = mix(side, vec3(0.96, 0.9, 0.74), fillA(seed, 0.05) * step(0.25, so.y) * 0.9);
     } else {
         side = uNori * (0.75 + 0.5 * roundS);
-        side = mix(side, mix(uNori, vec3(1.0), 0.35), 0.5 * (1.0 - smoothstep(0.0, 0.12, abs(u + 0.45) - 0.05)));
+        side = mix(side, mix(uNori, vec3(1.0), 0.3), 0.35 * (1.0 - smoothstep(0.0, 0.1, abs(u + 0.62) - 0.04)));
         // the nori's fine ribs
         side *= 0.92 + 0.08 * smoothstep(0.3, 0.7, vnoise(vec2(s.x * 30.0, s.y * 4.0)));
     }
@@ -611,8 +637,10 @@ void main() {
     float disc = fillA(topD, qa);
     vec3 c;
     if (type == 2) {
-        // uramaki: rice outside, sesame on it, a thin nori ring, avocado and salmon inside
+        // uramaki: a tobiko rim, the rice inside it with sesame, a thin nori ring, avocado and salmon inside
         c = uRice * (0.95 + 0.06 * smoothstep(-0.4, 0.4, q.y));
+        c = mix(c, vec3(0.93, 0.42, 0.12) * (0.9 + 0.15 * (1.0 - smoothstep(0.15, 0.4, length(fract(e * 30.0) - 0.5)))),
+                1.0 - fillA(fe + 0.07, qa));
         for (int i = 0; i < 9; i++) {
             float an = float(i) * 2.39996 + 0.5;
             float rr = 0.27 + 0.07 * fract(float(i) * 0.618);
@@ -625,18 +653,18 @@ void main() {
         vec3 fill = q.x + q.y * 0.3 < 0.0 ? vec3(0.62, 0.8, 0.32) : vec3(1.0, 0.52, 0.3);
         fill = mix(fill, vec3(1.0, 0.85, 0.78), (q.x + q.y * 0.3 >= 0.0 ? 1.0 : 0.0) * (1.0 - smoothstep(0.0, 0.02, abs(fract((q.x - q.y) * 9.0) - 0.5) - 0.3)));
         c = mix(c, fill, fillA(r - 0.175, qa));
-        c = mix(c, uLine, 1.0 - smoothstep(0.0, 0.04, R - r));
+        c = mix(c, uLine, 1.0 - smoothstep(0.0, 0.04, -fe));
     } else {
         // hosomaki: the nori outside, white rice, the filling in the middle
         c = uNori * (1.0 + 0.6 * (1.0 - smoothstep(0.0, 0.5, length(q / R - vec2(-0.5, 0.55)))));
         vec3 rice = uRice * (0.94 + 0.08 * smoothstep(-0.35, 0.35, q.y - q.x * 0.4));
-        float inR = R - 0.05;
-        c = mix(c, rice, fillA(r - inR, qa));
+        float riceA = fillA(fe + 0.055, qa);
+        c = mix(c, rice, riceA);
         // a hint of grains along the rice's edge
-        float gr = vnoise(vec2(atan(q.y, q.x) * 9.0, r * 18.0));
-        c = mix(c, uRice * 0.86, fillA(r - inR, qa) * (1.0 - fillA(r - (inR - 0.04), qa)) * smoothstep(0.55, 0.75, gr));
+        float gr = vnoise(vec2((e.x + e.y) * 12.0, fe * 18.0));
+        c = mix(c, uRice * 0.86, riceA * (1.0 - fillA(fe + 0.095, qa)) * smoothstep(0.55, 0.75, gr));
         // grains all over the rice
-        c = mix(c, uRice * 0.88, fillA(r - inR, qa) * 0.5 * smoothstep(0.6, 0.8, vnoise(rot2(q, 0.5) * vec2(34.0, 20.0))));
+        c = mix(c, uRice * 0.88, riceA * 0.5 * smoothstep(0.6, 0.8, vnoise(rot2(q, 0.5) * vec2(34.0, 20.0))));
         // the filling, a bit larger than the plain disc gives it
         q /= 1.22; r = length(q); qa /= 1.22;
         vec3 f = c;
@@ -692,7 +720,7 @@ void main() {
     // a little shine
     c = mix(c, vec3(1.0), 0.35 * fillA(sdEll(rot2(q - vec2(-0.2, 0.22), 0.7), vec2(0.07, 0.035)), qa) * (type == 2 ? 0.4 : 1.0));
     // its outline
-    c = mix(c, uLine, 1.0 - smoothstep(0.0, 0.035 / sc, R - r + 0.0));
+    c = mix(c, uLine, 1.0 - smoothstep(0.0, 0.035 / sc, -fe));
     over(c, disc * makiA);
     // the roll's soft outline
     over(uLine, fillA(abs(bodyD) - 0.014, qa) * makiA);

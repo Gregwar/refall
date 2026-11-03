@@ -1,7 +1,7 @@
 // SUSHI: the pieces are maki, one roll per cell, and the cleared rows feed kawaii cats sitting at the counter.
 //
-// One world: a small kaiten sushi bar in soft pastel colors, drawn flat with rounded shapes and thick soft outlines.
-// The well is a lacquered bento box standing on the counter; a conveyor belt runs along the counter behind it,
+// One world: a small kaiten sushi bar in light, quiet tones, drawn flat with rounded shapes and soft outlines. The
+// wall is shoji; the well is a pale hinoki bento box with a lacquered rim, standing on the counter; a conveyor belt runs along the counter behind it,
 // carrying dishes. Each cell is one maki standing on its own, seen nearly from the side (the cut face on top, the
 // nori around its side): salmon, tuna, cucumber, tamago, avocado, crab, and an inside-out roll with sesame.
 // The falling piece is exactly a locked one. Behind the counter, on both sides of the box, sit round cats (white,
@@ -68,26 +68,26 @@ struct VariantDef {
     float night, petals;
 };
 const VariantDef VARIANTS[] = {
-    // strawberry milk: a pink shop, a plum lacquer box with a coral rim
-    {"PASTEL", 0xfde9ef, 0xf8d2dd, 0xf0d3b0, 0xd9b386, 0xc9e8dc, 0x3a2532, 0xec7b80, 0x5a3346, 0xf0627f, 0x4a2b3a,
-     0xffb3c6, 0xf26b63, 0xfff3e6, 0x5d6fb8, 0xfff6ee, 0xfff0e0,
-     {0x8fd4f5, 0xffd866, 0xc4a6f0, 0x9fe2a2, 0xff8fa0, 0x8aa8f7, 0xffaf78}, 0.f, 1.f},
-    // a night market: indigo dusk, warm lanterns, a black box with a vermilion rim
-    {"NIGHT MARKET", 0x1c2044, 0x2f2756, 0x744c36, 0x553525, 0x3d4268, 0x100f1d, 0xc8463f, 0xf7e9d8, 0xffb65c, 0x1b1426,
-     0xf5c3d6, 0xff7a45, 0xffe3b5, 0xb8433c, 0xfff1e0, 0xffd6a8,
-     {0x7fd9f8, 0xffdf70, 0xcbaaff, 0x93e8a6, 0xff8c9c, 0x92b2ff, 0xffb37c}, 1.f, 0.8f},
-    // under the cherry trees: white-pink paper, a cherry-wood box, petals everywhere
-    {"SAKURA", 0xfff5f7, 0xfbdfe8, 0xf4ddc8, 0xdfbea2, 0xf7d6e0, 0x4a2431, 0xf2a0b4, 0x6b3a4d, 0xe5507a, 0x4e2533,
-     0xff9fbb, 0xfff6f0, 0xe85a6e, 0xe8507a, 0xfff8fa, 0xffe6ee,
-     {0x86cff2, 0xffd65c, 0xb89cf2, 0x8fdb9b, 0xff7f95, 0x7fa0f2, 0xffa66e}, 0.f, 2.f},
-    // matcha: a soft green tea house, a dark green lacquer box with a moss rim
-    {"MATCHA", 0xeef3df, 0xdae6c6, 0xead7a8, 0xceb47f, 0xd2e3bb, 0x1e2a22, 0x86a35a, 0x34452f, 0xe46a8a, 0x22301f,
-     0xf5b8c8, 0xe2605a, 0xfff4dc, 0x3f5b3b, 0xf3f0dc, 0xfff2d6,
-     {0x88d1ea, 0xffd45e, 0xc8a4ea, 0xb5e88f, 0xff8a96, 0x8aa3f2, 0xffad72}, 0.f, 0.9f},
-    // ramune soda: a sky-blue shop, a navy box with a sky rim
-    {"RAMUNE", 0xe6f6fc, 0xcbe8f4, 0xf2ddba, 0xdcc193, 0xc3e3f0, 0x1d2946, 0x55a9dc, 0x23405f, 0xff8a5c, 0x1c2b44,
-     0xffc4d3, 0xff8a5c, 0xfff6e8, 0x2f6db3, 0xf4fbff, 0xfff0e2,
-     {0x8ad6f6, 0xffd963, 0xc6a8f2, 0x9fe4a6, 0xff8f9f, 0x8aa8f7, 0xffb079}, 0.f, 1.f},
+    // hinoki: white plaster and shoji, a pale cypress box with a charcoal lacquer rim, an indigo noren
+    {"HINOKI", 0xf4f1ea, 0xe7e1d5, 0xdcc39c, 0xb99a6f, 0xd9d4ca, 0xecdfc6, 0x3a393e, 0x2f2d33, 0xc0473a, 0x34302f,
+     0xf0d8d6, 0xfbf7ef, 0xb9483d, 0x2f4b6e, 0xf6f2ea, 0xfff3e2,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.35f},
+    // sumi: cool pale stone and ink, a black rim; the minor songs
+    {"SUMI", 0xefefec, 0xdedfdb, 0xd0c3ad, 0xa8987e, 0xd1d1cd, 0xe6dfd2, 0x24272c, 0x23262b, 0x9a3b33, 0x26282c,
+     0xe9dfdf, 0xf7f5f0, 0x3b3e44, 0x26282c, 0xf0efe9, 0xfff4e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.25f},
+    // matcha: a pale sage tea house, a moss lacquer rim
+    {"MATCHA", 0xeff1e8, 0xe0e4d4, 0xd9c49f, 0xb3a079, 0xd6dbcc, 0xeadcc1, 0x4a5a3f, 0x2c3428, 0xb5523f, 0x2e3329,
+     0xebdcd7, 0xf8f5ea, 0x6f8155, 0x4a5a3f, 0xf3f1e6, 0xfff3e0,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.35f},
+    // sakura: a faint blush wall, a plum lacquer rim, a few more petals
+    {"SAKURA", 0xf6f0ee, 0xebe0dd, 0xdcc4a4, 0xbca07e, 0xe1d8d5, 0xeddcc6, 0x6e3b44, 0x3a2a2e, 0xc75b6b, 0x3a2a2e,
+     0xf0cbd2, 0xfbf6f2, 0xc4636f, 0x6e3b44, 0xfaf3f0, 0xfff1e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.9f},
+    // ai: indigo and white, a navy lacquer rim
+    {"AI", 0xf1f3f4, 0xe0e5ea, 0xd7c4a6, 0xb19b7b, 0xd4dae0, 0xe9dfcd, 0x24344f, 0x1f2a3d, 0xc0563f, 0x1f2a3d,
+     0xeadfe3, 0xf7f7f4, 0x2f4b7a, 0x24344f, 0xeef2f6, 0xfff3e6,
+     {0x5f8fae, 0xc49a3c, 0x8a73a8, 0x6c9a5f, 0xb85a5a, 0x5a6fa0, 0xc47e4e}, 0.f, 0.3f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -122,10 +122,10 @@ const CoatDef COATS[6] = {
     {0xbcc2d2, 0xfbfbff, 0x959db2},
     {0xf8ecd9, 0x8b6a55, 0x8b6a55},
 };
-const unsigned COLLARS[5] = {0xe8505b, 0x5bb5e8, 0x4fc49a, 0xb68be8, 0xff8fb0};
+const unsigned COLLARS[5] = {0xb9483d, 0x4f6f9a, 0x5f8a6a, 0x8a7299, 0xc58b8b};
 // The dishes on the belt (the plate, the topping, fat stripes or not).
-const unsigned DISH_PLATES[3] = {0xfff3f5, 0xf7c8d4, 0xc9dcf5};
-const unsigned DISH_TOPS[4] = {0xff8a52, 0xd8314a, 0xffd04d, 0xffb0a0};
+const unsigned DISH_PLATES[3] = {0xf7f4ee, 0x3a393e, 0xc9d1da};
+const unsigned DISH_TOPS[4] = {0xe0875a, 0xb8404f, 0xe6c25a, 0xe8b5a8};
 
 // The well's box (its inside, a rim around it) and the counter.
 constexpr float BOX_HX = 5.06f, BOX_HY = 10.06f, BOX_RIM = 0.32f;
@@ -425,8 +425,8 @@ void SushiUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && t.minor && t.brightness < 0.48f) v = 1;
-        else if (t.hasSong && t.airWeight > 0.62f && t.brightness > 0.55f) v = 2;
+        if (t.hasSong && t.minor && t.brightness < 0.48f) v = 1; // sumi
+        else if (t.hasSong && t.airWeight > 0.62f && t.brightness > 0.55f) v = 3; // sakura
         else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
@@ -1070,8 +1070,8 @@ void SushiUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 ink = ugl::toSrgb(pal_.ink), halo = ugl::toSrgb(lerp(pal_.wallTop, pal_.wallBot, 0.5f)),
                accent = ugl::toSrgb(pal_.accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    // what is written over the box (the dialogs, a celebration's line) is light on its dark lacquer
-    const vec3 boxInk = ugl::toSrgb(pal_.night > 0.5f ? pal_.ink : pal_.wallTop), boxHalo = ugl::toSrgb(pal_.lacquer);
+    // what is written over the box (the dialogs, a celebration's line) is dark on its pale wood
+    const vec3 boxInk = ugl::toSrgb(pal_.ink), boxHalo = ugl::toSrgb(pal_.lacquer);
 
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
