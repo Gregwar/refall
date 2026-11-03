@@ -618,9 +618,11 @@ void LanternsUniverse::buildLamps() {
             const float th = r.uniform() * 0.95f;
             const int type = r.irange(0, 6);
             const float ph = r.range(0.f, TAU);
+            const float rate = 0.4f + 0.3f * r.uniform(); // (every draw made before skipping an unlit one: the
+                                                          // stream stays the same, so no light ever moves)
             const float a = saturate((amount - th) * 5.f);
             if (a <= 0.f) continue;
-            const float tw = 0.85f + 0.15f * std::sin(worldTime_ * (0.4f + 0.3f * r.uniform()) + ph);
+            const float tw = 0.85f + 0.15f * std::sin(worldTime_ * rate + ph);
             const vec3 c = tint(type) * (light_ * tw * a * 0.8f);
             sprites_.push_back({{side * xs / f, WATER + 1.5f, z, 3.2f}, {c.x, c.y, c.z, 1.f}});
         }
