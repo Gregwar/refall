@@ -10,9 +10,10 @@
 // nucleus. The seven types are seven dyes of the variant's stain. The falling piece is exactly a locked one, the ghost
 // a faint wall, the previews the same cells.
 //
-// The dish starts empty at the start of a song. Each cleared row bursts (its cells round off, their walls break open
-// and their content disperses, gone in a third of a second) and releases one microorganism at the well's side, which
-// swims out of the well and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
+// About one cell in five has a small microorganism living inside it (a clear pool, its contents flowing slowly; the
+// other cells are still). The dish starts empty at the start of a song. Each cleared row bursts (its cells round off,
+// their walls break open and their content disperses, gone in a third of a second) and frees its organisms: each
+// swims out of its own cell to the nearer side, growing on the way, and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
 // cilia), amoebas (a slow blob reaching out with pseudopods), pennate and centric diatoms (glass boats and discs of
 // fine striae), rotifers (wheels of cilia on a telescoping body), and volvox colonies (rolling spheres of tiny cells,
 // daughter colonies inside; a Tetris releases a big one). They roam the sides of the dish, steering clear of the well
@@ -115,8 +116,10 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float LYSE_T = 0.32f;      // a cleared cell is gone in this long (real time)
 constexpr float DIE_T = 2.2f;        // game over: a cell's plasmolysis
-constexpr int MAX_ORGS = 22;         // the dish's population; beyond it, the oldest fade away
+constexpr int MAX_ORGS = 30;         // the dish's population; beyond it, the oldest fade away
 constexpr float ORG_FADE = 4.f;
+constexpr float LIFE_SHARE = 0.22f;   // the share of the cells with an organism living inside
+constexpr float DWELL_SIZE = 0.52f;   // an organism's size inside its cell
 
 // The kinds of life: paramecium, amoeba, pennate diatom, centric diatom, rotifer, volvox.
 enum { K_PARA, K_AMOEBA, K_PENNATE, K_CENTRIC, K_ROTIFER, K_VOLVOX, K_COUNT };
@@ -413,6 +416,7 @@ MicroscopeUniverse::CellLook MicroscopeUniverse::lookOf(int x, int y) {
     l.nx = std::cos(a) * d;
     l.ny = std::sin(a) * d;
     l.seed = r.uniform();
+    if (r.chance(LIFE_SHARE)) l.life = pickKind();
     return l;
 }
 
@@ -434,21 +438,43 @@ int MicroscopeUniverse::pickKind() {
     return k;
 }
 
-void MicroscopeUniverse::release(int kind, float y, int side, int type, float delay) {
+// A cell's organism as it is now: small, turning slowly about the middle of the cell (the same on every frame for a
+// given look and time, so that it leaves the cell exactly as it was in it).
+MicroscopeUniverse::Org MicroscopeUniverse::dweller(const CellLook& l, float x, float y, int type) const {
     Org o;
+    const int kind = std::clamp(l.life, 0, (int)K_COUNT - 1);
+    const float t = worldTime_ + l.seed * 50.f, s = l.seed * 37.f;
     o.kind = kind;
-    o.seed = rng_.uniform();
-    o.size = rng_.range(KIND_SIZE[kind][0], KIND_SIZE[kind][1]);
-    o.p = vec2{side * 5.4f, std::clamp(y, -9.5f, 9.5f)};
-    o.ang = (side > 0 ? 0.f : PI) + rng_.range(-0.35f, 0.35f);
-    o.speed = KIND_SPEED[kind] * rng_.range(0.8f, 1.25f);
-    o.depth = rng_.range(-1.f, 1.f);
-    o.turnPhase = rng_.range(0.f, 100.f);
-    o.burst = 1.f;
+    o.seed = l.seed;
+    o.size = DWELL_SIZE;
+    o.p = vec2{x + 0.07f * std::sin(t * 0.31f + s), y + 0.07f * std::cos(t * 0.27f + s * 1.3f)};
+    o.ang = s + t * (l.seed < 0.5f ? 0.23f : -0.23f) + 0.6f * std::sin(t * 0.17f + s);
     o.type = std::clamp(type, 0, 6);
-    o.tint = rng_.range(0.15f, 0.4f);
-    o.dir = 1.f;
-    o.spin = rng_.range(0.f, TAU);
+    o.depth = 0.f;
+    o.turnPhase = s;
+    o.tint = 0.1f;   // its own colors, not the cell's dye (it would vanish in it)
+    o.spin = s;
+    return o;
+}
+
+// The organism of a cleared cell leaves it: it darts out of the well toward the nearer side, growing to its full size
+// on the way, and makes its home in the dish.
+void MicroscopeUniverse::releaseFrom(const CellLook& l, float x, float y, int type, float delay, bool big) {
+    Org o = dweller(l, x, y, type);
+    const int kind = o.kind;
+    o.size = big ? 3.3f : rng_.range(KIND_SIZE[kind][0], KIND_SIZE[kind][1]);
+    o.grow0 = DWELL_SIZE / o.size;
+    o.fromCell = true;
+    const int side = x < 0.f ? -1 : 1;
+    const float out = side > 0 ? 0.f : PI;
+    if (kind != K_CENTRIC && kind != K_VOLVOX) {
+        // it turns toward the way out (a pennate diatom may just back up)
+        if (kind == K_PENNATE && std::cos(o.ang - out) < 0.f) o.dir = -1.f;
+        o.ang = out + rng_.range(-0.4f, 0.4f) + (o.dir < 0.f ? PI : 0.f);
+    } else o.ang = out + rng_.range(-0.4f, 0.4f);
+    o.speed = KIND_SPEED[kind] * rng_.range(0.8f, 1.25f);
+    o.depth = rng_.range(-0.6f, 0.6f);
+    o.burst = 1.f;
     o.home = pickHome(side);
     pending_.push_back({delay, o});
 }
@@ -526,18 +552,31 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const CellLook l = has_[c.y][c.x] ? look_[c.y][c.x] : lookOf(c.x, c.y);
             lyses_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.f});
         }
-        // each row releases one organism at the well's side (a Tetris: a big volvox colony among them)
-        int side = rng_.chance(0.5f) ? -1 : 1;
+        // the organisms living in the cleared cells swim out (a row with none still gives one; a Tetris, a big
+        // volvox colony among them)
         for (size_t k = 0; k < rows.size(); k++) {
-            int counts[7] = {};
+            std::vector<const GameEvent::CellInfo*> row, lives;
             for (auto& c : ev.cells)
-                if (c.y == rows[k] && c.type >= 0 && c.type < 7) counts[c.type]++;
-            const int type = (int)(std::max_element(counts, counts + 7) - counts);
-            const vec3 p = layout::cellPos(0.f, (float)rows[k]);
-            const int kind = tetris && k == 1 ? (int)K_VOLVOX : pickKind();
-            release(kind, p.y, side, type, 0.12f + 0.18f * k);
-            if (tetris && k == 1) pending_.back().second.size = 3.3f;
-            side = -side;
+                if (c.y == rows[k] && c.x >= 0 && c.x < Game::W) {
+                    row.push_back(&c);
+                    if (has_[c.y][c.x] && look_[c.y][c.x].life >= 0) lives.push_back(&c);
+                }
+            if (row.empty()) continue;
+            if (lives.empty()) {
+                const auto* c = row[(size_t)rng_.irange(0, (int)row.size() - 1)];
+                if (!has_[c->y][c->x]) look_[c->y][c->x] = lookOf(c->x, c->y);
+                has_[c->y][c->x] = true;
+                look_[c->y][c->x].life = pickKind();
+                lives.push_back(c);
+            }
+            const size_t bigAt = tetris && k == 1 ? (size_t)rng_.irange(0, (int)lives.size() - 1) : lives.size();
+            for (size_t i = 0; i < lives.size(); i++) {
+                const auto* c = lives[i];
+                CellLook l = look_[c->y][c->x];
+                if (i == bigAt) l.life = K_VOLVOX;
+                const vec3 p = layout::cellPos((float)c->x, (float)c->y);
+                releaseFrom(l, p.x, p.y, c->type, 0.f, i == bigAt);
+            }
         }
         if (tetris) swell_ = std::max(swell_, 0.55f);
         // the looks of the rows above step down
@@ -614,7 +653,7 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
 void MicroscopeUniverse::addCell(float x, float y, float half, int type, const CellLook& l, int kind, float prog, float alpha,
                                  float flash) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, (float)kind}, {(float)type, l.seed, prog, alpha}, {l.nx, l.ny, flash, 0.f}, {x, y, 0.f, 0.f}});
+    cells_.push_back({{x, y, half, (float)kind}, {(float)type, l.seed, prog, alpha}, {l.nx, l.ny, flash, l.life >= 0 ? 1.f : 0.f}, {x, y, 0.f, 0.f}});
 }
 
 void MicroscopeUniverse::buildBoard(const Game& g) {
@@ -1058,23 +1097,28 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     orgInst_.clear();
     const float spread = lerpf(1.1f, 0.55f, wp) * (1.f + 0.3f * slow_);
     const float calmBlur = 0.25f * (1.f - wm);
+    std::vector<Inst> dwellInst;   // drawn over the tissue: the cells' organisms, and those just out of them
     for (const Org& o : orgs_) {
         vec2 g;
         const float zd = zoneDist(o.p, &g);
         const float young = 1.f - smoothstepf(1.5f, 3.f, o.age);
-        const float minA = lerpf(0.05f, 0.4f, young);
+        // (one out of a cleared cell is in plain view as it leaves the well; one from elsewhere fades in)
+        const float minA = o.fromCell ? lerpf(0.05f, 1.f, 1.f - smoothstepf(2.5f, 4.f, o.age)) : lerpf(0.05f, 0.4f, young);
         float a = lerpf(minA, 1.f, smoothstepf(-0.2f, 1.0f, zd));
-        a *= smoothstepf(0.f, 0.6f, o.age);
+        if (!o.fromCell) a *= smoothstepf(0.f, 0.6f, o.age);
         if (o.fade >= 0.f) a *= 1.f - smoothstepf(0.f, 1.f, o.fade);
         a *= 1.f - bridgeK;
         if (a <= 0.003f) continue;
-        const float grow = lerpf(0.45f, 1.f, smoothstepf(0.f, 1.8f, o.age));
-        float blur = saturate(std::fabs(o.depth * spread - focus_) * 0.55f - 0.12f + calmBlur) + 0.5f * young + bridgeK;
+        const float grow = lerpf(o.grow0, 1.f, smoothstepf(0.f, o.fromCell ? 2.2f : 1.8f, o.age));
+        const float focusIn = o.fromCell ? smoothstepf(0.5f, 3.f, o.age) : 1.f;   // it drifts to its depth
+        float blur = saturate(std::fabs(o.depth * spread - focus_) * 0.55f - 0.12f + calmBlur) * focusIn +
+                     (o.fromCell ? 0.f : 0.5f * young) + bridgeK;
         blur = saturate(blur);
         const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
         const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
-        orgInst_.push_back({{o.p.x, o.p.y, o.size * grow, ang}, {(float)o.kind, o.seed, anim, a},
-                            {blur, o.cilia, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+        (o.fromCell && o.age < 1.5f ? dwellInst : orgInst_)
+            .push_back({{o.p.x, o.p.y, o.size * grow, ang}, {(float)o.kind, o.seed, anim, a},
+                        {blur, o.cilia, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
     }
     for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f);
     if (overT_ >= 0.f)
@@ -1083,6 +1127,36 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, d.l, 3, t, 1.f, 0.f);
         }
     buildBoard(game);
+    // the organisms living inside cells of the stack and the falling piece
+    {
+        auto dwell = [&](const CellLook& l, float x, float y, int type, float alpha) {
+            if (l.life < 0 || alpha <= 0.003f) return;
+            const Org o = dweller(l, x, y, type);
+            const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
+            const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
+            dwellInst.push_back({{o.p.x, o.p.y, o.size, ang}, {(float)o.kind, o.seed, anim, alpha * (1.f - bridgeK)},
+                                 {0.f, 0.15f + 0.3f * wm + 0.6f * kickEnv_, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+        };
+        if (overT_ < 0.f)
+            for (int y = Game::HIDDEN; y < Game::H; y++)
+                for (int x = 0; x < Game::W; x++) {
+                    const Cell& c = game.cell(x, y);
+                    if (c.type < 0 || !has_[y][x]) continue;
+                    const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
+                    dwell(look_[y][x], p.x, p.y, c.type, 1.f);
+                }
+        if (game.hasPiece() && !game.over()) {
+            const Piece& p = game.piece();
+            int pc[4][2];
+            game.pieceCells(p, pc);
+            const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
+            for (int i = 0; i < 4; i++) {
+                if (pc[i][1] < Game::HIDDEN - 1) continue;
+                const vec3 w = layout::cellPos(pc[i][0] + dx, pc[i][1] + dy);
+                dwell(fallLook_[i], w.x, w.y, p.type, saturate((10.6f - w.y) / 0.6f));
+            }
+        }
+    }
     std::vector<Inst> speckInst;
     for (const Speck& k : specks_) {
         const float s = k.t / k.life;
@@ -1129,6 +1203,12 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPiece_, "uLife", (0.6f + 0.4f * wm) * (1.f - 0.5f * slow_));
     set1f(progPiece_, "uGlow", (0.95f + 0.05f * wm + 0.08f * wp + 0.1f * swell_) * (1.f - 0.1f * slow_));
     drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
+    if (!dwellInst.empty()) {
+        glUseProgram(progOrg_);
+        setStain(progOrg_);
+        set1f(progOrg_, "uGlow", (0.85f + 0.12f * wm + 0.15f * wp + 0.2f * swell_) * (1.f - 0.2f * slow_));
+        drawInst(progOrg_, orgVao_, orgVbo_, dwellInst.data(), dwellInst.size() * sizeof(Inst), dwellInst.size());
+    }
 
     // ---- The glow (dark-field).
     glDisable(GL_BLEND);

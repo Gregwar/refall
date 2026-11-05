@@ -40,8 +40,9 @@ private:
     bool colorsSet_ = false;
     void setStain(GLuint prog);
 
-    // ---- The stack: each cell keeps its nucleus (offset, seed).
-    struct CellLook { float nx = 0, ny = 0, seed = 0; };
+    // ---- The stack: each cell keeps its nucleus (offset, seed) and, in some of them, a small organism living inside
+    // (its kind, -1 for none), which swims out into the dish when the row clears.
+    struct CellLook { float nx = 0, ny = 0, seed = 0; int life = -1; };
     CellLook look_[22][10];
     bool has_[22][10] = {};
     CellLook lookOf(int x, int y);
@@ -61,9 +62,12 @@ private:
         float ang = 0, speed = 0.3f, size = 2.f, seed = 0, age = 0, fade = -1.f, depth = 0, burst = 0;
         float turnPhase = 0, cilia = 0, dir = 1.f, tint = 0, spin = 0, dart = 0;
         int type = 0;
+        float grow0 = 0.45f;     // its size at birth, a fraction of its full size
+        bool fromCell = false;   // born out of a cleared cell: crisp and in full view from the start
     };
     std::vector<Org> orgs_;
-    void release(int kind, float y, int side, int type, float delay);
+    Org dweller(const CellLook& l, float x, float y, int type) const;   // a cell's organism, as it is now inside it
+    void releaseFrom(const CellLook& l, float x, float y, int type, float delay, bool big);
     vec2 pickHome(int side);
     std::vector<std::pair<float, Org>> pending_;   // organisms released a moment after their row bursts
     int pickKind();

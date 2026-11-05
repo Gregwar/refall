@@ -382,8 +382,10 @@ void main() {
     // the cell lives: everything inside drifts slowly and never stops, each cell on its own clock and with its own
     // mood (some livelier for a while, some nearly still). The cytoplasm flows, the nucleus wanders and breathes out
     // of round, granules stream at their own pace, a vacuole drifts. The wall breathes a little, never out of the grid.
-    float ts = uTime * (0.8 + 0.4 * fract(seed * 5.1)) + seed * 97.0;
-    float act = uLife * (0.35 + 0.65 * smoothstep(0.25, 0.75, vnoise(vec2(ts * 0.06, seed * 17.0))));
+    // (only the cells with an organism inside live so; the others are still)
+    float live = vC.w;
+    float ts = live * uTime * (0.8 + 0.4 * fract(seed * 5.1)) + seed * 97.0;
+    float act = live * uLife * (0.35 + 0.65 * smoothstep(0.25, 0.75, vnoise(vec2(ts * 0.06, seed * 17.0))));
     if (kind == 0) {
         float wob = vnoise(vec2(atan(p.y, p.x) * 1.6 + seed * 9.0, ts * 0.18)) - 0.5;
         d += (0.016 * (wob + 0.5) + 0.004 * (1.0 + sin(ts * 0.5))) * act;   // only ever inward: the gap stays
@@ -402,10 +404,11 @@ void main() {
     float na = atan(nq.y, nq.x);
     nr *= 1.0 + act * (0.09 * sin(2.0 * na + ts * 0.37 + seed * 4.0) + 0.05 * sin(3.0 * na - ts * 0.29 + seed));
     float nd = length(nq * vec2(1.0, 1.0 + 0.15 * sin(seed * 20.0))) - nr;
-    float nuc = (1.0 - smoothstep(-aa * 1.5, aa * 1.5, nd)) * proto;
-    float nedge = exp(-abs(nd) / 0.014) * proto;
+    // (a cell with an organism inside is a clear pool of it: no nucleus in the way)
+    float nuc = (1.0 - smoothstep(-aa * 1.5, aa * 1.5, nd)) * proto * (1.0 - live);
+    float nedge = exp(-abs(nd) / 0.014) * proto * (1.0 - live);
     float chrom = vnoise(nq * 38.0 + seed * 9.0 + vec2(ts * 0.05, 0.0));
-    float nucl = 1.0 - smoothstep(0.026 - aa, 0.026 + aa, length(nq - vec2(0.03, 0.025)));
+    float nucl = (1.0 - smoothstep(0.026 - aa, 0.026 + aa, length(nq - vec2(0.03, 0.025)))) * (1.0 - live);
     float gr = vnoise(gp * 15.0 + seed * 41.0) * 0.6 + vnoise(gp * 33.0 + seed * 17.0) * 0.4;
     // a vacuole: a clear, soft-edged pool drifting slowly through the cytoplasm
     vec2 vc = 0.17 * vec2(sin(ts * 0.083 + seed * 6.0), cos(ts * 0.071 + seed * 3.0));
@@ -441,7 +444,8 @@ void main() {
     vec3 field = uFieldA[0];
     float dens = 0.8 + 0.17 * exp(-in_ / 0.14) + 0.06 * (gr - 0.5);
     vec3 bf = mix(field, c, dens) * mix(0.8, 1.0, proto);
-    bf = mix(bf, mix(field, c, 0.45), vac * 0.55);
+    bf = mix(bf, mix(field, c, 0.5), live * 0.45 * proto);
+    bf = mix(bf, mix(field, c, 0.45), vac * 0.55 * (1.0 - live));
     bf = mix(bf, c * 0.42, grn * 0.75);
     bf = mix(bf, c * (0.55 + 0.15 * chrom), nuc * 0.85);
     bf = mix(bf, c * 0.3, nedge * 0.6 + nucl * nuc * 0.7);
@@ -452,7 +456,7 @@ void main() {
     vec3 df = g * (0.1 + 0.06 * gr) * proto;
     df += g * exp(-in_ / 0.1) * 0.35 * proto;
     df += g * inner * (0.15 + 0.3 * tl) * proto;
-    df *= 1.0 - 0.45 * vac;
+    df *= 1.0 - 0.45 * vac * (1.0 - live) - 0.3 * live;
     df += g * grn * 0.45;
     df = mix(df, g * (0.22 + 0.12 * chrom), nuc * 0.85);
     df += g * (nedge * 0.45 + nucl * nuc * 0.45);
