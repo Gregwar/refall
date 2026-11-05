@@ -1273,6 +1273,7 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progDown_, "uSrc", 0);
     set2f(progDown_, "uTexel", 1.5f / sceneT_.w, 1.5f / sceneT_.h);
+    set1f(progDown_, "uBlockCut", 0.75f);   // the blocks feed the glow only faintly: crisp, the city keeps its glow
     ugl::drawFullscreen();
     glUseProgram(progBlur_);
     set1i(progBlur_, "uSrc", 0);
