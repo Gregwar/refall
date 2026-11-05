@@ -1481,9 +1481,17 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    dropAmt_ = approach(dropAmt_, dropMode_ ? 1.f : 0.f, dropMode_ ? 4.f : 0.5f, dt);
+    // a real drop, not a chorus (both rise into a peak): from the HUD's section, else from the music's pace
+    bool sectionKnown = false, sectionDrop = false;
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_SECTION) {
+            sectionKnown = true;
+            sectionDrop = h.text == "DROP";
+        }
+    const bool isDrop = dropMode_ && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 4.f : 0.5f, dt);
     // the print changes on the drop's downbeat (quickly, so the pieces never sit long in between), back slowly
-    colAmt_ = approach(colAmt_, dropMode_ ? 1.f : 0.f, dropMode_ ? 10.f : 0.6f, dt);
+    colAmt_ = approach(colAmt_, isDrop ? 1.f : 0.f, isDrop ? 10.f : 0.6f, dt);
     {
         const Palette target = basePalette(variant_);
         if (!palSet_) { basePal_ = target; palSet_ = true; }
@@ -1510,10 +1518,10 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         auto onBar = [&]() {
             barCount_++;
             if (level_ < 1 || overT_ >= 0.f) return;
-            const int interval = dropMode_ ? 4 : level_ >= 2 ? 2 : 4;
+            const int interval = isDrop ? 4 : level_ >= 2 ? 2 : 4;
             if (barCount_ - lastPartBar_ >= interval) {
                 lastPartBar_ = barCount_;
-                addPart(dropMode_ ? 0.9f : level_ >= 2 ? 0.55f : 0.32f, 0.f);
+                addPart(isDrop ? 0.9f : level_ >= 2 ? 0.55f : 0.32f, 0.f);
             }
         };
         if (music.hasSong) {
@@ -1532,7 +1540,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
             double d = pos - driveBeat_;
             driveBeat_ = pos;
             if (d < 0.0 || d > 0.5) d = 0.0; // a seek
-            motion_ = approach(motion_, dropMode_ && wp > 0.5f && overT_ < 0.f ? 1.f : 0.f, dropMode_ ? 5.f : 1.2f, dt);
+            motion_ = approach(motion_, isDrop && wp > 0.5f && overT_ < 0.f ? 1.f : 0.f, isDrop ? 5.f : 1.2f, dt);
             angle_ -= (float)(d * (TAU / 4.0)) * motion_ * lerpf(1.f, 0.35f, slow_);
         } else {
             barClock_ += dt;
