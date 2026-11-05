@@ -5,6 +5,7 @@
 
 #include "ugl.hpp"
 #include "universe.hpp"
+#include "universes/sonar/scene.hpp"
 
 class SonarUniverse : public Universe {
 public:
@@ -29,29 +30,36 @@ private:
     struct Inst { float a[4], b[4], c[4]; };
     struct MoteInst { float a[4], b[4]; };
 
+    // ---- The sunken world (3D) and the camera gliding along its loop.
+    sonar_scene::Scene scene_;
+    float pathS_ = 0.f, speed_ = 0.9f, speedV_ = 0.f; // arc length along the loop, speed (units/s) and its rate
+    vec3 camPos_, camF_{0, 0, 1}, camR_{1, 0, 0}, camU_{0, 1, 0};
+    mat4 wvp_;
+    float decay_ = 1.5f;
+    float wTan_ = 0.5f;               // tan of half the world camera's vertical field of view
+    void updateCamera(float wdt, float targetSpeed, float dt);
+    bool toBoard(const vec3& p, vec2& board) const; // world -> board units (the plane the well is drawn on)
+    bool toNdc(const vec3& p, vec2& ndc, float& depth) const;
+    bool seabedAt(float nx, float ny, vec3& hit) const; // the seabed seen at a screen point (ndc)
+
     // ---- The echoes: pings on the beat grid, each lighting what lies around one point for a moment.
-    struct Ping { float x = 0, y = 0, age = -1.f, strength = 0, reach = 4.f; };
+    struct Ping { vec3 p; float age = -1.f, strength = 0, reach = 4.f; };
     Ping pings_[8];
     int pingNext_ = 0;
     long long pingSlot_ = -1;
     int pingSide_ = 1;
-    struct Anchor { float x, y; int layer; }; // layer 0 seabed, 1 wreck, 2 city
-    std::vector<Anchor> anchors_;
     int lastAnchor_[2] = {-1, -1};
-    void buildAnchors();
-    void ping(float x, float y, float strength, float reach);
+    void ping(const vec3& p, float strength, float reach);
     void pingSomewhere(int side, float strength, float reach, int maxLayer, float cityChance);
 
-    // ---- The chart: each cleared row maps a patch of the seabed (then of the city) for good.
-    struct Chart { float x, y, r, amount = 0, delay = 0; bool fading = false; };
+    // ---- The chart: each cleared row maps a spot of the seabed (later, of the city) for good.
+    struct Chart { vec3 p; float r, amount = 0, delay = 0; bool fading = false; };
     std::vector<Chart> charts_;
-    std::vector<vec3> chartOrder_; // x, y, radius: the spots in the order they are mapped
-    size_t chartNext_ = 0;
-    void buildChartOrder();
-    int chartSpot(float delay);
+    int chartCount_ = 0;
+    int chartSpot(int side, float delay);
 
     // ---- Light sinking from a cleared row to the spot it maps; the contact of a hard drop.
-    struct Mote { vec2 p0, p1, p; float t = 0, life = 1.4f, delay = 0, size = 0.18f, peak = 1.f, stretch = 1.f; vec3 col; bool glint = false; };
+    struct Mote { vec2 p0, p1, p; float t = 0, life = 1.4f, delay = 0, size = 0.18f, peak = 1.f, stretch = 1.f; vec3 col; bool glint = false; bool world = false; vec3 target; };
     std::vector<Mote> motes_;
     struct Sink { float x, y; vec3 col; float t, dur, delay; int kind; };
     std::vector<Sink> sinks_;
@@ -82,10 +90,12 @@ private:
     void flushShapes();
 
     // ---- GL.
-    GLuint progWorld_ = 0, progWell_ = 0, progPiece_ = 0, progMote_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
+    GLuint progWater_ = 0, progMesh_ = 0, progSnow_ = 0, progWell_ = 0, progPiece_ = 0, progMote_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
            progShape_ = 0, progText_ = 0;
     GLuint quadVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0, moteVao_ = 0, moteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
-           textVao_ = 0, textVbo_ = 0;
+           textVao_ = 0, textVbo_ = 0, meshVao_ = 0, meshVbo_ = 0, meshIbo_ = 0, snowVao_ = 0, snowVbo_ = 0;
+    GLsizei meshCount_ = 0, snowCount_ = 0;
+    void setWorldUniforms(GLuint prog);
     ugl::Target sceneT_, bloomA_, bloomB_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
@@ -98,8 +108,6 @@ private:
     bool colSet_ = false;
     uint64_t seed_ = 1;
     float seedF_ = 0.f;
-    vec3 bedPhase_{0.f, 0.f, 0.f};
-    float bedY(float x) const;
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;
