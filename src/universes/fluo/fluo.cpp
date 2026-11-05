@@ -1197,7 +1197,7 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progPlay_);
         setMat(progPlay_, "uVP", vp_);
         set1f(progPlay_, "uPx", px_);
-        set1f(progPlay_, "uGlowK", (0.35f + 0.9f * uvE) * (1.f - bridge));
+        set1f(progPlay_, "uGlowK", (0.35f + 0.4f * uvE) * (1.f - bridge));
         set1f(progPlay_, "uMul", mul);
         set1f(progPlay_, "uBridge", smoothstepf(0.f, 1.f, bridge));
         set3f(progPlay_, "uBridgeInk", bridge_.ink);
