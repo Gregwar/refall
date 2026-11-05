@@ -1520,7 +1520,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.55f + 0.1f * wp + 0.2f * fest_) * (1.f + 0.5f * slow_));
     set1f(progFinal_, "uExposure", 1.f);
-    set1f(progFinal_, "uHalo", 0.22f * bright);  // a halo around the containers, under a bright sky only
+    set1f(progFinal_, "uHalo", 0.16f + 0.06f * bright);  // a halo around the containers (a little more under a bright sky)
     set1f(progFinal_, "uSatF", 1.f + 0.06f * wp + 0.1f * fest_);
     set1f(progFinal_, "uSlow", slow_ * 0.45f);
     set3f(progFinal_, "uSlowTint", vec3(0.8f, 0.9f, 1.05f));
