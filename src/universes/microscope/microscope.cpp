@@ -182,6 +182,7 @@ void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
 
 bool MicroscopeUniverse::init(int width, int height) {
     using shaders::withCommon;
+    for (auto& l : fallLook_) l = lookOf(0, 0);
     const std::string inkText = withCommon(shaders::TEXT_FS, shaders::INK_GLSL);
     const std::string inkShape = withCommon(shaders::SHAPE_FS, shaders::INK_GLSL);
     progField_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FIELD_FS).c_str(), "microscope field");
@@ -478,11 +479,13 @@ vec2 MicroscopeUniverse::pickHome(int side) {
 void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
     case GameEvent::Lock: {
-        for (auto& c : ev.cells) {
+        for (size_t i = 0; i < ev.cells.size() && i < 4; i++) {
+            const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            look_[c.y][c.x] = lookOf(c.x, c.y);
+            look_[c.y][c.x] = fallLook_[i];
             has_[c.y][c.x] = true;
         }
+        for (auto& l : fallLook_) l = lookOf(0, 0);
         break;
     }
     case GameEvent::HardDrop: {
@@ -640,7 +643,7 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
                 const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
                 addCell(p.x, p.y, 0.5f, c.type, look_[y][x], 0, 0.f, 1.f, std::pow(saturate(c.flash), 14.f));
             }
-    // the falling piece: exactly a locked one at its place (its nuclei centered until it locks)
+    // the falling piece: exactly a locked one at its place (its cells keep their looks when it locks)
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -650,12 +653,7 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
             if (cells[i][1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
             const float a = saturate((10.6f - w.y) / 0.6f);
-            CellLook l;
-            const float an = (float)(i * 2.1 + p.type);
-            l.nx = std::cos(an) * 0.07f;
-            l.ny = std::sin(an) * 0.07f;
-            l.seed = hashf((uint64_t)(p.type * 7 + i));
-            addCell(w.x, w.y, 0.5f, p.type, l, 0, 0.f, a, 0.f);
+            addCell(w.x, w.y, 0.5f, p.type, fallLook_[i], 0, 0.f, a, 0.f);
         }
     }
     // the previews
