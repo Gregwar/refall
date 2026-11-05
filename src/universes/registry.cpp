@@ -43,6 +43,14 @@ int find(const std::string& name) {
         if (c == '_') c = ' '; // the registry id works too ("white_room")
     for (int i = 0; i < count(); i++)
         if (n == entry(i).name) return i;
+    // or by its registry id ("forest" for GLOWING FOREST)
+    static const char* const ids[] = {
+#define UNIVERSE(id, weight) #id,
+#include "universes/registry_enabled.def"
+#undef UNIVERSE
+    };
+    for (int i = 0; i < count() && i < (int)(sizeof(ids) / sizeof(ids[0])); i++)
+        if (n == upper(ids[i])) return i;
     // a name of several words can be given by its first one ("polar" for POLAR NIGHT)
     for (int i = 0; i < count(); i++) {
         const std::string e = entry(i).name;
