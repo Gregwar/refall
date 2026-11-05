@@ -379,14 +379,17 @@ void main() {
         float dp = sdBox(p, (hb - wallW) * s - r2) - r2;
         proto = 1.0 - smoothstep(-aa, aa, dp);
     }
-    // now and then a cell stirs for a few seconds (each on its own slow cycle): its nucleus drifts a little and its
-    // cytoplasm streams around it, then it settles; the wall never moves
-    float per = 12.0 + 10.0 * fract(seed * 3.71);
+    // now and then a cell stirs for a few seconds (each on its own slow cycle): its cytoplasm streams once around the
+    // cell, carrying its granules, and its nucleus wobbles, then it settles; the wall never moves. The streaming turn
+    // ends where it began, so the cell is seamless from one cycle to the next.
+    float per = 9.0 + 7.0 * fract(seed * 3.71);
     float ph = fract(uTime / per + seed * 5.3);
-    float wake = smoothstep(0.0, 0.08, ph) * (1.0 - smoothstep(0.1, 0.24, ph)) * uLife;
+    const float WAKE = 0.32;
+    float wake = smoothstep(0.0, 0.06, ph) * (1.0 - smoothstep(WAKE - 0.08, WAKE, ph)) * uLife;
+    float dir = fract(seed * 13.7) < 0.5 ? -1.0 : 1.0;
+    float sw = dir * 6.2832 * smoothstep(0.0, WAKE, ph);
     vec2 nc = vC.xy;
-    if (kind == 0) nc += wake * 0.06 * vec2(sin(uTime * 0.55 + seed * 13.0), cos(uTime * 0.47 + seed * 7.0));
-    float sw = wake * 0.7 * sin(uTime * 0.31 + seed * 11.0);
+    if (kind == 0) nc += wake * 0.07 * vec2(sin(uTime * 2.3 + seed * 13.0), cos(uTime * 1.9 + seed * 7.0));
     vec2 gp = mat2(cos(sw), sin(sw), -sin(sw), cos(sw)) * p;
     float nr = 0.105 + 0.025 * fract(seed * 7.13);
     if (kind == 3) nc *= 1.0 - 0.4 * t;
@@ -400,10 +403,10 @@ void main() {
     float grn = 0.0;
     for (int j = 0; j < 5; j++) {
         float fj = float(j);
-        float ang = fj * 1.2566 + seed * 31.0 + sw * 1.6;
-        float rad = 0.21 + 0.11 * fract(seed * 17.0 + fj * 0.37);
+        float ang = fj * 1.2566 + seed * 31.0 + sw;
+        float rad = 0.24 + 0.08 * fract(seed * 17.0 + fj * 0.37);
         vec2 gc = rad * vec2(cos(ang), sin(ang));
-        float gs = 0.014 + 0.008 * fract(seed * 23.0 + fj * 0.61);
+        float gs = 0.034 + 0.012 * fract(seed * 23.0 + fj * 0.61);
         grn = max(grn, 1.0 - smoothstep(gs - aa, gs + aa, length(p - gc)));
     }
     grn *= proto * (1.0 - nuc);
@@ -423,7 +426,7 @@ void main() {
     vec3 field = uFieldA[0];
     float dens = 0.8 + 0.17 * exp(-in_ / 0.14) + 0.06 * (gr - 0.5);
     vec3 bf = mix(field, c, dens) * mix(0.8, 1.0, proto);
-    bf = mix(bf, c * 0.5, grn * 0.55);
+    bf = mix(bf, c * 0.42, grn * 0.75);
     bf = mix(bf, c * (0.55 + 0.15 * chrom), nuc * 0.85);
     bf = mix(bf, c * 0.3, nedge * 0.6 + nucl * nuc * 0.7);
     bf = mix(bf, vec3(1.0), inner * (0.1 + 0.25 * tl) * proto);
@@ -433,7 +436,7 @@ void main() {
     vec3 df = g * (0.1 + 0.06 * gr) * proto;
     df += g * exp(-in_ / 0.1) * 0.35 * proto;
     df += g * inner * (0.15 + 0.3 * tl) * proto;
-    df += g * grn * 0.3;
+    df += g * grn * 0.45;
     df = mix(df, g * (0.22 + 0.12 * chrom), nuc * 0.85);
     df += g * (nedge * 0.45 + nucl * nuc * 0.45);
     df = mix(df, g * (1.2 + 0.6 * flash), wall);
