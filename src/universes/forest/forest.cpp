@@ -8,8 +8,9 @@
 //
 // The forest grows with the lines: a new song starts with a dark forest and a few faint plants; each cleared row
 // breaks into spores that drift out of the well to an empty spot, where a new plant comes up and stays for the song
-// (a Tetris sows a cluster of four at once and the whole forest flares up). Once every spot is taken, new lines make
-// the old plants grow fuller.
+// (a Tetris sows a cluster of four at once and the whole forest flares up). The spots fill in stages (the front row, then
+// the bark and the left's threads, then a back row), so the forest keeps growing to the end of a long song; once
+// every spot is taken, new lines make the old plants grow fuller.
 //
 // The pieces are solid little cubes of luminous fungus flesh, one per cell with a thin gap: lit from within, darker
 // toward their sides, threaded with bright veins and a few glowing spots, a pale line of moonlight along their top edge;
@@ -332,7 +333,10 @@ void ForestUniverse::buildForest(bool instant) {
             if (p.fade < 0.f) p.fade = 0.f;
     Rng r(seed_ ^ 0xF0E57ull);
     std::vector<Plant> fresh;
+    std::vector<float> late;    // added to a spot's place in the order: the back row, the bark and the left come later
+    float lateNow = 0.f;
     const float edge = viewH_.x - 0.4f;
+    const float cornerX = viewH_.x - 8.f;   // the bottom-left corner's text
     auto add = [&](float x, float y, int kind, float scale, bool flip) {
         Plant p;
         p.x = x;
@@ -344,13 +348,17 @@ void ForestUniverse::buildForest(bool instant) {
         p.colMix = r.chance(0.3f) ? 1.f : r.range(0.f, 0.35f);
         p.height = KIND_H[kind];
         fresh.push_back(p);
+        late.push_back(lateNow);
     };
-    // the floor
+    // the floor: a back row (smaller, a little further, drawn behind; it fills once the front row has grown), then
+    // the front row
+    for (int row = 1; row >= 0; row--)
     for (int side = -1; side <= 1; side += 2) {
-        float ax = 5.9f + r.range(0.f, 0.4f);
+        lateNow = row ? 0.7f : 0.f;
+        float ax = 5.9f + r.range(0.f, 0.4f) + (row ? 0.45f : 0.f);
         while (ax < edge) {
             const float x = side * ax;
-            const float y = groundY(x, groundSeed_) + 0.02f;
+            const float y = groundY(x, groundSeed_) + 0.02f + (row ? 0.22f : 0.f);
             // how high it may grow here
             float room;
             if (ax < 6.9f) room = 0.9f;
@@ -365,19 +373,38 @@ void ForestUniverse::buildForest(bool instant) {
             if (kind == 3 && room > 4.f) scale = r.range(1.0f, 1.5f);
             scale = std::min(scale, room / KIND_H[kind]);
             if (kind == 1 && room < 1.f) scale = std::min(scale, 0.42f);
+            if (row) scale *= 0.72f;
             // the bottom-left corner holds the section and the universe's names: nothing grows there
-            const bool corner = side < 0 && ax > 9.4f;
+            const bool corner = side < 0 && ax > cornerX;
             if (scale > 0.25f && !corner) add(x, y, kind, scale, r.chance(0.5f));
             ax += r.range(0.7f, 1.35f) * (kind == 3 ? 1.5f : 1.f);
         }
     }
-    // the canopy: glowworm threads hanging on the free right side (the left holds the song's title)
+    // the canopy: glowworm threads hanging on the free right side, and on the left short of the song's title
     {
         const float top = viewC_.y + viewH_.y + 0.15f;
+        lateNow = 0.f;
         float x = 11.9f + r.range(0.f, 0.6f);
         while (x < viewH_.x - 0.4f) {
             add(x, top, 2, r.range(0.85f, 1.15f), r.chance(0.5f));
             x += r.range(1.6f, 2.8f);
+        }
+        lateNow = 0.45f;
+        x = 12.2f + r.range(0.f, 0.6f);
+        while (x < viewH_.x - 7.f) {
+            add(-x, top, 2, r.range(0.7f, 1.0f), r.chance(0.5f));
+            x += r.range(1.6f, 2.8f);
+        }
+    }
+    // the bark: small fungi up the near trunks, on both sides, clear of the HUD and the title
+    lateNow = 0.4f;
+    for (const Trunk& t : trunks_) {
+        const int n = t.x < 0.f ? 3 : 2;
+        for (int i = 0; i < n; i++) {
+            const float y = -7.5f + (i + r.range(0.1f, 0.9f)) * (12.f / n);
+            const float x = t.x + t.lean * (y + 10.f) + (r.chance(0.5f) ? 1.f : -1.f) * t.hw * 0.5f;
+            if (std::fabs(x) > viewH_.x - 0.6f || inHud(x, y) || y > 5.5f) continue;
+            add(x, y, 0, r.range(0.35f, 0.5f), r.chance(0.5f));
         }
     }
     // the order: mostly shuffled, the floor near the well and the free sides first, the far edge and the bark later
@@ -386,7 +413,7 @@ void ForestUniverse::buildForest(bool instant) {
     for (int i = 0; i < (int)fresh.size(); i++) {
         const Plant& p = fresh[i];
         const float ax = std::fabs(p.x);
-        float key = r.uniform();
+        float key = r.uniform() + late[i];
         if (p.kind == 2) key += 0.2f;
         if (ax > 18.f) key += 0.25f;
         if (p.kind == 5 && ax > 7.f) key += 0.15f;
@@ -417,6 +444,7 @@ int ForestUniverse::sprout(float delay, float nearX, bool fast) {
         }
     }
     if (pi < 0) {
+        const float cornerX = viewH_.x - 8.f;
         std::vector<int> live;
         for (int i = 0; i < (int)plants_.size(); i++)
             if (plants_[i].live && plants_[i].fade < 0.f && plants_[i].scale < 1.6f && plants_[i].kind != 5) live.push_back(i);
@@ -425,7 +453,7 @@ int ForestUniverse::sprout(float delay, float nearX, bool fast) {
         Plant& p = plants_[pi];
         // fuller, if there is room (under the columns and beside the well it stays as it is)
         const float ax = std::fabs(p.x);
-        if (ax > 11.8f && p.x > 0.f && p.kind != 2) p.scale *= 1.06f;
+        if (ax > 11.8f && p.kind != 2 && !(p.x < 0.f && ax > cornerX - 0.5f)) p.scale *= 1.1f;
         p.kickGlow = 1.f;
         return pi;
     }
