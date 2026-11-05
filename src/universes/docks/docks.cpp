@@ -91,9 +91,9 @@ const VariantDef VARIANTS[] = {
      0.45f, 0.06f, 1.f, 0.0036f, 1.f, 0.45f, 1.1f, 1.f, 0.9f},
     // first light: a lilac sky warming to peach, the morning mist on the basin, the lamps going pale; red cranes
     {"DAWN", 0x3a4a7a, 0x8a8cb4, 0xf0bc9c, 0xffcc98, 0xc89070, 0x9a94aa, 0x4a5272, 0x24242a, 0xfff6ec, 0x2e3e58, 0xffb060,
-     0xfff0e0, 0x8e8a86, 0xd8402c, 0xeeeeee,
-     {0x1e8ed0, 0xf0b428, 0x7a4ec0, 0x2a9e5e, 0xd63832, 0x234ca8, 0xe8701c}, {0x1a2a44, 0x6a1c1c, 0x203a32},
-     -0.2f, 0.035f, 0.f, 0.0052f, 0.f, 1.f, 0.55f, 0.85f, 1.15f},
+     0xfff0e0, 0x8e8a86, 0x5a6c8e, 0xe8eaee,
+     {0x1670c4, 0xe0a010, 0x6438b4, 0x1a8a4c, 0xc42624, 0x1c3a98, 0xd85a10}, {0x1a2a44, 0x6a1c1c, 0x203a32},
+     -0.2f, 0.035f, 0.f, 0.0026f, 0.f, 0.4f, 0.55f, 0.85f, 1.15f},
     // a north sea night: low cloud, a grey-teal sky, cold lamps, green cranes
     {"NORTH SEA", 0x0a1418, 0x1c2e34, 0x3e5658, 0x48605e, 0x2a3c3c, 0x2a3c40, 0x1c2c30, 0x0c1012, 0xe6f2f4, 0x0a181c, 0xffae5a,
      0xcaf0ff, 0x6e7270, 0x3a8a7a, 0xe0e0d8,
@@ -1463,8 +1463,11 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progVeil_, "uVP", vp_);
     set4f(progVeil_, "uRect", -5.4f, Y_Q, 5.4f, 11.5f);
     set1f(progVeil_, "uZ", -2.f * CELL_D - 0.1f);
+    // (deeper under a bright sky, so the containers stand out from the port)
+    const float skyLum = 0.2126f * P.hor.x + 0.7152f * P.hor.y + 0.0722f * P.hor.z;
+    const float bright = smoothstepf(0.35f, 0.6f, skyLum);
     set3f(progVeil_, "uTint", P.zen * 0.3f);
-    set1f(progVeil_, "uA", 0.32f);
+    set1f(progVeil_, "uA", 0.32f + 0.08f * bright);
     set1f(progVeil_, "uHorY", EYE_Y);
     glBindVertexArray(quadVao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
