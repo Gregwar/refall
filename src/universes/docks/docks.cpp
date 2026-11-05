@@ -487,7 +487,7 @@ void DocksUniverse::setLevel(int level, float energy, float seconds, float impac
 void DocksUniverse::drop(float strength) {
     dropMode_ = true;
     dropT_ = 0.f;
-    swell_ = std::max(swell_, 0.7f + 0.3f * strength);
+    swellPeak_ = std::max(swellPeak_, 0.7f + 0.3f * strength);
 }
 
 void DocksUniverse::refresh(float strength) { refreshK_ = std::max(refreshK_, strength); }
@@ -987,7 +987,9 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     float festT = 0.f;
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.5f * smoothstepf(16.f * spb, 64.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.5f : 0.25f, dt);
-    swell_ = approach(swell_, 0.f, 0.35f, dt);
+    // (the swell eases in over a beat or so, then dies away slowly: no sudden jump of the light)
+    swellPeak_ = approach(swellPeak_, 0.f, 0.35f, dt);
+    swell_ = approach(swell_, swellPeak_, 2.f, dt);
     refreshK_ = approach(refreshK_, 0.f, 0.5f, dt);
     const float half = beat_ * 0.5f;
     const int halfI = (int)std::floor(half);

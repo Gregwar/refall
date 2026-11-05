@@ -185,7 +185,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false;
-    float dropT_ = 99.f, fest_ = 0.f, swell_ = 0.f;
+    float dropT_ = 99.f, fest_ = 0.f, swell_ = 0.f, swellPeak_ = 0.f;
     float kickIn_ = 0.f, refreshK_ = 0.f;
     double time_ = 0.0;
     float worldTime_ = 0.f, beat_ = 0.f;
