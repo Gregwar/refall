@@ -84,6 +84,7 @@ song, and songs change universe with a transition on the beat. Twenty-four unive
 <tr>
 <td><img src="docs/universes/ripples.jpg"><br><b>RIPPLES</b>: cut stone blocks in still water seen from above; every move sends fine ripples through a real wave simulation, cleared rows sink and open lily pads on the pond, the drop is a gust of wind<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/microscope.jpg"><br><b>MICROSCOPE</b>: a Petri dish through the eyepiece, the pieces stained plant cells; each cleared row releases a microorganism that swims in the dish for the rest of the song, the drop washes in a new stain<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a dark sea where shapes glow up from the black as echoes return on the beat; each cleared row sinks into the dark and charts the seabed for good, the drop raises a sunken city<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
