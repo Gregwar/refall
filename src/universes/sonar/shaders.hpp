@@ -1,12 +1,13 @@
 #pragma once
 // SONAR's shaders (see sonar.cpp).
 //
-// WORLD_FS paints the sea (near-black water, the seabed, its rocks and a wreck in front, a sunken city behind),
-// every surface dark until an echo returns from it: the pings (local, on the beat grid) light the surfaces facing
-// them for a moment, the charted patches (one per cleared row) keep them faintly lit for good, with survey lines
-// along the seabed's strata; a few particles in the water show only where an echo passes. PIECE_FS draws the
-// blocks (glowing solid cubes, instanced per cell), MOTE_FS the soft points of light (a cleared row's light sinking
-// to the seabed, a hard drop's contact), DOWN_FS / BLUR_FS the glow and FINAL_FS the frame.
+// WATER_FS paints the deep water (near black, a breath lighter far above); MESH_FS the sunken world in 3D (the
+// seabed, rocks, the wreck, the city), every surface dark until an echo returns from it: the pings (local, on the
+// beat grid) light the faces turned toward them, the polygons' edges as fine lines of light; the charted spots
+// (one per cleared row) stay faintly lit for good, the seabed showing its depth contours there; SNOW_VS / SNOW_FS
+// the particles drifting around the camera. PIECE_FS draws the blocks (solid cubes lit from within, instanced per
+// cell, crisp: the glow is the world's only), MOTE_FS the soft points of light (a cleared row's light sinking to
+// the seabed, a hard drop's contact), DOWN_FS / BLUR_FS the world's glow and FINAL_FS the frame.
 #include <string>
 
 namespace sonar_shaders {
@@ -27,228 +28,188 @@ float fbm(vec2 p) {
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 )";
 
-// ---------------------------------------------------------------- the sea (full screen)
-inline const char* WORLD_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform vec4 uView;             // center, half extents (board units)
-uniform vec3 uWaterTop, uWaterLow, uEcho, uEchoCity;
-uniform float uTime, uSeed, uDecay;
-uniform vec3 uS;                // the seabed's phases (the song)
-uniform vec4 uPing[8];          // x, y, age (s; < 0: none), strength
-uniform float uPingR[8];        // reach
-uniform vec4 uChart[64];        // x, y, radius, amount
-uniform int uCharts;
-uniform float uBed, uCity, uWin, uSlow, uFade;
+// ---------------------------------------------------------------- the sunken world (3D)
+// Shared by the water, the world's mesh and the particles: the pings, the quiet ground behind the well and the
+// HUD, the water's own faint light.
+inline const char* WORLD_COMMON = R"(
+uniform vec4 uPing[8];          // x, y, z (world), age (s; < 0: none)
+uniform vec2 uPingS[8];         // strength, reach
+uniform float uDecay;
+uniform vec4 uView;             // the board's view: center, half extents (board units)
+uniform vec2 uRes;
+uniform vec3 uWaterTop, uWaterLow;
+uniform vec3 uCamF, uCamR, uCamU; // the world camera: forward, right and up scaled to the view's half extents
+uniform float uTime, uSeed;
 
-float bedY(float x) {
-    float ax = abs(x);
-    float y = -9.2 + 0.42 * sin(0.29 * x + uS.x) + 0.22 * sin(0.77 * x + uS.y) + 0.1 * sin(1.9 * x + uS.z);
-    y -= 1.6 * (1.0 - smoothstep(4.5, 9.5, ax));   // a trench under the well
-    float r = smoothstep(12.0, 23.0, ax);
-    return y + 3.0 * r * r;                         // slopes rising at the edges
+// An echo returning from p (it leaves the ping's point and reaches farther surfaces a little later).
+float pingEnv(int i, vec3 p, out vec3 dir) {
+    vec4 P = uPing[i];
+    dir = vec3(0.0, 1.0, 0.0);
+    if (P.w < 0.0) return 0.0;
+    vec3 dv = P.xyz - p;
+    float dist = length(dv);
+    float a = P.w - dist / 14.0;
+    if (a <= 0.0) return 0.0;
+    float q = dist / uPingS[i].y;
+    dir = dv / max(dist, 1e-3);
+    return (1.0 - exp(-a / 0.14)) * exp(-a / uDecay) * exp(-q * q * q * q) * uPingS[i].x;
 }
-const float WRECK_X = 12.6, TOWER_X = 14.4, SPIRE_X = 15.9, DOME_X = 17.7, COL_X = 20.2, PYR_X = -19.2, ARCH_X = -14.8;
-float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
-float sdSeg(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h) - r; }
-float sdTrapezoid(vec2 p, float r1, float r2, float he) {
-    vec2 k1 = vec2(r2, he), k2 = vec2(r2 - r1, 2.0 * he);
-    p.x = abs(p.x);
-    vec2 ca = vec2(p.x - min(p.x, (p.y < 0.0) ? r1 : r2), abs(p.y) - he);
-    vec2 cb = p - k1 + k2 * clamp(dot(k1 - p, k2) / dot(k2, k2), 0.0, 1.0);
-    float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
-    return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
-}
-float rock(vec2 p, float x, float r, float sq) {
-    vec2 c = vec2(x, bedY(x) + r * 0.25);
-    vec2 q = (p - c) * vec2(1.0, sq);
-    return (length(q) - r + (vnoise(p * 2.3 + x) - 0.5) * 0.35 * r) / sq;
-}
-
-// The front: the seabed, its rocks and a wreck lying on its side.
-float wreck(vec2 p) {
-    const float K = 0.8;
-    vec2 c = vec2(WRECK_X, bedY(WRECK_X) + 0.45);
-    float a = 0.12;
-    vec2 q = mat2(cos(a), -sin(a), sin(a), cos(a)) * (p - c) / K;
-    float hull = sdTrapezoid(q, 2.6, 3.5, 0.68);
-    hull = max(hull, -(length(q - vec2(1.35, 0.95)) - 0.62));          // a breach in the hull
-    for (int i = 0; i < 4; i++) hull = max(hull, -(length(q - vec2(-2.35 + 0.62 * float(i), 0.12)) - 0.13)); // portholes
-    float cabin = sdBox(q - vec2(-1.45, 1.05), vec2(0.85, 0.38)) - 0.03;
-    cabin = max(cabin, -sdBox(q - vec2(-1.45, 1.1), vec2(0.55, 0.12)));
-    float mast = sdSeg(q, vec2(0.25, 0.65), vec2(0.95, 3.3), 0.07);
-    float spar = sdSeg(q, vec2(0.15, 2.5), vec2(1.55, 2.8), 0.05);
-    return min(min(hull, cabin), min(mast, spar)) * K;
-}
-float front(vec2 p) {
-    float bed = (p.y - bedY(p.x)) * 0.8 + (vnoise(p * vec2(0.9, 1.4) + uSeed) - 0.5) * 0.12;
-    float r = min(min(rock(p, -9.3, 0.75, 1.5), rock(p, 8.3, 0.6, 1.4)), min(rock(p, -16.8, 0.8, 1.6), rock(p, 21.4, 1.3, 1.3)));
-    r = min(r, min(rock(p, -12.0, 0.55, 1.3), rock(p, -20.6, 1.2, 1.2)));
-    float d = smin(bed, r, 0.35);
-    return min(d, wreck(p));
-}
-
-// The back: a sunken city (a tower, a dome, a colonnade on the right; a stepped pyramid and an arch on the left; a
-// few broken columns under the left lettering).
-float city(vec2 p, out float win) {
-    win = 0.0;
-    float d = 1e3;
-    // right
-    float b = bedY(TOWER_X) - 0.6;
-    float top = -0.6;
-    float tw = sdBox(p - vec2(TOWER_X, (b + top) * 0.5), vec2(0.72, (top - b) * 0.5));
-    tw = min(tw, sdBox(p - vec2(TOWER_X, top + 0.35), vec2(0.46, 0.35)));
-    tw = min(tw, sdSeg(p, vec2(TOWER_X, top + 0.7), vec2(TOWER_X, top + 1.9), 0.035));
-    // the tower's windows
-    {
-        vec2 q = p - vec2(TOWER_X, b);
-        vec2 g = vec2(q.x / 0.42, q.y / 0.75);
-        vec2 id = floor(g + vec2(0.5, 0.0));
-        vec2 f = g - vec2(id.x, id.y) - vec2(0.0, 0.5);
-        if (abs(id.x) <= 1.0 && id.y >= 2.0 && q.y < top - b - 0.4) {
-            float w = sdBox(f * vec2(0.42, 0.75), vec2(0.07, 0.15));
-            float h = hash12(id + 17.0);
-            win = max(win, (1.0 - smoothstep(-0.02, 0.02, w)) * step(0.45, h));
-        }
-    }
-    d = min(d, tw);
-    float b2 = bedY(DOME_X) - 0.4;
-    float drum = sdBox(p - vec2(DOME_X, b2 + 1.4), vec2(1.55, 1.4));
-    float dome = max(length(p - vec2(DOME_X, b2 + 2.8)) - 1.55, b2 + 2.8 - p.y);
-    float lan = sdBox(p - vec2(DOME_X, b2 + 4.55), vec2(0.18, 0.25));
-    d = min(d, min(min(drum, dome), lan));
-    // arched openings in the drum
-    for (int i = 0; i < 3; i++) {
-        vec2 c = vec2(DOME_X - 0.9 + 0.9 * float(i), b2 + 1.2);
-        float o = min(sdBox(p - c, vec2(0.2, 0.5)), length(p - c - vec2(0.0, 0.5)) - 0.2);
-        d = max(d, -o);
-    }
-    float b3 = bedY(COL_X) - 0.3;
-    float colT = b3 + 3.3;
-    float cols = 1e3;
-    for (int i = 0; i < 4; i++) cols = min(cols, sdBox(p - vec2(COL_X - 1.4 + 0.95 * float(i), (b3 + colT) * 0.5), vec2(0.16, (colT - b3) * 0.5)));
-    cols = max(cols, -(sdBox(p - vec2(COL_X + 0.5, colT - 0.6), vec2(0.4, 1.0))));     // one column broken
-    float arch = sdBox(p - vec2(COL_X, colT + 0.2), vec2(1.85, 0.2));
-    arch = max(arch, -(sdBox(p - vec2(COL_X + 1.3, colT + 0.2), vec2(0.5, 0.4))));
-    float ped = max(sdBox(p - vec2(COL_X - 0.3, colT + 0.6), vec2(1.55, 0.25)), (p.y - colT - 0.4) * 1.0 + abs(p.x - COL_X + 0.3) * 0.45 - 0.75);
-    d = min(d, min(cols, min(arch, ped)));
-    float sp = sdBox(p - vec2(SPIRE_X, (bedY(SPIRE_X) + 2.2) * 0.5), vec2(0.28, (2.2 - bedY(SPIRE_X)) * 0.5));
-    sp = min(sp, max(length(p - vec2(SPIRE_X, 2.2)) - 0.28, 2.2 - p.y));
-    d = min(d, sp);
-    // left
-    float b4 = bedY(PYR_X) - 0.3;
-    float pyr = 1e3;
-    for (int i = 0; i < 5; i++) pyr = min(pyr, sdBox(p - vec2(PYR_X, b4 + 0.32 + 0.64 * float(i)), vec2(2.7 - 0.5 * float(i), 0.32)));
-    pyr = min(pyr, sdBox(p - vec2(PYR_X, b4 + 3.55), vec2(0.4, 0.35)));
-    d = min(d, pyr);
-    float b5 = bedY(ARCH_X) - 0.3;
-    vec2 ac = vec2(ARCH_X, b5 + 2.4);
-    float ring = max(abs(length(p - ac) - 1.05) - 0.24, ac.y - p.y);
-    float pil = min(sdBox(p - vec2(ARCH_X - 1.05, (b5 + ac.y) * 0.5), vec2(0.24, (ac.y - b5) * 0.5)),
-                    sdBox(p - vec2(ARCH_X + 1.05, (b5 + ac.y - 1.0) * 0.5), vec2(0.24, (ac.y - 1.0 - b5) * 0.5)));
-    d = min(d, min(ring, pil));
-    // broken columns under the lettering
-    for (int i = 0; i < 3; i++) {
-        float xl = -7.6 - 1.4 * float(i);
-        float hb2 = bedY(xl) - 0.3;
-        float hl2 = 0.8 + 0.6 * float(i == 2) + 0.3 * float(i == 0);
-        d = min(d, sdBox(p - vec2(xl, hb2 + hl2 * 0.5), vec2(0.17, hl2 * 0.5)));
-    }
-    return d;
-}
-
-// What the echoes light at p, for a surface of normal n: the pings, the charted patches, a base level.
-float echoAt(vec2 p, vec2 n, float base, out float pings, out float chart) {
-    pings = 0.0;
-    float lit = 0.0;
-    for (int i = 0; i < 8; i++) {
-        vec4 P = uPing[i];
-        if (P.z < 0.0) continue;
-        vec2 dv = P.xy - p;
-        float dist = length(dv);
-        float a = P.z - dist / 11.0;           // the echo returns from here a little later
-        if (a <= 0.0) continue;
-        float r = uPingR[i];
-        float q = dist / r;
-        float env = (1.0 - exp(-a / 0.14)) * exp(-a / uDecay) * exp(-q * q * q * q) * P.w;
-        pings += env;
-        float face = max(dot(n, dv / max(dist, 1e-3)), 0.0);
-        lit += env * (0.3 + 0.7 * face);
-    }
-    chart = 0.0;
-    for (int i = 0; i < 64; i++) {
-        if (i >= uCharts) break;
-        vec4 C = uChart[i];
-        float dist = length(p - C.xy);
-        chart = max(chart, C.w * (1.0 - smoothstep(C.z * 0.45, C.z, dist)));
-    }
-    lit += chart * 0.32 * (0.55 + 0.45 * max(n.y, 0.0));
-    return lit + base;
-}
-
-// A surface returning the echo: a crisp line along its edge, a soft halo, the body fading into the dark below it.
-float surfaceLight(float d, float aa, float grain) {
-    float rim = exp(-abs(d) / max(0.03, aa));
-    float halo = exp(-max(d, 0.0) / 0.35) * 0.16;
-    float fill = d < 0.0 ? exp(d / 0.55) * 0.26 * grain : 0.0;
-    return 1.25 * rim + halo + fill;
-}
-
-void main() {
-    vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    float aa = length(fwidth(w));
-    // the water: near black, a breath lighter far above, a slow murk
-    float t = smoothstep(uView.y - uView.w, uView.y + uView.w, w.y);
-    vec3 c = mix(uWaterLow, uWaterTop, t * t);
-    c *= 0.88 + 0.24 * fbm(w * vec2(0.07, 0.11) + vec2(uTime * 0.006, uSeed));
-    // the well and the lettering keep a quiet, darker ground
+// The well, the lettering's columns and the bottom-left corner keep a quiet, darker ground.
+float quietAt(vec2 frag) {
+    vec2 w = uView.xy + (frag / uRes * 2.0 - 1.0) * uView.zw;
     float well = 1.0 - smoothstep(-0.2, 0.9, sdBox(w, vec2(5.2, 10.2)));
     float colL = 1.0 - smoothstep(-0.4, 1.2, sdBox(w - vec2(-8.6, 1.8), vec2(2.6, 8.6)));
     float colR = 1.0 - smoothstep(-0.4, 1.2, sdBox(w - vec2(8.6, 3.4), vec2(2.6, 7.0)));
     float corner = 1.0 - smoothstep(-0.4, 1.4, sdBox(w - vec2(-uView.z + 3.6, uView.y - uView.w + 2.6), vec2(3.4, 1.7)));
-    float quiet = (1.0 - 0.86 * well) * (1.0 - 0.55 * max(max(colL, colR), corner));
+    return (1.0 - 0.86 * well) * (1.0 - 0.55 * max(max(colL, colR), corner));
+}
+// Deep water: near black, a breath lighter far above, a slow murk.
+vec3 waterAt(vec2 frag) {
+    vec2 ndc = frag / uRes * 2.0 - 1.0;
+    vec3 d = normalize(uCamF + ndc.x * uCamR + ndc.y * uCamU);
+    float t = smoothstep(-0.3, 0.75, d.y);
+    vec3 c = mix(uWaterLow, uWaterTop, t * t);
+    vec2 m = d.xz / (d.y + 1.6) * 3.0;
+    return c * (0.88 + 0.24 * fbm(m + vec2(uTime * 0.01, uSeed)));
+}
+)";
 
-    float grainF = 0.75 + 0.5 * vnoise(w * vec2(2.2, 7.0) + uSeed);   // the sand's ripples, as a sonar shows them
-    // the city, behind
-    float win;
-    float dc = city(w, win);
-    vec2 nc = normalize(vec2(dFdx(dc), dFdy(dc)) + 1e-6);
-    float pc, cc;
-    float ec = echoAt(w, nc, uCity, pc, cc);
-    float lc = surfaceLight(dc, aa, 0.85 + 0.3 * vnoise(w * 3.0));
-    vec3 cityCol = uEchoCity * 0.75 * lc * ec;
-    // the lit windows (the kicks at a peak), and a faint glow of them in the dark
-    cityCol += uEchoCity * win * (uWin * 1.4 + 0.25 * ec);
-    // the front, over it
-    float df = front(w);
-    vec2 nf = normalize(vec2(dFdx(df), dFdy(df)) + 1e-6);
-    float pf, cf;
-    float ef = echoAt(w, nf, uBed, pf, cf);
-    float lf = surfaceLight(df, aa, grainF);
-    // charted seabed: survey lines along its strata, under the surface
-    float strata = 0.0;
-    if (df < 0.0 && cf > 0.001) {
-        float s = -df / 0.42;
-        float line = exp(-abs(fract(s) - 0.5) * 2.0 / max(0.08, aa * 2.5 / 0.42));
-        strata = line * exp(df / 2.2) * cf * 0.12;
-    }
-    vec3 frontCol = uEcho * (lf * ef + strata);
-    float occl = smoothstep(0.03, -0.03, df);
-    vec3 scene = cityCol * (1.0 - occl) + frontCol;
-    // particles in the water, seen only where an echo passes
-    float pw = pf;
-    if (pw > 0.01 && df > 0.0) {
-        vec2 g = w * 0.85 + vec2(0.0, uTime * 0.03);
-        vec2 id = floor(g), f = fract(g);
-        float h = hash12(id + uSeed * 7.0);
-        vec2 o = vec2(hash12(id + 3.1), hash12(id + 9.7)) * 0.8 + 0.1;
-        float r = length((f - o) / 0.85);
-        float m = exp(-r * r / 0.0015) * step(0.72, h) * (0.4 + h);
-        scene += uEcho * m * pw * 0.45;
-    }
-    c += scene * quiet;
+inline const char* WATER_FS = R"(#version 330 core
+out vec4 frag;
+uniform float uSlow, uFade;
+void main() {
+    vec3 c = waterAt(gl_FragCoord.xy);
     c = mix(c, c * vec3(0.7, 0.8, 1.15), uSlow * 0.5);
     frag = vec4(c * uFade, 0.0);
+}
+)";
+
+inline const char* MESH_VS = R"(#version 330 core
+layout(location = 0) in vec3 aP;
+layout(location = 1) in vec3 aN;
+layout(location = 2) in vec4 aE;
+layout(location = 3) in vec4 aI;
+uniform mat4 uWVP;
+out vec3 vP, vN;
+out vec4 vE, vI;
+void main() {
+    vP = aP; vN = aN; vE = aE; vI = aI;
+    gl_Position = uWVP * vec4(aP, 1.0);
+}
+)";
+// Every surface is dark until an echo returns from it: the faces turned toward the ping light up softly, the
+// polygons' edges as fine lines of light (the hull's ribs, the courses of the stones), the seabed shows its sand
+// ripples and, where charted, its depth contours. The charted spots stay faintly lit for good.
+inline const char* MESH_FS = R"(#version 330 core
+in vec3 vP, vN;
+in vec4 vE, vI;
+out vec4 frag;
+uniform vec3 uCam;
+uniform vec4 uChart[64];        // x, y, z, radius
+uniform float uChartA[64];      // amount
+uniform int uCharts;
+uniform vec3 uEcho, uEchoCity;
+uniform float uBed, uCity, uWin, uSlow, uFade;
+void main() {
+    vec3 V = uCam - vP;
+    float dist = length(V);
+    V /= dist;
+    vec3 n = normalize(vN);
+    if (dot(n, V) < 0.0) n = -n;
+    int layer = int(vI.x + 0.5), flags = int(vI.y + 0.5);
+    float lit = 0.0, pings = 0.0;
+    for (int i = 0; i < 8; i++) {
+        vec3 dir;
+        float e = pingEnv(i, vP, dir);
+        if (e <= 0.0) continue;
+        pings += e;
+        lit += e * (0.25 + 0.75 * max(dot(n, dir), 0.0));
+    }
+    float chart = 0.0;
+    for (int i = 0; i < 64; i++) {
+        if (i >= uCharts) break;
+        vec4 C = uChart[i];
+        chart = max(chart, uChartA[i] * (1.0 - smoothstep(C.w * 0.4, C.w, length(vP - C.xyz))));
+    }
+    float chartL = chart * 0.3 * (0.55 + 0.45 * max(n.y, 0.0));
+    // the drop, a peak, a Tetris: the whole world surfacing, lit from above and toward the eye
+    float base = layer == 3 ? uCity : uBed;
+    float baseL = base * (0.3 + 0.5 * max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0) + 0.2 * max(dot(n, V), 0.0));
+
+    // the outline: a fine line of light along the polygon's edges
+    float me = min(min(vE.x, vE.y), min(vE.z, vE.w));
+    float fw = max(fwidth(me), 1e-4);
+    float far = 1.0 - smoothstep(22.0, 70.0, dist);
+    float line = (1.0 - smoothstep(0.35 * fw, 1.35 * fw, me)) * far;
+    float soft = exp(-me / 0.12) * 0.22 * far;
+    float grain = layer == 0 ? 0.7 + 0.6 * vnoise(vec2(vP.x * 0.6 + vP.z * 0.9, vP.z * 0.6 - vP.x * 0.3) + uSeed)
+                             : 0.8 + 0.4 * vnoise(vP.xz * 1.7 + vP.y * 2.3);
+    float fill = (layer == 0 ? 0.2 : 0.16) * grain;
+    // the seabed's depth contours, where it is charted (and faintly where an echo passes)
+    float cont = 0.0;
+    if ((flags & 2) != 0) {
+        float s = vP.y / 0.45;
+        float fs = max(fwidth(s), 1e-4);
+        float dd = abs(fract(s + 0.5) - 0.5);
+        cont = (1.0 - smoothstep(0.4 * fs, 1.4 * fs, dd)) * (1.0 - smoothstep(18.0, 50.0, dist)) * (1.0 - smoothstep(0.25, 0.5, fs));
+    }
+    // the windows: dark openings, a few lit by the kicks at a peak
+    float glowW = 0.0;
+    if ((flags & 1) != 0) {
+        vec2 g = vI.zw / vec2(1.15, 1.9);
+        vec2 id = floor(g), f = fract(g) - 0.5;
+        float fg = max(fwidth(g.x), fwidth(g.y));
+        float wd = max(abs(f.x) - 0.17, abs(f.y) - 0.21);
+        float wm = (1.0 - smoothstep(-fg, fg, wd)) * step(1.0, id.y) * step(1.0, me);
+        fill *= 1.0 - 0.85 * wm;
+        glowW = wm * step(0.55, hash12(id + vec2(17.0, 3.0))) * uWin * far;
+    }
+    vec3 ec = layer == 3 ? uEchoCity : uEcho;
+    // the world surfacing (drop, peak, Tetris) shows mostly its lines: faint faces, crisp edges and contours
+    vec3 col = ec * (lit * (fill + 1.25 * line + soft) + (baseL + chartL) * (0.28 * fill + 1.1 * line + soft) + cont * (0.35 * chart + 0.5 * base));
+    col += uEchoCity * glowW * 0.9;
+    float fog = exp(-dist / 48.0);
+    col *= fog * smoothstep(0.4, 2.0, dist);
+    // near surfaces hide the water's faint light: the world stands out as a darker shape when unlit
+    vec3 c = waterAt(gl_FragCoord.xy) * (1.0 - 0.6 * fog) + col * quietAt(gl_FragCoord.xy);
+    c = mix(c, c * vec3(0.7, 0.8, 1.15), uSlow * 0.5);
+    frag = vec4(c * uFade, 0.0);
+}
+)";
+
+// Particles drifting in the water around the camera: barely there, glinting where an echo passes. They show the
+// glide through the water.
+inline const char* SNOW_VS = R"(#version 330 core
+layout(location = 0) in vec4 aP;
+uniform mat4 uWVP;
+uniform vec3 uCam;
+uniform float uBase, uFocal;
+out float vA;
+void main() {
+    const float B = 36.0;
+    vec3 p0 = aP.xyz * B + vec3(0.3 * sin(uTime * 0.07 + aP.w * 20.0), -uTime * 0.05, 0.3 * cos(uTime * 0.05 + aP.w * 13.0));
+    vec3 rel = mod(p0 - uCam + 0.5 * B, B) - 0.5 * B;
+    vec3 p = uCam + rel;
+    float d = length(rel);
+    float lit = 0.0;
+    for (int i = 0; i < 8; i++) { vec3 dir; lit += pingEnv(i, p, dir); }
+    float box = max(max(abs(rel.x), abs(rel.y)), abs(rel.z));
+    vA = (uBase * (0.35 + 0.65 * aP.w) + lit * 0.8) * (1.0 - smoothstep(0.35 * B, 0.5 * B, box)) * smoothstep(0.6, 2.5, d) * exp(-d / 22.0);
+    gl_Position = uWVP * vec4(p, 1.0);
+    gl_PointSize = clamp(0.035 * uFocal / max(d, 0.5), 1.5, 5.0);
+}
+)";
+inline const char* SNOW_FS = R"(#version 330 core
+in float vA;
+out vec4 frag;
+uniform vec3 uEcho;
+uniform float uFade;
+void main() {
+    vec2 q = gl_PointCoord * 2.0 - 1.0;
+    float r2 = dot(q, q);
+    float a = exp(-r2 * 3.0) * vA * quietAt(gl_FragCoord.xy) * uFade;
+    if (a <= 0.001) discard;
+    frag = vec4(uEcho * a, 0.0);
 }
 )";
 
@@ -468,11 +429,11 @@ void main() {
 }
 )";
 
-// Builds a fragment shader with the common functions inserted after the version line.
-inline std::string withCommon(const char* src) {
+// Builds a shader with the common functions (and the world's, if asked) inserted after the version line.
+inline std::string withCommon(const char* src, bool world = false) {
     std::string s(src);
     const size_t nl = s.find('\n');
-    return s.substr(0, nl + 1) + COMMON + s.substr(nl + 1);
+    return s.substr(0, nl + 1) + COMMON + (world ? WORLD_COMMON : "") + s.substr(nl + 1);
 }
 
 } // namespace sonar_shaders
