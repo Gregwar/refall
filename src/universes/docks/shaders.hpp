@@ -591,7 +591,8 @@ void main() {
     // the containers (the scene's alpha) stay out of the glow: they stay crisp, the lamps glow
     vec3 c = s0.rgb * (1.0 - s0.a) + s1.rgb * (1.0 - s1.a) + s2.rgb * (1.0 - s2.a) + s3.rgb * (1.0 - s3.a);
     c *= 0.25;
-    frag = vec4(max(c - vec3(uThr), 0.0), 1.0);
+    // (the alpha carries the containers, blurred into the halo around them)
+    frag = vec4(max(c - vec3(uThr), 0.0), 0.25 * (s0.a + s1.a + s2.a + s3.a));
 }
 )";
 inline const char* BLUR_FS = R"(#version 330 core
@@ -610,11 +611,14 @@ inline const char* FINAL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uScene, uBloom;
-uniform float uBloomK, uSlow, uDim, uFade, uBridge, uExposure, uSatF;
+uniform float uBloomK, uSlow, uDim, uFade, uBridge, uExposure, uSatF, uHalo;
 uniform vec3 uBridgeCol, uBridgeInk, uSlowTint;
 void main() {
     vec4 s = texture(uScene, vUv);
-    vec3 c = s.rgb * uExposure + texture(uBloom, vUv).rgb * uBloomK;
+    vec4 b = texture(uBloom, vUv);
+    vec3 c = s.rgb * uExposure + b.rgb * uBloomK;
+    // a faint white halo around the containers, outside them only
+    c += vec3(1.0, 0.98, 0.95) * uHalo * smoothstep(0.0, 0.5, b.a) * (1.0 - clamp(s.a, 0.0, 1.0));
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = max(mix(vec3(l), c, uSatF), 0.0);
     // slow motion: the fog rolls in, the port cools
