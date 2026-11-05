@@ -17,6 +17,8 @@ constexpr float SEA_LOW = -14.6f, SEA_HIGH = 5.0f;
 constexpr float SEA_FULL_LINES = 60.f;
 // the first boats sail out once the sea is this high
 constexpr float BOAT_LEVEL = -10.4f;
+// a submarine crosses now and then once the sea is this deep at the cut face (it is about 14 when full)
+constexpr float SUB_DEPTH = 11.5f;
 // gravity for the thrown cubes and the water (snappy)
 constexpr float GRAV = 22.f;
 // clear water, almost colorless (linear)
@@ -24,11 +26,15 @@ const vec3 WATER{0.74f, 0.86f, 0.95f};
 // the boats' lengths (their meshes, scale 1)
 constexpr float BOAT_LEN[6] = {1.6f, 3.2f, 4.6f, 10.f, 18.f, 22.f};
 
+// the far plain rising gently out to the horizon (evenly with the log of the distance, as the eye sees it): the
+// rising sea spreads out from the lake to the horizon instead of flooding the whole plain at once
+constexpr float FAR_RISE = 5.f;
+inline float farT(float z) { return saturate(std::log(std::max(-z, 30.f) / 30.f) / std::log(800.f / 30.f)); }
 // the sandy bed: a beach under the well sloping gently down far out, a lake's hollow just behind the well (the lowest
 // sand: the water gathers there first), low dunes over it (z <= FRONT_Z); WORLD_GLSL's sandH is the same function
 inline float sandH(float x, float z) {
     const float lake = std::exp(-(x * x / 576.f + (z + 15.f) * (z + 15.f) / 100.f));
-    const float base = -9.2f - 1.8f * smoothstepf(3.f, 48.f, -z) - 5.2f * lake;
+    const float base = -9.2f - 1.8f * smoothstepf(3.f, 48.f, -z) - 5.2f * lake + FAR_RISE * farT(z);
     const float k = (1.f - 0.4f * smoothstepf(10.f, 60.f, -z)) * (1.f - 0.8f * lake);
     const float d = 0.55f * std::sin(x * 0.21f + 1.3f + z * 0.11f) + 0.3f * std::sin(x * 0.53f + 0.4f - z * 0.27f) +
                     0.1f * std::sin(x * 1.37f + 2.f + z * 0.61f) + 0.35f * std::sin(x * 0.07f - z * 0.19f + 0.5f);
@@ -132,9 +138,9 @@ private:
     bool spawnBoat(bool onScreen);
 
     // ---- Life in the sea, in layers: schools of small fish near the surface, jellyfish drifting in the middle
-    // water, and in the dark depths an anglerfish and its lure, siphonophores, points of light. Only where there is
-    // water, behind the diorama's cut face.
-    enum { L_FISH = 0, L_JELLY = 1, L_ANGLER = 2, L_SIPHON = 3, L_MOTE = 4 };
+    // water, and in the dark depths an anglerfish and its lure, siphonophores, points of light; once the sea is very
+    // deep, now and then a submarine crossing. Only where there is water, behind the diorama's cut face.
+    enum { L_FISH = 0, L_JELLY = 1, L_ANGLER = 2, L_SIPHON = 3, L_MOTE = 4, L_SUB = 5 };
     struct Critter {
         int kind, school;
         float x, z, u, du, dir, speed, size, phase, seed, alpha, dart, dartY, dyv;
@@ -142,10 +148,11 @@ private:
     };
     std::vector<Critter> critters_;
     int nextSchool_ = 0;
-    float lifeT_ = 0.f, glowUp_ = 0.f;
+    float lifeT_ = 0.f, glowUp_ = 0.f, subT_ = 15.f;
     float waterDepth() const;                // the sea's depth at the cut face (board units)
     float critterY(const Critter& c) const;
     void spawnLife(bool onScreen);
+    void spawnSub();
     void simulateLife(float dt, float wdt, float world);
 
     // ---- GL.

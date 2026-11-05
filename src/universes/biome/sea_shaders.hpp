@@ -15,7 +15,7 @@ uniform vec3 uHaze, uWater, uDeep, uFoam, uStormSea;
 // lowest sand: the water gathers there first), low dunes over it
 float sandH(vec2 p) {
     float lake = exp(-(p.x * p.x / 576.0 + (p.y + 15.0) * (p.y + 15.0) / 100.0));
-    float base = -9.2 - 1.8 * smoothstep(3.0, 48.0, -p.y) - 5.2 * lake;
+    float base = -9.2 - 1.8 * smoothstep(3.0, 48.0, -p.y) - 5.2 * lake + 5.0 * clamp(log(max(-p.y, 30.0) / 30.0) / log(800.0 / 30.0), 0.0, 1.0);
     float k = (1.0 - 0.4 * smoothstep(10.0, 60.0, -p.y)) * (1.0 - 0.8 * lake);
     float d = 0.55 * sin(p.x * 0.21 + 1.3 + p.y * 0.11) + 0.3 * sin(p.x * 0.53 + 0.4 - p.y * 0.27) +
               0.1 * sin(p.x * 1.37 + 2.0 + p.y * 0.61) + 0.35 * sin(p.x * 0.07 - p.y * 0.19 + 0.5);
@@ -754,6 +754,35 @@ void main() {
         a = max(beadA * 0.85, th * 0.35);
         col = mix(col, vec3(1.0), beadA * 0.3);
         g = (exp(-max(bead, 0.0) * 30.0) * 0.4 * step(abs(bx), L) + exp(-thread * 9.0) * 0.08 * on) * glowK;
+    } else if (kind == 5) {
+        // a submarine: a long hull tapering to the stern, its sail and periscope, fins, a turning screw, lit
+        // portholes and a headlight's beam ahead
+        float L = ext.x / 1.6;
+        vec2 b = q / L;
+        float r = 0.17 - 0.07 * smoothstep(0.1, -1.0, b.x);
+        float hull = length(vec2(max(abs(b.x) - 0.8, 0.0), b.y)) - r;
+        vec2 s = b - vec2(0.22, 0.27);
+        float sail = max(abs(s.x) - 0.12 + s.y * 0.15, abs(s.y) - 0.13) - 0.015;
+        float plane = max(abs(b.x - 0.22) - 0.09, abs(b.y - 0.3) - 0.012);
+        float scope = min(sdSeg(b, vec2(0.27, 0.38), vec2(0.27, 0.52)), sdSeg(b, vec2(0.27, 0.52), vec2(0.32, 0.52))) - 0.012;
+        vec2 f = b - vec2(-0.86, 0.0);
+        float fin = max(abs(f.x) - 0.05 - abs(f.y) * 0.15, abs(f.y) - 0.22);
+        float screw = sdEll(b - vec2(-1.0, 0.0), vec2(0.022, 0.03 + 0.09 * abs(sin(t * 7.0))));
+        float dd = min(min(min(hull, sail), min(plane, scope)), min(fin, screw)) * L;
+        a = smoothstep(px, -px, dd);
+        col *= 0.7 + 0.45 * smoothstep(-0.18, 0.16, b.y);
+        float stripe = smoothstep(px / L, -px / L, abs(b.y + 0.07) - 0.012) * step(abs(b.x), 0.85);
+        col = mix(col, col * 0.55, stripe);
+        float lo = 0.0;
+        for (int i = 0; i < 6; i++) {
+            float hx = -0.5 + float(i) * 0.19;
+            lo = max(lo, smoothstep(0.034, 0.024, length(b - vec2(hx, 0.02))));
+        }
+        lo = max(lo, smoothstep(0.022, 0.014, length(b - vec2(0.2, 0.3))));
+        col = mix(col, mix(glow, vec3(1.0), 0.5) * 1.6, lo * a);
+        float ahead = b.x - 0.96;
+        float beam = ahead > 0.0 ? exp(-pow((b.y + 0.02) / (0.035 + ahead * 0.3), 2.0) * 2.0) * exp(-ahead * 1.6) : 0.0;
+        g = (beam * 0.6 + exp(-length(b - vec2(0.97, -0.02)) * 12.0) * 0.8 + lo * 0.4) * glowK;
     } else {
         // a point of light living in the dark, twinkling at its own slow pace
         float r = length(q);

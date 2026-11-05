@@ -469,6 +469,12 @@ void SeaWorld::drawWorld() {
                 glow = 0.8f + 0.4f * glowUp_;
                 anim = ctx.worldTime + c.phase;
                 break;
+            case L_SUB:
+                // (wider than the hull, for the headlight's beam)
+                hx = c.size * 1.6f; hy = c.size * 0.65f;
+                glow = 0.7f + 0.3f * dark + 0.4f * glowUp_;
+                anim = ctx.worldTime + c.phase;
+                break;
             case L_SIPHON:
                 hx = c.size + 0.3f; hy = 0.7f;
                 glow = 0.55f + 0.5f * glowUp_;
@@ -481,7 +487,7 @@ void SeaWorld::drawWorld() {
                 break;
             }
             }
-            const float bob = c.kind == L_JELLY ? 0.25f * std::sin(anim * 0.5f) : c.kind == L_FISH ? 0.04f * std::sin(ctx.time * 1.3f + c.phase * 3.f) : 0.f;
+            const float bob = c.kind == L_JELLY ? 0.25f * std::sin(anim * 0.5f) : c.kind == L_FISH ? 0.04f * std::sin(ctx.time * 1.3f + c.phase * 3.f) : c.kind == L_SUB ? 0.08f * std::sin(anim * 0.4f) : 0.f;
             const float v[20] = {c.x, y + bob, hx, hy, c.dir, (float)c.kind, anim, glow, body.x, body.y, body.z, a,
                                  c.glow.x, c.glow.y, c.glow.z, c.seed, c.z, 0.f, 0.f, 0.f};
             inst.insert(inst.end(), v, v + 20);

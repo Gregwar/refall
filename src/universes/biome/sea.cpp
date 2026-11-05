@@ -279,10 +279,10 @@ bool SeaWorld::spawnBoat(bool onScreen) {
     float z = -ctx.rng.range(Z0[type], Z1[type]);
     // out to where it floats (over the highest dunes at that distance)
     auto deep = [&](float zz) {
-        const float base = -9.2f - 3.6f * smoothstepf(3.f, 48.f, -zz), k = 1.f - 0.4f * smoothstepf(10.f, 60.f, -zz);
+        const float base = -9.2f - 3.6f * smoothstepf(3.f, 48.f, -zz) + FAR_RISE * farT(zz), k = 1.f - 0.4f * smoothstepf(10.f, 60.f, -zz);
         return S - (base + 1.3f * k) > DRAFT[type];
     };
-    while (!deep(z) && z > -200.f) z -= 8.f;
+    for (int i = 0; i < 6 && !deep(z); i++) z = -ctx.rng.range(Z0[type], Z1[type]);
     if (!deep(z)) return false;
     Boat b;
     b.type = type;
@@ -318,7 +318,7 @@ void SeaWorld::spawnLife(bool onScreen) {
     int have[5] = {0, 0, 0, 0, 0};
     for (const Critter& c : critters_)
         if (c.kind == L_FISH) have[0] += c.du == 0.f; // one leader per school
-        else have[c.kind]++;
+        else if (c.kind < 5) have[c.kind]++;
     const int want[5] = {D > 2.f ? std::min(4, 1 + (int)((D - 2.f) / 3.5f)) : 0, D > 6.f ? std::min(5, 1 + (int)((D - 6.f) / 2.2f)) : 0,
                          D > 11.f ? 1 : 0, D > 10.f ? (D > 13.f ? 2 : 1) : 0, D > 9.f ? std::min(16, (int)((D - 9.f) * 2.5f)) : 0};
     int kind = -1;
@@ -397,11 +397,36 @@ void SeaWorld::spawnLife(bool onScreen) {
     critters_.push_back(c);
 }
 
+// A submarine crossing the deep water slowly, its portholes and its headlight lit.
+void SeaWorld::spawnSub() {
+    for (const Critter& o : critters_)
+        if (o.kind == L_SUB) return;
+    Critter c{};
+    c.kind = L_SUB;
+    c.dir = ctx.rng.chance(0.5f) ? 1.f : -1.f;
+    c.phase = ctx.rng.range(0.f, TAU);
+    c.seed = ctx.rng.range(0.f, 50.f);
+    c.alpha = 1.f;
+    c.z = FRONT_Z - ctx.rng.range(2.f, 4.f);
+    c.size = ctx.rng.range(3.6f, 4.4f);
+    c.speed = ctx.rng.range(0.7f, 1.f);
+    c.u = ctx.rng.range(0.3f, 0.55f);
+    c.col = lerp(ctx.pal.deep * 0.6f, vec3(0.2f, 0.22f, 0.25f), 0.5f);
+    c.glow = lerp(ctx.pal.window, vec3(1.f, 0.9f, 0.7f), 0.3f);
+    c.x = -c.dir * (ctx.hwAt(c.z) + c.size * 1.2f + 1.f);
+    critters_.push_back(c);
+}
+
 void SeaWorld::simulateLife(float dt, float wdt, float world) {
     lifeT_ -= wdt;
     if (lifeT_ <= 0.f && world > 0.5f && !ctx.over) {
         spawnLife(false);
         lifeT_ = ctx.rng.range(1.f, 3.f);
+    }
+    subT_ -= wdt;
+    if (subT_ <= 0.f) {
+        subT_ = ctx.rng.range(25.f, 50.f);
+        if (world > 0.5f && !ctx.over && waterDepth() > SUB_DEPTH) spawnSub();
     }
     glowUp_ = approach(glowUp_, ctx.storm, 1.f, dt);
     const float surf = seaLevel();
