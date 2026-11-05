@@ -586,9 +586,13 @@ in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uSrc;
 uniform vec2 uTexel;
+uniform float uBlockCut;   // how much of the blocks' light is kept out of the glow
 void main() {
-    vec3 c = texture(uSrc, vUv + uTexel * vec2(-1, -1)).rgb + texture(uSrc, vUv + uTexel * vec2(1, -1)).rgb +
-             texture(uSrc, vUv + uTexel * vec2(-1, 1)).rgb + texture(uSrc, vUv + uTexel * vec2(1, 1)).rgb;
+    // the blocks (the scene's alpha) feed the glow only faintly: they stay crisp, the life around them glows
+    vec4 s0 = texture(uSrc, vUv + uTexel * vec2(-1, -1)), s1 = texture(uSrc, vUv + uTexel * vec2(1, -1));
+    vec4 s2 = texture(uSrc, vUv + uTexel * vec2(-1, 1)), s3 = texture(uSrc, vUv + uTexel * vec2(1, 1));
+    vec3 c = s0.rgb * (1.0 - uBlockCut * s0.a) + s1.rgb * (1.0 - uBlockCut * s1.a) +
+             s2.rgb * (1.0 - uBlockCut * s2.a) + s3.rgb * (1.0 - uBlockCut * s3.a);
     c *= 0.25;
     frag = vec4(max(c - vec3(0.04), 0.0), 1.0);
 }
