@@ -1125,6 +1125,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(progPiece_);
     setStain(progPiece_);
+    set1f(progPiece_, "uTime", worldTime_);
+    set1f(progPiece_, "uLife", (0.6f + 0.4f * wm) * (1.f - 0.5f * slow_));
     set1f(progPiece_, "uGlow", (0.95f + 0.05f * wm + 0.08f * wp + 0.1f * swell_) * (1.f - 0.1f * slow_));
     drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
 
