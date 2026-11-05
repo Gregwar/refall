@@ -86,7 +86,7 @@ song, and songs change universe with a transition on the beat. Thirty-three univ
 <td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a glide through a dark 3D sunken city where shapes glow up from the black as echoes return on the beat; each cleared row charts the seabed for good, the drop lights the whole world and the glide surges<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/forest.jpg"><br><b>GLOWING FOREST</b>: a night forest lit only by bioluminescence; glowing fungus cubes, each cleared row sows a glowing plant that stays, plants glow on the beat grid and the drop sends a slow wave of light through the forest<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/forest.jpg"><br><b>GLOWING FOREST</b>: a night forest lit only by bioluminescence, trunks fading into the mist, a mossy rock and a still pool; glowing fungus cubes, each cleared row sows a glowing plant that stays, plants glow on the beat grid and the drop sends a slow wave of light through the forest<br><sub>🔍 <i>to review</i></sub></td>
 <td></td>
 </tr>
 </table>
