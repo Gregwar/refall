@@ -262,21 +262,29 @@ void main() {
     // ---- where the light passes: the glass comes alive
     if (litL > 0.001) {
         vec2 ldn = length(ld) > 1e-4 ? normalize(ld) : vec2(0.0, -1.0);
+        // the light takes the glass's color: the cube's own hue, deepened (more saturated than its pastel body),
+        // carried by the light's energy, so a lit cube glows in its color instead of paling toward the beam's white
+        float tl = dot(tint, vec3(0.3, 0.5, 0.2));
+        vec3 deep = max(mix(vec3(tl), tint, 1.9), vec3(0.0));
+        deep *= tl / max(dot(deep, vec3(0.3, 0.5, 0.2)), 1e-3);
+        vec3 own = deep * litL * 1.6;
+        vec3 tinted = mix(lit * tint, own, 0.75);
         // inside: the light scatters in the body, brighter toward the side it came from
         float side = dot(q, -ldn);
         float body = 0.35 + 0.65 * smoothstep(-0.5, 0.5, side);
-        col += lit * tint * body * 0.28 * (1.0 - bev * 0.5);
-        // the chamfers facing the light blaze, those it leaves by glow in the glass's color
+        col += tinted * body * 0.4 * (1.0 - bev * 0.5);
+        // the chamfers facing the light blaze (a white hot line only at their crest), those it leaves glow in the
+        // glass's color
         float inF = pow(max(dot(n2, -ldn), 0.0), 3.0), outF = pow(max(dot(n2, ldn), 0.0), 2.0);
-        col += bev * (lit * inF * 1.4 + lit * tint * outF * 0.9);
-        col += rim * lit * (0.25 + 0.6 * inF);
+        col += bev * (mix(own * 1.3, lit, 0.35 * bevT) * inF * 1.3 + tinted * outF * 1.0);
+        col += rim * mix(own, lit, 0.3) * (0.25 + 0.6 * inF);
         // the back edges catch it too
-        col += back * lit * tint * 0.7;
+        col += back * tinted * 0.8;
         // caustics: a slow net of bright veins inside the body (two noise fields crossing)
         vec2 cq = q * 2.6 + vec2(seed * 17.0, seed * 5.0);
         float n1 = vnoise(cq + vec2(uTime * 0.11, -uTime * 0.07)), n2b = vnoise(cq * 1.37 + vec2(-uTime * 0.09, uTime * 0.05) + 3.7);
         float vein = pow(clamp(1.0 - abs(n1 - n2b) * 3.0, 0.0, 1.0), 3.0);
-        col += lit * mix(tint, vec3(1.0), 0.5) * vein * 0.4 * (1.0 - bev);
+        col += mix(own, lit * 0.6, 0.25) * vein * 0.4 * (1.0 - bev);
     }
     col += vec3(1.0) * vA2.w * (0.3 + 0.7 * bev); // a lock's brief glint
     // premultiplied: the glass dims what is behind it a little (a tinted absorption), and adds its own light
