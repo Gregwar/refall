@@ -66,6 +66,9 @@ private:
         float t = 0, life = 8.f, delay = 0, r = 0.3f, a = 1.f, seed = 0;
         int kind = 0;               // 0 firefly, 1 spore flying to a plant, 2 spore rising, 3 a puff at a hard drop
         vec3 col{1.f};
+        vec2 trail[8];              // a firefly's recent places (its fading trail)
+        int trailN = 0;
+        float trailAcc = 0.f;
     };
     std::vector<Mote> motes_;
 
@@ -110,6 +113,11 @@ private:
     bool colSet_ = false;
     uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull;
     float seedF_ = 0.f, groundSeed_ = 0.f;
+    float rock_[3] = {-17.4f, 7.4f, 2.7f};  // the mossy rock (the bottom-left corner): center, half width, height
+    float cornerRight_ = -12.8f;    // the right end of the corner's text (board units)
+    float pool_[3] = {0.f, 0.f, -10.66f};  // the still pool on the right floor: x0, x1 (none when equal), water level
+    float grow_ = 0.f;              // how much of the forest has grown (0..1, eased)
+    float wind_ = 0.4f;             // the breeze in the plants and vines
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
     int level_ = 1;

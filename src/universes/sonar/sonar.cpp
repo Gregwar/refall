@@ -1,27 +1,32 @@
 // SONAR: a dark sea where shapes surface from the black when an echo returns from them.
 //
-// One world: deep water, near black, and nothing to see in it until an echo comes back. The pings run on the beat
-// grid (every four beats in calm parts, every two from a chorus on), each one around a single point of the scene,
-// never a sweep and never a wave across the screen: the surfaces around that point that face it glow up softly in
-// the variant's echo color (a crisp line along their edge, the body fading into the dark below it) and fade back
-// over a couple of seconds, a few particles in the water glinting as the echo passes. What is down there: a seabed
-// of soft dunes with a trench under the well, a few rocks, a wreck lying on its side on the right; behind them, a
-// sunken city (a tower, a spire, a dome, a colonnade on the right, a stepped pyramid and an arch on the left, broken columns
-// under the lettering) that only a peak reveals.
+// One world: deep water, near black, and nothing to see in it until an echo comes back. It is a true 3D scene
+// (scene.cpp: a seabed of long dunes, rocks, a wreck and a sunken city, one static mesh drawn in perspective with a
+// depth buffer) and the camera glides through it, behind the well, along a closed loop: down a colonnade, under two
+// arches, past a tower, a dome, a stepped pyramid, a street of towers and a round temple, over the wreck. The pings
+// run on the beat grid (every four beats in calm parts, every two from a chorus on), each one around a single
+// point in view, never a sweep and never a wave across the screen: the surfaces around that point that face it
+// glow up softly in the variant's echo color, their edges as fine lines of light, and fade back over a couple of
+// seconds, the particles in the water glinting as the echo passes.
 //
-// The pieces are solid glowing blocks, one cube per cell, each of the seven types its own clean color. **The
-// chart grows with the lines**: a cleared row's blocks sink into the dark (gone in under half a second, at the real
-// speed even in slow motion) and their light sinks on, as one point, to a spot of the seabed, which stays charted
-// for the rest of the song: faintly lit for good, with survey lines along its strata. The seabed is mapped from
-// the well outward, then the city. A Tetris charts four spots at once and lets the whole city glow up for a moment.
+// The pieces are solid blocks lit from within, one cube per cell, crisp (no glow around them), each of the seven
+// types its own clean color. **The chart grows with the lines**: a cleared row's blocks sink into the dark (gone in
+// under half a second, at the real speed even in slow motion) and their light sinks on, as one point, to a spot of
+// the seabed in view (later now and then a building), which stays charted for the rest of the song: its edges
+// faintly lit for good, the seabed's depth contours drawn there. A Tetris charts four spots at once and lets the
+// whole city glow up for a moment.
 //
-// The song: calm is the dark sea and a slow ping now and then on the seabed; mid pings every two beats, the wreck
-// among them; a peak pings both sides at once, mostly the city, which glows faintly out of the black for the whole
-// peak, its windows lit by the kicks. The drop, eased in over two beats, raises the whole sunken city out of the
-// dark in the drop's own echo color, then settles back over the following bars. Slow motion is silent running (the
-// echoes linger, one cold light); game over sinks the stack into the dark from the top, and the chart fades.
+// The song: calm is the dark sea, a slow glide and a slow ping now and then on the seabed; mid pings every two
+// beats, the wreck and the city among them; a peak pings both sides at once, mostly the city, which glows faintly
+// out of the black for the whole peak, its windows lit by the kicks, and the glide quickens a little. The drop,
+// eased in over two beats, raises the whole sunken world out of the dark in the drop's own echo color (its edges
+// and the seabed's contours) and the glide surges to about twice the peak's pace, eased up and down by a critically
+// damped spring over a couple of seconds, then settles back over the following bars. Slow motion is silent running
+// (the echoes linger, the glide slows, one cold light); game over sinks the stack into the dark from the top, the
+// chart fades and the glide drifts to a halt.
 //
-// Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
+// Layout contract: the well, the blocks and the HUD are drawn through a flat orthographic view at the reference
+// camera's scale on the board plane, and never move; only the world behind them has its own moving camera.
 #include "universes/sonar/sonar.hpp"
 
 #include <algorithm>
@@ -81,8 +86,9 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-// Where the wreck and the city's buildings stand (as WORLD_FS draws them).
-constexpr float WRECK_X = 12.6f, TOWER_X = 14.4f, SPIRE_X = 15.9f, DOME_X = 17.7f, COL_X = 20.2f, PYR_X = -19.2f, ARCH_X = -14.8f;
+constexpr float FOV_Y = 52.f;      // the world camera's vertical field of view (degrees)
+constexpr float CAM_AHEAD = 9.f;   // it looks at the loop this far ahead, a little down
+constexpr int SNOW_N = 1600;       // particles in the water
 
 constexpr float SINK_T = 0.4f;     // a cleared row's blocks are gone in this long
 constexpr float OVER_T = 1.1f;     // game over: each block sinking
@@ -135,7 +141,9 @@ void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
 
 bool SonarUniverse::init(int width, int height) {
     using shaders::withCommon;
-    progWorld_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::WORLD_FS).c_str(), "sonar sea");
+    progWater_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::WATER_FS, true).c_str(), "sonar water");
+    progMesh_ = ugl::program(shaders::MESH_VS, withCommon(shaders::MESH_FS, true).c_str(), "sonar world");
+    progSnow_ = ugl::program(withCommon(shaders::SNOW_VS, true).c_str(), withCommon(shaders::SNOW_FS, true).c_str(), "sonar snow");
     progWell_ = ugl::program(ugl::FULLSCREEN_VS, shaders::WELL_FS, "sonar well");
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "sonar blocks");
     progMote_ = ugl::program(shaders::MOTE_VS, shaders::MOTE_FS, "sonar motes");
@@ -167,6 +175,44 @@ bool SonarUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+    // the sunken world: one static mesh
+    scene_.build();
+    glGenVertexArrays(1, &meshVao_);
+    glGenBuffers(1, &meshVbo_);
+    glGenBuffers(1, &meshIbo_);
+    glBindVertexArray(meshVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, meshVbo_);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(scene_.verts.size() * sizeof(sonar_scene::Vtx)), scene_.verts.data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, meshIbo_);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(scene_.idx.size() * sizeof(uint32_t)), scene_.idx.data(), GL_STATIC_DRAW);
+    {
+        const int sizes[4] = {3, 3, 4, 4};
+        size_t off = 0;
+        for (int i = 0; i < 4; i++) {
+            glEnableVertexAttribArray(i);
+            glVertexAttribPointer(i, sizes[i], GL_FLOAT, GL_FALSE, (GLsizei)sizeof(sonar_scene::Vtx), (void*)off);
+            off += sizeof(float) * sizes[i];
+        }
+    }
+    meshCount_ = (GLsizei)scene_.idx.size();
+    scene_.verts.clear();
+    scene_.verts.shrink_to_fit();
+    scene_.idx.clear();
+    scene_.idx.shrink_to_fit();
+    // particles in the water
+    {
+        std::vector<float> pts(SNOW_N * 4);
+        Rng r(0x5A0Full);
+        for (float& v : pts) v = r.uniform();
+        glGenVertexArrays(1, &snowVao_);
+        glGenBuffers(1, &snowVbo_);
+        glBindVertexArray(snowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, snowVbo_);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(pts.size() * sizeof(float)), pts.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, nullptr);
+        snowCount_ = SNOW_N;
+    }
     glBindVertexArray(0);
 
     buildFont(fontCap_, FONT_CAPS);
@@ -232,7 +278,7 @@ void SonarUniverse::resize(int width, int height) {
     viewH_ = vec2{hw, hh};
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
-    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
     const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
     bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomB_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -240,10 +286,10 @@ void SonarUniverse::resize(int width, int height) {
 
 SonarUniverse::~SonarUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progWorld_, progWell_, progPiece_, progMote_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+    for (GLuint p : {progWater_, progMesh_, progSnow_, progWell_, progPiece_, progMote_, progDown_, progBlur_, progFinal_, progShape_, progText_})
         glDeleteProgram(p);
-    for (GLuint v : {pieceVao_, moteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, pieceVbo_, moteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {pieceVao_, moteVao_, shapeVao_, textVao_, meshVao_, snowVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, pieceVbo_, moteVbo_, shapeVbo_, textVbo_, meshVbo_, meshIbo_, snowVbo_}) glDeleteBuffers(1, &b);
     for (Font* f : {&fontCap_, &fontIt_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
@@ -251,113 +297,160 @@ SonarUniverse::~SonarUniverse() {
 }
 
 // =====================================================================================================
-// The seabed, the echoes, the chart
+// The camera, the echoes, the chart
 // =====================================================================================================
 
-// The seabed's profile (as WORLD_FS draws it).
-float SonarUniverse::bedY(float x) const {
-    const float ax = std::fabs(x);
-    float y = -9.2f + 0.42f * std::sin(0.29f * x + bedPhase_.x) + 0.22f * std::sin(0.77f * x + bedPhase_.y) +
-              0.1f * std::sin(1.9f * x + bedPhase_.z);
-    y -= 1.6f * (1.f - smoothstepf(4.5f, 9.5f, ax));
-    const float r = smoothstepf(12.f, 23.f, ax);
-    return y + 3.f * r * r;
+// The glide along the loop: the speed follows its target through a critically damped spring (it eases up and down
+// over a couple of seconds, never a jerk), and the path parameter integrates it (never a jump).
+void SonarUniverse::updateCamera(float wdt, float targetSpeed, float dt) {
+    const float w = 1.6f;
+    if (dt > 0.f) {
+        const float a = w * w * (targetSpeed - speed_) - 2.f * w * speedV_;
+        speedV_ += a * dt;
+        speed_ += speedV_ * dt;
+    }
+    pathS_ += speed_ * wdt;
+    if (pathS_ > scene_.loopLength()) pathS_ -= scene_.loopLength();
+    camPos_ = scene_.path(pathS_);
+    vec3 ahead = scene_.path(pathS_ + CAM_AHEAD);
+    ahead.y -= 2.6f;
+    const vec3 up(0.f, 1.f, 0.f);
+    camF_ = normalize(ahead - camPos_);
+    camR_ = normalize(cross(camF_, up));
+    camU_ = cross(camR_, camF_);
+    const float aspect = (float)width_ / height_;
+    wTan_ = std::tan(FOV_Y * 0.5f * PI / 180.f);
+    wvp_ = mat4::perspective(FOV_Y * PI / 180.f, aspect, 0.3f, 260.f) * mat4::lookAt(camPos_, camPos_ + camF_, up);
 }
 
-// The points the pings return from: the seabed beside the well, the rocks, the wreck, the city's buildings.
-void SonarUniverse::buildAnchors() {
-    anchors_.clear();
-    for (int s = -1; s <= 1; s += 2)
-        for (float ax = 7.f; ax < 21.5f; ax += 2.4f) anchors_.push_back({s * ax, bedY(s * ax) + 0.4f, 0});
-    anchors_.push_back({WRECK_X, bedY(WRECK_X) + 1.f, 1});
-    anchors_.push_back({WRECK_X + 0.8f, bedY(WRECK_X) + 2.6f, 1});
-    anchors_.push_back({WRECK_X - 1.8f, bedY(WRECK_X - 1.8f) + 0.8f, 1});
-    anchors_.push_back({TOWER_X, -2.5f, 2});
-    anchors_.push_back({DOME_X, bedY(DOME_X) + 3.2f, 2});
-    anchors_.push_back({COL_X, bedY(COL_X) + 2.6f, 2});
-    anchors_.push_back({SPIRE_X, 0.5f, 2});
-    anchors_.push_back({PYR_X, bedY(PYR_X) + 2.4f, 2});
-    anchors_.push_back({ARCH_X, bedY(ARCH_X) + 2.6f, 2});
-    anchors_.push_back({-10.f, bedY(-10.f) + 1.f, 2});
+bool SonarUniverse::toNdc(const vec3& p, vec2& ndc, float& depth) const {
+    const vec4 c = wvp_ * vec4(p, 1.f);
+    if (c.w < 0.3f) return false;
+    ndc = vec2{c.x / c.w, c.y / c.w};
+    depth = c.w;
+    return true;
 }
 
-void SonarUniverse::ping(float x, float y, float strength, float reach) {
-    Ping& p = pings_[pingNext_];
+bool SonarUniverse::toBoard(const vec3& p, vec2& board) const {
+    vec2 n;
+    float d;
+    if (!toNdc(p, n, d)) return false;
+    board = vec2{viewC_.x + n.x * viewH_.x, viewC_.y + n.y * viewH_.y};
+    return true;
+}
+
+bool SonarUniverse::seabedAt(float nx, float ny, vec3& hit) const {
+    const float aspect = (float)width_ / height_;
+    const vec3 d = normalize(camF_ + camR_ * (nx * wTan_ * aspect) + camU_ * (ny * wTan_));
+    float prev = 0.5f;
+    for (float t = 0.5f; t < 45.f; t += 0.3f) {
+        const vec3 p = camPos_ + d * t;
+        if (p.y < scene_.height(p.x, p.z)) {
+            float a = prev, b = t;
+            for (int i = 0; i < 6; i++) {
+                const float m = 0.5f * (a + b);
+                const vec3 q = camPos_ + d * m;
+                if (q.y < scene_.height(q.x, q.z)) b = m;
+                else a = m;
+            }
+            hit = camPos_ + d * b;
+            return true;
+        }
+        prev = t;
+    }
+    return false;
+}
+
+void SonarUniverse::ping(const vec3& p, float strength, float reach) {
+    Ping& q = pings_[pingNext_];
     pingNext_ = (pingNext_ + 1) % 8;
-    p.x = x;
-    p.y = y;
-    p.age = 0.f;
-    p.strength = strength;
-    p.reach = reach;
+    q.p = p;
+    q.age = 0.f;
+    q.strength = strength;
+    q.reach = reach;
 }
 
-// A ping on one side (-1 left, 1 right): an anchor of a layer up to maxLayer (the city with some chance).
+// A ping on one side of the screen (-1 left, 1 right), outside the well: a building in view (the city with some
+// chance), a rock or the wreck, or a point of the seabed.
 void SonarUniverse::pingSomewhere(int side, float strength, float reach, int maxLayer, float cityChance) {
+    using namespace sonar_scene;
+    const float wellN = 5.4f / viewH_.x;
     const bool city = maxLayer >= 2 && rng_.chance(cityChance);
-    std::vector<int> pool;
-    for (int i = 0; i < (int)anchors_.size(); i++) {
-        const Anchor& a = anchors_[i];
-        if ((a.x < 0.f) != (side < 0)) continue;
-        if (std::fabs(a.x) > viewH_.x - 0.5f) continue;
-        if (city ? a.layer != 2 : a.layer > std::min(maxLayer, 1)) continue;
-        if (i == lastAnchor_[side < 0 ? 0 : 1]) continue;
-        pool.push_back(i);
-    }
-    if (pool.empty()) return;
-    const int i = pool[rng_.irange(0, (int)pool.size() - 1)];
-    lastAnchor_[side < 0 ? 0 : 1] = i;
-    const Anchor& a = anchors_[i];
-    ping(a.x + rng_.range(-0.6f, 0.6f), a.y + rng_.range(-0.3f, 0.3f), strength, reach);
-}
-
-// The spots the cleared rows chart, in order: the seabed from the well outward (both sides in turn), the wreck,
-// the city, then the gaps in between.
-void SonarUniverse::buildChartOrder() {
-    chartOrder_.clear();
-    chartNext_ = 0;
-    Rng r(seed_ ^ 0xC4A27ull);
-    const bool leftFirst = r.chance(0.5f);
-    for (int k = 0; k < 9; k++) {
-        const float ax = 6.4f + 1.9f * k;
-        for (int s2 = 0; s2 < 2; s2++) {
-            const float s = ((s2 == 0) == leftFirst) ? -1.f : 1.f;
-            const float x = s * (ax + r.range(-0.3f, 0.3f));
-            if (std::fabs(x) > viewH_.x + 0.5f) continue;
-            chartOrder_.push_back(vec3(x, bedY(x) + 0.1f, 2.3f));
+    const bool object = city || rng_.chance(maxLayer >= 1 ? 0.45f : 0.25f);
+    const int si = side < 0 ? 0 : 1;
+    if (object) {
+        std::vector<int> pool;
+        for (int i = 0; i < (int)scene_.anchors.size(); i++) {
+            const Anchor& a = scene_.anchors[i];
+            if (city ? a.layer != CITY : (a.layer == CITY || (a.layer == WRECK && maxLayer < 1))) continue;
+            vec2 n;
+            float d;
+            if (!toNdc(a.p, n, d) || d < 7.f || d > 40.f) continue;
+            if (n.x * side < wellN + 0.02f || n.x * side > 0.97f || n.y < -0.95f || n.y > 0.9f) continue;
+            if (i == lastAnchor_[si]) continue;
+            pool.push_back(i);
+        }
+        if (!pool.empty()) {
+            const int i = pool[rng_.irange(0, (int)pool.size() - 1)];
+            lastAnchor_[si] = i;
+            const vec3 j(rng_.range(-0.5f, 0.5f), rng_.range(-0.4f, 0.4f), rng_.range(-0.5f, 0.5f));
+            ping(scene_.anchors[i].p + j, strength, reach * (scene_.anchors[i].layer == CITY ? 1.25f : 1.f));
+            return;
         }
     }
-    chartOrder_.push_back(vec3(WRECK_X, bedY(WRECK_X) + 0.9f, 2.8f));
-    chartOrder_.push_back(vec3(WRECK_X + 0.8f, bedY(WRECK_X) + 2.6f, 2.2f));
-    const float cx[8] = {TOWER_X, PYR_X, DOME_X, ARCH_X, COL_X, SPIRE_X, -10.f, -8.f};
-    const float cy[8] = {-3.f, 0.f, 0.f, 0.f, 0.f, 0.3f, 0.f, 0.f};
-    const float ch[8] = {0.f, 1.8f, 2.4f, 2.f, 1.6f, 0.f, 0.8f, 0.8f};
-    for (int i = 0; i < 8; i++) {
-        const float y = cy[i] != 0.f ? cy[i] : bedY(cx[i]) + ch[i];
-        if (std::fabs(cx[i]) < viewH_.x + 0.5f) chartOrder_.push_back(vec3(cx[i], y, 3.f));
-    }
-    chartOrder_.push_back(vec3(TOWER_X, 0.3f, 2.6f));
-    chartOrder_.push_back(vec3(DOME_X, bedY(DOME_X) + 4.f, 2.4f));
-    chartOrder_.push_back(vec3(PYR_X, bedY(PYR_X) + 3.4f, 2.4f));
-    for (int k = 0; k < 9; k++) {
-        const float ax = 7.35f + 1.9f * k;
-        for (int s = -1; s <= 1; s += 2) {
-            const float x = s * ax;
-            if (std::fabs(x) > viewH_.x + 0.5f) continue;
-            chartOrder_.push_back(vec3(x, bedY(x) - 0.6f, 2.f));
-        }
+    for (int k = 0; k < 8; k++) {
+        vec3 hit;
+        if (!seabedAt(side * rng_.range(wellN + 0.08f, 0.9f), rng_.range(-0.92f, 0.05f), hit)) continue;
+        const float d = length(hit - camPos_);
+        if (d < 8.f || d > 34.f) continue;
+        ping(hit + vec3(0.f, 0.5f, 0.f), strength, reach);
+        return;
     }
 }
 
-// Charts the next spot after `delay` seconds; returns its index in charts_ (-1 once all is charted).
-int SonarUniverse::chartSpot(float delay) {
-    if (chartNext_ >= chartOrder_.size() || charts_.size() >= 64) return -1;
-    const vec3 s = chartOrder_[chartNext_++];
+// Charts a spot in view on one side (a point of the seabed, now and then a building) after `delay` seconds;
+// returns its index in charts_ (-1 if none could be found or the chart is full).
+int SonarUniverse::chartSpot(int side, float delay) {
+    using namespace sonar_scene;
+    if (charts_.size() >= 64) return -1;
+    const float wellN = 5.4f / viewH_.x;
+    auto spaced = [&](const vec3& p) {
+        for (const Chart& c : charts_)
+            if (!c.fading && length(c.p - p) < 3.5f) return false;
+        return true;
+    };
     Chart c;
-    c.x = s.x;
-    c.y = s.y;
-    c.r = s.z;
+    bool ok = false;
+    if (chartCount_ >= 4 && rng_.chance(0.3f)) {
+        std::vector<int> pool;
+        for (int i = 0; i < (int)scene_.anchors.size(); i++) {
+            const Anchor& a = scene_.anchors[i];
+            if (a.layer != CITY && a.layer != WRECK) continue;
+            vec2 n;
+            float d;
+            if (!toNdc(a.p, n, d) || d < 4.f || d > 32.f) continue;
+            if (n.x * side < wellN + 0.04f || n.x * side > 0.95f || std::fabs(n.y) > 0.9f || !spaced(a.p)) continue;
+            pool.push_back(i);
+        }
+        if (!pool.empty()) {
+            c.p = scene_.anchors[pool[rng_.irange(0, (int)pool.size() - 1)]].p;
+            c.r = 6.f;
+            ok = true;
+        }
+    }
+    for (int k = 0; k < 16 && !ok; k++) {
+        const int sd = k < 10 ? side : -side;
+        vec3 hit;
+        if (!seabedAt(sd * rng_.range(wellN + 0.1f, 0.82f), rng_.range(-0.88f, -0.2f), hit)) continue;
+        if (length(hit - camPos_) > 30.f || !spaced(hit)) continue;
+        c.p = hit + vec3(0.f, 0.3f, 0.f);
+        c.r = 5.f;
+        ok = true;
+    }
+    if (!ok) return -1;
     c.delay = delay;
     charts_.push_back(c);
+    chartCount_++;
     return (int)charts_.size() - 1;
 }
 
@@ -400,16 +493,16 @@ void SonarUniverse::setSong(const SongLook& t, float seconds) {
     seed_ = t.seed ? t.seed : 1;
     seedF_ = (float)((seed_ >> 20) % 1000) * 0.137f;
     rng_ = Rng(seed_ ^ 0x50A450ull);
-    // a new song: another stretch of seabed, nothing charted yet
-    {
+    // a new song: nothing charted yet; the first one starts the glide somewhere along the loop (later ones glide on)
+    if (instant) {
+        charts_.clear();
         Rng r(seed_ ^ 0xBEDull);
-        bedPhase_ = vec3(r.range(0.f, TAU), r.range(0.f, TAU), r.range(0.f, TAU));
-    }
-    if (instant) charts_.clear();
-    else
+        pathS_ = r.range(0.f, scene_.loopLength());
+        speed_ = 0.85f;
+        speedV_ = 0.f;
+    } else
         for (Chart& c : charts_) c.fading = true;
-    buildAnchors();
-    buildChartOrder();
+    chartCount_ = 0;
 }
 
 void SonarUniverse::setLevel(int level, float energy, float seconds, float impact) {
@@ -499,12 +592,19 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
             sinks_.push_back({p.x, p.y, pieceCol_[std::clamp(c.type, 0, 6)], 0.f, SINK_T, 0.012f * (float)(c.x % 3), 2});
         }
         for (size_t k = 0; k < rows.size(); k++) {
-            const int ci = chartSpot(MOTE_T + 0.12f * k);
+            const int side0 = ((int)k + chartCount_) % 2 ? 1 : -1;
+            const int ci = chartSpot(side0, MOTE_T + 0.12f * k);
             const vec3 p = layout::cellPos(0.f, (float)rows[k]);
             Mote m;
-            const float side = ci >= 0 ? (charts_[ci].x < 0.f ? -1.f : 1.f) : (k % 2 ? 1.f : -1.f);
+            vec2 b{side0 * rng_.range(12.f, 17.f), -9.f};
+            if (ci >= 0) {
+                m.world = true;
+                m.target = charts_[ci].p;
+                toBoard(m.target, b);
+            }
+            const float side = b.x < 0.f ? -1.f : 1.f;
             m.p0 = m.p = vec2{side * 4.2f, p.y};
-            m.p1 = ci >= 0 ? vec2{charts_[ci].x, charts_[ci].y} : vec2{side * rng_.range(8.f, 16.f), bedY(side * 12.f)};
+            m.p1 = b;
             m.delay = 0.08f + 0.1f * k;
             m.life = MOTE_T;
             m.size = 0.2f;
@@ -527,7 +627,7 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
             sinks_.push_back({p.x, p.y, pieceCol_[std::clamp(c.type, 0, 6)], 0.f, OVER_T, 0.1f + 0.045f * (c.y - top) + 0.08f * h, 3});
         }
         for (Chart& c : charts_) c.fading = true;
-        buildChartOrder();
+        chartCount_ = 0;
         break;
     }
     default: break;
@@ -793,6 +893,28 @@ void SonarUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
 // Frame
 // =====================================================================================================
 
+void SonarUniverse::setWorldUniforms(GLuint prog) {
+    float pv[32], ps[16];
+    for (int i = 0; i < 8; i++) {
+        const Ping& p = pings_[i];
+        pv[i * 4] = p.p.x; pv[i * 4 + 1] = p.p.y; pv[i * 4 + 2] = p.p.z; pv[i * 4 + 3] = p.age;
+        ps[i * 2] = p.strength; ps[i * 2 + 1] = p.reach;
+    }
+    glUniform4fv(ugl::U(prog, "uPing"), 8, pv);
+    glUniform2fv(ugl::U(prog, "uPingS"), 8, ps);
+    set1f(prog, "uDecay", decay_);
+    set4f(prog, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    set2f(prog, "uRes", (float)width_, (float)height_);
+    set3f(prog, "uWaterTop", waterTop_);
+    set3f(prog, "uWaterLow", waterLow_);
+    const float aspect = (float)width_ / height_;
+    set3f(prog, "uCamF", camF_);
+    set3f(prog, "uCamR", camR_ * (wTan_ * aspect));
+    set3f(prog, "uCamU", camU_ * wTan_);
+    set1f(prog, "uTime", worldTime_);
+    set1f(prog, "uSeed", seedF_);
+}
+
 void SonarUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
@@ -835,6 +957,14 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     kickEnv_ = std::max(kickEnv_ * std::exp(-dt * 4.f), kickIn_ * wp);
     kickIn_ = 0.f;
 
+    // ---- The glide: calm and slow, a little livelier from a chorus on, a clear surge of travel on the drop that
+    // eases in over a couple of seconds and settles over the following bars; game over drifts to a halt.
+    {
+        float target = lerpf(0.8f, 1.1f, wm) + 0.4f * wp + 1.4f * fest_;
+        if (overT_ >= 0.f) target = 0.25f;
+        updateCamera(wdt, target, f.paused ? 0.f : dt);
+    }
+
     // ---- The pings, on the beat grid: every four beats in calm parts, every two from mid on, both sides at a peak.
     if (!f.paused && overT_ < 0.f && bridge_.amount < 0.5f) {
         const long long slot = (long long)std::floor(beat_ / 2.0);
@@ -845,19 +975,19 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
             if (!first && (!calm || slot % 2 == 0)) {
                 pingSide_ = -pingSide_;
                 const float str = lerpf(0.6f, 0.85f, wm) + 0.15f * wp;
-                const float reach = lerpf(3.2f, 4.f, wm) + 1.2f * wp + 1.f * fest_;
+                const float reach = (lerpf(2.8f, 3.4f, wm) + 1.f * wp + 1.f * fest_) * 1.4f;
                 const int maxLayer = wm > 0.5f ? 2 : 0;
-                const float cityChance = 0.12f * wm + 0.6f * wp;
+                const float cityChance = 0.15f * wm + 0.6f * wp;
                 pingSomewhere(pingSide_, str, reach, maxLayer, cityChance);
                 if (wp > 0.5f || fest_ > 0.3f) pingSomewhere(-pingSide_, str * 0.85f, reach * 0.9f, 2, cityChance);
             }
         }
     }
-    const float decay = lerpf(1.5f, 4.f, slow_);
+    decay_ = lerpf(1.5f, 4.f, slow_);
     for (Ping& p : pings_)
         if (p.age >= 0.f) {
             p.age += wdt;
-            if (p.age > decay * 6.f + 3.f) p.age = -1.f;
+            if (p.age > decay_ * 6.f + 4.f) p.age = -1.f;
         }
     // ---- The chart.
     for (Chart& c : charts_) {
@@ -867,9 +997,10 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     }
     charts_.erase(std::remove_if(charts_.begin(), charts_.end(), [](const Chart& c) { return c.fading && c.amount < 0.01f; }),
                   charts_.end());
-    // ---- Light sinking (real time: what the play drives).
+    // ---- Light sinking (real time: what the play drives), toward its spot as the camera glides on.
     for (Mote& m : motes_) {
         m.t += dt;
+        if (m.world) toBoard(m.target, m.p1);
         const float s = saturate((m.t - m.delay) / m.life);
         const float e = s * s * (3.f - 2.f * s);
         // out from the well's side, then down onto the seabed
@@ -900,68 +1031,71 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
         moteInst_.push_back({{m.p.x, m.p.y, m.size, a}, {m.col.x, m.col.y, m.col.z, m.stretch}});
     }
 
-    // ---- Draw.
+    // ---- The world.
     const float aaW = 2.f * viewH_.y / (float)height_;
     const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    sceneT_.bind();
-    glDisable(GL_BLEND);
-    glUseProgram(progWorld_);
-    set4f(progWorld_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progWorld_, "uWaterTop", waterTop_);
-    set3f(progWorld_, "uWaterLow", waterLow_);
+    const float quietSlow = 1.f - 0.5f * slow_;
     const vec3 ech = lerp(echo_, dropEcho_, fest_ * 0.85f), echC = lerp(echoCity_, dropEcho_, fest_ * 0.9f);
-    set3f(progWorld_, "uEcho", ech);
-    set3f(progWorld_, "uEchoCity", echC);
-    set1f(progWorld_, "uTime", worldTime_);
-    set1f(progWorld_, "uSeed", seedF_);
-    set1f(progWorld_, "uDecay", decay);
-    set3f(progWorld_, "uS", bedPhase_);
+    sceneT_.bind();
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(progWater_);
+    setWorldUniforms(progWater_);
+    set1f(progWater_, "uSlow", slow_);
+    set1f(progWater_, "uFade", 1.f - bridgeK);
+    ugl::drawFullscreen();
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glUseProgram(progMesh_);
+    setWorldUniforms(progMesh_);
+    setMat(progMesh_, "uWVP", wvp_);
+    set3f(progMesh_, "uCam", camPos_);
     {
-        float pv[32], pr[8];
-        for (int i = 0; i < 8; i++) {
-            const Ping& p = pings_[i];
-            pv[i * 4] = p.x; pv[i * 4 + 1] = p.y; pv[i * 4 + 2] = p.age; pv[i * 4 + 3] = p.strength;
-            pr[i] = p.reach;
-        }
-        glUniform4fv(ugl::U(progWorld_, "uPing"), 8, pv);
-        glUniform1fv(ugl::U(progWorld_, "uPingR"), 8, pr);
-        float cv[64 * 4];
+        float cv[64 * 4], ca[64];
         const int n = (int)std::min<size_t>(64, charts_.size());
         for (int i = 0; i < n; i++) {
             const Chart& c = charts_[i];
-            cv[i * 4] = c.x; cv[i * 4 + 1] = c.y; cv[i * 4 + 2] = c.r; cv[i * 4 + 3] = c.amount;
+            cv[i * 4] = c.p.x; cv[i * 4 + 1] = c.p.y; cv[i * 4 + 2] = c.p.z; cv[i * 4 + 3] = c.r;
+            ca[i] = c.amount;
         }
-        if (n > 0) glUniform4fv(ugl::U(progWorld_, "uChart"), n, cv);
-        set1i(progWorld_, "uCharts", n);
+        if (n > 0) {
+            glUniform4fv(ugl::U(progMesh_, "uChart"), n, cv);
+            glUniform1fv(ugl::U(progMesh_, "uChartA"), n, ca);
+        }
+        set1i(progMesh_, "uCharts", n);
     }
-    const float quietSlow = 1.f - 0.5f * slow_;
-    set1f(progWorld_, "uBed", (0.003f + 0.02f * wp + 0.32f * fest_ + 0.12f * swell_ + 0.18f * tetrisGlow_) * quietSlow);
-    set1f(progWorld_, "uCity", (0.16f * wp + 0.5f * fest_ + 0.2f * swell_ + 0.42f * tetrisGlow_) * quietSlow);
-    set1f(progWorld_, "uWin", (0.5f * kickEnv_ + 0.25f * fest_) * quietSlow);
-    set1f(progWorld_, "uSlow", slow_);
-    set1f(progWorld_, "uFade", 1.f - bridgeK);
-    ugl::drawFullscreen();
+    set3f(progMesh_, "uEcho", ech);
+    set3f(progMesh_, "uEchoCity", echC);
+    set1f(progMesh_, "uBed", (0.004f + 0.03f * wp + 0.3f * fest_ + 0.15f * swell_ + 0.2f * tetrisGlow_) * quietSlow);
+    set1f(progMesh_, "uCity", (0.2f * wp + 0.7f * fest_ + 0.25f * swell_ + 0.55f * tetrisGlow_) * quietSlow);
+    set1f(progMesh_, "uWin", (0.6f * kickEnv_ + 0.3f * fest_) * quietSlow);
+    set1f(progMesh_, "uSlow", slow_);
+    set1f(progMesh_, "uFade", 1.f - bridgeK);
+    glBindVertexArray(meshVao_);
+    glDrawElements(GL_TRIANGLES, meshCount_, GL_UNSIGNED_INT, nullptr);
+    // the particles in the water
     glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE); // the scene's alpha is the stack's (for the bridge)
-    // the well
-    glUseProgram(progWell_);
-    set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progWell_, "uLine", lerp(echo_, vec3(0.6f), 0.5f));
-    set1f(progWell_, "uAA", aaW);
-    set1f(progWell_, "uLineA", 0.14f);
-    ugl::drawFullscreen();
-    // the light sinking, behind the stack
-    if (!moteInst_.empty()) drawInst(progMote_, moteVao_, moteVbo_, moteInst_.data(), moteInst_.size() * sizeof(MoteInst), moteInst_.size());
-    // the blocks: the stack writes the scene's alpha
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glUseProgram(progPiece_);
-    set1f(progPiece_, "uGlow", (1.f + 0.06f * wp + 0.05f * fest_) * (1.f - 0.2f * slow_));
-    drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
+    glBlendFunc(GL_ONE, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_PROGRAM_POINT_SIZE);
+    glUseProgram(progSnow_);
+    setWorldUniforms(progSnow_);
+    setMat(progSnow_, "uWVP", wvp_);
+    set3f(progSnow_, "uCam", camPos_);
+    set1f(progSnow_, "uBase", (0.05f + 0.03f * wm + 0.05f * fest_) * quietSlow);
+    set1f(progSnow_, "uFocal", height_ * 0.5f / wTan_);
+    set3f(progSnow_, "uEcho", lerp(ech, vec3(1.f), 0.3f));
+    set1f(progSnow_, "uFade", 1.f - bridgeK);
+    glBindVertexArray(snowVao_);
+    glDrawArrays(GL_POINTS, 0, snowCount_);
+    glDisable(GL_PROGRAM_POINT_SIZE);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
 
-    // ---- The glow.
+    // ---- The glow: of the world only (the blocks stay crisp).
     glDisable(GL_BLEND);
     bloomA_.bind();
     glUseProgram(progDown_);
@@ -983,6 +1117,26 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progBlur_, "uDir", 0.f, st / bloomA_.h);
         ugl::drawFullscreen();
     }
+
+    // ---- The well and the blocks, through the layout's camera.
+    sceneT_.bind();
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE); // the scene's alpha is the stack's (for the bridge)
+    glUseProgram(progWell_);
+    set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    set3f(progWell_, "uLine", lerp(echo_, vec3(0.6f), 0.5f));
+    set1f(progWell_, "uAA", aaW);
+    set1f(progWell_, "uLineA", 0.14f);
+    ugl::drawFullscreen();
+    // the light sinking, behind the stack
+    if (!moteInst_.empty()) drawInst(progMote_, moteVao_, moteVbo_, moteInst_.data(), moteInst_.size() * sizeof(MoteInst), moteInst_.size());
+    // the blocks: the stack writes the scene's alpha
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glUseProgram(progPiece_);
+    set1f(progPiece_, "uGlow", (1.f + 0.04f * wp + 0.04f * fest_) * (1.f - 0.2f * slow_));
+    drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
+    glDisable(GL_BLEND);
 
     // ---- The frame.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);

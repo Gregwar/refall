@@ -1,15 +1,22 @@
 // GLOWING FOREST: a night forest lit only by bioluminescence.
 //
-// One world: a dark, painted night forest. Two hazy layers of far trunks stand in the mist, a few near trunks rise at
-// the sides of the screen, banks of fog lie low over a mossy floor. There is no moon on screen and no lamp: all the light
-// is the life's own. Glowing mushrooms, slender mycena, ferns with lit veins, glowworm threads hanging from the canopy, arching stems
-// of luminous bells and cushions of glowing moss grow beside and outside the well and below
-// the HUD's columns, never behind their text; each lights the mist around it with a soft halo.
+// One world: a dark, painted night forest. Four depths of trunks fade into a luminous mist (the far ones thin and pale,
+// the nearer ones darker, with limbs), banks of mist drift between them, pale shafts of light fall through gaps in the
+// canopy with motes of dust in them, and clumps of leaves and vines hang over the top corners. At the sides stand the
+// near trunks: ridged bark, buttress roots, moss, and veins and dots of glowing fungus that climb them as the forest
+// grows. A large mossy rock fills the bottom-left corner (the HUD's corner text sits on its dark face), a still pool lies
+// on the right floor between the trunks (it mirrors the glow on its banks, glowing pads afloat on it), stones and a
+// carpet of glowing moss spread over the floor with the song. There is no moon on screen and no lamp: all the light is
+// the life's own. Glowing mushrooms (domed, conical or flat caps with gills), slender mycena, ferns unrolling from
+// fiddleheads, bell flowers, glowing reeds, cushions of moss, bracket fungi up the trunks and glowworm threads hanging
+// from the canopy grow beside and outside the well and below the HUD's columns, never behind their text; they sway in a
+// slow breeze, and each lights the mist around it with a soft halo.
 //
 // The forest grows with the lines: a new song starts with a dark forest and a few faint plants; each cleared row
 // breaks into spores that drift out of the well to an empty spot, where a new plant comes up and stays for the song
-// (a Tetris sows a cluster of four at once and the whole forest flares up). Once every spot is taken, new lines make
-// the old plants grow fuller.
+// (a Tetris sows a cluster of four at once and the whole forest flares up). The spots fill in stages (the front row, then
+// the bark and the left's threads, then a back row), so the forest keeps growing to the end of a long song; once
+// every spot is taken, new lines make the old plants grow fuller.
 //
 // The pieces are solid little cubes of luminous fungus flesh, one per cell with a thin gap: lit from within, darker
 // toward their sides, threaded with bright veins and a few glowing spots, a pale line of moonlight along their top edge;
@@ -96,15 +103,31 @@ constexpr float OUT_T = 1.5f;       // game over: a block's glow goes out and it
 constexpr float WAVE_SPEED = 2.6f;  // the drop's wave of light, board units a second
 constexpr float GROW_T = 2.8f;      // a new plant comes up in this long
 
-// The floor's height (mirrors groundY in the shaders).
-float groundY(float x, float gs) {
+// The floor's height (mirrors baseY, rockTop and groundY in the shaders): a gently rolling floor, and the mossy rock
+// rising in the bottom-left corner (centered on rockX).
+float baseY(float x, float gs) {
     const float ax = std::fabs(x);
     const float k = smoothstepf(4.5f, 8.f, ax);
     return -10.55f + k * (0.22f * std::sin(0.37f * x + gs) + 0.12f * std::sin(1.13f * x + 2.f * gs)) + 0.35f * smoothstepf(14.f, 21.f, x);
 }
+struct Rock { float x, w, h; };   // the mossy rock: its center, half width and height over -11.3
+float rockTop(float x, float gs, const Rock& r) {
+    const float bx = (x - r.x) / r.w;
+    const float k = std::max(1.f - bx * bx, 0.f);
+    return -11.3f + (r.h + 0.18f * std::sin(x * 0.9f + gs)) * std::pow(k, 0.55f);
+}
+float poolK(float x, const float* pool) {
+    return pool[1] > pool[0] ? smoothstepf(pool[0] - 0.7f, pool[0] + 0.5f, x) * smoothstepf(pool[1] + 0.7f, pool[1] - 0.5f, x) : 0.f;
+}
+float groundY(float x, float gs, const Rock& rock, const float* pool) {
+    const float a = baseY(x, gs), b = rockTop(x, gs, rock);
+    const float h = std::max(0.3f - std::fabs(a - b), 0.f) / 0.3f;
+    return lerpf(std::max(a, b) + h * h * 0.3f * 0.25f, -11.9f, poolK(x, pool));
+}
 
-// A plant's height (plant units) by kind: mushrooms, mycena, glowworm threads (hanging down), fern, bells, moss.
-const float KIND_H[6] = {1.55f, 2.0f, 4.f, 2.3f, 2.0f, 0.4f};
+// A plant's height (plant units) by kind: mushrooms, mycena, glowworm threads (hanging down), fern, bells, moss,
+// bracket fungi (on the bark), glowing reeds.
+const float KIND_H[8] = {1.55f, 2.0f, 4.f, 2.3f, 2.0f, 0.4f, 0.9f, 1.9f};
 
 std::string ascii(const std::string& s) {
     static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
@@ -174,7 +197,7 @@ bool ForestUniverse::init(int width, int height) {
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "forest blocks");
     progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "forest down");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "forest blur");
-    progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "forest final");
+    progFinal_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FINAL_FS).c_str(), "forest final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "forest shape");
     progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "forest text");
 
@@ -263,9 +286,23 @@ void ForestUniverse::resize(int width, int height) {
     const float aspect = (float)width_ / height_;
     const layout::Camera cam = layout::camera(width_, height_);
     const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect;
-    const bool rebuild = std::fabs(hw - viewH_.x) > 0.05f || std::fabs(hh - viewH_.y) > 0.05f;
+    bool rebuild = std::fabs(hw - viewH_.x) > 0.05f || std::fabs(hh - viewH_.y) > 0.05f;
     viewH_ = vec2{hw, hh};
     viewC_ = vec2{cam.target.x, cam.target.y};
+    // the mossy rock carries the bottom-left corner's text (the section and the universe's name) on its dark face:
+    // its top stays above the text, and the floor's plants keep to the right of it
+    const float oldRock = rock_[0] + rock_[1] + rock_[2];
+    {
+        const float s = std::max(1.f, height_ / 900.f), unit = 2.f * viewH_.y / height_;
+        const float textTop = viewC_.y - viewH_.y + 84.f * s * unit;
+        cornerRight_ = std::min(-viewH_.x + 318.f * s * unit, -8.f);
+        const float right = std::min(cornerRight_ + 2.6f, -6.4f);
+        rock_[0] = -viewH_.x + (right + viewH_.x) * 0.36f;
+        rock_[1] = right - rock_[0];
+        const float bx = (cornerRight_ - rock_[0]) / rock_[1];
+        rock_[2] = std::clamp((textTop + 0.4f + 11.3f) / std::pow(std::max(1.f - bx * bx, 0.05f), 0.55f), 2.4f, 4.2f);
+    }
+    if (std::fabs(rock_[0] + rock_[1] + rock_[2] - oldRock) > 0.05f) rebuild = true;
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
@@ -310,16 +347,28 @@ void ForestUniverse::buildTrunks() {
     Rng r(trunkSeed_);
     const float edge = viewH_.x + 0.6f;
     for (int side = -1; side <= 1; side += 2) {
-        float ax = 12.6f + r.range(0.f, 1.2f);
+        float ax = 13.6f + r.range(0.f, 0.7f);
+        bool first = true;
         while (ax < edge && (int)trunks_.size() < 8) {
             Trunk t;
             t.x = side * ax;
-            t.hw = r.range(0.3f, 0.6f);
-            t.lean = r.range(-0.02f, 0.02f);
-            t.flare = r.range(0.5f, 0.9f);
+            t.hw = first ? r.range(0.9f, 1.1f) : r.range(0.45f, 0.65f);
+            t.lean = r.range(-0.015f, 0.015f);
+            t.flare = r.range(0.7f, 1.0f);
             trunks_.push_back(t);
-            ax += r.range(2.9f, 4.4f);
+            ax += side > 0 ? r.range(5.6f, 6.4f) : r.range(4.2f, 5.2f);
+            first = false;
         }
+    }
+    // the still pool on the right floor, between the first two trunks when there is room
+    pool_[0] = pool_[1] = 0.f;
+    for (size_t i = 0; i + 1 < trunks_.size(); i++) {
+        const Trunk& a = trunks_[i];
+        const Trunk& b = trunks_[i + 1];
+        if (a.x < 0.f || b.x < a.x) continue;
+        const float x0 = a.x + a.hw + 1.1f, x1 = std::min(b.x - b.hw - 0.7f, viewH_.x - 0.6f);
+        if (x1 - x0 > 1.6f) { pool_[0] = x0; pool_[1] = x1; }
+        break;
     }
 }
 
@@ -332,7 +381,10 @@ void ForestUniverse::buildForest(bool instant) {
             if (p.fade < 0.f) p.fade = 0.f;
     Rng r(seed_ ^ 0xF0E57ull);
     std::vector<Plant> fresh;
+    std::vector<float> late;    // added to a spot's place in the order: the back row, the bark and the left come later
+    float lateNow = 0.f;
     const float edge = viewH_.x - 0.4f;
+    const float cornerX = -cornerRight_ - 0.3f;   // the bottom-left corner's text
     auto add = [&](float x, float y, int kind, float scale, bool flip) {
         Plant p;
         p.x = x;
@@ -344,13 +396,17 @@ void ForestUniverse::buildForest(bool instant) {
         p.colMix = r.chance(0.3f) ? 1.f : r.range(0.f, 0.35f);
         p.height = KIND_H[kind];
         fresh.push_back(p);
+        late.push_back(lateNow);
     };
-    // the floor
+    // the floor: a back row (smaller, a little further, drawn behind; it fills once the front row has grown), then
+    // the front row
+    for (int row = 1; row >= 0; row--)
     for (int side = -1; side <= 1; side += 2) {
-        float ax = 5.9f + r.range(0.f, 0.4f);
+        lateNow = row ? 0.7f : 0.f;
+        float ax = 5.9f + r.range(0.f, 0.4f) + (row ? 0.45f : 0.f);
         while (ax < edge) {
             const float x = side * ax;
-            const float y = groundY(x, groundSeed_) + 0.02f;
+            const float y = groundY(x, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) + 0.02f + (row ? 0.22f : 0.f);
             // how high it may grow here
             float room;
             if (ax < 6.9f) room = 0.9f;
@@ -358,26 +414,77 @@ void ForestUniverse::buildForest(bool instant) {
             else room = side < 0 ? 0.45f : 7.f;
             int kind;
             const float k = r.uniform();
-            if (room < 1.f) kind = k < 0.6f ? 5 : 1;
-            else if (room < 4.f) kind = k < 0.4f ? 0 : k < 0.6f ? 5 : k < 0.8f ? 1 : 4;
-            else kind = k < 0.3f ? 3 : k < 0.55f ? 0 : k < 0.75f ? 4 : k < 0.88f ? 1 : 5;
+            if (room < 1.f) kind = k < 0.55f ? 5 : 1;
+            else if (row) kind = k < 0.35f ? 7 : k < 0.6f ? 3 : k < 0.75f ? 1 : k < 0.88f ? 4 : 0;
+            else if (room < 4.f) kind = k < 0.32f ? 0 : k < 0.46f ? 5 : k < 0.6f ? 1 : k < 0.72f ? 4 : k < 0.86f ? 3 : 7;
+            else kind = k < 0.28f ? 3 : k < 0.52f ? 0 : k < 0.7f ? 4 : k < 0.82f ? 7 : k < 0.92f ? 1 : 5;
             float scale = r.range(0.65f, 1.25f);
             if (kind == 3 && room > 4.f) scale = r.range(1.0f, 1.5f);
             scale = std::min(scale, room / KIND_H[kind]);
             if (kind == 1 && room < 1.f) scale = std::min(scale, 0.42f);
-            // the bottom-left corner holds the section and the universe's names: nothing grows there
-            const bool corner = side < 0 && ax > 9.4f;
+            if (row) scale *= 0.72f;
+            // the bottom-left corner holds the section and the universe's names: nothing grows there; nor in the pool
+            const bool corner = (side < 0 && ax > cornerX) || poolK(x, pool_) > 0.0f || poolK(x - 0.6f, pool_) > 0.0f ||
+                                poolK(x + 0.6f, pool_) > 0.0f;
             if (scale > 0.25f && !corner) add(x, y, kind, scale, r.chance(0.5f));
             ax += r.range(0.7f, 1.35f) * (kind == 3 ? 1.5f : 1.f);
         }
     }
-    // the canopy: glowworm threads hanging on the free right side (the left holds the song's title)
+    // the pool's banks: reeds standing in the shallows and life leaning over the water, mirrored in it
+    if (pool_[1] > pool_[0]) {
+        lateNow = 0.1f;
+        add(pool_[0] - 0.15f, pool_[2] + 0.03f, 7, r.range(0.95f, 1.15f), false);
+        add(pool_[1] + 0.2f, pool_[2] + 0.03f, 7, r.range(0.8f, 1.0f), true);
+        add(pool_[0] - 0.75f, groundY(pool_[0] - 0.75f, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) + 0.02f, 0,
+            r.range(0.8f, 1.0f), false);
+        add(pool_[1] + 0.8f, groundY(pool_[1] + 0.8f, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) + 0.02f, 4,
+            r.range(0.85f, 1.05f), true);
+    }
+    // the canopy: glowworm threads hanging on the free right side, and on the left short of the song's title
     {
         const float top = viewC_.y + viewH_.y + 0.15f;
+        lateNow = 0.f;
         float x = 11.9f + r.range(0.f, 0.6f);
         while (x < viewH_.x - 0.4f) {
             add(x, top, 2, r.range(0.85f, 1.15f), r.chance(0.5f));
             x += r.range(1.6f, 2.8f);
+        }
+        lateNow = 0.45f;
+        x = 12.2f + r.range(0.f, 0.6f);
+        while (x < viewH_.x - 7.f) {
+            add(-x, top, 2, r.range(0.7f, 1.0f), r.chance(0.5f));
+            x += r.range(1.6f, 2.8f);
+        }
+    }
+    // the mossy rock in the bottom-left corner: low life along its top, above the corner's text
+    lateNow = 0.05f;
+    {
+        float x = -viewH_.x + 0.9f + r.range(0.f, 0.4f);
+        while (x < cornerRight_ - 0.2f) {
+            const float y = groundY(x, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) + 0.02f;
+            const float k = r.uniform();
+            const int kind = k < 0.3f ? 5 : k < 0.5f ? 1 : k < 0.7f ? 0 : k < 0.85f ? 7 : 3;
+            float scale = r.range(0.55f, 0.85f);
+            if (kind == 3) scale = r.range(0.6f, 0.8f);
+            add(x, y, kind, scale, r.chance(0.5f));
+            x += r.range(0.9f, 1.5f) * (kind == 3 ? 1.4f : 1.f);
+        }
+    }
+    // the bark: bracket fungi up the near trunks, on both sides, clear of the HUD and the title
+    lateNow = 0.4f;
+    for (size_t ti = 0; ti < trunks_.size(); ti++) {
+        const Trunk& t = trunks_[ti];
+        const int n = t.hw > 0.8f ? 3 : 2;
+        const float g = groundY(t.x, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_);
+        for (int i = 0; i < n; i++) {
+            const float y = g + 2.8f + (i + r.range(0.1f, 0.9f)) * (11.f / n);
+            const float side = r.chance(0.5f) ? 1.f : -1.f;
+            const float yy = y - g;
+            const float cx = t.x + t.lean * yy + 0.16f * std::sin(yy * 0.16f + ti * 2.3f) - 0.16f * std::sin(ti * 2.3f);
+            const float hw = t.hw * (1.f - 0.007f * yy);
+            const float x = cx + side * hw * 0.92f;
+            if (std::fabs(x) > viewH_.x - 0.4f || inHud(x, y) || inHud(x + side * 0.8f, y) || y > 5.5f) continue;
+            add(x, y, 6, t.hw > 0.8f ? r.range(0.85f, 1.1f) : r.range(0.6f, 0.8f), side < 0.f);
         }
     }
     // the order: mostly shuffled, the floor near the well and the free sides first, the far edge and the bark later
@@ -386,7 +493,7 @@ void ForestUniverse::buildForest(bool instant) {
     for (int i = 0; i < (int)fresh.size(); i++) {
         const Plant& p = fresh[i];
         const float ax = std::fabs(p.x);
-        float key = r.uniform();
+        float key = r.uniform() + late[i];
         if (p.kind == 2) key += 0.2f;
         if (ax > 18.f) key += 0.25f;
         if (p.kind == 5 && ax > 7.f) key += 0.15f;
@@ -417,6 +524,7 @@ int ForestUniverse::sprout(float delay, float nearX, bool fast) {
         }
     }
     if (pi < 0) {
+        const float cornerX = -cornerRight_ - 0.3f;
         std::vector<int> live;
         for (int i = 0; i < (int)plants_.size(); i++)
             if (plants_[i].live && plants_[i].fade < 0.f && plants_[i].scale < 1.6f && plants_[i].kind != 5) live.push_back(i);
@@ -425,7 +533,7 @@ int ForestUniverse::sprout(float delay, float nearX, bool fast) {
         Plant& p = plants_[pi];
         // fuller, if there is room (under the columns and beside the well it stays as it is)
         const float ax = std::fabs(p.x);
-        if (ax > 11.8f && p.x > 0.f && p.kind != 2) p.scale *= 1.06f;
+        if (ax > 11.8f && p.kind != 2 && !(p.x < 0.f && ax > cornerX - 0.5f)) p.scale *= 1.1f;
         p.kickGlow = 1.f;
         return pi;
     }
@@ -439,6 +547,7 @@ int ForestUniverse::sprout(float delay, float nearX, bool fast) {
 
 vec2 ForestUniverse::plantTop(const Plant& p) const {
     if (p.kind == 2) return vec2{p.x, p.y - 3.f * p.scale};
+    if (p.kind == 6) return vec2{p.x + (p.flip ? -0.4f : 0.4f) * p.scale, p.y};
     return vec2{p.x, p.y + p.height * 0.55f * p.scale};
 }
 
@@ -1044,6 +1153,19 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     }
     kickIn_ = 0.f;
     if (waveT_ > 14.f) waveK_ = 0.f;
+    // how much of the forest has grown: the bark's veins, the moss carpet and the mist's tint follow it
+    {
+        float total = 0.f, done = 0.f;
+        for (const Plant& p : plants_) {
+            if (p.fade >= 0.f) continue;
+            total += 1.f;
+            if (p.live) done += p.delay > 0.f ? 0.f : p.grow;
+        }
+        const float want = total > 0.f ? done / total : 0.f;
+        grow_ = approach(grow_, want, 0.08f, dt);
+    }
+    // the breeze: still at calm, livelier with the song, a gust after the drop that settles
+    wind_ = approach(wind_, (0.35f + 0.35f * wm + 0.35f * wp + 0.5f * fest_) * (1.f - 0.6f * slow_), 0.3f, dt);
     const float waveR = waveT_ * WAVE_SPEED;
 
     // ---- The plants.
@@ -1085,7 +1207,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
                 m.p = m.p0 = vec2{side * 16.f, 0.f};
             }
             const float ang = rng_.range(0.f, TAU);
-            m.v = vec2{std::cos(ang), std::sin(ang) * 0.5f} * rng_.range(0.12f, 0.3f);
+            m.v = vec2{std::cos(ang), std::sin(ang) * 0.5f} * rng_.range(0.2f, 0.45f);
             m.life = rng_.range(7.f, 13.f);
             m.r = rng_.range(0.28f, 0.42f);
             m.a = rng_.range(0.5f, 0.9f);
@@ -1100,8 +1222,15 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
         if (m.kind == 0) {
-            const float w = std::sin(m.t * 0.7f + m.seed) * 0.25f;
-            m.p = m.p + vec2{m.v.x + w * m.v.y, m.v.y - w * m.v.x + 0.08f * std::sin(m.t * 1.3f + m.seed * 2.f)} * mdt;
+            const float w = std::sin(m.t * 0.7f + m.seed) * 0.6f;
+            m.p = m.p + vec2{m.v.x + w * m.v.y, m.v.y - w * m.v.x + 0.12f * std::sin(m.t * 1.3f + m.seed * 2.f)} * mdt;
+            m.trailAcc += mdt;
+            if (m.trailAcc > 0.11f) {
+                m.trailAcc = 0.f;
+                for (int k = 7; k > 0; k--) m.trail[k] = m.trail[k - 1];
+                m.trail[0] = m.p;
+                m.trailN = std::min(8, m.trailN + 1);
+            }
         } else if (m.kind == 1) {
             // an arc up and out of the well, then down onto its plant
             const float s = saturate(tt / m.life);
@@ -1148,6 +1277,11 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     halos_.clear();
     cells_.clear();
     moteInst_.clear();
+    // the halos add up: a crowded forest lights its mist a little less per plant (light in the dark, never a haze)
+    int liveN = 0;
+    for (const Plant& p : plants_)
+        if (p.live && p.delay <= 0.f) liveN++;
+    const float haloK = 1.f / std::sqrt(1.f + liveN / 14.f);
     for (const Plant& p : plants_) {
         if (!p.live || p.delay > 0.f) continue;
         const float fa = p.fade >= 0.f ? 1.f - smoothstepf(0.f, 1.f, p.fade) : 1.f;
@@ -1166,7 +1300,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         // the light it casts on the mist
         const vec2 c = plantTop(p);
         const float hr = (1.4f + 1.2f * p.height * 0.5f) * p.scale * (1.f + 0.2f * wave);
-        const float ha = 0.05f * glow * fa * smoothstepf(0.f, 1.f, p.grow) * (1.f + 1.4f * wave) * (p.kind == 5 ? 0.6f : p.kind == 2 ? 0.5f : 1.f);
+        const float ha = 0.05f * glow * fa * smoothstepf(0.f, 1.f, p.grow) * (1.f + 1.4f * wave) * (p.kind == 5 ? 0.6f : p.kind == 2 ? 0.5f : p.kind == 6 ? 0.6f : 1.f) * haloK;
         halos_.push_back({{c.x, c.y, hr, ha}, {ca.x, ca.y, ca.z, 0.f}});
     }
     for (const Fade& c : clears_) addCell(c.x, c.y, 0.5f, c.type, c.l, 1.f, 2, saturate(c.t / CLEAR_T));
@@ -1189,6 +1323,14 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             // never over the well or the HUD's text
             a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
             if (inHud(m.p.x, m.p.y)) a *= 0.2f;
+            // its trail: a fading streak of light along where it flew
+            for (int k = 0; k < m.trailN; k++) {
+                const vec2 q = m.trail[k];
+                float ta = a * 0.3f * (1.f - (k + 1) / 9.f);
+                ta *= smoothstepf(5.9f, 6.8f, std::fabs(q.x));
+                if (inHud(q.x, q.y)) ta *= 0.2f;
+                if (ta > 0.003f) moteInst_.push_back({{q.x, q.y, r * (0.42f - 0.025f * k), ta}, {m.col.x, m.col.y, m.col.z, 0.25f}});
+            }
         } else if (m.kind == 1) {
             a *= smoothstepf(0.f, 0.1f, s) * (1.f - smoothstepf(0.75f, 1.f, s));
             r *= 1.f - 0.4f * s;
@@ -1230,6 +1372,10 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progBg_, "uTrunks", n);
     }
     set1f(progBg_, "uGS", groundSeed_);
+    set3f(progBg_, "uRock", vec3(rock_[0], rock_[1], rock_[2]));
+    set4f(progBg_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
+    set1f(progBg_, "uGrow", grow_);
+    set1f(progBg_, "uWind", wind_);
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", seedF_);
     set1f(progBg_, "uMistK", (0.5f + 0.15f * wm + 0.25f * wp + 0.25f * fest_) * (1.f - 0.25f * slow_));
@@ -1253,6 +1399,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progPlant_, "uAAp", aaW * 1.2f);
         set3f(progPlant_, "uMoon", moon_);
         set1f(progPlant_, "uGS", groundSeed_);
+        set1f(progPlant_, "uWind", wind_);
         drawInst(progPlant_, plantVao_, plantVbo_, plantInst_.data(), plantInst_.size() * sizeof(Inst), plantInst_.size());
     }
     // the well
@@ -1283,6 +1430,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progDown_, "uSrc", 0);
     set2f(progDown_, "uTexel", 1.5f / sceneT_.w, 1.5f / sceneT_.h);
+    set1f(progDown_, "uBlockCut", 0.8f);
     ugl::drawFullscreen();
     glUseProgram(progBlur_);
     set1i(progBlur_, "uSrc", 0);
@@ -1317,6 +1465,11 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progFinal_, "uBridgeCol", bridge_.color);
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
     set3f(progFinal_, "uMoon", moon_);
+    set4f(progFinal_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    set1f(progFinal_, "uTime", worldTime_);
+    set1f(progFinal_, "uGS", groundSeed_);
+    set3f(progFinal_, "uRock", vec3(rock_[0], rock_[1], rock_[2]));
+    set4f(progFinal_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

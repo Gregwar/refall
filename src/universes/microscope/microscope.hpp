@@ -45,6 +45,7 @@ private:
     CellLook look_[22][10];
     bool has_[22][10] = {};
     CellLook lookOf(int x, int y);
+    CellLook fallLook_[4];   // the falling piece's cells, kept as they are when it locks
     void syncLooks(const Game& g);
     struct Lyse { float x, y; int type; CellLook l; float t; };   // a cleared cell bursting
     std::vector<Lyse> lyses_;
