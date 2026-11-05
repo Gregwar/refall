@@ -395,9 +395,9 @@ void DocksUniverse::resize(int width, int height) {
     glGenRenderbuffers(1, &msColor_);
     glGenRenderbuffers(1, &msDepth_);
     glBindRenderbuffer(GL_RENDERBUFFER, msColor_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA16F, width_, height_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 2, GL_RGBA16F, width_, height_);
     glBindRenderbuffer(GL_RENDERBUFFER, msDepth_);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH_COMPONENT24, width_, height_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 2, GL_DEPTH_COMPONENT24, width_, height_);
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msColor_);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, msDepth_);
@@ -1314,6 +1314,19 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progSky_, "uTown", lerp(P.lampA, vec3(1.f, 0.9f, 0.7f), 0.3f) * 1.4f);
         ugl::drawFullscreen();
     };
+    // the sky, drawn last among the opaque things and only where nothing stands (at the far plane, behind the depth
+    // test): most of the screen is cranes, ships and quay, and the sky's clouds and hills are costly
+    auto drawSkyBehind = [&](const mat4& vp, bool mirror) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_FALSE);
+        glDepthFunc(GL_LEQUAL);
+        glDepthRange(1.0, 1.0);
+        glDisable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        drawSky(vp, mirror);
+        glDepthRange(0.0, 1.0);
+        glDepthFunc(GL_LESS);
+    };
     auto drawSolids = [&](const mat4& vp, float clipY) {
         glUseProgram(progBox_);
         common(progBox_);
@@ -1322,9 +1335,16 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBox_, "uClipY", clipY);
         set1f(progBox_, "uStackA", 0.f);
         if (staticDirty_) {
+            // nearest first, so that the depth test rejects most of what is hidden before it is shaded
+            std::vector<Box> sorted = static_;
+            auto dist2 = [&](const Box& b) {
+                const float dx = b.c[0] - eye_.x, dy = b.c[1] - eye_.y, dz = b.c[2] - eye_.z;
+                return dx * dx + dy * dy + dz * dz;
+            };
+            std::sort(sorted.begin(), sorted.end(), [&](const Box& a, const Box& b) { return dist2(a) < dist2(b); });
             glBindBuffer(GL_ARRAY_BUFFER, staticVbo_);
-            glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(static_.size() * sizeof(Box)), static_.data(), GL_STATIC_DRAW);
-            staticCount_ = static_.size();
+            glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sorted.size() * sizeof(Box)), sorted.data(), GL_STATIC_DRAW);
+            staticCount_ = sorted.size();
             staticDirty_ = false;
         }
         drawBoxes(staticVao_, staticVbo_, nullptr, staticCount_, vp, clipY, false);
@@ -1375,13 +1395,13 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         glDepthMask(GL_FALSE);
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
-        drawSky(vp_, true);
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
         glEnable(GL_CULL_FACE);
         glCullFace(GL_FRONT); // the mirror flips the winding
         drawSolids(vpM, Y_W);
+        drawSkyBehind(vp_, true);
         glDisable(GL_CULL_FACE);
         glDepthMask(GL_FALSE);
         glEnable(GL_BLEND);
@@ -1401,7 +1421,6 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    drawSky(vp_, false);
     // the water writes its depth
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
@@ -1433,6 +1452,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBox_, "uStackA", 1.f);
         drawBoxes(boxVao_, boxVbo_, &cells_, cells_.size(), vp_, -1e9f, true);
     }
+    drawSkyBehind(vp_, false);
     glDisable(GL_CULL_FACE);
     glEnable(GL_BLEND);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);

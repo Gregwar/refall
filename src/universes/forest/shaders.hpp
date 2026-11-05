@@ -556,11 +556,11 @@ void mushroom(vec2 p, vec2 base, vec2 tp, float cr, float form, float seed, floa
         float y0 = -0.08 * ry, gh = 0.22 * cr;
         float yy = y0 - q.y;
         if (yy > 0.0 && yy < gh) {
-            float half = rx * (0.98 - 0.55 * yy / gh);
-            float gc = (1.0 - smoothstep(-aa, aa, abs(q.x) - half)) * (1.0 - smoothstep(gh - aa * 2.0, gh, yy));
+            float hw = rx * (0.98 - 0.55 * yy / gh);
+            float gc = (1.0 - smoothstep(-aa, aa, abs(q.x) - hw)) * (1.0 - smoothstep(gh - aa * 2.0, gh, yy));
             float ang = atan(q.x, q.y + gh * 3.0 + 0.0001);
             float lines = 0.5 + 0.5 * cos(ang * (22.0 + 10.0 * h1(seed, 4.0)) * 6.2832 / 3.1416 * 0.5);
-            lay(e, a, gc, (0.3 + 0.55 * lines * (abs(q.x) / max(half, 1e-3))) * (1.0 - 0.5 * yy / gh));
+            lay(e, a, gc, (0.3 + 0.55 * lines * (abs(q.x) / max(hw, 1e-3))) * (1.0 - 0.5 * yy / gh));
         }
     }
     d += wob;

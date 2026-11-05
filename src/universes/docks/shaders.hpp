@@ -308,8 +308,8 @@ void main() {
         float frame = 1.0 - smoothstep(0.05, 0.06 + px, edge);
         alb = mix(alb, alb * 0.62, frame * mix(0.5, 1.0, detail));
         vec2 cq = sz - abs(q);
-        float cast = step(cq.x, 0.09) * step(cq.y, 0.08);
-        alb = mix(alb, vec3(0.16, 0.16, 0.17) + alb * 0.2, cast * 0.85 * detail);
+        float castg = step(cq.x, 0.09) * step(cq.y, 0.08);
+        alb = mix(alb, vec3(0.16, 0.16, 0.17) + alb * 0.2, castg * 0.85 * detail);
         // a pale bevel of light along the top edge of the doors and walls
         if (face != 1) alb += alb * 0.35 * (1.0 - smoothstep(0.0, 0.02 + px, sz.y - q.y)) * detail;
         // grime, very light, toward the bottom
