@@ -11,8 +11,7 @@
 // the paper.
 //
 // The pieces are flat blocks in the variant's primaries, one clean shape per piece (its cells merge, a narrow gutter
-// of paper around it, so two pieces never fuse), each carrying one small geometric mark in paper or ink (a disc, a
-// diamond, a triangle, a half disc, a ring, a quarter disc: the seven types read by color and by mark).
+// of paper around it, so two pieces never fuse), the seven types read by color alone.
 //
 // The song sets the composition. On the bar grid the forms recompose: they slide, turn and scale into a new balanced
 // arrangement with slow eased motion (small changes every bar, the structure every four or eight bars; a form that must
@@ -158,19 +157,6 @@ struct Pick {
     float range(int i, float a, float b) const { return a + (b - a) * u(i); }
     int irange(int i, int a, int b) const { return a + std::min(b - a, (int)(u(i) * (float)(b - a + 1))); }
 };
-
-// The cell of a piece that carries its mark: the one nearest the piece's middle (the first of equals).
-int markIndex(const int cells[4][2]) {
-    float mx = 0, my = 0;
-    for (int i = 0; i < 4; i++) { mx += cells[i][0] * 0.25f; my += cells[i][1] * 0.25f; }
-    int best = 0;
-    float bd = 1e9f;
-    for (int i = 0; i < 4; i++) {
-        const float d = (cells[i][0] - mx) * (cells[i][0] - mx) + (cells[i][1] - my) * (cells[i][1] - my);
-        if (d < bd - 1e-3f) { bd = d; best = i; }
-    }
-    return best;
-}
 
 // A 3x3 rotation, column major (as GLSL's mat3).
 struct M3 {
@@ -435,7 +421,7 @@ void BauhausUniverse::syncIds(const Game& g) {
     if (!wrong) return;
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
-            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; mark_[y][x] = false; }
+            if (g.cell(x, y).type < 0) ids_[y][x] = 0;
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             if (g.cell(x, y).type < 0 || ids_[y][x]) continue;
@@ -443,7 +429,6 @@ void BauhausUniverse::syncIds(const Game& g) {
             int stack[8][2], sp = 0, count = 0;
             stack[sp][0] = x; stack[sp][1] = y; sp++;
             ids_[y][x] = id;
-            mark_[y][x] = false;
             while (sp > 0 && count < 4) {
                 sp--;
                 const int cx = stack[sp][0], cy = stack[sp][1];
@@ -454,7 +439,6 @@ void BauhausUniverse::syncIds(const Game& g) {
                     if (nx < 0 || ny < 0 || nx >= Game::W || ny >= Game::H || ids_[ny][nx]) continue;
                     if (g.cell(nx, ny).type != g.cell(x, y).type || sp >= 8 || count + sp >= 4) continue;
                     ids_[ny][nx] = id;
-                    mark_[ny][nx] = false;
                     stack[sp][0] = nx; stack[sp][1] = ny; sp++;
                 }
             }
@@ -466,14 +450,9 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
     case GameEvent::Lock: {
         const int id = nextId_++;
-        int cells[4][2] = {};
-        for (int i = 0; i < 4 && i < (int)ev.cells.size(); i++) { cells[i][0] = ev.cells[i].x; cells[i][1] = ev.cells[i].y; }
-        const int mi = ev.cells.size() == 4 ? markIndex(cells) : -1;
-        for (int i = 0; i < (int)ev.cells.size(); i++) {
-            const auto& c = ev.cells[i];
+        for (const auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
-            mark_[c.y][c.x] = i == mi;
         }
         break;
     }
@@ -498,12 +477,9 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (!rows[y]) continue;
             Wipe w;
             w.y = layout::cellPos(0.f, (float)y).y;
-            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.mask[x] = 0; w.mark[x] = false; }
+            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.mask[x] = 0; }
             for (auto& c : ev.cells)
-                if (c.y == y && c.x >= 0 && c.x < Game::W) {
-                    w.type[c.x] = std::clamp(c.type, 0, 6);
-                    w.mark[c.x] = mark_[y][c.x];
-                }
+                if (c.y == y && c.x >= 0 && c.x < Game::W) w.type[c.x] = std::clamp(c.type, 0, 6);
             w.t = 0.f;
             w.delay = 0.f;
             w.dir = rng_.chance(0.5f) ? 1.f : -1.f;
@@ -516,16 +492,13 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // compact the ids like the game did
         {
             int nb[Game::H][Game::W] = {};
-            bool nm[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (rows[y]) continue;
                 std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
-                std::memcpy(nm[dst], mark_[y], sizeof(mark_[y]));
                 dst--;
             }
             std::memcpy(ids_, nb, sizeof(ids_));
-            std::memcpy(mark_, nm, sizeof(mark_));
         }
         break;
     }
@@ -536,11 +509,10 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
             Wipe w;
             bool any = false;
             w.y = layout::cellPos(0.f, (float)y).y;
-            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.mark[x] = false; }
+            for (int x = 0; x < Game::W; x++) w.type[x] = -1;
             for (auto& c : ev.cells)
                 if (c.y == y && c.x >= 0 && c.x < Game::W) {
                     w.type[c.x] = std::clamp(c.type, 0, 6);
-                    w.mark[c.x] = mark_[y][c.x];
                     any = true;
                 }
             if (!any) continue;
@@ -1440,26 +1412,6 @@ void BauhausUniverse::drawCell(float x, float y, float half, int m, const vec3& 
     rectPx(cutBL ? gi.x : p0.x, go.y, cutBR ? go.x : p1.x, p1.y, c, a, clip);
 }
 
-// A piece's mark, on one of its cells: a small geometric form in paper or ink, whichever stands out on the piece.
-void BauhausUniverse::drawMark(float x, float y, float half, int type, float a) {
-    const vec3 pc = pieceColor(type);
-    const VariantDef& V = VARIANTS[variant_];
-    const vec3 paper = lerp(hex(V.paper), vec3(1.f), 0.25f), ink = hex(V.ink);
-    const vec3 light = ugl::luma(paper) > ugl::luma(ink) ? paper : ink, dark = ugl::luma(paper) > ugl::luma(ink) ? ink : paper;
-    const vec3 c = ugl::luma(pc) > 0.42f ? dark : light;
-    const vec2 p = px(x, y);
-    const float r = half * 2.f * unitPx_ * 0.24f;
-    switch (std::clamp(type, 0, 6)) {
-    case I: shape(K_DISC, p.x, p.y, r, r, 0.f, c, a, 0.f, 0.f, 4.f); break;
-    case O: shape(K_BOX, p.x, p.y, r * 0.8f, r * 0.8f, 0.25f * PI, c, a); break;
-    case T: shape(K_TRI, p.x, p.y + r * 0.1f, r * 1.05f, r * 0.95f, 0.f, c, a, 0.f); break;
-    case S: shape(K_DISC, p.x, p.y + r * 0.4f, r * 1.1f, r * 1.1f, 0.f, c, a, 0.f, 0.f, 0.5f * PI); break;
-    case Z: shape(K_DISC, p.x, p.y - r * 0.4f, r * 1.1f, r * 1.1f, 0.f, c, a, 0.f, PI, 0.5f * PI); break;
-    case J: shape(K_DISC, p.x, p.y, r * 1.05f, r * 1.05f, 0.f, c, a, r * 0.55f, 0.f, 4.f); break;
-    default: shape(K_DISC, p.x - r * 0.75f, p.y + r * 0.75f, r * 1.7f, r * 1.7f, 0.f, c, a, 0.f, 0.25f * PI, 0.25f * PI); break;
-    }
-}
-
 void BauhausUniverse::drawBoard(const Game& g) {
     const float br = saturate(bridge_.amount);
     const vec3 bInk = ugl::toSrgb(bridge_.ink);
@@ -1472,7 +1424,6 @@ void BauhausUniverse::drawBoard(const Game& g) {
             if (same(x + dx[i], y + dy[i])) m |= 1 << i;
         return m;
     };
-    const float markA = 1.f - bk;
 
     // the well: a fine frame of ink, open at the top, a heavier baseline
     {
@@ -1514,7 +1465,7 @@ void BauhausUniverse::drawBoard(const Game& g) {
         }
     }
 
-    // locked pieces, then their marks
+    // locked pieces
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
@@ -1528,13 +1479,6 @@ void BauhausUniverse::drawBoard(const Game& g) {
             };
             const vec3 p = layout::cellPos((float)x, y - off);
             drawCell(p.x, p.y, 0.5f, mask8(x, y, same), tone(pieceColor(c.type)), 1.f);
-        }
-    for (int y = Game::HIDDEN; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++) {
-            const Cell& c = g.cell(x, y);
-            if (c.type < 0 || !mark_[y][x]) continue;
-            const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            drawMark(p.x, p.y, 0.5f, c.type, markA);
         }
 
     // cleared rows: the cells round into discs and slide out sideways, clipped at the well's edges
@@ -1572,15 +1516,10 @@ void BauhausUniverse::drawBoard(const Game& g) {
             return false;
         };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
-        const int mi = markIndex(cells);
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
             drawCell(w.x, w.y, 0.5f, mask8(c[0], c[1], in), tone(pieceColor(p.type)), 1.f);
-        }
-        if (cells[mi][1] >= Game::HIDDEN) {
-            const vec3 w = layout::cellPos(cells[mi][0] + dx, cells[mi][1] + dy);
-            drawMark(w.x, w.y, 0.5f, p.type, markA);
         }
     }
 
@@ -1593,7 +1532,7 @@ void BauhausUniverse::drawBoard(const Game& g) {
         rectPx(a.x, a.y + th * 0.5f, b.x, a.y + 1.5f * th, tone(ink_), 0.9f);
     }
 
-    // previews: small flat pieces with their marks in the HUD columns
+    // previews: small flat pieces in the HUD columns
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
@@ -1609,14 +1548,10 @@ void BauhausUniverse::drawBoard(const Game& g) {
                 if (c[0] == x && c[1] == y) return true;
             return false;
         };
-        const int mi = markIndex(cells);
-        for (int i = 0; i < 2; i++)
-            for (int j = 0; j < 4; j++) {
-                const auto& c = cells[j];
-                const float x = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, y = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-                if (i == 0) drawCell(x, y, 0.5f * sc, mask8(c[0], c[1], in), tone(pieceColor(type)), alpha);
-                else if (j == mi) drawMark(x, y, 0.5f * sc, type, alpha * markA);
-            }
+        for (const auto& c : cells) {
+            const float x = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, y = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
+            drawCell(x, y, 0.5f * sc, mask8(c[0], c[1], in), tone(pieceColor(type)), alpha);
+        }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {

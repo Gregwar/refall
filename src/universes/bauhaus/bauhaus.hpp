@@ -125,17 +125,15 @@ private:
     float medalX_[2] = {0, 0}, medalY_[2] = {0, 0}, medR_ = 1.6f;
     void placeTraces(float dur, bool instant);
 
-    // ---- Pieces: one id per piece (its cells merge into one flat shape), the cell carrying its mark.
+    // ---- Pieces: one id per piece (its cells merge into one flat shape).
     int ids_[22][10] = {};
-    bool mark_[22][10] = {};
     int nextId_ = 1;
     void syncIds(const Game& g);
-    struct Wipe { float y; int type[10], mask[10]; bool mark[10]; float t, delay, dir; };
+    struct Wipe { float y; int type[10], mask[10]; float t, delay, dir; };
     std::vector<Wipe> wipes_;
     vec3 pieceColor(int type) const;
     void drawCell(float x, float y, float half, int mask, const vec3& c, float a, float round = 0.f,
                   const float* clip = nullptr);
-    void drawMark(float x, float y, float half, int type, float a);
     void drawBoard(const Game& g);
 
     // ---- GL.
