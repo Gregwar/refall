@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Thirty-five universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Thirty-six universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -91,7 +91,7 @@ song, and songs change universe with a transition on the beat. Thirty-five unive
 </tr>
 <tr>
 <td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares in flat primaries on printed paper, recomposed on the bar grid; each cleared row joins the poster as a small form in a growing sampler, the drop grows a great disc that cuts the forms out of it<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/starchart.jpg"><br><b>STAR CHART</b>: an antique engraved celestial map, gold on navy, two hemispheres on their poles; enamelled pieces in gold rims, each cleared row flies out as stars into a new constellation engraved line by line on the bars, the drop brings the figures to life and turns the skies<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
