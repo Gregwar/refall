@@ -1,4 +1,5 @@
-// STAINED GLASS: a chapel's window, the well and its pieces leaded glass, the side windows filled by the cleared rows.
+// STAINED GLASS: a chapel's window, the well and its pieces leaded glass, the cleared rows running as molten glass
+// through the lead into the side windows.
 //
 // One world: the inside of a dim stone chapel, facing a great window. The well is the window's central light, set
 // between two slender stone jambs over a sill: its empty glass is a dark, clear glazing of diamond quarries, and the
@@ -11,11 +12,17 @@
 //
 // On both sides, past the HUD's stone piers, a two-light window under a pointed arch: two lancets parted by a
 // mullion, each a column of panels between iron saddle bars (a roundel or a quatrefoil medallion on a ground of
-// quarries, a border), a rose of eight petals in the head. Its panes start clear (pale painted grisaille): each
-// cleared row sends its glass into the next empty pane (its two main colors: the ground and the medallion), which
-// fills with color from its middle once the shards have fallen, bottom up, side to side, so that a long song ends
-// with both windows complete (then the oldest panes are glazed again). A Tetris glazes a whole rose at once and it
-// blazes.
+// quarries, a border), a rose of eight petals in the head. Its panes start clear (pale painted grisaille), and the
+// cleared rows glaze them with molten glass: the row goes incandescent in the well (its glass glowing in its own
+// colors, the lead melting with it) for as long as the game holds the stack, then runs out of the well's side as a
+// stream of liquid light (white-hot at its head, the row's glasses running along it cell by cell) down a groove cut
+// in the jamb, along a string course under the HUD, up beside the window and along its sill, up the mullion and
+// along the saddle bar to the next empty pane (bottom up, side to side), which it fills from the bottom with a
+// glowing meniscus; the pane then cools from white-hot to its color, a crackle of light running through it and a
+// few sparks as it sets (the stream leaves a trace cooling in the lead behind it). A double or triple sends one
+// stream per row, quicker, branching at the window; a Tetris sends its four rows together up to a whole rose, where
+// the stream branches around the ring and in along the spokes into every petal, and the rose blazes once set. A
+// long song ends with both windows complete (then the oldest panes are glazed again).
 //
 // The light: the sun stands behind the window, its glare moving across the glass with the song (low at one side in a
 // calm part, higher at mid, high at a peak; each new section moves it). Its light comes through every pane in color:
@@ -25,8 +32,8 @@
 // a dim, still morning; mid brightens it and the panes glint on the two-beat grid; a peak is high noon, glints on the
 // grid and the kicks, the stack's glass catching them too. The drop is the sun striking full through the window: its
 // glare, the shafts and the pools blaze, eased in over half a second and settling over the next bars (a chorus's rise
-// only brightens it a little). A cleared row cracks (bright fractures run through it for a few hundredths of a
-// second) and falls as shards to the floor, its color then going to the windows. Slow motion is night: the sun gives
+// only brightens it a little), and molten light runs out from the well through every lead channel, the windows'
+// mullions, saddle bars and roses included. Slow motion is night: the sun gives
 // way to a dim moonlight and the candles on the window sills are lit. Game over: the light goes out of the stack's
 // glass from the top, then it falls as shards.
 //
@@ -35,12 +42,15 @@
 // LAPIS (blue and violet with a touch of gold).
 //
 // Cost: one full-screen pass for the chapel (analytic tracery), the same at a quarter resolution for the light through
-// the glass, a 28-sample quarter-resolution shaft pass, quarter-resolution blurs and bloom, instanced cells and sprites.
+// the glass, a 28-sample quarter-resolution shaft pass, quarter-resolution blurs and bloom, instanced cells, sprites
+// and molten-glass capsules (a few hundred, a MAX blend; also drawn at a quarter resolution after the shafts so they
+// light the stone around them without throwing beams).
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/stainedglass/stainedglass.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -71,6 +81,12 @@ using ugl::set2f;
 using ugl::set3f;
 using ugl::set4f;
 using ugl::setMat;
+
+vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
+vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+vec2 operator*(vec2 a, float s) { return {a.x * s, a.y * s}; }
+float length(vec2 a) { return std::sqrt(a.x * a.x + a.y * a.y); }
+vec2 lerp2(vec2 a, vec2 b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
 
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
@@ -113,8 +129,8 @@ float seedOf(int id) { return std::fmod((float)id * 0.618034f, 1.f) * 97.f + 3.f
 
 // Shards fall this fast (board units / s^2).
 constexpr float G_SHARD = 30.f;
-// A cleared row cracks this long (seconds) before it falls.
-constexpr float CRACK_T = 0.11f;
+// A cleared row melts this long (seconds) before it runs out of the well (the game holds the stack as long).
+constexpr float MELT_T = 0.3f;
 // The drop's strike lasts this many beats, then the peak's own light comes back.
 constexpr double DROP_BEATS = 32.0;
 
@@ -179,6 +195,7 @@ bool StainedGlassUniverse::init(int width, int height) {
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FINAL_FS).c_str(), "stained glass final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "stained glass shape");
     progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "stained glass text");
+    progFlow_ = ugl::program(shaders::FLOW_VS, withCommon(shaders::FLOW_FS).c_str(), "stained glass molten glass");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -193,6 +210,9 @@ bool StainedGlassUniverse::init(int width, int height) {
     glGenVertexArrays(1, &shardVao_);
     glGenBuffers(1, &shardVbo_);
     instAttribs(shardVao_, shardVbo_, quadVbo_, 3, sizeof(ShardInst));
+    glGenVertexArrays(1, &flowVao_);
+    glGenBuffers(1, &flowVbo_);
+    instAttribs(flowVao_, flowVbo_, quadVbo_, 4, sizeof(FlowInst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -282,10 +302,10 @@ void StainedGlassUniverse::resize(int width, int height) {
 
 StainedGlassUniverse::~StainedGlassUniverse() {
     for (ugl::Target* t : {&sceneT_, &emitT_, &glowA_, &glowB_, &shaftT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progWall_, progCell_, progShard_, progSprite_, progShaft_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+    for (GLuint p : {progWall_, progCell_, progShard_, progSprite_, progShaft_, progDown_, progBlur_, progFinal_, progShape_, progText_, progFlow_})
         glDeleteProgram(p);
-    for (GLuint v : {cellVao_, spriteVao_, shardVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, cellVbo_, spriteVbo_, shardVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {cellVao_, spriteVao_, shardVao_, shapeVao_, textVao_, flowVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, cellVbo_, spriteVbo_, shardVbo_, shapeVbo_, textVbo_, flowVbo_}) glDeleteBuffers(1, &b);
     for (Font* f : {&fontReg_, &fontIt_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
@@ -302,11 +322,13 @@ void StainedGlassUniverse::placeWindows() {
     const std::vector<Pane> old = panes_;
     panes_.clear();
     lancetOrder_.clear();
+    channels_.clear();
     const float room = viewH_.x - 11.7f;
     winOn_ = room > 2.4f;
     if (!winOn_) {
         slotsPerWin_ = 0;
         roseOn_ = false;
+        flows_.clear();
         return;
     }
     winCx_ = 11.7f + room * 0.5f;
@@ -358,17 +380,38 @@ void StainedGlassUniverse::placeWindows() {
             for (int k = 0; k <= panelsK_; k++) {
                 Pane& p = panes_[side * slotsPerWin_ + li * (panelsK_ + 1) + k];
                 p.pos = vec2{sx + xl, k < panelsK_ ? winBase_ + (k + 0.5f) * panelH_ : winSpring_ + h1 * 0.4f};
+                p.yLo = k < panelsK_ ? winBase_ + k * panelH_ : winSpring_;
+                p.yHi = k < panelsK_ ? p.yLo + panelH_ : winSpring_ + h1;
+                p.entry = vec2{sx + xl, p.yLo};
+                p.half = k < panelsK_ ? winA1_ * 0.85f : winA1_ * 0.6f;
             }
         }
         if (roseOn_) {
             const int r0 = side * slotsPerWin_ + lancets_ * (panelsK_ + 1);
-            panes_[r0].pos = vec2{sx, winSpring_ + roseY_};
+            const vec2 rc{sx, winSpring_ + roseY_};
+            panes_[r0].pos = rc;
             panes_[r0].rose = true;
+            panes_[r0].yLo = rc.y - roseCore_;
+            panes_[r0].yHi = rc.y + roseCore_;
+            panes_[r0].entry = vec2{rc.x, rc.y - roseCore_};
+            panes_[r0].half = roseCore_ * 0.7f;
             const float rm = (roseCore_ + roseR_) * 0.5f;
             for (int j = 0; j < 8; j++) {
                 Pane& p = panes_[r0 + 1 + j];
-                p.pos = vec2{sx + std::cos(j * PI / 4.f) * rm, winSpring_ + roseY_ + std::sin(j * PI / 4.f) * rm};
+                const float th = j * PI / 4.f;
+                p.pos = vec2{rc.x + std::cos(th) * rm, rc.y + std::sin(th) * rm};
                 p.rose = true;
+                float lo = 1e9f, hi = -1e9f;
+                for (int i = 0; i <= 6; i++)
+                    for (float rr : {roseCore_ + 0.1f, roseR_ - 0.1f}) {
+                        const float a = th + (i / 6.f - 0.5f) * PI / 4.f * 0.8f;
+                        lo = std::min(lo, rc.y + std::sin(a) * rr);
+                        hi = std::max(hi, rc.y + std::sin(a) * rr);
+                    }
+                p.yLo = lo;
+                p.yHi = hi;
+                p.entry = vec2{rc.x + std::cos(th) * (roseR_ - 0.11f), rc.y + std::sin(th) * (roseR_ - 0.11f)};
+                p.half = (roseR_ - roseCore_) * 0.3f;
             }
         }
     }
@@ -381,12 +424,108 @@ void StainedGlassUniverse::placeWindows() {
     // a resize keeps what was glazed when the window keeps its panes
     if (old.size() == panes_.size())
         for (size_t i = 0; i < panes_.size(); i++) {
-            const vec2 pos = panes_[i].pos;
-            const bool rose = panes_[i].rose;
+            const Pane geo = panes_[i];
             panes_[i] = old[i];
-            panes_[i].pos = pos;
-            panes_[i].rose = rose;
+            panes_[i].pos = geo.pos;
+            panes_[i].rose = geo.rose;
+            panes_[i].yLo = geo.yLo;
+            panes_[i].yHi = geo.yHi;
+            panes_[i].entry = geo.entry;
+            panes_[i].half = geo.half;
         }
+    else flows_.clear();
+    placeChannels();
+}
+
+// The lead channels: a groove cut down each of the well's jambs, along a string course under the HUD, up beside
+// the window's moulding and along its sill (where the molten glass runs); the window's own leads (its mullion, the
+// saddle bars, the rose's ring and spokes) only show when molten light runs through them at the drop. Each knows
+// how far it is from the well (the drop's light runs out from it).
+void StainedGlassUniverse::placeChannels() {
+    channels_.clear();
+    if (!winOn_) return;
+    riserX_ = std::max(5.9f, (11.2f + (winCx_ - winA0_ - 0.75f)) * 0.5f);
+    gutterY_ = -9.75f;
+    const float sillY = winBase_ - 0.2f;
+    for (int side = 0; side < 2; side++) {
+        const float s = side == 0 ? -1.f : 1.f;
+        float d = 0.f;
+        auto add = [&](vec2 a, vec2 b, bool cut, float d0) {
+            const float l = length(b - a);
+            channels_.push_back({a, b, d0, d0 + l, cut});
+            return d0 + l;
+        };
+        add(vec2{s * 5.38f, 0.f}, vec2{s * 5.38f, 10.3f}, true, 0.f);
+        d = add(vec2{s * 5.38f, 0.f}, vec2{s * 5.38f, gutterY_}, true, 0.f);
+        d = add(vec2{s * 5.38f, gutterY_}, vec2{s * riserX_, gutterY_}, true, d);
+        d = add(vec2{s * riserX_, gutterY_}, vec2{s * riserX_, sillY}, true, d);
+        const float xr = winCx_ - (lancets_ == 2 ? 0.f : winA0_ - 0.07f);
+        d = add(vec2{s * riserX_, sillY}, vec2{s * xr, sillY}, true, d);
+        d = add(vec2{s * xr, sillY}, vec2{s * xr, winBase_}, false, d);
+        // the window's leads
+        const float top = roseOn_ ? winSpring_ + roseY_ - roseR_ : winSpring_;
+        const float dm = add(vec2{s * xr, winBase_}, vec2{s * xr, top}, false, d);
+        for (int k = 1; k <= panelsK_; k++) {
+            const float y = winBase_ + k * panelH_;
+            const float dk = d + (y - winBase_);
+            if (lancets_ == 2) {
+                add(vec2{s * winCx_, y}, vec2{s * winCx_ - (winM_ + 2.f * winA1_ - 0.05f), y}, false, dk);
+                add(vec2{s * winCx_, y}, vec2{s * winCx_ + (winM_ + 2.f * winA1_ - 0.05f), y}, false, dk);
+            } else add(vec2{s * xr, y}, vec2{s * xr + (s > 0 ? 1.f : -1.f) * (2.f * winA0_ - 0.14f), y}, false, dk);
+        }
+        if (roseOn_) {
+            const vec2 rc{s * winCx_, winSpring_ + roseY_};
+            const int N = 24;
+            for (int i = 0; i < N; i++) {
+                // the ring, both ways from its bottom
+                const float a0 = -PI * 0.5f + PI * i / N, a1 = -PI * 0.5f + PI * (i + 1) / N;
+                for (float sg : {-1.f, 1.f}) {
+                    const vec2 p0 = rc + vec2{std::cos(-PI * 0.5f + sg * (a0 + PI * 0.5f)), std::sin(-PI * 0.5f + sg * (a0 + PI * 0.5f))} * roseR_;
+                    const vec2 p1 = rc + vec2{std::cos(-PI * 0.5f + sg * (a1 + PI * 0.5f)), std::sin(-PI * 0.5f + sg * (a1 + PI * 0.5f))} * roseR_;
+                    add(p0, p1, false, dm + roseR_ * (a0 + PI * 0.5f));
+                }
+            }
+            for (int j = 0; j < 8; j++) {
+                const float a = PI / 8.f + j * PI / 4.f;
+                float da = std::fabs(std::remainder(a + PI * 0.5f, TAU));
+                add(rc + vec2{std::cos(a), std::sin(a)} * roseR_, rc + vec2{std::cos(a), std::sin(a)} * roseCore_, false, dm + roseR_ * da);
+            }
+        }
+    }
+}
+
+// The path of a cleared row's molten glass to a window (side sgn): across the row to the well's side, down the
+// jamb's groove, along the string course, up beside the window and along its sill to the foot of its mullion.
+std::vector<vec2> StainedGlassUniverse::trunk(int sgn, float rowY) const {
+    const float s = (float)sgn, sillY = winBase_ - 0.2f;
+    const float xr = winCx_ - (lancets_ == 2 ? 0.f : winA0_ - 0.07f);
+    return {vec2{-s * 4.6f, rowY}, vec2{s * 5.0f, rowY}, vec2{s * 5.38f, rowY}, vec2{s * 5.38f, gutterY_},
+            vec2{s * riserX_, gutterY_}, vec2{s * riserX_, sillY}, vec2{s * xr, sillY}, vec2{s * xr, winBase_}};
+}
+
+// From the mullion's foot up to the pane: up the mullion, along the saddle bar under it; for the rose, around its
+// ring and in along a spoke.
+void StainedGlassUniverse::paneTail(int pane, std::vector<vec2>& pts) const {
+    const Pane& p = panes_[pane];
+    const float s = pane / std::max(1, slotsPerWin_) == 0 ? -1.f : 1.f;
+    const float xr = s * (winCx_ - (lancets_ == 2 ? 0.f : winA0_ - 0.07f));
+    if (!p.rose) {
+        pts.push_back(vec2{xr, p.yLo});
+        pts.push_back(p.entry);
+        return;
+    }
+    const vec2 rc{s * winCx_, winSpring_ + roseY_};
+    pts.push_back(vec2{xr, rc.y - roseR_});
+    const int j = pane - ((pane / slotsPerWin_) * slotsPerWin_ + lancets_ * (panelsK_ + 1)) - 1; // -1: the core
+    const float target = j < 0 ? -PI * 0.5f + PI / 8.f * (s > 0 ? -1.f : 1.f) : j * PI / 4.f;
+    const float delta = std::remainder(target + PI * 0.5f, TAU);
+    const int n = std::max(1, (int)std::ceil(std::fabs(delta) / (PI / 18.f)));
+    for (int i = 1; i <= n; i++) {
+        const float a = -PI * 0.5f + delta * i / n;
+        pts.push_back(rc + vec2{std::cos(a), std::sin(a)} * roseR_);
+    }
+    if (j < 0) pts.push_back(rc + vec2{std::cos(target), std::sin(target)} * (roseCore_ + 0.02f));
+    pts.push_back(j < 0 ? p.entry : rc + vec2{std::cos(target), std::sin(target)} * ((roseCore_ + roseR_) * 0.5f));
 }
 
 // Candles on both windows' sills (lit at night, and in slow motion).
@@ -404,9 +543,10 @@ void StainedGlassUniverse::placeCandles() {
     }
 }
 
-// The next empty pane takes a cleared row's glass (the oldest one once both windows are complete).
-void StainedGlassUniverse::fillPane(const vec3& a, const vec3& b, float delay) {
-    if (panes_.empty()) return;
+// The next empty pane is promised a cleared row's glass (the oldest one once both windows are complete): its old
+// glass drains away while the molten glass runs to it.
+int StainedGlassUniverse::fillPane(const vec3& a, const vec3& b) {
+    if (panes_.empty()) return -1;
     int pick = -1;
     for (int s : lancetOrder_)
         if (panes_[s].order < 0) { pick = s; break; }
@@ -418,21 +558,20 @@ void StainedGlassUniverse::fillPane(const vec3& a, const vec3& b, float delay) {
     if (pick < 0) {
         int oldest = 1 << 30;
         for (int i = 0; i < (int)panes_.size(); i++)
-            if (panes_[i].order < oldest) { oldest = panes_[i].order; pick = i; }
+            if (panes_[i].order < oldest && !panes_[i].pending) { oldest = panes_[i].order; pick = i; }
     }
-    if (pick < 0) return;
+    if (pick < 0) return -1;
     Pane& p = panes_[pick];
-    if (p.fill > 0.05f) p.fill = 0.f; // glazed again: the new glass spreads in from its middle
-    p.a = a;
-    p.b = b;
+    p.na = a;
+    p.nb = b;
+    p.pending = true;
     p.target = 1.f;
-    p.delay = delay;
     p.order = fillCount_++;
+    return pick;
 }
 
-// A Tetris: a whole rose glazed at once (the emptier one), its petals from the rows' glass.
-void StainedGlassUniverse::fillRose(const std::vector<vec3>& cols, float delay) {
-    if (!roseOn_ || cols.empty()) return;
+// A Tetris glazes a whole rose: the emptier one.
+int StainedGlassUniverse::roseSide() {
     int side = 0, best = -1;
     for (int s = 0; s < 2; s++) {
         int empty = 0;
@@ -441,19 +580,31 @@ void StainedGlassUniverse::fillRose(const std::vector<vec3>& cols, float delay) 
         if (empty > best) { best = empty; side = s; }
     }
     if (best == 0) side = (fillCount_ / 3) % 2;
-    const int r0 = side * slotsPerWin_ + lancets_ * (panelsK_ + 1);
-    const unsigned gr = VARIANTS[variant_].ground;
-    for (int j = 0; j < 9; j++) {
-        Pane& p = panes_[r0 + j];
-        p.fill = 0.f;
-        p.a = cols[j % cols.size()];
-        p.b = gr ? lin(gr) : cols[(j + 1) % cols.size()];
-        p.target = 1.f;
-        p.delay = delay + 0.06f * j;
-        p.order = fillCount_++;
+    return side;
+}
+
+// A row's molten glass sets out (after `delay`, while the row melts) along its path to the pane.
+void StainedGlassUniverse::addFlow(int sgn, float rowY, const vec3* cols, int pane, float delay, float speed, float vol) {
+    Flow fl;
+    fl.pts = trunk(sgn, rowY);
+    if (pane >= 0) paneTail(pane, fl.pts);
+    fl.cum.resize(fl.pts.size());
+    fl.cum[0] = 0.f;
+    for (size_t i = 1; i < fl.pts.size(); i++) fl.cum[i] = fl.cum[i - 1] + length(fl.pts[i] - fl.pts[i - 1]);
+    fl.len = fl.cum.back();
+    fl.sWell = fl.cum[1];
+    fl.t = -delay;
+    fl.speed = speed;
+    fl.vol = vol;
+    fl.pane = pane;
+    fl.sgn = sgn;
+    vec3 sum{0.f};
+    for (int i = 0; i < 10; i++) {
+        fl.cols[i] = cols[i];
+        sum += cols[i];
     }
-    panes_[r0].a = panes_[r0].b = cols[0];
-    roseLit_ = side;
+    fl.tint = sum / 10.f;
+    flows_.push_back(fl);
 }
 
 // =====================================================================================================
@@ -481,7 +632,6 @@ void StainedGlassUniverse::setSong(const SongLook& t, float seconds) {
     for (Pane& p : panes_) {
         p.target = 0.f;
         p.order = -1;
-        p.delay = 0.f;
         if (seconds <= 0.1f) p.fill = 0.f;
     }
     fillCount_ = 0;
@@ -537,6 +687,7 @@ void StainedGlassUniverse::drop(float strength) {
     dropBeat_ = beat_;
     dropStart_ = time_;
     dropT_ = std::max(dropT_, 0.6f + 0.4f * strength);
+    leadT_ = 0.f;
 }
 
 // A new section of the same level: the sun moves on to the other side.
@@ -667,13 +818,21 @@ void StainedGlassUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (x < 0 || x >= Game::W || y < 0 || y >= Game::H || !rows[y]) return false;
             return true;
         };
-        // the rows crack (then fall as shards); their glass goes to the windows
+        // the rows melt, then run out of the well as molten glass to the windows: each row to its pane (bottom up,
+        // from side to side), a Tetris's four rows together to a whole rose, branching around its ring
         std::vector<vec3> rowCols;
+        std::vector<int> rowYs;
+        std::vector<std::array<vec3, 10>> rowCells;
         for (int y = 0; y < Game::H; y++) {
             if (!rows[y]) continue;
             int count[7] = {};
+            std::array<vec3, 10> cells;
+            for (int x = 0; x < 10; x++) cells[x] = glassColor(variant_, 0);
             for (auto& c : ev.cells)
-                if (c.y == y && c.type >= 0 && c.type < 7) count[c.type]++;
+                if (c.y == y && c.type >= 0 && c.type < 7) {
+                    count[c.type]++;
+                    if (c.x >= 0 && c.x < 10) cells[c.x] = glassColor(variant_, c.type);
+                }
             int a = 0, b = -1;
             for (int k = 1; k < 7; k++)
                 if (count[k] > count[a]) a = k;
@@ -682,17 +841,45 @@ void StainedGlassUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (b < 0) b = a;
             const vec3 ca = glassColor(variant_, a), cb = glassColor(variant_, b);
             rowCols.push_back(ca);
+            rowYs.push_back(y);
+            rowCells.push_back(cells);
             // the variant's ground, the row's main glass in the medallion (its second if the main one has the
             // ground's hue), or the row's two glasses
             const unsigned gr = VARIANTS[variant_].ground;
-            if (ev.count < 4) {
-                if (!gr) fillPane(ca, cb, 0.55f);
+            const float rowY = layout::cellPos(0.f, (float)y).y;
+            const int n = (int)rowYs.size() - 1;
+            const float speed = 9.5f + 2.2f * ev.count, vol = 3.6f + 0.5f * ev.count;
+            if (ev.count < 4 || !roseOn_) {
+                int pane;
+                if (ev.count >= 4) pane = fillPane(ca, ca);
+                else if (!gr) pane = fillPane(ca, cb);
                 else {
                     const vec3 g = lin(gr);
                     const bool close = dot(normalize(ca), normalize(g)) > 0.97f;
-                    fillPane(g, close && b != a ? cb : ca, 0.55f);
+                    pane = fillPane(g, close && b != a ? cb : ca);
                 }
+                if (pane >= 0) addFlow(pane / slotsPerWin_ == 0 ? -1 : 1, rowY, cells.data(), pane, MELT_T + 0.09f * n, speed, vol);
             }
+            // a few drops spit from the melting row
+            spit(vec2{0.f, rowY}, vec2{4.5f, 0.3f}, 3 + ev.count, lerp(ca, vec3(1.f, 0.6f, 0.25f), 0.6f), 0.5f);
+        }
+        if (ev.count >= 4 && roseOn_ && !rowYs.empty()) {
+            const int side = roseSide();
+            const int r0 = side * slotsPerWin_ + lancets_ * (panelsK_ + 1);
+            const unsigned gr = VARIANTS[variant_].ground;
+            for (int j = 0; j < 9; j++) {
+                Pane& p = panes_[r0 + j];
+                const int ri = j % (int)rowYs.size();
+                p.na = rowCols[(j + 3) % rowCols.size()];
+                p.nb = gr ? lin(gr) : rowCols[(j + 4) % rowCols.size()];
+                if (j == 0) p.na = p.nb = rowCols[0];
+                p.pending = true;
+                p.target = 1.f;
+                p.order = fillCount_++;
+                addFlow(side == 0 ? -1 : 1, layout::cellPos(0.f, (float)rowYs[ri]).y, rowCells[ri].data(), r0 + j,
+                        MELT_T + 0.025f * j, 18.f, 4.6f);
+            }
+            roseLit_ = side;
         }
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
@@ -701,15 +888,10 @@ void StainedGlassUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const Sheet& s = sh_[c.y][c.x];
             cracks_.push_back({c.x, c.y, c.type, m, id ? s.px : (float)c.x, id ? s.py : (float)c.y, id ? s.seed : seedOf(nextId_), 0.f});
         }
-        // a Tetris: a whole rose glazed at once, and it blazes
-        if (ev.count >= 4) {
-            if (roseOn_) fillRose(rowCols, 0.45f);
-            else
-                for (const vec3& c : rowCols) fillPane(c, c, 0.45f);
-            flare_ = 1.f;
+        // a Tetris: the windows glint (the rose blazes once its glass has set)
+        if (ev.count >= 4)
             for (Pane& p : panes_)
-                if (p.order >= 0) p.glint = std::max(p.glint, 0.45f);
-        }
+                if (p.order >= 0 && !p.pending) p.glint = std::max(p.glint, 0.45f);
         // compact the sheets like the game did
         {
             int nb[Game::H][Game::W] = {};
@@ -823,7 +1005,7 @@ void StainedGlassUniverse::buildBoard(const Game& g) {
     // A cleared row, cracking.
     for (const Crack& k : cracks_) {
         const vec3 p = layout::cellPos((float)k.x, (float)k.y);
-        cell(p.x, p.y, 0.5f, k.mask, k.type, glassColor(variant_, k.type), 1.f, 0.4f, 2, 0.f, k.px, -k.py, k.seed, saturate(k.t / CRACK_T));
+        cell(p.x, p.y, 0.5f, k.mask, k.type, glassColor(variant_, k.type), 1.f, 0.f, 2, 0.f, k.px, -k.py, k.seed, saturate(k.t / MELT_T));
     }
     // Game over: the light goes out of the glass row by row from the top, then each row falls as shards.
     for (Dead& d : dead_) {
@@ -890,6 +1072,116 @@ void StainedGlassUniverse::buildBoard(const Game& g) {
         const vec3 c = layout::nextCenter(i);
         preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
     }
+}
+
+// Drops of molten glass spat out around p (within spread), thrown up a little (`up`), falling.
+void StainedGlassUniverse::spit(vec2 p, vec2 spread, int n, const vec3& col, float up) {
+    for (int k = 0; k < n && sparks_.size() < 160; k++) {
+        Spark s;
+        s.p = vec2{p.x + rng_.range(-spread.x, spread.x), p.y + rng_.range(-spread.y, spread.y)};
+        s.v = vec2{rng_.range(-1.6f, 1.6f), rng_.range(0.6f, 2.8f) + up};
+        s.t = 0.f;
+        s.life = rng_.range(0.45f, 0.9f);
+        s.size = rng_.range(0.05f, 0.09f);
+        s.col = col;
+        sparks_.push_back(s);
+    }
+}
+
+// The streams as capsules: each one from its tail to its head (thick across the well where the row was, as thin
+// as a came in the channels, a rounder head), hottest at its head, the row's glass running along it cell by cell;
+// behind it a trace of light cooling in the lead. Then the channels (dark grooves; at a real drop, molten light).
+void StainedGlassUniverse::buildFlows() {
+    flowInst_.clear();
+    chanInst_.clear();
+    auto push = [&](std::vector<FlowInst>& out, vec2 a, vec2 b, float r0, float r1, float s0, float s1, const vec3& c,
+                    float h0, float h1, int kind, float alpha, float halo) {
+        out.push_back({{a.x, a.y, b.x, b.y}, {r0, r1, s0, s1}, {c.x, c.y, c.z, h0}, {h1, (float)kind, alpha, halo}});
+    };
+    for (const Flow& fl : flows_) {
+        if (fl.t < 0.f) continue;
+        const float headU = fl.sWell + fl.speed * (fl.t - 0.22f * (1.f - std::exp(-fl.t / 0.22f)));
+        const float lenNow = lerpf(fl.sWell, fl.vol, smoothstepf(0.f, 0.5f, fl.t));
+        const float tailU = headU - lenNow;
+        const float head = std::min(headU, fl.len), tail = std::min(std::max(tailU, 0.f), fl.len);
+        size_t seg = 0;
+        auto at = [&](float s) {
+            s = std::clamp(s, 0.f, fl.len);
+            while (seg + 2 < fl.pts.size() && fl.cum[seg + 1] < s) seg++;
+            while (seg > 0 && fl.cum[seg] > s) seg--;
+            const float l = std::max(1e-5f, fl.cum[seg + 1] - fl.cum[seg]);
+            return lerp2(fl.pts[seg], fl.pts[seg + 1], saturate((s - fl.cum[seg]) / l));
+        };
+        const float rIn = 0.36f, rCh = 0.13f;
+        auto radius = [&](float s) {
+            float r = lerpf(rIn, rCh, smoothstepf(fl.sWell - 1.2f, fl.sWell + 0.3f, s));
+            r *= 0.3f + 0.7f * smoothstepf(tail, tail + 0.9f, s); // the tail thins out
+            if (headU < fl.len) r *= 1.f + 0.3f * std::exp(-(head - s) * (head - s) / 0.12f); // a round head
+            return r;
+        };
+        auto colorAt = [&](float s) {
+            const float u = saturate((s - tail) / std::max(0.01f, head - tail)) * 9.999f;
+            const int i = (int)u;
+            const float f = u - i;
+            const int i0 = fl.sgn > 0 ? i : 9 - i, i1 = fl.sgn > 0 ? std::min(9, i + 1) : std::max(0, 8 - i);
+            return lerp(fl.cols[i0], fl.cols[i1], smoothstepf(0.6f, 1.f, f));
+        };
+        // the trace cooling behind it (not in the well)
+        {
+            const float from = std::max(fl.sWell + 0.3f, tail - fl.speed * 1.4f);
+            if (tail > from + 0.05f) {
+                const int n = std::min(80, (int)std::ceil((tail - from) / 0.3f));
+                auto heat = [&](float s) { return 0.62f * std::exp(-((tailU - s) / fl.speed) / 0.3f); };
+                const vec3 ember = lerp(fl.tint, vec3(1.f, 0.4f, 0.15f), 0.6f);
+                for (int i = 0; i < n; i++) {
+                    const float s0 = from + (tail - from) * i / n, s1 = from + (tail - from) * (i + 1) / n;
+                    push(flowInst_, at(s0), at(s1), rCh * 0.65f, rCh * 0.65f, s0, s1, ember, heat(s0), heat(s1), 0, 1.f, 1.4f);
+                }
+            }
+        }
+        if (head <= tail + 0.01f) continue;
+        const int n = std::min(160, (int)std::ceil((head - tail) / 0.2f));
+        for (int i = 0; i < n; i++) {
+            const float s0 = tail + (head - tail) * i / n, s1 = tail + (head - tail) * (i + 1) / n;
+            // hottest at its head; in the well (the row's glass still showing its colors) only orange
+            auto heat = [&](float s) {
+                const float h = 0.78f + 0.2f * (s - tail) / (head - tail);
+                return lerpf(0.66f, h, smoothstepf(fl.sWell - 1.5f, fl.sWell + 1.5f, s));
+            };
+            const float h0 = heat(s0), h1 = heat(s1);
+            const vec3 c = colorAt((s0 + s1) * 0.5f);
+            push(flowInst_, at(s0), at(s1), radius(s0), radius(s1), s0, s1, c, h0, h1, 0, 1.f, 1.6f);
+        }
+    }
+    // the channels
+    const float front = leadT_ * 15.f;
+    const vec3 warm{1.f, 0.62f, 0.3f};
+    for (const Channel& c : channels_) {
+        auto heat = [&](float d) { return leadAmp_ * smoothstepf(front, front - 3.f, d); };
+        const float h0 = heat(c.d0), h1 = heat(c.d1);
+        if (!c.cut && h0 < 0.01f && h1 < 0.01f) continue;
+        push(chanInst_, c.a, c.b, c.cut ? 0.065f : 0.055f, c.cut ? 0.065f : 0.055f, c.d0, c.d1, warm, h0, h1, 1, c.cut ? 0.85f : 0.f, 2.2f);
+    }
+}
+
+void StainedGlassUniverse::drawFlows(const std::vector<FlowInst>& v, bool molten, int emit) {
+    if (v.empty()) return;
+    glUseProgram(progFlow_);
+    wallUniforms(progFlow_);
+    setMat(progFlow_, "uVP", vp_);
+    set1f(progFlow_, "uTime", time_);
+    set1i(progFlow_, "uEmit", emit);
+    glEnable(GL_BLEND);
+    if (molten) {
+        glBlendEquation(GL_MAX);
+        glBlendFunc(GL_ONE, GL_ONE);
+    } else if (emit) glBlendFunc(GL_ONE, GL_ONE);
+    else glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glBindVertexArray(flowVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, flowVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(FlowInst), v.data(), GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)v.size());
+    glBlendEquation(GL_FUNC_ADD);
 }
 
 void StainedGlassUniverse::drawSprites() {
@@ -1215,17 +1507,52 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     const float cellGlare = glare0 + 0.3f * dropEnv_;
     const float sunR = 7.f + 3.f * lv_ + 5.f * dropEnv_;
 
-    // ---- The panes: filling, glinting.
-    for (Pane& p : panes_) {
-        if (p.delay > 0.f) {
-            p.delay -= dt;
-            if (p.delay <= 0.f) {
-                p.glint = std::max(p.glint, p.rose ? 0.9f : 0.6f);
-                sparkles_.push_back({p.pos, 0.f, 0.7f, p.rose ? 0.7f : 0.5f, lerp(p.a, vec3(1.f), 0.6f)});
-            }
-            continue;
+    // ---- Molten glass running in the lead (real time, even in slow motion): when its head reaches the pane it
+    // pours in, the level rising as the stream drains into it.
+    for (Flow& fl : flows_) {
+        fl.t += dt;
+        if (fl.t < 0.f || fl.pane < 0 || fl.pane >= (int)panes_.size()) continue;
+        const float headU = fl.sWell + fl.speed * (fl.t - 0.22f * (1.f - std::exp(-fl.t / 0.22f)));
+        const float lenNow = lerpf(fl.sWell, fl.vol, smoothstepf(0.f, 0.5f, fl.t));
+        Pane& p = panes_[fl.pane];
+        if (!fl.arrived && headU >= fl.len) {
+            fl.arrived = true;
+            fl.lenArrive = lenNow;
+            p.a = p.na;
+            p.b = p.nb;
+            p.fill = 0.f;
+            p.heat = 1.f;
+            p.pouring = true;
+            p.pending = false;
         }
-        p.fill = p.target > p.fill ? std::min(p.target, p.fill + dt / 1.3f) : std::max(p.target, p.fill - dt / 2.5f);
+        if (fl.arrived && p.pouring) {
+            p.fill = saturate((headU - fl.len) / std::max(0.5f, fl.lenArrive));
+            p.heat = 1.f;
+            if (p.fill >= 1.f) p.pouring = false;
+        }
+    }
+    flows_.erase(std::remove_if(flows_.begin(), flows_.end(), [&](const Flow& fl) {
+        if (fl.t < 0.f) return false;
+        const float headU = fl.sWell + fl.speed * (fl.t - 0.22f * (1.f - std::exp(-fl.t / 0.22f)));
+        return headU - fl.vol > fl.len + fl.speed * 1.6f;
+    }), flows_.end());
+    // ---- The panes: draining (glass on its way), filling, cooling (it sets with a crackle and a few sparks), glinting.
+    for (int i = 0; i < (int)panes_.size(); i++) {
+        Pane& p = panes_[i];
+        if (p.pending && !p.pouring) p.fill = std::max(0.f, p.fill - dt / 1.1f);
+        else if (!p.pouring) p.fill = p.target > p.fill ? std::min(p.target, p.fill + dt / 1.3f) : std::max(p.target, p.fill - dt / 2.5f);
+        if (!p.pouring && p.heat > 0.f) {
+            const float was = p.heat;
+            p.heat = std::max(0.f, p.heat - dt / 2.4f);
+            const vec3 hot = lerp(p.a, vec3(1.f, 0.62f, 0.28f), 0.65f);
+            if (was > 0.3f && p.heat <= 0.3f) spit(vec2{p.pos.x, (p.yLo + p.yHi) * 0.5f}, vec2{p.half, (p.yHi - p.yLo) * 0.4f}, p.rose ? 3 : 6, hot, 0.8f);
+            if (was > 0.1f && p.heat <= 0.1f) {
+                p.glint = std::max(p.glint, p.rose ? 0.8f : 0.6f);
+                sparkles_.push_back({p.pos, 0.f, 0.7f, p.rose ? 0.6f : 0.5f, lerp(p.a, vec3(1.f), 0.6f)});
+                // the rose has set: it blazes
+                if (p.rose && roseLit_ >= 0 && i == roseLit_ * slotsPerWin_ + lancets_ * (panelsK_ + 1)) flare_ = 1.f;
+            }
+        }
         p.glint = approach(p.glint, 0.f, 2.2f, dt);
     }
     // the beat grid (every two beats from mid on, with the kicks at a peak): a few glazed panes glint, a piece of
@@ -1241,7 +1568,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
                 const int n = wp > 0.5f ? 3 : 1;
                 for (int k = 0; k < n && !panes_.empty(); k++) {
                     Pane& p = panes_[rng_.irange(0, (int)panes_.size() - 1)];
-                    if (p.order >= 0 && p.delay <= 0.f) {
+                    if (p.order >= 0 && !p.pending && p.heat <= 0.f) {
                         p.glint = std::max(p.glint, 0.35f + 0.2f * wp);
                         sparkles_.push_back({vec2{p.pos.x + rng_.range(-0.5f, 0.5f), p.pos.y + rng_.range(-0.5f, 0.5f)}, 0.f, 0.6f, 0.55f, lerp(p.b, vec3(1.f), 0.6f)});
                     }
@@ -1264,15 +1591,23 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     for (auto& row : glint_)
         for (float& gl : row) gl = approach(gl, 0.f, 3.f, dt);
 
-    // ---- A cleared row: cracking, then shards (real time, even in slow motion).
+    // ---- A cleared row melting (real time, even in slow motion); then its molten glass runs (flows_).
     for (auto it = cracks_.begin(); it != cracks_.end();) {
         it->t += dt;
-        if (it->t >= CRACK_T) {
-            const vec3 p = layout::cellPos((float)it->x, (float)it->y);
-            shatter(p.x, p.y, glassColor(variant_, it->type), 4, 0.f);
-            it = cracks_.erase(it);
-        } else ++it;
+        if (it->t >= MELT_T) it = cracks_.erase(it);
+        else ++it;
     }
+    // sparks: drops of molten glass spat out, falling
+    for (Spark& sp : sparks_) {
+        sp.t += dt;
+        sp.v.y -= 9.f * dt;
+        sp.v = sp.v * (1.f - 0.8f * dt);
+        sp.p = sp.p + sp.v * dt;
+    }
+    sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& s) { return s.t > s.life; }), sparks_.end());
+    // a real drop: molten light runs out from the well through the whole lead network, then settles
+    leadT_ += dt;
+    leadAmp_ = (dropOn_ && realDrop_) ? std::max(leadAmp_ * (1.f - dt), dropEnv_ * 0.58f) : approach(leadAmp_, 0.f, 0.8f, dt);
     for (Shard& s : shards_) {
         s.t += dt;
         if (!s.landed) {
@@ -1319,6 +1654,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
 
     cells_.clear();
     buildBoard(game);
+    buildFlows();
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1326,7 +1662,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     const float worldK = 1.f - bridgeK;
 
     // the uniforms of the light and of the chapel
-    float paneA[50 * 4] = {}, paneB[50 * 4] = {};
+    float paneA[50 * 4] = {}, paneB[50 * 4] = {}, paneC[50 * 4] = {};
     for (int i = 0; i < (int)panes_.size() && i < 50; i++) {
         const Pane& p = panes_[i];
         paneA[i * 4 + 0] = p.a.x; paneA[i * 4 + 1] = p.a.y; paneA[i * 4 + 2] = p.a.z;
@@ -1334,6 +1670,10 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
         paneB[i * 4 + 0] = p.b.x; paneB[i * 4 + 1] = p.b.y; paneB[i * 4 + 2] = p.b.z;
         const bool lit = p.rose && roseLit_ >= 0 && i / std::max(1, slotsPerWin_) == roseLit_;
         paneB[i * 4 + 3] = p.glint + (lit ? 1.1f * flareA_ * p.fill : 0.f);
+        paneC[i * 4 + 0] = p.heat * worldK;
+        paneC[i * 4 + 1] = p.yLo;
+        paneC[i * 4 + 2] = p.yHi;
+        paneC[i * 4 + 3] = p.pouring ? 1.f : 0.f;
     }
     float candles[12 * 4] = {};
     const int nc = candleK > 0.01f ? std::min(12, (int)candles_.size()) : 0;
@@ -1368,6 +1708,8 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uWinOn", winOn_ ? 1.f : 0.f);
         glUniform4fv(ugl::U(p, "uPaneA"), 50, paneA);
         glUniform4fv(ugl::U(p, "uPaneB"), 50, paneB);
+        glUniform4fv(ugl::U(p, "uPaneC"), 50, paneC);
+        set1f(p, "uTime", time_);
         set1f(p, "uFloorY", floorY_);
         glUniform4fv(ugl::U(p, "uCandle"), 12, candles);
         set1i(p, "uNC", nc);
@@ -1396,27 +1738,10 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     drawCells(true);
     glDisable(GL_BLEND);
 
-    // ---- Its blur: the light falling on the stone and the floor.
-    glUseProgram(progBlur_);
-    set1i(progBlur_, "uSrc", 0);
-    glActiveTexture(GL_TEXTURE0);
-    {
-        const GLuint srcs[2] = {emitT_.tex, glowA_.tex};
-        for (int i = 0; i < 2; i++) {
-            const float st = 1.5f + 1.5f * i;
-            glowB_.bind();
-            glBindTexture(GL_TEXTURE_2D, srcs[i]);
-            set2f(progBlur_, "uDir", st / glowA_.w, 0.f);
-            ugl::drawFullscreen();
-            glowA_.bind();
-            glBindTexture(GL_TEXTURE_2D, glowB_.tex);
-            set2f(progBlur_, "uDir", 0.f, st / glowA_.h);
-            ugl::drawFullscreen();
-        }
-    }
     // ---- The shafts: the glass's light streaked from the sun, softened.
     shaftT_.bind();
     glUseProgram(progShaft_);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, emitT_.tex);
     set1i(progShaft_, "uSrc", 0);
     wallUniforms(progShaft_);
@@ -1435,6 +1760,30 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progBlur_, "uDir", 0.f, 1.f / shaftT_.h);
     ugl::drawFullscreen();
 
+    // ---- Molten glass (after the shafts: it lights the stone around it, it throws no beams).
+    emitT_.bind();
+    drawFlows(chanInst_, false, 1);
+    drawFlows(flowInst_, true, 1);
+    glDisable(GL_BLEND);
+
+    // ---- Its blur: the light falling on the stone and the floor.
+    glUseProgram(progBlur_);
+    set1i(progBlur_, "uSrc", 0);
+    glActiveTexture(GL_TEXTURE0);
+    {
+        const GLuint srcs[2] = {emitT_.tex, glowA_.tex};
+        for (int i = 0; i < 2; i++) {
+            const float st = 1.5f + 1.5f * i;
+            glowB_.bind();
+            glBindTexture(GL_TEXTURE_2D, srcs[i]);
+            set2f(progBlur_, "uDir", st / glowA_.w, 0.f);
+            ugl::drawFullscreen();
+            glowA_.bind();
+            glBindTexture(GL_TEXTURE_2D, glowB_.tex);
+            set2f(progBlur_, "uDir", 0.f, st / glowA_.h);
+            ugl::drawFullscreen();
+        }
+    }
     // ---- The chapel.
     sceneT_.bind();
     glUseProgram(progWall_);
@@ -1443,6 +1792,13 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, glowA_.tex);
     set1i(progWall_, "uGlow", 0);
     ugl::drawFullscreen();
+
+    // ---- The lead channels in the stone, the molten glass running in them (behind the stack: the rows falling
+    // into place cover what is left of the row's glass in the well).
+    if (worldK > 0.01f) {
+        drawFlows(chanInst_, false, 0);
+        drawFlows(flowInst_, true, 0);
+    }
 
     // ---- Shards (behind the stack).
     glEnable(GL_BLEND);
@@ -1502,6 +1858,19 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
             avg = avg / 9.f;
             const vec2 c = panes_[r0].pos;
             sprites_.push_back({{c.x, c.y, roseR_ * 2.6f, roseR_ * 2.6f}, {avg.x, avg.y, avg.z, 0.9f * flareA_ * worldK}, {0.f, 0.f, 0.f, 0.f}});
+        }
+        // the molten glass pouring into its pane: a glow where it comes in; sparks of it, streaking as they fall
+        for (const Flow& fl : flows_)
+            if (fl.arrived && fl.pane >= 0 && fl.pane < (int)panes_.size() && panes_[fl.pane].pouring) {
+                const Pane& p = panes_[fl.pane];
+                const vec3 c = lerp(p.a, vec3(1.f, 0.7f, 0.35f), 0.7f);
+                sprites_.push_back({{p.entry.x, p.entry.y, 0.7f, 0.7f}, {c.x, c.y, c.z, 0.9f * worldK}, {0.f, 0.f, 0.f, 0.f}});
+            }
+        for (const Spark& sp : sparks_) {
+            const float k = 1.f - saturate(sp.t / sp.life);
+            const float v = std::sqrt(sp.v.x * sp.v.x + sp.v.y * sp.v.y);
+            const vec3 c = lerp(sp.col, vec3(1.f, 0.85f, 0.6f), 0.5f * k);
+            sprites_.push_back({{sp.p.x, sp.p.y, sp.size * (1.f + 0.12f * v), sp.size * 0.7f}, {c.x, c.y, c.z, 2.2f * k * worldK}, {0.f, std::atan2(sp.v.y, sp.v.x), 0.f, 0.f}});
         }
         for (const Sparkle& sp : sparkles_) {
             const float k = std::sin(PI * saturate(sp.t / sp.life));
@@ -1585,7 +1954,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_stainedglass() {
     static const UniverseEntry e{
-        "STAINED GLASS", "a chapel's window: leaded glass pieces lit by the sun, cleared rows glaze the side windows",
+        "STAINED GLASS", "a chapel's window: leaded glass pieces lit by the sun, cleared rows run as molten glass into the side windows",
         [] { return std::unique_ptr<Universe>(new StainedGlassUniverse()); },
         // Fits most songs; dynamic ones a little more (the light striking on the drop).
         [](const SongLook& l) { return 0.85f + 0.2f * l.dynamics; },
