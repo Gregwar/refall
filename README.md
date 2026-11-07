@@ -90,7 +90,7 @@ song, and songs change universe with a transition on the beat. Thirty-nine unive
 <td><img src="docs/universes/docks.jpg"><br><b>DOCKS</b>: a container port at dusk in 3D; the falling container piece hangs from a gantry on hairline cables, cleared rows are craned onto ships that fill up over the song, the drop switches the port to full light<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares in flat primaries on printed paper, recomposed on the bar grid; each cleared row joins the poster as a small form in a growing sampler, the drop grows a great disc that cuts the forms out of it<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares cut out of thick colored paper and laid on the sheet in relief (soft shadows, lit edges), recomposed on the bar grid; each cleared row joins the poster as a small cut-out in a growing sampler, the drop lifts the forms off the sheet into a turning kinetic sculpture under a circling spotlight, then folds them back into a new composition<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/starchart.jpg"><br><b>STAR CHART</b>: an antique engraved celestial map, gold on navy, two hemispheres on their poles; enamelled pieces in gold rims, each cleared row flies out as stars into a new constellation engraved line by line on the bars, the drop brings the figures to life and turns the skies<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
