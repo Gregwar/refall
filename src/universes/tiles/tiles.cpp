@@ -1,0 +1,1333 @@
+// TILES: a great wall mosaic, the pieces glazed ceramic tiles; each cleared row breaks into tesserae that fly out and
+// are set, one by one along the andamento, into the figures of the mosaic.
+//
+// One world: a wall of thousands of small tesserae set in grout (mosaic.cpp lays them like a mosaicist: in rows
+// following the outlines of the figures, the ground's rows rippling out from them, every tessera its own size, its
+// own tilt in the mortar, its own shade). The well is a recessed bed of dark mortar framed by three rows of tesserae;
+// on each side a medallion (a ring of gold between two rows of color, a figure on its ground: a sun, a rosette, an
+// eight-pointed star), a vase below it from which a vine springs around it, leaves and grapes. The ground and the
+// frames are laid from the start; the figures are only the painter's sketch in red ochre on the bare setting bed
+// (the sinopia), and the cleared rows lay them: each row's tiles crack and break into tesserae that fly out of the
+// well in a stream and are tapped in one after another along the next rows of the figures (their outline first, then
+// row by row inward; then the medallion's ground, the vase, the stems, the leaves, the grapes), each chip taking its
+// smalto's color as it flies, each one standing a little proud and catching the light as it is set (a gold one
+// flashes). The rows alternate between the two sides; a double or a triple lays more, faster. A Tetris sends a swarm
+// that lays a great part of a figure in one sweep, then a glint runs around its medallion's gold ring. Once both sides
+// are complete the rows re-set tesserae of the ground, each one glinting (a Tetris: the gold of a whole side).
+//
+// The pieces are glazed tiles set in the bed: a pillowed glaze rounded over the edges (pale where it breaks over
+// them), a painted motif per type in tin white (or a deep tone on a pale tile) standing a little proud and running on
+// across the piece and its neighbours, a faint craquelure, a highlight from a fixed key light and from the moving
+// lamp, a shadow on the bed. The ghost is the painter's sketch of where the tile goes.
+//
+// The light: a lamp moving slowly over the wall, its raking light making each tilted tessera glint in turn (gold and
+// silver strongly, glass sharply, stone barely). Calm: a dim, still light; mid: it travels across the wall and a few
+// smalti glint on the two-beat grid; a peak: brighter and quicker, more glints, the kicks too. A real drop sets every
+// gold smalto ablaze, the fire spreading out from the well, each one shimmering on its own as its tilt wavers, and on
+// every two beats a ripple lifts the tesserae as it passes outward (a band of light running through the gold); it
+// eases in and settles over the next bars. Slow motion is night: an oil lamp low under the wall, the gold glowing
+// warm in the dark. Game over: the tiles come off the wall row by row from the top and fall.
+//
+// Variants (from the song): BYZANTINE (a gold ground, lapis and crimson), ROMAN (a floor of black basalt, marble,
+// terracotta and ochre stone, matte), NOCTURNE (a vault of deep blue glass strewn with gold stars), TRENCADIS (broken
+// glazed tiles in bright colors, pale grout) and LAGOON (Venetian sea-green glass and silver).
+//
+// Cost: the mosaic is laid once per variant and screen size (~150 ms on the CPU) and drawn once into a G-buffer; each
+// frame is one full-screen lighting pass over it, instanced tiles, fragments and sprites, a quarter-resolution bloom.
+//
+// Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
+#include "universes/tiles/tiles.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+
+#include "layout.hpp"
+#include "universes/registry.hpp"
+#include "universes/tiles/shaders.hpp"
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#include "stb_truetype.h"
+
+namespace {
+
+// Cinzel (the labels and numbers: Roman capitals) and Cormorant Garamond Italic (the song, the section, the
+// celebrations), SIL Open Font License, see OFL-Cinzel.txt and OFL-CormorantGaramond.txt.
+const unsigned char FONT_CAPS[] = {
+#include "universes/tiles/Cinzel.ttf.inc"
+};
+const unsigned char FONT_IT[] = {
+#include "universes/tiles/CormorantGaramond-Italic.ttf.inc"
+};
+
+namespace shaders = tiles_shaders;
+using tiles::VARIANTS;
+using tiles::VARIANT_COUNT;
+using ugl::set1f;
+using ugl::set1i;
+using ugl::set2f;
+using ugl::set3f;
+using ugl::set4f;
+using ugl::setMat;
+
+vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
+vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+vec2 operator*(vec2 a, float s) { return {a.x * s, a.y * s}; }
+float len(vec2 a) { return std::sqrt(a.x * a.x + a.y * a.y); }
+
+vec3 lin(unsigned v) { return tiles::linc(v); }
+vec3 hex(unsigned v) { return tiles::hexc(v); }
+
+// A cleared tile cracks this long (seconds) before it breaks into fragments.
+constexpr float CRACK_T = 0.16f;
+// The drop's fire lasts this many beats.
+constexpr double DROP_BEATS = 32.0;
+constexpr int STATE_W = 256;
+
+float seedOf(int id) { return std::fmod((float)id * 0.618034f, 1.f) * 97.f + 3.f; }
+
+// UTF-8 to the font's characters: the middle dot is glyph 127, accented Latin letters lose their accent, anything
+// else outside ASCII becomes a '?'.
+std::string ascii(const std::string& s) {
+    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
+    std::string o;
+    for (size_t i = 0; i < s.size(); i++) {
+        const unsigned char c = (unsigned char)s[i];
+        if (c < 128) { o += (char)c; continue; }
+        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
+        if (c == 0xC3 && i + 1 < s.size()) {
+            const unsigned char d = (unsigned char)s[i + 1];
+            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
+        }
+        if ((c & 0xE0) == 0xC0) i += 1;
+        else if ((c & 0xF0) == 0xE0) i += 2;
+        else if ((c & 0xF8) == 0xF0) i += 3;
+        o += '?';
+    }
+    return o;
+}
+
+// Instanced attributes: `vec4s` per instance from location `first`, the unit quad at location 0 when quadVbo != 0.
+void instAttribs(GLuint vao, GLuint vbo, GLuint quadVbo, int first, int vec4s, size_t stride) {
+    glBindVertexArray(vao);
+    if (quadVbo) {
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    for (int i = 0; i < vec4s; i++) {
+        glEnableVertexAttribArray(first + i);
+        glVertexAttribPointer(first + i, 4, GL_FLOAT, GL_FALSE, (GLsizei)stride, (void*)(sizeof(float) * 4 * i));
+        glVertexAttribDivisor(first + i, 1);
+    }
+}
+
+vec2 bezier(vec2 a, vec2 b, vec2 c, vec2 d, float t) {
+    const float u = 1.f - t;
+    return a * (u * u * u) + b * (3.f * u * u * t) + c * (3.f * u * t * t) + d * (t * t * t);
+}
+
+} // namespace
+
+// =====================================================================================================
+// Setup
+// =====================================================================================================
+
+bool TilesUniverse::init(int width, int height) {
+    using shaders::withCommon;
+    progGb_ = ugl::program(shaders::GB_VS, withCommon(shaders::GB_FS).c_str(), "tiles gbuffer");
+    progComp_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::COMP_FS).c_str(), "tiles wall");
+    progCell_ = ugl::program(shaders::CELL_VS, withCommon(shaders::CELL_FS).c_str(), "tiles cells");
+    progFrag_ = ugl::program(shaders::FRAG_VS, shaders::FRAG_FS, "tiles fragments");
+    progSprite_ = ugl::program(shaders::SPRITE_VS, shaders::SPRITE_FS, "tiles sprites");
+    progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "tiles down");
+    progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "tiles blur");
+    progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "tiles final");
+    progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "tiles shape");
+    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "tiles text");
+
+    const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
+    glGenBuffers(1, &quadVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+    glGenVertexArrays(1, &tessVao_);
+    glGenBuffers(1, &tessVbo_);
+    instAttribs(tessVao_, tessVbo_, 0, 1, 4, sizeof(float) * 16);
+    glGenVertexArrays(1, &cellVao_);
+    glGenBuffers(1, &cellVbo_);
+    instAttribs(cellVao_, cellVbo_, quadVbo_, 1, 4, sizeof(CellInst));
+    glGenVertexArrays(1, &fragVao_);
+    glGenBuffers(1, &fragVbo_);
+    instAttribs(fragVao_, fragVbo_, 0, 1, 5, sizeof(FragInst));
+    glGenVertexArrays(1, &spriteVao_);
+    glGenBuffers(1, &spriteVbo_);
+    instAttribs(spriteVao_, spriteVbo_, quadVbo_, 1, 3, sizeof(SpriteInst));
+    glGenVertexArrays(1, &shapeVao_);
+    glGenBuffers(1, &shapeVbo_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
+    glGenVertexArrays(1, &textVao_);
+    glGenBuffers(1, &textVbo_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+    glBindVertexArray(0);
+
+    glGenTextures(1, &stateTex_);
+    glGenTextures(1, &sketchTex_);
+    for (GLuint t : {stateTex_, sketchTex_}) {
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t == stateTex_ ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t == stateTex_ ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+
+    buildFont(fontCaps_, FONT_CAPS);
+    buildFont(fontIt_, FONT_IT);
+    resize(width, height);
+    return glGetError() == GL_NO_ERROR;
+}
+
+void TilesUniverse::buildFont(Font& f, const unsigned char* ttf) {
+    stbtt_fontinfo* info = new stbtt_fontinfo;
+    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
+        std::fprintf(stderr, "[gl] tiles font init failed\n");
+        delete info;
+        return;
+    }
+    f.info = info;
+    f.px = 64.f;
+    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
+    int x0, y0, x1, y1;
+    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
+    const int AW = 1024, AH = 1024, PAD = 8;
+    std::vector<unsigned char> atlas(AW * AH, 0);
+    int x = 1, y = 1, rowH = 0;
+    for (int ch = 32; ch < 128; ch++) {
+        const int cp = ch == 127 ? 0xB7 : ch; // the middle dot in DEL's slot
+        Glyph& g = f.g[ch - 32];
+        int adv, lsb;
+        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
+        g.adv = adv * f.scaleTT;
+        int w = 0, h = 0, xo = 0, yo = 0;
+        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
+        if (!sdf) { g.w = g.h = 0; continue; }
+        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
+        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
+        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
+        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
+        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
+        x += w + 1;
+        rowH = std::max(rowH, h);
+        stbtt_FreeSDF(sdf, nullptr);
+    }
+    glGenTextures(1, &f.tex);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    f.ok = true;
+}
+
+void TilesUniverse::resize(int width, int height) {
+    width_ = std::max(1, width);
+    height_ = std::max(1, height);
+    const float aspect = (float)width_ / height_;
+    const layout::Camera cam = layout::camera(width_, height_);
+    const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect;
+    viewH_ = vec2{hw, hh};
+    viewC_ = vec2{cam.target.x, cam.target.y};
+    vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
+    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
+    for (ugl::Target* t : {&bloomA_, &bloomB_}) t->create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    createGbuffer();
+    gbDirty_ = true;
+}
+
+void TilesUniverse::createGbuffer() {
+    if (gbFbo_) {
+        glDeleteFramebuffers(1, &gbFbo_);
+        glDeleteTextures(3, gbTex_);
+    }
+    glGenFramebuffers(1, &gbFbo_);
+    glGenTextures(3, gbTex_);
+    glBindFramebuffer(GL_FRAMEBUFFER, gbFbo_);
+    for (int i = 0; i < 3; i++) {
+        glBindTexture(GL_TEXTURE_2D, gbTex_[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        // the id buffer must not be filtered
+        const GLint filt = i == 2 ? GL_NEAREST : GL_LINEAR;
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, i == 0 ? GL_LINEAR_MIPMAP_LINEAR : filt);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filt);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D, gbTex_[i], 0);
+    }
+    const GLenum bufs[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2};
+    glDrawBuffers(3, bufs);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) std::fprintf(stderr, "[gl] tiles gbuffer incomplete\n");
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+TilesUniverse::~TilesUniverse() {
+    for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
+    for (GLuint p : {progGb_, progComp_, progCell_, progFrag_, progSprite_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+        glDeleteProgram(p);
+    for (GLuint v : {tessVao_, cellVao_, fragVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tessVbo_, cellVbo_, fragVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    if (gbFbo_) {
+        glDeleteFramebuffers(1, &gbFbo_);
+        glDeleteTextures(3, gbTex_);
+    }
+    glDeleteTextures(1, &stateTex_);
+    glDeleteTextures(1, &sketchTex_);
+    for (Font* f : {&fontCaps_, &fontIt_}) {
+        if (f->tex) glDeleteTextures(1, &f->tex);
+        delete (stbtt_fontinfo*)f->info;
+    }
+}
+
+// =====================================================================================================
+// The mosaic
+// =====================================================================================================
+
+// Lays the mosaic for the variant and the screen (the ground set, the figures only sketched).
+void TilesUniverse::rebuild() {
+    design_ = tiles::build(variant_, viewC_, viewH_, seed_ ^ 0x7115ull);
+    designVariant_ = variant_;
+    designC_ = viewC_;
+    designH_ = viewH_;
+    frags_.clear();
+    const int n = (int)design_.tess.size();
+    stateRows_ = (n + 1 + STATE_W - 1) / STATE_W;
+    state_.assign((size_t)stateRows_ * STATE_W * 4, 0.f);
+    for (int i = 0; i <= n; i++) {
+        float* s = &state_[(size_t)i * 4];
+        const bool figure = i > 0 && design_.tess[i - 1].group > 0;
+        s[0] = figure ? 1e9f : -1000.f;
+        s[1] = -1000.f;
+        s[2] = 1e9f;
+        s[3] = 0.f;
+    }
+    progress_[0] = progress_[1] = 0;
+    stateDirty_ = true;
+    uploadDesign();
+    gbDirty_ = true;
+}
+
+void TilesUniverse::uploadDesign() {
+    const int n = (int)design_.tess.size();
+    std::vector<float> v((size_t)n * 16);
+    for (int i = 0; i < n; i++) {
+        const tiles::Tessera& t = design_.tess[i];
+        float* o = &v[(size_t)i * 16];
+        o[0] = t.c[0].x; o[1] = t.c[0].y; o[2] = t.c[1].x; o[3] = t.c[1].y;
+        o[4] = t.c[2].x; o[5] = t.c[2].y; o[6] = t.c[3].x; o[7] = t.c[3].y;
+        o[8] = t.color.x; o[9] = t.color.y; o[10] = t.color.z; o[11] = (float)t.mat;
+        o[12] = t.tilt.x; o[13] = t.tilt.y; o[14] = t.rnd; o[15] = (float)(i + 1);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, tessVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
+    tessCount_ = n;
+    glBindTexture(GL_TEXTURE_2D, sketchTex_);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, design_.sw, design_.sh, 0, GL_RG, GL_UNSIGNED_BYTE, design_.sketch.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glBindTexture(GL_TEXTURE_2D, stateTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, STATE_W, stateRows_, 0, GL_RGBA, GL_FLOAT, state_.data());
+    stateDirty_ = false;
+}
+
+void TilesUniverse::renderGbuffer() {
+    glBindFramebuffer(GL_FRAMEBUFFER, gbFbo_);
+    glViewport(0, 0, width_, height_);
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    if (tessCount_ > 0) {
+        glUseProgram(progGb_);
+        setMat(progGb_, "uVP", vp_);
+        set4f(progGb_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        const float px = 2.f * viewH_.y / height_;
+        set1f(progGb_, "uPx", px);
+        const tiles::VariantDef& V = VARIANTS[variant_];
+        set1f(progGb_, "uBevel", std::max(px * 1.6f, V.pitch * 0.16f));
+        glBindVertexArray(tessVao_);
+        // the grout around each tessera takes its id (a figure not laid shows its bed there too), then the tesserae
+        set1i(progGb_, "uGrout", 1);
+        set1f(progGb_, "uDilate", V.grout_w * 0.9f);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, tessCount_);
+        set1i(progGb_, "uGrout", 0);
+        set1f(progGb_, "uDilate", 0.f);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, tessCount_);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // the albedo's mip chain: the colors to come, washed on the bare bed
+    glBindTexture(GL_TEXTURE_2D, gbTex_[0]);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    gbDirty_ = false;
+}
+
+// A new song in the same mosaic: the figures are pried out (over a second and a half) back to the sketch.
+void TilesUniverse::resetFigures(float seconds) {
+    frags_.clear();
+    const int n = (int)design_.tess.size();
+    for (int i = 0; i < n; i++) {
+        if (design_.tess[i].group == 0) continue;
+        float* s = &state_[(size_t)(i + 1) * 4];
+        if (seconds <= 0.1f) { s[0] = 1e9f; s[2] = 1e9f; continue; }
+        if (s[0] <= time_) s[2] = time_ + rng_.range(0.f, 1.5f);
+        else s[0] = 1e9f;
+    }
+    progress_[0] = progress_[1] = 0;
+    stateDirty_ = true;
+}
+
+// The next n figure tesserae of a side (the other side's once it is complete; none once both are).
+std::vector<int> TilesUniverse::takeTargets(int side, int n) {
+    std::vector<int> out;
+    for (int pass = 0; pass < 2 && (int)out.size() < n; pass++) {
+        const int s = pass == 0 ? side : 1 - side;
+        const std::vector<int>& o = design_.order[s];
+        while ((int)out.size() < n && progress_[s] < (int)o.size()) out.push_back(o[progress_[s]++]);
+    }
+    return out;
+}
+
+// A row's fragments: each target tessera gets a chip from the tile of the closest color (the load spread over the
+// row), out of the well in a stream along an arc, landing one after another `tap` apart from t0.
+void TilesUniverse::sendRow(const std::vector<vec3>& cellCols, const std::vector<float>& cellY, const std::vector<int>& targets,
+                            float t0, float tap, bool renew) {
+    const int M = (int)targets.size();
+    if (!M || cellCols.empty()) return;
+    const int nc = (int)cellCols.size();
+    std::vector<int> load(nc, 0);
+    const float cap = (float)M / nc;
+    for (int j = 0; j < M; j++) {
+        const tiles::Tessera& t = design_.tess[targets[j]];
+        int best = 0;
+        float bestS = 1e9f;
+        for (int c = 0; c < nc; c++) {
+            const vec3 d = cellCols[c] - t.color;
+            const float s = std::sqrt(dot(d, d)) + 0.25f * std::max(0.f, load[c] - cap) + rng_.range(0.f, 0.08f);
+            if (s < bestS) { bestS = s; best = c; }
+        }
+        load[best]++;
+        Frag f;
+        f.tess = targets[j];
+        f.renew = renew;
+        f.from = vec2{layout::cellPos((float)(best % 10), 0.f).x + rng_.range(-0.36f, 0.36f), cellY[best] + rng_.range(-0.34f, 0.34f)};
+        f.appear = t0;
+        const float sx = t.center.x > 0.f ? 1.f : -1.f;
+        f.ctrl1 = f.from + vec2{sx * rng_.range(2.5f, 4.5f), rng_.range(2.0f, 4.0f)};
+        f.ctrl2 = t.center + vec2{-sx * rng_.range(0.f, 1.2f), rng_.range(2.2f, 3.6f)};
+        f.land = t0 + 0.6f + j * tap + rng_.range(0.f, tap * 0.5f);
+        f.launch = std::min(f.land - 0.45f, t0 + 0.34f * j / std::max(1, M - 1) + rng_.range(0.f, 0.04f));
+        f.rot0 = rng_.range(-PI, PI);
+        f.spin = rng_.range(5.f, 11.f) * (rng_.chance(0.5f) ? 1.f : -1.f);
+        f.col0 = cellCols[best];
+        frags_.push_back(f);
+    }
+}
+
+// =====================================================================================================
+// Song, level
+// =====================================================================================================
+
+void TilesUniverse::setSong(const SongLook& t, float seconds) {
+    int v;
+    if (t.variant >= 0) v = t.variant % VARIANT_COUNT;
+    else {
+        float h = std::fmod(t.hue / TAU, 1.f);
+        if (h < 0) h += 1.f;
+        if (t.hasSong && t.minor && t.brightness < 0.45f) v = 2;                    // NOCTURNE: dark minor songs
+        else if (t.hasSong && !t.minor && t.brightness > 0.55f && t.density > 0.5f) v = 3; // TRENCADIS: bright, busy
+        else if (t.hasSong && (t.bassWeight > 0.62f || t.bpm < 92.f)) v = 1;        // ROMAN: heavy or slow
+        else if (t.hasSong && t.airWeight > 0.6f) v = 4;                           // LAGOON: airy
+        else v = (int)(h * 4.f) == 1 ? 4 : 0;                                      // BYZANTINE
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
+    }
+    const bool same = v == variant_ && designVariant_ == v;
+    variant_ = v;
+    seed_ = t.seed ? t.seed : 1;
+    rng_ = Rng(seed_ ^ 0x711Eull);
+    lightPhase_ = (float)(seed_ % 628) * 0.01f;
+    if (same && !design_.tess.empty()) resetFigures(seconds);
+    // otherwise the mosaic is laid anew before the next frame (render)
+}
+
+void TilesUniverse::setLevel(int level, float energy, float seconds, float impact) {
+    (void)impact;
+    level = std::clamp(level, 0, 2);
+    energy_ = energy;
+    if (level < 2) dropOn_ = false;
+    if (!hasLevel_ || seconds < 0.1f) {
+        hasLevel_ = true;
+        level_ = level;
+        lv_ = lvFrom_ = lvTo_ = (float)level;
+        lvT_ = 1.f;
+        return;
+    }
+    const bool rising = level > level_;
+    level_ = level;
+    lvFrom_ = lv_;
+    lvTo_ = (float)level;
+    lvT_ = 0.f;
+    lvDur_ = std::clamp(seconds, rising ? 1.2f : 3.f, 6.f);
+}
+
+// The drop (or a chorus's rise: see render, only a real DROP sets the gold ablaze).
+void TilesUniverse::drop(float strength) {
+    dropOn_ = true;
+    dropBeat_ = beat_;
+    dropStart_ = time_;
+    dropT_ = std::max(dropT_, 0.6f + 0.4f * strength);
+    ignite_ = 0.f;
+    lastWaveBeat_ = std::floor(beat_ / 2.0);
+    waveT_ = 0.f;
+    waveA_ = 1.f;
+}
+
+// A new section of the same level: the lamp moves on.
+void TilesUniverse::refresh(float strength) {
+    (void)strength;
+    lightPhase_ += 1.3f;
+}
+
+void TilesUniverse::levelUp() {
+    // a few gold smalti glint
+    for (int k = 0; k < 6 && !design_.field.empty(); k++) {
+        const int i = design_.field[rng_.irange(0, (int)design_.field.size() - 1)];
+        if (std::fabs(design_.tess[i].center.x) > 11.f) glintTess(i, time_);
+    }
+}
+
+vec2 TilesUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
+
+TransitionHints TilesUniverse::hints() const {
+    const tiles::VariantDef& V = VARIANTS[variant_];
+    TransitionHints h;
+    h.background = lin(V.field[0]) * 0.45f;
+    h.light = false;
+    h.ink = lin(V.piece[0]);
+    h.accent = lin(V.accent);
+    h.styles = TS_TILES | TS_REBUILD | TS_LUMA;
+    return h;
+}
+
+vec3 TilesUniverse::pieceColor(int type) const { return lin(VARIANTS[variant_].piece[std::clamp(type, 0, 6)]); }
+
+// =====================================================================================================
+// Game events
+// =====================================================================================================
+
+void TilesUniverse::syncIds(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const bool has = g.cell(x, y).type >= 0;
+            if (has && !ids_[y][x]) ids_[y][x] = nextId_++;
+            if (!has) ids_[y][x] = 0;
+        }
+}
+
+void TilesUniverse::onEvent(const GameEvent& ev, const Game& game) {
+    switch (ev.type) {
+    case GameEvent::Lock: {
+        // the tile pressed into the bed: a little mortar squeezed out from under it
+        const int id = nextId_++;
+        float sx = 0.f, minx = 99.f, maxx = -99.f, lowY = -99.f;
+        int n = 0;
+        for (auto& c : ev.cells) {
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            ids_[c.y][c.x] = id;
+            flash_[c.y][c.x] = 1.f;
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            sx += p.x;
+            minx = std::min(minx, p.x);
+            maxx = std::max(maxx, p.x);
+            lowY = std::max(lowY, (float)c.y);
+            n++;
+        }
+        if (n > 0) puffs_.push_back({vec2{sx / n, layout::cellPos(0.f, lowY).y - 0.5f}, 0.f, 0.8f, 0.3f + 0.22f * (maxx - minx)});
+        break;
+    }
+    case GameEvent::HardDrop: {
+        if (!game.hasPiece()) break;
+        int cells[4][2];
+        game.pieceCells(game.piece(), cells);
+        int low = -1;
+        float minx = 99.f, maxx = -99.f;
+        for (auto& c : cells) low = std::max(low, c[1]);
+        for (auto& c : cells) {
+            const vec3 p = layout::cellPos((float)c[0], (float)low);
+            minx = std::min(minx, p.x);
+            maxx = std::max(maxx, p.x);
+        }
+        puffs_.push_back({vec2{(minx + maxx) * 0.5f, layout::cellPos(0.f, (float)low).y - 0.5f}, 0.f, 1.0f, 0.6f + 0.28f * (maxx - minx)});
+        break;
+    }
+    case GameEvent::Clear: {
+        bool rows[Game::H] = {};
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
+        for (auto& c : ev.cells) {
+            if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            cracks_.push_back({c.x, c.y, c.type, (float)c.x, (float)-c.y, seedOf(ids_[c.y][c.x] ? ids_[c.y][c.x] : nextId_), 0.f});
+        }
+        const bool tetris = ev.count >= 4 || forceTetris_ >= 0;
+        forceTetris_ = -1;
+        const float t0 = time_ + CRACK_T;
+        // the rows' tiles, cell by cell
+        std::vector<std::vector<vec3>> rowCols;
+        std::vector<float> rowY;
+        for (int y = Game::H - 1; y >= 0; y--) {
+            if (!rows[y]) continue;
+            std::vector<vec3> cols(10, pieceColor(0));
+            for (auto& c : ev.cells)
+                if (c.y == y && c.x >= 0 && c.x < 10 && c.type >= 0) cols[c.x] = pieceColor(c.type);
+            rowCols.push_back(cols);
+            rowY.push_back(layout::cellPos(0.f, (float)y).y);
+        }
+        if (!design_.lay.sides || rowCols.empty()) {
+            // no room for the medallions: the chips only shatter (a few glints in the ground)
+        } else if (tetris) {
+            // a Tetris: a great part of a figure laid in one sweep, then a glint running around its medallion's
+            // gold ring; once the figures are complete, the whole gold of that side catches the light in turn
+            const int side = nextSide_;
+            std::vector<vec3> all;
+            std::vector<float> allY;
+            for (size_t r = 0; r < rowCols.size(); r++) {
+                all.insert(all.end(), rowCols[r].begin(), rowCols[r].end());
+                allY.insert(allY.end(), 10, rowY[r]);
+            }
+            const float sweep = 1.6f;
+            std::vector<int> tg = takeTargets(side, 380);
+            bool renew = false;
+            if (tg.empty()) {
+                renew = true;
+                for (int k = 0; k < 400 && !design_.field.empty(); k++) {
+                    const int i = design_.field[rng_.irange(0, (int)design_.field.size() - 1)];
+                    const tiles::Tessera& t = design_.tess[i];
+                    if (t.mat >= tiles::MAT_GOLD && std::fabs(t.center.x) > 11.6f && (t.center.x > 0.f) == (side == 1)) tg.push_back(i);
+                    if (tg.size() >= 160) break;
+                }
+            }
+            if (!tg.empty()) sendRow(all, allY, tg, t0, sweep / tg.size(), renew);
+            ringGlintSide_ = tg.empty() ? side : (design_.tess[tg[0]].center.x > 0.f ? 1 : 0);
+            ringGlintT_ = t0 + 0.6f + sweep;
+            nextSide_ = 1 - side;
+        } else {
+            const int per = 52 + 8 * ev.count;
+            for (size_t r = 0; r < rowCols.size(); r++) {
+                const int side = nextSide_;
+                nextSide_ = 1 - nextSide_;
+                std::vector<int> tg = takeTargets(side, per);
+                bool renew = false;
+                if (tg.empty()) {
+                    // the figures are complete: the row re-sets tesserae of the ground, each one glinting
+                    renew = true;
+                    for (int k = 0; k < per / 2 && !design_.field.empty(); k++) {
+                        const int i = design_.field[rng_.irange(0, (int)design_.field.size() - 1)];
+                        const tiles::Tessera& t = design_.tess[i];
+                        if (std::fabs(t.center.x) > 11.6f && (t.center.x > 0.f) == (side == 1)) tg.push_back(i);
+                    }
+                }
+                const float tap = (ev.count == 1 ? 0.016f : 0.011f);
+                sendRow(rowCols[r], std::vector<float>(10, rowY[r]), tg, t0 + 0.1f * r, tap, renew);
+            }
+        }
+        // compact the ids like the game did
+        {
+            int nb[Game::H][Game::W] = {};
+            float nf[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (rows[y]) continue;
+                std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
+                std::memcpy(nf[dst], flash_[y], sizeof(flash_[y]));
+                dst--;
+            }
+            std::memcpy(ids_, nb, sizeof(ids_));
+            std::memcpy(flash_, nf, sizeof(flash_));
+        }
+        break;
+    }
+    case GameEvent::TopOut: {
+        overT_ = 0.f;
+        dead_.clear();
+        for (auto& c : ev.cells) {
+            if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            dead_.push_back({c.x, c.y, c.type, (float)c.x, (float)-c.y, seedOf(ids_[c.y][c.x] ? ids_[c.y][c.x] : nextId_ + c.x)});
+        }
+        break;
+    }
+    default: break;
+    }
+}
+
+// =====================================================================================================
+// Geometry
+// =====================================================================================================
+
+void TilesUniverse::buildBoard(const Game& g) {
+    std::vector<CellInst> shadows;
+    auto cell = [&](float x, float y, float half, float rot, int type, const vec3& col, float alpha, int kind, float crack,
+                    float flash, float px, float py, float seed, float dark) {
+        const CellInst c{{x, y, half, rot}, {col.x, col.y, col.z, alpha}, {(float)type, (float)kind, crack, flash}, {px, py, seed, dark}};
+        if (kind == 0 || kind == 2) {
+            CellInst s = c;
+            s.c[1] = 3.f;
+            shadows.push_back(s);
+        }
+        cells_.push_back(c);
+    };
+    // the ghost: the painter's sketch of where the tile goes
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        Piece gp = p;
+        gp.y = g.ghostY();
+        if (gp.y > p.y) {
+            int gc[4][2];
+            g.pieceCells(gp, gc);
+            for (auto& c : gc) {
+                if (c[1] < Game::HIDDEN) continue;
+                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
+                cell(w.x, w.y, 0.5f, 0.f, p.type, pieceColor(p.type), 0.6f, 1, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f);
+            }
+        }
+    }
+    // the stack
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const Cell& c = g.cell(x, y);
+            if (c.type < 0) continue;
+            const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
+            cell(p.x, p.y, 0.5f, 0.f, c.type, pieceColor(c.type), 1.f, 0, 0.f, flash_[y][x] * 0.6f, (float)x, (float)-y, seedOf(ids_[y][x]), 0.f);
+        }
+    // cleared tiles cracking
+    for (const Crack& k : cracks_) {
+        const vec3 p = layout::cellPos((float)k.x, (float)k.y);
+        cell(p.x, p.y, 0.5f, 0.f, k.type, pieceColor(k.type), 1.f, 2, saturate(k.t / CRACK_T), 0.f, k.px, k.py, k.seed, 0.f);
+    }
+    // game over: the tiles come off the wall, row by row from the top, and fall
+    for (const Dead& d : dead_) {
+        const float t = overT_ - 0.09f * (d.y - Game::HIDDEN) - 0.04f * std::fabs(d.x - 4.5f);
+        const vec3 p = layout::cellPos((float)d.x, (float)d.y);
+        if (t <= 0.f) {
+            cell(p.x, p.y, 0.5f, 0.f, d.type, pieceColor(d.type), 1.f, 0, 0.f, 0.f, d.px, d.py, d.seed, 0.f);
+            continue;
+        }
+        const float fall = 12.f * t * t;
+        const float a = 1.f - smoothstepf(0.7f, 1.3f, t);
+        if (a <= 0.f) continue;
+        const float spin = (std::fmod(d.seed, 2.f) - 1.f) * 1.4f * t;
+        cell(p.x + (d.x - 4.5f) * 0.12f * t, p.y - fall, 0.5f * (1.f - 0.1f * t), spin, d.type, pieceColor(d.type), a, 0, 0.f, 0.f,
+             d.px, d.py, d.seed, 0.25f * t);
+    }
+    // the falling piece
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        int cs[4][2];
+        g.pieceCells(p, cs);
+        const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        for (auto& c : cs) {
+            if (c[1] < Game::HIDDEN - 1) continue;
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+            cell(w.x, w.y, 0.5f, 0.f, p.type, pieceColor(p.type), 1.f, 0, 0.f, 0.f, (float)c[0], (float)-c[1], seedOf(nextId_), 0.f);
+        }
+    }
+    // previews
+    auto preview = [&](int type, vec2 center, float sc, float alpha, float seed) {
+        if (type < 0) return;
+        Piece p{type, 0, 0, 0};
+        int cs[4][2];
+        g.pieceCells(p, cs);
+        float minx = 9, maxx = -9, miny = 9, maxy = -9;
+        for (auto& c : cs) {
+            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+        }
+        for (auto& c : cs) {
+            const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
+            cell(px, py, 0.5f * sc, 0.f, type, pieceColor(type), alpha, 0, 0.f, 0.f, (float)c[0], (float)-c[1], seed, 0.f);
+        }
+    };
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f, seedOf(nextId_ + 7));
+    for (int i = 0; i < 3; i++) {
+        const vec3 c = layout::nextCenter(i);
+        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
+    }
+    // shadows first
+    cells_.insert(cells_.begin(), shadows.begin(), shadows.end());
+}
+
+// =====================================================================================================
+// Text and the HUD
+// =====================================================================================================
+
+float TilesUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
+    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
+    const float k = size / f.px;
+    float w = 0;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        w += f.g[ch - 32].adv * k + track;
+    }
+    return w - track;
+}
+
+void TilesUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
+                              std::vector<float>& out) const {
+    if (!f.ok) return;
+    const float k = size / f.px;
+    const float baseline = y + f.capH * k;
+    float pen = x;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        const Glyph& g = f.g[ch - 32];
+        if (g.w > 0) {
+            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
+            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
+                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
+            for (auto& q : v) out.insert(out.end(), q, q + 4);
+        }
+        pen += g.adv * k + track;
+    }
+}
+
+void TilesUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, const vec3& halo, float alpha) {
+    if (q.empty() || !f.ok) return;
+    glUseProgram(progText_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    set1i(progText_, "uFont", 0);
+    set2f(progText_, "uRes", (float)width_, (float)height_);
+    set3f(progText_, "uInk", ink);
+    set3f(progText_, "uHalo", halo);
+    set1f(progText_, "uHaloA", 0.8f);
+    set1f(progText_, "uAlpha", alpha);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+}
+
+void TilesUniverse::flushShapes() {
+    if (shapes_.empty()) return;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, shapes_.size() * sizeof(float), shapes_.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(shapes_.size() / 6));
+    shapes_.clear();
+}
+
+// The lettering in pale Roman capitals over a dark halo; the bonus gauge a ring of twelve tesserae, set in gold as it
+// charges.
+void TilesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+    const tiles::VariantDef& V = VARIANTS[variant_];
+    const float s = height_ / 1080.f;
+    const vec3 ink = hex(V.ink), halo = hex(V.well) * 0.6f;
+    const vec3 accent = hex(V.accent);
+    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+
+    if (!panels.empty()) {
+        for (const HudRect& r : panels) {
+            const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
+            const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
+            const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                                   {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+            for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
+        }
+        flushShapes();
+    }
+
+    // the bonus gauge: twelve small tesserae in a ring
+    if (vis > 0.01f) {
+        const vec2 c = project(layout::GAUGE_CENTER);
+        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
+        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
+        const int N = 12;
+        for (int i = 0; i < N; i++) {
+            const float am = TAU * (i + 0.5f) / N;
+            const bool on = (i + 0.5f) / N <= fill;
+            const vec3 col = on ? accent : ink * 0.8f;
+            const float al = (on ? 0.95f : (g.bonusReady() ? 0.5f : 0.22f)) * vis * (1.f - 0.5f * dimT_);
+            const float rm = r * 0.84f, hs = r * (on ? 0.17f : 0.13f);
+            const vec2 m{c.x + std::sin(am) * rm, c.y - std::cos(am) * rm};
+            const float ca = std::cos(am), sa = std::sin(am);
+            auto P = [&](float u, float v) { return vec2{m.x + ca * u - sa * v, m.y + sa * u + ca * v}; };
+            const vec2 pts[4] = {P(-hs, -hs), P(hs, -hs), P(hs, hs), P(-hs, hs)};
+            const int idx[6] = {0, 1, 2, 0, 2, 3};
+            for (int k : idx) {
+                const float v[6] = {pts[k].x, pts[k].y, col.x, col.y, col.z, al};
+                shapes_.insert(shapes_.end(), v, v + 6);
+            }
+        }
+        flushShapes();
+    }
+
+    std::vector<float> q;
+    for (const HudText& h0 : hud) {
+        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
+        HudText h = h0;
+        h.text = ascii(h.text);
+        const float base = h.scale * 12.f;
+        const float alpha = saturate(h.alpha);
+        q.clear();
+        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
+            const float w = textWidth(f, text, size, track);
+            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
+        };
+        auto upper = [](std::string t) {
+            for (char& c : t) c = (char)std::toupper((unsigned char)c);
+            return t;
+        };
+        switch (h.role) {
+        case HUD_UNIVERSE:
+            place(fontCaps_, upper(h.text), base * 0.86f, base * 0.18f, base * 0.04f);
+            drawText(fontCaps_, q, ink, halo, saturate(0.3f + h.alpha * 1.5f) * 0.9f);
+            continue;
+        case HUD_SECTION:
+            place(fontIt_, h.text, base * 1.15f, base * 0.03f, -base * 0.12f);
+            drawText(fontIt_, q, accent, halo, saturate(0.25f + h.alpha * 1.7f));
+            continue;
+        case HUD_TITLE:
+            place(fontIt_, h.text, base * 1.2f, 0.f, -base * 0.14f);
+            drawText(fontIt_, q, ink, halo, saturate(h.alpha * 1.3f));
+            continue;
+        case HUD_INFO:
+            place(fontCaps_, upper(h.text), base * 0.74f, base * 0.1f);
+            drawText(fontCaps_, q, ink, halo, saturate(alpha * 1.3f) * 0.8f);
+            continue;
+        case HUD_LABEL:
+            place(fontCaps_, upper(h.text), base * 0.92f, base * 0.22f);
+            drawText(fontCaps_, q, ink, halo, saturate(alpha * 1.4f));
+            continue;
+        case HUD_VALUE:
+            place(fontCaps_, h.text, base * 1.05f, base * 0.06f, -base * 0.06f);
+            drawText(fontCaps_, q, ink, halo, alpha);
+            continue;
+        case HUD_NOTICE:
+            place(fontIt_, h.text, base * 1.1f, base * 0.04f);
+            drawText(fontIt_, q, accent, halo, alpha);
+            continue;
+        case HUD_KEY:
+            place(fontCaps_, h.text, base * 0.85f, 0.f);
+            drawText(fontCaps_, q, ink, halo, alpha);
+            continue;
+        case HUD_TOAST:
+            place(fontCaps_, upper(h.text), base * 1.05f, base * 0.16f, -base * 0.1f);
+            drawText(fontCaps_, q, ink, halo, alpha);
+            continue;
+        case HUD_TOAST_SUB:
+            place(fontIt_, h.text, base * 1.0f, base * 0.04f);
+            drawText(fontIt_, q, accent, halo, alpha * 0.9f);
+            continue;
+        case HUD_DIALOG:
+            if (h.scale >= 3.5f * s) {
+                place(fontIt_, h.text, base * 1.15f, base * 0.05f);
+                drawText(fontIt_, q, ink, halo, alpha);
+            } else {
+                place(fontCaps_, h.text, base * 0.76f, base * 0.08f);
+                drawText(fontCaps_, q, h.accent ? accent : ink, halo, alpha);
+            }
+            continue;
+        default:
+            place(fontCaps_, h.text, base * 0.74f, base * 0.04f);
+            drawText(fontCaps_, q, h.accent ? accent : ink, halo, alpha);
+            continue;
+        }
+    }
+}
+
+// =====================================================================================================
+// Frame
+// =====================================================================================================
+
+void TilesUniverse::render(const Frame& f, GLuint fbo) {
+    const Game& game = f.game;
+    const MusicState& music = f.music;
+    const float dt = f.dt;
+    const tiles::VariantDef& V = VARIANTS[variant_];
+    // a new variant: laid at once; a new screen size: once it has stayed for a moment (a window being dragged)
+    const bool sized = std::fabs(designH_.x - viewH_.x) > 0.01f || std::fabs(designH_.y - viewH_.y) > 0.01f;
+    resizeWait_ = sized ? resizeWait_ + f.dt : 0.f;
+    if (designVariant_ != variant_ || design_.tess.empty() || (sized && resizeWait_ > 0.3f)) rebuild();
+    if (gbDirty_) renderGbuffer();
+    syncIds(game);
+    slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
+    dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
+    if (overT_ >= 0.f) {
+        if (!game.over()) {
+            overT_ = -1.f;
+            dead_.clear();
+        } else overT_ += dt;
+    }
+    over_ = approach(over_, overT_ >= 0.f ? 1.f : 0.f, overT_ >= 0.f ? 0.5f : 1.5f, dt);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
+    time_ += dt;
+    worldTime_ += wdt;
+    hasSong_ = music.hasSong;
+    if (music.hasSong) {
+        beat_ = music.beat;
+        bps_ = std::max(0.5f, music.bpm / 60.f);
+    } else {
+        beat_ += wdt * 2.0;
+        bps_ = 2.f;
+    }
+
+    // ---- Staging.
+    if (lvT_ < 1.f) {
+        lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
+        lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
+    }
+    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
+    // a real drop, not a chorus (both rise into a peak): from the HUD's section, else from the music's pace
+    {
+        bool sectionKnown = false, sectionDrop = false;
+        for (const HudText& h : f.hud)
+            if (h.role == HUD_SECTION) {
+                sectionKnown = true;
+                sectionDrop = h.text == "DROP";
+            }
+        realDrop_ = sectionKnown ? sectionDrop : (!music.hasSong || music.speed > 1.26f);
+        if (dropOn_) {
+            const bool over = hasSong_ ? (beat_ - dropBeat_ > DROP_BEATS) : (time_ - dropStart_ > DROP_BEATS * 0.5f);
+            if (over) dropOn_ = false;
+        }
+    }
+    // the gold ablaze: swells in over half a second, settles over the next bars (a chorus only warms it a little)
+    {
+        float target = 0.f;
+        if (dropOn_ && dropT_ > 0.f) {
+            const float since = hasSong_ ? (float)((beat_ - dropBeat_) / bps_) : time_ - dropStart_;
+            target = dropT_ * (realDrop_ ? 1.f : 0.18f) * (since < 4.f ? 1.f : lerpf(1.f, 0.5f, smoothstepf(4.f, 14.f, since)));
+        } else dropT_ = 0.f;
+        dropA_ = approach(dropA_, target, 5.f, dt);
+        dropEnv_ = approach(dropEnv_, dropA_, 5.f, dt);
+        ignite_ += dt * 15.f;
+    }
+    // a ripple lifting the tesserae every two beats while a real drop lasts
+    if (dropOn_ && realDrop_ && !f.paused) {
+        const double b2 = std::floor(beat_ / 2.0);
+        if (b2 > lastWaveBeat_) {
+            lastWaveBeat_ = b2;
+            waveT_ = 0.f;
+            waveA_ = 0.55f + 0.3f * saturate(music.kick);
+        }
+    }
+    waveT_ += dt;
+    const float waveAmp = waveA_ * std::exp(-waveT_ * 0.55f) * (dropOn_ && realDrop_ ? 1.f : 0.f) * smoothstepf(0.f, 0.1f, waveT_);
+
+    // ---- The lamp: still and dim in a calm part, travelling over the wall from mid on, quicker at a peak; at night
+    // (slow motion) an oil lamp low under the wall.
+    lightPhase_ += wdt * (0.02f + 0.05f * wm + 0.06f * wp + 0.05f * dropEnv_);
+    {
+        const float ph = lightPhase_;
+        const float sideL = std::fmod(std::floor(ph / 3.f), 2.f) < 1.f ? 1.f : -1.f;
+        const vec3 still{sideL * (16.f + 1.5f * std::sin(ph * 0.5f)), 9.f + 1.f * std::cos(ph * 0.4f), 12.f};
+        const vec3 travel{17.f * std::sin(ph), 2.f + 6.5f * std::sin(ph * 0.73f + 1.1f), 11.f + 2.f * wp};
+        vec3 tgt = lerp(still, travel, wm);
+        const vec3 lamp{sideL * (15.f + 2.f * std::sin(worldTime_ * 0.3f)), viewC_.y - viewH_.y - 1.5f, 7.5f};
+        tgt = lerp(tgt, lamp, slow_);
+        lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * 1.5f));
+        const float target = (0.7f + 0.3f * wm + 0.35f * wp) * (1.f - 0.25f * slow_) * (1.f - 0.6f * over_);
+        lightI_ = approach(lightI_, target, 1.2f, dt);
+    }
+    const float flick = slow_ * (0.9f + 0.1f * std::sin(worldTime_ * 9.f) * std::sin(worldTime_ * 5.3f + 1.f));
+    vec3 lightCol = lin(V.light) * (lightI_ + 0.2f * dropEnv_);
+    lightCol = lerp(lightCol, vec3(1.f, 0.62f, 0.3f) * 1.3f * (0.85f + 0.15f * flick), slow_);
+    const float reach = 13.f + 4.f * wp + 2.f * dropEnv_ + 2.f * slow_;
+    const vec3 amb = lerp(vec3(0.13f, 0.125f, 0.12f) * (0.8f + 0.25f * wm + 0.3f * wp), vec3(0.035f, 0.03f, 0.03f), slow_) * (1.f - 0.5f * over_);
+    const float sparkle = 0.5f + 0.25f * wm + 0.4f * wp + 0.4f * dropEnv_;
+
+    // ---- Fragments landing: each one sets its tessera (real time, even in slow motion).
+    for (Frag& fr : frags_) {
+        if (fr.land > time_) continue;
+        const tiles::Tessera& t = design_.tess[fr.tess];
+        if (!fr.renew) setTess(fr.tess, fr.land);
+        if (t.mat >= tiles::MAT_GOLD || fr.renew) {
+            glintTess(fr.tess, fr.land);
+            if (rng_.chance(fr.renew ? 0.5f : 0.25f)) sparkles_.push_back({t.center, 0.f, 0.45f, 0.32f, lerp(t.color * 2.f, vec3(1.f, 0.95f, 0.8f), 0.5f)});
+        }
+        fr.tess = -1;
+    }
+    frags_.erase(std::remove_if(frags_.begin(), frags_.end(), [](const Frag& fr) { return fr.tess < 0; }), frags_.end());
+
+    // ---- Glints on the beat grid (every two beats from mid on, the kicks too at a peak): a few smalti near the lamp.
+    const float kick = std::max(music.kick, kickIn_);
+    kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
+    auto glintNearLamp = [&](int n) {
+        for (int k = 0, tries = 0; k < n && tries < 60 && !design_.tess.empty(); tries++) {
+            const int i = rng_.irange(0, (int)design_.tess.size() - 1);
+            const tiles::Tessera& t = design_.tess[i];
+            if (t.mat == tiles::MAT_STONE || !isSet(i)) continue;
+            if (std::fabs(t.center.x) < 6.5f || (std::fabs(t.center.x) < 11.4f && t.center.y > -7.f)) continue;
+            const float dx = t.center.x - lightPos_.x, dy = t.center.y - lightPos_.y;
+            if (dx * dx + dy * dy > reach * reach * 0.6f) continue;
+            glintTess(i, time_);
+            sparkles_.push_back({t.center, 0.f, 0.55f, 0.28f + 0.12f * wp, lerp(t.color * 2.f, vec3(1.f, 0.95f, 0.85f), 0.6f)});
+            k++;
+        }
+    };
+    if (!f.paused && overT_ < 0.f) {
+        const double b2 = std::floor(beat_ / 2.0);
+        if (lastGlintBeat_ < 0.0 || b2 < lastGlintBeat_ - 1.0) lastGlintBeat_ = b2;
+        if (b2 > lastGlintBeat_) {
+            lastGlintBeat_ = b2;
+            if (lv_ > 0.6f && slow_ < 0.5f) glintNearLamp(wp > 0.5f ? 4 : 1);
+        }
+        if (wp > 0.5f && kick > 0.45f && kickPrev_ <= 0.3f) glintNearLamp(2);
+    }
+    kickPrev_ = kick;
+
+    // ---- Cracks, flashes, sparkles, dust.
+    for (auto it = cracks_.begin(); it != cracks_.end();) {
+        it->t += dt;
+        if (it->t >= CRACK_T) it = cracks_.erase(it);
+        else ++it;
+    }
+    for (auto& row : flash_)
+        for (float& fl : row) fl = approach(fl, 0.f, 5.f, dt);
+    for (Sparkle& sp : sparkles_) sp.t += dt;
+    sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
+    for (Puff& p : puffs_) p.t += dt;
+    puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.t > p.life; }), puffs_.end());
+    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+
+    if (stateDirty_) {
+        glBindTexture(GL_TEXTURE_2D, stateTex_);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, STATE_W, stateRows_, GL_RGBA, GL_FLOAT, state_.data());
+        stateDirty_ = false;
+    }
+
+    cells_.clear();
+    buildBoard(game);
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    const float worldK = 1.f - bridgeK;
+    auto lightSet = [&](GLuint p) {
+        set4f(p, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set4f(p, "uLight", lightPos_.x, lightPos_.y, lightPos_.z, reach);
+        set3f(p, "uLightCol", lightCol * worldK);
+        set3f(p, "uAmb", amb);
+    };
+
+    // ---- The wall.
+    sceneT_.bind();
+    glDisable(GL_BLEND);
+    glUseProgram(progComp_);
+    lightSet(progComp_);
+    for (int i = 0; i < 3; i++) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        glBindTexture(GL_TEXTURE_2D, gbTex_[i]);
+    }
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, stateTex_);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, sketchTex_);
+    glActiveTexture(GL_TEXTURE0);
+    set1i(progComp_, "uGb0", 0);
+    set1i(progComp_, "uGb1", 1);
+    set1i(progComp_, "uGb2", 2);
+    set1i(progComp_, "uState", 3);
+    set1i(progComp_, "uSketch", 4);
+    set4f(progComp_, "uSketchBox", design_.lo.x, design_.lo.y, design_.hi.x, design_.hi.y);
+    set1f(progComp_, "uTime", time_);
+    set3f(progComp_, "uGrout", lin(V.grout));
+    set3f(progComp_, "uBed", lin(V.bed));
+    set3f(progComp_, "uSinopia", lin(V.sinopia));
+    set3f(progComp_, "uWell", lin(V.well));
+    set4f(progComp_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+    set4f(progComp_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    {
+        const float L = viewC_.x - viewH_.x, R = viewC_.x + viewH_.x, T = viewC_.y + viewH_.y, B = viewC_.y - viewH_.y;
+        set4f(progComp_, "uQuietA", L - 1.f, T - 2.6f, -10.f, T + 1.f);
+        set4f(progComp_, "uQuietB", L - 1.f, B - 1.f, -11.f, B + 3.2f);
+        set4f(progComp_, "uQuietC", 11.f, B - 1.f, R + 1.f, B + 2.2f);
+    }
+    set1f(progComp_, "uDrop", dropEnv_ * (realDrop_ ? 1.f : 0.3f));
+    set1f(progComp_, "uIgnite", ignite_);
+    set4f(progComp_, "uWave", waveT_ * 10.f, waveAmp, 1.6f, 0.f);
+    {
+        float strength = 0.f, ang = 0.f;
+        if (ringGlintT_ > 0.f && time_ > ringGlintT_ && design_.lay.sides) {
+            const float u = time_ - ringGlintT_;
+            strength = std::sin(PI * saturate(u / 1.6f)) * 1.2f;
+            const float sg = ringGlintSide_ == 0 ? 1.f : -1.f;
+            ang = sg * (u * 4.4f);
+            if (u > 1.6f) ringGlintT_ = -1.f;
+        }
+        const vec2 C = design_.lay.med[ringGlintSide_];
+        set4f(progComp_, "uRingGlint", C.x, C.y, ang, strength);
+        set2f(progComp_, "uRingR", design_.lay.R - design_.lay.ringW, design_.lay.R);
+    }
+    set1f(progComp_, "uSparkle", sparkle);
+    set1f(progComp_, "uGlintK", 1.f);
+    ugl::drawFullscreen();
+
+    // ---- The tiles: shadows on the bed, then the glazed tiles (alpha = the stack, for the bridge).
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    if (!cells_.empty()) {
+        glUseProgram(progCell_);
+        lightSet(progCell_);
+        setMat(progCell_, "uVP", vp_);
+        set3f(progCell_, "uKey", vec3(-0.45f, 0.6f, 0.75f));
+        set3f(progCell_, "uSinopia", lin(V.sinopia) * 1.6f);
+        set1f(progCell_, "uPx", 2.f * viewH_.y / height_);
+        glBindVertexArray(cellVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
+        glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+    }
+
+    // ---- The fragments in flight.
+    fragInst_.clear();
+    for (const Frag& fr : frags_) {
+        if (time_ < fr.appear) continue; // its tile is still cracking
+        const tiles::Tessera& t = design_.tess[fr.tess];
+        const float u = saturate((time_ - fr.launch) / std::max(0.05f, fr.land - fr.launch));
+        const float sEase = 1.f - std::pow(1.f - u, 2.3f);
+        const vec2 p = bezier(fr.from, fr.ctrl1, fr.ctrl2, t.center, sEase);
+        const float rot = fr.rot0 * std::pow(1.f - sEase, 1.4f);
+        const float scale = lerpf(1.75f, 1.f, smoothstepf(0.f, 0.9f, u)) * (1.f + 0.2f * std::sin(PI * sEase));
+        const float tumble = fr.spin * (time_ - fr.launch) * (1.f - sEase) * (u > 0.f ? 1.f : 0.f);
+        const vec3 c = lerp(fr.col0, fr.renew ? fr.col0 : t.color, smoothstepf(0.25f, 0.85f, u)) * (1.f + 0.4f * slow_);
+        FragInst fi;
+        fi.a[0] = p.x; fi.a[1] = p.y; fi.a[2] = rot; fi.a[3] = scale;
+        for (int k = 0; k < 2; k++) {
+            fi.o01[k * 2 + 0] = t.c[k].x - t.center.x;
+            fi.o01[k * 2 + 1] = t.c[k].y - t.center.y;
+            fi.o23[k * 2 + 0] = t.c[k + 2].x - t.center.x;
+            fi.o23[k * 2 + 1] = t.c[k + 2].y - t.center.y;
+        }
+        const float a = worldK;
+        fi.b[0] = c.x; fi.b[1] = c.y; fi.b[2] = c.z; fi.b[3] = a;
+        fi.c[0] = (float)t.mat; fi.c[1] = tumble; fi.c[2] = 0.15f * smoothstepf(0.85f, 1.f, u); fi.c[3] = 0.f;
+        fragInst_.push_back(fi);
+    }
+    if (!fragInst_.empty()) {
+        glUseProgram(progFrag_);
+        setMat(progFrag_, "uVP", vp_);
+        glBindVertexArray(fragVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, fragVbo_);
+        glBufferData(GL_ARRAY_BUFFER, fragInst_.size() * sizeof(FragInst), fragInst_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)fragInst_.size());
+    }
+
+    // ---- Glints and dust.
+    {
+        const vec3 dust = lin(V.bed) * 0.5f + amb;
+        for (const Puff& p : puffs_) {
+            const float k = p.t / p.life;
+            const float rr = p.size * (0.6f + 0.9f * std::sqrt(k));
+            sprites_.push_back({{p.p.x, p.p.y, rr, rr * 0.33f}, {dust.x, dust.y, dust.z, 0.5f * (1.f - k) * (1.f - k) * worldK}, {2.f, 0.f, 0.f, 0.f}});
+        }
+        for (const Sparkle& sp : sparkles_) {
+            const float k = std::sin(PI * saturate(sp.t / sp.life));
+            const float rr = sp.size * (0.6f + 0.4f * k);
+            sprites_.push_back({{sp.p.x, sp.p.y, rr, rr}, {sp.col.x, sp.col.y, sp.col.z, 0.9f * k * worldK}, {1.f, 0.3f, 0.f, 0.f}});
+        }
+        if (!sprites_.empty()) {
+            glUseProgram(progSprite_);
+            setMat(progSprite_, "uVP", vp_);
+            glBindVertexArray(spriteVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
+            glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
+            sprites_.clear();
+        }
+    }
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    // ---- Bloom.
+    glDisable(GL_BLEND);
+    bloomA_.bind();
+    glUseProgram(progDown_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    set1i(progDown_, "uSrc", 0);
+    set2f(progDown_, "uTexel", 1.5f / sceneT_.w, 1.5f / sceneT_.h);
+    set1f(progDown_, "uThreshold", 1.0f);
+    ugl::drawFullscreen();
+    glUseProgram(progBlur_);
+    set1i(progBlur_, "uSrc", 0);
+    for (int i = 0; i < 2; i++) {
+        const float st = 1.f + i;
+        bloomB_.bind();
+        glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
+        set2f(progBlur_, "uDir", st / bloomA_.w, 0.f);
+        ugl::drawFullscreen();
+        bloomA_.bind();
+        glBindTexture(GL_TEXTURE_2D, bloomB_.tex);
+        set2f(progBlur_, "uDir", 0.f, st / bloomA_.h);
+        ugl::drawFullscreen();
+    }
+
+    // ---- The frame.
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width_, height_);
+    glUseProgram(progFinal_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    set1i(progFinal_, "uScene", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
+    set1i(progFinal_, "uBloom", 1);
+    glActiveTexture(GL_TEXTURE0);
+    set1f(progFinal_, "uBloomK", (0.22f + 0.08f * wp + 0.15f * dropEnv_) * worldK);
+    set1f(progFinal_, "uExposure", 1.f);
+    set1f(progFinal_, "uDim", dimT_);
+    set1f(progFinal_, "uFade", saturate(f.fade));
+    set1f(progFinal_, "uBridge", bridgeK);
+    set3f(progFinal_, "uBridgeCol", bridge_.color);
+    set3f(progFinal_, "uBridgeInk", bridge_.ink);
+    ugl::drawFullscreen();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    drawHud(game, f.hud, f.panels);
+    glDisable(GL_BLEND);
+}
+
+// =====================================================================================================
+// Registry
+// =====================================================================================================
+
+const UniverseEntry& universe_tiles() {
+    static const UniverseEntry e{
+        "TILES", "a great wall mosaic of tesserae; the pieces are glazed tiles, each cleared row breaks into tesserae set one by one into the mosaic's figures",
+        [] { return std::unique_ptr<Universe>(new TilesUniverse()); },
+        // Fits most songs; dynamic ones a little more (the gold ablaze on the drop).
+        [](const SongLook& l) { return 0.85f + 0.2f * l.dynamics; },
+        [] {
+            std::vector<std::string> v;
+            for (int i = 0; i < VARIANT_COUNT; i++) v.push_back(VARIANTS[i].name);
+            return v;
+        }()};
+    return e;
+}

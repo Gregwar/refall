@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Thirty-nine universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -99,7 +99,7 @@ song, and songs change universe with a transition on the beat. Thirty-nine unive
 </tr>
 <tr>
 <td><img src="docs/universes/brutalist.jpg"><br><b>BRUTALIST</b>: raw board-marked concrete under a hard sun in 3D; the pieces are cast blocks in a slot cut into a monument, the sun moves on with the song and its shadows sweep the plaza, each cleared row has a crane lower a module onto a growing building, the drop is the sun breaking through<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
