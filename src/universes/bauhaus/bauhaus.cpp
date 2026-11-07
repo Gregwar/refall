@@ -493,78 +493,26 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
         bool rows[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
-        // each cleared row closes into discs sliding out sideways, then joins the poster as one small form
-        int k = 0;
-        int rowCol[4] = {0, 0, 0, 0};
+        // each cleared row closes into discs sliding out to a random side; it leaves no mark on the poster
         for (int y = Game::HIDDEN; y < Game::H; y++) {
             if (!rows[y]) continue;
             Wipe w;
             w.y = layout::cellPos(0.f, (float)y).y;
-            int count[7] = {};
             for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.mask[x] = 0; w.mark[x] = false; }
             for (auto& c : ev.cells)
                 if (c.y == y && c.x >= 0 && c.x < Game::W) {
                     w.type[c.x] = std::clamp(c.type, 0, 6);
                     w.mark[c.x] = mark_[y][c.x];
-                    count[w.type[c.x]]++;
                 }
             w.t = 0.f;
             w.delay = 0.f;
-            w.dir = ((y + k) & 1) ? 1.f : -1.f;
-            int main = 0;
-            for (int i = 1; i < 7; i++)
-                if (count[i] > count[main]) main = i;
-            if (k < 4) rowCol[k] = main;
-            // the row's form: its kind from the main type, a quarter turn from its place
-            static const int KIND[7] = {4, 0, 2, 3, 3, 1, 4};
-            Trace tr{};
-            tr.kind = KIND[main];
-            tr.col = main;
-            tr.medallion = false;
-            tr.rot = (float)((y + (int)traces_.size()) & 3) * 0.5f * PI;
-            tr.from.x = w.dir * 5.6f;
-            tr.from.y = w.y;
-            tr.from.s = 0.45f;
-            tr.from.a = 1.f;
-            tr.cur = tr.from;
-            tr.t = 0.f;
-            tr.dur = TRACE_S;
-            traces_.push_back(tr);
-            k++;
+            w.dir = rng_.chance(0.5f) ? 1.f : -1.f;
             wipes_.push_back(w);
         }
         if (ev.count >= 4) {
-            // a medallion of four quarter discs in the rows' colors; every big form turns a quarter
-            Trace m{};
-            m.medallion = true;
-            m.kind = 1;
-            for (int i = 0; i < 4; i++) m.quarters[i] = rowCol[i];
-            if (m.quarters[0] == m.quarters[1] && m.quarters[1] == m.quarters[2]) { m.quarters[1] = 3; m.quarters[3] = (m.quarters[0] + 2) % 7; }
-            m.from.x = 0.f;
-            m.from.y = 0.f;
-            m.from.s = 0.f;
-            m.from.a = 1.f;
-            m.cur = m.from;
-            m.t = 0.f;
-            m.dur = 2.f;
-            int medals = 0;
-            for (const Trace& t : traces_) medals += t.medallion;
-            if (medals >= 2)
-                for (size_t i = 0; i < traces_.size(); i++)
-                    if (traces_[i].medallion) { traces_.erase(traces_.begin() + i); break; }
-            traces_.push_back(m);
-            tetrisTurnTo_ += 0.5f * PI;
-            hop_ = 0.f; // every card hops off the sheet as it turns
+            tetrisTurnTo_ += 0.5f * PI; // every big form turns a quarter
+            hop_ = 0.f;                 // and every card hops off the sheet as it turns
         }
-        // the oldest forms of a full sampler leave it
-        for (;;) {
-            int n = 0;
-            for (const Trace& t : traces_) n += !t.medallion;
-            if (n <= MAX_TRACES) break;
-            for (size_t i = 0; i < traces_.size(); i++)
-                if (!traces_[i].medallion) { traces_.erase(traces_.begin() + i); break; }
-        }
-        placeTraces(TRACE_S, false);
         // compact the ids like the game did
         {
             int nb[Game::H][Game::W] = {};
@@ -976,6 +924,8 @@ void BauhausUniverse::compose(long bar, float dur, bool instant) {
     if (!info1_.empty()) info += "\n" + lower(info1_);
     if (!info2_.empty()) info += "\n" + lower(info2_);
 
+    // the song's name, tempo and key are already in the HUD: the poster doesn't print them again
+    T[F_TITLE].a = T[F_NUMBER].a = T[F_INFO].a = 0.f;
     for (int i = 0; i < F_COUNT; i++) {
         const std::string text = i == F_TITLE ? title : i == F_NUMBER ? std::string(num) : i == F_INFO ? info : std::string();
         setTarget(i, T[i], dur, instant, text);
