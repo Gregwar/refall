@@ -5,8 +5,9 @@
 // the sill and the floor with the colored pools); run at a quarter of the resolution with uEmit = 1, it only keeps
 // the light coming through the glass (emitT_), which is blurred into the light falling on the stone (glowT_) and
 // streaked from the sun into the shafts (SHAFT_FS). CELL_* draws the glass pieces (also into emitT_), SHARD_* a
-// cleared row's shards, SPRITE_* the small lights (dust in the beams, candle flames, glints); DOWN_FS / BLUR_FS make
-// the bloom and the blurred glass light, FINAL_FS adds the shafts and encodes the frame.
+// game over's shards, FLOW_* the molten glass running in the lead (and the lead channels), SPRITE_* the small
+// lights (dust in the beams, candle flames, glints, sparks); DOWN_FS / BLUR_FS make the bloom and the blurred glass
+// light, FINAL_FS adds the shafts and encodes the frame.
 #include <string>
 
 namespace stainedglass_shaders {
@@ -65,6 +66,29 @@ vec3 glassTex(vec2 t, float seed) {
 }
 // A painted line (grisaille) along a distance field: d its distance, wd its half width, aa a pixel.
 float paintLine(float d, float wd, float aa) { return 1.0 - smoothstep(wd - aa, wd + aa, abs(d)); }
+// Incandescence: the color of glowing glass from its heat (0 dark .. 0.3 deep red .. 0.6 orange .. 1 white-yellow).
+vec3 blackbody(float h) {
+    h = clamp(h, 0.0, 1.0);
+    return vec3(smoothstep(0.0, 0.4, h), smoothstep(0.25, 0.85, h) * 0.82, smoothstep(0.6, 1.0, h) * 0.62);
+}
+// Molten glass of a given tint: white-hot it is all heat, cooling it shows its own color, glowing.
+vec3 molten(vec3 tint, float h) {
+    h = clamp(h, 0.0, 1.0);
+    vec3 tt = tint / max(max(tint.r, max(tint.g, tint.b)), 0.05);
+    return mix(tt * 0.9 + 0.05, blackbody(h), 0.3 + 0.65 * h * h) * (0.4 * smoothstep(0.0, 0.3, h) + 2.5 * h * h);
+}
+// The edges of a cell pattern (a crackle): small near a crack.
+float crackle(vec2 p) {
+    vec2 ci = floor(p), cf = fract(p);
+    float d1 = 8.0, d2 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y)) + hash2(ci + vec2(float(x), float(y))) - cf;
+            float d = dot(o, o);
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+        }
+    return sqrt(d2) - sqrt(d1);
+}
 )";
 
 // ---------------------------------------------------------------- the chapel
@@ -86,6 +110,8 @@ uniform int uNL, uSlots;       // lancets per window, panes per window
 uniform float uWinOn;
 uniform vec4 uPaneA[50];       // each pane: its ground color (linear), how far it is filled
 uniform vec4 uPaneB[50];       // its medallion's color, its glint
+uniform vec4 uPaneC[50];       // its molten glass: heat (1 white-hot .. 0 set), its bottom and top (y), pouring (0/1)
+uniform float uTime;
 uniform vec4 uHudL, uHudR;
 uniform float uFloorY;
 uniform vec4 uCandle[12];      // candles: x, y of the flame, intensity, flicker
@@ -94,20 +120,45 @@ uniform vec3 uCandleCol;
 uniform float uMotif;          // the grisaille painting (none on the modern window)
 uniform float uWellLight;      // the well's clear glass
 
-// The glass of a pane: clear grisaille until a cleared row fills it, then its color spreads in from its middle.
-vec3 paneGlass(int slot, float region, vec2 pq, vec2 w, float dIn, out float glint, out float filled) {
-    vec4 A = uPaneA[slot], B = uPaneB[slot];
+// The glass of a pane: clear grisaille until molten glass pours into it from the bottom (a glowing meniscus rising),
+// white-hot, then cooling to its color (a crackle of light running through it as it sets). `em` is its own glow.
+vec3 paneGlass(int slot, float region, vec2 pq, vec2 w, float dIn, float px, out float glint, out float filled, out vec3 em) {
+    vec4 A = uPaneA[slot], B = uPaneB[slot], C = uPaneC[slot];
     glint = B.w;
+    em = vec3(0.0);
     vec3 col = region > 1.5 ? B.rgb * 0.75 : (region > 0.5 ? B.rgb : A.rgb);
     vec3 gt = glassTex(w * 1.1, float(slot) * 0.73 + 1.0);
-    float fr = length(pq) * 0.6 + 0.12 * gt.x;
-    float f = clamp((A.w * 1.25 - fr) / 0.18, 0.0, 1.0);
+    float heat = C.x, pour = C.w;
+    // the level: from the pane's bottom to its top; the surface wavers while hot and climbs a little at the lead
+    float lev = A.w >= 0.999 ? C.z + 1.0 : mix(C.y - 0.04, C.z + 0.04, A.w);
+    float hot = clamp(heat * 1.6, 0.0, 1.0) * pour;
+    float surf = lev + hot * (0.035 * sin(w.x * 7.0 + uTime * 5.0) + 0.02 * sin(w.x * 13.0 - uTime * 7.3) + 0.07 * exp(-max(dIn, 0.0) / 0.07));
+    float f = clamp((surf - w.y) / max(px * 1.5, 0.01) + 0.5, 0.0, 1.0);
     filled = f;
     vec3 clearG = uClear * (0.75 + 0.45 * gt.x + 0.35 * gt.y);
     float dens = clamp(gt.x * 1.25 - 0.12 + gt.y * 0.55, 0.0, 1.0);
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
     vec3 colG = mix(max(mix(vec3(lum), col, 1.3), vec3(0.0)) * 0.4, col * 1.2 + 0.02, smoothstep(0.1, 0.95, dens)) * 1.35;
     vec3 g = mix(clearG, colG, f);
+    if (heat > 0.002) {
+        // the glass glows from within: the latest poured (near the surface) is the hottest
+        float depth = max(surf - w.y, 0.0);
+        float hl = heat * mix(0.82, 0.48, clamp(depth / 1.1, 0.0, 1.0));
+        hl *= 0.9 + 0.2 * gt.x + 0.1 * gt.y;
+        em += molten(col, hl) * f * 0.6;
+        g *= 1.0 - 0.5 * smoothstep(0.3, 0.8, hl) * f;
+        // the meniscus: a bright line of liquid light on the surface, a warm haze above it
+        float above = w.y - surf;
+        em += blackbody(0.95) * 2.6 * exp(-above * above / 0.0018) * hot;
+        em += blackbody(0.7) * 0.5 * exp(-max(above, 0.0) / 0.22) * step(0.0, above) * hot;
+        // setting: a crackle of light runs through it, gone once it has set
+        float flash = exp(-pow((heat - 0.17) / 0.09, 2.0)) * (1.0 - pour);
+        if (flash > 0.01) {
+            float cr = crackle(w * 4.2 + float(slot) * 3.7);
+            em += mix(col, vec3(1.0, 0.85, 0.6), 0.5) * (1.0 - smoothstep(0.0, 0.06, cr)) * flash * 1.6 * f;
+            g *= 1.0 + 0.5 * flash * sin(w.x * 3.0 + w.y * 2.0 - uTime * 9.0);
+        }
+    }
     g *= 1.0 + 0.5 * max(gt.z, 0.0) - 0.25 * max(-gt.z, 0.0);
     // matting: the painter's shading darkens the glass toward the lead and the stone
     g *= 0.55 + 0.45 * smoothstep(0.0, 0.22, dIn);
@@ -222,7 +273,8 @@ void main() {
             }
             if (slot >= 0) {
                 float glint, filled;
-                vec3 g = paneGlass(slot, region, pq, w, dIn, glint, filled);
+                vec3 em;
+                vec3 g = paneGlass(slot, region, pq, w, dIn, px, glint, filled, em);
                 // painted grisaille: fine leaf trails on the clear glass, a few strokes on the colored
                 float paint = 0.0;
                 if (uMotif > 0.0) {
@@ -234,9 +286,10 @@ void main() {
                 c += mix(g, vec3(1.0), 0.6) * glint * 0.25;
                 float aaE = px * 1.2;
                 float onGlass = smoothstep(-aaE, aaE, dIn);
-                if (uEmit == 1) { frag = vec4(c * onGlass * (0.45 + 0.55 * filled), 0.0); return; } // clear glass throws less
+                if (uEmit == 1) { frag = vec4((c * (0.45 + 0.55 * filled) + em * 0.7) * onGlass, 0.0); return; } // clear glass throws less
+                c += em;
                 // the leads inside the pane (dark) and the stone around it
-                c = mix(c, uLeadCol * (0.5 + 0.6 * glow), leadL * 0.92);
+                c = mix(c, uLeadCol * (0.5 + 0.6 * glow) + em * 0.25, leadL * 0.92);
                 vec3 stone = uStoneLit * (uAmb * 0.8 + glow * uGlowK * 1.4);
                 frag = vec4(mix(stone, c, onGlass), 0.0);
                 return;
@@ -466,21 +519,14 @@ void main() {
     vec3 Lt = max(lightAt(vW), vec3(uMinLight));
     vec3 c = g * Lt * 1.55 * (1.0 + 0.6 * vC.y);
     c += mix(tint, vec3(1.0), 0.55) * vC.y * 0.1;
-    // cracking (a cleared row, a few hundredths of a second): bright fractures run through it
-    float crack = vD.w;
-    if (kind == 2 && crack > 0.0) {
-        vec2 cp = t * 2.6 + seed;
-        vec2 ci = floor(cp), cf = fract(cp);
-        float d1 = 8.0, d2 = 8.0;
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 o = vec2(float(x), float(y)) + hash2(ci + vec2(float(x), float(y))) - cf;
-                float d = dot(o, o);
-                if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
-            }
-        float edge = sqrt(d2) - sqrt(d1);
-        float line = 1.0 - smoothstep(0.0, 0.05 + 0.08 * crack, edge);
-        c = c * (1.0 + 0.6 * crack) + vec3(1.0, 0.97, 0.9) * line * crack * 1.5;
+    // melting (a cleared row): the glass goes incandescent, its colors running in the heat, the lead melting with it
+    float melt = kind == 2 ? vD.w : 0.0;
+    vec3 hotC = vec3(0.0);
+    if (melt > 0.0) {
+        float h = smoothstep(0.0, 1.0, melt);
+        float n = vnoise(t * 2.6 + vec2(seed, -melt * 5.0)) * 0.6 + vnoise(t * 6.0 + vec2(-seed, melt * 3.0)) * 0.4;
+        hotC = molten(tint, clamp(0.3 + 0.42 * h + 0.25 * (n - 0.5), 0.0, 1.0));
+        c = mix(c, hotC, smoothstep(0.0, 0.7, h));
     }
     // game over: the light goes out of it
     float gray = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -491,6 +537,7 @@ void main() {
     if (gOut < 0.0 && gOut < gIn + 1e-4) prof = clamp(1.0 - pow((gOut + LO * 0.5) / (LO * 0.5), 2.0), 0.0, 1.0);
     else prof = clamp(1.0 - pow(min(min(eL, eR), min(eD, eU)) / LI, 2.0), 0.0, 1.0) * 0.6;
     vec3 lead = uLeadCol * (0.6 + 0.8 * prof) + uRoom * prof * prof * 0.6;
+    lead = mix(lead, hotC * 0.8, smoothstep(0.35, 1.0, melt));
     vec3 col = mix(lead, c, onGlass);
     float a = vB.w;
     frag = vec4(col * a, a);
@@ -550,6 +597,84 @@ void main() {
     col += mix(vB.rgb, vec3(1.0), 0.5) * 0.5 * (1.0 - smoothstep(0.0, 0.14, -d));
     float al = cov * vB.a;
     frag = vec4(col * al, al * 0.6);
+}
+)";
+
+// ---------------------------------------------------------------- molten glass in the lead (instanced capsules)
+// One capsule per short stretch of a stream: kind 0 molten glass (drawn with a MAX blend, so the stretches join
+// seamlessly), kind 1 a lead channel in the stone (premultiplied over: dark, glowing when molten light runs in it).
+inline const char* FLOW_VS = R"(#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec4 aA; // a.xy, b.xy
+layout(location = 2) in vec4 aB; // radius at a, at b, arc length at a, at b
+layout(location = 3) in vec4 aC; // tint (linear), heat at a
+layout(location = 4) in vec4 aD; // heat at b, kind, darkness (channels) or alpha, halo (in radii)
+uniform mat4 uVP;
+out vec2 vW;
+flat out vec4 vA;
+flat out vec4 vB;
+flat out vec4 vC;
+flat out vec4 vD;
+void main() {
+    vec2 a = aA.xy, b = aA.zw;
+    vec2 ab = b - a;
+    float L = length(ab);
+    vec2 ax = L > 1e-5 ? ab / L : vec2(1.0, 0.0);
+    vec2 pp = vec2(-ax.y, ax.x);
+    float R = max(aB.x, aB.y) * (1.0 + aD.w) + 0.03;
+    vec2 wp = (a + b) * 0.5 + ax * aPos.x * (L * 0.5 + R) + pp * aPos.y * R;
+    vW = wp;
+    vA = aA; vB = aB; vC = aC; vD = aD;
+    gl_Position = uVP * vec4(wp, 0.0, 1.0);
+}
+)";
+inline const char* FLOW_FS = R"(#version 330 core
+in vec2 vW;
+flat in vec4 vA;
+flat in vec4 vB;
+flat in vec4 vC;
+flat in vec4 vD;
+out vec4 frag;
+uniform float uTime;
+uniform vec3 uLeadCol;
+uniform int uEmit;
+void main() {
+    vec2 a = vA.xy, b = vA.zw, ab = b - a;
+    float L2 = dot(ab, ab);
+    float tt = L2 > 1e-8 ? clamp(dot(vW - a, ab) / L2, 0.0, 1.0) : 0.0;
+    float d = length(vW - (a + ab * tt));
+    float r = max(mix(vB.x, vB.y, tt), 1e-4);
+    float heat = mix(vC.w, vD.x, tt);
+    float s = mix(vB.z, vB.w, tt);
+    int kind = int(vD.y + 0.5);
+    float aa = max(fwidth(vW.x), 1e-4);
+    float x = d / r;
+    float body = 1.0 - smoothstep(r - aa, r + aa, d);
+    float prof = sqrt(max(0.0, 1.0 - x * x));
+    // it runs: ripples of brighter liquid travel down the stream
+    float rip = vnoise(vec2(s * 2.4 - uTime * 9.0, 3.1)) * 0.6 + vnoise(vec2(s * 5.3 - uTime * 14.0, 7.7)) * 0.4;
+    if (kind == 1) {
+        // a lead channel cut in the stone: a dark groove with a lit lip, glowing when molten light runs in it
+        float darkA = vD.z;
+        vec3 lead = uLeadCol * (0.7 + 0.9 * prof) + vec3(0.05, 0.045, 0.04) * pow(prof, 6.0);
+        vec3 hot = molten(vC.rgb, heat * (0.85 + 0.3 * rip)) * body * prof * step(0.01, heat);
+        float hal = exp(-max(x - 1.0, 0.0) * 1.8) * (1.0 - body);
+        vec3 glow = blackbody(heat * 0.85) * heat * heat * hal * 0.5;
+        float al = body * darkA;
+        if (uEmit == 1) { frag = vec4(hot + glow * 2.0, 0.0); return; }
+        frag = vec4(lead * al * (1.0 - min(heat * 2.0, 1.0)) + hot + glow, al);
+        return;
+    }
+    // molten glass: a white-hot core, its edges in the glass's own color, a halo of heat
+    float hc = clamp(heat * (0.72 + 0.28 * prof) + 0.12 * (rip - 0.5) * heat, 0.0, 1.0);
+    vec3 core = molten(vC.rgb, hc);
+    vec3 edge = molten(vC.rgb, heat * 0.5) * 1.2;
+    vec3 col = mix(edge, core, smoothstep(0.05, 0.75, prof)) * (0.85 + 0.35 * rip);
+    float hal = exp(-max(x - 1.0, 0.0) * 2.4) * (1.0 - body);
+    vec3 glow = blackbody(heat * 0.8) * (0.15 + 0.85 * heat * heat) * hal * 0.55;
+    float al = vD.z;
+    if (uEmit == 1) { frag = vec4((col * body * 0.8 + glow * 2.5) * al, 0.0); return; }
+    frag = vec4((col * body + glow) * al, 0.0);
 }
 )";
 

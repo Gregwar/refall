@@ -1,6 +1,6 @@
 #pragma once
-// STAINED GLASS: a chapel's window, the well and its pieces leaded glass, the side windows filled by the cleared
-// rows (see stainedglass.cpp).
+// STAINED GLASS: a chapel's window, the well and its pieces leaded glass; a cleared row melts and runs as molten
+// glass through the lead channels of the stone into a pane of the side windows (see stainedglass.cpp).
 #include <string>
 #include <vector>
 
@@ -42,7 +42,7 @@ private:
     int previewStart_ = 0; // the previews' cells come last
     void buildBoard(const Game& g);
 
-    // ---- A cleared row: its glass cracks for an instant, then falls as shards to the floor.
+    // ---- A cleared row: its glass melts, then runs out of the well as molten glass (a Flow).
     struct Crack { int x, y, type, mask; float px, py, seed, t; };
     std::vector<Crack> cracks_;
     struct Shard { vec2 p, v; float rot, spin, size, t, life, floorY; vec3 col; float seed; bool landed; };
@@ -54,16 +54,22 @@ private:
     struct Dead { int x, y, type, mask; float px, py, seed; bool gone; };
     std::vector<Dead> dead_;
 
-    // ---- The side windows: their panes, clear until a cleared row fills one with its glass.
+    // ---- The side windows: their panes, clear until molten glass from a cleared row pours into one.
     struct Pane {
         vec3 a{0.f}, b{0.f};  // ground and medallion colors (linear)
-        float fill = 0.f;     // shown (0 clear .. 1 colored)
+        vec3 na{0.f}, nb{0.f}; // the glass on its way (taken on when it starts pouring in)
+        float fill = 0.f;     // its level (0 clear .. 1 full)
         float target = 0.f;
-        float delay = 0.f;    // seconds before it starts filling
+        float heat = 0.f;     // 1 white-hot .. 0 set
         float glint = 0.f;
         int order = -1;       // when it was filled (the oldest is filled again once the window is complete)
+        bool pending = false; // molten glass is on its way (its old glass drains away meanwhile)
+        bool pouring = false;
         bool rose = false;
         vec2 pos{0.f};        // its middle (board units), for the glints
+        float yLo = 0.f, yHi = 0.f; // its bottom and top (the level rises between them)
+        vec2 entry{0.f};      // where the molten glass comes in (its bottom, on the lead)
+        float half = 0.5f;    // about its half width (sparks)
     };
     std::vector<Pane> panes_;
     int slotsPerWin_ = 0, panelsK_ = 6, lancets_ = 2;
@@ -74,8 +80,42 @@ private:
     int roseLit_ = -1;            // the rose a Tetris glazed last (it blazes)
     std::vector<int> lancetOrder_; // the order lancet panes fill in (bottom up, alternating sides)
     void placeWindows();
-    void fillPane(const vec3& a, const vec3& b, float delay);
-    void fillRose(const std::vector<vec3>& cols, float delay);
+    int fillPane(const vec3& a, const vec3& b);
+    int roseSide();
+
+    // ---- Molten glass: a cleared row runs out of the well along the lead channels (down the jamb, along the
+    // string course under the HUD, up the window's mullion and saddle bars) into its pane.
+    struct Flow {
+        std::vector<vec2> pts;   // its path
+        std::vector<float> cum;  // arc length at each point
+        float len = 0.f;
+        float sWell = 9.6f;      // where it leaves the well
+        float t = 0.f;           // seconds since it started to run (< 0: the row is still melting)
+        float speed = 11.f;      // its head's speed in the channels
+        float vol = 4.5f;        // its length once out of the well
+        int pane = -1;
+        int sgn = 1;             // the side it runs to
+        bool arrived = false;
+        float lenArrive = 1.f;
+        vec3 cols[10];           // the row's glass, cell by cell (x)
+        vec3 tint{1.f};
+    };
+    std::vector<Flow> flows_;
+    void addFlow(int sgn, float rowY, const vec3* cols, int pane, float delay, float speed, float vol);
+    std::vector<vec2> trunk(int sgn, float rowY) const;
+    void paneTail(int pane, std::vector<vec2>& pts) const;
+    float riserX_ = 11.6f, gutterY_ = -9.75f;
+    // the lead channels in the stone (always there, dark) and the window's leads (only seen glowing, at the drop)
+    struct Channel { vec2 a, b; float d0, d1; bool cut; };
+    std::vector<Channel> channels_;
+    void placeChannels();
+    float leadT_ = 0.f, leadAmp_ = 0.f; // a real drop: molten light runs through the whole lead network
+    struct FlowInst { float a[4], b[4], c[4], d[4]; };
+    std::vector<FlowInst> flowInst_, chanInst_;
+    void buildFlows();
+    struct Spark { vec2 p, v; float t, life, size; vec3 col; };
+    std::vector<Spark> sparks_;
+    void spit(vec2 p, vec2 spread, int n, const vec3& col, float up);
 
     // ---- Light sprites: dust in the beams, glints, candle flames and their wax, puffs of dust.
     struct SpriteInst { float a[4], b[4], c[4]; }; // x, y, rx, ry | rgb, intensity | kind, rot, pad, pad
@@ -109,6 +149,8 @@ private:
     void flushShapes();
 
     // ---- GL.
+    GLuint progFlow_ = 0, flowVao_ = 0, flowVbo_ = 0;
+    void drawFlows(const std::vector<FlowInst>& v, bool molten, int emit);
     GLuint progWall_ = 0, progCell_ = 0, progShard_ = 0, progSprite_ = 0, progShaft_ = 0, progDown_ = 0, progBlur_ = 0,
            progFinal_ = 0, progShape_ = 0, progText_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shardVao_ = 0, shardVbo_ = 0,
