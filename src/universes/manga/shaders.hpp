@@ -1,5 +1,5 @@
 #pragma once
-// MANGA's shaders: inked shapes in screentones, and the lettering.
+// MANGA's shaders: inked shapes in screentones and washes of color, and the lettering.
 
 namespace manga_shaders {
 
@@ -9,6 +9,10 @@ namespace manga_shaders {
 // (scattered dots). The pattern is set from an origin, so a tone moves with its piece; the density is
 // interpolated (gradient tones). Every edge of a dot or a line is antialiased over a pixel, and cells are never
 // smaller than a few pixels, so the tones stay calm in motion. A shape may be clipped to a panel (a convex quad).
+// A wash (kind 6) is a flat of color, its color interpolated per vertex (gradients): gently textured like
+// watercolor on paper (a slow mottle, a fine grain), its density the colorist's progress, flooding in through a
+// noise with a darker wet edge; on a printed page (uPrint) it is set in CMYK halftone dots
+// instead.
 inline const char* INK_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;   // pixels
 layout(location = 1) in vec4 aTone;  // kind, density, cell (pixels), angle
@@ -37,8 +41,16 @@ flat in vec4 vTone;
 flat in vec4 vOrig;
 out vec4 frag;
 uniform vec3 uClip[48];   // 12 panels x 4 edges: inside where dot(e.xy, p) + e.z >= 0
+uniform float uScale;     // pixels per 1080p pixel
+uniform float uPrint;     // 1: washes printed in CMYK halftone
+uniform vec3 uPaper;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 
 float dotTone(vec2 q, float d, float cell) {
     if (d <= 0.001) return 0.0;
@@ -86,8 +98,33 @@ void main() {
         float r = sqrt(d / 3.14159) * cell * (0.6 + 0.8 * hash(id + 3.7));
         cov = hash(id + 1.9) < 0.75 ? clamp(r - length(f) + 0.5, 0.0, 1.0) : 0.0;
     }
+    vec3 rgb = vCol.rgb;
+    if (kind == 6) {
+        vec2 w = (vPix - vOrig.xy) / uScale;
+        float n = vnoise(w / 90.0) * 0.6 + vnoise(w / 27.0) * 0.4;
+        cov = clamp((d * 1.3 - n) / 0.3, 0.0, 1.0);
+        // the wet edge while it floods, a slow mottle and a fine grain once it has
+        rgb *= 1.0 - 0.22 * cov * (1.0 - cov) * 4.0 * step(d, 0.999);
+        rgb *= 1.0 + 0.09 * (vnoise(w / 48.0 + 5.3) - 0.5) + 0.05 * (hash(floor(w / 1.5)) - 0.5);
+        if (uPrint > 0.5) {
+            // under color removal, then four screens at their angles
+            vec3 cmy = clamp(1.0 - rgb / max(uPaper, vec3(0.05)), 0.0, 1.0);
+            float k = min(cmy.r, min(cmy.g, cmy.b)) * 0.8;
+            cmy = (cmy - k) / max(1.0 - k, 0.05);
+            float cell = 4.4 * uScale;
+            vec2 q2 = vPix - vOrig.xy;
+            float cc = dotTone(rot(0.2618) * q2, cmy.r, cell);
+            float cm = dotTone(rot(1.3090) * q2, cmy.g, cell);
+            float cy = dotTone(q2, cmy.b, cell);
+            float ck = dotTone(rot(0.7854) * q2, k, cell);
+            vec3 dotsRgb = uPaper * mix(vec3(1.0), vec3(0.05, 0.62, 0.86), cc) * mix(vec3(1.0), vec3(0.9, 0.16, 0.5), cm)
+                * mix(vec3(1.0), vec3(1.0, 0.9, 0.12), cy) * mix(vec3(1.0), vec3(0.16, 0.14, 0.15), ck);
+            // half of it flat (the ink's spread on soft paper), so the screens texture the color without breaking it up
+            rgb = mix(rgb, dotsRgb, 0.42);
+        }
+    }
     float a = vCol.a * cov;
-    frag = vec4(vCol.rgb * a, a);
+    frag = vec4(rgb * a, a);
 }
 )";
 

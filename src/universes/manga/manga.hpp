@@ -1,6 +1,7 @@
 #pragma once
-// MANGA: a black and white manga page drawn in ink and screentones, inked panel by panel over the song (see
-// manga.cpp).
+// MANGA: a manga's color page drawn in ink, screentones and washes of color, inked and colored panel by panel
+// over the song (see manga.cpp).
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,8 @@ private:
     struct ToneP { int kind; float cell, angle; vec2 origin; int clip; };
     void vtx(float x, float y, float dens, const ToneP& t, const vec3& c, float a);
     void tri(const V2& a, const V2& b, const V2& c, const ToneP& t, float da, float db, float dc, const vec3& col, float al);
+    // A triangle with a color and an opacity per vertex (washes, gradients).
+    void triC(const V2& a, const V2& b, const V2& c, const ToneP& t, float d, const vec3* cols, const float* als);
     // Board units in, pixels out.
     void fillPoly(const std::vector<V2>& pts, const manga::Tone& tone, float densK, const vec3& col, float a, int clip,
                   bool strip = false, const V2* pivot = nullptr, float rotA = 0.f);
@@ -77,6 +80,7 @@ private:
     void inkNext(float delay);
     void drawPanels(float t, float wm, float wp);
     void drawElement(const manga::Element& e, float inkT, float fade, float rotA);
+    void drawBurst(float amt);
     void drawFrames(float shatter);
     void drawSplash(float amt, float t);
     void setClips();
@@ -112,12 +116,25 @@ private:
     // ---- Song, variant.
     int variant_ = 0;
     uint64_t seed_ = 1;
-    vec3 paper_{1.f}, ink_{0.f}, spot_{0.f}, pencil_{0.5f};
-    vec3 tgt_[4];              // the variant's paper, ink, spot and pencil (eased into on a new song)
+    // The colors: the paper, the ink, the spot (the HUD's accent), the pencil, then the palette's hues, the seven
+    // piece colors, the drop's burst (center, middle, edge) and the sound effects' fill.
+    enum { K_PAPER = 0, K_INK, K_SPOT, K_PENCIL, K_HUE, K_PIECE = K_HUE + manga::H_COUNT, K_BURST = K_PIECE + 7, K_SFX = K_BURST + 3, K_COUNT };
+    vec3 cur_[K_COUNT], tgt_[K_COUNT]; // eased into on a new song
+    vec3 &paper_ = cur_[K_PAPER], &ink_ = cur_[K_INK], &spot_ = cur_[K_SPOT], &pencil_ = cur_[K_PENCIL];
     float colorRate_ = -1.f;
     float toneK_ = 1.f;        // the variant's screentone scale (coarser newsprint)
-    bool hasSpot_ = false;
-    vec3 col(int c) const { return c == manga::C_PAPER ? paper_ : c == manga::C_SPOT ? spot_ : ink_; }
+    bool print_ = false;       // washes printed in CMYK halftone
+    static vec3 shadeOf(const vec3& c);
+    vec3 col(int c) const {
+        if (c >= manga::C_PAL) {
+            const int h = (c - manga::C_PAL) % manga::C_SHADE;
+            const vec3& v = cur_[K_HUE + std::min(h, (int)manga::H_COUNT - 1)];
+            return c >= manga::C_PAL + manga::C_SHADE ? shadeOf(v) : v;
+        }
+        return c == manga::C_PAPER ? paper_ : c == manga::C_SPOT ? spot_ : ink_;
+    }
+    vec3 hue(int h) const { return cur_[K_HUE + h]; }
+    vec3 pieceColor(int type) const { return cur_[K_PIECE + std::clamp(type, 0, 6)]; }
 
     // ---- Staging.
     int level_ = 1;
@@ -127,6 +144,7 @@ private:
     float dropT_ = -1.f;       // seconds since the drop's downbeat (-1: none)
     bool donShown_ = false;
     float splash_ = 0.f;       // the drop's full-page splash 0..1
+    float burst_ = 0.f;        // its burst of color (or a Tetris')
     float tetrisT_ = -1.f;     // seconds since a Tetris
     float kickIn_ = 0.f;
     long step_ = -1000;        // the two-beat grid

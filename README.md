@@ -94,7 +94,7 @@ song, and songs change universe with a transition on the beat. Thirty-nine unive
 <td><img src="docs/universes/starchart.jpg"><br><b>STAR CHART</b>: an antique engraved celestial map, gold on navy, two hemispheres on their poles; enamelled pieces in gold rims, each cleared row flies out as stars into a new constellation engraved line by line on the bars, the drop brings the figures to life and turns the skies<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a black and white manga page in ink and screentones, drawn in pencil and inked panel by panel as rows clear; the pieces are inked blocks in seven screentones, the drop is a full-page splash of focus lines and a huge sound effect<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a manga color page in ink, screentones and watercolor washes, drawn in pencil, then inked and colored panel by panel as rows clear; the pieces are inked blocks of color under their screentones, the drop is a full-page splash of color, focus lines and a huge sound effect<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/stainedglass.jpg"><br><b>STAINED GLASS</b>: a dim chapel facing a great window, the pieces leaded glass lit by the sun; each cleared row cracks into shards and glazes a pane of the side windows, complete by the song's end, the drop is the sun striking full through the glass in colored shafts<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>

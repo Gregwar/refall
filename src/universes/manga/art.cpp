@@ -4,7 +4,7 @@
 // The grid: the well's tall panel in the middle; beside it, the HUD's quiet panels (the held piece, the score, the
 // next pieces, the bonus gauge) and under them two small panels; the outer columns hold two large panels each, cut
 // by a slanted gutter. Every drawing is original:
-//   A  the town at night from a rooftop: a moon behind thin clouds, a skyline, a water tower, a utility pole and
+//   A  the town at dusk from a rooftop: a moon behind thin clouds, a skyline, a water tower, a utility pole and
 //      its sagging wires, birds;
 //   B  a railway crossing at street level: the road running into the distance, a block wall, the rails, the
 //      signal with its crossbuck and its two lamps (they blink on the beat), the lowered barrier;
@@ -12,6 +12,8 @@
 //   D  a vending machine glowing in the dark;
 //   E  a lighthouse on a black cliff over the sea under a big cumulus;
 //   F  stone stairs climbing to a shrine gate against the setting sun, stone lanterns and dark trees.
+// Each is inked in black, then colored in washes of the variant's palette (the sky's gradient, the warm windows,
+// the sea, the trees, the gate...), its screentones printed in darker shades of the colors they lie on.
 // Coordinates are board units (y up): the outer columns run from x = +-12.1 out to the page's edge, the
 // drawings are set from the inner edge outward, their skies and seas fill the whole panel.
 #include "universes/manga/art.hpp"
@@ -64,8 +66,8 @@ Tone dots(float d, float cell = 0.14f, int color = C_INK) {
     return t;
 }
 // A gradient: density d0 at height y0 to d1 at height y1.
-Tone gradDots(float d0, float y0, float d1, float y1, float cell = 0.14f) {
-    Tone t = dots(d0, cell);
+Tone gradDots(float d0, float y0, float d1, float y1, float cell = 0.14f, int color = C_INK) {
+    Tone t = dots(d0, cell, color);
     t.d1 = d1;
     t.g0 = {0, y0};
     t.g1 = {0, y1};
@@ -80,11 +82,23 @@ Tone lines(float d, float cell, float angle, int color = C_INK) {
     t.color = color;
     return t;
 }
-Tone gradLines(float d0, float y0, float d1, float y1, float cell, float angle = 0.f) {
-    Tone t = lines(d0, cell, angle);
+Tone gradLines(float d0, float y0, float d1, float y1, float cell, float angle = 0.f, int color = C_INK) {
+    Tone t = lines(d0, cell, angle, color);
     t.d1 = d1;
     t.g0 = {0, y0};
     t.g1 = {0, y1};
+    return t;
+}
+// A wash of one hue, or running from hue h0 at height y0 to h1 at height y1 (colors: pal() or shade() codes).
+Tone wash(int c0, int c1 = -1, float y0 = 0.f, float y1 = 1.f, float a0 = 1.f, float a1 = 1.f) {
+    Tone t;
+    t.kind = TONE_WASH;
+    t.color = c0;
+    t.color1 = c1;
+    t.g0 = {0, y0};
+    t.g1 = {0, y1};
+    t.d0 = a0;
+    t.d1 = a1;
     return t;
 }
 
@@ -121,6 +135,18 @@ struct Ink {
         fill(pts, t);
         stroke(pts, w, 0.f, true);
     }
+    // A shape washed in a color, a screentone over the wash (kind < 0: none), its ink outline.
+    void colored(const std::vector<V2>& pts, int color, Tone tone, float w = 1.6f) {
+        fill(pts, wash(color));
+        if (tone.kind >= 0) fill(pts, tone);
+        if (w > 0.f) stroke(pts, w, 0.f, true);
+    }
+    // A solid black first inked, then colored over (a dark mass: a silhouette, a tree).
+    void dark(const std::vector<V2>& pts, int color, float w = 1.6f, bool strip = false) {
+        fill(pts, solid(), strip);
+        fill(pts, wash(color), strip);
+        if (w > 0.f) stroke(pts, w, 0.f, true);
+    }
     void panelFill(const Tone& t) {
         const Panel& p = pg.panels[panel];
         fill({p.c[3], p.c[2], p.c[1], p.c[0]}, t);
@@ -151,31 +177,36 @@ std::vector<V2> stripTop(const std::vector<V2>& s) {
     return v;
 }
 
-// ---------------------------------------------------------------- A: the town at night
+// ---------------------------------------------------------------- A: the town at dusk
 void drawRooftops(Ink& k, float X, Rng& r) {
-    (void)X;
-    // the sky: a gradient of dots, dense at the top, fading down to the skyline
+    // the sky: deep blue at the top, through violet, to the glow over the skyline; a gradient of dots over it
     k.begin({-16.f, 9.f});
     k.e->pencil = false;
-    k.panelFill(gradDots(0.3f, 10.5f, 0.f, 4.6f, 0.13f));
+    k.fill(rectPts(-X - 1.f, 6.6f, -11.8f, 10.8f), wash(pal(H_SKY_TOP), pal(H_SKY_MID), 10.5f, 6.6f));
+    k.fill(rectPts(-X - 1.f, 1.f, -11.8f, 6.6f), wash(pal(H_SKY_MID), pal(H_SKY_LOW), 6.6f, 3.2f));
+    k.panelFill(gradDots(0.3f, 10.5f, 0.f, 6.2f, 0.13f, shade(H_SKY_TOP)));
 
     // the moon, three soft craters
     const V2 mc{-17.4f, 8.3f};
     k.begin(mc);
-    k.shape(ellipsePts(mc, 1.2f, 1.2f, 56), solid(C_PAPER), 1.8f);
-    k.fill(ellipsePts({mc.x - 0.35f, mc.y + 0.3f}, 0.34f, 0.28f, 20), dots(0.2f, 0.09f));
-    k.fill(ellipsePts({mc.x + 0.35f, mc.y - 0.25f}, 0.24f, 0.2f, 18), dots(0.2f, 0.09f));
-    k.fill(ellipsePts({mc.x - 0.15f, mc.y - 0.55f}, 0.15f, 0.12f, 14), dots(0.2f, 0.09f));
+    k.fill(ellipsePts(mc, 1.2f, 1.2f, 56), solid(C_PAPER));
+    k.fill(ellipsePts(mc, 1.2f, 1.2f, 56), wash(pal(H_PALE)));
+    k.stroke(ellipsePts(mc, 1.2f, 1.2f, 56), 1.8f, 0.f, true);
+    k.fill(ellipsePts({mc.x - 0.35f, mc.y + 0.3f}, 0.34f, 0.28f, 20), dots(0.3f, 0.09f, shade(H_PALE)));
+    k.fill(ellipsePts({mc.x + 0.35f, mc.y - 0.25f}, 0.24f, 0.2f, 18), dots(0.3f, 0.09f, shade(H_PALE)));
+    k.fill(ellipsePts({mc.x - 0.15f, mc.y - 0.55f}, 0.15f, 0.12f, 14), dots(0.3f, 0.09f, shade(H_PALE)));
 
-    // thin clouds across the moon
+    // thin clouds across the moon, lit from below by the sunset
     k.begin({-17.f, 7.4f});
     {
         auto s = cloudStrip(-20.6f, -15.6f, 7.15f, 0.55f, 5, r);
         k.fill(s, solid(C_PAPER), true);
+        k.fill(s, wash(pal(H_CLOUD_SH), pal(H_CLOUD), 7.75f, 7.15f), true);
         k.stroke(stripTop(s), 1.5f, 0.15f);
         k.stroke({{-20.6f, 7.15f}, {-15.6f, 7.15f}}, 0.9f, 0.3f);
         auto s2 = cloudStrip(-15.2f, -12.f, 9.25f, 0.4f, 4, r);
         k.fill(s2, solid(C_PAPER), true);
+        k.fill(s2, wash(pal(H_CLOUD_SH), pal(H_CLOUD), 9.7f, 9.25f), true);
         k.stroke(stripTop(s2), 1.3f, 0.15f);
         k.stroke({{-15.2f, 9.25f}, {-12.f, 9.25f}}, 0.8f, 0.3f);
     }
@@ -188,26 +219,30 @@ void drawRooftops(Ink& k, float X, Rng& r) {
         int i = 0;
         while (x < -12.f) {
             const float w = r.range(0.7f, 1.3f), h = hs[i++ % 9];
-            k.fill(rectPts(x, 1.4f, x + w, h), dots(0.22f, 0.1f));
+            k.fill(rectPts(x, 1.4f, x + w, h), wash(pal(H_BLD_FAR)));
+            k.fill(rectPts(x, 1.4f, x + w, h), dots(0.2f, 0.1f, shade(H_BLD_FAR)));
             k.stroke({{x, h - 0.6f}, {x, h}, {x + w, h}, {x + w, h - 0.6f}}, 1.f, 0.f);
             if (i % 3 == 1) k.stroke({{x + w * 0.6f, h}, {x + w * 0.6f, h + 0.5f}}, 0.9f, 0.f); // an antenna
             x += w;
         }
     }
 
-    // the near buildings: black, their windows knocked out, some lit
+    // the near buildings: dark, their windows lit warm (a few still pale)
     k.begin({-15.f, 3.5f});
     {
         struct Bld { float x0, x1, h; };
         const Bld b[] = {{-20.6f, -18.9f, 4.1f}, {-18.9f, -17.6f, 3.4f}, {-17.6f, -15.3f, 4.55f}, {-15.3f, -14.2f, 3.7f},
                          {-14.2f, -12.f, 4.15f}};
         for (const Bld& d : b) {
-            k.shape(rectPts(d.x0, 1.4f, d.x1, d.h), solid(), 1.4f);
+            k.dark(rectPts(d.x0, 1.4f, d.x1, d.h), pal(H_BLD_NEAR), 1.4f);
             // a parapet
             k.fill(rectPts(d.x0 - 0.05f, d.h, d.x1 + 0.05f, d.h + 0.1f), solid());
             for (float y = d.h - 0.45f; y > 1.7f; y -= 0.48f)
                 for (float x = d.x0 + 0.22f; x + 0.2f < d.x1 - 0.12f; x += 0.42f)
-                    if (r.chance(0.42f)) k.fill(rectPts(x, y - 0.24f, x + 0.2f, y), solid(C_PAPER));
+                    if (r.chance(0.42f)) {
+                        k.fill(rectPts(x, y - 0.24f, x + 0.2f, y), solid(C_PAPER));
+                        k.fill(rectPts(x, y - 0.24f, x + 0.2f, y), wash(r.chance(0.8f) ? pal(H_WINDOW) : pal(H_BLD_FAR)));
+                    }
         }
     }
 
@@ -217,20 +252,20 @@ void drawRooftops(Ink& k, float X, Rng& r) {
         const float cx = -16.4f, base = 4.65f;
         for (float dx : {-0.42f, -0.14f, 0.14f, 0.42f}) k.stroke({{cx + dx, base}, {cx + dx * 0.8f, base + 0.55f}}, 1.3f, 0.f);
         k.stroke({{cx - 0.4f, base + 0.25f}, {cx + 0.4f, base + 0.25f}}, 1.f, 0.f);
-        k.shape(rectPts(cx - 0.5f, base + 0.55f, cx + 0.5f, base + 1.25f), lines(0.3f, 0.1f, 0.f), 1.5f);
-        k.shape({{cx - 0.56f, base + 1.25f}, {cx + 0.56f, base + 1.25f}, {cx, base + 1.62f}}, solid(), 1.4f);
+        k.colored(rectPts(cx - 0.5f, base + 0.55f, cx + 0.5f, base + 1.25f), pal(H_WOOD), lines(0.3f, 0.1f, 0.f, shade(H_WOOD)), 1.5f);
+        k.dark({{cx - 0.56f, base + 1.25f}, {cx + 0.56f, base + 1.25f}, {cx, base + 1.62f}}, pal(H_ROOF), 1.4f);
     }
 
     // the utility pole by the gutter, its crossarms and transformer
     k.begin({-13.f, 7.f});
     {
         const float px = -13.05f;
-        k.shape({{px - 0.13f, 1.4f}, {px + 0.13f, 1.4f}, {px + 0.09f, 9.9f}, {px - 0.09f, 9.9f}}, solid(), 1.2f);
+        k.dark({{px - 0.13f, 1.4f}, {px + 0.13f, 1.4f}, {px + 0.09f, 9.9f}, {px - 0.09f, 9.9f}}, pal(H_BLD_NEAR), 1.2f);
         for (float y : {9.45f, 8.85f}) {
-            k.shape(rectPts(px - 1.05f, y - 0.09f, px + 1.05f, y + 0.07f), solid(), 1.f);
+            k.dark(rectPts(px - 1.05f, y - 0.09f, px + 1.05f, y + 0.07f), pal(H_BLD_NEAR), 1.f);
             for (float dx : {-0.9f, -0.45f, 0.45f, 0.9f}) k.fill(rectPts(px + dx - 0.05f, y + 0.07f, px + dx + 0.05f, y + 0.2f), solid());
         }
-        k.shape(rectPts(px + 0.13f, 6.9f, px + 0.6f, 7.75f), dots(0.3f, 0.1f), 1.4f);
+        k.colored(rectPts(px + 0.13f, 6.9f, px + 0.6f, 7.75f), pal(H_ROOF), dots(0.3f, 0.1f, shade(H_ROOF)), 1.4f);
         k.stroke({{px + 0.13f, 7.6f}, {px + 0.13f, 7.6f}, {px + 0.13f, 7.1f}}, 1.f, 0.f);
         // a step bolt ladder
         for (float y = 3.f; y < 8.6f; y += 0.42f) k.stroke({{px - 0.22f, y}, {px - 0.12f, y}}, 1.f, 0.f);
@@ -267,12 +302,14 @@ void drawCrossing(Ink& k, float X, Rng& r) {
     const V2 vp{-17.3f, hz};     // the road's vanishing point
     const float bottom = -11.2f;
 
-    // a pale evening sky over the roofs
+    // the evening sky glowing over the roofs, the street in its last light
     k.begin({-16.f, 1.5f});
     k.e->pencil = false;
-    k.fill({{-21.f, hz}, {-12.f, hz}, {-12.f, 3.2f}, {-21.f, 3.2f}}, gradDots(0.3f, 3.2f, 0.f, hz + 0.6f, 0.15f));
+    k.fill({{-21.f, hz}, {-12.f, hz}, {-12.f, 3.4f}, {-21.f, 3.4f}}, wash(pal(H_SKY_MID), pal(H_SKY_LOW), 3.2f, hz + 0.2f));
+    k.fill({{-21.f, bottom - 0.5f}, {-12.f, bottom - 0.5f}, {-12.f, hz}, {-21.f, hz}}, wash(pal(H_ROAD), shade(H_ROAD), hz, bottom));
+    k.fill({{-21.f, hz}, {-12.f, hz}, {-12.f, 3.2f}, {-21.f, 3.2f}}, gradDots(0.3f, 3.2f, 0.f, hz + 1.2f, 0.15f, shade(H_SKY_MID)));
 
-    // the houses far down the road: roofs in a dot tone
+    // the houses far down the road: walls and roofs in their tones
     k.begin({-16.f, 0.2f});
     {
         float x = -20.8f;
@@ -281,9 +318,12 @@ void drawCrossing(Ink& k, float X, Rng& r) {
             const float w = r.range(0.9f, 1.5f), h = r.range(0.45f, 0.8f), roof = r.range(0.25f, 0.45f);
             const bool tall = i % 3 == 2;
             const float hh = tall ? h + 0.45f : h;
-            k.shape(rectPts(x, hz - 0.05f, x + w, hz + hh), dots(0.22f, 0.1f), 1.f);
-            k.shape({{x - 0.08f, hz + hh}, {x + w + 0.08f, hz + hh}, {x + w * 0.5f, hz + hh + roof}}, dots(0.55f, 0.1f), 1.f);
-            if (tall) k.fill(rectPts(x + w * 0.3f, hz + 0.25f, x + w * 0.45f, hz + 0.45f), solid());
+            k.colored(rectPts(x, hz - 0.05f, x + w, hz + hh), pal(H_BLD_FAR), dots(0.2f, 0.1f, shade(H_BLD_FAR)), 1.f);
+            k.colored({{x - 0.08f, hz + hh}, {x + w + 0.08f, hz + hh}, {x + w * 0.5f, hz + hh + roof}}, pal(H_ROOF), dots(0.35f, 0.1f, shade(H_ROOF)), 1.f);
+            if (tall) {
+                k.fill(rectPts(x + w * 0.3f, hz + 0.25f, x + w * 0.45f, hz + 0.45f), solid());
+                k.fill(rectPts(x + w * 0.3f, hz + 0.25f, x + w * 0.45f, hz + 0.45f), wash(pal(H_WINDOW)));
+            }
             x += w + r.range(0.05f, 0.3f);
             i++;
         }
@@ -294,6 +334,8 @@ void drawCrossing(Ink& k, float X, Rng& r) {
     {
         k.stroke({vp, {-21.4f, -7.8f}}, 1.6f, 0.f);
         k.stroke({vp, {-13.1f, bottom}}, 1.6f, 0.f);
+        // the sidewalk beyond the curb, a paler stone
+        k.fill({{vp.x + 0.15f, hz}, {-12.f, hz}, {-12.f, bottom}, {-12.4f, bottom}}, wash(pal(H_STONE), shade(H_STONE), hz, bottom, 0.85f, 0.85f));
         // the dashes, longer as they come closer
         for (int i = 0; i < 7; i++) {
             const float t0 = 0.06f + 0.135f * i, t1 = t0 + 0.06f;
@@ -304,6 +346,7 @@ void drawCrossing(Ink& k, float X, Rng& r) {
             };
             if (lerpf(hz, bottom, t1 * t1 * 1.25f) < -8.8f) break; // clear of the caption
             k.fill({at(t0, -1.f), at(t0, 1.f), at(t1, 1.f), at(t1, -1.f)}, solid());
+            k.fill({at(t0, -1.f), at(t0, 1.f), at(t1, 1.f), at(t1, -1.f)}, wash(pal(H_PALE)));
         }
         // a curb along the right edge
         k.stroke({{vp.x + 0.15f, hz}, {-12.4f, bottom}}, 1.f, 0.f);
@@ -316,7 +359,7 @@ void drawCrossing(Ink& k, float X, Rng& r) {
         const float topNear = -1.5f, topFar = hz + 0.25f;
         std::vector<V2> wall = {{-21.f, edge(-7.8f) < -21.f ? -7.6f : -7.8f}, {edge(hz - 0.2f), hz - 0.2f}, {edge(hz - 0.2f), topFar},
                                 {-21.f, topNear}};
-        k.shape(wall, dots(0.4f, 0.11f), 1.5f);
+        k.colored(wall, pal(H_STONE), dots(0.3f, 0.11f, shade(H_STONE)), 1.5f);
         for (int i = 1; i < 6; i++) {
             const float t = i / 6.f;
             k.stroke({{-21.f, lerpf(-7.6f, topNear, t)}, {edge(hz - 0.2f), lerpf(hz - 0.2f, topFar, t)}}, 0.8f, 0.f);
@@ -332,15 +375,16 @@ void drawCrossing(Ink& k, float X, Rng& r) {
     // the rails across the road, their sleepers
     k.begin({-16.f, -3.4f});
     {
+        k.fill({{-21.f, -3.0f}, {-12.f, -3.0f}, {-12.f, -3.95f}, {-21.f, -3.95f}}, wash(pal(H_WOOD), -1, 0.f, 1.f, 0.55f, 0.55f));
         for (float y : {-3.05f, -3.75f}) {
             k.stroke({{-21.f, y}, {-12.f, y}}, 1.5f, 0.f);
             k.stroke({{-21.f, y - 0.09f}, {-12.f, y - 0.09f}}, 1.f, 0.f);
         }
         for (float x = -20.8f; x < -12.f; x += 0.42f) k.fill(rectPts(x, -3.95f, x + 0.16f, -3.85f), solid());
-        k.fill({{-21.f, -3.25f}, {-12.f, -3.25f}, {-12.f, -3.55f}, {-21.f, -3.55f}}, lines(0.35f, 0.09f, 0.f));
+        k.fill({{-21.f, -3.25f}, {-12.f, -3.25f}, {-12.f, -3.55f}, {-21.f, -3.55f}}, lines(0.35f, 0.09f, 0.f, shade(H_WOOD)));
     }
 
-    // the crossing signal: its post, the crossbuck, the box of the barrier
+    // the crossing signal: its post, the crossbuck in yellow and black, the box of the barrier
     const float sx = -13.45f;
     k.begin({sx, -2.f});
     {
@@ -352,19 +396,19 @@ void drawCrossing(Ink& k, float X, Rng& r) {
             const float ca = std::cos(a), sa = std::sin(a), L = 1.05f, W = 0.15f;
             auto P = [&](float u, float v) { return V2{c.x + ca * u - sa * v, c.y + sa * u + ca * v}; };
             std::vector<V2> bar = {P(-L, -W), P(L, -W), P(L, W), P(-L, W)};
-            Tone t = lines(0.5f, 0.24f, a + PI_F * 0.5f);
-            k.shape(bar, t, 1.4f);
+            k.colored(bar, pal(H_HAZARD), lines(0.5f, 0.24f, a + PI_F * 0.5f), 1.4f);
         }
         // the lamps' crossbar and hoods
         k.shape(rectPts(sx - 0.95f, -0.55f, sx + 0.95f, -0.38f), solid(), 1.f);
         // a warning plate under it
-        k.shape({{sx - 0.32f, -1.6f}, {sx + 0.32f, -1.6f}, {sx, -2.15f}}, solid(C_PAPER), 1.4f);
+        k.fill({{sx - 0.32f, -1.6f}, {sx + 0.32f, -1.6f}, {sx, -2.15f}}, solid(C_PAPER));
+        k.colored({{sx - 0.32f, -1.6f}, {sx + 0.32f, -1.6f}, {sx, -2.15f}}, pal(H_HAZARD), Tone{-1}, 1.4f);
         k.fill({{sx - 0.06f, -1.7f}, {sx + 0.06f, -1.7f}, {sx + 0.03f, -1.9f}, {sx - 0.03f, -1.9f}}, solid());
         // the barrier's machine
-        k.shape(rectPts(sx - 0.32f, -6.3f, sx + 0.32f, -5.3f), dots(0.35f, 0.1f), 1.5f);
+        k.colored(rectPts(sx - 0.32f, -6.3f, sx + 0.32f, -5.3f), pal(H_HAZARD), dots(0.3f, 0.1f, shade(H_HAZARD)), 1.5f);
     }
 
-    // the two lamps (they blink)
+    // the two lamps (they blink), a dark red when unlit
     k.begin({sx, -0.9f}, A_LAMPS);
     {
         const float lr = 0.32f;
@@ -373,17 +417,18 @@ void drawCrossing(Ink& k, float X, Rng& r) {
         k.pg.lampRadius = lr;
         for (const V2& l : k.pg.lamp) {
             k.shape(ellipsePts(l, lr + 0.12f, lr + 0.12f, 32), solid(), 1.f);
-            k.shape(ellipsePts(l, lr, lr, 32), dots(0.7f, 0.08f), 1.f);
+            k.colored(ellipsePts(l, lr, lr, 32), shade(H_LAMP), dots(0.5f, 0.08f), 1.f);
             // the hood above
             k.fill(ellipsePts(l, lr + 0.22f, lr + 0.22f, 16, 0.15f, PI_F - 0.15f), solid());
         }
     }
 
-    // the barrier, lowered across the road: black and white stripes, a fringe
+    // the barrier, lowered across the road: yellow and black stripes, a fringe
     k.begin({-16.f, -5.8f});
     {
         const float y0 = -5.92f, y1 = -5.68f, xl = -19.8f, xr = sx - 0.3f;
-        k.shape(rectPts(xl, y0, xr, y1), solid(C_PAPER), 1.5f);
+        k.fill(rectPts(xl, y0, xr, y1), solid(C_PAPER));
+        k.colored(rectPts(xl, y0, xr, y1), pal(H_HAZARD), Tone{-1}, 1.5f);
         int i = 0;
         for (float x = xr - 0.45f; x > xl; x -= 0.45f, i++)
             if (i % 2 == 0) k.fill({{std::max(xl, x - 0.45f), y0}, {x - 0.15f, y0}, {x, y1}, {std::max(xl, x - 0.3f), y1}}, solid());
@@ -401,15 +446,17 @@ void drawCrossing(Ink& k, float X, Rng& r) {
 void drawChime(Ink& k) {
     k.begin({-8.8f, -8.f});
     k.e->pencil = false;
-    k.fill(rectPts(-11.8f, -11.3f, -5.8f, -5.3f), gradDots(0.3f, -5.4f, 0.02f, -10.8f, 0.14f));
+    k.fill(rectPts(-11.8f, -11.3f, -5.8f, -5.3f), wash(pal(H_SKY_MID), pal(H_SKY_LOW), -6.f, -10.8f));
+    k.fill(rectPts(-11.8f, -11.3f, -5.8f, -5.3f), gradDots(0.28f, -5.4f, 0.f, -9.6f, 0.14f, shade(H_SKY_MID)));
 
-    // the eaves across the top, rafter ends knocked out
+    // the eaves across the top, rafter ends showing
     k.begin({-8.8f, -5.9f});
     {
-        k.shape({{-11.8f, -5.3f}, {-5.8f, -5.3f}, {-5.8f, -5.95f}, {-11.8f, -6.55f}}, solid(), 1.4f);
+        k.dark({{-11.8f, -5.3f}, {-5.8f, -5.3f}, {-5.8f, -5.95f}, {-11.8f, -6.55f}}, pal(H_WOOD), 1.4f);
         for (int i = 0; i < 9; i++) {
             const float x = -11.5f + i * 0.68f, y = lerpf(-6.55f, -5.95f, (x + 11.8f) / 6.f);
             k.fill(rectPts(x, y + 0.08f, x + 0.24f, y + 0.3f), solid(C_PAPER));
+            k.fill(rectPts(x, y + 0.08f, x + 0.24f, y + 0.3f), wash(pal(H_STONE)));
         }
         k.stroke({{-11.8f, -6.72f}, {-5.8f, -6.12f}}, 1.2f, 0.f);
     }
@@ -423,18 +470,21 @@ void drawChime(Ink& k) {
         const V2 bc{hook.x, -7.55f};
         std::vector<V2> bell = ellipsePts(bc, 0.6f, 0.6f, 28, 0.f, PI_F);
         k.fill(bell, solid(C_PAPER));
-        k.fill(ellipsePts(bc, 0.6f, 0.6f, 14, 0.f, PI_F * 0.42f), dots(0.25f, 0.08f));
+        k.fill(bell, wash(pal(H_GLASS)));
+        k.fill(ellipsePts(bc, 0.6f, 0.6f, 14, 0.f, PI_F * 0.42f), dots(0.3f, 0.08f, shade(H_GLASS)));
         bell.push_back(bell.front());
         k.stroke(bell, 1.7f, 0.f);
         // a painted goldfish swirl
-        k.stroke({{bc.x - 0.35f, bc.y + 0.22f}, {bc.x - 0.15f, bc.y + 0.32f}, {bc.x + 0.05f, bc.y + 0.2f}, {bc.x - 0.1f, bc.y + 0.1f}}, 1.3f, 0.3f);
-        k.stroke({{bc.x + 0.12f, bc.y + 0.38f}, {bc.x + 0.32f, bc.y + 0.3f}}, 1.1f, 0.3f);
+        k.stroke({{bc.x - 0.35f, bc.y + 0.22f}, {bc.x - 0.15f, bc.y + 0.32f}, {bc.x + 0.05f, bc.y + 0.2f}, {bc.x - 0.1f, bc.y + 0.1f}}, 1.6f, 0.3f, false, pal(H_LAMP));
+        k.stroke({{bc.x + 0.12f, bc.y + 0.38f}, {bc.x + 0.32f, bc.y + 0.3f}}, 1.3f, 0.3f, false, pal(H_LAMP));
         k.fill(ellipsePts({bc.x, bc.y + 0.62f}, 0.07f, 0.05f, 10), solid());
         // the clapper, the strip
         k.stroke({{bc.x, bc.y}, {bc.x, -8.35f}}, 1.f, 0.f);
         k.fill(rectPts(bc.x - 0.05f, -7.9f, bc.x + 0.05f, -7.7f), solid());
-        k.shape({{bc.x - 0.24f, -8.35f}, {bc.x + 0.24f, -8.35f}, {bc.x + 0.24f, -10.25f}, {bc.x - 0.24f, -10.25f}}, lines(0.22f, 0.1f, PI_F * 0.5f), 1.4f);
+        k.colored({{bc.x - 0.24f, -8.35f}, {bc.x + 0.24f, -8.35f}, {bc.x + 0.24f, -10.25f}, {bc.x - 0.24f, -10.25f}}, pal(H_STRIP),
+                  lines(0.22f, 0.1f, PI_F * 0.5f, shade(H_STRIP)), 1.4f);
         k.fill(rectPts(bc.x - 0.12f, -9.9f, bc.x + 0.12f, -8.7f), solid(C_PAPER));
+        k.fill(rectPts(bc.x - 0.12f, -9.9f, bc.x + 0.12f, -8.7f), wash(pal(H_PALE)));
         for (float y = -8.85f; y > -9.8f; y -= 0.2f) k.stroke({{bc.x - 0.06f, y}, {bc.x + 0.06f, y - 0.03f}}, 1.f, 0.3f);
     }
 }
@@ -443,12 +493,14 @@ void drawChime(Ink& k) {
 void drawVending(Ink& k) {
     k.begin({8.8f, -8.5f});
     k.e->pencil = false;
-    k.panelFill(dots(0.84f, 0.13f));
+    k.fill(rectPts(5.8f, -11.3f, 11.8f, -5.9f), wash(pal(H_NIGHT), shade(H_NIGHT), -6.f, -10.5f));
+    k.panelFill(dots(0.55f, 0.13f, shade(H_NIGHT)));
 
     const float x0 = 7.75f, x1 = 9.85f, yb = -10.5f, yt = -6.65f;
-    // the glow around it: rays knocked out of the dark
+    // the glow around it: rays of its light out into the dark, the pavement lit
     k.begin({8.8f, -8.5f});
     {
+        k.fill(rectPts(5.8f, -11.3f, 11.8f, -10.5f), wash(pal(H_GLOW), -1, 0.f, 1.f, 0.55f, 0.55f));
         const V2 c{(x0 + x1) * 0.5f, (yb + yt) * 0.5f};
         for (int i = 0; i < 38; i++) {
             const float a = i / 38.f * 2.f * PI_F + 0.05f * std::sin(i * 7.f);
@@ -456,19 +508,21 @@ void drawVending(Ink& k) {
             // from the machine's edge outward
             const float tx = ca != 0.f ? ((ca > 0 ? x1 : x0) - c.x) / ca : 1e9f, ty = sa != 0.f ? ((sa > 0 ? yt : yb) - c.y) / sa : 1e9f;
             const float t0 = std::min(std::fabs(tx), std::fabs(ty)) + 0.12f, t1 = t0 + 0.5f + 0.55f * std::fabs(std::sin(i * 2.3f));
-            k.stroke({{c.x + ca * t0, c.y + sa * t0}, {c.x + ca * t1, c.y + sa * t1}}, 1.5f, 0.5f, false, C_PAPER);
+            k.stroke({{c.x + ca * t0, c.y + sa * t0}, {c.x + ca * t1, c.y + sa * t1}}, 1.5f, 0.5f, false, pal(H_GLOW));
         }
-        k.fill(rectPts(5.8f, -11.2f, 11.8f, -10.5f), lines(0.5f, 0.12f, 0.f, C_PAPER));
+        k.fill(rectPts(5.8f, -11.2f, 11.8f, -10.5f), lines(0.5f, 0.12f, 0.f, pal(H_GLOW)));
     }
 
-    // the machine
+    // the machine: painted, its window glowing
     k.begin({8.8f, -8.3f});
     {
-        k.shape(rectPts(x0, yb, x1, yt), solid(C_PAPER), 2.f);
-        k.shape(rectPts(x0 + 0.15f, -8.75f, x1 - 0.15f, yt - 0.15f), solid(C_PAPER), 1.3f);
-        k.fill(rectPts(x1 - 0.12f, yb, x1, yt), dots(0.45f, 0.08f));
+        k.fill(rectPts(x0, yb, x1, yt), solid(C_PAPER));
+        k.colored(rectPts(x0, yb, x1, yt), pal(H_MACHINE), Tone{-1}, 2.f);
+        k.fill(rectPts(x0 + 0.15f, -8.75f, x1 - 0.15f, yt - 0.15f), solid(C_PAPER));
+        k.colored(rectPts(x0 + 0.15f, -8.75f, x1 - 0.15f, yt - 0.15f), pal(H_GLOW), Tone{-1}, 1.3f);
+        k.fill(rectPts(x1 - 0.12f, yb, x1, yt), dots(0.45f, 0.08f, shade(H_MACHINE)));
         k.shape(rectPts(x0 + 0.35f, yb + 0.25f, x1 - 0.55f, yb + 0.65f), solid(), 1.f);
-        k.shape(rectPts(x1 - 0.48f, -9.6f, x1 - 0.25f, -9.0f), dots(0.3f, 0.07f), 1.f);
+        k.colored(rectPts(x1 - 0.48f, -9.6f, x1 - 0.25f, -9.0f), pal(H_PALE), dots(0.3f, 0.07f, shade(H_MACHINE)), 1.f);
         k.stroke({{x1 - 0.4f, -9.15f}, {x1 - 0.33f, -9.15f}}, 1.f, 0.f);
         k.fill(rectPts(x0 - 0.1f, yt, x1 + 0.1f, yt + 0.12f), solid());
     }
@@ -479,9 +533,11 @@ void drawVending(Ink& k) {
         const float yb0 = -8.6f + row * 0.62f;
         for (int i = 0; i < 5; i++) {
             const float bx = x0 + 0.33f + i * 0.36f;
-            k.shape({{bx - 0.11f, yb0 + 0.08f}, {bx + 0.11f, yb0 + 0.08f}, {bx + 0.11f, yb0 + 0.32f}, {bx + 0.05f, yb0 + 0.42f},
-                     {bx + 0.05f, yb0 + 0.48f}, {bx - 0.05f, yb0 + 0.48f}, {bx - 0.05f, yb0 + 0.42f}, {bx - 0.11f, yb0 + 0.32f}},
-                    (i + row) % 3 == 0 ? dots(0.55f, 0.07f) : (i + row) % 3 == 1 ? lines(0.4f, 0.07f, 0.f) : solid(C_PAPER), 1.f);
+            const int kind = (i + row) % 3;
+            const int c = kind == 0 ? H_LAMP : kind == 1 ? H_SEA : H_HAZARD;
+            k.colored({{bx - 0.11f, yb0 + 0.08f}, {bx + 0.11f, yb0 + 0.08f}, {bx + 0.11f, yb0 + 0.32f}, {bx + 0.05f, yb0 + 0.42f},
+                       {bx + 0.05f, yb0 + 0.48f}, {bx - 0.05f, yb0 + 0.48f}, {bx - 0.05f, yb0 + 0.42f}, {bx - 0.11f, yb0 + 0.32f}},
+                      pal(c), kind == 0 ? dots(0.35f, 0.07f, shade(c)) : kind == 1 ? lines(0.3f, 0.07f, 0.f, shade(c)) : Tone{-1}, 1.f);
             k.fill(rectPts(bx - 0.06f, yb0 - 0.02f, bx + 0.06f, yb0 + 0.04f), solid());
         }
         k.stroke({{x0 + 0.15f, yb0 - 0.06f}, {x1 - 0.15f, yb0 - 0.06f}}, 0.9f, 0.f);
@@ -491,45 +547,50 @@ void drawVending(Ink& k) {
 // ---------------------------------------------------------------- E: the lighthouse
 void drawLighthouse(Ink& k, float X, Rng& r) {
     const float hz = 6.1f;
-    // a sky of fine horizontal lines, thinning down to the horizon
+    // the sky, blue at the top warming down to the horizon, fine horizontal lines over it
     k.begin({16.f, 9.f});
     k.e->pencil = false;
-    k.fill({{12.f, hz}, {X + 0.5f, hz}, {X + 0.5f, 10.6f}, {12.f, 10.6f}}, gradLines(0.4f, 10.5f, 0.04f, hz + 0.4f, 0.17f));
+    k.fill({{12.f, 8.3f}, {X + 0.5f, 8.3f}, {X + 0.5f, 10.8f}, {12.f, 10.8f}}, wash(pal(H_SKY_TOP), pal(H_SKY_MID), 10.5f, 8.3f));
+    k.fill({{12.f, hz}, {X + 0.5f, hz}, {X + 0.5f, 8.3f}, {12.f, 8.3f}}, wash(pal(H_SKY_MID), pal(H_SKY_LOW), 8.3f, hz));
+    k.fill({{12.f, hz}, {X + 0.5f, hz}, {X + 0.5f, 10.6f}, {12.f, 10.6f}}, gradLines(0.35f, 10.5f, 0.f, 8.f, 0.17f, 0.f, shade(H_SKY_TOP)));
 
-    // a big cumulus over the sea
+    // a big cumulus over the sea, lit warm, its underside in shade
     k.begin({18.5f, 8.f});
     {
         auto lo = cloudStrip(15.4f, X + 0.6f, 6.55f, 1.25f, 5, r);
         auto hi = cloudStrip(16.4f, 19.9f, 7.6f, 1.2f, 4, r);
         k.fill(hi, solid(C_PAPER), true);
+        k.fill(hi, wash(pal(H_PALE), pal(H_CLOUD), 8.8f, 7.6f), true);
         k.stroke(stripTop(hi), 1.7f, 0.12f);
         // its lower tier in front (an element of its own: an element's lines go over all its fills)
         k.begin({17.5f, 7.f});
         k.fill(lo, solid(C_PAPER), true);
+        k.fill(lo, wash(pal(H_CLOUD), pal(H_CLOUD_SH), 7.7f, 6.55f), true);
         k.stroke(stripTop(lo), 1.7f, 0.12f);
         k.stroke({{15.4f, 6.55f}, {X + 0.6f, 6.55f}}, 1.f, 0.f);
         // its shaded underside
-        k.fill({{15.6f, 6.55f}, {X + 0.6f, 6.55f}, {X + 0.6f, 7.0f}, {15.9f, 6.85f}}, gradDots(0.3f, 6.55f, 0.f, 6.9f, 0.1f));
+        k.fill({{15.6f, 6.55f}, {X + 0.6f, 6.55f}, {X + 0.6f, 7.0f}, {15.9f, 6.85f}}, gradDots(0.35f, 6.55f, 0.f, 6.9f, 0.1f, shade(H_CLOUD_SH)));
     }
 
-    // the sea: lines thickening toward us
+    // the sea: teal, deepening toward us, its lines thickening
     k.begin({17.f, 4.5f});
-    k.fill({{12.f, 2.f}, {X + 0.5f, 2.f}, {X + 0.5f, hz}, {12.f, hz}}, gradLines(0.12f, hz, 0.62f, 2.4f, 0.15f));
+    k.fill({{12.f, 1.8f}, {X + 0.5f, 1.8f}, {X + 0.5f, hz}, {12.f, hz}}, wash(pal(H_SEA), pal(H_SEA_DEEP), hz, 2.2f));
+    k.fill({{12.f, 2.f}, {X + 0.5f, 2.f}, {X + 0.5f, hz}, {12.f, hz}}, gradLines(0.08f, hz, 0.45f, 2.4f, 0.15f, 0.f, shade(H_SEA_DEEP)));
     k.stroke({{12.f, hz}, {X + 0.5f, hz}}, 1.3f, 0.f);
 
-    // glints and crests on the water
+    // glints of the sunset and crests on the water
     k.begin({17.5f, 4.f});
     for (int i = 0; i < 26; i++) {
         const float y = r.range(2.4f, hz - 0.25f), t = (hz - y) / (hz - 2.4f);
         const float x = r.range(15.f, X), w = 0.25f + 0.6f * t;
-        k.stroke({{x - w, y}, {x + w, y + 0.02f}}, 1.2f + 1.2f * t, 0.45f, false, C_PAPER);
+        k.stroke({{x - w, y}, {x + w, y + 0.02f}}, 1.2f + 1.2f * t, 0.45f, false, pal(i % 3 ? H_PALE : H_SUN));
     }
     for (int i = 0; i < 9; i++) {
         const float y = r.range(2.6f, 4.6f), x = r.range(17.4f, X - 0.4f);
         k.stroke({{x - 0.35f, y}, {x - 0.1f, y + 0.08f}, {x + 0.2f, y + 0.02f}, {x + 0.4f, y + 0.1f}}, 1.3f, 0.4f);
     }
 
-    // the black cliff, white hatching on its face, grass on top
+    // the dark cliff, the sunset's light hatched on its face, grass on top
     k.begin({14.f, 5.5f});
     {
         const V2 top[] = {{11.9f, 7.55f}, {12.6f, 7.68f}, {13.3f, 7.8f}, {14.4f, 7.78f}, {15.f, 7.5f}, {15.35f, 6.9f},
@@ -541,6 +602,7 @@ void drawLighthouse(Ink& k, float X, Rng& r) {
             edge.push_back(p);
         }
         k.fill(strip, solid(), true);
+        k.fill(strip, wash(pal(H_CLIFF), shade(H_CLIFF), 7.8f, 2.f), true);
         k.stroke(edge, 1.6f, 0.f);
         for (int i = 0; i < 16; i++) {
             const float x = r.range(14.3f, 17.f);
@@ -550,24 +612,29 @@ void drawLighthouse(Ink& k, float X, Rng& r) {
                 if (x >= top[j].x && x <= top[j + 1].x) ytop = lerpf(top[j].y, top[j + 1].y, (x - top[j].x) / (top[j + 1].x - top[j].x));
             const float y = ytop - r.range(0.25f, 1.2f);
             if (y < 2.3f) continue;
-            k.stroke({{x - 0.25f, y + 0.22f}, {x + 0.25f, y - 0.22f}}, 1.1f, 0.4f, false, C_PAPER);
+            k.stroke({{x - 0.25f, y + 0.22f}, {x + 0.25f, y - 0.22f}}, 1.1f, 0.4f, false, pal(H_CLOUD));
         }
-        for (float x = 12.3f; x < 15.f; x += 0.22f) k.stroke({{x, 7.6f + 0.1f * std::sin(x * 9.f)}, {x + 0.06f, 7.95f + 0.08f * std::sin(x * 5.f)}}, 1.1f, 0.5f);
+        for (float x = 12.3f; x < 15.f; x += 0.22f)
+            k.stroke({{x, 7.6f + 0.1f * std::sin(x * 9.f)}, {x + 0.06f, 7.95f + 0.08f * std::sin(x * 5.f)}}, 1.3f, 0.5f, false, pal(H_GRASS));
     }
 
-    // the lighthouse
+    // the lighthouse: white, a red band, its lantern lit
     const float cx = 13.95f;
     k.begin({cx, 8.7f});
     {
         const float yb = 7.75f, yt = 9.25f;
-        k.shape({{cx - 0.42f, yb}, {cx + 0.42f, yb}, {cx + 0.28f, yt}, {cx - 0.28f, yt}}, solid(C_PAPER), 1.6f);
-        k.fill({{cx + 0.05f, yb}, {cx + 0.42f, yb}, {cx + 0.28f, yt}, {cx + 0.03f, yt}}, dots(0.3f, 0.08f));
+        const std::vector<V2> tower = {{cx - 0.42f, yb}, {cx + 0.42f, yb}, {cx + 0.28f, yt}, {cx - 0.28f, yt}};
+        k.fill(tower, solid(C_PAPER));
+        k.colored(tower, pal(H_PALE), Tone{-1}, 1.6f);
+        k.fill({{cx + 0.05f, yb}, {cx + 0.42f, yb}, {cx + 0.28f, yt}, {cx + 0.03f, yt}}, dots(0.3f, 0.08f, shade(H_CLOUD_SH)));
         k.fill({{cx - 0.38f, 8.25f}, {cx + 0.38f, 8.25f}, {cx + 0.35f, 8.55f}, {cx - 0.35f, 8.55f}}, solid());
+        k.fill({{cx - 0.38f, 8.25f}, {cx + 0.38f, 8.25f}, {cx + 0.35f, 8.55f}, {cx - 0.35f, 8.55f}}, wash(pal(H_LAMP)));
         k.fill(rectPts(cx - 0.08f, yb, cx + 0.08f, yb + 0.26f), solid());
         k.shape(rectPts(cx - 0.42f, yt, cx + 0.42f, yt + 0.1f), solid(), 1.f);
-        k.shape(rectPts(cx - 0.24f, yt + 0.1f, cx + 0.24f, yt + 0.48f), solid(C_PAPER), 1.3f);
+        k.fill(rectPts(cx - 0.24f, yt + 0.1f, cx + 0.24f, yt + 0.48f), solid(C_PAPER));
+        k.colored(rectPts(cx - 0.24f, yt + 0.1f, cx + 0.24f, yt + 0.48f), pal(H_WINDOW), Tone{-1}, 1.3f);
         k.stroke({{cx, yt + 0.1f}, {cx, yt + 0.48f}}, 1.f, 0.f);
-        k.shape({{cx - 0.3f, yt + 0.48f}, {cx + 0.3f, yt + 0.48f}, {cx, yt + 0.76f}}, solid(), 1.f);
+        k.dark({{cx - 0.3f, yt + 0.48f}, {cx + 0.3f, yt + 0.48f}, {cx, yt + 0.76f}}, pal(H_LAMP), 1.f);
         k.stroke({{cx, yt + 0.76f}, {cx, yt + 0.92f}}, 1.2f, 0.f);
         k.pg.beamFrom = {cx, yt + 0.29f};
     }
@@ -588,21 +655,25 @@ void drawLighthouse(Ink& k, float X, Rng& r) {
 
 // ---------------------------------------------------------------- F: the shrine stairs
 void drawShrine(Ink& k, float X, Rng& r) {
+    (void)r;
     const float gx = 16.4f;       // the gate's axis
-    // a dusk sky, dense at the top
+    // a dusk sky, from the zenith's blue down to the glow around the sun, dots dense at the top
     k.begin({16.f, 1.f});
     k.e->pencil = false;
-    k.fill({{12.f, -3.f}, {X + 0.5f, -3.f}, {X + 0.5f, 3.3f}, {12.f, 3.3f}}, gradDots(0.58f, 3.2f, 0.06f, -2.2f, 0.15f));
+    k.fill({{12.f, 1.2f}, {X + 0.5f, 1.2f}, {X + 0.5f, 3.4f}, {12.f, 3.4f}}, wash(pal(H_SKY_TOP), pal(H_SKY_MID), 3.2f, 1.2f));
+    k.fill({{12.f, -3.f}, {X + 0.5f, -3.f}, {X + 0.5f, 1.2f}, {12.f, 1.2f}}, wash(pal(H_SKY_MID), pal(H_SKY_LOW), 1.2f, -1.6f));
+    k.fill({{12.f, -3.f}, {X + 0.5f, -3.f}, {X + 0.5f, 3.3f}, {12.f, 3.3f}}, gradDots(0.4f, 3.2f, 0.f, 0.f, 0.15f, shade(H_SKY_TOP)));
 
     // the setting sun behind the gate, cut by thin lines of haze
     const V2 sc{gx, -0.55f};
     k.begin(sc);
     {
         k.fill(ellipsePts(sc, 1.75f, 1.75f, 64), solid(C_PAPER));
+        k.fill(ellipsePts(sc, 1.75f, 1.75f, 64), wash(pal(H_SUN), pal(H_SKY_LOW), 1.2f, -2.3f));
         k.stroke(ellipsePts(sc, 1.75f, 1.75f, 64), 1.f, 0.f, true);
         for (float y = -1.9f; y < 0.4f; y += 0.36f) {
             const float hw = std::sqrt(std::max(0.f, 1.75f * 1.75f - (y - sc.y) * (y - sc.y)));
-            k.stroke({{sc.x - hw - 0.3f, y}, {sc.x + hw + 0.3f, y}}, 1.1f + (0.4f - y) * 0.25f, 0.f);
+            k.stroke({{sc.x - hw - 0.3f, y}, {sc.x + hw + 0.3f, y}}, 1.1f + (0.4f - y) * 0.25f, 0.f, false, shade(H_SKY_LOW));
         }
     }
 
@@ -617,9 +688,10 @@ void drawShrine(Ink& k, float X, Rng& r) {
             pts.push_back({c.x + std::cos(a) * rx * bump, c.y + std::sin(a) * ry * bump});
         }
         k.fill(pts, solid());
+        k.fill(pts, wash(pal(H_TREE), shade(H_TREE), y1, y0));
         pts.push_back(pts.front());
         k.stroke(pts, 1.4f, 0.f);
-        Tone t = dots(0.1f, 0.16f, C_PAPER);
+        Tone t = dots(0.12f, 0.16f, pal(H_GRASS));
         t.kind = TONE_SAND;
         k.fill(ellipsePts({c.x + (left ? 0.4f : -0.4f), c.y + ry * 0.35f}, rx * 0.6f, ry * 0.4f, 24), t);
     };
@@ -632,12 +704,15 @@ void drawShrine(Ink& k, float X, Rng& r) {
     foliage(19.f, X + 1.f, -0.4f, 3.f, false);
     k.stroke({{19.5f, -4.1f}, {19.4f, -6.3f}}, 3.f, 0.1f);
 
-    // the gate (the spot color where there is one)
+    // the gate, vermilion under its black top beam
     k.begin({gx, 0.2f});
     {
-        const int col = C_SPOT;
+        auto red = [&](const std::vector<V2>& pts) {
+            k.fill(pts, solid());
+            k.fill(pts, wash(pal(H_GATE)));
+        };
         for (float px : {gx - 1.12f, gx + 1.12f}) {
-            k.fill({{px - 0.15f, -2.65f}, {px + 0.15f, -2.65f}, {px + 0.12f, 0.95f}, {px - 0.12f, 0.95f}}, solid(col));
+            red({{px - 0.15f, -2.65f}, {px + 0.15f, -2.65f}, {px + 0.12f, 0.95f}, {px - 0.12f, 0.95f}});
             k.fill(rectPts(px - 0.2f, -2.75f, px + 0.2f, -2.5f), solid());
         }
         // the top beam, its ends sweeping up
@@ -654,9 +729,9 @@ void drawShrine(Ink& k, float X, Rng& r) {
             beam.push_back(bot[i]);
         }
         k.fill(beam, solid(), true);
-        k.fill(rectPts(gx - 1.75f, 0.92f, gx + 1.75f, 1.1f), solid(col));
-        k.fill(rectPts(gx - 1.55f, 0.2f, gx + 1.55f, 0.42f), solid(col));
-        k.fill(rectPts(gx - 0.1f, 0.42f, gx + 0.1f, 0.92f), solid(col));
+        red(rectPts(gx - 1.75f, 0.92f, gx + 1.75f, 1.1f));
+        red(rectPts(gx - 1.55f, 0.2f, gx + 1.55f, 0.42f));
+        red(rectPts(gx - 0.1f, 0.42f, gx + 0.1f, 0.92f));
         k.stroke(top, 1.2f, 0.f);
     }
 
@@ -665,11 +740,13 @@ void drawShrine(Ink& k, float X, Rng& r) {
     {
         const float yTop = -2.7f, yBot = -11.3f, wTop = 1.25f, wBot = 3.6f;
         auto half = [&](float y) { return lerpf(wTop, wBot, (yTop - y) / (yTop - yBot)); };
+        k.fill({{gx - wTop, yTop}, {gx + wTop, yTop}, {gx + wBot, yBot}, {gx - wBot, yBot}}, wash(pal(H_STONE), pal(H_PALE), yBot, yTop));
         float y = yTop, h = 0.16f;
         while (y > yBot) {
             const float y2 = y - h, rise = h * 0.42f;
             const float a = half(y), b = half(y - rise);
-            k.fill({{gx - a, y}, {gx + a, y}, {gx + b, y - rise}, {gx - b, y - rise}}, dots(0.42f, 0.1f));
+            k.fill({{gx - a, y}, {gx + a, y}, {gx + b, y - rise}, {gx - b, y - rise}}, wash(shade(H_STONE), -1, 0.f, 1.f, 0.7f, 0.7f));
+            k.fill({{gx - a, y}, {gx + a, y}, {gx + b, y - rise}, {gx - b, y - rise}}, dots(0.3f, 0.1f, shade(H_STONE)));
             k.stroke({{gx - a, y}, {gx + a, y}}, 1.f + h * 2.f, 0.f);
             y = y2;
             h *= 1.11f;
@@ -677,23 +754,26 @@ void drawShrine(Ink& k, float X, Rng& r) {
         for (float s : {-1.f, 1.f}) {
             k.stroke({{gx + s * wTop, yTop}, {gx + s * wBot, yBot}}, 1.6f, 0.f);
             k.stroke({{gx + s * (wTop + 0.18f), yTop + 0.18f}, {gx + s * (wBot + 0.65f), yBot + 0.6f}}, 1.6f, 0.f);
-            k.fill({{gx + s * wTop, yTop}, {gx + s * (wTop + 0.18f), yTop + 0.18f}, {gx + s * (wBot + 0.65f), yBot + 0.6f}, {gx + s * wBot, yBot}},
-                   lines(0.35f, 0.1f, s > 0 ? -1.1f : 1.1f));
+            const std::vector<V2> bal = {{gx + s * wTop, yTop}, {gx + s * (wTop + 0.18f), yTop + 0.18f}, {gx + s * (wBot + 0.65f), yBot + 0.6f},
+                                         {gx + s * wBot, yBot}};
+            k.fill(bal, wash(pal(H_STONE)));
+            k.fill(bal, lines(0.35f, 0.1f, s > 0 ? -1.1f : 1.1f, shade(H_STONE)));
         }
     }
 
-    // stone lanterns on both sides
+    // stone lanterns on both sides, lit
     k.begin({gx, -5.5f});
     for (float s : {-1.f, 1.f}) {
         const float lx = gx + s * 3.05f, b = -7.3f, sc = 1.1f;
         auto R = [&](float x0, float y0, float x1, float y1) { return rectPts(lx + x0 * sc, b + y0 * sc, lx + x1 * sc, b + y1 * sc); };
-        k.shape(R(-0.42f, 0.f, 0.42f, 0.22f), dots(0.4f, 0.09f), 1.4f);
-        k.shape(R(-0.13f, 0.22f, 0.13f, 1.05f), lines(0.35f, 0.08f, 0.f), 1.4f);
-        k.shape(R(-0.32f, 1.05f, 0.32f, 1.2f), dots(0.4f, 0.09f), 1.4f);
-        k.shape(R(-0.26f, 1.2f, 0.26f, 1.72f), solid(), 1.4f);
+        k.colored(R(-0.42f, 0.f, 0.42f, 0.22f), pal(H_STONE), dots(0.35f, 0.09f, shade(H_STONE)), 1.4f);
+        k.colored(R(-0.13f, 0.22f, 0.13f, 1.05f), pal(H_STONE), lines(0.35f, 0.08f, 0.f, shade(H_STONE)), 1.4f);
+        k.colored(R(-0.32f, 1.05f, 0.32f, 1.2f), pal(H_STONE), dots(0.35f, 0.09f, shade(H_STONE)), 1.4f);
+        k.dark(R(-0.26f, 1.2f, 0.26f, 1.72f), shade(H_STONE), 1.4f);
         k.fill(R(-0.13f, 1.3f, 0.13f, 1.6f), solid(C_PAPER));
-        k.shape({{lx - 0.6f * sc, b + 1.72f * sc}, {lx + 0.6f * sc, b + 1.72f * sc}, {lx + 0.18f * sc, b + 2.05f * sc}, {lx - 0.18f * sc, b + 2.05f * sc}},
-                solid(), 1.4f);
+        k.fill(R(-0.13f, 1.3f, 0.13f, 1.6f), wash(pal(H_WINDOW)));
+        k.dark({{lx - 0.6f * sc, b + 1.72f * sc}, {lx + 0.6f * sc, b + 1.72f * sc}, {lx + 0.18f * sc, b + 2.05f * sc}, {lx - 0.18f * sc, b + 2.05f * sc}},
+               shade(H_STONE), 1.4f);
         k.shape(ellipsePts({lx, b + 2.15f * sc}, 0.1f * sc, 0.12f * sc, 12), solid(), 1.f);
     }
 }
