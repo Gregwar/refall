@@ -1,6 +1,7 @@
 #pragma once
 // MANGA's page: the panels and the drawings in them (see art.cpp), in board units (y up), so they follow the
-// layout's camera. Every drawing is a list of elements, inked one after the other as the song goes on.
+// layout's camera. Every drawing is a list of elements, inked one after the other as the song goes on, then
+// colored (its washes flood in after the ink).
 #include <cstdint>
 #include <vector>
 
@@ -16,18 +17,35 @@ struct V2 {
 };
 
 // Screentones (the fragment shader's kinds).
-enum ToneKind { TONE_SOLID = 0, TONE_DOTS = 1, TONE_LINES = 2, TONE_CROSS = 3, TONE_DISC = 4, TONE_SAND = 5 };
-// What a fill or a stroke is printed in: the ink, the paper (a knock-out) or the variant's spot color.
+// A wash is a flat of color laid under the ink (watercolor-like: gently textured, flooding in after the ink).
+enum ToneKind { TONE_SOLID = 0, TONE_DOTS = 1, TONE_LINES = 2, TONE_CROSS = 3, TONE_DISC = 4, TONE_SAND = 5, TONE_WASH = 6 };
+// What a fill or a stroke is printed in: the ink, the paper (a knock-out), the variant's spot color, or one of
+// the variant's palette hues (pal), or a darker shade of it (shade: a screentone printed over its wash).
 enum InkColor { C_INK = 0, C_PAPER = 1, C_SPOT = 2 };
+// The palette's hues (each variant gives its own color to each).
+enum Hue {
+    H_SKY_TOP = 0, H_SKY_MID, H_SKY_LOW, // the evening sky, from the zenith down to the horizon's glow
+    H_SUN, H_PALE, H_CLOUD, H_CLOUD_SH,  // the setting sun, pale light (the moon, road lines), lit clouds, their shade
+    H_WINDOW, H_BLD_FAR, H_BLD_NEAR, H_ROOF,
+    H_ROAD, H_STONE, H_HAZARD, H_LAMP,   // asphalt, stone, the crossing's yellow, its red lamps
+    H_NIGHT, H_GLOW, H_MACHINE,          // the dark street, the vending machine's glow and its paint
+    H_SEA, H_SEA_DEEP, H_CLIFF, H_GRASS, H_TREE,
+    H_GATE, H_WOOD, H_GLASS, H_STRIP,
+    H_COUNT
+};
+constexpr int C_PAL = 16, C_SHADE = 64;
+constexpr int pal(int hue) { return C_PAL + hue; }
+constexpr int shade(int hue) { return C_PAL + C_SHADE + hue; }
 
 // A screentone: its kind, a density running from d0 at g0 to d1 at g1 (a gradient tone), its cell (board units)
-// and angle (radians).
+// and angle (radians). A wash runs from its color at g0 to color1 at g1 (-1: one color), d0 and d1 its opacity.
 struct Tone {
     int kind = TONE_SOLID;
     float d0 = 1.f, d1 = 1.f;
     V2 g0{0, 0}, g1{0, 1};
     float cell = 0.14f, angle = 0.785398f;
     int color = C_INK;
+    int color1 = -1;
 };
 
 // A filled shape: a polygon fanned from its centroid (convex or star-shaped), or a strip (pairs of points, top
@@ -59,7 +77,8 @@ struct Element {
     int anim = A_NONE;
     V2 pivot{0, 0};
     V2 center{0, 0}; // where its dots fly to
-    bool pencil = true; // sketched in pencil before it is inked
+    bool pencil = true; // sketched in pencil before it is inked (false: a panel's ground, its washes laid in
+                        // faintly from the start, the colorist's flats)
 };
 
 // A panel: a convex quad (top-left, top-right, bottom-right, bottom-left), its art panels hold a drawing.
