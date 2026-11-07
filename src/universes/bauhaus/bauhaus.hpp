@@ -1,5 +1,5 @@
 #pragma once
-// BAUHAUS: a Bauhaus poster of circles, triangles and squares in flat primaries on printed paper, recomposed by the
+// BAUHAUS: a Bauhaus poster of circles, triangles and squares cut out of colored paper in relief, recomposed by the
 // music (see bauhaus.cpp).
 #include <string>
 #include <vector>
@@ -31,11 +31,9 @@ private:
     enum Kind { K_BOX = 0, K_DISC = 1, K_TRI = 2 };
     struct Shape { float a[4], c[4], k[4], e[4], clip[4]; };
     std::vector<Shape> shapes_;
-    bool overprint_ = false; // the batch being filled multiplies with the paper (ink over ink darkens)
     void shape(Kind kind, float cx, float cy, float hx, float hy, float rot, const vec3& c, float a,
                float p1 = 0.f, float p2 = 0.f, float p3 = 0.f, const float* clip = nullptr);
     void rectPx(float x0, float y0, float x1, float y1, const vec3& c, float a, const float* clip = nullptr);
-    void setOverprint(bool on);
     void flushShapes();
     vec2 px(float x, float y) const; // board -> pixels
     float unitPx_ = 45.f;            // pixels per board unit
@@ -78,8 +76,32 @@ private:
     void compose(long bar, float dur, bool instant);
     void setTarget(int slot, Form to, float dur, bool instant, const std::string& text = std::string());
     void updateElements(float dt);
-    void drawPoster();
+    void drawPoster(const MusicState& music);
     void drawForm(int slot, const Form& f, float spin);
+
+    // ---- Paper cut-outs: every form of the poster is a card of thick paper laid on the sheet at its own height
+    // (casting a soft shadow on the sheet and on the cards under it); in a drop the cards lift off and turn in space.
+    enum Motion { M_FREE, M_ROD, M_TILE }; // in a drop: turns freely, rolls about its length, flips like a tile
+    struct Card {
+        int kind;
+        float hx, hy, p1, p2, p3; // as the shapes', in board units
+        vec3 col;
+        float a;
+        float x, y, rot, h;       // its place on the sheet (rot clockwise, as the shapes'), its height
+        int key, motion;          // its identity (its motion in a drop)
+        float rise;               // how high it rises in a drop (board units)
+        vec3 c;                   // its pose: center, rotation (column major), its lift (0..1)
+        float R[9];
+        float lift;
+    };
+    std::vector<Card> cards_;
+    float cardH_ = 0.f, cardRise_ = 0.f; // the height, the rise and the key of the cards being added
+    int cardKey_ = 0, cardMotion_ = M_FREE;
+    void card(Kind kind, float x, float y, float hx, float hy, float rot, const vec3& c, float a, float p1 = 0.f,
+              float p2 = 0.f, float p3 = 0.f);
+    void poseCards(const MusicState& music);
+    void drawCards();
+    void setLight(GLuint prog);
     std::string title_, info1_, info2_, section_;
     long bar_ = -1000, step_ = -1000;
     int heavy_ = -1;             // the side holding the big circle (-1 left, +1 right)
@@ -117,10 +139,18 @@ private:
     void drawBoard(const Game& g);
 
     // ---- GL.
-    GLuint progShape_ = 0, progText_ = 0, progComp_ = 0;
+    GLuint progShape_ = 0, progText_ = 0, progComp_ = 0, progCard_ = 0, progShadow_ = 0, progSheet_ = 0;
     GLuint quadVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint cubeVao_ = 0, cubeVbo_ = 0, quadVao_ = 0;
     ugl::Target posterT_;
     mat4 vp_;
+    mat4 vp3_;                   // the poster in space: the reference camera (the sheet at z = 0 maps as vp_ does)
+    vec3 eye_{0.f};
+    float camDist_ = 36.f;
+    // the light: a far sun over the sheet, swinging in to the drop's spotlight circling the sculpture
+    vec3 lamp_{0.f}, spotDir_{0.f, 0.f, -1.f};
+    float lightR_ = 0.f;
+    float lit_[4] = {0.5f, 0.6f, 1.f, 0.f};
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
 
     // ---- Song, variant.
@@ -136,8 +166,13 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     bool dropMode_ = false, dropPending_ = false;
     bool realDrop_ = false;
-    float disc_ = 0.f;        // the drop's great disc (0..1, eased in over half a second)
-    float discX_ = 0.f, discY_ = 0.f, discTX_ = 0.f, discTY_ = 0.f; // its center, eased to the composition's
+    bool wasReal_ = false;
+    float dropLift_ = 0.f;    // the drop's sculpture (0 flat .. 1 every card lifted; up over 1.1 s, down over 1.8 s)
+    double dropClock_ = 0.0;  // beats since the cards lifted (held while they fold back)
+    double lastBeat_ = 0.0;
+    uint64_t salt_ = 0;       // a fold after a drop lays down a new composition
+    bool folding_ = false;
+    float hop_ = 1.f;         // a Tetris: every card hops off the sheet as it turns (0..1)
     float kickIn_ = 0.f, kickShown_ = 0.f;
     float lockLine_ = 0.f, lockX0_ = 0.f, lockX1_ = 0.f, lockY_ = 0.f;
     float time_ = 0.f;

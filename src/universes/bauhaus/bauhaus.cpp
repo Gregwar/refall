@@ -1,13 +1,12 @@
 // BAUHAUS: a Bauhaus poster (Bayer, Schmidt, Kandinsky, Moholy-Nagy, Albers) recomposed by the song.
 //
-// One world: a printed sheet of cream paper (a fine grain, long soft fibers, the ink a little uneven) carrying a
-// strict, balanced composition of flat geometric forms in the primaries and black: a great circle, a triangle, a
+// One world: a sheet of cream paper (a fine grain, long soft fibers) carrying a strict, balanced composition of
+// geometric paper cut-outs in the primaries and black: a great circle, a triangle, a
 // square, a half disc on the sheet's edge, a quarter disc in a corner, a long black bar on the diagonal that ties both
 // sides of the sheet together, a short bar, thin rules, small dots threaded on the bar, and lowercase type (the song's
 // title turned up the light side or set across it, its tempo as big numerals with the section, tempo and key beside
 // them). The composition is asymmetric but balanced: the circle weighs one side (the heavy side), the triangle and the
-// square answer it on the other, diagonally; the cleared rows' sampler sits under the circle. On light sheets some inks
-// overprint (a triangle over the bar darkens like ink over ink). The poster lives in the free zones beyond the HUD
+// square answer it on the other, diagonally; the cleared rows' sampler sits under the circle. The poster lives in the free zones beyond the HUD
 // columns: the band of the well and the columns, and a crisp box behind each HUD line in the corners, veil it toward
 // the paper.
 //
@@ -20,18 +19,25 @@
 // cross the sheet shrinks away and grows again in its new place instead of sliding across). Calm is sparse (the
 // circle, the bar, the title, much paper); mid adds the triangle, the square, the half disc, the short bar, a rule,
 // the numerals and dots stepping along the bar every two beats; a peak is dense (a ring around the circle, a second
-// rule, bigger numerals) and its big forms turn slowly, the dots and the ring swell with the kicks. The drop (a real DROP section, not a chorus) grows a great
-// disc in the signature color out of the heavy side in half a second, every form inside it cut out of it in paper,
-// held while the drop lasts and shrinking back after. Every cleared row closes into discs sliding out of the well
+// rule, bigger numerals) and its big forms turn slowly, the dots and the ring swell with the kicks.
+//
+// Every form is a paper cut-out: a card of thick colored paper at its own height over the sheet, casting a soft
+// shadow from a far sun on the sheet and on the cards under it (layered paper), its cut edge lit on the light's side.
+// The drop (a real DROP section, not a chorus) unfolds the poster into a kinetic sculpture (Moholy-Nagy's Light-Space
+// Modulator): the cards peel off the sheet over about a second and turn in space on their own axes on the beat grid,
+// under a spotlight circling the sheet that sweeps their shadows across it; after the drop they fold back flat onto a
+// new composition. Every cleared row closes into discs sliding out of the well
 // sideways (0.35 s, clipped at its edge) and joins the poster as one small form (a square, disc, triangle, half or
-// quarter disc in the row's main color) in a sampler grid that grows over the song; a Tetris turns every big form a
-// quarter turn and adds a medallion of four quarter discs in the four rows' colors. Slow motion turns the sheet into a
-// photogram (a dark ground, the forms pale where they held back the light). Game over slides the stack out row by row
-// from the top.
+// quarter disc in the row's main color) in a sampler grid that grows over the song; a Tetris hops every card off the
+// sheet as every big form turns a quarter, and adds a medallion of four quarter discs in the four rows' colors. Slow
+// motion turns the sheet into a photogram (a dark ground, the cut-outs pale where they held back the light, their
+// shadows a soft grey halo). Game over slides the stack out row by row from the top.
 //
-// Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
+// Cost: a few dozen cards, each its box rasterized and ray-cast in the fragment shader, each with one analytic soft
+// shadow quad; flat instanced shapes and SDF type; one full-resolution poster target with depth, one composite pass.
 //
-// Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
+// Layout contract: the game and the HUD flat (orthographic at the reference camera's scale on the board plane), the
+// poster's cards through the reference camera itself (the sheet at z = 0 maps to the same pixels).
 #include "universes/bauhaus/bauhaus.hpp"
 
 #include <algorithm>
@@ -68,7 +74,7 @@ using ugl::set4f;
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
 // How a variant composes: the Dessau poster (the forms plain), Kandinsky (the circles in concentric rings, more
-// rules), Albers (the squares nested, homage to the square), Moholy-Nagy (translucent overprinted planes, many rules).
+// rules), Albers (the squares nested, homage to the square), Moholy-Nagy (translucent vellum planes, many rules).
 enum Style { ST_DESSAU, ST_KANDINSKY, ST_ALBERS, ST_MOHOLY };
 
 // The sheets: the paper, the ink, four poster colors (the first is the signature: the drop's disc) and the seven
@@ -79,26 +85,30 @@ struct VariantDef {
     unsigned col[4];
     unsigned piece[7];
     Style style;
-    bool overprint; // inks multiply where they cross (light sheets)
 };
 const VariantDef VARIANTS[] = {
     // the classic: red, yellow, blue and black on cream
     {"DESSAU", 0xeee6d3, 0x1b1a19, {0xd8352a, 0xf2b71b, 0x1d4e9e, 0x9a948a},
-     {0x1d4e9e, 0xe9a915, 0xd8352a, 0x1b1a19, 0x8f897f, 0x6b9fcb, 0xe46f24}, ST_DESSAU, true},
+     {0x1d4e9e, 0xe9a915, 0xd8352a, 0x1b1a19, 0x8f897f, 0x6b9fcb, 0xe46f24}, ST_DESSAU},
     // circles in rings, violet and green beside the primaries, a warmer paper
     {"KANDINSKY", 0xf2e7cf, 0x1d1b22, {0xcf3a2c, 0x274a9a, 0xf0c21d, 0x6a3f8c},
-     {0x274a9a, 0xeab01a, 0xcf3a2c, 0x1d1b22, 0x6a3f8c, 0x2f8a5c, 0xe8762c}, ST_KANDINSKY, true},
+     {0x274a9a, 0xeab01a, 0xcf3a2c, 0x1d1b22, 0x6a3f8c, 0x2f8a5c, 0xe8762c}, ST_KANDINSKY},
     // nested squares in warm earths
     {"ALBERS", 0xede5d5, 0x26231f, {0xd9622b, 0xe2a52e, 0xa8322a, 0x77745a},
-     {0xdc9c22, 0xd9622b, 0xa8322a, 0x26231f, 0x77745a, 0x4d6787, 0x8a8174}, ST_ALBERS, true},
+     {0xdc9c22, 0xd9622b, 0xa8322a, 0x26231f, 0x77745a, 0x4d6787, 0x8a8174}, ST_ALBERS},
     // the same primaries printed on black, cream for the ink
     {"NACHT", 0x161515, 0xece4d2, {0xe2412f, 0xf5c31f, 0x3d6fd0, 0x6e6a63},
-     {0x4a7ad8, 0xf5c31f, 0xe2412f, 0xece4d2, 0x8a857c, 0x86b6e2, 0xf07c2c}, ST_DESSAU, false},
+     {0x4a7ad8, 0xf5c31f, 0xe2412f, 0xece4d2, 0x8a857c, 0x86b6e2, 0xf07c2c}, ST_DESSAU},
     // translucent planes, black and red on a grey paper
     {"MOHOLY", 0xe3e1db, 0x151515, {0xcc2e24, 0xeec22c, 0x55779f, 0x8f8d88},
-     {0x4f6f96, 0xe5b21e, 0xcc2e24, 0x151515, 0x8a8883, 0xdf6a2a, 0x8fb2d2}, ST_MOHOLY, true},
+     {0x4f6f96, 0xe5b21e, 0xcc2e24, 0x151515, 0x8a8883, 0xdf6a2a, 0x8fb2d2}, ST_MOHOLY},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
+
+// The paper in full shadow, as a multiplier: a little cool on the light sheets.
+vec3 shadeOf(const VariantDef& V) {
+    return ugl::luma(hex(V.paper)) < 0.4f ? vec3(0.45f, 0.45f, 0.47f) : vec3(0.5f, 0.5f, 0.56f);
+}
 
 // The gutter around a piece (board units, each side), the clear's slide (seconds), the trace's flight to the poster.
 constexpr float GAP = 0.06f;
@@ -111,10 +121,6 @@ constexpr float VEIL = 0.93f;
 float ease(float t) {
     t = saturate(t);
     return t * t * t * (t * (t * 6.f - 15.f) + 10.f);
-}
-float easeOut(float t) {
-    t = saturate(t);
-    return 1.f - (1.f - t) * (1.f - t) * (1.f - t);
 }
 
 // UTF-8 to the font's characters: the middle dot is glyph 127, accented Latin letters lose their accent, anything
@@ -166,6 +172,38 @@ int markIndex(const int cells[4][2]) {
     return best;
 }
 
+// A 3x3 rotation, column major (as GLSL's mat3).
+struct M3 {
+    float m[9];
+    static M3 of(const float* p) { M3 r; std::memcpy(r.m, p, sizeof(r.m)); return r; }
+    vec3 operator*(const vec3& v) const {
+        return {m[0] * v.x + m[3] * v.y + m[6] * v.z, m[1] * v.x + m[4] * v.y + m[7] * v.z, m[2] * v.x + m[5] * v.y + m[8] * v.z};
+    }
+};
+M3 mul(const M3& a, const M3& b) {
+    M3 r;
+    for (int c = 0; c < 3; c++)
+        for (int row = 0; row < 3; row++)
+            r.m[c * 3 + row] = a.m[row] * b.m[c * 3] + a.m[3 + row] * b.m[c * 3 + 1] + a.m[6 + row] * b.m[c * 3 + 2];
+    return r;
+}
+M3 rotZ(float a) {
+    const float c = std::cos(a), s = std::sin(a);
+    return {{c, s, 0.f, -s, c, 0.f, 0.f, 0.f, 1.f}};
+}
+// about a unit axis (Rodrigues)
+M3 rotAxis(const vec3& u, float a) {
+    const float c = std::cos(a), s = std::sin(a), k = 1.f - c;
+    return {{c + u.x * u.x * k, u.y * u.x * k + u.z * s, u.z * u.x * k - u.y * s,
+             u.x * u.y * k - u.z * s, c + u.y * u.y * k, u.z * u.y * k + u.x * s,
+             u.x * u.z * k + u.y * s, u.y * u.z * k - u.x * s, c + u.z * u.z * k}};
+}
+// A turn on the beat grid: a step eased into each period, with a steady drift under it so it never stops dead.
+float stepTurn(float x) {
+    const float f = std::floor(x);
+    return 0.6f * (f + ease(x - f)) + 0.4f * x;
+}
+
 } // namespace
 
 // =====================================================================================================
@@ -175,7 +213,11 @@ int markIndex(const int cells[4][2]) {
 bool BauhausUniverse::init(int width, int height) {
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "bauhaus shapes");
     progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "bauhaus text");
-    progComp_ = ugl::program(ugl::FULLSCREEN_VS, shaders::COMP_FS, "bauhaus composite");
+    const std::string common = shaders::CARD_COMMON;
+    progComp_ = ugl::program(ugl::FULLSCREEN_VS, (common + shaders::COMP_FS).c_str(), "bauhaus composite");
+    progCard_ = ugl::program(shaders::CARD_VS, (common + shaders::CARD_FS).c_str(), "bauhaus cards");
+    progShadow_ = ugl::program(shaders::SHADOW_VS, (common + shaders::SHADOW_FS).c_str(), "bauhaus shadows");
+    progSheet_ = ugl::program(ugl::FULLSCREEN_VS, (common + shaders::SHEET_FS).c_str(), "bauhaus sheet light");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -201,6 +243,32 @@ bool BauhausUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+    // the shadows' quad
+    glGenVertexArrays(1, &quadVao_);
+    glBindVertexArray(quadVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    // the cards' box: a cube, its faces wound counterclockwise seen from outside
+    {
+        std::vector<float> v;
+        for (int axis = 0; axis < 3; axis++)
+            for (int sg = -1; sg <= 1; sg += 2) {
+                vec3 n(0.f), u(0.f), w(0.f);
+                (axis == 0 ? n.x : axis == 1 ? n.y : n.z) = (float)sg;
+                (axis == 0 ? u.y : axis == 1 ? u.z : u.x) = 1.f;
+                w = cross(n, u); // u x w = n
+                const vec3 P[4] = {n - u - w, n + u - w, n + u + w, n - u + w};
+                for (int i : {0, 1, 2, 0, 2, 3}) v.insert(v.end(), {P[i].x, P[i].y, P[i].z});
+            }
+        glGenVertexArrays(1, &cubeVao_);
+        glGenBuffers(1, &cubeVbo_);
+        glBindVertexArray(cubeVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    }
     glBindVertexArray(0);
 
     buildFont(med_, FONT_MED, 128.f, 2048);
@@ -268,15 +336,20 @@ void BauhausUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     unitPx_ = height_ / (2.f * hh);
-    posterT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    // the poster's space: the reference camera, near and far set around the sheet for the depth's precision
+    const layout::Camera cam3 = layout::camera(width_, height_, 1.f, 0.f, 4.f, 120.f);
+    vp3_ = cam3.vp;
+    eye_ = cam3.eye;
+    camDist_ = cam3.dist;
+    posterT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
     if (bar_ > -1000) compose(bar_, 0.f, true);
 }
 
 BauhausUniverse::~BauhausUniverse() {
     posterT_.destroy();
-    for (GLuint p : {progShape_, progText_, progComp_}) glDeleteProgram(p);
-    for (GLuint v : {shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progShape_, progText_, progComp_, progCard_, progShadow_, progSheet_}) glDeleteProgram(p);
+    for (GLuint v : {shapeVao_, textVao_, cubeVao_, quadVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, shapeVbo_, textVbo_, cubeVbo_}) glDeleteBuffers(1, &b);
     for (Font* f : {&med_, &light_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
@@ -329,7 +402,7 @@ void BauhausUniverse::setLevel(int level, float energy, float seconds, float imp
     lvDur_ = std::clamp(seconds, 1.f, 5.f);
 }
 
-// The drop: on its downbeat the poster recomposes around the heavy side and, on a real drop, the great disc grows.
+// The drop: on its downbeat the poster recomposes around the heavy side and, on a real drop, the cards lift off.
 void BauhausUniverse::drop(float strength) {
     (void)strength;
     dropMode_ = true;
@@ -481,6 +554,7 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     if (traces_[i].medallion) { traces_.erase(traces_.begin() + i); break; }
             traces_.push_back(m);
             tetrisTurnTo_ += 0.5f * PI;
+            hop_ = 0.f; // every card hops off the sheet as it turns
         }
         // the oldest forms of a full sampler leave it
         for (;;) {
@@ -565,23 +639,14 @@ void BauhausUniverse::rectPx(float x0, float y0, float x1, float y1, const vec3&
     shape(K_BOX, 0.5f * (x0 + x1), 0.5f * (y0 + y1), 0.5f * (x1 - x0), 0.5f * (y1 - y0), 0.f, c, a, 0.f, 0.f, 0.f, clip);
 }
 
-// Overprinted shapes multiply with what is under them (ink over ink darkens); the others cover it.
-void BauhausUniverse::setOverprint(bool on) {
-    if (on == overprint_) return;
-    flushShapes();
-    overprint_ = on;
-}
-
 void BauhausUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
     set2f(progShape_, "uRes", (float)width_, (float)height_);
-    if (overprint_) glBlendFunc(GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA);
     glBindVertexArray(shapeVao_);
     glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
     glBufferData(GL_ARRAY_BUFFER, shapes_.size() * sizeof(Shape), shapes_.data(), GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)shapes_.size());
-    if (overprint_) glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     shapes_.clear();
 }
 
@@ -680,8 +745,9 @@ void BauhausUniverse::compose(long bar, float dur, bool instant) {
     const bool peak = lvl >= 2 || dropMode_;
     const int period = lvl >= 1 ? 4 : 8;
     const long era = (long)std::floor((double)bar / period);
-    const Pick rb{seed_ ^ ((uint64_t)(era + 100000) * 0x9E3779B97F4A7C15ull)};
-    Rng rs(seed_ ^ ((uint64_t)(bar + 100000) * 0xC2B2AE3D27D4EB4Full));
+    // (the salt: each drop's fold lays down a new composition)
+    const Pick rb{seed_ ^ ((uint64_t)(era + 100000) * 0x9E3779B97F4A7C15ull) ^ (salt_ * 0xD6E8FEB86659FD93ull)};
+    Rng rs(seed_ ^ ((uint64_t)(bar + 100000) * 0xC2B2AE3D27D4EB4Full) ^ (salt_ * 0xA0761D6478BD642Full));
     // the circle changes side now and then with the structure (never on the drop: it grows the disc there)
     if (!dropMode_ && (bar_ <= -1000 || (rb.chance(1, 0.3f) && (era & 1))))
         heavy_ = rb.chance(2, 0.5f) ? -1 : 1;
@@ -698,7 +764,7 @@ void BauhausUniverse::compose(long bar, float dur, bool instant) {
     for (int i = 0; i < F_COUNT; i++) T[i] = el_[i].to, T[i].a = 0.f;
 
     // ---- The great circle and its ring.
-    const int circleCol = drop ? -1 : (rb.chance(4, 0.55f) ? 0 : rb.chance(5, 0.5f) ? 2 : -1);
+    const int circleCol = rb.chance(4, 0.55f) ? 0 : rb.chance(5, 0.5f) ? 2 : -1;
     {
         // the heavy zone's height, less the sampler's block at its foot (a full sampler, the numerals, the bar's
         // lane), holds the circle and its ring
@@ -915,8 +981,6 @@ void BauhausUniverse::compose(long bar, float dur, bool instant) {
         setTarget(i, T[i], dur, instant, text);
     }
     placeTraces(std::max(dur, 0.6f), instant);
-    // the drop's disc: on the left it stays clear of the HUD's corners
-    if (drop) { discTX_ = hx; discTY_ = hs < 0.f ? 0.5f : -up * 1.5f; }
 }
 
 void BauhausUniverse::setTarget(int slot, Form to, float dur, bool instant, const std::string& text) {
@@ -944,7 +1008,11 @@ void BauhausUniverse::setTarget(int slot, Form to, float dur, bool instant, cons
     const float far = std::hypot(e.from.x - to.x, e.from.y - to.y);
     const bool bar = slot == F_BAR0 || slot == F_BAR1 || slot == F_LINE0 || slot == F_LINE1;
     const bool turn = (bar || isText) && std::fabs(e.from.rot - to.rot) > (isText ? 0.05f : 0.15f);
-    e.twoPhase = e.cur.a > 0.01f && to.a > 0.01f && (far > 6.f || turn || (isText && text != e.text));
+    // (folding back after a drop, a form glides from where it turned in the air to its new place, unless it must cross
+    // the well)
+    const bool cross = e.from.x * to.x < 0.f && std::fabs(e.from.x) > 6.f && std::fabs(to.x) > 6.f;
+    e.twoPhase = e.cur.a > 0.01f && to.a > 0.01f &&
+                 ((far > 6.f && (isText || !folding_ || cross)) || (turn && (isText || !folding_)) || (isText && text != e.text));
     if (!e.twoPhase && text != e.text) e.text = text;
     e.nextText = text;
 }
@@ -1016,88 +1084,112 @@ void BauhausUniverse::placeTraces(float dur, bool instant) {
     }
 }
 
-// One form of the poster, in its style (spin: the peak's turn).
+// One form of the poster, in its style (spin: the peak's turn), as paper cut-outs: each layer of a form is its own
+// card, a little above the one under it (the layers of a Kandinsky circle, of an Albers square).
 void BauhausUniverse::drawForm(int slot, const Form& f, float spin) {
     const VariantDef& V = VARIANTS[variant_];
     if (f.a <= 0.002f || f.s <= 0.02f) return;
-    const vec2 c = px(f.x, f.y);
-    const float s = f.s * unitPx_;
+    const float x = f.x, y = f.y, s = f.s;
     const vec3 paper = hex(V.paper), ink = hex(V.ink);
-    const bool op = V.overprint;
-    const float planeA = V.style == ST_MOHOLY ? 0.86f : 1.f;
+    // Moholy's planes are translucent vellum
+    const float planeA = V.style == ST_MOHOLY ? 0.84f : 1.f;
+    // each slot's height on the sheet (the long bar over the circle, the triangle over the bar, the dots on top)
+    static const float HEIGHT[F_COUNT] = {0.3f, 0.21f, 0.26f, 0.54f, 0.18f, 0.15f, 0.44f, 0.64f, 0.09f, 0.11f,
+                                          0.74f, 0.74f, 0.74f, 0.1f, 0.1f, 0.f};
+    static const float RISE[F_COUNT] = {3.2f, 4.f, 5.f, 6.f, 3.2f, 2.6f, 1.6f, 4.4f, 1.f, 1.2f,
+                                        7.f, 6.f, 5.f, 0.f, 0.f, 0.f};
+    cardH_ = HEIGHT[slot];
+    cardRise_ = RISE[slot];
+    cardKey_ = slot * 8;
+    cardMotion_ = (slot == F_BAR0 || slot == F_LINE0 || slot == F_LINE1) ? M_ROD : M_FREE;
     switch (slot) {
     case F_CIRCLE:
-        setOverprint(false);
-        shape(K_DISC, c.x, c.y, s, s, 0.f, f.col, f.a, 0.f, 0.f, 4.f);
+        card(K_DISC, x, y, s, s, 0.f, f.col, f.a, 0.f, 0.f, 4.f);
         if (V.style == ST_KANDINSKY) {
-            // concentric circles, a little off center
+            // concentric circles, a little off center, each a card on the one before
             const vec3 c2 = length(f.col - hex(V.col[2])) < 0.1f ? hex(V.col[0]) : hex(V.col[2]);
             const vec3 c3 = length(f.col - ink) < 0.1f ? paper : ink;
-            shape(K_DISC, c.x + s * 0.08f, c.y - s * 0.06f, s * 0.62f, s * 0.62f, 0.f, c2, f.a, 0.f, 0.f, 4.f);
-            shape(K_DISC, c.x + s * 0.12f, c.y - s * 0.1f, s * 0.28f, s * 0.28f, 0.f, c3, f.a, 0.f, 0.f, 4.f);
+            cardH_ += 0.06f; cardKey_++; cardRise_ += 1.4f;
+            card(K_DISC, x + s * 0.08f, y + s * 0.06f, s * 0.62f, s * 0.62f, 0.f, c2, f.a, 0.f, 0.f, 4.f);
+            cardH_ += 0.06f; cardKey_++; cardRise_ += 1.4f;
+            card(K_DISC, x + s * 0.12f, y + s * 0.1f, s * 0.28f, s * 0.28f, 0.f, c3, f.a, 0.f, 0.f, 4.f);
         }
         break;
     case F_RING:
-        setOverprint(false);
-        shape(K_DISC, c.x, c.y, s, s, 0.f, f.col, f.a, s - f.s2 * unitPx_, 0.f, 4.f);
+        card(K_DISC, x, y, s, s, 0.f, f.col, f.a, s - f.s2, 0.f, 4.f);
         break;
     case F_SQUARE:
-        setOverprint(false);
         if (V.style == ST_ALBERS) {
-            // homage to the square: three more squares nested, each lower in the one before
+            // homage to the square: three more squares nested, each lower in the one before, each on the one before
             const vec3 cols[4] = {hex(V.col[3]), hex(V.col[1]), hex(V.col[0]), hex(V.col[2])};
             float h = s, oy = 0.f;
             for (int i = 0; i < 4; i++) {
-                shape(K_BOX, c.x, c.y + oy, h, h, f.rot + spin * 0.3f, cols[i], f.a);
+                card(K_BOX, x, y - oy, h, h, f.rot + spin * 0.3f, cols[i], f.a);
+                cardH_ += 0.05f; cardKey_++; cardRise_ += 1.2f;
                 const float nh = h * 0.72f;
                 oy += (h - nh) * 0.45f;
                 h = nh;
             }
         } else {
-            setOverprint(op && V.style == ST_MOHOLY);
-            shape(K_BOX, c.x, c.y, s, s, f.rot - spin * 0.7f, f.col, f.a * planeA);
+            card(K_BOX, x, y, s, s, f.rot - spin * 0.7f, f.col, f.a * planeA);
         }
         break;
     case F_TRIANGLE:
-        setOverprint(op);
-        shape(K_TRI, c.x, c.y, s, f.s2 * unitPx_, f.rot + spin, f.col, f.a * planeA, 0.f);
+        card(K_TRI, x, y, s, f.s2, f.rot + spin, f.col, f.a * planeA, 0.f);
         break;
     case F_HALF: {
         (void)spin;
-        setOverprint(op);
         // the flat side on the sheet's edge (or the left zone's line above the HUD's corner), facing in
         const float face = f.y > 0.f ? PI : 0.f;
-        shape(K_DISC, c.x, c.y, s, s, 0.f, f.col, f.a * planeA, 0.f, face, 0.5f * PI);
+        card(K_DISC, x, y, s, s, 0.f, f.col, f.a * planeA, 0.f, face, 0.5f * PI);
         break;
     }
     case F_QUARTER: {
-        setOverprint(false);
         // a quarter of a disc centered on the sheet's corner, facing in
         const float face = (f.x > 0.f ? -1.f : 1.f) * (f.y > 0.f ? 0.75f * PI : 0.25f * PI);
-        shape(K_DISC, c.x, c.y, s, s, 0.f, f.col, f.a, 0.f, face, 0.25f * PI);
+        card(K_DISC, x, y, s, s, 0.f, f.col, f.a, 0.f, face, 0.25f * PI);
         break;
     }
     case F_BAR0: case F_BAR1: case F_LINE0: case F_LINE1: {
-        setOverprint(slot == F_BAR1 && op);
-        const float th = std::max(1.2f, f.s2 * unitPx_);
-        shape(K_BOX, c.x, c.y, s, th, -f.rot, f.col, f.a);
+        const float th = std::max(1.2f / unitPx_, f.s2);
+        card(K_BOX, x, y, s, th, -f.rot, f.col, f.a * (slot == F_BAR1 ? planeA : 1.f));
         break;
     }
     default: // dots
-        setOverprint(false);
-        shape(K_DISC, c.x, c.y, s, s, 0.f, f.col, f.a, 0.f, 0.f, 4.f);
+        card(K_DISC, x, y, s, s, 0.f, f.col, f.a, 0.f, 0.f, 4.f);
         break;
     }
 }
 
-// The poster itself (into posterT_): the forms back to front, the cleared rows' forms, the words.
-void BauhausUniverse::drawPoster() {
+void BauhausUniverse::card(Kind kind, float x, float y, float hx, float hy, float rot, const vec3& c, float a,
+                           float p1, float p2, float p3) {
+    if (a <= 0.002f || hx <= 0.01f || hy <= 0.005f) return;
+    Card k{};
+    k.kind = kind;
+    k.hx = hx; k.hy = hy; k.p1 = p1; k.p2 = p2; k.p3 = p3;
+    k.col = c;
+    k.a = std::min(1.f, a);
+    k.x = x; k.y = y; k.rot = rot; k.h = cardH_;
+    k.key = cardKey_;
+    k.motion = cardMotion_;
+    k.rise = cardRise_;
+    cards_.push_back(k);
+}
+
+// The poster itself (into posterT_): the words printed and cut, the sheet's light, then the forms and the cleared
+// rows' forms as paper cards, each with its shadow.
+void BauhausUniverse::drawPoster(const MusicState& music) {
     const VariantDef& V = VARIANTS[variant_];
     const float spin = spin_ + tetrisTurn_;
+    cards_.clear();
     for (int i : {F_QUARTER, F_HALF, F_SQUARE, F_RING, F_CIRCLE, F_LINE0, F_LINE1, F_BAR0, F_TRIANGLE, F_BAR1}) {
         Form f = el_[i].cur;
         if (i == F_RING) f.s2 *= 1.f + 0.6f * kickShown_; // the ring thickens with the kicks
+        const size_t n0 = cards_.size();
         drawForm(i, f, spin);
+        // a form on the move is picked up off the sheet and laid down again
+        const float up = el_[i].t < 1.f ? 0.3f * std::sin(PI * el_[i].t) : 0.f;
+        for (size_t k = n0; k < cards_.size(); k++) cards_[k].h += up;
     }
     // the dots swell with the kicks
     for (int i = F_DOT0; i <= F_DOT2; i++) {
@@ -1105,38 +1197,52 @@ void BauhausUniverse::drawPoster() {
         f.s *= 1.f + 0.35f * kickShown_;
         drawForm(i, f, spin);
     }
-    // the cleared rows: small forms in the piece colors, the medallions of a Tetris
-    setOverprint(false);
-    for (const Trace& t : traces_) {
+    // the cleared rows: small cut-outs in the piece colors, the medallions of a Tetris
+    int n = 0;
+    for (size_t ti = 0; ti < traces_.size(); ti++) {
+        const Trace& t = traces_[ti];
         const Form& f = t.cur;
         if (f.s <= 0.02f) continue;
-        const vec2 c = px(f.x, f.y);
-        const float s = f.s * unitPx_;
+        const float x = f.x, y = f.y, s = f.s;
+        cardH_ = 0.1f + (t.t < 1.f ? 0.5f * std::sin(PI * t.t) : 0.f);
+        cardKey_ = 200 + (int)ti * 8;
         if (t.medallion) {
-            for (int q = 0; q < 4; q++)
-                shape(K_DISC, c.x, c.y, s, s, 0.f, hex(V.piece[std::clamp(t.quarters[q], 0, 6)]), f.a, 0.f,
-                      0.25f * PI + q * 0.5f * PI + spin, 0.25f * PI + 0.004f);
-            shape(K_DISC, c.x, c.y, s * 0.18f, s * 0.18f, 0.f, hex(V.paper), f.a, 0.f, 0.f, 4.f);
+            cardMotion_ = M_FREE;
+            cardRise_ = 3.f;
+            for (int q = 0; q < 4; q++) {
+                card(K_DISC, x, y, s, s, 0.f, hex(V.piece[std::clamp(t.quarters[q], 0, 6)]), f.a, 0.f,
+                     0.25f * PI + q * 0.5f * PI + spin, 0.25f * PI + 0.004f);
+                cardKey_++;
+                cardH_ += 0.01f;
+            }
+            cardH_ += 0.05f;
+            card(K_DISC, x, y, s * 0.18f, s * 0.18f, 0.f, hex(V.paper), f.a, 0.f, 0.f, 4.f);
             continue;
         }
+        // the sampler's tiles flip in a wave along its columns in a drop
+        cardMotion_ = M_TILE;
+        cardRise_ = 0.9f + 0.1f * (float)(n % samplerCols_);
+        cardKey_ = 200 + (n % samplerCols_) * 8 + (n / samplerCols_) * 64 + 1000;
+        n++;
         const vec3 cc = hex(V.piece[std::clamp(t.col, 0, 6)]);
         switch (t.kind) {
-        case 0: shape(K_BOX, c.x, c.y, s * 0.88f, s * 0.88f, t.rot, cc, f.a); break;
-        case 1: shape(K_DISC, c.x, c.y, s, s, 0.f, cc, f.a, 0.f, 0.f, 4.f); break;
-        case 2: shape(K_TRI, c.x, c.y, s, s, t.rot, cc, f.a, 1.f); break;
-        case 3: shape(K_DISC, c.x, c.y + s * 0.35f, s, s, 0.f, cc, f.a, 0.f, t.rot, 0.5f * PI); break;
+        case 0: card(K_BOX, x, y, s * 0.88f, s * 0.88f, t.rot, cc, f.a); break;
+        case 1: card(K_DISC, x, y, s, s, 0.f, cc, f.a, 0.f, 0.f, 4.f); break;
+        case 2: card(K_TRI, x, y, s, s, t.rot, cc, f.a, 1.f); break;
+        case 3: card(K_DISC, x, y - s * 0.35f, s, s, 0.f, cc, f.a, 0.f, t.rot, 0.5f * PI); break;
         default: {
             // a quarter disc filling the cell from one corner
             const float a = t.rot + 0.25f * PI;
             const float ox = -std::sin(a) * s * 0.9f, oy = std::cos(a) * s * 0.9f;
-            shape(K_DISC, c.x + ox, c.y + oy, s * 1.75f, s * 1.75f, 0.f, cc, f.a, 0.f, a, 0.25f * PI);
+            card(K_DISC, x + ox, y - oy, s * 1.75f, s * 1.75f, 0.f, cc, f.a, 0.f, a, 0.25f * PI);
             break;
         }
         }
     }
-    flushShapes();
-    setOverprint(false);
-    // the words
+    poseCards(music);
+
+    // the words: printed on the sheet (the information), or cut out of paper (the title, the numerals), their shadow
+    // under them
     std::vector<float> q;
     for (int i : {F_TITLE, F_NUMBER, F_INFO}) {
         const Element& e = el_[i];
@@ -1144,21 +1250,204 @@ void BauhausUniverse::drawPoster() {
         const Font& f = i == F_INFO ? light_ : med_;
         const float track = i == F_INFO ? 0.06f : i == F_NUMBER ? -0.02f : 0.02f;
         const float capPx = e.cur.s * unitPx_;
-        q.clear();
-        size_t a = 0;
-        int line = 0;
-        while (a <= e.text.size()) {
-            size_t b = e.text.find('\n', a);
-            if (b == std::string::npos) b = e.text.size();
-            const std::string s = e.text.substr(a, b - a);
-            const float base = e.cur.y - e.cur.s - line * e.cur.s * 1.7f;
-            const vec2 p = px(e.cur.x, base);
-            textQuads(f, s, p.x, p.y, capPx, track, e.cur.rot, q);
-            a = b + 1;
-            line++;
+        auto quads = [&](float ox, float oy) {
+            q.clear();
+            size_t a = 0;
+            int line = 0;
+            while (a <= e.text.size()) {
+                size_t b = e.text.find('\n', a);
+                if (b == std::string::npos) b = e.text.size();
+                const std::string s = e.text.substr(a, b - a);
+                const float base = e.cur.y - e.cur.s - line * e.cur.s * 1.7f;
+                const vec2 p = px(e.cur.x + ox, base + oy);
+                textQuads(f, s, p.x, p.y, capPx, track, e.cur.rot, q);
+                a = b + 1;
+                line++;
+            }
+        };
+        if (i != F_INFO) {
+            // the shadow of letters cut at a little height, cast away from the light
+            const float h = 0.08f + (e.t < 1.f ? 0.2f * std::sin(PI * e.t) : 0.f);
+            const vec3 P(e.cur.x, e.cur.y, h);
+            const float k = h / std::max(0.5f, lamp_.z - h);
+            const float ox = (P.x - lamp_.x) * k, oy = (P.y - lamp_.y) * k;
+            const float wPx = (lightR_ * h / std::max(1.f, length(lamp_ - P)) + 0.02f) * unitPx_;
+            const float soft = std::clamp(wPx * f.capH / std::max(1.f, capPx) * (8.f / 255.f) * 128.f / f.px, 0.02f, 0.4f);
+            quads(ox, oy);
+            glUseProgram(progText_);
+            set1f(progText_, "uSoft", soft);
+            drawText(f, q, hex(V.paper) * shadeOf(V), 0.6f * e.cur.a);
+            glUseProgram(progText_);
+            set1f(progText_, "uSoft", 0.f);
         }
+        quads(0.f, 0.f);
         drawText(f, q, e.cur.col, e.cur.a);
     }
+    drawCards();
+}
+
+// Every card's pose. Laid on the sheet it is its place at its height; in a drop it peels off (one after another over
+// about a second), rises toward the eye (kept at its place on screen) and turns in space on its own axes at its own
+// pace on the beat grid: the free forms a quarter turn every two or four beats about a tilted axis, a little leaning,
+// the bars and rules rolling about their length, the sampler's tiles flipping in a wave along its columns. Folding
+// back, each unwinds the turn it had onto its new place. A Tetris hops every card off the sheet for a moment.
+void BauhausUniverse::poseCards(const MusicState& music) {
+    (void)music;
+    const float D = camDist_;
+    const double t = dropClock_;
+    for (Card& k : cards_) {
+        const uint64_t hk = splitmix64(seed_ * 0x9E3779B97F4A7C15ull + (uint64_t)k.key * 0xBF58476D1CE4E5B9ull + salt_);
+        auto r = [&](int i) { return (float)(splitmix64(hk + (uint64_t)i) >> 40) * (1.f / 16777216.f); };
+        const float delay = k.motion == M_TILE ? 0.25f + 0.2f * r(0) : 0.42f * r(0);
+        const float L = ease((dropLift_ * 1.1f - delay) / 0.65f);
+        k.lift = L;
+        float x = k.x, y = k.y, z = k.h;
+        M3 R = rotZ(-k.rot);
+        if (L > 0.001f) {
+            const float sg = r(3) < 0.5f ? -1.f : 1.f;
+            float alpha = 0.f, beta = 0.f;
+            vec3 u(1.f, 0.f, 0.f), v(0.f, 1.f, 0.f);
+            if (k.motion == M_ROD) {
+                // rolls about its length, a quarter every two beats
+                u = vec3(std::cos(-k.rot), std::sin(-k.rot), 0.f);
+                alpha = sg * 0.5f * PI * stepTurn((float)(t / 2.0) + r(4));
+            } else if (k.motion == M_TILE) {
+                // a tile flips over every two beats, the wave running along the sampler's columns
+                const int col = ((k.key - 1200) / 8) % 8;
+                u = ((k.key / 64) & 1) ? vec3(1.f, 0.f, 0.f) : vec3(0.f, 1.f, 0.f);
+                alpha = PI * stepTurn(std::max(0.f, (float)(t - 2.5 - col * 0.25) / 2.f));
+                beta = 0.25f * (r(6) - 0.5f);
+            } else {
+                const float phi = r(4) * PI;
+                u = vec3(std::cos(phi), std::sin(phi), 0.f);
+                v = vec3(-std::sin(phi), std::cos(phi), 0.f);
+                const float per = k.hx > 2.5f ? 4.f : r(5) < 0.5f ? 2.f : 4.f;
+                alpha = sg * 0.5f * PI * stepTurn((float)(t / per));
+                beta = (r(6) < 0.5f ? -1.f : 1.f) * (0.35f + 0.35f * r(7));
+            }
+            alpha = std::remainder(alpha, TAU) * L;
+            R = mul(rotAxis(u, alpha), mul(rotAxis(v, beta * L), R));
+            const float bob = 0.22f * std::sin((float)(t * PI * 0.5) + r(1) * TAU) * std::min(1.f, k.rise);
+            z += L * (k.rise * (0.75f + 0.5f * r(2)) + bob);
+        }
+        if (hop_ < 1.f) {
+            const float hp = std::sin(PI * hop_);
+            z += 0.7f * hp * (0.6f + 0.4f * r(8));
+            const float ph = r(9) * PI;
+            R = mul(rotAxis(vec3(std::cos(ph), std::sin(ph), 0.f), 0.3f * std::sin(TAU * hop_) * (r(10) - 0.5f) * 2.f), R);
+        }
+        // risen toward the eye, it keeps its place on screen (a free form drifting a little into its zone, away from
+        // the well) and most of its size, so the sculpture stays in the free zones
+        const float sc = (D - z) / D;
+        if (k.motion == M_FREE && L > 0.001f) {
+            const float zc = (x < 0.f ? -1.f : 1.f) * (11.8f + std::max(5.f, viewH_.x - 11.8f) * 0.5f);
+            x += (zc - x) * 0.3f * L;
+        }
+        x = viewC_.x + (x - viewC_.x) * sc;
+        y = viewC_.y + (y - viewC_.y) * sc;
+        const float keep = lerpf(1.f, sc, 0.75f);
+        k.hx *= keep; k.hy *= keep; k.p1 *= keep;
+        k.c = vec3(x, y, z);
+        std::memcpy(k.R, R.m, sizeof(k.R));
+    }
+    // drawn from the lowest up: each one's shadow falls on the sheet and on the cards under it
+    std::stable_sort(cards_.begin(), cards_.end(), [](const Card& a, const Card& b) { return a.c.z < b.c.z; });
+}
+
+void BauhausUniverse::setLight(GLuint p) {
+    set3f(p, "uLight", lamp_);
+    set3f(p, "uSpotDir", spotDir_);
+    set4f(p, "uLit", lit_[0], lit_[1], lit_[2], lit_[3]);
+}
+
+// The sheet's light (in a drop: the spotlight's pool), then each card from the lowest up: its shadow multiplying what
+// lies under it (on a plane just under the card, so it darkens the sheet and the lower cards but not the higher
+// ones), then the card itself, ray-cast in its box.
+void BauhausUniverse::drawCards() {
+    const VariantDef& V = VARIANTS[variant_];
+    const vec3 paper = hex(V.paper);
+    const bool dark = ugl::luma(paper) < 0.4f;
+    const vec3 shade = shadeOf(V);
+    const float grain = 1.f - saturate(bridge_.amount);
+    if (lit_[3] > 0.001f) {
+        glUseProgram(progSheet_);
+        setLight(progSheet_);
+        set2f(progSheet_, "uRes", (float)width_, (float)height_);
+        set2f(progSheet_, "uViewC", viewC_.x, viewC_.y);
+        set1f(progSheet_, "uUnitPx", unitPx_);
+        glBlendFunc(GL_DST_COLOR, GL_ZERO);
+        ugl::drawFullscreen();
+    }
+    if (cards_.empty()) { glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA); return; }
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glCullFace(GL_FRONT);
+    const float pad = 2.5f / unitPx_;
+    const float castK = lerpf(0.5f, 0.52f, lit_[3]), aoK = lerpf(0.3f, 0.18f, lit_[3]);
+    auto cardUniforms = [&](GLuint p, const Card& k, float th) {
+        set3f(p, "uC", k.c);
+        glUniformMatrix3fv(ugl::U(p, "uR"), 1, GL_FALSE, k.R);
+        set3f(p, "uHalf", vec3(k.hx, k.hy, th));
+        set4f(p, "uKind", (float)k.kind, k.p1, k.p2, k.p3);
+        setLight(p);
+    };
+    for (const Card& k : cards_) {
+        const float th = k.motion == M_TILE ? 0.016f + 0.02f * k.lift : 0.018f + 0.05f * k.lift;
+        // where its shadow falls: its box's corners seen from the light on the plane under it
+        const M3 R = M3::of(k.R);
+        vec3 pts[8];
+        float zmin = 1e9f, zmax = -1e9f;
+        for (int i = 0; i < 8; i++) {
+            const vec3 l((i & 1) ? k.hx : -k.hx, (i & 2) ? k.hy : -k.hy, (i & 4) ? th : -th);
+            pts[i] = k.c + R * l;
+            zmin = std::min(zmin, pts[i].z);
+            zmax = std::max(zmax, pts[i].z);
+        }
+        const float zq = std::clamp(zmin - 0.012f, 0.0005f, 0.6f);
+        if (zmax < lamp_.z - 0.3f) {
+            float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+            for (const vec3& p : pts) {
+                const float s = (zq - lamp_.z) / (p.z - lamp_.z);
+                const vec3 q = lamp_ + (p - lamp_) * s;
+                x0 = std::min({x0, q.x, p.x}); x1 = std::max({x1, q.x, p.x});
+                y0 = std::min({y0, q.y, p.y}); y1 = std::max({y1, q.y, p.y});
+            }
+            const float gap = std::max(0.f, k.c.z - zq);
+            const float m = 0.15f + std::min(gap, 2.f) * 0.8f + lightR_ * gap / std::max(0.5f, length(lamp_ - k.c));
+            glDepthMask(GL_FALSE);
+            glDisable(GL_CULL_FACE);
+            glBlendFunc(GL_DST_COLOR, GL_ZERO);
+            glUseProgram(progShadow_);
+            cardUniforms(progShadow_, k, th);
+            ugl::setMat(progShadow_, "uVP", vp3_);
+            set4f(progShadow_, "uRect", x0 - m, y0 - m, x1 + m, y1 + m);
+            set1f(progShadow_, "uZq", zq);
+            set1f(progShadow_, "uLr", lightR_);
+            set3f(progShadow_, "uShade", shade);
+            set2f(progShadow_, "uStrength", castK * k.a, aoK * k.a);
+            glBindVertexArray(quadVao_);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
+        glDepthMask(GL_TRUE);
+        glEnable(GL_CULL_FACE);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(progCard_);
+        cardUniforms(progCard_, k, th);
+        ugl::setMat(progCard_, "uVP", vp3_);
+        set3f(progCard_, "uEye", eye_);
+        set1f(progCard_, "uPad", pad);
+        set4f(progCard_, "uCol", k.col.x, k.col.y, k.col.z, k.a);
+        set3f(progCard_, "uBack", k.col * 0.86f); // printed on both sides, the back a shade deeper
+        set3f(progCard_, "uEdge", dark ? lerp(k.col, vec3(0.75f), 0.25f) : lerp(k.col, vec3(1.f), 0.45f));
+        set1f(progCard_, "uSeed", (float)(k.key % 97));
+        set1f(progCard_, "uTex", grain);
+        glBindVertexArray(cubeVao_);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 // =====================================================================================================
@@ -1606,10 +1895,19 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
             dropPending_ = false;
             bar_ = bar;
             compose(bar, 0.8f, false);
+        } else if (realDrop_ != wasReal_ && !realDrop_ && dropLift_ > 0.f) {
+            // the drop is over: the sculpture folds back flat onto a new composition
+            bar_ = bar;
+            salt_++;
+            folding_ = true;
+            compose(bar, 1.7f, false);
+            folding_ = false;
         } else if (bar != bar_ && overT_ < 0.f) {
             bar_ = bar;
-            compose(bar, std::clamp(barS * 0.7f, 1.2f, 2.4f), false);
+            // the sculpture holds the arrangement it rose from while it turns
+            if (!(realDrop_ && dropLift_ > 0.f)) compose(bar, std::clamp(barS * 0.7f, 1.2f, 2.4f), false);
         }
+        wasReal_ = realDrop_;
         if (step != step_) {
             step_ = step;
             if (lv_ > 0.5f && !f.paused) {
@@ -1659,15 +1957,36 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
         kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
         kickShown_ = std::max(kickShown_ * std::exp(-dt * 6.f), kick * wp);
     }
-    // ---- The drop's disc: in over half a second, held, back over a second and a half.
+    // ---- The drop's sculpture: the cards peel off over about a second, turn on the beat grid while the drop lasts
+    // (its clock in beats, held while they fold back), fold back over about two seconds after.
     {
-        const float target = realDrop_ && overT_ < 0.f ? 1.f : 0.f;
-        // it grows where the drop puts it and drifts slowly after the composition
-        if (disc_ <= 0.f) { discX_ = discTX_; discY_ = discTY_; }
-        if (target > disc_) disc_ = std::min(1.f, disc_ + dt / 0.5f);
-        else disc_ = std::max(0.f, disc_ - dt / 1.5f);
-        discX_ = approach(discX_, discTX_, 0.6f, dt);
-        discY_ = approach(discY_, discTY_, 0.6f, dt);
+        const bool up = realDrop_ && overT_ < 0.f;
+        const double beat = music.hasSong ? music.beat : time_ * 2.0;
+        if (dropLift_ <= 0.f && up) dropClock_ = 0.0;
+        if (up && !f.paused) dropClock_ += std::clamp(beat - lastBeat_, 0.0, 0.5) * (double)lerpf(1.f, 0.4f, slow_);
+        lastBeat_ = beat;
+        if (up) dropLift_ = std::min(1.f, dropLift_ + dt / 1.1f);
+        else dropLift_ = std::max(0.f, dropLift_ - dt / 1.8f);
+        hop_ = std::min(1.f, hop_ + dt / 0.8f);
+    }
+    // ---- The light: a far sun from the upper left (swaying slowly), in a drop a spotlight circling the sheet a
+    // turn every four bars, low enough that the shadows sweep and stretch.
+    {
+        const float Ld = ease(dropLift_ * 1.4f);
+        const float az = 2.25f + 0.12f * std::sin(time_ * 0.05f);
+        const vec3 sunDir = normalize(vec3(std::cos(az), std::sin(az), 1.0f));
+        const vec3 C(viewC_.x, viewC_.y, 0.f);
+        const vec3 sun = C + sunDir * 400.f;
+        const float th = 2.4f + (float)(dropClock_ * TAU / 16.0);
+        const vec3 spot = C + vec3(18.f * std::cos(th), 10.f * std::sin(th), 20.f);
+        lamp_ = lerp(sun, spot, Ld);
+        lightR_ = lerpf(130.f, 1.4f, Ld);
+        spotDir_ = normalize(C - vec3(4.f * std::cos(th), 2.f * std::sin(th), 0.f) - spot);
+        const float amb = 0.5f, dif = 0.6f;
+        lit_[0] = lerpf(amb, 0.64f, Ld);
+        lit_[1] = lerpf(dif, 0.8f, Ld);
+        lit_[2] = amb + dif * sunDir.z;
+        lit_[3] = Ld;
     }
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);
     for (Wipe& w : wipes_) w.t += dt;
@@ -1683,8 +2002,9 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
     posterT_.bind();
     const vec3 paper = hex(V.paper);
     glClearColor(paper.x, paper.y, paper.z, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    drawPoster();
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    drawPoster(music);
 
     // ---- On screen: the print, the poster faint behind the well and the HUD's boxes.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -1697,14 +2017,10 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progComp_, "uRes", (float)width_, (float)height_);
     set3f(progComp_, "uPaper", paper);
     set3f(progComp_, "uGround", ground_);
-    {
-        const vec2 c = px(discX_, discY_);
-        const float R = discTX_ < 0.f ? 8.9f : std::min(viewH_.x - 11.8f, 10.f) * 0.5f + 5.2f;
-        const float r = R * unitPx_ * easeOut(disc_);
-        set4f(progComp_, "uDisc", c.x, c.y, r, disc_ > 0.f ? 1.f : 0.f);
-        set3f(progComp_, "uDiscCol", hex(V.col[0]));
-    }
     set1f(progComp_, "uSlow", smoothstepf(0.f, 1.f, slow_));
+    setLight(progComp_);
+    set2f(progComp_, "uViewC", viewC_.x, viewC_.y);
+    set1f(progComp_, "uUnitPx", unitPx_);
     set1f(progComp_, "uGrain", 1.f - saturate(bridge_.amount));
     {
         std::vector<float> rects, soft;
@@ -1718,7 +2034,7 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
         const float pad = 12.f * height_ / 1080.f;
         std::vector<vec4> boxes;
         const vec2 a = px(-11.5f, 20.f), b = px(11.5f, -20.f);
-        add(a.x, a.y, b.x, b.y, 1.f, VEIL);
+        add(a.x, a.y, b.x, b.y, 1.f + 50.f * unitPx_ / 45.f * lit_[3], VEIL);
         for (const HudText& h : f.hud) {
             if (h.alpha <= 0.02f || h.text.empty()) continue;
             const float base = h.scale * 12.f;
@@ -1740,7 +2056,8 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
                     }
                 }
         }
-        for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f, VEIL);
+        // (in a drop the boxes and the band feather out, so the shadows sweeping the sheet never meet a hard edge)
+        for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f + 24.f * unitPx_ / 45.f * lit_[3], VEIL);
         const int n = (int)rects.size() / 4;
         set1i(progComp_, "uCount", n);
         if (n) {
@@ -1778,7 +2095,7 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_bauhaus() {
     static const UniverseEntry e{
-        "BAUHAUS", "a Bauhaus poster: circles, triangles and squares in flat primaries on printed paper recompose on the bar grid, cleared rows join the poster",
+        "BAUHAUS", "a Bauhaus poster: circles, triangles and squares cut out of colored paper in relief recompose on the bar grid, cleared rows join the poster, the drop lifts them into a turning sculpture",
         [] { return std::unique_ptr<Universe>(new BauhausUniverse()); },
         // Graphic and clean, it suits most songs, rhythmic and bright ones best.
         [](const SongLook& l) { return 0.8f + 0.2f * l.density + 0.1f * l.brightness; },
