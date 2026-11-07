@@ -91,7 +91,7 @@ song, and songs change universe with a transition on the beat. Thirty-nine unive
 </tr>
 <tr>
 <td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares cut out of thick colored paper and laid on the sheet in relief (soft shadows, lit edges), recomposed on the bar grid; each cleared row joins the poster as a small cut-out in a growing sampler, the drop lifts the forms off the sheet into a turning kinetic sculpture under a circling spotlight, then folds them back into a new composition<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/starchart.jpg"><br><b>STAR CHART</b>: an antique engraved celestial map, gold on navy, two hemispheres on their poles; enamelled pieces in gold rims, each cleared row flies out as stars into a new constellation engraved line by line on the bars, the drop brings the figures to life and turns the skies<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/skyocean.jpg"><br><b>CELESTIAL OCEAN</b>: a sea of clouds at night under a big moon; moonstone pieces, each cleared row rises out of the clouds as a translucent creature of light (a school of fish, jellyfish, a manta ray, a whale for a Tetris) swimming away through the starry sky, the drop brings a giant whale slowly across the whole sky<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a manga color page in ink, screentones and watercolor washes, drawn in pencil, then inked and colored panel by panel as rows clear; the pieces are inked blocks of color under their screentones, the drop is a full-page splash of color, focus lines and a huge sound effect<br><sub>🔍 <i>to review</i></sub></td>
@@ -116,6 +116,7 @@ Disabled for now (not built; their code stays in the repository):
 | EMBROIDERY | Cross-stitch on aida; to be judged later |
 | SUSHI | Maki in a bento box fed to kawaii cats; on hold |
 | RIPPLES | Cut stone blocks in still water seen from above, rippled by every move; on hold |
+| STAR CHART | An engraved celestial map filling with constellations; replaced by CELESTIAL OCEAN |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -175,5 +176,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
