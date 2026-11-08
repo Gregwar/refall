@@ -55,6 +55,14 @@ struct Builder {
     }
 };
 
+// The camera's side of the hut early on (it stands back toward -x, -z): kept as an open meadow near the hut, so
+// nothing rises between the camera and the hut.
+bool inView(float x, float z, float rMax) {
+    const float r = std::sqrt(x * x + z * z);
+    if (r > rMax || r < 1e-3f) return false;
+    return (x * -0.86f + z * -0.51f) / r > std::cos(0.75f);
+}
+
 bool inRiver(float x, float z, float margin) {
     if (std::fabs(z) > 60000.f) return false;
     return std::fabs(x - riverX(z)) < riverHalfW(z) + margin;
@@ -80,7 +88,7 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             const float r = 7.f + 195.f * std::pow(rng.uniform(), 1.15f);
             const float a = rng.range(0.f, TAU);
             const float x = r * std::cos(a), z = r * std::sin(a);
-            if (inRiver(x, z, 5.f)) continue;
+            if (inRiver(x, z, 5.f) || inView(x, z, 130.f)) continue;
             // along the road by the river (x ~ riverX - 20) and the road west (z ~ 0): likelier
             const float dRoad = std::min(std::fabs(x - (riverX(z) - riverHalfW(z) - 14.f)), std::fabs(z - 2.f) + (x > 0.f ? 50.f : 0.f));
             if (rng.uniform() > 0.25f + 0.75f * std::exp(-dRoad / 14.f)) continue;
@@ -105,7 +113,7 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             const float r = 10.f + 192.f * std::sqrt(rng.uniform());
             const float a = rng.range(0.f, TAU);
             const float x = r * std::cos(a), z = r * std::sin(a);
-            if (inRiver(x, z, 4.f)) continue;
+            if (inRiver(x, z, 4.f) || inView(x, z, 60.f)) continue;
             if (std::fabs(x + 40.f) < 14.f && std::fabs(z - 26.f) < 14.f) continue;
             bool ok = true;
             for (const vec2& p : placed)
@@ -294,7 +302,7 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
         const float a = rng.range(0.f, TAU);
         const float x = r * std::cos(a), z = r * std::sin(a);
         if (inRiver(x, z, 2.f)) continue;
-        if (x < -2.f && r < 48.f) continue;   // keep the camera's side of the hut open
+        if ((x < -2.f && r < 48.f) || inView(x, z, 160.f)) continue;   // keep the camera's side of the hut open
         const float sz = rng.range(2.2f, 4.2f) * (r < 20.f ? 0.9f : 1.f);
         const float q[4] = {x, z, sz, rng.uniform()};
         plan.trees.insert(plan.trees.end(), q, q + 4);

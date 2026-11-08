@@ -397,8 +397,8 @@ void MegaCityUniverse::updateCamera(float dt) {
     const float gGoal = std::min(g_, G_MAX) + 0.9f * orbit_;
     if (gc_ < -50.f) { gc_ = gGoal; gcVel_ = 0.f; }
     {
-        const float w = 3.f;
-        gcVel_ += (w * w * (gGoal - gc_) + 2.f * w * (0.8f * gVel_ - gcVel_)) * dt;
+        const float w = 1.7f;
+        gcVel_ += (w * w * (gGoal - gc_) + 2.f * w * (0.3f * gVel_ - gcVel_)) * dt;
         gc_ += gcVel_ * dt;
     }
     const float G = gc_;
@@ -1052,7 +1052,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
         linesShown_ = lines;
         // a spurt: a spring toward the target; a drop's district rises more slowly (a wave rolling outward)
-        const float w = dropR1_ > 0.f && std::exp(g_) < dropR1_ * 0.98f ? 1.5f : 3.6f;
+        const float w = dropR1_ > 0.f && std::exp(g_) < dropR1_ * 0.98f ? 1.2f : 3.6f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
