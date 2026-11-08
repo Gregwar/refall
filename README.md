@@ -107,7 +107,7 @@ song, and songs change universe with a transition on the beat. Forty-four univer
 </tr>
 <tr>
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row flies into the shelves and slots in sorted by color in rainbow order, as a cosy study grows into galleries, a domed reading room and an endless Borgesian abyss of hexagonal galleries, its shelves sorting into a rainbow; the drop runs a wave of light through every shelf<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row floats calmly into the shelves of a personal library and slots in, kept sorted by color in rainbow order, every book a cleared cell, as a cosy study opens into a tall long room and new bookcases are carried in as they fill; the drop runs a soft light along the spines<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 

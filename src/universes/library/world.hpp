@@ -1,7 +1,5 @@
 #pragma once
-// LIBRARY: the library's dimensions (meters) and its stages (lines). The study's back wall is one side of a
-// hexagon 40 m across: the rotunda the study turns out to stand in, and later one level of an endless shaft of
-// such hexagons. Side k of a hexagon has the outward normal (sin 60k, 0, -cos 60k): side 0 is the back wall (-z).
+// LIBRARY: the library's dimensions (meters): the study, then the long room it opens into, its back wall at ZBACK.
 #include <cmath>
 
 #include "mathutil.hpp"
@@ -21,13 +19,11 @@ constexpr float BAY_W = 1.f;            // a bookcase
 constexpr int BAY_SHELVES = 8;
 inline float tierY(int t) { return t == 0 ? 0.f : t == 1 ? 4.1f : 8.2f; }
 
-// The stages, in lines.
-constexpr float S_ROOM = 5.f;       // the study's walls fall away: a long room of bookcases
-constexpr float S_GALLERY = 14.f;   // a gallery, a second and a third storey, ladders, a spiral stair
-constexpr float S_ROTUNDA = 26.f;   // the hexagon closes around it: the reading room under its dome
-constexpr float S_SHAFT = 42.f;     // the floor opens: galleries above and below, the abyss
-constexpr float S_HONEY = 65.f;     // the camera leaves the shaft: a section through the honeycomb
-constexpr float S_ENDLESS = 100.f;  // farther and farther
+// The room: its half width (the back wall's bookcases from x = -HALL_X to HALL_X), its height.
+constexpr float HALL_X = 10.4f;
+constexpr float HALL_H = 8.6f;
+// The study's walls fall away into the long room once its bookcase is well filled (some 120 books).
+constexpr float S_ROOM = 12.f;
 
 inline vec3 sideN(int k) { const float a = k * (3.14159265f / 3.f); return {std::sin(a), 0.f, -std::cos(a)}; }
 inline vec3 sideT(int k) { const float a = k * (3.14159265f / 3.f); return {std::cos(a), 0.f, std::sin(a)}; }

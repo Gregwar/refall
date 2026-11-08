@@ -96,9 +96,11 @@ void LibraryUniverse::buildStudy() {
     const Palette& P = palT_;
     const float zb = ZBACK;
     st_ = Stamp{};
-    // the back wall (the hexagon's side 0) and its wainscot, the dado rail
-    box(vec3(0.f, 0.95f * 0.5f, zb + 0.03f), vec3(3.45f, 0.95f * 0.5f, 0.03f), P.wood * 0.8f, M_WOOD, 1.f);
-    box(vec3(0.f, 0.97f, zb + 0.05f), vec3(3.45f, 0.025f, 0.05f), P.wood, M_WOOD);
+    // the back wall, the floor, the wainscot and its dado rail
+    box(vec3(0.f, HALL_H * 0.5f, zb - 0.15f), vec3(HALL_X + 0.4f, HALL_H * 0.5f, 0.15f), P.plaster, M_PLASTER, 1.f);
+    box(vec3(0.f, -0.15f, 5.5f), vec3(HALL_X + 0.4f, 0.15f, 8.6f), P.floor, M_FLOOR);
+    box(vec3(0.f, 0.95f * 0.5f, zb + 0.03f), vec3(HALL_X, 0.95f * 0.5f, 0.03f), P.wood * 0.8f, M_WOOD, 1.f);
+    box(vec3(0.f, 0.97f, zb + 0.05f), vec3(HALL_X, 0.025f, 0.05f), P.wood, M_WOOD);
     // the room's own walls and ceiling: they fall away when the room opens
     st_.die = S_ROOM;
     st_.style = 1.f;
@@ -145,48 +147,59 @@ void LibraryUniverse::buildStudy() {
             lamp(vec3(s * 1.15f, 2.38f, zb + 0.22f), P.lampCol, 0.18f, 0.9f, 3.5f);
         }
     }
-    // the window over the desk: arched, its frame, the curtains
+    // the window in the left wall, over the desk: arched, its frame, the curtains (they go with the wall)
     {
-        const float x = -2.75f;
-        box(vec3(x, 2.05f, zb + 0.02f), vec3(0.62f, 1.05f, 0.03f), P.skyA, M_WINDOW, 1.f);
-        box(vec3(x, 0.98f, zb + 0.08f), vec3(0.72f, 0.03f, 0.1f), P.wood, M_WOOD);
+        const float x = -3.44f, z = -1.45f;
+        const vec3 u(0, 0, -1), w(1, 0, 0);
+        st_.die = S_ROOM;
+        st_.style = 1.f;
+        obox(vec3(x, 2.05f, z), u, UP, w, vec3(0.54f, 1.0f, 0.03f), P.skyA, M_WINDOW, 1.f);
+        obox(vec3(x + 0.08f, 1.03f, z), u, UP, w, vec3(0.64f, 0.03f, 0.1f), P.wood, M_WOOD);
         for (int s = -1; s <= 1; s += 2) {
-            box(vec3(x + s * 0.78f, 1.95f, zb + 0.14f), vec3(0.14f, 1.25f, 0.06f), P.rug * 0.9f, M_PLASTER, 0.f, 0.f, 0.f, 2.f + s);
-            box(vec3(x + s * 0.66f, 2.05f, zb + 0.05f), vec3(0.04f, 1.08f, 0.04f), P.wood, M_WOOD);
+            obox(vec3(x + 0.14f, 1.95f, z - s * 0.68f), u, UP, w, vec3(0.12f, 1.25f, 0.06f), P.rug * 0.9f, M_PLASTER, 0.f, 0.f, 0.f, 2.f + s);
+            obox(vec3(x + 0.05f, 2.05f, z - s * 0.57f), u, UP, w, vec3(0.04f, 1.03f, 0.04f), P.wood, M_WOOD);
         }
-        box(vec3(x, 3.25f, zb + 0.16f), vec3(1.0f, 0.03f, 0.03f), P.gilt, M_BRASS);
+        obox(vec3(x + 0.16f, 3.25f, z), u, UP, w, vec3(0.85f, 0.03f, 0.03f), P.gilt, M_BRASS);
+        st_ = Stamp{};
     }
-    // the desk: its top, two pedestals of drawers, the lamp, books, papers; the chair
+    // the desk under it: its top, two pedestals of drawers, the banker's lamp, papers, an inkwell; the chair
     {
-        const float x = -2.75f, z = zb + 0.75f;
-        box(vec3(x, 0.745f, z), vec3(0.78f, 0.03f, 0.4f), P.wood, M_WOOD);
-        box(vec3(x, 0.77f, z), vec3(0.6f, 0.004f, 0.3f), P.leather * 0.8f, M_LEATHER);
-        for (int s = -1; s <= 1; s += 2) box(vec3(x + s * 0.52f, 0.36f, z), vec3(0.24f, 0.36f, 0.37f), P.wood * 0.92f, M_WOOD);
+        const float x = -3.0f, z = -1.45f;
+        box(vec3(x, 0.745f, z), vec3(0.4f, 0.03f, 0.72f), P.wood, M_WOOD);
+        box(vec3(x, 0.77f, z), vec3(0.3f, 0.004f, 0.55f), P.leather * 0.8f, M_LEATHER);
+        for (int s = -1; s <= 1; s += 2) box(vec3(x, 0.36f, z + s * 0.48f), vec3(0.37f, 0.36f, 0.22f), P.wood * 0.92f, M_WOOD);
+        const vec3 du(0, 0, -1), dw(1, 0, 0);
         for (int s = -1; s <= 1; s += 2)
             for (int i = 0; i < 3; i++) {
-                box(vec3(x + s * 0.52f, 0.14f + i * 0.22f, z + 0.371f), vec3(0.21f, 0.095f, 0.005f), P.wood * 1.05f, M_WOOD, 0.5f);
-                box(vec3(x + s * 0.52f, 0.17f + i * 0.22f, z + 0.38f), vec3(0.03f, 0.008f, 0.008f), P.gilt, M_BRASS);
+                obox(vec3(x + 0.371f, 0.14f + i * 0.22f, z + s * 0.48f), du, UP, dw, vec3(0.19f, 0.095f, 0.005f), P.wood * 1.05f, M_WOOD, 0.5f);
+                box(vec3(x + 0.38f, 0.17f + i * 0.22f, z + s * 0.48f), vec3(0.008f, 0.008f, 0.03f), P.gilt, M_BRASS);
             }
-        // the banker's lamp
-        cyl(vec3(x - 0.45f, 0.775f, z - 0.1f), 0.08f, 0.012f, P.gilt, M_BRASS);
-        cyl(vec3(x - 0.45f, 0.95f, z - 0.1f), 0.012f, 0.17f, P.gilt, M_BRASS);
-        obox(vec3(x - 0.45f, 1.13f, z - 0.03f), vec3(1, 0, 0), normalize(vec3(0, 1, 0.35f)), normalize(vec3(0, -0.35f, 1)), vec3(0.17f, 0.035f, 0.07f),
-             P.shade, M_SHADE, 1.3f);
-        lamp(vec3(x - 0.45f, 1.06f, z), P.lampCol, 0.22f, 1.2f, 4.f);
-        // books on the desk
-        const vec3 bc[3] = {P.piece[0] * 0.6f, P.piece[3] * 0.6f, P.piece[5] * 0.6f};
-        for (int i = 0; i < 3; i++)
-            obox(vec3(x + 0.42f, 0.78f + 0.025f + i * 0.05f, z - 0.05f), normalize(vec3(std::cos(i * 0.4f), 0, std::sin(i * 0.4f))), vec3(0, -1, 0) * -1.f,
-                 normalize(vec3(-std::sin(i * 0.4f), 0, std::cos(i * 0.4f))), vec3(0.13f, 0.024f, 0.09f), bc[i], M_BOOK, (float)(i % 4), 0.f, 0.f,
-                 0.3f + i);
-        obox(vec3(x + 0.05f, 0.776f, z + 0.12f), normalize(vec3(1, 0, 0.2f)), UP, normalize(vec3(-0.2f, 0, 1)), vec3(0.12f, 0.002f, 0.085f), P.paper,
+        cyl(vec3(x - 0.1f, 0.775f, z - 0.45f), 0.08f, 0.012f, P.gilt, M_BRASS);
+        cyl(vec3(x - 0.1f, 0.95f, z - 0.45f), 0.012f, 0.17f, P.gilt, M_BRASS);
+        obox(vec3(x - 0.03f, 1.13f, z - 0.45f), du, normalize(vec3(0.35f, 1, 0)), normalize(vec3(1, -0.35f, 0)), vec3(0.17f, 0.035f, 0.07f), P.shade, M_SHADE,
+             1.3f);
+        lamp(vec3(x, 1.06f, z - 0.45f), P.lampCol, 0.22f, 1.2f, 4.f);
+        obox(vec3(x + 0.1f, 0.776f, z + 0.1f), normalize(vec3(0.2f, 0, -1)), UP, normalize(vec3(1, 0, 0.2f)), vec3(0.12f, 0.002f, 0.085f), P.paper,
              M_PAPER, 0.f, 0.f, 0.f, 4.1f);
-        // the chair
-        const float cz = z + 0.75f;
-        box(vec3(x, 0.46f, cz), vec3(0.25f, 0.05f, 0.24f), P.leather, M_LEATHER);
-        box(vec3(x, 0.82f, cz + 0.22f), vec3(0.25f, 0.32f, 0.04f), P.leather, M_LEATHER);
+        cyl(vec3(x - 0.15f, 0.8f, z + 0.42f), 0.03f, 0.03f, vec3(0.03f), M_IRON);
+        const float cx = x + 0.78f;
+        box(vec3(cx, 0.46f, z), vec3(0.24f, 0.05f, 0.25f), P.leather, M_LEATHER);
+        box(vec3(cx + 0.22f, 0.82f, z), vec3(0.04f, 0.32f, 0.25f), P.leather, M_LEATHER);
         for (int a = -1; a <= 1; a += 2)
-            for (int b = -1; b <= 1; b += 2) cyl(vec3(x + a * 0.21f, 0.21f, cz + b * 0.2f), 0.02f, 0.21f, P.woodDark, M_WOOD);
+            for (int b = -1; b <= 1; b += 2) cyl(vec3(cx + a * 0.2f, 0.21f, z + b * 0.21f), 0.02f, 0.21f, P.woodDark, M_WOOD);
+    }
+    // a longcase clock against the back wall
+    {
+        const float x = -2.45f, z = ZBACK + 0.2f;
+        box(vec3(x, 0.95f, z), vec3(0.22f, 0.95f, 0.17f), P.wood, M_WOOD, 0.6f);
+        box(vec3(x, 2.15f, z + 0.01f), vec3(0.28f, 0.27f, 0.19f), P.wood * 1.05f, M_WOOD);
+        box(vec3(x, 2.48f, z + 0.02f), vec3(0.3f, 0.05f, 0.2f), P.wood * 0.9f, M_WOOD);
+        put(MESH_CYL, vec3(x, 2.15f, z + 0.2f), vec3(0.17f, 0, 0), vec3(0, 0, 0.008f), vec3(0, -0.17f, 0), P.paper, M_PLASTER);
+        put(MESH_CYL, vec3(x, 2.15f, z + 0.205f), vec3(0.19f, 0, 0), vec3(0, 0, 0.006f), vec3(0, -0.19f, 0), P.gilt, M_BRASS, 0.f, 0.f, 1.f);
+        box(vec3(x, 2.15f, z + 0.212f), vec3(0.006f, 0.12f, 0.003f), vec3(0.02f), M_IRON);
+        box(vec3(x + 0.04f, 2.17f, z + 0.214f), vec3(0.08f, 0.005f, 0.003f), vec3(0.02f), M_IRON);
+        box(vec3(x, 1.1f, z + 0.172f), vec3(0.11f, 0.42f, 0.004f), vec3(0.03f), M_IRON);
+        cyl(vec3(x, 0.85f, z + 0.18f), 0.07f, 0.008f, P.gilt, M_BRASS);
     }
     // the rug, an armchair by the fire, a globe on its stand
     box(vec3(0.f, 0.006f, -0.9f), vec3(2.1f, 0.006f, 1.35f), P.rug, M_RUG, 0.f, 0.f, 0.f, 3.f);
@@ -214,47 +227,68 @@ void LibraryUniverse::buildStudy() {
     }
 }
 
-// ---------------------------------------------------------------------------------------------------- the long room, its galleries
+// ---------------------------------------------------------------------------------------------------- the long room
+// When the study's walls have gone: a tall room, its back wall waiting for bookcases from end to end, high windows
+// over them and down its side walls, reading tables, chandeliers, a brass rail with its ladders.
 void LibraryUniverse::buildHall() {
     const Palette& P = palT_;
     const float zb = ZBACK;
-    const vec3 along(1, 0, 0), out(0, 0, 1);
-    // the filler bookcases left of the study, popping up one after the other as the room opens; the collection
-    // takes them over late in a long game (bays 8..13)
+    const vec3 along(1, 0, 0);
     st_ = Stamp{};
-    fillerFeet_.clear();
-    for (int i = 0; i < 6; i++) {
-        const vec3 foot(-3.95f - i * BAY_W, 0.f, zb + CASE_D);
-        const int bay = 7 + i;
-        st_.born = S_ROOM + 0.4f + 0.55f * i;
-        st_.die = (bay < (int)bays_.size() && bays_[bay].born >= 0.f) ? bays_[bay].born : -1.f;
-        st_.style = 0.f;
-        fillerFeet_.push_back(foot);
-        buildBookcase(foot, along, out, BAY_W, TIER_H, BAY_SHELVES, P.wood, true, i, 10.f + i);
+    st_.born = S_ROOM;
+    st_.style = 1.f;
+    // the side walls, their wainscot, the cornice; tall arched windows high on every wall
+    for (int s = -1; s <= 1; s += 2) {
+        const float x = s * (HALL_X + 0.2f);
+        box(vec3(x, HALL_H * 0.5f, 5.5f), vec3(0.2f, HALL_H * 0.5f, 8.7f), P.plaster, M_PLASTER, 1.f);
+        box(vec3(x - s * 0.23f, 0.475f, 5.5f), vec3(0.03f, 0.475f, 8.7f), P.wood * 0.8f, M_WOOD, 1.f);
+        box(vec3(x - s * 0.3f, HALL_H - 0.3f, 5.5f), vec3(0.12f, 0.16f, 8.7f), P.wood, M_WOOD);
+        const vec3 u = s < 0 ? vec3(0, 0, -1) : vec3(0, 0, 1), w = vec3((float)-s, 0, 0);
+        for (int i = 0; i < 3; i++) {
+            const float z = 0.f + i * 3.6f;
+            obox(vec3(x - s * 0.21f, 5.45f, z), u, UP, w, vec3(0.62f, 1.0f, 0.03f), P.skyA, M_WINDOW, 1.f);
+            obox(vec3(x - s * 0.27f, 4.35f, z), u, UP, w, vec3(0.85f, 0.04f, 0.1f), P.wood, M_WOOD);
+            // a sconce between the windows, lighting the bookcases below
+            const vec3 lp(x - s * 0.45f, 3.95f, z + 1.8f);
+            box(lp - UP * 0.1f + vec3(s * 0.17f, 0, 0), vec3(0.03f, 0.1f, 0.06f), P.gilt, M_BRASS);
+            box(lp, vec3(0.09f, 0.1f, 0.09f), P.shade, M_SHADE, 1.f);
+            lamp(lp, P.lampCol, 0.22f, 0.9f, 4.5f);
+        }
     }
-    // the plaster wall above the wainscot, from end to end; the brass rail the ladders run on
+    box(vec3(0.f, HALL_H - 0.3f, zb + 0.12f), vec3(HALL_X, 0.16f, 0.12f), P.wood, M_WOOD);
+    for (int i = -1; i <= 1; i++) {
+        const float x = i * 6.6f;
+        box(vec3(x, 5.45f, zb + 0.02f), vec3(0.7f, 1.0f, 0.03f), P.skyA, M_WINDOW, 1.f);
+        box(vec3(x, 4.35f, zb + 0.08f), vec3(0.95f, 0.04f, 0.1f), P.wood, M_WOOD);
+    }
+    // sconces over the back wall's bookcases
+    for (int i = 0; i < 4; i++) {
+        const vec3 lp(-9.9f + i * 6.6f + 3.3f, 4.05f, zb + 0.32f);
+        box(lp - vec3(0, 0.1f, 0.2f), vec3(0.06f, 0.1f, 0.03f), P.gilt, M_BRASS);
+        box(lp, vec3(0.09f, 0.1f, 0.09f), P.shade, M_SHADE, 1.f);
+        lamp(lp, P.lampCol, 0.22f, 0.9f, 5.f);
+    }
+    // the ceiling: plaster between dark beams, coming down from above
+    st_.style = 2.f;
+    box(vec3(0.f, HALL_H + 0.15f, 5.5f), vec3(HALL_X + 0.4f, 0.15f, 8.7f), P.plaster * 0.9f, M_PLASTER);
+    for (int i = 0; i < 7; i++) box(vec3(0.f, HALL_H - 0.12f, -2.f + i * 2.4f), vec3(HALL_X, 0.14f, 0.14f), P.woodDark, M_WOOD);
     st_ = Stamp{};
     st_.born = S_ROOM + 0.8f;
-    st_.style = 0.f;
-    box(vec3(0.f, 3.55f, zb + CASE_D + 0.06f), vec3(9.6f, 0.012f, 0.012f), P.gilt, M_BRASS);
-    for (int i = -4; i <= 4; i++) box(vec3(i * 2.3f, 3.55f, zb + CASE_D + 0.03f), vec3(0.02f, 0.02f, 0.04f), P.gilt, M_BRASS);
-    // the ladders: one by the collection, one by the fillers
+    // the brass rail the ladders run on, along the back wall's bookcases
+    box(vec3(0.f, 3.85f, zb + CASE_D + 0.06f), vec3(HALL_X - 0.3f, 0.012f, 0.012f), P.gilt, M_BRASS);
+    for (int i = -4; i <= 4; i++) box(vec3(i * 2.3f, 3.85f, zb + CASE_D + 0.03f), vec3(0.02f, 0.02f, 0.04f), P.gilt, M_BRASS);
     auto ladder = [&](float x, float born) {
         st_.born = born;
-        const vec3 b(x, 0.f, zb + CASE_D + 0.95f), t(x, 3.55f, zb + CASE_D + 0.1f);
+        const vec3 b(x, 0.f, zb + CASE_D + 0.95f), t(x, 3.85f, zb + CASE_D + 0.1f);
         const vec3 d = normalize(t - b);
         const vec3 w = normalize(cross(along, d));
         const float L = length(t - b);
         for (int s = -1; s <= 1; s += 2) obox((b + t) * 0.5f + along * (s * 0.22f), along, d, w, vec3(0.025f, L * 0.5f, 0.035f), P.wood, M_WOOD);
-        for (int i = 1; i < 12; i++) {
-            const vec3 p = b + (t - b) * (i / 12.f);
-            put(MESH_CYL, p, d * 0.014f, along * 0.22f, cross(d * 0.014f, along * 0.22f) * (1.f / 0.22f), P.wood * 1.1f, M_WOOD);
-        }
+        for (int i = 1; i < 13; i++) put(MESH_CYL, b + (t - b) * (i / 13.f), d * 0.014f, along * 0.22f, cross(d, along) * 0.014f, P.wood * 1.1f, M_WOOD);
         box(t + vec3(0, 0.02f, -0.02f), vec3(0.26f, 0.03f, 0.03f), P.gilt, M_BRASS);
     };
-    ladder(5.6f, S_ROOM + 2.5f);
-    ladder(-6.4f, S_ROOM + 3.5f);
-    // reading tables with their lamps and chairs
+    ladder(-1.55f, S_ROOM + 1.5f);
+    // reading tables with their lamps and chairs, a long rug
     auto table = [&](const vec3& c, float born) {
         st_.born = born;
         box(c + UP * 0.76f, vec3(1.25f, 0.03f, 0.48f), P.wood, M_WOOD);
@@ -274,16 +308,18 @@ void LibraryUniverse::buildHall() {
             }
         }
     };
-    table(vec3(-4.4f, 0.f, 0.6f), S_ROOM + 1.6f);
-    table(vec3(4.6f, 0.f, 0.6f), S_ROOM + 2.8f);
-    // chandeliers
+    // (down the middle of the room, so they never stand in front of the collection)
+    table(vec3(0.f, 0.f, 1.4f), S_ROOM + 1.0f);
+    st_.born = S_ROOM + 0.5f;
+    box(vec3(0.f, 0.005f, 2.4f), vec3(2.2f, 0.005f, 3.6f), P.rug, M_RUG, 0.f, 0.f, 0.f, 5.f);
+    // chandeliers, let down from the ceiling
     auto chandelier = [&](const vec3& c, float r, int n, float born) {
         st_.born = born;
-        st_.die = S_SHAFT - 0.5f;
         st_.style = 2.f;
         put(MESH_CYL, c + UP * 0.02f, vec3(r, 0, 0), vec3(0, 0.03f, 0), vec3(0, 0, r), P.gilt, M_BRASS, 0.f, 0.f, 1.f);
         put(MESH_CYL, c + UP * 0.3f, vec3(r * 0.5f, 0, 0), vec3(0, 0.025f, 0), vec3(0, 0, r * 0.5f), P.gilt, M_BRASS, 0.f, 0.f, 1.f);
-        cyl(c + UP * 1.6f, 0.02f, 1.6f, P.gilt * 0.6f, M_IRON);
+        const float chain = (HALL_H - c.y) * 0.5f;
+        cyl(c + UP * chain, 0.02f, chain, P.gilt * 0.6f, M_IRON);
         sphere(c + UP * 0.12f, 0.12f, P.gilt, M_BRASS);
         for (int i = 0; i < n; i++) {
             const float a = i * 6.2832f / n;
@@ -292,234 +328,12 @@ void LibraryUniverse::buildHall() {
             sphere(p + UP * 0.2f, 0.022f, P.candle, M_EMIT, 4.f);
             lamp(p + UP * 0.21f, P.candle, 0.09f, 0.7f, 0.f, 1.f);
         }
-        lamp(c + UP * 0.15f, P.candle, 0.6f, 0.35f, 7.f, 0.3f);
+        lamp(c + UP * 0.15f, P.candle, 0.6f, 0.4f, 8.f, 0.3f);
         st_.style = 0.f;
-        st_.die = -1.f;
     };
-    chandelier(vec3(-4.4f, 3.3f, 0.4f), 0.45f, 8, S_ROOM + 2.0f);
-    chandelier(vec3(4.6f, 3.3f, 0.4f), 0.45f, 8, S_ROOM + 3.0f);
-
-    // ---- the galleries: sides 5, 0, 1 first (the room), the others with the rotunda
+    chandelier(vec3(-5.4f, 7.0f, 0.9f), 0.6f, 10, S_ROOM + 2.2f);
+    chandelier(vec3(5.6f, 7.0f, 0.9f), 0.6f, 10, S_ROOM + 2.6f);
     st_ = Stamp{};
-    const int sideOrder[6] = {0, 5, 1, 4, 2, 3};
-    for (int oi = 0; oi < 6; oi++) {
-        const int k = sideOrder[oi];
-        const bool room = oi < 3;
-        const SideFrame F = frameOf(k);
-        const vec3 C(0.f, 0.f, ZC);
-        const float bornT0 = room ? S_GALLERY + 0.6f * oi : S_ROTUNDA + 0.5f + 0.7f * (oi - 3);
-        for (int t = 0; t < 3; t++) {
-            // tier 0 of the back wall holds the real bookcases (the study, the collection, the fillers)
-            if (k == 0 && t == 0) continue;
-            const float tb = (t == 0 ? (room ? S_GALLERY + 1.0f + 0.5f * oi : bornT0) : t == 1 ? bornT0 + 0.5f : bornT0 + 7.f + 0.5f * oi);
-            const float bornTier = room ? tb : bornT0 + 0.8f * t;
-            st_.born = bornTier;
-            st_.style = 1.f;
-            const float y = tierY(t);
-            const float len = R - 2.f * CASE_D * 0.5774f - 0.02f;
-            const vec3 c = C + F.n * (A - CASE_D * 0.5f) + UP * (y + TIER_H * 0.5f);
-            const Stamp keep = st_;
-            st_.unit = (float)unit(c);
-            obox(c, F.t, UP, F.in, vec3(len * 0.5f, TIER_H * 0.5f, CASE_D * 0.5f), P.wood, M_BOOKWALL, BAY_W, (float)BAY_SHELVES, 0.f,
-                 1.3f * k + 7.1f * t);
-            st_ = keep;
-            if (t > 0) {
-                // the gallery's floor, its fascia, brackets under it, the balustrade
-                st_.style = 0.f;
-                const float a0 = GAL_IN, a1 = A - CASE_D;
-                const float gl = 2.f * a1 * 0.5774f;
-                const vec3 fc = C + F.n * ((a0 + a1) * 0.5f) + UP * (y - 0.1f);
-                obox(fc, F.t, UP, F.in, vec3(gl * 0.5f, 0.1f, (a1 - a0) * 0.5f), P.wood * 0.9f, M_WOOD);
-                obox(C + F.n * (a0 + 0.03f) + UP * (y - 0.16f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.16f, 0.04f), P.wood, M_WOOD, 0.6f);
-                for (int b = -4; b <= 4; b++)
-                    obox(C + F.n * (a1 - 0.35f) + F.t * (b * 2.1f) + UP * (y - 0.42f), F.t, UP, F.in, vec3(0.06f, 0.22f, 0.35f), P.wood * 0.8f, M_WOOD);
-                obox(C + F.n * (a0 + 0.06f) + UP * (y + 0.5f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.5f, 0.03f), P.wood * 1.05f, M_BALUSTRADE);
-                obox(C + F.n * (a0 + 0.06f) + UP * (y + 1.02f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.025f, 0.06f), P.wood * 0.8f, M_WOOD);
-                // a lamp on the balustrade at each end
-                for (int s = -1; s <= 1; s += 2) {
-                    const vec3 lp = C + F.n * (a0 + 0.06f) + F.t * (s * a0 * 0.5774f * 0.6f) + UP * (y + 1.3f);
-                    cyl(lp - UP * 0.15f, 0.015f, 0.12f, P.gilt, M_BRASS);
-                    sphere(lp, 0.11f, P.lampCol, M_EMIT, 1.6f, 1.f);
-                    lamp(lp, P.lampCol, 0.35f, 0.8f, 6.f);
-                }
-            }
-        }
-        // the cornice
-        st_.born = room ? bornT0 + 9.f : bornT0 + 2.5f;
-        st_.style = 0.f;
-        obox(C + F.n * (A - 0.35f) + UP * 12.1f, F.t, UP, F.in, vec3(R * 0.5f, 0.3f, 0.35f), P.wood, M_WOOD, 0.8f);
-    }
-    // the ladders upstairs
-    st_.born = S_GALLERY + 5.f;
-    {
-        const vec3 b(-2.5f, 4.1f, zb + CASE_D + 0.85f), t(-2.5f, 7.6f, zb + CASE_D + 0.1f);
-        const vec3 d = normalize(t - b), w = normalize(cross(along, d));
-        const float L = length(t - b);
-        for (int s = -1; s <= 1; s += 2) obox((b + t) * 0.5f + along * (s * 0.22f), along, d, w, vec3(0.025f, L * 0.5f, 0.035f), P.wood, M_WOOD);
-        for (int i = 1; i < 12; i++) put(MESH_CYL, b + (t - b) * (i / 12.f), d * 0.014f, along * 0.22f, cross(d, along) * 0.014f, P.wood, M_WOOD);
-    }
-    // the spiral stair up to the gallery, step by step
-    {
-        const vec3 c(-8.2f, 0.f, -0.35f);
-        st_.born = S_GALLERY + 1.5f;
-        cyl(c + UP * 2.1f, 0.09f, 2.1f, P.wood, M_WOOD);
-        sphere(c + UP * 4.3f, 0.12f, P.gilt, M_BRASS);
-        const int n = 22;
-        for (int i = 0; i < n; i++) {
-            st_.born = S_GALLERY + 1.5f + 0.12f * i;
-            const float a = 1.2f + i * 0.33f;
-            const vec3 u(std::cos(a), 0.f, std::sin(a));
-            const vec3 w = cross(u, UP);
-            const float y = (i + 1) * (4.1f / (n + 1));
-            obox(c + u * 0.66f + UP * y, u, UP, w, vec3(0.56f, 0.03f, 0.17f + 0.0f), P.wood * 1.05f, M_WOOD);
-            put(MESH_CYL, c + u * 1.16f + UP * (y + 0.45f), vec3(0.012f, 0, 0), vec3(0, 0.45f, 0), vec3(0, 0, 0.012f), P.gilt * 0.8f, M_BRASS);
-        }
-    }
-    // a great chandelier in the middle of the room
-    chandelier(vec3(0.f, 7.2f, 2.5f), 1.1f, 14, S_GALLERY + 6.f);
-}
-
-// ---------------------------------------------------------------------------------------------------- the rotunda (the reading room)
-void LibraryUniverse::buildRotunda() {
-    const Palette& P = palT_;
-    const vec3 C(0.f, 0.f, ZC);
-    // the floor: the ring (always), the middle (gone when the shaft opens), a marble inlay
-    st_ = Stamp{};
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * ((HOLE + A) * 0.5f) + UP * -0.15f, F.t, UP, F.in, vec3(R * 0.5f, 0.15f, (A - HOLE) * 0.5f), P.floor, M_FLOOR);
-        // the plaster walls behind everything
-        obox(C + F.n * (A + 0.2f) + UP * (HL * 0.5f), F.t, UP, F.in, vec3(R * 0.5f + 0.3f, HL * 0.5f, 0.2f), P.plaster, M_PLASTER, k == 0 ? 1.f : 0.f);
-    }
-    st_.die = S_SHAFT;
-    st_.style = 1.f;
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * (HOLE * 0.5f) + UP * -0.15f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.15f, HOLE * 0.5f), P.floor, M_FLOOR);
-    }
-    st_.born = S_ROTUNDA + 0.5f;
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * (HOLE * 0.5f) + UP * 0.004f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.006f, HOLE * 0.5f), P.marble, M_FLOOR, 1.f);
-    }
-    // the issue desk at the middle, a lamp post on it
-    st_.born = S_ROTUNDA + 1.f;
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * 2.4f + UP * 0.55f, F.t * -1.f, UP, F.n, vec3(1.38f, 0.55f, 0.3f), P.wood, M_WOOD, 0.8f);
-        obox(C + F.n * 2.4f + UP * 1.13f, F.t * -1.f, UP, F.n, vec3(1.5f, 0.03f, 0.4f), P.wood * 0.8f, M_WOOD);
-    }
-    cyl(C + UP * 1.8f, 0.07f, 1.8f, P.gilt, M_BRASS);
-    for (int k = 0; k < 6; k++) {
-        const vec3 d = cornerDir(k);
-        sphere(C + d * 0.45f + UP * 3.3f, 0.16f, P.lampCol, M_EMIT, 1.5f, 1.f);
-        cyl(C + d * 0.22f + UP * 3.2f, 0.012f, 0.24f, P.gilt, M_BRASS);
-    }
-    lamp(C + UP * 3.4f, P.lampCol, 0.9f, 1.2f, 12.f);
-    // the reading desks: twelve spokes running out from the middle, green lamps along their screens
-    for (int i = 0; i < 12; i++) {
-        st_.born = S_ROTUNDA + 6.f + 0.45f * i;
-        st_.die = S_SHAFT + 0.1f * i;
-        st_.style = 1.f;
-        const float a = (i + 0.5f) * 6.2832f / 12.f;
-        const vec3 u(std::cos(a), 0.f, std::sin(a));
-        const vec3 w = cross(u, UP);
-        const float r0 = 4.0f, r1 = 8.4f;
-        const vec3 m = C + u * ((r0 + r1) * 0.5f);
-        const float hl = (r1 - r0) * 0.5f;
-        obox(m + UP * 0.38f, u, UP, w, vec3(hl, 0.38f, 0.55f), P.wood * 0.9f, M_WOOD, 0.5f);
-        obox(m + UP * 0.78f, u, UP, w, vec3(hl + 0.05f, 0.025f, 0.62f), P.leather * 0.7f, M_LEATHER);
-        obox(m + UP * 1.0f, u, UP, w, vec3(hl, 0.2f, 0.03f), P.wood, M_WOOD, 0.4f);
-        for (int j = 0; j < 4; j++) {
-            const vec3 l = C + u * (r0 + 0.6f + j * 1.05f);
-            obox(l + UP * 1.27f, u, UP, w, vec3(0.16f, 0.04f, 0.07f), P.shade, M_SHADE, 1.2f);
-            if (j == 1) lamp(l + UP * 1.2f, P.lampCol, 0.25f, 0.9f, 0.f);
-            for (int s = -1; s <= 1; s += 2) {
-                const vec3 ch = l + w * (s * 0.95f);
-                obox(ch + UP * 0.46f, u, UP, w, vec3(0.21f, 0.04f, 0.21f), P.leather, M_LEATHER);
-                obox(ch + UP * 0.76f + w * (s * 0.2f), u, UP, w, vec3(0.21f, 0.26f, 0.03f), P.leather, M_LEATHER);
-            }
-        }
-    }
-    // the ceiling round the dome, the dome (brought down from above), the sky over its oculus
-    st_ = Stamp{};
-    st_.born = S_ROTUNDA + 3.5f;
-    st_.die = S_SHAFT;
-    st_.style = 2.f;
-    box(C + UP * (HL + 0.25f), vec3(R + 0.6f, 0.25f, R + 0.6f), P.marble * 0.6f, M_CEIL, A - 0.25f, 0.f, ZC);
-    st_.born = S_ROTUNDA + 4.0f;
-    const float rd = A - 0.25f;
-    put(MESH_DOME, C + UP * HL, vec3(rd, 0, 0), vec3(0, rd * 0.92f, 0), vec3(0, 0, rd), lerp(P.marble, P.paper, 0.5f) * 0.75f, M_DOME);
-    put(MESH_CYL, C + UP * (HL + 0.15f), vec3(rd + 0.1f, 0, 0), vec3(0, 0.18f, 0), vec3(0, 0, rd + 0.1f), P.gilt * 0.7f, M_BRASS, 0.f, 0.f, 1.f);
-    box(C + UP * (HL + rd * 0.92f + 0.6f), vec3(4.f, 0.05f, 4.f), P.skyA, M_EMIT, 1.4f);
-    st_ = Stamp{};
-    // the shaft's balustrade round the opening, its lamps
-    st_.born = S_SHAFT + 0.8f;
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * (HOLE + 0.06f) + UP * 0.5f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.5f, 0.03f), P.wood, M_BALUSTRADE);
-        obox(C + F.n * (HOLE + 0.06f) + UP * 1.02f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.025f, 0.07f), P.wood * 0.8f, M_WOOD);
-        obox(C + F.n * (HOLE + 0.02f) + UP * -0.2f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.2f, 0.04f), P.wood, M_WOOD);
-        const vec3 lp = C + cornerDir(k) * (HOLE / 0.866f + 0.15f);
-        cyl(lp + UP * 0.8f, 0.04f, 0.8f, P.gilt, M_BRASS);
-        sphere(lp + UP * 1.85f, 0.26f, P.lampCol, M_EMIT, 1.6f, 1.f);
-        lamp(lp + UP * 1.85f, P.lampCol, 0.55f, 1.f, 8.f);
-    }
-}
-
-// ---------------------------------------------------------------------------------------------------- a level of the shaft
-// A whole level (12.4 m): the floor ring round the opening and its balustrade, three tiers of bookcases on the six
-// walls with two galleries, lamps at the opening's corners; `full`: also a spiral stair.
-void LibraryUniverse::buildLevel(const vec3& center, int level, float born, bool full, int shaft) {
-    const Palette& P = palT_;
-    const vec3 C = center + UP * (level * HL);
-    st_ = Stamp{};
-    st_.born = born;
-    st_.style = 0.f;
-    for (int k = 0; k < 6; k++) {
-        const SideFrame F = frameOf(k);
-        obox(C + F.n * ((HOLE + A) * 0.5f) + UP * -0.15f, F.t, UP, F.in, vec3(R * 0.5f, 0.15f, (A - HOLE) * 0.5f), P.floor, M_FLOOR);
-        obox(C + F.n * (A + 0.2f) + UP * (HL * 0.5f), F.t, UP, F.in, vec3(R * 0.5f + 0.3f, HL * 0.5f, 0.2f), P.plaster, M_PLASTER);
-        obox(C + F.n * (HOLE + 0.06f) + UP * 0.5f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.5f, 0.03f), P.wood, M_BALUSTRADE);
-        obox(C + F.n * (HOLE + 0.06f) + UP * 1.02f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.025f, 0.07f), P.wood * 0.8f, M_WOOD);
-        obox(C + F.n * (HOLE + 0.02f) + UP * -0.2f, F.t, UP, F.in, vec3(HOLE * 0.5774f, 0.2f, 0.04f), P.wood, M_WOOD);
-        for (int t = 0; t < 3; t++) {
-            const float y = tierY(t);
-            const float len = R - 2.f * CASE_D * 0.5774f - 0.02f;
-            const vec3 c = C + F.n * (A - CASE_D * 0.5f) + UP * (y + TIER_H * 0.5f);
-            const Stamp keep = st_;
-            st_.unit = (float)unit(c);
-            obox(c, F.t, UP, F.in, vec3(len * 0.5f, TIER_H * 0.5f, CASE_D * 0.5f), P.wood, M_BOOKWALL, BAY_W, (float)BAY_SHELVES, 0.f,
-                 1.3f * k + 7.1f * t + level * 3.3f + shaft * 11.7f);
-            st_ = keep;
-            if (t > 0) {
-                const float a0 = GAL_IN, a1 = A - CASE_D;
-                obox(C + F.n * ((a0 + a1) * 0.5f) + UP * (y - 0.1f), F.t, UP, F.in, vec3(a1 * 0.5774f, 0.1f, (a1 - a0) * 0.5f), P.wood * 0.9f, M_WOOD);
-                obox(C + F.n * (a0 + 0.06f) + UP * (y + 0.5f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.5f, 0.03f), P.wood * 1.05f, M_BALUSTRADE);
-                obox(C + F.n * (a0 + 0.06f) + UP * (y + 1.02f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.025f, 0.06f), P.wood * 0.8f, M_WOOD);
-                obox(C + F.n * (a0 + 0.03f) + UP * (y - 0.16f), F.t, UP, F.in, vec3(a0 * 0.5774f, 0.16f, 0.04f), P.wood, M_WOOD);
-            }
-        }
-        const vec3 lp = C + cornerDir(k) * (HOLE / 0.866f + 0.15f);
-        cyl(lp + UP * 0.8f, 0.04f, 0.8f, P.gilt, M_BRASS);
-        sphere(lp + UP * 1.85f, 0.26f, P.lampCol, M_EMIT, 1.6f, 1.f);
-        if (full || (k % 2 == 0)) lamp(lp + UP * 1.85f, P.lampCol, 0.55f, 1.f, 8.f);
-    }
-    if (full) {
-        // a spiral stair in the opening's corner, up to the next level
-        const vec3 sc = C + cornerDir(4) * (HOLE / 0.866f - 1.9f);
-        cyl(sc + UP * (HL * 0.5f), 0.1f, HL * 0.5f, P.wood, M_WOOD);
-        const int n = 44;
-        for (int i = 0; i < n; i++) {
-            const float a = i * 0.36f + level * 0.7f;
-            const vec3 u(std::cos(a), 0.f, std::sin(a));
-            const vec3 w = cross(u, UP);
-            const float y = (i + 1) * (HL / (n + 1));
-            obox(sc + u * 0.75f + UP * y, u, UP, w, vec3(0.62f, 0.03f, 0.18f), P.wood * 1.05f, M_WOOD);
-            if (i % 2 == 0)
-                put(MESH_CYL, sc + u * 1.33f + UP * (y + 0.45f), vec3(0.012f, 0, 0), vec3(0, 0.45f, 0), vec3(0, 0, 0.012f), P.gilt * 0.8f, M_BRASS);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------------------------------- everything
@@ -528,17 +342,12 @@ void LibraryUniverse::buildWorld() {
     lamps_.clear();
     units_.clear();
     shelves_.clear();
-    const Palette& P = palT_;
-    // the collection's bookcases: bay 0 is the study's; the others are made as they are needed (newBay)
-    // (the six to the right of the study's stand empty from the room's opening, waiting for their books)
+    // the collection's bookcases: the study's, the six standing ready right of it once the room opens; the others
+    // are carried in as they are needed (newBay)
     while (bays_.size() < 7) newBay();
     for (int i = 0; i < (int)bays_.size(); i++) {
         Bay& b = bays_[i];
-        const Stamp keep = st_;
-        st_ = Stamp{};
-        st_.born = std::max(0.f, b.born);
         b.firstShelf = (int)shelves_.size();
-        // (geometry drawn each frame with the dynamic parts; the shelves recorded here)
         const float y0 = 0.12f, y1 = TIER_H - 0.12f;
         const float pitch = (y1 - y0) / BAY_SHELVES;
         const float innerW = BAY_W - 0.1f;
@@ -553,56 +362,27 @@ void LibraryUniverse::buildWorld() {
             sh.bay = i;
             shelves_.push_back(sh);
         }
-        st_ = keep;
     }
     buildStudy();
     buildHall();
-    buildRotunda();
-    // the shaft: levels below and above the reading room
-    const vec3 C(0.f, 0.f, ZC);
-    for (int n = 1; n <= 16; n++) {
-        buildLevel(C, -n, S_SHAFT + 1.4f + 0.95f * (n - 1), n <= 3, 0);
-        buildLevel(C, n, S_SHAFT + 1.9f + 0.95f * (n - 1), n <= 2, 0);
-    }
-    // the honeycomb: shafts along the section's row, farther and farther
-    const vec3 dir = sideN(1) * (2.f * A);
-    for (int m = 1; m <= 4; m++) {
-        const int nLev = m == 1 ? 12 : 16;
-        const float base = m == 1 ? S_HONEY + 0.5f : m == 2 ? S_HONEY + 10.f : m == 3 ? S_ENDLESS - 5.f : S_ENDLESS + 15.f;
-        for (int s = -1; s <= 1; s += 2) {
-            const vec3 sc = C + dir * (float)(s * m);
-            for (int n = -nLev; n <= nLev; n++) buildLevel(sc, n, base + 0.28f * std::abs(n) + (s > 0 ? 0.f : 0.6f), false, m * 2 + (s > 0));
-        }
-    }
-    // the sort units, nearest to the collection first
-    const vec3 anchor(5.5f, 1.8f, ZBACK);
-    for (Unit& u : units_) {
-        const vec3 d = u.c - anchor;
-        // (in the room, along the walls; in the shaft, level by level up and down, across the whole honeycomb)
-        const float lateral = std::sqrt(d.x * d.x + d.z * d.z);
-        u.order = u.born < S_SHAFT ? lateral + std::fabs(d.y) * 2.f + u.born * 0.4f
-                                   : S_SHAFT * 2.f + std::fabs(d.y) * 1.2f + lateral * 0.12f;
-    }
-    if ((int)sortTimes_.size() < (int)units_.size()) sortTimes_.resize(units_.size(), -1.f);
-    (void)P;
     (void)hashf;
     worldDirty_ = false;
 }
 
-// A new bookcase for the collection: along the back wall to the right of the study's, then over the fillers on its left.
+// The collection's bookcases, in the order they fill: the study's, then along the back wall to its right, then left
+// of the study, then down the side walls (one each side in turn).
 void LibraryUniverse::newBay() {
     const int i = (int)bays_.size();
     Bay b;
     b.along = vec3(1, 0, 0);
     b.out = vec3(0, 0, 1);
     if (i < 7) b.c = vec3(2.9f + i * BAY_W, 0.f, ZBACK + CASE_D);
-    else if (i < 13) {
-        b.c = vec3(-3.95f - (i - 7) * BAY_W, 0.f, ZBACK + CASE_D);
-        b.filler = i - 7;
-    } else {
-        // beyond: up on the first gallery, over the back wall's middle (rare: some 210 lines)
-        const int j = i - 13;
-        b.c = vec3(-9.f + (j % 18) * BAY_W, 4.1f + 4.1f * (j / 18 % 2), ZBACK + CASE_D + 0.02f);
+    else if (i < 13) b.c = vec3(-3.95f - (i - 7) * BAY_W, 0.f, ZBACK + CASE_D);
+    else {
+        const int j = i - 13, side = j % 2 == 0 ? 1 : -1, k = j / 2;
+        b.c = vec3(side * (HALL_X - CASE_D), 0.f, -1.9f + k * BAY_W);
+        b.out = vec3((float)-side, 0.f, 0.f);
+        b.along = side > 0 ? vec3(0, 0, 1) : vec3(0, 0, -1);
     }
     b.born = i == 0 ? 0.f : i < 7 ? S_ROOM + 0.6f + 0.45f * i : grow_;
     bays_.push_back(b);
