@@ -99,7 +99,7 @@ song, and songs change universe with a transition on the beat. Forty universes s
 </tr>
 <tr>
 <td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/gianttree.jpg"><br><b>GIANT TREE</b>: a 3D world tree growing behind the well with every cleared line, from a tiny sapling in a meadow to a celestial tree whose crown rises through a sea of clouds into the stars; the drop sends light up from its roots and the whole crown blooms<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/gianttree.jpg"><br><b>GIANT TREE</b>: a toon world tree shooting up absurdly with every cleared line, from a round sapling in a bright meadow through the clouds, the stratosphere and orbit until the planet is a ball under its roots and its crown passes the moon; the drop beams a rainbow up the trunk into space<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 

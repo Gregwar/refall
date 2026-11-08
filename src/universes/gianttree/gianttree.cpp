@@ -1,32 +1,37 @@
-// GIANT TREE: a world tree grows behind the well with every cleared line, from a tiny sapling at the side of the
-// scene into a celestial tree whose crown rises through the clouds into the stars.
+// GIANT TREE: a world tree grows behind the well with every cleared line, absurdly: from a little round sapling in
+// a bright meadow it shoots up past the hot-air balloons, through the clouds, into the stratosphere where the sky
+// turns deep blue and the horizon curves, out into orbit among the satellites, then on until the planet is a ball
+// under its roots, the moon floats by its crown and, far out, ringed planets and a galaxy.
 //
-// The tree is real 3D geometry (tree.cpp): a trunk with buttressed roots, great limbs and two finer orders of
-// branches as tapered, furrowed cylinders, the crown as clumps of leaf clusters (and blossoms). It is generated
-// once per game from a seed, every part carrying the growth at which it is born, and the shaders reveal it against
-// the growth: each cleared line raises the growth (a spurt over a second or so: branches reach out and thicken,
-// buds burst into leaves), a Tetris more, with a burst of blossoms and light. As it grows the whole tree scales up
-// (a sapling of a meter at first, some 600 m at the end) and the camera pulls back and tilts up so it keeps
-// fitting, from a low view in the grass by the sapling to the colossal trunk rising out of a sea of clouds,
-// its crown against a sky deepening into stars (the haze, in meters, shows the scale). Full size at 120 lines (the
-// growth eases out: the first lines show the most); beyond, it keeps blooming. Game over: every leaf falls; the
-// next game sprouts a new seed.
+// The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~25 lines, the
+// stratosphere at ~45, orbit at ~75, the planet a ball at ~105, the moon at ~160, and it keeps going (more slowly)
+// to some two million kilometers. The tree is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
+// G (thick at the foot, slender under the crown: it grows ever taller for its width), the crown is built in its own
+// space and scaled on G (the sapling's lollipop head spreads into a broad crown over the first lines as its limbs
+// are born, then it rides the trunk up), vine leaves spiral up the trunk sprouting as the tip passes. Each clear is
+// a spurt: the growth springs to its new target, the crown squashes and stretches, sparkles burst out of it,
+// streaks rush down past it, and the camera follows a moment later (the tree shoots up out of the frame first). A
+// Tetris is a huge spurt. The camera rides with the crown: low in the grass by the sapling, then up with the crown
+// looking down the soaring trunk at the land falling away, the clouds sinking under it, the planet curving, then
+// a ball far below. Game over: every leaf falls; the next game sprouts a new seed (the camera dives back down).
 //
-// The light: a low sun (or the moon) behind and to the side, a soft key light with a sky ambient, the leaves glowing
-// through when the eye looks toward the sun, a rim of light on the bark, the crown's shade inside it, the haze. The
-// lanterns (glowing fruits) appear once the tree is grand. The music: calm is a still, soft world (a light breeze);
-// mid stirs the wind and lets the petals drift; a peak sways the branches more, shimmers the leaves, fills the air
-// with spores and petals and the lanterns breathe with the beat. **The drop** (a real one only, not a chorus): light
-// flows up from the roots through the trunk and out along every branch to the leaves, then the whole crown blooms
-// and glows while a shower of luminous petals falls and a gust leans the tree.
+// The look: a toon world in saturated colors: crisp bands of light with cool tinted shades, warm rims, round
+// scalloped puffs of foliage with painterly leaf strokes, toon cumulus, a meadow in crisp two-tone patches with
+// flowers and round trees, the aerial perspective in color (an exponential atmosphere: none of it in space). The
+// sky, the planet (continents, oceans, cities on the night side, the limb's glow), the moon (a sphere floating
+// behind the tree), the sun and space (nebula, a ringed planet, a galaxy) are one ray-traced pass. The music: calm
+// is a light breeze; mid stirs the wind and drifts petals; a peak sways the tree, shimmers the leaves and fills the
+// air with sparkles. **The drop** (a real one only, not a chorus) shoots the tree up an extra burst while a rainbow
+// of light runs up the trunk from the roots, out through the crown and on up into space as a beam, and the crown
+// blooms under a shower of rainbow petals.
 //
-// The pieces are seed glass: translucent glass shapes with a warm seed of light glowing deep inside each shape, fine
-// leaf veins. Cleared rows dissolve into light that flows out of the well to the tree's crown.
+// The pieces are seed glass: translucent glass shapes with a warm seed of light inside, fine leaf veins. Cleared rows
+// dissolve into light that flows out of the well to the crown.
 //
-// Cost: the world at a reduced resolution (at most 720 lines) with depth: ~50k triangles of bark, ~9k leaf
-// billboards (soft edged), a ground grid of ~36k triangles, ~1700 cloud puffs; a quarter resolution bloom; the
-// stars, the veil, the pieces and the lettering at full resolution. Nothing is uploaded while the tree grows
-// (one upload per game).
+// Cost: the world at a reduced resolution (at most 720 lines) with depth: one ray-traced sky pass (planet, moon,
+// space), ~25k triangles of bark, ~1.5k puffs (most of them too small to draw at any time), ~1300 cloud puffs, a
+// ray-traced cloud shell once above it; a quarter resolution bloom; the stars, the veil, the pieces and the
+// lettering at full resolution. Nothing is uploaded while the tree grows (one upload per game).
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind
 // it has its own 3D camera.
@@ -71,12 +76,12 @@ GLuint compile(const char* vs, const char* fs, const char* name) {
     v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
     return ugl::program(v.c_str(), f.c_str(), name);
 }
-// A world shader: the light in the fragment shader, the wind in the vertex shader.
-GLuint compileWorld(const char* vs, const char* fs, const char* name, bool sway) {
+// A world shader: the light in both stages, the tree's shape in the vertex shader.
+GLuint compileWorld(const char* vs, const char* fs, const char* name, bool tree) {
     std::string f(fs);
     f.insert(f.find('\n') + 1, std::string(shaders::COMMON_GLSL) + shaders::LIGHT_GLSL);
     std::string v(vs);
-    v.insert(v.find('\n') + 1, std::string(shaders::COMMON_GLSL) + (sway ? shaders::SWAY_GLSL : ""));
+    v.insert(v.find('\n') + 1, std::string(shaders::COMMON_GLSL) + shaders::LIGHT_GLSL + (tree ? shaders::TREE_GLSL : ""));
     return ugl::program(v.c_str(), f.c_str(), name);
 }
 
@@ -86,65 +91,45 @@ vec2 lerp2(vec2 a, vec2 b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y 
 vec2 mul(vec2 a, float k) { return {a.x * k, a.y * k}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// CPU value noise (the ground's heights).
-float hashv(float x, float y) {
-    float h = std::sin(x * 127.1f + y * 311.7f) * 43758.5453f;
-    return h - std::floor(h);
-}
-float vnoise(float x, float y) {
-    const float ix = std::floor(x), iy = std::floor(y);
-    float fx = x - ix, fy = y - iy;
-    fx = fx * fx * (3 - 2 * fx);
-    fy = fy * fy * (3 - 2 * fy);
-    const float a = hashv(ix, iy), b = hashv(ix + 1, iy), c = hashv(ix, iy + 1), d = hashv(ix + 1, iy + 1);
-    return lerpf(lerpf(a, b, fx), lerpf(c, d, fx), fy);
-}
-float fbm(float x, float y) {
-    float s = 0, a = 0.5f;
-    for (int i = 0; i < 4; i++) {
-        s += a * vnoise(x, y);
-        const float nx = 0.8f * x - 0.6f * y, ny = 0.6f * x + 0.8f * y;
-        x = nx * 2.03f + 1.7f;
-        y = ny * 2.03f + 1.7f;
-        a *= 0.5f;
-    }
-    return s / 0.9375f;
-}
-
-// A variant (sRGB): the sky (zenith, sky, horizon, haze), the sun and its glow, the ambient, the ground (near, far)
-// and the mist, the bark (lit, dark), the leaves (two greens), the blossoms, the glow of the tree's light, the
-// lanterns, the clouds (lit, shade), the petals, the HUD's ink and accent, the veil; the seven pieces; the sun's
-// place (azimuth from straight behind the tree, elevation), its size, night, stars, nebula, the leaves' own glow,
-// how many blossoms, bloom, haze density.
+// A variant (sRGB): the sky (zenith, horizon), space and its nebula's two colors, the sun and its glow, the toon
+// light (lit, shade), the haze, the rim; the meadow (light, dark), the ocean, the land, the deserts, the flowers;
+// the bark (lit, dark), the leaves (mid, sunlit, shade), the blossoms, the fruits, the magic light, the clouds
+// (lit, shade), the petals; the HUD's ink and accent, the veil; the seven pieces; the sun's place (azimuth from
+// straight behind the tree, elevation), its size, night, stars, the leaves' own glow, how many blossoms, bloom.
 struct VariantDef {
     const char* name;
-    unsigned zenith, sky, horizon, haze, sun, sunGlow, ambient, ground, groundFar, mist;
-    unsigned bark, barkDark, leaf, leaf2, blossom, glow, lantern, cloudLit, cloudShade, petal;
+    unsigned zenith, horizon, space, nebula, nebula2, sun, sunGlow, lit, shadow, haze, rim;
+    unsigned groundA, groundB, ocean, land, desert, flower;
+    unsigned bark, barkDark, leaf, leaf2, leafShade, blossom, fruit, glow, cloudLit, cloudShade, petal;
     unsigned ink, accent, veil;
     unsigned piece[7];
-    float sunAz, sunEl, sunSize, night, stars, nebula, leafGlow, blossomK, bloom, fog;
+    float sunAz, sunEl, sunSize, night, stars, leafGlow, blossomK, bloom;
 };
 const VariantDef VARIANTS[] = {
-    // Spring at dawn: a peach horizon under a lilac sky, fresh green leaves and pink blossoms.
-    {"BLOSSOM", 0x2c3a72, 0x93a6d6, 0xf8c8b0, 0xe6c6cc, 0xfff2dc, 0xffb48c, 0x9fb0d8, 0x7a9a66, 0x8a9ab8, 0xf0dae2,
-     0x76584c, 0x2c201e, 0x6fae4c, 0xb4d470, 0xffbcd2, 0xfff0c4, 0xffd890, 0xfff2ee, 0x9c90b8, 0xffd2e2,
-     0xfff6f2, 0xffbccc, 0x1c1a34,
-     {0x7cd6ea, 0xf6d688, 0xc6a4f2, 0x98e0a0, 0xf890aa, 0x8aa6f2, 0xf8ac80}, -0.75f, 0.13f, 0.026f, 0.f, 0.f, 0.f, 0.f, 0.42f, 0.45f, 1.f / 3800.f},
-    // Autumn at sunset: a golden crown against an amber sky, red leaves among the gold.
-    {"AUTUMN", 0x2a2250, 0xb88878, 0xffbe74, 0xf0b48c, 0xfff0c0, 0xff9448, 0xc09080, 0x6e6a34, 0xa08a90, 0xf8cea4,
-     0x5e4236, 0x22160f, 0xe0902e, 0xf6c454, 0xe85a2c, 0xffd890, 0xffb860, 0xffe0b0, 0x9a6c86, 0xf6a03c,
-     0xfff2e0, 0xffc070, 0x1e1420,
-     {0x7ccad0, 0xf6c860, 0xc89ae0, 0xa8d070, 0xf07c6c, 0x8a9ee8, 0xf89c50}, 0.8f, 0.07f, 0.03f, 0.f, 0.f, 0.f, 0.f, 0.3f, 0.5f, 1.f / 3200.f},
-    // A silver moon tree at night: pale glowing leaves, the moon high, stars.
-    {"MOON", 0x02040e, 0x0a1832, 0x2a3e6a, 0x34486e, 0xf4f6ff, 0x7c8ccc, 0x40507a, 0x24364e, 0x2a3858, 0x50648e,
-     0x4c566c, 0x10141e, 0x8cd0e4, 0xdaf2ff, 0xffffff, 0x9cf0ff, 0xb0e8ff, 0xa8b8e0, 0x34446c, 0xd8f4ff,
-     0xe8f0ff, 0x9ce8ff, 0x040814,
-     {0x7ee0f8, 0xe8e0a0, 0xb0a0f8, 0x88f0c8, 0xf0a0c8, 0x90a8ff, 0xf0b890}, -1.0f, 0.2f, 0.05f, 1.f, 1.f, 0.f, 0.7f, 0.18f, 0.6f, 1.f / 4200.f},
-    // A cosmic tree: starlit indigo foliage under a nebula, golden star blossoms.
-    {"COSMOS", 0x05010f, 0x1a0c38, 0x5a2c6c, 0x5e3678, 0xffe6ff, 0xc078ff, 0x50386c, 0x281a44, 0x3a2458, 0x6a4490,
-     0x3c2e54, 0x0c0818, 0x5e54cc, 0xe8b8f0, 0xfff0b0, 0xffa8f0, 0xffe0a0, 0xc8a0e8, 0x2a1848, 0xffe8ff,
-     0xf6eaff, 0xffb0f0, 0x08041a,
-     {0x70d0ff, 0xffd870, 0xd890ff, 0x80f0b0, 0xff80b0, 0x8890ff, 0xffa070}, 0.65f, 0.3f, 0.02f, 1.f, 1.f, 1.f, 1.f, 0.3f, 0.7f, 1.f / 4000.f},
+    // A bright day: a deep blue sky, a warm high sun, a vivid green crown dotted with pink blossoms, red apples.
+    {"MEADOW", 0x1f6fe0, 0x9ce6ff, 0x03061a, 0x5a3cff, 0x20c0ff, 0xfff6dc, 0xffe49a, 0xfff2d6, 0x6f86d8, 0xa6e0ff, 0xffe8a0,
+     0x86de4c, 0x4fb43a, 0x1aa6e0, 0x56c046, 0xe8cf72, 0xff7ab8,
+     0xb0703e, 0x5c3456, 0x3fc23c, 0xc4f454, 0x1c7a64, 0xff92c6, 0xff3b30, 0xfff27a, 0xffffff, 0x9fb8f4, 0xffb4dc,
+     0xffffff, 0xffe066, 0x0b2350,
+     {0x5ee0ff, 0xffd84a, 0xc28cff, 0x6ef08a, 0xff6e8a, 0x5c8cff, 0xffa04a}, 2.45f, 0.72f, 0.03f, 0.f, 0.f, 0.f, 0.55f, 0.35f},
+    // A golden sunset: an orange and rose sky, an autumn crown of gold and red, golden fruits, the sun low ahead.
+    {"SUNSET", 0x3446b8, 0xffa860, 0x080418, 0xff5aa0, 0xffa040, 0xfff0c0, 0xff8a3c, 0xffd8a0, 0xa874c4, 0xffb88a, 0xffc070,
+     0xb6cc4a, 0x6c9a3a, 0x2a7ec8, 0x7aaa48, 0xf0b860, 0xff6a5a,
+     0xb85c38, 0x5a2a4c, 0xf59a30, 0xffdc5a, 0xc4544a, 0xff6a5a, 0xffe14a, 0xffd36a, 0xffe2c4, 0xb27ac4, 0xffa850,
+     0xfff4e4, 0xffc070, 0x2a1030,
+     {0x6cd8e0, 0xffd04a, 0xd890ff, 0xa8e05a, 0xff6a5a, 0x7c8cff, 0xff9a3a}, -1.45f, 0.14f, 0.034f, 0.f, 0.f, 0.f, 0.3f, 0.5f},
+    // A vivid night: an ultramarine sky, the tree glowing turquoise with magenta blossoms, golden fruits, the stars.
+    {"STARLIGHT", 0x0a1452, 0x2c50c0, 0x02030e, 0x8a3cff, 0x18b0ff, 0xd8e6ff, 0x6a8cff, 0xa8c0ff, 0x2c2c78, 0x2c4cb0, 0x9ae0ff,
+     0x2a9a72, 0x145060, 0x0c3a90, 0x1e7060, 0x50609a, 0xff7ae8,
+     0x7a64b8, 0x2a1c58, 0x22c8c8, 0x7cfff0, 0x1a4aa4, 0xff7ae8, 0xffe86a, 0x8affff, 0xa8bcff, 0x3c3c96, 0xd0a8ff,
+     0xeef4ff, 0x8affff, 0x050a28,
+     {0x5ef0ff, 0xffe46a, 0xd080ff, 0x5effb0, 0xff6ab8, 0x6a8cff, 0xffa060}, 2.2f, 0.5f, 0.03f, 1.f, 1.f, 0.55f, 0.5f, 0.6f},
+    // A fantasy in pastels: a lilac sky, a pink cherry crown with white blossoms on a lavender trunk, mint meadows.
+    {"CANDY", 0x7a6cf0, 0xffc4ea, 0x0a0620, 0xff6ad8, 0x7ae0ff, 0xfffaf0, 0xffcaf0, 0xfff0f6, 0x8a78d8, 0xffd0f0, 0xfff0a0,
+     0x9cf0b8, 0x58c8a4, 0x6ad8f4, 0x9ce89a, 0xffe0a0, 0xffffff,
+     0xc884b8, 0x6a4a9e, 0xff86c4, 0xffd0ea, 0xb054b4, 0xffffff, 0xffd84a, 0xfff0a0, 0xffffff, 0xc2acf2, 0xffc0e0,
+     0xffffff, 0xfff0a0, 0x281850,
+     {0x7ae8ff, 0xffe070, 0xd8a0ff, 0x8af0b0, 0xff8ab8, 0x8aa0ff, 0xffb070}, 2.7f, 0.62f, 0.03f, 0.f, 0.f, 0.15f, 0.65f, 0.4f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -157,14 +142,16 @@ Palette paletteOf(int v) {
     const VariantDef& d = VARIANTS[wrapV(v)];
     auto L = [](unsigned c) { return ugl::toLinear(hex(c)); };
     Palette p;
-    p.zenith = L(d.zenith); p.sky = L(d.sky); p.horizon = L(d.horizon); p.haze = L(d.haze); p.sun = L(d.sun);
-    p.sunGlow = L(d.sunGlow); p.ambient = L(d.ambient); p.ground = L(d.ground); p.groundFar = L(d.groundFar);
-    p.mist = L(d.mist); p.bark = L(d.bark); p.barkDark = L(d.barkDark); p.leaf = L(d.leaf); p.leaf2 = L(d.leaf2);
-    p.blossom = L(d.blossom); p.glow = L(d.glow); p.lantern = L(d.lantern); p.cloudLit = L(d.cloudLit);
+    p.zenith = L(d.zenith); p.horizon = L(d.horizon); p.space = L(d.space); p.nebula = L(d.nebula); p.nebula2 = L(d.nebula2);
+    p.sun = L(d.sun); p.sunGlow = L(d.sunGlow); p.lit = L(d.lit); p.shadow = L(d.shadow); p.haze = L(d.haze); p.rim = L(d.rim);
+    p.groundA = L(d.groundA); p.groundB = L(d.groundB); p.ocean = L(d.ocean); p.land = L(d.land); p.desert = L(d.desert);
+    p.flower = L(d.flower);
+    p.bark = L(d.bark); p.barkDark = L(d.barkDark); p.leaf = L(d.leaf); p.leaf2 = L(d.leaf2); p.leafShade = L(d.leafShade);
+    p.blossom = L(d.blossom); p.fruit = L(d.fruit); p.glow = L(d.glow); p.cloudLit = L(d.cloudLit);
     p.cloudShade = L(d.cloudShade); p.petal = L(d.petal); p.ink = L(d.ink); p.accent = L(d.accent); p.veil = L(d.veil);
     for (int i = 0; i < 7; i++) p.piece[i] = L(d.piece[i]);
     p.sunAz = d.sunAz; p.sunEl = d.sunEl; p.sunSize = d.sunSize; p.night = d.night; p.stars = d.stars;
-    p.nebula = d.nebula; p.leafGlow = d.leafGlow; p.blossomAmt = d.blossomK; p.bloom = d.bloom; p.fog = d.fog;
+    p.leafGlow = d.leafGlow; p.blossomAmt = d.blossomK; p.bloom = d.bloom;
     return p;
 }
 void lerpPalette(Palette& a, const Palette& b, float k) {
@@ -176,9 +163,17 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 constexpr float CLEAR_T = 0.38f;     // a cleared row dissolves into light in this long (real time)
 constexpr float FLOW_T = 1.25f;      // its light flows to the tree in this long
 constexpr int MAX_MOTES = 1600;
-constexpr int MAX_PETALS = 1400;
-constexpr int FULL_LINES = 120;      // the celestial tree
-constexpr float CLOUD_Y = 205.f;     // the cloud layer (meters)
+constexpr int MAX_PETALS = 1600;
+constexpr float CLOUD_Y = 1900.f;    // the cloud layer (meters)
+constexpr float CAM_AZ = 0.3f;       // the camera's side of the tree
+
+// The journey: lines -> the trunk's height (meters), interpolated in log space; beyond the table, slower and slower.
+struct Stage { float lines, height; };
+const Stage STAGES[] = {
+    {0, 1.3f}, {3, 3.f}, {8, 12.f}, {14, 60.f}, {20, 320.f}, {26, 2400.f}, {34, 6.e3f}, {44, 1.5e4f}, {54, 3.5e4f},
+    {64, 9.e4f}, {76, 3.5e5f}, {90, 1.5e6f}, {104, 6.e6f}, {120, 2.5e7f}, {140, 1.e8f}, {162, 3.6e8f}, {200, 1.5e9f},
+};
+constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 
 } // namespace
 
@@ -188,7 +183,6 @@ constexpr float CLOUD_Y = 205.f;     // the cloud layer (meters)
 
 bool GiantTreeUniverse::init(int width, int height) {
     progSky_ = compileWorld(ugl::FULLSCREEN_VS, shaders::SKY_FS, "gianttree sky", false);
-    progGround_ = compileWorld(shaders::GROUND_VS, shaders::GROUND_FS, "gianttree ground", false);
     progBark_ = compileWorld(shaders::BARK_VS, shaders::BARK_FS, "gianttree bark", true);
     progLeaf_ = compileWorld(shaders::LEAF_VS, shaders::LEAF_FS, "gianttree leaf", true);
     progCloud_ = compileWorld(shaders::CLOUD_VS, shaders::CLOUD_FS, "gianttree cloud", false);
@@ -238,17 +232,6 @@ bool GiantTreeUniverse::init(int width, int height) {
         glVertexAttribPointer(i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 20, (void*)(sizeof(float) * 4 * i));
     }
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, barkIbo_);
-    // the ground
-    glGenVertexArrays(1, &groundVao_);
-    glGenBuffers(1, &groundVbo_);
-    glGenBuffers(1, &groundIbo_);
-    glBindVertexArray(groundVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, groundVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, groundIbo_);
     // shapes and text (pixels)
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
@@ -270,7 +253,7 @@ bool GiantTreeUniverse::init(int width, int height) {
 
     buildFont(caps_, FONT_CAPS);
     buildFont(ital_, FONT_ITAL);
-    buildGround();
+    buildMeadow();
     pal_ = basePal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
@@ -320,71 +303,20 @@ void GiantTreeUniverse::buildFont(Font& f, const unsigned char* ttf) {
     f.ok = true;
 }
 
-// The ground's height (meters) around the tree's foot: flat by the sapling, a gentle hill under the grown tree,
-// rolling country beyond, higher hills far away.
-float GiantTreeUniverse::groundAt(float x, float z) const {
-    const float r = std::sqrt(x * x + z * z);
-    float h = 40.f * (std::exp(-(r / 420.f) * (r / 420.f)) - 1.f);
-    h += 0.25f * (vnoise(x / 5.f, z / 5.f) - 0.5f) * smoothstepf(2.f, 12.f, r);
-    h += 4.f * (fbm(x / 90.f, z / 90.f) - 0.5f) * smoothstepf(20.f, 120.f, r);
-    h += 60.f * (fbm(x / 1700.f + 3.f, z / 1700.f) - 0.45f) * smoothstepf(300.f, 1600.f, r);
-    h += 260.f * std::max(0.f, fbm(x / 6000.f + 9.f, z / 6000.f) - 0.35f) * smoothstepf(3000.f, 14000.f, r);
-    return h;
-}
-
-void GiantTreeUniverse::buildGround() {
-    std::vector<float> rad;
-    rad.push_back(0.f);
-    float r = 0.2f;
-    while (r < 42000.f) { rad.push_back(r); r = r * 1.085f + 0.04f; }
-    const int segs = 128;
-    std::vector<float> v;
-    std::vector<uint32_t> idx;
-    auto push = [&](float x, float z) {
-        const float e = std::max(0.05f, std::sqrt(x * x + z * z) * 0.01f);
-        const float h = groundAt(x, z);
-        const float hx = groundAt(x + e, z) - groundAt(x - e, z), hz = groundAt(x, z + e) - groundAt(x, z - e);
-        const vec3 n = normalize(vec3(-hx, 2.f * e, -hz));
-        const float q[6] = {x, h, z, n.x, n.y, n.z};
-        v.insert(v.end(), q, q + 6);
-    };
-    push(0.f, 0.f);
-    for (size_t i = 1; i < rad.size(); i++)
-        for (int j = 0; j < segs; j++) {
-            const float a = (j + 0.5f * (i % 2)) / segs * TAU;
-            push(rad[i] * std::cos(a), rad[i] * std::sin(a));
-        }
-    for (int j = 0; j < segs; j++) {
-        const uint32_t q[3] = {0, (uint32_t)(1 + j), (uint32_t)(1 + (j + 1) % segs)};
-        idx.insert(idx.end(), q, q + 3);
-    }
-    for (size_t i = 1; i + 1 < rad.size(); i++)
-        for (int j = 0; j < segs; j++) {
-            const uint32_t a = (uint32_t)(1 + (i - 1) * segs + j), b = (uint32_t)(1 + (i - 1) * segs + (j + 1) % segs);
-            const uint32_t c = a + segs, d = b + segs;
-            const uint32_t q[6] = {a, c, b, b, c, d};
-            idx.insert(idx.end(), q, q + 6);
-        }
-    // grass tufts around the sapling, a few wildflowers among them
+// Grass tufts and wildflowers around the sapling's foot (meters).
+void GiantTreeUniverse::buildMeadow() {
     Rng tr(0x6A55ull);
     tufts_.clear();
-    for (int i = 0; i < 900; i++) {
-        const float a = tr.range(0, TAU), d = 0.1f + 3.2f * std::pow(tr.uniform(), 0.7f);
+    for (int i = 0; i < 1100; i++) {
+        const float a = tr.range(0, TAU), d = 0.12f + 4.5f * std::pow(tr.uniform(), 0.8f);
         Tuft t;
         t.p = vec3(std::cos(a) * d, 0.f, std::sin(a) * d);
-        t.p.y = groundAt(t.p.x, t.p.z);
-        t.h = tr.range(0.04f, 0.1f) * (0.7f + 0.3f * std::min(1.f, d / 2.f));
+        t.h = tr.range(0.05f, 0.12f) * (0.7f + 0.3f * std::min(1.f, d / 2.f));
         t.seed = tr.uniform();
-        t.flower = tr.chance(0.05f) ? 1.f : 0.f;
+        t.flower = tr.chance(0.07f) ? 1.f : 0.f;
+        if (t.flower > 0.5f) t.h *= 1.3f;
         tufts_.push_back(t);
     }
-    glBindVertexArray(groundVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, groundVbo_);
-    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, groundIbo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
-    glBindVertexArray(0);
-    groundCount_ = (GLsizei)idx.size();
 }
 
 void GiantTreeUniverse::resize(int width, int height) {
@@ -410,12 +342,12 @@ void GiantTreeUniverse::resize(int width, int height) {
 
 GiantTreeUniverse::~GiantTreeUniverse() {
     for (ugl::Target* t : {&worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
-    for (GLuint p : {progSky_, progSea_, progGround_, progBark_, progLeaf_, progGlow_, progCloud_, progComp_, progBright_, progBlur_,
+    for (GLuint p : {progSky_, progSea_, progBark_, progLeaf_, progGlow_, progCloud_, progComp_, progBright_, progBlur_,
                      progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {barkVao_, leafVao_, glowVao_, cloudVao_, groundVao_, spriteVao_, cellVao_, shapeVao_, textVao_})
+    for (GLuint v : {barkVao_, leafVao_, glowVao_, cloudVao_, spriteVao_, cellVao_, shapeVao_, textVao_})
         glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, barkVbo_, barkIbo_, leafVbo_, glowVbo_, cloudVbo_, groundVbo_, groundIbo_, spriteVbo_,
+    for (GLuint b : {quadVbo_, barkVbo_, barkIbo_, leafVbo_, glowVbo_, cloudVbo_, spriteVbo_,
                      cellVbo_, shapeVbo_, textVbo_})
         glDeleteBuffers(1, &b);
     for (Font* f : {&caps_, &ital_}) {
@@ -428,19 +360,30 @@ GiantTreeUniverse::~GiantTreeUniverse() {
 // The tree
 // =====================================================================================================
 
-// Lines -> growth: the sapling at 0.045, the full tree at FULL_LINES; easing out, so the first lines show the most.
+// Lines -> G: the journey's table, then a slow climb on (some 30% taller every ten lines), up to G_MAX.
 float GiantTreeUniverse::growthOf(int lines) const {
-    const float t = std::min(1.f, lines / (float)FULL_LINES);
-    return 0.045f + 0.955f * std::pow(t, 0.72f);
+    const float l = (float)std::max(0, lines);
+    float h;
+    if (l >= STAGES[STAGE_COUNT - 1].lines) {
+        h = std::log(STAGES[STAGE_COUNT - 1].height) + (l - STAGES[STAGE_COUNT - 1].lines) * 0.026f;
+    } else {
+        int i = 0;
+        while (i + 2 < STAGE_COUNT && STAGES[i + 1].lines <= l) i++;
+        const float t = (l - STAGES[i].lines) / (STAGES[i + 1].lines - STAGES[i].lines);
+        h = lerpf(std::log(STAGES[i].height), std::log(STAGES[i + 1].height), t);
+    }
+    return std::min(h, gtree::G_MAX);
 }
 
-// Growth -> meters per tree unit (the trunk is 100 units): a sapling of a meter, a tree of some 600 m.
-float GiantTreeUniverse::scaleOf(float g) const {
-    return 0.032f * std::pow(5.6f / 0.032f, std::pow(saturate(g), 0.82f));
+vec3 GiantTreeUniverse::crownCenter(float G) const { return gtree::tip(G, tree_.wob) + tree_.crownC * gtree::crownW(G); }
+
+// The crown's horizontal radius (meters): only the dome on the sapling, its limbs spreading over the first lines.
+float GiantTreeUniverse::crownRadius(float G) const {
+    return gtree::crownW(G) * lerpf(0.36f, tree_.crownR, smoothstepf(0.3f, 3.3f, G));
 }
 
 void GiantTreeUniverse::uploadTree() {
-    tree_ = buildGiantTree(treeSeed_, 0);
+    tree_ = buildGiantTree(treeSeed_);
     glBindVertexArray(barkVao_);
     glBindBuffer(GL_ARRAY_BUFFER, barkVbo_);
     glBufferData(GL_ARRAY_BUFFER, tree_.bark.size() * sizeof(float), tree_.bark.data(), GL_STATIC_DRAW);
@@ -448,31 +391,28 @@ void GiantTreeUniverse::uploadTree() {
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, tree_.index.size() * sizeof(uint32_t), tree_.index.data(), GL_STATIC_DRAW);
     barkCount_ = (GLsizei)tree_.index.size();
     glBindBuffer(GL_ARRAY_BUFFER, leafVbo_);
-    glBufferData(GL_ARRAY_BUFFER, tree_.leaves.size() * sizeof(float), tree_.leaves.data(), GL_STATIC_DRAW);
-    leafCount_ = (GLsizei)(tree_.leaves.size() / 16);
-    lanternCount_ = (GLsizei)(tree_.lanterns.size() / 8);
+    glBufferData(GL_ARRAY_BUFFER, tree_.puffs.size() * sizeof(float), tree_.puffs.data(), GL_STATIC_DRAW);
+    leafCount_ = (GLsizei)(tree_.puffs.size() / 16);
     glBindVertexArray(0);
-    // the clouds: a layer of soft clouds kilometers wide, a few drifting by the tree
+    // the clouds: toon cumulus scattered over the country (fewer right around the trunk on the camera's side)
     Rng r(treeSeed_ ^ 0xC10Dull);
     puffs_.clear();
-    // cumulus around the trunk (the grown tree rises through them), across the country, far away
-    for (int c = 0; c < 260; c++) {
-        const int band = c < 34 ? 0 : c < 180 ? 1 : 2;
+    for (int c = 0; c < 190; c++) {
+        const int band = c < 40 ? 0 : c < 140 ? 1 : 2;
         float a = r.range(0, TAU);
-        // none around the trunk on the camera's side (the camera looks at the tree from azimuth ~0.3)
-        if (band == 0) a = 0.3f + PI + r.range(-2.2f, 2.2f);
-        const float d = band == 0 ? r.range(45.f, 450.f) : band == 1 ? r.range(450.f, 3000.f) : r.range(3000.f, 11000.f);
-        const float big = band == 0 ? r.range(22.f, 50.f) : band == 1 ? r.range(45.f, 110.f) : r.range(110.f, 240.f);
-        const vec3 ctr(std::cos(a) * d, CLOUD_Y + r.range(-8.f, 12.f) + big * 0.2f, std::sin(a) * d);
-        const int n = r.irange(5, 9);
+        const float d = band == 0 ? r.range(300.f, 3000.f) : band == 1 ? r.range(3000.f, 16000.f) : r.range(16000.f, 45000.f);
+        if (band == 0 && std::fabs(std::remainder(a - CAM_AZ, TAU)) < 0.9f) a += PI;
+        const float big = (band == 0 ? r.range(90.f, 220.f) : band == 1 ? r.range(180.f, 420.f) : r.range(400.f, 900.f));
+        const vec3 ctr(std::cos(a) * d, CLOUD_Y + r.range(-250.f, 350.f), std::sin(a) * d);
+        const int n = r.irange(5, 8);
         const float ca = r.range(0, TAU);
         const vec3 ax(std::cos(ca), 0.f, std::sin(ca)), az(-std::sin(ca), 0.f, std::cos(ca));
         for (int i = 0; i < n; i++) {
             const float u = (i - (n - 1) * 0.5f) / std::max(1.f, (n - 1) * 0.5f);
             Puff p;
-            p.r = big * r.range(0.6f, 1.f) * (1.f - 0.4f * std::fabs(u));
-            p.p = ctr + ax * (u * big * 1.7f + r.range(-0.3f, 0.3f) * big) + az * (r.range(-0.7f, 0.7f) * big) +
-                  vec3(0.f, r.range(0.f, 0.45f) * big * (1.f - std::fabs(u)), 0.f);
+            p.r = big * r.range(0.55f, 0.85f) * (1.f - 0.45f * std::fabs(u));
+            p.p = ctr + ax * (u * big * 1.5f) + az * (r.range(-0.4f, 0.4f) * big) +
+                  vec3(0.f, r.range(0.f, 0.5f) * big * (1.f - std::fabs(u)) + p.r * 0.3f, 0.f);
             p.seed = r.uniform();
             puffs_.push_back(p);
         }
@@ -484,47 +424,68 @@ void GiantTreeUniverse::uploadTree() {
 // Camera
 // =====================================================================================================
 
-// Frames the tree as it grows: a low view in the grass by the sapling at the right of the scene, then pulling back
-// and tilting up, the trunk moving toward the middle, until the celestial tree rises from the bottom of the screen
-// into the sky. Only this camera moves: the board is drawn on its own.
+// Rides with the crown, a moment behind it: low in the grass by the sapling at the right of the scene (the whole
+// little tree in view), then rising with the crown and looking down along the soaring trunk at the land falling
+// away, the clouds sinking under it, the horizon curving, the planet a ball far below. Only this camera moves: the
+// board is drawn on its own. The world is drawn relative to the eye (vp3_ has the eye at its origin).
 void GiantTreeUniverse::updateCamera(float dt) {
-    const float s = scaleOf(g_);
-    const float hv = tree_.sample(tree_.height, g_);
-    const float cr = tree_.sample(tree_.crownR, g_);
-    const float H = s * (hv + 1.5f), W = s * cr * 2.f;
-    const float F0 = std::max(H, W * 0.8f);
-    if (camH_ < 0.f) camH_ = F0;
-    else camH_ = std::exp(approach(std::log(camH_), std::log(F0), 1.1f, dt));
-    const float F = camH_;
-    const float k = smoothstepf(0.f, 1.f, saturate(std::log(F / 1.1f) / std::log(700.f / 1.1f)));
-    tanH_ = std::tan(lerpf(21.f, 26.f, k) * PI / 180.f);
-    const float D = F * lerpf(6.0f, 1.3f, k);
-    const float hc = F * lerpf(0.2f, 0.03f, k);
-    const float xs = lerpf(0.66f, 0.5f, k);
-    const float az = 0.3f + 0.05f * std::sin(time_ * 0.021f);
-    vec3 eye(std::sin(az) * D, 0.f, std::cos(az) * D);
-    const float low = std::max(groundAt(eye.x, eye.z), groundAt(eye.x * 0.97f, eye.z * 0.97f)) + hc;
-    // the celestial tree: the camera rises above the sea of clouds the trunk grows out of
-    const float rise = smoothstepf(0.82f, 0.98f, k);
-    eye.y = lerpf(low, CLOUD_Y + 60.f, rise);
-    const float ty = F * lerpf(0.38f, 0.58f, k);
-    const vec3 target(0.f, ty, 0.f);
-    vec3 fwd = normalize(target - eye);
-    const vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
-    const float yaw = std::atan(xs * tanH_ * aspect_);
-    fwd = normalize(fwd * std::cos(yaw) - right * std::sin(yaw));
+    if (gc_ < -50.f) { gc_ = g_; gcVel_ = 0.f; }
+    {
+        // a critically damped spring, slower than the growth's (partly fed its speed): the crown shoots up, we follow
+        const float w = 4.f;
+        gcVel_ += (w * w * (g_ - gc_) + 2.f * w * (0.9f * gVel_ - gcVel_)) * dt;
+        gc_ += gcVel_ * dt;
+    }
+    const float G = gc_;
+    const float T = std::exp(G);
+    const vec3 cc = crownCenter(G);
+    const float Rc = crownRadius(G);
+    const float W = gtree::crownW(G);
+    const float kF = smoothstepf(1.6f, 5.5f, G);      // the ground -> riding with the crown
+    const float kH = smoothstepf(8.5f, 14.f, G);      // high up: looking down along the trunk
+    // the planet a ball under the roots: look straight down the trunk at it; then up again at the moon, the stars
+    const float kP = smoothstepf(13.f, 16.f, G) * (1.f - smoothstepf(17.5f, 19.5f, G));
+    tanH_ = std::tan(lerpf(26.f, 29.f, kF) * PI / 180.f);
+    // The camera's direction first (its azimuth on the tree's side, its pitch with the stage), then its place: the
+    // anchor (the whole tree by the ground, then the crown) sits at a fixed point of the screen, right of the well,
+    // at the distance that frames it.
+    const float top = T + 0.55f * W;
+    const vec3 aGround(0.f, 0.47f * top, 0.f);
+    const float FG = 0.68f * top + 0.15f;
+    const float FF = lerpf(3.0f, 3.3f, kH) * Rc * lerpf(1.f, 1.15f, kP);
+    const vec3 anchor = lerp(aGround, cc, kF);
+    const float F = lerpf(FG, FF, kF);
+    const float sx = lerpf(0.62f, 0.64f, kF), sy = lerpf(0.f, 0.36f, kF) + 0.1f * kP;
+    const float kD = smoothstepf(18.f, 20.f, G);      // deep space: looking out at the moon, the planets
+    const float pitch = (lerpf(4.f, -15.f, kF) - 12.f * kH * (1.f - kD) - 40.f * kP) * PI / 180.f;
+    const float az = CAM_AZ + 0.04f * std::sin(time_ * 0.023f);
+    // looking toward the tree (-z, turned by the azimuth), then turned left so the anchor lands right of the well
+    const float yaw = std::atan(sx * tanH_ * aspect_ / std::cos(pitch));
+    const float phi = az + yaw;
+    vec3 fwd(-std::sin(phi) * std::cos(pitch), std::sin(pitch), -std::cos(phi) * std::cos(pitch));
+    vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
+    vec3 upv = cross(right, fwd);
+    const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
+    const float D = F / tanH_;
+    vec3 eye = anchor - dirA * D;
+    eye.y = std::max(eye.y, 0.25f + 0.2f * std::min(T, 4.f));
     eye_ = eye;
     look_ = fwd;
     camR_ = normalize(cross(fwd, vec3(0, 1, 0)));
     camU_ = cross(camR_, fwd);
-    const float zn = std::max(0.02f, D * 0.015f), zf = std::max(70000.f, D * 40.f);
-    view3_ = mat4::lookAt(eye_, eye_ + fwd, vec3(0, 1, 0));
+    {
+        const vec3 oc(eye.x, eye.y + gtree::R_EARTH, eye.z);
+        alt_ = std::max(0.f, length(oc) - gtree::R_EARTH);
+        if (length(oc) < 1e7f) alt_ = std::max(0.f, eye.y + (eye.x * eye.x + eye.z * eye.z) / (2.f * gtree::R_EARTH));
+    }
+    const float zn = std::max(0.02f, D * 0.02f), zf = std::max({1.6e5f, D * 80.f, T * 3.f});
+    const mat4 view3 = mat4::lookAt(vec3(0.f), fwd, vec3(0, 1, 0));
     proj3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, zn, zf);
-    vp3_ = proj3_ * view3_;
+    vp3_ = proj3_ * view3;
 }
 
 vec2 GiantTreeUniverse::toBoard(const vec3& w) const {
-    const vec4 c = vp3_ * vec4(w, 1.f);
+    const vec4 c = vp3_ * vec4(w - eye_, 1.f);
     if (c.w <= 1e-4f) return V(viewC_.x + viewH_.x, viewC_.y);
     return V(viewC_.x + c.x / c.w * viewH_.x, viewC_.y + c.y / c.w * viewH_.y);
 }
@@ -539,9 +500,9 @@ void GiantTreeUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && !t.minor && t.brightness > 0.58f) v = 0;          // spring for bright, major songs
-        else if (t.hasSong && t.minor && t.brightness < 0.42f) v = 2;      // the moon tree for dark ones
-        else if (t.hasSong && t.airWeight > 0.62f && t.density < 0.45f) v = 3; // the cosmos for airy, sparse ones
+        if (t.hasSong && !t.minor && t.brightness > 0.58f) v = 0;          // the bright day for bright, major songs
+        else if (t.hasSong && t.minor && t.brightness < 0.42f) v = 2;      // the glowing night for dark ones
+        else if (t.hasSong && t.airWeight > 0.62f && t.density < 0.45f) v = 3; // the pastel fantasy for airy, sparse ones
         else {
             static const int BY_HUE[] = {1, 0, 2, 1, 3, 0};
             v = BY_HUE[(int)(h * 6.f) % 6];
@@ -589,7 +550,7 @@ vec2 GiantTreeUniverse::project(const vec3& p) const { return layout::project(vp
 TransitionHints GiantTreeUniverse::hints() const {
     const Palette p = paletteOf(variant_);
     TransitionHints h;
-    h.background = lerp(p.sky, p.horizon, 0.4f) * (p.night > 0.5f ? 1.f : 0.7f);
+    h.background = lerp(p.zenith, p.horizon, 0.45f) * (p.night > 0.5f ? 1.f : 0.75f);
     h.light = false;
     h.ink = p.ink;
     h.accent = p.glow;
@@ -671,9 +632,7 @@ void GiantTreeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
         const int lines = std::max(1, ev.count);
         // the cells dissolve into light that flows out of the well to the tree's crown
-        const float s = scaleOf(g_);
-        const vec3 crownW = vec3(tree_.sample(tree_.crownX, g_), tree_.sample(tree_.crownY, g_), tree_.sample(tree_.crownZ, g_)) * s;
-        vec2 to = toBoard(crownW);
+        vec2 to = toBoard(crownCenter(g_));
         to.x = std::clamp(to.x, -viewH_.x + 1.f, viewH_.x - 1.f);
         to.y = std::clamp(to.y, viewC_.y - viewH_.y + 1.f, viewC_.y + viewH_.y - 1.f);
         const float side = to.x >= 0.f ? 1.f : -1.f;
@@ -717,16 +676,38 @@ void GiantTreeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
+        // a spurt: the crown squashes and stretches, sparkles and leaves burst out of it
         spurt_ = std::max(spurt_, 0.4f + 0.15f * lines);
+        jellyV_ += 1.6f + 0.9f * lines;
+        {
+            const float W = gtree::crownW(gTarget_), Rc = crownRadius(gTarget_);
+            const vec3 cc = crownCenter(g_);
+            const int n = lines >= 4 ? 46 : 7 * lines;
+            for (int i = 0; i < n && (int)petals_.size() < MAX_PETALS; i++) {
+                Petal q;
+                const vec3 dir = normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(-0.3f, 1.f), rng_.range(-1.f, 1.f)));
+                q.p = cc + dir * Rc * rng_.range(0.4f, 0.9f);
+                q.v = dir * Rc * rng_.range(0.6f, 1.6f) + vec3(0.f, Rc * 0.5f, 0.f);
+                q.age = -rng_.range(0.f, 0.3f);
+                q.life = rng_.range(0.7f, 1.3f);
+                q.size = W * rng_.range(0.035f, 0.07f) * (lines >= 4 ? 1.4f : 1.f);
+                q.seed = rng_.uniform();
+                q.spin = 0.f;
+                q.kind = 4;
+                q.col = i % 3 == 0 ? pal_.glow * 1.6f : i % 3 == 1 ? lerp(pal_.blossom, vec3(1.f), 0.3f) * 1.4f : lerp(pal_.leaf2, vec3(1.f), 0.4f) * 1.3f;
+                petals_.push_back(q);
+            }
+            petalAcc_ += 8.f * lines;
+        }
         if (lines >= 4) {
             tetrisGlow_ = 1.f;
             bloomBurst_ = 1.f;
-            if (flowT_ > 4.f) { flowT_ = 0.f; flowSpeed_ = tree_.maxPath / 1.8f; flowK_ = 0.7f; }
+            if (flowT_ > 3.f) { flowT_ = 0.f; flowDur_ = 1.6f; flowK_ = 0.8f; }
             petalAcc_ += 110.f;
         } else if (flowT_ > 2.5f) {
             flowT_ = 0.f;
-            flowSpeed_ = tree_.maxPath / 1.5f;
-            flowK_ = 0.12f + 0.08f * lines;
+            flowDur_ = 1.3f;
+            flowK_ = 0.15f + 0.08f * lines;
         }
         break;
     }
@@ -1058,35 +1039,6 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += wdt;
 
-    // ---- The game's lines -> the growth (a new game sprouts a new seed).
-    {
-        const int lines = game.lines();
-        if (treeSeed_ == 0) { treeSeed_ = seed_ ? seed_ : 1; treeDirty_ = true; }
-        if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
-            treeSeed_ = splitmix64(treeSeed_ + 0x9E37ull);
-            treeDirty_ = true;
-            g_ = 0.f;
-            gVel_ = 0.f;
-            shed_ = 0.f;
-            seedT_ = 0.f;
-            petals_.clear();
-        }
-        lines_ = lines;
-        if (treeDirty_) uploadTree();
-        gTarget_ = growthOf(lines);
-        if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
-        linesShown_ = lines;
-        // a spurt: a critically damped spring toward the target, over a second or two
-        const float w = 3.2f;
-        gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
-        g_ += gVel_ * wdt;
-        if (g_ > gTarget_ + 0.002f) { g_ = gTarget_; gVel_ = 0.f; }
-        seedT_ += dt;
-    }
-    shed_ = approach(shed_, overT_ >= 0.f ? 1.f : 0.f, overT_ >= 0.f ? 0.6f : 3.f, dt);
-    spurt_ = approach(spurt_, 0.f, 1.2f, dt);
-    bloomBurst_ = approach(bloomBurst_, 0.f, 0.7f, dt);
-
     // ---- Staging.
     if (lvT_ < 1.f) {
         lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
@@ -1101,9 +1053,50 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
             sectionDrop = h.text == "DROP";
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
+
+    // ---- The game's lines -> the growth (a new game sprouts a new seed).
+    {
+        const int lines = game.lines();
+        if (treeSeed_ == 0) { treeSeed_ = seed_ ? seed_ : 1; treeDirty_ = true; }
+        if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
+            treeSeed_ = splitmix64(treeSeed_ + 0x9E37ull);
+            treeDirty_ = true;
+            gBonus_ = 0.f;
+            g_ = growthOf(lines);
+            gVel_ = 0.f;
+            shed_ = 0.f;
+            seedT_ = 0.f;
+            petals_.clear();
+        }
+        lines_ = lines;
+        if (treeDirty_) uploadTree();
+        if (isDrop && !wasDrop_) {
+            // the drop shoots the tree up an extra burst
+            gBonus_ += 0.45f;
+            jellyV_ += 5.f;
+            petalAcc_ += 160.f;
+        }
+        gTarget_ = std::min(gtree::G_MAX, growthOf(lines) + gBonus_);
+        if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
+        linesShown_ = lines;
+        // a spurt: a critically damped spring toward the target, over a second or so
+        const float w = 4.2f;
+        gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
+        g_ += gVel_ * wdt;
+        if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
+        seedT_ += dt;
+        // the crown's squash and stretch (a springy wobble)
+        jellyV_ += (-90.f * jelly_ - 7.f * jellyV_) * wdt;
+        jelly_ += jellyV_ * wdt;
+        jelly_ = std::clamp(jelly_, -0.25f, 0.3f);
+    }
+    shed_ = approach(shed_, overT_ >= 0.f ? 1.f : 0.f, overT_ >= 0.f ? 0.6f : 3.f, dt);
+    spurt_ = approach(spurt_, 0.f, 1.2f, dt);
+    bloomBurst_ = approach(bloomBurst_, 0.f, 0.7f, dt);
+
     if (isDrop && !wasDrop_) {
         flowT_ = 0.f;
-        flowSpeed_ = tree_.maxPath / 3.f;
+        flowDur_ = 2.4f;
         flowK_ = 1.f;
         gust_ = 1.f;
     }
@@ -1111,7 +1104,9 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.5f : 0.4f, dt);
     const float life = smoothstepf(0.f, 1.f, dropAmt_);
     flowT_ += dt;
-    flowK_ = approach(flowK_, 0.f, flowT_ > 3.5f ? 0.5f : 0.05f, dt);
+    const float flow = flowT_ / flowDur_ * 1.8f;
+    flowK_ = approach(flowK_, 0.f, flowT_ > flowDur_ * 1.4f ? 0.6f : 0.03f, dt);
+    beam_ = approach(beam_, isDrop && flow > 1.3f ? 1.f : 0.f, isDrop ? 2.f : 0.5f, dt);
     gust_ = approach(gust_, 0.f, 0.45f, dt);
     {
         const Palette target = paletteOf(variant_);
@@ -1119,11 +1114,11 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
         pal_ = basePal_;
         if (slow_ > 0.01f) {
-            // slow motion: a hush, the light softer and bluer, the lanterns brighter
+            // slow motion: a hush, the light softer and bluer
             const float k = slow_;
             pal_.sunGlow = lerp(pal_.sunGlow, pal_.sunGlow * vec3(0.8f, 0.9f, 1.2f), k);
-            pal_.haze = lerp(pal_.haze, pal_.haze * vec3(0.8f, 0.88f, 1.1f), k);
-            pal_.lantern = pal_.lantern * (1.f + 0.6f * k);
+            pal_.haze = lerp(pal_.haze, pal_.haze * vec3(0.85f, 0.9f, 1.1f), k);
+            pal_.lit = lerp(pal_.lit, pal_.lit * vec3(0.9f, 0.95f, 1.1f), k);
         }
     }
     swell_ = approach(swell_, 0.f, 0.5f, dt);
@@ -1141,68 +1136,116 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     }
     shimmer_ = (0.15f * wm + 0.5f * wp + 0.4f * life) * (0.7f + 0.3f * beatPulse);
 
-    // ---- The wind: a breeze, stirring at mid, swaying at a peak; big things move slowly.
-    const float s = scaleOf(g_);
-    const float bigK = saturate(std::log(std::max(s, 0.033f) / 0.033f) / std::log(5.6f / 0.033f));
+    // ---- The wind: a breeze, stirring at mid, swaying at a peak.
     const float wind = 0.35f + 0.45f * wm + 0.7f * wp + 0.3f * life;
-    windPhase_ += wdt * (0.7f + 0.3f * wm + 0.35f * wp) * lerpf(1.5f, 0.55f, bigK);
+    windPhase_ += wdt * (0.7f + 0.3f * wm + 0.35f * wp);
 
     updateCamera(dt);
+    const float W = gtree::crownW(g_);
+    const float Rc = crownRadius(g_);
+    const vec3 cc = crownCenter(g_);
+    const vec3 tipW = gtree::tip(g_, tree_.wob);
+    const float spaceK = smoothstepf(1.2e4f, 9.e4f, alt_);
 
-    // ---- Petals and spores in the air (meters), from the living leaves.
+    // ---- Particles in the world (meters): petals, sparkles, streaks, rainbow petals.
     {
-        auto randomLeaf = [&](vec3* p) {
-            const int n = (int)(tree_.leaves.size() / 16);
-            for (int tries = 0; tries < 6 && n > 0; tries++) {
-                const float* l = &tree_.leaves[(size_t)rng_.irange(0, n - 1) * 16];
-                if (l[7] <= g_ && l[8] > g_) { *p = vec3(l[0], l[1], l[2]) * s; return true; }
+        auto crownPoint = [&](vec3* p) {
+            const int n = (int)(tree_.puffs.size() / 16);
+            for (int tries = 0; tries < 8 && n > 0; tries++) {
+                const float* l = &tree_.puffs[(size_t)rng_.irange(0, n - 1) * 16];
+                if (l[4] != 0.f || l[5] > g_) continue;
+                *p = tipW + vec3(l[0], l[1], l[2]) * W + vec3(rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f)) * (l[3] * W);
+                return true;
             }
             return false;
         };
-        const float petalRate = (0.6f + 2.f * wm + 6.f * wp + 55.f * life + 25.f * bloomBurst_) * (0.4f + 0.6f * smoothstepf(0.05f, 0.4f, g_)) +
-                                (overT_ >= 0.f && overT_ < 4.f ? 60.f : 0.f);
-        const float sporeRate = (1.f + 2.f * wm + 9.f * wp + 14.f * life) * smoothstepf(0.1f, 0.5f, g_) + 8.f * pal_.night * smoothstepf(0.1f, 0.5f, g_);
+        const float ps = W * 0.022f;
+        const float petalRate = 1.f + 3.f * wm + 7.f * wp + 50.f * life + 30.f * bloomBurst_ + (overT_ >= 0.f && overT_ < 4.f ? 70.f : 0.f);
+        const float sporeRate = (1.f + 3.f * wm + 10.f * wp + 16.f * life) + 10.f * pal_.night;
         if (!f.paused) {
             petalAcc_ += petalRate * wdt;
             sporeAcc_ += sporeRate * wdt;
+            streakAcc_ += std::min(std::max(0.f, gVel_ - 0.05f) * 160.f, 140.f) * wdt;
         }
-        petalAcc_ = std::min(petalAcc_, 300.f);
+        petalAcc_ = std::min(petalAcc_, 320.f);
         while (petalAcc_ >= 1.f && (int)petals_.size() < MAX_PETALS) {
             petalAcc_ -= 1.f;
             vec3 p;
-            if (!randomLeaf(&p)) break;
+            if (!crownPoint(&p)) break;
             Petal q;
             q.p = p;
-            q.v = vec3(rng_.range(0.6f, 2.f), -rng_.range(1.2f, 2.6f), rng_.range(-0.6f, 0.6f)) * s;
+            q.v = vec3(rng_.range(0.3f, 1.2f), -rng_.range(0.5f, 1.3f), rng_.range(-0.4f, 0.4f)) * (W * 0.12f);
             q.age = 0.f;
-            q.life = rng_.range(7.f, 12.f);
-            q.size = s * rng_.range(0.7f, 1.2f);
+            q.life = rng_.range(5.f, 9.f);
+            q.size = ps * rng_.range(0.7f, 1.2f);
             q.seed = rng_.uniform();
             q.spin = rng_.range(-3.f, 3.f);
-            q.kind = (life > 0.3f && rng_.chance(0.5f)) || bloomBurst_ > 0.3f ? 2 : 0;
+            q.kind = (life > 0.3f && rng_.chance(0.7f)) || bloomBurst_ > 0.3f ? 3 : 0;
+            q.col = q.kind == 3 ? lerp(ugl::toLinear(hex(0xff4a6a)), vec3(1.f), 0.f) : pal_.petal;
+            if (q.kind == 3) {
+                // a rainbow
+                const float h = rng_.uniform() * 6.f;
+                const float r = saturate(std::fabs(h - 3.f) - 1.f), g = saturate(2.f - std::fabs(h - 2.f)), b = saturate(2.f - std::fabs(h - 4.f));
+                q.col = lerp(vec3(r, g, b), vec3(1.f), 0.25f) * 1.4f;
+            }
             petals_.push_back(q);
         }
         sporeAcc_ = std::min(sporeAcc_, 60.f);
         while (sporeAcc_ >= 1.f && (int)petals_.size() < MAX_PETALS) {
             sporeAcc_ -= 1.f;
             vec3 p;
-            if (!randomLeaf(&p)) break;
+            if (!crownPoint(&p)) break;
             Petal q;
-            q.p = p + vec3(rng_.range(-6.f, 6.f), rng_.range(-6.f, 2.f), rng_.range(-6.f, 6.f)) * s;
-            q.v = vec3(rng_.range(-0.4f, 0.8f), rng_.range(0.6f, 1.6f), rng_.range(-0.4f, 0.4f)) * s;
+            q.p = p + vec3(rng_.range(-0.5f, 0.5f), rng_.range(-0.4f, 0.1f), rng_.range(-0.5f, 0.5f)) * W;
+            q.v = vec3(rng_.range(-0.2f, 0.4f), rng_.range(0.3f, 0.8f), rng_.range(-0.2f, 0.2f)) * (W * 0.06f);
             q.age = 0.f;
-            q.life = rng_.range(5.f, 9.f);
-            q.size = s * rng_.range(0.35f, 0.6f);
+            q.life = rng_.range(4.f, 8.f);
+            q.size = ps * rng_.range(0.4f, 0.7f);
             q.seed = rng_.uniform();
             q.spin = 0.f;
             q.kind = 1;
+            q.col = lerp(pal_.glow, pal_.fruit, q.seed * 0.4f);
+            petals_.push_back(q);
+        }
+        // the drop's beam: sparks of every color rushing up out of the crown
+        for (int i = 0; i < (int)(beam_ * 3.f + rng_.uniform()) && (int)petals_.size() < MAX_PETALS && !f.paused; i++) {
+            Petal q;
+            const float a = rng_.range(0.f, TAU), d = Rc * 0.3f * std::sqrt(rng_.uniform());
+            q.p = cc + vec3(std::cos(a) * d, Rc * rng_.range(0.f, 0.5f), std::sin(a) * d);
+            q.v = vec3(0.f, Rc * rng_.range(2.f, 5.f), 0.f);
+            q.age = 0.f;
+            q.life = rng_.range(1.2f, 2.f);
+            q.size = Rc * rng_.range(0.04f, 0.08f);
+            q.seed = rng_.uniform();
+            q.spin = 0.f;
+            q.kind = 4;
+            const float h = rng_.uniform() * 6.f;
+            q.col = lerp(vec3(saturate(std::fabs(h - 3.f) - 1.f), saturate(2.f - std::fabs(h - 2.f)), saturate(2.f - std::fabs(h - 4.f))), vec3(1.f), 0.3f) * 1.6f;
+            petals_.push_back(q);
+        }
+        // streaks rushing down past a spurt
+        streakAcc_ = std::min(streakAcc_, 40.f);
+        while (streakAcc_ >= 1.f && (int)petals_.size() < MAX_PETALS) {
+            streakAcc_ -= 1.f;
+            Petal q;
+            const float a = rng_.range(0.f, TAU), d = Rc * rng_.range(0.6f, 2.6f);
+            q.p = tipW + vec3(std::cos(a) * d, rng_.range(-2.5f, 0.3f) * Rc, std::sin(a) * d);
+            q.v = vec3(0.f, -W * 0.8f, 0.f);
+            q.age = 0.f;
+            q.life = rng_.range(0.35f, 0.7f);
+            q.size = Rc * rng_.range(0.03f, 0.05f);
+            q.seed = rng_.uniform();
+            q.spin = 0.f;
+            q.kind = 5;
+            q.col = lerp(vec3(1.f), pal_.glow, 0.3f);
             petals_.push_back(q);
         }
         for (Petal& q : petals_) {
             q.age += wdt;
             const float fl = std::sin(time_ * 1.7f + q.seed * 40.f);
-            q.p += (q.v + vec3(fl * 1.1f + gust_ * 6.f, 0.f, std::cos(time_ * 1.3f + q.seed * 20.f) * 0.6f) * s) * wdt;
-            if (q.kind != 1 && q.p.y < groundAt(q.p.x, q.p.z) + q.size) q.life = std::min(q.life, q.age + 0.6f);
+            q.p += (q.v + vec3(fl * 0.08f + gust_ * 0.4f, 0.f, std::cos(time_ * 1.3f + q.seed * 20.f) * 0.05f) * (q.kind == 5 ? 0.f : W)) * wdt;
+            if (q.kind == 4) q.v = q.v * std::exp(-1.2f * wdt);
+            if ((q.kind == 0 || q.kind == 3) && q.p.y < q.size) q.life = std::min(q.life, q.age + 0.5f);
         }
         petals_.erase(std::remove_if(petals_.begin(), petals_.end(), [](const Petal& q) { return q.age >= q.life; }), petals_.end());
     }
@@ -1245,112 +1288,120 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     // =========================================================== the world (reduced resolution)
     const vec3 sunDir = normalize(vec3(std::sin(pal_.sunAz) * std::cos(pal_.sunEl), std::sin(pal_.sunEl),
                                        -std::cos(pal_.sunAz) * std::cos(pal_.sunEl)));
-    const float flowFront = flowT_ * flowSpeed_;
-    const float bloom = life * smoothstepf(2.2f, 3.6f, flowT_ < 50.f ? flowT_ : 99.f) + 0.6f * bloomBurst_ * smoothstepf(1.f, 2.f, flowT_);
-    const vec4 crownT(tree_.sample(tree_.crownX, g_), tree_.sample(tree_.crownY, g_), tree_.sample(tree_.crownZ, g_),
-                      tree_.sample(tree_.crownR, g_));
-    const float high = smoothstepf(0.45f, 0.95f, g_);
+    const float bloom = life * smoothstepf(1.f, 1.6f, flow) + 0.6f * bloomBurst_;
+    const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
     auto setLight = [&](GLuint p) {
         set3f(p, "uEye", eye_);
         set3f(p, "uSunDir", sunDir);
-        set3f(p, "uSunC", pal_.sun * (pal_.night > 0.5f ? 0.55f : 1.f) * (1.f + 0.15f * wp + 0.2f * life));
+        set3f(p, "uSunC", pal_.lit * (1.f + 0.12f * wp + 0.2f * life));
+        set3f(p, "uShadowC", pal_.shadow * lerpf(1.f, 0.6f, spaceK));
         set3f(p, "uSunGlow", pal_.sunGlow * (1.f + 0.2f * wp + 0.3f * life));
-        set3f(p, "uSkyC", pal_.sky);
-        set3f(p, "uZenithC", pal_.zenith);
-        set3f(p, "uHorizonC", pal_.horizon);
         set3f(p, "uHazeC", pal_.haze);
-        set3f(p, "uGroundC", pal_.ground);
-        set3f(p, "uMistC", pal_.mist);
-        set1f(p, "uFogK", pal_.fog);
+        set3f(p, "uRimC", pal_.rim);
+        set1f(p, "uFogK", 2.2e-5f);
+        set1f(p, "uAlt", alt_);
         set1f(p, "uNight", pal_.night);
         set1f(p, "uTime", time_);
         set1f(p, "uBridge", bridge);
         set3f(p, "uBridgeCol", bridge_.color);
     };
-    auto setSway = [&](GLuint p) {
+    auto setTree = [&](GLuint p) {
+        set4f(p, "uWob", tree_.wob[0], tree_.wob[1], tree_.wob[2], tree_.wob[3]);
         set1f(p, "uG", g_);
         set1f(p, "uWind", wind);
         set1f(p, "uWindPhase", windPhase_);
         set1f(p, "uGust", gust_);
+        set1f(p, "uJelly", jelly_);
     };
     auto setFlow = [&](GLuint p) {
         set3f(p, "uGlowC", pal_.glow);
-        set4f(p, "uCrown", crownT.x, crownT.y, crownT.z, crownT.w);
         set1f(p, "uLeafGlow", pal_.leafGlow * (0.8f + 0.2f * wm + 0.3f * wp));
-        set1f(p, "uFlow", flowFront);
+        set1f(p, "uFlow", flow);
         set1f(p, "uFlowK", flowK_);
-        set1f(p, "uFlowW", tree_.maxPath * 0.045f);
         set1f(p, "uBloom", bloom);
     };
     const float minPx = 2.f * tanH_ / worldT_.h * 0.8f;
 
     worldT_.bind();
     glClearColor(0, 0, 0, 0);
+    glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
+    // the sky, the planet, space (it writes the planet's depth)
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
     glUseProgram(progSky_);
     setLight(progSky_);
+    setMat(progSky_, "uVP", vp3_);
     set3f(progSky_, "uLook", look_);
     set3f(progSky_, "uCamR", camR_);
     set3f(progSky_, "uCamU", camU_);
     set2f(progSky_, "uTan", tanH_ * aspect_, tanH_);
+    set1f(progSky_, "uPix", 2.f * tanH_ / worldT_.h);
     set1f(progSky_, "uSunSize", pal_.sunSize);
     set1f(progSky_, "uStars", pal_.stars);
-    set1f(progSky_, "uHigh", high);
-    set1f(progSky_, "uNebula", pal_.nebula * (0.8f + 0.3f * wp + 0.3f * life));
+    set1f(progSky_, "uHills", 1.f - smoothstepf(150.f, 2500.f, alt_));
+    set1f(progSky_, "uDeep", smoothstepf(18.f, 20.5f, gc_));
     set1f(progSky_, "uGlow", 0.3f * wp + 0.6f * life + 0.4f * tetrisGlow_ + 0.2f * swell_);
+    set1f(progSky_, "uSpaceK", spaceK);
+    set3f(progSky_, "uZenithC", pal_.zenith);
+    set3f(progSky_, "uHorizonC", pal_.horizon);
+    set3f(progSky_, "uSpaceC", pal_.space);
+    set3f(progSky_, "uNebulaC", pal_.nebula);
+    set3f(progSky_, "uNebula2C", pal_.nebula2);
+    set3f(progSky_, "uGroundA", pal_.groundA);
+    set3f(progSky_, "uGroundB", pal_.groundB);
+    set3f(progSky_, "uOceanC", pal_.ocean);
+    set3f(progSky_, "uLandC", pal_.land);
+    set3f(progSky_, "uDesertC", pal_.desert);
+    set3f(progSky_, "uFlowerC", pal_.flower);
+    {
+        const vec3 moon = (fwdH * 0.25f - rightH * 0.97f) * 3.2e8f + vec3(0.f, 4.1e8f, 0.f);
+        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, 2.6e7f);
+    }
+    set4f(progSky_, "uCrownW", cc.x, cc.y, cc.z, Rc);
+    set3f(progSky_, "uPlanetDir", normalize(fwdH * 0.35f - rightH * 0.94f + vec3(0.f, -0.02f, 0.f)));
+    set3f(progSky_, "uGalaxyDir", normalize(fwdH * 0.94f - rightH * 0.3f + vec3(0.f, 0.12f, 0.f)));
+    set1f(progSky_, "uBeam", beam_ * world);
+    set3f(progSky_, "uBeamPos", cc);
     ugl::drawFullscreen();
 
-    glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-    // the ground
-    glUseProgram(progGround_);
-    setLight(progGround_);
-    setMat(progGround_, "uVP", vp3_);
-    set4f(progGround_, "uCrownW", crownT.x * s, crownT.y * s, crownT.z * s, crownT.w * s);
-    set1f(progGround_, "uScale", s);
-    set3f(progGround_, "uBlossomC", pal_.blossom);
-    set3f(progGround_, "uLeafC", pal_.leaf);
-    set3f(progGround_, "uAmbientC", pal_.ambient);
-    glBindVertexArray(groundVao_);
-    glDrawElements(GL_TRIANGLES, groundCount_, GL_UNSIGNED_INT, nullptr);
     // the bark
     if (barkCount_ > 0) {
         glUseProgram(progBark_);
         setLight(progBark_);
-        setSway(progBark_);
+        setTree(progBark_);
         setFlow(progBark_);
         setMat(progBark_, "uVP", vp3_);
-        set1f(progBark_, "uScale", s);
         set3f(progBark_, "uBarkC", pal_.bark);
         set3f(progBark_, "uBarkDark", pal_.barkDark);
-        set3f(progBark_, "uYoungC", lerp(pal_.leaf, pal_.bark, 0.55f));
         glBindVertexArray(barkVao_);
         glDrawElements(GL_TRIANGLES, barkCount_, GL_UNSIGNED_INT, nullptr);
     }
-    // the leaves
+    // the puffs of foliage
     if (leafCount_ > 0) {
         glUseProgram(progLeaf_);
         setLight(progLeaf_);
-        setSway(progLeaf_);
+        setTree(progLeaf_);
         setFlow(progLeaf_);
         setMat(progLeaf_, "uVP", vp3_);
-        set1f(progLeaf_, "uScale", s);
         set1f(progLeaf_, "uShed", shed_);
-        set1f(progLeaf_, "uBurst", bloomBurst_ + 0.4f * spurt_);
+        set1f(progLeaf_, "uBurst", bloomBurst_ + 0.5f * spurt_);
         set1f(progLeaf_, "uMinPx", minPx);
         set3f(progLeaf_, "uCamR", camR_);
         set3f(progLeaf_, "uCamU", camU_);
         set3f(progLeaf_, "uLeafC", pal_.leaf);
         set3f(progLeaf_, "uLeaf2C", pal_.leaf2);
+        set3f(progLeaf_, "uLeafShadeC", pal_.leafShade);
         set3f(progLeaf_, "uBlossomC", pal_.blossom);
-        set1f(progLeaf_, "uBlossom", saturate(pal_.blossomAmt + 0.25f * bloomBurst_ + 0.15f * life +
-                                             0.2f * saturate((lines_ - FULL_LINES) / 60.f)));
+        set3f(progLeaf_, "uFruitC", pal_.fruit);
+        set1f(progLeaf_, "uBlossom", saturate(pal_.blossomAmt * (0.45f + 0.55f * smoothstepf(1.5f, 4.f, g_)) + 0.25f * bloomBurst_ + 0.2f * life +
+                                             0.15f * smoothstepf(10.f, 18.f, g_)));
         set1f(progLeaf_, "uShimmer", shimmer_);
+        set1f(progLeaf_, "uSpace", spaceK);
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
         glBindVertexArray(leafVao_);
@@ -1358,19 +1409,20 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         glDisable(GL_BLEND);
     }
 
-    // ---- Transparent: the clouds (far to near), then the lights in the air.
+    // ---- Transparent: the clouds (far to near), the sea of clouds, then the lights in the air.
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-    {
-        // far cumulus on the sea (they write their depth where dense: the sea passes behind them)
+    if (alt_ < 2.5e5f) {
         std::vector<std::pair<float, int>> order;
         order.reserve(puffs_.size());
-        const float camD = std::sqrt(eye_.x * eye_.x + eye_.z * eye_.z);
-        const float drift = time_ * (4.f + 6.f * wm + 6.f * wp);
+        const float drift = time_ * (6.f + 8.f * wm + 8.f * wp);
+        const float pxK = 1.f / (minPx / 0.8f);
         for (size_t i = 0; i < puffs_.size(); i++) {
             const vec3 p = puffs_[i].p + vec3(drift, 0.f, 0.f);
             const vec3 d = p - eye_;
-            order.push_back({dot(d, d), (int)i});
+            const float d2 = dot(d, d);
+            if (puffs_[i].r * pxK < 0.6f * std::sqrt(d2)) continue;   // under a pixel
+            order.push_back({d2, (int)i});
         }
         std::sort(order.begin(), order.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
         cinst_.clear();
@@ -1379,8 +1431,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
             const vec3 p = pf.p + vec3(drift, 0.f, 0.f);
             // fade the puffs the camera is about to enter
             const float dEye = std::sqrt(o.first);
-            const float a = smoothstepf(pf.r * 0.6f, pf.r * 2.f, dEye) * smoothstepf(camD * 0.3f, camD * 0.55f, dEye) *
-                            (1.f - 0.4f * pal_.night);
+            const float a = smoothstepf(pf.r * 0.8f, pf.r * 2.5f, dEye) * (1.f - 0.3f * pal_.night);
             const float q[8] = {p.x, p.y, p.z, pf.r, pf.seed, a, 0.f, 0.f};
             cinst_.insert(cinst_.end(), q, q + 8);
         }
@@ -1392,16 +1443,14 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progCloud_, "uCamU", camU_);
             set3f(progCloud_, "uCloudLit", pal_.cloudLit * (1.f + 0.15f * life));
             set3f(progCloud_, "uCloudShade", pal_.cloudShade);
-            set1f(progCloud_, "uDrift", time_ * 0.01f);
             glBindVertexArray(cloudVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
             glBufferData(GL_ARRAY_BUFFER, cinst_.size() * sizeof(float), cinst_.data(), GL_STREAM_DRAW);
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
         }
     }
-    glDepthMask(GL_FALSE);
-    {
-        // the sea of clouds
+    if (eye_.y > CLOUD_Y + 200.f) {
+        // the sea of clouds under the camera, then the planet's weather from orbit
         glUseProgram(progSea_);
         setLight(progSea_);
         setMat(progSea_, "uVP", vp3_);
@@ -1409,14 +1458,15 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progSea_, "uCamR", camR_);
         set3f(progSea_, "uCamU", camU_);
         set2f(progSea_, "uTan", tanH_ * aspect_, tanH_);
+        set1f(progSea_, "uPix", 2.f * tanH_ / worldT_.h);
         set1f(progSea_, "uCloudY", CLOUD_Y);
-        set1f(progSea_, "uDrift", time_ * (5.f + 8.f * wm + 8.f * wp));
-        set1f(progSea_, "uFade", 0.7f * smoothstepf(CLOUD_Y + 15.f, CLOUD_Y + 50.f, eye_.y));
-        set1f(progSea_, "uCover", eye_.y > CLOUD_Y ? 0.8f : 0.3f);
+        set1f(progSea_, "uDrift", time_ * (8.f + 10.f * wm + 10.f * wp));
+        set1f(progSea_, "uFade", 0.92f * smoothstepf(CLOUD_Y + 200.f, CLOUD_Y + 1800.f, eye_.y));
         set3f(progSea_, "uCloudLit", pal_.cloudLit * (1.f + 0.15f * life));
         set3f(progSea_, "uCloudShade", pal_.cloudShade);
         ugl::drawFullscreen();
     }
+    glDepthMask(GL_FALSE);
     {
         pinst_.clear();
         auto glow = [&](const vec3& p, float size, const vec3& c, float a, int mode, float seed, float spin) {
@@ -1425,50 +1475,70 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
             pinst_.insert(pinst_.end(), q, q + 12);
         };
         // the grass by the sapling (gone once the camera is far)
-        if (s < 0.5f) {
-            const vec3 gcol = lerp(pal_.ground, pal_.leaf, 0.35f) * (pal_.night > 0.5f ? 0.9f : 1.25f);
+        if (gc_ < 4.5f) {
+            const vec3 gcol = lerp(pal_.groundA, pal_.leaf2, 0.25f) * (pal_.night > 0.5f ? 0.9f : 1.05f);
+            const vec3 flowers[3] = {pal_.flower, ugl::toLinear(hex(0xffe14a)), vec3(1.f)};
             for (const Tuft& t : tufts_) {
-                const vec3 c = t.flower > 0.5f ? lerp(pal_.blossom, vec3(1.f), 0.3f * t.seed) : gcol * (0.8f + 0.4f * t.seed);
+                const vec3 c = t.flower > 0.5f ? flowers[(int)(t.seed * 3.f) % 3] : gcol * (0.8f + 0.4f * t.seed);
                 glow(t.p, t.h, c, world, t.flower > 0.5f ? 4 : 3, t.seed, std::sin(time_ * 1.3f + t.p.x * 2.f + t.seed * 6.f) * (0.15f + 0.25f * wind));
             }
         }
-        // birds: two small flocks circling the crown (they fade once they are too small to see)
-        if (s > 0.25f && overT_ < 0.f) {
-            const vec3 cc = vec3(crownT.x, crownT.y, crownT.z) * s;
-            const float R = crownT.w * s * 1.25f;
+        // birds circling the crown while it is still near the ground
+        if (g_ > 2.f && g_ < 8.5f && overT_ < 0.f) {
+            const float R = Rc * 1.4f;
             for (int fl = 0; fl < 2; fl++) {
                 const float dir = fl == 0 ? 1.f : -1.f;
-                const float ang = dir * time_ * (0.05f + 0.02f * fl) + fl * 2.6f;
-                const vec3 fc = cc + vec3(std::cos(ang) * R, (fl == 0 ? 0.25f : -0.1f) * crownT.w * s + std::sin(time_ * 0.13f + fl) * 4.f,
-                                          std::sin(ang) * R);
+                const float ang = dir * time_ * (0.12f + 0.04f * fl) + fl * 2.6f;
+                const vec3 fc = cc + vec3(std::cos(ang) * R, (fl == 0 ? 0.3f : -0.2f) * Rc, std::sin(ang) * R);
                 const vec3 fwd = vec3(-std::sin(ang), 0.f, std::cos(ang)) * dir;
                 const vec3 side = vec3(std::cos(ang), 0.f, std::sin(ang));
                 const int n = fl == 0 ? 7 : 5;
                 for (int i = 0; i < n; i++) {
                     const float k = (float)((i + 1) / 2) * (i % 2 ? 1.f : -1.f);
-                    const vec3 p = fc - fwd * (std::fabs(k) * 2.4f) + side * (k * 2.2f) +
-                                   vec3(0.f, std::sin(time_ * 0.7f + i) * 0.6f, 0.f);
-                    const vec3 col = pal_.night > 0.5f ? lerp(pal_.glow, vec3(1.f), 0.3f) * 0.9f : pal_.barkDark * 0.7f;
-                    glow(p, 0.9f, col, world * (pal_.night > 0.5f ? 0.8f : 0.85f), 5, (float)i * 0.37f + fl, time_ * 7.f + i * 1.3f);
+                    const vec3 p = fc - fwd * (std::fabs(k) * 1.6f) + side * (k * 1.5f) + vec3(0.f, std::sin(time_ * 0.7f + i) * 0.4f, 0.f);
+                    const vec3 col = pal_.night > 0.5f ? lerp(pal_.glow, vec3(1.f), 0.3f) : vec3(1.f, 0.98f, 0.95f);
+                    glow(p, 0.6f, col, world * 0.95f, 5, (float)i * 0.37f + fl, time_ * 9.f + i * 1.3f);
                 }
             }
         }
-        // the lanterns, once the tree is grand; breathing slowly, with the beat at a peak
-        for (int i = 0; i < lanternCount_; i++) {
-            const float* l = &tree_.lanterns[(size_t)i * 8];
-            const float on = smoothstepf(l[4], l[4] + 0.05f, g_) * (1.f - shed_);
-            if (on <= 0.f) continue;
-            const float br = (0.7f + 0.3f * std::sin(time_ * (0.5f + l[5]) + l[5] * 30.f)) * (1.f + 0.25f * wp * beatPulse + 0.6f * bloom);
-            const vec3 c = lerp(pal_.lantern, pal_.glow, l[5] * 0.5f) * (pal_.night > 0.5f ? 1.3f : 1.0f);
-            const vec3 p = vec3(l[0], l[1], l[2]) * s;
-            glow(p, l[3] * s * 1.6f, c, on * br * world, 0, l[5], 0.f);
+        // hot-air balloons drifting around the clouds' height
+        if (alt_ < 4.e4f) {
+            static const unsigned BAL[6] = {0xff3b4a, 0xffc61a, 0x2a8cff, 0xa64cff, 0xff7a1a, 0x18c8a8};
+            Rng br(0xBA11ull);
+            for (int i = 0; i < 9; i++) {
+                float a = br.range(0.f, TAU);
+                if (std::fabs(std::remainder(a - CAM_AZ, TAU)) < 0.7f) a += 1.6f;
+                const float d = br.range(250.f, 3500.f);
+                const float h = br.range(350.f, 2900.f);
+                const float sz = br.range(12.f, 20.f);
+                const vec3 p(std::cos(a) * d + time_ * 1.5f, h + std::sin(time_ * 0.3f + i) * 6.f, std::sin(a) * d);
+                glow(p, sz, ugl::toLinear(hex(BAL[i % 6])), world, 7, br.uniform(), 0.f);
+            }
+        }
+        // satellites in orbit
+        if (alt_ > 3.e4f) {
+            Rng sr(0x5A7Eull);
+            for (int i = 0; i < 7; i++) {
+                const float h = sr.range(3.5e5f, 1.4e6f);
+                const float tilt = sr.range(-0.5f, 0.5f), az = sr.range(0.f, TAU);
+                const vec3 u = normalize(vec3(std::sin(tilt) * std::cos(az), std::cos(tilt), std::sin(tilt) * std::sin(az)));
+                const vec3 v = normalize(cross(u, vec3(std::cos(az + 1.f), 0.f, std::sin(az + 1.f))));
+                const float th = sr.range(-0.4f, 0.4f) + time_ * sr.range(0.004f, 0.012f) * (sr.chance(0.5f) ? 1.f : -1.f);
+                const float rr = gtree::R_EARTH + h;
+                const vec3 p = vec3(0.f, -gtree::R_EARTH, 0.f) + (u * std::cos(th) + v * std::sin(th)) * rr;
+                glow(p, 2200.f * std::sqrt(h / 4.e5f), vec3(1.f), world * smoothstepf(3.e4f, 1.5e5f, alt_), 6, sr.uniform(), time_ + i);
+            }
         }
         for (const Petal& q : petals_) {
             const float t = q.age / q.life;
-            const float a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.75f, 1.f, t));
-            if (q.kind == 1) glow(q.p, q.size * 1.6f, lerp(pal_.glow, pal_.lantern, q.seed * 0.5f), a * 0.8f * world, 2, q.seed, 0.f);
-            else if (q.kind == 2) glow(q.p, q.size * 1.4f, lerp(pal_.glow, pal_.petal, 0.4f) * 1.4f, a * world, 2, q.seed, 0.f);
-            else glow(q.p, q.size, pal_.petal * (pal_.night > 0.5f ? 1.6f : 1.f), a * 0.95f * world, 1, q.seed, q.seed * 6.f + time_ * q.spin);
+            const float a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.7f, 1.f, t));
+            switch (q.kind) {
+            case 1: glow(q.p, q.size * 1.6f, q.col, a * 0.85f * world, 2, q.seed, 0.f); break;
+            case 4: glow(q.p, q.size, q.col, a * world, 9, q.seed, 0.f); break;
+            case 5: glow(q.p, q.size, q.col, a * 0.55f * world, 8, q.seed, 0.f); break;
+            case 3: glow(q.p, q.size * 1.2f, q.col, a * world, 1, q.seed, q.seed * 6.f + time_ * q.spin); break;
+            default: glow(q.p, q.size, q.col * (pal_.night > 0.5f ? 1.5f : 1.f), a * 0.95f * world, 1, q.seed, q.seed * 6.f + time_ * q.spin); break;
+            }
         }
         if (!pinst_.empty()) {
             glUseProgram(progGlow_);
@@ -1494,7 +1564,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progBright_, "uSrc", 0);
     set2f(progBright_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
-    set1f(progBright_, "uThreshold", pal_.night > 0.5f ? 0.35f : 0.75f);
+    set1f(progBright_, "uThreshold", pal_.night > 0.5f ? 0.45f : 0.85f);
     ugl::drawFullscreen();
     for (int pass = 0; pass < 2; pass++) {
         bloomB_.bind();
@@ -1527,6 +1597,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.3f * wp + 0.35f * life + 0.4f * tetrisGlow_) * world);
     set1f(progComp_, "uTwinkle", 0.25f + 0.2f * wm + 0.25f * wp);
     set1f(progComp_, "uTime", time_);
+    set1f(progComp_, "uSat", 1.1f);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
@@ -1589,7 +1660,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_gianttree() {
     static const UniverseEntry e{
-        "GIANT TREE", "a world tree growing with every cleared line, from a sapling into a celestial tree rising through the clouds",
+        "GIANT TREE", "a toon world tree shooting up with every cleared line, from a round sapling in a meadow through the clouds into space",
         [] { return std::unique_ptr<Universe>(new GiantTreeUniverse()); },
         // Fits most songs; the calm, airy ones a little better.
         [](const SongLook& l) { return 0.85f + 0.2f * (1.f - l.density) + 0.15f * l.airWeight; },
