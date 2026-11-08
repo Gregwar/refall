@@ -69,7 +69,7 @@ public:
     // The station's plan: one module per cleared line (station.cpp).
     enum Kind {
         K_CAPSULE, K_NODE, K_LAB, K_WINGS, K_CUPOLA, K_TRUSS, K_ARRAY, K_RADIATOR, K_SHIP, K_HUB, K_SPOKE, K_ARC,
-        K_DISH, K_AXLE, K_BIGSPOKE, K_BIGARC, K_MIRROR, K_LINER, K_NRING, K_YARD, K_TETHER, K_ERING, K_SWARM, K_FLEET,
+        K_DISH, K_AXLE, K_BIGSPOKE, K_BIGARC, K_MIRROR, K_LINER, K_NRING, K_YARD, K_TETHER, K_ERING, K_ELEVATOR, K_FLEET,
         K_MOONWORK, K_COLOSSUS, K_COUNT
     };
     struct Module {
@@ -115,7 +115,7 @@ private:
         float spin = 0.f, w = 0.f, baseW = 0.f, peakW = 0.f, dropW = 0.f;
         float heads = 4.f, turn = 16.f;
     };
-    static constexpr int RINGS = 10;
+    static constexpr int RINGS = 12;
     Ring rings_[RINGS];
     int stageFirst_[16] = {};   // the first module of each later stage (see buildPlan)
     float moonWork_ = 0.f;      // the Moon's works, 0..1

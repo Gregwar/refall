@@ -217,12 +217,35 @@ void OrbitalUniverse::buildPlan() {
     ringDef(6, EARTH_C, vec3(1.f, 0.f, 0.35f), 0.0015f, 0.001f, 0.006f, 4.f, 16.f);
     rings_[6].ref = vec3(0, 1, 0);
     arcs(K_ERING, 6, R_PLANET + ALT + 4.5e5f, 9.e4f, 12, 6, 0.f);
-    // swarms of mirrors and collectors round it, streaming off toward the sun
+    // the ring becomes a wheel round the planet: more elevators, spokes in its plane, then a rim through their
+    // counterweights, and two rings crossed over it
     stageFirst_[4] = (int)plan_.size();
-    for (int k = 0; k < 5; k++) {
-        Module& m = add(K_SWARM, frameZ(EARTH_C, vec3(0, 0, 1)), vec3(1.f), normalize(vec3(std::cos(k * 1.3f), 0.5f, std::sin(k * 1.3f))), 1.7e7f);
-        m.a0 = (float)k;
-        m.tugs = 0;
+    {
+        // an elevator along a ring's plane, from the ground up to that ring (its counterweight on the ring)
+        auto elevator = [&](int r, float a, float top, int k) {
+            const Ring& RG = rings_[r];
+            const vec3 up = RG.ref * std::cos(a) + cross(RG.n, RG.ref) * std::sin(a);
+            Module& m = add(K_ELEVATOR, frameZ(EARTH_C, vec3(0, 0, 1)), up, up, 0.25f * top);
+            m.pivot = up * (R_PLANET + 0.5f * top);
+            m.a0 = (float)k;
+            m.al = top;
+            m.tugs = 4;
+        };
+        const Ring& R6 = rings_[6];
+        const vec3 up0 = normalize(vec3(-1.6e5f, R_PLANET + ALT, 0.f));
+        const float a6 = std::atan2(dot(up0, cross(R6.n, R6.ref)), dot(up0, R6.ref));
+        elevator(6, a6 + TAU * 0.25f, 2.2e6f, 1);
+        elevator(6, a6 - TAU * 0.25f, 2.2e6f, 2);
+        elevator(6, a6 + TAU * 0.5f, 2.2e6f, 3);
+        ringDef(9, EARTH_C, R6.n, 0.0015f, 0.001f, 0.006f, 4.f, 16.f);
+        rings_[9].ref = R6.ref;
+        arcs(K_ERING, 9, R_PLANET + 2.2e6f, 1.3e5f, 10, 6, 0.f);
+        ringDef(10, EARTH_C, vec3(0.3f, 1.f, -0.6f), -0.001f, -0.0008f, -0.005f, 2.f, 8.f);
+        arcs(K_ERING, 10, R_PLANET * 1.75f, 1.6e5f, 10, 6, 1.f);
+        for (int k = 0; k < 4; k++) elevator(10, 0.4f + k * TAU / 4.f, R_PLANET * 0.75f, 4 + k);
+        ringDef(11, EARTH_C, vec3(-0.7f, 0.4f, 1.f), 0.0008f, 0.0006f, 0.004f, 4.f, 16.f);
+        arcs(K_ERING, 11, R_PLANET * 2.1f, 2.2e5f, 10, 6, 0.f);
+        for (int k = 0; k < 4; k++) elevator(11, 1.2f + k * TAU / 4.f, R_PLANET * 1.1f, 8 + k);
     }
     // a fleet of O'Neill cylinders
     stageFirst_[5] = (int)plan_.size();
@@ -850,31 +873,35 @@ void OrbitalUniverse::emitModule(Builder& b, const Module& m, int idx) {
         }
         break;
     }
-    case K_SWARM: {
-        // mirrors and collectors on their orbits, glinting, a stream of them flowing off toward the sun
-        Rng r(0x5A5Aull + (uint64_t)(m.a0 * 97.f));
-        const vec3 sun = normalize(p.sunDir);
-        vec3 su, sv;
-        basisOf(sun, su, sv);
-        for (int i = 0; i < 220; i++) {
-            const float rr = R_PLANET * (1.6f + 1.6f * r.uniform());
-            const vec3 ax = normalize(vec3(r.range(-0.5f, 0.5f), 1.f, r.range(-0.5f, 0.5f)));
-            vec3 u, v;
-            basisOf(ax, u, v);
-            const float w = 0.03f * std::pow(1.6f * R_PLANET / rr, 1.5f) * (i % 2 ? 1.f : 0.85f);
-            const float ph = r.uniform() * TAU + time_ * w;
-            const vec3 c = (u * std::cos(ph) + v * std::sin(ph)) * rr;
-            const float s = 1.6e5f * (0.6f + 0.8f * r.uniform());
-            const bool mirror = i % 3 == 0;
-            b.boxO(c, su * s, sun * (s * 0.03f), sv * (s * (mirror ? 1.f : 0.5f)), mirror ? M_SILVER : M_SOLAR, mirror ? vec3(0.9f) : p.solar, (float)i);
-            if (i % 4 == 0) b.light(c + sun * s * 0.1f, s * 0.5f, vec3(1.f, 0.97f, 0.9f), 0.5f + 0.5f * std::sin(time_ * 1.3f + i), 3);
+    case K_ELEVATOR: {
+        // a whole space elevator along its spoke: the anchor on the ground, the tether up to the counterweight on
+        // its ring, a port at the station's height, climbers up and down
+        const vec3 up(m.dim.x, m.dim.y, m.dim.z);
+        vec3 u, v;
+        basisOf(up, u, v);
+        const float rTop = R_PLANET + m.al, rPort = R_PLANET + ALT + 4.5e5f;
+        b.tube(up * R_PLANET, up * rTop, 1.4e4f, M_SILVER, vec3(0.85f), sd);
+        b.tube(up * R_PLANET + u * 3.e4f, up * rTop + u * 3.e4f, 5000.f, M_GOLD, p.gold, sd);
+        b.cyl(up * (R_PLANET + 2.e4f), up, 9.e4f, 2.e4f, M_DARK, p.dark, 0.3f, false, sd);
+        b.light(up * (R_PLANET + 3.e4f), 1.4e5f, p.city, 1.4f);
+        b.cyl(up * rPort, up, 1.2e5f, 5.e4f, M_HULL, p.hull, 1.f, false, sd);
+        b.cyl(up * rPort, up, 1.3e5f, 9000.f, M_GOLD, p.gold, 1.f, false, sd);
+        b.torus(up * rPort, up, u, 2.2e5f, 1.2e4f, 0.f, TAU, M_HAB, p.hull, sd);
+        for (int i = 0; i < 10; i++) {
+            const float a = i * TAU / 10.f;
+            b.light(up * rPort + (u * std::cos(a) + v * std::sin(a)) * 2.3e5f, 1.6e4f, p.lamp, 0.5f + 0.6f * lamp1);
         }
-        for (int i = 0; i < 50; i++) {
-            const float ph = std::fmod(time_ * 0.025f + i / 50.f, 1.f);
-            const float d = 2.4e7f + ph * 1.6e8f;
-            const float j = r.uniform() * TAU, jr = 2.e6f + 4.e6f * r.uniform();
-            b.light(sun * d + (su * std::cos(j) + sv * std::sin(j)) * jr * (1.f + ph), 6.e4f * (1.f + ph),
-                    lerp(p.lamp, vec3(1.f), 0.5f), 0.9f * (1.f - ph), 3);
+        b.cyl(up * rTop, up, 1.8e5f, 2.4e5f, M_HAB, p.hull, 1.f, false, sd);
+        b.boxO(up * rTop, u * 7.e5f, v * 1.6e5f, up * 4000.f, M_SOLAR, p.solar, sd);
+        b.light(up * (rTop + 2.6e5f), 9.e4f, p.navR, (0.5f + blink) * navK);
+        const int n = std::clamp((int)(m.al / 5.e4f), 20, 140);
+        for (int i = 0; i <= n; i++)
+            b.light(up * lerpf(R_PLANET, rTop, i / (float)n), 1.6e4f, p.lamp, 0.35f + 0.4f * lamp1);
+        for (int i = 0; i < 10; i++) {
+            const float ph = std::fmod(time_ * (i % 2 ? 0.02f : -0.02f) + i / 10.f + m.a0 * 0.13f + 10.f, 1.f);
+            const float r = R_PLANET + 4.e4f + ph * (m.al - 3.e5f);
+            b.cyl(up * r + u * 1.6e4f, up, 2.4e4f, 4.e4f, M_HAB, p.hull, 1.f, false, sd + i);
+            b.light(up * r + u * 1.6e4f, 4.e4f, i % 2 ? p.chase : p.lamp, 1.1f + 0.6f * lamp1);
         }
         break;
     }

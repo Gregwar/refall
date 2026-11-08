@@ -1425,7 +1425,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         const float alt = std::max(10.f, length(eyeP) - R_PLANET);
         set3f(progSky_, "uEyeP", eyeP);
         set1f(progSky_, "uAlt", alt);
-        set1f(progSky_, "uDyson", saturate((float)(built_ - stageFirst_[4]) / 3.f) * (stageFirst_[4] > 0 ? 1.f : 0.f));
+        set1f(progSky_, "uDyson", saturate((float)(built_ - stageFirst_[5]) / 3.f) * (stageFirst_[5] > 0 ? 1.f : 0.f));
         set1f(progSky_, "uR", R_PLANET);
         set3f(progSky_, "uSunDir", pal_.sunDir);
         set3f(progSky_, "uSunC", pal_.sunC * (1.f / 2.6f) * (1.f - 0.5f * slow_));
