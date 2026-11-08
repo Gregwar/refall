@@ -58,6 +58,7 @@ public:
         vec3 c;           // the bookcase's foot, at the middle of its front
         vec3 along, out;
         float born = -1.f; // lines when it appeared (-1: not yet)
+        float t0 = -1.f;   // carried in mid-game: when (world time), else -1
         int filler = -1;   // the filler bookcase it replaces (its instances die), -1 none
         int firstShelf = 0;
     };
@@ -122,6 +123,9 @@ private:
     void layoutBooks();
     const Book& addBook(int type, bool flying);
     int hookLines_ = 0;
+    bool hookPlaced_ = false;
+    // hold: the books wait in the well, where their row was, until their turn to fly (a real clear)
+    void putAway(const std::vector<GameEvent::CellInfo>& cells, bool hold);
     int ensureBays(int needShelves);
     vec3 bookPos(const Book& b, int shelf, float x) const;
     void newBay();
@@ -143,6 +147,7 @@ private:
         float rot = 0.f, rotV = 0.f;
         bool gilt = false;
         int unitTo = -1;
+        bool hold = false;
     };
     std::vector<Flight> flights_;
     void launch(Flight& fl);

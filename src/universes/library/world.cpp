@@ -385,5 +385,6 @@ void LibraryUniverse::newBay() {
         b.along = side > 0 ? vec3(0, 0, 1) : vec3(0, 0, -1);
     }
     b.born = i == 0 ? 0.f : i < 7 ? S_ROOM + 0.6f + 0.45f * i : grow_;
+    if (i >= 7) b.t0 = worldTime_;
     bays_.push_back(b);
 }
