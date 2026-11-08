@@ -24,11 +24,11 @@
 // silver strongly, glass sharply, stone barely). Calm: a dim, still light; mid: it travels across the wall and a few
 // smalti glint on the two-beat grid; a peak: brighter and quicker, more glints, the kicks too. A real drop sets every
 // gold smalto ablaze, the fire spreading out from the well, each one shimmering on its own as its tilt wavers, and on
-// every two beats a ripple lifts the tesserae as it passes outward (a band of light running through the gold); it
-// eases in and settles over the next bars. Above all the wall comes alive (updateShow): every two beats a wave sweeps
-// over it turning the tesserae over like a stadium's cards, about their own row's line; on the bar their backs show a
-// new design laid tessera by tessera over the whole ground (a sunburst, frames, a spiral, a lattice, waves), between
-// two bars a full turn flashes their gold backs, the medallions' rings chase their light, the lamp swings on the beat;
+// every bar a gentle ripple lifts the tesserae as it passes outward (a band of light running through the gold); it
+// eases in and settles over the next bars. Above all the wall comes alive (updateShow): every bar a slow wave sweeps
+// over it turning the tesserae over like a stadium's cards, about their own row's line, their backs a new design laid
+// tessera by tessera over the whole ground (a sunburst, frames, a spiral, a lattice, waves) drifting slowly; the
+// medallions' rings chase a soft light, the lamp sways from side to side every bar (kept soft: no flash, no slap);
 // the drop over, a last wave lays the mosaic back. Slow motion is night: an oil lamp low under the wall, the gold glowing
 // warm in the dark. Game over: the tiles come off the wall row by row from the top and fall.
 //
@@ -532,18 +532,17 @@ void TilesUniverse::drop(float strength) {
     dropStart_ = time_;
     dropT_ = std::max(dropT_, 0.6f + 0.4f * strength);
     ignite_ = 0.f;
-    lastWaveBeat_ = std::floor(beat_ / 2.0);
+    lastWaveBeat_ = std::floor(beat_ / 4.0);
     waveT_ = 0.f;
     waveA_ = 1.f;
 }
 
-// The drop's show, on the beat grid: a wave every two beats; on the bar the tesserae turn over to a new design, two
-// beats later a full turn sweeps their gold backs across the wall; once the drop is over, a last wave lays the mosaic
-// back. Successive drops start from other designs and sweeps.
+// The drop's show, on the beat grid: every bar a wave turns the tesserae over to a new design (kept gentle: one
+// wave a bar, no full spins); once the drop is over, a last wave lays the mosaic back. Successive drops start from
+// other designs and sweeps.
 void TilesUniverse::updateShow(bool want) {
     static const int PATS[5] = {1, 2, 3, 4, 5};
     static const int TURN_SWEEPS[7] = {1, 2, 4, 6, 3, 5, 7};
-    static const int SPIN_SWEEPS[5] = {3, 5, 0, 6, 1};
     if (!show_) {
         if (!want || beat_ - dropBeat_ > 2.0) return;
         show_ = true;
@@ -553,7 +552,7 @@ void TilesUniverse::updateShow(bool want) {
         showPat_ = PATS[(showCount_ * 2) % 5];
         swB_ = Sweep{};
         swA_ = Sweep{beat_, 0, 0, showPat_, false};
-        showNext_ = showStart_ + 2.0;
+        showNext_ = showStart_ + 4.0;
         showCount_++;
         return;
     }
@@ -568,16 +567,12 @@ void TilesUniverse::updateShow(bool want) {
         showEnding_ = true;
     } else {
         showStep_++;
-        const int k = showStep_ / 2 + showCount_ * 3;
-        if (showStep_ % 2 == 0) {
-            const int next = PATS[(showStep_ / 2 + (showCount_ - 1) * 2) % 5];
-            swA_ = Sweep{showNext_, TURN_SWEEPS[k % 7], showPat_, next, false};
-            showPat_ = next;
-        } else {
-            swA_ = Sweep{showNext_, SPIN_SWEEPS[k % 5], showPat_, showPat_, true};
-        }
+        const int k = showStep_ + showCount_ * 3;
+        const int next = PATS[(showStep_ + (showCount_ - 1) * 2) % 5];
+        swA_ = Sweep{showNext_, TURN_SWEEPS[k % 7], showPat_, next, false};
+        showPat_ = next;
     }
-    showNext_ += 2.0;
+    showNext_ += 4.0;
 }
 
 // A new section of the same level: the lamp moves on.
@@ -1105,13 +1100,13 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         dropEnv_ = approach(dropEnv_, dropA_, 5.f, dt);
         ignite_ += dt * 15.f;
     }
-    // a ripple lifting the tesserae every two beats while a real drop lasts
+    // a ripple lifting the tesserae every bar while a real drop lasts
     if (dropOn_ && realDrop_ && !f.paused) {
-        const double b2 = std::floor(beat_ / 2.0);
+        const double b2 = std::floor(beat_ / 4.0);
         if (b2 > lastWaveBeat_) {
             lastWaveBeat_ = b2;
             waveT_ = 0.f;
-            waveA_ = 0.55f + 0.3f * saturate(music.kick);
+            waveA_ = 0.35f + 0.15f * saturate(music.kick);
         }
     }
     waveT_ += dt;
@@ -1128,11 +1123,11 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         vec3 tgt = lerp(still, travel, wm);
         const vec3 lamp{sideL * (15.f + 2.f * std::sin(worldTime_ * 0.3f)), viewC_.y - viewH_.y - 1.5f, 7.5f};
         tgt = lerp(tgt, lamp, slow_);
-        // the show: the lamp swings from one side to the other on every beat, its raking light running over the wall
-        const float sw = std::fmod((float)std::floor(beat_), 2.f) < 1.f ? 1.f : -1.f;
-        const vec3 swing{sw * 18.f, viewC_.y + 4.f * std::sin((float)beat_ * 0.37f), 10.f};
+        // the show: the lamp sways from one side to the other every bar, its raking light gliding over the wall
+        const float sw = std::fmod((float)std::floor(beat_ / 4.0), 2.f) < 1.f ? 1.f : -1.f;
+        const vec3 swing{sw * 16.f, viewC_.y + 3.f * std::sin((float)beat_ * 0.2f), 10.f};
         tgt = lerp(tgt, swing, showK_ * (1.f - slow_));
-        lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * lerpf(1.5f, 7.f, showK_)));
+        lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * lerpf(1.5f, 2.2f, showK_)));
         const float target = (0.7f + 0.3f * wm + 0.35f * wp) * (1.f - 0.25f * slow_) * (1.f - 0.6f * over_);
         lightI_ = approach(lightI_, target, 1.2f, dt);
     }

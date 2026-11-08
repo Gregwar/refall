@@ -148,7 +148,7 @@ uniform vec2 uPalMat;       // the metal's material, the others'
 uniform vec4 uMed;          // the medallions' centers
 uniform vec3 uMedR;         // their radius, their ring's inner radius, they exist
 uniform float uShowK;       // its strength (eased in and out)
-const float FLIP = 0.6;     // a turn lasts this many beats
+const float FLIP = 1.5;     // a turn lasts this many beats
 // When a sweep reaches a tessera at c (beats after the wave).
 float sweepDelay(float kind, vec2 c, float rnd) {
     float r = length(c * vec2(0.8, 1.0));
@@ -165,7 +165,7 @@ float sweepDelay(float kind, vec2 c, float rnd) {
 }
 // The design a tessera at c shows on its back: an index into uPal (0 the dark, 1 the metal, 2 and 3 the accents).
 int design(float pat, vec2 c, float rnd) {
-    float st = floor(uBeat * 2.0) * 0.5;   // steps on the eighth notes
+    float st = uBeat * 0.25;               // a slow, continuous drift (steps on the eighth notes flickered)
     vec2 q = c * vec2(0.8, 1.0);
     float r = length(q), a = atan(c.y, c.x) / 6.2831853;
     if (pat > 98.5) return 1;
@@ -262,9 +262,8 @@ void main() {
             float spin = useA ? uWaveSpin.x : uWaveSpin.y;
             float dl = useA ? dA : sweepDelay(uWaveB.y, ctr, rnd0);
             float p = clamp((uBeat - wv.x - dl) / FLIP, 0.0, 1.0);
-            // an ease out with a little overshoot: it slaps down
-            float pm = p - 1.0; // (pow is undefined for a negative base)
-            float e = 1.0 + 2.2 * pm * pm * pm + 1.2 * pm * pm;
+            // a smooth ease in and out (no overshoot: a slap on every tessera was hard on the eyes)
+            float e = p * p * (3.0 - 2.0 * p);
             float th = 3.14159265 * (spin > 0.5 ? 2.0 : 1.0) * e;
             turnC = cos(th);
             turnS = sin(th);
@@ -279,7 +278,7 @@ void main() {
             } else if (abs(across) > half_) {
                 // the bed under a tessera standing on its edge: in its shadow
                 float sh = smoothstep(half_, half_ + ge.w * 0.6, abs(across));
-                vec3 c0 = uGrout * 0.18 * (uAmb * 3.0 + uLightCol * att * 0.3) * mix(0.4, 1.0, sh);
+                vec3 c0 = uGrout * 0.18 * (uAmb * 3.0 + uLightCol * att * 0.3) * mix(0.75, 1.0, sh);
                 frag = vec4(c0 * (1.0 - 0.5 * quiet), 0.0);
                 return;
             } else {
@@ -392,7 +391,7 @@ void main() {
     }
     // the rounded edge into the grout
     c *= 0.55 + 0.45 * hgt;
-    c *= 0.3 + 0.7 * abs(turnC);
+    c *= 0.65 + 0.35 * abs(turnC);
     // the show: the medallions' rings chase their light around, the two counter-rotating, and on every beat a pulse
     // runs out from the heart of each figure
     if (uShow > 0.5 && uMedR.z > 0.5) {
@@ -405,13 +404,13 @@ void main() {
             float an = atan(d.y, d.x);
             float sg = sdx == 0 ? 1.0 : -1.0;
             if (rr > uMedR.y - 0.1) {
-                float ch = pow(max(0.0, 0.5 + 0.5 * cos(an * 5.0 - sg * uBeat * 3.14159265 * 0.5)), 10.0);
-                c += (mat > 1.5 ? alb * 3.2 + vec3(0.05) : alb * 1.4 + vec3(0.03)) * ch * uShowK * (1.0 - 0.6 * quiet);
+                float ch = pow(max(0.0, 0.5 + 0.5 * cos(an * 5.0 - sg * uBeat * 3.14159265 * 0.25)), 10.0);
+                c += (mat > 1.5 ? alb * 1.6 + vec3(0.02) : alb * 0.7 + vec3(0.015)) * ch * uShowK * (1.0 - 0.6 * quiet);
             } else {
-                float fb = fract(uBeat);
+                float fb = fract(uBeat * 0.5);
                 float pr = rr / uMedR.y - fb * 1.25;
-                float pulse = exp(-pr * pr * 40.0) * (1.0 - fb);
-                c += (mat > 1.5 ? alb * 2.4 : alb * 1.2 + vec3(0.02)) * pulse * uShowK * (1.0 - 0.6 * quiet);
+                float pulse = exp(-pr * pr * 25.0) * (1.0 - fb);
+                c += (mat > 1.5 ? alb * 1.2 : alb * 0.6 + vec3(0.01)) * pulse * uShowK * (1.0 - 0.6 * quiet);
             }
         }
     }
