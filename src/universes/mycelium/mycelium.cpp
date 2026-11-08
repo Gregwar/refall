@@ -9,7 +9,7 @@
 // cords. Mushrooms burst up through the surface where the threads reach it, each bigger than the last: a pin first,
 // then caps among the moss, the ferns, the bushes, until parasol towers stand taller than the trees, their caps
 // lighting the canopy around them. The growth is G = ln(the network's reach in meters), from a millimeter at the
-// first line to some 50 m at 48 lines (the mushrooms as tall as the trees) and a kilometer past 120.
+// first line to some 50 m at 48 lines (the mushrooms as tall as the trees) and 800 m at 92 lines; a cabin, pylons, a church, a town, a wind farm, skyscrapers and airliners give the scale on the way.
 //
 // The music: calm is a still network breathing faintly; mid sends pulses of light out along some threads every two
 // beats; a peak along all of them, caps glowing brighter and spores drifting up. **The drop** (a real one: the HUD's
@@ -324,6 +324,7 @@ void MyceliumUniverse::uploadNet() {
     glBufferData(GL_ARRAY_BUFFER, net_.roots.size() * sizeof(float), net_.roots.data(), GL_STATIC_DRAW);
     rootCount_ = (GLsizei)(net_.roots.size() / 8);
     planMushrooms();
+    planLandmarks();
     netDirty_ = false;
 }
 
@@ -968,6 +969,25 @@ void MyceliumUniverse::buildFlora() {
         return (h >> 40) * (1.0f / 16777216.0f);
     };
     const float pinsK = smoothstepf(myc::growthOf(2), myc::growthOf(4), g_);
+    // clearings: no tree in front of a human-made thing that is showing (its window span and depth)
+    struct Span { float l, r, z, k; };
+    std::vector<Span> clear;
+    for (const Landmark& m : marks_) {
+        if (m.type >= L_PLANE || m.type == L_WIRES) continue;
+        const float sk = smoothstepf(std::log(0.2f * m.gate), std::log(0.45f * m.gate), g_);
+        if (sk <= 0.f) continue;
+        const float k = v.D / (v.D + m.z);
+        const float w = m.w * (m.type == L_PYLON ? 2.f : 1.3f);
+        clear.push_back({v.ex + (m.x - w - v.ex) * k, v.ex + (m.x + w - v.ex) * k, m.z, sk});
+    }
+    auto hides = [&](float x, float w, float z) {
+        const float k = v.D / (v.D + z);
+        const float l = v.ex + (x - w - v.ex) * k, r = v.ex + (x + w - v.ex) * k;
+        float h = 0.f;
+        for (const Span& c : clear)
+            if (z < c.z && r > c.l && l < c.r) h = std::max(h, c.k);
+        return h;
+    };
     // the floor's clutter at every scale
     for (int k = 0; k <= 10; k++) {
         const float s = 0.0015f * std::pow(3.f, (float)k);
@@ -1028,7 +1048,9 @@ void MyceliumUniverse::buildFlora() {
                 if (type == B_MOSS) glow = pinsK * (under ? 1.f : 0.f) * (1.f - 0.7f * over_);
                 const float a = sizeAlpha(h, z) * world;
                 if (a <= 0.003f) continue;
-                push(x, myc::surf(x), z, h, wq, type, seed, a, c, col, glow, vec3(0.f), 0.f);
+                const float hid = (type == B_TREE || type == B_BUSH) ? hides(x, wq * 0.8f, z) : 0.f;
+                if (hid >= 0.999f) continue;
+                push(x, myc::surf(x), z, h, wq, type, seed, a * (1.f - hid), c, col, glow, vec3(0.f), 0.f);
             }
         }
     }
@@ -1053,7 +1075,9 @@ void MyceliumUniverse::buildFlora() {
         }
         const float a = sizeAlpha(h, z) * world;
         if (a <= 0.003f) continue;
-        push(x, myc::surf(x), z, h, wq, type, p.seed, a, c, vec3(0.f), 0.f, vec3(0.f), 0.f);
+        const float hid = type == B_TREE ? hides(x, wq * 0.8f, z) : 0.f;
+        if (hid >= 0.999f) continue;
+        push(x, myc::surf(x), z, h, wq, type, p.seed, a * (1.f - hid), c, vec3(0.f), 0.f, vec3(0.f), 0.f);
     }
 }
 
@@ -1080,6 +1104,206 @@ void MyceliumUniverse::buildShroomBoards() {
         b.d[0] = cc.x; b.d[1] = cc.y; b.d[2] = cc.z; b.d[3] = glow;
         b.e[0] = gc.x; b.e[1] = gc.y; b.e[2] = gc.z; b.e[3] = 0.f;
         boards_.push_back(b);
+    }
+}
+
+// =====================================================================================================
+// Human-made things, for scale
+// =====================================================================================================
+
+// Things people built, at their real sizes, each placed so that it stands in the open at the side of the well when the
+// network is about its size, then dwarfed in turn by the mushrooms: a cabin with a car by it, a lit farmhouse, a line of
+// pylons, a church spire, a town and a highway far off, a radio mast, a wind farm, a skyline of towers, then low clouds,
+// a helicopter, a hot-air balloon and airliners flying under the caps. h is the height that gates it (it fades in as the
+// network's reach passes about half of it).
+void MyceliumUniverse::planLandmarks() {
+    marks_.clear();
+    Rng r(netSeed_ ^ 0x1A4D3A2Cull);
+    auto xAt = [&](float h, float z, float bx) {
+        const myc::View v = myc::frame(std::log(0.9f * h), 16.f / 9.f, 11.9f);
+        return v.ex + (v.cx + bx * v.vh / 11.9f - v.ex) * (v.D + z) / v.D;
+    };
+    auto add = [&](int type, float x, float y, float z, float h, float w, float gate, float p0 = 0.f) {
+        Landmark m;
+        m.type = type; m.x = x; m.y = y; m.z = z; m.h = h; m.w = w; m.gate = gate; m.p0 = p0; m.seed = r.uniform();
+        marks_.push_back(m);
+        return (int)marks_.size() - 1;
+    };
+    // a cabin in the woods, its car parked by it
+    {
+        const float x = xAt(6.f, 40.f, 16.5f);
+        add(L_CABIN, x, myc::surf(x), 40.f, 6.f, 4.4f, 6.f, 0.f);
+        add(L_CAR, x - 8.f, myc::surf(x - 8.f), 37.f, 1.5f, 2.3f, 6.f, -1.f);
+    }
+    // a lit farmhouse
+    { const float x = xAt(9.f, 120.f, -16.5f); add(L_CABIN, x, myc::surf(x), 120.f, 9.f, 8.5f, 9.f, 1.f); }
+    // a line of power pylons with their wires
+    {
+        const float x0 = xAt(38.f, 260.f, 13.f);
+        for (int i = 0; i < 5; i++) {
+            const float x = x0 + i * 75.f, y = myc::surf(x);
+            add(L_PYLON, x, y, 260.f, 38.f, 13.f, 38.f);
+            if (i < 4) add(L_WIRES, x + 37.5f, std::min(y, myc::surf(x + 75.f)), 260.f, 38.f, 37.5f, 38.f);
+        }
+    }
+    // a church spire
+    { const float x = xAt(55.f, 520.f, -17.5f); add(L_SPIRE, x, myc::surf(x), 520.f, 55.f, 25.f, 55.f); }
+    // a town's lights and a highway (lights only, see buildLandmarks)
+    townX_ = xAt(110.f, 2100.f, -15.f);
+    // a radio mast with its red beacons
+    { const float x = xAt(300.f, 2600.f, 18.5f); add(L_MAST, x, myc::surf(x), 2600.f, 300.f, 115.f, 300.f); }
+    // a wind farm
+    {
+        const float xc = xAt(150.f, 4300.f, -15.5f);
+        for (int i = 0; i < 7; i++) {
+            const float x = xc + (i - 3) * 270.f + r.range(-40.f, 40.f), z = 4300.f + r.range(-500.f, 500.f);
+            add(L_TURBINE, x, myc::surf(x), z, 150.f, 64.f, 150.f);
+        }
+    }
+    // a city skyline far behind, two clusters of towers
+    { const float x = xAt(420.f, 4200.f, 15.5f); add(L_SKYLINE, x, myc::surf(x), 4200.f, 460.f, 620.f, 380.f); }
+    { const float x = xAt(330.f, 3400.f, -16.f); add(L_SKYLINE, x, myc::surf(x), 3400.f, 330.f, 450.f, 380.f); }
+    // low clouds, the caps rising through them
+    for (int i = 0; i < 12; i++) {
+        const float z = r.range(700.f, 5000.f);
+        const float x = xAt(450.f, z, r.range(-22.f, 22.f));
+        add(L_CLOUD, x, r.range(170.f, 300.f), z, 110.f, r.range(220.f, 600.f), 400.f);
+    }
+    // aircraft (moving: placed every frame)
+    add(L_HELI, 0.f, 150.f, 650.f, 6.f, 4.4f, 160.f, 1.f);
+    add(L_BALLOON, 0.f, 190.f, 950.f, 26.f, 9.f, 220.f, -1.f);
+    add(L_PLANE, 0.f, 200.f, 700.f, 45.f, 25.f, 330.f, 1.f);
+    add(L_PLANE, 0.f, 300.f, 1300.f, 55.f, 31.f, 330.f, -1.f);
+    add(L_PLANE, 0.f, 380.f, 2100.f, 60.f, 34.f, 400.f, 1.f);
+}
+
+void MyceliumUniverse::buildLandmarks() {
+    markGlow_.clear();
+    const myc::View& v = view_;
+    const float hw = v.vh * aspect_;
+    const float screenH = (float)worldT_.h;
+    const float world = 1.f - smoothstepf(0.f, 0.7f, smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
+    auto gateA = [&](float h) { return smoothstepf(std::log(0.28f * h), std::log(0.65f * h), g_); };
+    auto sizeA = [&](float h, float z) {
+        const float hpx = h * v.D / (v.D + z) / pxW_;
+        return smoothstepf(2.f, 6.f, hpx) * (1.f - smoothstepf(1.2f * screenH, 2.f * screenH, hpx));
+    };
+    auto inView = [&](float x, float z, float w) {
+        const float k = (v.D + z) / v.D;
+        return x + w > v.ex + (v.cx - hw * 1.1f - v.ex) * k && x - w < v.ex + (v.cx + hw * 1.1f - v.ex) * k;
+    };
+    // a light: never under ~2 px, so a far lamp stays a point of light
+    auto light = [&](const vec3& p, float size, const vec3& c, float a) {
+        if (a <= 0.004f) return;
+        const float minS = 3.f * pxW_ * (v.D + p.z) / v.D;
+        const float q[12] = {p.x, p.y, p.z, std::max(size, minS), c.x, c.y, c.z, a * world, 3.f, 0.f, 0.f, 0.f};
+        markGlow_.insert(markGlow_.end(), q, q + 12);
+    };
+    auto blink = [&](float f, float ph) { const float s = 0.5f + 0.5f * std::sin(time_ * TAU * f + ph); return 0.25f + 0.75f * s * s * s; };
+    const vec3 warm = ugl::toLinear(vec3(1.f, 0.78f, 0.5f)), red = ugl::toLinear(vec3(1.f, 0.16f, 0.1f)),
+               green = ugl::toLinear(vec3(0.3f, 1.f, 0.45f)), white = vec3(1.f, 0.97f, 0.92f);
+    const float t = time_;
+    auto wrapX = [&](float z, float speed, float phase) {
+        const float k = (v.D + z) / v.D;
+        const float l = v.ex + (v.cx - hw * 1.3f - v.ex) * k, rr = v.ex + (v.cx + hw * 1.3f - v.ex) * k;
+        const float span = std::max(rr - l, 1.f);
+        float u = std::fmod(t * std::fabs(speed) + phase * span, span);
+        if (u < 0.f) u += span;
+        return speed > 0.f ? l + u : rr - u;
+    };
+    for (Landmark& m : marks_) {
+        const float ga = gateA(m.gate);
+        if (ga <= 0.f) continue;
+        float x = m.x, y = m.y;
+        if (m.type == L_PLANE || m.type == L_HELI || m.type == L_BALLOON) {
+            const float speed = m.type == L_PLANE ? 75.f : m.type == L_HELI ? 22.f : 2.5f;
+            x = wrapX(m.z, speed * m.p0, m.seed);
+            if (m.type == L_BALLOON) y += 6.f * std::sin(t * 0.2f + m.seed * 9.f);
+        }
+        if (!inView(x, m.z, m.w * (m.type == L_PLANE ? 30.f : 1.f))) continue;
+        const float a = ga * sizeA(m.h, m.z) * world;
+        if (a <= 0.003f && m.type != L_PLANE) continue;
+        Board b;
+        b.a[0] = x; b.a[1] = y; b.a[2] = m.z; b.a[3] = m.h;
+        b.b[0] = m.w; b.b[1] = (float)(8 + m.type); b.b[2] = m.seed; b.b[3] = a;
+        b.c[0] = m.p0; b.c[1] = b.c[2] = b.c[3] = 0.f;
+        for (int i = 0; i < 4; i++) { b.d[i] = 0.f; b.e[i] = 0.f; }
+        if (a > 0.003f) boards_.push_back(b);
+        const float la = ga * world;
+        switch (m.type) {
+        case L_CABIN:
+            light(vec3(x, y + m.h * 0.3f, m.z - 0.5f), m.h * 0.9f, warm, 0.1f * la);
+            break;
+        case L_CAR:
+            light(vec3(x + m.w * 0.95f * m.p0, y + m.h * 0.42f, m.z - 0.3f), m.h * 0.35f, white, 0.8f * la);
+            light(vec3(x + m.w * 0.95f * m.p0 + m.p0 * m.h * 2.f, y + m.h * 0.3f, m.z - 0.3f), m.h * 1.6f, white, 0.12f * la);
+            break;
+        case L_PYLON:
+            light(vec3(x, y + m.h * 1.0f, m.z), 1.2f, red, 0.5f * la * blink(0.4f, 0.f));
+            break;
+        case L_SPIRE:
+            light(vec3(x - m.h * 0.22f, y + m.h * 0.3f, m.z - 1.f), m.h * 0.35f, warm, 0.12f * la);
+            break;
+        case L_MAST:
+            for (int i = 1; i <= 3; i++)
+                light(vec3(x, y + m.h * (i == 3 ? 1.f : i * 0.33f), m.z - 1.f), 3.f, red, 0.85f * la * blink(0.5f, 0.f));
+            break;
+        case L_TURBINE:
+            light(vec3(x, y + m.h * 0.68f, m.z - 1.f), 2.5f, red, 0.75f * la * blink(0.5f, 1.3f));
+            break;
+        case L_SKYLINE:
+            light(vec3(x + 0.05f * m.w, y + m.h * 1.06f, m.z - 1.f), 5.f, red, 0.8f * la * blink(0.45f, 2.f));
+            light(vec3(x, y + m.h * 0.3f, m.z - 5.f), m.w * 1.4f, warm, 0.06f * la);
+            break;
+        case L_PLANE: {
+            const float dir = m.p0;
+            // the contrail behind it, its nav lights
+            Board tr = b;
+            const float len = 650.f;
+            tr.a[0] = x - dir * (len + m.h * 0.5f); tr.a[1] = y + m.h * 0.5f - 20.f; tr.a[3] = 40.f;
+            tr.b[0] = len; tr.b[1] = 17.f; tr.b[3] = ga * world * smoothstepf(1.f, 4.f, 40.f * v.D / (v.D + m.z) / pxW_);
+            tr.c[0] = dir;
+            if (tr.b[3] > 0.003f) boards_.push_back(tr);
+            light(vec3(x + dir * m.h * 0.5f, y + m.h * 0.47f, m.z - 1.f), 2.f, white, 0.9f * la);
+            light(vec3(x + dir * m.h * 1.6f, y + m.h * 0.4f, m.z - 1.f), m.h * 1.2f, white, 0.07f * la);
+            light(vec3(x, y + m.h * 0.48f, m.z - 1.f), 1.5f, red, 0.9f * la);
+            light(vec3(x, y + m.h * 0.48f, m.z + 1.f), 1.5f, green, 0.6f * la);
+            light(vec3(x - dir * m.h * 0.45f, y + m.h * 0.68f, m.z - 1.f), 1.5f, white, 0.9f * la * blink(0.7f, m.seed * 6.f));
+            light(vec3(x, y + m.h * 0.56f, m.z - 1.f), 1.5f, red, 0.7f * la * blink(0.55f, 1.f));
+            break;
+        }
+        case L_HELI:
+            light(vec3(x, y + m.h * 0.7f, m.z - 1.f), 1.2f, red, 0.85f * la * blink(0.6f, 0.5f));
+            light(vec3(x + m.p0 * m.h * 0.3f, y + m.h * 0.3f, m.z - 1.f), 1.2f, white, 0.6f * la);
+            break;
+        case L_BALLOON:
+            light(vec3(x, y + m.h * 0.3f, m.z - 1.f), m.h * 0.5f, warm, 0.18f * la * (0.7f + 0.3f * std::sin(t * 0.7f + m.seed * 9.f)));
+            break;
+        default: break;
+        }
+    }
+    // the town's lights, scattered over a few kilometers
+    {
+        const float ga = gateA(110.f) * world;
+        if (ga > 0.f) {
+            Rng tr(netSeed_ ^ 0x70A7ull);
+            for (int i = 0; i < 90; i++) {
+                const float x = townX_ + tr.range(-650.f, 650.f) * (1.f + 0.3f * tr.uniform());
+                const float z = tr.range(1700.f, 2700.f);
+                const float hgt = tr.range(2.f, 18.f) * (tr.chance(0.1f) ? 3.f : 1.f);
+                const vec3 c = tr.chance(0.75f) ? warm : vec3(0.85f, 0.92f, 1.f);
+                const float tw = 0.85f + 0.15f * std::sin(t * tr.range(0.2f, 0.6f) + i);
+                light(vec3(x, myc::surf(x) + hgt, z), 4.f, c, 0.55f * ga * tw);
+            }
+            // a highway crossing the plain: headlights one way, tail lights the other
+            const float gh = gateA(130.f) * world;
+            for (int i = 0; i < 28; i++) {
+                const bool east = i % 2 == 0;
+                const float z = 1300.f + (east ? 0.f : 18.f);
+                const float x = wrapX(z, east ? 30.f : -30.f, (float)i / 28.f + (east ? 0.f : 0.017f));
+                light(vec3(x, myc::surf(x) + 1.f, z), 2.f, east ? white : red, (east ? 0.6f : 0.5f) * gh);
+            }
+        }
     }
 }
 
@@ -1362,6 +1586,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     boards_.clear();
     buildFlora();
     buildShroomBoards();
+    buildLandmarks();
     order_.clear();
     for (int i = 0; i < (int)boards_.size(); i++) order_.push_back({boards_[i].a[2], i});
     std::sort(order_.begin(), order_.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
@@ -1562,6 +1787,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             const float rr = 30.f * pxW_;
             glow(vec3(0.f, myc::SPORE_Y, 0.f), rr * 1.6f, lerp(pal_.thread, pal_.threadTip, 0.5f), 0.3f * bright, 2, 0.f);
         }
+        ginst_.insert(ginst_.end(), markGlow_.begin(), markGlow_.end());
         for (const Spore& s : spores_) {
             if (s.age < 0.f) continue;
             const float t = s.age / s.life;
