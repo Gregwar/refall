@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Forty-five universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty-four universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -109,10 +109,6 @@ song, and songs change universe with a transition on the beat. Forty-five univer
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row floats calmly to the shelves of a personal library, shelved in the order the lines come so the collection is the history of the game, every book a cleared cell, as a cosy study opens into a tall long room and new bookcases are carried in as they fill; the drop runs a soft light along the spines<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
-<tr>
-<td><img src="docs/universes/groceries.jpg"><br><b>GROCERIES</b>: a cashier's checkout counter seen from above, the pieces groceries on the belt; each cleared row glides across the scanner with a soft beep and is packed neatly into an open bag, full bags are set aside, the receipt curls longer and the customer's things gather on the counter; the drop glows softly along the belt<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
-</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
@@ -130,6 +126,7 @@ Disabled for now (not built; their code stays in the repository):
 | RIPPLES | Cut stone blocks in still water seen from above, rippled by every move; on hold |
 | STAR CHART | An engraved celestial map filling with constellations; replaced by CELESTIAL OCEAN |
 | STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
+| GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -189,5 +186,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
