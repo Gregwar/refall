@@ -27,13 +27,13 @@
 //
 // The song: calm is the still page; mid sets the crossing's lamps glowing red in turn on the two-beat grid ("kan"
 // lettered in red by the lit one) and the wind chime swaying; a peak adds the lighthouse's warm beam sweeping slowly
-// over the sea and short focus lines reaching in from the page's edges. **The drop is a full-page splash**: the
-// drawings fade back to the paper, the frames of their panels break apart and drift away, a burst of color floods
-// the page from the well out (the variant's three burst colors), focus lines burst in from the page's edges toward
-// the well (easing in over half a second) and a huge "DON!" is lettered down the left column in a bold color; while
-// it lasts, a rumble of "GO" letters builds up on the right on the two-beat grid and a few focus lines lunge in with
-// it. After, the panels come back. A Tetris inks four elements, bursts color and focus lines in and letters "ZUDON!"
-// over the right column, its toast in a spiky balloon. Slow motion is a quiet moment: a deep blue night settles over
+// over the sea and short focus lines reaching in from the page's edges. **The drop is one of six manga moments**
+// (drops.cpp), never the same twice in a row: SPLASH (the drawings fade back to the paper, the frames of their
+// panels break apart and drift away, a burst of color floods the page from the well out, focus lines burst in from
+// the page's edges toward the well and a huge "DON!" is lettered down the left column in a bold color, a rumble of
+// "GO" letters building up on the right on the two-beat grid, a few focus lines lunging in with it), DASH, PANELS,
+// IMPACT, SHOJO and BARRAGE. After, the panels come back. A Tetris inks four elements, bursts color and focus lines
+// in and letters "ZUDON!" over the right column, its toast in a spiky balloon. Slow motion is a quiet moment: a deep blue night settles over
 // the drawings, pink petals drift down through them and "SHIIN" (the sound of silence) is lettered in outline. Game
 // over turns the stack back to pencil from the top, then erases it.
 //
@@ -170,15 +170,10 @@ std::string upper(std::string s) {
 }
 
 // The sound effects (katakana).
-const char* SFX_DON = "\xE3\x83\x89\xE3\x83\xB3\xEF\xBC\x81";            // ドン！
-const char* SFX_GO = "\xE3\x82\xB4";                                     // ゴ
 const char* SFX_ZUDON = "\xE3\x82\xBA\xE3\x83\x89\xE3\x83\xB3\xEF\xBC\x81"; // ズドン！
 const char* SFX_KAN = "\xE3\x82\xAB\xE3\x83\xB3";                         // カン
 const char* SFX_SHIIN = "\xE3\x82\xB7\xE3\x83\xBC\xE3\x83\xB3";           // シーン
 
-// SFX styles: 0 a white letter outlined in ink on a paper margin, 1 a black letter on a paper margin, 2 a thin
-// outlined letter (silence), 3 a bold color outlined in ink on a paper margin, 4 the crossing's red.
-enum { SFX_OUTLINED = 0, SFX_BLACK = 1, SFX_THIN = 2, SFX_COLOR = 3, SFX_LAMP = 4 };
 
 } // namespace
 
@@ -561,9 +556,10 @@ void MangaUniverse::onEvent(const GameEvent& ev, const Game& game) {
     }
 }
 
-void MangaUniverse::addSfx(const std::string& text, V2 at, float size, float angle, float life, bool vertical, int style, float in) {
+MangaUniverse::Sfx& MangaUniverse::addSfx(const std::string& text, V2 at, float size, float angle, float life, bool vertical, int style, float in) {
     Sfx s{text, at, size, angle, 0.f, life, in, vertical, style};
     sfx_.push_back(s);
+    return sfx_.back();
 }
 
 // =====================================================================================================
@@ -764,7 +760,7 @@ void MangaUniverse::flushInk() {
     if (verts_.empty()) return;
     glUseProgram(progInk_);
     set2f(progInk_, "uRes", (float)width_, (float)height_);
-    glUniform3fv(ugl::U(progInk_, "uClip"), manga::P_COUNT * 4, &clipEq_[0][0][0]);
+    glUniform3fv(ugl::U(progInk_, "uClip"), CLIP_SLOTS * 4, &clipEq_[0][0][0]);
     set1f(progInk_, "uScale", s_);
     set1f(progInk_, "uPrint", print_ ? 1.f : 0.f);
     ugl::set3f(progInk_, "uPaper", paper_);
@@ -777,10 +773,19 @@ void MangaUniverse::flushInk() {
 
 // Each panel's four edges as half-planes in pixels (inside: dot(n, p) + c >= 0).
 void MangaUniverse::setClips() {
-    for (int i = 0; i < manga::P_COUNT; i++) {
-        const manga::Panel& p = page_.panels[i];
+    for (int i = 0; i < CLIP_SLOTS; i++)
         for (int e = 0; e < 4; e++) {
-            const vec2 a = px(p.c[e]), b = px(p.c[(e + 1) % 4]);
+            clipEq_[i][e][0] = clipEq_[i][e][1] = 0.f;
+            clipEq_[i][e][2] = 1.f;
+        }
+    for (int i = 0; i < manga::P_COUNT; i++) setClip(i, page_.panels[i].c);
+    elemBox_.clear();
+}
+
+void MangaUniverse::setClip(int i, const V2* c) {
+    {
+        for (int e = 0; e < 4; e++) {
+            const vec2 a = px(c[e]), b = px(c[(e + 1) % 4]);
             // corners run clockwise on screen (y down): the inside is to the right of each edge
             float nx = -(b.y - a.y), ny = b.x - a.x;
             const float l = std::max(1e-5f, std::hypot(nx, ny));
@@ -875,10 +880,11 @@ void MangaUniverse::drawSfx(const Sfx& s, float alpha) {
     case SFX_THIN: st = {paper_, 1.f, ink_, 1.f, std::max(1.5f, cap * 0.028f), paper_, 0.f, 0.f}; break;
     case SFX_COLOR: st = {cur_[K_SFX], 1.f, ink_, 1.f, cap * 0.05f, paper_, 1.f, cap * 0.07f}; break;
     case SFX_LAMP: st = {hue(manga::H_LAMP), 1.f, ink_, 1.f, std::max(1.2f, cap * 0.05f), paper_, 1.f, cap * 0.09f}; break;
+    case SFX_WHITE: st = {paper_, 1.f, ink_, 1.f, cap * 0.06f, paper_, 0.f, 0.f}; break;
     default: st = {paper_, 1.f, ink_, 1.f, cap * 0.05f, paper_, 1.f, cap * 0.07f}; break;
     }
     std::vector<float> q;
-    const vec2 c = px(s.at);
+    const vec2 c = px(s.at + s.vel * s.t);
     const std::vector<int> cps = decode(s.text);
     // letters one by one, so each has its own tilt
     std::vector<std::string> letters;
@@ -920,9 +926,30 @@ void MangaUniverse::drawSfx(const Sfx& s, float alpha) {
 // inker. A panel's ground (no pencil) has its washes laid in faintly from the start (the colorist's flats). fade
 // < 1 takes the ink and the color off again (a new song), leaving the pencil.
 void MangaUniverse::drawElement(const manga::Element& e, float inkT, float fade, float rotA) {
-    const int clip = e.panel;
+    const int clip = clipOverride_ >= 0 ? clipOverride_ : e.panel;
     const V2* pv = rotA != 0.f ? &e.pivot : nullptr;
     const float k = inkT < 0.f ? -1.f : inkT / INK_S;
+    if (artMode_ != 0) {
+        // the drop's impact frames: the lines only, no color (negative: the ink's lines in paper, on an ink ground)
+        const vec3 line = artMode_ == 1 ? paper_ : ink_, knock = artMode_ == 1 ? ink_ : paper_;
+        if (k < 0.f) {
+            for (const manga::Stroke& s : e.strokes) strokeLine(s.pts, 1.0f, 0.f, s.closed, 1.f, line, 0.45f * fade, clip, pv, rotA);
+            return;
+        }
+        const float tones = smoothstepf(0.4f, 1.f, k) * fade, lineK = easeOut(k / 0.65f);
+        for (const manga::Fill& f : e.fills) {
+            if (f.tone.kind == manga::TONE_WASH) continue;
+            if (f.tone.kind == manga::TONE_SOLID) {
+                if (f.tone.color == manga::C_INK) fillPoly(f.pts, f.tone, 1.f, line, tones, clip, f.strip, pv, rotA);
+                else if (f.tone.color == manga::C_PAPER) fillPoly(f.pts, f.tone, 1.f, knock, tones, clip, f.strip, pv, rotA);
+                continue;
+            }
+            fillPoly(f.pts, f.tone, tones, line, fade, clip, f.strip, pv, rotA);
+        }
+        for (const manga::Stroke& s : e.strokes)
+            strokeLine(s.pts, s.width, s.taper, s.closed, lineK, s.color == manga::C_PAPER ? knock : line, fade, clip, pv, rotA);
+        return;
+    }
     // the pencil sketch, fading as the ink covers it
     const float pencilA = k < 0.f ? 1.f : 1.f - smoothstepf(0.4f, 1.f, k) * fade;
     if (!e.pencil)
@@ -1060,7 +1087,7 @@ void MangaUniverse::drawBurst(float amt) {
 }
 
 // Focus lines bursting in from the page's edges toward the well. reach 0..1: how far in they come.
-void MangaUniverse::drawSplash(float reach, float t) {
+void MangaUniverse::drawSplash(float reach, float t, const vec3& color) {
     if (reach <= 0.002f) return;
     Rng r(0xF0C05ull);
     const V2 c{0.f, 0.4f};
@@ -1090,7 +1117,7 @@ void MangaUniverse::drawSplash(float reach, float t) {
         const V2 o{c.x + ca * R, c.y + sa * R};
         const float half = wBase * (R - inner) / 6.f;
         manga::Tone tn;
-        fillPoly({tip, o + nrm * half, o - nrm * half}, tn, 1.f, ink_, 1.f, -1);
+        fillPoly({tip, o + nrm * half, o - nrm * half}, tn, 1.f, color, 1.f, -1);
     }
 }
 
@@ -1582,13 +1609,30 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     if (!dropMode_) dropT_ = -1.f;
     else if (dropT_ >= 0.f) dropT_ += dt;
     const bool splashing = isDrop && dropT_ >= 0.f;
+    const double beatNow = music.hasSong ? music.beat : time_ * 2.0;
+    // ---- The drop's effect: one per drop, another every 32 beats of a long one.
     if (splashing && !donShown_) {
         donShown_ = true;
-        if (dropT_ < 2.f) addSfx(SFX_DON, {-16.3f, 1.6f}, 3.3f, -0.08f, 1e9f, true, SFX_COLOR, 0.45f);
-        rumble_ = 0;
+        startFx(pickFx(), beatNow);
     }
-    // the splash eases in over half a second, and out over a second and a half
-    splash_ = splashing ? std::min(1.f, splash_ + dt / 0.5f) : std::max(0.f, splash_ - dt / 1.5f);
+    if (splashing && fx_ >= 0) {
+        if (beatNow - fxBeat0_ >= 32.0) startFx(pickFx(), beatNow);
+        const long n = (long)std::floor(beatNow - fxBeat0_);
+        if (n - fxStep_ > 4) fxStep_ = n - 1;
+        while (fxStep_ < n && !f.paused) {
+            fxStep_++;
+            if (fxStep_ >= 0) fxBeat(fx_, fxStep_, beatNow, music.bpm);
+        }
+    }
+    if (!splashing) fx_ = -1;
+    splash_ = 0.f;
+    for (int i = 0; i < DF_COUNT; i++) {
+        // eased in over half a second, and out over a second and a half (faster when the drop moves on)
+        const bool on = splashing && i == fx_;
+        fxAmt_[i] = on ? std::min(1.f, fxAmt_[i] + dt / 0.5f) : std::max(0.f, fxAmt_[i] - dt / (splashing ? 0.4f : 1.5f));
+        if (on || fxAmt_[i] > 0.f) fxT_[i] += dt;
+        splash_ = std::max(splash_, fxAmt_[i]);
+    }
 
     // ---- The two-beat grid: the lamps, the chime, the rumble.
     {
@@ -1608,13 +1652,6 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
                             addSfx(SFX_KAN, at, 0.5f, l ? 0.18f : -0.18f, 0.7f, false, SFX_LAMP, 0.15f);
                         }
                     chimeV_ += (step & 1 ? 1.f : -1.f) * (0.35f + 0.35f * wp);
-                }
-                if (splashing && splash_ > 0.5f) {
-                    // the rumble builds up the right column, a letter every two beats
-                    const int slot = rumble_ % 6;
-                    const V2 at{slot % 2 ? 18.4f : 15.3f, 7.6f - slot * 2.9f};
-                    addSfx(SFX_GO, at, 1.35f, (slot % 2 ? 0.12f : -0.12f), 4.f * 60.f / std::max(60.f, music.bpm) * 3.f, false, SFX_BLACK, 0.2f);
-                    rumble_++;
                 }
             }
         }
@@ -1658,7 +1695,22 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     for (Impact& im : impacts_) im.t += dt;
     impacts_.erase(std::remove_if(impacts_.begin(), impacts_.end(), [](const Impact& im) { return im.t >= 0.3f; }), impacts_.end());
     for (Sfx& s : sfx_) s.t += dt;
-    sfx_.erase(std::remove_if(sfx_.begin(), sfx_.end(), [&](const Sfx& s) { return s.t >= s.life || (s.life > 1e8f && splash_ <= 0.f && !splashing); }), sfx_.end());
+    sfx_.erase(std::remove_if(sfx_.begin(), sfx_.end(),
+                              [&](const Sfx& s) { return s.t >= s.life || (s.fx >= 0 && fxAmt_[s.fx] <= 0.f && fx_ != s.fx); }),
+               sfx_.end());
+    // the drop's shock waves, shards, balloons, jolts
+    for (Ring& r : rings_) r.t += dt;
+    rings_.erase(std::remove_if(rings_.begin(), rings_.end(), [](const Ring& r) { return r.t >= r.life; }), rings_.end());
+    for (Shard& x : shards_) {
+        x.t += dt;
+        x.p = x.p + x.v * dt;
+        x.v = x.v * std::exp(-dt * 1.5f);
+        x.rot += x.vr * dt;
+    }
+    shards_.erase(std::remove_if(shards_.begin(), shards_.end(), [](const Shard& x) { return x.t >= x.life; }), shards_.end());
+    for (Pop& p : pops_) p.t += dt;
+    pops_.erase(std::remove_if(pops_.begin(), pops_.end(), [](const Pop& p) { return p.t >= p.life; }), pops_.end());
+    jolt_ = approach(jolt_, 0.f, 7.f, dt);
     if (tetrisT_ >= 0.f) {
         tetrisT_ += dt;
         if (tetrisT_ > 2.6f) tetrisT_ = -1.f;
@@ -1676,8 +1728,16 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     glClearColor(paper_.x, paper_.y, paper_.z, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // the drawings
-    drawPanels(time_, wm, wp);
+    // the drawings (jolting with the drop's barrage)
+    const float aS = ease(fxAmt_[DF_SPLASH]), aD = ease(fxAmt_[DF_DASH]), aP = ease(fxAmt_[DF_PANELS]);
+    const float aI = ease(fxAmt_[DF_IMPACT]), aJ = ease(fxAmt_[DF_SHOJO]), aB = ease(fxAmt_[DF_BARRAGE]);
+    {
+        const vec2 c0 = viewC_;
+        const float j = 0.32f * jolt_ * aB;
+        viewC_ = vec2{c0.x + joltDir_.x * j, c0.y + joltDir_.y * j};
+        drawPanels(time_, wm, wp);
+        viewC_ = c0;
+    }
     // slow motion: night settles over the drawings (a deep blue wash, night tones), petals drift down through them
     if (slow_ > 0.01f) {
         // the night's tone is the darker of the two inks, the petals the lighter, blushed pink
@@ -1728,34 +1788,42 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
             discPx(c.x, c.y, rr, light, ease(slow_), clip);
         }
     }
-    // the splash: the drawings fade back to the paper
-    if (splash_ > 0.001f)
-        for (int i = manga::P_A; i < manga::P_COUNT; i++) {
-            const manga::Panel& p = page_.panels[i];
-            if (!p.art) continue;
-            manga::Tone tn;
-            fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, 0.9f * ease(splash_), i);
-        }
-    // the burst of color behind the focus lines: the drop's, a Tetris'
+    // the drop: the drawings fade back to the paper (the splash's, the dash's, the barrage's)
     {
-        float amt = ease(splash_);
+        const float k = std::max(0.9f * aS, std::max(0.7f * aD, 0.35f * aB));
+        if (k > 0.001f)
+            for (int i = manga::P_A; i < manga::P_COUNT; i++) {
+                const manga::Panel& p = page_.panels[i];
+                if (!p.art) continue;
+                manga::Tone tn;
+                fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, k, i);
+            }
+    }
+    const double beat = music.hasSong ? music.beat : time_ * 2.0;
+    if (aD > 0.001f) drawDash(aD, fxT_[DF_DASH], beat);
+    if (aJ > 0.001f) drawShojo(aJ, beat);
+    if (aB > 0.001f) drawBarrage(aB, beat);
+    if (aI > 0.001f) drawImpact(aI, beat);
+    if (aP > 0.001f) drawPanelBreak(aP, beat);
+    // the burst of color behind the focus lines: the splash's, a Tetris'
+    {
+        float amt = aS;
         if (tetrisT_ >= 0.f) amt = std::max(amt, 0.6f * easeOut(tetrisT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, tetrisT_)));
-        burst_ = amt;
+        burst_ = std::max(amt, aI);
         drawBurst(amt);
     }
-    // focus lines: the drop's burst, a Tetris', and short ones at a peak
+    // focus lines: the splash's burst, a Tetris', and short ones at a peak
     {
-        float reach = ease(splash_);
+        float reach = aS;
         if (tetrisT_ >= 0.f) reach = std::max(reach, 0.7f * easeOut(tetrisT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, tetrisT_)));
-        reach = std::max(reach, 0.2f * wp * (1.f - slow_));
-        const double beat = music.hasSong ? music.beat : time_ * 2.0;
-        drawSplash(reach, (float)(beat / 2.0));
+        reach = std::max(reach, 0.2f * wp * (1.f - slow_) * (1.f - splash_));
+        drawSplash(reach, (float)(beat / 2.0), ink_);
     }
     flushInk();
     // the sound effects on the page (under the HUD's panels)
     for (const Sfx& s : sfx_) {
-        float a = 1.f - smoothstepf(s.life - 0.35f, s.life, s.t);
-        if (s.life > 1e8f) a = ease(splash_);
+        float a = s.life > 1e8f ? 1.f : 1.f - smoothstepf(s.life - 0.35f, s.life, s.t);
+        if (s.fx >= 0) a *= ease(fxAmt_[s.fx]);
         drawSfx(s, a * std::min(1.f, s.t / std::max(0.05f, s.in * 0.5f)));
     }
     if (slow_ > 0.01f) {
@@ -1770,7 +1838,7 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         manga::Tone tn;
         fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, 1.f, -1);
     }
-    drawFrames(ease(splash_));
+    drawFrames(std::max(aS, std::max(aP, aI)));
     flushInk();
 
     // ---- The bridge: the world gives way to the bridge's color (the stack turns to its ink).
@@ -1806,7 +1874,7 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_manga() {
     static const UniverseEntry e{
-        "MANGA", "a manga color page in ink, screentones and watercolor washes, inked then colored panel by panel as rows clear; the drop is a full-page splash of color, focus lines and a huge sound effect",
+        "MANGA", "a manga color page in ink, screentones and watercolor washes, inked then colored panel by panel as rows clear; the drop is one of six manga moments: a splash of color, speed lines, a panel break, impact frames, a shojo bloom or a barrage of sound effects",
         [] { return std::unique_ptr<Universe>(new MangaUniverse()); },
         // Graphic and dramatic: it suits energetic songs with clear drops best.
         [](const SongLook& l) { return 0.75f + 0.25f * l.dynamics + 0.15f * l.density; },

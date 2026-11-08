@@ -40,7 +40,7 @@ in vec4 vCol;
 flat in vec4 vTone;
 flat in vec4 vOrig;
 out vec4 frag;
-uniform vec3 uClip[48];   // 12 panels x 4 edges: inside where dot(e.xy, p) + e.z >= 0
+uniform vec3 uClip[76];   // 19 panels x 4 edges (the page's, then the drop's): inside where dot(e.xy, p) + e.z >= 0
 uniform float uScale;     // pixels per 1080p pixel
 uniform float uPrint;     // 1: washes printed in CMYK halftone
 uniform vec3 uPaper;
