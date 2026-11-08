@@ -1,28 +1,28 @@
 // MEGACITY: a single hut on a riverbank grows into a city covering the whole planet, with the cleared lines. At the
 // first line it is a hut at dusk, its window glowing with the fire, smoke rising from its roof, trees around it and
-// the river behind it mirroring the afterglow. Each clear raises a new ring of buildings out of the ground around it:
-// a hamlet, a village with its church, a walled medieval town of steep roofs, a stone city of mansards, glass towers,
-// supertalls with setbacks and spires, arcologies kilometers high and wide, the space elevator's tower and its tether
-// rising into orbit, until the city covers the continents, then the oceans, and the planet is one glowing ball of
-// lights under an orbital ring being built around it.
+// the river behind it mirroring the afterglow. The city sprawls organically, along the river, the highways and the
+// coast of a bay, in lobes and fingers around parks, satellite towns growing on their own and merging: a village with
+// its church, a walled medieval town, a stone city of perimeter blocks; then a long skyscraper stage (downtown
+// clusters of towers taller and more numerous line after line, then megatalls), arcologies, the space elevator's
+// tether rising into orbit, the continents, the oceans, until the planet is one glowing ball of lights under an
+// orbital ring being built around it.
 //
-// The growth is G = ln(the city's radius in meters), from a table of lines (4 m at the start, a village at ~9 lines,
-// the walled town at ~12, skyscrapers at ~25, arcologies at ~46, the continent at ~68, the planet at ~110) then the
-// ring's construction. The city's plan is generated once per game (city.cpp): a log-polar grid of lots around the
-// hut (square lots, ever larger outward: the older the ring, the smaller its houses), each building carrying the
-// radius at which it rises; the buildings shader raises them out of the ground as the edge passes them (a wave
-// rolling outward with each spurt), and the ground's shader draws the streets, the avenues' traffic and the lots too
-// small to draw as buildings (their rooftops and lit windows) from the same grid. Dusk turns to night as the town
-// grows, so the lights read: the windows, the street lamps, the traffic, the red beacons on the towers.
+// The lines drive a frontier F (meters, a table interpolated in log space: the first towers at ~28 lines, megatalls
+// from ~70, arcologies from ~88, the continent from ~110, the planet covered at 152, then the ring); each place rises
+// when F passes its organic distance D (mcity::field, the same on the CPU and in the ground's shader). The plan is
+// generated once per game (city.cpp): lots sized by D on district-turned grids, each built in its era's style, the
+// downtowns' towers planted on their own; the buildings' shader raises each out of the ground as the frontier passes
+// it (and sinks the old town where the towers rise), the ground's shader draws the streets, the highways' traffic and
+// the lots too small to draw as buildings from the same lots. Dusk turns to night as the town grows.
 //
-// The camera pulls back as the city grows: low by the hut at the right of the well, then over the village, then
-// higher and farther with the skyline against the sky and the city's glow on the haze, then the curve of the
-// planet, then the planet as a ball, its night side a web of lights. **The drop** (a real one only) raises a whole
-// new district out of the ground in a wave (the city's radius jumps out by half), and its lights come on block by
-// block on the beat; searchlights sweep the sky from it while the peak lasts. A clear's cells dissolve into light
-// that flows out of the well to the city's edge, which then grows; a Tetris is a big spurt with fireworks over the
-// edge. Slow motion slows the traffic and cools the light; game over turns the lights off from the edge inward, and
-// the next game starts again from a hut (the camera dives back down).
+// The camera pulls back as the city grows: low by the hut at the right of the well, then over the village and the
+// town, then low over the skyline, slowly circling the main downtown and framing its tallest towers, then up over
+// the continent, then the planet as a ball. **The drop** (a real one only) raises a whole new district (a wave of
+// towers in the skyscraper stage) out of the ground (the frontier jumps out by half), and its lights come on patch by
+// patch on the beat; lanterns rise over a town, searchlights sweep the sky over a modern city. A clear's cells
+// dissolve into light that flows out of the well to the city; a Tetris adds fireworks. Slow motion slows the traffic
+// and cools the light; game over turns the lights off from the edge inward, and the next game starts again from a
+// hut (the camera dives back down).
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind it
 // has its own 3D camera.
@@ -167,12 +167,16 @@ constexpr float RING_ALT = 2.6e6f;   // the orbital ring's height
 
 // The journey: lines -> the city's radius (meters), interpolated in log space.
 struct Stage { float lines, radius; };
+// The skyscraper stage is long: the first towers at ~28 lines, megatalls from ~70, arcologies from ~88, the
+// continent from ~110, the planet covered at 152.
 const Stage STAGES[] = {
-    {0, 4.f}, {2, 14.f}, {4, 35.f}, {6, 80.f}, {9, 200.f}, {12, 520.f}, {16, 1300.f}, {20, 3000.f}, {25, 7000.f},
-    {31, 1.6e4f}, {38, 4.e4f}, {46, 1.e5f}, {56, 3.e5f}, {68, 1.e6f}, {82, 3.5e6f}, {96, 1.e7f}, {110, 2.05e7f},
+    {0, 4.f}, {2, 14.f}, {4, 35.f}, {7, 90.f}, {10, 220.f}, {14, 550.f}, {18, 1300.f}, {23, 2600.f}, {28, 4500.f},
+    {34, 6500.f}, {40, 9000.f}, {46, 1.3e4f}, {52, 1.8e4f}, {58, 2.5e4f}, {64, 3.4e4f}, {70, 4.6e4f}, {76, 6.5e4f},
+    {82, 9.5e4f}, {88, 1.4e5f}, {94, 2.2e5f}, {100, 3.8e5f}, {108, 7.e5f}, {116, 1.3e6f}, {124, 2.5e6f}, {132, 5.e6f},
+    {142, 1.e7f}, {152, 2.4e7f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
-const float G_MAX = std::log(2.05e7f);
+const float G_MAX = std::log(2.4e7f);
 
 // Test hooks: ZEN_MEGACITY_LINES=N adds N lines to the city's growth (to look at a stage without playing to it); ZEN_GROW_RATE=R adds R more lines a second (a time-lapse).
 int extraLines(double t) {
@@ -257,9 +261,9 @@ bool MegaCityUniverse::init(int width, int height) {
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
         glBindBuffer(GL_ARRAY_BUFFER, bldVbo_);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 5; i++) {
             glEnableVertexAttribArray(2 + i);
-            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 16, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 20, (void*)(sizeof(float) * 4 * i));
             glVertexAttribDivisor(2 + i, 1);
         }
     }
@@ -384,7 +388,7 @@ void MegaCityUniverse::uploadCity() {
     plan_ = buildMegaCity(citySeed_);
     glBindBuffer(GL_ARRAY_BUFFER, bldVbo_);
     glBufferData(GL_ARRAY_BUFFER, plan_.inst.size() * sizeof(float), plan_.inst.data(), GL_STATIC_DRAW);
-    bldCount_ = (GLsizei)(plan_.inst.size() / 16);
+    bldCount_ = (GLsizei)(plan_.inst.size() / 20);
     cityDirty_ = false;
 }
 
@@ -406,25 +410,41 @@ void MegaCityUniverse::updateCamera(float dt) {
     const float cityR = std::exp(std::min(G, G_MAX));
     const float R = mcity::R_EARTH;
     const float kV = smoothstepf(std::log(6.f), std::log(200.f), G);           // the hut -> the village
+    const float kT = smoothstepf(std::log(1300.f), std::log(3800.f), G);       // the stone city: lower, toward downtown
+    const float kD = smoothstepf(std::log(3800.f), std::log(7000.f), G);       // the skyline
+    const float kL = smoothstepf(std::log(1.4e5f), std::log(6.e5f), G);        // arcologies -> the continent from above
     const float kP = smoothstepf(std::log(2.e6f), std::log(1.6e7f), G);        // the planet as a ball
     const float kO = smoothstepf(G_MAX, G_MAX + 0.9f, G);                       // the ring's view
     tanH_ = std::tan(26.f * PI / 180.f);
-    // the framing (half the view's height at the anchor, meters)
-    const float kS = smoothstepf(std::log(2000.f), std::log(2.e4f), G) * (1.f - smoothstepf(std::log(2.e5f), std::log(2.e6f), G));   // the skyline's stage
-    const float Fc = std::max(lerpf(6.f, 4.2f, kV), lerpf(0.62f, 0.42f, kS) * cityR);
+    const vec3 dc(plan_.downtown[0], 0.f, plan_.downtown[1]);
+    // the town: over the hut, then lower and toward the downtown-to-be as it becomes a stone city
+    const float Fcity = std::max(lerpf(6.f, 4.2f, kV), lerpf(0.62f, 0.4f, kT) * cityR);
+    const float pCity = -6.f - 14.f * kV + 9.f * kT;
+    const vec3 aCity = lerp(vec3(0.f, lerpf(1.3f, 0.f, kV), 0.f), dc * 0.6f, kT);
+    const float sxCity = lerpf(0.68f, 0.f, smoothstepf(std::log(12.f), std::log(400.f), G)) + 0.2f * kT;
+    const float syCity = lerpf(-0.08f, -0.42f, smoothstepf(std::log(30.f), std::log(3000.f), G)) + 0.12f * kT;
+    // the skyline: low, a few degrees under the horizon, framing the tallest towers, circling the downtown slowly
+    const float Htop = mcity::towerH(std::min(cityR, 7.e4f)) * 1.35f;
+    const float tD = saturate(std::log(std::max(cityR, mcity::SKY_F0) / mcity::SKY_F0) / std::log(14.f));
+    const float rDown = 350.f + 2250.f * std::pow(tD, 0.7f);   // the downtown's extent (see city.cpp)
+    const float Fsky = std::max(1.6f * Htop + 60.f, tanH_ * 1.25f * rDown);
+    const vec3 aSky = dc + vec3(0.f, 0.3f * Htop, 0.f);
+    const float pSky = -3.5f;
+    // later: the continent from above, the city's whole extent
+    const float Flate = 0.62f * cityR;
+    const float pLate = -20.f - 10.f * smoothstepf(std::log(1.e6f), std::log(4.e6f), G);
+    const vec3 aLate(0.f, 0.f, 0.f);
+    const float wSky = kD * (1.f - kL), wLate = kD * kL, wCity = 1.f - kD;
+    const float Fc = std::exp(std::log(Fcity) * wCity + std::log(Fsky) * wSky + std::log(Flate) * wLate);
+    const vec3 anchorC = aCity * wCity + aSky * wSky + aLate * wLate;
+    const float pitchDeg = pCity * wCity + pSky * wSky + pLate * wLate;
     const float Fp = R * lerpf(1.0f, 1.25f, kO);
     const float F = std::exp(lerpf(std::log(Fc), std::log(Fp), kP));
-    // the pitch: low over the hut, looking down more and more
-    const float pitchDeg = -6.f - 14.f * kV + 4.f * smoothstepf(std::log(400.f), std::log(3000.f), G) + 7.f * kS -
-                           14.f * smoothstepf(std::log(2.e5f), std::log(2.e6f), G);
     const float pitch = lerpf(pitchDeg, -32.f + 8.f * kO, kP) * PI / 180.f;
-    // the anchor: the hut's middle, the city's center, the planet's center
-    const vec3 aCity(0.f, lerpf(1.3f, 0.f, kV), 0.f);
-    const vec3 anchor = lerp(aCity, vec3(0.f, -R, 0.f), kP);
-    // where the anchor sits on the screen: right of the well by the hut, centered and low as the city spreads
-    const float sx = lerpf(0.68f, 0.f, smoothstepf(std::log(12.f), std::log(400.f), G)) + 0.52f * kP;
-    const float sy = (lerpf(-0.08f, -0.42f, smoothstepf(std::log(30.f), std::log(3000.f), G)) + 0.2f * kS) * (1.f - kP) + lerpf(-0.1f, -0.2f, kO) * kP;
-    const float az = CAM_AZ + 0.05f * std::sin(time_ * 0.021f) - 0.004f * time_ * kP;
+    const vec3 anchor = lerp(anchorC, vec3(0.f, -R, 0.f), kP);
+    const float sx = (sxCity * wCity + 0.4f * wSky) * (1.f - kP) + 0.52f * kP;
+    const float sy = (syCity * wCity - 0.08f * wSky - 0.3f * wLate) * (1.f - kP) + lerpf(-0.1f, -0.2f, kO) * kP;
+    const float az = CAM_AZ + 0.05f * std::sin(time_ * 0.021f) + 0.32f * wSky * std::sin(time_ * 0.011f) - 0.004f * time_ * kP;
     const float yaw = std::atan(sx * tanH_ * aspect_ / std::cos(pitch));
     const float phi = az + yaw;
     vec3 fwd(-std::sin(phi) * std::cos(pitch), std::sin(pitch), -std::cos(phi) * std::cos(pitch));
@@ -433,7 +453,7 @@ void MegaCityUniverse::updateCamera(float dt) {
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
     const float D = F / tanH_;
     vec3 eye = anchor - dirA * D;
-    eye.y = std::max(eye.y, 0.9f);
+    eye.y = std::max(eye.y, 0.9f + 0.05f * Htop * wSky);
     eye_ = eye;
     look_ = fwd;
     camR_ = right;
@@ -603,7 +623,8 @@ void MegaCityUniverse::onEvent(const GameEvent& ev, const Game& game) {
         {
             const float r = std::min(cityR * 0.9f, 6.e6f), ph = 0.5f;
             const float th = r / mcity::R_EARTH, s2 = std::sin(th * 0.5f);
-            const vec3 p(mcity::R_EARTH * std::sin(th) * std::cos(ph), -2.f * mcity::R_EARTH * s2 * s2, mcity::R_EARTH * std::sin(th) * std::sin(ph));
+            vec3 p(mcity::R_EARTH * std::sin(th) * std::cos(ph), -2.f * mcity::R_EARTH * s2 * s2, mcity::R_EARTH * std::sin(th) * std::sin(ph));
+            if (cityR > 3800.f && cityR < 2.e5f) p = vec3(plan_.downtown[0], mcity::towerH(cityR) * 0.6f, plan_.downtown[1]);
             to = toBoard(p);
         }
         to.x = std::clamp(to.x, 6.5f, viewH_.x - 1.5f);
@@ -1112,7 +1133,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     const float overR = over_ > 0.001f ? cityR * 1.02f * (1.f - over_) : 1e30f;
     // the pixel's size at the anchor; lots smaller than a few of them are left to the ground's shader
     const float pxM = camD_ * 2.f * tanH_ / (float)worldT_.h;
-    const float drawR0 = 2.2f * pxM / mcity::LOT_D;
+    const float drawR0 = 2.2f * pxM / 0.07f;
 
     // ---- Lights in the air (meters).
     {
@@ -1210,7 +1231,9 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
             for (size_t i = 0; i + 3 < plan_.trees.size(); i += 4) {
                 const float x = plan_.trees[i], z = plan_.trees[i + 1], sz = plan_.trees[i + 2], sd = plan_.trees[i + 3];
                 const float r = std::sqrt(x * x + z * z);
-                const float keep = 1.f - smoothstepf(std::max(r * 1.1f, 230.f), std::max(r * 1.3f, 300.f), cityR);
+                const float dT = mcity::field(x, z, plan_.sats);
+                const float keep = 1.f - smoothstepf(std::max(dT * 1.1f, 230.f), std::max(dT * 1.4f, 300.f), cityR);
+                (void)r;
                 if (keep <= 0.f) continue;
                 glow(vec3(x, -0.05f, z), sz * keep, tint, world, 2, sd, std::sin(pal_.sunAz) > 0.f ? 0.6f : -0.6f);
             }
@@ -1376,6 +1399,11 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uOverR", overR);
         set1f(p, "uNeon", pal_.neon);
         set4f(p, "uDrop", dropR0_, dropR1_, dropShare, 0.f);
+        {
+            float sv[mcity::SATS * 3];
+            for (int j = 0; j < mcity::SATS; j++) { sv[j * 3] = plan_.sats[j].x; sv[j * 3 + 1] = plan_.sats[j].z; sv[j * 3 + 2] = plan_.sats[j].a; }
+            glUniform3fv(ugl::U(p, "uSats"), mcity::SATS, sv);
+        }
     };
     const float minPx = 2.f * tanH_ / worldT_.h;
 
@@ -1456,8 +1484,8 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         auto drawRange = [&](int a, int b) {
             if (b <= a) return;
             glBindBuffer(GL_ARRAY_BUFFER, bldVbo_);
-            for (int i = 0; i < 4; i++)
-                glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 16, (void*)(sizeof(float) * (16 * (size_t)a + 4 * i)));
+            for (int i = 0; i < 5; i++)
+                glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 20, (void*)(sizeof(float) * (20 * (size_t)a + 4 * i)));
             glDrawArraysInstanced(GL_TRIANGLES, 0, meshCount_, b - a);
         };
         drawRange(first, last);
