@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Forty-one universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -95,15 +95,11 @@ song, and songs change universe with a transition on the beat. Forty-one univers
 </tr>
 <tr>
 <td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a manga color page in ink, screentones and watercolor washes, drawn in pencil, then inked and colored panel by panel as rows clear; the pieces are inked blocks of color under their screentones, the drop is a full-page splash of color, focus lines and a huge sound effect<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/stainedglass.jpg"><br><b>STAINED GLASS</b>: a dim chapel facing a great window, the pieces leaded glass lit by the sun; each cleared row cracks into shards and glazes a pane of the side windows, complete by the song's end, the drop is the sun striking full through the glass in colored shafts<br><sub>🔍 <i>to review</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/brutalist.jpg"><br><b>BRUTALIST</b>: raw board-marked concrete under a hard sun in 3D; the pieces are cast blocks in a slot cut into a monument, the sun moves on with the song and its shadows sweep the plaza, each cleared row has a crane lower a module onto a growing building, the drop is the sun breaking through<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
+<td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/gianttree.jpg"><br><b>GIANT TREE</b>: a 3D world tree growing behind the well with every cleared line, from a tiny sapling in a meadow to a celestial tree whose crown rises through a sea of clouds into the stars; the drop sends light up from its roots and the whole crown blooms<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
 </tr>
 </table>
 
@@ -121,6 +117,7 @@ Disabled for now (not built; their code stays in the repository):
 | SUSHI | Maki in a bento box fed to kawaii cats; on hold |
 | RIPPLES | Cut stone blocks in still water seen from above, rippled by every move; on hold |
 | STAR CHART | An engraved celestial map filling with constellations; replaced by CELESTIAL OCEAN |
+| STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -180,5 +177,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
