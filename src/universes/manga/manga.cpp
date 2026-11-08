@@ -1161,11 +1161,17 @@ void MangaUniverse::drawPiece(const int cells[][2], int n, int type, float dx, f
         const vec2 a = px({p.x - 0.5f, p.y + 0.5f}), b = px({p.x + 0.5f, p.y - 0.5f}); // top-left, bottom-right
         const vec3 ic = tone(ink_);
         // game y grows downward: (0, -1) is above
-        // the outline lies inside the piece; a concave corner gets its square
-        if (!in(cx - 1, cy)) rectPx(a.x, a.y, a.x + wOut, b.y, ic, alpha);
-        if (!in(cx + 1, cy)) rectPx(b.x - wOut, a.y, b.x, b.y, ic, alpha);
-        if (!in(cx, cy - 1)) rectPx(a.x, a.y, b.x, a.y + wOut, ic, alpha);
-        if (!in(cx, cy + 1)) rectPx(a.x, b.y - wOut, b.x, b.y, ic, alpha);
+        // the outline lies inside the piece; a concave corner gets its square. Against another locked piece each
+        // draws half of it, so the shared edge is one line as bold as the outer ones, not two side by side.
+        auto edge = [&](int nx, int ny) {
+            if (!stack_ || nx < 0 || nx >= Game::W || ny < Game::HIDDEN || ny >= Game::H) return wOut;
+            if (stack_->cell(nx, ny).type < 0 || std::fabs(stack_->rowOffset(ny) - stack_->rowOffset(cy)) > 0.02f) return wOut;
+            return wOut * 0.5f;
+        };
+        if (!in(cx - 1, cy)) rectPx(a.x, a.y, a.x + edge(cx - 1, cy), b.y, ic, alpha);
+        if (!in(cx + 1, cy)) rectPx(b.x - edge(cx + 1, cy), a.y, b.x, b.y, ic, alpha);
+        if (!in(cx, cy - 1)) rectPx(a.x, a.y, b.x, a.y + edge(cx, cy - 1), ic, alpha);
+        if (!in(cx, cy + 1)) rectPx(a.x, b.y - edge(cx, cy + 1), b.x, b.y, ic, alpha);
         for (int dxy = 0; dxy < 4; dxy++) {
             const int ox = dxy & 1 ? 1 : -1, oy = dxy & 2 ? 1 : -1;
             if (!in(cx + ox, cy) || !in(cx, cy + oy) || in(cx + ox, cy + oy)) continue;
@@ -1237,7 +1243,9 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
                         n++;
                         done[yy][xx] = true;
                     }
+                stack_ = &g;
                 drawPiece(cells, n, c.type, 0.f, -off, 1.f, 1.f);
+                stack_ = nullptr;
             }
     }
 

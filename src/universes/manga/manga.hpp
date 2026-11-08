@@ -92,6 +92,7 @@ private:
     void syncIds(const Game& g);
     void drawBoard(const Game& g, float t);
     void drawPiece(const int cells[][2], int n, int type, float dx, float dy, float alpha, float inkK);
+    const Game* stack_ = nullptr; // while drawing the locked pieces: the board, so touching pieces share one outline
     struct Crumb { V2 p, v; float r, t, life; int type; };
     std::vector<Crumb> crumbs_;
     struct Fade { int x, y, type; float t; int mask; };
