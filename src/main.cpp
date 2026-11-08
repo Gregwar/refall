@@ -150,7 +150,12 @@ private:
         else glfwGetFramebufferSize(win_, &w, &h);
     }
     void swap() {
-        if (!headless_) glfwSwapBuffers(win_);
+        if (headless_) return;
+        glfwSwapBuffers(win_);
+        // Wait for the frame to be shown: otherwise the driver queues up to a few frames ahead under vsync (more
+        // through PRIME offload), and every key press waits behind them. ZEN_FRAME_QUEUE=1 lets it queue.
+        static const bool queue = std::getenv("ZEN_FRAME_QUEUE") != nullptr;
+        if (!queue) glFinish();
     }
     AudioEngine audio_;
     Library lib_;
