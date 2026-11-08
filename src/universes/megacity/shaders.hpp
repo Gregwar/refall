@@ -64,13 +64,54 @@ float lightDots(vec2 uv, float px, float dens, float seed) {
     return sum;
 }
 const float R_EARTH = 6.371e6;
-const float LOT_R0 = 200.0;
-const float LOT_D = 6.2831853 / 120.0;
 float riverX(float z) {
     float a = abs(z);
     return 14.0 + z * 0.16 * sin(log(a + 30.0) * 2.6) + 18.0 * sin(z * 0.011) * min(1.0, a / 150.0);
 }
-float riverHalfW(float z) { float a = abs(z); return (7.0 + 0.035 * a) * (1.0 - smoothstep(30000.0, 60000.0, a)); }
+float riverHalfW(float z) { float a = abs(z); return (7.0 + 0.022 * a) * (1.0 - smoothstep(50000.0, 80000.0, a)); }
+// the organic field (the same as mcity:: on the CPU, see megacity.hpp)
+uniform vec3 uSats[8];
+float vnL(vec2 p) {
+    vec2 i = floor(p), f = p - i;
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hashLot(i), b = hashLot(i + vec2(1.0, 0.0)), c = hashLot(i + vec2(0.0, 1.0)), d = hashLot(i + vec2(1.0, 1.0));
+    float ab = a + (b - a) * f.x, cd = c + (d - c) * f.x;
+    return ab + (cd - ab) * f.y;
+}
+float ofbm(vec2 p) { return 0.5 * vnL(p) + 0.3 * vnL(p * 2.1 + vec2(5.3, 1.1)) + 0.2 * vnL(p * 4.3 + vec2(1.7, 9.2)); }
+float roadAngle(int k, float r) {
+    return float(k) * 6.2831853 / 6.0 + 0.5 * (hashLot(vec2(float(k), 3.0)) - 0.5) + 0.22 * sin(log(r + 600.0) * 2.1 + 1.7 * float(k));
+}
+float coastSigned(vec2 q) {
+    float along = q.x * 0.96 + q.y * 0.28, across = -q.x * 0.28 + q.y * 0.96;
+    return along - (16000.0 + 0.42 * abs(across) + 9000.0 * (ofbm(q / 11000.0) - 0.5) * 2.0);
+}
+float roadDist(vec2 q, float r) {
+    float ph = atan(q.y, q.x);
+    float d = 1e30;
+    for (int k = 0; k < 6; k++) {
+        float a = ph - roadAngle(k, r);
+        a -= 6.2831853 * floor(a / 6.2831853 + 0.5);
+        d = min(d, abs(a) * r);
+    }
+    return d;
+}
+float field(vec2 q) {
+    float r = length(q) + 1e-3;
+    float cd = abs(q.y) < 80000.0 ? max(0.0, abs(q.x - riverX(q.y)) - riverHalfW(q.y)) : 1e9;
+    cd = min(cd, roadDist(q, r));
+    if (r < 5.0e5) cd = min(cd, abs(coastSigned(q)));
+    float c = 0.58 + 0.72 * clamp(cd / (0.1 * r + 150.0), 0.0, 1.0);
+    float lr = log(r + 50.0);
+    vec2 u = q / r;
+    float n1 = ofbm(u * 2.6 + lr * vec2(1.1, 0.6));
+    float n2 = ofbm(vec2(u.x * 8.0 - lr * 2.3 + 17.0, u.y * 8.0 + lr * 1.7));
+    float n = exp((n1 - 0.5) * 1.5 + (n2 - 0.5) * 0.7);
+    float D = r * c * n;
+    for (int j = 0; j < 8; j++) D = min(D, uSats[j].z + length(q - uSats[j].xy) * c * n * 1.15);
+    float k = clamp((lr - 12.6) / 2.4, 0.0, 1.0);
+    return D + (r * (0.8 + 0.3 * n1) - D) * k * k * (3.0 - 2.0 * k);
+}
 )";
 
 // The world's light, shared by the world's shaders.
@@ -99,7 +140,7 @@ vec3 atmos(vec3 col, vec3 wp) {
 }
 vec3 eraColor(float r, float seed) {
     vec3 c = mix(uWinWarm, uWinCool, smoothstep(4000.0, 12000.0, r) * (0.55 + 0.45 * seed));
-    c = mix(c, uWinAccent, smoothstep(30000.0, 90000.0, r) * smoothstep(0.45, 0.85, seed) * 0.6 + uNeon * smoothstep(5000.0, 20000.0, r) * step(0.7, seed));
+    c = mix(c, uWinAccent, smoothstep(30000.0, 90000.0, r) * smoothstep(0.45, 0.85, seed) * 0.6 + uNeon * 0.55 * smoothstep(5000.0, 20000.0, r) * step(0.75, seed));
     return c;
 }
 // how lit a district is: the staging, the night, the drop's blocks coming on, the game over's blackout
@@ -178,20 +219,21 @@ vec3 cityFar(vec2 q, vec3 n, float r, float foot, float lit) {
     return c * (0.025 + 0.32 * glow * glow) * lit + mix(c, vec3(1.0), 0.4) * dots * 1.1;
 }
 
-// The city's carpet at q (meters, polar around the hut), seen at a pixel's size `foot`: returns the albedo, adds the
-// lights to `em`.
-vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, inout vec3 em, out float built) {
+// The city's carpet at q (meters, polar around the hut), seen at a pixel's size `foot`, its organic distance D:
+// returns the albedo, adds the lights to `em`. The lots are square, sized by D (an octave of D a level), on grids
+// turned district by district (the same as city.cpp), plazas where the districts meet.
+vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout vec3 em, out float built) {
     built = 0.0;
-    float edge = max(foot * 1.5, r * 0.004);
-    float inside = 1.0 - smoothstep(uCityR - edge, uCityR + edge, r);
+    float edge = max(foot * 1.5, D * 0.012);
+    float inside = 1.0 - smoothstep(uCityR - edge, uCityR + edge, D);
     if (inside <= 0.0) return base;
-    float phi = atan(q.y, q.x);
-    if (phi < 0.0) phi += 6.2831853;
     float night = 0.25 + 0.75 * uNightK;
-    vec3 pave = mix(vec3(0.3, 0.26, 0.22), vec3(0.08, 0.08, 0.09), smoothstep(1500.0, 6000.0, r));
+    vec3 pave = mix(vec3(0.3, 0.26, 0.22), vec3(0.08, 0.08, 0.09), smoothstep(1500.0, 6000.0, D));
     vec3 col = base;
-    if (r < LOT_R0) {
-        // the village: packed earth and cobbles near the houses, the road lamps once it is a town
+    float ks = 0.12 * D + 40.0;
+    float lit = districtLit(D, vnL(q / ks));
+    if (D < 300.0 && r < 300.0) {
+        // the village: packed earth near the houses, the road lamps once it is a town
         float trod = smoothstep(0.35, 0.75, vnoise(q / 7.0)) * 0.5 + 0.5 * (1.0 - smoothstep(2.0, 4.0, abs(q.y - 2.0))) * step(q.x, 0.0)
                    + (1.0 - smoothstep(2.0, 4.0, abs(q.x - (riverX(q.y) - riverHalfW(q.y) - 14.0))));
         col = mix(base, mix(base, vec3(0.42, 0.33, 0.22), 0.6), clamp(trod - 0.45, 0.0, 1.0) * inside * smoothstep(20.0, 60.0, uCityR));
@@ -199,113 +241,103 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, inout vec3 em, o
         vec2 cell = floor(q / 14.0);
         vec2 o = (cell + 0.3 + 0.4 * hash2(cell)) * 14.0;
         float lamp = step(hash(cell + 5.1), 0.08) * exp(-dot(q - o, q - o) / (0.08 + foot * foot)) * min(1.0, 0.08 / (foot * foot + 1e-4));
-        em += uWinWarm * lamp * lampK * night * 0.8 * inside * districtLit(r, 0.0);
+        em += uWinWarm * lamp * lampK * night * 0.8 * inside * lit;
         built = inside;
         return col;
     }
-    float U = log(r / LOT_R0) / LOT_D, V = phi / LOT_D;
-    vec2 lot = floor(vec2(U, V));
-    vec2 f = fract(vec2(U, V));
-    float s = r * LOT_D;                          // the lot's size (meters)
-    float px = foot / s;                          // a pixel, in lots
-    bool avenueL = mod(lot.y, 10.0) < 0.5;
-    bool boulevardL = mod(lot.x, 12.0) > 10.5;
-    // past a few kilometers a lot, the avenues are highways (a line of light through the lot), the lots one carpet
+    // the lot: its level, its district's grid
+    float lv = floor(log2(max(14.0, 0.07 * D) / 14.0));
+    float s = 14.0 * exp2(lv);
+    float C = 12.0 * s;
+    vec2 cell = floor(q / C);
+    vec2 cc = (cell + 0.5) * C;
+    float ang = (hashLot(cell + vec2(31.0 * lv, -17.0 * lv)) - 0.5) * 1.3;
+    float ca = cos(ang), sa = sin(ang);
+    vec2 dq = q - cc;
+    vec2 loc = vec2(ca * dq.x + sa * dq.y, -sa * dq.x + ca * dq.y);
+    vec2 lot = floor(loc / s);
+    vec2 f = loc / s - lot;
+    vec2 lc = (lot + 0.5) * s;
+    vec2 lcw = cc + vec2(ca * lc.x - sa * lc.y, sa * lc.x + ca * lc.y);
     bool wide = s > 4000.0;
-    bool avenue = avenueL && !wide, boulevard = boulevardL && !wide;
-    float hl = hashLot(lot);
-    float key = hashLot(floor(lot / 2.0) + vec2(0.5, 7.0));
-    float lit = districtLit(r, key);
-    vec3 win = eraColor(r, s > 4000.0 ? vnoise(q / max(r * 0.05, 1.0) + 2.0) : hash(lot + 0.37));
-    // districts brighter or darker (organic clusters at the city's scale), the regular grid fading out on a planet
-    float clusterSc = max(r * 0.12, 300.0);
+    bool valid = wide || (floor(lcw.x / C) == cell.x && floor(lcw.y / C) == cell.y && abs(lot.x + 0.5) < 6.0 && abs(lot.y + 0.5) < 6.0);
+    float px = foot / s;
+    vec2 lid = lot + cell * 13.0;
+    float hl = hashLot(lid);
+    vec3 win = eraColor(D, wide ? vnoise(q / max(r * 0.05, 1.0) + 2.0) : hash(lid + 0.37));
+    // districts brighter or darker (organic clusters)
+    float clusterSc = max(D * 0.12, 300.0);
     float cluster = smoothstep(0.25, 0.75, fbm(q / clusterSc + 4.0) * 0.7 + vnoise(q / (clusterSc * 0.3) + 9.0) * 0.3);
+    lit *= mix(0.4, 1.2, cluster);
     float gridK = 1.0 - 0.75 * smoothstep(1.5e6, 6.0e6, r);
-    lit *= mix(0.35, 1.25, cluster);
+    // the highways: wide roads of light along their winding bearings
+    float hwW = max(9.0, 0.0035 * r);
+    float rd = roadDist(q, r);
+    float hwy = 1.0 - smoothstep(hwW - foot, hwW + foot, rd);
     // the streets around the lot, their lamps
     float dEdge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
     float sw = min(0.055, 90.0 / s);
     float street = (1.0 - smoothstep(sw - px, sw + px, dEdge)) * min(1.0, sw / max(px, 1e-6));
-    float lampSp = 0.25;
     float along = (min(f.x, 1.0 - f.x) < min(f.y, 1.0 - f.y)) ? f.y : f.x;
-    float lampD = abs(fract(along / lampSp) - 0.5) * lampSp;
+    float lampD = abs(fract(along / 0.25) - 0.5) * 0.25;
     float lamps = exp(-(sq(lampD) + sq(dEdge - sw * 0.5)) / max(sq(0.012) + sq(px * 0.8), 1e-6)) * min(1.0, sq(0.012) / max(sq(px * 0.8), 1e-6) + 0.15);
-    float detail = 1.0 - smoothstep(0.08, 0.3, px);      // the lot's pattern resolves
-    float avgStreet = 2.0 * sw;                           // its average, once it does not
+    float detail = 1.0 - smoothstep(0.08, 0.3, px);
+    float avgStreet = 2.0 * sw;
     vec3 lotCol = pave;
     vec3 lotEm = vec3(0.0);
-    if (avenue || boulevard) {
-        // a wide road: a median of trees, two carriageways of traffic, lamps
-        float cross_ = avenue ? f.x * 1.0 : f.y;   // along the road
-        float acrossF = avenue ? f.y : f.x;
-        float across = abs(acrossF - 0.5);
-        float median = 1.0 - smoothstep(0.08 - px, 0.08 + px, across);
-        float lane = smoothstep(0.1, 0.12, across) * (1.0 - smoothstep(0.38, 0.4, across));
-        lotCol = mix(vec3(0.05, 0.05, 0.06), uForestC * 0.6, median);
-        // traffic: streams of headlights one way, tail lights the other
-        float dir = acrossF < 0.5 ? 1.0 : -1.0;
-        float u = (avenue ? (U + lot.y * 3.1) : (V * 0.3 + lot.x * 1.7)) * 6.0 + dir * uTrafficPhase * 4.0;
-        float car = smoothstep(0.55, 0.9, vnoise(vec2(u, lot.x * 0.37 + lot.y * 0.11 + dir * 9.0)));
-        vec3 tc = acrossF < 0.5 ? vec3(1.0, 0.95, 0.85) : uTrafficC;
-        float laneMid = 1.0 - smoothstep(0.0, 0.08 + px, abs(across - 0.25));
-        lotEm += tc * car * laneMid * uTraffic * 1.4 * mix(1.0, 0.12, 1.0 - detail) * gridK;
-        float alamps = exp(-sq(abs(fract(cross_ * 5.0) - 0.5) / 5.0) / max(sq(0.01) + sq(px * 0.6), 1e-6)) * (1.0 - smoothstep(0.0, 0.04 + px, abs(across - 0.42)));
-        float lres = 1.0 - smoothstep(0.03, 0.1, px);
-        lotEm += uStreetC * mix(0.08 * (1.0 - smoothstep(0.0, 0.06 + px, abs(across - 0.42))), alamps, lres) * 0.8 * detail * gridK;
-        lotEm += mix(uStreetC, tc, 0.4) * (1.0 - detail) * (0.05 + 0.1 * uTraffic) * gridK;
-        lotEm *= mix(1.0, 0.5, 1.0 - gridK);
-        lit = 1.0 * (1.0 - smoothstep(uOverR * 0.97, uOverR, r));
-    } else if (hl < 0.05 && !wide) {
-        // a park: dark grass, a few lamps along its paths
+    bool park = ofbm(vec2(lcw.x / (s * 9.0) + 31.0, lcw.y / (s * 9.0))) > 0.7 && !wide;
+    if (!valid) {
+        // where two districts' grids meet: a plaza, a few lamps
+        lotCol = pave * 0.8;
+        vec2 pc = floor(q / (s * 0.5));
+        vec2 po = (pc + 0.3 + 0.4 * hash2(pc)) * s * 0.5;
+        float pl = exp(-dot(q - po, q - po) / (sq(s * 0.02) + foot * foot)) * min(1.0, sq(s * 0.02) / (foot * foot + 1e-4) + 0.05);
+        lotEm += uStreetC * pl * 0.8 * gridK;
+        street = 0.0;
+        lamps = 0.0;
+    } else if (park) {
+        // a park, a green finger: dark grass, a few lamps along its paths
         lotCol = uForestC * mix(0.5, 0.8, vnoise(q / (s * 0.2)));
         float path = 1.0 - smoothstep(0.02 - px, 0.02 + px, abs(f.x - f.y) * 0.7);
         lotCol = mix(lotCol, vec3(0.2, 0.18, 0.15), path * 0.6);
         lotEm += uWinWarm * path * 0.15 * detail;
     } else {
         // a lot: its buildings are drawn (the ground under them is a dark plaza), or too small to: rooftops with lit
-        // windows. Big lots are cut by lanes into blocks (and those into smaller ones), each with its lamps: a web of
-        // lights at every scale the pixel resolves.
-        float drawn = smoothstep(uDrawR0 * 0.9, uDrawR0 * 1.1, r) * (1.0 - smoothstep(1.2e6, 1.3e6, r));
-        float lotLit = uLit * mix(0.2 + 1.3 * sq(hash(lot + 4.4)), 0.75 + 0.4 * hash(lot + 4.4), smoothstep(2000.0, 20000.0, s));
+        // windows; big lots cut by lanes into blocks, each with its lamps: a web of lights at every scale.
+        float drawn = smoothstep(uDrawR0 * 0.9, uDrawR0 * 1.1, D) * (1.0 - smoothstep(1.2e6, 1.3e6, D));
+        float lotLit = uLit * mix(0.2 + 1.3 * sq(hash(lid + 4.4)), 0.75 + 0.4 * hash(lid + 4.4), smoothstep(2000.0, 20000.0, s));
         vec3 roof = mix(vec3(0.035, 0.035, 0.045), vec3(0.07, 0.065, 0.07), hl);
         lotCol = mix(pave * 0.6, roof, 1.0 - drawn);
         float lane = 0.0, laneLamp = 0.0;
-        float nl = 4.0;
         vec2 fl = f;
         float pxl = px;
         for (int k = 0; k < 3; k++) {
-            // a level of lanes: n x n blocks in the lot (or in the block above)
-            vec2 fk = fract(fl * nl);
-            float pk = pxl * nl;
-            float on = smoothstep(4.0, 1.5, s / (nl * 25.0)) < 1.0 ? 1.0 : 0.0;   // no lanes in blocks under ~25 m
+            if (s / pow(4.0, float(k + 1)) < 25.0) break;
+            vec2 fk = fract(fl * 4.0);
+            float pk = pxl * 4.0;
             float dk = min(min(fk.x, 1.0 - fk.x), min(fk.y, 1.0 - fk.y));
             float res = 1.0 - smoothstep(0.12, 0.45, pk);
             float wl = min(0.05, 40.0 * pow(4.0, float(k + 1)) / s);
-            float lk = (1.0 - smoothstep(wl - pk, wl + pk, dk)) * on;
+            float lk = 1.0 - smoothstep(wl - pk, wl + pk, dk);
             float alongK = (min(fk.x, 1.0 - fk.x) < min(fk.y, 1.0 - fk.y)) ? fk.y : fk.x;
             float lampK = exp(-(sq(abs(fract(alongK * 2.0) - 0.5) * 0.5) + sq(dk - 0.025)) / max(sq(0.015) + sq(pk * 0.7), 1e-6));
-            float w = 0.55 / float(k + 1);
             lane = max(lane, lk * res);
-            laneLamp += (mix(0.015 * on, lampK * on, res)) * w * (0.4 + 0.9 * hash(floor(fl * nl) + lot * 3.1 + float(k)));
+            laneLamp += mix(0.015, lampK, res) * (0.55 / float(k + 1)) * (0.4 + 0.9 * hash(floor(fl * 4.0) + lid * 3.1 + float(k)));
             fl = fk;
             pxl = pk;
-            nl = 4.0;
-            if (s / pow(4.0, float(k + 1)) < 40.0) break;
         }
-        lotCol = mix(lotCol, vec3(0.03, 0.03, 0.04), lane * (1.0 - drawn * 0.5) * (1.0 - smoothstep(2500.0, 6000.0, s)));
+        float farK = smoothstep(2500.0, 6000.0, s);
+        lotCol = mix(lotCol, vec3(0.03, 0.03, 0.04), lane * (1.0 - drawn * 0.5) * (1.0 - farK));
         float speck;
         {
-            // the lit windows of the rooftops, as fine as the pixel resolves; once smaller, their dim average (the
-            // windows are points in the dark)
             float wn = max(9.0, floor(s / 9.0));
             vec2 wc = floor(f * wn);
             float pw = px * wn;
-            float on = step(hash(lot * 9.1 + wc), lotLit) * step(0.3, fract(f.x * wn)) * step(0.3, fract(f.y * wn));
+            float on = step(hash(lid * 9.1 + wc), lotLit) * step(0.3, fract(f.x * wn)) * step(0.3, fract(f.y * wn));
             float planet = smoothstep(4.0e5, 4.0e6, r);
             speck = mix(on, lotLit * mix(0.04, 0.22, planet) + lightDots(q, foot, lotLit * mix(0.45, 0.55, planet), 5.0) * mix(0.9, 1.5, planet), smoothstep(0.2, 0.7, pw));
         }
-        float density = smoothstep(200.0, 2000.0, r) * 0.5 + 0.5;
-        float farK = smoothstep(2500.0, 6000.0, s);
+        float density = smoothstep(200.0, 2000.0, D) * 0.5 + 0.5;
         lotEm += win * speck * (1.0 - lane) * (1.0 - drawn) * 0.55 * density * (1.0 - farK);
         lotEm += mix(uStreetC, win, 0.3) * laneLamp * 0.7 * gridK * (1.0 - farK);
         lotEm += win * 0.02 * drawn;
@@ -313,16 +345,22 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, inout vec3 em, o
             lotEm += cityFar(q, n, r, foot, uLit * 1.6) * farK * (1.0 - drawn * 0.7);
             lotCol = mix(lotCol, vec3(0.03, 0.03, 0.04), farK);
         }
-        if (wide && (avenueL || boulevardL)) {
-            float acrossF = avenueL ? f.y : f.x;
-            float hw = max(150.0 / s, px * 0.6);
-            float line = exp(-sq((acrossF - 0.5) / hw)) * min(1.0, 150.0 / s / max(px * 0.6, 1e-6));
-            lotEm += mix(uStreetC, uTrafficC, 0.25) * line * (0.6 + 0.6 * uTraffic) * gridK;
-        }
     }
     // the streets around the lot and their lamps
     vec3 stCol = mix(lotCol, vec3(0.03, 0.03, 0.04), street * detail);
-    vec3 stEm = lotEm * (1.0 - street * detail) + (uStreetC * lamps * 1.0 * detail + uStreetC * avgStreet * 0.18 * (1.0 - detail)) * gridK;
+    vec3 stEm = lotEm * (1.0 - street * detail) + (uStreetC * lamps * detail + uStreetC * avgStreet * 0.18 * (1.0 - detail)) * gridK;
+    // the highway over it: dark asphalt, two streams of traffic, lamps; a line of light from far away
+    if (hwy > 0.0) {
+        float acr = rd / hwW;   // 0 on the axis .. 1 at the edge
+        float res = 1.0 - smoothstep(1.0, 4.0, foot / hwW);
+        float u = r / (hwW * 5.0) - uTrafficPhase * 3.0 * (acr < 0.5 ? 1.0 : -1.0);
+        float car = smoothstep(0.5, 0.85, vnoise(vec2(u, acr < 0.5 ? 3.0 : 9.0)));
+        vec3 tc = acr < 0.5 ? vec3(1.0, 0.95, 0.85) : uTrafficC;
+        vec3 hEm = tc * car * (0.6 + 0.8 * uTraffic) * 1.3 * res + mix(uStreetC, tc, 0.3) * (0.35 + 0.4 * uTraffic) * (1.0 - res);
+        hEm += uStreetC * exp(-sq((acr - 0.95) / 0.08)) * 0.6 * res;
+        stCol = mix(stCol, vec3(0.04, 0.04, 0.05), hwy);
+        stEm = mix(stEm, hEm * gridK, hwy);
+    }
     col = mix(base, stCol, inside);
     em += stEm * inside * night * lit;
     built = inside;
@@ -332,11 +370,20 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, inout vec3 em, o
 // The ground's color at p (n: the planet's normal there, q: polar meters around the hut, t: the distance, foot: a
 // pixel's size there).
 vec3 landColor(vec3 p, vec3 n, vec2 q, float r, float t, float foot, out float water, inout vec3 em, out float built) {
+    float D = field(q);
     // continents (on the sphere), the hut's region always on land
     float c0 = fbm3(n * 2.6 + 11.0);
     float c = c0 + 0.45 * (1.0 - smoothstep(1.2e6, 2.2e6, r));
     float cw = max(foot / 3.0e6, 0.004);
     water = 1.0 - smoothstep(0.47 - cw, 0.47 + cw, c);
+    // the bay east of the hut (built over only once the city covers the planet)
+    float bay = 0.0;
+    if (r < 5.0e5) {
+        float cs = coastSigned(q);
+        float aa = max(foot * 1.2, 1.0);
+        bay = smoothstep(-aa, aa, cs) * (1.0 - smoothstep(3.5e5, 5.0e5, r));
+        water = max(water, bay);
+    }
     float dry = smoothstep(0.52, 0.62, fbm3(n * 5.0 + 3.0)) * (1.0 - smoothstep(0.55, 0.8, c));
     vec3 land = mix(uLandC, uDesertC, dry);
     land *= mix(1.0, 0.7, smoothstep(0.55, 0.7, fbm3(n * 14.0 + 7.0)) * (1.0 - dry));
@@ -355,7 +402,7 @@ vec3 landColor(vec3 p, vec3 n, vec2 q, float r, float t, float foot, out float w
         vec2 fq = q / fs;
         vec2 fc = floor(fq + 0.3 * vec2(vnoise(fq * 0.5), vnoise(fq * 0.5 + 9.0)));
         float fh = hash(fc);
-        float ring = smoothstep(uCityR * 0.9, uCityR * 1.3, r) * (1.0 - smoothstep(uCityR * 2.5, uCityR * 5.0, r)) * smoothstep(40.0, 120.0, r);
+        float ring = smoothstep(uCityR * 0.9, uCityR * 1.3, D) * (1.0 - smoothstep(uCityR * 2.5, uCityR * 5.0, D)) * smoothstep(40.0, 120.0, r);
         float rows = 0.5 + 0.5 * sin(dot(q, fh < 0.5 ? vec2(1.0, 0.3) : vec2(-0.3, 1.0)) / max(fs * 0.04, foot * 1.5) * 6.28);
         vec3 fcol = mix(uFieldC, mix(uGrass, uFieldC, 0.5), step(0.5, fract(fh * 7.0)));
         fcol *= 0.9 + 0.12 * rows * smoothstep(fs * 0.04, fs * 0.01, foot);
@@ -372,7 +419,7 @@ vec3 landColor(vec3 p, vec3 n, vec2 q, float r, float t, float foot, out float w
     land = mix(land, near * (0.9 + 0.1 * smoothstep(-0.1, 0.1, v)), uSnow * (1.0 - water) * (0.7 + 0.3 * kNear));
     // the river: dark water between sandy banks
     float riv = 0.0;
-    if (abs(q.y) < 60000.0) {
+    if (abs(q.y) < 80000.0) {
         float hw = riverHalfW(q.y);
         float dx = abs(q.x - riverX(q.y));
         float aa = foot * 1.2;
@@ -383,9 +430,9 @@ vec3 landColor(vec3 p, vec3 n, vec2 q, float r, float t, float foot, out float w
     vec3 ocean = mix(uOceanC, uOceanC * vec3(0.55, 0.75, 1.0), smoothstep(0.47, 0.3, c));
     // the city over it all
     float b;
-    vec3 col = cityGround(q, n, r, foot, land, em, b);
+    vec3 col = cityGround(q, n, r, foot, land, D, em, b);
     built = b;
-    water = max(water * (1.0 - b * smoothstep(1.0e7, 1.9e7, uCityR)), riv);
+    water = max(water * (1.0 - b * smoothstep(4.0e6, 1.2e7, uCityR)), riv);
     if (water > 0.0 && riv > 0.0) ocean = uRiverC;
     // the city on the oceans at the end: floating platforms (dimmer)
     em *= mix(1.0, 0.45, water * (1.0 - riv));
@@ -443,7 +490,8 @@ void main() {
         float nightSide = 1.0 - lit;
         col = mix(col, alb * uShadowC * 0.12, nightSide * smoothstep(1e4, 2e5, alt));
         // the lights: the city, the scattered villages beyond it
-        float spread = smoothstep(uCityR, uCityR * 1.05, r) * (1.0 - smoothstep(uCityR * 1.2, uCityR * 2.2, r)) * (1.0 - water);
+        float Dg = field(q);
+        float spread = smoothstep(uCityR, uCityR * 1.05, Dg) * (1.0 - smoothstep(uCityR * 1.2, uCityR * 2.2, Dg)) * (1.0 - water);
         if (spread > 0.0) {
             float cs = max(uCityR * 0.02, 30.0);
             vec2 cell = floor(q / cs);
@@ -452,7 +500,7 @@ void main() {
             em += uWinWarm * vil * spread * 0.7 * (0.3 + 0.7 * uNightK);
         }
         // the construction frontier: a faint warm line of work lights at the city's edge
-        em += uWinWarm * uBuild * exp(-sq((r - uCityR) / max(uCityR * 0.01, foot * 1.5))) * 0.6 * (1.0 - water);
+        em += uWinWarm * uBuild * exp(-sq((Dg - uCityR) / max(uCityR * 0.012, foot * 1.5))) * 0.6 * (1.0 - water);
         col += em * mix(1.0, 1.3, smoothstep(1e5, 1e6, alt));
         // the aerial perspective, the limb's glow
         float od = 1.0e-5 * t * airDensity(alt, 0.0);
@@ -551,6 +599,7 @@ layout(location = 2) in vec4 i0;     // base (world), birth radius
 layout(location = 3) in vec4 i1;     // x axis, half width
 layout(location = 4) in vec4 i2;     // half depth, height, roof height, taper
 layout(location = 5) in vec4 i3;     // kind, seed, light key, base height
+layout(location = 6) in vec4 i4;     // death, twist, -, -
 uniform mat4 uVP;
 uniform float uMinPx;
 out vec3 vW;
@@ -560,7 +609,7 @@ flat out vec4 vS;      // half width, half depth, height (whole, with its base),
 out float vRoofY;
 void main() {
     float birth = i0.w;
-    float k = smoothstep(birth, birth * 1.06 + 1.5, uCityR);
+    float k = smoothstep(birth, birth * 1.06 + 1.5, uCityR) * (1.0 - smoothstep(i4.x, i4.x * 1.08, uCityR));
     vec3 base = i0.xyz;
     float dist = length(base - uEye);
     float size = max(i1.w, i2.x) * 2.0 + i2.y * 0.3;
@@ -575,6 +624,13 @@ void main() {
     float yl = min(aPos.y, 1.0);
     float tw = 1.0 - taper * yl;
     float x = aPos.x * hw * tw, z = aPos.z * hd * tw;
+    if (i4.y != 0.0) {
+        // a twisted tower: each floor turned a little more
+        float a = i4.y * yl, c = cos(a), sn = sin(a);
+        float x2 = c * x - sn * z;
+        z = sn * x + c * z;
+        x = x2;
+    }
     float y = roof ? y0 + h + (aPos.y - 1.0) * roofH * tw : y0 + aPos.y * h;
     if (!roof && aPos.y < 0.001 && y0 < 0.001) y = -max(0.4, 0.04 * max(hw, hd));
     y *= rise;
@@ -608,7 +664,7 @@ float windows(vec2 uv, float cw, float ch, float ww, float wh, float seed, float
     // lights switch on and off now and then; whole groups of floors (offices, flats) lit or dark together
     vec2 grp = floor(cell / vec2(5.0, 3.0));
     float gk = hash(grp * 0.71 + seed * 13.0);
-    float gFrac = clamp(frac * 1.6 * smoothstep(0.15, 0.6, gk) + (gk > 0.92 ? 0.5 : 0.0), 0.0, 1.0);
+    float gFrac = clamp(frac * (0.5 + 0.9 * gk), 0.0, 1.0);
     float slot = floor(uTime / 23.0 + hash(cell + seed * 17.0) * 4.0);
     float on = step(hash(cell * 1.37 + seed * 31.0 + slot * 0.123), gFrac);
     float avg = ww * wh;
@@ -710,13 +766,17 @@ void main() {
             // vertical fins on the supertalls
             if (kind == 7) alb *= 1.0 + 0.3 * smoothstep(0.85, 0.95, abs(fract(vUV.x / 9.0) * 2.0 - 1.0));
             // a band of light at the crown
-            float crown = smoothstep(vS.z * 0.93, vS.z * 0.95, hy) * (1.0 - smoothstep(vS.z * 0.985, vS.z, hy));
-            em += mix(uWinAccent, win, 0.4) * crown * (kind == 6 ? 0.7 : 1.6) * lit * step(60.0, vS.z) * 0.5;
+            // a lit crown on some towers, its color their own (warm, white, the accent)
+            float cs = fract(seed * 13.7);
+            float crown = smoothstep(vS.z * 0.95, vS.z * 0.96, hy) * (1.0 - smoothstep(vS.z * 0.985, vS.z, hy));
+            float crown2 = smoothstep(0.85, 0.95, abs(fract(hy / max(vS.z * 0.04, 6.0)) * 2.0 - 1.0)) * smoothstep(vS.z * 0.86, vS.z * 0.88, hy);
+            vec3 cc = cs < 0.33 ? uWinWarm * 1.2 : cs < 0.6 ? vec3(1.0, 0.97, 0.92) : uWinAccent;
+            em += cc * (crown + crown2 * 0.5 * step(0.5, fract(seed * 5.3))) * (kind == 6 ? 0.6 : 1.1) * lit * step(60.0, vS.z) * step(0.35, fract(seed * 7.1));
             if (kind == 9) em += uWinAccent * 0.6 * smoothstep(0.9, 0.98, abs(fract(hy / 2500.0) * 2.0 - 1.0));
         }
     } else {
         // arcologies: pale terraces, bands of light every few floors, windows too fine to tell apart
-        alb = uArcoC * (0.3 + 0.1 * seed);
+        alb = uArcoC * (0.1 + 0.06 * seed);
         float band = smoothstep(0.86, 0.94, abs(fract(hy / 160.0) * 2.0 - 1.0));
         float bw = fwidth(hy / 160.0);
         band = mix(band, 0.05, smoothstep(0.2, 0.6, bw));
@@ -724,6 +784,13 @@ void main() {
         em += win * (wv * 0.6 + band * 1.1) * lit;
         em += uWinAccent * band * 0.4 * lit * step(0.5, seed);
         alb *= 1.0 - band * 0.4;
+    }
+    // the giant ones seen from orbit: dark bodies, their lights doing the work
+    {
+        float farB = smoothstep(6.0e4, 2.5e5, vK.w);
+        alb *= 1.0 - 0.6 * farB;
+        gloss *= 1.0 - farB;
+        em *= 1.0 - 0.45 * farB;
     }
     // the light: the sky's light and the low sun's band; at night the moon's, the city's glow from below
     vec3 light = uSkyAmb * (0.6 + 0.4 * nUp) + uSunC * toonBand(ndl) * (1.0 - uNightK * 0.92);

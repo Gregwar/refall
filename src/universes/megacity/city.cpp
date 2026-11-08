@@ -1,13 +1,17 @@
-// MEGACITY: the city's plan, generated once per game from a seed. Every building carries the city radius at which it
-// rises (its distance from the hut, a little jittered): the shaders raise it out of the ground as the city's edge
-// passes it, so nothing is uploaded while the city grows.
+// MEGACITY: the city's plan, generated once per game from a seed. Every building carries the frontier at which it
+// rises (its organic distance D, see mcity::field): the shaders raise it out of the ground as the frontier passes it,
+// so nothing is uploaded while the city grows. Some carry a death too: the old town sinks back where the downtowns'
+// towers rise.
 //
-// The hut stands on the riverbank at the origin. The village around it is laid out by hand (houses scattered along
-// the river and the road, a church); past LOT_R0 the lots follow a log-polar grid around the hut (SECTORS lots a
-// ring, square, their size growing with the distance), and each ring is built in the style of the era the city
-// reaches it in: medieval town houses with steep roofs inside a walled ring, stone blocks with mansards, glass
-// towers, supertalls with setbacks and spires, then arcologies, kilometers high and wide. Radial avenues and ring
-// boulevards are left free (the ground's shader lights them), and so are a few parks and the river.
+// The hut stands on the riverbank at the origin. The village around it is laid out by hand (houses along the river
+// and the road, a church, gardens filling in later); a medieval wall follows the town's edge where the frontier
+// stood at ~700 m. Past it the lots are square, ever larger with D (the older the district, the smaller its
+// buildings), on grids turned district by district (a patchwork of street grids, with plazas where they meet), each
+// built in the style of its era: town houses with steep roofs, stone perimeter blocks around courtyards, modern
+// mid-rise, megablocks, then arcologies kilometers high. Highways, the river, the bay, parks and green fingers stay
+// free. The downtowns are planted on their own: the main one by the old town, more in the satellite towns along the
+// highways, each a cluster of towers rising over many lines, taller and taller (setbacks, tapers, twists, octagons,
+// slabs, spires, lit crowns), then megatalls.
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -19,39 +23,39 @@ namespace {
 using namespace mcity;
 
 enum Kind { K_HUT = 0, K_HOUSE, K_TOWN, K_CHURCH, K_WALL, K_CLASSIC, K_GLASS, K_SUPER, K_ARCO, K_ELEVATOR };
+constexpr int FL = 20;   // floats a building
 
 struct Builder {
     MegaCityPlan& plan;
     std::vector<float> births;
-    std::vector<float> rows;   // 16 floats each, before sorting
+    std::vector<float> rows;
     std::vector<float> beacons;
 
-    // A building on the sphere at the geodesic polar coordinates (r, phi) around the hut, turned by yaw from facing
-    // the hut, raised by y0 (a setback's tier).
-    void add(float r, float phi, float yaw, float hw, float hd, float h, float roofH, float taper, int kind, float seed,
-             float key, float y0, float birth) {
+    // A building at (x, z) on the sphere (flat coordinates: geodesic polar around the hut), turned by yaw, raised by
+    // y0 (a setback's tier).
+    void add(float x, float z, float yaw, float hw, float hd, float h, float roofH, float taper, int kind, float seed,
+             float y0, float birth, float death = 1e30f, float twist = 0.f) {
+        const float r = std::sqrt(x * x + z * z) + 1e-4f;
+        const float phi = std::atan2(z, x);
         const float th = r / R_EARTH;
         const float st = std::sin(th), ct = std::cos(th), sp = std::sin(phi), cp = std::cos(phi);
         const vec3 n(st * cp, ct, st * sp);
         const float s2 = std::sin(th * 0.5f);
         const vec3 base(R_EARTH * st * cp, -2.f * R_EARTH * s2 * s2, R_EARTH * st * sp);
-        const vec3 ePhi(-sp, 0.f, cp), eTh(ct * cp, -st, ct * sp);
-        const vec3 ax = ePhi * std::cos(yaw) + eTh * std::sin(yaw);
-        (void)n;
-        const float q[16] = {base.x, base.y, base.z, birth, ax.x, ax.y, ax.z, hw, hd, h, roofH, taper,
-                             (float)kind, seed, key, y0};
-        rows.insert(rows.end(), q, q + 16);
+        // the axes: x along the flat map's x direction turned by yaw, projected on the tangent plane
+        vec3 ax(std::cos(yaw), 0.f, std::sin(yaw));
+        ax = normalize(ax - n * dot(ax, n));
+        const float ks = 0.12f * birth + 40.f;
+        const float key = vnL(x / ks, z / ks);
+        const float q[FL] = {base.x, base.y, base.z, birth, ax.x, ax.y, ax.z, hw, hd, h, roofH, taper,
+                             (float)kind, seed, key, y0, death, twist, 0.f, 0.f};
+        rows.insert(rows.end(), q, q + FL);
         births.push_back(birth);
-        if (h + y0 > 90.f && kind != K_WALL) {
+        if (h + y0 > 120.f && (kind == K_GLASS || kind == K_SUPER || kind == K_ARCO) && taper > 0.9f) {
             const vec3 top = base + n * (y0 + h + roofH);
             const float b[4] = {top.x, top.y, top.z, birth};
             beacons.insert(beacons.end(), b, b + 4);
         }
-    }
-    void addXZ(float x, float z, float yaw, float hw, float hd, float h, float roofH, float taper, int kind, float seed,
-               float key, float y0, float birth) {
-        const float r = std::sqrt(x * x + z * z);
-        add(r, std::atan2(z, x), yaw, hw, hd, h, roofH, taper, kind, seed, key, y0, birth);
     }
 };
 
@@ -60,12 +64,95 @@ struct Builder {
 bool inView(float x, float z, float rMax) {
     const float r = std::sqrt(x * x + z * z);
     if (r > rMax || r < 1e-3f) return false;
-    return (x * -0.86f + z * -0.51f) / r > std::cos(0.75f);
+    return (x * -0.86f + z * -0.51f) / r > std::cos(1.0f);
+}
+bool inRiver(float x, float z, float margin) {
+    if (std::fabs(z) > 80000.f) return false;
+    return std::fabs(x - riverX(z)) < riverHalfW(z) + margin;
+}
+float roadDist(float x, float z) {
+    const float r = std::sqrt(x * x + z * z) + 1e-3f, ph = std::atan2(z, x);
+    float d = 1e30f;
+    for (int k = 0; k < ROADS; k++) {
+        float a = ph - roadAngle(k, r);
+        a -= TAU_F * std::floor(a / TAU_F + 0.5f);
+        d = std::min(d, std::fabs(a) * r);
+    }
+    return d;
 }
 
-bool inRiver(float x, float z, float margin) {
-    if (std::fabs(z) > 60000.f) return false;
-    return std::fabs(x - riverX(z)) < riverHalfW(z) + margin;
+// A tower of one of the silhouettes, its base at (x, z): setbacks, a taper, a twist, an octagon, a slab, a pyramid
+// top; most with a spire.
+void addTower(Builder& b, Rng& rng, float x, float z, float hw, float h, float birth, int type, float death = 1e30f) {
+    const int kind = h > 260.f ? K_SUPER : K_GLASS;
+    const float sd = rng.uniform();
+    const float yaw = rng.range(0.f, 1.5708f);
+    const float hd = hw * rng.range(0.75f, 1.f);
+    const bool spire = h > 150.f && rng.chance(0.75f);
+    float top = h;
+    switch (type) {
+    case 0:   // setbacks
+        b.add(x, z, yaw, hw, hd, h * 0.5f, 0.f, 0.03f, kind, sd, 0.f, birth, death);
+        b.add(x, z, yaw, hw * 0.78f, hd * 0.78f, h * 0.28f, 0.f, 0.04f, kind, sd, h * 0.5f, birth, death);
+        b.add(x, z, yaw, hw * 0.55f, hd * 0.55f, h * 0.16f, 0.f, 0.08f, kind, sd, h * 0.78f, birth, death);
+        top = h * 0.94f;
+        break;
+    case 1:   // tapered
+        b.add(x, z, yaw, hw * 1.15f, hd * 1.15f, h * 0.92f, 0.f, 0.42f, kind, sd, 0.f, birth, death);
+        top = h * 0.92f;
+        break;
+    case 2:   // twisted
+        b.add(x, z, yaw, hw, hw, h * 0.95f, 0.f, 0.22f, kind, sd, 0.f, birth, death, rng.range(0.9f, 1.6f) * (rng.chance(0.5f) ? 1.f : -1.f));
+        top = h * 0.95f;
+        break;
+    case 3:   // octagonal (two prisms turned an eighth of a turn), a crown
+        b.add(x, z, yaw, hw, hw, h * 0.85f, 0.f, 0.06f, kind, sd, 0.f, birth, death);
+        b.add(x, z, yaw + 0.7854f, hw, hw, h * 0.85f, 0.f, 0.06f, kind, sd, 0.f, birth, death);
+        b.add(x, z, yaw, hw * 0.62f, hw * 0.62f, h * 0.1f, 0.f, 0.2f, kind, sd, h * 0.85f, birth, death);
+        top = h * 0.95f;
+        break;
+    case 4:   // a slab
+        b.add(x, z, yaw, hw * 1.7f, hd * 0.65f, h * 0.8f, 0.f, 0.f, kind, sd, 0.f, birth, death);
+        top = h * 0.8f;
+        break;
+    default:  // a pyramid top
+        b.add(x, z, yaw, hw, hd, h * 0.78f, 0.f, 0.02f, kind, sd, 0.f, birth, death);
+        b.add(x, z, yaw, hw * 0.98f, hd * 0.98f, h * 0.2f, 0.f, 1.f, kind, sd, h * 0.78f, birth, death);
+        top = h * 0.98f;
+        break;
+    }
+    if (spire && type != 4 && type != 5) b.add(x, z, yaw, hw * 0.1f, hw * 0.1f, h * 0.16f, 0.f, 1.f, kind, sd, top, birth, death);
+}
+
+// A downtown: towers around a center, founded when the frontier reaches F0, rising until it is k times farther, the
+// cluster spreading as it goes; the tallest near the core.
+void addDowntown(Builder& b, Rng& rng, float cx, float cz, float F0, float k, int n, float r0, float r1, std::vector<vec3>& placed) {
+    for (int j = 0; j < n; j++) {
+        const float t = (j + rng.uniform()) / n;
+        const float birth = F0 * std::exp(t * std::log(k));
+        const float rmax = r0 + (r1 - r0) * std::pow(t, 0.7f);
+        float x = 0.f, z = 0.f, h = 0.f, hw = 0.f;
+        bool ok = false;
+        for (int tries = 0; tries < 12 && !ok; tries++) {
+            const float rho = rmax * std::sqrt(rng.uniform()), a = rng.range(0.f, TAU);
+            x = cx + rho * std::cos(a);
+            z = cz + rho * std::sin(a);
+            if (inRiver(x, z, 40.f) || atSea(x, z) || roadDist(x, z) < 30.f) continue;
+            const float g = std::exp(rng.range(-0.45f, 0.35f));
+            h = towerH(birth) * g * (1.25f - 0.55f * rho / std::max(rmax, 1.f));
+            hw = std::min(std::max(0.075f * h, 13.f), 95.f) * rng.range(0.85f, 1.15f);
+            ok = true;
+            for (const vec3& p : placed) {
+                const float dx = p.x - x, dz = p.y - z;
+                if (dx * dx + dz * dz < (p.z + hw) * (p.z + hw) * 1.6f) { ok = false; break; }
+            }
+        }
+        if (!ok) continue;
+        placed.push_back(vec3(x, z, hw));
+        const float u = rng.uniform();
+        const int type = u < 0.3f ? 0 : u < 0.5f ? 1 : u < 0.66f ? 2 : u < 0.8f ? 3 : u < 0.9f ? 4 : 5;
+        addTower(b, rng, x, z, hw, h, birth, type);
+    }
 }
 
 } // namespace
@@ -74,24 +161,33 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
     MegaCityPlan plan;
     Builder b{plan, {}, {}, {}};
     Rng rng(seed ^ 0xC17Eull);
+    satellites(plan.sats);
+    const Sat* S = plan.sats;
+    auto D = [&](float x, float z) { return field(x, z, S); };
+    const float dcx = plan.downtown[0], dcz = plan.downtown[1];
+    // the old town makes way for the downtown's towers, from its core outward
+    auto deathAt = [&](float x, float z) {
+        const float d = std::hypot(x - dcx, z - dcz);
+        if (d > 2400.f) return 1e30f;
+        return SKY_F0 * (1.05f + 2.5f * d / 2400.f);
+    };
 
     // ---- The hut: on the bank, facing the river (+x).
-    b.addXZ(0.f, 0.f, 0.75f, 2.0f, 1.55f, 2.2f, 1.7f, 0.f, K_HUT, 0.5f, 0.f, 0.f, 0.f);
+    b.add(0.f, 0.f, 0.75f, 2.0f, 1.55f, 2.2f, 1.7f, 0.f, K_HUT, 0.5f, 0.f, 0.f);
 
-    // ---- The village: houses along the river and the road west, born with their distance from the hut.
+    // ---- The village: houses along the river and the road west, born with their organic distance.
+    std::vector<vec2> placed;
+    placed.push_back(vec2{0.f, 0.f});
     {
-        std::vector<vec2> placed;
-        placed.push_back(vec2{0.f, 0.f});
         int tries = 0;
         while ((int)placed.size() < 230 && tries < 9000) {
             tries++;
-            const float r = 7.f + 195.f * std::pow(rng.uniform(), 1.15f);
+            const float r = 7.f + 260.f * std::pow(rng.uniform(), 1.15f);
             const float a = rng.range(0.f, TAU);
             const float x = r * std::cos(a), z = r * std::sin(a);
-            if (inRiver(x, z, 5.f) || inView(x, z, 130.f)) continue;
-            // along the road by the river (x ~ riverX - 20) and the road west (z ~ 0): likelier
-            const float dRoad = std::min(std::fabs(x - (riverX(z) - riverHalfW(z) - 14.f)), std::fabs(z - 2.f) + (x > 0.f ? 50.f : 0.f));
-            if (rng.uniform() > 0.25f + 0.75f * std::exp(-dRoad / 14.f)) continue;
+            if (inRiver(x, z, 5.f) || inView(x, z, 220.f)) continue;
+            const float d = D(x, z);
+            if (d > 230.f) continue;
             if (std::fabs(x + 40.f) < 14.f && std::fabs(z - 26.f) < 14.f) continue;   // the church
             bool ok = true;
             for (const vec2& p : placed)
@@ -99,21 +195,20 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             if (!ok) continue;
             placed.push_back(vec2{x, z});
             const float hw = rng.range(2.3f, 3.6f), hd = rng.range(2.6f, 4.4f);
-            const float h = rng.range(2.6f, 4.8f) * (r > 60.f ? 1.25f : 1.f);
-            // facing the road
-            const float yaw = rng.range(-0.25f, 0.25f) + (rng.chance(0.5f) ? 1.5708f : 0.f);
-            b.addXZ(x, z, yaw, hw, hd, h, hw * rng.range(0.75f, 1.0f), 0.f, K_HOUSE, rng.uniform(), mcity::hashLot(x * 0.05f, z * 0.05f),
-                    0.f, std::max(3.5f, r * rng.range(0.9f, 1.05f)));
+            const float h = rng.range(2.6f, 4.8f) * (d > 60.f ? 1.25f : 1.f);
+            const float yaw = rng.range(0.f, TAU);
+            b.add(x, z, yaw, hw, hd, h, hw * rng.range(0.75f, 1.0f), 0.f, K_HOUSE, rng.uniform(), 0.f, std::max({5.f, d, 0.7f * r}), deathAt(x, z));
         }
-        // as the town grows around it, the village fills in: houses in its gardens, packed along its lanes
+        // as the town grows around it, the village fills in
         tries = 0;
         int infill = 0;
         while (infill < 330 && tries < 12000) {
             tries++;
-            const float r = 10.f + 192.f * std::sqrt(rng.uniform());
+            const float r = 10.f + 250.f * std::sqrt(rng.uniform());
             const float a = rng.range(0.f, TAU);
             const float x = r * std::cos(a), z = r * std::sin(a);
-            if (inRiver(x, z, 4.f) || inView(x, z, 60.f)) continue;
+            if (inRiver(x, z, 4.f) || inView(x, z, 120.f)) continue;
+            if (D(x, z) > 230.f) continue;
             if (std::fabs(x + 40.f) < 14.f && std::fabs(z - 26.f) < 14.f) continue;
             bool ok = true;
             for (const vec2& p : placed)
@@ -122,139 +217,187 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             placed.push_back(vec2{x, z});
             infill++;
             const float hw = rng.range(2.2f, 3.2f), hd = rng.range(2.4f, 3.8f);
-            const float h = rng.range(3.5f, 7.f);
-            const float yaw = rng.range(-0.3f, 0.3f) + (rng.chance(0.5f) ? 1.5708f : 0.f);
-            b.addXZ(x, z, yaw, hw, hd, h, hw * rng.range(0.8f, 1.05f), 0.f, K_TOWN, rng.uniform(), mcity::hashLot(x * 0.05f, z * 0.05f),
-                    0.f, rng.range(240.f, 480.f));
+            b.add(x, z, rng.range(0.f, TAU), hw, hd, rng.range(3.5f, 7.f), hw * rng.range(0.8f, 1.05f), 0.f, K_TOWN, rng.uniform(), 0.f,
+                  rng.range(240.f, 480.f));
         }
         // the church: a nave and a bell tower with its spire
-        const float cb = 85.f;
-        b.addXZ(-40.f, 26.f, 0.3f, 4.5f, 10.f, 9.f, 4.5f, 0.f, K_CHURCH, 0.3f, 0.2f, 0.f, cb);
-        b.addXZ(-36.5f, 36.5f, 0.3f, 2.6f, 2.6f, 19.f, 0.f, 0.f, K_CHURCH, 0.6f, 0.2f, 0.f, cb);
-        b.addXZ(-36.5f, 36.5f, 0.3f, 2.7f, 2.7f, 14.f, 0.f, 1.f, K_CHURCH, 0.7f, 0.2f, 19.f, cb);
+        const float cb = std::max(60.f, D(-40.f, 26.f));
+        b.add(-40.f, 26.f, 0.3f, 4.5f, 10.f, 9.f, 4.5f, 0.f, K_CHURCH, 0.3f, 0.f, cb);
+        b.add(-36.5f, 36.5f, 0.3f, 2.6f, 2.6f, 19.f, 0.f, 0.f, K_CHURCH, 0.6f, 0.f, cb);
+        b.add(-36.5f, 36.5f, 0.3f, 2.7f, 2.7f, 14.f, 0.f, 1.f, K_CHURCH, 0.7f, 19.f, cb);
     }
 
-    // ---- The medieval wall around the old town, its towers and gates.
-    const float WALL_R = 640.f;
+    // ---- The medieval wall: along the town's edge where the frontier stood at ~700 m, towers, gates on the roads.
     {
-        const float wb = WALL_R * 1.02f;
-        for (int j = 0; j < SECTORS; j++) {
-            const float phi = (j + 0.5f) * LOT_D;
-            const float x = WALL_R * std::cos(phi), z = WALL_R * std::sin(phi);
-            if (inRiver(x, z, 4.f)) continue;
-            if (j % 10 == 0) {
-                // a gate: two towers flanking the avenue
+        const float WD = 700.f;
+        const int N = 110;
+        std::vector<vec2> pts(N);
+        for (int i = 0; i < N; i++) {
+            const float a = i * TAU / N;
+            float r = 60.f;
+            while (r < 4000.f && D(r * std::cos(a), r * std::sin(a)) < WD) r *= 1.03f;
+            pts[i] = vec2{r * std::cos(a), r * std::sin(a)};
+        }
+        for (int i = 0; i < N; i++) {
+            const vec2 p = pts[i], q = pts[(i + 1) % N];
+            const float mx = (p.x + q.x) * 0.5f, mz = (p.y + q.y) * 0.5f;
+            const float len = std::hypot(q.x - p.x, q.y - p.y);
+            if (len > 220.f || inRiver(mx, mz, 6.f) || atSea(mx, mz)) continue;
+            const float yaw = std::atan2(q.y - p.y, q.x - p.x);
+            if (roadDist(mx, mz) < 18.f) {
+                // a gate: two towers
                 for (int s = -1; s <= 1; s += 2) {
-                    const float ph = j * LOT_D + s * 0.012f;
-                    b.add(WALL_R, ph, 0.f, 4.5f, 4.5f, 17.f, 0.f, 0.f, K_WALL, 0.2f, 0.f, 0.f, wb);
-                    b.add(WALL_R, ph, 0.f, 4.8f, 4.8f, 7.f, 0.f, 1.f, K_WALL, 0.25f, 0.f, 17.f, wb);
+                    const float gx = mx + s * 12.f * std::cos(yaw), gz = mz + s * 12.f * std::sin(yaw);
+                    b.add(gx, gz, yaw, 4.5f, 4.5f, 17.f, 0.f, 0.f, K_WALL, 0.2f, 0.f, WD * 1.02f);
+                    b.add(gx, gz, yaw, 4.8f, 4.8f, 7.f, 0.f, 1.f, K_WALL, 0.25f, 17.f, WD * 1.02f);
                 }
                 continue;
             }
-            b.add(WALL_R, phi, 0.f, WALL_R * LOT_D * 0.5f + 0.4f, 2.2f, 10.f, 0.f, 0.f, K_WALL, 0.f, 0.f, 0.f, wb);
-            if (j % 5 == 0) {
-                b.add(WALL_R, phi, 0.f, 4.f, 4.f, 15.f, 0.f, 0.f, K_WALL, 0.4f, 0.f, 0.f, wb);
-                b.add(WALL_R, phi, 0.f, 4.3f, 4.3f, 6.f, 0.f, 1.f, K_WALL, 0.45f, 0.f, 15.f, wb);
+            b.add(mx, mz, yaw, len * 0.5f + 0.6f, 2.2f, 10.f, 0.f, 0.f, K_WALL, 0.f, 0.f, WD * 1.02f, deathAt(mx, mz));
+            if (i % 4 == 0) {
+                b.add(p.x, p.y, yaw, 4.f, 4.f, 15.f, 0.f, 0.f, K_WALL, 0.4f, 0.f, WD * 1.02f, deathAt(p.x, p.y));
+                b.add(p.x, p.y, yaw, 4.3f, 4.3f, 6.f, 0.f, 1.f, K_WALL, 0.45f, 15.f, WD * 1.02f, deathAt(p.x, p.y));
             }
         }
     }
 
-    // ---- The lots: a log-polar grid, each ring built in its era's style.
-    const float R_MAX = 1.3e6f;
-    for (int i = 0;; i++) {
-        const float rIn = LOT_R0 * std::exp(i * LOT_D), rOut = rIn * std::exp(LOT_D);
-        if (rIn > R_MAX) break;
-        const float rc = std::sqrt(rIn * rOut);
-        const float s = rc * LOT_D;   // the lot's size (meters)
-        const bool boulevard = i % 12 == 11;
-        if (boulevard) continue;
-        if (std::fabs(rc - WALL_R) < s * 0.5f + 8.f) continue;
-        for (int j = 0; j < SECTORS; j++) {
-            if (j % 10 == 0) continue;   // a radial avenue
-            const float phi = (j + 0.5f) * LOT_D;
-            const float hl = hashLot((float)i, (float)j);
-            if (hl < 0.05f) continue;    // a park, a square
-            const float x = rc * std::cos(phi), z = rc * std::sin(phi);
-            if (inRiver(x, z, s * 0.55f)) continue;
-            if (rc > 100000.f && std::hypot(x - 180000.f * std::cos(0.3f), z - 180000.f * std::sin(0.3f)) < 15000.f) continue;   // the elevator's square
-            const float key = hashLot((float)(i / 2) + 0.5f, (float)(j / 2) + 7.f);
-            auto birthOf = [&](float r) { return r * rng.range(0.97f, 1.03f); };
-            if (rc < 1500.f) {
-                // the medieval town: a cluster of steep-roofed town houses, now and then a tower
-                const int k = s < 24.f ? 1 : 2;
-                const float sub = s / k;
-                for (int a = 0; a < k; a++)
-                    for (int c = 0; c < k; c++) {
-                        const float rr = rc * std::exp(((a + 0.5f) / k - 0.5f) * LOT_D);
-                        const float ph = phi + ((c + 0.5f) / k - 0.5f) * LOT_D;
-                        const float hw = sub * rng.range(0.3f, 0.4f), hd = sub * rng.range(0.32f, 0.42f);
-                        const float h = rng.range(6.f, 12.f) * std::min(1.6f, std::max(1.f, sub / 14.f));
-                        b.add(rr, ph, rng.range(-0.04f, 0.04f), hw, hd, h, std::min(hw, 7.f) * rng.range(0.8f, 1.1f), 0.f, K_TOWN, rng.uniform(), key, 0.f, birthOf(rr));
+    // ---- The lots: square, on grids turned district by district, sized by D (an octave of D a level).
+    const float L0 = 14.f;
+    for (int l = 0; l < 14; l++) {
+        const float Ll = L0 * std::pow(2.f, (float)l);
+        const float d0 = Ll / 0.07f, d1 = 2.f * d0;
+        if (d0 > 1.3e6f) break;
+        const float C = 12.f * Ll;
+        const float ext = std::min(d1 * 5.5f, 4.0e6f);
+        const int nc = (int)std::ceil(ext / C);
+        for (int cxi = -nc; cxi < nc; cxi++)
+            for (int czi = -nc; czi < nc; czi++) {
+                const float ccx = (cxi + 0.5f) * C, ccz = (czi + 0.5f) * C;
+                // a quick look at the district: skip it when its D is far from this level's range
+                const float dc = D(ccx, ccz);
+                if (dc < d0 * 0.45f - C || dc > d1 * 2.2f + C) continue;
+                const float ang = (hashLot(cxi + 31.f * l, czi - 17.f * l) - 0.5f) * 1.3f;
+                const float ca = std::cos(ang), sa = std::sin(ang);
+                for (int i = -6; i < 6; i++)
+                    for (int j = -6; j < 6; j++) {
+                        const float lx = (i + 0.5f) * Ll, lz = (j + 0.5f) * Ll;
+                        const float x = ccx + ca * lx - sa * lz, z = ccz + sa * lx + ca * lz;
+                        if (std::floor(x / C) != (float)cxi || std::floor(z / C) != (float)czi) continue;
+                        const float d = D(x, z);
+                        if (d < d0 || d >= d1) continue;
+                        if (atSea(x, z) || inRiver(x, z, Ll * 0.6f)) continue;
+                        if (roadDist(x, z) < std::max(10.f, 0.004f * std::hypot(x, z)) + Ll * 0.5f) continue;
+                        if (ofbm(x / (Ll * 9.f) + 31.f, z / (Ll * 9.f)) > 0.7f) continue;   // a park, a green finger
+                        if (d < 300.f && std::hypot(x, z) < 280.f) continue;                  // the village own
+                        if (d < 700.f && inView(x, z, 450.f)) continue;                       // nothing between the early camera and the hut
+                        const float birth = d * rng.range(0.98f, 1.02f);
+                        const float death = deathAt(x, z);
+                        if (death < birth * 1.02f) continue;
+                        const float yaw = ang;
+                        if (d < 1300.f) {
+                            // town houses with steep roofs, now and then a tower
+                            const int k = Ll >= 28.f ? 2 : 1;
+                            const float sub = Ll / k;
+                            for (int a = 0; a < k; a++)
+                                for (int c = 0; c < k; c++) {
+                                    const float ox = ((a + 0.5f) / k - 0.5f) * Ll, oz = ((c + 0.5f) / k - 0.5f) * Ll;
+                                    const float hx = x + ca * ox - sa * oz, hz = z + sa * ox + ca * oz;
+                                    const float hw = sub * rng.range(0.3f, 0.4f), hd = sub * rng.range(0.32f, 0.42f);
+                                    const float h = rng.range(6.f, 12.f) * std::min(1.6f, std::max(1.f, sub / 14.f));
+                                    b.add(hx, hz, yaw, hw, hd, h, std::min(hw, 7.f) * rng.range(0.8f, 1.1f), 0.f, K_TOWN, rng.uniform(), 0.f, birth, death);
+                                }
+                            if (rng.chance(0.025f)) {
+                                const float tw = std::min(Ll * 0.12f, 5.f), th = rng.range(24.f, 40.f);
+                                b.add(x, z, yaw, tw, tw, th, 0.f, 0.f, K_CHURCH, rng.uniform(), 0.f, birth, death);
+                                b.add(x, z, yaw, tw * 1.05f, tw * 1.05f, th * 0.45f, 0.f, 1.f, K_CHURCH, rng.uniform(), th, birth, death);
+                            }
+                        } else if (d < SKY_F0) {
+                            // stone perimeter blocks around a courtyard, mansards, now and then a dome
+                            const float w = Ll * 0.4f, dep = Ll * rng.range(0.1f, 0.14f);
+                            const float h = rng.range(18.f, 34.f) * (1.f + 0.5f * smoothstepf(1300.f, SKY_F0, d));
+                            const float sd = rng.uniform();
+                            for (int s = 0; s < 4; s++) {
+                                const float sx = s == 0 ? w - dep : s == 1 ? -(w - dep) : 0.f;
+                                const float sz = s == 2 ? w - dep : s == 3 ? -(w - dep) : 0.f;
+                                const float hx = x + ca * sx - sa * sz, hz = z + sa * sx + ca * sz;
+                                const bool alongX = s >= 2;
+                                b.add(hx, hz, yaw, alongX ? w : dep, alongX ? dep : w - 2.f * dep, h * rng.range(0.9f, 1.1f), std::min(dep, 6.f) * 0.8f, 0.f,
+                                      K_CLASSIC, sd, 0.f, birth, death);
+                            }
+                            if (rng.chance(0.04f)) b.add(x, z, yaw, w * 0.45f, w * 0.45f, h * 1.6f, 0.f, 0.7f, K_CLASSIC, 0.97f, 0.f, birth, death);
+                        } else if (d < 40000.f) {
+                            // modern mid-rise, two or three a lot, taller with the era
+                            const int m = rng.chance(0.5f) ? 3 : 2;
+                            for (int a = 0; a < m; a++) {
+                                const float ox = rng.range(-0.25f, 0.25f) * Ll, oz = rng.range(-0.25f, 0.25f) * Ll;
+                                const float hx = x + ca * ox - sa * oz, hz = z + sa * ox + ca * oz;
+                                const float h = towerH(d) * rng.range(0.15f, 0.45f);
+                                b.add(hx, hz, yaw, Ll * rng.range(0.1f, 0.18f), Ll * rng.range(0.08f, 0.16f), h, 0.f, rng.chance(0.2f) ? 0.15f : 0.f,
+                                      h > 260.f ? K_SUPER : K_GLASS, rng.uniform(), 0.f, birth, death);
+                            }
+                        } else if (d < 150000.f) {
+                            // megablocks: a podium and its towers
+                            const float sd = rng.uniform();
+                            const float ph = towerH(d) * rng.range(0.06f, 0.1f);
+                            b.add(x, z, yaw, Ll * 0.36f, Ll * 0.36f, ph, 0.f, 0.1f, K_GLASS, sd, 0.f, birth, death);
+                            const int m = rng.irange(1, 3);
+                            for (int a = 0; a < m; a++) {
+                                const float ox = rng.range(-0.22f, 0.22f) * Ll, oz = rng.range(-0.22f, 0.22f) * Ll;
+                                const float hx = x + ca * ox - sa * oz, hz = z + sa * ox + ca * oz;
+                                const float h = towerH(d) * rng.range(0.25f, 0.6f);
+                                addTower(b, rng, hx, hz, std::max(0.06f * h, 20.f), h, birth, rng.irange(0, 5), death);
+                            }
+                        } else {
+                            // arcologies: pyramids and ziggurats kilometers high
+                            const float hw = Ll * rng.range(0.34f, 0.42f);
+                            const float h = std::min(Ll * rng.range(0.6f, 1.0f), 40000.f);
+                            const float sd = rng.uniform();
+                            if (rng.chance(0.55f)) {
+                                b.add(x, z, yaw, hw, hw, h, 0.f, rng.range(0.7f, 0.9f), K_ARCO, sd, 0.f, birth, death);
+                            } else {
+                                b.add(x, z, yaw, hw, hw, h * 0.4f, 0.f, 0.25f, K_ARCO, sd, 0.f, birth, death);
+                                b.add(x, z, yaw, hw * 0.66f, hw * 0.66f, h * 0.35f, 0.f, 0.3f, K_ARCO, sd, h * 0.4f, birth, death);
+                                b.add(x, z, yaw, hw * 0.4f, hw * 0.4f, h * 0.35f, 0.f, 0.85f, K_ARCO, sd, h * 0.75f, birth, death);
+                            }
+                        }
                     }
-                if (rng.chance(0.03f)) {
-                    const float tw = std::min(s * 0.12f, 5.f);
-                    const float th = rng.range(24.f, 40.f);
-                    b.add(rc, phi, 0.f, tw, tw, th, 0.f, 0.f, K_CHURCH, rng.uniform(), key, 0.f, birthOf(rc));
-                    b.add(rc, phi, 0.f, tw * 1.05f, tw * 1.05f, th * 0.45f, 0.f, 1.f, K_CHURCH, rng.uniform(), key, th, birthOf(rc));
-                }
-            } else if (rc < 5000.f) {
-                // the stone city: blocks with mansard roofs, a courtyard's worth of variety in their heights
-                const float hw = s * rng.range(0.36f, 0.42f), hd = s * rng.range(0.36f, 0.42f);
-                const float h = rng.range(14.f, 30.f) * (1.f + 0.4f * smoothstepf(2500.f, 5000.f, rc));
-                b.add(rc, phi, 0.f, hw, hd, h, std::min(hw * 0.12f, 5.f), 0.f, K_CLASSIC, rng.uniform(), key, 0.f, birthOf(rc));
-                if (rng.chance(0.04f)) {
-                    // a dome
-                    b.add(rc, phi, 0.f, hw * 0.4f, hw * 0.4f, h * 0.9f, 0.f, 0.75f, K_CLASSIC, 0.95f, key, h, birthOf(rc));
-                }
-            } else if (rc < 16000.f) {
-                // glass towers, one to four a lot
-                const int k = rng.chance(0.55f) ? 2 : 1;
-                const float sub = s / k;
-                const float med = lerpf(70.f, 380.f, smoothstepf(5000.f, 16000.f, rc));
-                for (int a = 0; a < k; a++)
-                    for (int c = 0; c < k; c++) {
-                        if (k == 2 && rng.chance(0.2f)) continue;
-                        const float rr = rc * std::exp(((a + 0.5f) / k - 0.5f) * LOT_D);
-                        const float ph = phi + ((c + 0.5f) / k - 0.5f) * LOT_D;
-                        const float hw = sub * rng.range(0.24f, 0.36f), hd = sub * rng.range(0.24f, 0.36f);
-                        const float h = std::min(med * std::exp(rng.range(-0.6f, 0.9f)), 1100.f);
-                        const float bb = birthOf(rr);
-                        b.add(rr, ph, 0.f, hw, hd, h, 0.f, rng.chance(0.15f) ? 0.25f : 0.f, K_GLASS, rng.uniform(), key, 0.f, bb);
-                        if (h > 160.f && rng.chance(0.5f)) b.add(rr, ph, 0.f, hw * 0.6f, hd * 0.6f, h * 0.25f, 0.f, 0.2f, K_GLASS, rng.uniform(), key, h, bb);
-                    }
-            } else if (rc < 60000.f) {
-                // supertalls: setbacks and spires
-                const int n = rng.irange(1, 3);
-                const float med = lerpf(700.f, 2600.f, smoothstepf(16000.f, 60000.f, rc));
-                for (int t = 0; t < n; t++) {
-                    const float rr = rc * std::exp(rng.range(-0.3f, 0.3f) * LOT_D);
-                    const float ph = phi + rng.range(-0.3f, 0.3f) * LOT_D;
-                    const float w = s * rng.range(0.1f, 0.16f) / std::sqrt((float)n);
-                    const float h = std::min(med * std::exp(rng.range(-0.5f, 0.6f)), 5000.f);
-                    const float bb = birthOf(rr);
-                    const float sd = rng.uniform();
-                    b.add(rr, ph, 0.f, w, w * rng.range(0.8f, 1.2f), h * 0.55f, 0.f, 0.05f, K_SUPER, sd, key, 0.f, bb);
-                    b.add(rr, ph, 0.f, w * 0.72f, w * 0.72f, h * 0.3f, 0.f, 0.1f, K_SUPER, sd, key, h * 0.55f, bb);
-                    b.add(rr, ph, 0.f, w * 0.45f, w * 0.45f, h * 0.15f, 0.f, 0.6f, K_SUPER, sd, key, h * 0.85f, bb);
-                }
-                // and a podium of lower towers around them
-                if (rng.chance(0.7f)) {
-                    const float h = rng.range(120.f, 400.f);
-                    b.add(rc, phi + 0.3f * LOT_D, 0.f, s * 0.2f, s * 0.14f, h, 0.f, 0.f, K_GLASS, rng.uniform(), key, 0.f, birthOf(rc));
-                }
-            } else {
-                // arcologies: pyramids and ziggurats kilometers high, glowing bands
-                const float bb = birthOf(rc);
-                const float hw = s * rng.range(0.34f, 0.42f);
-                const float h = std::min(s * rng.range(0.6f, 1.1f), 40000.f);
-                const float sd = rng.uniform();
-                if (rng.chance(0.55f)) {
-                    b.add(rc, phi, 0.f, hw, hw, h, 0.f, rng.range(0.7f, 0.9f), K_ARCO, sd, key, 0.f, bb);
-                } else {
-                    b.add(rc, phi, 0.f, hw, hw, h * 0.4f, 0.f, 0.25f, K_ARCO, sd, key, 0.f, bb);
-                    b.add(rc, phi, 0.f, hw * 0.66f, hw * 0.66f, h * 0.35f, 0.f, 0.3f, K_ARCO, sd, key, h * 0.4f, bb);
-                    b.add(rc, phi, 0.f, hw * 0.4f, hw * 0.4f, h * 0.35f, 0.f, 0.85f, K_ARCO, sd, key, h * 0.75f, bb);
-                }
+            }
+    }
+
+    // ---- The downtowns: the main one by the old town, then in the satellite towns; then the megatalls.
+    {
+        std::vector<vec3> placed3;
+        addDowntown(b, rng, dcx, dcz, SKY_F0, 14.f, 900, 350.f, 2600.f, placed3);
+        // midtowns across the view (left of the main one, farther), so that the skyline spans the whole screen
+        {
+            std::vector<vec3> pl;
+            addDowntown(b, rng, 1700.f, -5100.f, SKY_F0 * 1.35f, 12.f, 600, 300.f, 2000.f, pl);
+        }
+        {
+            std::vector<vec3> pl;
+            addDowntown(b, rng, 5100.f, -8900.f, SKY_F0 * 1.9f, 10.f, 450, 300.f, 2200.f, pl);
+        }
+        {
+            std::vector<vec3> pl;
+            addDowntown(b, rng, 6800.f, 1800.f, SKY_F0 * 2.4f, 9.f, 350, 300.f, 1600.f, pl);
+        }
+        for (int j = 1; j < 6; j++) {
+            std::vector<vec3> pl;
+            const float F0 = std::max(S[j].a * 2.2f, SKY_F0 * (1.6f + 0.5f * j));
+            addDowntown(b, rng, S[j].x, S[j].z, F0, 9.f, 260, 250.f, 300.f + 0.18f * S[j].a, pl);
+        }
+        // megatalls: the tallest of all, km high, in the main downtown and the first satellites
+        for (int m = 0; m < 16; m++) {
+            const float birth = 40000.f * std::exp((m + rng.uniform()) / 16.f * std::log(4.f));
+            const int site = m % 3;
+            const float cx = site == 0 ? dcx : S[site].x, cz = site == 0 ? dcz : S[site].z;
+            for (int tries = 0; tries < 20; tries++) {
+                const float rho = rng.range(200.f, 2500.f), a = rng.range(0.f, TAU);
+                const float x = cx + rho * std::cos(a), z = cz + rho * std::sin(a);
+                if (inRiver(x, z, 80.f) || atSea(x, z)) continue;
+                const float h = towerH(birth) * rng.range(1.1f, 1.4f);
+                addTower(b, rng, x, z, 0.055f * h, h, birth, rng.irange(0, 3));
+                break;
             }
         }
     }
@@ -264,10 +407,10 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
     std::vector<size_t> order(n);
     std::iota(order.begin(), order.end(), size_t(0));
     std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t c) { return b.births[a] < b.births[c]; });
-    plan.inst.resize(n * 16);
+    plan.inst.resize(n * FL);
     plan.births.resize(n);
     for (size_t k = 0; k < n; k++) {
-        std::copy(b.rows.begin() + order[k] * 16, b.rows.begin() + order[k] * 16 + 16, plan.inst.begin() + k * 16);
+        std::copy(b.rows.begin() + order[k] * FL, b.rows.begin() + order[k] * FL + FL, plan.inst.begin() + k * FL);
         plan.births[k] = b.births[order[k]];
     }
     {
@@ -282,27 +425,28 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
 
     // ---- The space elevator's foot: a great tapering tower (its tether is drawn as light, see megacity.cpp).
     {
-        const float er = 180000.f, ephi = 0.3f;
+        const float er = 180000.f, ephi = 2.4f;
+        const float ex = er * std::cos(ephi), ez = er * std::sin(ephi);
         const float th = er / R_EARTH;
         const float s2 = std::sin(th * 0.5f);
         plan.elevator = vec3(R_EARTH * std::sin(th) * std::cos(ephi), -2.f * R_EARTH * s2 * s2, R_EARTH * std::sin(th) * std::sin(ephi));
         plan.elevatorUp = normalize(plan.elevator + vec3(0.f, R_EARTH, 0.f));
-        const float eb = 5.5e5f;
+        const float eb = 6.e5f;
         plan.fixedFirst = (int)plan.births.size();
         Builder eb2{plan, {}, {}, {}};
-        eb2.add(er, ephi, 0.f, 9000.f, 9000.f, 16000.f, 0.f, 0.8f, K_ELEVATOR, 0.5f, 0.f, 0.f, eb);
-        eb2.add(er, ephi, 0.f, 1800.f, 1800.f, 30000.f, 0.f, 0.7f, K_ELEVATOR, 0.6f, 0.f, 16000.f, eb);
+        eb2.add(ex, ez, 0.f, 9000.f, 9000.f, 16000.f, 0.f, 0.8f, K_ELEVATOR, 0.5f, 0.f, eb);
+        eb2.add(ex, ez, 0.f, 1800.f, 1800.f, 30000.f, 0.f, 0.7f, K_ELEVATOR, 0.6f, 16000.f, eb);
         plan.inst.insert(plan.inst.end(), eb2.rows.begin(), eb2.rows.end());
         plan.births.insert(plan.births.end(), eb2.births.size(), 1e30f);
     }
 
-    // ---- Trees around the hut, cut down as the village reaches them.
+    // ---- Trees around the hut, cut down as the town reaches them.
     for (int t = 0; t < 260; t++) {
         const float r = 5.f + 260.f * std::pow(rng.uniform(), 0.9f);
         const float a = rng.range(0.f, TAU);
         const float x = r * std::cos(a), z = r * std::sin(a);
         if (inRiver(x, z, 2.f)) continue;
-        if ((x < -2.f && r < 48.f) || inView(x, z, 160.f)) continue;   // keep the camera's side of the hut open
+        if ((x < -2.f && r < 48.f) || inView(x, z, 160.f)) continue;
         const float sz = rng.range(2.2f, 4.2f) * (r < 20.f ? 0.9f : 1.f);
         const float q[4] = {x, z, sz, rng.uniform()};
         plan.trees.insert(plan.trees.end(), q, q + 4);

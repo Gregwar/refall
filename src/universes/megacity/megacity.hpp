@@ -8,26 +8,25 @@
 #include "ugl.hpp"
 #include "universe.hpp"
 
-// The world: meters, the hut at the origin on the ground, y up, the planet's center at (0, -R, 0). The city grows in
-// rings around the hut: its radius (the geodesic distance from the hut to its edge) is what the lines drive. Past a
-// village, its lots follow a log-polar grid around the hut (square lots whose size grows with the distance: the
-// older the ring, the smaller its houses), the same grid on the CPU (the buildings) and in the ground's shader (the
-// streets, the lights of the lots too small to draw as buildings).
+// The world: meters, the hut at the origin on the ground, y up, the planet's center at (0, -R, 0). The lines drive
+// the city's frontier F (meters); each place rises when F passes its organic distance D (see field()): the distance
+// from the hut stretched by the terrain (short along the river, the highways and the coast, long across the land),
+// warped by noise into lobes and fingers, and short again around satellite towns along the highways, which grow on
+// their own and merge. The same field on the CPU (the buildings) and in the ground's shader (the streets, the lights).
 namespace mcity {
 constexpr float R_EARTH = 6.371e6f;
-constexpr float LOT_R0 = 200.f;        // where the log-polar grid starts (inside: the village, laid out by hand)
-constexpr int SECTORS = 120;           // lots around a ring
-constexpr float LOT_D = 6.2831853f / SECTORS;   // a lot's size in log-polar units (radians, and ln r)
-constexpr float CITY_FULL = 2.0e7f;    // the planet covered (pi R)
-// The river: its centerline's x (meters) at a z along it (near the hut; it fades out far away).
+constexpr float TAU_F = 6.2831853f;
+constexpr int ROADS = 6;
+constexpr int SATS = 8;
+// The river: its centerline's x (meters) at a z along it.
 inline float riverX(float z) {
     const float a = std::fabs(z);
     return 14.f + z * 0.16f * std::sin(std::log(a + 30.f) * 2.6f) + 18.f * std::sin(z * 0.011f) * std::min(1.f, a / 150.f);
 }
 inline float riverHalfW(float z) {
     const float a = std::fabs(z);
-    const float t = std::min(1.f, std::max(0.f, (a - 30000.f) / 30000.f));
-    return (7.f + 0.035f * a) * (1.f - t * t * (3.f - 2.f * t));
+    const float t = std::min(1.f, std::max(0.f, (a - 50000.f) / 30000.f));
+    return (7.f + 0.022f * a) * (1.f - t * t * (3.f - 2.f * t));
 }
 // A hash shared with the shaders (no sin: the same result on the CPU and the GPU).
 inline float hashLot(float x, float y) {
@@ -38,12 +37,78 @@ inline float hashLot(float x, float y) {
     const float r = (p3x + p3y) * p3z;
     return r - std::floor(r);
 }
+inline float vnL(float x, float y) {
+    const float ix = std::floor(x), iy = std::floor(y);
+    float fx = x - ix, fy = y - iy;
+    fx = fx * fx * (3.f - 2.f * fx); fy = fy * fy * (3.f - 2.f * fy);
+    const float a = hashLot(ix, iy), b = hashLot(ix + 1.f, iy), c = hashLot(ix, iy + 1.f), d = hashLot(ix + 1.f, iy + 1.f);
+    const float ab = a + (b - a) * fx, cd = c + (d - c) * fx;
+    return ab + (cd - ab) * fy;
+}
+inline float ofbm(float x, float y) {
+    return 0.5f * vnL(x, y) + 0.3f * vnL(x * 2.1f + 5.3f, y * 2.1f + 1.1f) + 0.2f * vnL(x * 4.3f + 1.7f, y * 4.3f + 9.2f);
+}
+// The highways leaving the hut: their bearing at a distance r (winding gently in log space).
+inline float roadAngle(int k, float r) {
+    return k * TAU_F / ROADS + 0.5f * (hashLot((float)k, 3.f) - 0.5f) + 0.22f * std::sin(std::log(r + 600.f) * 2.1f + 1.7f * k);
+}
+// The coast of a bay east of the hut: > 0 at sea.
+inline float coastSigned(float x, float z) {
+    const float along = x * 0.96f + z * 0.28f, across = -x * 0.28f + z * 0.96f;
+    return along - (16000.f + 0.42f * std::fabs(across) + 9000.f * (ofbm(x / 11000.f, z / 11000.f) - 0.5f) * 2.f);
+}
+inline bool atSea(float x, float z) { return x * x + z * z < 2.5e11f && coastSigned(x, z) > 0.f; }
+// Satellite towns along the highways: position, the frontier at which each is founded.
+struct Sat { float x, z, a; };
+inline void satellites(Sat* s) {
+    for (int j = 0; j < SATS; j++) {
+        const int k = (j * 5 + 1) % ROADS;
+        float r = 2600.f * std::pow(1.72f, (float)j);
+        float ph = roadAngle(k, r);
+        for (int t = 0; t < 8 && atSea(r * std::cos(ph), r * std::sin(ph)); t++) { r *= 0.8f; ph = roadAngle(k, r); }
+        s[j] = {r * std::cos(ph), r * std::sin(ph), 0.5f * r};
+    }
+}
+// The distance to the nearest corridor the city follows: the river, the highways, the coast.
+inline float corridor(float x, float z, float r) {
+    float d = std::fabs(z) < 80000.f ? std::max(0.f, std::fabs(x - riverX(z)) - riverHalfW(z)) : 1e9f;
+    const float ph = std::atan2(z, x);
+    for (int k = 0; k < ROADS; k++) {
+        float a = ph - roadAngle(k, r);
+        a -= TAU_F * std::floor(a / TAU_F + 0.5f);
+        d = std::min(d, std::fabs(a) * r);
+    }
+    if (r < 5.e5f) d = std::min(d, std::fabs(coastSigned(x, z)));
+    return d;
+}
+// The organic distance D: when the frontier F passes it, the place is built.
+inline float field(float x, float z, const Sat* s) {
+    const float r = std::sqrt(x * x + z * z) + 1e-3f;
+    const float c = 0.58f + 0.72f * std::min(1.f, std::max(0.f, corridor(x, z, r) / (0.1f * r + 150.f)));
+    const float lr = std::log(r + 50.f);
+    const float ux = x / r, uz = z / r;
+    const float n1 = ofbm(ux * 2.6f + lr * 1.1f, uz * 2.6f + lr * 0.6f);
+    const float n2 = ofbm(ux * 8.f - lr * 2.3f + 17.f, uz * 8.f + lr * 1.7f);
+    const float n = std::exp((n1 - 0.5f) * 1.5f + (n2 - 0.5f) * 0.7f);
+    float D = r * c * n;
+    for (int j = 0; j < SATS; j++) {
+        const float dx = x - s[j].x, dz = z - s[j].z;
+        D = std::min(D, s[j].a + std::sqrt(dx * dx + dz * dz) * c * n * 1.15f);
+    }
+    // far away (the continents, the planet) a plainer distance, so that the whole planet gets covered in the end
+    const float k = std::min(1.f, std::max(0.f, (lr - 12.6f) / 2.4f));
+    return D + (r * (0.8f + 0.3f * n1) - D) * k * k * (3.f - 2.f * k);
+}
+// The tallest towers when the frontier is at F (the skyscraper stage starts at ~4 km).
+inline float towerH(float F) { return 95.f * std::pow(std::max(F, 1000.f) / 4500.f, 1.1f); }
+constexpr float SKY_F0 = 4200.f;   // the frontier at which the first towers rise downtown
 } // namespace mcity
 
 // The city, generated once per game from a seed (city.cpp). Every building carries the city radius at which it rises.
 struct MegaCityPlan {
-    // 16 floats a building (see BLD_VS): base center (world) + birth radius; its x axis + half width; half depth,
-    // height, roof height, taper; kind, seed, light key, base height.
+    // 20 floats a building (see BLD_VS): base center (world) + birth; its x axis + half width; half depth, height,
+    // roof height, taper; kind, seed, light key, base height; death (it sinks back when the frontier passes it:
+    // the old town making way for the towers), twist, -, -.
     std::vector<float> inst;
     // The instances are sorted by birth radius: births[i] is the i-th one's.
     std::vector<float> births;
@@ -54,6 +119,8 @@ struct MegaCityPlan {
     int fixedFirst = 0;             // instances from here on are drawn whatever their size (the elevator's tower)
     // Trees around the hut (meters): x, z, size, seed (they vanish when the city reaches them).
     std::vector<float> trees;
+    mcity::Sat sats[mcity::SATS];
+    float downtown[2] = {1700.f, -350.f};   // the main downtown's center (x, z)
 };
 MegaCityPlan buildMegaCity(uint64_t seed);
 
