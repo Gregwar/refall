@@ -16,7 +16,7 @@
 namespace myc {
 constexpr float SPORE_Y = -0.0007f;     // the spore, just under the surface (meters)
 constexpr float DEPTH_K = 0.42f;        // the network's reach downward, relative to its reach sideways
-constexpr float G_MAX = 8.2f;           // the most it spreads (some 3.6 km)
+constexpr float G_MAX = 9.2f;           // the most it spreads (some 10 km)
 // The surface of the forest floor along the cut (the same sum of waves as SURF_GLSL), 0 at the spore.
 inline float surf(float x) {
     float s = 0.f, s0 = 0.f, l = 0.01f;
@@ -103,10 +103,10 @@ private:
     void planMushrooms();
     // ---- Human-made things, for scale (a cabin to a skyline, airliners under the caps).
     enum { L_CABIN = 0, L_CAR, L_PYLON, L_WIRES, L_SPIRE, L_MAST, L_TURBINE, L_SKYLINE, L_PLANE, L_TRAIL, L_BALLOON, L_HELI, L_CLOUD };
-    struct Landmark { int type; float x, y, z, h, w, gate, p0, seed; };
+    struct Landmark { int type, shroom; float x, y, z, h, w, p0, seed, u; bool init; };
     std::vector<Landmark> marks_;
     std::vector<float> markGlow_;
-    float townX_ = 0.f;
+    float markTime_ = 0.f;
     void planLandmarks();
     void buildLandmarks();
     float shroomHeight(const Mushroom& m) const;

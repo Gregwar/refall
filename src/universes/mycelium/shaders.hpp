@@ -945,9 +945,11 @@ vec4 skyline(vec2 q) {
         if (i == 8) d = min(d, line(q, vec2(cx, hh), vec2(cx, hh + 0.06), 0.003));
         float cv = cover(d);
         if (cv <= 0.0) continue;
-        float w = windows(q - vec2(cx - hw, 0.0), vec2(0.016, 0.012), vec2(0.005, 0.003), seed + fi, 0.3) * 0.7;
-        vec3 tint = mix(WARM, vec3(0.75, 0.88, 1.0), hash1(seed + fi * 3.3));
-        vec3 c = vec3(0.03, 0.035, 0.05) * mmLit(vec3(0.0, 0.2, -1.0)) * 1.6 + tint * w * 1.4;
+        float w = windows(q - vec2(cx - hw, 0.0), vec2(0.028, 0.02), vec2(0.009, 0.0055), seed + fi, 0.3);
+        vec3 tint = mix(WARM, vec3(0.7, 0.8, 0.95), 0.6 * hash1(seed + fi * 3.3));
+        float across = clamp((q.x - cx) / hw, -1.0, 1.0);
+        vec3 c = vec3(0.07, 0.075, 0.09) * (mmLit(normalize(vec3(across, 0.1, -1.0))) * 1.8 + uMoonC * 0.08 * max(across, 0.0)) * (0.85 + 0.15 * q.y / hh) + tint * w * 0.75;
+        c += uMoonC * 0.05 * smoothstep(0.85, 1.0, abs(across));
         col = mix(col, c, cv);
         em = mix(em, w, cv);
         a = max(a, cv);
@@ -1017,10 +1019,10 @@ vec4 cloud(vec2 q) {
     float seed = vB.z;
     float W = vB.x / vA.w;
     float dens = 0.0;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 10; i++) {
         float fi = float(i);
-        vec2 c = vec2((hash1(seed * 3.0 + fi) * 2.0 - 1.0) * W * 0.7, 0.45 + 0.2 * hash1(seed * 5.0 + fi));
-        float r = (0.22 + 0.16 * hash1(seed * 7.0 + fi)) * min(W, 1.6);
+        vec2 c = vec2((fi / 9.0 * 2.0 - 1.0 + (hash1(seed * 3.0 + fi) - 0.5) * 0.2) * W * 0.75, 0.45 + 0.15 * hash1(seed * 5.0 + fi));
+        float r = (0.32 + 0.2 * hash1(seed * 7.0 + fi)) * max(0.6, W * 0.22);
         dens += exp(-dot(q - c, q - c) / (r * r));
     }
     dens *= 0.75 + 0.5 * fbm(q * 3.0 + seed * 4.0);
