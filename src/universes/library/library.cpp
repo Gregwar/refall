@@ -2,10 +2,10 @@
 //
 // The pieces are books standing in the well, one per cell, their spines toward us: cloth bindings in a clean color
 // per piece, gilt bands and a label on the rounded spine, the page block showing on top; the well is a tall bookcase
-// of dark wood. When a row clears, its ten books slide out of the well and float calmly across the room into the gaps
-// that open for them on the shelves, sorted: by color in rainbow order, the tallest first in each color, the books
-// after them sliding along (and over to the next shelf) to make room. Every book on the shelves is a cleared cell:
-// N lines, 10 N books. They stay for the game.
+// of dark wood. When a row clears, its ten books slide out of the well one after the other and float calmly across
+// the room to the shelves, shelved in the order they come (each after the last, shelf after shelf, bookcase after
+// bookcase) and never moved again: the collection is the history of the game. Every book on the shelves is a
+// cleared cell: N lines, 10 N books. They stay for the game.
 //
 // It starts as a cosy study with one empty bookcase (the desk and its green lamp under the window, a fire, an
 // armchair, a globe, a longcase clock). Once that bookcase is well filled (S_ROOM), the study's walls fall away into a
@@ -63,7 +63,7 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 
-// The rainbow rank of each piece (I O T S Z J L): red Z, orange L, gold O, green S, teal I, blue J, violet T.
+// The rainbow rank of each piece (I O T S Z J L), kept in the books (they are not sorted by it).
 const int RANK[7] = {4, 2, 6, 3, 0, 5, 1};
 // Each piece's spine (0 gilt rules and a label, 1 raised bands, 2 a label panel and gilt head, 3 rules and a fleuron).
 const int STYLE[7] = {1, 2, 0, 3, 1, 2, 0};
@@ -118,11 +118,15 @@ constexpr float CELL_HY = 0.48f;
 constexpr float CELL_D = 0.36f;
 constexpr float BOARD_EYE_Y = 4.5f;  // the board camera's height (the books' tops show)
 
-// Test hooks: ZEN_LIBRARY_LINES=N adds N lines to the growth, ZEN_GROW_RATE=R adds R lines a second.
-int extraLines(double t) {
+// Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already on the shelves: for screenshots),
+// ZEN_GROW_RATE=R adds R lines a second (each one cleared like a real line: its ten books fly to the shelves).
+int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
+    return n;
+}
+int rateLines(double t) {
     static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
-    return n + (int)(rate * t);
+    return (int)(rate * t);
 }
 
 mat4 inverse(const mat4& m) {
@@ -662,11 +666,10 @@ void LibraryUniverse::resetGrowth() {
     books_.clear();
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& f) { return f.kind == 0; }), flights_.end());
     bays_.clear();
-    hookLines_ = 0;
     worldDirty_ = true;
 }
 
-// A new book for the collection, in its sorted place (the books after it make room).
+// A new book for the collection, after the last one (books are shelved in the order they come, and never move).
 const LibraryUniverse::Book& LibraryUniverse::addBook(int type, bool flying) {
     Book b;
     b.id = nextBookId_++;
@@ -678,8 +681,39 @@ const LibraryUniverse::Book& LibraryUniverse::addBook(int type, bool flying) {
     b.gilt = rng_.chance(0.3f);
     b.key = RANK[type] * 10.f + (0.4f - b.h) * 10.f + rng_.uniform() * 0.01f;
     b.flying = flying;
-    auto it = std::upper_bound(books_.begin(), books_.end(), b.key, [](float key, const Book& o) { return key < o.key; });
-    return *books_.insert(it, b);
+    books_.push_back(b);
+    return books_.back();
+}
+
+// A cleared row's books: each one shelved after the last, flying there from its cell, left to right.
+void LibraryUniverse::putAway(const std::vector<GameEvent::CellInfo>& cells, bool hold) {
+    std::vector<GameEvent::CellInfo> cs;
+    for (auto& c : cells)
+        if (c.x >= 0 && c.x < Game::W && c.y >= Game::HIDDEN && c.y < Game::H) cs.push_back(c);
+    // rows bottom first, each left to right: the order they go on the shelf
+    std::sort(cs.begin(), cs.end(), [](const GameEvent::CellInfo& a, const GameEvent::CellInfo& b) { return a.y != b.y ? a.y > b.y : a.x < b.x; });
+    // a line arriving while the last ones are still in the air waits its turn, so the books never cross
+    float start = 0.f;
+    for (const Flight& f : flights_)
+        if (f.kind == 0 && !f.world) start = std::max(start, f.delay - f.t + 0.15f);
+    int i = 0;
+    for (auto& c : cs) {
+        const int type = std::clamp(c.type, 0, 6);
+        const Book& b = addBook(type, true);
+        Flight fl;
+        fl.book = b.id;
+        fl.type = type;
+        fl.style = b.style;
+        fl.gilt = b.gilt;
+        fl.b0 = layout::cellPos((float)c.x, (float)c.y);
+        fl.delay = std::max(0.f, start) + 0.05f * i;
+        fl.spin = 0.f;
+        fl.kind = 0;
+        fl.hold = hold;
+        flights_.push_back(fl);
+        i++;
+    }
+    layoutBooks();
 }
 
 // =====================================================================================================
@@ -695,24 +729,7 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
         if (ev.count >= 4) tetrisT_ = 0.f;
-        for (auto& c : ev.cells) {
-            if (c.x < 0 || c.x >= Game::W || c.y < Game::HIDDEN) continue;
-            const int k = (int)(std::find(rows.begin(), rows.end(), c.y) - rows.begin());
-            const int type = std::clamp(c.type, 0, 6);
-            // a book for the collection, put in its sorted place (the books after it make room at once)
-            const Book& b = addBook(type, true);
-            Flight fl;
-            fl.book = b.id;
-            fl.type = type;
-            fl.style = b.style;
-            fl.gilt = b.gilt;
-            fl.b0 = layout::cellPos((float)c.x, (float)c.y);
-            fl.delay = 0.035f * (float)((c.x * 7) % 10) * 0.5f + 0.1f * k;
-            fl.spin = 0.f;
-            fl.kind = 0;
-            flights_.push_back(fl);
-        }
-        layoutBooks();
+        putAway(ev.cells, true);
         break;
     }
     case GameEvent::TopOut: {
@@ -1147,20 +1164,28 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game starts again from the study).
     {
-        const int hook = extraLines(time_);
+        const int hookStart = startLines(), hookRate = rateLines(time_);
+        const int hook = hookStart + hookRate;
         const int lines = game.lines() + hook;
         if (linesSeen_ >= 0 && lines < lines_ && !game.over()) resetGrowth();
         lines_ = lines;
         if (linesSeen_ < 0) { grow_ = (float)lines; growV_ = 0.f; }
         linesSeen_ = lines;
-        // (the test hooks' lines bring their ten books each, put straight on the shelves)
-        if (hook > hookLines_) {
-            for (int l = hookLines_; l < hook; l++)
+        // the test hooks' lines: the static offset's books put straight on the shelves (screenshots), the grow
+        // rate's lines cleared like real ones (a row of ten books out of the bottom of the well, flying home)
+        if (!hookPlaced_) {
+            hookPlaced_ = true;
+            for (int l = 0; l < hookStart; l++)
                 for (int k = 0; k < 10; k++) addBook(rng_.irange(0, 6), false);
-            hookLines_ = hook;
             layoutBooks();
             for (Book& b : books_)
                 if (!b.flying) { b.shelfShown = b.shelf; b.x = b.xT; b.hop = 1.f; }
+        }
+        while (hookLines_ < hookRate) {
+            hookLines_++;
+            std::vector<GameEvent::CellInfo> row;
+            for (int x = 0; x < Game::W; x++) row.push_back({x, Game::H - 1, rng_.irange(0, 6)});
+            putAway(row, false);
         }
         const float target = (float)lines;
         const float w = 3.2f;
@@ -1225,7 +1250,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     for (int i = 0; i < (int)bays_.size(); i++) {
         const Bay& b = bays_[i];
         st_ = Stamp{};
-        st_.born = b.born;
+        // (a bookcase carried in mid-game comes in over a second and a half, whatever the lines do)
+        st_.born = b.t0 >= 0.f ? grow_ + 0.86f - 0.85f * saturate((worldTime_ - b.t0) / 1.5f) : b.born;
         st_.style = i == 0 ? 0.f : 3.f;
         buildBookcase(b.c, b.along, b.out, BAY_W, TIER_H, BAY_SHELVES, pal_.wood, false, -1, 3.f + i);
         // brass bookends at the shelves' left ends
@@ -1310,7 +1336,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fl.gilt ? 1.f : 0.f;
             in.col[0] = col.x; in.col[1] = col.y; in.col[2] = col.z; in.col[3] = fl.b0.x * 0.3f;
             in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f;
-            if (tt >= 0.f) cells_.push_back(in);
+            if (tt >= 0.f || fl.hold) cells_.push_back(in);
             ++it;
             continue;
         }
@@ -1701,7 +1727,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books, put away sorted on the shelves of a personal library growing from a cosy study into a long room of bookcases, in 3D",
+        "LIBRARY", "the blocks are books, put away on the shelves of a personal library growing from a cosy study into a long room of bookcases, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A quiet, warm world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },
