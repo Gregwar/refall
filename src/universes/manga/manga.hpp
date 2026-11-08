@@ -82,9 +82,12 @@ private:
     void drawElement(const manga::Element& e, float inkT, float fade, float rotA);
     void drawBurst(float amt);
     void drawFrames(float shatter);
-    void drawSplash(float amt, float t);
+    void drawSplash(float amt, float t, const vec3& color);
     void setClips();
-    float clipEq_[manga::P_COUNT][4][3];
+    // the panels' clips, then spare slots for the drop's own panels (set per frame)
+    static constexpr int CLIP_SLOTS = manga::P_COUNT + 8;
+    float clipEq_[CLIP_SLOTS][4][3];
+    void setClip(int slot, const V2* quad);
 
     // ---- Pieces: one id per piece (its cells share one outline).
     int ids_[22][10] = {};
@@ -101,9 +104,14 @@ private:
     std::vector<Impact> impacts_;
 
     // ---- Sound effects lettered on the page.
-    struct Sfx { std::string text; V2 at; float size, angle, t, life, in; bool vertical; int style; };
+    // Styles: a white letter outlined in ink on a paper margin, a black letter on a paper margin, a thin outlined
+    // letter (silence), a bold color outlined in ink on a paper margin, the crossing's red, a white letter outlined
+    // in ink with no margin (on an ink ground).
+    enum { SFX_OUTLINED = 0, SFX_BLACK = 1, SFX_THIN = 2, SFX_COLOR = 3, SFX_LAMP = 4, SFX_WHITE = 5 };
+    // fx: the drop effect it belongs to (-1: none; it lasts as long as that effect), vel: sliding (units/s)
+    struct Sfx { std::string text; V2 at; float size, angle, t, life, in; bool vertical; int style; int fx = -1; V2 vel{0, 0}; };
     std::vector<Sfx> sfx_;
-    void addSfx(const std::string& text, V2 at, float size, float angle, float life, bool vertical, int style, float in = 0.35f);
+    Sfx& addSfx(const std::string& text, V2 at, float size, float angle, float life, bool vertical, int style, float in = 0.35f);
     void drawSfx(const Sfx& s, float alpha);
 
     // ---- GL.
@@ -144,7 +152,42 @@ private:
     bool dropMode_ = false;
     float dropT_ = -1.f;       // seconds since the drop's downbeat (-1: none)
     bool donShown_ = false;
-    float splash_ = 0.f;       // the drop's full-page splash 0..1
+    float splash_ = 0.f;       // the drop's weight 0..1 (the strongest of its effects)
+    // ---- The drop's effects: one per drop (a shuffled rotation, never the same twice in a row), a new one every
+    // 32 beats of a long drop.
+    enum { DF_SPLASH = 0, DF_DASH, DF_PANELS, DF_IMPACT, DF_SHOJO, DF_BARRAGE, DF_COUNT };
+    int fx_ = -1, lastFx_ = -1;
+    int bag_[DF_COUNT] = {}, bagPos_ = DF_COUNT;
+    float fxAmt_[DF_COUNT] = {};   // each effect's weight 0..1 (eased in and out)
+    float fxT_[DF_COUNT] = {};     // seconds since it started
+    double fxBeat0_ = 0.0;         // the beat it started on
+    long fxStep_ = -1000;          // its own beat counter
+    float jolt_ = 0.f;             // the drawings' jolt on a beat (barrage)
+    V2 joltDir_{0, 0};
+    int pickFx();
+    void startFx(int fx, double beat);
+    void fxBeat(int fx, long n, double beat, float bpm);
+    // art modes: 0 as drawn, 1 negative (the ink's lines in paper, on an ink ground), 2 the lines only (ink and paper)
+    int artMode_ = 0;
+    std::vector<float> elemBox_; // per element: its bounds (board units), x0 y0 x1 y1
+    void drawArtAt(int srcPanel, int clipSlot, V2 focus, float zoom, V2 centerB, int mode, float alpha, bool inked, const float* cullPx);
+    void gradRect(float x0, float y0, float x1, float y1, const vec3& top, const vec3& bottom, float a); // board units
+    void starburst(V2 c, float rx, float ry, int spikes, float inner, uint64_t seed, const vec3& fill, float a, float outlinePx);
+    void sparkle(V2 c, float r, float rot, const vec3& fill, const vec3& line, float a);
+    void flower(V2 c, float r, float rot, float open, const vec3& petal, const vec3& line, float a);
+    void drawDash(float a, float t, double beat);
+    void drawPanelBreak(float a, double beat);
+    void drawImpact(float a, double beat);
+    void drawShojo(float a, double beat);
+    void drawBarrage(float a, double beat);
+    struct Ring { V2 c; float t, life, r0, r1; };
+    std::vector<Ring> rings_;
+    struct Shard { V2 p, v; float rot, vr, size, t, life; int kind; };
+    std::vector<Shard> shards_;
+    struct Pop { V2 at; float t, life, size, angle; int kind; std::string text; };
+    std::vector<Pop> pops_;     // barrage: sound effects in starburst balloons
+    bool negative_ = false;     // drawing elements inverted (white on ink)
+    int clipOverride_ = -1;     // drawing elements into another clip slot
     float burst_ = 0.f;        // its burst of color (or a Tetris')
     float tetrisT_ = -1.f;     // seconds since a Tetris
     float kickIn_ = 0.f;
