@@ -106,7 +106,7 @@ song, and songs change universe with a transition on the beat. Forty-three unive
 <td><img src="docs/universes/megacity.jpg"><br><b>MEGACITY</b>: a hut on a riverbank at dusk growing with every cleared line into a village, a walled town, a skyline of towers, arcologies and a space elevator, until the planet is one glowing ball of city lights under an orbital ring; the drop raises a whole district whose lights come on block by block on the beat<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit, one module docked per cleared line by tugs and a robot arm, from a lone capsule over the planet to trusses, solar wings, a spinning habitat wheel and finally a great ring with forests inside; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, swarms, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
 <td></td>
 </tr>
 </table>

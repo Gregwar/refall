@@ -142,16 +142,113 @@ void OrbitalUniverse::buildPlan() {
         m.pivot = vec3(std::cos(mid) * (GREAT_R - GREAT_WALL * 0.5f), GREAT_HW + GREAT_R * 0.06f, -std::sin(mid) * (GREAT_R - GREAT_WALL * 0.5f));
         m.tugs = 2;
     }
-    // then liners keep docking along the great ring, for ever (up to a cap)
-    for (int k = 0; k < 80; k++) {
-        const float a = k * 137.508f * DEG;
-        Module& m = add(K_LINER, frameZ(GREAT_C, vec3(0, 0, 1)), vec3(1.f), vec3(std::cos(a), 0.3f, -std::sin(a)), 260.f);
-        m.a0 = a;
-        m.al = (k % 2 ? 1.f : -1.f);
-        m.ring = 2;
-        m.pivot = vec3(std::cos(a) * (GREAT_R + 220.f), m.al * GREAT_HW * 0.45f, -std::sin(a) * (GREAT_R + 220.f));
+    // ---- Then each stage an order of magnitude bigger.
+    auto ringDef = [&](int r, const vec3& c, const vec3& n, float baseW, float peakW, float dropW, float heads, float turn) {
+        Ring& R = rings_[r];
+        R.c = c;
+        R.n = normalize(n);
+        R.ref = normalize(cross(R.n, std::fabs(R.n.z) < 0.9f ? vec3(0, 0, 1) : vec3(1, 0, 0)));
+        R.baseW = baseW;
+        R.peakW = peakW;
+        R.dropW = dropW;
+        R.heads = heads;
+        R.turn = turn;
+    };
+    ringDef(1, WHEEL_C, WHEEL_N, 0.05f, 0.08f, 0.24f, 2.f, 8.f);
+    rings_[1].ref = vec3(1, 0, 0);
+    rings_[1].first = wheelFirst_;
+    rings_[1].last = wheelLast_;
+    ringDef(2, GREAT_C, GREAT_N, 0.004f, 0.003f, 0.02f, 4.f, 16.f);
+    rings_[2].ref = vec3(1, 0, 0);
+    rings_[2].first = greatFirst_;
+    rings_[2].last = greatLast_;
+    auto arcs = [&](int kind, int r, float R, float hw, int n, int tugs, float flag) {
+        Ring& RG = rings_[r];
+        RG.first = (int)plan_.size();
+        const vec3 cr = cross(RG.n, RG.ref);
+        for (int k = 0; k < n; k++) {
+            const int j = (k % 2 == 0) ? k / 2 : n - 1 - k / 2;     // from one side round both ways
+            const float al = TAU / n, mid = (j + 0.5f) * al;
+            const vec3 e = RG.ref * std::cos(mid) + cr * std::sin(mid);
+            Module& m = add(kind, frameZ(RG.c, vec3(0, 0, 1)), vec3(R, hw, flag), e, R * std::sin(al * 0.5f) * 0.8f + hw);
+            m.a0 = mid - al * 0.5f;
+            m.al = al;
+            m.ring = r;
+            m.pivot = e * R;
+            m.tugs = tugs;
+        }
+        RG.last = (int)plan_.size() - 1;
+    };
+    // nested rings around the forest ring, tilted, counter-rotating: a band of land, a tube of windows, a wider band
+    stageFirst_[0] = (int)plan_.size();
+    ringDef(3, GREAT_C, vec3(0.35f, 1.f, 0.55f), 0.012f, 0.01f, 0.05f, 4.f, 16.f);
+    ringDef(4, GREAT_C, vec3(1.f, 0.45f, -0.35f), -0.008f, -0.008f, -0.04f, 2.f, 8.f);
+    ringDef(5, GREAT_C, vec3(-0.5f, 1.f, -0.25f), 0.005f, 0.005f, 0.025f, 4.f, 16.f);
+    arcs(K_NRING, 3, 26000.f, 2400.f, 6, 5, 0.f);
+    arcs(K_NRING, 4, 44000.f, 1800.f, 6, 5, 1.f);
+    arcs(K_NRING, 5, 72000.f, 5200.f, 6, 6, 0.f);
+    // shipyards around them, each building a huge ship
+    stageFirst_[1] = (int)plan_.size();
+    for (int k = 0; k < 4; k++) {
+        const float a = (k * 90.f + 30.f) * DEG;
+        const vec3 rr(std::cos(a), 0.12f * (k % 2 ? 1.f : -1.f), -std::sin(a));
+        Module& m = add(K_YARD, frameX(GREAT_C + rr * 190000.f, vec3(-std::sin(a), 0.f, -std::cos(a))), vec3(1.f), normalize(rr), 95000.f);
+        m.tugs = 6;
+        m.a0 = k * 9.7f;
+    }
+    // a space elevator: a tether from the ground through the station's height to a counterweight
+    stageFirst_[2] = (int)plan_.size();
+    {
+        const vec3 up = normalize(vec3(-1.6e5f, R_PLANET + ALT, 0.f));
+        for (int k = 0; k < 6; k++) {
+            Module& m = add(K_TETHER, frameZ(EARTH_C, vec3(0, 0, 1)), vec3(up.x, up.y, up.z), vec3(-0.6f, 0.2f, 0.5f), 4.e5f);
+            // segments (radii from the planet's center): the port, down, to the ground, up, the counterweight, climbers
+            static const float A[6] = {ALT - 4.e4f, 1.5e5f, 0.f, ALT + 4.e4f, 1.0e6f, 0.f};
+            static const float B[6] = {ALT + 4.e4f, ALT - 4.e4f, 1.5e5f, 1.0e6f, 2.2e6f, 2.2e6f};
+            m.a0 = A[k];
+            m.al = B[k];
+            m.pivot = up * (R_PLANET + 0.5f * (A[k] + B[k]));
+            m.extent = std::max(1.e5f, 0.5f * (B[k] - A[k]));
+            m.tugs = k == 5 ? 0 : 4;
+        }
+    }
+    // a ring round the whole planet, over the station
+    stageFirst_[3] = (int)plan_.size();
+    ringDef(6, EARTH_C, vec3(1.f, 0.f, 0.35f), 0.0015f, 0.001f, 0.006f, 4.f, 16.f);
+    rings_[6].ref = vec3(0, 1, 0);
+    arcs(K_ERING, 6, R_PLANET + ALT + 4.5e5f, 9.e4f, 12, 6, 0.f);
+    // swarms of mirrors and collectors round it, streaming off toward the sun
+    stageFirst_[4] = (int)plan_.size();
+    for (int k = 0; k < 5; k++) {
+        Module& m = add(K_SWARM, frameZ(EARTH_C, vec3(0, 0, 1)), vec3(1.f), normalize(vec3(std::cos(k * 1.3f), 0.5f, std::sin(k * 1.3f))), 1.7e7f);
+        m.a0 = (float)k;
         m.tugs = 0;
     }
+    // a fleet of O'Neill cylinders
+    stageFirst_[5] = (int)plan_.size();
+    for (int k = 0; k < 6; k++) {
+        const float a = (k * 52.f - 110.f) * DEG;
+        const vec3 n = normalize(vec3(0.2f, 1.f, -0.1f));
+        vec3 u, v;
+        basisOf(n, u, v);
+        const vec3 p = EARTH_C + (u * std::cos(a) + v * std::sin(a)) * (R_PLANET * 3.1f) + n * ((k % 3) - 1.f) * 2.e6f;
+        Module& m = add(K_FLEET, frameX(p, normalize(cross(n, normalize(p - EARTH_C)))), vec3(1.f), normalize(p - EARTH_C), 1.6e6f);
+        m.tugs = 0;
+    }
+    // the Moon taken in hand: rings round it, its works lit, shells, a mass driver
+    stageFirst_[6] = (int)plan_.size();
+    for (int k = 0; k < 6; k++) {
+        Module& m = add(K_MOONWORK, frameZ(MOON_C, vec3(0, 0, 1)), vec3(1.f), normalize(vec3(0.4f, 0.6f, 0.7f)), R_MOON * 1.4f);
+        m.a0 = (float)k;
+        m.tugs = 6;
+    }
+    // the finale: two rings dwarfing the planet, round the planet and the Moon, crossed, turning against each other
+    stageFirst_[7] = (int)plan_.size();
+    ringDef(7, EARTH_C, vec3(0.12f, 1.f, 0.22f), 0.0006f, 0.0004f, 0.003f, 4.f, 16.f);
+    ringDef(8, EARTH_C, vec3(1.f, 0.55f, 0.65f), -0.0008f, -0.0005f, -0.004f, 4.f, 16.f);
+    arcs(K_COLOSSUS, 7, 1.45e8f, 1.5e7f, 8, 8, 0.f);
+    arcs(K_COLOSSUS, 8, 1.15e8f, 2.6e6f, 8, 8, 1.f);
+    stageFirst_[8] = (int)plan_.size();
 
     // The framing: each module's bounds (spheres on its seat), the center of everything in after module i.
     frameA_.assign(plan_.size(), vec3(0.f));
@@ -170,6 +267,13 @@ void OrbitalUniverse::buildPlan() {
             m.sph[0] = vec4(o + rr * (R * 0.5f), R * 0.5f);
             m.sph[1] = vec4(o - rr * (R * 0.5f), R * 0.5f);
         }
+        if ((int)i >= stageFirst_[3] && m.kind != K_MOONWORK) m.sph[m.nsph++] = vec4(EARTH_C, R_PLANET * 1.05f);
+        if (m.kind == K_MOONWORK) m.sph[m.nsph++] = vec4(MOON_C, R_MOON * 1.6f);
+        if (m.kind == K_ERING || m.kind == K_COLOSSUS || m.kind == K_NRING) {
+            const Ring& RG = rings_[m.ring];
+            const float R = m.dim.x;
+            m.sph[0] = vec4(RG.c + (RG.ref * std::cos(m.a0 + m.al * 0.5f) + cross(RG.n, RG.ref) * std::sin(m.a0 + m.al * 0.5f)) * R, m.extent);
+        }
         for (int s = 0; s < m.nsph; s++) {
             const vec3 p(m.sph[s].x, m.sph[s].y, m.sph[s].z);
             const float e = m.sph[s].w;
@@ -181,11 +285,13 @@ void OrbitalUniverse::buildPlan() {
 }
 
 float OrbitalUniverse::flightA(const Module& m) const {
+    if (m.kind >= K_NRING) return 5.2f;
     if (m.kind == K_BIGARC || m.kind == K_BIGSPOKE || m.kind == K_MIRROR || m.kind == K_AXLE) return 4.6f;
     if (m.kind == K_SHIP || m.kind == K_LINER) return 4.4f;
     return 3.4f;
 }
 float OrbitalUniverse::flightB(const Module& m) const {
+    if (m.kind >= K_NRING) return 2.6f;
     if (m.kind == K_BIGARC || m.kind == K_BIGSPOKE || m.kind == K_MIRROR || m.kind == K_AXLE) return 2.2f;
     return 1.6f;
 }
@@ -193,10 +299,9 @@ float OrbitalUniverse::flightB(const Module& m) const {
 // A ring's turn: about its axis through its center.
 Xf OrbitalUniverse::ringXf(int ring) const {
     Xf r;
-    if (ring == 0) return r;
-    const vec3 c = ring == 1 ? WHEEL_C : GREAT_C;
-    const vec3 n = ring == 1 ? WHEEL_N : GREAT_N;
-    const float a = ring == 1 ? wheelSpin_ : greatSpin_;
+    if (ring <= 0 || ring >= RINGS) return r;
+    const vec3 c = rings_[ring].c, n = rings_[ring].n;
+    const float a = rings_[ring].spin;
     r.x = rotateAxis(vec3(1, 0, 0), n, a);
     r.y = rotateAxis(vec3(0, 1, 0), n, a);
     r.z = rotateAxis(vec3(0, 0, 1), n, a);
@@ -290,8 +395,8 @@ float OrbitalUniverse::lampK(int group, float order) const {
 // The drop's chase around a ring: a few heads of light sweeping round on the beat grid (one turn every two bars on
 // the wheel, every four on the great ring), each with a tail.
 float OrbitalUniverse::chaseAt(float ang, int ring) const {
-    const float heads = ring == 1 ? 2.f : 4.f;
-    const float turn = ring == 1 ? 8.f : 16.f;
+    const float heads = rings_[std::clamp(ring, 1, RINGS - 1)].heads;
+    const float turn = rings_[std::clamp(ring, 1, RINGS - 1)].turn;
     const float head = (float)std::fmod(beat_ / turn, 1.0) * TAU;
     float x = (head - ang) / TAU * heads;
     x -= std::floor(x);
@@ -604,6 +709,231 @@ void OrbitalUniverse::emitModule(Builder& b, const Module& m, int idx) {
         b.light(c + t * 185.f + Y * 20.f, 12.f, vec3(1.f), strobe * 1.4f);
         break;
     }
+    case K_NRING:
+    case K_COLOSSUS: {
+        // a ring arc: a band of land (flag 0) or a tube of windows (flag 1); lamps along it, the drop's chase
+        const Ring& RG = rings_[m.ring];
+        const float R = m.dim.x, hw = m.dim.y;
+        const vec3 n = RG.n, ref = RG.ref, cr = cross(n, ref);
+        const bool tube = m.dim.z > 0.5f;
+        if (m.kind == K_COLOSSUS) {
+            // a spoke of lattice and light from the arc down toward the planet
+            const float mid = m.a0 + m.al * 0.5f;
+            const vec3 e = ref * std::cos(mid) + cr * std::sin(mid);
+            b.beam(e * (R_PLANET * 2.5f), e * (R * 0.97f), R * 0.004f, M_TRUSS, p.hull * 0.8f, sd);
+            for (int i = 1; i < 16; i++)
+                b.light(e * lerpf(R_PLANET * 2.5f, R * 0.97f, i / 16.f), R * 0.004f, i % 2 ? p.chase : p.lamp,
+                        0.6f + 0.4f * lamp1 + 2.f * life_ * chaseAt(i / 16.f * TAU, m.ring));
+        }
+        if (tube) {
+            b.torus(vec3(0), n, ref, R, hw, m.a0, m.al, M_HAB, m.kind == K_COLOSSUS ? p.hull * 0.55f : p.hull, sd);
+            for (int k = 0; k < 3; k++)
+                b.torus(vec3(0), n, ref, R, hw * 1.05f, m.a0 + m.al * (k + 0.5f) / 3.f - 0.004f, 0.008f, M_DARK, p.dark, sd + k);
+        } else {
+            b.band(vec3(0), n, ref, R, hw, m.a0, m.al, hw * 0.18f, M_LAND, p.hull * 0.75f, sd, b.emitK, 0.6f);
+            for (int k = 0; k < 4; k++) {
+                const float a = m.a0 + m.al * (k + 0.5f) / 4.f;
+                b.band(vec3(0), n, ref, R * 1.0015f, hw * 1.02f, a - 0.002f, 0.004f, 0.f, M_DARK, p.dark, sd + k, 0.f, 0.f);
+            }
+            b.torus(vec3(0), n, ref, R - hw * 0.09f, hw * 0.02f, m.a0, m.al, M_HULL, p.hull, sd);
+        }
+        const int N = 14;
+        for (int k = 0; k < N; k++) {
+            const float a = m.a0 + m.al * (k + 0.5f) / N;
+            const float ch = chaseAt(a + RG.spin, m.ring) * life_;
+            const vec3 e = ref * std::cos(a) + cr * std::sin(a);
+            const float base = 0.3f + 0.5f * lamp1 + 0.2f * kickGlow_;
+            const vec3 col = lerp(p.lamp, p.chase, saturate(ch * 2.f));
+            if (tube) b.light(e * (R + hw * 1.02f), hw * 0.5f, col, base * navK + ch * 2.4f);
+            else
+                for (int s = -1; s <= 1; s += 2) b.light(e * (R - hw * 0.18f) + n * (hw * s), hw * 0.06f, col, base * navK + ch * 2.4f);
+        }
+        break;
+    }
+    case K_YARD: {
+        // a shipyard: a lattice cradle, a ship growing in it, sparks at its growing end; done, it sails, a new one starts
+        const float L = 9.e4f, W = 1.6e4f;
+        for (int s = -1; s <= 1; s += 2) b.boxA(vec3(0, W * s, 0), vec3(L, 1400.f, 1400.f), M_TRUSS, p.hull * 0.85f, sd + s);
+        b.boxA(vec3(0, 0, -W), vec3(L, 1400.f, 1400.f), M_TRUSS, p.hull * 0.85f, sd);
+        for (int k = 0; k <= 8; k++) {
+            const float x = -L + 2.f * L * k / 8.f;
+            b.beam(vec3(x, W, 0), vec3(x, W, -W), 900.f, M_TRUSS, p.hull * 0.8f, sd);
+            b.beam(vec3(x, -W, 0), vec3(x, -W, -W), 900.f, M_TRUSS, p.hull * 0.8f, sd);
+            b.beam(vec3(x, -W, -W), vec3(x, W, -W), 900.f, M_TRUSS, p.hull * 0.8f, sd);
+            b.light(vec3(x, W + 1500.f, 0), 1500.f, p.lamp, 0.5f + 0.5f * lamp1);
+            b.light(vec3(x, -W - 1500.f, 0), 1500.f, p.lamp, 0.5f + 0.5f * lamp1);
+        }
+        const float g = std::fmod(time_ / 46.f + m.a0, 1.f);
+        const float len = 1.55e5f * smoothstepf(0.f, 1.f, std::min(1.f, g / 0.72f));
+        const float go = g > 0.78f ? sq((g - 0.78f) / 0.22f) * 4.e6f : 0.f;
+        const float x0 = -L * 0.9f + go;
+        if (len > 2000.f) {
+            const float r = 1.05e4f;
+            b.cyl(vec3(x0 + len * 0.5f, 0, -W * 0.45f), X, r, len * 0.5f, M_HAB, p.hull, 1.f, false, sd);
+            if (g > 0.72f) {
+                b.cyl(vec3(x0 + len + 9000.f, 0, -W * 0.45f), X, r, 9000.f, M_HULL, p.hull * 0.95f, 0.25f, false, sd);
+                b.cyl(vec3(x0 - 6000.f, 0, -W * 0.45f), X * -1.f, r * 0.8f, 6000.f, M_DARK, p.dark, 0.6f, false, sd);
+                b.boxA(vec3(x0 + len * 0.4f, 0, -W * 0.45f + r * 1.1f), vec3(len * 0.25f, 600.f, 3000.f), M_GOLD, p.gold, sd);
+            }
+            if (go > 0.f) b.light(vec3(x0 - 13000.f, 0, -W * 0.45f), 9000.f, p.thrust, 1.6f, 2, X * -1.f);
+            else {
+                // the welders at the growing end
+                for (int k = 0; k < 6; k++) {
+                    const float fl = 0.5f + 0.5f * std::sin(time_ * (13.f + k * 3.1f) + k * 2.f);
+                    const float ang = k * TAU / 6.f + time_ * 0.7f;
+                    b.light(vec3(x0 + len, std::cos(ang) * r * 1.1f, -W * 0.45f + std::sin(ang) * r * 1.1f), 1800.f,
+                            k % 2 ? vec3(1.f, 0.9f, 0.7f) : vec3(0.7f, 0.85f, 1.f), 1.4f * fl, 3);
+                }
+            }
+        }
+        break;
+    }
+    case K_TETHER: {
+        // a segment of the space elevator (radii from the planet's center along its line), its lights
+        const vec3 up(m.dim.x, m.dim.y, m.dim.z);
+        const float r0 = R_PLANET + m.a0, r1 = R_PLANET + m.al;
+        const int seg = (m.a0 < 1.f && m.al > 2.e6f) ? 5 : m.a0 < 1.f ? 2 : m.a0 > 9.e5f ? 4 : m.a0 > ALT ? 3 : m.a0 < 2.e5f ? 1 : 0;
+        if (seg != 5) b.tube(up * std::min(r0, r1), up * std::max(r0, r1), 3500.f, M_SILVER, vec3(0.85f), sd);
+        if (seg == 0) {
+            b.cyl(up * (R_PLANET + ALT), up, 3.2e4f, 1.2e4f, M_HULL, p.hull, 1.f, false, sd);
+            b.cyl(up * (R_PLANET + ALT), up, 3.4e4f, 2500.f, M_GOLD, p.gold, 1.f, false, sd);
+            vec3 u, v;
+            basisOf(up, u, v);
+            b.torus(up * (R_PLANET + ALT), up, u, 6.e4f, 3000.f, 0.f, TAU, M_HAB, p.hull, sd);
+            for (int i = 0; i < 12; i++) {
+                const float a = i * TAU / 12.f;
+                b.light(up * (R_PLANET + ALT) + (u * std::cos(a) + v * std::sin(a)) * 6.3e4f, 4000.f, p.lamp, 0.5f + 0.6f * lamp1);
+            }
+        }
+        if (seg == 2) {
+            b.cyl(up * (R_PLANET + 6000.f), up, 2.5e4f, 6000.f, M_DARK, p.dark, 0.3f, false, sd);
+            b.light(up * (R_PLANET + 8000.f), 4.e4f, p.city, 1.2f);
+        }
+        if (seg == 4) {
+            b.cyl(up * (R_PLANET + 2.2e6f), up, 6.e4f, 9.e4f, M_HAB, p.hull, 1.f, false, sd);
+            vec3 u, v;
+            basisOf(up, u, v);
+            b.boxO(up * (R_PLANET + 2.2e6f), u * 2.6e5f, v * 6.e4f, up * 1500.f, M_SOLAR, p.solar, sd);
+            b.light(up * (R_PLANET + 2.3e6f), 3.e4f, p.navR, (0.5f + blink) * navK);
+        }
+        if (seg != 5) {
+            const int n = std::clamp((int)(std::fabs(r1 - r0) / 4.e4f), 2, 50);
+            for (int i = 0; i <= n; i++)
+                b.light(up * lerpf(r0, r1, i / (float)n), 5000.f, p.lamp, 0.35f + 0.4f * lamp1);
+        } else {
+            // the climbers, up and down the line
+            vec3 u, v;
+            basisOf(up, u, v);
+            for (int i = 0; i < 14; i++) {
+                const float ph = std::fmod(time_ * (i % 2 ? 0.012f : -0.012f) + i / 14.f + 10.f, 1.f);
+                const float r = R_PLANET + 2.e4f + ph * 2.15e6f;
+                b.cyl(up * r + u * 5000.f, up, 7000.f, 1.4e4f, M_HAB, p.hull, 1.f, false, sd + i);
+                b.light(up * r + u * 5000.f, 1.2e4f, i % 2 ? p.chase : p.lamp, 0.9f + 0.6f * lamp1);
+            }
+        }
+        break;
+    }
+    case K_ERING: {
+        const Ring& RG = rings_[m.ring];
+        const float R = m.dim.x, hw = m.dim.y;
+        const vec3 n = RG.n, ref = RG.ref, cr = cross(n, ref);
+        b.torus(vec3(0), n, ref, R, hw, m.a0, m.al, M_HAB, p.hull, sd);
+        b.torus(vec3(0), n, ref, R - hw * 1.6f, hw * 0.25f, m.a0, m.al, M_GOLD, p.gold, sd);
+        for (int k = 0; k < 4; k++)
+            b.torus(vec3(0), n, ref, R, hw * 1.06f, m.a0 + m.al * (k + 0.5f) / 4.f - 0.0015f, 0.003f, M_DARK, p.dark, sd + k);
+        const int N = 18;
+        for (int k = 0; k < N; k++) {
+            const float a = m.a0 + m.al * (k + 0.5f) / N;
+            const float ch = chaseAt(a + RG.spin, m.ring) * life_;
+            const vec3 e = ref * std::cos(a) + cr * std::sin(a);
+            b.light(e * (R + hw * 1.05f), hw * 0.9f, lerp(p.lamp, p.chase, saturate(ch * 2.f)), (0.3f + 0.5f * lamp1) * navK + ch * 2.4f);
+        }
+        break;
+    }
+    case K_SWARM: {
+        // mirrors and collectors on their orbits, glinting, a stream of them flowing off toward the sun
+        Rng r(0x5A5Aull + (uint64_t)(m.a0 * 97.f));
+        const vec3 sun = normalize(p.sunDir);
+        vec3 su, sv;
+        basisOf(sun, su, sv);
+        for (int i = 0; i < 220; i++) {
+            const float rr = R_PLANET * (1.6f + 1.6f * r.uniform());
+            const vec3 ax = normalize(vec3(r.range(-0.5f, 0.5f), 1.f, r.range(-0.5f, 0.5f)));
+            vec3 u, v;
+            basisOf(ax, u, v);
+            const float w = 0.03f * std::pow(1.6f * R_PLANET / rr, 1.5f) * (i % 2 ? 1.f : 0.85f);
+            const float ph = r.uniform() * TAU + time_ * w;
+            const vec3 c = (u * std::cos(ph) + v * std::sin(ph)) * rr;
+            const float s = 1.6e5f * (0.6f + 0.8f * r.uniform());
+            const bool mirror = i % 3 == 0;
+            b.boxO(c, su * s, sun * (s * 0.03f), sv * (s * (mirror ? 1.f : 0.5f)), mirror ? M_SILVER : M_SOLAR, mirror ? vec3(0.9f) : p.solar, (float)i);
+            if (i % 4 == 0) b.light(c + sun * s * 0.1f, s * 0.5f, vec3(1.f, 0.97f, 0.9f), 0.5f + 0.5f * std::sin(time_ * 1.3f + i), 3);
+        }
+        for (int i = 0; i < 50; i++) {
+            const float ph = std::fmod(time_ * 0.025f + i / 50.f, 1.f);
+            const float d = 2.4e7f + ph * 1.6e8f;
+            const float j = r.uniform() * TAU, jr = 2.e6f + 4.e6f * r.uniform();
+            b.light(sun * d + (su * std::cos(j) + sv * std::sin(j)) * jr * (1.f + ph), 6.e4f * (1.f + ph),
+                    lerp(p.lamp, vec3(1.f), 0.5f), 0.9f * (1.f - ph), 3);
+        }
+        break;
+    }
+    case K_FLEET: {
+        // a pair of O'Neill cylinders, turning against each other: windows strips, mirrors, end caps, drives
+        for (int s = -1; s <= 1; s += 2) {
+            const vec3 c(0.f, s * 7.5e5f, 0.f);
+            const float r = 2.8e5f, hl = 1.25e6f;
+            const float ang = time_ * 0.05f * s + sd * 6.f;
+            const vec3 u(0.f, std::cos(ang), std::sin(ang)), v(0.f, -std::sin(ang), std::cos(ang));
+            b.put(r * b.s < b.minR ? b.coarse : b.fine, S_CYL, c, u * r, X * hl, v * r, M_HULL, p.hull, 1.f, 1.f, sd + s);
+            b.cyl(c + X * (hl + 6.e4f), X, r * 0.9f, 6.e4f, M_DARK, p.dark, 0.5f, false, sd);
+            b.cyl(c - X * (hl + 5.e4f), X * -1.f, r * 0.7f, 5.e4f, M_DARK, p.dark, 0.6f, false, sd);
+            for (int k = 0; k < 3; k++) {
+                const float a = k * TAU / 3.f;
+                const vec3 e = u * std::cos(a) + v * std::sin(a), t = u * -std::sin(a) + v * std::cos(a);
+                b.boxO(c + e * (r * 1.002f), X * (hl * 0.95f), e * 2000.f, t * (r * 0.28f), M_EMIT, p.window, sd + k, 1.2f * b.emitK);
+                b.boxO(c + e * (r * 1.3f) + X * (hl * 0.02f), X * (hl * 0.93f), (e * 0.5f + t * 0.866f) * 3000.f, (t * 0.5f - e * 0.866f) * (r * 0.32f), M_SILVER, vec3(0.9f), sd + k);
+            }
+            b.light(c - X * (hl + 1.2e5f), 1.6e5f, p.thrust, m.state == 1 ? 1.6f : 0.35f, 2, X * -1.f);
+            b.light(c + X * (hl + 1.3e5f), 4.e4f, vec3(1.f), strobe * 1.5f);
+        }
+        break;
+    }
+    case K_MOONWORK: {
+        const int k = (int)m.a0;
+        const float Rm = R_MOON;
+        if (k == 0 || k == 2) {
+            const vec3 n = k == 0 ? normalize(vec3(0.3f, 1.f, 0.2f)) : normalize(vec3(1.f, 0.3f, -0.5f));
+            vec3 u, v;
+            basisOf(n, u, v);
+            const float R = Rm * (k == 0 ? 1.35f : 1.62f);
+            b.torus(vec3(0), n, u, R, Rm * 0.035f, 0.f, TAU, M_HAB, p.hull, sd);
+            for (int i = 0; i < 36; i++) {
+                const float a = i * TAU / 36.f;
+                b.light((u * std::cos(a) + v * std::sin(a)) * (R + Rm * 0.04f), Rm * 0.02f, i % 2 ? p.chase : p.lamp, 0.4f + 0.5f * lamp1 + 1.5f * life_ * chaseAt(a, 2));
+            }
+        } else if (k == 1) {
+            // mining spires over the surface
+            Rng r(0x300Dull);
+            for (int i = 0; i < 9; i++) {
+                const vec3 d = normalize(vec3(r.range(-1.f, 1.f), r.range(-1.f, 1.f), r.range(-1.f, 1.f)));
+                b.beam(d * (Rm * 0.98f), d * (Rm * 1.25f), Rm * 0.012f, M_TRUSS, p.hull * 0.85f, sd + i);
+                b.light(d * (Rm * 1.26f), Rm * 0.02f, p.navR, (0.5f + blink) * navK);
+            }
+        } else if (k == 3 || k == 4) {
+            b.band(vec3(0), vec3(0, 1, 0), vec3(1, 0, 0), Rm * 1.1f, Rm * 0.55f, (k - 3) * PI, PI, 0.f, M_TRUSS, p.hull * 0.8f, sd, 0.f, 0.f);
+        } else {
+            // a mass driver flinging glowing loads toward the planet
+            const vec3 d = normalize(EARTH_C - MOON_C);
+            b.tube(d * (Rm * 0.95f), d * (Rm * 9.f), Rm * 0.02f, M_SILVER, vec3(0.85f), sd);
+            for (int i = 0; i < 40; i++) {
+                const float ph = std::fmod(time_ * 0.04f + i / 40.f, 1.f);
+                const float dd = Rm + ph * (length(EARTH_C - MOON_C) - R_PLANET * 1.3f - Rm);
+                b.light(d * dd, Rm * 0.025f, lerp(p.lamp, p.chase, 0.4f), 0.9f * smoothstepf(0.f, 0.05f, ph) * (1.f - smoothstepf(0.9f, 1.f, ph)));
+            }
+        }
+        break;
+    }
     default: break;
     }
     (void)idx;
@@ -751,5 +1081,73 @@ void OrbitalUniverse::emitDrones(Builder& b) {
         }
         b.light(vec3(0, 0.2f, 0), i < nHalo && haloK > 0.f ? 0.55f : 0.3f, i % 3 == 0 || haloK > 0.5f ? p.chase : p.lamp, lk);
         b.light(vec3(0, 0, -0.5f), 0.14f, p.thrust, 0.5f + 0.5f * std::min(1.f, sp / (F * 0.2f)), 2, vec3(0, 0, -1));
+    }
+}
+
+// The lines -> how many modules: one a line at first, then ever more, each stage an order of magnitude bigger.
+int OrbitalUniverse::wantOf(int lines) const {
+    struct P { float l, n; };
+    const P T[] = {{0, 1}, {5, 6}, {10, 22}, {23, 51}, {29, 63}, {40, (float)stageFirst_[1]}, {48, (float)stageFirst_[2]},
+                   {58, (float)stageFirst_[3]}, {72, (float)stageFirst_[4]}, {82, (float)stageFirst_[5]}, {94, (float)stageFirst_[6]},
+                   {108, (float)stageFirst_[7]}, {135, (float)stageFirst_[8]}};
+    const int n = (int)(sizeof(T) / sizeof(T[0]));
+    const float L = (float)std::max(0, lines);
+    if (L >= T[n - 1].l) return (int)plan_.size();
+    int i = 0;
+    while (i + 2 < n && T[i + 1].l <= L) i++;
+    const float f = (L - T[i].l) / (T[i + 1].l - T[i].l);
+    return (int)std::floor(lerpf(T[i].n, T[i + 1].n, f) + 1e-3f);
+}
+
+// The Moon, always there (brought in close): grey seas and craters; as it is taken in hand, its works light up (a
+// grid of glowing seams, the great pit of its hollowing).
+void OrbitalUniverse::emitMoon(Builder& b) {
+    b.xf = Xf();
+    b.pivot = vec3(0.f);
+    b.s = 1.f;
+    b.glowK = 1.f;
+    b.chaseOff = 0.f;
+    b.put(b.fine, S_SPHERE, MOON_C, vec3(R_MOON, 0, 0), vec3(0, R_MOON, 0), vec3(0, 0, R_MOON), M_MOON, vec3(0.62f, 0.62f, 0.66f), 0.f, 0.f, 0.3f, 0.f,
+          0.f, moonWork_ * (0.4f + 0.6f * groupOn_[1]) + 0.6f * life_ * moonWork_);
+}
+
+// Traffic: convoys and lone ships on their courses round the works, at the scale of the frame, their drives glowing.
+void OrbitalUniverse::emitTraffic(Builder& b) {
+    const Palette& p = pal_;
+    const float F = std::max(camF_, 6.f);
+    if (F < 60.f) return;
+    b.xf = Xf();
+    b.pivot = vec3(0.f);
+    b.s = 1.f;
+    b.glowK = 1.f;
+    const float more = smoothstepf(std::log(60.f), std::log(3000.f), std::log(F));
+    const int convoys = (int)std::lround((2.f + 3.f * wm_ + 3.f * wp_ + 3.f * life_) * more);
+    const float sz = F * 0.0035f;
+    for (int c = 0; c < convoys; c++) {
+        const float h = hash1(c * 5.3f + 1.f), h2 = hash1(c * 2.9f + 7.f);
+        const vec3 ax = normalize(vec3(h - 0.5f, 1.f, h2 - 0.5f) + vec3(0.f, 0.f, 0.f));
+        vec3 u, v;
+        basisOf(ax, u, v);
+        const float R = F * (0.45f + 0.6f * h2);
+        const float sp = (0.05f + 0.04f * h) * (c % 2 ? 1.f : -1.f);
+        for (int j = 0; j < 9; j++) {
+            const float th = time_ * sp + h * TAU - j * 0.035f * (sp > 0 ? 1.f : -1.f);
+            const vec3 pos = camA_ + (u * std::cos(th) + v * (std::sin(th) * 0.55f)) * R + ax * (R * 0.12f * std::sin(th * 2.f + h));
+            const vec3 vel = (u * -std::sin(th) + v * (std::cos(th) * 0.55f)) * (sp > 0 ? 1.f : -1.f);
+            b.light(pos, sz, vec3(1.f, 0.97f, 0.9f), 0.9f);
+            b.light(pos, sz * 0.9f, p.thrust, 1.1f, 2, normalize(vel) * -1.f);
+        }
+    }
+    const int loners = (int)std::lround((6.f + 8.f * wm_ + 10.f * wp_) * more);
+    for (int i = 0; i < loners; i++) {
+        const float h = hash1(i * 3.7f + 11.f), h2 = hash1(i * 8.1f + 3.f);
+        const float per = 9.f + 8.f * h;
+        const float ph = std::fmod(time_ / per + h2, 1.f);
+        const vec3 a = camA_ + normalize(vec3(h - 0.5f, h2 - 0.3f, hash1(i * 1.3f) - 0.5f)) * F * 1.4f;
+        const vec3 c = camA_ + normalize(vec3(h2 - 0.5f, 0.2f - h, hash1(i * 4.3f) - 0.5f)) * F * 0.2f;
+        const vec3 pos = lerp(a, c, ph);
+        const float k = smoothstepf(0.f, 0.1f, ph) * (1.f - smoothstepf(0.85f, 1.f, ph));
+        b.light(pos, sz * 0.8f, vec3(1.f), 0.8f * k);
+        b.light(pos, sz * 0.8f, p.thrust, 1.1f * k, 2, normalize(a - c));
     }
 }

@@ -17,6 +17,10 @@ constexpr float WHEEL_R = 48.f, WHEEL_TUBE = 4.2f;
 const vec3 GREAT_C(0.f, -260.f, -22.2f);
 const vec3 GREAT_N(0.f, 1.f, 0.f);
 constexpr float GREAT_R = 9000.f, GREAT_HW = 1250.f, GREAT_WALL = 300.f;
+// The planet's center (the station orbits 420 km over it), the Moon (moved in close, for the show).
+const vec3 EARTH_C(0.f, -(R_PLANET + ALT), 0.f);
+constexpr float R_MOON = 1.737e6f;
+const vec3 MOON_C(-5.27e7f, -(R_PLANET + ALT) + 1.27e7f, 0.91e7f);
 
 // A frame: an origin and three axes (orthonormal), mapping local points to the station's frame.
 struct Xf {
@@ -65,7 +69,8 @@ public:
     // The station's plan: one module per cleared line (station.cpp).
     enum Kind {
         K_CAPSULE, K_NODE, K_LAB, K_WINGS, K_CUPOLA, K_TRUSS, K_ARRAY, K_RADIATOR, K_SHIP, K_HUB, K_SPOKE, K_ARC,
-        K_DISH, K_AXLE, K_BIGSPOKE, K_BIGARC, K_MIRROR, K_LINER, K_COUNT
+        K_DISH, K_AXLE, K_BIGSPOKE, K_BIGARC, K_MIRROR, K_LINER, K_NRING, K_YARD, K_TETHER, K_ERING, K_SWARM, K_FLEET,
+        K_MOONWORK, K_COLOSSUS, K_COUNT
     };
     struct Module {
         int kind = K_NODE;
@@ -76,7 +81,7 @@ public:
         vec3 approach{0, 0, -1};  // the side it comes in from (unit, outward from its seat)
         float extent = 5.f;       // its radius (meters)
         vec3 pivot{0.f};          // its middle (local)
-        vec4 sph[2];              // its bounds for the camera: spheres (center, radius) on its seat
+        vec4 sph[3];              // its bounds for the camera: spheres (center, radius) on its seat
         int nsph = 1;
         float seed = 0.f;
         bool armOk = false;       // within the robot arm's reach
@@ -103,6 +108,19 @@ private:
     int lines_ = 0, linesShown_ = -1;
     int built_ = 1;               // modules wanted (lines + the capsule)
     float wheelSpin_ = 0.f, wheelW_ = 0.f, greatSpin_ = 0.f, greatW_ = 0.f;
+    // Every ring: its center and axis, the modules that make it (complete: it turns), its turn and speed.
+    struct Ring {
+        vec3 c{0.f}, n{0, 1, 0}, ref{1, 0, 0};
+        int first = -1, last = -1;
+        float spin = 0.f, w = 0.f, baseW = 0.f, peakW = 0.f, dropW = 0.f;
+        float heads = 4.f, turn = 16.f;
+    };
+    static constexpr int RINGS = 10;
+    Ring rings_[RINGS];
+    int stageFirst_[16] = {};   // the first module of each later stage (see buildPlan)
+    float moonWork_ = 0.f;      // the Moon's works, 0..1
+    int wantOf(int lines) const;
+    float sparkAcc_ = 0.f;
     void startFlight(int i, float delay);
     float flightA(const Module& m) const;
     float flightB(const Module& m) const;
@@ -115,6 +133,8 @@ private:
     void emitTug(Builder& b, const vec3& pos, const vec3& face, float size, const vec3& exhaust, float thrust, float k, float seed);
     void emitArm(Builder& b, float dt);
     void emitDrones(Builder& b);
+    void emitMoon(Builder& b);
+    void emitTraffic(Builder& b);
     std::vector<Part> boxes_, fine_, coarse_;
     std::vector<Glow> glows_;
     float lampK(int group, float order) const;
@@ -133,7 +153,7 @@ private:
     float tanH_ = 0.47f, aspect_ = 1.78f;
     mat4 vp3_;
     float camF_ = -1.f, camFv_ = 0.f;  // framing radius (log space, a spring)
-    vec3 camA_{0.f};
+    vec3 camA_{0.f}, camAv_{0.f};
     float camAlt_ = orbital::ALT;
     void updateCamera(float dt);
     vec2 toBoard(const vec3& w) const;
