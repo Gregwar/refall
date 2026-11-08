@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Forty-two universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty-three universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -104,6 +104,10 @@ song, and songs change universe with a transition on the beat. Forty-two univers
 <tr>
 <td><img src="docs/universes/mycelium.jpg"><br><b>MYCELIUM</b>: a glowing fungal network spreading through a cross-section of the forest floor at night, from a single spore to mushroom towers taller than the trees, each clear pushing the threads deeper and wider; the drop sends a wave of light from the spore through the network, up the stems, and a cloud of spores into the night<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/megacity.jpg"><br><b>MEGACITY</b>: a hut on a riverbank at dusk growing with every cleared line into a village, a walled town, a skyline of towers, arcologies and a space elevator, until the planet is one glowing ball of city lights under an orbital ring; the drop raises a whole district whose lights come on block by block on the beat<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
+<tr>
+<td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit, one module docked per cleared line by tugs and a robot arm, from a lone capsule over the planet to trusses, solar wings, a spinning habitat wheel and finally a great ring with forests inside; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
+<td></td>
 </tr>
 </table>
 
