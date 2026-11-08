@@ -120,7 +120,7 @@ Palette paletteOf(int v) {
         p.sunDir = normalize(vec3(0.45f, 0.82f, 0.12f));
         p.sunC = vec3(1.f, 0.98f, 0.94f) * 2.6f; p.sunGlow = L(0xfff0d0); p.keyC = p.sunC;
         p.earthC = L(0x3a64a8) * 0.32f; p.amb = L(0x0a0e18) * 0.6f; p.envUp = L(0x05070c); p.envDown = L(0x3a6ab0) * 0.7f;
-        p.ocean = L(0x0c3478); p.shallow = L(0x1890b8); p.land = L(0x3a7a32); p.land2 = L(0x8e8a50); p.desert = L(0xdcb07a);
+        p.ocean = L(0x0a2c6e); p.shallow = L(0x1a8cb4); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
         p.city = L(0xffc878); p.atmoDay = L(0x4aa0ff); p.atmoTwi = L(0xff7a40);
         p.ink = L(0xf4f7ff); p.accent = L(0x7ad8ff); p.veil = L(0x040814); p.rail = L(0x7ad8ff);
         const unsigned pc[7] = {0x3fd0ff, 0xffd23f, 0xb48cff, 0x5fe08a, 0xff5a6e, 0x4a78ff, 0xff9a3c};
@@ -132,7 +132,7 @@ Palette paletteOf(int v) {
         p.sunDir = normalize(vec3(-0.89f, -0.25f, -0.38f));
         p.sunC = vec3(1.f, 0.86f, 0.66f) * 2.8f; p.sunGlow = L(0xffa860); p.keyC = p.sunC;
         p.earthC = L(0x1a2846) * 0.3f; p.amb = L(0x0c0a16) * 0.7f; p.envUp = L(0x06050c); p.envDown = L(0x1a2a50) * 0.6f;
-        p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x3e6a36); p.land2 = L(0x76804a); p.desert = L(0xc89a68);
+        p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
         p.city = L(0xffc070); p.atmoDay = L(0x3a8aff); p.atmoTwi = L(0xff6a2a); p.cityK = 1.3f;
         p.hull = L(0xf4ece2); p.gold = L(0xf0b040); p.chase = L(0xffb060); p.lamp = L(0xffd8a0); p.window = L(0xffb870);
         p.space = L(0x03040e); p.milky = L(0x3a3a6a); p.milkyK = 0.35f; p.sunSize = 0.013f; p.bloom = 0.6f; p.ringDay = 0.38f;
@@ -148,7 +148,7 @@ Palette paletteOf(int v) {
         p.keyC = vec3(0.62f, 0.72f, 1.f) * 0.95f; p.keyMoon = 1.f; p.moonSize = 0.022f;
         p.keyDir = normalize(vec3(-0.35f, 0.75f, 0.55f)); p.pole = normalize(vec3(-0.35f, 0.79f, -0.5f)); p.ringDay = 0.22f;
         p.earthC = L(0x1a2a3a) * 0.3f; p.amb = L(0x060a14) * 0.9f; p.envUp = L(0x04060c); p.envDown = L(0x101a2a) * 0.8f;
-        p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x3e6a36); p.land2 = L(0x76804a); p.desert = L(0xc89a68);
+        p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
         p.city = L(0xffcc80); p.atmoDay = L(0x3a6aff); p.atmoTwi = L(0xff5a30); p.cityK = 1.4f;
         p.airglow = L(0x50ff80) * 0.22f; p.auroraK = 1.3f; p.nightLift = 0.2f; p.stars = 1.f; p.milkyK = 0.5f;
         p.chase = L(0x5affd0); p.lamp = L(0xffe0b8); p.window = L(0xffc070); p.bloom = 0.65f;
@@ -403,9 +403,7 @@ void OrbitalUniverse::resize(int width, int height) {
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
     // the planet at a reduced resolution
-    const int sh = std::max(180, std::min(600, (int)(height_ * 0.55f)));
-    const int sw = std::max(320, (int)std::lround((float)sh * width_ / height_));
-    skyT_.create(sw, sh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    skyT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, GL_NEAREST);
     resolveT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     const int qw = std::max(16, width_ / 4), qh = std::max(16, height_ / 4);
     bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -967,19 +965,24 @@ void OrbitalUniverse::updateCamera(float dt) {
     }
     tanH_ = std::tan(25.f * PI / 180.f);
     // the camera's direction and the anchor's place on screen, by the framing (F: the view's half height there)
-    float kMid = 0.f, kBig = 0.f, sx = 0.f, sy = 0.f, pitch = 0.f, az = 0.f;
+    float kMid = 0.f, kBig = 0.f, kC = 0.f, sx = 0.f, sy = 0.f, pitch = 0.f, az = 0.f, leftRoom = 0.f;
     vec3 fwd, right, upv;
+    camAlt_ = std::max(2000.f, length(eye_ - EARTH_C) - R_PLANET);
     auto orient = [&](float F) {
         const float lF = std::log(std::max(F, 1.f));
         kMid = smoothstepf(std::log(35.f), std::log(130.f), lF);
         kBig = smoothstepf(std::log(600.f), std::log(10000.f), lF);
+        const float kHuge = smoothstepf(std::log(1.5e5f), std::log(3.e6f), lF);
+        kC = smoothstepf(std::log(250.f), std::log(5000.f), lF);
         const float kTiny = 1.f - smoothstepf(std::log(14.f), std::log(55.f), lF);
-        camAlt_ = ALT + 2.f * F;
-        const float dip = std::acos(R_PLANET / (R_PLANET + camAlt_));
-        pitch = -dip - std::atan(-0.1f * tanH_) - kBig * 18.f * PI / 180.f;
-        az = 0.55f + 0.5f * kTiny + 0.04f * std::sin(time_ * 0.017f) - 0.12f * kBig;
-        sx = lerpf(lerpf(0.5f, 0.4f, kMid), 0.04f, kBig);
-        sy = lerpf(lerpf(0.3f, 0.27f, kMid), 0.03f, kBig);
+        const float dip = std::acos(R_PLANET / (R_PLANET + std::min(camAlt_, 2.e6f)));
+        const float nearPitch = -dip - std::atan(-0.1f * tanH_) - kBig * 18.f * PI / 180.f;
+        pitch = lerpf(nearPitch, -24.f * PI / 180.f, kHuge);
+        az = 0.55f + 0.5f * kTiny + 0.04f * std::sin(time_ * 0.017f) - 0.12f * kBig + 0.12f * kHuge;
+        // small, the station sits in the strip right of the previews; big, it is centered behind the well
+        sx = lerpf(0.76f, 0.f, kC);
+        sy = lerpf(0.12f, 0.03f, kC);
+        leftRoom = lerpf(0.2f, 0.97f, kC);
         fwd = vec3(-std::sin(az) * std::cos(pitch), std::sin(pitch), -std::cos(az) * std::cos(pitch));
         right = normalize(cross(fwd, vec3(0, 1, 0)));
         upv = cross(right, fwd);
@@ -994,7 +997,7 @@ void OrbitalUniverse::updateCamera(float dt) {
             const vec3 c = vec3(m.sph[s].x, m.sph[s].y, m.sph[s].z) - At;
             const float r = m.sph[s].w, xr = dot(c, right), yu = dot(c, upv);
             need = std::max(need, (xr + r) / ((0.93f - sx) * aspect_));
-            need = std::max(need, (r - xr) / ((0.97f + sx) * aspect_));
+            need = std::max(need, (r - xr) / (leftRoom * aspect_));
             need = std::max(need, (yu + r) / (0.86f - sy));
             need = std::max(need, (r - yu) / (0.92f + sy));
         }
@@ -1012,17 +1015,31 @@ void OrbitalUniverse::updateCamera(float dt) {
         lf += camFv_ * dt;
         camF_ = std::exp(lf);
         const float k = 1.f - std::exp(-dt * 1.4f);
-        camA_ = camA_ + (At - camA_) * k;
+        // the anchor never runs ahead of the framing (it moves at most a few frames' widths a second)
+        // (its speed eased, so it never starts or stops with a jolt)
+        vec3 want = (At - camA_) * 1.4f;
+        const float wl = length(want), maxV = camF_ * 1.6f;
+        if (wl > maxV && wl > 0.f) want = want * (maxV / wl);
+        camAv_ = camAv_ + (want - camAv_) * (1.f - std::exp(-dt * 2.5f));
+        camA_ = camA_ + camAv_ * dt;
+        (void)k;
     }
     const float F = camF_;
     orient(F);
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
     const float D = F / tanH_;
     eye_ = camA_ - dirA * D;
+    {
+        // never inside the planet's air
+        const vec3 r = eye_ - EARTH_C;
+        const float d = length(r), minD = R_PLANET + 1.5e5f;
+        if (d < minD) eye_ = EARTH_C + r * (minD / d);
+    }
     look_ = fwd;
     camR_ = right;
     camU_ = upv;
-    const float zn = std::max(0.05f, D * 0.03f), zf = D * 30.f + F * 8.f;
+    const float zn = std::max(0.05f, D * 0.03f);
+    const float zf = std::max({D * 30.f + F * 8.f, length(eye_ - EARTH_C) + R_PLANET * 1.5f, length(eye_ - MOON_C) + R_MOON * 2.f});
     const mat4 view3 = mat4::lookAt(vec3(0.f), fwd, vec3(0, 1, 0));
     vp3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, zn, zf) * view3;
     minPx_ = 2.f * tanH_ / (float)height_;
@@ -1121,7 +1138,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         static const int testLines = std::getenv("ZEN_ORBITAL_LINES") ? std::atoi(std::getenv("ZEN_ORBITAL_LINES")) : 0;
         // (ZEN_GROW_RATE=R adds R more lines a second: a time-lapse)
         static const double growRate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
-        const int want = std::clamp(1 + lines + testLines + (int)(growRate * time_), 1, (int)plan_.size());
+        const int want = std::clamp(wantOf(lines + testLines + (int)(growRate * time_)), 1, (int)plan_.size());
         if (linesShown_ < 0) {
             for (int i = 0; i < (int)plan_.size(); i++) {
                 plan_[i].state = i < want ? 2 : 0;
@@ -1129,8 +1146,8 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
                 plan_[i].t = 0.f;
                 plan_[i].fading = false;
             }
-            wheelW_ = want > wheelLast_ ? 0.05f : 0.f;
-            greatW_ = want > greatLast_ ? 0.004f : 0.f;
+            for (int r = 1; r < RINGS; r++)
+                if (rings_[r].first >= 0) rings_[r].w = want > rings_[r].last ? rings_[r].baseW : 0.f;
             built_ = want;
         } else {
             // a new game: everything beyond what is wanted shrinks away, the outermost first
@@ -1191,19 +1208,18 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         }
         m.latch = approach(m.latch, 0.f, 1.4f, wdt);
     }
-    // the rings turn once complete: slowly, faster at a peak, spun up on the drop
-    {
-        bool wheelAll = true;
-        for (int i = wheelFirst_; i <= wheelLast_ && wheelAll; i++) wheelAll = plan_[i].state == 2 && !plan_[i].fading;
-        bool greatAll = true;
-        for (int i = greatFirst_; i <= greatLast_ && greatAll; i++) greatAll = plan_[i].state == 2 && !plan_[i].fading;
-        const float wT = wheelAll ? 0.05f + 0.03f * wm_ + 0.05f * wp_ + 0.24f * life_ : 0.f;
-        const float gT = greatAll ? 0.004f + 0.003f * wp_ + 0.02f * life_ : 0.f;
-        wheelW_ = approach(wheelW_, wT, 0.45f, dt);
-        greatW_ = approach(greatW_, gT, 0.35f, dt);
-        wheelSpin_ = std::fmod(wheelSpin_ + wheelW_ * wdt, TAU);
-        greatSpin_ = std::fmod(greatSpin_ + greatW_ * wdt, TAU);
+    // the rings turn once complete: slowly, faster at a peak, spun up on the drop (some against the others)
+    for (int r = 1; r < RINGS; r++) {
+        Ring& RG = rings_[r];
+        if (RG.first < 0) continue;
+        bool all = true;
+        for (int i = RG.first; i <= RG.last && all; i++) all = plan_[i].state == 2 && !plan_[i].fading;
+        const float target = all ? RG.baseW + RG.peakW * (r == 1 ? 0.6f * wm_ + wp_ : wp_) + RG.dropW * life_ : 0.f;
+        RG.w = approach(RG.w, target, r == 1 ? 0.45f : 0.35f, dt);
+        RG.spin = std::fmod(RG.spin + RG.w * wdt, TAU);
     }
+    wheelSpin_ = rings_[1].spin;
+    greatSpin_ = rings_[2].spin;
     planetSpin_ += wdt * 0.0012f;
     cloudSpin_ += wdt * 0.0016f;
 
@@ -1238,6 +1254,27 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
                     }
                     break;
                 }
+            }
+        }
+        sparkAcc_ += wdt * (2.5f + 5.f * wm_ + 8.f * wp_) * smoothstepf(30.f, 200.f, camF_);
+        while (sparkAcc_ >= 1.f) {
+            sparkAcc_ -= 1.f;
+            int last[4] = {-1, -1, -1, -1}, nl = 0;
+            for (int i = (int)plan_.size() - 1; i >= 0 && nl < 4; i--)
+                if (plan_[i].state == 2 && !plan_[i].fading && plan_[i].extent > camF_ * 0.03f) last[nl++] = i;
+            if (nl == 0) break;
+            const Module& m = plan_[last[rng_.irange(0, nl - 1)]];
+            const Xf mf = moduleXf(m, nullptr, nullptr, nullptr);
+            const vec3 at = mf.at(m.pivot) + normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f))) * (m.extent * rng_.range(0.2f, 0.6f));
+            for (int s = 0; s < 7 && (int)sparks_.size() < MAX_SPARKS; s++) {
+                Spark sp;
+                sp.p = at;
+                sp.v = normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f), rng_.range(-1.f, 1.f))) * (camF_ * rng_.range(0.01f, 0.04f));
+                sp.age = 0.f;
+                sp.life = rng_.range(0.3f, 0.7f);
+                sp.size = camF_ * rng_.range(0.002f, 0.004f);
+                sp.col = rng_.chance(0.6f) ? vec3(1.f, 0.9f, 0.7f) : vec3(0.7f, 0.85f, 1.f);
+                sparks_.push_back(sp);
             }
         }
         for (Spark& s : sparks_) {
@@ -1302,6 +1339,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
             b.emitK = emitK;
             b.glowK = 1.f;
             b.towns = 0.f;
+            b.chaseOff = m.ring > 0 ? -rings_[m.ring].spin : 0.f;
             const vec3 cw = b.xf.at(m.pivot);
             m.order = saturate(length(cw - frameA_[0]) / std::max(camF_ * 1.1f, 1.f));
             emitModule(b, m, i);
@@ -1309,7 +1347,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
             // its tugs: pushing it in, then backing off and leaving
             if (m.state == 1 && m.tugs > 0) {
                 const float TA = flightA(m);
-                const float size = std::max(2.4f, m.extent * 0.16f);
+                const float size = std::max(2.4f, m.extent * (m.kind >= K_NRING ? 0.045f : 0.16f));
                 vec3 u, v;
                 basisOf(dir, u, v);
                 for (int k = 0; k < m.tugs; k++) {
@@ -1348,8 +1386,16 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
                 b.light(seat, std::max(0.6f, m.extent * 0.22f), lerp(pal_.lamp, vec3(1.f), 0.5f), m.latch * 1.6f);
             }
         }
+        b.chaseOff = 0.f;
+        {
+            int works = 0;
+            for (int i = stageFirst_[6]; i < stageFirst_[7] && i < (int)plan_.size(); i++) works += plan_[i].state == 2 && !plan_[i].fading ? 1 : 0;
+            moonWork_ = approach(moonWork_, works / 6.f, 0.5f, dt);
+        }
         emitArm(b, dt);
         emitDrones(b);
+        emitMoon(b);
+        emitTraffic(b);
         // sparks
         b.xf = Xf();
         b.pivot = vec3(0.f);
@@ -1375,9 +1421,11 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progSky_, "uCamU", camU_);
         set2f(progSky_, "uTan", tanH_ * aspect_, tanH_);
         set1f(progSky_, "uPix", 2.f * tanH_ / skyT_.h);
-        const float alt = camAlt_ + eye_.y;
-        set3f(progSky_, "uEyeP", vec3(eye_.x, R_PLANET + alt, eye_.z));
+        const vec3 eyeP = eye_ - EARTH_C;
+        const float alt = std::max(10.f, length(eyeP) - R_PLANET);
+        set3f(progSky_, "uEyeP", eyeP);
         set1f(progSky_, "uAlt", alt);
+        set1f(progSky_, "uDyson", saturate((float)(built_ - stageFirst_[4]) / 3.f) * (stageFirst_[4] > 0 ? 1.f : 0.f));
         set1f(progSky_, "uR", R_PLANET);
         set3f(progSky_, "uSunDir", pal_.sunDir);
         set3f(progSky_, "uSunC", pal_.sunC * (1.f / 2.6f) * (1.f - 0.5f * slow_));
@@ -1460,9 +1508,20 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     // =========================================================== the station (full resolution, multisampled)
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
     glViewport(0, 0, width_, height_);
-    glDisable(GL_DEPTH_TEST);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
     glUseProgram(progBg_);
+    {
+        const vec3 eyeP = eye_ - EARTH_C;
+        set3f(progBg_, "uEyeP", eyeP);
+        set1f(progBg_, "uAlt", std::max(10.f, length(eyeP) - R_PLANET));
+        set1f(progBg_, "uR", R_PLANET);
+        setMat(progBg_, "uVP", vp3_);
+    }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, skyT_.tex);
     set1i(progBg_, "uSky", 0);
@@ -1475,9 +1534,6 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uTime", time_);
     set1f(progBg_, "uStars", pal_.stars * (1.f + 0.6f * slow_));
     ugl::drawFullscreen();
-    glClearDepth(1.0);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     if (msSamples_ > 1) glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
@@ -1495,6 +1551,8 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
             set3f(p, "uEnvUp", pal_.envUp);
             set3f(p, "uEnvDown", envDown);
             set1f(p, "uDipS", std::sin(dip));
+            set3f(p, "uPlanetC", EARTH_C);
+            set1f(p, "uPlanetR", R_PLANET);
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, shadowTex_);
             set1i(p, "uShadow", 1);
@@ -1517,7 +1575,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
             set1f(p, "uRingDay", pal_.ringDay);
             {
                 const float h1 = (float)std::fmod(beat_ / 8.0, 1.0) * TAU, h2 = (float)std::fmod(beat_ / 16.0, 1.0) * TAU;
-                set4f(p, "uChase", h1 - wheelSpin_, h2 - greatSpin_, life_ * (1.f - over_), (0.12f + 0.35f * groupOn_[1] + 0.25f * kickGlow_) * (1.f - over_));
+                set4f(p, "uChase", h1, h2, life_ * (1.f - over_), (0.12f + 0.35f * groupOn_[1] + 0.25f * kickGlow_) * (1.f - over_));
                 set3f(p, "uChaseC", pal_.chase * 1.4f);
             }
         }
@@ -1606,8 +1664,8 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
     set3f(progVeil_, "uRail", lerp(pal_.rail * 0.45f, bridge_.ink * 0.4f, bridge));
-    set1f(progVeil_, "uWellA", 0.8f);
-    set1f(progVeil_, "uColA", 0.45f * world);
+    set1f(progVeil_, "uWellA", 0.84f);
+    set1f(progVeil_, "uColA", 0.66f * world);
     set1f(progVeil_, "uRailA", 0.5f);
     set1f(progVeil_, "uPx", pxPerUnit_);
     set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);

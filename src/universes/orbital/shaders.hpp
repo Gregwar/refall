@@ -64,7 +64,7 @@ uniform float uClouds, uCity, uAurora, uGlow, uNightLift, uHaze;
 uniform vec3 uAurora1, uAurora2;
 uniform vec3 uMoonDir;
 uniform float uMoonSize;
-uniform float uTime, uBridge;
+uniform float uTime, uBridge, uDyson;
 uniform vec3 uBridgeCol;
 vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTan.x + uCamU * (uv.y * 2.0 - 1.0) * uTan.y); }
 
@@ -73,11 +73,11 @@ float fbmD(vec3 p, float foot, float wl, int oct) {
     float s = 0.0, a = 0.5;
     for (int i = 0; i < 12; i++) {
         if (i >= oct) break;
-        float k = smoothstep(2.0 * foot, 5.0 * foot, wl);
+        float k = smoothstep(1.2 * foot, 3.0 * foot, wl);
         if (k <= 0.0) break;
         s += a * (vnoise3(p) - 0.5) * k;
         p = p * 2.03 + vec3(1.7, 9.2, 3.1);
-        a *= 0.5;
+        a *= i < 3 ? 0.5 : 0.58;
         wl *= 0.4926;
     }
     return s;
@@ -97,7 +97,7 @@ float ridges(vec3 p, float foot, float wl) {
 }
 // the land's height (0.5 the shore) at a surface direction, its detail by the pixel's footprint
 float terrain(vec3 s, float foot) {
-    return 0.5 + fbmD(s * 2.8 + 3.1, foot, 1.4e7, 11) * 1.3 - 0.01;
+    return 0.5 + fbmD(s * 2.8 + 3.1, foot, 1.4e7, 12) * 1.25 - 0.01;
 }
 // craters: a bowl, a bright rim, one per cell where there is one (two scales)
 float craters(vec3 s, float foot) {
@@ -127,8 +127,8 @@ float clouds(vec3 c, float foot, bool detail) {
     // bands: the tropics clearer, the storm belts fuller
     float lat = abs(c.y);
     v += 0.07 * sin(lat * 9.0) - 0.02;
-    if (detail) v += fbmD(c * 14.0 + w * 3.0, foot, 2.8e6, 8) * 0.5;
-    return smoothstep(0.46, 0.6, v);
+    if (detail) v += fbmD(c * 14.0 + w * 3.0, foot, 2.8e6, 10) * 0.6;
+    return v;
 }
 void main() {
     vec3 d = rayDir(vUv);
@@ -157,15 +157,18 @@ void main() {
         if (uType < 0.5) {
             water = 1.0 - smoothstep(0.5 - cw, 0.5 + cw, h);
             float lat = abs(s.y);
-            float moist = fbm3(s * 2.6 + 11.0) + 0.12 * (1.0 - smoothstep(0.1, 0.25, abs(lat - 0.4)));
+            float moist = fbm3(s * 2.6 + 11.0) + 0.12 * (1.0 - smoothstep(0.1, 0.25, abs(lat - 0.4))) - 0.1 * smoothstep(0.15, 0.3, abs(lat - 0.28)) * 0.0;
+            moist += fbmD(s * 30.0, foot, 1.3e6, 8) * 0.7;
             float rg = ridges(s * 22.0 + 4.0, foot, 1.8e6) * smoothstep(0.5, 0.56, h);
-            float dry = smoothstep(0.5, 0.42, moist) * smoothstep(0.08, 0.2, lat) * smoothstep(0.62, 0.45, lat);
-            vec3 land = mix(uLand, uLand2, smoothstep(0.42, 0.6, moist + fbmD(s * 30.0, foot, 1.3e6, 6) * 0.6));
-            land = mix(land, uDesert, dry);
-            land = mix(land, uLand2 * 0.8 + vec3(0.04, 0.03, 0.02), smoothstep(0.6, 0.75, lat));
-            land *= 0.7 + 0.55 * rg;
-            land *= 0.62 + 0.75 * (fbmD(s * 90.0 + 2.0, foot, 4.4e5, 7) + 0.5);
-            ice = smoothstep(0.8, 0.86, lat + 0.06 * fbm3(s * 8.0)) + smoothstep(0.75, 0.95, rg) * 0.8 * (1.0 - dry);
+            float dry = smoothstep(0.47, 0.37, moist) * smoothstep(0.08, 0.2, lat) * smoothstep(0.62, 0.45, lat);
+            vec3 forest = uLand, grass = mix(uLand, uLand2, 0.45) * vec3(1.05, 1.08, 0.85), savanna = uLand2;
+            vec3 land = mix(savanna, grass, smoothstep(0.42, 0.52, moist));
+            land = mix(land, forest, smoothstep(0.55, 0.66, moist));
+            land = mix(land, uDesert * (0.9 + 0.2 * fbmD(s * 200.0, foot, 2.e5, 6)), dry);
+            land = mix(land, vec3(0.32, 0.3, 0.24), smoothstep(0.62, 0.74, lat) * (1.0 - smoothstep(0.78, 0.84, lat)));
+            land = mix(land, vec3(0.36, 0.32, 0.28), smoothstep(0.3, 0.7, rg) * 0.7 * smoothstep(0.5, 0.62, fbm3(s * 3.0 + 20.0)));
+            land *= 0.72 + 0.56 * (fbmD(s * 400.0 + 2.0, foot, 1.e5, 8) + 0.5);
+            ice = smoothstep(0.82, 0.87, lat + 0.06 * fbm3(s * 8.0)) + smoothstep(0.66, 0.85, rg) * 0.85 * (1.0 - dry) * smoothstep(0.58, 0.68, fbm3(s * 3.0 + 20.0));
             vec3 sea = mix(uShallow, uOcean, smoothstep(0.5, 0.44, h));
             alb = mix(land, sea, water);
             alb = mix(alb, uIce, clamp(ice, 0.0, 1.0));
@@ -185,8 +188,11 @@ void main() {
         }
         // the clouds and their shadows
         vec3 sc = uCloudRot * n;
-        float cl = clouds(sc, foot, true) * uClouds;
-        float clS = clouds(uCloudRot * normalize(n - uSunDir * 0.006), foot, false) * uClouds;
+        float cv = clouds(sc, foot, true);
+        float ce = max(0.018, foot / 2.0e5);
+        float cl = smoothstep(0.53 - ce, 0.53 + ce * 1.5, cv) * uClouds;
+        float cthick = smoothstep(0.53, 0.8, cv);
+        float clS = smoothstep(0.5, 0.6, clouds(uCloudRot * normalize(n - uSunDir * 0.006), foot, false)) * uClouds;
         vec3 lightC = uSunC * (max(ndl, 0.0) * 1.15 + 0.03 * day);
         lightC = mix(lightC, lightC * vec3(1.15, 0.75, 0.55), tw * 0.6);
         col = alb * lightC * (1.0 - 0.55 * clS);
@@ -213,7 +219,8 @@ void main() {
         }
         // the clouds over it all, lit by the sun, pink at the terminator, faintly by the moon at night
         vec3 cloudLit = uCloudC * (max(ndl, 0.0) * 1.2 + 0.04 * day) + uCloudC * vec3(1.0, 0.5, 0.35) * tw * 0.35 + vec3(0.55, 0.62, 0.8) * uNightLift * 0.09 * night;
-        col = mix(col, cloudLit, cl * 0.92);
+        cloudLit *= (0.66 + 0.34 * cthick) * (0.8 + 0.4 * (fbmD(sc * 80.0 + 5.0, foot, 5.e5, 8) + 0.5));
+        col = mix(col, cloudLit, cl * (0.75 + 0.2 * cthick));
         col += (alb * 0.4 + vec3(0.25, 0.3, 0.45)) * uNightLift * 0.03 * night * (1.0 - cl);
         // the air over the surface: blue on the day side, thicker toward the limb
         float mu = max(dot(n, -d), 0.0);
@@ -292,6 +299,27 @@ void main() {
         col += uSunGlow * glow * uSunVis * (hit ? 0.25 : 1.0) * (1.0 + 0.4 * uGlow);
         col = mix(col, uSunC * 6.0, dsk * uSunVis);
         stars *= 1.0 - clamp(glow * 3.0 * uSunVis + dsk, 0.0, 1.0);
+        if (uDyson > 0.0 && !hit && sd > 0.9) {
+            vec3 bx = normalize(cross(uSunDir, vec3(0.0, 1.0, 0.0)));
+            vec3 by = cross(bx, uSunDir);
+            vec2 q = vec2(dot(d, bx), dot(d, by)) / uSunSize;
+            float acc = 0.0;
+            for (int k = 0; k < 4; k++) {
+                float tilt = 0.25 + 0.2 * float(k);
+                vec2 e = vec2(q.x, q.y / tilt);
+                float rr = length(e), R = 3.0 + 2.6 * float(k);
+                float a = atan(e.y, e.x) + uTime * (0.02 + 0.01 * float(k)) * (k % 2 == 0 ? 1.0 : -1.0);
+                float n = 60.0 + 30.0 * float(k);
+                float cell = floor(a / TAU * n);
+                float ca = (cell + 0.5) / n * TAU;
+                float on = step(0.35, hash(vec2(cell, float(k))));
+                vec2 pc = vec2(cos(ca), sin(ca)) * R;
+                float dd = length(e - pc);
+                acc += exp(-dd * dd / 0.02) * on * (0.6 + 0.4 * sin(uTime * 2.0 + cell));
+                acc += exp(-sq((rr - R) / 0.08)) * 0.08;
+            }
+            col += vec3(1.0, 0.9, 0.72) * acc * uDyson * uSunVis * 1.5;
+        }
     }
     // the moon
     if (uMoonSize > 0.0 && !hit) {
@@ -326,9 +354,26 @@ uniform sampler2D uSky;
 uniform vec3 uLook, uCamR, uCamU;
 uniform vec2 uTan, uRes;
 uniform float uTwinkle, uTime, uStars;
+uniform vec3 uEyeP;
+uniform float uAlt, uR;
+uniform mat4 uVP;
 vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTan.x + uCamU * (uv.y * 2.0 - 1.0) * uTan.y); }
 void main() {
-    vec4 w = texture(uSky, vUv);
+    vec4 w = texelFetch(uSky, ivec2(gl_FragCoord.xy), 0);
+    {
+        // the planet's depth: what passes behind it is hidden
+        vec3 d = rayDir(vUv);
+        float b = dot(uEyeP, d);
+        float c0 = uAlt * (uAlt + 2.0 * uR);
+        float disc = b * b - c0;
+        float depth = 1.0;
+        if (disc > 0.0 && b < 0.0) {
+            float t = c0 / (-b + sqrt(disc));
+            vec4 cp = uVP * vec4(d * t, 1.0);
+            depth = clamp(cp.z / cp.w * 0.5 + 0.5, 0.0, 1.0);
+        }
+        gl_FragDepth = depth;
+    }
     vec3 c = w.rgb;
     float vis = w.a * uStars;
     if (vis > 0.002) {
@@ -387,6 +432,7 @@ out vec3 vLoc;
 flat out vec4 vMat;   // material, p0, p1, p2
 flat out vec4 vCol;
 flat out vec4 vExt;   // glow, size u, size v, face/region
+flat out float vSpin; // its ring's turn (taken off the drop's chase)
 )";
 
 inline const char* BOX_VS = R"(#version 330 core
@@ -408,6 +454,7 @@ void main() {
     vMat = vec4(iX.w, iY.w, iZ.w, iE.y);
     vCol = iC;
     vExt = vec4(iE.z, sz, face);
+    vSpin = iE.w;
     gl_Position = uVP * vec4(P - uEye, 1.0);
 }
 )";
@@ -506,6 +553,7 @@ void main() {
     vMat = vec4(iX.w, iY.w, iZ.w, iE.y);
     vCol = iC;
     vExt = vec4(iE.z, sz, region + 4.0 + float(shape) * 10.0);
+    vSpin = iE.w;
     gl_Position = uVP * vec4(P - uEye, 1.0);
 }
 )";
@@ -545,10 +593,13 @@ in vec3 vLoc;
 flat in vec4 vMat;
 flat in vec4 vCol;
 flat in vec4 vExt;
+flat in float vSpin;
 out vec4 frag;
 uniform vec3 uEye;
 uniform vec3 uKeyDir, uKeyC, uEarthC, uAmbC, uEnvUp, uEnvDown;
 uniform float uDipS;           // sin of the horizon's dip: below it, the planet
+uniform vec3 uPlanetC;         // the planet's center
+uniform float uPlanetR;
 uniform sampler2DShadow uShadow;
 uniform mat4 uShadowVP;
 uniform vec3 uShadowO;
@@ -574,9 +625,12 @@ float shadowAt(vec3 P, vec3 N) {
     for (int i = 0; i < 5; i++) r += texture(uShadow, vec3(q.xy + o[i] * uShadowTexel, q.z - uShadowBias * 0.0));
     return r / 5.0;
 }
-vec3 env(vec3 R) {
-    // what a shiny surface mirrors: the planet below the horizon, deep space above
-    float e = smoothstep(-uDipS + 0.05, -uDipS - 0.05, R.y);
+vec3 env(vec3 R, vec3 P) {
+    // what a shiny surface mirrors: the planet where it fills the sky, deep space elsewhere
+    vec3 toE = uPlanetC - P;
+    float dE = length(toE);
+    float cosA = sqrt(max(0.0, 1.0 - sq(uPlanetR / dE)));
+    float e = smoothstep(cosA - 0.03, cosA + 0.03, dot(R, toE / dE));
     return mix(uEnvUp, uEnvDown, e);
 }
 void main() {
@@ -679,7 +733,7 @@ void main() {
             float aa = vMat.y + uv.x * vMat.z / max(2.0 * sz.x, 1e-3);
             float sd = abs(abs(uv.y) - 0.5 * PI * r);
             float strip = 1.0 - smoothstep(0.18, 0.18 + px * 1.5, sd);
-            float ch = chase(aa, uChase.x, 2.0);
+            float ch = chase(aa, uChase.x + vSpin, 2.0);
             emit += uChaseC * strip * (uChase.w + ch * uChase.z * 3.0);
         }
         spec = 0.2;
@@ -738,7 +792,7 @@ void main() {
             // a band of light along the hull, the drop's chase running round it
             float aa = vMat.y + uv.x * vMat.z / max(2.0 * sz.x, 1e-3);
             float band2 = 1.0 - smoothstep(0.035, 0.035 + px / sz.y * 1.5, abs(abs(y) - 0.36));
-            emit += uChaseC * band2 * (uChase.w * 0.6 + chase(aa, uChase.y, 4.0) * uChase.z * 3.0);
+            emit += uChaseC * band2 * (uChase.w * 0.6 + chase(aa, uChase.y + vSpin, 4.0) * uChase.z * 3.0);
         } else {
             // the rim walls: glass and steel
             alb = vec3(0.08, 0.1, 0.13);
@@ -765,6 +819,33 @@ void main() {
         gloss = 200.0;
         refl = 0.85;
         alb *= 0.35;
+    } else if (mat == 12) {
+        // the Moon: seas and craters; its works: a grid of glowing seams, the great pit of its hollowing
+        vec3 q = normalize(vLoc);
+        float mar = smoothstep(0.42, 0.62, fbm3(q * 2.3 + 5.0));
+        float cr = 0.0;
+        for (int i = 0; i < 3; i++) {
+            vec3 pp = q * (5.0 + 8.0 * float(i)) + float(i) * 7.0;
+            vec3 cc = floor(pp);
+            vec3 o = vec3(hash3(cc), hash3(cc + 3.1), hash3(cc + 7.7)) * 0.5 + 0.25;
+            float r = length(fract(pp) - o);
+            float Rc = 0.12 + 0.16 * hash3(cc + 1.3);
+            cr += (exp(-sq((r - Rc) / (Rc * 0.22))) * 0.35 - smoothstep(Rc, Rc * 0.6, r) * 0.28) * step(0.45, hash3(cc + 5.9));
+        }
+        alb = mix(vec3(0.8, 0.8, 0.82), vec3(0.4, 0.4, 0.45), mar) * (1.0 + cr) * (0.85 + 0.3 * fbm3(q * 40.0));
+        spec = 0.03;
+        gloss = 8.0;
+        float work = vExt.x;
+        float lon = atan(q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
+        vec2 g = vec2(lon * 18.0 / TAU, lat * 12.0 / PI);
+        vec2 gw = fwidth(g) + 1e-4;
+        vec2 gd = abs(fract(g) - 0.5);
+        float seam = max(smoothstep(0.5 - gw.x * 1.5 - 0.008, 0.5, gd.x), smoothstep(0.5 - gw.y * 1.5 - 0.008, 0.5, gd.y));
+        float pit = dot(q, normalize(vec3(0.56, 0.37, 0.74)));
+        float hole = smoothstep(0.8, 0.84, pit);
+        float rimP = exp(-sq((pit - 0.8) / 0.012));
+        alb *= 1.0 - 0.85 * hole * work;
+        emit = (uWindowC * seam * 0.9 + vec3(1.0, 0.55, 0.22) * (hole * (0.6 + 0.4 * fbm3(q * 60.0)) * 1.6 + rimP * 0.8)) * work;
     }
     // light: the key (the sun, or the moon), its shadow, the planet's glow from below, a faint fill
     vec3 T = normalize(cross(N, abs(N.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
@@ -772,16 +853,24 @@ void main() {
     vec3 Nb = normalize(N + T * bump.x + B * bump.y);
     float ndl = dot(Nb, uKeyDir);
     float sh = ndl > 0.0 ? shadowAt(vP, N) : 0.0;
+    {
+        // the planet's shadow
+        vec3 o = vP - uPlanetC;
+        float bb = dot(o, uKeyDir);
+        if (bb < 0.0) sh *= smoothstep(uPlanetR * 0.985, uPlanetR * 1.015, sqrt(max(dot(o, o) - bb * bb, 0.0)));
+    }
     vec3 H = normalize(uKeyDir + V);
     float fres = 0.04 + 0.96 * pow(1.0 - max(dot(Nb, V), 0.0), 5.0);
     vec3 c = alb * uKeyC * max(ndl, 0.0) * sh;
     c += uKeyC * spec * pow(max(dot(Nb, H), 0.0), gloss) * (gloss + 8.0) / 64.0 * sh * step(0.0, ndl);
     // a rim of light on the edges turned from a light behind them
     c += uKeyC * pow(1.0 - max(dot(N, V), 0.0), 4.0) * max(dot(-V, uKeyDir), 0.0) * 0.5 * max(max(alb.r, alb.g), alb.b);
-    float down = 0.5 - 0.5 * Nb.y;
-    c += alb * (uEarthC * down * down + uAmbC);
+    vec3 fromE = vP - uPlanetC;
+    float dPl = length(fromE);
+    float down = 0.5 - 0.5 * dot(Nb, fromE / dPl);
+    c += alb * (uEarthC * down * down * min(1.0, sq(uPlanetR * 1.07 / dPl)) + uAmbC);
     vec3 Rf = reflect(-V, Nb);
-    c += env(Rf) * refl * mix(0.5, 1.0, fres);
+    c += env(Rf, vP) * refl * mix(0.5, 1.0, fres);
     c += emit;
     c = mix(c, uBridgeCol, uBridge);
     if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0);

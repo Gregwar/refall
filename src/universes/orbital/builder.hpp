@@ -6,7 +6,7 @@
 
 namespace orbital {
 enum Mat { M_HULL = 0, M_GOLD = 1, M_SOLAR = 2, M_RADIATOR = 3, M_TRUSS = 4, M_DARK = 5, M_EMIT = 6, M_HAB = 7, M_LAND = 8,
-           M_SHIELD = 9, M_GLASS = 10, M_SILVER = 11 };
+           M_SHIELD = 9, M_GLASS = 10, M_SILVER = 11, M_MOON = 12 };
 enum Shape { S_BOX = 0, S_CYL = 1, S_SPHERE = 2, S_TORUS = 3, S_BAND = 5 };
 inline void basisOf(const vec3& v, vec3& a, vec3& b) {
     const vec3 h = std::fabs(v.y) < 0.9f ? vec3(0, 1, 0) : vec3(1, 0, 0);
@@ -27,6 +27,7 @@ struct OrbitalUniverse::Builder {
     float glowK = 1.f;       // its lamps
     float towns = 0.f;
     float minR = 0.f;        // a cylinder thinner than this (meters) is drawn coarse
+    float chaseOff = 0.f;    // its ring's turn, taken off the drop's chase (the strips of light)
 
     Builder(std::vector<Part>& b, std::vector<Part>& f, std::vector<Part>& c, std::vector<Glow>& g)
         : box(b), fine(f), coarse(c), glow(g) {}
@@ -39,7 +40,7 @@ struct OrbitalUniverse::Builder {
         if (s <= 0.002f) return;
         const vec3 C = P(c), x = D(X), y = D(Y), z = D(Z);
         Part p = {{C.x, C.y, C.z, (float)shape}, {x.x, x.y, x.z, (float)mat}, {y.x, y.y, y.z, p0}, {z.x, z.y, z.z, p1},
-                  {col.x, col.y, col.z, seed}, {p2 * s, p3, g < 0.f ? emitK : g, 0.f}};
+                  {col.x, col.y, col.z, seed}, {p2 * s, p3, g < 0.f ? emitK : g, chaseOff}};
         L.push_back(p);
     }
     // an axis-aligned box (local), half sizes
