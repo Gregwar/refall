@@ -1134,7 +1134,7 @@ void MangaUniverse::drawPiece(const int cells[][2], int n, int type, float dx, f
     // the tone travels with the piece
     const V2 shift{dx, -dy};
     for (int i = 0; i < n; i++) {
-        if (cells[i][1] < Game::HIDDEN) continue;
+        if (cells[i][1] < 0) continue;
         const vec3 p = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
         manga::Tone t = tn;
         t.g0 = {0, p.y + 0.5f};
@@ -1155,7 +1155,7 @@ void MangaUniverse::drawPiece(const int cells[][2], int n, int type, float dx, f
     // the lines: fine between cells of the piece, bold around it
     const float wOut = 2.6f * s_, wIn = std::max(1.f, 1.1f * s_);
     for (int i = 0; i < n; i++) {
-        if (cells[i][1] < Game::HIDDEN) continue;
+        if (cells[i][1] < 0) continue;
         const int cx = cells[i][0], cy = cells[i][1];
         const vec3 p = layout::cellPos(cx + dx, cy + dy);
         const vec2 a = px({p.x - 0.5f, p.y + 0.5f}), b = px({p.x + 0.5f, p.y - 0.5f}); // top-left, bottom-right
