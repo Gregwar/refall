@@ -110,7 +110,7 @@ song, and songs change universe with a transition on the beat. Forty-five univer
 <td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row floats calmly into the shelves of a personal library and slots in, kept sorted by color in rainbow order, every book a cleared cell, as a cosy study opens into a tall long room and new bookcases are carried in as they fill; the drop runs a soft light along the spines<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/groceries.jpg"><br><b>GROCERIES</b>: a supermarket checkout in 3D, the pieces groceries on the belt; cleared rows are scanned by a red beam and packed into bags, bags go into carts, carts line up; more lanes open, the roof lifts off over the whole store, vans and lorries load, and the store grows into a hypermarket among mountains of bags and a city of cart towers; the drop is the millionth customer: confetti and every scanner flashing on the beat<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/groceries.jpg"><br><b>GROCERIES</b>: a cashier's checkout counter seen from above, the pieces groceries on the belt; each cleared row glides across the scanner with a soft beep and is packed neatly into an open bag, full bags are set aside, the receipt curls longer and the customer's things gather on the counter; the drop glows softly along the belt<br><sub>🔍 <i>to review</i></sub></td>
 <td></td>
 </tr>
 </table>
