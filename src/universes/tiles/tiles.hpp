@@ -124,7 +124,7 @@ private:
     GLuint quadVbo_ = 0, tessVao_ = 0, tessVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, fragVao_ = 0, fragVbo_ = 0, spriteVao_ = 0,
            spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
     GLuint gbFbo_ = 0, gbTex_[3] = {0, 0, 0};
-    GLuint stateTex_ = 0, sketchTex_ = 0;
+    GLuint stateTex_ = 0, sketchTex_ = 0, geoTex_ = 0;
     int tessCount_ = 0;
     ugl::Target sceneT_, bloomA_, bloomB_;
     mat4 vp_;
@@ -151,6 +151,15 @@ private:
     float waveT_ = 99.f, waveA_ = 0.f;
     double lastWaveBeat_ = -1.0, lastGlintBeat_ = -1.0;
     float ringGlintT_ = -1.f;
+    // The drop's show: waves turning the tesserae over every two beats (on the bar a new design, between them a full
+    // turn showing their gold backs), the medallions chasing their light; the last wave lays the mosaic back.
+    struct Sweep { double beat = -1e4; int kind = 0, from = 0, to = 0; bool spin = false; };
+    bool show_ = false, showEnding_ = false;
+    double showStart_ = 0.0, showNext_ = 0.0;
+    int showStep_ = 0, showPat_ = 0, showCount_ = 0;
+    float showK_ = 0.f;
+    Sweep swA_, swB_;
+    void updateShow(bool want);
     int ringGlintSide_ = 0;
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
