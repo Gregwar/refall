@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Forty universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty-one universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -100,6 +100,9 @@ song, and songs change universe with a transition on the beat. Forty universes s
 <tr>
 <td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/gianttree.jpg"><br><b>GIANT TREE</b>: a toon world tree shooting up absurdly with every cleared line, from a round sapling in a bright meadow through the clouds, the stratosphere and orbit until the planet is a ball under its roots and its crown passes the moon; the drop beams a rainbow up the trunk into space<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
+<tr>
+<td><img src="docs/universes/megacity.jpg"><br><b>MEGACITY</b>: a hut on a riverbank at dusk growing with every cleared line into a village, a walled town, a skyline of towers, arcologies and a space elevator, until the planet is one glowing ball of city lights under an orbital ring; the drop raises a whole district whose lights come on block by block on the beat<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
