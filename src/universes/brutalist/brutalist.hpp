@@ -72,7 +72,7 @@ private:
     int queued_ = 0;             // rows cleared but not yet lowered
     void planGrowth();
     void buildModule(std::vector<Box>& out, const Module& m, const vec3& at, float alpha) const;
-    struct Crane { float jib = 0.f, trolley = 20.f, tFrom = 20.f, tTo = 20.f, tT = 1.f, hook = 6.f; int carrying = -1; float wait = 0.f; };
+    struct Crane { float jib = 0.f, jibFrom = 0.f, hookFrom = 6.f, trolley = 20.f, tFrom = 20.f, tTo = 20.f, tT = 1.f, hook = 6.f; int carrying = -1; float wait = 0.f; };
     Crane crane_;
     void buildCrane(std::vector<Box>& out);
 

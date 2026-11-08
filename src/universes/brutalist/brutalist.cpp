@@ -1073,6 +1073,8 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
                 plan_[c.carrying].t = 0.f;
                 c.tT = 0.f;
                 c.tFrom = c.trolley;
+                c.jibFrom = c.jib;
+                c.hookFrom = c.hook;
                 c.wait = 0.f;
             }
         } else {
@@ -1087,9 +1089,10 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
             const float pickY = Y_P + MOD_H * 0.5f + 1.6f, topY = hookTop;
             const float slotY = m.pos.y + MOD_H * 0.5f + 1.6f;
             if (stage == 0) {
-                c.jib = lerpf(c.jib, pickJib, e * 0.2f + 0.02f);
+                // eased from where the idle crane was, so it meets the pick exactly as stage 1 starts
+                c.jib = lerpf(c.jibFrom, pickJib, e);
                 c.trolley = lerpf(c.tFrom, pickU, e);
-                c.hook = lerpf(topY, pickY, e);
+                c.hook = lerpf(c.hookFrom, pickY, e);
             } else if (stage == 1) {
                 c.jib = pickJib;
                 c.trolley = pickU;
@@ -1115,7 +1118,8 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
                     c.tFrom = c.trolley;
                 }
             }
-            if (c.carrying >= 0 && stage < 4) m.t = std::min(0.99f, c.tT / 4.f);
+            // (not once it has landed: that would hang it back on the hook, rising with it, then pop it into its slot)
+            if (c.carrying >= 0 && c.tT < 4.f) m.t = std::min(0.99f, c.tT / 4.f);
         }
     }
 
@@ -1206,7 +1210,13 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         const Module& m = plan_[i];
         if (m.t < 0.f) continue;
         vec3 at = m.pos;
-        if (m.t < 1.f && (int)i == crane_.carrying) {
+        if ((int)i == crane_.carrying && crane_.tT < 1.f) {
+            // waiting at the crane's foot while the hook comes down: it rises out of the podium through a hatch
+            // (it used to appear on the hook in the air)
+            const float pickU = 9.f, pickJib = 0.9f;
+            const float k = smoothstepf(0.f, 0.6f, crane_.tT);
+            at = vec3(CRANE_X - pickU * std::cos(pickJib), Y_P - MOD_H * 1.02f * (1.f - k), CRANE_Z - pickU * std::sin(pickJib));
+        } else if (m.t < 1.f && (int)i == crane_.carrying) {
             // hanging from the hook
             const float c = std::cos(crane_.jib), sn = std::sin(crane_.jib);
             const vec3 tr(CRANE_X - crane_.trolley * c, JIB_Y - 0.2f, CRANE_Z - crane_.trolley * sn);
