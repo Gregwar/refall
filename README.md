@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and songs change universe with a transition on the beat. Forty-three universes so far, each with its status:
+song, and songs change universe with a transition on the beat. Forty-four universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -107,7 +107,7 @@ song, and songs change universe with a transition on the beat. Forty-three unive
 </tr>
 <tr>
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/groceries.jpg"><br><b>GROCERIES</b>: a supermarket checkout in 3D, the pieces groceries on the belt; cleared rows are scanned by a red beam and packed into bags, bags go into carts, carts line up; more lanes open, the roof lifts off over the whole store, vans and lorries load, and the store grows into a hypermarket among mountains of bags and a city of cart towers; the drop is the millionth customer: confetti and every scanner flashing on the beat<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
