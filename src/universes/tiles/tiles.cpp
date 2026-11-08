@@ -25,7 +25,11 @@
 // smalti glint on the two-beat grid; a peak: brighter and quicker, more glints, the kicks too. A real drop sets every
 // gold smalto ablaze, the fire spreading out from the well, each one shimmering on its own as its tilt wavers, and on
 // every two beats a ripple lifts the tesserae as it passes outward (a band of light running through the gold); it
-// eases in and settles over the next bars. Slow motion is night: an oil lamp low under the wall, the gold glowing
+// eases in and settles over the next bars. Above all the wall comes alive (updateShow): every two beats a wave sweeps
+// over it turning the tesserae over like a stadium's cards, about their own row's line; on the bar their backs show a
+// new design laid tessera by tessera over the whole ground (a sunburst, frames, a spiral, a lattice, waves), between
+// two bars a full turn flashes their gold backs, the medallions' rings chase their light, the lamp swings on the beat;
+// the drop over, a last wave lays the mosaic back. Slow motion is night: an oil lamp low under the wall, the gold glowing
 // warm in the dark. Game over: the tiles come off the wall row by row from the top and fall.
 //
 // Variants (from the song): BYZANTINE (a gold ground, lapis and crimson), ROMAN (a floor of black basalt, marble,
@@ -85,6 +89,19 @@ constexpr float CRACK_T = 0.16f;
 // The drop's fire lasts this many beats.
 constexpr double DROP_BEATS = 32.0;
 constexpr int STATE_W = 256;
+// The drop's show lasts at most this many beats (it ends with the drop).
+constexpr double SHOW_BEATS = 64.0;
+
+// The designs the drop lays over the wall, per variant: the dark, the metal, two accents (sRGB), the metal's material
+// and the others'.
+struct ShowPalette { unsigned c[4]; int metal, other; };
+const ShowPalette SHOW_PAL[] = {
+    {{0x101634, 0xd8a644, 0xa8243a, 0x2a4cb0}, tiles::MAT_GOLD, tiles::MAT_GLASS},    // BYZANTINE: lapis, gold, crimson
+    {{0x161514, 0xe6dccb, 0xb4542e, 0xd09a48}, tiles::MAT_STONE, tiles::MAT_STONE},   // ROMAN: basalt, marble, terracotta, ochre
+    {{0x080e2c, 0xd8aa48, 0x1c3478, 0xe8e4dc}, tiles::MAT_GOLD, tiles::MAT_GLASS},    // NOCTURNE: night, gold, blue, silver
+    {{0x123656, 0xf6c42a, 0xe84a2a, 0xf2efe6}, tiles::MAT_GLASS, tiles::MAT_GLASS},   // TRENCADIS: blue, yellow, red, white
+    {{0x062424, 0xc0ccd2, 0x2ab0b0, 0x2a8ad0}, tiles::MAT_SILVER, tiles::MAT_GLASS},  // LAGOON: deep sea, silver, turquoise, blue
+};
 
 float seedOf(int id) { return std::fmod((float)id * 0.618034f, 1.f) * 97.f + 3.f; }
 
@@ -185,10 +202,11 @@ bool TilesUniverse::init(int width, int height) {
 
     glGenTextures(1, &stateTex_);
     glGenTextures(1, &sketchTex_);
-    for (GLuint t : {stateTex_, sketchTex_}) {
+    glGenTextures(1, &geoTex_);
+    for (GLuint t : {stateTex_, sketchTex_, geoTex_}) {
         glBindTexture(GL_TEXTURE_2D, t);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t == stateTex_ ? GL_NEAREST : GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t == stateTex_ ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, t == sketchTex_ ? GL_LINEAR : GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, t == sketchTex_ ? GL_LINEAR : GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
@@ -296,6 +314,7 @@ TilesUniverse::~TilesUniverse() {
         glDeleteTextures(3, gbTex_);
     }
     glDeleteTextures(1, &stateTex_);
+    glDeleteTextures(1, &geoTex_);
     glDeleteTextures(1, &sketchTex_);
     for (Font* f : {&fontCaps_, &fontIt_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
@@ -352,6 +371,19 @@ void TilesUniverse::uploadDesign() {
     glBindTexture(GL_TEXTURE_2D, stateTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, STATE_W, stateRows_, 0, GL_RGBA, GL_FLOAT, state_.data());
     stateDirty_ = false;
+    // each tessera's place for the drop's show: its center, the direction across its row, half its width
+    std::vector<float> geo((size_t)stateRows_ * STATE_W * 4, 0.f);
+    for (int i = 0; i < n; i++) {
+        const tiles::Tessera& t = design_.tess[i];
+        const float ax0 = t.c[3].x - t.c[0].x, ay0 = t.c[3].y - t.c[0].y, ax1 = t.c[2].x - t.c[1].x, ay1 = t.c[2].y - t.c[1].y;
+        float* o = &geo[(size_t)(i + 1) * 4];
+        o[0] = t.center.x;
+        o[1] = t.center.y;
+        o[2] = std::atan2(ay0 + ay1, ax0 + ax1);
+        o[3] = 0.25f * (std::hypot(ax0, ay0) + std::hypot(ax1, ay1));
+    }
+    glBindTexture(GL_TEXTURE_2D, geoTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, STATE_W, stateRows_, 0, GL_RGBA, GL_FLOAT, geo.data());
 }
 
 void TilesUniverse::renderGbuffer() {
@@ -503,6 +535,49 @@ void TilesUniverse::drop(float strength) {
     lastWaveBeat_ = std::floor(beat_ / 2.0);
     waveT_ = 0.f;
     waveA_ = 1.f;
+}
+
+// The drop's show, on the beat grid: a wave every two beats; on the bar the tesserae turn over to a new design, two
+// beats later a full turn sweeps their gold backs across the wall; once the drop is over, a last wave lays the mosaic
+// back. Successive drops start from other designs and sweeps.
+void TilesUniverse::updateShow(bool want) {
+    static const int PATS[5] = {1, 2, 3, 4, 5};
+    static const int TURN_SWEEPS[7] = {1, 2, 4, 6, 3, 5, 7};
+    static const int SPIN_SWEEPS[5] = {3, 5, 0, 6, 1};
+    if (!show_) {
+        if (!want || beat_ - dropBeat_ > 2.0) return;
+        show_ = true;
+        showEnding_ = false;
+        showStart_ = std::round(beat_);
+        showStep_ = 0;
+        showPat_ = PATS[(showCount_ * 2) % 5];
+        swB_ = Sweep{};
+        swA_ = Sweep{beat_, 0, 0, showPat_, false};
+        showNext_ = showStart_ + 2.0;
+        showCount_++;
+        return;
+    }
+    if (beat_ < showNext_) return;
+    if (showEnding_) {
+        show_ = false;
+        return;
+    }
+    swB_ = swA_;
+    if (!want || beat_ - showStart_ > SHOW_BEATS) {
+        swA_ = Sweep{showNext_, 0, showPat_, 0, false};
+        showEnding_ = true;
+    } else {
+        showStep_++;
+        const int k = showStep_ / 2 + showCount_ * 3;
+        if (showStep_ % 2 == 0) {
+            const int next = PATS[(showStep_ / 2 + (showCount_ - 1) * 2) % 5];
+            swA_ = Sweep{showNext_, TURN_SWEEPS[k % 7], showPat_, next, false};
+            showPat_ = next;
+        } else {
+            swA_ = Sweep{showNext_, SPIN_SWEEPS[k % 5], showPat_, showPat_, true};
+        }
+    }
+    showNext_ += 2.0;
 }
 
 // A new section of the same level: the lamp moves on.
@@ -1017,6 +1092,8 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
             if (over) dropOn_ = false;
         }
     }
+    if (!f.paused) updateShow(dropOn_ && realDrop_ && level_ >= 2 && overT_ < 0.f);
+    showK_ = approach(showK_, show_ && !showEnding_ ? 1.f : 0.f, show_ && !showEnding_ ? 4.f : 1.5f, dt);
     // the gold ablaze: swells in over half a second, settles over the next bars (a chorus only warms it a little)
     {
         float target = 0.f;
@@ -1051,7 +1128,11 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         vec3 tgt = lerp(still, travel, wm);
         const vec3 lamp{sideL * (15.f + 2.f * std::sin(worldTime_ * 0.3f)), viewC_.y - viewH_.y - 1.5f, 7.5f};
         tgt = lerp(tgt, lamp, slow_);
-        lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * 1.5f));
+        // the show: the lamp swings from one side to the other on every beat, its raking light running over the wall
+        const float sw = std::fmod((float)std::floor(beat_), 2.f) < 1.f ? 1.f : -1.f;
+        const vec3 swing{sw * 18.f, viewC_.y + 4.f * std::sin((float)beat_ * 0.37f), 10.f};
+        tgt = lerp(tgt, swing, showK_ * (1.f - slow_));
+        lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * lerpf(1.5f, 7.f, showK_)));
         const float target = (0.7f + 0.3f * wm + 0.35f * wp) * (1.f - 0.25f * slow_) * (1.f - 0.6f * over_);
         lightI_ = approach(lightI_, target, 1.2f, dt);
     }
@@ -1169,7 +1250,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progComp_, "uQuietB", L - 1.f, B - 1.f, -11.f, B + 3.2f);
         set4f(progComp_, "uQuietC", 11.f, B - 1.f, R + 1.f, B + 2.2f);
     }
-    set1f(progComp_, "uDrop", dropEnv_ * (realDrop_ ? 1.f : 0.3f));
+    set1f(progComp_, "uDrop", dropEnv_ * (realDrop_ ? 1.f : 0.3f) * (1.f - 0.6f * showK_));
     set1f(progComp_, "uIgnite", ignite_);
     set4f(progComp_, "uWave", waveT_ * 10.f, waveAmp, 1.6f, 0.f);
     {
@@ -1186,6 +1267,33 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progComp_, "uRingR", design_.lay.R - design_.lay.ringW, design_.lay.R);
     }
     set1f(progComp_, "uSparkle", sparkle);
+    {
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, geoTex_);
+        glActiveTexture(GL_TEXTURE0);
+        set1i(progComp_, "uGeo", 5);
+        set1f(progComp_, "uShow", show_ ? 1.f : 0.f);
+        set1f(progComp_, "uShowK", showK_);
+        set1f(progComp_, "uBeat", (float)(beat_ - showStart_));
+        auto sweep = [&](const char* n, const Sweep& w) {
+            set4f(progComp_, n, (float)(w.beat - showStart_), (float)w.kind, (float)w.from, (float)w.to);
+        };
+        sweep("uWaveA", swA_);
+        sweep("uWaveB", swB_);
+        set2f(progComp_, "uWaveSpin", swA_.spin ? 1.f : 0.f, swB_.spin ? 1.f : 0.f);
+        const ShowPalette& P = SHOW_PAL[variant_ % 5];
+        const GLint loc = glGetUniformLocation(progComp_, "uPal");
+        float pal[12];
+        for (int i = 0; i < 4; i++) {
+            const vec3 c = lin(P.c[i]);
+            pal[i * 3] = c.x; pal[i * 3 + 1] = c.y; pal[i * 3 + 2] = c.z;
+        }
+        glUniform3fv(loc, 4, pal);
+        set2f(progComp_, "uPalMat", (float)P.metal, (float)P.other);
+        const tiles::Layout& L = design_.lay;
+        set4f(progComp_, "uMed", L.med[0].x, L.med[0].y, L.med[1].x, L.med[1].y);
+        set3f(progComp_, "uMedR", vec3(L.R, L.R - L.ringW, L.sides ? 1.f : 0.f));
+    }
     set1f(progComp_, "uGlintK", 1.f);
     ugl::drawFullscreen();
 

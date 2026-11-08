@@ -135,6 +135,76 @@ uniform vec4 uRingGlint;    // a Tetris's ring: center x, y, angle, strength
 uniform vec2 uRingR;        // its inner and outer radius
 uniform float uSparkle;     // how much the smalti sparkle (the section)
 uniform float uGlintK;
+// ---- The drop's show: the wall turns its tesserae over in waves, like a stadium's cards, each one showing on its
+// back a tessera of a new design laid over the whole ground (the medallions keep theirs, their rings chasing).
+uniform sampler2D uGeo;     // per tessera: center x, y, the direction across its row (angle), half its width
+uniform float uShow;        // the show is on
+uniform float uBeat;        // the song's beat
+uniform vec4 uWaveA;        // the last wave: its beat, its sweep, the design it turns from, the one it turns to
+uniform vec4 uWaveB;        // the one before
+uniform vec2 uWaveSpin;     // 1: a full turn (the gold back shows in the middle of it) (A, B)
+uniform vec3 uPal[4];       // the designs' colors: the dark, the metal, two accents (linear)
+uniform vec2 uPalMat;       // the metal's material, the others'
+uniform vec4 uMed;          // the medallions' centers
+uniform vec3 uMedR;         // their radius, their ring's inner radius, they exist
+uniform float uShowK;       // its strength (eased in and out)
+const float FLIP = 0.6;     // a turn lasts this many beats
+// When a sweep reaches a tessera at c (beats after the wave).
+float sweepDelay(float kind, vec2 c, float rnd) {
+    float r = length(c * vec2(0.8, 1.0));
+    float d;
+    if (kind < 0.5) d = r / 19.0;                                                     // out from the well
+    else if (kind < 1.5) d = (c.x + c.y * 1.4 + 40.0) / 80.0;                         // a diagonal, up and right
+    else if (kind < 2.5) d = fract(atan(c.y, c.x) / 6.2831853 + 0.5 + r * 0.025);     // a spiral around the well
+    else if (kind < 3.5) d = 1.0 - abs(c.x) / 23.0;                                   // in from both sides
+    else if (kind < 4.5) d = (uMedR.z > 0.5 ? min(length(c - uMed.xy), length(c - uMed.zw)) : r) / 19.0; // out of the medallions
+    else if (kind < 5.5) d = (40.0 - c.x - c.y * 1.4) / 80.0;                         // a diagonal, down and left
+    else if (kind < 6.5) d = (c.y + 13.0) / 26.0;                                     // up from the floor
+    else d = rnd;                                                                     // here and there
+    return clamp(d, 0.0, 1.0) * 1.2 + rnd * 0.08;
+}
+// The design a tessera at c shows on its back: an index into uPal (0 the dark, 1 the metal, 2 and 3 the accents).
+int design(float pat, vec2 c, float rnd) {
+    float st = floor(uBeat * 2.0) * 0.5;   // steps on the eighth notes
+    vec2 q = c * vec2(0.8, 1.0);
+    float r = length(q), a = atan(c.y, c.x) / 6.2831853;
+    if (pat > 98.5) return 1;
+    if (pat < 1.5) {
+        // a sunburst out of the well, its rings turning against each other
+        float band = floor(r / 2.4);
+        float dir = mod(band, 2.0) < 0.5 ? 1.0 : -1.0;
+        float ray = floor(a * 18.0 + dir * st);
+        int k = int(mod(ray + band, 3.0));
+        return k == 0 ? 0 : (k == 1 ? 1 : (mod(band, 2.0) < 0.5 ? 2 : 3));
+    }
+    if (pat < 2.5) {
+        // frames out of the well, marching outward
+        vec2 e = abs(c) - vec2(4.0, 9.0);
+        float d = length(max(e, 0.0)) + min(max(e.x, e.y), 0.0);
+        float band = floor(d / 1.1 - st);
+        int k = int(mod(band, 4.0));
+        return k == 0 ? 1 : (k == 1 ? 0 : (k == 2 ? 2 : 0));
+    }
+    if (pat < 3.5) {
+        // a spiral of arms around the well, turning
+        float s = a * 4.0 + log(r + 1.0) * 1.8 - st * 0.5;
+        float m = mod(floor(s * 2.0), 4.0);
+        return m < 0.5 ? 1 : (m < 1.5 ? 2 : (m < 2.5 ? 0 : 3));
+    }
+    if (pat < 4.5) {
+        // a lattice of lozenges, a diagonal running through it
+        float u = (c.x + c.y) / 2.2, v = (c.x - c.y) / 2.2;
+        vec2 f = abs(fract(vec2(u, v)) - 0.5);
+        bool edge = max(f.x, f.y) > 0.36;
+        float run = mod(floor(u) - floor(st * 2.0), 6.0);
+        return edge ? 1 : (run < 0.5 ? 2 : (mod(floor(u) + floor(v), 2.0) < 0.5 ? 0 : 3));
+    }
+    // checkered waves rising from the floor
+    float row = floor((c.y + 13.0) / 1.3);
+    float wv = sin(c.x * 0.35 + row * 0.5 - st * 1.5);
+    float m = mod(row, 3.0);
+    return wv > 0.55 ? 1 : (wv > -0.2 ? (m < 0.5 ? 2 : (m < 1.5 ? 3 : 0)) : 0);
+}
 float tessState(int id, out float glintT, out float unsetT) {
     vec4 s = texelFetch(uState, ivec2(id % 256, id / 256), 0);
     glintT = s.y;
@@ -176,10 +246,55 @@ void main() {
         return;
     }
 
+    // ---- the drop's show: the tessera turning over about its row's line (squeezed across it), the bed dark in its
+    // shadow; past halfway its back shows, a tessera of the next design
+    float showPat = 0.0, turnS = 0.0, turnC = 1.0;
+    vec2 turnDir = vec2(0.0);
+    if (uShow > 0.5 && id > 0) {
+        vec4 ge = texelFetch(uGeo, ivec2(id % 256, id / 256), 0);
+        vec2 ctr = ge.xy;
+        float rnd0 = hash(ctr * 7.31);
+        bool inMed = uMedR.z > 0.5 && min(length(ctr - uMed.xy), length(ctr - uMed.zw)) < uMedR.x + 0.05;
+        if (!inMed) {
+            float dA = sweepDelay(uWaveA.y, ctr, rnd0);
+            bool useA = uBeat >= uWaveA.x + dA;
+            vec4 wv = useA ? uWaveA : uWaveB;
+            float spin = useA ? uWaveSpin.x : uWaveSpin.y;
+            float dl = useA ? dA : sweepDelay(uWaveB.y, ctr, rnd0);
+            float p = clamp((uBeat - wv.x - dl) / FLIP, 0.0, 1.0);
+            // an ease out with a little overshoot: it slaps down
+            float pm = p - 1.0; // (pow is undefined for a negative base)
+            float e = 1.0 + 2.2 * pm * pm * pm + 1.2 * pm * pm;
+            float th = 3.14159265 * (spin > 0.5 ? 2.0 : 1.0) * e;
+            turnC = cos(th);
+            turnS = sin(th);
+            showPat = turnC >= 0.0 ? wv.z : (spin > 0.5 ? 99.0 : wv.w);
+            if (spin > 0.5 && turnC >= 0.0) showPat = wv.w;
+            turnDir = vec2(cos(ge.z), sin(ge.z));
+            vec2 dw = w - ctr;
+            float across = dot(dw, turnDir);
+            float half_ = ge.w * abs(turnC);
+            if (abs(across) > ge.w) {
+                // the grout around it
+            } else if (abs(across) > half_) {
+                // the bed under a tessera standing on its edge: in its shadow
+                float sh = smoothstep(half_, half_ + ge.w * 0.6, abs(across));
+                vec3 c0 = uGrout * 0.18 * (uAmb * 3.0 + uLightCol * att * 0.3) * mix(0.4, 1.0, sh);
+                frag = vec4(c0 * (1.0 - 0.5 * quiet), 0.0);
+                return;
+            } else {
+                vec2 src = ctr + dw - turnDir * across + turnDir * (across / max(abs(turnC), 0.05));
+                vec2 suv = (src - uView.xy) / uView.zw * 0.5 + 0.5;
+                g0 = texture(uGb0, suv);
+                g1 = texture(uGb1, suv);
+            }
+        }
+    }
     float glintT = -100.0, unsetT = 1e9;
     float setT = id > 0 ? tessState(id, glintT, unsetT) : -100.0;
     float age = uTime - setT;
     bool isSet = age >= 0.0 && uTime < unsetT;
+    if (showPat > 0.5) { isSet = true; age = 10.0; }
     vec3 c;
     if (!isSet) {
         // ---- the bare setting bed: fresh lime, troweled, washed with the colors to come (as the mosaicists
@@ -217,12 +332,25 @@ void main() {
     vec3 alb = g0.rgb * g0.rgb;
     vec2 nxy = g1.xy * 2.0 - 1.0;
     float hgt = g1.z, rnd = g1.w;
+    if (showPat > 0.5) {
+        // at its tessera's center, so the design is laid tessera by tessera
+        vec4 ge = texelFetch(uGeo, ivec2(id % 256, id / 256), 0);
+        int k = design(showPat, ge.xy, rnd);
+        alb = uPal[k] * (0.82 + 0.36 * rnd) * (showPat > 98.5 ? 1.35 : 1.0);
+        mat = k == 1 ? uPalMat.x : uPalMat.y;
+        // behind the lettering, the design faded toward its dark and darker
+        float qh = max(box(w, uHudL, 1.2), box(w, uHudR, 1.2));
+        alb = mix(alb, uPal[0], 0.55 * qh) * (1.0 - 0.45 * quiet);
+    }
+    // turning: its face leans away from the eye and darkens as it stands on its edge
+    if (uShow > 0.5) nxy += turnDir * turnS / max(abs(turnC), 0.3) * sign(turnC) * 0.9;
     // the drop: the gold smalti ablaze, each one shimmering on its own as its tilt wavers
     float ign = uDrop * smoothstep(uIgnite, uIgnite - 4.0, length(w * vec2(0.8, 1.0))) * (1.0 - 0.9 * quiet);
     if (mat > 0.5) nxy += ign * (mat > 1.5 ? 0.2 : 0.14) * vec2(sin(uTime * (1.3 + rnd * 2.6) + rnd * 40.0), cos(uTime * (1.6 + rnd * 1.9) + rnd * 17.0));
     // a ripple lifting the tesserae as it passes
     float rho = length(w);
-    float lift = uWave.y * exp(-pow((rho - uWave.x) / uWave.z, 2.0));
+    float wr = (rho - uWave.x) / uWave.z;
+    float lift = uWave.y * exp(-wr * wr);
     nxy += normalize(w + vec2(0.001)) * lift * 0.22;
     // just set: tapped in (it still stands a little proud, its edges catching the light), fresh
     float tap = age < 0.8 ? exp(-age * 6.0) : 0.0;
@@ -264,6 +392,29 @@ void main() {
     }
     // the rounded edge into the grout
     c *= 0.55 + 0.45 * hgt;
+    c *= 0.3 + 0.7 * abs(turnC);
+    // the show: the medallions' rings chase their light around, the two counter-rotating, and on every beat a pulse
+    // runs out from the heart of each figure
+    if (uShow > 0.5 && uMedR.z > 0.5) {
+        vec4 ge = texelFetch(uGeo, ivec2(id % 256, id / 256), 0);
+        for (int sdx = 0; sdx < 2; sdx++) {
+            vec2 C = sdx == 0 ? uMed.xy : uMed.zw;
+            vec2 d = ge.xy - C;
+            float rr = length(d);
+            if (rr > uMedR.x) continue;
+            float an = atan(d.y, d.x);
+            float sg = sdx == 0 ? 1.0 : -1.0;
+            if (rr > uMedR.y - 0.1) {
+                float ch = pow(max(0.0, 0.5 + 0.5 * cos(an * 5.0 - sg * uBeat * 3.14159265 * 0.5)), 10.0);
+                c += (mat > 1.5 ? alb * 3.2 + vec3(0.05) : alb * 1.4 + vec3(0.03)) * ch * uShowK * (1.0 - 0.6 * quiet);
+            } else {
+                float fb = fract(uBeat);
+                float pr = rr / uMedR.y - fb * 1.25;
+                float pulse = exp(-pr * pr * 40.0) * (1.0 - fb);
+                c += (mat > 1.5 ? alb * 2.4 : alb * 1.2 + vec3(0.02)) * pulse * uShowK * (1.0 - 0.6 * quiet);
+            }
+        }
+    }
     // a glint on the beat grid; the tap of a tessera just set
     c += (mat > 1.5 ? alb * 2.5 + 0.1 : vec3(0.35)) * glint * pow(nh, 6.0) * 2.0 * (1.0 - 0.6 * quiet);
     c += (mat > 1.5 ? alb * 1.8 : alb * 0.6 + 0.12) * tap * 0.9;
