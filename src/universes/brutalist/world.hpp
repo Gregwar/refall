@@ -12,8 +12,8 @@ constexpr float Z_BACK = -0.96f;   // the slot's back wall (the blocks are 0.94 
 constexpr float X_SLOT = 5.04f;    // the slot's side walls
 constexpr float X_PIER = 6.7f;     // the piers' outer faces
 constexpr float Z_PIER = 0.55f;    // the piers' faces, a little proud of the stack
-constexpr float Y_LINTEL = 10.1f;  // the lintel's soffit over the well
-constexpr float Y_MON = 12.6f;     // the monument's top
+constexpr float Y_LINTEL = 12.1f;  // the lintel's soffit over the well
+constexpr float Y_MON = 14.6f;     // the monument's top
 
 // The civic building on the left (on pilotis, its upper floors cantilevered), the growing one on the right.
 constexpr float CIV_X0 = -66.f, CIV_X1 = -15.f, CIV_Z0 = -50.f, CIV_Z1 = -30.f;
