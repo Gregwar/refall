@@ -1516,8 +1516,9 @@ void BauhausUniverse::drawBoard(const Game& g) {
             return false;
         };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        // whole from the moment it spawns: the well is open at the top, so cells still in the hidden rows show above it
         for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN) continue;
+            if (c[1] < 0) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
             drawCell(w.x, w.y, 0.5f, mask8(c[0], c[1], in), tone(pieceColor(p.type)), 1.f);
         }
