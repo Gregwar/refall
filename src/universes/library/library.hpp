@@ -1,6 +1,6 @@
 #pragma once
-// LIBRARY: the blocks are books; cleared rows fly into a library that grows from a cosy study to an endless
-// Borgesian abyss of hexagonal galleries, in 3D (see library.cpp).
+// LIBRARY: the blocks are books; cleared rows are put away, sorted, on the shelves of a growing personal library,
+// in 3D (see library.cpp).
 #include <string>
 #include <vector>
 
@@ -69,8 +69,6 @@ private:
     void buildWorld();
     void buildStudy();
     void buildHall();
-    void buildRotunda();
-    void buildLevel(const vec3& center, int level, float born, bool full, int shaft);
     void buildBookcase(const vec3& foot, const vec3& along, const vec3& out, float w, float h, int shelves, const vec3& wood, bool filler,
                        int fillerIdx, float seed);
     void put(Mesh m, const vec3& c, const vec3& ax, const vec3& ay, const vec3& az, const vec3& col, int mat, float p0 = 0, float p1 = 0,
@@ -122,6 +120,8 @@ private:
     std::vector<Book> books_;
     int nextBookId_ = 1;
     void layoutBooks();
+    const Book& addBook(int type, bool flying);
+    int hookLines_ = 0;
     int ensureBays(int needShelves);
     vec3 bookPos(const Book& b, int shelf, float x) const;
     void newBay();
@@ -149,8 +149,6 @@ private:
 
     // ---- Loose pages (peaks, the drop).
     struct Page { vec3 p, v; float a = 0, av = 0, flap = 0, life = 0, maxLife = 6, size = 0.1f; float seed = 0; };
-    std::vector<Page> pages_;
-    void spawnPages(int n, const vec3& c, float spread, float speed, bool swirl);
     struct Mote { vec3 p; float seed; };
     std::vector<Mote> motes_;
 
@@ -179,7 +177,6 @@ private:
     std::vector<float> sortTimes_;
     GLuint sortTex_ = 0;
     bool sortDirty_ = true;
-    void sortUnits(int n, float delay);
     void resetGrowth();
 
     // ---- Text.

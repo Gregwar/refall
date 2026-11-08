@@ -1,25 +1,22 @@
-// LIBRARY: the blocks are books, and the cleared rows are put away on the shelves of a library that grows absurdly.
+// LIBRARY: the blocks are books, and every cleared row is put away on the shelves of a growing personal library.
 //
 // The pieces are books standing in the well, one per cell, their spines toward us: cloth bindings in a clean color
 // per piece, gilt bands and a label on the rounded spine, the page block showing on top; the well is a tall bookcase
-// of dark wood. When a row clears, its books slide out of the well, fly across the room and slot into the gaps that
-// open for them on the shelves of the collection, sorted: by color in rainbow order, the tallest first in each color,
-// the books after them sliding along (and hopping to the next shelf) to make room. They stay there for the game.
+// of dark wood. When a row clears, its ten books slide out of the well and float calmly across the room into the gaps
+// that open for them on the shelves, sorted: by color in rainbow order, the tallest first in each color, the books
+// after them sliding along (and over to the next shelf) to make room. Every book on the shelves is a cleared cell:
+// N lines, 10 N books. They stay for the game.
 //
-// It starts as a cosy study (one empty bookcase, the desk and its green lamp under the window, a fire, an armchair,
-// a globe). As lines clear, the study's walls fall away into a long room of bookcases (S_ROOM), then a gallery, a
-// second and a third storey with ladders on their rail and a spiral stair (S_GALLERY), then the hexagon closes around
-// it: a domed reading room, its desks running out like spokes under green lamps (S_ROTUNDA). Then the floor opens and
-// the dome lifts away: it was one level of an endless shaft of hexagonal galleries, receding up and down into the
-// abyss (S_SHAFT); the camera leaves the shaft for a section through the honeycomb of shafts, farther and farther
-// (S_HONEY, S_ENDLESS). The camera pulls back as it grows. Each clear also sorts the next shelves of the library into a
-// rainbow (a sweep with a flash of gilt), nearest to the collection first, more and more of them as it grows: the
-// rainbow spreads through the galleries and down the abyss.
+// It starts as a cosy study with one empty bookcase (the desk and its green lamp under the window, a fire, an
+// armchair, a globe, a longcase clock). Once that bookcase is well filled (S_ROOM), the study's walls fall away into a
+// tall long room: six empty bookcases standing ready to the right of the study's, high arched windows, reading tables,
+// chandeliers. When those are full, more bookcases are carried in, left of the study, then down the side walls. The
+// camera eases back a little to keep the collection in view.
 //
-// The song: calm is dust motes drifting in the lamplight; a peak brightens the lamps and sets loose pages fluttering
-// down from the galleries; a real drop (the HUD's section, else the music's pace) runs a wave of light out through
-// every shelf, the books' gilt lit up as it passes, then holds a shimmer on the beat while a whirl of pages flies
-// round the room. Slow motion: moonlight, the motes stand still. Game over: the stack's books tumble out of the well.
+// The song: dust motes drift in the lamplight; the lamps follow the music (brighter at a peak, lifted by the kicks);
+// a real drop (the HUD's section, else the music's pace) sends a soft light running along the collection's spines
+// and warms the lamps; a Tetris sends one soft light along them. Slow motion: moonlight. Game over: the stack's books
+// tumble out of the well.
 //
 // Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the
 // board plane keeps its pixels, the books' tops show); the library has its own camera behind it.
@@ -180,23 +177,14 @@ int glyphIndex(unsigned char ch) {
 // The world camera along the growth: where it looks (T), how far back (D), its yaw and pitch (degrees).
 struct CamKey { float g, tx, ty, tz, d, yaw, pitch; };
 const CamKey CAMS[] = {
-    {0.f, -0.3f, 1.8f, -3.f, 6.2f, 0.f, -3.f},
-    {4.f, -0.2f, 1.85f, -3.f, 6.6f, 0.f, -3.f},
-    {7.f, 0.2f, 2.1f, -3.f, 8.5f, 0.f, -3.f},
-    {12.f, 0.f, 2.6f, -3.f, 11.f, 0.f, -3.f},
-    {16.f, 0.f, 3.8f, -3.f, 13.5f, 0.f, -2.f},
-    {23.f, 0.f, 5.8f, -2.f, 18.5f, 0.f, 1.f},
-    {29.f, 0.f, 8.5f, 1.5f, 24.f, 0.f, 7.f},
-    {37.f, 0.f, 12.f, 5.f, 25.f, 0.f, 15.f},
-    {42.f, 0.f, 9.f, 6.f, 25.f, 0.f, 4.f},
-    {47.f, 0.f, -6.f, ZC - 9.f, 24.f, 0.f, -24.f},
-    {56.f, 0.f, -14.f, ZC - 6.f, 26.f, 4.f, -42.f},
-    {62.f, 0.f, -12.f, ZC - 2.f, 30.f, 14.f, -40.f},
-    {68.f, 0.f, -8.f, ZC, 52.f, 30.f, -24.f},
-    {80.f, 0.f, -2.f, ZC, 95.f, 30.f, -13.f},
-    {100.f, 0.f, 0.f, ZC, 150.f, 30.f, -9.f},
-    {140.f, 0.f, 0.f, ZC, 250.f, 30.f, -7.f},
-    {200.f, 0.f, 0.f, ZC, 380.f, 30.f, -6.f},
+    {0.f, 0.1f, 1.8f, -3.f, 6.2f, 0.f, -3.f},
+    {11.f, 0.2f, 1.85f, -3.f, 6.6f, 0.f, -3.f},
+    {17.f, 1.7f, 1.95f, -3.f, 8.4f, 0.f, -3.f},
+    {60.f, 2.3f, 2.0f, -3.f, 9.4f, 0.f, -3.f},
+    {105.f, 1.2f, 2.05f, -3.f, 10.4f, 0.f, -3.f},
+    {130.f, 0.f, 2.1f, -3.f, 11.6f, 0.f, -3.f},
+    {215.f, 0.f, 2.2f, -2.5f, 12.4f, 0.f, -3.f},
+    {300.f, 0.f, 2.3f, -1.5f, 14.f, 0.f, -4.f},
 };
 constexpr int CAM_COUNT = (int)(sizeof(CAMS) / sizeof(CAMS[0]));
 
@@ -209,7 +197,6 @@ void camAt(float g, vec3& T, float& D, float& yaw, float& pitch) {
     t = t * t * (3.f - 2.f * t);
     T = lerp(vec3(a.tx, a.ty, a.tz), vec3(b.tx, b.ty, b.tz), t);
     D = std::exp(lerpf(std::log(a.d), std::log(b.d), t));
-    if (g > CAMS[CAM_COUNT - 1].g) D = CAMS[CAM_COUNT - 1].d * std::pow(1.f + (g - CAMS[CAM_COUNT - 1].g) / 200.f, 0.8f);
     yaw = lerpf(a.yaw, b.yaw, t) * (PI / 180.f);
     pitch = lerpf(a.pitch, b.pitch, t) * (PI / 180.f);
 }
@@ -671,29 +658,28 @@ void LibraryUniverse::layoutBooks() {
     }
 }
 
-// The next unsorted shelves (nearest the collection first, among those that exist): sorted after `delay` seconds.
-void LibraryUniverse::sortUnits(int n, float delay) {
-    if (n <= 0) return;
-    std::vector<int> cand;
-    for (int i = 0; i < (int)units_.size(); i++)
-        if (!units_[i].sorted && units_[i].born <= grow_ + 0.5f) cand.push_back(i);
-    std::sort(cand.begin(), cand.end(), [&](int a, int b) { return units_[a].order < units_[b].order; });
-    for (int i = 0; i < n && i < (int)cand.size(); i++) {
-        units_[cand[i]].sorted = true;
-        if ((int)sortTimes_.size() <= cand[i]) sortTimes_.resize(cand[i] + 1, -1.f);
-        sortTimes_[cand[i]] = worldTime_ + delay + 0.25f * i;
-        sortDirty_ = true;
-    }
-}
-
 void LibraryUniverse::resetGrowth() {
     books_.clear();
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& f) { return f.kind == 0; }), flights_.end());
     bays_.clear();
-    for (Unit& u : units_) u.sorted = false;
-    std::fill(sortTimes_.begin(), sortTimes_.end(), -1.f);
-    sortDirty_ = true;
+    hookLines_ = 0;
     worldDirty_ = true;
+}
+
+// A new book for the collection, in its sorted place (the books after it make room).
+const LibraryUniverse::Book& LibraryUniverse::addBook(int type, bool flying) {
+    Book b;
+    b.id = nextBookId_++;
+    b.type = type;
+    b.style = pieceStyle(type);
+    b.h = rng_.range(0.24f, 0.335f);
+    b.w = rng_.range(0.032f, 0.056f);
+    b.d = std::min(0.3f, rng_.range(0.15f, 0.21f) + (b.h - 0.23f) * 0.4f);
+    b.gilt = rng_.chance(0.3f);
+    b.key = RANK[type] * 10.f + (0.4f - b.h) * 10.f + rng_.uniform() * 0.01f;
+    b.flying = flying;
+    auto it = std::upper_bound(books_.begin(), books_.end(), b.key, [](float key, const Book& o) { return key < o.key; });
+    return *books_.insert(it, b);
 }
 
 // =====================================================================================================
@@ -708,27 +694,13 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        if (ev.count >= 4) {
-            tetrisT_ = 0.f;
-            spawnPages(80, targetW_, camD_ * 0.3f, camD_ * 0.1f, true);
-        }
+        if (ev.count >= 4) tetrisT_ = 0.f;
         for (auto& c : ev.cells) {
             if (c.x < 0 || c.x >= Game::W || c.y < Game::HIDDEN) continue;
             const int k = (int)(std::find(rows.begin(), rows.end(), c.y) - rows.begin());
             const int type = std::clamp(c.type, 0, 6);
             // a book for the collection, put in its sorted place (the books after it make room at once)
-            Book b;
-            b.id = nextBookId_++;
-            b.type = type;
-            b.style = pieceStyle(type);
-            b.h = rng_.range(0.23f, 0.335f);
-            b.w = rng_.range(0.028f, 0.058f);
-            b.d = std::min(0.3f, rng_.range(0.15f, 0.21f) + (b.h - 0.23f) * 0.4f);
-            b.gilt = rng_.chance(0.3f);
-            b.key = RANK[type] * 10.f + (0.4f - b.h) * 10.f + rng_.uniform() * 0.01f;
-            b.flying = true;
-            auto it = std::upper_bound(books_.begin(), books_.end(), b.key, [](float key, const Book& o) { return key < o.key; });
-            books_.insert(it, b);
+            const Book& b = addBook(type, true);
             Flight fl;
             fl.book = b.id;
             fl.type = type;
@@ -736,15 +708,11 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fl.gilt = b.gilt;
             fl.b0 = layout::cellPos((float)c.x, (float)c.y);
             fl.delay = 0.035f * (float)((c.x * 7) % 10) * 0.5f + 0.1f * k;
-            fl.spin = rng_.chance(0.35f) ? (rng_.chance(0.5f) ? 1.f : -1.f) : 0.f;
+            fl.spin = 0.f;
             fl.kind = 0;
             flights_.push_back(fl);
         }
         layoutBooks();
-        // each clear also sorts the next shelves of the library, more of them as it grows
-        const float g = grow_;
-        const int n = g < S_ROOM ? 0 : g < S_ROTUNDA ? 1 : g < S_SHAFT ? 2 : g < S_HONEY ? 6 : g < S_ENDLESS ? 24 : 48;
-        sortUnits(n * std::max(1, (int)rows.size()), 1.4f);
         break;
     }
     case GameEvent::TopOut: {
@@ -774,22 +742,6 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Pages, flights
 // =====================================================================================================
 
-void LibraryUniverse::spawnPages(int n, const vec3& c, float spread, float speed, bool swirl) {
-    for (int i = 0; i < n && pages_.size() < 900; i++) {
-        Page p;
-        p.p = c + vec3(rng_.range(-1.f, 1.f), rng_.range(-0.3f, 1.f), rng_.range(-1.f, 1.f)) * spread;
-        if (swirl) p.v = vec3(rng_.range(-1.f, 1.f), rng_.range(0.2f, 1.2f), rng_.range(-1.f, 1.f)) * speed;
-        else p.v = vec3(rng_.range(-0.3f, 0.3f), rng_.range(-0.4f, 0.f), rng_.range(-0.2f, 0.3f)) * speed;
-        p.a = rng_.range(0.f, TAU);
-        p.av = rng_.range(-3.f, 3.f);
-        p.flap = rng_.range(0.f, TAU);
-        p.maxLife = rng_.range(5.f, 9.f);
-        p.size = rng_.range(0.8f, 1.2f);
-        p.seed = rng_.uniform();
-        pages_.push_back(p);
-    }
-}
-
 // The hand-off: the book leaves the well's space for the library's, at the same pixel and the same apparent size.
 void LibraryUniverse::launch(Flight& fl) {
     const vec3 bp = fl.b0 + vec3(0.f, 0.25f, 1.25f - CELL_D);
@@ -815,8 +767,8 @@ void LibraryUniverse::launch(Flight& fl) {
     fl.world = true;
     fl.t = 0.f;
     const float L = length(target - fl.p0);
-    fl.dur = 1.15f + 0.45f * std::log2(1.f + L / 2.5f);
-    fl.p1 = fl.p0 + UP * (0.22f * L) + fwdW_ * (0.12f * L);
+    fl.dur = 1.9f + 0.5f * std::log2(1.f + L / 3.f);
+    fl.p1 = fl.p0 + UP * (0.1f * L) + fwdW_ * (0.15f * L);
     if (bk) fl.dims1 = vec3(bk->w * 0.5f, bk->h * 0.5f, bk->d * 0.5f);
     else fl.dims1 = fl.dims0 * 0.2f;
 }
@@ -1110,20 +1062,7 @@ void LibraryUniverse::updateCamera(float dt) {
     const mat4 view = mat4::lookAt(vec3(0.f), fwdW_, UP);
     vpW_ = mat4::perspective(2.f * std::atan(tanW_), aspect_, zn, zf) * view;
     invVpW_ = inverse(vpW_);
-    // the cutaway: once the camera has left the shaft, everything between it and the shaft's axis is cut away
-    const vec3 fh = normalize(vec3(fwdW_.x, 0.f, fwdW_.z));
-    const vec3 rel(eyeW_.x, 0.f, eyeW_.z - ZC);
-    float apo = 0.f;
-    for (int k = 0; k < 6; k++) apo = std::max(apo, dot(rel, sideN(k)));
-    if (camG_ > S_SHAFT + 6.f && apo > A - 6.f) {
-        const float toAxis = std::max(0.5f, dot(vec3(0.f, 0.f, ZC) - vec3(eyeW_.x, 0.f, eyeW_.z), fh));
-        // (just in front of the camera while it passes through the walls, at the axis once it is out)
-        const float d = std::min(toAxis, 0.6f + 4.f * std::max(0.f, apo - (A - 3.f)));
-        const vec3 pc = eyeW_ + fh * std::max(0.6f, d);
-        cut_ = vec4(fh.x, 0.f, fh.z, -dot(pc, fh));
-    } else {
-        cut_ = vec4(0.f, 0.f, 0.f, 1e9f);
-    }
+    cut_ = vec4(0.f, 0.f, 0.f, 1e9f);
 }
 
 void LibraryUniverse::drawInst(GLuint vao, GLuint vbo, int mesh, const std::vector<Inst>* data, size_t count) {
@@ -1196,12 +1135,6 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             sectionDrop = h.text == "DROP";
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
-    if (isDrop && !wasDrop_) {
-        // the drop: a wave of light out through every shelf from the collection, a whirl of pages
-        waveT_ = 0.f;
-        waveO_ = lerp(targetW_, vec3(5.5f, 1.8f, ZBACK + 0.3f), camG_ < S_SHAFT ? 0.6f : 0.f);
-        spawnPages(150, targetW_ + vec3(0.f, -camD_ * 0.1f, 0.f), camD_ * 0.35f, camD_ * 0.12f, true);
-    }
     wasDrop_ = isDrop;
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.2f : 0.5f, dt);
     waveT_ += dt;
@@ -1214,11 +1147,21 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game starts again from the study).
     {
-        const int lines = game.lines() + extraLines(time_);
+        const int hook = extraLines(time_);
+        const int lines = game.lines() + hook;
         if (linesSeen_ >= 0 && lines < lines_ && !game.over()) resetGrowth();
         lines_ = lines;
         if (linesSeen_ < 0) { grow_ = (float)lines; growV_ = 0.f; }
         linesSeen_ = lines;
+        // (the test hooks' lines bring their ten books each, put straight on the shelves)
+        if (hook > hookLines_) {
+            for (int l = hookLines_; l < hook; l++)
+                for (int k = 0; k < 10; k++) addBook(rng_.irange(0, 6), false);
+            hookLines_ = hook;
+            layoutBooks();
+            for (Book& b : books_)
+                if (!b.flying) { b.shelfShown = b.shelf; b.x = b.xT; b.hop = 1.f; }
+        }
         const float target = (float)lines;
         const float w = 3.2f;
         growV_ += (w * w * (target - grow_) - 2.f * w * growV_) * wdt;
@@ -1238,8 +1181,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         static bool once = false;
         if (!once) {
             once = true;
-            std::fprintf(stderr, "[library] world: %zu boxes, %zu cylinders, %zu domes, %zu lamps, %zu sort units\n", stat_[0].size(),
-                         stat_[1].size(), stat_[2].size(), lamps_.size(), units_.size());
+            std::fprintf(stderr, "[library] world: %zu boxes, %zu cylinders, %zu domes, %zu lamps\n", stat_[0].size(),
+                         stat_[1].size(), stat_[2].size(), lamps_.size());
         }
     }
     if (sortDirty_) {
@@ -1272,35 +1215,6 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         if (!fl.world && fl.t - fl.delay >= SLIDE_T) launch(fl);
     }
 
-    // ---- Pages and motes.
-    {
-        // at a peak, pages drift down from the galleries; more on the drop
-        const float rate = (wp * 2.5f + dropAmt_ * 6.f + (tetrisT_ < 2.f ? 20.f : 0.f)) * (1.f - slow_);
-        pageAcc_ += rate * wdt;
-        while (pageAcc_ >= 1.f) {
-            pageAcc_ -= 1.f;
-            spawnPages(1, targetW_ + vec3(rng_.range(-1.f, 1.f) * camD_ * 0.7f, camD_ * 0.45f, rng_.range(-0.6f, 0.4f) * camD_ * 0.5f), 0.f,
-                       camD_ * 0.05f, false);
-        }
-        const float sc = camD_ * 0.05f;
-        for (Page& p : pages_) {
-            p.life += wdt;
-            const float sw = std::sin(worldTime_ * 1.3f + p.seed * 20.f);
-            vec3 acc(sw * 0.4f * sc, -0.35f * sc, std::cos(worldTime_ * 0.9f + p.seed * 9.f) * 0.3f * sc);
-            // the drop's whirl round the camera's target
-            if (dropAmt_ > 0.05f) {
-                const vec3 r = p.p - targetW_;
-                acc += vec3(-r.z, 0.15f * camD_ * 0.05f, r.x) * (0.25f * dropAmt_) - r * (0.05f * dropAmt_);
-            }
-            p.v += acc * wdt;
-            p.v = p.v * std::exp(-wdt * 0.9f);
-            p.p += p.v * wdt;
-            p.a += p.av * wdt;
-            p.flap += wdt * (4.f + 3.f * p.seed);
-        }
-        pages_.erase(std::remove_if(pages_.begin(), pages_.end(), [](const Page& p) { return p.life > p.maxLife; }), pages_.end());
-    }
-
     // ---- Dynamic instances: the collection's bookcases and books, the pages, the flights.
     for (auto& v : dyn_) v.clear();
     flightInst_.clear();
@@ -1312,6 +1226,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         const Bay& b = bays_[i];
         st_ = Stamp{};
         st_.born = b.born;
+        st_.style = i == 0 ? 0.f : 3.f;
         buildBookcase(b.c, b.along, b.out, BAY_W, TIER_H, BAY_SHELVES, pal_.wood, false, -1, 3.f + i);
         // brass bookends at the shelves' left ends
     }
@@ -1328,8 +1243,21 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         in.e[0] = born; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = 0.f;
         out.push_back(in);
     };
+    const int nBooks = (int)books_.size();
+    int bi = -1;
     for (const Book& b : books_) {
+        bi++;
         if (b.flying || b.shelfShown < 0) continue;
+        // a soft light running along the spines: slowly round the collection for a drop, once along it for a Tetris
+        float g = b.glow;
+        if (nBooks > 0) {
+            const float f = (bi + 0.5f) / nBooks;
+            if (dropAmt_ > 0.01f) {
+                float d = std::fabs(f - std::fmod(worldTime_ * 0.06f, 1.2f) + 0.1f);
+                g += 0.45f * dropAmt_ * std::exp(-d * 18.f);
+            }
+            if (tetrisT_ < 5.f) g += 0.4f * std::exp(-std::fabs(f - tetrisT_ / 4.f) * 20.f);
+        }
         const Shelf& s = shelves_[b.shelfShown];
         vec3 p;
         if (b.hop < 1.f && b.hopFrom >= 0) {
@@ -1339,26 +1267,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         } else {
             p = bookPos(b, b.shelfShown, b.x);
         }
-        putBook(dyn_[MESH_BOX], p, s.along * (b.w * 0.5f), UP * (b.h * 0.5f), s.out * (b.d * 0.5f), b.type, b.style, b.glow, b.gilt,
+        putBook(dyn_[MESH_BOX], p, s.along * (b.w * 0.5f), UP * (b.h * 0.5f), s.out * (b.d * 0.5f), b.type, b.style, g, b.gilt,
                 (float)(b.id % 97) * 0.13f, -100.f);
-    }
-    for (const Page& p : pages_) {
-        const float fade = std::min(1.f, p.life * 2.f) * (1.f - smoothstepf(p.maxLife - 1.f, p.maxLife, p.life));
-        const float s = camD_ * 0.009f * p.size * (camG_ < S_SHAFT ? 1.f : 0.8f) * fade;
-        if (s <= 0.f) continue;
-        const float fl = std::sin(p.flap) * 0.6f;
-        const vec3 u = normalize(vec3(std::cos(p.a), std::sin(fl) * 0.5f, std::sin(p.a)));
-        const vec3 w = normalize(cross(u, vec3(std::sin(p.a * 0.7f) * 0.4f, 1.f, std::cos(p.flap * 0.5f) * 0.3f)));
-        const vec3 v = cross(w, u);
-        Inst in{};
-        in.c[0] = p.p.x; in.c[1] = p.p.y; in.c[2] = p.p.z; in.c[3] = (float)M_PAPER;
-        const vec3 X = u * (s * 0.75f), Y = w * (s * 0.004f), Z = v * s;
-        in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = 0.f;
-        in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.15f * dropAmt_ + 0.05f;
-        in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z;
-        in.col[0] = 1.f; in.col[1] = 1.f; in.col[2] = 1.f; in.col[3] = p.seed;
-        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f;
-        dyn_[MESH_BOX].push_back(in);
     }
     putTo_ = nullptr;
     // flights: in the well's space while sliding out, then in the library's
@@ -1433,22 +1343,12 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 Zd = normalize(vec3(face.x, 0.f, face.z) + vec3(0.f, face.y, 0.f));
         const vec3 Xd = normalize(cross(UP, Zd));
         const vec3 Yd = cross(Zd, Xd);
-        const float glow = 0.6f * (1.f - smoothstepf(0.6f, 1.f, s)) + 0.3f;
+        const float glow = 0.12f;
         putBook(flightInst_, p, Xd * dims.x, Yd * dims.y, Zd * dims.z, fl.type, fl.style, glow, fl.gilt, fl.b0.x * 0.3f, -100.f);
-        // a trail of gilt sparks behind it
-        if (s < 0.9f) {
-            const vec3 gc = pal_.gilt * 1.2f;
-            for (int k = 1; k <= 3; k++) {
-                const float sk = std::max(0.f, s - 0.025f * k);
-                const float ek = 1.f - std::pow(1.f - std::min(1.f, sk / 0.86f), 2.f), uk = 1.f - ek;
-                const vec3 q = fl.p0 * (uk * uk * uk) + fl.p1 * (3.f * uk * uk * ek) + p2 * (3.f * uk * ek * ek) + pA * (ek * ek * ek);
-                sprites_.push_back({{q.x, q.y, q.z, dims.y * 0.6f}, {gc.x, gc.y, gc.z, 0.5f * (1.f - k / 4.f) * (1.f - s)}});
-            }
-        }
         if (s >= 1.f) {
             if (bk) {
                 bk->flying = false;
-                bk->glow = 1.f;
+                bk->glow = 0.35f;
                 bk->shelfShown = bk->shelf;
                 bk->x = bk->xT;
                 bk->hop = 1.f;
@@ -1461,7 +1361,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     buildBoard(game);
 
     // ---- Lamps: their glows and the 16 that light the scene.
-    const float lampLevel = pal_.lampK * (0.8f + 0.1f * wm + 0.25f * wp + 0.35f * kickK_ * wp + 0.4f * dropAmt_) * (1.f - 0.35f * slow_);
+    const float lampLevel = pal_.lampK * (0.8f + 0.1f * wm + 0.2f * wp + 0.25f * kickK_ * wp + 0.25f * dropAmt_) * (1.f - 0.35f * slow_);
     const float flick = pal_.flicker;
     std::vector<vec4> LP, LC;
     {
@@ -1508,9 +1408,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Uniforms shared by the passes.
     const Palette& P = pal_;
-    const float stageIn = smoothstepf(S_SHAFT - 2.f, S_SHAFT + 8.f, camG_);
+    const float stageIn = 0.f;
     const vec3 keyDir = normalize(lerp(VARIANTS[variant_].keyDir, vec3(0.15f, 1.f, 0.25f), stageIn * 0.7f));
-    const float keyK = (1.f + 0.15f * wp + 0.3f * dropAmt_) * (1.f - 0.5f * slow_);
+    const float keyK = (1.f + 0.1f * wp + 0.1f * dropAmt_) * (1.f - 0.5f * slow_);
     const vec3 slowTint(0.75f, 0.85f, 1.15f);
     auto lighting = [&](GLuint p, bool board) {
         if (board) {
@@ -1626,9 +1526,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSolid_, "uMoon", P.moon);
     set1f(progSolid_, "uSortRate", 0.55f);
     set3f(progSolid_, "uWaveO", waveO_);
-    set1f(progSolid_, "uWaveT", waveT_);
+    set1f(progSolid_, "uWaveT", 99.f);
     set1f(progSolid_, "uWaveSpeed", std::max(4.f, camD_ * 0.9f));
-    set1f(progSolid_, "uGlowAll", dropAmt_ * 0.55f);
+    set1f(progSolid_, "uGlowAll", 0.f);
     set1f(progSolid_, "uBeat", beatPulse_);
     set1f(progSolid_, "uWorld", 1.f);
     glActiveTexture(GL_TEXTURE1);
@@ -1678,7 +1578,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set3f(progVeil_, "uVeil", P.veil);
     set1f(progVeil_, "uWellA", P.night > 0.5f ? 0.74f : 0.78f);
-    set1f(progVeil_, "uColA", P.night > 0.5f ? 0.42f : 0.55f);
+    set1f(progVeil_, "uColA", P.night > 0.5f ? 0.45f : 0.68f);
     set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     ugl::drawFullscreen();
@@ -1776,7 +1676,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
-    set1f(progFinal_, "uBloomK", (0.6f + 0.15f * wp + 0.35f * dropAmt_) * (1.f + 0.4f * slow_));
+    set1f(progFinal_, "uBloomK", (0.6f + 0.1f * wp + 0.12f * dropAmt_) * (1.f + 0.4f * slow_));
     set1f(progFinal_, "uExposure", P.exposure);
     set1f(progFinal_, "uSatF", 1.04f + 0.06f * wp + 0.08f * dropAmt_);
     set1f(progFinal_, "uSlow", slow_ * 0.5f);
@@ -1801,7 +1701,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books, put away sorted on the shelves of a library growing from a cosy study into an endless Borgesian abyss, in 3D",
+        "LIBRARY", "the blocks are books, put away sorted on the shelves of a personal library growing from a cosy study into a long room of bookcases, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A quiet, warm world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },

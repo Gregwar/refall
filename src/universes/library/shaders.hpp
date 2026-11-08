@@ -64,8 +64,8 @@ void main() {
     vec3 C = iC.xyz;
     vec3 P;
     if (style == 0) {
-        // pop: scaled up from its foot, a little overshoot
-        float e = s < 1.0 ? 1.0 + 2.2 * pow(s - 1.0, 3.0) + 1.2 * pow(s - 1.0, 2.0) : 1.0;
+        // grown from its foot, eased
+        float e = s * s * (3.0 - 2.0 * s);
         float k = e * (1.0 - d * d * (3.0 - 2.0 * d));
         vec3 base = C - Y;
         P = base + (X * aPos.x + Y * (aPos.y + 1.0) + Z * aPos.z) * k;
@@ -75,6 +75,15 @@ void main() {
         float k = s * s * (3.0 - 2.0 * s) * (1.0 - d * d * (3.0 - 2.0 * d));
         P = C + X * aPos.x + Y * aPos.y + Z * aPos.z - Y * 2.02 * (1.0 - k);
         if (k <= 0.0) P = C - Y * 2.0;
+    } else if (style == 3) {
+        // carried in: set down a little out from the wall and pushed back into place
+        float a = clamp(s / 0.25, 0.0, 1.0);
+        float b = clamp((s - 0.25) / 0.75, 0.0, 1.0);
+        b = b * b * (3.0 - 2.0 * b);
+        float k = a * a * (3.0 - 2.0 * a) * (1.0 - d);
+        vec3 base = C - Y + normalize(Z) * (1.4 * (1.0 - b)) + vec3(0.0, 0.25 * (1.0 - a), 0.0);
+        P = base + (X * aPos.x + Y * (aPos.y + 1.0) + Z * aPos.z) * mix(0.0, 1.0, k);
+        if (k <= 0.0) P = C - Y;
     } else {
         // coming down from above (lifted away)
         float k = s * s * (3.0 - 2.0 * s) * (1.0 - d * d * (3.0 - 2.0 * d));
