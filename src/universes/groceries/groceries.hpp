@@ -162,7 +162,8 @@ private:
     float tetrisT_ = 99.f;
     double lastBeat_ = -1.0;
     float beatFlash_ = 0.f, beatAcc_ = 0.f;
-    float worldTime_ = 0.f, beltPhase_ = 0.f, beltK_ = 0.5f;
+    float worldTime_ = 0.f, beltPhase_ = 0.f, beltK_ = 0.5f, beltStep_ = 0.f, railPhase_ = 0.f;
+    float lastVisY_ = -1.f;          // the falling piece's row last frame (the belt carries it)
     double time_ = 0.0;
 
     bool slowOn_ = false;

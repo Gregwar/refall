@@ -892,7 +892,18 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     const float beltT = (0.45f + 0.35f * wm + 0.4f * wp + 0.25f * dropAmt_) * (1.f - 0.6f * slow_);
     beltK_ = approach(beltK_, beltT, 0.8f, dt);
     const float beltV = 1.3f * beltK_;
-    beltPhase_ += wdt * beltV;
+    railPhase_ += wdt * beltV;
+    // the belt carries the falling piece: it runs exactly as far as the piece falls (one row, one unit), and stands
+    // still while nothing falls (a new piece spawning higher up is not a move)
+    {
+        const float vy = game.pieceVisualY();
+        const float d = vy - lastVisY_;
+        beltStep_ = lastVisY_ >= 0.f && d > 0.f && d < (float)Game::H && !game.over() ? d : 0.f;
+        lastVisY_ = vy;
+        // the belt lies a little under the board's plane: it runs that much farther to keep pace on screen
+        if (eye_.z > 1.f) beltStep_ *= (eye_.z - Z_TOP) / eye_.z;
+        beltPhase_ += beltStep_;
+    }
 
     // ---- The lines: the receipt, the customer's things; lines added by the test hooks bring their bags at once.
     const int extra = extraLines(time_);
@@ -1069,7 +1080,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
         dividerWait_ -= wdt;
         if (dividerWait_ < 0.f) { divider_ = 12.8f; dividerWait_ = rng_.range(14.f, 26.f); }
     } else {
-        divider_ -= wdt * beltV;
+        divider_ -= beltStep_;
         if (divider_ < -10.3f) divider_ = -99.f;
     }
 
@@ -1115,7 +1126,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
         for (int s = -1; s <= 1; s += 2)
             for (int k = 0; k < 6; k++) {
                 // the soft glow along the rails, running down with the beat
-                const float y = 11.f - std::fmod(k * 4.f + beltPhase_ * 3.f, 24.f);
+                const float y = 11.f - std::fmod(k * 4.f + railPhase_ * 3.f, 24.f);
                 sprite(sprites_, vec3(s * 5.18f, y, Z_TOP + 0.5f), 2.2f, P.accent * 0.5f + vec3(0.5f, 0.42f, 0.3f), 0.45f * groupK[G_RAIL]);
             }
     pointP_.clear();
