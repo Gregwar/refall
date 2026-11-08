@@ -25,6 +25,44 @@
 
 namespace fs = std::filesystem;
 
+#if defined(_WIN32)
+// Laptops with two GPUs: ask the NVIDIA and AMD drivers for the discrete one.
+extern "C" {
+__declspec(dllexport) unsigned long NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+
+// Linux machines with two GPUs (an integrated one driving the screen, a discrete one for offload): render on the
+// discrete one through PRIME offload, unless the user already chose (their own variables, or ZEN_GPU=integrated).
+// Returns whether it changed anything, so a failed window can be retried without it.
+static bool preferDiscreteGpu() {
+#if defined(__linux__)
+    const char* pref = std::getenv("ZEN_GPU");
+    if (pref && std::strcmp(pref, "integrated") == 0) return false;
+    if (std::getenv("__NV_PRIME_RENDER_OFFLOAD") || std::getenv("__GLX_VENDOR_LIBRARY_NAME") || std::getenv("DRI_PRIME"))
+        return false;
+    if (fs::exists("/proc/driver/nvidia/version")) {
+        setenv("__NV_PRIME_RENDER_OFFLOAD", "1", 0);
+        setenv("__GLX_VENDOR_LIBRARY_NAME", "nvidia", 0);
+        setenv("__VK_LAYER_NV_optimus", "NVIDIA_only", 0);
+    } else {
+        setenv("DRI_PRIME", "1", 0); // Mesa: the other GPU when there is one, no change otherwise
+    }
+    return true;
+#else
+    return false;
+#endif
+}
+static void undoDiscreteGpu() {
+#if defined(__linux__)
+    unsetenv("__NV_PRIME_RENDER_OFFLOAD");
+    unsetenv("__GLX_VENDOR_LIBRARY_NAME");
+    unsetenv("__VK_LAYER_NV_optimus");
+    unsetenv("DRI_PRIME");
+#endif
+}
+
 struct Options {
     std::vector<std::string> paths;
     bool autoplay = false, mute = false, fullscreen = false, hidden = false, shuffle = true;
@@ -618,24 +656,37 @@ int App::run() {
         if (!gladLoadGL((GLADloadfunc)headless::proc)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
     } else {
     if (wantHeadless) std::fprintf(stderr, "[gl] no headless GPU context, using a window\n");
-    if (!glfwInit()) { std::fprintf(stderr, "glfwInit failed\n"); return 1; }
+    // on the discrete GPU when there are two; if that fails, again on the default one
+    bool discrete = preferDiscreteGpu();
+    for (;;) {
+        if (!glfwInit()) {
+            if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
+            std::fprintf(stderr, "glfwInit failed\n");
+            return 1;
+        }
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+        if (opt_.hidden) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        if (shotMode) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
+        int ww = opt_.width, wh = opt_.height;
+        if (mon) { const GLFWvidmode* vm = glfwGetVideoMode(mon); ww = vm->width; wh = vm->height; }
+        win_ = glfwCreateWindow(ww, wh, "Tetris Universe", mon, nullptr);
+        if (win_) break;
+        glfwTerminate();
+        if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
+        std::fprintf(stderr, "could not create an OpenGL 3.3 window\n");
+        return 1;
+    }
     Input::loadMappings();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
-    if (opt_.hidden) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    if (shotMode) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-    GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
-    int ww = opt_.width, wh = opt_.height;
-    if (mon) { const GLFWvidmode* vm = glfwGetVideoMode(mon); ww = vm->width; wh = vm->height; }
-    win_ = glfwCreateWindow(ww, wh, "Tetris Universe", mon, nullptr);
-    if (!win_) { std::fprintf(stderr, "could not create an OpenGL 3.3 window\n"); glfwTerminate(); return 1; }
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);
     if (!gladLoadGL(glfwGetProcAddress)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
     }
     glGetError();
+    std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
 
     int fbw, fbh;
     fbSize(fbw, fbh);
