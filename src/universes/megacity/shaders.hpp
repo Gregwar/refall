@@ -226,6 +226,8 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
     built = 0.0;
     float edge = max(foot * 1.5, D * 0.012);
     float inside = 1.0 - smoothstep(uCityR - edge, uCityR + edge, D);
+    // the meadow kept open between the early camera and the hut (city.cpp's inView): no lots there yet
+    if (D < 700.0 && r < 470.0) inside *= 1.0 - smoothstep(cos(1.0) - 0.04, cos(1.0) + 0.04, dot(q / max(r, 1.0), vec2(-0.86, -0.51))) * (1.0 - smoothstep(420.0, 470.0, r)) * step(300.0, r);
     if (inside <= 0.0) return base;
     float night = 0.25 + 0.75 * uNightK;
     vec3 pave = mix(vec3(0.3, 0.26, 0.22), vec3(0.08, 0.08, 0.09), smoothstep(1500.0, 6000.0, D));
@@ -280,7 +282,7 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
     float street = (1.0 - smoothstep(sw - px, sw + px, dEdge)) * min(1.0, sw / max(px, 1e-6));
     float along = (min(f.x, 1.0 - f.x) < min(f.y, 1.0 - f.y)) ? f.y : f.x;
     float lampD = abs(fract(along / 0.25) - 0.5) * 0.25;
-    float lamps = exp(-(sq(lampD) + sq(dEdge - sw * 0.5)) / max(sq(0.012) + sq(px * 0.8), 1e-6)) * min(1.0, sq(0.012) / max(sq(px * 0.8), 1e-6) + 0.15);
+    float lamps = exp(-(sq(lampD) + sq(dEdge - sw * 0.5)) / max(sq(0.012) + sq(px * 0.8), 1e-6)) * min(1.0, sq(0.012) / max(sq(px * 0.8), 1e-6) + 0.03);
     float detail = 1.0 - smoothstep(0.08, 0.3, px);
     float avgStreet = 2.0 * sw;
     vec3 lotCol = pave;
@@ -307,8 +309,9 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
         float drawn = smoothstep(uDrawR0 * 0.9, uDrawR0 * 1.1, D) * (1.0 - smoothstep(1.2e6, 1.3e6, D));
         float lotLit = uLit * mix(0.2 + 1.3 * sq(hash(lid + 4.4)), 0.75 + 0.4 * hash(lid + 4.4), smoothstep(2000.0, 20000.0, s));
         vec3 roof = mix(vec3(0.035, 0.035, 0.045), vec3(0.07, 0.065, 0.07), hl);
-        lotCol = mix(pave * 0.6, roof, 1.0 - drawn);
-        float lane = 0.0, laneLamp = 0.0;
+        lotCol = mix(pave * 0.6 * (1.0 - 0.6 * smoothstep(3000.0, 6000.0, D)), roof, 1.0 - drawn);
+        float lane = 0.0, laneLamp = 0.0, laneCar = 0.0;
+        vec3 carCol = vec3(1.0);
         vec2 fl = f;
         float pxl = px;
         for (int k = 0; k < 3; k++) {
@@ -323,6 +326,16 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
             float lampK = exp(-(sq(abs(fract(alongK * 2.0) - 0.5) * 0.5) + sq(dk - 0.025)) / max(sq(0.015) + sq(pk * 0.7), 1e-6));
             lane = max(lane, lk * res);
             laneLamp += mix(0.015, lampK, res) * (0.55 / float(k + 1)) * (0.4 + 0.9 * hash(floor(fl * 4.0) + lid * 3.1 + float(k)));
+            if (k == 0) {
+                // the first lanes are streets with traffic: headlights one way, tail lights the other
+                bool alongY = min(fk.x, 1.0 - fk.x) < min(fk.y, 1.0 - fk.y);
+                float acrossK = alongY ? fk.x : fk.y;
+                float sideK = acrossK < 0.5 ? 1.0 : -1.0;
+                float uu = (alongY ? (fl.y + lot.y) : (fl.x + lot.x)) * s / 9.0 + sideK * uTrafficPhase * 6.0 + hash(floor(fl * 4.0) + lid) * 50.0;
+                float cr = smoothstep(0.62, 0.8, vnoise(vec2(uu, sideK * 3.0 + float(alongY))));
+                laneCar = lk * res * cr * (1.0 - smoothstep(0.3, 0.7, pk / 0.1));
+                carCol = sideK > 0.0 ? vec3(1.0, 0.95, 0.85) : uTrafficC;
+            }
             fl = fk;
             pxl = pk;
         }
@@ -339,16 +352,46 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
         }
         float density = smoothstep(200.0, 2000.0, D) * 0.5 + 0.5;
         lotEm += win * speck * (1.0 - lane) * (1.0 - drawn) * 0.55 * density * (1.0 - farK);
-        lotEm += mix(uStreetC, win, 0.3) * laneLamp * 0.7 * gridK * (1.0 - farK);
+        lotEm += mix(uStreetC, win, 0.3) * laneLamp * 0.4 * gridK * (1.0 - farK);
+        lotEm += carCol * laneCar * uTraffic * 1.2 * gridK * (1.0 - farK);
         lotEm += win * 0.02 * drawn;
         if (farK > 0.0) {
             lotEm += cityFar(q, n, r, foot, uLit * 1.6) * farK * (1.0 - drawn * 0.7);
             lotCol = mix(lotCol, vec3(0.03, 0.03, 0.04), farK);
         }
     }
+    // street life where the pixel resolves it: trees lining the pavements, parked cars, the lamps' pools of light
+    if (valid && !park && detail > 0.0) {
+        float sm = dEdge * s;                       // meters from the lot's edge (the street's middle at 0)
+        float am = along * s;                       // meters along the street
+        float swm = sw * s;
+        // parked cars along both kerbs
+        float kc = 1.0 - smoothstep(0.35, 1.0, foot);
+        if (kc > 0.0 && swm > 4.0) {
+            float ci = floor(am / 5.2);
+            float cf = fract(am / 5.2);
+            float lane = step(swm - 2.6, sm) * step(sm, swm - 0.6);
+            float car = lane * step(0.12, cf) * step(cf, 0.86) * step(hash(vec2(ci, sm > swm * 0.5 ? 1.0 : 2.0) + lid), 0.55);
+            float ch = hash(vec2(ci, 7.0) + lid);
+            vec3 carC = ch < 0.25 ? vec3(0.6, 0.05, 0.04) : ch < 0.45 ? vec3(0.85, 0.85, 0.82) : ch < 0.6 ? vec3(0.05, 0.12, 0.35) : ch < 0.8 ? vec3(0.08) : vec3(0.5, 0.45, 0.35);
+            lotCol = mix(lotCol, carC, car * kc);
+            street *= 1.0 - car * kc;
+        }
+        // trees just inside the kerb, every nine meters
+        float kt = 1.0 - smoothstep(1.2, 3.0, foot);
+        if (kt > 0.0) {
+            float ti = floor(am / 9.0);
+            vec2 tq = vec2((fract(am / 9.0) - 0.5) * 9.0, sm - swm - 2.0);
+            float tree = (1.0 - smoothstep(1.6, 1.9, length(tq))) * step(0.25, hash(vec2(ti, 3.0) + lid));
+            lotCol = mix(lotCol, uForestC * (0.75 + 0.35 * vnoise(q * 1.3)), tree * kt);
+            lotEm *= 1.0 - tree * kt;
+        }
+    }
     // the streets around the lot and their lamps
     vec3 stCol = mix(lotCol, vec3(0.03, 0.03, 0.04), street * detail);
-    vec3 stEm = lotEm * (1.0 - street * detail) + (uStreetC * lamps * detail + uStreetC * avgStreet * 0.18 * (1.0 - detail)) * gridK;
+    float pw6 = 7.0 / s;
+    float pool = exp(-(sq(lampD) + sq(dEdge - sw * 0.5)) / max(sq(pw6), sq(px))) * min(1.0, sq(pw6) / max(sq(px), 1e-9)) * detail;
+    vec3 stEm = lotEm * (1.0 - street * detail) + (uStreetC * lamps * detail + uStreetC * pool * 0.07 + uStreetC * avgStreet * 0.09 * (1.0 - detail)) * gridK;
     // the highway over it: dark asphalt, two streams of traffic, lamps; a line of light from far away
     if (hwy > 0.0) {
         float acr = rd / hwW;   // 0 on the axis .. 1 at the edge
@@ -651,11 +694,19 @@ flat in vec4 vK;
 flat in vec4 vS;
 in float vRoofY;
 out vec4 frag;
-uniform vec3 uWallA, uWallB, uRoofA, uRoofB, uStone, uGlassC, uArcoC, uCityGlowC;
+uniform vec3 uWallA, uWallB, uRoofA, uRoofB, uStone, uGlassC, uArcoC, uCityGlowC, uStreetC;
 uniform float uBeat;
 uniform vec3 uMoonDir, uMoonL;
-// the windows: a grid of cells (cw wide, ch high), each lit or not; averaged once smaller than a pixel
-float windows(vec2 uv, float cw, float ch, float ww, float wh, float seed, float frac, out float frame) {
+// A line at every integer of x, w wide (in x's units), faded out once finer than a pixel.
+float gridLine(float x, float w) {
+    float d = abs(fract(x + 0.5) - 0.5);
+    float fw = fwidth(x);
+    return (1.0 - smoothstep(w - fw, w + fw, d)) * (1.0 - smoothstep(0.25, 0.5, fw));
+}
+// The windows: a grid of cells (cw wide, ch high), each lit or not, their light given its room's tint (warm lamps,
+// cool white, an orange shade, now and then a television's soft blue), curtains half drawn, a mullion cross; averaged
+// once smaller than a pixel, then glittering points from afar. frame: the window's opening (for the walls around).
+vec3 windowsC(vec2 uv, float cw, float ch, float ww, float wh, float seed, float frac, vec3 win, float mull, out float frame) {
     vec2 c = uv / vec2(cw, ch);
     vec2 cell = floor(c);
     vec2 f = fract(c) - 0.5;
@@ -663,17 +714,32 @@ float windows(vec2 uv, float cw, float ch, float ww, float wh, float seed, float
     float inside = (1.0 - smoothstep(ww * 0.5 - fw.x, ww * 0.5 + fw.x, abs(f.x))) * (1.0 - smoothstep(wh * 0.5 - fw.y, wh * 0.5 + fw.y, abs(f.y)));
     // lights switch on and off now and then; whole groups of floors (offices, flats) lit or dark together
     vec2 grp = floor(cell / vec2(5.0, 3.0));
-    float gk = hash(grp * 0.71 + seed * 13.0);
+    float gk = mix(hash(grp * 0.71 + seed * 13.0), hash(vec2(cell.y * 0.37, seed * 7.0)), 0.55);
     float gFrac = clamp(frac * (0.5 + 0.9 * gk), 0.0, 1.0);
     float slot = floor(uTime / 23.0 + hash(cell + seed * 17.0) * 4.0);
     float on = step(hash(cell * 1.37 + seed * 31.0 + slot * 0.123), gFrac);
     float avg = ww * wh;
     float blur = smoothstep(0.35, 0.8, max(fw.x, fw.y));
-    float blur2 = smoothstep(0.25, 0.6, max(fw.x / 5.0, fw.y / 3.0));
     frame = mix(inside, avg, blur);
-    float far = avg * frac * 0.03 + lightDots(uv, max(fw.x * cw, fw.y * ch), frac * 0.55, seed * 91.0) * 0.9;
-    return mix(mix(inside * on, avg * gFrac * 0.3, blur), far, blur);
+    // the room behind: its tint, curtains, the ceiling light brighter at the top, the mullions
+    vec2 q = f / vec2(ww, wh);
+    vec2 fq = fw / vec2(ww, wh);
+    float h1 = hash(cell * 3.7 + seed * 5.1);
+    vec3 tint = h1 < 0.55 ? win : h1 < 0.8 ? mix(win, vec3(1.0, 0.96, 0.9), 0.6) : h1 < 0.94 ? win * vec3(1.05, 0.72, 0.45)
+              : vec3(0.42, 0.58, 1.0) * (0.75 + 0.25 * sin(uTime * 1.1 + h1 * 40.0));
+    float curtain = step(0.55, hash(cell * 1.9 + seed)) * smoothstep(0.22 - fq.x, 0.3 + fq.x, abs(q.x)) * 0.65;
+    float grad = 0.8 + 0.35 * q.y;
+    float mu = mull * clamp((1.0 - smoothstep(0.035 - fq.x, 0.035 + fq.x, abs(q.x))) + (1.0 - smoothstep(0.035 - fq.y, 0.035 + fq.y, abs(q.y - 0.18))), 0.0, 1.0);
+    vec3 nearC = tint * (inside * on * grad * (1.0 - curtain) * (1.0 - mu * 0.85));
+    vec3 midC = win * (avg * gFrac * 0.3);
+    vec3 farC = win * (avg * frac * 0.03 + lightDots(uv, max(fw.x * cw, fw.y * ch), frac * 0.55, seed * 91.0) * 0.9);
+    return mix(nearC, mix(midC, farC, blur), blur);
 }
+float windows(vec2 uv, float cw, float ch, float ww, float wh, float seed, float frac, out float frame) {
+    return windowsC(uv, cw, ch, ww, wh, seed, frac, vec3(1.0), 0.0, frame).r;
+}
+// a disc of radius rd at c (uv meters), antialiased
+float disc(vec2 uv, vec2 c, float rd) { float d = length(uv - c); float fw = fwidth(d); return 1.0 - smoothstep(rd - fw, rd + fw, d); }
 void main() {
     int kind = int(vK.x + 0.5);
     float seed = vK.y;
@@ -681,7 +747,6 @@ void main() {
     if (dot(Nf, vW) > 0.0) Nf = -Nf;
     vec3 wp = vW + uEye;
     vec3 up = normalize(wp + vec3(0.0, R_EARTH, 0.0));
-    float r = length(wp.xz);
     float ndl = dot(Nf, uSunDir);
     float nUp = dot(Nf, up);
     bool roofFace = vS.w > 1.5 || nUp > 0.7;
@@ -710,69 +775,229 @@ void main() {
             em += uWinWarm * (wnd * 2.6 + door * 1.2 * (0.6 + 0.4 * smoothstep(0.85, -0.6, dq.y))) * flick;
             alb = mix(alb, uRoofB * 0.35, frameW + door * 0.3);
             alb *= 1.0 - wnd * 0.6;
+            // the log ends at the corners
+            float corner = smoothstep(0.88, 0.95, abs(vUV.x) / (vS.w < 0.5 ? vS.y : vS.x));
+            alb = mix(alb, uWallB * 1.15, corner * step(0.5, fract(hy * 3.2 + 0.25)));
         } else {
-            alb *= 0.8 + 0.25 * vnoise(vec2(vUV.x * 6.0, hy * 20.0));
+            // thatch: bundles in rows, ragged
+            float rows = gridLine(vRoofY * 7.0 + vnoise(vec2(vUV.x * 3.0, 0.0)) * 0.3, 0.12);
+            alb *= (0.8 + 0.25 * vnoise(vec2(vUV.x * 6.0, hy * 20.0 + vRoofY * 30.0))) * (1.0 - rows * 0.3);
         }
     } else if (kind == 1 || kind == 2) {
-        // houses: plaster walls, timber, tiled roofs, small windows warm with lamps
-        vec3 wall = mix(uWallA, uWallB, step(0.5, seed));
+        // houses: plaster walls with a plinth, timber framing, shutters, a door, tiled roofs, warm windows
+        vec3 wall = mix(uWallA, uWallB, step(0.5, seed)) * (0.92 + 0.12 * fract(seed * 23.0));
         float rs = fract(seed * 7.0);
-        alb = roofFace ? (rs < 0.6 ? mix(uRoofA, uRoofB, rs / 0.6 * 0.6) : rs < 0.85 ? mix(uStone * 0.5, vec3(0.1, 0.13, 0.2), 0.45) : uRoofB * 1.2) : wall;
+        vec3 roofC = rs < 0.6 ? mix(uRoofA, uRoofB, rs / 0.6 * 0.6) : rs < 0.85 ? mix(uStone * 0.5, vec3(0.1, 0.13, 0.2), 0.45) : uRoofB * 1.2;
+        alb = roofFace ? roofC : wall;
         if (!roofFace) {
+            alb *= 1.0 - 0.25 * (1.0 - smoothstep(0.45, 0.55, hy));   // the plinth
             if (kind == 2) {
-                // timber framing
-                float beam = smoothstep(0.92, 0.97, abs(fract(hy / 3.0) * 2.0 - 1.0)) + smoothstep(0.9, 0.96, abs(fract(vUV.x / 2.4) * 2.0 - 1.0));
-                alb = mix(alb, uRoofB * 0.4, clamp(beam, 0.0, 1.0) * 0.6 * step(0.5, fract(seed * 3.0)));
+                // half-timbering: posts, rails, braces
+                float u = vUV.x / 1.2;
+                float beam = gridLine(hy / 3.0, 0.05) + gridLine(u * 0.5, 0.06) + gridLine((vUV.x + hy * 0.8) / 2.4, 0.04) * step(0.5, fract(floor(u * 0.5) * 0.5));
+                alb = mix(alb, uRoofB * 0.38, clamp(beam, 0.0, 1.0) * 0.75 * step(0.45, fract(seed * 3.0)) * step(0.5, hy));
             }
-            float wv = windows(vUV + vec2(0.0, -0.4), 2.4, 3.0, 0.38, 0.45, seed, uLit * (kind == 1 ? 0.75 : 0.85), frame);
-            em += win * wv * 1.8 * lit;
+            vec2 wuv = vUV + vec2(0.0, -0.4);
+            vec3 wv = windowsC(wuv, 2.4, 3.0, 0.38, 0.45, seed, uLit * (kind == 1 ? 0.75 : 0.85), win, 1.0, frame);
+            // shutters on either side of the windows, painted
+            vec2 cq = fract(wuv / vec2(2.4, 3.0)) - 0.5;
+            float sh = step(0.2, abs(cq.x)) * step(abs(cq.x), 0.29) * step(abs(cq.y), 0.23) * step(0.35, fract(seed * 11.0)) * step(1.0, wuv.y);
+            vec3 shC = fract(seed * 17.0) < 0.5 ? vec3(0.12, 0.3, 0.2) : fract(seed * 17.0) < 0.75 ? vec3(0.15, 0.22, 0.4) : uRoofA * 0.6;
+            alb = mix(alb, shC, sh * (1.0 - smoothstep(0.3, 0.6, fwidth(cq.x) * 4.0)));
+            // a door in the middle of the front, its fanlight warm
+            float door = (1.0 - smoothstep(0.55, 0.6, abs(vUV.x))) * (1.0 - smoothstep(2.1, 2.15, hy)) * step(vS.w, 0.5);
+            alb = mix(alb, uRoofB * 0.45, door);
+            em += uWinWarm * door * smoothstep(1.75, 1.85, hy) * 1.2 * lit * step(0.4, fract(seed * 5.0));
+            wv *= 1.0 - door;
+            em += wv * 1.8 * lit;
             alb *= 1.0 - frame * 0.5;
         } else {
-            alb *= 0.85 + 0.2 * step(0.5, fract(hy * 3.0 + vRoofY * 6.0));
+            // tiles in rows, staggered joints, a darker ridge
+            float tilesY = vRoofY * max(vS.x, 2.0) / 0.32;
+            float row = gridLine(tilesY, 0.08);
+            float joint = gridLine(vUV.x / 0.3 + 0.5 * floor(tilesY), 0.06);
+            float ridge = smoothstep(0.93, 0.97, vRoofY);
+            alb *= (1.0 - 0.28 * row - 0.12 * joint * (1.0 - row)) * (0.9 + 0.2 * hash(floor(vec2(vUV.x / 0.3, tilesY)))) * (1.0 - 0.4 * ridge);
         }
     } else if (kind == 3 || kind == 4) {
-        // stone: the church (tall windows of colored glass), the walls and their towers (torches)
-        alb = roofFace && kind == 3 ? uRoofB * 0.7 : uStone * (0.85 + 0.15 * vnoise(vUV * vec2(0.6, 1.4)));
+        // stone: the church (tall windows of colored glass, a rose window, a clock, the belfry), the walls (torches)
+        float ash = gridLine(hy / 0.6, 0.04) + gridLine(vUV.x / 1.2 + 0.5 * floor(hy / 0.6), 0.03);
+        alb = roofFace && kind == 3 ? uRoofB * 0.7 : uStone * (0.85 + 0.15 * vnoise(vUV * vec2(0.6, 1.4))) * (1.0 - 0.12 * clamp(ash, 0.0, 1.0));
         if (!roofFace && kind == 3) {
-            float wv = windows(vUV + vec2(0.0, -2.0), 3.0, 7.0, 0.3, 0.6, seed, 0.9, frame);
             vec3 stained = mix(mix(vec3(1.0, 0.3, 0.3), vec3(0.3, 0.5, 1.0), vnoise(vUV * 2.0)), vec3(1.0, 0.8, 0.3), vnoise(vUV * 3.0 + 4.0));
-            em += mix(win, stained, 0.6) * wv * 1.6 * lit * step(hy, 25.0);
+            if (seed < 0.5) {
+                // the nave: tall lancets, and a rose window high on the gable ends
+                float wv = windows(vUV + vec2(0.0, -2.0), 3.0, 7.0, 0.3, 0.6, seed, 0.9, frame);
+                em += mix(win, stained, 0.6) * wv * 1.6 * lit * step(hy, vS.z - 1.0);
+                if (vS.w < 0.5) {
+                    vec2 rc = vec2(0.0, vS.z * 0.72);
+                    float rr = length(vUV - rc), ra = atan(vUV.y - rc.y, vUV.x);
+                    float rose = disc(vUV, rc, 1.7) * (0.55 + 0.45 * step(0.5, fract(ra * 12.0 / 6.2831853)) * step(0.3, rr));
+                    em += stained * rose * 1.8 * lit;
+                    alb *= 1.0 - disc(vUV, rc, 1.95) * 0.4;
+                }
+            } else if (seed < 0.65) {
+                // the bell tower: a clock face (no numbers: twelve ticks and its hands), the belfry's openings
+                vec2 cc = vec2(0.0, vS.z * 0.72);
+                vec2 d = vUV - cc;
+                float rr = length(d);
+                float face = disc(vUV, cc, 1.25);
+                float ang = atan(d.x, d.y);
+                float ticks = step(0.94, abs(cos(ang * 6.0))) * smoothstep(0.85, 0.95, rr) * face;
+                float hA = uTime * 0.01, mA = uTime * 0.12;
+                vec2 hd = vec2(sin(hA), cos(hA)), md = vec2(sin(mA), cos(mA));
+                float hand = (1.0 - smoothstep(0.05, 0.09, abs(d.x * hd.y - d.y * hd.x))) * step(0.0, dot(d, hd)) * step(rr, 0.65)
+                           + (1.0 - smoothstep(0.04, 0.07, abs(d.x * md.y - d.y * md.x))) * step(0.0, dot(d, md)) * step(rr, 1.0);
+                alb = mix(alb, vec3(0.92, 0.88, 0.78), face);
+                alb = mix(alb, vec3(0.08), clamp(ticks + hand, 0.0, 1.0) * face);
+                em += uWinWarm * face * (1.0 - clamp(ticks + hand, 0.0, 1.0)) * 0.35 * lit;
+                float bel = (1.0 - smoothstep(0.5, 0.6, abs(vUV.x))) * smoothstep(vS.z * 0.84, vS.z * 0.85, hy) * (1.0 - smoothstep(vS.z * 0.95, vS.z * 0.96, hy));
+                alb *= 1.0 - bel * 0.85;
+                em += uWinWarm * bel * 0.4 * lit;
+            }
         }
         if (!roofFace && kind == 4) {
             float torch = exp(-(sq(fract(vUV.x / 9.0) - 0.5) * 80.0 + sq(hy - vS.z * 0.75) * 0.8));
             em += uWinWarm * torch * 1.5 * lit * step(vS.z, 20.0);
             float crenel = step(0.5, fract(vUV.x / 1.6)) * smoothstep(vS.z - 1.0, vS.z - 0.9, hy);
             alb *= 1.0 - crenel * 0.5;
+            // arrow slits on the towers
+            alb *= 1.0 - (1.0 - smoothstep(0.08, 0.12, abs(vUV.x))) * step(abs(hy - vS.z * 0.5), 1.0) * step(vS.x, 5.0) * 0.8;
         }
     } else if (kind == 5) {
-        // stone blocks with mansards: tall windows on every floor, warm
-        alb = roofFace ? uRoofA * 0.55 : mix(uStone, uWallA, 0.4 + 0.3 * seed);
-        if (!roofFace) {
-            float wv = windows(vUV + vec2(0.0, -1.0), 2.8, 3.6, 0.42, 0.55, seed, uLit * 0.8, frame);
-            em += win * wv * 1.6 * lit;
-            alb *= 1.0 - frame * 0.45;
-            float cornice = smoothstep(0.85, 0.95, fract(hy / 3.6)) * 0.15;
-            alb *= 1.0 + cornice;
+        // stone blocks: pilasters, string courses, a cornice, tall windows with balconies, shopfronts and awnings on
+        // the ground floor, lit dormers in the mansard
+        vec3 wallC = mix(uStone, uWallA, 0.4 + 0.3 * seed);
+        alb = roofFace ? uRoofA * 0.55 : wallC;
+        if (seed > 0.94) {
+            alb = uGlassC * 1.5 + 0.1; gloss = 0.6;   // a dome
+            alb *= 1.0 - 0.3 * gridLine(vUV.x / 2.5, 0.05);
+        } else if (!roofFace) {
+            float pil = gridLine(vUV.x / 5.6 + 0.5, 0.05);
+            float course = gridLine(hy / 3.6, 0.03) * step(4.6, hy);
+            float cornice = smoothstep(vS.z - 1.4, vS.z - 1.2, hy);
+            float under = smoothstep(vS.z - 1.9, vS.z - 1.7, hy) * (1.0 - cornice);
+            alb *= 1.0 + 0.12 * pil + 0.18 * cornice - 0.35 * under - 0.2 * course;
+            if (hy > 4.6) {
+                vec2 wuv = vUV + vec2(0.0, -1.0);
+                vec3 wv = windowsC(wuv, 2.8, 3.6, 0.42, 0.55, seed, uLit * 0.8, win, 1.0, frame);
+                em += wv * 1.6 * lit;
+                alb *= 1.0 - frame * 0.45;
+                // balconies: a ledge and its railing under the windows, on some buildings
+                vec2 cq = fract(wuv / vec2(2.8, 3.6)) - 0.5;
+                float bal = step(0.5, fract(seed * 9.0)) * step(abs(cq.x), 0.32) * (1.0 - smoothstep(0.02, 0.04, abs(cq.y + 0.3))) * (1.0 - smoothstep(0.3, 0.6, fwidth(cq.y) * 6.0));
+                alb = mix(alb, vec3(0.05), bal * 0.8);
+            } else {
+                // the shopfront: big windows warm with light, an awning, a glowing sign band above (no lettering)
+                float sx = fract(vUV.x / 4.2) - 0.5;
+                float sid = floor(vUV.x / 4.2);
+                float glassF = (1.0 - smoothstep(0.38, 0.42, abs(sx))) * step(0.3, hy) * (1.0 - smoothstep(3.0, 3.1, hy));
+                float shopOn = step(0.25, hash(vec2(sid, seed * 7.0)));
+                vec3 shopC = mix(uWinWarm, vec3(1.0, 0.95, 0.85), hash(vec2(sid, 3.0 + seed)));
+                em += shopC * glassF * shopOn * 1.4 * lit * (0.85 + 0.15 * smoothstep(3.0, 0.3, hy));
+                alb *= 1.0 - glassF * 0.7;
+                float aw = step(3.1, hy) * (1.0 - step(3.7, hy)) * (1.0 - smoothstep(0.42, 0.46, abs(sx)));
+                float ah = hash(vec2(sid, 11.0 + seed));
+                vec3 awC = ah < 0.3 ? vec3(0.6, 0.1, 0.1) : ah < 0.55 ? vec3(0.1, 0.35, 0.2) : ah < 0.8 ? vec3(0.12, 0.2, 0.45) : vec3(0.75, 0.7, 0.6);
+                awC *= 0.8 + 0.25 * step(0.5, fract(vUV.x / 0.5));
+                alb = mix(alb, awC, aw);
+                float sign = step(3.8, hy) * (1.0 - step(4.3, hy)) * (1.0 - smoothstep(0.3, 0.34, abs(sx))) * step(0.45, ah);
+                vec3 sc = ah < 0.6 ? uWinWarm : ah < 0.8 ? vec3(1.0, 0.85, 0.7) : uWinAccent;
+                em += sc * sign * 0.9 * lit;
+            }
+        } else {
+            // the mansard: slate, a row of lit dormers
+            float slate = gridLine(vRoofY * 8.0, 0.08);
+            alb *= 1.0 - 0.25 * slate;
+            vec2 dq = vec2(fract(vUV.x / 2.8) - 0.5, vRoofY - 0.4);
+            float dorm = (1.0 - smoothstep(0.14, 0.17, abs(dq.x))) * (1.0 - smoothstep(0.16, 0.2, abs(dq.y))) * (1.0 - smoothstep(0.3, 0.6, fwidth(dq.x) * 5.0));
+            float don = step(1.0 - uLit * 0.8, hash(vec2(floor(vUV.x / 2.8), seed * 13.0)));
+            em += win * dorm * don * 1.3 * lit;
+            alb *= 1.0 - dorm * 0.5;
         }
-        if (seed > 0.94) { alb = uGlassC * 1.5 + 0.1; gloss = 0.6; }   // a dome
     } else if (kind == 6 || kind == 7 || kind == 9) {
-        // glass towers: dark glass mirroring the sky, a dense grid of windows, a lit crown
+        // glass towers: curtain-wall panels with their seams and spandrels, the city mirrored in them, rooms lit in
+        // their own tints, a bright lobby at the foot, a lit crown; on the roofs a helipad or a garden
         alb = roofFace ? vec3(0.06) : uGlassC;
         gloss = roofFace ? 0.0 : 0.85;
         if (!roofFace) {
             float cw = kind == 6 ? 2.2 : 3.2, ch = kind == 6 ? 3.6 : 4.2;
-            float wv = windows(vUV, cw, ch, 0.7, 0.62, seed, uLit * 0.75, frame);
-            em += win * wv * 1.0 * lit;
-            // vertical fins on the supertalls
+            float style = fract(seed * 3.3);
+            vec3 wv = windowsC(vUV, cw, ch, style < 0.5 ? 0.7 : 0.9, style < 0.5 ? 0.62 : 0.72, seed, uLit * 0.75, win, 0.0, frame);
+            em += wv * lit;
+            // the spandrels (an opaque band at each floor slab) and the mullions' seams
+            float span = gridLine(vUV.y / ch, style < 0.5 ? 0.18 : 0.12);
+            float mull = gridLine(vUV.x / cw, 0.05);
+            alb = mix(alb, alb * 1.6 + 0.02, span * 0.6);
+            gloss *= 1.0 - 0.5 * span;
+            alb *= 1.0 + 0.4 * mull;
             if (kind == 7) alb *= 1.0 + 0.3 * smoothstep(0.85, 0.95, abs(fract(vUV.x / 9.0) * 2.0 - 1.0));
-            // a band of light at the crown
+            // bays: a darker structural column every few windows; lit corner strips on some towers
+            float bay = gridLine(vUV.x / (cw * (3.0 + floor(fract(seed * 6.1) * 3.0))) + 0.5, 0.06);
+            em *= 1.0 - 0.85 * bay;
+            alb *= 1.0 - 0.4 * bay;
+            float halfW = vS.w < 0.5 ? vS.y : vS.x;
+            float edgeK = smoothstep(0.965, 0.99, abs(vUV.x) / max(halfW, 1.0)) * step(0.6, fract(seed * 8.3)) * (1.0 - smoothstep(0.3, 0.6, fwidth(vUV.x) / max(halfW * 0.04, 0.01)));
+            em += mix(vec3(1.0, 0.97, 0.92), uWinAccent, step(0.85, fract(seed * 8.3))) * edgeK * 0.6 * lit;
+            // the lobby: tall, bright glass at the foot of the tower, a canopy over the entrance
+            if (vS.z - hy > 0.0 && hy < 7.0 && vS.z > 40.0) {
+                float lob = step(0.4, hy) * (1.0 - smoothstep(5.5, 5.8, hy));
+                em += mix(uWinWarm, vec3(1.0, 0.97, 0.9), 0.5) * lob * 1.1 * lit * (1.0 - 0.6 * gridLine(vUV.x / 3.0, 0.03));
+                float can = step(5.8, hy) * (1.0 - step(6.3, hy)) * (1.0 - smoothstep(4.0, 4.3, abs(vUV.x)));
+                alb = mix(alb, vec3(0.1), can);
+                em += vec3(1.0, 0.95, 0.85) * can * 0.5 * lit;
+            }
             // a lit crown on some towers, its color their own (warm, white, the accent)
             float cs = fract(seed * 13.7);
             float crown = smoothstep(vS.z * 0.95, vS.z * 0.96, hy) * (1.0 - smoothstep(vS.z * 0.985, vS.z, hy));
             float crown2 = smoothstep(0.85, 0.95, abs(fract(hy / max(vS.z * 0.04, 6.0)) * 2.0 - 1.0)) * smoothstep(vS.z * 0.86, vS.z * 0.88, hy);
+            float crown3 = gridLine(vUV.x / 4.0, 0.06) * smoothstep(vS.z * 0.9, vS.z * 0.92, hy) * step(0.7, fract(seed * 2.9));
             vec3 cc = cs < 0.33 ? uWinWarm * 1.2 : cs < 0.6 ? vec3(1.0, 0.97, 0.92) : uWinAccent;
-            em += cc * (crown + crown2 * 0.5 * step(0.5, fract(seed * 5.3))) * (kind == 6 ? 0.6 : 1.1) * lit * step(60.0, vS.z) * step(0.35, fract(seed * 7.1));
+            em += cc * (crown + crown2 * 0.5 * step(0.5, fract(seed * 5.3)) + crown3 * 0.7) * (kind == 6 ? 0.6 : 1.1) * lit * step(60.0, vS.z) * step(0.35, fract(seed * 7.1));
             if (kind == 9) em += uWinAccent * 0.6 * smoothstep(0.9, 0.98, abs(fract(hy / 2500.0) * 2.0 - 1.0));
+        } else if (vS.x > 8.0) {
+            // the roof: a helipad (a lit ring, its touchdown circle), a garden with lamps, or plant and gravel
+            float rt = fract(seed * 4.7);
+            if (rt < 0.25) {
+                float ring = disc(vUV, vec2(0.0), vS.x * 0.5) - disc(vUV, vec2(0.0), vS.x * 0.44);
+                alb = mix(alb, vec3(0.3), ring);
+                float dots = step(0.8, abs(cos(atan(vUV.y, vUV.x) * 8.0))) * ring;
+                em += vec3(0.6, 1.0, 0.7) * dots * 1.2 * lit * (0.6 + 0.4 * step(0.5, fract(uTime * 0.5 + seed)));
+            } else if (rt < 0.45) {
+                alb = mix(vec3(0.05, 0.12, 0.06), vec3(0.08, 0.2, 0.08), vnoise(vUV * 0.5));
+                vec2 g = floor(vUV / 6.0);
+                vec2 o = (g + 0.5) * 6.0;
+                em += uWinWarm * exp(-dot(vUV - o, vUV - o) * 3.0) * 0.8 * lit * step(0.5, hash(g + seed));
+            } else {
+                alb *= 0.8 + 0.4 * vnoise(vUV * 0.3);
+            }
+        }
+    } else if (kind == 10) {
+        // rooftop clutter and building-site gear: brick chimneys, metal plant, water tanks, antennas, cranes
+        if (seed < 0.3) {
+            alb = uRoofA * 0.55 * (1.0 - 0.2 * gridLine(hy / 0.25, 0.1));
+        } else if (seed < 0.6) {
+            alb = vec3(0.32, 0.33, 0.35) * (0.8 + 0.3 * gridLine(vUV.x / 0.6, 0.15));
+        } else if (seed < 0.8) {
+            alb = vec3(0.35, 0.28, 0.22) * (1.0 - 0.3 * gridLine(hy / 0.8, 0.08));
+        } else {
+            // a crane: lattice steel, yellow, a red light at its top
+            float lat = gridLine(hy / max(vS.x * 2.0, 1.0), 0.07) + gridLine((hy + vUV.x) / max(vS.x * 2.0, 1.0), 0.05);
+            alb = vec3(0.75, 0.55, 0.08) * (0.55 + 0.6 * clamp(lat, 0.0, 1.0));
+            em += vec3(1.0, 0.1, 0.05) * smoothstep(vS.z * 0.985, vS.z, hy) * 2.0 * lit;
+        }
+    } else if (kind == 11) {
+        // a bridge: stone or steel, arches below the deck, a lit parapet
+        alb = uStone * 1.1;
+        if (!roofFace) {
+            float span = max(vS.z * 2.2, 8.0);
+            float ax = fract(vUV.x / span) - 0.5;
+            float arch = step(hy, vS.z - 1.6) * step(sq(ax * span) / sq(span * 0.42) + sq((hy) / max(vS.z - 2.0, 0.5)), 1.0);
+            alb *= 1.0 - arch;
+            em += uStreetC * exp(-sq(hy - (vS.z - 0.2)) * 8.0) * 0.25 * lit;
+        } else {
+            alb = vec3(0.16, 0.15, 0.15);
+            em += uStreetC * gridLine(vUV.x / 12.0, 0.03) * 0.3 * lit;
         }
     } else {
         // arcologies: pale terraces, bands of light every few floors, windows too fine to tell apart
@@ -811,6 +1036,14 @@ void main() {
         float rel = dot(rd, up);
         vec3 refl = mix(mix(uHazeC, uSkyAmb * 2.2, smoothstep(-0.1, 0.6, rel)), uCityGlowC * uGlowK * 0.25, step(rel, 0.0) * uNightK) * (1.0 - 0.6 * uNightK);
         refl += uSunGlow * pow(max(dot(rd, uSunDir), 0.0), 16.0) * (1.0 - uNightK * 0.8) * 1.4;
+        {
+            // the neighbours' lights mirrored: soft warm and white points low in the reflection
+            float az = atan(rd.x, rd.z);
+            vec2 g = vec2(az * 40.0, rel * 60.0);
+            vec2 gi = floor(g);
+            float pt = step(0.72, hash(gi + floor(seed * 50.0))) * exp(-dot(fract(g) - 0.5, fract(g) - 0.5) * 18.0);
+            refl += mix(uWinWarm, vec3(1.0), hash(gi + 3.0)) * pt * 0.6 * uNightK * smoothstep(0.35, -0.05, rel) * smoothstep(-0.4, -0.05, rel);
+        }
         float fres = 0.15 + 0.85 * pow(1.0 - max(dot(-v, Nf), 0.0), 4.0);
         col = mix(col, refl, gloss * fres * 0.7);
     }
@@ -908,6 +1141,18 @@ void main() {
         v *= mix(1.0, sq(1.0 - t), vC.z) * smoothstep(0.0, 0.02, t);
         if (vC.w > 1.5) v = (exp(-sq(vLocal.x * 1.6)) * 0.7 + exp(-sq(vLocal.x * 5.0)) * 0.5) * sq(1.0 - t) * smoothstep(0.0, 0.05, t);
         frag = vec4(vB.rgb * v * vB.a, 0.0);
+        return;
+    }
+    if (mode == 5) {
+        // a bird: two wings beating
+        float fl = sin(vC.z);
+        vec2 q = vLocal;
+        float x = abs(q.x);
+        float wingY = fl * 0.45 * x - 0.15 * x * x;
+        float wing = smoothstep(0.16, 0.05, abs(q.y - wingY)) * step(x, 0.95) * (1.0 - smoothstep(0.7, 0.95, x) * 0.6);
+        float body = smoothstep(0.2, 0.1, length(q * vec2(1.0, 1.6)));
+        float a = max(wing, body) * vB.a * vDim;
+        frag = vec4(vB.rgb * a, a);
         return;
     }
     if (mode == 4) {

@@ -22,7 +22,7 @@ namespace {
 
 using namespace mcity;
 
-enum Kind { K_HUT = 0, K_HOUSE, K_TOWN, K_CHURCH, K_WALL, K_CLASSIC, K_GLASS, K_SUPER, K_ARCO, K_ELEVATOR };
+enum Kind { K_HUT = 0, K_HOUSE, K_TOWN, K_CHURCH, K_WALL, K_CLASSIC, K_GLASS, K_SUPER, K_ARCO, K_ELEVATOR, K_GEAR, K_BRIDGE };
 constexpr int FL = 20;   // floats a building
 
 struct Builder {
@@ -33,6 +33,13 @@ struct Builder {
 
     // A building at (x, z) on the sphere (flat coordinates: geodesic polar around the hut), turned by yaw, raised by
     // y0 (a setback's tier).
+    // A world point at (x, z) on the ground, raised by y.
+    static vec3 world(float x, float z, float y) {
+        const float r = std::sqrt(x * x + z * z) + 1e-4f, phi = std::atan2(z, x), th = r / R_EARTH;
+        const float st = std::sin(th), ct = std::cos(th), s2 = std::sin(th * 0.5f);
+        const vec3 n(st * std::cos(phi), ct, st * std::sin(phi));
+        return vec3(R_EARTH * st * std::cos(phi), -2.f * R_EARTH * s2 * s2, R_EARTH * st * std::sin(phi)) + n * y;
+    }
     void add(float x, float z, float yaw, float hw, float hd, float h, float roofH, float taper, int kind, float seed,
              float y0, float birth, float death = 1e30f, float twist = 0.f) {
         const float r = std::sqrt(x * x + z * z) + 1e-4f;
@@ -81,6 +88,36 @@ float roadDist(float x, float z) {
     return d;
 }
 
+// A point on a building's footprint: (u, v) in [-1, 1] of its half sizes, turned by yaw.
+void local(float x, float z, float yaw, float u, float v, float& ox, float& oz) {
+    ox = x + std::cos(yaw) * u - std::sin(yaw) * v;
+    oz = z + std::sin(yaw) * u + std::cos(yaw) * v;
+}
+// A house's chimney (its smoke is drawn from plan.chimneys): on the slope, rising past the ridge.
+void addChimney(Builder& b, Rng& rng, float x, float z, float yaw, float hw, float hd, float h, float roofH, float birth, float death) {
+    if (!rng.chance(0.6f)) return;
+    float cx, cz;
+    const float u = rng.range(-0.6f, 0.6f) * hw, v = (rng.chance(0.5f) ? 0.45f : -0.45f) * hd;
+    local(x, z, yaw, u, v, cx, cz);
+    const float ch = roofH * 0.75f + 0.9f;
+    b.add(cx, cz, yaw, 0.32f, 0.32f, ch, 0.f, 0.f, K_GEAR, 0.1f + 0.15f * rng.uniform(), h, birth, death);
+    const vec3 top = Builder::world(cx, cz, h + ch);
+    const float q[4] = {top.x, top.y, top.z, birth};
+    b.plan.chimneys.insert(b.plan.chimneys.end(), q, q + 4);
+}
+// Rooftop plant on a flat roof: air conditioning units, a water tank or two, an antenna.
+void addRoofGear(Builder& b, Rng& rng, float x, float z, float yaw, float hw, float hd, float top, float birth, float death, float scale) {
+    const int n = rng.irange(1, 3);
+    for (int i = 0; i < n; i++) {
+        float gx, gz;
+        local(x, z, yaw, rng.range(-0.6f, 0.6f) * hw, rng.range(-0.6f, 0.6f) * hd, gx, gz);
+        const float t = rng.uniform();
+        if (t < 0.5f) b.add(gx, gz, yaw, 1.6f * scale, 1.1f * scale, 1.4f * scale, 0.f, 0.f, K_GEAR, 0.35f + 0.2f * rng.uniform(), top, birth, death);
+        else if (t < 0.8f) b.add(gx, gz, yaw + 0.785f, 1.3f * scale, 1.3f * scale, 2.6f * scale, 1.1f * scale, 0.f, K_GEAR, 0.62f + 0.15f * rng.uniform(), top, birth, death);
+        else b.add(gx, gz, yaw, 0.15f * scale, 0.15f * scale, 9.f * scale, 0.f, 0.7f, K_GEAR, 0.4f, top, birth, death);
+    }
+}
+
 // A tower of one of the silhouettes, its base at (x, z): setbacks, a taper, a twist, an octagon, a slab, a pyramid
 // top; most with a spire.
 void addTower(Builder& b, Rng& rng, float x, float z, float hw, float h, float birth, int type, float death = 1e30f) {
@@ -122,6 +159,19 @@ void addTower(Builder& b, Rng& rng, float x, float z, float hw, float h, float b
         break;
     }
     if (spire && type != 4 && type != 5) b.add(x, z, yaw, hw * 0.1f, hw * 0.1f, h * 0.16f, 0.f, 1.f, kind, sd, top, birth, death);
+    // plant on the roof of the flat-topped ones
+    if (type == 0 || type == 4) addRoofGear(b, rng, x, z, yaw, type == 0 ? hw * 0.55f : hw * 1.7f, type == 0 ? hd * 0.55f : hd * 0.65f, top, birth, death, std::max(1.f, hw / 18.f));
+    // a crane on the site while the tower rises: a mast beside it, its jib out over it (gone once it is built)
+    if (rng.chance(0.4f) && h > 80.f) {
+        float mx, mz;
+        local(x, z, yaw, hw * 1.25f, 0.f, mx, mz);
+        const float mh = h * 1.08f, ms = std::max(1.2f, h * 0.006f);
+        const float d = std::min(death, birth * 1.13f);
+        b.add(mx, mz, yaw, ms, ms, mh, 0.f, 0.f, K_GEAR, 0.9f, 0.f, birth * 0.995f, d);
+        float jx, jz;
+        local(x, z, yaw, hw * 1.25f - h * 0.12f, 0.f, jx, jz);
+        b.add(jx, jz, yaw, h * 0.17f, ms * 0.7f, ms * 1.2f, 0.f, 0.f, K_GEAR, 0.9f, mh - ms * 2.f, birth * 0.995f, d);
+    }
 }
 
 // A downtown: towers around a center, founded when the frontier reaches F0, rising until it is k times farther, the
@@ -197,7 +247,9 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             const float hw = rng.range(2.3f, 3.6f), hd = rng.range(2.6f, 4.4f);
             const float h = rng.range(2.6f, 4.8f) * (d > 60.f ? 1.25f : 1.f);
             const float yaw = rng.range(0.f, TAU);
-            b.add(x, z, yaw, hw, hd, h, hw * rng.range(0.75f, 1.0f), 0.f, K_HOUSE, rng.uniform(), 0.f, std::max({5.f, d, 0.7f * r}), deathAt(x, z));
+            const float rh = hw * rng.range(0.75f, 1.0f), hb = std::max({5.f, d, 0.7f * r});
+            b.add(x, z, yaw, hw, hd, h, rh, 0.f, K_HOUSE, rng.uniform(), 0.f, hb, deathAt(x, z));
+            addChimney(b, rng, x, z, yaw, hw, hd, h, rh, hb, deathAt(x, z));
         }
         // as the town grows around it, the village fills in
         tries = 0;
@@ -217,8 +269,9 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
             placed.push_back(vec2{x, z});
             infill++;
             const float hw = rng.range(2.2f, 3.2f), hd = rng.range(2.4f, 3.8f);
-            b.add(x, z, rng.range(0.f, TAU), hw, hd, rng.range(3.5f, 7.f), hw * rng.range(0.8f, 1.05f), 0.f, K_TOWN, rng.uniform(), 0.f,
-                  rng.range(240.f, 480.f));
+            const float yw = rng.range(0.f, TAU), hh = rng.range(3.5f, 7.f), rh = hw * rng.range(0.8f, 1.05f), hb = rng.range(240.f, 480.f);
+            b.add(x, z, yw, hw, hd, hh, rh, 0.f, K_TOWN, rng.uniform(), 0.f, hb);
+            addChimney(b, rng, x, z, yw, hw, hd, hh, rh, hb, 1e30f);
         }
         // the church: a nave and a bell tower with its spire
         const float cb = std::max(60.f, D(-40.f, 26.f));
@@ -304,7 +357,9 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
                                     const float hx = x + ca * ox - sa * oz, hz = z + sa * ox + ca * oz;
                                     const float hw = sub * rng.range(0.3f, 0.4f), hd = sub * rng.range(0.32f, 0.42f);
                                     const float h = rng.range(6.f, 12.f) * std::min(1.6f, std::max(1.f, sub / 14.f));
-                                    b.add(hx, hz, yaw, hw, hd, h, std::min(hw, 7.f) * rng.range(0.8f, 1.1f), 0.f, K_TOWN, rng.uniform(), 0.f, birth, death);
+                                    const float rh = std::min(hw, 7.f) * rng.range(0.8f, 1.1f);
+                                    b.add(hx, hz, yaw, hw, hd, h, rh, 0.f, K_TOWN, rng.uniform(), 0.f, birth, death);
+                                    if (d < 900.f) addChimney(b, rng, hx, hz, yaw, hw, hd, h, rh, birth, death);
                                 }
                             if (rng.chance(0.025f)) {
                                 const float tw = std::min(Ll * 0.12f, 5.f), th = rng.range(24.f, 40.f);
@@ -325,6 +380,14 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
                                       K_CLASSIC, sd, 0.f, birth, death);
                             }
                             if (rng.chance(0.04f)) b.add(x, z, yaw, w * 0.45f, w * 0.45f, h * 1.6f, 0.f, 0.7f, K_CLASSIC, 0.97f, 0.f, birth, death);
+                            else if (rng.chance(0.5f)) {
+                                // chimney stacks along the mansards
+                                for (int c = 0; c < 3; c++) {
+                                    float cx, cz;
+                                    local(x, z, yaw, rng.range(-0.8f, 0.8f) * w, (rng.chance(0.5f) ? 1.f : -1.f) * (w - dep), cx, cz);
+                                    b.add(cx, cz, yaw, 0.9f, 0.5f, std::min(dep, 6.f) * 0.8f + 1.4f, 0.f, 0.f, K_GEAR, 0.15f, h, birth, death);
+                                }
+                            }
                         } else if (d < 40000.f) {
                             // modern mid-rise, two or three a lot, taller with the era
                             const int m = rng.chance(0.5f) ? 3 : 2;
@@ -332,8 +395,10 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
                                 const float ox = rng.range(-0.25f, 0.25f) * Ll, oz = rng.range(-0.25f, 0.25f) * Ll;
                                 const float hx = x + ca * ox - sa * oz, hz = z + sa * ox + ca * oz;
                                 const float h = towerH(d) * rng.range(0.15f, 0.45f);
-                                b.add(hx, hz, yaw, Ll * rng.range(0.1f, 0.18f), Ll * rng.range(0.08f, 0.16f), h, 0.f, rng.chance(0.2f) ? 0.15f : 0.f,
-                                      h > 260.f ? K_SUPER : K_GLASS, rng.uniform(), 0.f, birth, death);
+                                const float bw = Ll * rng.range(0.1f, 0.18f), bd = Ll * rng.range(0.08f, 0.16f);
+                                const bool tp = rng.chance(0.2f);
+                                b.add(hx, hz, yaw, bw, bd, h, 0.f, tp ? 0.15f : 0.f, h > 260.f ? K_SUPER : K_GLASS, rng.uniform(), 0.f, birth, death);
+                                if (!tp && Ll < 3000.f) addRoofGear(b, rng, hx, hz, yaw, bw, bd, h, birth, death, std::max(1.f, bw / 18.f));
                             }
                         } else if (d < 150000.f) {
                             // megablocks: a podium and its towers
@@ -398,6 +463,32 @@ MegaCityPlan buildMegaCity(uint64_t seed) {
                 const float h = towerH(birth) * rng.range(1.1f, 1.4f);
                 addTower(b, rng, x, z, 0.055f * h, h, birth, rng.irange(0, 3));
                 break;
+            }
+        }
+    }
+
+    // ---- Bridges over the river: stone arches near the old town, longer spans downstream; lamps along them.
+    {
+        const float zs[] = {-180.f, 160.f, 520.f, -650.f, 1300.f, -1700.f, 2600.f, -3300.f, 4800.f, -6200.f, 8500.f, -11000.f, 15000.f, -19000.f, 26000.f};
+        for (float bz : zs) {
+            const float bx = riverX(bz);
+            const float hwR = riverHalfW(bz);
+            if (hwR < 3.f || atSea(bx, bz)) continue;
+            // across the river: the river runs along z (its slope dx/dz from the centerline)
+            const float slope = (riverX(bz + 5.f) - riverX(bz - 5.f)) / 10.f;
+            const float yaw = std::atan(-slope) ;
+            const float L = hwR + 14.f, wdt = std::min(7.f + 0.002f * std::fabs(bz), 16.f);
+            const float hgt = std::min(6.f + 0.0015f * std::fabs(bz), 28.f);
+            const float birth = std::max(field(bx, bz, S) * 1.02f, 90.f);
+            b.add(bx, bz, yaw, L, wdt, hgt, 0.f, 0.f, K_BRIDGE, rng.uniform(), 0.f, birth);
+            for (int i = -6; i <= 6; i++) {
+                for (int sd = -1; sd <= 1; sd += 2) {
+                    float lx, lz;
+                    local(bx, bz, yaw, L * i / 6.5f, sd * wdt * 0.95f, lx, lz);
+                    const vec3 p = Builder::world(lx, lz, hgt + 1.6f);
+                    const float q[4] = {p.x, p.y, p.z, birth};
+                    plan.lamps.insert(plan.lamps.end(), q, q + 4);
+                }
             }
         }
     }

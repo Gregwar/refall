@@ -119,6 +119,8 @@ struct MegaCityPlan {
     int fixedFirst = 0;             // instances from here on are drawn whatever their size (the elevator's tower)
     // Trees around the hut (meters): x, z, size, seed (they vanish when the city reaches them).
     std::vector<float> trees;
+    // Chimney tops (their smoke) and the bridges' lamps: position (world), birth.
+    std::vector<float> chimneys, lamps;
     mcity::Sat sats[mcity::SATS];
     float downtown[2] = {1700.f, -350.f};   // the main downtown's center (x, z)
 };

@@ -348,7 +348,7 @@ void MegaCityUniverse::resize(int width, int height) {
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
     // the world at a reduced resolution
-    const int wh = std::max(180, std::min(720, (int)(height_ * 0.7f)));
+    const int wh = std::max(180, std::min(1080, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
     bloomA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -418,8 +418,8 @@ void MegaCityUniverse::updateCamera(float dt) {
     tanH_ = std::tan(26.f * PI / 180.f);
     const vec3 dc(plan_.downtown[0], 0.f, plan_.downtown[1]);
     // the town: over the hut, then lower and toward the downtown-to-be as it becomes a stone city
-    const float Fcity = std::max(lerpf(6.f, 4.2f, kV), lerpf(0.62f, 0.4f, kT) * cityR);
-    const float pCity = -6.f - 14.f * kV + 9.f * kT;
+    const float Fcity = std::max(lerpf(6.f, 4.2f, kV), lerpf(0.62f, 0.17f, kT) * cityR);
+    const float pCity = -6.f - 14.f * kV + 13.f * kT;
     const vec3 aCity = lerp(vec3(0.f, lerpf(1.3f, 0.f, kV), 0.f), dc * 0.6f, kT);
     const float sxCity = lerpf(0.68f, 0.f, smoothstepf(std::log(12.f), std::log(400.f), G)) + 0.2f * kT;
     const float syCity = lerpf(-0.08f, -0.42f, smoothstepf(std::log(30.f), std::log(3000.f), G)) + 0.12f * kT;
@@ -1274,6 +1274,170 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
                 glow(vec3(b[0], b[1], b[2]), bsz, pal_.beacon * 1.1f, (0.15f + 0.6f * on) * world * nightK * (h < 0.4f ? 1.f : 0.f), 1, h, 0.f);
             }
         }
+        // ---- Life in the town and the city: smoke, lamps, boats, a train, ships, an airport, helicopters, birds.
+        auto at = [&](float x, float z, float y) {
+            const float r = std::sqrt(x * x + z * z) + 1e-4f, ph = std::atan2(z, x);
+            const vec3 g = groundAt(r, ph);
+            return g + normalize(g + vec3(0.f, R, 0.f)) * y;
+        };
+        const float camH = std::max(alt_, 1.f);
+        // chimney smoke over the old town at dusk (the nearest few dozen, while they are big enough to see)
+        if (cityR < 6000.f && overT_ < 0.f) {
+            int shown = 0;
+            for (size_t i = 0; i + 3 < plan_.chimneys.size() && shown < 60; i += 4) {
+                const float* c = &plan_.chimneys[i];
+                if (c[3] > cityR) continue;
+                const vec3 cp(c[0], c[1], c[2]);
+                const float dist = length(cp - eye_);
+                if (dist > camD_ * 1.6f) continue;
+                if (mcity::hashLot((float)i, 7.f) > 0.45f) continue;
+                shown++;
+                for (int k = 0; k < 4; k++) {
+                    const float t = std::fmod(time_ * 0.18f + k / 4.f + c[0] * 0.013f, 1.f);
+                    const vec3 sp = cp + vec3(t * 2.5f + 0.4f * std::sin(time_ * 0.6f + k + i), t * 7.f, t * 0.8f);
+                    glow(sp, 0.5f + t * 1.8f, lerp(vec3(0.5f, 0.5f, 0.56f), pal_.nightHaze * 3.f + pal_.cityGlow * 0.08f, nightK) * 0.55f,
+                         0.3f * (1.f - t) * smoothstepf(0.f, 0.1f, t) * world, 4, (float)k, 0.f);
+                }
+            }
+        }
+        // the bridges' lamps
+        if (cityR > 80.f && cityR < 1.e5f) {
+            for (size_t i = 0; i + 3 < plan_.lamps.size(); i += 4) {
+                const float* l = &plan_.lamps[i];
+                if (l[3] > cityR) continue;
+                glow(vec3(l[0], l[1], l[2]), 0.5f, pal_.street * 1.6f, (0.4f + 0.6f * nightK) * world, 1, 0.f, 0.f);
+            }
+        }
+        // boats on the river: a white masthead light, red and green at the sides, a warm cabin
+        if (cityR > 30.f && cityR < 6.e4f) {
+            const int nb = 14;
+            for (int i = 0; i < nb; i++) {
+                const float span = std::min(cityR * 1.4f, 20000.f) + 200.f;
+                const float dir = i % 2 ? 1.f : -1.f;
+                const float sp = 1.5f + 3.f * mcity::hashLot((float)i, 1.f) + span * 0.0006f;
+                float z = std::fmod(mcity::hashLot((float)i, 2.f) * 2.f * span + dir * time_ * sp, 2.f * span);
+                if (z < 0.f) z += 2.f * span;
+                z -= span;
+                const float hwR = mcity::riverHalfW(z);
+                if (hwR < 4.f) continue;
+                const float x = mcity::riverX(z) + dir * hwR * 0.35f;
+                const float bs = std::min(2.f + hwR * 0.04f, 20.f);
+                const float fade = smoothstepf(span, span * 0.8f, std::fabs(z));
+                glow(at(x, z, bs * 1.6f), bs * 0.25f, vec3(1.f, 0.96f, 0.85f) * 1.4f, fade * world, 1, 0.f, 0.f);
+                glow(at(x + bs * 0.5f, z, bs * 0.6f), bs * 0.2f, vec3(0.2f, 1.f, 0.4f), fade * world * nightK, 1, 0.f, 0.f);
+                glow(at(x - bs * 0.5f, z, bs * 0.6f), bs * 0.2f, vec3(1.f, 0.15f, 0.1f), fade * world * nightK, 1, 0.f, 0.f);
+                glow(at(x, z - dir * bs, bs * 0.7f), bs * 0.5f, pal_.winWarm, 0.7f * fade * world, 0, 0.f, 0.f);
+            }
+        }
+        // a train: lit carriages along a line out of the city (beside the north-west highway)
+        if (cityR > 1500.f && cityR < 2.e5f) {
+            const float L = std::min(cityR * 1.2f, 60000.f);
+            const float speed = 25.f + cityR * 0.004f;
+            for (int tr = 0; tr < 2; tr++) {
+                const float dir = tr ? -1.f : 1.f;
+                float head = std::fmod(time_ * speed + tr * L * 0.6f, L * 1.3f);
+                if (dir < 0.f) head = L * 1.3f - head;
+                for (int c = 0; c < 10; c++) {
+                    const float r = head - dir * c * 26.f;
+                    if (r < 300.f || r > L) continue;
+                    const float ph = mcity::roadAngle(2, r) + (60.f + 0.004f * r) / r + tr * 12.f / r;
+                    const float x = r * std::cos(ph), z = r * std::sin(ph);
+                    glow(at(x, z, 3.f), 9.f, lerp(pal_.winWarm, vec3(1.f), 0.4f) * (c == 0 ? 1.6f : 1.f), 0.9f * world, 0, (float)c, 0.f);
+                }
+            }
+        }
+        // ships in the bay: clusters of deck lights drifting slowly, a lighthouse's beam at the point
+        if (cityR > 9000.f && cityR < 8.e5f) {
+            for (int i = 0; i < 9; i++) {
+                const float a = (mcity::hashLot((float)i, 5.f) - 0.5f) * 1.2f + time_ * 0.0006f * (i % 2 ? 1.f : -1.f);
+                const float off = 1500.f + 7000.f * mcity::hashLot((float)i, 6.f);
+                const float ca = 0.96f, sa = 0.28f;
+                // along the coast's normal (+x mostly), out to sea
+                const float across = std::tan(a) * 30000.f;
+                const float x = 16000.f + 0.42f * std::fabs(across) + off, z = across;
+                const float xx = ca * x - sa * z, zz = sa * x + ca * z;
+                for (int k = 0; k < 5; k++) {
+                    const float kx = xx + (k - 2) * 45.f * ca, kz = zz + (k - 2) * 45.f * sa;
+                    glow(at(kx, kz, 18.f + 8.f * (k == 1)), 14.f, k == 1 ? vec3(1.f) * 1.5f : pal_.winWarm * 1.2f, 0.9f * world, 1, 0.f, 0.f);
+                }
+            }
+        }
+        // the airport: runway edge lights, the approach lights flowing in, planes taking off and climbing
+        if (cityR > 6000.f && cityR < 4.e5f) {
+            const float ax = -9500.f, az = 4200.f, ay = 0.35f;   // west of the town, its runway turned
+            const float rl = 3200.f;
+            const float ca = std::cos(ay), sa = std::sin(ay);
+            const float vis = smoothstepf(6000.f, 9000.f, cityR) * world;
+            for (int i = 0; i <= 32; i++) {
+                const float u = (i / 32.f - 0.5f) * rl;
+                for (int sd = -1; sd <= 1; sd += 2) {
+                    const float v = sd * 30.f;
+                    glow(at(ax + ca * u - sa * v, az + sa * u + ca * v, 1.f), 6.f, i == 0 || i == 32 ? vec3(0.3f, 1.f, 0.4f) : vec3(1.f, 0.95f, 0.8f), vis * 0.9f, 1, 0.f, 0.f);
+                }
+            }
+            for (int i = 0; i < 12; i++) {
+                const float u = -rl * 0.5f - 60.f - i * 60.f;
+                const float flash = std::fmod(time_ * 2.f - i * 0.08f, 1.f) < 0.1f ? 1.f : 0.25f;
+                glow(at(ax + ca * u, az + sa * u, 1.f), 7.f, vec3(1.f), vis * flash, 1, 0.f, 0.f);
+            }
+            for (int pl = 0; pl < 3; pl++) {
+                const float T = 40.f, t = std::fmod(time_ + pl * T / 3.f, T) / T;
+                const float u = -rl * 0.5f + t * rl * 4.f;
+                const float hgt = std::max(0.f, t * rl * 4.f - rl * 0.7f) * 0.18f + 3.f;
+                const vec3 p = at(ax + ca * u, az + sa * u, hgt);
+                const float fa = smoothstepf(0.f, 0.03f, t) * (1.f - smoothstepf(0.85f, 1.f, t)) * vis;
+                glow(p, 9.f, vec3(1.f, 0.98f, 0.9f) * 1.5f, fa, 1, 0.f, 0.f);
+                const bool blink = std::fmod(time_ * 1.2f + pl, 1.f) < 0.12f;
+                glow(p + vec3(0.f, 4.f, 0.f), 8.f, vec3(1.f, 0.15f, 0.1f) * 1.8f, fa * (blink ? 1.f : 0.f), 1, 0.f, 0.f);
+            }
+        }
+        // helicopters over the downtown: blinking, a searchlight on the streets
+        if (cityR > 4500.f && cityR < 1.5e5f) {
+            const vec3 dcw = at(plan_.downtown[0], plan_.downtown[1], 0.f);
+            const float H = mcity::towerH(std::min(cityR, 7.e4f));
+            for (int hc = 0; hc < 3; hc++) {
+                const float a = time_ * (0.05f + 0.02f * hc) + hc * 2.1f;
+                const float rr = 600.f + 500.f * hc + 0.02f * cityR;
+                const vec3 p = at(plan_.downtown[0] + rr * std::cos(a), plan_.downtown[1] + rr * std::sin(a), H * (0.8f + 0.25f * hc) + 60.f);
+                const bool blink = std::fmod(time_ * 1.1f + hc * 0.37f, 1.f) < 0.1f;
+                glow(p, 4.f, vec3(1.f, 0.12f, 0.08f) * 2.f, (blink ? 1.f : 0.15f) * world, 1, 0.f, 0.f);
+                glow(p, 3.f, vec3(1.f), 0.5f * world, 1, 0.f, 0.f);
+                const vec3 down = normalize(dcw - p) * 0.25f + normalize(p + vec3(0.f, R, 0.f)) * -0.97f;
+                glow(p, 10.f, vec3(1.f, 0.97f, 0.9f), 0.07f * world * nightK, 3, 0.f, 1.f, normalize(down), H * 0.9f);
+            }
+        }
+        // rooftop steam over the towers, lit from below
+        if (cityR > 5000.f && cityR < 1.e5f && overT_ < 0.f) {
+            const size_t nb = plan_.beacons.size() / 4;
+            int shown = 0;
+            for (size_t i = 0; i < nb && shown < 24; i++) {
+                const float* bc = &plan_.beacons[i * 4];
+                if (bc[3] > cityR || mcity::hashLot((float)i, 9.f) > 0.08f) continue;
+                shown++;
+                const vec3 bp(bc[0], bc[1], bc[2]);
+                for (int k = 0; k < 3; k++) {
+                    const float t = std::fmod(time_ * 0.07f + k / 3.f + i * 0.17f, 1.f);
+                    glow(bp + vec3(t * 40.f, t * 90.f, 0.f), 10.f + t * 40.f, pal_.cityGlow * 0.12f + pal_.nightHaze * 0.5f,
+                         0.22f * (1.f - t) * smoothstepf(0.f, 0.1f, t) * world, 4, (float)k, 0.f);
+                }
+            }
+        }
+        // birds at dusk over the village
+        if (cityR > 15.f && cityR < 900.f && overT_ < 0.f) {
+            const float bk = 1.f - smoothstepf(400.f, 900.f, cityR);
+            for (int fl = 0; fl < 2; fl++) {
+                const float a = time_ * (0.035f + 0.015f * fl) + fl * 2.4f;
+                const float rr = 25.f + cityR * 0.35f;
+                const vec3 fc(rr * std::cos(a) + 10.f, 12.f + cityR * 0.07f + fl * 6.f, rr * std::sin(a) - 15.f);
+                const vec3 fwd(-std::sin(a), 0.f, std::cos(a)), side(std::cos(a), 0.f, std::sin(a));
+                for (int i = 0; i < 9; i++) {
+                    const float k = (float)((i + 1) / 2) * (i % 2 ? 1.f : -1.f);
+                    const vec3 p = fc - fwd * (std::fabs(k) * 2.2f) + side * (k * 2.f) + vec3(0.f, std::sin(time_ * 0.8f + i) * 0.6f, 0.f);
+                    glow(p, 0.7f + cityR * 0.002f, vec3(0.12f, 0.1f, 0.14f), bk * world * (1.f - 0.6f * nightK), 5, (float)i, time_ * 8.f + i * 1.3f);
+                }
+            }
+        }
+        (void)camH;
         // the space elevator: its tether rising into orbit, climbers on it, the station at its top
         const float elevK = smoothstepf(std::log(5.5e5f), std::log(3.e6f), G);
         if (elevK > 0.f && alt_ > 100.f) {
@@ -1384,7 +1548,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uSunGlow", pal_.sunGlow);
         set3f(p, "uHazeC", lerp(pal_.haze, pal_.nightHaze, nightK) + pal_.cityGlow * glowK * 0.04f);
         set3f(p, "uSkyAmb", skyAmb);
-        set1f(p, "uFogK", 2.4e-5f);
+        set1f(p, "uFogK", 2.4e-5f * (1.f + 3.f * smoothstepf(4000.f, 9000.f, cityR) * (1.f - smoothstepf(1.e5f, 4.e5f, cityR))));
         set1f(p, "uAlt", alt_);
         set1f(p, "uNightK", nightK);
         set1f(p, "uTime", time_);
@@ -1478,6 +1642,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progBld_, "uGlassC", pal_.glass);
         set3f(progBld_, "uArcoC", pal_.arco);
         set3f(progBld_, "uCityGlowC", pal_.cityGlow);
+        set3f(progBld_, "uStreetC", pal_.street);
         set3f(progBld_, "uMoonDir", normalize(fwdH * 0.8f - rightH * 0.45f + vec3(0.f, 0.53f, 0.f)));
         set3f(progBld_, "uMoonL", pal_.moonC * 0.045f + pal_.nightHorizon * 0.3f);
         glBindVertexArray(bldVao_);
