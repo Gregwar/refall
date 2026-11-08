@@ -891,25 +891,33 @@ void main() {
     float vis = w.a;
     if (vis > 0.002) {
         vec3 d = rayDir(vUv);
-        // stars fixed on the sky (a cube-ish projection of the direction)
+        // stars fixed on the sky (a cube-ish projection of the direction). Each pixel looks at its own cell only, so
+        // a star keeps to the cell's middle and its glow is measured in screen pixels through the projection's
+        // Jacobian (round on screen however the face stretches); a layer whose cells shrink under a few pixels fades
+        // out (a wide view in space), or the grid aliases into streaks.
         vec3 ad = abs(d);
         vec2 face = ad.x > ad.y && ad.x > ad.z ? d.yz / ad.x + vec2(7.0 * sign(d.x), 0.0)
                   : ad.y > ad.z ? d.xz / ad.y + vec2(0.0, 7.0 * sign(d.y)) : d.xy / ad.z + vec2(3.5 * sign(d.z), 3.5);
         vec2 sp = face * 300.0 * max(uRes.y / 1080.0, 0.5);
+        mat2 J = mat2(dFdx(sp), dFdy(sp));
+        float det = J[0][0] * J[1][1] - J[1][0] * J[0][1];
+        mat2 Ji = abs(det) > 1e-8 ? inverse(J) : mat2(0.0);
+        float px = sqrt(abs(det)) + 1e-4; // sky units per pixel
         vec3 st = vec3(0.0);
-        for (int L = 0; L < 2; L++) {
-            float cell = L == 0 ? 1.0 : 3.1;
+        for (int L = 0; L < 3; L++) {
+            float cell = L == 0 ? 1.0 : L == 1 ? 3.1 : 9.7;
+            float fade = smoothstep(4.0, 7.0, cell / px);
+            if (fade <= 0.0) continue;
             vec2 g = floor(sp / cell);
             float rr = hash(g + float(L) * 31.0);
             if (rr < (L == 0 ? 0.3 : 0.4)) {
-                vec2 o = (g + 0.2 + 0.6 * hash2(g + 3.1)) * cell;
-                float px = length(dFdx(sp)) + 1e-4;
-                vec2 dd = (sp - o) / px;
+                vec2 o = (g + 0.25 + 0.5 * hash2(g + 3.1)) * cell;
+                vec2 dd = Ji * (sp - o);
                 float b = pow(hash(g + 7.7), L == 0 ? 2.5 : 1.5);
                 float rad = (L == 0 ? 0.6 : 1.0) + 0.5 * b;
                 float tw = 1.0 + uTwinkle * sin(uTime * (1.2 + 3.0 * hash(g + 1.3)) + rr * 80.0);
                 vec3 tint = mix(vec3(0.7, 0.85, 1.0), vec3(1.0, 0.88, 0.7), hash(g + 9.1));
-                st += tint * exp(-dot(dd, dd) / (rad * rad)) * b * max(tw, 0.0) * (L == 0 ? 0.7 : 1.5);
+                st += tint * exp(-dot(dd, dd) / (rad * rad)) * b * max(tw, 0.0) * (L == 0 ? 0.7 : 1.5) * fade;
             }
         }
         c += st * vis;
