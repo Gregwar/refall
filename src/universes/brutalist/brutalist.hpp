@@ -48,13 +48,14 @@ private:
     float seeds_[22][10] = {};
     int nextPid_ = 1;
 
-    // ---- Cleared blocks: pushed out of the slot and hoisted away; game over: the stack falls out onto the plaza.
+    // ---- Cleared blocks: popped out of the slot, tumbling down onto the plaza; game over: the stack falls out too.
     struct Flight {
         vec3 p0, cur, vel, spin;
         int type = 0;
         float t = 0, delay = 0, seed = 0;
         int kind = 0;   // 0 a cleared row's block, 1 game over
         float ang = 0;
+        float spinK = 1.f, rest = -1.f, scale = 1.f; // (cleared blocks) tumble rate, time at rest, shrinking away
     };
     std::vector<Flight> flights_;
 

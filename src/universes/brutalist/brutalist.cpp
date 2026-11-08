@@ -17,8 +17,8 @@
 // hard light (crisp shadows, the dust glittering on the two-beat grid, the crane working faster). The drop is the sun
 // breaking through (a real drop only, not a chorus): the veil clears, the light swells over half a second and settles,
 // the shadows turn razor sharp, the glazing glints, a cloud of dust shaken out of the slot glitters in the light (by
-// dusk and by night, the monument's floodlights come up and the windows light). A cleared row's blocks are pushed out
-// of the slot and hoisted away, and a module is lowered onto the growing pile for each of them: over the song the
+// dusk and by night, the monument's floodlights come up and the windows light). A cleared row's blocks pop out
+// of the slot and tumble down onto the plaza, and a module is lowered onto the growing pile for each of them: over the song the
 // building grows, its shadows longer and more complex. A Tetris sends a glint over all the glazing and shakes the
 // dust out of the slot. Slow motion is the evening: the sun sinks low and warm, the shadows stretch, windows light up,
 // time stretches. Game over topples the stack out of the slot onto the plaza, block by block from the top, in dust.
@@ -111,7 +111,6 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float CELL_H = 0.47f;    // a block's half size in the well (the joints between pieces)
 constexpr float CELL_D = 0.47f;    // its half depth
-constexpr float OUT_T = 0.5f;      // a cleared row leaves the slot in this long (real time)
 
 mat4 inverse(const mat4& m) {
     const float* a = m.m;
@@ -594,7 +593,7 @@ void BrutalistUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        // each block of the row is pushed out of the slot and hoisted away; a module will be lowered for each row
+        // each block of the row pops out of the slot and tumbles down onto the plaza; a module will be lowered for each row
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
@@ -609,7 +608,11 @@ void BrutalistUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fl.p0 = fl.cur = vec3(p.x, p.y, -CELL_D);
             fl.type = std::clamp(c.type, 0, 6);
             fl.seed = rng_.uniform();
-            fl.delay = 0.015f * (float)std::abs(c.x * 2 - 9);
+            fl.delay = 0.015f * (float)std::abs(c.x * 2 - 9) + rng_.range(0.f, 0.03f);
+            const float side = (c.x - 4.5f) / 4.5f;
+            fl.vel = vec3(side * rng_.range(1.6f, 3.f) + rng_.range(-0.4f, 0.4f), rng_.range(3.5f, 6.f) + (ev.count >= 4 ? 1.5f : 0.f),
+                          rng_.range(2.6f, 4.4f));
+            fl.spin = normalize(vec3(rng_.range(0.5f, 1.f), rng_.range(-0.6f, 0.6f), side + rng_.range(-0.4f, 0.4f))) * rng_.range(4.f, 9.f);
             fl.kind = 0;
             flights_.push_back(fl);
         }
@@ -1129,11 +1132,28 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
             fl.t += dt;
             const float tt = fl.t - fl.delay;
             if (tt <= 0.f) continue;
-            // pushed out of the slot, then hoisted up and away, shrinking into the distance
-            const float a = smoothstepf(0.f, 0.14f, tt);
-            const float b = smoothstepf(0.1f, OUT_T, tt);
-            fl.cur = fl.p0 + vec3(0.f, 6.f * b * b, 1.4f * a + 4.f * b * b);
-            fl.ang = b;
+            // popped out of the slot, tumbling down onto the sill or the plaza, bouncing, then shrinking away
+            const float rest = (fl.cur.z < 1.3f && std::fabs(fl.cur.x) < X_PIER ? Y_SILL : Y_G) + CELL_H * 0.7f;
+            if (fl.cur.y > rest || fl.vel.y > 0.f) {
+                fl.vel.y -= 24.f * dt;
+                fl.cur = fl.cur + fl.vel * dt;
+                if (fl.cur.y <= rest) {
+                    fl.cur.y = rest;
+                    if (fl.vel.y < -4.f) puff(fl.cur + vec3(0.f, -CELL_H * 0.5f, 0.f), 3, 1.f, 0.7f, 0.8f);
+                    fl.vel = vec3(fl.vel.x * 0.7f, -fl.vel.y * 0.3f, fl.vel.z * 0.7f);
+                    fl.spinK *= 0.6f;
+                    if (fl.vel.y < 1.2f) fl.vel.y = 0.f;
+                }
+            } else {
+                // sliding to a stop, then gone
+                fl.vel = fl.vel * std::exp(-4.f * dt);
+                fl.cur = fl.cur + vec3(fl.vel.x, 0.f, fl.vel.z) * dt;
+                fl.spinK *= std::exp(-6.f * dt);
+                fl.rest = fl.rest < 0.f ? 0.f : fl.rest + dt;
+            }
+            fl.ang += dt * fl.spinK;
+            if (fl.rest > 0.6f) fl.scale = std::max(0.f, 1.f - (fl.rest - 0.6f) / 0.45f);
+            if (tt > 4.f) fl.scale = std::max(0.f, fl.scale - dt * 3.f);
         } else {
             fl.t += dt;
             const float tt = fl.t - fl.delay;
@@ -1154,7 +1174,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
     }
-    flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.kind == 0 && fl.t > fl.delay + OUT_T; }),
+    flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.kind == 0 && fl.scale <= 0.f; }),
                    flights_.end());
     gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
@@ -1249,18 +1269,15 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     for (const Flight& fl : flights_) {
         if (fl.t < fl.delay && fl.kind == 1) continue;
         const vec3 col = pieceColor(fl.type);
-        if (fl.kind == 0) {
-            const float k = CELL_H * (1.f - 0.85f * fl.ang * fl.ang);
-            box(boxes_, fl.cur, vec3(k, k, CELL_D * (1.f - 0.85f * fl.ang * fl.ang)), col, M_BLOCK, 0.f, 0.f, (float)fl.type, fl.seed);
-        } else {
-            const float a = fl.ang * length(fl.spin);
+        {
+            const float a = fl.ang * length(fl.spin), sc = fl.kind == 0 ? fl.scale : 1.f;
             const vec3 ax = normalize(fl.spin + vec3(1e-4f, 0, 0));
             // a rotation about ax by a (Rodrigues) for the three half axes
             auto rot = [&](const vec3& v) {
                 const float c = std::cos(a), s = std::sin(a);
                 return v * c + cross(ax, v) * s + ax * (dot(ax, v) * (1.f - c));
             };
-            obox(boxes_, fl.cur, rot(vec3(CELL_H, 0, 0)), rot(vec3(0, CELL_H, 0)), rot(vec3(0, 0, CELL_D)), col, M_BLOCK, 0.f, 0.f, (float)fl.type,
+            obox(boxes_, fl.cur, rot(vec3(CELL_H * sc, 0, 0)), rot(vec3(0, CELL_H * sc, 0)), rot(vec3(0, 0, CELL_D * sc)), col, M_BLOCK, 0.f, 0.f, (float)fl.type,
                  fl.seed);
         }
     }
