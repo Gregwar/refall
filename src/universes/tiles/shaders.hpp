@@ -550,7 +550,7 @@ void main() {
     float lineM = 1.0 - smoothstep(0.008, 0.008 + aam * 1.5, abs(md + 0.004));
     float raised = 1.0 - smoothstep(-0.05, 0.0, md);
     vec2 mg = vec2(dFdx(raised), dFdy(raised)) / max(uPx / max(vScale, 0.05), 1e-4);
-    vec2 wob = (vec2(vnoise(pq * 6.0 + seed), vnoise(pq * 6.0 + seed + 5.0)) - 0.5) * 0.07;
+    vec2 wob = (vec2(vnoise(pq * 6.0 + seed), vnoise(pq * 6.0 + seed + 5.0)) - 0.5) * 0.025;
     vec3 n = normalize(vec3(gq * bevel * bevel * 1.25 - mg * 0.012 + wob, 1.0));
     // the glaze pooled a little deeper in the middle and along the motif, thinner over the edge
     float th = fbm(pq * 2.3 + seed * 3.1);
@@ -584,13 +584,10 @@ void main() {
     float nhk = max(dot(n, Hk), 0.0);
     float sk = pow(nhk, 90.0) * 0.9 + pow(nhk, 14.0) * 0.04;
     float sl = pow(max(dot(n, Hl), 0.0), 110.0) * 0.6;
-    // the window of the room mirrored in the glaze: four soft panes
+    // the room reflected in the glaze: a soft, even sheen, brighter over the rounded edge
     vec3 rf = reflect(-V, n);
-    vec2 wq = (rf.xy - vec2(-0.13, -0.16)) / vec2(0.2, 0.14);
-    float win = (1.0 - smoothstep(0.85, 1.0, max(abs(wq.x), abs(wq.y))));
-    win *= smoothstep(0.03, 0.09, abs(wq.x)) * smoothstep(0.03, 0.09, abs(wq.y));
     float fres = 0.04 + 0.5 * pow(1.0 - max(dot(n, V), 0.0), 4.0);
-    lit += vec3(0.9, 0.88, 0.82) * win * (0.16 + fres) + vec3(sk) + min(uLightCol * att * sl, vec3(0.6));
+    lit += vec3(0.9, 0.88, 0.82) * fres * 0.25 + vec3(sk) + min(uLightCol * att * sl, vec3(0.6));
     lit += vec3(0.06, 0.06, 0.07) * (0.5 + 0.5 * rf.y) * fres * 2.0;
     lit *= 1.0 - vD.w;
     lit += col * vC.w * 0.35;
