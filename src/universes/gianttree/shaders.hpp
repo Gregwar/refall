@@ -109,7 +109,7 @@ out vec4 frag;
 uniform vec3 uLook, uCamR, uCamU;
 uniform vec2 uTan;
 uniform mat4 uVP;
-uniform float uPix, uSunSize, uStars, uHills, uDeep, uGlow, uSpaceK;
+uniform float uPix, uSunSize, uStars, uHills, uDeep, uRinged, uGlow, uSpaceK;
 uniform vec3 uZenithC, uHorizonC, uSpaceC, uNebulaC, uNebula2C;
 uniform vec3 uGroundA, uGroundB, uOceanC, uLandC, uDesertC, uFlowerC;
 uniform vec4 uMoon;               // center (meters), radius
@@ -231,7 +231,7 @@ void main() {
         if (uDeep > 0.0) {
             vec3 bx, by;
             basis(uPlanetDir, bx, by);
-            float pr = mix(0.04, 0.1, uDeep);
+            float pr = mix(0.04, 0.1, uRinged);
             vec2 q = vec2(dot(d, bx), dot(d, by)) / pr;
             float front = dot(d, uPlanetDir);
             if (front > 0.0) {
@@ -253,9 +253,9 @@ void main() {
                 }
                 vec3 rc = vec3(0.95, 0.85, 0.7) * ring;
                 bool ringFront = rq.y < 0.0 || r2 >= 1.0;
-                sp = mix(sp, pc, pa * uDeep);
-                if (ringFront || pa < 0.5) sp = mix(sp, rc, ring * 0.85 * uDeep);
-                stars -= (pa + ring) * 2.0;
+                sp = mix(sp, pc, pa * uRinged);
+                if (ringFront || pa < 0.5) sp = mix(sp, rc, ring * 0.85 * uRinged);
+                stars -= (pa + ring) * 2.0 * uRinged;
             }
             basis(uGalaxyDir, bx, by);
             vec2 g = vec2(dot(d, bx), dot(d, by)) / 0.22;

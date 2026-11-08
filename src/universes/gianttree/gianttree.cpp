@@ -4,7 +4,8 @@
 // under its roots, the moon floats by its crown and, far out, ringed planets and a galaxy.
 //
 // The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~25 lines, the
-// stratosphere at ~45, orbit at ~75, the planet a ball at ~105, the moon at ~160, and it keeps going (more slowly)
+// stratosphere at ~45, orbit at ~75, the planet a ball at ~105, the moon at ~150, the ringed planet after it from ~170,
+// and it keeps going (more slowly)
 // to some two million kilometers. The tree is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
 // G (thick at the foot, slender under the crown: it grows ever taller for its width), the crown is built in its own
 // space and scaled on G (the sapling's lollipop head spreads into a broad crown over the first lines as its limbs
@@ -174,6 +175,13 @@ const Stage STAGES[] = {
     {64, 9.e4f}, {76, 3.5e5f}, {90, 1.5e6f}, {104, 6.e6f}, {120, 2.5e7f}, {140, 1.e8f}, {162, 3.6e8f}, {200, 1.5e9f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
+
+// Test hooks: ZEN_GIANTTREE_LINES=N adds N lines to the growth, ZEN_GROW_RATE=R adds R lines a second.
+int extraLines(double t) {
+    static const int n = std::getenv("ZEN_GIANTTREE_LINES") ? std::atoi(std::getenv("ZEN_GIANTTREE_LINES")) : 0;
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return n + (int)(rate * t);
+}
 
 } // namespace
 
@@ -1056,7 +1064,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game sprouts a new seed).
     {
-        const int lines = game.lines();
+        const int lines = game.lines() + extraLines(time_);
         if (treeSeed_ == 0) { treeSeed_ = seed_ ? seed_ : 1; treeDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             treeSeed_ = splitmix64(treeSeed_ + 0x9E37ull);
@@ -1344,6 +1352,8 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uStars", pal_.stars);
     set1f(progSky_, "uHills", 1.f - smoothstepf(150.f, 2500.f, alt_));
     set1f(progSky_, "uDeep", smoothstepf(18.f, 20.5f, gc_));
+    // the ringed planet only once the moon has gone by under the crown
+    set1f(progSky_, "uRinged", smoothstepf(19.9f, 20.9f, gc_));
     set1f(progSky_, "uGlow", 0.3f * wp + 0.6f * life + 0.4f * tetrisGlow_ + 0.2f * swell_);
     set1f(progSky_, "uSpaceK", spaceK);
     set3f(progSky_, "uZenithC", pal_.zenith);
@@ -1358,8 +1368,8 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uDesertC", pal_.desert);
     set3f(progSky_, "uFlowerC", pal_.flower);
     {
-        const vec3 moon = (fwdH * 0.25f - rightH * 0.97f) * 3.2e8f + vec3(0.f, 4.1e8f, 0.f);
-        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, 2.6e7f);
+        const vec3 moon = (fwdH * 0.25f - rightH * 0.97f) * 2.2e8f + vec3(0.f, 2.2e8f, 0.f);
+        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, 2.2e7f);
     }
     set4f(progSky_, "uCrownW", cc.x, cc.y, cc.z, Rc);
     set3f(progSky_, "uPlanetDir", normalize(fwdH * 0.35f - rightH * 0.94f + vec3(0.f, -0.02f, 0.f)));
