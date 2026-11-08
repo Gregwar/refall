@@ -147,10 +147,11 @@ constexpr int MAX_MOTES = 1600;
 constexpr int MAX_SPORES = 2600;
 enum BoardType { B_MUSHROOM = 0, B_TREE, B_GRASS, B_FERN, B_ROCK, B_BUSH, B_PINS, B_MOSS };
 
-// Test hook: ZEN_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot).
-int extraLines() {
+// Test hooks: ZEN_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot); ZEN_GROW_RATE=R adds R more lines a second (a time-lapse).
+int extraLines(double t) {
     static const int n = std::getenv("ZEN_MYCELIUM_LINES") ? std::atoi(std::getenv("ZEN_MYCELIUM_LINES")) : 0;
-    return std::max(0, n);
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return std::max(0, n) + (int)(rate * t);
 }
 
 } // namespace
@@ -1118,7 +1119,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game grows a new network).
     {
-        const int lines = game.lines() + extraLines();
+        const int lines = game.lines() + extraLines(time_);
         if (netSeed_ == 0) { netSeed_ = seed_ ? seed_ : 1; netDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             netSeed_ = splitmix64(netSeed_ + 0x9E37ull);

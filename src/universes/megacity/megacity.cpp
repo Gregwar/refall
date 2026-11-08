@@ -174,10 +174,11 @@ const Stage STAGES[] = {
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 const float G_MAX = std::log(2.05e7f);
 
-// Test hook: ZEN_MEGACITY_LINES=N adds N lines to the city's growth (to look at a stage without playing to it).
-int extraLines() {
+// Test hooks: ZEN_MEGACITY_LINES=N adds N lines to the city's growth (to look at a stage without playing to it); ZEN_GROW_RATE=R adds R more lines a second (a time-lapse).
+int extraLines(double t) {
     static const int n = std::getenv("ZEN_MEGACITY_LINES") ? std::atoi(std::getenv("ZEN_MEGACITY_LINES")) : 0;
-    return n;
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return n + (int)(rate * t);
 }
 
 } // namespace
@@ -1022,7 +1023,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game starts again from a hut).
     {
-        const int lines = game.lines() + extraLines();
+        const int lines = game.lines() + extraLines(time_);
         if (citySeed_ == 0) { citySeed_ = seed_ ? seed_ : 1; cityDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             citySeed_ = splitmix64(citySeed_ + 0x9E37ull);

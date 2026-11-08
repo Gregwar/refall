@@ -1119,7 +1119,9 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     {
         const int lines = game.lines();
         static const int testLines = std::getenv("ZEN_ORBITAL_LINES") ? std::atoi(std::getenv("ZEN_ORBITAL_LINES")) : 0;
-        const int want = std::clamp(1 + lines + testLines, 1, (int)plan_.size());
+        // (ZEN_GROW_RATE=R adds R more lines a second: a time-lapse)
+        static const double growRate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+        const int want = std::clamp(1 + lines + testLines + (int)(growRate * time_), 1, (int)plan_.size());
         if (linesShown_ < 0) {
             for (int i = 0; i < (int)plan_.size(); i++) {
                 plan_[i].state = i < want ? 2 : 0;
