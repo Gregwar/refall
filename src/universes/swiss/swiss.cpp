@@ -84,10 +84,6 @@ const VariantDef VARIANTS[] = {
     {"NIGHT", 0x121314, 0xf1f1ee,
      {{0xff5a1f, 0x3b7ddb, 0xc9c9c4}, {0xff5a1f, 0x2fa8ff, 0x35c27c}, {0xff5a1f, 0x35c27c, 0xb98cff},
       {0xff5a1f, 0xffd23f, 0x4a7dff}, {0xff2e4d, 0x00d2c0, 0xffe14d}}},
-    // a concrete grey, black and yellow
-    {"CONCRETE", 0xa7abae, 0x141414,
-     {{0xffd200, 0x1b46c2, 0xf3f3f1}, {0xffd200, 0xd81e14, 0xf3f3f1}, {0xffd200, 0x1b46c2, 0xe25a12},
-      {0xffd200, 0xd81e14, 0x1b46c2}, {0xffe600, 0xff3b1f, 0xffffff}}},
     // white, black and magenta
     {"LAUSANNE", 0xf4f4f4, 0x161616,
      {{0xe6007e, 0x3a57c4, 0x14907f}, {0xe6007e, 0x14907f, 0xeca400}, {0xe6007e, 0x4a4fa8, 0xff6a13},
@@ -284,9 +280,8 @@ void SwissUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        static const int LIGHT[3] = {0, 1, 4};
+        static const int LIGHT[3] = {0, 1, 3};
         if (t.hasSong && t.minor && t.brightness < 0.45f) v = 2;
-        else if (t.hasSong && t.bassWeight > 0.64f) v = 3;
         else v = LIGHT[(int)(h * 3) % 3];
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
