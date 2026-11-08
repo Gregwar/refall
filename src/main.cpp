@@ -852,10 +852,11 @@ int App::run() {
             }
             lastLevel_ = game_.level();
             R_.setDim(game_.over() && overTime_ > 1.2f);
-            // Slow motion: a short tape bend of the song marks it (gravity's own slow-down is in updateGravity).
+            // Slow motion: the song is muffled for the whole bonus (bass kept, highs attenuated); gravity's own
+            // slow-down is in updateGravity.
             if (game_.bonusActive() != slowWas_) {
                 slowWas_ = game_.bonusActive();
-                audio_.bend(-0.15f, 0.9f); // a very slight slow-down and back, at the start and at the end
+                audio_.setMuffled(slowWas_, 0.6f);
                 // The screen's colors are reversed for the whole bonus (a front sweeps it in and out).
                 R_.setBonus(slowWas_);
             }

@@ -43,6 +43,9 @@ public:
     // A short tape-like bend of the song's speed: it slides by `depth` (e.g. -0.15 = 15% slower) and back to
     // where it was, along a smooth bump lasting `seconds`.
     void bend(float depth, float seconds);
+    // Muffle the song (sound effects stay clear): a low-pass that keeps the bass and attenuates the high tones,
+    // sliding in or out over `seconds`.
+    void setMuffled(bool on, float seconds = 0.6f) { muffleGlide_ = seconds; muffleTarget_ = on ? 1.f : 0.f; }
     // One-shot sound mixed over the song (interleaved stereo at the engine rate); heard even when paused.
     void playSample(std::shared_ptr<const std::vector<float>> pcm, float gain = 1.f);
 
@@ -68,4 +71,8 @@ private:
     double frac_ = 0; // fractional position inside the current frame when slowed down
     float bendDepth_ = 0;          // current bend (guarded by mutex_)
     uint64_t bendLen_ = 0, bendPos_ = 0;
+    std::atomic<float> muffleTarget_{0.f}, muffleGlide_{0.6f};
+    float muffle_ = 0;                        // current muffle amount 0..1 (audio thread)
+    float lpZ_[2][2] = {{0, 0}, {0, 0}};      // low-pass biquad state, per channel
+    void applyMuffle(float* out, unsigned int frames);
 };

@@ -77,6 +77,36 @@ void AudioEngine::bend(float depth, float seconds) {
     bendPos_ = 0;
 }
 
+// Low-pass (RBJ biquad) on the song: its cutoff slides from out of hearing (amount 0) down to ~700 Hz (amount 1),
+// on an exponential scale so the slide sounds even. Bypassed when fully off.
+void AudioEngine::applyMuffle(float* out, unsigned int frames) {
+    const float target = muffleTarget_, glide = muffleGlide_;
+    if (muffle_ == 0.f && target == 0.f) {
+        lpZ_[0][0] = lpZ_[0][1] = lpZ_[1][0] = lpZ_[1][1] = 0.f;
+        return;
+    }
+    const float step = glide > 0.f ? 1.f / (glide * sampleRate_) : 1.f;
+    const float fHi = std::min(20000.f, 0.45f * sampleRate_), fLo = 700.f, Q = 0.8f;
+    constexpr unsigned int BLOCK = 32; // coefficients are recomputed every BLOCK frames
+    for (unsigned int b = 0; b < frames; b += BLOCK) {
+        const unsigned int e = std::min(frames, b + BLOCK);
+        muffle_ = muffle_ < target ? std::min(target, muffle_ + step * (e - b)) : std::max(target, muffle_ - step * (e - b));
+        const float amt = muffle_ * muffle_ * (3.f - 2.f * muffle_); // smoothstep
+        const float fc = fHi * std::pow(fLo / fHi, amt);
+        const float w = 6.2831853f * fc / sampleRate_, cw = std::cos(w), alpha = std::sin(w) / (2.f * Q);
+        const float a0 = 1.f + alpha;
+        const float b0 = (1.f - cw) * 0.5f / a0, b1 = (1.f - cw) / a0, b2 = b0;
+        const float a1 = -2.f * cw / a0, a2 = (1.f - alpha) / a0;
+        for (unsigned int i = b; i < e; i++)
+            for (int c = 0; c < 2; c++) { // transposed direct form II
+                float x = out[i * 2 + c], y = b0 * x + lpZ_[c][0];
+                lpZ_[c][0] = b1 * x - a1 * y + lpZ_[c][1];
+                lpZ_[c][1] = b2 * x - a2 * y;
+                out[i * 2 + c] = y;
+            }
+    }
+}
+
 double AudioEngine::position() const {
     if (!current_) return 0;
     return (double)atomicPos_.load() / sampleRate_;
@@ -93,11 +123,15 @@ void AudioEngine::dataCallback(ma_device* dev, void* out, const void*, unsigned 
 void AudioEngine::render(float* out, unsigned int frames) {
     for (unsigned int i = 0; i < frames * 2; i++) out[i] = 0.f;
     std::lock_guard<std::mutex> lock(mutex_);
-    for (Voice& v : voices_)
-        for (unsigned int i = 0; i < frames * 2 && v.pos < v.pcm->size(); i++, v.pos++) out[i] += (*v.pcm)[v.pos] * v.gain;
-    voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [](const Voice& v) { return v.pos >= v.pcm->size(); }),
-                  voices_.end());
+    // One-shot sounds go on top of the song, after it is muffled.
+    auto mixVoices = [&] {
+        for (Voice& v : voices_)
+            for (unsigned int i = 0; i < frames * 2 && v.pos < v.pcm->size(); i++, v.pos++) out[i] += (*v.pcm)[v.pos] * v.gain;
+        voices_.erase(std::remove_if(voices_.begin(), voices_.end(), [](const Voice& v) { return v.pos >= v.pcm->size(); }),
+                      voices_.end());
+    };
     if (paused_) {
+        mixVoices();
         if (muted_)
             for (unsigned int i = 0; i < frames * 2; i++) out[i] = 0.f;
         return;
@@ -150,6 +184,8 @@ void AudioEngine::render(float* out, unsigned int frames) {
         if (prevFade_ <= 0.f || prevPos_ >= previous_->frames()) previous_.reset();
     }
     atomicPos_ = pos_;
+    applyMuffle(out, frames);
+    mixVoices();
 
     if (muted_)
         for (unsigned int i = 0; i < frames * 2; i++) out[i] = 0.f;
