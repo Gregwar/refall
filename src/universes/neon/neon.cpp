@@ -5,7 +5,7 @@
 // fading into the night. Everything takes its color from one spectrum swept across the screen from left to right (the
 // variant's five stops, NOCTURNE's teal, blue-violet, magenta, orange and gold), the city in deep, dark tones of it.
 //
-// The pieces are chunky, very rounded shapes, one per piece (its cells merged, round outer corners and filleted inner
+// The pieces are chunky, rounded shapes, one per piece (its cells merged, round outer corners and filleted inner
 // ones, a thin dark gap from the others), each filled with a glowing watercolor wash: cloudy wet-in-wet blotches,
 // blooms with ragged darker fringes, granulation, the pigment pooled into a darker dried rim, luminous where it is
 // thin. A piece's color is the spectrum at its place in the well, so the stack reads as one sweep across it; each

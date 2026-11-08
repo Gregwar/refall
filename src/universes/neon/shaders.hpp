@@ -313,7 +313,7 @@ float unionRound(float a, float b, float r) {
     vec2 u = max(vec2(r - a, r - b), vec2(0.0));
     return max(r, min(a, b)) - length(u);
 }
-const float GAP = 0.065, RO = 0.36, RI = 0.16;
+const float GAP = 0.065, RO = 0.24, RI = 0.11;
 float shapeSdf(vec2 p, int m) {
     vec2 q = abs(p);
     bool hx = p.x < 0.0 ? has(m, 0) : has(m, 1);
