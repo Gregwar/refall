@@ -123,8 +123,8 @@ vec3 soil(vec2 p, vec2 uv, float px) {
     c = mix(c, uSoilB, smoothstep(b1 * 0.8 - px, b1 * 1.2 + px, dd));
     c = mix(c, uSoilC, smoothstep(b2 * 0.8 - px, b2 * 1.2 + px, dd));
     c = mix(c, uSoilD, smoothstep(b3 * 0.8 - px, b3 * 1.2 + px, dd));
-    c = mix(c, mix(uSoilD, uRock, 0.6), smoothstep(b4 * 0.8 - px, b4 * 1.2 + px, dd));
-    c = mix(c, uRock * 0.5, smoothstep(b5 * 0.85 - px, b5 * 1.15 + px, dd));
+    c = mix(c, mix(uSoilD, uSoilC, 0.45) * vec3(1.0, 0.95, 0.9), smoothstep(b4 * 0.8 - px, b4 * 1.2 + px, dd));
+    c = mix(c, mix(uSoilC, uRock, 0.25) * 0.85, smoothstep(b5 * 0.85 - px, b5 * 1.15 + px, dd));
     // grain and mottling
     float g = lfbm(p, px * 1.5);
     float m = lfbm(p * vec2(0.7, 1.4) + 3.7, px * 14.0);
@@ -813,6 +813,223 @@ vec4 moss(vec2 q) {
     return vec4(c, cover(sd));
 }
 
+
+// ---- human-made things, for scale (their windows and lamps glow; the caps light them)
+float gEm = 0.0;   // how much of the pixel is its own light (it fogs less)
+const vec3 WARM = vec3(1.0, 0.6, 0.26);
+float sdBox(vec2 p, vec2 c, vec2 h) { vec2 d = abs(p - c) - h; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+float line(vec2 p, vec2 a, vec2 b, float w) { return sdSeg(p, a, b) - max(w, aaW * 0.7); }
+vec3 mmLit(vec3 n) { return uAmbient * 0.9 + capLight(vW, n, 0.5) + uMoonC * 0.05; }
+float detail() { return 1.0 / (1.0 + (vCoc + vPxL) / 0.02); }
+// windows: a grid of panes (cell, pane half size), some lit; averaged when too small to see
+float windows(vec2 p, vec2 cell, vec2 pane, float seed, float lit) {
+    vec2 g = floor(p / cell);
+    vec2 f = p / cell - g - 0.5;
+    float on = step(hash(g + seed * 13.0), lit);
+    float sharp = 1.0 - smoothstep(-aaW, aaW, max(abs(f.x * cell.x) - pane.x, abs(f.y * cell.y) - pane.y));
+    float avg = lit * pane.x * pane.y * 4.0 / (cell.x * cell.y);
+    float k = smoothstep(0.6, 1.6, cell.x / max(vPxL + vCoc, 1e-5) / 4.0);
+    return mix(avg, sharp * on, k);
+}
+vec4 cabin(vec2 q) {
+    float big = vC.x;    // 0 a forest cabin, 1 a farmhouse
+    float bw = mix(0.55, 0.85, big), bh = mix(0.58, 0.55, big);
+    float body = sdBox(q, vec2(0.0, bh * 0.5), vec2(bw, bh * 0.5));
+    float rt = (q.y - bh) / (1.0 - bh);
+    float roof = max(abs(q.x) - (bw + 0.08) * (1.0 - rt), max(-(q.y - bh), q.y - 1.0));
+    float chim = sdBox(q, vec2(bw * 0.5, 0.82), vec2(0.05, 0.14));
+    float cb = cover(body), cr = cover(min(roof, chim));
+    float win = 0.0;
+    if (big < 0.5) {
+        win = max(cover(sdBox(q, vec2(-0.28, 0.32), vec2(0.11, 0.1))), cover(sdBox(q, vec2(0.28, 0.32), vec2(0.11, 0.1))));
+    } else {
+        win = windows(q - vec2(-bw, 0.08), vec2(0.3, 0.22), vec2(0.07, 0.06), vB.z, 0.7) * step(abs(q.x), bw - 0.06) * step(q.y, bh - 0.06) * step(0.08, q.y);
+    }
+    vec3 wood = vec3(0.16, 0.11, 0.08) * (0.8 + 0.3 * vnoise(vec2(q.x * 3.0, q.y * 40.0)) * detail());
+    vec3 c = wood * mmLit(vec3(0.0, 0.0, -1.0)) * 1.6;
+    c = mix(c, c * 0.7 + WARM * 1.4, win * cb);
+    vec3 rc = vec3(0.12, 0.12, 0.14) * mmLit(vec3(0.0, 0.7, -0.7)) * 1.6 + uMoonC * 0.08 * smoothstep(0.2, 1.0, rt);
+    gEm = win * cb;
+    return vec4(mix(c, rc, cr * (1.0 - cb)), max(cb, cr));
+}
+vec4 car(vec2 q) {
+    float dir = vC.x >= 0.0 ? 1.0 : -1.0;
+    vec2 p = vec2(q.x * dir, q.y);
+    float body = sdBox(p, vec2(0.0, 0.36), vec2(1.35, 0.2)) - 0.06;
+    float top = sdBox(p, vec2(-0.15, 0.68), vec2(0.7, 0.14)) - 0.08;
+    float wh = min(length(p - vec2(0.85, 0.17)), length(p - vec2(-0.85, 0.17))) - 0.17;
+    float cb = cover(min(min(body, top), wh));
+    float glass = cover(sdBox(p, vec2(-0.15, 0.7), vec2(0.6, 0.1)));
+    float head = cover(length(p - vec2(1.38, 0.42)) - 0.07), tail = cover(length(p - vec2(-1.38, 0.42)) - 0.06);
+    vec3 c = vec3(0.1, 0.1, 0.12) * mmLit(vec3(0.0, 0.3, -1.0)) * 2.0 + uMoonC * 0.12 * smoothstep(0.6, 0.85, p.y);
+    c = mix(c, vec3(0.05, 0.06, 0.08) + WARM * 0.15, glass * 0.8);
+    c = mix(c, vec3(1.6, 1.5, 1.2), head);
+    c = mix(c, vec3(1.4, 0.08, 0.05), tail);
+    gEm = max(head, tail);
+    return vec4(c, max(cb, max(head, tail)));
+}
+vec4 pylon(vec2 q) {
+    float hw = mix(0.2, 0.025, clamp(q.y, 0.0, 1.0));
+    float d = max(abs(abs(q.x) - hw) - 0.008, max(-q.y, q.y - 1.0));
+    d = min(d, sdBox(q, vec2(0.0, 0.8), vec2(0.34, 0.012)));
+    d = min(d, sdBox(q, vec2(0.0, 0.66), vec2(0.26, 0.012)));
+    float zig = abs(fract(q.y * 9.0) - 0.5) * 2.0;
+    d = min(d, max(abs(q.x - (zig * 2.0 - 1.0) * hw) - 0.006, max(-q.y, q.y - 0.8)));
+    vec3 c = vec3(0.2, 0.21, 0.24) * mmLit(vec3(0.0, 0.2, -1.0)) * 1.4 + uMoonC * 0.05;
+    return vec4(c, cover(d) * (0.6 + 0.4 * detail()));
+}
+vec4 wires(vec2 q) {
+    float hs = vB.x / vA.w;          // half the span, in heights
+    float u = q.x / max(hs, 1e-4);
+    float sag = 0.07 * (1.0 - u * u);
+    float d = min(abs(q.y - (0.8 - sag)), abs(q.y - (0.66 - sag))) - max(0.002, aaW * 0.5);
+    vec3 c = vec3(0.12, 0.13, 0.15) * mmLit(vec3(0.0, 0.5, -1.0)) * 1.4 + uMoonC * 0.04;
+    return vec4(c, cover(d) * 0.75 * step(abs(u), 1.0));
+}
+vec4 spire(vec2 q) {
+    float nave = sdBox(q, vec2(0.12, 0.13), vec2(0.3, 0.13));
+    float rt = (q.y - 0.26) / 0.12;
+    float roof = max(abs(q.x - 0.12) - 0.32 * (1.0 - rt), max(-(q.y - 0.26), q.y - 0.38));
+    float tower = sdBox(q, vec2(-0.22, 0.27), vec2(0.075, 0.27));
+    float st = (q.y - 0.54) / 0.46;
+    float sp = max(abs(q.x + 0.22) - 0.085 * (1.0 - st), max(-(q.y - 0.54), q.y - 1.0));
+    float d = min(min(nave, roof), min(tower, sp));
+    float win = 0.0;
+    for (int i = 0; i < 3; i++) win = max(win, cover(sdBox(q, vec2(float(i) * 0.12, 0.13), vec2(0.022, 0.05))));
+    win = max(win, cover(sdBox(q, vec2(-0.22, 0.42), vec2(0.025, 0.04))));
+    vec3 c = vec3(0.22, 0.2, 0.2) * mmLit(vec3(0.0, 0.2, -1.0)) * 1.4 + uMoonC * 0.08 * smoothstep(0.3, 1.0, st);
+    float cv = cover(d);
+    c = mix(c, WARM * 1.3, win * cv);
+    gEm = win * cv;
+    return vec4(c, cv);
+}
+vec4 mast(vec2 q) {
+    float d = max(abs(q.x) - (0.004 + 0.01 * (1.0 - q.y)), max(-q.y, q.y - 1.0));
+    for (int i = 1; i <= 3; i++) {
+        float y = float(i) * 0.31;
+        d = min(d, line(q, vec2(0.0, y), vec2(-0.36, 0.0), 0.0012));
+        d = min(d, line(q, vec2(0.0, y), vec2(0.36, 0.0), 0.0012));
+    }
+    vec3 c = vec3(0.24, 0.22, 0.22) * mmLit(vec3(0.0, 0.2, -1.0)) * 1.4 + uMoonC * 0.05;
+    return vec4(c, cover(d) * 0.85);
+}
+vec4 turbine(vec2 q) {
+    vec2 hub = vec2(0.0, 0.66);
+    float d = max(abs(q.x) - 0.018 * (1.3 - 0.6 * q.y), max(-q.y, q.y - 0.66));
+    d = min(d, sdBox(q, hub + vec2(0.03, 0.0), vec2(0.05, 0.018)));
+    float ang = uTime * 0.9 * (0.8 + 0.4 * vB.z) + vB.z * 6.28;
+    for (int i = 0; i < 3; i++) {
+        float a = ang + float(i) * 2.0944;
+        vec2 dir = vec2(cos(a), sin(a));
+        vec2 rel = q - hub;
+        float t = clamp(dot(rel, dir) / 0.4, 0.0, 1.0);
+        d = min(d, length(rel - dir * t * 0.4) - max(mix(0.016, 0.004, t), aaW * 0.6));
+    }
+    vec3 c = vec3(0.55, 0.57, 0.6) * mmLit(vec3(0.0, 0.3, -1.0)) * 1.2 + uMoonC * 0.1;
+    return vec4(c, cover(d));
+}
+vec4 skyline(vec2 q) {
+    float seed = vB.z;
+    float W = vB.x / vA.w;
+    vec3 col = vec3(0.0);
+    float a = 0.0, em = 0.0;
+    for (int i = 0; i < 9; i++) {
+        float fi = float(i);
+        float cx = (hash1(seed * 7.0 + fi) * 2.0 - 1.0) * W * 0.85;
+        float hh = 0.3 + 0.7 * pow(hash1(seed * 3.0 + fi * 1.7), 1.5);
+        if (i == 8) { cx = 0.05 * W; hh = 1.0; }
+        float hw = 0.035 + 0.05 * hash1(seed * 5.0 + fi);
+        float setback = step(0.5, hash1(seed * 11.0 + fi));
+        float d = sdBox(q, vec2(cx, hh * 0.5), vec2(hw, hh * 0.5));
+        d = min(d, sdBox(q, vec2(cx, hh * 0.5), vec2(hw * 0.65, hh * 0.5 + 0.06 * setback)));
+        if (i == 8) d = min(d, line(q, vec2(cx, hh), vec2(cx, hh + 0.06), 0.003));
+        float cv = cover(d);
+        if (cv <= 0.0) continue;
+        float w = windows(q - vec2(cx - hw, 0.0), vec2(0.016, 0.012), vec2(0.005, 0.003), seed + fi, 0.3) * 0.7;
+        vec3 tint = mix(WARM, vec3(0.75, 0.88, 1.0), hash1(seed + fi * 3.3));
+        vec3 c = vec3(0.03, 0.035, 0.05) * mmLit(vec3(0.0, 0.2, -1.0)) * 1.6 + tint * w * 1.4;
+        col = mix(col, c, cv);
+        em = mix(em, w, cv);
+        a = max(a, cv);
+    }
+    gEm = em;
+    return vec4(col, a);
+}
+vec4 plane(vec2 q) {
+    float dir = vC.x >= 0.0 ? 1.0 : -1.0;
+    vec2 p = vec2(q.x * dir, q.y - 0.5);
+    float fus = max(length(p * vec2(1.0, 6.5)) - 0.5, -0.5 - p.x);
+    float fin = max(abs(p.x + 0.43) - 0.06 + p.y * 0.25, max(-p.y, p.y - 0.2));
+    float wing = sdBox(p, vec2(0.0, -0.02), vec2(0.17, 0.012));
+    float eng = length((p - vec2(0.06, -0.06)) * vec2(1.0, 2.2)) - 0.05;
+    float d = min(min(fus, fin), min(wing, eng));
+    float cv = cover(d);
+    float win = windows(p - vec2(-0.3, 0.0), vec2(0.03, 1.0), vec2(0.007, 0.012), vB.z, 0.9) * step(abs(p.y), 0.02) * step(-0.32, p.x) * step(p.x, 0.36);
+    vec3 c = vec3(0.32, 0.33, 0.36) * mmLit(vec3(0.0, -0.4, -1.0)) * 1.4 + uMoonC * 0.12 * smoothstep(0.0, 0.07, p.y);
+    c = mix(c, WARM * 1.2, win * cv);
+    gEm = win * cv;
+    return vec4(c, cv);
+}
+vec4 trail(vec2 q) {
+    // a contrail: long and soft, spreading and fading behind the plane (at its forward end)
+    float W = vB.x / vA.w;
+    float dir = vC.x >= 0.0 ? 1.0 : -1.0;
+    float u = clamp((W - q.x * dir) / (2.0 * W), 0.0, 1.0);
+    float wdt = 0.12 + 0.3 * u;
+    float wob = (vnoise(vec2(q.x * 0.4, vB.z * 9.0)) - 0.5) * 0.15 * u;
+    float v = exp(-sq((q.y - 0.5 - wob) / wdt)) * pow(1.0 - u, 1.5) * smoothstep(0.0, 0.05, u);
+    vec3 c = uMoonC * 0.22 + uMistC * 0.6 + capLight(vW, vec3(0.0, -1.0, 0.0), 1.0) * 0.4;
+    return vec4(c, v * 0.35);
+}
+vec4 balloon(vec2 q) {
+    vec2 e = (q - vec2(0.0, 0.62)) / vec2(0.33, 0.37);
+    float env = length(e) - 1.0;
+    env = min(env * 0.33, max(abs(q.x) - 0.33 * smoothstep(0.12, 0.42, q.y) - 0.04, max(q.y - 0.5, 0.18 - q.y)));
+    float basket = sdBox(q, vec2(0.0, 0.05), vec2(0.06, 0.05));
+    float ropes = min(line(q, vec2(-0.05, 0.1), vec2(-0.1, 0.24), 0.003), line(q, vec2(0.05, 0.1), vec2(0.1, 0.24), 0.003));
+    float ce = cover(env), cb = cover(min(basket, ropes));
+    float stripe = step(0.5, fract(atan(e.x, 1.2 - e.y * 0.3) * 2.2 + vB.z));
+    vec3 base = mix(vec3(0.75, 0.2, 0.15), vec3(0.95, 0.75, 0.3), stripe);
+    float burn = 0.55 + 0.25 * sin(uTime * 0.7 + vB.z * 9.0);
+    float inner = exp(-max(0.0, q.y - 0.3) * 4.0) * burn;
+    vec3 c = base * (mmLit(normalize(vec3(e.x, e.y, -0.8))) * 1.2 + WARM * inner * 0.9);
+    vec3 bc = vec3(0.15, 0.1, 0.07) * mmLit(vec3(0.0, 0.0, -1.0)) * 1.5;
+    gEm = ce * inner * 0.6;
+    return vec4(mix(bc, c, ce), max(ce, cb));
+}
+vec4 heli(vec2 q) {
+    float dir = vC.x >= 0.0 ? 1.0 : -1.0;
+    vec2 p = vec2(q.x * dir, q.y);
+    float body = (length((p - vec2(0.1, 0.4)) * vec2(1.0, 1.6)) - 0.22) / 1.6;
+    float boom = line(p, vec2(-0.05, 0.42), vec2(-0.62, 0.5), 0.025);
+    float fin = line(p, vec2(-0.62, 0.48), vec2(-0.66, 0.62), 0.02);
+    float rotor = sdBox(p, vec2(0.08, 0.66), vec2(0.6, 0.006));
+    float mastL = line(p, vec2(0.08, 0.55), vec2(0.08, 0.66), 0.015);
+    float skid = line(p, vec2(-0.12, 0.16), vec2(0.3, 0.16), 0.01);
+    float d = min(min(min(body, boom), min(fin, mastL)), skid);
+    float cv = max(cover(d), cover(rotor) * 0.4);
+    float win = cover(length((p - vec2(0.24, 0.44)) * vec2(1.0, 1.3)) - 0.09);
+    vec3 c = vec3(0.18, 0.19, 0.22) * mmLit(vec3(0.0, 0.0, -1.0)) * 1.5 + uMoonC * 0.08 * smoothstep(0.4, 0.6, p.y);
+    c = mix(c, WARM * 0.5, win * 0.6);
+    return vec4(c, cv);
+}
+vec4 cloud(vec2 q) {
+    float seed = vB.z;
+    float W = vB.x / vA.w;
+    float dens = 0.0;
+    for (int i = 0; i < 7; i++) {
+        float fi = float(i);
+        vec2 c = vec2((hash1(seed * 3.0 + fi) * 2.0 - 1.0) * W * 0.7, 0.45 + 0.2 * hash1(seed * 5.0 + fi));
+        float r = (0.22 + 0.16 * hash1(seed * 7.0 + fi)) * min(W, 1.6);
+        dens += exp(-dot(q - c, q - c) / (r * r));
+    }
+    dens *= 0.75 + 0.5 * fbm(q * 3.0 + seed * 4.0);
+    float a = smoothstep(0.3, 1.1, dens) * 0.75;
+    float top = smoothstep(0.4, 0.9, q.y);
+    vec3 c = uMistC * 0.9 + uMoonC * 0.12 * top + capLight(vW, vec3(0.0, -1.0, -0.3), 0.8) * 0.55 * (1.0 - top * 0.5);
+    return vec4(c, a);
+}
+
 void main() {
     int type = int(vB.y + 0.5);
     aaW = max(vPxL * 0.9, vCoc);
@@ -824,12 +1041,30 @@ void main() {
     else if (type == 4) r = rock(vL);
     else if (type == 5) r = bush(vL);
     else if (type == 6) r = pins(vL);
-    else r = moss(vL);
+    else if (type == 7) r = moss(vL);
+    else if (type == 8) r = cabin(vL);
+    else if (type == 9) r = car(vL);
+    else if (type == 10) r = pylon(vL);
+    else if (type == 11) r = wires(vL);
+    else if (type == 12) r = spire(vL);
+    else if (type == 13) r = mast(vL);
+    else if (type == 14) r = turbine(vL);
+    else if (type == 15) r = skyline(vL);
+    else if (type == 16) r = plane(vL);
+    else if (type == 17) r = trail(vL);
+    else if (type == 18) r = balloon(vL);
+    else if (type == 19) r = heli(vL);
+    else r = cloud(vL);
     float a = r.a * vB.w;
     if (a <= 0.003) discard;
     vec3 c = r.rgb;
     float fz = vA.z;
-    if (type == 0 || type == 6) {
+    if (type >= 8) {
+        // far things: a thinner haze (the night is clear), their own lights carrying through it
+        float f = (1.0 - exp(-fz / (uFogD * 12.0))) * 0.55;
+        c = mix(c, uMistC, f * (1.0 - 0.7 * gEm));
+        c = mix(c, uBridgeCol, uBridge);
+    } else if (type == 0 || type == 6) {
         // glowing things fog less (their light carries)
         float f = 1.0 - exp(-fz / uFogD);
         c = mix(c, uMistC, f * 0.5);
@@ -874,6 +1109,7 @@ void main() {
     float v;
     if (kind == 1) v = exp(-r * r * 3.0) * 0.7 + exp(-r * r * 9.0) * 0.3;          // a halo in the mist
     else if (kind == 2) v = exp(-r * r * 6.0) + 0.5 * exp(-r * r * 40.0);          // the network's heart
+    else if (kind == 3) v = exp(-r * r * 22.0) + 0.3 * exp(-r * r * 3.0);           // a lamp, a beacon
     else v = exp(-r * r * 16.0) + 0.25 * exp(-r * r * 4.0);                         // a spore
     v *= smoothstep(1.0, 0.75, r);
     frag = vec4(vB.rgb * v * vB.a, 0.0);
