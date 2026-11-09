@@ -40,7 +40,7 @@ public:
     };
 
     // Where the creature is: its center, its axes (x forward, y up, z its right side), its length (meters).
-    struct Pose { vec3 c, fx, fy, fz; float L, bend; };
+    struct Pose { vec3 c, fx, fy, fz; float L, bend; vec3 wo; }; // wo: the wandering's offset (meters)
 
 private:
     // ---- The growth: G = ln(the creature's length in meters), from a 30 cm koi to a million kilometers.
@@ -57,8 +57,27 @@ private:
     uint64_t koiSeed_ = 1;
     float koiSeedF_ = 0.3f;
     Pose pose_{};
-    Pose poseAt(float G, float t) const; // the path (from the growth) and the swim's own motion (t: the world clock)
-    vec3 pathPos(float G) const;        // the path's center at G
+    Pose poseAt(float G) const;          // the path (from the growth and the cruise) and the swim's own wandering
+    // ---- The cruise: it always swims on, between the clears too (round the pond, down the river, then on and on
+    // around the planet), at a pace from the music, a clear surging it ahead.
+    struct Cruise {
+        float pondA = 0.f;   // its angle round the pond (radians, decreasing: clockwise seen from above)
+        float riverC = 0.f;  // meters ahead of its growth's place down the river (held short of the sea)
+        double orbitA = 0.0; // radians around the body it circles (the sea, the sky, orbit, the Moon)
+    };
+    Cruise cr_{};
+    float swimT_ = 0.f;          // the wandering's clock (quicker with the music)
+    float pace_ = 1.f;           // the cruise's pace from the music (smoothed)
+    float speedL_ = 0.3f;        // the cruise's speed now (body lengths a second)
+    float surge_ = 0.f, surgeIn_ = 0.f; // a clear's surge (smooth rise, slow fall)
+    vec3 camH_{1.f, 0.f, 0.f};   // the camera's bearing (the travel's direction, smoothed)
+    vec3 camWo_{0.f};            // how much of the wandering the camera follows (smoothed)
+    bool camHSet_ = false;
+    vec3 pathPosC(float G, const Cruise& c) const; // the path's center at G, at that cruise
+    vec3 pathPos(float G) const { return pathPosC(G, cr_); }
+    vec3 travelDir(float G) const;      // the cruise's direction at G (unit)
+    vec3 wander(float G, float tau, float* roll) const; // the wandering (body lengths: along, up, side), its roll
+    void advanceCruise(float G, float dt);
     vec3 lastHead_{0.f}, lastTail_{0.f};
     vec3 splashC_{0.f};
     float splashAge_ = 99.f;
@@ -152,7 +171,12 @@ private:
     GLuint quadVbo_ = 0, puffVao_ = 0, puffVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0,
            ribbonVao_ = 0, ribbonVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
            shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
-    ugl::Target worldT_, bloomA_, bloomB_, sceneT_;
+    ugl::Target skyT_, worldT_, bloomA_, bloomB_, sceneT_;
+    // The world's geometry is drawn multisampled at (up to) the full resolution over the ray-traced sky (which stays
+    // at a reduced resolution, upsampled with its depth), then resolved into worldT_.
+    GLuint skyDepthTex_ = 0, skyFbo_ = 0, msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
+    int msW_ = 0, msH_ = 0, msSamples_ = 1;
+    GLuint progUp_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;
