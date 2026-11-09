@@ -79,7 +79,7 @@ private:
     void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
     void drawText(const std::vector<float>& quads, const vec3& ink, float alpha);
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
-    void drawOverlay(const Game& g);
+    void drawOverlay(const Game& g, bool bare);
     std::vector<float> shapes_;
     void rect(float x0, float y0, float x1, float y1, const vec3& c, float a);
     void flushShapes();

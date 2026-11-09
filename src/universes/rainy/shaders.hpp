@@ -137,7 +137,7 @@ uniform vec4 uView;
 uniform vec2 uRes;
 uniform sampler2D uCity, uBlur, uWater, uMist;
 uniform vec3 uMistTint, uFrame, uFrameRim;
-uniform float uMistA, uLens, uSpec;
+uniform float uMistA, uLens, uSpec, uMullions;
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     float pxw = 2.0 * uView.w / uRes.y;           // board units per pixel
@@ -185,7 +185,7 @@ void main() {
         // a faint rim of city light on the mullion's edges
         float rim = (1.0 - smoothstep(0.0, 0.05, abs(mx + 0.025))) * smoothstep(-13.0, 6.0, w.y);
         fc = uFrame + uFrameRim * rim * 0.9;
-        fr = a;
+        fr = a * uMullions;
     }
     float rail = 1.0 - smoothstep(-pxw, pxw, w.y + 10.02);
     if (rail > 0.0) {

@@ -49,7 +49,7 @@ private:
     float evo_ = 0.f, evoSpeed_ = 0.7f;
     std::vector<float> nC_, wC_;
     int woodRow_ = 0; // the ground's noise and woodland on the coarse grid
-    void updateTerrain(const Game& game, float dt, float wdt);
+    void updateTerrain(const Game& game, float dt, float wdt, bool bare);
     // ---- Rivers: a drainage network on a coarser grid (every other sample): each node drains to its lowest
     // neighbour, the rain gathers downstream, a river shows where enough of it runs, and it carves its valley.
     int cw_ = 0, ch_ = 0;
@@ -75,7 +75,7 @@ private:
     bool placePeak(Peak& p);
     Palette basePal_{};
     std::vector<float> hudRects_; // pixels x0 y0 x1 y1: where the map keeps quiet behind the HUD
-    void buildHudRects(const std::vector<HudText>& hud);
+    void buildHudRects(const std::vector<HudText>& hud, bool bare);
     void splat(std::vector<float>& f, float x, float y, float v);
     float waterPercentile(float p);
     std::vector<float> sorted_;

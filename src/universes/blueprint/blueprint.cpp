@@ -749,7 +749,7 @@ void BlueprintUniverse::dimV(float y0, float y1, float x, float xRef, float reve
     }
 }
 
-void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA) {
+void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bare) {
     const float hw = viewH_.x, hh = viewH_.y, cx = viewC_.x, cy = viewC_.y;
     const float b = 0.3f;
     const float X0 = cx - hw + b, X1 = cx + hw - b, Y0 = cy - hh + b, Y1 = cy + hh - b;
@@ -778,8 +778,9 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA) {
             labels_.push_back({std::string(1, (char)('A' + i)), V(X1 - 0.17f, y + 0.17f), ts, 0.55f, R_LINE, false, true});
         }
     }
-    // the well, drawn in section: inner and outer walls, the floor, hatched between; center line stubs
-    {
+    // the well, drawn in section: inner and outer walls, the floor, hatched between; center line stubs (not at a
+    // break: the sheet alone)
+    if (!bare) {
         const float t = 0.3f, top = 10.25f;
         out.push_back(Stroke{{V(-5.f, top), V(-5.f, -10.f), V(5.f, -10.f), V(5.f, top)}, W_THICK, P_SOLID, R_LINE, 1.f});
         out.push_back(Stroke{{V(-5.f - t, top), V(-5.f - t, -10.f - t), V(5.f + t, -10.f - t), V(5.f + t, top)}, W_MED, P_SOLID, R_LINE, 0.9f});
@@ -1464,7 +1465,9 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    // a break: the sheet and its machine alone (the blank board is not the stack: the ids and dimensions keep theirs)
+    const bool bare = f.bare;
+    if (!bare) syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1577,7 +1580,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         }
         if (pieceDim_.t + pieceDim_.life > DIM_HOLD + DIM_FADE) pieceDim_.alive = false;
     }
-    {
+    if (!bare) {
         const int rows = std::min(20, game.stackHeight());
         if (rows != stackRows_) { stackRows_ = rows; stackDimT_ = 0.f; }
         stackDimT_ += dt;
@@ -1590,7 +1593,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     lines_.clear();
     labels_.clear();
     std::vector<Stroke> ss;
-    buildSheet(ss, 1.f);
+    buildSheet(ss, 1.f, bare);
     for (const Stroke& s : ss) emit(s, 1.f, world);
     // construction lines through the machine's centers (a break shows only these)
     if (machOn_) {
@@ -1623,7 +1626,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     }
     // dimensions: the last part, the stack's height
     ss.clear();
-    if (pieceDim_.alive && overT_ < 0.f) {
+    if (pieceDim_.alive && overT_ < 0.f && !bare) {
         const Dim& d = pieceDim_;
         // half the ink of the other dimensions: it lies inside the well
         const float a = 0.5f * (1.f - smoothstepf(DIM_HOLD, DIM_HOLD + DIM_FADE, d.t + d.life)) * world;
@@ -1631,7 +1634,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         dimH(d.x0, d.x1, y, d.y, d.y, saturate(d.t / 0.4f), a, R_DIM, ss);
         if (d.t > 0.25f) labels_.push_back({std::to_string(d.value), V((d.x0 + d.x1) * 0.5f, y + 0.5f), 0.46f * pxPerUnit_, a * saturate((d.t - 0.25f) / 0.2f), R_DIM, false, true});
     }
-    if (stackShown_ > 0.05f && overT_ < 0.f) {
+    if (stackShown_ > 0.05f && overT_ < 0.f && !bare) {
         const float x = 5.62f;
         const float y1 = -10.f + stackShown_;
         dimV(-10.f, y1, x, 5.f + 0.3f, 1.f, 0.85f * world, R_DIM, ss);
@@ -1643,7 +1646,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
 
     cells_.clear();
     ghost_.clear();
-    buildBoard(game);
+    if (!bare) buildBoard(game);
 
     // ---- Pen lines into their layer (MAX: joints and crossings of one ink never darken).
     lineT_.bind();
@@ -1736,12 +1739,12 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
     }
     // ---- Lettering and the HUD.
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare) {
         const float a = smoothstepf(0.5f, 1.5f, overT_) * world;
         labels_.push_back({"VOID", V(viewC_.x + viewH_.x - 0.3f - 3.7f, viewC_.y - viewH_.y + 0.3f + 2.2f), 1.1f * pxPerUnit_, a * 0.9f, R_ACCENT, false, true});
     }
     drawLabels();
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

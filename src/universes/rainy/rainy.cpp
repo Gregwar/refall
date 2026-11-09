@@ -634,7 +634,7 @@ float RainyUniverse::hudBox(int b, int k) const {
 
 float RainyUniverse::hudMask(float x, float y) const {
     float m = 0.f;
-    for (int b = 0; b < 4; b++) {
+    for (int b = bare_ ? 2 : 0; b < 4; b++) { // (a break keeps only the corners' lettering)
         const float dx = std::max(hudBox(b, 0) - x, x - hudBox(b, 2)), dy = std::max(hudBox(b, 1) - y, y - hudBox(b, 3));
         m = std::max(m, 1.f - smoothstepf(0.f, 1.6f, std::max(dx, dy)));
     }
@@ -1125,7 +1125,7 @@ void RainyUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 acc = ugl::toSrgb(accent());
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? acc : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -1136,7 +1136,7 @@ void RainyUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushShapes();
     }
 
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1236,7 +1236,10 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    // a break: the window, the rain and the city alone (no mullions, glass tiles, ghost, previews nor gauge; the
+    // blank board leaves the pieces' ids as they are)
+    bare_ = f.bare;
+    if (!bare_) syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1326,7 +1329,7 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     const float seedU = (float)(seed_ % 1000) * 0.137f;
     float hudBoxes[16];
     for (int b = 0; b < 4; b++)
-        for (int k = 0; k < 4; k++) hudBoxes[b * 4 + k] = hudBox(b, k);
+        for (int k = 0; k < 4; k++) hudBoxes[b * 4 + k] = bare_ && b < 2 ? 999.f : hudBox(b, k);
     auto columns = [&](GLuint p) {
         glUniform4fv(ugl::U(p, "uHud"), 4, hudBoxes);
         set1f(p, "uSeed", seedU);
@@ -1440,11 +1443,12 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progGlass_, "uMistA", 0.85f);
     set1f(progGlass_, "uLens", 0.9f);
     set1f(progGlass_, "uSpec", 0.5f + 0.2f * wp);
+    set1f(progGlass_, "uMullions", bare_ ? 0.f : 1.f);
     ugl::drawFullscreen();
 
     // ---- The glass tiles, the ghost, the water over them.
     cells_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!cells_.empty()) {

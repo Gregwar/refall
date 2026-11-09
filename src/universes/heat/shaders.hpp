@@ -16,7 +16,7 @@ uniform sampler2D uAir, uHeat;
 uniform vec4 uAirGrid;   // x0, y0, 1 / spacing
 uniform vec4 uView;      // center, half extents (board units)
 uniform vec2 uRes;
-uniform float uTime, uWall, uAirGain, uShimmer, uGrain, uWallHeat, uVig;
+uniform float uTime, uWall, uAirGain, uShimmer, uGrain, uWallHeat, uVig, uWell;
 uniform vec4 uBlob[4];   // x, y, rx, ry
 uniform vec4 uBlobT;     // their temperatures
 uniform float uSeed;
@@ -76,7 +76,7 @@ void main() {
     }
     // the well: a pane a shade colder than the wall, its walls and floor thin frames warmed by the stack
     vec2 qw = abs(w - vec2(0.0, 0.0)) - vec2(5.0, 10.0);
-    float inWell = 1.0 - smoothstep(-0.3, 0.3, max(qw.x, qw.y));
+    float inWell = (1.0 - smoothstep(-0.3, 0.3, max(qw.x, qw.y))) * uWell;
     d -= 0.012 * inWell;
     float fx = abs(abs(w.x) - 5.13) - 0.07;
     float wallMask = (1.0 - smoothstep(-px, px, fx)) * (1.0 - smoothstep(-px, px, w.y - 10.0)) * smoothstep(-10.2 - px, -10.2 + px, w.y);
@@ -84,7 +84,7 @@ void main() {
     float floorMask = (1.0 - smoothstep(-px, px, fy)) * (1.0 - smoothstep(-px, px, abs(w.x) - 5.2));
     float wh = wallHeat(w.x < 0.0 ? 0.0 : 11.0, w.y);
     float fh = texture(uHeat, vec2((clamp(w.x + 5.0, 0.0, 9.999) + 1.0) / 12.0, 22.5 / 23.0)).r;
-    float frame = max(wallMask, floorMask);
+    float frame = max(wallMask, floorMask) * uWell;
     float fheat = floorMask > wallMask ? fh : wh;
     d = mix(d, 0.085 + uWallHeat * (1.0 - exp(-fheat * 1.8)), frame);
     // the air, hot over the stack

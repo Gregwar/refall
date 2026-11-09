@@ -917,7 +917,7 @@ void HeatUniverse::flushShapes() {
 
 // The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge, the bonus gauge
 // as a thin ring.
-void HeatUniverse::drawOverlay(const Game& g) {
+void HeatUniverse::drawOverlay(const Game& g, bool bare) {
     const float s = height_ / 1080.f;
     const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_);
     const vec3 ink(0.93f, 0.94f, 0.95f), shadow(0.f);
@@ -945,8 +945,8 @@ void HeatUniverse::drawOverlay(const Game& g) {
         textQuads(loS, x1 - textWidth(loS, ts, 0.f), y1 + ts * 0.9f, ts, 0.f, q);
         drawText(q, ink, 0.75f * vis);
     }
-    // ---- the bonus gauge: a thin ring, its charge an arc in the hot color
-    {
+    // ---- the bonus gauge: a thin ring, its charge an arc in the hot color (none at a break)
+    if (!bare) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1066,7 +1066,9 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncCells(game);
+    // a break: the room alone (its blank board leaves the stack's heat, the well's walls and floor as they are)
+    const bool bare = f.bare;
+    if (!bare) syncCells(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1131,7 +1133,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The heat.
-    conduct(game, wdt);
+    if (!bare) conduct(game, wdt);
     updateAir(game, wdt);
     const float gain = (0.92f + 0.12f * saturate(warm) + 0.25f * flare_) * (1.f - over_);
 
@@ -1192,6 +1194,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uShimmer", 0.5f + 0.7f * saturate(warm));
     set1f(progBg_, "uGrain", V.grain);
     set1f(progBg_, "uWallHeat", 0.45f);
+    set1f(progBg_, "uWell", bare ? 0.f : 1.f);
     set1f(progBg_, "uVig", 0.32f);
     {
         float bl[16] = {}, bt[4] = {};
@@ -1208,7 +1211,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The pieces, ghost, previews.
     cells_.clear();
-    buildBoard(game);
+    if (!bare) buildBoard(game);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!cells_.empty()) {
@@ -1278,8 +1281,8 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The overlay and the HUD.
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawOverlay(game);
-    drawHud(f.hud, f.panels);
+    drawOverlay(game, bare);
+    drawHud(f.hud, bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 }
 

@@ -1147,8 +1147,11 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
-    syncCells(game);
-    if (!warm_) warmUp(game);
+    // (a break's blank board is not the stack: the colony keeps the cubes it knows)
+    if (!f.bare) {
+        syncCells(game);
+        if (!warm_) warmUp(game);
+    }
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
     if (!f.paused) {
         clock_ += wdt;
@@ -1208,8 +1211,10 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     top_.clear();
     const float shA = V.shadow;
     const float glint = 0.25f * pk + 0.5f * dropMix_;
+    // a break: the substrate, its terminals, traces and charges alone (no cubes, fragments, sparks nor gauge)
+    const bool gameOn = !f.bare;
     // the stack
-    for (int y = Game::HIDDEN; y < Game::H; y++)
+    for (int y = Game::HIDDEN; y < Game::H && gameOn; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = game.cell(x, y);
             if (c.type < 0) continue;
@@ -1220,13 +1225,14 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         }
     // cleared cubes crumbling
     for (const Dying& d : dying_) {
+        if (!gameOn) break;
         const float t = d.t - d.delay;
         const float k = t < 0.f ? 0.f : saturate(t / (d.over ? 1.1f : 0.32f));
         if (k >= 1.f) continue;
         cube(stack_, d.x, d.y, 1.f, pieceColor(d.type), 1.f, d.nib, d.seed, glint, false, std::max(0.02f, k));
     }
     // the ghost and the falling piece (in the air: its shadow further off and softer)
-    if (game.hasPiece() && !game.over()) {
+    if (gameOn && game.hasPiece() && !game.over()) {
         const Piece& p = game.piece();
         int cells[4][2];
         game.pieceCells(p, cells);
@@ -1256,7 +1262,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     }
     // previews
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
-        if (type < 0) return;
+        if (type < 0 || !gameOn) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
         game.pieceCells(p, cells);
@@ -1279,7 +1285,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     }
     // grains: lying on the ground (under the ants), flying (over everything)
     for (const Grain& g : grains_) {
-        if (g.t < g.delay) continue;
+        if (g.t < g.delay || !gameOn) continue;
         const float k = (g.t - g.delay) / g.life;
         float a = g.food ? (1.f - smoothstepf(0.93f, 1.f, k)) * world : 1.f - smoothstepf(0.55f, 1.f, k);
         const float s = g.food ? g.size : g.size * (1.f - 0.5f * smoothstepf(0.5f, 1.f, k));
@@ -1295,7 +1301,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         const Ant& a = ants_[i];
         // inside the well (over the blocks) a charge is faint, fading in across the border
         const float inside = std::min(std::min(5.f - std::fabs(a.p.x), a.p.y + 10.f), 10.f - a.p.y);
-        float al = saturate(a.alpha) * world * (1.f - 0.66f * smoothstepf(-0.3f, 0.3f, inside));
+        float al = saturate(a.alpha) * world * (1.f - (gameOn ? 0.66f : 0.f) * smoothstepf(-0.3f, 0.3f, inside));
         const bool carry = a.state == 1;
         if (!carry) al *= a.state == 2 || a.retire ? 0.3f : 0.5f;
         if (al <= 0.f) continue;
@@ -1309,6 +1315,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     }
     // sparks and flashes (over everything, small and brief)
     for (const Spark& sp : sparks_) {
+        if (!gameOn) break;
         const float k = sp.t / sp.life;
         const float spd = len(sp.v);
         const vec2 d = spd > 1e-4f ? sp.v * (1.f / spd) : v2(1.f, 0.f);
@@ -1319,13 +1326,14 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
                          {Lh, sp.w, 0.f, 0.f}});
     }
     for (const Flash& fl : flashes_) {
+        if (!gameOn) break;
         const float k = fl.t / fl.life;
         const float al = (1.f - k) * (1.f - k) * world;
         over_.push_back({{fl.p.x, fl.p.y, fl.r * 1.3f, fl.r * 1.3f}, {0.f, 6.f, 0.f, al}, {fl.col.x, fl.col.y, fl.col.z, 0.f},
                          {fl.r * (0.7f + 0.3f * k), 0.f, 0.f, 0.f}});
     }
     // the bonus gauge: twelve grains of sugar in a ring
-    {
+    if (gameOn) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float R = layout::GAUGE_R * 0.78f;
         const int N = Game::BONUS_LINES;
@@ -1374,6 +1382,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progGround_, "uCharge", hex(V.charge));
         set3f(progGround_, "uFrame", hex(V.frame));
         set1f(progGround_, "uFrameA", V.frameA);
+        set1f(progGround_, "uWell", gameOn ? 1.f : 0.f); // a break: no panel, no frame
         set1f(progGround_, "uGrain", V.grain);
         // a steady glow per section, brighter at a peak, a swell on the drop that settles
         set1f(progGround_, "uTraceAmt", V.traceAmt * (0.62f + 0.12f * pm + 0.16f * pk + 0.3f * dropMix_ + 0.3f * swell_));
@@ -1401,7 +1410,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(antsV_);
     drawSprites(over_);
     drawSprites(top_);
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, gameOn ? f.panels : std::vector<HudRect>{});
 
     // ---- the veil: startup fade, pause / game-over dim
     const float veil = std::max(1.f - saturate(f.fade), dimT_ * 0.5f);
