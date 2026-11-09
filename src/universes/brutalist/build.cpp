@@ -95,6 +95,7 @@ void BrutalistUniverse::buildWorld() {
 
     // ---- The monument: the sill the stack stands on, the piers, the lintel, the slot's dark lining, its mass.
     const float xs = X_PIER + 0.25f;
+    monument0_ = static_.size();
     span(static_, vec3(-xs, Y_G - 0.2f, Z_BACK - 2.f), vec3(xs, Y_SILL, 1.3f), conc, M_CONC, 0, 0.f, 0.5f, 0.11f);
     span(static_, vec3(-xs - 0.9f, Y_G - 0.2f, 1.3f), vec3(xs + 0.9f, Y_G + 0.6f, 2.5f), conc * 0.97f, M_CONC, 0, 3.f, 0.4f, 0.13f);
     for (int s = -1; s <= 1; s += 2) {
@@ -106,6 +107,7 @@ void BrutalistUniverse::buildWorld() {
     span(static_, vec3(-X_SLOT, Y_SILL, Z_BACK - 0.4f), vec3(X_SLOT, Y_LINTEL, Z_BACK), P.lining, M_LINING, 0.8f, 0.f, 0.35f, 0.5f);
     // the mass behind (it casts its long shadow over the plaza)
     span(static_, vec3(-xs, Y_G - 0.2f, Z_BACK - 9.f), vec3(xs, Y_MON - 1.2f, Z_BACK - 2.f), tone(0.05f), M_CONC, 0, 2.f, 0.6f, 0.41f);
+    monument1_ = static_.size();
     // the low walls running out from it, a bench cast against the left one
     span(static_, vec3(-X_PIER, Y_G, -1.6f), vec3(-19.f, Y_G + 2.6f, -0.6f), tone(0.06f), M_CONC, 0, 0.f, 0.8f, 0.43f);
     span(static_, vec3(-X_PIER - 0.4f, Y_G, -0.6f), vec3(-16.f, Y_G + 0.9f, 0.6f), tone(0.06f), M_CONC, 0, 3.f, 0.4f, 0.47f);

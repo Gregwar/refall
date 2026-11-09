@@ -1032,7 +1032,7 @@ void MangaUniverse::drawFrames(float shatter) {
     const float w = 2.8f;
     for (int i = 0; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
-        if (!p.shown) continue;
+        if (!p.shown || (bare_ && !p.art)) continue;
         if (!p.art || shatter <= 0.001f) {
             strokeLine({p.c[0], p.c[1], p.c[2], p.c[3]}, w, 0.f, true, 1.f, ink_, 1.f, -1);
             continue;
@@ -1398,7 +1398,7 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     }
 
     // the bonus gauge: a fine ring, its charge a bold arc
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const V2 c{layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y};
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
         std::vector<V2> ring, arc;
@@ -1433,7 +1433,7 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
             y1 = std::max(y1, h.y + cap * 1.25f);
             a = std::max(a, std::min(1.f, 0.4f + h.alpha * 1.5f));
         }
-        if (x1 > x0 && vis > 0.01f) {
+        if (x1 > x0 && vis > 0.01f && !bare_) {
             const float pad = 9.f * s;
             rectPx(x0 - pad, y0 - pad, x1 + pad, y1 + pad, paper, a * vis);
             const float th = std::max(1.f, 1.8f * s);
@@ -1581,10 +1581,11 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    bare_ = f.bare;
+    if (!f.bare) syncIds(game); // (a break's blank board keeps the stack's ids)
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) {
             overT_ = -1.f;
             fades_.erase(std::remove_if(fades_.begin(), fades_.end(), [](const Fade& x) { return x.mask == 1; }), fades_.end());
@@ -1715,7 +1716,7 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         tetrisT_ += dt;
         if (tetrisT_ > 2.6f) tetrisT_ = -1.f;
     }
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
 
     // ---- Draw.
@@ -1831,10 +1832,10 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         drawSfx(sh, ease(slow_));
     }
 
-    // the HUD's panels and the well's: plain paper, then every frame
+    // the HUD's panels and the well's: plain paper, then every frame (a break: only the art panels' frames)
     for (int i = manga::P_WELL; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
-        if (p.art || !p.shown) continue;
+        if (p.art || !p.shown || bare_) continue;
         manga::Tone tn;
         fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, 1.f, -1);
     }
@@ -1848,7 +1849,7 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The game.
-    drawBoard(game, time_);
+    if (!bare_) drawBoard(game, time_);
 
     // ---- Dim (pause, game over screen) and the startup fade.
     {

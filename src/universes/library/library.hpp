@@ -176,6 +176,7 @@ private:
     vec2 viewC_, viewH_;        // the board plane's view (for the veil)
     float fB_ = 1.f;             // the board camera's focal length (pixels)
     vec4 cut_{0, 0, 0, 1e9f};
+    bool bare_ = false; // a break's frame: the room alone (no well, no gauge)
 
     // ---- Growth.
     int lines_ = 0, linesSeen_ = -1;

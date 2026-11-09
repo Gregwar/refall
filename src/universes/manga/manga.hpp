@@ -199,6 +199,7 @@ private:
     float overT_ = -1.f;
     float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
+    bool bare_ = false; // a break: the art panels alone, no well, HUD panels, gauge or pieces
     float chime_ = 0.f, chimeV_ = 0.f;
     float lampT_[2] = {0.f, 0.f};
     std::string section_;
