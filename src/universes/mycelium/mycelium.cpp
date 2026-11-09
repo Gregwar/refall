@@ -1466,7 +1466,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             const float px = s / (pxK * std::max(d, 1e-9f));
             const float a = smoothstepf(2.5f, 6.f, px) * (1.f - smoothstepf(H * 0.3f, H * 0.6f, px)) * smoothstepf(0.6f * s, 1.6f * s, d) *
                             smoothstepf(0.55f * camD_, 0.95f * camD_, d) *
-                            (pl.kind == 5 ? 1.f - smoothstepf(H * 0.18f, H * 0.32f, px) : 1.f);
+                            (pl.kind == 5 ? 1.f - smoothstepf(H * 0.1f, H * 0.2f, px) : pl.kind == 4 ? 1.f - smoothstepf(H * 0.14f, H * 0.26f, px) : 1.f);
             if (a <= 0.01f || !inView(base + vec3(0.f, s, 0.f), s * 2.f)) continue;
             const float rho = std::sqrt(pl.x * pl.x + pl.z * pl.z);
             const float under = std::exp(-sq(rho / (reach * 0.8f))) * 0.9f * (1.f - over_) * pal_.glow;
