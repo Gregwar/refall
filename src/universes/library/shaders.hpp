@@ -544,9 +544,9 @@ void main() {
             vec2 m = fract(q * 3.0) - 0.5;
             float motif = smoothstep(0.2, 0.15, abs(m.x) + abs(m.y));
             vec3 c2 = uRain[int(mod(seed * 7.0, 7.0))] * 0.5;
-            alb = mix(alb, mix(alb * 0.6, c2, 0.5), border);
-            alb = mix(alb, uGilt * 0.55, motif * 0.25 * (1.0 - border));
-            alb = mix(alb, c2 * 1.2, med * (1.0 - border));
+            // a plain field and a quiet double border
+            float inner = step(b, 0.36) * step(0.32, b);
+            alb = mix(alb, alb * 0.55, border * 0.8 + inner * 0.5);
             alb *= 0.9 + 0.12 * vnoise(q * 80.0);
             alb *= step(0.02, b) * 0.5 + 0.5;
         }
