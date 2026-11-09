@@ -1,28 +1,35 @@
-// MYCELIUM: a glowing fungal network spreads through a cross-section of the forest floor at night. The soil is cut
-// along the front of the scene (its horizons, stones and roots lit only by the threads' light) and the forest stands
-// behind the cut: the floor of moss receding into the mist, plants, trees and a far tree line under the night sky.
+// MYCELIUM: a glowing fungal network grows over the forest floor at night with the cleared lines, from a single spore
+// among the moss until it wraps the whole Earth in filaments of light.
 //
-// It starts as a single spore just under the surface, a millimeter across, seen as close as a macro lens would:
-// the soil's grains are pebbles, blurred blades of grass tower behind. Every cleared line pushes the threads deeper
-// and wider (the network is grown in log space: network.cpp), and the camera pulls back with it, so the scale keeps
-// changing: grass roots, then a fern's, then a tree's root plates go by, until the network is a kilometer of glowing
-// cords. Mushrooms burst up through the surface where the threads reach it, each bigger than the last: a pin first,
-// then caps among the moss, the ferns, the bushes, until parasol towers stand taller than the trees, their caps
-// lighting the canopy around them. The growth is G = ln(the network's reach in meters), from a millimeter at the
-// first line to some 50 m at 48 lines (the mushrooms as tall as the trees) and 1 km at 84 lines; a cabin, pylons, a church, wind turbines, skyscrapers and airliners stand among the mushrooms for scale.
+// It starts as close as a macro lens: one spore glowing on the forest floor at dusk, its first germ tubes reaching
+// out between the fallen leaves, moss cushions and their capsules standing around like a little forest, the real
+// forest a far tree line under the moon. Every cleared line spurts the network outward (it is grown once per game in
+// log space: network.cpp, the same density of threads at every scale it reaches) and the camera rises and pulls back
+// with it: the moss, the clearing, the forest, a valley with a village and hot-air balloons, the clouds, a region
+// where the threads glow under the land like veins of light, a continent, and at last the Earth seen from space on
+// its night side, wrapped in a living web of light, the moon beyond. Mushrooms burst up where the threads run, each
+// bigger than the last (a pin, then a cap opening with a little overshoot): caps among the moss, parasols taller than
+// the trees, towers standing above the clouds, glowing pins all over the globe. The growth is G = ln(the network's
+// reach in meters): 2 mm at the start, 1 m at ~20 lines, 500 m (the village) at ~54, 75 km at 90, the planet a ball
+// at ~140, wrapped at ~200.
 //
-// The music: calm is a still network breathing faintly; mid sends pulses of light out along some threads every two
-// beats; a peak along all of them, caps glowing brighter and spores drifting up. **The drop** (a real one: the HUD's
-// section, else the music's pace) sends one wave of light from the spore out through the whole network, up the
-// stems of every mushroom as it reaches them, the caps flaring, and a cloud of spores floating up into the night.
-// Each clear is a spurt: the threads shoot ahead with bright tips, the camera following a moment later.
+// The look: a moonlit night in clean colors, toon light (crisp bands, cool tinted shades), the threads and caps the
+// only bright things: the threads glow over the ground (thin, crisp ribbons that never get thinner than a pixel, a
+// soft bloom around them, a pool of their light under the land), the caps are translucent and lit from within, they
+// light the ground around them. The sky, the planet (the forest floor at every scale, forests and fields, the
+// village's windows, continents, oceans, cities, the day side's crescent from space), the moon and space are one
+// ray-traced pass. The music: calm is a still network breathing; mid sends pulses of light out along some threads
+// every two beats; a peak along all of them, the caps brighter, spores drifting up. **The drop** (a real one: the
+// HUD's section, else the music's pace) sends one wave of light from the spore through the whole network; reaching
+// each mushroom it climbs the stem, the cap flares and a cloud of glowing spores rises into the night.
 //
 // The pieces are mycelium felt: deep translucent shapes woven of glowing threads. Cleared rows fray into light that
-// flies down into the soil to the network.
+// flies to the network's heart, which pulses it out along the threads.
 //
-// Cost: the world at a reduced resolution (at most 720 lines): one full-screen pass (sky, tree line, floor, soil with
-// stones at every scale), ~36k thread quads, ~30k root quads (most culled in the vertex shader as sub-pixel), a few
-// hundred plant and mushroom quads, a quarter-resolution light pass and bloom.
+// Cost: the world at a reduced resolution (at most 720 lines) with depth: one ray-traced sky pass, ~80k thread quads
+// (most culled in the vertex shader: not yet born, or far under a pixel), the visible mushrooms turned on a lathe
+// (~1.3k triangles each), a few thousand puffs and billboards, clouds; a quarter-resolution bloom; the stars, the veil,
+// the pieces and the lettering at full resolution. Nothing is uploaded while the network grows (one upload a game).
 #include "universes/mycelium/mycelium.hpp"
 
 #include <algorithm>
@@ -61,12 +68,20 @@ using ugl::set3f;
 using ugl::set4f;
 using ugl::setMat;
 
-GLuint compile(const char* vs, const char* fs, const char* name, bool lights = false) {
-    const std::string pre = std::string(shaders::COMMON_GLSL) + (lights ? shaders::LIGHTS_GLSL : "");
+GLuint compile(const char* vs, const char* fs, const char* name) {
+    std::string f(fs);
+    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    std::string v(vs);
+    v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
+    return ugl::program(v.c_str(), f.c_str(), name);
+}
+// A world shader: the light in both stages.
+GLuint compileWorld(const char* vs, const char* fs, const char* name) {
+    const std::string pre = std::string(shaders::COMMON_GLSL) + shaders::LIGHT_GLSL;
     std::string f(fs);
     f.insert(f.find('\n') + 1, pre);
     std::string v(vs);
-    v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
+    v.insert(v.find('\n') + 1, pre);
     return ugl::program(v.c_str(), f.c_str(), name);
 }
 
@@ -74,44 +89,53 @@ vec2 V(float x, float y) { return vec2{x, y}; }
 vec2 add(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
 vec2 lerp2(vec2 a, vec2 b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
 vec2 mul(vec2 a, float k) { return {a.x * k, a.y * k}; }
+float sq(float x) { return x * x; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// A variant (sRGB): the night (sky top, sky low, mist, moon), the floor (moss, its light), the soil (litter, humus,
-// topsoil, subsoil), rock, roots, the ambient light; the threads (body, tips, pulses), the caps and gills (three
-// mushroom colors), the stems, foliage, bark, the floor's specks; the HUD's ink and accent, the veil; the seven
-// pieces; the glow, the threads' light on the soil, the mist's share of the caps' light, the stars.
+// A variant (sRGB): the night (sky top, sky low, the dusk's glow on the horizon, mist, space, the nebula, the moon's
+// light, the shade's light); the ground (moss, soil, fallen leaves, fields, forests, far land, ocean, town lights);
+// the plants (foliage, moss), bark, stones; the threads (body, tips, pulses), three cap colors, the stems, the clouds
+// (lit, shade); the HUD's ink and accent, the veil; the seven pieces; the glow, the pool of light under the land, the
+// stars, the bloom.
 struct VariantDef {
     const char* name;
-    unsigned skyTop, skyLow, mist, moon, floorC, floorLit, soilA, soilB, soilC, soilD, rock, rootC, ambient;
-    unsigned thread, threadTip, pulse, cap[3], gill[3], stem, foliage, bark, speck, ink, accent, veil;
+    unsigned skyTop, skyLow, dusk, mist, spaceC, nebula, moonC, ambient;
+    unsigned moss, soil, litter, field, forest, land, ocean, city;
+    unsigned flora, floraLit, bark, rock;
+    unsigned thread, threadTip, pulse, cap[3], stem, cloudLit, cloudShade;
+    unsigned ink, accent, veil;
     unsigned piece[7];
-    float glow, soilLight, mistK, stars;
+    float glow, pool, stars, bloom;
 };
 const VariantDef VARIANTS[] = {
-    // Ice-blue threads and turquoise caps under a deep blue night.
-    {"GLACIER", 0x040a1c, 0x112848, 0x14304a, 0xdce8ff, 0x1a2a2c, 0xffffff, 0x2a2026, 0x3e2e26, 0x55402e, 0x6e5640,
-     0x6c7684, 0x7a5a44, 0x3e4a64,
-     0x2ad4ff, 0xa0fff6, 0xe4ffff, {0x34e4ff, 0x6a86ff, 0x6affc4}, {0xb4fff4, 0xc4d0ff, 0xd0ffe6}, 0xb8ccd6, 0x14302e,
-     0x181a22, 0x5aeaff, 0xe6f4ff, 0x7ae6ff, 0x030812,
-     {0x4ee6ff, 0xffd84a, 0xb88cff, 0x6ef0a0, 0xff6e86, 0x5c8cff, 0xffa04a}, 1.f, 1.f, 0.07f, 1.f},
-    // Magenta threads, pink and violet caps in a plum night.
-    {"ORCHID", 0x0b0418, 0x26143c, 0x321a44, 0xffe6f2, 0x20172a, 0xffffff, 0x2e1e28, 0x44302e, 0x5a3e34, 0x745446,
-     0x7a7084, 0x7c5446, 0x4a3e62,
-     0xff52d4, 0xffb4ee, 0xfff0fc, {0xff48b4, 0xa862ff, 0xff8466}, {0xffc4ea, 0xdcbcff, 0xffd4c4}, 0xd8c2d2, 0x281a32,
-     0x1c1422, 0xff86e4, 0xfff0fa, 0xff98de, 0x0c0512,
-     {0x5ee0ff, 0xffe066, 0xd884ff, 0x7aef9a, 0xff6a8a, 0x6a8aff, 0xffa860}, 1.f, 1.f, 0.07f, 1.f},
-    // Amber threads and honey caps in a teal night.
-    {"EMBER", 0x020e18, 0x0c2a36, 0x123238, 0xfff0d6, 0x1a241e, 0xffffff, 0x2a2018, 0x40301f, 0x5a4229, 0x765c3c,
-     0x767670, 0x7e5a38, 0x3a5258,
-     0xffa02a, 0xffdc84, 0xfff4da, {0xff9426, 0xffcc44, 0xff5836}, {0xffdc9c, 0xffeeac, 0xffac8c}, 0xe2ceb2, 0x122e28,
-     0x181816, 0xffc45c, 0xfff4e4, 0xffc66e, 0x030e10,
-     {0x4ee8e0, 0xffe04a, 0xc890ff, 0x8af06a, 0xff6a5a, 0x6a9cff, 0xffa040}, 1.f, 1.f, 0.07f, 1.f},
+    // Ice-blue threads, turquoise, blue and mint caps under a deep blue night.
+    {"GLACIER", 0x061234, 0x1c4684, 0x3c7cae, 0x0e2244, 0x02040e, 0x3a2a8a, 0xbcd4ff, 0x1c2c5a,
+     0x2a6a54, 0x2e2a3c, 0x6a5a4a, 0x2e5a56, 0x123a3c, 0x2a4a44, 0x0a1e4a, 0xffc070,
+     0x1e6a5e, 0x3a7a5c, 0x2a2a3e, 0x56607a,
+     0x2ad4ff, 0xb0fff8, 0xeaffff, {0x34e4ff, 0x6a86ff, 0x6affc4}, 0xb8ccd6, 0x8aa4d4, 0x24386a,
+     0xe6f4ff, 0x7ae6ff, 0x030812,
+     {0x4ee6ff, 0xffd84a, 0xb88cff, 0x6ef0a0, 0xff6e86, 0x5c8cff, 0xffa04a}, 1.f, 1.f, 1.f, 0.7f},
+    // Magenta threads, pink, violet and coral caps in a plum night.
+    {"ORCHID", 0x12082c, 0x44206e, 0x9a4686, 0x1c1230, 0x05020c, 0x8a2a8a, 0xffe0f4, 0x28243e,
+     0x345050, 0x2e1e2e, 0x7a4a46, 0x44445a, 0x22223c, 0x3a3044, 0x160c36, 0xffb070,
+     0x3e3466, 0x3a5a56, 0x2e2236, 0x6a5a72,
+     0xff52d4, 0xffc0f0, 0xfff0fc, {0xff48b4, 0xa862ff, 0xff8466}, 0xd8c2d2, 0xb490c8, 0x3e2458,
+     0xfff0fa, 0xff98de, 0x0c0512,
+     {0x5ee0ff, 0xffe066, 0xd884ff, 0x7aef9a, 0xff6a8a, 0x6a8aff, 0xffa860}, 1.f, 1.f, 1.f, 0.7f},
+    // Amber threads, honey, gold and red caps in a teal night.
+    {"EMBER", 0x04182a, 0x124a5a, 0x2e7c7a, 0x0a2a34, 0x020608, 0x1a6a6a, 0xfff0d6, 0x183a40,
+     0x2a5236, 0x2e2420, 0x7a5232, 0x30503a, 0x10302a, 0x2a3a2a, 0x082430, 0xffd080,
+     0x1e5644, 0x3a5a34, 0x2a241e, 0x5a5a54,
+     0xffa02a, 0xffe090, 0xfff4da, {0xff9426, 0xffcc44, 0xff5836}, 0xe2ceb2, 0x92b8b8, 0x1e4048,
+     0xfff4e4, 0xffc66e, 0x030e10,
+     {0x4ee8e0, 0xffe04a, 0xc890ff, 0x8af06a, 0xff6a5a, 0x6a9cff, 0xffa040}, 1.f, 1.f, 1.f, 0.7f},
     // Green foxfire: lime threads, emerald and chartreuse caps.
-    {"JADE", 0x020b0f, 0x0b2828, 0x10362e, 0xecffee, 0x17241b, 0xffffff, 0x262218, 0x3a2e20, 0x4e3c28, 0x66543e,
-     0x6c7870, 0x6c5638, 0x3a5246,
-     0x74ff54, 0xd4ffa4, 0xf2fff0, {0x94ff36, 0x36ffac, 0xe4ff56}, {0xdcffbc, 0xbcffec, 0xf6ffc4}, 0xccdcc4, 0x13281b,
-     0x161b17, 0xa4ff66, 0xf0fff0, 0xb4ff86, 0x020a06,
-     {0x4ee0ff, 0xffd84a, 0xc08cff, 0x6af0b0, 0xff6e8a, 0x6a8cff, 0xffa24a}, 1.f, 1.f, 0.07f, 1.f},
+    {"JADE", 0x041020, 0x103a46, 0x2c6a5a, 0x0a2226, 0x02060a, 0x2a6a4a, 0xe8ffee, 0x16342e,
+     0x2a5c32, 0x28241c, 0x6a5632, 0x2e5436, 0x0e3020, 0x2a402e, 0x061c2c, 0xffd080,
+     0x1e5838, 0x3a6a34, 0x24261e, 0x4e5a52,
+     0x74ff54, 0xd8ffaa, 0xf2fff0, {0x94ff36, 0x36ffac, 0xe4ff56}, 0xccdcc4, 0x94b8ae, 0x1c3c3a,
+     0xf0fff0, 0xb4ff86, 0x020a06,
+     {0x4ee0ff, 0xffd84a, 0xc08cff, 0x6af0b0, 0xff6e8a, 0x6a8cff, 0xffa24a}, 1.f, 1.f, 1.f, 0.7f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -124,15 +148,17 @@ Palette paletteOf(int v) {
     const VariantDef& d = VARIANTS[wrapV(v)];
     auto L = [](unsigned c) { return ugl::toLinear(hex(c)); };
     Palette p;
-    p.skyTop = L(d.skyTop); p.skyLow = L(d.skyLow); p.mist = L(d.mist); p.moon = L(d.moon); p.floorC = L(d.floorC);
-    p.floorLit = L(d.floorLit); p.soilA = L(d.soilA); p.soilB = L(d.soilB); p.soilC = L(d.soilC); p.soilD = L(d.soilD);
-    p.rock = L(d.rock); p.rootC = L(d.rootC); p.ambient = L(d.ambient);
+    p.skyTop = L(d.skyTop); p.skyLow = L(d.skyLow); p.dusk = L(d.dusk); p.mist = L(d.mist); p.spaceC = L(d.spaceC);
+    p.nebula = L(d.nebula); p.moonC = L(d.moonC); p.ambient = L(d.ambient);
+    p.moss = L(d.moss); p.soil = L(d.soil); p.litter = L(d.litter); p.field = L(d.field); p.forest = L(d.forest);
+    p.land = L(d.land); p.ocean = L(d.ocean); p.city = L(d.city);
+    p.flora = L(d.flora); p.floraLit = L(d.floraLit); p.bark = L(d.bark); p.rock = L(d.rock);
     p.thread = L(d.thread); p.threadTip = L(d.threadTip); p.pulse = L(d.pulse);
-    for (int i = 0; i < 3; i++) { p.cap[i] = L(d.cap[i]); p.gill[i] = L(d.gill[i]); }
-    p.stem = L(d.stem); p.foliage = L(d.foliage); p.bark = L(d.bark); p.speck = L(d.speck);
+    for (int i = 0; i < 3; i++) p.cap[i] = L(d.cap[i]);
+    p.stem = L(d.stem); p.cloudLit = L(d.cloudLit); p.cloudShade = L(d.cloudShade);
     p.ink = L(d.ink); p.accent = L(d.accent); p.veil = L(d.veil);
     for (int i = 0; i < 7; i++) p.piece[i] = L(d.piece[i]);
-    p.glow = d.glow; p.soilLight = d.soilLight; p.mistK = d.mistK; p.stars = d.stars;
+    p.glow = d.glow; p.pool = d.pool; p.stars = d.stars; p.bloom = d.bloom;
     return p;
 }
 void lerpPalette(Palette& a, const Palette& b, float k) {
@@ -142,16 +168,56 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 }
 
 constexpr float CLEAR_T = 0.36f;     // a cleared row frays into light in this long (real time)
-constexpr float FLOW_T = 1.2f;       // its light flies down to the network in this long
+constexpr float FLOW_T = 1.2f;       // its light flies to the network's heart in this long
 constexpr int MAX_MOTES = 1600;
-constexpr int MAX_SPORES = 2600;
-enum BoardType { B_MUSHROOM = 0, B_TREE, B_GRASS, B_FERN, B_ROCK, B_BUSH, B_PINS, B_MOSS };
+constexpr int MAX_SPORES = 2400;
+constexpr float CLOUD_Y = 2000.f;    // the cloud layer (meters)
+constexpr float CAM_AZ = 0.35f;      // the camera's side of the spore
+constexpr int LATHE_U = 22, LATHE_V = 40;
+const float R_E = (float)myc::R_EARTH;
 
-// Test hooks: ZEN_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot); ZEN_GROW_RATE=R adds R more lines a second (a time-lapse).
+// Test hooks: ZEN_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot); ZEN_GROW_RATE=R
+// adds R more lines a second (a time-lapse).
 int extraLines(double t) {
     static const int n = std::getenv("ZEN_MYCELIUM_LINES") ? std::atoi(std::getenv("ZEN_MYCELIUM_LINES")) : 0;
     static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
     return std::max(0, n) + (int)(rate * t);
+}
+
+// The camera for a growth: where it looks from and along, and how far it frames (its distance to the anchor).
+// Close to the moss at first, the spore at the right of the well, low over the floor with the sky at the top; then
+// rising and looking down more steeply as the network spreads (the clearing, the forest, the valley, the region),
+// then out in space looking at the planet's night side, the moon beyond.
+struct CamPose { vec3 eye, fwd; float D, tanH; };
+CamPose cameraFor(float G, float aspect, float wobble) {
+    const float Rr = std::exp(G);
+    const float kP = smoothstepf(std::log(4.e5f), std::log(5.e6f), G);    // the planet in the frame
+    const float kO = smoothstepf(std::log(5.e6f), std::log(1.55e7f), G);  // pulling out to the moon
+    const float kM = smoothstepf(std::log(0.03f), std::log(60.f), G);     // the floor -> the forest
+    const float kR = smoothstepf(std::log(2000.f), std::log(1.e5f), G);   // the valley -> the region, more steeply down
+    const float tanH = std::tan(lerpf(25.f, 27.f, kM) * PI / 180.f);
+    float pitch = lerpf(-7.f, -20.f, kM);
+    pitch = lerpf(pitch, -29.f, kR);
+    pitch = lerpf(pitch, -60.f, kP);
+    pitch *= PI / 180.f;
+    const float F = lerpf(lerpf(1.05f, 0.82f, kM) * Rr, 0.95f * R_E, kP) * lerpf(1.f, 1.75f, kO);
+    const vec3 anchor(0.f, lerpf(0.12f * Rr * (1.f - kR), -R_E, kP), 0.f);
+    const float sx = lerpf(lerpf(0.64f, 0.56f, kM) - 0.06f * kR, 0.52f, kP) - 0.04f * kO;
+    const float sy = lerpf(lerpf(-0.36f, -0.3f, kM) - 0.05f * kR, -0.42f, kP) + 0.3f * kO;
+    const float az = CAM_AZ + wobble;
+    const float yaw = std::atan(sx * tanH * aspect / std::cos(pitch));
+    const float phi = az + yaw;
+    vec3 fwd(-std::sin(phi) * std::cos(pitch), std::sin(pitch), -std::cos(phi) * std::cos(pitch));
+    const vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
+    const vec3 upv = cross(right, fwd);
+    const vec3 dirA = normalize(fwd + right * (sx * tanH * aspect) + upv * (sy * tanH));
+    const float D = F / tanH;
+    CamPose c;
+    c.eye = anchor - dirA * D;
+    c.fwd = fwd;
+    c.D = D;
+    c.tanH = tanH;
+    return c;
 }
 
 } // namespace
@@ -161,12 +227,13 @@ int extraLines(double t) {
 // =====================================================================================================
 
 bool MyceliumUniverse::init(int width, int height) {
-    progBg_ = compile(ugl::FULLSCREEN_VS, shaders::BG_FS, "mycelium bg", true);
-    progThread_ = compile(shaders::THREAD_VS, shaders::THREAD_FS, "mycelium thread");
-    progNode_ = compile(shaders::NODE_VS, shaders::NODE_FS, "mycelium node");
-    progRoot_ = compile(shaders::ROOT_VS, shaders::ROOT_FS, "mycelium root");
-    progBoard_ = compile(shaders::BOARD_VS, shaders::BOARD_FS, "mycelium board", true);
-    progGlow_ = compile(shaders::GLOW_VS, shaders::GLOW_FS, "mycelium glow");
+    progSky_ = compileWorld(ugl::FULLSCREEN_VS, shaders::SKY_FS, "mycelium sky");
+    progThread_ = compileWorld(shaders::THREAD_VS, shaders::THREAD_FS, "mycelium thread");
+    progShroom_ = compileWorld(shaders::SHROOM_VS, shaders::SHROOM_FS, "mycelium shroom");
+    progPuff_ = compileWorld(shaders::PUFF_VS, shaders::PUFF_FS, "mycelium puff");
+    progGlow_ = compileWorld(shaders::GLOW_VS, shaders::GLOW_FS, "mycelium glow");
+    progCloud_ = compileWorld(shaders::CLOUD_VS, shaders::CLOUD_FS, "mycelium cloud");
+    progSea_ = compileWorld(ugl::FULLSCREEN_VS, shaders::SEA_FS, "mycelium sea");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "mycelium comp");
     progBright_ = compile(ugl::FULLSCREEN_VS, shaders::BRIGHT_FS, "mycelium bright");
     progBlur_ = compile(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "mycelium blur");
@@ -195,13 +262,46 @@ bool MyceliumUniverse::init(int width, int height) {
             glVertexAttribDivisor(1 + i, 1);
         }
     };
-    instanced(threadVao_, threadVbo_, 3, sizeof(float) * 12);
-    instanced(nodeVao_, nodeVbo_, 2, sizeof(float) * 8);
-    instanced(rootVao_, rootVbo_, 2, sizeof(float) * 8);
-    instanced(boardVao_, boardVbo_, 5, sizeof(Board));
+    instanced(threadVao_, threadVbo_, 4, sizeof(float) * 16);
+    instanced(puffVao_, puffVbo_, 4, sizeof(float) * 16);
     instanced(glowVao_, glowVbo_, 3, sizeof(float) * 12);
+    instanced(cloudVao_, cloudVbo_, 2, sizeof(float) * 8);
     instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
     instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
+    // the mushrooms' lathe: (u around, v along the profile), instanced
+    {
+        std::vector<float> uv;
+        std::vector<uint32_t> idx;
+        for (int j = 0; j <= LATHE_V; j++)
+            for (int i = 0; i <= LATHE_U; i++) {
+                uv.push_back((float)i / LATHE_U);
+                uv.push_back((float)j / LATHE_V);
+            }
+        for (int j = 0; j < LATHE_V; j++)
+            for (int i = 0; i < LATHE_U; i++) {
+                const uint32_t a = j * (LATHE_U + 1) + i, b = a + 1, c = a + LATHE_U + 1, d = c + 1;
+                idx.insert(idx.end(), {a, b, d, a, d, c});
+            }
+        shroomIdx_ = (GLsizei)idx.size();
+        glGenVertexArrays(1, &shroomVao_);
+        glGenBuffers(1, &shroomVbo_);
+        glGenBuffers(1, &shroomIbo_);
+        glGenBuffers(1, &shroomInst_);
+        glBindVertexArray(shroomVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, shroomVbo_);
+        glBufferData(GL_ARRAY_BUFFER, uv.size() * sizeof(float), uv.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, shroomInst_);
+        for (int i = 0; i < 5; i++) {
+            glEnableVertexAttribArray(1 + i);
+            glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 20, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(1 + i, 1);
+        }
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, shroomIbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
+    }
+    // shapes and text (pixels)
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -225,6 +325,8 @@ bool MyceliumUniverse::init(int width, int height) {
     buildFont(ital_, FONT_ITAL);
     pal_ = basePal_ = paletteOf(0);
     resize(width, height);
+    buildFlora();
+    buildClouds();
     return glGetError() == GL_NO_ERROR;
 }
 
@@ -285,8 +387,6 @@ void MyceliumUniverse::resize(int width, int height) {
     const int wh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
-    lightA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    lightB_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomB_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -294,13 +394,14 @@ void MyceliumUniverse::resize(int width, int height) {
 }
 
 MyceliumUniverse::~MyceliumUniverse() {
-    for (ugl::Target* t : {&worldT_, &lightA_, &lightB_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
-    for (GLuint p : {progBg_, progThread_, progNode_, progRoot_, progBoard_, progGlow_, progComp_, progBright_, progBlur_,
-                     progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_})
+    for (ugl::Target* t : {&worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    for (GLuint p : {progSky_, progThread_, progShroom_, progPuff_, progGlow_, progCloud_, progSea_, progComp_, progBright_,
+                     progBlur_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {threadVao_, nodeVao_, rootVao_, boardVao_, glowVao_, spriteVao_, cellVao_, shapeVao_, textVao_})
+    for (GLuint v : {threadVao_, shroomVao_, puffVao_, glowVao_, cloudVao_, spriteVao_, cellVao_, shapeVao_, textVao_})
         glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, threadVbo_, nodeVbo_, rootVbo_, boardVbo_, glowVbo_, spriteVbo_, cellVbo_, shapeVbo_, textVbo_})
+    for (GLuint b : {quadVbo_, threadVbo_, shroomVbo_, shroomIbo_, shroomInst_, puffVbo_, glowVbo_, cloudVbo_, spriteVbo_,
+                     cellVbo_, shapeVbo_, textVbo_})
         glDeleteBuffers(1, &b);
     for (Font* f : {&caps_, &capsB_, &ital_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
@@ -309,110 +410,167 @@ MyceliumUniverse::~MyceliumUniverse() {
 }
 
 // =====================================================================================================
-// The network and its mushrooms
+// The world: the network, the mushrooms, the ground cover, the village, the clouds
 // =====================================================================================================
 
 void MyceliumUniverse::uploadNet() {
     net_ = buildMycNet(netSeed_);
     glBindBuffer(GL_ARRAY_BUFFER, threadVbo_);
     glBufferData(GL_ARRAY_BUFFER, net_.seg.size() * sizeof(float), net_.seg.data(), GL_STATIC_DRAW);
-    threadCount_ = (GLsizei)(net_.seg.size() / 12);
-    glBindBuffer(GL_ARRAY_BUFFER, nodeVbo_);
-    glBufferData(GL_ARRAY_BUFFER, net_.nodes.size() * sizeof(float), net_.nodes.data(), GL_STATIC_DRAW);
-    nodeCount_ = (GLsizei)(net_.nodes.size() / 8);
-    glBindBuffer(GL_ARRAY_BUFFER, rootVbo_);
-    glBufferData(GL_ARRAY_BUFFER, net_.roots.size() * sizeof(float), net_.roots.data(), GL_STATIC_DRAW);
-    rootCount_ = (GLsizei)(net_.roots.size() / 8);
+    threadCount_ = (GLsizei)(net_.seg.size() / 16);
     planMushrooms();
-    planLandmarks();
     netDirty_ = false;
 }
 
-// The mushrooms: one at each of these lines, each bigger than the last (half the network's reach), with a few
-// smaller ones at its foot. Each comes up where the threads reach the surface, placed so that it stands in the
-// open at the sides of the well when it is born.
+// The mushrooms, once per game: one born every third of an e-fold of growth, at a site the threads reached a little
+// before, at about half the network's reach, where the camera will see it in the open beside the well; each a third of
+// the network's reach tall when it bursts up (capped at some 60 km: then glowing pins all over the globe), with two or
+// three smaller ones at its foot.
 void MyceliumUniverse::planMushrooms() {
     shrooms_.clear();
-    Rng r(netSeed_ ^ 0x5A0Full);
-    static const int AT[] = {2,  4,  6,  8,  10, 12, 14, 17, 20, 23, 26, 29, 32, 35, 38, 41, 44, 48, 52, 56, 60,
-                             65, 70, 75, 80, 86, 92, 98, 105, 112, 120, 130, 140, 150, 160, 175, 190, 205, 220};
-    float side = 1.f;
-    int lastColor = -1;
-    for (int li : AT) {
-        const float gl = myc::growthOf(li);
-        const float gm = gl - 0.03f;
-        const float R = std::exp(gm);
-        const float H = 0.58f * R * r.range(0.85f, 1.1f);
-        const myc::View vw = myc::frame(gl, 16.f / 9.f, 11.9f);
-        auto xOf = [&](float bx) { return vw.cx + bx * vw.vh / 11.9f; };
-        // a place in the open (the margins beside the HUD), over threads already there, away from the last ones
-        float bestX = 0.f, bestScore = -1e9f, usedSide = side;
-        auto tryRange = [&](float lo, float hi, float sd, float bonus) {
-            for (int k = 0; k < 24; k++) {
-                const float bx = sd * r.range(lo, hi);
-                const float x = xOf(bx);
-                if (std::fabs(x) > 0.95f * R) continue;
-                float score = bonus + r.range(0.f, 0.5f);
-                for (const Mushroom& o : shrooms_) {
-                    if (o.companion || o.h0 < 0.25f * H) continue;
-                    const float d = std::fabs(o.x - x) / H;
-                    if (d < 0.5f) score -= (0.5f - d) * 6.f;
-                }
-                if (score > bestScore) { bestScore = score; bestX = x; usedSide = sd; }
-            }
-        };
-        tryRange(side > 0.f ? 15.f : 15.5f, 19.5f, side, 3.f);
-        tryRange(side > 0.f ? 15.5f : 15.f, 19.5f, -side, 2.f);
-        if (bestScore < 0.5f) { tryRange(11.5f, 15.f, 1.f, 1.f); tryRange(12.f, 15.5f, -1.f, 1.f); }
-        if (bestScore < -1e8f) bestX = xOf(side * 17.f);
-        Mushroom m;
-        m.x = bestX;
-        // the pulse coordinate of the threads under it (the nearest site), else from its distance
-        m.q = std::log(std::max(std::fabs(m.x), 1e-4f));
-        {
-            float bd = 0.2f * R;
-            for (const MycNet::Site& st : net_.sites)
-                if (st.g < gm && std::fabs(st.x - m.x) < bd) { bd = std::fabs(st.x - m.x); m.q = st.q; }
+    Rng r(netSeed_ ^ 0x5A00ull);
+    if (net_.sites.empty()) return;
+    int n = 0;
+    for (float Gi = myc::G_MIN + 0.9f; Gi < myc::G_MAX - 0.1f; Gi += r.range(0.26f, 0.38f), n++) {
+        const float reach = std::exp(Gi);
+        // the camera a moment after the birth: where it will look
+        const CamPose cp = cameraFor(Gi + 0.5f, aspect_, 0.f);
+        const vec3 right = normalize(cross(cp.fwd, vec3(0, 1, 0)));
+        const vec3 upv = cross(right, cp.fwd);
+        int best = -1;
+        float bestS = -1e9f;
+        for (int k = 0; k < 60; k++) {
+            const int si = r.irange(0, (int)net_.sites.size() - 1);
+            const MycNet::Site& s = net_.sites[si];
+            if (s.g > Gi - 0.15f) continue;
+            const float rho = std::sqrt(s.x * s.x + s.z * s.z);
+            const float lr = std::log(std::max(rho, 1e-6f) / (reach * 0.7f));
+            if (std::fabs(lr) > 1.2f) continue;
+            const vec3 w = myc::toWorld(s.x, s.z) + myc::normalAt(s.x, s.z) * (reach * 0.12f);
+            const vec3 d = w - cp.eye;
+            const float z = dot(d, cp.fwd);
+            if (z <= 0.f) continue;
+            const float sx = dot(d, right) / (z * cp.tanH * aspect_), sy = dot(d, upv) / (z * cp.tanH);
+            // in the open beside the well, on the screen, a little to the right preferred
+            float score = -std::fabs(lr) * 0.6f;
+            const float ax = std::fabs(sx);
+            score -= ax < 0.36f ? 3.f : 0.f;
+            score -= ax > 0.92f ? 2.f : 0.f;
+            score -= sy > 0.75f || sy < -0.92f ? 2.f : 0.f;
+            score += sx > 0.f ? 0.4f : 0.f;
+            score += r.range(0.f, 0.5f);
+            if (score > bestS) { bestS = score; best = si; }
         }
-        const bool flip = usedSide == side;
-        m.g = gm;
-        m.h0 = H;
-        m.z = H * r.range(0.04f, 0.18f);
+        if (best < 0) continue;
+        const MycNet::Site& s = net_.sites[best];
+        Mushroom m;
+        m.x = s.x; m.z = s.z;
+        m.g = Gi;
+        m.h0 = std::min(reach * r.range(0.42f, 0.58f), 8.e4f);
+        m.type = r.chance(0.45f) ? 0 : r.chance(0.55f) ? 1 : 2;
+        m.capR = m.type == 0 ? r.range(0.36f, 0.46f) : m.type == 1 ? r.range(0.26f, 0.32f) : r.range(0.17f, 0.22f);
+        m.color = r.irange(0, 2);
         m.seed = r.uniform();
-        m.lean = r.range(-0.05f, 0.05f);
-        m.type = shrooms_.size() < 2 ? 2 : (r.chance(0.6f) ? 0 : 2);
-        if (r.chance(0.15f)) m.type = 1;
-        int c = r.irange(0, 2);
-        if (c == lastColor) c = (c + 1) % 3;
-        lastColor = c;
-        m.color = c;
+        m.lean = r.range(0.02f, 0.12f);
+        m.leanA = r.range(0.f, TAU);
         shrooms_.push_back(m);
-        // companions at its foot
-        const int n = r.irange(2, 4);
-        for (int k = 0; k < n; k++) {
+        // a few smaller ones at its foot
+        const int c = r.irange(1, 3);
+        for (int i = 0; i < c; i++) {
             Mushroom q = m;
-            q.companion = true;
-            const float sd = r.chance(0.5f) ? 1.f : -1.f;
-            q.h0 = H * r.range(0.12f, 0.38f);
-            q.x = m.x + sd * H * r.range(0.07f, 0.4f);
-            q.g = gm + r.range(0.03f, 0.25f);
-            q.z = std::max(0.01f * H, m.z + H * r.range(-0.03f, 0.12f));
-            q.seed = r.uniform();
-            q.lean = sd * r.range(0.0f, 0.12f);
-            q.type = r.chance(0.5f) ? 1 : m.type;
+            const float a = r.range(0.f, TAU), d = m.h0 * r.range(0.2f, 0.6f);
+            q.x += std::cos(a) * d;
+            q.z += std::sin(a) * d;
+            q.g = Gi + r.range(0.05f, 0.3f);
+            q.h0 = m.h0 * r.range(0.22f, 0.5f);
+            q.type = r.chance(0.6f) ? m.type : r.irange(0, 2);
+            q.capR = q.type == 0 ? r.range(0.36f, 0.46f) : q.type == 1 ? r.range(0.26f, 0.32f) : r.range(0.17f, 0.22f);
             q.color = r.chance(0.6f) ? m.color : r.irange(0, 2);
+            q.seed = r.uniform();
+            q.lean = r.range(0.05f, 0.25f);
+            q.leanA = std::atan2(q.z - m.z, q.x - m.x) + r.range(-0.4f, 0.4f);
             shrooms_.push_back(q);
         }
-        if (flip) side = -side;
     }
 }
 
-float MyceliumUniverse::shroomHeight(const Mushroom& m) const {
-    // it keeps growing after it bursts up (some four times taller over the next scales)
-    const float grow = std::exp(0.55f * std::min(std::max(0.f, g_ - m.g), 2.6f));
-    const float a = m.age;
-    const float e = std::max(0.f, 1.f - std::exp(-a * 3.2f) * std::cos(a * 5.f));
-    return m.h0 * grow * e;
+// The height: it bursts up when born, then keeps growing (some 2.6 times taller over the next scales).
+float MyceliumUniverse::shroomHeight(const Mushroom& m, float G) const {
+    const float e = (G - m.g) / 0.45f;
+    if (e < -0.3f) return 0.f;
+    const float rise = smoothstepf(-0.3f, 0.35f, e);
+    return m.h0 * rise * (1.f + 2.2f * smoothstepf(0.f, 3.5f, G - m.g));
+}
+float MyceliumUniverse::shroomOpen(const Mushroom& m, float G) const {
+    const float o = smoothstepf(0.05f, 1.f, (G - m.g) / 0.45f);
+    return o * (1.f + 0.18f * std::sin(o * PI));
+}
+
+// Ground cover at every scale, around the spore: moss sprigs with their capsules, moss cushions and pebbles, grass
+// tufts, bushes, trees; each scale is shown while it is a sensible size on screen.
+void MyceliumUniverse::buildFlora() {
+    plants_.clear();
+    Rng r(0xF10Aull);
+    for (int k = 0; k <= 10; k++) {
+        const float s = 0.0006f * std::pow(3.f, (float)k);
+        const int n = k >= 9 ? 130 : 150;
+        for (int i = 0; i < n; i++) {
+            const float a = r.range(0.f, TAU);
+            const float d = s * std::exp(r.range(std::log(k >= 9 ? 3.f : 1.8f), std::log(k >= 9 ? 30.f : 45.f)));
+            Plant p;
+            p.x = std::cos(a) * d;
+            p.z = std::sin(a) * d;
+            p.s = s * r.range(0.7f, 1.3f);
+            p.seed = r.uniform();
+            p.level = k;
+            if (k <= 2) p.kind = 0;                                   // moss sprigs
+            else if (k <= 4) p.kind = r.chance(0.8f) ? 1 : 2;         // moss cushions, pebbles
+            else if (k <= 6) p.kind = r.chance(0.6f) ? 3 : r.chance(0.5f) ? 1 : 2;   // grass, moss, stones
+            else if (k <= 8) p.kind = r.chance(0.55f) ? 4 : 3;        // bushes, tall grass and ferns
+            else p.kind = 5;                                          // trees
+            plants_.push_back(p);
+        }
+    }
+    // the village: houses gathered in a clearing ahead of the spore, on the left of the view
+    houses_.clear();
+    const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
+    const vec3 vc = fwdH * 350.f - rightH * 1400.f;
+    villageW_ = vc;
+    for (int i = 0; i < 40; i++) {
+        const float a = r.range(0.f, TAU), d = 200.f * std::sqrt(r.uniform());
+        House h;
+        h.x = vc.x + std::cos(a) * d;
+        h.z = vc.z + std::sin(a) * d;
+        h.w = r.range(10.f, 16.f);
+        h.h = h.w * r.range(0.55f, 0.75f);
+        h.seed = r.uniform();
+        h.kind = 0;
+        houses_.push_back(h);
+    }
+}
+
+void MyceliumUniverse::buildClouds() {
+    Rng r(0xC10Dull);
+    clouds_.clear();
+    for (int c = 0; c < 170; c++) {
+        const int band = c < 40 ? 0 : c < 120 ? 1 : 2;
+        const float a = r.range(0, TAU);
+        const float d = band == 0 ? r.range(600.f, 4000.f) : band == 1 ? r.range(4000.f, 18000.f) : r.range(18000.f, 50000.f);
+        const float big = (band == 0 ? r.range(110.f, 240.f) : band == 1 ? r.range(200.f, 450.f) : r.range(450.f, 950.f));
+        const vec3 ctr(std::cos(a) * d, CLOUD_Y + r.range(-250.f, 350.f), std::sin(a) * d);
+        const int n = r.irange(5, 8);
+        const float ca = r.range(0, TAU);
+        const vec3 ax(std::cos(ca), 0.f, std::sin(ca)), az(-std::sin(ca), 0.f, std::cos(ca));
+        for (int i = 0; i < n; i++) {
+            const float u = (i - (n - 1) * 0.5f) / std::max(1.f, (n - 1) * 0.5f);
+            Puff p;
+            p.r = big * r.range(0.55f, 0.85f) * (1.f - 0.45f * std::fabs(u));
+            p.p = ctr + ax * (u * big * 1.5f) + az * (r.range(-0.4f, 0.4f) * big) +
+                  vec3(0.f, r.range(0.f, 0.5f) * big * (1.f - std::fabs(u)) + p.r * 0.3f, 0.f);
+            p.seed = r.uniform();
+            clouds_.push_back(p);
+        }
+    }
 }
 
 // =====================================================================================================
@@ -421,17 +579,49 @@ float MyceliumUniverse::shroomHeight(const Mushroom& m) const {
 
 void MyceliumUniverse::updateCamera(float dt) {
     if (gc_ < -50.f) { gc_ = g_; gcVel_ = 0.f; }
-    const float w = 3.4f;
-    gcVel_ += (w * w * (g_ - gc_) + 2.f * w * (0.85f * gVel_ - gcVel_)) * dt;
-    gc_ += gcVel_ * dt;
-    view_ = myc::frame(gc_, aspect_, viewH_.y);
-    pxW_ = 2.f * view_.vh / (float)std::max(1, worldT_.h);
+    {
+        // a critically damped spring, slower than the growth's: the network spurts out, the camera follows
+        const float w = 3.6f;
+        gcVel_ += (w * w * (g_ - gc_) + 2.f * w * (0.85f * gVel_ - gcVel_)) * dt;
+        gc_ += gcVel_ * dt;
+    }
+    const CamPose c = cameraFor(gc_, aspect_, 0.035f * std::sin(time_ * 0.021f));
+    tanH_ = c.tanH;
+    eye_ = c.eye;
+    look_ = c.fwd;
+    camD_ = c.D;
+    camR_ = normalize(cross(look_, vec3(0, 1, 0)));
+    camU_ = cross(camR_, look_);
+    {
+        const vec3 oc(eye_.x, eye_.y + R_E, eye_.z);
+        alt_ = std::max(0.f, length(oc) - R_E);
+        if (length(oc) < 1e7f) alt_ = std::max(0.f, eye_.y + (eye_.x * eye_.x + eye_.z * eye_.z) / (2.f * R_E));
+    }
+    // the moon: low over the forest from the ground, high beside the planet from space
+    const float kP = smoothstepf(std::log(4.e5f), std::log(5.e6f), gc_);
+    const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
+    const vec3 mG = normalize(fwdH * 0.9f - rightH * 0.42f + vec3(0.f, 0.2f, 0.f));
+    const vec3 mP = normalize(look_ + camU_ * 0.3f - camR_ * 0.66f);
+    moonDir_ = normalize(lerp(mG, mP, kP));
+    // the sun: deep under the spore's horizon, behind the planet seen from space (its day side a crescent)
+    {
+        const CamPose P = cameraFor(16.3f, aspect_, 0.f);
+        const vec3 pr = normalize(cross(P.fwd, vec3(0, 1, 0))), pu = cross(pr, P.fwd);
+        const vec3 toC = vec3(0.f, -R_E, 0.f) - P.eye;
+        const vec3 dirC = normalize(toC);
+        const float ang = std::asin(std::min(1.f, R_E / length(toC))) * 0.9f;
+        sunDir_ = normalize(dirC * std::cos(ang) + normalize(pr * -0.75f + pu * 0.66f) * std::sin(ang));
+    }
+    const float zn = std::max(1e-6f, camD_ * 0.01f), zf = std::max({1.6e5f, camD_ * 1e4f});
+    const mat4 view3 = mat4::lookAt(vec3(0.f), look_, vec3(0, 1, 0));
+    proj3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, zn, zf);
+    vp3_ = proj3_ * view3;
 }
 
-vec2 MyceliumUniverse::worldToBoard(float x, float y, float z) const {
-    const float s = view_.D / (view_.D + z);
-    const float wx = view_.ex + (x - view_.ex) * s, wy = view_.ey + (y - view_.ey) * s;
-    return V(viewC_.x + (wx - view_.cx) / view_.vh * viewH_.y, viewC_.y + (wy - view_.cy) / view_.vh * viewH_.y);
+vec2 MyceliumUniverse::toBoard(const vec3& w) const {
+    const vec4 c = vp3_ * vec4(w - eye_, 1.f);
+    if (c.w <= 1e-12f) return V(viewC_.x + viewH_.x, viewC_.y);
+    return V(viewC_.x + c.x / c.w * viewH_.x, viewC_.y + c.y / c.w * viewH_.y);
 }
 
 // =====================================================================================================
@@ -493,7 +683,7 @@ vec2 MyceliumUniverse::project(const vec3& p) const { return layout::project(vp_
 TransitionHints MyceliumUniverse::hints() const {
     const Palette p = paletteOf(variant_);
     TransitionHints h;
-    h.background = lerp(p.skyLow, p.soilB, 0.5f);
+    h.background = lerp(p.skyTop, p.mist, 0.5f);
     h.light = false;
     h.ink = p.ink;
     h.accent = p.thread;
@@ -574,8 +764,8 @@ void MyceliumUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
         const int lines = std::max(1, ev.count);
-        // the cells fray into light that flies down into the soil, to the network's heart
-        vec2 to = worldToBoard(0.f, myc::SPORE_Y);
+        // the cells fray into light that flies to the network's heart
+        vec2 to = toBoard(vec3(0.f));
         to.x = std::clamp(to.x, viewC_.x - viewH_.x + 1.f, viewC_.x + viewH_.x - 1.f);
         to.y = std::clamp(to.y, viewC_.y - viewH_.y + 1.f, viewC_.y + viewH_.y - 1.f);
         const float side = to.x >= 0.f ? 1.f : -1.f;
@@ -597,8 +787,8 @@ void MyceliumUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 Mote mt;
                 mt.kind = 1;
                 mt.from = V(p.x + rng_.range(-0.3f, 0.3f), p.y + rng_.range(-0.3f, 0.3f));
-                mt.to = add(to, V(rng_.range(-1.2f, 1.2f), rng_.range(-0.8f, 0.8f)));
-                mt.ctl = V(side * rng_.range(5.5f, 7.5f), std::min(mt.from.y, mt.to.y) + rng_.range(2.f, 5.f));
+                mt.to = add(to, V(rng_.range(-0.5f, 0.5f), rng_.range(-0.4f, 0.4f)));
+                mt.ctl = V(side * rng_.range(5.5f, 7.5f), std::max(mt.from.y, mt.to.y) + rng_.range(1.f, 4.f));
                 mt.p = mt.from;
                 mt.life = FLOW_T * rng_.range(0.8f, 1.1f);
                 mt.age = -rng_.range(0.f, 0.25f) - (float)(side > 0 ? Game::W - 1 - cl.x : cl.x) * 0.015f;
@@ -619,13 +809,14 @@ void MyceliumUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        // a spurt, and a pulse out from the spore through every thread
+        // a spurt, the heart pulsing its light out through every thread (as the motes arrive)
         spurt_ = std::max(spurt_, 0.4f + 0.15f * lines);
         if ((int)pulses_.size() < 6) {
-            const float q0 = std::log(view_.vh * 0.04f);
-            pulses_.push_back({q0, (g_ + 0.4f - q0) / 1.6f, lines >= 4 ? 1.1f : 0.5f, 1.f, rng_.uniform()});
+            const float q0 = std::log(camD_ * 0.004f);
+            const float dur = lines >= 4 ? 1.8f : 1.5f;
+            pulses_.push_back({q0 - (g_ + 0.6f - q0) / dur * 0.9f, (g_ + 0.6f - q0) / dur, lines >= 4 ? 1.3f : 0.7f, 1.f, 0.45f});
         }
-        if (lines >= 4) tetrisGlow_ = 1.f;
+        if (lines >= 4) { tetrisGlow_ = 1.f; burst_ = 1.f; }
         break;
     }
     case GameEvent::TopOut: {
@@ -938,377 +1129,6 @@ void MyceliumUniverse::drawHud(const std::vector<HudText>& hud, const std::vecto
 }
 
 // =====================================================================================================
-// Plants, trees, rocks: built for the view every frame
-// =====================================================================================================
-
-// Things at every scale stand behind the cut: for each size class, a few rows at depths proportional to it, laid on
-// a grid of cells hashed into plants, rocks and trees; only those that are a sensible size on screen are kept (so a
-// moss sprig in the macro view, a fern later, trees in the wide view). The plants on the cut's edge come from the
-// roots' clusters (network.cpp).
-void MyceliumUniverse::buildFlora() {
-    const myc::View& v = view_;
-    const float hw = v.vh * aspect_;
-    const float screenH = (float)worldT_.h;
-    const float R = std::exp(g_);
-    const float world = 1.f - smoothstepf(0.f, 0.7f, smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
-    auto push = [&](float x, float y, float z, float h, float w, int type, float seed, float alpha, const float c[4],
-                    const vec3& col, float glow, const vec3& col2, float e) {
-        Board b;
-        b.a[0] = x; b.a[1] = y; b.a[2] = z; b.a[3] = h;
-        b.b[0] = w; b.b[1] = (float)type; b.b[2] = seed; b.b[3] = alpha;
-        for (int i = 0; i < 4; i++) b.c[i] = c[i];
-        b.d[0] = col.x; b.d[1] = col.y; b.d[2] = col.z; b.d[3] = glow;
-        b.e[0] = col2.x; b.e[1] = col2.y; b.e[2] = col2.z; b.e[3] = e;
-        boards_.push_back(b);
-    };
-    auto sizeAlpha = [&](float h, float z) {
-        const float hpx = h * v.D / (v.D + z) / pxW_;
-        return smoothstepf(3.f, 9.f, hpx) * (1.f - smoothstepf(1.f * screenH, 1.7f * screenH, hpx));
-    };
-    auto hashf = [](int a, int b, int c) {
-        uint64_t h = splitmix64((uint64_t)(uint32_t)a * 0x9E3779B97F4A7C15ull ^ ((uint64_t)(uint32_t)b << 20) ^ ((uint64_t)c << 40));
-        return (h >> 40) * (1.0f / 16777216.0f);
-    };
-    const float pinsK = smoothstepf(myc::growthOf(2), myc::growthOf(4), g_);
-    // clearings: no tree in front of a human-made thing that is showing (its window span and depth)
-    struct Span { float l, r, z, k; };
-    std::vector<Span> clear;
-    for (const Landmark& m : marks_) {
-        if (m.type >= L_PLANE || m.type == L_WIRES || m.shroom < 0 || !shrooms_[m.shroom].born) continue;
-        const float sk = smoothstepf(0.f, 1.5f, shrooms_[m.shroom].age);
-        if (sk <= 0.f) continue;
-        const float k = v.D / (v.D + m.z);
-        const float w = m.w * (m.type == L_PYLON ? 2.f : 1.3f);
-        clear.push_back({v.ex + (m.x - w - v.ex) * k, v.ex + (m.x + w - v.ex) * k, m.z, sk});
-    }
-    auto hides = [&](float x, float w, float z) {
-        const float k = v.D / (v.D + z);
-        const float l = v.ex + (x - w - v.ex) * k, r = v.ex + (x + w - v.ex) * k;
-        float h = 0.f;
-        for (const Span& c : clear)
-            if (z < c.z && r > c.l && l < c.r) h = std::max(h, c.k);
-        return h;
-    };
-    // the floor's clutter at every scale
-    for (int k = 0; k <= 10; k++) {
-        const float s = 0.0015f * std::pow(3.f, (float)k);
-        for (int j = 0; j < 3; j++) {
-            const float z0 = s * (j == 0 ? 1.1f : j == 1 ? 2.8f : 6.5f);
-            const bool trees = k >= 8;
-            const float hTyp = trees ? 22.f : s;
-            if (sizeAlpha(hTyp, z0) <= 0.f && sizeAlpha(hTyp * 0.5f, z0) <= 0.f) continue;
-            const float sc = (v.D + z0) / v.D;
-            const float left = v.ex + (v.cx - hw - v.ex) * sc, right = v.ex + (v.cx + hw - v.ex) * sc;
-            const float cs = s * (trees ? 0.9f : 1.1f);
-            const int i0 = (int)std::floor((left - 2.f * s) / cs), i1 = (int)std::ceil((right + 2.f * s) / cs);
-            const int n = i1 - i0;
-            const int stride = std::max(1, n / 220);
-            for (int i = i0; i <= i1; i += stride) {
-                const float h0 = hashf(i, k, j * 7 + 1);
-                if (h0 > (trees ? 0.5f : 0.62f)) continue;
-                const float x = (i + 0.15f + 0.7f * hashf(i, k, j * 7 + 2)) * cs;
-                const float z = z0 * (0.8f + 0.4f * hashf(i, k, j * 7 + 3));
-                const float seed = hashf(i, k, j * 7 + 4);
-                const float tsel = hashf(i, k, j * 7 + 5);
-                const bool under = std::fabs(x) < R * 0.85f && z < R * 0.4f;
-                int type;
-                float h, wq;
-                float c[4] = {0, 0, 0, 0};
-                vec3 col = pal_.cap[(int)(seed * 3.f) % 3];
-                float glow = 0.f;
-                if (trees) {
-                    type = B_TREE;
-                    h = 17.f + 13.f * seed;
-                    c[0] = 0.018f + 0.014f * hashf(i, k, 9);
-                    c[1] = 0.32f + 0.15f * hashf(i, k, 10);
-                    c[2] = 0.2f + 0.12f * hashf(i, k, 11);
-                    wq = h * 0.36f;
-                } else if (k <= 1) {
-                    type = (under && pinsK > 0.f && tsel < 0.18f) ? B_PINS : tsel < 0.7f ? B_MOSS : B_ROCK;
-                    h = s * (0.6f + 0.6f * seed);
-                    wq = h * (type == B_ROCK ? 0.7f : 0.9f);
-                } else if (k <= 3) {
-                    type = (under && pinsK > 0.f && tsel < 0.22f) ? B_PINS : tsel < 0.45f ? B_MOSS : tsel < 0.85f ? B_GRASS : B_ROCK;
-                    h = s * (0.7f + 0.7f * seed);
-                    wq = h * (type == B_ROCK ? 0.7f : type == B_GRASS ? 0.5f : 0.9f);
-                } else if (k <= 5) {
-                    type = (under && pinsK > 0.f && tsel < 0.18f) ? B_PINS : tsel < 0.45f ? B_GRASS : tsel < 0.85f ? B_FERN : B_ROCK;
-                    h = s * (0.8f + 0.7f * seed);
-                    wq = h * (type == B_ROCK ? 0.7f : type == B_FERN ? 0.75f : 0.5f);
-                } else {
-                    type = tsel < 0.4f ? B_FERN : tsel < 0.82f ? B_BUSH : B_ROCK;
-                    h = s * (0.7f + 0.8f * seed) * (type == B_BUSH ? 1.1f : 1.f);
-                    wq = h * (type == B_ROCK ? 0.7f : type == B_FERN ? 0.75f : 0.7f);
-                }
-                if (type == B_PINS) {
-                    c[0] = seed;
-                    glow = pal_.glow * (0.7f + 0.3f * hashf(i, k, 12)) * pinsK * (1.f - 0.7f * over_);
-                    h *= 0.8f;
-                    wq = h * 0.6f;
-                }
-                if (type == B_MOSS) glow = pinsK * (under ? 1.f : 0.f) * (1.f - 0.7f * over_);
-                const float a = sizeAlpha(h, z) * world;
-                if (a <= 0.003f) continue;
-                const float hid = (type == B_TREE || type == B_BUSH) ? hides(x, wq * 0.8f, z) : 0.f;
-                if (hid >= 0.999f) continue;
-                push(x, myc::surf(x), z, h, wq, type, seed, a * (1.f - hid), c, col, glow, vec3(0.f), 0.f);
-            }
-        }
-    }
-    // the plants on the cut's edge (over the roots)
-    for (const MycNet::Plant& p : net_.plants) {
-        const float x = p.x;
-        if (x < v.cx - hw * 1.2f - p.s * 2.f || x > v.cx + hw * 1.2f + p.s * 2.f) continue;
-        int type;
-        float h, wq, z;
-        float c[4] = {0, 0, 0, 0};
-        if (p.cls <= 2) { type = p.seed < 0.5f ? B_MOSS : B_GRASS; h = p.s * (type == B_MOSS ? 0.5f : 1.3f); wq = h * 0.8f; z = p.s * 0.06f; }
-        else if (p.cls <= 4) { type = p.seed < 0.55f ? B_GRASS : B_FERN; h = p.s * 1.4f; wq = h * 0.7f; z = p.s * 0.08f; }
-        else if (p.cls <= 6) { type = p.seed < 0.5f ? B_FERN : B_BUSH; h = p.s * 1.1f; wq = h * 0.75f; z = p.s * 0.1f; }
-        else {
-            type = B_TREE;
-            h = std::clamp(p.s * 2.f, 15.f, 30.f);
-            c[0] = 0.02f + 0.012f * p.seed;
-            c[1] = 0.3f + 0.15f * p.seed;
-            c[2] = 0.2f + 0.1f * p.seed;
-            wq = h * 0.36f;
-            z = 0.6f + p.s * 0.08f;
-        }
-        const float a = sizeAlpha(h, z) * world;
-        if (a <= 0.003f) continue;
-        const float hid = type == B_TREE ? hides(x, wq * 0.8f, z) : 0.f;
-        if (hid >= 0.999f) continue;
-        push(x, myc::surf(x), z, h, wq, type, p.seed, a * (1.f - hid), c, vec3(0.f), 0.f, vec3(0.f), 0.f);
-    }
-}
-
-void MyceliumUniverse::buildShroomBoards() {
-    const float world = 1.f - smoothstepf(0.f, 0.7f, smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
-    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    const float life = smoothstepf(0.f, 1.f, dropAmt_);
-    const float wilt = smoothstepf(0.5f, 3.5f, overT_ >= 0.f ? overT_ : 0.f);
-    for (const Mushroom& m : shrooms_) {
-        if (!m.born) continue;
-        const float H = shroomHeight(m) * (1.f - wilt);
-        if (H <= 0.f) continue;
-        const float hpx = H * view_.D / (view_.D + m.z) / pxW_;
-        if (hpx < 2.f) continue;
-        const float open = smoothstepf(0.25f, 1.8f, m.age) * (1.f - 0.4f * wilt);
-        const float glow = pal_.glow * (0.6f + 0.1f * wm + 0.2f * wp + 0.1f * life + 0.12f * swell_) * (1.f - 0.75f * over_) +
-                           m.flare * 0.8f + m.beat * 0.4f;
-        const float wave = m.flareT < 1.6f ? m.flareT / 0.75f : 0.f;
-        Board b;
-        b.a[0] = m.x; b.a[1] = myc::surf(m.x); b.a[2] = m.z; b.a[3] = H;
-        b.b[0] = H * 0.55f; b.b[1] = (float)B_MUSHROOM; b.b[2] = m.seed; b.b[3] = world * smoothstepf(2.f, 6.f, hpx);
-        b.c[0] = open; b.c[1] = (float)m.type; b.c[2] = wave; b.c[3] = m.lean + (m.companion ? 0.f : 0.f) + wilt * 0.15f;
-        const vec3 cc = pal_.cap[m.color], gc = pal_.gill[m.color];
-        b.d[0] = cc.x; b.d[1] = cc.y; b.d[2] = cc.z; b.d[3] = glow;
-        b.e[0] = gc.x; b.e[1] = gc.y; b.e[2] = gc.z; b.e[3] = 0.f;
-        boards_.push_back(b);
-    }
-}
-
-// =====================================================================================================
-// Human-made things, for scale
-// =====================================================================================================
-
-// Things people built, at their real sizes, standing among the mushrooms: each one comes with the mushroom that is
-// about its height when it bursts up (at its foot, beside its stem, at its depth), so the two are seen side by side;
-// then the mushrooms keep growing and newer ones tower higher, and the same house, church or skyscraper ends up at an
-// ankle. A cabin and its car, a farmhouse, a line of pylons, a church, a helicopter, wind turbines, a hot-air balloon,
-// skyscrapers, a radio mast, airliners crossing between the caps (at fixed altitudes: low beside the last caps), and
-// clouds wrapping the stems.
-void MyceliumUniverse::planLandmarks() {
-    marks_.clear();
-    Rng r(netSeed_ ^ 0x1A4D3A2Cull);
-    // the main mushroom whose height is nearest a target
-    auto pick = [&](float target) {
-        int best = -1;
-        float bd = 1e9f;
-        for (int i = 0; i < (int)shrooms_.size(); i++) {
-            const Mushroom& m = shrooms_[i];
-            if (m.companion) continue;
-            const float d = std::fabs(std::log(m.h0 / target));
-            if (d < bd) { bd = d; best = i; }
-        }
-        return best;
-    };
-    // its side of the screen when it is born (to keep what stands by it in the open)
-    auto sideOf = [&](const Mushroom& m) {
-        const myc::View v = myc::frame(m.g, 16.f / 9.f, 11.9f);
-        return (m.x - v.cx) >= 0.f ? 1.f : -1.f;
-    };
-    auto add = [&](int type, int sh, float dx, float y, float dz, float h, float w, float p0 = 0.f) {
-        if (sh < 0) return;
-        const Mushroom& m = shrooms_[sh];
-        Landmark l;
-        l.type = type; l.shroom = sh; l.x = m.x + dx; l.y = y; l.z = std::max(0.5f, m.z + dz); l.h = h; l.w = w;
-        l.p0 = p0; l.seed = r.uniform(); l.u = 0.f; l.init = false;
-        if (l.y < -1e8f) l.y = myc::surf(l.x);
-        marks_.push_back(l);
-    };
-    const float GROUND = -1e9f;
-    // beside a mushroom: toward the inside of the screen when it stands at the edge, at its foot, a little in front
-    auto beside = [&](int sh, float gap) {
-        if (sh < 0) return 0.f;
-        const Mushroom& m = shrooms_[sh];
-        return -sideOf(m) * (0.07f * m.h0 + gap);
-    };
-    {   // a cabin, its car parked by it
-        const int s = pick(6.5f);
-        const float dx = beside(s, 5.f);
-        add(L_CABIN, s, dx, GROUND, -0.3f * (s >= 0 ? shrooms_[s].z : 0.f), 6.f, 4.4f, 0.f);
-        add(L_CAR, s, dx + (dx > 0.f ? 8.f : -8.f), GROUND, -0.35f * (s >= 0 ? shrooms_[s].z : 0.f), 1.5f, 2.3f, dx > 0.f ? 1.f : -1.f);
-    }
-    {   const int s = pick(10.f); add(L_CABIN, s, beside(s, 9.f), GROUND, -0.3f * (s >= 0 ? shrooms_[s].z : 0.f), 9.f, 8.5f, 1.f); }
-    {   // a line of pylons striding past a mushroom, their wires
-        const int s = pick(40.f);
-        if (s >= 0) {
-            const float dir = -sideOf(shrooms_[s]);
-            const float x0 = 0.05f * shrooms_[s].h0 * dir;
-            for (int i = 0; i < 4; i++) {
-                const float dx = x0 + dir * i * 60.f;
-                add(L_PYLON, s, dx, GROUND, 10.f + i * 4.f, 38.f, 13.f);
-                if (i < 3) add(L_WIRES, s, dx + dir * 30.f, GROUND, 12.f + i * 4.f, 38.f, 30.f);
-            }
-        }
-    }
-    {   const int s = pick(55.f); add(L_SPIRE, s, beside(s, 30.f), GROUND, -0.3f * (s >= 0 ? shrooms_[s].z : 0.f), 55.f, 25.f); }
-    {   const int s = pick(100.f); add(L_HELI, s, 0.f, 130.f, -0.4f * (s >= 0 ? shrooms_[s].z : 0.f), 6.f, 4.4f, 1.f); }
-    {   // wind turbines around a mushroom's foot
-        const int s = pick(160.f);
-        if (s >= 0) {
-            const float sd = -sideOf(shrooms_[s]);
-            for (int i = 0; i < 3; i++)
-                add(L_TURBINE, s, sd * (0.12f * shrooms_[s].h0 + 70.f + i * 160.f), GROUND, (i - 1) * 40.f, 150.f, 64.f);
-        }
-    }
-    {   const int s = pick(230.f); add(L_BALLOON, s, 0.f, 230.f, -0.5f * (s >= 0 ? shrooms_[s].z : 0.f), 26.f, 9.f, -1.f); }
-    {   // skyscrapers growing among the stems
-        const int s = pick(400.f);
-        add(L_SKYLINE, s, beside(s, 60.f), GROUND, -0.25f * (s >= 0 ? shrooms_[s].z : 0.f), 400.f, 300.f);
-        const int s2 = pick(650.f);
-        if (s2 >= 0 && s2 != s) add(L_SKYLINE, s2, beside(s2, 70.f), GROUND, -0.25f * shrooms_[s2].z, 460.f, 340.f);
-        add(L_MAST, s2 >= 0 ? s2 : s, -beside(s2 >= 0 ? s2 : s, 200.f), GROUND, -0.2f * (s >= 0 ? shrooms_[s].z : 0.f), 600.f, 230.f);
-    }
-    {   // airliners, low over the land first, then far under the caps
-        add(L_PLANE, pick(170.f), 0.f, 210.f, -20.f, 60.f, 34.f, 1.f);
-        add(L_PLANE, pick(420.f), 0.f, 480.f, -40.f, 70.f, 40.f, -1.f);
-        add(L_PLANE, pick(850.f), 0.f, 880.f, -60.f, 70.f, 40.f, 1.f);
-    }
-    {   // clouds wrapping the stems of the tallest
-        for (int k = 0; k < 2; k++) {
-            const int s = pick(k == 0 ? 1100.f : 1800.f);
-            if (s < 0) continue;
-            const float H = shrooms_[s].h0;
-            for (int i = 0; i < 6; i++)
-                add(L_CLOUD, s, r.range(-0.6f, 0.6f) * H, r.range(0.35f, 0.6f) * H * (k == 0 ? 1.f : 0.8f), (i % 2 ? -0.06f : 0.08f) * H,
-                    0.12f * H, r.range(0.25f, 0.5f) * H);
-        }
-    }
-}
-
-void MyceliumUniverse::buildLandmarks() {
-    markGlow_.clear();
-    const myc::View& v = view_;
-    const float hw = v.vh * aspect_;
-    const float screenH = (float)worldT_.h;
-    const float world = 1.f - smoothstepf(0.f, 0.7f, smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
-    auto sizeA = [&](float h, float z) {
-        const float hpx = h * v.D / (v.D + z) / pxW_;
-        return smoothstepf(1.f, 3.f, hpx) * (1.f - smoothstepf(1.4f * screenH, 2.2f * screenH, hpx));
-    };
-    // a light: never under ~3 px, so a small lamp stays a point of light
-    auto light = [&](const vec3& p, float size, const vec3& c, float a) {
-        if (a <= 0.004f) return;
-        const float minS = 3.f * pxW_ * (v.D + p.z) / v.D;
-        const float q[12] = {p.x, p.y, p.z, std::max(size, minS), c.x, c.y, c.z, a * world, 3.f, 0.f, 0.f, 0.f};
-        markGlow_.insert(markGlow_.end(), q, q + 12);
-    };
-    auto blink = [&](float f, float ph) { const float s = 0.5f + 0.5f * std::sin(time_ * TAU * f + ph); return 0.25f + 0.75f * s * s * s; };
-    const vec3 warm = ugl::toLinear(vec3(1.f, 0.78f, 0.5f)), red = ugl::toLinear(vec3(1.f, 0.16f, 0.1f)),
-               green = ugl::toLinear(vec3(0.3f, 1.f, 0.45f)), white = vec3(1.f, 0.97f, 0.92f);
-    const float t = time_;
-    const float dtw = std::max(0.f, time_ - markTime_);
-    markTime_ = time_;
-    for (Landmark& m : marks_) {
-        if (m.shroom < 0 || m.shroom >= (int)shrooms_.size()) continue;
-        const Mushroom& sh = shrooms_[m.shroom];
-        if (!sh.born) { m.init = false; continue; }
-        const float ga = smoothstepf(0.f, 1.5f, sh.age);
-        float x = m.x, y = m.y;
-        const bool flies = m.type == L_PLANE || m.type == L_HELI || m.type == L_BALLOON;
-        if (flies) {
-            // moving in screen space (u: the offset from the eye in window heights at its depth), so a plane always
-            // moves forward on screen however the camera pulls back
-            const float span = aspect_ * 1.05f + (m.type == L_PLANE ? 8.f * m.h / v.vh : 0.25f);
-            const float c0 = (v.cx - v.ex) / v.vh;
-            if (!m.init) {
-                const float k = v.D / (v.D + m.z);
-                m.u = (sh.x - v.ex) * k / v.vh - m.p0 * 0.6f;
-                m.init = true;
-            }
-            const float speed = m.type == L_PLANE ? 0.16f : m.type == L_HELI ? 0.07f : 0.012f;
-            m.u += m.p0 * speed * dtw;
-            if (m.u > c0 + span) m.u -= 2.f * span;
-            if (m.u < c0 - span) m.u += 2.f * span;
-            x = v.ex + m.u * v.vh * (v.D + m.z) / v.D;
-            if (m.type == L_BALLOON) y += 6.f * std::sin(t * 0.2f + m.seed * 9.f);
-        }
-        const float a = ga * sizeA(m.h, m.z) * world;
-        Board b;
-        b.a[0] = x; b.a[1] = y; b.a[2] = m.z; b.a[3] = m.h;
-        b.b[0] = m.w; b.b[1] = (float)(8 + m.type); b.b[2] = m.seed; b.b[3] = a;
-        b.c[0] = m.p0; b.c[1] = b.c[2] = b.c[3] = 0.f;
-        for (int i = 0; i < 4; i++) { b.d[i] = 0.f; b.e[i] = 0.f; }
-        if (a > 0.003f) boards_.push_back(b);
-        const float la = ga * world * smoothstepf(0.3f, 1.5f, m.h * v.D / (v.D + m.z) / pxW_ + 1.f);
-        switch (m.type) {
-        case L_CABIN: light(vec3(x, y + m.h * 0.3f, m.z - 0.5f), m.h * 0.9f, warm, 0.1f * la); break;
-        case L_CAR:
-            light(vec3(x + m.w * 0.95f * m.p0, y + m.h * 0.42f, m.z - 0.3f), m.h * 0.35f, white, 0.8f * la);
-            light(vec3(x + m.w * 0.95f * m.p0 + m.p0 * m.h * 2.f, y + m.h * 0.3f, m.z - 0.3f), m.h * 1.6f, white, 0.12f * la);
-            break;
-        case L_PYLON: light(vec3(x, y + m.h, m.z - 0.5f), 1.2f, red, 0.5f * la * blink(0.4f, 0.f)); break;
-        case L_SPIRE: light(vec3(x - m.h * 0.22f, y + m.h * 0.3f, m.z - 1.f), m.h * 0.35f, warm, 0.12f * la); break;
-        case L_MAST:
-            for (int i = 1; i <= 3; i++) light(vec3(x, y + m.h * (i == 3 ? 1.f : i * 0.33f), m.z - 1.f), 3.f, red, 0.85f * la * blink(0.5f, 0.f));
-            break;
-        case L_TURBINE: light(vec3(x, y + m.h * 0.68f, m.z - 1.f), 2.5f, red, 0.75f * la * blink(0.5f, 1.3f)); break;
-        case L_SKYLINE:
-            light(vec3(x + 0.05f * m.w, y + m.h * 1.06f, m.z - 1.f), 4.f, red, 0.8f * la * blink(0.45f, 2.f));
-            light(vec3(x, y + m.h * 0.3f, m.z - 5.f), m.w * 1.2f, warm, 0.05f * la);
-            break;
-        case L_PLANE: {
-            const float dir = m.p0;
-            Board tr = b;
-            const float len = 7.f * m.h;
-            tr.a[0] = x - dir * (len + m.h * 0.5f); tr.a[1] = y + m.h * 0.5f - 0.4f * m.h; tr.a[3] = 0.8f * m.h;
-            tr.b[0] = len; tr.b[1] = 17.f; tr.b[3] = ga * world * 0.8f;
-            tr.c[0] = dir;
-            boards_.push_back(tr);
-            light(vec3(x + dir * m.h * 0.5f, y + m.h * 0.47f, m.z - 1.f), 2.f, white, 0.9f * la);
-            light(vec3(x + dir * m.h * 1.6f, y + m.h * 0.4f, m.z - 1.f), m.h * 1.2f, white, 0.07f * la);
-            light(vec3(x, y + m.h * 0.48f, m.z - 1.f), 1.5f, red, 0.9f * la);
-            light(vec3(x, y + m.h * 0.48f, m.z + 1.f), 1.5f, green, 0.6f * la);
-            light(vec3(x - dir * m.h * 0.45f, y + m.h * 0.68f, m.z - 1.f), 1.5f, white, 0.9f * la * blink(0.7f, m.seed * 6.f));
-            light(vec3(x, y + m.h * 0.56f, m.z - 1.f), 1.5f, red, 0.7f * la * blink(0.55f, 1.f));
-            break;
-        }
-        case L_HELI:
-            light(vec3(x, y + m.h * 0.7f, m.z - 1.f), 1.2f, red, 0.85f * la * blink(0.6f, 0.5f));
-            light(vec3(x + m.p0 * m.h * 0.3f, y + m.h * 0.3f, m.z - 1.f), 1.2f, white, 0.6f * la);
-            break;
-        case L_BALLOON:
-            light(vec3(x, y + m.h * 0.3f, m.z - 1.f), m.h * 0.5f, warm, 0.18f * la * (0.7f + 0.3f * std::sin(t * 0.7f + m.seed * 9.f)));
-            break;
-        default: break;
-        }
-    }
-    (void)hw;
-}
-
-// =====================================================================================================
 // Frame
 // =====================================================================================================
 
@@ -1323,7 +1143,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
-    over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 3.f) : 0.f, overT_ >= 0.f ? 10.f : 0.8f, dt);
+    over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 3.5f) : 0.f, overT_ >= 0.f ? 10.f : 0.8f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += wdt;
 
@@ -1342,7 +1162,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
 
-    // ---- The game's lines -> the growth (a new game grows a new network).
+    // ---- The game's lines -> the growth (a new game grows a new network from a new spore).
     {
         const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
         if (netSeed_ == 0) { netSeed_ = seed_ ? seed_ : 1; netDirty_ = true; }
@@ -1352,199 +1172,237 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             gBonus_ = 0.f;
             g_ = myc::growthOf(lines);
             gVel_ = 0.f;
+            newT_ = 0.f;
             spores_.clear();
             pulses_.clear();
         }
         lines_ = lines;
         if (netDirty_) uploadNet();
-        if (isDrop && !wasDrop_) gBonus_ += 0.12f;
+        if (isDrop && !wasDrop_) gBonus_ += 0.25f; // the drop spreads it a little farther
         gTarget_ = std::min(myc::G_MAX, myc::growthOf(lines) + gBonus_);
         if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
         linesShown_ = lines;
         // a spurt: a critically damped spring toward the target, over a second or so
-        const float w = 3.6f;
+        const float w = 4.f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
+        newT_ += dt;
     }
     spurt_ = approach(spurt_, 0.f, 1.2f, dt);
+    burst_ = approach(burst_, 0.f, 0.8f, dt);
+    if (isDrop && !wasDrop_) {
+        // one wave of light from the spore out through the whole network
+        waveQ_ = std::log(camD_ * 0.003f);
+        waveSpeed_ = (g_ + 0.8f - waveQ_) / 3.4f;
+        waveAmp_ = 0.75f;
+    }
+    wasDrop_ = isDrop;
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.5f : 0.4f, dt);
+    const float life = smoothstepf(0.f, 1.f, dropAmt_);
+    if (waveAmp_ > 0.f) {
+        waveQ_ += waveSpeed_ * wdt;
+        if (waveQ_ > g_ + 1.f) waveAmp_ = approach(waveAmp_, 0.f, 0.8f, dt);
+    }
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { basePal_ = target; palSet_ = true; }
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
         pal_ = basePal_;
         if (slow_ > 0.01f) {
-            // slow motion: a hush, the night colder and the light paler
+            // slow motion: a hush, the night cooler and stiller, the moon brighter
             const float k = slow_;
-            pal_.mist = lerp(pal_.mist, pal_.mist * vec3(0.8f, 0.95f, 1.25f), k);
-            pal_.skyLow = lerp(pal_.skyLow, pal_.skyLow * vec3(0.8f, 0.95f, 1.2f), k);
-            pal_.thread = lerp(pal_.thread, lerp(pal_.thread, pal_.pulse, 0.4f), k);
+            pal_.moonC = lerp(pal_.moonC, pal_.moonC * vec3(0.85f, 0.95f, 1.25f), k);
+            pal_.mist = lerp(pal_.mist, pal_.mist * vec3(0.8f, 0.9f, 1.25f), k);
+            pal_.dusk = lerp(pal_.dusk, pal_.dusk * vec3(0.6f, 0.8f, 1.2f), k);
         }
     }
-    const bool dropStart = isDrop && !wasDrop_;
-    wasDrop_ = isDrop;
-    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.5f : 0.4f, dt);
-    const float life = smoothstepf(0.f, 1.f, dropAmt_);
-    swell_ = approach(swell_, 0.f, 0.35f, dt);
+    swell_ = approach(swell_, 0.f, 0.5f, dt);
     tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.4f, dt);
+    heart_ = approach(heart_, 0.f, 1.5f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     kickGlow_ = std::max(approach(kickGlow_, 0.f, 4.f, dt), kick * wp);
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
-    gust_ = approach(gust_, 0.f, 0.4f, dt);
-    const float wind = 0.25f + 0.25f * wm + 0.35f * wp + 0.4f * gust_;
-    windPhase_ += wdt * (0.6f + 0.25f * wm + 0.3f * wp);
+    windPhase_ += wdt * (0.6f + 0.3f * wm + 0.4f * wp);
 
-    updateCamera(dt);
-    const float qStart = std::log(view_.vh * 0.04f);
-
-    // ---- The beat: a pulse out along the threads every two beats (some threads at mid, all at a peak).
+    // ---- The beat: pulses along the threads (mid: some of them every two beats; a peak: all of them, every beat).
     {
-        bool fire = false;
-        float beatSec = 60.f / std::max(60.f, music.bpm);
+        bool beat = false;
         if (music.hasSong) {
             const double b = std::floor(music.beat);
-            if (b != lastBeat_) {
-                if (lastBeat_ >= 0.0 && ((long long)b % 2 == 0)) fire = true;
-                lastBeat_ = b;
-            }
+            if (lastBeat_ < 0.0) lastBeat_ = b;
+            if (b > lastBeat_) { lastBeat_ = b; beat = true; beatCount_++; }
         } else if (!f.paused) {
             beatClock_ += dt;
-            beatSec = 0.5f;
-            if (beatClock_ > 1.f) { beatClock_ -= 1.f; fire = true; }
+            if (beatClock_ > 0.5f) { beatClock_ -= 0.5f; beat = true; beatCount_++; }
         }
-        if (fire && !f.paused && overT_ < 0.f) {
-            beatCount_++;
-            const float k = wm * (1.f - wp) + wp;
-            if (k > 0.25f && (int)pulses_.size() < 6) {
-                const float amp = (0.25f + 0.35f * wp + 0.25f * life) * (0.7f + 0.3f * std::min(1.f, kick + 0.4f));
-                pulses_.push_back({qStart, (g_ + 0.4f - qStart) / (beatSec * 5.f), amp, 0.3f + 0.7f * wp, rng_.uniform()});
-            }
-            // a mushroom or two glow softly on the beat
-            if (k > 0.25f && !shrooms_.empty()) {
-                for (int t = 0; t < 1 + (wp > 0.5f ? 1 : 0); t++) {
-                    const int i = rng_.irange(0, (int)shrooms_.size() - 1);
-                    if (shrooms_[i].born && shrooms_[i].companion) shrooms_[i].beatK = std::max(shrooms_[i].beatK, 0.4f + 0.4f * wp);
-                }
+        if (beat && !f.paused && overT_ < 0.f && (int)pulses_.size() < 6) {
+            const bool every = wp > 0.5f;
+            if (wm > 0.4f && (every || beatCount_ % 2 == 0)) {
+                const float q0 = std::log(camD_ * 0.01f);
+                const float dur = every ? 1.6f : 2.2f;
+                pulses_.push_back({q0, (g_ + 0.4f - q0) / dur, 0.35f + 0.25f * wp + 0.3f * kickGlow_, every ? 0.75f : 0.35f, 0.3f});
             }
         }
         for (Pulse& p : pulses_) p.q += p.speed * wdt;
-        pulses_.erase(std::remove_if(pulses_.begin(), pulses_.end(), [&](const Pulse& p) { return p.q > g_ + 0.8f; }), pulses_.end());
-    }
-    // ---- The drop: one wave of light from the spore through the whole network, up into every mushroom.
-    if (dropStart) {
-        waveQ_ = qStart - 0.3f;
-        waveSpeed_ = (g_ + 0.5f - waveQ_) / 2.6f;
-        waveAmp_ = 0.01f;
-        waveT_ = 0.f;
-        gust_ = 1.f;
-    }
-    if (waveAmp_ > 0.f) {
-        waveQ_ += waveSpeed_ * wdt;
-        waveT_ += wdt;
-        if (waveQ_ > g_ + 0.4f) waveAmp_ = approach(waveAmp_, 0.f, 0.6f, dt);
-        else waveAmp_ = 1.25f * smoothstepf(0.f, 0.5f, waveT_);
+        pulses_.erase(std::remove_if(pulses_.begin(), pulses_.end(), [&](const Pulse& p) { return p.q > g_ + 1.f; }), pulses_.end());
     }
 
-    // ---- Mushrooms: born as the growth passes them, flaring as the drop's wave reaches them.
-    {
-        for (Mushroom& m : shrooms_) {
-            if (!m.born && g_ >= m.g) { m.born = true; m.age = 0.f; }
-            if (m.born && g_ < m.g - 0.1f) { m.born = false; m.age = 0.f; }
-            if (!m.born) continue;
-            m.age += wdt;
-            m.beatK = approach(m.beatK, 0.f, 1.2f, dt);
-            m.beat = approach(m.beat, m.beatK, 6.f, dt);
-            if (waveAmp_ > 0.5f && m.flareT > 3.f && waveQ_ >= m.q && waveQ_ < m.q + 1.f && m.age > 0.5f) m.flareT = 0.f;
-            if (m.flareT < 50.f) {
-                const float prev = m.flareT;
-                m.flareT += wdt;
-                if (prev < 0.75f && m.flareT >= 0.75f) {
-                    m.flareK = 1.f;
-                    // a cloud of spores floats up from the cap
-                    const float H = shroomHeight(m);
-                    const float hpx = H * view_.D / (view_.D + m.z) / pxW_;
-                    const int n = (int)std::clamp(hpx * (m.companion ? 0.25f : 0.6f), 0.f, m.companion ? 30.f : 160.f);
-                    const float hs = m.type == 0 ? 0.8f : m.type == 1 ? 0.72f : 0.64f;
-                    const float rc = H * (m.type == 0 ? 0.42f : m.type == 1 ? 0.16f : 0.34f);
-                    for (int i = 0; i < n && (int)spores_.size() < MAX_SPORES; i++) {
-                        Spore s;
-                        const float u = rng_.range(-1.f, 1.f);
-                        s.p = vec3(m.x + u * rc, myc::surf(m.x) + H * (hs + 0.05f + 0.1f * (1.f - u * u)), m.z + rng_.range(-0.05f, 0.05f) * H);
-                        s.v = vec3(u * rng_.range(0.08f, 0.35f), rng_.range(0.1f, 0.45f), rng_.range(-0.05f, 0.05f)) * H;
-                        s.age = -rng_.range(0.f, 1.2f);
-                        s.life = rng_.range(6.f, 11.f);
-                        s.size = H * rng_.range(0.008f, 0.02f);
-                        s.seed = rng_.uniform();
-                        s.col = lerp(pal_.gill[m.color], pal_.pulse, rng_.range(0.f, 0.5f));
-                        s.kind = 0;
-                        spores_.push_back(s);
-                    }
-                }
-            }
-            m.flareK = approach(m.flareK, 0.f, 0.35f, dt);
-            m.flare = approach(m.flare, m.flareK, 2.5f, dt);
-        }
-    }
-    // the lights: the biggest caps light the floor, the plants and the canopy
-    struct Light { vec3 p; float r; vec3 c; float h; };
+    updateCamera(dt);
+    const float G = g_;
+    const float reach = std::exp(G);
+    const float pxK = 2.f * tanH_ / worldT_.h;   // meters per pixel per meter of distance
+    const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
+    auto pxOf = [&](const vec3& p, float size) {
+        const vec3 d = p - eye_;
+        const float z = dot(d, look_);
+        return z <= 0.f ? -1.f : size / (pxK * length(d));
+    };
+    auto inView = [&](const vec3& p, float rad) {
+        const vec3 d = p - eye_;
+        const float z = dot(d, look_);
+        if (z < -rad) return false;
+        const float zz = std::max(z, 1e-9f);
+        const float sx = std::fabs(dot(d, camR_)) - rad, sy = std::fabs(dot(d, camU_)) - rad;
+        return sx < zz * tanH_ * aspect_ * 1.1f && sy < zz * tanH_ * 1.1f;
+    };
+
+    // ---- The mushrooms: their state, the drop's wave reaching them, spores rising from their caps.
+    const float capGlow = (0.62f + 0.12f * wm + 0.35f * wp + 0.25f * life + 0.3f * swell_ + 0.4f * tetrisGlow_ + 0.25f * kickGlow_) * pal_.glow;
+    minst_.clear();
+    struct Light { vec3 p; float r; vec3 c; float score; };
     std::vector<Light> lights;
-    {
-        const float wilt = smoothstepf(0.5f, 3.5f, overT_ >= 0.f ? overT_ : 0.f);
-        for (const Mushroom& m : shrooms_) {
-            if (!m.born) continue;
-            const float H = shroomHeight(m) * (1.f - wilt);
-            if (H <= 0.f) continue;
-            const float hs = m.type == 0 ? 0.8f : m.type == 1 ? 0.72f : 0.64f;
-            const float glow = pal_.glow * (0.6f + 0.1f * wm + 0.2f * wp + 0.1f * life + 0.12f * swell_) * (1.f - 0.75f * over_) + m.flare * 0.8f + m.beat * 0.3f;
-            const vec3 c = pal_.cap[m.color] * glow * 0.9f * smoothstepf(0.f, 0.6f, m.age);
-            lights.push_back({vec3(m.x, myc::surf(m.x) + H * hs, m.z), H * 0.8f, c, H});
+    std::vector<vec4> capSpots;   // where spores rise from (cap center, size)
+    for (Mushroom& m : shrooms_) {
+        const float h = shroomHeight(m, G);
+        if (h <= 0.f) { m.burst = false; continue; }
+        const vec3 base = myc::toWorld(m.x, m.z, -0.03 * h);
+        const vec3 up = myc::normalAt(m.x, m.z);
+        // the drop's wave climbing it, the cap flaring, a cloud of spores
+        const float mq = std::log(std::max(std::sqrt(m.x * m.x + m.z * m.z), 1e-6f));
+        if (waveAmp_ > 0.4f && m.flareT > 3.f && waveQ_ > mq && waveQ_ < mq + 0.6f) m.flareT = 0.f;
+        m.flareT += wdt;
+        const float climb = m.flareT < 1.4f ? m.flareT / 0.9f : -1.f;
+        m.flare = approach(m.flare, m.flareT > 0.7f && m.flareT < 2.f ? 1.f : 0.f, m.flareT < 2.f ? 4.f : 0.7f, dt);
+        const vec3 capC = base + up * (h * 0.8f);
+        const float px = pxOf(capC, h);
+        if (!m.burst && G > m.g && G < m.g + 0.6f && px > 4.f && overT_ < 0.f) {
+            // born: a burst of sparks as the cap opens
+            m.burst = true;
+            for (int i = 0; i < 14 && (int)spores_.size() < MAX_SPORES; i++) {
+                Spore s;
+                const vec3 dir = normalize(vec3(rng_.range(-1.f, 1.f), rng_.range(0.2f, 1.f), rng_.range(-1.f, 1.f)));
+                s.p = capC;
+                s.v = dir * (h * rng_.range(0.4f, 1.f));
+                s.age = -rng_.range(0.f, 0.3f);
+                s.life = rng_.range(0.8f, 1.6f);
+                s.size = h * rng_.range(0.02f, 0.04f);
+                s.seed = rng_.uniform();
+                s.col = lerp(pal_.cap[m.color], vec3(1.f), 0.4f) * 1.4f;
+                s.kind = 2;
+                spores_.push_back(s);
+            }
         }
-        std::sort(lights.begin(), lights.end(), [](const Light& a, const Light& b) { return a.h > b.h; });
-        if (lights.size() > 8) lights.resize(8);
+        if (m.flareT >= 0.8f && m.flareT - wdt < 0.8f) {
+            for (int i = 0; i < 40 && (int)spores_.size() < MAX_SPORES; i++) {
+                Spore s;
+                s.p = capC + vec3(rng_.range(-1.f, 1.f), rng_.range(0.f, 0.3f), rng_.range(-1.f, 1.f)) * (h * m.capR);
+                s.v = (up * rng_.range(0.15f, 0.45f) + vec3(rng_.range(-0.1f, 0.1f), 0.f, rng_.range(-0.1f, 0.1f))) * h;
+                s.age = -rng_.range(0.f, 0.5f);
+                s.life = rng_.range(3.f, 6.f);
+                s.size = h * rng_.range(0.012f, 0.025f);
+                s.seed = rng_.uniform();
+                s.col = lerp(pal_.cap[m.color], pal_.pulse, 0.3f);
+                s.kind = 0;
+                spores_.push_back(s);
+            }
+        }
+        if (px < 1.2f || !inView(capC, h)) continue;
+        if (px > 0.f) capSpots.push_back(vec4(capC.x, capC.y, capC.z, h));
+        const float open = shroomOpen(m, G);
+        const float wilt = smoothstepf(0.f, 1.f, over_);
+        const float glow = capGlow * (1.f + 0.7f * m.flare) * (0.85f + 0.3f * m.seed);
+        const vec3 lean(std::cos(m.leanA) * m.lean, 0.f, std::sin(m.leanA) * m.lean);
+        const float v[20] = {base.x, base.y, base.z, h, up.x, up.y, up.z, m.capR,
+                             pal_.cap[m.color].x, pal_.cap[m.color].y, pal_.cap[m.color].z, (float)m.type,
+                             open, glow, wilt, m.seed, lean.x, lean.y, lean.z, climb};
+        minst_.insert(minst_.end(), v, v + 20);
+        if (open > 0.3f) {
+            const vec3 lc = pal_.cap[m.color] * (glow * 0.55f * open * (1.f - 0.8f * wilt));
+            lights.push_back({capC, h * m.capR * 1.3f, lc, px});
+        }
     }
+    std::sort(lights.begin(), lights.end(), [](const Light& a, const Light& b) { return a.score > b.score; });
+    if (lights.size() > 6) lights.resize(6);
 
-    // ---- Spores in the air: a few always drifting, more at a peak, rising from the caps.
+    // ---- Particles in the world: spores drifting up from the caps (from space: spore clouds drifting off).
     {
-        const float rate = (0.8f + 2.f * wm + 6.f * wp + 10.f * life) * world;
+        const float rate = (2.f + 4.f * wm + 14.f * wp + 30.f * life + 50.f * burst_) * (overT_ >= 0.f ? 0.2f : 1.f);
         if (!f.paused) sporeAcc_ += rate * wdt;
-        sporeAcc_ = std::min(sporeAcc_, 20.f);
-        while (sporeAcc_ >= 1.f && (int)spores_.size() < MAX_SPORES) {
+        sporeAcc_ = std::min(sporeAcc_, 60.f);
+        while (sporeAcc_ >= 1.f && !capSpots.empty() && (int)spores_.size() < MAX_SPORES) {
             sporeAcc_ -= 1.f;
+            const vec4& c = capSpots[(size_t)rng_.irange(0, (int)capSpots.size() - 1)];
+            const float h = c.w;
+            const vec3 cp(c.x, c.y, c.z);
+            const vec3 up = normalize(cp + vec3(0.f, R_E, 0.f));
             Spore s;
-            // from a born mushroom's cap, else over the floor in view
-            int pick = -1;
-            for (int t = 0; t < 6 && !shrooms_.empty(); t++) {
-                const int i = rng_.irange(0, (int)shrooms_.size() - 1);
-                if (shrooms_[i].born && shroomHeight(shrooms_[i]) > view_.vh * 0.05f) { pick = i; break; }
-            }
-            if (pick >= 0) {
-                const Mushroom& m = shrooms_[pick];
-                const float H = shroomHeight(m);
-                s.p = vec3(m.x + rng_.range(-0.35f, 0.35f) * H, myc::surf(m.x) + H * rng_.range(0.6f, 0.85f), m.z);
-                s.v = vec3(rng_.range(-0.04f, 0.04f), rng_.range(0.03f, 0.1f), 0.f) * H;
-                s.size = H * rng_.range(0.005f, 0.01f);
-                s.col = lerp(pal_.gill[m.color], pal_.pulse, 0.3f);
-            } else {
-                const float x = view_.cx + rng_.range(-1.f, 1.f) * view_.vh * aspect_;
-                s.p = vec3(x, myc::surf(x) + rng_.range(0.f, 0.3f) * view_.vh, rng_.range(0.05f, 1.f) * view_.vh);
-                s.v = vec3(rng_.range(-0.02f, 0.02f), rng_.range(0.01f, 0.04f), 0.f) * view_.vh;
-                s.size = view_.vh * rng_.range(0.003f, 0.006f);
-                s.col = lerp(pal_.threadTip, pal_.pulse, 0.3f);
-            }
+            s.p = cp + vec3(rng_.range(-0.3f, 0.3f), rng_.range(-0.05f, 0.1f), rng_.range(-0.3f, 0.3f)) * h;
+            s.v = (up * rng_.range(0.05f, 0.15f) + vec3(rng_.range(-0.04f, 0.04f), 0.f, rng_.range(-0.04f, 0.04f))) * h;
             s.age = 0.f;
-            s.life = rng_.range(6.f, 10.f);
+            s.life = rng_.range(4.f, 8.f);
+            s.size = h * rng_.range(0.008f, 0.018f);
             s.seed = rng_.uniform();
+            s.col = lerp(pal_.threadTip, pal_.cap[rng_.irange(0, 2)], 0.5f);
             s.kind = 0;
             spores_.push_back(s);
         }
+        // from space: clouds of spores drifting off the glowing planet
+        if (alt_ > 1.e5f && overT_ < 0.f && !f.paused) {
+            const float k = smoothstepf(1.e5f, 1.e6f, alt_);
+            spaceAcc_ += (10.f + 25.f * wp + 40.f * life) * k * wdt;
+            while (spaceAcc_ >= 1.f && (int)spores_.size() < MAX_SPORES) {
+                spaceAcc_ -= 1.f;
+                const float a = rng_.range(0.f, TAU), d = std::min(reach, 1.9e7f) * std::sqrt(rng_.uniform());
+                const float x = std::cos(a) * d, z = std::sin(a) * d;
+                Spore s;
+                s.p = myc::toWorld(x, z, camD_ * 0.005f);
+                const vec3 up = myc::normalAt(x, z);
+                s.v = up * (camD_ * rng_.range(0.006f, 0.02f)) + vec3(rng_.range(-1.f, 1.f), 0.f, rng_.range(-1.f, 1.f)) * (camD_ * 0.003f);
+                s.age = 0.f;
+                s.life = rng_.range(5.f, 9.f);
+                s.size = camD_ * rng_.range(0.0012f, 0.003f);
+                s.seed = rng_.uniform();
+                s.col = lerp(pal_.threadTip, pal_.cap[rng_.irange(0, 2)], rng_.range(0.2f, 0.7f));
+                s.kind = 0;
+                spores_.push_back(s);
+            }
+        }
+        // a Tetris: a burst of spores from the network's heart
+        if (burst_ > 0.95f) {
+            for (int i = 0; i < 60 && (int)spores_.size() < MAX_SPORES; i++) {
+                Spore s;
+                const float a = rng_.range(0.f, TAU), d = reach * std::sqrt(rng_.uniform()) * 0.7f;
+                s.p = myc::toWorld(std::cos(a) * d, std::sin(a) * d, reach * 0.02f);
+                const vec3 up = myc::normalAt(std::cos(a) * d, std::sin(a) * d);
+                s.v = up * (reach * rng_.range(0.04f, 0.12f));
+                s.age = -rng_.range(0.f, 0.6f);
+                s.life = rng_.range(3.f, 5.f);
+                s.size = reach * rng_.range(0.004f, 0.009f);
+                s.seed = rng_.uniform();
+                s.col = lerp(pal_.threadTip, pal_.pulse, rng_.uniform());
+                s.kind = 0;
+                spores_.push_back(s);
+            }
+            burst_ = 0.94f;
+        }
         for (Spore& s : spores_) {
             s.age += wdt;
-            const float sc = s.size * 30.f;
-            const vec3 turb(std::sin(time_ * 0.7f + s.seed * 40.f) * 0.5f + gust_ * 0.8f, std::sin(time_ * 0.5f + s.seed * 17.f) * 0.2f, 0.f);
-            s.p = s.p + (s.v + turb * sc * 0.25f) * wdt;
-            s.v = s.v * std::exp(-0.25f * wdt) + vec3(0.f, sc * 0.02f, 0.f) * wdt;
+            const float fl = std::sin(time_ * 1.3f + s.seed * 40.f);
+            s.p += (s.v + vec3(fl, 0.f, std::cos(time_ * 1.1f + s.seed * 20.f)) * (s.size * 0.6f)) * wdt;
+            if (s.kind == 2) s.v = s.v * std::exp(-2.f * wdt);
         }
         spores_.erase(std::remove_if(spores_.begin(), spores_.end(), [](const Spore& s) { return s.age >= s.life; }), spores_.end());
     }
@@ -1556,6 +1414,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             const float t = smoothstepf(0.f, 1.f, saturate(m.age / m.life));
             const vec2 a = lerp2(m.from, m.ctl, t), b = lerp2(m.ctl, m.to, t);
             m.p = lerp2(a, b, t);
+            if (m.age >= m.life && m.age - dt < m.life) heart_ = std::min(1.5f, heart_ + 0.08f);
         } else {
             m.p = add(m.p, mul(m.v, dt));
             if (m.kind == 3) m.v = mul(m.v, std::exp(-2.5f * dt));
@@ -1571,7 +1430,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         if (m.age < 0.f || f.bare) continue; // (the motes over the board: none in a break)
         const float t = m.age / m.life;
         float a = smoothstepf(0.f, 0.12f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * m.bright;
-        if (m.kind == 1) a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.8f, 1.f, t)) * m.bright;
+        if (m.kind == 1) a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.85f, 1.f, t)) * m.bright;
         sprite(m.p, m.size * (m.kind == 1 ? 2.f : 1.6f), m.col, a * world, 0);
     }
     if (!f.bare) {
@@ -1583,229 +1442,348 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
 
-    // ---- Billboards, far to near.
-    boards_.clear();
-    buildFlora();
-    buildShroomBoards();
-    buildLandmarks();
-    order_.clear();
-    for (int i = 0; i < (int)boards_.size(); i++) order_.push_back({boards_[i].a[2], i});
-    std::sort(order_.begin(), order_.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
-    sorted_.clear();
-    for (auto& o : order_) sorted_.push_back(boards_[o.second]);
-
-    // =========================================================== uniforms shared by the world's passes
-    const float bright = (0.42f + 0.08f * wm + 0.14f * wp + 0.08f * life + 0.12f * swell_ + 0.2f * tetrisGlow_) * pal_.glow *
-                         (1.f - 0.8f * over_) * world;
-    const float vh = view_.vh;
-    const float dof = 0.035f * vh * (1.f - smoothstepf(std::log(0.4f), std::log(30.f), std::log(vh)));
-    const float fogD = 70.f + 2.5f * vh;
-    const vec3 mistC = pal_.mist * 1.5f * (0.9f + 0.1f * wm + 0.15f * wp + 0.08f * life);
-    auto setCam = [&](GLuint p, float pxw) {
-        set4f(p, "uCam", view_.cx, view_.cy, view_.vh, aspect_);
-        set3f(p, "uEyeP", vec3(view_.ex, view_.ey, view_.D));
-        set1f(p, "uPxW", pxw);
+    // ---- Ground cover, houses, things in the air: built for the view.
+    finst_.clear();
+    ginst_.clear();
+    auto glow = [&](const vec3& p, float size, const vec3& c, float a, int mode, float seed, float spin, float param = 0.f) {
+        a *= world;
+        if (a <= 0.004f) return;
+        const float q[12] = {p.x, p.y, p.z, size, c.x, c.y, c.z, a, (float)mode, seed, spin, param};
+        ginst_.insert(ginst_.end(), q, q + 12);
     };
-    auto setLights = [&](GLuint p) {
-        float lp[32] = {}, lc[24] = {};
-        for (size_t i = 0; i < lights.size(); i++) {
-            lp[i * 4 + 0] = lights[i].p.x; lp[i * 4 + 1] = lights[i].p.y; lp[i * 4 + 2] = lights[i].p.z; lp[i * 4 + 3] = lights[i].r;
-            lc[i * 3 + 0] = lights[i].c.x; lc[i * 3 + 1] = lights[i].c.y; lc[i * 3 + 2] = lights[i].c.z;
+    auto puff = [&](const vec3& c, float r, const vec3& col, float seed, const vec3& clump, float a, int kind, float under) {
+        a *= world;
+        if (a <= 0.004f) return;
+        const float q[16] = {c.x, c.y, c.z, r, col.x, col.y, col.z, seed, clump.x, clump.y, clump.z, a, (float)kind, under, 0.f, 0.f};
+        finst_.insert(finst_.end(), q, q + 16);
+    };
+    {
+        const float H = (float)worldT_.h;
+        for (const Plant& pl : plants_) {
+            const float s = pl.s;
+            const vec3 base = myc::toWorld(pl.x, pl.z);
+            const float d = length(base - eye_);
+            const float px = s / (pxK * std::max(d, 1e-9f));
+            const float a = smoothstepf(2.5f, 6.f, px) * (1.f - smoothstepf(H * 0.3f, H * 0.6f, px)) * smoothstepf(0.6f * s, 1.6f * s, d) *
+                            smoothstepf(0.55f * camD_, 0.95f * camD_, d) *
+                            (pl.kind == 5 ? 1.f - smoothstepf(H * 0.18f, H * 0.32f, px) : 1.f);
+            if (a <= 0.01f || !inView(base + vec3(0.f, s, 0.f), s * 2.f)) continue;
+            const float rho = std::sqrt(pl.x * pl.x + pl.z * pl.z);
+            const float under = std::exp(-sq(rho / (reach * 0.8f))) * 0.9f * (1.f - over_) * pal_.glow;
+            Rng pr((uint64_t)(pl.seed * 1e9) + 7);
+            const float sw = std::sin(windPhase_ * 1.3f + pl.seed * 30.f) * (0.06f + 0.1f * wp);
+            switch (pl.kind) {
+            case 0: {   // a moss sprig: a little clump, its capsules on their setae
+                const vec3 cl = base + vec3(0.f, s * 0.15f, 0.f);
+                for (int i = 0; i < 5; i++) {
+                    const vec3 o(pr.range(-0.35f, 0.35f) * s, pr.range(0.05f, 0.3f) * s, pr.range(-0.35f, 0.35f) * s);
+                    puff(base + o, s * pr.range(0.16f, 0.26f), pal_.floraLit * pr.range(0.8f, 1.2f), pr.uniform(), cl, a, 1, under);
+                }
+                if (pr.chance(0.35f)) {
+                    const vec3 o(pr.range(-0.3f, 0.3f) * s, 0.f, pr.range(-0.3f, 0.3f) * s);
+                    glow(base + o, s * pr.range(0.5f, 0.8f), lerp(pal_.litter, pal_.floraLit, 0.5f) * 0.6f, a * 0.7f, 10, pr.uniform(), 0.04f, 1.f);
+                }
+                break;
+            }
+            case 1: {   // a moss cushion
+                const vec3 cl = base - vec3(0.f, s * 0.2f, 0.f);
+                const int n = pr.irange(5, 9);
+                for (int i = 0; i < n; i++) {
+                    const float aa = pr.range(0.f, TAU), dd = pr.range(0.f, 0.45f) * s;
+                    const vec3 o(std::cos(aa) * dd, pr.range(0.05f, 0.25f) * s, std::sin(aa) * dd);
+                    puff(base + o, s * pr.range(0.22f, 0.36f), pal_.floraLit * pr.range(0.85f, 1.2f), pr.uniform(), cl, a, 1, under);
+                }
+                break;
+            }
+            case 2:     // a pebble
+                puff(base + vec3(0.f, s * 0.12f, 0.f), s * pr.range(0.25f, 0.4f), pal_.rock * pr.range(0.8f, 1.2f), pr.uniform(),
+                     base - vec3(0.f, s, 0.f), a, 2, under);
+                break;
+            case 3:     // a grass tuft
+                glow(base, s * 0.6f, lerp(pal_.flora, pal_.floraLit, 0.5f) * 0.9f, a * (1.f - smoothstepf(H * 0.12f, H * 0.25f, px)), 3, pl.seed, sw);
+                break;
+            case 4: {   // a bush
+                const vec3 cl = base;
+                const int n = pr.irange(5, 8);
+                for (int i = 0; i < n; i++) {
+                    const float aa = pr.range(0.f, TAU), dd = pr.range(0.f, 0.4f) * s;
+                    const vec3 o(std::cos(aa) * dd, pr.range(0.2f, 0.6f) * s, std::sin(aa) * dd);
+                    puff(base + o, s * pr.range(0.2f, 0.32f), pal_.flora * pr.range(0.8f, 1.15f), pr.uniform(), cl, a, 0, under);
+                }
+                break;
+            }
+            default: {  // a tree: a trunk, a round crown of puffs
+                const float th = s * pr.range(1.1f, 1.6f);
+                glow(base, th * 0.5f, pal_.bark, a, 10, pl.seed, 0.09f, 0.f);
+                const vec3 cc = base + vec3(0.f, th * 0.95f, 0.f);
+                const int n = pr.irange(6, 10);
+                for (int i = 0; i < n; i++) {
+                    const vec3 o(pr.range(-0.35f, 0.35f) * s, pr.range(-0.25f, 0.3f) * s, pr.range(-0.35f, 0.35f) * s);
+                    puff(cc + o, s * pr.range(0.2f, 0.3f), pal_.flora * pr.range(0.75f, 1.1f), pr.uniform(), cc - vec3(0.f, s * 0.2f, 0.f), a, 0, under * 0.6f);
+                }
+                break;
+            }
+            }
         }
-        glUniform4fv(ugl::U(p, "uLP"), 8, lp);
-        glUniform3fv(ugl::U(p, "uLC"), 8, lc);
-        set1i(p, "uNL", (int)lights.size());
-        set3f(p, "uAmbient", pal_.ambient);
-        set3f(p, "uMistC", mistC);
-        set3f(p, "uMoonC", pal_.moon * (1.f - 0.3f * slow_));
-        set1f(p, "uFogD", fogD);
-        set1f(p, "uMistK", pal_.mistK);
+        // the village
+        for (const House& h : houses_) {
+            const vec3 p = myc::toWorld(h.x, h.z);
+            const float px = h.w / (pxK * std::max(length(p - eye_), 1e-9f));
+            const float a = smoothstepf(1.5f, 4.f, px) * (1.f - smoothstepf(120.f, 300.f, px));
+            if (a > 0.01f && inView(p, h.w)) glow(p, h.h, lerp(pal_.bark, pal_.rock, 0.5f) * 0.8f, a * world, 11, h.seed, 0.f);
+        }
+        // hot-air balloons over the valley, glowing from their burners
+        if (alt_ < 4.e4f) {
+            static const unsigned BAL[6] = {0xff3b4a, 0xffc61a, 0x2a8cff, 0xa64cff, 0xff7a1a, 0x18c8a8};
+            Rng br(0xBA11ull);
+            for (int i = 0; i < 9; i++) {
+                const float f = br.range(600.f, 4500.f), rr = br.range(-3500.f, 800.f);
+                const float hh = br.range(250.f, 1400.f);
+                const vec3 q = fwdH * f + rightH * rr;
+                const vec3 p = myc::toWorld(q.x + time_ * 1.2f, q.z, hh + std::sin(time_ * 0.3f + i) * 5.f);
+                glow(p, br.range(11.f, 17.f), ugl::toLinear(hex(BAL[i % 6])), world, 7, br.uniform(), time_ + i * 1.7f);
+            }
+        }
+        // airliners at cruising height, their lights blinking
+        if (alt_ > 300.f && alt_ < 3.e5f) {
+            Rng ar(0xA1B2ull);
+            for (int i = 0; i < 4; i++) {
+                const float a = ar.range(0.f, TAU), d = ar.range(3000.f, 25000.f), dir = ar.range(0.f, TAU);
+                const float hh = ar.range(9000.f, 11500.f);
+                const float u = std::fmod(time_ * 240.f + ar.range(0.f, 6e4f), 6e4f) - 3e4f;
+                const vec3 p = myc::toWorld(std::cos(a) * d + std::cos(dir) * u, std::sin(a) * d + std::sin(dir) * u, hh);
+                glow(p, 30.f, pal_.cloudShade, world, 12, ar.uniform(), time_ + i);
+            }
+        }
+        // satellites in orbit
+        if (alt_ > 5.e4f) {
+            Rng sr(0x5A7Eull);
+            for (int i = 0; i < 7; i++) {
+                const float h = sr.range(3.5e5f, 1.4e6f);
+                const float tilt = sr.range(-0.5f, 0.5f), az = sr.range(0.f, TAU);
+                const vec3 u = normalize(vec3(std::sin(tilt) * std::cos(az), std::cos(tilt), std::sin(tilt) * std::sin(az)));
+                const vec3 v = normalize(cross(u, vec3(std::cos(az + 1.f), 0.f, std::sin(az + 1.f))));
+                const float th = sr.range(-0.4f, 0.4f) + time_ * sr.range(0.004f, 0.012f) * (sr.chance(0.5f) ? 1.f : -1.f);
+                const float rr = R_E + h;
+                const vec3 p = vec3(0.f, -R_E, 0.f) + (u * std::cos(th) + v * std::sin(th)) * rr;
+                glow(p, 2200.f * std::sqrt(h / 4.e5f), vec3(1.f), world * smoothstepf(5.e4f, 2.e5f, alt_), 6, sr.uniform(), time_ + i);
+            }
+        }
+        // the spore: the network's heart, glowing
+        {
+            const float hs = std::max(0.00025f, camD_ * 0.004f);
+            const float hb = (0.55f + 0.5f * heart_ + 0.3f * spurt_) * (1.f - 0.8f * over_) * std::exp(-std::max(0.f, G - 6.f) * 0.25f);
+            glow(vec3(0.f, 0.00012f, 0.f), hs, lerp(pal_.threadTip, vec3(1.f), 0.3f), hb * world, 0, 0.f, 0.f);
+            if (heart_ > 0.05f) glow(vec3(0.f, 0.00012f, 0.f), hs * 2.5f, pal_.threadTip, heart_ * 0.5f * world, 9, 0.f, 0.f);
+        }
+        for (const Spore& s : spores_) {
+            if (s.age < 0.f) continue;
+            const float t = s.age / s.life;
+            const float a = smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * (0.75f + 0.25f * std::sin(time_ * 3.f + s.seed * 40.f));
+            glow(s.p, s.size, s.col, a * world, s.kind == 2 ? 2 : 0, s.seed, 0.f);
+        }
+    }
+
+    // =========================================================== the world (reduced resolution)
+    const float mistK = (1.f / (lerpf(14.f, 40.f, smoothstepf(1.f, 300.f, camD_)) * camD_)) * (1.f - smoothstepf(1000.f, 20000.f, camD_));
+    auto setLight = [&](GLuint p) {
+        set3f(p, "uEye", eye_);
+        set3f(p, "uMoonDir", moonDir_);
+        set3f(p, "uMoonC", pal_.moonC * (0.55f + 0.05f * wp));
+        set3f(p, "uAmbC", pal_.ambient);
+        set3f(p, "uMistC", pal_.mist);
+        set3f(p, "uNetC", pal_.thread);
+        set1f(p, "uFogK", 2.e-5f);
+        set1f(p, "uMistK", mistK);
+        set1f(p, "uAlt", alt_);
+        set1f(p, "uTime", time_);
         set1f(p, "uBridge", bridge);
         set3f(p, "uBridgeCol", bridge_.color);
     };
-    auto setPulses = [&](GLuint p) {
-        float pu[24] = {};
-        for (size_t i = 0; i < pulses_.size() && i < 6; i++) {
-            pu[i * 4 + 0] = pulses_[i].q; pu[i * 4 + 1] = pulses_[i].amp * world; pu[i * 4 + 2] = pulses_[i].frac; pu[i * 4 + 3] = pulses_[i].seed;
-        }
-        glUniform4fv(ugl::U(p, "uPulse"), 6, pu);
-        set3f(p, "uWave", vec3(waveQ_, waveAmp_ * world, 0.32f));
-        set3f(p, "uThreadC", pal_.thread);
-        set3f(p, "uTipC", pal_.threadTip);
-        set3f(p, "uPulseC", pal_.pulse);
-        set1f(p, "uBright", bright);
-        set1f(p, "uG", g_);
-    };
-
-    // =========================================================== the threads' light (quarter resolution)
-    glDisable(GL_DEPTH_TEST);
-    lightA_.bind();
-    glClearColor(0, 0, 0, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE);
-    if (threadCount_ > 0) {
-        glUseProgram(progThread_);
-        setCam(progThread_, 2.f * vh / (float)lightA_.h);
-        setPulses(progThread_);
-        set1f(progThread_, "uMode", 1.f);
-        set1f(progThread_, "uSurfPx", 2.f * vh / (float)lightA_.h * 2.f);
-        glBindVertexArray(threadVao_);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, threadCount_);
-    }
-    glDisable(GL_BLEND);
-    for (int pass = 0; pass < 2; pass++) {
-        lightB_.bind();
-        glUseProgram(progBlur_);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, lightA_.tex);
-        set1i(progBlur_, "uSrc", 0);
-        set2f(progBlur_, "uDir", 1.f / lightA_.w, 0.f);
-        ugl::drawFullscreen();
-        lightA_.bind();
-        glBindTexture(GL_TEXTURE_2D, lightB_.tex);
-        set2f(progBlur_, "uDir", 0.f, 1.f / lightA_.h);
-        ugl::drawFullscreen();
-    }
-
-    // =========================================================== the world (reduced resolution, with depth)
     worldT_.bind();
     glClearColor(0, 0, 0, 0);
     glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    // the sky, the planet, space (it writes the planet's depth)
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-    const float soilLight = 1.9f * pal_.soilLight * (0.85f + 0.1f * wm + 0.15f * wp + 0.1f * life) * (1.f - 0.6f * over_);
+    glUseProgram(progSky_);
+    setLight(progSky_);
+    setMat(progSky_, "uVP", vp3_);
+    set3f(progSky_, "uLook", look_);
+    set3f(progSky_, "uCamR", camR_);
+    set3f(progSky_, "uCamU", camU_);
+    set2f(progSky_, "uTan", tanH_ * aspect_, tanH_);
+    set1f(progSky_, "uPix", pxK);
+    set1f(progSky_, "uStars", pal_.stars);
+    set1f(progSky_, "uHills", 1.f - smoothstepf(30.f, 1500.f, alt_));
+    set1f(progSky_, "uGlow", 0.3f * wp + 0.5f * life);
+    set1f(progSky_, "uReach", reach);
+    set1f(progSky_, "uPoolK", pal_.pool * (0.22f + 0.1f * wp + 0.15f * life + 0.25f * waveAmp_ * 0.5f + 0.15f * heart_) * (1.f - 0.85f * over_));
+    set1f(progSky_, "uOver", over_);
+    set3f(progSky_, "uSunDir", sunDir_);
+    set3f(progSky_, "uMoonLit", normalize(look_ * -1.f + camR_ * 0.7f + camU_ * 0.35f));
+    set3f(progSky_, "uSkyTop", pal_.skyTop);
+    set3f(progSky_, "uSkyLow", pal_.skyLow);
+    set3f(progSky_, "uDusk", pal_.dusk);
+    set3f(progSky_, "uSpaceC", pal_.spaceC);
+    set3f(progSky_, "uNebulaC", pal_.nebula);
+    set3f(progSky_, "uMoss", pal_.moss);
+    set3f(progSky_, "uSoil", pal_.soil);
+    set3f(progSky_, "uLitter", pal_.litter);
+    set3f(progSky_, "uField", pal_.field);
+    set3f(progSky_, "uForest", pal_.forest);
+    set3f(progSky_, "uLand", pal_.land);
+    set3f(progSky_, "uOcean", pal_.ocean);
+    set3f(progSky_, "uCity", pal_.city);
+    set3f(progSky_, "uPoolC", pal_.thread);
     {
-        glUseProgram(progBg_);
-        setCam(progBg_, pxW_);
-        setLights(progBg_);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, lightA_.tex);
-        set1i(progBg_, "uLight", 0);
-        set1f(progBg_, "uPx", pxW_);
-        set1f(progBg_, "uTime", time_);
-        set1f(progBg_, "uDof", dof);
-        set1f(progBg_, "uSoilLight", soilLight);
-        set1f(progBg_, "uNetR", std::exp(g_));
-        set1f(progBg_, "uGlowAll", (0.7f + 0.2f * wm + 0.3f * wp + 0.3f * life) * (1.f - 0.8f * over_));
-        set3f(progBg_, "uSkyTop", pal_.skyTop);
-        set3f(progBg_, "uSkyLow", pal_.skyLow);
-        set3f(progBg_, "uFloorC", pal_.floorC);
-        set3f(progBg_, "uFloorLit", pal_.floorLit);
-        set3f(progBg_, "uSoilA", pal_.soilA);
-        set3f(progBg_, "uSoilB", pal_.soilB);
-        set3f(progBg_, "uSoilC", pal_.soilC);
-        set3f(progBg_, "uSoilD", pal_.soilD);
-        set3f(progBg_, "uRock", pal_.rock);
-        set3f(progBg_, "uSpeck", pal_.speck);
-        set3f(progBg_, "uThread", pal_.thread);
-        set2f(progBg_, "uMoonPos", 0.76f, 0.64f);
+        const vec3 mc = moonDir_ * 3.5e8f;
+        set4f(progSky_, "uMoon", mc.x, mc.y, mc.z, 2.3e7f);
+        set4f(progSky_, "uVillage", villageW_.x, villageW_.y, villageW_.z, 230.f);
+        float lp[24] = {}, lc[24] = {};
+        for (size_t i = 0; i < lights.size(); i++) {
+            lp[i * 4 + 0] = lights[i].p.x; lp[i * 4 + 1] = lights[i].p.y; lp[i * 4 + 2] = lights[i].p.z; lp[i * 4 + 3] = lights[i].r;
+            lc[i * 4 + 0] = lights[i].c.x * world; lc[i * 4 + 1] = lights[i].c.y * world; lc[i * 4 + 2] = lights[i].c.z * world;
+        }
+        glUniform4fv(glGetUniformLocation(progSky_, "uLightP"), 6, lp);
+        glUniform4fv(glGetUniformLocation(progSky_, "uLightC"), 6, lc);
+    }
+    ugl::drawFullscreen();
+
+    glDepthFunc(GL_LESS);
+    // the mushrooms
+    if (!minst_.empty()) {
+        glUseProgram(progShroom_);
+        setLight(progShroom_);
+        setMat(progShroom_, "uVP", vp3_);
+        set3f(progShroom_, "uStemC", pal_.stem);
+        set1f(progShroom_, "uCapGlow", world);
+        glBindVertexArray(shroomVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, shroomInst_);
+        glBufferData(GL_ARRAY_BUFFER, minst_.size() * sizeof(float), minst_.data(), GL_STREAM_DRAW);
+        glDrawElementsInstanced(GL_TRIANGLES, shroomIdx_, GL_UNSIGNED_INT, nullptr, (GLsizei)(minst_.size() / 20));
+    }
+    // the ground cover's puffs
+    if (!finst_.empty()) {
+        glUseProgram(progPuff_);
+        setLight(progPuff_);
+        setMat(progPuff_, "uVP", vp3_);
+        set3f(progPuff_, "uCamR", camR_);
+        set3f(progPuff_, "uCamU", camU_);
+        set1f(progPuff_, "uPx", pxK);
+        set3f(progPuff_, "uRimC", pal_.thread * 0.6f);
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+        glBindVertexArray(puffVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, puffVbo_);
+        glBufferData(GL_ARRAY_BUFFER, finst_.size() * sizeof(float), finst_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(finst_.size() / 16));
+        glDisable(GL_BLEND);
+    }
+
+    // ---- Transparent: the clouds (far to near), the sea of clouds, the threads, then the lights in the air.
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+    if (alt_ < 2.5e5f) {
+        std::vector<std::pair<float, int>> order;
+        order.reserve(clouds_.size());
+        const float drift = time_ * (5.f + 6.f * wm + 6.f * wp);
+        for (size_t i = 0; i < clouds_.size(); i++) {
+            const vec3 p = clouds_[i].p + vec3(drift, 0.f, 0.f);
+            const vec3 d = p - eye_;
+            const float d2 = dot(d, d);
+            if (clouds_[i].r < 0.6f * pxK * std::sqrt(d2)) continue;
+            order.push_back({d2, (int)i});
+        }
+        std::sort(order.begin(), order.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
+        cinst_.clear();
+        for (auto& o : order) {
+            const Puff& pf = clouds_[o.second];
+            const vec3 p = pf.p + vec3(drift, 0.f, 0.f);
+            const float dEye = std::sqrt(o.first);
+            const float a = smoothstepf(pf.r * 0.8f, pf.r * 2.5f, dEye) * 0.9f;
+            const float rho = std::sqrt(p.x * p.x + p.z * p.z);
+            const float under = std::exp(-sq(rho / (reach * 0.8f))) * (1.f - over_);
+            const float q[8] = {p.x, p.y, p.z, pf.r, pf.seed, a, under, 0.f};
+            cinst_.insert(cinst_.end(), q, q + 8);
+        }
+        if (!cinst_.empty()) {
+            glUseProgram(progCloud_);
+            setLight(progCloud_);
+            setMat(progCloud_, "uVP", vp3_);
+            set3f(progCloud_, "uCamR", camR_);
+            set3f(progCloud_, "uCamU", camU_);
+            set3f(progCloud_, "uCloudLit", pal_.cloudLit);
+            set3f(progCloud_, "uCloudShade", pal_.cloudShade);
+            glBindVertexArray(cloudVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
+            glBufferData(GL_ARRAY_BUFFER, cinst_.size() * sizeof(float), cinst_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
+        }
+    }
+    if (eye_.y > CLOUD_Y + 200.f) {
+        glUseProgram(progSea_);
+        setLight(progSea_);
+        setMat(progSea_, "uVP", vp3_);
+        set3f(progSea_, "uLook", look_);
+        set3f(progSea_, "uCamR", camR_);
+        set3f(progSea_, "uCamU", camU_);
+        set3f(progSea_, "uSunDir", sunDir_);
+        set2f(progSea_, "uTan", tanH_ * aspect_, tanH_);
+        set1f(progSea_, "uPix", pxK);
+        set1f(progSea_, "uCloudY", CLOUD_Y);
+        set1f(progSea_, "uDrift", time_ * (8.f + 10.f * wm + 10.f * wp));
+        set1f(progSea_, "uFade", 0.6f * smoothstepf(CLOUD_Y + 200.f, CLOUD_Y + 1800.f, eye_.y));
+        set3f(progSea_, "uCloudLit", pal_.cloudLit);
+        set3f(progSea_, "uCloudShade", pal_.cloudShade);
         ugl::drawFullscreen();
     }
-    glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    // the roots in the cut
-    if (rootCount_ > 0) {
-        glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
-        glUseProgram(progRoot_);
-        setCam(progRoot_, pxW_);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, lightA_.tex);
-        set1i(progRoot_, "uLight", 0);
-        set2f(progRoot_, "uRes", (float)worldT_.w, (float)worldT_.h);
-        set1f(progRoot_, "uSoilLight", soilLight);
-        set3f(progRoot_, "uRootC", pal_.rootC);
-        set3f(progRoot_, "uAmbient", pal_.ambient);
-        glBindVertexArray(rootVao_);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, rootCount_);
-    }
-    // the threads and their knots
-    glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+    glDepthFunc(GL_LEQUAL);
+    // the threads (additive)
     if (threadCount_ > 0) {
+        float pu[24] = {};
+        for (size_t i = 0; i < pulses_.size() && i < 6; i++) {
+            pu[i * 4 + 0] = pulses_[i].q; pu[i * 4 + 1] = pulses_[i].amp; pu[i * 4 + 2] = pulses_[i].width; pu[i * 4 + 3] = pulses_[i].frac;
+        }
         glUseProgram(progThread_);
-        setCam(progThread_, pxW_);
-        setPulses(progThread_);
-        set1f(progThread_, "uMode", 0.f);
-        set1f(progThread_, "uSurfPx", pxW_ * 1.5f);
+        setLight(progThread_);
+        setMat(progThread_, "uVP", vp3_);
+        set3f(progThread_, "uCamR", camR_);
+        set3f(progThread_, "uCamU", camU_);
+        set1f(progThread_, "uG", G);
+        set1f(progThread_, "uPx", pxK);
+        set1f(progThread_, "uNear", camD_);
+        set3f(progThread_, "uThreadC", pal_.thread);
+        set3f(progThread_, "uTipC", pal_.threadTip);
+        set3f(progThread_, "uPulseC", pal_.pulse);
+        set1f(progThread_, "uBright", lerpf(1.f, 0.8f, smoothstepf(2.e4f, 2.e6f, alt_)) * (0.6f + 0.1f * wm + 0.25f * wp + 0.2f * life + 0.25f * swell_ + 0.3f * tetrisGlow_ + 0.2f * heart_) * pal_.glow * world);
+        set1f(progThread_, "uOver", smoothstepf(0.f, 1.f, over_));
+        glUniform4fv(glGetUniformLocation(progThread_, "uPulse"), 6, pu);
+        set4f(progThread_, "uWave", waveQ_, waveAmp_, 0.45f, 0.f);
+        glBlendFunc(GL_ONE, GL_ONE);
         glBindVertexArray(threadVao_);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, threadCount_);
-    }
-    if (nodeCount_ > 0) {
-        glUseProgram(progNode_);
-        setCam(progNode_, pxW_);
-        setPulses(progNode_);
-        set1f(progNode_, "uTime", time_);
-        glBindVertexArray(nodeVao_);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, nodeCount_);
-    }
-    // plants, trees and mushrooms behind the cut (depth tested: the cut and the floor in front hide them)
-    glEnable(GL_DEPTH_TEST);
-    if (!sorted_.empty()) {
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-        glUseProgram(progBoard_);
-        setCam(progBoard_, pxW_);
-        setLights(progBoard_);
-        set1f(progBoard_, "uDof", dof);
-        set1f(progBoard_, "uTime", time_);
-        set1f(progBoard_, "uWind", wind);
-        set1f(progBoard_, "uWindPhase", windPhase_);
-        set3f(progBoard_, "uStemC", pal_.stem);
-        set3f(progBoard_, "uFoliageC", pal_.foliage);
-        set3f(progBoard_, "uBarkC", pal_.bark);
-        set3f(progBoard_, "uRockC", pal_.rock);
-        set3f(progBoard_, "uThreadC", pal_.thread);
-        glBindVertexArray(boardVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, boardVbo_);
-        glBufferData(GL_ARRAY_BUFFER, sorted_.size() * sizeof(Board), sorted_.data(), GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sorted_.size());
     }
-    // spores, the caps' halos in the mist, the network's heart
-    {
-        ginst_.clear();
-        auto glow = [&](const vec3& p, float size, const vec3& c, float a, int kind, float seed) {
-            if (a <= 0.004f || size <= 0.f) return;
-            const float q[12] = {p.x, p.y, p.z, size, c.x, c.y, c.z, a, (float)kind, seed, 0.f, 0.f};
-            ginst_.insert(ginst_.end(), q, q + 12);
-        };
-        const float wilt = smoothstepf(0.5f, 3.5f, overT_ >= 0.f ? overT_ : 0.f);
-        for (const Mushroom& m : shrooms_) {
-            if (!m.born) continue;
-            const float H = shroomHeight(m) * (1.f - wilt);
-            if (H * view_.D / (view_.D + m.z) / pxW_ < 4.f) continue;
-            const float hs = m.type == 0 ? 0.8f : m.type == 1 ? 0.72f : 0.64f;
-            const float rc = m.type == 0 ? 0.46f : m.type == 1 ? 0.17f : 0.36f;
-            const float g = (0.08f + 0.03f * wp + 0.03f * life) * (1.f - 0.75f * over_) + m.flare * 0.14f + m.beat * 0.06f;
-            glow(vec3(m.x, myc::surf(m.x) + H * (hs + 0.05f), m.z + 0.001f * H), H * rc * 2.2f, pal_.cap[m.color], g * world * smoothstepf(0.f, 1.f, m.age), 1, m.seed);
-        }
-        // the heart: where the threads are too fine to see, a knot of light
-        {
-            const float rr = 30.f * pxW_;
-            glow(vec3(0.f, myc::SPORE_Y, 0.f), rr * 1.6f, lerp(pal_.thread, pal_.threadTip, 0.5f), 0.3f * bright, 2, 0.f);
-        }
-        ginst_.insert(ginst_.end(), markGlow_.begin(), markGlow_.end());
-        for (const Spore& s : spores_) {
-            if (s.age < 0.f) continue;
-            const float t = s.age / s.life;
-            const float a = smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * (0.7f + 0.3f * std::sin(time_ * 2.f + s.seed * 30.f));
-            glow(s.p, s.size, s.col, a * world, 0, s.seed);
-        }
-        if (!ginst_.empty()) {
-            glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
-            glUseProgram(progGlow_);
-            setCam(progGlow_, pxW_);
-            glBindVertexArray(glowVao_);
-            glBindBuffer(GL_ARRAY_BUFFER, glowVbo_);
-            glBufferData(GL_ARRAY_BUFFER, ginst_.size() * sizeof(float), ginst_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(ginst_.size() / 12));
-        }
+    if (!ginst_.empty()) {
+        glUseProgram(progGlow_);
+        setLight(progGlow_);
+        setMat(progGlow_, "uVP", vp3_);
+        set3f(progGlow_, "uCamR", camR_);
+        set3f(progGlow_, "uCamU", camU_);
+        set1f(progGlow_, "uPx", pxK);
+        glBindVertexArray(glowVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, glowVbo_);
+        glBufferData(GL_ARRAY_BUFFER, ginst_.size() * sizeof(float), ginst_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(ginst_.size() / 12));
     }
     glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
@@ -1816,7 +1794,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progBright_, "uSrc", 0);
     set2f(progBright_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
-    set1f(progBright_, "uThreshold", 0.5f);
+    set1f(progBright_, "uThreshold", 0.3f);
     ugl::drawFullscreen();
     for (int pass = 0; pass < 2; pass++) {
         bloomB_.bind();
@@ -1841,11 +1819,15 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
     set1i(progComp_, "uBloomT", 1);
     glActiveTexture(GL_TEXTURE0);
+    set3f(progComp_, "uLook", look_);
+    set3f(progComp_, "uCamR", camR_);
+    set3f(progComp_, "uCamU", camU_);
+    set2f(progComp_, "uTan", tanH_ * aspect_, tanH_);
     set2f(progComp_, "uRes", (float)width_, (float)height_);
-    set1f(progComp_, "uBloomK", (0.7f + 0.1f * wp + 0.08f * life) * world);
+    set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.25f * wp + 0.3f * life + 0.4f * tetrisGlow_) * world);
     set1f(progComp_, "uTwinkle", 0.25f + 0.15f * wm + 0.2f * wp);
     set1f(progComp_, "uTime", time_);
-    set1f(progComp_, "uStars", pal_.stars * world);
+    set1f(progComp_, "uSat", 1.08f);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
@@ -1857,7 +1839,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
         set3f(progVeil_, "uRail", lerp(pal_.thread * 0.45f, bridge_.ink * 0.4f, bridge));
         set1f(progVeil_, "uWellA", 0.8f);
-        set1f(progVeil_, "uColA", 0.56f * world);
+        set1f(progVeil_, "uColA", 0.5f * world);
         set1f(progVeil_, "uRailA", 0.5f);
         set1f(progVeil_, "uPx", pxPerUnit_);
         set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
@@ -1910,7 +1892,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_mycelium() {
     static const UniverseEntry e{
-        "MYCELIUM", "a glowing fungal network spreading through a cross-section of the forest floor at night, from a single spore to mushroom towers taller than the trees",
+        "MYCELIUM", "a glowing fungal network growing over the forest floor at night, from a single spore among the moss until it wraps the Earth in light",
         [] { return std::unique_ptr<Universe>(new MyceliumUniverse()); },
         // Fits most songs; darker, denser ones a little better.
         [](const SongLook& l) { return 0.85f + 0.2f * (1.f - l.brightness) + 0.1f * l.density; },
