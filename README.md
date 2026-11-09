@@ -13,7 +13,7 @@ uvx zentris ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and between songs the game takes a short break into the next universe. Forty-seven universes so far, each with its status:
+song, and between songs the game takes a short break into the next universe. Forty-six universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -109,10 +109,6 @@ song, and between songs the game takes a short break into the next universe. For
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row floats calmly to the shelves of a quiet panelled room, shelved in the order the lines come so the collection is the history of the game, every book a cleared cell; bookcases are carried in one at a time as they are needed and the camera eases back to keep the full shelves in view; the drop runs a soft light along the spines<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
-<tr>
-<td><img src="docs/universes/musicbox.jpg"><br><b>MUSIC BOX</b>: a Swiss cylinder music box under a warm lamp, in 3D; the pieces are brass-bossed plates of metal and enamel, and each cleared row flies calmly to the brass cylinder as ten pins, one under each tooth of the comb, so the cylinder fills with the game's history; it turns with the song and the pinned rows pluck the teeth on the beat; the drop opens the trap and a porcelain dancer turns in a ring of light<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
-</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
@@ -131,6 +127,7 @@ Disabled for now (not built; their code stays in the repository):
 | STAR CHART | An engraved celestial map filling with constellations; replaced by CELESTIAL OCEAN |
 | STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
 | GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
+| MUSIC BOX | A cylinder music box pinned with the cleared rows; disabled, not convincing yet |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -190,5 +187,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/tetris-universe ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
