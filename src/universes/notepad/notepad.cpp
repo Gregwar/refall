@@ -1920,10 +1920,12 @@ void NotepadUniverse::drawMarks(const std::vector<Mark>& m, bool residue, vec2 s
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE);
     glBindVertexArray(markVao_);
-    if (residue) {
+    if (residue || &m != &marks_) { // (a list of its own: a ghost, or a break's page)
         glBindBuffer(GL_ARRAY_BUFFER, markVbo_);
         glBufferData(GL_ARRAY_BUFFER, m.size() * sizeof(Mark), m.data(), GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)m.size());
+        // a break's page: the drawing put back in the buffer (the whole frame draws it from there)
+        if (!residue) glBufferData(GL_ARRAY_BUFFER, marks_.size() * sizeof(Mark), marks_.data(), GL_DYNAMIC_DRAW);
     } else if (markCount_ > 0) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)markCount_);
     }
@@ -1931,7 +1933,8 @@ void NotepadUniverse::drawMarks(const std::vector<Mark>& m, bool residue, vec2 s
 
 void NotepadUniverse::drawText(const std::vector<float>& v, bool residue) {
     if (!font_.ok) return;
-    const size_t count = residue ? v.size() / 8 : textCount_;
+    const bool own = residue || &v != &textVerts_; // (a list of its own: a ghost, or a break's page)
+    const size_t count = own ? v.size() / 8 : textCount_;
     if (count == 0) return;
     glUseProgram(progText_);
     glActiveTexture(GL_TEXTURE0);
@@ -1944,8 +1947,9 @@ void NotepadUniverse::drawText(const std::vector<float>& v, bool residue) {
     glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE);
     glBindVertexArray(textVao_);
     glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    if (residue) glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    if (own) glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)count);
+    if (own && !residue) glBufferData(GL_ARRAY_BUFFER, textVerts_.size() * sizeof(float), textVerts_.data(), GL_DYNAMIC_DRAW);
 }
 
 void NotepadUniverse::render(const Frame& f, GLuint fbo) {
@@ -1954,7 +1958,8 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     const float dt = f.dt;
     const Variant& V = VARIANTS[variant_];
     pauseFade_ = approach(pauseFade_, f.paused ? 1.f : (f.dim ? 0.6f : 0.f), f.paused ? 4.f : 1.5f, dt);
-    if (!f.paused) {
+    // a break's frame (the board given is blank): no new drawing, the page shown without the game (see below)
+    if (!f.paused && !f.bare) {
         clock_ += dt;
         kick_ = std::max(approach(kick_, 0.f, 4.f, dt), music.kick);
         slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 3.f, dt);
@@ -2017,7 +2022,7 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
         if (!dying_.empty() && since >= 1.0 / 16.0) due = true;
         if (bridge_.amount > 0.f && since >= 1.0 / 12.0) due = true;
         if (due) tick(f, (float)std::min(since, 0.5));
-    } else if (lastTick_ < 0) {
+    } else if (lastTick_ < 0 && !f.bare) {
         tick(f, 0.f);
     }
 
@@ -2040,12 +2045,33 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progPaper_, "uMarginP", marginX_, (float)V.marginN, V.marginA, 0.f);
     set1f(progPaper_, "uLight", V.light ? 1.f : 0.f);
     set1f(progPaper_, "uWorld", world);
+    set1f(progPaper_, "uResidueOn", f.bare ? 0.f : 1.f);
     set1f(progPaper_, "uGrain", V.grain);
     set1f(progPaper_, "uAspect", (float)width_ / height_);
     glBindVertexArray(emptyVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
-    drawMarks(marks_, false, v2(0, 0));
-    drawText(textVerts_, false);
+    if (f.bare) {
+        // the world alone: the doodles and the travelling drawings as last drawn, and the HUD's words written for
+        // this frame; the well, the stack, the previews, the gauge and the eraser's ghosts left out
+        std::vector<Mark> marks;
+        std::vector<float> text;
+        for (const Item& it : items_)
+            if (it.kind == IT_DOODLE || it.kind == IT_MOVER) emit(it, drawing_ - it.born, false, marks, &text);
+        std::vector<Item> words;
+        hudItems(f, words);
+        for (Item& it : words) {
+            it.wt = weight_;
+            it.wob = wobble_;
+            it.born = drawing_;
+            it.seed = (float)(it.key % 1000u);
+            emit(it, 0, false, marks, &text);
+        }
+        drawMarks(marks, false, v2(0, 0));
+        drawText(text, false);
+    } else {
+        drawMarks(marks_, false, v2(0, 0));
+        drawText(textVerts_, false);
+    }
     glDisable(GL_BLEND);
 
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);

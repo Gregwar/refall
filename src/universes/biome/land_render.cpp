@@ -638,7 +638,7 @@ void LandWorld::drawWorld() {
 
 // The puffs of dust under a lock (at the contact, small), over the stack.
 void LandWorld::drawAfterStack() {
-    if (puffs_.empty()) return;
+    if (puffs_.empty() || ctx.bare) return;
     std::vector<float> pv;
     const vec3 dc = lerp(ctx.pal.soilDry, ctx.pal.dust, 0.5f);
     const float world = ctx.world();

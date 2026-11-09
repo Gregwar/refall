@@ -177,6 +177,7 @@ uniform float uIgnite;         // the stains lighting up one region after anothe
 uniform vec2 uSweep;           // the drop's sweeping beam: x, strength
 uniform float uSlow;          // slow motion: the paint drained of its color, the wall cooler
 uniform vec4 uWell;            // center xy, half extents xy
+uniform float uPanel;          // the well's panel shown (0 in a break's frame: the wall alone)
 uniform vec4 uColL, uColR;     // the HUD columns (x0 y0 x1 y1)
 uniform vec4 uText[32];        // the HUD's lines (x0 y0 x1 y1): the paint is held back under them
 uniform int uTextN;
@@ -206,7 +207,7 @@ void main() {
     float wash = 0.82 + 0.28 * smoothstep(-uView.w, uView.w * 1.1, p.y);
     // the well's panel: a calmer, slightly deeper patch of the wall
     float well = inRect(p, vec4(uWell.xy - uWell.zw, uWell.xy + uWell.zw), 0.5);
-    wall *= 1.0 - 0.22 * well;
+    wall *= 1.0 - 0.22 * well * uPanel;
     vec3 lit = wall * uLight * wash * vign;
     vec3 uvWall = (wall * 0.35 + uUvTint * (0.6 + 0.4 * tone)) * vign;
     {

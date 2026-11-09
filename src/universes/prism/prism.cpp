@@ -1265,9 +1265,9 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
     }
-    // the cleared rows' bursts of light, through the same glass
+    // the cleared rows' bursts of light, through the same glass (the game's: not in a break's frame)
     for (const Burst& b : bursts_)
-        if (b.delay <= 0.f) emitBurst(b);
+        if (b.delay <= 0.f && !f.bare) emitBurst(b);
     // the light the cubes received, smoothed (a cube lights up and dims over a fraction of a second)
     {
         const float k = 1.f - std::exp(-dt * 10.f);
@@ -1279,18 +1279,18 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     }
     // sparks, flares and the gauge, at full resolution
     for (const Spark& s : sparks_) {
-        if (s.delay > 0.f) continue;
+        if (s.delay > 0.f || f.bare) continue;
         const float a = 1.f - smoothstepf(0.4f, 1.f, s.t / s.life);
         const vec2 tail = sub(s.p, mul(s.v, 0.035f));
         glow_.push_back({{s.p.x, s.p.y, tail.x, tail.y}, {s.w, s.w * 0.6f, a, a * 0.5f}, {s.c.x, s.c.y, s.c.z, 3.f}, {0.f, 0.f, 0.f, 0.f}});
     }
     for (const Flare& fl : flares_) {
-        if (fl.delay > 0.f) continue;
+        if (fl.delay > 0.f || f.bare) continue;
         const float u = fl.t / fl.life;
         const float a = smoothstepf(0.f, 0.12f, u) * (1.f - smoothstepf(0.25f, 1.f, u));
         glow_.push_back({{fl.p.x, fl.p.y, 0.f, 0.f}, {fl.size * (0.8f + 0.3f * u), 0.f, a, 0.f}, {fl.c.x, fl.c.y, fl.c.z, 2.f}, {0.f, 0.f, 0.f, 0.f}});
     }
-    {
+    if (!f.bare) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float R = layout::GAUGE_R;
         const bool ready = game.bonusReady(), active = game.bonusActive();
@@ -1333,6 +1333,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progScene_, "uDust", (0.6f + 0.4f * lvm) * (1.f - bridge));
     set1f(progScene_, "uHaze", 0.8f - 0.15f * rainbow_);
     set1f(progScene_, "uSpill", 0.05f);
+    set1f(progScene_, "uWell", f.bare ? 0.f : 1.f);
     set4f(progScene_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progScene_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     set1f(progScene_, "uBridge", smoothstepf(0.f, 1.f, bridge));
@@ -1342,7 +1343,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The glass cubes over it (premultiplied), then the glints, sparks and gauge (additive).
     const float mul = 1.f;
     cubes_.clear();
-    buildCubes(game);
+    if (!f.bare) buildCubes(game); // a break: the beams cross the empty room (the board given is blank anyway)
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1378,7 +1379,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, f.panels, fade);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels, fade);
     glDisable(GL_BLEND);
 }
 

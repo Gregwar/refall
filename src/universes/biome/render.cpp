@@ -638,9 +638,10 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (c_.over && !game.over()) c_.over = false;
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, c_.slow);
+    c_.bare = f.bare;
     if (!f.paused) {
         c_.time += dt;
-        watchBoard(game);
+        if (!c_.bare) watchBoard(game); // (a break's board is blank: not a stack gone)
         simulate(game, f.music, dt, wdt);
     }
     const float bridge = saturate(c_.bridge.amount);
@@ -672,7 +673,7 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     drawRain();
-    drawPane();
+    if (!c_.bare) drawPane();
     w_->drawAfterPane();
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
@@ -687,68 +688,70 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // ---- The ghost, the stack, the falling piece: every cell its own glass cube.
-    if (game.hasPiece() && !game.over()) {
-        const Piece& p = game.piece();
-        Piece gp = p;
-        gp.y = game.ghostY();
-        if (gp.y > p.y) {
-            int gc[4][2];
-            game.pieceCells(gp, gc);
-            for (auto& c : gc) {
-                if (c[1] < Game::HIDDEN) continue;
-                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cube(w.x, w.y, 1.f, p.type, 1.f, true, 0.f);
+    // ---- The ghost, the stack, the falling piece: every cell its own glass cube (none in a break's frame).
+    if (!c_.bare) {
+        if (game.hasPiece() && !game.over()) {
+            const Piece& p = game.piece();
+            Piece gp = p;
+            gp.y = game.ghostY();
+            if (gp.y > p.y) {
+                int gc[4][2];
+                game.pieceCells(gp, gc);
+                for (auto& c : gc) {
+                    if (c[1] < Game::HIDDEN) continue;
+                    const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
+                    cube(w.x, w.y, 1.f, p.type, 1.f, true, 0.f);
+                }
             }
         }
-    }
-    for (int y = Game::HIDDEN; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++) {
-            const int t = game.cell(x, y).type;
-            if (t < 0) continue;
-            const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
-            cube(p.x, p.y, 1.f, t, 1.f, false, std::fmod((float)(x * 7 + y * 13 + t), 50.f));
+        for (int y = Game::HIDDEN; y < Game::H; y++)
+            for (int x = 0; x < Game::W; x++) {
+                const int t = game.cell(x, y).type;
+                if (t < 0) continue;
+                const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
+                cube(p.x, p.y, 1.f, t, 1.f, false, std::fmod((float)(x * 7 + y * 13 + t), 50.f));
+            }
+        for (const Dying& d : dying_) cube(d.x, d.y, 1.f, d.type, 1.f, false, d.x * 3.f + d.y, smoothstepf(d.delay - 0.15f, d.delay, d.t));
+        if (game.hasPiece() && !game.over()) {
+            const Piece& p = game.piece();
+            int cells[4][2];
+            game.pieceCells(p, cells);
+            const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
+            for (int i = 0; i < 4; i++) {
+                const auto& c = cells[i];
+                if (c[1] < Game::HIDDEN - 1) continue;
+                const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+                cube(w.x, w.y, 1.f, p.type, 1.f, false, (float)(p.type * 7 + i * 13));
+            }
         }
-    for (const Dying& d : dying_) cube(d.x, d.y, 1.f, d.type, 1.f, false, d.x * 3.f + d.y, smoothstepf(d.delay - 0.15f, d.delay, d.t));
-    if (game.hasPiece() && !game.over()) {
-        const Piece& p = game.piece();
-        int cells[4][2];
-        game.pieceCells(p, cells);
-        const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
-        for (int i = 0; i < 4; i++) {
-            const auto& c = cells[i];
-            if (c[1] < Game::HIDDEN - 1) continue;
-            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cube(w.x, w.y, 1.f, p.type, 1.f, false, (float)(p.type * 7 + i * 13));
+        // ---- Previews: four small cubes each.
+        auto preview = [&](int type, vec2 center, float sc, float alpha) {
+            if (type < 0) return;
+            Piece p{type, 0, 0, 0};
+            int cells[4][2];
+            game.pieceCells(p, cells);
+            float minx = 9, maxx = -9, miny = 9, maxy = -9;
+            for (auto& c : cells) {
+                minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+                miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+            }
+            for (int i = 0; i < 4; i++) {
+                const auto& c = cells[i];
+                const vec2 pos = v2(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc);
+                cube(pos.x, pos.y, sc, type, alpha, false, (float)(type * 3 + i * 11));
+            }
+        };
+        preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 1.f);
+        for (int i = 0; i < 3; i++) {
+            const vec3 c = layout::nextCenter(i);
+            if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
         }
-    }
-    // ---- Previews: four small cubes each.
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
-        if (type < 0) return;
-        Piece p{type, 0, 0, 0};
-        int cells[4][2];
-        game.pieceCells(p, cells);
-        float minx = 9, maxx = -9, miny = 9, maxy = -9;
-        for (auto& c : cells) {
-            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
-            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
-        }
-        for (int i = 0; i < 4; i++) {
-            const auto& c = cells[i];
-            const vec2 pos = v2(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc);
-            cube(pos.x, pos.y, sc, type, alpha, false, (float)(type * 3 + i * 11));
-        }
-    };
-    preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 1.f);
-    for (int i = 0; i < 3; i++) {
-        const vec3 c = layout::nextCenter(i);
-        if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     flushCells();
     w_->drawAfterStack();
 
     // ---- The bonus gauge: a round glass filling with the world's water or seeds.
-    {
+    if (!c_.bare) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float R = layout::GAUGE_R;
         const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
@@ -766,7 +769,7 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, 1);
     }
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, c_.bare ? std::vector<HudRect>() : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

@@ -74,6 +74,7 @@ private:
     std::vector<Inst> play_;
     void cellInst(vec2 pos, float scale, int type, int mask, float alpha, float flash, bool ghost);
     void buildPlay(const Game& g, float t);
+    void buildFlight(); // the paint in the air (specks, gobs): drawn in a break's frame too
     struct Speck { vec2 p, v; vec3 color; float t, life, r; };
     std::vector<Speck> specks_;
 

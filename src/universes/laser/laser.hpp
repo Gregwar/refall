@@ -68,6 +68,8 @@ private:
     vec3 pieceColor(int type, int id) const;
     void buildProjection(const Game& game);
     void addProjection(vec2 src, const std::vector<vec2>& corners, const vec3& col, float power, float depth, bool lens);
+    void addLens(vec2 src, const vec3& col, float power, float gain);
+    void buildLenses(); // a break: the projectors alone, glowing in the haze, nothing projected
     void updateProjectors(const Game& game, const MusicState& music, float dt);
     // The outline corners of a set of cells (game grid), at their drawn positions.
     std::vector<vec2> outline(const std::vector<std::pair<int, int>>& cells, const Game* game, float dx, float dy) const;
