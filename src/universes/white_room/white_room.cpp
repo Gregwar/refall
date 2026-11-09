@@ -1003,9 +1003,10 @@ void WhiteRoomUniverse::buildBoard(const Game& g) {
             const float pr = age < 0.4f ? press_ * 0.07f * std::exp(-age * 6.f) : 0.f;
             block(p.x, p.y, 1.f - pr, pal_.piece[c.type], 1.f, 0.f, 0);
         }
-    // A topped-out stack turning to plaster.
-    for (const Dying& d : dying_)
-        block(d.x, d.y, 1.f, pal_.piece[d.type], 1.f, 0.85f * smoothstepf(0.f, 0.8f, d.t - d.delay), 0);
+    // A topped-out stack turning to plaster (a break: the room alone, the board is blank).
+    if (!bare_)
+        for (const Dying& d : dying_)
+            block(d.x, d.y, 1.f, pal_.piece[d.type], 1.f, 0.85f * smoothstepf(0.f, 0.8f, d.t - d.delay), 0);
     // The falling piece and its ghost.
     if (g.hasPiece()) {
         const Piece& p = g.piece();
@@ -1052,7 +1053,7 @@ void WhiteRoomUniverse::buildBoard(const Game& g) {
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
     // The bonus gauge: a groove in the wall.
-    {
+    if (!bare_) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float R = layout::GAUGE_R;
         tile(gc.x, gc.y, R * 1.05f, R * 1.05f, vec3(1.f), 1.f, 4, saturate(gaugeShown_), g.bonusReady() ? 1.f : 0.f,
@@ -1307,6 +1308,7 @@ void WhiteRoomUniverse::setRoomUniforms(GLuint p) {
     set4f(p, "uShP1", shP_[1].x, shP_[1].y, shP_[1].z, shP_[1].w);
     set1f(p, "uShadowK", shadowK_);
     set1f(p, "uShadowAmt", shadowAmt_);
+    set1f(p, "uPiles", bare_ ? 0.f : 1.f);
 }
 
 // Instances [first, first + count) of the cube buffer.
@@ -1374,6 +1376,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
@@ -1381,7 +1384,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) {
             overT_ = -1.f;
             dying_.clear();
@@ -1389,7 +1392,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     }
     over_ = overT_ >= 0.f ? smoothstepf(0.3f, 4.f, overT_) : approach(over_, 0.f, 1.5f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.25f, slow_);
-    if (!f.paused) simulate(game, music, dt, wdt);
+    if (!f.paused && !f.bare) simulate(game, music, dt, wdt); // (a break: its blank board says nothing of the game)
     computeLights(music);
     const float bridge = saturate(bridge_.amount);
     const float shadowK = 1.f - smoothstepf(0.f, 0.7f, bridge);
@@ -1403,6 +1406,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     vec3 lo(1e9f, 1e9f, 1e9f), hi(-1e9f, -1e9f, -1e9f);
     const float tk = saturate(physAcc_ / STEP); // between the last two physics steps
     for (const Ejected& e : ejected_) {
+        if (bare_) break; // a break: the thrown cubes are gone with the game
         const float a = saturate((e.life - e.age) / FADE);
         if (a <= 0.f) continue;
         const vec3 c = pal_.piece[e.color];
@@ -1496,6 +1500,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progRoom_, "uBridge", smoothstepf(0.05f, 0.9f, bridge));
         set3f(progRoom_, "uBridgeCol", bridge_.color);
         set1f(progRoom_, "uPx", px_);
+        set1f(progRoom_, "uPane", bare_ ? 0.f : 1.f);
         ugl::drawFullscreen();
     }
     // ... copied into the multisampled scene
