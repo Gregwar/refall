@@ -249,7 +249,7 @@ void App::startTrack(std::shared_ptr<Track> t) {
     pace_ = -1;
     lastSongBeat_ = -1;
     simSongTime_ = 0;
-    std::printf("[app] now playing: %s\n", track_->title.c_str());
+    std::printf("[app] now playing: %s (%s)\n", track_->title.c_str(), track_->path.c_str());
     sceneCounter_++;
     computePhases();
     lastPhase_ = first ? plan_.phaseAt(0.0) : 0;
