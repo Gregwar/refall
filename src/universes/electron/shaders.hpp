@@ -41,7 +41,7 @@ out vec4 frag;
 uniform vec4 uView;          // center x, y, half w, half h (board units)
 uniform float uPx;           // board units per pixel
 uniform vec3 uGround, uMottle, uTrace, uCore, uTerm, uCharge, uFrame, uPanel;
-uniform float uGrain, uTraceAmt, uWorld, uFrameA, uTime, uTermGlow;
+uniform float uGrain, uTraceAmt, uWorld, uFrameA, uTime, uTermGlow, uWell;
 uniform sampler2D uPher;
 uniform vec4 uPherRect;      // x0, y0, w, h
 uniform vec2 uPherTexel;     // one texel in uv
@@ -85,7 +85,7 @@ float field(vec2 q) { return texture(uPher, q).r; }
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     // inside the well (soft edge): the panel, calm and even
-    float inWell = smoothstep(0.05, -0.05, max(abs(p.x) - 5.0, max(-10.0 - p.y, p.y - 10.0)));
+    float inWell = smoothstep(0.05, -0.05, max(abs(p.x) - 5.0, max(-10.0 - p.y, p.y - 10.0))) * uWell;
     // the substrate's texture: a slow mottling and finer fibres (soft, never a pattern)
     float m = fbm(p * 0.22 + 3.1);
     float fib = fbm(vec2(p.x * 1.6 + p.y * 0.4, p.y * 3.5 - p.x * 0.9) + 11.0);
@@ -122,7 +122,7 @@ void main() {
     float fr = 0.0;
     if (p.y > -10.0 && p.y < 10.0) fr = max(fr, 1.0 - smoothstep(lw, lw + uPx, fx));
     if (abs(p.x) < 5.0) fr = max(fr, 1.0 - smoothstep(lw, lw + uPx, fy));
-    col = mix(col, uFrame, fr * uFrameA);
+    col = mix(col, uFrame, fr * uFrameA * uWell);
     col = mix(col, uBridgeCol, uBridge);
     // fine grain, static (on the pixel grid)
     float gr = hash2(floor(gl_FragCoord.xy)) - 0.5;

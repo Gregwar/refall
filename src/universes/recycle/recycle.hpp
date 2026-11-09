@@ -110,7 +110,7 @@ private:
     std::vector<Drawn> drawn_;
     void addCube(const vec3& p, float rot, const vec3& col, float alpha, float squash, float seed, bool piece);
     void flushCubes();
-    void buildScene(const Game& g);
+    void buildScene(const Game& g, bool bare);
     vec3 pileColor(const Pile& p, const Occ& o, int slot) const;
     vec3 pieceCol(int t) const { return pal_.piece[std::clamp(t, 0, 6)]; }
 

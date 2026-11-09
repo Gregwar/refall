@@ -631,7 +631,7 @@ bool TopographyUniverse::placePeak(Peak& p) {
 }
 
 // The HUD's text and the previews, as boxes in pixels (padded): the map fades behind them.
-void TopographyUniverse::buildHudRects(const std::vector<HudText>& hud) {
+void TopographyUniverse::buildHudRects(const std::vector<HudText>& hud, bool bare) {
     hudRects_.clear();
     auto add = [&](float x0, float y0, float x1, float y1) {
         if (hudRects_.size() / 4 >= 40) return;
@@ -651,6 +651,7 @@ void TopographyUniverse::buildHudRects(const std::vector<HudText>& hud) {
         const vec2 a = project(vec3(c.x - 2.1f * sc, c.y + 1.4f * sc, 0.f)), b = project(vec3(c.x + 2.1f * sc, c.y - 1.4f * sc, 0.f));
         add(a.x, a.y, b.x, b.y);
     };
+    if (bare) return; // a break: no previews to keep clear
     piece(layout::HOLD_CENTER, layout::previewScale(0));
     for (int i = 0; i < 3; i++) piece(layout::nextCenter(i), layout::previewScale(i));
 }
@@ -664,7 +665,7 @@ float TopographyUniverse::waterPercentile(float p) {
     return lerpf(sorted_[i], sorted_[std::min(i + 1, sorted_.size() - 1)], f - i);
 }
 
-void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt) {
+void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt, bool bare) {
     // The ground drifts on, slowly at a break, a little faster in a chorus and in a drop.
     {
         const float sp = 0.7f + 0.35f * smoothstepf(0.2f, 1.f, lv_) + 0.35f * smoothstepf(1.1f, 2.f, lv_) + 0.6f * dropAmt_;
@@ -794,9 +795,10 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt) {
         std::sort(sorted_.begin(), sorted_.end());
     }
 
-    // Upload: elevation, water, woodland.
+    // Upload: elevation, water, woodland. A break shows the ground without the stack at once (the blank board's
+    // terrain, not the eased map).
     for (size_t k = 0; k < n; k++) {
-        upload_[k * 4 + 0] = disp_[k];
+        upload_[k * 4 + 0] = bare ? target_[k] : disp_[k];
         upload_[k * 4 + 1] = pondL_[k];
         upload_[k * 4 + 2] = wood_[k];
         upload_[k * 4 + 3] = 0.f;
@@ -1311,7 +1313,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
         if (!palSet_) { basePal_ = target; palSet_ = true; }
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
     }
-    syncIds(game);
+    if (!f.bare) syncIds(game); // a break's blank board would forget the pieces
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1409,7 +1411,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > 0.4f; }), fading_.end());
     gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
-    updateTerrain(game, f.paused ? 0.f : dt, wdt);
+    updateTerrain(game, f.paused ? 0.f : dt, wdt, f.bare);
 
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float s = height_ / 1080.f;
@@ -1472,13 +1474,14 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uPhase", phase_);
     set1f(progMap_, "uRiver", riverVis_ * (1.f - over_));
     set1f(progMap_, "uFlow", flow_);
-    set1f(progMap_, "uWellCalm", 0.6f);
+    set1f(progMap_, "uWellCalm", f.bare ? 1.f : 0.6f);
+    set1f(progMap_, "uGameOn", f.bare ? 0.f : 1.f); // a break: no neat line round the well, no quiet HUD columns
     set1f(progMap_, "uSlow", slow_);
     set1f(progMap_, "uDark", pal_.dark);
     set1f(progMap_, "uFurn", 1.f - over_ * 0.7f);
     set1f(progMap_, "uBridge", bridge);
     set3f(progMap_, "uBridgeCol", bridge_.color);
-    buildHudRects(f.hud);
+    buildHudRects(f.hud, f.bare);
     set1i(progMap_, "uHudN", (int)(hudRects_.size() / 4));
     if (!hudRects_.empty()) glUniform4fv(ugl::U(progMap_, "uHud"), (GLsizei)(hudRects_.size() / 4), hudRects_.data());
     set1f(progMap_, "uHalf", half_);
@@ -1490,7 +1493,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Pieces, ghost, previews, gauge.
     cells_.clear();
-    buildBoard(game);
+    if (!f.bare) buildBoard(game); // a break: no pieces, debris, previews nor gauge
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!cells_.empty()) {
@@ -1527,7 +1530,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
             drawText(fontItalic_, nums, pal_.index, a);
         }
     }
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

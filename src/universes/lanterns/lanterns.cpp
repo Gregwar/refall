@@ -401,6 +401,7 @@ vec2 LanternsUniverse::screenBoard(const vec3& p) const {
 // The HUD's lettering on screen (in the board plane's units): the score column down to its last value, the next
 // column down to the gauge's word, the corner lines (the section, the universe's name) and the song's title.
 float LanternsUniverse::hudDim(const vec3& p) const {
+    if (bare_) return 1.f; // a break: only the corner title, nothing to keep clear
     const vec2 b = screenBoard(p);
     const float R[4][4] = {{-11.4f, -9.4f, -5.8f, 10.6f}, {5.8f, -5.9f, 11.4f, 10.6f}, {-23.f, -11.6f, -8.2f, -7.3f},
                            {-23.f, 8.3f, -12.f, 13.f}};
@@ -595,6 +596,7 @@ void LanternsUniverse::buildLamps() {
     for (int idx : order) {
         const Lantern& L = lanterns_[idx];
         if (L.state == L_RISE && L.delay > 0.f && L.sky) continue;
+        if (bare_ && (L.state == L_LEAVE || L.state == L_DESCEND)) continue; // a cleared run still by the well
         const vec3 c = tint(L.type);
         const float a = L.alpha * (1.f - L.fade);
         if (a <= 0.003f) continue;
@@ -628,6 +630,7 @@ void LanternsUniverse::buildLamps() {
         }
     }
     for (const Ember& e : embers_) {
+        if (bare_) break;
         const float k = e.t / e.life;
         const vec3 c = tint(e.type) * (1.4f * (1.f - k) * (1.f - k));
         sprites_.push_back({{e.x, e.y, e.z, 0.16f * (1.f - 0.5f * k)}, {c.x, c.y, c.z, 1.f}});
@@ -1071,7 +1074,7 @@ void LanternsUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, c
     const vec3 accent = ugl::toSrgb(pale ? lin(0x7a3a10) : lin(VARIANTS[variant_].accent));
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -1082,7 +1085,7 @@ void LanternsUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, c
         flushShapes();
     }
 
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1222,7 +1225,10 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    // a break: the lake, its lanterns and the far lights alone (no poles, stack, ghost, previews nor gauge; the
+    // blank board leaves the pieces' ids as they are)
+    bare_ = f.bare;
+    if (!bare_) syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1286,7 +1292,11 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     light_ = (0.92f + 0.05f * wm + 0.06f * wp + 0.05f * swell_) * (1.f - 0.1f * slow_);
     updateLanterns(dt, wdt);
     gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
-    buildBoard(game);
+    if (bare_) {
+        stack_.clear();
+        ghost_.clear();
+        poles_.clear();
+    } else buildBoard(game);
     buildLamps();
 
     const VariantDef& V = VARIANTS[variant_];
@@ -1335,8 +1345,14 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progEnv_, "uLake", lin(V.lake));
     set3f(progEnv_, "uShore", lin(V.shore));
     set3f(progEnv_, "uGlow", glowCol);
-    set4f(progEnv_, "uColL", layout::LEFT_COLUMN[0], -9.4f, layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-    set4f(progEnv_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    if (bare_) {
+        // no HUD columns to keep the stars from
+        set4f(progEnv_, "uColL", 999.f, 999.f, 999.f, 999.f);
+        set4f(progEnv_, "uColR", 999.f, 999.f, 999.f, 999.f);
+    } else {
+        set4f(progEnv_, "uColL", layout::LEFT_COLUMN[0], -9.4f, layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+        set4f(progEnv_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    }
     set4f(progEnv_, "uCorner", -23.f, 8.3f, -12.f, 13.f);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, reflT_.tex);

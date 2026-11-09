@@ -1054,6 +1054,18 @@ void BricksUniverse::pushStud(const vec3& base, float r, float h, const vec3& co
 }
 
 void BricksUniverse::buildBoard(const Game& g) {
+    if (bare_) {
+        // a break: no board, floor plate, stack, piece, ghost nor previews
+        const unsigned char none[Game::H][Game::W] = {};
+        glBindTexture(GL_TEXTURE_2D, occTex_);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Game::W, Game::H, GL_RED, GL_UNSIGNED_BYTE, none);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+        flat_.clear();
+        previewStart_[0] = previewEnd_[0] = boxes_.size();
+        previewStart_[1] = previewEnd_[1] = studs_.size();
+        return;
+    }
     const VariantDef& V = VARIANTS[variant_];
     const Quat id;
     const float bev = 0.1f;
@@ -1248,7 +1260,7 @@ void BricksUniverse::buildModels() {
     // bricks in flight: out of the row, then an arc to the model, reshaping and repainting on the way
     for (const Flight& f : flights_) {
         Model* m = model(f.model);
-        if (!m) continue;
+        if (!m || (bare_ && f.phase == 0)) continue; // (a break: no run still sliding out of the well)
         vec3 pos, size = f.size0, col = f.col0;
         Quat q;
         float slope = 0.f;
@@ -1310,6 +1322,7 @@ void BricksUniverse::buildModels() {
         }
     }
     for (const Debris& d : debris_) {
+        if (bare_) break;
         const Q qq = qAxis(d.axis, d.ang);
         const Quat q{qq.x, qq.y, qq.z, qq.w};
         pushBox(d.p, d.size, d.col, q, 0, 0.f, d.delay > 0.f ? 1.f : 0.f, 0.f, 0.075f);
@@ -1392,7 +1405,7 @@ void BricksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, con
     const vec3 accent = ugl::toSrgb(pale ? mixDisplay(lin(V.accent), lin(0x000000), 0.15f) : lin(V.accent));
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -1403,7 +1416,7 @@ void BricksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, con
         flushShapes();
     }
 
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1540,7 +1553,9 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    // a break: the studio, its turntables and the models alone (the blank board leaves the pieces' ids as they are)
+    bare_ = f.bare;
+    if (!bare_) syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
