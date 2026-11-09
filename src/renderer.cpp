@@ -268,7 +268,7 @@ void Renderer::renderBreak(const Frame& f) {
     const bool bare = play < 1.f && brk_.blank, whole = play > 0.f || !brk_.blank;
     if (brk_.black < 0.999f) {
         if (bare) {
-            const Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_};
+            const Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
         }
