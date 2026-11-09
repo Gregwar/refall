@@ -945,7 +945,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         }
         sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Particle& p) { return p.delay <= 0.f && p.t >= p.life; }), sparks_.end());
         gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
-        updateWindows(game, dt);
+        if (!f.bare) updateWindows(game, dt); // (a break's board is blank: the windows are kept as they are)
     }
 
     // ---- The staging.
@@ -1102,88 +1102,91 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     glBufferData(GL_ARRAY_BUFFER, inst_.size() * sizeof(Inst), inst_.data(), GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 36, (GLsizei)inst_.size());
 
-    // ---- The tower: the windows' light into the two textures, then the facade.
-    {
-        std::vector<float> a(ROWS * COLS * 4), b(ROWS * COLS * 4);
-        const float bright = (1.f + 0.1f * peakK) * worldOn * (1.f - 0.2f * slow_);
-        for (int r = 0; r < ROWS; r++)
-            for (int c = 0; c < COLS; c++) {
-                const Win& w = win_[r][c];
-                const int i = (r * COLS + c) * 4;
-                const vec3 col = w.cur * bright;
-                a[i] = col.x; a[i + 1] = col.y; a[i + 2] = col.z; a[i + 3] = 1.f;
-                b[i] = w.ghost * worldOn;
-                b[i + 1] = w.fall;
-                b[i + 2] = 0.f;
-                b[i + 3] = 0.f;
-            }
-        glBindTexture(GL_TEXTURE_2D, cellA_);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, COLS, ROWS, GL_RGBA, GL_FLOAT, a.data());
-        glBindTexture(GL_TEXTURE_2D, cellB_);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, COLS, ROWS, GL_RGBA, GL_FLOAT, b.data());
-    }
-    glUseProgram(progTower_);
-    setSky(progTower_);
-    setMat(progTower_, "uVP", vp_);
-    set4f(progTower_, "uRect", -5.5f, -40.f, 5.5f, 14.6f);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cellA_);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, cellB_);
-    glActiveTexture(GL_TEXTURE0);
-    set1i(progTower_, "uCellA", 0);
-    set1i(progTower_, "uCellB", 1);
-    set3f(progTower_, "uEye", eye_);
-    set3f(progTower_, "uFrame", pal_.frame * (1.f - 0.5f * black));
-    set3f(progTower_, "uGlassTint", lerp(pal_.tint, vec3(1.f), 0.6f)); // only a hint of the glass color: the lamps keep their own
-    {
-        vec3 gc = pal_.piece[0];
-        if (game.hasPiece()) gc = pal_.piece[std::clamp(game.piece().type, 0, 6)];
-        set3f(progTower_, "uGhostCol", gc * 0.8f);
-    }
-    set3f(progTower_, "uPierCol", crownCol);
-    set3f(progTower_, "uCrownCol", crownCol);
-    set3f(progTower_, "uAmb", pal_.amb);
-    set3f(progTower_, "uUpCol", pal_.upl * (1.f - 0.6f * black));
-    set3f(progTower_, "uMoonCol", pal_.moon);
-    set3f(progTower_, "uMoonDir", MOON_DIR);
-    set3f(progTower_, "uSnowCol", lin(0xdfe6f4) * 0.4f);
-    set3f(progTower_, "uReflCity", pal_.reflCity * (0.25f * (1.f - black) * worldOn) + crownCol * (0.02f * crown));
-    set1f(progTower_, "uMull", pal_.mull);
-    set1f(progTower_, "uSpand", pal_.spand);
-    set1f(progTower_, "uRecess", pal_.recess);
-    set1f(progTower_, "uReflK", pal_.reflK);
-    set1f(progTower_, "uPier", (0.5f * chorus_ * lvp + 0.9f * drop_ + 0.4f * kickK * drop_) * worldOn * (1.f - black));
-    set1f(progTower_, "uCrown", (0.25f + crown) * worldOn * (1.f - black));
-    set1f(progTower_, "uSnow", pal_.snow);
-    set1f(progTower_, "uRain", pal_.rain);
-    set1f(progTower_, "uTime", world_);
-    set1f(progTower_, "uChase", tet * worldOn);
-    set1f(progTower_, "uRoomAmb", 0.0035f);
-    set1f(progTower_, "uFrameLight", 4.f);
-    // the facade's floodlights, from the ledge of each floor and from below
-    set3f(progTower_, "uFlood", pal_.upl * 3.f * (1.f - 0.7f * black) * worldOn);
-    set1f(progTower_, "uGroundY", GROUND_Y);
-    {
-        float cc[21];
-        for (int i = 0; i < 7; i++) { cc[i * 3] = pal_.piece[i].x; cc[i * 3 + 1] = pal_.piece[i].y; cc[i * 3 + 2] = pal_.piece[i].z; }
-        glUniform3fv(ugl::U(progTower_, "uChaseCol"), 7, cc);
-        float ct[16] = {}, ccol[12] = {};
-        for (size_t i = 0; i < contacts_.size() && i < 4; i++) {
-            const Contact& c = contacts_[i];
-            const float u = c.t / c.life;
-            ct[i * 4] = c.x0; ct[i * 4 + 1] = c.x1; ct[i * 4 + 2] = c.y;
-            ct[i * 4 + 3] = c.power * smoothstepf(0.f, 0.25f, u) * (1.f - smoothstepf(0.3f, 1.f, u)) * worldOn;
-            ccol[i * 3] = c.col.x; ccol[i * 3 + 1] = c.col.y; ccol[i * 3 + 2] = c.col.z;
+    // ---- The tower: the windows' light into the two textures, then the facade. Not in a break's frame: the tower
+    // is the well, it goes with the game and the city behind it shows.
+    if (!f.bare) {
+        {
+            std::vector<float> a(ROWS * COLS * 4), b(ROWS * COLS * 4);
+            const float bright = (1.f + 0.1f * peakK) * worldOn * (1.f - 0.2f * slow_);
+            for (int r = 0; r < ROWS; r++)
+                for (int c = 0; c < COLS; c++) {
+                    const Win& w = win_[r][c];
+                    const int i = (r * COLS + c) * 4;
+                    const vec3 col = w.cur * bright;
+                    a[i] = col.x; a[i + 1] = col.y; a[i + 2] = col.z; a[i + 3] = 1.f;
+                    b[i] = w.ghost * worldOn;
+                    b[i + 1] = w.fall;
+                    b[i + 2] = 0.f;
+                    b[i + 3] = 0.f;
+                }
+            glBindTexture(GL_TEXTURE_2D, cellA_);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, COLS, ROWS, GL_RGBA, GL_FLOAT, a.data());
+            glBindTexture(GL_TEXTURE_2D, cellB_);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, COLS, ROWS, GL_RGBA, GL_FLOAT, b.data());
         }
-        glUniform4fv(ugl::U(progTower_, "uContact"), 4, ct);
-        glUniform3fv(ugl::U(progTower_, "uContactCol"), 4, ccol);
+        glUseProgram(progTower_);
+        setSky(progTower_);
+        setMat(progTower_, "uVP", vp_);
+        set4f(progTower_, "uRect", -5.5f, -40.f, 5.5f, 14.6f);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, cellA_);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, cellB_);
+        glActiveTexture(GL_TEXTURE0);
+        set1i(progTower_, "uCellA", 0);
+        set1i(progTower_, "uCellB", 1);
+        set3f(progTower_, "uEye", eye_);
+        set3f(progTower_, "uFrame", pal_.frame * (1.f - 0.5f * black));
+        set3f(progTower_, "uGlassTint", lerp(pal_.tint, vec3(1.f), 0.6f)); // only a hint of the glass color: the lamps keep their own
+        {
+            vec3 gc = pal_.piece[0];
+            if (game.hasPiece()) gc = pal_.piece[std::clamp(game.piece().type, 0, 6)];
+            set3f(progTower_, "uGhostCol", gc * 0.8f);
+        }
+        set3f(progTower_, "uPierCol", crownCol);
+        set3f(progTower_, "uCrownCol", crownCol);
+        set3f(progTower_, "uAmb", pal_.amb);
+        set3f(progTower_, "uUpCol", pal_.upl * (1.f - 0.6f * black));
+        set3f(progTower_, "uMoonCol", pal_.moon);
+        set3f(progTower_, "uMoonDir", MOON_DIR);
+        set3f(progTower_, "uSnowCol", lin(0xdfe6f4) * 0.4f);
+        set3f(progTower_, "uReflCity", pal_.reflCity * (0.25f * (1.f - black) * worldOn) + crownCol * (0.02f * crown));
+        set1f(progTower_, "uMull", pal_.mull);
+        set1f(progTower_, "uSpand", pal_.spand);
+        set1f(progTower_, "uRecess", pal_.recess);
+        set1f(progTower_, "uReflK", pal_.reflK);
+        set1f(progTower_, "uPier", (0.5f * chorus_ * lvp + 0.9f * drop_ + 0.4f * kickK * drop_) * worldOn * (1.f - black));
+        set1f(progTower_, "uCrown", (0.25f + crown) * worldOn * (1.f - black));
+        set1f(progTower_, "uSnow", pal_.snow);
+        set1f(progTower_, "uRain", pal_.rain);
+        set1f(progTower_, "uTime", world_);
+        set1f(progTower_, "uChase", tet * worldOn);
+        set1f(progTower_, "uRoomAmb", 0.0035f);
+        set1f(progTower_, "uFrameLight", 4.f);
+        // the facade's floodlights, from the ledge of each floor and from below
+        set3f(progTower_, "uFlood", pal_.upl * 3.f * (1.f - 0.7f * black) * worldOn);
+        set1f(progTower_, "uGroundY", GROUND_Y);
+        {
+            float cc[21];
+            for (int i = 0; i < 7; i++) { cc[i * 3] = pal_.piece[i].x; cc[i * 3 + 1] = pal_.piece[i].y; cc[i * 3 + 2] = pal_.piece[i].z; }
+            glUniform3fv(ugl::U(progTower_, "uChaseCol"), 7, cc);
+            float ct[16] = {}, ccol[12] = {};
+            for (size_t i = 0; i < contacts_.size() && i < 4; i++) {
+                const Contact& c = contacts_[i];
+                const float u = c.t / c.life;
+                ct[i * 4] = c.x0; ct[i * 4 + 1] = c.x1; ct[i * 4 + 2] = c.y;
+                ct[i * 4 + 3] = c.power * smoothstepf(0.f, 0.25f, u) * (1.f - smoothstepf(0.3f, 1.f, u)) * worldOn;
+                ccol[i * 3] = c.col.x; ccol[i * 3 + 1] = c.col.y; ccol[i * 3 + 2] = c.col.z;
+            }
+            glUniform4fv(ugl::U(progTower_, "uContact"), 4, ct);
+            glUniform3fv(ugl::U(progTower_, "uContactCol"), 4, ccol);
+        }
+        set1f(progTower_, "uBridge", bri);
+        set3f(progTower_, "uBridgeColor", bridge_.color);
+        set3f(progTower_, "uBridgeInk", bridge_.ink);
+        glBindVertexArray(quadVao_);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
-    set1f(progTower_, "uBridge", bri);
-    set3f(progTower_, "uBridgeColor", bridge_.color);
-    set3f(progTower_, "uBridgeInk", bridge_.ink);
-    glBindVertexArray(quadVao_);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     // ---- The lights: beacons, the crane's tip, fireworks, rain, snow (depth tested, additive).
     dots_.clear();
@@ -1196,9 +1199,11 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         std::vector<vec3> bs;
         for (const Bldg& b : bldgs_)
             if (b.beacon) bs.push_back(vec3(b.cx, b.y1 + 0.4f, b.cz));
-        bs.push_back(vec3(-5.38f, 11.18f, 0.05f));
-        bs.push_back(vec3(5.38f, 11.18f, 0.05f));
-        bs.push_back(vec3(2.6f, 14.4f, 0.05f));
+        if (!f.bare) { // the tower's own
+            bs.push_back(vec3(-5.38f, 11.18f, 0.05f));
+            bs.push_back(vec3(5.38f, 11.18f, 0.05f));
+            bs.push_back(vec3(2.6f, 14.4f, 0.05f));
+        }
         const bool grid = music.hasSong && lv_ > 0.5f;
         for (size_t i = 0; i < bs.size(); i++) {
             float on;
@@ -1254,52 +1259,54 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
 
-    // ---- The previews (small lit windows) and the gauge, on the board plane.
+    // ---- The previews (small lit windows) and the gauge, on the board plane (none in a break's frame).
     wins_.clear();
-    auto preview = [&](int type, vec2 center, float sc, float level) {
-        if (type < 0) return;
-        Piece p{type, 0, 0, 0};
-        int cells[4][2];
-        game.pieceCells(p, cells);
-        float minx = 9, maxx = -9, miny = 9, maxy = -9;
-        for (auto& c : cells) {
-            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
-            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
-        }
-        const vec3 L = pal_.piece[type] * (level * worldOn);
-        for (int i = 0; i < 4; i++) {
-            const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
-            const float h = sc * 0.5f;
-            wins_.push_back(Inst{{pos.x - h, pos.y - h, pos.x + h, pos.y + h}, {L.x, L.y, L.z, 1.f}, {0, 0, 0, 0}, {0, 0, 0, 0}});
-        }
-    };
-    preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.3f : 0.85f);
-    for (int i = 0; i < 3; i++) {
-        const vec3 c = layout::nextCenter(i);
-        if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.05f : 0.75f);
-    }
-    if (!wins_.empty()) {
-        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-        glUseProgram(progWin_);
-        setMat(progWin_, "uVP", vp_);
-        set3f(progWin_, "uFrame", pal_.frame * 0.3f);
-        set1f(progWin_, "uBridge", bri);
-        set3f(progWin_, "uBridgeInk", bridge_.ink);
-        drawInst(wins_);
-    }
     dots_.clear();
-    {
-        // the gauge: twelve small windows in a ring, lit one by one as it charges (a step per line)
-        const vec3 gc = layout::GAUGE_CENTER;
-        const bool ready = game.bonusReady(), active = game.bonusActive();
-        const float fill = active ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const float pulse = ready && music.hasSong ? 0.75f + 0.25f * std::cos((float)std::fmod(music.beat / 2.0, 1.0) * TAU) : 1.f;
-        for (int i = 0; i < 12; i++) {
-            const float a = PI * 0.5f - TAU * (i + 0.5f) / 12.f;
-            const vec3 p(gc.x + std::cos(a) * layout::GAUGE_R, gc.y + std::sin(a) * layout::GAUGE_R, 0.f);
-            const float k = ready ? 1.f : saturate(fill * 12.f - i);
-            const vec3 lc = lerp(pal_.text * 0.03f, pal_.accent * (active ? 1.2f : 0.9f) * pulse, k);
-            dot(p, 0.1f, lc, worldOn * (1.f - 0.4f * dimT_), vec3(1.f, 0.f, 0.f), 0.f, 2.f);
+    if (!f.bare) {
+        auto preview = [&](int type, vec2 center, float sc, float level) {
+            if (type < 0) return;
+            Piece p{type, 0, 0, 0};
+            int cells[4][2];
+            game.pieceCells(p, cells);
+            float minx = 9, maxx = -9, miny = 9, maxy = -9;
+            for (auto& c : cells) {
+                minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+                miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+            }
+            const vec3 L = pal_.piece[type] * (level * worldOn);
+            for (int i = 0; i < 4; i++) {
+                const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
+                const float h = sc * 0.5f;
+                wins_.push_back(Inst{{pos.x - h, pos.y - h, pos.x + h, pos.y + h}, {L.x, L.y, L.z, 1.f}, {0, 0, 0, 0}, {0, 0, 0, 0}});
+            }
+        };
+        preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.3f : 0.85f);
+        for (int i = 0; i < 3; i++) {
+            const vec3 c = layout::nextCenter(i);
+            if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.05f : 0.75f);
+        }
+        if (!wins_.empty()) {
+            glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            glUseProgram(progWin_);
+            setMat(progWin_, "uVP", vp_);
+            set3f(progWin_, "uFrame", pal_.frame * 0.3f);
+            set1f(progWin_, "uBridge", bri);
+            set3f(progWin_, "uBridgeInk", bridge_.ink);
+            drawInst(wins_);
+        }
+        {
+            // the gauge: twelve small windows in a ring, lit one by one as it charges (a step per line)
+            const vec3 gc = layout::GAUGE_CENTER;
+            const bool ready = game.bonusReady(), active = game.bonusActive();
+            const float fill = active ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
+            const float pulse = ready && music.hasSong ? 0.75f + 0.25f * std::cos((float)std::fmod(music.beat / 2.0, 1.0) * TAU) : 1.f;
+            for (int i = 0; i < 12; i++) {
+                const float a = PI * 0.5f - TAU * (i + 0.5f) / 12.f;
+                const vec3 p(gc.x + std::cos(a) * layout::GAUGE_R, gc.y + std::sin(a) * layout::GAUGE_R, 0.f);
+                const float k = ready ? 1.f : saturate(fill * 12.f - i);
+                const vec3 lc = lerp(pal_.text * 0.03f, pal_.accent * (active ? 1.2f : 0.9f) * pulse, k);
+                dot(p, 0.1f, lc, worldOn * (1.f - 0.4f * dimT_), vec3(1.f, 0.f, 0.f), 0.f, 2.f);
+            }
         }
     }
     glBlendFunc(GL_ONE, GL_ONE);
@@ -1379,7 +1386,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     fullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, f.panels, fade);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels, fade);
     glDisable(GL_BLEND);
 }
 

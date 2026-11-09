@@ -73,6 +73,7 @@ struct Ctx {
     float wp() const { return smoothstepf(1.1f, 2.f, lv); }   // toward a peak
     float slow = 0.f;
     bool over = false;
+    bool bare = false; // a break's frame: the world alone (no well, no stack, nothing thrown from it)
     Bridge bridge;
     float world() const { return 1.f - smoothstepf(0.f, 0.6f, saturate(bridge.amount)); } // the world shown (bridge)
 

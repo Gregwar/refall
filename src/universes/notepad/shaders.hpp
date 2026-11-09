@@ -36,6 +36,7 @@ inline const char* PAPER_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uResidue;
+uniform float uResidueOn; // the eraser's ghosts shown (0 in a break's frame: the page without the game's)
 uniform vec4 uView;     // center, half extents (board units)
 uniform float uPx;      // board units per pixel
 uniform vec3 uPaper, uGrid, uMargin;
@@ -75,7 +76,7 @@ void main() {
     c *= 1.0 - 0.07 * (1.0 - smoothstep(0.0, 1.0, corner)) * uWorld;
     c *= 1.0 + 0.03 * smoothstep(0.5, 1.0, corner) * (1.0 - smoothstep(1.0, 1.4, corner)) * uWorld;
     vec3 S = uLight > 0.5 ? c : 1.0 - c;
-    vec3 R = mix(vec3(1.0), texture(uResidue, vUv).rgb, uWorld);
+    vec3 R = mix(vec3(1.0), texture(uResidue, vUv).rgb, uWorld * uResidueOn);
     frag = vec4(S * R, 0.0);
 }
 )";

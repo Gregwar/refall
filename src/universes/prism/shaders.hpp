@@ -116,6 +116,7 @@ uniform float uFloorY;
 uniform float uDust;       // dust motes in the beams
 uniform float uHaze;       // how much the haze breaks the beams up
 uniform float uSpill;      // light scattered on the backdrop
+uniform float uWell;       // the well's hairlines shown (0 in a break's frame: the room alone)
 uniform vec4 uColL, uColR; // the HUD's columns: the beams quieter there
 uniform float uBridge;
 uniform vec3 uBridgeColor;
@@ -172,7 +173,7 @@ void main() {
     // the well: three hairlines of glass edge, almost invisible, catching the light that crosses them
     float hx = min(abs(p.x - 5.08), abs(p.x + 5.08));
     float wall = exp(-hx * hx / (uPx * uPx * 0.8)) * step(floorY, p.y) * (1.0 - smoothstep(9.6, 10.4, p.y));
-    col += uHair * wall * (0.25 + lum * 2.5);
+    col += uHair * wall * (0.25 + lum * 2.5) * uWell;
     col = mix(col, uBridgeColor, uBridge);
     frag = vec4(col, 1.0);
 }

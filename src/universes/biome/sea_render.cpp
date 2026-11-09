@@ -376,7 +376,7 @@ void SeaWorld::drawBoats(bool depthOnly) {
 void SeaWorld::drawBoxes() {
     std::vector<float> inst;
     for (const Body& b : bodies_) {
-        if (b.age < b.delay || b.fade > 0.6f) continue;
+        if (b.age < b.delay || b.fade > 0.6f || ctx.bare) continue;
         const mat4 m = model(b.p, qRot(b.q, vec3(1, 0, 0)), qRot(b.q, vec3(0, 1, 0)), qRot(b.q, vec3(0, 0, 1)), 1.f);
         inst.insert(inst.end(), m.m, m.m + 16);
         inst.insert(inst.end(), {1.f, 0.f, 0.f, 0.f});
@@ -510,8 +510,8 @@ void SeaWorld::drawWorld() {
     glBlitFramebuffer(0, 0, ctx.width, ctx.height, 0, 0, ctx.width, ctx.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, ctx.msFbo);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    // the thrown cubes, far to near, each writing its depth
-    if (!bodies_.empty()) {
+    // the thrown cubes, far to near, each writing its depth (not in a break's frame: the game's cubes are hidden)
+    if (!bodies_.empty() && !ctx.bare) {
         std::vector<const Body*> order;
         for (const Body& b : bodies_)
             if (b.age >= b.delay) order.push_back(&b);
