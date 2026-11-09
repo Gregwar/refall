@@ -826,7 +826,7 @@ void GroceriesUniverse::buildBoard(const Game& g) {
         blob(blobs_, vec3(hc.x + 0.3f, hc.y - 0.3f, Z_TOP + 0.01f), 2.f, 1.3f, 0.3f, 0.6f);
         for (int i = 0; i < 3; i++) {
             const vec3 c = layout::nextCenter(i);
-            preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+            if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
         }
     }
 }

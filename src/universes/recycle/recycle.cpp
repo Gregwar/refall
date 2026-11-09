@@ -1171,7 +1171,7 @@ void RecycleUniverse::buildScene(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 0.95f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), i == 0 ? 0.95f : 0.8f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), i == 0 ? 0.95f : 0.8f);
     }
     // ---- The bonus gauge: twelve pips, one per line.
     {

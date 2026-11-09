@@ -1037,7 +1037,7 @@ void LaserUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), -1, v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), pieceCounter_ + 1 + i, v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), pieceCounter_ + 1 + i, v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     // the bonus gauge: a ring of laser light
     {

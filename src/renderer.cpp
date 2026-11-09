@@ -11,12 +11,29 @@ Renderer::~Renderer() {
     texA_.destroy();
     texB_.destroy();
     if (cellsTex_) glDeleteTextures(1, &cellsTex_);
+    if (mixProg_) glDeleteProgram(mixProg_);
 }
+
+namespace {
+// A break's frame: the world alone (B) and the whole frame (A) mixed by how much of the game shows, then toward black.
+const char* BREAK_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uA, uB;
+uniform float uPlay, uLight;
+void main() {
+    vec3 c = mix(texture(uB, vUv).rgb, texture(uA, vUv).rgb, uPlay);
+    frag = vec4(c * uLight, 1.0);
+}
+)";
+} // namespace
 
 bool Renderer::init(int width, int height) {
     w_ = std::max(1, width);
     h_ = std::max(1, height);
     comp_.init();
+    card_.init();
+    mixProg_ = ugl::program(ugl::FULLSCREEN_VS, BREAK_FS, "break");
     glGenTextures(1, &cellsTex_);
     glBindTexture(GL_TEXTURE_2D, cellsTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Game::W, Game::H - Game::HIDDEN, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
@@ -174,6 +191,10 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     if (state_ == RUNNING && !paused) p_ += dt / std::max(0.2f, seconds_);
 
     if (state_ != RUNNING) {
+        if (brk_.play < 1.f || brk_.black > 0.f || brk_.card[0].alpha > 0.f || brk_.card[1].alpha > 0.f) {
+            renderBreak(f);
+            return;
+        }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, w_, h_);
         cur_.u->render(f, 0);
@@ -233,6 +254,49 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     comp_.draw(kind_, in);
 
     if (p_ >= 1.f) finishChange();
+}
+
+// A break: the world alone (a blank board, the bare HUD) and the whole frame, each in its own texture while both
+// show (the world alone renders without time passing, the whole frame moves the universe on), mixed, darkened,
+// then the title card on top.
+void Renderer::renderBreak(const Frame& f) {
+    if (!texA_.fbo) {
+        texA_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
+        texB_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
+    }
+    const float play = saturate(brk_.play);
+    const bool bare = play < 1.f && brk_.blank, whole = play > 0.f || !brk_.blank;
+    if (brk_.black < 0.999f) {
+        if (bare) {
+            const Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_};
+            texB_.bind();
+            cur_.u->render(fb, texB_.fbo);
+        }
+        if (whole) {
+            texA_.bind();
+            cur_.u->render(f, texA_.fbo);
+        }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w_, h_);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(mixProg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, whole ? texA_.tex : texB_.tex);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, bare ? texB_.tex : texA_.tex);
+    glActiveTexture(GL_TEXTURE0);
+    ugl::set1i(mixProg_, "uA", 0);
+    ugl::set1i(mixProg_, "uB", 1);
+    ugl::set1f(mixProg_, "uPlay", bare ? play : 1.f);
+    ugl::set1f(mixProg_, "uLight", 1.f - saturate(brk_.black));
+    ugl::drawFullscreen();
+    // White on the black; on a light universe it turns to the universe's ink as its world comes up.
+    const TransitionHints hi = cur_.u->hints();
+    const float day = hi.light ? 1.f - saturate(brk_.black) : 0.f;
+    const vec3 white(0.96f, 0.95f, 0.92f), dark = ugl::toSrgb(hi.ink) * 0.8f;
+    card_.draw(brk_.card, 2, w_, h_, white + (dark - white) * day, vec3(0.f) + (white - vec3(0.f)) * day);
 }
 
 void Renderer::readFrame(std::vector<unsigned char>& px, int& w, int& h) {

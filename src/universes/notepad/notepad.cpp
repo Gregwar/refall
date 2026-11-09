@@ -1045,7 +1045,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
     if (g.holdType() >= 0)
         preview(tag('H', (uint64_t)g.holdType()), g.holdType(), layout::HOLD_CENTER, g.holdUsed() ? 0.4f : 1.f, 0.35f);
     for (int i = 0; i < 3; i++)
-        preview(tag('N', (uint64_t)(i * 16 + g.next(i))), g.next(i), layout::nextCenter(i), i == 0 ? 1.f : 0.7f, 0.3f);
+        if (g.next(i) >= 0) preview(tag('N', (uint64_t)(i * 16 + g.next(i))), g.next(i), layout::nextCenter(i), i == 0 ? 1.f : 0.7f, 0.3f);
 
     // ---- the bonus gauge: a pie coloured in as the lines charge it
     {

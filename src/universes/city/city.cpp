@@ -1276,7 +1276,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.3f : 0.85f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.05f : 0.75f);
+        if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.05f : 0.75f);
     }
     if (!wins_.empty()) {
         glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

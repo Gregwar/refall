@@ -1158,7 +1158,7 @@ void KintsugiUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f, 1);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, 2 + i);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, 2 + i);
     }
 
     // the shards of the cleared rows: falling away into the dark (shrinking, darkening), their broken edges gold

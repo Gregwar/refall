@@ -1523,7 +1523,7 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
         }
     };
     if (g.holdType() >= 0) preview(g.holdType(), vec3(-8.6f, 7.2f, -0.12f), 0.62f, 0.f, g.holdUsed());
-    for (int i = 0; i < 3; i++) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, -0.12f), i == 0 ? 0.62f : 0.5f, 1.3f + i * 2.1f, false);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, -0.12f), i == 0 ? 0.62f : 0.5f, 1.3f + i * 2.1f, false);
 
     // Tumbling bodies.
     for (const Body& b : bodies_) {

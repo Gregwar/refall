@@ -757,7 +757,7 @@ void BrutalistUniverse::buildBoard(const Game& g) {
         preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0));
         for (int i = 0; i < 3; i++) {
             const vec3 c = layout::nextCenter(i);
-            preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
+            if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
         }
     }
 }

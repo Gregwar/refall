@@ -1275,7 +1275,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     // grains: lying on the ground (under the ants), flying (over everything)
     for (const Grain& g : grains_) {

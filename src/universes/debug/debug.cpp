@@ -186,7 +186,7 @@ public:
             for (auto& c : cs) cell(center + vec3((c[0] - mx) * sc, -(c[1] - my) * sc, 0), 0.47f * sc, V.pieces[type], a);
         };
         if (g.holdType() >= 0) preview(g.holdType(), layout::HOLD_CENTER, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
-        for (int i = 0; i < 3; i++) preview(g.next(i), layout::nextCenter(i), layout::previewScale(i), i ? 0.7f : 1.f);
+        for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), layout::nextCenter(i), layout::previewScale(i), i ? 0.7f : 1.f);
         // Gauge: a ring of dots.
         for (int j = 0; j < 24; j++) {
             const float a = PI * 0.5f - TAU * (j + 0.5f) / 24;

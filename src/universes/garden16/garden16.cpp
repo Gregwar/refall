@@ -1741,7 +1741,7 @@ void Garden16Universe::drawSide(const Game& g) {
         }
     };
     preview(g.holdType(), lx(layout::HOLD_CENTER.x), ly(layout::HOLD_CENTER.y), 7, g.holdUsed());
-    for (int i = 0; i < 3; i++) preview(g.next(i), lx(layout::nextCenter(i).x), ly(layout::nextCenter(i).y), i == 0 ? 7 : 6, false);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), lx(layout::nextCenter(i).x), ly(layout::nextCenter(i).y), i == 0 ? 7 : 6, false);
 
     // The bonus gauge: a ring with a meadow rising inside, a flower opening in it when it is ready.
     {

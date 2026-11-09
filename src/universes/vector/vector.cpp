@@ -835,7 +835,7 @@ void VectorUniverse::buildBoard(const Game& g, float dt) {
         }
     };
     if (g.holdType() >= 0) preview(g.holdType(), vec3(-8.6f, 7.2f, 0), 0.62f, g.holdUsed() ? 0.3f : 0.85f);
-    for (int i = 0; i < 3; i++) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, 0), i == 0 ? 0.62f : 0.5f, i == 0 ? 0.9f : 0.55f);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, 0), i == 0 ? 0.62f : 0.5f, i == 0 ? 0.9f : 0.55f);
     // Thin rules under the HOLD / NEXT labels.
     for (float sx : {-1.f, 1.f}) {
         const float in = 0.3f * gain;
