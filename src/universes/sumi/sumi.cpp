@@ -743,7 +743,7 @@ void SumiUniverse::addBlock(std::vector<Sprite>& out, vec2 pos, int type, int ma
     out.push_back(s);
 }
 
-void SumiUniverse::collectScenery(const MusicState& music, std::vector<Sprite>& out) {
+void SumiUniverse::collectScenery(const MusicState& music, std::vector<Sprite>& out, bool bare) {
     auto put = [&](float x, float y, float hw, float hh, float rot, int kind, float seed, float alpha, vec3 c, float cw,
                    float d0, float d1, float d2, float d3) {
         Sprite s{x, y, hw, hh, rot, (float)kind, seed, alpha, {c.x, c.y, c.z, cw}, {d0, d1, d2, d3}};
@@ -799,6 +799,7 @@ void SumiUniverse::collectScenery(const MusicState& music, std::vector<Sprite>& 
                 branchPresence_ * smoothstepf(0.f, 0.3f, open), col, open, (float)b.style, 0, 0, 0);
         }
     }
+    if (bare) return;
     // The well: three brush lines (left, right, bottom), open at the top, and the signature seal.
     auto stroke = [&](vec2 a, vec2 b, float width, float seed, float dry, float taper, float dens, vec3 col, float reveal,
                       float wellFade, float alpha) {
@@ -1129,8 +1130,10 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     if (!paused) {
         const float wdt = dt * lerpf(1.f, 0.35f, slow_);
         simulate(game, music, dt, wdt);
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 1.5f, dt);
-        readyT_ = game.bonusReady() ? readyT_ + dt : 0.f;
+        if (!f.bare) { // (a break's blank board: the gauge keeps its state for the game's return)
+            gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 1.5f, dt);
+            readyT_ = game.bonusReady() ? readyT_ + dt : 0.f;
+        }
         readyFlash_ = approach(readyFlash_, 0.f, 1.f, dt);
     }
 
@@ -1154,7 +1157,9 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progBg_, "uLevel", lvA_, lvB_, washFront_, washT_);
     set1f(progBg_, "uImpact", washImpact_);
     set1f(progBg_, "uSeed", washSeed_ * 0.f);
-    set2f(progBg_, "uWell", WELL_HX + 0.05f, WELL_HY + 0.05f);
+    // A break: no well, the landscape runs on through its paper.
+    if (f.bare) set2f(progBg_, "uWell", -1.f, -1.f);
+    else set2f(progBg_, "uWell", WELL_HX + 0.05f, WELL_HY + 0.05f);
     set1f(progBg_, "uWorld", world);
     set3f(progBg_, "uSkyCol", skyCol_);
     set1f(progBg_, "uSky", saturate(skyWash_ + 0.6f * skySwell_ * sunPresence_));
@@ -1169,10 +1174,10 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Ink.
     std::vector<Sprite> sprites;
     sprites.reserve(512);
-    collectScenery(music, sprites);
+    collectScenery(music, sprites, f.bare);
     for (Sprite& s : sprites)
         if (s.kind >= K_BEHIND || s.kind == K_DROP) s.alpha *= world; // blooms, petals, enso, sun, specks
-    collectBoard(game, music, sprites);
+    if (!f.bare) collectBoard(game, music, sprites);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
     glUseProgram(progSprite_);
@@ -1186,7 +1191,8 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
         glUniform3fv(U(progSprite_, "uPiece"), 7, pc);
     }
     set3f(progSprite_, "uVermDark", verm_ * vec3(0.62f, 0.55f, 0.6f));
-    set2f(progSprite_, "uWell", WELL_HX, WELL_HY);
+    if (f.bare) set2f(progSprite_, "uWell", -1.f, -1.f);
+    else set2f(progSprite_, "uWell", WELL_HX, WELL_HY);
     set1f(progSprite_, "uPx", 2.f * viewH_.y / height_);
     glBindVertexArray(spriteVao_);
     glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);

@@ -137,6 +137,7 @@ private:
     bool worldPaused_ = false;
     float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
+    bool bare_ = false; // this frame is a break's: the night alone, no ice sheet, no blocks
     Bridge bridge_;
     Rng rng_{808};
 };

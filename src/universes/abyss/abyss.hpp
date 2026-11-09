@@ -51,6 +51,7 @@ private:
     void buildWhale();
     void buildBoard(const Game& game);
     void buildFx();
+    void setBoxes(GLuint prog) const;
     void drawWorld();
     void drawSprites(const std::vector<Sprite>& v);
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
@@ -144,6 +145,7 @@ private:
     float overT_ = -1.f, over_ = 0.f;
     float gaugeShown_ = 0.f, readyT_ = 9.f;
     float dimT_ = 0.f;
+    bool bare_ = false; // this frame is a break's: the sea alone, no well, no columns, no jelly blocks
     Bridge bridge_;
     Rng rng_{4242};
 };

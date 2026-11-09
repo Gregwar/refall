@@ -49,7 +49,8 @@ private:
     void addBlock(std::vector<Sprite>& out, vec2 pos, int type, int mask, float scale, vec2 nc, float seed,
                   float wet, float age, float dissolve, float alpha, int kind = K_BLOCK);
     void collectBoard(const Game& game, const MusicState& music, std::vector<Sprite>& out);
-    void collectScenery(const MusicState& music, std::vector<Sprite>& out);
+    // bare: the landscape's own ink only (a break: no well, no seal, no traces of the game).
+    void collectScenery(const MusicState& music, std::vector<Sprite>& out, bool bare);
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
     void spawnBloom(vec2 pos, float size, float strength, vec3 col);
     void drawText(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);

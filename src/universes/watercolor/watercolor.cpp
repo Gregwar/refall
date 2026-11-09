@@ -622,7 +622,7 @@ void WatercolorUniverse::simulate(const Game& game, const MusicState& music, flo
     floodT_ += wdt;
     flood_ = floodT_ < 0.6f ? smoothstepf(0.f, 0.6f, floodT_) : 1.f - smoothstepf(2.f, 7.f, floodT_);
 
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -1026,6 +1026,7 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
@@ -1033,7 +1034,7 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1068,7 +1069,8 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progComp_, "uRes", (float)width_, (float)height_);
         set3f(progComp_, "uPaperCol", pal_.paper);
         set1f(progComp_, "uPx", px_);
-        set4f(progComp_, "uWell", WELL_X, WELL_Y, 0.f, 0.15f);
+        // (a break: no well masked out of the painting, which runs on through its place)
+        set4f(progComp_, "uWell", WELL_X, WELL_Y, bare_ ? 1.f : 0.f, bare_ ? 0.f : 0.15f);
         set1f(progComp_, "uWetGain", 1.f - smoothstepf(0.f, 0.6f, run_));
         set1f(progComp_, "uRun", run_);
         set1f(progComp_, "uBridge", bridge);
@@ -1082,7 +1084,7 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Glazed over the sheet: pencil, pieces, the HUD (dst * mul + add).
     cells_.clear();
     pencil_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_SRC1_COLOR);
     if (!pencil_.empty()) {

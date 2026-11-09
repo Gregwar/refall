@@ -123,6 +123,7 @@ private:
     float overT_ = -1.f, run_ = 0.f;
     float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
+    bool bare_ = false; // this frame is a break's: the painting alone, no pencil frame, no pieces
     Bridge bridge_;
     Rng rng_{909};
 };
