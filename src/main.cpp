@@ -151,6 +151,7 @@ private:
     float breakT_ = 0;         // seconds into the stage
     bool breakSkip_ = false;   // an outro asked by "next song": a shorter one
     bool breaks_ = true;
+    bool introAtStart_ = true; // the program starts on the black, the first song coming in with its title card
     Game blank_;               // what the universes draw while the game is hidden
     static constexpr float OUT_LEAD = 7.5f;  // the outro starts this long before the song's end
     static constexpr float OUT_HIDE = 1.6f;  // the game fades away
@@ -519,6 +520,21 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     // Test hook: ZEN_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
     static const bool bareTest = std::getenv("ZEN_BARE") != nullptr;
     if (bareTest && break_ == BREAK_OFF) b.play = 0.f;
+    if (introAtStart_ && !track_) {
+        // Before the first song: the black, a quiet word while it loads.
+        int w, h;
+        fbSize(w, h);
+        b.black = 1.f;
+        TitleCard::Line& l = b.card[1];
+        l.text = lib_.empty() ? "NO SONGS FOUND" : "LOADING THE FIRST SONG";
+        l.face = TitleCard::SANS;
+        l.cap = h * 0.016f;
+        l.track = 0.45f;
+        l.center = true;
+        l.x = w * 0.5f;
+        l.y = h * 0.5f;
+        l.alpha = 0.45f * smoothstepf(0.5f, 1.5f, runTime_);
+    }
     if (break_ == BREAK_OUT) {
         const float hide = breakSkip_ ? 1.f : OUT_HIDE;
         b.play = 1.f - smoothstepf(0.f, hide, t);
@@ -804,6 +820,7 @@ int App::run() {
     game_.reset(runSeed_);
     blank_.makeBlank();
     breaks_ = !std::getenv("ZEN_NO_BREAK") && (!shotMode || clipMode);
+    introAtStart_ = breaks_ && (!shotMode || std::getenv("ZEN_INTRO_TEST"));
     // A universe while the first song loads (the forced one, else one picked from the run seed); the first song
     // keeps it.
     if (!opt_.universe.empty()) {
@@ -841,7 +858,14 @@ int App::run() {
             }
             if (!nextTrack_ && !lib_.loading() && !lib_.empty()) lib_.prefetch(runSeed_ + (uint64_t)(runTime_ * 1000));
         }
-        if (!track_ && nextTrack_) startTrack(std::move(nextTrack_));
+        if (!track_ && nextTrack_) {
+            // The first song comes in like every next one: its title card on the black, then its world, then the game.
+            if (introAtStart_) {
+                break_ = BREAK_IN;
+                breakT_ = 0;
+            }
+            startTrack(std::move(nextTrack_));
+        }
         if (breaks_ && track_) {
             // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
             const double left = track_->duration() - songTime_;

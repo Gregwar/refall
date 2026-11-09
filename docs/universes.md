@@ -453,7 +453,7 @@ previews, gauge or blocks, on a blank board), which stays a few seconds and fade
 next song starts on the black, its title and universe lettered big in the middle by the host (`src/titlecard.*`,
 Cormorant Garamond Italic and Tenor Sans, SIL Open Font License, `src/embed/`); they shrink into their corners as
 the new world fades in, where the universe's own HUD takes them over; the game comes back last, its falling piece
-back at the top. "Next song" plays a shorter outro. `ZEN_NO_BREAK=1` goes back to the transitions below (still
+back at the top. "Next song" plays a shorter outro. The program starts the same way: on the black (a quiet "loading the first song"), the first song coming in with its title card (`ZEN_INTRO_TEST=1` plays it in a `--clip`). `ZEN_NO_BREAK=1` goes back to the transitions below (still
 used by T / Y and `--universe-on-peak`); `ZEN_BARE=1` shows the bare world in screenshots, `--clip-break` records
 a break.
 
