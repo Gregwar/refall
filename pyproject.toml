@@ -3,7 +3,7 @@ requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "zentris"
+name = "tetris-universe"
 version = "1.24.0"
 description = "A Tetris Effect inspired game that plays any playlist (local music or YouTube)"
 readme = "README.md"
@@ -24,7 +24,7 @@ classifiers = [
 dependencies = ["yt-dlp[default]", "imageio-ffmpeg"]
 
 [project.urls]
-Homepage = "https://github.com/Gregwar/zentris"
+Homepage = "https://github.com/Gregwar/tetris-universe"
 
 [project.scripts]
 tetris-universe = "zentris._launcher:main"

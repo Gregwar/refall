@@ -3,6 +3,6 @@
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("zentris")  # single source of truth: pyproject.toml
+    __version__ = version("tetris-universe")  # single source of truth: pyproject.toml
 except PackageNotFoundError:
     __version__ = "unknown"

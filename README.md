@@ -5,8 +5,8 @@ playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, 
 it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
 
 ```sh
-uvx zentris            # the default playlist
-uvx zentris ~/Music    # or any folders, files and YouTube URLs
+uvx tetris-universe            # the default playlist
+uvx tetris-universe ~/Music    # or any folders, files and YouTube URLs
 ```
 
 ## Universes
@@ -140,8 +140,8 @@ Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/zen
 [uv](https://docs.astral.sh/uv/) as above, or install them:
 
 ```sh
-pipx install zentris        # or: uv tool install zentris
-zentris ~/Music             # with no argument it plays the default YouTube playlist
+pipx install tetris-universe        # or: uv tool install tetris-universe
+tetris-universe ~/Music     # with no argument it plays the default YouTube playlist
 ```
 
 Quote YouTube URLs (`&` is special in the shell). YouTube also needs a JavaScript runtime
@@ -176,7 +176,7 @@ missing from it still works with a generic layout.
   notes on it.
 - `zenscene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
 
-Both come with the package (`uvx --from zentris zenscope`). Every option, the tools and how the music drives the
+Both come with the package (`uvx --from tetris-universe zenscope`). Every option, the tools and how the music drives the
 game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source
