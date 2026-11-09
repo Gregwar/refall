@@ -700,7 +700,7 @@ void SonarUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
 }
 
@@ -778,7 +778,7 @@ void SonarUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 ink = vec3(0.78f, 0.81f, 0.84f), halo = ugl::toSrgb(waterLow_) * 0.6f;
     const vec3 accent = lerp(ugl::toSrgb(lerp(echo_, dropEcho_, fest_ * 0.8f)), vec3(1.f), 0.2f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -789,7 +789,7 @@ void SonarUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushShapes();
     }
     // the bonus gauge: a fine pale ring, its charge in the echo's color
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -919,6 +919,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
+    bare_ = f.bare;
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -931,7 +932,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1011,17 +1012,19 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.t > m.delay + m.life; }), motes_.end());
     for (Sink& s : sinks_) s.t += dt;
     sinks_.erase(std::remove_if(sinks_.begin(), sinks_.end(), [](const Sink& s) { return s.t > s.delay + s.dur; }), sinks_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     cells_.clear();
     moteInst_.clear();
     for (const Sink& s : sinks_) {
+        if (bare_) break; // the world alone: no blocks, no light sinking out of them
         const float t = saturate((s.t - s.delay) / s.dur);
         addCell(s.x, s.y, 0.5f, s.kind, s.col, 1.f, 0.f, t);
     }
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     for (const Mote& m : motes_) {
+        if (bare_) break;
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
         const float s = saturate(tt / m.life);
@@ -1123,12 +1126,14 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE); // the scene's alpha is the stack's (for the bridge)
-    glUseProgram(progWell_);
-    set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progWell_, "uLine", lerp(echo_, vec3(0.6f), 0.5f));
-    set1f(progWell_, "uAA", aaW);
-    set1f(progWell_, "uLineA", 0.14f);
-    ugl::drawFullscreen();
+    if (!bare_) {
+        glUseProgram(progWell_);
+        set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progWell_, "uLine", lerp(echo_, vec3(0.6f), 0.5f));
+        set1f(progWell_, "uAA", aaW);
+        set1f(progWell_, "uLineA", 0.14f);
+        ugl::drawFullscreen();
+    }
     // the light sinking, behind the stack
     if (!moteInst_.empty()) drawInst(progMote_, moteVao_, moteVbo_, moteInst_.data(), moteInst_.size() * sizeof(MoteInst), moteInst_.size());
     // the blocks: the stack writes the scene's alpha

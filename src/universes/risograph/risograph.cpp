@@ -640,7 +640,7 @@ void RisographUniverse::simulate(const Game& game, const MusicState& music, floa
     strips_.erase(std::remove_if(strips_.begin(), strips_.end(), [](const Strip& s) { return s.t > s.delay + 0.45f; }), strips_.end());
     for (auto& d : dying_) d.t += dt;
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.t > d.delay + 1.4f; }), dying_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
 }
 
 // =====================================================================================================
@@ -787,7 +787,7 @@ void RisographUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
 
     // The well: crop marks at its corners and a registration target under it, printed by every drum (so the
@@ -1008,6 +1008,7 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         const VariantDef& d = VARIANTS[variant_];
         const float k = palSet_ ? 1.f - std::exp(-dt * 1.2f) : 1.f;
@@ -1119,12 +1120,17 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
         const float bloom = (0.20f + 0.22f * dropSwell) * bloom_ * world * (1.f - 0.6f * slow_) * tame;
         const float wash = (0.03f + 0.1f * wm) * world * tame;
         set1f(progWorld_, "uSide", (float)side_);
-        set4f(progWorld_, "uWell", 0.f, 0.f, 5.f, 10.f);
-        set4f(progWorld_, "uCols", 0.f, 0.5f * (layout::LEFT_COLUMN[1] + layout::LEFT_COLUMN[3]), layout::RIGHT_COLUMN[2],
-              0.5f * (layout::LEFT_COLUMN[3] - layout::LEFT_COLUMN[1]));
+        if (bare_) { // a break: no play area to keep clear, the forms and the sheet print right across it
+            set4f(progWorld_, "uWell", 1e4f, 1e4f, 1.f, 1.f);
+            set4f(progWorld_, "uCols", 1e4f, 1e4f, 1.f, 1.f);
+        } else {
+            set4f(progWorld_, "uWell", 0.f, 0.f, 5.f, 10.f);
+            set4f(progWorld_, "uCols", 0.f, 0.5f * (layout::LEFT_COLUMN[1] + layout::LEFT_COLUMN[3]), layout::RIGHT_COLUMN[2],
+                  0.5f * (layout::LEFT_COLUMN[3] - layout::LEFT_COLUMN[1]));
+        }
         set4f(progWorld_, "uSheet", bloom, wash, std::atan2(-0.35f, 1.f * side_), drift_);
         const float bt = saturate(blotT_ / 0.45f);
-        set4f(progWorld_, "uBlot", blotPos_.x, blotPos_.y, bt, bt < 1.f ? blotK_ * world * (1.f - 0.5f * slow_) : 0.f);
+        set4f(progWorld_, "uBlot", blotPos_.x, blotPos_.y, bt, bt < 1.f && !bare_ ? blotK_ * world * (1.f - 0.5f * slow_) : 0.f);
         ugl::drawFullscreen();
     }
 
@@ -1135,7 +1141,7 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Marks and pieces, the HUD: each drum's coverage, the most ink wins.
     inst_.clear();
     cellInst_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     glEnable(GL_BLEND);
     glBlendEquation(GL_MAX);
     if (!inst_.empty()) {

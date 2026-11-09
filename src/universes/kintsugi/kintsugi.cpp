@@ -879,6 +879,7 @@ void KintsugiUniverse::onEvent(const GameEvent& ev, const Game&) {
                 l.t = -rng_.range(0.f, 0.3f);
                 l.life = rng_.range(3.f, 6.f);
                 l.seed = rng_.uniform();
+                l.game = true;
                 leaves_.push_back(l);
             }
             swell_ = std::max(swell_, 0.4f);
@@ -1048,7 +1049,7 @@ void KintsugiUniverse::simulate(const Game& game, const MusicState& music, float
     for (Dying& d : dying_) d.t += dt;
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.t > d.delay + 6.f; }), dying_.end());
     levelGlint_ = approach(levelGlint_, 0.f, 0.8f, dt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -1158,7 +1159,7 @@ void KintsugiUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f, 1);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, 2 + i);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, 2 + i);
     }
 
     // the shards of the cleared rows: falling away into the dark (shrinking, darkening), their broken edges gold
@@ -1219,7 +1220,7 @@ void KintsugiUniverse::buildFx() {
     }
     // gold leaf: bright when it turns to face the light
     for (const Leaf& l : leaves_) {
-        if (l.t < 0.f) continue;
+        if (l.t < 0.f || (bare_ && l.game)) continue;
         const float face = std::cos(l.turn);
         const float flash = std::pow(std::fabs(face), 6.f);
         const float a = smoothstepf(0.f, 0.15f, l.t) * (1.f - smoothstepf(l.life - 1.5f, l.life, l.t));
@@ -1427,6 +1428,7 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
@@ -1436,7 +1438,7 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
     cur_ = pal_;
     if (slow_ > 0.001f) lerpPalette(cur_, moonOf(pal_), smoothstepf(0.f, 1.f, slow_));
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.55f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) { overT_ = -1.f; dying_.clear(); }
         else overT_ += dt;
     }
@@ -1480,7 +1482,9 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progStone_, "uRim", (0.07f + 0.04f * wm + 0.5f * levelGlint_) * (1.f - over_));
     set1f(progStone_, "uBridge", saturate(bridge_.amount));
     set3f(progStone_, "uBridgeCol", bridge_.color);
-    set4f(progStone_, "uWell", -WELL_X, -WELL_Y, WELL_X, WELL_Y);
+    // (a break: no honed panel, no rim: the slab runs on through the well's place)
+    if (bare_) set4f(progStone_, "uWell", 1e4f, 1e4f, 1e4f + 1.f, 1e4f + 1.f);
+    else set4f(progStone_, "uWell", -WELL_X, -WELL_Y, WELL_X, WELL_Y);
     set1f(progStone_, "uPx", px_);
     ugl::drawFullscreen();
 
@@ -1503,10 +1507,14 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progVein_, "uGain", gain);
         set1f(progVein_, "uSurgeT", surgeT_);
         set1f(progVein_, "uSurgeAmp", surgeAmp_);
-        set4f(progVein_, "uColL", KEEP_L[0], KEEP_L[1], KEEP_L[2], KEEP_L[3]);
-        set4f(progVein_, "uColTL", KEEP_TL[0], KEEP_TL[1], KEEP_TL[2], KEEP_TL[3]);
-        set4f(progVein_, "uColBL", KEEP_BL[0], KEEP_BL[1], KEEP_BL[2], KEEP_BL[3]);
-        set4f(progVein_, "uColR", KEEP_R[0], KEEP_R[1], KEEP_R[2], KEEP_R[3]);
+        if (bare_) { // a break: no HUD for the veins to fade behind
+            for (const char* n : {"uColL", "uColTL", "uColBL", "uColR"}) set4f(progVein_, n, 1e4f, 1e4f, 1e4f + 1.f, 1e4f + 1.f);
+        } else {
+            set4f(progVein_, "uColL", KEEP_L[0], KEEP_L[1], KEEP_L[2], KEEP_L[3]);
+            set4f(progVein_, "uColTL", KEEP_TL[0], KEEP_TL[1], KEEP_TL[2], KEEP_TL[3]);
+            set4f(progVein_, "uColBL", KEEP_BL[0], KEEP_BL[1], KEEP_BL[2], KEEP_BL[3]);
+            set4f(progVein_, "uColR", KEEP_R[0], KEEP_R[1], KEEP_R[2], KEEP_R[3]);
+        }
         glBindVertexArray(veinVao_);
         glBindBuffer(GL_ARRAY_BUFFER, veinVbo_);
         glBufferData(GL_ARRAY_BUFFER, veinVerts_.size() * sizeof(float), veinVerts_.data(), GL_STREAM_DRAW);
@@ -1531,7 +1539,12 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(sprites_);
 
     // ---- The ceramic: the stack, the piece, the ghost, the previews; then the shards of cleared rows.
-    buildBoard(game);
+    if (bare_) {
+        blocks_.clear();
+        shardVerts_.clear();
+    } else {
+        buildBoard(game);
+    }
     auto ceramicUniforms = [&](GLuint p) {
         glUseProgram(p);
         setMat(p, "uVP", vp_);
@@ -1559,10 +1572,10 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, shardVerts_.size() * sizeof(float), shardVerts_.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(shardVerts_.size() / 16));
     }
-    drawVeins(true); // the hairline cracks of the locks, at the contact
+    if (!bare_) drawVeins(true); // the hairline cracks of the locks, at the contact
 
     // ---- The gauge: a thin ring of metal, mended as it fills.
-    {
+    if (!bare_) {
         std::vector<Sprite> g;
         const vec3 c = layout::GAUGE_CENTER;
         const vec3 m = cur_.metal;

@@ -835,7 +835,7 @@ void LightsourceUniverse::buildBlocks(const Game& g, float ember) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.65f : 1.f, 0.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, i == 0 ? 0.08f : 0.f);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, i == 0 ? 0.08f : 0.f);
     }
 }
 
@@ -1023,7 +1023,10 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
     const float bridge = saturate(bridge_.amount);
-    syncBoard(game);
+    // a break's frame: the room alone, lit by its own spots only (the pieces are its lamps: they go with the game);
+    // the board given is blank, the stack's pieces are kept as they are
+    const bool bare = f.bare;
+    if (!bare) syncBoard(game);
 
     if (!f.paused) {
         time_ += dt;
@@ -1118,7 +1121,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
                 }
         return n;
     };
-    if (game.hasPiece() && !game.over()) {
+    if (game.hasPiece() && !game.over() && !bare) {
         const Piece& p = game.piece();
         int cells[4][2];
         game.pieceCells(p, cells);
@@ -1139,7 +1142,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         lights_.push_back(L);
     }
     for (const Lamp& l : lamps_) {
-        if (l.level < 0.02f) continue;
+        if (l.level < 0.02f || bare) continue;
         LightDef L;
         if (cellsOf(l.id, L) == 0) continue;
         int type = l.type;
@@ -1161,7 +1164,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     }
     {
         // the cleared rows burning: each row a line of light
-        for (int r = 0; r < Game::H; r++) {
+        for (int r = 0; r < Game::H && !bare; r++) {
             LightDef L;
             vec3 c(0.f);
             float I = 0.f;
@@ -1184,7 +1187,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
             lights_.push_back(L);
         }
     }
-    if (afterT_ < 1.4f && !game.over()) {
+    if (afterT_ < 1.4f && !game.over() && !bare) {
         // (it takes over as the burning rows die out: the burns carry the first instants)
         LightDef L;
         for (int k = 0; k < 4; k++) L.pts.push_back(afterPts_[k]);
@@ -1220,7 +1223,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         L.rank = 1.f * side_[i];
         lights_.push_back(L);
     }
-    {
+    if (!bare) {
         // a drop: the stack's brightest pieces are lights with shadows, the others glow without (cheap). Which ones
         // cast shadows is eased (each piece's share crossfades between its shadowed light and its glow), so that
         // nothing pops when the order changes; at most as many as the free light slots.
@@ -1331,6 +1334,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progScene_, "uWall", wall_);
     set3f(progScene_, "uFloor", floor_);
     set3f(progScene_, "uRail", rail_);
+    set1f(progScene_, "uRails", bare ? 0.f : 1.f);
     set3f(progScene_, "uAmbient", amb);
     set1f(progScene_, "uFloorY", FLOOR_Y);
     set1f(progScene_, "uBridge", smoothstepf(0.f, 1.f, bridge));
@@ -1339,7 +1343,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
 
     blocks_.clear();
-    buildBlocks(game, ember);
+    if (!bare) buildBlocks(game, ember);
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1382,12 +1386,13 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         fx_.push_back({{ctr.x, ctr.y, 0.f, 0.f}, {3.6f, 1.f, 0.f, 0.f}, {c2.x, c2.y, c2.z, 0.f}, {0.f, 0.f, 0.f, 0.f}});
     }
     for (const Contact& ct : contacts_) {
+        if (bare) break;
         const float u = ct.t / ct.life;
         const float k = ct.power * smoothstepf(0.f, 0.08f, u) * (1.f - u) * (1.f - u) * worldOn;
         const vec3 c = ct.c * 0.9f;
         fx_.push_back({{ct.a.x, ct.a.y, ct.b.x, ct.b.y}, {0.16f + 0.1f * u, k, 0.f, 0.f}, {c.x, c.y, c.z, 1.f}, {0.f, 0.f, 0.f, 0.f}});
     }
-    {
+    if (!bare) {
         const vec3 gc = layout::GAUGE_CENTER;
         const bool ready = game.bonusReady(), active = game.bonusActive();
         const float fill = active ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1413,7 +1418,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, f.panels, fade);
+    drawHud(f.hud, bare ? std::vector<HudRect>() : f.panels, fade);
     glDisable(GL_BLEND);
 }
 

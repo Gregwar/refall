@@ -899,7 +899,7 @@ void NeonUniverse::buildBoard(const Game& g) {
             90000 + g.holdType());
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, nextId_ + 1 + i);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, nextId_ + 1 + i);
     }
 }
 
@@ -978,7 +978,7 @@ void NeonUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const
     vec3 accent = ugl::toSrgb(spectrumAt(0.62f, phase_));
     accent = lerp(accent, vec3(1.f), 0.25f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -989,7 +989,7 @@ void NeonUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const
         flushShapes();
     }
     // the bonus gauge: a fine pale ring, its charge in the spectrum
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1098,7 +1098,8 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
-    syncIds(game);
+    bare_ = f.bare;
+    if (!bare_) syncIds(game); // the world alone: the pieces' washes kept for the whole frame
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -1107,7 +1108,7 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) { overT_ = -1.f; runs_.clear(); }
         else overT_ += dt;
     }
@@ -1171,7 +1172,7 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     wisps_.erase(std::remove_if(wisps_.begin(), wisps_.end(), [](const Wisp& w) { return w.t > w.delay + w.life; }), wisps_.end());
     for (Lift& l : lifts_) l.t += dt;
     lifts_.erase(std::remove_if(lifts_.begin(), lifts_.end(), [](const Lift& l) { return l.t > LIFT_T; }), lifts_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     builds_.clear();
@@ -1186,13 +1187,15 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
             builds_.push_back({{b.x, b.base, b.hw, b.h}, {(float)b.kind, b.seed, paint, b.alpha * fa},
                                {b.phaseA, b.phaseB, b.mixAB, b.tint}, {(float)b.layer, b.windows ? 1.f : 0.f, 0.f, 0.f}});
         }
-    for (const Lift& l : lifts_) addCell(l.x, l.y, 0.5f, l.mask, l.l, 0.f, 1.f, 2, saturate(l.t / LIFT_T));
-    if (overT_ >= 0.f)
-        for (const Run& r : runs_) {
-            const float t = saturate((overT_ - r.delay) / RUN_T);
-            if (t < 1.f) addCell(r.x, r.y, 0.5f, r.mask, r.l, 0.f, 1.f, 3, t);
-        }
-    buildBoard(game);
+    if (!bare_) { // the world alone: no stack, nothing lifting off or running down
+        for (const Lift& l : lifts_) addCell(l.x, l.y, 0.5f, l.mask, l.l, 0.f, 1.f, 2, saturate(l.t / LIFT_T));
+        if (overT_ >= 0.f)
+            for (const Run& r : runs_) {
+                const float t = saturate((overT_ - r.delay) / RUN_T);
+                if (t < 1.f) addCell(r.x, r.y, 0.5f, r.mask, r.l, 0.f, 1.f, 3, t);
+            }
+        buildBoard(game);
+    }
     for (const Wisp& w : wisps_) {
         const float tt = w.t - w.delay;
         if (tt <= 0.f) continue;
@@ -1245,13 +1248,15 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
         drawInst(progBuild_, buildVao_, buildVbo_, builds_.data(), builds_.size() * sizeof(Inst), builds_.size());
     }
     // the well
-    glUseProgram(progVeil_);
-    set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progVeil_, "uSkyLow", sky_[1]);
-    set3f(progVeil_, "uLine", vec3(0.5f, 0.5f, 0.55f));
-    set1f(progVeil_, "uAA", aaW);
-    set1f(progVeil_, "uLineA", 0.16f);
-    ugl::drawFullscreen();
+    if (!bare_) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uSkyLow", sky_[1]);
+        set3f(progVeil_, "uLine", vec3(0.5f, 0.5f, 0.55f));
+        set1f(progVeil_, "uAA", aaW);
+        set1f(progVeil_, "uLineA", 0.16f);
+        ugl::drawFullscreen();
+    }
     // the pigment in the air, behind the stack
     if (!wispInst_.empty()) {
         glUseProgram(progWisp_);

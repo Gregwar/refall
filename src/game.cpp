@@ -131,6 +131,16 @@ void Game::spawn(int type) {
     events_.push_back({GameEvent::Spawn});
 }
 
+void Game::respawn() {
+    if (!active_ || over_) return;
+    spawn(cur_.type);
+}
+
+void Game::makeBlank() {
+    reset(1);
+    next_.assign(next_.size(), -1);
+}
+
 void Game::onMoved() {
     Piece below = cur_;
     below.y++;

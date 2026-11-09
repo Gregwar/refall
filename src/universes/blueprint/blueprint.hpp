@@ -97,7 +97,7 @@ private:
     int rev_ = 0;                // revisions (clears)
     float revT_ = 9.f;           // time since the last revision
     float cloudT_ = 9.f;         // a Tetris's revision cloud
-    void buildSheet(std::vector<Stroke>& out, float lvA);
+    void buildSheet(std::vector<Stroke>& out, float lvA, bool bare);
     std::string dwgNo_ = "BP-0000";
 
     // ---- Pieces.

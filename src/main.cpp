@@ -74,6 +74,7 @@ struct Options {
     std::string clipPath; // --clip: record a video around the first drop of the first song, then exit
     float clipBefore = 4.f, clipAfter = 6.f;
     float clipAt = -1.f; // the clip's moment (song seconds), the first drop when < 0
+    bool clipBreak = false; // --clip-break: the clip spans the break after the first song
     std::string universe;   // forced universe "NAME" or "NAME:VARIANT" (as shown in the corner), "" = picked per song
     bool universeOnPeak = false; // also change universe when a long song rises into a peak
     std::string toUniverse, transition; // --transition-shots: the universe changed to, the transition forced
@@ -115,7 +116,8 @@ static void usage() {
         "                       NAME (default: picked), saves N frames across the transition, then exits (testing)\n"
         "  --clip OUT.mp4       record a video (with sound, needs ffmpeg) around the first drop of the first\n"
         "                       song, then exit; --clip-before / --clip-after SEC set the span (default 4 / 6),\n"
-        "                       --clip-at SEC records around that song time instead of the drop\n");
+        "                       --clip-at SEC records around that song time instead of the drop, --clip-break around\n"
+        "                       the break between the first song and the next (from 9 s before its end)\n");
 }
 
 class App {
@@ -139,6 +141,22 @@ private:
     void autoplay(float dt);
     void toggleFullscreen();
     std::vector<HudText> buildHud(float dt);
+    void updateBreak(float dt, const std::vector<HudText>& hud);
+
+    // The break between songs: a little before a song ends the game freezes and fades away with its HUD, the
+    // world stays alone a moment, then fades to black; the next song starts on the black with its title and
+    // universe lettered big in the middle, which then shrink into their corners as the new world fades in; the
+    // game comes back last, its falling piece back at the top. ZEN_NO_BREAK=1 goes back to the transitions.
+    enum BreakStage { BREAK_OFF, BREAK_OUT, BREAK_IN } break_ = BREAK_OFF;
+    float breakT_ = 0;         // seconds into the stage
+    bool breakSkip_ = false;   // an outro asked by "next song": a shorter one
+    bool breaks_ = true;
+    Game blank_;               // what the universes draw while the game is hidden
+    static constexpr float OUT_LEAD = 7.5f;  // the outro starts this long before the song's end
+    static constexpr float OUT_HIDE = 1.6f;  // the game fades away
+    static constexpr float OUT_DARK = 2.0f;  // the world fades to black, ending with the song
+    static constexpr float IN_CARD = 0.4f, IN_HOLD = 1.4f, IN_SHRINK = 3.2f, IN_WORLD = 5.2f, IN_SHOW = 6.8f, IN_END = 8.4f;
+    bool gameFrozen() const { return break_ != BREAK_OFF; }
 
     Options opt_;
     GLFWwindow* win_ = nullptr;
@@ -231,7 +249,7 @@ void App::startTrack(std::shared_ptr<Track> t) {
     pace_ = -1;
     lastSongBeat_ = -1;
     simSongTime_ = 0;
-    std::printf("[app] now playing: %s\n", track_->title.c_str());
+    std::printf("[app] now playing: %s (%s)\n", track_->title.c_str(), track_->path.c_str());
     sceneCounter_++;
     computePhases();
     lastPhase_ = first ? plan_.phaseAt(0.0) : 0;
@@ -249,7 +267,7 @@ void App::startTrack(std::shared_ptr<Track> t) {
         R_.setSong(look_, 1.5f);
         R_.setLevel(phaseLevel(lastPhase_), phaseEnergy(lastPhase_), 1.5f, 0.f);
     } else {
-        changeUniverse(u, variant, transitions::SONG_CHANGE, offline);
+        changeUniverse(u, variant, transitions::SONG_CHANGE, offline || break_ != BREAK_OFF);
     }
     sceneNameTimer_ = 8.f;
     printScene();
@@ -492,6 +510,83 @@ void App::autoplay(float dt) {
     planned_ = false;
 }
 
+// The break's frame: how much of the game shows, the black, the bare HUD and the title card.
+void App::updateBreak(float dt, const std::vector<HudText>& hud) {
+    (void)dt;
+    Renderer::Break b;
+    b.blank = &blank_;
+    const float t = breakT_;
+    // Test hook: ZEN_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
+    static const bool bareTest = std::getenv("ZEN_BARE") != nullptr;
+    if (bareTest && break_ == BREAK_OFF) b.play = 0.f;
+    if (break_ == BREAK_OUT) {
+        const float hide = breakSkip_ ? 1.f : OUT_HIDE;
+        b.play = 1.f - smoothstepf(0.f, hide, t);
+        const float dark0 = hide + 0.4f;
+        float black = smoothstepf(dark0, dark0 + 1.2f, t);
+        if (!breakSkip_ && track_) {
+            // ends with the song, but never before the game is gone
+            const float songBlack = smoothstepf((float)track_->duration() - OUT_DARK - 0.2f, (float)track_->duration() - 0.2f, (float)songTime_);
+            black = std::min(songBlack, smoothstepf(OUT_HIDE, OUT_HIDE + 1.f, t));
+            if (songFinished() && t >= OUT_HIDE + 1.f) black = 1.f;
+        }
+        b.black = black;
+    } else if (break_ == BREAK_IN) {
+        if (t >= IN_SHOW && t - dt < IN_SHOW) {
+            game_.respawn(); // the falling piece back at the top, to fall again as the game comes back
+            handleEvents();
+        }
+        b.play = smoothstepf(IN_SHOW, IN_END, t);
+        b.black = 1.f - smoothstepf(IN_SHRINK, IN_WORLD, t);
+        const float bareA = smoothstepf(IN_WORLD - 0.6f, IN_WORLD + 0.2f, t);
+        for (const HudText& h : hud)
+            if (h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE) {
+                b.bareHud.push_back(h);
+                b.bareHud.back().alpha *= bareA;
+            }
+        // The title card: big in the middle, then shrinking into the corners where the universe's HUD letters them.
+        int w, h;
+        fbSize(w, h);
+        const float s = std::max(1.f, h / 900.f);
+        const float k = smoothstepf(IN_SHRINK, IN_WORLD, t), e = k * k * (3.f - 2.f * k);
+        const float a = smoothstepf(IN_CARD, IN_HOLD, t) * (1.f - smoothstepf(IN_WORLD - 0.5f, IN_WORLD + 0.2f, t));
+        auto fold = [](std::string x) {
+            for (size_t i; (i = x.find("\xC2\xB7")) != std::string::npos;) x.replace(i, 2, "\x7F");
+            return x;
+        };
+        TitleCard::Line& ti = b.card[0];
+        ti.text = track_ ? fold(asciiFold(track_->title)) : std::string();
+        ti.face = TitleCard::SERIF_ITALIC;
+        ti.cap = h * 0.075f;
+        ti.track = 0.f;
+        const float bigW = std::min(1.f, w * 0.86f / std::max(1.f, R_.titleCard().width(ti)));
+        const float capBig = ti.cap * bigW, capSmall = 2.2f * s * 8.f;
+        ti.cap = capBig;
+        const float leftBig = w * 0.5f - R_.titleCard().width(ti) * 0.5f;
+        ti.cap = lerpf(capBig, capSmall, e);
+        ti.x = lerpf(leftBig, 28.f * s, e);
+        ti.y = lerpf(h * 0.42f - capBig, 24.f * s + 2.f * s, e);
+        ti.alpha = a;
+        TitleCard::Line& un = b.card[1];
+        un.text = fold(R_.label());
+        un.face = TitleCard::SANS;
+        un.track = lerpf(0.45f, 0.12f, e);
+        const float uBig = h * 0.022f, uSmall = 1.3f * s * 8.f;
+        un.cap = uBig;
+        const float uLeftBig = w * 0.5f - R_.titleCard().width(un) * 0.5f;
+        un.cap = lerpf(uBig, uSmall, e);
+        un.x = lerpf(uLeftBig, 28.f * s, e);
+        un.y = lerpf(h * 0.42f + h * 0.06f, h - 50.f * s + 2.f * s, e);
+        un.alpha = a * lerpf(0.85f, 0.6f, e);
+        if (t >= IN_END) {
+            break_ = BREAK_OFF;
+            b = Renderer::Break{};
+            std::printf("[app] break: play\n");
+        }
+    }
+    R_.setBreak(std::move(b));
+}
+
 std::vector<HudText> App::buildHud(float dt) {
     std::vector<HudText> hud;
     int w, h;
@@ -707,6 +802,8 @@ int App::run() {
     lib_.prefetch(runSeed_);
 
     game_.reset(runSeed_);
+    blank_.makeBlank();
+    breaks_ = !std::getenv("ZEN_NO_BREAK") && (!shotMode || clipMode);
     // A universe while the first song loads (the forced one, else one picked from the run seed); the first song
     // keeps it.
     if (!opt_.universe.empty()) {
@@ -745,14 +842,32 @@ int App::run() {
             if (!nextTrack_ && !lib_.loading() && !lib_.empty()) lib_.prefetch(runSeed_ + (uint64_t)(runTime_ * 1000));
         }
         if (!track_ && nextTrack_) startTrack(std::move(nextTrack_));
-        if (track_ && nextTrack_ && (songFinished() || wantSkip_)) {
+        if (breaks_ && track_) {
+            // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
+            const double left = track_->duration() - songTime_;
+            if (break_ == BREAK_OFF && ((wantSkip_ && nextTrack_) || left <= OUT_LEAD || songFinished())) {
+                break_ = BREAK_OUT;
+                breakT_ = 0;
+                breakSkip_ = wantSkip_ || songFinished();
+                wantSkip_ = false;
+                skipToast_ = 0;
+                std::printf("[app] break: outro\n");
+            }
+            const bool outroDone = breakSkip_ ? breakT_ >= OUT_HIDE + 0.4f + 1.2f : songFinished() && breakT_ >= OUT_HIDE + 1.f;
+            if (break_ == BREAK_OUT && outroDone && nextTrack_) {
+                startTrack(std::move(nextTrack_));
+                break_ = BREAK_IN;
+                breakT_ = 0;
+                std::printf("[app] break: intro\n");
+            }
+        } else if (track_ && nextTrack_ && (songFinished() || wantSkip_)) {
             wantSkip_ = false;
             skipToast_ = 0;
             startTrack(std::move(nextTrack_));
         }
         if (clipMode && track_) {
             if (clipStart_ < 0) {
-                const double drop = opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
+                const double drop = opt_.clipBreak ? track_->duration() - 9.0 : opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
                 clipStart_ = std::max(0.0, drop - opt_.clipBefore);
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
                 std::printf("[clip] moment at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
@@ -816,7 +931,15 @@ int App::run() {
         if (input_.pressed(A_HUD)) { showHelp_ = !showHelp_; helpTimer_ = showHelp_ ? 1e9f : 0; }
 
         // ---- Game.
-        if (!paused_ && !waiting) {
+        if (!paused_ && !waiting && gameFrozen()) {
+            breakT_ += dt;
+            if (break_ == BREAK_IN) {
+                trackAge_ = 1.f; // the corner title stays lit through the intro
+                sceneNameTimer_ = 8.f;
+            } else {
+                trackAge_ += dt;
+            }
+        } else if (!paused_ && !waiting) {
             trackAge_ += dt;
             if (opt_.autoplay || shotMode) {
                 // Test hook: ZEN_TEST_OVER=T hard-drops every piece from T seconds into a shot's settle (a game
@@ -1016,9 +1139,15 @@ int App::run() {
             lastH = fbh;
         }
         fade = std::min(1.f, fade + dt * 0.8f);
-        if (fbw > 0 && fbh > 0) R_.render(game_, music_, runTime_, dt, paused_ || waiting, buildHud(dt), shotMode ? 1.f : fade);
+        if (fbw > 0 && fbh > 0) {
+            std::vector<HudText> hud = buildHud(dt);
+            updateBreak(dt, hud);
+            R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
+        }
 
-        if (clipMode && track_ && clipStart_ >= 0 && songTime_ >= clipStart_) {
+        static long clipFrames = -1; // frames recorded (the song time restarts with the next song)
+        if (clipMode && track_ && clipStart_ >= 0 && (clipFrames >= 0 || songTime_ >= clipStart_)) {
+            clipFrames++;
             int cw, ch;
             R_.readFrame(clipPx, cw, ch);
             if (!clipPipe) {
@@ -1032,12 +1161,12 @@ int App::run() {
                                   // on the GPU's encoder when there is one, else x264 on two threads (a light load)
                                   std::string(headless_ && headless::nvidia() ? "-c:v h264_nvenc -preset p5 -rc vbr -cq 19 -b:v 0"
                                                                               : "-c:v libx264 -threads 2 -preset medium -crf 18") +
-                                  " -pix_fmt yuv420p -c:a aac -b:a 192k -shortest " + platform::quoteArg(opt_.clipPath);
+                                  " -pix_fmt yuv420p -c:a aac -b:a 192k -af apad -shortest " + platform::quoteArg(opt_.clipPath);
                 clipPipe = platform::openWrite(cmd);
                 if (!clipPipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); break; }
             }
             std::fwrite(clipPx.data(), 1, clipPx.size(), clipPipe);
-            if (songTime_ >= clipStart_ + opt_.clipBefore + opt_.clipAfter) {
+            if (clipFrames >= (long)((opt_.clipBefore + opt_.clipAfter) * 60.f)) {
                 const int rc = platform::closeRead(clipPipe);
                 clipPipe = nullptr;
                 std::printf("[clip] %s %s (%s)\n", rc == 0 ? "wrote" : "FAILED", opt_.clipPath.c_str(), R_.label().c_str());
@@ -1184,6 +1313,7 @@ int main(int argc, char** argv) {
         else if (a == "--review-level" && i + 1 < argc) o.reviewLevel = std::atoi(argv[++i]);
         else if (a == "--clip" && i + 1 < argc) o.clipPath = argv[++i];
         else if (a == "--clip-at" && i + 1 < argc) o.clipAt = std::stof(argv[++i]);
+        else if (a == "--clip-break") o.clipBreak = true;
         else if (a == "--clip-before" && i + 1 < argc) o.clipBefore = std::stof(argv[++i]);
         else if (a == "--clip-after" && i + 1 < argc) o.clipAfter = std::stof(argv[++i]);
         else o.paths.push_back(a);

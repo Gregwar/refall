@@ -31,6 +31,7 @@ uniform vec2 uLightXY;        // where the light comes from (screen direction)
 uniform sampler2D uShadow;    // r: shadow coverage
 uniform vec2 uShadowTexel;
 uniform float uCrease, uPattern, uWarm;
+uniform float uWell;          // 0 at a break: no tray
 // The sheet was folded before: a giant crease pattern over the whole view, each facet tilted a little and lit by the
 // light (pattern 0: a square base, 1: a sixteen-fold star, 2: a square base set lower and turned, and so on).
 vec2 creaseTilt(vec2 w, out float edge) {
@@ -66,7 +67,7 @@ void main() {
         float edge;
         vec2 tilt = creaseTilt(w, edge);
         vec2 ld = normalize(uLightXY);
-        float inWell = (abs(w.x) < 5.0 && w.y > -10.0) ? 0.5 : 1.0;
+        float inWell = (abs(w.x) < 5.0 && w.y > -10.0 && uWell > 0.5) ? 0.5 : 1.0;
         float lit = uCrease * inWell * dot(tilt, ld);
         c *= 1.0 + lit * 1.6;
         c += uDark * lit * 0.12 * (uSheet + vec3(0.05)); // a dark sheet: the facets catch a little light of their own
@@ -77,7 +78,7 @@ void main() {
     }
     // the well: a shallow tray folded into the sheet, open at the top
     float inX = 5.0 - abs(w.x), inY = w.y + 10.0;
-    if (inX > 0.0 && inY > 0.0) {
+    if (inX > 0.0 && inY > 0.0 && uWell > 0.5) {
         c *= mix(0.955, 1.08, uDark);
         // the inner walls in the light's shade: the wall facing away from it shades the floor near it
         float sl = exp(-max(0.0, w.x + 5.0) * 3.2) * (uLightXY.x < 0.0 ? 1.0 : 0.3) + exp(-max(0.0, 5.0 - w.x) * 3.2) * (uLightXY.x < 0.0 ? 0.3 : 1.0);
@@ -91,13 +92,13 @@ void main() {
     if (w.y < -10.0 && abs(w.x) > 5.0) side = min(side, length(vec2(abs(w.x) - 5.0, w.y + 10.0)));
     float d = min(side, floor_);
     float topFade = 1.0 - smoothstep(9.6, 10.6, w.y);
-    float line = (1.0 - smoothstep(0.5 * px, 1.6 * px, d)) * topFade;
+    float line = (1.0 - smoothstep(0.5 * px, 1.6 * px, d)) * topFade * uWell;
     c *= 1.0 - line * mix(0.26, 0.0, uDark);
     c += line * uDark * 0.1 * (vec3(1.0) - c);
     // a lip of light just outside the crease
     float outX = abs(w.x) - 5.0;
     float lip = (outX > 0.0 && w.y > -10.0 ? exp(-outX / (3.0 * px)) * (1.0 - smoothstep(0.0, 1.5 * px, -outX)) : 0.0) + (w.y < -10.0 && abs(w.x) < 5.0 ? exp(-(-10.0 - w.y) / (3.0 * px)) : 0.0);
-    c *= 1.0 + 0.05 * lip * topFade * (1.0 - line);
+    c *= 1.0 + 0.05 * lip * topFade * (1.0 - line) * uWell;
     // the soft shadows of what lies on the sheet
     vec2 st = vUv;
     float sh = texture(uShadow, st).r * 0.4;

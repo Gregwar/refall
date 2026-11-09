@@ -765,7 +765,7 @@ void OrbitalUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
 }
 
@@ -1081,10 +1081,10 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    if (!f.bare) syncIds(game); // (a break's blank board keeps the stack's ids)
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1134,7 +1134,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the modules (a new game takes them back to the capsule).
     {
-        const int lines = game.lines();
+        const int lines = f.bare ? lines_ : game.lines(); // (a break: the station as it was)
         static const int testLines = std::getenv("ZEN_ORBITAL_LINES") ? std::atoi(std::getenv("ZEN_ORBITAL_LINES")) : 0;
         // (ZEN_GROW_RATE=R adds R more lines a second: a time-lapse)
         static const double growRate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
@@ -1299,23 +1299,23 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
     for (auto& fd : fading_) fd.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     sprites_.clear();
     for (const Mote& m : motes_) {
-        if (m.age < 0.f) continue;
+        if (m.age < 0.f || f.bare) continue; // (the motes over the board: none in a break)
         const float t = m.age / m.life;
         float a = smoothstepf(0.f, 0.12f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * m.bright;
         if (m.kind == 1) a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.85f, 1.f, t)) * m.bright;
         sprite(m.p, m.size * (m.kind == 1 ? 2.f : 1.6f), m.col, a * world, 0);
     }
-    {
+    if (!f.bare) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
         const bool on = game.bonusReady() || game.bonusActive();
         sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.chase * 1.4f : pal_.accent, 1.f, 1, fill, on ? 1.f : 0.f);
     }
     cells_.clear();
-    buildBoard(game);
+    if (!f.bare) buildBoard(game); // (a break: the world alone)
 
     // ---- The station's solids and lights.
     boxes_.clear();
@@ -1658,19 +1658,21 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
-    // ---- The veil behind the well and the HUD's columns.
+    // ---- The veil behind the well and the HUD's columns (none in a break).
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(progVeil_);
-    set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
-    set3f(progVeil_, "uRail", lerp(pal_.rail * 0.45f, bridge_.ink * 0.4f, bridge));
-    set1f(progVeil_, "uWellA", 0.84f);
-    set1f(progVeil_, "uColA", 0.66f * world);
-    set1f(progVeil_, "uRailA", 0.5f);
-    set1f(progVeil_, "uPx", pxPerUnit_);
-    set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
-    set4f(progVeil_, "uColR", 5.f, layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
-    ugl::drawFullscreen();
+    if (!f.bare) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
+        set3f(progVeil_, "uRail", lerp(pal_.rail * 0.45f, bridge_.ink * 0.4f, bridge));
+        set1f(progVeil_, "uWellA", 0.84f);
+        set1f(progVeil_, "uColA", 0.66f * world);
+        set1f(progVeil_, "uRailA", 0.5f);
+        set1f(progVeil_, "uPx", pxPerUnit_);
+        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
+        set4f(progVeil_, "uColR", 5.f, layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        ugl::drawFullscreen();
+    }
 
     // ---- Pieces, previews, the motes over them, the HUD.
     if (!cells_.empty()) {

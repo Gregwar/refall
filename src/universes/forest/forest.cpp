@@ -900,7 +900,7 @@ void ForestUniverse::buildBoard(const Game& g) {
             90000 + g.holdType());
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, nextId_ + 1 + i);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, nextId_ + 1 + i);
     }
 }
 
@@ -978,7 +978,7 @@ void ForestUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, con
     const vec3 ink = lerp(vec3(0.80f, 0.82f, 0.80f), ugl::toSrgb(glow_[0]), 0.08f), halo = ugl::toSrgb(sky_[1]) * 0.5f;
     const vec3 accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -989,7 +989,7 @@ void ForestUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, con
         flushShapes();
     }
     // the bonus gauge: a fine pale ring, its charge in the forest's glow
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1098,7 +1098,8 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
-    syncIds(game);
+    bare_ = f.bare;
+    if (!bare_) syncIds(game); // the world alone: the blocks' looks kept for the whole frame
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -1110,7 +1111,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) { overT_ = -1.f; outs_.clear(); }
         else overT_ += dt;
     }
@@ -1270,7 +1271,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     }
     for (Fade& c : clears_) c.t += dt;
     clears_.erase(std::remove_if(clears_.begin(), clears_.end(), [](const Fade& c) { return c.t > CLEAR_T; }), clears_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     plantInst_.clear();
@@ -1303,16 +1304,19 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float ha = 0.05f * glow * fa * smoothstepf(0.f, 1.f, p.grow) * (1.f + 1.4f * wave) * (p.kind == 5 ? 0.6f : p.kind == 2 ? 0.5f : p.kind == 6 ? 0.6f : 1.f) * haloK;
         halos_.push_back({{c.x, c.y, hr, ha}, {ca.x, ca.y, ca.z, 0.f}});
     }
-    for (const Fade& c : clears_) addCell(c.x, c.y, 0.5f, c.type, c.l, 1.f, 2, saturate(c.t / CLEAR_T));
-    if (overT_ >= 0.f)
-        for (const Fade& o : outs_) {
-            const float t = saturate((overT_ - o.delay) / OUT_T);
-            if (t < 1.f) addCell(o.x, o.y, 0.5f, o.type, o.l, 1.f, 3, t);
-        }
-    buildBoard(game);
+    if (!bare_) { // the world alone: no blocks, nothing flaring or going out
+        for (const Fade& c : clears_) addCell(c.x, c.y, 0.5f, c.type, c.l, 1.f, 2, saturate(c.t / CLEAR_T));
+        if (overT_ >= 0.f)
+            for (const Fade& o : outs_) {
+                const float t = saturate((overT_ - o.delay) / OUT_T);
+                if (t < 1.f) addCell(o.x, o.y, 0.5f, o.type, o.l, 1.f, 3, t);
+            }
+        buildBoard(game);
+    }
     for (const Mote& m : motes_) {
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
+        if (bare_ && (m.kind == 1 || m.kind == 3)) continue; // (the spores out of a cleared row, a hard drop's dust)
         const float s = saturate(tt / m.life);
         float a = m.a, r = m.r, core = 0.f;
         if (m.kind == 0) {
@@ -1403,13 +1407,15 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         drawInst(progPlant_, plantVao_, plantVbo_, plantInst_.data(), plantInst_.size() * sizeof(Inst), plantInst_.size());
     }
     // the well
-    glUseProgram(progVeil_);
-    set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progVeil_, "uSkyLow", sky_[1]);
-    set3f(progVeil_, "uLine", lerp(vec3(0.45f, 0.5f, 0.5f), glow_[0], 0.25f));
-    set1f(progVeil_, "uAA", aaW);
-    set1f(progVeil_, "uLineA", 0.15f);
-    ugl::drawFullscreen();
+    if (!bare_) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uSkyLow", sky_[1]);
+        set3f(progVeil_, "uLine", lerp(vec3(0.45f, 0.5f, 0.5f), glow_[0], 0.25f));
+        set1f(progVeil_, "uAA", aaW);
+        set1f(progVeil_, "uLineA", 0.15f);
+        ugl::drawFullscreen();
+    }
     // fireflies and spores
     glBlendFunc(GL_ONE, GL_ONE);
     drawInst(progMote_, haloVao_, haloVbo_, moteInst_.data(), moteInst_.size() * sizeof(Inst2), moteInst_.size());

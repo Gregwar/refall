@@ -823,7 +823,7 @@ void PixelUniverse::drawSide(const Game& g, const std::vector<HudItem>& items, i
         }
     };
     if (g.holdType() >= 0) preview(g.holdType(), cxL, ly(layout::HOLD_CENTER.y) - hop, 5, g.holdUsed());
-    for (int i = 0; i < 3; i++) preview(g.next(i), cxR, ly(layout::nextCenter(i).y) - hop, i == 0 ? 6 : 5, false);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), cxR, ly(layout::nextCenter(i).y) - hop, i == 0 ? 6 : 5, false);
 
     // The bonus gauge: a medallion with twelve segments, lit as lines are cleared.
     {

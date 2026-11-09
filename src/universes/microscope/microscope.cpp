@@ -719,7 +719,7 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.45f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
 }
 
@@ -831,7 +831,7 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
     haloIn_ = lerp(ugl::toSrgb(base_.field[0]), vec3(0.f), dk);
     haloOut_ = vec3(0.f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? acc : lerp(ugl::toSrgb(base_.field[0]), vec3(0.02f), dk);
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -842,7 +842,7 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
         flushShapes(0);
     }
     // the bonus gauge: a fine ring like a field stop, its charge in the accent
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -963,7 +963,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
-    if (overT_ < 0.f) syncLooks(game);
+    bare_ = f.bare;
+    if (overT_ < 0.f && !bare_) syncLooks(game); // the world alone: the cells' looks kept for the whole frame
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -978,7 +979,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) { overT_ = -1.f; dying_.clear(); }
         else overT_ += dt;
     }
@@ -1089,7 +1090,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         k.v.y *= std::exp(-dt * 3.f);
     }
     specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
@@ -1120,15 +1121,17 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             .push_back({{o.p.x, o.p.y, o.size * grow, ang}, {(float)o.kind, o.seed, anim, a},
                         {blur, o.cilia, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
     }
-    for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f);
-    if (overT_ >= 0.f)
-        for (const Dying& d : dying_) {
-            const float t = saturate((overT_ - d.delay) / DIE_T);
-            if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, d.l, 3, t, 1.f, 0.f);
-        }
-    buildBoard(game);
+    if (!bare_) { // the world alone: no tissue, nothing bursting or dying
+        for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f);
+        if (overT_ >= 0.f)
+            for (const Dying& d : dying_) {
+                const float t = saturate((overT_ - d.delay) / DIE_T);
+                if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, d.l, 3, t, 1.f, 0.f);
+            }
+        buildBoard(game);
+    }
     // the organisms living inside cells of the stack and the falling piece
-    {
+    if (!bare_) {
         auto dwell = [&](const CellLook& l, float x, float y, int type, float alpha) {
             if (l.life < 0 || alpha <= 0.003f) return;
             const Org o = dweller(l, x, y, type);
@@ -1159,6 +1162,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     }
     std::vector<Inst> speckInst;
     for (const Speck& k : specks_) {
+        if (bare_) break; // (pushed out from under a dropped piece)
         const float s = k.t / k.life;
         const float a = smoothstepf(0.f, 0.1f, s) * (1.f - smoothstepf(0.4f, 1.f, s)) * 0.5f;
         speckInst.push_back({{k.p.x, k.p.y, k.r, 0.f}, {0.f, 0.f, 0.f, a}, {0.f, 0.f, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}});
@@ -1180,7 +1184,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progField_, "uSwell", swell_ * (1.f - 0.6f * slow_));
     set1f(progField_, "uSeed", seedF_);
     set1f(progField_, "uAA", aaW);
-    set1f(progField_, "uReticle", 1.f - bridgeK);
+    set1f(progField_, "uReticle", bare_ ? 0.f : 1.f - bridgeK);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

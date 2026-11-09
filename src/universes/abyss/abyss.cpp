@@ -812,7 +812,7 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
     lureX_ = -13.8f + 1.3f * std::sin(slowT_ * 0.23f) ;
     lureY_ = -3.4f + 1.f * std::sin(slowT_ * 0.37f + 1.f);
 
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     readyT_ += dt;
 }
 
@@ -886,7 +886,7 @@ void AbyssUniverse::buildLife(const MusicState& music) {
     // Jellyfish.
     for (const Jelly& j : jellies_) {
         const float fade = smoothstepf(0.f, 4.f, j.age) * (1.f - smoothstepf(j.life - 6.f, j.life, j.age));
-        const float behindHud = (std::fabs(j.x) < 12.f && std::fabs(j.x) > 5.5f && j.y > -7.f) ? 0.35f : 1.f;
+        const float behindHud = (!bare_ && std::fabs(j.x) < 12.f && std::fabs(j.x) > 5.5f && j.y > -7.f) ? 0.35f : 1.f;
         const float a = fade * dark * alive(hashf(j.seed)) * lerpf(0.5f, 1.f, j.depth) * behindHud;
         if (a <= 0.01f) continue;
         const vec3 c = j.hue < 0 ? lerp(pal_.glow, pal_.glow2, hashf(j.seed) * 0.6f) : pal_.piece[j.hue];
@@ -902,7 +902,7 @@ void AbyssUniverse::buildLife(const MusicState& music) {
             const float ox = (h1 - 0.5f) * 5.f * (1.f - 0.4f * s.turn) + 0.4f * std::sin(worldTime_ * 1.3f + i);
             const float oy = (h2 - 0.5f) * 2.2f * (1.f - 0.4f * s.turn) + 0.25f * std::sin(worldTime_ * 1.7f + i * 0.7f);
             const vec2 p = v2(s.x + ox, s.y + oy + 0.3f * std::sin(s.x * 0.4f + h3 * 6.f));
-            if (std::fabs(p.x) < WELL_X + 0.3f && p.y < WELL_TOP) continue; // never in front of the stack
+            if (!bare_ && std::fabs(p.x) < WELL_X + 0.3f && p.y < WELL_TOP) continue; // never in front of the stack
             const float tw = 0.6f + 0.4f * std::sin(worldTime_ * (2.f + 3.f * h3) + i);
             const vec3 c = h3 > 0.8f ? pal_.glow2 : pal_.glow;
             sprite(back_, 4, p, v2(0, 0), 0.035f + 0.02f * h2, c * 0.9f, a0 * tw * (0.7f + 0.5f * beatGlow_));
@@ -1079,7 +1079,7 @@ void AbyssUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.f : 0.7f);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.f : 0.7f);
     }
     // The bonus gauge: an orb filling with living light.
     {
@@ -1093,7 +1093,7 @@ void AbyssUniverse::buildBoard(const Game& g) {
 void AbyssUniverse::buildFx() {
     const float world = 1.f - saturate(bridge_.amount);
     // The well's glass walls: two faint threads of light, a ledge at the bottom.
-    {
+    if (!bare_) {
         const vec3 c = pal_.glow * (0.22f + 0.12f * beatGlow_) * (1.f - 0.6f * slow_);
         const float a = 0.8f * (1.f - 0.5f * saturate(bridge_.amount));
         sprite(back_, 3, v2(-WELL_X, WELL_BOT), v2(-WELL_X, WELL_TOP), 0.02f, c, a);
@@ -1102,7 +1102,7 @@ void AbyssUniverse::buildFx() {
     }
     for (const Spark& s : sparks_) {
         const float t = s.t - s.delay;
-        if (t < 0.f) continue;
+        if (t < 0.f || (bare_ && s.kind == 1)) continue; // (a break: no motes off the stack)
         const float k = t / s.life;
         const float a = smoothstepf(0.f, 0.08f, t) * (1.f - k) * (1.f - k) * (0.65f + 0.35f * std::sin(s.t * 7.f + s.twinkle));
         sprite(fx_, s.kind == 1 ? 4 : 0, v2(s.x, s.y), v2(0, 0), s.size, s.col * (1.6f - 0.6f * k), a * world);
@@ -1308,6 +1308,17 @@ void AbyssUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<H
 // Frame
 // =====================================================================================================
 
+// The well and the HUD columns, where the sea quiets down behind the game (a break: nowhere, far off screen).
+void AbyssUniverse::setBoxes(GLuint p) const {
+    if (bare_) {
+        for (const char* n : {"uWell", "uColL", "uColR"}) set4f(p, n, 1e4f, 1e4f, 1e4f + 1.f, 1e4f + 1.f);
+        return;
+    }
+    set4f(p, "uWell", -WELL_X, WELL_BOT, WELL_X, WELL_TOP + 8.f);
+    set4f(p, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+    set4f(p, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+}
+
 void AbyssUniverse::drawWorld() {
     const float out = std::max(saturate(bridge_.amount * 1.25f), over_ * 0.85f);
     glUseProgram(progWorld_);
@@ -1340,9 +1351,7 @@ void AbyssUniverse::drawWorld() {
     set1f(progWorld_, "uOver", over_);
     set1f(progWorld_, "uBridge", saturate(bridge_.amount));
     set3f(progWorld_, "uBridgeCol", bridge_.color);
-    set4f(progWorld_, "uWell", -WELL_X, WELL_BOT, WELL_X, WELL_TOP + 8.f);
-    set4f(progWorld_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-    set4f(progWorld_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    setBoxes(progWorld_);
     ugl::drawFullscreen();
 }
 
@@ -1363,6 +1372,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         Palette target = paletteOf(variant_);
         if (inDrop_) {
@@ -1376,7 +1386,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, slowOn_ ? 1.2f : 0.8f, dt);
     slowT_ += dt;
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.55f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1392,7 +1402,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     fx_.clear();
     buildLife(music);
     buildWhale();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     buildFx();
 
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
@@ -1415,9 +1425,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progWhale_, "uSpot", pal_.whale);
             set3f(progWhale_, "uVeil", pal_.water * 0.8f + pal_.surf * 0.02f);
             set1f(progWhale_, "uAlpha", a);
-            set4f(progWhale_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-            set4f(progWhale_, "uWell", -WELL_X, WELL_BOT, WELL_X, WELL_TOP + 8.f);
-            set4f(progWhale_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+            setBoxes(progWhale_);
             set1f(progWhale_, "uTime", worldTime_);
             set1f(progWhale_, "uBeat", beatGlow_);
             set1f(progWhale_, "uLen", 30.f * whale_.size);

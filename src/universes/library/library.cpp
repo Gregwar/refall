@@ -881,7 +881,7 @@ void LibraryUniverse::buildBoard(const Game& g) {
         preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0));
         for (int i = 0; i < 3; i++) {
             const vec3 c = layout::nextCenter(i);
-            preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
+            if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
         }
     }
 }
@@ -959,8 +959,8 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         }
         flushShapes();
     }
-    // the bonus gauge: a fine ring ticked like a clock's dial, its charge in gilt
-    if (vis > 0.01f) {
+    // the bonus gauge: a fine ring ticked like a clock's dial, its charge in gilt (none in a break)
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1129,6 +1129,7 @@ void LibraryUniverse::drawInst(GLuint vao, GLuint vbo, int mesh, const std::vect
 // =====================================================================================================
 
 void LibraryUniverse::render(const Frame& f, GLuint fbo) {
+    bare_ = f.bare;
     // ZEN_LIBRARY_TIMING=1: the frame's cost (GPU included: glFinish around it), every 200 frames
     static const bool timing = std::getenv("ZEN_LIBRARY_TIMING") != nullptr;
     struct Timer {
@@ -1162,7 +1163,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const float dt = std::min(f.dt, 0.1f);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1191,13 +1192,13 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     kickIn_ = 0.f;
     refreshK_ = approach(refreshK_, 0.f, 0.5f, dt);
     beatPulse_ = music.hasSong ? std::pow(1.f - (float)(music.beat - std::floor(music.beat)), 3.f) : 0.f;
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The game's lines -> the growth (a new game starts again with one bookcase).
     {
         const int hookStart = startLines(), hookRate = rateLines(time_);
         const int hook = hookStart + hookRate;
-        const int lines = game.lines() + hook;
+        const int lines = f.bare ? lines_ : game.lines() + hook; // (a break: the shelves as they were)
         if (linesSeen_ >= 0 && lines < lines_ && !game.over()) resetGrowth();
         lines_ = lines;
         if (linesSeen_ < 0) { grow_ = (float)lines; growV_ = 0.f; }
@@ -1422,7 +1423,12 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         }
         ++it;
     }
-    buildBoard(game);
+    if (f.bare) {
+        // a break: the room alone (no stack, no ghost, no books in flight)
+        cells_.clear();
+        cellLines_.clear();
+        flightInst_.clear();
+    } else buildBoard(game);
 
     // ---- Lamps: their glows and the 16 that light the scene.
     const float lampLevel = pal_.lampK * (0.8f + 0.1f * wm + 0.2f * wp + 0.25f * kickK_ * wp + 0.25f * dropAmt_) * (1.f - 0.35f * slow_);
@@ -1635,17 +1641,19 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sprites_.size() * sizeof(Sprite)), sprites_.data(), GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
     }
-    // the veil behind the well and the HUD's columns
+    // the veil behind the well and the HUD's columns (none in a break)
     glDisable(GL_DEPTH_TEST);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(progVeil_);
-    set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progVeil_, "uVeil", P.veil);
-    set1f(progVeil_, "uWellA", P.night > 0.5f ? 0.74f : 0.78f);
-    set1f(progVeil_, "uColA", P.night > 0.5f ? 0.45f : 0.68f);
-    set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-    set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
-    ugl::drawFullscreen();
+    if (!f.bare) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uVeil", P.veil);
+        set1f(progVeil_, "uWellA", P.night > 0.5f ? 0.74f : 0.78f);
+        set1f(progVeil_, "uColA", P.night > 0.5f ? 0.45f : 0.68f);
+        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+        set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        ugl::drawFullscreen();
+    }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glDisable(GL_BLEND);
     // the flights over the veil (they still meet the shelves' depth)
@@ -1656,9 +1664,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progSolid_, "uStackA", 0.f);
         drawInst(dynVao_[MESH_BOX], dynVbo_[MESH_BOX], MESH_BOX, &flightInst_, flightInst_.size());
     }
-    // ---- The well: its bookcase frame, the books, the ghost
+    // ---- The well: its bookcase frame, the books, the ghost (none in a break)
     glClear(GL_DEPTH_BUFFER_BIT);
-    {
+    if (!f.bare) {
         std::vector<Inst> frame;
         auto fb = [&](const vec3& c, const vec3& h, const vec3& col, int mat, float p0 = 0.f) {
             Inst in{};

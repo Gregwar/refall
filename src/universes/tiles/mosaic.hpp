@@ -80,7 +80,11 @@ struct Design {
     std::vector<int> field;
 };
 
-// Lays the whole mosaic over the view (center c, half extents h) for a variant.
-Design build(int variant, vec2 viewC, vec2 viewH, uint64_t seed);
+// The label of the well's frame tesserae.
+constexpr int FRAME_LABEL = 1;
+
+// Lays the whole mosaic over the view (center c, half extents h) for a variant. well = false: no well and no frame,
+// the ground laid over their place too (a break's wall).
+Design build(int variant, vec2 viewC, vec2 viewH, uint64_t seed, bool well = true);
 
 } // namespace tiles

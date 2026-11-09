@@ -92,6 +92,10 @@ private:
     std::vector<Line> lines_, cellLines_;
     size_t staticCount_ = 0;
     bool staticDirty_ = true;
+    // the monument (the well's frame: sill, piers, lintel, lining, mass) is static_[monument0_, monument1_); in the
+    // VBO it comes last, after the worldCount_ other boxes: a break (bare) draws the place without it
+    size_t monument0_ = 0, monument1_ = 0, worldCount_ = 0;
+    bool bare_ = false;
 
     // ---- Text.
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };

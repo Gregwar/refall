@@ -99,6 +99,7 @@ if(ZENTRIS_DISABLED_UNIVERSES)
 endif()
 add_library(zenrender STATIC
   src/renderer.cpp
+  src/titlecard.cpp
   src/transitions.cpp
   src/layout.cpp
   src/ugl.cpp
@@ -114,10 +115,15 @@ file(GLOB ZEN_UNIVERSE_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universe
 foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
   list(FILTER ZEN_UNIVERSE_EMBEDS EXCLUDE REGEX "/src/universes/${id}/")
 endforeach()
-foreach(f ${ZEN_UNIVERSE_EMBEDS})
+# The host's own assets (src/embed/: the title card's fonts) are included as "universes/host/<file name>.inc".
+file(GLOB ZEN_HOST_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/embed/*.ttf)
+foreach(f ${ZEN_UNIVERSE_EMBEDS} ${ZEN_HOST_EMBEDS})
   get_filename_component(dir ${f} DIRECTORY)
   get_filename_component(dir ${dir} DIRECTORY)
   get_filename_component(id ${dir} NAME)
+  if(id STREQUAL "src")
+    set(id host)
+  endif()
   get_filename_component(name ${f} NAME)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${f})
   file(READ ${f} hex HEX)

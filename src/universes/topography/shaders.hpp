@@ -22,7 +22,7 @@ uniform float uLineW;    // the minor contour's width (pixels)
 uniform vec3 uPaper, uLine, uIndex, uWaterLine, uLake, uTint0, uTint1, uTint2, uWood;
 uniform float uLineAlpha, uTintAmt, uShade, uWoodAmt, uHMin, uHMax;
 uniform float uPond, uPondMin;
-uniform float uWater, uWaterOn, uPhase, uRiver, uFlow, uWellCalm, uSlow, uDark, uFurn;
+uniform float uWater, uWaterOn, uPhase, uRiver, uFlow, uWellCalm, uSlow, uDark, uFurn, uGameOn;
 uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform vec4 uLeftCol, uRightCol;
@@ -90,7 +90,7 @@ void main() {
     // ---- Where the world keeps quiet: the well, the HUD columns.
     float inWell = box(w, vec4(-5.0, -10.0, 5.0, 10.0));
     float inCols = max(box(w, uLeftCol), box(w, uRightCol));
-    float quiet = mix(1.0, uWellCalm, inWell) * mix(1.0, 0.5, inCols);
+    float quiet = mix(1.0, uWellCalm, inWell) * mix(1.0, 0.5, inCols * uGameOn);
     // behind the HUD's text and the previews the map nearly fades out
     vec2 pix = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
     float hud = 0.0;
@@ -148,7 +148,7 @@ void main() {
         float tick = 0.0;
         if (q.x > 0.0 && q.x < 0.32 && abs(w.y) < 10.1) tick = stroke(abs(fract(w.y / 5.0 + 0.5) - 0.5) * 5.0 / px, max(uLineW, 0.9));
         if (q.y > 0.0 && q.y < 0.32 && abs(w.x) < 5.1) tick = max(tick, stroke(abs(fract(w.x / 5.0 + 0.5) - 0.5) * 5.0 / px, max(uLineW, 0.9)));
-        col = mix(col, uIndex, (nl + tick * (1.0 - nl)) * 0.8 * uFurn);
+        col = mix(col, uIndex, (nl + tick * (1.0 - nl)) * 0.8 * uFurn * uGameOn);
         // scale bar: four units, alternately filled
         vec2 sb = w - vec2(13.0, -9.7);
         if (sb.x > -0.2 && sb.x < 4.2 && sb.y > -0.3 && sb.y < 0.3) {

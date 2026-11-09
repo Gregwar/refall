@@ -69,8 +69,9 @@ private:
     // ---- Targets.
     GLuint progLine_ = 0, progFill_ = 0, progDecay_ = 0, progDown_ = 0, progUp_ = 0, progComp_ = 0;
     GLuint lineVao_ = 0, cornerVbo_ = 0, beamVbo_ = 0, fillVao_ = 0, fillVbo_ = 0;
-    GLuint accFbo_[2] = {}, accTex_[2] = {}, depthRb_ = 0;
-    int accCur_ = 0;
+    // Two persistence pairs: the whole frame's, and the bare frame's (a break: the world alone, its own phosphor).
+    GLuint accFbo_[4] = {}, accTex_[4] = {}, depthRb_ = 0;
+    int accCur_[2] = {};
     static constexpr int BLOOM_MIPS = 4;
     GLuint bloomFbo_[BLOOM_MIPS] = {}, bloomTex_[BLOOM_MIPS] = {};
     int bloomW_[BLOOM_MIPS] = {}, bloomH_[BLOOM_MIPS] = {};

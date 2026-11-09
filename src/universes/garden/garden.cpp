@@ -1813,7 +1813,7 @@ void GardenUniverse::render(const Frame& f, GLuint fbo) {
             add(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.5f : 1.f);
             for (int i = 0; i < 3; i++) {
                 const vec3 c = layout::nextCenter(i);
-                add(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+                if (game.next(i) >= 0) add(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
             }
             glUniform4fv(glGetUniformLocation(progSky_, "uHalo"), 16, halo);
             set4f(progSky_, "uHaloRing", layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y, layout::GAUGE_R, 0.55f * world);
@@ -1900,7 +1900,7 @@ void GardenUniverse::render(const Frame& f, GLuint fbo) {
     preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     flushCells();
     // ---- The bonus gauge: a fine ring, a meadow rising inside, a flower opening in it when it is ready.

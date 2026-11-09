@@ -173,6 +173,9 @@ bool TilesUniverse::init(int width, int height) {
     glGenVertexArrays(1, &tessVao_);
     glGenBuffers(1, &tessVbo_);
     instAttribs(tessVao_, tessVbo_, 0, 1, 4, sizeof(float) * 16);
+    glGenVertexArrays(1, &bareVao_);
+    glGenBuffers(1, &bareVbo_);
+    instAttribs(bareVao_, bareVbo_, 0, 1, 4, sizeof(float) * 16);
     glGenVertexArrays(1, &cellVao_);
     glGenBuffers(1, &cellVbo_);
     instAttribs(cellVao_, cellVbo_, quadVbo_, 1, 4, sizeof(CellInst));
@@ -307,8 +310,8 @@ TilesUniverse::~TilesUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
     for (GLuint p : {progGb_, progComp_, progCell_, progFrag_, progSprite_, progDown_, progBlur_, progFinal_, progShape_, progText_})
         glDeleteProgram(p);
-    for (GLuint v : {tessVao_, cellVao_, fragVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, tessVbo_, cellVbo_, fragVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {tessVao_, bareVao_, cellVao_, fragVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tessVbo_, bareVbo_, cellVbo_, fragVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
     if (gbFbo_) {
         glDeleteFramebuffers(1, &gbFbo_);
         glDeleteTextures(3, gbTex_);
@@ -333,12 +336,28 @@ void TilesUniverse::rebuild() {
     designC_ = viewC_;
     designH_ = viewH_;
     frags_.clear();
-    const int n = (int)design_.tess.size();
-    stateRows_ = (n + 1 + STATE_W - 1) / STATE_W;
+    // the break's ground over the frame's box
+    {
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        for (const tiles::Tessera& t : design_.tess)
+            if (t.label == tiles::FRAME_LABEL)
+                for (const vec2& c : t.c) {
+                    x0 = std::min(x0, c.x); x1 = std::max(x1, c.x);
+                    y0 = std::min(y0, c.y); y1 = std::max(y1, c.y);
+                }
+        fill_.clear();
+        if (x1 > x0) {
+            const tiles::Design bare = tiles::build(variant_, viewC_, viewH_, seed_ ^ 0x7115ull, false);
+            for (const tiles::Tessera& t : bare.tess)
+                if (t.center.x > x0 && t.center.x < x1 && t.center.y > y0 && t.center.y < y1 && t.group == 0) fill_.push_back(t);
+        }
+    }
+    const int n = (int)design_.tess.size(), nAll = n + (int)fill_.size();
+    stateRows_ = (nAll + 1 + STATE_W - 1) / STATE_W;
     state_.assign((size_t)stateRows_ * STATE_W * 4, 0.f);
-    for (int i = 0; i <= n; i++) {
+    for (int i = 0; i <= nAll; i++) {
         float* s = &state_[(size_t)i * 4];
-        const bool figure = i > 0 && design_.tess[i - 1].group > 0;
+        const bool figure = i > 0 && i <= n && design_.tess[i - 1].group > 0;
         s[0] = figure ? 1e9f : -1000.f;
         s[1] = -1000.f;
         s[2] = 1e9f;
@@ -351,19 +370,26 @@ void TilesUniverse::rebuild() {
 }
 
 void TilesUniverse::uploadDesign() {
-    const int n = (int)design_.tess.size();
-    std::vector<float> v((size_t)n * 16);
+    const int n = (int)design_.tess.size(), nAll = n + (int)fill_.size();
+    auto put = [](std::vector<float>& v, const tiles::Tessera& t, int id) {
+        const float o[16] = {t.c[0].x, t.c[0].y, t.c[1].x, t.c[1].y, t.c[2].x, t.c[2].y, t.c[3].x, t.c[3].y,
+                             t.color.x, t.color.y, t.color.z, (float)t.mat, t.tilt.x, t.tilt.y, t.rnd, (float)id};
+        v.insert(v.end(), o, o + 16);
+    };
+    std::vector<float> v, vb;
+    v.reserve((size_t)n * 16);
+    vb.reserve((size_t)nAll * 16);
     for (int i = 0; i < n; i++) {
-        const tiles::Tessera& t = design_.tess[i];
-        float* o = &v[(size_t)i * 16];
-        o[0] = t.c[0].x; o[1] = t.c[0].y; o[2] = t.c[1].x; o[3] = t.c[1].y;
-        o[4] = t.c[2].x; o[5] = t.c[2].y; o[6] = t.c[3].x; o[7] = t.c[3].y;
-        o[8] = t.color.x; o[9] = t.color.y; o[10] = t.color.z; o[11] = (float)t.mat;
-        o[12] = t.tilt.x; o[13] = t.tilt.y; o[14] = t.rnd; o[15] = (float)(i + 1);
+        put(v, design_.tess[i], i + 1);
+        if (design_.tess[i].label != tiles::FRAME_LABEL) put(vb, design_.tess[i], i + 1);
     }
+    for (int i = 0; i < (int)fill_.size(); i++) put(vb, fill_[i], n + 1 + i);
     glBindBuffer(GL_ARRAY_BUFFER, tessVbo_);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
     tessCount_ = n;
+    glBindBuffer(GL_ARRAY_BUFFER, bareVbo_);
+    glBufferData(GL_ARRAY_BUFFER, vb.size() * sizeof(float), vb.data(), GL_STATIC_DRAW);
+    bareCount_ = (int)(vb.size() / 16);
     glBindTexture(GL_TEXTURE_2D, sketchTex_);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, design_.sw, design_.sh, 0, GL_RG, GL_UNSIGNED_BYTE, design_.sketch.data());
@@ -373,8 +399,8 @@ void TilesUniverse::uploadDesign() {
     stateDirty_ = false;
     // each tessera's place for the drop's show: its center, the direction across its row, half its width
     std::vector<float> geo((size_t)stateRows_ * STATE_W * 4, 0.f);
-    for (int i = 0; i < n; i++) {
-        const tiles::Tessera& t = design_.tess[i];
+    for (int i = 0; i < nAll; i++) {
+        const tiles::Tessera& t = i < n ? design_.tess[i] : fill_[i - n];
         const float ax0 = t.c[3].x - t.c[0].x, ay0 = t.c[3].y - t.c[0].y, ax1 = t.c[2].x - t.c[1].x, ay1 = t.c[2].y - t.c[1].y;
         float* o = &geo[(size_t)(i + 1) * 4];
         o[0] = t.center.x;
@@ -386,7 +412,7 @@ void TilesUniverse::uploadDesign() {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, STATE_W, stateRows_, 0, GL_RGBA, GL_FLOAT, geo.data());
 }
 
-void TilesUniverse::renderGbuffer() {
+void TilesUniverse::renderGbuffer(bool bare) {
     glBindFramebuffer(GL_FRAMEBUFFER, gbFbo_);
     glViewport(0, 0, width_, height_);
     glClearColor(0.f, 0.f, 0.f, 0.f);
@@ -401,20 +427,22 @@ void TilesUniverse::renderGbuffer() {
         set1f(progGb_, "uPx", px);
         const tiles::VariantDef& V = VARIANTS[variant_];
         set1f(progGb_, "uBevel", std::max(px * 1.6f, V.pitch * 0.16f));
-        glBindVertexArray(tessVao_);
+        glBindVertexArray(bare ? bareVao_ : tessVao_);
+        const int count = bare ? bareCount_ : tessCount_;
         // the grout around each tessera takes its id (a figure not laid shows its bed there too), then the tesserae
         set1i(progGb_, "uGrout", 1);
         set1f(progGb_, "uDilate", V.grout_w * 0.9f);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, tessCount_);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
         set1i(progGb_, "uGrout", 0);
         set1f(progGb_, "uDilate", 0.f);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, tessCount_);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, count);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     // the albedo's mip chain: the colors to come, washed on the bare bed
     glBindTexture(GL_TEXTURE_2D, gbTex_[0]);
     glGenerateMipmap(GL_TEXTURE_2D);
     gbDirty_ = false;
+    gbBare_ = bare;
 }
 
 // A new song in the same mosaic: the figures are pried out (over a second and a half) back to the sketch.
@@ -842,7 +870,7 @@ void TilesUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f, seedOf(nextId_ + 7));
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, seedOf(nextId_ + 1 + i));
     }
     // shadows first
     cells_.insert(cells_.begin(), shadows.begin(), shadows.end());
@@ -932,8 +960,8 @@ void TilesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushShapes();
     }
 
-    // the bonus gauge: twelve small tesserae in a ring
-    if (vis > 0.01f) {
+    // the bonus gauge: twelve small tesserae in a ring (none in a break: the HUD's text alone)
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1044,11 +1072,12 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     const bool sized = std::fabs(designH_.x - viewH_.x) > 0.01f || std::fabs(designH_.y - viewH_.y) > 0.01f;
     resizeWait_ = sized ? resizeWait_ + f.dt : 0.f;
     if (designVariant_ != variant_ || design_.tess.empty() || (sized && resizeWait_ > 0.3f)) rebuild();
-    if (gbDirty_) renderGbuffer();
-    syncIds(game);
+    if (gbDirty_ || gbBare_ != f.bare) renderGbuffer(f.bare);
+    bare_ = f.bare;
+    if (!f.bare) syncIds(game); // (a break's blank board keeps the stack's ids)
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) {
             overT_ = -1.f;
             dead_.clear();
@@ -1190,7 +1219,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
     for (Puff& p : puffs_) p.t += dt;
     puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.t > p.life; }), puffs_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     if (stateDirty_) {
         glBindTexture(GL_TEXTURE_2D, stateTex_);
@@ -1199,7 +1228,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     cells_.clear();
-    buildBoard(game);
+    if (!f.bare) buildBoard(game);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1237,6 +1266,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uBed", lin(V.bed));
     set3f(progComp_, "uSinopia", lin(V.sinopia));
     set3f(progComp_, "uWell", lin(V.well));
+    set1f(progComp_, "uBare", f.bare ? 1.f : 0.f);
     set4f(progComp_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progComp_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     {
@@ -1311,7 +1341,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The fragments in flight.
     fragInst_.clear();
     for (const Frag& fr : frags_) {
-        if (time_ < fr.appear) continue; // its tile is still cracking
+        if (time_ < fr.appear || f.bare) continue; // its tile is still cracking (a break: none in flight)
         const tiles::Tessera& t = design_.tess[fr.tess];
         const float u = saturate((time_ - fr.launch) / std::max(0.05f, fr.land - fr.launch));
         const float sEase = 1.f - std::pow(1.f - u, 2.3f);
@@ -1346,6 +1376,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     {
         const vec3 dust = lin(V.bed) * 0.5f + amb;
         for (const Puff& p : puffs_) {
+            if (f.bare) break;
             const float k = p.t / p.life;
             const float rr = p.size * (0.6f + 0.9f * std::sqrt(k));
             sprites_.push_back({{p.p.x, p.p.y, rr, rr * 0.33f}, {dust.x, dust.y, dust.z, 0.5f * (1.f - k) * (1.f - k) * worldK}, {2.f, 0.f, 0.f, 0.f}});

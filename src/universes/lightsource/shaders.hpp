@@ -179,6 +179,7 @@ uniform vec2 uLightTexel;
 uniform vec4 uView;
 uniform float uPx;
 uniform vec3 uWall, uFloor, uRail, uAmbient;
+uniform float uRails; // the well's rails shown (0 in a break's frame: the room alone)
 uniform float uFloorY;
 uniform float uBridge;
 uniform vec3 uBridgeColor;
@@ -200,7 +201,7 @@ void main() {
     }
     // the rails standing at the well's sides
     float rx = abs(abs(p.x) - 5.09);
-    if (p.y > uFloorY && p.y < 10.02) alb = mix(alb, uRail, 1.0 - smoothstep(0.035, 0.035 + uPx * 1.2, rx));
+    if (p.y > uFloorY && p.y < 10.02) alb = mix(alb, uRail, (1.0 - smoothstep(0.035, 0.035 + uPx * 1.2, rx)) * uRails);
     vec3 irr = soft(uLight, vUv, uLightTexel).rgb;
     // a gap between two blocks: their contact shadow
     ivec2 cell = cellAt(p);

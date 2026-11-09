@@ -40,6 +40,7 @@ uniform vec4 uOccRect;        // x0, y0, size (board units), texels per unit
 uniform float uOccLod;        // the map's last mip level
 uniform sampler2D uHm;        // the thrown cubes' piles: height above their ground (r), over x, z
 uniform vec4 uHmRect;         // x0, z0, width, depth
+uniform float uPiles;         // 1: the piles darken the floor, 0: none (a break: the thrown cubes are gone)
 uniform sampler2DShadow uSh0, uSh1; // the thrown cubes seen from each lamp (compared)
 uniform sampler2D uShD0, uShD1;     // the same depths, raw (for the penumbra)
 uniform sampler2D uShC0, uShC1;     // where the casters are (1), mipmapped: a single tap tells a point far from any
@@ -143,7 +144,7 @@ float pileAO(vec3 p) {
     vec2 uv = (p.xz - uHmRect.xy) / uHmRect.zw;
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 1.0;
     float H = 0.5 * (textureLod(uHm, uv, 1.0).r + textureLod(uHm, uv, 2.0).r);
-    if (H < 0.01) return 1.0;
+    if (H < 0.01 || uPiles < 0.5) return 1.0;
     float ground = (abs(p.x) < PLINTH_HX.x && abs(p.z) < PLINTH_HX.y) ? PLINTH_TOP : uFloor;
     float above = p.y - ground;
     return 1.0 - 0.55 * smoothstep(0.0, 0.7, H - above * 0.8) * uShadowK;
@@ -183,6 +184,7 @@ uniform vec4 uPool;           // the light pool on the wall: center xy, radius, 
 uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform float uPx;            // a pixel in board units (at the well)
+uniform float uPane;          // 1: the well's pane, 0: none (a break: the room alone)
 
 // ray / box: t of entry (or -1) and the normal
 float boxHit(vec3 ro, vec3 rd, vec3 c, vec3 h, out vec3 n) {
@@ -262,7 +264,7 @@ void main() {
     float tp = (PANE_Z - ro.z) / rd.z;
     vec3 pp = ro + rd * tp;
     float sd = sdBox(pp.xy - PANEL_C.xy, PANEL_H.xy);
-    if (sd < uPx * 1.5) {
+    if (sd < uPx * 1.5 && uPane > 0.5) {
         // an even, calm ground behind the blocks: no shadow, no gradient
         // in the panel's own color at one steady level, whatever the lamps and the gels do
         float inside = 1.0 - smoothstep(-uPx * 0.5, uPx * 0.5, sd);

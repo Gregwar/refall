@@ -1591,7 +1591,7 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     }
     if (!f.paused) {
         simulate(game, music, dt);
-        syncSlots(game);
+        if (!f.bare) syncSlots(game); // (a break's board is blank: the stack's tiles are kept, only not drawn)
     }
     const float bridge = saturate(bridge_.amount);
     const float world = 1.f - smoothstepf(0.f, 0.6f, bridge);
@@ -1707,50 +1707,52 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     // ---- The marbles on the table.
     drawWorld(world);
-    // ---- The well, the stack, the falling piece.
-    drawBoard(game, world);
+    // ---- The well, the stack, the falling piece (none of the game in a break's frame: the table alone).
+    if (!f.bare) drawBoard(game, world);
     flush();
     // ---- Previews: small tiles and marbles.
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
-        if (type < 0) return;
-        Piece p{type, 0, 0, 0};
-        int cells[4][2];
-        game.pieceCells(p, cells);
-        float minx = 9, maxx = -9, miny = 9, maxy = -9;
-        for (auto& c : cells) {
-            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
-            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+    if (!f.bare) {
+        auto preview = [&](int type, vec2 center, float sc, float alpha) {
+            if (type < 0) return;
+            Piece p{type, 0, 0, 0};
+            int cells[4][2];
+            game.pieceCells(p, cells);
+            float minx = 9, maxx = -9, miny = 9, maxy = -9;
+            for (auto& c : cells) {
+                minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+                miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+            }
+            for (int i = 0; i < 4; i++) {
+                const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
+                put(pos.x, pos.y, TILE_H * sc, TILE_R * sc, pal_.piece[std::clamp(type, 0, 6)], alpha, hashf((float)type, i * 3.f) * TAU, 0.f,
+                    mseed(type, hashf((float)type + 0.5f, (float)i)), 1);
+            }
+        };
+        preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 1.f);
+        for (int i = 0; i < 3; i++) {
+            const vec3 c = layout::nextCenter(i);
+            if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
         }
-        for (int i = 0; i < 4; i++) {
-            const vec2 pos = v2(center.x + (cells[i][0] - (minx + maxx) * 0.5f) * sc, center.y - (cells[i][1] - (miny + maxy) * 0.5f) * sc);
-            put(pos.x, pos.y, TILE_H * sc, TILE_R * sc, pal_.piece[std::clamp(type, 0, 6)], alpha, hashf((float)type, i * 3.f) * TAU, 0.f,
-                mseed(type, hashf((float)type + 0.5f, (float)i)), 1);
+        // ---- The bonus gauge: a ring of twelve marbles, one more for each cleared line; ready, a light runs around it.
+        {
+            const vec3 gc = layout::GAUGE_CENTER;
+            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
+            const bool ready = game.bonusReady() || game.bonusActive();
+            const float n = fill * 12.f;
+            const float ga = 1.f - 0.6f * smoothstepf(0.3f, 0.95f, bridge);
+            for (int i = 0; i < 12; i++) {
+                const float a = PI * 0.5f - TAU * i / 12.f;
+                const float x = gc.x + std::cos(a) * 0.82f, y = gc.y + std::sin(a) * 0.82f;
+                const float on = saturate(n - i);
+                putFx(x, y, 0.07f, 0.f, ugl::luma(pal_.ink) > 0.3f ? pal_.ink * 0.25f : pal_.ink * 0.4f, 0.5f * ga * (1.f - on), 2);
+                const float run = ready ? std::pow(0.5f + 0.5f * std::cos(time_ * 3.f - TAU * i / 12.f), 6.f) : 0.f;
+                put(x, y, 0.f, 0.15f, pal_.piece[i % 7], on * ga, (float)i, 0.15f * ready + 0.8f * run, mseed(i % 7, hashf((float)i, 3.f)), 0, 0.f, 0.f, run, 1.f);
+            }
+            flush();
+            flushFx();
         }
-    };
-    preview(game.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), game.holdUsed() ? 0.35f : 1.f);
-    for (int i = 0; i < 3; i++) {
-        const vec3 c = layout::nextCenter(i);
-        preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
-    // ---- The bonus gauge: a ring of twelve marbles, one more for each cleared line; ready, a light runs around it.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const bool ready = game.bonusReady() || game.bonusActive();
-        const float n = fill * 12.f;
-        const float ga = 1.f - 0.6f * smoothstepf(0.3f, 0.95f, bridge);
-        for (int i = 0; i < 12; i++) {
-            const float a = PI * 0.5f - TAU * i / 12.f;
-            const float x = gc.x + std::cos(a) * 0.82f, y = gc.y + std::sin(a) * 0.82f;
-            const float on = saturate(n - i);
-            putFx(x, y, 0.07f, 0.f, ugl::luma(pal_.ink) > 0.3f ? pal_.ink * 0.25f : pal_.ink * 0.4f, 0.5f * ga * (1.f - on), 2);
-            const float run = ready ? std::pow(0.5f + 0.5f * std::cos(time_ * 3.f - TAU * i / 12.f), 6.f) : 0.f;
-            put(x, y, 0.f, 0.15f, pal_.piece[i % 7], on * ga, (float)i, 0.15f * ready + 0.8f * run, mseed(i % 7, hashf((float)i, 3.f)), 0, 0.f, 0.f, run, 1.f);
-        }
-        flush();
-        flushFx();
-    }
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

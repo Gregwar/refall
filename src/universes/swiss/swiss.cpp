@@ -1241,7 +1241,7 @@ void SwissUniverse::drawBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
     flushShapes();
 }
@@ -1257,7 +1257,7 @@ void SwissUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 ink = ink_, ground = ground_, accent = palShown_[1];
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : ground;
             rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
@@ -1265,7 +1265,7 @@ void SwissUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushShapes();
     }
 
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1355,10 +1355,11 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     const VariantDef& V = VARIANTS[variant_];
-    syncIds(game);
+    bare_ = f.bare;
+    if (!bare_) syncIds(game); // the world alone: the pieces' ids kept for the whole frame
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) {
             overT_ = -1.f;
             wipes_.erase(std::remove_if(wipes_.begin(), wipes_.end(), [](const Wipe& w) { return w.delay > 0.f; }), wipes_.end());
@@ -1483,7 +1484,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);
     for (Wipe& w : wipes_) w.t += dt;
     wipes_.erase(std::remove_if(wipes_.begin(), wipes_.end(), [](const Wipe& w) { return w.t > w.delay + WIPE_S; }), wipes_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1550,7 +1551,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
                 }
         }
         for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f, VEIL);
-        const int n = (int)rects.size() / 4;
+        const int n = bare_ ? 0 : (int)rects.size() / 4; // the world alone: the poster unveiled
         set1i(progComp_, "uCount", n);
         if (n) {
             glUniform4fv(ugl::U(progComp_, "uRects"), n, rects.data());
@@ -1568,7 +1569,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The game.
-    drawBoard(game);
+    if (!bare_) drawBoard(game);
 
     // ---- Dim (pause, game over screen) and the startup fade.
     {

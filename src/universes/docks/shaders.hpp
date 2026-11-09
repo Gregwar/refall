@@ -255,6 +255,7 @@ flat in vec4 vCol, vMat;
 out vec4 frag;
 uniform float uClipY, uWaterY, uStackA, uDeckLights;
 uniform vec3 uWinCol, uQuayLine;
+uniform float uBay; // the well's footprint painted on the quay (0: the world alone, a break)
 void main() {
     if (vP.y < uClipY) discard;
     int mat = int(vMat.x + 0.5);
@@ -339,7 +340,7 @@ void main() {
                 if (vMat.y < 1.5) {
                     vec2 r = abs(g - vec2(0.0, -0.45)) - vec2(5.35, 0.85);
                     float fr = abs(max(r.x, r.y));
-                    paint += (1.0 - smoothstep(0.05, 0.09 + px, fr)) * 0.9;
+                    paint += (1.0 - smoothstep(0.05, 0.09 + px, fr)) * 0.9 * uBay;
                     // the crane's rails
                     float rail = min(abs(abs(g.x) - 15.5) - 0.0, 9.0);
                     alb = mix(alb, vec3(0.35, 0.33, 0.3) * 0.5, (1.0 - smoothstep(0.06, 0.1 + px, abs(rail - 0.25))) * 0.0);

@@ -1419,6 +1419,13 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
     solid_.clear();
     beads_.clear();
     sprites_.clear();
+    (void)music;
+    if (!bare_) collectBlocks(g, time);
+    collectSprites();
+}
+
+// The game's blocks: the stack, the piece and its ghost, the previews, the tumbling bodies, the gauge's beads.
+void DioramaUniverse::collectBlocks(const Game& g, double time) {
     const float S = 0.95f;
     auto inst = [&](vec3 p, vec3 sc, vec3 col, float kind = 0, float mask = 0, vec4 q = vec4(0, 0, 0, 1), float glow = 0) {
         solid_.push_back({vec4(p, kind), vec4(sc, mask), q, vec4(col, glow)});
@@ -1523,7 +1530,7 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
         }
     };
     if (g.holdType() >= 0) preview(g.holdType(), vec3(-8.6f, 7.2f, -0.12f), 0.62f, 0.f, g.holdUsed());
-    for (int i = 0; i < 3; i++) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, -0.12f), i == 0 ? 0.62f : 0.5f, 1.3f + i * 2.1f, false);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), vec3(8.6f, 7.2f - i * 3.2f, -0.12f), i == 0 ? 0.62f : 0.5f, 1.3f + i * 2.1f, false);
 
     // Tumbling bodies.
     for (const Body& b : bodies_) {
@@ -1550,11 +1557,15 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
         }
     }
 
-    // ---- Sprites.
+}
+
+// The sprites: dust, splashes, leaves, birds, the lanterns' halos and fireflies (a break: the world's own only).
+void DioramaUniverse::collectSprites() {
     auto spr = [&](vec3 p, float size, vec3 col, float a, float kind, float rot = 0, float aspect = 1) {
         sprites_.push_back({vec4(p, size), vec4(col, a), vec4(kind, rot, 0, aspect)});
     };
     for (const Particle& p : parts_) {
+        if (bare_ && (p.kind == 0 || p.kind == 5)) continue; // the blocks' dust and splashes
         const float t = 1.f - p.life / p.maxLife;
         float a = p.alpha * std::min(1.f, t * 8.f) * std::min(1.f, p.life / (p.maxLife * 0.35f));
         float aspect = p.kind == 2 ? std::cos(p.rot * 1.7f) : (p.kind == 1 ? 0.55f : 1.f);
@@ -1565,7 +1576,8 @@ void DioramaUniverse::collect(const Game& g, const MusicState& music, double tim
     const float L = env_.lantern;
     if (L > 0.02f) {
         const vec3 lc = hex(0xFFC27A);
-        for (int s = -1; s <= 1; s += 2) spr(vec3(s * 5.42f, 11.42f, 0.2f), 1.6f, lc, 0.55f * L, 3);
+        if (!bare_)
+            for (int s = -1; s <= 1; s += 2) spr(vec3(s * 5.42f, 11.42f, 0.2f), 1.6f, lc, 0.55f * L, 3);
         const int NF = 34;
         for (int i = 0; i < NF; i++) {
             const float h1 = ((splitmix64(i * 7 + 1) >> 40) & 0xFFFF) / 65535.f, h2 = ((splitmix64(i * 7 + 2) >> 40) & 0xFFFF) / 65535.f,
@@ -1622,8 +1634,10 @@ void DioramaUniverse::drawWorld(GLuint prog, bool) {
     setMat(prog, "uModel", mat4::identity());
     glBindVertexArray(island_.vao);
     glDrawArrays(GL_TRIANGLES, 0, island_.count);
-    glBindVertexArray(tower_.vao);
-    glDrawArrays(GL_TRIANGLES, 0, tower_.count);
+    if (!bare_) {
+        glBindVertexArray(tower_.vao);
+        glDrawArrays(GL_TRIANGLES, 0, tower_.count);
+    }
     for (const Prop& pr : props_) {
         const float grow = propGrow_[pr.world];
         if (grow < 0.01f) continue;
@@ -1701,6 +1715,7 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     const bool paused = f.paused;
+    bare_ = f.bare;
     computeEnv(paused ? 0.f : dt, music);
     if (!paused) simulate(game, music, dt);
     pauseFade_ = approach(pauseFade_, paused ? 1.f : (f.dim ? 0.55f : 0.f), paused ? 4.f : 1.5f, dt);
@@ -1791,7 +1806,7 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progWater_, "uRefl", 3);
         set2f(progWater_, "uRes", (float)width_, (float)height_);
         float rp[64] = {}, rg[24] = {};
-        for (size_t i = 0; i < ripples_.size() && i < 16; i++) {
+        for (size_t i = 0; i < ripples_.size() && i < 16 && !bare_; i++) { // (the blocks' splashes)
             rp[i * 4] = ripples_[i].x; rp[i * 4 + 1] = ripples_[i].z; rp[i * 4 + 2] = ripples_[i].age; rp[i * 4 + 3] = ripples_[i].strength;
         }
         for (size_t i = 0; i < rings_.size() && i < 6; i++) { rg[i * 4] = rings_[i].age; rg[i * 4 + 1] = rings_[i].strength; }

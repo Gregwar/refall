@@ -957,7 +957,7 @@ void RipplesUniverse::buildBoard(const Game& g) {
             90000 + g.holdType());
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, 91000 + g.next(i));
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f, 91000 + g.next(i));
     }
     // the kerb
     const float top = viewC_.y + viewH_.y + 1.f;

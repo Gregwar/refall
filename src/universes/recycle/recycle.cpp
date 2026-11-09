@@ -1058,7 +1058,7 @@ void RecycleUniverse::flushCubes() {
     drawn_.clear();
 }
 
-void RecycleUniverse::buildScene(const Game& g) {
+void RecycleUniverse::buildScene(const Game& g, bool bare) {
     const float bridgeA = 1.f - smoothstepf(0.f, 0.8f, bridge_.amount);
     auto maskOf = [&](int x, int y, auto same) {
         const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, 1, 1, -1, -1};
@@ -1083,8 +1083,9 @@ void RecycleUniverse::buildScene(const Game& g) {
             o.rotShown = rot;
             addCube(q, rot, pileColor(p, o, (int)i), bridgeA, 0.f, (float)((i * 37 + p.side * 11) % 97), false);
         }
+    // A break shows the table and its heaps alone (and the cubes moving between heaps): the rest is the game.
     // ---- The stack: cubes resting in the tray (a hard drop squashes them a little as they land).
-    for (int y = Game::HIDDEN; y < Game::H; y++)
+    for (int y = Game::HIDDEN; y < Game::H && !bare; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0 || incoming_[y][x]) continue;
@@ -1095,8 +1096,8 @@ void RecycleUniverse::buildScene(const Game& g) {
             addCube(vec3(w.x, w.y, z), 0.f, pieceCol(c.type), 1.f, sq, (float)((x * 7 + y * 13) % 97), true);
         }
     // ---- The ghost (an outline on the tray) and the piece, hovering.
-    lastPieceOk_ = false;
-    if (g.hasPiece() && !g.over()) {
+    if (!bare) lastPieceOk_ = false;
+    if (!bare && g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
         g.pieceCells(p, cells);
@@ -1130,7 +1131,7 @@ void RecycleUniverse::buildScene(const Game& g) {
     }
     // ---- Cubes in the air.
     for (Flight& fl : flights_) {
-        if (fl.a < 0) continue;
+        if (fl.a < 0 || (bare && fl.target != T_PILE)) continue;
         const vec3 to = targetPos(fl, g);
         const float u = saturate((fl.t - fl.delay) / fl.dur);
         const float e = ease(u);
@@ -1149,7 +1150,7 @@ void RecycleUniverse::buildScene(const Game& g) {
     }
     // ---- Previews: the pieces' silhouettes, printed on the table.
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
-        if (type < 0) return;
+        if (type < 0 || bare) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
         g.pieceCells(p, cells);
@@ -1171,10 +1172,10 @@ void RecycleUniverse::buildScene(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 0.95f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), i == 0 ? 0.95f : 0.8f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), i == 0 ? 0.95f : 0.8f);
     }
     // ---- The bonus gauge: twelve pips, one per line.
-    {
+    if (!bare) {
         const vec3 gc = layout::GAUGE_CENTER;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
         const int n = Game::BONUS_LINES;
@@ -1395,12 +1396,13 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     // the fall speed, from the piece's own motion in its first half second (the time the cubes take to come;
     // hard drops and new pieces left out)
     fallAge_ += rdt;
-    if (game.hasPiece() && rdt > 0.f) {
+    // (a break's blank board neither moves the piece nor brings the cubes: the stack stays as it is)
+    if (!f.bare && game.hasPiece() && rdt > 0.f) {
         const float y = game.pieceVisualY(), dy = std::abs(y - fallY_);
         if (fallOk_ && dy < 2.f && fallAge_ < 0.5f) fallRate_ = lerpf(fallRate_, dy / rdt, 1.f - std::exp(-rdt * 1.5f));
         fallY_ = y;
         fallOk_ = true;
-    } else fallOk_ = false;
+    } else if (!f.bare) fallOk_ = false;
 
     // ---- Staging.
     if (lvT_ < 1.f) {
@@ -1413,7 +1415,7 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     for (int i = 0; i < 7; i++) pal_.piece[i] = lerp(basePal_.piece[i], basePal_.drop[i], smoothstepf(0.f, 1.f, colAmt_));
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
 
-    reconcile(game);
+    if (!f.bare || fresh_) reconcile(game); // (the heaps are laid out on the first frame, even a bare one)
 
     // ---- The beat: every two beats (half time).
     if (!f.paused && music.hasSong && !piles_.empty()) {
@@ -1493,7 +1495,7 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     shadows_.clear();
     flat_.clear();
     cubes_.clear();
-    buildScene(game);
+    buildScene(game, f.bare);
     flushCubes();
 
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
@@ -1534,6 +1536,7 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progTable_, "uGrain", pal_.grain);
     set1f(progTable_, "uLamp", pal_.lamp * (1.f + 1.5f * evening));
     set1f(progTable_, "uTrayDepth", pal_.trayDepth);
+    set1f(progTable_, "uWell", f.bare ? 0.f : 1.f); // a break: no tray
     set1f(progTable_, "uDark", pal_.dark);
     set2f(progTable_, "uLight", LIGHT.x, LIGHT.y);
     set1f(progTable_, "uBridge", bridge);
@@ -1554,7 +1557,7 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progCube_, "uBridgeInk", bridge_.ink);
     drawInst(progCube_, flat_);
     drawInst(progCube_, cubes_);
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

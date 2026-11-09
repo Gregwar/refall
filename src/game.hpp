@@ -52,6 +52,10 @@ public:
     // Game over: the board has been cleared (the renderer dissolves it) and play waits for restart().
     bool over() const { return over_; }
     void restart();
+    // A break between songs: the falling piece goes back to the top, to fall again when play resumes.
+    void respawn();
+    // An empty board with no piece and no previews (next() is -1): what universes draw when the game is hidden.
+    void makeBlank();
     // Testing (B key): fill the bonus gauge.
     void debugChargeBonus() {
         if (bonusActive_ || over_ || bonusLines_ >= BONUS_LINES) return;

@@ -18,7 +18,7 @@ uniform sampler2D uShadow;
 uniform vec4 uView;          // center, half extents (board units)
 uniform vec2 uRes;
 uniform vec3 uTable, uTray, uShadowTint;
-uniform float uShadowAmt, uMottle, uGrain, uLamp, uTrayDepth, uDark;
+uniform float uShadowAmt, uMottle, uGrain, uLamp, uTrayDepth, uDark, uWell;
 uniform vec2 uLight;         // toward the light (board plane)
 uniform float uBridge;
 uniform vec3 uBridgeCol;
@@ -77,7 +77,7 @@ void main() {
     // the tray: a shallow recess the well's cubes rest in; its upper-left walls shade the floor
     float sd = boxSd(p, vec2(5.12, 10.12));
     float px = 2.0 * uView.w / uRes.y;
-    float inside = 1.0 - smoothstep(-px, px, sd);
+    float inside = (1.0 - smoothstep(-px, px, sd)) * uWell;
     vec3 tray = uTray * (1.0 + uLamp * 0.5 * (0.5 - length((p - vec2(-14.0, 16.0)) / vec2(62.0, 44.0))));
     // the walls on the light's side cast their shade inward
     vec2 w = max(vec2(5.12 - abs(p.x), 10.12 - abs(p.y)), 0.0);
@@ -89,7 +89,7 @@ void main() {
     // the rim: a hairline catching the light on the far walls, a fine dark line on the near ones
     float rim = 1.0 - smoothstep(0.0, 1.2 * px, abs(sd));
     float lit = clamp(0.5 - 0.5 * dot(normalize(p * vec2(1.0, 0.5) + 1e-4), uLight), 0.0, 1.0);
-    c = mix(c, c * mix(0.78, 1.18, lit), rim * uTrayDepth);
+    c = mix(c, c * mix(0.78, 1.18, lit), rim * uTrayDepth * uWell);
     // shadows of the cubes
     float s = texture(uShadow, vUv).r;
     c = mix(c, c * uShadowTint, clamp(s * uShadowAmt, 0.0, 1.0));

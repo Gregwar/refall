@@ -799,7 +799,7 @@ void FluoUniverse::buildPlay(const Game& g, float) {
     preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     // the well: two faint hairlines and its floor, the wall's own chalk
     {
@@ -819,6 +819,9 @@ void FluoUniverse::buildPlay(const Game& g, float) {
         play_.push_back({{gc.x, gc.y, R + 0.2f, R + 0.2f}, {c.x, c.y, c.z, 1.f}, {2.f, 0.f, 0.f, 0.f},
                          {R, 0.045f, ready ? 1.f : fill, ready ? 1.f : 0.f}});
     }
+}
+
+void FluoUniverse::buildFlight() {
     // specks of paint flicked by the locks
     for (const Speck& s : specks_) {
         const float a = 1.f - smoothstepf(0.5f, 1.f, s.t / s.life);
@@ -1158,6 +1161,7 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progComp_, "uSweep", sweepX_, sweepA_);
     set1f(progComp_, "uSlow", slow_ * (1.f - uvE));
     set4f(progComp_, "uWell", 0.f, 0.f, 5.f, 10.f);
+    set1f(progComp_, "uPanel", f.bare ? 0.f : 1.f);
     set4f(progComp_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progComp_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     {
@@ -1189,7 +1193,8 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The play, over the wall.
     const float mul = (1.f - 0.55f * dimT_) * saturate(f.fade);
     play_.clear();
-    buildPlay(game, time_);
+    if (!f.bare) buildPlay(game, time_); // a break: no stack, previews, well lines or gauge
+    buildFlight();
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1209,7 +1214,7 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)play_.size());
         }
     }
-    drawHud(f.hud, f.panels, mul);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels, mul);
     glDisable(GL_BLEND);
 }
 

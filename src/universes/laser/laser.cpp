@@ -750,10 +750,28 @@ void LaserUniverse::addProjection(vec2 src, const std::vector<vec2>& corners, co
         b.a2[0] = 0.016f; b.a2[1] = l; b.a2[2] = 0.f; b.a2[3] = 0.f;
         beams_.push_back(b);
     }
-    if (lens) {
-        const vec3 lc = lerp(col, vec3(1.f), 0.35f) * (1.4f * power * std::min(1.f, gain));
-        lenses_.push_back({{src.x, src.y, 0.32f, 0.5f}, {lc.x, lc.y, lc.z, 1.f}, {1.f, 0.f, 0.f, 0.f}});
+    if (lens) addLens(src, col, power, gain);
+}
+
+void LaserUniverse::addLens(vec2 src, const vec3& col, float power, float gain) {
+    const vec3 lc = lerp(col, vec3(1.f), 0.35f) * (1.4f * power * std::min(1.f, gain));
+    lenses_.push_back({{src.x, src.y, 0.32f, 0.5f}, {lc.x, lc.y, lc.z, 1.f}, {1.f, 0.f, 0.f, 0.f}});
+}
+
+// A break: the projectors stay where they hang, lit as they were, but project nothing (the stack is hidden, and the
+// board given is blank: the projectors are kept as they are, not matched against it).
+void LaserUniverse::buildLenses() {
+    beams_.clear();
+    cones_.clear();
+    lenses_.clear();
+    const float gain = (0.65f * wCalm_ + 0.8f * wMid_ + 1.0f * wChorus_ + 1.3f * wDrop_) * (1.f + 0.5f * swell_) *
+                       (1.f - smoothstepf(0.1f, 0.7f, bridge_.amount)) * (1.f + 0.4f * smoothstepf(0.f, 1.f, slow_));
+    const float overK = overT_ >= 0.f ? 0.f : 1.f;
+    for (auto& kv : projs_) {
+        const float power = kv.second.power * overK;
+        if (power >= 0.004f) addLens(srcPos(kv.second), laserColor(kv.second.type, kv.first), power, gain);
     }
+    if (hasFall_ && fall_.power >= 0.004f) addLens(srcPos(fall_), laserColor(fall_.type, pieceCounter_), fall_.power * 1.7f, gain);
 }
 
 // The projectors follow the moment: how many are on (the newest pieces first), how bright, how far they drift.
@@ -1037,7 +1055,7 @@ void LaserUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), -1, v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), pieceCounter_ + 1 + i, v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), pieceCounter_ + 1 + i, v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     // the bonus gauge: a ring of laser light
     {
@@ -1302,8 +1320,14 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
     const float world = 1.f - saturate(bridge_.amount);
     buildMasks(f.hud);
     tiles_.clear();
-    buildBoard(game); // (groups an inherited stack into pieces before the projectors look at it)
-    buildProjection(game);
+    if (f.bare) {
+        // a break: the room, its haze and its projectors, without the well, the stack, the previews or the gauge
+        buildLenses();
+        sparks_.clear();
+    } else {
+        buildBoard(game); // (groups an inherited stack into pieces before the projectors look at it)
+        buildProjection(game);
+    }
 
     // ---- The haze (reduced resolution).
     {
@@ -1370,7 +1394,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     // the well: black glass in front of the beams, its rim catching them
-    {
+    if (!f.bare) {
         glUseProgram(progWell_);
         glUniform1i(ugl::U(progWell_, "uNB"), 0);
         set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
@@ -1439,7 +1463,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, sparks_.size() * sizeof(Spark), sparks_.data(), GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sparks_.size());
     }
-    drawHud(f.hud, f.panels);
+    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the beams' cores, the lit edges.

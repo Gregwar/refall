@@ -9,6 +9,7 @@
 #include <glad/gl.h>
 
 #include "layout.hpp"
+#include "titlecard.hpp"
 #include "transitions.hpp"
 #include "ugl.hpp"
 #include "universe.hpp"
@@ -55,6 +56,18 @@ public:
     void setBonus(bool on);
     void setDim(bool d) { dim_ = d; }
     void setPanels(std::vector<HudRect> p) { panels_ = std::move(p); }
+
+    // ---- A break between songs (the app's timeline): the game and its HUD fade away, leaving the world alone,
+    // the frame fades to black, the host's title card shows the new song, and everything comes back in turn.
+    struct Break {
+        float play = 1;              // 1: the whole frame; 0: the world alone (a blank board and `bareHud`)
+        float black = 0;             // 0 .. 1: the frame fades to black (under the title card)
+        const Game* blank = nullptr; // the blank board drawn while the game is hidden (needed when play < 1)
+        std::vector<HudText> bareHud; // the HUD while the game is hidden (the corner title)
+        TitleCard::Line card[2];     // the title card (the song, the universe), over everything
+    };
+    void setBreak(Break b) { brk_ = std::move(b); }
+    const TitleCard& titleCard() const { return card_; }
     void forceFx(int slow, int tetris);
 
     void render(const Game& game, const MusicState& music, double time, float dt, bool paused,
@@ -96,4 +109,8 @@ private:
     bool bonus_ = false, dim_ = false;
     std::vector<HudRect> panels_;
     int w_ = 1, h_ = 1;
+    Break brk_;
+    TitleCard card_;
+    GLuint mixProg_ = 0;
+    void renderBreak(const Frame& f);
 };

@@ -597,7 +597,7 @@ void Garden16Universe::simulate(const Game& game, const MusicState& music, float
         int n = 0;
         while (n < Game::H - Game::HIDDEN && game.cell(col, Game::H - 1 - n).type >= 0) n++;
         const float target = over ? 0.f : (float)n;
-        raise_[side] += (target - raise_[side]) * (1.f - std::exp(-wdt * 3.f));
+        if (!bare_) raise_[side] += (target - raise_[side]) * (1.f - std::exp(-wdt * 3.f)); // (a break's board is blank)
     }
 
     // Is this peak a drop? The HUD's section says it when there is one; else the song's drive.
@@ -1196,7 +1196,7 @@ void Garden16Universe::drawGround() {
     for (int c = cMin_; c <= cMax_; c++) {
         const int X0 = bx0_ + c * CELL, top = topOf(c), tl = topOf(c - 1), tr = topOf(c + 1);
         // the well's floor under a block is bare earth: no grass line where the bottom row is filled
-        const bool covered = c >= 0 && c < Game::W && soil_[Game::H - 1][c].id >= 0;
+        const bool covered = !bare_ && c >= 0 && c < Game::W && soil_[Game::H - 1][c].id >= 0;
         for (int Y = std::max(0, top); Y < H_; Y++) {
             const int d = Y - top;
             const int tileRow = floorDiv(Y - floor_, CELL), jj = (Y - floor_) - tileRow * CELL;
@@ -1335,7 +1335,7 @@ void Garden16Universe::drawGroundPlants() {
     for (int c = cMin_; c <= cMax_; c++) {
         const int top = topOf(c), X0 = bx0_ + c * CELL;
         const bool inWell = c >= 0 && c < Game::W;
-        if (inWell && soil_[Game::H - 1][c].id >= 0) continue;
+        if (inWell && !bare_ && soil_[Game::H - 1][c].id >= 0) continue;
         const float far = smoothstepf(10.f, 16.f, std::fabs(c - 4.5f));
         for (int k = 0; k < 3; k++) {
             const int slot = c * 3 + k;
@@ -1647,6 +1647,7 @@ void Garden16Universe::drawWorms() {
 void Garden16Universe::drawFront() {
     for (const Part& p : parts_) {
         if (p.kind == P_PETAL || p.kind == P_SEED || p.kind == P_POLLEN || p.kind == P_LEAF) continue;
+        if (bare_ && p.kind != P_SPLASH) continue; // a break: the game's debris (clods, crumbs, puffs) hidden
         const int X = iround(p.x), Y = iround(p.y);
         switch (p.kind) {
         case P_CHUNK: {
@@ -1741,7 +1742,7 @@ void Garden16Universe::drawSide(const Game& g) {
         }
     };
     preview(g.holdType(), lx(layout::HOLD_CENTER.x), ly(layout::HOLD_CENTER.y), 7, g.holdUsed());
-    for (int i = 0; i < 3; i++) preview(g.next(i), lx(layout::nextCenter(i).x), ly(layout::nextCenter(i).y), i == 0 ? 7 : 6, false);
+    for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), lx(layout::nextCenter(i).x), ly(layout::nextCenter(i).y), i == 0 ? 7 : 6, false);
 
     // The bonus gauge: a ring with a meadow rising inside, a flower opening in it when it is ready.
     {
@@ -1983,10 +1984,12 @@ void Garden16Universe::render(const Frame& f, GLuint fbo) {
         else overT_ += dt;
     }
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, slow_);
+    // a break: the world alone; the stack's earth is kept as it is (the board given is blank), only not drawn
+    bare_ = f.bare;
     computeTops();
     if (!f.paused) {
         simulate(g, m, dt, wdt);
-        syncSoil(g, wdt);
+        if (!bare_) syncSoil(g, wdt);
     }
     computeTops();
     buildPalette();
@@ -1994,17 +1997,17 @@ void Garden16Universe::render(const Frame& f, GLuint fbo) {
 
     drawSky();
     drawAir(true);
-    drawWellPanel();
+    if (!bare_) drawWellPanel();
     drawGround();
     drawGroundPlants();
     drawAir(false);
-    drawStack(g);
+    if (!bare_) drawStack(g);
     drawWorms();
-    drawPiece(g);
+    if (!bare_) drawPiece(g);
     drawFront();
     hud_.fill(255, 0);
-    drawSide(g);
-    drawText(f.hud, f.panels);
+    if (!bare_) drawSide(g);
+    drawText(f.hud, bare_ ? std::vector<HudRect>() : f.panels);
     mergeLayer();
     compose(f);
 

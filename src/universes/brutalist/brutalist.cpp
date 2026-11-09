@@ -757,7 +757,7 @@ void BrutalistUniverse::buildBoard(const Game& g) {
         preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0));
         for (int i = 0; i < 3; i++) {
             const vec3 c = layout::nextCenter(i);
-            preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
+            if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i));
         }
     }
 }
@@ -838,7 +838,7 @@ void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, 
         flushShapes();
     }
     // the bonus gauge: a square frame (cast, like the slot), its charge running round it in the accent
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = (project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x) * 0.86f;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -970,6 +970,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
+    bare_ = f.bare;
     // ---- A new variant eases in.
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -986,7 +987,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) { // (a break's blank board is never over)
         if (!game.over()) {
             overT_ = -1.f;
             flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.kind == 1; }), flights_.end());
@@ -1176,7 +1177,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     }
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.kind == 0 && fl.scale <= 0.f; }),
                    flights_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The dust: the air's motes drift (and glitter on the grid at a peak); the puffs spread and settle.
     sprites_.clear();
@@ -1265,9 +1266,9 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 top(CRANE_X, CRANE_TOP, CRANE_Z);
         for (float u : {-12.f, 20.f, 36.f}) line(lines_, top, vec3(CRANE_X - u * c, JIB_Y + 1.3f, CRANE_Z - u * sn), 1.f, pal_.steel * 0.6f, 0.7f);
     }
-    // the cleared blocks and the fallen ones
+    // the cleared blocks and the fallen ones (none in a break)
     for (const Flight& fl : flights_) {
-        if (fl.t < fl.delay && fl.kind == 1) continue;
+        if ((fl.t < fl.delay && fl.kind == 1) || bare_) continue;
         const vec3 col = pieceColor(fl.type);
         {
             const float a = fl.ang * length(fl.spin), sc = fl.kind == 0 ? fl.scale : 1.f;
@@ -1282,7 +1283,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     // (at game over, the stack is the falling blocks)
-    if (overT_ < 0.05f) buildBoard(game);
+    if (overT_ < 0.05f && !bare_) buildBoard(game);
 
     // ---- The sun's shadow map: an orthographic view along the sun over the place's extents.
     {
@@ -1299,13 +1300,23 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         sunVp_ = mat4::ortho(mn[0], mx[0], mn[1], mx[1], -mx[2] - 5.f, -mn[2] + 5.f) * view;
     }
     if (staticDirty_) {
-        // nearest first, so that the depth test rejects most of what is hidden before it is shaded
-        std::vector<Box> sorted = static_;
+        // nearest first, so that the depth test rejects most of what is hidden before it is shaded; the monument
+        // last (a break draws the place without it)
+        std::vector<size_t> idx(static_.size());
+        for (size_t i = 0; i < idx.size(); i++) idx[i] = i;
         auto dist2 = [&](const Box& b) {
             const float dx = b.c[0] - eye_.x, dy = b.c[1] - eye_.y, dz = b.c[2] - eye_.z;
             return dx * dx + dy * dy + dz * dz;
         };
-        std::sort(sorted.begin(), sorted.end(), [&](const Box& a, const Box& b) { return dist2(a) < dist2(b); });
+        auto isMon = [&](size_t i) { return i >= monument0_ && i < monument1_; };
+        std::sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+            if (isMon(a) != isMon(b)) return isMon(b);
+            return dist2(static_[a]) < dist2(static_[b]);
+        });
+        std::vector<Box> sorted;
+        sorted.reserve(idx.size());
+        for (size_t i : idx) sorted.push_back(static_[i]);
+        worldCount_ = static_.size() - (monument1_ - monument0_);
         glBindBuffer(GL_ARRAY_BUFFER, staticVbo_);
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sorted.size() * sizeof(Box)), sorted.data(), GL_STATIC_DRAW);
         staticCount_ = sorted.size();
@@ -1331,7 +1342,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         glPolygonOffset(1.5f, 3.f);
         glUseProgram(progDepth_);
         setMat(progDepth_, "uVP", sunVp_);
-        drawBoxes(staticVao_, staticVbo_, nullptr, staticCount_, false);
+        drawBoxes(staticVao_, staticVbo_, nullptr, bare_ ? worldCount_ : staticCount_, false);
         drawBoxes(boxVao_, boxVbo_, nullptr, boxes_.size(), false);
         drawBoxes(cellVao_, cellVbo_, nullptr, cells_.size(), false);
         glDisable(GL_POLYGON_OFFSET_FILL);
@@ -1405,7 +1416,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBox_, "uGlint", glint);
     set1f(progBox_, "uFlash", flash);
     set1f(progBox_, "uStackA", 0.f);
-    drawBoxes(staticVao_, staticVbo_, nullptr, staticCount_, false);
+    drawBoxes(staticVao_, staticVbo_, nullptr, bare_ ? worldCount_ : staticCount_, false);
     drawBoxes(boxVao_, boxVbo_, nullptr, boxes_.size(), false);
     // the stack (the scene's alpha is the stack's, for the halo and the bridge)
     set1f(progBox_, "uStackA", 1.f);

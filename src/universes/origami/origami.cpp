@@ -774,6 +774,7 @@ void OrigamiUniverse::buildCranes() {
         if (!c.leaving && c.age < c.foldEnd) {
             const float F = std::max(0.f, (c.age - c.fold0) / STEP);
             if (F < 0.5f) {
+                if (bare_) continue; // a break: no row sliding out of the well
                 const float flipX = c.age < c.fold0 ? 1.f : std::fabs(std::cos(PI * F));
                 stripFaces(c, c.age, flipX, faces);
                 const float lift = 0.08f + 0.25f * std::sin(PI * smoothstepf(SLIDE, c.fold0, c.age));
@@ -1181,7 +1182,7 @@ void OrigamiUniverse::buildBoard(const Game& g) {
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
 }
 
@@ -1275,7 +1276,7 @@ void OrigamiUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
     const vec3 accent = ugl::toSrgb(paper(7));
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -1286,7 +1287,7 @@ void OrigamiUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         flushShapes();
     }
 
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1400,7 +1401,10 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    syncIds(game);
+    // a break: the sheet and the flock alone (no tray, pieces, ghost, previews nor gauge; the blank board leaves the
+    // pieces' ids as they are)
+    bare_ = f.bare;
+    if (!bare_) syncIds(game);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1444,7 +1448,7 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
 
     cells_.clear();
     shadows_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     buildCranes();
     const vec3 L = lightDir();
     const float px = 2.f * viewH_.y / height_;
@@ -1485,6 +1489,7 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPaper_, "uCrease", (0.022f + 0.02f * wm + 0.035f * wp + 0.03f * swell_) * patternA_);
     set1f(progPaper_, "uPattern", (float)pattern_);
     set1f(progPaper_, "uWarm", 0.35f + 0.25f * wm + 0.4f * wp);
+    set1f(progPaper_, "uWell", bare_ ? 0.f : 1.f);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, shadowT_.tex);
     set1i(progPaper_, "uShadow", 0);
