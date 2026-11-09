@@ -58,6 +58,7 @@ uniform int uNL;
 uniform vec4 uHudL, uHudR;
 uniform float uWater;
 uniform vec3 uWellCol;                // the well's edges: two fine veins of the mineral's light
+uniform float uBare;                  // 1: the world alone (a break), the rock unshaded behind the well and the HUD
 void main() {
     vec2 w = worldAt(vUv);
     float ex = abs(w.x - uView.x) / uView.z;
@@ -92,8 +93,8 @@ void main() {
     }
     light += uDropCol * uDrop * (0.7 + 1.1 * wall + 0.4 * max(ey, 0.0));
     vec3 c = rock * light * crev;
-    c *= 1.0 - 0.42 * well;
-    c *= 1.0 - 0.3 * hud;
+    c *= 1.0 - 0.42 * well * (1.0 - uBare);
+    c *= 1.0 - 0.3 * hud * (1.0 - uBare);
     // the far shore of the pool: wet stone catching the light
     float shore = exp(-pow((w.y - uWater - 0.12) * 6.0, 2.0));
     c += light * uRockLit * 0.12 * shore * (1.0 - well);

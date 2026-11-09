@@ -135,6 +135,7 @@ private:
     float slow_ = 0.f;
     float overT_ = -1.f;
     float gaugeShown_ = 0.f;
+    bool bare_ = false; // this frame is the world alone (a break): the night and the city, no well, no pieces
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{0x4E30};

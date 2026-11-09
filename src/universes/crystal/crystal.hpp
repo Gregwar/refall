@@ -149,6 +149,7 @@ private:
     float slow_ = 0.f;
     float overT_ = -1.f;
     float gaugeShown_ = 0.f;
+    bool bare_ = false; // this frame is the world alone (a break): no stones, no gauge, no plates
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

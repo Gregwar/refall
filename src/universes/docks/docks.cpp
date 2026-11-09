@@ -814,7 +814,7 @@ void DocksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 ink(0.9f, 0.9f, 0.88f), halo = ugl::toSrgb(lerp(pal_.zen, pal_.fog, 0.3f)) * 0.45f;
     const vec3 accent = lerp(ugl::toSrgb(pal_.lampA), vec3(1.f), 0.15f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -825,7 +825,7 @@ void DocksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushShapes();
     }
     // the bonus gauge: a fine pale ring, its charge in amber, ticked like a dial
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -949,6 +949,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
+    bare_ = f.bare;
     // ---- A new variant eases in.
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
@@ -966,7 +967,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 0.9f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1114,7 +1115,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(),
                                   [](const Flight& fl) { return fl.t > 1e8f || (fl.kind == 1 && fl.t > fl.delay + fl.dur); }),
                    flights_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Lights: the masts on by level, all on (in a sequence from the well) on the drop.
     const float lampLevel = pal_.lampK * (0.55f + 0.25f * wm + 0.2f * wp + 0.35f * fest_) * (1.f + 0.25f * slow_);
@@ -1225,6 +1226,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         for (const Flight& fl : flights_) {
             const float tt = fl.t - fl.delay;
             if (fl.kind == 1 && tt < 0.f) continue;
+            if (bare_ && (fl.kind == 1 || tt < LIFT_T)) continue; // the world alone: none still in or by the well
             const int type = std::clamp((int)fl.seed, 0, 6);
             const vec3 col = pieceColor(type);
             const vec3 hc(CELL_H, CELL_H, CELL_D);
@@ -1241,8 +1243,10 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
                 line(lines_, top + vec3(s * h.x * 0.6f, 0.f, 0.f), vec3(fl.cur.x + s * 0.25f, topY, fl.cur.z), wpx, cc, 0.24f * a);
         }
     }
-    buildBoard(game);
-    buildSpreader(game, dt);
+    if (!bare_) {
+        buildBoard(game);
+        buildSpreader(game, dt);
+    }
 
     // ---- The lights for shading: the brightest, nearest first.
     {
@@ -1299,6 +1303,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uWaterY", Y_W);
         set3f(p, "uWinCol", lerp(P.lampA, vec3(1.f, 0.85f, 0.6f), 0.5f) * (0.45f + 0.4f * wm + 0.2f * wp + 0.3f * fest_));
         set3f(p, "uQuayLine", lin(0xc8a030) * 0.9f);
+        set1f(p, "uBay", bare_ ? 0.f : 1.f);
         set1f(p, "uDeckLights", saturate(0.3f + 0.4f * wm + 0.3f * wp + (tetrisT_ < 4.f ? 0.5f : 0.f)));
     };
     auto drawSky = [&](const mat4& vp, bool mirror) {
@@ -1461,18 +1466,20 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_FALSE);
     // the well's soft shade, behind the stack
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glUseProgram(progVeil_);
-    setMat(progVeil_, "uVP", vp_);
-    set4f(progVeil_, "uRect", -5.4f, Y_Q, 5.4f, 11.5f);
-    set1f(progVeil_, "uZ", -2.f * CELL_D - 0.1f);
     // (deeper under a bright sky, so the containers stand out from the port)
     const float skyLum = 0.2126f * P.hor.x + 0.7152f * P.hor.y + 0.0722f * P.hor.z;
     const float bright = smoothstepf(0.35f, 0.6f, skyLum);
-    set3f(progVeil_, "uTint", P.zen * 0.3f);
-    set1f(progVeil_, "uA", 0.32f + 0.08f * bright);
-    set1f(progVeil_, "uHorY", EYE_Y);
-    glBindVertexArray(quadVao_);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    if (!bare_) {
+        glUseProgram(progVeil_);
+        setMat(progVeil_, "uVP", vp_);
+        set4f(progVeil_, "uRect", -5.4f, Y_Q, 5.4f, 11.5f);
+        set1f(progVeil_, "uZ", -2.f * CELL_D - 0.1f);
+        set3f(progVeil_, "uTint", P.zen * 0.3f);
+        set1f(progVeil_, "uA", 0.32f + 0.08f * bright);
+        set1f(progVeil_, "uHorY", EYE_Y);
+        glBindVertexArray(quadVao_);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
     // the lamps, the cables, the ghost
     glBlendFunc(GL_ONE, GL_ONE);
     drawSpriteList(vp_, -1e9f, false);

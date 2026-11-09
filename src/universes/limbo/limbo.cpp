@@ -1222,7 +1222,7 @@ void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     const vec3 ink = neg(hex(V.text)), halo = neg(hex(V.halo)), accent = neg(hex(V.accent));
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? neg(r.color) : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -1234,7 +1234,7 @@ void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
     }
 
     // the bonus gauge: a fine ring, its charge a firmer stroke
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1369,10 +1369,11 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     const VariantDef& V = VARIANTS[variant_];
-    syncIds(game);
+    bare_ = f.bare;
+    if (!bare_) syncIds(game); // the world alone: the pieces' ids kept for the whole frame
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) {
             overT_ = -1.f;
             fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& l) { return l.delay > 0.f; }), fading_.end());
@@ -1439,7 +1440,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     gearAngle_ = notch * (TAU / 24.f) + gearSpin_;
 
     // ---- The world filling up with the play.
-    grownTarget_ = std::min(game.lines(), GROW_COUNT);
+    if (!bare_) grownTarget_ = std::min(game.lines(), GROW_COUNT); // (a blank board keeps what grew)
     for (Thing& t : things_) {
         if (t.grow < 0) continue;
         const float target = t.grow < grownTarget_ ? 1.f : 0.f;
@@ -1493,12 +1494,12 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(),
                                  [](const Fading& l) { return l.t > l.delay + (l.delay > 0.f ? 0.95f : 0.45f); }),
                   fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     buildWorld(sway, notch);
     cells_.clear();
     ghost_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
 
     // ---- The scene.
     const vec3 fogLo = lin(V.fogLo), fogHi = lin(V.fogHi), glowCol = lin(V.glow);
@@ -1544,7 +1545,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progSil_, "uQuiet", -5.4f, -10.1f, 5.4f, 11.f);
     set4f(progSil_, "uHudL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progSil_, "uHudR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
-    set1f(progSil_, "uQuietK", 0.75f);
+    set1f(progSil_, "uQuietK", bare_ ? 0.f : 0.75f);
     set4f(progSil_, "uQuietTL", -viewH_.x - 2.f, 8.2f, -10.2f, viewH_.y + 2.f);
     const float bankK = 0.25f + 0.75f * saturate(fog);
     const float veil[L_COUNT] = {0.6f, 0.5f, 0.32f, 0.1f};
@@ -1556,7 +1557,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
             // the lanterns' halos (additive)
             set1f(progSil_, "uQuietK", 0.f);
             drawPrims(glows_);
-            set1f(progSil_, "uQuietK", 0.75f);
+            set1f(progSil_, "uQuietK", bare_ ? 0.f : 0.75f);
         }
         if (l == L_FAR) drawBank(0.75f * bankK, Y_FAR + 0.5f, 3.2f, drift_ * 0.35f, 0.16f, 1.f, 1.02f);
         if (l == L_EDGE) drawBank(0.7f * bankK, Y_EDGE - 0.8f, 2.4f, drift_ * 0.6f, 0.22f, 2.f, 1.03f);
@@ -1567,7 +1568,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
         if (l == L_MID) drawBank(0.6f * bankK, Y_MID - 0.8f, 1.6f, drift_, 0.3f, 3.f, 1.04f);
     }
     // the well's edges: two faint posts in the fog
-    {
+    if (!bare_) {
         std::vector<Prim> frame;
         const float a = 0.22f * (1.f - over_ * 0.5f);
         for (int k = -1; k <= 1; k += 2)
@@ -1581,7 +1582,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // ---- The motes (behind the stack), the ghost, the pieces (they write the frame's alpha: the stack, for the bridge).
-    if (!motes_.empty()) {
+    if (!motes_.empty() && !bare_) { // (the motes rise from the stack)
         moteInst_.clear();
         const vec3 dark = lerp(lin(V.sil), fogLo, 0.35f), mist = fogLo * 1.1f + glowCol * (0.3f * glow);
         for (const Mote& m : motes_) {
