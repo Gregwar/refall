@@ -1064,7 +1064,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game sprouts a new seed).
     {
-        const int lines = f.bare ? lines_ : game.lines() + extraLines(time_); // (a break: the growth as it was)
+        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
         if (treeSeed_ == 0) { treeSeed_ = seed_ ? seed_ : 1; treeDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             treeSeed_ = splitmix64(treeSeed_ + 0x9E37ull);

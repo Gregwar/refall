@@ -186,4 +186,13 @@ public:
 
 protected:
     int width_ = 1, height_ = 1;
+    // The lines cleared since this universe came in, for the universes that grow with the play: one coming in
+    // mid-game starts small and grows with the lines played in it; a new game starts it again from nothing.
+    int linesHere(const Game& g) {
+        if (lineBase_ < 0 || g.lines() < lineBase_) lineBase_ = g.lines();
+        return g.lines() - lineBase_;
+    }
+
+private:
+    int lineBase_ = -1;
 };

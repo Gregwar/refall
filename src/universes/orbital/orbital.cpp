@@ -1134,7 +1134,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the modules (a new game takes them back to the capsule).
     {
-        const int lines = f.bare ? lines_ : game.lines(); // (a break: the station as it was)
+        const int lines = f.bare ? lines_ : linesHere(game); // (a break: the station as it was)
         static const int testLines = std::getenv("ZEN_ORBITAL_LINES") ? std::atoi(std::getenv("ZEN_ORBITAL_LINES")) : 0;
         // (ZEN_GROW_RATE=R adds R more lines a second: a time-lapse)
         static const double growRate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;

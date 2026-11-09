@@ -1440,7 +1440,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     gearAngle_ = notch * (TAU / 24.f) + gearSpin_;
 
     // ---- The world filling up with the play.
-    if (!bare_) grownTarget_ = std::min(game.lines(), GROW_COUNT); // (a blank board keeps what grew)
+    if (!bare_) grownTarget_ = std::min(linesHere(game), GROW_COUNT); // (a blank board keeps what grew)
     for (Thing& t : things_) {
         if (t.grow < 0) continue;
         const float target = t.grow < grownTarget_ ? 1.f : 0.f;

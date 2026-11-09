@@ -1344,7 +1344,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game grows a new network).
     {
-        const int lines = f.bare ? lines_ : game.lines() + extraLines(time_); // (a break: the growth as it was)
+        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
         if (netSeed_ == 0) { netSeed_ = seed_ ? seed_ : 1; netDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             netSeed_ = splitmix64(netSeed_ + 0x9E37ull);

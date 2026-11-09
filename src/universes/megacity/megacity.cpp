@@ -1044,7 +1044,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game starts again from a hut).
     {
-        const int lines = f.bare ? lines_ : game.lines() + extraLines(time_); // (a break: the growth as it was)
+        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
         if (citySeed_ == 0) { citySeed_ = seed_ ? seed_ : 1; cityDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             citySeed_ = splitmix64(citySeed_ + 0x9E37ull);

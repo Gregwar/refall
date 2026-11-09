@@ -1198,7 +1198,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     {
         const int hookStart = startLines(), hookRate = rateLines(time_);
         const int hook = hookStart + hookRate;
-        const int lines = f.bare ? lines_ : game.lines() + hook; // (a break: the shelves as they were)
+        const int lines = f.bare ? lines_ : linesHere(game) + hook; // (a break: the shelves as they were)
         if (linesSeen_ >= 0 && lines < lines_ && !game.over()) resetGrowth();
         lines_ = lines;
         if (linesSeen_ < 0) { grow_ = (float)lines; growV_ = 0.f; }
