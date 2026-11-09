@@ -892,7 +892,7 @@ void CrystalUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
     accent = lerp(accent, vec3(1.f), 0.22f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty()) {
+    if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
@@ -904,7 +904,7 @@ void CrystalUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
     }
 
     // the bonus gauge: a ring of small facets
-    if (vis > 0.01f) {
+    if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
@@ -1026,10 +1026,11 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     const VariantDef& V = VARIANTS[variant_];
-    syncIds(game);
+    bare_ = f.bare;
+    if (!bare_) syncIds(game); // the world alone: the stones kept as they were, for the whole frame
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) {
             overT_ = -1.f;
             dead_.clear();
@@ -1091,7 +1092,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     vec3 sum{0.f};
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
-            if (ids_[y][x] && game.cell(x, y).type >= 0) {
+            if (ids_[y][x] && (bare_ || game.cell(x, y).type >= 0)) {
                 const Stone& s = st_[y][x];
                 bins[std::clamp(s.mineral, 0, 3)][((s.tone % 3) + 3) % 3] += 1.f;
                 sum += s.col;
@@ -1223,7 +1224,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
 
     for (Sparkle& sp : sparkles_) sp.t += dt;
     sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The cave's light: the clusters' glow.
     for (Cluster& cl : clusters_) cl.col = vec3(0.f);
@@ -1239,7 +1240,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     cells_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1298,7 +1299,8 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progBg_, "uNL", n);
     }
     set1f(progBg_, "uWater", waterY_);
-    set3f(progBg_, "uWellCol", curLin * (0.05f + 0.03f * wp) * worldK);
+    set3f(progBg_, "uWellCol", curLin * (0.05f + 0.03f * wp) * worldK * (bare_ ? 0.f : 1.f));
+    set1f(progBg_, "uBare", bare_ ? 1.f : 0.f);
     ugl::drawFullscreen();
 
     // ---- The crystals.
@@ -1399,6 +1401,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
     shardInst_.clear();
     for (const Shard& s : shards_) {
+        if (bare_) break; // the stones' shards are the game's
         const float under = s.landed ? saturate((s.landY - s.p.y) / 0.35f + 0.3f) : 0.f;
         float a = 1.f;
         if (s.landed) a = (1.f - smoothstepf(s.life - 0.3f, s.life, s.t)) * (1.f - 0.6f * under);
