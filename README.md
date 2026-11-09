@@ -13,7 +13,7 @@ uvx tetris-universe ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and between songs the game takes a short break into the next universe. Forty-six universes so far, each with its status:
+song, and between songs the game takes a short break into the next universe. Forty-seven universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -108,6 +108,10 @@ song, and between songs the game takes a short break into the next universe. For
 <tr>
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are books; each cleared row floats calmly to the shelves of a quiet panelled room, shelved in the order the lines come so the collection is the history of the game, every book a cleared cell; bookcases are carried in one at a time as they are needed and the camera eases back to keep the full shelves in view; the drop runs a soft light along the spines<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
+<tr>
+<td><img src="docs/universes/skywhale.jpg"><br><b>SKY WHALE</b>: a little koi in a lily pond at dusk, growing with every cleared line, a slow stroke of its tail each time: it slips down the river to the sea, breaches as a whale by a lighthouse, swims up through the clouds with seabirds and balloons in its wake, glides around the Earth trailing aurora from its fins and circles the Moon; on the drop it sings, soft rings of light rippling out through the sky<br><sub>🔍 <i>to review</i></sub></td>
+<td></td>
 </tr>
 </table>
 
