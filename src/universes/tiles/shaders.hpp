@@ -127,6 +127,7 @@ uniform sampler2D uState;   // per tessera: set time, glint time, unset time
 uniform vec4 uSketchBox;    // the sketch raster's lo, hi
 uniform float uTime;
 uniform vec3 uGrout, uBed, uSinopia, uWell;
+uniform float uBare;        // a break: no well (its place laid with the ground)
 uniform vec4 uHudL, uHudR, uQuietA, uQuietB, uQuietC;
 uniform float uDrop;        // the drop: the gold ablaze (0..1)
 uniform float uIgnite;      // its front's radius from the well
@@ -233,7 +234,7 @@ void main() {
     quiet = max(quiet, nearWell * 0.55);
 
     // ---- the well: a bed of dark mortar, recessed
-    if (abs(w.x) < 5.06 && w.y > -10.06 && w.y < 10.06 + 3.0 && id == 0) {
+    if (abs(w.x) < 5.06 && w.y > -10.06 && w.y < 10.06 + 3.0 && id == 0 && uBare < 0.5) {
         float grain = vnoise(w * 23.0) * 0.5 + vnoise(w * 61.0) * 0.5;
         float trowel = vnoise(vec2(w.x * 0.9 + sin(w.y * 0.7) * 0.6, w.y * 0.25));
         vec3 c = uWell * (0.85 + 0.18 * grain + 0.12 * trowel);

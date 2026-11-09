@@ -33,6 +33,11 @@ public:
 private:
     // ---- The mosaic.
     tiles::Design design_;
+    // A break's wall (bare): the ground laid over the well and its frame too (tesserae of a wall built without them,
+    // over the frame's box; slot ids after the design's), the frame left out. Its own instance buffer.
+    std::vector<tiles::Tessera> fill_;
+    bool gbBare_ = false; // the G-buffer holds the break's wall
+    bool bare_ = false;   // this frame is a break's
     int designVariant_ = -1;
     vec2 designC_{0, 0}, designH_{0, 0};
     float resizeWait_ = 0.f;
@@ -121,16 +126,16 @@ private:
     // ---- GL.
     GLuint progGb_ = 0, progComp_ = 0, progCell_ = 0, progFrag_ = 0, progSprite_ = 0, progDown_ = 0, progBlur_ = 0,
            progFinal_ = 0, progShape_ = 0, progText_ = 0;
-    GLuint quadVbo_ = 0, tessVao_ = 0, tessVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, fragVao_ = 0, fragVbo_ = 0, spriteVao_ = 0,
+    GLuint quadVbo_ = 0, tessVao_ = 0, tessVbo_ = 0, bareVao_ = 0, bareVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, fragVao_ = 0, fragVbo_ = 0, spriteVao_ = 0,
            spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
     GLuint gbFbo_ = 0, gbTex_[3] = {0, 0, 0};
     GLuint stateTex_ = 0, sketchTex_ = 0, geoTex_ = 0;
-    int tessCount_ = 0;
+    int tessCount_ = 0, bareCount_ = 0;
     ugl::Target sceneT_, bloomA_, bloomB_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
     void createGbuffer();
-    void renderGbuffer();
+    void renderGbuffer(bool bare);
     void uploadDesign();
 
     // ---- Song, variant, the light.

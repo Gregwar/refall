@@ -300,7 +300,9 @@ vec3 mix3(vec3 a, vec3 b, float t) { return a + (b - a) * t; }
 
 } // namespace
 
-Design build(int variant, vec2 viewC, vec2 viewH, uint64_t seed) {
+static_assert(L_FRAME == FRAME_LABEL, "the frame's label");
+
+Design build(int variant, vec2 viewC, vec2 viewH, uint64_t seed, bool well) {
     const VariantDef& V = VARIANTS[std::clamp(variant, 0, VARIANT_COUNT - 1)];
     Design out;
     Rng rng(seed * 2654435761ull + 77);
@@ -318,8 +320,10 @@ Design build(int variant, vec2 viewC, vec2 viewH, uint64_t seed) {
     // ---- The design.
     const float wellE = 0.06f;
     const float frameE = wellE + 3.f * h;
-    paint(g, -5.f - frameE, -10.f - frameE, 5.f + frameE, 10.f + frameE, L_FRAME, [&](vec2) { return true; });
-    paint(g, -5.f - wellE, -10.f - wellE, 5.f + wellE, 10.f + wellE, L_NONE, [&](vec2) { return true; });
+    if (well) {
+        paint(g, -5.f - frameE, -10.f - frameE, 5.f + frameE, 10.f + frameE, L_FRAME, [&](vec2) { return true; });
+        paint(g, -5.f - wellE, -10.f - wellE, 5.f + wellE, 10.f + wellE, L_NONE, [&](vec2) { return true; });
+    }
 
     Layout& lay = out.lay;
     const float x0 = 11.55f, x1 = viewC.x + viewH.x;
