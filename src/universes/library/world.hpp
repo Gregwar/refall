@@ -19,11 +19,12 @@ constexpr float BAY_W = 1.f;            // a bookcase
 constexpr int BAY_SHELVES = 8;
 inline float tierY(int t) { return t == 0 ? 0.f : t == 1 ? 4.1f : 8.2f; }
 
-// The room: its half width (the back wall's bookcases from x = -HALL_X to HALL_X), its height.
+// The room: its half width, its height; the collection's bookcases: the first one's x (either side of the
+// fireplace), how many along the back wall on each side.
 constexpr float HALL_X = 10.4f;
-constexpr float HALL_H = 8.6f;
-// The study's walls fall away into the long room once its bookcase is well filled (some 120 books).
-constexpr float S_ROOM = 12.f;
+constexpr float ROOM_H = 4.6f;
+constexpr float FIRST_BAY_X = 2.9f;
+constexpr int BACK_BAYS = 7;
 
 inline vec3 sideN(int k) { const float a = k * (3.14159265f / 3.f); return {std::sin(a), 0.f, -std::cos(a)}; }
 inline vec3 sideT(int k) { const float a = k * (3.14159265f / 3.f); return {std::cos(a), 0.f, std::sin(a)}; }

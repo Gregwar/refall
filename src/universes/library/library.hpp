@@ -129,6 +129,8 @@ private:
     int ensureBays(int needShelves);
     vec3 bookPos(const Book& b, int shelf, float x) const;
     void newBay();
+    vec3 bayFoot(int i, vec3* along, vec3* out);
+    float lastBayFill_ = 0.f;   // how full the newest bookcase is (0..1)
 
     // ---- Cleared books on their way: out of the well (board space), then across the library into their gap.
     struct Flight {

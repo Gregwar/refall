@@ -7,11 +7,10 @@
 // bookcase) and never moved again: the collection is the history of the game. Every book on the shelves is a
 // cleared cell: N lines, 10 N books. They stay for the game.
 //
-// It starts as a cosy study with one empty bookcase (the desk and its green lamp under the window, a fire, an
-// armchair, a globe, a longcase clock). Once that bookcase is well filled (S_ROOM), the study's walls fall away into a
-// tall long room: six empty bookcases standing ready to the right of the study's, high arched windows, reading tables,
-// chandeliers. When those are full, more bookcases are carried in, left of the study, then down the side walls. The
-// camera eases back a little to keep the collection in view.
+// One quiet room, there from the start: a panelled back wall with a fireplace in its middle (behind the well), the
+// collection's bookcases set against it either side, one at a time, each carried in only when the books need it.
+// The camera frames the bookcases in use and eases back as each new one starts to fill, so the shelves in view are
+// always full but for the one being filled.
 //
 // The song: dust motes drift in the lamplight; the lamps follow the music (brighter at a peak, lifted by the kicks);
 // a real drop (the HUD's section, else the music's pace) sends a soft light running along the collection's spines
@@ -620,6 +619,8 @@ vec3 LibraryUniverse::bookPos(const Book& b, int shelf, float x) const {
 void LibraryUniverse::layoutBooks() {
     int shelf = 0;
     float x = 0.f;
+    int lastShelf = -1;
+    float lastX = 0.f;
     for (Book& b : books_) {
         for (;;) {
             if (shelf >= (int)shelves_.size()) {
@@ -652,6 +653,8 @@ void LibraryUniverse::layoutBooks() {
                 }
                 b.shelf = shelf;
                 b.xT = x + b.w * 0.5f;
+                lastShelf = shelf;
+                lastX = x + b.w;
                 if (b.shelfShown < 0 || b.flying) { b.shelfShown = shelf; b.x = b.xT; }
                 x += b.w + 0.003f;
                 break;
@@ -659,6 +662,15 @@ void LibraryUniverse::layoutBooks() {
             shelf++;
             x = 0.f;
         }
+    }
+    // how full the newest bookcase is
+    lastBayFill_ = 0.f;
+    if (lastShelf >= 0 && !bays_.empty()) {
+        const int bayIdx = shelves_[lastShelf].bay;
+        if (bayIdx == (int)bays_.size() - 1) {
+            const int first = bays_[bayIdx].firstShelf;
+            lastBayFill_ = saturate(((lastShelf - first) + lastX / shelves_[lastShelf].len) / BAY_SHELVES);
+        } else lastBayFill_ = 1.f;
     }
 }
 
@@ -1057,16 +1069,35 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
 // =====================================================================================================
 
 void LibraryUniverse::updateCamera(float dt) {
-    // the camera follows the growth a moment behind it (a spring)
-    if (camG_ < 0.f) { camG_ = grow_; camGv_ = 0.f; }
-    const float w = 1.1f;
-    camGv_ += (w * w * (grow_ - camG_) - 2.f * w * camGv_) * dt;
+    // framed on the bookcases in use: the newest one comes into the frame as it starts to fill, and the camera eases
+    // back by as much as it needs, never more (n: bookcases to show, fractional)
+    const float n = std::max(1.f, (float)bays_.size() - 1.f + smoothstepf(0.f, 0.35f, lastBayFill_));
+    if (camG_ < 0.f) { camG_ = n; camGv_ = 0.f; }
+    const float w = 1.2f;
+    camGv_ += (w * w * (n - camG_) - 2.f * w * camGv_) * dt;
     camG_ += camGv_ * dt;
-    vec3 T;
-    float D, yaw, pitch;
-    camAt(camG_, T, D, yaw, pitch);
-    // a slow drift, never still
-    yaw += 0.02f * std::sin(worldTime_ * 0.05f) * smoothstepf(4.f, 20.f, camG_) + 0.012f * std::sin(worldTime_ * 0.031f);
+    auto frame = [&](int k, float& tx, float& d) {
+        const float tw = std::tan(25.f * PI / 180.f) * aspect_;
+        if (k <= 2 * BACK_BAYS) {
+            const int r = (k + 1) / 2, l = k / 2;
+            const float xr = FIRST_BAY_X - 0.5f + r * BAY_W, xl = -(FIRST_BAY_X - 0.5f + l * BAY_W);
+            tx = (xr + xl) * 0.5f;
+            d = std::max(5.6f, ((xr - xl) * 0.5f + 0.75f) / tw);
+        } else {
+            // down the side walls: back far enough to see into the room's ends
+            tx = 0.f;
+            d = std::max(5.6f, (HALL_X + 0.6f) / tw) + 0.9f * (k - 2 * BACK_BAYS);
+        }
+    };
+    float tx0, d0, tx1, d1;
+    const int k0 = (int)std::floor(camG_);
+    frame(std::max(1, k0), tx0, d0);
+    frame(std::max(1, k0 + 1), tx1, d1);
+    const float fk = smoothstepf(0.f, 1.f, camG_ - std::floor(camG_));
+    const float D = lerpf(d0, d1, fk);
+    const vec3 T(lerpf(tx0, tx1, fk), 2.0f + 0.03f * (D - 5.6f), ZBACK);
+    float yaw = 0.f, pitch = -3.f * PI / 180.f - 0.004f * (D - 5.6f);
+    yaw += 0.006f * std::sin(worldTime_ * 0.031f);
     pitch += 0.008f * std::sin(worldTime_ * 0.043f);
     fwdW_ = vec3(-std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
     rightW_ = normalize(cross(fwdW_, UP));
@@ -1162,7 +1193,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     beatPulse_ = music.hasSong ? std::pow(1.f - (float)(music.beat - std::floor(music.beat)), 3.f) : 0.f;
     gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
-    // ---- The game's lines -> the growth (a new game starts again from the study).
+    // ---- The game's lines -> the growth (a new game starts again with one bookcase).
     {
         const int hookStart = startLines(), hookRate = rateLines(time_);
         const int hook = hookStart + hookRate;
@@ -1254,7 +1285,14 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         st_.born = b.t0 >= 0.f ? grow_ + 0.86f - 0.85f * saturate((worldTime_ - b.t0) / 1.5f) : b.born;
         st_.style = i == 0 ? 0.f : 3.f;
         buildBookcase(b.c, b.along, b.out, BAY_W, TIER_H, BAY_SHELVES, pal_.wood, false, -1, 3.f + i);
-        // brass bookends at the shelves' left ends
+        // its picture light: a brass hood on two arms over the crown, lit underneath
+        {
+            const vec3 top = b.c + UP * (TIER_H + 0.05f);
+            for (int s2 = -1; s2 <= 1; s2 += 2)
+                obox(top + b.along * (s2 * 0.25f) + b.out * 0.05f + UP * 0.03f, b.along, UP, b.out, vec3(0.008f, 0.04f, 0.1f), pal_.gilt, M_BRASS);
+            obox(top + b.out * 0.17f + UP * 0.07f, b.along, UP, b.out, vec3(0.32f, 0.025f, 0.035f), pal_.gilt, M_BRASS);
+            obox(top + b.out * 0.17f + UP * 0.043f, b.along, UP, b.out, vec3(0.3f, 0.004f, 0.025f), pal_.lampCol, M_EMIT, 1.2f, 1.f);
+        }
     }
     st_ = Stamp{};
     auto putBook = [&](std::vector<Inst>& out, const vec3& c, const vec3& X, const vec3& Y, const vec3& Z, int type, int style, float glow, bool gilt,
@@ -1727,7 +1765,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books, put away on the shelves of a personal library growing from a cosy study into a long room of bookcases, in 3D",
+        "LIBRARY", "the blocks are books, put away on the shelves of a quiet panelled room whose bookcases fill one by one, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A quiet, warm world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },
