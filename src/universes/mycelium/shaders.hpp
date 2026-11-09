@@ -312,7 +312,7 @@ void main() {
             }
             vec3 alb = mix(vec3(1.0), vec3(0.72, 0.74, 0.86), smoothstep(0.5, 0.62, cr)) * (1.0 - crater * 0.5);
             float ml = smoothstep(-0.04, 0.04, dot(mn, uMoonLit));
-            vec3 mc = alb * mix(uSkyTop * 0.6 + 0.01, uMoonC * 2.4 + 0.25, ml);
+            vec3 mc = alb * mix(uSkyTop * 0.6 + 0.01, uMoonC * 1.5 + 0.12, ml);
             float edge = smoothstep(0.0, 0.1, -dot(mn, d));
             col = mix(col, mc, edge);
             stars = 0.0;

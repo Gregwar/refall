@@ -189,7 +189,7 @@ int extraLines(double t) {
 // rising and looking down more steeply as the network spreads (the clearing, the forest, the valley, the region),
 // then out in space looking at the planet's night side, the moon beyond.
 struct CamPose { vec3 eye, fwd; float D, tanH; };
-CamPose cameraFor(float G, float aspect, float wobble) {
+CamPose cameraFor(float G, float aspect, float wobble, float spin = 0.f) {
     const float Rr = std::exp(G);
     const float kP = smoothstepf(std::log(4.e5f), std::log(5.e6f), G);    // the planet in the frame
     const float kO = smoothstepf(std::log(5.e6f), std::log(1.55e7f), G);  // pulling out to the moon
@@ -204,7 +204,7 @@ CamPose cameraFor(float G, float aspect, float wobble) {
     const vec3 anchor(0.f, lerpf(0.12f * Rr * (1.f - kR), -R_E, kP), 0.f);
     const float sx = lerpf(lerpf(0.64f, 0.56f, kM) - 0.06f * kR, 0.52f, kP) - 0.04f * kO;
     const float sy = lerpf(lerpf(-0.36f, -0.3f, kM) - 0.05f * kR, -0.42f, kP) + 0.3f * kO;
-    const float az = CAM_AZ + wobble;
+    const float az = CAM_AZ + wobble + spin * kO;   // once out in space, slowly around the planet
     const float yaw = std::atan(sx * tanH * aspect / std::cos(pitch));
     const float phi = az + yaw;
     vec3 fwd(-std::sin(phi) * std::cos(pitch), std::sin(pitch), -std::cos(phi) * std::cos(pitch));
@@ -585,7 +585,7 @@ void MyceliumUniverse::updateCamera(float dt) {
         gcVel_ += (w * w * (g_ - gc_) + 2.f * w * (0.85f * gVel_ - gcVel_)) * dt;
         gc_ += gcVel_ * dt;
     }
-    const CamPose c = cameraFor(gc_, aspect_, 0.035f * std::sin(time_ * 0.021f));
+    const CamPose c = cameraFor(gc_, aspect_, 0.035f * std::sin(time_ * 0.021f), time_ * 0.03f);
     tanH_ = c.tanH;
     eye_ = c.eye;
     look_ = c.fwd;
@@ -605,7 +605,8 @@ void MyceliumUniverse::updateCamera(float dt) {
     moonDir_ = normalize(lerp(mG, mP, kP));
     // the sun: deep under the spore's horizon, behind the planet seen from space (its day side a crescent)
     {
-        const CamPose P = cameraFor(16.3f, aspect_, 0.f);
+        const float kO = smoothstepf(std::log(5.e6f), std::log(1.55e7f), gc_);
+        const CamPose P = cameraFor(myc::G_MAX, aspect_, 0.f, time_ * 0.03f * kO);
         const vec3 pr = normalize(cross(P.fwd, vec3(0, 1, 0))), pu = cross(pr, P.fwd);
         const vec3 toC = vec3(0.f, -R_E, 0.f) - P.eye;
         const vec3 dirC = normalize(toC);
@@ -1362,7 +1363,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         // from space: clouds of spores drifting off the glowing planet
         if (alt_ > 1.e5f && overT_ < 0.f && !f.paused) {
             const float k = smoothstepf(1.e5f, 1.e6f, alt_);
-            spaceAcc_ += (10.f + 25.f * wp + 40.f * life) * k * wdt;
+            spaceAcc_ += (28.f + 30.f * wp + 50.f * life) * k * wdt;
             while (spaceAcc_ >= 1.f && (int)spores_.size() < MAX_SPORES) {
                 spaceAcc_ -= 1.f;
                 const float a = rng_.range(0.f, TAU), d = std::min(reach, 1.9e7f) * std::sqrt(rng_.uniform());
