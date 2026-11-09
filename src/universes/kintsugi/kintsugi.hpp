@@ -142,7 +142,7 @@ private:
     };
     std::vector<Shard> shards_;
     void breakRows(const GameEvent& ev, bool tetris);
-    struct Leaf { vec2 p, v; float rot, spin, turn, turnRate, size, t, life, seed; };
+    struct Leaf { vec2 p, v; float rot, spin, turn, turnRate, size, t, life, seed; bool game = false; }; // game: out of the well
     std::vector<Leaf> leaves_;
     struct Glint { vec2 p; float t, life, size; };
     std::vector<Glint> glints_;
@@ -157,6 +157,7 @@ private:
     float overT_ = -1.f, over_ = 0.f;
     float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
+    bool bare_ = false; // this frame is a break's: the slab alone, no well, no ceramic, no cracks of the locks
     float levelGlint_ = 0.f;
     Bridge bridge_;
     Rng rng_{1313};

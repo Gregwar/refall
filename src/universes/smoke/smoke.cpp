@@ -695,7 +695,7 @@ void SmokeUniverse::simulate(const Game& game, const MusicState& music, float dt
     for (auto& s : sweeps_) s.t += wdt;
     sweeps_.erase(std::remove_if(sweeps_.begin(), sweeps_.end(), [](const Sweep& s) { return s.t > 0.6f; }), sweeps_.end());
 
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -813,9 +813,10 @@ void SmokeUniverse::buildFx() {
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     const float lightOn = 1.f - over_;
     const float gain = cur_.gain * lightOn;
-    // the smoke puffs, lit by the beam where they drift into it
+    wisps_.clear();
+    // the smoke puffs, lit by the beam where they drift into it (all kicked up by the game: none in a break)
     for (const Puff& p : puffs_) {
-        if (p.t < p.delay) continue;
+        if (p.t < p.delay || bare_) continue;
         const float k = (p.t - p.delay) / p.life;
         const float r = p.r * (1.f + p.grow * (1.f - (1.f - k) * (1.f - k)));
         const float lit = spotAt(vec3(p.p.x, p.p.y, 0.6f));
@@ -831,9 +832,8 @@ void SmokeUniverse::buildFx() {
     // cleared blocks turned to smoke: while a block erodes, its body streams up out of it as smoke of its own color, in
     // thin curling tendrils that rise fast, spread and thin out; one column per block, in a smoke field shared by the
     // row (the columns merge, the row rises as one sheet), lit by the beam
-    wisps_.clear();
     for (const Dying& d : dying_) {
-        if (d.over) continue;
+        if (d.over || bare_) continue;
         const float t = d.t - d.delay;
         if (t <= 0.f) continue;
         const float B = d.big;
@@ -850,7 +850,7 @@ void SmokeUniverse::buildFx() {
     }
     // a blade of light along each cleared row
     for (const Sweep& s : sweeps_) {
-        if (s.t < 0.f) continue;
+        if (s.t < 0.f || bare_) continue;
         const float k = s.t / 0.6f;
         const float a = std::sin(PI * saturate(k)) * 1.6f;
         const vec3 c = lerp(cur_.light, vec3(1.f), 0.5f) * (1.2f + gain);
@@ -860,7 +860,7 @@ void SmokeUniverse::buildFx() {
     const float vis = (0.25f + 0.45f * wm + 0.5f * wp) * lightOn * (1.f - 0.5f * slow_);
     const float beat = beats_ + lastBeatPhase_;
     for (const Mote& m : moteList_) {
-        if (std::fabs(m.p.x) < WELL_X + 0.3f && std::fabs(m.p.y) < WELL_Y + 0.3f) continue;
+        if (!bare_ && std::fabs(m.p.x) < WELL_X + 0.3f && std::fabs(m.p.y) < WELL_Y + 0.3f) continue;
         const float lit = spotAt(m.p);
         if (lit < 0.02f) continue;
         const float tw = 0.55f + 0.45f * std::sin(m.phase * 3.1f + beat * 0.5f);
@@ -1055,6 +1055,12 @@ void SmokeUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<H
 // Frame
 // =====================================================================================================
 
+// The well's flag of black glass (a break: none, the beam and the far wall run on through its place).
+void SmokeUniverse::setWell(GLuint p) const {
+    if (bare_) set4f(p, "uWell", 1e4f, 1e4f, 1e4f + 1.f, 1e4f + 1.f);
+    else set4f(p, "uWell", -WELL_X, -WELL_Y, WELL_X, WELL_Y);
+}
+
 void SmokeUniverse::drawSmoke() {
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     const float thick = smoothstepf(0.0f, 0.85f, bridge_.amount);
@@ -1086,7 +1092,7 @@ void SmokeUniverse::drawSmoke() {
     set1f(progSmoke_, "uShadowK", 1.6f);
     set3f(progSmoke_, "uFlow", flow_);
     set1f(progSmoke_, "uSwirl", swirl_);
-    set4f(progSmoke_, "uWell", -WELL_X, -WELL_Y, WELL_X, WELL_Y);
+    setWell(progSmoke_);
     set1f(progSmoke_, "uBlast", 2.f + 22.f * smoothstepf(0.f, 3.f, blastT_));
     set1f(progSmoke_, "uBlastA", blast * 0.9f);
     set1f(progSmoke_, "uThick", thick * 1.0f + overFog_ * 0.3f);
@@ -1100,7 +1106,8 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    if (!landed_.empty()) landDust(game);
+    bare_ = f.bare;
+    if (!landed_.empty() && !bare_) landDust(game);
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
@@ -1110,7 +1117,7 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
     cur_ = pal_;
     if (slow_ > 0.001f) lerpPalette(cur_, pinOf(pal_), smoothstepf(0.f, 1.f, slow_));
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.55f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1119,7 +1126,9 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
     if (over_ > 0.001f) cur_.light = lerp(cur_.light, lin(0xff6a24), smoothstepf(0.f, 0.6f, over_));
     overFog_ = approach(overFog_, overT_ > 1.5f ? 0.55f : 0.f, overT_ >= 0.f ? 0.12f : 1.5f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.2f, slow_);
-    if (!f.paused) simulate(game, music, dt, wdt);
+    // (a break's bare frame drawn beside the whole one passes no time: the whole one moves the smoke on, and must
+    // see the beat's progress itself)
+    if (!f.paused && !(bare_ && dt <= 0.f)) simulate(game, music, dt, wdt);
     const float world = 1.f - saturate(bridge_.amount);
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     (void)wm;
@@ -1130,7 +1139,7 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Geometry.
     tiles_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     buildFx();
 
     const vec3 lp = lampPos(), ax = lampAxis();
@@ -1155,7 +1164,7 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progComp_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set1f(progComp_, "uPx", px_);
         set1f(progComp_, "uTime", worldTime_);
-        set4f(progComp_, "uWell", -WELL_X, -WELL_Y, WELL_X, WELL_Y);
+        setWell(progComp_);
         set3f(progComp_, "uLPos", lp);
         set3f(progComp_, "uLAxis", ax);
         set1f(progComp_, "uCone", cone);

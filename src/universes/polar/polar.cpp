@@ -748,7 +748,7 @@ void PolarUniverse::simulate(const Game& game, const MusicState& music, float dt
     for (auto& g : glints_) g.t += dt;
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > g.life; }), glints_.end());
 
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -944,7 +944,7 @@ void PolarUniverse::buildFx() {
         const float r = (0.04f + 0.14f * f.depth * f.depth) * f.size;
         float a = (0.1f + 0.5f * f.depth) * on * world;
         const bool front = f.depth > 0.72f;
-        if (front && inWell(x, y)) a *= 0.35f;
+        if (front && !bare_ && inWell(x, y)) a *= 0.35f;
         std::vector<Dot>& out = front ? dots_ : backDots_;
         out.push_back({{x, y, r, 0.f}, {flakeCol.x, flakeCol.y, flakeCol.z, a}, {f.phase, 0.f, 1.f, 0.f}});
         // frozen in the air: some flakes catch the light
@@ -954,6 +954,7 @@ void PolarUniverse::buildFx() {
             out.push_back({{x, y, r * 4.f, 2.f}, {gc.x, gc.y, gc.z, a * tw * smoothstepf(0.3f, 0.9f, slow_)}, {0.f, 0.f, 1.f, 0.f}});
         }
     }
+    if (bare_) return; // (a break: the powder and glints all come off the ice blocks)
     // powder
     const vec3 powCol = lerp(cur_.snow, vec3(1.f), 0.45f) + aurLight_ * 1.2f;
     for (const Powder& p : powder_) {
@@ -1240,6 +1241,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
+    bare_ = f.bare;
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
@@ -1249,7 +1251,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
     cur_ = pal_;
     if (slow_ > 0.001f) lerpPalette(cur_, frozenOf(pal_), smoothstepf(0.f, 1.f, slow_));
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.55f : 0.f), 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !bare_) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1282,7 +1284,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Geometry.
     tiles_.clear();
-    buildBoard(game);
+    if (!bare_) buildBoard(game);
     buildFx();
 
     // ---- The scene at full resolution.
@@ -1319,7 +1321,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progComp_, "uBridge", saturate(bridge_.amount));
         set1f(progComp_, "uDrift", drift_);
         set1f(progComp_, "uCornerShade", 0.55f);
-        set1f(progComp_, "uWellAlpha", 1.f);
+        set1f(progComp_, "uWellAlpha", bare_ ? 0.f : 1.f); // a break: no ice sheet, no shade behind the HUD
         set3f(progComp_, "uBridgeCol", bridge_.color);
         set3f(progComp_, "uCornerCol", cur_.halo);
         set3f(progComp_, "uMoonCol", cur_.moonCol * (0.4f + 0.6f * cur_.moon));

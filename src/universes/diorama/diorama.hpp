@@ -59,6 +59,8 @@ private:
     void computeEnv(float dt, const MusicState& music);
     void simulate(const Game& game, const MusicState& music, float dt);
     void collect(const Game& game, const MusicState& music, double time);
+    void collectBlocks(const Game& game, double time);
+    void collectSprites();
     vec3 cellPos(float x, float y) const;
     void spawnDust(vec3 pos, vec3 dir, int n, float strength);
     void splash(vec3 pos, float strength);
@@ -103,6 +105,7 @@ private:
     bool inDrop_ = false; // a drop: the night turns to a golden evening for its whole length
     float eve_ = 0;       // how much the evening is in (0..1)
     float pauseFade_ = 0;
+    bool bare_ = false; // this frame is a break's: the island alone, no tower, steles or blocks
     float kick_ = 0, kickEnv_ = 0, lastKickT_ = 0;
     float windTime_ = 0, waterTime_ = 0, cloudTime_ = 0, worldTime_ = 0;
     float birdTimer_ = 6.f;

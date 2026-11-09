@@ -189,8 +189,8 @@ VectorUniverse::~VectorUniverse() {
 
 void VectorUniverse::destroyTargets() {
     if (!accFbo_[0]) return;
-    glDeleteFramebuffers(2, accFbo_);
-    glDeleteTextures(2, accTex_);
+    glDeleteFramebuffers(4, accFbo_);
+    glDeleteTextures(4, accTex_);
     glDeleteRenderbuffers(1, &depthRb_);
     glDeleteFramebuffers(BLOOM_MIPS, bloomFbo_);
     glDeleteTextures(BLOOM_MIPS, bloomTex_);
@@ -211,8 +211,8 @@ void VectorUniverse::createTargets() {
     glGenRenderbuffers(1, &depthRb_);
     glBindRenderbuffer(GL_RENDERBUFFER, depthRb_);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width_, height_);
-    glGenFramebuffers(2, accFbo_);
-    for (int i = 0; i < 2; i++) {
+    glGenFramebuffers(4, accFbo_);
+    for (int i = 0; i < 4; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, accFbo_[i]);
         makeTex(accTex_[i], width_, height_);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, accTex_[i], 0);
@@ -1070,7 +1070,7 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     kick_ = std::max(approach(kick_, 0.f, 6.f, dt), music.kick);
     throb_ = 0.f; // (no beat throb: see the section's glow)
     dimT_ = approach(dimT_, f.dim || paused ? 1.f : 0.f, 3.f, dt);
-    if (overT_ >= 0.f) {
+    if (overT_ >= 0.f && !f.bare) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
@@ -1096,15 +1096,23 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     worldK_ = 0.72f - 0.14f * wPeak;
     buildWorld(music);
     const size_t worldEnd = beams_.size();
-    buildBoard(game, dt);
-    buildFx(paused ? 0.f : dt);
+    if (!f.bare) {
+        buildBoard(game, dt);
+        buildFx(paused ? 0.f : dt);
+    } else {
+        // A break: the world alone. The effects still age (they belong to the board: none drawn).
+        buildFx(paused ? 0.f : dt);
+        beams_.resize(worldEnd);
+        cellFill_.clear();
+    }
     const size_t boardEnd = beams_.size();
     buildHud(f.hud);
 
     // ---- Persistence: last frame decays into this one.
-    const int prev = accCur_;
-    accCur_ ^= 1;
-    glBindFramebuffer(GL_FRAMEBUFFER, accFbo_[accCur_]);
+    const int pair = f.bare ? 2 : 0, prev = pair + accCur_[pair / 2];
+    accCur_[pair / 2] ^= 1;
+    const int acc = pair + accCur_[pair / 2];
+    glBindFramebuffer(GL_FRAMEBUFFER, accFbo_[acc]);
     glViewport(0, 0, width_, height_);
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
@@ -1171,9 +1179,9 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
         rect(6.0f, -3.6f, 11.2f, 10.4f, rv + 4);
         glUniform4fv(U(progLine_, "uRects"), 2, rv);
         // No world line passes through the stack: the world fades out a cell before the well and is gone inside.
-        set1f(progLine_, "uQuadDim", 0.f);
+        set1f(progLine_, "uQuadDim", f.bare ? 1.f : 0.f); // a break: no well, the world passes through
         set1f(progLine_, "uQuadPad", std::fabs(project(vec3(1, 0, 0)).x - project(vec3(0, 0, 0)).x) * 1.2f);
-        set1f(progLine_, "uRectDim", 0.3f - 0.12f * wPeak); // busier peaks sink further behind the HUD
+        set1f(progLine_, "uRectDim", f.bare ? 1.f : 0.3f - 0.12f * wPeak); // busier peaks sink further behind the HUD
     }
     auto drawBeams = [&](size_t first, size_t count) {
         if (!count) return;
@@ -1241,7 +1249,7 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Tight bloom on the beams.
     glUseProgram(progDown_);
     set1i(progDown_, "uTex", 0);
-    GLuint src = accTex_[accCur_];
+    GLuint src = accTex_[acc];
     int sw = width_, sh = height_;
     for (int i = 0; i < BLOOM_MIPS; i++) {
         glBindFramebuffer(GL_FRAMEBUFFER, bloomFbo_[i]);
@@ -1273,7 +1281,7 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progComp_, "uAccum", 0);
     set1i(progComp_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, accTex_[accCur_]);
+    glBindTexture(GL_TEXTURE_2D, accTex_[acc]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, bloomTex_[0]);
     glActiveTexture(GL_TEXTURE0);
