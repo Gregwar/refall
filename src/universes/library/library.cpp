@@ -1,30 +1,25 @@
-// LIBRARY: the blocks are books, and every cleared row is shelved in a contemporary library atrium that fills, bay
-// after bay and floor after floor, with the game.
+// LIBRARY: the blocks are books, and every cleared line brings two big books to a small, cosy library room that
+// fills slowly with the game.
 //
-// The board stays a clean Tetris board: each cell is one neat block in its piece's color, a bound volume with its
-// spine toward us (a soft bevel, two fine rules, its pages showing down one side), over a calm ground. When
-// a row clears, its blocks dissolve into light where they stand, and each cleared cell's books fly to the shelves in
-// the background: from behind the cell's place on the board, at a depth behind the well, only ever going deeper
-// (never in front of the board or the HUD). On the way they become a little stack of real books, which lands in the
-// next free place on the shelves with a soft glow: shelved in the order they come, never moved again, so the
-// collection is the history of the game. Its books are mostly the pieces' colors, with bright toy bindings among them.
+// The board stays a clean Tetris board: each cell is one toy block in its piece's color, a bound volume with its
+// spine toward us (a bevel, two rules, its pages showing down one side), over a deep saturated ground. When a row
+// clears, its blocks dissolve into light where they stand, and two of its cells send a book to the room: from behind
+// the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
+// the HUD), turning over once on the way. Each lands in the next free place (the order of the runs in world.cpp) with
+// a soft glow and never moves again, so the room is the history of the game.
 //
-// It is drawn as a toon picture book (3D Zelda): saturated colors, cel shading in crisp bands with cool colored
-// shade, inked edges, round friendly lamps and bushes; the well a deep saturated ground the pieces stand out on.
+// The room is a diorama seen from above through a long lens, drawn as a toon picture book (Link's Awakening): a
+// plank floor on a thick slab, walls cut in section, two big bookcases, round windows, a reading nook, a big plant;
+// the ladder, the piles, the mezzanine and more bookcases grow in from their floors as the collection needs them.
+// Calm and lower in contrast than the board; cel shading in bands with a cool colored shade, inked edges.
 //
-// The atrium is all there from the start: painted shelving bays on four floors, on the back wall either side of a
-// tall glazed slot behind the well and down both side walls, the upper floors on galleries with glass balustrades
-// round the void, a skylight over it all, reading tables on the ground floor. Each floor's light strips and
-// downlights come on as it starts to fill; the camera frames the bays in use, easing back, then rising floor by
-// floor toward the skylight.
-//
-// The song: dust in the daylight; the lights follow the music; in a real drop the shelves breathe (a wave a beat rolls
-// along each shelf row, sliding the books out, tipped forward, and back into their places) and a light runs along
-// the collection in the order it came; a Tetris runs one light along it. Slow motion: blue hour.
+// The song: dust in the light; the lamps follow the music; in a real drop the shelves breathe (a wave a beat rolls
+// along each shelf, sliding the books out, tipped forward, and back into their places), loose pages flutter up from
+// the bookcases and a soft light runs along the collection; a Tetris runs one light along it. Slow motion: blue hour.
 // Game over: the blocks topple out of the bottom of the well.
 //
 // Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the board
-// plane keeps its pixels, the books' tops show); the library has its own camera behind it.
+// plane keeps its pixels, the books' tops show); the room has its own camera behind it.
 #include "universes/library/library.hpp"
 
 #include <algorithm>
@@ -71,61 +66,65 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 uint32_t hash32(uint64_t x) { return (uint32_t)(splitmix64(x) >> 32); }
 
-// A variant (sRGB), a toon picture book: the seven bindings (I O T S Z J L); the painted shelving, its back panels,
-// the walls, the galleries' slabs, the floor's two tiles, the painted metal, the paper; the sky (high, low), the
-// green outside (the town at night); the shade's cool light (from the sky, from the ground), the sun, the lamps; the
-// well's ground (low, high); the HUD's card, its edge, its ink, accent and halo; the ink lines, the warm rim; the
-// clouds (lit, shaded); the plants' leaves, their pots.
+// A variant (sRGB), one mood of the same cosy room: the seven bindings (I O T S Z J L, the board's; the shelved books
+// are these, muted); the wood (bookcases, furniture), the bookcases' backs, the walls, their wainscot, the walls'
+// cut section, the floor's two planks, the metal, the paper; the sky (high, low: the backdrop and the windows); the
+// shade's cool light (from the sky, from the ground), the sun, the lamps; the armchair, the rug (two tones), the
+// leaves, the pots; the well's ground (low, high); the HUD's card, its edge, its ink, accent and halo; the ink lines,
+// the warm rim; the clouds (lit, shaded).
 struct VariantDef {
     const char* name;
     unsigned piece[7];
-    unsigned oak, bay, wall, slab, floor, floorB, steel, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
-    unsigned veil, veilTop, card, cardEdge, ink, accent, halo, line, rim, cloud, cloudShade, leaf, pot;
+    unsigned oak, bay, wall, wall2, cut, floor, floorB, steel, paper, skyA, skyB, ambSky, ambGround, key, led;
+    unsigned chair, rug, rug2, leaf, pot, veil, veilTop, card, cardEdge, ink, accent, halo, line, rim, cloud, cloudShade;
     float night, keyK, ambK, ledK, exposure, floorKind;
     vec3 keyDir;
     bool light;
 };
 const VariantDef VARIANTS[] = {
-    // golden afternoon: honey shelves on teal, peach walls, terracotta and cream tiles, a low golden sun, lavender
-    // shade; coral
+    // golden afternoon: warm cream walls over an apricot wainscot, honey floor, a low golden sun, lavender shade; coral
     {"GOLDEN HOUR",
      {0x22d0f0, 0xffd31a, 0xb45cff, 0x4fd24a, 0xff4b4b, 0x3f7dff, 0xff9620},
-     0xe8a050, 0x2bb2a6, 0xffdcb4, 0xfff0d4, 0xe8825a, 0xffe6bf, 0x1f6c78, 0xfff3da, 0x3d8ef2, 0xffc78c, 0x4caf3c,
-     0xbcc4f4, 0xe0b0d8, 0xffc070, 0xffd27a,
-     0x1d1e4c, 0x2e3274, 0xfff3dc, 0xff7a4d, 0x26203c, 0xe8473c, 0xfff3dc, 0x2a1640, 0xffcf86, 0xffffff, 0xf6c2c8, 0x3cbf4a, 0xe8603a,
-     0.f, 0.65f, 0.85f, 0.7f, 1.0f, 0.f, vec3(-0.55f, 0.55f, 0.45f), true},
-    // sunny noon: a high white sun, sky-blue bays on golden shelves, mint and cream tiles, primaries; cobalt
+     0xc98450, 0xf2d4a8, 0xf6e4c8, 0xeab07c, 0x7a3d62, 0xd99c60, 0xe2a96c, 0x3d5a6e, 0xfff1d8, 0x7fb6ee, 0xffd2a0,
+     0xbcc4f4, 0xf2c4b0, 0xffc878, 0xffd27a,
+     0x2f9e8f, 0xd8604e, 0xf2b75a, 0x4caf50, 0xd8643c, 0x1d1e4c, 0x2e3274, 0xfff3dc, 0xff7a4d, 0x26203c, 0xe8473c, 0xfff3dc,
+     0x3a1f40, 0xffcf86, 0xffffff, 0xf6c2c8,
+     0.f, 0.65f, 0.85f, 0.8f, 1.0f, 1.f, vec3(-0.55f, 0.6f, 0.55f), true},
+    // sunny noon: soft white walls over a sky-blue wainscot, light wood, a high white sun; cobalt
     {"SUNNY NOON",
      {0x1ccff5, 0xffd60f, 0xa855ff, 0x3fcf45, 0xff4545, 0x3a78ff, 0xff9418},
-     0xf3b54a, 0x48a6ff, 0xfff6e2, 0xfffaf0, 0x82d9b8, 0xfff4dc, 0x2350c8, 0xfffaf0, 0x2c84ff, 0xa9e2ff, 0x3dbb45,
+     0xe0a85c, 0xfbf0dc, 0xeef3f6, 0xa6d4e6, 0x2c4f8a, 0xe8c48c, 0xf0d29e, 0x2350c8, 0xfffaf0, 0x3d8ef0, 0xbfe6ff,
      0xc0d0ff, 0xd8d0f4, 0xfff4e0, 0xfff0c8,
-     0x162452, 0x23397c, 0xffffff, 0x2f86ff, 0x1a2140, 0x2a6cf0, 0xffffff, 0x1a2050, 0xfff0b0, 0xffffff, 0xc6dbff, 0x3dc24a, 0xff6a3d,
-     0.f, 0.58f, 0.8f, 0.55f, 1.0f, 0.f, vec3(-0.3f, 0.85f, 0.42f), true},
-    // fresh morning: coral shelves on mint, pale sky walls, butter tiles, a pink dawn horizon, soft cool shade; pink
+     0xf2c53d, 0x3d7be0, 0xa8d8f0, 0x3dbb50, 0xff7a4a, 0x162452, 0x23397c, 0xffffff, 0x2f86ff, 0x1a2140, 0x2a6cf0, 0xffffff,
+     0x1a2050, 0xfff0b0, 0xffffff, 0xc6dbff,
+     0.f, 0.58f, 0.8f, 0.6f, 1.0f, 1.f, vec3(-0.3f, 0.85f, 0.42f), true},
+    // fresh morning: mint walls, butter floor, coral wood, a pink dawn sky, a cool soft shade; pink
     {"MORNING",
      {0x26c9f0, 0xffcf24, 0xae5cf6, 0x48cc56, 0xff4d5e, 0x4479ff, 0xff8f2a},
-     0xf28a68, 0x6fd8bf, 0xe6f4ff, 0xfffaf2, 0xffd98a, 0xfff2d4, 0xe0566a, 0xfff8ec, 0x5ab2ff, 0xffe0ee, 0x55c860,
-     0xc4c8f8, 0xecc8e8, 0xfff0dc, 0xfff2d0,
-     0x152e4c, 0x1f4a70, 0xfffaf2, 0x2fc2a4, 0x1b2a3a, 0xe8506a, 0xfffaf2, 0x1e2a4a, 0xffe0cc, 0xffffff, 0xf6cce0, 0x46c75a, 0xf2765a,
-     0.f, 0.58f, 0.82f, 0.55f, 1.0f, 1.f, vec3(0.5f, 0.55f, 0.5f), true},
-    // starry night: indigo walls, warm round lamps, honey shelves glowing, stars and a lit town outside; gold
+     0xe39a78, 0xfff1e2, 0xe2f1ea, 0x96d3bf, 0xc9506a, 0xf0d6a2, 0xf6e0b4, 0xe0566a, 0xfff8ec, 0x6fb8ff, 0xffdcea,
+     0xc0d8ff, 0xb8e4ec, 0xfff0dc, 0xfff2d0,
+     0xa57be0, 0xf08aa0, 0xfff0c0, 0x52c46a, 0xf2765a, 0x152e4c, 0x1f4a70, 0xfffaf2, 0x2fc2a4, 0x1b2a3a, 0xe8506a, 0xfffaf2,
+     0x1e2a4a, 0xffe0cc, 0xffffff, 0xf6cce0,
+     0.f, 0.58f, 0.82f, 0.6f, 1.0f, 1.f, vec3(-0.35f, 0.75f, 0.55f), true},
+    // starry night: indigo walls, honey bookcases glowing under warm round lamps, stars in the windows; gold
     {"STARRY NIGHT",
      {0x2ad6f5, 0xffd42a, 0xc06bff, 0x56dc58, 0xff5a5a, 0x5a8cff, 0xffa030},
-     0xe08a48, 0x3a3c9c, 0x2c3478, 0x46529c, 0x3b4290, 0x5260b0, 0xffb84a, 0xfff0d0, 0x0c1240, 0x2c3c90, 0x26357a,
+     0xc98048, 0x2c3270, 0x37428a, 0x2a3270, 0x141838, 0x3e3c7e, 0x48468c, 0xffb84a, 0xfff0d0, 0x0c1240, 0x2c3c90,
      0x4a52c0, 0x5a3c6a, 0x9ab0ff, 0xffc46a,
-     0x0a0c26, 0x151b46, 0x1e2558, 0xffb84a, 0xfff2dc, 0xffbe4a, 0x10143a, 0x08081e, 0xffc070, 0x7c8cd4, 0x46549c, 0x2f9a5a, 0xd8603a,
-     1.f, 0.35f, 0.75f, 1.6f, 1.0f, 0.f, vec3(-0.5f, 0.7f, 0.5f), false},
+     0xe0603a, 0xb84a6a, 0xffbe4a, 0x2f9a5a, 0xd8603a, 0x0a0c26, 0x151b46, 0x1e2558, 0xffb84a, 0xfff2dc, 0xffbe4a, 0x10143a,
+     0x08081e, 0xffc070, 0x7c8cd4, 0x46549c,
+     1.f, 0.35f, 0.95f, 2.1f, 1.0f, 1.f, vec3(-0.5f, 0.7f, 0.5f), false},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float BOARD_EYE_Y = 4.5f;  // the board camera's height (the books' tops show)
 constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (the stack above waits 0.3 s)
 
-// Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their stacks already on the shelves: for screenshots),
-// ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its ten stacks grow on the shelves).
-// Each cleared cell's books go on the shelves as two stacks side by side (so some 100 lines fill the atrium).
-constexpr int STACKS_CELL = 2;
-uint32_t stackSeed(uint32_t cell, int k) { return k == 0 ? cell : hash32((uint64_t)cell * 2654435761ull + (uint64_t)k); }
+// Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
+// ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
+// Each cleared line brings two big books (so some 100 lines fill the room), launched from these two cells of the row.
+constexpr int BOOKS_LINE = 2;
+constexpr int BOOK_CELL[BOOKS_LINE] = {2, 7};
 
 int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
@@ -509,11 +508,12 @@ void LibraryUniverse::setSong(const SongLook& t, float seconds) {
     const VariantDef& V = VARIANTS[v];
     Palette& P = pal_;
     for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]);
-    P.oak = lin(V.oak); P.bay = lin(V.bay); P.wall = lin(V.wall); P.slab = lin(V.slab); P.floor = lin(V.floor); P.floorB = lin(V.floorB);
-    P.steel = lin(V.steel); P.paper = lin(V.paper); P.skyA = lin(V.skyA); P.skyB = lin(V.skyB); P.outside = lin(V.outside);
+    P.oak = lin(V.oak); P.bay = lin(V.bay); P.wall = lin(V.wall); P.wall2 = lin(V.wall2); P.cut = lin(V.cut); P.floor = lin(V.floor);
+    P.floorB = lin(V.floorB); P.steel = lin(V.steel); P.paper = lin(V.paper); P.skyA = lin(V.skyA); P.skyB = lin(V.skyB);
     P.ambSky = lin(V.ambSky) * V.ambK; P.ambGround = lin(V.ambGround) * V.ambK; P.key = lin(V.key) * V.keyK; P.led = lin(V.led);
+    P.chair = lin(V.chair); P.rug = lin(V.rug); P.rug2 = lin(V.rug2); P.leaf = lin(V.leaf); P.pot = lin(V.pot);
     P.veil = lin(V.veil); P.veilTop = lin(V.veilTop); P.card = lin(V.card); P.cardEdge = lin(V.cardEdge); P.line = lin(V.line);
-    P.rim = lin(V.rim); P.cloud = lin(V.cloud); P.cloudShade = lin(V.cloudShade); P.leaf = lin(V.leaf); P.pot = lin(V.pot);
+    P.rim = lin(V.rim); P.cloud = lin(V.cloud); P.cloudShade = lin(V.cloudShade);
     P.ink = hex(V.ink); P.accent = hex(V.accent); P.halo = hex(V.halo);
     P.night = V.night; P.keyK = V.keyK; P.ledK = V.ledK; P.exposure = V.exposure; P.floorKind = V.floorKind; P.light = V.light;
     colSet_ = true;
@@ -565,102 +565,8 @@ TransitionHints LibraryUniverse::hints() const {
 }
 
 // =====================================================================================================
-// The stacks
+// The board's cells
 // =====================================================================================================
-
-// A cell's stack, from its seed: a pile lying flat (the longest at the bottom) or a row standing, neat.
-LibraryUniverse::Stack LibraryUniverse::makeStack(uint32_t seed) {
-    Stack s;
-    Rng r(0x51AC0000ull ^ ((uint64_t)seed * 2654435761ull));
-    const float B = -0.47f;
-    if (r.chance(0.52f)) {
-        const float w[5] = {0.f, 0.f, 0.3f, 0.45f, 0.25f};
-        s.n = r.weighted(w);
-        const float total = r.range(0.8f, 0.94f);
-        float t[5], L[5], sum = 0.f;
-        for (int i = 0; i < s.n; i++) { t[i] = r.range(0.65f, 1.35f); sum += t[i]; L[i] = r.range(0.78f, 0.94f); }
-        std::sort(L, L + s.n, [](float a, float b) { return a > b; });
-        float y = B;
-        for (int i = 0; i < s.n; i++) {
-            const float th = t[i] / sum * total;
-            BookDef& b = s.b[i];
-            b.lying = true;
-            b.hx = L[i] * 0.5f;
-            b.hy = th * 0.5f - 0.006f;
-            b.cy = y + th * 0.5f;
-            b.cx = r.range(-1.f, 1.f) * (0.47f - b.hx) * 0.7f;
-            b.hd = r.range(0.3f, 0.37f);
-            b.z = r.range(-0.035f, 0.f);
-            y += th;
-        }
-        s.top = y;
-    } else {
-        const float w[6] = {0.f, 0.f, 0.f, 0.3f, 0.45f, 0.25f};
-        s.n = r.weighted(w);
-        const float total = r.range(0.86f, 0.94f);
-        float t[5], sum = 0.f;
-        for (int i = 0; i < s.n; i++) { t[i] = r.range(0.6f, 1.4f); sum += t[i]; }
-        float x = -total * 0.5f;
-        s.top = B;
-        for (int i = 0; i < s.n; i++) {
-            const float wd = t[i] / sum * total;
-            BookDef& b = s.b[i];
-            b.lying = false;
-            b.hx = wd * 0.5f - 0.006f;
-            b.cx = x + wd * 0.5f;
-            const float H = r.range(0.72f, 0.94f);
-            b.hy = H * 0.5f;
-            b.cy = B + H * 0.5f;
-            b.hd = r.range(0.3f, 0.37f);
-            b.z = r.range(-0.035f, 0.f);
-            x += wd;
-            s.top = std::max(s.top, B + H);
-        }
-    }
-    for (int i = 0; i < s.n; i++) {
-        BookDef& b = s.b[i];
-        b.tone = r.range(0.88f, 1.07f);
-        b.style = r.irange(0, 3);
-        b.seed = r.range(0.f, 10.f);
-    }
-    return s;
-}
-
-// The stack's books as instances: in the cell's frame (origin its center, along / up / out its axes, k its size),
-// grown from its foot by `grow`, swollen by a clear's fade.
-void LibraryUniverse::pushStack(std::vector<Inst>& out, const Stack& s, int type, const vec3& origin, const vec3& along, const vec3& up,
-                                const vec3& outD, float k, float grow, float glow, float fade, bool calm) {
-    if (grow <= 0.001f) return;
-    const vec3 base = pieceColor(type);
-    // on the shelves: mostly the piece's color, with bright toy bindings among them (cream, coral, teal, pink, navy,
-    // lime)
-    static const vec3 TOY[6] = {lin(0xfff0d0), lin(0xff6f5e), lin(0x22b5a0), lin(0xff7fb0), lin(0x2f3f9a), lin(0xa8e04a)};
-    const vec3 foot = origin - up * (0.47f * k);
-    const float swell = 1.f + 0.14f * (1.f - (1.f - fade) * (1.f - fade));
-    for (int i = 0; i < s.n; i++) {
-        const BookDef& b = s.b[i];
-        vec3 c = origin + along * (b.cx * k) + up * (b.cy * k) + outD * ((b.z - b.hd) * k);
-        float g = grow;
-        if (fade > 0.f) { c = origin + (c - origin) * swell; g = swell; }
-        else c = foot + (c - foot) * grow;
-        const vec3 X = b.lying ? up * (b.hy * k * g) : along * (b.hx * k * g);
-        const vec3 Y = b.lying ? along * (b.hx * k * g) : up * (b.hy * k * g);
-        const vec3 Z = outD * (b.hd * k * g);
-        vec3 col = base * b.tone;
-        if (calm) {
-            const uint32_t h = hash32((uint64_t)(b.seed * 100003.f) + (uint64_t)i * 7919ull);
-            col = (h & 255) < 150 ? base * b.tone : TOY[(h >> 8) % 6] * b.tone;
-        }
-        Inst in;
-        in.c[0] = c.x; in.c[1] = c.y; in.c[2] = c.z; in.c[3] = (float)M_BOOK;
-        in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = (float)b.style;
-        in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = glow;
-        in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fade;
-        in.col[0] = col.x; in.col[1] = col.y; in.col[2] = col.z; in.col[3] = b.seed;
-        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = stLevel_; in.e[3] = -10.f;
-        out.push_back(in);
-    }
-}
 
 void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade,
                                float seed) {
@@ -692,50 +598,115 @@ uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
 // The collection
 // =====================================================================================================
 
-// A slot on the shelves: floor by floor, bay by bay (bayFrame's order), shelf by shelf from the bottom, four stacks
-// a shelf. Its frame: the stack's center over the shelf, at the shelf's front.
-void LibraryUniverse::slotFrame(int slot, vec3& origin, vec3& along, vec3& out) const {
-    const int level = slot / SLOTS_LEVEL;
-    const int r = slot % SLOTS_LEVEL;
-    const BayFrame b = bayFrame(r / SLOTS_BAY);
-    const int r2 = r % SLOTS_BAY;
-    const int shelf = r2 / SLOTS, pos = r2 % SLOTS;
-    const float x = -(BAY_W * 0.5f - 2.f * UPRIGHT) + (pos + 0.5f) * SLOT_W;
-    const float jit = ((hash32((uint64_t)slot * 7919ull) & 1023) / 1023.f - 0.5f) * 0.03f;
-    origin = b.foot + b.along * (x + jit) + UP * (level * LEVEL_H + SHELF_Y0 + shelf * SHELF_PITCH + 0.47f * BOOK_K) - b.out * 0.035f;
-    along = b.along;
-    out = b.out;
+// A book's place: the next free one along the runs (a shelf: standing side by side; a row of piles on the floor:
+// lying, three to five a pile, each pile a little askew). Its size and look come from its seed.
+bool LibraryUniverse::place(Group& g) {
+    Rng r(0xB00Cull ^ ((uint64_t)g.seed * 2654435761ull));
+    const float h = r.range(0.58f, 0.84f), t = r.range(0.17f, 0.3f), d = r.range(0.4f, 0.5f);
+    g.style = r.irange(0, 3);
+    g.tone = r.range(0.9f, 1.06f);
+    const float askew = r.range(-0.18f, 0.18f);
+    while (runIdx_ < (int)runs_.size()) {
+        const Run& R = runs_[runIdx_];
+        if (R.feat >= 0) featUnlocked_[R.feat] = true;
+        if (R.kind == 0) {
+            if (runOff_ + t <= R.len) {
+                const float hh = std::min(h, R.maxH);
+                g.lying = false;
+                g.hx = t * 0.5f - 0.005f;
+                g.hy = hh * 0.5f;
+                g.hd = d * 0.5f;
+                g.along = R.along;
+                g.out = R.out;
+                g.level = R.level;
+                g.c = R.start + R.along * (runOff_ + t * 0.5f) + UP * (hh * 0.5f) - R.out * (d * 0.5f + 0.05f);
+                runOff_ += t + 0.01f;
+                return true;
+            }
+        } else {
+            const float spacing = 1.f;
+            const int pileMax = 3 + (int)(hash32((uint64_t)(runIdx_ * 31 + pileN_)) % 3);
+            if ((int)runOff_ >= pileMax) { pileN_++; runOff_ = 0.f; pileH_ = 0.f; }
+            if ((pileN_ + 0.5f) * spacing <= R.len) {
+                const float a = askew * 0.6f + 0.25f * ((hash32((uint64_t)(runIdx_ * 7 + pileN_)) & 255) / 255.f - 0.5f);
+                const vec3 al = R.along * std::cos(a) + R.out * std::sin(a);
+                g.lying = true;
+                g.hx = h * 0.5f;
+                g.hy = t * 0.36f; // (lying, a book reads thinner)
+                g.hd = d * 0.5f;
+                g.along = al;
+                g.out = cross(al, UP) * (dot(cross(al, UP), R.out) > 0.f ? 1.f : -1.f);
+                g.level = -1;
+                const vec3 base = R.start + R.along * ((pileN_ + 0.5f) * spacing) - R.out * 0.35f;
+                g.c = base + UP * (pileH_ + g.hy);
+                pileH_ += 2.f * g.hy + 0.004f;
+                runOff_ += 1.f;
+                return true;
+            }
+        }
+        runIdx_++;
+        runOff_ = 0.f;
+        pileN_ = 0;
+        pileH_ = 0.f;
+    }
+    return false;
+}
+
+bool LibraryUniverse::shelve(int type, uint32_t seed) {
+    Group g;
+    g.type = type;
+    g.seed = seed;
+    if (!place(g)) return false;
+    g.t0 = worldTime_;
+    groups_.push_back(g);
+    return true;
+}
+
+// A book as an instance: centered at c in its frame (along / up / out), k its size, grown from its foot by `grow`.
+// The shelved books keep to the pieces' colors, muted toward the walls so the board stays the brightest thing.
+void LibraryUniverse::pushBook(std::vector<Inst>& out, const Group& g, const vec3& c, const vec3& along, const vec3& outD, float k,
+                               float grow, float glow, int index) {
+    if (grow <= 0.001f) return;
+    const float hx = g.hx * k * grow, hy = g.hy * k * grow, hd = g.hd * k * grow;
+    const vec3 foot = c - UP * (g.hy * k);
+    const vec3 cc = foot + UP * hy;
+    // standing: X across its thickness (along the shelf), Y up its length; lying: X up its thickness, Y along its length
+    const vec3 X = g.lying ? UP * hy : along * hx;
+    const vec3 Y = g.lying ? along * hx : UP * hy;
+    const vec3 Z = outD * hd;
+    const vec3 col = lerp(pieceColor(g.type), pal_.wall, 0.38f) * (0.9f * g.tone);
+    Inst in;
+    in.c[0] = cc.x; in.c[1] = cc.y; in.c[2] = cc.z; in.c[3] = (float)M_BOOK;
+    in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = (float)g.style;
+    in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = glow;
+    in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = 0.f;
+    in.col[0] = col.x; in.col[1] = col.y; in.col[2] = col.z; in.col[3] = (float)(g.seed % 1000) / 97.f;
+    in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = (float)g.level; in.e[3] = (float)index;
+    out.push_back(in);
 }
 
 void LibraryUniverse::fly(int type, uint32_t seed, const vec3& board, float delay) {
-    if (nextSlot_ >= SLOTS_ALL) return;
-    shelve(type, seed, 0.f);
-    groups_.back().t0 = 1e9f; // (not on its shelf until it lands)
+    if (!shelve(type, seed)) return;
+    groups_.back().t0 = 1e9f; // (not in its place until it lands)
     Flight fl;
     fl.group = (int)groups_.size() - 1;
     fl.board = board;
     fl.t = -delay;
+    fl.spin = ((seed >> 8) & 1) ? 1.f : -1.f;
     flights_.push_back(fl);
-}
-
-void LibraryUniverse::shelve(int type, uint32_t seed, float delay) {
-    if (nextSlot_ >= SLOTS_ALL) return;
-    Group g;
-    g.type = type;
-    g.seed = seed;
-    g.slot = nextSlot_++;
-    g.t0 = worldTime_ + delay;
-    groups_.push_back(g);
 }
 
 void LibraryUniverse::resetGrowth() {
     groups_.clear();
     flights_.clear();
-    nextSlot_ = 0;
+    runIdx_ = 0;
+    runOff_ = 0.f;
+    pileN_ = 0;
+    pileH_ = 0.f;
+    for (int i = 0; i < F_COUNT_; i++) featUnlocked_[i] = false;
     shelfInst_.clear();
     settled_ = 0;
     shelfDirty_ = true;
-    camDs_ = -1.f;
 }
 
 // =====================================================================================================
@@ -772,8 +743,9 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             full[c.y] = true;
             const vec3 bp = layout::cellPos((float)c.x, (float)c.y);
             if (c.y >= Game::HIDDEN) fx_.push_back({type, sd, bp, 0.f});
-            for (int k = 0; k < STACKS_CELL; k++) fly(type, stackSeed(sd, k), bp, 0.05f + 0.06f * i + 0.03f * k);
-            i++;
+            // each line's two books leave from two of its cells, in its pieces' colors
+            for (int k = 0; k < BOOKS_LINE; k++)
+                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.12f * i++);
         }
         // the seeds follow the rows down
         int dst = Game::H - 1;
@@ -1105,48 +1077,20 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
 // The camera
 // =====================================================================================================
 
-// Framed on the bays in use: the first two at eye level at the start, easing back as the bays fill outward, then
-// back and up as the collection climbs the floors.
+// The diorama's view: from above and far, through a long lens (a tabletop model), the whole room framed around the
+// well, drifting very slowly.
 void LibraryUniverse::updateCamera(float dt) {
-    const float tw = std::tan(25.f * PI / 180.f);
-    tanW_ = tw;
-    const int used = std::max(1, nextSlot_);
-    const int level = std::min(LEVELS - 1, (used - 1) / SLOTS_LEVEL);
-    const float bays = (float)(used - level * SLOTS_LEVEL) / SLOTS_BAY; // bays in use on this floor (fractional)
-    const float zb = ZBACK + CASE_D;
-    // the back wall: as wide as its bays in use; then down the side walls: back far enough to see the newest bays
-    float D;
-    if (level == 0 && bays <= 2 * BACK_BAYS) {
-        const float perSide = std::min((float)BACK_BAYS, std::max(1.f, std::ceil(bays * 0.5f + 0.2f)));
-        D = (SLOT_HALF + perSide * BAY_W + 0.35f) / (tw * aspect_);
-    } else if (level == 0) {
-        const float sideUsed = std::max(0.f, bays - 2 * BACK_BAYS) * 0.5f;
-        const float zf = SIDE_Z0 + std::min((float)SIDE_BAYS, std::ceil(sideUsed + 0.3f)) * BAY_W;
-        D = zf - zb + HALL_HALF / (tw * aspect_) * 0.8f;
-    } else D = (HALL_HALF + 0.3f) / (tw * aspect_);
-    // up the floors: the one being filled and the one under it (the skylight over the top one)
-    const float yTop = level == 0 ? LEVEL_H - 0.25f : (level + 1) * LEVEL_H + (level == LEVELS - 1 ? 0.5f : -0.2f);
-    const float yBot = level <= 1 ? -0.15f : (level - 1) * LEVEL_H + 0.3f;
-    D = std::max({4.2f, D, ((yTop - yBot) * 0.5f + 0.2f) / tw});
-    // the eye stays low on the ground floor, rising with the floors in use
-    const float ty = level == 0 ? std::min(1.6f + 0.06f * (D - 4.2f), 2.4f) : (yTop + yBot) * 0.5f;
-    const vec3 T(0.f, ty, zb);
-    if (camDs_ < 0.f) { camDs_ = D; camT_ = T; camDv_ = 0.f; camTv_ = vec3(0.f); }
-    const float w = 0.9f;
-    camDv_ += (w * w * (D - camDs_) - 2.f * w * camDv_) * dt;
-    camDs_ += camDv_ * dt;
-    camTv_ = camTv_ + ((T - camT_) * (w * w) - camTv_ * (2.f * w)) * dt;
-    camT_ = camT_ + camTv_ * dt;
-    float yaw = 0.008f * std::sin(worldTime_ * 0.029f), pitch = 0.006f * std::sin(worldTime_ * 0.041f);
-    fwdW_ = vec3(-std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
+    (void)dt;
+    tanW_ = std::tan(13.f * PI / 180.f);
+    const float sway = 0.4f * std::sin(worldTime_ * 0.045f), bob = 0.12f * std::sin(worldTime_ * 0.063f);
+    targetW_ = vec3(0.f, 2.3f, -1.0f);
+    eyeW_ = targetW_ + vec3(sway, 11.2f + bob, 25.f);
+    fwdW_ = normalize(targetW_ - eyeW_);
     rightW_ = normalize(cross(fwdW_, UP));
     upW_ = cross(rightW_, fwdW_);
-    targetW_ = camT_;
-    camD_ = camDs_;
-    eyeW_ = camT_ - fwdW_ * camDs_;
-    const float zn = std::max(0.05f, camD_ * 0.01f), zf = std::max(80.f, camD_ * 8.f);
+    camD_ = length(targetW_ - eyeW_);
     const mat4 view = mat4::lookAt(vec3(0.f), fwdW_, UP);
-    vpW_ = mat4::perspective(2.f * std::atan(tanW_), aspect_, zn, zf) * view;
+    vpW_ = mat4::perspective(2.f * std::atan(tanW_), aspect_, 0.1f, 200.f) * view;
 }
 
 void LibraryUniverse::drawInst(GLuint vao, GLuint vbo, int mesh, const std::vector<Inst>* data, size_t count) {
@@ -1235,25 +1179,21 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         if (linesSeen_ >= 0 && lines < lines_ && !game.over()) resetGrowth();
         lines_ = lines;
         linesSeen_ = lines;
-        // the test hooks' lines: the static offset's stacks put straight on the shelves (screenshots), the grow
-        // rate's lines shelved like real ones (ten stacks growing on the shelves, one after the other)
+        if (runs_.empty()) buildRuns();
+        // the test hooks' lines: the static offset's books put straight in their places (screenshots), the grow
+        // rate's lines shelved like real ones (their books flying to their places)
         if (!hookPlaced_) {
             hookPlaced_ = true;
             Rng hr(0xB00C5ull);
-            for (int l = 0; l < hookStart; l++)
-                for (int k = 0; k < Game::W * STACKS_CELL; k++) {
-                    shelve(hr.irange(0, 6), (uint32_t)hr.next(), 0.f);
-                    groups_.back().t0 = -100.f;
-                }
+            for (int l = 0; l < hookStart * BOOKS_LINE; l++)
+                if (shelve(hr.irange(0, 6), (uint32_t)hr.next())) groups_.back().t0 = -100.f;
+            for (int k = 0; k < F_COUNT_; k++)
+                if (featUnlocked_[k]) featGrow_[k] = 1.f;
         }
         while (hookLines_ < hookRate) {
             hookLines_++;
-            for (int x = 0; x < Game::W; x++) {
-                const int type = rng_.irange(0, 6);
-                const uint32_t sd = (uint32_t)rng_.next();
-                for (int k = 0; k < STACKS_CELL; k++)
-                    fly(type, stackSeed(sd, k), layout::cellPos((float)x, (float)(Game::H - 1)), 0.05f + 0.06f * x + 0.03f * k);
-            }
+            for (int k = 0; k < BOOKS_LINE; k++)
+                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.12f * k);
         }
         grow_ = (float)lines_;
     }
@@ -1268,13 +1208,14 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(glass_.size() * sizeof(Inst)), glass_.empty() ? nullptr : glass_.data(), GL_STATIC_DRAW);
     }
     updateCamera(wdt);
-    // each floor's lights: on once it starts to fill
-    {
-        const int cur = nextSlot_ > 0 ? std::min(LEVELS - 1, (nextSlot_ - 1) / SLOTS_LEVEL) : 0;
-        for (int k = 0; k < 8; k++) levelOn_[k] = approach(levelOn_[k], k <= cur ? 1.f : 0.f, 0.6f, dt);
-    }
+    // the features (grown in from the floor when first needed), the lights: the room's, the mezzanine's, the low
+    // bookcase's
+    for (int k = 0; k < F_COUNT_; k++) featGrow_[k] = approach(featGrow_[k], featUnlocked_[k] ? 1.f : 0.f, 0.8f, dt);
+    levelOn_[0] = 1.f;
+    levelOn_[1] = smoothstepf(0.5f, 1.f, featGrow_[F_MEZZ]);
+    levelOn_[2] = smoothstepf(0.5f, 1.f, featGrow_[F_LOW]);
 
-    // ---- Dynamic instances: the collection's stacks.
+    // ---- Dynamic instances: the collection's books.
     for (auto& v : dyn_) v.clear();
     cells_.clear();
     fxInst_.clear();
@@ -1283,15 +1224,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const int nG = (int)groups_.size();
     auto pushGroup = [&](std::vector<Inst>& out, int i, float grow, float glow) {
         const Group& g = groups_[i];
-        vec3 o, al, ou;
-        slotFrame(g.slot, o, al, ou);
-        stLevel_ = (float)(g.slot / SLOTS_LEVEL);
-        const size_t first = out.size();
-        pushStack(out, makeStack(g.seed), g.type, o, al, UP, ou, BOOK_K, grow, glow, 0.f, true);
-        // its place in the collection (the drop's and the Tetris' light run along it)
-        for (size_t j = first; j < out.size(); j++) out[j].e[3] = (float)i;
+        pushBook(out, g, g.c, g.along, g.out, 1.f, grow, glow, i);
     };
-    // settled stacks (grown, their light faded) go to the kept buffer, the others are drawn as they grow
+    // settled books (grown, their light faded) go to the kept buffer, the others are drawn as they settle
     while (settled_ < groups_.size() && worldTime_ - groups_[settled_].t0 > 3.f) {
         pushGroup(shelfInst_, (int)settled_, 1.f, 0.f);
         settled_++;
@@ -1306,20 +1241,19 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     for (int i = (int)settled_; i < nG; i++) {
         const float a = worldTime_ - groups_[i].t0;
         if (a < 0.f) continue;
-        // growing onto its shelf from its foot, a soft light fading as it settles
-        pushGroup(dyn_[MESH_BOX], i, a > 0.6f ? 1.f : easeOutBack(a / 0.5f), 0.6f * std::exp(-std::max(0.f, a - 0.6f) * 1.4f));
+        // settling into its place, a soft light fading
+        pushGroup(dyn_[MESH_BOX], i, a > 0.6f ? 1.f : easeOutBack(a / 0.5f), 0.5f * std::exp(-std::max(0.f, a - 0.6f) * 1.4f));
     }
-    stLevel_ = 0.f;
 
-    // ---- Flights: a cleared cell's books, from behind its place in the well to their shelf, only ever going deeper
+    // ---- Flights: a cleared line's books, from behind their cells' places in the well to their places in the room,
+    // only ever going deeper; they turn over once on the way
     for (auto it = flights_.begin(); it != flights_.end();) {
         Flight& fl = *it;
         fl.t += wdt;
         if (fl.group < 0 || fl.group >= (int)groups_.size()) { it = flights_.erase(it); continue; }
         Group& g = groups_[fl.group];
         if (fl.t < 0.f) { ++it; continue; }
-        vec3 oT, alT, ouT;
-        slotFrame(g.slot, oT, alT, ouT);
+        const vec3 oT = g.c;
         if (!fl.launched) {
             fl.launched = true;
             // the cell's pixel and size through the board's camera, the world ray through it
@@ -1330,27 +1264,58 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             const float dT = std::max(1.f, dot(oT - eyeW_, fwdW_));
             const float d0 = std::clamp(dT * 0.8f, std::min(2.f, dT), dT);
             fl.p0 = eyeW_ + dir * (d0 / std::max(0.2f, dot(dir, fwdW_)));
-            fl.k0 = 2.f * halfNdc * d0 * tanW_;
+            fl.k0 = 2.f * halfNdc * d0 * tanW_ / std::max(0.05f, 2.f * g.hy);
             fl.out0 = normalize(vec3(-fwdW_.x, 0.f, -fwdW_.z));
-            fl.dur = 0.95f + 0.22f * std::log2(1.f + length(oT - fl.p0) / 2.f);
+            fl.dur = 1.1f + 0.25f * std::log2(1.f + length(oT - fl.p0) / 2.f);
         }
         const float s = saturate(fl.t / fl.dur);
         if (s >= 1.f) {
-            g.t0 = worldTime_ - 0.6f; // on its shelf, full size, its light fading from now
+            g.t0 = worldTime_ - 0.6f; // in its place, full size, its light fading from now
             it = flights_.erase(it);
             continue;
         }
         if (!f.bare) {
             const float e = s * s * (3.f - 2.f * s);
             const float L = length(oT - fl.p0);
-            const vec3 p = lerp(fl.p0, oT, e) + UP * (0.12f * L * std::sin(PI * e));
-            const vec3 ou = normalize(lerp(fl.out0, ouT, smoothstepf(0.f, 0.8f, s)));
-            const vec3 al = normalize(cross(UP, ou));
-            stLevel_ = (float)(g.slot / SLOTS_LEVEL);
-            pushStack(dyn_[MESH_BOX], makeStack(g.seed), g.type, p, al, UP, ou, lerpf(fl.k0, BOOK_K, e), 1.f, 0.25f, 0.f, true);
-            stLevel_ = 0.f;
+            const vec3 p = lerp(fl.p0, oT, e) + UP * (0.18f * L * std::sin(PI * e));
+            // its spine turns from us toward its place, once round on the way
+            const float turn = fl.spin * TAU * (1.f - smoothstepf(0.f, 0.85f, s));
+            const vec3 o0 = normalize(lerp(fl.out0, g.out, smoothstepf(0.f, 0.85f, s)));
+            const vec3 a0 = normalize(cross(UP, o0));
+            const vec3 ou = o0 * std::cos(turn) + a0 * std::sin(turn);
+            vec3 al = normalize(cross(UP, ou));
+            if (dot(cross(UP, g.out), g.along) < 0.f) al = al * -1.f;
+            pushBook(dyn_[MESH_BOX], g, p, al, ou, lerpf(fl.k0, 1.f, e), 1.f, 0.3f, fl.group);
         }
         ++it;
+    }
+
+    // ---- The drop: loose pages fluttering up from the bookcases, behind the well
+    if (!f.bare && dropAmt_ > 0.01f) {
+        const vec3 paper = pal_.paper * 0.95f;
+        for (int i = 0; i < 18; i++) {
+            const float hs = (hash32((uint64_t)i * 977u) & 1023) / 1023.f, hs2 = (hash32((uint64_t)i * 131u + 7u) & 1023) / 1023.f;
+            const float ph = std::fmod(worldTime_ * (0.07f + 0.03f * hs) + hs2, 1.f);
+            const int side = (i % 2) ? 1 : -1;
+            const WallFrame w = wallAt(side, 0.45f + 0.4f * hs);
+            const vec3 p0 = w.p + w.out * (CASE_D + 0.3f) + UP * (0.6f + 2.0f * hs2);
+            const vec3 p = p0 + w.out * (ph * 2.4f) + UP * (ph * 2.8f + 0.2f * std::sin(ph * 11.f + i)) + w.along * (0.7f * std::sin(ph * 4.f + i));
+            const float a = dropAmt_ * std::sin(PI * ph);
+            if (a < 0.02f) continue;
+            const float th = ph * 9.f + i, ph2 = std::sin(ph * 7.f + i * 1.7f) * 1.1f;
+            const vec3 ax = vec3(std::cos(th), 0.f, std::sin(th));
+            const vec3 ay = vec3(-std::sin(th) * std::sin(ph2), std::cos(ph2), std::cos(th) * std::sin(ph2));
+            const vec3 az = normalize(cross(ax, ay));
+            const vec3 X = ax * (0.13f * a), Y = ay * (0.17f * a), Z = az * 0.004f;
+            Inst in;
+            in.c[0] = p.x; in.c[1] = p.y; in.c[2] = p.z; in.c[3] = (float)M_PLASTER;
+            in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = 0.f;
+            in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.f;
+            in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = 0.f;
+            in.col[0] = paper.x; in.col[1] = paper.y; in.col[2] = paper.z; in.col[3] = 0.f;
+            in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = -10.f;
+            dyn_[MESH_BOX].push_back(in);
+        }
     }
 
     // ---- A cleared row: its stacks swell and dissolve into light where they stand.
@@ -1428,8 +1393,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const vec3 fogCol = P.light ? lerp(P.skyA, vec3(1.f), 0.55f) : lerp(P.skyA, P.skyB, 0.6f) * 0.5f;
     // the collection's light: the drop runs it slowly and on, a Tetris once along it
     float dropT = -10.f, dropK = 0.f;
-    if (tetrisT_ < 3.f) { dropT = tetrisT_ / 2.4f * 1.3f - 0.15f; dropK = 0.55f; }
-    else if (dropAmt_ > 0.01f) { dropT = std::fmod(worldTime_ * 0.07f, 1.4f) - 0.2f; dropK = 0.45f * dropAmt_ * (0.75f + 0.25f * beatPulse_); }
+    if (tetrisT_ < 3.f) { dropT = tetrisT_ / 2.4f * 1.3f - 0.15f; dropK = 0.28f; }
+    else if (dropAmt_ > 0.01f) { dropT = std::fmod(worldTime_ * 0.07f, 1.4f) - 0.2f; dropK = 0.2f * dropAmt_ * (0.75f + 0.25f * beatPulse_); }
     auto lighting = [&](GLuint p, bool board) {
         if (board) {
             // the blocks: a clean white key (their faces read as their color), a cool shade on the sides away from it
@@ -1454,8 +1419,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
                 glUniform4fv(ugl::U(p, "uLC"), n, &LC[0].x);
             }
             set1f(p, "uShadowOn", 1.f);
-            set1f(p, "uFogD", 0.1f / std::max(6.f, camD_ * 3.f));
-            set1f(p, "uFogStart", camD_ * 1.0f);
+            set1f(p, "uFogD", 0.f);
+            set1f(p, "uFogStart", 1e6f);
             set3f(p, "uFogCol", fogCol);
         }
     };
@@ -1476,8 +1441,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         waveK = smoothstepf(0.f, 1.f, dropAmt_) * ((down ? 1.f : 0.68f) + 0.25f * kickK_) * (1.f - 0.6f * slow_);
     }
     // ---- The sun's shadow map, round what the camera sees.
-    const vec3 shC = targetW_;
-    const float shR = std::max(5.f, camD_ * 1.1f);
+    const vec3 shC(0.f, 2.f, -1.5f);
+    const float shR = 11.f;
     mat4 shVP;
     {
         const mat4 view = mat4::lookAt(keyDir * (shR * 2.f), vec3(0.f), std::fabs(keyDir.y) < 0.95f ? UP : vec3(1, 0, 0));
@@ -1496,6 +1461,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progShadow_, "uWaveK", waveK);
         set1f(progShadow_, "uBeatPh", beatPh);
         set3f(progShadow_, "uOrigin", shC);
+        glUniform1fv(ugl::U(progShadow_, "uFeat"), F_COUNT_, featGrow_);
         if (!shelfInst_.empty()) {
             glBindVertexArray(shelfVao_);
             glDrawElementsInstanced(GL_TRIANGLES, meshN_[MESH_BOX], GL_UNSIGNED_INT, nullptr, (GLsizei)shelfInst_.size());
@@ -1531,10 +1497,10 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSolid_, "uBoard", 0.f);
     set1f(progSolid_, "uStackA", 0.f);
     set1f(progSolid_, "uPremul", 0.f);
-    const float skyK = P.light ? 1.6f : 1.f;
+    const float skyK = 1.f;
     set3f(progSolid_, "uSkyA", lerp(P.skyA, P.skyA * slowTint * 0.45f, slow_) * skyK);
     set3f(progSolid_, "uSkyB", lerp(P.skyB, P.skyB * slowTint * 0.5f, slow_) * skyK);
-    set3f(progSolid_, "uOutside", P.outside * (P.light ? 1.3f : 1.f) * (1.f - 0.4f * slow_));
+    set3f(progSolid_, "uOutside", P.leaf);
     set3f(progSolid_, "uLed", P.led);
     set3f(progSolid_, "uPaper", P.paper);
     set3f(progSolid_, "uFloorB", P.floorB);
@@ -1547,7 +1513,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSolid_, "uNight", P.night);
     set1f(progSolid_, "uWorld", 1.f);
     set1f(progSolid_, "uShelfLight", lampLevel);
-    set1f(progSolid_, "uLevelH", LEVEL_H);
+    set1f(progSolid_, "uLevelH", SHELF_PITCH);
+    glUniform1fv(ugl::U(progSolid_, "uFeat"), F_COUNT_, featGrow_);
     set1f(progSolid_, "uBeat", beatPulse_);
     glUniform1fv(ugl::U(progSolid_, "uLevelOn"), 8, levelOn_);
     set1f(progSolid_, "uDropT", dropT);
@@ -1562,7 +1529,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progSolid_, "uShadowVP", shVP);
     set3f(progSolid_, "uShadowO", shC);
     set1f(progSolid_, "uShadowTexel", 1.f / 2048.f);
-    set1f(progSolid_, "uShadowBias", 2.f * shR / 2048.f * 1.5f);
+    set1f(progSolid_, "uShadowBias", 2.f * shR / 2048.f * 4.f);
     glActiveTexture(GL_TEXTURE0);
     if (!shelfInst_.empty()) drawInst(shelfVao_, shelfVbo_, MESH_BOX, nullptr, shelfInst_.size());
     for (int m = 0; m < MESH_COUNT; m++) {
@@ -1613,7 +1580,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progVeil_, "uCardEdge", P.cardEdge);
         set1f(progVeil_, "uPx", 2.f * viewH_.y / height_);
         set1f(progVeil_, "uWellA", 1.f);
-        set1f(progVeil_, "uColA", 1.f);
+        set1f(progVeil_, "uColA", P.light ? 0.6f : 0.68f);
         // (the cards a little narrower than the columns, so more of the library shows)
         set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0] + 0.9f, layout::LEFT_COLUMN[1] + 0.3f, layout::LEFT_COLUMN[2] - 0.5f, layout::LEFT_COLUMN[3] - 0.5f);
         set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.4f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
@@ -1718,6 +1685,22 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uSlow", slow_ * 0.5f);
     set3f(progFinal_, "uSlowTint", slowTint);
     set3f(progFinal_, "uLift", vec3(0.f));
+    {
+        // the HUD's cards: rounded, light, see-through (the room shows through them), an opaque edge in the accent
+        auto rect = [&](float x0, float y0, float x1, float y1) {
+            const vec2 a = project(vec3(x0, y1, 0.f)), b = project(vec3(x1, y0, 0.f)); // (pixels, top-left origin)
+            return vec4(a.x, (float)height_ - b.y, b.x, (float)height_ - a.y);
+        };
+        const vec4 rl = rect(layout::LEFT_COLUMN[0] + 0.9f, layout::LEFT_COLUMN[1] + 0.3f, layout::LEFT_COLUMN[2] - 0.5f, layout::LEFT_COLUMN[3] - 0.5f);
+        const vec4 rr = rect(layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.4f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
+        set4f(progFinal_, "uCardL", rl.x, rl.y, rl.z, rl.w);
+        set4f(progFinal_, "uCardR", rr.x, rr.y, rr.z, rr.w);
+        set3f(progFinal_, "uCardCol", P.card);
+        set3f(progFinal_, "uCardEdgeC", P.cardEdge);
+        set1f(progFinal_, "uCardA", 0.f); // (the cards are laid in the scene, under the previews)
+        set1f(progFinal_, "uCardRad", 26.f * height_ / 1080.f);
+        set1f(progFinal_, "uCardEdgeW", std::max(1.5f, 3.f * height_ / 1080.f));
+    }
     set1f(progFinal_, "uVig", P.light ? 0.06f : 0.2f);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
@@ -1737,7 +1720,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books, shelved full size in a bright toon library atrium (saturated, cel-shaded, inked) that fills floor by floor, in 3D",
+        "LIBRARY", "the blocks are books; each cleared line sends two big books to a cosy toon library room, a diorama that fills slowly, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A calm, bright world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },

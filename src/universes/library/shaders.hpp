@@ -2,10 +2,10 @@
 // LIBRARY's shaders (see library.cpp).
 //
 // SOLID_VS / SOLID_FS draw everything solid, instanced, as toon: boxes, cylinders and the hemisphere, with their
-// materials: painted wood, the shelving's back panels washed by the strip lights, the books (toy-bright spines, pages,
-// covers), checker tiles or planks, painted plaster and metal, lights, the glazing (a toon sky with puffy clouds and
-// round trees, or a town under the stars), the balustrades' glass (drawn last, blended), the skylight and round toy
-// shapes (bushes, pots, shades, globes). Cel lit (the sun in three bands with its shadow map, a cool colored shade,
+// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), planks, painted plaster and metal,
+// lights, round toy shapes (bushes, pots, shades, globes, the rug), the round windows (the sky through a cross of
+// bars), the backdrop (the sky, stars at night); the furniture that comes later scaled in from its floor by its
+// feature's growth (uFeat). Cel lit (the sun in three bands with its shadow map, a cool colored shade,
 // up to 16 lamps in soft-edged pools), inked along every box's edges and round the silhouettes of round shapes.
 // SHADOW_FS writes the sun's depth. SPRITE_* are the glows (lamps, dust in the daylight); VEIL_FS the well's deep
 // ground and the HUD's rounded cards; LINE_*
@@ -23,7 +23,7 @@ uniform float uTime;
 uniform float uWaveK, uBeatPh;
 float shelfWave(float s, float y, float level) {
     if (uWaveK <= 0.0) return 0.0;
-    float row = floor(y / 0.32);
+    float row = floor(y / 0.95);
     float dir = mod(row, 2.0) < 0.5 ? 1.0 : -1.0;
     float d = fract(s * dir * 0.075 - uBeatPh - row * 0.035 - level * 0.12) - 0.5;
     return exp(-d * d / 0.011) * uWaveK;
@@ -55,6 +55,7 @@ layout(location = 6) in vec4 iCol;
 layout(location = 7) in vec4 iE;
 uniform mat4 uVP;
 uniform vec3 uOrigin;
+uniform float uFeat[4];   // the features' growth (0 not there .. 1 grown)
 out vec3 vP, vL, vLN, vN;
 flat out vec3 vHalf, vAX, vAY, vAZ;
 flat out vec4 vCol, vMat, vE;
@@ -63,6 +64,14 @@ void main() {
     vec3 X = iX.xyz, Y = iY.xyz, Z = iZ.xyz;
     vec3 C = iC.xyz;
     vWave = 0.0;
+    if (iE.x > -0.5 && iE.x < 3.5) {
+        // a part of a feature: grown in from its floor (a little overshoot)
+        float g = uFeat[int(iE.x + 0.5)];
+        float u = g - 1.0;
+        float k = g <= 0.0 ? 0.0 : 1.0 + 2.4 * u * u * u + 1.4 * u * u;
+        X *= k; Y *= k; Z *= k;
+        C.y = iE.y + (C.y - iE.y) * k;
+    }
     if (uWaveK > 0.0 && int(iC.w + 0.5) == 3 && iE.z >= 0.0) {
         // a shelved book (its depth axis Z points out of its shelf): slid out and tipped forward about its foot
         vec3 out_ = normalize(Z);
@@ -311,8 +320,8 @@ void main() {
             float r = hash12(vec2(seed * 3.1, 9.0));
             #define RECT(v0, v1, uw) (smoothstep(v0 - pv, v0 + pv, v) * (1.0 - smoothstep(v1 - pv, v1 + pv, v)) * (1.0 - smoothstep(uw - pu, uw + pu, abs(u))))
             // toy-bright designs: cream or gold bands, a dark title, a dot
-            vec3 light = mix(alb, vec3(1.0, 0.92, 0.75), 0.8);
-            vec3 band = r > 0.5 ? gold : light;
+            vec3 light = mix(alb, vec3(1.0, 0.94, 0.82), 0.6);
+            vec3 band = r > 0.8 ? mix(alb, gold, 0.7) : light;
             if (sty == 0) {
                 alb = mix(alb, band, RECT(0.55, 0.7, 2.0) * detail);
                 alb = mix(alb, band, RECT(-0.7, -0.55, 2.0) * detail);
@@ -462,6 +471,29 @@ void main() {
             emit = sky * (1.0 - beam);
             alb *= beam;
         }
+    } else if (mat == 13) {
+        // the backdrop the diorama sits against: the variant's sky, calm (soft clouds by day, stars by night)
+        lineK = 0.0;
+        float hy = smoothstep(-14.0, 30.0, vP.y);
+        emit = mix(uSkyB, uSkyA, hy * hy) * 0.95;
+        vec2 sp = vP.xy * 1.6;
+        float h = hash12(floor(sp));
+        float st = step(0.95, h) * (1.0 - smoothstep(0.04, 0.14, length(fract(sp) - 0.5)));
+        emit += vec3(1.0, 0.95, 0.8) * st * uNight * (0.5 + 1.2 * step(0.99, h));
+        alb = vec3(0.0);
+    } else if (mat == 14) {
+        // a round window (a disc facing the room, its axis Y): the sky through a cross of glazing bars, a frame
+        if (uMesh == 1 && vLN.y > 0.5) {
+            vec2 d = vL.xz;
+            float r = length(d);
+            float pw = fwidth(r) * 1.2 + 0.004;
+            float frameM = smoothstep(0.82 - pw, 0.82 + pw, r);
+            float bar = 1.0 - smoothstep(0.05 - pw, 0.05 + pw, min(abs(d.x), abs(d.y)));
+            frameM = max(frameM, bar);
+            vec3 sky = skyAt(vec2(d.x * 9.0 + seed * 30.0, 15.0 + d.y * 9.0));
+            emit = sky * (1.0 - frameM);
+            alb *= frameM;
+        }
     } else if (mat == 11) {
         // a round, friendly shape (a plant's foliage, a pot, a lamp's globe): flat color, toon lit; p0 > 0: a
         // globe glowing from within
@@ -495,7 +527,7 @@ void main() {
             ol = 1.0 - smoothstep(0.14, 0.24, abs(dot(N, V)));
         }
         vec3 lc = lineC.x >= 0.0 ? lineC : uLineCol * (0.3 + 0.7 * alb);
-        c = mix(c, lc, ol * lineK * 0.85);
+        c = mix(c, lc, ol * lineK * (uWorld > 0.5 ? 0.6 : 0.85));
     }
     if (uBoard < 0.5) c = applyFog(c, vP);
     if (uPremul > 0.5) frag = vec4(c * outA, outA);
@@ -616,14 +648,13 @@ void main() {
     for (int i = 0; i < 2; i++) {
         vec4 r = i == 0 ? uColL : uColR;
         float dc = box(w, (r.xy + r.zw) * 0.5, (r.zw - r.xy) * 0.5, 0.7);
-        float m = (1.0 - smoothstep(-aa, aa, dc)) * uColA;
-        float edge = (1.0 - smoothstep(-aa, aa, dc + 0.14)) ;
-        vec3 cc = mix(uCardEdge, uCard, edge);
-        // a soft drop shadow under the card
-        float sh = (1.0 - smoothstep(-0.2, 0.6, box(w, (r.xy + r.zw) * 0.5 + vec2(0.12, -0.18), (r.zw - r.xy) * 0.5, 0.7))) * 0.25 * uColA * (1.0 - m);
+        // see-through (the room shows through), its edge opaque
+        float cov = 1.0 - smoothstep(-aa, aa, dc);
+        float inner = 1.0 - smoothstep(-aa, aa, dc + 0.12);
+        float m = cov * mix(1.0, uColA, inner) * step(0.001, uColA);
+        vec3 cc = mix(uCardEdge, uCard, inner);
         col = col * (1.0 - m) + cc * m;
-        col *= 1.0 - sh;
-        a = a + m * (1.0 - a) + sh * (1.0 - a);
+        a = a + m * (1.0 - a);
     }
     frag = vec4(col, a);
 }
@@ -662,6 +693,14 @@ out vec4 frag;
 uniform sampler2D uScene, uBloom;
 uniform float uBloomK, uSlow, uDim, uFade, uBridge, uExposure, uSatF, uVig;
 uniform vec3 uBridgeCol, uBridgeInk, uSlowTint, uLift;
+uniform vec4 uCardL, uCardR;           // the HUD's cards (pixels, GL origin)
+uniform vec3 uCardCol, uCardEdgeC;
+uniform float uCardA, uCardRad, uCardEdgeW;
+float rbox(vec2 p, vec4 r, float rad) {
+    vec2 c = (r.xy + r.zw) * 0.5, h = (r.zw - r.xy) * 0.5;
+    vec2 q = abs(p - c) - h + rad;
+    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - rad;
+}
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 b = texture(uBloom, vUv).rgb;
@@ -675,6 +714,17 @@ void main() {
     c += uLift * (1.0 - c);
     vec2 v = vUv - 0.5;
     c *= 1.0 - uVig * dot(v, v) * 2.0;
+    if (uCardA > 0.0) {
+        for (int i = 0; i < 2; i++) {
+            float d = rbox(gl_FragCoord.xy, i == 0 ? uCardL : uCardR, uCardRad);
+            float m = 1.0 - smoothstep(-0.75, 0.75, d);
+            float inner = 1.0 - smoothstep(-0.75, 0.75, d + uCardEdgeW);
+            // a soft shadow round it
+            float sh = (1.0 - smoothstep(0.0, uCardRad * 0.6, d)) * (1.0 - m) * 0.18;
+            c *= 1.0 - sh * uCardA;
+            c = mix(c, mix(uCardEdgeC, uCardCol, inner), m * mix(1.0, uCardA, inner) * min(1.0, uCardA * 3.0));
+        }
+    }
     c = mix(c, mix(uBridgeCol, uBridgeInk, clamp(s.a, 0.0, 1.0)), uBridge);
     c *= (1.0 - uDim * 0.5) * uFade;
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
