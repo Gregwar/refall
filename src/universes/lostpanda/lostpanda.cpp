@@ -1190,9 +1190,9 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             break;
         case T_TERM:
             trainX_ = XA - DOOR;
-            if (P_ > XA + 3.0) leaveT_ += wdt;
-            door_ = std::clamp(door_ + wdt / 1.2f * (leaveT_ > 1.5f ? -1.f : 1.f), 0.f, 1.f);
-            if (leaveT_ > 1.5f && door_ <= 0.f) { train_ = T_LEAVE; trainT_ = 0.f; }
+            if (P_ > XA + 1.2) leaveT_ += wdt;
+            door_ = std::clamp(door_ + wdt / 1.0f * (leaveT_ > 0.5f ? -1.f : 1.f), 0.f, 1.f);
+            if (leaveT_ > 0.5f && door_ <= 0.f) { train_ = T_LEAVE; trainT_ = 0.f; }
             break;
         case T_LEAVE: {
             trainT_ += wdt;
@@ -1350,6 +1350,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set1f(prog, "uTrainBody", 0.55f + 0.7f * dawn);
         set1f(prog, "uSway", train_ == T_RIDE ? 1.f : 0.25f);
         set1f(prog, "uTrainT", trainClock_);
+        set1f(prog, "uDir", train_ == T_LEAVE ? -1.f : 1.f);
+        set1f(prog, "uHead", (1.f - 0.8f * dawn) * (train_ == T_AWAY || train_ == T_GONE ? 0.f : 1.f));
         (void)px;
     };
     const bool trainOn = std::fabs(trainX_ + 17.0 - (C_ - xP_)) < viewH_.x + 40.0;
