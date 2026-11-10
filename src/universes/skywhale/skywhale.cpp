@@ -4,9 +4,9 @@
 // balloons in its wake, on through the stratosphere into orbit, where it glides around the Earth with aurora
 // trailing from its fins, and out to the Moon, low over whose craters it glides at the end, the Earth in its sky.
 //
-// The growth is G = ln(the creature's length in meters): 30 cm at the first line, 1 m (leaving the pond) at ~6
-// lines, a 15 m whale reaching the sea at ~24, 150 m leaving the water at ~48, the clouds (2 km) at ~64, orbit at
-// ~100, around the Earth at ~140, down over the Moon by ~180, then slower and slower. One mesh for its whole life
+// The growth is G = ln(the creature's length in meters): 30 cm at the first line, 1 m (leaving the pond) at ~4
+// lines, a 12 m whale reaching the sea at ~13, 160 m leaving the water at ~27, the clouds (2 km) at ~35, orbit at
+// ~50, out to the Moon from ~65, low over it by ~100, then slower and slower. One mesh for its whole life
 // (a grid per part: body, tail fin, dorsal, pectorals, pelvics) placed by the vertex shader against the morph (koi ->
 // whale: the slender patterned body thickens, the forked vertical tail turns into horizontal flukes, the pectorals
 // grow into a humpback's long flippers, the markings become soft lights), the swimming wave (side to side for the
@@ -177,9 +177,11 @@ inline float pondR(float x, float z) {
 // The journey: lines -> the creature's length (meters), interpolated in log space; beyond the table, slower and slower.
 struct Stage { float lines, length; };
 const Stage STAGES[] = {
-    {0, 0.3f}, {3, 0.5f}, {6, 0.95f}, {11, 2.5f}, {16, 6.f}, {21, 12.f}, {26, 20.f}, {32, 38.f}, {40, 80.f},
-    {48, 160.f}, {56, 500.f}, {64, 1400.f}, {72, 4000.f}, {82, 1.4e4f}, {92, 6.e4f}, {104, 3.e5f}, {118, 1.4e6f},
-    {134, 7.e6f}, {150, 1.2e7f}, {170, 2.e7f}, {195, 3.e7f}, {220, 4.e7f}, {250, 5.e7f},
+    // (the whole journey within ~100 lines: the sea by ~13, the clouds ~35, orbit ~50, the Moon growing ahead from ~65,
+    // the glide low over it established by ~100; then slower and slower)
+    {0, 0.3f}, {2, 0.5f}, {4, 0.95f}, {7, 2.5f}, {10, 6.f}, {13, 12.f}, {16, 20.f}, {19, 38.f}, {23, 80.f},
+    {27, 160.f}, {31, 500.f}, {35, 1400.f}, {40, 4000.f}, {45, 1.4e4f}, {50, 6.e4f}, {55, 3.e5f}, {60, 1.4e6f},
+    {65, 7.e6f}, {72, 1.e7f}, {80, 1.4e7f}, {90, 2.2e7f}, {100, 3.3e7f}, {125, 4.2e7f}, {160, 5.e7f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 constexpr float G_MAX = 17.9f;
@@ -190,7 +192,7 @@ constexpr float G_MAX = 17.9f;
 // out and closes on it, until its craters fill the sky and its horizon flattens under the whale.
 constexpr double R_LUNAR = 8.e8, D_MOON = 3.e10;
 vec3 moonPos() { return vec3(0.f, -(float)R_EARTH, (float)D_MOON); }
-// How far it has gone from circling the Earth to gliding over the Moon (the journey out takes ~70 lines).
+// How far it has gone from circling the Earth to gliding over the Moon (the journey out takes ~35 lines).
 float lunarK(float G) { return smoothstepf(15.95f, 17.3f, G); }
 // The finale proper (its low sun, the Earth rising over the Moon's horizon, the dust).
 float lunarDraw(float G) { return smoothstepf(17.f, 17.3f, G); }
@@ -2188,7 +2190,8 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progLunar_, "uEarthR", 0.075f);
         set1f(progLunar_, "uEarthK", 0.f); // (the Earth is behind it, far)
         // (pale in the day's sky, bright in space)
-        set1f(progLunar_, "uMoonK", lerpf(0.4f, 1.f, smoothstepf(1.e4f, 2.e5f, alt_)));
+        set1f(progLunar_, "uMoonK", lerpf(0.75f, 1.f, smoothstepf(1.e4f, 2.e5f, alt_)));
+        set1f(progLunar_, "uDay", (1.f - smoothstepf(2.e4f, 1.5e5f, alt_)) * (1.f - 0.6f * pal_.night));
         set3f(progLunar_, "uSpaceC", pal_.space);
         set3f(progLunar_, "uNebulaC", pal_.nebula);
         set3f(progLunar_, "uRegA", lerp(vec3(0.62f, 0.61f, 0.6f), pal_.cloudLit * 0.62f, 0.2f));
@@ -2317,7 +2320,8 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     cloudDrift_ += wdt * (6.f + 8.f * wm + 8.f * wp);
     seaDrift_ += wdt * (8.f + 10.f * wm + 10.f * wp);
     // the cumulus field: fading as it falls away below the climbing whale (the sea of clouds takes over)
-    const float puffK = 1.f - smoothstepf(3.e4f, 1.6e5f, alt_);
+    // (gone, gradually, once the eye is well over the cloud layer: seen from far above, the sea of clouds carries them)
+    const float puffK = 1.f - smoothstepf(CLOUD_Y + 700.f, CLOUD_Y + 4500.f, alt_);
     if (puffK > 0.f) {
         std::vector<std::pair<float, int>> order;
         order.reserve(clouds_.size());

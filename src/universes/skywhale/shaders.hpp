@@ -489,7 +489,8 @@ uniform float uRL;         // its radius (meters)
 uniform vec3 uEarthDir;
 uniform float uEarthR;     // the Earth's angular radius
 uniform float uEarthK;     // the Earth drawn (the finale)
-uniform float uMoonK;      // the Moon's opacity (pale in the day's sky)
+uniform float uMoonK;      // the Moon's opacity
+uniform float uDay;        // in the day's sky: a pale moon, its dark side lost in the sky's light
 uniform vec3 uSpaceC, uNebulaC, uRegA, uRegB;
 uniform vec3 uWhaleA, uWhaleB;
 uniform float uWhaleW;
@@ -599,9 +600,11 @@ void main() {
         // the regolith: grey, darker maria, bright young craters
         vec3 alb = mix(uRegB, uRegA, clamp(0.55 + a0 * 2.2, 0.0, 1.0));
         // the low sun: crisp light, hard shadows marched toward it
-        float ndl = dot(N, uSunDir);
-        // near: crisp light, hard shadows; from afar a softer light (its relief would be ink blots)
+        // near: crisp light, hard shadows; from afar a softer light (its relief would be ink blots), and its phase
+        // gibbous (lit from nearly behind the eye: a bright disc, never a dark spot)
         float nearK = smoothstep(0.4, 0.06, length(o) - 1.0);
+        vec3 sunM = normalize(mix(uSunDir, -d, 0.6 * (1.0 - nearK)));
+        float ndl = dot(N, sunM);
         float lit = mix(smoothstep(-0.25, 0.7, ndl), smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * 2.2, 0.0, 1.0)), nearK);
         float sh = 1.0;
         // (hard shadows near; from afar the terminator alone, the marched shadows would be noise)
@@ -666,6 +669,12 @@ void main() {
         }
     }
     float a = cov * uMoonK;
+    if (uDay > 0.0 && cov > 0.0) {
+        // by day: pale and bright, washed into the sky, its shaded side lost in the sky's light
+        float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        col = mix(col, vec3(1.0, 0.98, 0.96) * (0.55 + 0.9 * lum), uDay);
+        a *= mix(1.0, 0.25 + 0.55 * smoothstep(0.05, 0.35, lum), uDay);
+    }
     if (a <= 0.001 && ce <= 0.001) discard;
     // the Moon over the Earth (it is nearer), the Earth over the sky
     vec3 outc = (col * a + ec * ce * (1.0 - a)) / max(a + ce * (1.0 - a), 1e-4);
@@ -1374,19 +1383,24 @@ void main() {
     vec3 n0 = uCamR * q.x + uCamU * q.y + fwd * sqrt(max(1.0 - rn * rn, 0.0));
     vec3 nrm = normalize(normalize(n0) - (uCamR * gx + uCamU * gy) * 0.9);
     // toon light, three bands: the cool shade, the body, the sunlit tops; softly self-shadowed toward the base
-    float ndl = dot(nrm, uSunDir) + 0.2 * nrm.y;
+    // seen from above (the eye over it): its sunlit top faces the eye, no shaded base
+    float above = smoothstep(0.02, 0.25, fwd.y);
+    nrm = normalize(mix(nrm, normalize(vec3(0.0, 1.0, 0.0) + nrm * 0.35), above));
+    float ndl = dot(nrm, uSunDir) + 0.2 * nrm.y + 0.35 * above;
     float band = smoothstep(-0.18, -0.08, ndl) * 0.45 + smoothstep(0.12, 0.2, ndl) * 0.3 + smoothstep(0.5, 0.58, ndl) * 0.25;
     vec3 shade = uCloudShade * mix(vec3(0.85, 0.9, 1.08), vec3(1.0), 0.4);
     vec3 col = mix(shade, uCloudLit, band);
     // the base, in its own shadow; the hollows between the lobes
-    col *= mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y));
-    col *= 1.0 - 0.18 * smoothstep(0.0, -0.06, lb) * (1.0 - band);
+    col *= mix(mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y)), 1.0, above);
+    col *= 1.0 - 0.18 * smoothstep(0.0, -0.06, lb) * (1.0 - band) * (1.0 - 0.6 * above);
     // a warm rim where the sun grazes its silhouette, and the light through its edge when the sun is behind it
     float rim = smoothstep(0.72, 0.98, rn) * clamp(dot(normalize(n0), uSunDir) + 0.35, 0.0, 1.0);
     col += uSunGlow * rim * 0.45;
     float back = pow(max(dot(-fwd, uSunDir), 0.0), 4.0);
     col += uSunGlow * back * smoothstep(0.7, 0.98, rn) * 0.8;
     col = atmos(col, vW);
+    // (never darker than the haze around it; from above, never darker than the sea of clouds' sunlit tops)
+    col = max(col, mix(uHazeC * 0.92, atmos(uCloudLit * 0.8, vW), 0.45 + 0.55 * above));
     float a = cover * vI.y;
     frag = vec4(col * a, a);
 }
@@ -1481,6 +1495,7 @@ vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTa
 void main() {
     vec2 uv = vec2(1.0 - vUv.x, vUv.y);
     vec4 w = texture(uWorld, uv);
+    if (any(isnan(w)) || any(isinf(w))) w = vec4(0.0);
     vec3 c = w.rgb + texture(uBloomT, uv).rgb * uBloomK;
     float vis = w.a;
     if (vis > 0.002) {
@@ -1526,7 +1541,10 @@ uniform float uThreshold;
 void main() {
     vec3 c = vec3(0.0);
     for (int y = -1; y <= 1; y++)
-        for (int x = -1; x <= 1; x++) c += texture(uSrc, vUv + vec2(x, y) * uTexel).rgb;
+        for (int x = -1; x <= 1; x++) {
+            vec3 t = texture(uSrc, vUv + vec2(x, y) * uTexel).rgb;
+            c += any(isnan(t)) || any(isinf(t)) ? vec3(0.0) : t; // (a stray NaN would spread into a dark square)
+        }
     c /= 9.0;
     float l = max(c.r, max(c.g, c.b));
     frag = vec4(c * max(l - uThreshold, 0.0) / max(l, 1e-3), 1.0);
