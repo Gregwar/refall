@@ -1,7 +1,7 @@
 #pragma once
-// SKY WHALE's shaders: the world (the sky, the planet with its pond, river and sea, and space in one ray-traced pass;
-// the creature, the props, the toon trees; clouds, the lights in the air, the aurora) at a reduced resolution with
-// depth, a soft bloom, the stars at full resolution, then the veil behind the well, the koi-scale pieces, the
+// SKY WHALE's shaders: the world (the sky, the planet with its pond, river and sea, and space in one ray-traced pass
+// at a reduced resolution with its depth; the creature, the props, the toon trees, clouds, the lights in the air, the
+// aurora multisampled at the full resolution over it), a soft bloom, the stars at full resolution, then the veil behind the well, the koi-scale pieces, the
 // lettering. Positions are in meters, drawn relative to the eye (uVP has the eye at its origin): the creature spans
 // from a hand's width to a million kilometers.
 
@@ -23,7 +23,8 @@ float fbm(vec2 p) {
     for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = mat2(0.8, -0.6, 0.6, 0.8) * p * 2.03 + 1.7; a *= 0.5; }
     return s / 0.9375;
 }
-float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+// (no sin: it keeps its precision far out, where the planet's noises are sampled at large coordinates)
+float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float vnoise3(vec3 p) {
     vec3 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -93,11 +94,14 @@ vec3 waterSurface(vec3 col, vec3 s, vec3 v) {
     col += (uSunC * 0.6 + uSunGlow) * smoothstep(0.99, 0.995, g) * 0.8 * (1.0 - 0.6 * uNight);
     return col;
 }
-// A point under the water (below y = 0) seen from above: absorbed along its path in the water, then the surface.
+// The height above the sea (the planet's curve, locally): the creature cruises kilometers out to sea.
+float seaH(vec3 p) { return p.y + dot(p.xz, p.xz) / 1.2742e7; }
+// A point under the water (below the sea) seen from above: absorbed along its path in the water, then the surface.
 vec3 underWater(vec3 col, vec3 wp) {
-    if (uEye.y <= 0.0 || wp.y >= 0.0) return col;
+    float he = seaH(uEye), hp = seaH(wp);
+    if (he <= 0.0 || hp >= 0.0) return col;
     vec3 d = wp - uEye;
-    float t0 = uEye.y / max(-d.y, 1e-6);
+    float t0 = he / max(he - hp, 1e-6);
     vec3 s = uEye + d * t0;
     float path = length(d) * (1.0 - t0);
     col = mix(col, col * uWaterC, 1.0 - exp(-path * uWaterK * 2.0));
@@ -173,7 +177,8 @@ vec3 landColor(vec3 p, vec3 n, float t, float foot, float e) {
     float tone = smoothstep(-0.03, 0.03, v);
     vec3 meadow = mix(uGroundB, uGroundA, tone);
     float kNear = 1.0 - smoothstep(6.0e3, 8.0e4, length(p.xz));
-    land = mix(land * mix(0.85, 1.12, tone), meadow, kNear);
+    // (the patches are mapped on the plane: none at the planet's scale, where they would streak)
+    land = mix(land * mix(0.85, 1.12, mix(0.5, tone, 1.0 - smoothstep(1.0e5, 6.0e5, length(p.xz)))), meadow, kNear);
     // the shore: a band of sand and pebbles along the water
     float band = max(0.35, 0.05 * max(p.x, 4.0));
     float sand = smoothstep(-band - foot, -band * 0.6, e) * kNear;
@@ -212,6 +217,67 @@ vec3 floorColor(vec3 fp, float foot, float depth) {
         c *= 1.0 - 0.45 * uShadowK * smoothstep(w * 1.6, w * 0.6, dd);
     }
     return c;
+}
+// The sky along d (the atmosphere along the ray, its lowest point; space beyond; the aurora, the limb, far hills).
+vec3 skyColor(vec3 d, float b, float disc, float alt, vec3 up, inout float stars) {
+    vec3 col;
+    // ---- the sky: the atmosphere along the ray (its lowest point), space beyond
+    float hc = b < 0.0 ? -disc / (sqrt(R * R - disc) + R) : alt;
+    float air = exp(-hc / 18000.0);
+    float dip = atan(sqrt(alt * (2.0 * R + alt)), R);
+    float el = asin(clamp(dot(d, up), -1.0, 1.0)) + dip;   // above the limb
+    float zk = smoothstep(0.0, 0.75, el);
+    vec3 zen = mix(uZenithC, uZenithC * vec3(0.25, 0.3, 0.55), smoothstep(2000.0, 30000.0, alt));
+    vec3 sky = mix(uHorizonC, zen, pow(zk, 0.7));
+    float a = clamp(pow(air, 0.55) * 1.15, 0.0, 1.0);
+    vec3 sp = uSpaceC;
+    float az = atan(d.x, -d.z);
+    float nb = fbm3(d * 2.2 + 4.0);
+    float neb = smoothstep(0.45, 0.8, nb) * (0.35 + 0.65 * smoothstep(0.3, 0.9, fbm3(d * 5.0 + 1.0)));
+    sp += mix(uNebulaC, uNebula2C, fbm3(d * 3.7 + 9.0)) * neb * (0.08 + 0.5 * uDeep);
+    if (uDeep > 0.0) {
+        vec3 bx, by;
+        basis(uGalaxyDir, bx, by);
+        vec2 g = vec2(dot(d, bx), dot(d, by)) / 0.22;
+        if (dot(d, uGalaxyDir) > 0.0) {
+            vec2 gq = vec2(g.x * 0.9 + g.y * 0.43, (-g.x * 0.43 + g.y * 0.9) / 0.45);
+            float gr = length(gq), ga = atan(gq.y, gq.x);
+            float arms = 0.5 + 0.5 * cos(2.0 * (ga - log(gr + 0.05) * 2.6));
+            float gb = exp(-gr * 2.6) * (0.35 + 0.65 * arms * smoothstep(0.0, 0.25, gr)) + exp(-gr * 14.0) * 1.2;
+            gb *= 0.75 + 0.5 * vnoise(gq * 14.0);
+            sp += mix(uNebula2C * 1.3, vec3(1.0, 0.92, 0.8), exp(-gr * 5.0)) * gb * uDeep * 0.9;
+        }
+    }
+    col = mix(sp, sky, a);
+    // the polar aurora, in curtains over the sky (the aurora variant)
+    if (uAurora > 0.0 && el > 0.0) {
+        float x = az * 2.2 + 0.5 * sin(az * 3.0 + uTime * 0.05);
+        float curtain = smoothstep(0.25, 0.75, fbm(vec2(x * 1.3, uTime * 0.03))) ;
+        float rays = 0.55 + 0.45 * vnoise(vec2(az * 70.0, uTime * 0.25));
+        float h = (el - 0.06 - 0.08 * fbm(vec2(x * 2.0, 1.0))) / 0.45;
+        float body = smoothstep(0.0, 0.06, h) * exp(-max(h, 0.0) * 2.4);
+        vec3 ac = mix(uAuroraC, uAurora2C, smoothstep(0.1, 0.9, h));
+        col += ac * body * curtain * rays * uAurora * a * 0.9;
+        stars *= 1.0 - 0.6 * body * curtain;
+    }
+    // the limb, glowing (seen from high up)
+    float limb = exp(-hc / 6000.0) * smoothstep(3000.0, 60000.0, alt) * step(0.0, -b + 0.0);
+    col += uHorizonC * limb * 0.7;
+    stars += (uStars + (1.0 - a)) * (1.0 - a * 0.85);
+    // far hills along the horizon, on the land's side (seen from near the ground)
+    if (uHills > 0.0) {
+        float side = smoothstep(0.35, -0.25, d.x);
+        float h1 = 0.012 + 0.022 * fbm(vec2(az * 2.6, 1.0)) + 0.012 * fbm(vec2(az * 9.0, 7.0));
+        float h2 = 0.004 + 0.016 * fbm(vec2(az * 4.3 + 9.0, 3.0)) + 0.006 * fbm(vec2(az * 17.0, 2.0));
+        float aa = uPix * 1.2;
+        float m1 = smoothstep(h1 + aa, h1 - aa, el) * uHills * side, m2 = smoothstep(h2 + aa, h2 - aa, el) * uHills * side;
+        vec3 far = mix(uHazeC, uGroundB * 0.9 + uZenithC * 0.25, 0.4);
+        vec3 near = mix(uHazeC, uGroundB, 0.62);
+        col = mix(col, far, m1);
+        col = mix(col, near, m2);
+        stars *= 1.0 - max(m1, m2);
+    }
+    return col;
 }
 void main() {
     vec3 d = rayDir(vUv);
@@ -286,17 +352,19 @@ void main() {
                 float trail = smoothstep(-0.1 * Lw, 0.2 * Lw, back) * smoothstep(5.0 * Lw, 1.0 * Lw, back);
                 float bw = uWhaleW * 1.2 + back * 0.12;
                 float fn = vnoise(rel / max(uWhaleW * 0.25, foot * 2.0) + vec2(uFlowT * 0.3, 0.0));
-                float foam = smoothstep(bw, bw * 0.5, side) * smoothstep(0.55, 0.6, fn + 0.25 * smoothstep(bw, 0.0, side)) * trail;
+                float ff = fn + 0.25 * smoothstep(bw, 0.0, side);
+                float fw = max(fwidth(ff), 0.025);
+                float foam = smoothstep(bw, bw * 0.5, side) * smoothstep(0.575 - fw, 0.575 + fw, ff) * trail;
                 // the Kelvin V, from the snout
                 vec2 relA = p.xz - uWhaleA.xz;
                 float bA = -dot(relA, hd), sA = abs(dot(relA, vec2(-hd.y, hd.x)));
                 float vline = abs(sA - bA * 0.36) / max(uWhaleW * 0.25 + bA * 0.02, foot);
-                foam = max(foam, smoothstep(1.0, 0.4, vline) * smoothstep(0.0, 0.2 * Lw, bA) * smoothstep(2.5 * Lw, 0.3 * Lw, bA) * smoothstep(0.4, 0.55, fn) * 0.7);
+                foam = max(foam, smoothstep(1.0, 0.4, vline) * smoothstep(0.0, 0.2 * Lw, bA) * smoothstep(2.5 * Lw, 0.3 * Lw, bA) * smoothstep(0.475 - fw - 0.05, 0.475 + fw + 0.05, fn) * 0.7);
                 // around the body where it meets the water
                 vec2 ab = uWhaleA.xz - uWhaleB.xz, pq = p.xz - uWhaleB.xz;
                 float hh = clamp(dot(pq, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
                 float dd = length(pq - ab * hh);
-                foam = max(foam, smoothstep(uWhaleW * 1.7, uWhaleW * 1.0, dd) * smoothstep(0.35, 0.5, fn) * 0.8 * uFoamBody);
+                foam = max(foam, smoothstep(uWhaleW * 1.7, uWhaleW * 1.0, dd) * smoothstep(0.425 - fw - 0.05, 0.425 + fw + 0.05, fn) * 0.8 * uFoamBody);
                 wcol = mix(wcol, vec3(1.0, 0.99, 0.97) * mix(light, vec3(1.0), 0.3), foam * uWakeK * 0.85);
             }
             if (uSplash.w >= 0.0 && uSplash.w < 6.0) {
@@ -350,63 +418,15 @@ void main() {
         vec3 dp = water > 0.5 ? fp : p;
         vec4 clip = uVP * vec4(dp - uEye, 1.0);
         depth = water > 0.5 && length(dp - uEye) > 5.0e4 ? 1.0 : clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
+        // the limb antialiased: within a pixel and a half of it, toward the sky behind
+        float gap = disc / (R + sqrt(max(R * R - disc, 0.0)));
+        float wl = 1.0 - smoothstep(0.0, 1.6 * uPix * sqrt(max(c0, 1.0)), gap);
+        if (wl > 0.002) {
+            float st = 0.0;
+            col = mix(col, skyColor(d, b, 0.0, alt, up, st), wl);
+        }
     } else {
-        // ---- the sky: the atmosphere along the ray (its lowest point), space beyond
-        float hc = b < 0.0 ? -disc / (sqrt(R * R - disc) + R) : alt;
-        float air = exp(-hc / 18000.0);
-        float dip = atan(sqrt(alt * (2.0 * R + alt)), R);
-        float el = asin(clamp(dot(d, up), -1.0, 1.0)) + dip;   // above the limb
-        float zk = smoothstep(0.0, 0.75, el);
-        vec3 zen = mix(uZenithC, uZenithC * vec3(0.25, 0.3, 0.55), smoothstep(2000.0, 30000.0, alt));
-        vec3 sky = mix(uHorizonC, zen, pow(zk, 0.7));
-        float a = clamp(pow(air, 0.55) * 1.15, 0.0, 1.0);
-        vec3 sp = uSpaceC;
-        float az = atan(d.x, -d.z);
-        float nb = fbm3(d * 2.2 + 4.0);
-        float neb = smoothstep(0.45, 0.8, nb) * (0.35 + 0.65 * smoothstep(0.3, 0.9, fbm3(d * 5.0 + 1.0)));
-        sp += mix(uNebulaC, uNebula2C, fbm3(d * 3.7 + 9.0)) * neb * (0.08 + 0.5 * uDeep);
-        if (uDeep > 0.0) {
-            vec3 bx, by;
-            basis(uGalaxyDir, bx, by);
-            vec2 g = vec2(dot(d, bx), dot(d, by)) / 0.22;
-            if (dot(d, uGalaxyDir) > 0.0) {
-                vec2 gq = vec2(g.x * 0.9 + g.y * 0.43, (-g.x * 0.43 + g.y * 0.9) / 0.45);
-                float gr = length(gq), ga = atan(gq.y, gq.x);
-                float arms = 0.5 + 0.5 * cos(2.0 * (ga - log(gr + 0.05) * 2.6));
-                float gb = exp(-gr * 2.6) * (0.35 + 0.65 * arms * smoothstep(0.0, 0.25, gr)) + exp(-gr * 14.0) * 1.2;
-                gb *= 0.75 + 0.5 * vnoise(gq * 14.0);
-                sp += mix(uNebula2C * 1.3, vec3(1.0, 0.92, 0.8), exp(-gr * 5.0)) * gb * uDeep * 0.9;
-            }
-        }
-        col = mix(sp, sky, a);
-        // the polar aurora, in curtains over the sky (the aurora variant)
-        if (uAurora > 0.0 && el > 0.0) {
-            float x = az * 2.2 + 0.5 * sin(az * 3.0 + uTime * 0.05);
-            float curtain = smoothstep(0.25, 0.75, fbm(vec2(x * 1.3, uTime * 0.03))) ;
-            float rays = 0.55 + 0.45 * vnoise(vec2(az * 70.0, uTime * 0.25));
-            float h = (el - 0.06 - 0.08 * fbm(vec2(x * 2.0, 1.0))) / 0.45;
-            float body = smoothstep(0.0, 0.06, h) * exp(-max(h, 0.0) * 2.4);
-            vec3 ac = mix(uAuroraC, uAurora2C, smoothstep(0.1, 0.9, h));
-            col += ac * body * curtain * rays * uAurora * a * 0.9;
-            stars *= 1.0 - 0.6 * body * curtain;
-        }
-        // the limb, glowing (seen from high up)
-        float limb = exp(-hc / 6000.0) * smoothstep(3000.0, 60000.0, alt) * step(0.0, -b + 0.0);
-        col += uHorizonC * limb * 0.7;
-        stars += (uStars + (1.0 - a)) * (1.0 - a * 0.85);
-        // far hills along the horizon, on the land's side (seen from near the ground)
-        if (uHills > 0.0) {
-            float side = smoothstep(0.35, -0.25, d.x);
-            float h1 = 0.012 + 0.022 * fbm(vec2(az * 2.6, 1.0)) + 0.012 * fbm(vec2(az * 9.0, 7.0));
-            float h2 = 0.004 + 0.016 * fbm(vec2(az * 4.3 + 9.0, 3.0)) + 0.006 * fbm(vec2(az * 17.0, 2.0));
-            float aa = uPix * 1.2;
-            float m1 = smoothstep(h1 + aa, h1 - aa, el) * uHills * side, m2 = smoothstep(h2 + aa, h2 - aa, el) * uHills * side;
-            vec3 far = mix(uHazeC, uGroundB * 0.9 + uZenithC * 0.25, 0.4);
-            vec3 near = mix(uHazeC, uGroundB, 0.62);
-            col = mix(col, far, m1);
-            col = mix(col, near, m2);
-            stars *= 1.0 - max(m1, m2);
-        }
+        col = skyColor(d, b, disc, alt, up, stars);
     }
     // the sun: a crisp disc, a halo
     {
@@ -451,13 +471,216 @@ void main() {
 }
 )";
 
+
+// ---------------------------------------------------------------- the finale: the Moon's landscape
+// Ray-marched per pixel (at the sky's reduced resolution) over the Moon's sphere, in Moon radii: grey regolith,
+// darker maria, mountain ranges (ridged), craters at six scales (bowls, raised rims, ejecta blankets, central peaks in
+// the great ones, the young ones bright with rays), rilles; a low sun, hard shadows marched toward it, the creature's
+// own shadow on the ground; the black sky with the Earth hanging in it. Writes its depth.
+inline const char* LUNAR_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform vec3 uLook, uCamR, uCamU;
+uniform vec2 uTan;
+uniform mat4 uVP;
+uniform float uPix;
+uniform vec3 uLC;          // the Moon's center - the eye (meters)
+uniform float uRL;         // its radius (meters)
+uniform vec3 uEarthDir;
+uniform float uEarthR;     // the Earth's angular radius
+uniform float uEarthK;     // the Earth drawn (the finale)
+uniform float uMoonK;      // the Moon's opacity (pale in the day's sky)
+uniform vec3 uSpaceC, uNebulaC, uRegA, uRegB;
+uniform vec3 uWhaleA, uWhaleB;
+uniform float uWhaleW;
+vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTan.x + uCamU * (uv.y * 2.0 - 1.0) * uTan.y); }
+void basisL(vec3 a, out vec3 x, out vec3 y) {
+    x = normalize(cross(a, abs(a.y) < 0.95 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
+    y = cross(x, a);
+}
+// The ground's height (Moon radii) at the direction n; alb: its albedo's offset. foot: a pixel's size there (the
+// detail it resolves); lo: the cheap form for the marches.
+float terrain(vec3 n, float foot, bool lo, out float alb) {
+    alb = 0.0;
+    float big = lo ? vnoise3(n * 2.3 + 5.0) : fbm3(n * 2.3 + 5.0);
+    float maria = smoothstep(0.5, 0.4, big);
+    float h = (big - 0.5) * 0.006;
+    // mountain ranges: ridged, in the highlands
+    float rg = 1.0 - abs(vnoise3(n * 7.0 + 2.0) * 2.0 - 1.0);
+    float hl = smoothstep(0.45, 0.62, big);
+    h += pow(rg, 3.0) * 0.0045 * hl;
+    if (!lo) {
+        float rg2 = 1.0 - abs(vnoise3(n * 26.0 + 7.0) * 2.0 - 1.0);
+        h += pow(rg2, 3.0) * 0.0012 * (1.0 - 0.7 * maria) * smoothstep(0.02, 0.004, foot);
+        alb += 0.04 * (vnoise3(n * 60.0) - 0.5) * smoothstep(0.004, 0.001, foot);
+    }
+    alb -= 0.13 * maria;
+    float cell = 0.085;
+    for (int i = 0; i < 6; i++) {
+        if (lo && i >= 3) break;
+        float k = smoothstep(cell * 0.6, cell * 0.15, foot);
+        if (k <= 0.0) break;
+        vec3 P = n / cell;
+        vec3 ci = floor(P);
+        if (hash3(ci + 1.7) < (i < 3 ? 0.6 : 0.62 - 0.1 * float(i))) {
+            vec3 o = ci + 0.5 + (vec3(hash3(ci), hash3(ci + 3.1), hash3(ci + 7.7)) - 0.5) * 0.3;
+            vec3 f = P - o;
+            float R = 0.12 + 0.24 * pow(hash3(ci + 5.3), 1.5);
+            float x = length(f) / R;
+            if (x < 2.7) {
+                float dr = i < 2 ? 0.09 : 0.16;
+                float prof = x < 1.0 ? (x * x - 1.0) : 0.0;
+                prof += 0.32 * exp(-sq((x - 1.0) / 0.17));
+                prof += 0.14 * smoothstep(0.85, 1.05, x) * exp(-max(x - 1.0, 0.0) * 2.0);
+                if (i < 3) prof += 0.5 * exp(-sq(x / 0.15)) * (1.0 - 0.5 * hash3(ci + 2.2));
+                h += prof * R * cell * dr * 2.0 * k;
+                if (!lo && hash3(ci + 9.9) < 0.3) {
+                    vec3 fd = normalize(f + 1e-5);
+                    float ray = pow(vnoise3(fd * 9.0 + ci * 0.37), 3.0) * 2.0;
+                    alb += (ray * exp(-max(x - 1.0, 0.0) * 1.1) * smoothstep(0.95, 1.1, x) + 0.1 * step(x, 1.0)) * 0.3 * k;
+                }
+            }
+        }
+        cell *= 0.42;
+    }
+    if (!lo) {
+        float rl = abs(vnoise3(n * 16.0 + 31.0) - 0.5);
+        h -= 0.0011 * smoothstep(0.03, 0.0, rl) * smoothstep(0.55, 0.65, vnoise3(n * 3.0 + 9.0)) * smoothstep(0.01, 0.003, foot);
+    }
+    return h;
+}
+void main() {
+    vec3 d = rayDir(vUv);
+    vec3 o = -uLC / uRL;
+    float b = dot(o, d);
+    const float HM = 0.03;
+    float c = dot(o, o) - sq(1.0 + HM);
+    float disc = b * b - c;
+    bool hit = false;
+    float t = 0.0;
+    float pixA = uPix;
+    float gBest = 1e9, tBest = 0.0;   // the nearest miss (in pixels): the rim's coverage
+    if (disc > 0.0) {
+        float sq_ = sqrt(disc);
+        float t1 = -b + sq_;
+        t = max(0.0, -b - sq_);
+        for (int i = 0; i < 72; i++) {
+            vec3 p = o + d * t;
+            float r = length(p);
+            float a;
+            float hh = terrain(p / r, t * pixA * 3.0, true, a);
+            float gap = r - (1.0 + hh);
+            if (gap < 0.0004 * t + 1e-6) { hit = true; break; }
+            float gp = gap / max(t * pixA, 1e-9);
+            if (gp < gBest) { gBest = gp; tBest = t; }
+            t += max(gap * 0.6, 1e-5 + t * 0.001);
+            if (t > t1) break;
+        }
+    }
+    vec3 col = vec3(0.0);
+    float depth = 1.0;
+    // a ray passing within a pixel and a half of the ground: the rim, partly covered (antialiased)
+    float cov = hit ? 1.0 : 1.0 - smoothstep(0.0, 1.5, gBest);
+    if (!hit && cov > 0.0) t = tBest;
+    if (cov > 0.0) {
+        vec3 p = o + d * t;
+        vec3 n = normalize(p);
+        float foot = t * pixA;
+        vec3 e1, e2;
+        basisL(n, e1, e2);
+        float eps = max(foot * 1.5, 1.5e-5);
+        float a0, a1, a2;
+        float h0 = terrain(n, foot, false, a0);
+        vec3 n1 = normalize(n + e1 * eps), n2 = normalize(n + e2 * eps);
+        float h1 = terrain(n1, foot, false, a1), h2 = terrain(n2, foot, false, a2);
+        vec3 P0 = n * (1.0 + h0), P1 = n1 * (1.0 + h1), P2 = n2 * (1.0 + h2);
+        vec3 N = normalize(cross(P1 - P0, P2 - P0));
+        if (dot(N, n) < 0.0) N = -N;
+        // the regolith: grey, darker maria, bright young craters
+        vec3 alb = mix(uRegB, uRegA, clamp(0.55 + a0 * 2.2, 0.0, 1.0));
+        // the low sun: crisp light, hard shadows marched toward it
+        float ndl = dot(N, uSunDir);
+        // near: crisp light, hard shadows; from afar a softer light (its relief would be ink blots)
+        float nearK = smoothstep(0.4, 0.06, length(o) - 1.0);
+        float lit = mix(smoothstep(-0.25, 0.7, ndl), smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * 2.2, 0.0, 1.0)), nearK);
+        float sh = 1.0;
+        // (hard shadows near; from afar the terminator alone, the marched shadows would be noise)
+        if (lit > 0.0 && foot < 0.02 && nearK > 0.0) {
+            vec3 q = P0 + n * 2e-5;
+            float ts = 4e-5;
+            for (int i = 0; i < 28; i++) {
+                vec3 s = q + uSunDir * ts;
+                float r = length(s);
+                if (r > 1.0 + HM) break;
+                float a;
+                float gap = r - (1.0 + terrain(s / r, foot * 2.0 + ts * pixA, true, a));
+                sh = min(sh, smoothstep(0.0, 0.0008 + ts * 0.02, gap));
+                if (sh <= 0.0) break;
+                ts += max(gap * 0.7, 2e-4 + ts * 0.05);
+            }
+        }
+        // its own shadow on the ground
+        vec3 rel = d * t * uRL;
+        vec3 A = uWhaleA - uEye - rel, B = uWhaleB - uEye - rel;
+        float wsh = 0.0;
+        if (dot(A + B, uSunDir) > 0.0) {
+            vec3 a2v = A - uSunDir * dot(A, uSunDir), b2v = B - uSunDir * dot(B, uSunDir);
+            vec3 ab = b2v - a2v;
+            float hq = clamp(-dot(a2v, ab) / max(dot(ab, ab), 1.0), 0.0, 1.0);
+            float dd = length(a2v + ab * hq);
+            float w = uWhaleW * (0.5 + 0.7 * sin(3.14159 * clamp(0.1 + hq * 0.85, 0.0, 1.0)));
+            wsh = smoothstep(w * 1.25, w * 0.75, dd) * 0.85 * exp(-max(dot(A + B, uSunDir) * 0.5, 0.0) / (uWhaleW * 14.0));
+        }
+        sh = mix(1.0, sh, nearK * smoothstep(0.02, 0.006, foot));
+        vec3 light = uShadowC * mix(0.25, 0.1, nearK) + vec3(0.05, 0.07, 0.12) * 0.35 + uSunC * 1.3 * lit * sh * (1.0 - wsh);
+        col = alb * light;
+        // the far ground fades a little toward the black (no air: only a touch, for depth)
+        col *= mix(1.0, 0.75, smoothstep(0.05, 0.6, t));
+        vec4 clip = uVP * vec4(rel, 1.0);
+        depth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
+    }
+    // the Earth over the Moon's horizon (the finale)
+    float ce = 0.0;
+    vec3 ec = vec3(0.0);
+    if (uEarthK > 0.0 && cov < 1.0) {
+        vec3 e1, e2;
+        basisL(uEarthDir, e1, e2);
+        float sr = sin(uEarthR);
+        vec2 q = vec2(dot(d, e1), dot(d, e2)) / sr;
+        float qr = length(q);
+        float fw = uPix / sr * 1.5;
+        if (qr < 1.0 + fw && dot(d, uEarthDir) > 0.0) {
+            float z = sqrt(max(1.0 - qr * qr, 0.0));
+            vec3 N = normalize(e1 * q.x + e2 * q.y - uEarthDir * z);
+            float ndl = dot(N, uSunDir);
+            vec3 Nr = vec3(N.x * cos(uTime * 0.01) - N.z * sin(uTime * 0.01), N.y, N.x * sin(uTime * 0.01) + N.z * cos(uTime * 0.01));
+            float cont = fbm3(Nr * 2.2 + 11.0);
+            vec3 sc = mix(vec3(0.05, 0.16, 0.42), mix(vec3(0.22, 0.42, 0.16), vec3(0.55, 0.48, 0.3), smoothstep(0.55, 0.7, fbm3(Nr * 5.0))), smoothstep(0.5, 0.53, cont));
+            float cl = smoothstep(0.5, 0.68, fbm3(Nr * 4.2 + 7.0 + vec3(uTime * 0.004, 0.0, 0.0)));
+            sc = mix(sc, vec3(0.95), cl * 0.85);
+            float l = smoothstep(-0.08, 0.2, ndl);
+            ec = sc * (0.03 + 1.2 * l);
+            ec += vec3(1.0, 0.75, 0.4) * step(0.8, vnoise3(Nr * 40.0)) * smoothstep(0.5, 0.53, cont) * (1.0 - l) * 0.25;
+            ec += vec3(0.35, 0.6, 1.0) * pow(1.0 - z, 3.0) * (0.15 + 0.85 * smoothstep(-0.2, 0.3, ndl));
+            ce = smoothstep(1.0 + fw, 1.0 - fw, qr) * uEarthK;
+        }
+    }
+    float a = cov * uMoonK;
+    if (a <= 0.001 && ce <= 0.001) discard;
+    // the Moon over the Earth (it is nearer), the Earth over the sky
+    vec3 outc = (col * a + ec * ce * (1.0 - a)) / max(a + ce * (1.0 - a), 1e-4);
+    gl_FragDepth = a > 0.001 ? depth : 1.0;
+    frag = vec4(outc, a + ce * (1.0 - a));
+}
+)";
+
 // ---------------------------------------------------------------- the creature
 // One mesh for its whole life, generated once (a grid per part: the body, the tail fin, the dorsal fin, the
 // pectoral and pelvic fins); the vertex shader places every vertex against the morph uM (0 a koi .. 1 a whale), the
 // swimming wave (lateral for the koi, vertical for the whale: its plane turns with the tail's, uTailR), the fins'
 // beat and the spine's bend (an arc, around the planet in orbit). Normals from the deformed neighbors.
 inline const char* WHALE_GLSL = R"(
-uniform float uM, uTailR, uSwimPh, uSwimA, uBend, uFinPh, uFinA, uL;
+uniform float uM, uTailR, uSwimPh, uSwimA, uBend, uFinPh, uFinA, uL, uCurv, uCurvV, uFinTurn;
 uniform vec3 uRel;
 uniform mat3 uRot;
 const float X0 = 0.5, BL = 0.8;
@@ -474,12 +697,19 @@ vec3 section(float u) {
 }
 vec3 waveDir() { float a = uTailR * 1.5707963; return vec3(0.0, sin(a), cos(a)); }
 vec3 finSide() { float a = uTailR * 1.5707963; return vec3(0.0, cos(a), -sin(a)); }
+// The swimming wave, travelling from the head to the tail, growing toward the tail: the koi's whole rear half
+// sweeping (carangiform, about a wavelength along it), the whale's flexing mostly at its tail stock, its head steady.
 float waveAt(float x) {
     float q = clamp(0.5 - x, 0.0, 1.3);
-    return uSwimA * (0.1 + 1.45 * q * q) * sin(uSwimPh - q * 5.2);
+    float env = mix(0.06 + 1.5 * q * q, 0.015 + 2.1 * q * q * q, uM);
+    return uSwimA * env * sin(uSwimPh - q * mix(6.0, 3.6, uM));
 }
 vec3 deform(vec3 p) {
     p += waveDir() * waveAt(p.x);
+    // bending into its turns (sideways) and its climbs and dives
+    float xc = p.x - 0.08;
+    p.z += 0.5 * uCurv * xc * xc;
+    p.y += 0.5 * uCurvV * xc * xc;
     float k = uBend;
     if (abs(k) > 1e-3) {
         float a = k * p.x;
@@ -517,7 +747,7 @@ vec3 pectoralPoint(float s, float t, float side) {
     vec3 sec = section(u);
     vec3 root = vec3(X0 - u * BL, -0.45 * sec.y, side * 0.72 * sec.z);
     vec3 dir = normalize(mix(vec3(-0.55, -0.45, 0.7 * side), vec3(-0.32, -0.42, 0.85 * side), uM));
-    float flap = uFinA * sin(uFinPh + s * 0.9) * side;
+    float flap = uFinA * sin(uFinPh + s * 0.9) * side + uFinTurn * (0.4 + 0.6 * s);
     float ca = cos(flap), sa = sin(flap);
     dir = vec3(dir.x, dir.y * ca - dir.z * sa, dir.y * sa + dir.z * ca);
     float len = mix(0.1, 0.31, uM);
@@ -596,26 +826,35 @@ void main() {
         // the koi's markings (red patches on the back, a few ink spots), its scales
         vec3 P = vec3(u * 3.4, c * 0.6, sin(th) * 0.45) * 1.9 + uSeed * 7.0;
         float nz = fbm3(P) + 0.2 * c - 0.18 * smoothstep(0.8, 1.0, u) + 0.1 * smoothstep(0.12, 0.0, u);
-        float red = smoothstep(0.49, 0.52, nz);
-        float ink = smoothstep(0.66, 0.69, fbm3(P * 1.7 + 13.0) + 0.1 * c) * uPatch2;
+        // (every edge antialiased: its width at least a pixel's)
+        float wn = max(0.015, fwidth(nz) * 0.75);
+        float red = smoothstep(0.505 - wn, 0.505 + wn, nz);
+        float ni = fbm3(P * 1.7 + 13.0) + 0.1 * c;
+        float wi = max(0.015, fwidth(ni) * 0.75);
+        float ink = smoothstep(0.675 - wi, 0.675 + wi, ni) * uPatch2;
         vec3 koi = mix(uKoiC, uKoiPatch, red);
         koi = mix(koi, uKoiPatch2, ink);
         vec2 sq2 = vec2(u * 52.0, th * 7.5);
         sq2.y += step(1.0, mod(floor(sq2.x), 2.0)) * 0.5;
         vec2 sf = fract(sq2) - vec2(0.15, 0.5);
-        float scl = smoothstep(0.38, 0.5, length(sf * vec2(1.25, 1.0)));
-        koi *= 1.0 - 0.13 * scl * smoothstep(0.03, 0.12, u);
+        float fs = max(fwidth(sq2.x), fwidth(sq2.y));
+        float scl = smoothstep(0.38 - fs, 0.5 + fs, length(sf * vec2(1.25, 1.0)));
+        koi *= 1.0 - 0.13 * scl * smoothstep(0.03, 0.12, u) * (1.0 - smoothstep(0.15, 0.4, fs));
         // the whale: a dark back, a pale belly, the throat's pleats; the markings become soft lights
         float cs = smoothstep(-0.45, 0.1, c);
         vec3 wh = mix(uBellyC, uBackC, cs);
-        float pleat = smoothstep(0.1, 0.0, abs(fract(th * 12.0 / 3.14159) - 0.5) - 0.36) * smoothstep(-0.25, -0.5, c) * smoothstep(0.55, 0.35, u);
+        float pq = th * 12.0 / 3.14159;
+        float fp = fwidth(pq);
+        float pleat = smoothstep(0.1 + fp, 0.0, abs(fract(pq) - 0.5) - 0.36) * smoothstep(-0.25, -0.5, c) * smoothstep(0.55, 0.35, u) * (1.0 - smoothstep(0.15, 0.35, fp));
         wh *= 1.0 - 0.18 * pleat;
         wh *= 1.0 - 0.08 * smoothstep(0.55, 0.62, fbm3(P * 2.4 + 5.0)) * cs;
         alb = mix(koi, wh, smoothstep(0.15, 0.85, uM));
-        float edge = 1.0 - smoothstep(0.0, 0.03, abs(nz - 0.505));
+        float edge = 1.0 - smoothstep(0.0, max(0.03, wn * 1.5), abs(nz - 0.505));
         vec2 dq = fract(vec2(u * 30.0, th * 5.0)) - 0.5;
-        float dots = smoothstep(0.11, 0.05, length(dq)) * step(0.55, hash(floor(vec2(u * 30.0, th * 5.0)))) * smoothstep(0.46, 0.52, nz + 0.05) * smoothstep(-0.6, 0.3, c);
-        glow = (edge * 0.9 + red * 0.22 + dots * 0.7 * uDark) * smoothstep(0.2, 0.9, uM) * (0.3 + 0.7 * uDark) + red * 0.12 * (1.0 - uM) * uDark;
+        float fd = max(fwidth(u * 30.0), fwidth(th * 5.0));
+        float dots = smoothstep(0.11 + fd, 0.05, length(dq)) * (1.0 - smoothstep(0.2, 0.45, fd)) * step(0.55, hash(floor(vec2(u * 30.0, th * 5.0)))) * smoothstep(0.46, 0.52, nz + 0.05) * smoothstep(-0.6, 0.3, c);
+        // (the old patches as fine lines of light along their edges, a faint wash inside: not a coat of paint)
+        glow = (edge * 0.9 + red * 0.07 + dots * 0.7 * uDark) * smoothstep(0.2, 0.9, uM) * (0.3 + 0.7 * uDark) + red * 0.1 * (1.0 - uM) * uDark;
         // the song: light running from the head to the tail
         glow += uSing * exp(-sq((u - fract(uSingPh)) / 0.06)) * (0.5 + red);
         ao = mix(0.72, 1.0, smoothstep(-0.9, 0.3, c));
@@ -627,10 +866,13 @@ void main() {
         float rE = mix(0.013, 0.008, uM);
         vec2 eo = vec2((u - ue) * BL, dth * sec.z * 1.1);
         float er = length(eo);
-        float eyeM = smoothstep(rE, rE * 0.82, er);
-        vec3 ec = mix(uEyeC, vec3(0.02, 0.02, 0.04), smoothstep(rE * 0.75, rE * 0.55, er));
-        ec += vec3(1.0) * smoothstep(rE * 0.3, rE * 0.18, length(eo - vec2(rE * 0.3, -rE * 0.25 * sign(th - 3.14159))));
-        float mline = smoothstep(0.012, 0.0, abs(c - (-0.12 - 0.3 * u / 0.2))) * (1.0 - smoothstep(0.16, 0.2, u)) * smoothstep(0.004, 0.02, u) * uM;
+        float fe = fwidth(er);
+        float eyeM = smoothstep(rE + fe, rE * 0.82 - fe, er);
+        vec3 ec = mix(uEyeC, vec3(0.02, 0.02, 0.04), smoothstep(rE * 0.75 + fe, rE * 0.55 - fe, er));
+        float eh = length(eo - vec2(rE * 0.3, -rE * 0.25 * sign(th - 3.14159)));
+        ec += vec3(1.0) * smoothstep(rE * 0.3 + fe, rE * 0.18 - fe, eh) * (1.0 - smoothstep(rE * 0.15, rE * 0.4, fe));
+        float mc = c - (-0.12 - 0.3 * u / 0.2);
+        float mline = smoothstep(0.012 + fwidth(mc), 0.0, abs(mc)) * (1.0 - smoothstep(0.16, 0.2, u)) * smoothstep(0.004, 0.02, u) * uM;
         alb = mix(alb, alb * 0.35, mline);
         alb = mix(alb, ec, eyeM);
         glow *= 1.0 - eyeM;
@@ -638,7 +880,9 @@ void main() {
     } else {
         float s = a, t = b;
         // fins: translucent, their rays fanning out, the tips paler; the whale's darker, lit at their edges
-        float ray = smoothstep(0.32, 0.5, abs(fract(t * (part < 1.5 ? 9.0 : 5.0)) - 0.5));
+        float rq = t * (part < 1.5 ? 9.0 : 5.0);
+        float fr = fwidth(rq);
+        float ray = smoothstep(0.32 - fr, 0.5, abs(fract(rq) - 0.5)) * (1.0 - smoothstep(0.2, 0.45, fr));
         vec3 kf = mix(uFinC, uKoiPatch, (part < 1.5 ? 0.35 : 0.15) * smoothstep(0.2, 0.0, s)) * (1.0 - 0.12 * ray);
         kf = mix(kf, vec3(1.0), s * 0.25);
         vec3 wf = mix(uBackC, uBellyC, part > 2.5 ? 0.75 : 0.2);
@@ -652,18 +896,26 @@ void main() {
     // toon light, its full band reached sooner (the creature reads bright), a fill from the sky above
     float band = smoothstep(-0.05, 0.03, ndl) * 0.6 + smoothstep(0.2, 0.28, ndl) * 0.4;
     vec3 col = alb * (mix(uShadowC * mix(0.7, 1.0, ao), uSunC, band) * mix(0.85, 1.0, ao) + skyRefl(n) * 0.18 * (0.4 + 0.6 * max(n.y, 0.0)));
+    // a soft gradient over the bands: its volume reads (in space above all, where the light is hard)
+    col *= mix(0.78, 1.1, smoothstep(-0.6, 0.9, ndl)) * mix(1.0, mix(0.7, 1.15, smoothstep(-0.8, 0.8, ndl)), 0.6 * uDark);
     // a wet gloss: a crisp highlight
-    float spec = smoothstep(0.94, 0.965, dot(reflect(-v, n), uSunDir));
+    float rs = dot(reflect(-v, n), uSunDir);
+    float fsp = fwidth(rs);
+    float spec = smoothstep(0.94 - fsp, 0.965 + fsp, rs);
     col += (uSunC * 0.5 + 0.5) * spec * gloss;
     // a warm rim along the silhouette on the sun's side, the creature's own soft light at night and in space
     float rim = smoothstep(0.6, 0.8, 1.0 - max(dot(n, v), 0.0));
-    col += uRimC * rim * smoothstep(-0.3, 0.3, ndl + 0.2) * 0.4 * alb * 2.0;
+    col += uRimC * rim * smoothstep(-0.3, 0.3, ndl + 0.2) * 0.4 * alb * (2.0 + 1.5 * uDark);
     col += uGlowC * (glow * uGlowK + rim * uGlowK * 0.25);
     // the deep, at game over
     col = mix(col, col * 0.25 + uDeepC * 0.3, uSink);
     // under the water: absorbed, under the surface; foam where it breaks the surface
-    if (vW.y < 0.0) col = underWater(col, vW);
-    float wl = uFoam * smoothstep(0.02 * uL, 0.0, abs(vW.y)) * step(0.45, vnoise(vec2(vW.x + vW.z, vW.y * 3.0) / (0.03 * uL) + uTime));
+    float hs = seaH(vW);
+    float fh = max(fwidth(hs), 1e-6);
+    // (the creature under the surface stays readable: not all the deep's absorption)
+    if (hs < fh) col = mix(col, underWater(col, vW - vec3(0.0, max(hs, 0.0) + fh, 0.0)), smoothstep(fh, -fh, hs) * 0.8);
+    float fn = vnoise(vec2(vW.x + vW.z, hs * 3.0) / (0.03 * uL) + uTime);
+    float wl = uFoam * smoothstep(0.02 * uL + fh, 0.0, abs(hs)) * smoothstep(0.45 - max(fwidth(fn), 0.02), 0.45 + max(fwidth(fn), 0.02), fn);
     col = mix(col, vec3(1.0) * mix(uSunC, vec3(1.0), 0.4), wl * 0.8);
     frag = vec4(atmos(col, vW), 0.0);
 }
@@ -929,9 +1181,10 @@ void main() {
         return;
     }
     if (mode == 5) {
-        // a seabird: two long wings gliding and beating, darker tips
-        float fl = sin(vC.z);
-        vec2 q = vLocal;
+        // a seabird: two long wings gliding and beating, darker tips, banking into its turns
+        float fl = mix(sin(vC.z), 0.25, vC.w);
+        float ca = cos(vD.w), sa = sin(vD.w);
+        vec2 q = vec2(ca * vLocal.x - sa * vLocal.y, sa * vLocal.x + ca * vLocal.y);
         float x = abs(q.x);
         float wingY = fl * 0.35 * x + 0.25 * x - 0.32 * x * x;
         float wing = smoothstep(0.13, 0.04, abs(q.y - wingY)) * step(x, 0.98) * (1.0 - smoothstep(0.75, 0.98, x) * 0.5);
@@ -1086,22 +1339,53 @@ in vec3 vW;
 flat in vec4 vI;
 out vec4 frag;
 uniform vec3 uCloudLit, uCloudShade, uCamR, uCamU;
+// A puff's cauliflower: rounded lobes over lobes (its outline and its relief), on a flat-ish base.
+float lobes(vec2 q, float s) {
+    vec2 o = vec2(s * 37.0, s * 11.0);
+    float h = 0.0;
+    h += (vnoise(q * 2.6 + o) - 0.5) * 0.16;
+    h += (vnoise(q * 5.5 + o * 1.7) - 0.5) * 0.08;
+    h += (vnoise(q * 11.0 + o * 2.3) - 0.5) * 0.035;
+    return h;
+}
+// (its relief: the broad lobes only, the shading stays clean)
+float lobes2(vec2 q, float s) {
+    vec2 o = vec2(s * 37.0, s * 11.0);
+    return (vnoise(q * 2.6 + o) - 0.5) * 0.16 + (vnoise(q * 5.5 + o * 1.7) - 0.5) * 0.08;
+}
 void main() {
-    float r = length(vLocal);
-    float th = atan(vLocal.y, vLocal.x);
-    float edge = 0.92 + 0.06 * sin(th * 6.0 + vI.x * 30.0) + 0.03 * sin(th * 11.0 + vI.x * 9.0);
-    float aa = max(fwidth(r), 1e-4);
-    float cover = clamp(0.5 - (r - edge) / aa, 0.0, 1.0);
-    cover *= clamp(0.5 + (vLocal.y + 0.55) / aa, 0.0, 1.0);
+    vec2 q = vLocal;
+    float s = vI.x;
+    float r = length(q);
+    // the outline: lobed, the top bulging, the base flatter and cut
+    float lb = lobes(q, s);
+    float edge = 0.86 + lb + 0.05 * smoothstep(-0.2, 0.8, q.y);
+    float dr = r - edge;
+    float aa = max(fwidth(dr), 1e-4);
+    float cover = clamp(0.5 - dr / aa, 0.0, 1.0);
+    float base = -0.5 + 0.04 * (vnoise(vec2(q.x * 6.0 + s * 9.0, 0.0)) - 0.5);
+    cover *= clamp(0.5 + (q.y - base) / max(fwidth(q.y), 1e-4), 0.0, 1.0);
     if (cover < 0.01) discard;
     vec3 fwd = normalize(uEye - vW);
-    float rn = min(r / edge, 1.0);
-    vec3 nrm = normalize(uCamR * vLocal.x + uCamU * vLocal.y + fwd * sqrt(max(1.0 - rn * rn, 0.0)));
-    float ndl = dot(nrm, uSunDir) + 0.25 * nrm.y;
-    float band = smoothstep(-0.12, -0.04, ndl) * 0.55 + smoothstep(0.32, 0.4, ndl) * 0.45;
-    vec3 col = mix(uCloudShade, uCloudLit, band);
+    // the relief: a sphere's normal, bent by the lobes' slopes (the cauliflower's bumps)
+    float rn = min(r / max(edge, 0.3), 1.0);
+    float e = 0.03;
+    float gx = (lobes2(q + vec2(e, 0.0), s) - lobes2(q, s)) / e, gy = (lobes2(q + vec2(0.0, e), s) - lobes2(q, s)) / e;
+    vec3 n0 = uCamR * q.x + uCamU * q.y + fwd * sqrt(max(1.0 - rn * rn, 0.0));
+    vec3 nrm = normalize(normalize(n0) - (uCamR * gx + uCamU * gy) * 0.9);
+    // toon light, three bands: the cool shade, the body, the sunlit tops; softly self-shadowed toward the base
+    float ndl = dot(nrm, uSunDir) + 0.2 * nrm.y;
+    float band = smoothstep(-0.18, -0.08, ndl) * 0.45 + smoothstep(0.12, 0.2, ndl) * 0.3 + smoothstep(0.5, 0.58, ndl) * 0.25;
+    vec3 shade = uCloudShade * mix(vec3(0.85, 0.9, 1.08), vec3(1.0), 0.4);
+    vec3 col = mix(shade, uCloudLit, band);
+    // the base, in its own shadow; the hollows between the lobes
+    col *= mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y));
+    col *= 1.0 - 0.18 * smoothstep(0.0, -0.06, lb) * (1.0 - band);
+    // a warm rim where the sun grazes its silhouette, and the light through its edge when the sun is behind it
+    float rim = smoothstep(0.72, 0.98, rn) * clamp(dot(normalize(n0), uSunDir) + 0.35, 0.0, 1.0);
+    col += uSunGlow * rim * 0.45;
     float back = pow(max(dot(-fwd, uSunDir), 0.0), 4.0);
-    col += uSunGlow * back * smoothstep(0.75, 0.98, rn) * 0.8;
+    col += uSunGlow * back * smoothstep(0.7, 0.98, rn) * 0.8;
     col = atmos(col, vW);
     float a = cover * vI.y;
     frag = vec4(col * a, a);
@@ -1122,8 +1406,13 @@ float dens(vec3 p, vec3 n, float foot) {
     float v = 0.0, w = 0.0;
     float sc = 900.0;
     vec2 q = p.xz + vec2(uDrift, uDrift * 0.3);
+    // (swirled: the great octaves warped, so from orbit the cover streams in bands and swirls)
+    vec3 wv = vec3(vnoise3(n * 3.0 + 1.0), vnoise3(n * 3.0 + 7.0), vnoise3(n * 3.0 + 13.0)) - 0.5;
+    n = normalize(n + wv * 0.06 + vec3(0.0, 0.0, 0.02 * sin(n.y * 9.0 + n.x * 4.0)));
     for (int i = 0; i < 6; i++) {
         float k = smoothstep(sc * 0.8, sc * 0.2, foot);
+        // (the planar octaves only near: far out their hash loses its precision)
+        if (i < 3) k *= 1.0 - smoothstep(3.0e4, 1.5e5, length(q));
         float nz = i < 3 ? vnoise(q / sc + float(i) * 5.1) : vnoise3(n * (R / sc) + float(i) * 3.3);
         float amp = 0.6 + 0.1 * float(i);
         v += (nz - 0.5) * amp * k;
@@ -1150,21 +1439,37 @@ void main() {
     if (cover < 0.01) discard;
     float e = max(foot * 2.0, 60.0);
     float vx = dens(p + vec3(e, 0.0, 0.0), n, foot), vz = dens(p + vec3(0.0, 0.0, e), n, foot);
-    vec3 nrm = normalize(n + vec3(-(vx - v), 0.0, -(vz - v)) * 9.0);
+    vec3 nrm = normalize(n + vec3(-(vx - v), 0.0, -(vz - v)) * 18.0);
     float ndl = dot(nrm, uSunDir);
-    float band = smoothstep(0.0, 0.08, ndl) * 0.5 + smoothstep(0.35, 0.42, ndl + (v - 0.6) * 0.8) * 0.5;
-    vec3 col = mix(uCloudShade, uCloudLit, band);
+    // three toon bands (the thick tops brightest), a warm glow on the sunlit tops, cool in the hollows
+    float band = smoothstep(0.0, 0.08, ndl) * 0.4 + smoothstep(0.3, 0.37, ndl + (v - 0.6) * 0.8) * 0.35 + smoothstep(0.55, 0.62, ndl + (v - 0.62) * 1.2) * 0.25;
+    vec3 col = mix(uCloudShade * vec3(0.9, 0.94, 1.06), uCloudLit, band);
+    col += uSunGlow * 0.18 * smoothstep(0.6, 0.75, v) * smoothstep(0.2, 0.6, ndl);
+    // thick tops bright, thin edges and the hollows between the heads in their own shade
+    col *= mix(0.74, 1.05, smoothstep(0.5, 0.75, v)) * mix(0.86, 1.0, smoothstep(0.5, 0.57, v));
     float lit = smoothstep(-0.1, 0.1, dot(n, uSunDir));
     col *= mix(0.12, 1.0, lit);
     col = atmos(col, p);
     float a = cover * uFade * smoothstep(0.0, 0.01, -dot(d, normalize(oc)));
-    vec4 clip = uVP * vec4(p - uEye, 1.0);
+    // (its depth pulled a little toward the eye: the planet's under it, at a nearly equal depth far out)
+    vec4 clip = uVP * vec4((p - uEye) * 0.995, 1.0);
     gl_FragDepth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
     frag = vec4(col * a, a);
 }
 )";
 
 // ---------------------------------------------------------------- composite: the world upscaled, the bloom, stars
+// The sky (reduced resolution) into the multisampled target, with its depth (so the pads still hide the koi).
+inline const char* UPSAMPLE_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uSky, uDepth;
+void main() {
+    frag = texture(uSky, vUv);
+    gl_FragDepth = texture(uDepth, vUv).r;
+}
+)";
+// The world is drawn mirrored (it swims left to right, on the left of the well): uv.x flipped here.
 inline const char* COMP_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -1174,11 +1479,12 @@ uniform vec2 uTan, uRes;
 uniform float uBloomK, uTwinkle, uTime, uSat;
 vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTan.x + uCamU * (uv.y * 2.0 - 1.0) * uTan.y); }
 void main() {
-    vec4 w = texture(uWorld, vUv);
-    vec3 c = w.rgb + texture(uBloomT, vUv).rgb * uBloomK;
+    vec2 uv = vec2(1.0 - vUv.x, vUv.y);
+    vec4 w = texture(uWorld, uv);
+    vec3 c = w.rgb + texture(uBloomT, uv).rgb * uBloomK;
     float vis = w.a;
     if (vis > 0.002) {
-        vec3 d = rayDir(vUv);
+        vec3 d = rayDir(uv);
         vec3 ad = abs(d);
         vec2 face = ad.x > ad.y && ad.x > ad.z ? d.yz / ad.x + vec2(7.0 * sign(d.x), 0.0)
                   : ad.y > ad.z ? d.xz / ad.y + vec2(0.0, 7.0 * sign(d.y)) : d.xy / ad.z + vec2(3.5 * sign(d.z), 3.5);

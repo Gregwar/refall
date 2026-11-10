@@ -40,7 +40,7 @@ public:
     };
 
     // Where the creature is: its center, its axes (x forward, y up, z its right side), its length (meters).
-    struct Pose { vec3 c, fx, fy, fz; float L, bend; };
+    struct Pose { vec3 c, fx, fy, fz; float L, bend; vec3 wo; }; // wo: the wandering's offset (meters)
 
 private:
     // ---- The growth: G = ln(the creature's length in meters), from a 30 cm koi to a million kilometers.
@@ -48,7 +48,7 @@ private:
     int lines_ = 0, linesShown_ = -1, here_ = 0;
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;
     float gBonus_ = 0.f;
-    float stroke_ = 0.f;          // a clear's tail stroke (the swim surging)
+    float stroke_ = 0.f;          // a clear's tail stroke (its glow)
     float burst_ = 0.f;           // a Tetris' burst
     float hatchT_ = 99.f;         // a new game: a new koi
     float swimPh_ = 0.f, finPh_ = 0.f, singPh_ = 0.f;
@@ -57,8 +57,47 @@ private:
     uint64_t koiSeed_ = 1;
     float koiSeedF_ = 0.3f;
     Pose pose_{};
-    Pose poseAt(float G, float t) const; // the path (from the growth) and the swim's own motion (t: the world clock)
-    vec3 pathPos(float G) const;        // the path's center at G
+    Pose poseAt(float G) const;          // the path (from the growth and the cruise) and the swim's own wandering
+    // ---- The cruise: it always swims on, between the clears too (round the pond, down the river, then on and on
+    // around the planet), at a pace from the music, a clear surging it ahead.
+    struct Cruise {
+        float pondA = 0.f;   // its angle round the pond (radians, decreasing: clockwise seen from above)
+        float riverC = 0.f;  // meters ahead of its growth's place down the river (held short of the sea)
+        double orbitA = 0.0; // radians around the body it circles (the sea, the sky, orbit)
+        float moonA = 0.f;   // radians on along the Moon's meridian, gliding low over it (the finale)
+    };
+    Cruise cr_{};
+    float pace_ = 1.f;           // the cruise's pace from the music (smoothed)
+    float speedL_ = 0.3f;        // the cruise's speed along its line now (body lengths a second)
+    // ---- The swim, physically: the tail's strokes give thrust, the water's (or the air's) drag slows it, so it
+    // accelerates, coasts between strokes; it steers toward slowly moving goals, banking into its turns with a lag.
+    float swimV_ = 0.2f;         // its speed (body lengths a second)
+    float effort_ = 0.5f;        // the strokes' effort (amplitude), 0 gliding .. ~2 a clear's power strokes
+    float tailF_ = 1.f;          // the tail's beat (Hz)
+    float boost_ = 0.f;          // power strokes left (a clear)
+    bool burstOn_ = true;        // the koi's burst-and-coast
+    float yaw_ = 0.f, yawRate_ = 0.f, pitch_ = 0.f, pitchRate_ = 0.f; // its heading off its line (radians, /s)
+    float offS_ = 0.f, offU_ = 0.f;  // its offset off its line (body lengths: to the side, up)
+    float roll_ = 0.f, curv_ = 0.f, curvV_ = 0.f, finTurn_ = 0.f, pathTurn_ = 0.f;
+    float rollEvT_ = 40.f, rollEvPh_ = -1.f; // a slow barrel roll now and then (in the air, in space)
+    float steerT_ = 0.f;         // the steering goals' clock
+    vec3 hPrev_{0.f};
+    void updateSwim(float G, float dt, float target);
+    // ---- Seabirds (boids) and hot-air balloons: their own lives in the world, around its journey.
+    struct Bird { vec3 p, v; float flap, glide, glideT, seed, age, fade, bank; int flock; bool leaving; };
+    std::vector<Bird> birds_;
+    std::vector<vec3> flockDir_;
+    float flockT_ = 0.f;
+    struct Balloon { vec3 p; float size, seed, age; int color; };
+    std::vector<Balloon> balloons_;
+    void updateBirds(float G, float dt);
+    vec3 camH_{1.f, 0.f, 0.f};   // the camera's bearing (the travel's direction, smoothed)
+    vec3 camWo_{0.f};            // how much of the wandering the camera follows (smoothed)
+    bool camHSet_ = false;
+    vec3 pathPosC(float G, const Cruise& c) const; // the path's center at G, at that cruise
+    vec3 pathPos(float G) const { return pathPosC(G, cr_); }
+    vec3 travelDir(float G) const;      // the cruise's direction at G (unit)
+    void advanceCruise(float G, float dt);
     vec3 lastHead_{0.f}, lastTail_{0.f};
     vec3 splashC_{0.f};
     float splashAge_ = 99.f;
@@ -78,7 +117,7 @@ private:
     // ---- Particles in the world: spray, sparkles, petals, streaks, rings of song.
     struct Spark { vec3 p, v; float age, life, size, seed, spin; int kind; vec3 col; };
     std::vector<Spark> sparks_;
-    float sparkAcc_ = 0.f, streakAcc_ = 0.f;
+    float sparkAcc_ = 0.f, streakAcc_ = 0.f, dustAcc_ = 0.f;
     struct Ring { vec3 c, n; float age, life, r0, r1, hue; };
     std::vector<Ring> rings_;
     double lastRingBeat_ = -1e9;
@@ -89,6 +128,7 @@ private:
     struct Puff { vec3 p; float r, seed; };
     std::vector<Puff> clouds_;
     std::vector<float> cinst_;
+    float cloudDrift_ = 0.f, seaDrift_ = 0.f, flowT_ = 0.f;
     // ---- The banks: trees and bushes (toon puffs), reeds, grass.
     std::vector<float> trees_;
     struct Tuft { vec3 p; float h, seed; int kind; };
@@ -152,7 +192,12 @@ private:
     GLuint quadVbo_ = 0, puffVao_ = 0, puffVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0,
            ribbonVao_ = 0, ribbonVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
            shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
-    ugl::Target worldT_, bloomA_, bloomB_, sceneT_;
+    ugl::Target skyT_, worldT_, bloomA_, bloomB_, sceneT_;
+    // The world's geometry is drawn multisampled at (up to) the full resolution over the ray-traced sky (which stays
+    // at a reduced resolution, upsampled with its depth), then resolved into worldT_.
+    GLuint skyDepthTex_ = 0, skyFbo_ = 0, msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
+    int msW_ = 0, msH_ = 0, msSamples_ = 1;
+    GLuint progUp_ = 0, progLunar_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;
