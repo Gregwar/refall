@@ -584,12 +584,15 @@ void SkyWhaleUniverse::buildWorld() {
         const int n = c.irange(5, 8);
         const float ca = c.range(0.f, TAU);
         const vec3 ax(std::cos(ca), 0.f, std::sin(ca)), az(-std::sin(ca), 0.f, std::cos(ca));
+        // (its moment to dissolve into the sea of clouds on the way up: hashed, the field's layout untouched)
+        const float grp = (float)(splitmix64(0xC10Dull + (uint64_t)k * 7919ull) % 100000ull) / 100000.f;
         for (int i = 0; i < n; i++) {
             const float u = (i - (n - 1) * 0.5f) / std::max(1.f, (n - 1) * 0.5f);
             Puff p;
             p.r = big * c.range(0.55f, 0.85f) * (1.f - 0.45f * std::fabs(u));
             p.p = ctr + ax * (u * big * 1.5f) + az * (c.range(-0.4f, 0.4f) * big) + vec3(0.f, c.range(0.f, 0.5f) * big * (1.f - std::fabs(u)) + p.r * 0.3f, 0.f);
             p.seed = c.uniform();
+            p.grp = grp;
             clouds_.push_back(p);
         }
     }
@@ -2319,60 +2322,9 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     // the clouds drift on the wind (accumulated: a change of pace never jumps them)
     cloudDrift_ += wdt * (6.f + 8.f * wm + 8.f * wp);
     seaDrift_ += wdt * (8.f + 10.f * wm + 10.f * wp);
-    // the cumulus field: fading as it falls away below the climbing whale (the sea of clouds takes over)
-    // (gone, gradually, once the eye is well over the cloud layer: seen from far above, the sea of clouds carries them)
-    const float puffK = 1.f - smoothstepf(CLOUD_Y + 700.f, CLOUD_Y + 4500.f, alt_);
-    if (puffK > 0.f) {
-        std::vector<std::pair<float, int>> order;
-        order.reserve(clouds_.size());
-        const float drift = cloudDrift_;
-        const float pxK = 1.f / (minPx / 0.8f);
-        // (the field tiles around the eye: the creature cruises on and on through it)
-        constexpr float CP = 100000.f;
-        auto cloudAt = [&](const Puff& pf) {
-            vec3 p = pf.p + vec3(drift, 0.f, 0.f);
-            p.x = eye_.x + std::remainder(p.x - eye_.x, CP);
-            p.z = eye_.z + std::remainder(p.z - eye_.z, CP);
-            // on the planet's curve
-            p.y -= ((p.x * p.x + p.z * p.z) - (pf.p.x * pf.p.x + pf.p.z * pf.p.z)) / (2.f * (float)R_EARTH);
-            return p;
-        };
-        for (size_t i = 0; i < clouds_.size(); i++) {
-            const vec3 p = cloudAt(clouds_[i]);
-            const vec3 d = p - eye_;
-            const float d2 = dot(d, d);
-            if (clouds_[i].r * pxK < 0.5f * std::sqrt(d2)) continue; // (below half a pixel: already faded out)
-            order.push_back({d2, (int)i});
-        }
-        std::sort(order.begin(), order.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
-        cinst_.clear();
-        for (auto& o : order) {
-            const Puff& pf = clouds_[o.second];
-            const vec3 p = cloudAt(pf);
-            const float dEye = std::sqrt(o.first);
-            // (near: thinning as the eye enters it; small: fading below a pixel or two; far: fading before the tiling's edge)
-            const float hd = std::sqrt((p.x - eye_.x) * (p.x - eye_.x) + (p.z - eye_.z) * (p.z - eye_.z));
-            const float a = smoothstepf(pf.r * 0.8f, pf.r * 2.5f, dEye) * (1.f - 0.3f * pal_.night) * puffK *
-                            smoothstepf(0.5f, 2.f, pf.r * pxK / dEye) * (1.f - smoothstepf(3.4e4f, 4.8e4f, hd));
-            const float q[8] = {p.x, p.y, p.z, pf.r, pf.seed, a, 0.f, 0.f};
-            cinst_.insert(cinst_.end(), q, q + 8);
-        }
-        if (!cinst_.empty()) {
-            glUseProgram(progCloud_);
-            setLight(progCloud_);
-            setMat(progCloud_, "uVP", vp3_);
-            set3f(progCloud_, "uCamR", camR_);
-            set3f(progCloud_, "uCamU", camU_);
-            set3f(progCloud_, "uCloudLit", pal_.cloudLit * (1.f + 0.15f * life));
-            set3f(progCloud_, "uCloudShade", pal_.cloudShade);
-            glBindVertexArray(cloudVao_);
-            glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
-            glBufferData(GL_ARRAY_BUFFER, cinst_.size() * sizeof(float), cinst_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
-        }
-    }
     // the sea of clouds: the cloud layer seen from above, on the planet's sphere (by the altitude, wherever the whale is
-    // around the planet), merging far out into the Earth's cloud cover seen from orbit
+    // around the planet), merging far out into the Earth's cloud cover seen from orbit (before the cumulus: they sit on
+    // it, sink into it, and a thinning puff shows the sea of clouds through it, never the dark ground under the layer)
     const float seaK = smoothstepf(CLOUD_Y + 150.f, CLOUD_Y + 1800.f, alt_) * (1.f - lunar);
     if (seaK > 0.f) {
         glUseProgram(progSea_);
@@ -2389,6 +2341,69 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progSea_, "uCloudLit", pal_.cloudLit * (1.f + 0.15f * life));
         set3f(progSea_, "uCloudShade", pal_.cloudShade);
         ugl::drawFullscreen();
+    }
+    // the cumulus field: dissolving into the sea of clouds as it falls away below the climbing whale, one cloud after
+    // another over ~8 lines (~35 .. ~43: by the growth, never by the eye's altitude, which a breach or a dive swings),
+    // each shrinking and sinking into the sea, its tops paling toward the sea's own sunlit tops (never darker)
+    constexpr float PUFF_G0 = 7.3f, PUFF_GSPAN = 1.2f, PUFF_GW = 0.55f;
+    auto puffFade = [&](const Puff& pf) { return 1.f - smoothstepf(PUFF_G0 + PUFF_GSPAN * pf.grp, PUFF_G0 + PUFF_GSPAN * pf.grp + PUFF_GW, G); };
+    if (G < PUFF_G0 + PUFF_GSPAN + PUFF_GW) {
+        std::vector<std::pair<float, int>> order;
+        order.reserve(clouds_.size());
+        const float drift = cloudDrift_;
+        const float pxK = 1.f / (minPx / 0.8f);
+        // (the field tiles around the eye: the creature cruises on and on through it)
+        constexpr float CP = 100000.f;
+        auto cloudAt = [&](const Puff& pf) {
+            vec3 p = pf.p + vec3(drift, 0.f, 0.f);
+            p.x = eye_.x + std::remainder(p.x - eye_.x, CP);
+            p.z = eye_.z + std::remainder(p.z - eye_.z, CP);
+            // on the planet's curve
+            p.y -= ((p.x * p.x + p.z * p.z) - (pf.p.x * pf.p.x + pf.p.z * pf.p.z)) / (2.f * (float)R_EARTH);
+            return p;
+        };
+        for (size_t i = 0; i < clouds_.size(); i++) {
+            if (puffFade(clouds_[i]) <= 0.f) continue;
+            const vec3 p = cloudAt(clouds_[i]);
+            const vec3 d = p - eye_;
+            const float d2 = dot(d, d);
+            if (clouds_[i].r * pxK < 0.5f * std::sqrt(d2)) continue; // (below half a pixel: already faded out)
+            order.push_back({d2, (int)i});
+        }
+        std::sort(order.begin(), order.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
+        cinst_.clear();
+        for (auto& o : order) {
+            const Puff& pf = clouds_[o.second];
+            vec3 p = cloudAt(pf);
+            const float dEye = std::sqrt(o.first);
+            // dissolving: smaller, lower (into the sea), thinner
+            const float fd = puffFade(pf);
+            const float r = pf.r * (0.45f + 0.55f * fd);
+            p.y -= (pf.r - r) * 0.9f;
+            // (near: thinning as the eye enters it, and before it looms over a third of the screen (the climb through the
+            // layer sweeps them past the eye: never a wall of cloud over the well); small: fading below a pixel or two;
+            // far: fading before the tiling's edge)
+            const float hd = std::sqrt((p.x - eye_.x) * (p.x - eye_.x) + (p.z - eye_.z) * (p.z - eye_.z));
+            const float rpx = pf.r * pxK / dEye;
+            const float a = smoothstepf(pf.r * 1.2f, pf.r * 4.f, dEye) * (1.f - 0.3f * pal_.night) * smoothstepf(0.f, 0.7f, fd) *
+                            smoothstepf(0.5f, 2.f, rpx) * (1.f - smoothstepf(0.16f * msH_, 0.34f * msH_, rpx)) *
+                            (1.f - smoothstepf(3.4e4f, 4.8e4f, hd));
+            const float q[8] = {p.x, p.y, p.z, r, pf.seed, a, 1.f - fd, 0.f};
+            cinst_.insert(cinst_.end(), q, q + 8);
+        }
+        if (!cinst_.empty()) {
+            glUseProgram(progCloud_);
+            setLight(progCloud_);
+            setMat(progCloud_, "uVP", vp3_);
+            set3f(progCloud_, "uCamR", camR_);
+            set3f(progCloud_, "uCamU", camU_);
+            set3f(progCloud_, "uCloudLit", pal_.cloudLit * (1.f + 0.15f * life));
+            set3f(progCloud_, "uCloudShade", pal_.cloudShade);
+            glBindVertexArray(cloudVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
+            glBufferData(GL_ARRAY_BUFFER, cinst_.size() * sizeof(float), cinst_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
+        }
     }
     glDepthMask(GL_FALSE);
     {

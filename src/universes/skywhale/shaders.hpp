@@ -1500,6 +1500,8 @@ void main() {
     col = atmos(col, vW);
     // (never darker than the haze around it; from above, never darker than the sea of clouds' sunlit tops)
     col = max(col, mix(uHazeC * 0.92, atmos(uCloudLit * 0.8, vW), 0.45 + 0.55 * above));
+    // dissolving into the sea of clouds (vI.z): its shade lifted toward the sea's sunlit tops, never darker
+    col = max(col, mix(col, atmos(uCloudLit * 0.9, vW), vI.z));
     float a = cover * vI.y;
     frag = vec4(col * a, a);
 }
