@@ -91,6 +91,16 @@ classical Tetris look. What worked and what did not:
 When a universe starts to feel busy, remove elements instead of tuning them. When the right direction is unclear,
 render two or three alternatives side by side and let the player pick.
 
+**Progression universes.** A universe that grows or travels with the lines cleared in the game (`linesHere(g)`:
+GIANT TREE, MYCELIUM, MEGACITY, ORBITAL STATION, LIBRARY, SKY WHALE, TIDE POOL...) reaches its most advanced stage at
+about **100 lines**: two or three songs of normal play (a song is some 30 to 50 lines; the default playlist averages
+3:20). Spread the stages over 0 to 100 so the early and middle ones are enjoyed too, with something visibly new every
+10 to 15 lines; do not just squeeze the end. After 100 lines slow growth or variation is fine, but no new major stage
+should need more. Where it fills a space (shelves, a village), size the space or the share of each line so it is
+full around 100 lines without looking sparse early. Extra growth from other sources (a drop's bonus, a Tetris) stays
+proportionate: it never skips a stage. A `ZEN_<ID>_LINES=N` test hook (and `ZEN_GROW_RATE=R`) lets you check the stills
+at 0, 25, 50, 75 and 100 lines.
+
 **Typography.** One or two fonts that fit the world, under the SIL Open Font License, placed in
 `src/universes/<id>/embed/` with their license text next to the universe (`src/universes/<id>/OFL-*.txt`).
 
