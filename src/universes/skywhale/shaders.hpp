@@ -488,6 +488,8 @@ uniform vec3 uLC;          // the Moon's center - the eye (meters)
 uniform float uRL;         // its radius (meters)
 uniform vec3 uEarthDir;
 uniform float uEarthR;     // the Earth's angular radius
+uniform float uEarthK;     // the Earth drawn (the finale)
+uniform float uMoonK;      // the Moon's opacity (pale in the day's sky)
 uniform vec3 uSpaceC, uNebulaC, uRegA, uRegB;
 uniform vec3 uWhaleA, uWhaleB;
 uniform float uWhaleW;
@@ -506,10 +508,10 @@ float terrain(vec3 n, float foot, bool lo, out float alb) {
     // mountain ranges: ridged, in the highlands
     float rg = 1.0 - abs(vnoise3(n * 7.0 + 2.0) * 2.0 - 1.0);
     float hl = smoothstep(0.45, 0.62, big);
-    h += pow(rg, 5.0) * 0.011 * hl;
+    h += pow(rg, 3.0) * 0.0045 * hl;
     if (!lo) {
         float rg2 = 1.0 - abs(vnoise3(n * 26.0 + 7.0) * 2.0 - 1.0);
-        h += pow(rg2, 3.0) * 0.0025 * (1.0 - 0.7 * maria) * smoothstep(0.02, 0.004, foot);
+        h += pow(rg2, 3.0) * 0.0012 * (1.0 - 0.7 * maria) * smoothstep(0.02, 0.004, foot);
         alb += 0.04 * (vnoise3(n * 60.0) - 0.5) * smoothstep(0.004, 0.001, foot);
     }
     alb -= 0.13 * maria;
@@ -557,6 +559,7 @@ void main() {
     bool hit = false;
     float t = 0.0;
     float pixA = uPix;
+    float gBest = 1e9, tBest = 0.0;   // the nearest miss (in pixels): the rim's coverage
     if (disc > 0.0) {
         float sq_ = sqrt(disc);
         float t1 = -b + sq_;
@@ -568,14 +571,18 @@ void main() {
             float hh = terrain(p / r, t * pixA * 3.0, true, a);
             float gap = r - (1.0 + hh);
             if (gap < 0.0004 * t + 1e-6) { hit = true; break; }
+            float gp = gap / max(t * pixA, 1e-9);
+            if (gp < gBest) { gBest = gp; tBest = t; }
             t += max(gap * 0.6, 1e-5 + t * 0.001);
             if (t > t1) break;
         }
     }
-    vec3 col;
-    float stars = 0.0;
+    vec3 col = vec3(0.0);
     float depth = 1.0;
-    if (hit) {
+    // a ray passing within a pixel and a half of the ground: the rim, partly covered (antialiased)
+    float cov = hit ? 1.0 : 1.0 - smoothstep(0.0, 1.5, gBest);
+    if (!hit && cov > 0.0) t = tBest;
+    if (cov > 0.0) {
         vec3 p = o + d * t;
         vec3 n = normalize(p);
         float foot = t * pixA;
@@ -593,9 +600,12 @@ void main() {
         vec3 alb = mix(uRegB, uRegA, clamp(0.55 + a0 * 2.2, 0.0, 1.0));
         // the low sun: crisp light, hard shadows marched toward it
         float ndl = dot(N, uSunDir);
-        float lit = smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * 2.2, 0.0, 1.0));
+        // near: crisp light, hard shadows; from afar a softer light (its relief would be ink blots)
+        float nearK = smoothstep(0.4, 0.06, length(o) - 1.0);
+        float lit = mix(smoothstep(-0.25, 0.7, ndl), smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * 2.2, 0.0, 1.0)), nearK);
         float sh = 1.0;
-        if (lit > 0.0) {
+        // (hard shadows near; from afar the terminator alone, the marched shadows would be noise)
+        if (lit > 0.0 && foot < 0.02 && nearK > 0.0) {
             vec3 q = P0 + n * 2e-5;
             float ts = 4e-5;
             for (int i = 0; i < 28; i++) {
@@ -621,17 +631,18 @@ void main() {
             float w = uWhaleW * (0.5 + 0.7 * sin(3.14159 * clamp(0.1 + hq * 0.85, 0.0, 1.0)));
             wsh = smoothstep(w * 1.25, w * 0.75, dd) * 0.85 * exp(-max(dot(A + B, uSunDir) * 0.5, 0.0) / (uWhaleW * 14.0));
         }
-        vec3 light = uShadowC * 0.1 + vec3(0.05, 0.07, 0.12) * 0.35 + uSunC * 1.3 * lit * sh * (1.0 - wsh);
+        sh = mix(1.0, sh, nearK * smoothstep(0.02, 0.006, foot));
+        vec3 light = uShadowC * mix(0.25, 0.1, nearK) + vec3(0.05, 0.07, 0.12) * 0.35 + uSunC * 1.3 * lit * sh * (1.0 - wsh);
         col = alb * light;
         // the far ground fades a little toward the black (no air: only a touch, for depth)
         col *= mix(1.0, 0.75, smoothstep(0.05, 0.6, t));
         vec4 clip = uVP * vec4(rel, 1.0);
         depth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
-    } else {
-        // the black sky, a faint nebula
-        col = uSpaceC * 0.6 + uNebulaC * smoothstep(0.45, 0.85, fbm3(d * 2.2 + 4.0)) * 0.12;
-        stars = 1.0;
-        // the Earth hanging in it: oceans, continents, clouds, its lit crescent, its blue rim
+    }
+    // the Earth over the Moon's horizon (the finale)
+    float ce = 0.0;
+    vec3 ec = vec3(0.0);
+    if (uEarthK > 0.0 && cov < 1.0) {
         vec3 e1, e2;
         basisL(uEarthDir, e1, e2);
         float sr = sin(uEarthR);
@@ -648,18 +659,18 @@ void main() {
             float cl = smoothstep(0.5, 0.68, fbm3(Nr * 4.2 + 7.0 + vec3(uTime * 0.004, 0.0, 0.0)));
             sc = mix(sc, vec3(0.95), cl * 0.85);
             float l = smoothstep(-0.08, 0.2, ndl);
-            vec3 ec = sc * (0.03 + 1.2 * l);
-            ec += vec3(1.0, 0.75, 0.4) * step(0.8, vnoise3(Nr * 40.0)) * (1.0 - smoothstep(0.5, 0.53, 1.0 - cont)) * (1.0 - l) * 0.25;
+            ec = sc * (0.03 + 1.2 * l);
+            ec += vec3(1.0, 0.75, 0.4) * step(0.8, vnoise3(Nr * 40.0)) * smoothstep(0.5, 0.53, cont) * (1.0 - l) * 0.25;
             ec += vec3(0.35, 0.6, 1.0) * pow(1.0 - z, 3.0) * (0.15 + 0.85 * smoothstep(-0.2, 0.3, ndl));
-            float m = smoothstep(1.0 + fw, 1.0 - fw, qr);
-            col = mix(col, ec, m);
-            stars *= 1.0 - m;
+            ce = smoothstep(1.0 + fw, 1.0 - fw, qr) * uEarthK;
         }
-        // its thin blue halo
-        col += vec3(0.3, 0.55, 1.0) * exp(-max(qr - 1.0, 0.0) * 40.0) * step(1.0, qr) * 0.25 * step(0.0, dot(d, uEarthDir));
     }
-    gl_FragDepth = depth;
-    frag = vec4(col, stars);
+    float a = cov * uMoonK;
+    if (a <= 0.001 && ce <= 0.001) discard;
+    // the Moon over the Earth (it is nearer), the Earth over the sky
+    vec3 outc = (col * a + ec * ce * (1.0 - a)) / max(a + ce * (1.0 - a), 1e-4);
+    gl_FragDepth = a > 0.001 ? depth : 1.0;
+    frag = vec4(outc, a + ce * (1.0 - a));
 }
 )";
 

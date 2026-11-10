@@ -179,23 +179,23 @@ struct Stage { float lines, length; };
 const Stage STAGES[] = {
     {0, 0.3f}, {3, 0.5f}, {6, 0.95f}, {11, 2.5f}, {16, 6.f}, {21, 12.f}, {26, 20.f}, {32, 38.f}, {40, 80.f},
     {48, 160.f}, {56, 500.f}, {64, 1400.f}, {72, 4000.f}, {82, 1.4e4f}, {92, 6.e4f}, {104, 3.e5f}, {118, 1.4e6f},
-    {134, 7.e6f}, {150, 2.e7f}, {170, 3.e7f}, {195, 4.e7f}, {220, 5.e7f},
+    {134, 7.e6f}, {150, 1.2e7f}, {170, 2.e7f}, {195, 3.e7f}, {220, 4.e7f}, {250, 5.e7f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 constexpr float G_MAX = 17.9f;
 
-// The finale's Moon: as the creature heads out to it, it swells to a world of its own (R_LUNAR), cratered at every
-// scale, over which the whale glides low.
-// (far out and grown, past the real Moon's scale: a fable's Moon, so the whale can glide low over it)
-constexpr double R_MOON = 1.1e7, R_LUNAR = 8.e8, D_MOON = 2.e9, PHI_MOON = 2.1;
-vec3 moonPos() { return vec3((float)(D_MOON * std::sin(PHI_MOON)), (float)(-R_EARTH + D_MOON * std::cos(PHI_MOON)), 0.f); }
-// How far it has gone from circling the Earth to gliding over the Moon.
-float lunarK(float G) { return smoothstepf(16.85f, 17.35f, G); }
-// The Moon's radius as it is approached (it swells), and how much of the finale's landscape is drawn.
-double moonRadius(float G) { return std::exp(lerpf((float)std::log(R_MOON), (float)std::log(R_LUNAR), smoothstepf(16.8f, 17.1f, G))); }
-float lunarDraw(float G) { return smoothstepf(17.15f, 17.32f, G); }
-// The body it circles (the Earth's center, then the Moon's).
-vec3 orbitCenter(float G) { return lerp(vec3(0.f, -(float)R_EARTH, 0.f), moonPos(), lunarK(G)); }
+// The Moon: one fixed world for the whole journey, a fable's Moon (far bigger and farther than the real one, so the
+// whale can glide low over it at the end), on the axis of the creature's orbit around the Earth, ahead of the camera:
+// a small pale disc in the sky from the ground and from orbit (about 1.5 degrees), it grows as the whale spirals
+// out and closes on it, until its craters fill the sky and its horizon flattens under the whale.
+constexpr double R_LUNAR = 8.e8, D_MOON = 3.e10;
+vec3 moonPos() { return vec3(0.f, -(float)R_EARTH, (float)D_MOON); }
+// How far it has gone from circling the Earth to gliding over the Moon (the journey out takes ~70 lines).
+float lunarK(float G) { return smoothstepf(15.95f, 17.3f, G); }
+// The finale proper (its low sun, the Earth rising over the Moon's horizon, the dust).
+float lunarDraw(float G) { return smoothstepf(17.f, 17.3f, G); }
+// The center it circles, for a point p: the Earth's axis (the Moon lies on it), at p's height along it.
+vec3 orbitCenter(const vec3& p) { return vec3(0.f, -(float)R_EARTH, p.z); }
 
 // Test hooks: ZEN_SKYWHALE_LINES=N adds N lines to the growth, ZEN_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
@@ -734,28 +734,22 @@ vec3 SkyWhaleUniverse::pathPosC(float G, const Cruise& cr) const {
     // the cruise around the planet
     const vec3 ce(0.f, -(float)R_EARTH, 0.f);
     if (cr.orbitA != 0.0) p = turnAbout(p, ce, cr.orbitA);
-    // the end: it swims out to the Moon and glides low over it (around the Earth, then around the Moon, never through)
+    // the end: out to the Moon. Seen from the Moon's center, its height above the Moon's ground shrinks steadily in log
+    // (so the Moon grows steadily in its sky: a small disc, a great one, its craters, its horizon flattening), while it
+    // swings from the Earth's side round to the Moon's equator, low over which it glides, circling the same axis
     const float kM = lunarK(G);
     if (kM > 0.f) {
-        // low over the ground (a quarter of its length), on around the Moon with its cruise
-        const double rhoM = R_LUNAR * 1.016 + 0.2 * L;
-        const double ph = PHI_MOON + PI + cr.orbitA;
         const vec3 mc = moonPos();
-        const vec3 m = mc + vec3((float)(rhoM * std::sin(ph)), (float)(rhoM * std::cos(ph)), 0.f);
-        const vec3 mid = lerp(ce, mc, 0.5f);
-        if (kM < 0.5f) {
-            const double k = smoothstepf(0.f, 0.5f, kM);
-            double a0, r0, a1, r1;
-            polar(p, ce, a0, r0);
-            polar(mid, ce, a1, r1);
-            p = fromPolar(ce, a0 + wrapPi(a1 - a0) * k, std::exp(lerpf((float)std::log(r0), (float)std::log(r1), (float)k)), lerpf(p.z, 0.f, (float)k));
-        } else {
-            const double k = smoothstepf(0.5f, 1.f, kM);
-            double a0, r0, a1, r1;
-            polar(mid, mc, a0, r0);
-            polar(m, mc, a1, r1);
-            p = fromPolar(mc, a0 + wrapPi(a1 - a0) * k, std::exp(lerpf((float)std::log(r0), (float)std::log(r1), (float)k)), 0.f);
-        }
+        const double ex = (double)p.x - mc.x, ey = (double)p.y - mc.y, ez = (double)p.z - (double)mc.z;
+        const double rxy = std::sqrt(ex * ex + ey * ey), th = std::atan2(ex, ey);
+        const double dist0 = std::sqrt(rxy * rxy + ez * ez), phi0 = std::atan2(rxy, -ez);
+        const double hG = R_LUNAR * 0.016 + 0.2 * L;
+        const double sH = kM * (0.85 + 0.15 * kM), sP = smoothstepf(0.35f, 1.f, kM);
+        const double h0 = std::max(dist0 - R_LUNAR, hG);
+        const double dist = R_LUNAR + std::exp(std::log(h0) + (std::log(hG) - std::log(h0)) * sH);
+        const double phi = phi0 + (PI * 0.5 - phi0) * sP;
+        p = vec3((float)(mc.x + dist * std::sin(phi) * std::sin(th)), (float)(mc.y + dist * std::sin(phi) * std::cos(th)),
+                 (float)((double)mc.z - dist * std::cos(phi)));
     }
     return p;
 }
@@ -763,8 +757,8 @@ vec3 SkyWhaleUniverse::pathPosC(float G, const Cruise& cr) const {
 // The cruise's direction at G: its path's tangent along the cruise (round the pond, down the river, around).
 vec3 SkyWhaleUniverse::travelDir(float G) const {
     const float L = std::exp(G);
-    const vec3 ctr = orbitCenter(G);
     const vec3 c = pathPos(G);
+    const vec3 ctr = orbitCenter(c);
     const double rho = std::max(1.0, (double)length(c - ctr));
     Cruise a = cr_, b = cr_;
     a.pondA += 0.02f; b.pondA -= 0.02f;
@@ -791,7 +785,8 @@ void SkyWhaleUniverse::advanceCruise(float G, float dt) {
     if (cr_.riverC > cap) cr_.riverC = cap;
     else if (cap > 0.f) cr_.riverC += d * (1.f - kP) * (1.f - kO) * std::max(0.08f, 1.f - cr_.riverC / cap);
     // around the planet (or the Moon)
-    const double rho = std::max(1.0, (double)length(pathPos(G) - orbitCenter(G)));
+    const vec3 pc = pathPos(G);
+    const double rho = std::max(1.0, (double)length(pc - orbitCenter(pc)));
     cr_.orbitA += (double)d * kO / rho;
 }
 
@@ -874,7 +869,7 @@ void SkyWhaleUniverse::updateSwim(float G, float dt, float target) {
     // its line's own turning (round the pond, the river's bends)
     {
         const vec3 c0 = pathPos(G);
-        const vec3 up0 = normalize(c0 - orbitCenter(G));
+        const vec3 up0 = normalize(c0 - orbitCenter(c0));
         vec3 h = travelDir(G);
         h = normalize(h - up0 * dot(h, up0));
         const vec3 side0 = normalize(cross(h, up0));
@@ -914,7 +909,7 @@ SkyWhaleUniverse::Pose SkyWhaleUniverse::poseAt(float G) const {
     const float L = std::exp(G);
     P.L = L;
     const vec3 c = pathPos(G);
-    const vec3 ctr = orbitCenter(G);
+    const vec3 ctr = orbitCenter(c);
     const vec3 up0 = normalize(c - ctr);
     vec3 h = travelDir(G);
     h = normalize(h - up0 * dot(h, up0));
@@ -960,7 +955,7 @@ SkyWhaleUniverse::Pose SkyWhaleUniverse::poseAt(float G) const {
 // come. The balloons drift on the wind where they are, the creature climbing past them.
 void SkyWhaleUniverse::updateBirds(float G, float dt) {
     const float L = std::exp(G);
-    const vec3 ctr = orbitCenter(G);
+    const vec3 ctr = orbitCenter(pose_.c);
     const vec3 up0 = normalize(pose_.c - ctr);
     vec3 h = travelDir(G);
     h = normalize(h - up0 * dot(h, up0));
@@ -1123,46 +1118,46 @@ void SkyWhaleUniverse::updateCamera(float dt) {
     const float G = gc_;
     const float L = std::exp(G);
     static const float K[] = {-1.2f, 0.f, 1.6f, 2.7f, 3.9f, 5.0f, 6.5f, 7.6f, 10.f, 12.5f, 14.5f, 16.5f, 18.5f, 21.f};
-    static const float PITCH[] = {-50.f, -44.f, -30.f, -14.f, -11.f, -9.f, 2.f, 0.f, -14.f, -22.f, -24.f, -20.f, -14.f, -12.f};
+    static const float PITCH[] = {-50.f, -44.f, -30.f, -14.f, -11.f, -9.f, 2.f, 0.f, -14.f, -22.f, -15.f, -12.f, -12.f, -12.f};
     static const float FR[] = {1.05f, 0.95f, 0.8f, 0.72f, 0.78f, 0.78f, 0.72f, 0.72f, 0.72f, 0.72f, 0.75f, 0.78f, 0.8f, 0.8f};
-    static const float PSI[] = {0.05f, -0.15f, -0.3f, -0.5f, -0.55f, -0.55f, -0.5f, -0.45f, -0.35f, 0.1f, 0.12f, 0.1f, 0.1f, 0.1f};
+    static const float PSI[] = {0.05f, -0.15f, -0.3f, -0.5f, -0.55f, -0.55f, -0.5f, -0.45f, -0.35f, -0.1f, -0.5f, -0.5f, -0.5f, -0.5f};
     static const float SY[] = {-0.04f, 0.f, 0.f, 0.06f, 0.08f, 0.1f, 0.12f, 0.15f, 0.2f, 0.22f, 0.2f, 0.12f, 0.05f, 0.f};
     const int n = (int)(sizeof(K) / sizeof(K[0]));
     // the finale: low over the Moon, looking ahead along the ground
-    const float kLc = smoothstepf(17.f, 17.35f, G);
+    const float kLc = smoothstepf(16.9f, 17.25f, G);
     const float pitch = lerpf(keyed(G, K, PITCH, n), -17.f, kLc) * PI / 180.f;
-    const float psi = lerpf(keyed(G, K, PSI, n), -0.25f, kLc) + 0.03f * std::sin(time_ * 0.021f);
+    const float psi = lerpf(keyed(G, K, PSI, n), -0.4f, kLc) + 0.03f * std::sin(time_ * 0.021f);
     // (the world is drawn mirrored: the creature sits in the free band left of the HUD's left column)
     const float sy = lerpf(keyed(G, K, SY, n), 0.1f, kLc);
     tanH_ = std::tan(27.f * PI / 180.f);
     const float colEdge = -layout::LEFT_COLUMN[0]; // board units from the center
-    const float sx = std::clamp(0.5f * (colEdge / std::max(viewH_.x, 1.f) + 1.f) - 0.06f, 0.55f, 0.75f);
+    const float sx = std::clamp(0.5f * (colEdge / std::max(viewH_.x, 1.f) + 1.f) - 0.06f - 0.1f * kLc, 0.5f, 0.75f);
     // the anchor: the path and its cruise (not the breaches: the creature leaps out of the frame and back), and a
     // part of its wandering, a moment behind
-    vec3 anchor = pathPos(G);
+    // (on the way out to the Moon each line carries it far: the camera keeps up with it, not a moment behind)
+    vec3 anchor = pathPos(lerpf(G, g_, smoothstepf(15.5f, 15.95f, g_)));
     const float kWater = 1.f - smoothstepf(std::log(150.f), std::log(400.f), G);
     const float kSea = smoothstepf(std::log(10.f), std::log(18.f), G) * kWater;
     {
-        const vec3 up = normalize(anchor - orbitCenter(G) + vec3(0.f, 1e-3f, 0.f));
+        const vec3 up = normalize(anchor - orbitCenter(anchor) + vec3(0.f, 1e-3f, 0.f));
         anchor = anchor + up * (L * lerpf(-0.08f, 0.08f, kSea) * kWater);
         camWo_ = lerp(camWo_, pose_.wo * 0.45f, 1.f - std::exp(-dt * 1.2f));
         anchor = anchor + camWo_;
     }
     // pulled back: the creature smaller in a wider scene
-    float F = keyed(G, K, FR, n) * L * lerpf(lerpf(1.6f, 1.85f, smoothstepf(9.f, 12.f, G)), 1.8f, kLc);
+    float F = keyed(G, K, FR, n) * L * lerpf(lerpf(1.6f, 1.85f, smoothstepf(9.f, 12.f, G)), 2.5f, kLc);
     // far out: the planet comes into the frame (and the moon's orbit at the end)
     {
-        const float kE = smoothstepf(15.f, 17.f, G) * (1.f - kLc);
+        const float kE = smoothstepf(14.8f, 15.8f, G) * (1.f - smoothstepf(15.9f, 16.5f, G));
         if (kE > 0.f) {
-            const vec3 ce = orbitCenter(G);
+            const vec3 ce = orbitCenter(anchor);
             const float rho = length(anchor - ce);
-            anchor = lerp(anchor, ce + (anchor - ce) * 0.4f, kE * 0.8f);
-            F = lerpf(F, std::max(F, rho * 1.0f), kE);
+            F = lerpf(F, std::max(F, rho * 0.6f), kE);
         }
     }
     // the local frame at the anchor (up: away from the planet's center; ahead: the cruise's bearing, smoothed), so
     // the camera keeps its bearings round the pond, down the river and all the way around the planet
-    const vec3 upL = normalize(anchor - orbitCenter(G) + vec3(0.f, 1e-3f, 0.f));
+    const vec3 upL = normalize(anchor - orbitCenter(anchor) + vec3(0.f, 1e-3f, 0.f));
     {
         vec3 h = travelDir(G);
         h = h - upL * dot(h, upL);
@@ -2093,7 +2088,6 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     glDepthFunc(GL_ALWAYS);
     glDepthMask(GL_TRUE);
     const float lunar = lunarDraw(G);
-    if (lunar < 0.999f) {
     glUseProgram(progSky_);
     setLight(progSky_);
     setMat(progSky_, "uVP", vp3_);
@@ -2143,14 +2137,14 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uLantC", pal_.lantern);
     {
         // the moon, out where the creature's arc reaches it at the end of the journey
-        const vec3 moon = moonPos();
-        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, (float)moonRadius(G));
+        // (the Moon itself: the lunar pass, at every distance)
+        set4f(progSky_, "uMoon", 0.f, 0.f, 0.f, 0.f);
     }
     set3f(progSky_, "uGalaxyDir", normalize(vec3(-0.6f, 0.25f, 0.75f)));
     ugl::drawFullscreen();
-    }
-    // the finale: the Moon's landscape (fading in over the sky as the creature comes down to it)
-    if (lunar > 0.001f) {
+    // the Moon, at every distance (a small pale disc from the ground and from orbit, growing as the whale closes on
+    // it, then its landscape under the whale): ray-marched over its sphere, its rim antialiased, laid over the sky
+    {
         glUseProgram(progLunar_);
         setLight(progLunar_);
         setMat(progLunar_, "uVP", vp3_);
@@ -2161,9 +2155,13 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progLunar_, "uPix", 2.f * tanH_ / skyT_.h);
         set3f(progLunar_, "uLC", moonPos() - eye_);
         set1f(progLunar_, "uRL", (float)R_LUNAR);
-        // the Earth hanging over the horizon, in the free band right of the well (left here: the world is mirrored)
-        set3f(progLunar_, "uEarthDir", normalize(look_ - camR_ * (0.7f * tanH_ * aspect_) + camU_ * (0.42f * tanH_)));
+        // the Earth rising over the Moon's horizon in the finale, in the free band right of the well (left here: the
+        // world is mirrored)
+        set3f(progLunar_, "uEarthDir", normalize(look_ - camR_ * (0.7f * tanH_ * aspect_) + camU_ * (lerpf(-0.3f, 0.42f, lunar) * tanH_)));
         set1f(progLunar_, "uEarthR", 0.075f);
+        set1f(progLunar_, "uEarthK", lunar);
+        // (pale in the day's sky, bright in space)
+        set1f(progLunar_, "uMoonK", lerpf(0.4f, 1.f, smoothstepf(1.e4f, 2.e5f, alt_)));
         set3f(progLunar_, "uSpaceC", pal_.space);
         set3f(progLunar_, "uNebulaC", pal_.nebula);
         set3f(progLunar_, "uRegA", lerp(vec3(0.62f, 0.61f, 0.6f), pal_.cloudLit * 0.62f, 0.2f));
@@ -2171,11 +2169,8 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progLunar_, "uWhaleA", head);
         set3f(progLunar_, "uWhaleB", tail);
         set1f(progLunar_, "uWhaleW", 0.09f * L);
-        if (lunar < 0.999f) {
-            glEnable(GL_BLEND);
-            glBlendColor(0.f, 0.f, 0.f, lunar);
-            glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA);
-        }
+        glEnable(GL_BLEND);
+        glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
         ugl::drawFullscreen();
         glDisable(GL_BLEND);
     }
@@ -2443,7 +2438,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
             for (int r = 0; r < 4; r++) {
                 const float seed = r * 1.7f;
                 auto at = [&](float k, float hgt) {
-                    const float x = tips[r][0] - k * 1.1f;
+                    const float x = tips[r][0] - k * (1.1f - 0.6f * lunarK(G));
                     const float y = tips[r][1] + 0.05f * std::sin(k * 7.f - time_ * 1.1f + seed) + hgt;
                     const float z = tips[r][2] * (1.f + 0.6f * k) + 0.06f * std::sin(k * 5.f - time_ * 0.8f + seed * 2.f);
                     const vec3 b = bendBody(vec3(x, y, z), pose_.bend);
