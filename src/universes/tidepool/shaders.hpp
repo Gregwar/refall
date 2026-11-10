@@ -39,11 +39,13 @@ uniform vec2 uViewC, uViewH, uFocus;
 uniform float uPxP;           // p units per pixel of this target
 uniform vec4 uLayer[2];       // the stage we are in and the next: stage, local zoom u, scale (stage units per p unit), angle
 uniform float uTau;           // the crossfade into the next stage
-uniform float uTime, uTide, uTideAmp, uLife, uPeak, uKick, uSlow, uBridge, uWorldA;
+uniform float uTime, uLayerT0, uLayerT1, uTide, uTideAmp, uLife, uPeak, uKick, uSlow, uBridge, uWorldA;
 uniform vec4 uWave;           // the drop's wave: age (s), strength, -, -
 uniform vec3 uDeep, uWater, uShallow, uLight, uRock, uSand, uWarm, uWarm2, uWeed, uCool, uGlow, uBridgeCol;
 uniform float uLum, uFever, uDepth;
-uniform vec4 uBands;          // the music's bands (low, low-mid, high-mid, high), quickly smoothed
+uniform vec4 uBands;
+// each stage's own clock: it slows as the zoom goes into it, so its life keeps a calm pace on the screen
+float gT = 0.0;          // the music's bands (low, low-mid, high-mid, high), quickly smoothed
 
 const float PI = 3.14159265, TAU = 6.2831853;
 
@@ -143,7 +145,7 @@ vec4 anemone(vec2 q, vec2 c, float R, float seed, float px, float t) {
     if (rho > 1.25) return vec4(0.0);
     float pw = px / R;
     float ang = atan(d.y, d.x);
-    float open = 0.9 + 0.1 * uTide * uTideAmp + 0.04 * sin(t * 0.35 + seed * 9.0);
+    float open = 0.9 + 0.05 * uTide * uTideAmp + 0.03 * sin(t * 0.3 + seed * 9.0);
     // its soft shadow on the bed
     vec4 acc = vec4(0.0, 0.0, 0.0, 0.4 * fillA(length(d - vec2(0.1, -0.12)) - 0.85 * open, pw * 4.0 + 0.2));
     for (int wh = 0; wh < 3; wh++) {
@@ -377,8 +379,8 @@ struct World { vec3 bg; vec4 obj; float host; };
 // ---- 0. the rock pool at low tide
 World stagePool(vec2 q, float px) {
     World W;
-    float t = uTime;
-    float level = 0.4 + 0.022 * uTide * uTideAmp + 0.07 * uWave.y * bump(uWave.x - 2.5, 1.8);
+    float t = gT;
+    float level = 0.4 + 0.012 * uTide * uTideAmp + 0.04 * uWave.y * bump(uWave.x - 3.0, 2.2);
     float e = max(px * 1.5, 0.004);
     float h = poolH(q, px);
     vec2 g = vec2(poolH(q + vec2(e, 0.0), px) - h, poolH(q + vec2(0.0, e), px) - h) / e;
@@ -446,8 +448,8 @@ vec4 barnacleAt(vec2 q, vec2 c, float R, float seed, float px) {
 }
 World stageFloor(vec2 q, float px) {
     World W;
-    float t = uTime;
-    float wave = uWave.y * bump(uWave.x - 2.2, 1.6);
+    float t = gT;
+    float wave = uWave.y * bump(uWave.x - 3.0, 2.2);
     // the bed: sand and gravel, and stones (cells of a coarse Voronoi) standing out of it
     vec3 bed = sandBed(q, px, t, 2.6);
     vec2 sid;
@@ -511,7 +513,7 @@ vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     float r = length(q);
     poreMask = 0.0;
     if (r > R * 1.25) return vec4(0.0);
-    float t = uTime;
+    float t = gT;
     float th = atan(q.y, q.x);
     float rn = r / R;
     // a jewel of glass: golden-green, lit as a shallow dome from the upper left, thin-film colors drifting over it
@@ -558,7 +560,7 @@ vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     float ew = max(px, R * 0.002);
     col = mix(col, uDeep * 0.6, lineA(rn - 0.89, 0.004, ew / R) * 0.6);
     col += mix(uLight, vec3(1.0), 0.4) * lineA(r - R * 0.995, R * 0.004, ew) * (0.4 + 0.6 * sat(dot(normalize(q + 1e-5), L2)));
-    col += uLight * uKick * step(0.985, hash(vec2(ring, floor(a)) + floor(uLife * 0.5))) * pore * lodp;
+    col += uLight * 0.35 * uKick * step(0.985, hash(vec2(ring, floor(a)))) * pore * lodp;   // a few pores glint, softly
     poreMask = max(pore * lodp, inField * (1.0 - lodp) * 0.5);
     float alpha = fillA(r - R, max(px * 1.2, R * 0.002)) * 0.95;
     vec4 o = layerC(col, alpha);
@@ -568,7 +570,7 @@ vec4 frustule(vec2 q, float R, float px, out float poreMask) {
 }
 World stagePlankton(vec2 q, float px) {
     World W;
-    float t = uTime;
+    float t = gT;
     // luminous water, lit from above left, clouds of fine matter
     vec3 col = mix(uWater, uShallow, 0.5 + 0.12 * sin(q.x * 0.7 + q.y * 0.9 + 1.0));
     col *= 0.9 + 0.14 * fbm(q * 1.4 + t * 0.03);
@@ -580,8 +582,9 @@ World stagePlankton(vec2 q, float px) {
         float a = fillA(length(q - cc) - R - soft * 0.5, max(px, soft)) * (soft > 0.0 ? 0.3 : 0.7);
         acc = over(acc, layerC(mix(uLight, uSand, h2.x), a));
     END_SCATTER
+    // a gentle dart every two beats: eased out and back, never a jump
     float hopP = fract(uLife * 0.5);
-    float hop = exp(-hopP * 7.0) * (0.3 + 0.7 * uTideAmp);
+    float hop = smoothstep(0.0, 0.4, hopP) * (1.0 - smoothstep(0.4, 1.0, hopP)) * (0.3 + 0.5 * uTideAmp);
     // diatoms drifting, little glass jewels
     SCATTER(0.55, 61.0, 0.72)
         if (length(c) < 0.25) continue;
@@ -597,12 +600,12 @@ World stagePlankton(vec2 q, float px) {
         float size = (kind == 0 ? 0.15 : kind == 1 ? 0.09 : 0.1) * (0.7 + 0.5 * h2.y);
         float heading = hash(id + 5.0) * 6.28 + 0.3 * sin(t * 0.2 + h2.x * 6.0);
         vec2 dir = vec2(cos(heading), sin(heading));
-        vec2 cc = c + dir * size * (0.4 * sin(t * 0.15 + h2.x * 9.0) + 0.15 * hop);
+        vec2 cc = c + dir * size * 0.4 * sin(t * 0.12 + h2.x * 9.0);    // (the beat only sweeps their antennae)
         vec2 d = rot(-heading) * (q - cc) / size;
         float pw = px / size * 1.3;
         vec4 o = kind == 0 ? copepod(d, pw, hop, id.x) : kind == 1 ? nauplius(d, pw, t + h2.x * 9.0) : chain(d, pw, t);
         acc = over(o, acc);
-        if (uLum > 0.0) col += uGlow * uLum * uKick * 0.5 * exp(-dot(q - cc, q - cc) / sq(size * 0.6)) * step(0.6, hash(id + floor(uLife)));
+        if (uLum > 0.0) col += uGlow * uLum * uKick * 0.25 * exp(-dot(q - cc, q - cc) / sq(size * 0.6)) * step(0.6, hash(id + 13.0));
     END_SCATTER
     W.bg = col;
     W.obj = acc;
@@ -613,7 +616,7 @@ World stagePlankton(vec2 q, float px) {
 // ---- 3. one diatom, a jewel of glass among others, the living cell glowing through its pores
 World stageDiatom(vec2 q, float px) {
     World W;
-    float t = uTime;
+    float t = gT;
     vec3 col = mix(uWater, uShallow, 0.5 + 0.12 * sin(q.x * 0.7 / 16.0 + q.y * 0.9 / 16.0 + 1.0));
     col *= 0.92 + 0.1 * fbm(q * 0.3 + t * 0.02);
     vec4 acc = vec4(0.0);
@@ -639,9 +642,10 @@ World stageDiatom(vec2 q, float px) {
 // ---- 4. the living cell: cytoplasm streaming
 World stageCell(vec2 q0, float px) {
     World W;
-    float t = uTime;
-    float sp = 0.03 + 0.03 * uTideAmp * (0.5 + 0.5 * uTide);
-    vec2 q = q0 + vec2(t * sp, 0.05 * sin(q0.x * 1.3 + t * 0.15));     // the stream
+    float t = gT;
+    // (a constant pace: a pace that follows the music, multiplied by the clock, would make the stream jump)
+    float sp = 0.035;
+    vec2 q = q0 + vec2(t * sp, (0.04 + 0.02 * uTide * uTideAmp) * sin(q0.x * 1.3 + t * 0.15));     // the stream
     vec3 col = mix(mix(uShallow, uSand, 0.3), uWater, 0.4) * (0.8 + 0.15 * fbm(q * 1.5));
     float vf = fbm(q * 0.9 + 7.0);
     col = mix(col, mix(uShallow, uLight, 0.25), smoothstep(0.55, 0.7, vf) * 0.35);
@@ -680,8 +684,8 @@ World stageCell(vec2 q0, float px) {
 // ---- 5. molecules jostling
 World stageMolecules(vec2 q, float px) {
     World W;
-    float t = uTime;
-    float jit = 0.6 + 0.9 * uTideAmp * (0.6 + 0.4 * uTide) + 0.5 * uKick;
+    float t = gT;
+    float jit = 0.5 + 0.5 * uTideAmp * (0.7 + 0.3 * uTide) + 0.2 * uKick;
     vec3 col = mix(uDeep, uWater, 0.32 + 0.1 * fbm(q * 0.7));
     vec4 acc = vec4(0.0);
     // double helices crossing the field, rungs of light between their strands
@@ -692,7 +696,7 @@ World stageMolecules(vec2 q, float px) {
         float along = dot(q - o, ax), across = dot(q - o, vec2(-ax.y, ax.x));
         across += 0.12 * sin(along * 0.9 + fk * 3.0);
         float hw = 0.07;
-        float ph = along * 14.0 - t * 0.6;
+        float ph = along * 14.0 - t * 0.3;
         float s1 = sin(ph), s2 = -s1;
         float lw = max(px, 0.002);
         float f1 = 0.5 + 0.5 * cos(ph);
@@ -707,10 +711,10 @@ World stageMolecules(vec2 q, float px) {
     SCATTER(0.34, 101.0, 0.35)
         if (length(c) < 0.3) continue;
         float hs = h2.x * 40.0 + h2.y * 13.0;
-        vec2 jt = vec2(vnoise(vec2(t * 3.1 + hs, 1.0)), vnoise(vec2(1.0, t * 2.9 + hs))) - 0.5;
-        vec2 cc = c + jt * 0.08 * jit;
+        vec2 jt = vec2(vnoise(vec2(t * 0.7 + hs, 1.0)), vnoise(vec2(1.0, t * 0.65 + hs))) - 0.5;
+        vec2 cc = c + jt * 0.035 * jit;
         float R = 0.04;
-        float ang = hash(id + 2.0) * 6.28 + (vnoise(vec2(t * 2.0 + hs, 5.0)) - 0.5) * 2.0 * jit;
+        float ang = hash(id + 2.0) * 6.28 + (vnoise(vec2(t * 0.5 + hs, 5.0)) - 0.5) * 0.8 * jit;
         vec2 e1 = vec2(cos(ang), sin(ang)), e2 = vec2(cos(ang + 1.82), sin(ang + 1.82));
         vec2 h1p = cc + e1 * R * 2.2, h2p = cc + e2 * R * 2.2;
         float bw = max(px, 0.002);
@@ -741,10 +745,10 @@ World stageMolecules(vec2 q, float px) {
 // ---- 6. the atom: breathing orbital clouds, drawn as contours of light
 World stageAtom(vec2 q, float px) {
     World W;
-    float t = uTime;
+    float t = gT;
     float r = length(q);
     float th = atan(q.y, q.x);
-    float breathe = 1.0 + 0.035 * uTide * uTideAmp;
+    float breathe = 1.0 + 0.012 * uTide * uTideAmp;
     float lr = log(max(r, 1e-4) / breathe);
     float psi = 0.0, dens = 0.0;
     for (int s = 0; s < 5; s++) {
@@ -786,9 +790,9 @@ World stageAtom(vec2 q, float px) {
 // ---- 7. inside the nucleus: quantum foam
 World stageFoam(vec2 q, float px) {
     World W;
-    float t = uTime;
+    float t = gT;
     float r = length(q);
-    float boil = 0.1 + 0.1 * uTideAmp * (0.5 + 0.5 * uTide) + 0.06 * uPeak;
+    float boil = 0.08;                 // (constant: it multiplies the clock)
     float C = 0.14;
     vec2 i = floor(q / C), f = q / C - i;
     float d1 = 8.0, d2 = 8.0;
@@ -797,7 +801,7 @@ World stageFoam(vec2 q, float px) {
         for (int x = -1; x <= 1; x++) {
             vec2 g = vec2(x, y);
             vec2 h = hash2(i + g);
-            vec2 o = g + 0.5 + 0.38 * sin(t * (0.3 + boil * 3.0) * (0.5 + h) + 6.2831 * h);
+            vec2 o = g + 0.5 + 0.38 * sin(t * 0.2 * (0.5 + h) + 6.2831 * h);
             vec2 dv = o - f;
             float d = dot(dv, dv);
             if (d < d1) { d2 = d1; o2 = o1; d1 = d; o1 = dv; cid = i + g; } else if (d < d2) { d2 = d; o2 = dv; }
@@ -805,7 +809,7 @@ World stageFoam(vec2 q, float px) {
     float wallD = abs(dot(0.5 * (o1 + o2), normalize(o2 - o1)));
     float cd = sqrt(d1);
     float life = fract(t * boil * (0.5 + hash(cid)) + hash(cid + 3.0));
-    float burst = smoothstep(0.86, 0.9, life) * (1.0 - smoothstep(0.97, 1.0, life));
+    float burst = smoothstep(0.8, 0.9, life) * (1.0 - smoothstep(0.95, 1.0, life));
     float pw = px / C;
     float wall = lineA(wallD, 0.025 + 0.02 * (1.0 - life), pw * 1.2) * (1.0 - burst);
     vec3 fc = hsv(fract(fract(hash(cid) * 3.0 + cd * 0.8 + life * 0.6) * 0.7 + 0.45 + uFever * t * 0.03), 0.45, 1.0) * mix(uLight, vec3(1.0), 0.2);
@@ -816,17 +820,17 @@ World stageFoam(vec2 q, float px) {
     float age = (life - 0.86) / 0.14;
     if (age > 0.0) {
         col += mix(uCool, uLight, 0.5) * cos((cd - age * 1.4) * 18.0) * exp(-sq((cd - age * 1.4) / 0.3)) * (1.0 - age) * 0.18 * k;
-        col += uLight * 0.5 * exp(-sq(cd / 0.08)) * (1.0 - smoothstep(0.0, 0.3, age)) * k;
+        col += uLight * 0.12 * exp(-sq(cd / 0.1)) * sin(sat(age / 0.5) * PI) * k;
     }
     // virtual pairs: two sparks born together, spiraling apart, annihilating (with the kicks)
     SCATTER(0.5, 111.0, 0.5)
-        float ph = fract(t * 0.3 + h2.x);
+        float ph = fract(t * 0.15 + h2.x);
         float sp = sin(ph * PI) * 0.06;
         float a0 = ph * 5.0 + h2.y * 6.28;
         vec2 o = vec2(cos(a0), sin(a0)) * sp;
         float sz = 0.006 + px;
         float g = exp(-dot(q - c - o, q - c - o) / sq(sz)) + exp(-dot(q - c + o, q - c + o) / sq(sz));
-        col += mix(uWarm, uLight, 0.5) * g * (0.25 + 0.9 * uKick) * sin(ph * PI);
+        col += mix(uWarm, uLight, 0.5) * g * (0.25 + 0.3 * uKick) * sin(ph * PI);
     END_SCATTER
     // the nucleus seen whole: a glowing knot of foam with a bright rim
     float R = 2.2;
@@ -841,7 +845,7 @@ World stageFoam(vec2 q, float px) {
 // ---- 8. strings, ringing with the music, on a fabric that ripples like a pool
 World stageStrings(vec2 q, float px) {
     World W;
-    float t = uTime;
+    float t = gT;
     vec3 col = mix(uDeep, uWater, 0.3);
     // ripples from a few sources, interfering
     float rip = 0.0;
@@ -861,8 +865,8 @@ World stageStrings(vec2 q, float px) {
         for (int n = 2; n < 8; n++) {
             float fn = float(n);
             float band = n < 3 ? uBands.x : n < 4 ? uBands.y : n < 6 ? uBands.z : uBands.w;
-            float a = (0.03 + 0.09 * band * (0.4 + uTideAmp) + 0.04 * uKick) / fn * (0.5 + 0.8 * hash(id + fn));
-            float arg = fn * th - t * (0.35 + 0.12 * fn) * dir + hash(id + fn * 3.0) * 6.28;
+            float a = (0.03 + 0.05 * band * (0.4 + uTideAmp) + 0.01 * uKick) / fn * (0.5 + 0.8 * hash(id + fn));
+            float arg = fn * th - t * (0.18 + 0.06 * fn) * dir + hash(id + fn * 3.0) * 6.28;
             rr += R0 * a * cos(arg);
             drr -= R0 * a * fn * sin(arg);
         }
@@ -898,9 +902,9 @@ void main() {
     // the drop's wave: a slow ripple through the fabric, out from the focus
     if (uWave.y > 0.0) {
         float pr = length(p);
-        float front = uWave.x * 0.9;
-        float k = exp(-sq((pr - front) / 0.35)) * uWave.y * exp(-uWave.x * 0.35);
-        p += p / max(pr, 1e-3) * sin((pr - front) * 9.0) * 0.02 * k;
+        float front = uWave.x * 0.45;
+        float k = exp(-sq((pr - front) / 0.5)) * uWave.y * exp(-uWave.x * 0.3);
+        p += p / max(pr, 1e-3) * sin((pr - front) * 6.0) * 0.005 * k;
     }
     // a little softness behind the well and the HUD's columns (the stack and the score read over a calmer world)
     vec2 qw = abs(b) - vec2(5.0, 10.0);
@@ -914,7 +918,9 @@ void main() {
     float blurP = 0.003 * hud;
     // the stage we are in, and the next one, its things already there, tiny; then a crossfade into it
     vec4 L0 = uLayer[0], L1 = uLayer[1];
+    gT = uLayerT0;
     World A = stage(int(L0.x + 0.5), rot(L0.w) * p * L0.z, (uPxP + blurP) * L0.z);
+    gT = uLayerT1;
     World B = stage(int(L1.x + 0.5), rot(L1.w) * p * L1.z, (uPxP + blurP) * L1.z);
     float appear = smoothstep(-3.6, -2.6, L1.y);
     vec4 nb = B.obj * appear * mix(A.host, 1.0, uTau);
@@ -923,7 +929,7 @@ void main() {
     vec3 c = mix(a, bb, uTau);
     // FEVER: the world's hues turn slowly with the depth
     if (uFever > 0.0) {
-        float an = uFever * (uDepth * 0.35 + uTime * 0.03);
+        float an = uFever * (uDepth * 0.08 + uTime * 0.015);
         vec3 k = vec3(0.57735);
         float ca = cos(an), sa = sin(an);
         c = max(c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca), 0.0);

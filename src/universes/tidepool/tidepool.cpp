@@ -9,14 +9,15 @@
 // on a rippling fabric; and the rock pool again, resolving out of them: the zoom never ends.
 //
 // The dive is one similarity transform about a point left of the HUD's left column, so the whole world streams out
-// from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 2/3
-// of an octave deeper (eased by a spring), a Tetris plunges through a whole stage. Each stage is a whole world in
+// from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 0.3
+// octave deeper and a Tetris half a stage, eased (the zoom's speed changes smoothly and stays under a third of an
+// octave a second): the whole loop takes about 100 lines. Each stage is a whole world in
 // its own frame, its things of a fixed size, 16 times smaller than the stage before; the shader draws the stage we
 // are in with the next one's things over it, then crossfades into the next one over the last octave and a half
 // (shaders.hpp). The zoom turns a little as it dives. Game over: the zoom pulls all the way back out to the rock
 // pool, and the next game starts there.
 //
-// The music is the tide: the water sloshes once a bar at every scale (the waterline creeping over the rock, the
+// The music is the tide: the water swells slowly, once every two bars, at every scale (the waterline creeping over the rock, the
 // anemones opening, the plankton hopping every two beats, the light sweeping round the glass, the cytoplasm
 // streaming, the molecules' Brownian jitter, the orbitals breathing, the foam boiling, the strings ringing in
 // harmonics fed by the song's bands). The drop is a wave: a lace of foam drifting over the pool's floor,
@@ -129,8 +130,11 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 constexpr double STAGE_OCT = 4.0;                 // octaves per stage (16 times smaller each)
 constexpr int STAGES = 9;
 constexpr double LOOP = STAGE_OCT * STAGES;       // a loop of the nine stages: back to a rock pool
-constexpr double STEP = STAGE_OCT / 6.0;          // a line: two thirds of an octave (six lines a stage)
-constexpr double TETRIS_EXTRA = STAGE_OCT / 3.0;  // a Tetris plunges a whole stage (4 lines + this)
+// The pace: the whole loop in about 100 lines of a game. A line is 0.3 octave, a Tetris 2 octaves (half a stage),
+// and the slow drift adds some 0.4 octave a minute: a stage every ~10.5 lines in a typical game (strings at ~85, the
+// rock pool again at ~95).
+constexpr double STEP = 0.3;                      // a line
+constexpr double TETRIS_EXTRA = 0.8;              // a Tetris: 4 lines + this
 constexpr float OMEGA = 0.07f;            // the zoom's turn (radians an octave)
 constexpr float CLEAR_T = 0.42f;          // a cleared row melts in this long (real time)
 constexpr int MAX_MOTES = 900;
@@ -865,16 +869,22 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
             onEvent(ev, game);
         }
     }
-    // ---- The beat grid: the tide sloshes once a bar.
+    // ---- The beat grid: the tide swells once every two bars.
     double beat;
     if (music.hasSong) beat = music.beat;
     else {
         if (!f.paused) ownBeat_ += dt * 2.0;
         beat = ownBeat_;
     }
-    const float tide = (float)std::sin(beat / 4.0 * TAU);
-    const float tideAmp = 0.25f + 0.4f * wm + 0.45f * wp + 0.2f * dropAmt_;
-    const float kick = std::max(music.kick, kickIn_) * wp;
+    // the tide: one slow swell every two bars, eased by the level
+    const float tide = (float)std::sin(beat / 8.0 * TAU);
+    const float tideAmp = 0.25f + 0.3f * wm + 0.3f * wp + 0.1f * dropAmt_;
+    // the kicks (in a peak only), eased into soft swells: rising over a fifth of a second, fading over a second
+    {
+        const float k = std::max(music.kick, kickIn_) * wp;
+        kickS_ = approach(kickS_, k, k > kickS_ ? 5.f : 1.2f, dt);
+    }
+    const float kick = kickS_;
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
 
     // ---- The dive: the game's lines -> the depth (a new game starts again from the rock pool).
@@ -886,7 +896,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
             creep_ = bonus_ = 0.0;
         }
         lines_ = lines;
-        if (!f.paused && overT_ < 0.f) creep_ += wdt * (0.004 + 0.006 * wm + 0.008 * wp);
+        if (!f.paused && overT_ < 0.f) creep_ += wdt * (0.005 + 0.003 * wm + 0.005 * wp);
         breath_ = 0.06 * std::sin(time_ * 0.11) * (0.5 + 0.5 * wm);
         double target = zTarget(lines);
         if (overT_ >= 0.f) target = std::floor(z_ / LOOP + 0.02) * LOOP; // game over: all the way back out
@@ -894,10 +904,13 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         if (!zSet_) { z_ = target; zVel_ = 0.0; zSet_ = true; }
         linesShown_ = lines;
         // a critically damped spring: each clear an eased step inward, a Tetris a plunge
-        const double w = overT_ >= 0.f ? 1.1 : 1.7;
-        zVel_ += (w * w * (target - z_) - 2.0 * w * zVel_) * wdt;
-        const double vmax = overT_ >= 0.f ? 7.0 : 3.0;
-        zVel_ = std::clamp(zVel_, -vmax, vmax);
+        // the zoom's speed eases toward a speed set by the distance left (slowing down as it arrives), never
+        // faster than a third of an octave a second (the far edge of the screen then moves a few pixels a frame), and
+        // it changes smoothly: a clear is a soft push, a Tetris a long glide down through a whole scale
+        const bool back = overT_ >= 0.f;
+        const double vmax = back ? 1.6 : 0.36;
+        const double want = std::clamp((target - z_) * (back ? 1.2 : 0.9), -vmax, vmax);
+        zVel_ += (want - zVel_) * (1.0 - std::exp(-2.2 * wdt));
         z_ += zVel_ * wdt;
         if (debugZ_ >= 0.0) { z_ = debugZ_; zVel_ = 0.0; }
     }
@@ -964,6 +977,14 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
             layers[i * 4 + 2] = (float)std::exp2(-u);
             layers[i * 4 + 3] = (float)(OMEGA * u + st * 0.9);
         }
+        // each stage's clock runs slower as the zoom goes into it: its things keep a calm pace on the screen
+        float clocks[2];
+        for (int i = 0; i < 2; i++) {
+            const double u = zz - (a + i) * STAGE_OCT;
+            const int st = (int)std::fmod(a + i, (double)STAGES);
+            if (i == 0 || u > -STAGE_OCT) stageClock_[st] += wdt * (float)std::exp2(-0.75 * std::clamp(u, 0.0, STAGE_OCT));
+            clocks[i] = std::fmod(stageClock_[st], 2000.f) + st * 37.f;
+        }
         const float tau = smoothstepf((float)STAGE_OCT - 1.6f, (float)STAGE_OCT - 0.1f, (float)(zz - a * STAGE_OCT));
         worldT_.bind();
         glDisable(GL_BLEND);
@@ -974,6 +995,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progWorld_, "uPxP", 2.f / worldT_.h);
         glUniform4fv(ugl::U(progWorld_, "uLayer"), 2, layers);
         set1f(progWorld_, "uTau", tau);
+        set1f(progWorld_, "uLayerT0", clocks[0]);
+        set1f(progWorld_, "uLayerT1", clocks[1]);
         set1f(progWorld_, "uTime", time_);
         set1f(progWorld_, "uTide", tide);
         set1f(progWorld_, "uTideAmp", tideAmp);
@@ -981,11 +1004,11 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progWorld_, "uPeak", wp + 0.5f * dropAmt_);
         set1f(progWorld_, "uKick", kick);
         set1f(progWorld_, "uSlow", slow_);
-        set4f(progWorld_, "uWave", waveT_, waveK_ * (waveT_ < 9.f ? 1.f : 0.f), 0.f, 0.f);
+        set4f(progWorld_, "uWave", waveT_, waveK_ * smoothstepf(0.f, 1.5f, waveT_) * (1.f - smoothstepf(7.f, 9.f, waveT_)), 0.f, 0.f); // (eased in and out)
         set3f(progWorld_, "uDeep", pal_.deep);
         set3f(progWorld_, "uWater", pal_.water);
         set3f(progWorld_, "uShallow", pal_.shallow);
-        set3f(progWorld_, "uLight", pal_.light * (1.f + 0.12f * wp + 0.2f * swell_));
+        set3f(progWorld_, "uLight", pal_.light * (1.f + 0.08f * wp + 0.06f * swell_));
         set3f(progWorld_, "uRock", pal_.rock);
         set3f(progWorld_, "uSand", pal_.sand);
         set3f(progWorld_, "uWarm", pal_.warm);
@@ -1001,7 +1024,9 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         {
             float b[4] = {0, 0, 0, 0};
             for (int i = 0; i < NUM_BANDS; i++) b[std::min(3, i * 4 / NUM_BANDS)] += music.bandsFast[i] * (4.f / NUM_BANDS);
-            set4f(progWorld_, "uBands", saturate(b[0]), saturate(b[1] * 1.3f), saturate(b[2] * 1.6f), saturate(b[3] * 2.f));
+            const float tb[4] = {saturate(b[0]), saturate(b[1] * 1.3f), saturate(b[2] * 1.6f), saturate(b[3] * 2.f)};
+            for (int i = 0; i < 4; i++) bandS_[i] = approach(bandS_[i], tb[i], 1.5f, dt);
+            set4f(progWorld_, "uBands", bandS_[0], bandS_[1], bandS_[2], bandS_[3]);
         }
         ugl::drawFullscreen();
     }
