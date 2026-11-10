@@ -48,7 +48,7 @@ private:
     int lines_ = 0, linesShown_ = -1, here_ = 0;
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;
     float gBonus_ = 0.f;
-    float stroke_ = 0.f;          // a clear's tail stroke (the swim surging)
+    float stroke_ = 0.f;          // a clear's tail stroke (its glow)
     float burst_ = 0.f;           // a Tetris' burst
     float hatchT_ = 99.f;         // a new game: a new koi
     float swimPh_ = 0.f, finPh_ = 0.f, singPh_ = 0.f;
@@ -66,17 +66,36 @@ private:
         double orbitA = 0.0; // radians around the body it circles (the sea, the sky, orbit, the Moon)
     };
     Cruise cr_{};
-    float swimT_ = 0.f;          // the wandering's clock (quicker with the music)
     float pace_ = 1.f;           // the cruise's pace from the music (smoothed)
-    float speedL_ = 0.3f;        // the cruise's speed now (body lengths a second)
-    float surge_ = 0.f, surgeIn_ = 0.f; // a clear's surge (smooth rise, slow fall)
+    float speedL_ = 0.3f;        // the cruise's speed along its line now (body lengths a second)
+    // ---- The swim, physically: the tail's strokes give thrust, the water's (or the air's) drag slows it, so it
+    // accelerates, coasts between strokes; it steers toward slowly moving goals, banking into its turns with a lag.
+    float swimV_ = 0.2f;         // its speed (body lengths a second)
+    float effort_ = 0.5f;        // the strokes' effort (amplitude), 0 gliding .. ~2 a clear's power strokes
+    float tailF_ = 1.f;          // the tail's beat (Hz)
+    float boost_ = 0.f;          // power strokes left (a clear)
+    bool burstOn_ = true;        // the koi's burst-and-coast
+    float yaw_ = 0.f, yawRate_ = 0.f, pitch_ = 0.f, pitchRate_ = 0.f; // its heading off its line (radians, /s)
+    float offS_ = 0.f, offU_ = 0.f;  // its offset off its line (body lengths: to the side, up)
+    float roll_ = 0.f, curv_ = 0.f, curvV_ = 0.f, finTurn_ = 0.f, pathTurn_ = 0.f;
+    float rollEvT_ = 40.f, rollEvPh_ = -1.f; // a slow barrel roll now and then (in the air, in space)
+    float steerT_ = 0.f;         // the steering goals' clock
+    vec3 hPrev_{0.f};
+    void updateSwim(float G, float dt, float target);
+    // ---- Seabirds (boids) and hot-air balloons: their own lives in the world, around its journey.
+    struct Bird { vec3 p, v; float flap, glide, glideT, seed, age, fade, bank; int flock; bool leaving; };
+    std::vector<Bird> birds_;
+    std::vector<vec3> flockDir_;
+    float flockT_ = 0.f;
+    struct Balloon { vec3 p; float size, seed, age; int color; };
+    std::vector<Balloon> balloons_;
+    void updateBirds(float G, float dt);
     vec3 camH_{1.f, 0.f, 0.f};   // the camera's bearing (the travel's direction, smoothed)
     vec3 camWo_{0.f};            // how much of the wandering the camera follows (smoothed)
     bool camHSet_ = false;
     vec3 pathPosC(float G, const Cruise& c) const; // the path's center at G, at that cruise
     vec3 pathPos(float G) const { return pathPosC(G, cr_); }
     vec3 travelDir(float G) const;      // the cruise's direction at G (unit)
-    vec3 wander(float G, float tau, float* roll) const; // the wandering (body lengths: along, up, side), its roll
     void advanceCruise(float G, float dt);
     vec3 lastHead_{0.f}, lastTail_{0.f};
     vec3 splashC_{0.f};
@@ -97,7 +116,7 @@ private:
     // ---- Particles in the world: spray, sparkles, petals, streaks, rings of song.
     struct Spark { vec3 p, v; float age, life, size, seed, spin; int kind; vec3 col; };
     std::vector<Spark> sparks_;
-    float sparkAcc_ = 0.f, streakAcc_ = 0.f;
+    float sparkAcc_ = 0.f, streakAcc_ = 0.f, dustAcc_ = 0.f;
     struct Ring { vec3 c, n; float age, life, r0, r1, hue; };
     std::vector<Ring> rings_;
     double lastRingBeat_ = -1e9;
@@ -176,7 +195,7 @@ private:
     // at a reduced resolution, upsampled with its depth), then resolved into worldT_.
     GLuint skyDepthTex_ = 0, skyFbo_ = 0, msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     int msW_ = 0, msH_ = 0, msSamples_ = 1;
-    GLuint progUp_ = 0;
+    GLuint progUp_ = 0, progLunar_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;
