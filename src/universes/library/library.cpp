@@ -116,6 +116,10 @@ constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (th
 
 // Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their stacks already on the shelves: for screenshots),
 // ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its ten stacks grow on the shelves).
+// Each cleared cell's books go on the shelves as two stacks side by side (so some 100 lines fill the atrium).
+constexpr int STACKS_CELL = 2;
+uint32_t stackSeed(uint32_t cell, int k) { return k == 0 ? cell : hash32((uint64_t)cell * 2654435761ull + (uint64_t)k); }
+
 int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
     return n;
@@ -758,7 +762,7 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             full[c.y] = true;
             const vec3 bp = layout::cellPos((float)c.x, (float)c.y);
             if (c.y >= Game::HIDDEN) fx_.push_back({type, sd, bp, 0.f});
-            fly(type, sd, bp, 0.05f + 0.06f * i);
+            for (int k = 0; k < STACKS_CELL; k++) fly(type, stackSeed(sd, k), bp, 0.05f + 0.06f * i + 0.03f * k);
             i++;
         }
         // the seeds follow the rows down
@@ -1188,15 +1192,19 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             hookPlaced_ = true;
             Rng hr(0xB00C5ull);
             for (int l = 0; l < hookStart; l++)
-                for (int k = 0; k < Game::W; k++) {
+                for (int k = 0; k < Game::W * STACKS_CELL; k++) {
                     shelve(hr.irange(0, 6), (uint32_t)hr.next(), 0.f);
                     groups_.back().t0 = -100.f;
                 }
         }
         while (hookLines_ < hookRate) {
             hookLines_++;
-            for (int x = 0; x < Game::W; x++)
-                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)x, (float)(Game::H - 1)), 0.05f + 0.06f * x);
+            for (int x = 0; x < Game::W; x++) {
+                const int type = rng_.irange(0, 6);
+                const uint32_t sd = (uint32_t)rng_.next();
+                for (int k = 0; k < STACKS_CELL; k++)
+                    fly(type, stackSeed(sd, k), layout::cellPos((float)x, (float)(Game::H - 1)), 0.05f + 0.06f * x + 0.03f * k);
+            }
         }
         grow_ = (float)lines_;
     }
