@@ -48,7 +48,6 @@ private:
     double zTarget(int lines) const;
     double debugZ_ = -1.0;        // ZEN_TIDEPOOL_DEPTH: a fixed depth (testing)
     vec2 focus_{15.f, -0.8f};     // board units: where the zoom dives
-    float h0_ = 1.f;              // stage units per screen half-height at a stage's start
     std::string scaleText_, stageName_;
 
     // ---- Particles over the board: bubbles of cleared rows, silt of hard drops.

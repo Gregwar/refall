@@ -1,24 +1,25 @@
-// TIDE POOL: attention as a journey. Behind the well, a humble rock pool at low tide, almost nothing to see: a
-// little boulder in clear water. Every cleared line zooms deeper into it, one continuous dive inward through nine
-// scales: the pool; the boulder, beadlet anemones swaying on its flanks, limpets, a shore crab, a drop of water
-// glistening on the rock; inside the drop, plankton (copepods, nauplii, chains of diatoms); a diatom's glass
-// frustule, a rose window of pores with the golden cell glowing behind them; the cell's cytoplasm streaming,
-// chloroplasts and granules; molecules jostling, a double helix winding into the focus like a spiral staircase of
-// light; an atom, its orbital clouds breathing in nested shells; inside the nucleus, a boiling quantum foam whose
-// bubbles burst into ripples that interfere like rain on a pool; strings of light vibrating to the music; and in
-// the smallest loop of string, a rock pool again: the zoom never ends.
+// TIDE POOL: attention as a journey. Behind the well, a humble rock pool at low tide, almost nothing to see: clear
+// water over sand, slate around it. Every cleared line zooms deeper into it, one continuous dive inward through nine
+// scales, each one already there in the one before, tiny: the pool; its floor (stones with limpets and barnacles,
+// colonies of beadlet anemones, sea lettuce, a crab or two), dotted with specks of plankton; the water, teeming with
+// copepods, nauplii, chains and discs of diatoms; one diatom's glass frustule, rings of pores with the golden cell
+// glowing through every one; the cell's cytoplasm streaming, chloroplasts and granules; molecules jostling, double
+// helices of light; an atom, its orbital clouds breathing as contours of light; inside its nucleus a boiling quantum
+// foam whose bubbles burst into ripples that interfere like rain on a pool; strings of light ringing with the music
+// on a rippling fabric; and the rock pool again, resolving out of them: the zoom never ends.
 //
-// The dive is one similarity transform: depth z (octaves of zoom) drifts slowly inward all the time, each cleared
-// line pushes it 2/3 of an octave deeper (eased by a spring), a Tetris plunges through a whole stage. Each stage
-// lives in its own frame, 16 times smaller than the one before, in a disc around the focus of the zoom; the
-// shader draws up to three nested stages per pixel, innermost first (shaders.hpp). The focus sits right of the
-// well's HUD column, wandering slowly; the zoom turns a little as it dives. Game over: the zoom pulls all the way
-// back out to the rock pool, and the next game starts there.
+// The dive is one similarity transform about the screen's middle (behind the well), so the whole world streams out
+// from it on every side: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 2/3
+// of an octave deeper (eased by a spring), a Tetris plunges through a whole stage. Each stage is a whole world in
+// its own frame, its things of a fixed size, 16 times smaller than the stage before; the shader draws the stage we
+// are in with the next one's things over it, then crossfades into the next one over the last octave and a half
+// (shaders.hpp). The zoom turns a little as it dives. Game over: the zoom pulls all the way back out to the rock
+// pool, and the next game starts there.
 //
 // The music is the tide: the water sloshes once a bar at every scale (the waterline creeping over the rock, the
 // anemones opening, the plankton hopping every two beats, the light sweeping round the glass, the cytoplasm
 // streaming, the molecules' Brownian jitter, the orbitals breathing, the foam boiling, the strings ringing in
-// harmonics fed by the song's bands). The drop is a wave: water washing up over the boulder with a lace of foam,
+// harmonics fed by the song's bands). The drop is a wave: a lace of foam drifting over the pool's floor,
 // and deeper down a slow ripple through the fabric. Kicks (in a peak only) light small things: dinoflagellates
 // sparking, glints in the diatom's pores, virtual pairs of particles, the strings plucked.
 //
@@ -135,7 +136,7 @@ constexpr float CLEAR_T = 0.42f;          // a cleared row melts in this long (r
 constexpr int MAX_MOTES = 900;
 
 // What each stage is and how big (meters, a half screen at its start).
-const char* STAGE_NAME[STAGES] = {"a rock pool", "a boulder", "a drop of water", "a diatom", "a living cell",
+const char* STAGE_NAME[STAGES] = {"a rock pool", "the pool floor", "plankton", "a diatom", "a living cell",
                                   "molecules", "an atom", "quantum foam", "strings"};
 const double STAGE_M[STAGES + 1] = {1.0, 6e-2, 4e-3, 2.5e-4, 1.5e-5, 2e-8, 3e-10, 2e-15, 1.6e-35, 1e-36};
 
@@ -263,9 +264,8 @@ void TidePoolUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the focus: in the free band right of the HUD's right column
-    const float x0 = layout::RIGHT_COLUMN[2], x1 = viewC_.x + hw;
-    focus_ = V(x0 + std::max(1.5f, (x1 - x0) * 0.46f), viewC_.y - 0.8f);
+    // the focus of the dive: the screen's middle, behind the well (the world flows out from it on every side)
+    focus_ = V(0.f, viewC_.y + 1.f);
     // the world at a reduced resolution (at most 810 lines)
     const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
@@ -949,29 +949,21 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
 
     // =========================================================== the world (reduced resolution)
     {
-        // the focus wanders slowly; the layers' frames from the depth
-        const vec2 F = V(focus_.x + 0.7f * std::sin(time_ * 0.031f), focus_.y + 0.5f * std::sin(time_ * 0.023f + 1.f));
-        float far = 0.f;
-        for (int i = 0; i < 4; i++) {
-            const float cx = viewC_.x + ((i & 1) ? viewH_.x : -viewH_.x), cy = viewC_.y + ((i & 2) ? viewH_.y : -viewH_.y);
-            far = std::max(far, std::sqrt((cx - F.x) * (cx - F.x) + (cy - F.y) * (cy - F.y)) / viewH_.y);
-        }
-        h0_ = 3.05f / far;
+        // the focus (the screen's middle, behind the well) wanders a little; the two stages' frames from the depth
+        const vec2 F = V(focus_.x + 0.5f * std::sin(time_ * 0.031f), focus_.y + 0.4f * std::sin(time_ * 0.023f + 1.f));
         const double zz = std::max(0.0, z_);
         const double a = std::floor(zz / STAGE_OCT);
-        // the stage seen whole, the one around it (its soft edge), the two inside it
-        float layers[16];
-        const double first = a >= 1.0 ? a - 1.0 : a;
-        const int count = a >= 1.0 ? 4 : 3;
-        for (int i = 0; i < count; i++) {
-            const double l = first + i;
+        float layers[8];
+        for (int i = 0; i < 2; i++) {
+            const double l = a + i;
             const double u = zz - l * STAGE_OCT;
             const int st = (int)std::fmod(l, (double)STAGES);
             layers[i * 4 + 0] = (float)st;
             layers[i * 4 + 1] = (float)u;
-            layers[i * 4 + 2] = h0_ * (float)std::exp2(-u);
+            layers[i * 4 + 2] = (float)std::exp2(-u);
             layers[i * 4 + 3] = (float)(OMEGA * u + st * 0.9);
         }
+        const float tau = smoothstepf((float)STAGE_OCT - 1.6f, (float)STAGE_OCT - 0.1f, (float)(zz - a * STAGE_OCT));
         worldT_.bind();
         glDisable(GL_BLEND);
         glUseProgram(progWorld_);
@@ -979,8 +971,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
         set2f(progWorld_, "uFocus", F.x, F.y);
         set1f(progWorld_, "uPxP", 2.f / worldT_.h);
-        glUniform4fv(ugl::U(progWorld_, "uLayer"), count, layers);
-        set1i(progWorld_, "uLayers", count);
+        glUniform4fv(ugl::U(progWorld_, "uLayer"), 2, layers);
+        set1f(progWorld_, "uTau", tau);
         set1f(progWorld_, "uTime", time_);
         set1f(progWorld_, "uTide", tide);
         set1f(progWorld_, "uTideAmp", tideAmp);
@@ -1092,7 +1084,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_tidepool() {
     static const UniverseEntry e{
-        "TIDE POOL", "a rock pool at low tide; every cleared line zooms deeper into it, from anemones to a drop, a diatom, a cell, molecules, an atom and beyond",
+        "TIDE POOL", "a rock pool at low tide; every cleared line zooms deeper into it, through anemones, plankton, a diatom, a cell, molecules, an atom and beyond",
         [] { return std::unique_ptr<Universe>(new TidePoolUniverse()); },
         // Fits most songs; the calm, airy ones a little better.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.density) + 0.15f * l.airWeight; },

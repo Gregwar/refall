@@ -1,14 +1,13 @@
 #pragma once
-// TIDE POOL's shaders: the world (one continuous zoom through nine scales, each drawn procedurally in its own
-// frame and nested in the one before it), the veil behind the well, the sea-glass pieces, bubbles, lettering.
+// TIDE POOL's shaders: the world (one continuous zoom through nine scales, each a whole world drawn procedurally
+// in its own frame), the veil behind the well, the sea-glass pieces, bubbles, lettering.
 //
-// The nesting: every scale (a "stage") is drawn in local coordinates q with the focus of the zoom at its origin.
-// Stage k+1 lives inside stage k, 16 times smaller (S = 4 octaves), inside a disc of radius RB = 3.3 of its own
-// units (0.21 of stage k's): the drop on the boulder, the diatom in the drop, the pore in the diatom... Each stage
-// draws its world over the annulus it is seen in (radius 3.3 down to 0.21) and is transparent outside RB; the
-// compositor draws the innermost first and stops as soon as a stage is opaque. Things in a stage are sized in
-// proportion to their distance from the focus (often scattered on a log-polar lattice), so the screen keeps the same
-// density of detail at every zoom, and every edge is anti-aliased against the pixel's size in the stage's units.
+// The dive: every stage fills the plane with things of a fixed size in its world (16 times smaller from one stage to
+// the next: S = 4 octaves), so zooming makes all of them grow and stream out from the focus at the screen's middle.
+// The next stage's things are already there, tiny, scattered everywhere in the current one (anemones dotting the
+// pool's floor, plankton specks over the anemones, the cell glowing through every pore of the diatom...); over the
+// stage's last octave and a half the whole next world fades in under them. Every edge is anti-aliased against the
+// pixel's size in the stage's units, and patterns fade out before they get under a few pixels (no shimmer).
 
 namespace tidepool_shaders {
 
@@ -38,15 +37,14 @@ in vec2 vUv;
 out vec4 frag;
 uniform vec2 uViewC, uViewH, uFocus;
 uniform float uPxP;           // p units per pixel of this target
-uniform vec4 uLayer[4];       // stage, local zoom u, scale (stage units per p unit), angle
-uniform int uLayers;
+uniform vec4 uLayer[2];       // the stage we are in and the next: stage, local zoom u, scale (stage units per p unit), angle
+uniform float uTau;           // the crossfade into the next stage
 uniform float uTime, uTide, uTideAmp, uLife, uPeak, uKick, uSlow, uBridge, uWorldA;
 uniform vec4 uWave;           // the drop's wave: age (s), strength, -, -
 uniform vec3 uDeep, uWater, uShallow, uLight, uRock, uSand, uWarm, uWarm2, uWeed, uCool, uGlow, uBridgeCol;
 uniform float uLum, uFever, uDepth;
 uniform vec4 uBands;          // the music's bands (low, low-mid, high-mid, high), quickly smoothed
 
-const float RB = 3.3;         // a stage's disc, in its own units
 const float PI = 3.14159265, TAU = 6.2831853;
 
 // ---- small helpers
@@ -94,7 +92,7 @@ float caustic(vec2 p, float t, float px) {
 vec2 toLP(vec2 q, float n) { return vec2(log(max(length(q), 1e-6)), atan(q.y, q.x)) * (n / TAU); }
 vec2 fromLP(vec2 c, float n) { float k = TAU / n; return exp(c.x * k) * vec2(cos(c.y * k), sin(c.y * k)); }
 
-// ======================================================================= 0. the rock pool at low tide
+// ======================================================================= helpers
 // the bed seen through d of clear sea water
 vec3 waterOver(vec3 bed, float d) {
     vec3 T = exp(-d * vec3(5.0, 1.9, 1.4));
@@ -137,75 +135,6 @@ vec3 sandBed(vec2 q, float px, float t, float scale) {
         c = mix(c, pc * shade, inside * k);
     }
     return c;
-}
-vec4 stagePool(vec2 q, float px, float lu, bool inner) {
-    float r = length(q);
-    float t = uTime;
-    float level = 0.4 + 0.022 * uTide * uTideAmp + 0.07 * uWave.y * bump(uWave.x - 2.5, 1.8);
-    float e = max(px * 1.5, 0.004);
-    float h = poolH(q, px);
-    float hx = poolH(q + vec2(e, 0.0), px), hy = poolH(q + vec2(0.0, e), px);
-    vec2 g = vec2(hx - h, hy - h) / e;
-    vec3 n = normalize(vec3(-g * 0.5, 1.0));
-    vec3 L = normalize(vec3(-0.5, 0.6, 0.65));
-    float dep = level - h;
-    float aw = max(px * 1.5, 0.002) * (length(g) + 0.3);
-    vec3 col;
-    {
-        // rock: dark slate, lichen high and dry, pink coralline crust and green weed in the wet band near the water
-        float dry = smoothstep(0.02, 0.3, -dep);
-        float dif = sat(dot(n, L)) * 0.85 + 0.22;
-        vec2 sl = slabs(q, px, 2.2);
-        vec3 rc = uRock * (0.7 + 0.45 * fbm(q * 5.0 + 4.0)) * (1.0 - 0.55 * sl.y);
-        rc *= 0.9 + 0.2 * vnoise(q * 40.0) * lod(1.0 / 40.0, px);
-        float lich = smoothstep(0.6, 0.78, fbm(q * 2.0 + 9.0)) * smoothstep(0.15, 0.4, -dep);
-        rc = mix(rc, uWarm2 * 0.85 * (0.8 + 0.3 * vnoise(q * 25.0)), lich * 0.6);
-        float coral = smoothstep(0.5, 0.66, fbm(q * 2.6 - 3.0)) * (1.0 - dry);
-        rc = mix(rc, mix(uWarm, uSand, 0.55) * 0.85 * (0.85 + 0.3 * vnoise(q * 30.0)), coral * 0.75);
-        rc = mix(rc, uWeed * 0.75, smoothstep(0.55, 0.72, fbm(q * 3.0 - 2.0)) * (1.0 - dry) * 0.55);
-        col = rc * dif * mix(0.62, 1.0, dry);
-        vec3 hv = normalize(L + vec3(0.0, 0.0, 1.0));
-        col += uLight * pow(sat(dot(n, hv)), 50.0) * mix(0.9, 0.12, dry);
-    }
-    float waterA = smoothstep(-aw, aw, dep);
-    if (dep > -aw) {
-        // the pool: sand and pebbles through clear water, caustics, a breath of the sky on its surface
-        vec2 rip = vec2(sin(q.x * 9.0 + t * 1.1 + 3.0 * fbm(q * 2.0)), cos(q.y * 8.0 - t * 0.9)) * 0.004 * (0.4 + uTideAmp);
-        vec2 rq = q - g * 0.015 + rip;
-        vec3 bed = sandBed(rq, px, t, 3.2);
-        // the rock continues under the water where it is shallow
-        bed = mix(bed, col * 0.9, smoothstep(0.08, 0.0, dep) * 0.6);
-        float c = caustic(rq * 2.6, t * 0.5, px * 2.6);
-        float d = max(dep, 0.0);
-        vec3 lit = bed * (0.5 + 1.0 * c * exp(-d * 2.0));
-        vec3 wc = waterOver(lit, d + 0.04);
-        wc += uShallow * 0.06 * smoothstep(-1.5, 1.5, q.y - q.x * 0.4);
-        float men = lineA(dep, aw * 0.5, aw);
-        wc = mix(wc, mix(uLight, uShallow, 0.5), men * 0.35);
-        col = mix(col, wc, waterA);
-    }
-    // bioluminescence (MIDNIGHT): faint sparks in the pool
-    if (uLum > 0.0 && dep > 0.0) {
-        vec2 id;
-        vec3 v = voronoi(q * 14.0, 1.0, t * 0.3, id);
-        float tw = pow(sat(sin(t * (0.7 + hash(id)) + hash(id + 2.0) * 6.28)), 6.0);
-        col += uGlow * exp(-v.x * v.x / 0.02) * tw * uLum * 0.5 * lod(1.0 / 14.0, px);
-    }
-    float a = 1.0;
-    if (inner) {
-        // seen from far inside the strings: only the pool's water glows; the rocks come with the arrival
-        a = 1.0 - smoothstep(1.7, RB, r);
-        a *= mix(smoothstep(-3.2, -0.6, lu), 1.0, waterA * (1.0 - smoothstep(1.4, 2.4, r)));
-    }
-    return layerC(col, a);
-}
-
-// ======================================================================= 1. a boulder in the pool: anemones, limpets
-float boulderH(vec2 q) {
-    float r = length(q);
-    float w = 0.16 * fbm(q * 1.4 + 5.0) + 0.05 * fbm(q * 4.0);
-    float dome = 1.0 - smoothstep(0.35, 1.3, r + w);
-    return dome * 0.9 + 0.07 * fbm(q * 3.0 + 1.0) + 0.025 * fbm(q * 9.0);
 }
 // a beadlet anemone at c, radius R: a red column, blue beads at its rim, three whorls of soft tentacles
 vec4 anemone(vec2 q, vec2 c, float R, float seed, float px, float t) {
@@ -320,104 +249,6 @@ vec4 crab(vec2 q, vec2 c, float R, float a0, float walk, float px) {
     }
     return acc;
 }
-vec4 barnacles(vec2 q, float px, float level) {
-    float cs = 22.0;
-    vec2 s = q * cs;
-    vec2 i = floor(s);
-    vec4 acc = vec4(0.0);
-    float k = lod(0.5 / cs, px);
-    if (k <= 0.0) return acc;
-    for (int y = -1; y <= 1; y++)
-        for (int x = -1; x <= 1; x++) {
-            vec2 id = i + vec2(x, y);
-            if (hash(id + 1.0) < 0.4) continue;
-            vec2 c = id + 0.3 + 0.4 * hash2(id);
-            vec2 cw = c / cs;
-            float hc = boulderH(cw);
-            float band = smoothstep(level + 0.03, level + 0.08, hc) * (1.0 - smoothstep(level + 0.28, level + 0.42, hc)) * smoothstep(0.26, 0.32, length(cw));
-            if (band <= 0.0) continue;
-            float rad = 0.36 * (0.65 + 0.5 * hash(id));
-            vec2 d = (s - c) / rad;
-            float rr = length(d);
-            if (rr > 1.6) continue;
-            float pw = px * cs / rad * 1.3;
-            float ang = atan(d.y, d.x) + hash(id + 4.0) * 6.28;
-            float fl = 0.5 + 0.5 * cos(ang * 6.0);
-            float body = fillA(rr - (1.0 + 0.07 * fl), pw);
-            vec3 n = normalize(vec3(d / max(rr, 1e-3) * 0.9 * sat(rr * 1.5), 1.0));
-            float lit = 0.4 + 0.6 * sat(dot(n, normalize(vec3(-0.5, 0.6, 0.65))));
-            vec3 bc = mix(uSand, vec3(0.92), 0.35) * (0.75 + 0.3 * hash(id + 7.0)) * lit * (0.85 + 0.2 * fl * smoothstep(0.4, 1.0, rr));
-            vec2 od = rot(hash(id + 5.0) * 3.14) * d;
-            bc = mix(bc, bc * 0.6, fillA(abs(od.x) * 0.6 + abs(od.y) - 0.34, pw));
-            bc = mix(bc, uDeep * 0.4, fillA(max(abs(od.y) - 0.045, abs(od.x) - 0.42), pw));
-            float sh = fillA(length(d - vec2(0.18, -0.22)) - 1.15, pw * 3.0 + 0.25) * 0.4;
-            acc = over(layerC(bc, body * band * k), over(acc, vec4(0.0, 0.0, 0.0, sh * band * k)));
-        }
-    return acc;
-}
-vec4 stageBoulder(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB) return vec4(0.0);
-    float t = uTime;
-    float wave = uWave.y * bump(uWave.x - 2.2, 1.6);
-    float level = 0.42 + 0.03 * uTide * uTideAmp + 0.22 * wave;
-    float e = max(px * 1.5, 0.002);
-    float h = boulderH(q);
-    vec2 g = vec2(boulderH(q + vec2(e, 0.0)) - h, boulderH(q + vec2(0.0, e)) - h) / e;
-    vec3 n = normalize(vec3(-g * 0.35, 1.0));
-    vec3 L = normalize(vec3(-0.5, 0.6, 0.65));
-    float dep = level - h;
-    float aw = max(px * 1.5, 0.002) * (length(g) * 0.5 + 0.4);
-    // the wet rock of the boulder: slate, pink coralline crust, a film of green weed
-    float dif = sat(dot(n, L)) * 0.8 + 0.3;
-    vec3 col = uRock * (0.7 + 0.45 * fbm(q * 5.0 + 2.0)) * (0.9 + 0.2 * vnoise(q * 60.0) * lod(1.0 / 60.0, px));
-    float coral = smoothstep(0.52, 0.68, fbm(q * 2.4 - 7.0));
-    col = mix(col, mix(uWarm, uSand, 0.55) * 0.8 * (0.85 + 0.3 * vnoise(q * 40.0)), coral * 0.7);
-    col = mix(col, uWeed * 0.7, smoothstep(0.55, 0.75, fbm(q * 2.5 - 4.0)) * 0.45);
-    col *= dif * 0.75;
-    col += uLight * pow(sat(dot(n, normalize(L + vec3(0, 0, 1)))), 60.0) * 0.7;
-    // barnacles: little fluted cones crowding the band above the water, a diamond of plates and a slit in each
-    {
-        vec4 bn = barnacles(q, px, level);
-        col = col * (1.0 - bn.a) + bn.rgb;
-    }
-    // limpets
-    {
-        vec4 lc = limpet(q, vec2(-0.5, 0.33), 0.2, 0.4, px);
-        lc = over(lc, limpet(q, vec2(0.25, -0.55), 0.14, 2.1, px));
-        lc = over(lc, limpet(q, vec2(-0.3, -0.36), 0.1, -0.7, px));
-        col = col * (1.0 - lc.a) + lc.rgb;
-    }
-    // under the drop: its shadow and its focused light
-    col *= 1.0 - 0.45 * fillA(length(q - vec2(0.05, -0.06)) - 0.22, 0.1);
-    col += uLight * 0.9 * exp(-dot(q - vec2(0.09, -0.1), q - vec2(0.09, -0.1)) / 0.004);
-    if (dep > -aw) {
-        // the water round the boulder: sand, caustics, anemones on its flanks, a crab
-        vec3 bed = sandBed(q, px, t, 2.0);
-        float d = max(dep, 0.0);
-        float c = caustic(q * 1.6, t * 0.5, px * 1.6);
-        vec3 lit = mix(bed, col * 1.1, smoothstep(0.08, 0.32, h)) * (0.5 + 1.0 * c * exp(-d * 1.5));
-        vec4 an = anemone(q, vec2(-1.2, 0.55), 0.4, 1.0, px, t);
-        an = over(an, anemone(q, vec2(-0.55, 1.2), 0.32, 2.0, px, t));
-        an = over(an, anemone(q, vec2(-1.95, -0.45), 0.55, 3.0, px, t));
-        an = over(an, anemone(q, vec2(-0.95, -1.15), 0.34, 4.0, px, t));
-        an = over(an, anemone(q, vec2(0.7, 1.1), 0.28, 5.0, px, t));
-        float cw = t * 0.05;
-        vec2 cp = vec2(cos(-0.9 + 0.25 * sin(cw)), sin(-0.9 + 0.25 * sin(cw))) * 1.55 + vec2(-0.2, 0.0);
-        vec4 cr = crab(q, cp, 0.24, -0.6 + 0.4 * cos(cw), t * 0.35, px);
-        vec4 life = over(cr, an);
-        vec3 wc = mix(waterOver(lit, d * 0.8 + 0.06), waterOver(life.rgb / max(life.a, 1e-3) * (0.8 + 0.5 * c), 0.1), life.a);
-        float men = lineA(dep, aw * 0.5, aw);
-        wc = mix(wc, mix(uLight, uShallow, 0.5), men * 0.4);
-        // the drop's wave: a lace of foam on its edge
-        float foam = wave * smoothstep(0.06, 0.0, dep) * smoothstep(0.4, 0.65, fbm(q * 9.0 + t));
-        wc = mix(wc, vec3(0.92), foam * 0.6);
-        col = mix(col, wc, smoothstep(-aw, aw, dep));
-    }
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
-}
-// ======================================================================= 2. inside the drop: plankton
 // a copepod, its body along +x, length 1 in d units
 vec4 copepod(vec2 d, float pw, float hop, float seed) {
     if (abs(d.x) > 1.3 || abs(d.y) > 1.1) return vec4(0.0);
@@ -511,209 +342,6 @@ vec4 chain(vec2 d, float pw, float t) {
     }
     return acc;
 }
-vec4 stageDrop(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB + 0.05) return vec4(0.0);
-    float t = uTime;
-    // the drop is a lens: the water inside compressed toward its rim
-    float rr = r / RB;
-    vec2 qc = q * (1.0 + 0.35 * rr * rr * rr);
-    // luminous water, lit through the drop from the upper left
-    vec2 ld = normalize(vec2(-0.6, 0.7));
-    vec3 col = mix(uWater, uShallow, 0.55 + 0.35 * dot(q / RB, ld) - 0.25 * rr * rr);
-    col += uLight * 0.12 * exp(-sq(length(q - ld * 1.6)) / 1.5);
-    // murk: soft clouds of fine matter drifting, at a scale following the zoom
-    col *= 0.9 + 0.14 * fbm(qc * 1.2 / max(0.3, r) + t * 0.05);
-    vec4 life = vec4(0.0);
-    // dust and tiny cells: a log-polar scatter, some in focus, some soft
-    {
-        float N = 44.0;
-        vec2 lp = toLP(qc, N) + vec2(-t * 0.03, t * 0.12);
-        vec2 ci = floor(lp);
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 cell = ci + vec2(x, y);
-                vec2 wc = vec2(cell.x, mod(cell.y, N));
-                float hb = hash(wc + 3.0);
-                if (hb < 0.5) continue;
-                vec2 cc = fromLP(cell + hash2(wc) - vec2(-t * 0.03, t * 0.12), N);
-                float rad = length(cc) * TAU / N * (0.08 + 0.1 * hash(wc + 7.0));
-                float blur = rad * (hb > 0.8 ? 1.6 : 0.15);
-                float dd = length(qc - cc) - rad;
-                float a = fillA(dd, max(px, blur)) * (hb > 0.8 ? 0.25 : 0.6);
-                life = over(life, layerC(mix(uLight, uSand, hash(wc + 1.0)) * 0.9, a));
-            }
-    }
-    // the plankton, their places scaled on their distance from the focus
-    float hopP = fract(uLife * 0.5);            // a hop every two beats
-    float hop = exp(-hopP * 7.0) * (0.3 + 0.7 * uTideAmp);
-    for (int i = 0; i < 9; i++) {
-        float fi = float(i);
-        float hs = hash1(fi * 3.7 + 1.0);
-        float rad = 0.5 * pow(1.3, fi) * (0.9 + 0.2 * hs);          // log-spaced distances from the focus
-        float a0 = fi * 2.39996 + 0.7 + t * (0.01 + 0.015 * hs) * (mod(fi, 2.0) * 2.0 - 1.0);
-        vec2 c = vec2(cos(a0), sin(a0)) * rad;
-        int kind = fi < 4.0 ? int(mod(fi, 4.0)) : int(mod(fi, 3.0));
-        float size = rad * (0.3 + 0.1 * hs) * (kind == 3 ? 0.55 : 1.0);
-        float heading = a0 + 1.9 + 0.3 * sin(t * 0.2 + fi);
-        vec2 dir = vec2(cos(heading), sin(heading));
-        c += dir * size * (0.25 * sin(t * 0.15 + fi) + 0.12 * hop);
-        vec2 d = rot(-heading) * (qc - c) / size;
-        float pw = px / size * 1.3;
-        vec4 o;
-        if (kind == 0 || kind == 2) o = copepod(d, pw, hop, fi);
-        else if (kind == 1) o = nauplius(d * 1.3, pw * 1.3, t + fi);
-        else o = chain(d * 0.9, pw * 0.9, t);
-        life = over(life, o);
-        // bioluminescent flashes at night: a dinoflagellate sparks on the kicks
-        if (uLum > 0.0) col += uGlow * uLum * uKick * 0.6 * exp(-dot(qc - c, qc - c) / sq(size * 0.6)) * step(0.5, hash1(fi + floor(uLife)));
-    }
-    col = col * (1.0 - life.a) + life.rgb;
-    // a halo of light around the diatom at the focus
-    col += uLight * 0.25 * exp(-sq(r - 0.22) / 0.004) * (0.6 + 0.4 * sin(atan(q.y, q.x) * 3.0 + t * 0.2));
-    // the drop's rim: refraction darkens toward it, a bright crescent of reflected light, a faint second one
-    float edgeW = max(px * 1.2, 0.004);
-    float rim = smoothstep(RB * 0.78, RB, r);
-    col = mix(col, uDeep * 0.9, rim * rim * 0.85);
-    float th = atan(q.y, q.x);
-    float cres = lineA(r - RB * 0.93, RB * 0.025, edgeW) * smoothstep(0.4, 1.0, cos(th - 2.3));
-    col += mix(uLight, vec3(1.0), 0.5) * cres * 0.9;
-    col += uLight * 0.35 * lineA(r - RB * 0.97, RB * 0.01, edgeW) * smoothstep(0.3, 1.0, cos(th + 0.8));
-    float a = fillA(r - RB, edgeW);
-    return layerC(col, a);
-}
-
-// ======================================================================= 3. a diatom's glass: the rose window
-vec4 stageDiatom(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB + 0.05) return vec4(0.0);
-    float t = uTime;
-    float th = atan(q.y, q.x);
-    // behind the glass: the living cell, golden, softly moving
-    vec3 cell = mix(uWarm2, uWeed, 0.3 + 0.35 * fbm(q * 1.3 / max(r, 0.25) + t * 0.03));
-    cell = mix(uDeep, cell, 0.8);
-    float N = 96.0;
-    vec2 lp = toLP(q, N);
-    float row = floor(lp.x);
-    vec2 hp = vec2(lp.x, lp.y + 0.5 * mod(row, 2.0));          // alternate rows offset
-    vec2 ci = floor(hp), f = fract(hp) - 0.5;
-    float cellLen = r * TAU / N;                                // a pore's size (stage units)
-    float pw = px / cellLen * 1.2;                              // a pixel in pore units
-    float lodp = lod(cellLen, px * 1.3);
-    // the glass: sectors alternately raised and sunken (light and shade), thin-film colors, a light turning slowly
-    float sector = cos(th * 4.0 + 0.4);
-    float sh = 0.78 + 0.22 * smoothstep(-0.25, 0.25, sector);
-    float film = 0.5 + 0.5 * sin(log(r) * 3.0 + th * 2.0 + t * 0.12);
-    vec3 irid = hsv(fract(film * 0.5 + 0.45 + uFever * t * 0.02), 0.4, 1.0);
-    vec3 glass = mix(uLight, uShallow, 0.45) * mix(vec3(1.0), irid, 0.4);
-    float sweep = 0.5 + 0.5 * cos(th - (t * 0.1 + 0.6 * uTide * uTideAmp));
-    vec3 gcol = mix(uDeep * 0.8, glass, 0.22 + 0.2 * sweep) * sh;
-    // a pore: round, a bevelled rim catching the light, the golden cell glowing deep inside
-    float pd = length(f) - 0.33;
-    float pore = fillA(pd, pw);
-    float bev = 0.5 + 0.5 * dot(normalize(f + 1e-4), normalize(vec2(-0.6, 0.7) * rot(-th)));
-    vec3 inPore = mix(uDeep * 0.7, cell * (0.6 + 0.6 * sweep), smoothstep(0.33, 0.0, length(f)));
-    // a sieve of tiny holes in each pore, once it is big
-    float sieveA = lod(cellLen / 7.0, px * 1.5);
-    float sieve = fillA(length(fract(f * 7.0) - 0.5) - 0.2, pw * 7.0) * sieveA;
-    inPore = mix(inPore, gcol * 0.5, sieve * 0.4 * (1.0 - smoothstep(0.25, 0.33, length(f))));
-    vec3 rimC = glass * (0.35 + 0.45 * bev) * (0.5 + 0.6 * sweep);
-    float rim = lineA(pd + 0.03, 0.035, pw) ;
-    vec3 col = mix(gcol, inPore, pore * lodp + (1.0 - lodp) * 0.45);
-    col = mix(col, rimC, rim * lodp * 0.8);
-    // radial ribs every twelve pores, concentric costae every eight rows: fine threads of brighter glass
-    float rib = lineA(fract((lp.y + 0.25) / 12.0) - 0.5, 0.02, pw / 12.0);
-    float cost = lineA(fract(lp.x / 8.0) - 0.5, 0.03, pw / 8.0);
-    col = mix(col, gcol * 1.15, max(rib, cost) * 0.55 * lod(cellLen * 4.0, px));
-    // glints in the pores with the kicks
-    col += uLight * uKick * step(0.985, hash(ci + vec2(0.0, floor(uLife * 0.5)))) * pore * lodp;
-    // the central pore (the next scale inside it) in a ring of plain glass with fine radial striae
-    float hy = smoothstep(0.212, 0.222, r) * (1.0 - smoothstep(0.3, 0.33, r));
-    vec3 hyal = glass * (0.6 + 0.2 * sin(th * 60.0) * lod(r * TAU / 60.0, px)) * (0.6 + 0.5 * sweep);
-    col = mix(col, hyal, hy);
-    col = mix(col, uDeep * 0.5, lineA(r - 0.214, 0.004, max(px, 0.002)));
-    // the girdle: a thick band of glass at the rim
-    float gb = smoothstep(RB - 0.3, RB - 0.26, r);
-    vec3 gir = glass * (0.55 + 0.2 * sin(r * 160.0) * lod(RB / 160.0 * 6.0, px)) * (0.6 + 0.5 * sweep);
-    gir += glass * 0.4 * lineA(r - (RB - 0.04), 0.012, max(px, 0.003));
-    col = mix(col, gir, gb);
-    float a = fillA(r - RB, max(px * 1.2, 0.004));
-    return layerC(col, a);
-}
-
-// ======================================================================= 4. inside the cell: cytoplasm streaming
-vec4 stageCell(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB) return vec4(0.0);
-    float t = uTime;
-    float stream = t * (0.04 + 0.03 * uTideAmp * (0.5 + 0.5 * uTide));
-    vec2 sq0 = rot(stream * 0.6) * q;
-    float sc = 1.0 / max(r, 0.25);
-    // pale cytoplasm, clouded by vacuoles
-    vec3 col = mix(mix(uShallow, uSand, 0.3), uWater, 0.4) * (0.8 + 0.15 * fbm(sq0 * 1.3 * sc));
-    float vac = smoothstep(0.55, 0.7, fbm(sq0 * 0.9 * sc + 7.0));
-    col = mix(col, mix(uShallow, uLight, 0.25), vac * 0.35);
-    col = mix(col, mix(uShallow, uLight, 0.5), lineA(fbm(sq0 * 0.9 * sc + 7.0) - 0.55, 0.004, px * sc * 0.6 + 0.004) * 0.35);
-    vec4 life = vec4(0.0);
-    // chloroplasts: golden-brown plates with stacked thylakoids and a pale pyrenoid, streaming round
-    {
-        float N = 13.0;
-        vec2 qq = rot(stream) * q;
-        vec2 lp = toLP(qq, N);
-        vec2 ci = floor(lp);
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 cell = ci + vec2(x, y);
-                vec2 wc = vec2(cell.x, mod(cell.y, N));
-                if (hash(wc + 1.0) < 0.5) continue;
-                vec2 cc = fromLP(cell + 0.1 + 0.8 * hash2(wc), N);
-                float R = length(cc) * TAU / N * (0.22 + 0.2 * hash(wc + 8.0));
-                vec2 d = rot(hash(wc + 4.0) * 6.28 + t * 0.05 * (hash(wc + 3.0) - 0.5)) * (qq - cc) / R;
-                d.y *= 1.6 + 0.6 * hash(wc + 9.0);
-                float lob = length(d) - 1.0 + 0.1 * sin(atan(d.y, d.x) * 3.0 + hash(wc) * 6.0);
-                float pw = px / R * 1.5;
-                float a = fillA(lob, pw + 0.05);
-                if (a <= 0.0) continue;
-                vec3 pc = mix(uWarm2, uWeed, 0.25 + 0.3 * hash(wc + 2.0)) * (0.6 + 0.4 * smoothstep(0.0, -0.7, lob));
-                float lam = lineA(fract(d.y * 2.2) - 0.5, 0.1, pw * 2.2) * lod(R / 2.2, px);
-                pc = mix(pc, pc * 0.7, lam * 0.5);
-                pc = mix(pc, mix(uSand, uLight, 0.5), fillA(length(d) - 0.22, pw + 0.04) * 0.6);
-                pc += uLight * 0.25 * lineA(lob + 0.05, 0.03, pw);
-                life = over(layerC(pc, a * 0.85), life);
-            }
-    }
-    // granules streaming along spiral paths, oil droplets
-    {
-        float N = 60.0;
-        float sp = t * (0.5 + 0.5 * uTideAmp);
-        vec2 lp = toLP(q, N);
-        lp.y += sp - lp.x * 0.35;
-        vec2 ci = floor(lp);
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 cell = ci + vec2(x, y);
-                vec2 wc = vec2(cell.x, mod(cell.y, N));
-                float hb = hash(wc + 6.0);
-                if (hb < 0.62) continue;
-                vec2 c0 = cell + 0.5 + 0.3 * (hash2(wc) - 0.5);
-                vec2 cc = fromLP(vec2(c0.x, c0.y - sp + c0.x * 0.35), N);
-                float R = length(cc) * TAU / N * (hb > 0.94 ? 0.42 : 0.15);
-                float dd = length(q - cc) - R;
-                float a = fillA(dd, max(px, R * 0.15));
-                vec3 gc = hb > 0.94 ? mix(uWarm2, uLight, 0.6) : mix(uLight, uSand, 0.4);
-                gc *= 0.8 + 0.5 * sat(1.0 - length(q - cc + R * vec2(0.3, -0.3)) / R);
-                life = over(life, layerC(gc, a * (hb > 0.94 ? 0.9 : 0.55)));
-            }
-    }
-    col = col * (1.0 - life.a) + life.rgb;
-    // the vesicle at the focus (the next scale inside it): a double membrane
-    float mem = lineA(r - 0.226, 0.006, max(px, 0.002)) + lineA(r - 0.244, 0.005, max(px, 0.002)) * 0.7;
-    col = mix(col, mix(uLight, uShallow, 0.3), mem * 0.7);
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
-}
-
-// ======================================================================= 5. molecules jostling
 // an atom as an orb of light: a glowing core, a fine rim, translucent
 vec4 orb(vec2 q, vec2 c, float R, vec3 tint, float px) {
     vec2 d = (q - c) / R;
@@ -729,255 +357,506 @@ vec4 orb(vec2 q, vec2 c, float R, vec3 tint, float px) {
     o.rgb += tint * 0.18 * exp(-sq(max(rr - 1.0, 0.0)) * 12.0) * (1.0 - body);   // a halo
     return o;
 }
-vec4 stageMolecules(vec2 q, float px, float lu) {
+// ======================================================================= the stages
+// Each stage is a whole world filling the plane, in its own units (the screen's half-height is 1 unit at the
+// stage's start, 1/16 at its end): an opaque background `bg` and its things `obj` (premultiplied, over the
+// background), all of a fixed size in the world, so that zooming in makes every one of them grow and stream out
+// from the focus. `host`: where the next stage's things may be seen (the pool's water, the diatom's pores).
+struct World { vec3 bg; vec4 obj; float host; };
+
+// A scatter of things on a grid of cells `C` wide: the cell's id and the thing's center (in the stage's units).
+#define SCATTER(C, SEED, P) \
+    for (int sy = -1; sy <= 1; sy++) \
+        for (int sx = -1; sx <= 1; sx++) { \
+            vec2 id = floor(q / (C)) + vec2(sx, sy); \
+            if (hash(id + SEED) < (P)) continue; \
+            vec2 h2 = hash2(id + SEED * 1.7); \
+            vec2 c = (id + 0.2 + 0.6 * h2) * (C);
+#define END_SCATTER }
+
+// ---- 0. the rock pool at low tide
+World stagePool(vec2 q, float px) {
+    World W;
+    float t = uTime;
+    float level = 0.4 + 0.022 * uTide * uTideAmp + 0.07 * uWave.y * bump(uWave.x - 2.5, 1.8);
+    float e = max(px * 1.5, 0.004);
+    float h = poolH(q, px);
+    vec2 g = vec2(poolH(q + vec2(e, 0.0), px) - h, poolH(q + vec2(0.0, e), px) - h) / e;
+    vec3 n = normalize(vec3(-g * 0.5, 1.0));
+    vec3 L = normalize(vec3(-0.5, 0.6, 0.65));
+    float dep = level - h;
+    float aw = max(px * 1.5, 0.002) * (length(g) + 0.3);
+    vec3 col;
+    {
+        float dry = smoothstep(0.02, 0.3, -dep);
+        float dif = sat(dot(n, L)) * 0.85 + 0.22;
+        vec2 sl = slabs(q, px, 2.2);
+        vec3 rc = uRock * (0.7 + 0.45 * fbm(q * 5.0 + 4.0)) * (1.0 - 0.55 * sl.y);
+        rc *= 0.9 + 0.2 * vnoise(q * 40.0) * lod(1.0 / 40.0, px);
+        float lich = smoothstep(0.6, 0.78, fbm(q * 2.0 + 9.0)) * smoothstep(0.15, 0.4, -dep);
+        rc = mix(rc, uWarm2 * 0.85 * (0.8 + 0.3 * vnoise(q * 25.0)), lich * 0.6);
+        float coral = smoothstep(0.5, 0.66, fbm(q * 2.6 - 3.0)) * (1.0 - dry);
+        rc = mix(rc, mix(uWarm, uSand, 0.55) * 0.85 * (0.85 + 0.3 * vnoise(q * 30.0)), coral * 0.75);
+        rc = mix(rc, uWeed * 0.75, smoothstep(0.55, 0.72, fbm(q * 3.0 - 2.0)) * (1.0 - dry) * 0.55);
+        col = rc * dif * mix(0.62, 1.0, dry);
+        col += uLight * pow(sat(dot(n, normalize(L + vec3(0.0, 0.0, 1.0)))), 50.0) * mix(0.9, 0.12, dry);
+    }
+    float waterA = smoothstep(-aw, aw, dep);
+    if (dep > -aw) {
+        vec2 rip = vec2(sin(q.x * 9.0 + t * 1.1 + 3.0 * fbm(q * 2.0)), cos(q.y * 8.0 - t * 0.9)) * 0.004 * (0.4 + uTideAmp);
+        vec2 rq = q - g * 0.015 + rip;
+        vec3 bed = sandBed(rq, px, t, 3.2);
+        bed = mix(bed, col * 0.9, smoothstep(0.08, 0.0, dep) * 0.6);
+        float c = caustic(rq * 2.6, t * 0.5, px * 2.6);
+        float d = max(dep, 0.0);
+        vec3 wc = waterOver(bed * (0.5 + 1.0 * c * exp(-d * 2.0)), d + 0.04);
+        wc += uShallow * 0.06 * smoothstep(-1.5, 1.5, q.y - q.x * 0.4);
+        wc = mix(wc, mix(uLight, uShallow, 0.5), lineA(dep, aw * 0.5, aw) * 0.35);
+        col = mix(col, wc, waterA);
+    }
+    if (uLum > 0.0 && dep > 0.0) {
+        vec2 id;
+        vec3 v = voronoi(q * 14.0, 1.0, t * 0.3, id);
+        float tw = pow(sat(sin(t * (0.7 + hash(id)) + hash(id + 2.0) * 6.28)), 6.0);
+        col += uGlow * exp(-v.x * v.x / 0.02) * tw * uLum * 0.5 * lod(1.0 / 14.0, px);
+    }
+    W.bg = col;
+    W.obj = vec4(0.0);
+    W.host = waterA * smoothstep(0.0, 0.05, dep);
+    return W;
+}
+
+// ---- 1. the pool's floor, close: stones with limpets and barnacles, anemones, weed, a crab or two
+vec4 barnacleAt(vec2 q, vec2 c, float R, float seed, float px) {
+    vec2 d = (q - c) / R;
+    float rr = length(d);
+    if (rr > 1.5) return vec4(0.0);
+    float pw = px / R * 1.3;
+    float ang = atan(d.y, d.x) + seed * 6.28;
+    float fl = 0.5 + 0.5 * cos(ang * 6.0);
+    float body = fillA(rr - (1.0 + 0.07 * fl), pw);
+    vec3 n = normalize(vec3(d / max(rr, 1e-3) * 0.9 * sat(rr * 1.5), 1.0));
+    float lit = 0.4 + 0.6 * sat(dot(n, normalize(vec3(-0.5, 0.6, 0.65))));
+    vec3 bc = mix(uSand, vec3(0.92), 0.3) * (0.75 + 0.3 * seed) * lit;
+    vec2 od = rot(seed * 3.14) * d;
+    bc = mix(bc, bc * 0.6, fillA(abs(od.x) * 0.6 + abs(od.y) - 0.34, pw));
+    bc = mix(bc, uDeep * 0.4, fillA(max(abs(od.y) - 0.05, abs(od.x) - 0.42), pw));
+    float sh = fillA(length(d - vec2(0.18, -0.22)) - 1.12, pw * 3.0 + 0.25) * 0.4;
+    return over(layerC(bc, body), vec4(0.0, 0.0, 0.0, sh));
+}
+World stageFloor(vec2 q, float px) {
+    World W;
+    float t = uTime;
+    float wave = uWave.y * bump(uWave.x - 2.2, 1.6);
+    // the bed: sand and gravel, and stones (cells of a coarse Voronoi) standing out of it
+    vec3 bed = sandBed(q, px, t, 2.6);
+    vec2 sid;
+    vec3 sv = voronoi(q * 1.1 + 0.4 * vec2(fbm(q * 0.8), fbm(q * 0.8 + 5.0)), 0.8, 0.0, sid);
+    float isStone = step(0.55, hash(sid + 3.0));
+    float stoneD = sv.x - 0.42 - 0.08 * fbm(q * 4.0);
+    float stone = isStone * fillA(stoneD, px * 1.1 * 1.5 + 0.004);
+    vec3 sc = uRock * (0.75 + 0.45 * fbm(q * 6.0 + sid)) * (0.75 + 0.45 * sat(-stoneD * 4.0));
+    sc = mix(sc, mix(uWarm, uSand, 0.55) * 0.85, smoothstep(0.55, 0.7, fbm(q * 3.5 + sid * 3.0)) * 0.7);
+    sc = mix(sc, uWeed * 0.8, smoothstep(0.6, 0.75, fbm(q * 2.5 - sid)) * 0.5);
+    bed *= 1.0 - 0.35 * isStone * fillA(stoneD - 0.06, 0.06) * (1.0 - stone);
+    bed = mix(bed, sc, stone);
+    float caus = caustic(q * 1.6, t * 0.5, px * 1.6);
+    W.bg = waterOver(bed * (0.5 + 1.0 * caus), 0.4);
+    // weed: soft blades of sea lettuce lying on the sand
+    vec4 acc = vec4(0.0);
+    SCATTER(1.6, 11.0, 0.7)
+        vec2 d = rot(hash(id + 4.0) * 6.28 + 0.15 * sin(t * 0.5 + h2.x * 6.0) * uTideAmp) * (q - c);
+        float R = 0.35 + 0.25 * h2.y;
+        d /= R;
+        float blade = length(d * vec2(0.55, 1.6)) - 0.8 + 0.15 * fbm(d * 3.0 + id);
+        float a = fillA(blade, px / R * 2.0 + 0.02);
+        if (a <= 0.0) continue;
+        vec3 wc = uWeed * (0.9 + 0.4 * fbm(d * 6.0 + id)) * (0.8 + 0.3 * sat(-blade * 3.0));
+        wc += uLight * 0.06 * lineA(d.y, 0.02, px / R * 2.0);
+        acc = over(acc, layerC(waterOver(wc * (0.6 + 0.8 * caus), 0.25), a * 0.85));
+    END_SCATTER
+    // limpets and barnacles on the stones
+    SCATTER(0.32, 21.0, 0.3)
+        vec2 sid2;
+        vec3 sv2 = voronoi(c * 1.1 + 0.4 * vec2(fbm(c * 0.8), fbm(c * 0.8 + 5.0)), 0.8, 0.0, sid2);
+        if (hash(sid2 + 3.0) < 0.55 || sv2.x > 0.36) continue;
+        vec4 o = h2.x > 0.7 ? limpet(q, c, 0.07 + 0.03 * h2.y, h2.y * 6.0, px) : barnacleAt(q, c, 0.035 + 0.015 * h2.y, h2.x, px);
+        acc = over(o * vec4(vec3(0.8 + 0.6 * caus), 1.0), acc);
+    END_SCATTER
+    // beadlet anemones, on stones and sand (none right at the focus: the water there is where we dive)
+    SCATTER(0.9, 31.0, 0.35)
+        if (length(c) < 0.35 || fbm(c * 0.35 + 3.0) < 0.56) continue;    // in colonies, not a carpet
+        float R = 0.16 + 0.12 * h2.y;
+        vec4 o = anemone(q, c, R, h2.x * 9.0 + id.x, px, t);
+        acc = over(vec4(waterOver(o.rgb / max(o.a, 1e-3) * (0.8 + 0.5 * caus), 0.1) * o.a, o.a), acc);
+    END_SCATTER
+    // a crab or two, walking slowly round their cells
+    SCATTER(3.0, 41.0, 0.55)
+        float cw = t * (0.04 + 0.03 * h2.x) + h2.y * 6.0;
+        vec2 cp = c + vec2(cos(cw), sin(cw * 0.7)) * 0.6;
+        vec4 o = crab(q, cp, 0.14, cw + 1.57, t * 0.35, px);
+        acc = over(vec4(waterOver(o.rgb / max(o.a, 1e-3), 0.12) * o.a, o.a), acc);
+    END_SCATTER
+    // the drop's wave: a lace of foam drifting over
+    float foam = wave * smoothstep(0.45, 0.7, fbm(q * 5.0 + t * 0.4));
+    acc = over(layerC(vec3(0.92), foam * 0.5), acc);
+    W.obj = acc;
+    W.host = 1.0;
+    return W;
+}
+
+// ---- 2. the water, teeming: plankton
+// a diatom's frustule: rings of pores of one size, sectors raised and sunken, its girdle; (color, alpha, pore)
+vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     float r = length(q);
-    if (r > RB) return vec4(0.0);
+    poreMask = 0.0;
+    if (r > R * 1.02) return vec4(0.0);
+    float t = uTime;
+    float th = atan(q.y, q.x);
+    float dr = R / 60.0;                               // ring spacing (pore size)
+    float ring = floor(r / dr);
+    float rc = (ring + 0.5) * dr;
+    float N = max(1.0, floor(TAU * rc / dr));
+    float a = th / TAU * N + hash1(ring) * 7.0;
+    vec2 f = vec2((r / dr - ring) - 0.5, fract(a) - 0.5);
+    f.y *= TAU * rc / dr / N;
+    float pw = px / dr * 1.2;
+    float lodp = lod(dr, px * 1.3);
+    float sector = cos(th * 4.0 + 0.4);
+    float sh = 0.78 + 0.22 * smoothstep(-0.25, 0.25, sector);
+    float sweep = 0.5 + 0.5 * cos(th - (t * 0.1 + 0.6 * uTide * uTideAmp));
+    float film = 0.5 + 0.5 * sin(r * 2.5 + th * 2.0 + t * 0.12);
+    vec3 glass = mix(uLight, uShallow, 0.45) * mix(vec3(1.0), hsv(fract(film * 0.5 + 0.45 + uFever * t * 0.02), 0.4, 1.0), 0.4);
+    vec3 gcol = glass * (0.5 + 0.35 * sweep) * sh;
+    float pd = length(f) - 0.32;
+    float pore = fillA(pd, pw) * step(0.1 * R, r) * (1.0 - smoothstep(R - 0.22, R - 0.18, r));
+    vec3 cell = mix(uWarm2, uWeed, 0.3 + 0.3 * vnoise(q * 3.0 + t * 0.05));
+    vec3 inPore = mix(uDeep * 0.7, cell * (0.6 + 0.5 * sweep), smoothstep(0.32, 0.0, length(f)));
+    float sieve = fillA(length(fract(f * 6.0) - 0.5) - 0.2, pw * 6.0) * lod(dr / 6.0, px * 1.5);
+    inPore = mix(inPore, gcol * 0.6, sieve * 0.35 * (1.0 - smoothstep(0.24, 0.32, length(f))));
+    float bev = 0.5 + 0.5 * dot(normalize(f + 1e-4), normalize(vec2(-0.6, 0.7)));
+    vec3 col = mix(gcol, mix(inPore, mix(gcol, cell * 0.9, 0.35), 1.0 - lodp), max(pore * lodp, (1.0 - lodp) * 0.6) * step(0.1 * R, r));
+    col = mix(col, glass * (0.35 + 0.45 * bev) * (0.5 + 0.6 * sweep), lineA(pd + 0.03, 0.035, pw) * lodp * 0.8 * step(0.1 * R, r));
+    // radial ribs, the plain central area with fine striae, the girdle at the rim
+    col = mix(col, glass * 0.8 * sh, lineA(fract(th / TAU * 48.0) - 0.5, 0.03, px / max(r, 1e-3) * 48.0 / TAU * 1.2) * 0.35 * lod(r * TAU / 48.0, px));
+    col = mix(col, glass * (0.55 + 0.15 * sin(th * 70.0) * lod(r * TAU / 70.0, px)) * (0.6 + 0.4 * sweep), 1.0 - smoothstep(0.09 * R, 0.1 * R, r));
+    float gb = smoothstep(R - 0.18, R - 0.15, r);
+    col = mix(col, glass * (0.6 + 0.2 * sin(r / R * 400.0) * lod(R / 400.0 * 4.0, px)) * (0.6 + 0.5 * sweep), gb);
+    col += glass * 0.5 * lineA(r - (R - 0.02), 0.008, max(px, 0.002));
+    col += uLight * uKick * step(0.985, hash(vec2(ring, floor(a)) + floor(uLife * 0.5))) * pore * lodp;
+    poreMask = pore * lodp;
+    return layerC(col, fillA(r - R, max(px * 1.2, 0.002)));
+}
+World stagePlankton(vec2 q, float px) {
+    World W;
+    float t = uTime;
+    // luminous water, lit from above left, clouds of fine matter
+    vec3 col = mix(uWater, uShallow, 0.5 + 0.12 * sin(q.x * 0.7 + q.y * 0.9 + 1.0));
+    col *= 0.9 + 0.14 * fbm(q * 1.4 + t * 0.03);
+    // motes: some sharp, some soft (out of the focal plane)
+    vec4 acc = vec4(0.0);
+    SCATTER(0.11, 51.0, 0.55)
+        vec2 cc = c + 0.02 * vec2(sin(t * 0.3 + h2.x * 9.0), cos(t * 0.27 + h2.y * 9.0));
+        float R = 0.004 + 0.008 * h2.y;
+        float soft = hash(id + 9.0) > 0.75 ? R * 2.5 : 0.0;
+        float a = fillA(length(q - cc) - R - soft * 0.5, max(px, soft)) * (soft > 0.0 ? 0.3 : 0.7);
+        acc = over(acc, layerC(mix(uLight, uSand, h2.x), a));
+    END_SCATTER
+    float hopP = fract(uLife * 0.5);
+    float hop = exp(-hopP * 7.0) * (0.3 + 0.7 * uTideAmp);
+    // diatoms drifting, little glass discs
+    SCATTER(0.55, 61.0, 0.55)
+        if (length(c) < 0.3) continue;
+        float R = 0.05 + 0.06 * h2.y;
+        float pm;
+        vec4 o = frustule(rot(t * 0.05 * (h2.x - 0.5)) * (q - c), R, px, pm);
+        acc = over(o * 0.95, acc);
+    END_SCATTER
+    // copepods, nauplii, chains
+    SCATTER(0.5, 71.0, 0.25)
+        if (length(c) < 0.3) continue;
+        int kind = int(hash(id + 3.0) * 3.0);
+        float size = (kind == 0 ? 0.15 : kind == 1 ? 0.09 : 0.1) * (0.7 + 0.5 * h2.y);
+        float heading = hash(id + 5.0) * 6.28 + 0.3 * sin(t * 0.2 + h2.x * 6.0);
+        vec2 dir = vec2(cos(heading), sin(heading));
+        vec2 cc = c + dir * size * (0.4 * sin(t * 0.15 + h2.x * 9.0) + 0.15 * hop);
+        vec2 d = rot(-heading) * (q - cc) / size;
+        float pw = px / size * 1.3;
+        vec4 o = kind == 0 ? copepod(d, pw, hop, id.x) : kind == 1 ? nauplius(d, pw, t + h2.x * 9.0) : chain(d, pw, t);
+        acc = over(o, acc);
+        if (uLum > 0.0) col += uGlow * uLum * uKick * 0.5 * exp(-dot(q - cc, q - cc) / sq(size * 0.6)) * step(0.6, hash(id + floor(uLife)));
+    END_SCATTER
+    W.bg = col;
+    W.obj = acc;
+    W.host = 1.0;
+    return W;
+}
+
+// ---- 3. one diatom: the glass rose window, the living cell glowing through its pores
+World stageDiatom(vec2 q, float px) {
+    World W;
+    float pm;
+    vec4 o = frustule(rot(uTime * 0.004) * q, 3.0, px, pm);
+    W.bg = mix(uWater, uShallow, 0.4);
+    W.obj = o;
+    W.host = pm;
+    return W;
+}
+
+// ---- 4. the living cell: cytoplasm streaming
+World stageCell(vec2 q0, float px) {
+    World W;
+    float t = uTime;
+    float sp = 0.03 + 0.03 * uTideAmp * (0.5 + 0.5 * uTide);
+    vec2 q = q0 + vec2(t * sp, 0.05 * sin(q0.x * 1.3 + t * 0.15));     // the stream
+    vec3 col = mix(mix(uShallow, uSand, 0.3), uWater, 0.4) * (0.8 + 0.15 * fbm(q * 1.5));
+    float vf = fbm(q * 0.9 + 7.0);
+    col = mix(col, mix(uShallow, uLight, 0.25), smoothstep(0.55, 0.7, vf) * 0.35);
+    col = mix(col, mix(uShallow, uLight, 0.5), lineA(vf - 0.55, 0.004, px * 0.8 + 0.003) * 0.35);
+    vec4 acc = vec4(0.0);
+    // chloroplasts
+    SCATTER(0.9, 81.0, 0.45)
+        float R = 0.18 + 0.12 * hash(id + 8.0);
+        vec2 d = rot(hash(id + 4.0) * 6.28 + 0.1 * sin(t * 0.1 + h2.x * 6.0)) * (q - c) / R;
+        d.y *= 1.6 + 0.6 * hash(id + 9.0);
+        float lob = length(d) - 1.0 + 0.1 * sin(atan(d.y, d.x) * 3.0 + h2.x * 6.0);
+        float pw = px / R * 1.5;
+        float a = fillA(lob, pw + 0.03);
+        if (a <= 0.0) continue;
+        vec3 pc = mix(uWarm2, uWeed, 0.25 + 0.3 * h2.y) * (0.6 + 0.4 * smoothstep(0.0, -0.7, lob));
+        pc = mix(pc, pc * 0.7, lineA(fract(d.y * 2.2) - 0.5, 0.1, pw * 2.2) * lod(R / 2.2, px) * 0.5);
+        pc = mix(pc, mix(uSand, uLight, 0.5), fillA(length(d) - 0.22, pw + 0.03) * 0.6);
+        pc += uLight * 0.25 * lineA(lob + 0.05, 0.03, pw);
+        acc = over(layerC(pc, a * 0.88), acc);
+    END_SCATTER
+    // granules and oil drops
+    SCATTER(0.09, 91.0, 0.55)
+        float big = step(0.93, hash(id + 2.0));
+        float R = big > 0.5 ? 0.025 : 0.008 + 0.005 * h2.y;
+        float dd = length(q - c) - R;
+        vec3 gc = big > 0.5 ? mix(uWarm2, uLight, 0.6) : mix(uLight, uSand, 0.4);
+        gc *= 0.8 + 0.5 * sat(1.0 - length(q - c + R * vec2(0.3, -0.3)) / R);
+        acc = over(acc, layerC(gc, fillA(dd, max(px, R * 0.12)) * (big > 0.5 ? 0.9 : 0.55)));
+    END_SCATTER
+    W.bg = col;
+    W.obj = acc;
+    W.host = 1.0;
+    return W;
+}
+
+// ---- 5. molecules jostling
+World stageMolecules(vec2 q, float px) {
+    World W;
     float t = uTime;
     float jit = 0.6 + 0.9 * uTideAmp * (0.6 + 0.4 * uTide) + 0.5 * uKick;
-    vec3 col = mix(uDeep, uWater, 0.3 + 0.12 * fbm(q * 0.8 / max(r, 0.3)));
+    vec3 col = mix(uDeep, uWater, 0.32 + 0.1 * fbm(q * 0.7));
     vec4 acc = vec4(0.0);
-    // the double helix: a log spiral staircase of light winding into the focus
-    {
-        float lr = log(max(r, 1e-4));
-        float th = atan(q.y, q.x);
-        float b = 0.3;
-        float ds = mod(lr - th * b + PI * b, TAU * b) - PI * b;  // ln r to the arm
-        float hw = 0.13;
-        float ph = lr * 11.0 - t * 0.5;
-        float s1 = sin(ph), s2 = sin(ph + PI);
-        float lw = max(px, r * 0.006);
-        float d1 = abs(ds - hw * s1) * r, d2 = abs(ds - hw * s2) * r;
-        float f1 = 0.5 + 0.5 * cos(ph), f2 = 1.0 - f1;
+    // double helices crossing the field, rungs of light between their strands
+    for (int k = 0; k < 2; k++) {
+        float fk = float(k);
+        vec2 ax = normalize(vec2(cos(0.7 + fk * 1.9), sin(0.7 + fk * 1.9)));
+        vec2 o = vec2(-0.4 + fk * 1.1, 0.5 - fk * 0.9);
+        float along = dot(q - o, ax), across = dot(q - o, vec2(-ax.y, ax.x));
+        across += 0.12 * sin(along * 0.9 + fk * 3.0);
+        float hw = 0.07;
+        float ph = along * 14.0 - t * 0.6;
+        float s1 = sin(ph), s2 = -s1;
+        float lw = max(px, 0.002);
+        float f1 = 0.5 + 0.5 * cos(ph);
         vec3 c1 = mix(uWarm, uLight, 0.45), c2 = mix(uCool, uLight, 0.45);
-        // base pairs: rungs across, twelve a turn
-        float rp = fract(ph * 6.0 / TAU);
-        float rw = 6.0 / TAU * 11.0 * lw / r;
-        float rung = lineA(rp - 0.5, 0.05, rw) * step(abs(ds), hw * abs(s1) * 0.95);
-        acc = over(acc, layerC(mix(c1, c2, 0.5) * 0.8, rung * 0.4 * lod(r * 0.03, px)));
-        acc = over(layerC(c1 * (0.5 + 0.6 * f1), lineA(d1, r * 0.008, lw) * (0.35 + 0.65 * f1)), acc);
-        acc = over(layerC(c2 * (0.5 + 0.6 * f2), lineA(d2, r * 0.008, lw) * (0.35 + 0.65 * f2)), acc);
-        acc.rgb += uGlow * 0.08 * exp(-sq(ds / (hw * 1.5))) * (1.0 - acc.a);
+        float rung = lineA(fract(ph * 6.0 / TAU) - 0.5, 0.05, 6.0 / TAU * 14.0 * lw) * step(abs(across), hw * abs(s1) * 0.95);
+        acc = over(acc, layerC(mix(c1, c2, 0.5) * 0.8, rung * 0.45 * lod(0.02, px)));
+        acc = over(layerC(c1 * (0.5 + 0.6 * f1), lineA(across - hw * s1, 0.004, lw) * (0.35 + 0.65 * f1)), acc);
+        acc = over(layerC(c2 * (1.1 - 0.6 * f1), lineA(across - hw * s2, 0.004, lw) * (1.0 - 0.65 * f1)), acc);
+        acc.rgb += uGlow * 0.06 * exp(-sq(across / (hw * 1.6))) * (1.0 - acc.a);
     }
-    // water molecules: an oxygen orb and two hydrogens, bonds as threads of light, Brownian jitter
-    {
-        float N = 22.0;
-        vec2 lp = toLP(q, N);
-        vec2 ci = floor(lp);
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 cell = ci + vec2(x, y);
-                vec2 wc = vec2(cell.x, mod(cell.y, N));
-                if (hash(wc + 9.0) < 0.45) continue;
-                vec2 h2 = hash2(wc);
-                float hs = h2.x * 40.0 + h2.y * 13.0;
-                vec2 jt = vec2(vnoise(vec2(t * 3.1 + hs, 1.0)), vnoise(vec2(1.0, t * 2.9 + hs))) - 0.5;
-                vec2 cc = fromLP(cell + 0.25 + 0.5 * h2 + jt * 0.3 * jit, N);
-                float R = length(cc) * TAU / N * 0.17;
-                if (length(cc) < 0.45) continue;
-                float ang = hash(wc + 2.0) * 6.28 + (vnoise(vec2(t * 2.0 + hs, 5.0)) - 0.5) * 2.0 * jit;
-                vec2 e1 = vec2(cos(ang), sin(ang)), e2 = vec2(cos(ang + 1.82), sin(ang + 1.82));
-                vec2 h1p = cc + e1 * R * 2.1, h2p = cc + e2 * R * 2.1;
-                float bw = max(px, R * 0.04);
-                float bond = max(lineA(sdSeg(q, cc, h1p), R * 0.03, bw), lineA(sdSeg(q, cc, h2p), R * 0.03, bw));
-                vec4 m = layerC(mix(uLight, uGlow, 0.3), bond * 0.75);
-                m = over(orb(q, cc, R, mix(uWarm, uSand, 0.25), px), m);
-                m = over(orb(q, h1p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
-                m = over(orb(q, h2p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
-                acc = over(m, acc);
-            }
-    }
+    // water molecules: an oxygen orb, two hydrogens, bonds as threads of light, Brownian jitter
+    SCATTER(0.34, 101.0, 0.35)
+        if (length(c) < 0.3) continue;
+        float hs = h2.x * 40.0 + h2.y * 13.0;
+        vec2 jt = vec2(vnoise(vec2(t * 3.1 + hs, 1.0)), vnoise(vec2(1.0, t * 2.9 + hs))) - 0.5;
+        vec2 cc = c + jt * 0.08 * jit;
+        float R = 0.04;
+        float ang = hash(id + 2.0) * 6.28 + (vnoise(vec2(t * 2.0 + hs, 5.0)) - 0.5) * 2.0 * jit;
+        vec2 e1 = vec2(cos(ang), sin(ang)), e2 = vec2(cos(ang + 1.82), sin(ang + 1.82));
+        vec2 h1p = cc + e1 * R * 2.2, h2p = cc + e2 * R * 2.2;
+        float bw = max(px, 0.002);
+        float bond = max(lineA(sdSeg(q, cc, h1p), 0.0015, bw), lineA(sdSeg(q, cc, h2p), 0.0015, bw));
+        vec4 m = layerC(mix(uLight, uGlow, 0.3), bond * 0.75);
+        m = over(orb(q, cc, R, mix(uWarm, uSand, 0.25), px), m);
+        m = over(orb(q, h1p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
+        m = over(orb(q, h2p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
+        acc = over(m, acc);
+    END_SCATTER
     // the molecule at the focus: two hydrogens bonded to the atom we dive into
     {
         float ang = 0.6 + 0.15 * sin(t * 0.7);
         vec2 e1 = vec2(cos(ang), sin(ang)), e2 = vec2(cos(ang + 1.82), sin(ang + 1.82));
-        float bw = max(px, 0.003);
-        float bond = max(lineA(sdSeg(q, e1 * 0.2, e1 * 0.36), 0.004, bw), lineA(sdSeg(q, e2 * 0.2, e2 * 0.36), 0.004, bw));
+        float bw = max(px, 0.002);
+        float bond = max(lineA(sdSeg(q, e1 * 0.1, e1 * 0.18), 0.0015, bw), lineA(sdSeg(q, e2 * 0.1, e2 * 0.18), 0.0015, bw));
         vec4 m = layerC(mix(uLight, uGlow, 0.3), bond * 0.8);
-        m = over(orb(q, e1 * 0.42, 0.075, mix(uCool, uLight, 0.3), px), m);
-        m = over(orb(q, e2 * 0.42, 0.075, mix(uCool, uLight, 0.3), px), m);
+        m = over(orb(q, e1 * 0.2, 0.035, mix(uCool, uLight, 0.3), px), m);
+        m = over(orb(q, e2 * 0.2, 0.035, mix(uCool, uLight, 0.3), px), m);
         acc = over(m, acc);
-        acc.rgb += uWarm * 0.35 * exp(-sq(r - 0.21) / 0.0015) * (1.0 - acc.a);
     }
-    col = col * (1.0 - acc.a) + acc.rgb;
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
+    W.bg = col;
+    W.obj = acc;
+    W.host = 1.0;
+    return W;
 }
 
-// ======================================================================= 6. an atom: breathing orbital clouds
-vec4 stageAtom(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB) return vec4(0.0);
+// ---- 6. the atom: breathing orbital clouds, drawn as contours of light
+World stageAtom(vec2 q, float px) {
+    World W;
     float t = uTime;
+    float r = length(q);
     float th = atan(q.y, q.x);
     float breathe = 1.0 + 0.035 * uTide * uTideAmp;
     float lr = log(max(r, 1e-4) / breathe);
-    // nested shells, each with more lobes, a slow quantum beat between two states, the phase in color
     float psi = 0.0, dens = 0.0;
-    for (int s = 0; s < 4; s++) {
+    for (int s = 0; s < 5; s++) {
         float fs = float(s);
-        float rc = log(0.36) + fs * 0.62;
+        float rc = log(0.09) + fs * 0.69;          // shells at 0.09, 0.18, 0.36, 0.72, 1.44
         float rad = exp(-sq((lr - rc) / 0.3));
         float m = 1.0 + fs;
         float spin = t * (0.04 + 0.015 * fs) * (mod(fs, 2.0) * 2.0 - 1.0);
         float beat = 0.5 + 0.5 * sin(t * (0.17 + 0.04 * fs) + fs * 1.3);
         float y = mix(cos(m * (th - spin)), cos((m + 1.0) * (th + spin * 0.7) + fs), beat * 0.5);
-        float amp = rad * y;
-        psi += amp;
-        dens += amp * amp;
+        psi += rad * y;
+        dens += sq(rad * y);
     }
-    dens = dens * (0.8 + 0.2 * uPeak);
+    dens *= 0.8 + 0.2 * uPeak;
     vec3 warm = mix(uWarm, uLight, 0.3), cool = mix(uCool, uLight, 0.3);
-    float ph = smoothstep(-0.04, 0.04, psi);
-    vec3 phase = mix(cool, warm, ph);
-    vec3 col = mix(uDeep, uWater * 0.8, 0.45);
-    col += phase * dens * 0.5;
-    // contour lines of light (the density's level sets), drawn against the pixel's size
+    vec3 phase = mix(cool, warm, smoothstep(-0.04, 0.04, psi));
     float lv = sqrt(dens) * 7.0;
-    float w = fwidth(lv) + px * 7.0 / max(r, 0.05) * 0.0;
-    float iso = lineA(fract(lv) - 0.5, 0.05, w * 1.2 + 0.01) * smoothstep(0.3, 1.2, lv) * (1.0 - smoothstep(6.0, 7.0, lv));
-    col += phase * iso * 0.75;
-    // bonds: threads of light to the neighbors, out of the frame
+    float iso = lineA(fract(lv) - 0.5, 0.05, fwidth(lv) * 1.2 + 0.01) * smoothstep(0.3, 1.2, lv) * (1.0 - smoothstep(6.0, 7.0, lv));
+    vec3 c = phase * (dens * 0.6 + iso * 0.75);
+    float a = sat(sqrt(dens) * 1.6 + iso * 0.5) * (1.0 - smoothstep(1.6, 2.4, r));
+    // the nucleus at the center: a tiny bright knot
+    c += mix(uLight, uWarm, 0.3) * exp(-r * r / 0.0004) * 0.8;
+    a = max(a, exp(-r * r / 0.0004));
+    W.bg = mix(uDeep, uWater, 0.35);
+    // bonds: threads of light to the neighbours
     for (int i = 0; i < 3; i++) {
-        float ba = 0.8 + float(i) * 2.1 + 0.05 * sin(t * 0.3 + float(i));
+        float ba = 0.8 + float(i) * 2.1;
         vec2 bd = vec2(cos(ba), sin(ba));
         float along = dot(q, bd);
         float dd = abs(dot(q, vec2(-bd.y, bd.x)));
-        float th2 = lineA(dd, r * 0.003, max(px, r * 0.003)) * smoothstep(0.6, 1.6, along);
-        col += mix(uLight, uGlow, 0.5) * th2 * 0.6 * (0.6 + 0.4 * sin(along * 6.0 - t * 2.0));
+        W.bg += mix(uLight, uGlow, 0.5) * lineA(dd, 0.003, max(px, 0.002)) * smoothstep(0.2, 0.6, along) * 0.5 * (0.6 + 0.4 * sin(along * 6.0 - t * 2.0));
     }
-    // the nucleus at the focus: a tiny bright knot
-    col += mix(uLight, uWarm, 0.3) * exp(-sq(r - 0.215) / 0.0008) * 0.7;
-    col += uGlow * 0.25 * exp(-r * r / 0.03);
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
+    W.obj = vec4(c * a / max(a, 1e-3), a);
+    W.obj.rgb = c;
+    W.host = 1.0;
+    return W;
 }
 
-// ======================================================================= 7. inside the nucleus: quantum foam
-// foam cells on the log-polar lattice (periodic round the focus): (distance to the wall, cell id)
-vec3 foamCells(vec2 lp, float n, float t, out vec2 cid, out vec2 cpos) {
-    vec2 i = floor(lp), f = fract(lp);
+// ---- 7. inside the nucleus: quantum foam
+World stageFoam(vec2 q, float px) {
+    World W;
+    float t = uTime;
+    float r = length(q);
+    float boil = 0.1 + 0.1 * uTideAmp * (0.5 + 0.5 * uTide) + 0.06 * uPeak;
+    float C = 0.14;
+    vec2 i = floor(q / C), f = q / C - i;
     float d1 = 8.0, d2 = 8.0;
-    vec2 o1 = vec2(0.0), o2 = vec2(0.0);
-    cid = i; cpos = vec2(0.0);
+    vec2 o1 = vec2(0.0), o2 = vec2(0.0), cid = i;
     for (int y = -1; y <= 1; y++)
         for (int x = -1; x <= 1; x++) {
             vec2 g = vec2(x, y);
-            vec2 id = vec2(i.x + g.x, mod(i.y + g.y, n));
-            vec2 h = hash2(id);
-            vec2 o = g + 0.5 + 0.38 * sin(t * (0.3 + 0.4 * h) + 6.2831 * h);
+            vec2 h = hash2(i + g);
+            vec2 o = g + 0.5 + 0.38 * sin(t * (0.3 + boil * 3.0) * (0.5 + h) + 6.2831 * h);
             vec2 dv = o - f;
             float d = dot(dv, dv);
-            if (d < d1) { d2 = d1; o2 = o1; d1 = d; o1 = dv; cid = id; cpos = i + o; }
-            else if (d < d2) { d2 = d; o2 = dv; }
+            if (d < d1) { d2 = d1; o2 = o1; d1 = d; o1 = dv; cid = i + g; } else if (d < d2) { d2 = d; o2 = dv; }
         }
-    // the distance to the wall between the two nearest cells (their bisector)
-    float wall = dot(0.5 * (o1 + o2), normalize(o2 - o1));
-    return vec3(abs(wall), sqrt(d1), 0.0);
-}
-vec4 stageFoam(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB) return vec4(0.0);
-    float t = uTime;
-    vec3 col = mix(uDeep, uWater, 0.34);
-    float N = 26.0;
-    vec2 lp = toLP(q, N);
-    float cellLen = r * TAU / N;
-    float pw = px / cellLen;
-    float boil = 0.1 + 0.1 * uTideAmp * (0.5 + 0.5 * uTide) + 0.06 * uPeak;
-    vec2 cid, cpos;
-    vec3 v = foamCells(lp, N, t * (0.5 + boil * 3.0), cid, cpos);
-    // each cell's life: it swells, its film thins to colors, it bursts and its walls let go
+    float wallD = abs(dot(0.5 * (o1 + o2), normalize(o2 - o1)));
+    float cd = sqrt(d1);
     float life = fract(t * boil * (0.5 + hash(cid)) + hash(cid + 3.0));
     float burst = smoothstep(0.86, 0.9, life) * (1.0 - smoothstep(0.97, 1.0, life));
-    float lw = 0.025 + 0.02 * (1.0 - life);
-    float wall = lineA(v.x, lw, pw * 1.2) * (1.0 - burst);
-    float film = fract(hash(cid) * 3.0 + v.y * 0.8 + life * 0.6);
-    vec3 fc = hsv(fract(film * 0.7 + 0.45 + uFever * t * 0.03), 0.45, 1.0) * mix(uLight, vec3(1.0), 0.2);
-    float k = lod(cellLen * 0.3, px);
+    float pw = px / C;
+    float wall = lineA(wallD, 0.025 + 0.02 * (1.0 - life), pw * 1.2) * (1.0 - burst);
+    vec3 fc = hsv(fract(fract(hash(cid) * 3.0 + cd * 0.8 + life * 0.6) * 0.7 + 0.45 + uFever * t * 0.03), 0.45, 1.0) * mix(uLight, vec3(1.0), 0.2);
+    float k = lod(C * 0.3, px);
+    vec3 col = mix(uDeep, uWater, 0.34);
     col += fc * wall * 0.75 * k + fc * (1.0 - k) * 0.12;
-    col += mix(uCool, uShallow, 0.4) * 0.08 * smoothstep(0.6, 0.0, v.y) * (1.0 - burst) * life;
-    // its ripple once it bursts, interfering with its neighbours' like rain on a pool
-    {
-        float age = (life - 0.86) / 0.14;
-        if (age > 0.0) {
-            float rr = v.y;
-            float ring = cos((rr - age * 1.4) * 18.0) * exp(-sq((rr - age * 1.4) / 0.3)) * (1.0 - age);
-            col += mix(uCool, uLight, 0.5) * ring * 0.18 * k;
-            col += uLight * 0.5 * exp(-sq(rr / 0.08)) * (1.0 - smoothstep(0.0, 0.3, age)) * k;
-        }
+    col += mix(uCool, uShallow, 0.4) * 0.08 * smoothstep(0.6, 0.0, cd) * (1.0 - burst) * life;
+    float age = (life - 0.86) / 0.14;
+    if (age > 0.0) {
+        col += mix(uCool, uLight, 0.5) * cos((cd - age * 1.4) * 18.0) * exp(-sq((cd - age * 1.4) / 0.3)) * (1.0 - age) * 0.18 * k;
+        col += uLight * 0.5 * exp(-sq(cd / 0.08)) * (1.0 - smoothstep(0.0, 0.3, age)) * k;
     }
     // virtual pairs: two sparks born together, spiraling apart, annihilating (with the kicks)
-    {
-        float M = 10.0;
-        vec2 lp2 = toLP(q, M);
-        vec2 c2 = floor(lp2);
-        vec2 wc = vec2(c2.x, mod(c2.y, M));
-        float ph = fract(t * 0.3 + hash(wc + 3.0));
-        vec2 cc = fromLP(c2 + 0.5, M);
-        float R = length(cc) * TAU / M;
-        float sp = sin(ph * PI) * R * 0.3;
-        float a0 = ph * 5.0 + hash(wc) * 6.28;
+    SCATTER(0.5, 111.0, 0.5)
+        float ph = fract(t * 0.3 + h2.x);
+        float sp = sin(ph * PI) * 0.06;
+        float a0 = ph * 5.0 + h2.y * 6.28;
         vec2 o = vec2(cos(a0), sin(a0)) * sp;
-        float sz = R * 0.025 + px;
-        float g = exp(-dot(q - cc - o, q - cc - o) / sq(sz)) + exp(-dot(q - cc + o, q - cc + o) / sq(sz));
+        float sz = 0.006 + px;
+        float g = exp(-dot(q - c - o, q - c - o) / sq(sz)) + exp(-dot(q - c + o, q - c + o) / sq(sz));
         col += mix(uWarm, uLight, 0.5) * g * (0.25 + 0.9 * uKick) * sin(ph * PI);
-    }
-    // the strings at the focus glow through
-    col += uGlow * 0.3 * exp(-sq(r - 0.22) / 0.002);
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
+    END_SCATTER
+    // the nucleus seen whole: a glowing knot of foam with a bright rim
+    float R = 2.2;
+    float rim = exp(-sq((r - R) / 0.25)) * 0.12;
+    W.bg = mix(uDeep, uWater, 0.34);
+    float fa = 1.0 - smoothstep(R * 0.55, R, r);
+    W.obj = vec4((col + mix(uLight, uGlow, 0.5) * rim) * fa, fa);
+    W.host = 1.0;
+    return W;
 }
 
-// ======================================================================= 8. strings, vibrating to the music
-vec4 stageStrings(vec2 q, float px, float lu) {
-    float r = length(q);
-    if (r > RB) return vec4(0.0);
+// ---- 8. strings, ringing with the music, on a fabric that ripples like a pool
+World stageStrings(vec2 q, float px) {
+    World W;
     float t = uTime;
-    float th = atan(q.y, q.x);
-    float lr = log(max(r, 1e-4));
-    // the fabric: log-spaced rings drifting out from the focus, like ripples on a pool
     vec3 col = mix(uDeep, uWater, 0.3);
-    float rings = cos(lr * 9.0 - t * 0.5);
-    col += mix(uCool, uLight, 0.3) * 0.045 * (0.5 + 0.5 * rings) * lod(r * 0.6, px * 3.0);
-    // closed strings: loops round the focus, each ringing in its own harmonics, fed by the song's bands
-    for (int k = 0; k < 8; k++) {
-        float fk = float(k);
-        float R0 = 0.3 * pow(1.45, fk);
-        float rr = R0;
-        float dir = mod(fk, 2.0) * 2.0 - 1.0;
-        float drr = 0.0;
+    // ripples from a few sources, interfering
+    float rip = 0.0;
+    for (int i = 0; i < 3; i++) {
+        vec2 s = vec2(cos(float(i) * 2.1 + 0.4), sin(float(i) * 2.1 + 0.4)) * 0.8;
+        rip += cos(length(q - s) * 40.0 - t * 1.2);
+    }
+    col += mix(uCool, uLight, 0.3) * 0.035 * (rip / 3.0 + 0.5) * lod(0.15, px * 2.0);
+    vec4 acc = vec4(0.0);
+    SCATTER(0.42, 121.0, 0.3)
+        float R0 = 0.07 + 0.09 * h2.y;
+        vec2 d = q - c;
+        float r = length(d), th = atan(d.y, d.x);
+        if (r > R0 * 1.6) continue;
+        float rr = R0, drr = 0.0;
+        float dir = hash(id + 6.0) > 0.5 ? 1.0 : -1.0;
         for (int n = 2; n < 8; n++) {
             float fn = float(n);
             float band = n < 3 ? uBands.x : n < 4 ? uBands.y : n < 6 ? uBands.z : uBands.w;
-            float a = (0.01 + 0.045 * band * (0.4 + uTideAmp) + 0.02 * uKick) / fn * (0.6 + 0.4 * hash1(fk * 7.0 + fn));
-            float arg = fn * th - t * (0.35 + 0.12 * fn) * dir + hash1(fk + fn) * 6.28;
+            float a = (0.03 + 0.09 * band * (0.4 + uTideAmp) + 0.04 * uKick) / fn * (0.5 + 0.8 * hash(id + fn));
+            float arg = fn * th - t * (0.35 + 0.12 * fn) * dir + hash(id + fn * 3.0) * 6.28;
             rr += R0 * a * cos(arg);
             drr -= R0 * a * fn * sin(arg);
         }
-        // the distance to the curve r = rr(th): divided by its slope
-        float d = abs(r - rr) / sqrt(1.0 + sq(drr / max(r, 1e-3)));
-        float lw = max(px, R0 * 0.003);
-        float core = lineA(d, R0 * 0.0035, lw);
-        float glow = exp(-d / (R0 * 0.03)) * 0.16 + exp(-d / (R0 * 0.004 + px)) * 0.1;
-        vec3 sc = hsv(fract(fk * 0.11 + 0.55 + uFever * t * 0.02), 0.3, 1.0);
-        sc = mix(mix(uLight, mix(uGlow, uWarm, mod(fk, 2.0)), 0.45), sc, 0.25);
-        col += sc * (core * 0.9 + glow);
-    }
-    // the pool, far inside the smallest loop
-    col += uShallow * 0.2 * exp(-sq(r - 0.22) / 0.002);
-    float a = 1.0 - smoothstep(2.0, RB, r);
-    return layerC(col, a);
+        float dd = abs(r - rr) / sqrt(1.0 + sq(drr / max(r, 1e-3)));
+        float lw = max(px, 0.0015);
+        vec3 sc = mix(mix(uLight, mix(uGlow, uWarm, step(0.5, h2.x)), 0.45), hsv(fract(h2.x * 0.3 + 0.55 + uFever * t * 0.02), 0.3, 1.0), 0.25);
+        float core = lineA(dd, 0.0012, lw);
+        float glow = exp(-dd / 0.01) * 0.3 + exp(-dd / 0.003) * 0.25;
+        acc.rgb += sc * (core * 0.9 + glow);
+        acc.a = max(acc.a, core * 0.9);
+    END_SCATTER
+    W.bg = col;
+    W.obj = acc;
+    W.host = 1.0;
+    return W;
 }
-vec4 stage(int s, vec2 q, float px, float lu, bool inner) {
-    if (s == 0) return stagePool(q, px, lu, inner);
-    if (s == 1) return stageBoulder(q, px, lu);
-    if (s == 2) return stageDrop(q, px, lu);
-    if (s == 3) return stageDiatom(q, px, lu);
-    if (s == 4) return stageCell(q, px, lu);
-    if (s == 5) return stageMolecules(q, px, lu);
-    if (s == 6) return stageAtom(q, px, lu);
-    if (s == 7) return stageFoam(q, px, lu);
-    return stageStrings(q, px, lu);
+
+World stage(int s, vec2 q, float px) {
+    if (s == 0) return stagePool(q, px);
+    if (s == 1) return stageFloor(q, px);
+    if (s == 2) return stagePlankton(q, px);
+    if (s == 3) return stageDiatom(q, px);
+    if (s == 4) return stageCell(q, px);
+    if (s == 5) return stageMolecules(q, px);
+    if (s == 6) return stageAtom(q, px);
+    if (s == 7) return stageFoam(q, px);
+    return stageStrings(q, px);
 }
 
 void main() {
@@ -988,37 +867,31 @@ void main() {
         float pr = length(p);
         float front = uWave.x * 0.9;
         float k = exp(-sq((pr - front) / 0.35)) * uWave.y * exp(-uWave.x * 0.35);
-        p += p / max(pr, 1e-3) * sin((pr - front) * 9.0) * 0.025 * k;
+        p += p / max(pr, 1e-3) * sin((pr - front) * 9.0) * 0.02 * k;
     }
-    // depth of field, as through a macro lens: sharp at the focus, softer toward the edges and behind the well
-    float pr = length(p);
+    // a little softness behind the well (the stack reads over a calmer world)
     vec2 qw = abs(b) - vec2(5.0, 10.0);
     float hud = 1.0 - smoothstep(-1.0, 2.5, length(max(qw, 0.0)) + min(max(qw.x, qw.y), 0.0));
-    float blurP = 0.016 * smoothstep(0.45, 2.6, pr) + 0.01 * hud;
-    // innermost first: it is in front; stop once opaque
-    vec4 acc = vec4(0.0);
-    for (int i = 3; i >= 0; i--) {
-        if (i >= uLayers) continue;
-        vec4 L = uLayer[i];
-        vec2 q = rot(L.w) * p * L.z;
-        float px = (uPxP + blurP) * L.z;
-        if (i > 0 && length(q) > RB + 0.1) continue;
-        vec4 c = stage(int(L.x + 0.5), q, px, L.y, i > 0);
-        acc = over(acc, c);
-        if (acc.a > 0.999) break;
-    }
-    vec3 c = acc.rgb;
+    float blurP = 0.003 * hud;
+    // the stage we are in, and the next one, its things already there, tiny; then a crossfade into it
+    vec4 L0 = uLayer[0], L1 = uLayer[1];
+    World A = stage(int(L0.x + 0.5), rot(L0.w) * p * L0.z, (uPxP + blurP) * L0.z);
+    World B = stage(int(L1.x + 0.5), rot(L1.w) * p * L1.z, (uPxP + blurP) * L1.z);
+    float appear = smoothstep(-3.6, -2.6, L1.y);
+    vec4 nb = B.obj * appear * mix(A.host, 1.0, uTau);
+    vec3 a = over(nb, over(A.obj, vec4(A.bg, 1.0))).rgb;
+    vec3 bb = over(B.obj, vec4(B.bg, 1.0)).rgb;
+    vec3 c = mix(a, bb, uTau);
     // FEVER: the world's hues turn slowly with the depth
     if (uFever > 0.0) {
-        float a = uFever * (uDepth * 0.35 + uTime * 0.03);
+        float an = uFever * (uDepth * 0.35 + uTime * 0.03);
         vec3 k = vec3(0.57735);
-        float ca = cos(a), sa = sin(a);
-        c = c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca);
-        c = max(c, 0.0);
+        float ca = cos(an), sa = sin(an);
+        c = max(c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca), 0.0);
     }
-    // slow motion: a hush, silver and cool
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    c = mix(c, vec3(l) * vec3(0.85, 0.95, 1.12), uSlow * 0.55);
+    c = mix(c, vec3(l), hud * 0.25);                                        // calmer behind the well
+    c = mix(c, vec3(l) * vec3(0.85, 0.95, 1.12), uSlow * 0.55);            // slow motion: a hush
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(c, 1.0);
 }
