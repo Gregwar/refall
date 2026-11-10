@@ -10,8 +10,8 @@
 // its night side, wrapped in a living web of light, the moon beyond. Mushrooms burst up where the threads run, each
 // bigger than the last (a pin, then a cap opening with a little overshoot): caps among the moss, parasols taller than
 // the trees, towers standing above the clouds, glowing pins all over the globe. The growth is G = ln(the network's
-// reach in meters): 2 mm at the start, 1 m at ~20 lines, 500 m (the village) at ~54, 75 km at 90, the planet a ball
-// at ~140, wrapped at ~200.
+// reach in meters): 2 mm at the start, 1 m at ~15 lines, 500 m (the village) at ~39, 75 km at ~59, the planet a ball
+// at ~81, wrapped at ~100.
 //
 // The look: a moonlit night in clean colors, toon light (crisp bands, cool tinted shades), the threads and caps the
 // only bright things: the threads glow over the ground (thin, crisp ribbons that never get thinner than a pixel, a
