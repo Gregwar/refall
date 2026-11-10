@@ -1,4 +1,4 @@
-// LOST PANDA: a journey home told in pictures behind the well. A little panda in a red scarf is lost in the city at
+// LOST PANDA: a journey home told in pictures behind the well. A little kawaii panda cub is lost in the city at
 // night, small and alone under the rain. Every cleared line is a few steps further on its way home: a rainy street
 // of closed shops and lamplight; the shopping street, neon signs, people hurrying by under umbrellas, a crossing; the
 // subway, tiled walls, a train gliding in; a night train, the tunnel's lamps streaming past the windows until it
@@ -66,17 +66,17 @@ vec2 V(float x, float y) { return vec2{x, y}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned c) { return ugl::toLinear(hex(c)); }
 
-// A variant: the seven pieces, the scarf, the HUD's accent, the lights' warmth.
+// A variant: the seven pieces, the HUD's accent, the lights' warmth.
 struct VariantDef {
     const char* name;
     unsigned piece[7];
-    unsigned scarf, accent, light;
+    unsigned accent, light;
 };
 const VariantDef VARIANTS[] = {
-    {"RED SCARF", {0x6fd3d0, 0xf4cf62, 0xb497e0, 0x8fd07a, 0xef7f74, 0x6f9ee8, 0xf3a35a}, 0xd23c36, 0xffc77a, 0xffc070},
-    {"YELLOW SCARF", {0x7fd8e6, 0xffe08a, 0xc6a6ff, 0x9be6a5, 0xff9aa8, 0x82a9ff, 0xffb98a}, 0xf0b830, 0xa8d8ff, 0xffd890},
-    {"BLOSSOM", {0x86e0cf, 0xffd98f, 0xe0a3e8, 0xb7e08a, 0xff8fa6, 0x8fb0f0, 0xffad7f}, 0xee7898, 0xffb8cc, 0xffc8a0},
-    {"JADE", {0x5fd0b8, 0xe8d070, 0xa890e0, 0x7ccf6e, 0xe8706a, 0x5f8fe0, 0xe89a50}, 0x2f9a62, 0xa8e8c0, 0xffd070},
+    {"LANTERN", {0x6fd3d0, 0xf4cf62, 0xb497e0, 0x8fd07a, 0xef7f74, 0x6f9ee8, 0xf3a35a}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0x7fd8e6, 0xffe08a, 0xc6a6ff, 0x9be6a5, 0xff9aa8, 0x82a9ff, 0xffb98a}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0x86e0cf, 0xffd98f, 0xe0a3e8, 0xb7e08a, 0xff8fa6, 0x8fb0f0, 0xffad7f}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0x5fd0b8, 0xe8d070, 0xa890e0, 0x7ccf6e, 0xe8706a, 0x5f8fe0, 0xe89a50}, 0xa8e8c0, 0xffd070},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
@@ -88,9 +88,7 @@ const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
 constexpr double C_END = 372.0;                      // the camera at the family
 constexpr double P_END = C_END;                      // the cub with them
 const double WAY_AT[STAGES + 1] = {0, 48, 96, 144, 192, 240, 288, 336, P_END};
-constexpr double MOM_AT = C_END + 3.2, DAD_AT = C_END - 3.3; // where they sit along the way
 constexpr float GY = -7.4f;                          // the ground line
-constexpr float KID_H = 4.2f;                        // the cub's height (board units)
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 
 double wayOf(double lines) {
@@ -296,7 +294,10 @@ void LostPandaUniverse::resize(int width, int height) {
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
     // the panda's spot: in the free band left of the HUD's left column
-    xP_ = std::max(-16.f, viewC_.x - hw + 4.6f);
+    // the free band left of the HUD's left column, the cub's size and the family's scale from its width
+    famS_ = std::clamp((layout::LEFT_COLUMN[0] - 0.4f - (viewC_.x - hw)) / 9.5f, 0.5f, 1.f);
+    kidH_ = 6.6f * famS_;
+    xP_ = viewC_.x - hw + 4.5f * famS_;
     const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -327,8 +328,8 @@ void LostPandaUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && !t.minor && t.brightness > 0.6f) v = 1;          // a yellow scarf for bright songs
-        else if (t.hasSong && t.minor && t.brightness < 0.45f) v = 0;     // the red scarf for dark ones
+        if (t.hasSong && !t.minor && t.brightness > 0.6f) v = 1;          // sunny for bright songs
+        else if (t.hasSong && t.minor && t.brightness < 0.45f) v = 0;     // lanterns for dark ones
         else if (t.hasSong && t.airWeight > 0.6f) v = 2;                  // blossom for airy ones
         else {
             static const int BY_HUE[] = {0, 3, 1, 2, 0, 3};
@@ -419,7 +420,7 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
             if (cl.y >= 0 && cl.y < Game::H) rows[cl.y] = true;
         }
-        const vec2 head = V(xP_ + (float)(P_ - C_), GY + KID_H * 1.05f);
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 1.05f);
         for (int y = 0; y < Game::H; y++) {
             if (!rows[y] || lights_.size() > 80) continue;
             const float ry = layout::cellPos(0.f, (float)y).y;
@@ -488,9 +489,8 @@ void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate)
     p.joyEyes = approach(p.joyEyes, t.joyEyes, rate * 1.2f, dt);
     p.hug = approach(p.hug, t.hug, rate * 0.7f, dt);
     p.mood = approach(p.mood, t.mood, 0.5f, dt);
-    // breath, blinks, the ears on their springs, the scarf in the wind
+    // breath, blinks, the ears on their springs
     p.breath += dt * (TAU / 3.6f) * (1.f + 0.4f * p.walk);
-    p.scarfT += dt * (2.2f + 5.f * p.walk);
     p.wind = approach(p.wind, t.wind, 1.f, dt);
     p.blinkAge += dt;
     p.blinkT -= dt;
@@ -580,7 +580,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
     }
     // the butterfly: looked at while it flutters near
     if (flyA_ > 0.3f && (act_ == A_BUTTERFLY || act_ == A_LOOK || act_ == A_STAND) && !travelling && overT_ < 0.f) {
-        const vec2 head = V(xP_ + (float)(P_ - C_), GY + KID_H * 0.75f);
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.75f);
         const float dx = fly_.x - head.x, dy = fly_.y - head.y;
         t.turn = std::clamp(dx * 0.6f, -0.9f, 0.9f);
         t.lookX = dx > 0.f ? 1.f : -1.f;
@@ -875,12 +875,11 @@ void LostPandaUniverse::drawHud(const std::vector<HudText>& hud, const std::vect
 // =====================================================================================================
 
 void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze,
-                                  bool reflect) {
+                                  bool reflect, int part) {
     if (alpha <= 0.003f) return;
-    const float x0 = feet.x - 0.85f * h, x1 = feet.x + 0.85f * h;
+    const float x0 = feet.x - 0.75f * h, x1 = feet.x + 0.75f * h;
     if (x1 < viewC_.x - viewH_.x || x0 > viewC_.x + viewH_.x) return;
     const Look l = lookAt(C_ + (feet.x - xP_) * 0.4);
-    const VariantDef& vd = VARIANTS[wrapV(variant_)];
     glUseProgram(progPanda_);
     setMat(progPanda_, "uVP", vp_);
     set4f(progPanda_, "uRect", x0, feet.y - (reflect ? 0.75f * h : 0.08f * h), x1, feet.y + 1.35f * h);
@@ -889,6 +888,8 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uFace", face);
     set1f(progPanda_, "uPx", 1.f / pxPerUnit_);
     set1f(progPanda_, "uAdult", adult);
+    set1f(progPanda_, "uTime", time_);
+    glUniform1i(ugl::U(progPanda_, "uPart"), part);
     set1f(progPanda_, "uWalk", p.walk);
     set1f(progPanda_, "uPhase", p.phase);
     set1f(progPanda_, "uMood", p.mood);
@@ -906,10 +907,6 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uHug", p.hug);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
     set2f(progPanda_, "uEars", p.earN, p.earF);
-    set1f(progPanda_, "uScarfT", p.scarfT);
-    set1f(progPanda_, "uScarfA", adult > 0.5f ? 0.f : 1.f);
-    set1f(progPanda_, "uWind", p.wind);
-    set3f(progPanda_, "uScarfCol", lin(vd.scarf));
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
     set3f(progPanda_, "uAmb", l.amb * night);
     set3f(progPanda_, "uKey", l.key * night * (1.f + 0.25f * dropAmt_));
@@ -1037,7 +1034,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         const double cT = std::min(P_, C_END);
         C_ += (cT - C_) * (1.0 - std::exp(-1.1 * wdt));
         // the walk cycle: steps follow the ground covered
-        const float stride = 0.42f * KID_H;
+        const float stride = 0.32f * kidH_;
         kid_.phase += (float)(vel_ * wdt) * TAU / stride;
         kid_.walk = approach(kid_.walk, saturate(speed / 1.1f), 5.f, wdt);
         reunion_ = smoothstepf((float)(C_END - 12.0), (float)P_END, (float)P_);
@@ -1054,6 +1051,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         // the family: waiting, looking out for it, then all joy
         const float r = reunion_;
         const bool arrived = P_ >= P_END - 0.05;
+        arriveT_ = arrived ? arriveT_ + wdt : 0.f;
         for (int i = 0; i < 2; i++) {
             Pose& fp = i == 0 ? mom_ : dad_;
             Pose t = fp;
@@ -1065,9 +1063,21 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             t.lookY = r > 0.3f ? -0.3f : 0.f;
             t.tilt = lerpf(0.05f * std::sin(tt * 1.3f), -0.06f, r);
             t.arms = (r > 0.4f && !arrived) ? 0.6f : 0.f;
-            t.hug = arrived && i == 0 ? 0.6f : 0.f;
+            t.hug = arrived && i == 0 ? 1.f : 0.f;
             t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f)) : 0.f;
             t.wind = 0.2f;
+            if (i == 1) {
+                // the father comes back from the grove a little after the reunion, waddling in from the left
+                const float u = smoothstepf(2.f, 7.f, arriveT_);
+                const float x = lerpf(-4.f, 0.f, u);
+                const float v = (x - dadWalkX_) / std::max(wdt, 1e-4f);
+                dadWalkX_ = x;
+                fp.walk = approach(fp.walk, saturate(std::fabs(v) * famS_ / 0.6f), 5.f, wdt);
+                fp.phase += std::fabs(v) * wdt * TAU / (0.3f * 8.6f);
+                t.sit = u > 0.97f ? 1.f : 0.f;
+                if (u < 0.97f) t.turn = 0.7f;
+                t.arms = 0.f;
+            }
             updatePose(fp, wdt, t, 1.5f);
         }
     }
@@ -1075,7 +1085,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     {
         const float want = overT_ < 0.f ? look.butterfly : 0.f;
         flyA_ = approach(flyA_, want, 0.5f, wdt);
-        const vec2 head = V(xP_ + (float)(P_ - C_), GY + KID_H * 0.9f);
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.9f);
         const vec2 goal = V(head.x + 1.6f * std::sin(time_ * 0.37f) + 0.9f * std::sin(time_ * 0.91f + 1.f) + 0.6f,
                             head.y + 0.6f + 0.9f * std::sin(time_ * 0.53f + 2.f) + 0.4f * std::sin(time_ * 1.7f));
         if (flyA_ < 0.02f) fly_ = V(head.x + 6.f, head.y + 3.f);
@@ -1212,13 +1222,18 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // the family (behind), the cub, the butterfly
     {
         const float alpha = world;
-        const float momX = xP_ + (float)(MOM_AT - C_), dadX = xP_ + (float)(DAD_AT - C_);
-        dad_.walk = mom_.walk = 0.f;
-        drawPanda(dad_, V(dadX, GY + 0.45f), 6.6f, 1.f, 1.f, alpha, 0.05f, false);
-        drawPanda(mom_, V(momX, GY + 0.2f), 7.0f, -1.f, 1.f, alpha, 0.02f, false);
+        // the reunion fits in the free band left of the HUD: the mother sitting right of the cub (her near arm
+        // wrapping round it, drawn over it), the father behind them on the left once he is back
+        const float s = famS_;
+        const float momX = xP_ + (float)(C_END - C_) + 2.3f * s;
+        const float dadX = xP_ - 3.4f * s + dadWalkX_ * s;
+        mom_.walk = 0.f;
+        if (arriveT_ > 2.f) drawPanda(dad_, V(dadX, GY + 0.75f * s), 8.6f * s, 1.f, 1.f, alpha, 0.07f, false, 0);
+        drawPanda(mom_, V(momX, GY + 0.15f * s), 9.4f * s, -1.f, 1.f, alpha, 0.02f, false, 1);
         kid_.tilt += 0.035f * nod;
-        drawPanda(kid_, V(xP_ + (float)(P_ - C_), GY), KID_H, 1.f, 0.f, alpha, 0.f, true);
+        drawPanda(kid_, V(xP_ + (float)(P_ - C_), GY), kidH_, 1.f, 0.f, alpha, 0.f, true, 0);
         kid_.tilt -= 0.035f * nod;
+        drawPanda(mom_, V(momX, GY + 0.15f * s), 9.4f * s, -1.f, 1.f, alpha, 0.02f, false, 2);
         if (flyA_ > 0.01f) {
             std::vector<SpriteInst> fly;
             sprite(fly, fly_, 0.32f, lerp(lin(0xfff3c0), lin(vd.accent), 0.35f), flyA_ * world, 3, 0.5f + 0.5f * std::sin(flyFlap_));

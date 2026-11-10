@@ -1,5 +1,5 @@
 #pragma once
-// LOST PANDA: a little panda lost in the city at night finds its way home, one cleared line at a time: a rainy
+// LOST PANDA: a little kawaii panda lost in the city at night finds its way home, one cleared line at a time: a rainy
 // street, the shopping street's crossing, the subway, a night train, the canal at dawn, the fields at the city's
 // edge, the bamboo forest, and its family waiting in a glade at sunset (see lostpanda.cpp).
 #include <cmath>
@@ -34,7 +34,7 @@ public:
         float walk = 0, phase = 0, mood = 0, turn = 0.5f, tilt = 0, lookX = 0.5f, lookY = 0, blink = 0, sit = 0,
               wipe = 0, tear = 0, hop = 0, lean = 0, arms = 0, joyEyes = 0, hug = 0;
         float earN = 0, earF = 0, earVN = 0, earVF = 0; // the ears' springs
-        float breath = 0, scarfT = 0, wind = 0.3f;
+        float breath = 0, wind = 0.3f;
         float blinkT = 2.f, blinkAge = 9.f;
     };
 
@@ -46,6 +46,8 @@ private:
     int lines_ = 0, linesShown_ = -1, linesWalk_ = 0;
     bool placed_ = false;
     float xP_ = -16.f;            // the panda's spot on the screen (board x)
+    float kidH_ = 6.6f, famS_ = 1.f; // the cub's height, the family's scale (both from the free band's width)
+    float arriveT_ = 0.f, dadWalkX_ = -4.f; // since the cub reached its family; the father's way back
     std::string stageName_;
     int stageAt_ = 0;
 
@@ -85,7 +87,7 @@ private:
     void sprite(std::vector<SpriteInst>& out, vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f,
                 float param2 = 0.f);
     void drawSprites(const std::vector<SpriteInst>& v, bool additive);
-    void drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze, bool reflect);
+    void drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze, bool reflect, int part);
 
     // ---- Text.
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
