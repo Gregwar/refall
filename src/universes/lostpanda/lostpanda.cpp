@@ -1,25 +1,26 @@
-// LOST PANDA: a journey home told in pictures behind the well. A little kawaii panda cub is lost in the city at
-// night, small and alone under the rain. Every cleared line is a few steps further on its way home: a rainy street
-// of closed shops and lamplight; the shopping street, neon signs, people hurrying by under umbrellas, a crossing; the
-// subway, tiled walls, a train gliding in; a night train, the tunnel's lamps streaming past the windows until it
-// climbs onto a viaduct at dawn; the canal through the industrial district, chimneys and cranes against a rose sky;
-// the fields at the city's edge, morning, pylons, the first bamboo, a butterfly to follow; the bamboo forest, shafts
-// of golden light; and a glade at sunset where its family waits: the cub runs to them.
+// LOST PANDA: a journey home told in pictures behind the well, one continuous shot. A little kawaii panda cub is lost
+// in the city at night, alone under the rain. Every cleared line is a few steps further on its way home, through one
+// world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
+// hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
+// cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
+// the train runs through the tunnel (the clears drive it, it creeps on between them), climbs a cutting into the dawn
+// and stops at a terminus in the industrial district; the cub steps out, the train leaves; it walks on along the
+// canal, past the last fences into the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over
+// a little bridge into a glade at sunset. There the camera stops: its family waits on the right of the screen, it sees
+// them, runs across behind the well to them, and they hug.
 //
-// The world is an illustrated side view in parallax layers (shaders.hpp): the eight places lie one after the other
-// on one long road, LEN units each, the next taking over across the end of the one before. The panda stands left of
-// the HUD's left column, on the ground line under it; the camera follows it along the road. The lines cleared in the
-// game set where it should be (the stages at 0, 13, 26, 38, 50, 63, 76 and 89 lines, the family reached at 100):
-// a clear sends a few lights of hope drifting from the row, behind the well, to the panda, which watches them come
-// and then walks on (a Tetris a run). Between clears it lives: it breathes, blinks, looks around, looks back where
-// it came from, sits down, wipes a tear, sighs, looks up at the rain; later it hops, follows a butterfly, watches the
-// fireflies. Its mood follows the way: hunched and teary in the rain, upright and smiling in the forest, its eyes
-// closing in joy with its family. Every value of its pose eases toward its target; nothing snaps.
+// The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
+// weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
+// The lines cleared set where the cub should be (the stages at 0, 13, 26, 38, 50, 63, 76 and 89 lines, the family at
+// 100). A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
+// and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
+// bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
+// wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
-// beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow welling up from the ground,
-// a swirl of lights rising around it, a few happy hops (it never walks further: a drop never skips a stage).
-// The pieces are clean rounded tiles, one solid color each, lit softly from above; a cleared row shrinks away.
+// beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
+// rising around it, a few happy hops (it never walks further: a drop never skips a stage).
+// The pieces are clean bamboo-segment cells, one solid color each; a cleared row shrinks away.
 #include "universes/lostpanda/lostpanda.hpp"
 
 #include <algorithm>
@@ -56,6 +57,8 @@ using ugl::setMat;
 
 GLuint compile(const char* vs, const char* fs, const char* name) {
     std::string f(fs);
+    const size_t at = f.find("//@TRAIN");
+    if (at != std::string::npos) f.replace(at, 8, shaders::TRAIN_GLSL);
     f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
     std::string v(vs);
     v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
@@ -81,13 +84,14 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
 
-// ---- The way home.
+// ---- The way home: one continuous world. The cub's place along it is its world x (board units).
 constexpr int STAGES = 8;
-constexpr double LEN = 48.0, BL = 10.0;            // a place's length, the crossfade into the next (as in the shader)
 const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
-constexpr double C_END = 372.0;                      // the camera at the family
-const double WAY_AT[STAGES + 1] = {0, 48, 96, 144, 192, 240, 288, 336, C_END};
-constexpr float GY = -7.4f;                          // the ground line
+constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
+const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
+constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
+constexpr double GY0 = -7.4, PLAT_Y = -21.4;         // the street, the subway's platform (world y, as in the shaders)
+constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 
 double wayOf(double lines) {
@@ -98,6 +102,28 @@ double wayOf(double lines) {
             return WAY_AT[s] + (WAY_AT[s + 1] - WAY_AT[s]) * u;
         }
     return C_END;
+}
+double smd(double a, double b, double x) {
+    const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+double trackY(double x) { return PLAT_Y + (GY0 - PLAT_Y) * smd(150.0, 236.0, x); }
+// the cub's feet (world y) along the way: the street, the stairs down, the platform, a hop into the train (its floor
+// following the track up the cutting), a hop down onto the terminus's platform, the ground
+double pathY(double x) {
+    if (x < 80.0) return GY0;
+    if (x < 96.0) return GY0 + (PLAT_Y - GY0) * (x - 80.0) / 16.0;
+    if (x < XB - 0.7) return PLAT_Y;
+    if (x < XB) {
+        const double u = (x - (XB - 0.7)) / 0.7;
+        return PLAT_Y + (trackY(XB) + 0.5 - PLAT_Y) * smd(0.0, 1.0, u) + 0.9 * std::sin(PI * u);
+    }
+    if (x < XA) return trackY(x) + 0.5;
+    if (x < XA + 0.9) {
+        const double u = (x - XA) / 0.9;
+        return trackY(XA) + 0.5 + (GY0 - trackY(XA) - 0.5) * smd(0.0, 1.0, u) + 0.7 * std::sin(PI * u);
+    }
+    return GY0;
 }
 
 // How each place looks (sRGB colors; the light on the pandas as plain multipliers).
@@ -111,20 +137,20 @@ struct StageDef {
 const StageDef STAGE[STAGES] = {
     {"a rainy street", 0x070b16, 0x222a3c, 0x1e2536, 0xffb060, 0x070a12, 0, 0, 1, 0, 0.0f, 0, 1.0f, 1.0f,
      {0.30f, 0.34f, 0.46f}, {0.42f, 0.36f, 0.30f}, {0.55f, 0.42f, 0.28f}, 0.7f, 0.6f, 0.0f, 0.55f, 0.f, 0.f},
-    {"the crossing", 0x0d0a1c, 0x34243e, 0x2c2238, 0xff9a80, 0x0c0814, 0, 0, 1, 0, 0.0f, 0, 0.55f, 1.0f,
+    {"the shopping street", 0x0d0a1c, 0x34243e, 0x2c2238, 0xff9a80, 0x0c0814, 0, 0, 1, 0, 0.0f, 0, 0.6f, 1.0f,
      {0.36f, 0.34f, 0.48f}, {0.48f, 0.38f, 0.44f}, {0.6f, 0.35f, 0.5f}, 0.7f, 0.6f, 0.08f, 0.45f, 0.f, 0.f},
-    {"the subway", 0x0a1010, 0x1a2624, 0x1e2a28, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.0f, 0, 0.0f, 1.0f,
+    {"the subway", 0x0d0a1c, 0x34243e, 0x2c2238, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.0f, 0, 0.45f, 1.0f,
      {0.50f, 0.56f, 0.55f}, {0.45f, 0.50f, 0.46f}, {0.45f, 0.55f, 0.5f}, 0.2f, 1.0f, 0.22f, 0.25f, 0.f, 0.f},
-    {"the night train", 0x0c1420, 0x262838, 0x2a2a36, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.0f, 0, 0.0f, 1.0f,
-     {0.56f, 0.56f, 0.54f}, {0.50f, 0.50f, 0.46f}, {0.4f, 0.4f, 0.36f}, 0.0f, 1.0f, 0.34f, 0.08f, 0.f, 0.f},
-    {"the canal at dawn", 0x18204a, 0xdf9584, 0x7a6278, 0xffa868, 0x120e1c, 9.f, -6.8f, 1.0f, 0.45f, 0.3f, 0.25f, 0.0f, 0.8f,
+    {"the night train", 0x0c1020, 0x262838, 0x2a2a36, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.1f, 0, 0.2f, 1.0f,
+     {0.56f, 0.56f, 0.54f}, {0.50f, 0.50f, 0.46f}, {0.4f, 0.4f, 0.36f}, 0.0f, 1.0f, 0.34f, 0.0f, 0.f, 0.f},
+    {"the industrial district", 0x18204a, 0xdf9584, 0x7a6278, 0xffa868, 0x120e1c, 9.f, -6.8f, 1.0f, 0.45f, 0.3f, 0.25f, 0.0f, 0.8f,
      {0.46f, 0.42f, 0.52f}, {0.62f, 0.44f, 0.40f}, {0.9f, 0.55f, 0.42f}, 0.9f, 0.3f, 0.45f, 0.f, 0.f, 0.f},
     {"the fields", 0x5e9ad2, 0xf2e5c6, 0xcad6d4, 0xfff0c8, 0x162030, 14.f, 7.5f, 1.0f, 0.55f, 0.0f, 0.8f, 0.0f, 0.0f,
      {0.70f, 0.74f, 0.82f}, {0.72f, 0.68f, 0.58f}, {0.8f, 0.75f, 0.6f}, 0.6f, 0.8f, 0.66f, 0.f, 0.f, 1.f},
     {"the bamboo forest", 0x5f8f4a, 0xe8dc8a, 0x7f9e62, 0xffe090, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
      {0.58f, 0.68f, 0.52f}, {0.74f, 0.68f, 0.48f}, {0.9f, 0.8f, 0.5f}, -0.6f, 0.8f, 0.82f, 0.f, 0.45f, 0.7f},
-    {"home", 0x584c86, 0xffb070, 0xe2a084, 0xffc068, 0x1c1018, -15.5f, -3.2f, 1.7f, 1.0f, 0.15f, 0.5f, 0.0f, 0.0f,
-     {0.60f, 0.50f, 0.56f}, {0.90f, 0.64f, 0.44f}, {1.0f, 0.68f, 0.38f}, -1.0f, 0.25f, 1.0f, 0.f, 1.0f, 0.5f},
+    {"the glade", 0x584c86, 0xffb070, 0xe2a084, 0xffc068, 0x1c1018, 16.f, -2.0f, 1.7f, 1.0f, 0.15f, 0.5f, 0.0f, 0.0f,
+     {0.60f, 0.50f, 0.56f}, {0.90f, 0.64f, 0.44f}, {1.0f, 0.68f, 0.38f}, 1.0f, 0.25f, 1.0f, 0.f, 1.0f, 0.5f},
 };
 
 // A blend of two places, float by float.
@@ -143,22 +169,39 @@ Look lookOf(int s) {
     l.fireflies = d.fireflies; l.butterfly = d.butterfly;
     return l;
 }
-Look lookAt(double j, int* stage = nullptr, float* blend = nullptr) {
-    const double t = std::max(0.0, j) / LEN;
-    const int s = std::min(STAGES - 1, (int)std::floor(t));
-    const double jl = (t - std::floor(t)) * LEN;
-    float w = s >= STAGES - 1 ? 0.f : smoothstepf((float)(LEN - BL), (float)LEN, (float)jl);
-    if (j >= (STAGES - 1) * LEN) w = 0.f;
-    Look a = lookOf(s);
-    if (w > 0.f) {
-        const Look b = lookOf(s + 1);
-        float* pa = reinterpret_cast<float*>(&a);
-        const float* pb = reinterpret_cast<const float*>(&b);
-        for (int i = 0; i < (int)(sizeof(Look) / sizeof(float)); i++) pa[i] += (pb[i] - pa[i]) * w;
+void mixLook(Look& a, const Look& b, float w) {
+    float* pa = reinterpret_cast<float*>(&a);
+    const float* pb = reinterpret_cast<const float*>(&b);
+    for (int i = 0; i < (int)(sizeof(Look) / sizeof(float)); i++) pa[i] += (pb[i] - pa[i]) * w;
+}
+// The look along the way: keyframes (a place's look at a world x), eased from one to the next: the weather and the
+// time of day pass as the cub goes (night, the subway, the train, dawn as it rides out, morning, gold, sunset).
+struct Key { double s; int stage; };
+const Key KEYS[] = {{0, 0}, {40, 1}, {84, 1}, {100, 2}, {130, 3}, {205, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
+constexpr int NKEYS = (int)(sizeof(KEYS) / sizeof(KEYS[0]));
+Look lookAt(double s, int* stage = nullptr, float* blend = nullptr) {
+    int i = 0;
+    while (i < NKEYS - 1 && s >= KEYS[i + 1].s) i++;
+    Look a = lookOf(KEYS[i].stage);
+    float w = 0.f;
+    if (i < NKEYS - 1) {
+        w = (float)smd(KEYS[i].s, KEYS[i + 1].s, s);
+        if (w > 0.f) mixLook(a, lookOf(KEYS[i + 1].stage), w);
     }
-    if (stage) *stage = s;
+    if (stage) *stage = KEYS[i].stage;
     if (blend) *blend = w;
     return a;
+}
+// which part of the way (for the HUD and the cub's idle life)
+int placeOf(double s) {
+    if (s < 40.0) return 0;
+    if (s < 84.0) return 1;
+    if (s < XB - 0.5) return 2;
+    if (s < XA + 0.5) return 3;
+    if (s < 340.0) return 4;
+    if (s < 392.0) return 5;
+    if (s < 440.0) return 6;
+    return 7;
 }
 
 // Test hooks: ZEN_LOSTPANDA_LINES=N adds N lines to the way, ZEN_GROW_RATE=R adds R lines a second.
@@ -179,6 +222,7 @@ enum Act { A_STAND, A_LOOK, A_LOOKUP, A_SIT, A_WIPE, A_STROLL, A_BUTTERFLY, A_HO
 
 bool LostPandaUniverse::init(int width, int height) {
     progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world");
+    progFront_ = compile(ugl::FULLSCREEN_VS, shaders::FRONT_FS, "lostpanda front");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "lostpanda comp");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "lostpanda sprite");
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "lostpanda veil");
@@ -298,11 +342,13 @@ void LostPandaUniverse::resize(int width, int height) {
     famS_ = std::clamp(bandW / 9.5f, 0.5f, 1.f);
     kidH_ = 4.2f * famS_;
     xP_ = bandL + 5.1f * famS_;
-    // the reunion, in the band: the father on the left, the mother, the cub in front at the right
-    dadEndX_ = bandL + 0.25f * bandW;
-    momEndX_ = bandL + 0.55f * bandW;
-    kidEndX_ = bandL + 0.8f * bandW;
-    enterX_ = bandL - 3.f * famS_;
+    // the reunion, in the free band right of the HUD's right column: the cub (it comes from the left), its mother,
+    // its father furthest right
+    const float bandR0 = layout::RIGHT_COLUMN[2] + 0.4f, bandRW = (viewC_.x + hw) - bandR0;
+    kidEndX_ = bandR0 + 0.2f * bandRW;
+    momEndX_ = bandR0 + 0.48f * bandRW;
+    dadEndX_ = bandR0 + 0.77f * bandRW;
+    enterX_ = 0.f;
     pEnd_ = C_END + (kidEndX_ - xP_);
     const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
@@ -313,7 +359,7 @@ void LostPandaUniverse::resize(int width, int height) {
 
 LostPandaUniverse::~LostPandaUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_, progPanda_})
+    for (GLuint p : {progWorld_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_, progPanda_})
         glDeleteProgram(p);
     for (GLuint v : {quadVao_, spriteVao_, cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
@@ -426,26 +472,40 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
             if (cl.y >= 0 && cl.y < Game::H) rows[cl.y] = true;
         }
-        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 1.05f);
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - camY_ + kidH_ * 1.05f);
+        int firstRow = -1;
         for (int y = 0; y < Game::H; y++) {
             if (!rows[y] || lights_.size() > 80) continue;
+            if (firstRow < 0) firstRow = y;
             const float ry = layout::cellPos(0.f, (float)y).y;
-            const int n = lines >= 4 ? 4 : 3;
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < 2; i++) {
                 Light l;
                 l.a = V(rng_.range(-4.f, 4.f), ry);
                 l.b = V(head.x + rng_.range(-1.6f, 1.6f), head.y + rng_.range(-0.4f, 2.2f));
                 l.ctl = V(lerpf(l.a.x, l.b.x, 0.5f) + rng_.range(-1.f, 1.f), std::max(l.a.y, l.b.y) + rng_.range(2.f, 5.f));
                 l.life = rng_.range(2.6f, 3.4f);
                 l.age = -rng_.range(0.f, 0.35f);
-                l.size = rng_.range(0.35f, 0.55f) * (lines >= 4 ? 1.2f : 1.f);
+                l.size = rng_.range(0.3f, 0.45f);
                 l.seed = rng_.uniform();
                 l.col = lin(vd.light);
                 lights_.push_back(l);
             }
         }
+        // the snack: a piece of bamboo (a whole little stalk for a Tetris) flying to the cub's paws
+        if (firstRow >= 0) {
+            Light l;
+            l.kind = lines >= 4 ? 2 : 1;
+            l.a = V(rng_.range(-3.f, 3.f), layout::cellPos(0.f, (float)firstRow).y);
+            l.ctl = V(lerpf(l.a.x, head.x, 0.5f), std::max(l.a.y, head.y) + 4.f);
+            l.b = head;
+            l.life = 1.5f;
+            l.size = lines >= 4 ? 0.85f : 0.5f;
+            l.seed = rng_.uniform();
+            l.col = vec3(1.f);
+            lights_.push_back(l);
+        }
         if (lines >= 4) joy_ = std::max(joy_, 0.8f);
-        lineDelay_ = 0.7f;
+        lineDelay_ = 1.2f;
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -494,6 +554,8 @@ void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate)
     p.arms = approach(p.arms, t.arms, rate * 0.9f, dt);
     p.joyEyes = approach(p.joyEyes, t.joyEyes, rate * 1.2f, dt);
     p.hug = approach(p.hug, t.hug, rate * 0.7f, dt);
+    p.munch = approach(p.munch, t.munch, 7.f, dt);
+    p.chew += dt * 11.f * p.munch;
     p.mood = approach(p.mood, t.mood, 0.5f, dt);
     // breath, blinks, the ears on their springs
     p.breath += dt * (TAU / 3.6f) * (1.f + 0.4f * p.walk);
@@ -577,7 +639,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
             t.turn = -0.85f * in + 0.55f * (1.f - in); t.lookX = -1.f; t.tilt = 0.05f;
             break;
         case A_HUG: {
-            t.joyEyes = in; t.turn = -0.5f; t.tilt = 0.12f * in; t.lean = -0.8f * in;
+            t.joyEyes = in; t.turn = 0.5f; t.tilt = 0.12f * in; t.lean = 0.8f * in;   // leaning into its mother
             break;
         }
         default: break;
@@ -594,13 +656,21 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
         t.tilt = std::clamp(dy * 0.08f, -0.1f, 0.25f);
         if (act_ == A_BUTTERFLY) t.joyEyes = 0.f;
     }
-    // the reunion: home, it hears them coming out of the bamboo behind it and turns, arms up
-    if (home && arriveT_ < 6.5f && overT_ < 0.f) {
-        const float k = smoothstepf(0.6f, 1.6f, arriveT_);
-        t.turn = lerpf(t.turn, -0.85f, k); t.lookX = -1.f; t.lookY = 0.f; t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
-        t.arms = 0.6f * smoothstepf(2.5f, 3.5f, arriveT_); t.joyEyes = smoothstepf(4.f, 5.f, arriveT_);
-        actT_ = 0.f; act_ = A_HUG; actDur_ = 8.f;
+    // the end: it sees its family on the right, stops, then runs to them; there, the hug
+    if (noticeT_ > 0.f && overT_ < 0.f) {
+        if (!home) {
+            t.turn = 0.85f; t.lookX = 1.f; t.lookY = 0.1f; t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
+            t.tilt = noticeT_ < 1.8f ? 0.1f : 0.f;
+            t.arms = noticeT_ < 1.8f ? 0.f : 0.55f;
+            t.joyEyes = noticeT_ < 1.8f ? 0.f : 0.35f;
+            actT_ = 0.f; act_ = A_HUG; actDur_ = 9.f;
+        } else if (arriveT_ < 1.f) {
+            act_ = A_HUG; actT_ = std::max(actT_, 0.7f); actDur_ = std::max(actDur_, 9.f);
+        }
     }
+    // munching a snack: paws at its mouth, happy
+    t.munch = munchT_ > 0.f ? 1.f : 0.f;
+    if (munchT_ > 0.f) { t.joyEyes = std::max(t.joyEyes, 0.45f); t.wipe = 0.f; t.tear = 0.f; t.arms = 0.f; }
     // a drop: the spirits lift, a look up, a few hops
     if (joy_ > 0.4f && !travelling && act_ != A_HUG && overT_ < 0.f) {
         t.tilt = std::max(t.tilt, 0.15f * joy_);
@@ -890,7 +960,7 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     if (alpha <= 0.003f) return;
     const float x0 = feet.x - 0.75f * h, x1 = feet.x + 0.75f * h;
     if (x1 < viewC_.x - viewH_.x || x0 > viewC_.x + viewH_.x) return;
-    const Look l = lookAt(C_ + (feet.x - xP_) * 0.4);
+    const Look l = lookAt(C_ + (feet.x - xP_));
     glUseProgram(progPanda_);
     setMat(progPanda_, "uVP", vp_);
     set4f(progPanda_, "uRect", x0, feet.y - (reflect ? 0.75f * h : 0.08f * h), x1, feet.y + 1.35f * h);
@@ -916,6 +986,9 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uArms", p.arms);
     set1f(progPanda_, "uJoyEyes", p.joyEyes);
     set1f(progPanda_, "uHug", p.hug);
+    set1f(progPanda_, "uMunch", p.munch);
+    set1f(progPanda_, "uChew", p.chew);
+    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
     set2f(progPanda_, "uEars", p.earN, p.earF);
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
@@ -1005,6 +1078,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The way: the game's lines -> where the cub should be.
     bool travelling = false;
     float speed = 0.f;
+    trainClock_ += wdt;
     {
         const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_);
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
@@ -1016,83 +1090,146 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         lines_ = lines;
         linesShown_ = lines;
         if (!placed_) {
-            lineTarget_ = wayOf(lines);
-            if (lines >= LINES_AT[STAGES]) lineTarget_ = pEnd_;
-            P_ = C_ = lineTarget_;
-            C_ = std::min(C_, C_END);
+            lineTarget_ = lines >= LINES_AT[STAGES] ? pEnd_ : wayOf(lines);
+            P_ = lineTarget_;
+            C_ = std::min(P_, C_END);
+            camY_ = (float)(pathY(P_) - GY0);
             vel_ = 0.0;
-            stroll_ = P_;
+            stroll_ = creep_ = P_;
             linesWalk_ = lines;
+            noticeT_ = arriveT_ = 0.f;
+            // the train where it should be
+            boardT_ = leaveT_ = trainT_ = 0.f;
+            if (P_ >= XA + 3.0) { train_ = T_GONE; trainX_ = -1000.0; door_ = 0.f; }
+            else if (P_ >= XA - 0.05) { train_ = T_TERM; trainX_ = XA - DOOR; door_ = 1.f; }
+            else if (P_ > XB - 0.7) { train_ = T_RIDE; trainX_ = P_ - DOOR; door_ = 0.f; }
+            else if (P_ >= 96.0) { train_ = T_WAIT; trainX_ = XB - DOOR; door_ = 1.f; }
+            else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
             placed_ = true;
         }
         lineDelay_ -= wdt;
-        if (lineDelay_ <= 0.f) { linesWalk_ = lines_; }
+        if (lineDelay_ <= 0.f) linesWalk_ = lines_;
         lineTarget_ = linesWalk_ >= LINES_AT[STAGES] ? pEnd_ : wayOf(linesWalk_);
-        double target = std::max(lineTarget_, std::min(stroll_, lineTarget_ + 1.3));
-        target = std::min(target, pEnd_);
+        double target = lineTarget_;
+        double cap = pEnd_;   // how far the cub may go now (the gates below)
+        // a stroll (on foot, in the open), the train creeping on between clears
+        const bool onFoot = P_ < 78.0 || (P_ > XA + 2.0 && P_ < C_END - 2.0);
+        if (onFoot) target = std::max(target, std::min(stroll_, lineTarget_ + 1.3));
+        const bool riding = train_ == T_RIDE;
+        if (riding) creep_ = std::min(std::max(creep_, P_) + wdt * 1.1, std::min(lineTarget_ + 12.0, XA));
+        else creep_ = P_;
+        if (riding) target = std::max(target, creep_);
+        // gates: the train must be there with its doors open, closed before it leaves, open at the terminus
+        if (P_ < XB - 0.5 && !(train_ == T_WAIT && door_ > 0.95f)) cap = std::min(cap, XB - 1.0);
+        if (train_ == T_WAIT) cap = std::min(cap, XB);
+        if (P_ < XA + 0.5 && !(train_ == T_TERM && door_ > 0.95f)) cap = std::min(cap, XA);
+        // the end: the cub sees its family, stops a moment, then runs to them
+        if (linesWalk_ >= LINES_AT[STAGES] && P_ >= C_END - 0.1) noticeT_ += wdt;
+        if (noticeT_ < 1.8f) cap = std::min(cap, C_END);
+        target = std::min(target, cap);
         if (overT_ >= 0.f) target = P_;
         const double dist = target - P_;
         const float mood = kid_.mood;
-        const bool lineWalk = lineTarget_ - P_ > 0.05;
+        const bool lineWalk = lineTarget_ - P_ > 0.05 || (riding && dist > 0.05);
         double vmax = lineWalk ? lerpf(1.5f, 2.6f, mood) + std::min(2.2, std::max(0.0, dist - 6.0) * 0.25) : 0.45;
-        if (P_ > C_END - 8.0 && lineWalk) vmax = std::max(vmax, 3.0); // the last steps: running to them
+        if (P_ > 79.0 && P_ < 97.0) vmax = std::min(vmax, 1.3);                 // careful on the stairs
+        if (riding) vmax = 6.5;                                                // the train
+        if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
+        if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
+        if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
         { // (testing: with ZEN_GROW_RATE the cub keeps up with the growing lines)
             static const double grow = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
-            vmax += grow * 4.0;
+            if (!riding) vmax += grow * 3.0;
+            else vmax += grow * 6.0;
         }
-        const double want = std::clamp(dist * 1.1, 0.0, vmax);
-        vel_ += (want - vel_) * (1.0 - std::exp(-2.6 * wdt));
+        const double want = std::clamp(dist * (riding ? 0.7 : 1.1), 0.0, vmax);
+        vel_ += (want - vel_) * (1.0 - std::exp(-(riding ? 1.2 : 2.6) * wdt));
         if (dist < 0.002 && vel_ < 0.02) vel_ = 0.0;
-        P_ += vel_ * wdt;
+        {
+            const double before = P_;
+            P_ += vel_ * wdt;
+            if (P_ > cap) { P_ = std::max(before, cap); vel_ = 0.0; }   // never past a gate
+        }
         speed = (float)vel_;
-        travelling = lineWalk || vel_ > 0.12;
-        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks)
+        travelling = (lineWalk || vel_ > 0.12) && !riding;
+        // the train
+        switch (train_) {
+        case T_AWAY:
+            trainX_ = XB - DOOR - 160.0;
+            if (P_ >= 95.0) { train_ = T_ARRIVE; trainT_ = 0.f; }
+            break;
+        case T_ARRIVE: {
+            trainT_ += wdt;
+            const double u = std::min(1.0, trainT_ / 10.0);
+            trainX_ = XB - DOOR - 130.0 * (1.0 - u) * (1.0 - u);
+            if (u >= 1.0) { train_ = T_WAIT; trainT_ = 0.f; boardT_ = 0.f; }
+            break;
+        }
+        case T_WAIT:
+            trainX_ = XB - DOOR;
+            if (P_ >= XB - 0.03) boardT_ += wdt;
+            door_ = std::clamp(door_ + wdt / 1.2f * (boardT_ > 1.0f ? -1.f : 1.f), 0.f, 1.f);
+            if (boardT_ > 1.0f && door_ <= 0.f) train_ = T_RIDE;
+            break;
+        case T_RIDE:
+            trainX_ = P_ - DOOR;
+            door_ = 0.f;
+            if (P_ >= XA - 0.03) { train_ = T_TERM; leaveT_ = 0.f; }
+            break;
+        case T_TERM:
+            trainX_ = XA - DOOR;
+            if (P_ > XA + 3.0) leaveT_ += wdt;
+            door_ = std::clamp(door_ + wdt / 1.2f * (leaveT_ > 1.5f ? -1.f : 1.f), 0.f, 1.f);
+            if (leaveT_ > 1.5f && door_ <= 0.f) { train_ = T_LEAVE; trainT_ = 0.f; }
+            break;
+        case T_LEAVE: {
+            trainT_ += wdt;
+            const double u = trainT_ / 14.0;
+            trainX_ = XA - DOOR - 170.0 * u * u;
+            if (u >= 1.0) train_ = T_GONE;
+            break;
+        }
+        default: trainX_ = -1000.0; break;
+        }
+        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
         const double cT = std::min(P_, C_END);
-        C_ += (cT - C_) * (1.0 - std::exp(-1.1 * wdt));
-        // the walk cycle: steps follow the ground covered
+        C_ += (cT - C_) * (1.0 - std::exp(-(riding ? 2.5 : 1.1) * wdt));
+        camY_ = approach(camY_, (float)(pathY(P_) - GY0), riding ? 3.f : 1.6f, wdt);
+        // the walk cycle: steps follow the ground covered (not while riding)
         const float stride = 0.32f * kidH_;
-        kid_.phase += (float)(vel_ * wdt) * TAU / stride;
-        kid_.walk = approach(kid_.walk, saturate(speed / 1.1f), 5.f, wdt);
+        if (!riding) kid_.phase += (float)(vel_ * wdt) * TAU / stride;
+        kid_.walk = approach(kid_.walk, riding ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
         reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
+        strength_ = approach(strength_, (float)smd(20.0, C_END - 30.0, P_), 0.5f, wdt);
+        munchT_ = std::max(0.f, munchT_ - wdt);
     }
-    int stage = 0;
-    float sblend = 0.f;
-    const Look look = lookAt(C_, &stage, &sblend);
-    stageAt_ = sblend > 0.5f ? std::min(STAGES - 1, stage + 1) : stage;
+    const Look look0 = lookAt(C_);
+    Look look = look0;
+    stageAt_ = placeOf(P_);
     stageName_ = STAGE[stageAt_].name;
+    if (P_ >= C_END - 1.0 && arriveT_ > 0.f) stageName_ = "home";
 
     // ---- The pandas' life.
     updateKid(wdt, look.mood, stageAt_, travelling, speed);
     {
-        // the family: once the cub is home, they come out of the bamboo on the left, waddling, and sit with it;
-        // then they lean in to it, nuzzling, eyes closing in joy
+        // the family waits on the right; when the cub sees them they stand up and open their arms; then the hug
         const bool arrived = P_ >= pEnd_ - 0.05;
         arriveT_ = arrived ? arriveT_ + wdt : 0.f;
         for (int i = 0; i < 2; i++) {
             Pose& fp = i == 0 ? mom_ : dad_;
-            float& x = i == 0 ? momX_ : dadX_;
-            const float endX = i == 0 ? momEndX_ : dadEndX_;
-            const float t0 = i == 0 ? 1.f : 2.6f;
-            const float u = smoothstepf(t0, t0 + 4.2f, arriveT_);
-            const float nx = lerpf(enterX_, endX, u);
-            const float v = arrived ? (nx - x) / std::max(wdt, 1e-4f) : 0.f;
-            x = nx;
-            const float h = (i == 0 ? 6.6f : 6.9f) * famS_;
-            fp.walk = approach(fp.walk, saturate(std::fabs(v) / (0.5f * famS_)), 5.f, wdt);
-            fp.phase += std::fabs(v) * wdt * TAU / (0.32f * h);
             Pose t = fp;
-            const bool seated = u > 0.98f;
-            const float together = smoothstepf(t0 + 4.5f, t0 + 6.f, arriveT_);
-            t.sit = seated ? 1.f : 0.f;
-            t.mood = 1.f;
-            t.turn = 0.6f;
-            t.lookX = 1.f;
-            t.lookY = -0.2f;
-            t.tilt = -0.14f * together;                 // leaning their heads in toward the cub
-            t.lean = (i == 0 ? 0.9f : 0.6f) * together;
-            t.arms = 0.f;
-            t.hug = 0.f;
-            t.joyEyes = together * smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f));
+            const float tt = time_ * (i == 0 ? 0.35f : 0.27f) + i * 2.f;
+            const bool seen = noticeT_ > 0.6f;
+            t.mood = seen ? 1.f : 0.6f;
+            t.sit = (seen && arriveT_ < 4.5f) ? 0.f : 1.f;
+            t.turn = seen ? 0.7f : 0.35f * std::sin(tt) + 0.25f;     // (their +x: toward the cub, on their left)
+            t.lookX = t.turn > 0.f ? 1.f : -1.f;
+            t.lookY = 0.f;
+            t.arms = (seen && !arrived) ? 0.85f : 0.f;
+            t.hug = (arrived && i == 0) ? 1.f : 0.f;
+            t.tilt = arrived ? 0.14f : 0.05f * std::sin(tt * 1.3f);
+            t.lean = arrived ? (i == 0 ? 0.8f : 0.4f) : 0.f;
+            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : 0.f;
             t.wind = 0.2f;
             updatePose(fp, wdt, t, 1.5f);
         }
@@ -1128,15 +1265,34 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
 
-    // background sprites: the lights of hope, the fireflies
+    // background sprites: the lights of hope, the snacks on their way, the fireflies
     bgSprites_.clear();
-    for (const Light& l : lights_) {
+    fgSprites_.clear();
+    const vec2 kidHead = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - camY_ + kidH_ * 0.55f);
+    for (Light& l : lights_) {
         if (l.age < 0.f) continue;
+        if (l.kind > 0) {
+            // a snack: an arc from the row to the cub's paws, tumbling; caught at the end
+            const float u = saturate(l.age / l.life);
+            const float e = u * u * (3.f - 2.f * u);
+            const float iu = 1.f - e;
+            const vec2 b = kidHead;
+            const vec2 p = V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * b.y);
+            const float a = smoothstepf(0.f, 0.08f, u) * (1.f - smoothstepf(0.9f, 1.f, u)) * world;
+            const float ang = l.seed * 6.f + l.age * 2.2f * (1.f - u);
+            sprite(u < 0.75f ? bgSprites_ : fgSprites_, p, l.size * (1.f - 0.35f * smoothstepf(0.8f, 1.f, u)), vec3(1.f), a, 5, ang);
+            if (u > 0.92f && !l.fed) {
+                l.fed = true;
+                munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
+                joy_ = std::max(joy_, l.kind == 2 ? 0.7f : 0.3f);
+                if (l.kind == 2 && act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.4f; }
+            }
+            continue;
+        }
         const float u = saturate(l.age / (l.life * 0.72f));
         const float e = u * u * (3.f - 2.f * u);
         const float iu = 1.f - e;
         vec2 p = V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * l.b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * l.b.y);
-        // drifting, then hovering by the cub
         p.x += 0.25f * std::sin(l.age * 2.1f + l.seed * 9.f);
         p.y += 0.25f * std::sin(l.age * 1.7f + l.seed * 5.f);
         const float t = l.age / l.life;
@@ -1174,21 +1330,33 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    // the subway train's timetable: glide in, wait, glide out, a pause
-    {
-        trainT_ += wdt;
-        const float cyc = 42.f;
-        if (trainT_ > cyc) { trainT_ -= cyc; trainStop_ = C_ * 0.75 - 50.0; }
-        if (trainStop_ == 0.0) trainStop_ = C_ * 0.75 - 50.0;
-    }
-    float trainX;
-    {
-        const float t = trainT_;
-        if (t < 12.f) { const float u = 1.f - t / 12.f; trainX = (float)trainStop_ + 110.f * u * u; }
-        else if (t < 24.f) trainX = (float)trainStop_;
-        else if (t < 36.f) { const float u = (t - 24.f) / 12.f; trainX = (float)trainStop_ - 150.f * u * u; }
-        else trainX = (float)trainStop_ + 400.f;
-    }
+    const float dawn = (float)smd(185.0, 300.0, P_);
+    auto setTrain = [&](GLuint prog, float px) {
+        set1f(prog, "uTrainX", (float)trainX_);
+        set1f(prog, "uDoor", smoothstepf(0.f, 1.f, door_));
+        set1f(prog, "uTrainLit", 1.f);
+        set1f(prog, "uTrainBody", 0.55f + 0.7f * dawn);
+        set1f(prog, "uSway", train_ == T_RIDE ? 1.f : 0.25f);
+        set1f(prog, "uTrainT", trainClock_);
+        (void)px;
+    };
+    const bool trainOn = std::fabs(trainX_ + 17.0 - (C_ - xP_)) < viewH_.x + 40.0;
+    auto drawFront = [&]() {
+        if (!trainOn) return;
+        glUseProgram(progFront_);
+        set2f(progFront_, "uViewC", viewC_.x, viewC_.y);
+        set2f(progFront_, "uViewH", viewH_.x, viewH_.y);
+        set1f(progFront_, "uD", (float)C_ - xP_);
+        set1f(progFront_, "uCamY", camY_);
+        set1f(progFront_, "uPxP", 1.f / pxPerUnit_);
+        set1f(progFront_, "uWorldA", world);
+        set1f(progFront_, "uOver", smoothstepf(0.f, 1.f, over_));
+        set3f(progFront_, "uBridgeCol", bridge_.color);
+        setTrain(progFront_, 1.f / pxPerUnit_);
+        ugl::drawFullscreen();
+    };
+    // the cub is inside the train (behind its near side) from its door to the terminus
+    const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
 
     // =========================================================== the world (reduced resolution)
     {
@@ -1198,8 +1366,11 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progWorld_, "uViewC", viewC_.x, viewC_.y);
         set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
         set1f(progWorld_, "uPxP", 2.f * viewH_.y / worldT_.h);
-        set1f(progWorld_, "uD", (float)C_);
-        set1f(progWorld_, "uXP", xP_);
+        set1f(progWorld_, "uD", (float)C_ - xP_);
+        set1f(progWorld_, "uCamY", camY_);
+        set1f(progWorld_, "uDawn", dawn);
+        set1f(progWorld_, "uSubLight", 1.f);
+        setTrain(progWorld_, 2.f * viewH_.y / worldT_.h);
         set1f(progWorld_, "uTime", time_);
         set1f(progWorld_, "uBeat", (float)std::fmod(beat, 4096.0));
         set1f(progWorld_, "uPeak", wp);
@@ -1216,9 +1387,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progWorld_, "uSkyHor", look.skyHor);
         set3f(progWorld_, "uFog", look.fog);
         set3f(progWorld_, "uSunCol", look.sunCol);
-        set4f(progWorld_, "uSun", look.sunX, look.sunY, look.sunR, look.sun);
+        set4f(progWorld_, "uSun", look.sunX, look.sunY - camY_ * 0.08f, look.sunR, look.sun);
         set3f(progWorld_, "uBridgeCol", bridge_.color);
-        set1f(progWorld_, "uTrain", trainX);
         set1f(progWorld_, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
         ugl::drawFullscreen();
     }
@@ -1235,23 +1405,31 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawSprites(bgSprites_, true);
-    // the family (behind), the cub, the butterfly
+    // the train's near side (when the cub is not in it), the family, the cub, the train's near side over it (when it
+    // rides), the snacks reaching it, the butterfly
+    if (!inside) drawFront();
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     {
         const float alpha = world;
-        // the reunion, in the free band left of the HUD: the father furthest back, the mother, the cub in front
         const float fs = famS_;
-        if (arriveT_ > 0.5f) {
-            drawPanda(dad_, V(dadX_, GY + 0.7f * fs), 6.9f * fs, 1.f, 1.f, alpha, 0.06f, false, 0);
-            drawPanda(mom_, V(momX_, GY + 0.35f * fs), 6.6f * fs, 1.f, 1.f, alpha, 0.03f, false, 0);
+        const float shift = (float)(C_END - C_);
+        const float fy = -camY_;
+        if (shift < 2.f * viewH_.x + 12.f) {
+            drawPanda(dad_, V(dadEndX_ + shift, GY + 0.7f * fs + fy), 6.9f * fs, -1.f, 1.f, alpha, 0.06f, false, 0);
+            drawPanda(mom_, V(momEndX_ + shift, GY + 0.35f * fs + fy), 6.6f * fs, -1.f, 1.f, alpha, 0.03f, false, 0);
         }
+        const float ky = GY + (float)(pathY(P_) - GY0) - camY_;
         kid_.tilt += 0.035f * nod;
-        drawPanda(kid_, V(xP_ + (float)(P_ - C_), GY), kidH_, 1.f, 0.f, alpha, 0.f, true, 0);
+        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 96.0 && P_ < XB - 0.7), 0);
         kid_.tilt -= 0.035f * nod;
-        if (flyA_ > 0.01f) {
-            std::vector<SpriteInst> fly;
-            sprite(fly, fly_, 0.32f, lerp(lin(0xfff3c0), lin(vd.accent), 0.35f), flyA_ * world, 3, 0.5f + 0.5f * std::sin(flyFlap_));
-            drawSprites(fly, false);
-        }
+    }
+    if (inside) drawFront();
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    drawSprites(fgSprites_, false);
+    if (flyA_ > 0.01f) {
+        std::vector<SpriteInst> fly;
+        sprite(fly, fly_, 0.32f, lerp(lin(0xfff3c0), lin(vd.accent), 0.35f), flyA_ * world, 3, 0.5f + 0.5f * std::sin(flyFlap_));
+        drawSprites(fly, false);
     }
     if (!f.bare) {
         glUseProgram(progVeil_);

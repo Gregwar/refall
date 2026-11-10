@@ -1,7 +1,8 @@
 #pragma once
-// LOST PANDA: a little kawaii panda lost in the city at night finds its way home, one cleared line at a time: a rainy
-// street, the shopping street's crossing, the subway, a night train, the canal at dawn, the fields at the city's
-// edge, the bamboo forest, and its family waiting in a glade at sunset (see lostpanda.cpp).
+// LOST PANDA: a little kawaii panda lost in the city at night finds its way home, one cleared line at a time, in one
+// continuous world: the rainy street, the shopping street, down the stairs into the subway, a train through the
+// tunnel and out at dawn, the industrial district, the fields, the bamboo forest, and its family waiting in a glade
+// at sunset (see lostpanda.cpp).
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -36,11 +37,23 @@ public:
         float earN = 0, earF = 0, earVN = 0, earVF = 0; // the ears' springs
         float breath = 0, wind = 0.3f;
         float blinkT = 2.f, blinkAge = 9.f;
+        float munch = 0, chew = 0;
     };
 
 private:
-    // ---- The way home: P the panda's place along it, C the camera's (both board units at the ground's depth).
-    double P_ = 0.0, C_ = 0.0, vel_ = 0.0, stroll_ = 0.0;
+    // ---- The way home, one continuous world: P the cub's place along it (its world x), C the camera's (the world x
+    // at the cub's spot on the screen), camY_ the camera's height (the world y at the screen's ground line - GY).
+    double P_ = 0.0, C_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
+    float camY_ = 0.f;
+    // ---- The subway train: away, arriving, waiting (doors), riding with the cub, at the terminus, leaving, gone.
+    enum { T_AWAY, T_ARRIVE, T_WAIT, T_RIDE, T_TERM, T_LEAVE, T_GONE };
+    int train_ = T_AWAY;
+    double trainX_ = -1000.0;     // the train's rear (world x)
+    float trainT_ = 0.f, door_ = 0.f, boardT_ = 0.f, leaveT_ = 0.f, trainClock_ = 0.f;
+    // ---- The end: the camera stops, the cub sees its family on the right and runs to them.
+    float noticeT_ = 0.f;
+    // ---- Fed on the way: munching a snack, strength gained.
+    float munchT_ = 0.f, strength_ = 0.f;
     double lineTarget_ = 0.0;
     float lineDelay_ = 0.f;       // a clear's walk starts once the panda has seen its lights coming
     int lines_ = 0, linesShown_ = -1, linesWalk_ = 0;
@@ -73,6 +86,8 @@ private:
         vec2 a{0, 0}, b{0, 0}, ctl{0, 0};
         float age = 0.f, life = 2.f, size = 0.3f, seed = 0.f;
         vec3 col{1.f};
+        int kind = 0;             // 0 a light, 1 a bamboo snack, 2 a big one (a Tetris)
+        bool fed = false;
     };
     std::vector<Light> lights_;
     struct Mote { vec2 p{0, 0}, v{0, 0}; float age = 0.f, life = 1.f, size = 0.1f, alpha = 1.f; vec3 col{1.f}; };
@@ -86,7 +101,7 @@ private:
     struct Fading { float x, y; int type; float t; };
     std::vector<Fading> fading_;
     struct SpriteInst { float a[4], b[4], c[4]; };
-    std::vector<SpriteInst> sprites_, bgSprites_;
+    std::vector<SpriteInst> sprites_, bgSprites_, fgSprites_;
     void sprite(std::vector<SpriteInst>& out, vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f,
                 float param2 = 0.f);
     void drawSprites(const std::vector<SpriteInst>& v, bool additive);
@@ -109,7 +124,7 @@ private:
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progWorld_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0, progText_ = 0,
+    GLuint progWorld_ = 0, progFront_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0, progText_ = 0,
            progPost_ = 0, progPanda_ = 0;
     GLuint quadVbo_ = 0, quadVao_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
            shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
@@ -131,8 +146,6 @@ private:
     float dropAmt_ = 0.f, swell_ = 0.f;
     float kickIn_ = 0.f, kickS_ = 0.f;
     double ownBeat_ = 0.0;
-    float trainT_ = 0.f;
-    double trainStop_ = 0.0;
 
     bool slowOn_ = false;
     float slow_ = 0.f;

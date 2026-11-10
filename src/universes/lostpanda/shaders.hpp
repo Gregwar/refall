@@ -1,11 +1,7 @@
 #pragma once
-// LOST PANDA's shaders: the world (eight places along the way home, side by side on one long road, drawn as
-// illustrated parallax layers), the little panda and its family (soft shapes with clean outlines), the board's
-// cells, the lights, the lettering.
-//
-// The road: a coordinate j along the way (board units at the ground's depth). Every place is LEN long; the next one
-// takes over across the last BL units of the one before (a soft crossfade drifting by with the walk). Each place
-// draws its own layers at their own parallax (a layer at parallax k scrolls by k times the walk).
+// LOST PANDA's shaders: the world (one continuous world along the way home, in a side view cut away like a
+// cross-section where it goes underground), the train, the pandas (kawaii stickers), the bamboo cells, the lights
+// and the snacks, the lettering.
 
 namespace lostpanda_shaders {
 
@@ -31,22 +27,134 @@ float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = sat
 float sdEll(vec2 p, vec2 r) { float k = length(p / r); return (k - 1.0) * min(r.x, r.y) * (k < 1.0 ? 1.0 : min(1.0, k)); }
 )";
 
+// ------------------------------------------------------------------------------------------------ the train (shared)
+// Two cars on a track along the way (the subway's tunnel, a ramp up a cutting to the surface, the terminus), seen in a
+// cut-away: the back wall with its windows (the world behind through them), benches, poles, straps, the floor and the
+// roof cut; the low near-side wall and its doors are drawn by trainFront (over the cub when it rides).
+inline const char* TRAIN_GLSL = R"(
+const float GY0 = -7.4, PLAT_Y = -21.4;
+const float CAR = 17.0, CGAP = 0.6;
+uniform float uTrainX, uDoor, uTrainLit, uTrainBody, uSway, uTrainT;
+float trackY(float x) { return mix(PLAT_Y, GY0, smoothstep(150.0, 236.0, x)); }
+vec2 carLocal(vec2 w, float i) {
+    float x0 = uTrainX + i * (CAR + CGAP);
+    float y0 = trackY(x0) - 0.3, y1 = trackY(x0 + CAR) - 0.3;
+    return rot(-atan(y1 - y0, CAR)) * (w - vec2(x0, y0));
+}
+vec4 trainInside(vec2 w, vec3 behind) {
+    vec3 col = behind;
+    float a = 0.0;
+    for (int ci = 0; ci < 2; ci++) {
+        vec2 l = carLocal(w, float(ci));
+        if (l.x < -0.3 || l.x > CAR + 0.9 || l.y < -0.8 || l.y > 8.4) continue;
+        vec3 body = vec3(0.13, 0.15, 0.18) * uTrainBody;
+        vec3 inside = vec3(0.16, 0.15, 0.13);
+        // the gangway to the next car
+        if (ci == 0) {
+            float gw = sdBox(l - vec2(CAR + CGAP * 0.5, 3.9), vec2(CGAP * 0.5 + 0.05, 3.3));
+            col = mix(col, vec3(0.03), fillA(gw));
+            a = max(a, fillA(gw));
+        }
+        if (l.x > CAR + 0.1) continue;
+        // wheels and bogies
+        float wh = 1e3;
+        for (int k = 0; k < 4; k++) {
+            float wx = k == 0 ? 2.3 : (k == 1 ? 3.7 : (k == 2 ? CAR - 3.7 : CAR - 2.3));
+            wh = min(wh, length(l - vec2(wx, 0.0)) - 0.38);
+        }
+        float bog = min(sdBox(l - vec2(3.0, 0.25), vec2(1.3, 0.14)), sdBox(l - vec2(CAR - 3.0, 0.25), vec2(1.3, 0.14)));
+        float wa = fillA(min(wh, bog));
+        col = mix(col, vec3(0.025), wa);
+        a = max(a, wa);
+        // the back wall: windows (the world behind), doors, benches, adverts, the light strip, poles, straps
+        float wallA = fillA(sdBox(l - vec2(CAR * 0.5, 4.0), vec2(CAR * 0.5 - 0.3, 3.2)));
+        if (wallA > 0.0) {
+            vec3 wc = inside * (0.85 + 0.35 * smoothstep(0.8, 7.0, l.y));
+            wc += vec3(1.0, 0.85, 0.6) * 0.06 * exp(-sq((l.y - 6.9) / 1.6));
+            float dr = min(sdBox(l - vec2(4.6, 3.9), vec2(0.9, 3.1)), sdBox(l - vec2(12.4, 3.9), vec2(0.9, 3.1)));
+            wc = mix(wc, inside * 0.72, fillA(dr));
+            float win = min(sdBox(l - vec2(2.0, 4.6), vec2(0.95, 1.2)), min(sdBox(l - vec2(8.5, 4.6), vec2(2.4, 1.2)), sdBox(l - vec2(15.0, 4.6), vec2(0.95, 1.2)))) - 0.3;
+            win = min(win, min(sdBox(l - vec2(4.6, 4.8), vec2(0.45, 1.0)), sdBox(l - vec2(12.4, 4.8), vec2(0.45, 1.0))) - 0.1);
+            wc = mix(wc, vec3(0.05), fillA(win - 0.14));
+            vec3 glass = behind * 0.85 + vec3(0.03, 0.035, 0.04) + vec3(0.05) * smoothstep(-1.0, 1.0, l.x * 0.3 + l.y - 4.6);
+            wc = mix(wc, glass, fillA(win));
+            float bench = min(sdBox(l - vec2(8.5, 1.45), vec2(2.7, 0.62)), min(sdBox(l - vec2(1.95, 1.45), vec2(1.35, 0.62)), sdBox(l - vec2(15.05, 1.45), vec2(1.35, 0.62)))) - 0.12;
+            wc = mix(wc, mix(vec3(0.05, 0.08, 0.2), vec3(0.09, 0.14, 0.3), smoothstep(0.8, 2.1, l.y)), fillA(bench));
+            float ad = sdBox(vec2(mod(l.x - 1.0, 3.6) - 1.8, l.y - 6.35), vec2(1.3, 0.28));
+            vec3 adC = (0.4 + 0.35 * cos(6.2831 * (hash1(floor((l.x - 1.0) / 3.6) + float(ci) * 7.0) + vec3(0.0, 0.33, 0.67)))) * 0.35;
+            wc = mix(wc, adC, fillA(ad) * step(1.0, l.x) * step(l.x, CAR - 1.0));
+            wc = mix(wc, vec3(1.0, 0.9, 0.7) * 1.5, fillA(sdBox(l - vec2(CAR * 0.5, 7.0), vec2(CAR * 0.5 - 1.0, 0.09))));
+            float pole = 1e3;
+            for (int k = 0; k < 4; k++) {
+                float px = k == 0 ? 3.5 : (k == 1 ? 5.7 : (k == 2 ? 11.3 : 13.5));
+                pole = min(pole, abs(l.x - px) - 0.06);
+            }
+            wc = mix(wc, vec3(0.75, 0.62, 0.18) * 0.6, fillA(max(pole, l.y - 6.75)));
+            float inRange = step(0.6, l.x) * step(l.x, CAR - 0.6);
+            wc = mix(wc, vec3(0.3, 0.3, 0.28), fillA(abs(l.y - 6.75) - 0.04) * inRange);
+            float sx = mod(l.x, 1.5) - 0.75, sid = floor(l.x / 1.5);
+            vec2 s0 = rot(-0.07 * sin(uTrainT * 0.9 + sid * 0.7) * uSway) * vec2(sx, l.y - 6.75);
+            float strap = min(sdBox(s0 - vec2(0.0, -0.35), vec2(0.035, 0.35)), abs(length(s0 - vec2(0.0, -0.85)) - 0.15) - 0.035);
+            wc = mix(wc, vec3(0.45, 0.43, 0.38), fillA(strap) * inRange);
+            wc *= uTrainLit;
+            col = mix(col, wc, wallA);
+            a = max(a, wallA);
+        }
+        // the floor, the roof, the ends: the cut, outlined
+        float sh = min(sdBox(l - vec2(CAR * 0.5, 0.5), vec2(CAR * 0.5, 0.3)), sdBox(l - vec2(CAR * 0.5, 7.55), vec2(CAR * 0.5, 0.35)));
+        sh = min(sh, min(sdBox(l - vec2(0.15, 4.05), vec2(0.15, 3.85)), sdBox(l - vec2(CAR - 0.15, 4.05), vec2(0.15, 3.85))));
+        float so = fillA(sh - gPx * 1.5), sa = fillA(sh);
+        col = mix(col, vec3(0.02), so);
+        col = mix(col, body * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y)), sa);
+        col = mix(col, vec3(0.45, 0.06, 0.06) * uTrainBody, fillA(abs(l.y - 7.35) - 0.08) * sa * step(abs(l.x - CAR * 0.5), CAR * 0.5 - 0.3));
+        a = max(a, so);
+    }
+    return vec4(col, a);
+}
+vec4 trainFront(vec2 w) {
+    vec4 o = vec4(0.0);
+    for (int ci = 0; ci < 2; ci++) {
+        vec2 l = carLocal(w, float(ci));
+        if (l.x < -0.3 || l.x > CAR + 0.3 || l.y < 0.4 || l.y > 2.8) continue;
+        float panel = sdBox(l - vec2(CAR * 0.5, 1.55), vec2(CAR * 0.5 - 0.1, 0.75));
+        float open = uDoor * 0.95;
+        panel = max(panel, -sdBox(l - vec2(4.6, 1.55), vec2(open, 1.0)));
+        panel = max(panel, -sdBox(l - vec2(12.4, 1.55), vec2(open, 1.0)));
+        float a = fillA(panel - gPx * 1.5);
+        if (a <= 0.0) continue;
+        vec3 c = vec3(0.16, 0.18, 0.21) * (0.85 + 0.3 * smoothstep(0.8, 2.3, l.y)) * uTrainBody;
+        c = mix(c, vec3(0.5, 0.07, 0.07) * uTrainBody, fillA(abs(l.y - 1.95) - 0.12));
+        for (int k = 0; k < 2; k++) {
+            float dx = abs(l.x - (k == 0 ? 4.6 : 12.4));
+            float seam = min(abs(dx - 0.95), abs(dx - open)) - 0.025;
+            c = mix(c, vec3(0.03), fillA(seam) * step(dx, 0.98));
+        }
+        c = mix(vec3(0.02), c, fillA(panel));
+        o = vec4(mix(o.rgb, c, a), max(o.a, a));
+    }
+    return o;
+}
+)";
+
 // ------------------------------------------------------------------------------------------------ the world
+// One continuous world in a side view, its near plane cut away like a cross-section where it goes underground:
+// world x along the way (0 the rainy street .. ~470 the glade), world y up (the street at GY0, the subway's platform
+// at PLAT_Y). The camera (uD, uCamY: the world point at the screen's origin) follows the cub. Layers behind the near
+// plane scroll at their own parallax k (x and y); what stands on the near plane (lamps, the stairs, the train, the
+// ground and the earth's cut) moves with the world. Where each kind of scenery stands is a density along the way,
+// evaluated at the object's own place (no popping): the city thins out into the industrial district, then the fields,
+// the bamboo, the glade.
 inline const char* WORLD_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform vec2 uViewC, uViewH;
 uniform float uPxP;          // board units per pixel of this target
-uniform float uD;            // the walk: where the camera is along the way
-uniform float uXP;           // the panda's place on the screen (board x)
-uniform float uTime, uBeat, uPeak, uDrop, uKick, uRain, uStars, uClouds, uOver, uWorldA, uSlow, uMid;
+uniform float uD, uCamY;     // the camera: the world point at the screen's origin
+uniform float uTime, uBeat, uPeak, uDrop, uKick, uRain, uStars, uClouds, uOver, uWorldA, uSlow, uMid, uLamp, uDawn;
 uniform vec3 uSkyTop, uSkyHor, uFog, uSunCol, uBridgeCol;
-uniform vec4 uSun;           // x, y, radius, strength
-uniform float uTrain;        // the subway train's place along its track (board units, its layer)
-uniform float uLamp;         // the night lights' level (lamps, windows, neon)
+uniform vec4 uSun;           // screen x, y, radius, strength
+uniform float uSubLight;     // the station's light (it comes on as the cub nears)
 
-const float GY = -7.4;       // the ground line (the panda's feet)
-const float LEN = 48.0, BL = 10.0;
 const float PI = 3.14159265, TAU = 6.2831853;
 float gPx = 0.02;
 float gGlow = 0.0;           // the light of lamps at the pixel (it lights the rain)
@@ -55,17 +163,29 @@ vec3 gGlowC = vec3(1.0);
 float fillA(float d) { return 1.0 - smoothstep(-gPx, gPx, d); }
 float fillS(float d, float s) { return 1.0 - smoothstep(-s, s, d); }
 float lod(float cell) { return smoothstep(2.0, 5.0, cell / gPx); }
-float bump(float x, float w) { return exp(-x * x / (w * w)); }
 vec3 lay(vec3 c, vec3 col, float a) { return mix(c, col, sat(a)); }
-// haze toward the fog with the distance (0 near .. 1 lost in it)
 vec3 haze(vec3 c, float h) { return mix(c, uFog, h); }
+vec2 layerP(vec2 p, float k) { return vec2(p.x, p.y + uCamY * k); }
+//@TRAIN
 
-// ---------------------------------------------------------------- the sky (shared: its colors follow the walk)
+// ---- where things are along the way (world x)
+float zCity(float x) { return 1.0 - smoothstep(205.0, 250.0, x); }
+float zShop(float x) { return smoothstep(24.0, 50.0, x) * (1.0 - smoothstep(190.0, 215.0, x)); }
+float zInd(float x) { return smoothstep(215.0, 250.0, x) * (1.0 - smoothstep(330.0, 355.0, x)); }
+float zNature(float x) { return smoothstep(300.0, 350.0, x); }
+float zField(float x) { return smoothstep(328.0, 352.0, x) * (1.0 - smoothstep(392.0, 418.0, x)); }
+float zBamboo(float x) { return smoothstep(360.0, 400.0, x) * (1.0 - 0.8 * smoothstep(436.0, 454.0, x)); }
+float zGlade(float x) { return smoothstep(436.0, 454.0, x); }
+// the place far layers show at an object's screen x (sx): far things fade in and out with the way, gently
+float xFar(float sx) { return uD + sx * 1.3; }
+
+// ---------------------------------------------------------------- the sky (its colors follow the time of day)
 vec3 sky(vec2 p) {
-    float h = sat((p.y - GY) / (12.0 - GY));
+    float py = p.y + uCamY * 0.08;
+    float h = sat((py - GY0) / 19.4);
     vec3 c = mix(uSkyHor, uSkyTop, pow(h, 0.65));
     if (uStars > 0.0) {
-        vec2 q = p * 1.7 + vec2(uD * 0.01, 0.0);
+        vec2 q = vec2(p.x + uD * 0.01, py) * 1.7;
         vec2 i = floor(q), f = fract(q) - 0.5;
         vec2 o = hash2(i) - 0.5;
         float on = step(0.86, hash(i + 3.1));
@@ -79,7 +199,6 @@ vec3 sky(vec2 p) {
         c = mix(c, uSunCol * 1.5 + 0.2, fillS(r - uSun.z, gPx * 1.5) * uSun.w * 0.9);
     }
     if (uClouds > 0.0) {
-        // puffy clouds, flat bottomed, lit from the top, drifting slowly
         for (int i = 0; i < 2; i++) {
             float fi = float(i);
             float x = p.x + uD * (0.03 + 0.03 * fi) + uTime * (0.1 + 0.06 * fi) + fi * 37.0;
@@ -88,7 +207,7 @@ vec3 sky(vec2 p) {
             if (hash1(id + fi * 9.0) > 0.7) continue;
             vec2 ctr = vec2((id + 0.5 + (hash1(id + 2.0) - 0.5) * 0.4) * cw, 3.0 + 4.0 * fi + 2.5 * hash1(id + 4.0));
             float sc = (0.8 + 0.5 * hash1(id + 6.0)) * (1.0 - 0.3 * fi);
-            vec2 q = (vec2(x, p.y) - ctr) / sc;
+            vec2 q = (vec2(x, py) - ctr) / sc;
             float d = 1e3;
             for (int k = 0; k < 5; k++) {
                 float fk = float(k);
@@ -105,31 +224,29 @@ vec3 sky(vec2 p) {
     return c;
 }
 
-// ---------------------------------------------------------------- shared pieces of scenery
-
-// lit windows: a grid in local coords q (cell size, window half size), returns the light (0..1, faded with lod)
+// ---------------------------------------------------------------- pieces of scenery
 float windowsLit(vec2 q, vec2 cell, vec2 half, float seed, float prob, out float glass) {
     vec2 g = q / cell;
     vec2 gi = floor(g), gf = (fract(g) - 0.5) * cell;
-    float d = sdBox(gf, half);
-    float w = fillA(d);
+    float w = fillA(sdBox(gf, half));
     float lit = step(hash(gi + seed), prob) * (0.55 + 0.45 * hash(gi + seed + 4.7));
     float l = lod(min(cell.x, cell.y));
     glass = mix(half.x * half.y * 4.0 / (cell.x * cell.y), w, l);
     return mix(prob * 0.75 * glass, w * lit, l);
 }
 
-// a far skyline of towers in layer k: their lit windows sparse
+// a far skyline of towers in layer k (p in layer coords): only where the city is
 vec3 skyline(vec2 p, vec3 c, float k, float base, float hmin, float hmax, float cw, vec3 bc, float prob, float seed, float hz) {
     float u = p.x + uD * k + seed * 13.0;
     float id = floor(u / cw);
+    float dens = zCity(xFar((id + 0.5) * cw - seed * 13.0 - uD * k));
+    if (dens <= 0.005) return c;
     float lx = (u / cw - id) * cw;
     float h = hmin + (hmax - hmin) * pow(hash1(id + seed), 1.4);
     float w = cw * (0.62 + 0.3 * hash1(id * 1.3 + seed));
     float x0 = 0.2 * cw * hash1(id + 5.0);
     float top = base + h;
     float d = max(abs(lx - x0 - w * 0.5) - w * 0.5, p.y - top);
-    // a stepped crown on some
     if (hash1(id + 11.0) > 0.6) d = min(d, max(abs(lx - x0 - w * 0.5) - w * 0.25, p.y - top - 0.9));
     float a = fillA(d);
     if (a <= 0.0) return c;
@@ -138,49 +255,34 @@ vec3 skyline(vec2 p, vec3 c, float k, float base, float hmin, float hmax, float 
     float gl;
     float lit = windowsLit(vec2(lx - x0, p.y - base), vec2(0.36, 0.5), vec2(0.1, 0.13), id * 7.3 + seed, prob, gl);
     b += vec3(1.0, 0.68, 0.36) * lit * 0.55 * uLamp;
-    return mix(c, haze(b, hz), a);
+    return mix(c, haze(b, hz), a * dens);
 }
 
-// a street lamp (layer k, every `sp` units): returns color over c, adds its light to gGlow
-vec3 lamps(vec2 p, vec3 c, float k, float sp, float off, vec3 lc, float hgt, float on) {
-    float u = p.x + uD * k - off;
-    float n = floor(u / sp + 0.5);
-    float lx = u - n * sp;
-    vec2 head = vec2(0.7, GY + hgt);
-    // the pole and its arm
-    float d = sdBox(vec2(lx, p.y - (GY + hgt * 0.5)), vec2(0.07, hgt * 0.5));
-    d = min(d, sdSeg(vec2(lx, p.y), vec2(0.0, GY + hgt - 0.1), vec2(0.35, GY + hgt + 0.32)) - 0.05);
-    d = min(d, sdSeg(vec2(lx, p.y), vec2(0.35, GY + hgt + 0.32), head + vec2(0.0, 0.2)) - 0.05);
-    d = min(d, sdBox(vec2(lx, p.y - (GY + 0.25)), vec2(0.13, 0.25)));
-    vec3 pole = vec3(0.03, 0.035, 0.05) + lc * 0.04 * on;
-    // the lamp's head
-    float dh = sdBox(vec2(lx - head.x, p.y - head.y - 0.12), vec2(0.28 - (p.y - head.y) * 0.25, 0.1));
-    c = lay(c, pole, fillA(min(d, dh)));
-    vec2 lp = vec2(lx - head.x, p.y - head.y);
+// a street lamp every `sp` (world, layer 1): `on` its light; exists where `zone` says
+vec3 lampAt(vec2 w, vec3 c, float lx, vec3 lc, float hgt, float on) {
+    vec2 head = vec2(0.7, GY0 + hgt);
+    float d = sdBox(vec2(lx, w.y - (GY0 + hgt * 0.5)), vec2(0.07, hgt * 0.5));
+    d = min(d, sdSeg(vec2(lx, w.y), vec2(0.0, GY0 + hgt - 0.1), vec2(0.35, GY0 + hgt + 0.32)) - 0.05);
+    d = min(d, sdSeg(vec2(lx, w.y), vec2(0.35, GY0 + hgt + 0.32), head + vec2(0.0, 0.2)) - 0.05);
+    d = min(d, sdBox(vec2(lx, w.y - (GY0 + 0.25)), vec2(0.13, 0.25)));
+    float dh = sdBox(vec2(lx - head.x, w.y - head.y - 0.12), vec2(0.28 - (w.y - head.y) * 0.25, 0.1));
+    c = lay(c, vec3(0.03, 0.035, 0.05) + lc * 0.04 * on, fillA(min(d, dh)));
+    vec2 lp = vec2(lx - head.x, w.y - head.y);
     float r = length(lp * vec2(1.0, 1.3));
-    // the glass, the halo, the cone of light down to the ground
     float glass = fillA(sdEll(lp + vec2(0.0, 0.02), vec2(0.22, 0.09)));
     float halo = exp(-r * r / 0.5) * 0.9 + exp(-r / 1.8) * 0.35;
     float coneX = abs(lp.x) / max(0.2, -lp.y * 0.55 + 0.25);
-    float cone = (1.0 - smoothstep(0.6, 1.0, coneX)) * step(lp.y, 0.0) * smoothstep(GY - 0.5, GY + 1.5, p.y) * 0.12 * exp(lp.y * 0.08);
+    float cone = (1.0 - smoothstep(0.6, 1.0, coneX)) * step(lp.y, 0.0) * smoothstep(GY0 - 0.5, GY0 + 1.5, w.y) * 0.12 * exp(lp.y * 0.08);
     float g = (halo + cone) * on;
     c += lc * g;
     c = mix(c, lc * 2.2 + 0.3, glass * on);
     gGlow += g; gGlowC = lc;
     return c;
 }
-// the lamps' light seen in a wet ground: mirrored under the line y0 and stretched, rippled
-float lampReflect(vec2 p, float k, float sp, float off, float hgt, float y0) {
-    float u = p.x + uD * k - off + 0.04 * sin(p.y * 9.0 + uTime * 2.3) + 0.03 * sin(p.y * 23.0 - uTime * 3.1);
-    float n = floor(u / sp + 0.5);
-    float lx = u - n * sp - 0.7;
-    float my = (y0 - p.y);
-    float streak = exp(-lx * lx / 0.08) * exp(-my / 3.2) * 0.55;
-    float pool = exp(-lx * lx / 3.0) * exp(-my * 1.2) * 0.25;
-    return streak + pool;
+float lampReflectAt(float lx, float my) {
+    return exp(-lx * lx / 0.08) * exp(-my / 3.2) * 0.55 + exp(-lx * lx / 3.0) * exp(-my * 1.2) * 0.25;
 }
 
-// rain: thin slanted streaks falling in three depths; lit by the lamps' light at the pixel
 vec3 rain(vec2 p, vec3 c, float amt) {
     if (amt <= 0.0) return c;
     float acc = 0.0;
@@ -189,6 +291,7 @@ vec3 rain(vec2 p, vec3 c, float amt) {
         float sc = 1.0 + fi * 0.55;
         vec2 q = p;
         q.x += q.y * 0.12 + uD * (0.6 + 0.3 * fi);
+        q.y += uCamY * (0.6 + 0.3 * fi);
         float cw = 0.33 * sc;
         float ci = floor(q.x / cw);
         float fx = q.x / cw - ci - 0.5;
@@ -206,9 +309,8 @@ vec3 rain(vec2 p, vec3 c, float amt) {
     return c + rc * acc * amt * (0.25 + 1.4 * sat(gGlow));
 }
 
-// ripples of rain in puddles (ground coords)
-float puddleRings(vec2 p, float k) {
-    vec2 q = vec2(p.x + uD * k, (p.y - GY) * 3.2);
+float puddleRings(vec2 w) {
+    vec2 q = vec2(w.x, (w.y - GY0) * 3.2);
     float acc = 0.0;
     for (int i = 0; i < 2; i++) {
         vec2 g = q / 1.1 + float(i) * 0.5;
@@ -217,18 +319,16 @@ float puddleRings(vec2 p, float k) {
         float t = fract(uTime * 0.7 + h);
         vec2 o = (hash2(gi) - 0.5) * 0.5;
         float r = length(gf - o) * 1.1;
-        float rr = t * 0.45;
-        acc += (1.0 - smoothstep(0.0, 0.03 + gPx, abs(r - rr))) * (1.0 - t) * 0.6;
+        acc += (1.0 - smoothstep(0.0, 0.03 + gPx, abs(r - t * 0.45))) * (1.0 - t) * 0.6;
     }
     return acc;
 }
 
-// out of focus lights drifting in front (a layer at parallax 1.5)
 vec3 bokeh(vec2 p, vec3 c, float amt, vec3 c1, vec3 c2) {
     if (amt <= 0.0) return c;
     for (int i = 0; i < 2; i++) {
         float fi = float(i);
-        vec2 q = vec2(p.x + uD * (1.4 + 0.3 * fi) + fi * 3.0, p.y);
+        vec2 q = vec2(p.x + uD * (1.4 + 0.3 * fi) + fi * 3.0, p.y + uCamY * 1.4);
         float cw = 6.5;
         float id = floor(q.x / cw);
         float h = hash1(id + fi * 31.0);
@@ -244,71 +344,65 @@ vec3 bokeh(vec2 p, vec3 c, float amt, vec3 c1, vec3 c2) {
     return c;
 }
 
-// ---------------------------------------------------------------- the facades across the street (layer k)
-// shop: how lit the shop windows are; neon: neon signs
-vec3 facades(vec2 p, vec3 c, float k, float base, float shop, float neon, float prob, float hz) {
+// ---- the facades across the street (layer k, p in layer coords): shops and neon where the shopping street is
+vec3 facades(vec2 p, vec3 c, float k, float base, float hz) {
     float u = p.x + uD * k + 21.0;
     float cw = 6.2;
     float id = floor(u / cw);
+    float xe = ((id + 0.5) * cw - 21.0) / k;
+    float city = zCity(xe);
+    if (hash1(id + 0.3) > city) return c;
+    float shop = zShop(xe), neon = shop;
     float lx = (u / cw - id) * cw;
     float h1 = hash1(id * 3.1);
-    float top = base + 6.0 + 7.0 * h1;
+    float top = base + (6.0 + 7.0 * h1) * (0.45 + 0.55 * city);
     float bw = cw - 0.35;
     vec3 bc = mix(vec3(0.03, 0.04, 0.07), vec3(0.06, 0.04, 0.045), hash1(id + 1.0));
     bc = mix(bc, vec3(0.035, 0.06, 0.065), step(0.7, hash1(id + 12.0)));
     bc *= 0.9 + 0.2 * hash1(id + 4.0);
-    // the gap between two buildings: a dark alley
+    bc = mix(bc, bc * 1.6 + uFog * 0.25, uDawn * 0.6);
     float inB = fillA(max(abs(lx - bw * 0.5) - bw * 0.5, p.y - top));
     float roof = fillA(max(abs(lx - bw * 0.5) - bw * 0.5 - 0.12, abs(p.y - top + 0.1) - 0.12));
     if (inB + roof <= 0.0) return c;
     vec3 b = bc * (0.85 + 0.35 * sat((p.y - base) / 10.0));
     b = mix(b, bc * 1.6, roof);
-    // windows on the floors above the shop
     float gl;
-    float wl = windowsLit(vec2(lx - 0.45, p.y - base - 3.2), vec2(1.32, 1.75), vec2(0.34, 0.5), id * 3.7, prob, gl);
-    gl *= step(base + 3.0, p.y) * step(p.y, top - 0.7) * step(0.3, lx) * step(lx, bw - 0.3);
-    wl *= step(base + 3.0, p.y) * step(p.y, top - 0.7) * step(0.3, lx) * step(lx, bw - 0.3);
+    float wl = windowsLit(vec2(lx - 0.45, p.y - base - 3.2), vec2(1.32, 1.75), vec2(0.34, 0.5), id * 3.7, 0.3 + 0.1 * shop, gl);
+    float inWin = step(base + 3.0, p.y) * step(p.y, top - 0.7) * step(0.3, lx) * step(lx, bw - 0.3);
+    gl *= inWin; wl *= inWin;
     vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.82, 0.55), hash1(id + 8.0));
     b = mix(b, mix(uFog * 0.5, b * 1.2, 0.5), gl * 0.5);
     b += warm * wl * 0.8 * uLamp;
-    // the shop on the ground floor: a window glowing, an awning
     float sx = lx - bw * 0.5;
     float shopW = fillA(sdBox(vec2(sx, p.y - base - 1.15), vec2(bw * 0.38, 1.05)));
-    float doorW = fillA(sdBox(vec2(sx + bw * 0.43, p.y - base - 1.0), vec2(0.0, 1.0)));
     vec3 shopC = mix(vec3(1.0, 0.75, 0.45), vec3(0.75, 0.9, 1.0), step(0.6, hash1(id + 21.0)));
+    float lit = (0.25 + 0.75 * shop) * step(0.3, hash1(id + 17.0));
     float slat = 0.8 + 0.2 * smoothstep(0.3, 0.5, abs(fract((p.y - base) * 4.0) - 0.5)) * lod(0.25);
-    float lit = shop * step(0.3, hash1(id + 17.0));
-    // closed: a steel shutter catching a little light; open: a warm window, shelves inside
     vec3 shutter = vec3(0.05, 0.055, 0.07) * slat + uFog * 0.15;
     float shelves = 0.7 + 0.3 * step(0.5, fract((p.y - base) * 1.6));
     vec3 window = shopC * shelves * (0.4 + 0.6 * uLamp) * 0.9;
-    b = mix(b, mix(shutter, window, lit), shopW);
-    gGlow += lit * shopW * 0.3;
-    // the awning, striped
+    b = mix(b, mix(shutter, window, lit * step(0.5, shop + 0.3)), shopW);
     float aw = fillA(sdBox(vec2(sx, p.y - base - 2.45), vec2(bw * 0.44, 0.22)));
     vec3 awC = mix(vec3(0.35, 0.08, 0.08), vec3(0.08, 0.2, 0.22), step(0.5, hash1(id + 31.0)));
     awC = mix(awC, awC * 1.8 + 0.03, step(0.5, fract(sx * 1.5)));
     b = mix(b, awC * (0.5 + 0.5 * uLamp), aw);
-    // neon: a vertical sign beside the shop, glowing outlines
-    if (neon > 0.0 && hash1(id + 41.0) < 0.7) {
+    if (neon > 0.05 && hash1(id + 41.0) < 0.7 * neon) {
         vec3 nc = hash1(id + 43.0) < 0.5 ? vec3(1.0, 0.25, 0.55) : (hash1(id + 44.0) < 0.5 ? vec3(0.25, 0.85, 1.0) : vec3(1.0, 0.65, 0.2));
         vec2 nq = vec2(lx - bw + 0.65, p.y - base - 5.0 - 2.5 * hash1(id + 47.0));
         float sign = sdBox(nq, vec2(0.38, 1.4));
         float tube = 1.0 - smoothstep(0.03, 0.03 + gPx * 1.5, abs(sign + 0.1));
-        // letters: little bars of light down the sign
         float letters = (1.0 - smoothstep(0.04, 0.04 + gPx * 1.5, abs(nq.x))) * step(0.35, fract(nq.y * 1.1)) * step(abs(nq.y), 1.2);
-        float flick = 0.85 + 0.15 * sin(uTime * 0.8 + id);
         b = mix(b, vec3(0.02), fillA(sign) * 0.8);
         float glow = exp(-max(sign, 0.0) * 1.6) * 0.35;
-        b += nc * (tube + letters + glow) * neon * flick * (0.6 + 0.4 * uLamp);
-        gGlow += glow * neon * 0.8; gGlowC = nc;
+        b += nc * (tube + letters + glow) * (0.85 + 0.15 * sin(uTime * 0.8 + id)) * (0.6 + 0.4 * uLamp) * uLamp;
     }
     return mix(c, haze(b, hz), sat(inB + roof));
 }
 
-// ---------------------------------------------------------------- passers-by under umbrellas (layer k)
-vec3 passers(vec2 p, vec3 c, float k, float amt, vec3 rim) {
-    if (amt <= 0.0) return c;
+// ---- passers-by under umbrellas (layer k), on the shopping street
+vec3 passers(vec2 p, vec3 c, float k, vec3 rim) {
+    float amt = 0.75 * zShop(p.x + uD) * uRain;
+    if (amt <= 0.01) return c;
     for (int g = 0; g < 2; g++) {
         float dir = g == 0 ? 1.0 : -1.0;
         float speed = 1.05 + 0.2 * float(g);
@@ -318,438 +412,128 @@ vec3 passers(vec2 p, vec3 c, float k, float amt, vec3 rim) {
         float h = hash1(id + float(g) * 17.0);
         if (h > amt) continue;
         float sx = (u / cw - id) * cw - cw * 0.5 - (hash1(id + 3.0) - 0.5) * 3.0;
-        vec2 q = vec2(sx * dir, p.y - GY - 0.1);
+        vec2 q = vec2(sx * dir, p.y - GY0 - 0.1);
         float s = 0.9 + 0.25 * hash1(id + 5.0);
         q /= s;
-        // walk cycle
         float ph = (uTime * speed * (1.0 - 0.6 * uSlow) * 2.0 + h * 10.0) * 1.1;
         float sw = sin(ph) * 0.45;
-        float d = 1e3;
-        // legs
-        d = min(d, sdSeg(q, vec2(0.0, 3.6), vec2(sw * 0.9, 0.15)) - 0.17);
-        d = min(d, sdSeg(q, vec2(0.0, 3.6), vec2(-sw * 0.9, 0.15)) - 0.17);
-        // coat
-        float coat = sdBox(q - vec2(0.0, 5.3), vec2(0.62 - (q.y - 5.3) * 0.12, 1.75)) - 0.12;
-        d = min(d, coat);
-        // head, arm up to the umbrella
+        float d = min(sdSeg(q, vec2(0.0, 3.6), vec2(sw * 0.9, 0.15)), sdSeg(q, vec2(0.0, 3.6), vec2(-sw * 0.9, 0.15))) - 0.17;
+        d = min(d, sdBox(q - vec2(0.0, 5.3), vec2(0.62 - (q.y - 5.3) * 0.12, 1.75)) - 0.12);
         d = min(d, length(q - vec2(0.15, 7.55)) - 0.42);
         d = min(d, sdSeg(q, vec2(0.25, 6.6), vec2(0.45, 7.3)) - 0.13);
-        // the umbrella: a dome and its handle
         vec2 uq = q - vec2(0.45, 8.6);
         float dome = max(length(uq * vec2(1.0, 1.55)) - 1.95, -uq.y);
-        float handle = sdBox(uq - vec2(0.0, -0.7), vec2(0.035, 0.7));
-        float um = min(dome, handle);
+        float um = min(dome, sdBox(uq - vec2(0.0, -0.7), vec2(0.035, 0.7)));
         vec3 uc = hash1(id + 9.0) < 0.35 ? vec3(0.45, 0.06, 0.08) : (hash1(id + 10.0) < 0.5 ? vec3(0.04, 0.05, 0.07) : vec3(0.1, 0.16, 0.22));
-        float body = fillA(d * s);
-        vec3 bc = vec3(0.022, 0.024, 0.032) + rim * 0.06 * smoothstep(-0.25, 0.0, d) ;
-        c = lay(c, bc, body);
-        float ua = fillA(um * s);
-        vec3 ucc = uc * (0.7 + 0.5 * smoothstep(-0.6, 0.6, uq.y)) + rim * 0.08 * exp(-abs(dome) * 6.0);
-        c = lay(c, ucc, ua);
+        c = lay(c, vec3(0.022, 0.024, 0.032) + rim * 0.06 * smoothstep(-0.25, 0.0, d), fillA(d * s));
+        c = lay(c, uc * (0.7 + 0.5 * smoothstep(-0.6, 0.6, uq.y)) + rim * 0.08 * exp(-abs(dome) * 6.0), fillA(um * s));
     }
     return c;
 }
 
-// =========================================================================== 0. a rainy street at night
-vec3 stStreet(vec2 p, vec3 c, float crossing) {
-    c = skyline(p, c, 0.12, GY + 2.0, 4.0, 15.0, 2.9, vec3(0.03, 0.04, 0.07), 0.1, 3.0, 0.35);
-    c = facades(p, c, 0.42, GY + 1.0, 0.25 + 0.75 * crossing, crossing, 0.3 + 0.1 * crossing, 0.12);
-    // the road: a dark band, wet, the facades' light in it
-    if (p.y < GY + 1.0) {
-        float my = GY + 1.0 - p.y;
-        vec3 road = mix(vec3(0.03, 0.035, 0.05), vec3(0.015, 0.018, 0.028), sat(my / 1.0));
-        road += uFog * 0.3 * exp(-my * 2.0);
-        float refl = lampReflect(p, 0.42, 6.2, 0.0, 3.0, GY + 1.0) * 0.4;
-        road += vec3(1.0, 0.7, 0.4) * refl * uLamp * 0.5;
-        // a zebra crossing on the shopping street
-        if (crossing > 0.0) {
-            float u = p.x + uD * 0.75;
-            float cx = mod(u, 34.0) - 17.0;
-            float z = step(abs(cx), 4.0) * step(0.5, fract(my * 4.5 / (0.6 + my)));
-            road = mix(road, vec3(0.25, 0.26, 0.3) * (0.6 + 0.4 * uLamp), z * crossing * 0.8 * fillA(abs(cx) - 4.0));
-        }
-        c = mix(c, road, fillA(p.y - (GY + 1.0)));
+// ---- the industrial district far away (layer k): chimneys and their smoke, gas holders, cranes
+vec3 industry(vec2 p, vec3 c, float k) {
+    float u = p.x + uD * k;
+    float cw = 9.0;
+    float id = floor(u / cw);
+    float dens = zInd(xFar((id + 0.5) * cw - uD * k));
+    if (dens <= 0.005) return c;
+    float lx = (u / cw - id) * cw - cw * 0.5;
+    vec3 sil = mix(mix(vec3(0.12, 0.09, 0.14), uFog, 0.45), uFog, 1.0 - dens);
+    float base = GY0 + 2.5;
+    float ch = 6.0 + 6.0 * hash1(id + 2.0);
+    float d = sdBox(vec2(lx - 1.5, p.y - base - ch * 0.5), vec2(0.28 - (p.y - base) * 0.01, ch * 0.5));
+    if (hash1(id + 5.0) > 0.5) {
+        vec2 g = vec2(lx + 2.0, p.y - base - 1.6);
+        float lat = min(abs(fract(g.x * 1.2 + g.y * 0.6) - 0.5), abs(fract(g.x * 1.2 - g.y * 0.6) - 0.5)) / 1.2;
+        d = min(d, max(sdBox(g, vec2(1.8, 1.6)), -(lat - 0.05)));
+        d = min(d, max(sdBox(g, vec2(1.9, 1.62)), -sdBox(g, vec2(1.75, 1.5))));
     }
-    // a traffic light by the crossing
-    if (crossing > 0.0) {
-        float u = p.x + uD - 6.0;
-        float lx = mod(u, 34.0) - 17.0 + 5.2;
-        float d = min(sdBox(vec2(lx, p.y - GY - 2.6), vec2(0.07, 2.6)), sdBox(vec2(lx, p.y - GY - 5.6), vec2(0.32, 0.65)) - 0.06);
-        c = lay(c, vec3(0.025, 0.028, 0.035), fillA(d) * crossing);
-        float cyc = fract(uTime / 14.0);
-        float red = step(cyc, 0.55), grn = 1.0 - red;
-        vec2 r1 = vec2(lx, p.y - GY - 5.9), r2 = vec2(lx, p.y - GY - 5.3);
-        vec3 rc = vec3(1.0, 0.18, 0.12), gc = vec3(0.2, 1.0, 0.6);
-        c += rc * red * (fillA(length(r1) - 0.17) * 1.5 + exp(-dot(r1, r1) / 0.4) * 0.6) * crossing;
-        c += gc * grn * (fillA(length(r2) - 0.17) * 1.5 + exp(-dot(r2, r2) / 0.4) * 0.6) * crossing;
-        gGlow += (red * exp(-dot(r1, r1) / 1.2) + grn * exp(-dot(r2, r2) / 1.2)) * 0.5 * crossing;
+    if (hash1(id + 8.0) > 0.55) {
+        vec2 g = vec2(lx + 3.4, p.y - base);
+        d = min(d, sdBox(g - vec2(0.0, 3.5), vec2(0.15, 3.5)));
+        d = min(d, sdSeg(g, vec2(-1.5, 7.0), vec2(4.0, 7.0)) - 0.09);
+        d = min(d, sdSeg(g, vec2(0.0, 7.6), vec2(3.6, 7.0)) - 0.03);
     }
-    // people under umbrellas hurrying by (the shopping street)
-    c = passers(p, c, 0.8, 0.75 * crossing, vec3(1.0, 0.6, 0.5));
-    // the street lamps
-    c = lamps(p, c, 1.0, 15.0, 4.0, vec3(1.0, 0.72, 0.38), 6.6, uLamp);
-    // the pavement: wet stone, the lamps and the sky in it, puddles rippling with rain
-    if (p.y < GY + 0.1) {
-        float my = GY - p.y;
-        vec3 pv = mix(vec3(0.05, 0.055, 0.07), vec3(0.025, 0.028, 0.038), sat(my / 3.5));
-        // the curb
-        float curb = fillA(abs(p.y - GY + 0.06) - 0.06);
-        float pud = smoothstep(0.55, 0.62, fbm(vec2((p.x + uD) * 0.25, my * 1.4)));
-        float refl = lampReflect(p, 1.0, 15.0, 4.0, 6.6, GY) * (0.35 + 0.65 * pud) * uLamp;
-        pv += vec3(1.0, 0.72, 0.4) * refl;
-        pv += mix(uSkyHor, uSkyTop, 0.3) * pud * 0.4;
-        pv += vec3(0.6, 0.7, 0.8) * puddleRings(p, 1.0) * smoothstep(0.62, 0.7, fbm(vec2((p.x + uD) * 0.25, my * 1.4))) * 0.12 * uRain;
-        pv = mix(pv, vec3(0.09, 0.09, 0.11), curb);
-        c = mix(c, pv, fillA(p.y - GY));
-    }
+    d = min(d, p.y - base - 1.0 - 0.6 * step(0.5, fract(u * 0.15)));
+    c = lay(c, sil, fillA(d) * dens);
+    vec2 sp = vec2(lx - 1.5, p.y - base - ch);
+    float sm = fbm(vec2(sp.x * 0.5 - uTime * 0.12 + id, sp.y * 0.35 - uTime * 0.08));
+    float plume = smoothstep(0.0, 0.5, sp.y) * exp(-sq((sp.x - sp.y * 0.6) / (0.4 + sp.y * 0.35))) * exp(-sp.y * 0.12);
+    c = mix(c, mix(uFog, vec3(1.0, 0.85, 0.8), 0.25), sat(plume * sm * 1.6) * 0.6);
+    vec2 rl = vec2(lx - 1.5, p.y - base - ch - 0.15);
+    c += vec3(1.0, 0.15, 0.1) * exp(-dot(rl, rl) / 0.03) * (0.5 + 0.5 * sin(uTime * 1.3 + id * 2.0)) * 0.8;
     return c;
 }
-
-// =========================================================================== 2. the subway station
-vec3 stStation(vec2 p, vec3 c) {
-    // the wall across the tracks: glazed tiles under cool light
-    float u = p.x + uD * 0.6;
-    float wallTop = GY + 10.5;
-    vec3 tile = vec3(0.13, 0.16, 0.15);
-    vec2 tq = vec2(u / 0.9, (p.y - GY) / 0.45);
-    vec2 tf = abs(fract(tq + vec2(0.5 * step(0.5, fract(tq.y * 0.5)), 0.0)) - 0.5);
-    float grout = (1.0 - smoothstep(0.43, 0.48, max(tf.x * 0.9 / 0.45 * 0.5, tf.y))) ;
-    float gl = lod(0.45);
-    vec3 w = tile * mix(0.93, mix(0.82, 1.0, grout), gl);
-    w *= 0.9 + 0.1 * vnoise(tq * vec2(1.0, 0.5));
-    // a band of color along the wall, the station's name in it
-    float band = fillA(abs(p.y - GY - 4.4) - 0.5);
-    w = mix(w, vec3(0.02, 0.07, 0.06), band);
-    float nx = mod(u, 26.0) - 13.0;
-    float nameB = fillA(sdBox(vec2(nx, p.y - GY - 6.4), vec2(3.0, 0.65)) - 0.05);
-    w = mix(w, vec3(0.03, 0.05, 0.12), nameB);
-    float letters = fillA(sdBox(vec2(fract(nx * 0.9) - 0.5, p.y - GY - 6.4), vec2(0.24, 0.3))) * step(abs(nx), 2.4) * nameB;
-    w = mix(w, vec3(0.85, 0.88, 0.95), letters * 0.9);
-    // posters, framed, their pictures soft
-    float px = mod(u + 9.0, 13.0) - 6.5;
-    vec2 pq = vec2(px, p.y - GY - 2.1);
-    float frame = fillA(sdBox(pq, vec2(1.25, 1.55)));
-    float pid = floor((u + 9.0) / 13.0);
-    vec3 pc1 = 0.5 + 0.5 * cos(TAU * (hash1(pid) + vec3(0.0, 0.33, 0.67)));
-    vec3 pic = mix(pc1 * 0.5, (0.5 + 0.5 * cos(TAU * (hash1(pid + 3.0) + vec3(0.1, 0.4, 0.7)))) * 0.7, smoothstep(-1.0, 1.0, pq.y + sin(pq.x * 2.0 + pid) * 0.5));
-    pic += 0.25 * fillA(length(pq - vec2(0.3 * sin(pid), 0.4)) - 0.55);
-    w = mix(w, vec3(0.05), frame);
-    w = mix(w, pic * 0.35, fillA(sdBox(pq, vec2(1.1, 1.4))));
-    // the ceiling, the strip lights
-    float ceil = smoothstep(wallTop - 0.05, wallTop + 0.05, p.y);
-    vec3 cl = mix(vec3(0.03, 0.035, 0.035), vec3(0.008, 0.01, 0.01), sat((p.y - wallTop) / 4.0));
-    w = mix(w, cl, ceil);
-    float lu = p.x + uD * 0.7;
-    float lx = mod(lu, 8.0) - 4.0;
-    float tube = fillA(sdBox(vec2(lx, p.y - wallTop - 0.5), vec2(2.2, 0.12)));
-    vec3 lc = vec3(0.85, 1.0, 0.92);
-    w = mix(w, lc * 1.8, tube);
-    float tg = exp(-sq(sdBox(vec2(lx, p.y - wallTop - 0.5), vec2(2.2, 0.0)) / 0.5)) * 0.25;
-    w += lc * tg * 0.5;
-    // the light falling down the wall from the strips
-    w *= 0.55 + 0.6 * exp(-sq(lx / 3.5)) * smoothstep(GY, wallTop, p.y);
-    c = w;
-    // the track pit
-    if (p.y < GY + 1.2) {
-        float pit = sat((GY + 1.2 - p.y) / 1.0);
-        vec3 tc = vec3(0.02, 0.022, 0.025);
-        float rail = fillA(abs(p.y - GY - 0.55) - 0.04) + fillA(abs(p.y - GY - 0.3) - 0.04);
-        tc += vec3(0.5, 0.55, 0.6) * rail * 0.25;
-        c = mix(c, tc, fillA(p.y - GY - 1.2));
-    }
-    // the train: it glides in, waits with its doors open, leaves
-    {
-        float tx = p.x + uD * 0.75 - uTrain;
-        float carL = 14.0;
-        float ci = floor(tx / carL);
-        float lx2 = tx - ci * carL;
-        float onTrain = step(0.0, tx) * step(tx, carL * 6.0);
-        if (onTrain > 0.0) {
-            float body = sdBox(vec2(lx2 - carL * 0.5, p.y - GY - 4.0), vec2(carL * 0.5 - 0.15, 3.6)) - 0.3;
-            vec3 tcol = vec3(0.12, 0.14, 0.16) * (0.8 + 0.4 * smoothstep(GY, GY + 7.0, p.y));
-            float stripe = fillA(abs(p.y - GY - 2.3) - 0.25);
-            tcol = mix(tcol, vec3(0.5, 0.08, 0.08), stripe);
-            float wx = mod(lx2 - 1.0, 3.0) - 1.5;
-            float win = fillA(sdBox(vec2(wx, p.y - GY - 5.0), vec2(0.9, 0.85)) - 0.15) * step(1.0, lx2) * step(lx2, carL - 1.0);
-            vec3 inside = vec3(1.0, 0.86, 0.62) * 0.9;
-            // people in the windows, a silhouette here and there
-            float pid = floor((lx2 - 1.0) / 3.0) + ci * 7.0;
-            float pers = fillA(length(vec2(wx - 0.3, p.y - GY - 5.25)) - 0.32) + fillA(sdBox(vec2(wx - 0.3, p.y - GY - 4.3), vec2(0.45, 0.6)));
-            inside = mix(inside, vec3(0.1, 0.08, 0.07), sat(pers) * step(hash1(pid), 0.4));
-            // the station's light along its roof, a line of shade between cars
-            tcol += vec3(0.5, 0.6, 0.55) * 0.12 * exp(-sq((p.y - GY - 7.6) / 0.35));
-            tcol *= 1.0 - 0.6 * exp(-sq(min(lx2, carL - lx2) / 0.12));
-            float doorX = mod(lx2 - 2.5, 4.5) - 2.25;
-            tcol = mix(tcol, tcol * 0.6, (1.0 - smoothstep(0.02, 0.05, abs(abs(doorX) - 0.7))) * step(p.y, GY + 6.2) * (1.0 - win));
-            tcol = mix(tcol, inside, win);
-            c = mix(c, tcol, fillA(body) * onTrain);
-            gGlow += win * 0.3;
-        }
-    }
-    // the platform: polished stone, the lights in it, the yellow line at its edge
-    if (p.y < GY + 0.1) {
-        float my = GY - p.y;
-        vec3 pl = mix(vec3(0.07, 0.075, 0.075), vec3(0.03, 0.032, 0.033), sat(my / 3.5));
-        float lx3 = mod(p.x + uD * 0.7, 8.0) - 4.0;
-        pl += lc * exp(-lx3 * lx3 / 2.0) * exp(-my * 0.6) * 0.1;
-        float edge = fillA(abs(my - 0.35) - 0.17);
-        pl = mix(pl, vec3(0.45, 0.33, 0.04), edge * 0.85);
-        float tiles = lod(1.5) * (1.0 - smoothstep(0.0, 0.03 + gPx, abs(fract((p.x + uD) / 1.5) - 0.5) * 1.5 - 0.72)) * step(0.6, my);
-        pl *= 1.0 - 0.15 * tiles;
-        c = mix(c, pl, fillA(p.y - GY));
-    }
-    return c;
-}
-
-// =========================================================================== 3. the night train (inside a car)
-vec3 outsideView(vec2 p, float dawn) {
-    // through the windows: the tunnel, lamps streaming by; then up on the viaduct, the city at dawn
-    float spd = 7.0 * (1.0 - 0.6 * uSlow);
-    float x = p.x + uD * 0.3 + uTime * spd;
-    vec3 tun = vec3(0.012, 0.012, 0.016);
-    float lx = mod(x, 9.0) - 4.5;
-    float lampT = exp(-sq(lx / 0.35)) * exp(-sq((p.y - GY - 6.2) / 0.25));
-    tun += vec3(1.0, 0.75, 0.45) * lampT * 1.2 + vec3(1.0, 0.75, 0.45) * exp(-abs(lx) / 1.5) * 0.04;
-    float cables = fillA(abs(p.y - GY - 4.8 - 0.06 * sin(x * 0.5)) - 0.02) * 0.3;
-    tun += vec3(0.05) * cables;
-    // dawn: the sky and a city skyline far away, moving slowly
-    vec3 sk = mix(vec3(0.5, 0.36, 0.42), vec3(0.12, 0.14, 0.3), sat((p.y - GY - 4.0) / 4.0));
-    float sx = p.x + uD * 0.3 + uTime * 0.9;
-    float id = floor(sx / 1.4);
-    float hh = GY + 4.2 + 2.2 * hash1(id) * hash1(id + 1.0);
-    float bld = fillA(p.y - hh);
-    float gl;
-    float wl = windowsLit(vec2(sx, p.y), vec2(0.28, 0.35), vec2(0.07, 0.09), id, 0.25, gl);
-    sk = mix(sk, vec3(0.08, 0.07, 0.11) + vec3(1.0, 0.7, 0.4) * wl * 0.5, bld);
-    return mix(tun, sk, dawn);
-}
-vec3 stTrain(vec2 p, vec3 c, float jl) {
-    float u = p.x + uD;
-    float carL = 21.0;
-    float ci = floor(u / carL);
-    float lx = u - ci * carL;
-    float dawn = smoothstep(LEN * 0.35, LEN * 0.8, jl);
-    // the car's wall, the ceiling's curve
-    float roof = GY + 9.8;
-    vec3 wallC = vec3(0.11, 0.105, 0.09);
-    vec3 col = wallC * (0.8 + 0.2 * smoothstep(GY, roof, p.y));
-    // windows, rounded, the outside through them
-    float wx = mod(lx - 2.0, 4.2) - 2.1;
-    float winD = sdBox(vec2(wx, p.y - GY - 5.4), vec2(1.45, 1.5)) - 0.3;
-    float inCar = step(1.4, lx) * step(lx, carL - 1.4);
-    float win = fillA(winD) * inCar;
-    vec3 outv = outsideView(p, dawn);
-    col = mix(col, vec3(0.08, 0.085, 0.08), fillA(winD - 0.12) * inCar);
-    col = mix(col, outv + vec3(0.03, 0.04, 0.05) * (1.0 - dawn), win);
-    // reflections in the glass: the car's lights, faint
-    col += vec3(0.08, 0.09, 0.08) * win * (1.0 - dawn * 0.7) * smoothstep(-1.2, 1.2, wx + p.y - GY - 5.4) * 0.6;
-    // an advert strip above the windows
-    float ad = fillA(sdBox(vec2(mod(lx, 4.2) - 2.1, p.y - GY - 8.4), vec2(1.6, 0.42)));
-    float aid = floor(lx / 4.2) + ci * 5.0;
-    vec3 adC = 0.45 + 0.4 * cos(TAU * (hash1(aid) + vec3(0.0, 0.33, 0.67)));
-    col = mix(col, adC * 0.3, ad * inCar);
-    // the ceiling and its light strip
-    float ceilA = smoothstep(roof - 0.05, roof + 0.05, p.y);
-    vec3 ceilC = mix(vec3(0.09, 0.085, 0.075), vec3(0.015, 0.015, 0.013), sat((p.y - roof) / 3.5));
-    vec2 lq = vec2(mod(lx, 5.25) - 2.625, p.y - roof - 0.7);
-    float strip = fillA(sdBox(lq, vec2(1.7, 0.13)) - 0.04);
-    ceilC = mix(ceilC, vec3(1.0, 0.9, 0.7) * 1.5, strip);
-    ceilC += vec3(1.0, 0.85, 0.6) * exp(-sq(sdBox(lq, vec2(1.7, 0.0)) / 0.7)) * 0.12;
-    col = mix(col, ceilC, ceilA);
-    // the bench along the wall
-    float bench = fillA(sdBox(vec2(mod(lx, carL) - carL * 0.5, p.y - GY - 1.6), vec2(carL * 0.5 - 1.6, 0.9)) - 0.25);
-    vec3 benchC = mix(vec3(0.05, 0.08, 0.2), vec3(0.09, 0.14, 0.3), smoothstep(GY + 1.0, GY + 2.5, p.y));
-    float seatLines = step(0.5, fract((lx) / 1.4)) * 0.08;
-    col = mix(col, benchC * (1.0 - seatLines), bench);
-    // the gangway between two cars: a door with a little window
-    float gx = lx < carL * 0.5 ? lx : lx - carL;
-    float gang = fillA(sdBox(vec2(gx, p.y - GY - 4.9), vec2(1.3, 4.9)));
-    vec3 gangC = vec3(0.07, 0.07, 0.065);
-    gangC = mix(gangC, outsideView(p + vec2(3.0, 0.0), dawn) * 0.6 + 0.02, fillA(sdBox(vec2(gx, p.y - GY - 5.8), vec2(0.45, 0.9)) - 0.1));
-    gangC = mix(gangC, vec3(0.08), fillA(abs(abs(gx) - 1.2) - 0.08));
-    col = mix(col, gangC, gang);
-    // poles, steel, and the hand straps swaying with the car
-    float sway = sin(uTime * 0.9) * 0.08 + sin(uTime * 2.3) * 0.03;
-    float px = mod(lx - 5.25, 10.5) - 5.25;
-    float pole = fillA(abs(px) - 0.07) * step(GY, p.y) * step(p.y, roof + 0.3);
-    vec3 poleC = mix(vec3(0.85, 0.75, 0.2), vec3(1.0, 0.95, 0.6), exp(-sq((px + 0.03) / 0.03)));
-    col = mix(col, poleC * 0.45, pole * step(0.3, abs(gx) - 1.4));
-    float railY = roof - 0.35;
-    col = mix(col, vec3(0.3, 0.3, 0.28), fillA(abs(p.y - railY) - 0.05) * inCar);
-    float sx2 = mod(lx, 1.6) - 0.8;
-    float sid = floor(lx / 1.6);
-    float ang = sway * (1.0 + 0.3 * sin(sid * 1.7)) + 0.03 * sin(uTime * 1.7 + sid);
-    vec2 sq0 = vec2(sx2, p.y - railY);
-    vec2 sqr = rot(-ang) * sq0;
-    float strap = min(sdBox(sqr - vec2(0.0, -0.45), vec2(0.04, 0.45)), abs(length(sqr - vec2(0.0, -1.05)) - 0.17) - 0.04);
-    col = mix(col, vec3(0.5, 0.48, 0.42), fillA(strap) * inCar);
-    // the floor
-    if (p.y < GY + 0.1) {
-        float my = GY - p.y;
-        vec3 fl = mix(vec3(0.09, 0.085, 0.075), vec3(0.04, 0.038, 0.034), sat(my / 3.0));
-        fl += vec3(0.1) * exp(-my * 1.5) * 0.4;
-        c = mix(col, fl, fillA(p.y - GY));
-        return c;
-    }
-    return col;
-}
-
-// =========================================================================== 4. the canal at dawn
-vec3 stCanal(vec2 p, vec3 c) {
-    // far: chimneys, gas holders, cranes, their smoke
-    {
-        float u = p.x + uD * 0.1;
-        float cw = 9.0;
-        float id = floor(u / cw);
-        float lx = (u / cw - id) * cw - cw * 0.5;
-        float hx = hash1(id + 2.0);
-        vec3 sil = mix(vec3(0.12, 0.09, 0.14), uFog, 0.45);
-        float base = GY + 2.5;
-        float d = 1e3;
-        // a chimney or two
-        float ch = 6.0 + 6.0 * hx;
-        d = min(d, sdBox(vec2(lx - 1.5, p.y - base - ch * 0.5), vec2(0.28 - (p.y - base) * 0.01, ch * 0.5)));
-        // a gas holder's lattice drum
-        if (hash1(id + 5.0) > 0.5) {
-            vec2 g = vec2(lx + 2.0, p.y - base - 1.6);
-            float drum = sdBox(g, vec2(1.8, 1.6));
-            float lat = min(abs(fract(g.x * 1.2 + g.y * 0.6) - 0.5), abs(fract(g.x * 1.2 - g.y * 0.6) - 0.5)) / 1.2;
-            d = min(d, max(drum, -(lat - 0.05)));
-            d = min(d, max(sdBox(g, vec2(1.9, 1.62)), -sdBox(g, vec2(1.75, 1.5))));
-        }
-        // a crane
-        if (hash1(id + 8.0) > 0.55) {
-            vec2 g = vec2(lx + 3.4, p.y - base);
-            d = min(d, sdBox(g - vec2(0.0, 3.5), vec2(0.15, 3.5)));
-            d = min(d, sdSeg(g, vec2(-1.5, 7.0), vec2(4.0, 7.0)) - 0.09);
-            d = min(d, sdSeg(g, vec2(0.0, 7.6), vec2(3.6, 7.0)) - 0.03);
-            d = min(d, sdSeg(g, vec2(2.8, 7.0), vec2(2.8, 5.2)) - 0.02);
-        }
-        // low sheds
-        d = min(d, p.y - base - 1.0 - 0.6 * step(0.5, fract(u * 0.15)));
-        c = lay(c, sil, fillA(d));
-        // the smoke, drifting
-        vec2 sp = vec2(lx - 1.5, p.y - base - ch);
-        float sm = fbm(vec2(sp.x * 0.5 - uTime * 0.12 + id, sp.y * 0.35 - uTime * 0.08));
-        float plume = smoothstep(0.0, 0.5, sp.y) * exp(-sq((sp.x - sp.y * 0.6) / (0.4 + sp.y * 0.35))) * exp(-sp.y * 0.12);
-        c = mix(c, mix(uFog, vec3(1.0, 0.85, 0.8), 0.25), sat(plume * sm * 1.6) * 0.6);
-        // the red lights on top of the chimneys, slow
-        vec2 rl = vec2(lx - 1.5, p.y - base - ch - 0.15);
-        float blink = 0.5 + 0.5 * sin(uTime * 1.3 + id * 2.0);
-        c += vec3(1.0, 0.15, 0.1) * exp(-dot(rl, rl) / 0.03) * blink * 0.8;
-    }
-    // mid: warehouses with saw-tooth roofs, sodium lamps, a freight train on the embankment
-    {
-        float u = p.x + uD * 0.4 + 7.0;
-        float cw = 11.0;
-        float id = floor(u / cw);
+// warehouses with saw-tooth roofs (layer k), freight wagons
+vec3 warehouses(vec2 p, vec3 c, float k) {
+    float u = p.x + uD * k + 7.0;
+    float cw = 11.0;
+    float id = floor(u / cw);
+    float dens = zInd(((id + 0.5) * cw - 7.0) / k);
+    if (hash1(id + 0.4) < dens) {
         float lx = (u / cw - id) * cw;
-        float base = GY + 1.3;
+        float base = GY0 + 1.3;
         float hgt = 2.6 + 1.4 * hash1(id);
         float saw = fract(lx / 1.6);
         float roofY = base + hgt + 0.9 * saw;
         float d = max(p.y - roofY, abs(lx - cw * 0.45) - cw * 0.42);
         vec3 wh = mix(vec3(0.15, 0.1, 0.12), vec3(0.24, 0.15, 0.14), hash1(id + 3.0));
         wh = haze(wh, 0.25);
-        // the saw-tooth glass catching the dawn
         wh = mix(wh, mix(uSkyHor, vec3(1.0, 0.7, 0.55), 0.3), smoothstep(0.75, 0.95, saw) * step(roofY - 0.9 * saw - 0.01, p.y) * 0.6);
         float gl;
         float wl = windowsLit(vec2(lx, p.y - base - 0.6), vec2(1.1, 1.2), vec2(0.28, 0.22), id * 9.0, 0.35, gl);
         wl *= step(p.y, base + hgt - 0.2) * step(base + 0.2, p.y);
         wh += vec3(1.0, 0.6, 0.25) * wl * 0.7 * uLamp;
         c = lay(c, wh, fillA(d));
-        // freight wagons
-        float wu = p.x + uD * 0.55;
-        float wid = floor(wu / 5.0);
-        float wx = mod(wu, 5.0) - 2.5;
-        float wag = sdBox(vec2(wx, p.y - GY - 1.55), vec2(2.25, 0.75));
-        vec3 wc = mix(vec3(0.3, 0.12, 0.08), vec3(0.12, 0.2, 0.25), step(0.5, hash1(wid)));
-        wc *= 0.7 + 0.3 * step(0.5, fract(wx * 1.6 + 0.25));
-        c = lay(c, haze(wc, 0.15), fillA(wag) * step(hash1(wid + 40.0), 0.75));
-        c = lay(c, vec3(0.05, 0.04, 0.05), fillA(abs(p.y - GY - 0.75) - 0.08));
-    }
-    // sodium lamps along the towpath
-    c = lamps(p, c, 1.0, 13.0, 2.0, vec3(1.0, 0.55, 0.2), 5.6, uLamp);
-    // the towpath, then the canal in front: the dawn in the water, the lamps, ripples
-    if (p.y < GY + 0.1) {
-        float my = GY - p.y;
-        vec3 path = mix(vec3(0.16, 0.12, 0.12), vec3(0.09, 0.07, 0.08), sat(my / 1.2));
-        float cob = lod(0.6) * (1.0 - smoothstep(0.32, 0.5, length(fract(vec2((p.x + uD) / 0.6, my / 0.35)) - 0.5))) * 0.15;
-        path *= 1.0 - cob;
-        // bollards along the edge
-        float bx = mod(p.x + uD, 6.5) - 3.25;
-        float boll = fillA(sdBox(vec2(bx, p.y - GY + 1.05), vec2(0.22, 0.3)) - 0.08);
-        float edge = fillA(abs(my - 1.35) - 0.08);
-        path = mix(path, vec3(0.3, 0.27, 0.27), edge);
-        if (my > 1.4) {
-            float wy = my - 1.4;
-            vec2 rp = vec2(p.x + 0.12 * sin(p.y * 6.0 + uTime * 1.3) * sat(wy), GY + 4.0 + wy * 2.2);
-            vec3 water = mix(uSkyHor, uSkyTop, sat(wy / 3.0)) * 0.7;
-            water = mix(water, vec3(0.04, 0.04, 0.07), sat(wy / 3.0) * 0.6);
-            float refl = lampReflect(vec2(p.x, p.y), 1.0, 13.0, 2.0, 5.6, GY - 1.4) * uLamp;
-            water += vec3(1.0, 0.55, 0.2) * refl * 0.8;
-            float rip = vnoise(vec2((p.x + uD) * 0.8, wy * 6.0 - uTime * 0.6));
-            water *= 0.85 + 0.3 * rip;
-            // mist on the water
-            water = mix(water, uFog * 1.1, exp(-wy * 1.5) * 0.3);
-            path = water;
-        }
-        path = mix(path, vec3(0.06, 0.05, 0.06), boll * step(my, 1.4));
-        c = mix(c, path, fillA(p.y - GY));
     }
     return c;
 }
 
-// =========================================================================== 5. the fields at the city's edge
-float grassTufts(vec2 p, float k, float y0, float h, float dens, float seed) {
-    float u = p.x + uD * k;
-    float cw = 0.22;
-    float id = floor(u / cw);
-    float lx = (u / cw - id) * cw - cw * 0.5;
-    float hh = h * (0.4 + 0.6 * hash1(id + seed)) * step(hash1(id * 1.7 + seed), dens);
-    float t = sat((p.y - y0) / max(hh, 1e-3));
-    float lean = (hash1(id + seed + 3.0) - 0.5) * 0.25 + 0.06 * sin(uTime * 1.2 + u * 0.3) * t;
-    float w = 0.05 * (1.0 - t);
-    float d = abs(lx - lean * t * hh) - w;
-    d = max(d, p.y - y0 - hh);
-    d = max(d, y0 - p.y);
-    return fillA(d);
-}
-vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens, vec3 col, float hz, float seed);
-vec3 stFields(vec2 p, vec3 c, float jl) {
-    // far blue mountains, two ridges
+// ---- the fields: far ridges, hills, pylons
+vec3 ridges(vec2 p, vec3 c) {
     for (int i = 0; i < 2; i++) {
         float fi = float(i);
-        float u = p.x + uD * (0.05 + 0.07 * fi) + fi * 50.0;
-        float hgt = GY + 4.5 - fi * 1.6 + 3.0 * fbm(vec2(u * 0.05, fi)) + 1.0 * vnoise(vec2(u * 0.2, fi));
+        float k = 0.05 + 0.07 * fi;
+        vec2 q = layerP(p, k);
+        float u = q.x + uD * k + fi * 50.0;
+        float dens = zNature(xFar(p.x));
+        float hgt = GY0 + 1.5 - fi * 1.0 + dens * (3.0 + 3.0 * fbm(vec2(u * 0.05, fi)) + 1.0 * vnoise(vec2(u * 0.2, fi)));
         vec3 mc = mix(uFog * 0.95, mix(vec3(0.35, 0.45, 0.55), vec3(0.3, 0.42, 0.38), fi), 0.35 + 0.25 * fi);
-        c = lay(c, mc, fillA(p.y - hgt));
+        c = lay(c, mc, fillA(q.y - hgt) * smoothstep(0.0, 0.2, dens));
     }
-    // rolling hills, patchwork fields, a few trees
-    {
-        float u = p.x + uD * 0.25;
-        float hgt = GY + 2.2 + 1.2 * sin(u * 0.11) + 0.6 * sin(u * 0.27 + 1.0);
-        float a = fillA(p.y - hgt);
-        float pid = floor(u / 4.0 + floor((hgt - p.y) / 0.6) * 0.5);
-        vec3 fc = mix(vec3(0.42, 0.55, 0.25), vec3(0.62, 0.6, 0.3), hash1(pid));
-        fc = mix(fc, vec3(0.3, 0.48, 0.28), step(0.7, hash1(pid + 2.0)));
-        fc *= 0.9 + 0.1 * smoothstep(hgt - 1.0, hgt, p.y);
-        fc = haze(fc, 0.3);
-        c = lay(c, fc, a);
-        float tid = floor(u / 3.0);
-        float tx = mod(u, 3.0) - 1.5 + (hash1(tid) - 0.5);
-        float th = GY + 2.2 + 1.2 * sin((tid * 3.0 + 1.5) * 0.11) + 0.6 * sin((tid * 3.0 + 1.5) * 0.27 + 1.0);
-        float tree = fillA(length(vec2(tx, (p.y - th - 0.45) * 1.2)) - 0.42) * step(hash1(tid + 7.0), 0.4);
-        c = lay(c, haze(vec3(0.16, 0.3, 0.16), 0.3), tree);
-    }
-    // power lines on their pylons, sagging wires
-    {
-        float u = p.x + uD * 0.45;
-        float sp = 18.0;
-        float n = floor(u / sp + 0.5);
-        float lx = u - n * sp;
-        float base = GY + 1.0;
-        vec2 q = vec2(lx, p.y - base);
+    return c;
+}
+vec3 hills(vec2 p, vec3 c) {
+    vec2 q = layerP(p, 0.25);
+    float u = q.x + uD * 0.25;
+    float dens = zNature(xFar(p.x));
+    if (dens <= 0.01) return c;
+    float hgt = GY0 + 0.6 + dens * (1.6 + 1.2 * sin(u * 0.11) + 0.6 * sin(u * 0.27 + 1.0));
+    float pid = floor(u / 4.0 + floor((hgt - q.y) / 0.6) * 0.5);
+    vec3 fc = mix(vec3(0.42, 0.55, 0.25), vec3(0.62, 0.6, 0.3), hash1(pid));
+    fc = mix(fc, vec3(0.3, 0.48, 0.28), step(0.7, hash1(pid + 2.0)));
+    fc *= 0.9 + 0.1 * smoothstep(hgt - 1.0, hgt, q.y);
+    c = lay(c, haze(fc * (0.5 + 0.5 * uDawn), 0.3), fillA(q.y - hgt));
+    float tid = floor(u / 3.0);
+    float tx = mod(u, 3.0) - 1.5 + (hash1(tid) - 0.5);
+    float tc = tid * 3.0 + 1.5;
+    float th = GY0 + 0.6 + dens * (1.6 + 1.2 * sin(tc * 0.11) + 0.6 * sin(tc * 0.27 + 1.0));
+    float tree = fillA(length(vec2(tx, (q.y - th - 0.45) * 1.2)) - 0.42) * step(hash1(tid + 7.0), 0.4 * dens);
+    return lay(c, haze(vec3(0.16, 0.3, 0.16) * (0.5 + 0.5 * uDawn), 0.3), tree);
+}
+vec3 pylons(vec2 p, vec3 c) {
+    vec2 q0 = layerP(p, 0.45);
+    float u = q0.x + uD * 0.45;
+    float sp = 18.0;
+    float n = floor(u / sp + 0.5);
+    float dens = max(zField(n * sp / 0.45), zInd(n * sp / 0.45) * 0.5);
+    float dens2 = max(zField((n + 1.0) * sp / 0.45), zInd((n + 1.0) * sp / 0.45) * 0.5);
+    float lx = u - n * sp;
+    float base = GY0 + 1.0;
+    vec2 q = vec2(lx, q0.y - base);
+    vec3 pc = haze(vec3(0.3, 0.33, 0.36) * (0.5 + 0.5 * uDawn), 0.2);
+    if (dens > 0.5) {
         float tw = 0.9 - q.y * 0.07;
         float d = max(abs(abs(q.x) - tw * 0.5 * (1.0 - q.y / 12.0)) - 0.05, -q.y);
         d = max(d, q.y - 8.5);
@@ -757,58 +541,33 @@ vec3 stFields(vec2 p, vec3 c, float jl) {
         d = min(d, sdBox(q - vec2(0.0, 6.3), vec2(1.2, 0.06)));
         float lat = min(abs(fract(q.y * 0.9 + q.x * 0.6) - 0.5), abs(fract(q.y * 0.9 - q.x * 0.6) - 0.5)) / 0.9;
         d = min(d, max(lat - 0.03, abs(q.x) - tw * 0.5 * (1.0 - q.y / 12.0)));
-        d = max(d, -q.y);
-        d = max(d, q.y - 8.6);
-        vec3 pc = haze(vec3(0.3, 0.33, 0.36), 0.2);
+        d = max(max(d, -q.y), q.y - 8.6);
         c = lay(c, pc, fillA(d) * 0.9);
-        float fx = (lx + sp * 0.5) / sp;
+    }
+    // the wires between this pylon and the next
+    float fx = (lx + sp * 0.5) / sp;
+    float nn = lx < 0.0 ? n - 1.0 : n;
+    float da = max(zField(nn * sp / 0.45), zInd(nn * sp / 0.45) * 0.5), db = max(zField((nn + 1.0) * sp / 0.45), zInd((nn + 1.0) * sp / 0.45) * 0.5);
+    if (da > 0.5 && db > 0.5) {
+        float fx2 = fract(u / sp);
         for (int w = 0; w < 2; w++) {
-            float wy = base + 7.35 - float(w) * 1.1 - 1.4 * 4.0 * fx * (1.0 - fx);
-            c = lay(c, pc * 0.8, (1.0 - smoothstep(0.012, 0.012 + gPx, abs(p.y - wy))) * 0.7);
+            float wy = base + 7.35 - float(w) * 1.1 - 1.4 * 4.0 * fx2 * (1.0 - fx2);
+            c = lay(c, pc * 0.8, (1.0 - smoothstep(0.012, 0.012 + gPx, abs(q0.y - wy))) * 0.7);
         }
-    }
-    // the first bamboo, more of it toward the forest
-    c = bambooClump(p, c, 0.6, GY + 0.6, 0.8, smoothstep(LEN * 0.35, LEN, jl) * 0.28, vec3(0.32, 0.5, 0.25), 0.2, 3.0);
-    // the meadow along the path, wild flowers, grass
-    {
-        float u = p.x + uD * 0.85;
-        float top = GY + 1.0 + 0.25 * sin(u * 0.4);
-        vec3 mc = mix(vec3(0.3, 0.5, 0.18), vec3(0.45, 0.62, 0.22), vnoise(vec2(u * 0.3, p.y)));
-        c = lay(c, mc, fillA(p.y - top));
-        float fl = 0.0;
-        vec2 fq = vec2(u / 0.55, (p.y - GY) / 0.5);
-        vec2 fi = floor(fq), ff = fract(fq) - 0.5;
-        vec2 fo = (hash2(fi) - 0.5) * 0.6;
-        float on = step(0.72, hash(fi + 2.0)) * step(p.y, top - 0.1);
-        float fd = length(ff - fo) * 0.5;
-        vec3 flc = hash(fi + 5.0) < 0.5 ? vec3(1.0, 0.95, 0.85) : (hash(fi + 6.0) < 0.5 ? vec3(1.0, 0.8, 0.25) : vec3(1.0, 0.55, 0.7));
-        c = lay(c, flc, fillS(fd - 0.06, gPx) * on);
-        c = lay(c, vec3(0.35, 0.55, 0.2), grassTufts(p, 0.85, top - 0.15, 0.7, 0.55, 1.0));
-    }
-    // the dirt path
-    if (p.y < GY + 0.1) {
-        float my = GY - p.y;
-        vec3 dirt = mix(vec3(0.6, 0.48, 0.32), vec3(0.42, 0.33, 0.22), sat(my / 2.5));
-        dirt *= 0.92 + 0.12 * vnoise(vec2((p.x + uD) * 1.5, my * 4.0));
-        float pebble = lod(0.5) * step(0.85, hash(floor(vec2((p.x + uD) / 0.5, my / 0.3)))) * 0.1;
-        dirt *= 1.0 - pebble;
-        float edge = smoothstep(2.4, 2.8, my + 0.2 * sin((p.x + uD) * 0.9));
-        dirt = mix(dirt, vec3(0.28, 0.45, 0.16), edge);
-        c = mix(c, dirt, fillA(p.y - GY));
-        c = lay(c, vec3(0.3, 0.5, 0.18), grassTufts(p, 1.0, GY - 2.9, 0.9, 0.7, 7.0));
     }
     return c;
 }
 
-// =========================================================================== 6. the bamboo forest
-// one layer of bamboo culms: segmented by nodes, swaying, leaves in sprays at their tops and sides
-vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens, vec3 col, float hz, float seed) {
-    if (dens <= 0.0) return c;
+// ---- bamboo (layer k, density by place)
+vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens0, vec3 col, float hz, float seed) {
     float u = p.x + uD * k + seed * 17.0;
     float cw = 1.25 * scale;
     float id0 = floor(u / cw);
     for (int o = -1; o <= 1; o++) {
         float id = id0 + float(o);
+        float fade = 1.0;
+        float dens = dens0 * zBamboo(((id + 0.5) * cw - seed * 17.0) / k);
+        if (k < 0.3) { fade = zBamboo(xFar((id + 0.5) * cw - seed * 17.0 - uD * k)); dens = dens0 * step(0.005, fade); }
         float h = hash1(id + seed);
         if (h > dens) continue;
         float x0 = (id + 0.5 + (hash1(id + seed + 1.0) - 0.5) * 0.6) * cw;
@@ -817,21 +576,16 @@ vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens, v
         float yy = p.y - base;
         float sway = (0.15 * sin(uTime * 0.5 + id * 1.3) + 0.06 * sin(uTime * 1.1 + id)) * scale * sq(max(yy, 0.0) / 20.0);
         float x = u - x0 - lean * yy - sway;
-        float d = abs(x) - w;
-        d = max(d, base - p.y);
+        float d = max(abs(x) - w, base - p.y);
         float a = fillA(d);
         if (a > 0.0) {
-            // nodes, a light down one side
             float seg = 1.6 * scale;
             float ny = fract((yy + hash1(id) * seg) / seg);
-            float node = (1.0 - smoothstep(0.0, 0.05 + gPx / seg, abs(ny - 0.5) * seg / scale * 0.5 - 0.0)) ;
-            node = exp(-sq((ny - 0.5) * seg / (0.06 * scale + gPx)));
-            vec3 cc = col * (0.75 + 0.45 * smoothstep(-w, w, -x)) ;
+            float node = exp(-sq((ny - 0.5) * seg / (0.06 * scale + gPx)));
+            vec3 cc = col * (0.75 + 0.45 * smoothstep(-w, w, -x));
             cc = mix(cc, col * 0.55, node * 0.7);
-            cc = mix(cc, col * 1.35 + 0.03, node * smoothstep(0.5, 1.0, -x / w) * 0.4);
-            c = mix(c, haze(cc, hz), a);
+            c = mix(c, haze(cc, hz), a * fade);
         }
-        // leaves: slender blades in sprays off the culm, high up
         for (int l = 0; l < 3; l++) {
             float fl = float(l);
             float ly = (6.0 + 5.0 * hash1(id + fl * 7.0 + seed)) * scale;
@@ -841,124 +595,381 @@ vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens, v
             q.x *= side;
             for (int b = 0; b < 3; b++) {
                 float fb = float(b);
-                float ang = -0.35 - 0.35 * fb + 0.05 * sin(uTime * 0.9 + id + fb);
-                vec2 r = rot(ang) * q;
+                vec2 r = rot(-0.35 - 0.35 * fb + 0.05 * sin(uTime * 0.9 + id + fb)) * q;
                 float L = (1.3 + 0.4 * fb) * scale;
                 float t = sat(r.x / L);
                 float lw = 0.17 * scale * sin(t * PI) * (1.0 - t * 0.3);
                 float ld = max(abs(r.y + 0.1 * scale * t * t) - lw, max(-r.x, r.x - L));
-                vec3 lc = col * (0.85 + 0.35 * fb / 2.0);
-                c = mix(c, haze(lc, hz), fillA(ld));
+                c = mix(c, haze(col * (0.85 + 0.35 * fb / 2.0), hz), fillA(ld) * fade);
             }
         }
     }
     return c;
 }
-vec3 stBamboo(vec2 p, vec3 c, float jl, float home) {
-    // light from the upper left through the canopy, layers of culms receding into the green haze
-    vec3 far = vec3(0.3, 0.42, 0.2);
-    c = bambooClump(p, c, 0.12, GY + 2.0, 0.55, 0.8, mix(far, uFog, 0.5), 0.55, 1.0);
-    c = bambooClump(p, c, 0.28, GY + 1.5, 0.75, 0.75 * (1.0 - 0.5 * home), vec3(0.16, 0.27, 0.08), 0.3, 2.0);
-    c = bambooClump(p, c, 0.5, GY + 1.0, 1.0, 0.55 * (1.0 - 0.6 * home), vec3(0.08, 0.16, 0.04), 0.12, 5.0);
-    // shafts of light
-    float sh = 0.0;
-    vec2 sq0 = rot(-0.45) * (p - vec2(-30.0, 14.0));
-    float sx = sq0.x + uD * 0.15;
-    sh = sq(sat(vnoise(vec2(sx * 0.35, uTime * 0.05)) * 1.4 - 0.45)) * smoothstep(GY - 2.0, GY + 6.0, p.y);
-    c += uSunCol * sh * 0.55;
-    c = bambooClump(p, c, 0.8, GY + 0.5, 1.35, 0.4 * (1.0 - 0.7 * home), vec3(0.035, 0.07, 0.02), 0.03, 9.0);
-    // the mossy ground, fallen leaves, the path
-    if (p.y < GY + 0.5) {
-        float my = GY - p.y;
-        vec3 g = mix(vec3(0.14, 0.2, 0.05), vec3(0.05, 0.08, 0.02), sat(my / 3.0));
-        g *= 0.85 + 0.25 * vnoise(vec2((p.x + uD) * 1.2, my * 3.0));
-        float path = 1.0 - smoothstep(0.8, 1.4, abs(my - 1.0 + 0.2 * sin((p.x + uD) * 0.4)));
-        g = mix(g, vec3(0.3, 0.22, 0.1) * (0.9 + 0.1 * vnoise(vec2((p.x + uD) * 2.0, my * 5.0))), path * 0.75);
-        vec2 lq = vec2((p.x + uD) / 0.45, my / 0.25);
-        vec2 li = floor(lq), lf = fract(lq) - 0.5;
-        float leaf = fillS(sdEll(rot(hash(li) * 6.0) * lf, vec2(0.38, 0.12)), 0.08) * step(0.75, hash(li + 1.0)) * lod(0.25);
-        g = mix(g, mix(vec3(0.75, 0.6, 0.25), vec3(0.55, 0.45, 0.2), hash(li + 2.0)), leaf * 0.7);
-        g += uSunCol * sh * 0.25;
-        c = mix(c, g, fillA(p.y - GY - 0.25 * sin((p.x + uD) * 0.3) * 0.0));
-        c = lay(c, vec3(0.28, 0.42, 0.16), grassTufts(p, 1.0, GY - 0.05, 0.45, 0.35 + 0.4 * home, 4.0));
-    }
-    return c;
+
+float grassTufts(vec2 w, float y0, float h, float dens, float seed) {
+    float cw = 0.22;
+    float id = floor(w.x / cw);
+    float lx = (w.x / cw - id) * cw - cw * 0.5;
+    float hh = h * (0.4 + 0.6 * hash1(id + seed)) * step(hash1(id * 1.7 + seed), dens);
+    float t = sat((w.y - y0) / max(hh, 1e-3));
+    float lean = (hash1(id + seed + 3.0) - 0.5) * 0.25 + 0.06 * sin(uTime * 1.2 + w.x * 0.3) * t;
+    float d = abs(lx - lean * t * hh) - 0.05 * (1.0 - t);
+    d = max(max(d, w.y - y0 - hh), y0 - w.y);
+    return fillA(d);
 }
 
-// =========================================================================== 7. home: a glade at sunset
-vec3 stHome(vec2 p, vec3 c, float jl) {
-    // far hills in the golden haze
-    for (int i = 0; i < 2; i++) {
-        float fi = float(i);
-        float u = p.x + uD * (0.06 + 0.08 * fi) + fi * 30.0;
-        float hgt = GY + 3.0 - fi * 1.2 + 2.5 * fbm(vec2(u * 0.06, fi + 5.0));
-        vec3 mc = mix(uFog, vec3(0.45, 0.3, 0.32), 0.25 + 0.2 * fi);
-        c = lay(c, mc, fillA(p.y - hgt));
+// =========================================================================== the air: everything above the ground
+vec3 airScene(vec2 p, vec2 w) {
+    vec3 c = sky(p);
+    c = ridges(p, c);
+    c = skyline(layerP(p, 0.12), c, 0.12, GY0 + 2.0, 4.0, 15.0, 2.9, mix(vec3(0.03, 0.04, 0.07), uFog * 0.7, uDawn * 0.6), 0.1, 3.0, 0.35);
+    c = industry(layerP(p, 0.1), c, 0.1);
+    c = hills(p, c);
+    c = bambooClump(layerP(p, 0.12), c, 0.12, GY0 + 2.0, 0.55, 0.8, mix(vec3(0.3, 0.42, 0.2), uFog, 0.5), 0.55, 1.0);
+    c = facades(layerP(p, 0.42), c, 0.42, GY0 + 1.0, 0.12);
+    c = warehouses(layerP(p, 0.4), c, 0.4);
+    c = pylons(p, c);
+    c = bambooClump(layerP(p, 0.28), c, 0.28, GY0 + 1.5, 0.75, 0.75 * (1.0 - 0.5 * zGlade(w.x)), vec3(0.16, 0.27, 0.08), 0.3, 2.0);
+    // shafts of light in the forest
+    float shz = zBamboo(w.x) + 0.5 * zGlade(w.x);
+    if (shz > 0.01) {
+        vec2 sq0 = rot(-0.45) * (p - vec2(-30.0, 14.0));
+        float sh = sq(sat(vnoise(vec2((sq0.x + uD * 0.15) * 0.35, uTime * 0.05)) * 1.4 - 0.45));
+        c += uSunCol * sh * 0.5 * shz * smoothstep(-12.0, 4.0, p.y);
     }
-    // the bamboo grove framing the glade, thinner
-    c = stBamboo(p, c, jl, 1.0);
-    // a little stream, the sky in it
-    // tall grass and flowers in the warm light
+    c = passers(layerP(p, 0.8), c, 0.8, vec3(1.0, 0.6, 0.5));
+    c = bambooClump(layerP(p, 0.5), c, 0.5, GY0 + 1.0, 1.0, 0.55, vec3(0.08, 0.16, 0.04), 0.12, 5.0);
+    // the meadow behind the path: grass and flowers (fields, forest, glade)
     {
-        float u = p.x + uD * 0.9;
-        float top = GY + 0.6 + 0.2 * sin(u * 0.5);
-        c = lay(c, vec3(0.42, 0.42, 0.16), grassTufts(p, 0.9, GY + 0.2, 1.4, 0.6, 12.0));
-        vec2 fq = vec2(u / 0.7, (p.y - GY) / 0.6);
-        vec2 fi = floor(fq), ff = fract(fq) - 0.5;
-        vec2 fo = (hash2(fi) - 0.5) * 0.6;
-        float on = step(0.7, hash(fi + 2.0)) * step(p.y, top) * step(GY - 0.5, p.y);
-        vec3 flc = hash(fi + 5.0) < 0.5 ? vec3(1.0, 0.85, 0.7) : vec3(1.0, 0.6, 0.65);
-        c = lay(c, flc, fillS(length(ff - fo) * 0.6 - 0.06, gPx) * on);
+        float nat = smoothstep(330.0, 350.0, w.x);
+        if (nat > 0.01 && w.y < GY0 + 2.0) {
+            float top = GY0 + 0.5 + 0.25 * sin(w.x * 0.4);
+            vec3 mc = mix(vec3(0.3, 0.5, 0.18), vec3(0.45, 0.62, 0.22), vnoise(vec2(w.x * 0.3, w.y)));
+            mc = mix(mc, vec3(0.3, 0.3, 0.12), zBamboo(w.x) * 0.6);
+            mc = mix(mc, vec3(0.5, 0.42, 0.2), zGlade(w.x) * 0.5);
+            mc *= (0.55 + 0.45 * uDawn);
+            c = lay(c, mc, fillA(w.y - top) * nat);
+            vec2 fq = vec2(w.x / 0.55, (w.y - GY0) / 0.5);
+            vec2 fi = floor(fq), ff = fract(fq) - 0.5;
+            vec2 fo = (hash2(fi) - 0.5) * 0.6;
+            float on = step(0.72, hash(fi + 2.0)) * step(w.y, top - 0.1) * nat * (1.0 - 0.7 * zBamboo(w.x));
+            vec3 flc = hash(fi + 5.0) < 0.5 ? vec3(1.0, 0.95, 0.85) : (hash(fi + 6.0) < 0.5 ? vec3(1.0, 0.8, 0.25) : vec3(1.0, 0.55, 0.7));
+            c = lay(c, flc * (0.6 + 0.4 * uDawn), fillS(length(ff - fo) * 0.5 - 0.06, gPx) * on);
+            c = lay(c, vec3(0.35, 0.55, 0.2) * (0.55 + 0.45 * uDawn), grassTufts(w, top - 0.15, 0.7 + 0.6 * zGlade(w.x), 0.55 * nat, 1.0));
+        }
+    }
+    c = bambooClump(layerP(p, 0.8), c, 0.8, GY0 + 0.5, 1.35, 0.4 * (1.0 - 0.8 * zGlade(w.x)), vec3(0.035, 0.07, 0.02), 0.03, 9.0);
+    // ---- on the near plane: lamps, the subway's entrance, the crossing's light, the station's canopy, bollards
+    if (w.x < 236.0) {
+        float sp = 15.0, n = floor((w.x - 4.0) / sp + 0.5);
+        float lxw = n * sp + 4.0;
+        float lx = w.x - lxw;
+        if (abs(lxw - 79.0) > 6.0) c = lampAt(w, c, lx, vec3(1.0, 0.72, 0.38), 6.6, uLamp);
+    } else if (w.x > 296.0 && w.x < 345.0) {
+        float sp = 13.0, n = floor((w.x - 2.0) / sp + 0.5);
+        c = lampAt(w, c, w.x - (n * sp + 2.0), vec3(1.0, 0.55, 0.2), 5.6, uLamp);
+    }
+    // the subway's entrance: railings round the stairwell, a lit sign on a post
+    {
+        vec2 q = w - vec2(79.0, GY0);
+        float rail = min(sdBox(q - vec2(-0.5, 1.0), vec2(0.06, 1.0)), sdBox(q - vec2(5.6, 1.0), vec2(0.06, 1.0)));
+        rail = min(rail, sdBox(q - vec2(2.55, 1.95), vec2(3.05, 0.05)));
+        rail = min(rail, sdBox(q - vec2(-1.6, 2.4), vec2(0.07, 2.4)));
+        c = lay(c, vec3(0.06, 0.07, 0.06) + vec3(0.1, 0.12, 0.1) * uLamp * 0.3, fillA(rail));
+        vec2 sq0 = q - vec2(-1.6, 5.2);
+        float sg = sdBox(sq0, vec2(0.65, 0.65)) - 0.1;
+        c = lay(c, vec3(0.9, 0.95, 1.0) * (0.3 + 0.9 * uLamp), fillA(sg));
+        // an M: two legs, a V between them
+        float mx = abs(sq0.x);
+        float m = min(abs(mx - 0.32) - 0.065, abs(mx - (0.3 - 0.75 * (sq0.y + 0.4)) * 0.5 - 0.0) - 0.06);
+        m = max(m, abs(sq0.y) - 0.38);
+        c = lay(c, vec3(0.05, 0.2, 0.45), fillA(m));
+        c += vec3(0.7, 0.85, 1.0) * exp(-max(sg, 0.0) * 1.5) * 0.25 * uLamp;
+    }
+    // the crossing's pedestrian light
+    {
+        float lx = w.x - 58.0;
+        float d = min(sdBox(vec2(lx, w.y - GY0 - 2.6), vec2(0.07, 2.6)), sdBox(vec2(lx, w.y - GY0 - 5.6), vec2(0.32, 0.65)) - 0.06);
+        c = lay(c, vec3(0.025, 0.028, 0.035), fillA(d));
+        float red = step(fract(uTime / 14.0), 0.55), grn = 1.0 - red;
+        vec2 r1 = vec2(lx, w.y - GY0 - 5.9), r2 = vec2(lx, w.y - GY0 - 5.3);
+        c += vec3(1.0, 0.18, 0.12) * red * (fillA(length(r1) - 0.17) * 1.5 + exp(-dot(r1, r1) / 0.4) * 0.6);
+        c += vec3(0.2, 1.0, 0.6) * grn * (fillA(length(r2) - 0.17) * 1.5 + exp(-dot(r2, r2) / 0.4) * 0.6);
+    }
+    // the terminus: a canopy on posts over the platform, its lamps
+    if (w.x > 250.0 && w.x < 312.0) {
+        vec2 q = w - vec2(281.0, GY0);
+        float roof = sdBox(q - vec2(0.0, 8.6), vec2(26.0, 0.18)) - 0.05;
+        float px = mod(q.x + 26.0, 6.5) - 3.25;
+        float post = max(abs(px) - 0.09, abs(q.y - 4.3) - 4.3) ;
+        post = max(post, abs(q.x) - 26.0);
+        c = lay(c, vec3(0.1, 0.09, 0.1) + uFog * 0.15, fillA(min(roof, post)));
+        vec2 lq = vec2(px, q.y - 8.2);
+        c += vec3(1.0, 0.85, 0.6) * (fillA(sdBox(lq, vec2(0.5, 0.06))) * 1.2 + exp(-dot(lq, lq) / 2.0) * 0.12) * step(abs(q.x), 25.0);
+        // the station's name board
+        vec2 nq = q - vec2(16.0, 5.8);
+        c = lay(c, vec3(0.04, 0.08, 0.16), fillA(sdBox(nq, vec2(2.4, 0.5)) - 0.05));
+        c = lay(c, vec3(0.85, 0.88, 0.95), fillA(sdBox(vec2(fract(nq.x * 0.9) - 0.5, nq.y), vec2(0.22, 0.24))) * step(abs(nq.x), 2.0));
+    }
+    // a fence and a few posts where the town gives way to the fields
+    if (w.x > 330.0 && w.x < 362.0) {
+        float fx = mod(w.x, 2.2) - 1.1;
+        float f = min(sdBox(vec2(fx, w.y - GY0 - 0.8), vec2(0.06, 0.8)), sdBox(vec2(fx, w.y - GY0 - 1.2), vec2(1.1, 0.04)));
+        c = lay(c, vec3(0.2, 0.17, 0.14) * (0.5 + 0.5 * uDawn), fillA(f) * (1.0 - smoothstep(352.0, 362.0, w.x)) * smoothstep(330.0, 336.0, w.x));
+    }
+    // the little bridge over the glade's stream: its rails
+    if (w.x > 441.0 && w.x < 452.0) {
+        vec2 q = w - vec2(446.5, GY0);
+        float r = min(sdBox(q - vec2(0.0, 1.1), vec2(5.0, 0.07)), max(abs(mod(q.x + 5.0, 2.5) - 1.25) - 0.07, abs(q.y - 0.55) - 0.55));
+        r = max(r, abs(q.x) - 5.05);
+        c = lay(c, vec3(0.32, 0.2, 0.12) * (0.5 + 0.6 * uDawn), fillA(r));
     }
     return c;
 }
 
-// ---------------------------------------------------------------- one place
-vec3 place(int i, vec2 p, vec3 c, float jl) {
-    if (i <= 0) return stStreet(p, c, 0.0);
-    if (i == 1) return stStreet(p, c, 1.0);
-    if (i == 2) return stStation(p, c);
-    if (i == 3) return stTrain(p, c, jl);
-    if (i == 4) return stCanal(p, c);
-    if (i == 5) return stFields(p, c, jl);
-    if (i == 6) return stBamboo(p, c, jl, 0.0);
-    return stHome(p, c, jl);
+// =========================================================================== underground
+// the stairs' floor line, the station's platform, the tunnels' floor (the train's track bed)
+float stairsY(float x) { return mix(GY0, PLAT_Y, sat((x - 80.0) / 16.0)); }
+// cavities cut in the earth: 1 the stairs, 2 the station's hall, 3 the tunnel on the left, 4 the tunnel on the right,
+// 5 the cutting (open to the sky); floor and ceiling at w.x
+int cavity(vec2 w, out float fl, out float ce) {
+    fl = -1e3; ce = -1e3;
+    if (w.x > 79.0 && w.x < 97.0 && w.y < GY0) {
+        fl = stairsY(w.x); ce = fl + 5.2;
+        if (w.y > fl - 1.6 && w.y < ce) return 1;
+    }
+    if (w.x > 92.0 && w.x < 146.0) { fl = PLAT_Y; ce = PLAT_Y + 8.5; if (w.y > fl - 1.6 && w.y < ce) return 2; }
+    if (w.x > 10.0 && w.x <= 92.0) { fl = PLAT_Y - 0.4; ce = PLAT_Y + 7.2; if (w.y > fl - 1.6 && w.y < ce) return 3; }
+    if (w.x >= 146.0 && w.x < 196.0) { fl = trackY(w.x) - 0.4; ce = trackY(w.x) + 7.8; if (w.y > fl - 1.6 && w.y < ce) return 4; }
+    if (w.x >= 196.0 && w.x < 238.0) { fl = trackY(w.x) - 0.4; ce = GY0; if (w.y > fl - 1.6 && w.y < GY0 + 0.01) return 5; }
+    return 0;
+}
+vec3 earth(vec2 w) {
+    float depth = GY0 - w.y;
+    float n = fbm(vec2(w.x * 0.08, w.y * 0.6 + fbm(vec2(w.x * 0.05, w.y * 0.1)) * 2.0));
+    vec3 c = mix(vec3(0.05, 0.032, 0.024), vec3(0.085, 0.055, 0.035), n);
+    c = mix(c, vec3(0.03, 0.022, 0.02), smoothstep(4.0, 16.0, depth) * 0.6);
+    // pebbles, a darker topsoil with roots near the top
+    vec2 pq = w / vec2(0.9, 0.6);
+    vec2 pi = floor(pq), pf = fract(pq) - 0.5;
+    float pb = fillS(length(pf - (hash2(pi) - 0.5) * 0.5) - 0.12 * hash(pi + 3.0), 0.03) * step(0.7, hash(pi + 1.0));
+    c = mix(c, vec3(0.12, 0.1, 0.09), pb * 0.6 * lod(0.6));
+    c = mix(c, vec3(0.04, 0.03, 0.02), smoothstep(3.6, 2.2, depth));
+    // pipes running under the street
+    float pipe = abs(w.y - (GY0 - 4.2)) - 0.18;
+    c = mix(c, vec3(0.1, 0.11, 0.1), fillA(pipe) * step(w.x, 210.0));
+    c = mix(c, vec3(0.06, 0.05, 0.05), fillA(abs(w.y - (GY0 - 5.6)) - 0.1) * step(w.x, 200.0));
+    return c * (0.8 + 0.4 * uDawn);
+}
+vec3 tiles(vec2 w, vec3 tile) {
+    vec2 tq = vec2(w.x / 0.9, w.y / 0.45);
+    vec2 tf = abs(fract(tq + vec2(0.5 * step(0.5, fract(tq.y * 0.5)), 0.0)) - 0.5);
+    float grout = 1.0 - smoothstep(0.43, 0.48, max(tf.x * 0.5, tf.y));
+    return tile * mix(0.93, mix(0.82, 1.0, grout), lod(0.45)) * (0.9 + 0.1 * vnoise(tq * vec2(1.0, 0.5)));
+}
+vec3 interior(int cv, vec2 w, float fl, float ce) {
+    float L = uSubLight;
+    vec3 lc = vec3(0.85, 1.0, 0.92);
+    if (cv == 1) {
+        // the stairs: tiles along the slope, a handrail, lamps under the ceiling
+        vec3 c = tiles(w, vec3(0.13, 0.15, 0.14));
+        float yy = w.y - fl;
+        c *= 0.6 + 0.6 * smoothstep(0.0, 4.5, yy);
+        c = mix(c, vec3(0.3, 0.32, 0.3), fillA(abs(yy - 1.7) - 0.06));
+        float lx = mod(w.x - 82.0, 5.0) - 2.5;
+        vec2 lq = vec2(lx, w.y - (ce - 0.35));
+        c = mix(c, lc * 1.6, fillA(sdBox(lq, vec2(0.6, 0.08))) * L);
+        c += lc * exp(-dot(lq, lq) / 4.0) * 0.12 * L;
+        c = mix(c, vec3(0.02), smoothstep(ce - 0.4, ce, w.y));
+        return c * (0.35 + 0.65 * L);
+    }
+    if (cv == 2) {
+        // the hall: tiles, a band of color, the station's name, posters, strip lights, the track bed below the wall
+        vec3 c = tiles(w, vec3(0.13, 0.16, 0.15));
+        float yy = w.y - PLAT_Y;
+        c = mix(c, vec3(0.02, 0.07, 0.06), fillA(abs(yy - 4.4) - 0.5));
+        float nx = mod(w.x - 92.0, 26.0) - 13.0;
+        float nameB = fillA(sdBox(vec2(nx, yy - 6.3), vec2(3.0, 0.6)) - 0.05);
+        c = mix(c, vec3(0.03, 0.05, 0.12), nameB);
+        c = mix(c, vec3(0.85, 0.88, 0.95), fillA(sdBox(vec2(fract(nx * 0.9) - 0.5, yy - 6.3), vec2(0.24, 0.28))) * step(abs(nx), 2.4) * nameB * 0.9);
+        float px = mod(w.x - 92.0 + 6.5, 13.0) - 6.5;
+        vec2 pq = vec2(px, yy - 2.3);
+        float pid = floor((w.x - 92.0 + 6.5) / 13.0);
+        vec3 pc1 = 0.5 + 0.5 * cos(TAU * (hash1(pid) + vec3(0.0, 0.33, 0.67)));
+        vec3 pic = mix(pc1 * 0.5, (0.5 + 0.5 * cos(TAU * (hash1(pid + 3.0) + vec3(0.1, 0.4, 0.7)))) * 0.7, smoothstep(-1.0, 1.0, pq.y + sin(pq.x * 2.0 + pid) * 0.5));
+        pic += 0.25 * fillA(length(pq - vec2(0.3 * sin(pid), 0.4)) - 0.55);
+        c = mix(c, vec3(0.05), fillA(sdBox(pq, vec2(1.25, 1.55))));
+        c = mix(c, pic * 0.35, fillA(sdBox(pq, vec2(1.1, 1.4))));
+        float lx = mod(w.x, 8.0) - 4.0;
+        float tube = fillA(sdBox(vec2(lx, w.y - (ce - 0.5)), vec2(2.2, 0.12)));
+        c *= 0.55 + 0.6 * exp(-sq(lx / 3.5)) * smoothstep(PLAT_Y, ce, w.y);
+        c = mix(c, vec3(0.02, 0.025, 0.025), smoothstep(ce - 0.9, ce - 0.85, w.y));
+        c = mix(c, lc * 1.8, tube);
+        c += lc * exp(-sq(sdBox(vec2(lx, w.y - (ce - 0.5)), vec2(2.2, 0.0)) / 0.5)) * 0.12;
+        // the track bed, dark, behind the platform's edge
+        c = mix(c, vec3(0.015, 0.016, 0.018), smoothstep(0.9, 0.7, yy));
+        return c * (0.3 + 0.7 * L);
+    }
+    // tunnels: dark concrete, a lamp every few meters, cables
+    vec3 c = mix(vec3(0.03, 0.03, 0.032), vec3(0.018, 0.018, 0.02), sat((w.y - fl) / 7.0));
+    if (cv == 5) {
+        // the cutting: its far bank, grass on top, the dawn on it
+        float bank = smoothstep(fl, GY0, w.y);
+        c = mix(vec3(0.07, 0.05, 0.04), vec3(0.12, 0.1, 0.07), bank) * (0.6 + 0.8 * uDawn);
+        c = mix(c, vec3(0.2, 0.3, 0.12) * (0.4 + 0.8 * uDawn), smoothstep(GY0 - 0.6, GY0 - 0.2, w.y));
+        return c;
+    }
+    float lx = mod(w.x, 9.0) - 4.5;
+    vec2 lq = vec2(lx, w.y - fl - 5.6);
+    c += vec3(1.0, 0.75, 0.45) * (exp(-dot(lq, lq) / 0.08) * 1.4 + exp(-length(lq) / 1.5) * 0.06);
+    c = mix(c, vec3(0.06), fillA(abs(w.y - fl - 4.2 - 0.06 * sin(w.x * 0.5)) - 0.03) * 0.5);
+    c = mix(c, vec3(0.05), fillA(abs(w.y - fl - 3.8 - 0.06 * sin(w.x * 0.45 + 1.0)) - 0.025) * 0.5);
+    return c;
+}
+// the floor bands (the surfaces seen receding), in front of the train
+vec3 floorBand(int cv, vec2 w, float fl, vec3 base, out float a) {
+    a = 0.0;
+    float my = fl - w.y;
+    if (my < 0.0 || my > 1.6) return base;
+    a = 1.0;
+    if (cv == 1) {
+        // the stairs' steps
+        float st = fract((w.x - 80.0) / 0.55);
+        vec3 c = mix(vec3(0.16, 0.16, 0.15), vec3(0.08, 0.08, 0.08), smoothstep(0.1, 0.9, st));
+        c = mix(c, vec3(0.6, 0.5, 0.15), fillA(st - 0.06) * 0.6);
+        return c * (0.3 + 0.7 * uSubLight) * (1.0 - 0.4 * sat(my / 1.6));
+    }
+    if (cv == 2) {
+        vec3 c = mix(vec3(0.07, 0.075, 0.075), vec3(0.03, 0.032, 0.033), sat(my / 1.6));
+        c += vec3(0.85, 1.0, 0.92) * exp(-sq(mod(w.x, 8.0) - 4.0) / 2.0) * exp(-my * 0.6) * 0.1;
+        c = mix(c, vec3(0.45, 0.33, 0.04), fillA(abs(my - 0.2) - 0.1) * 0.9);
+        return c * (0.3 + 0.7 * uSubLight);
+    }
+    // track beds
+    vec3 c = mix(vec3(0.04, 0.035, 0.03), vec3(0.015, 0.014, 0.013), sat(my / 1.6));
+    c *= 0.85 + 0.3 * vnoise(w * 4.0);
+    if (cv == 5) c *= 0.6 + 0.9 * uDawn;
+    return c;
+}
+// the surface band: pavement, the terminus's platform, the towpath, the path through the fields, moss, the glade
+vec3 surfaceBand(vec2 w, vec2 p) {
+    float my = GY0 - w.y;
+    float x = w.x;
+    // the wet pavement (the street, the outskirts)
+    vec3 pv = mix(vec3(0.05, 0.055, 0.07), vec3(0.025, 0.028, 0.038), sat(my / 1.8));
+    pv = mix(pv, pv * 2.0 + uFog * 0.1, uDawn * 0.6);
+    float curb = fillA(abs(my - 0.06) - 0.06);
+    float pud = smoothstep(0.55, 0.62, fbm(vec2(x * 0.25, my * 1.4)));
+    float lxw = x - (floor((x - 4.0) / 15.0 + 0.5) * 15.0 + 4.0) - 0.7;
+    float refl = lampReflectAt(lxw + 0.04 * sin(w.y * 9.0 + uTime * 2.3), my) * (0.35 + 0.65 * pud) * uLamp * step(x, 236.0);
+    pv += vec3(1.0, 0.72, 0.4) * refl;
+    pv += mix(uSkyHor, uSkyTop, 0.3) * pud * 0.4;
+    pv += vec3(0.6, 0.7, 0.8) * puddleRings(w) * smoothstep(0.62, 0.7, fbm(vec2(x * 0.25, my * 1.4))) * 0.12 * uRain;
+    pv = mix(pv, vec3(0.09, 0.09, 0.11) * (1.0 + uDawn), curb);
+    vec3 c = pv;
+    // the terminus's platform: concrete, a yellow line along its edge
+    float term = smoothstep(252.0, 256.0, x) * (1.0 - smoothstep(306.0, 310.0, x));
+    vec3 pl = mix(vec3(0.2, 0.19, 0.19), vec3(0.1, 0.095, 0.1), sat(my / 1.6)) * (0.5 + 0.6 * uDawn);
+    pl = mix(pl, vec3(0.6, 0.45, 0.06) * (0.5 + 0.5 * uDawn), fillA(abs(my - 0.2) - 0.1));
+    c = mix(c, pl, term);
+    // the towpath: cobbles, the canal under its edge
+    float tow = smoothstep(306.0, 312.0, x) * (1.0 - smoothstep(334.0, 340.0, x));
+    vec3 path = mix(vec3(0.16, 0.12, 0.12), vec3(0.09, 0.07, 0.08), sat(my / 1.2)) * (0.6 + 0.6 * uDawn);
+    path *= 1.0 - lod(0.6) * (1.0 - smoothstep(0.32, 0.5, length(fract(vec2(x / 0.6, my / 0.35)) - 0.5))) * 0.15;
+    c = mix(c, path, tow);
+    // the dirt path through the fields, moss in the forest, grass in the glade
+    vec3 dirt = mix(vec3(0.6, 0.48, 0.32), vec3(0.42, 0.33, 0.22), sat(my / 1.6)) * (0.92 + 0.12 * vnoise(vec2(x * 1.5, my * 4.0)));
+    vec3 moss = mix(vec3(0.3, 0.22, 0.1), vec3(0.14, 0.2, 0.05), sat(my / 1.6)) * (0.85 + 0.25 * vnoise(vec2(x * 1.2, my * 3.0)));
+    vec3 grass = mix(vec3(0.45, 0.42, 0.16), vec3(0.28, 0.32, 0.1), sat(my / 1.6)) * (0.85 + 0.25 * vnoise(vec2(x * 1.2, my * 3.0)));
+    vec3 nat = mix(dirt, moss, smoothstep(390.0, 405.0, x));
+    nat = mix(nat, grass, smoothstep(436.0, 448.0, x));
+    vec2 lq = vec2(x / 0.45, my / 0.25);
+    vec2 li = floor(lq), lf = fract(lq) - 0.5;
+    float leaf = fillS(sdEll(rot(hash(li) * 6.0) * lf, vec2(0.38, 0.12)), 0.08) * step(0.8, hash(li + 1.0)) * lod(0.25) * smoothstep(392.0, 405.0, x);
+    nat = mix(nat, mix(vec3(0.75, 0.6, 0.25), vec3(0.55, 0.45, 0.2), hash(li + 2.0)), leaf * 0.6);
+    c = mix(c, nat * (0.55 + 0.45 * uDawn), smoothstep(336.0, 344.0, x));
+    // the little bridge over the stream: planks
+    float br = smoothstep(441.0, 441.5, x) * (1.0 - smoothstep(451.5, 452.0, x));
+    vec3 pk = vec3(0.4, 0.26, 0.15) * (0.85 + 0.15 * step(0.5, fract(x / 0.5))) * (0.5 + 0.6 * uDawn);
+    c = mix(c, pk, br * step(my, 0.5));
+    return c;
 }
 
 void main() {
     vec2 p = uViewC + (vUv * 2.0 - 1.0) * uViewH;
     gPx = uPxP;
-    vec3 s = sky(p);
-    // where this pixel is along the way, and the places there
-    float j = uD + (p.x - uXP) * 0.4;   // compressed: the next place only shows as the panda nears it
-    float t = j / LEN;
-    float si = floor(t);
-    float jl = (t - si) * LEN;
-    float w = smoothstep(LEN - BL, LEN, jl);
-    int a = int(clamp(si, 0.0, 7.0)), b = int(clamp(si + 1.0, 0.0, 7.0));
-    if (j < 0.0) { a = 0; b = 0; w = 0.0; }
+    vec2 w = p + vec2(uD, uCamY);
+    float fl, ce;
+    int cv = cavity(w, fl, ce);
     vec3 c;
-    float g0 = 0.0;
-    vec3 gc0 = vec3(1.0);
-    if (w < 0.999) { c = place(a, p, s, jl); g0 = gGlow; gc0 = gGlowC; }
-    if (w > 0.001 && b != a) {
-        gGlow = 0.0;
-        vec3 c2 = place(b, p, s, jl - LEN);
-        c = w >= 0.999 ? c2 : mix(c, c2, w);
-        gGlow = mix(g0, gGlow, w);
-        gGlowC = mix(gc0, gGlowC, w);
-    } else if (w >= 0.999) {
-        c = place(b, p, s, jl - LEN);
+    bool air = false;
+    vec3 bandC = vec3(0.0);
+    float bandA = 0.0;
+    if (cv > 0 && w.y >= fl) {
+        c = interior(cv, w, fl, ce);
+    } else if (cv > 0) {
+        bandC = floorBand(cv, w, fl, vec3(0.0), bandA);
+        c = bandC;
+    } else if (w.y >= GY0) {
+        c = airScene(p, w);
+        air = true;
+    } else if (w.y >= GY0 - 1.8) {
+        bandC = surfaceBand(w, p);
+        bandA = 1.0;
+        c = bandC;
+        air = true; // (rain falls on it)
     } else {
-        gGlow = g0; gGlowC = gc0;
+        c = earth(w);
+        // the canal's water under the towpath, the stream under the bridge
+        float can = step(310.0, w.x) * step(w.x, 336.0) * step(GY0 - 4.2, w.y);
+        float strm = step(442.0, w.x) * step(w.x, 451.0) * step(GY0 - 3.4, w.y);
+        if (can + strm > 0.0) {
+            float wy = GY0 - 1.8 - w.y;
+            vec3 water = mix(uSkyHor, uSkyTop, sat(wy / 3.0)) * 0.7;
+            water *= 0.85 + 0.3 * vnoise(vec2(w.x * 0.8, wy * 6.0 - uTime * 0.6));
+            water = mix(water, vec3(0.03, 0.04, 0.05), sat(wy / 2.5) * 0.5);
+            c = water;
+        }
     }
-    c = rain(p, c, uRain);
-    c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
-    // the drop: a warm glow welling up from the ground (a steady swell, settling over seconds)
+    // the train, then the floor bands in front of it
+    vec4 tr = trainInside(w, c);
+    c = mix(c, tr.rgb, tr.a);
+    if (bandA > 0.0) c = mix(c, bandC, bandA);
+    // the cut's edges: a thin dark line where the earth meets the cavities and the surface
+    {
+        float e = abs(w.y - (GY0 - 1.8));
+        if (cv > 0) e = min(e, min(abs(w.y - ce), abs(w.y - (fl - 1.6))));
+        if (!(cv == 0 && w.y > GY0 - 1.8 && w.y < GY0)) c = mix(c, vec3(0.015, 0.01, 0.01), (1.0 - smoothstep(gPx * 0.8, gPx * 2.0, e)) * 0.7);
+    }
+    if (air) c = rain(p, c, uRain);
+    if (air && w.x < 215.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
     c += uSunCol * uDrop * 0.05 * smoothstep(4.0, -10.0, p.y);
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(max(c, 0.0), 1.0);
+}
+)";
+
+// ------------------------------------------------------------------------------------------------ the train's near side
+// The train's low near-side wall and its doors, drawn over the cub (who stands inside, behind it); full resolution.
+inline const char* FRONT_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform vec2 uViewC, uViewH;
+uniform float uD, uCamY, uPxP, uWorldA, uOver;
+uniform vec3 uBridgeCol;
+float gPx;
+float fillA(float d) { return 1.0 - smoothstep(-gPx, gPx, d); }
+//@TRAIN
+void main() {
+    vec2 p = uViewC + (vUv * 2.0 - 1.0) * uViewH;
+    gPx = uPxP;
+    vec2 w = p + vec2(uD, uCamY);
+    vec4 f = trainFront(w);
+    f.rgb = mix(f.rgb, f.rgb * vec3(0.3, 0.32, 0.4), uOver * 0.75);
+    f.rgb = mix(uBridgeCol, f.rgb, uWorldA);
+    frag = vec4(f.rgb * f.a, f.a);
 }
 )";
 
@@ -1009,6 +1020,7 @@ uniform float uReflect, uShadow, uAlpha, uHaze;
 uniform vec3 uHazeC;
 uniform float uHug;
 uniform int uPart;
+uniform float uMunch, uChew, uStrength;   // munching a bamboo snack; strength gained on the way
 
 float gAA, gLW;
 vec3 gCol;
@@ -1036,14 +1048,15 @@ float capsule(vec2 q, vec2 a, vec2 b, float r) { return sdSeg(q, a, b) - r; }
 
 vec4 panda(vec2 q) {
     gCol = vec3(0.0); gA = 0.0;
-    float A = uAdult, walk = uWalk, ph = uPhase, sit = uSit, mood = uMood, sad = 1.0 - mood;
+    float A = uAdult, walk = uWalk, ph = uPhase, sit = uSit, mood = uMood;
+    float sad = (1.0 - mood) * (1.0 - 0.6 * uStrength);   // fed on the way, it stands straighter
     q.y -= uHop;
     // the waddle: rocking from foot to foot about the feet, a little bounce
     float rock = sin(ph) * 0.08 * walk + uLean * 0.06;
     vec2 qr = rot(-rock) * q;
-    qr.y -= walk * 0.028 * abs(cos(ph)) + 0.005 * sin(uBreath);
+    qr.y -= walk * 0.028 * (1.0 + 0.8 * uStrength) * abs(cos(ph)) + 0.005 * sin(uBreath);
     // a round head (half the height), a bean of a body, little limbs
-    vec2 Br = vec2(mix(0.23, 0.255, A), mix(0.2, 0.23, A) * (1.0 + 0.012 * sin(uBreath))) * mix(vec2(1.0), vec2(1.06, 0.92), sit);
+    vec2 Br = vec2(mix(0.23, 0.255, A) * (1.0 + 0.07 * uStrength), mix(0.2, 0.23, A) * (1.0 + 0.012 * sin(uBreath))) * mix(vec2(1.0), vec2(1.06, 0.92), sit);
     vec2 B = vec2(0.0, mix(0.07 + Br.y, 0.035 + Br.y, sit));
     float headR = mix(0.3, 0.27, A);
     vec2 Hc = B + vec2(0.0, Br.y + headR * 0.62 - sad * 0.02);
@@ -1063,21 +1076,26 @@ vec4 panda(vec2 q) {
     hN = mix(hN, eyeN + vec2(0.035 + 0.01 * sin(uBreath * 7.0), -0.05), uWipe);
     hN = mix(hN, shN + vec2(0.1, 0.14), uArms); hF = mix(hF, shF + vec2(-0.1, 0.14), uArms);
     hN = mix(hN, shN + vec2(0.14, 0.02), uHug);
+    // munching: both paws at the mouth, holding the snack
+    vec2 mouthP = Hc + rot(-tilt) * vec2(0.06 * turn, -0.14);
+    hN = mix(hN, mouthP + vec2(0.06, -0.035), uMunch); hF = mix(hF, mouthP + vec2(-0.06, -0.035), uMunch);
     float ear = mix(0.1, 0.085, A);
     float earDrop = sad * 0.06;
     vec2 eF = Hc + rot(-tilt) * vec2(-headR * 0.74 - 0.025 * turn - earDrop * 0.6, headR * 0.7 - earDrop + uEars.y * 0.05);
     vec2 eN = Hc + rot(-tilt) * vec2(headR * 0.74 - 0.025 * turn + earDrop * 0.6, headR * 0.7 - earDrop + uEars.x * 0.05);
-    bool armOver = uWipe > 0.3;
+    bool armOver = uWipe > 0.3 || uMunch > 0.3;
+    bool farOver = uMunch > 0.3;
 
     // back to front: far arm, ears, feet, body, near arm, head, face
-    paint(capsule(qr, shF, hF, armR), tone(BLACK, qr, hF, 0.1));
+    if (!farOver) paint(capsule(qr, shF, hF, armR), tone(BLACK, qr, hF, 0.1));
     paint(length(qr - eF) - ear, tone(BLACK, qr, eF, ear));
     paint(length(qr - eN) - ear, tone(BLACK, qr, eN, ear));
     paint(sdEll(qr - fF, fr), tone(BLACK, qr, fF, 0.1));
     paint(sdEll(qr - fN, fr), tone(BLACK, qr, fN, 0.1));
     paint(sdEll(qr - B, Br), tone(WHITE, qr, B, Br.x));
     if (!armOver) paint(capsule(qr, shN, hN, armR), tone(BLACK, qr, hN, 0.1));
-    float headD = sdEll(qh, vec2(headR * 1.07, headR * 0.95));
+    float puff = uMunch * (0.6 + 0.4 * sin(uChew));
+    float headD = sdEll(qh, vec2(headR * 1.07 * (1.0 + 0.035 * puff), headR * 0.95));
     paint(headD, tone(WHITE, qh, vec2(0.0), headR));
 
     // the face, set low on the head: oval patches leaning outward (more when sad), pure black; in each a glossy
@@ -1125,13 +1143,14 @@ vec4 panda(vec2 q) {
     }
     // blush
     float ck = min(sdEll(qh - fc - vec2(sp + 0.055, -0.085), vec2(0.04, 0.022)), sdEll(qh - fc - vec2(-sp - 0.055, -0.085), vec2(0.04, 0.022)));
-    gCol = mix(gCol, vec3(1.0, 0.6, 0.62) * (uAmb + uKey * 0.85), fillP(ck) * (0.35 + 0.3 * mood) * fillP(headD + 0.01));
+    gCol = mix(gCol, vec3(1.0, 0.6, 0.62) * (uAmb + uKey * 0.85), fillP(ck - 0.01 * puff) * (0.35 + 0.3 * mood + 0.2 * puff) * fillP(headD + 0.01));
     // nose
     vec2 nq = qh - fc - vec2(0.0, -0.06);
     gCol = mix(gCol, BLACK, fillP(sdEll(nq, vec2(0.022, 0.015))));
     // mouth: a small w when happy, a small frown when sad (open in joy)
     vec2 mq = qh - fc - vec2(0.0, -0.09);
-    float happyM = smoothstep(0.35, 0.8, mood);
+    float happyM = max(smoothstep(0.35, 0.8, mood), uMunch);
+    mq.y += uMunch * 0.004 * sin(uChew);
     float wArc = abs(length(vec2(abs(mq.x) - 0.013, mq.y - 0.003)) - 0.013) - 0.0035;
     wArc = max(wArc, mq.y - 0.003);
     float frown = abs(length(vec2(mq.x, mq.y + 0.026)) - 0.02) - 0.0035;
@@ -1140,6 +1159,17 @@ vec4 panda(vec2 q) {
     float openM = smoothstep(0.85, 1.0, mood) * uJoyEyes;
     if (openM > 0.02) mouth = min(mouth, sdEll(mq - vec2(0.0, -0.01), vec2(0.014, 0.014 * openM)));
     gCol = mix(gCol, INK, fillP(mouth));
+    // the snack in its paws, shrinking as it is eaten
+    if (uMunch > 0.05) {
+        float len = 0.075 * (0.4 + 0.6 * uMunch);
+        vec2 sc = mouthP + vec2(0.0, -0.03);
+        float st = capsule(qr, sc - vec2(len, 0.0), sc + vec2(len, 0.0), 0.02);
+        vec3 stc = mix(vec3(0.35, 0.55, 0.16), vec3(0.7, 0.85, 0.36), smoothstep(-0.02, 0.015, qr.y - sc.y)) * (uAmb + uKey * 0.85);
+        stc = mix(stc, vec3(0.22, 0.38, 0.1) * (uAmb + uKey), 1.0 - smoothstep(0.004, 0.008, abs(qr.x - sc.x - 0.02)));
+        gCol = mix(gCol, INK, fillP(st - gLW) * smoothstep(0.05, 0.3, uMunch));
+        gCol = mix(gCol, stc, fillP(st) * smoothstep(0.05, 0.3, uMunch));
+    }
+    if (farOver) paint(capsule(qr, shF, hF, armR), tone(BLACK, qr, hF, 0.1));
     if (armOver) paint(capsule(qr, shN, hN, armR), tone(BLACK, qr, hN, 0.1));
     return vec4(gCol, gA);
 }
@@ -1230,6 +1260,22 @@ void main() {
         frag = vec4(col * a, a);
         return;
     }
+    if (mode == 5) {
+        // a snack: a short piece of bamboo with a node and a leaf, tumbling slowly (param: its angle)
+        vec2 q = rot(vC.x) * vLocal;
+        float d = sdSeg(q, vec2(-0.7, 0.0), vec2(0.7, 0.0)) - 0.2;
+        vec2 lq = rot(0.7) * (q - vec2(0.35, 0.28));
+        float leaf = sdEll(lq, vec2(0.32, 0.09));
+        float sh = min(d, leaf);
+        float a = 1.0 - smoothstep(-px * 1.2, px * 1.2, sh - px * 1.8);
+        vec3 col = mix(vec3(0.35, 0.55, 0.16), vec3(0.72, 0.85, 0.38), smoothstep(-0.2, 0.15, q.y));
+        col = mix(col, vec3(0.25, 0.4, 0.1), (1.0 - smoothstep(0.03, 0.06, abs(q.x - 0.12))) * step(d, 0.0));
+        col = mix(col, vec3(0.3, 0.6, 0.2), step(leaf, d));
+        col = mix(vec3(0.05, 0.04, 0.03), col, 1.0 - smoothstep(-px * 1.2, px * 1.2, sh));
+        col *= vB.rgb;
+        frag = vec4(col * a, a) * vB.a;
+        return;
+    }
     if (mode == 4) {
         // a firefly / a light of hope: a bright core, a warm halo, gently twinkling
         float core = exp(-r * r * 60.0);
@@ -1268,9 +1314,9 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the cells
-// One clean, solid cell per block: a soft rounded tile in its piece's color, lit from above (a gentle gradient, a
-// fine light edge on top, a slightly deeper base), a thin darker line of its own color around it. The ghost is the
-// outline alone; a cleared cell shrinks softly away.
+// One clean, solid cell per block, a short segment of a bamboo stalk in its piece's color: a soft cylindrical shading
+// across it (a sheen left of its middle), a node ring near its base, a faint fibre, a thin darker line of its own
+// color around it. The ghost is the outline alone; a cleared cell shrinks softly away.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, -
@@ -1296,6 +1342,7 @@ flat in vec4 vC;
 out vec4 frag;
 uniform float uBridge;
 uniform vec3 uBridgeInk, uLightC;
+float lod2(float aa) { return smoothstep(0.08, 0.03, aa); }
 void main() {
     int mode = int(vC.x + 0.5);
     float erase = vC.y;
@@ -1312,9 +1359,14 @@ void main() {
         frag = vec4(c * a, a);
         return;
     }
-    // a gentle top light, a deeper base
-    vec3 c = t * mix(0.82, 1.08, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, mix(t, uLightC, 0.45) * 1.15, (1.0 - smoothstep(0.0, 0.05, abs(d + 0.06))) * smoothstep(0.1, 0.4, q.y) * 0.55);
+    // a stalk: round across (lit a little from above), a sheen, a node ring near its base, a faint fibre
+    float cyl = sat(1.0 - sq(q.x / 0.46));
+    vec3 c = t * mix(0.74, 1.06, sqrt(cyl)) * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
+    c = mix(c, mix(t, uLightC, 0.5) * 1.12, exp(-sq((q.x + 0.17) / 0.055)) * 0.4);
+    float ny = q.y + 0.29;
+    c = mix(c, t * 0.66, (1.0 - smoothstep(0.02, 0.02 + aa * 1.5, abs(ny))) * 0.75);
+    c = mix(c, mix(t, vec3(1.0), 0.3), (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(ny - 0.045))) * 0.45);
+    c *= 1.0 - 0.03 * smoothstep(0.35, 0.5, abs(fract(q.x * 7.0 + 0.5) - 0.5) * 2.0) * lod2(aa);
     // its own thin darker edge
     c = mix(c, t * 0.55, 1.0 - smoothstep(0.0, 0.035 + aa, -d));
     c += t * vC.z * 0.6;
