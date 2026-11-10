@@ -2188,7 +2188,8 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progLunar_, "uEarthR", 0.075f);
         set1f(progLunar_, "uEarthK", 0.f); // (the Earth is behind it, far)
         // (pale in the day's sky, bright in space)
-        set1f(progLunar_, "uMoonK", lerpf(0.4f, 1.f, smoothstepf(1.e4f, 2.e5f, alt_)));
+        set1f(progLunar_, "uMoonK", lerpf(0.75f, 1.f, smoothstepf(1.e4f, 2.e5f, alt_)));
+        set1f(progLunar_, "uDay", (1.f - smoothstepf(2.e4f, 1.5e5f, alt_)) * (1.f - 0.6f * pal_.night));
         set3f(progLunar_, "uSpaceC", pal_.space);
         set3f(progLunar_, "uNebulaC", pal_.nebula);
         set3f(progLunar_, "uRegA", lerp(vec3(0.62f, 0.61f, 0.6f), pal_.cloudLit * 0.62f, 0.2f));
@@ -2317,7 +2318,8 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     cloudDrift_ += wdt * (6.f + 8.f * wm + 8.f * wp);
     seaDrift_ += wdt * (8.f + 10.f * wm + 10.f * wp);
     // the cumulus field: fading as it falls away below the climbing whale (the sea of clouds takes over)
-    const float puffK = 1.f - smoothstepf(3.e4f, 1.6e5f, alt_);
+    // (gone, gradually, once the eye is well over the cloud layer: seen from far above, the sea of clouds carries them)
+    const float puffK = 1.f - smoothstepf(CLOUD_Y + 700.f, CLOUD_Y + 4500.f, alt_);
     if (puffK > 0.f) {
         std::vector<std::pair<float, int>> order;
         order.reserve(clouds_.size());
