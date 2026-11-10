@@ -70,23 +70,38 @@ void LibraryUniverse::buildWorld() {
         box(vec3(s * (SLOT_HALF - 0.04f), top * 0.5f, ZBACK + CASE_D * 0.5f + 0.01f), vec3(0.06f, top * 0.5f, CASE_D * 0.5f + 0.01f), P.slab,
             M_CONCRETE);
 
-    // ---- the reading tables down the void: long oak tops on white trestles, oak benches, slim lamps
+    // ---- the reading tables down the void: chunky painted tops on trestles, benches, mushroom lamps, a little bush
     for (int s = -1; s <= 1; s += 2) {
         const float x = s * 2.15f, z0 = 1.2f, z1 = 4.6f, zc = (z0 + z1) * 0.5f, hz = (z1 - z0) * 0.5f;
-        box(vec3(x, 0.74f, zc), vec3(0.45f, 0.02f, hz), P.oak, M_WOOD, 0.f, 0.f, 0.f, 3.f + s);
+        box(vec3(x, 0.72f, zc), vec3(0.47f, 0.045f, hz), P.oak, M_WOOD, 0.f, 0.f, 0.f, 3.f + s);
         for (int e = -1; e <= 1; e += 2) box(vec3(x, 0.36f, zc + e * (hz - 0.35f)), vec3(0.4f, 0.36f, 0.025f), P.slab, M_CONCRETE);
         for (int b = -1; b <= 1; b += 2) {
             const float xb = x + b * 0.72f;
-            box(vec3(xb, 0.44f, zc), vec3(0.17f, 0.02f, hz - 0.15f), P.oak, M_WOOD, 0.f, 0.f, 0.f, 5.f + b);
+            box(vec3(xb, 0.43f, zc), vec3(0.17f, 0.04f, hz - 0.15f), P.oak, M_WOOD, 0.f, 0.f, 0.f, 5.f + b);
             for (int e = -1; e <= 1; e += 2) box(vec3(xb, 0.21f, zc + e * (hz - 0.5f)), vec3(0.15f, 0.21f, 0.02f), P.slab, M_CONCRETE);
         }
         for (int l = 0; l < 2; l++) {
-            const vec3 lp(x, 0.76f, z0 + 1.2f + l * 1.6f);
-            cyl(lp + UP * 0.2f, 0.008f, 0.2f, P.steel, M_STEEL);
-            cyl(lp + UP * 0.41f, 0.075f, 0.012f, P.led, M_EMIT, 2.2f);
-            put(MESH_CYL, lp + UP * 0.43f, vec3(0.08f, 0, 0), vec3(0, 0.015f, 0), vec3(0, 0, 0.08f), P.slab, M_CONCRETE);
-            lamp(lp + UP * 0.38f, P.led, 0.05f, 0.5f, 1.4f, 0);
+            // a chunky mushroom lamp: a stem, a round shade, its bulb glowing under it
+            const vec3 lp(x, 0.765f, z0 + 1.2f + l * 1.6f);
+            cyl(lp + UP * 0.03f, 0.07f, 0.03f, P.steel, M_STEEL);
+            cyl(lp + UP * 0.2f, 0.018f, 0.16f, P.steel, M_STEEL);
+            sphere(lp + UP * 0.34f, 0.06f, P.led, 2.2f);
+            put(MESH_DOME, lp + UP * 0.34f, vec3(0.17f, 0, 0), vec3(0, 0.13f, 0), vec3(0, 0, 0.17f), P.pot, M_TOY);
+            lamp(lp + UP * 0.3f, P.led, 0.08f, 0.6f, 1.6f, 0);
         }
+    }
+    // ---- potted plants: round toon bushes in terracotta pots, at the tables' ends and on the galleries
+    auto plant = [&](const vec3& base, float k, float seed) {
+        cyl(base + UP * (0.17f * k), 0.2f * k, 0.17f * k, P.pot, M_TOY);
+        cyl(base + UP * (0.35f * k), 0.23f * k, 0.035f * k, P.pot * 1.1f, M_TOY);
+        const float a = seed * 2.4f;
+        const vec3 offs[3] = {vec3(0.f, 0.68f, 0.f), vec3(std::cos(a) * 0.17f, 0.56f, std::sin(a) * 0.17f),
+                              vec3(-std::cos(a + 0.8f) * 0.16f, 0.54f, -std::sin(a + 0.8f) * 0.16f)};
+        const float rad[3] = {0.27f, 0.21f, 0.19f};
+        for (int j = 0; j < 3; j++) sphere(base + offs[j] * k, rad[j] * k, P.leaf * (j == 0 ? 1.f : 0.9f), 0.f);
+    };
+    for (int s = -1; s <= 1; s += 2) {
+        plant(vec3(s * 2.15f, 0.765f, 3.2f), 0.42f, 1.f + s); // a little one on the table, between its lamps
     }
     // ---- every floor: its bays, its galleries (above the ground floor), its lights
     for (int k = 0; k < LEVELS; k++) {
@@ -101,7 +116,7 @@ void LibraryUniverse::buildWorld() {
             };
             const float sd = 0.37f * i + 1.3f * k;
             // the back panel (washed by the strips under each shelf), the uprights, the plinth, the boards, the top
-            ob(foot - b.out * (CASE_D - 0.012f) + UP * (CASE_H * 0.5f), vec3(BAY_W * 0.5f, CASE_H * 0.5f, 0.012f), P.oak * 0.72f, M_CASE, SHELF_PITCH,
+            ob(foot - b.out * (CASE_D - 0.012f) + UP * (CASE_H * 0.5f), vec3(BAY_W * 0.5f, CASE_H * 0.5f, 0.012f), P.bay, M_CASE, SHELF_PITCH,
                SHELF_Y0, 0.f, sd);
             for (int s = -1; s <= 1; s += 2)
                 ob(mid + b.along * (s * (BAY_W * 0.5f - UPRIGHT)) + UP * (CASE_H * 0.5f), vec3(UPRIGHT, CASE_H * 0.5f, CASE_D * 0.5f), P.oak, M_WOOD,
@@ -138,15 +153,18 @@ void LibraryUniverse::buildWorld() {
             box(vec3(0.f, y0 + 1.1f, zg - 0.03f), vec3(INNER + 0.06f, 0.022f, 0.03f), P.oak, M_WOOD);
             box(vec3(0.f, y0 + 0.003f, (ZBACK + zg) * 0.5f + 0.2f), vec3(HALL_HALF - 0.05f, 0.003f, (zg - ZBACK) * 0.5f - 0.2f), P.floor, M_FLOOR,
                 P.floorKind);
+            for (int s = -1; s <= 1; s += 2) plant(vec3(s * (INNER + 0.5f), y0, zg + 0.45f + 0.6f * (k % 2)), 0.9f, (float)(k * 3 + s));
         }
-        // the floor's downlights: under the slab above, in front of each bay
+        // the floor's lights: round globes hanging under the slab above, in front of each bay
         const float yl = (k + 1) * LEVEL_H - SLAB - 0.01f;
         for (int i = 0; i < BAYS_LEVEL; i++) {
             const BayFrame b = bayFrame(i);
             const vec3 p = vec3(b.foot.x, yl, b.foot.z) + b.out * 0.7f;
             if (k == LEVELS - 1) continue; // (the top floor: under the skylight)
-            cyl(p + UP * 0.01f, 0.07f, 0.01f, P.led, M_EMIT, 2.5f);
-            lamp(p - UP * 0.05f, P.led, 0.f, 1.f, 4.2f, k);
+            // a round globe on a short cord, glowing warm
+            cyl(p - UP * 0.08f, 0.006f, 0.08f, P.steel, M_STEEL);
+            sphere(p - UP * 0.24f, 0.1f, P.led, 1.5f);
+            lamp(p - UP * 0.24f, P.led, 0.1f, 0.5f, 4.2f, k);
         }
     }
     stLevel_ = 0.f;

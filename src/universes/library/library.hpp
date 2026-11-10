@@ -35,7 +35,7 @@ public:
     enum Mesh { MESH_BOX = 0, MESH_CYL = 1, MESH_DOME = 2, MESH_COUNT = 3 };
     enum Mat {
         M_PLASTER = 0, M_WOOD = 1, M_CASE = 2, M_BOOK = 3, M_FLOOR = 4, M_CONCRETE = 5, M_STEEL = 6, M_EMIT = 7, M_WINDOW = 8,
-        M_GLASS = 9, M_SKY = 10, M_FELT = 11, M_CELL = 12
+        M_GLASS = 9, M_SKY = 10, M_TOY = 11, M_CELL = 12
     };
     struct Lamp {
         vec3 p, col;
@@ -65,6 +65,11 @@ private:
     }
     void cyl(const vec3& c, float r, float halfH, const vec3& col, int mat, float p0 = 0, float seed = 0) {
         put(MESH_CYL, c, vec3(r, 0, 0), vec3(0, halfH, 0), vec3(0, 0, r), col, mat, p0, 0, 0, seed);
+    }
+    // a round toy shape (two hemispheres); glow > 0: a globe lit from within
+    void sphere(const vec3& c, float r, const vec3& col, float glow) {
+        put(MESH_DOME, c, vec3(r, 0, 0), vec3(0, r, 0), vec3(0, 0, r), col, M_TOY, glow);
+        put(MESH_DOME, c, vec3(r, 0, 0), vec3(0, -r, 0), vec3(0, 0, r), col, M_TOY, glow);
     }
     void lamp(const vec3& p, const vec3& col, float r, float k, float range, int level);
     std::vector<Inst> stat_[MESH_COUNT], glass_;
@@ -185,8 +190,9 @@ private:
     int variant_ = 0;
     struct Palette {
         vec3 piece[7];
-        vec3 oak, wall, slab, floor, steel, felt, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
-        vec3 veil, ink, accent, halo;
+        vec3 oak, bay, wall, slab, floor, floorB, steel, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
+        vec3 veil, veilTop, card, cardEdge, line, rim, cloud, cloudShade, leaf, pot;
+        vec3 ink, accent, halo;
         float night = 0, keyK = 1, ledK = 1, exposure = 1, floorKind = 0;
         bool light = true;
     };

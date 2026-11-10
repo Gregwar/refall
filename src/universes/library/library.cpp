@@ -7,9 +7,12 @@
 // the background: from behind the cell's place on the board, at a depth behind the well, only ever going deeper
 // (never in front of the board or the HUD). On the way they become a little stack of real books, which lands in the
 // next free place on the shelves with a soft glow: shelved in the order they come, never moved again, so the
-// collection is the history of the game. The shelves keep to quiet bindings, the pieces' colors here and there.
+// collection is the history of the game. Its books are mostly the pieces' colors, with bright toy bindings among them.
 //
-// The atrium is all there from the start: pale oak shelving bays on four floors, on the back wall either side of a
+// It is drawn as a toon picture book (3D Zelda): saturated colors, cel shading in crisp bands with cool colored
+// shade, inked edges, round friendly lamps and bushes; the well a deep saturated ground the pieces stand out on.
+//
+// The atrium is all there from the start: painted shelving bays on four floors, on the back wall either side of a
 // tall glazed slot behind the well and down both side walls, the upper floors on galleries with glass balustrades
 // round the void, a skylight over it all, reading tables on the ground floor. Each floor's light strips and
 // downlights come on as it starts to fill; the camera frames the bays in use, easing back, then rising floor by
@@ -68,47 +71,50 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 uint32_t hash32(uint64_t x) { return (uint32_t)(splitmix64(x) >> 32); }
 
-// A variant (sRGB): the seven bindings (I O T S Z J L); the oak, the walls, the slabs, the floor, the steel, the
-// felt, the paper; the sky (high, low), the view outside; the ambient light (sky, ground), the sun, the strips; the
-// HUD's veil, ink, accent and halo.
+// A variant (sRGB), a toon picture book: the seven bindings (I O T S Z J L); the painted shelving, its back panels,
+// the walls, the galleries' slabs, the floor's two tiles, the painted metal, the paper; the sky (high, low), the
+// green outside (the town at night); the shade's cool light (from the sky, from the ground), the sun, the lamps; the
+// well's ground (low, high); the HUD's card, its edge, its ink, accent and halo; the ink lines, the warm rim; the
+// clouds (lit, shaded); the plants' leaves, their pots.
 struct VariantDef {
     const char* name;
     unsigned piece[7];
-    unsigned oak, wall, slab, floor, steel, felt, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
-    unsigned veil, ink, accent, halo;
+    unsigned oak, bay, wall, slab, floor, floorB, steel, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
+    unsigned veil, veilTop, card, cardEdge, ink, accent, halo, line, rim, cloud, cloudShade, leaf, pot;
     float night, keyK, ambK, ledK, exposure, floorKind;
     vec3 keyDir;
     bool light;
 };
 const VariantDef VARIANTS[] = {
-    // pale oak, warm white and polished concrete in the afternoon sun; vermilion for the signage
-    {"DAYLIGHT",
-     {0x1f9fb5, 0xf0b31a, 0x7356cf, 0x2b9a66, 0xe2462f, 0x2754cf, 0xee7d2b},
-     0xd8b88e, 0xf2efe9, 0xf5f3ee, 0xd9d3c8, 0x2a2c30, 0x3b4048, 0xf5f0e6, 0x7fb0e6, 0xdbe7f0, 0x7d9a70, 0xc8d4e2, 0xb4a690,
-     0xfff0d8, 0xffe0b4,
-     0xf7f4ef, 0x1b1c1f, 0xe2462f, 0xfbf9f6,
-     0.f, 3.4f, 0.45f, 0.55f, 0.9f, 2.f, vec3(-0.3f, 0.9f, 0.32f), true},
-    // everything white, cool bright light, the bindings in pure primaries; cobalt for the signage
-    {"WHITE CUBE",
-     {0x00a0c6, 0xffc20a, 0x8a3fd6, 0x15a957, 0xee2d2a, 0x1c4ce0, 0xff7417},
-     0xeeede9, 0xf6f6f3, 0xfbfbf9, 0xe1dfda, 0x1b1c1e, 0x2c2f35, 0xf7f5f0, 0x8ab8ee, 0xe6eef6, 0x8aa596, 0xd6dde6, 0xc8c4bc,
-     0xf6f9ff, 0xf2f5ff,
-     0xfafafa, 0x111214, 0x1c4ce0, 0xffffff,
-     0.f, 2.0f, 1.0f, 0.4f, 0.86f, 0.f, vec3(-0.45f, 0.72f, 0.52f), true},
-    // birch and oak floors under a soft northern sky, the bindings in muted design colors; terracotta for the signage
-    {"BIRCH",
-     {0x4f97a3, 0xd9a93f, 0x86659f, 0x6f9864, 0xcc5b45, 0x3a5d8c, 0xdc8552},
-     0xe6d3b2, 0xefece5, 0xf0ede6, 0xd6bd96, 0x34363a, 0x4a5058, 0xf3eee4, 0xb9c4cf, 0xe3e6e8, 0x6f7f72, 0xd9dde1, 0xc4b8a6,
-     0xf4f3ef, 0xffe6c2,
-     0xf4f1eb, 0x22252a, 0xcc5b45, 0xf8f6f2,
-     0.f, 2.1f, 0.62f, 0.6f, 0.88f, 1.f, vec3(-0.25f, 0.88f, 0.4f), true},
-    // evening: the city lit outside, the shelves glowing warm, oak and dark concrete; coral for the signage
-    {"EVENING",
-     {0x2cc0d4, 0xf5c242, 0x9767e6, 0x3abd78, 0xef4e48, 0x4a7bf0, 0xf78f3a},
-     0xc89c6c, 0xe7e2da, 0xe3ded6, 0x56524e, 0x1c1d20, 0x2a2d33, 0xf2ece0, 0x101a33, 0x2c3b60, 0x141a26, 0x2a3346, 0x2a2219,
-     0x9fb2dc, 0xffc684,
-     0x15171b, 0xf3efe7, 0xff6b4f, 0x0d0e11,
-     1.f, 0.3f, 0.8f, 1.7f, 1.08f, 0.f, vec3(-0.5f, 0.7f, 0.5f), false},
+    // golden afternoon: honey shelves on teal, peach walls, terracotta and cream tiles, a low golden sun, lavender
+    // shade; coral
+    {"GOLDEN HOUR",
+     {0x22d0f0, 0xffd31a, 0xb45cff, 0x4fd24a, 0xff4b4b, 0x3f7dff, 0xff9620},
+     0xe8a050, 0x2bb2a6, 0xffdcb4, 0xfff0d4, 0xe8825a, 0xffe6bf, 0x1f6c78, 0xfff3da, 0x3d8ef2, 0xffc78c, 0x4caf3c,
+     0xbcc4f4, 0xe0b0d8, 0xffc070, 0xffd27a,
+     0x1d1e4c, 0x2e3274, 0xfff3dc, 0xff7a4d, 0x26203c, 0xe8473c, 0xfff3dc, 0x2a1640, 0xffcf86, 0xffffff, 0xf6c2c8, 0x3cbf4a, 0xe8603a,
+     0.f, 0.65f, 0.85f, 0.7f, 1.0f, 0.f, vec3(-0.55f, 0.55f, 0.45f), true},
+    // sunny noon: a high white sun, sky-blue bays on golden shelves, mint and cream tiles, primaries; cobalt
+    {"SUNNY NOON",
+     {0x1ccff5, 0xffd60f, 0xa855ff, 0x3fcf45, 0xff4545, 0x3a78ff, 0xff9418},
+     0xf3b54a, 0x48a6ff, 0xfff6e2, 0xfffaf0, 0x82d9b8, 0xfff4dc, 0x2350c8, 0xfffaf0, 0x2c84ff, 0xa9e2ff, 0x3dbb45,
+     0xc0d0ff, 0xd8d0f4, 0xfff4e0, 0xfff0c8,
+     0x162452, 0x23397c, 0xffffff, 0x2f86ff, 0x1a2140, 0x2a6cf0, 0xffffff, 0x1a2050, 0xfff0b0, 0xffffff, 0xc6dbff, 0x3dc24a, 0xff6a3d,
+     0.f, 0.58f, 0.8f, 0.55f, 1.0f, 0.f, vec3(-0.3f, 0.85f, 0.42f), true},
+    // fresh morning: coral shelves on mint, pale sky walls, butter tiles, a pink dawn horizon, soft cool shade; pink
+    {"MORNING",
+     {0x26c9f0, 0xffcf24, 0xae5cf6, 0x48cc56, 0xff4d5e, 0x4479ff, 0xff8f2a},
+     0xf28a68, 0x6fd8bf, 0xe6f4ff, 0xfffaf2, 0xffd98a, 0xfff2d4, 0xe0566a, 0xfff8ec, 0x5ab2ff, 0xffe0ee, 0x55c860,
+     0xc4c8f8, 0xecc8e8, 0xfff0dc, 0xfff2d0,
+     0x152e4c, 0x1f4a70, 0xfffaf2, 0x2fc2a4, 0x1b2a3a, 0xe8506a, 0xfffaf2, 0x1e2a4a, 0xffe0cc, 0xffffff, 0xf6cce0, 0x46c75a, 0xf2765a,
+     0.f, 0.58f, 0.82f, 0.55f, 1.0f, 1.f, vec3(0.5f, 0.55f, 0.5f), true},
+    // starry night: indigo walls, warm round lamps, honey shelves glowing, stars and a lit town outside; gold
+    {"STARRY NIGHT",
+     {0x2ad6f5, 0xffd42a, 0xc06bff, 0x56dc58, 0xff5a5a, 0x5a8cff, 0xffa030},
+     0xe08a48, 0x3a3c9c, 0x2c3478, 0x46529c, 0x3b4290, 0x5260b0, 0xffb84a, 0xfff0d0, 0x0c1240, 0x2c3c90, 0x26357a,
+     0x4a52c0, 0x5a3c6a, 0x9ab0ff, 0xffc46a,
+     0x0a0c26, 0x151b46, 0x1e2558, 0xffb84a, 0xfff2dc, 0xffbe4a, 0x10143a, 0x08081e, 0xffc070, 0x7c8cd4, 0x46549c, 0x2f9a5a, 0xd8603a,
+     1.f, 0.35f, 0.75f, 1.6f, 1.0f, 0.f, vec3(-0.5f, 0.7f, 0.5f), false},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -503,10 +509,12 @@ void LibraryUniverse::setSong(const SongLook& t, float seconds) {
     const VariantDef& V = VARIANTS[v];
     Palette& P = pal_;
     for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]);
-    P.oak = lin(V.oak); P.wall = lin(V.wall); P.slab = lin(V.slab); P.floor = lin(V.floor); P.steel = lin(V.steel); P.felt = lin(V.felt);
-    P.paper = lin(V.paper); P.skyA = lin(V.skyA); P.skyB = lin(V.skyB); P.outside = lin(V.outside);
+    P.oak = lin(V.oak); P.bay = lin(V.bay); P.wall = lin(V.wall); P.slab = lin(V.slab); P.floor = lin(V.floor); P.floorB = lin(V.floorB);
+    P.steel = lin(V.steel); P.paper = lin(V.paper); P.skyA = lin(V.skyA); P.skyB = lin(V.skyB); P.outside = lin(V.outside);
     P.ambSky = lin(V.ambSky) * V.ambK; P.ambGround = lin(V.ambGround) * V.ambK; P.key = lin(V.key) * V.keyK; P.led = lin(V.led);
-    P.veil = lin(V.veil); P.ink = hex(V.ink); P.accent = hex(V.accent); P.halo = hex(V.halo);
+    P.veil = lin(V.veil); P.veilTop = lin(V.veilTop); P.card = lin(V.card); P.cardEdge = lin(V.cardEdge); P.line = lin(V.line);
+    P.rim = lin(V.rim); P.cloud = lin(V.cloud); P.cloudShade = lin(V.cloudShade); P.leaf = lin(V.leaf); P.pot = lin(V.pot);
+    P.ink = hex(V.ink); P.accent = hex(V.accent); P.halo = hex(V.halo);
     P.night = V.night; P.keyK = V.keyK; P.ledK = V.ledK; P.exposure = V.exposure; P.floorKind = V.floorKind; P.light = V.light;
     colSet_ = true;
     seed_ = t.seed ? t.seed : 1;
@@ -624,8 +632,9 @@ void LibraryUniverse::pushStack(std::vector<Inst>& out, const Stack& s, int type
                                 const vec3& outD, float k, float grow, float glow, float fade, bool calm) {
     if (grow <= 0.001f) return;
     const vec3 base = pieceColor(type);
-    // on the shelves: mostly quiet bindings (paper, stone, taupe, charcoal, kraft), the piece's color here and there
-    static const vec3 NEUTRAL[5] = {lin(0xe9e4d8), lin(0xc4bcae), lin(0x8d857a), lin(0x57544f), lin(0xb39a76)};
+    // on the shelves: mostly the piece's color, with bright toy bindings among them (cream, coral, teal, pink, navy,
+    // lime)
+    static const vec3 TOY[6] = {lin(0xfff0d0), lin(0xff6f5e), lin(0x22b5a0), lin(0xff7fb0), lin(0x2f3f9a), lin(0xa8e04a)};
     const vec3 foot = origin - up * (0.47f * k);
     const float swell = 1.f + 0.14f * (1.f - (1.f - fade) * (1.f - fade));
     for (int i = 0; i < s.n; i++) {
@@ -640,7 +649,7 @@ void LibraryUniverse::pushStack(std::vector<Inst>& out, const Stack& s, int type
         vec3 col = base * b.tone;
         if (calm) {
             const uint32_t h = hash32((uint64_t)(b.seed * 100003.f) + (uint64_t)i * 7919ull);
-            col = (h & 255) < 72 ? base * b.tone * 0.92f : NEUTRAL[(h >> 8) % 5] * b.tone;
+            col = (h & 255) < 150 ? base * b.tone : TOY[(h >> 8) % 6] * b.tone;
         }
         Inst in;
         in.c[0] = c.x; in.c[1] = c.y; in.c[2] = c.z; in.c[3] = (float)M_BOOK;
@@ -837,8 +846,8 @@ void LibraryUniverse::buildBoard(const Game& g) {
                     if (c[0] == x && c[1] == y) return true;
                 return false;
             };
-            const vec3 col = lerp(ugl::toLinear(pal_.ink), pieceColor(p.type), 0.6f);
-            const float wpx = std::max(1.f, 1.6f * height_ / 1080.f);
+            const vec3 col = lerp(pieceColor(p.type), vec3(1.f), 0.2f);
+            const float wpx = std::max(1.5f, 2.6f * height_ / 1080.f);
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
@@ -939,7 +948,7 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
     // a clean grotesque: charcoal (or warm white at night) on a soft halo, the variant's one accent for the labels
     const vec3 ink = pal_.ink, halo = pal_.halo;
     const vec3 accent = pal_.accent;
-    const float haloK = pal_.light ? 0.75f : 0.65f;
+    const float haloK = 1.f;
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
@@ -984,6 +993,45 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         for (char& c : t) c = (char)std::toupper((unsigned char)c);
         return t;
     };
+    // the corner texts (the song, its section, the universe) sit on little rounded tags in the card's color, so
+    // they read over the busy shelves
+    {
+        const vec3 card = ugl::toSrgb(pal_.card);
+        auto pill = [&](float x0, float y0, float x1, float y1, float r, float a) {
+            const int K = 6;
+            std::vector<vec2> pts;
+            const vec2 cs[4] = {{x1 - r, y0 + r}, {x1 - r, y1 - r}, {x0 + r, y1 - r}, {x0 + r, y0 + r}};
+            for (int c = 0; c < 4; c++)
+                for (int k = 0; k <= K; k++) {
+                    const float an = -PI * 0.5f + (c + (float)k / K) * PI * 0.5f;
+                    pts.push_back(vec2{cs[c].x + std::cos(an) * r, cs[c].y + std::sin(an) * r});
+                }
+            const vec2 m{(x0 + x1) * 0.5f, (y0 + y1) * 0.5f};
+            for (size_t i = 0; i < pts.size(); i++) {
+                const vec2& p0 = pts[i];
+                const vec2& p1 = pts[(i + 1) % pts.size()];
+                const float v[3][6] = {{m.x, m.y, card.x, card.y, card.z, a}, {p0.x, p0.y, card.x, card.y, card.z, a},
+                                       {p1.x, p1.y, card.x, card.y, card.z, a}};
+                for (auto& vv : v) shapes_.insert(shapes_.end(), vv, vv + 6);
+            }
+        };
+        for (const HudText& h0 : hud) {
+            if (h0.alpha <= 0.01f || h0.text.empty()) continue;
+            if (h0.role != HUD_TITLE && h0.role != HUD_INFO && h0.role != HUD_UNIVERSE && h0.role != HUD_SECTION) continue;
+            const std::string t = ascii(h0.text);
+            const float base = h0.scale * 12.f;
+            const Font& f = h0.role == HUD_TITLE ? ital_ : h0.role == HUD_INFO ? reg_ : semi_;
+            const float size = h0.role == HUD_TITLE ? base * 1.06f : h0.role == HUD_INFO ? base * 0.62f : h0.role == HUD_SECTION ? base * 0.72f : base * 0.66f;
+            const float track = h0.role == HUD_TITLE ? 0.f : h0.role == HUD_INFO ? base * 0.14f : h0.role == HUD_SECTION ? base * 0.22f : base * 0.16f;
+            const float w = textWidth(f, h0.role == HUD_TITLE ? t : upper(t), size, track);
+            const float x = ugl::hudLeft(h0, w, width_);
+            const float capH = f.capH * size / f.px;
+            const float pad = std::max(4.f, size * 0.45f);
+            const float a = std::min(1.f, saturate(h0.alpha) * 1.6f) * vis * 0.92f;
+            pill(x - pad * 1.3f, h0.y - pad, x + w + pad * 1.3f, h0.y + capH + pad, std::min(pad * 1.2f, (capH + 2.f * pad) * 0.5f), a);
+        }
+        flushShapes();
+    }
     for (const HudText& h0 : hud) {
         if (h0.alpha <= 0.01f || h0.text.empty()) continue;
         HudText h = h0;
@@ -1377,17 +1425,18 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const vec3 keyDir = normalize(VARIANTS[variant_].keyDir);
     const float keyK = (1.f + 0.06f * wp + 0.08f * dropAmt_) * (1.f - 0.55f * slow_);
     const vec3 slowTint(0.72f, 0.84f, 1.18f);
-    const vec3 fogCol = lerp(P.wall, P.skyB, 0.4f) * (P.light ? 0.9f : 0.35f);
+    const vec3 fogCol = P.light ? lerp(P.skyA, vec3(1.f), 0.55f) : lerp(P.skyA, P.skyB, 0.6f) * 0.5f;
     // the collection's light: the drop runs it slowly and on, a Tetris once along it
     float dropT = -10.f, dropK = 0.f;
     if (tetrisT_ < 3.f) { dropT = tetrisT_ / 2.4f * 1.3f - 0.15f; dropK = 0.55f; }
     else if (dropAmt_ > 0.01f) { dropT = std::fmod(worldTime_ * 0.07f, 1.4f) - 0.2f; dropK = 0.45f * dropAmt_ * (0.75f + 0.25f * beatPulse_); }
     auto lighting = [&](GLuint p, bool board) {
         if (board) {
-            set3f(p, "uAmbSky", lerp(P.ambSky, vec3(0.6f), 0.4f) * (P.light ? 0.85f : 0.75f));
-            set3f(p, "uAmbGround", lerp(P.ambGround, vec3(0.35f), 0.4f) * 0.8f);
+            // the blocks: a clean white key (their faces read as their color), a cool shade on the sides away from it
+            set3f(p, "uAmbSky", lerp(P.ambSky / std::max(0.05f, VARIANTS[variant_].ambK), vec3(0.75f), 0.35f) * 0.42f);
+            set3f(p, "uAmbGround", lerp(P.ambGround / std::max(0.05f, VARIANTS[variant_].ambK), vec3(0.6f), 0.35f) * 0.3f);
             set3f(p, "uKeyDir", normalize(vec3(-0.45f, 0.72f, 0.6f)));
-            set3f(p, "uKeyCol", vec3(1.f, 0.97f, 0.92f) * (1.35f + 0.12f * wp + 0.2f * dropAmt_) * lerp(vec3(1.f), slowTint, slow_));
+            set3f(p, "uKeyCol", vec3(1.f, 0.98f, 0.95f) * (0.68f + 0.06f * wp + 0.1f * dropAmt_) * lerp(vec3(1.f), slowTint, slow_));
             set1i(p, "uNL", 0);
             set1f(p, "uShadowOn", 0.f);
             set1f(p, "uFogD", 0.f);
@@ -1405,8 +1454,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
                 glUniform4fv(ugl::U(p, "uLC"), n, &LC[0].x);
             }
             set1f(p, "uShadowOn", 1.f);
-            set1f(p, "uFogD", 0.35f / std::max(6.f, camD_ * 3.f));
-            set1f(p, "uFogStart", camD_ * 0.8f);
+            set1f(p, "uFogD", 0.1f / std::max(6.f, camD_ * 3.f));
+            set1f(p, "uFogStart", camD_ * 1.0f);
             set3f(p, "uFogCol", fogCol);
         }
     };
@@ -1488,6 +1537,12 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSolid_, "uOutside", P.outside * (P.light ? 1.3f : 1.f) * (1.f - 0.4f * slow_));
     set3f(progSolid_, "uLed", P.led);
     set3f(progSolid_, "uPaper", P.paper);
+    set3f(progSolid_, "uFloorB", P.floorB);
+    set3f(progSolid_, "uLineCol", P.line);
+    set3f(progSolid_, "uRimCol", P.rim);
+    set3f(progSolid_, "uCloud", P.cloud);
+    set3f(progSolid_, "uCloudShade", P.cloudShade);
+    set1f(progSolid_, "uLineW", std::max(1.f, 1.6f * height_ / 1080.f));
     set1f(progSolid_, "uLampK", lampLevel);
     set1f(progSolid_, "uNight", P.night);
     set1f(progSolid_, "uWorld", 1.f);
@@ -1551,12 +1606,17 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     if (!f.bare) {
         glUseProgram(progVeil_);
         set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-        // the well's ground: clean and calm (the light variants' a near white after the tone curve)
-        set3f(progVeil_, "uVeil", P.veil * (P.light ? 1.45f : 1.f));
-        set1f(progVeil_, "uWellA", P.light ? 0.94f : 0.96f);
-        set1f(progVeil_, "uColA", P.light ? 0.5f : 0.62f);
-        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
-        set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        // the well's ground: one deep saturated color, against which all seven pieces stand out; the HUD on cards
+        set3f(progVeil_, "uVeil", P.veil);
+        set3f(progVeil_, "uVeilTop", P.veilTop);
+        set3f(progVeil_, "uCard", P.card);
+        set3f(progVeil_, "uCardEdge", P.cardEdge);
+        set1f(progVeil_, "uPx", 2.f * viewH_.y / height_);
+        set1f(progVeil_, "uWellA", 1.f);
+        set1f(progVeil_, "uColA", 1.f);
+        // (the cards a little narrower than the columns, so more of the library shows)
+        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0] + 0.9f, layout::LEFT_COLUMN[1] + 0.3f, layout::LEFT_COLUMN[2] - 0.5f, layout::LEFT_COLUMN[3] - 0.5f);
+        set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.4f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
         ugl::drawFullscreen();
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -1577,8 +1637,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = 0.f;
             frame.push_back(in);
         };
-        for (int s = -1; s <= 1; s += 2) fb(vec3(s * 5.14f, -0.05f, -0.4f), vec3(0.12f, 10.6f, 0.42f), P.oak, M_WOOD);
-        fb(vec3(0.f, -10.6f, -0.4f), vec3(5.26f, 0.1f, 0.42f), P.oak * 0.92f, M_WOOD);
+        // a chunky painted frame
+        for (int s = -1; s <= 1; s += 2) fb(vec3(s * 5.2f, -0.1f, -0.4f), vec3(0.17f, 10.68f, 0.45f), P.oak, M_WOOD);
+        fb(vec3(0.f, -10.64f, -0.4f), vec3(5.37f, 0.14f, 0.45f), P.oak * 0.92f, M_WOOD);
         glUseProgram(progSolid_);
         common(progSolid_, true);
         lighting(progSolid_, true);
@@ -1653,11 +1714,11 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.45f + 0.1f * wp + 0.12f * dropAmt_) * (1.f + 0.4f * slow_));
     set1f(progFinal_, "uExposure", P.exposure);
-    set1f(progFinal_, "uSatF", 1.02f + 0.05f * wp + 0.06f * dropAmt_);
+    set1f(progFinal_, "uSatF", 1.1f + 0.05f * wp + 0.06f * dropAmt_);
     set1f(progFinal_, "uSlow", slow_ * 0.5f);
     set3f(progFinal_, "uSlowTint", slowTint);
     set3f(progFinal_, "uLift", vec3(0.f));
-    set1f(progFinal_, "uVig", P.light ? 0.16f : 0.3f);
+    set1f(progFinal_, "uVig", P.light ? 0.06f : 0.2f);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
     set1f(progFinal_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
@@ -1676,7 +1737,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are little stacks of books, shelved full size in a light, modern library atrium that fills floor by floor, in 3D",
+        "LIBRARY", "the blocks are books, shelved full size in a bright toon library atrium (saturated, cel-shaded, inked) that fills floor by floor, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A calm, bright world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },
