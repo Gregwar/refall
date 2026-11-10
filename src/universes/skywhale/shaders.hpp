@@ -160,11 +160,68 @@ float waterE(vec2 q, out float depth, out float calm) {
     if (es > 0.0) depth = max(depth, 0.3 + es * 0.4);
     return e;
 }
+// The continents' finer outline (their coasts, bays, islands), each octave as soon as a pixel resolves it.
+float contDetail(vec3 n, float foot) {
+    float v = 0.0, f = 41.6, amp = 0.075;
+    for (int i = 0; i < 5; i++) {
+        float sz = R / f;
+        float k = smoothstep(sz * 0.5, sz * 0.15, foot);
+        if (k <= 0.0) break;
+        v += (vnoise3(n * f + float(i) * 4.7) - 0.5) * amp * k;
+        f *= 2.0;
+        amp *= 0.62;
+    }
+    return v;
+}
+// The mountain ranges seen from high up: ridged, in belts, their octaves as the pixel resolves them.
+float ranges(vec3 n, float foot) {
+    float belt = smoothstep(0.5, 0.68, vnoise3(n * 9.0 + 21.0));
+    float h = 0.0, f = 45.0, amp = 1.0;
+    for (int i = 0; i < 4; i++) {
+        float sz = R / f;
+        float k = smoothstep(sz * 0.6, sz * 0.15, foot);
+        if (k <= 0.0) break;
+        h += pow(1.0 - abs(vnoise3(n * f + float(i) * 9.1) * 2.0 - 1.0), 2.0) * amp * k;
+        f *= 2.1;
+        amp *= 0.5;
+    }
+    return h * belt;
+}
 // The ground's color at p (n: the planet's normal there, t: the distance, foot: a pixel's size there).
 vec3 landColor(vec3 p, vec3 n, float t, float foot, float e) {
     float c0 = fbm3(n * 2.6 + 11.0);
     vec3 land = mix(uLandC, uDesertC, smoothstep(0.52, 0.62, fbm3(n * 5.0 + 3.0)) * 0.6);
     land *= mix(1.0, 0.62, smoothstep(0.55, 0.7, fbm3(n * 14.0 + 7.0)));   // forests
+    // seen from high up (orbit): the regions' finer mosaic (forests, plains, dry lands) at every scale a pixel
+    // resolves, crisp; the mountain ranges in relief under the sun, their snow (none near: the meadows have it all)
+    float farL = smoothstep(1.0e5, 6.0e5, length(p.xz));
+    if (farL > 0.0 && foot > 30.0) {
+        float m = 0.0, f = 30.0, amp = 0.5;
+        for (int i = 0; i < 5; i++) {
+            float sz = R / f;
+            float k = smoothstep(sz * 0.6, sz * 0.15, foot);
+            if (k <= 0.0) break;
+            m += (vnoise3(n * f + float(i) * 7.3 + 40.0) - 0.5) * amp * k;
+            f *= 2.2;
+            amp *= 0.6;
+        }
+        float dw = max(foot / 6.0e5, 0.02);
+        vec3 mos = land;
+        mos = mix(mos, land * vec3(0.62, 0.78, 0.6), smoothstep(0.02 - dw, 0.02 + dw, m) * 0.85);          // forest
+        mos = mix(mos, mix(land, uDesertC, 0.75) * 1.08, smoothstep(-0.12 + dw, -0.12 - dw, m) * 0.8);   // dry plains
+        mos *= 1.0 + 0.5 * (vnoise3(n * 700.0) - 0.5) * smoothstep(9000.0, 2500.0, foot);               // fields
+        // the ranges: lit on their sunward slopes, shaded beyond, snow on the high ridges
+        vec3 sT = uSunDir - n * dot(uSunDir, n);
+        float ep = max(foot * 1.5, 2000.0) / R;
+        float h0 = ranges(n, foot);
+        float h1 = ranges(normalize(n + normalize(sT + 1e-6) * ep), foot);
+        float sl = (h0 - h1) / (ep * R) * 15000.0;
+        vec3 rock = mix(land, vec3(0.5, 0.44, 0.4), 0.55);
+        mos = mix(mos, rock, smoothstep(0.25, 0.6, h0));
+        mos *= clamp(1.0 + sl * 0.9, 0.55, 1.35);
+        mos = mix(mos, vec3(0.95, 0.96, 1.0) * clamp(1.0 + sl * 0.6, 0.7, 1.15), smoothstep(0.95, 1.05, h0) * 0.9);
+        land = mix(land, mos, farL);
+    }
     // the meadow's patches, crisp, at every scale the pixel resolves
     float v = 0.0;
     float sc = 1.4;
@@ -309,6 +366,8 @@ void main() {
         float wdepth, calm;
         float e = waterE(p.xz, wdepth, calm);
         float cont = fbm3(n * 2.6 + 11.0) - 0.75 * smoothstep(-2.0e5, 2.0e5, p.x - uCoastX) * (1.0 - smoothstep(1.5e6, 3.0e6, dist0));
+        // (the far coasts' finer outline; none around the pond, its own geography)
+        cont += contDetail(n, foot) * smoothstep(1.0e5, 6.0e5, dist0);
         float cw = max(foot / 3.0e6, 0.004);
         float wFar = 1.0 - smoothstep(0.47 - cw, 0.47 + cw, cont);
         float aa = max(foot * 0.7, 1e-4);
@@ -325,7 +384,10 @@ void main() {
             vec3 under = mix(uDeepC, mix(fl, fl * uWaterC, 1.0 - exp(-(dep / cosv) * uWaterK * 2.0)), exp(-(dep / cosv) * uWaterK));
             // far: the ocean seen from high up (its own blue, the glint)
             float hi = smoothstep(800.0, 2.0e4, alt);
-            vec3 ocean = mix(uOceanC, uOceanC * vec3(0.55, 0.75, 1.0), smoothstep(0.47, 0.3, cont)) * light;
+            vec3 ocean = mix(uOceanC, uOceanC * vec3(0.55, 0.75, 1.0), smoothstep(0.47, 0.3, cont));
+            // the shelves along the coasts, paler, turquoise
+            ocean = mix(ocean, uOceanC * vec3(1.05, 1.35, 1.25) + vec3(0.0, 0.03, 0.03), smoothstep(0.43, 0.465, cont) * 0.7 * smoothstep(1.0e5, 6.0e5, dist0));
+            ocean *= light;
             ocean = mix(ocean, ocean * vec3(0.7, 1.15, 1.1) + vec3(0.0, 0.03, 0.03), smoothstep(-200.0, 0.0, -(p.x - coastX(p.z)) - 300.0) * kLocal);
             wcol = waterSurface(under, p, d);
             wcol = mix(wcol, ocean + uSunGlow * pow(max(dot(reflect(d, n), uSunDir), 0.0), 40.0) * 0.6 * lit, hi);
@@ -500,9 +562,15 @@ void basisL(vec3 a, out vec3 x, out vec3 y) {
     y = cross(x, a);
 }
 // The ground's height (Moon radii) at the direction n; alb: its albedo's offset. foot: a pixel's size there (the
-// detail it resolves); lo: the cheap form for the marches.
+// detail it resolves); lo: the cheap form for the marches. Each octave of craters shows as soon as a pixel can tell
+// it: first its albedo (a bright rim, its rays, a darker floor: a spot on the disc), then its relief as it grows past
+// a few pixels. The full form also casts each bowl's shadow toward the sun (gSunL) analytically, into gCast (1 lit ..
+// 0), so the craters keep their shadows at every distance (the marched shadows only resolve the near ground).
+vec3 gSunL = vec3(0.0, 1.0, 0.0);
+float gCast = 1.0;
 float terrain(vec3 n, float foot, bool lo, out float alb) {
     alb = 0.0;
+    gCast = 1.0;
     float big = lo ? vnoise3(n * 2.3 + 5.0) : fbm3(n * 2.3 + 5.0);
     float maria = smoothstep(0.5, 0.4, big);
     float h = (big - 0.5) * 0.006;
@@ -510,35 +578,60 @@ float terrain(vec3 n, float foot, bool lo, out float alb) {
     float rg = 1.0 - abs(vnoise3(n * 7.0 + 2.0) * 2.0 - 1.0);
     float hl = smoothstep(0.45, 0.62, big);
     h += pow(rg, 3.0) * 0.0045 * hl;
+    // the sun over the local ground (for the bowls' cast shadows): its direction along it, its elevation's tangent
+    vec3 sT = gSunL - n * dot(gSunL, n);
+    float sTl = length(sT);
+    vec3 sDir = sT / max(sTl, 1e-5);
+    float tanEl = max(dot(gSunL, n), 0.0) / max(sTl, 1e-3);
     if (!lo) {
         float rg2 = 1.0 - abs(vnoise3(n * 26.0 + 7.0) * 2.0 - 1.0);
         h += pow(rg2, 3.0) * 0.0012 * (1.0 - 0.7 * maria) * smoothstep(0.02, 0.004, foot);
+        // the mottled regolith (what the eye reads on the disc between the craters)
+        alb += 0.06 * (vnoise3(n * 11.0 + 3.0) - 0.5) + 0.05 * (vnoise3(n * 23.0 + 13.0) - 0.5) * smoothstep(0.03, 0.01, foot);
         alb += 0.04 * (vnoise3(n * 60.0) - 0.5) * smoothstep(0.004, 0.001, foot);
     }
     alb -= 0.13 * maria;
-    float cell = 0.085;
-    for (int i = 0; i < 6; i++) {
+    // the great basins (sparse, shallow), then six octaves of craters
+    float cell = 0.085 / 0.42;
+    for (int j = 0; j < 7; j++) {
+        int i = j - 1;
         if (lo && i >= 3) break;
+        // its relief once it spans a few pixels; its albedo already from about a pixel
         float k = smoothstep(cell * 0.6, cell * 0.15, foot);
-        if (k <= 0.0) break;
+        float ka = lo ? k : smoothstep(cell * 1.6, cell * 0.5, foot);
+        if (ka <= 0.0) break;
         vec3 P = n / cell;
         vec3 ci = floor(P);
-        if (hash3(ci + 1.7) < (i < 3 ? 0.6 : 0.62 - 0.1 * float(i))) {
+        if (hash3(ci + 1.7) < (i < 0 ? 0.45 : (i < 3 ? 0.6 : 0.62 - 0.1 * float(i)))) {
             vec3 o = ci + 0.5 + (vec3(hash3(ci), hash3(ci + 3.1), hash3(ci + 7.7)) - 0.5) * 0.3;
             vec3 f = P - o;
             float R = 0.12 + 0.24 * pow(hash3(ci + 5.3), 1.5);
             float x = length(f) / R;
             if (x < 2.7) {
-                float dr = i < 2 ? 0.09 : 0.16;
+                float dr = i < 0 ? 0.05 : (i < 2 ? 0.09 : 0.16);
                 float prof = x < 1.0 ? (x * x - 1.0) : 0.0;
                 prof += 0.32 * exp(-sq((x - 1.0) / 0.17));
                 prof += 0.14 * smoothstep(0.85, 1.05, x) * exp(-max(x - 1.0, 0.0) * 2.0);
-                if (i < 3) prof += 0.5 * exp(-sq(x / 0.15)) * (1.0 - 0.5 * hash3(ci + 2.2));
-                h += prof * R * cell * dr * 2.0 * k;
-                if (!lo && hash3(ci + 9.9) < 0.3) {
-                    vec3 fd = normalize(f + 1e-5);
-                    float ray = pow(vnoise3(fd * 9.0 + ci * 0.37), 3.0) * 2.0;
-                    alb += (ray * exp(-max(x - 1.0, 0.0) * 1.1) * smoothstep(0.95, 1.1, x) + 0.1 * step(x, 1.0)) * 0.3 * k;
+                float peak = i < 3 ? 0.5 * exp(-sq(x / 0.15)) * (1.0 - 0.5 * hash3(ci + 2.2)) : 0.0;
+                h += (prof + peak) * R * cell * dr * 2.0 * k;
+                if (!lo) {
+                    // its albedo: a bright rim and ejecta, a darker floor; the young ones bright, with rays
+                    float young = step(hash3(ci + 9.9), 0.3);
+                    alb += (0.07 * exp(-sq((x - 1.0) / 0.22)) + 0.03 * exp(-max(x - 1.0, 0.0) * 3.0) * step(1.0, x)
+                            - 0.04 * smoothstep(0.95, 0.7, x) * (1.0 - young)) * ka;
+                    if (young > 0.5) {
+                        vec3 fd = normalize(f + 1e-5);
+                        float ray = pow(vnoise3(fd * 9.0 + ci * 0.37), 3.0) * 2.0;
+                        alb += (ray * exp(-max(x - 1.0, 0.0) * 1.1) * smoothstep(0.95, 1.1, x) + 0.1 * step(x, 1.0)) * 0.3 * ka;
+                    }
+                    // the bowl's shadow: its floor behind the sunward rim, where the rim stands above the sun's line
+                    if (x < 1.0 && k > 0.0) {
+                        vec3 fx = f / R;
+                        float bb = dot(fx, sDir);
+                        float dR = -bb + sqrt(max(bb * bb - (dot(fx, fx) - 1.0), 0.0)); // to the rim (crater radii)
+                        float drop = (0.32 - prof) * dr * 2.0;                          // the rim above (crater radii)
+                        gCast = min(gCast, mix(1.0, smoothstep(-0.03, 0.03, dR * tanEl - drop), k));
+                    }
                 }
             }
         }
@@ -590,22 +683,28 @@ void main() {
         vec3 e1, e2;
         basisL(n, e1, e2);
         float eps = max(foot * 1.5, 1.5e-5);
+        // near: the low sun itself, crisp light, hard shadows marched toward it; from afar its phase turned gibbous
+        // (lit from nearer behind the eye: a bright disc, never a dark spot) and its terminator softer, but the relief
+        // still lit by it at every distance (the craters' walls, their shadows: never a flat disc)
+        float alt = length(o) - 1.0;
+        float nearK = smoothstep(0.4, 0.06, alt);
+        vec3 sunM = normalize(mix(uSunDir, -d, 0.6 * smoothstep(0.5, 6.0, alt)));
+        gSunL = sunM;
         float a0, a1, a2;
-        float h0 = terrain(n, foot, false, a0);
         vec3 n1 = normalize(n + e1 * eps), n2 = normalize(n + e2 * eps);
         float h1 = terrain(n1, foot, false, a1), h2 = terrain(n2, foot, false, a2);
+        float h0 = terrain(n, foot, false, a0);   // (last: its cast shadow in gCast)
+        float cast = gCast;
         vec3 P0 = n * (1.0 + h0), P1 = n1 * (1.0 + h1), P2 = n2 * (1.0 + h2);
         vec3 N = normalize(cross(P1 - P0, P2 - P0));
         if (dot(N, n) < 0.0) N = -N;
         // the regolith: grey, darker maria, bright young craters
         vec3 alb = mix(uRegB, uRegA, clamp(0.55 + a0 * 2.2, 0.0, 1.0));
-        // the low sun: crisp light, hard shadows marched toward it
-        // near: crisp light, hard shadows; from afar a softer light (its relief would be ink blots), and its phase
-        // gibbous (lit from nearly behind the eye: a bright disc, never a dark spot)
-        float nearK = smoothstep(0.4, 0.06, length(o) - 1.0);
-        vec3 sunM = normalize(mix(uSunDir, -d, 0.6 * (1.0 - nearK)));
-        float ndl = dot(N, sunM);
-        float lit = mix(smoothstep(-0.25, 0.7, ndl), smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * 2.2, 0.0, 1.0)), nearK);
+        // (from afar the slopes' light exaggerated a little, so the relief reads on the disc whatever the phase)
+        float ndl0 = dot(n, sunM);
+        float ndl = ndl0 + (dot(N, sunM) - ndl0) * mix(2.2, 1.0, nearK);
+        float lit = smoothstep(-0.02, 0.06, ndl) * (0.4 + 0.6 * clamp(ndl * mix(1.1, 2.2, nearK), 0.0, 1.0));
+        lit *= mix(smoothstep(-0.1, 0.25, ndl0), 1.0, nearK);
         float sh = 1.0;
         // (hard shadows near; from afar the terminator alone, the marched shadows would be noise)
         if (lit > 0.0 && foot < 0.02 && nearK > 0.0) {
@@ -634,8 +733,8 @@ void main() {
             float w = uWhaleW * (0.5 + 0.7 * sin(3.14159 * clamp(0.1 + hq * 0.85, 0.0, 1.0)));
             wsh = smoothstep(w * 1.25, w * 0.75, dd) * 0.85 * exp(-max(dot(A + B, uSunDir) * 0.5, 0.0) / (uWhaleW * 14.0));
         }
-        sh = mix(1.0, sh, nearK * smoothstep(0.02, 0.006, foot));
-        vec3 light = uShadowC * mix(0.25, 0.1, nearK) + vec3(0.05, 0.07, 0.12) * 0.35 + uSunC * 1.3 * lit * sh * (1.0 - wsh);
+        sh = min(mix(1.0, sh, nearK * smoothstep(0.02, 0.006, foot)), cast);
+        vec3 light = uShadowC * mix(0.16, 0.1, nearK) + vec3(0.05, 0.07, 0.12) * 0.35 + uSunC * 1.3 * lit * sh * (1.0 - wsh);
         col = alb * light;
         // the far ground fades a little toward the black (no air: only a touch, for depth)
         col *= mix(1.0, 0.75, smoothstep(0.05, 0.6, t));
@@ -1423,12 +1522,17 @@ float dens(vec3 p, vec3 n, float foot) {
     // (swirled: the great octaves warped, so from orbit the cover streams in bands and swirls)
     vec3 wv = vec3(vnoise3(n * 3.0 + 1.0), vnoise3(n * 3.0 + 7.0), vnoise3(n * 3.0 + 13.0)) - 0.5;
     n = normalize(n + wv * 0.06 + vec3(0.0, 0.0, 0.02 * sin(n.y * 9.0 + n.x * 4.0)));
+    // (the planar octaves only near: far out their hash loses its precision, the sphere's take over)
+    float farQ = smoothstep(3.0e4, 1.5e5, length(q));
     for (int i = 0; i < 6; i++) {
         float k = smoothstep(sc * 0.8, sc * 0.2, foot);
-        // (the planar octaves only near: far out their hash loses its precision)
-        if (i < 3) k *= 1.0 - smoothstep(3.0e4, 1.5e5, length(q));
-        float nz = i < 3 ? vnoise(q / sc + float(i) * 5.1) : vnoise3(n * (R / sc) + float(i) * 3.3);
-        float amp = 0.6 + 0.1 * float(i);
+        if (k <= 0.0) { sc *= 4.0; continue; }
+        float nz;
+        if (i >= 3 || farQ >= 1.0) nz = vnoise3(n * (R / sc) + float(i) * 3.3);
+        else if (farQ <= 0.0) nz = vnoise(q / sc + float(i) * 5.1);
+        else nz = mix(vnoise(q / sc + float(i) * 5.1), vnoise3(n * (R / sc) + float(i) * 3.3), farQ);
+        // (from orbit the fine octaves only fray the edges of the great swirls)
+        float amp = (0.6 + 0.1 * float(i)) * (i < 3 ? mix(1.0, 0.3 + 0.1 * float(i), farQ) : 1.0);
         v += (nz - 0.5) * amp * k;
         w += sq(amp * k);
         sc *= 4.0;
@@ -1449,7 +1553,7 @@ void main() {
     vec3 n = normalize(oc + d * t);
     float foot = t * uPix;
     float v = dens(p, n, foot);
-    float cover = smoothstep(0.5, 0.5 + max(0.02, min(foot / 4000.0, 0.12)), v);
+    float cover = smoothstep(0.5, 0.5 + max(0.02, min(foot / 4000.0, 0.06)), v);
     if (cover < 0.01) discard;
     float e = max(foot * 2.0, 60.0);
     float vx = dens(p + vec3(e, 0.0, 0.0), n, foot), vz = dens(p + vec3(0.0, 0.0, e), n, foot);
