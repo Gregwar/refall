@@ -7,8 +7,8 @@
 // tether rising into orbit, the continents, the oceans, until the planet is one glowing ball of lights under an
 // orbital ring being built around it.
 //
-// The lines drive a frontier F (meters, a table interpolated in log space: the first towers at ~28 lines, megatalls
-// from ~70, arcologies from ~88, the continent from ~110, the planet covered at 152, then the ring); each place rises
+// The lines drive a frontier F (meters, a table interpolated in log space: the first towers at ~21 lines, megatalls
+// from ~48, arcologies from ~58, the continent from ~70, the planet covered at 86, then the ring, done by ~100); each place rises
 // when F passes its organic distance D (mcity::field, the same on the CPU and in the ground's shader). The plan is
 // generated once per game (city.cpp): lots sized by D on district-turned grids, each built in its era's style, the
 // downtowns' towers planted on their own; the buildings' shader raises each out of the ground as the frontier passes
@@ -167,14 +167,15 @@ constexpr float RING_ALT = 2.6e6f;   // the orbital ring's height
 
 // The journey: lines -> the city's radius (meters), interpolated in log space.
 struct Stage { float lines, radius; };
-// The skyscraper stage is long: the first towers at ~28 lines, megatalls from ~70, arcologies from ~88, the
-// continent from ~110, the planet covered at 152.
+// The skyscraper stage is long: the first towers at ~21 lines, megatalls from ~48, arcologies from ~58, the
+// continent from ~70, the planet covered at 86, the orbital ring done by ~100 (two or three songs).
 const Stage STAGES[] = {
-    {0, 4.f}, {2, 14.f}, {4, 35.f}, {7, 90.f}, {10, 220.f}, {14, 550.f}, {18, 1300.f}, {23, 2600.f}, {28, 4500.f},
-    {34, 6500.f}, {40, 9000.f}, {46, 1.3e4f}, {52, 1.8e4f}, {58, 2.5e4f}, {64, 3.4e4f}, {70, 4.6e4f}, {76, 6.5e4f},
-    {82, 9.5e4f}, {88, 1.4e5f}, {94, 2.2e5f}, {100, 3.8e5f}, {108, 7.e5f}, {116, 1.3e6f}, {124, 2.5e6f}, {132, 5.e6f},
-    {142, 1.e7f}, {152, 2.4e7f},
+    {0, 4.f}, {2, 14.f}, {3, 35.f}, {6, 90.f}, {8, 220.f}, {11, 550.f}, {14, 1300.f}, {18, 2600.f}, {21, 4500.f},
+    {25, 6500.f}, {30, 9000.f}, {34, 1.3e4f}, {37, 1.8e4f}, {41, 2.5e4f}, {45, 3.4e4f}, {48, 4.6e4f}, {52, 6.5e4f},
+    {55, 9.5e4f}, {58, 1.4e5f}, {62, 2.2e5f}, {65, 3.8e5f}, {68, 7.e5f}, {72, 1.3e6f}, {76, 2.5e6f}, {79, 5.e6f},
+    {83, 1.e7f}, {86, 2.4e7f},
 };
+constexpr float RING_LINES = 14.f; // the orbital ring is built over this many lines once the planet is covered
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 const float G_MAX = std::log(2.4e7f);
 
@@ -1069,8 +1070,8 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
             dropLit_ = false;
         }
         gTarget_ = std::min(G_MAX, growthOf(lines) + gBonus_);
-        const float over = (float)(lines - (int)STAGES[STAGE_COUNT - 1].lines) + gBonus_ * 8.f;
-        orbit_ = approach(orbit_, saturate(over / 40.f) * (gTarget_ >= G_MAX - 1e-3f ? 1.f : 0.f), 0.6f, wdt);
+        const float over = (float)(lines - (int)STAGES[STAGE_COUNT - 1].lines) + gBonus_ * 3.f;
+        orbit_ = approach(orbit_, saturate(over / RING_LINES) * (gTarget_ >= G_MAX - 1e-3f ? 1.f : 0.f), 0.6f, wdt);
         if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
         linesShown_ = lines;
         // a spurt: a spring toward the target; a drop's district rises more slowly (a wave rolling outward)
