@@ -1,0 +1,1540 @@
+// LOST PANDA: a journey home told in pictures behind the well, one continuous shot. A little kawaii panda cub is lost
+// in the city at night, alone under the rain. Every cleared line is a few steps further on its way home, through one
+// world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
+// hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
+// cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
+// the train runs through the tunnel (the clears drive it, it creeps on between them), climbs a cutting into the dawn
+// and stops at a terminus in the industrial district; the cub steps out, the train leaves; it walks on along the
+// canal, past the last fences into the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over
+// a little bridge into a glade at sunset. There the camera stops: its family waits on the right of the screen, it sees
+// them, runs across behind the well to them, and they hug.
+//
+// The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
+// weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
+// The lines cleared set where the cub should be (the stages at 0, 13, 26, 38, 50, 63, 76 and 89 lines, the family at
+// 100). A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
+// and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
+// bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
+// wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
+//
+// The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
+// beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
+// rising around it, a few happy hops (it never walks further: a drop never skips a stage).
+// The pieces are clean bamboo-segment cells, one solid color each; a cleared row shrinks away.
+#include "universes/lostpanda/lostpanda.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+
+#include "layout.hpp"
+#include "universes/registry.hpp"
+#include "universes/lostpanda/shaders.hpp"
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#include "stb_truetype.h"
+
+namespace {
+
+// Fraunces Soft Italic (the song, the stage, the notices) and Nunito SemiBold (labels, numbers), SIL Open Font
+// License, see OFL-Fraunces.txt and OFL-Nunito.txt.
+const unsigned char FONT_ITAL[] = {
+#include "universes/lostpanda/Fraunces-SoftItalic.ttf.inc"
+};
+const unsigned char FONT_SANS[] = {
+#include "universes/lostpanda/Nunito-SemiBold.ttf.inc"
+};
+
+namespace shaders = lostpanda_shaders;
+using ugl::set1f;
+using ugl::set1i;
+using ugl::set2f;
+using ugl::set3f;
+using ugl::set4f;
+using ugl::setMat;
+
+GLuint compile(const char* vs, const char* fs, const char* name) {
+    std::string f(fs);
+    const size_t at = f.find("//@TRAIN");
+    if (at != std::string::npos) f.replace(at, 8, shaders::TRAIN_GLSL);
+    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    std::string v(vs);
+    v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
+    return ugl::program(v.c_str(), f.c_str(), name);
+}
+
+vec2 V(float x, float y) { return vec2{x, y}; }
+vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
+vec3 lin(unsigned c) { return ugl::toLinear(hex(c)); }
+
+// A variant: the seven pieces, the HUD's accent, the lights' warmth.
+struct VariantDef {
+    const char* name;
+    unsigned piece[7];
+    unsigned accent, light;
+};
+const VariantDef VARIANTS[] = {
+    {"LANTERN", {0x6fd3d0, 0xf4cf62, 0xb497e0, 0x8fd07a, 0xef7f74, 0x6f9ee8, 0xf3a35a}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0x7fd8e6, 0xffe08a, 0xc6a6ff, 0x9be6a5, 0xff9aa8, 0x82a9ff, 0xffb98a}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0x86e0cf, 0xffd98f, 0xe0a3e8, 0xb7e08a, 0xff8fa6, 0x8fb0f0, 0xffad7f}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0x5fd0b8, 0xe8d070, 0xa890e0, 0x7ccf6e, 0xe8706a, 0x5f8fe0, 0xe89a50}, 0xa8e8c0, 0xffd070},
+};
+constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
+int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
+
+// ---- The way home: one continuous world. The cub's place along it is its world x (board units).
+constexpr int STAGES = 8;
+const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
+constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
+const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
+constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
+constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
+constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
+constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
+
+double wayOf(double lines) {
+    if (lines <= 0) return 0.0;
+    for (int s = 0; s < STAGES; s++)
+        if (lines < LINES_AT[s + 1]) {
+            const double u = (lines - LINES_AT[s]) / (double)(LINES_AT[s + 1] - LINES_AT[s]);
+            return WAY_AT[s] + (WAY_AT[s + 1] - WAY_AT[s]) * u;
+        }
+    return C_END;
+}
+double smd(double a, double b, double x) {
+    const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+double trackY(double x) {
+    const double t = std::clamp((x - 146.0) / 112.0, 0.0, 1.0);
+    return PLAT_Y + (GY0 - PLAT_Y) * (0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
+}
+constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;   // the subway's stairs (as in the shaders)
+// the cub's feet (world y) along the way: the street, the stairs down, the platform, a hop into the train (its floor
+// following the track up the cutting), a hop down onto the terminus's platform, the ground
+double pathY(double x) {
+    if (x < STAIR_X - 0.3) return GY0;
+    if (x < STAIR_X + TREAD * NSTEPS) {
+        // down the steps one by one: on a tread, then a little hop down to the next as it passes the edge
+        const double n = (x - (STAIR_X - 0.3)) / TREAD;
+        const double i = std::floor(n), fr = n - i;
+        const double d = smd(0.0, 0.4, fr);
+        const double level = std::min(NSTEPS, i + d);
+        return GY0 - (GY0 - PLAT_Y) / NSTEPS * level + (level < NSTEPS ? 0.18 * std::sin(PI * d) : 0.0);
+    }
+    if (x < XB - 0.7) return PLAT_Y;
+    if (x < XB) {
+        const double u = (x - (XB - 0.7)) / 0.7;
+        return PLAT_Y + (trackY(XB) + 0.5 - PLAT_Y) * smd(0.0, 1.0, u) + 0.9 * std::sin(PI * u);
+    }
+    if (x < XA) return trackY(x) + 0.5;
+    if (x < XA + 0.9) {
+        const double u = (x - XA) / 0.9;
+        return trackY(XA) + 0.5 + (GY0 - trackY(XA) - 0.5) * smd(0.0, 1.0, u) + 0.7 * std::sin(PI * u);
+    }
+    return GY0;
+}
+
+// How each place looks (sRGB colors; the light on the pandas as plain multipliers).
+struct StageDef {
+    const char* name;
+    unsigned skyTop, skyHor, fog, sunCol, veil;
+    float sunX, sunY, sunR, sun, stars, clouds, rain, lamp;
+    vec3 amb, key, rim;
+    float keyX, keyY, mood, reflect, fireflies, butterfly;
+};
+const StageDef STAGE[STAGES] = {
+    {"a rainy street", 0x070b16, 0x222a3c, 0x1e2536, 0xffb060, 0x070a12, 0, 0, 1, 0, 0.0f, 0, 1.0f, 1.0f,
+     {0.30f, 0.34f, 0.46f}, {0.42f, 0.36f, 0.30f}, {0.55f, 0.42f, 0.28f}, 0.7f, 0.6f, 0.0f, 0.55f, 0.f, 0.f},
+    {"the shopping street", 0x0d0a1c, 0x34243e, 0x2c2238, 0xff9a80, 0x0c0814, 0, 0, 1, 0, 0.0f, 0, 0.6f, 1.0f,
+     {0.36f, 0.34f, 0.48f}, {0.48f, 0.38f, 0.44f}, {0.6f, 0.35f, 0.5f}, 0.7f, 0.6f, 0.08f, 0.45f, 0.f, 0.f},
+    {"the subway", 0x0d0a1c, 0x34243e, 0x2c2238, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.0f, 0, 0.45f, 1.0f,
+     {0.50f, 0.56f, 0.55f}, {0.45f, 0.50f, 0.46f}, {0.45f, 0.55f, 0.5f}, 0.2f, 1.0f, 0.22f, 0.25f, 0.f, 0.f},
+    {"the night train", 0x0c1020, 0x262838, 0x2a2a36, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.1f, 0, 0.2f, 1.0f,
+     {0.56f, 0.56f, 0.54f}, {0.50f, 0.50f, 0.46f}, {0.4f, 0.4f, 0.36f}, 0.0f, 1.0f, 0.34f, 0.0f, 0.f, 0.f},
+    {"the industrial district", 0x18204a, 0xdf9584, 0x7a6278, 0xffa868, 0x120e1c, 9.f, -6.8f, 1.0f, 0.45f, 0.3f, 0.25f, 0.0f, 0.8f,
+     {0.46f, 0.42f, 0.52f}, {0.62f, 0.44f, 0.40f}, {0.9f, 0.55f, 0.42f}, 0.9f, 0.3f, 0.45f, 0.f, 0.f, 0.f},
+    {"the fields", 0x5e9ad2, 0xf2e5c6, 0xcad6d4, 0xfff0c8, 0x162030, 14.f, 7.5f, 1.0f, 0.55f, 0.0f, 0.8f, 0.0f, 0.0f,
+     {0.70f, 0.74f, 0.82f}, {0.72f, 0.68f, 0.58f}, {0.8f, 0.75f, 0.6f}, 0.6f, 0.8f, 0.66f, 0.f, 0.f, 1.f},
+    {"the bamboo forest", 0x5f8f4a, 0xe8dc8a, 0x7f9e62, 0xffe090, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
+     {0.58f, 0.68f, 0.52f}, {0.74f, 0.68f, 0.48f}, {0.9f, 0.8f, 0.5f}, -0.6f, 0.8f, 0.82f, 0.f, 0.45f, 0.7f},
+    {"the glade", 0x584c86, 0xffb070, 0xe2a084, 0xffc068, 0x1c1018, 16.f, -2.0f, 1.7f, 1.0f, 0.15f, 0.5f, 0.0f, 0.0f,
+     {0.60f, 0.50f, 0.56f}, {0.90f, 0.64f, 0.44f}, {1.0f, 0.68f, 0.38f}, 1.0f, 0.25f, 1.0f, 0.f, 1.0f, 0.5f},
+};
+
+// A blend of two places, float by float.
+struct Look {
+    vec3 skyTop, skyHor, fog, sunCol, veil, amb, key, rim;
+    float sunX, sunY, sunR, sun, stars, clouds, rain, lamp, keyX, keyY, mood, reflect, fireflies, butterfly;
+};
+static_assert(sizeof(Look) % sizeof(float) == 0, "a look is floats only");
+Look lookOf(int s) {
+    const StageDef& d = STAGE[std::clamp(s, 0, STAGES - 1)];
+    Look l;
+    l.skyTop = lin(d.skyTop); l.skyHor = lin(d.skyHor); l.fog = lin(d.fog); l.sunCol = lin(d.sunCol); l.veil = lin(d.veil);
+    l.amb = d.amb; l.key = d.key; l.rim = d.rim;
+    l.sunX = d.sunX; l.sunY = d.sunY; l.sunR = d.sunR; l.sun = d.sun; l.stars = d.stars; l.clouds = d.clouds;
+    l.rain = d.rain; l.lamp = d.lamp; l.keyX = d.keyX; l.keyY = d.keyY; l.mood = d.mood; l.reflect = d.reflect;
+    l.fireflies = d.fireflies; l.butterfly = d.butterfly;
+    return l;
+}
+void mixLook(Look& a, const Look& b, float w) {
+    float* pa = reinterpret_cast<float*>(&a);
+    const float* pb = reinterpret_cast<const float*>(&b);
+    for (int i = 0; i < (int)(sizeof(Look) / sizeof(float)); i++) pa[i] += (pb[i] - pa[i]) * w;
+}
+// The look along the way: keyframes (a place's look at a world x), eased from one to the next: the weather and the
+// time of day pass as the cub goes (night, the subway, the train, dawn as it rides out, morning, gold, sunset).
+struct Key { double s; int stage; };
+const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {220, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
+constexpr int NKEYS = (int)(sizeof(KEYS) / sizeof(KEYS[0]));
+Look lookAt(double s, int* stage = nullptr, float* blend = nullptr) {
+    int i = 0;
+    while (i < NKEYS - 1 && s >= KEYS[i + 1].s) i++;
+    Look a = lookOf(KEYS[i].stage);
+    float w = 0.f;
+    if (i < NKEYS - 1) {
+        w = (float)smd(KEYS[i].s, KEYS[i + 1].s, s);
+        if (w > 0.f) mixLook(a, lookOf(KEYS[i + 1].stage), w);
+    }
+    if (stage) *stage = KEYS[i].stage;
+    if (blend) *blend = w;
+    return a;
+}
+// which part of the way (for the HUD and the cub's idle life)
+int placeOf(double s) {
+    if (s < 40.0) return 0;
+    if (s < 84.0) return 1;
+    if (s < XB - 0.5) return 2;
+    if (s < XA + 0.5) return 3;
+    if (s < 340.0) return 4;
+    if (s < 392.0) return 5;
+    if (s < 440.0) return 6;
+    return 7;
+}
+
+// Test hooks: ZEN_LOSTPANDA_LINES=N adds N lines to the way, ZEN_GROW_RATE=R adds R lines a second.
+int extraLines(double t) {
+    static const int n = std::getenv("ZEN_LOSTPANDA_LINES") ? std::atoi(std::getenv("ZEN_LOSTPANDA_LINES")) : 0;
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return n + (int)(rate * t);
+}
+
+// The idle actions.
+enum Act { A_STAND, A_LOOK, A_LOOKUP, A_SIT, A_WIPE, A_STROLL, A_BUTTERFLY, A_HOP, A_SIGH, A_LOOKBACK, A_HUG, A_COUNT };
+
+} // namespace
+
+// =====================================================================================================
+// Setup
+// =====================================================================================================
+
+bool LostPandaUniverse::init(int width, int height) {
+    progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world");
+    progFront_ = compile(ugl::FULLSCREEN_VS, shaders::FRONT_FS, "lostpanda front");
+    progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "lostpanda comp");
+    progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "lostpanda sprite");
+    progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "lostpanda veil");
+    progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "lostpanda cell");
+    progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "lostpanda shape");
+    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "lostpanda text");
+    progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "lostpanda post");
+    progPanda_ = compile(shaders::PANDA_VS, shaders::PANDA_FS, "lostpanda panda");
+
+    const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
+    glGenBuffers(1, &quadVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+    glGenVertexArrays(1, &quadVao_);
+    glBindVertexArray(quadVao_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    auto instanced = [&](GLuint& vao, GLuint& vbo, int attribs, int stride) {
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        for (int i = 0; i < attribs; i++) {
+            glEnableVertexAttribArray(1 + i);
+            glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(1 + i, 1);
+        }
+    };
+    instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
+    instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
+    glGenVertexArrays(1, &shapeVao_);
+    glGenBuffers(1, &shapeVbo_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
+    glGenVertexArrays(1, &textVao_);
+    glGenBuffers(1, &textVbo_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+    glBindVertexArray(0);
+
+    buildFont(sans_, FONT_SANS);
+    buildFont(ital_, FONT_ITAL);
+    // the family's own rhythms
+    mom_.breath = 1.3f; mom_.blinkT = 3.1f; mom_.sit = 1.f; mom_.mood = 0.6f;
+    dad_.breath = 2.6f; dad_.blinkT = 4.3f; dad_.sit = 1.f; dad_.mood = 0.6f;
+    resize(width, height);
+    return glGetError() == GL_NO_ERROR;
+}
+
+void LostPandaUniverse::buildFont(Font& f, const unsigned char* ttf) {
+    stbtt_fontinfo* info = new stbtt_fontinfo;
+    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
+        std::fprintf(stderr, "[gl] lostpanda font init failed\n");
+        delete info;
+        return;
+    }
+    f.info = info;
+    f.px = 64.f;
+    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
+    int x0, y0, x1, y1;
+    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
+    const int AW = 1024, AH = 1024, PAD = 8;
+    std::vector<unsigned char> atlas(AW * AH, 0);
+    int x = 1, y = 1, rowH = 0;
+    for (int ch = 32; ch < 128; ch++) {
+        Glyph& g = f.g[ch - 32];
+        int adv, lsb;
+        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
+        g.adv = adv * f.scaleTT;
+        int w = 0, h = 0, xo = 0, yo = 0;
+        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
+        if (!sdf) { g.w = g.h = 0; continue; }
+        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
+        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
+        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
+        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
+        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
+        x += w + 1;
+        rowH = std::max(rowH, h);
+        stbtt_FreeSDF(sdf, nullptr);
+    }
+    glGenTextures(1, &f.tex);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    f.ok = true;
+}
+
+void LostPandaUniverse::resize(int width, int height) {
+    width_ = std::max(1, width);
+    height_ = std::max(1, height);
+    const layout::Camera cam = layout::camera(width_, height_);
+    const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * (float)width_ / height_;
+    viewH_ = vec2{hw, hh};
+    viewC_ = vec2{cam.target.x, cam.target.y};
+    vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
+    pxPerUnit_ = height_ / (2.f * hh);
+    // the panda's spot: in the free band left of the HUD's left column
+    // the free band left of the HUD's left column, the cub's size and the family's scale from its width
+    const float bandL = viewC_.x - hw, bandW = layout::LEFT_COLUMN[0] - 0.4f - bandL;
+    famS_ = std::clamp(bandW / 9.5f, 0.5f, 1.f);
+    kidH_ = 4.2f * famS_;
+    xP_ = bandL + 5.1f * famS_;
+    // the reunion, in the free band right of the HUD's right column: the cub (it comes from the left), its mother,
+    // its father furthest right
+    const float bandR0 = layout::RIGHT_COLUMN[2] + 0.4f, bandRW = (viewC_.x + hw) - bandR0;
+    kidEndX_ = bandR0 + 0.2f * bandRW;
+    momEndX_ = bandR0 + 0.48f * bandRW;
+    dadEndX_ = bandR0 + 0.77f * bandRW;
+    enterX_ = 0.f;
+    pEnd_ = C_END + (kidEndX_ - xP_);
+    const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
+    const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+LostPandaUniverse::~LostPandaUniverse() {
+    for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
+    for (GLuint p : {progWorld_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_, progPanda_})
+        glDeleteProgram(p);
+    for (GLuint v : {quadVao_, spriteVao_, cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (Font* f : {&sans_, &ital_}) {
+        if (f->tex) glDeleteTextures(1, &f->tex);
+        delete (stbtt_fontinfo*)f->info;
+    }
+}
+
+// =====================================================================================================
+// Song, level
+// =====================================================================================================
+
+void LostPandaUniverse::setSong(const SongLook& t, float seconds) {
+    (void)seconds;
+    int v;
+    if (t.variant >= 0) v = t.variant % VARIANT_COUNT;
+    else {
+        float h = std::fmod(t.hue / TAU, 1.f);
+        if (h < 0) h += 1.f;
+        if (t.hasSong && !t.minor && t.brightness > 0.6f) v = 1;          // sunny for bright songs
+        else if (t.hasSong && t.minor && t.brightness < 0.45f) v = 0;     // lanterns for dark ones
+        else if (t.hasSong && t.airWeight > 0.6f) v = 2;                  // blossom for airy ones
+        else {
+            static const int BY_HUE[] = {0, 3, 1, 2, 0, 3};
+            v = BY_HUE[(int)(h * 6.f) % 6];
+        }
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
+    }
+    variant_ = v;
+    seed_ = t.seed ? t.seed : 1;
+    rng_ = Rng(seed_ ^ 0x9A4DAull);
+}
+
+void LostPandaUniverse::setLevel(int level, float energy, float seconds, float impact) {
+    level = std::clamp(level, 0, 2);
+    energy_ = energy;
+    if (level < 2) dropMode_ = false;
+    (void)impact;
+    if (!hasLevel_ || seconds < 0.1f) {
+        hasLevel_ = true;
+        level_ = level;
+        lv_ = lvFrom_ = lvTo_ = (float)level;
+        lvT_ = 1.f;
+        return;
+    }
+    const bool rising = level > level_;
+    level_ = level;
+    lvFrom_ = lv_;
+    lvTo_ = (float)level;
+    lvT_ = 0.f;
+    lvDur_ = std::clamp(seconds, rising ? 1.5f : 3.f, 6.f);
+}
+
+void LostPandaUniverse::drop(float strength) {
+    dropMode_ = true;
+    swell_ = std::max(swell_, 0.5f + 0.5f * strength);
+}
+
+void LostPandaUniverse::refresh(float strength) { swell_ = std::max(swell_, 0.3f * strength); }
+
+vec2 LostPandaUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
+
+TransitionHints LostPandaUniverse::hints() const {
+    const Look l = lookAt(C_);
+    TransitionHints h;
+    h.background = lerp(l.skyHor, l.fog, 0.5f) * 0.6f;
+    h.light = false;
+    h.ink = lin(0xf6efe2);
+    h.accent = lin(VARIANTS[wrapV(variant_)].accent);
+    h.styles = TS_INK | TS_LUMA;
+    return h;
+}
+
+// =====================================================================================================
+// Game events
+// =====================================================================================================
+
+void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
+    (void)game;
+    const VariantDef& vd = VARIANTS[wrapV(variant_)];
+    switch (ev.type) {
+    case GameEvent::HardDrop: {
+        // a little puff of dust pushed out from under the piece, at its lowest cells
+        float yLo = 99.f;
+        for (auto& c : ev.cells) yLo = std::min(yLo, layout::cellPos((float)c.x, (float)c.y).y);
+        for (auto& c : ev.cells) {
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            if (p.y > yLo + 0.01f || motes_.size() > 300) continue;
+            for (int i = 0; i < 2; i++) {
+                Mote m;
+                m.p = V(p.x + rng_.range(-0.4f, 0.4f), p.y - 0.5f);
+                m.v = V(rng_.range(-0.8f, 0.8f), rng_.range(0.05f, 0.3f));
+                m.life = rng_.range(0.5f, 0.8f);
+                m.size = rng_.range(0.12f, 0.2f);
+                m.col = lerp(lin(vd.piece[std::clamp(c.type, 0, 6)]), vec3(0.8f), 0.5f);
+                m.alpha = 0.3f;
+                motes_.push_back(m);
+            }
+        }
+        break;
+    }
+    case GameEvent::Clear: {
+        const int lines = std::max(1, ev.count);
+        // each cleared cell shrinks away; each row sends lights of hope drifting to the panda, behind the well
+        bool rows[Game::H] = {};
+        for (auto& cl : ev.cells) {
+            if (cl.y < Game::HIDDEN) continue;
+            const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
+            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
+            if (cl.y >= 0 && cl.y < Game::H) rows[cl.y] = true;
+        }
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - camY_ + kidH_ * 1.05f);
+        int firstRow = -1;
+        for (int y = 0; y < Game::H; y++) {
+            if (!rows[y] || lights_.size() > 80) continue;
+            if (firstRow < 0) firstRow = y;
+            const float ry = layout::cellPos(0.f, (float)y).y;
+            for (int i = 0; i < 2; i++) {
+                Light l;
+                l.a = V(rng_.range(-4.f, 4.f), ry);
+                l.b = V(head.x + rng_.range(-1.6f, 1.6f), head.y + rng_.range(-0.4f, 2.2f));
+                l.ctl = V(lerpf(l.a.x, l.b.x, 0.5f) + rng_.range(-1.f, 1.f), std::max(l.a.y, l.b.y) + rng_.range(2.f, 5.f));
+                l.life = rng_.range(2.6f, 3.4f);
+                l.age = -rng_.range(0.f, 0.35f);
+                l.size = rng_.range(0.3f, 0.45f);
+                l.seed = rng_.uniform();
+                l.col = lin(vd.light);
+                lights_.push_back(l);
+            }
+        }
+        // the snack: a piece of bamboo (a whole little stalk for a Tetris) flying to the cub's paws
+        if (firstRow >= 0) {
+            Light l;
+            l.kind = lines >= 4 ? 2 : 1;
+            l.a = V(rng_.range(-3.f, 3.f), layout::cellPos(0.f, (float)firstRow).y);
+            l.ctl = V(lerpf(l.a.x, head.x, 0.5f), std::max(l.a.y, head.y) + 4.f);
+            l.b = head;
+            l.life = 1.5f;
+            l.size = lines >= 4 ? 0.85f : 0.5f;
+            l.seed = rng_.uniform();
+            l.col = vec3(1.f);
+            lights_.push_back(l);
+        }
+        if (lines >= 4) joy_ = std::max(joy_, 0.8f);
+        lineDelay_ = 1.2f;
+        break;
+    }
+    case GameEvent::TopOut: overT_ = 0.f; break;
+    default: break;
+    }
+}
+
+// =====================================================================================================
+// The pandas' life
+// =====================================================================================================
+
+void LostPandaUniverse::chooseAct(float mood, int stage, bool home) {
+    float w[A_COUNT] = {};
+    const float sad = 1.f - mood;
+    w[A_STAND] = 0.8f;
+    w[A_LOOK] = 1.4f;
+    w[A_LOOKUP] = 0.8f;
+    w[A_SIT] = 0.6f + 1.0f * sad;
+    w[A_WIPE] = mood < 0.5f ? 1.6f * sad * sad : 0.f;
+    w[A_STROLL] = home ? 0.f : 0.7f;
+    w[A_BUTTERFLY] = stage >= 5 && !home ? 1.6f : 0.f;
+    w[A_HOP] = 1.4f * mood * mood;
+    w[A_SIGH] = 0.9f * sad;
+    w[A_LOOKBACK] = 0.8f * sad;
+    w[A_HUG] = home ? 3.0f : 0.f;
+    int a = rng_.weighted(w);
+    if (a == act_ && a != A_HUG) a = rng_.weighted(w);
+    act_ = a;
+    actT_ = 0.f;
+    static const float DUR[A_COUNT][2] = {{2.5f, 4.f}, {4.f, 7.f}, {3.f, 5.f}, {6.f, 10.f}, {4.f, 5.f}, {3.f, 4.5f},
+                                          {6.f, 9.f}, {2.4f, 3.f}, {3.f, 4.f}, {3.f, 5.f}, {6.f, 10.f}};
+    actDur_ = rng_.range(DUR[a][0], DUR[a][1]);
+    if (a == A_STROLL) stroll_ = std::min(P_ + rng_.range(0.6f, 1.1f), lineTarget_ + 1.3);
+}
+
+void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate) {
+    p.turn = approach(p.turn, t.turn, rate * 0.7f, dt);
+    p.tilt = approach(p.tilt, t.tilt, rate, dt);
+    p.lookX = approach(p.lookX, t.lookX, rate * 1.6f, dt);
+    p.lookY = approach(p.lookY, t.lookY, rate * 1.6f, dt);
+    p.sit = approach(p.sit, t.sit, rate * 0.6f, dt);
+    p.wipe = approach(p.wipe, t.wipe, rate * 0.9f, dt);
+    p.tear = approach(p.tear, t.tear, rate * 0.5f, dt);
+    p.hop = approach(p.hop, t.hop, 16.f, dt);
+    p.lean = approach(p.lean, t.lean, rate, dt);
+    p.arms = approach(p.arms, t.arms, rate * 0.9f, dt);
+    p.joyEyes = approach(p.joyEyes, t.joyEyes, rate * 1.2f, dt);
+    p.hug = approach(p.hug, t.hug, rate * 0.7f, dt);
+    p.munch = approach(p.munch, t.munch, 7.f, dt);
+    p.chew += dt * 11.f * p.munch;
+    p.mood = approach(p.mood, t.mood, 0.5f, dt);
+    // breath, blinks, the ears on their springs
+    p.breath += dt * (TAU / 3.6f) * (1.f + 0.4f * p.walk);
+    p.wind = approach(p.wind, t.wind, 1.f, dt);
+    p.blinkAge += dt;
+    p.blinkT -= dt;
+    if (p.blinkT <= 0.f) {
+        p.blinkAge = 0.f;
+        p.blinkT = rng_.range(2.2f, 5.5f);
+        if (rng_.chance(0.2f)) p.blinkT = 0.35f; // a double blink
+    }
+    p.blink = p.blinkAge < 0.18f ? std::sin(p.blinkAge / 0.18f * PI) : 0.f;
+    const float target = 0.08f * std::sin(p.phase * 2.f) * p.walk;
+    for (int i = 0; i < 2; i++) {
+        float& e = i == 0 ? p.earN : p.earF;
+        float& v = i == 0 ? p.earVN : p.earVF;
+        v += (60.f * (target - e) - 5.f * v) * dt;
+        e += v * dt;
+    }
+    if (rng_.chance(dt * 0.18f)) (rng_.chance(0.5f) ? p.earVN : p.earVF) += rng_.range(-2.5f, 2.5f);
+}
+
+void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool travelling, float speed) {
+    Pose t = kid_;
+    const bool home = P_ >= pEnd_ - 0.05;
+    const float mood = std::clamp(stageMood + 0.35f * joy_ + 0.5f * reunion_ - (overT_ >= 0.f ? 0.4f : 0.f), 0.f, 1.f);
+    t.mood = mood;
+    t.turn = 0.55f; t.tilt = 0.f; t.lookX = 0.6f; t.lookY = -0.3f * (1.f - mood);
+    t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f; t.hop = 0.f; t.lean = 0.f; t.arms = 0.f; t.joyEyes = 0.f; t.hug = 0.f;
+    t.wind = 0.3f + 0.5f * kid_.walk;
+    actT_ += dt;
+    // the lights of a clear coming: watch them (toward the well, up)
+    float watch = 0.f;
+    for (const Light& l : lights_) if (l.age > 0.f && l.age < l.life * 0.8f) watch = 1.f;
+    if (overT_ >= 0.f) {
+        t.sit = 1.f; t.tilt = -0.2f; t.turn = 0.15f; t.lookY = -1.f;
+    } else if (travelling) {
+        // walking on: looking ahead; running in a Tetris or a joyful mood
+        t.turn = 0.7f; t.tilt = -0.04f * (1.f - mood); t.lookX = 1.f; t.lookY = -0.1f;
+        t.lean = std::min(1.f, speed / 3.f);
+        if (speed > 2.6f) t.hop = std::fabs(std::sin(kid_.phase)) * 0.035f * std::min(1.f, (speed - 2.6f) / 1.f);
+        actT_ = 0.f;
+        act_ = A_STAND;
+        actDur_ = rng_.range(1.f, 2.5f);
+    } else {
+        if (actT_ > actDur_) chooseAct(mood, stage, home);
+        const float a = actT_;
+        const float in = smoothstepf(0.f, 0.6f, a) * (1.f - smoothstepf(actDur_ - 0.8f, actDur_, a));
+        switch (act_) {
+        case A_LOOK:
+            t.turn = 0.25f + 0.75f * std::sin(a * 0.75f);
+            t.lookX = t.turn > 0.f ? 1.f : -1.f;
+            t.tilt = 0.05f * std::sin(a * 0.5f);
+            break;
+        case A_LOOKUP:
+            t.tilt = 0.26f * in; t.lookY = 1.f; t.turn = 0.35f;
+            break;
+        case A_SIT:
+            t.sit = smoothstepf(0.2f, 0.8f, a) * (1.f - smoothstepf(actDur_ - 1.f, actDur_ - 0.2f, a));
+            t.turn = 0.2f + 0.2f * std::sin(a * 0.4f); t.tilt = -0.06f * (1.f - mood); t.lookY = -0.6f * (1.f - mood);
+            break;
+        case A_WIPE:
+            t.tear = (a > 0.2f && a < 2.4f) ? 1.f : 0.f;
+            t.wipe = (a > 1.6f && a < 3.4f) ? 1.f : 0.f;
+            if (a > 2.3f) t.tear = 0.f;
+            t.tilt = -0.12f; t.turn = 0.15f; t.lookY = -1.f;
+            break;
+        case A_STROLL:
+            t.turn = 0.7f; t.lookX = 1.f;
+            break;
+        case A_BUTTERFLY: break; // the head follows the butterfly (below)
+        case A_HOP: {
+            const float k = a < 2.0f ? std::fabs(std::sin(a * PI / 0.5f)) : 0.f;
+            t.hop = k * 0.075f; t.arms = 0.7f * in; t.joyEyes = in; t.turn = 0.3f;
+            break;
+        }
+        case A_SIGH:
+            t.tilt = -0.2f * in; t.lookY = -1.f; t.turn = 0.2f; t.lean = -0.3f * in;
+            break;
+        case A_LOOKBACK:
+            t.turn = -0.85f * in + 0.55f * (1.f - in); t.lookX = -1.f; t.tilt = 0.05f;
+            break;
+        case A_HUG: {
+            t.joyEyes = in; t.turn = 0.5f; t.tilt = 0.12f * in; t.lean = 0.8f * in;   // leaning into its mother
+            break;
+        }
+        default: break;
+        }
+        if (watch > 0.f && act_ != A_HUG) { t.turn = 0.75f; t.lookX = 1.f; t.lookY = 0.8f; t.tilt = 0.18f; t.sit = 0.f; t.wipe = 0.f; }
+    }
+    // the butterfly: looked at while it flutters near
+    if (flyA_ > 0.3f && (act_ == A_BUTTERFLY || act_ == A_LOOK || act_ == A_STAND) && !travelling && overT_ < 0.f) {
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.75f);
+        const float dx = fly_.x - head.x, dy = fly_.y - head.y;
+        t.turn = std::clamp(dx * 0.6f, -0.9f, 0.9f);
+        t.lookX = dx > 0.f ? 1.f : -1.f;
+        t.lookY = std::clamp(dy * 0.8f, -1.f, 1.f);
+        t.tilt = std::clamp(dy * 0.08f, -0.1f, 0.25f);
+        if (act_ == A_BUTTERFLY) t.joyEyes = 0.f;
+    }
+    // the end: it sees its family on the right, stops, then runs to them; there, the hug
+    if (noticeT_ > 0.f && overT_ < 0.f) {
+        if (!home) {
+            t.turn = 0.85f; t.lookX = 1.f; t.lookY = 0.1f; t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
+            t.tilt = noticeT_ < 1.8f ? 0.1f : 0.f;
+            t.arms = noticeT_ < 1.8f ? 0.f : 0.55f;
+            t.joyEyes = noticeT_ < 1.8f ? 0.f : 0.35f;
+            actT_ = 0.f; act_ = A_HUG; actDur_ = 9.f;
+        } else if (arriveT_ < 1.f) {
+            act_ = A_HUG; actT_ = std::max(actT_, 0.7f); actDur_ = std::max(actDur_, 9.f);
+        }
+    }
+    // munching a snack: paws at its mouth, happy
+    t.munch = munchT_ > 0.f ? 1.f : 0.f;
+    if (munchT_ > 0.f) { t.joyEyes = std::max(t.joyEyes, 0.45f); t.wipe = 0.f; t.tear = 0.f; t.arms = 0.f; }
+    // a drop: the spirits lift, a look up, a few hops
+    if (joy_ > 0.4f && !travelling && act_ != A_HUG && overT_ < 0.f) {
+        t.tilt = std::max(t.tilt, 0.15f * joy_);
+        t.lookY = 0.7f;
+        t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
+    }
+    updatePose(kid_, dt, t, 3.f);
+}
+
+// =====================================================================================================
+// Drawing helpers
+// =====================================================================================================
+
+void LostPandaUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow) {
+    if (alpha <= 0.003f) return;
+    cells_.push_back({{x, y, half, 0.f}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, 0.f}});
+}
+
+void LostPandaUniverse::buildBoard(const Game& g) {
+    const VariantDef& vd = VARIANTS[wrapV(variant_)];
+    auto tintOf = [&](int t) { return lin(vd.piece[std::clamp(t, 0, 6)]); };
+    const float darken = 1.f - 0.45f * smoothstepf(0.f, 1.f, over_);
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const Cell& c = g.cell(x, y);
+            if (c.type < 0) continue;
+            const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
+            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f);
+        }
+    for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T));
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        int cells[4][2];
+        g.pieceCells(p, cells);
+        Piece gp = p;
+        gp.y = g.ghostY();
+        if (gp.y > p.y) {
+            int gc[4][2];
+            g.pieceCells(gp, gc);
+            for (auto& c : gc) {
+                if (c[1] < Game::HIDDEN) continue;
+                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
+                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.6f, 1, 0.f);
+            }
+        }
+        const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        for (auto& c : cells) {
+            if (c[1] < Game::HIDDEN - 1) continue;
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f);
+        }
+    }
+    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+        if (type < 0) return;
+        Piece p{type, 0, 0, 0};
+        int cells[4][2];
+        g.pieceCells(p, cells);
+        float minx = 9, maxx = -9, miny = 9, maxy = -9;
+        for (auto& c : cells) {
+            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+        }
+        for (auto& c : cells) {
+            const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
+            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f);
+        }
+    };
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
+    for (int i = 0; i < 3; i++) {
+        const vec3 c = layout::nextCenter(i);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+    }
+}
+
+void LostPandaUniverse::sprite(std::vector<SpriteInst>& out, vec2 p, float size, const vec3& col, float alpha, int mode,
+                               float param, float param2) {
+    if (alpha <= 0.004f || size <= 0.f) return;
+    out.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}, {param, param2, 0.f, 0.f}});
+}
+
+void LostPandaUniverse::drawSprites(const std::vector<SpriteInst>& v, bool additive) {
+    if (v.empty()) return;
+    (void)additive;
+    glUseProgram(progSprite_);
+    setMat(progSprite_, "uVP", vp_);
+    set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
+    glBindVertexArray(spriteVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(SpriteInst), v.data(), GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)v.size());
+}
+
+// =====================================================================================================
+// Text
+// =====================================================================================================
+
+float LostPandaUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
+    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    float w = 0;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        w += f.g[ch - 32].adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+    return w - track;
+}
+
+void LostPandaUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
+                                  std::vector<float>& out) const {
+    if (!f.ok) return;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    const float baseline = f.capH * k;
+    float pen = 0.f;
+    auto place = [&](float u, float v, float tu, float tv) {
+        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
+    };
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        const Glyph& g = f.g[ch - 32];
+        if (g.w > 0) {
+            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
+            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
+            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
+        }
+        pen += g.adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+}
+
+void LostPandaUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float halo) {
+    if (q.empty() || !f.ok || alpha <= 0.004f) return;
+    glUseProgram(progText_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    set1i(progText_, "uFont", 0);
+    set2f(progText_, "uRes", (float)width_, (float)height_);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const Look l = lookAt(C_);
+    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
+    set3f(progText_, "uHalo", lerp(l.veil * 0.8f, bridge_.color, b));
+    set1f(progText_, "uHaloA", halo);
+    set1f(progText_, "uAlpha", alpha);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+}
+
+// The HUD: Nunito capitals, widely spaced, for the labels and the numbers; Fraunces' soft italics for the song,
+// the variant, the notices, and the place on the way home after the universe's name.
+void LostPandaUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+    const Look lk = lookAt(C_);
+    if (!panels.empty()) {
+        std::vector<float> v;
+        for (const HudRect& r : panels) {
+            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? lin(VARIANTS[wrapV(variant_)].accent) : lk.veil;
+            const float a = std::min(1.f, r.alpha);
+            const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                                    {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+            for (auto& p : qd) v.insert(v.end(), p, p + 6);
+        }
+        glUseProgram(progShape_);
+        set2f(progShape_, "uRes", (float)width_, (float)height_);
+        glBindVertexArray(shapeVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+    }
+    const vec3 ink = lin(0xf6efe2), accent = lin(VARIANTS[wrapV(variant_)].accent);
+    std::vector<float> q;
+    const float halo = 0.75f;
+    for (const HudText& h : hud) {
+        if (h.alpha <= 0.01f || h.text.empty()) continue;
+        const float base = h.scale * 12.f;
+        const float alpha = saturate(h.alpha);
+        q.clear();
+        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
+            const float w = textWidth(f, text, size, track);
+            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
+        };
+        switch (h.role) {
+        case HUD_UNIVERSE: {
+            std::string name = h.text, var;
+            const size_t dot = name.find("\xC2\xB7");
+            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
+            while (!name.empty() && name.back() == ' ') name.pop_back();
+            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
+            const float sz = base * 0.95f, tr = sz * 0.28f;
+            const float wName = textWidth(sans_, name, sz, tr);
+            std::string vt = var;
+            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
+            const float vsz = base * 1.3f;
+            const float wVar = vt.empty() ? 0.f : textWidth(ital_, vt, vsz, 0.f);
+            const float gap = base * 0.75f;
+            const std::string st = stageName_;
+            const float wSt = textWidth(ital_, st, vsz, 0.f);
+            const float total = wName + (vt.empty() ? 0.f : gap + wVar) + gap * 1.3f + wSt;
+            const float x = ugl::hudLeft(h, total, width_);
+            const float a = saturate(0.35f + h.alpha * 1.6f);
+            textQuads(sans_, name, x, h.y, sz, tr, q);
+            drawText(sans_, q, ink, a, halo);
+            float cx = x + wName;
+            if (!vt.empty()) {
+                q.clear();
+                textQuads(ital_, vt, cx + gap, h.y - sz * 0.22f, vsz, 0.f, q);
+                drawText(ital_, q, accent, a * 0.9f, halo);
+                cx += gap + wVar;
+            }
+            cx += gap * 1.3f;
+            q.clear();
+            textQuads(ital_, st, cx, h.y - sz * 0.22f, vsz, 0.f, q);
+            drawText(ital_, q, ink, a * 0.72f, halo);
+            continue;
+        }
+        case HUD_SECTION:
+            place(sans_, h.text, base * 0.9f, base * 0.45f);
+            drawText(sans_, q, ink, saturate(0.2f + h.alpha * 1.9f), halo);
+            continue;
+        case HUD_TITLE:
+            place(ital_, h.text, base * 1.65f, 0.f, -base * 0.35f);
+            drawText(ital_, q, ink, saturate(h.alpha * 1.3f), halo);
+            continue;
+        case HUD_INFO:
+            place(sans_, h.text, base * 0.66f, base * 0.12f);
+            drawText(sans_, q, ink, saturate(alpha * 1.3f) * 0.8f, halo);
+            continue;
+        case HUD_LABEL:
+            place(sans_, h.text, base * 0.78f, base * 0.42f);
+            drawText(sans_, q, lerp(ink, accent, 0.5f), saturate(alpha * 1.2f) * 0.92f, halo);
+            continue;
+        case HUD_VALUE:
+            place(sans_, h.text, base * 1.05f, base * 0.04f);
+            drawText(sans_, q, ink, alpha, halo);
+            continue;
+        case HUD_NOTICE:
+            place(ital_, h.text, base * 1.55f, 0.f);
+            drawText(ital_, q, accent, alpha, halo);
+            continue;
+        case HUD_KEY:
+            place(sans_, h.text, base * 0.75f, base * 0.06f);
+            drawText(sans_, q, ink, alpha, halo);
+            continue;
+        case HUD_TOAST:
+            place(sans_, h.text, base * 1.3f, base * 0.45f, -base * 0.2f);
+            drawText(sans_, q, ink, alpha, 0.85f);
+            continue;
+        case HUD_TOAST_SUB:
+            place(ital_, h.text, base * 1.4f, 0.f);
+            drawText(ital_, q, accent, alpha * 0.9f, 0.85f);
+            continue;
+        case HUD_DIALOG:
+            if (h.scale >= 3.5f * height_ / 1080.f) {
+                place(ital_, h.text, base * 1.3f, 0.f, -base * 0.1f);
+                drawText(ital_, q, ink, alpha, 0.85f);
+            } else {
+                place(sans_, h.text, base * 0.85f, base * 0.14f);
+                drawText(sans_, q, h.accent ? accent : ink, alpha, 0.85f);
+            }
+            continue;
+        default:
+            place(sans_, h.text, base * 0.85f, base * 0.12f);
+            drawText(sans_, q, h.accent ? accent : ink, alpha, halo);
+            continue;
+        }
+    }
+}
+
+// =====================================================================================================
+// The pandas
+// =====================================================================================================
+
+void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze,
+                                  bool reflect, int part) {
+    if (alpha <= 0.003f) return;
+    const float x0 = feet.x - 0.75f * h, x1 = feet.x + 0.75f * h;
+    if (x1 < viewC_.x - viewH_.x || x0 > viewC_.x + viewH_.x) return;
+    const Look l = lookAt(C_ + (feet.x - xP_));
+    glUseProgram(progPanda_);
+    setMat(progPanda_, "uVP", vp_);
+    set4f(progPanda_, "uRect", x0, feet.y - (reflect ? 0.75f * h : 0.08f * h), x1, feet.y + 1.35f * h);
+    set2f(progPanda_, "uPos", feet.x, feet.y);
+    set1f(progPanda_, "uH", h);
+    set1f(progPanda_, "uFace", face);
+    set1f(progPanda_, "uPx", 1.f / pxPerUnit_);
+    set1f(progPanda_, "uAdult", adult);
+    set1f(progPanda_, "uTime", time_);
+    glUniform1i(ugl::U(progPanda_, "uPart"), part);
+    set1f(progPanda_, "uWalk", p.walk);
+    set1f(progPanda_, "uPhase", p.phase);
+    set1f(progPanda_, "uMood", p.mood);
+    set1f(progPanda_, "uBreath", p.breath);
+    set1f(progPanda_, "uTurn", p.turn);
+    set1f(progPanda_, "uTilt", p.tilt);
+    set1f(progPanda_, "uBlink", p.blink);
+    set1f(progPanda_, "uSit", p.sit);
+    set1f(progPanda_, "uWipe", p.wipe);
+    set1f(progPanda_, "uTear", p.tear);
+    set1f(progPanda_, "uHop", p.hop);
+    set1f(progPanda_, "uLean", p.lean);
+    set1f(progPanda_, "uArms", p.arms);
+    set1f(progPanda_, "uJoyEyes", p.joyEyes);
+    set1f(progPanda_, "uHug", p.hug);
+    set1f(progPanda_, "uMunch", p.munch);
+    set1f(progPanda_, "uChew", p.chew);
+    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
+    set1f(progPanda_, "uRoll", adult > 0.5f ? 0.f : kidRoll_);
+    set2f(progPanda_, "uLook", p.lookX, p.lookY);
+    set2f(progPanda_, "uEars", p.earN, p.earF);
+    const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
+    set3f(progPanda_, "uAmb", l.amb * night);
+    set3f(progPanda_, "uKey", l.key * night * (1.f + 0.25f * dropAmt_));
+    set3f(progPanda_, "uRimC", l.rim * night);
+    const float kl = std::sqrt(l.keyX * l.keyX + l.keyY * l.keyY) + 1e-4f;
+    set2f(progPanda_, "uKeyDir", l.keyX / kl, l.keyY / kl);
+    set1f(progPanda_, "uReflect", reflect ? l.reflect : 0.f);
+    set1f(progPanda_, "uShadow", 0.6f);
+    set1f(progPanda_, "uAlpha", alpha);
+    set1f(progPanda_, "uHaze", haze);
+    set3f(progPanda_, "uHazeC", l.fog);
+    glBindVertexArray(quadVao_);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+// =====================================================================================================
+// Frame
+// =====================================================================================================
+
+void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
+    const Game& game = f.game;
+    const MusicState& music = f.music;
+    const float dt = std::min(f.dt, 0.1f);
+    slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
+    dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
+    if (overT_ >= 0.f && !f.bare) {
+        if (!game.over()) overT_ = -1.f;
+        else overT_ += dt;
+    }
+    over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 2.5f) : 0.f, overT_ >= 0.f ? 3.f : 0.8f, dt);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, slow_);
+    time_ += wdt;
+    const VariantDef& vd = VARIANTS[wrapV(variant_)];
+
+    // ---- Staging.
+    if (lvT_ < 1.f) {
+        lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
+        lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
+    }
+    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
+    bool sectionKnown = false, sectionDrop = false;
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_SECTION) {
+            sectionKnown = true;
+            sectionDrop = h.text == "DROP";
+        }
+    const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
+    if (isDrop && !wasDrop_) {
+        // the drop: the spirits lift; lights rise all around the cub
+        joy_ = 1.f;
+        if (act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.8f; }
+        const vec2 at = V(xP_ + (float)(P_ - C_), GY);
+        for (int i = 0; i < 16 && lights_.size() < 120; i++) {
+            Light l;
+            l.a = V(at.x + rng_.range(-4.f, 4.f), GY + rng_.range(-1.5f, 0.5f));
+            l.b = V(l.a.x + rng_.range(-2.f, 2.f), GY + rng_.range(6.f, 13.f));
+            l.ctl = V(at.x + rng_.range(-3.f, 3.f), lerpf(l.a.y, l.b.y, 0.5f));
+            l.life = rng_.range(4.f, 6.f);
+            l.age = -rng_.range(0.f, 1.2f);
+            l.size = rng_.range(0.3f, 0.5f);
+            l.seed = rng_.uniform();
+            l.col = lin(vd.light);
+            lights_.push_back(l);
+        }
+    }
+    wasDrop_ = isDrop;
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 0.8f : 0.3f, dt);
+    swell_ = approach(swell_, 0.f, 0.5f, dt);
+    joy_ = approach(joy_, 0.f, 0.22f, dt);
+    double beat;
+    if (music.hasSong) beat = music.beat;
+    else {
+        if (!f.paused) ownBeat_ += dt * 2.0;
+        beat = ownBeat_;
+    }
+    {
+        const float k = std::max(music.kick, kickIn_) * wp;
+        kickS_ = approach(kickS_, k, k > kickS_ ? 5.f : 1.2f, dt);
+    }
+    kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
+    // every two beats, a soft bump (a peak's nod, the fireflies winking)
+    const float half = (float)std::fmod(beat * 0.5, 1.0);
+    const float nod = std::exp(-half * 5.f) * wp;
+
+    // ---- The way: the game's lines -> where the cub should be.
+    bool travelling = false;
+    float speed = 0.f;
+    trainClock_ += wdt;
+    {
+        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_);
+        if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
+            // a new game: back to the rainy street (the world dimmed by the game over hides the jump)
+            placed_ = false;
+            lights_.clear();
+            kid_.sit = 0.f;
+        }
+        lines_ = lines;
+        linesShown_ = lines;
+        if (!placed_) {
+            lineTarget_ = lines >= LINES_AT[STAGES] ? pEnd_ : wayOf(lines);
+            P_ = lineTarget_;
+            C_ = std::min(P_, C_END);
+            camY_ = (float)(pathY(P_) - GY0);
+            vel_ = 0.0;
+            stroll_ = creep_ = P_;
+            linesWalk_ = lines;
+            noticeT_ = arriveT_ = 0.f;
+            // the train where it should be
+            boardT_ = leaveT_ = trainT_ = 0.f;
+            if (P_ >= XA + 3.0) { train_ = T_GONE; trainX_ = -1000.0; door_ = 0.f; }
+            else if (P_ >= XA - 0.05) { train_ = T_TERM; trainX_ = XA - DOOR; door_ = 1.f; }
+            else if (P_ > XB - 0.7) { train_ = T_RIDE; trainX_ = P_ - DOOR; door_ = 0.f; }
+            else if (P_ >= 90.0) { train_ = T_WAIT; trainX_ = XB - DOOR; door_ = 1.f; }
+            else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
+            placed_ = true;
+        }
+        lineDelay_ -= wdt;
+        if (lineDelay_ <= 0.f) linesWalk_ = lines_;
+        lineTarget_ = linesWalk_ >= LINES_AT[STAGES] ? pEnd_ : wayOf(linesWalk_);
+        double target = lineTarget_;
+        double cap = pEnd_;   // how far the cub may go now (the gates below)
+        // a stroll (on foot, in the open), the train creeping on between clears
+        const bool onFoot = P_ < 78.0 || (P_ > XA + 2.0 && P_ < C_END - 2.0);
+        if (onFoot) target = std::max(target, std::min(stroll_, lineTarget_ + 1.3));
+        const bool riding = train_ == T_RIDE;
+        if (riding) creep_ = std::min(std::max(creep_, P_) + wdt * 1.1, std::min(lineTarget_ + 12.0, XA));
+        else creep_ = P_;
+        if (riding) target = std::max(target, creep_);
+        // gates: the train must be there with its doors open, closed before it leaves, open at the terminus
+        if (P_ < XB - 0.5 && !(train_ == T_WAIT && door_ > 0.95f)) cap = std::min(cap, XB - 1.0);
+        if (train_ == T_WAIT) cap = std::min(cap, XB);
+        if (P_ < XA + 0.5 && !(train_ == T_TERM && door_ > 0.95f)) cap = std::min(cap, XA);
+        // the end: the cub sees its family, stops a moment, then runs to them
+        if (linesWalk_ >= LINES_AT[STAGES] && P_ >= C_END - 0.1) noticeT_ += wdt;
+        if (noticeT_ < 1.8f) cap = std::min(cap, C_END);
+        target = std::min(target, cap);
+        if (overT_ >= 0.f) target = P_;
+        const double dist = target - P_;
+        const float mood = kid_.mood;
+        const bool lineWalk = lineTarget_ - P_ > 0.05 || (riding && dist > 0.05);
+        double vmax = lineWalk ? lerpf(1.5f, 2.6f, mood) + std::min(2.2, std::max(0.0, dist - 6.0) * 0.25) : 0.45;
+        if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
+        if (riding) vmax = 6.5;                                                // the train
+        if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
+        if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
+        if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
+        { // (testing: with ZEN_GROW_RATE the cub keeps up with the growing lines)
+            static const double grow = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+            if (!riding) vmax += grow * 3.0;
+            else vmax += grow * 6.0;
+        }
+        const double want = std::clamp(dist * (riding ? 0.7 : 1.1), 0.0, vmax);
+        vel_ += (want - vel_) * (1.0 - std::exp(-(riding ? 1.2 : 2.6) * wdt));
+        if (dist < 0.002 && vel_ < 0.02) vel_ = 0.0;
+        {
+            const double before = P_;
+            P_ += vel_ * wdt;
+            if (P_ > cap) { P_ = std::max(before, cap); vel_ = 0.0; }   // never past a gate
+        }
+        speed = (float)vel_;
+        travelling = (lineWalk || vel_ > 0.12) && !riding;
+        // the train
+        switch (train_) {
+        case T_AWAY:
+            trainX_ = XB - DOOR - 160.0;
+            if (P_ >= 90.0) { train_ = T_ARRIVE; trainT_ = 0.f; }
+            break;
+        case T_ARRIVE: {
+            trainT_ += wdt;
+            const double u = std::min(1.0, trainT_ / 10.0);
+            trainX_ = XB - DOOR - 130.0 * (1.0 - u) * (1.0 - u);
+            if (u >= 1.0) { train_ = T_WAIT; trainT_ = 0.f; boardT_ = 0.f; }
+            break;
+        }
+        case T_WAIT:
+            trainX_ = XB - DOOR;
+            if (P_ >= XB - 0.03) boardT_ += wdt;
+            door_ = std::clamp(door_ + wdt / 1.2f * (boardT_ > 1.0f ? -1.f : 1.f), 0.f, 1.f);
+            if (boardT_ > 1.0f && door_ <= 0.f) train_ = T_RIDE;
+            break;
+        case T_RIDE:
+            trainX_ = P_ - DOOR;
+            door_ = 0.f;
+            if (P_ >= XA - 0.03) { train_ = T_TERM; leaveT_ = 0.f; }
+            break;
+        case T_TERM:
+            trainX_ = XA - DOOR;
+            if (P_ > XA + 3.0) leaveT_ += wdt;
+            door_ = std::clamp(door_ + wdt / 1.2f * (leaveT_ > 1.5f ? -1.f : 1.f), 0.f, 1.f);
+            if (leaveT_ > 1.5f && door_ <= 0.f) { train_ = T_LEAVE; trainT_ = 0.f; }
+            break;
+        case T_LEAVE: {
+            trainT_ += wdt;
+            const double u = trainT_ / 14.0;
+            trainX_ = XA - DOOR - 170.0 * u * u;
+            if (u >= 1.0) train_ = T_GONE;
+            break;
+        }
+        default: trainX_ = -1000.0; break;
+        }
+        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
+        const double cT = std::min(P_, C_END);
+        C_ += (cT - C_) * (1.0 - std::exp(-(riding ? 2.5 : 1.1) * wdt));
+        camY_ = approach(camY_, (float)(pathY(P_) - GY0), riding ? 3.f : 1.6f, wdt);
+        // the walk cycle: steps follow the ground covered (not while riding)
+        const float stride = 0.32f * kidH_;
+        if (!riding) kid_.phase += (float)(vel_ * wdt) * TAU / stride;
+        kid_.walk = approach(kid_.walk, riding ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
+        reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
+        strength_ = approach(strength_, (float)smd(20.0, C_END - 30.0, P_), 0.5f, wdt);
+        munchT_ = std::max(0.f, munchT_ - wdt);
+    }
+    const Look look0 = lookAt(C_);
+    Look look = look0;
+    stageAt_ = placeOf(P_);
+    stageName_ = STAGE[stageAt_].name;
+    if (P_ >= C_END - 1.0 && arriveT_ > 0.f) stageName_ = "home";
+
+    // ---- The pandas' life.
+    updateKid(wdt, look.mood, stageAt_, travelling, speed);
+    {
+        // the family waits on the right; when the cub sees them they stand up and open their arms; then the hug
+        const bool arrived = P_ >= pEnd_ - 0.05;
+        arriveT_ = arrived ? arriveT_ + wdt : 0.f;
+        for (int i = 0; i < 2; i++) {
+            Pose& fp = i == 0 ? mom_ : dad_;
+            Pose t = fp;
+            const float tt = time_ * (i == 0 ? 0.35f : 0.27f) + i * 2.f;
+            const bool seen = noticeT_ > 0.6f;
+            t.mood = seen ? 1.f : 0.6f;
+            t.sit = (seen && arriveT_ < 4.5f) ? 0.f : 1.f;
+            t.turn = seen ? 0.7f : 0.35f * std::sin(tt) + 0.25f;     // (their +x: toward the cub, on their left)
+            t.lookX = t.turn > 0.f ? 1.f : -1.f;
+            t.lookY = 0.f;
+            t.arms = (seen && !arrived) ? 0.85f : 0.f;
+            t.hug = (arrived && i == 0) ? 1.f : 0.f;
+            t.tilt = arrived ? 0.14f : 0.05f * std::sin(tt * 1.3f);
+            t.lean = arrived ? (i == 0 ? 0.8f : 0.4f) : 0.f;
+            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : 0.f;
+            t.wind = 0.2f;
+            updatePose(fp, wdt, t, 1.5f);
+        }
+    }
+    // the butterfly: it flutters about the cub in the fields and the forest
+    {
+        const float want = overT_ < 0.f ? look.butterfly : 0.f;
+        flyA_ = approach(flyA_, want, 0.5f, wdt);
+        const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.9f);
+        const vec2 goal = V(head.x + 1.6f * std::sin(time_ * 0.37f) + 0.9f * std::sin(time_ * 0.91f + 1.f) + 0.6f,
+                            head.y + 0.6f + 0.9f * std::sin(time_ * 0.53f + 2.f) + 0.4f * std::sin(time_ * 1.7f));
+        if (flyA_ < 0.02f) fly_ = V(head.x + 6.f, head.y + 3.f);
+        flyV_ = V(flyV_.x + (goal.x - fly_.x) * 2.2f * wdt, flyV_.y + (goal.y - fly_.y) * 2.2f * wdt);
+        flyV_ = V(flyV_.x * std::exp(-1.6f * wdt), flyV_.y * std::exp(-1.6f * wdt));
+        fly_ = V(fly_.x + flyV_.x * wdt, fly_.y + flyV_.y * wdt);
+        fly_.x = std::min(fly_.x, layout::LEFT_COLUMN[0] - 0.8f);
+        flyFlap_ += wdt * 14.f;
+    }
+
+    // ---- Lights and motes.
+    for (Light& l : lights_) l.age += wdt * (1.f - 0.4f * slow_) + dt * 0.4f * slow_;
+    lights_.erase(std::remove_if(lights_.begin(), lights_.end(), [](const Light& l) { return l.age >= l.life; }), lights_.end());
+    for (Mote& m : motes_) {
+        m.age += dt;
+        m.p = vec2{m.p.x + m.v.x * dt, m.p.y + m.v.y * dt};
+        m.v = vec2{m.v.x * std::exp(-2.5f * dt), m.v.y * std::exp(-2.5f * dt)};
+    }
+    motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
+    for (auto& fd : fading_) fd.t += dt;
+    fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+
+    const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
+
+    // background sprites: the lights of hope, the snacks on their way, the fireflies
+    bgSprites_.clear();
+    fgSprites_.clear();
+    const vec2 kidHead = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - camY_ + kidH_ * 0.55f);
+    for (Light& l : lights_) {
+        if (l.age < 0.f) continue;
+        if (l.kind > 0) {
+            // a snack: an arc from the row to the cub's paws, tumbling; caught at the end
+            const float u = saturate(l.age / l.life);
+            const float e = u * u * (3.f - 2.f * u);
+            const float iu = 1.f - e;
+            const vec2 b = kidHead;
+            const vec2 p = V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * b.y);
+            const float a = smoothstepf(0.f, 0.08f, u) * (1.f - smoothstepf(0.9f, 1.f, u)) * world;
+            const float ang = l.seed * 6.f + l.age * 2.2f * (1.f - u);
+            sprite(u < 0.75f ? bgSprites_ : fgSprites_, p, l.size * (1.f - 0.35f * smoothstepf(0.8f, 1.f, u)), vec3(1.f), a, 5, ang);
+            if (u > 0.92f && !l.fed) {
+                l.fed = true;
+                munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
+                joy_ = std::max(joy_, l.kind == 2 ? 0.7f : 0.3f);
+                if (l.kind == 2 && act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.4f; }
+            }
+            continue;
+        }
+        const float u = saturate(l.age / (l.life * 0.72f));
+        const float e = u * u * (3.f - 2.f * u);
+        const float iu = 1.f - e;
+        vec2 p = V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * l.b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * l.b.y);
+        p.x += 0.25f * std::sin(l.age * 2.1f + l.seed * 9.f);
+        p.y += 0.25f * std::sin(l.age * 1.7f + l.seed * 5.f);
+        const float t = l.age / l.life;
+        const float a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.75f, 1.f, t));
+        const float tw = 0.85f + 0.15f * std::sin(l.age * 6.f + l.seed * 20.f);
+        sprite(bgSprites_, p, l.size * (1.f + 0.3f * (1.f - t)), l.col * 1.4f, a * tw * world, 4);
+    }
+    {
+        const float n = (look.fireflies + 0.5f * dropAmt_) * world;
+        const int count = (int)std::ceil(48.f * std::min(1.f, n));
+        for (int i = 0; i < count; i++) {
+            const float s = i * 1.618f;
+            float x = viewC_.x - viewH_.x + std::fmod(s * 13.7f + 3.f, 2.f * viewH_.x);
+            x += 1.5f * std::sin(time_ * (0.11f + 0.05f * std::sin(s)) + s * 4.f) + std::fmod(-(float)C_ * 0.6f, 2.f * viewH_.x) * 0.f;
+            const float y = GY - 1.f + std::fmod(s * 7.3f, 12.f) + 1.2f * std::sin(time_ * (0.17f + 0.04f * std::cos(s)) + s);
+            float blink = 0.5f + 0.5f * std::sin(time_ * (0.8f + 0.3f * std::sin(s * 3.f)) + s * 7.f);
+            blink = blink * blink;
+            if ((i & 3) == 0) blink = std::max(blink, nod * 0.9f);
+            const float a = blink * smoothstepf((float)i, (float)i + 1.f, 48.f * std::min(1.f, n)) * (0.4f + 0.6f * kickS_ * ((i % 5) == 0));
+            sprite(bgSprites_, V(x, y), 0.32f, lerp(lin(0xd8ff90), lin(vd.light), 0.3f), a * 0.9f + 0.1f * a, 4);
+        }
+    }
+    sprites_.clear();
+    if (!f.bare) {
+        for (const Mote& m : motes_) {
+            const float t = m.age / m.life;
+            const float a = smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.5f, 1.f, t)) * m.alpha;
+            sprite(sprites_, m.p, m.size * (1.f + t), m.col, a, 0);
+        }
+        const vec3 gc = layout::GAUGE_CENTER;
+        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
+        const bool on = game.bonusReady() || game.bonusActive();
+        sprite(sprites_, V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? lin(vd.light) : lin(vd.accent), 1.f, 1, fill, on ? 1.f : 0.f);
+    }
+    cells_.clear();
+    if (!f.bare) buildBoard(game);
+
+    const float dawn = (float)smd(165.0, 290.0, P_);
+    auto setTrain = [&](GLuint prog, float px) {
+        set1f(prog, "uTrainX", (float)trainX_);
+        set1f(prog, "uDoor", smoothstepf(0.f, 1.f, door_));
+        set1f(prog, "uTrainLit", 1.f);
+        set1f(prog, "uTrainBody", 0.55f + 0.7f * dawn);
+        set1f(prog, "uSway", train_ == T_RIDE ? 1.f : 0.25f);
+        set1f(prog, "uTrainT", trainClock_);
+        (void)px;
+    };
+    const bool trainOn = std::fabs(trainX_ + 17.0 - (C_ - xP_)) < viewH_.x + 40.0;
+    auto drawFront = [&]() {
+        if (!trainOn) return;
+        glUseProgram(progFront_);
+        set2f(progFront_, "uViewC", viewC_.x, viewC_.y);
+        set2f(progFront_, "uViewH", viewH_.x, viewH_.y);
+        set1f(progFront_, "uD", (float)C_ - xP_);
+        set1f(progFront_, "uCamY", camY_);
+        set1f(progFront_, "uPxP", 1.f / pxPerUnit_);
+        set1f(progFront_, "uWorldA", world);
+        set1f(progFront_, "uOver", smoothstepf(0.f, 1.f, over_));
+        set3f(progFront_, "uBridgeCol", bridge_.color);
+        setTrain(progFront_, 1.f / pxPerUnit_);
+        ugl::drawFullscreen();
+    };
+    // the cub is inside the train (behind its near side) from its door to the terminus
+    const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
+
+    // =========================================================== the world (reduced resolution)
+    {
+        worldT_.bind();
+        glDisable(GL_BLEND);
+        glUseProgram(progWorld_);
+        set2f(progWorld_, "uViewC", viewC_.x, viewC_.y);
+        set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
+        set1f(progWorld_, "uPxP", 2.f * viewH_.y / worldT_.h);
+        set1f(progWorld_, "uD", (float)C_ - xP_);
+        set1f(progWorld_, "uCamY", camY_);
+        set1f(progWorld_, "uDawn", dawn);
+        set1f(progWorld_, "uSubLight", 1.f);
+        setTrain(progWorld_, 2.f * viewH_.y / worldT_.h);
+        set1f(progWorld_, "uTime", time_);
+        set1f(progWorld_, "uBeat", (float)std::fmod(beat, 4096.0));
+        set1f(progWorld_, "uPeak", wp);
+        set1f(progWorld_, "uMid", wm);
+        set1f(progWorld_, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
+        set1f(progWorld_, "uKick", kickS_);
+        set1f(progWorld_, "uRain", look.rain);
+        set1f(progWorld_, "uStars", look.stars);
+        set1f(progWorld_, "uClouds", look.clouds);
+        set1f(progWorld_, "uOver", smoothstepf(0.f, 1.f, over_));
+        set1f(progWorld_, "uWorldA", world);
+        set1f(progWorld_, "uSlow", slow_);
+        set3f(progWorld_, "uSkyTop", look.skyTop);
+        set3f(progWorld_, "uSkyHor", look.skyHor);
+        set3f(progWorld_, "uFog", look.fog);
+        set3f(progWorld_, "uSunCol", look.sunCol);
+        set4f(progWorld_, "uSun", look.sunX, look.sunY - camY_ * 0.08f, look.sunR, look.sun);
+        set3f(progWorld_, "uBridgeCol", bridge_.color);
+        set1f(progWorld_, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
+        ugl::drawFullscreen();
+    }
+
+    // =========================================================== the scene (full resolution)
+    sceneT_.bind();
+    glUseProgram(progComp_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, worldT_.tex);
+    set1i(progComp_, "uWorld", 0);
+    set2f(progComp_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    ugl::drawFullscreen();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    drawSprites(bgSprites_, true);
+    // the train's near side (when the cub is not in it), the family, the cub, the train's near side over it (when it
+    // rides), the snacks reaching it, the butterfly
+    if (!inside) drawFront();
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    {
+        const float alpha = world;
+        const float fs = famS_;
+        const float shift = (float)(C_END - C_);
+        const float fy = -camY_;
+        if (shift < 2.f * viewH_.x + 12.f) {
+            drawPanda(dad_, V(dadEndX_ + shift, GY + 0.7f * fs + fy), 6.9f * fs, -1.f, 1.f, alpha, 0.06f, false, 0);
+            drawPanda(mom_, V(momEndX_ + shift, GY + 0.35f * fs + fy), 6.6f * fs, -1.f, 1.f, alpha, 0.03f, false, 0);
+        }
+        const float ky = GY + (float)(pathY(P_) - GY0) - camY_;
+        {
+            const double x0 = trainX_ + 17.6;
+            kidRoll_ = inside ? (float)std::atan((trackY(x0 + 17.0) - trackY(x0)) / 17.0) : 0.f;
+        }
+        kid_.tilt += 0.035f * nod;
+        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 96.0 && P_ < XB - 0.7), 0);
+        kid_.tilt -= 0.035f * nod;
+    }
+    if (inside) drawFront();
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // hearts rising from the pandas when they meet (on the right of the HUD, behind nothing of the board)
+    {
+        const float fs = famS_;
+        const float shift = (float)(C_END - C_);
+        if (arriveT_ > 0.15f && overT_ < 0.f) {
+            heartT_ -= wdt;
+            if (heartT_ <= 0.f && hearts_.size() < 40) {
+                const int who = rng_.irange(0, 2);
+                vec2 at = who == 0 ? V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.8f)
+                        : who == 1 ? V(momEndX_ + shift, GY + 0.35f * fs + 6.6f * fs * 0.8f)
+                                   : V(dadEndX_ + shift, GY + 0.7f * fs + 6.9f * fs * 0.8f);
+                Heart h;
+                h.p = V(at.x + rng_.range(-1.2f, 1.2f), at.y + rng_.range(-0.5f, 0.8f));
+                h.life = rng_.range(3.5f, 5.f);
+                h.size = rng_.range(0.34f, 0.6f) * fs;
+                h.seed = rng_.uniform();
+                h.col = lerp(lin(0xff7a90), lin(0xe8344e), rng_.uniform());
+                hearts_.push_back(h);
+                heartT_ = arriveT_ < 4.f ? rng_.range(0.2f, 0.35f) : rng_.range(0.5f, 0.9f);
+            }
+        }
+        const float minX = layout::RIGHT_COLUMN[2] + 0.5f;
+        for (Heart& h : hearts_) {
+            h.age += wdt;
+            h.p.y += wdt * (0.6f + 0.25f * h.seed);
+        }
+        hearts_.erase(std::remove_if(hearts_.begin(), hearts_.end(), [](const Heart& h) { return h.age >= h.life; }), hearts_.end());
+        for (const Heart& h : hearts_) {
+            const float t = h.age / h.life;
+            const float a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.55f, 1.f, t)) * world;
+            const float x = std::max(minX + h.size, h.p.x + 0.35f * std::sin(h.age * 1.4f + h.seed * 6.f));
+            sprite(fgSprites_, V(x, h.p.y), h.size * (0.8f + 0.2f * smoothstepf(0.f, 0.2f, t)), h.col, a, 6, 0.15f * std::sin(h.age * 1.5f + h.seed * 9.f));
+        }
+    }
+    drawSprites(fgSprites_, false);
+    if (flyA_ > 0.01f) {
+        std::vector<SpriteInst> fly;
+        sprite(fly, fly_, 0.32f, lerp(lin(0xfff3c0), lin(vd.accent), 0.35f), flyA_ * world, 3, 0.5f + 0.5f * std::sin(flyFlap_));
+        drawSprites(fly, false);
+    }
+    if (!f.bare) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uVeil", lerp(look.veil, bridge_.color, bridge));
+        set3f(progVeil_, "uRail", lerp(lin(vd.light) * 0.35f, bridge_.ink * 0.4f, bridge));
+        set1f(progVeil_, "uWellA", 0.8f + 0.14f * smoothstepf(0.1f, 0.6f, ugl::luma(look.skyHor)));
+        set1f(progVeil_, "uColA", 0.5f * world);
+        set1f(progVeil_, "uRailA", 0.5f);
+        set1f(progVeil_, "uPx", pxPerUnit_);
+        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
+        set4f(progVeil_, "uColR", 5.f, layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        ugl::drawFullscreen();
+    }
+    if (!cells_.empty()) {
+        glUseProgram(progCell_);
+        setMat(progCell_, "uVP", vp_);
+        set3f(progCell_, "uLightC", lerp(look.key, vec3(1.f), 0.5f));
+        set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
+        set3f(progCell_, "uBridgeInk", bridge_.ink);
+        glBindVertexArray(cellVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
+        glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+    }
+    drawSprites(sprites_, false);
+    drawHud(f.hud, f.panels);
+    glDisable(GL_BLEND);
+
+    // ---- Post.
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width_, height_);
+    glUseProgram(progPost_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    set1i(progPost_, "uScene", 0);
+    set1f(progPost_, "uFade", saturate(f.fade));
+    set1f(progPost_, "uDim", dimT_);
+    ugl::drawFullscreen();
+}
+
+// =====================================================================================================
+// Registry
+// =====================================================================================================
+
+const UniverseEntry& universe_lostpanda() {
+    static const UniverseEntry e{
+        "LOST PANDA", "a little panda lost in the city at night; every cleared line takes it further on its way home, through the subway, the canal at dawn and the bamboo forest to its family",
+        [] { return std::unique_ptr<Universe>(new LostPandaUniverse()); },
+        // Fits most songs; the gentle, warm ones a little better.
+        [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },
+        [] {
+            std::vector<std::string> v;
+            for (const VariantDef& x : VARIANTS) v.push_back(x.name);
+            return v;
+        }()};
+    return e;
+}
