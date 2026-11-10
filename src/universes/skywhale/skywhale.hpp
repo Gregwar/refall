@@ -63,7 +63,8 @@ private:
     struct Cruise {
         float pondA = 0.f;   // its angle round the pond (radians, decreasing: clockwise seen from above)
         float riverC = 0.f;  // meters ahead of its growth's place down the river (held short of the sea)
-        double orbitA = 0.0; // radians around the body it circles (the sea, the sky, orbit, the Moon)
+        double orbitA = 0.0; // radians around the body it circles (the sea, the sky, orbit)
+        float moonA = 0.f;   // radians on along the Moon's meridian, gliding low over it (the finale)
     };
     Cruise cr_{};
     float pace_ = 1.f;           // the cruise's pace from the music (smoothed)
@@ -127,6 +128,7 @@ private:
     struct Puff { vec3 p; float r, seed; };
     std::vector<Puff> clouds_;
     std::vector<float> cinst_;
+    float cloudDrift_ = 0.f, seaDrift_ = 0.f, flowT_ = 0.f;
     // ---- The banks: trees and bushes (toon puffs), reeds, grass.
     std::vector<float> trees_;
     struct Tuft { vec3 p; float h, seed; int kind; };

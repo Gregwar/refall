@@ -1339,22 +1339,53 @@ in vec3 vW;
 flat in vec4 vI;
 out vec4 frag;
 uniform vec3 uCloudLit, uCloudShade, uCamR, uCamU;
+// A puff's cauliflower: rounded lobes over lobes (its outline and its relief), on a flat-ish base.
+float lobes(vec2 q, float s) {
+    vec2 o = vec2(s * 37.0, s * 11.0);
+    float h = 0.0;
+    h += (vnoise(q * 2.6 + o) - 0.5) * 0.16;
+    h += (vnoise(q * 5.5 + o * 1.7) - 0.5) * 0.08;
+    h += (vnoise(q * 11.0 + o * 2.3) - 0.5) * 0.035;
+    return h;
+}
+// (its relief: the broad lobes only, the shading stays clean)
+float lobes2(vec2 q, float s) {
+    vec2 o = vec2(s * 37.0, s * 11.0);
+    return (vnoise(q * 2.6 + o) - 0.5) * 0.16 + (vnoise(q * 5.5 + o * 1.7) - 0.5) * 0.08;
+}
 void main() {
-    float r = length(vLocal);
-    float th = atan(vLocal.y, vLocal.x);
-    float edge = 0.92 + 0.06 * sin(th * 6.0 + vI.x * 30.0) + 0.03 * sin(th * 11.0 + vI.x * 9.0);
-    float aa = max(fwidth(r), 1e-4);
-    float cover = clamp(0.5 - (r - edge) / aa, 0.0, 1.0);
-    cover *= clamp(0.5 + (vLocal.y + 0.55) / aa, 0.0, 1.0);
+    vec2 q = vLocal;
+    float s = vI.x;
+    float r = length(q);
+    // the outline: lobed, the top bulging, the base flatter and cut
+    float lb = lobes(q, s);
+    float edge = 0.86 + lb + 0.05 * smoothstep(-0.2, 0.8, q.y);
+    float dr = r - edge;
+    float aa = max(fwidth(dr), 1e-4);
+    float cover = clamp(0.5 - dr / aa, 0.0, 1.0);
+    float base = -0.5 + 0.04 * (vnoise(vec2(q.x * 6.0 + s * 9.0, 0.0)) - 0.5);
+    cover *= clamp(0.5 + (q.y - base) / max(fwidth(q.y), 1e-4), 0.0, 1.0);
     if (cover < 0.01) discard;
     vec3 fwd = normalize(uEye - vW);
-    float rn = min(r / edge, 1.0);
-    vec3 nrm = normalize(uCamR * vLocal.x + uCamU * vLocal.y + fwd * sqrt(max(1.0 - rn * rn, 0.0)));
-    float ndl = dot(nrm, uSunDir) + 0.25 * nrm.y;
-    float band = smoothstep(-0.12, -0.04, ndl) * 0.55 + smoothstep(0.32, 0.4, ndl) * 0.45;
-    vec3 col = mix(uCloudShade, uCloudLit, band);
+    // the relief: a sphere's normal, bent by the lobes' slopes (the cauliflower's bumps)
+    float rn = min(r / max(edge, 0.3), 1.0);
+    float e = 0.03;
+    float gx = (lobes2(q + vec2(e, 0.0), s) - lobes2(q, s)) / e, gy = (lobes2(q + vec2(0.0, e), s) - lobes2(q, s)) / e;
+    vec3 n0 = uCamR * q.x + uCamU * q.y + fwd * sqrt(max(1.0 - rn * rn, 0.0));
+    vec3 nrm = normalize(normalize(n0) - (uCamR * gx + uCamU * gy) * 0.9);
+    // toon light, three bands: the cool shade, the body, the sunlit tops; softly self-shadowed toward the base
+    float ndl = dot(nrm, uSunDir) + 0.2 * nrm.y;
+    float band = smoothstep(-0.18, -0.08, ndl) * 0.45 + smoothstep(0.12, 0.2, ndl) * 0.3 + smoothstep(0.5, 0.58, ndl) * 0.25;
+    vec3 shade = uCloudShade * mix(vec3(0.85, 0.9, 1.08), vec3(1.0), 0.4);
+    vec3 col = mix(shade, uCloudLit, band);
+    // the base, in its own shadow; the hollows between the lobes
+    col *= mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y));
+    col *= 1.0 - 0.18 * smoothstep(0.0, -0.06, lb) * (1.0 - band);
+    // a warm rim where the sun grazes its silhouette, and the light through its edge when the sun is behind it
+    float rim = smoothstep(0.72, 0.98, rn) * clamp(dot(normalize(n0), uSunDir) + 0.35, 0.0, 1.0);
+    col += uSunGlow * rim * 0.45;
     float back = pow(max(dot(-fwd, uSunDir), 0.0), 4.0);
-    col += uSunGlow * back * smoothstep(0.75, 0.98, rn) * 0.8;
+    col += uSunGlow * back * smoothstep(0.7, 0.98, rn) * 0.8;
     col = atmos(col, vW);
     float a = cover * vI.y;
     frag = vec4(col * a, a);
@@ -1375,6 +1406,9 @@ float dens(vec3 p, vec3 n, float foot) {
     float v = 0.0, w = 0.0;
     float sc = 900.0;
     vec2 q = p.xz + vec2(uDrift, uDrift * 0.3);
+    // (swirled: the great octaves warped, so from orbit the cover streams in bands and swirls)
+    vec3 wv = vec3(vnoise3(n * 3.0 + 1.0), vnoise3(n * 3.0 + 7.0), vnoise3(n * 3.0 + 13.0)) - 0.5;
+    n = normalize(n + wv * 0.06 + vec3(0.0, 0.0, 0.02 * sin(n.y * 9.0 + n.x * 4.0)));
     for (int i = 0; i < 6; i++) {
         float k = smoothstep(sc * 0.8, sc * 0.2, foot);
         // (the planar octaves only near: far out their hash loses its precision)
@@ -1405,10 +1439,14 @@ void main() {
     if (cover < 0.01) discard;
     float e = max(foot * 2.0, 60.0);
     float vx = dens(p + vec3(e, 0.0, 0.0), n, foot), vz = dens(p + vec3(0.0, 0.0, e), n, foot);
-    vec3 nrm = normalize(n + vec3(-(vx - v), 0.0, -(vz - v)) * 9.0);
+    vec3 nrm = normalize(n + vec3(-(vx - v), 0.0, -(vz - v)) * 18.0);
     float ndl = dot(nrm, uSunDir);
-    float band = smoothstep(0.0, 0.08, ndl) * 0.5 + smoothstep(0.35, 0.42, ndl + (v - 0.6) * 0.8) * 0.5;
-    vec3 col = mix(uCloudShade, uCloudLit, band);
+    // three toon bands (the thick tops brightest), a warm glow on the sunlit tops, cool in the hollows
+    float band = smoothstep(0.0, 0.08, ndl) * 0.4 + smoothstep(0.3, 0.37, ndl + (v - 0.6) * 0.8) * 0.35 + smoothstep(0.55, 0.62, ndl + (v - 0.62) * 1.2) * 0.25;
+    vec3 col = mix(uCloudShade * vec3(0.9, 0.94, 1.06), uCloudLit, band);
+    col += uSunGlow * 0.18 * smoothstep(0.6, 0.75, v) * smoothstep(0.2, 0.6, ndl);
+    // thick tops bright, thin edges and the hollows between the heads in their own shade
+    col *= mix(0.74, 1.05, smoothstep(0.5, 0.75, v)) * mix(0.86, 1.0, smoothstep(0.5, 0.57, v));
     float lit = smoothstep(-0.1, 0.1, dot(n, uSunDir));
     col *= mix(0.12, 1.0, lit);
     col = atmos(col, p);
