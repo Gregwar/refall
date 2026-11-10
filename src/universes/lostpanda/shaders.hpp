@@ -1080,33 +1080,46 @@ vec4 panda(vec2 q) {
     float headD = sdEll(qh, vec2(headR * 1.07, headR * 0.95));
     paint(headD, tone(WHITE, qh, vec2(0.0), headR));
 
-    // the face: oval patches leaning outward (more when sad), a dark eye with one dot of light, a tiny nose,
-    // a minimal mouth, light blush
-    vec2 fc = vec2(0.07 * turn, -0.04);
-    float sp = mix(0.12, 0.1, abs(turn)) * mix(1.0, 0.92, A);
+    // the face, set low on the head: oval patches leaning outward (more when sad), pure black; in each a glossy
+    // black eye, large, low and to the inner side, its shine (a big dot of light above, a small one below, the same
+    // side on both eyes) what makes it read; a soft blink to a curved line; ^ ^ in joy
+    vec2 fc = vec2(0.06 * turn, -0.06);
+    float sp = mix(0.13, 0.11, abs(turn)) * mix(1.0, 0.92, A);
     float lean = mix(0.55, 0.3, mood);
-    vec2 pNc = fc + vec2(sp, 0.02), pFc = fc + vec2(-sp, 0.02);
-    vec2 pr = vec2(0.062, 0.08) * mix(1.0, 0.88, A);
-    float pN = sdEll(rot(-lean) * (qh - pNc - vec2(0.008, -0.01)), pr);
-    float pF = sdEll(rot(lean) * (qh - pFc - vec2(-0.008, -0.01)), pr);
-    gCol = mix(gCol, BLACK * (uAmb + uKey * 0.85), fillP(min(pN, pF)));
+    vec2 pNc = fc + vec2(sp, 0.025), pFc = fc + vec2(-sp, 0.025);
+    vec2 pr = vec2(0.064, 0.082) * mix(1.0, 0.88, A);
+    float pN = sdEll(rot(-lean) * (qh - pNc - vec2(0.008, -0.008)), pr);
+    float pF = sdEll(rot(lean) * (qh - pFc - vec2(-0.008, -0.008)), pr);
+    vec3 patchC = BLACK * (uAmb + uKey * 0.85);
+    gCol = mix(gCol, patchC, fillP(min(pN, pF)));
     float open = 1.0 - max(uBlink, 0.0);
+    float esz = mix(0.92, 1.0, mood) * mix(1.0, 0.9, A);
     for (int i = 0; i < 2; i++) {
-        vec2 ec = (i == 0 ? pNc : pFc) + uLook * vec2(0.007, 0.005) + vec2(0.0, 0.004);
-        vec2 eq = qh - ec;
-        float eye = sdEll(eq, vec2(0.034, 0.038 * max(open, 0.08)));
-        float ea = fillP(eye) * (1.0 - uJoyEyes);
-        gCol = mix(gCol, vec3(0.2, 0.15, 0.17) * (0.6 + 0.6 * uKey), ea);
-        float dot1 = length(eq - vec2(-0.011, 0.013)) - 0.0115;
-        gCol = mix(gCol, vec3(1.0), fillP(dot1) * ea * step(0.5, open));
+        float inner = i == 0 ? -1.0 : 1.0;
+        vec2 ec = (i == 0 ? pNc : pFc) + vec2(0.007 * inner, -0.012) + uLook * vec2(0.003, 0.002);
+        vec2 eq = (qh - ec) / esz;
+        float k = 1.0 - uJoyEyes;
+        // open: a glossy black bean, a faint dark-grey edge apart from the patch
+        float o = smoothstep(0.2, 0.45, open);
+        float eye = sdEll(eq, vec2(0.04, 0.047 * max(open, 0.15)));
+        float ea = fillP(eye * esz) * k * o;
+        gCol = mix(gCol, vec3(0.11, 0.105, 0.12) * (uAmb + uKey * 0.85), fillP(eye * esz - gLW * 0.5) * k * o);
+        gCol = mix(gCol, vec3(0.012, 0.01, 0.014), ea);
+        float big = length(eq - vec2(-0.013, 0.017)) - mix(0.016, 0.0135, mood);
+        float small = length(eq - vec2(0.014, -0.017)) - 0.0065;
+        gCol = mix(gCol, vec3(1.0), fillP(min(big, small) * esz) * ea * smoothstep(0.45, 0.7, open));
+        // closed (blinking): a soft curved line
+        float line = abs(eq.y + 0.004 - 9.0 * eq.x * eq.x) - 0.0045;
+        line = max(line, abs(eq.x) - 0.036);
+        gCol = mix(gCol, vec3(0.5, 0.48, 0.5) * (uAmb + uKey * 0.85), fillP(line * esz) * k * (1.0 - o));
         // joy: ^ ^
         float arc = abs(length((eq + vec2(0.0, 0.02)) * vec2(1.0, 1.15)) - 0.03) - 0.0075;
         arc = max(arc, -eq.y);
-        gCol = mix(gCol, WHITE * (uAmb + uKey * 0.85), fillP(arc) * uJoyEyes);
+        gCol = mix(gCol, WHITE * (uAmb + uKey * 0.85), fillP(arc * esz) * uJoyEyes);
     }
     // a single tear
     if (uTear > 0.01) {
-        vec2 tq = qh - pNc - vec2(0.04, -0.085 - 0.05 * (1.0 - uTear));
+        vec2 tq = qh - pNc - vec2(0.03, -0.09 - 0.05 * (1.0 - uTear));
         float drop = min(length(tq) - 0.015, sdEll(tq - vec2(0.0, 0.014), vec2(0.008, 0.018)));
         gCol = mix(gCol, vec3(0.6, 0.82, 1.0) * (uAmb + uKey), fillP(drop) * smoothstep(0.0, 0.4, uTear));
     }
