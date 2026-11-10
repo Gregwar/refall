@@ -1495,6 +1495,7 @@ vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTa
 void main() {
     vec2 uv = vec2(1.0 - vUv.x, vUv.y);
     vec4 w = texture(uWorld, uv);
+    if (any(isnan(w)) || any(isinf(w))) w = vec4(0.0);
     vec3 c = w.rgb + texture(uBloomT, uv).rgb * uBloomK;
     float vis = w.a;
     if (vis > 0.002) {
@@ -1540,7 +1541,10 @@ uniform float uThreshold;
 void main() {
     vec3 c = vec3(0.0);
     for (int y = -1; y <= 1; y++)
-        for (int x = -1; x <= 1; x++) c += texture(uSrc, vUv + vec2(x, y) * uTexel).rgb;
+        for (int x = -1; x <= 1; x++) {
+            vec3 t = texture(uSrc, vUv + vec2(x, y) * uTexel).rgb;
+            c += any(isnan(t)) || any(isinf(t)) ? vec3(0.0) : t; // (a stray NaN would spread into a dark square)
+        }
     c /= 9.0;
     float l = max(c.r, max(c.g, c.b));
     frag = vec4(c * max(l - uThreshold, 0.0) / max(l, 1e-3), 1.0);
