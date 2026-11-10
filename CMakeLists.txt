@@ -71,8 +71,30 @@ endif()
 # in src/universes/, picked up automatically; the list of universes is src/universes/registry.def).
 # Universes listed in ZENTRIS_DISABLED_UNIVERSES are not built at all: their sources and assets are skipped and their
 # line is dropped from the registry the game is compiled with (generated/universes/registry_enabled.def).
-set(ZENTRIS_DISABLED_UNIVERSES "pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox" CACHE STRING
-    "Universes (folder names in src/universes/) left out of the build, separated by ;")
+# An existing build directory follows changes to the default list: the cached value is replaced while it still is
+# a default (the last default seen, or, in a cache from before that was recorded, any subset of the default), and
+# kept once it was set by hand (-D...).
+set(ZEN_DEFAULT_DISABLED "pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox")
+set(zen_follow_default FALSE)
+if(NOT DEFINED ZENTRIS_DISABLED_UNIVERSES)
+  set(zen_follow_default TRUE)
+elseif(DEFINED ZEN_LAST_DEFAULT_DISABLED)
+  if("${ZENTRIS_DISABLED_UNIVERSES}" STREQUAL "${ZEN_LAST_DEFAULT_DISABLED}")
+    set(zen_follow_default TRUE)
+  endif()
+elseif(ZENTRIS_DISABLED_UNIVERSES)
+  set(zen_follow_default TRUE)
+  foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
+    if(NOT id IN_LIST ZEN_DEFAULT_DISABLED)
+      set(zen_follow_default FALSE)
+    endif()
+  endforeach()
+endif()
+if(zen_follow_default)
+  set(ZENTRIS_DISABLED_UNIVERSES "${ZEN_DEFAULT_DISABLED}" CACHE STRING
+      "Universes (folder names in src/universes/) left out of the build, separated by ;" FORCE)
+endif()
+set(ZEN_LAST_DEFAULT_DISABLED "${ZEN_DEFAULT_DISABLED}" CACHE INTERNAL "The default list of disabled universes last seen")
 file(GLOB ZEN_UNIVERSE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/*/*.cpp)
 foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
   list(FILTER ZEN_UNIVERSE_SOURCES EXCLUDE REGEX "/src/universes/${id}/")
