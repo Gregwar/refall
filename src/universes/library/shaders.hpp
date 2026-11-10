@@ -159,7 +159,7 @@ vec3 outside(float x, float y) {
     vec3 city = uOutside * (0.8 + 0.2 * hash12(vec2(blk, 2.0)));
     vec2 w = vec2(x / 0.45, y / 0.6);
     float lit = step(0.8, hash12(floor(w) + blk * 3.0)) * step(0.3, fract(w.x)) * step(0.35, fract(w.y));
-    city += vec3(1.0, 0.78, 0.5) * lit * 0.45 * (1.0 - smoothstep(0.3, 1.0, fwidth(w.x)));
+    city += vec3(1.0, 0.78, 0.5) * lit * 0.22 * (1.0 - smoothstep(0.3, 1.0, fwidth(w.x)));
     vec3 c = mix(sky, mix(trees, city, uNight), m);
     // the lawn (the street at night) in front
     vec3 lawn = mix(uOutside * 1.15, uOutside * 0.6, uNight);
@@ -302,6 +302,38 @@ void main() {
             float f = vMat.w;
             // its own color, lit from within, then gone
             emit += (vCol.rgb * 1.4 + 0.25) * (2.2 * f);
+            outA = (1.0 - f) * (1.0 - f * 0.5);
+        }
+    } else if (mat == 12) {
+        // a cell of the board: one clean block, a bound volume with its spine toward us: a soft bevel, two fine
+        // rules at head and tail, a small label; the page edge on its right side; p2: a clear's fade into light
+        if (face == 2 && vLN.z > 0.0) {
+            vec2 e = sz - abs(q);
+            float ed = min(e.x, e.y);
+            float rim = 1.0 - smoothstep(0.0, 0.03 + px, ed);
+            alb *= 1.0 - 0.18 * rim;
+            float pr = px + 0.004;
+            float rule = (1.0 - smoothstep(0.012, 0.012 + pr, abs(q.y - sz.y * 0.7))) + (1.0 - smoothstep(0.012, 0.012 + pr, abs(q.y + sz.y * 0.7)));
+            vec3 lite = mix(alb, vec3(1.0), 0.3);
+            alb = mix(alb, lite, clamp(rule, 0.0, 1.0) * 0.75);
+            vec2 lq = vec2(q.x, q.y - sz.y * 0.28);
+            vec2 ld = vec2(sz.x * 0.34, sz.y * 0.1) - abs(lq);
+            float lab = smoothstep(0.0, pr, min(ld.x, ld.y));
+            alb = mix(alb, lite, lab * 0.55);
+            spec = 0.1; rough = 22.0;
+        } else if (face == 0 && vLN.x > 0.0) {
+            float lines = 0.5 + 0.5 * sin(q.y * 900.0);
+            lines = mix(lines, 0.5, smoothstep(1.0, 3.0, fwidth(q.y * 900.0)));
+            float covers = 1.0 - smoothstep(0.02, 0.03, sz.y - abs(q.y));
+            alb = mix(uPaper * (0.86 + 0.1 * lines), alb * 0.85, covers);
+            spec = 0.04;
+        } else {
+            alb *= 0.86;
+            spec = 0.06;
+        }
+        if (vMat.w > 0.0) {
+            float f = vMat.w;
+            emit += (vCol.rgb * 1.3 + 0.25) * (2.0 * f);
             outA = (1.0 - f) * (1.0 - f * 0.5);
         }
     } else if (mat == 4) {

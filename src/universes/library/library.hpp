@@ -1,6 +1,6 @@
 #pragma once
-// LIBRARY: the blocks are small stacks of books; every cleared row's stacks are shelved, grown to full size, on the
-// shelving walls of a contemporary library atrium that fills floor by floor, in 3D (see library.cpp).
+// LIBRARY: the blocks are books; every cleared row's books fly, behind the board, to the shelves of a contemporary
+// library atrium that fills floor by floor, in 3D (see library.cpp).
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -35,7 +35,7 @@ public:
     enum Mesh { MESH_BOX = 0, MESH_CYL = 1, MESH_DOME = 2, MESH_COUNT = 3 };
     enum Mat {
         M_PLASTER = 0, M_WOOD = 1, M_CASE = 2, M_BOOK = 3, M_FLOOR = 4, M_CONCRETE = 5, M_STEEL = 6, M_EMIT = 7, M_WINDOW = 8,
-        M_GLASS = 9, M_SKY = 10, M_FELT = 11
+        M_GLASS = 9, M_SKY = 10, M_FELT = 11, M_CELL = 12
     };
     struct Lamp {
         vec3 p, col;
@@ -83,7 +83,9 @@ private:
     uint32_t spawnN_ = 1;
     uint32_t cellSeed(int x, int y, int type);
     void pushStack(std::vector<Inst>& out, const Stack& s, int type, const vec3& origin, const vec3& along, const vec3& up, const vec3& out_,
-                   float k, float grow, float glow, float fade);
+                   float k, float grow, float glow, float fade, bool calm = false);
+    // a cell of the board: one clean block, a bound volume (spine toward us)
+    void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, float seed);
 
     // ---- The collection: every cleared cell's stack, shelved in the order they came.
     struct Group {
@@ -100,6 +102,18 @@ private:
     bool shelfDirty_ = true;
     GLuint shelfVao_ = 0, shelfVbo_ = 0;
     void shelve(int type, uint32_t seed, float delay);
+    // a cleared cell's books flying to their shelf, behind the well: launched from the cell's place on screen at a
+    // depth behind the board, only ever going deeper
+    struct Flight {
+        int group = -1;
+        vec3 board;            // the cell (board space)
+        float t = 0.f, dur = 1.f;
+        bool launched = false;
+        vec3 p0, out0;
+        float k0 = 0.f;
+    };
+    std::vector<Flight> flights_;
+    void fly(int type, uint32_t seed, const vec3& board, float delay);
     void slotFrame(int slot, vec3& origin, vec3& along, vec3& out) const;
     int hookLines_ = 0;
     bool hookPlaced_ = false;
