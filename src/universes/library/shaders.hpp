@@ -17,6 +17,16 @@ namespace library_shaders {
 inline const char* COMMON = R"(
 uniform vec3 uEye;
 uniform float uTime;
+// The drop's wave through the shelves: a pulse rolling along each shelf row once a beat, alternate rows the other
+// way, a little later on each floor up. s: along the wall (m), y: height (m), level: the floor. 0..1.
+uniform float uWaveK, uBeatPh;
+float shelfWave(float s, float y, float level) {
+    if (uWaveK <= 0.0) return 0.0;
+    float row = floor(y / 0.32);
+    float dir = mod(row, 2.0) < 0.5 ? 1.0 : -1.0;
+    float d = fract(s * dir * 0.075 - uBeatPh - row * 0.035 - level * 0.12) - 0.5;
+    return exp(-d * d / 0.011) * uWaveK;
+}
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -47,9 +57,34 @@ uniform vec3 uOrigin;
 out vec3 vP, vL, vLN, vN;
 flat out vec3 vHalf, vAX, vAY, vAZ;
 flat out vec4 vCol, vMat, vE;
+flat out float vWave;
 void main() {
     vec3 X = iX.xyz, Y = iY.xyz, Z = iZ.xyz;
-    vec3 P = iC.xyz + X * aPos.x + Y * aPos.y + Z * aPos.z;
+    vec3 C = iC.xyz;
+    vWave = 0.0;
+    if (uWaveK > 0.0 && int(iC.w + 0.5) == 3 && iE.z >= 0.0) {
+        // a shelved book (its depth axis Z points out of its shelf): slid out and tipped forward about its foot
+        vec3 out_ = normalize(Z);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+        vec3 along = normalize(cross(up, out_));
+        float w = shelfWave(dot(C, along), C.y, iE.z);
+        vWave = w;
+        if (w > 0.001) {
+            float hu = abs(X.y) + abs(Y.y) + abs(Z.y);
+            vec3 pivot = C - up * hu + out_ * length(Z);
+            float a = 0.3 * w, ca = cos(a), sa = sin(a);
+            // rotate in the (up, out) plane: the head comes forward
+            vec3 v = C - pivot;
+            float vy = dot(v, up), vo = dot(v, out_);
+            vec3 vr = v + up * (vy * ca - vo * sa - vy) + out_ * (vo * ca + vy * sa - vo);
+            C = pivot + vr + out_ * (0.11 * w);
+            float xy, xo;
+            xy = dot(X, up); xo = dot(X, out_); X += up * (xy * ca - xo * sa - xy) + out_ * (xo * ca + xy * sa - xo);
+            xy = dot(Y, up); xo = dot(Y, out_); Y += up * (xy * ca - xo * sa - xy) + out_ * (xo * ca + xy * sa - xo);
+            xy = dot(Z, up); xo = dot(Z, out_); Z += up * (xy * ca - xo * sa - xy) + out_ * (xo * ca + xy * sa - xo);
+        }
+    }
+    vec3 P = C + X * aPos.x + Y * aPos.y + Z * aPos.z;
     vHalf = vec3(length(X), length(Y), length(Z));
     vAX = X / max(vHalf.x, 1e-6);
     vAY = Y / max(vHalf.y, 1e-6);
@@ -126,6 +161,7 @@ inline const char* SOLID_FS = R"(#version 330 core
 in vec3 vP, vL, vLN, vN;
 flat in vec3 vHalf, vAX, vAY, vAZ;
 flat in vec4 vCol, vMat, vE;
+flat in float vWave;
 out vec4 frag;
 uniform int uMesh;          // 0 box, 1 cylinder, 2 hemisphere
 uniform float uBoard;       // 1: the well (no fog)
@@ -293,6 +329,8 @@ void main() {
             // on the shelves: the strip above lights its head more than its foot
             float up = dot(vAX, vec3(0, 1, 0)) * L.x + dot(vAY, vec3(0, 1, 0)) * L.y;
             emit += alb * uLed * uShelfLight * levelOn(vE.z) * (0.08 + 0.22 * smoothstep(-1.0, 1.0, up));
+            // lit as the wave lifts it out
+            emit += (alb * 0.25 + uLed * 0.1) * vWave;
             // the drop's light running along the collection
             float d = (vE.w + 0.5) / uGroupN - uDropT;
             emit += (alb * 1.6 + uLed * 0.3) * uDropK * exp(-d * d / (uDropSpan * uDropSpan));
@@ -316,10 +354,12 @@ void main() {
             float rule = (1.0 - smoothstep(0.012, 0.012 + pr, abs(q.y - sz.y * 0.7))) + (1.0 - smoothstep(0.012, 0.012 + pr, abs(q.y + sz.y * 0.7)));
             vec3 lite = mix(alb, vec3(1.0), 0.3);
             alb = mix(alb, lite, clamp(rule, 0.0, 1.0) * 0.75);
-            vec2 lq = vec2(q.x, q.y - sz.y * 0.28);
-            vec2 ld = vec2(sz.x * 0.34, sz.y * 0.1) - abs(lq);
-            float lab = smoothstep(0.0, pr, min(ld.x, ld.y));
-            alb = mix(alb, lite, lab * 0.55);
+            // the pages showing down its right side, between the boards
+            float pe = smoothstep(sz.x * 0.76 - pr, sz.x * 0.76 + pr, q.x) * (1.0 - smoothstep(sz.x * 0.93 - pr, sz.x * 0.93 + pr, q.x));
+            pe *= smoothstep(sz.y * 0.86 + pr, sz.y * 0.86 - pr, abs(q.y));
+            float pl = 0.5 + 0.5 * sin(q.y * 700.0);
+            pl = mix(pl, 0.5, smoothstep(1.0, 3.0, fwidth(q.y * 700.0)));
+            alb = mix(alb, uPaper * (0.88 + 0.1 * pl), pe * 0.92);
             spec = 0.1; rough = 22.0;
         } else if (face == 0 && vLN.x > 0.0) {
             float lines = 0.5 + 0.5 * sin(q.y * 900.0);
@@ -383,6 +423,7 @@ void main() {
     } else if (mat == 7) {
         // a light: p0 how bright, p1 = 1: follows the lamps' level; its floor's lights must be on
         float k = vMat.y * (vMat.z > 0.5 ? uLampK : 1.0) * mix(0.15, 1.0, levelOn(vE.z));
+        if (vHalf.y < 0.005 && vE.z >= 0.0) k *= 1.0 + 2.2 * shelfWave(dot(vP, vAX), vP.y + 0.05, vE.z);
         emit = alb * k;
         alb = vec3(0.0);
     } else if (mat == 8) {

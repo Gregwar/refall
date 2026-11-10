@@ -2,7 +2,7 @@
 // after bay and floor after floor, with the game.
 //
 // The board stays a clean Tetris board: each cell is one neat block in its piece's color, a bound volume with its
-// spine toward us (a soft bevel, two fine rules, a small label, its page edge on one side), over a calm ground. When
+// spine toward us (a soft bevel, two fine rules, its pages showing down one side), over a calm ground. When
 // a row clears, its blocks dissolve into light where they stand, and each cleared cell's books fly to the shelves in
 // the background: from behind the cell's place on the board, at a depth behind the well, only ever going deeper
 // (never in front of the board or the HUD). On the way they become a little stack of real books, which lands in the
@@ -15,8 +15,9 @@
 // downlights come on as it starts to fill; the camera frames the bays in use, easing back, then rising floor by
 // floor toward the skylight.
 //
-// The song: dust in the daylight; the lights follow the music; a real drop runs a light along the collection, in
-// the order it came, the strips breathing on the beat; a Tetris runs one light along it. Slow motion: blue hour.
+// The song: dust in the daylight; the lights follow the music; in a real drop the shelves breathe (a wave a beat rolls
+// along each shelf row, sliding the books out, tipped forward, and back into their places) and a light runs along
+// the collection in the order it came; a Tetris runs one light along it. Slow motion: blue hour.
 // Game over: the blocks topple out of the bottom of the well.
 //
 // Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the board
@@ -1408,6 +1409,15 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uOrigin", board ? vec3(0.f) : eyeW_);
     };
 
+    // ---- The drop's wave through the shelves: eased in and out with the drop, a pulse a beat (fuller on the bar's
+    // downbeat and with the kicks); without a song, a slow pulse of its own
+    float waveK = 0.f, beatPh = 0.f;
+    if (dropAmt_ > 0.002f) {
+        const double b = music.hasSong ? music.beat : worldTime_ * 2.0;
+        beatPh = (float)(b - std::floor(b));
+        const bool down = ((long long)std::floor(b) % 4 + 4) % 4 == 0;
+        waveK = smoothstepf(0.f, 1.f, dropAmt_) * ((down ? 1.f : 0.68f) + 0.25f * kickK_) * (1.f - 0.6f * slow_);
+    }
     // ---- The sun's shadow map, round what the camera sees.
     const vec3 shC = targetW_;
     const float shR = std::max(5.f, camD_ * 1.1f);
@@ -1426,6 +1436,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         glDisable(GL_CULL_FACE);
         glUseProgram(progShadow_);
         setMat(progShadow_, "uVP", shVP);
+        set1f(progShadow_, "uWaveK", waveK);
+        set1f(progShadow_, "uBeatPh", beatPh);
         set3f(progShadow_, "uOrigin", shC);
         if (!shelfInst_.empty()) {
             glBindVertexArray(shelfVao_);
@@ -1478,6 +1490,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSolid_, "uDropT", dropT);
     set1f(progSolid_, "uDropK", dropK);
     set1f(progSolid_, "uDropSpan", 0.06f);
+    set1f(progSolid_, "uWaveK", waveK);
+    set1f(progSolid_, "uBeatPh", beatPh);
     set1f(progSolid_, "uGroupN", (float)std::max<size_t>(1, groups_.size()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, shadowTex_);
