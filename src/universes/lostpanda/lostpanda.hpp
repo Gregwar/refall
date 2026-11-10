@@ -54,6 +54,10 @@ private:
     float noticeT_ = 0.f;
     // ---- Fed on the way: munching a snack, strength gained.
     float munchT_ = 0.f, strength_ = 0.f;
+    float kidRoll_ = 0.f;          // the floor's tilt under the cub (its car on the grade)
+    struct Heart { vec2 p{0, 0}; float age = 0.f, life = 4.f, size = 0.3f, seed = 0.f; vec3 col{1.f}; };
+    std::vector<Heart> hearts_;
+    float heartT_ = 0.f;
     double lineTarget_ = 0.0;
     float lineDelay_ = 0.f;       // a clear's walk starts once the panda has seen its lights coming
     int lines_ = 0, linesShown_ = -1, linesWalk_ = 0;

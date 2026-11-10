@@ -90,7 +90,7 @@ const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
 constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
 const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
 constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
-constexpr double GY0 = -7.4, PLAT_Y = -21.4;         // the street, the subway's platform (world y, as in the shaders)
+constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
 constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 
@@ -107,12 +107,23 @@ double smd(double a, double b, double x) {
     const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
 }
-double trackY(double x) { return PLAT_Y + (GY0 - PLAT_Y) * smd(150.0, 236.0, x); }
+double trackY(double x) {
+    const double t = std::clamp((x - 146.0) / 112.0, 0.0, 1.0);
+    return PLAT_Y + (GY0 - PLAT_Y) * (0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
+}
+constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;   // the subway's stairs (as in the shaders)
 // the cub's feet (world y) along the way: the street, the stairs down, the platform, a hop into the train (its floor
 // following the track up the cutting), a hop down onto the terminus's platform, the ground
 double pathY(double x) {
-    if (x < 80.0) return GY0;
-    if (x < 96.0) return GY0 + (PLAT_Y - GY0) * (x - 80.0) / 16.0;
+    if (x < STAIR_X - 0.3) return GY0;
+    if (x < STAIR_X + TREAD * NSTEPS) {
+        // down the steps one by one: on a tread, then a little hop down to the next as it passes the edge
+        const double n = (x - (STAIR_X - 0.3)) / TREAD;
+        const double i = std::floor(n), fr = n - i;
+        const double d = smd(0.0, 0.4, fr);
+        const double level = std::min(NSTEPS, i + d);
+        return GY0 - (GY0 - PLAT_Y) / NSTEPS * level + (level < NSTEPS ? 0.18 * std::sin(PI * d) : 0.0);
+    }
     if (x < XB - 0.7) return PLAT_Y;
     if (x < XB) {
         const double u = (x - (XB - 0.7)) / 0.7;
@@ -177,7 +188,7 @@ void mixLook(Look& a, const Look& b, float w) {
 // The look along the way: keyframes (a place's look at a world x), eased from one to the next: the weather and the
 // time of day pass as the cub goes (night, the subway, the train, dawn as it rides out, morning, gold, sunset).
 struct Key { double s; int stage; };
-const Key KEYS[] = {{0, 0}, {40, 1}, {84, 1}, {100, 2}, {130, 3}, {205, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
+const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {220, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
 constexpr int NKEYS = (int)(sizeof(KEYS) / sizeof(KEYS[0]));
 Look lookAt(double s, int* stage = nullptr, float* blend = nullptr) {
     int i = 0;
@@ -989,6 +1000,7 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uMunch", p.munch);
     set1f(progPanda_, "uChew", p.chew);
     set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
+    set1f(progPanda_, "uRoll", adult > 0.5f ? 0.f : kidRoll_);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
     set2f(progPanda_, "uEars", p.earN, p.earF);
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
@@ -1103,7 +1115,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             if (P_ >= XA + 3.0) { train_ = T_GONE; trainX_ = -1000.0; door_ = 0.f; }
             else if (P_ >= XA - 0.05) { train_ = T_TERM; trainX_ = XA - DOOR; door_ = 1.f; }
             else if (P_ > XB - 0.7) { train_ = T_RIDE; trainX_ = P_ - DOOR; door_ = 0.f; }
-            else if (P_ >= 96.0) { train_ = T_WAIT; trainX_ = XB - DOOR; door_ = 1.f; }
+            else if (P_ >= 90.0) { train_ = T_WAIT; trainX_ = XB - DOOR; door_ = 1.f; }
             else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
             placed_ = true;
         }
@@ -1132,7 +1144,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         const float mood = kid_.mood;
         const bool lineWalk = lineTarget_ - P_ > 0.05 || (riding && dist > 0.05);
         double vmax = lineWalk ? lerpf(1.5f, 2.6f, mood) + std::min(2.2, std::max(0.0, dist - 6.0) * 0.25) : 0.45;
-        if (P_ > 79.0 && P_ < 97.0) vmax = std::min(vmax, 1.3);                 // careful on the stairs
+        if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
         if (riding) vmax = 6.5;                                                // the train
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
@@ -1156,7 +1168,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         switch (train_) {
         case T_AWAY:
             trainX_ = XB - DOOR - 160.0;
-            if (P_ >= 95.0) { train_ = T_ARRIVE; trainT_ = 0.f; }
+            if (P_ >= 90.0) { train_ = T_ARRIVE; trainT_ = 0.f; }
             break;
         case T_ARRIVE: {
             trainT_ += wdt;
@@ -1330,7 +1342,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    const float dawn = (float)smd(185.0, 300.0, P_);
+    const float dawn = (float)smd(165.0, 290.0, P_);
     auto setTrain = [&](GLuint prog, float px) {
         set1f(prog, "uTrainX", (float)trainX_);
         set1f(prog, "uDoor", smoothstepf(0.f, 1.f, door_));
@@ -1419,12 +1431,50 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             drawPanda(mom_, V(momEndX_ + shift, GY + 0.35f * fs + fy), 6.6f * fs, -1.f, 1.f, alpha, 0.03f, false, 0);
         }
         const float ky = GY + (float)(pathY(P_) - GY0) - camY_;
+        {
+            const double x0 = trainX_ + 17.6;
+            kidRoll_ = inside ? (float)std::atan((trackY(x0 + 17.0) - trackY(x0)) / 17.0) : 0.f;
+        }
         kid_.tilt += 0.035f * nod;
         drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 96.0 && P_ < XB - 0.7), 0);
         kid_.tilt -= 0.035f * nod;
     }
     if (inside) drawFront();
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // hearts rising from the pandas when they meet (on the right of the HUD, behind nothing of the board)
+    {
+        const float fs = famS_;
+        const float shift = (float)(C_END - C_);
+        if (arriveT_ > 0.15f && overT_ < 0.f) {
+            heartT_ -= wdt;
+            if (heartT_ <= 0.f && hearts_.size() < 40) {
+                const int who = rng_.irange(0, 2);
+                vec2 at = who == 0 ? V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.8f)
+                        : who == 1 ? V(momEndX_ + shift, GY + 0.35f * fs + 6.6f * fs * 0.8f)
+                                   : V(dadEndX_ + shift, GY + 0.7f * fs + 6.9f * fs * 0.8f);
+                Heart h;
+                h.p = V(at.x + rng_.range(-1.2f, 1.2f), at.y + rng_.range(-0.5f, 0.8f));
+                h.life = rng_.range(3.5f, 5.f);
+                h.size = rng_.range(0.34f, 0.6f) * fs;
+                h.seed = rng_.uniform();
+                h.col = lerp(lin(0xff7a90), lin(0xe8344e), rng_.uniform());
+                hearts_.push_back(h);
+                heartT_ = arriveT_ < 4.f ? rng_.range(0.2f, 0.35f) : rng_.range(0.5f, 0.9f);
+            }
+        }
+        const float minX = layout::RIGHT_COLUMN[2] + 0.5f;
+        for (Heart& h : hearts_) {
+            h.age += wdt;
+            h.p.y += wdt * (0.6f + 0.25f * h.seed);
+        }
+        hearts_.erase(std::remove_if(hearts_.begin(), hearts_.end(), [](const Heart& h) { return h.age >= h.life; }), hearts_.end());
+        for (const Heart& h : hearts_) {
+            const float t = h.age / h.life;
+            const float a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.55f, 1.f, t)) * world;
+            const float x = std::max(minX + h.size, h.p.x + 0.35f * std::sin(h.age * 1.4f + h.seed * 6.f));
+            sprite(fgSprites_, V(x, h.p.y), h.size * (0.8f + 0.2f * smoothstepf(0.f, 0.2f, t)), h.col, a, 6, 0.15f * std::sin(h.age * 1.5f + h.seed * 9.f));
+        }
+    }
     drawSprites(fgSprites_, false);
     if (flyA_ > 0.01f) {
         std::vector<SpriteInst> fly;
