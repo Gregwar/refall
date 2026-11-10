@@ -176,8 +176,10 @@ Build temple() {
 }
 
 // ---- The track.
-const float TRACK_PTS[][2] = {{-28.f, -8.4f}, {-21.f, -6.8f}, {-14.f, -5.4f}, {-7.f, -4.5f}, {0.f, -4.2f},
-                              {7.f, -4.5f},    {14.f, -5.4f},  {21.f, -6.8f},  {28.f, -8.4f}};
+// (close behind the well: under the HUD's columns it stays low on screen, below their lowest line, and it ends
+// before the corner labels)
+const float TRACK_PTS[][2] = {{-16.5f, -4.4f}, {-12.f, -3.4f}, {-6.f, -2.85f}, {0.f, -2.7f},
+                              {6.f, -2.85f},   {12.f, -3.4f},  {16.5f, -4.4f}};
 constexpr int TRACK_N = (int)(sizeof(TRACK_PTS) / sizeof(TRACK_PTS[0]));
 struct TrackTable {
     std::vector<vec3> p;   // samples
@@ -241,20 +243,23 @@ Build rails(float s0, float s1, bool backward) {
 Build loco() {
     Build b;
     b.group = 1;
-    // the chassis on edge, a deck across
+    // the chassis: two planks on edge along, a buffer beam across at each end, a deck of planks across
     for (int s = 0; s < 2; s++) b.add(vec3(0.f, WC * 0.5f, (s ? -1.f : 1.f) * 0.3f * LC), EX);
+    for (int s = 0; s < 2; s++) b.add(vec3((s ? -1.f : 1.f) * (LC * 0.5f + TC * 0.5f), WC * 0.5f, 0.f), EZ);
     float y = WC;
     for (int j = 0; j < 5; j++) b.add(vec3(-LC * 0.5f + (j + 0.5f) * WC, y + TC * 0.5f, 0.f), FZ);
     y += TC;
-    // the boiler at the front, the cab at the back: planks on edge across, three courses (the cab's walls)
-    for (int k = 0; k < 3; k++) {
-        if (k < 2)
-            for (int j = 0; j < 2; j++) b.add(vec3((0.14f + j * 0.22f) * LC, y + (k + 0.5f) * WC, 0.f), EZ);
-        for (int j = 0; j < 2; j++) b.add(vec3((-0.08f - j * 0.36f) * LC, y + (k + 0.5f) * WC, 0.f), EZ);
-    }
-    // the cab's roof, the chimney through the boiler
-    for (int j = 0; j < 3; j++) b.add(vec3(-0.46f * LC + (j + 0.5f) * WC, y + 3.f * WC + TC * 0.5f, 0.f), FZ);
-    b.add(vec3(0.36f * LC, y + LC * 0.5f, 0.f), UP);
+    // the boiler in front: a narrow block of planks laid flat along it, stacked, the smokebox on edge across its nose
+    for (int k = 0; k < 4; k++)
+        for (int j = 0; j < 2; j++) b.add(vec3(0.12f * LC, y + (k + 0.5f) * TC, (j ? -0.5f : 0.5f) * WC), FX);
+    b.add(vec3(0.5f * LC - TC * 0.5f, y + WC * 0.5f, 0.f), qMul(qYaw(PI * 0.5f), qAxis(vec3(0, 0, 1), 0.f)));
+    // the cab at the back: four columns, a roof of planks across overhanging it
+    for (int s = 0; s < 4; s++)
+        b.add(vec3((s & 1) ? -0.46f * LC : -0.12f * LC, y + LC * 0.5f * 0.8f, (s & 2) ? -0.36f * LC : 0.36f * LC), UPZ);
+    const float yr = y + LC * 0.8f;
+    for (int j = 0; j < 4; j++) b.add(vec3(-0.56f * LC + (j + 0.5f) * WC, yr + TC * 0.5f, 0.f), FZ);
+    // the chimney standing on the boiler's nose
+    b.add(vec3(0.36f * LC, y + 4.f * TC + LC * 0.3f, 0.f), UP);
     b.sort();
     return b;
 }
@@ -262,12 +267,16 @@ Build carriage() {
     Build b;
     b.group = 2;
     for (int s = 0; s < 2; s++) b.add(vec3(0.f, WC * 0.5f, (s ? -1.f : 1.f) * 0.3f * LC), EX);
+    for (int s = 0; s < 2; s++) b.add(vec3((s ? -1.f : 1.f) * (LC * 0.5f + TC * 0.5f), WC * 0.5f, 0.f), EZ);
     float y = WC;
     for (int j = 0; j < 5; j++) b.add(vec3(-LC * 0.5f + (j + 0.5f) * WC, y + TC * 0.5f, 0.f), FZ);
     y += TC;
-    // a little log-cabin box, a roof overhanging it
-    y = logCabin(b, -LC * 0.5f + TC * 0.5f, 0.f, 1, 0, 3, y);
-    for (int j = 0; j < 6; j++) b.add(vec3(-3.f * WC + (j + 0.5f) * WC, y + TC * 0.5f, 0.f), FZ);
+    // a low wall on edge each side, three columns each side, a roof of planks across overhanging both ends
+    for (int s = 0; s < 2; s++) b.add(vec3(0.f, y + WC * 0.5f, (s ? -1.f : 1.f) * (0.42f * LC)), EX);
+    for (int s = 0; s < 6; s++)
+        b.add(vec3((-0.42f + (s % 3) * 0.42f) * LC, y + LC * 0.4f, (s < 3 ? 1.f : -1.f) * 0.36f * LC), UPZ);
+    const float yr = y + LC * 0.8f;
+    for (int j = 0; j < 6; j++) b.add(vec3(-3.f * WC + (j + 0.5f) * WC, yr + TC * 0.5f, 0.f), FZ);
     b.sort();
     return b;
 }
@@ -326,7 +335,7 @@ vec3 trackPoint(float s, vec3* tangent) {
     return lerp(t.p[i], t.p[i + 1], k);
 }
 
-float trainStation() { return trackLength() * 0.5f + 12.f; }
+float trainStation() { return trackLength() * 0.5f + 10.5f; }
 
 std::vector<PDef> program(int side) {
     std::vector<PDef> out;

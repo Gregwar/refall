@@ -111,7 +111,7 @@ song, and between songs the game takes a short break into the next universe. For
 </tr>
 <tr>
 <td><img src="docs/universes/skywhale.jpg"><br><b>SKY WHALE</b>: a little koi in a lily pond at dusk, growing with every cleared line, a slow stroke of its tail each time: it slips down the river to the sea, breaches as a whale by a lighthouse, swims up through the clouds with seabirds and balloons in its wake, glides around the Earth trailing aurora from its fins and circles the Moon; on the drop it sings, soft rings of light rippling out through the sky<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/planks.jpg"><br><b>PLANKS</b>: wooden plank blocks in a white studio, each cell a little log-cabin stack of real planks; each cleared row pushes its planks out, Jenga style, to build a plank village beside the well (a tower, a temple, a train on its track, a pagoda), the train shuttles at a peak and the village topples at game over<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/planks.jpg"><br><b>PLANKS</b>: wooden plank blocks in a white studio, each cell a solid block of three stained planks; each cleared row's planks slip out behind the well, Jenga style, to build a plank village beside it (a tower, a temple, a train on its track, a pagoda), the train shuttles at a peak and the village topples at game over<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 

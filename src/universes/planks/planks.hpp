@@ -1,6 +1,6 @@
 #pragma once
-// PLANKS: wooden plank blocks in a white studio; every piece is built of real thin planks (1 : 3 : 15) in crossed
-// courses, and every cleared row pushes its planks out, Jenga style, to build a plank village beside the well: a
+// PLANKS: wooden plank blocks in a white studio; every cell a solid block of three stained planks, and every cleared
+// row pushes its planks out, Jenga style, to build a plank village of thin planks beside the well: a
 // tower, a temple, a track with a train, a pagoda, a house (see planks.cpp).
 #include <string>
 #include <vector>
@@ -37,7 +37,7 @@ private:
     size_t previewStart_ = 0, previewEnd_ = 0; // the previews (no shadow)
     void push(const vec3& c, const vec3& size, const Q& q, const vec3& tint, float tintK, float seed, float stack,
               float grain, float mat = 0.f, float glow = 0.f, float fog = 0.f);
-    // A cell of the well: a little crossed stack of planks (unit cube centered on c, scaled by sc, turned by q).
+    // A cell of the well: three thick planks laid flat (a unit block centered on c, scaled by sc, turned by q).
     void pushCell(const vec3& c, float sc, const Q& q, int type, float seed, float stack, float gap, int skipPlank = -1,
                   float glow = 0.f);
     vec3 cellPlankPos(int k, vec3* size, Q* q) const; // the cell's k-th plank (unit cell)
@@ -78,8 +78,8 @@ private:
     struct Flight {
         int side = 0, idx = 0, type = 0;
         bool painted = false;
-        vec3 p0{0, 0, 0}, slideTo{0, 0, 0};
-        float t = 0.f, slideDur = 0.3f, arcDur = 1.2f, seed = 0.f;
+        vec3 p0{0, 0, 0}, runFrom{0, 0, 0}, slideTo{0, 0, 0};
+        float t = 0.f, slideDur = 0.2f, runDur = 0.3f, arcDur = 1.2f, seed = 0.f, lane = -9.6f;
         int phase = 0;
     };
     std::vector<Flight> flights_;

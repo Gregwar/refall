@@ -3,30 +3,30 @@
 //
 // One world, in real 3D, BRICKS' studio made of wood: a seamless white sweep under one soft key light, seen through
 // the layout's camera raised a little and looking straight ahead with a lens shift (the board's plane keeps its
-// pixels while the table recedes). Everything is made of one plank, thin and long (1 : 3 : 15, like the real wooden
-// plank blocks): pale pine with its growth rings, fibers and darker end grain, rounded arrises, a satin sheen. Each
-// cell of a piece is a little crossed stack of such planks: four courses on edge along the front and back faces,
-// with three planks laid flat across between them (their end grain showing in the thin gaps); a piece's color is a
-// stain (or a paint, or a wood species) over the grain. The well is a painted board standing on a plinth of crossed
-// planks; the falling piece is held a little off it (its shadow says so), its courses loose, and they settle when it
-// locks. Screen-space ambient occlusion darkens every gap between planks and the table under the constructions.
+// pixels while the table recedes). Everything is wood: grown rings, fibers and darker end grain, rounded arrises, a
+// satin sheen. The board stays a clean Tetris board: each cell is one solid block of three thick planks laid flat,
+// tight (fine seams, the end grain at the cell's sides, a small gap around it), stained all over in its piece's color
+// (or painted, or a wood species), so a piece reads at a glance by its color. The well is a painted board standing on
+// a plinth of crossed planks; the falling piece is held a little off it (its shadow says so), its planks a hair
+// loose, and they settle when it locks. Screen-space ambient occlusion darkens the seams and the table under the
+// constructions. The real plank architecture (thin planks, 1 : 3 : 15) lives in the village.
 //
 // The village: each side of the well lays its own builds, one after the other (build.cpp): on the left a tall tower
-// with floors and a gable roof, then the left half of a track behind the well, a pagoda far back;
-// on the right a temple (porches on columns, lean-to roofs, a stepped top), the right half of the track, a train
-// (a locomotive and a carriage), a long house; then more builds farther back. A cleared row: the middle plank of each
-// cell is pushed out sideways (the left half to the left, the right half to the right) like a plank out of a Jenga
-// tower, and flies on an arc that only ever goes away from the camera to the village, where it settles into its
-// place on the music's beat grid (half beats); the row's other planks tip back like dominoes, from the middle out,
-// and slide back into the board. Every plank of the village is a cleared cell (natural in PINE and HONEY, a Tetris
-// keeping its paint; colored in COLOURS).
+// with floors and a gable roof, then the left half of a track close behind the well, a pagoda far back; on the right
+// a temple (porches on columns, lean-to roofs, a stepped top), the right half of the track, a train (a locomotive and
+// a carriage), a long house; then more builds farther back. A cleared row: its cells tip back like dominoes, from the
+// middle out, and slide back into the board; each cell's middle plank is pushed straight back into the board, Jenga
+// style, and, hidden behind it, comes out from under the well's back low on the table, slides out below the HUD's
+// columns and only then rises on an arc away from the camera to its place in the village, where it settles on the
+// music's beat grid (half beats): nothing crosses the well or the HUD. Every plank of the village is a cleared cell
+// (natural in PINE and HONEY, a Tetris keeping its paint; colored in COLOURS).
 //
 // The song: calm, the village stands still; mid and peak send a gentle ripple up the constructions every two beats
-// (each plank lifting a hair and settling, bottom to top), and a peak sets the train shuttling along its track; the
-// drop speeds it up, ripples higher and warms the light once (a slow swell). A Tetris is one big ripple through the
-// whole village. Slow motion is an evening light raking in from the right. Game over: the stack's cells drop into
-// the plinth, from the top down, and every plank of the village topples gracefully, from the top down; the next
-// game starts a new village.
+// (each plank lifting a hair and settling, bottom to top), and a peak sets the train shuttling along the right half
+// of its track; the drop speeds it up, ripples higher and warms the light once (a slow swell). A Tetris is one big
+// ripple through the whole village. Slow motion is an evening light raking in from the right. Game over: the stack's
+// cells drop into the plinth, from the top down, and every plank of the village topples gracefully, from the top
+// down; the next game starts a new village.
 #include "universes/planks/planks.hpp"
 
 #include <algorithm>
@@ -89,15 +89,15 @@ int hookRate(double t) {
     static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
     return (int)(rate * t);
 }
-// ZEN_PLANKS_STYLE=0: the cells in four courses with flat planks between (thin gaps) instead of five on edge.
-int cellStyle() {
-    static const int s = std::getenv("ZEN_PLANKS_STYLE") ? std::atoi(std::getenv("ZEN_PLANKS_STYLE")) : 1;
-    return s;
-}
+// A cell: three thick planks laid flat, tight, one on the other (a solid block, fine seams between them).
+constexpr int CELL_PLANKS = 3;
+constexpr int PUSHED = 1;          // the middle one is pushed out on a clear
+constexpr float SLAB_L = 0.955f, SLAB_H = 0.314f, SLAB_D = 0.94f, SLAB_STEP = 0.32f;
 
 // The variants: the studio (table near, far, the backdrop's top, the light pool), the board, the natural wood
-// (earlywood, latewood), the seven pieces (I O T S Z J L) and how much their tint covers the wood (the pieces, the
-// planks across, the village), the accent, the light (strength, ambient, sheen, its direction).
+// (earlywood, latewood), the seven pieces (I O T S Z J L) and how much their stain covers the wood (the pieces, a
+// Tetris' planks in the village, unused, the village's other planks), the grain's contrast, the accent, the light
+// (strength, ambient, sheen, its direction).
 struct VariantDef {
     const char* name;
     unsigned tableNear, tableFar, wallTop, pool, board;
@@ -110,27 +110,27 @@ struct VariantDef {
     unsigned keyCol;
 };
 const VariantDef VARIANTS[] = {
-    // natural pine on white, gently stained pieces
+    // natural pine on white, the pieces in clear stains over the grain, a natural village
     {"PINE", 0xf4f2ee, 0xebe8e2, 0xdedad3, 0x14100a, 0x4b4641,
      0xeed6a8, 0xcf9f62,
-     {0x8fc3e0, 0xf2c23a, 0x9a62c4, 0x6fb05a, 0xe0503a, 0x3f6fc0, 0xf08a2e},
-     0.2f, 0.92f, 0.05f, 0.08f, 0.8f, 0xc0603a, 1.0f, 1.0f, 0.8f, -0.3f, 0.82f, 0.48f, 0xfff6ea},
-    // the colored planks of a toy set: lacquered colors over pine, the planks across left natural
+     {0x62b2e6, 0xf4c832, 0xb24cc2, 0x55ae4c, 0xe2463a, 0x2552c4, 0xf38424},
+     0.86f, 0.92f, 0.f, 0.08f, 0.75f, 0xc0603a, 1.0f, 1.0f, 0.8f, -0.3f, 0.82f, 0.48f, 0xfff6ea},
+    // the colored planks of a toy set: lacquered colors over pine, a colorful village
     {"COLOURS", 0xf3f2f0, 0xe9e8e5, 0xdcdbd8, 0x10100e, 0x3e4654,
      0xefd8ab, 0xd2a266,
      {0x47a3dc, 0xf4c53a, 0x8a5cc4, 0x48a85e, 0xdf4a35, 0x2f5cad, 0xef8a2d},
-     0.88f, 0.88f, 0.12f, 0.6f, 0.45f, 0xdf4a35, 1.0f, 1.0f, 1.0f, -0.3f, 0.82f, 0.48f, 0xfff8f0},
+     0.9f, 0.9f, 0.f, 0.6f, 0.45f, 0xdf4a35, 1.0f, 1.0f, 1.0f, -0.3f, 0.82f, 0.48f, 0xfff8f0},
     // late afternoon: honey light from low on the left, oiled pine, warm stains
     {"HONEY", 0xf2e3cf, 0xe6d0b4, 0xd6bb98, 0x2a1a08, 0x3a2b22,
      0xe8bf86, 0xbb7f42,
-     {0xf4e2bf, 0xdd9d2c, 0x8f5466, 0x80924b, 0xbd4630, 0x557990, 0xcf6d2c},
-     0.66f, 0.8f, 0.3f, 0.12f, 1.0f, 0xd27a2a, 1.05f, 0.85f, 0.9f, -0.7f, 0.46f, 0.55f, 0xffe2b8},
+     {0x4e9a98, 0xeac030, 0x9a3c78, 0x6a903a, 0xb02a24, 0x2a62b0, 0xe27420},
+     0.84f, 0.85f, 0.f, 0.12f, 0.9f, 0xd27a2a, 1.05f, 0.85f, 0.9f, -0.7f, 0.46f, 0.55f, 0xffe2b8},
     // a dark studio under one lamp: the pieces in natural hardwoods (maple, yellowheart, purpleheart, olive,
     // bloodwood, blue-stained ash, padauk) on a walnut plinth
     {"HARDWOOD", 0x3b342e, 0x29231e, 0x17140f, 0x5a3a18, 0x1c1916,
      0xc89a64, 0x93663c,
      {0xecdcb8, 0xe6b632, 0x9a4f96, 0x8a9a46, 0xc23a2c, 0x5a7cab, 0xdc7030},
-     1.0f, 1.0f, 1.0f, 0.3f, 0.9f, 0xe6b632, 1.2f, 0.95f, 1.1f, -0.3f, 0.8f, 0.5f, 0xffeedd},
+     1.0f, 1.0f, 0.f, 0.3f, 0.9f, 0xe6b632, 1.2f, 0.95f, 1.1f, -0.3f, 0.8f, 0.5f, 0xffeedd},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -524,38 +524,18 @@ TransitionHints PlanksUniverse::hints() const {
 }
 
 // =====================================================================================================
-// A cell: a little crossed stack of planks
+// A cell: a solid block of three planks
 // =====================================================================================================
 
-int PlanksUniverse::cellPlanks() const { return cellStyle() == 1 ? 10 : 14; }
+int PlanksUniverse::cellPlanks() const { return CELL_PLANKS; }
 
-// The k-th plank of a unit cell (centered on 0): its center, size and turn. Style 0: four courses on edge along the
-// front and back faces (k 0..7, front then back per course), three courses of planks laid flat across between them
-// (k 8..13, at the left and right ends, their end grain in the gaps). Style 1: five courses all on edge, the faces
-// at 0, 2, 4 and planks across at both ends at 1, 3.
+// The k-th plank of a unit cell (centered on 0): three thick planks laid flat along the row, bottom to top, tight
+// (fine seams between them and a small gap around the cell): their wide faces to the front, their end grain at the
+// cell's sides.
 vec3 PlanksUniverse::cellPlankPos(int k, vec3* size, Q* q) const {
-    if (cellStyle() == 1) {
-        if (k < 6) {
-            const int c = (k / 2) * 2, s = k % 2;
-            *size = vec3(1.f, PW, PT);
-            *q = Q{};
-            return vec3(0.f, -0.5f + (c + 0.5f) * PW, s ? -0.5f + PT * 0.5f : 0.5f - PT * 0.5f);
-        }
-        const int c = ((k - 6) / 2) * 2 + 1, s = (k - 6) % 2;
-        *size = vec3(1.f, PW, PT);
-        *q = qYaw(PI * 0.5f);
-        return vec3(s ? 0.5f - PT * 0.5f : -0.5f + PT * 0.5f, -0.5f + (c + 0.5f) * PW, 0.f);
-    }
-    if (k < 8) {
-        const int c = k / 2, s = k % 2;
-        *size = vec3(1.f, PW, PT);
-        *q = Q{};
-        return vec3(0.f, -0.5f + c * (PW + PT) + PW * 0.5f, s ? -0.5f + PT * 0.5f : 0.5f - PT * 0.5f);
-    }
-    const int r = (k - 8) / 2, s = (k - 8) % 2;
-    *size = vec3(1.f, PW, PT);
-    *q = qMul(qYaw(PI * 0.5f), qAxis(vec3(1, 0, 0), PI * 0.5f));
-    return vec3(s ? 0.5f - PW * 0.5f : -0.5f + PW * 0.5f, -0.5f + (r + 1) * PW + r * PT + PT * 0.5f, 0.f);
+    *size = vec3(SLAB_L, SLAB_H, SLAB_D);
+    *q = Q{};
+    return vec3(0.f, (k - 1) * SLAB_STEP, 0.f);
 }
 
 void PlanksUniverse::push(const vec3& c, const vec3& size, const Q& q, const vec3& tint, float tintK, float seed,
@@ -575,10 +555,8 @@ void PlanksUniverse::pushCell(const vec3& c, float sc, const Q& q, int type, flo
         Q qk;
         vec3 p = cellPlankPos(k, &size, &qk);
         // the courses loose (a piece held in the hand), settling when it locks
-        p.y += gap * (p.y + 0.5f) * 6.f;
-        const bool across = cellStyle() == 1 ? k >= 6 : k >= 8;
-        const bool accent = cellStyle() == 1 ? (k == 2 || k == 3) : (k == 4 || k == 5);
-        push(c + qRot(q, p * sc), size * sc, qMul(q, qk), tint, across ? V.ribK : (accent ? V.accentK : V.pieceK), hashf((uint32_t)(seed * 1e6f) + k * 7919u),
+        p.y += gap * (float)(k - 1) * 3.f;
+        push(c + qRot(q, p * sc), size * sc, qMul(q, qk), tint, V.pieceK, hashf((uint32_t)(seed * 1e6f) + k * 7919u),
              stack, V.grain, 0.f, glow);
     }
 }
@@ -636,16 +614,21 @@ void PlanksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 slots_[side][f.idx].state = 1;
                 f.type = std::clamp(c.type, 0, 6);
                 f.painted = tetris;
-                f.seed = hashf((uint32_t)(seed * 1e6f) + (cellStyle() == 1 ? 2u : 4u) * 7919u);
+                f.seed = hashf((uint32_t)(seed * 1e6f) + (uint32_t)PUSHED * 7919u);
                 vec3 sz;
                 Q qq;
-                f.p0 = layout::cellPos((float)c.x, (float)y) + vec3(0.f, 0.f, -0.5f) + cellPlankPos(cellStyle() == 1 ? 2 : 4, &sz, &qq);
+                f.p0 = layout::cellPos((float)c.x, (float)y) + vec3(0.f, 0.f, -0.5f) + cellPlankPos(PUSHED, &sz, &qq);
                 const float sg = side ? 1.f : -1.f;
-                f.slideTo = vec3(sg * 6.1f, f.p0.y, f.p0.z - 0.05f);
-                f.slideDur = 0.08f + (6.1f - std::fabs(f.p0.x)) / 19.f;
+                // pushed straight back into the board (it vanishes in it), then, hidden behind the board, down to the
+                // table: it slides out from under the well's back, low, under the HUD's columns, and only then rises
+                f.lane = -9.62f + 0.2f * (float)rowK;
+                f.slideDur = 0.2f + 0.012f * std::fabs(c.x - 4.5f);
+                f.runFrom = vec3(f.p0.x, f.lane, -2.0f);
+                f.slideTo = vec3(sg * 11.5f, f.lane, -2.7f);
+                f.runDur = 0.06f + (11.5f - std::fabs(f.p0.x)) / 20.f;
                 // it lands on the beat grid (half beats), after the ones before it on its side
-                const float launch = time_ + f.slideDur;
-                const float minFlight = (tetris ? 1.25f : 1.0f) + 0.03f * rowK;
+                const float launch = time_ + f.slideDur + f.runDur;
+                const float minFlight = (tetris ? 1.1f : 0.85f) + 0.03f * rowK;
                 float arrive = std::max(launch + minFlight, lastArrive_[side] + beatLen_ * 0.5f);
                 const float backlog = arrive - launch;
                 if (backlog > 2.4f) arrive = std::max(launch + minFlight, lastArrive_[side] + beatLen_ * 0.25f);
@@ -835,8 +818,9 @@ void PlanksUniverse::updateFlights(float dt) {
     for (Flight& f : flights_) {
         f.t += dt;
         if (f.phase == 0 && f.t >= f.slideDur) { f.phase = 1; f.t -= f.slideDur; }
-        if (f.phase == 1 && f.t >= f.arcDur) {
-            f.phase = 2;
+        if (f.phase == 1 && f.t >= f.runDur) { f.phase = 2; f.t -= f.runDur; }
+        if (f.phase == 2 && f.t >= f.arcDur) {
+            f.phase = 3;
             if (f.idx < (int)slots_[f.side].size()) {
                 Slot& s = slots_[f.side][f.idx];
                 s.state = 2;
@@ -847,7 +831,7 @@ void PlanksUniverse::updateFlights(float dt) {
             }
         }
     }
-    flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& f) { return f.phase == 2; }), flights_.end());
+    flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& f) { return f.phase == 3; }), flights_.end());
     for (int s = 0; s < 2; s++)
         for (Slot& sl : slots_[s])
             if (sl.state == 2 && sl.t < 9.f) sl.t += dt;
@@ -870,29 +854,38 @@ void PlanksUniverse::buildVillage() {
             const float haze = saturate((-d.c.z - 52.f) / 150.f) * 0.75f;
             push(d.c, size, d.q, pieceTint(sl.type), slotTintK(sl.painted), sl.seed, 0.f, V.grain, 0.f, glowAll_ * 0.5f, haze);
         }
-    // the planks flying from the well: out of the row sideways, then an arc away from the camera to their place
+    // the planks flying from the well: pushed back into the board, out from under it behind the well (low, under the
+    // HUD's columns), then an arc away from the camera to their place
     for (const Flight& f : flights_) {
-        if (bare_ && f.phase == 0) continue;
+        if (f.phase == 0) {
+            if (bare_) continue;
+            const float u = saturate(f.t / f.slideDur);
+            const vec3 pos = f.p0 + vec3(0.f, 0.f, -1.6f * u * u);
+            push(pos, vec3(SLAB_L, SLAB_H, SLAB_D), Q{}, pieceTint(f.type), V.pieceK, f.seed, -1.f, V.grain);
+            continue;
+        }
         vec3 pos;
         Q q;
-        float sc = 1.f, k = 0.f;
-        if (f.phase == 0) {
-            const float u = saturate(f.t / f.slideDur);
-            pos = lerp(f.p0, f.slideTo, u * u * (1.5f - 0.5f * u) / 1.0f);
+        float sc = 1.25f, k = 0.f;
+        if (f.phase == 1) {
+            const float u = saturate(f.t / f.runDur);
+            pos = lerp(f.runFrom, f.slideTo, u * (2.f - u) * 0.5f + u * 0.5f);
         } else {
             const pb::PDef d = placed(f.side, f.idx, false);
             const vec3 tgt = d.c + vec3(0.f, SNAP, 0.f);
             const float u = saturate(f.t / std::max(0.05f, f.arcDur));
             const float e = 0.45f * u + (3.f - 2.f * 0.45f) * u * u + (0.45f - 2.f) * u * u * u;
             const float sg = f.side ? 1.f : -1.f;
-            const vec3 c1 = f.slideTo + vec3(sg * 6.5f, 0.3f, -2.6f); // out under the HUD column first
-            const vec3 c2 = tgt + vec3(0.f, 3.2f, 0.f);
+            // out along the table first (below the columns), then up and back to its place: z only ever decreases
+            const float zMid = std::min(f.slideTo.z, 0.5f * (f.slideTo.z + tgt.z));
+            const vec3 c1(f.slideTo.x + sg * 5.5f, f.slideTo.y + 0.2f, zMid);
+            const vec3 c2(tgt.x, std::max(tgt.y, f.slideTo.y) + 2.6f, tgt.z);
             pos = bezier(f.slideTo, c1, c2, tgt, e);
             k = smoothstepf(0.05f, 0.9f, u);
             q = qSlerp(Q{}, d.q, smoother(u));
-            sc = lerpf(1.f, pb::LC, k);
+            sc = lerpf(1.25f, pb::LC, k);
         }
-        push(pos, vec3(1.f, PW, PT) * sc, q, pieceTint(f.type), lerpf(V.accentK, slotTintK(f.painted), k), f.seed, 0.f, V.grain);
+        push(pos, vec3(1.f, PW, PT) * sc, q, pieceTint(f.type), lerpf(V.pieceK, slotTintK(f.painted), k), f.seed, 0.f, V.grain);
     }
     // game over: the village's planks toppling and lying on the table (fading when a new game starts)
     for (const Topple& t : topple_) {
@@ -955,7 +948,7 @@ void PlanksUniverse::buildBoard(const Game& g) {
         const vec3 pivot = base + vec3(0.f, -0.5f, -0.5f);
         const Q q = qAxis(vec3(1, 0, 0), -0.5f * smoothstepf(0.f, 0.7f, u));
         const vec3 c = pivot + qRot(q, base - pivot) + vec3(0.f, 0.f, -1.25f * u * u);
-        pushCell(c, 1.f, q, cc.type, cc.seed, -1.f, 0.f, cellStyle() == 1 ? 2 : 4);
+        pushCell(c, 1.f, q, cc.type, cc.seed, -1.f, 0.f, PUSHED);
     }
     // game over: the stack's cells drop into the plinth
     for (const Fall& f : falls_) {
@@ -1363,7 +1356,8 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
     if (trainBuilt() && !toppled_) {
         const float target = (overT_ < 0.f ? (1.1f * wp + 2.8f * dropRelease_) : 0.f) * (1.f - 0.7f * slow_);
         trainV_ = approach(trainV_, target, 0.8f, dt);
-        const float lo = pb::CAR_GAP + 1.4f, hi = pb::trackLength() - 1.4f;
+        // (the right half only: from behind the well to the track's end, never under the left HUD column)
+        const float lo = pb::trackLength() * 0.5f + 0.5f, hi = pb::trackLength() - 1.4f;
         const float ahead = trainDir_ > 0.f ? hi - trainS_ : trainS_ - lo;
         const float k = 0.12f + 0.88f * smoothstepf(0.f, 3.5f, ahead);
         trainS_ += trainDir_ * trainV_ * k * wdt;

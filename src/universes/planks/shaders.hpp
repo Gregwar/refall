@@ -194,7 +194,7 @@ void main() {
     if (vE.x < -1.5 && vWorld.y < uClipY) discard;
     float L = vSize.x;
     float unit = L / 15.0;                 // the plank's thickness unit (1 : 3 : 15)
-    float rad = min(vSize.y, vSize.z) * 0.4;
+    float rad = min(min(vSize.y, vSize.z) * 0.4, L * 0.032);
     if (vMat > 0.5) rad = 0.035;
     vec3 n = roundedNormal(vObj, vFace, vSize, rad);
     vec3 N = normalize(qrot(vQuat, n));
