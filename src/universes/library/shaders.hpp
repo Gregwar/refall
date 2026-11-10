@@ -1,15 +1,15 @@
 #pragma once
 // LIBRARY's shaders (see library.cpp).
 //
-// SOLID_VS / SOLID_FS draw everything solid, instanced: boxes, cylinders and the hemisphere (domes, lamp globes),
-// with their materials: wood with its grain and mouldings, plaster and wallpaper, parquet and marble floors, the
-// books (cloth, gilt bands, a label, the page block on top), the shelves of books drawn procedurally (one box a
-// shelf, or a whole wall of bookcases in one box: uprights, boards and spines, sorted into a rainbow when a clear
-// reaches them), windows, rugs, leather, lamp shades, the coffered dome. Lit by the sky (hemisphere), a key light
-// with its shadow map, up to 16 lamps, fogged toward the abyss (dark below, light above). SHADOW_FS writes the key
-// light's depth. SPRITE_* are the glows (lamps, dust motes, sparks); VEIL_FS the shade behind the well and the
-// HUD's columns; LINE_* screen-space lines (the ghost); DOWN / BLUR / FINAL the bloom and the frame; SHAPE / TEXT
-// the HUD.
+// SOLID_VS / SOLID_FS draw everything solid, instanced: boxes, cylinders and the hemisphere, with their materials:
+// pale oak (fine straight grain, the slatted wall), the shelving's back panels washed by the strip lights, the books
+// (a matte cloth or paper spine with its own modern design, pages, covers), polished concrete or oak floors, white
+// concrete, steel, lights, the glazing (the sky and the trees or the city outside, mullions), the balustrades' glass
+// (drawn last, blended) and the skylight. Lit by the sky (hemisphere), the sun with its shadow map, up to 16
+// downlights, and on the shelves the strips' own light. SHADOW_FS writes the sun's depth. SPRITE_* are the glows
+// (downlights, dust in the daylight); VEIL_FS the frosted panel behind the well and the HUD's columns; LINE_*
+// screen-space lines (the ghost, a cleared row's light); DOWN / BLUR / FINAL the bloom and the frame; SHAPE / TEXT the
+// HUD.
 #include <string>
 
 namespace library_shaders {
@@ -18,7 +18,6 @@ inline const char* COMMON = R"(
 uniform vec3 uEye;
 uniform float uTime;
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
-float hash13(vec3 p3) { p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
 float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
@@ -30,16 +29,10 @@ float fbm(vec2 p) {
     for (int i = 0; i < 4; i++) { s += a * vnoise(p); p = R * p * 2.03 + 0.37; a *= 0.5; }
     return s / 0.9375;
 }
-vec3 saturateC(vec3 c, float k) {
-    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    return max(mix(vec3(l), c, k), 0.0);
-}
 )";
 
 // ---------------------------------------------------------------- solids (instanced meshes)
-// Instance: c (center, material), x y z (half axes, params p0 p1 p2), col (color, seed), e (born, die, sort unit,
-// style). Born / die are in lines: the part pops up (style 0: scaled up from its foot with a little overshoot), rises
-// from below its foot (1) or comes down from above (2) as the growth passes them, and goes away the same way.
+// Instance: c (center, material), x y z (half axes, params p0 p1 p2), col (color, seed), e (-, -, floor, -).
 inline const char* SOLID_VS = R"(#version 330 core
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNrm;
@@ -51,45 +44,12 @@ layout(location = 6) in vec4 iCol;
 layout(location = 7) in vec4 iE;
 uniform mat4 uVP;
 uniform vec3 uOrigin;
-uniform float uGrow, uSpan, uLift;
 out vec3 vP, vL, vLN, vN;
 flat out vec3 vHalf, vAX, vAY, vAZ;
 flat out vec4 vCol, vMat, vE;
 void main() {
-    float born = iE.x, die = iE.y;
-    float s = clamp((uGrow - born) / uSpan, 0.0, 1.0);
-    float d = die > 0.0 ? clamp((uGrow - die) / uSpan, 0.0, 1.0) : 0.0;
-    int style = int(iE.w + 0.5);
     vec3 X = iX.xyz, Y = iY.xyz, Z = iZ.xyz;
-    vec3 C = iC.xyz;
-    vec3 P;
-    if (style == 0) {
-        // grown from its foot, eased
-        float e = s * s * (3.0 - 2.0 * s);
-        float k = e * (1.0 - d * d * (3.0 - 2.0 * d));
-        vec3 base = C - Y;
-        P = base + (X * aPos.x + Y * (aPos.y + 1.0) + Z * aPos.z) * k;
-        if (k <= 0.0) P = base;
-    } else if (style == 1) {
-        // rising out of the floor (sinking back into it)
-        float k = s * s * (3.0 - 2.0 * s) * (1.0 - d * d * (3.0 - 2.0 * d));
-        P = C + X * aPos.x + Y * aPos.y + Z * aPos.z - Y * 2.02 * (1.0 - k);
-        if (k <= 0.0) P = C - Y * 2.0;
-    } else if (style == 3) {
-        // carried in: set down a little out from the wall and pushed back into place
-        float a = clamp(s / 0.25, 0.0, 1.0);
-        float b = clamp((s - 0.25) / 0.75, 0.0, 1.0);
-        b = b * b * (3.0 - 2.0 * b);
-        float k = a * a * (3.0 - 2.0 * a) * (1.0 - d);
-        vec3 base = C - Y + normalize(Z) * (1.4 * (1.0 - b)) + vec3(0.0, 0.25 * (1.0 - a), 0.0);
-        P = base + (X * aPos.x + Y * (aPos.y + 1.0) + Z * aPos.z) * mix(0.0, 1.0, k);
-        if (k <= 0.0) P = C - Y;
-    } else {
-        // coming down from above (lifted away)
-        float k = s * s * (3.0 - 2.0 * s) * (1.0 - d * d * (3.0 - 2.0 * d));
-        P = C + X * aPos.x + Y * aPos.y + Z * aPos.z + vec3(0.0, uLift * (1.0 - k) * (1.0 - k), 0.0);
-        if (k <= 0.0) P = C;
-    }
+    vec3 P = iC.xyz + X * aPos.x + Y * aPos.y + Z * aPos.z;
     vHalf = vec3(length(X), length(Y), length(Z));
     vAX = X / max(vHalf.x, 1e-6);
     vAY = Y / max(vHalf.y, 1e-6);
@@ -114,8 +74,8 @@ uniform float uShadowOn, uShadowTexel, uShadowBias;
 uniform sampler2DShadow uShadow;
 uniform mat4 uShadowVP;
 uniform vec3 uShadowO;
-uniform float uFogD, uFogStart, uFogMid, uFogSpan;
-uniform vec3 uFogLow, uFogHigh;
+uniform float uFogD, uFogStart;
+uniform vec3 uFogCol;
 float shadowAt(vec3 P, vec3 N) {
     if (uShadowOn < 0.5) return 1.0;
     vec4 s = uShadowVP * vec4(P - uShadowO + N * uShadowBias, 1.0);
@@ -123,11 +83,9 @@ float shadowAt(vec3 P, vec3 N) {
     if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0 || q.z > 1.0) return 1.0;
     float t = uShadowTexel;
     float r = 0.0;
-    r += texture(uShadow, vec3(q.xy + vec2(-0.5, -0.5) * t, q.z));
-    r += texture(uShadow, vec3(q.xy + vec2(0.5, -0.5) * t, q.z));
-    r += texture(uShadow, vec3(q.xy + vec2(-0.5, 0.5) * t, q.z));
-    r += texture(uShadow, vec3(q.xy + vec2(0.5, 0.5) * t, q.z));
-    return r * 0.25;
+    for (int i = -1; i <= 1; i++)
+        for (int j = -1; j <= 1; j++) r += texture(uShadow, vec3(q.xy + vec2(i, j) * t * 1.2, q.z));
+    return r / 9.0;
 }
 vec3 shade(vec3 P, vec3 N, vec3 alb, float spec, float rough, float ao) {
     vec3 V = normalize(uEye - P);
@@ -147,21 +105,20 @@ vec3 shade(vec3 P, vec3 N, vec3 alb, float spec, float rough, float ao) {
         if (d2 > r * r) continue;
         float d = sqrt(d2);
         L /= d;
-        float att = 1.0 / (1.0 + d2 / (r * r * 0.05)) * (1.0 - smoothstep(0.5 * r, r, d));
-        float nl = max(dot(N, L), 0.0) * 0.9 + 0.1;
+        float att = 1.0 / (1.0 + d2 / (r * r * 0.08)) * (1.0 - smoothstep(0.5 * r, r, d));
+        // a downlight: a cone toward the floor
+        att *= 0.2 + 0.8 * smoothstep(0.15, 0.8, L.y);
+        float nl = max(dot(N, L), 0.0) * 0.85 + 0.15;
         c += alb * uLC[i].rgb * uLC[i].a * att * nl * mix(0.5, 1.0, ao);
         vec3 Hl = normalize(L + V);
-        c += uLC[i].rgb * uLC[i].a * att * pow(max(dot(N, Hl), 0.0), rough) * spec * 0.7;
+        c += uLC[i].rgb * uLC[i].a * att * pow(max(dot(N, Hl), 0.0), rough) * spec * 0.6;
     }
     return c;
-}
-vec3 fogCol(vec3 P) {
-    return mix(uFogLow, uFogHigh, smoothstep(-uFogSpan, uFogSpan, P.y - uFogMid));
 }
 vec3 applyFog(vec3 c, vec3 P) {
     float dist = length(P - uEye);
     float f = 1.0 - exp(-max(dist - uFogStart, 0.0) * uFogD);
-    return mix(c, fogCol(P), clamp(f, 0.0, 1.0));
+    return mix(c, uFogCol, clamp(f, 0.0, 1.0));
 }
 )";
 
@@ -171,102 +128,50 @@ flat in vec3 vHalf, vAX, vAY, vAZ;
 flat in vec4 vCol, vMat, vE;
 out vec4 frag;
 uniform int uMesh;          // 0 box, 1 cylinder, 2 hemisphere
-uniform float uBoard;       // 1: the well's books (no fog, no shadow)
+uniform float uBoard;       // 1: the well (no fog)
 uniform float uStackA;      // the frame's alpha (1 on the stack, for the bridge)
-uniform vec4 uCut;          // a cutaway: fragments with dot(P, n) + d < 0 are dropped (uCut.w > 1e8: none)
-uniform vec3 uFill[5], uRain[7];
-uniform vec3 uGilt, uPaper, uSkyA, uSkyB, uSection;
-uniform float uLampK, uNight, uFlicker, uMoon;
-uniform sampler2D uSortTex;
-uniform float uSortRate;
-uniform vec3 uWaveO;
-uniform float uWaveT, uWaveSpeed, uGlowAll, uBeat, uWorld;
+uniform float uPremul;      // 1: a blended pass (the glass, a cleared row): premultiplied color and alpha
+uniform vec3 uSkyA, uSkyB, uOutside, uLed, uPaper;
+uniform float uLampK, uNight, uWorld, uShelfLight, uLevelH, uBeat;
+uniform float uLevelOn[8];
+uniform float uDropT, uDropK, uDropSpan, uGroupN;
 
-float sortTime(float unit) {
-    if (unit < 0.0) return -1.0;
-    int id = int(unit + 0.5);
-    float t0 = texelFetch(uSortTex, ivec2(id % 1024, id / 1024), 0).r;
-    return t0 < 0.0 ? -1.0 : uTime - t0;
-}
-// The drop's light: a wave running out through the shelves, then a shimmer held on the beat.
-float dropGlow(vec3 P, float ph) {
-    float g = 0.0;
-    if (uWaveT < 30.0) {
-        float r = length(P - uWaveO);
-        float front = uWaveT * uWaveSpeed;
-        g += exp(-abs(r - front) / max(uWaveSpeed * 0.25, 0.5)) * step(r, front + uWaveSpeed * 0.6) * exp(-uWaveT * 0.12);
-    }
-    g += uGlowAll * (0.35 + 0.65 * pow(0.5 + 0.5 * sin(uTime * 2.3 + ph * 6.283), 3.0)) * (0.6 + 0.4 * uBeat);
-    return g;
-}
+float levelOn(float k) { int i = int(clamp(k, 0.0, 7.0) + 0.5); return uLevelOn[i]; }
 
-// A shelf of books (q: x along the shelf, y above its board, m; H the clear height). Returns the spine's color and in
-// .a whether a book is there (else the dark back of the shelf); bend: the spine's roundness, gilt: its gilt, glowPh
-// a phase per book.
-vec4 spineAt(float x, float y, float H, float len, float seed, float r0, float r1, float sortT, out float bend, out float gilt,
-             out float glowPh, out float flash) {
-    float w0 = 0.042;
-    float t = x / w0;
-    float j = floor(t);
-    float bj = j + 0.4 * (hash12(vec2(j, seed)) - 0.5);
-    if (t < bj) { j -= 1.0; bj = j + 0.4 * (hash12(vec2(j, seed)) - 0.5); }
-    float bn = j + 1.0 + 0.4 * (hash12(vec2(j + 1.0, seed)) - 0.5);
-    float u = (t - bj) / max(bn - bj, 1e-3);
-    float h1 = hash12(vec2(j * 1.7 + 0.3, seed + 3.1)), h2 = hash12(vec2(j + 0.7, seed * 1.3 + 7.7)), h3 = hash12(vec2(j * 0.37, seed + 19.0));
-    float xc = (bj + bn) * 0.5 * w0;
-    float rb = mix(r0, r1, clamp(xc / max(len, 1e-3), 0.0, 1.0));
-    // sorted once the clear's sweep has passed this book
-    float sorted = sortT >= 0.0 ? step(rb, sortT * uSortRate) : 0.0;
-    flash = sortT >= 0.0 ? exp(-abs(rb - sortT * uSortRate) * 40.0) * step(rb, sortT * uSortRate + 0.02) : 0.0;
-    vec3 col;
-    float hb;
-    float present = 1.0;
-    if (sorted > 0.5) {
-        float g = clamp(floor(rb * 7.0), 0.0, 6.0);
-        float gf = fract(rb * 7.0);
-        col = uRain[int(g)] * (0.78 + 0.3 * h2);
-        hb = H * (0.94 - 0.3 * gf) * (0.97 + 0.03 * h1);
-    } else {
-        int k = int(min(h2 * 5.0, 4.0));
-        col = uFill[k] * (0.7 + 0.45 * h3);
-        hb = H * (0.6 + 0.36 * h1);
-        if (h3 < 0.035) present = 0.0;
-    }
-    bend = u * 2.0 - 1.0;
-    glowPh = h1 + h2;
-    gilt = 0.0;
-    if (y > hb || present < 0.5) return vec4(col, 0.0);
-    // gilt bands near the head and the tail, a dark label
-    float yb = y / hb;
-    float px = fwidth(y) / hb;
-    float bandA = 1.0 - smoothstep(0.006, 0.006 + px, abs(yb - 0.92));
-    float bandB = 1.0 - smoothstep(0.006, 0.006 + px, abs(yb - 0.08));
-    float bandC = (1.0 - smoothstep(0.004, 0.004 + px, abs(yb - 0.885))) * step(0.5, h1);
-    float lab = step(0.62, yb) * step(yb, 0.78) * step(0.18, u) * step(u, 0.82) * step(0.3, h3);
-    float detail = 1.0 - smoothstep(0.08, 0.3, fwidth(t));
-    col = mix(col, col * 0.35 + vec3(0.02), lab * 0.8 * detail);
-    gilt = clamp(bandA + bandB + bandC + lab * (1.0 - smoothstep(0.03, 0.03 + px * 2.0, abs(yb - 0.7))) * 0.0, 0.0, 1.0) * detail;
-    // the gap between two books, darker
-    float edge = min(u, 1.0 - u) * (bn - bj);
-    col *= mix(1.0, 0.45 + 0.55 * smoothstep(0.0, 0.08, edge), detail);
-    return vec4(col, 1.0);
+// The view out of the glazing at world height y, x along it: the sky over a park's trees (day), the city (night).
+vec3 outside(float x, float y) {
+    // seen from far: everything out there a third of its size
+    x *= 3.0;
+    y = y * 3.0 - 1.0;
+    vec3 sky = mix(uSkyB, uSkyA, smoothstep(0.0, 40.0, y));
+    // a soft cloud or two
+    sky = mix(sky, mix(uSkyB, vec3(1.0), 0.6), smoothstep(0.55, 0.8, fbm(vec2(x * 0.05, y * 0.12) + 4.0)) * 0.5 * (1.0 - uNight));
+    // the canopy: rounded crowns of different heights, lit from above, hazier where it's lower
+    float crown = 3.0 + 4.0 * fbm(vec2(x * 0.06, 2.7)) + 1.5 * fbm(vec2(x * 0.4, 9.1));
+    float blk = floor(x / 3.1);
+    float hB = 5.0 + 14.0 * pow(hash12(vec2(blk, 7.1)), 1.6);
+    float h = mix(crown, hB, uNight);
+    float edge = fwidth(y) + 0.04;
+    float m = 1.0 - smoothstep(h - edge, h + edge, y);
+    float leaf = fbm(vec2(x * 1.3, y * 1.3));
+    vec3 trees = uOutside * mix(0.55, 1.25, leaf) * mix(0.7, 1.05, smoothstep(0.0, h, y));
+    trees = mix(trees, uSkyB, 0.22);
+    vec3 city = uOutside * (0.8 + 0.2 * hash12(vec2(blk, 2.0)));
+    vec2 w = vec2(x / 0.45, y / 0.6);
+    float lit = step(0.8, hash12(floor(w) + blk * 3.0)) * step(0.3, fract(w.x)) * step(0.35, fract(w.y));
+    city += vec3(1.0, 0.78, 0.5) * lit * 0.45 * (1.0 - smoothstep(0.3, 1.0, fwidth(w.x)));
+    vec3 c = mix(sky, mix(trees, city, uNight), m);
+    // the lawn (the street at night) in front
+    vec3 lawn = mix(uOutside * 1.15, uOutside * 0.6, uNight);
+    c = mix(c, lawn, 1.0 - smoothstep(0.0, 0.6, y));
+    return c;
 }
 
 void main() {
-    if (uCut.w < 1e8 && dot(vP, uCut.xyz) + uCut.w < 0.0) discard;
     int mat = int(vMat.x + 0.5);
-    // an open tube (a cylinder with p2 = 1): no caps
-    if (uMesh == 1 && vMat.w > 0.5 && abs(vLN.y) > 0.5) discard;
     vec3 N = normalize(vN);
-    bool back = !gl_FrontFacing;
-    if (back && uMesh != 2 && mat != 15) {
-        // a cut through a solid: its section
-        vec3 c = uSection * (0.4 + 0.6 * max(dot(-N, uKeyDir), 0.0));
-        frag = vec4(applyFog(c, vP), uStackA);
-        return;
-    }
-    if (uMesh == 2) { if (dot(N, uEye - vP) < 0.0) N = -N; }
-    else if (back) N = -N;
+    if (!gl_FrontFacing && uMesh != 2) N = -N;
+    if (uMesh == 2 && dot(N, uEye - vP) < 0.0) N = -N;
     vec2 uv = vec2(0.0), sz = vec2(1.0);
     vec3 T = vAX, B = vAY;
     int face = 0; // box: 0 x sides, 1 top / bottom, 2 front / back (z)
@@ -278,415 +183,234 @@ void main() {
     vec2 q = uv * sz;
     vec3 alb = vCol.rgb;
     vec3 emit = vec3(0.0);
-    float spec = 0.08, rough = 20.0, ao = 1.0;
+    float spec = 0.06, rough = 20.0, ao = 1.0;
     float seed = vCol.a;
     vec2 bend = vec2(0.0);
     float px = max(fwidth(q.x), fwidth(q.y));
-    float glow = 0.0;
+    float outA = 1.0;
 
-    if (mat == 1) {
-        // wood: grain along the longest side, a darker moulding line along the edges, raised panels (p0)
+    if (mat == 0) {
+        // plaster: barely there
+        alb *= 0.97 + 0.05 * fbm(vP.xy * 0.4 + vP.z * 0.3);
+        spec = 0.02;
+    } else if (mat == 1) {
+        // pale oak: a fine straight grain along the longest side; p0 = 2: a wall of vertical slats on a dark ground
         vec2 g = sz.x > sz.y ? q : q.yx;
-        float grain = fbm(vec2(g.x * 1.2, g.y * 18.0) + seed * 13.0);
-        float rings = sin(g.y * 60.0 + grain * 9.0 + seed * 5.0) * 0.5 + 0.5;
-        float detail = 1.0 - smoothstep(0.004, 0.03, px);
-        alb *= mix(1.0, 0.82 + 0.22 * grain + 0.08 * rings, detail);
-        float edge = min(sz.x - abs(q.x), sz.y - abs(q.y));
-        alb *= mix(1.0, 0.72 + 0.28 * smoothstep(0.0, 0.012 + px, edge), detail);
-        alb += alb * 0.25 * (1.0 - smoothstep(0.0, 0.006 + px, abs(edge - 0.018))) * detail;
-        if (vMat.y > 0.5 && face == 2) {
-            // a raised panel inset: its bevel catching the light
-            vec2 r = sz - abs(q) - vec2(vMat.y * 0.06);
-            float ins = min(r.x, r.y);
-            float bev = smoothstep(0.0, 0.02, ins) * (1.0 - smoothstep(0.02, 0.04 + px, ins));
-            bend = vec2(sign(q.x) * step(r.x, r.y), sign(q.y) * step(r.y, r.x)) * bev * 0.5;
-            alb *= 1.0 - 0.12 * step(0.0, ins) * (1.0 - bev);
-        }
-        spec = 0.18; rough = 28.0;
-    } else if (mat == 0) {
-        // plaster, or wallpaper over a dado (p0 = 1): fine stripes and a small damask
-        float n = fbm(vP.xz * 0.6 + vP.y * 0.4);
-        alb *= 0.92 + 0.1 * n;
-        if (vMat.y > 0.5 && face == 2) {
-            vec2 w = vec2(dot(vP, vAX), vP.y);
-            float st = smoothstep(0.42, 0.5, abs(fract(w.x / 0.18) - 0.5) * 2.0);
-            vec2 dm = fract(w / vec2(0.36, 0.42)) - 0.5;
-            float dam = smoothstep(0.17, 0.12, length(dm * vec2(1.0, 0.8)) + 0.04 * sin(atan(dm.y, dm.x) * 4.0));
-            float detail = 1.0 - smoothstep(0.01, 0.05, px);
-            alb = mix(alb, alb * 0.8, (st * 0.6 + dam * 0.5) * detail);
-        }
-        spec = 0.03;
-    } else if (mat == 2 || mat == 14) {
-        // books on shelves, drawn: 2 = one shelf's books (p0..p1 its share of the sort unit's run), 14 = a wall of
-        // bookcases (p0 bay width, p1 shelves per bay; the wood in the instance color)
-        if (face == 2 && vLN.z > 0.0) {
-            float len = sz.x * 2.0, Ht = sz.y * 2.0;
-            float x = q.x + sz.x, y = q.y + sz.y;
-            float st = sortTime(vE.z);
-            float bendS = 0.0, gilt = 0.0, ph = 0.0, flash = 0.0;
-            vec4 s = vec4(0.0);
-            vec3 wood = alb;
-            if (mat == 2) {
-                s = spineAt(x, y, Ht, len, seed * 37.0, vMat.y, vMat.z, st, bendS, gilt, ph, flash);
-                if (s.a > 0.5) { alb = s.rgb; bend.x = bendS * 0.55; }
-                else { alb = wood * 0.18; ao = 0.35; }
-                ao *= 0.55 + 0.45 * smoothstep(Ht, Ht * 0.55, y);
-            } else {
-                float bayW = vMat.y, nSh = vMat.z;
-                float bay = floor(x / bayW), bx = x - bay * bayW;
-                float nBay = max(floor(len / bayW + 0.5), 1.0);
-                float plinth = 0.14, crown = 0.16;
-                float inner = Ht - plinth - crown;
-                float pitch = inner / nSh;
-                float yi = y - plinth;
-                float sh = floor(yi / pitch), sy = yi - sh * pitch;
-                float up = 0.035;  // the upright's half width
-                float board = 0.028;
-                float upright = 1.0 - smoothstep(up, up + px, min(bx, bayW - bx));
-                bool frame = yi < 0.0 || yi > inner || upright > 0.5 || sy < board;
-                if (!frame) {
-                    float shelfIdx = nSh - 1.0 - sh;
-                    float r0 = (bay * nSh + shelfIdx) / (nBay * nSh), r1 = (bay * nSh + shelfIdx + 1.0) / (nBay * nSh);
-                    float H = pitch - board - 0.01;
-                    s = spineAt(bx - up, sy - board, H, bayW - 2.0 * up, seed * 31.0 + bay * 7.13 + sh * 3.71, r0, r1, st, bendS, gilt, ph, flash);
-                    if (s.a > 0.5) { alb = s.rgb; bend.x = bendS * 0.5; }
-                    else { alb = wood * 0.16; }
-                    // the board above shades the books' heads, the uprights their sides
-                    ao = (0.5 + 0.5 * smoothstep(H + 0.02, H * 0.5, sy - board)) * (0.7 + 0.3 * smoothstep(up, up + 0.08, min(bx, bayW - bx)));
-                    if (s.a < 0.5) ao *= 0.5;
-                } else {
-                    gilt = 0.0; flash = 0.0; ph = 0.0;
-                    // the wood: lit board edges, darker joints
-                    float grain = fbm(vec2(x * 2.0, y * 30.0) + seed * 5.0);
-                    float detail = 1.0 - smoothstep(0.01, 0.05, px);
-                    alb = wood * mix(1.0, 0.85 + 0.25 * grain, detail);
-                    if (sy < board && yi > 0.0 && yi < inner && upright < 0.5) {
-                        alb *= 1.12;
-                        bend.y = 0.25;
-                    }
-                    if (yi < 0.0) alb *= 0.8 + 0.2 * smoothstep(0.0, 0.03, -yi) - 0.15 * (1.0 - smoothstep(0.0, 0.02 + px, abs(yi + plinth * 0.5)));
-                    if (yi > inner) {
-                        float cy = yi - inner;
-                        alb *= 0.85 + 0.3 * smoothstep(0.02, 0.06, cy) * (1.0 - smoothstep(0.1, 0.14, cy));
-                    }
-                }
-                gilt *= 1.0;
-            }
-            // the sort's sweep: a flash of gilt as the books fall into order
-            emit += uGilt * flash * 2.5;
-            alb = mix(alb, uGilt, gilt * 0.85);
-            spec = 0.1 + 0.5 * gilt; rough = 30.0;
-            glow = dropGlow(vP, ph) * (s.a > 0.5 ? 1.0 : 0.0);
-            emit += (s.rgb * 1.3 + uGilt * (0.25 + gilt * 2.0)) * glow;
+        float detail = 1.0 - smoothstep(0.003, 0.02, px);
+        if (vMat.y > 1.5 && face == 2) {
+            float period = 0.105;
+            float f = fract((q.x + 50.0) / period);
+            float sl = smoothstep(0.0, 0.06 + px / period, f) * (1.0 - smoothstep(0.62, 0.68 + px / period, f));
+            float id = floor((q.x + 50.0) / period);
+            float gr = fbm(vec2(q.y * 0.5, id * 3.1 + q.x * 40.0));
+            alb = mix(vec3(0.025), alb * (0.88 + 0.16 * gr + 0.08 * hash12(vec2(id, 1.0))), sl);
+            bend.x = (f / 0.65 - 0.5) * 0.8 * sl;
+            ao = mix(0.5, 1.0, sl);
         } else {
-            alb *= 0.25;
-            ao = 0.5;
+            float grain = fbm(vec2(g.x * 0.7, g.y * 34.0) + seed * 13.0);
+            float fine = vnoise(vec2(g.x * 2.0, g.y * 260.0) + seed * 7.0);
+            alb *= mix(1.0, 0.9 + 0.14 * grain + 0.05 * fine, detail);
+            float edge = min(sz.x - abs(q.x), sz.y - abs(q.y));
+            alb *= mix(1.0, 0.92 + 0.08 * smoothstep(0.0, 0.004 + px, edge), detail);
         }
+        spec = 0.1; rough = 22.0;
+    } else if (mat == 2) {
+        // the shelving's back panel: washed by the strip light under each shelf, darker low in each compartment
+        float yb = q.y + sz.y;
+        float cy = (yb - vMat.z) / vMat.y;
+        float fr = fract(cy);
+        float inside = step(0.0, cy) * step(cy, 8.0);
+        float on = levelOn(vE.z);
+        float wash = exp(-(1.0 - fr) * 3.2) * inside;
+        alb *= 0.96 + 0.06 * fbm(q * vec2(1.5, 8.0) + seed);
+        ao = mix(1.0, 0.72 + 0.28 * fr, inside);
+        emit += uLed * wash * 0.22 * uShelfLight * on * alb / max(dot(alb, vec3(0.333)), 0.05);
+        spec = 0.03;
     } else if (mat == 3) {
-        // a book: the spine toward +z, the page block on top (and the fore-edge at -z), cloth covers. p0: its style,
-        // p1: its glow (the drop, landing), p2: gilt page heads
+        // a book: the spine toward +z, pages at the ends and at -z, covers on the x sides. p0: its spine's design,
+        // p1: its glow (shelved, the drop), p2: a cleared book's fade into light (0 none .. 1 gone)
         vec3 L = vL;
         vec3 h = vHalf;
         int sty = int(vMat.y + 0.5);
-        float rim = 0.09 * min(h.x * 2.0, h.z * 2.0);
-        float detail = 1.0 - smoothstep(0.2, 0.6, px / max(h.y, 1e-3) * 10.0);
+        float lum = dot(alb, vec3(0.2126, 0.7152, 0.0722));
+        vec3 ink = lum > 0.22 ? vec3(0.035, 0.035, 0.04) : vec3(0.92, 0.9, 0.86);
+        float rim = 0.08 * min(h.x * 2.0, h.z * 2.0);
+        float detail = 1.0 - smoothstep(0.25, 0.7, px / max(min(h.x, h.y), 1e-4) * 2.0);
         if (face == 2 && vLN.z > 0.0) {
-            // the spine: rounded, gilt bands and a label
-            float u = L.x, v = L.y;
-            bend.x = u * 0.55;
-            float pxv = fwidth(v);
-            float g = 0.0;
+            float u = L.x, v = L.y;   // u across the thickness, v along the length
+            float pu = fwidth(u) + 1e-4, pv = fwidth(v) + 1e-4;
+            float m = 0.0;
+            float r = hash12(vec2(seed * 3.1, 9.0));
+            #define RECT(v0, v1, uw) (smoothstep(v0 - pv, v0 + pv, v) * (1.0 - smoothstep(v1 - pv, v1 + pv, v)) * (1.0 - smoothstep(uw - pu, uw + pu, abs(u))))
+            // tonal designs, so the piece keeps its color: a lighter block, fine rules, two tones, a dark title
+            vec3 light = mix(alb, vec3(0.95, 0.94, 0.9), 0.38), dark = alb * 0.78;
             if (sty == 0) {
-                g += 1.0 - smoothstep(0.02, 0.02 + pxv, abs(v - 0.8));
-                g += 1.0 - smoothstep(0.012, 0.012 + pxv, abs(v - 0.88));
-                g += 1.0 - smoothstep(0.02, 0.02 + pxv, abs(v + 0.8));
-                g += 1.0 - smoothstep(0.012, 0.012 + pxv, abs(v + 0.88));
-                float lab = step(abs(v - 0.35), 0.17) * step(abs(u), 0.72);
-                alb = mix(alb, alb * 0.3 + vec3(0.015), lab);
-                g += lab * (1.0 - smoothstep(0.02, 0.02 + pxv, abs(abs(v - 0.35) - 0.17)));
+                m = RECT(0.1, 0.6, 2.0);
+                alb = mix(alb, light, m * detail);
+                float t = RECT(0.22, 0.22 + 0.26 * (0.5 + 0.5 * r), 0.28);
+                alb = mix(alb, ink, t * detail * 0.7);
             } else if (sty == 1) {
-                // raised bands
-                for (int i = 0; i < 3; i++) {
-                    float yb = -0.5 + 0.5 * float(i);
-                    float d = abs(v - yb);
-                    float band = 1.0 - smoothstep(0.04, 0.055 + pxv, d);
-                    bend.y += sign(v - yb) * band * 0.8 * step(0.02, d);
-                    g += (1.0 - smoothstep(0.01, 0.01 + pxv, abs(d - 0.05))) * 0.7;
-                }
-                g += 1.0 - smoothstep(0.015, 0.015 + pxv, abs(abs(v) - 0.86));
+                m = RECT(-0.66, -0.61, 2.0) + RECT(-0.54, -0.49, 2.0);
+                alb = mix(alb, light, clamp(m, 0.0, 1.0) * mix(0.3, 0.9, detail));
+                alb = mix(alb, ink, RECT(0.18, 0.18 + 0.42 * (0.5 + 0.5 * r), 0.3) * detail * 0.75);
             } else if (sty == 2) {
-                // a colored label panel framed in gilt, gilt head and tail
-                float lab = step(abs(v - 0.3), 0.22) * step(abs(u), 0.78);
-                alb = mix(alb, vec3(0.06, 0.05, 0.04) + alb * 0.15, lab);
-                g += lab * (1.0 - smoothstep(0.015, 0.015 + pxv, min(0.22 - abs(v - 0.3), (0.78 - abs(u)) * h.x / h.y)));
-                g += step(0.9, abs(v));
+                float lo = smoothstep(-0.22 - pv, -0.22 + pv, v);
+                alb = mix(dark, alb, lo);
+                alb = mix(alb, light, RECT(0.28, 0.66, 0.26) * detail * 0.9);
             } else {
-                // gilt rules and a fleuron
-                g += 1.0 - smoothstep(0.015, 0.015 + pxv, abs(abs(v) - 0.72));
-                g += 1.0 - smoothstep(0.015, 0.015 + pxv, abs(abs(v) - 0.66));
-                vec2 f = vec2(u * h.x / h.y, v + 0.1) * vec2(1.0, 1.0);
-                g += 1.0 - smoothstep(0.06, 0.06 + pxv, length(f) + 0.03 * sin(atan(f.y, f.x) * 6.0));
-                float lab = step(abs(v - 0.4), 0.12) * step(abs(u), 0.7);
-                alb = mix(alb, alb * 0.35, lab);
+                alb = mix(alb, ink, RECT(0.05, 0.05 + 0.5 * (0.5 + 0.5 * r), 0.26) * detail * 0.7);
+                float dt = 1.0 - smoothstep(0.24 - pu, 0.24 + pu, length(vec2(u, (v + 0.78) * h.y / max(h.x, 1e-3))));
+                alb = mix(alb, light, dt * detail);
             }
-            // the cloth's weave
-            alb *= 0.95 + 0.06 * vnoise(vec2(u * 60.0, v * 240.0) + seed * 9.0) * detail;
-            alb = mix(alb, uGilt, clamp(g, 0.0, 1.0) * mix(0.4, 0.9, detail));
-            spec = 0.12 + 0.6 * clamp(g, 0.0, 1.0); rough = 24.0 + 30.0 * clamp(g, 0.0, 1.0);
-            glow = vMat.z + dropGlow(vP, seed) * uWorld;
-            emit += (alb * 0.6 + uGilt * clamp(g, 0.0, 1.0) * 1.2) * glow;
+            // the cloth's tooth, the spine's edges catching the light
+            alb *= 0.96 + 0.06 * vnoise(vec2(u * 30.0, v * 120.0) + seed * 9.0) * detail;
+            bend.x = u * 0.35;
+            alb *= 0.9 + 0.1 * smoothstep(1.0, 0.8, abs(u));
+            spec = 0.06; rough = 14.0;
+            emit += alb * vMat.z * 1.2 + uLed * vMat.z * 0.25;
         } else if (face == 1 || (face == 2 && vLN.z < 0.0)) {
-            // the page block (top, bottom, fore-edge), the boards' edges around it
+            // the page block (head, tail, fore-edge), the boards' edges around it
             float ax = h.x - abs(L.x * h.x);
-            float covers = 1.0 - step(rim, ax);
+            float covers = 1.0 - smoothstep(rim * 0.8, rim, ax);
             float spineSide = face == 1 ? step(h.z - rim * 1.2, L.z * h.z) : 0.0;
-            float pages = 1.0 - max(covers, spineSide);
+            float pages = (1.0 - covers) * (1.0 - spineSide);
             float lines = 0.5 + 0.5 * sin(L.x * h.x * 2400.0 + seed * 3.0);
             float lp = fwidth(L.x * h.x * 2400.0);
             lines = mix(lines, 0.5, smoothstep(1.0, 3.0, lp));
-            vec3 paper = uPaper * (0.88 + 0.12 * lines);
-            if (vMat.w > 0.5 && face == 1) paper = mix(paper, uGilt * 1.1, 0.85);
-            // the page block is set back a hair: shaded near the boards
-            paper *= 0.82 + 0.18 * smoothstep(rim, rim * 2.5, ax);
-            alb = mix(alb * 0.9, paper, pages);
-            spec = mix(0.1, vMat.w > 0.5 ? 0.6 : 0.04, pages);
-            glow = vMat.z;
-            emit += uGilt * 0.25 * glow;
+            vec3 paper = uPaper * (0.9 + 0.1 * lines);
+            paper *= 0.86 + 0.14 * smoothstep(rim, rim * 2.5, ax);
+            alb = mix(alb * 0.85, paper, pages);
+            spec = mix(0.06, 0.03, pages);
+            emit += uPaper * vMat.z * 0.4 * pages;
         } else {
-            // a cover: cloth, a blind-stamped frame
-            vec2 r = sz - abs(q) - vec2(min(sz.x, sz.y) * 0.12);
-            float fr = 1.0 - smoothstep(0.0, max(px, 1e-4) * 1.5 + min(sz.x, sz.y) * 0.015, abs(min(r.x, r.y)));
-            alb *= 0.9 - 0.12 * fr * detail;
-            alb *= 0.95 + 0.06 * vnoise(q * 300.0 / max(sz.y, 0.1) * 0.1 + seed) * detail;
-            spec = 0.1;
+            // a cover: matte, a hair darker than the spine
+            alb *= 0.9;
+            alb *= 0.97 + 0.04 * vnoise(q * 400.0 + seed) * detail;
+            spec = 0.08; rough = 18.0;
+            emit += alb * vMat.z * 0.6;
         }
-        ao = 1.0;
+        if (uWorld > 0.5) {
+            // on the shelves: the strip above lights its head more than its foot
+            float up = dot(vAX, vec3(0, 1, 0)) * L.x + dot(vAY, vec3(0, 1, 0)) * L.y;
+            emit += alb * uLed * uShelfLight * levelOn(vE.z) * (0.08 + 0.22 * smoothstep(-1.0, 1.0, up));
+            // the drop's light running along the collection
+            float d = (vE.w + 0.5) / uGroupN - uDropT;
+            emit += (alb * 1.6 + uLed * 0.3) * uDropK * exp(-d * d / (uDropSpan * uDropSpan));
+        }
+        if (vMat.w > 0.0) {
+            // a cleared book: swelling and dissolving into light
+            float f = vMat.w;
+            // its own color, lit from within, then gone
+            emit += (vCol.rgb * 1.4 + 0.25) * (2.2 * f);
+            outA = (1.0 - f) * (1.0 - f * 0.5);
+        }
     } else if (mat == 4) {
-        // floor: parquet in herringbone (p0 = 0), or a marble checkerboard (p0 = 1)
+        // floor: polished concrete (p0 = 0), or long planks of pale oak (p0 = 1)
         vec2 g = vP.xz;
+        float detail = 1.0 - smoothstep(0.01, 0.05, px);
         if (vMat.y < 0.5) {
-            vec2 s = g / vec2(0.09, 0.09);
-            float row = floor((s.x + s.y) / 4.0);
-            vec2 r = vec2(s.x - s.y, s.x + s.y);
-            float k = mod(floor(r.x / 1.0) + floor(r.y / 4.0), 2.0);
-            vec2 pl = k > 0.5 ? vec2(fract(r.x), fract(r.y / 4.0)) : vec2(fract(r.y / 4.0), fract(r.x));
-            float id = hash12(vec2(floor(r.x), floor(r.y / 4.0)) + k * 17.0);
-            float detail = 1.0 - smoothstep(0.01, 0.04, px);
-            float seam = smoothstep(0.0, 0.06, min(min(pl.x, 1.0 - pl.x), min(pl.y, 1.0 - pl.y) * 4.0));
-            alb *= mix(1.0, (0.8 + 0.35 * id) * (0.65 + 0.35 * seam) * (0.9 + 0.15 * vnoise(vec2(pl.x * 3.0, pl.y * 30.0) + id * 30.0)), detail);
-            spec = 0.35; rough = 40.0;
+            float m = fbm(g * 0.35) * 0.7 + fbm(g * 2.3 + 4.0) * 0.3;
+            alb *= 0.9 + 0.16 * m;
+            // saw cuts on a 3 m grid
+            vec2 f = abs(fract(g / 3.0 + 0.5) - 0.5) * 3.0;
+            alb *= mix(1.0, 0.82 + 0.18 * smoothstep(0.0, 0.006 + px, min(f.x, f.y)), detail);
+            spec = 0.4; rough = 60.0;
+        } else if (vMat.y > 1.5) {
+            // terrazzo: a warm pale ground, chips of stone in two sizes, a fine 2.4 m grid
+            float m = fbm(g * 0.3) * 0.5 + 0.5;
+            vec2 c1 = g * 38.0, c2 = g * 13.0;
+            float h1 = hash12(floor(c1)), h2 = hash12(floor(c2) + 7.0);
+            float chip1 = step(0.78, h1) * (1.0 - smoothstep(0.22, 0.38, length(fract(c1) - 0.5)));
+            float chip2 = step(0.86, h2) * (1.0 - smoothstep(0.18, 0.34, length(fract(c2) - 0.5)));
+            vec3 stoneA = vec3(0.32, 0.31, 0.3), stoneB = vec3(0.62, 0.52, 0.42);
+            alb *= 0.94 + 0.08 * m;
+            alb = mix(alb, mix(stoneA, stoneB, hash12(floor(c1) + 3.0)), chip1 * 0.8 * detail);
+            alb = mix(alb, mix(stoneB, alb * 0.7, hash12(floor(c2) + 5.0)), chip2 * 0.7 * detail);
+            vec2 f = abs(fract(g / 2.4 + 0.5) - 0.5) * 2.4;
+            alb *= mix(1.0, 0.86 + 0.14 * smoothstep(0.0, 0.005 + px, min(f.x, f.y)), detail);
+            spec = 0.45; rough = 70.0;
         } else {
-            vec2 c = floor(g / 1.2);
-            float k = mod(c.x + c.y, 2.0);
-            float vein = fbm(g * 0.8 + k * 3.0);
-            vec3 m = k > 0.5 ? vCol.rgb * 0.8 : vCol.rgb * vec3(0.32, 0.3, 0.3);
-            alb = m * (0.85 + 0.2 * vein) * (1.0 - 0.6 * smoothstep(0.45, 0.5, abs(vnoise(g * 2.0 + 9.0) - 0.5)) * 0.2);
-            float detail = 1.0 - smoothstep(0.02, 0.08, px);
-            vec2 f = abs(fract(g / 1.2) - 0.5);
-            alb *= mix(1.0, 0.85 + 0.15 * smoothstep(0.49, 0.47, max(f.x, f.y)), detail);
-            spec = 0.6; rough = 70.0;
+            float w = 0.19;
+            float row = floor(g.x / w);
+            float off = hash12(vec2(row, 3.0)) * 2.4;
+            float col = floor((g.y + off) / 2.4);
+            float id = hash12(vec2(row, col));
+            vec2 pl = vec2(fract(g.x / w), fract((g.y + off) / 2.4));
+            float seam = smoothstep(0.0, 0.03 + px / w, min(pl.x, 1.0 - pl.x)) * smoothstep(0.0, 0.004 + px / 2.4, min(pl.y, 1.0 - pl.y));
+            float gr = fbm(vec2(g.x * 30.0, g.y * 0.8) + id * 20.0);
+            alb *= mix(1.0, (0.9 + 0.16 * id) * (0.75 + 0.25 * seam) * (0.92 + 0.12 * gr), detail);
+            spec = 0.25; rough = 40.0;
         }
     } else if (mat == 5) {
-        // marble: veins
-        vec2 g = uMesh == 0 ? q + seed : vec2(atan(vL.z, vL.x) * vHalf.x, vP.y);
-        float v = fbm(g * 1.4);
-        float vein = 1.0 - smoothstep(0.0, 0.05, abs(v - 0.5));
-        alb *= 0.9 + 0.12 * fbm(g * 4.0);
-        alb = mix(alb, alb * 0.6, vein * 0.5);
-        if (uMesh == 1) {
-            // fluting
-            float a = atan(vL.z, vL.x) * 12.0 / 3.14159;
-            bend.x = sin(a * 3.14159) * 0.35;
-        }
-        spec = 0.5; rough = 60.0;
+        // white concrete: fine, quiet
+        alb *= 0.96 + 0.05 * fbm(q * 2.5 + seed);
+        spec = 0.04;
     } else if (mat == 6) {
-        // brass, gilt
-        alb *= 0.9 + 0.1 * vnoise(vP.xy * 20.0);
-        spec = 1.2; rough = 50.0;
-        glow = dropGlow(vP, seed) * 0.3 * uWorld;
-        emit += alb * glow;
+        // dark steel
+        spec = 0.35; rough = 40.0;
     } else if (mat == 7) {
-        // a light: lit by its own (p0 how bright, p1 = 1: follows the lamps' level, p2 flicker)
-        float k = vMat.y * (vMat.z > 0.5 ? uLampK : 1.0) * (1.0 + vMat.w * uFlicker * (0.6 + 0.4 * sin(uTime * 13.0 + seed * 40.0)));
+        // a light: p0 how bright, p1 = 1: follows the lamps' level; its floor's lights must be on
+        float k = vMat.y * (vMat.z > 0.5 ? uLampK : 1.0) * mix(0.15, 1.0, levelOn(vE.z));
         emit = alb * k;
         alb = vec3(0.0);
     } else if (mat == 8) {
-        // a window: its arched top (p0 = 1), mullions, the sky behind (a gradient, the moon, a few stars)
-        if (face == 2) {
-            vec2 r = q / sz;
-            if (vMat.y > 0.5) {
-                float ar = sz.x / sz.y;
-                vec2 c = vec2(r.x * ar, r.y - (1.0 - ar));
-                if (r.y > 1.0 - ar && length(c) > ar) discard;
-            }
-            float mx = abs(fract((r.x + 1.0) * 1.5) - 0.5) * 2.0;
-            float my = abs(fract((r.y + 1.0) * 2.5) - 0.5) * 2.0;
-            float frameW = 0.06;
-            float mull = max(1.0 - smoothstep(0.9, 0.93, mx), 0.0);
-            float m = step(mx, 1.0 - frameW * 2.0) * step(my, 1.0 - frameW * 3.0);
-            float outer = step(sz.x - abs(q.x), 0.05) + step(sz.y - abs(q.y), 0.05);
-            vec3 sky = mix(uSkyB, uSkyA, smoothstep(-1.0, 1.0, r.y));
-            vec2 sm = vec2(r.x - 0.35, r.y - 0.45) * vec2(sz.x / sz.y, 1.0);
-            sky += vec3(1.0, 0.97, 0.9) * smoothstep(0.1, 0.085, length(sm)) * uMoon * 2.0;
-            sky += vec3(0.8, 0.85, 1.0) * step(0.996, hash12(floor(q * 90.0))) * uNight * 0.8;
-            emit = sky * (1.0 - clamp(outer, 0.0, 1.0)) * m;
-            alb = alb * (1.0 - m * (1.0 - clamp(outer, 0.0, 1.0)));
-            spec = 0.2;
-        }
+        // glazing (its +z face): the view out between mullions. p0: 1 the curtain wall, 0 the slot
+        if (face == 2 && vLN.z > 0.0) {
+            float x = dot(vP, vAX);
+            float y = vP.y;
+            float mw = vMat.y > 0.5 ? 1.5 : 0.9;
+            float fx = abs(fract(x / mw) - 0.5) * mw;           // distance to the nearest mullion's center
+            float fy = abs(fract(y / (uLevelH * 0.5)) - 0.5) * uLevelH * 0.5;
+            float mull = 1.0 - smoothstep(0.035, 0.035 + px * 1.5, mw * 0.5 - fx);
+            float tr = 1.0 - smoothstep(0.03, 0.03 + px * 1.5, uLevelH * 0.25 - fy);
+            float frameM = max(mull, tr);
+            vec3 o = outside(x + seed * 40.0, y);
+            emit = o * (1.0 - frameM);
+            alb = alb * frameM;
+            spec = 0.3 * frameM;
+        } else alb *= 0.4;
     } else if (mat == 9) {
-        // a rug: a border, a medallion, a field of small motifs (the instance color its field, the gilt its pattern)
-        if (face == 1) {
-            vec2 r = abs(q) / sz;
-            vec2 d = sz - abs(q);
-            float b = min(d.x, d.y);
-            float border = step(b, 0.28) * step(0.04, b);
-            float med = smoothstep(0.32, 0.3, length(q / sz * vec2(1.0, sz.y / sz.x)) * 1.0);
-            vec2 m = fract(q * 3.0) - 0.5;
-            float motif = smoothstep(0.2, 0.15, abs(m.x) + abs(m.y));
-            vec3 c2 = uRain[int(mod(seed * 7.0, 7.0))] * 0.5;
-            // a plain field and a quiet double border
-            float inner = step(b, 0.36) * step(0.32, b);
-            alb = mix(alb, alb * 0.55, border * 0.8 + inner * 0.5);
-            alb *= 0.9 + 0.12 * vnoise(q * 80.0);
-            alb *= step(0.02, b) * 0.5 + 0.5;
-        }
-        spec = 0.02;
+        // glass (blended): a faint tint, the sky's reflection at grazing angles, a bright edge
+        vec3 V = normalize(uEye - vP);
+        float fr = pow(1.0 - abs(dot(N, V)), 4.0);
+        vec2 e = sz - abs(q);
+        float edge = 1.0 - smoothstep(0.0, 0.01 + px, min(e.x, e.y));
+        vec3 c = mix(alb * 0.2, mix(uSkyB, uSkyA, 0.5) * 0.45, fr) + vec3(0.6) * edge * 0.25;
+        outA = 0.03 + 0.14 * fr + 0.25 * edge;
+        frag = vec4(applyFog(c, vP) * outA, outA);
+        return;
     } else if (mat == 10) {
-        // leather (chairs): buttoned
-        vec2 g = q * 7.0;
-        vec2 f = fract(g + vec2(0.5 * mod(floor(g.y), 2.0), 0.0)) - 0.5;
-        float btn = smoothstep(0.12, 0.05, length(f));
-        alb *= 0.85 + 0.2 * smoothstep(0.0, 0.5, length(f));
-        alb *= 1.0 - 0.4 * btn;
-        bend = f * 0.6;
-        spec = 0.4; rough = 26.0;
+        // the skylight: a grid of white beams over the sky (its underside)
+        if (face == 1 && vLN.y < 0.0) {
+            vec2 g = vP.xz;
+            vec2 f = abs(fract(g / 2.4 + 0.5) - 0.5) * 2.4;
+            float beam = 1.0 - smoothstep(0.12, 0.12 + px * 1.5, min(f.x, f.y));
+            vec3 sky = mix(uSkyA, uSkyB, 0.25) * 1.2;
+            emit = sky * (1.0 - beam);
+            alb *= beam;
+        }
     } else if (mat == 11) {
-        // a lamp shade, lit from inside (the instance color is the glass / silk)
-        float k = vMat.y * uLampK;
-        emit = alb * k * (0.6 + 0.4 * (face == 1 ? 0.3 : 1.0));
-        alb *= 0.5;
-        spec = 0.6; rough = 40.0;
-    } else if (mat == 12) {
-        // the dome: coffers in rings, gilt rosettes, ribs, the windows of its drum, the oculus
-        vec3 s = vL;
-        float el = asin(clamp(s.y, 0.0, 1.0));
-        float az = atan(s.z, s.x);
-        if (el > 1.36) discard;
-        float nAz = 24.0;
-        float a = az / 6.28318 * nAz;
-        float fa = fract(a) - 0.5;
-        float ringH = 0.17;
-        float er = (el - 0.16) / ringH;
-        float ring = floor(er);
-        float fe = fract(er) - 0.5;
-        vec3 base = alb;
-        if (el < 0.16) {
-            // the drum: arched windows between piers
-            float w = step(abs(fa), 0.32) * step(el, 0.13) * step(0.025, el);
-            float arch = step(length(vec2(fa / 0.32, (el - 0.10) / 0.035)), 1.0) + step(el, 0.10);
-            float win = w * clamp(arch, 0.0, 1.0);
-            emit += mix(uSkyB, uSkyA, el / 0.16) * win * 1.2;
-            alb = mix(base, vec3(0.0), win);
-        } else {
-            // coffers diminishing toward the top: a stepped recess (two frames), a gilt rosette; ribs every
-            // fourth column; the light falling in from the oculus brightening the top
-            float cw = 0.4 * (1.0 - 0.3 * ring / 7.0);
-            float pxa = fwidth(a) + fwidth(er);
-            float d1 = max(abs(fa) / cw, abs(fe) / 0.4);
-            float d2 = max(abs(fa) / (cw - 0.08), abs(fe) / 0.31);
-            float frame1 = smoothstep(1.0, 1.0 - pxa * 3.0, d1);
-            float frame2 = smoothstep(1.0, 1.0 - pxa * 3.0, d2);
-            alb = base * (1.06 - 0.22 * frame1 - 0.3 * frame2);
-            // the recess's lit and shaded sides (the light from above)
-            float side = (frame1 - frame2) * sign(fe);
-            alb *= 1.0 + 0.25 * side;
-            vec2 ro = vec2(fa, fe * 0.9);
-            float ros = smoothstep(0.13, 0.09, length(ro) + 0.025 * sin(atan(ro.y, ro.x) * 8.0));
-            alb = mix(alb, uGilt * 1.1, ros * frame2);
-            spec = 0.1 + ros * 0.8;
-            float rib = 1.0 - smoothstep(0.08, 0.12 + pxa, abs(fract(a / 4.0) - 0.5) * 4.0 - 1.84);
-            rib = clamp((abs(fract(a / 4.0 + 0.5) - 0.5) < 0.03) ? 1.0 : 0.0, 0.0, 1.0);
-            alb = mix(alb, uGilt * 0.9, rib * 0.7);
-            // the oculus' gilt ring, the light coming down from it
-            alb = mix(alb, uGilt, (1.0 - smoothstep(0.02, 0.035, abs(el - 1.32))) * 0.9);
-            emit += base * mix(uSkyB, vec3(1.0), 0.5) * 0.3 * smoothstep(0.5, 1.36, el) * (frame2 * 0.5 + 0.5);
-        }
-        // a warm wash from the lamps below, the daylight from the oculus and the drum
-        emit += base * (uLampK * 0.16 * (1.0 - 0.6 * smoothstep(0.1, 1.0, el)) + mix(uSkyB, uSkyA, 0.5) * 0.08 + uAmbSky * 0.8);
-        glow = dropGlow(vP, 0.0) * 0.4 * uWorld;
-        emit += uGilt * glow * 0.3;
-        // the coffers' 'normals' bend in local space: approximate with the tangents
-        T = normalize(cross(vec3(0.0, 1.0, 0.0), N) + vec3(1e-4));
-        B = normalize(cross(N, T));
-    } else if (mat == 13) {
-        // a ceiling with a round opening (p0 its radius around p1 p2): coffered squares
-        float r = length(vP.xz - vec2(vMat.z, vMat.w));
-        if (r < vMat.y) discard;
-        vec2 g = fract(vP.xz / 2.0) - 0.5;
-        float c = step(max(abs(g.x), abs(g.y)), 0.4);
-        alb *= 1.0 - 0.2 * c;
-        alb = mix(alb, uGilt, (1.0 - smoothstep(0.0, 0.25, abs(r - vMat.y - 0.3))) * 0.8);
-    } else if (mat == 15) {
-        // a loose page: paper, a few lines of text, bent
-        alb = uPaper * 1.05;
-        vec2 r = q / sz;
-        float txt = step(abs(r.x), 0.75) * step(abs(r.y), 0.82) * step(0.5, fract(r.y * 12.0)) * step(0.35, hash12(vec2(floor(r.y * 12.0), floor(r.x * 4.0) + seed * 9.0)));
-        alb *= 1.0 - 0.35 * txt;
-        bend = vec2(r.x * 0.4, 0.0);
-        emit += uPaper * (vMat.y + 0.12);
-        spec = 0.05;
-    } else if (mat == 16) {
-        // a balustrade (a box: rail on top, a row of turned balusters drawn and cut out)
-        if (face != 1) {
-            float H = sz.y * 2.0;
-            float y = q.y + sz.y;
-            float along = uv.x * sz.x;
-            float rail = step(H - 0.09, y) + step(y, 0.08);
-            float f = fract(along / 0.16) - 0.5;
-            float prof = 0.035 + 0.02 * sin(y / H * 6.283 * 1.5 + 1.2) + 0.012 * step(abs(y / H - 0.5), 0.05);
-            float bal = step(abs(f) * 0.16, prof);
-            if (rail + bal < 0.5) discard;
-            bend.x = bal * (1.0 - rail) * f * 4.0;
-        }
-        spec = 0.3; rough = 30.0;
-    } else if (mat == 17) {
-        // a fire (the hearth): flames
-        vec2 r = q / sz;
-        float n = fbm(vec2(r.x * 3.0, r.y * 2.0 - uTime * 2.2) + seed);
-        float f = smoothstep(0.2, 0.9, (1.0 - (r.y * 0.5 + 0.5)) * 1.3 + n * 0.8 - 0.6 - abs(r.x) * 0.6);
-        emit = mix(vec3(1.0, 0.25, 0.04), vec3(1.0, 0.75, 0.35), f) * f * 3.0 * uLampK;
-        alb = vec3(0.02);
-    } else if (mat == 18) {
-        // a globe: oceans, continents, a meridian
-        vec3 s = normalize(vL);
-        float lon = atan(s.z, s.x) + uTime * 0.05, lat = asin(clamp(s.y, -1.0, 1.0));
-        float land = smoothstep(0.52, 0.56, fbm(vec2(lon * 1.6, lat * 2.2) + 3.0));
-        alb = mix(vec3(0.12, 0.3, 0.42), vec3(0.62, 0.52, 0.3), land);
-        spec = 0.5; rough = 40.0;
-    } else if (mat == 19) {
-        // iron, dark lacquer
-        spec = 0.5; rough = 30.0;
-    } else if (mat == 20) {
-        // a book's glowing ghost (in flight trails): emissive gilt
-        emit = alb * vMat.y;
-        alb *= 0.2;
+        // felt: soft, matte
+        alb *= 0.95 + 0.08 * vnoise(q * 300.0);
+        spec = 0.0;
     }
 
-    vec3 Nb = N;
-    if (uMesh == 0 || mat == 12) Nb = normalize(N + T * bend.x + B * bend.y);
-    else Nb = normalize(N + vAY * bend.y);
+    vec3 Nb = normalize(N + T * bend.x + B * bend.y);
     vec3 c = shade(vP, Nb, alb, spec, rough, ao) + emit;
     if (uBoard < 0.5) c = applyFog(c, vP);
-    frag = vec4(c, uStackA);
+    if (uPremul > 0.5) frag = vec4(c * outA, outA);
+    else frag = vec4(c, uStackA);
 }
 )";
 
 inline const char* SHADOW_FS = R"(#version 330 core
 in vec3 vP;
-uniform vec4 uCut;
+flat in vec4 vMat;
 out vec4 frag;
 void main() {
-    if (uCut.w < 1e8 && dot(vP, uCut.xyz) + uCut.w < 0.0) discard;
+    // the skylight's glazing and the lights let the sun through
+    int mat = int(vMat.x + 0.5);
+    if (mat == 10 || mat == 7) discard;
     frag = vec4(1.0);
 }
 )";

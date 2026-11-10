@@ -1,6 +1,7 @@
 #include "game.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 
 namespace {
@@ -459,6 +460,16 @@ bool Game::planMove(int& bestRot, int& bestX) const {
             }
             double s = -0.51 * agg + 0.76 * cleared * cleared - 0.36 * holes * 3 - 0.18 * bump - 0.1 * wells -
                        0.05 * landing;
+            // Test hook: ZEN_TEST_TETRIS=1 keeps the right column free and waits for an I to clear four lines at once
+            // (to check a universe's Tetris in a clip).
+            static const bool tetrisTest = std::getenv("ZEN_TEST_TETRIS") != nullptr;
+            if (tetrisTest) {
+                bool right = false;
+                for (auto& q : c) right = right || q[0] == W - 1;
+                if (cleared >= 4) s += 100.0;
+                else if (right) s -= 30.0;
+                else s -= 2.0 * cleared - 0.05 * wells;
+            }
             if (s > bestScore) {
                 bestScore = s;
                 bestRot = rot;
