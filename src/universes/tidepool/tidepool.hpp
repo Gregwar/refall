@@ -114,6 +114,9 @@ private:
     float dropAmt_ = 0.f, swell_ = 0.f;
     float waveT_ = 99.f, waveK_ = 0.f;   // the drop's wave washing over (the fabric rippling, deep down)
     float kickIn_ = 0.f;
+    float stageClock_[9] = {};         // each stage's own clock (slower as the zoom goes into it)
+    float kickS_ = 0.f;                // the kicks, eased (no flashes)
+    float bandS_[4] = {0.f, 0.f, 0.f, 0.f}; // the song's bands, eased (for the strings)
     float beatClock_ = 0.f;
     double ownBeat_ = 0.0;
 
