@@ -3,7 +3,7 @@
 // in its own frame), the veil behind the well, the sea-glass pieces, bubbles, lettering.
 //
 // The dive: every stage fills the plane with things of a fixed size in its world (16 times smaller from one stage to
-// the next: S = 4 octaves), so zooming makes all of them grow and stream out from the focus at the screen's middle.
+// the next: S = 4 octaves), so zooming makes all of them grow and stream out from the focus (left of the HUD).
 // The next stage's things are already there, tiny, scattered everywhere in the current one (anemones dotting the
 // pool's floor, plankton specks over the anemones, the cell glowing through every pore of the diatom...); over the
 // stage's last octave and a half the whole next world fades in under them. Every edge is anti-aliased against the
@@ -510,10 +510,25 @@ World stageFloor(vec2 q, float px) {
 vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     float r = length(q);
     poreMask = 0.0;
-    if (r > R * 1.02) return vec4(0.0);
+    if (r > R * 1.25) return vec4(0.0);
     float t = uTime;
     float th = atan(q.y, q.x);
-    float dr = R / 60.0;                               // ring spacing (pore size)
+    float rn = r / R;
+    // a jewel of glass: golden-green, lit as a shallow dome from the upper left, thin-film colors drifting over it
+    vec2 L2 = normalize(vec2(-0.6, 0.7));
+    float dome = sqrt(max(0.0, 1.0 - rn * rn));
+    vec3 n = normalize(vec3(q / R * 0.8, dome + 0.2));
+    float lit = 0.55 + 0.45 * sat(dot(n, normalize(vec3(L2, 0.8))));
+    float sweep = 0.5 + 0.5 * cos(th - (t * 0.1 + 0.6 * uTide * uTideAmp));
+    float film = 0.5 + 0.5 * sin(rn * 7.0 - t * 0.12);
+    vec3 irid = hsv(fract(film * 0.45 + 0.3 + uFever * t * 0.02), 0.45, 1.0);
+    vec3 glass = mix(mix(uLight, uShallow, 0.4), mix(uWarm2, uWeed, 0.4), 0.55) * 1.05;
+    glass = mix(glass, glass * irid * 1.3, 0.3 + 0.2 * sweep);
+    vec3 gcol = glass * lit * (0.75 + 0.2 * sweep);
+    // the living cell inside, golden, its chloroplasts glowing through
+    vec3 cell = mix(uWarm2, uWeed, 0.25 + 0.35 * vnoise(q / R * 4.0 + t * 0.05)) * (0.75 + 0.5 * smoothstep(0.55, 0.75, fbm(q / R * 3.0 + 4.0)));
+    // pores in rings, all of one size, rows growing in number outward; finer near the rim
+    float dr = R / 32.0;
     float ring = floor(r / dr);
     float rc = (ring + 0.5) * dr;
     float N = max(1.0, floor(TAU * rc / dr));
@@ -521,31 +536,35 @@ vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     vec2 f = vec2((r / dr - ring) - 0.5, fract(a) - 0.5);
     f.y *= TAU * rc / dr / N;
     float pw = px / dr * 1.2;
-    float lodp = lod(dr, px * 1.3);
-    float sector = cos(th * 4.0 + 0.4);
-    float sh = 0.78 + 0.22 * smoothstep(-0.25, 0.25, sector);
-    float sweep = 0.5 + 0.5 * cos(th - (t * 0.1 + 0.6 * uTide * uTideAmp));
-    float film = 0.5 + 0.5 * sin(r * 2.5 + th * 2.0 + t * 0.12);
-    vec3 glass = mix(uLight, uShallow, 0.45) * mix(vec3(1.0), hsv(fract(film * 0.5 + 0.45 + uFever * t * 0.02), 0.4, 1.0), 0.4);
-    vec3 gcol = glass * (0.5 + 0.35 * sweep) * sh;
-    float pd = length(f) - 0.32;
-    float pore = fillA(pd, pw) * step(0.1 * R, r) * (1.0 - smoothstep(R - 0.22, R - 0.18, r));
-    vec3 cell = mix(uWarm2, uWeed, 0.3 + 0.3 * vnoise(q * 3.0 + t * 0.05));
-    vec3 inPore = mix(uDeep * 0.7, cell * (0.6 + 0.5 * sweep), smoothstep(0.32, 0.0, length(f)));
+    float lodp = lod(dr, px * 1.8);
+    float inField = smoothstep(0.09, 0.12, rn) * (1.0 - smoothstep(0.86, 0.9, rn));
+    float pd = length(f) - 0.3;
+    float pore = fillA(pd, pw) * inField;
+    vec3 inPore = mix(cell * 0.3, cell * 1.2, smoothstep(0.3, 0.0, length(f)));
     float sieve = fillA(length(fract(f * 6.0) - 0.5) - 0.2, pw * 6.0) * lod(dr / 6.0, px * 1.5);
-    inPore = mix(inPore, gcol * 0.6, sieve * 0.35 * (1.0 - smoothstep(0.24, 0.32, length(f))));
-    float bev = 0.5 + 0.5 * dot(normalize(f + 1e-4), normalize(vec2(-0.6, 0.7)));
-    vec3 col = mix(gcol, mix(inPore, mix(gcol, cell * 0.9, 0.35), 1.0 - lodp), max(pore * lodp, (1.0 - lodp) * 0.6) * step(0.1 * R, r));
-    col = mix(col, glass * (0.35 + 0.45 * bev) * (0.5 + 0.6 * sweep), lineA(pd + 0.03, 0.035, pw) * lodp * 0.8 * step(0.1 * R, r));
-    // radial ribs, the plain central area with fine striae, the girdle at the rim
-    col = mix(col, glass * 0.8 * sh, lineA(fract(th / TAU * 48.0) - 0.5, 0.03, px / max(r, 1e-3) * 48.0 / TAU * 1.2) * 0.35 * lod(r * TAU / 48.0, px));
-    col = mix(col, glass * (0.55 + 0.15 * sin(th * 70.0) * lod(r * TAU / 70.0, px)) * (0.6 + 0.4 * sweep), 1.0 - smoothstep(0.09 * R, 0.1 * R, r));
-    float gb = smoothstep(R - 0.18, R - 0.15, r);
-    col = mix(col, glass * (0.6 + 0.2 * sin(r / R * 400.0) * lod(R / 400.0 * 4.0, px)) * (0.6 + 0.5 * sweep), gb);
-    col += glass * 0.5 * lineA(r - (R - 0.02), 0.008, max(px, 0.002));
+    inPore = mix(inPore, gcol * 0.8, sieve * 0.3 * (1.0 - smoothstep(0.22, 0.3, length(f))));
+    float bev = 0.5 + 0.5 * dot(normalize(f + 1e-4), L2);
+    vec3 cellMean = mix(uWarm2, uWeed, 0.4) * 0.85;
+    vec3 col = mix(gcol, mix(gcol, cellMean, 0.4), inField * (1.0 - lodp) * 0.8);
+    col = mix(col, inPore, pore * lodp);
+    col += glass * 0.35 * bev * lineA(pd + 0.03, 0.035, pw) * lodp * inField;
+    // a few fine radial costae, and a small rosette at the center
+    col = mix(col, gcol * 1.2, lineA(fract(th / TAU * 16.0) - 0.5, 0.015, px / max(r, 1e-3) * 16.0 / TAU * 1.2) * 0.3 * lod(r * TAU / 16.0, px) * inField);
+    col = mix(col, glass * (0.85 + 0.08 * sin(rn * 180.0) * lod(R / 180.0 * 6.0, px)) * lit, 1.0 - smoothstep(0.08, 0.1, rn));
+    col = mix(col, cellMean * 1.1, fillA(rn - 0.025, px / R * 1.5) * 0.4);
+    // the rim: a band of clear glass, a crisp bright edge, a dark inner line
+    float band = smoothstep(0.88, 0.9, rn);
+    col = mix(col, glass * (0.85 + 0.25 * sin(rn * 300.0) * lod(R / 300.0 * 4.0, px)) * lit, band);
+    float ew = max(px, R * 0.002);
+    col = mix(col, uDeep * 0.6, lineA(rn - 0.89, 0.004, ew / R) * 0.6);
+    col += mix(uLight, vec3(1.0), 0.4) * lineA(r - R * 0.995, R * 0.004, ew) * (0.4 + 0.6 * sat(dot(normalize(q + 1e-5), L2)));
     col += uLight * uKick * step(0.985, hash(vec2(ring, floor(a)) + floor(uLife * 0.5))) * pore * lodp;
-    poreMask = pore * lodp;
-    return layerC(col, fillA(r - R, max(px * 1.2, 0.002)));
+    poreMask = max(pore * lodp, inField * (1.0 - lodp) * 0.5);
+    float alpha = fillA(r - R, max(px * 1.2, R * 0.002)) * 0.95;
+    vec4 o = layerC(col, alpha);
+    // a soft halo of light round the glass
+    o.rgb += uLight * 0.12 * exp(-sq((r - R) / (R * 0.06))) * (1.0 - alpha);
+    return o;
 }
 World stagePlankton(vec2 q, float px) {
     World W;
@@ -553,7 +572,6 @@ World stagePlankton(vec2 q, float px) {
     // luminous water, lit from above left, clouds of fine matter
     vec3 col = mix(uWater, uShallow, 0.5 + 0.12 * sin(q.x * 0.7 + q.y * 0.9 + 1.0));
     col *= 0.9 + 0.14 * fbm(q * 1.4 + t * 0.03);
-    // motes: some sharp, some soft (out of the focal plane)
     vec4 acc = vec4(0.0);
     SCATTER(0.11, 51.0, 0.55)
         vec2 cc = c + 0.02 * vec2(sin(t * 0.3 + h2.x * 9.0), cos(t * 0.27 + h2.y * 9.0));
@@ -564,17 +582,17 @@ World stagePlankton(vec2 q, float px) {
     END_SCATTER
     float hopP = fract(uLife * 0.5);
     float hop = exp(-hopP * 7.0) * (0.3 + 0.7 * uTideAmp);
-    // diatoms drifting, little glass discs
-    SCATTER(0.55, 61.0, 0.55)
-        if (length(c) < 0.3) continue;
-        float R = 0.05 + 0.06 * h2.y;
+    // diatoms drifting, little glass jewels
+    SCATTER(0.55, 61.0, 0.72)
+        if (length(c) < 0.25) continue;
+        float R = 0.04 + 0.05 * h2.y;
         float pm;
         vec4 o = frustule(rot(t * 0.05 * (h2.x - 0.5)) * (q - c), R, px, pm);
-        acc = over(o * 0.95, acc);
+        acc = over(o, acc);
     END_SCATTER
     // copepods, nauplii, chains
     SCATTER(0.5, 71.0, 0.25)
-        if (length(c) < 0.3) continue;
+        if (length(c) < 0.25) continue;
         int kind = int(hash(id + 3.0) * 3.0);
         float size = (kind == 0 ? 0.15 : kind == 1 ? 0.09 : 0.1) * (0.7 + 0.5 * h2.y);
         float heading = hash(id + 5.0) * 6.28 + 0.3 * sin(t * 0.2 + h2.x * 6.0);
@@ -592,17 +610,32 @@ World stagePlankton(vec2 q, float px) {
     return W;
 }
 
-// ---- 3. one diatom: the glass rose window, the living cell glowing through its pores
+// ---- 3. one diatom, a jewel of glass among others, the living cell glowing through its pores
 World stageDiatom(vec2 q, float px) {
     World W;
+    float t = uTime;
+    vec3 col = mix(uWater, uShallow, 0.5 + 0.12 * sin(q.x * 0.7 / 16.0 + q.y * 0.9 / 16.0 + 1.0));
+    col *= 0.92 + 0.1 * fbm(q * 0.3 + t * 0.02);
+    vec4 acc = vec4(0.0);
+    // motes in the water, out of focus
+    SCATTER(0.5, 151.0, 0.6)
+        float R = 0.02 + 0.04 * h2.y;
+        acc = over(acc, layerC(mix(uLight, uSand, h2.x), fillA(length(q - c) - R, max(px, R)) * 0.25));
+    END_SCATTER
+    // other diatoms drifting near it
+    SCATTER(1.3, 161.0, 0.7)
+        if (length(c) < 1.6) continue;
+        float R = 0.25 + 0.3 * h2.y;
+        float pm;
+        acc = over(frustule(rot(t * 0.03 * (h2.x - 0.5)) * (q - c), R, px, pm), acc);
+    END_SCATTER
     float pm;
-    vec4 o = frustule(rot(uTime * 0.004) * q, 3.0, px, pm);
-    W.bg = mix(uWater, uShallow, 0.4);
-    W.obj = o;
+    vec4 o = frustule(rot(t * 0.004) * q, 1.0, px, pm);
+    W.bg = col;
+    W.obj = over(o, acc);
     W.host = pm;
     return W;
 }
-
 // ---- 4. the living cell: cytoplasm streaming
 World stageCell(vec2 q0, float px) {
     World W;
@@ -869,9 +902,15 @@ void main() {
         float k = exp(-sq((pr - front) / 0.35)) * uWave.y * exp(-uWave.x * 0.35);
         p += p / max(pr, 1e-3) * sin((pr - front) * 9.0) * 0.02 * k;
     }
-    // a little softness behind the well (the stack reads over a calmer world)
+    // a little softness behind the well and the HUD's columns (the stack and the score read over a calmer world)
     vec2 qw = abs(b) - vec2(5.0, 10.0);
     float hud = 1.0 - smoothstep(-1.0, 2.5, length(max(qw, 0.0)) + min(max(qw.x, qw.y), 0.0));
+    // and behind the HUD's columns (the score, the next pieces)
+    for (int i = 0; i < 2; i++) {
+        vec4 cr = i == 0 ? vec4(-11.2, -6.8, -6.0, 10.4) : vec4(6.0, -3.6, 11.2, 10.4);
+        vec2 qc = abs(b - (cr.xy + cr.zw) * 0.5) - (cr.zw - cr.xy) * 0.5;
+        hud = max(hud, 0.8 * (1.0 - smoothstep(-0.5, 2.0, length(max(qc, 0.0)) + min(max(qc.x, qc.y), 0.0))));
+    }
     float blurP = 0.003 * hud;
     // the stage we are in, and the next one, its things already there, tiny; then a crossfade into it
     vec4 L0 = uLayer[0], L1 = uLayer[1];
@@ -890,7 +929,7 @@ void main() {
         c = max(c * ca + cross(k, c) * sa + k * dot(k, c) * (1.0 - ca), 0.0);
     }
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    c = mix(c, vec3(l), hud * 0.25);                                        // calmer behind the well
+    c = mix(c, vec3(l), hud * 0.25);                                        // calmer behind the well and the HUD
     c = mix(c, vec3(l) * vec3(0.85, 0.95, 1.12), uSlow * 0.55);            // slow motion: a hush
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(c, 1.0);

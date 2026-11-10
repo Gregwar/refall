@@ -8,8 +8,8 @@
 // foam whose bubbles burst into ripples that interfere like rain on a pool; strings of light ringing with the music
 // on a rippling fabric; and the rock pool again, resolving out of them: the zoom never ends.
 //
-// The dive is one similarity transform about the screen's middle (behind the well), so the whole world streams out
-// from it on every side: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 2/3
+// The dive is one similarity transform about a point left of the HUD's left column, so the whole world streams out
+// from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 2/3
 // of an octave deeper (eased by a spring), a Tetris plunges through a whole stage. Each stage is a whole world in
 // its own frame, its things of a fixed size, 16 times smaller than the stage before; the shader draws the stage we
 // are in with the next one's things over it, then crossfades into the next one over the last octave and a half
@@ -264,8 +264,9 @@ void TidePoolUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the focus of the dive: the screen's middle, behind the well (the world flows out from it on every side)
-    focus_ = V(0.f, viewC_.y + 1.f);
+    // the focus of the dive: in the free band left of the HUD's left column (the world flows out from it)
+    const float x0 = layout::LEFT_COLUMN[0], x1 = viewC_.x - hw;
+    focus_ = V(x0 - std::max(1.2f, (x0 - x1) * 0.5f), viewC_.y + 0.5f);
     // the world at a reduced resolution (at most 810 lines)
     const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
@@ -912,7 +913,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%d", e);
         scaleText_ = buf;
-        stageName_ = STAGE_NAME[u > 0.75 ? (st + 1) % STAGES : st];
+        stageName_ = STAGE_NAME[u > 0.6 ? (st + 1) % STAGES : st];
     }
 
     // ---- Motes over the board.
@@ -949,8 +950,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
 
     // =========================================================== the world (reduced resolution)
     {
-        // the focus (the screen's middle, behind the well) wanders a little; the two stages' frames from the depth
-        const vec2 F = V(focus_.x + 0.5f * std::sin(time_ * 0.031f), focus_.y + 0.4f * std::sin(time_ * 0.023f + 1.f));
+        // the focus (left of the HUD's left column) wanders a little; the two stages' frames from the depth
+        const vec2 F = V(focus_.x + 0.4f * std::sin(time_ * 0.031f), focus_.y + 0.5f * std::sin(time_ * 0.023f + 1.f));
         const double zz = std::max(0.0, z_);
         const double a = std::floor(zz / STAGE_OCT);
         float layers[8];
