@@ -185,7 +185,7 @@ constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 constexpr float G_MAX = 18.8f;
 
 // The Moon (meters, around the Earth's center): out where the creature swims at the end of the journey, to circle it.
-constexpr double R_MOON = 6.e6, D_MOON = 3.6e8, PHI_MOON = 2.1;
+constexpr double R_MOON = 3.2e6, D_MOON = 3.6e8, PHI_MOON = 2.1;
 vec3 moonPos() { return vec3((float)(D_MOON * std::sin(PHI_MOON)), (float)(-R_EARTH + D_MOON * std::cos(PHI_MOON)), 0.f); }
 // How far it has gone from circling the Earth to circling the Moon.
 float moonK(float G) { return smoothstepf(16.9f, 17.5f, G); }
@@ -849,7 +849,7 @@ SkyWhaleUniverse::Pose SkyWhaleUniverse::poseAt(float G) const {
     vec3 offs = toWorld(w0) * L;
     P.wo = offs;
     // the depth: just under the surface in the pond and the river, the back out of the water at sea
-    offs = offs + up0 * (L * lerpf(lerpf(-0.1f, -0.055f, smoothstepf(-0.5f, 1.5f, G)), 0.04f, kSea) * kWater);
+    offs = offs + up0 * (L * lerpf(lerpf(-0.1f, -0.055f, smoothstepf(-0.5f, 1.5f, G)), 0.06f, kSea) * kWater);
     if (kSea > 0.f) {
         const float b = breachY(breachPh_);
         const float eb = 0.01f;
@@ -1507,6 +1507,11 @@ void SkyWhaleUniverse::drawHud(const std::vector<HudText>& hud, const std::vecto
 // =====================================================================================================
 
 void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
+    // ZEN_GPUTIME: the GPU time of a frame, printed every 240 frames
+    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    static GLuint gpuQ = 0;
+    if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
+    if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
@@ -1776,7 +1781,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (the sky reduced, the geometry multisampled)
     // the sun's azimuth is given from the camera's view (so each variant keeps its light whatever the stage)
     // the sun's azimuth is given from the view (0: straight ahead, behind the creature; negative: to the left), so each
     // variant keeps its light at every stage
@@ -2004,8 +2009,18 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         order.reserve(clouds_.size());
         const float drift = time_ * (6.f + 8.f * wm + 8.f * wp);
         const float pxK = 1.f / (minPx / 0.8f);
+        // (the field tiles around the eye: the creature cruises on and on through it)
+        constexpr float CP = 100000.f;
+        auto cloudAt = [&](const Puff& pf) {
+            vec3 p = pf.p + vec3(drift, 0.f, 0.f);
+            p.x = eye_.x + std::remainder(p.x - eye_.x, CP);
+            p.z = eye_.z + std::remainder(p.z - eye_.z, CP);
+            // on the planet's curve
+            p.y -= ((p.x * p.x + p.z * p.z) - (pf.p.x * pf.p.x + pf.p.z * pf.p.z)) / (2.f * (float)R_EARTH);
+            return p;
+        };
         for (size_t i = 0; i < clouds_.size(); i++) {
-            const vec3 p = clouds_[i].p + vec3(drift, 0.f, 0.f);
+            const vec3 p = cloudAt(clouds_[i]);
             const vec3 d = p - eye_;
             const float d2 = dot(d, d);
             if (clouds_[i].r * pxK < 0.6f * std::sqrt(d2)) continue;
@@ -2015,7 +2030,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         cinst_.clear();
         for (auto& o : order) {
             const Puff& pf = clouds_[o.second];
-            const vec3 p = pf.p + vec3(drift, 0.f, 0.f);
+            const vec3 p = cloudAt(pf);
             const float dEye = std::sqrt(o.first);
             const float a = smoothstepf(pf.r * 0.8f, pf.r * 2.5f, dEye) * (1.f - 0.3f * pal_.night);
             const float q[8] = {p.x, p.y, p.z, pf.r, pf.seed, a, 0.f, 0.f};
@@ -2293,6 +2308,19 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uFade", saturate(f.fade));
     set1f(progPost_, "uDim", dimT_);
     ugl::drawFullscreen();
+    if (gpuQ) {
+        glEndQuery(GL_TIME_ELAPSED);
+        GLuint64 ns = 0;
+        glGetQueryObjectui64v(gpuQ, GL_QUERY_RESULT, &ns);
+        static double acc = 0.0;
+        static int n = 0;
+        acc += ns * 1e-6;
+        if (++n == 240) {
+            std::fprintf(stderr, "[skywhale] gpu %.2f ms/frame (%dx%d, G %.2f)\n", acc / n, width_, height_, g_);
+            acc = 0.0;
+            n = 0;
+        }
+    }
 }
 
 // =====================================================================================================

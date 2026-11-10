@@ -1,7 +1,7 @@
 #pragma once
-// SKY WHALE's shaders: the world (the sky, the planet with its pond, river and sea, and space in one ray-traced pass;
-// the creature, the props, the toon trees; clouds, the lights in the air, the aurora) at a reduced resolution with
-// depth, a soft bloom, the stars at full resolution, then the veil behind the well, the koi-scale pieces, the
+// SKY WHALE's shaders: the world (the sky, the planet with its pond, river and sea, and space in one ray-traced pass
+// at a reduced resolution with its depth; the creature, the props, the toon trees, clouds, the lights in the air, the
+// aurora multisampled at the full resolution over it), a soft bloom, the stars at full resolution, then the veil behind the well, the koi-scale pieces, the
 // lettering. Positions are in meters, drawn relative to the eye (uVP has the eye at its origin): the creature spans
 // from a hand's width to a million kilometers.
 
@@ -352,17 +352,19 @@ void main() {
                 float trail = smoothstep(-0.1 * Lw, 0.2 * Lw, back) * smoothstep(5.0 * Lw, 1.0 * Lw, back);
                 float bw = uWhaleW * 1.2 + back * 0.12;
                 float fn = vnoise(rel / max(uWhaleW * 0.25, foot * 2.0) + vec2(uFlowT * 0.3, 0.0));
-                float foam = smoothstep(bw, bw * 0.5, side) * smoothstep(0.55, 0.6, fn + 0.25 * smoothstep(bw, 0.0, side)) * trail;
+                float ff = fn + 0.25 * smoothstep(bw, 0.0, side);
+                float fw = max(fwidth(ff), 0.025);
+                float foam = smoothstep(bw, bw * 0.5, side) * smoothstep(0.575 - fw, 0.575 + fw, ff) * trail;
                 // the Kelvin V, from the snout
                 vec2 relA = p.xz - uWhaleA.xz;
                 float bA = -dot(relA, hd), sA = abs(dot(relA, vec2(-hd.y, hd.x)));
                 float vline = abs(sA - bA * 0.36) / max(uWhaleW * 0.25 + bA * 0.02, foot);
-                foam = max(foam, smoothstep(1.0, 0.4, vline) * smoothstep(0.0, 0.2 * Lw, bA) * smoothstep(2.5 * Lw, 0.3 * Lw, bA) * smoothstep(0.4, 0.55, fn) * 0.7);
+                foam = max(foam, smoothstep(1.0, 0.4, vline) * smoothstep(0.0, 0.2 * Lw, bA) * smoothstep(2.5 * Lw, 0.3 * Lw, bA) * smoothstep(0.475 - fw - 0.05, 0.475 + fw + 0.05, fn) * 0.7);
                 // around the body where it meets the water
                 vec2 ab = uWhaleA.xz - uWhaleB.xz, pq = p.xz - uWhaleB.xz;
                 float hh = clamp(dot(pq, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
                 float dd = length(pq - ab * hh);
-                foam = max(foam, smoothstep(uWhaleW * 1.7, uWhaleW * 1.0, dd) * smoothstep(0.35, 0.5, fn) * 0.8 * uFoamBody);
+                foam = max(foam, smoothstep(uWhaleW * 1.7, uWhaleW * 1.0, dd) * smoothstep(0.425 - fw - 0.05, 0.425 + fw + 0.05, fn) * 0.8 * uFoamBody);
                 wcol = mix(wcol, vec3(1.0, 0.99, 0.97) * mix(light, vec3(1.0), 0.3), foam * uWakeK * 0.85);
             }
             if (uSplash.w >= 0.0 && uSplash.w < 6.0) {
@@ -641,7 +643,8 @@ void main() {
         vec2 dq = fract(vec2(u * 30.0, th * 5.0)) - 0.5;
         float fd = max(fwidth(u * 30.0), fwidth(th * 5.0));
         float dots = smoothstep(0.11 + fd, 0.05, length(dq)) * (1.0 - smoothstep(0.2, 0.45, fd)) * step(0.55, hash(floor(vec2(u * 30.0, th * 5.0)))) * smoothstep(0.46, 0.52, nz + 0.05) * smoothstep(-0.6, 0.3, c);
-        glow = (edge * 0.9 + red * 0.22 + dots * 0.7 * uDark) * smoothstep(0.2, 0.9, uM) * (0.3 + 0.7 * uDark) + red * 0.12 * (1.0 - uM) * uDark;
+        // (the old patches as fine lines of light along their edges, a faint wash inside: not a coat of paint)
+        glow = (edge * 0.9 + red * 0.07 + dots * 0.7 * uDark) * smoothstep(0.2, 0.9, uM) * (0.3 + 0.7 * uDark) + red * 0.1 * (1.0 - uM) * uDark;
         // the song: light running from the head to the tail
         glow += uSing * exp(-sq((u - fract(uSingPh)) / 0.06)) * (0.5 + red);
         ao = mix(0.72, 1.0, smoothstep(-0.9, 0.3, c));
@@ -683,6 +686,8 @@ void main() {
     // toon light, its full band reached sooner (the creature reads bright), a fill from the sky above
     float band = smoothstep(-0.05, 0.03, ndl) * 0.6 + smoothstep(0.2, 0.28, ndl) * 0.4;
     vec3 col = alb * (mix(uShadowC * mix(0.7, 1.0, ao), uSunC, band) * mix(0.85, 1.0, ao) + skyRefl(n) * 0.18 * (0.4 + 0.6 * max(n.y, 0.0)));
+    // a soft gradient over the bands: its volume reads (in space above all, where the light is hard)
+    col *= mix(0.78, 1.1, smoothstep(-0.6, 0.9, ndl)) * mix(1.0, mix(0.7, 1.15, smoothstep(-0.8, 0.8, ndl)), 0.6 * uDark);
     // a wet gloss: a crisp highlight
     float rs = dot(reflect(-v, n), uSunDir);
     float fsp = fwidth(rs);
@@ -690,14 +695,15 @@ void main() {
     col += (uSunC * 0.5 + 0.5) * spec * gloss;
     // a warm rim along the silhouette on the sun's side, the creature's own soft light at night and in space
     float rim = smoothstep(0.6, 0.8, 1.0 - max(dot(n, v), 0.0));
-    col += uRimC * rim * smoothstep(-0.3, 0.3, ndl + 0.2) * 0.4 * alb * 2.0;
+    col += uRimC * rim * smoothstep(-0.3, 0.3, ndl + 0.2) * 0.4 * alb * (2.0 + 1.5 * uDark);
     col += uGlowC * (glow * uGlowK + rim * uGlowK * 0.25);
     // the deep, at game over
     col = mix(col, col * 0.25 + uDeepC * 0.3, uSink);
     // under the water: absorbed, under the surface; foam where it breaks the surface
     float hs = seaH(vW);
     float fh = max(fwidth(hs), 1e-6);
-    if (hs < fh) col = mix(col, underWater(col, vW - vec3(0.0, max(hs, 0.0) + fh, 0.0)), smoothstep(fh, -fh, hs));
+    // (the creature under the surface stays readable: not all the deep's absorption)
+    if (hs < fh) col = mix(col, underWater(col, vW - vec3(0.0, max(hs, 0.0) + fh, 0.0)), smoothstep(fh, -fh, hs) * 0.8);
     float fn = vnoise(vec2(vW.x + vW.z, hs * 3.0) / (0.03 * uL) + uTime);
     float wl = uFoam * smoothstep(0.02 * uL + fh, 0.0, abs(hs)) * smoothstep(0.45 - max(fwidth(fn), 0.02), 0.45 + max(fwidth(fn), 0.02), fn);
     col = mix(col, vec3(1.0) * mix(uSunC, vec3(1.0), 0.4), wl * 0.8);
