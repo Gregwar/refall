@@ -13,7 +13,7 @@ uvx tetris-universe ~/Music    # or any folders, files and YouTube URLs
 
 Each universe is a hand-directed world with its own palette, materials, typography and way of staging the music:
 calm parts stay quiet, drops and choruses bring the whole picture. Each one comes in several variants picked per
-song, and between songs the game takes a short break into the next universe. Forty-nine universes so far, each with its status:
+song, and between songs the game takes a short break into the next universe. Fifty universes so far, each with its status:
 ✅ <i>ok</i> (reviewed and tested) or 🔍 <i>to review</i> (new, still to be played and tested):
 
 <table>
@@ -115,7 +115,7 @@ song, and between songs the game takes a short break into the next universe. For
 </tr>
 <tr>
 <td><img src="docs/universes/tidepool.jpg"><br><b>TIDE POOL</b>: a humble rock pool at low tide, and every cleared line zooms deeper into it, one continuous dive: the floor's anemones and limpets, plankton in the water, a diatom's glass rose window, a living cell, then imagined physics (molecules, breathing orbital clouds, a boiling quantum foam, strings of light ringing with the song) until a rock pool resolves out of them again; the pieces are sea glass<br><sub>🔍 <i>to review</i></sub></td>
-<td></td>
+<td><img src="docs/universes/lostpanda.jpg"><br><b>LOST PANDA</b>: a little panda in a scarf, lost in the city at night under the rain, finds its way home one cleared line at a time, in a picture-book side view: the shopping street's neon and umbrellas, the subway, a night train, the canal at dawn, the fields, the bamboo forest, and its family waiting in a glade at sunset; it watches the lights of each clear come and walks on, and between clears it lives (sits, wipes a tear, follows a butterfly)<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
