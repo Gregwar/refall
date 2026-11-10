@@ -3,10 +3,9 @@
 // turns deep blue and the horizon curves, out into orbit among the satellites, then on until the planet is a ball
 // under its roots, the moon floats by its crown and, far out, ringed planets and a galaxy.
 //
-// The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~25 lines, the
-// stratosphere at ~45, orbit at ~75, the planet a ball at ~105, the moon at ~150, the ringed planet after it from ~170,
-// and it keeps going (more slowly)
-// to some two million kilometers. The tree is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
+// The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~20 lines, the
+// stratosphere at ~32, orbit at ~52, the planet a ball at ~67, the moon at ~88, the ringed planet after it from ~93,
+// the end of the journey at 100, and it keeps going (more slowly) to some two million kilometers. The tree is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
 // G (thick at the foot, slender under the crown: it grows ever taller for its width), the crown is built in its own
 // space and scaled on G (the sapling's lollipop head spreads into a broad crown over the first lines as its limbs
 // are born, then it rides the trunk up), vine leaves spiral up the trunk sprouting as the tip passes. Each clear is
@@ -169,10 +168,11 @@ constexpr float CLOUD_Y = 1900.f;    // the cloud layer (meters)
 constexpr float CAM_AZ = 0.3f;       // the camera's side of the tree
 
 // The journey: lines -> the trunk's height (meters), interpolated in log space; beyond the table, slower and slower.
+// The whole journey fits in some 100 lines (two or three songs): something new every ten lines or so.
 struct Stage { float lines, height; };
 const Stage STAGES[] = {
-    {0, 1.3f}, {3, 3.f}, {8, 12.f}, {14, 60.f}, {20, 320.f}, {26, 2400.f}, {34, 6.e3f}, {44, 1.5e4f}, {54, 3.5e4f},
-    {64, 9.e4f}, {76, 3.5e5f}, {90, 1.5e6f}, {104, 6.e6f}, {120, 2.5e7f}, {140, 1.e8f}, {162, 3.6e8f}, {200, 1.5e9f},
+    {0, 1.3f}, {2, 3.f}, {6, 12.f}, {11, 60.f}, {15, 320.f}, {20, 2400.f}, {25, 6.e3f}, {32, 1.5e4f}, {39, 3.5e4f},
+    {45, 9.e4f}, {52, 3.5e5f}, {60, 1.5e6f}, {67, 6.e6f}, {74, 2.5e7f}, {83, 1.e8f}, {90, 3.6e8f}, {100, 1.5e9f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 
