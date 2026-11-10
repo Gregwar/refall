@@ -991,7 +991,7 @@ void SumiUniverse::drawText(const std::vector<HudText>& hud, const std::vector<H
     glBindVertexArray(textVao_);
     glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
     static char quadBuf[200000];
-    // Panels (zenscene's menu): plain paint, normal blending.
+    // Panels (tetris-universe-scene's menu): plain paint, normal blending.
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (const HudRect& r : panels) {
         const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};

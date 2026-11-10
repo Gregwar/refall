@@ -177,20 +177,20 @@ target_compile_definitions(tetris-universe PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURC
 add_custom_command(TARGET tetris-universe POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
                    ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:tetris-universe>/gamecontrollerdb.txt)
 
-# zenscope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
-add_executable(zenscope src/zenscope.cpp)
-target_link_libraries(zenscope PRIVATE zencore glfw glad)
+# tetris-universe-scope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
+add_executable(tetris-universe-scope src/scope.cpp)
+target_link_libraries(tetris-universe-scope PRIVATE zencore glfw glad)
 
-# zenscene: a scene viewer; the computer plays while a menu adjusts the scene and picks the song phase.
-add_executable(zenscene
-  src/zenscene.cpp
+# tetris-universe-scene: a scene viewer; the computer plays while a menu adjusts the scene and picks the song phase.
+add_executable(tetris-universe-scene
+  src/scene.cpp
   src/game.cpp
 )
-target_link_libraries(zenscene PRIVATE zenrender zencore glfw glad)
+target_link_libraries(tetris-universe-scene PRIVATE zenrender zencore glfw glad)
 # Its "send to dashboard" runs tools/scenereview.py from the sources.
-target_compile_definitions(zenscene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(tetris-universe-scene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
-foreach(t zencore zenrender tetris-universe zenscope zenscene)
+foreach(t zencore zenrender tetris-universe tetris-universe-scope tetris-universe-scene)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
@@ -199,6 +199,6 @@ endforeach()
 
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
-  install(TARGETS tetris-universe zenscope zenscene RUNTIME DESTINATION zentris/bin)
+  install(TARGETS tetris-universe tetris-universe-scope tetris-universe-scene RUNTIME DESTINATION zentris/bin)
   install(FILES third_party/gamecontrollerdb.txt DESTINATION zentris/bin)
 endif()

@@ -1215,7 +1215,7 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
         glBindBuffer(GL_ARRAY_BUFFER, beamVbo_);
     }
     drawBeams(worldEnd, boardEnd - worldEnd);
-    // zenscene's menu panels: dark glass under the text (or a lit bar for the accent ones).
+    // tetris-universe-scene's menu panels: dark glass under the text (or a lit bar for the accent ones).
     if (!f.panels.empty()) {
         glUseProgram(progFill_);
         set1i(progFill_, "uScreen", 1);

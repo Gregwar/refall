@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ZENTRIS = os.path.join(ROOT, "build", "zentris")
+GAME = os.path.join(ROOT, "build", "tetris-universe")
 
 
 def default_playlist_id():
@@ -45,7 +45,7 @@ def duration(path):
 
 def record(video_id, out, args):
     """One clip around the song's first drop; False if the song could not be loaded."""
-    cmd = [ZENTRIS, "--hidden", "--size", args.size, "--clip", out, "--clip-before", str(args.before),
+    cmd = [GAME, "--hidden", "--size", args.size, "--clip", out, "--clip-before", str(args.before),
            "--clip-after", str(args.after), f"ytdl:{video_id}"]
     try:
         log = subprocess.run(cmd, capture_output=True, text=True, timeout=600).stdout
@@ -84,8 +84,8 @@ def main():
     ap.add_argument("--fade", type=float, default=1.0, help="crossfade length")
     ap.add_argument("--size", default="1920x1080")
     args = ap.parse_args()
-    if not os.path.exists(ZENTRIS):
-        sys.exit(f"build tetris-universe first ({ZENTRIS} is missing)")
+    if not os.path.exists(GAME):
+        sys.exit(f"build tetris-universe first ({GAME} is missing)")
 
     ids = playlist_ids(default_playlist_id())
     random.shuffle(ids)

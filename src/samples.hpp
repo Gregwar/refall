@@ -1,6 +1,6 @@
 #pragma once
 // One-shot samples cut from the song itself, beat-aligned, meant to answer line clears
-// (1 line: a hit ... 4 lines: a bar of the song's hook). Shared so the game and zenscope agree.
+// (1 line: a hit ... 4 lines: a bar of the song's hook). Shared so the game and tetris-universe-scope agree.
 #include <memory>
 #include <string>
 #include <vector>

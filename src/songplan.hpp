@@ -1,6 +1,6 @@
 #pragma once
 // How the game stages a song from its analysis: scene levels, pulse zones and the per-section profile.
-// Shared by the game and by zenscope (the analysis viewer) so both always agree.
+// Shared by the game and by tetris-universe-scope (the analysis viewer) so both always agree.
 #include <utility>
 #include <vector>
 

@@ -132,7 +132,7 @@ struct Frame {
     bool dim;                           // dimmed without freezing (behind the game-over screen)
     float fade;                         // 0 black .. 1: startup fade in
     const std::vector<HudText>& hud;    // HUD text, in the universe's own typography
-    const std::vector<HudRect>& panels; // rectangles under the HUD text (zenscene's menu)
+    const std::vector<HudRect>& panels; // rectangles under the HUD text (tetris-universe-scene's menu)
     // A break between songs: the game is hidden. Draw the world alone, as if there were no game: no well (its
     // walls, glass, back panel, grid, floor), no hold / next boxes, no bonus gauge, no HUD plates; only the HUD
     // text given in `hud` (the corner title). `game` is then a blank board. The host crossfades this frame with
