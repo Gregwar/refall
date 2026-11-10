@@ -47,7 +47,10 @@ private:
     bool placed_ = false;
     float xP_ = -16.f;            // the panda's spot on the screen (board x)
     float kidH_ = 6.6f, famS_ = 1.f; // the cub's height, the family's scale (both from the free band's width)
-    float arriveT_ = 0.f, dadWalkX_ = -4.f; // since the cub reached its family; the father's way back
+    float arriveT_ = 0.f;          // since the cub reached home
+    // the reunion's places on the screen (board x), where the parents come in from, the cub's place along the way
+    float dadEndX_ = -19.f, momEndX_ = -16.f, kidEndX_ = -13.5f, enterX_ = -24.f, momX_ = -24.f, dadX_ = -24.f;
+    double pEnd_ = 374.5;
     std::string stageName_;
     int stageAt_ = 0;
 

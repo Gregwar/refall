@@ -86,8 +86,7 @@ constexpr int STAGES = 8;
 constexpr double LEN = 48.0, BL = 10.0;            // a place's length, the crossfade into the next (as in the shader)
 const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
 constexpr double C_END = 372.0;                      // the camera at the family
-constexpr double P_END = C_END;                      // the cub with them
-const double WAY_AT[STAGES + 1] = {0, 48, 96, 144, 192, 240, 288, 336, P_END};
+const double WAY_AT[STAGES + 1] = {0, 48, 96, 144, 192, 240, 288, 336, C_END};
 constexpr float GY = -7.4f;                          // the ground line
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 
@@ -98,7 +97,7 @@ double wayOf(double lines) {
             const double u = (lines - LINES_AT[s]) / (double)(LINES_AT[s + 1] - LINES_AT[s]);
             return WAY_AT[s] + (WAY_AT[s + 1] - WAY_AT[s]) * u;
         }
-    return P_END;
+    return C_END;
 }
 
 // How each place looks (sRGB colors; the light on the pandas as plain multipliers).
@@ -295,9 +294,16 @@ void LostPandaUniverse::resize(int width, int height) {
     pxPerUnit_ = height_ / (2.f * hh);
     // the panda's spot: in the free band left of the HUD's left column
     // the free band left of the HUD's left column, the cub's size and the family's scale from its width
-    famS_ = std::clamp((layout::LEFT_COLUMN[0] - 0.4f - (viewC_.x - hw)) / 9.5f, 0.5f, 1.f);
-    kidH_ = 6.6f * famS_;
-    xP_ = viewC_.x - hw + 4.5f * famS_;
+    const float bandL = viewC_.x - hw, bandW = layout::LEFT_COLUMN[0] - 0.4f - bandL;
+    famS_ = std::clamp(bandW / 9.5f, 0.5f, 1.f);
+    kidH_ = 4.2f * famS_;
+    xP_ = bandL + 5.1f * famS_;
+    // the reunion, in the band: the father on the left, the mother, the cub in front at the right
+    dadEndX_ = bandL + 0.25f * bandW;
+    momEndX_ = bandL + 0.55f * bandW;
+    kidEndX_ = bandL + 0.8f * bandW;
+    enterX_ = bandL - 3.f * famS_;
+    pEnd_ = C_END + (kidEndX_ - xP_);
     const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -512,7 +518,7 @@ void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate)
 
 void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool travelling, float speed) {
     Pose t = kid_;
-    const bool home = P_ >= P_END - 0.05;
+    const bool home = P_ >= pEnd_ - 0.05;
     const float mood = std::clamp(stageMood + 0.35f * joy_ + 0.5f * reunion_ - (overT_ >= 0.f ? 0.4f : 0.f), 0.f, 1.f);
     t.mood = mood;
     t.turn = 0.55f; t.tilt = 0.f; t.lookX = 0.6f; t.lookY = -0.3f * (1.f - mood);
@@ -571,7 +577,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
             t.turn = -0.85f * in + 0.55f * (1.f - in); t.lookX = -1.f; t.tilt = 0.05f;
             break;
         case A_HUG: {
-            t.hug = in; t.joyEyes = in; t.turn = 0.65f; t.tilt = -0.08f * in;
+            t.joyEyes = in; t.turn = -0.5f; t.tilt = 0.12f * in; t.lean = -0.8f * in;
             break;
         }
         default: break;
@@ -588,8 +594,13 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
         t.tilt = std::clamp(dy * 0.08f, -0.1f, 0.25f);
         if (act_ == A_BUTTERFLY) t.joyEyes = 0.f;
     }
-    // the reunion: running in, then the hug
-    if (reunion_ > 0.5f && !home && !travelling) { t.arms = 0.5f; t.turn = 0.7f; t.joyEyes = 0.5f; }
+    // the reunion: home, it hears them coming out of the bamboo behind it and turns, arms up
+    if (home && arriveT_ < 6.5f && overT_ < 0.f) {
+        const float k = smoothstepf(0.6f, 1.6f, arriveT_);
+        t.turn = lerpf(t.turn, -0.85f, k); t.lookX = -1.f; t.lookY = 0.f; t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
+        t.arms = 0.6f * smoothstepf(2.5f, 3.5f, arriveT_); t.joyEyes = smoothstepf(4.f, 5.f, arriveT_);
+        actT_ = 0.f; act_ = A_HUG; actDur_ = 8.f;
+    }
     // a drop: the spirits lift, a look up, a few hops
     if (joy_ > 0.4f && !travelling && act_ != A_HUG && overT_ < 0.f) {
         t.tilt = std::max(t.tilt, 0.15f * joy_);
@@ -1006,7 +1017,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         linesShown_ = lines;
         if (!placed_) {
             lineTarget_ = wayOf(lines);
-            P_ = C_ = std::min(lineTarget_, P_END);
+            if (lines >= LINES_AT[STAGES]) lineTarget_ = pEnd_;
+            P_ = C_ = lineTarget_;
             C_ = std::min(C_, C_END);
             vel_ = 0.0;
             stroll_ = P_;
@@ -1015,15 +1027,19 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
         lineDelay_ -= wdt;
         if (lineDelay_ <= 0.f) { linesWalk_ = lines_; }
-        lineTarget_ = wayOf(linesWalk_);
+        lineTarget_ = linesWalk_ >= LINES_AT[STAGES] ? pEnd_ : wayOf(linesWalk_);
         double target = std::max(lineTarget_, std::min(stroll_, lineTarget_ + 1.3));
-        target = std::min(target, P_END);
+        target = std::min(target, pEnd_);
         if (overT_ >= 0.f) target = P_;
         const double dist = target - P_;
         const float mood = kid_.mood;
         const bool lineWalk = lineTarget_ - P_ > 0.05;
         double vmax = lineWalk ? lerpf(1.5f, 2.6f, mood) + std::min(2.2, std::max(0.0, dist - 6.0) * 0.25) : 0.45;
         if (P_ > C_END - 8.0 && lineWalk) vmax = std::max(vmax, 3.0); // the last steps: running to them
+        { // (testing: with ZEN_GROW_RATE the cub keeps up with the growing lines)
+            static const double grow = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+            vmax += grow * 4.0;
+        }
         const double want = std::clamp(dist * 1.1, 0.0, vmax);
         vel_ += (want - vel_) * (1.0 - std::exp(-2.6 * wdt));
         if (dist < 0.002 && vel_ < 0.02) vel_ = 0.0;
@@ -1037,7 +1053,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         const float stride = 0.32f * kidH_;
         kid_.phase += (float)(vel_ * wdt) * TAU / stride;
         kid_.walk = approach(kid_.walk, saturate(speed / 1.1f), 5.f, wdt);
-        reunion_ = smoothstepf((float)(C_END - 12.0), (float)P_END, (float)P_);
+        reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
     }
     int stage = 0;
     float sblend = 0.f;
@@ -1048,36 +1064,36 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The pandas' life.
     updateKid(wdt, look.mood, stageAt_, travelling, speed);
     {
-        // the family: waiting, looking out for it, then all joy
-        const float r = reunion_;
-        const bool arrived = P_ >= P_END - 0.05;
+        // the family: once the cub is home, they come out of the bamboo on the left, waddling, and sit with it;
+        // then they lean in to it, nuzzling, eyes closing in joy
+        const bool arrived = P_ >= pEnd_ - 0.05;
         arriveT_ = arrived ? arriveT_ + wdt : 0.f;
         for (int i = 0; i < 2; i++) {
             Pose& fp = i == 0 ? mom_ : dad_;
+            float& x = i == 0 ? momX_ : dadX_;
+            const float endX = i == 0 ? momEndX_ : dadEndX_;
+            const float t0 = i == 0 ? 1.f : 2.6f;
+            const float u = smoothstepf(t0, t0 + 4.2f, arriveT_);
+            const float nx = lerpf(enterX_, endX, u);
+            const float v = arrived ? (nx - x) / std::max(wdt, 1e-4f) : 0.f;
+            x = nx;
+            const float h = (i == 0 ? 6.6f : 6.9f) * famS_;
+            fp.walk = approach(fp.walk, saturate(std::fabs(v) / (0.5f * famS_)), 5.f, wdt);
+            fp.phase += std::fabs(v) * wdt * TAU / (0.32f * h);
             Pose t = fp;
-            t.sit = 1.f;
-            t.mood = lerpf(0.55f, 1.f, r);
-            const float tt = time_ * (i == 0 ? 0.35f : 0.27f) + i * 2.f;
-            t.turn = lerpf(0.4f * std::sin(tt) + 0.2f, 0.6f, r);
-            t.lookX = t.turn > 0.f ? 1.f : -1.f;
-            t.lookY = r > 0.3f ? -0.3f : 0.f;
-            t.tilt = lerpf(0.05f * std::sin(tt * 1.3f), -0.06f, r);
-            t.arms = (r > 0.4f && !arrived) ? 0.6f : 0.f;
-            t.hug = arrived && i == 0 ? 1.f : 0.f;
-            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f)) : 0.f;
+            const bool seated = u > 0.98f;
+            const float together = smoothstepf(t0 + 4.5f, t0 + 6.f, arriveT_);
+            t.sit = seated ? 1.f : 0.f;
+            t.mood = 1.f;
+            t.turn = 0.6f;
+            t.lookX = 1.f;
+            t.lookY = -0.2f;
+            t.tilt = -0.14f * together;                 // leaning their heads in toward the cub
+            t.lean = (i == 0 ? 0.9f : 0.6f) * together;
+            t.arms = 0.f;
+            t.hug = 0.f;
+            t.joyEyes = together * smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f));
             t.wind = 0.2f;
-            if (i == 1) {
-                // the father comes back from the grove a little after the reunion, waddling in from the left
-                const float u = smoothstepf(2.f, 7.f, arriveT_);
-                const float x = lerpf(-4.f, 0.f, u);
-                const float v = (x - dadWalkX_) / std::max(wdt, 1e-4f);
-                dadWalkX_ = x;
-                fp.walk = approach(fp.walk, saturate(std::fabs(v) * famS_ / 0.6f), 5.f, wdt);
-                fp.phase += std::fabs(v) * wdt * TAU / (0.3f * 8.6f);
-                t.sit = u > 0.97f ? 1.f : 0.f;
-                if (u < 0.97f) t.turn = 0.7f;
-                t.arms = 0.f;
-            }
             updatePose(fp, wdt, t, 1.5f);
         }
     }
@@ -1222,18 +1238,15 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // the family (behind), the cub, the butterfly
     {
         const float alpha = world;
-        // the reunion fits in the free band left of the HUD: the mother sitting right of the cub (her near arm
-        // wrapping round it, drawn over it), the father behind them on the left once he is back
-        const float s = famS_;
-        const float momX = xP_ + (float)(C_END - C_) + 2.3f * s;
-        const float dadX = xP_ - 3.4f * s + dadWalkX_ * s;
-        mom_.walk = 0.f;
-        if (arriveT_ > 2.f) drawPanda(dad_, V(dadX, GY + 0.75f * s), 8.6f * s, 1.f, 1.f, alpha, 0.07f, false, 0);
-        drawPanda(mom_, V(momX, GY + 0.15f * s), 9.4f * s, -1.f, 1.f, alpha, 0.02f, false, 1);
+        // the reunion, in the free band left of the HUD: the father furthest back, the mother, the cub in front
+        const float fs = famS_;
+        if (arriveT_ > 0.5f) {
+            drawPanda(dad_, V(dadX_, GY + 0.7f * fs), 6.9f * fs, 1.f, 1.f, alpha, 0.06f, false, 0);
+            drawPanda(mom_, V(momX_, GY + 0.35f * fs), 6.6f * fs, 1.f, 1.f, alpha, 0.03f, false, 0);
+        }
         kid_.tilt += 0.035f * nod;
         drawPanda(kid_, V(xP_ + (float)(P_ - C_), GY), kidH_, 1.f, 0.f, alpha, 0.f, true, 0);
         kid_.tilt -= 0.035f * nod;
-        drawPanda(mom_, V(momX, GY + 0.15f * s), 9.4f * s, -1.f, 1.f, alpha, 0.02f, false, 2);
         if (flyA_ > 0.01f) {
             std::vector<SpriteInst> fly;
             sprite(fly, fly_, 0.32f, lerp(lin(0xfff3c0), lin(vd.accent), 0.35f), flyA_ * world, 3, 0.5f + 0.5f * std::sin(flyFlap_));
