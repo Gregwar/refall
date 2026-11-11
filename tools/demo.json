@@ -35,12 +35,12 @@
   "env": {"ZEN_SCENE_LINES": "50", "ZEN_WARMUP": "10", "ZEN_CLIP_FILL": "1"},
   // Per universe, wherever it appears (a shot's own env overrides it): a nice stage of the progression ones.
   "universe_env": {
-    "gianttree": {"ZEN_GIANTTREE_LINES": "8", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
-    "megacity": {"ZEN_MEGACITY_LINES": "8", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
+    "gianttree": {"ZEN_GIANTTREE_LINES": "16"},
+    "megacity": {"ZEN_MEGACITY_LINES": "14"},
     "orbital": {"ZEN_ORBITAL_LINES": "26"},
     "library": {"ZEN_LIBRARY_LINES": "30"},
-    "planks": {"ZEN_PLANKS_LINES": "18", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
-    "mycelium": {"ZEN_MYCELIUM_LINES": "10", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
+    "planks": {"ZEN_PLANKS_LINES": "24"},
+    "mycelium": {"ZEN_MYCELIUM_LINES": "16"},
     "tidepool": {"ZEN_TIDEPOOL_LINES": "16"},
     "lostpanda": {"ZEN_LOSTPANDA_LINES": "20"},
     "skywhale": {"ZEN_SKYWHALE_LINES": "31", "ZEN_GROW_RATE": "0.75"},
@@ -92,8 +92,11 @@
      "card": {"text": "Enjoy the experience", "bars": 2, "enabled": false},
      "grid": "bar",
      "shots": [{"u": "tidepool"}, {"u": "docks"}, {"u": "skyocean"}, {"u": "crystal"},
-               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 2bars",
-                "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 8.5}}],
-     "outro": {"fade": "3bars", "title": {"text": "Tetris Universe", "style": "title", "at": "end - 4bars"}}}
+               // the game and its HUD fade away at about 2:10 (ZEN_OUT_LEAD: that long before the song's end), so the
+               // clear must come before it; then the whale alone, the title slowly appearing (wipe: seconds)
+               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "12.2"},
+                "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
+     "outro": {"fade": "2bars",
+               "title": {"text": "Tetris Universe", "style": "title", "at": "end - 6bars", "wipe": 9.0, "fade": 2.0}}}
   ]
 }

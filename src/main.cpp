@@ -157,7 +157,11 @@ private:
     bool breaks_ = true;
     bool introAtStart_ = true; // the program starts on the black, the first song coming in with its title card
     Game blank_;               // what the universes draw while the game is hidden
-    static constexpr float OUT_LEAD = 7.5f;  // the outro starts this long before the song's end
+    // the outro starts this long before the song's end (ZEN_OUT_LEAD=SECONDS: earlier or later, for demo videos)
+    static float outLead() {
+        static const float lead = std::getenv("ZEN_OUT_LEAD") ? (float)std::atof(std::getenv("ZEN_OUT_LEAD")) : 7.5f;
+        return lead;
+    }
     static constexpr float OUT_HIDE = 1.6f;  // the game fades away
     static constexpr float OUT_DARK = 2.0f;  // the world fades to black, ending with the song
     static constexpr float IN_CARD = 0.4f, IN_HOLD = 1.4f, IN_SHRINK = 3.2f, IN_WORLD = 5.2f, IN_SHOW = 6.8f, IN_END = 8.4f;
@@ -913,7 +917,7 @@ int App::run() {
         if (breaks_ && track_) {
             // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
             const double left = track_->duration() - songTime_;
-            if (break_ == BREAK_OFF && ((wantSkip_ && nextTrack_) || left <= OUT_LEAD || songFinished())) {
+            if (break_ == BREAK_OFF && ((wantSkip_ && nextTrack_) || left <= outLead() || songFinished())) {
                 break_ = BREAK_OUT;
                 breakT_ = 0;
                 breakSkip_ = wantSkip_ || songFinished();

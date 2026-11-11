@@ -713,7 +713,8 @@ def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, c
         if e.get("title"):
             if i not in titles:
                 titles[i] = make_card(e["title"], cfg, width, height)
-            titles[i].draw(fr, t, e["title"]["at"], duration - 0.6, wipe=1.8, fade=2.5)
+            titles[i].draw(fr, t, e["title"]["at"], duration - 0.6, wipe=e["title"].get("wipe", 1.8),
+                                 fade=e["title"].get("fade", 2.5))
         enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
         if j % (fps * 10) == 0:
             log(f"  {t:7.2f} s  {e.get('label') or e['u']}")
