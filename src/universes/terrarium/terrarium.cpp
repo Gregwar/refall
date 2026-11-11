@@ -76,19 +76,19 @@ const VariantDef VARIANTS[] = {
      0xee2f2a, 0xfff2dc, 0x9a62ff, 0xf6eaff, 0x6e4a2e, 0x2a8ab0, 0x9aa8bc, 0xec2a2e, 0x15111a, 0xd8ff6e, 0x6f957e,
      0xf6f1e6, 0xeadcc4, 0x48b03a, 0x84c8a6,
      0xfffaf0, 0xffd27a, 0x0b1c17,
-     {0x3fd6ec, 0xffd43f, 0xb06bff, 0x6ade4a, 0xff5a5a, 0x4a80ff, 0xff9a3a}, 0.07f, 1.f},
+     {0x62c4b0, 0xe8bf5c, 0xa585d6, 0x8cc65e, 0xdc6e58, 0x6a92d0, 0xeda0a8}, 0.07f, 1.f},
     // A desert jar: layered sand in coral and cream, succulent rosettes, aloes, cacti in flower, a turquoise scarab.
     {"DESERT", 1, 0xe2ae74, 0xc48c56, 0xd8c8b4, 0xf47a66, 0xfff0d6, 0xa8c870, 0x6b8a4a, 0x8ad6b4, 0x2f8a7c, 0x8a9a5a,
      0xff7ab0, 0xffe8c0, 0xff5aa0, 0xffd27a, 0xcbb698, 0x4ab0c8, 0xe6d6c4, 0x22c4cc, 0x0d3a5c, 0xffe48a, 0xb8603c,
      0xfff6ea, 0xf2dabb, 0xdc9a4e, 0xeebc84,
      0xfffaf2, 0xffb27a, 0x22130c,
-     {0x2ad4c4, 0xffd23a, 0xff6a9e, 0x8ad84a, 0xff6a3a, 0x5a8cff, 0xc47aff}, 0.0f, 0.f},
+     {0x5cc8bc, 0xf2d282, 0xb48ad8, 0xaac86a, 0xe27a4c, 0x6688c0, 0xec9cba}, 0.0f, 0.f},
     // A tropical jar: rich dark earth, broad striped leaves, magenta orchids, orange caps, a jewel beetle.
     {"ORCHID", 2, 0x4e2c1a, 0x22130a, 0x7a8a72, 0x2a2a2e, 0x46464c, 0x5ad85a, 0x1d6a3a, 0x48d68c, 0x0e5a3a, 0x4a9a4a,
      0xffa83a, 0xfff0d0, 0xff48bc, 0xfff0fa, 0x5a3a28, 0x14a4a4, 0x66788a, 0x3ad46a, 0xe8c440, 0xa8fff0, 0x8a5636,
      0xeaf2ea, 0xdae2ca, 0x26a45a, 0x5ac4a2,
      0xf6fff8, 0xff8ad4, 0x061d18,
-     {0x2ae2d2, 0xffe23a, 0xe45aff, 0x5ae25a, 0xff4a6a, 0x3a8cff, 0xff8c2a}, 0.07f, 0.f},
+     {0x48bfa8, 0xe8c650, 0x9c70d6, 0x6cc46a, 0xe0607e, 0x4e80d6, 0xf09250}, 0.07f, 0.f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -1130,10 +1130,10 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
     }
     vec3 sunDir;
     {
-        const float az = 0.33f;
+        const float az = -0.33f;
         const float el = std::max(elev, -0.06f);
         const vec3 sd(-std::sin(az) * std::cos(el), std::sin(el), -std::cos(az) * std::cos(el));
-        const vec3 md = normalize(vec3(0.48f, 0.42f, -0.77f));
+        const vec3 md = normalize(vec3(0.48f, 0.42f, -0.77f)); // (the moon, right)
         const float toMoon = smoothstepf(4.f, 4.9f, tod_);
         sunDir = normalize(lerp(sd, md, toMoon));
         if (sunDir.y < 0.08f) sunDir = normalize(vec3(sunDir.x, 0.08f, sunDir.z));
@@ -1313,7 +1313,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         set3f(P, "uGlowSun", glowC);
         set1f(P, "uSunDisc", disc);
         // the sun as the window shows it (stretched elevations): low over the hills on the left
-        set2f(P, "uSunSky", -0.2f, std::clamp(elev, -0.1f, 0.9f) * 2.0f);
+        set2f(P, "uSunSky", 0.3f, std::clamp(elev, -0.1f, 0.9f) * 2.0f);
         set1f(P, "uMoon", moon);
         set1f(P, "uStars", stars * (1.f - rain_));
         set1f(P, "uRain", rain_);
@@ -1352,7 +1352,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
         set3f(progVeil_, "uRail", lerp(lerp(pal_.ink, pal_.accent, 0.3f) * 0.5f, bridge_.ink * 0.4f, bridge));
-        set1f(progVeil_, "uWellA", 0.84f);
+        set1f(progVeil_, "uWellA", 0.93f);
         set1f(progVeil_, "uColA", 0.4f * world);
         set1f(progVeil_, "uRailA", 0.55f);
         set1f(progVeil_, "uPx", pxPerUnit_);
