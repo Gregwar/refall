@@ -288,9 +288,21 @@ void LimboUniverse::placeWorld() {
     for (float x = -W - 2.f; x < W + 2.f; x += r.range(3.5f, 5.5f)) add(K_HILL, L_NEAR, x, Y_NEAR + r.range(-0.15f, 0.2f), r.range(4.f, 6.5f));
     for (float x = -W - 2.f; x < W + 2.f; x += r.range(4.f, 7.f)) add(K_HILL, L_MID, x, Y_MID + r.range(-0.3f, 0.5f), r.range(4.f, 8.f));
     for (float x = -W - 2.f; x < W + 2.f; x += r.range(5.f, 9.f)) add(K_HILL, L_EDGE, x, Y_EDGE + r.range(-0.6f, 0.6f), r.range(6.f, 10.f));
-    // the forest edge: pines and bare trees all along
+    // the ground's height at x on a layer: the top of the hills' discs there (a hill is a disc of radius size whose
+    // top is at y), so every tree stands on the silhouette it is drawn against, never floating above a dip
+    auto groundAt = [&](int layer, float x, float fallback) {
+        float best = -1e9f;
+        for (const Thing& h : things_) {
+            if (h.kind != K_HILL || h.layer != layer) continue;
+            const float dx = x - h.x;
+            if (std::fabs(dx) >= h.size) continue;
+            best = std::max(best, h.y - h.size + std::sqrt(h.size * h.size - dx * dx));
+        }
+        return best > -1e8f ? best : fallback;
+    };
+    // the forest edge: pines and bare trees all along, sunk a little into the rise
     for (float x = -W; x < W; x += r.range(0.6f, 1.5f)) {
-        const float y = Y_EDGE + 0.25f + 0.5f * std::sin(x * 0.21f + 1.3f) + r.range(-0.2f, 0.2f);
+        const float y = groundAt(L_EDGE, x, Y_EDGE) - r.range(0.05f, 0.25f);
         if (r.chance(0.72f)) add(K_PINE, L_EDGE, x, y, r.range(0.7f, 1.35f));
         else add(K_DEADTREE, L_EDGE, x, y, r.range(0.35f, 0.55f));
     }
@@ -298,9 +310,10 @@ void LimboUniverse::placeWorld() {
     add(K_MILL, L_FAR, -side * r.range(13.f, 17.f), Y_FAR, r.range(0.9f, 1.1f));
     add(K_TOWER, L_FAR, side * r.range(8.f, 11.f), Y_FAR - 0.3f, r.range(0.9f, 1.2f));
     // the mid ground: a bare tree on the left
-    add(K_DEADTREE, L_MID, -side * r.range(14.5f, 17.5f), Y_MID + 0.3f, r.range(0.75f, 0.9f));
+    { const float x = -side * r.range(14.5f, 17.5f); add(K_DEADTREE, L_MID, x, groundAt(L_MID, x, Y_MID) + 0.1f, r.range(0.75f, 0.9f)); }
     // near: the big bare tree, a lantern hanging from above between it and the HUD column
-    const int bigTree = add(K_DEADTREE, L_NEAR, side * r.range(15.f, 16.5f), Y_NEAR + 0.1f, r.range(1.15f, 1.3f));
+    const float bigX = side * r.range(15.f, 16.5f);
+    const int bigTree = add(K_DEADTREE, L_NEAR, bigX, groundAt(L_NEAR, bigX, Y_NEAR) + 0.05f, r.range(1.15f, 1.3f));
     add(K_LANTERN, L_NEAR, side * r.range(12.f, 12.8f), viewH_.y + 0.5f, r.range(4.f, 5.5f));
     // grass
     for (int i = 0; i < 4; i++) add(K_GRASS, L_NEAR, grassX(i % 2 ? 1.f : -1.f), Y_NEAR + 0.05f, r.range(0.7f, 1.1f));
@@ -338,14 +351,15 @@ void LimboUniverse::placeWorld() {
             }
             break;
         case K_DEADTREE: {
-            const int i = add(K_DEADTREE, L_MID, margin(s), Y_MID + 0.3f, r.range(0.55f, 0.85f), g++);
+            const float x = margin(s);
+            const int i = add(K_DEADTREE, L_MID, x, groundAt(L_MID, x, Y_MID) + 0.1f, r.range(0.55f, 0.85f), g++);
             if (nMid < 8) midTrees[nMid++] = i;
             break;
         }
         case K_TOWER: add(K_TOWER, L_FAR, s * r.range(5.f, W - 1.f), Y_FAR - 0.3f, r.range(0.8f, 1.25f), g++); break;
         case K_PYLON: add(K_PYLON, L_FAR, s * r.range(5.f, W - 1.f), Y_FAR, r.range(0.75f, 1.f), g++); break;
         case K_MILL: add(K_MILL, L_FAR, s * r.range(4.f, W - 2.f), Y_FAR - 0.2f, r.range(0.7f, 0.9f), g++); break;
-        case K_PINE: add(K_PINE, L_MID, margin(s), Y_MID + 0.3f, r.range(1.4f, 2.f), g++); break;
+        case K_PINE: { const float x = margin(s); add(K_PINE, L_MID, x, groundAt(L_MID, x, Y_MID) - 0.05f, r.range(1.4f, 2.f), g++); } break;
         case K_POST: add(K_POST, L_MID, margin(s), Y_MID + 0.25f, r.range(0.9f, 1.15f), g++); break;
         case K_WATERTOWER: add(K_WATERTOWER, L_FAR, s * r.range(6.f, W - 2.f), Y_FAR - 0.2f, r.range(0.85f, 1.1f), g++); break;
         default: break;
@@ -1398,7 +1412,16 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     const float partRate = partGoal_ > partMid_ ? 2.6f : 0.3f;
     partMid_ = approach(partMid_, partGoal_, partRate, dt);
     part_ = approach(part_, partMid_, partRate, dt);
-    invert_ = approach(invert_, partGoal_, 9.f, dt); // the drop flips the scene to negative (quick: no grey midway)
+    // the negative belongs to the DROP section alone (not a chorus's peak, nor the parting's hold): from the HUD's
+    // section, else from the music's pace; it flips in quickly (no grey midway) and eases out as the drop ends
+    bool sectionKnown = false, sectionDrop = false;
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_SECTION) {
+            sectionKnown = true;
+            sectionDrop = h.text == "DROP";
+        }
+    const bool realDrop = overT_ < 0.f && (sectionKnown ? sectionDrop : partGoal_ > 0.5f && (!music.hasSong || music.speed > 1.26f));
+    invert_ = approach(invert_, realDrop ? 1.f : 0.f, realDrop ? 9.f : 1.2f, dt);
     gust_ = approach(gust_, gustGoal_, 1.6f, dt);
     gustGoal_ = approach(gustGoal_, 0.f, 0.3f, dt);
     gearSpin_ += dt * 1.4f * part_;

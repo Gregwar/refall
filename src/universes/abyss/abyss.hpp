@@ -134,7 +134,9 @@ private:
     struct Dying { float x, y, t, delay, out, vx, vy; int type, mask; bool sink; };
     std::vector<Dying> dying_;
     // a cleared cell's jelly (type >= 0) or a tiny trailing bubble (type -1) rising in a bubble to the top, where it pops
-    struct Bubble { float x, y, vx, vy, t, delay, r, seed, buoy; int type; };
+    // ox, oy: a drawing offset left by a merge, eased back to zero; rd: the drawn radius, easing to r (a merge
+    // never makes a bubble jump or pop)
+    struct Bubble { float x, y, vx, vy, t, delay, r, seed, buoy; int type; float ox = 0.f, oy = 0.f, rd = 0.f; };
     std::vector<Bubble> bubbles_;
     float tetrisT_ = 99.f;
 
