@@ -103,6 +103,7 @@ private:
         bool lying = false;
         int level = 0, style = 0;
         float tone = 1.f;
+        float landT = -100.f; // world time it landed (its pulse of light)
     };
     std::vector<Group> groups_;
     bool place(Group& g); // its place: the next free one (false: the room is full)
@@ -113,7 +114,7 @@ private:
     GLuint shelfVao_ = 0, shelfVbo_ = 0;
     bool shelve(int type, uint32_t seed);
     void pushBook(std::vector<Inst>& out, const Group& g, const vec3& c, const vec3& along, const vec3& outD, float k, float grow,
-                  float glow, int index);
+                  float glow, int index, float vivid = 0.f);
     // features: unlocked when their first run is used, then grown in
     bool featUnlocked_[F_COUNT_] = {};
     float featGrow_[F_COUNT_] = {};
@@ -127,6 +128,7 @@ private:
         vec3 p0, out0;
         float k0 = 0.f;
         float spin = 0.f;
+        vec3 c1, c2;           // its arc's control points (with p0 and its place)
     };
     std::vector<Flight> flights_;
     void fly(int type, uint32_t seed, const vec3& board, float delay);
