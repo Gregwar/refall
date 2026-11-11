@@ -82,7 +82,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/microscope.jpg"><br><b>MICROSCOPE</b>: a Petri dish through the eyepiece, the pieces stained plant cells, some with a microorganism living inside; a cleared row frees them to swim in the dish for the rest of the song, the drop washes in a new stain<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/microscope.jpg"><br><b>MICROSCOPE</b>: a picture-book Petri dish under a toy microscope, the pieces jelly cells; each cleared row frees a cute creature that swims in the dish for the rest of the song, the drop pours in a new palette<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a glide through a dark 3D sunken city where shapes glow up from the black as echoes return on the beat; each cleared row charts the seabed for good, the drop lights the whole world and the glide surges<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
