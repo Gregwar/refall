@@ -1,28 +1,36 @@
-// TIDE POOL: attention as a journey. Behind the well, a humble rock pool at low tide, almost nothing to see: clear
-// water over sand, slate around it. Every cleared line zooms deeper into it, one continuous dive inward through nine
-// scales, each one already there in the one before, tiny: the pool; its floor (stones with limpets and barnacles,
-// colonies of beadlet anemones, sea lettuce, a crab or two), dotted with specks of plankton; the water, teeming with
-// copepods, nauplii, chains and discs of diatoms; one diatom's glass frustule, rings of pores with the golden cell
-// glowing through every one; the cell's cytoplasm streaming, chloroplasts and granules; molecules jostling, double
-// helices of light; an atom, its orbital clouds breathing as contours of light; inside its nucleus a boiling quantum
-// foam whose bubbles burst into ripples that interfere like rain on a pool; strings of light ringing with the music
-// on a rippling fabric; and the rock pool again, resolving out of them: the zoom never ends.
+// TIDE POOL: attention as a journey, from the whole universe down to a humble rock pool and on into it. Behind the
+// well, the cosmic web: filaments of galaxies glowing in the dark, clusters at their nodes. Every cleared line zooms
+// deeper, one continuous dive through fifteen scales, each one already there in the one before, tiny, at the focus:
+// the universe; one galaxy of the cluster at the focus, a spiral seen a little tilted, golden bulge, blue arms, dust
+// lanes, rose knots of star birth, its stars resolving; a star in one of its arms, by a nebula, its planets' orbits
+// threads of light; the planet on the orbit that crosses the focus, oceans, continents, ice caps, clouds, a moon,
+// cities on its night side; its coast from high above, turquoise shallows, beaches, forests; the shore, surf rolling
+// in on a shelf of rock with tide pools; one of them, the rock pool: clear water over sand, slate around it; its floor
+// (stones with limpets and barnacles, colonies of beadlet anemones, sea lettuce, a crab or two), dotted with specks
+// of plankton; the water, teeming with copepods, nauplii, chains and discs of diatoms; one diatom's glass frustule,
+// rings of pores with the golden cell glowing through every one; the cell's cytoplasm streaming, chloroplasts and
+// granules; molecules jostling, double helices of light; an atom, its orbital clouds breathing as contours of light;
+// inside its nucleus a boiling quantum foam whose bubbles burst into ripples that interfere like rain on a pool;
+// strings of light ringing with the music on a rippling fabric; and the whole universe again, a knot of light opening
+// at the focus: the zoom never ends.
 //
 // The dive is one similarity transform about a point left of the HUD's left column, so the whole world streams out
-// from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 0.3
-// octave deeper and a Tetris half a stage, eased (the zoom's speed changes smoothly and stays under a third of an
-// octave a second): the whole loop takes about 100 lines. Each stage is a whole world in
-// its own frame, its things of a fixed size, 16 times smaller than the stage before; the shader draws the stage we
-// are in with the next one's things over it, then crossfades into the next one over the last octave and a half
-// (shaders.hpp). The zoom turns a little as it dives. Game over: the zoom pulls all the way back out to the rock
-// pool, and the next game starts there.
+// from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 0.55 octave
+// deeper and a Tetris three quarters of a stage, eased (the zoom's speed changes smoothly and stays under a third of
+// an octave a second): the strings at about 100 lines. Each stage is a whole world in its own frame, its things of a
+// fixed size, 16 times smaller than the stage before; the shader draws the stage we are in with the next one's
+// things over it, then crossfades into the next one over the last octave and a half (shaders.hpp). From the universe
+// to the shore the stages nest exactly (each draws the one before it as its background, the one after it at its
+// focus): the crossfades there are between two drawings of the same picture, and the planet's surface is one
+// function from orbit down to the rocks (its coast runs through the focus at every scale). The zoom turns a little
+// as it dives. Game over: the zoom pulls all the way back out to the universe, and the next game starts there.
 //
-// The music is the tide: the water swells slowly, once every two bars, at every scale (the waterline creeping over the rock, the
-// anemones opening, the plankton hopping every two beats, the light sweeping round the glass, the cytoplasm
+// The music is the tide: it swells slowly, once every two bars, at every scale (the galaxy's bulge and the sun's
+// corona breathing, the waterline creeping over the rock, the anemones opening, the plankton hopping every two beats, the light sweeping round the glass, the cytoplasm
 // streaming, the molecules' Brownian jitter, the orbitals breathing, the foam boiling, the strings ringing in
 // harmonics fed by the song's bands). The drop is a wave: a lace of foam drifting over the pool's floor,
-// and deeper down a slow ripple through the fabric. Kicks (in a peak only) light small things: dinoflagellates
-// sparking, glints in the diatom's pores, virtual pairs of particles, the strings plucked.
+// and deeper down a slow ripple through the fabric. Kicks (in a peak only) light small things: a few bright stars
+// flaring, dinoflagellates sparking, glints in the diatom's pores, virtual pairs of particles, the strings plucked.
 //
 // The pieces are sea glass: frosted, worn round, the water's light moving through them. Cleared rows melt into
 // bubbles.
@@ -128,24 +136,27 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 
 // The dive.
 constexpr double STAGE_OCT = 4.0;                 // octaves per stage (16 times smaller each)
-constexpr int STAGES = 9;
-constexpr double LOOP = STAGE_OCT * STAGES;       // a loop of the nine stages: back to a rock pool
-// The pace: the whole loop in about 100 lines of a game. A line is 0.3 octave, a Tetris 2 octaves (half a stage),
-// and the slow drift adds some 0.4 octave a minute: a stage every ~10.5 lines in a typical game (strings at ~85, the
-// rock pool again at ~95).
-constexpr double STEP = 0.3;                      // a line
+constexpr int STAGES = 15;
+constexpr double LOOP = STAGE_OCT * STAGES;       // a loop of the fifteen stages: back to the whole universe
+// The pace: the strings, the last stage, at about 100 lines of a game. A line is 0.55 octave, a Tetris 3 octaves
+// (three quarters of a stage), and the slow drift adds some 0.3 octave a minute: a stage every ~6.5 lines in a
+// typical game (the planet at ~19, the rock pool at ~38, the strings at ~93, the universe again at ~100).
+constexpr double STEP = 0.55;                     // a line
 constexpr double TETRIS_EXTRA = 0.8;              // a Tetris: 4 lines + this
-constexpr float OMEGA = 0.07f;            // the zoom's turn (radians an octave)
+constexpr float OMEGA = 0.07f;            // the zoom's turn (radians an octave; the shader's REL is 4 of them)
+constexpr double PLANET_Z = 12.0;         // where the planet's stage starts in a loop (its clock slows from there)
 constexpr float CLEAR_T = 0.42f;          // a cleared row melts in this long (real time)
 constexpr int MAX_MOTES = 900;
 
-// What each stage is and how big (meters, a half screen at its start).
-const char* STAGE_NAME[STAGES] = {"a rock pool", "the pool floor", "plankton", "a diatom", "a living cell",
+// What each stage is and how big (meters, a half screen at its start; after the strings, the universe again).
+const char* STAGE_NAME[STAGES] = {"the universe", "a galaxy", "a star", "a planet", "the coast", "the shore",
+                                  "a rock pool", "the pool floor", "plankton", "a diatom", "a living cell",
                                   "molecules", "an atom", "quantum foam", "strings"};
-const double STAGE_M[STAGES + 1] = {1.0, 6e-2, 4e-3, 2.5e-4, 1.5e-5, 2e-8, 3e-10, 2e-15, 1.6e-35, 1e-36};
+const double STAGE_M[STAGES + 1] = {4e26, 1e21, 2e11, 1.6e7, 1e6, 2e3, 1.0, 6e-2, 4e-3, 2.5e-4, 1.5e-5, 2e-8,
+                                    3e-10, 2e-15, 1.6e-35, 1e-35};
 
 // Test hooks: ZEN_TIDEPOOL_LINES=N adds N lines to the dive, ZEN_GROW_RATE=R adds R lines a second,
-// ZEN_TIDEPOOL_DEPTH=Z holds the dive at depth Z (octaves; 4 a stage).
+// ZEN_TIDEPOOL_DEPTH=Z holds the dive at depth Z (octaves; 4 a stage, the rock pool at 24).
 int extraLines(double t) {
     static const int n = std::getenv("ZEN_TIDEPOOL_LINES") ? std::atoi(std::getenv("ZEN_TIDEPOOL_LINES")) : 0;
     static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
@@ -891,12 +902,12 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     {
         const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_);
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
-            // a new game: start from the rock pool the last one pulled back to
+            // a new game: start from the universe the last one pulled back to
             zBase_ = std::floor(z_ / LOOP + 0.02) * LOOP;
             creep_ = bonus_ = 0.0;
         }
         lines_ = lines;
-        if (!f.paused && overT_ < 0.f) creep_ += wdt * (0.005 + 0.003 * wm + 0.005 * wp);
+        if (!f.paused && overT_ < 0.f) creep_ += wdt * (0.004 + 0.002 * wm + 0.004 * wp);
         breath_ = 0.06 * std::sin(time_ * 0.11) * (0.5 + 0.5 * wm);
         double target = zTarget(lines);
         if (overT_ >= 0.f) target = std::floor(z_ / LOOP + 0.02) * LOOP; // game over: all the way back out
@@ -908,7 +919,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         // faster than a third of an octave a second (the far edge of the screen then moves a few pixels a frame), and
         // it changes smoothly: a clear is a soft push, a Tetris a long glide down through a whole scale
         const bool back = overT_ >= 0.f;
-        const double vmax = back ? 1.6 : 0.36;
+        const double vmax = back ? 2.4 : 0.36;
         const double want = std::clamp((target - z_) * (back ? 1.2 : 0.9), -vmax, vmax);
         zVel_ += (want - zVel_) * (1.0 - std::exp(-2.2 * wdt));
         z_ += zVel_ * wdt;
@@ -921,7 +932,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         const double inLoop = zz - loopN * LOOP;
         const int st = std::min(STAGES - 1, (int)std::floor(inLoop / STAGE_OCT));
         const double u = (inLoop - st * STAGE_OCT) / STAGE_OCT;
-        const double lg = std::log10(STAGE_M[st]) * (1.0 - u) + std::log10(STAGE_M[st + 1]) * u - 36.0 * loopN;
+        double lg = std::log10(STAGE_M[st]) * (1.0 - u) + std::log10(STAGE_M[st + 1]) * u;
+        if (st == STAGES - 1 && u > 0.6) lg = std::log10(STAGE_M[0]);   // the smallest holds the largest
         const int e = (int)std::lround(lg);
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%d", e);
@@ -975,7 +987,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
             layers[i * 4 + 0] = (float)st;
             layers[i * 4 + 1] = (float)u;
             layers[i * 4 + 2] = (float)std::exp2(-u);
-            layers[i * 4 + 3] = (float)(OMEGA * u + st * 0.9);
+            layers[i * 4 + 3] = (float)(OMEGA * u);
         }
         // each stage's clock runs slower as the zoom goes into it: its things keep a calm pace on the screen
         float clocks[2];
@@ -984,6 +996,11 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
             const int st = (int)std::fmod(a + i, (double)STAGES);
             if (i == 0 || u > -STAGE_OCT) stageClock_[st] += wdt * (float)std::exp2(-0.75 * std::clamp(u, 0.0, STAGE_OCT));
             clocks[i] = std::fmod(stageClock_[st], 2000.f) + st * 37.f;
+        }
+        // the planet's clock (its surface is drawn by three stages, from orbit down to the shore) slows the same way
+        {
+            const double inLoop = zz - std::floor(zz / LOOP) * LOOP;
+            earthClock_ = std::fmod(earthClock_ + wdt * (float)std::exp2(-0.75 * std::clamp(inLoop - PLANET_Z, 0.0, 12.0)), 4000.f);
         }
         const float tau = smoothstepf((float)STAGE_OCT - 1.6f, (float)STAGE_OCT - 0.1f, (float)(zz - a * STAGE_OCT));
         worldT_.bind();
@@ -1021,6 +1038,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progWorld_, "uLum", pal_.lum);
         set1f(progWorld_, "uFever", pal_.fever);
         set1f(progWorld_, "uDepth", (float)std::fmod(zz, 1000.0));
+        set1f(progWorld_, "uEarthT", earthClock_);
         {
             float b[4] = {0, 0, 0, 0};
             for (int i = 0; i < NUM_BANDS; i++) b[std::min(3, i * 4 / NUM_BANDS)] += music.bandsFast[i] * (4.f / NUM_BANDS);
@@ -1110,7 +1128,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_tidepool() {
     static const UniverseEntry e{
-        "TIDE POOL", "a rock pool at low tide; every cleared line zooms deeper into it, through anemones, plankton, a diatom, a cell, molecules, an atom and beyond",
+        "TIDE POOL", "the whole universe; every cleared line zooms deeper, one continuous dive into a galaxy, a star, a planet, its coast and a rock pool, then through anemones, plankton, a diatom, a cell, molecules, an atom and beyond",
         [] { return std::unique_ptr<Universe>(new TidePoolUniverse()); },
         // Fits most songs; the calm, airy ones a little better.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.density) + 0.15f * l.airWeight; },

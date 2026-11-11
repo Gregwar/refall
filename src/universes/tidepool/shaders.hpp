@@ -1,13 +1,15 @@
 #pragma once
-// TIDE POOL's shaders: the world (one continuous zoom through nine scales, each a whole world drawn procedurally
-// in its own frame), the veil behind the well, the sea-glass pieces, bubbles, lettering.
+// TIDE POOL's shaders: the world (one continuous zoom through fifteen scales, from the cosmic web to strings, each a
+// whole world drawn procedurally in its own frame), the veil behind the well, the sea-glass pieces, bubbles, lettering.
 //
 // The dive: every stage fills the plane with things of a fixed size in its world (16 times smaller from one stage to
 // the next: S = 4 octaves), so zooming makes all of them grow and stream out from the focus (left of the HUD).
-// The next stage's things are already there, tiny, scattered everywhere in the current one (anemones dotting the
-// pool's floor, plankton specks over the anemones, the cell glowing through every pore of the diatom...); over the
-// stage's last octave and a half the whole next world fades in under them. Every edge is anti-aliased against the
-// pixel's size in the stage's units, and patterns fade out before they get under a few pixels (no shimmer).
+// The next stage's things are already there, tiny, at the focus of the current one (our galaxy at a node of the web,
+// its star, the planet on its orbit, the rock pool among the tide pools, anemones dotting the pool's floor, the cell
+// glowing through every pore of the diatom...); over the stage's last octave and a half the whole next world fades in
+// under them. From the universe to the shore the stages nest exactly, so those crossfades are between two drawings of
+// one picture. Every edge is anti-aliased against the pixel's size in the stage's units, and patterns fade out before
+// they get under a few pixels (no shimmer).
 
 namespace tidepool_shaders {
 
@@ -43,6 +45,7 @@ uniform float uTime, uLayerT0, uLayerT1, uTide, uTideAmp, uLife, uPeak, uKick, u
 uniform vec4 uWave;           // the drop's wave: age (s), strength, -, -
 uniform vec3 uDeep, uWater, uShallow, uLight, uRock, uSand, uWarm, uWarm2, uWeed, uCool, uGlow, uBridgeCol;
 uniform float uLum, uFever, uDepth;
+uniform float uEarthT;         // the planet's clock (from orbit to its shore)
 uniform vec4 uBands;
 // each stage's own clock: it slows as the zoom goes into it, so its life keeps a calm pace on the screen
 float gT = 0.0;          // the music's bands (low, low-mid, high-mid, high), quickly smoothed
@@ -376,7 +379,7 @@ struct World { vec3 bg; vec4 obj; float host; };
             vec2 c = (id + 0.2 + 0.6 * h2) * (C);
 #define END_SCATTER }
 
-// ---- 0. the rock pool at low tide
+// ---- 6. the rock pool at low tide
 World stagePool(vec2 q, float px) {
     World W;
     float t = gT;
@@ -428,7 +431,7 @@ World stagePool(vec2 q, float px) {
     return W;
 }
 
-// ---- 1. the pool's floor, close: stones with limpets and barnacles, anemones, weed, a crab or two
+// ---- 7. the pool's floor, close: stones with limpets and barnacles, anemones, weed, a crab or two
 vec4 barnacleAt(vec2 q, vec2 c, float R, float seed, float px) {
     vec2 d = (q - c) / R;
     float rr = length(d);
@@ -507,7 +510,7 @@ World stageFloor(vec2 q, float px) {
     return W;
 }
 
-// ---- 2. the water, teeming: plankton
+// ---- 8. the water, teeming: plankton
 // a diatom's frustule: rings of pores of one size, sectors raised and sunken, its girdle; (color, alpha, pore)
 vec4 frustule(vec2 q, float R, float px, out float poreMask) {
     float r = length(q);
@@ -613,7 +616,7 @@ World stagePlankton(vec2 q, float px) {
     return W;
 }
 
-// ---- 3. one diatom, a jewel of glass among others, the living cell glowing through its pores
+// ---- 9. one diatom, a jewel of glass among others, the living cell glowing through its pores
 World stageDiatom(vec2 q, float px) {
     World W;
     float t = gT;
@@ -639,7 +642,7 @@ World stageDiatom(vec2 q, float px) {
     W.host = pm;
     return W;
 }
-// ---- 4. the living cell: cytoplasm streaming
+// ---- 10. the living cell: cytoplasm streaming
 World stageCell(vec2 q0, float px) {
     World W;
     float t = gT;
@@ -681,7 +684,7 @@ World stageCell(vec2 q0, float px) {
     return W;
 }
 
-// ---- 5. molecules jostling
+// ---- 11. molecules jostling
 World stageMolecules(vec2 q, float px) {
     World W;
     float t = gT;
@@ -742,7 +745,7 @@ World stageMolecules(vec2 q, float px) {
     return W;
 }
 
-// ---- 6. the atom: breathing orbital clouds, drawn as contours of light
+// ---- 12. the atom: breathing orbital clouds, drawn as contours of light
 World stageAtom(vec2 q, float px) {
     World W;
     float t = gT;
@@ -787,7 +790,7 @@ World stageAtom(vec2 q, float px) {
     return W;
 }
 
-// ---- 7. inside the nucleus: quantum foam
+// ---- 13. inside the nucleus: quantum foam
 World stageFoam(vec2 q, float px) {
     World W;
     float t = gT;
@@ -842,7 +845,7 @@ World stageFoam(vec2 q, float px) {
     return W;
 }
 
-// ---- 8. strings, ringing with the music, on a fabric that ripples like a pool
+// ---- 14. strings, ringing with the music, on a fabric that ripples like a pool
 World stageStrings(vec2 q, float px) {
     World W;
     float t = gT;
@@ -884,15 +887,530 @@ World stageStrings(vec2 q, float px) {
     return W;
 }
 
+// ======================================================================= the sky: from the whole universe to a shore
+// Stages 0-5 nest exactly: each stage's frame is the one before it 16 times larger and turned by REL (4 octaves of
+// the zoom's turn), so a stage can draw what the one before it shows there (its background) and the one after it
+// what it shows at its focus: the galaxy we dive into is the one at the web's focus, then its star, its planet, the
+// very coast and pool. Light glows in the dark: every source is added, a point stays a point (its light, not its
+// size), and every extended thing is band-limited against the pixel (gaussians widened by it, octaves faded).
+const float REL = 0.28;
+vec2 up(vec2 q) { return rot(REL) * q * 0.0625; }       // a point of a stage in the stage before it
+vec2 down(vec2 q) { return rot(-REL) * q * 16.0; }      // ... in the stage after it
+float gNext = 0.0;            // 1 while the next stage is drawn (tiny at the focus, then crossfading in)
+float gWantBg = 1.0;          // 0 when that next stage's background is not seen yet (before its crossfade)
+float gTn = 0.0;              // the next stage's clock
+vec2 gWebO = vec2(0.0);       // the cosmic web's offset that puts one of its nodes at the focus
+
+vec3 spaceBg() { return vec3(0.0010, 0.0013, 0.0042) + uDeep * 0.035; }
+// a gaussian blob of light of radius s seen through a pixel of size pw (its light kept when it is smaller)
+float blob(float r2, float s, float pw) { float v = s * s + pw * pw; return s * s / v * exp(-r2 / v); }
+
+// Points of light fixed in a plane, of every brightness: level k has one star in a cell of C0 / 2^k (where the
+// density lets it), the stars of a finer level coming in, faint, as the zoom makes room for them.
+vec3 starfield(vec2 g, float pg, float C0, float dens, float seed) {
+    vec3 acc = vec3(0.0);
+    float C = C0;
+    for (int k = 0; k < 18; k++) {
+        float cp = C / pg;
+        if (cp < 2.5) break;
+        float fk = float(k) * 13.7 + seed;
+        vec2 id = floor(g / C);
+        if (hash(id + fk) < dens) {
+            vec2 c = (id + 0.2 + 0.6 * hash2(id + fk * 1.3)) * C;
+            float d2 = dot(g - c, g - c) / (pg * pg);
+            float hb = hash(id * 1.7 + fk + 5.0);
+            float br = (0.1 + 3.2 * pow(hb, 8.0)) * smoothstep(2.5, 10.0, cp);
+            br *= 1.0 + 0.6 * uKick * step(0.9, hb) + 0.12 * sin(uTime * (0.7 + hb) + hb * 40.0) * step(0.6, hb);
+            vec3 sc = mix(vec3(1.0, 0.6, 0.36), vec3(0.6, 0.76, 1.0), hash(id + fk + 9.0));
+            acc += sc * br * exp(-d2 * 0.9);
+        }
+        C *= 0.5;
+    }
+    return acc;
+}
+
+// ---- the cosmic web: the edges of a Voronoi net (filaments of galaxies), its nodes (clusters)
+// (distance to the nearest edge, to the nearest node), in cells
+vec2 vweb(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 o1 = vec2(0.0), o2 = vec2(0.0), o3 = vec2(0.0);
+    float d1 = 8.0, d2 = 8.0, d3 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 o = g + 0.5 + 0.4 * (hash2(i + g) * 2.0 - 1.0) - f;
+            float d = dot(o, o);
+            if (d < d1) { d3 = d2; o3 = o2; d2 = d1; o2 = o1; d1 = d; o1 = o; }
+            else if (d < d2) { d3 = d2; o3 = o2; d2 = d; o2 = o; }
+            else if (d < d3) { d3 = d; o3 = o; }
+        }
+    return vec2(dot(0.5 * (o1 + o2), normalize(o2 - o1)), sqrt(d3) - sqrt(d1));
+}
+const float WS = 1.7;         // the coarse net's cells per unit
+vec2 webP(vec2 q) { return q * WS + 0.5 * vec2(vnoise(q * 1.9 + 3.0), vnoise(q * 1.9 - 7.0)) + 0.12 * vec2(vnoise(q * 6.0), vnoise(q * 6.0 + 5.0)); }
+// a node of the net: the circumcenter of the three sites nearest to a point (then put at the focus)
+vec2 webNode() {
+    vec2 p = vec2(0.37, 0.61), i = floor(p);
+    vec2 s1 = vec2(0.0), s2 = vec2(0.0), s3 = vec2(0.0);
+    float d1 = 8.0, d2 = 8.0, d3 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 s = i + vec2(x, y) + 0.5 + 0.4 * (hash2(i + vec2(x, y)) * 2.0 - 1.0);
+            float d = dot(s - p, s - p);
+            if (d < d1) { d3 = d2; s3 = s2; d2 = d1; s2 = s1; d1 = d; s1 = s; }
+            else if (d < d2) { d3 = d2; s3 = s2; d2 = d; s2 = s; }
+            else if (d < d3) { d3 = d; s3 = s; }
+        }
+    float D = 2.0 * (s1.x * (s2.y - s3.y) + s2.x * (s3.y - s1.y) + s3.x * (s1.y - s2.y));
+    float a = dot(s1, s1), b = dot(s2, s2), c = dot(s3, s3);
+    return vec2(a * (s2.y - s3.y) + b * (s3.y - s1.y) + c * (s1.y - s2.y),
+                a * (s3.x - s2.x) + b * (s1.x - s3.x) + c * (s2.x - s1.x)) / D;
+}
+// the coarse density (where the galaxies gather): filaments, nodes, the cluster at the focus
+float webDens(vec2 q, out vec2 e) {
+    e = vweb(webP(q) + gWebO);
+    return exp(-e.x / 0.045) + 1.6 * exp(-e.y / 0.06) + 2.2 * exp(-dot(q, q) / 0.003);
+}
+// a little galaxy at d from its center, radius R: a warm core, a disc (spiral arms once it is big enough)
+vec3 miniGalaxy(vec2 d, float R, float pw, float s) {
+    vec2 e = rot(s * 6.2831) * d;
+    e.y /= mix(0.28, 1.0, fract(s * 7.31));
+    float r2 = dot(e, e);
+    float ell = step(fract(s * 3.7), 0.35);
+    float core = blob(r2, R * 0.16, pw), disk = blob(r2, R * 0.5, pw);
+    float arms = 1.0;
+    if (ell < 0.5) {
+        float rr = sqrt(r2) / R;
+        float th = atan(e.y, e.x);
+        arms = mix(1.0, 0.3 + 1.4 * sq(0.5 + 0.5 * cos(2.0 * (th - 3.0 * log(rr + 0.05)) + s * 20.0)), lod(R * 0.35, pw));
+    }
+    vec3 dc = ell > 0.5 ? mix(uWarm2, uLight, 0.45) * 1.1 : mix(uCool, uLight, 0.3) * 1.2;
+    return mix(uWarm2, uLight, 0.6) * core * 2.2 + dc * disk * arms * 0.85;
+}
+vec3 webLight(vec2 q, float px, bool gals) {
+    vec2 e1;
+    float d1 = webDens(q, e1);
+    vec2 P = webP(q) + gWebO;
+    vec2 e2 = vweb(rot(1.1) * P * 3.3 + 5.1);
+    vec2 e3 = vweb(rot(2.3) * P * 10.7 + 1.7);
+    float near = exp(-e1.x / 0.2);
+    float f1 = exp(-e1.x / 0.045), f2 = exp(-e2.x / 0.05) * (0.04 + 0.96 * near);
+    float f3 = exp(-e3.x / 0.06) * (0.02 + 0.98 * near) * lod(0.06 / (WS * 10.7), px);
+    float clump = 0.25 + 1.2 * sq(mix(0.5, vnoise(q * 16.0 + 4.0), lod(1.0 / 16.0, px))) + 0.6 * mix(0.5, vnoise(q * 47.0), lod(1.0 / 47.0, px));
+    vec3 fc = mix(uCool, vec3(0.42, 0.28, 1.0), 0.4);
+    vec3 nc = mix(uWarm, uLight, 0.45);
+    // (the glow thins as the zoom resolves it into galaxies: the sky between them stays dark)
+    float kd = smoothstep(4e-5, 2e-3, px);
+    vec3 col = fc * (0.2 * f1 + 0.1 * f2 + 0.06 * f3 + 0.012 * near) * clump * kd;
+    col += mix(nc, fc, 0.3) * (0.3 * exp(-e1.y / 0.06) * clump + 0.18 * exp(-dot(q, q) / 0.0012)) * kd;
+    if (gals) {
+        // the galaxies, gathered along the filaments and at the nodes (none right at the focus: ours is there)
+        for (int L = 0; L < 2; L++) {
+            float C = L == 0 ? 0.055 : 0.016, fl = float(L);
+            vec2 b0 = floor(q / C - 0.5);
+            for (int j = 0; j < 4; j++) {
+                vec2 id = b0 + vec2(float(j & 1), float(j >> 1));
+                vec2 c = (id + 0.25 + 0.5 * hash2(id + 41.0 + fl * 17.0)) * C;
+                if (length(c) < (L == 0 ? 0.085 : 0.06)) continue;
+                vec2 ec;
+                float dc = webDens(c, ec);
+                if (hash(id + 7.0 + fl * 3.0) > dc * (L == 0 ? 0.3 : 0.45)) continue;
+                float s = hash(id + 13.0 + fl * 5.0);
+                float R = C * (L == 0 ? mix(0.1, 0.5, s * s * s) : mix(0.1, 0.38, s * s));
+                col += miniGalaxy(q - c, R, px, s) * (L == 0 ? 1.0 : 0.7);
+            }
+        }
+    }
+    return col;
+}
+
+// ---- a galaxy: the one we dive into, a spiral seen a little tilted, the focus in one of its arms
+const vec2 GC = vec2(0.30, 0.19);
+const float GR = 0.55, GTILT = 0.74, GPA = 0.5;
+const vec2 NEB = vec2(-0.011, -0.031);  // a nebula by the focus (seen whole at the star's stage)
+vec2 galD(vec2 q) { vec2 d = rot(GPA) * (q - GC); d.y /= GTILT; return d / GR; }
+float galPhase(vec2 d) { return 2.0 * (atan(d.y, d.x) - 3.0 * log(max(length(d), 1e-3))); }
+vec3 heroGalaxy(vec2 q, float px) {
+    vec2 d = galD(q);
+    float pw = px / (GR * GTILT);
+    float r = length(d);
+    float psi = galPhase(d) - galPhase(galD(vec2(0.0)));     // (an arm's crest runs through the focus)
+    float arm = sq(0.5 + 0.5 * cos(psi));
+    arm = mix(0.4, arm, smoothstep(0.06, 0.2, r));
+    float clump = 0.5 + mix(0.5, fbm(d * 7.0 + 3.0), lod(0.14, pw)) + 0.4 * mix(0.5, vnoise(d * 30.0), lod(0.035, pw));
+    float disk = exp(-r / 0.3) * (1.0 - smoothstep(0.8, 1.35, r));
+    float dl = pow(0.5 + 0.5 * cos(psi + 0.75), 6.0) * smoothstep(0.1, 0.3, r) * (1.0 - smoothstep(0.85, 1.15, r));
+    dl *= 0.4 + mix(0.5, fbm(d * 13.0 - 2.0), lod(0.08, pw)) * 1.2;
+    float absorb = exp(-dl * 2.4);
+    // (its diffuse light thins as the zoom resolves it into stars: the sky between them stays dark)
+    float kd = mix(0.04, 1.0, smoothstep(3e-4, 3e-3, px));
+    vec3 col = (mix(uWarm2, uLight, 0.5) * disk * 0.3 + mix(uCool, uLight, 0.3) * disk * arm * clump * 1.3) * absorb * kd;
+    col += vec3(0.25, 0.1, 0.03) * dl * disk * 0.15;                                   // the dust's warm rim
+    // the bulge, golden
+    float r2 = dot(d, d);
+    col += mix(uWarm2, uLight, 0.62) * (2.4 * blob(r2, 0.1, pw) + 1.6 * blob(r2, 0.035, pw)) * (1.0 + 0.06 * uTide * uTideAmp);
+    // rose knots of star birth along the arms, wisps in them once they are big
+    {
+        float C = 0.07;
+        vec2 b0 = floor(d / C - 0.5);
+        for (int j = 0; j < 4; j++) {
+            vec2 id = b0 + vec2(float(j & 1), float(j >> 1));
+            vec2 c = (id + 0.25 + 0.5 * hash2(id + 71.0)) * C;
+            float rc = length(c);
+            if (rc < 0.15 || rc > 1.0 || hash(id + 3.0) > 0.4) continue;
+            if (sq(0.5 + 0.5 * cos(galPhase(c) - galPhase(galD(vec2(0.0))))) < 0.45) continue;
+            float R = C * mix(0.08, 0.3, sq(hash(id + 5.0)));
+            vec2 dd = d - c;
+            float k = blob(dot(dd, dd), R, pw) * sq(0.3 + 1.2 * mix(0.5, fbm(dd / R * 2.0 + id), lod(R * 0.5, pw)));
+            col += mix(mix(uWarm, vec3(1.0, 0.25, 0.6), 0.5), uLight, 0.15) * k * 1.6 * exp(-r / 0.5);
+        }
+    }
+    // the nebula by the focus: rose and teal veils, filaments in them as the zoom comes near
+    {
+        vec2 dn = (q - NEB) / 0.013;
+        float rn = dot(dn, dn);
+        if (rn < 9.0) {
+            float pn = px / 0.013;
+            float w1 = mix(0.5, fbm(dn * 1.6 + 2.0), lod(0.6, pn)), w2 = mix(0.5, fbm(rot(1.3) * dn * 3.4 - 4.0), lod(0.3, pn));
+            float fil = mix(0.0, 1.0 - abs(2.0 * fbm(dn * 2.4 + 9.0) - 1.0), lod(0.4, pn));
+            float env = exp(-rn / 1.6);
+            vec3 rose = mix(uWarm, vec3(1.0, 0.2, 0.55), 0.55), teal = mix(uCool, vec3(0.2, 1.0, 0.8), 0.45);
+            col += rose * env * (0.25 + 1.1 * w1 * w1 + 0.9 * pow(fil, 6.0)) * 0.9;
+            col += teal * exp(-rn / 0.7) * (0.15 + 0.9 * w2 * w2) * 0.5;
+            col *= 1.0 - 0.6 * env * smoothstep(0.55, 0.75, w2) * lod(0.3, pn);                // dark globules
+        }
+    }
+    // its stars, as many as its light
+    col += starfield(q, px, 0.03, sat(disk * (0.6 + 2.6 * arm) * 0.9 + 0.01), 3.0) * 0.9;
+    return col;
+}
+
+// ---- a star: the sun, its planets' orbits (the one we dive into crossing the focus)
+const vec2 SUN = vec2(0.26, 0.56);
+vec4 starSystem(vec2 q, float px) {
+    vec2 d = q - SUN;
+    float r = length(d), th = atan(d.y, d.x);
+    const float SR = 0.042;
+    vec3 sc = mix(uLight, vec3(1.0, 0.78, 0.45), 0.45);
+    float br = 1.0 + 0.1 * uTide * uTideAmp;
+    float o = max(r - SR, 0.0);
+    vec3 col = sc * (1.1 * exp(-o / (0.01 * br)) + 0.4 * exp(-o / (0.05 * br)) + 0.06 * exp(-r / 0.6));
+    col += sc * 0.3 * exp(-o / 0.06) * pow(0.5 + 0.5 * cos(th * 5.0 + 0.7 * sin(th * 3.0 + gT * 0.03)), 6.0);
+    float a = 0.0;
+    float disc = fillA(r - SR, px);
+    if (disc > 0.0) {
+        float mu = sqrt(max(0.0, 1.0 - sq(r / SR)));
+        float gran = 0.85 + 0.3 * mix(0.5, vnoise(d / SR * 26.0 + gT * 0.02), lod(SR / 26.0, px));
+        col = mix(col, sc * 5.0 * (0.35 + 0.65 * mu) * gran, disc);
+        a = disc;
+    }
+    // the orbits: fine threads of light; the planets on them, lit from the sun
+    float lw = max(px, 0.0011);
+    for (int i = 0; i < 5; i++) {
+        float Ro = i == 0 ? 0.17 : i == 1 ? 0.33 : i == 2 ? length(SUN) : i == 3 ? 1.02 : 1.5;
+        float fade = i == 2 ? smoothstep(0.02, 0.2, length(q)) : 1.0;
+        col += mix(uCool, uLight, 0.45) * 0.2 * lineA(r - Ro, 0.0, lw) * fade * (1.0 - a);
+        if (i == 2) continue;
+        float pa = hash1(float(i) * 3.7 + 1.0) * TAU + gT * 0.004 / Ro;
+        vec2 pc = SUN + Ro * vec2(cos(pa), sin(pa));
+        float pr = i == 3 ? 0.024 : i == 4 ? 0.015 : i == 1 ? 0.011 : 0.007;
+        vec2 pd = (q - pc) / pr;
+        float rr = length(pd);
+        if (rr > 2.6) continue;
+        vec2 ls = normalize(SUN - pc);
+        vec3 pcol = i == 0 ? mix(uWarm2, uSand, 0.4) : i == 1 ? mix(uWarm, uSand, 0.3) * 1.2 : i == 4 ? mix(uCool, uLight, 0.4) : mix(uWarm2, uSand, 0.5) * 1.2;
+        if (i == 3) pcol *= 0.75 + 0.35 * sin(pd.y * 9.0 + 1.5 * sin(pd.x * 3.0));     // the giant's bands
+        float pdisc = fillA(rr - 1.0, px / pr);
+        float lit = sat(dot(pd, ls) * 0.9 + 0.35) * (0.4 + 0.6 * sqrt(max(0.0, 1.0 - rr * rr)));
+        // the giant's rings, behind it and in front
+        if (i == 3) {
+            vec2 rd = rot(0.4) * pd;
+            float re = length(rd * vec2(1.0, 3.2));
+            float ring = smoothstep(1.4, 1.5, re) * (1.0 - smoothstep(2.2, 2.35, re)) * (0.6 + 0.4 * sin(re * 30.0));
+            float front = step(0.0, rd.y) + (1.0 - step(0.0, rd.y)) * (1.0 - pdisc);
+            col += mix(uSand, uLight, 0.5) * ring * 0.5 * front;
+        }
+        col = mix(col, pcol * lit * 1.6, pdisc);
+        a = max(a, pdisc);
+    }
+    return vec4(col, a);
+}
+
+// ---- the planet: oceans, continents, coasts, clouds; the same surface from orbit down to its shore
+const float PR = 0.4;                         // its radius in its stage's units
+const vec2 MOON = vec2(-0.2, 0.62);
+const float MR = 0.055;
+const float LIFT = 0.007;                     // the focus stands this high on the rocks, by the sea
+vec3 sunL() { vec2 s = normalize(rot(-REL) * SUN); return normalize(vec3(s * 0.8, 0.6)); }
+vec3 noised(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+    float a = hash(i), b = hash(i + vec2(1, 0)), c = hash(i + vec2(0, 1)), d = hash(i + vec2(1, 1));
+    float k = a - b - c + d;
+    return vec3(a + (b - a) * u.x + (c - a) * u.y + k * u.x * u.y, du * vec2(b - a + k * u.y, c - a + k * u.x));
+}
+// The land's height (sea level 0), its slope and a fine texture, along the surface g (planet units) from the focus:
+// octaves of noise, each less its value at the focus (so the coast runs through the focus at every scale), down to
+// the pixel; the focus itself stands LIFT high. The texture keeps only the octaves seen on the screen.
+vec4 earthH(vec2 g, float pg) {
+    vec4 h = vec4(LIFT, 0.0, 0.0, 0.0);
+    float a = 0.5, f = 2.2;
+    mat2 R = mat2(1.0);
+    for (int k = 0; k < 24; k++) {
+        float lpx = 1.0 / (f * pg);
+        if (lpx < 1.0) break;
+        float w = smoothstep(1.0, 3.0, lpx);
+        vec2 o = vec2(float(k) * 7.31 + 0.5, float(k) * 3.17 + 0.3);
+        vec3 n = noised(R * g * f + o);
+        n.x -= vnoise(o);
+        h.x += w * a * n.x;
+        h.yz += w * a * f * (n.yz * R);
+        h.w += w * (1.0 - smoothstep(60.0, 240.0, lpx)) * (n.x + vnoise(o) - 0.5);
+        a *= 0.5;
+        f *= 2.0;
+        R = mat2(0.8, -0.6, 0.6, 0.8) * R;
+    }
+    return h;
+}
+float cloudCover(vec2 g, float pg, float t) {
+    vec2 p = g + 0.07 * vec2(vnoise(g * 5.0 + 1.0), vnoise(g * 5.0 + 9.0));
+    float c = 0.0, a = 0.5, f = 4.0;
+    for (int k = 0; k < 11; k++) {
+        float w = smoothstep(1.0, 3.0, 1.0 / (f * pg));
+        if (w <= 0.0) { c += a; break; }      // (the rest: their mean)
+        c += a * mix(0.5, vnoise(p * f + float(k) * 5.3 + vec2(0.05, 0.02) * t), w);
+        a *= 0.5;
+        f *= 2.03;
+    }
+    float cover = smoothstep(0.52, 0.74, c + 0.06 * sin(g.y * 9.0));
+    return cover * smoothstep(0.012, 0.05, length(g)) * smoothstep(5e-6, 2e-5, pg);   // a clear sky over the coast at the focus
+}
+// the rocks of the shore, close: slate split into slabs, pink crust and weed by the water, lichen above it
+vec3 shoreRock(vec2 g, float pg, float h, float tex) {
+    vec2 id;
+    vec3 v = voronoi(g * 3000.0 + 0.4 * vec2(vnoise(g * 5000.0), vnoise(g * 5000.0 + 3.0)), 0.8, 0.0, id);
+    float k = lod(1.0 / 3000.0, pg);
+    float fis = exp(-v.y / max(0.05, pg * 3000.0 * 1.5)) * k;
+    vec3 rc = uRock * (0.62 + 0.4 * hash(id) * k + 0.25 * tex) * (1.0 - 0.5 * fis);
+    float wet = 1.0 - smoothstep(0.0005, 0.003, h);
+    rc = mix(rc, mix(uWarm, uSand, 0.5) * 0.8, smoothstep(0.55, 0.7, vnoise(g * 9000.0 + 5.0)) * wet * 0.6 * lod(1.0 / 9000.0, pg));
+    rc = mix(rc, uWeed * 0.95, smoothstep(0.55, 0.7, vnoise(g * 6000.0 - 3.0)) * wet * 0.7 * lod(1.0 / 6000.0, pg));
+    rc = mix(rc, mix(uWarm2, uRock, 0.4), smoothstep(0.62, 0.75, vnoise(g * 7000.0 + 9.0)) * smoothstep(0.004, 0.009, h) * 0.35 * lod(1.0 / 7000.0, pg));
+    return rc * mix(0.82, 0.6, wet * 0.5);
+}
+// The planet's surface at qp (its stage's units, inside its disc) seen through a pixel pp: lit by the sun, its
+// night side sparkling with cities, clouds and their shadows, the air's haze toward the limb.
+vec3 planetSurface(vec2 qp, float pp) {
+    float s = length(qp) / PR;
+    float z = sqrt(max(1.0 - s * s, 0.0));
+    vec3 n = vec3(qp / PR, z);
+    vec2 g = qp * (s < 1e-3 ? 1.0 + s * s / 6.0 : asin(min(s, 1.0)) / s);   // along the surface from the focus
+    float pg = pp / max(z, 0.12);
+    float t = uEarthT;
+    vec3 L = sunL();
+    float day = dot(n, L);
+    vec4 H = earthH(g, pg);
+    float h = H.x, tex = H.w;
+    vec3 nt = normalize(n - vec3(H.yz * (h > 0.0 ? 0.22 : 0.0), 0.0));
+    vec3 sunC = uLight * 1.25;
+    vec3 col;
+    // the rocks or the sand of the coast (the focus is on rocks)
+    float rk = mix(0.5, vnoise(g * 260.0), lod(1.0 / 260.0, pg)) * 0.6 + mix(0.5, vnoise(g * 1100.0 + 4.0), lod(1.0 / 1100.0, pg)) * 0.4;
+    rk = max(smoothstep(0.48, 0.58, rk), smoothstep(0.03, 0.012, length(g)));
+    if (h > 0.0) {
+        float m = fbm(g * 2.6 + 17.0);
+        float lat = abs(g.y) / (PR * 1.5708);
+        vec3 lush = mix(uWeed, vec3(0.05, 0.32, 0.04), 0.55) * 1.2, dry = mix(uWarm2, uSand, 0.35) * 1.05;
+        float wetness = m + 0.12 * tex + 0.3 * exp(-dot(g, g) / 0.0025);   // (green by the coast at the focus)
+        vec3 land = mix(dry, lush, smoothstep(0.4, 0.56, wetness));
+        land = mix(land, lush * 0.5, smoothstep(0.56, 0.72, wetness) * 0.75);                    // forests
+        land = mix(land, mix(uRock, uWarm2, 0.3) * 1.15, smoothstep(0.2, 0.36, h + 0.05 * tex));   // mountains
+        land = mix(land, vec3(0.86, 0.91, 1.0), smoothstep(0.4, 0.5, h + 0.06 * tex));            // their snow
+        land = mix(land, vec3(0.86, 0.92, 1.0), smoothstep(0.72, 0.8, lat + 0.08 * tex));        // the ice caps
+        land *= 0.82 + 0.4 * tex;
+        // the coast: a band of sand or rock above the water, wet by it
+        vec3 sand = uSand * 1.1 * (0.9 + 0.25 * tex);
+        vec3 coast = mix(sand, shoreRock(g, pg, h, tex), rk);
+        coast = mix(coast, coast * 0.6 + uWater * 0.08, (1.0 - smoothstep(0.0, 0.0005, h)) * (1.0 - rk * 0.5));
+        // (a broad shelf of rock round the focus, elsewhere a thin rocky coast or a beach)
+        float shelf = rk * smoothstep(0.014, 0.005, length(g));
+        land = mix(land, coast, 1.0 - smoothstep(mix(mix(0.0018, 0.004, rk), 0.022, shelf), mix(mix(0.003, 0.007, rk), 0.034, shelf), h));
+        float lam = max(dot(nt, L), 0.0);
+        col = land * sunC * (0.05 + 1.3 * lam);
+        // tide pools in the rocks (not the one at the focus: it is drawn whole by the shore)
+        if (rk > 0.5 && h < 0.012) {
+            vec2 id;
+            vec2 gw = g * 1600.0 + 0.2 * vec2(vnoise(g * 4000.0), vnoise(g * 4000.0 + 7.0));
+            vec3 v = voronoi(gw, 0.7, 0.0, id);
+            if (hash(id + 17.0) < 0.14 && length(g) > 0.0012) {
+                float pw = pg * 1600.0;
+                float pd = v.x - 0.13 - 0.1 * hash(id) + 0.05 * (vnoise(gw * 4.0) - 0.5);
+                float pool = fillA(pd, pw * 1.5) * lod(1.0 / 1600.0, pg);
+                vec3 bed = mix(uSand, uRock * 1.4, 0.35 + 0.3 * vnoise(gw * 6.0)) * (0.6 + 0.8 * caustic(gw * 5.0, t * 30.0, pw * 5.0));
+                vec3 pc = waterOver(bed, 0.06 + 0.35 * smoothstep(0.0, -0.15, pd)) * sunC;
+                pc = mix(pc, mix(uLight, uShallow, 0.5) * sunC * 0.8, lineA(pd + 0.015, 0.012, pw * 1.5) * 0.4);
+                col *= 1.0 - 0.35 * fillA(pd - 0.06, pw * 2.0 + 0.03) * lod(1.0 / 1600.0, pg) * (rk - 0.5) * 2.0;   // wet rock round it
+                col = mix(col, pc, pool * (rk - 0.5) * 2.0);
+            }
+        }
+    } else {
+        float dep = -h;
+        vec3 oDeep = mix(uDeep, vec3(0.0, 0.01, 0.07), 0.5), oMid = mix(uWater, vec3(0.0, 0.07, 0.3), 0.5) * 0.7;
+        vec3 oShelf = mix(uWater, uShallow, 0.5) * 1.25;
+        vec3 sea = mix(oMid, oDeep, smoothstep(0.03, 0.25, dep));
+        sea = mix(sea, oShelf, exp(-dep / 0.012));
+        // the bed seen through the shallows
+        sea = mix(sea, mix(uSand * 0.95, uRock * 0.9, rk) * (0.75 + 0.4 * tex), exp(-dep / 0.0015) * 0.5);
+        // the swell's texture, and the surf: lines of foam along the coast, rolling in, a lace on the sand
+        sea *= 0.92 + 0.16 * tex * (1.0 - smoothstep(0.02, 0.1, dep));
+        float sp = 0.00045;
+        float surfZ = 1.0 - smoothstep(0.0012, 0.0035, dep);
+        float ph = dep / sp * TAU + t * 110.0 + 3.0 * mix(0.5, vnoise(g * 4000.0), lod(1.0 / 4000.0, pg));
+        float k = lod(sp / 3.0, pg);
+        float brk = smoothstep(0.3, 0.6, mix(0.5, vnoise(g * 2500.0 + vec2(t * 3.0, 0.0)), lod(1.0 / 2500.0, pg)));
+        float foam = mix(0.1, pow(0.5 + 0.5 * sin(ph), 12.0) * brk, k) * surfZ * exp(-dep / 0.0012);
+        float lace = (1.0 - smoothstep(0.0, 0.00035, dep)) * mix(0.5, smoothstep(0.35, 0.65, vnoise(g * 12000.0 + vec2(0.0, t * 40.0))), lod(1.0 / 12000.0, pg));
+        foam = max(foam, lace * 0.9);
+        sea = mix(sea, vec3(0.95, 0.97, 1.0), foam * 0.85);
+        float lam = max(dot(n, L), 0.0);
+        col = sea * sunC * (0.06 + 1.25 * lam);
+        // the sun's glint on the sea
+        vec3 Hv = normalize(L + vec3(0.0, 0.0, 1.0));
+        float sp2 = max(dot(n, Hv), 0.0);
+        col += sunC * (pow(sp2, 300.0) * 2.5 + pow(sp2, 40.0) * 0.12) * (1.0 - foam);
+    }
+    // the night side: the cities' lights, along the coasts
+    float night = smoothstep(0.1, -0.12, day);
+    if (night > 0.0 && h > 0.0) {
+        vec3 lights = vec3(0.0);
+        float C = 0.012;
+        for (int k = 0; k < 4; k++) {
+            if (C / pg < 2.0) break;
+            vec2 id = floor(g / C);
+            if (hash(id + 31.0 + float(k)) > 0.55 - 0.3 * exp(-h / 0.06)) {
+                vec2 c = (id + 0.2 + 0.6 * hash2(id + float(k) * 3.0)) * C;
+                lights += exp(-dot(g - c, g - c) / sq(max(pg, C * 0.06)) * 0.8) * (0.4 + hash(id + 9.0));
+            }
+            C *= 0.5;
+        }
+        col += mix(uWarm2, vec3(1.0, 0.7, 0.3), 0.5) * lights * night * 1.4;
+    }
+    // clouds, their shadows on the ground
+    float cov = cloudCover(g, pg, t);
+    vec3 cc = vec3(0.96, 0.97, 1.0) * sunC * (0.05 + 1.25 * max(day, 0.0)) * (0.82 + 0.18 * tex);
+    col = mix(col, cc, cov * 0.92);
+    // the air: blue toward the limb, a thin haze from high up (it thins as we come down)
+    vec3 atmo = mix(uCool, vec3(0.25, 0.55, 1.0), 0.55);
+    float limb = pow(1.0 - z, 2.0);
+    col = mix(col, atmo * sunC * (0.08 + 1.1 * max(day + 0.15, 0.0)), limb * 0.7);
+    col += atmo * 0.05 * smoothstep(1e-5, 1e-3, pg) * max(day, 0.0);
+    return col;
+}
+vec4 moon(vec2 q, float px, vec3 L) {
+    vec2 d = (q - MOON) / MR;
+    float r = length(d);
+    float a = fillA(r - 1.0, px / MR);
+    if (a <= 0.0) return vec4(0.0);
+    vec3 n = vec3(d, sqrt(max(0.0, 1.0 - r * r)));
+    float pw = px / MR;
+    vec2 cid;
+    vec3 v = voronoi(d * 4.5 + 3.0, 0.9, 0.0, cid);
+    float cr = step(0.45, hash(cid + 2.0)) * lod(0.22, pw);
+    vec3 alb = vec3(0.6, 0.58, 0.55) * (0.75 + 0.35 * fbm(d * 3.0));
+    alb = mix(alb, alb * 0.55, smoothstep(0.5, 0.62, fbm(d * 1.4 + 7.0)));
+    alb *= 1.0 - 0.3 * cr * (1.0 - smoothstep(0.22, 0.3, v.x));
+    alb += 0.25 * cr * lineA(v.x - 0.3, 0.025, pw * 4.5);
+    vec3 col = alb * uLight * (0.015 + 1.3 * max(dot(n, L), 0.0));
+    return vec4(col * a, a);
+}
+
+// ---- 0. the universe: the cosmic web, galaxies strung along its filaments, a cluster at the focus
+World stageWeb(vec2 q, float px) {
+    World W;
+    vec3 col = webLight(q, px, true);
+    // (deep in the strings, the whole universe is a knot of light at the focus that opens as it comes)
+    if (gNext > 0.5) col *= exp(-dot(q, q) / sq(mix(1.0, 40.0, uTau * uTau)));
+    W.bg = spaceBg();
+    W.obj = vec4(col, 0.0);
+    W.host = 1.0;
+    return W;
+}
+// ---- 1. a galaxy among its neighbours
+World stageGalaxy(vec2 q, float px) {
+    World W;
+    W.bg = spaceBg() + (gWantBg > 0.5 ? webLight(up(q), px * 0.0625, true) : vec3(0.0));
+    W.obj = vec4(heroGalaxy(q, px), 0.0);
+    W.host = 1.0;
+    return W;
+}
+// ---- 2. a star, in an arm of the galaxy, by a nebula
+World stageStar(vec2 q, float px) {
+    World W;
+    W.bg = spaceBg();
+    if (gWantBg > 0.5) W.bg += heroGalaxy(up(q), px * 0.0625);      // (the web's glow is all resolved by now)
+    W.obj = starSystem(q, px);
+    W.host = 1.0;
+    return W;
+}
+// ---- 3. the planet, its moon
+World stagePlanet(vec2 q, float px) {
+    World W;
+    W.bg = spaceBg();
+    if (gWantBg > 0.5) W.bg += heroGalaxy(up(up(q)), px / 256.0) + starSystem(up(q), px * 0.0625).rgb;
+    vec3 L = sunL();
+    float r = length(q);
+    vec3 atmo = mix(uCool, vec3(0.25, 0.55, 1.0), 0.55);
+    vec2 l2 = normalize(L.xy);
+    vec3 col = atmo * uLight * 0.9 * exp(-max(r - PR, 0.0) / 0.014) * sat(0.1 + 0.9 * (dot(q / max(r, 1e-4), l2) * 0.6 + 0.45));
+    float a = fillA(r - PR, px);
+    if (a > 0.0) col = mix(col, planetSurface(q, px), a);
+    vec4 m = moon(q, px, L);
+    W.obj = over(m, vec4(col, a));
+    W.host = 1.0;
+    return W;
+}
+// ---- 4. the coast, from high above
+World stageCoast(vec2 q, float px) {
+    World W;
+    W.bg = gWantBg > 0.5 ? planetSurface(up(q), px * 0.0625) : vec3(0.0);
+    W.obj = vec4(0.0);
+    W.host = 1.0;
+    return W;
+}
+// ---- 5. the shore: rocks by the sea, tide pools in them, the one at the focus the very rock pool of the next stage
+World stageShore(vec2 q, float px) {
+    World W;
+    W.bg = gWantBg > 0.5 ? planetSurface(up(up(q)), px / 256.0) : vec3(0.0);
+    W.obj = vec4(0.0);
+    vec2 qd = down(q);
+    float rr = length(qd);
+    if (rr < 4.2) {
+        float t0 = gT;
+        gT = gTn;
+        World P = stagePool(qd, px * 16.0);
+        gT = t0;
+        float m = 1.0 - smoothstep(2.6, 4.2, rr);
+        W.obj = vec4(P.bg * m, m);
+    }
+    W.host = 1.0;
+    return W;
+}
+
 World stage(int s, vec2 q, float px) {
-    if (s == 0) return stagePool(q, px);
-    if (s == 1) return stageFloor(q, px);
-    if (s == 2) return stagePlankton(q, px);
-    if (s == 3) return stageDiatom(q, px);
-    if (s == 4) return stageCell(q, px);
-    if (s == 5) return stageMolecules(q, px);
-    if (s == 6) return stageAtom(q, px);
-    if (s == 7) return stageFoam(q, px);
+    if (s == 0) return stageWeb(q, px);
+    if (s == 1) return stageGalaxy(q, px);
+    if (s == 2) return stageStar(q, px);
+    if (s == 3) return stagePlanet(q, px);
+    if (s == 4) return stageCoast(q, px);
+    if (s == 5) return stageShore(q, px);
+    if (s == 6) return stagePool(q, px);
+    if (s == 7) return stageFloor(q, px);
+    if (s == 8) return stagePlankton(q, px);
+    if (s == 9) return stageDiatom(q, px);
+    if (s == 10) return stageCell(q, px);
+    if (s == 11) return stageMolecules(q, px);
+    if (s == 12) return stageAtom(q, px);
+    if (s == 13) return stageFoam(q, px);
     return stageStrings(q, px);
 }
 
@@ -918,11 +1436,15 @@ void main() {
     float blurP = 0.003 * hud;
     // the stage we are in, and the next one, its things already there, tiny; then a crossfade into it
     vec4 L0 = uLayer[0], L1 = uLayer[1];
+    gWebO = webNode() - webP(vec2(0.0));
     gT = uLayerT0;
+    gTn = uLayerT1;
     World A = stage(int(L0.x + 0.5), rot(L0.w) * p * L0.z, (uPxP + blurP) * L0.z);
     gT = uLayerT1;
+    gNext = 1.0;
+    gWantBg = uTau > 0.0 ? 1.0 : 0.0;
     World B = stage(int(L1.x + 0.5), rot(L1.w) * p * L1.z, (uPxP + blurP) * L1.z);
-    float appear = smoothstep(-3.6, -2.6, L1.y);
+    float appear = smoothstep(-4.0, -3.3, L1.y);
     vec4 nb = B.obj * appear * mix(A.host, 1.0, uTau);
     vec3 a = over(nb, over(A.obj, vec4(A.bg, 1.0))).rgb;
     vec3 bb = over(B.obj, vec4(B.bg, 1.0)).rgb;
