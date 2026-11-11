@@ -121,6 +121,9 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/terrarium.jpg"><br><b>TERRARIUM</b>: a sealed glass jar on a windowsill; every few cleared lines grow its little world (moss cushions, ferns uncurling, toadstools, a pond, a sapling, violets) while the light outside goes from day through the golden hour to dusk, when the fireflies come out; a kawaii beetle wanders the soil, the calm parts mist the glass, the drop is a summer shower with every firefly lighting at once, and clears release seeds that drift down and sprout; the blocks are pebbles<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/coralreef.jpg"><br><b>CORAL REEF</b>: a sunny reef from bare rock and white sand to a dense coral garden over one song: every cleared row bursts into bubbles and drifting seeds that plant brain corals, staghorns, sea fans, sponges and table corals behind the well, while schools of fish follow the melody; caustics pulse with the kicks, a manta glides past on the drop, slow motion turns the water deep blue; the blocks are pale sun-bleached coral<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/architect.jpg"><br><b>ARCHITECT</b>: a modern villa built over one song on an empty green field: every cleared row is a delivery, a tower crane lowering the next room, glazing or roof into place with the load swinging softly on its cables; the pool is dug, tiled and filled, the garden planted, the cranes leave, and at dusk the rooms light up and the pool glows; the drop switches the site's floodlights on; the blocks are pigmented architectural concrete with tie holes<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
