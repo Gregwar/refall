@@ -1,5 +1,7 @@
 #pragma once
 // CORAL REEF: a sunny shallow reef that grows behind the well with the cleared lines (see coralreef.cpp).
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -30,10 +32,17 @@ enum Kind { K_BRAIN, K_STAG, K_TABLE, K_FAN, K_SPONGE, K_ANEMONE, K_SOFT, K_COUN
 constexpr int TEMPLATES = 3;              // templates per kind
 Mesh buildCoral(int kind, int variant);   // unit size (about 1 m tall or wide), its base at the origin
 Mesh buildRock(int variant);              // a boulder, unit wide
-Mesh buildPalm(int variant);              // a palm tree, unit tall
-// The atoll's ring (the growth's later stages, as in shaders.hpp): its radius and the motus' height factor.
-constexpr float RING_R = 320.f;
-float motu(float a, float seed);
+// The reef's edge and its wall (the growth's later stages, as bigH in shaders.hpp): the reef flat ends at
+// wallEdge(x) (z, meters), where the wall plunges into the deep; wallZ gives the face's z at a height y.
+constexpr float WALL_Z = 260.f, WALL_TOP = -1.2f, WALL_DEPTH = 1300.f;
+inline float wallEdge(float x) {
+    return WALL_Z + 30.f * std::sin(x * 0.011f + 0.7f) + 14.f * std::sin(x * 0.031f + 2.1f) + 6.f * std::sin(x * 0.083f + 0.4f) +
+           34.f * std::pow(std::fabs(std::sin(x * 0.019f + 1.1f)), 3.f) + 16.f * std::pow(std::fabs(std::sin(x * 0.047f + 0.3f)), 3.f);
+}
+inline float wallZ(float x, float y) {
+    const float drop = std::clamp(WALL_TOP - 0.4f - y, 0.f, WALL_DEPTH * 0.97f);
+    return wallEdge(x) - std::log(1.f - drop / WALL_DEPTH) * WALL_DEPTH / 3.4f;
+}
 enum Species { F_CHROMIS, F_ANTHIAS, F_YELLOW, F_BLUE, F_IDOL, F_PARROT, F_CLOWN, F_COUNT };
 Mesh buildFish(int species);              // unit length along +x (the nose), centered
 Mesh buildManta();                        // unit half span along x, the head toward +z
@@ -65,7 +74,6 @@ public:
         vec3 reef[8];
         vec3 ink, accent, veil, rail;
         vec3 piece[7];
-        vec3 skyZ, skyH, leaf;
         float sunAz, sunEl, fog, rays, caustics, glow, night, sat;
     };
 
@@ -85,8 +93,6 @@ private:
     std::vector<Slot> slots_;
     struct Rock { vec3 p; float size, yaw, seed; int tmpl; float birth, grow; };
     std::vector<Rock> rocks_;           // boulders on the outcrops and in the sand, the bommie's as it rises
-    struct Palm { vec3 p; float size, yaw, seed, rise; };
-    std::vector<Palm> palms_;           // on the atoll's motus, once they break the surface
     float surfaceAt(float x, float z) const; // the seabed or a boulder's top
     uint64_t reefSeed_ = 0;
     bool reefDirty_ = true;
@@ -145,7 +151,7 @@ private:
     vec3 anchor_{0, 0, 0};
     vec3 P0_{9.5f, 0.f, 4.f};          // where the first polyp lives (on its pebble)
     GLsizei groundRings_ = 0;
-    float camD_ = 15.f, aboveK_ = 0.f;
+    float camD_ = 15.f;
     mat4 refVP_;                        // the reef stage's framing (where the reef's slots are laid out)
     bool toScreenRef(const vec3& w, vec2* ndc) const;
     // The camera's place at a point of the growth (t: its breathing): the eye, what it frames, its forward axis.
@@ -193,7 +199,6 @@ private:
     struct MeshGL { GLuint vao = 0, vbo = 0, ibo = 0, inst = 0; GLsizei count = 0; };
     MeshGL coral_[reef::K_COUNT][reef::TEMPLATES];
     MeshGL rockM_[reef::TEMPLATES];
-    MeshGL palmM_;
     MeshGL fishM_[reef::F_COUNT];
     MeshGL manta_;
     void upload(MeshGL& m, const reef::Mesh& mesh, int instFloats);
