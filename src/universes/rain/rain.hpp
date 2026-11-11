@@ -142,6 +142,12 @@ private:
     float flash_ = 0.f;      // the soft lightning glow
     vec2 flashPos_{0, 8};
     long flashBar_ = -1000;
+    float strikeT_ = 9.f;    // seconds since the last lightning strike (a double pulse)
+    float strikeAmp_ = 0.f;
+    long surgeBeat_ = -1000;
+    float surge_ = 0.f;      // the drop's neon surging on the beats (and flickering)
+    float neonGain_ = 1.f;
+    float sweepX_ = 0.f;     // the colored light sweeping across the wet street
     float kickIn_ = 0.f;
     float time_ = 0.f, rainT_ = 0.f;
     bool slowOn_ = false;
