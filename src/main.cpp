@@ -473,6 +473,9 @@ void App::toggleFullscreen() {
 void App::handleEvents() {
     for (const GameEvent& ev : game_.events()) {
         R_.onEvent(ev, game_);
+        // --clip: the line clears with their song time (tools/demo.py keeps the shots that show one)
+        if (ev.type == GameEvent::Clear && !opt_.clipPath.empty() && clipStart_ >= 0 && songTime_ >= clipStart_ - 2.0)
+            std::printf("[clip] clear %d at %.3f\n", ev.count, songTime_);
         if (ev.type == GameEvent::Clear && ev.count >= 4) {
             tetrisToast_ = 2.4f;
             tetrisPoints_ = ev.points;

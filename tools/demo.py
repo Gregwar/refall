@@ -11,19 +11,23 @@ The pipeline, one function each:
      analysis of it (tetris-universe --analysis: beats, downbeat, sections, drops), so cuts land on the beats the
      universes react to;
   2. plan: the config turned into a timeline (chapter ends snapped to downbeats, shot lengths cut on the grid,
-     universes no chapter names added to the "fill" chapter); --plan-only prints it, with the coverage of the
+     with "cover_all", the universes no chapter names added to the "fill" chapter); --plan-only prints it, with the coverage of the
      enabled universes (the build's registry_enabled.def, else registry.def minus CMake's default disabled list;
      weight-0 universes such as DEBUG are left out);
   3. record: every shot is the real game (--hidden --clip, autoplay at the clip's calm pace) in its universe at
      that very moment of the song, so the music-reactive visuals match the audio under them; shots run in
      parallel (-j) and are cached in WORK/clips by everything that defines them: a re-run re-records only the
-     shots that changed;
+     shots that changed. With "clear", every shot shows a line clear: the game logs its clears with their song
+     time and game seeds are tried until a take shows one inside the shot (the best of a few: near a beat, near the
+     middle, a Tetris best), the song time never moving; the report lists each shot's clear;
   4. cards: titles drawn with Pillow from the fonts shipped in the repo (a soft wipe in, a slow fade out);
-  5. assemble: frame-exact segments (the whole song uncut is the audio track: video time = song time), then a
+  5. assemble: frame by frame (the whole song uncut is the audio track: video time = song time), crossfades of
+     "crossfade" seconds centred on the cuts (each clip is recorded that much longer on both sides), then a
      two-pass x264 encode sized to --max-mb (or --crf), AAC audio; a contact sheet of the shots next to it.
 
 Game options used (added for this tool): `--analysis OUT.json` writes the song analysis and exits; ZEN_CLIP_FILL=1
-starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board). Other hooks
+starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board); with --clip
+the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
 (ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env.
 Needs a built tetris-universe (default build/tetris-universe), ffmpeg, numpy and Pillow; yt-dlp for a song not
 cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
@@ -301,7 +305,7 @@ def plan(cfg, grid, universes):
             timeline.append({"kind": "card", "chapter": ch["id"], "t0": t, "t1": card_end, **card})
             shots_at = card_end
         shots = [dict(s) for s in ch.get("shots", []) if s["u"].split(":")[0] in universes]
-        if ch.get("fill"):
+        if ch.get("fill") and cfg.get("cover_all", True):
             order = [u for u in ch.get("fill_order", []) if u in universes]
             order += [u for u in universes if u not in order]
             shots += [{"u": u} for u in order if u not in named]
@@ -353,6 +357,9 @@ def plan(cfg, grid, universes):
                                  "seed": int(s.get("seed", int(short_hash(seed, ch["id"], u)[:8], 16) | 1))})
                 if "fade_in" in s:
                     timeline[-1]["fade_in"] = grid.length(s["fade_in"], points[bounds[i]])
+                rule = s.get("clear", cfg.get("clear"))
+                if rule:
+                    timeline[-1]["clear"] = dict(rule)
         t = end
         if ch.get("outro") and timeline[-1]["kind"] == "shot":
             o = ch["outro"]
@@ -364,6 +371,11 @@ def plan(cfg, grid, universes):
                 title = dict(o["title"])
                 title["at"] = grid.anchor(title.get("at", "end - 4bars"))
                 last["title"] = title
+    # what each shot records: a little more than its span, for the crossfades centred on its cuts
+    half = float(cfg.get("crossfade", 0.0)) / 2
+    for e in timeline:
+        if e["kind"] == "shot":
+            e["c0"], e["c1"] = max(0.0, e["t0"] - half), min(grid.duration, e["t1"] + half)
     missing = [u for u in universes if u not in {e.get("u") for e in timeline}]
     return timeline, missing
 
@@ -382,7 +394,7 @@ def print_plan(timeline, grid, universes, missing):
         k += 1
     shown = [e["u"] for e in timeline if e["kind"] == "shot"]
     log(f"\ncoverage: {len(set(shown))}/{len(universes)} enabled universes in {len(shown)} shots"
-        + (f"; MISSING: {', '.join(missing)}" if missing else " (all)"))
+        + (f"; not shown: {', '.join(missing)}" if missing else " (all)"))
     log("  " + " ".join(sorted(set(shown))))
 
 
@@ -390,27 +402,19 @@ def print_plan(timeline, grid, universes, missing):
 # 3. Recording
 
 def shot_key(e, game, song, size):
+    """Everything that defines a shot but its game seed (searched for: see record_shot)."""
     return short_hash(file_key(game), file_key(song), size, e["u"], e["variant"], e["env"], e["seed"],
-                      round(e["t0"] * CLIP_FPS), round((e["t1"] - e["t0"]) * CLIP_FPS))
+                      round(e["c0"] * CLIP_FPS), round((e["c1"] - e["c0"]) * CLIP_FPS), e["t0"], e["t1"],
+                      e.get("clear"))
 
 
-def record_shot(e, game, song, size, clips):
-    """One shot: the game in its universe at that moment of the song (a cached clip)."""
-    key = shot_key(e, game, song, size)
-    out = os.path.join(clips, key + ".mp4")
-    e["clip"] = out
-    if os.path.exists(out):
-        if os.path.exists(out + ".log"):
-            with open(out + ".log") as f:
-                label = re.search(r"\[clip\] wrote .* \((.*)\)", f.read())
-            if label:
-                e["label"] = label.group(1)
-        return e, True, "cached"
-    start = round(e["t0"] * CLIP_FPS) / CLIP_FPS  # on the game's frame grid
-    dur = e["t1"] - e["t0"] + 0.25
+def run_clip(e, seed, game, song, size, out):
+    """Records the shot's clip [c0, c1] with this game seed; returns (ok, label, clears, log)."""
+    start = round(e["c0"] * CLIP_FPS) / CLIP_FPS  # on the game's frame grid
+    dur = e["c1"] - e["c0"] + 0.25
     spec = e["u"] + (":" + e["variant"] if e["variant"] else "")
     tmp = out + ".part.mp4"
-    cmd = [game, "--hidden", "--seed", str(e["seed"]), "--size", size, "--universe", spec, "--clip", tmp,
+    cmd = [game, "--hidden", "--seed", str(seed), "--size", size, "--universe", spec, "--clip", tmp,
            "--clip-at", f"{start:.4f}", "--clip-before", "0", "--clip-after", f"{dur:.3f}", song]
     env = dict(os.environ)
     env.update({k: str(v) for k, v in e["env"].items()})
@@ -418,26 +422,92 @@ def record_shot(e, game, song, size, clips):
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=env)
         text = r.stdout + r.stderr
     except subprocess.TimeoutExpired:
-        return e, False, "timeout"
+        return False, spec, [], "timeout"
     with open(out + ".log", "w") as f:
         f.write(" ".join(cmd) + "\n" + text)
-    if "[clip] wrote" in text and os.path.exists(tmp):
-        os.replace(tmp, out)
-        label = re.search(r"\[clip\] wrote .* \((.*)\)", text)
-        e["label"] = label.group(1) if label else spec
-        return e, True, e["label"]
-    return e, False, text[-400:]
+    if "[clip] wrote" not in text or not os.path.exists(tmp):
+        return False, spec, [], text[-400:]
+    os.replace(tmp, out)
+    label = re.search(r"\[clip\] wrote .* \((.*)\)", text)
+    clears = [(float(t), int(n)) for n, t in re.findall(r"\[clip\] clear (\d+) at ([\d.]+)", text)]
+    return True, label.group(1) if label else spec, clears, ""
 
 
-def record_all(timeline, game, song, size, work, jobs):
+def clear_score(e, clears, grid):
+    """The best line clear inside the shot (its animation on screen, away from the cuts), scored: near a beat, near
+    the middle, a Tetris best. None when the shot shows none."""
+    rule = e.get("clear") or {}
+    lo, hi = e["t0"] + rule.get("lead", 0.4), e["t1"] - rule.get("tail", 0.8)
+    best = None
+    for t, n in clears:
+        if lo <= t <= hi:
+            beat = float(np.min(np.abs(grid.beats - t)))
+            mid = abs(t - (e["t0"] + e["t1"]) / 2) / max(0.5, e["t1"] - e["t0"])
+            score = (2.0 if n >= 4 else 0.0) - beat / grid.period - 0.5 * mid
+            if best is None or score > best[0]:
+                best = (score, t, n)
+    return best
+
+
+def record_shot(e, game, song, size, clips, grid):
+    """One shot: the game in its universe at that moment of the song, a cached clip. When the shot asks for a line
+    clear ("clear" in the config), game seeds are tried until one shows a clear inside the shot (the best of the
+    first few that do); the song time never moves, so the picture stays in sync with the music."""
+    key = shot_key(e, game, song, size)
+    meta = os.path.join(clips, key + ".json")
+    if os.path.exists(meta):
+        with open(meta) as f:
+            cached = json.load(f)
+        if os.path.exists(cached["clip"]):
+            e.update(cached)
+            return e, True, "cached"
+    rule = e.get("clear")
+    tries = int(rule.get("tries", 10)) if rule else 1
+    keep = int(rule.get("pick_of", 3)) if rule else 1
+    found, msg, last = [], "", None
+    for k in range(tries):
+        seed = e["seed"] + 7919 * k
+        out = os.path.join(clips, f"{key}-{seed}.mp4")
+        ok, label, clears, msg = run_clip(e, seed, game, song, size, out)
+        if not ok:
+            continue
+        sc = clear_score(e, clears, grid) if rule else (0.0, None, 0)
+        if sc is not None:
+            found.append((sc, seed, out, label, clears))
+            if len(found) >= keep:
+                break
+        else:
+            if last and os.path.exists(last[2]):
+                os.remove(last[2])
+            last = ((-99.0, None, 0), seed, out, label, clears)
+    if not found and last:  # no take showed a clear: keep the last one, reported
+        found.append(last)
+    elif last and os.path.exists(last[2]):
+        os.remove(last[2])
+    if not found:
+        return e, False, msg
+    found.sort(key=lambda f: -f[0][0])
+    sc, seed, out, label, clears = found[0]
+    for f in found[1:]:
+        if os.path.exists(f[2]):
+            os.remove(f[2])
+    result = {"clip": out, "label": label, "game_seed": seed, "clear_at": sc[1], "clear_lines": sc[2],
+              "clears": clears}
+    with open(meta, "w") as f:
+        json.dump(result, f)
+    e.update(result)
+    return e, True, label
+
+
+def record_all(timeline, game, song, size, work, jobs, grid):
     clips = os.path.join(work, "clips")
     os.makedirs(clips, exist_ok=True)
     shots = [e for e in timeline if e["kind"] == "shot"]
-    todo = [e for e in shots if not os.path.exists(os.path.join(clips, shot_key(e, game, song, size) + ".mp4"))]
+    todo = [e for e in shots if not os.path.exists(os.path.join(clips, shot_key(e, game, song, size) + ".json"))]
     log(f"recording {len(todo)} of {len(shots)} shots ({len(shots) - len(todo)} cached), {jobs} at a time")
     failed = []
     with concurrent.futures.ThreadPoolExecutor(jobs) as ex:
-        for k, (e, ok, msg) in enumerate(ex.map(lambda s: record_shot(s, game, song, size, clips), shots)):
+        for k, (e, ok, msg) in enumerate(ex.map(lambda s: record_shot(s, game, song, size, clips, grid), shots)):
             if not ok:
                 failed.append(e)
                 log(f"  FAILED {e['u']} at {e['t0']:.2f}: {msg}")
@@ -445,6 +515,13 @@ def record_all(timeline, game, song, size, work, jobs):
                 log(f"  [{k + 1}/{len(shots)}] {e['u']:<12} {e['t0']:7.2f} s  {msg}")
     if failed:
         sys.exit(f"{len(failed)} shots failed (logs in {clips})")
+    log(f"\n{'shot':<34} {'start':>7} {'end':>7}  line clear shown")
+    for e in shots:
+        c = e.get("clear_at")
+        what = (f"{c:7.2f} s ({e['clear_lines']} line{'s' if e['clear_lines'] > 1 else ''}"
+                f"{', a Tetris' if e['clear_lines'] >= 4 else ''})" if c is not None
+                else ("NONE (no take showed one)" if e.get("clear") else "-"))
+        log(f"{(e.get('label') or e['u'])[:34]:<34} {e['t0']:7.2f} {e['t1']:7.2f}  {what}")
 
 
 # ---------------------------------------------------------------------------------------------------------------
@@ -546,25 +623,39 @@ def make_card(spec, cfg, width, height):
 # ---------------------------------------------------------------------------------------------------------------
 # 5. Assembly
 
-def read_frames(clip, first, step, n, width, height):
-    """n frames of a clip at 60 fps: indices first, first + step, ..."""
-    vf = f"select='gte(n\\,{first})*not(mod(n-{first}\\,{step}))',scale={width}:{height}"
-    p = subprocess.Popen(["ffmpeg", "-v", "error", "-i", clip, "-vf", vf, "-vsync", "0", "-f", "rawvideo",
-                          "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
-    size = width * height * 3
-    last = None
-    for _ in range(n):
-        buf = p.stdout.read(size)
-        if len(buf) < size:
-            buf = last if last is not None else bytes(size)  # a clip a frame short: hold its last frame
-        last = buf
-        yield buf
-    p.stdout.close()
-    p.kill()
-    p.wait()
+class ClipReader:
+    """A shot's clip, read forward: the frame shown at song time t (the clip starts at the shot's c0, 60 fps)."""
+
+    def __init__(self, e, width, height):
+        self.start = round(e["c0"] * CLIP_FPS) / CLIP_FPS
+        self.size = width * height * 3
+        self.p = subprocess.Popen(["ffmpeg", "-v", "error", "-i", e["clip"], "-vf", f"scale={width}:{height}",
+                                   "-vsync", "0", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], stdout=subprocess.PIPE)
+        self.index, self.buf = -1, bytes(self.size)
+
+    def get(self, t):
+        want = max(0, int(round((t - self.start) * CLIP_FPS)))
+        while self.index < want:
+            buf = self.p.stdout.read(self.size)
+            if len(buf) < self.size:  # a clip a frame short: hold its last frame
+                self.index = want
+                break
+            self.buf, self.index = buf, self.index + 1
+        return self.buf
+
+    def close(self):
+        self.p.stdout.close()
+        self.p.kill()
+        self.p.wait()
+
+
+def as_float(buf, width, height):
+    return np.frombuffer(buf, np.uint8).reshape(height, width, 3).astype(np.float32) / 255.0
 
 
 def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, crf):
+    """Frame by frame over the whole song: cards, shots, the crossfades centred on the cuts between two shots, the
+    fade in of a shot from black, the end title and the final fade out; then the final encode."""
     duration = grid.duration
     total = int(round(duration * fps))
     inter = os.path.join(work, "assembled.mkv")
@@ -572,53 +663,62 @@ def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, c
                             "-r", str(fps), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "8",
                             "-pix_fmt", "yuv444p", inter], stdin=subprocess.PIPE)
     black = np.zeros((height, width, 3), np.float32)
-    cards = {}
-    step = CLIP_FPS // fps if CLIP_FPS % fps == 0 else None
-    if step is None:
-        sys.exit("--fps must divide 60 (30 or 60)")
-    written = 0
-    for e in timeline:
-        f0, f1 = int(round(e["t0"] * fps)), int(round(e["t1"] * fps))
-        f1 = min(f1, total)
-        if f1 <= f0:
-            continue
-        if f0 != written:
-            sys.exit(f"timeline gap at frame {written} ({e})")
+    half = float(cfg.get("crossfade", 0.0)) / 2
+    readers, cards, titles = {}, {}, {}
+
+    def shot_frame(i, t):
+        if i not in readers:
+            readers[i] = ClipReader(timeline[i], width, height)
+        return readers[i].get(t)
+
+    def is_shot(i):
+        return 0 <= i < len(timeline) and timeline[i]["kind"] == "shot"
+
+    i = 0
+    for j in range(total):
+        t = j / fps
+        while i + 1 < len(timeline) and t >= timeline[i + 1]["t0"]:
+            i += 1
+        for k in [k for k in readers if k < i - 1]:  # done with them
+            readers.pop(k).close()
+        e = timeline[i]
         if e["kind"] == "card":
-            card = make_card(e, cfg, width, height)
-            t_in = e["t0"] + 0.15 if e.get("style") == "title" else e["t0"] + 0.1
-            if e.get("style") == "title" and e["t0"] < 0.5:
-                t_in = e["t0"] + 0.6
-            t_out = e["t1"] - 0.12
-            for f in range(f0, f1):
-                fr = black.copy()
-                card.draw(fr, f / fps, t_in, t_out, wipe=1.8 if e.get("style") == "title" else 0.8,
-                          fade=1.0 if e.get("style") == "title" else 0.5)
-                enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
-        else:
-            start = round(e["t0"] * CLIP_FPS) / CLIP_FPS
-            first = max(0, int(round((f0 / fps - start) * CLIP_FPS)))
-            title = make_card(e["title"], cfg, width, height) if e.get("title") else None
-            fade_from = grid.duration - e["fade_out"] if e.get("fade_out") else None
-            for k, buf in enumerate(read_frames(e["clip"], first, step, f1 - f0, width, height)):
-                t = (f0 + k) / fps
-                fade_in = e.get("fade_in", 0)
-                if title is None and fade_from is None and t >= e["t0"] + fade_in:
-                    enc.stdin.write(buf)
-                    continue
-                fr = np.frombuffer(buf, np.uint8).reshape(height, width, 3).astype(np.float32) / 255.0
-                if t < e["t0"] + fade_in:
-                    fr *= smooth(e["t0"], e["t0"] + fade_in, t)
-                if fade_from is not None and t > fade_from:
-                    x = min(1.0, (t - fade_from) / (grid.duration - 0.3 - fade_from))
-                    fr *= (1 - x) ** 1.6
-                if title is not None:
-                    title.draw(fr, t, e["title"]["at"], grid.duration - 0.6, wipe=1.8, fade=2.5)
-                enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
-        written = f1
-        log(f"  {written / fps:7.2f} s  {e.get('text') or e.get('label') or e['u']}")
-    for _ in range(written, total):
-        enc.stdin.write((black * 255).astype(np.uint8).tobytes())
+            if i not in cards:
+                cards[i] = make_card(e, cfg, width, height)
+            title = e.get("style") == "title"
+            t_in = e["t0"] + (0.6 if title and e["t0"] < 0.5 else 0.15 if title else 0.1)
+            fr = black.copy()
+            cards[i].draw(fr, t, t_in, e["t1"] - 0.12, wipe=1.8 if title else 0.8, fade=1.0 if title else 0.5)
+            enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
+            continue
+        buf = shot_frame(i, t)
+        mix = None  # (other shot, weight of this one)
+        if half > 0 and is_shot(i + 1) and t >= e["t1"] - half:
+            mix = (i + 1, 1 - smooth(e["t1"] - half, e["t1"] + half, t))
+        elif half > 0 and is_shot(i - 1) and t < e["t0"] + half:
+            mix = (i - 1, smooth(e["t0"] - half, e["t0"] + half, t))
+        fade_in = e.get("fade_in", 0)
+        fade_from = duration - e["fade_out"] if e.get("fade_out") else None
+        if mix is None and not e.get("title") and (fade_from is None or t <= fade_from) and t >= e["t0"] + fade_in:
+            enc.stdin.write(buf)
+            continue
+        fr = as_float(buf, width, height)
+        if mix is not None:
+            fr = fr * mix[1] + as_float(shot_frame(mix[0], t), width, height) * (1 - mix[1])
+        if t < e["t0"] + fade_in:
+            fr *= smooth(e["t0"], e["t0"] + fade_in, t)
+        if fade_from is not None and t > fade_from:
+            x = min(1.0, (t - fade_from) / (duration - 0.3 - fade_from))
+            fr *= (1 - x) ** 1.6
+        if e.get("title"):
+            if i not in titles:
+                titles[i] = make_card(e["title"], cfg, width, height)
+            titles[i].draw(fr, t, e["title"]["at"], duration - 0.6, wipe=1.8, fade=2.5)
+        enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
+        if j % (fps * 10) == 0:
+            log(f"  {t:7.2f} s  {e.get('label') or e['u']}")
+    for r in readers.values():
+        r.close()
     enc.stdin.close()
     enc.wait()
     encode_final(inter, song, out, duration, max_mb, crf, work)
@@ -645,7 +745,7 @@ def encode_final(inter, song, out, duration, max_mb, crf, work):
 def contact_sheet(timeline, out_png, path_video, fps):
     """A tile per shot (its middle frame from the final video), labelled with the time and universe."""
     shots = [e for e in timeline if e["kind"] in ("shot", "card")]
-    tw, th, cols = 384, 216, 8
+    tw, th, cols = 384, 216, 6
     rows = (len(shots) + cols - 1) // cols
     sheet = Image.new("RGB", (cols * tw, rows * (th + 22)), (12, 12, 14))
     font = ImageFont.truetype(os.path.join(ROOT, "src", "embed", "TenorSans-Regular.ttf"), 14)
@@ -653,6 +753,8 @@ def contact_sheet(timeline, out_png, path_video, fps):
     with tempfile.TemporaryDirectory() as tmp:
         for k, e in enumerate(shots):
             mid = (e["t0"] + e["t1"]) / 2 if e["kind"] == "shot" else e["t0"] + 0.75 * (e["t1"] - e["t0"])
+            if e.get("clear_at") is not None:  # the line clear being made
+                mid = e["clear_at"] + 0.1
             png = os.path.join(tmp, f"{k}.png")
             subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{mid:.3f}", "-i", path_video, "-frames:v", "1",
                             "-vf", f"scale={tw}:{th}", png], check=True)
@@ -660,7 +762,8 @@ def contact_sheet(timeline, out_png, path_video, fps):
             if os.path.exists(png):
                 sheet.paste(Image.open(png), (x, y))
             name = e.get("label") or e.get("u") or e["text"]
-            d.text((x + 6, y + th + 3), f"{e['t0']:6.2f}  {name}", font=font, fill=(220, 215, 205))
+            clear = f"  (clear {e['clear_at']:.2f})" if e.get("clear_at") is not None else ""
+            d.text((x + 6, y + th + 3), f"{e['t0']:6.2f}  {name}{clear}", font=font, fill=(220, 215, 205))
     sheet.save(out_png)
     log(f"wrote {out_png}")
 
@@ -710,9 +813,9 @@ def main():
         return
     if args.only:
         keep = set(args.only.split(","))
-        record_all([e for e in timeline if e.get("u") in keep], game, song, f"{width}x{height}", work, args.jobs)
+        record_all([e for e in timeline if e.get("u") in keep], game, song, f"{width}x{height}", work, args.jobs, grid)
         return
-    record_all(timeline, game, song, f"{width}x{height}", work, args.jobs)
+    record_all(timeline, game, song, f"{width}x{height}", work, args.jobs, grid)
     out = os.path.abspath(args.out)
     assemble(timeline, cfg, grid, song, out, width, height, fps, work, cfg.get("max_mb", 29.5), args.crf)
     contact_sheet(timeline, args.sheet or os.path.splitext(out)[0] + "-sheet.png", out, fps)
