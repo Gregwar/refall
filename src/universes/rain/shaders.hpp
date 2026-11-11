@@ -250,21 +250,19 @@ void main() {
 }
 )";
 
-// Umbrella canopies seen from above, one per cell: eight panels of wet nylon stretched between the ribs, in two
-// tones of the piece's color, scalloped between the rib tips (the tips on the diagonals reach into the cell's
-// corners, so the canopy fills its cell: one bold silhouette), domed and lit from the upper left, the ribs' seams,
-// a darker hem, the metal ferrule at the center, a wet specular sheen catching the street's neon, and big beads of
-// water sliding out along the panels (with the cell's wetness). The previews are dry and plain.
+// Wet glazed ceramic tiles: one rounded tile per cell, a deep glaze in the piece's color, the light pooling at
+// the rim, the street's neon caught in a soft sheen, a film of water along the top edge, beads of water and a
+// rivulet sliding down the face (both with the tile's wetness).
 inline const char* TILE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aGeom;   // center x, y (pixels), half size x, y (pixels)
-layout(location = 2) in vec4 aCol;    // sRGB, alpha
-layout(location = 3) in vec4 aP;      // seed, wetness, plain (preview: dry), angle (radians, counterclockwise on screen)
+layout(location = 2) in vec4 aCol;    // sRGB glaze, alpha
+layout(location = 3) in vec4 aP;      // seed, wetness, plain (preview: no water), angle (radians, counterclockwise)
 uniform vec2 uRes;
 out vec2 vPix;
 flat out vec4 vGeom, vCol, vP;
 void main() {
-    vec2 p = aGeom.xy + aCorner * (max(aGeom.z, aGeom.w) * 1.3 + 1.5);
+    vec2 p = aGeom.xy + aCorner * (max(aGeom.z, aGeom.w) * 1.42 + 1.0);
     vPix = p;
     vGeom = aGeom; vCol = aCol; vP = aP;
     gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
@@ -275,77 +273,59 @@ in vec2 vPix;
 flat in vec4 vGeom, vCol, vP;
 out vec4 frag;
 uniform float uTime;
-uniform vec3 uSheen;   // the street's light caught in the wet nylon
+uniform vec3 uSheen;   // the street's light caught in the glaze
 uniform vec3 uSheen2;
 uniform float uGlow;
-const float PI = 3.14159265;
 float h(float x) { return fract(sin(x * 91.3458) * 47453.5453); }
-float tipR(float k) { return mod(k, 2.0) < 0.5 ? 0.97 : 1.2; }
 void main() {
     vec2 hs = vGeom.zw;
-    vec2 d = vPix - vGeom.xy;
-    vec2 qs = d / hs;                                   // screen frame, y down
+    vec2 d0 = vPix - vGeom.xy;
     float ca = cos(vP.w), sa = sin(vP.w);
-    // into the canopy's own frame (the angle is counterclockwise on screen: y down flips it)
-    vec2 q = vec2(ca * qs.x - sa * qs.y, sa * qs.x + ca * qs.y);
-    float r = length(q);
-    float th = atan(q.y, q.x);
-    if (th < 0.0) th += 2.0 * PI;
-    float k = floor(th / (PI * 0.25));
-    float f = th / (PI * 0.25) - k;                     // across the panel 0..1
-    float a0 = k * PI * 0.25, a1 = a0 + PI * 0.25;
-    vec2 T0 = tipR(k) * vec2(cos(a0), sin(a0)), T1 = tipR(k + 1.0) * vec2(cos(a1), sin(a1));
-    vec2 e = T1 - T0;
-    vec2 n = normalize(vec2(e.y, -e.x));
-    float s = clamp(dot(q - T0, e) / dot(e, e), 0.0, 1.0);
-    float sd = dot(q - T0, n) + 0.09 * sin(PI * s);     // the scallop between the tips
-    float cov = clamp(0.5 - sd * hs.x, 0.0, 1.0);
+    vec2 d = vec2(ca * d0.x - sa * d0.y, sa * d0.x + ca * d0.y); // into the tile's frame (a heaped tile is turned)
+    vec2 q = d / hs;                         // -1..1, y down
+    float r = 0.2 * min(hs.x, hs.y);
+    vec2 b = abs(d) - hs + r;
+    float sd = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - r;
+    float cov = clamp(0.5 - sd, 0.0, 1.0);
     if (cov <= 0.0) discard;
     vec3 base = vCol.rgb;
-    bool plain = vP.z > 0.5;
-    float wet = plain ? 0.0 : vP.y;
-    // two tones: the panels alternate the piece's color and a pale tint of it
-    vec3 c = mod(k, 2.0) < 0.5 ? base : mix(base, vec3(1.0), 0.38);
-    // the dome, lit from the upper left (in screen space), the fabric sagging between the ribs
-    vec3 nrm = normalize(vec3(qs * 0.85, sqrt(max(0.05, 1.7 - dot(qs, qs)))));
-    vec3 L = normalize(vec3(-0.45, -0.6, 0.75));
-    float dif = 0.6 + 0.5 * max(dot(nrm, L), 0.0);
-    float sag = 1.0 - 0.16 * (1.0 - sin(PI * f)) * smoothstep(0.1, 0.8, r);
-    c *= dif * sag;
-    // the rib seams, the hem, the ferrule
-    float ribD = min(f, 1.0 - f) * PI * 0.25 * r * hs.x;
-    c *= 1.0 - 0.35 * smoothstep(1.4, 0.3, ribD) * smoothstep(0.08, 0.2, r);
-    c *= 1.0 - 0.22 * smoothstep(-0.12, -0.03, sd);
-    float fer = smoothstep(0.13, 0.09, r);
-    c = mix(c, vec3(0.16, 0.16, 0.18) + 0.5 * smoothstep(0.08, 0.0, length(q + vec2(0.03, 0.03))), fer);
-    // the wet sheen: a soft highlight on the dome and the street's neon along it
-    float spec = pow(max(dot(reflect(-L, nrm), vec3(0.0, 0.0, 1.0)), 0.0), 14.0);
-    c += vec3(1.0) * spec * (plain ? 0.12 : 0.25 + 0.35 * wet);
-    float band = exp(-pow((qs.x * 0.6 - qs.y * 0.8 - 0.55) * 3.0, 2.0));
-    c += (uSheen * band * 0.18 + uSheen2 * exp(-pow((qs.x + qs.y - 0.9) * 2.5, 2.0)) * 0.1) * uGlow * (plain ? 0.4 : 1.0);
-    // big beads of water sliding out along the panels
-    if (!plain) {
-        float sd0 = vP.x;
-        for (int i = 0; i < 5; i++) {
+    float rim = smoothstep(-0.16 * hs.x, 0.0, sd);           // the glaze pooling darker at the rim
+    vec3 c = base * mix(1.1, 0.82, (q.y + 1.0) * 0.5);
+    c *= 1.0 - 0.32 * rim;
+    // a thin bright bevel just inside the rim, top-left
+    float bev = smoothstep(-0.14 * hs.x, -0.06 * hs.x, sd) * (1.0 - smoothstep(-0.06 * hs.x, 0.0, sd));
+    c += vec3(1.0) * bev * 0.22 * clamp(-(q.x + q.y) * 0.6 + 0.4, 0.0, 1.0);
+    // the sheen: a soft diagonal band of the street's neon
+    float band = exp(-pow((q.x * 0.55 + q.y * 0.85 + 0.45) * 2.6, 2.0));
+    float band2 = exp(-pow((q.x * 0.7 - q.y * 0.4 - 0.6) * 4.0, 2.0));
+    float wet = vP.y;
+    c += uSheen * band * (0.16 + 0.2 * wet) * uGlow + uSheen2 * band2 * 0.08 * uGlow;
+    if (vP.z < 0.5) {
+        float s = vP.x;
+        // the water film along the top edge
+        float film = smoothstep(-0.98, -0.86, q.y) * smoothstep(-0.7, -0.84, q.y) * (1.0 - smoothstep(0.75, 0.95, abs(q.x)));
+        c += vec3(1.0) * film * (0.1 + 0.3 * wet);
+        // beads of water: a darker lens with a bright point
+        for (int i = 0; i < 3; i++) {
             float fi = float(i);
-            if (h(sd0 + fi * 7.3) > 0.25 + 0.75 * wet) continue;
-            float kb = floor(h(sd0 + fi * 3.1) * 8.0);
-            float ab = (kb + 0.3 + 0.4 * h(sd0 + fi * 5.9)) * PI * 0.25;
-            float sp = 0.06 + 0.1 * h(sd0 + fi * 2.3);
-            float u = fract(uTime * sp + h(sd0 + fi * 9.7));
-            float rb = 0.25 + 0.7 * u;
-            vec2 bc = rb * vec2(cos(ab), sin(ab));
-            float br = (0.14 + 0.05 * h(sd0 + fi)) * (1.0 - 0.3 * u);
-            float l = length(q - bc);
-            float m = smoothstep(br, br - 1.2 / hs.x, l) * smoothstep(1.0, 0.85, u) * smoothstep(0.0, 0.1, u);
-            vec2 hl = bc + vec2(-0.35, -0.4) * br;      // the highlight toward the light (screen frame is close enough)
-            vec3 bead = c * 0.7 + vec3(1.0) * 0.85 * smoothstep(br * 0.45, br * 0.1, length(q - hl));
-            bead += mix(base, vec3(1.0), 0.5) * 0.35 * smoothstep(br * 0.4, br, l);
+            vec2 bc = vec2(h(s + fi * 3.1) * 1.3 - 0.65, h(s + fi * 5.7 + 1.0) * 1.2 - 0.5);
+            float br = 0.07 + 0.06 * h(s + fi * 9.1);
+            float l = length((q - bc) / vec2(1.0, 1.15));
+            float m = smoothstep(br, br - 0.03, l) * smoothstep(0.15, 0.6, wet + 0.2 * h(s + fi));
+            vec3 bead = c * 0.78 + vec3(1.0) * 0.6 * smoothstep(br * 0.45, 0.0, length(q - bc + vec2(br * 0.35, br * 0.4)));
+            bead += base * 0.25 * smoothstep(br * 0.2, br, l) * step(0.0, q.y - bc.y);
             c = mix(c, bead, m);
         }
+        // a rivulet sliding down the face now and then
+        float rx = h(s + 17.0) * 1.2 - 0.6;
+        float sp = 0.25 + 0.25 * h(s + 23.0);
+        float head = mod(uTime * sp + h(s + 29.0) * 4.0, 4.0) - 1.2;      // -1.2..2.8 (on the face -1..1)
+        float on = step(0.45, h(s + 31.0)) * smoothstep(0.2, 0.7, wet);
+        float along = clamp((head - q.y) / 0.9, 0.0, 1.0) * step(q.y, head) * step(-0.95, q.y);
+        float line = smoothstep(0.07, 0.0, abs(q.x - rx - 0.04 * sin(q.y * 5.0 + s))) * (1.0 - along * 0.6) * step(0.0, along);
+        float tip = smoothstep(0.11, 0.0, length(vec2(q.x - rx, (q.y - head) * 0.8)));
+        c = mix(c, c * 0.8 + vec3(0.55), (line * 0.3 * float(along > 0.0 || abs(q.y - head) < 0.1) + tip * 0.6) * on);
     }
-    // a fine dark outline keeps the silhouette crisp on any ground
-    c *= 1.0 - 0.45 * smoothstep(-1.6, 0.0, sd * hs.x);
     float a = vCol.a * cov;
     frag = vec4(c * a, a);
 }

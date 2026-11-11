@@ -12,11 +12,12 @@
 // edge some of the water runs down the face as a thin drip and falls off the bottom of the face, splashing again
 // below. The rain never crosses a cell: it stops on it.
 //
-// The pieces are little umbrellas seen from above, one canopy per cell: eight wet nylon panels in two tones of the
-// piece's color, scalloped between the rib tips, domed, a metal ferrule, a wet sheen, big beads sliding out along the
-// panels (with the cell's wetness: a sheltered cell slowly dries). The previews are the same canopies, dry and plain.
+// The pieces are wet glazed ceramic tiles in pastel glazes, one tile per cell: the glaze deepens at the rim, the
+// street's neon is caught in a soft sheen, a film of water lies along the top edge, beads of water sit on the face and
+// now and then a rivulet slides down it (with the cell's wetness: a sheltered cell slowly dries). The previews are the
+// same tiles, dry and plain.
 //
-// A cleared row's umbrellas are thrown out of the well, half to each side, on a scripted arc (behind the stack and the
+// A cleared row's tiles are thrown out of the well, half to each side, on a scripted arc (behind the stack and the
 // HUD) to a release over the side bands, then become rigid boxes in a small 2D solver (sequential impulses, friction,
 // sleeping): they tumble and settle into messy heaps on the street, where the rain falls on their tilted faces and
 // slides off the lower corners. Each heap is capped (the oldest fades away). A new song washes them away; game over
@@ -78,17 +79,17 @@ struct VariantDef {
 const VariantDef VARIANTS[] = {
     {"NEON STREET", 0, 0x1a1240, 0x7a2a6e, 0x2a1d52, 0x140e2a, 0xffb35a, 0x5a3d7a, 0x120c20, 0x0b0914,
      {0xff3fa4, 0x2fe6ff, 0xb46bff, 0xffd23a}, 0.09f,
-     {0x35d8ff, 0xffd23a, 0xb066ff, 0x5fe36a, 0xff3b6b, 0x3d6dff, 0xff8c2e}},
+     {0x8ee6f5, 0xfbe58a, 0xc9a8f7, 0x9fe3a4, 0xf7a1b5, 0x93aef7, 0xf9bf8c}},
     {"FLOWER MARKET", 1, 0x1f2f66, 0xf08a5e, 0x5a3a6a, 0x2e1a2c, 0xffd08a, 0xb0607a, 0x1c1220, 0x100b12,
      {0xff4f7a, 0x3fcfa0, 0xffb33a, 0x9a7aff}, 0.06f,
-     {0x5ad1e6, 0xffd447, 0xb98cff, 0x4fcf6e, 0xff5c8a, 0x4f7dff, 0xff8f3a}},
+     {0x9fdde9, 0xfde48f, 0xd2b3fa, 0xa8e2a0, 0xf8a9c4, 0x9cb6f5, 0xfbc493}},
     {"MONSOON", 2, 0x082b3a, 0x1f7a70, 0x15504e, 0x0a2428, 0xffc06a, 0x3f8a80, 0x081a1c, 0x061012,
      {0xff6a3a, 0xffb03a, 0xff4f6a, 0xffd86a}, 0.16f,
-     {0x2fe0d0, 0xffc531, 0xe0479e, 0x45d67c, 0xff5733, 0x5b6dff, 0x9d62ff}},
+     {0x8fe8de, 0xfcdc8a, 0xeea5cb, 0xa3e5b5, 0xf9ad96, 0x9faaf6, 0xc6a9f5}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float GAP = 0.025f;        // between the canopies, each side (board units)
+constexpr float GAP = 0.07f;         // between tiles, each side (board units)
 constexpr float HORIZON = -8.2f;     // the street's far edge (as in the backdrop)
 
 std::string ascii(const std::string& s) {
@@ -911,7 +912,7 @@ void RainUniverse::drawHeaps() {
         a *= 1.f - 0.6f * textCover(b.x, b.y);  // and its corner lines
         const vec3 c = lerp(pieceColor(b.type), bInk, bk);
         if (!(b.thrown && b.t < b.delay)) a *= 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
-        tile(b.x, b.y, b.half + 0.02f, b.half + 0.02f, c, a, b.seed, b.wet, false, b.a);
+        tile(b.x, b.y, b.half + GAP, b.half + GAP, c, a, b.seed, b.wet, false, b.a);
     }
     flushTiles();
 }
@@ -1329,7 +1330,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_rain() {
     static const UniverseEntry e{
-        "RAIN", "rain everywhere over a colorful street at dusk: it pours on little wet umbrellas (the falling piece shelters the cells under it), cleared rows are thrown out and tumble into heaps on the sides, the drop is a thunderstorm",
+        "RAIN", "rain everywhere over a colorful street at dusk: it pours on wet pastel glazed tiles (the falling piece shelters the cells under it), cleared rows are thrown out and tumble into heaps on the sides, the drop is a thunderstorm",
         [] { return std::unique_ptr<Universe>(new RainUniverse()); },
         // An atmosphere for most songs, moody and mid-tempo ones best.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.brightness) + 0.1f * l.dynamics; },
