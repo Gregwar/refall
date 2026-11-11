@@ -3,9 +3,10 @@
 // turns deep blue and the horizon curves, out into orbit among the satellites, then on until the planet is a ball
 // under its roots, the moon floats by its crown and, far out, ringed planets and a galaxy.
 //
-// The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~20 lines, the
-// stratosphere at ~32, orbit at ~52, the planet a ball at ~67, the moon at ~88, the ringed planet after it from ~93,
-// the end of the journey at 100, and it keeps going (more slowly) to some two million kilometers. The tree is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
+// The growth is G = ln(the trunk's height in meters): 1.3 m at the first line, the clouds at ~10 lines, the
+// stratosphere at ~16, orbit at ~26, the planet a ball at ~33, the moon at ~44, the ringed planet after it from ~47,
+// the end of the journey at 50 (one song), and it keeps going (more slowly) to some two million kilometers. The tree
+// is parametric (tree.cpp, TREE_GLSL): the trunk's rings are placed against
 // G (thick at the foot, slender under the crown: it grows ever taller for its width), the crown is built in its own
 // space and scaled on G (the sapling's lollipop head spreads into a broad crown over the first lines as its limbs
 // are born, then it rides the trunk up), vine leaves spiral up the trunk sprouting as the tip passes. Each clear is
@@ -168,11 +169,13 @@ constexpr float CLOUD_Y = 1900.f;    // the cloud layer (meters)
 constexpr float CAM_AZ = 0.3f;       // the camera's side of the tree
 
 // The journey: lines -> the trunk's height (meters), interpolated in log space; beyond the table, slower and slower.
-// The whole journey fits in some 100 lines (two or three songs): something new every ten lines or so.
+// The whole journey fits in some 50 lines (one song): something new every five lines or so, the meadow's first
+// stages a little quicker (some 2x taller a line), then about 1.4x a line from the clouds on.
 struct Stage { float lines, height; };
 const Stage STAGES[] = {
-    {0, 1.3f}, {2, 3.f}, {6, 12.f}, {11, 60.f}, {15, 320.f}, {20, 2400.f}, {25, 6.e3f}, {32, 1.5e4f}, {39, 3.5e4f},
-    {45, 9.e4f}, {52, 3.5e5f}, {60, 1.5e6f}, {67, 6.e6f}, {74, 2.5e7f}, {83, 1.e8f}, {90, 3.6e8f}, {100, 1.5e9f},
+    {0, 1.3f}, {1.2f, 3.f}, {3.2f, 12.f}, {5.4f, 60.f}, {7.4f, 320.f}, {10, 2400.f}, {12.5f, 6.e3f}, {16, 1.5e4f},
+    {19.5f, 3.5e4f}, {22.5f, 9.e4f}, {26, 3.5e5f}, {30, 1.5e6f}, {33.5f, 6.e6f}, {37, 2.5e7f}, {41.5f, 1.e8f},
+    {45, 3.6e8f}, {50, 1.5e9f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 
@@ -1090,6 +1093,9 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         // a spurt: a critically damped spring toward the target, over a second or so
         const float w = 4.2f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
+        // capped (a line is a big step now the journey fits in one song): a Tetris in the meadow takes a breath
+        // longer instead of jolting the view
+        gVel_ = std::min(gVel_, 3.f);
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
         seedT_ += dt;
