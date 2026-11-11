@@ -35,6 +35,8 @@ inline const char* TRAIN_GLSL = R"(
 const float GY0 = -7.4, PLAT_Y = -17.4;
 const float CAR = 17.0, CGAP = 0.6;
 uniform float uTrainX, uDoor, uTrainLit, uTrainBody, uSway, uTrainT;
+uniform float uDir;       // which way the train runs: +1 its front car leads (head lamps there), -1 backing away
+uniform float uHead;      // how much its head lamps light the walls around them
 // the track: level through the station and the tunnel, then a steady grade under 5 degrees (eased at both ends) up
 // the cutting to the surface
 float trackY(float x) {
@@ -46,21 +48,92 @@ vec2 carLocal(vec2 w, float i) {
     float y0 = trackY(x0) - 0.3, y1 = trackY(x0 + CAR) - 0.3;
     return rot(-atan(y1 - y0, CAR)) * (w - vec2(x0, y0));
 }
+// a cab at an end of the train: closed sides, a slanted nose with its windscreen, a side window (the driver in the
+// leading cab), a destination sign, a route disc, head lamps (leading) or tail lamps; n: the distance outward past
+// the car's end
+float noseX(float y) {
+    float x = 1.5 - 0.6 * smoothstep(3.6, 6.9, y);
+    x -= 0.4 * (1.0 - smoothstep(0.2, 1.1, y));
+    return x;
+}
+void cab(vec2 l, float n, bool lead, inout vec3 col, inout float a) {
+    if (l.y < 0.0 || l.y > 7.6 || n < -3.2 || n > 2.6) return;
+    float fx = noseX(clamp(l.y, 0.2, 6.95));
+    float body = max(max(-3.0 - n, n - fx), max(0.2 - l.y, l.y - 6.95 - 0.2 * (1.0 - smoothstep(-0.5, 0.5, fx - n - 0.6))));
+    body = max(body, l.y - 6.95 - 0.3 * smoothstep(0.0, 1.0, -n - 0.0));
+    body = max(max(-3.0 - n, n - fx), max(0.2 - l.y, l.y - 7.0));
+    float bo = fillA(body - gPx * 1.5), ba = fillA(body);
+    vec3 bc = vec3(0.13, 0.15, 0.18) * uTrainBody * (0.85 + 0.3 * smoothstep(0.0, 7.0, l.y));
+    bc = mix(bc, vec3(0.5, 0.07, 0.07) * uTrainBody, max(fillA(abs(l.y - 1.95) - 0.12), fillA(abs(l.y - 6.75) - 0.08)));
+    // the windscreen along the slanted front, a wiper
+    float ws = max(abs(n - (noseX(clamp(l.y, 3.3, 6.3)) - 0.28)) - 0.24, abs(l.y - 4.85) - 1.35);
+    vec3 wsc = vec3(0.03, 0.05, 0.07) + vec3(0.3, 0.32, 0.36) * 0.25 * smoothstep(4.0, 6.0, l.y) + (lead ? vec3(0.06, 0.05, 0.03) : vec3(0.0));
+    bc = mix(bc, vec3(0.02), fillA(ws - 0.08));
+    bc = mix(bc, wsc, fillA(ws));
+    // the side window, the driver in it (a cap, a head, shoulders)
+    float sw = sdBox(vec2(n + 1.55, l.y - 4.4), vec2(1.05, 1.0)) - 0.15;
+    vec3 glass = vec3(0.05, 0.07, 0.09) + vec3(0.3, 0.26, 0.18) * 0.35 * uTrainLit;
+    if (lead) {
+        vec2 dq = vec2(n + 1.1, l.y - 4.0);
+        float drv = min(length(dq - vec2(0.0, 0.75)) - 0.36, sdBox(dq - vec2(0.0, -0.1), vec2(0.6, 0.45)) - 0.12);
+        drv = min(drv, sdBox(dq - vec2(0.05, 1.08), vec2(0.36, 0.08)));
+        drv = min(drv, sdBox(dq - vec2(0.38, 1.02), vec2(0.18, 0.04)));
+        glass = mix(glass, vec3(0.02, 0.02, 0.03), fillA(drv));
+    }
+    bc = mix(bc, vec3(0.02), fillA(sw - 0.12));
+    bc = mix(bc, glass, fillA(sw));
+    // the destination sign above it: amber dots on black
+    vec2 dq2 = vec2(n + 1.55, l.y - 6.0);
+    float ds = sdBox(dq2, vec2(1.05, 0.22));
+    float dots = step(0.45, fract(dq2.x * 7.0)) * step(abs(dq2.y), 0.11) * step(hash1(floor(dq2.x * 7.0) + 3.0), 0.72);
+    bc = mix(bc, vec3(0.015), fillA(ds));
+    bc += vec3(1.0, 0.55, 0.12) * dots * fillA(ds) * 1.3;
+    // the route disc near the top of the nose
+    float rd = length(vec2(n - (noseX(6.2) - 0.45), l.y - 6.25)) - 0.2;
+    bc = mix(bc, vec3(0.02), fillA(rd - 0.05));
+    bc = mix(bc, vec3(0.25, 0.95, 0.45) * 1.3, fillA(rd));
+    // the lamps, low on the nose: white ahead, red behind
+    vec2 hq = vec2(n - (noseX(1.5) - 0.2), l.y - 1.5);
+    float lamp = length(hq * vec2(1.4, 1.0)) - 0.17;
+    vec3 lc = lead ? vec3(1.0, 0.95, 0.82) * 2.6 : vec3(1.0, 0.1, 0.06) * 1.8;
+    bc = mix(bc, lc, fillA(lamp));
+    col = mix(col, vec3(0.02), bo);
+    col = mix(col, bc, ba);
+    a = max(a, bo);
+    // the lamp's glow, round it (in front of the nose too)
+    float gl = exp(-dot(hq, hq) / (lead ? 0.6 : 0.2)) * (lead ? 0.7 : 0.4);
+    col += (lead ? vec3(1.0, 0.9, 0.7) : vec3(1.0, 0.12, 0.06)) * gl;
+    a = max(a, sat(gl * 1.5));
+}
+// the head lamps' light on the walls ahead (and a little round them)
+vec3 headGlow(vec2 w) {
+    float x0 = uDir > 0.0 ? uTrainX + 2.0 * CAR + CGAP + 1.3 : uTrainX - 1.3;
+    vec2 hp = vec2(x0, trackY(x0) - 0.3 + 1.5);
+    vec2 d = w - hp;
+    float dx = d.x * sign(uDir);
+    float beam = dx > 0.0 ? exp(-dx / 11.0) * exp(-sq(d.y / (0.7 + dx * 0.32))) : 0.0;
+    float halo = exp(-dot(d, d) / 4.0);
+    return vec3(1.0, 0.92, 0.75) * (beam * 0.9 + halo * 0.25);
+}
 vec4 trainInside(vec2 w, vec3 behind) {
     vec3 col = behind;
     float a = 0.0;
     for (int ci = 0; ci < 2; ci++) {
         vec2 l = carLocal(w, float(ci));
-        if (l.x < -0.3 || l.x > CAR + 0.9 || l.y < -0.8 || l.y > 7.6) continue;
+        if (l.x < -2.8 || l.x > CAR + 2.8 || l.y < -0.8 || l.y > 7.8) continue;
         vec3 body = vec3(0.13, 0.15, 0.18) * uTrainBody;
         vec3 inside = vec3(0.16, 0.15, 0.13);
         // the gangway to the next car
         if (ci == 0) {
-            float gw = sdBox(l - vec2(CAR + CGAP * 0.5, 3.6), vec2(CGAP * 0.5 + 0.05, 3.0));
+            float gw = min(sdBox(l - vec2(CAR + CGAP * 0.5, 3.6), vec2(CGAP * 0.5 + 0.05, 3.0)), sdBox(l - vec2(CAR + CGAP * 0.5, 0.45), vec2(CGAP * 0.5 + 0.25, 0.1)));
             col = mix(col, vec3(0.03), fillA(gw));
             a = max(a, fillA(gw));
         }
-        if (l.x > CAR + 0.1) continue;
+        if ((ci == 0 && l.x > CAR + 0.1) || l.x < -0.3 || (ci == 1 && l.x > CAR + 0.1 && false)) {
+            if (ci == 0 && l.x < -0.3) cab(l, -l.x, uDir < 0.0, col, a);
+            continue;
+        }
+        if (ci == 1 && l.x > CAR + 0.1) { cab(l, l.x - CAR, uDir > 0.0, col, a); continue; }
         // wheels and bogies
         float wh = 1e3;
         for (int k = 0; k < 4; k++) {
@@ -113,6 +186,9 @@ vec4 trainInside(vec2 w, vec3 behind) {
         col = mix(col, body * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y)), sa);
         col = mix(col, vec3(0.45, 0.06, 0.06) * uTrainBody, fillA(abs(l.y - 6.75) - 0.08) * sa * step(abs(l.x - CAR * 0.5), CAR * 0.5 - 0.3));
         a = max(a, so);
+        // the cabs at the train's two ends
+        if (ci == 1) cab(l, l.x - CAR, uDir > 0.0, col, a);
+        else cab(l, -l.x, uDir < 0.0, col, a);
     }
     return vec4(col, a);
 }
@@ -1031,6 +1107,12 @@ void main() {
             water = mix(water, vec3(0.03, 0.04, 0.05), sat(wy / 2.5) * 0.5);
             c = water;
         }
+    }
+    // the head lamps light the walls and the floor ahead of the train (softly)
+    if (uHead > 0.0 && (cv > 0 || !air)) {
+        vec3 g = headGlow(w) * uHead;
+        c += c * g * 2.2 + g * 0.012;
+        if (bandA > 0.0) bandC += bandC * g * 2.2 + g * 0.012;
     }
     // the train, then the floor bands in front of it
     vec4 tr = trainInside(w, c);
