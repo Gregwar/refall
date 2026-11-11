@@ -1,32 +1,32 @@
-// MICROSCOPE: a picture-book Petri dish seen through a toy microscope, filled with cute creatures by the cleared rows.
+// MICROSCOPE: a Petri dish seen through the eyepiece of a microscope, filled with life by the cleared rows.
 //
-// One world, drawn like a children's book or a toon cartoon: the round dish of the eyepiece in a thick, glossy toy
-// rim, on the variant's table color; inside, saturated water, a little deeper toward the rim, soft patches of light
-// drifting in it and a few big bubbles rising slowly at the sides. The well is a calm rounded pane of a quieter tone
-// (deeper on the dark waters, paler on the light ones), its edge one soft line, so the stack always reads.
+// One world: the round field of view of the eyepiece on black, its edge soft with a faint colored fringe. Bright-field
+// variants light the field evenly in a pale, neutral tone and show the life stained and absorbing; dark-field ones
+// leave the field black and show only the light scattered by the edges of what is in it (glowing walls, cilia,
+// glass). Out-of-focus debris floats faintly in the medium; along the well run the eyepiece's reticle (two fine etched
+// lines, a floor and a scale of ticks, one per row).
 //
-// The pieces are jelly eggs: one soft translucent shell per block in its type's color, a small creature curled up
-// asleep inside (it wakes, wiggles, presses its face to the shell, peeks out of the top, rarely hops out and back in);
-// a cleared row hatches them all, the dish keeping as many as the song's pace allows, the others swimming off. The falling piece is exactly a
-// locked one, the ghost a faint outline, the previews the same cells.
+// The pieces are plant tissue: each block one cell, a rounded cube of stained cytoplasm in its glassy wall, with its
+// nucleus. The seven types are seven dyes of the variant's stain. The falling piece is exactly a locked one, the ghost
+// a faint wall, the previews the same cells.
 //
-// The dish starts empty at the start of a song and fills with life as the rows clear: each cleared row pops its cells
-// (they puff into balls and vanish, in 0.3 s) and frees a creature, which swims out of the well behind the stack,
-// growing to its size on the way, and lives at a home at the side of the dish for the rest of the song: beans
-// (paramecia, a rippling fringe of cilia), blobs (amoebas reaching out a lobe), tadpoles (flagellates lashing their
-// tails), daisies (centric diatoms, seven petals turning slowly), rotifers (two spinning wheels on their heads) and
-// volvox balls (babies rolling inside; a Tetris frees a big one). Every creature is toon shaded with big shiny eyes,
-// rosy cheeks and a small smile, its face always upright, looking where it swims, blinking now and then; they swim
-// with a stroke (squash and stretch), never rigidly. The dish fills at the song's pace (paceLines: full at scene
-// completion, ~16 creatures, a third of them further back in the water); a row cleared while the dish is as full as the
-// pace allows frees bubbles instead. They keep clear of the well, the HUD's columns and the corners' lettering.
+// About one cell in five has a small microorganism living inside it (a clear pool, its contents flowing slowly; the
+// other cells are still). The dish starts empty at the start of a song. Each cleared row bursts (its cells round off,
+// their walls break open and their content disperses, gone in a third of a second) and frees its organisms: each
+// swims out of its own cell to the nearer side, growing on the way, and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
+// cilia), amoebas (a slow blob reaching out with pseudopods), pennate and centric diatoms (glass boats and discs of
+// fine striae), rotifers (wheels of cilia on a telescoping body), and volvox colonies (rolling spheres of tiny cells,
+// daughter colonies inside; a Tetris releases a big one). They roam the sides of the dish, steering clear of the well
+// and the HUD, at their own depth: the focal plane drifts, so some of them are soft, out of focus. Beyond a cap the
+// oldest fade away. A new song rinses the dish.
 //
-// The song: calm is a still dish, slow swimmers; mid wakes them up, a few creatures hopping (a squash and a bounce)
-// on the beat grid every two beats, in turn; a peak livens them up, the kicks make the swimmers dart and each bar
-// turns a few. The drop pours the variant's second palette into the water and the creatures (soaking in unevenly),
-// with one soft swell of light, and every creature closes its eyes happily for a moment. Slow motion is the dish by
-// moonlight, the creatures sleepy. Game over deflates the stack from the top, the cells sagging and graying out. Exit
-// and entrance: the dish fades to the bridge.
+// The song: calm parts are a still, dimmer dish with soft focus and slow life; mid wakes it up, the cilia beating on
+// the beat grid (every two beats); a peak brings brighter light, crisp focus and lively swimmers, the kicks flicking
+// the cilia and the bars turning the swimmers. The drop changes the stain: a new staining palette (the variant's
+// second dye) soaks unevenly into the whole dish, the tissue and the life, with one swell of light; it is rinsed out
+// slowly after the peak. Slow motion switches the illumination to a silver dark-field, time stretched. Game over
+// kills the tissue: from the top, each cell's protoplast shrinks away from its wall (plasmolysis), the stain drains,
+// and it fades. Exit and entrance: the dish goes out of focus and fades to the bridge.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/microscope/microscope.hpp"
@@ -35,7 +35,6 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 
 #include "layout.hpp"
@@ -47,12 +46,13 @@
 
 namespace {
 
-// M PLUS Rounded 1c Bold and Medium, SIL Open Font License, see OFL-MPLUSRounded1c.txt.
-const unsigned char FONT_BOLD[] = {
-#include "universes/microscope/MPLUSRounded1c-Bold.ttf.inc"
+// Lato (labels, numbers) and EB Garamond Italic (the song, like a species' name), SIL Open Font License, see
+// OFL-Lato.txt and OFL-EBGaramond.txt.
+const unsigned char FONT_SANS[] = {
+#include "universes/microscope/Lato-Regular.ttf.inc"
 };
-const unsigned char FONT_MEDIUM[] = {
-#include "universes/microscope/MPLUSRounded1c-Medium.ttf.inc"
+const unsigned char FONT_IT[] = {
+#include "universes/microscope/EBGaramond12-Italic.ttf.inc"
 };
 
 namespace shaders = microscope_shaders;
@@ -66,78 +66,66 @@ using ugl::setMat;
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
-// A variant (sRGB): the water (center, edge, the well's pane) and the drop's water (center, edge), the table around
-// the dish and its rim, the seven piece types (I O T S Z J L), five creature colors and the drop's, the HUD's inks
-// (in the dish, on the table) and accent.
+// A stain (sRGB): the field (center, edge), the seven piece types (I O T S Z J L), the organisms (body, rim,
+// organelles).
+struct StainDef {
+    unsigned field[2];
+    unsigned piece[7];
+    unsigned org[3];
+};
+// A variant: its illumination, its own stain and the one the drop washes in, the HUD's accent.
 struct VariantDef {
     const char* name;
-    bool light;
-    unsigned water[3], dropWater[2];
-    unsigned table, rim;
-    unsigned piece[7];
-    unsigned life[5], dropLife[5];
-    unsigned inkIn, inkOut, accent;
+    bool dark;
+    StainDef own, drop;
+    unsigned accent;
 };
 const VariantDef VARIANTS[] = {
-    // a turquoise lagoon, a sunny yellow rim; candy pieces on a deep teal pane; the drop: a green lagoon
-    {"LAGOON", false, {0x1499bd, 0x0b6f9a, 0x08405f}, {0x15a88a, 0x0b7a6a}, 0x0b2f4a, 0xffd23f,
-     {0x5ee4ff, 0xffd93b, 0xc985ff, 0x8de85a, 0xff5a6e, 0x6a8cff, 0xff9a3c},
-     {0xff8fc0, 0xc6f25a, 0xffd84a, 0xffa25a, 0xc0a8ff}, {0xff6fae, 0xfff27a, 0x7af5ff, 0xff8a5a, 0xe08bff},
-     0xf2fbff, 0xf2fbff, 0xffd23f},
-    // a bubblegum night: plum water, a pink rim; the drop: raspberry
-    {"BUBBLEGUM", false, {0x7a38a8, 0x58237f, 0x2a0e48}, {0xb02f78, 0x821c58}, 0x1c0832, 0xff7ac0,
-     {0x5ef2ff, 0xffe45c, 0xff8ad8, 0x8cf26b, 0xff5c5c, 0x8a9cff, 0xffa04d},
-     {0xffe45c, 0x7af7d0, 0xff9ad1, 0xb6ff7a, 0x9fd4ff}, {0x7af7ff, 0xffb45c, 0xfff07a, 0x9fffb0, 0xffd0f0},
-     0xfff0fa, 0xfff0fa, 0xff7ac0},
-    // a starry blue: navy water, a sky-blue rim; neon candy pieces; the drop: violet
-    {"MIDNIGHT", false, {0x2348a8, 0x173584, 0x0a1642}, {0x6430b0, 0x46208a}, 0x070b24, 0x6ad5ff,
-     {0x4ff0ff, 0xffe14d, 0xff7ae0, 0x6cf58a, 0xff5d6a, 0x93a2ff, 0xffa24a},
-     {0xffd84d, 0xff8fc8, 0x7af0c4, 0xa8f060, 0xffa86a}, {0x7af7ff, 0xff7ae0, 0xfff07a, 0x9cff8a, 0xffb05a},
-     0xeef4ff, 0xeef4ff, 0x6ad5ff},
-    // lemonade: pale yellow water, a tomato rim on a teal table; the drop: strawberry
-    {"LEMONADE", true, {0xfff0a0, 0xffd45e, 0xfffbe4}, {0xffc0d4, 0xff95b8}, 0x1fa89c, 0xff6b4a,
-     {0x1fb3e0, 0xf5b400, 0x9b4dde, 0x3dbb4a, 0xee3d55, 0x3360e0, 0xff7a1a},
-     {0xff6fa5, 0x3cc7c0, 0x8f6bff, 0x7ed957, 0xff9445}, {0x3cb4ff, 0xff5a7a, 0x2ec4a0, 0xb06bff, 0xffb020},
-     0x2a2440, 0xffffff, 0xe8452a},
-    // mint: pale mint water, a yellow rim on a blue table; the drop: a sky blue
-    {"MINT", true, {0xc0f5df, 0x7ee3c4, 0xefffff}, {0xc4e0ff, 0x94c4ff}, 0x2f5fd0, 0xffd23f,
-     {0x19a7ff, 0xffc400, 0xa14ee8, 0x22b04a, 0xff4a5f, 0x2f54d9, 0xff8a1f},
-     {0xff7eb3, 0xffb23d, 0x5b8cff, 0xb072ff, 0xff6b6b}, {0xff5fa0, 0x2ec4ff, 0xffd23f, 0x8f6bff, 0x3cd08a},
-     0x15304a, 0xffffff, 0x2f6fe0},
-    // berry: pink water, a golden rim on a purple table; the drop: lilac
-    {"BERRY", true, {0xffd0e4, 0xffa6c9, 0xfff3f8}, {0xd8c8ff, 0xb6a0ff}, 0x6a2a8a, 0xffc93c,
-     {0x14a8e0, 0xf2b000, 0x8a4fe0, 0x2fb45a, 0xe8304a, 0x2e5ae6, 0xff7a1a},
-     {0x4fc3ff, 0x8a6bff, 0x3cc78f, 0xffb020, 0xff5a8a}, {0xff5a8a, 0x2ec4ff, 0xffd23f, 0x3cd08a, 0xb072ff},
-     0x3a1838, 0xffffff, 0xe8457a},
+    // light scattered on black: cool pastel cells, silver life; the drop: a fluorescent label
+    {"DARK FIELD", true,
+     {{0x040609, 0x010202}, {0x7fd8f0, 0xf0d070, 0xb69af2, 0x7fe0a6, 0xf08a7e, 0x7f9ef4, 0xf2ac66}, {0x9fb4c4, 0xdfe9f2, 0xf2e6c8}},
+     {{0x030604, 0x010201}, {0x3fe0ff, 0xffe24a, 0xd070ff, 0x4cf07c, 0xff5a70, 0x5a7aff, 0xff9a3a}, {0x3aa860, 0x6cff9a, 0x7a96ff}},
+     0xa8dcef},
+    // fluorophores on black: GFP, DAPI, mCherry...; the drop: a second channel, rhodamine
+    {"FLUORESCENCE", true,
+     {{0x030308, 0x010102}, {0x52c8ff, 0xf2e650, 0xc85af0, 0x4ef08a, 0xff4e6e, 0x5c6cff, 0xff8a3c}, {0x2c9a5a, 0x5cf08e, 0x7a8cff}},
+     {{0x060305, 0x020101}, {0x6ac8ff, 0xffd46a, 0xff6ad8, 0xc8f05a, 0xff5a4a, 0x8a6aff, 0xffa04a}, {0xa83a5a, 0xff7a9a, 0x7a96ff}},
+     0x6cf09a},
+    // crossed polarizers: interference colors on black; the drop: the next order of colors
+    {"POLARIZED", true,
+     {{0x040405, 0x010101}, {0x5ab0f0, 0xf2d24a, 0xd05ac8, 0x52d8a0, 0xf27a4a, 0x8a7af0, 0xe8e0cc}, {0x8a8478, 0xe8e2d2, 0xf0c870}},
+     {{0x040306, 0x010101}, {0x40d0e0, 0xf2a040, 0xf05a8a, 0x9ae060, 0xff6a50, 0xb06af0, 0xf0e070}, {0x8a6a90, 0xf0d2f0, 0x9ae0c0}},
+     0xf0c870},
+    // bright-field, methylene blue with a safranin counterstain; the drop: eosin
+    {"METHYLENE BLUE", false,
+     {{0xeef1f0, 0xd6dde1}, {0x2f7fd0, 0xd8a23a, 0x6448b8, 0x1f9e96, 0xc8405a, 0x23367e, 0xe0703a}, {0x3c6ea8, 0x1f3d70, 0x14284e}},
+     {{0xf2f0f0, 0xdedadc}, {0xd84a7a, 0xf09a5a, 0x8a3aa0, 0x3a9a8a, 0xc02a3a, 0x4a3a8a, 0xe8b040}, {0xc8507a, 0x8a2050, 0x4a2a6a}},
+     0x2f6fc0},
+    // bright-field, hematoxylin and eosin; the drop: a Gram stain (crystal violet, iodine, safranin)
+    {"H&E", false,
+     {{0xf0f1f0, 0xdcdedf}, {0x6a4ab0, 0xe86a8a, 0xa03a8a, 0x5a8ad0, 0xd04a4a, 0x3a2a6a, 0xf0a070}, {0xb05a8a, 0x6a2a5a, 0x3a1a4a}},
+     {{0xf0f0f2, 0xdadae2}, {0x5a3ac8, 0xe0a040, 0xd84a8a, 0x3a8ab0, 0xc83a3a, 0x2a2a7a, 0xe87a5a}, {0x6a4ab8, 0x3a2a7a, 0x2a1a4a}},
+     0xb04a7a},
+    // bright-field, malachite green and safranin; the drop: methylene blue
+    {"MALACHITE", false,
+     {{0xeef2ee, 0xd8dfda}, {0x2a9a6a, 0xe0b040, 0x7a4aa8, 0x7ac04a, 0xd04a5a, 0x1f5a6a, 0xe8804a}, {0x3a8a5a, 0x1f4a3a, 0x8a2a3a}},
+     {{0xeef0f2, 0xd6dce2}, {0x2f7fd0, 0xe0b040, 0x6448b8, 0x1f9e96, 0xc8405a, 0x23367e, 0xe0703a}, {0x3c6ea8, 0x1f3d70, 0x14284e}},
+     0x2a8a5a},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float POP_T = 0.3f;     // a cleared cell is gone in this long (real time)
-constexpr float DIE_T = 1.6f;     // game over: a cell's deflating
-constexpr float FULL = 12.f;      // the dish's creatures at scene completion (at most: full_, the room there is)
-constexpr float ORG_FADE = 1.8f;
-constexpr float RIM_W = 0.6f;     // the dish's rim (board units)
+constexpr float LYSE_T = 0.32f;      // a cleared cell is gone in this long (real time)
+constexpr float DIE_T = 2.2f;        // game over: a cell's plasmolysis
+constexpr int MAX_ORGS = 30;         // the dish's population; beyond it, the oldest fade away
+constexpr float ORG_FADE = 4.f;
+constexpr float LIFE_SHARE = 0.22f;   // the share of the cells with an organism living inside
+constexpr float DWELL_SIZE = 0.52f;   // an organism's size inside its cell
 
-// The kinds of life: bean (paramecium), blob (amoeba), tadpole (flagellate), daisy (centric diatom), rotifer, volvox.
-enum { K_BEAN, K_BLOB, K_TADPOLE, K_DAISY, K_ROTIFER, K_VOLVOX, K_COUNT, K_BUBBLE = 6 };
-const float KIND_SIZE[K_COUNT][2] = {{4.0f, 4.6f}, {3.8f, 4.3f}, {3.8f, 4.4f}, {3.6f, 4.1f}, {3.9f, 4.4f}, {3.8f, 4.3f}};
-const float KIND_SPEED[K_COUNT] = {0.55f, 0.12f, 0.5f, 0.12f, 0.28f, 0.2f};
-const float KIND_TURN[K_COUNT] = {0.5f, 0.25f, 0.55f, 0.15f, 0.35f, 0.25f};
-const float KIND_STROKE[K_COUNT] = {1.6f, 0.5f, 2.2f, 0.4f, 1.2f, 0.6f};   // swim strokes a second
-const float KIND_STRETCH[K_COUNT] = {0.07f, 0.04f, 0.06f, 0.02f, 0.06f, 0.025f};
-
-// An egg's creature: its kind from its seed (as PIECE_FS draws it), and that kind in the dish.
-int eggKind(float seed) { return std::clamp((int)((seed * 7.13f - std::floor(seed * 7.13f)) * 4.f), 0, 3); }
-const int EGG_TO_DISH[4] = {K_BEAN, K_BLOB, K_TADPOLE, K_DAISY};
-float envf(float t, float dur, float rise, float fall) { return smoothstepf(0.f, rise, t) * (1.f - smoothstepf(dur - fall, dur, t)); }
-float hashSeed(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
-
-// Test hooks: ZEN_MICROSCOPE_LINES=N adds N lines to the dish, ZEN_GROW_RATE=R adds R lines a second.
-int extraLines(double t) {
-    static const int n = std::getenv("ZEN_MICROSCOPE_LINES") ? std::atoi(std::getenv("ZEN_MICROSCOPE_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
-    return n + (int)(rate * t);
-}
+// The kinds of life: paramecium, amoeba, pennate diatom, centric diatom, rotifer, volvox.
+enum { K_PARA, K_AMOEBA, K_PENNATE, K_CENTRIC, K_ROTIFER, K_VOLVOX, K_COUNT };
+const float KIND_SIZE[K_COUNT][2] = {{2.3f, 2.9f}, {2.3f, 2.9f}, {2.0f, 2.7f}, {1.7f, 2.2f}, {2.5f, 3.1f}, {2.0f, 2.5f}};
+const float KIND_SPEED[K_COUNT] = {0.55f, 0.07f, 0.14f, 0.05f, 0.22f, 0.16f};
+const float KIND_TURN[K_COUNT] = {0.5f, 0.25f, 0.06f, 0.15f, 0.35f, 0.25f};
 
 std::string ascii(const std::string& s) {
     static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
@@ -161,6 +149,7 @@ int glyphIndex(unsigned char ch) {
     if (ch < 32 || ch >= 128) ch = '?';
     return ch - 32;
 }
+float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 float wrapAngle(float a) {
     while (a > PI) a -= TAU;
     while (a < -PI) a += TAU;
@@ -171,8 +160,6 @@ float sdBox(vec2 p, vec2 c, vec2 h) {
     const float ox = std::max(dx, 0.f), oy = std::max(dy, 0.f);
     return std::sqrt(ox * ox + oy * oy) + std::min(std::max(dx, dy), 0.f);
 }
-// A hop: a squash and a bounce back, eased (0 at its start and its end).
-float hopCurve(float t) { return t >= 1.2f ? 0.f : -std::sin(t * TAU / 0.55f) * std::exp(-t * 3.5f) * smoothstepf(0.f, 0.06f, t); }
 
 // A VAO over the unit quad with `n` per-instance vec4 attributes (locations 1..n) of `stride` bytes.
 void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
@@ -198,11 +185,15 @@ void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
 
 bool MicroscopeUniverse::init(int width, int height) {
     using shaders::withCommon;
+    for (auto& l : fallLook_) l = lookOf(0, 0);
     const std::string inkText = withCommon(shaders::TEXT_FS, shaders::INK_GLSL);
     const std::string inkShape = withCommon(shaders::SHAPE_FS, shaders::INK_GLSL);
-    progField_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FIELD_FS).c_str(), "microscope water");
-    progLife_ = ugl::program(shaders::LIFE_VS, withCommon(shaders::LIFE_FS).c_str(), "microscope life");
+    progField_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FIELD_FS).c_str(), "microscope field");
+    progOrg_ = ugl::program(shaders::ORG_VS, withCommon(shaders::ORG_FS).c_str(), "microscope life");
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "microscope cells");
+    progSpeck_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::SPECK_FS).c_str(), "microscope specks");
+    progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "microscope down");
+    progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "microscope blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "microscope final");
     progShape_ = ugl::program(shaders::SHAPE_VS, inkShape.c_str(), "microscope shape");
     progText_ = ugl::program(shaders::TEXT_VS, inkText.c_str(), "microscope text");
@@ -212,7 +203,8 @@ bool MicroscopeUniverse::init(int width, int height) {
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     instVao(quadVbo_, pieceVao_, pieceVbo_, 4, sizeof(Inst));
-    instVao(quadVbo_, lifeVao_, lifeVbo_, 5, sizeof(LInst));
+    instVao(quadVbo_, orgVao_, orgVbo_, 4, sizeof(Inst));
+    instVao(quadVbo_, speckVao_, speckVbo_, 4, sizeof(Inst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -231,8 +223,8 @@ bool MicroscopeUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontB_, FONT_BOLD);
-    buildFont(fontM_, FONT_MEDIUM);
+    buildFont(fontSans_, FONT_SANS);
+    buildFont(fontIt_, FONT_IT);
     resize(width, height);
     SongLook none;
     none.variant = 0;
@@ -294,22 +286,21 @@ void MicroscopeUniverse::resize(int width, int height) {
     viewH_ = vec2{hw, hh};
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
-    // the dish: as wide as the screen allows, always around the HUD's columns
+    // the eyepiece's field: as wide as the screen allows, always around the HUD's columns
     diskR_ = std::max(hw * 0.95f, 15.6f);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    // how many creatures the dish holds at its fullest: the room left for them around the well and the HUD
-    int room = 0;
-    for (float y = viewC_.y - hh; y < viewC_.y + hh; y += 0.5f)
-        for (float x = -hw; x < hw; x += 0.5f) room += zoneDist(vec2{x, y}, nullptr) >= 2.f;
-    full_ = std::clamp(std::round(room * 0.25f / 8.5f), 4.f, FULL);
+    const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
+    bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    bloomB_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
 }
 
 MicroscopeUniverse::~MicroscopeUniverse() {
-    sceneT_.destroy();
-    for (GLuint p : {progField_, progLife_, progPiece_, progFinal_, progShape_, progText_}) glDeleteProgram(p);
-    for (GLuint v : {pieceVao_, lifeVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, pieceVbo_, lifeVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontB_, &fontM_}) {
+    for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
+    for (GLuint p : {progField_, progOrg_, progPiece_, progSpeck_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+        glDeleteProgram(p);
+    for (GLuint v : {pieceVao_, orgVao_, speckVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, pieceVbo_, orgVbo_, speckVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (Font* f : {&fontSans_, &fontIt_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
     }
@@ -325,7 +316,7 @@ void MicroscopeUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        // darker songs in the deep waters, brighter ones in the light ones
+        // darker songs look in dark-field (light on black), brighter ones in bright-field (stains on a pale field)
         const bool dark = !t.hasSong || t.brightness < 0.55f || (t.minor && t.brightness < 0.62f);
         const int pick = (int)(h * 3.f) % 3;
         if (dark) v = t.hasSong && t.dynamics > 0.62f ? 1 : t.hasSong && t.airWeight > 0.6f ? 2 : pick;
@@ -335,31 +326,33 @@ void MicroscopeUniverse::setSong(const SongLook& t, float seconds) {
     }
     variant_ = v;
     const VariantDef& V = VARIANTS[v];
-    Palette& p = palT_;
-    for (int i = 0; i < 3; i++) p.water[i] = lin(V.water[i]);
-    for (int i = 0; i < 2; i++) p.dropWater[i] = lin(V.dropWater[i]);
-    for (int i = 0; i < 7; i++) p.piece[i] = lin(V.piece[i]);
-    for (int i = 0; i < 5; i++) { p.life[i] = lin(V.life[i]); p.dropLife[i] = lin(V.dropLife[i]); }
-    p.table = lin(V.table);
-    p.rim = lin(V.rim);
-    p.rimInk = V.light ? lin(0x2a2440) * 0.8f : lin(0x0a0a1e);
-    p.line = V.light ? lerp(p.water[2], lin(V.inkIn), 0.35f) : lerp(p.water[0], vec3(1.f), 0.25f);
-    p.eyeInk = lin(0x1a1028);
-    p.blush = lin(0xff6f8e);
-    p.night = V.light ? vec3(0.26f, 0.36f, 0.95f) : vec3(0.3f, 0.52f, 1.8f);
+    auto fill = [&](Stain& s, const StainDef& d) {
+        for (int i = 0; i < 2; i++) s.field[i] = lin(d.field[i]);
+        for (int i = 0; i < 7; i++) s.piece[i] = lin(d.piece[i]);
+        for (int i = 0; i < 3; i++) s.org[i] = lin(d.org[i]);
+    };
+    fill(baseT_, V.own);
+    fill(dropT_, V.drop);
+    darkT_ = V.dark ? 1.f : 0.f;
     const bool instant = !colorsSet_ || seconds <= 0.1f;
     if (instant) {
-        pal_ = palT_;
+        base_ = baseT_;
+        dropS_ = dropT_;
+        dark_ = darkT_;
         colorsSet_ = true;
     }
     seed_ = t.seed ? t.seed : 1;
     seedF_ = (float)((seed_ >> 20) % 1000) * 0.137f;
     rng_ = Rng(seed_ ^ 0x3C1C0Bull);
-    // (the dish keeps its life into the next song in this universe: it fills at the pace of the lines, paceLines)
-    if (instant) { orgs_.clear(); bubbles_.clear(); }
-    clears_.clear();
+    // a new song: the dish is rinsed, empty again
+    if (instant) orgs_.clear();
+    else
+        for (Org& o : orgs_)
+            if (o.fade < 0.f) o.fade = 0.f;
+    pending_.clear();
     stain_ = 0.f;
     dropMode_ = false;
+    focus_ = focusT_ = 0.f;
 }
 
 void MicroscopeUniverse::setLevel(int level, float energy, float seconds, float impact) {
@@ -375,6 +368,7 @@ void MicroscopeUniverse::setLevel(int level, float energy, float seconds, float 
         return;
     }
     const bool rising = level > level_;
+    if (level != level_) focusT_ = rng_.range(-0.5f, 0.5f);   // a new section: the observer refocuses
     level_ = level;
     lvFrom_ = lv_;
     lvTo_ = (float)level;
@@ -382,36 +376,30 @@ void MicroscopeUniverse::setLevel(int level, float energy, float seconds, float 
     lvDur_ = std::clamp(seconds, rising ? 1.2f : 3.f, 6.f);
 }
 
-// The drop: the variant's second palette soaks into the dish, one swell of light, every creature happy for a moment.
+// The drop: the variant's second stain soaks into the dish, with one swell of light and a refocus.
 void MicroscopeUniverse::drop(float strength) {
     dropMode_ = true;
     swell_ = std::max(swell_, 0.6f + 0.4f * strength);
-    wakeAllT_ = 0.f;   // every creature in the stack wakes up and looks around
-    for (Org& o : orgs_) {
-        o.happy = 2.2f + o.seed * 0.8f;
-        if (o.hop > 1.2f) o.hop = -o.seed * 0.5f;
-    }
+    focusT_ = rng_.range(-0.3f, 0.3f);
 }
 
 void MicroscopeUniverse::refresh(float strength) {
     (void)strength;
-    // a new section: a few creatures turn
-    for (Org& o : orgs_)
-        if (rng_.chance(0.4f)) o.ang += rng_.range(-0.8f, 0.8f);
+    focusT_ = rng_.range(-0.6f, 0.6f);
 }
 
 vec2 MicroscopeUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
 
 TransitionHints MicroscopeUniverse::hints() const {
     TransitionHints h;
-    const bool light = VARIANTS[variant_].light;
-    h.light = light;
-    h.background = pal_.water[0];
+    const bool dark = dark_ > 0.5f;
+    h.light = !dark;
+    h.background = dark ? lerp(base_.field[0], base_.field[1], 0.5f) : base_.field[0];
     vec3 ink(0.f);
-    for (int i = 0; i < 7; i++) ink = ink + pal_.piece[i] * (1.f / 7.f);
-    h.ink = light ? ink * 0.7f : ink;
+    for (int i = 0; i < 7; i++) ink = ink + base_.piece[i] * (1.f / 7.f);
+    h.ink = dark ? ink : ink * 0.7f;
     h.accent = lin(VARIANTS[variant_].accent);
-    h.styles = TS_RIPPLE | TS_INK;
+    h.styles = TS_LUMA | TS_INK | TS_RIPPLE;
     return h;
 }
 
@@ -419,21 +407,115 @@ TransitionHints MicroscopeUniverse::hints() const {
 // Game events
 // =====================================================================================================
 
+MicroscopeUniverse::CellLook MicroscopeUniverse::lookOf(int x, int y) {
+    (void)x;
+    (void)y;
+    CellLook l;
+    Rng& r = rng_;
+    const float a = r.range(0.f, TAU), d = r.range(0.05f, 0.15f);
+    l.nx = std::cos(a) * d;
+    l.ny = std::sin(a) * d;
+    l.seed = r.uniform();
+    if (r.chance(LIFE_SHARE)) l.life = pickKind();
+    return l;
+}
+
+// Keeps the looks in step with the board (a new board, a stack inherited from another universe).
+void MicroscopeUniverse::syncLooks(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const bool on = g.cell(x, y).type >= 0;
+            if (on && !has_[y][x]) look_[y][x] = lookOf(x, y);
+            has_[y][x] = on;
+        }
+}
+
+int MicroscopeUniverse::pickKind() {
+    const float w[K_COUNT] = {0.27f, 0.15f, 0.2f, 0.14f, 0.16f, 0.08f};
+    int k = rng_.weighted(w);
+    // not the same kind three times in a row
+    if (orgs_.size() >= 2 && orgs_[orgs_.size() - 1].kind == k && orgs_[orgs_.size() - 2].kind == k) k = (k + 1 + rng_.irange(0, 3)) % K_COUNT;
+    return k;
+}
+
+// A cell's organism as it is now: small, turning slowly about the middle of the cell (the same on every frame for a
+// given look and time, so that it leaves the cell exactly as it was in it).
+MicroscopeUniverse::Org MicroscopeUniverse::dweller(const CellLook& l, float x, float y, int type) const {
+    Org o;
+    const int kind = std::clamp(l.life, 0, (int)K_COUNT - 1);
+    const float t = worldTime_ + l.seed * 50.f, s = l.seed * 37.f;
+    o.kind = kind;
+    o.seed = l.seed;
+    o.size = DWELL_SIZE;
+    o.p = vec2{x + 0.07f * std::sin(t * 0.31f + s), y + 0.07f * std::cos(t * 0.27f + s * 1.3f)};
+    o.ang = s + t * (l.seed < 0.5f ? 0.23f : -0.23f) + 0.6f * std::sin(t * 0.17f + s);
+    o.type = std::clamp(type, 0, 6);
+    o.depth = 0.f;
+    o.turnPhase = s;
+    o.tint = 0.1f;   // its own colors, not the cell's dye (it would vanish in it)
+    o.spin = s;
+    return o;
+}
+
+// The organism of a cleared cell leaves it: it darts out of the well toward the nearer side, growing to its full size
+// on the way, and makes its home in the dish.
+void MicroscopeUniverse::releaseFrom(const CellLook& l, float x, float y, int type, float delay, bool big) {
+    Org o = dweller(l, x, y, type);
+    const int kind = o.kind;
+    o.size = big ? 3.3f : rng_.range(KIND_SIZE[kind][0], KIND_SIZE[kind][1]);
+    o.grow0 = DWELL_SIZE / o.size;
+    o.fromCell = true;
+    const int side = x < 0.f ? -1 : 1;
+    const float out = side > 0 ? 0.f : PI;
+    if (kind != K_CENTRIC && kind != K_VOLVOX) {
+        // it turns toward the way out (a pennate diatom may just back up)
+        if (kind == K_PENNATE && std::cos(o.ang - out) < 0.f) o.dir = -1.f;
+        o.ang = out + rng_.range(-0.4f, 0.4f) + (o.dir < 0.f ? PI : 0.f);
+    } else o.ang = out + rng_.range(-0.4f, 0.4f);
+    o.speed = KIND_SPEED[kind] * rng_.range(0.8f, 1.25f);
+    o.depth = rng_.range(-0.6f, 0.6f);
+    o.burst = 1.f;
+    o.home = pickHome(side);
+    pending_.push_back({delay, o});
+}
+
+// A place for an organism to live on one side of the dish: mostly the wide band beyond the HUD's column, sometimes
+// the corner under it; the least crowded of a few tries.
+vec2 MicroscopeUniverse::pickHome(int side) {
+    vec2 best{side * 15.f, 0.f};
+    float bestScore = -1e9f;
+    for (int tryN = 0; tryN < 6; tryN++) {
+        const float y = rng_.range(-9.f, 9.f);
+        const float dy = y - viewC_.y;
+        const float xmax = std::sqrt(std::max(0.f, (diskR_ - 2.2f) * (diskR_ - 2.2f) - dy * dy));
+        const float x0 = 13.2f;
+        if (xmax < x0 + 0.5f) continue;
+        const vec2 h{side * rng_.range(x0, xmax), y};
+        if (zoneDist(h, nullptr) < 1.2f) continue;
+        float nearest = 99.f;
+        for (const Org& o : orgs_) {
+            const float dx = o.home.x - h.x, dy = o.home.y - h.y;
+            nearest = std::min(nearest, std::sqrt(dx * dx + dy * dy));
+        }
+        if (nearest > bestScore) { bestScore = nearest; best = h; }
+    }
+    return best;
+}
+
 void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
     case GameEvent::Lock: {
-        // the falling piece's eggs keep their creatures as they lock
         for (size_t i = 0; i < ev.cells.size() && i < 4; i++) {
             const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            seedAt_[c.y][c.x] = fallSeed_[i];
+            look_[c.y][c.x] = fallLook_[i];
             has_[c.y][c.x] = true;
         }
-        for (float& f : fallSeed_) f = rng_.uniform();
+        for (auto& l : fallLook_) l = lookOf(0, 0);
         break;
     }
     case GameEvent::HardDrop: {
-        // a few bubbles pushed out from under the piece, at the contact (behind the stack)
+        // fine debris pushed out from under the piece, at the contact
         if (!game.hasPiece()) break;
         Piece gp = game.piece();
         gp.y = game.ghostY();
@@ -445,59 +527,79 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c[1] == low) { minX = std::min(minX, c[0]); maxX = std::max(maxX, c[0]); }
         if (low < Game::HIDDEN) break;
         const vec3 a = layout::cellPos((float)minX, (float)low), b = layout::cellPos((float)maxX, (float)low);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 12; i++) {
             const float s = i % 2 ? 1.f : -1.f;
-            Bubble k;
-            k.p = vec2{(s < 0 ? a.x - 0.45f : b.x + 0.45f) + rng_.range(-0.1f, 0.1f), a.y - 0.35f + rng_.range(0.f, 0.2f)};
-            k.v = vec2{s * rng_.range(0.4f, 1.0f), rng_.range(0.3f, 0.7f)};
+            Speck k;
+            k.p = vec2{(s < 0 ? a.x - 0.45f : b.x + 0.45f) + rng_.range(-0.1f, 0.1f), a.y - 0.42f + rng_.range(0.f, 0.2f)};
+            k.v = vec2{s * rng_.range(0.5f, 1.4f), rng_.range(0.05f, 0.5f)};
             k.t = 0.f;
-            k.life = rng_.range(0.6f, 0.9f);
-            k.r = rng_.range(0.13f, 0.22f);
-            k.deco = false;
-            bubbles_.push_back(k);
+            k.life = rng_.range(0.45f, 0.8f);
+            k.r = rng_.range(0.05f, 0.1f);
+            specks_.push_back(k);
         }
         break;
     }
     case GameEvent::Clear: {
-        // the cells pop; the life in the rows is freed on the next frame (at the song's pace, paceLines)
-        ClearAt ca;
         std::vector<int> rows;
+        for (auto& c : ev.cells)
+            if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
+        std::sort(rows.begin(), rows.end());
+        const bool tetris = ev.count >= 4;
+        // the cells burst
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f});
-            const float sd = has_[c.y][c.x] ? seedAt_[c.y][c.x] : rng_.uniform();
-            ca.cells.push_back(vec2{p.x, p.y});
-            ca.kinds.push_back(eggKind(sd));
-            ca.types.push_back(std::clamp(c.type, 0, 6));
-            hatches_.push_back({vec2{p.x, p.y}, EGG_TO_DISH[eggKind(sd)], std::clamp(c.type, 0, 6), -0.03f * rng_.uniform() * 4.f, sd});
-            if (std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
+            const CellLook l = has_[c.y][c.x] ? look_[c.y][c.x] : lookOf(c.x, c.y);
+            lyses_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.f});
         }
-        ca.rows = std::max(1, std::max(ev.count, (int)rows.size()));
-        if (!ca.cells.empty()) clears_.push_back(ca);
-        if (ev.count >= 4) swell_ = std::max(swell_, 0.5f);
-        // the eggs above step down; whatever the creatures were doing, they settle back in
-        acts_.clear();
+        // the organisms living in the cleared cells swim out (a row with none still gives one; a Tetris, a big
+        // volvox colony among them)
+        for (size_t k = 0; k < rows.size(); k++) {
+            std::vector<const GameEvent::CellInfo*> row, lives;
+            for (auto& c : ev.cells)
+                if (c.y == rows[k] && c.x >= 0 && c.x < Game::W) {
+                    row.push_back(&c);
+                    if (has_[c.y][c.x] && look_[c.y][c.x].life >= 0) lives.push_back(&c);
+                }
+            if (row.empty()) continue;
+            if (lives.empty()) {
+                const auto* c = row[(size_t)rng_.irange(0, (int)row.size() - 1)];
+                if (!has_[c->y][c->x]) look_[c->y][c->x] = lookOf(c->x, c->y);
+                has_[c->y][c->x] = true;
+                look_[c->y][c->x].life = pickKind();
+                lives.push_back(c);
+            }
+            const size_t bigAt = tetris && k == 1 ? (size_t)rng_.irange(0, (int)lives.size() - 1) : lives.size();
+            for (size_t i = 0; i < lives.size(); i++) {
+                const auto* c = lives[i];
+                CellLook l = look_[c->y][c->x];
+                if (i == bigAt) l.life = K_VOLVOX;
+                const vec3 p = layout::cellPos((float)c->x, (float)c->y);
+                releaseFrom(l, p.x, p.y, c->type, 0.f, i == bigAt);
+            }
+        }
+        if (tetris) swell_ = std::max(swell_, 0.55f);
+        // the looks of the rows above step down
         {
             bool cleared[Game::H] = {};
             for (int y : rows) cleared[y] = true;
             for (auto& c : ev.cells)
                 if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
-            float ns[Game::H][Game::W] = {};
+            CellLook nl[Game::H][Game::W];
             bool nh[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (cleared[y]) continue;
-                for (int x = 0; x < Game::W; x++) { ns[dst][x] = seedAt_[y][x]; nh[dst][x] = has_[y][x]; }
+                for (int x = 0; x < Game::W; x++) { nl[dst][x] = look_[y][x]; nh[dst][x] = has_[y][x]; }
                 dst--;
             }
             for (int y = 0; y < Game::H; y++)
-                for (int x = 0; x < Game::W; x++) { seedAt_[y][x] = ns[y][x]; has_[y][x] = nh[y][x]; }
+                for (int x = 0; x < Game::W; x++) { look_[y][x] = nl[y][x]; has_[y][x] = nh[y][x]; }
         }
         break;
     }
     case GameEvent::TopOut: {
-        // the stack deflates from the top
+        // the tissue dies from the top: plasmolysis, the stain drained
         overT_ = 0.f;
         dying_.clear();
         int top = Game::H;
@@ -505,7 +607,8 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            dying_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.2f + 0.06f * (c.y - top) + 0.08f * rng_.uniform()});
+            const CellLook l = has_[c.y][c.x] ? look_[c.y][c.x] : lookOf(c.x, c.y);
+            dying_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.25f + 0.07f * (c.y - top) + 0.1f * hashf((uint64_t)(c.x * 31 + c.y))});
         }
         break;
     }
@@ -517,141 +620,8 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // The dish's life
 // =====================================================================================================
 
-int MicroscopeUniverse::alive() const {
-    int n = 0;
-    for (const Org& o : orgs_) n += o.fade < 0.f && !o.leaving;
-    return n;
-}
-
-int MicroscopeUniverse::sideCount(int side) const {
-    int n = 0;
-    for (const Org& o : orgs_) n += o.fade < 0.f && !o.leaving && (o.home.x < 0.f) == (side < 0);
-    return n;
-}
-
-int MicroscopeUniverse::pickKind() {
-    const float w[K_COUNT] = {0.22f, 0.17f, 0.19f, 0.15f, 0.15f, 0.12f};
-    int k = rng_.weighted(w);
-    // not the same kind as one of the last two
-    for (int tries = 0; tries < 4; tries++) {
-        bool seen = false;
-        for (size_t i = orgs_.size() >= 2 ? orgs_.size() - 2 : 0; i < orgs_.size(); i++) seen |= orgs_[i].kind == k;
-        if (!seen) break;
-        k = rng_.weighted(w);
-    }
-    return k;
-}
-
-int MicroscopeUniverse::pickColor() {
-    int c = rng_.irange(0, 4);
-    for (int tries = 0; tries < 4; tries++) {
-        bool seen = false;
-        for (size_t i = orgs_.size() >= 2 ? orgs_.size() - 2 : 0; i < orgs_.size(); i++) seen |= orgs_[i].col == c;
-        if (!seen) break;
-        c = rng_.irange(0, 4);
-    }
-    return c;
-}
-
-// A place for a creature to live on one side of the dish: the wide band beyond the HUD's column, or the corner under
-// it; the least crowded of a few tries.
-vec2 MicroscopeUniverse::pickHome(int side, float size) {
-    vec2 best{side * 15.f, 0.f};
-    float bestScore = -1e9f;
-    const float r = size * 0.4f;
-    for (int tryN = 0; tryN < 10; tryN++) {
-        const float y = rng_.range(-viewH_.y + 1.5f, viewH_.y - 1.5f) + viewC_.y;
-        const float dy = y - viewC_.y;
-        const float xmax = std::sqrt(std::max(0.f, (diskR_ - RIM_W - r - 0.6f) * (diskR_ - RIM_W - r - 0.6f) - dy * dy));
-        const float x0 = 7.f;
-        if (xmax < x0 + 0.5f) continue;
-        const vec2 h{side * rng_.range(x0, xmax), y};
-        const float zd = zoneDist(h, nullptr);
-        if (zd < r + 0.4f) continue;
-        float nearest = 99.f;
-        for (const Org& o : orgs_) {
-            if (o.fade >= 0.f) continue;
-            const float dx = o.home.x - h.x, dy2 = o.home.y - h.y;
-            nearest = std::min(nearest, std::sqrt(dx * dx + dy2 * dy2) - (o.size + size) * 0.45f);
-        }
-        if (nearest > bestScore) { bestScore = nearest; best = h; }
-    }
-    return best;
-}
-
-// A new creature: out of a cleared row (it swims out of the well behind the stack, growing on the way), or simply
-// fading in at its home.
-void MicroscopeUniverse::spawn(vec2 at, int side, bool fromCell, bool big, int kind, int piece, bool leaving) {
-    Org o;
-    o.kind = big ? K_VOLVOX : kind >= 0 ? kind : pickKind();
-    o.piece = big ? -1 : piece;
-    o.leaving = leaving;
-    o.col = pickColor();
-    o.seed = rng_.uniform();
-    o.depth = 0.f;
-    o.size = big ? 5.8f : rng_.range(KIND_SIZE[o.kind][0], KIND_SIZE[o.kind][1]);
-    o.speed = KIND_SPEED[o.kind] * rng_.range(0.8f, 1.2f);
-    o.phase = rng_.range(0.f, TAU);
-    o.spin = rng_.range(0.f, TAU);
-    o.nextBlink = rng_.range(1.5f, 6.f);
-    o.hop = 9.f;
-    if (leaving) o.size *= 0.6f;
-    // (one swimming off heads for the rim on its side, out of the way)
-    o.home = leaving ? vec2{side * (diskR_ - RIM_W - 1.f), std::clamp(at.y + rng_.range(-4.f, 4.f), -9.f, 9.f)}
-                     : pickHome(side, o.size);
-    o.fromCell = fromCell;
-    if (fromCell) {
-        o.p = at;
-        o.grow0 = std::min(0.6f, 1.1f / o.size);
-        o.burst = 1.f;
-        o.ang = (side > 0 ? 0.f : PI) + rng_.range(-0.4f, 0.4f);
-    } else {
-        o.p = o.home;
-        o.ang = rng_.range(0.f, TAU);
-        o.age = 0.f;
-        o.grow0 = 0.7f;
-    }
-    o.look = o.ang;
-    orgs_.push_back(o);
-}
-
-// A cleared row frees its life: a creature (a Tetris: a big volvox among them), as many as the song's pace allows in
-// the dish so far (full at scene completion); a row cleared while the dish is as full as it may be yet frees a few
-// bubbles instead.
-void MicroscopeUniverse::release(const ClearAt& c, float pace) {
-    const int cap = (int)std::ceil(full_ * saturate(pace / SCENE_REF_LINES) - 0.01f) + 1;
-    const int al = alive();
-    const bool tetris = c.rows >= 4;
-    int n = std::min(cap - al, tetris ? 3 : c.rows >= 3 ? 2 : 1);
-    // every egg of the row hatches: n of its creatures stay in the dish, the others swim off toward the rim and fade
-    std::vector<size_t> order(c.cells.size());
-    for (size_t i = 0; i < order.size(); i++) order[i] = i;
-    for (size_t i = order.size(); i > 1; i--) std::swap(order[i - 1], order[(size_t)rng_.irange(0, (int)i - 1)]);
-    for (size_t j = 0; j < order.size(); j++) {
-        const size_t i = order[j];
-        const vec2 at = c.cells[i];
-        int side = std::fabs(at.x) < 0.3f ? (rng_.chance(0.5f) ? 1 : -1) : at.x < 0.f ? -1 : 1;
-        const bool stays = (int)j < n;
-        if (stays && sideCount(side) >= sideCount(-side) + 2) side = -side;   // (the two sides stay balanced)
-        spawn(at, side, true, false, EGG_TO_DISH[c.kinds[i]], c.types[i], !stays);
-    }
-    // a Tetris: a big volvox too
-    if (tetris) spawn(c.cells[0], c.cells[0].x < 0.f ? -1 : 1, true, true);
-    // beyond the full dish (a Tetris' big one), the oldest swims away, fading
-    int over = alive() - (int)full_;
-    for (Org& o : orgs_) {
-        if (over <= 0) break;
-        if (o.leaving) continue;
-        if (o.fade < 0.f && !o.fromCell) { o.fade = 0.f; over--; }
-        else if (o.fade < 0.f && o.age > 5.f) { o.fade = 0.f; over--; }
-    }
-    // the dish cheers: a few creatures hop
-    for (Org& o : orgs_)
-        if (o.fade < 0.f && !o.fromCell && o.hop > 1.2f && rng_.chance(tetris ? 1.f : 0.3f)) o.hop = -rng_.range(0.f, 0.3f);
-}
-
-// Distance from p to the places the life keeps away from (the well, the HUD's columns and corners, the dish's rim):
-// positive outside them, negative inside; its gradient (pointing out).
+// Distance from p to the places the life keeps away from (the well, the HUD's columns and corners, the field's
+// edge): positive outside them, negative inside; its gradient (pointing out).
 float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
     auto f = [&](const vec2& q) {
         float d = sdBox(q, vec2{0.f, 0.4f}, vec2{5.9f, 13.f});
@@ -660,9 +630,9 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
         const float hx = viewH_.x + 2.f;
         d = std::min(d, sdBox(q, vec2{-hx + (hx - 11.3f) * 0.5f, -8.8f}, vec2{(hx - 11.3f) * 0.5f, 1.9f}));
         d = std::min(d, sdBox(q, vec2{-hx + (hx - 11.3f) * 0.5f, 11.f}, vec2{(hx - 11.3f) * 0.5f, 1.9f}));
-        // the dish's rim and the screen's edge
+        // the field's edge and the screen's
         const float dy = q.y - viewC_.y;
-        d = std::min(d, diskR_ - RIM_W - 0.6f - std::sqrt(q.x * q.x + dy * dy));
+        d = std::min(d, diskR_ - 0.6f - std::sqrt(q.x * q.x + dy * dy));
         d = std::min(d, viewH_.y - 0.6f - std::fabs(dy));
         return d;
     };
@@ -677,183 +647,17 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
 }
 
 // =====================================================================================================
-// The eggs' creatures
-// =====================================================================================================
-
-// Keeps the eggs in step with the board (a new board, a stack inherited from another universe).
-void MicroscopeUniverse::syncSeeds(const Game& g) {
-    for (int y = 0; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++) {
-            const bool on = g.cell(x, y).type >= 0;
-            if (on && !has_[y][x]) seedAt_[y][x] = rng_.uniform();
-            has_[y][x] = on;
-        }
-}
-
-// A surface egg may open: nothing falling near it (the piece or its ghost within two columns, above it).
-bool MicroscopeUniverse::safeAt(const Game& g, int x, int y) const {
-    if (!g.hasPiece() || g.over()) return true;
-    Piece p = g.piece();
-    int cells[4][2];
-    for (int k = 0; k < 2; k++) {
-        if (k == 1) p.y = g.ghostY();
-        g.pieceCells(p, cells);
-        for (auto& c : cells)
-            if (std::abs(c[0] - x) <= 2 && c[1] < y && c[1] >= y - 5) return false;
-    }
-    return true;
-}
-
-// Now and then a creature does something in its egg (a few at a time, never in step); every several seconds one peeks
-// out of the top of a surface egg (more often at a peak), and rarely one hops out on the stack and back in.
-void MicroscopeUniverse::updateActs(const Game& g, float dt, float wm, float wp) {
-    auto filled = [&](int x, int y) { return x >= 0 && x < Game::W && y >= 0 && y < Game::H && g.cell(x, y).type >= 0; };
-    auto busy = [&](int x, int y) {
-        for (const Act& a : acts_)
-            if (std::abs(a.x - x) <= 1 && std::abs(a.y - y) <= 1) return true;
-        return false;
-    };
-    for (Act& a : acts_) {
-        float rate = 1.f;
-        if (a.type == A_PEEK || a.type == A_HOP) {
-            // the egg is gone, or something lands on it: it hurries back in
-            const bool ok = filled(a.x, a.y) && !filled(a.x, a.y - 1) && safeAt(g, a.x, a.y) &&
-                            (a.type != A_HOP || (filled(a.x + a.side, a.y) && !filled(a.x + a.side, a.y - 1)));
-            if (!ok) {
-                if (a.type == A_PEEK) a.t = std::max(a.t, a.dur - 0.35f);
-                else rate = 3.f;
-            }
-        }
-        a.t += dt * rate;
-    }
-    acts_.erase(std::remove_if(acts_.begin(), acts_.end(), [&](const Act& a) { return a.t >= a.dur || !filled(a.x, a.y); }), acts_.end());
-    if (g.over() || overT_ >= 0.f) return;
-    // the stack's eggs (and the surface ones)
-    std::vector<std::pair<int, int>> eggs, top;
-    for (int y = Game::HIDDEN; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++)
-            if (filled(x, y) && !busy(x, y)) {
-                eggs.push_back({x, y});
-                if (!filled(x, y - 1) && y > Game::HIDDEN + 1) top.push_back({x, y});
-            }
-    int inner = 0;
-    for (const Act& a : acts_) inner += a.type <= A_PRESS;
-    innerT_ -= dt;
-    if (innerT_ <= 0.f) {
-        innerT_ = rng_.range(0.8f, 2.2f) / (0.7f + 0.3f * wm + 0.4f * wp);
-        if (inner < 3 && !eggs.empty()) {
-            const auto e = eggs[(size_t)rng_.irange(0, (int)eggs.size() - 1)];
-            const float w[3] = {0.45f, 0.3f, 0.25f};
-            Act a{e.first, e.second, rng_.weighted(w), rng_.chance(0.5f) ? 1 : -1, 0.f, 0.f, 0.f};
-            a.dur = a.type == A_WAKE ? rng_.range(2.2f, 3.2f) : a.type == A_WIGGLE ? 1.3f : 2.4f;
-            const float dirs[3] = {0.f, PI, PI * 0.5f};
-            a.dir = a.type == A_PRESS ? dirs[rng_.irange(0, 2)] : rng_.range(-PI, PI);
-            acts_.push_back(a);
-        }
-    }
-    peekT_ -= dt;
-    if (peekT_ <= 0.f) {
-        peekT_ = lerpf(lerpf(rng_.range(9.f, 15.f), rng_.range(6.f, 10.f), wm), rng_.range(3.5f, 6.f), wp);
-        for (int tries = 0; tries < 6 && !top.empty(); tries++) {
-            const auto e = top[(size_t)rng_.irange(0, (int)top.size() - 1)];
-            if (!safeAt(g, e.first, e.second)) continue;
-            Act a{e.first, e.second, A_PEEK, rng_.chance(0.5f) ? 1 : -1, 0.f, rng_.range(2.2f, 3.f), 0.f};
-            if (rng_.chance(0.2f)) // rarely, a hop out on the stack's surface (to a neighbor egg's top) and back in
-                for (int s : {a.side, -a.side})
-                    if (filled(e.first + s, e.second) && !filled(e.first + s, e.second - 1) && !busy(e.first + s, e.second)) {
-                        a.type = A_HOP;
-                        a.side = s;
-                        a.dur = 3.f;
-                        break;
-                    }
-            acts_.push_back(a);
-            break;
-        }
-    }
-}
-
-// What the creature in the egg at (x, y) shows now (awake, looking, in its egg or out of it, pressed, wiggling).
-MicroscopeUniverse::EggLife MicroscopeUniverse::eggLife(int x, int y, float seed) const {
-    EggLife l;
-    // the drop: everyone wakes up and looks around, in a ripple
-    {
-        const float t = wakeAllT_ - seed * 0.7f;
-        const float w = envf(t, 2.6f, 0.25f, 0.5f);
-        if (w > 0.f) {
-            l.awake = w;
-            l.look = 1.4f * std::sin(t * 2.4f + seed * 9.f);
-        }
-    }
-    for (const Act& a : acts_) {
-        if (a.x != x || a.y != y) continue;
-        const float t = a.t;
-        switch (a.type) {
-        case A_WAKE: {
-            const float blink = 1.f - std::exp(-std::pow((t - a.dur * 0.5f) / 0.08f, 2.f));
-            l.awake = std::max(l.awake, envf(t, a.dur, 0.3f, 0.45f) * blink);
-            l.look = a.dir + 1.3f * std::sin(t * 1.7f);
-            break;
-        }
-        case A_WIGGLE: l.wiggle = envf(t, a.dur, 0.2f, 0.4f); break;
-        case A_PRESS: {
-            const float e = envf(t, a.dur, 0.55f, 0.55f);
-            l.ox = std::cos(a.dir) * 0.09f * e;
-            l.oy = std::sin(a.dir) * 0.09f * e;
-            l.awake = std::max(l.awake, e);
-            l.look = a.dir;
-            break;
-        }
-        default: {
-            // peeking or hopping: it rises to the top of its egg and slips out; the egg is empty until it is back
-            const float up = smoothstepf(0.f, 0.3f, t) * (1.f - smoothstepf(a.dur - 0.3f, a.dur, t));
-            l.oy = 0.2f * up;
-            l.awake = 1.f;
-            l.look = PI * 0.5f;
-            l.inside = (t > 0.25f && t < a.dur - 0.25f) ? 0.f : 1.f;
-            break;
-        }
-        }
-    }
-    return l;
-}
-
-void MicroscopeUniverse::addFront(int kind, int type, vec2 p, float size, float ang, float look, float lid, float happy, float clipY,
-                                  float stretch, float alpha, float seed) {
-    if (alpha <= 0.003f) return;
-    const vec3 c = pal_.piece[type];
-    lifeFront_.push_back({{p.x, p.y, size, ang}, {(float)kind, seed, worldTime_ + seed * 50.f, alpha}, {c.x, c.y, c.z, stretch},
-                          {c.x, c.y, c.z, lid}, {happy, clipY, worldTime_ * 0.3f + seed * 6.f, look}});
-}
-
-// =====================================================================================================
 // Geometry
 // =====================================================================================================
 
-void MicroscopeUniverse::addCell(float x, float y, float half, int type, int kind, float prog, float alpha, float flash, float seed,
-                                 const EggLife* life, bool face) {
+void MicroscopeUniverse::addCell(float x, float y, float half, int type, const CellLook& l, int kind, float prog, float alpha,
+                                 float flash) {
     if (alpha <= 0.003f) return;
-    const EggLife l = life ? *life : EggLife();
-    cells_.push_back({{x, y, half, (float)kind}, {(float)type, seed, prog, alpha}, {flash, l.awake, l.look, l.inside},
-                      {l.ox, l.oy, l.wiggle, face ? 1.f : 0.f}});
-}
-
-void MicroscopeUniverse::addLife(std::vector<LInst>& out, const Org& o, float alpha, float sizeK) {
-    if (alpha <= 0.003f) return;
-    // the swim stroke: squash and stretch along its heading, and a hop now and then
-    const float st = KIND_STRETCH[o.kind] * std::sin(o.phase) + 0.16f * hopCurve(o.hop);
-    const bool round = o.kind == K_DAISY || o.kind == K_VOLVOX;
-    const float rot = round ? 0.f : o.ang;
-    // the eyes: a blink now and then, sleepy in slow motion, happy on the drop
-    const float blink = o.blink > 0.f ? std::sin(saturate(o.blink / 0.2f) * PI) : 0.f;
-    const float lid = std::max(blink, 0.55f * slow_);
-    const float happy = smoothstepf(0.f, 0.3f, o.happy) * (1.f - slow_);
-    const vec3 c = o.piece >= 0 ? pal_.piece[o.piece] : pal_.life[o.col], cd = o.piece >= 0 ? c : pal_.dropLife[o.col];
-    out.push_back({{o.p.x, o.p.y, o.size * sizeK, rot}, {(float)o.kind, o.seed, worldTime_ + o.seed * 50.f, alpha},
-                   {c.x, c.y, c.z, round ? std::fabs(st) * 0.6f : st}, {cd.x, cd.y, cd.z, lid}, {happy, -1e4f, o.spin, o.look}});
+    cells_.push_back({{x, y, half, (float)kind}, {(float)type, l.seed, prog, alpha}, {l.nx, l.ny, flash, l.life >= 0 ? 1.f : 0.f}, {x, y, 0.f, 0.f}});
 }
 
 void MicroscopeUniverse::buildBoard(const Game& g) {
-    // the ghost: a faint outline where the piece will land
+    // the ghost: the wall alone, where the piece will land
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -861,24 +665,24 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
+            CellLook l;
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                addCell(w.x, w.y, 0.5f, p.type, 1, 0.f, 1.f, 0.f);
+                addCell(w.x, w.y, 0.5f, p.type, l, 1, 0.f, 1.f, 0.f);
             }
         }
     }
-    // the stack (gone into the deflating cells at a game over)
+    // the stack (gone into the dying cells at a game over)
     if (overT_ < 0.f)
         for (int y = Game::HIDDEN; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) {
                 const Cell& c = g.cell(x, y);
                 if (c.type < 0) continue;
                 const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-                const EggLife life = eggLife(x, y, seedAt_[y][x]);
-                addCell(p.x, p.y, 0.5f, c.type, 0, 0.f, 1.f, std::pow(saturate(c.flash), 8.f), seedAt_[y][x], &life);
+                addCell(p.x, p.y, 0.5f, c.type, look_[y][x], 0, 0.f, 1.f, std::pow(saturate(c.flash), 14.f));
             }
-    // the falling piece: exactly a locked one at its place
+    // the falling piece: exactly a locked one at its place (its cells keep their looks when it locks)
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -887,7 +691,8 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             if (cells[i][1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
-            addCell(w.x, w.y, 0.5f, p.type, 0, 0.f, saturate((10.6f - w.y) / 0.6f), 0.f, fallSeed_[i]);   // (asleep)
+            const float a = saturate((10.6f - w.y) / 0.6f);
+            addCell(w.x, w.y, 0.5f, p.type, fallLook_[i], 0, 0.f, a, 0.f);
         }
     }
     // the previews
@@ -903,8 +708,12 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         }
         for (int i = 0; i < 4; i++) {
             const float ox = cells[i][0] - (minx + maxx) * 0.5f, oy = cells[i][1] - (miny + maxy) * 0.5f;
-            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, type, 0, 0.f, alpha, 0.f, hashSeed((uint64_t)(type * 7 + i)),
-                    nullptr, false);   // (a simpler one: no face)
+            CellLook l;
+            const float an = (float)(i * 2.1 + type);
+            l.nx = std::cos(an) * 0.07f;
+            l.ny = std::sin(an) * 0.07f;
+            l.seed = hashf((uint64_t)(type * 7 + i));
+            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, type, l, 0, 0.f, alpha, 0.f);
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.45f : 1.f);
@@ -924,20 +733,21 @@ void MicroscopeUniverse::drawInst(GLuint prog, GLuint vao, GLuint vbo, const voi
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)count);
 }
 
-void MicroscopeUniverse::setPalette(GLuint prog) {
+void MicroscopeUniverse::setStain(GLuint prog) {
     auto arr = [&](const char* name, const vec3* v, int n) {
         float f[21];
         for (int i = 0; i < n; i++) { f[i * 3] = v[i].x; f[i * 3 + 1] = v[i].y; f[i * 3 + 2] = v[i].z; }
         glUniform3fv(ugl::U(prog, name), n, f);
     };
-    arr("uWaterA", pal_.water, 3);
-    arr("uWaterB", pal_.dropWater, 2);
-    arr("uPiece", pal_.piece, 7);
-    set3f(prog, "uNight", pal_.night);
-    set3f(prog, "uEyeInk", pal_.eyeInk);
-    set3f(prog, "uBlush", pal_.blush);
+    arr("uFieldA", base_.field, 2);
+    arr("uFieldB", dropS_.field, 2);
+    arr("uPieceA", base_.piece, 7);
+    arr("uPieceB", dropS_.piece, 7);
+    arr("uOrgA", base_.org, 3);
+    arr("uOrgB", dropS_.org, 3);
     set1f(prog, "uStain", stain_);
     set1f(prog, "uStainSeed", seedF_);
+    set1f(prog, "uDark", lerpf(dark_, 1.f, slow_));
     set1f(prog, "uSlow", slow_);
 }
 
@@ -1010,20 +820,20 @@ void MicroscopeUniverse::flushShapes(int mode) {
 
 void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
-    const VariantDef& V = VARIANTS[variant_];
-    // the ink: the variant's own in the dish, another on the table; by moonlight (slow motion) a pale one
-    const vec3 pale = hex(0xf2f4ff);
-    inkIn_ = lerp(hex(V.inkIn), pale, slow_);
-    inkOut_ = hex(V.inkOut);
-    const vec3 acc = hex(V.accent);
-    accentIn_ = lerp(acc, lerp(acc, pale, 0.4f), slow_);
-    accentOut_ = lerp(acc, vec3(1.f), 0.2f);
-    haloIn_ = lerp(ugl::toSrgb(pal_.water[0]), ugl::toSrgb(pal_.water[0] * pal_.night), slow_);
-    haloOut_ = ugl::toSrgb(pal_.table);
+    // the ink: dark on a pale field, pale on dark-field and on the black around the field
+    const float dk = smoothstepf(0.35f, 0.65f, lerpf(dark_, 1.f, slow_));
+    const vec3 pale = hex(0xc6ccd4), darkInk = hex(0x262a33);
+    inkIn_ = lerp(darkInk, pale, dk);
+    inkOut_ = pale;
+    const vec3 acc = hex(VARIANTS[variant_].accent);
+    accentIn_ = lerp(acc, lerp(acc, vec3(1.f), 0.15f), dk);
+    accentOut_ = lerp(acc, vec3(1.f), dk > 0.5f ? 0.15f : 0.45f);
+    haloIn_ = lerp(ugl::toSrgb(base_.field[0]), vec3(0.f), dk);
+    haloOut_ = vec3(0.f);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? acc : ugl::toSrgb(pal_.water[2]);
+            const vec3 c = r.custom ? r.color : r.accent ? acc : lerp(ugl::toSrgb(base_.field[0]), vec3(0.02f), dk);
             const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h, a = std::min(1.f, r.alpha);
             const float qd[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
@@ -1031,13 +841,13 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
         }
         flushShapes(0);
     }
-    // the bonus gauge: a chunky ring, its charge in the accent
+    // the bonus gauge: a fine ring like a field stop, its charge in the accent
     if (vis > 0.01f && !bare_) {
         const vec2 c = project(layout::GAUGE_CENTER);
         const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
         const int N = 120;
-        const float th = std::max(3.f, 7.f * s);
+        const float th = std::max(1.f, 1.3f * s), th2 = std::max(2.f, 3.5f * s);
         auto seg = [&](float a0, float a1, float w, float al) {
             const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
             const float ri = r - w * 0.5f, ro = r + w * 0.5f;
@@ -1050,11 +860,24 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
             }
         };
         const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, th, (g.bonusReady() ? 0.5f : 0.25f) * dimk);
+        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, th, (g.bonusReady() ? 0.55f : 0.25f) * dimk);
+        // a scale of ticks inside the ring, every 30 degrees
+        for (int i = 0; i < 12; i++) {
+            const float a = TAU * i / 12.f;
+            const float sn = std::sin(a), cs = std::cos(a), w = th * 0.5f;
+            const float r0 = r * 0.8f, r1 = r * 0.9f;
+            const float pts[4][2] = {{c.x + sn * r0 - cs * w, c.y - cs * r0 - sn * w}, {c.x + sn * r1 - cs * w, c.y - cs * r1 - sn * w},
+                                     {c.x + sn * r1 + cs * w, c.y - cs * r1 + sn * w}, {c.x + sn * r0 + cs * w, c.y - cs * r0 + sn * w}};
+            const int idx[6] = {0, 1, 2, 0, 2, 3};
+            for (int k : idx) {
+                const float v[6] = {pts[k][0], pts[k][1], 0.f, 0.f, 0.f, 0.25f * dimk};
+                shapes_.insert(shapes_.end(), v, v + 6);
+            }
+        }
         flushShapes(1);
         for (int i = 0; i < N; i++) {
             if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, th, 0.95f * dimk);
+            seg(TAU * i / N, TAU * (i + 1) / N, th2, 0.95f * dimk);
         }
         flushShapes(2);
     }
@@ -1076,57 +899,57 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
         };
         switch (h.role) {
         case HUD_UNIVERSE:
-            place(fontM_, upper(h.text), base * 0.66f, base * 0.2f, base * 0.08f);
-            drawText(fontM_, q, false, saturate(0.3f + h.alpha * 1.5f) * 0.8f * vis);
+            place(fontSans_, upper(h.text), base * 0.66f, base * 0.3f, base * 0.08f);
+            drawText(fontSans_, q, false, saturate(0.3f + h.alpha * 1.5f) * 0.75f * vis);
             continue;
         case HUD_SECTION:
-            place(fontB_, upper(h.text), base * 0.74f, base * 0.24f);
-            drawText(fontB_, q, true, saturate(0.3f + h.alpha * 1.7f) * vis);
+            place(fontSans_, upper(h.text), base * 0.72f, base * 0.34f);
+            drawText(fontSans_, q, true, saturate(0.3f + h.alpha * 1.7f) * vis);
             continue;
         case HUD_TITLE:
-            place(fontB_, h.text, base * 1.05f, base * 0.02f, -base * 0.1f);
-            drawText(fontB_, q, false, saturate(h.alpha * 1.3f) * vis);
+            place(fontIt_, h.text, base * 1.12f, base * 0.01f, -base * 0.12f);
+            drawText(fontIt_, q, false, saturate(h.alpha * 1.3f) * vis);
             continue;
         case HUD_INFO:
-            place(fontM_, upper(h.text), base * 0.6f, base * 0.18f);
-            drawText(fontM_, q, false, saturate(alpha * 1.2f) * 0.78f);
+            place(fontSans_, upper(h.text), base * 0.6f, base * 0.24f);
+            drawText(fontSans_, q, false, saturate(alpha * 1.2f) * 0.72f);
             continue;
         case HUD_LABEL:
-            place(fontB_, upper(h.text), base * 0.62f, base * 0.3f);
-            drawText(fontB_, q, false, saturate(alpha * 1.2f) * 0.7f);
+            place(fontSans_, upper(h.text), base * 0.62f, base * 0.4f);
+            drawText(fontSans_, q, false, saturate(alpha * 1.2f) * 0.62f);
             continue;
         case HUD_VALUE:
-            place(fontB_, h.text, base * 1.0f, base * 0.04f, -base * 0.04f);
-            drawText(fontB_, q, false, alpha);
+            place(fontSans_, h.text, base * 1.0f, base * 0.06f, -base * 0.04f);
+            drawText(fontSans_, q, false, alpha * 0.95f);
             continue;
         case HUD_NOTICE:
-            place(fontB_, h.text, base * 1.0f, base * 0.04f);
-            drawText(fontB_, q, true, alpha);
+            place(fontIt_, h.text, base * 1.1f, base * 0.02f);
+            drawText(fontIt_, q, true, alpha);
             continue;
         case HUD_KEY:
-            place(fontB_, h.text, base * 0.85f, base * 0.08f);
-            drawText(fontB_, q, false, alpha);
+            place(fontSans_, h.text, base * 0.85f, base * 0.1f);
+            drawText(fontSans_, q, false, alpha);
             continue;
         case HUD_TOAST:
-            place(fontB_, upper(h.text), base * 0.95f, base * 0.3f, -base * 0.1f);
-            drawText(fontB_, q, false, alpha);
+            place(fontSans_, upper(h.text), base * 0.95f, base * 0.42f, -base * 0.1f);
+            drawText(fontSans_, q, false, alpha);
             continue;
         case HUD_TOAST_SUB:
-            place(fontM_, h.text, base * 0.95f, base * 0.04f);
-            drawText(fontM_, q, true, alpha * 0.9f);
+            place(fontIt_, h.text, base * 1.0f, base * 0.02f);
+            drawText(fontIt_, q, true, alpha * 0.9f);
             continue;
         case HUD_DIALOG:
             if (h.scale >= 3.5f * s) {
-                place(fontB_, upper(h.text), base * 0.85f, base * 0.24f);
-                drawText(fontB_, q, false, alpha);
+                place(fontSans_, upper(h.text), base * 0.85f, base * 0.3f);
+                drawText(fontSans_, q, false, alpha);
             } else {
-                place(fontM_, h.text, base * 0.9f, base * 0.03f);
-                drawText(fontM_, q, h.accent, alpha);
+                place(fontIt_, h.text, base * 0.95f, base * 0.02f);
+                drawText(fontIt_, q, h.accent, alpha);
             }
             continue;
         default:
-            place(fontM_, h.text, base * 0.75f, base * 0.05f);
-            drawText(fontM_, q, h.accent, alpha);
+            place(fontSans_, h.text, base * 0.75f, base * 0.06f);
+            drawText(fontSans_, q, h.accent, alpha);
             continue;
         }
     }
@@ -1137,31 +960,22 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
 // =====================================================================================================
 
 void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 240 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
-    static GLuint gpuQ = 0;
-    if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
-    if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
     bare_ = f.bare;
+    if (overT_ < 0.f && !bare_) syncLooks(game); // the world alone: the cells' looks kept for the whole frame
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
-        Palette& p = pal_;
-        const Palette& t = palT_;
-        for (int i = 0; i < 3; i++) p.water[i] = lerp(p.water[i], t.water[i], k);
-        for (int i = 0; i < 2; i++) p.dropWater[i] = lerp(p.dropWater[i], t.dropWater[i], k);
-        for (int i = 0; i < 7; i++) p.piece[i] = lerp(p.piece[i], t.piece[i], k);
-        for (int i = 0; i < 5; i++) { p.life[i] = lerp(p.life[i], t.life[i], k); p.dropLife[i] = lerp(p.dropLife[i], t.dropLife[i], k); }
-        p.table = lerp(p.table, t.table, k);
-        p.rim = lerp(p.rim, t.rim, k);
-        p.rimInk = lerp(p.rimInk, t.rimInk, k);
-        p.line = lerp(p.line, t.line, k);
-        p.night = lerp(p.night, t.night, k);
-        p.eyeInk = t.eyeInk;
-        p.blush = t.blush;
+        auto ease = [&](Stain& s, const Stain& t) {
+            for (int i = 0; i < 2; i++) s.field[i] = lerp(s.field[i], t.field[i], k);
+            for (int i = 0; i < 7; i++) s.piece[i] = lerp(s.piece[i], t.piece[i], k);
+            for (int i = 0; i < 3; i++) s.org[i] = lerp(s.org[i], t.org[i], k);
+        };
+        ease(base_, baseT_);
+        ease(dropS_, dropT_);
+        dark_ = lerpf(dark_, darkT_, k);
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
@@ -1169,7 +983,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         if (!game.over()) { overT_ = -1.f; dying_.clear(); }
         else overT_ += dt;
     }
-    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
     time_ += dt;
     worldTime_ += wdt;
     // ---- Staging.
@@ -1179,322 +993,278 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     const double beat = music.hasSong ? music.beat : time_ * 2.0;
+    // the cilia beat on the beat grid, every two beats (not in calm parts)
+    const float half = (float)(beat * 0.5 - std::floor(beat * 0.5));
+    const float pulse = std::exp(-half * 5.f) * (0.35f * wm + 0.65f * wp) * (1.f - 0.7f * slow_);
     kickEnv_ = std::max(kickEnv_ * std::exp(-dt * 5.f), std::max(kickIn_, music.kick) * wp);
     kickIn_ = 0.f;
     stain_ = approach(stain_, dropMode_ ? 1.f : 0.f, dropMode_ ? 0.42f : 0.12f, dt);
     swell_ = approach(swell_, 0.f, 0.22f, dt);
-    // ---- The eggs' creatures.
-    if (!bare_ && overT_ < 0.f) syncSeeds(game);
-    wakeAllT_ += wdt;
-    if (!bare_) updateActs(game, wdt, wm, wp);
-    for (Hatch& h : hatches_) h.t += dt;
-    hatches_.erase(std::remove_if(hatches_.begin(), hatches_.end(), [](const Hatch& h) { return h.t > 0.6f; }), hatches_.end());
-    // every two beats (mid and peak), a third of the creatures hop, in turn
-    const double half = std::floor(beat * 0.5);
-    if (half != lastHalf_) {
-        if (lastHalf_ >= 0.0 && wm > 0.5f && slow_ < 0.5f && !f.paused) {
-            beatCount_++;
-            int i = 0;
-            for (Org& o : orgs_)
-                if (o.fade < 0.f && (i++ % 3) == beatCount_ % 3 && o.hop > 1.2f) o.hop = -0.1f * o.seed;
-        }
-        lastHalf_ = half;
-    }
-    // a bar at a peak: a few swimmers turn
+    focus_ += (focusT_ - focus_) * (1.f - std::exp(-dt * 1.3f));
+    // a bar at a peak: a few swimmers turn, a diatom reverses
     const double bar = std::floor(beat / 4.0);
-    if (bar != lastBar_) {
-        lastBar_ = bar;
-        if (wp > 0.5f && !orgs_.empty())
-            for (int n = 0; n < 2; n++) orgs_[(size_t)rng_.irange(0, (int)orgs_.size() - 1)].ang += rng_.range(-0.9f, 0.9f);
-    }
-
-    // ---- The game's lines -> the dish's life (on the 50-line scale: the song's pace, paceLines; a break: as it was).
-    if (!bare_) {
-        const float pl = paceLines(game, (float)extraLines(time_));
-        if (pl + 0.5f < pace_) // a new game: the dish is rinsed
-            for (Org& o : orgs_)
-                if (o.fade < 0.f) o.fade = 0.f;
-        pace_ = pl;
-    }
-    for (const ClearAt& c : clears_) release(c, pace_);
-    clears_.clear();
-    {
-        // (a stage reached without clears, the test hook: the dish fills in, one creature at a time)
-        fillT_ -= dt;
-        const int want = (int)std::floor(full_ * saturate(pace_ / SCENE_REF_LINES) + 0.01f);
-        if (fillT_ <= 0.f && alive() < want) {
-            const int l = sideCount(-1), r = sideCount(1);
-            spawn(vec2{0.f, 0.f}, l == r ? (rng_.chance(0.5f) ? 1 : -1) : l < r ? -1 : 1, false, false);
-            fillT_ = 0.05f;
+    const bool newBar = bar != lastBar_;
+    lastBar_ = bar;
+    if (newBar && wp > 0.5f && !orgs_.empty()) {
+        for (int n = 0; n < 2; n++) {
+            Org& o = orgs_[rng_.irange(0, (int)orgs_.size() - 1)];
+            if (o.kind == K_PENNATE) o.dir = -o.dir;
+            else o.ang += rng_.range(-0.7f, 0.7f);
         }
     }
-    // the grown-ups: the creatures grow up a little as the dish fills
-    paceShown_ = approach(paceShown_, pace_, 1.2f, dt);
-    const float growK = lerpf(0.78f, 1.f, smoothstepf(0.f, SCENE_REF_LINES, paceShown_));
 
     // ---- The life (world time: slow motion stretches it).
-    const float act = (0.45f + 0.35f * wm + 0.4f * wp) * (1.f - 0.4f * slow_);
+    for (auto& pr : pending_) pr.first -= dt;
+    for (size_t i = 0; i < pending_.size();) {
+        if (pending_[i].first <= 0.f) {
+            orgs_.push_back(pending_[i].second);
+            pending_.erase(pending_.begin() + (long)i);
+            // beyond the cap, the oldest fade away
+            int alive = 0;
+            for (const Org& o : orgs_) alive += o.fade < 0.f;
+            for (Org& o : orgs_) {
+                if (alive <= MAX_ORGS) break;
+                if (o.fade < 0.f) { o.fade = 0.f; alive--; }
+            }
+        } else i++;
+    }
+    const float act = (0.45f + 0.35f * wm + 0.4f * wp);
     for (Org& o : orgs_) {
         o.age += wdt;
-        if (o.leaving && o.fade < 0.f && o.age > 1.6f) o.fade = 0.f;   // (swimming off: it fades on its way)
-        if (o.fade >= 0.f) o.fade += dt / (o.leaving ? 1.2f : ORG_FADE);
-        o.burst = std::max(0.f, o.burst - wdt * 0.7f);
-        o.hop += wdt;
-        o.happy -= dt;
-        // blinking now and then
-        o.nextBlink -= wdt;
-        if (o.blink > 0.f) o.blink += wdt;
-        if (o.blink > 0.2f) o.blink = 0.f;
-        if (o.nextBlink <= 0.f) { o.blink = 1e-4f; o.nextBlink = rng_.range(2.5f, 7.f); }
+        if (o.fade >= 0.f) o.fade += dt / ORG_FADE;
+        o.burst = std::max(0.f, o.burst - wdt * 0.9f);
         // wander around its home, apart from the others, steered clear of the well and the HUD
         vec2 g;
         const float zd = zoneDist(o.p, &g);
-        const float margin = 0.8f + o.size * 0.45f;
-        const float turn = KIND_TURN[o.kind] * (std::sin(o.seed * 40.f + worldTime_ * 0.23f) * 0.7f + std::sin(o.seed * 71.f + worldTime_ * 0.11f) * 0.5f);
+        const float margin = 1.2f + o.size * 0.45f;
+        const float turn = KIND_TURN[o.kind] * (std::sin(o.turnPhase + worldTime_ * 0.23f) * 0.7f + std::sin(o.turnPhase * 1.7f + worldTime_ * 0.11f) * 0.5f);
         o.ang += turn * wdt * act;
-        if (rng_.chance(wdt / 50.f)) o.home = pickHome(o.home.x < 0.f ? -1 : 1, o.size);   // now and then it moves on
+        if (rng_.chance(wdt / 45.f)) o.home = pickHome(o.home.x < 0.f ? -1 : 1);   // now and then it moves on
         const vec2 th{o.home.x - o.p.x, o.home.y - o.p.y};
         const float hd2 = std::sqrt(th.x * th.x + th.y * th.y);
         const vec2 hn = hd2 > 1e-4f ? vec2{th.x / hd2, th.y / hd2} : vec2{0.f, 0.f};
         vec2 sep{0.f, 0.f};
         for (const Org& b : orgs_) {
-            if (&b == &o || b.fade >= 0.f) continue;
-            const float dx = o.p.x - b.p.x, dy = o.p.y - b.p.y, R = (o.size + b.size) * 0.48f;
+            if (&b == &o) continue;
+            const float dx = o.p.x - b.p.x, dy = o.p.y - b.p.y, R = (o.size + b.size) * 0.62f;
             const float dd = std::sqrt(dx * dx + dy * dy);
             if (dd < R && dd > 1e-4f) { sep.x += dx / dd * (1.f - dd / R); sep.y += dy / dd * (1.f - dd / R); }
         }
-        // (the way out of the well and the HUD's columns is sideways: their union's gradient may point back in)
-        if (std::fabs(o.p.x) < 11.8f && zd < margin) g = vec2{o.p.x < 0.f ? -1.f : 1.f, 0.f};
-        const float wz = saturate((margin - zd) / margin), wh = smoothstepf(0.5f, 3.5f, hd2);
-        const vec2 want{hn.x * wh * 0.9f + sep.x * 2.f + g.x * wz * 2.5f, hn.y * wh * 0.9f + sep.y * 2.f + g.y * wz * 2.5f};
+        const float wz = saturate((margin - zd) / margin), wh = smoothstepf(1.5f, 6.f, hd2);
+        const vec2 want{hn.x * wh * 0.8f + sep.x * 1.2f + g.x * wz * 2.5f, hn.y * wh * 0.8f + sep.y * 1.2f + g.y * wz * 2.5f};
         const float wl = std::sqrt(want.x * want.x + want.y * want.y);
         if (wl > 0.05f) {
-            const float diff = wrapAngle(std::atan2(want.y, want.x) - o.ang);
-            o.ang += (diff > 0 ? 1.f : -1.f) * std::min(std::fabs(diff), (0.15f + 0.35f * std::min(wl, 1.f) + 1.2f * wz) * wdt);
+            const float target = std::atan2(want.y, want.x);
+            const float hd = o.kind == K_PENNATE && o.dir < 0.f ? o.ang + PI : o.ang;
+            const float diff = wrapAngle(target - hd);
+            if (o.kind == K_PENNATE && std::fabs(diff) > 0.7f * PI && wz > 0.3f) o.dir = -o.dir;   // a diatom just backs up
+            else o.ang += (diff > 0 ? 1.f : -1.f) * std::min(std::fabs(diff), (0.15f + 0.4f * std::min(wl, 1.f) + 1.4f * wz) * wdt);
         }
-        // the stroke: a push and a glide (its speed and its squash and stretch on the same cycle)
-        o.phase += wdt * KIND_STROKE[o.kind] * TAU * (0.6f + 0.5f * act);
-        const float push = 0.55f + 0.45f * std::sin(o.phase + 1.2f);
-        float sp = o.speed * act * push * (1.f + 0.7f * kickEnv_ * (o.kind == K_BEAN || o.kind == K_TADPOLE));
-        o.p.x += std::cos(o.ang) * sp * wdt;
-        o.p.y += std::sin(o.ang) * sp * wdt;
-        // carried out to its home at first (out of the well, behind the stack), eased, nudged apart from the others
-        const float carry = (o.fromCell ? 3.2f : 0.f) * (1.f - smoothstepf(1.5f, 5.f, o.age)) * smoothstepf(0.2f, 2.5f, hd2) *
-                            smoothstepf(0.f, 0.35f, o.age);
-        o.p.x += (hn.x * carry + sep.x * 1.2f) * wdt;
-        o.p.y += (hn.y * carry + sep.y * 1.2f) * wdt;
-        // inside a forbidden place (past its birth): eased out
-        const float overlap = o.size * 0.35f - zd;
-        if (overlap > 0.f && o.age > 2.f) {
-            const float k = 1.5f * std::min(overlap, 1.f);
-            o.p.x += g.x * k * wdt;
-            o.p.y += g.y * k * wdt;
+        float sp = o.speed * act * (1.f + 0.6f * pulse * (o.kind == K_PARA)) + 2.2f * o.burst * o.burst;
+        if (o.kind == K_PARA) sp *= 1.f + 0.8f * kickEnv_;
+        const float dirSign = o.kind == K_PENNATE ? o.dir : 1.f;
+        o.p.x += std::cos(o.ang) * sp * dirSign * wdt;
+        o.p.y += std::sin(o.ang) * sp * dirSign * wdt;
+        // carried out to its home by the medium at first, nudged apart from the others
+        const float carry = 2.2f * (1.f - smoothstepf(1.f, 6.f, o.age)) * smoothstepf(0.3f, 2.f, hd2);
+        o.p.x += (hn.x * carry + sep.x * 0.3f) * wdt;
+        o.p.y += (hn.y * carry + sep.y * 0.3f) * wdt;
+        // inside a forbidden place (past its birth): pushed out
+        if (zd < 0.f && o.age > 1.5f) {
+            // (out toward the sides: the forbidden places are the middle columns and the corners' text)
+            const float out = std::fabs(o.p.x) < 12.f ? (o.p.x < 0.f ? -0.8f : 0.8f) : 0.f;
+            o.p.x += (g.x * 0.9f + out) * wdt;
+            o.p.y += g.y * 0.9f * wdt;
         }
-        if (o.age > 6.f) o.fromCell = false;
-        // the eyes look where it swims (eased), the wheels and petals turn, the babies roll
-        o.look += wrapAngle(o.ang - o.look) * (1.f - std::exp(-wdt * 2.f));
-        o.spin += wdt * (o.kind == K_ROTIFER ? 2.2f + 2.f * act : o.kind == K_DAISY ? 0.12f : o.kind == K_VOLVOX ? 0.35f : 0.f);
+        o.cilia = 0.15f + 0.3f * wm + 0.9f * pulse + 0.6f * kickEnv_;
+        o.spin += wdt * (o.kind == K_CENTRIC ? 0.08f : 0.f);
     }
     orgs_.erase(std::remove_if(orgs_.begin(), orgs_.end(), [](const Org& o) { return o.fade >= 1.f; }), orgs_.end());
-    // a few big bubbles rising slowly at the sides
-    {
-        int deco = 0;
-        for (const Bubble& b : bubbles_) deco += b.deco;
-        if (deco < 7 && rng_.chance(wdt * 0.5f)) {
-            Bubble b;
-            const int side = rng_.chance(0.5f) ? 1 : -1;
-            const float x = side * rng_.range(12.5f, std::max(13.f, diskR_ - 3.f));
-            b.p = vec2{x, viewC_.y - viewH_.y - 1.f};
-            b.v = vec2{0.f, rng_.range(0.25f, 0.5f)};
-            b.t = 0.f;
-            b.life = 2.f * viewH_.y / b.v.y + 4.f;
-            b.r = rng_.range(0.35f, 0.75f);
-            b.deco = true;
-            bubbles_.push_back(b);
-        }
+    for (Lyse& l : lyses_) l.t += dt;
+    lyses_.erase(std::remove_if(lyses_.begin(), lyses_.end(), [](const Lyse& l) { return l.t > LYSE_T; }), lyses_.end());
+    for (Speck& k : specks_) {
+        k.t += dt;
+        k.p.x += k.v.x * dt;
+        k.p.y += k.v.y * dt;
+        k.v.x *= std::exp(-dt * 3.f);
+        k.v.y *= std::exp(-dt * 3.f);
     }
-    for (Bubble& b : bubbles_) {
-        const float bt = b.deco ? wdt : dt;
-        b.t += bt;
-        if (b.t < 0.f) continue;
-        b.p.x += (b.v.x + (b.deco ? 0.15f * std::sin(b.t * 0.8f + b.r * 10.f) : 0.f)) * bt;
-        b.p.y += b.v.y * bt;
-        if (!b.deco) { b.v.x *= std::exp(-bt * 2.5f); b.v.y = std::max(b.v.y, 0.3f); }
-    }
-    bubbles_.erase(std::remove_if(bubbles_.begin(), bubbles_.end(), [](const Bubble& b) { return b.t > b.life; }), bubbles_.end());
-    for (Pop& p : pops_) p.t += dt;
-    pops_.erase(std::remove_if(pops_.begin(), pops_.end(), [](const Pop& p) { return p.t > POP_T; }), pops_.end());
+    specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
     if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     cells_.clear();
-    lifeBack_.clear();
-    lifeFront_.clear();
-    for (const Bubble& b : bubbles_) {
-        if (b.t < 0.f || (bare_ && !b.deco)) continue;
-        const float s = b.t / b.life;
-        float a = b.deco ? smoothstepf(0.f, 0.05f, s) * (1.f - smoothstepf(0.9f, 1.f, s)) * 0.55f * smoothstepf(-1.f, 1.f, zoneDist(b.p, nullptr))
-                         : smoothstepf(0.f, 0.1f, s) * (1.f - smoothstepf(0.4f, 1.f, s)) * 0.8f;
+    orgInst_.clear();
+    const float spread = lerpf(1.1f, 0.55f, wp) * (1.f + 0.3f * slow_);
+    const float calmBlur = 0.25f * (1.f - wm);
+    std::vector<Inst> dwellInst;   // drawn over the tissue: the cells' organisms, and those just out of them
+    for (const Org& o : orgs_) {
+        vec2 g;
+        const float zd = zoneDist(o.p, &g);
+        const float young = 1.f - smoothstepf(1.5f, 3.f, o.age);
+        // (one out of a cleared cell is in plain view as it leaves the well; one from elsewhere fades in)
+        const float minA = o.fromCell ? lerpf(0.05f, 1.f, 1.f - smoothstepf(2.5f, 4.f, o.age)) : lerpf(0.05f, 0.4f, young);
+        float a = lerpf(minA, 1.f, smoothstepf(-0.2f, 1.0f, zd));
+        if (!o.fromCell) a *= smoothstepf(0.f, 0.6f, o.age);
+        if (o.fade >= 0.f) a *= 1.f - smoothstepf(0.f, 1.f, o.fade);
         a *= 1.f - bridgeK;
         if (a <= 0.003f) continue;
-        const vec3 c = lerp(pal_.water[0], vec3(1.f), 0.75f);
-        lifeBack_.push_back({{b.p.x, b.p.y, b.r * 2.5f, 0.f}, {(float)K_BUBBLE, 0.f, 0.f, a}, {c.x, c.y, c.z, 0.f},
-                             {c.x, c.y, c.z, 0.f}, {0.f, 0.f, 0.f, 0.f}});
+        const float grow = lerpf(o.grow0, 1.f, smoothstepf(0.f, o.fromCell ? 2.2f : 1.8f, o.age));
+        const float focusIn = o.fromCell ? smoothstepf(0.5f, 3.f, o.age) : 1.f;   // it drifts to its depth
+        float blur = saturate(std::fabs(o.depth * spread - focus_) * 0.55f - 0.12f + calmBlur) * focusIn +
+                     (o.fromCell ? 0.f : 0.5f * young) + bridgeK;
+        blur = saturate(blur);
+        const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
+        const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
+        (o.fromCell && o.age < 1.5f ? dwellInst : orgInst_)
+            .push_back({{o.p.x, o.p.y, o.size * grow, ang}, {(float)o.kind, o.seed, anim, a},
+                        {blur, o.cilia, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
     }
-    for (int layer = 1; layer >= 0; layer--)
-        for (const Org& o : orgs_) {
-            if ((o.depth > 0.5f) != (layer == 1)) continue;
-            vec2 g;
-            const float zd = zoneDist(o.p, &g);
-            // calm behind the well and the HUD: a newborn crossing it shows faintly (behind the stack), then keeps out
-            // (by its body's edge: the zones are generous around the text)
-            const float settled = lerpf(0.2f, 1.f, smoothstepf(-0.8f, 0.3f, zd - o.size * 0.4f * 0.7f));
-            const float newborn = o.fromCell ? 1.f - smoothstepf(1.5f, 3.5f, o.age) : 0.f;
-            const bool inWell = std::fabs(o.p.x) < 5.6f;
-            float a = lerpf(settled, std::max(settled, inWell ? 0.75f : 0.2f), newborn);
-            if (!o.fromCell) a *= smoothstepf(0.f, 0.8f, o.age);
-            float fadeK = 1.f;
-            if (o.fade >= 0.f) { a *= 1.f - smoothstepf(0.3f, 1.f, o.fade); fadeK = 1.f - 0.6f * smoothstepf(0.f, 1.f, o.fade); }
-            a *= 1.f - bridgeK;
-            const float grow = lerpf(o.grow0, 1.f, smoothstepf(0.f, o.fromCell ? 2.4f : 1.5f, o.age));
-            addLife(lifeBack_, o, a, grow * growK * fadeK * (o.depth > 0.5f ? 0.72f : 1.f));
-        }
-    if (!bare_) {
-        // the creatures out of their eggs: peeking, hopping, hatching (in front, clipped by their egg's top)
-        for (const Act& a : acts_) {
-            if (a.type != A_PEEK && a.type != A_HOP) continue;
-            const float tt = a.t - 0.25f, d2 = a.dur - 0.5f;
-            if (tt <= 0.f || tt >= d2) continue;
-            const vec3 cp = layout::cellPos((float)a.x, a.y - game.rowOffset(a.y));
-            const float top = cp.y + 0.46f, seed = seedAt_[a.y][a.x];
-            const int kind = EGG_TO_DISH[eggKind(seed)];
-            const int type = std::clamp((int)game.cell(a.x, a.y).type, 0, 6);
-            const float blink = 1.f - std::exp(-std::pow((tt - d2 * 0.55f) / 0.07f, 2.f));
-            float x = cp.x, y, clip = -1e4f, st = 0.f;
-            const float sit = top + 0.27f;
-            if (a.type == A_PEEK) {
-                const float e = envf(tt, d2, 0.45f, 0.4f);
-                y = top - 0.32f + 0.52f * e;
-                clip = top;
-                st = 0.08f * std::sin(PI * smoothstepf(0.f, 0.45f, tt));
-            } else if (tt < 0.35f) {
-                y = lerpf(top - 0.32f, sit, smoothstepf(0.f, 0.35f, tt));
-                clip = top;
-            } else if (tt < 2.15f) {
-                const bool out = tt < 1.25f;
-                const float u0 = out ? 0.35f : 1.55f, u = saturate((tt - u0) / 0.6f);
-                const float from = out ? 0.f : 1.f, to = out ? 1.f : 0.f;
-                const bool moving = tt < u0 + 0.6f;
-                x = cp.x + a.side * lerpf(from, to, smoothstepf(0.f, 1.f, u));
-                y = sit + (moving ? 0.7f * std::sin(PI * u) : 0.f);
-                st = moving ? 0.12f * std::sin(PI * u) : 0.f;
-            } else {
-                y = lerpf(sit, top - 0.34f, smoothstepf(2.15f, d2, tt));
-                clip = top;
-            }
-            const float look = PI * 0.5f - 1.2f * std::sin(tt * 1.7f);
-            addFront(kind, type, vec2{x, y}, 0.9f, PI * 0.5f, look, blink < 0.5f ? 1.f : 0.f, 0.f, clip, st, 1.f - bridgeK, seed);
-        }
-        for (const Hatch& h : hatches_) {
-            if (h.t < 0.f) continue;
-            const float sz = 0.5f + 0.35f * smoothstepf(0.f, 0.25f, h.t);
-            const vec2 p{h.p.x, h.p.y + 0.25f * std::sin(PI * std::min(h.t / 0.5f, 1.f))};
-            addFront(h.kind, h.type, p, sz, PI * 0.5f, PI * 0.5f, 0.f, 1.f, -1e4f, 0.1f * std::sin(PI * std::min(h.t / 0.3f, 1.f)),
-                     (1.f - smoothstepf(0.35f, 0.6f, h.t)) * (1.f - bridgeK), h.seed);
-        }
-    }
-    if (!bare_) { // the world alone: no stack, nothing popping or deflating
-        EggLife out;
-        out.inside = 0.f;
-        for (const Pop& p : pops_) addCell(p.x, p.y, 0.5f, p.type, 2, saturate(p.t / POP_T), 1.f, 0.f, 0.f, &out);
+    if (!bare_) { // the world alone: no tissue, nothing bursting or dying
+        for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f);
         if (overT_ >= 0.f)
             for (const Dying& d : dying_) {
                 const float t = saturate((overT_ - d.delay) / DIE_T);
-                if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, 3, t, 1.f, 0.f, hashSeed((uint64_t)(d.x * 31.f + d.y * 977.f + 5000.f)));
+                if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, d.l, 3, t, 1.f, 0.f);
             }
         buildBoard(game);
     }
+    // the organisms living inside cells of the stack and the falling piece
+    if (!bare_) {
+        auto dwell = [&](const CellLook& l, float x, float y, int type, float alpha) {
+            if (l.life < 0 || alpha <= 0.003f) return;
+            const Org o = dweller(l, x, y, type);
+            const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
+            const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
+            dwellInst.push_back({{o.p.x, o.p.y, o.size, ang}, {(float)o.kind, o.seed, anim, alpha * (1.f - bridgeK)},
+                                 {0.f, 0.15f + 0.3f * wm + 0.6f * kickEnv_, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+        };
+        if (overT_ < 0.f)
+            for (int y = Game::HIDDEN; y < Game::H; y++)
+                for (int x = 0; x < Game::W; x++) {
+                    const Cell& c = game.cell(x, y);
+                    if (c.type < 0 || !has_[y][x]) continue;
+                    const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
+                    dwell(look_[y][x], p.x, p.y, c.type, 1.f);
+                }
+        if (game.hasPiece() && !game.over()) {
+            const Piece& p = game.piece();
+            int pc[4][2];
+            game.pieceCells(p, pc);
+            const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
+            for (int i = 0; i < 4; i++) {
+                if (pc[i][1] < Game::HIDDEN - 1) continue;
+                const vec3 w = layout::cellPos(pc[i][0] + dx, pc[i][1] + dy);
+                dwell(fallLook_[i], w.x, w.y, p.type, saturate((10.6f - w.y) / 0.6f));
+            }
+        }
+    }
+    std::vector<Inst> speckInst;
+    for (const Speck& k : specks_) {
+        if (bare_) break; // (pushed out from under a dropped piece)
+        const float s = k.t / k.life;
+        const float a = smoothstepf(0.f, 0.1f, s) * (1.f - smoothstepf(0.4f, 1.f, s)) * 0.5f;
+        speckInst.push_back({{k.p.x, k.p.y, k.r, 0.f}, {0.f, 0.f, 0.f, a}, {0.f, 0.f, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}});
+    }
 
     // ---- Draw.
+    const float dk = lerpf(dark_, 1.f, slow_);
     const float aaW = 2.f * viewH_.y / (float)height_;
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     sceneT_.bind();
     glDisable(GL_BLEND);
     glUseProgram(progField_);
-    setPalette(progField_);
+    setStain(progField_);
     set4f(progField_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set2f(progField_, "uDisk", viewC_.y, diskR_);
     set1f(progField_, "uTime", worldTime_);
+    set1f(progField_, "uIllum", 0.93f + 0.045f * wm + 0.03f * wp);
     set1f(progField_, "uSwell", swell_ * (1.f - 0.6f * slow_));
     set1f(progField_, "uSeed", seedF_);
     set1f(progField_, "uAA", aaW);
-    set1f(progField_, "uWell", bare_ ? 0.f : 1.f - bridgeK);
-    set3f(progField_, "uLine", pal_.line);
+    set1f(progField_, "uReticle", bare_ ? 0.f : 1.f - bridgeK);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE); // the scene's alpha is the stack's (for the bridge)
-    if (!lifeBack_.empty()) {
-        glUseProgram(progLife_);
-        setPalette(progLife_);
-        set1f(progLife_, "uGlow", 1.f + 0.06f * wp + 0.12f * swell_);
-        set1f(progLife_, "uPane", bare_ ? 0.f : 1.f - bridgeK);
-        drawInst(progLife_, lifeVao_, lifeVbo_, lifeBack_.data(), lifeBack_.size() * sizeof(LInst), lifeBack_.size());
+    if (!orgInst_.empty()) {
+        glUseProgram(progOrg_);
+        setStain(progOrg_);
+        set1f(progOrg_, "uGlow", (0.85f + 0.12f * wm + 0.15f * wp + 0.2f * swell_) * (1.f - 0.2f * slow_));
+        drawInst(progOrg_, orgVao_, orgVbo_, orgInst_.data(), orgInst_.size() * sizeof(Inst), orgInst_.size());
+    }
+    if (!speckInst.empty()) {
+        glUseProgram(progSpeck_);
+        setStain(progSpeck_);
+        drawInst(progSpeck_, speckVao_, speckVbo_, speckInst.data(), speckInst.size() * sizeof(Inst), speckInst.size());
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(progPiece_);
-    setPalette(progPiece_);
+    setStain(progPiece_);
     set1f(progPiece_, "uTime", worldTime_);
+    set1f(progPiece_, "uLife", (0.6f + 0.4f * wm) * (1.f - 0.5f * slow_));
+    set1f(progPiece_, "uGlow", (0.95f + 0.05f * wm + 0.08f * wp + 0.1f * swell_) * (1.f - 0.1f * slow_));
     drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
-    if (!lifeFront_.empty()) {
-        glUseProgram(progLife_);
-        setPalette(progLife_);
-        set1f(progLife_, "uGlow", 1.f);
-        set1f(progLife_, "uPane", 0.f);
-        drawInst(progLife_, lifeVao_, lifeVbo_, lifeFront_.data(), lifeFront_.size() * sizeof(LInst), lifeFront_.size());
+    if (!dwellInst.empty()) {
+        glUseProgram(progOrg_);
+        setStain(progOrg_);
+        set1f(progOrg_, "uGlow", (0.85f + 0.12f * wm + 0.15f * wp + 0.2f * swell_) * (1.f - 0.2f * slow_));
+        drawInst(progOrg_, orgVao_, orgVbo_, dwellInst.data(), dwellInst.size() * sizeof(Inst), dwellInst.size());
+    }
+
+    // ---- The glow (dark-field).
+    glDisable(GL_BLEND);
+    const float bloomK = dk * (0.22f + 0.1f * wp + 0.2f * swell_);
+    if (bloomK > 0.01f) {
+        bloomA_.bind();
+        glUseProgram(progDown_);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+        set1i(progDown_, "uSrc", 0);
+        set2f(progDown_, "uTexel", 1.5f / sceneT_.w, 1.5f / sceneT_.h);
+        ugl::drawFullscreen();
+        glUseProgram(progBlur_);
+        set1i(progBlur_, "uSrc", 0);
+        for (int i = 0; i < 2; i++) {
+            const float st = 1.f + i;
+            bloomB_.bind();
+            glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
+            set2f(progBlur_, "uDir", st / bloomA_.w, 0.f);
+            ugl::drawFullscreen();
+            bloomA_.bind();
+            glBindTexture(GL_TEXTURE_2D, bloomB_.tex);
+            set2f(progBlur_, "uDir", 0.f, st / bloomA_.h);
+            ugl::drawFullscreen();
+        }
     }
 
     // ---- The frame.
-    glDisable(GL_BLEND);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glUseProgram(progFinal_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
+    set1i(progFinal_, "uBloom", 1);
+    glActiveTexture(GL_TEXTURE0);
     set4f(progFinal_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set2f(progFinal_, "uDisk", viewC_.y, diskR_);
-    set1f(progFinal_, "uRimW", RIM_W);
-    set1f(progFinal_, "uSlow", slow_);
+    set1f(progFinal_, "uBloomK", bloomK);
+    set1f(progFinal_, "uDarkF", dk);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
     set1f(progFinal_, "uBridge", bridgeK);
     set3f(progFinal_, "uBridgeCol", bridge_.color);
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
-    set3f(progFinal_, "uTable", pal_.table);
-    set3f(progFinal_, "uRim", pal_.rim);
-    set3f(progFinal_, "uRimInk", pal_.rimInk);
-    set3f(progFinal_, "uNight", pal_.night);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(game, f.hud, f.panels);
     glDisable(GL_BLEND);
-    if (gpuQ) {
-        glEndQuery(GL_TIME_ELAPSED);
-        GLuint64 ns = 0;
-        glGetQueryObjectui64v(gpuQ, GL_QUERY_RESULT, &ns);
-        static double acc = 0.0;
-        static int n = 0;
-        acc += ns * 1e-6;
-        if (++n == 240) {
-            std::fprintf(stderr, "[microscope] gpu %.2f ms/frame (%dx%d, %d creatures)\n", acc / n, width_, height_, alive());
-            acc = 0.0;
-            n = 0;
-        }
-    }
 }
 
 // =====================================================================================================
@@ -1503,10 +1273,10 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_microscope() {
     static const UniverseEntry e{
-        "MICROSCOPE", "a picture-book Petri dish: jelly cells; each cleared row frees a cute creature that swims in the dish for the rest of the song",
+        "MICROSCOPE", "a Petri dish through the eyepiece: stained plant cells; each cleared row releases life that swims for the rest of the song",
         [] { return std::unique_ptr<Universe>(new MicroscopeUniverse()); },
-        // A playful world: fits most songs, a little more the light and lively ones.
-        [](const SongLook& l) { return 0.8f + 0.15f * l.brightness + 0.15f * (1.f - l.density); },
+        // A quiet, precise world: fits most songs, a little more the calm and airy ones.
+        [](const SongLook& l) { return 0.8f + 0.15f * l.airWeight + 0.15f * (1.f - l.density); },
         [] {
             std::vector<std::string> v;
             for (const VariantDef& x : VARIANTS) v.push_back(x.name);
