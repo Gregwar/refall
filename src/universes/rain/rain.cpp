@@ -867,7 +867,6 @@ void RainUniverse::physicsStep(float h) {
         velAt(c.i, c.px, c.py, vix, viy);
         velAt(c.j, c.px, c.py, vjx, vjy);
         const float vn = (vix - vjx) * c.nx + (viy - vjy) * c.ny;
-        for (int k : {c.i, c.j})
         c.bias = 0.2f / h * std::max(0.f, c.depth - 0.004f);
         c.bias = std::min(c.bias, 1.f); // (a gentle push out, never a shove)
         if (vn < -1.5f) c.bias = std::max(c.bias, -0.15f * vn); // a small bounce
