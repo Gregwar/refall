@@ -89,26 +89,26 @@ const VariantDef VARIANTS[] = {
     {"LAGOON", 0x0fb8cc, 0x0646a0, 0x6ce4ee, 0xc4fcff, 0xfff6dc, 0x6a8ee0, 0xa8f6ff, 0xfffbe8, 0xeafff8,
      0xf2e0bc, 0xe0c294, 0xa47c6c, 0x6e5470, 0xf07aa0, 0x66c45a,
      {0xff5f8a, 0xa45cff, 0xffd02a, 0xff8a2a, 0x2fe0a8, 0xff3fd0, 0x9cf03a, 0x3a9cff},
-     0xffffff, 0xffd84a, 0x033250, 0x86ecf2,
-     {0x2fe6ff, 0xffd23a, 0xb46cff, 0x52e57a, 0xff4f6a, 0x3d78ff, 0xff9636}, 0.55f, 1.18f, 27.f, 1.f, 1.f, 0.08f, 0.f, 1.1f},
+     0xffffff, 0xffd84a, 0x022a56, 0x86ecf2,
+     {0x8edcfc, 0xffe48a, 0xd6a4ff, 0xa6ec9c, 0xff9ca8, 0x98a8ff, 0xffb680}, 0.55f, 1.18f, 27.f, 1.f, 1.f, 0.08f, 0.f, 1.1f},
     // A reef at golden hour: green-gold water, the sun low on one side, long warm shafts, warm corals.
     {"GOLDEN HOUR", 0x1aa2b4, 0x0a3a7c, 0xffc890, 0xffe2b0, 0xffcf88, 0x7a76c8, 0xffcc88, 0xffe2a4, 0xffcf84,
      0xf0dcc0, 0xdcb894, 0x8c6e6c, 0x6a5868, 0xff6a7a, 0xa0c048,
      {0xff5a5a, 0xa060ff, 0xffd23a, 0xff8a2a, 0x3ad0a0, 0xe048a8, 0xb0e048, 0x5a8cff},
-     0xfff6e8, 0xffb84a, 0x0e2c46, 0xffcf84,
-     {0x40e0f0, 0xffd040, 0xc070ff, 0x7ae060, 0xff5060, 0x5080ff, 0xff9a40}, -1.15f, 0.62f, 23.f, 1.35f, 0.85f, 0.06f, 0.f, 1.12f},
+     0xfff6e8, 0xffb84a, 0x0a1e46, 0xffcf84,
+     {0x92dcf4, 0xffe088, 0xd8a8fa, 0xb0e892, 0xff9ea4, 0x9eaafc, 0xffb478}, -1.15f, 0.62f, 23.f, 1.35f, 0.85f, 0.06f, 0.f, 1.12f},
     // The outer reef: deep cobalt water, crystal clear, a white sun high above.
     {"OUTER REEF", 0x1478d8, 0x062a80, 0x62bcff, 0xa4dcff, 0xf4fbff, 0x5a74d0, 0x90d4ff, 0xf0f8ff, 0xd8f0ff,
      0xd4deec, 0xb0bed6, 0x7c6c8a, 0x5a4c74, 0xd060c8, 0x48b890,
      {0xff6a7a, 0x9a5aff, 0xffd23a, 0xff7a30, 0x3ae0d0, 0xff4aa0, 0x8cf060, 0x4a8cff},
-     0xffffff, 0x7af0ff, 0x041a48, 0x90d4ff,
-     {0x38e8ff, 0xffd84a, 0xbe78ff, 0x5ae888, 0xff5a72, 0x4a86ff, 0xffa040}, 0.3f, 1.3f, 31.f, 1.1f, 1.f, 0.08f, 0.f, 1.1f},
+     0xffffff, 0x7af0ff, 0x02164a, 0x90d4ff,
+     {0x8edcfc, 0xffe48a, 0xd6a4ff, 0xa6ec9c, 0xff9ca8, 0x98a8ff, 0xffb680}, 0.3f, 1.3f, 31.f, 1.1f, 1.f, 0.08f, 0.f, 1.1f},
     // A moonlit night dive: indigo water, moonlight shafts, the corals glowing in fluorescent colors.
     {"MOONLIT", 0x0c3a7a, 0x03102e, 0x2a5ab8, 0x3a6ad8, 0xb8ccff, 0x2a3a88, 0x6aa0ff, 0xa8c8ff, 0x8ab0ff,
      0x8a9ac8, 0x6a78a8, 0x3a3c5a, 0x2a2c48, 0xc04aa0, 0x2a9a7a,
      {0xff5a8a, 0xb060ff, 0xffe040, 0xffa030, 0x30ffe0, 0xff40d0, 0xa0ff40, 0x6a7aff},
-     0xeef4ff, 0x6affe8, 0x020a24, 0x4a80ff,
-     {0x40f0ff, 0xffe060, 0xc080ff, 0x60f090, 0xff5a8a, 0x5a8cff, 0xffa050}, 0.9f, 1.05f, 21.f, 0.75f, 0.7f, 0.9f, 1.f, 1.1f},
+     0xeef4ff, 0x6affe8, 0x01061a, 0x4a80ff,
+     {0x9ae4ff, 0xffec98, 0xdeb0ff, 0xb0f2a6, 0xffa8b6, 0xa4b4ff, 0xffc092}, 0.9f, 1.05f, 21.f, 0.75f, 0.7f, 0.9f, 1.f, 1.1f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
@@ -1578,6 +1578,13 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progComp_, "uSunVP", 0.5f + 0.35f * std::sin(pal_.sunAz) * std::cos(pal_.sunEl) * 2.f, 1.f + 1.6f * std::tan(pal_.sunEl) * 0.5f);
     set1f(progComp_, "uRays", pal_.rays * (0.75f + 0.15f * wm + 0.3f * wp + 0.3f * life + 0.15f * swell_));
     set1f(progComp_, "uSat", pal_.sat);
+    {
+        // the well's rectangle in uv (the world is blurred behind it)
+        const float u0 = (-5.3f - (viewC_.x - viewH_.x)) / (2.f * viewH_.x), u1 = (5.3f - (viewC_.x - viewH_.x)) / (2.f * viewH_.x);
+        const float v0 = (-10.3f - (viewC_.y - viewH_.y)) / (2.f * viewH_.y), v1 = (10.3f - (viewC_.y - viewH_.y)) / (2.f * viewH_.y);
+        set4f(progComp_, "uWellUv", u0, v0, u1, v1);
+        set1f(progComp_, "uBlur", f.bare ? 0.f : 1.f - bridge);
+    }
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
@@ -1587,7 +1594,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
         set3f(progVeil_, "uRail", lerp(pal_.rail * 0.5f, bridge_.ink * 0.4f, bridge));
-        set1f(progVeil_, "uWellA", 0.8f);
+        set1f(progVeil_, "uWellA", 0.93f);
         set1f(progVeil_, "uColA", 0.5f * (1.f - bridge));
         set1f(progVeil_, "uRailA", 0.45f);
         set1f(progVeil_, "uPx", pxPerUnit_);
@@ -1621,10 +1628,18 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progCell_, "uLightC", pal_.sun);
             set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
             set3f(progCell_, "uBridgeInk", bridge_.ink);
+            // a contact shadow under the blocks (at night a soft glow around them), then the blocks
+            set1f(progCell_, "uGlow", pal_.night);
+            set3f(progCell_, "uHaloC", vec3(0.f, 0.004f, 0.02f));
+            set1f(progCell_, "uHaloA", lerpf(0.75f, 0.32f, pal_.night));
+            set2f(progCell_, "uHaloOff", lerpf(0.07f, 0.f, pal_.night), lerpf(-0.09f, 0.f, pal_.night));
             glBindVertexArray(cellVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
             glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+            for (int pass = 0; pass < 2; pass++) {
+                set1f(progCell_, "uPass", (float)pass);
+                glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+            }
         }
         // the bonus gauge: a faint ring, the charge a bright arc
         {

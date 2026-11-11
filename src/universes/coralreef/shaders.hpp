@@ -587,9 +587,25 @@ uniform vec2 uTan;
 uniform vec3 uRayC;
 uniform vec2 uSunVP;
 uniform float uRays, uSat;
+uniform vec4 uWellUv;   // the well's rectangle (uv), where the world is blurred
+uniform float uBlur;
 void main() {
     vec4 w = texture(uWorld, vUv);
     vec3 c = w.rgb;
+    {
+        vec2 dw = max(max(uWellUv.xy - vUv, vUv - uWellUv.zw), 0.0);
+        float k = (1.0 - smoothstep(0.0, 0.02, length(dw))) * uBlur;
+        if (k > 0.0) {
+            vec2 px = 1.0 / vec2(textureSize(uWorld, 0));
+            vec3 acc = c;
+            for (int i = 0; i < 12; i++) {
+                float an = float(i) * 2.39996;
+                float r = 2.5 + float(i) * 0.9;
+                acc += texture(uWorld, vUv + vec2(cos(an), sin(an)) * r * px).rgb;
+            }
+            c = mix(c, acc / 13.0, k);
+        }
+    }
     vec3 d = normalize(uLook + uCamR * (vUv.x * 2.0 - 1.0) * uTan.x + uCamU * (vUv.y * 2.0 - 1.0) * uTan.y);
     // the shafts: fanning down from the surface, from a point high above the view (toward the sun), drifting
     // slowly; they show over the water's depth in front of what they cross (none on what is near)
@@ -631,7 +647,7 @@ void main() {
         a = max(a, uColA * (1.0 - smoothstep(-1.5, 2.6, dc)));
     }
     // the well's own glass: a little lighter toward its top, where the light comes from
-    vec3 veil = uVeil * (1.0 + 0.25 * smoothstep(-10.0, 10.0, w.y) * step(dw, 0.0));
+    vec3 veil = uVeil * (1.0 + 0.12 * smoothstep(-10.0, 10.0, w.y) * step(dw, 0.0));
     float rail = clamp(1.0 - abs(dw) * uPx * 0.9, 0.0, 1.0) * 0.55 + exp(-abs(dw) * 3.0) * 0.1;
     rail *= smoothstep(10.4, 8.0, w.y) * 0.5 + 0.5;
     vec3 c = veil * a + uRail * rail * uRailA;
@@ -639,7 +655,10 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- pieces: one clean rounded tile per cell
+// ---------------------------------------------------------------- pieces: one coral block per cell
+// Each cell one clean rounded block of pale, sun-bleached coral: a porous calcified surface (polyp cups, a fine
+// grain) shaded like a relief from the top left, a crisp deeper rim of its own hue. A first pass lays a soft
+// contact shadow under the stack (a soft glow at night), the second the blocks. The ghost is a thin outline.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, -
@@ -648,49 +667,92 @@ layout(location = 3) in vec4 aC; // mode (0 piece, 1 ghost), erase 0..1, -, -
 uniform mat4 uVP;
 out vec2 vLocal;
 out vec2 vWorld;
+flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
 void main() {
-    float ext = aA.z + 0.04;
+    float ext = aA.z * 1.36;
     vec2 wp = aA.xy + aPos * ext;
     vLocal = aPos * ext / (2.0 * aA.z);
     vWorld = wp;
-    vB = aB; vC = aC;
+    vA = aA; vB = aB; vC = aC;
     gl_Position = uVP * vec4(wp, 0.0, 1.0);
 }
 )";
 inline const char* CELL_FS = R"(#version 330 core
 in vec2 vLocal;
 in vec2 vWorld;
+flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
-uniform float uTime, uBridge, uShimmer;
-uniform vec3 uBridgeInk, uLightC;
+uniform float uTime, uBridge, uShimmer, uPass, uHaloA, uGlow;
+uniform vec2 uHaloOff;
+uniform vec3 uBridgeInk, uLightC, uHaloC;
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
+// the calcified surface's height: polyp cups (the nearest of jittered centres) with raised lips, a fine grain
+float coral(vec2 q) {
+    vec2 i = floor(q), f = fract(q);
+    float d1 = 8.0;
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 r = g + 0.2 + 0.6 * hash2(i + g) - f;
+            d1 = min(d1, dot(r, r));
+        }
+    float d = sqrt(d1);
+    float cup = smoothstep(0.27, 0.08, d);
+    float lip = smoothstep(0.16, 0.28, d) * smoothstep(0.48, 0.3, d);
+    return 0.4 * lip - 0.8 * cup + 0.2 * vnoise(q * 2.7);
+}
 void main() {
     int mode = int(vC.x + 0.5);
     float erase = vC.y;
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
-    vec2 q = vLocal / shrink;
-    float d = sdBox(q, vec2(0.45 - 0.13)) - 0.13;
-    float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
-    if (mode == 1) {
-        float ring = 1.0 - smoothstep(0.022, 0.022 + aa * 1.5, abs(d + 0.035));
-        float a = (ring * 0.8 + inside * 0.07) * vB.a;
-        vec3 c = mix(mix(t, vec3(1.0), 0.3), uBridgeInk, uBridge);
+    if (uPass < 0.5) {
+        // the contact shadow (or the night's glow) under a block
+        if (mode != 0) discard;
+        vec2 q = (vLocal - uHaloOff) / shrink;
+        float d = sdBox(q, vec2(0.45 - 0.13)) - 0.13;
+        float a = (1.0 - smoothstep(-0.06, 0.2, d)) * uHaloA * vB.a * (1.0 - smoothstep(0.3, 1.0, erase)) * (1.0 - uBridge);
+        vec3 c = mix(uHaloC, t * 0.8, uGlow);
         frag = vec4(c * a, a);
         return;
     }
-    // solid, lit softly from above (the sun through the water), its edge a shade deeper
-    vec3 c = t * mix(0.86, 1.06, smoothstep(-0.5, 0.5, q.y));
-    c = mix(c, mix(t, vec3(1.0), 0.32), (1.0 - smoothstep(0.0, 0.07, abs(q.y - 0.31))) * smoothstep(0.42, 0.2, abs(q.x)) * 0.35);
+    vec2 q = vLocal / shrink;
+    float d = sdBox(q, vec2(0.45 - 0.13)) - 0.13;
+    float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
+    if (inside <= 0.0) discard;
+    if (mode == 1) {
+        float ring = 1.0 - smoothstep(0.03, 0.03 + aa * 1.5, abs(d + 0.04));
+        float a = (ring * 0.85 + inside * 0.06) * vB.a;
+        vec3 c = mix(t, uBridgeInk, uBridge);
+        frag = vec4(c * a, a);
+        return;
+    }
+    // the relief: polyp cups over the block (each cell its own), fading out when tiny on screen
+    float lod = smoothstep(0.11, 0.035, aa);
+    vec2 cq = q * 4.4 + vA.xy * 1.37;
+    float e = 0.06;
+    float h0 = coral(cq), hx = coral(cq + vec2(e, 0.0)), hy = coral(cq + vec2(0.0, e));
+    vec3 n = vec3(-(hx - h0) / e * 0.22 * lod, -(hy - h0) / e * 0.22 * lod, 0.0);
+    // the block's own rounded body, lit from the top left
+    float edgeK = smoothstep(0.0, 0.16, -d);
+    n = normalize(n + vec3(-q * (1.0 - edgeK) * 1.4, 1.0));
+    vec3 L = normalize(vec3(-0.45, 0.6, 0.66));
+    float diff = dot(n, L);
+    vec3 c = t * (0.7 + 0.42 * diff);
+    c *= mix(1.0, 0.8 + 0.2 * smoothstep(-0.7, 0.1, h0), lod);
+    c = mix(c, mix(t, vec3(1.0), 0.45), smoothstep(0.92, 1.0, diff) * 0.35);
     // a faint ripple of light drifting over the stack
     float w = sin(vWorld.x * 1.3 + vWorld.y * 0.7 + uTime * 0.8) + sin(vWorld.x * 0.6 - vWorld.y * 1.1 - uTime * 0.6);
-    c *= 1.0 + uShimmer * 0.05 * smoothstep(1.2, 2.0, w);
-    c = mix(c, t * 0.62, 1.0 - smoothstep(0.0, 0.04 + aa, -d));
+    c *= 1.0 + uShimmer * 0.04 * smoothstep(1.2, 2.0, w);
+    c += t * uGlow * 0.12;
+    // its crisp rim, a deeper tone of its own hue
+    vec3 deep = t * t * 0.55;
+    c = mix(c, deep, 1.0 - smoothstep(0.035, 0.035 + aa * 1.5, -d));
     c = mix(c, mix(t, vec3(1.0), 0.6), smoothstep(0.0, 0.5, erase) * 0.6);
     c = mix(c, uBridgeInk, uBridge);
     float a = inside * vB.a * (1.0 - smoothstep(0.45, 1.0, erase));
