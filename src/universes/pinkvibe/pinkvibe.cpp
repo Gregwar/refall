@@ -1,0 +1,884 @@
+// PINK VIBE: a soft, girly, pastel pink world in flat design.
+//
+// One world, flat and without outlines. Behind everything wide, smooth bands of pinks wave diagonally across the
+// screen, from pale blush through rose and salmon-pink to a deeper raspberry band and back to blush, each band laid
+// over the next with a soft flat shade under its edge. They undulate slowly and continuously: the waves breathe with
+// the section (almost still at a calm part, rolling at a peak) and sway gently on the half-time beat grid from mid
+// on. A few sparkles, bubble rings and dots, toned to the band they cross, drift very sparsely upward in the free
+// zones (never behind the well, fading out near the HUD columns).
+//
+// The well is a translucent deep plum panel with a soft pale rim: the pastel blocks pop off it and the bands show
+// faintly through. The blocks are one soft rounded tile per cell, flat with a gentle lift toward the top, a thin pale
+// shine curve in their top left corner (no gloss) and one small calm motif in a paler tone: I three pearls, O a heart,
+// T a little flower, S a sparkle, Z a crescent, J a bow, L a bubble ring. The seven types are seven pinks of clearly
+// different lightness and hue (blush, peach-pink, rose, raspberry, mauve, lilac-pink, coral-pink), per variant.
+//
+// The drop is the sunset, held for the whole drop section: the bands swirl around the well into one big rolling
+// wave and the palette swings to the variant's deeper rose-gold / magenta tones, eased in over a second or two and
+// out over a few once the drop ends. A cleared row's tiles swell softly and vanish, each releasing petals and
+// bubbles that drift out behind the well and float up; a Tetris sends a soft shower of hearts and petals from both
+// sides and swells the waves; slow motion is a lavender dusk with slower waves; game over greys the stack from the
+// top. HUD: Quicksand and Nunito (rounded), deep plum on a feathered blush halo.
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+
+#include "layout.hpp"
+#include "ugl.hpp"
+#include "universes/registry.hpp"
+#include "universes/pinkvibe/shaders.hpp"
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#include "stb_truetype.h"
+
+namespace {
+
+// Quicksand Medium (the song, labels, toasts) and Nunito SemiBold (numbers, the universe's name), SIL Open Font
+// License, see OFL-Quicksand.txt and OFL-Nunito.txt.
+const unsigned char FONT_SOFT[] = {
+#include "universes/pinkvibe/Quicksand-Medium.ttf.inc"
+};
+const unsigned char FONT_ROUND[] = {
+#include "universes/pinkvibe/Nunito-SemiBold.ttf.inc"
+};
+
+namespace sh = pinkvibe_shaders;
+using ugl::set1f;
+using ugl::set1i;
+using ugl::set2f;
+using ugl::set3f;
+using ugl::set4f;
+
+vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
+
+// A variant: the five bands (blush .. deepest) and the drop's, the well, its rim, the HUD ink and accent, the seven
+// pieces (I O T S Z J L).
+struct VariantDef {
+    const char* name;
+    unsigned band[5], dropBand[5];
+    unsigned well, rim, ink, accent;
+    unsigned piece[7];
+};
+const VariantDef VARIANTS[] = {
+    {"BLUSH",
+     {0xfde4e7, 0xf9c8d1, 0xf4a9b7, 0xee8e9e, 0xd8617f},
+     {0xf9c7b4, 0xf09aa6, 0xe0668d, 0xc23f78, 0x8a2862},
+     0x561745, 0xffe1ea, 0x5a1f45, 0xb8336a,
+     {0xffdde5, 0xffbea4, 0xf78fb1, 0xe0477f, 0xc488aa, 0xd9a9f0, 0xff7878}},
+    {"ROSE",
+     {0xfde9e0, 0xf8ccbf, 0xf2ada1, 0xe78c8e, 0xc8677b},
+     {0xf6c391, 0xee9c86, 0xd86d82, 0xae4870, 0x6c2954},
+     0x5a1a40, 0xffe6dc, 0x5c2234, 0xb54360,
+     {0xffe6d4, 0xf9b78c, 0xf2949c, 0xc8476a, 0xba8599, 0xe2afd7, 0xff8468}},
+    {"CANDY",
+     {0xfbe7f4, 0xf5c6e3, 0xeea4d0, 0xe081bb, 0xc35c9f},
+     {0xd9b6f2, 0xe58dcb, 0xd0569f, 0xa63b86, 0x6a2670},
+     0x491650, 0xffe3f3, 0x4e1a4e, 0xb02f86,
+     {0xffe1f1, 0xffb4a6, 0xff8dc6, 0xd3377f, 0xb282c6, 0xc8a6ff, 0xff6e8e}},
+};
+constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
+
+enum Kind { K_PANEL = 0, K_PETAL, K_HEART, K_BUBBLE, K_SPARKLE, K_RING };
+
+constexpr float CLEAR_T = 0.36f;   // a cleared tile vanishes in this long (real time)
+
+float ease(float t) {
+    t = saturate(t);
+    return t * t * (3.f - 2.f * t);
+}
+
+// UTF-8 to the font's characters (the middle dot kept, accents dropped).
+std::string ascii(const std::string& s) {
+    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
+    std::string o;
+    for (size_t i = 0; i < s.size(); i++) {
+        const unsigned char c = (unsigned char)s[i];
+        if (c < 128) { o += (char)c; continue; }
+        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
+        if (c == 0xC3 && i + 1 < s.size()) {
+            const unsigned char d = (unsigned char)s[i + 1];
+            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
+        }
+        if ((c & 0xE0) == 0xC0) i += 1;
+        else if ((c & 0xF0) == 0xE0) i += 2;
+        else if ((c & 0xF8) == 0xF0) i += 3;
+        o += '?';
+    }
+    return o;
+}
+
+class PinkVibeUniverse : public Universe {
+public:
+    ~PinkVibeUniverse() override;
+    bool init(int width, int height) override;
+    void resize(int width, int height) override;
+    void setSong(const SongLook& look, float seconds) override;
+    void setLevel(int level, float energy, float seconds, float impact) override;
+    void drop(float strength) override { dropMode_ = true; swell_ = std::max(swell_, 0.4f + 0.4f * strength); }
+    void refresh(float strength) override { swell_ = std::max(swell_, 0.25f * strength); }
+    void onEvent(const GameEvent& ev, const Game& game) override;
+    void setBonus(bool on) override { slowOn_ = on; }
+    void render(const Frame& f, GLuint fbo) override;
+    vec2 project(const vec3& p) const override { return layout::project(vp_, p, width_, height_); }
+    TransitionHints hints() const override;
+    int variant() const override { return variant_; }
+
+private:
+    struct Sprite { float a[4], b[4], c[4], d[4]; };
+    std::vector<Sprite> sprites_;
+    void sprite(int kind, float x, float y, float hx, float hy, float rot, float alpha, const vec3& A,
+                const vec3& B = vec3(1.f), float p1 = 0.f, float p2 = 0.f, float p3 = 0.f) {
+        if (alpha <= 0.004f || hx <= 0.f || hy <= 0.f) return;
+        sprites_.push_back({{x, y, hx, hy}, {rot, (float)kind, alpha, p1}, {A.x, A.y, A.z, p2}, {B.x, B.y, B.z, p3}});
+    }
+    void flushSprites();
+
+    struct CellInst { float a[4], b[4], c[4]; };
+    std::vector<CellInst> cells_;
+    void cell(float x, float y, float half, float rot, int type, float alpha, int mode, float scale, float k);
+    void buildBoard(const Game& g);
+    struct Pop { float x, y; int type; float t; };
+    std::vector<Pop> pops_;
+
+    // Particles: the clears' petals and bubbles (behind the well), the hard drops' petals (at the contact).
+    struct Part { float x, y, vx, vy, rot, spin, size, age, life, seed; int kind; vec3 col; bool front; };
+    std::vector<Part> parts_;
+
+    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
+    struct Font {
+        bool ok = false;
+        GLuint tex = 0;
+        float px = 64.f, scaleTT = 1.f, capH = 40.f;
+        Glyph g[96];
+        void* info = nullptr;
+    };
+    Font soft_, round_;
+    void buildFont(Font& f, const unsigned char* ttf);
+    float textWidth(const Font& f, const std::string& s, float size, float track) const;
+    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
+    void drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha);
+    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+
+    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progText_ = 0, progSolid_ = 0;
+    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    mat4 vp_;
+    vec2 viewC_{0, 0}, viewH_{21, 11.9f};
+    void solid(float r, float g, float b, float a);
+
+    int variant_ = 0;
+    uint64_t seed_ = 1;
+    vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7];
+    bool colSet_ = false;
+
+    int level_ = 1;
+    bool hasLevel_ = false;
+    float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
+    bool dropMode_ = false;
+    float dropAmt_ = 0.f, swell_ = 0.f;
+    float flow_ = 0.f, amp_ = 0.5f, sway_ = 0.f, intensity_ = 0.3f;
+    bool slowOn_ = false;
+    float slow_ = 0.f;
+    float overT_ = -1.f, over_ = 0.f;
+    float gaugeShown_ = 0.f;
+    float dimT_ = 0.f;
+    float time_ = 0.f;
+    Rng rng_{0x9171u};
+};
+
+// =====================================================================================================
+// Setup
+// =====================================================================================================
+
+bool PinkVibeUniverse::init(int width, int height) {
+    const std::string head = "#version 330 core\n";
+    progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "pinkvibe bands");
+    progSprite_ = ugl::program(sh::SPRITE_VS, (head + sh::PAINT_GLSL + sh::SPRITE_FS).c_str(), "pinkvibe sprites");
+    progCell_ = ugl::program(sh::CELL_VS, (head + sh::PAINT_GLSL + sh::CELL_FS).c_str(), "pinkvibe blocks");
+    progText_ = ugl::program(sh::TEXT_VS, sh::TEXT_FS, "pinkvibe text");
+    progSolid_ = ugl::program(ugl::FULLSCREEN_VS, sh::SOLID_FS, "pinkvibe solid");
+
+    const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
+    glGenBuffers(1, &quadVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+    auto instanced = [&](GLuint& vao, GLuint& vbo, int vec4s) {
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        for (int i = 0; i < vec4s; i++) {
+            glEnableVertexAttribArray(1 + i);
+            glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4 * vec4s, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(1 + i, 1);
+        }
+    };
+    instanced(spriteVao_, spriteVbo_, 4);
+    instanced(cellVao_, cellVbo_, 3);
+    glGenVertexArrays(1, &textVao_);
+    glGenBuffers(1, &textVbo_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+    glBindVertexArray(0);
+
+    buildFont(soft_, FONT_SOFT);
+    buildFont(round_, FONT_ROUND);
+    resize(width, height);
+    return glGetError() == GL_NO_ERROR;
+}
+
+void PinkVibeUniverse::buildFont(Font& f, const unsigned char* ttf) {
+    stbtt_fontinfo* info = new stbtt_fontinfo;
+    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
+        std::fprintf(stderr, "[gl] pinkvibe font init failed\n");
+        delete info;
+        return;
+    }
+    f.info = info;
+    f.px = 64.f;
+    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
+    int x0, y0, x1, y1;
+    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
+    const int AW = 1024, AH = 1024, PAD = 14;
+    std::vector<unsigned char> atlas((size_t)AW * AH, 0);
+    int x = 1, y = 1, rowH = 0;
+    for (int ch = 32; ch < 128; ch++) {
+        const int cp = ch == 127 ? 0xB7 : ch;
+        Glyph& g = f.g[ch - 32];
+        int adv, lsb;
+        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
+        g.adv = adv * f.scaleTT;
+        int w = 0, h = 0, xo = 0, yo = 0;
+        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
+        if (!sdf) { g.w = g.h = 0; continue; }
+        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
+        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
+        for (int r = 0; r < h; r++) std::memcpy(&atlas[(size_t)(y + r) * AW + x], sdf + r * w, w);
+        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
+        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
+        x += w + 1;
+        rowH = std::max(rowH, h);
+        stbtt_FreeSDF(sdf, nullptr);
+    }
+    glGenTextures(1, &f.tex);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    f.ok = true;
+}
+
+void PinkVibeUniverse::resize(int width, int height) {
+    width_ = std::max(1, width);
+    height_ = std::max(1, height);
+    const float aspect = (float)width_ / height_;
+    const layout::Camera cam = layout::camera(width_, height_);
+    const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect;
+    viewH_ = vec2{hw, hh};
+    viewC_ = vec2{cam.target.x, cam.target.y};
+    vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
+}
+
+PinkVibeUniverse::~PinkVibeUniverse() {
+    for (GLuint p : {progBg_, progSprite_, progCell_, progText_, progSolid_}) glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (Font* f : {&soft_, &round_}) {
+        if (f->tex) glDeleteTextures(1, &f->tex);
+        delete (stbtt_fontinfo*)f->info;
+    }
+}
+
+// =====================================================================================================
+// Song, level, events
+// =====================================================================================================
+
+void PinkVibeUniverse::setSong(const SongLook& t, float seconds) {
+    int v;
+    if (t.variant >= 0) v = t.variant % VARIANT_COUNT;
+    else {
+        float h = std::fmod(t.hue / TAU, 1.f);
+        if (h < 0) h += 1.f;
+        if (t.hasSong && t.minor && t.brightness < 0.5f) v = 1;           // a darker, minor song: the warm rosé
+        else if (t.hasSong && t.brightness > 0.62f) v = 2;                // a bright one: candy
+        else {
+            static const int BY_HUE[] = {0, 2, 1, 0, 1, 2};
+            v = BY_HUE[(int)(h * 6.f) % 6];
+        }
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 2)) % VARIANT_COUNT;
+    }
+    variant_ = v;
+    seed_ = t.seed ? t.seed : 1;
+    rng_ = Rng(seed_ ^ 0x91AEull);
+    if (seconds <= 0.f) colSet_ = false;
+}
+
+void PinkVibeUniverse::setLevel(int level, float energy, float seconds, float impact) {
+    (void)energy;
+    (void)impact;
+    level = std::clamp(level, 0, 2);
+    if (level < 2) dropMode_ = false;
+    if (!hasLevel_ || seconds < 0.1f) {
+        hasLevel_ = true;
+        level_ = level;
+        lv_ = lvFrom_ = lvTo_ = (float)level;
+        lvT_ = 1.f;
+        return;
+    }
+    const bool rising = level > level_;
+    level_ = level;
+    lvFrom_ = lv_;
+    lvTo_ = (float)level;
+    lvT_ = 0.f;
+    lvDur_ = std::clamp(seconds, rising ? 1.2f : 2.5f, 5.f);
+}
+
+TransitionHints PinkVibeUniverse::hints() const {
+    const VariantDef& V = VARIANTS[variant_];
+    TransitionHints h;
+    vec3 bg(0.f);
+    for (unsigned c : V.band) bg += hex(c) * 0.2f;
+    h.background = ugl::toLinear(bg);
+    h.ink = ugl::toLinear(hex(V.ink));
+    h.accent = ugl::toLinear(hex(V.accent));
+    h.light = true;
+    h.styles = TS_INK | TS_RIPPLE;
+    return h;
+}
+
+void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
+    (void)game;
+    switch (ev.type) {
+    case GameEvent::HardDrop: {
+        // two small petals pushed out from under the piece, at its lowest cells' outer sides
+        float yLo = 99.f, xLo = 99.f, xHi = -99.f;
+        int type = 0;
+        for (auto& c : ev.cells) { yLo = std::min(yLo, layout::cellPos((float)c.x, (float)c.y).y); type = c.type; }
+        for (auto& c : ev.cells) {
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            if (p.y > yLo + 0.01f) continue;
+            xLo = std::min(xLo, p.x);
+            xHi = std::max(xHi, p.x);
+        }
+        if (xLo > xHi) break;
+        for (int s = 0; s < 2; s++) {
+            const float sx = s ? 1.f : -1.f;
+            Part p;
+            p.x = s ? xHi + 0.5f : xLo - 0.5f;
+            p.y = yLo - 0.38f;
+            p.vx = sx * rng_.range(1.1f, 1.6f);
+            p.vy = rng_.range(0.5f, 0.9f);
+            p.rot = s ? 0.3f : PI - 0.3f;
+            p.spin = sx * 1.6f;
+            p.size = 0.15f;
+            p.age = 0.f;
+            p.life = 0.55f;
+            p.seed = rng_.uniform();
+            p.kind = K_PETAL;
+            p.col = piece_[std::clamp(type, 0, 6)];
+            p.front = true;
+            parts_.push_back(p);
+        }
+        break;
+    }
+    case GameEvent::Clear: {
+        for (auto& c : ev.cells) {
+            if (c.y < Game::HIDDEN) continue;
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f});
+            const float side = p.x + rng_.range(-1.f, 1.f) < 0.f ? -1.f : 1.f;
+            for (int i = 0; i < 2; i++) {
+                Part q;
+                q.x = p.x;
+                q.y = p.y;
+                q.vx = side * rng_.range(4.5f, 9.f);
+                q.vy = rng_.range(0.5f, 3.f);
+                q.rot = rng_.range(0.f, TAU);
+                q.spin = rng_.range(-1.2f, 1.2f);
+                q.size = i == 0 ? rng_.range(0.3f, 0.45f) : rng_.range(0.2f, 0.32f);
+                q.age = -rng_.range(0.f, 0.12f);
+                q.life = rng_.range(2.6f, 3.4f);
+                q.seed = rng_.uniform();
+                q.kind = i == 0 ? K_PETAL : (rng_.chance(0.6f) ? K_BUBBLE : K_PETAL);
+                q.col = i == 0 ? piece_[std::clamp(c.type, 0, 6)] : rim_;
+                q.front = false;
+                parts_.push_back(q);
+            }
+        }
+        if (ev.count >= 4) {
+            // a Tetris: a soft shower of hearts and petals from both sides; the waves swell
+            swell_ = std::max(swell_, 0.8f);
+            for (int i = 0; i < 26; i++) {
+                Part q;
+                const float side = i % 2 ? 1.f : -1.f;
+                q.x = side * rng_.range(4.f, 5.f);
+                q.y = rng_.range(-8.f, 4.f);
+                q.vx = side * rng_.range(3.5f, 7.5f);
+                q.vy = rng_.range(1.5f, 5.f);
+                q.rot = rng_.range(-0.3f, 0.3f);
+                q.spin = rng_.range(-0.8f, 0.8f);
+                q.size = rng_.range(0.4f, 0.7f);
+                q.age = -rng_.range(0.f, 0.6f);
+                q.life = rng_.range(3.f, 3.8f);
+                q.seed = rng_.uniform();
+                q.kind = i % 3 == 0 ? K_HEART : i % 3 == 1 ? K_PETAL : K_BUBBLE;
+                q.col = q.kind == K_BUBBLE ? rim_ : piece_[rng_.irange(0, 6)];
+                q.front = false;
+                parts_.push_back(q);
+            }
+        }
+        break;
+    }
+    case GameEvent::TopOut: overT_ = 0.f; break;
+    default: break;
+    }
+}
+
+// =====================================================================================================
+// Board
+// =====================================================================================================
+
+void PinkVibeUniverse::cell(float x, float y, float half, float rot, int type, float alpha, int mode, float scale, float k) {
+    if (alpha <= 0.003f || scale <= 0.f) return;
+    const vec3 c = piece_[std::clamp(type, 0, 6)];
+    cells_.push_back({{x, y, half, rot}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
+}
+
+void PinkVibeUniverse::buildBoard(const Game& g) {
+    const float overRows = over_ * 26.f;
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const Cell& c = g.cell(x, y);
+            if (c.type < 0) continue;
+            const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
+            float k = -0.3f * std::pow(saturate(c.flash), 10.f);
+            if (over_ > 0.f) k = 0.75f * saturate(overRows - (y - Game::HIDDEN));
+            cell(p.x, p.y, 0.5f, 0.f, c.type, 1.f, 0, 1.f, k);
+        }
+    for (const Pop& p : pops_) {
+        // a soft swell, then the tile shrinks away and fades
+        const float t = saturate(p.t / CLEAR_T);
+        const float sc = (1.f + 0.12f * std::sin(std::min(t * 2.5f, 1.f) * PI)) * (1.f - 0.6f * ease((t - 0.3f) / 0.7f));
+        cell(p.x, p.y, 0.5f, 0.f, p.type, 1.f - ease((t - 0.35f) / 0.65f), 0, sc, -0.35f * (1.f - t));
+    }
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        int cs[4][2];
+        g.pieceCells(p, cs);
+        Piece gp = p;
+        gp.y = g.ghostY();
+        if (gp.y > p.y) {
+            int gc[4][2];
+            g.pieceCells(gp, gc);
+            for (auto& c : gc) {
+                if (c[1] < Game::HIDDEN) continue;
+                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
+                cell(w.x, w.y, 0.5f, 0.f, p.type, 1.f, 1, 1.f, 0.f);
+            }
+        }
+        const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        for (auto& c : cs) {
+            if (c[1] < Game::HIDDEN - 1) continue;
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+            cell(w.x, w.y, 0.5f, 0.f, p.type, 1.f, 0, 1.f, 0.f);
+        }
+    }
+    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+        if (type < 0) return;
+        Piece p{type, 0, 0, 0};
+        int cs[4][2];
+        g.pieceCells(p, cs);
+        float minx = 9, maxx = -9, miny = 9, maxy = -9;
+        for (auto& c : cs) {
+            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+        }
+        for (auto& c : cs)
+            cell(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc, 0.5f, 0.f, type,
+                 alpha, 2, sc, 0.f);
+    };
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
+    for (int i = 0; i < 3; i++) {
+        const vec3 c = layout::nextCenter(i);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+    }
+}
+
+void PinkVibeUniverse::flushSprites() {
+    if (sprites_.empty()) return;
+    glUseProgram(progSprite_);
+    ugl::setMat(progSprite_, "uVP", vp_);
+    glBindVertexArray(spriteVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
+    glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(Sprite), sprites_.data(), GL_STREAM_DRAW);
+    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
+    sprites_.clear();
+}
+
+void PinkVibeUniverse::solid(float r, float g, float b, float a) {
+    if (a <= 0.002f) return;
+    glUseProgram(progSolid_);
+    set4f(progSolid_, "uColor", r * a, g * a, b * a, a);
+    ugl::drawFullscreen();
+}
+
+// =====================================================================================================
+// Text
+// =====================================================================================================
+
+float PinkVibeUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
+    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    float w = 0;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        w += f.g[ch - 32].adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            if (ch != 127 && n != 127) w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+    return w - track;
+}
+
+void PinkVibeUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
+                                 std::vector<float>& out) const {
+    if (!f.ok) return;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    const float baseline = f.capH * k;
+    float pen = 0.f;
+    auto place = [&](float u, float v, float tu, float tv) {
+        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
+    };
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        const Glyph& g = f.g[ch - 32];
+        if (g.w > 0) {
+            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
+            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
+            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
+        }
+        pen += g.adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            if (ch != 127 && n != 127) pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+}
+
+void PinkVibeUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha) {
+    if (q.empty() || !f.ok || alpha <= 0.004f) return;
+    glUseProgram(progText_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    set1i(progText_, "uFont", 0);
+    set2f(progText_, "uRes", (float)width_, (float)height_);
+    set3f(progText_, "uFill", fill);
+    set3f(progText_, "uHalo", lerp(rim_, vec3(1.f), 0.4f));
+    set1f(progText_, "uHaloA", 0.6f);
+    set1f(progText_, "uAlpha", alpha);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+}
+
+// The HUD: deep plum letters on a feathered blush halo; Quicksand for the words, Nunito for the numbers.
+void PinkVibeUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+    if (!panels.empty()) {
+        glUseProgram(progSolid_);
+        glEnable(GL_SCISSOR_TEST);
+        for (const HudRect& r : panels) {
+            const vec3 c = r.custom ? r.color : r.accent ? accent_ : rim_;
+            glScissor((GLint)r.x, (GLint)(height_ - r.y - r.h), (GLsizei)std::max(0.f, r.w), (GLsizei)std::max(0.f, r.h));
+            solid(c.x, c.y, c.z, std::min(1.f, r.alpha));
+        }
+        glDisable(GL_SCISSOR_TEST);
+    }
+    std::vector<float> q;
+    for (const HudText& h : hud) {
+        if (h.alpha <= 0.01f || h.text.empty()) continue;
+        const float base = h.scale * 12.f;
+        const float alpha = saturate(h.alpha);
+        const std::string text = ascii(h.text);
+        q.clear();
+        auto place = [&](const Font& f, const std::string& s, float size, float track, float dy = 0.f) {
+            const float w = textWidth(f, s, size, track);
+            textQuads(f, s, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
+        };
+        switch (h.role) {
+        case HUD_UNIVERSE: {
+            std::string name = h.text, var;
+            const size_t dot = name.find("\xC2\xB7");
+            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
+            while (!name.empty() && name.back() == ' ') name.pop_back();
+            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
+            name = ascii(name);
+            std::string vt = ascii(var);
+            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
+            const float sz = base * 0.9f, tr = sz * 0.2f, vsz = base * 1.15f, gap = base * 0.7f;
+            const float wName = textWidth(round_, name, sz, tr);
+            const float wVar = vt.empty() ? 0.f : textWidth(soft_, vt, vsz, 0.f);
+            const float x = ugl::hudLeft(h, wName + (vt.empty() ? 0.f : gap + wVar), width_);
+            const float a = saturate(0.35f + h.alpha * 1.6f);
+            textQuads(round_, name, x, h.y, sz, tr, q);
+            drawText(round_, q, ink_, a);
+            if (!vt.empty()) {
+                q.clear();
+                textQuads(soft_, vt, x + wName + gap, h.y - sz * 0.15f, vsz, 0.f, q);
+                drawText(soft_, q, accent_, a);
+            }
+            continue;
+        }
+        case HUD_SECTION:
+            place(soft_, text, base * 0.9f, base * 0.34f);
+            drawText(soft_, q, accent_, saturate(0.2f + h.alpha * 1.9f));
+            continue;
+        case HUD_TITLE:
+            place(soft_, text, base * 1.6f, base * 0.02f, -base * 0.3f);
+            drawText(soft_, q, ink_, saturate(h.alpha * 1.3f));
+            continue;
+        case HUD_INFO:
+            place(soft_, text, base * 0.75f, base * 0.1f);
+            drawText(soft_, q, ink_, saturate(alpha * 1.3f) * 0.85f);
+            continue;
+        case HUD_LABEL:
+            place(soft_, text, base * 0.8f, base * 0.3f);
+            drawText(soft_, q, accent_, saturate(alpha * 1.2f));
+            continue;
+        case HUD_VALUE:
+            place(round_, text, base * 1.1f, base * 0.04f);
+            drawText(round_, q, ink_, alpha);
+            continue;
+        case HUD_NOTICE:
+            place(soft_, text, base * 1.5f, base * 0.04f);
+            drawText(soft_, q, accent_, alpha);
+            continue;
+        case HUD_KEY:
+            place(round_, text, base * 0.75f, base * 0.06f);
+            drawText(round_, q, ink_, alpha);
+            continue;
+        case HUD_TOAST:
+            place(soft_, text, base * 1.55f, base * 0.12f, -base * 0.3f);
+            drawText(soft_, q, accent_, alpha);
+            continue;
+        case HUD_TOAST_SUB:
+            place(round_, text, base * 1.05f, base * 0.1f);
+            drawText(round_, q, ink_, alpha * 0.95f);
+            continue;
+        case HUD_DIALOG:
+            if (h.scale >= 3.5f * height_ / 1080.f) {
+                place(soft_, text, base * 1.3f, 0.f, -base * 0.1f);
+                drawText(soft_, q, ink_, alpha);
+            } else {
+                place(soft_, text, base * 0.85f, base * 0.1f);
+                drawText(soft_, q, h.accent ? accent_ : ink_, alpha);
+            }
+            continue;
+        default:
+            place(soft_, text, base * 0.85f, base * 0.08f);
+            drawText(soft_, q, h.accent ? accent_ : ink_, alpha);
+            continue;
+        }
+    }
+}
+
+// =====================================================================================================
+// Frame
+// =====================================================================================================
+
+void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
+    const Game& game = f.game;
+    const MusicState& music = f.music;
+    const float dt = std::min(f.dt, 0.1f);
+
+    slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
+    dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
+    if (overT_ >= 0.f && !f.bare) {
+        if (!game.over()) overT_ = -1.f;
+        else overT_ += dt;
+    }
+    over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 2.5f) : 0.f, overT_ >= 0.f ? 3.f : 1.f, dt);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
+    time_ += wdt;
+
+    // ---- The colors: the variant's, eased in on a change of song.
+    {
+        const VariantDef& V = VARIANTS[variant_];
+        const float k = colSet_ ? 1.f - std::exp(-dt * 1.2f) : 1.f;
+        colSet_ = true;
+        auto mixc = [&](vec3& c, unsigned target) { c = lerp(c, hex(target), k); };
+        for (int i = 0; i < 5; i++) { mixc(band_[i], V.band[i]); mixc(dropBand_[i], V.dropBand[i]); }
+        mixc(well_, V.well); mixc(rim_, V.rim); mixc(ink_, V.ink); mixc(accent_, V.accent);
+        for (int i = 0; i < 7; i++) mixc(piece_[i], V.piece[i]);
+    }
+
+    // ---- Staging.
+    if (lvT_ < 1.f) {
+        lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
+        lv_ = lerpf(lvFrom_, lvTo_, ease(lvT_));
+    }
+    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
+    bool sectionKnown = false, sectionDrop = false;
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_SECTION) {
+            sectionKnown = true;
+            sectionDrop = h.text == "DROP";
+        }
+    // the sunset holds for the whole drop section (whether or not its first downbeat was heard: a seek, a review shot)
+    const bool isDrop = overT_ < 0.f && level_ == 2 && (sectionKnown ? sectionDrop : dropMode_ && (!music.hasSong || music.speed > 1.26f));
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.1f : 0.4f, dt);
+    const float sunset = ease(dropAmt_);
+    swell_ = approach(swell_, 0.f, 0.45f, dt);
+    // the waves: their height breathes with the section's energy (slow envelopes), their flow speeds up from mid on
+    intensity_ = approach(intensity_, music.hasSong ? music.intensity : 0.5f, 0.6f, dt);
+    const float ampT = (0.35f + 0.45f * wm + 0.4f * wp) * (0.75f + 0.5f * saturate(intensity_)) + 0.3f * sunset;
+    amp_ = approach(amp_, ampT + 0.35f * swell_, 0.8f, dt);
+    flow_ += wdt * (0.05f + 0.22f * wm + 0.2f * wp + 0.1f * sunset) * lerpf(1.f, 0.5f, slow_);
+    // the sway: a gentle eased swing on the half-time beat grid, from mid on
+    {
+        const double beats = music.hasSong ? music.beat : time_ * 2.0;
+        const float ph = (float)std::fmod(beats * 0.5, 1.0);
+        const float target = std::sin(ph * TAU) * (0.08f + 0.18f * wm + 0.14f * wp);
+        sway_ = approach(sway_, target, 5.f, dt);
+    }
+
+    // ---- Particles, pops.
+    for (Pop& p : pops_) p.t += dt;
+    pops_.erase(std::remove_if(pops_.begin(), pops_.end(), [](const Pop& p) { return p.t > CLEAR_T; }), pops_.end());
+    for (Part& p : parts_) {
+        p.age += dt;
+        if (p.age < 0.f) continue;
+        p.x += (p.vx + (p.front ? 0.f : 0.5f * std::sin(p.age * 1.7f + p.seed * 9.f))) * dt;
+        p.y += p.vy * dt;
+        const float drag = std::exp(-(p.front ? 3.f : 1.3f) * dt);
+        p.vx *= drag;
+        p.vy = p.vy * drag + (p.front ? 0.f : 0.5f) * dt;   // the petals float up a little
+        p.rot += p.spin * dt;
+    }
+    parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Part& p) { return p.age >= p.life; }), parts_.end());
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+
+    // =========================================================== the bands
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width_, height_);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    {
+        glUseProgram(progBg_);
+        set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        float bands[15];
+        for (int i = 0; i < 5; i++) {
+            const vec3 c = lerp(band_[i], dropBand_[i], sunset);
+            bands[i * 3] = c.x; bands[i * 3 + 1] = c.y; bands[i * 3 + 2] = c.z;
+        }
+        glUniform3fv(ugl::U(progBg_, "uBand"), 5, bands);
+        set1f(progBg_, "uTime", time_);
+        set1f(progBg_, "uFlow", flow_);
+        set1f(progBg_, "uAmp", amp_);
+        set1f(progBg_, "uSway", sway_);
+        set1f(progBg_, "uSwirl", sunset);
+        set1f(progBg_, "uDesat", 0.5f * slow_ + 0.3f * over_);
+        set1f(progBg_, "uDecor", 0.55f + 0.25f * wm + 0.2f * sunset);
+        set4f(progBg_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
+        set4f(progBg_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        ugl::drawFullscreen();
+    }
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    // the clears' petals and bubbles, behind the well (softened where they cross a HUD column)
+    auto inColumn = [&](float x, float y) {
+        auto in = [&](const float* c) { return x > c[0] - 0.3f && x < c[2] + 0.3f && y > c[1] - 0.3f && y < c[3] + 0.3f; };
+        return in(layout::LEFT_COLUMN) || in(layout::RIGHT_COLUMN);
+    };
+    for (const Part& p : parts_) {
+        if (p.front || p.age < 0.f) continue;
+        float a = saturate(p.age / 0.15f) * (1.f - ease((p.age - p.life + 0.9f) / 0.9f));
+        if (inColumn(p.x, p.y)) a *= 0.4f;
+        const float r = p.size;
+        const vec3 hi = lerp(p.col, vec3(1.f), 0.55f);
+        if (p.kind == K_PETAL) sprite(K_PETAL, p.x, p.y, r, r * 0.6f, p.rot, a * 0.95f, p.col, hi);
+        else if (p.kind == K_HEART) sprite(K_HEART, p.x, p.y, r, r, p.rot * 0.3f, a * 0.95f, p.col, hi);
+        else sprite(K_BUBBLE, p.x, p.y, r, r, 0.f, a * 0.85f, p.col, vec3(1.f));
+    }
+    flushSprites();
+
+    if (!f.bare) {
+        // =========================================================== the well
+        sprite(K_PANEL, 0.f, 0.f, 5.15f, 10.15f, 0.f, 1.f, lerp(well_, dropBand_[4] * 0.55f, 0.25f * sunset), rim_, 0.84f);
+        for (const Part& p : parts_) {
+            if (!p.front) continue;
+            const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);
+            sprite(K_PETAL, p.x, p.y, p.size, p.size * 0.6f, p.rot, a, p.col, lerp(p.col, vec3(1.f), 0.5f));
+        }
+        // the bonus ring: its arc fills with the gauge, a heart in its middle when it's ready
+        {
+            const vec3 gc = layout::GAUGE_CENTER;
+            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
+            const bool on = game.bonusReady() || game.bonusActive();
+            const float r = layout::GAUGE_R * (on ? 1.f + 0.03f * std::sin(time_ * 2.5f) : 1.f);
+            sprite(K_RING, gc.x, gc.y, r, r, 0.f, 1.f, accent_, lerp(well_, rim_, 0.35f), fill, on ? 1.f : 0.f);
+        }
+        flushSprites();
+
+        // =========================================================== the blocks
+        cells_.clear();
+        buildBoard(game);
+        if (!cells_.empty()) {
+            glUseProgram(progCell_);
+            ugl::setMat(progCell_, "uVP", vp_);
+            set3f(progCell_, "uRim", well_);
+            glBindVertexArray(cellVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
+            glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+        }
+    }
+    solid(0.f, 0.f, 0.f, 0.45f * dimT_);
+    drawHud(f.hud, f.panels);
+    solid(0.f, 0.f, 0.f, 1.f - saturate(f.fade));
+    glDisable(GL_BLEND);
+}
+
+} // namespace
+
+// =====================================================================================================
+// Registry
+// =====================================================================================================
+
+const UniverseEntry& universe_pinkvibe() {
+    static const UniverseEntry e{
+        "PINK VIBE", "a soft pastel pink world in flat design: wide waving bands of pinks, cute pastel blocks, a rose sunset on the drop",
+        [] { return std::unique_ptr<Universe>(new PinkVibeUniverse()); },
+        // Bright, sweet, airy songs suit it best.
+        [](const SongLook& l) { return 0.6f + 0.35f * l.brightness + (l.minor ? 0.f : 0.15f) + 0.15f * l.airWeight - 0.1f * l.bassWeight; },
+        [] {
+            std::vector<std::string> v;
+            for (const VariantDef& x : VARIANTS) v.push_back(x.name);
+            return v;
+        }()};
+    return e;
+}
