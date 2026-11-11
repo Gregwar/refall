@@ -155,6 +155,15 @@ foreach(f ${ZEN_UNIVERSE_EMBEDS} ${ZEN_HOST_EMBEDS})
                  ${CMAKE_BINARY_DIR}/generated/universes/${id}/${name}.inc COPYONLY)
 endforeach()
 target_include_directories(zenrender PRIVATE ${CMAKE_BINARY_DIR}/generated)
+# When each universe last changed (its last commit, or its files' time when it has local changes), refreshed at
+# every build: the list printed for an unknown universe shows the newest last.
+set(ZEN_UNIVERSE_DATES ${CMAKE_BINARY_DIR}/generated/universes/universe_dates.def)
+add_custom_target(universe_dates
+  COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${ZEN_UNIVERSE_DATES}
+          -P ${CMAKE_SOURCE_DIR}/tools/universe_dates.cmake
+  BYPRODUCTS ${ZEN_UNIVERSE_DATES}
+  COMMENT "Universe dates")
+add_dependencies(zenrender universe_dates)
 
 # The game.
 add_executable(tetris-universe
