@@ -13,9 +13,8 @@
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
 // The lines cleared set where the cub should be (the stages at 0, 7, 13, 19, 25, 32, 38 and 45 lines, the family at
 // 50, within a song): the stairs at about 11-12 lines, the platform's end at about 19, the terminus at 25. The
-// subway runs on its own timetable, whatever the cub does: a train glides in, waits with its doors open, leaves;
-// the cub boards if it is at the platform's end then, else it misses it (it watches it go, sad) and takes the next
-// one, under 30 seconds later (a train every 38 s or so). The ride runs on the train's clock; lines cleared meanwhile are banked, and the cub
+// subway comes on its own timetable: a train glides in some 18 s into the scene and waits at the platform, its doors
+// open, until the cub steps in (a missed train would leave a short song without its reunion). The ride runs on the train's clock; lines cleared meanwhile are banked, and the cub
 // walks on with them from the terminus. A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
 // and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
 // bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
@@ -99,8 +98,8 @@ constexpr float GY = -7.4f;                          // the ground line on the s
 constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
 constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
-// The subway's timetable (seconds): a train every 38 s or so, whatever the cub does. Between two trains, a gap;
-// then one glides in, opens its doors, waits, closes them and leaves (into the tunnel, with the cub or without it).
+// The subway's timetable (seconds): after a gap a train glides in, opens its doors and waits for the cub as long as
+// it takes, then closes them and leaves with it.
 constexpr float T_GAP = 8.f, T_ARRIVE_S = 10.f, T_DOOR_S = 1.2f, T_DWELL = 9.f, T_OUT_S = 10.f;
 constexpr float T_RIDE_S = 36.f;                     // the ride, door to door
 double rideF(double u) { u = std::clamp(u, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
@@ -1215,8 +1214,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
         case T_WAIT: {
             trainX_ = XB - DOOR;
-            const bool stepping = P_ > XB - 0.95 && P_ < XB - 0.03;          // (the doors wait for a cub mid-step)
-            if (stepping && trainT_ > T_DOOR_S + T_DWELL - 0.5f) trainT_ = T_DOOR_S + T_DWELL - 0.5f;
+            // the doors stay open until the cub is aboard: the train never leaves without it
+            if (P_ < XB - 0.03 && trainT_ > T_DOOR_S + T_DWELL - 0.5f) trainT_ = T_DOOR_S + T_DWELL - 0.5f;
             const bool closing = trainT_ > T_DOOR_S + T_DWELL;
             door_ = std::clamp(door_ + wdt / T_DOOR_S * (closing ? -1.f : 1.f), 0.f, 1.f);
             if (closing && door_ <= 0.f) {
