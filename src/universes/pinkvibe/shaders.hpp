@@ -226,9 +226,10 @@ void main() {
     float d = dBox(u, vec2(0.45), 0.2);
     vec4 acc = vec4(0.0);
     if (abs(vB.z - 1.0) < 0.5) {
-        // the ghost: a faint fill and a fine line of the piece's color
-        layerA(acc, d, col, 0.13);
-        layerA(acc, abs(d + 0.025) - 0.02, col, 0.55);
+        // the ghost: a soft fill and a clear line of the piece's color, lightened so it reads on the plum well
+        vec3 lc = mix(col, vec3(1.0), 0.3);
+        layerA(acc, d, col, 0.26);
+        layerA(acc, abs(d + 0.035) - 0.032, lc, 0.95);
         frag = vec4(acc.rgb * acc.a * vB.y, acc.a * vB.y);
         return;
     }
