@@ -725,7 +725,7 @@ struct Contact {
 inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
 } // namespace
 
-// One step of the boxes: gravity, contacts (corners inside the other box, the street, the band's walls), a few
+// One step of the boxes: gravity, contacts (box-box by SAT and clipping, corners against the street and the band's walls), a few
 // iterations of sequential impulses with friction, sleeping. A sleeping box is static for the others; one hit
 // hard wakes up.
 void RainUniverse::physicsStep(float h) {
@@ -742,17 +742,65 @@ void RainUniverse::physicsStep(float h) {
             P[k][1] = b.y + s * L[k][0] + c * L[k][1];
         }
     };
-    auto pointIn = [&](int i, int j, float x, float y) {
-        // a corner of i inside j: the contact on j's nearest face, its normal from j to i
-        const Body& B = bodies_[j];
-        const float c = std::cos(B.a), s = std::sin(B.a), dx = x - B.x, dy = y - B.y;
-        const float lx = c * dx + s * dy, ly = -s * dx + c * dy;
-        const float ox = B.half - std::fabs(lx), oy = B.half - std::fabs(ly);
-        if (ox <= 0.f || oy <= 0.f) return;
-        float nlx = 0.f, nly = 0.f, d;
-        if (ox < oy) { nlx = lx < 0.f ? -1.f : 1.f; d = ox; }
-        else { nly = ly < 0.f ? -1.f : 1.f; d = oy; }
-        cs.push_back({i, j, x, y, c * nlx - s * nly, s * nlx + c * nly, d, 0, 0, 0, 0, 0});
+    // Two rotated boxes (SAT): the axis of least penetration among both boxes' face normals gives the reference
+    // face; the incident box's most anti-parallel edge is clipped to the reference face's side planes, each clipped
+    // point below the face a contact (up to two), its normal from the reference box to the incident one.
+    auto boxBox = [&](int ia, int ib) {
+        const Body& A = bodies_[ia];
+        const Body& B = bodies_[ib];
+        const float ax[2][2] = {{std::cos(A.a), std::sin(A.a)}, {-std::sin(A.a), std::cos(A.a)}};
+        const float bx[2][2] = {{std::cos(B.a), std::sin(B.a)}, {-std::sin(B.a), std::cos(B.a)}};
+        const float dx = B.x - A.x, dy = B.y - A.y;
+        float bestSep = -1e9f;
+        int ref = -1, axis = 0;
+        for (int k = 0; k < 4; k++) {
+            const float* u = k < 2 ? ax[k] : bx[k - 2];
+            const float hu = k < 2 ? A.half : B.half;        // the box owning the axis
+            const float* o0 = k < 2 ? bx[0] : ax[0];
+            const float* o1 = k < 2 ? bx[1] : ax[1];
+            const float ho = k < 2 ? B.half : A.half;
+            const float sep = std::fabs(dx * u[0] + dy * u[1]) - hu -
+                              ho * (std::fabs(o0[0] * u[0] + o0[1] * u[1]) + std::fabs(o1[0] * u[0] + o1[1] * u[1]));
+            if (sep > 0.f) return;
+            if (sep > bestSep + (k < 2 ? 0.f : 1e-3f)) { bestSep = sep; ref = k < 2 ? 0 : 1; axis = k & 1; }
+        }
+        const int ri = ref == 0 ? ia : ib, ii = ref == 0 ? ib : ia;
+        const Body& R = bodies_[ri];
+        const Body& I = bodies_[ii];
+        const float (*rx)[2] = ref == 0 ? ax : bx;
+        const float (*iv)[2] = ref == 0 ? bx : ax;
+        float nx = rx[axis][0], ny = rx[axis][1];
+        if ((I.x - R.x) * nx + (I.y - R.y) * ny < 0.f) { nx = -nx; ny = -ny; }
+        // the incident face: its normal most against n
+        int fk = 0;
+        float fs = 1e9f, fsg = 1.f;
+        for (int k = 0; k < 2; k++)
+            for (int sg = -1; sg <= 1; sg += 2) {
+                const float dd = sg * (iv[k][0] * nx + iv[k][1] * ny);
+                if (dd < fs) { fs = dd; fk = k; fsg = (float)sg; }
+            }
+        const float fnx = fsg * iv[fk][0], fny = fsg * iv[fk][1];   // the face normal
+        const float tx = iv[1 - fk][0], ty = iv[1 - fk][1];           // along the face
+        const float cx = I.x + fnx * I.half, cy = I.y + fny * I.half;
+        float v[2][2] = {{cx - tx * I.half, cy - ty * I.half}, {cx + tx * I.half, cy + ty * I.half}};
+        // clip against the reference face's side planes
+        const float sx = -ny, sy = nx;
+        const float sc = R.x * sx + R.y * sy;
+        for (int side = -1; side <= 1; side += 2) {
+            const float px_ = side * sx, py_ = side * sy, off = side * sc + R.half;
+            const float d0 = v[0][0] * px_ + v[0][1] * py_ - off, d1 = v[1][0] * px_ + v[1][1] * py_ - off;
+            if (d0 > 0.f && d1 > 0.f) return;
+            if (d0 > 0.f || d1 > 0.f) {
+                const float t = d0 / (d0 - d1);
+                const float qx = v[0][0] + (v[1][0] - v[0][0]) * t, qy = v[0][1] + (v[1][1] - v[0][1]) * t;
+                if (d0 > 0.f) { v[0][0] = qx; v[0][1] = qy; } else { v[1][0] = qx; v[1][1] = qy; }
+            }
+        }
+        const float front = R.x * nx + R.y * ny + R.half;
+        for (auto& p : v) {
+            const float sep = p[0] * nx + p[1] * ny - front;
+            if (sep <= 0.f) cs.push_back({ii, ri, p[0], p[1], nx, ny, -sep, 0, 0, 0, 0, 0});
+        }
     };
     for (int i = 0; i < N; i++) {
         if (!live(i) || bodies_[i].asleep) continue;
@@ -772,10 +820,7 @@ void RainUniverse::physicsStep(float h) {
             if (!B.asleep && j < i) continue; // awake pairs once
             const float dx = B.x - A.x, dy = B.y - A.y, r = (A.half + B.half) * 1.42f;
             if (dx * dx + dy * dy > r * r) continue;
-            float Q[4][2];
-            corners(B, Q);
-            for (auto& c : P) pointIn(i, j, c[0], c[1]);
-            for (auto& c : Q) pointIn(j, i, c[0], c[1]);
+            boxBox(i, j);
         }
     }
     // masses (a sleeping box is static), a hard hit wakes it
@@ -793,8 +838,8 @@ void RainUniverse::physicsStep(float h) {
         velAt(c.j, c.px, c.py, vjx, vjy);
         const float vn = (vix - vjx) * c.nx + (viy - vjy) * c.ny;
         for (int k : {c.i, c.j})
-            if (k >= 0 && bodies_[k].asleep && vn < -3.f) { bodies_[k].asleep = false; bodies_[k].still = bodies_[k].awake = 0.f; }
-        c.bias = 0.15f / h * std::max(0.f, c.depth - 0.01f);
+            if (k >= 0 && bodies_[k].asleep && vn < -0.6f) { bodies_[k].asleep = false; bodies_[k].still = bodies_[k].awake = 0.f; }
+        c.bias = 0.2f / h * std::max(0.f, c.depth - 0.004f);
         c.bias = std::min(c.bias, 2.f);
         if (vn < -1.5f) c.bias = std::max(c.bias, -0.15f * vn); // a small bounce
     }
@@ -879,26 +924,42 @@ void RainUniverse::stepHeaps(float dt) {
         }
     }
     // the boxes, at a fixed step
-    physAcc_ = std::min(physAcc_ + dt, 4.f / 120.f);
-    while (physAcc_ >= 1.f / 120.f) {
-        physicsStep(1.f / 120.f);
-        physAcc_ -= 1.f / 120.f;
+    physAcc_ = std::min(physAcc_ + dt, 8.f / 240.f);
+    while (physAcc_ >= 1.f / 240.f) {
+        physicsStep(1.f / 240.f);
+        physAcc_ -= 1.f / 240.f;
     }
     // fading tiles sink away; once gone, what rested on them falls again
     for (Body& b : bodies_) {
         b.wet = std::max(0.2f, b.wet - dt * 0.08f);
         if (!b.fading) continue;
         b.fade = std::max(0.f, b.fade - dt * b.fadeRate);
-        if (b.solid && b.fade < 0.35f) {
+        if (b.solid && b.fade < 0.12f) {
             b.solid = false;
             for (Body& o : bodies_)
-                if (o.side == b.side && o.asleep && o.y > b.y - 0.3f && std::fabs(o.x - b.x) < 2.5f) {
+                if (o.side == b.side && o.asleep) { // the whole heap settles again (no arch left over the gap)
                     o.asleep = false;
                     o.still = o.awake = 0.f;
                 }
         }
     }
     bodies_.erase(std::remove_if(bodies_.begin(), bodies_.end(), [](const Body& b) { return b.fading && b.fade <= 0.f; }), bodies_.end());
+    // a sleeping tile left without support (what held it went away) wakes and falls again
+    for (Body& b : bodies_) {
+        if (!b.asleep || !b.solid) continue;
+        const float c = std::cos(b.a), s = std::sin(b.a), q = b.half;
+        float lx = 0.f, ly = 1e9f;
+        for (int k = 0; k < 4; k++) {
+            const float ux = (k & 1) ? q : -q, uy = (k & 2) ? q : -q;
+            const float x = b.x + c * ux - s * uy, y = b.y + s * ux + c * uy;
+            if (y < ly) { ly = y; lx = x; }
+        }
+        bool held = ly - ground_ < 0.06f;
+        for (const Body& o : bodies_)
+            if (!held && &o != &b && o.solid && !o.thrown && std::fabs(o.x - lx) < 1.f && std::fabs(o.y - ly) < 1.f)
+                held = bodyInside(o, lx, ly - 0.06f) || bodyInside(o, lx - 0.15f, ly - 0.06f) || bodyInside(o, lx + 0.15f, ly - 0.06f);
+        if (!held) { b.asleep = false; b.still = b.awake = 0.f; }
+    }
     // fallen out of the picture (a wall missed at a high speed): gone
     bodies_.erase(std::remove_if(bodies_.begin(), bodies_.end(), [&](const Body& b) { return b.y < ground_ - 3.f; }), bodies_.end());
 }
@@ -907,12 +968,12 @@ void RainUniverse::drawHeaps() {
     const vec3 bInk = ugl::toSrgb(bridge_.ink);
     const float bk = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     for (const Body& b : bodies_) {
-        float a = b.fading ? std::min(1.f, b.fade * 1.4f) : 1.f;
+        float a = b.fading ? b.fade : 1.f;
         a *= 1.f - 0.6f * hudCover(b.x, b.y);   // behind the HUD's columns
         a *= 1.f - 0.6f * textCover(b.x, b.y);  // and its corner lines
         const vec3 c = lerp(pieceColor(b.type), bInk, bk);
         if (!(b.thrown && b.t < b.delay)) a *= 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
-        tile(b.x, b.y, b.half + GAP, b.half + GAP, c, a, b.seed, b.wet, false, b.a);
+        tile(b.x, b.y, b.half + GAP - 0.01f, b.half + GAP - 0.01f, c, a, b.seed, b.wet, false, b.a);
     }
     flushTiles();
 }
