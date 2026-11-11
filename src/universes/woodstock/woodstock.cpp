@@ -616,7 +616,7 @@ void WoodstockUniverse::buildBoard(const Game& g) {
         }
         for (auto& c : cs)
             cell(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc, 0.5f, 0.f, type,
-                 alpha, 0, sc, 0.f);
+                 alpha, 2, sc, 0.f);
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
     for (int i = 0; i < 3; i++) {
@@ -1072,7 +1072,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
 
     if (!f.bare) {
         // =========================================================== the well
-        sprite(K_PANEL, 0.f, 0.f, 5.18f, 10.18f, 0.f, 1.f, wellTop_, wellBottom_, accent_, 0.f, 0.f, 0.f, 0.14f);
+        sprite(K_PANEL, 0.f, 0.f, 5.12f, 10.12f, 0.f, 1.f, wellTop_, wellBottom_, accent_, 0.f, 0.f, 0.f, 0.06f);
         for (const Part& p : parts_) {
             if (!p.front) continue;
             const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);
