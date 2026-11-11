@@ -1,9 +1,8 @@
-Copyright 2016 The Rounded M+ Project Authors.
-(M PLUS Rounded 1c by Coji Morishita and the M+ Fonts Project, subset to Latin and a few kana for this game.)
+Copyright (c) 2010-2013, Georg A. Duffner (http://www.georgduffner.at/ebgaramond, g.duffner@gmail.com).
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
-https://scripts.sil.org/OFL
+http://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------
