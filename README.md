@@ -127,6 +127,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 </tr>
 <tr>
 <td><img src="docs/universes/islands.jpg"><br><b>ISLANDS</b>: one continuous flight over an endless tropical archipelago, like drone footage: volcanic islands with cliffs and waterfalls, sandy cays, atolls, a lighthouse islet, bungalows on stilts, a white villa with its pool and deck, turquoise shallows, sailboats and speedboats with their wakes; calm parts fly high and wide, now and then above the clouds, peaks skim the waves; every cleared row launches a sailboat with sails in the row's colors, a fleet that grows over the song and lights its lanterns at dusk; the drop dives to the waves into a regatta of coloured spinnakers, golden light and leaping dolphins (fireworks at night); the day passes from midday to dusk; the blocks are polished sea glass<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/rain.jpg"><br><b>RAIN</b>: rain everywhere over a colorful street at dusk (neon signs, a flower market or a monsoon's lanterns, all mirrored in the puddles); the rain pours on the stack with its own physics, splashing and running down the wet glazed tiles, the falling piece sheltering the cells under it; cleared rows are thrown out on calm arcs to two piles on the sides where the rain falls too; the drop is a thunderstorm<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
