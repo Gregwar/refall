@@ -48,67 +48,72 @@ vec2 carLocal(vec2 w, float i) {
     float y0 = trackY(x0) - 0.3, y1 = trackY(x0 + CAR) - 0.3;
     return rot(-atan(y1 - y0, CAR)) * (w - vec2(x0, y0));
 }
-// a cab at an end of the train: closed sides, a slanted nose with its windscreen, a side window (the driver in the
-// leading cab), a destination sign, a route disc, head lamps (leading) or tail lamps; n: the distance outward past
-// the car's end
-float noseX(float y) {
-    float x = 1.5 - 0.6 * smoothstep(3.6, 6.9, y);
-    x -= 0.4 * (1.0 - smoothstep(0.2, 1.1, y));
-    return x;
+// a cab at an end of the train, one smooth shape flowing out of the car's body: the same top, bottom, outline and
+// shading as the car, a nose rounded generously at the top and a little at the bottom, the front leaning back; one
+// windscreen inset from that outline, the lamps inside its lower front corner (white ahead, red behind), a faint
+// amber strip at its top, the driver a soft rounded shape behind the glass in the leading cab. n: the distance
+// outward past the car's end (the cab starts 3 inside it)
+float sdRoundBox4(vec2 p, vec2 b, vec4 r) {
+    r.xy = p.x > 0.0 ? r.xy : r.zw;
+    float rr = p.y > 0.0 ? r.x : r.y;
+    vec2 q = abs(p) - b + rr;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - rr;
+}
+const float NOSE = 1.5, CABIN = 3.0;
+float cabBody(float n, float y) {
+    vec2 q = vec2(n + (y - 3.75) * 0.09, y);
+    return sdRoundBox4(q - vec2((NOSE - 14.0) * 0.5, 3.75), vec2((NOSE + 14.0) * 0.5, 3.55), vec4(2.3, 0.7, 0.0, 0.0));
 }
 void cab(vec2 l, float n, bool lead, inout vec3 col, inout float a) {
-    if (l.y < 0.0 || l.y > 7.6 || n < -3.2 || n > 2.6) return;
-    float fx = noseX(clamp(l.y, 0.2, 6.95));
-    float body = max(max(-3.0 - n, n - fx), max(0.2 - l.y, l.y - 6.95 - 0.2 * (1.0 - smoothstep(-0.5, 0.5, fx - n - 0.6))));
-    body = max(body, l.y - 6.95 - 0.3 * smoothstep(0.0, 1.0, -n - 0.0));
-    body = max(max(-3.0 - n, n - fx), max(0.2 - l.y, l.y - 7.0));
-    float bo = fillA(body - gPx * 1.5), ba = fillA(body);
-    vec3 bc = vec3(0.13, 0.15, 0.18) * uTrainBody * (0.85 + 0.3 * smoothstep(0.0, 7.0, l.y));
-    bc = mix(bc, vec3(0.5, 0.07, 0.07) * uTrainBody, max(fillA(abs(l.y - 1.95) - 0.12), fillA(abs(l.y - 6.75) - 0.08)));
-    // the windscreen along the slanted front, a wiper
-    float ws = max(abs(n - (noseX(clamp(l.y, 3.3, 6.3)) - 0.28)) - 0.24, abs(l.y - 4.85) - 1.35);
-    vec3 wsc = vec3(0.03, 0.05, 0.07) + vec3(0.3, 0.32, 0.36) * 0.25 * smoothstep(4.0, 6.0, l.y) + (lead ? vec3(0.06, 0.05, 0.03) : vec3(0.0));
-    bc = mix(bc, vec3(0.02), fillA(ws - 0.08));
-    bc = mix(bc, wsc, fillA(ws));
-    // the side window, the driver in it (a cap, a head, shoulders)
-    float sw = sdBox(vec2(n + 1.55, l.y - 4.4), vec2(1.05, 1.0)) - 0.15;
-    vec3 glass = vec3(0.05, 0.07, 0.09) + vec3(0.3, 0.26, 0.18) * 0.35 * uTrainLit;
+    if (l.y < -0.2 || l.y > 7.7 || n < -CABIN - 0.4 || n > NOSE + 0.6) return;
+    float d = cabBody(n, l.y);
+    float inCab = step(-CABIN, n);
+    // the outline round the outer shape only (not where the cab meets the car)
+    float bo = fillA(d - gPx * 1.5) * inCab, ba = fillA(d) * inCab;
+    vec3 bc = vec3(0.13, 0.15, 0.18) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y));
+    // the stripes the cars carry, following the nose
+    bc = mix(bc, vec3(0.5, 0.07, 0.07) * uTrainBody, fillA(abs(l.y - 1.95) - 0.12));
+    bc = mix(bc, vec3(0.45, 0.06, 0.06) * uTrainBody, fillA(abs(l.y - 6.75) - 0.08) * step(n, NOSE - 0.9));
+    // the windscreen: the body's outline inset, from behind the cab's middle to the nose
+    float wd = max(d + 0.32, max(abs(l.y - 4.55) - 1.45, -1.9 - n));
+    wd = max(wd, -(n + 1.9) + 0.0);
+    float wr = sdRoundBox4(vec2(n, l.y) - vec2(-0.4, 4.55), vec2(1.5, 1.45), vec4(1.2, 0.35, 0.35, 0.35));
+    wd = max(d + 0.32, wr);
+    float wo = fillA(wd - gPx * 1.5), wa = fillA(wd);
+    vec3 glass = mix(vec3(0.04, 0.06, 0.08), vec3(0.08, 0.1, 0.13), smoothstep(3.1, 6.0, l.y)) * (0.8 + 0.4 * uTrainLit);
+    glass += vec3(0.3, 0.26, 0.18) * 0.12 * uTrainLit;                       // the cab's own faint light
     if (lead) {
-        vec2 dq = vec2(n + 1.1, l.y - 4.0);
-        float drv = min(length(dq - vec2(0.0, 0.75)) - 0.36, sdBox(dq - vec2(0.0, -0.1), vec2(0.6, 0.45)) - 0.12);
-        drv = min(drv, sdBox(dq - vec2(0.05, 1.08), vec2(0.36, 0.08)));
-        drv = min(drv, sdBox(dq - vec2(0.38, 1.02), vec2(0.18, 0.04)));
-        glass = mix(glass, vec3(0.02, 0.02, 0.03), fillA(drv));
+        // the driver: a soft head and shoulders, faintly lit, low in the glass
+        vec2 dq = vec2(n + 0.75, l.y - 3.1);
+        float drv = min(length(dq - vec2(0.0, 1.45)) - 0.48, sdRoundBox4(dq - vec2(0.0, 0.3), vec2(0.8, 0.75), vec4(0.6, 0.0, 0.6, 0.0)));
+        glass = mix(glass, glass * 0.6 + vec3(0.07, 0.055, 0.04) * uTrainLit, 1.0 - smoothstep(-0.05, 0.05, drv));
     }
-    bc = mix(bc, vec3(0.02), fillA(sw - 0.12));
-    bc = mix(bc, glass, fillA(sw));
-    // the destination sign above it: amber dots on black
-    vec2 dq2 = vec2(n + 1.55, l.y - 6.0);
-    float ds = sdBox(dq2, vec2(1.05, 0.22));
-    float dots = step(0.45, fract(dq2.x * 7.0)) * step(abs(dq2.y), 0.11) * step(hash1(floor(dq2.x * 7.0) + 3.0), 0.72);
-    bc = mix(bc, vec3(0.015), fillA(ds));
-    bc += vec3(1.0, 0.55, 0.12) * dots * fillA(ds) * 1.3;
-    // the route disc near the top of the nose
-    float rd = length(vec2(n - (noseX(6.2) - 0.45), l.y - 6.25)) - 0.2;
-    bc = mix(bc, vec3(0.02), fillA(rd - 0.05));
-    bc = mix(bc, vec3(0.25, 0.95, 0.45) * 1.3, fillA(rd));
-    // the lamps, low on the nose: white ahead, red behind
-    vec2 hq = vec2(n - (noseX(1.5) - 0.2), l.y - 1.5);
-    float lamp = length(hq * vec2(1.4, 1.0)) - 0.17;
-    vec3 lc = lead ? vec3(1.0, 0.95, 0.82) * 2.6 : vec3(1.0, 0.1, 0.06) * 1.8;
-    bc = mix(bc, lc, fillA(lamp));
+    // a soft reflection across the glass, an amber strip at its top
+    glass += vec3(0.1) * smoothstep(0.3, 0.0, abs(n * 0.6 - (l.y - 4.5) * 0.5 + 0.1)) * 0.35;
+    // the lamps in the windscreen's lower front corner
+    vec2 hq = vec2(n - (NOSE - 0.75), l.y - 3.45);
+    float lamp = length(hq * vec2(1.2, 1.0)) - 0.2;
+    vec3 lc = lead ? vec3(1.0, 0.95, 0.82) * 2.4 : vec3(1.0, 0.12, 0.07) * 1.7;
+    glass = mix(glass, lc, fillA(lamp));
+    bc = mix(bc, vec3(0.02), wo);
+    bc = mix(bc, glass, wa);
     col = mix(col, vec3(0.02), bo);
     col = mix(col, bc, ba);
-    a = max(a, bo);
-    // the lamp's glow, round it (in front of the nose too)
-    float gl = exp(-dot(hq, hq) / (lead ? 0.6 : 0.2)) * (lead ? 0.7 : 0.4);
+    // the cab's wall on the cut-away side: like the cars' end walls
+    float wall = abs(n + CABIN + 0.15) - 0.15;
+    wall = max(wall, max(0.2 - l.y, l.y - 7.3));
+    col = mix(col, vec3(0.02), fillA(wall - gPx * 1.5) * step(n, -CABIN + 0.01));
+    col = mix(col, vec3(0.13, 0.15, 0.18) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y)), fillA(wall));
+    a = max(a, max(bo, fillA(wall - gPx * 1.5)));
+    // the lamp's glow
+    float gl = exp(-dot(hq, hq) / (lead ? 0.7 : 0.25)) * (lead ? 0.55 : 0.35);
     col += (lead ? vec3(1.0, 0.9, 0.7) : vec3(1.0, 0.12, 0.06)) * gl;
     a = max(a, sat(gl * 1.5));
 }
 // the head lamps' light on the walls ahead (and a little round them)
 vec3 headGlow(vec2 w) {
-    float x0 = uDir > 0.0 ? uTrainX + 2.0 * CAR + CGAP + 1.3 : uTrainX - 1.3;
-    vec2 hp = vec2(x0, trackY(x0) - 0.3 + 1.5);
+    float x0 = uDir > 0.0 ? uTrainX + 2.0 * CAR + CGAP + 0.8 : uTrainX - 0.8;
+    vec2 hp = vec2(x0, trackY(x0) - 0.3 + 3.45);
     vec2 d = w - hp;
     float dx = d.x * sign(uDir);
     float beam = dx > 0.0 ? exp(-dx / 11.0) * exp(-sq(d.y / (0.7 + dx * 0.32))) : 0.0;
@@ -178,8 +183,9 @@ vec4 trainInside(vec2 w, vec3 behind) {
             col = mix(col, wc, wallA);
             a = max(a, wallA);
         }
-        // the floor, the roof, the ends: the cut, outlined
-        float sh = min(sdBox(l - vec2(CAR * 0.5, 0.5), vec2(CAR * 0.5, 0.3)), sdBox(l - vec2(CAR * 0.5, 6.95), vec2(CAR * 0.5, 0.35)));
+        // the floor, the roof, the ends: the cut, outlined (not under the cabs, which are one shape of their own)
+        bool cabSide = (ci == 1 && l.x > CAR - 3.15) || (ci == 0 && l.x < 3.15);
+        float sh = cabSide ? 1e3 : min(sdBox(l - vec2(CAR * 0.5, 0.5), vec2(CAR * 0.5, 0.3)), sdBox(l - vec2(CAR * 0.5, 6.95), vec2(CAR * 0.5, 0.35)));
         sh = min(sh, min(sdBox(l - vec2(0.15, 3.75), vec2(0.15, 3.55)), sdBox(l - vec2(CAR - 0.15, 3.75), vec2(0.15, 3.55))));
         float so = fillA(sh - gPx * 1.5), sa = fillA(sh);
         col = mix(col, vec3(0.02), so);
@@ -197,7 +203,8 @@ vec4 trainFront(vec2 w) {
     for (int ci = 0; ci < 2; ci++) {
         vec2 l = carLocal(w, float(ci));
         if (l.x < -0.3 || l.x > CAR + 0.3 || l.y < 0.4 || l.y > 2.8) continue;
-        float panel = sdBox(l - vec2(CAR * 0.5, 1.55), vec2(CAR * 0.5 - 0.1, 0.75));
+        float p0 = ci == 0 ? 3.3 : 0.15, p1 = ci == 0 ? CAR - 0.15 : CAR - 3.3;   // (the cabs at the ends are solid)
+        float panel = sdBox(l - vec2((p0 + p1) * 0.5, 1.55), vec2((p1 - p0) * 0.5, 0.75));
         float open = uDoor * 0.95;
         panel = max(panel, -sdBox(l - vec2(4.6, 1.55), vec2(open, 1.0)));
         panel = max(panel, -sdBox(l - vec2(12.4, 1.55), vec2(open, 1.0)));
