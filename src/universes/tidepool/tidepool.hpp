@@ -37,9 +37,9 @@ public:
     };
 
 private:
-    // ---- The dive: depth z in octaves of zoom (one stage = S octaves, nine stages a loop).
+    // ---- The dive: depth z in octaves of zoom (one stage = S octaves, fifteen stages a loop).
     double z_ = 0.0, zVel_ = 0.0;
-    double zBase_ = 0.0;          // the rock pool this game started from (a multiple of the loop)
+    double zBase_ = 0.0;          // the universe this game started from (a multiple of the loop)
     double creep_ = 0.0;          // the slow drift inward, always on
     double bonus_ = 0.0;          // the Tetrises' plunges
     double breath_ = 0.0;         // a slow in and out of the zoom
@@ -114,7 +114,8 @@ private:
     float dropAmt_ = 0.f, swell_ = 0.f;
     float waveT_ = 99.f, waveK_ = 0.f;   // the drop's wave washing over (the fabric rippling, deep down)
     float kickIn_ = 0.f;
-    float stageClock_[9] = {};         // each stage's own clock (slower as the zoom goes into it)
+    float stageClock_[15] = {};        // each stage's own clock (slower as the zoom goes into it)
+    float earthClock_ = 0.f;           // the planet's clock, from orbit to the shore (slower as the zoom goes in)
     float kickS_ = 0.f;                // the kicks, eased (no flashes)
     float bandS_[4] = {0.f, 0.f, 0.f, 0.f}; // the song's bands, eased (for the strings)
     float beatClock_ = 0.f;
