@@ -255,6 +255,13 @@ void App::startTrack(std::shared_ptr<Track> t) {
     computePhases();
     lastPhase_ = first ? plan_.phaseAt(0.0) : 0;
     look_ = makeSongLook(&track_->analysis.fp, runSeed_ ^ splitmix64(sceneCounter_));
+    songTime_ = 0;
+    if (track_->duration() > 0) look_.duration = look_.remaining = (float)track_->duration();
+    {
+        const int sec = (int)look_.duration;
+        std::printf("[app] song %d:%02d: a progression scene completes in %.0f lines (%.0f lines/min)\n", sec / 60, sec % 60,
+                    sceneLinesFor(look_), LINES_PER_MINUTE);
+    }
     // Each song gets its universe (picked from its footprint, never the same twice in a row), swept in with a
     // transition on the beat; a forced universe stays and performs its own change of song, and so does the
     // universe shown while the first song loaded (the game doesn't jump to another world as the music starts).
@@ -285,6 +292,7 @@ int App::songUniverse(int* variant) {
 void App::changeUniverse(int index, int variant, transitions::Reason why, bool instant) {
     SongLook l = look_;
     l.variant = variant;
+    if (track_) l.remaining = (float)std::max(0.0, track_->duration() - songTime_); // mid-song: the time left
     const int lv = phaseLevel(lastPhase_);
     const float en = phaseEnergy(lastPhase_);
     universeAge_ = 0;
@@ -1234,6 +1242,7 @@ int App::run() {
                     if (to < 0) { std::fprintf(stderr, "[app] unknown universe '%s'\n", opt_.toUniverse.c_str()); break; }
                     SongLook l = look_;
                     l.variant = variant;
+                    if (track_) l.remaining = (float)std::max(0.0, track_->duration() - songTime_);
                     Renderer::Change c;
                     c.transition = opt_.transition.empty() ? -1 : transitions::find(opt_.transition);
                     if (!opt_.transition.empty() && c.transition < 0)

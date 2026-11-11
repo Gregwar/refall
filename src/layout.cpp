@@ -1,5 +1,8 @@
 #include "layout.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 #include "universe.hpp"
 
 namespace layout {
@@ -62,5 +65,15 @@ SongLook makeSongLook(const Footprint* fp, uint64_t seed) {
     l.airWeight = fp->airWeight;
     l.dynamics = fp->dynamics;
     l.density = fp->density;
+    l.duration = l.remaining = fp->duration;
     return l;
+}
+
+float sceneLinesFor(const SongLook& look) {
+    static const float forced = std::getenv("ZEN_SCENE_LINES") ? (float)std::atof(std::getenv("ZEN_SCENE_LINES")) : 0.f;
+    static const float perMin = std::getenv("ZEN_LINES_PER_MINUTE") ? (float)std::atof(std::getenv("ZEN_LINES_PER_MINUTE")) : 0.f;
+    if (forced > 0.f) return forced;
+    const float seconds = look.remaining > 0.f ? look.remaining : look.duration;
+    if (!look.hasSong || seconds <= 0.f) return SCENE_REF_LINES;
+    return std::clamp((perMin > 0.f ? perMin : LINES_PER_MINUTE) * seconds / 60.f, SCENE_LINES_MIN, SCENE_LINES_MAX);
 }
