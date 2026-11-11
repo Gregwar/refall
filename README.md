@@ -125,6 +125,9 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/woodstock.jpg"><br><b>WOODSTOCK</b>: a late-60s psychedelic cartoon in thick white outlines: a kaleidoscope breathing with the beat around a calm dark well, flat candy blocks each with a small daisy, heart, peace sign, sparkle, spiral, rainbow or kawaii face; cleared rows burst into flowers, hearts and peace signs, and a garden of daisies and mandala flowers, a rainbow, a smiling sun, mushrooms and doves grows at the sides over one song; the drop folds the kaleidoscope into a mandala and swings the palette<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/architect.jpg"><br><b>ARCHITECT</b>: a modern villa built over one song on an empty green field: every cleared row is a delivery, a tower crane lowering the next room, glazing or roof into place with the load swinging softly on its cables; the pool is dug, tiled and filled, the garden planted, the cranes leave, and at dusk the rooms light up and the pool glows; the drop switches the site's floodlights on; the blocks are pigmented architectural concrete with tie holes<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/islands.jpg"><br><b>ISLANDS</b>: one continuous flight over an endless tropical archipelago, like drone footage: volcanic islands with cliffs and waterfalls, sandy cays, atolls, a lighthouse islet, bungalows on stilts, a white villa with its pool and deck, turquoise shallows, sailboats and speedboats with their wakes; calm parts fly high and wide, now and then above the clouds, peaks skim the waves, the drop is one big dive; every cleared row releases a flock of seabirds, and the day passes from midday to dusk; the blocks are polished sea glass<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
