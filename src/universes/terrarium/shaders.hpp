@@ -1287,7 +1287,6 @@ void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     float dw = box(w, vec2(0.0), vec2(5.0, 10.0));
     float a = uWellA * (1.0 - smoothstep(-0.1, 0.7, dw));
-    a *= 0.92 + 0.08 * smoothstep(-10.0, 10.0, w.y);
     for (int i = 0; i < 2; i++) {
         vec4 r = i == 0 ? uColL : uColR;
         float dc = box(w, (r.xy + r.zw) * 0.5, (r.zw - r.xy) * 0.5);
@@ -1299,9 +1298,10 @@ void main() {
 }
 )";
 
-// ------------------------------------------------------------------------------------------------ pieces: pebbles
-// Each cell one polished pebble from the jar's gravel: a clean rounded square of its piece's color, domed (lit from
-// the window, top left), a crisp glint, a faint speckle in the stone, a thin darker edge of its own color.
+// ------------------------------------------------------------------------------------------------ pieces: stones
+// Each cell one polished stone from the jar's gravel: a clean rounded square of its piece's color, a natural stone
+// surface in restrained relief (soft mottling, a few fine pale veins, speckles), a satin dome lit from the window
+// (top left), a crisp darker rim of its own color with a thin light bevel, and a soft contact shadow under it.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, seed
@@ -1312,9 +1312,10 @@ out vec2 vLocal;
 flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
+const float EXT = 1.2; // (room for the contact shadow)
 void main() {
-    vec2 wp = aA.xy + aPos * aA.z;
-    vLocal = aPos * 0.5;
+    vec2 wp = aA.xy + aPos * aA.z * EXT;
+    vLocal = aPos * 0.5 * EXT;
     vA = aA; vB = aB; vC = aC;
     gl_Position = uVP * vec4(wp, 0.0, 1.0);
 }
@@ -1328,43 +1329,64 @@ out vec4 frag;
 uniform float uBridge;
 uniform vec3 uBridgeInk, uLightC;
 float sdBoxR(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+// the stone's own pattern, fixed to the stone (its seed from its place)
+float stoneH(vec2 q, vec2 sd) { return fbm(q * 3.2 + sd * 17.0); }
 void main() {
     int mode = int(vC.x + 0.5);
     float erase = vC.y;
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
     vec2 q = vLocal / shrink;
-    float d = sdBoxR(q, vec2(0.445), 0.15);
+    float d = sdBoxR(q, vec2(0.45), 0.17);
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
         float ring = 1.0 - smoothstep(0.022, 0.022 + aa * 1.5, abs(d + 0.035));
-        float a = (ring * 0.8 + inside * 0.08) * vB.a;
-        vec3 c = mix(mix(t, vec3(1.0), 0.35), uBridgeInk, uBridge);
+        float a = (ring * 0.85 + inside * 0.1) * vB.a;
+        vec3 c = mix(mix(t, vec3(1.0), 0.3), uBridgeInk, uBridge);
         frag = vec4(c * a, a);
         return;
     }
-    // a dome: lit from the top left, a little darker bottom right, a crisp glint
-    float e = sat(-d / 0.2);
-    vec2 g = normalize(q + 1e-5) * (1.0 - e);
-    float lit = dot(g, normalize(vec2(-0.6, 0.75)));
-    vec3 c = t * (1.0 + 0.14 * lit) * mix(0.9, 1.05, e);
-    c *= 0.96 + 0.08 * smoothstep(0.45, -0.45, q.x - q.y);
-    // the stone's faint speckle
-    vec2 sp = (q + vA.w * 3.7) * 22.0;
-    float sk = step(0.86, hash(floor(sp))) * smoothstep(0.35, 0.15, length(fract(sp) - 0.5));
-    c = mix(c, t * 0.78, sk * 0.35);
-    float gl = smoothstep(0.11, 0.05, length((q - vec2(-0.2, 0.22)) * vec2(1.0, 1.5)));
-    c = mix(c, mix(t, uLightC, 0.75) * 1.25, gl * 0.65);
-    c += mix(t, uLightC, 0.5) * 0.1 * exp(-sq((q.y - 0.3) / 0.06)) * smoothstep(0.3, 0.0, abs(q.x + 0.05));
-    // its own thin darker edge
-    c = mix(c, t * 0.55, 1.0 - smoothstep(0.0, 0.04 + aa, -d));
+    // the contact shadow, down and right, outside the stone only
+    float ds = sdBoxR(q - vec2(0.045, -0.06), vec2(0.45), 0.17);
+    float shadow = (1.0 - smoothstep(-0.02, 0.08, ds)) * (1.0 - inside) * 0.55 * (1.0 - smoothstep(0.0, 0.5, erase));
+    vec2 sd = vA.xy * vec2(0.173, 0.291) + vA.w;
+    // relief: the stone's mottling as a gentle height, lit like the dome
+    float h = stoneH(q, sd);
+    float hx = stoneH(q + vec2(0.02, 0.0), sd) - h, hy = stoneH(q + vec2(0.0, 0.02), sd) - h;
+    float e = sat(-d / 0.22);
+    vec2 dome = normalize(q + 1e-5) * (1.0 - e) * 0.9;
+    vec3 n = normalize(vec3(dome - vec2(hx, hy) * 1.4, 1.0));
+    vec3 L = normalize(vec3(-0.55, 0.65, 0.75));
+    float lit = dot(n, L);
+    // the stone's colors: its tint in soft cloudy patches, faint strata at its own angle, now and then one fine pale
+    // vein, a few speckles
+    vec3 c = t * mix(0.84, 1.08, smoothstep(0.32, 0.72, h));
+    float ang = fract(sd.x * 3.7) * 3.1416;
+    float band = sin(dot(q, vec2(cos(ang), sin(ang))) * 9.0 + h * 4.0 + sd.y * 6.0);
+    c *= 1.0 + 0.05 * band;
+    float vn = fbm(q * 1.6 + sd * 9.0 + 4.0);
+    float vein = (1.0 - smoothstep(0.0, 0.012 + aa, abs(vn - 0.5))) * step(0.55, fract(sd.x * 7.3 + sd.y * 3.1));
+    c = mix(c, mix(t, vec3(1.0), 0.5), vein * 0.3);
+    vec2 sp = (q + sd) * 26.0;
+    float sk = step(0.88, hash(floor(sp))) * smoothstep(0.38, 0.18, length(fract(sp) - 0.5));
+    c = mix(c, t * 0.62, sk * 0.35);
+    // satin light: a rounder dome (lit top left, its foot darker bottom right), a broad sheen, no glint
+    c *= 0.72 + 0.42 * sat(lit * 0.5 + 0.5);
+    c *= 1.0 - 0.14 * smoothstep(0.1, 0.5, dot(q, vec2(0.7, -0.7)));
+    float sheen = smoothstep(0.82, 0.98, dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)));
+    c += mix(t, uLightC, 0.6) * sheen * 0.12;
+    // the bevel: a thin light edge top left, a crisp darker rim all round
+    float edgeIn = 1.0 - smoothstep(0.0, 0.06, -d);
+    c = mix(c, mix(t, vec3(1.0), 0.45), edgeIn * sat(dot(normalize(q + 1e-5), vec2(-0.6, 0.8))) * 0.35);
+    c = mix(c, t * 0.42, 1.0 - smoothstep(0.0, 0.03 + aa, -d));
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.4);
     float dull = vC.z;
     c = mix(c, vec3(dot(c, vec3(0.3, 0.5, 0.2))) * 0.55, dull);
     c = mix(c, uBridgeInk, uBridge);
     float a = inside * vB.a * (1.0 - smoothstep(0.55, 1.0, erase));
-    frag = vec4(c * a, a);
+    float sa = shadow * vB.a * (1.0 - uBridge);
+    frag = vec4(c * a, a + sa * (1.0 - a));
 }
 )";
 
