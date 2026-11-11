@@ -34,7 +34,7 @@ private:
     void box(float cx, float cy, float hx, float hy, const vec3& c, float a, float round = 0.f, float outline = 0.f);
     void disc(float cx, float cy, float rx, float ry, const vec3& c, float a, float soft = 0.f);
     void seg(float x0, float y0, float x1, float y1, float w, const vec3& c, float a, float tail = 0.f);
-    void tile(float bx, float by, float hx, float hy, const vec3& c, float a, float seed, float wet, bool plain);
+    void tile(float bx, float by, float hx, float hy, const vec3& c, float a, float seed, float wet, bool plain, float angle = 0.f);
     void flushShapes();
     void flushTiles();
     vec2 px(float x, float y) const;
@@ -63,7 +63,7 @@ private:
     struct Drop { float x, y, vx, vy, len, a, endY; bool drip; };
     struct Spark { float x, y, vx, vy, t, life, r; };      // a splash's droplet
     struct Crown { float x, y, t, w; };                      // a splash's flat crown at the impact
-    struct Run { float x, y, side, v, t; };                  // a drip running down an exposed face
+    struct Run { float x, y, side, v, t; int body; float sl; }; // a drip running down a face (or sliding down a heaped tile's slope)
     std::vector<Drop> drops_;
     std::vector<Spark> sparks_;
     std::vector<Crown> crowns_;
@@ -80,25 +80,32 @@ private:
     void stepRain(float dt, float rdt);
     void drawRain(bool well);
 
-    // ---- The side piles.
-    struct PileBlock { int id, type; float seed, h, y, wet, fadeRate; bool arrived, fading; };
-    int nextBlock_ = 1;
-    static constexpr int PILE_COLS = 9;
-    std::vector<PileBlock> pile_[2][PILE_COLS];
-    float bandX0_[2] = {12.f, 12.f};       // each band's inner edge (board units), cells growing outward
-    float pileCell_ = 0.92f;
-    float ground_ = -11.6f;
-    int pileMax_ = 7;
-    int colCap_[2][PILE_COLS] = {};        // each column's height, kept under the HUD's corner lines
-    float pileColX(int side, int c) const;
-    float pileTop(int side, int c) const;  // the top of its arrived blocks
-    int pileColAt(float x, int* side) const;
-    struct Fly { float x0, y0; int side, col, id, type; float t, delay, dur, arc; };
-    std::vector<Fly> flies_;
+    // ---- The heaps: cleared tiles thrown out of the well, then tumbling rigid boxes (a small 2D solver of our own)
+    // settling into heaps on the street in the side bands, where the rain falls on their tilted faces.
+    struct Body {
+        int id, type, side;
+        float seed, half;              // half size (board units)
+        float x, y, vx, vy, a, w;      // center, velocity, angle (radians, counterclockwise), angular velocity
+        float wet, fade, fadeRate;
+        bool fading, solid, asleep;
+        float still, awake;            // seconds nearly still, seconds awake (both put a body to sleep)
+        // the throw: a scripted arc (Hermite) out of the well to its release over the band, then physics
+        bool thrown;
+        float t, delay, dur, x0, y0, tx0, ty0, x1, y1, tx1, ty1;
+    };
+    std::vector<Body> bodies_;
+    int nextBody_ = 1;
+    float bandIn_ = 11.9f, bandOut_ = 21.f, ground_ = -11.6f;
+    float physAcc_ = 0.f;
+    std::vector<vec4> textRects_;      // the HUD's bottom corner lines (board units): the heaps dim under them
     void eject(int x, int y, int type, float delay);
-    void stepPiles(float dt);
-    void drawPiles();
-    void drawFlies();
+    void stepHeaps(float dt);
+    void physicsStep(float h);
+    void drawHeaps();
+    Body* bodyById(int id);
+    float bodyTop(const Body& b, float x, float* slope) const; // where a vertical line at x enters the box from above (-1e9: misses)
+    bool bodyInside(const Body& b, float x, float y) const;
+    float textCover(float x, float y) const;
 
     // ---- The board.
     float wet_[Game::H][Game::W] = {};
