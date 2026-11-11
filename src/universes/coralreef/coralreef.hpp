@@ -32,17 +32,6 @@ enum Kind { K_BRAIN, K_STAG, K_TABLE, K_FAN, K_SPONGE, K_ANEMONE, K_SOFT, K_COUN
 constexpr int TEMPLATES = 3;              // templates per kind
 Mesh buildCoral(int kind, int variant);   // unit size (about 1 m tall or wide), its base at the origin
 Mesh buildRock(int variant);              // a boulder, unit wide
-// The reef's edge and its wall (the growth's later stages, as bigH in shaders.hpp): the reef flat ends at
-// wallEdge(x) (z, meters), where the wall plunges into the deep; wallZ gives the face's z at a height y.
-constexpr float WALL_Z = 260.f, WALL_TOP = -1.2f, WALL_DEPTH = 1300.f;
-inline float wallEdge(float x) {
-    return WALL_Z + 30.f * std::sin(x * 0.011f + 0.7f) + 14.f * std::sin(x * 0.031f + 2.1f) + 6.f * std::sin(x * 0.083f + 0.4f) +
-           34.f * std::pow(std::fabs(std::sin(x * 0.019f + 1.1f)), 3.f) + 16.f * std::pow(std::fabs(std::sin(x * 0.047f + 0.3f)), 3.f);
-}
-inline float wallZ(float x, float y) {
-    const float drop = std::clamp(WALL_TOP - 0.4f - y, 0.f, WALL_DEPTH * 0.97f);
-    return wallEdge(x) - std::log(1.f - drop / WALL_DEPTH) * WALL_DEPTH / 3.4f;
-}
 enum Species { F_CHROMIS, F_ANTHIAS, F_YELLOW, F_BLUE, F_IDOL, F_PARROT, F_CLOWN, F_COUNT };
 Mesh buildFish(int species);              // unit length along +x (the nose), centered
 Mesh buildManta();                        // unit half span along x, the head toward +z
@@ -152,6 +141,7 @@ private:
     vec3 P0_{9.5f, 0.f, 4.f};          // where the first polyp lives (on its pebble)
     GLsizei groundRings_ = 0;
     float camD_ = 15.f;
+    float surfY_ = reef::SURF_Y;        // the surface's plane: it rises as the camera pulls back (it stays in the water)
     mat4 refVP_;                        // the reef stage's framing (where the reef's slots are laid out)
     bool toScreenRef(const vec3& w, vec2* ndc) const;
     // The camera's place at a point of the growth (t: its breathing): the eye, what it frames, its forward axis.
