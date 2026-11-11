@@ -740,9 +740,11 @@ void ArchitectUniverse::drawElements() {
             }
             // set down without its crane (a backlog caught up): it settles softly from a few meters above
             const float lift = st.direct ? 4.f * (1.f - smoother(st.t / 1.6f)) : 0.f;
+            const vec3 slide = st.slide * (1.f - smoother((st.t - 0.6f) / 1.8f));
             for (const Part& p0 : e.parts) {
                 Part p = p0;
                 p.c.y += lift;
+                p.c = p.c + slide;
                 push(p, lit(p0), p0.tiles ? tk : 0.f);
             }
             continue;
@@ -806,6 +808,39 @@ float ArchitectUniverse::clearance(int i) const {
         if (els_[k].state == 3) top = std::max(top, prog_[k].hi.y);
     return std::min(mastH(i) - 2.f, top + 3.5f + SLING + 3.5f);
 }
+// Where a load is lowered: straight onto its place when nothing in place stands in its way, else beside it, outside
+// (the front first), shifted just far enough that its descent column is clear of every part standing in it (a roof
+// or a slab overhanging a glazing): it is released there and slides in the last meters, so nothing ever comes down
+// through the building, and its cable never runs through a roof.
+vec3 ArchitectUniverse::approachOf(int ei) const {
+    const as::Element& e = prog_[ei];
+    auto blocked = [&](float ox, float oz) {
+        for (size_t k = 0; k < prog_.size(); k++) {
+            if ((int)k == ei) continue;
+            const bool standing = prog_[k].kind == as::CRANE ? els_[k].state == 3 : elementK(prog_[k]) > 0.01f;
+            if (!standing || prog_[k].kind == as::TREE || prog_[k].kind == as::DRIVE) continue;
+            for (const Part& q : e.parts) {
+                const float sx = std::min(0.35f, q.s.x * 0.4f), sz = std::min(0.35f, q.s.z * 0.4f);
+                const float ax0 = q.c.x - q.s.x * 0.5f + sx + ox, ax1 = q.c.x + q.s.x * 0.5f - sx + ox;
+                const float az0 = q.c.z - q.s.z * 0.5f + sz + oz, az1 = q.c.z + q.s.z * 0.5f - sz + oz;
+                const float ay0 = q.c.y - q.s.y * 0.5f + 0.05f;
+                for (const Part& r : prog_[k].parts) {
+                    if (r.c.y + r.s.y * 0.5f <= ay0) continue; // below it: no matter
+                    if (r.c.x + r.s.x * 0.5f <= ax0 || r.c.x - r.s.x * 0.5f >= ax1) continue;
+                    if (r.c.z + r.s.z * 0.5f <= az0 || r.c.z - r.s.z * 0.5f >= az1) continue;
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+    if (!blocked(0.f, 0.f)) return e.anchor;
+    const float dirs[4][2] = {{0.f, 1.f}, {1.f, 0.f}, {-1.f, 0.f}, {0.f, -1.f}};
+    for (float s = 0.25f; s <= 14.f; s += 0.25f)
+        for (auto& d : dirs)
+            if (!blocked(d[0] * s, d[1] * s)) return e.anchor + vec3(d[0], 0.f, d[1]) * (s + 0.5f);
+    return e.anchor;
+}
 // Where a crane picks its load up: on the ground behind the well, hidden by it.
 vec3 ArchitectUniverse::hiddenYard(int i) const {
     // the ray through the screen's middle, a little under it, down to the ground
@@ -837,6 +872,7 @@ void ArchitectUniverse::setDown(int i) {
     s.t = 0.f;
     s.vis = 1.f;
     s.direct = true;
+    s.slide = vec3(0, 0, 0);
     for (auto& c : cranes_) {
         c.queue.erase(std::remove(c.queue.begin(), c.queue.end(), i), c.queue.end());
         if (c.job == i) { c.job = -1; c.phase = 0; }
@@ -910,6 +946,7 @@ void ArchitectUniverse::updateCranes(float dt, float workDt) {
             c.phase = 1;
             c.jobT = 0.f;
             c.yard = hiddenYard(i);
+            c.approach = approachOf(c.job);
         }
         if (c.job >= 0 && (els_[c.job].state == 0 || els_[c.job].state == 3)) { c.job = -1; c.phase = 0; }
         // a watchdog: a delivery that takes far too long ends with its element set down
@@ -944,15 +981,19 @@ void ArchitectUniverse::updateCranes(float dt, float workDt) {
                 if (c.h > hiY - 1.2f) c.phase = 5;
                 break;
             case 5: // across, the load swinging
-                c.ta = angleTo(e.anchor);
-                c.tr = radiusTo(e.anchor);
+                c.ta = angleTo(c.approach);
+                c.tr = radiusTo(c.approach);
                 c.th = hiY;
                 if (angOk && radOk && std::fabs(c.sx) + std::fabs(c.sz) < 0.6f) c.phase = 6;
                 break;
             case 6: // down, softly
-                c.th = e.anchor.y + SLING;
-                c.tr = radiusTo(e.anchor);
+                c.th = c.approach.y + SLING;
+                c.tr = radiusTo(c.approach);
                 if (hOk) {
+                    // released at its place, or beside it (it then slides in under the overhang, on rollers)
+                    const vec3 hk = hookPos(i);
+                    s.slide = vec3(hk.x - e.anchor.x, 0.f, hk.z - e.anchor.z);
+                    if (length(s.slide) < 0.3f) s.slide = vec3(0, 0, 0);
                     s.state = 3;
                     s.t = 0.f;
                     s.vis = 1.f;
@@ -1295,12 +1336,22 @@ void ArchitectUniverse::buildBoard(const Game& g) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
                 const float l = p.x - 0.5f + in, r = p.x + 0.5f - in, t = p.y + 0.5f - in, b = p.y - 0.5f + in;
-                const bool L = inG(c[0] - 1, c[1]), R = inG(c[0] + 1, c[1]), U = inG(c[0], c[1] - 1), D = inG(c[0], c[1] + 1);
-                const float l2 = L ? p.x - 0.5f : l, r2 = R ? p.x + 0.5f : r, t2 = U ? p.y + 0.5f : t, b2 = D ? p.y - 0.5f : b;
-                if (!L) line(l, b2, l, t2, zz, w, ink, 0.8f);
-                if (!R) line(r, b2, r, t2, zz, w, ink, 0.8f);
-                if (!U) line(l2, t, r2, t, zz, w, ink, 0.8f);
-                if (!D) line(l2, b, r2, b, zz, w, ink, 0.8f);
+                const int x = c[0], y = c[1];
+                const bool L = inG(x - 1, y), R = inG(x + 1, y), U = inG(x, y - 1), D = inG(x, y + 1);
+                // an edge runs on to the next cell's edge, or turns at a corner: inset at an outer corner, past the
+                // cell boundary by the inset at an inner one (where the diagonal neighbour is in the piece), so the
+                // contour stays closed
+                auto endX = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner : inG(x + sx, y + sy) ? edge + sx * in : edge;
+                };
+                auto endY = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner : inG(x + sx, y + sy) ? edge - sy * in : edge;
+                };
+                const float xl = p.x - 0.5f, xr = p.x + 0.5f, yt = p.y + 0.5f, yb = p.y - 0.5f;
+                if (!L) line(l, endY(D, -1, 1, b, yb), l, endY(U, -1, -1, t, yt), zz, w, ink, 0.8f);
+                if (!R) line(r, endY(D, 1, 1, b, yb), r, endY(U, 1, -1, t, yt), zz, w, ink, 0.8f);
+                if (!U) line(endX(L, -1, -1, l, xl), t, endX(R, 1, -1, r, xr), t, zz, w, ink, 0.8f);
+                if (!D) line(endX(L, -1, 1, l, xl), b, endX(R, 1, 1, r, xr), b, zz, w, ink, 0.8f);
             }
         }
     }

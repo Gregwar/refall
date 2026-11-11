@@ -48,6 +48,7 @@ private:
         float vis = 0.f;        // 1 shown .. 0 gone (a new game takes the villa down)
         float wait = 0.f;       // how long it has waited for its crane (earned, not yet lowered)
         bool direct = false;    // set down without its crane (a backlog caught up): it settles from above
+        vec3 slide{0, 0, 0};    // released beside its place (under an overhang): it slides in from there
     };
     std::vector<ElState> els_;
     arch_site::Palette pal_;
@@ -74,6 +75,7 @@ private:
         bool primed = false;
         int job = -1, phase = 0;
         float jobT = 0.f;       // how long the job has run (a watchdog)
+        vec3 approach{0, 0, 0}; // where the load is lowered: its place, or beside it, clear of what stands above it
         float wait = 0.f, wob = 0.f, wobV = 0.f;
         float erect = 0.f, depart = 0.f;
         vec3 yard{0, 0, -16};
@@ -88,6 +90,7 @@ private:
     float mastH(int i) const { return arch_site::MAST_H + 2.f * i; }
     float clearance(int i) const;
     vec3 hiddenYard(int i) const;
+    vec3 approachOf(int e) const;                  // the shift that clears the descent of what stands above
 
     // ---- Life on the site: sparks on the beat, the mixer's drum, the floodlights.
     struct Spark { vec3 p, v; float t, life, size; };

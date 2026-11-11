@@ -395,7 +395,7 @@ std::vector<Element> program(const Palette& P, uint64_t seed) {
     // ---- the stone walls, laid course by course (masons, not cranes), framing the villa left and right
     {
         Element e = el(GROW, d, 2.2f);
-        e.parts.push_back(box(-22.3f, 0.f, -8.f, -21.6f, 4.0f, 7.5f, STONE, P.stone, 0.4f));
+        e.parts.push_back(box(-22.3f, 0.f, -8.f, -21.6f, 3.8f, 7.5f, STONE, P.stone, 0.4f));
         E.push_back(e);
         Element f = el(GROW, d + 0.9f, 2.2f);
         f.parts.push_back(box(18.6f, 0.f, -7.5f, 19.3f, 3.6f, 6.5f, STONE, P.stone, 0.4f));
@@ -407,6 +407,9 @@ std::vector<Element> program(const Palette& P, uint64_t seed) {
         e.parts.push_back(box(-24.f, GF_TOP, -5.f, -21.15f, FF, 6.f, CONCRETE, P.concrete));
         e.parts.push_back(box(-21.15f, GF_TOP, 3.f, -11.f, FF, 6.f, CONCRETE, P.concrete));
         e.parts.push_back(box(-21.15f, GF_TOP, -5.f, -14.5f, FF, 3.f, CONCRETE, P.concrete));
+        // its front edge clad (wood, or stone), the band wrapping the cantilever
+        const int m = P.upperMat;
+        e.parts.push_back(box(-24.2f, GF_TOP - 0.05f, 6.f, -10.8f, FF + 0.02f, 6.2f, m, m == WOOD ? P.wood : m == STONE ? P.stone : P.render));
         E.push_back(e);
         d += step;
     }
@@ -487,13 +490,11 @@ std::vector<Element> program(const Palette& P, uint64_t seed) {
         Element e = crane(d, 0);
         const int m = P.upperMat;
         const vec3 c = m == WOOD ? P.wood : m == STONE ? P.stone : P.render;
-        e.parts.push_back(box(-11.f, FF - 0.4f, -1.f, -10.8f, FF_TOP + 0.35f, 2.4f, m, c));
-        e.parts.push_back(box(-11.f, FF - 0.4f, 3.6f, -10.8f, FF_TOP + 0.35f, 6.f, m, c));
-        e.parts.push_back(box(-11.f, FF_TOP - 0.2f, 2.4f, -10.8f, FF_TOP + 0.35f, 3.6f, m, c));
-        e.parts.push_back(box(-11.f, FF - 0.4f, 2.4f, -10.8f, FF + 0.2f, 3.6f, m, c));
-        glazing(e, P, 2.4f, 3.6f, -10.8f, FF + 0.2f, FF_TOP - 0.2f, 6.f, 3, 2);
-        // the cladding wraps the front band of the suite's slab and roof
-        e.parts.push_back(box(-24.2f, GF_TOP - 0.05f, 6.f, -10.8f, FF + 0.02f, 6.2f, m, c));
+        e.parts.push_back(box(-10.8f, FF, -0.55f, -10.6f, FF_TOP + 0.35f, 2.4f, m, c));
+        e.parts.push_back(box(-10.8f, FF, 3.6f, -10.6f, FF_TOP + 0.35f, 6.f, m, c));
+        e.parts.push_back(box(-10.6f, FF_TOP - 0.2f, 2.4f, -10.8f, FF_TOP + 0.35f, 3.6f, m, c));
+        e.parts.push_back(box(-10.8f, FF, 2.4f, -10.6f, FF + 0.2f, 3.6f, m, c));
+        glazing(e, P, 2.4f, 3.6f, -10.6f, FF + 0.2f, FF_TOP - 0.2f, 6.f, 3, 2);
         E.push_back(e);
         d += 1.f;
     }
