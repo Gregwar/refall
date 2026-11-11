@@ -477,7 +477,7 @@ float fern(vec2 w) {
 // frozen through (the end of the freeze); the frost only reaches REACH of the way in, and the core clouds over only
 // a little: the old ice keeps its colored heart
 const float FROZEN = 1.0;
-const float REACH = 0.34;
+const float REACH = 0.62;
 const float FREEZE = 7.0; // seconds (polar.cpp FREEZE_SECONDS)
 
 vec4 iceCube(vec2 wl, float d, vec3 pc, float k, float seed) {
@@ -508,9 +508,21 @@ vec4 iceCube(vec2 wl, float d, vec3 pc, float k, float seed) {
     float core = smoothstep(0.08, 0.5, d + (n - 0.5) * 0.15);
     vec3 cloudy = mix(water, mix(pastel * (0.85 + 0.1 * n), mix(pastel, vec3(1.0), 0.15) * 0.95, core), milk);
     // frosted surface: whitish, tinted, a crystalline grain
-    vec3 frost = mix(pastel, vec3(1.0), 0.12) * (0.85 + 0.1 * n2 + 0.08 * fe) + vec3(0.06) * smoothstep(0.55, 0.85, grain);
-    vec3 col = mix(cloudy, frost, frosted * 0.8);
-    float a = mix(0.9, 0.97, max(frosted, milk));
+    // (the material turns to an icy white-blue, its crystals drawn bright, so the progress reads at a glance)
+    vec3 icy = vec3(0.80, 0.90, 1.0);
+    vec3 frost = mix(mix(pastel, icy, 0.4), vec3(1.0), 0.1) * (0.85 + 0.1 * n2) + icy * 0.28 * max(fe, fe2 * 0.7)
+               + vec3(0.1) * smoothstep(0.55, 0.85, grain);
+    vec3 col = mix(cloudy, frost, frosted * 0.88);
+    // the frosted rim: a bright white-blue line at the faces, growing in as soon as the piece lands
+    float rim = exp(-d / (0.02 + 0.03 * k)) * smoothstep(0.0, 0.12, k);
+    col = mix(col, vec3(0.92, 0.97, 1.0), rim * 0.6);
+    // a glint: one sheen sweeping diagonally across the ice as it sets, then sparkles held on the crystals
+    float sweep = mix(-1.5, 5.0, smoothstep(0.15, 0.85, k));
+    float diag = (wl.x + wl.y) * 0.7 - sweep;
+    float sheen = exp(-diag * diag / 0.05) * smoothstep(0.1, 0.25, k) * (1.0 - smoothstep(0.8, 0.95, k));
+    float spark = smoothstep(0.93, 0.99, grain) * frosted * (0.5 + 0.5 * sin(uTime * 2.0 + seed * 9.0 + n * 20.0));
+    col += vec3(0.85, 0.95, 1.0) * (sheen * 0.45 + spark * 0.6);
+    float a = mix(0.9, 0.98, max(max(frosted, milk), rim));
     return vec4(col, a);
 }
 // The contact of a cleared or topped-out cell, packed above its neighbour mask (polar.cpp: packContact).
