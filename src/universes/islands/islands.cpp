@@ -1641,8 +1641,14 @@ void IslandsUniverse::buildBoard(const Game& g) {
                     if (c[0] == x && c[1] == y) return true;
                 return false;
             };
-            const vec3 ink = mixDisplay(back, pieceCol(pc.type), 0.55f);
-            const float in = 0.08f, w = 0.05f, zz = BACK_Z + 0.008f;
+            // the piece's own color, a little lighter, and a faint fill: it reads over the translucent pane
+            const vec3 ink = mixDisplay(pieceCol(pc.type), vec3(1.f), 0.2f);
+            const float in = 0.08f, w = 0.065f, zz = BACK_Z + 0.008f;
+            for (auto& c : gc)
+                if (c[1] >= Game::HIDDEN) {
+                    const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
+                    quad(vec3(p.x, p.y, zz - 0.001f), 0.5f, 0.5f, pieceCol(pc.type), 0.16f, 0.f, 0.f);
+                }
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
@@ -1659,10 +1665,10 @@ void IslandsUniverse::buildBoard(const Game& g) {
                     return !side ? inner : inG(x + sx, y + sy) ? edge - sy * in : edge;
                 };
                 const float xl = p.x - 0.5f, xr = p.x + 0.5f, yt = p.y + 0.5f, yb = p.y - 0.5f;
-                if (!L) line(l, endY(D, -1, 1, b, yb), l, endY(U, -1, -1, t, yt), zz, w, ink, 0.85f);
-                if (!R) line(r, endY(D, 1, 1, b, yb), r, endY(U, 1, -1, t, yt), zz, w, ink, 0.85f);
-                if (!U) line(endX(L, -1, -1, l, xl), t, endX(R, 1, -1, r, xr), t, zz, w, ink, 0.85f);
-                if (!D) line(endX(L, -1, 1, l, xl), b, endX(R, 1, 1, r, xr), b, zz, w, ink, 0.85f);
+                if (!L) line(l, endY(D, -1, 1, b, yb), l, endY(U, -1, -1, t, yt), zz, w, ink, 1.f);
+                if (!R) line(r, endY(D, 1, 1, b, yb), r, endY(U, 1, -1, t, yt), zz, w, ink, 1.f);
+                if (!U) line(endX(L, -1, -1, l, xl), t, endX(R, 1, -1, r, xr), t, zz, w, ink, 1.f);
+                if (!D) line(endX(L, -1, 1, l, xl), b, endX(R, 1, 1, r, xr), b, zz, w, ink, 1.f);
             }
         }
     }
