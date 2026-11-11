@@ -125,7 +125,7 @@ private:
     std::vector<float> ginst_;
     std::vector<float> ribbon_;
     // ---- Clouds.
-    struct Puff { vec3 p; float r, seed; };
+    struct Puff { vec3 p; float r, seed, grp; }; // (grp: its cloud's own moment to dissolve on the way up, 0..1)
     std::vector<Puff> clouds_;
     std::vector<float> cinst_;
     float cloudDrift_ = 0.f, seaDrift_ = 0.f, flowT_ = 0.f;
