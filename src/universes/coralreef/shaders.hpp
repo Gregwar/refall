@@ -70,31 +70,41 @@ float groundBase(vec2 p) {
          0.1 * sin(0.53 * p.x + 0.9) * sin(0.41 * p.y + 0.2);
     return h;
 }
-// ---- The world beyond the reef (the growth's later stages): the reef flat stretching out in every direction from
-// the place it began, out to a far, winding drop-off (EDGE_R) where it slopes down into the deep.
-const float EDGE_R = 2200.0;
-float bigH(vec2 p) {
-    float r = length(p);
-    float a = atan(p.y, p.x);
-    float edge = EDGE_R * (1.0 + 0.16 * sin(3.0 * a + 0.7) + 0.09 * sin(7.0 * a + 2.1) + 0.04 * sin(13.0 * a));
-    float flat0 = -1.6 + 0.5 * sin(0.021 * p.x + 0.4) * sin(0.017 * p.y + 1.1) + 0.3 * sin(0.09 * p.x) * sin(0.07 * p.y + 2.0);
-    float t = r - edge;
-    if (t <= 0.0) return flat0;
-    return flat0 - 900.0 * (1.0 - exp(-t * 1.2 / 900.0));
+// ---- The tower (the growth's later stages, as reef::towerH in coralreef.hpp): the reef stacks up into a pinnacle,
+// its summit the reef where it all began (a plateau of TOP_R around TOWER_C), its flanks plunging steeply in
+// terraces and ledges, buttresses all round, down to the deep floor at -uTowerH (which sinks as the reef grows).
+uniform float uTowerH;
+const vec2 TOWER_C = vec2(3.0, -6.0);
+const float TOP_R = 46.0, TOWER_SLOPE = 2.6;
+float towerProfile(vec2 p, float floorY) {
+    vec2 d = p - TOWER_C;
+    float r = length(d), a = atan(d.y, d.x);
+    float e = 1.0 + 0.2 * sin(3.0 * a + 0.7) + 0.11 * sin(5.0 * a + 2.0) + 0.06 * sin(11.0 * a + 0.3) + 0.03 * sin(23.0 * a);
+    float t = r / e - TOP_R;
+    float top = -1.6 + 0.4 * sin(0.21 * p.x + 0.4) * sin(0.17 * p.y + 1.1);
+    if (t <= 0.0) return top;
+    float z = t * TOWER_SLOPE;
+    z = z + 5.6 * sin(z * 6.2831 / 38.0 + a * 0.6);   // terraces: steep cliffs and ledges, staggered round the tower
+    z += 4.0 * sin(a * 7.0 + z * 0.05) * smoothstep(0.0, 20.0, z);
+    float h = top - max(z, 0.0);
+    // the floor at the tower's foot: a smooth bend
+    float k = 12.0;
+    return floorY + log(exp((h - floorY) * 1.0 / k) + 1.0) * k * step(-1e5, h) - 0.0;
 }
+float bigH(vec2 p) { return towerProfile(p, -max(uTowerH, 2.0)); }
 // The whole seabed (meters): the reef's own ground near it, the big terrain beyond.
 float groundH(vec2 p, out float rockAmt) {
     float r = length(p);
-    float wN = 1.0 - smoothstep(90.0, 200.0, r);
+    float wN = 1.0 - smoothstep(34.0, 46.0, length(p - TOWER_C));
     rockAmt = 0.0;
     float near = 0.0;
-    if (wN > 0.0) { rockAmt = r < 80.0 ? moundSum(p) : 0.0; near = groundBase(p) + rockAmt; }
+    if (wN > 0.0) { rockAmt = r < 80.0 ? moundSum(p) : 0.0; near = max(groundBase(p), -1.6) + rockAmt; }
     float big = wN < 1.0 ? bigH(p) : 0.0;
     return mix(big, near, wN);
 }
 // ---- How deep the eye is: the water seen from far down is a deep, darkening blue.
 uniform float uLensD;
-vec3 depthTint(float depth) { return exp(-max(depth, 0.0) * vec3(0.012, 0.0055, 0.0029)); }
+vec3 depthTint(float depth) { return exp(-max(depth, 0.0) * vec3(0.0045, 0.0024, 0.0013)); }
 // Caustics: a web of bright lines (the edges of drifting cells, warped), on what faces the sun.
 float causticCells(vec2 p, float t) {
     vec2 i = floor(p), f = fract(p);
@@ -252,42 +262,7 @@ vec4 carpet(vec2 p, float cell, float px, out vec2 nrm) {
     return vec4(mix(avg, c, lod), mix(0.85, head, lod));
 }
 uniform vec4 uMark;   // the place it began (xz), its glow's radius, strength
-uniform vec3 uMarkC, uReefE;
-// The reef as seen from afar: a patchwork of coral thickets in the reef's own colors (pink, yellow, mint, violet,
-// orange), bright and saturated, with sand gullies between; rgb its color, a its cover.
-vec3 reefCol(float h) {
-    return h < 0.2 ? uReefA : h < 0.4 ? uReefB : h < 0.6 ? uReefC : h < 0.8 ? uReefD : uReefE;
-}
-vec4 reefPatch(vec2 p, float px) {
-    // colonies: rounded thickets a few meters wide (a cell each), each its own color, lit as a dome; the zones of the
-    // reef (which colors grow where) from a large-scale noise; sand gullies running out between the spurs
-    float zone = fbm(p * 0.006 + 1.0);
-    const float CELLW = 5.0;
-    vec2 q = p / CELLW, i = floor(q), f = fract(q);
-    float d1 = 8.0; vec2 id = vec2(0.0), rel = vec2(0.0);
-    for (int y = -1; y <= 1; y++)
-        for (int x = -1; x <= 1; x++) {
-            vec2 g = vec2(x, y);
-            vec2 r = g + 0.15 + 0.7 * hash2(i + g) - f;
-            float d = dot(r, r);
-            if (d < d1) { d1 = d; id = i + g; rel = r; }
-        }
-    float h = fract(hash(id) * 0.55 + zone * 1.3);
-    vec3 c = reefCol(h);
-    float dome = sqrt(max(0.0, 1.0 - d1 / 0.5));
-    float lodC = smoothstep(CELLW * 0.7, CELLW * 0.15, px);
-    vec3 cc = c * (0.62 + 0.5 * dome + 0.12 * dot(normalize(vec2(-0.5, 0.7)), -rel));
-    cc *= 1.0 - 0.15 * smoothstep(0.55, 0.7, vnoise(p * 2.3 + id));
-    // seen from afar, the zone's own mix of colors
-    vec3 avg = mix(reefCol(fract(zone * 1.3 + 0.1)), reefCol(fract(zone * 1.3 + 0.37)), 0.45);
-    avg *= 0.85 + 0.25 * fbm(p * 0.05 + 3.0);
-    c = mix(avg, cc, lodC);
-    float gully = smoothstep(0.72, 0.8, abs(fbm(p * 0.008 + 2.0) * 2.0 - 1.0) + 0.42);
-    float bare = smoothstep(0.66, 0.74, fbm(p * 0.03 + 6.0));
-    float a = (1.0 - 0.85 * gully) * (1.0 - 0.6 * bare) * mix(0.97, smoothstep(0.95, 0.7, sqrt(d1)), lodC);
-    c = mix(vec3(dot(c, vec3(0.3, 0.5, 0.2))), c, 1.25);   // (vivid: the reef stays saturated through the water)
-    return vec4(max(c, 0.0) * 1.0, a);
-}
+uniform vec3 uMarkC;
 void main() {
     vec3 wp = vWorld;
     vec3 n = normalize(vN);
@@ -343,33 +318,21 @@ void main() {
     // beyond the reef: the reef carpet spreading over the lagoon and the ring (a toon patchwork of corals), the
     // beaches and the green of the motus above the water, the dark deep floor
     float depth = SURF0 - wp.y;
-    float far = smoothstep(60.0, 140.0, vR);
-    {
-        // the reef carpet over the near ground too, as the barrier reef spreads (between the corals, not on rock)
-        // (seen from high up, the near reef too is a carpet of its colors: its corals are under a pixel by then)
-        float nearC = (1.0 - far) * smoothstep(0.04, 0.3, px) * smoothstep(60.0, 300.0, uSpread);
-        if (nearC > 0.0) {
-            vec4 rp = reefPatch(p, px);
-            alb = mix(alb, rp.rgb, nearC * rp.a * mix(0.75, 1.0, rock));
-        }
-    }
+    float far = smoothstep(36.0, 46.0, length(p - TOWER_C));
     if (far > 0.0) {
-        float slope = 1.0 - smoothstep(0.35, 0.8, n.y);
-        vec2 cq = p / 9.0;
-        float n2 = fbm(cq * 0.43 + 7.0);
-        vec2 dn;
-        vec4 cp = carpet(p, 2.2, px, dn);
-        vec4 rp = reefPatch(p, px);
-        // up close coral heads; from afar the patchwork of thickets
-        float closeK = 1.0 - smoothstep(0.05, 0.4, px);
-        vec3 coralC = mix(rp.rgb, mix(cp.rgb, rp.rgb, 0.35), closeK);
-        float cover = (1.0 - smoothstep(uSpread * 0.85, uSpread, length(p))) * smoothstep(420.0, 60.0, depth)
-                    * mix(rp.a, cp.a * rp.a + 0.15, closeK);
-        vec3 bare = mix(uSandC * mix(0.9, 1.0, n2), mix(uRockC, uRock2C, smoothstep(0.3, 0.7, n2)) * 0.8, slope);
-        vec3 farC = mix(bare, coralC, cover);
-        alb = mix(alb, farC, far);
-        vec3 nf = normalize(n + vec3(dn.x, 0.0, dn.y) * cover * closeK);
-        nn = normalize(mix(nn, nf, far));
+        // the tower's own rock: reef limestone, crusted pink and green, lumpy (its life is the corals on it)
+        vec2 tp = mix(p, vec2(p.x + p.y, wp.y), 1.0 - smoothstep(0.35, 0.8, n.y));
+        float r1 = fbm(tp * 0.11 + 9.0), r2 = vnoise(tp * 0.9), r3 = fbm(tp * 0.03 + 2.0);
+        vec3 rk = mix(uRockC, uRock2C, smoothstep(0.35, 0.7, r1)) * (0.8 + 0.3 * r2);
+        float crust = smoothstep(0.45, 0.6, r3 + 0.25 * max(n.y, 0.0));
+        rk = mix(rk, uCrustC * (0.75 + 0.35 * r2), crust * 0.75);
+        rk = mix(rk, uCrust2C * (0.7 + 0.4 * r2), smoothstep(0.55, 0.7, fbm(tp * 0.07 + 4.0)) * (1.0 - crust) * 0.7);
+        // the deep floor at its foot: pale sand
+        float floorK = smoothstep(-uTowerH + 14.0, -uTowerH + 3.0, wp.y) * step(10.0, uTowerH);
+        rk = mix(rk, uSandC * 0.9, floorK);
+        alb = mix(alb, rk, far);
+        vec2 g = vec2(fbm(tp * 0.25 + vec2(0.13, 0.0)) - fbm(tp * 0.25 - vec2(0.13, 0.0)), fbm(tp * 0.25 + vec2(0.0, 0.13)) - fbm(tp * 0.25 - vec2(0.0, 0.13)));
+        nn = normalize(mix(nn, normalize(n - vec3(g.x, 0.0, g.y) * 1.6), far));
     }
     // the place it all began: a soft glow under it, seen from afar
     if (uMark.w > 0.0) {
@@ -379,8 +342,8 @@ void main() {
     // the sand darkens a little at the rocks' feet
     float ao = 1.0 - 0.35 * smoothstep(0.02, 0.25, vRock) * (1.0 - rock);
     vec3 col = alb * toonLight(nn, ao);
-    // (the light under water comes from all around too: the wall's face is never black)
-    col = mix(col, alb * mix(uShadeC, uSunC, 0.3 + 0.35 * max(n.x * 0.6 + 0.5, 0.0)), far * (1.0 - smoothstep(0.35, 0.8, n.y)) * 0.7);
+    // (the light under water comes from all around too: the tower's flanks are never black)
+    col = mix(col, alb * mix(uShadeC, uSunC, 0.3 + 0.3 * max(nn.x * 0.6 + 0.5, 0.0)), far * (1.0 - smoothstep(0.35, 0.8, n.y)) * 0.55);
     if (uMark.w > 0.0) col += uMarkC * uMark.w * exp(-sq(length(p - uMark.xy) / (uMark.z * 0.6))) * 0.35;
     float lit = toonBand(dot(nn, uSunDir));
     col += uCausticC * caustic(wp) * (0.3 + 0.7 * lit) * mix(0.75, 0.55, rock) * (1.0 - smoothstep(0.3, 2.0, px)) * step(0.0, depth);

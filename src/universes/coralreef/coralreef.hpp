@@ -32,6 +32,27 @@ enum Kind { K_BRAIN, K_STAG, K_TABLE, K_FAN, K_SPONGE, K_ANEMONE, K_SOFT, K_COUN
 constexpr int TEMPLATES = 3;              // templates per kind
 Mesh buildCoral(int kind, int variant);   // unit size (about 1 m tall or wide), its base at the origin
 Mesh buildRock(int variant);              // a boulder, unit wide
+// The tower (the growth's later stages, as towerProfile in shaders.hpp).
+constexpr float TOWER_CX = 3.f, TOWER_CZ = -6.f, TOP_R = 46.f, TOWER_SLOPE = 2.6f, TOWER_MAX = 430.f;
+inline float towerE(float a) {
+    return 1.f + 0.2f * std::sin(3.f * a + 0.7f) + 0.11f * std::sin(5.f * a + 2.f) + 0.06f * std::sin(11.f * a + 0.3f) + 0.03f * std::sin(23.f * a);
+}
+// The tower's surface height at (x, z) for a floor at floorY (without the summit's own ground).
+inline float towerH(float x, float z, float floorY) {
+    const float dx = x - TOWER_CX, dz = z - TOWER_CZ;
+    const float r = std::sqrt(dx * dx + dz * dz), a = std::atan2(dz, dx);
+    const float t = r / towerE(a) - TOP_R;
+    const float top = -1.6f + 0.4f * std::sin(0.21f * x + 0.4f) * std::sin(0.17f * z + 1.1f);
+    if (t <= 0.f) return top;
+    float zz = t * TOWER_SLOPE;
+    zz = zz + 5.6f * std::sin(zz * 6.2831f / 38.f + a * 0.6f);
+    zz += 4.f * std::sin(a * 7.f + zz * 0.05f) * smoothstepf(0.f, 20.f, zz);
+    const float h = top - std::max(zz, 0.f);
+    const float k = 12.f;
+    return floorY + std::log(std::exp((h - floorY) / k) + 1.f) * k;
+}
+// The tower's radius at a depth (meters below the summit), along an angle.
+inline float towerR(float depth, float a) { return (TOP_R + depth / TOWER_SLOPE) * towerE(a); }
 enum Species { F_CHROMIS, F_ANTHIAS, F_YELLOW, F_BLUE, F_IDOL, F_PARROT, F_CLOWN, F_COUNT };
 Mesh buildFish(int species);              // unit length along +x (the nose), centered
 Mesh buildManta();                        // unit half span along x, the head toward +z
@@ -141,7 +162,8 @@ private:
     vec3 P0_{9.5f, 0.f, 4.f};          // where the first polyp lives (on its pebble)
     GLsizei groundRings_ = 0;
     float camD_ = 15.f;
-    float surfY_ = reef::SURF_Y;        // the surface's plane: it rises as the camera pulls back (it stays in the water)
+    float surfY_ = reef::SURF_Y;        // the surface's plane
+    float towerH_ = 0.f;                // the tower's height (its floor at -towerH_), with the lines
     mat4 refVP_;                        // the reef stage's framing (where the reef's slots are laid out)
     bool toScreenRef(const vec3& w, vec2* ndc) const;
     // The camera's place at a point of the growth (t: its breathing): the eye, what it frames, its forward axis.
