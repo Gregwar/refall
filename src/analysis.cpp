@@ -440,6 +440,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
 
         std::vector<double> eventBounds; // boundaries that start with a salient event
         std::vector<double> returnBounds; // boundaries where the full bass comes back (see below)
+        std::vector<double> punchBounds;  // returns that land harder than the bars before them
         // ---- Boundary localization (change-point detection at beat resolution).
         // The coarse detectors above say *that* the song changes around a time, but they work on wide,
         // smoothed windows, so they are imprecise (typically late). A listener hears a new section as
@@ -640,12 +641,26 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                     const float after = percentile(next, 0.5f);
                     // the return beat reaches the new level and the bass holds there (a riser's bass does not)
                     if (after < 0.5f || beatBass[i] < 0.85f * after) continue;
-                    if (std::min(beatBass[i + 1], beatBass[i + 2]) < 0.6f * after) continue;
+                    // A punchier landing: a gap of a beat or two, then bass and loudness peaks clearly above
+                    // those of the bars before it. A drop that pumps (sidechained beats, half-time hits) keeps
+                    // the same mean level as the chorus before it, but its hits land harder: it is heard as
+                    // the drop although neither the mean bass nor the smoothed intensity rises. Only out of
+                    // steady loud material, full bass all along (a return from a quiet or choppy part is the
+                    // usual case below).
+                    bool punch = false;
+                    if (i >= 18 && std::min(beatBass[i - 1], beatBass[i - 2]) < 0.4f * beatBass[i] &&
+                        std::min(beatLoud[i - 1], beatLoud[i - 2]) < 0.5f * beatLoud[i]) {
+                        std::vector<float> pb(beatBass.begin() + i - 18, beatBass.begin() + i - 2),
+                            pl(beatLoud.begin() + i - 18, beatLoud.begin() + i - 2), nl(beatLoud.begin() + i, beatLoud.begin() + i + 8);
+                        punch = percentile(pb, 0.25f) >= 0.5f && percentile(next, 0.75f) >= 1.12f * percentile(pb, 0.75f) &&
+                                percentile(nl, 0.75f) >= 1.06f * percentile(pl, 0.75f) && percentile(next, 0.75f) >= 0.7f;
+                    }
+                    if (!punch && std::min(beatBass[i + 1], beatBass[i + 2]) < 0.6f * after) continue;
                     float before = 0.f;
                     for (int j = i - 4; j < i; j++) before += beatBass[j];
-                    if (before / 4 > 0.6f * after) continue;
+                    if (!punch && before / 4 > 0.6f * after) continue;
                     const double te = an.beats[i];
-                    if (an.intensity[std::clamp((int)((te + 6.0) / an.hop), 0, nFrames - 1)] < 0.8f) continue;
+                    if (an.intensity[std::clamp((int)((te + 6.0) / an.hop), 0, nFrames - 1)] < (punch ? 0.6f : 0.8f)) continue;
                     i += 8; // one return per two bars
                     if (te < minLen || te > dur - minLen) continue;
                     int k = -1;
@@ -660,7 +675,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                         const int j0 = std::max(0, cut - 16), j1 = std::max(j0 + 1, cut);
                         float sb = 0.f;
                         for (int j = j0; j < j1; j++) sb += beatBass[j];
-                        if (e - cut <= 6 && sb / (j1 - j0) >= 0.85f * after) continue;
+                        if (!punch && e - cut <= 6 && sb / (j1 - j0) >= 0.85f * after) continue;
                     }
                     const double d = k >= 0 ? bounds[k] - te : 1e9;
                     const double prevB = k >= 0 && d > 0 ? (k > 0 ? bounds[k - 1] : 0.0) : (k >= 0 ? bounds[k] : 0.0);
@@ -676,6 +691,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                         std::sort(bounds.begin(), bounds.end());
                     }
                     returnBounds.push_back(te);
+                    if (punch) punchBounds.push_back(te);
                     eventBounds.push_back(te);
                 }
             }
@@ -761,6 +777,11 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
             auto peakGroup = [&](int g) { return gE[g] >= maxE - 0.1 && gE[g] >= 0.65; };
             float maxSegE = 0;
             for (const Segment& sg : an.segments) maxSegE = std::max(maxSegE, sg.energy);
+            // Sections that start on a punchier landing (see the bass returns).
+            std::vector<char> punchStart(n, 0);
+            for (int i = 0; i < n; i++)
+                for (double pt : punchBounds)
+                    if (std::fabs(pt - an.segments[i].start) < 0.05) punchStart[i] = 1;
             for (int i = 0; i < n; i++) {
                 Segment& sg = an.segments[i];
                 float prevE = i > 0 ? an.segments[i - 1].energy : sg.energy;
@@ -770,6 +791,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                 else if (i == n - 1 && n > 1 && sg.energy < 0.5f) sg.kind = SEG_OUTRO;
                 else if (sg.rise > 0.22f && sg.energy < 0.8f) sg.kind = SEG_BUILD;
                 else if (i > 0 && climax && (sg.energy - prevE >= 0.08f || prevKind == SEG_BUILD)) sg.kind = SEG_DROP;
+                else if (i > 0 && punchStart[i] && sg.energy >= 0.65f && sg.energy >= prevE - 0.05f) sg.kind = SEG_DROP;
                 else if (peakGroup(sg.cluster) && sg.energy >= 0.65f) sg.kind = SEG_CHORUS;
                 else if (sg.energy < 0.4f) sg.kind = SEG_BREAK;
                 else sg.kind = SEG_VERSE;
@@ -778,6 +800,9 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
             // (a pre-drop, a build that already has the beat) and the drop is the second.
             for (int i = 0; i + 1 < n; i++) {
                 Segment &a = an.segments[i], &b = an.segments[i + 1];
+                // A drop that lands harder than what came before it stays one, unless the next one lands
+                // harder still: its louder second half is the same drop opening up.
+                if (punchStart[i] && !punchStart[i + 1]) continue;
                 if (a.kind == SEG_DROP && (b.kind == SEG_DROP || b.kind == SEG_CHORUS) && b.energy >= a.energy + 0.06f) {
                     a.kind = SEG_BUILD;
                     b.kind = SEG_DROP;
