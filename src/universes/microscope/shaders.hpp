@@ -107,7 +107,8 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the organisms (instanced)
-// a: x, y, size, angle. b: kind, seed, time, alpha. c: blur, cilia beat, tint, piece type. d: spin, dart, -, -.
+// a: x, y, size, angle. b: kind, seed, time, alpha. c: blur, cilia beat, tint, piece type. d: spin, simple
+// (in its cell: one bold shape, its fine details faded out), -, -.
 inline const char* ORG_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -294,7 +295,7 @@ void main() {
     // the shading
     float ew = AA + blur * 0.04;
     float inside = 1.0 - smoothstep(-ew, ew, d);
-    float rimw = 0.01 + blur * 0.05;
+    float rimw = 0.01 + blur * 0.05 + 0.012 * vD.y;
     float rim = max(exp(-abs(d) / rimw) - 0.01, 0.0) * (1.0 - smoothstep(0.05, 0.16, d));
     float innerL = inner < 8.0 ? (1.0 - smoothstep(-AA, AA, inner)) : 0.0;
     float sharp = 1.0 - 0.75 * blur;
@@ -302,6 +303,12 @@ void main() {
     org *= inside * (1.0 - 0.6 * blur);
     gran *= inside * sharp;
     innerL *= sharp;
+    // in its cell (and while it leaves it): one bold, readable shape, its fine details faded out
+    float simple = vD.y;
+    lines *= 1.0 - 0.8 * simple;
+    gran *= 1.0 - simple;
+    org *= 1.0 - 0.55 * simple;
+    innerL *= 1.0 - 0.5 * simple;
     float k = stainK(vWorld);
     int type = int(vC.w + 0.5);
     vec3 tint = pieceCol(type, k);
@@ -310,11 +317,12 @@ void main() {
     vec3 orgc = mix(mix(uOrgA[2], uOrgB[2], k), tint, vC.z * 0.5);
     if (kind == 5) { body = mix(body, mix(body, vec3(0.08, 0.5, 0.12), 0.5), 1.0 - uDark); }
     // dark-field: light scattered by the edges and the structures, on black
-    vec3 df = silver(rimc) * (rim * 0.55 + innerL * 0.35 + lines * 0.4) + silver(body) * inside * (fillK * 0.05 + gran * 0.16) +
+    vec3 df = silver(rimc) * (rim * (0.55 + 0.5 * simple) + innerL * 0.35 + lines * 0.4) +
+              silver(body) * inside * (fillK * 0.05 + gran * 0.16 + 0.2 * simple) +
               silver(orgc) * org * 0.32;
     df *= uGlow * (1.0 - 0.45 * blur);
     // bright-field: a stained body absorbing the light, its edge a darker line, a pale halo just outside
-    float A = inside * (0.22 * fillK + 0.4 * gran) + rim * 0.75 + innerL * 0.55 + lines * 0.6 + org * 0.7;
+    float A = inside * (0.22 * fillK + 0.4 * gran + 0.25 * simple) + rim * (0.75 + 0.25 * simple) + innerL * 0.55 + lines * 0.6 + org * 0.7;
     A = clamp(A * (1.0 - 0.45 * blur), 0.0, 0.9);
     vec3 dye = mix(body, orgc, clamp(org, 0.0, 1.0) * 0.6) * 0.75;
     float halo = exp(-max(d, 0.0) / (0.02 + blur * 0.05)) * step(0.0, d) * 0.06;
@@ -379,55 +387,18 @@ void main() {
         float dp = sdBox(p, (hb - wallW) * s - r2) - r2;
         proto = 1.0 - smoothstep(-aa, aa, dp);
     }
-    // the cell lives: everything inside drifts slowly and never stops, each cell on its own clock and with its own
-    // mood (some livelier for a while, some nearly still). The cytoplasm flows, the nucleus wanders and breathes out
-    // of round, granules stream at their own pace, a vacuole drifts. The wall breathes a little, never out of the grid.
-    // (only the cells with an organism inside live so; the others are still)
+    // A calm stained cell: an even tint (a touch denser along its wall), the glassy wall and its fine bright line; no
+    // nucleus, no granules. A cell with life in it is a clear pool around its organism (drawn over it), its wall
+    // breathing a little.
     float live = vC.w;
-    float ts = live * uTime * (0.8 + 0.4 * fract(seed * 5.1)) + seed * 97.0;
-    float act = live * uLife * (0.35 + 0.65 * smoothstep(0.25, 0.75, vnoise(vec2(ts * 0.06, seed * 17.0))));
-    if (kind == 0) {
+    if (kind == 0 && live > 0.5) {
+        float ts = uTime * (0.8 + 0.4 * fract(seed * 5.1)) + seed * 97.0;
         float wob = vnoise(vec2(atan(p.y, p.x) * 1.6 + seed * 9.0, ts * 0.18)) - 0.5;
-        d += (0.016 * (wob + 0.5) + 0.004 * (1.0 + sin(ts * 0.5))) * act;   // only ever inward: the gap stays
+        d += (0.012 * (wob + 0.5) + 0.003 * (1.0 + sin(ts * 0.5))) * uLife;   // only ever inward: the gap stays
         cov = 1.0 - smoothstep(-aa, aa, d);
         in_ = max(-d, 0.0);
         wall = 1.0 - smoothstep(wallW - aa, wallW + aa, in_);
     }
-    vec2 nc = vC.xy;
-    if (kind == 0 || kind == 3)
-        nc += 0.07 * act * (vec2(vnoise(vec2(ts * 0.11, seed * 3.0)), vnoise(vec2(seed * 5.0, ts * 0.09))) - 0.5) * 2.0;
-    vec2 flow = vec2(vnoise(p * 2.6 + vec2(ts * 0.07, seed)), vnoise(p * 2.6 + vec2(seed * 2.0, -ts * 0.06))) - 0.5;
-    vec2 gp = p + 0.12 * act * flow + vec2(ts * 0.012, -ts * 0.009) * act;
-    float nr = 0.105 + 0.025 * fract(seed * 7.13);
-    if (kind == 3) nc *= 1.0 - 0.4 * t;
-    vec2 nq = p - nc;
-    float na = atan(nq.y, nq.x);
-    nr *= 1.0 + act * (0.09 * sin(2.0 * na + ts * 0.37 + seed * 4.0) + 0.05 * sin(3.0 * na - ts * 0.29 + seed));
-    float nd = length(nq * vec2(1.0, 1.0 + 0.15 * sin(seed * 20.0))) - nr;
-    // (a cell with an organism inside is a clear pool of it: no nucleus in the way)
-    float nuc = (1.0 - smoothstep(-aa * 1.5, aa * 1.5, nd)) * proto * (1.0 - live);
-    float nedge = exp(-abs(nd) / 0.014) * proto * (1.0 - live);
-    float chrom = vnoise(nq * 38.0 + seed * 9.0 + vec2(ts * 0.05, 0.0));
-    float nucl = (1.0 - smoothstep(0.026 - aa, 0.026 + aa, length(nq - vec2(0.03, 0.025)))) * (1.0 - live);
-    float gr = vnoise(gp * 15.0 + seed * 41.0) * 0.6 + vnoise(gp * 33.0 + seed * 17.0) * 0.4;
-    // a vacuole: a clear, soft-edged pool drifting slowly through the cytoplasm
-    vec2 vc = 0.17 * vec2(sin(ts * 0.083 + seed * 6.0), cos(ts * 0.071 + seed * 3.0));
-    float vr = 0.075 + 0.02 * sin(ts * 0.21 + seed);
-    float vac = (1.0 - smoothstep(vr - 0.03, vr + 0.01, length(p - vc))) * proto * (0.5 + 0.5 * act);
-    // granules, each streaming at its own pace and distance, with a faint Brownian tremble
-    float grn = 0.0;
-    for (int j = 0; j < 6; j++) {
-        float fj = float(j);
-        float h = fract(seed * 17.0 + fj * 0.37);
-        float sp = (0.05 + 0.1 * fract(seed * 29.0 + fj * 0.53)) * (fract(seed * 13.7 + fj * 0.71) < 0.5 ? -1.0 : 1.0);
-        float ang = fj * 1.0472 + seed * 31.0 + ts * sp * act + 0.5 * sin(ts * 0.13 + fj * 2.0);
-        float rad = 0.25 + 0.07 * h + 0.04 * act * sin(ts * (0.17 + 0.1 * h) + fj * 1.7);
-        vec2 gc = rad * vec2(cos(ang), sin(ang));
-        gc += 0.008 * act * vec2(sin(ts * 3.1 + fj * 5.0 + seed), cos(ts * 2.7 + fj * 3.0));
-        float gs = 0.03 + 0.012 * fract(seed * 23.0 + fj * 0.61);
-        grn = max(grn, 1.0 - smoothstep(gs - aa, gs + aa, length(p - gc)));
-    }
-    grn *= proto * (1.0 - nuc);
     float flash = vC.z;
     if (kind == 1) {
         // the ghost: the wall alone, faint
@@ -437,30 +408,23 @@ void main() {
         frag = vec4(gb * a, a);
         return;
     }
-    // the glassy wall's light: a fine bright line just inside it, stronger toward the top left
     float inner = exp(-max(in_ - wallW, 0.0) / 0.025) * step(wallW, in_);
     float tl = smoothstep(-0.5, 0.5, -p.x * 0.6 + p.y * 0.8);
-    // bright-field: stained cytoplasm (denser along the wall), a darker wall, a granular nucleus
     vec3 field = uFieldA[0];
-    float dens = 0.8 + 0.17 * exp(-in_ / 0.14) + 0.06 * (gr - 0.5);
+    // the pool: clear in the middle, the stain fading in toward the wall
+    float pool = live * smoothstep(0.1, 0.24, in_);
+    // bright-field: the stain, a little denser along the wall, a darker wall
+    float dens = 0.8 + 0.15 * exp(-in_ / 0.14);
     vec3 bf = mix(field, c, dens) * mix(0.8, 1.0, proto);
-    bf = mix(bf, mix(field, c, 0.5), live * 0.45 * proto);
-    bf = mix(bf, mix(field, c, 0.45), vac * 0.55 * (1.0 - live));
-    bf = mix(bf, c * 0.42, grn * 0.75);
-    bf = mix(bf, c * (0.55 + 0.15 * chrom), nuc * 0.85);
-    bf = mix(bf, c * 0.3, nedge * 0.6 + nucl * nuc * 0.7);
+    bf = mix(bf, mix(field, c, 0.28), pool * 0.85 * proto);
     bf = mix(bf, vec3(1.0), inner * (0.1 + 0.25 * tl) * proto);
     bf = mix(bf, c * (0.4 - 0.12 * flash), wall);
-    // dark-field: the glassy wall glows, the cytoplasm a dim glow fading inward, the nucleus a soft lit body
-    vec3 g = silver(c);
-    vec3 df = g * (0.1 + 0.06 * gr) * proto;
-    df += g * exp(-in_ / 0.1) * 0.35 * proto;
-    df += g * inner * (0.15 + 0.3 * tl) * proto;
-    df *= 1.0 - 0.45 * vac * (1.0 - live) - 0.3 * live;
-    df += g * grn * 0.45;
-    df = mix(df, g * (0.22 + 0.12 * chrom), nuc * 0.85);
-    df += g * (nedge * 0.45 + nucl * nuc * 0.45);
-    df = mix(df, g * (1.2 + 0.6 * flash), wall);
+    // dark-field: the wall glows, the stain a soft glow fading inward (darker in a pool)
+    vec3 gcol = silver(c);
+    vec3 df = gcol * (0.11 + exp(-in_ / 0.1) * 0.35) * proto;
+    df *= 1.0 - 0.55 * pool;
+    df += gcol * inner * (0.15 + 0.3 * tl) * proto;
+    df = mix(df, gcol * (1.2 + 0.6 * flash), wall);
     df *= uGlow;
     vec3 col = mix(bf, df, uDark);
     float a = cov * vB.w;
