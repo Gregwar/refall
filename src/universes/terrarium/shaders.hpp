@@ -40,11 +40,6 @@ in vec2 vUv;
 out vec4 frag;
 uniform vec3 uEye, uFwd, uRight, uUp;
 uniform float uTanH, uAspect, uTime, uPx;
-uniform int uKind;                       // 0 the mossy forest, 1 the desert, 2 the tropics
-uniform int uSlots;
-uniform vec4 uSA[24];                    // x, y (the soil there), z, size
-uniform vec4 uSB[24];                    // type, growth, seed, rotation
-uniform vec4 uSC[24];                    // param, -, -, -
 uniform int uSprouts;
 uniform vec4 uSp[40];                    // x, y, z, growth
 uniform int uFlies;
@@ -53,21 +48,19 @@ uniform int uSeeds;
 uniform vec4 uSeedP[32];                 // x, y, z, alpha
 uniform vec4 uBug;                       // x, y, z, heading
 uniform vec4 uBug2;                      // walk phase, moving, look, blink
-uniform vec4 uPondP;                     // x, z, radius, depth
-uniform float uPondY, uPond, uMossCover, uSway, uSpots;
+uniform float uSway, uSpots;
 uniform vec3 uSunDir, uSunCol, uSkyZ, uSkyH, uAmbS, uAmbG, uFill, uGlowSun;
 uniform vec2 uSunSky;
 uniform float uSunDisc, uMoon, uStars, uRain, uFog, uCond, uNight, uFlyAmt;
-uniform vec3 uSoil, uSoil2, uGravel, uStr1, uStr2, uMoss, uMoss2, uLeaf, uLeaf2, uStem, uCap, uCap2, uFlower, uFlower2,
-             uBark, uWater, uStone, uBugC, uBugSpot, uFlyC, uSill, uFrame, uWall, uHill, uHill2;
+uniform vec3 uBugC, uBugSpot, uFlyC, uSill, uFrame, uWall, uHill, uHill2;
 uniform vec3 uBridgeCol;
 uniform float uWorldA, uSlow;
-// vines up the inside of the first jar's glass
-uniform float uInVine;
-// the network: more jars (each its own little world), glass tubes between them, fireflies along the tubes
+// The cluster: every jar is the first one's twin (the same glass, the same plant system), scaled and placed, its own
+// biome, colors and growth: one row each in uJarTex (texels 0-16 its palette, 17 its pond, 18 pond level / pond / moss
+// / world, 19 foot and size, 20 slot count / vines / appear, 32 on its slots, three texels each).
 uniform int uJarN;
-uniform vec4 uJarA[40];                  // x, y, z (its foot), size
-uniform vec4 uJarB[40];                  // shape, biome, growth, detail (1: ray marched inside, 0: painted)
+uniform sampler2D uJarTex;
+uniform int uSnailJar;                   // the jar the snail lives in (-1: none)
 uniform int uTubeN;
 uniform vec4 uTubeA[48];                 // start xyz, radius
 uniform vec4 uTubeB[48];                 // end xyz, grown 0..1
@@ -83,6 +76,34 @@ const float SF = 1.3;                    // the sill's front edge
 const float WX = 2.4, WY = 2.7;          // the window opening (half width, height above the sill)
 const float WCX = 0.0;                   // its center
 const float BS = 1.9;                    // the beetle's scale
+
+// ---- the jar being drawn (setJar): its palette, pond, soil, slots, place
+int gJ = 0;
+vec3 gFoot = vec3(0.0);
+float gS = 1.0;
+int uKind, uSlots;
+vec4 uPondP;
+float uPondY, uPond, uMossCover, uInVine;
+vec3 uSoil, uSoil2, uGravel, uStr1, uStr2, uMoss, uMoss2, uLeaf, uLeaf2, uStem, uCap, uCap2, uFlower, uFlower2, uBark, uWater, uStone;
+vec4 jarTexel(int j, int i) { return texelFetch(uJarTex, ivec2(i, j), 0); }
+void setJar(int j) {
+    gJ = j;
+    uSoil = jarTexel(j, 0).rgb; uSoil2 = jarTexel(j, 1).rgb; uGravel = jarTexel(j, 2).rgb; uStr1 = jarTexel(j, 3).rgb;
+    uStr2 = jarTexel(j, 4).rgb; uMoss = jarTexel(j, 5).rgb; uMoss2 = jarTexel(j, 6).rgb; uLeaf = jarTexel(j, 7).rgb;
+    uLeaf2 = jarTexel(j, 8).rgb; uStem = jarTexel(j, 9).rgb; uCap = jarTexel(j, 10).rgb; uCap2 = jarTexel(j, 11).rgb;
+    uFlower = jarTexel(j, 12).rgb; uFlower2 = jarTexel(j, 13).rgb; uBark = jarTexel(j, 14).rgb; uWater = jarTexel(j, 15).rgb;
+    uStone = jarTexel(j, 16).rgb;
+    uPondP = jarTexel(j, 17);
+    vec4 a = jarTexel(j, 18);
+    uPondY = a.x; uPond = a.y; uMossCover = a.z; uKind = int(a.w + 0.5);
+    vec4 f = jarTexel(j, 19);
+    gFoot = f.xyz; gS = max(f.w, 1e-3);
+    vec4 c = jarTexel(j, 20);
+    uSlots = int(c.x + 0.5); uInVine = c.y;
+}
+vec4 slotA(int i) { return jarTexel(gJ, 32 + 3 * i); }
+vec4 slotB(int i) { return jarTexel(gJ, 33 + 3 * i); }
+vec4 slotC(int i) { return jarTexel(gJ, 34 + 3 * i); }
 const float PI = 3.14159265, TAU = 6.2831853;
 
 // ---------------------------------------------------------------- primitives
@@ -137,6 +158,7 @@ float gMat;      // 1 soil, 3 moss, 4 frond, 5 stem, 6 cap, 7 mushroom stem, 8 b
 vec4 gInf;
 int gSl[12];     // the slots this ray comes near
 vec4 gSb[12];    // and their bounds
+vec4 gSlA[12], gSlB[12], gSlC[12];
 int gNs;
 int gSpL[12];    // the sprouts
 int gNsp;
@@ -411,8 +433,7 @@ float cactus(vec3 p, vec3 B, float s, float g, float seed, inout vec4 inf, inout
 }
 
 // the slots' bounds (for the rays' masks)
-vec4 slotBound(int i) {
-    vec4 A = uSA[i], Bv = uSB[i];
+vec4 slotBound(vec4 A, vec4 Bv, vec4 Cv) {
     int t = int(Bv.x + 0.5);
     float s = A.w, g = max(Bv.y, 0.0);
     if (g <= 0.001) return vec4(0.0, -10.0, 0.0, 0.0);
@@ -420,7 +441,7 @@ vec4 slotBound(int i) {
     if (t == 1) return vec4(A.x, A.y + s * 0.4, A.z, s * 0.88);
     if (t == 2) return vec4(A.x, A.y + s * 0.6, A.z, s * 1.35);
     if (t == 3) return vec4(A.x, A.y + s * 0.55, A.z, s * 0.85);
-    if (t == 4) return vec4(A.x, A.y + s * 0.6, A.z, s * (uSC[i].x > 0.5 ? 1.45 : 1.05));
+    if (t == 4) return vec4(A.x, A.y + s * 0.6, A.z, s * (Cv.x > 0.5 ? 1.45 : 1.05));
     if (t == 5) return vec4(A.x, A.y + s * 0.5, A.z, s * 1.6);
     if (t == 6) return vec4(A.x, A.y + s * 0.8, A.z, s * 1.4);
     if (t == 8) return vec4(A.x, A.y + s * 0.3, A.z, s * 1.6);
@@ -436,21 +457,60 @@ float rayBall(vec3 ro, vec3 rd, vec4 b, float tmax) {
     return (-bb + h > 0.0 && -bb - h < tmax) ? 1.0 : 0.0;
 }
 
+// the snail (in its jar's units): a slow loop round the jar, a little up and down the soil
+bool gSnail = false;
+vec4 snailPos() {
+    float a = uTime * 0.035;
+    vec2 c = vec2(0.05, 0.12) + vec2(cos(a), sin(a)) * vec2(0.5, 0.36);
+    vec2 tg = vec2(-sin(a) * 0.5, cos(a) * 0.36);
+    return vec4(c.x, soilH(c), c.y, atan(-tg.x, tg.y));
+}
+float snailD(vec3 p, out vec4 inf, out float m) {
+    vec4 sp = snailPos();
+    vec3 q = p - sp.xyz;
+    q.xz = rot(-sp.w) * q.xz;
+    float crawl = sin(uTime * 1.3) * 0.004;
+    // the foot, long and soft, its head raised
+    float body = sdCapT(q, vec3(0.0, 0.012, -0.07), vec3(0.0, 0.018, 0.06 + crawl), 0.012, 0.02);
+    body = smin(body, length(q - vec3(0.0, 0.03, 0.065 + crawl)) - 0.019, 0.02);
+    m = 23.0; inf = vec4(q, 0.0);
+    float d = body;
+    // eye stalks with their round eyes
+    for (int s = -1; s <= 1; s += 2) {
+        float fs = float(s);
+        vec3 a = vec3(fs * 0.008, 0.04, 0.072 + crawl), b = vec3(fs * 0.02, 0.075 + 0.004 * sin(uTime * 1.7 + fs), 0.085 + crawl);
+        float ds = sdCapT(q, a, b, 0.004, 0.003);
+        if (ds < d) { d = ds; m = 23.0; }
+        float de = length(q - b) - 0.008;
+        if (de < d) { d = de; m = 25.0; }
+    }
+    // the shell: a round spiral on its back
+    vec3 qs = q - vec3(0.0, 0.052, -0.02);
+    float dsh = length(qs * vec3(1.4, 1.0, 1.0)) - 0.044;
+    if (dsh < d) { d = dsh; m = 24.0; inf = vec4(qs, 0.0); }
+    return d;
+}
+
 void buildMasks(vec3 ro, vec3 rd, float tmax) {
     gNs = 0;
     for (int i = 0; i < uSlots; i++) {
-        vec4 b = slotBound(i);
-        if (gNs < 12 && rayBall(ro, rd, b, tmax) > 0.5) { gSl[gNs] = i; gSb[gNs] = b; gNs++; }
+        if (gNs >= 12) break;
+        vec4 A = slotA(i), Bv = slotB(i), Cv = slotC(i);
+        vec4 b = slotBound(A, Bv, Cv);
+        if (rayBall(ro, rd, b, tmax) > 0.5) { gSl[gNs] = i; gSb[gNs] = b; gSlA[gNs] = A; gSlB[gNs] = Bv; gSlC[gNs] = Cv; gNs++; }
     }
     gNsp = 0;
-    for (int k = 0; k < uSprouts; k++) {
+    for (int k = 0; k < (gJ == 0 ? uSprouts : 0); k++) {
         vec4 sp = uSp[k];
         if (sp.w <= 0.001) continue;
         if (rayBall(ro, rd, vec4(sp.x, sp.y + 0.035, sp.z, 0.065), tmax) > 0.5) {
             if (gNsp < 12) { gSpL[gNsp] = k; gNsp++; }
         }
     }
-    gBug = uBugMode < 0.5 && rayBall(ro, rd, vec4(uBug.xyz + vec3(0.0, 0.04, 0.0), 0.125 * BS), tmax) > 0.5;
+    bool bugHere = (uBugMode < 0.5 && gJ == 0) || (uBugMode > 1.5 && gJ == uBugJar);
+    vec3 bl = (uBug.xyz - gFoot) / gS;
+    gBug = bugHere && rayBall(ro, rd, vec4(bl + vec3(0.0, 0.04, 0.0) / gS, 0.125 * BS / gS), tmax) > 0.5;
+    gSnail = gJ == uSnailJar && rayBall(ro, rd, vec4(snailPos().xyz + vec3(0.0, 0.04, 0.0), 0.12), tmax) > 0.5;
 }
 
 // the beetle, in its own frame (forward +z), unit ~ 1/BS
@@ -561,6 +621,9 @@ float sprouts(vec3 p, float dIn, inout vec4 inf, inout float m) {
 }
 
 float mapC(vec3 p) {
+    float dSn = 1e3;
+    vec4 snInf = vec4(0.0); float snM = 0.0;
+    if (gSnail) dSn = snailD(p, snInf, snM);
     float d = (p.y - soilH(p.xz)) * 0.8;
     gMat = 1.0; gInf = vec4(0.0);
     // the pond's water
@@ -571,8 +634,7 @@ float mapC(vec3 p) {
     for (int j = 0; j < gNs; j++) {
         // (nothing in a slot can be nearer than its bound)
         if (length(p - gSb[j].xyz) - gSb[j].w > d) continue;
-        int i = gSl[j];
-        vec4 A = uSA[i], Bv = uSB[i];
+        vec4 A = gSlA[j], Bv = gSlB[j], Cv = gSlC[j];
         int t = int(Bv.x + 0.5);
         float s = A.w, g = Bv.y, seed = Bv.z, rt = Bv.w;
         vec3 B = A.xyz;
@@ -593,9 +655,9 @@ float mapC(vec3 p) {
         }
         else if (t == 1) { m = 4.0; ds = fern(p, B, s, g, seed, rt, inf); }
         else if (t == 2) ds = mushrooms(p, B, s, g, seed, inf, m);
-        else if (t == 3) ds = sapling(p, B, s, g, seed, uSC[i].x, inf, m);
-        else if (t == 4) ds = flowers(p, B, s, g, seed, uSC[i].x, inf, m);
-        else if (t == 5) ds = rosette(p, B, s, g, seed, rt, uSC[i].x, inf, m);
+        else if (t == 3) ds = sapling(p, B, s, g, seed, Cv.x, inf, m);
+        else if (t == 4) ds = flowers(p, B, s, g, seed, Cv.x, inf, m);
+        else if (t == 5) ds = rosette(p, B, s, g, seed, rt, Cv.x, inf, m);
         else if (t == 6) ds = cactus(p, B, s, g, seed, inf, m);
         else if (t == 8) {
             // a mossy rock, a thin waterfall trickling from its lip into the pond
@@ -605,7 +667,7 @@ float mapC(vec3 p) {
             ds = sdEll(q - vec3(0.0, 0.12 * r, 0.0), vec3(r, 0.78 * r, 0.85 * r));
             if (ds < 0.06) ds += r * 0.12 * (vnoise3(q / r * 3.0 + seed) - 0.5);
             m = 21.0; inf = vec4(q / max(r, 1e-3), seed);
-            if (uSC[i].x > 0.5 && uPond > 0.3 && g > 0.5) {
+            if (Cv.x > 0.5 && uPond > 0.3 && g > 0.5) {
                 vec2 dir = normalize(uPondP.xy - B.xz);
                 vec3 a = B + vec3(dir.x * r * 0.62, r * 0.72, dir.y * r * 0.62);
                 vec3 b = vec3(B.x + dir.x * (r * 0.95 + 0.035), uPondY, B.z + dir.y * (r * 0.95 + 0.035));
@@ -632,13 +694,14 @@ float mapC(vec3 p) {
         float ds = sprouts(p, d, inf, m);
         take(d, ds, m, inf);
     }
-    if (gBug && length(p - uBug.xyz - vec3(0.0, 0.04, 0.0)) - 0.125 * BS < d) {
+    if (gBug && length(p - (uBug.xyz - gFoot) / gS - vec3(0.0, 0.04, 0.0) / gS) - 0.125 * BS / gS < d) {
         vec4 inf = vec4(0.0); float m = 0.0;
-        float db = beetle(p, inf, m);
+        float db = beetle(gFoot + p * gS, inf, m) / gS;
         take(d, db, m, inf);
     }
     // the cork, seen through the neck
     if (p.y > JHN - 0.15) take(d, cork(p), 19.0, vec4(0.0));
+    take(d, dSn, snM, snInf);
     return d;
 }
 
@@ -845,6 +908,14 @@ vec3 sillColor(vec3 p, vec3 rd) {
     vec3 lightC = uSunCol * sat(L.y) * sh * 0.55 + uAmbS * 0.65 + uFill * 0.6;
     vec3 col = alb * lightC + uSunCol * alb * caus * 0.35 * (1.0 - soilSh);
     col += uFlyC * alb * uFlyAmt * 0.12 * exp(-sq(max(length(p.xz) - 0.9, 0.0) / 0.5));
+    for (int j = 1; j < uJarN; j++) {
+        vec4 f = jarTexel(j, 19);
+        if (f.w <= 0.0 || abs(f.y) > 0.05) continue;
+        // the other jars on the sill: their soft shadows and their glow at night
+        vec2 dq = p.xz - f.xz - uSunDir.xz / max(uSunDir.y, 0.2) * 0.25 * f.w;
+        col *= 1.0 - 0.3 * smoothstep(1.05 * f.w, 0.8 * f.w, length(dq));
+        col += uFlyC * alb * uFlyAmt * 0.1 * exp(-sq(max(length(p.xz - f.xz) - 0.9 * f.w, 0.0) / (0.5 * f.w)));
+    }
     return col;
 }
 
@@ -860,6 +931,7 @@ float shelfHit(vec3 ro, vec3 rd, out vec3 n) {
     n = vec3(0.0, 1.0, 0.0);
     vec3 inv = 1.0 / rd;
     for (int i = 0; i < 5; i++) {
+        if (i == 1 || i == 4) continue; // (only the shelves beside and above the window hold jars)
         vec4 sa = shelfA(i);
         vec2 sz = shelfZ(i);
         vec3 bmin = vec3(sa.y, sa.x - 0.09, sz.x), bmax = vec3(sa.z, sa.x, sz.y);
@@ -955,115 +1027,7 @@ vec3 toonOut(vec3 p, vec3 n, vec3 rd, vec3 alb, float trans) {
     return c;
 }
 
-// ---------------------------------------------------------------- the network: more jars, glass tubes between them
-// Each jar is a revolved profile in its own units (its foot at the origin; the first jar's size is 1): 0 a wide jar
-// like the first, 1 a globe on a little foot, 2 a bottle, 3 a flask, 4 a big round carboy; each has a cork.
-float neckTop(int ty) { return ty == 0 ? 0.93 : ty == 1 ? 2.08 : ty == 2 ? 2.15 : ty == 3 ? 1.85 : 1.75; }
-float neckR(int ty) { return ty == 0 ? 0.62 : ty == 1 ? 0.32 : ty == 2 ? 0.22 : 0.3; }
-float soilY(int ty) { return ty == 0 ? 0.2 : ty == 1 ? 0.42 : ty == 2 ? 0.22 : ty == 3 ? 0.2 : 0.28; }
-float innerR(int ty) { return ty == 2 ? 0.48 : ty == 3 ? 0.72 : ty == 1 ? 0.75 : 0.82; }
-float sdTrapezoid(vec2 p, float r1, float r2, float he) {
-    vec2 k1 = vec2(r2, he), k2 = vec2(r2 - r1, 2.0 * he);
-    p.x = abs(p.x);
-    vec2 ca = vec2(p.x - min(p.x, (p.y < 0.0) ? r1 : r2), abs(p.y) - he);
-    vec2 cb = p - k1 + k2 * clamp(dot(k1 - p, k2) / dot(k2, k2), 0.0, 1.0);
-    float sg = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
-    return sg * sqrt(min(dot(ca, ca), dot(cb, cb)));
-}
-float shapeD(vec3 q, int ty) {
-    vec2 r = vec2(length(q.xz), q.y);
-    if (ty == 0) return jarOuter(q);
-    if (ty == 1) return smin(max(length(q - vec3(0.0, 1.0, 0.0)) - 1.0, 0.12 - q.y), sdBox2(vec2(r.x, r.y - 1.88), vec2(0.32, 0.2)), 0.08);
-    if (ty == 2) return smin(sdRoundBox2(vec2(r.x, r.y - 0.85), vec2(0.62, 0.85), vec4(0.45, 0.1, 0.45, 0.1)), sdBox2(vec2(r.x, r.y - 1.78), vec2(0.22, 0.37)), 0.1);
-    if (ty == 3) return smin(sdTrapezoid(vec2(r.x, r.y - 0.68), 0.96, 0.27, 0.64) - 0.04, sdBox2(vec2(r.x, r.y - 1.55), vec2(0.3, 0.3)), 0.06);
-    return smin(sdRoundBox2(vec2(r.x, r.y - 0.75), vec2(1.0, 0.75), vec4(0.7, 0.25, 0.7, 0.25)), sdBox2(vec2(r.x, r.y - 1.5), vec2(0.3, 0.25)), 0.1);
-}
-float corkD(vec3 q, int ty) {
-    vec2 r = vec2(length(q.xz), q.y - neckTop(ty) - 0.02);
-    return sdRoundBox2(r, vec2(neckR(ty) - 0.03, 0.08), vec4(0.02, 0.0, 0.02, 0.0));
-}
-// a jar's bound: center, radius (world)
-vec4 jarBound(int k) {
-    vec4 A = uJarA[k];
-    return vec4(A.xyz + vec3(0.0, 1.0 * A.w, 0.0), 1.35 * A.w);
-}
-
-// the little world inside another jar, in its units: soil, and up to six plants of its biome growing in turn
-// (biome 0 a moss forest, 1 a desert, 2 an orchid jungle, 3 a mushroom grove, 4 a pond); m: the material
-float insideD(vec3 q, int ty, int b, float g, float seed, out float m) {
-    float sy = soilY(ty);
-    float rin = innerR(ty);
-    float d = q.y - sy - 0.025 * sin(q.x * 7.0 + seed) * sin(q.z * 6.0 + seed);
-    m = 1.0;
-    if (b == 4) {
-        d = q.y - sy + 0.05;
-        float dw = max(q.y - sy - 0.012, length(q.xz) - rin * 0.85);
-        if (dw < d) { d = dw; m = 5.0; }
-    }
-    for (int k = 0; k < 6; k++) {
-        float fk = float(k);
-        float gk = sat((g - fk / 7.0) * 3.5);
-        if (gk <= 0.001) break;
-        float h = hash1(seed * 13.0 + fk * 7.7);
-        float a = seed * 6.0 + fk * 2.39996;
-        float rad = rin * (0.12 + 0.6 * fract(h * 7.3));
-        vec3 l = q - vec3(cos(a) * rad, sy, sin(a) * rad);
-        if (dot(l, l) > sq(0.55) && l.y > -0.1) { float far = length(l) - 0.5; if (far > d) continue; }
-        float dp = 1e3, mp = 2.0;
-        int kind = int(mod(fk + floor(seed * 3.0), 3.0));
-        if (b == 0) {
-            if (kind == 0) { dp = sdEll(l, vec3(0.2, 0.11, 0.2) * gk + 0.001); mp = 2.0; }
-            else if (kind == 1) { dp = sdEll(l - vec3(0.0, 0.22 * gk, 0.0), vec3(0.11, 0.25, 0.11) * gk + 0.001) + 0.02 * gk * sin(atan(l.z, l.x) * 7.0 + l.y * 20.0); mp = 3.0; }
-            else {
-                float H = 0.22 * gk;
-                dp = sdCap(l, vec3(0.0), vec3(0.0, H, 0.0), 0.025 * gk); mp = 7.0;
-                float dc = max(sdEll(l - vec3(0.0, H, 0.0), vec3(0.12, 0.07, 0.12) * gk + 0.001), -(l.y - H + 0.01));
-                if (dc < dp) { dp = dc; mp = 6.0; }
-            }
-        } else if (b == 1) {
-            if (kind != 1) {
-                float H = 0.32 * gk;
-                dp = sdCap(l, vec3(0.0, 0.06, 0.0), vec3(0.0, max(H, 0.061), 0.0), 0.08 * gk) + 0.01 * gk * (0.5 + 0.5 * cos(atan(l.z, l.x) * 10.0)); mp = 8.0;
-                float df = length(l - vec3(0.0, H + 0.08 * gk, 0.0)) - 0.035 * gk;
-                if (df < dp) { dp = df; mp = 10.0; }
-            } else { dp = sdEll(l - vec3(0.0, 0.03, 0.0), vec3(0.13, 0.08, 0.13) * gk + 0.001) + 0.012 * gk * cos(atan(l.z, l.x) * 9.0); mp = 9.0; }
-        } else if (b == 2) {
-            vec3 lr = l;
-            lr.xz = rot(a) * lr.xz;
-            dp = sdEll(lr - vec3(0.12, 0.08, 0.0) * gk, vec3(0.22, 0.025, 0.09) * gk + 0.001); mp = 3.0;
-            float H = 0.3 * gk;
-            float ds = sdCap(l, vec3(0.0), vec3(0.03, H, 0.0), 0.012 * gk);
-            if (ds < dp) { dp = ds; mp = 7.0; }
-            float df = sdEll(l - vec3(0.03, H, 0.0), vec3(0.08, 0.05, 0.08) * gk + 0.001);
-            if (df < dp) { dp = df; mp = 10.0; }
-        } else if (b == 3) {
-            float H = (0.18 + 0.2 * h) * gk;
-            dp = sdCap(l, vec3(0.0), vec3(0.0, H, 0.0), 0.03 * gk); mp = 7.0;
-            float dc = max(sdEll(l - vec3(0.0, H, 0.0), vec3(0.15, 0.08, 0.15) * gk + 0.001), -(l.y - H + 0.015));
-            if (dc < dp) { dp = dc; mp = 11.0; }
-        } else {
-            if (kind == 0) { dp = sdEll(l - vec3(0.0, 0.015, 0.0), vec3(0.12, 0.008, 0.12) * gk + 0.001); mp = 2.0; }
-            else { dp = sdCapT(l, vec3(0.0), vec3(0.02, 0.4 * gk, 0.0), 0.018 * gk, 0.004); mp = 3.0; }
-        }
-        if (dp < d) { d = dp; m = mp; }
-    }
-    return d;
-}
-vec3 biomeAlb(int b, float m, vec3 q) {
-    if (m < 1.5) return b == 1 ? vec3(0.78, 0.5, 0.25) : (b == 4 ? vec3(0.2, 0.14, 0.07) : vec3(0.2, 0.1, 0.05));
-    if (m < 2.5) return b == 4 ? vec3(0.12, 0.5, 0.1) : vec3(0.22, 0.6, 0.08) * (0.8 + 0.4 * vnoise3(q * 40.0));
-    if (m < 3.5) return b == 2 ? vec3(0.03, 0.32, 0.12) : vec3(0.12, 0.48, 0.07);
-    if (m < 5.5) return vec3(0.05, 0.3, 0.45);
-    if (m < 6.5) return mix(vec3(0.85, 0.05, 0.03), vec3(1.0, 0.95, 0.85), step(0.82, hash3(floor(q * 60.0))));
-    if (m < 7.5) return vec3(0.82, 0.75, 0.6);
-    if (m < 8.5) return vec3(0.12, 0.45, 0.22);
-    if (m < 9.5) return vec3(0.35, 0.62, 0.55);
-    if (m < 10.5) return b == 1 ? vec3(1.0, 0.35, 0.55) : vec3(0.9, 0.12, 0.6);
-    return vec3(0.3, 0.75, 0.85);
-}
-// the jars' glow at night: little lanterns of life
-vec3 biomeGlow(int b) { return b == 3 ? vec3(0.3, 0.9, 1.0) : (b == 1 ? vec3(1.0, 0.7, 0.4) : uFlyC); }
-
+// ---------------------------------------------------------------- the network's glass tubes
 // the glass tubes: quadratic curves between necks (or the jars' sides), grown from one end
 vec2 sdBezier(vec3 pos, vec3 A, vec3 B, vec3 C) {
     vec3 a = B - A, b = A - 2.0 * B + C, c = a * 2.0, d = A - pos;
@@ -1123,100 +1087,6 @@ vec4 tubeBound(int i) {
     return vec4(m, max(max(length(a.xyz - m), length(b.xyz - m)), length(c.xyz - m)) + a.w + 0.02);
 }
 
-// another jar seen through its glass (the ray meets it at p0): ray marched inside when near, painted when far
-vec3 jarColor(int k, vec3 p0, vec3 rd) {
-    vec4 A = uJarA[k], Bj = uJarB[k];
-    float s = A.w;
-    int ty = int(Bj.x + 0.5), b = int(Bj.y + 0.5);
-    float g = Bj.z, seed = float(k) * 1.37 + 0.31;
-    vec3 q0 = (p0 - A.xyz) / s;
-    if (corkD(q0, ty) < shapeD(q0, ty)) {
-        const vec2 e = vec2(0.002, 0.0);
-        vec3 n = normalize(vec3(corkD(q0 + e.xyy, ty) - corkD(q0 - e.xyy, ty), corkD(q0 + e.yxy, ty) - corkD(q0 - e.yxy, ty), corkD(q0 + e.yyx, ty) - corkD(q0 - e.yyx, ty)));
-        return toonOut(p0, n, rd, vec3(0.62, 0.42, 0.24) * (0.85 + 0.3 * vnoise3(q0 * 60.0)), 0.0);
-    }
-    const vec2 e = vec2(0.002, 0.0);
-    vec3 N = normalize(vec3(shapeD(q0 + e.xyy, ty) - shapeD(q0 - e.xyy, ty), shapeD(q0 + e.yxy, ty) - shapeD(q0 - e.yxy, ty), shapeD(q0 + e.yyx, ty) - shapeD(q0 - e.yyx, ty)));
-    float cosv = sat(dot(N, -rd));
-    vec3 inner;
-    float tb;
-    vec3 glow = biomeGlow(b) * uFlyAmt * 0.12 * g;
-    if (Bj.w > 0.5) {
-        vec3 qi = q0 + rd * (0.035 / 1.0);
-        float ti = 0.0, m = 1.0;
-        bool hit = false;
-        bool bugHere = uBugMode > 1.5 && uBugJar == k;
-        for (int i = 0; i < 44; i++) {
-            vec3 q = qi + rd * ti;
-            float dI = insideD(q, ty, b, g, seed, m);
-            if (bugHere) { vec4 bi; float bm; float db = beetle(A.xyz + q * s, bi, bm) / s; if (db < dI) { dI = db; m = 20.0 + bm; } }
-            float dw = -(shapeD(q, ty) + 0.03);
-            if (dI < 0.002) { hit = true; break; }
-            if (dw < 0.002 && i > 1) break;
-            ti += max(min(dI, max(dw, 0.004)), 0.003);
-            if (ti > 4.0) break;
-        }
-        vec3 qe = qi + rd * ti;
-        if (hit && m > 19.5) {
-            vec3 pw = A.xyz + qe * s;
-            vec3 n = normalize(vec3(0.0, 1.0, 0.0) + (pw - uBug.xyz) * 8.0);
-            float bm = m - 20.0;
-            vec3 alb = bm < 15.5 ? uBugC : vec3(0.08, 0.07, 0.1);
-            inner = toonOut(pw, n, rd, alb, 0.0);
-        } else if (hit) {
-            float mm;
-            vec3 n = normalize(vec3(insideD(qe + e.xyy, ty, b, g, seed, mm) - insideD(qe - e.xyy, ty, b, g, seed, mm),
-                                    insideD(qe + e.yxy, ty, b, g, seed, mm) - insideD(qe - e.yxy, ty, b, g, seed, mm),
-                                    insideD(qe + e.yyx, ty, b, g, seed, mm) - insideD(qe - e.yyx, ty, b, g, seed, mm)));
-            vec3 alb = biomeAlb(b, m, qe);
-            inner = toonOut(A.xyz + qe * s, n, rd, alb, m > 2.5 && m < 3.5 ? 0.6 : 0.2);
-            if (m > 10.5) inner += alb * (0.25 + 1.2 * uNight);
-            if (m > 4.5 && m < 5.5) inner = mix(inner, mix(uSkyH, uSkyZ, 0.4) * (0.8 - 0.5 * uNight), 0.5);
-            inner += glow * alb * 3.0;
-        } else inner = background(A.xyz + qe * s, rd, tb);
-    } else {
-        // far away: painted, its soil, a ring of little plant silhouettes in its biome's colors, glowing at night
-        float sy = soilY(ty);
-        float ang = atan(q0.z, q0.x);
-        vec3 back = background(p0 + rd * 0.05, rd, tb);
-        vec3 lit = uAmbS * 0.8 + uFill * 0.7 + uSunCol * 0.3;
-        float h = 0.0, pick = 0.0;
-        for (int k = 0; k < 6; k++) {
-            float fk = float(k);
-            float gk = sat((g - fk / 7.0) * 3.5);
-            if (gk <= 0.0) break;
-            float ak = seed * 6.0 + fk * 2.39996;
-            float da = abs(mod(ang - ak + PI, TAU) - PI);
-            float w = 0.35 + 0.25 * hash1(seed + fk);
-            float hk = (b == 4 ? 0.12 : 0.22 + 0.25 * hash1(seed * 3.0 + fk)) * gk * sqrt(sat(1.0 - sq(da / w)));
-            if (hk > h) { h = hk; pick = fk; }
-        }
-        float m = 1.0;
-        if (q0.y < sy) m = 1.0;
-        else if (b == 4 && q0.y < sy + 0.05) m = 5.0;
-        else if (q0.y < sy + h) {
-            float tip = smoothstep(h * 0.7, h, q0.y - sy);
-            float kind = mod(pick + floor(seed * 3.0), 3.0);
-            m = b == 0 ? (kind < 0.5 ? 2.0 : (kind < 1.5 ? 3.0 : (tip > 0.5 ? 6.0 : 7.0))) :
-                b == 1 ? (kind < 1.5 ? (tip > 0.6 ? 10.0 : 8.0) : 9.0) :
-                b == 2 ? (tip > 0.5 ? 10.0 : 3.0) :
-                b == 3 ? (tip > 0.4 ? 11.0 : 7.0) : 3.0;
-        } else m = 0.0;
-        if (m > 0.5) {
-            inner = biomeAlb(b, m, q0) * lit * (0.7 + 0.3 * sat((q0.y - sy) * 3.0));
-            if (m > 10.5) inner += biomeAlb(b, m, q0) * (0.2 + 1.2 * uNight);
-            if (m > 4.5 && m < 5.5) inner = mix(inner, mix(uSkyH, uSkyZ, 0.4) * (0.8 - 0.5 * uNight), 0.4);
-            inner += glow * 2.0;
-        } else inner = back + glow * 0.5;
-    }
-    vec3 tint = vec3(0.9, 0.97, 0.95);
-    inner *= mix(vec3(1.0), tint * tint * 0.85, pow(1.0 - cosv, 2.5));
-    float F = 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
-    vec3 col = mix(inner, env(reflect(rd, N)), F);
-    col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
-    return col;
-}
-
 // the beetle seen in a tube
 vec3 bugColor(vec3 p, vec3 rd) {
     vec4 inf; float m;
@@ -1239,56 +1109,6 @@ vec3 bugColor(vec3 p, vec3 rd) {
         alb = mix(alb, uCap2 * vec3(1.0, 0.94, 0.88), smoothstep(0.05, 0.2, dir.z) * smoothstep(0.75, 0.5, dir.y));
     }
     return toonOut(p, n, rd, alb, 0.0) + uSunCol * smoothstep(0.85, 0.9, dot(reflect(rd, n), uSunDir)) * 0.3;
-}
-
-// Everything outside the first jar's glass: the other jars, the beetle in a tube, then the room (marched), with the
-// glass tubes crossed on the way laid over (their rims and reflections added, a trickle of water in some). kind: 0
-// the room, 1 the first jar (left to the caller), 2 another jar, 3 the beetle. acc / thru: what the tubes add and let
-// through.
-vec3 traceOuter(vec3 ro, vec3 rd, out float tHit, out int kind) {
-    kind = 0; tHit = 1e4;
-    const bool withMain = false;
-    int jl[10]; int nj = 0;
-    for (int k = 0; k < uJarN; k++) {
-        if (nj >= 10) break;
-        if (uJarA[k].w > 0.0 && rayBall(ro, rd, jarBound(k), 100.0) > 0.5) { jl[nj] = k; nj++; }
-    }
-    bool mainNear = withMain && rayBall(ro, rd, vec4(0.0, 0.55, 0.0, 1.2), 100.0) > 0.5;
-    bool bugNear = uBugMode > 0.5 && uBugMode < 1.5 && rayBall(ro, rd, vec4(uBug.xyz + vec3(0.0, 0.04, 0.0), 0.13 * BS), 100.0) > 0.5;
-    vec3 col;
-    bool solid = false;
-    if (nj > 0 || mainNear || bugNear) {
-        float t = 0.0;
-        for (int i = 0; i < 120; i++) {
-            vec3 p = ro + rd * t;
-            float d = 1e3;
-            int kd = 0, id = -1;
-            if (mainNear) { float dm = min(jarOuter(p), cork(p)); if (dm < d) { d = dm; kd = 1; } }
-            for (int j = 0; j < nj; j++) {
-                int k = jl[j];
-                vec4 bd = jarBound(k);
-                if (length(p - bd.xyz) - bd.w > d) continue;
-                vec4 A = uJarA[k];
-                int ty = int(uJarB[k].x + 0.5);
-                vec3 q = (p - A.xyz) / A.w;
-                float dj = min(shapeD(q, ty), corkD(q, ty)) * A.w;
-                if (dj < d) { d = dj; kd = 2; id = k; }
-            }
-            if (bugNear) { vec4 bi; float bm; float db = beetle(p, bi, bm); if (db < d) { d = db; kd = 4; } }
-            if (d < 0.0006 + t * 0.0004) {
-                tHit = t;
-                solid = true;
-                if (kd == 1) { kind = 1; col = vec3(0.0); }
-                else if (kd == 2) { kind = 2; col = jarColor(id, p, rd); }
-                else { kind = 3; col = bugColor(p, rd); }
-                break;
-            }
-            t += max(d * 0.9, 0.0005);
-            if (t > 60.0) break;
-        }
-    }
-    if (!solid) col = background(ro, rd, tHit);
-    return col;
 }
 
 // the glass tubes a ray crosses before tHit: their rims and reflections added, a little tint, water in some
@@ -1368,7 +1188,7 @@ vec3 flies(vec3 p, vec3 n) {
     for (int i = 0; i < uFlies; i++) {
         vec4 f = uFly[i];
         if (f.w <= 0.01) continue;
-        vec3 L = f.xyz - p;
+        vec3 L = (f.xyz - gFoot) / gS - p;
         float d2 = dot(L, L);
         float w = sat(dot(n, L * inversesqrt(d2 + 1e-6)) * 0.6 + 0.4);
         c += f.w * w * (exp(-d2 / 0.01) * 0.7 + 0.00012 / (d2 + 0.002));
@@ -1584,6 +1404,17 @@ vec3 shade(vec3 p, vec3 rd, float m, vec4 inf) {
         alb = mix(alb, mix(uMoss2, uMoss, vnoise3(p * 90.0)), mossy * (uKind == 1 ? 0.0 : 1.0));
         trans = 0.2 * mossy;
     }
+    else if (m > 22.5 && m < 23.5) { alb = vec3(0.86, 0.78, 0.7); trans = 0.3; spec = 0.4; }
+    else if (m > 23.5 && m < 24.5) {
+        vec3 qs = inf.xyz;
+        float ang = atan(qs.y, qs.z);
+        float r = length(qs.yz) / 0.044;
+        float spiral = 0.5 + 0.5 * sin(ang * 1.0 + r * 14.0);
+        alb = mix(vec3(0.9, 0.55, 0.25), vec3(0.55, 0.25, 0.12), smoothstep(0.4, 0.7, spiral));
+        alb = mix(alb, vec3(1.0, 0.85, 0.6), smoothstep(0.1, 0.0, r - 0.05) * 0.5);
+        spec = 0.8;
+    }
+    else if (m > 24.5) { alb = vec3(0.05, 0.04, 0.06); spec = 1.0; }
     else if (m > 21.5) {
         // the trickle: bright, clear water running down
         float st = smoothstep(0.4, 0.9, vnoise(vec2(inf.y * 300.0, inf.x * 9.0 - uTime * 3.0)));
@@ -1624,128 +1455,146 @@ vec3 shade(vec3 p, vec3 rd, float m, vec4 inf) {
 void main() {
     vec2 ndc = vUv * 2.0 - 1.0;
     vec3 rd = normalize(uFwd + uRight * ndc.x * uTanH * uAspect + uUp * ndc.y * uTanH);
-    vec3 ro = uEye;
+    vec3 roW = uEye;
     vec3 col = vec3(0.0);
     float tTot = 1e4;
-    // ---- the first jar and its cork
-    float t = 0.0;
-    bool hitJar = false, hitCork = false;
-    {
+    // ---- the nearest jar (and its cork) along the ray: each jar is the first one's twin, scaled and placed
+    int hj = -1;
+    float tj = 1e4;
+    bool hitCork = false;
+    for (int j = 0; j < uJarN; j++) {
+        vec4 f = jarTexel(j, 19);
+        if (f.w <= 0.0) continue;
+        vec3 ro = (roW - f.xyz) / f.w;
         vec2 oc = ro.xz;
         float a = dot(rd.xz, rd.xz), b = dot(oc, rd.xz), c = dot(oc, oc) - 1.06 * 1.06;
         float h = b * b - a * c;
-        if (h > 0.0) {
-            t = max(0.0, (-b - sqrt(h)) / a);
-            float tEnd = (-b + sqrt(h)) / a;
-            for (int i = 0; i < 64; i++) {
-                vec3 p = ro + rd * t;
-                if (p.y > JHN + 0.2 || p.y < -0.02 || t > tEnd) break;
-                float dj = jarOuter(p), dk = cork(p);
-                float d = min(dj, dk);
-                if (d < 0.0004) { hitJar = dj <= dk; hitCork = !hitJar; break; }
-                t += d;
+        if (h <= 0.0) continue;
+        float t = max(0.0, (-b - sqrt(h)) / a);
+        float tEnd = (-b + sqrt(h)) / a;
+        if (t * f.w > tj) continue;
+        for (int i = 0; i < 64; i++) {
+            vec3 p = ro + rd * t;
+            if (p.y > JHN + 0.2 || p.y < -0.02 || t > tEnd) break;
+            float dj = jarOuter(p), dk = cork(p);
+            float d = min(dj, dk);
+            if (d < 0.0004 / f.w + t * 0.0002) {
+                if (t * f.w < tj) { tj = t * f.w; hj = j; hitCork = dk < dj; }
+                break;
             }
+            t += d;
         }
     }
-    // the ray the network is traced along: from us, or out of the first jar's far wall
-    vec3 ro2 = ro, rd2 = rd;
-    bool traceNet = true;
-    float tBase = 0.0;
-    vec3 N = vec3(0.0, 1.0, 0.0), p0 = ro, rdIn = rd, pEnd = ro, pIn = ro;
-    vec4 dr = vec4(0.0);
-    float cov = 0.0, cosv = 1.0, ti = 0.0;
-    vec2 uv = vec2(0.0);
-    bool innerHit = false;
-    vec3 inner = vec3(0.0);
-    if (hitCork) {
-        p0 = ro + rd * t;
-        const vec2 e = vec2(0.0015, 0.0);
-        vec3 n = normalize(vec3(cork(p0 + e.xyy) - cork(p0 - e.xyy), cork(p0 + e.yxy) - cork(p0 - e.yxy), cork(p0 + e.yyx) - cork(p0 - e.yyx)));
-        float sp = vnoise3(p0 * 180.0);
-        vec3 alb = mix(vec3(0.62, 0.42, 0.24), vec3(0.8, 0.6, 0.38), sp);
-        alb = mix(alb, vec3(0.32, 0.2, 0.1), step(0.86, hash3(floor(p0 * 220.0))));
-        col = toonOut(p0, n, rd, alb, 0.0) + alb * uFlyC * uFlyAmt * 0.08;
-        traceNet = false;
-        tTot = t;
-    } else if (hitJar) {
-        p0 = ro + rd * t;
-        N = jarNormal(p0);
-        cosv = sat(dot(N, -rd));
-        uv = vec2(atan(p0.x, p0.z) * JR, p0.y);
-        cov = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y);
-        dr = drops(uv, cov);
-        vec3 tng = normalize(cross(vec3(0.0, 1.0, 0.0), N));
-        rdIn = normalize(refract(rd, N, 0.94) + (tng * dr.x + vec3(0.0, 1.0, 0.0) * dr.y) * 0.06 * dr.z);
-        pIn = p0 + rdIn * (JT * 1.6);
-        float tmax = 3.0;
-        buildMasks(pIn, rdIn, tmax);
-        float hm = 0.0; vec4 hinf = vec4(0.0);
-        for (int i = 0; i < 96; i++) {
-            vec3 p = pIn + rdIn * ti;
-            float dc = mapC(p);
-            float dw = cav(p);
-            if (dc < 0.0005 + ti * 0.0008) { innerHit = true; hm = gMat; hinf = gInf; break; }
-            if (dw < 0.0008 && i > 2) break;
-            ti += max(min(dc * 0.75, max(dw, 0.0015)), 0.0006);
-            if (ti > tmax) break;
+    // ---- the beetle on its trip along the tube
+    float tBug = 1e4;
+    if (uBugMode > 0.5 && uBugMode < 1.5 && rayBall(roW, rd, vec4(uBug.xyz + vec3(0.0, 0.04, 0.0), 0.13 * BS), tj) > 0.5) {
+        vec3 oc = roW - uBug.xyz;
+        float t = max(0.0, -dot(oc, rd) - 0.3);
+        for (int i = 0; i < 48; i++) {
+            vec4 bi; float bm;
+            float d = beetle(roW + rd * t, bi, bm);
+            if (d < 0.0005) { tBug = t; break; }
+            t += d;
+            if (t > tj) break;
         }
-        pEnd = pIn + rdIn * ti;
-        tTot = t + ti;
-        if (innerHit) { inner = shade(pEnd, rdIn, hm, hinf); traceNet = false; }
-        else { ro2 = pEnd + rdIn * 0.02; rd2 = rdIn; tBase = t + ti; }
     }
-    if (traceNet) {
-        float tb; int kind;
-        vec3 c = traceOuter(ro2, rd2, tb, kind);
-        tTot = tBase + tb;
-        if (hitJar) inner = c; else col = c;
+    if (tBug < tj) {
+        col = bugColor(roW + rd * tBug, rd);
+        tTot = tBug;
+    } else if (hj < 0) {
+        col = background(roW, rd, tTot);
+    } else {
+        setJar(hj);
+        vec3 ro = (roW - gFoot) / gS;
+        float t = tj / gS;
+        vec3 p0 = ro + rd * t;
+        if (hitCork) {
+            const vec2 e = vec2(0.0015, 0.0);
+            vec3 n = normalize(vec3(cork(p0 + e.xyy) - cork(p0 - e.xyy), cork(p0 + e.yxy) - cork(p0 - e.yxy), cork(p0 + e.yyx) - cork(p0 - e.yyx)));
+            float sp = vnoise3(p0 * 180.0);
+            vec3 alb = mix(vec3(0.62, 0.42, 0.24), vec3(0.8, 0.6, 0.38), sp);
+            alb = mix(alb, vec3(0.32, 0.2, 0.1), step(0.86, hash3(floor(p0 * 220.0))));
+            col = toonOut(p0, n, rd, alb, 0.0) + alb * uFlyC * uFlyAmt * 0.08;
+            tTot = tj;
+        } else {
+            vec3 N = jarNormal(p0);
+            float cosv = sat(dot(N, -rd));
+            vec2 uv = vec2(atan(p0.x, p0.z) * JR, p0.y);
+            float cov = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y);
+            vec4 dr = drops(uv, cov);
+            vec3 tng = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+            vec3 rdIn = normalize(refract(rd, N, 0.94) + (tng * dr.x + vec3(0.0, 1.0, 0.0) * dr.y) * 0.06 * dr.z);
+            vec3 pIn = p0 + rdIn * (JT * 1.6);
+            float ti = 0.0;
+            float tmax = 3.0;
+            buildMasks(pIn, rdIn, tmax);
+            bool innerHit = false;
+            float hm = 0.0; vec4 hinf = vec4(0.0);
+            // (a precision of about a pixel: far jars converge in fewer steps)
+            float eps = max(0.0005, uPx * tj * 0.6 / gS);
+            for (int i = 0; i < 96; i++) {
+                vec3 p = pIn + rdIn * ti;
+                float dc = mapC(p);
+                float dw = cav(p);
+                if (dc < eps + ti * 0.0008) { innerHit = true; hm = gMat; hinf = gInf; break; }
+                if (dw < 0.0008 && i > 2) break;
+                ti += max(min(dc * 0.75, max(dw, 0.0015)), 0.0006);
+                if (ti > tmax) break;
+            }
+            vec3 pEnd = pIn + rdIn * ti;
+            vec3 inner;
+            tTot = tj + ti * gS;
+            if (innerHit) inner = shade(pEnd, rdIn, hm, hinf);
+            else {
+                // through the far wall: the room behind, the wall's own faint reflection, mist and vines
+                float tb;
+                inner = background(gFoot + (pEnd + rdIn * 0.02) * gS, rdIn, tb);
+                tTot += tb;
+                vec3 NB = -jarNormal(pEnd);
+                float fb = 0.04 + 0.5 * pow(1.0 - sat(dot(-NB, rdIn)), 5.0);
+                inner = mix(inner, env(reflect(rdIn, NB)) * 0.6, fb);
+                vec2 uvb = vec2(atan(pEnd.x, pEnd.z) * JR, pEnd.y);
+                float covb = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, pEnd.y)) * smoothstep(0.36, 0.5, pEnd.y) * 0.6;
+                vec4 db = drops(uvb, covb);
+                vec3 mist = mix(uSkyH, vec3(1.0), 0.4) * (0.75 - 0.5 * uNight) + uAmbS * 0.3;
+                inner = mix(inner, mist, db.w * 0.3 + db.z * 0.15);
+                vec4 vb = vines(uvb, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uFlyAmt);
+                if (vb.a > 0.5) inner = vb.rgb * paintLight(pEnd, 0.4) * 0.85;
+            }
+            {
+                float y0 = pIn.y, dy = rdIn.y;
+                float H = 0.16;
+                float a = exp(-(y0 - 0.22) / H);
+                float integ = abs(dy) > 1e-4 ? a * H * (1.0 - exp(-dy * ti / H)) / dy : a * ti;
+                float wisp = 0.6 + 0.8 * vnoise(vec2(pIn.x * 3.0 + uTime * 0.03, pIn.y * 2.0 + uTime * 0.01));
+                float fogA = 1.0 - exp(-max(integ, 0.0) * uFog * 1.2 * wisp);
+                vec3 fogC = mix(uSkyH, vec3(1.0), 0.45) * (0.85 - 0.65 * uNight) + uAmbS * 0.3 + uFlyC * uFlyAmt * 0.025;
+                inner = mix(inner, fogC, fogA * 0.6);
+            }
+            {
+                vec4 vi = vines(uv, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uFlyAmt);
+                if (vi.a > 0.5) inner = vi.rgb * paintLight(p0, 0.5);
+            }
+            vec3 tint = vec3(0.9, 0.97, 0.95);
+            inner *= mix(vec3(1.0), tint * tint * 0.85, pow(1.0 - cosv, 2.5));
+            vec3 mist = mix(uSkyH, vec3(1.0), 0.5) * (0.85 - 0.6 * uNight) + uAmbS * 0.35 + uFlyC * uFlyAmt * 0.05;
+            inner = mix(inner, mist, dr.w * 0.3);
+            if (dr.z > 0.5) {
+                float r2 = dot(dr.xy, dr.xy);
+                vec3 lightC = mix(uSkyH, vec3(1.0), 0.6) * (1.0 - 0.6 * uNight) + uFlyC * uFlyAmt * 0.35;
+                inner = mix(inner, mist, 0.25 * cov);
+                inner *= 1.0 - 0.22 * smoothstep(0.7, 1.0, r2);
+                float hi = smoothstep(0.16, 0.04, length(dr.xy - vec2(-0.3, 0.38)));
+                float lo = smoothstep(0.45, 0.1, length(dr.xy - vec2(0.15, -0.5))) * smoothstep(0.3, 0.9, r2);
+                inner += lightC * (hi * 0.8 + lo * 0.22);
+            }
+            float F = 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
+            col = mix(inner, env(reflect(rd, N)), F);
+            col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
+            col += uGlowSun * 0.25 * smoothstep(0.995, 1.0, sat(1.0 - abs(p0.y - JHN + 0.01) * 18.0)) * step(length(p0.xz), JRN + 0.03);
+        }
     }
-    if (hitJar) {
-        if (!innerHit) {
-            // through the far wall: its faint reflection, mist and vines
-            vec3 NB = -jarNormal(pEnd);
-            float fb = 0.04 + 0.5 * pow(1.0 - sat(dot(-NB, rdIn)), 5.0);
-            inner = mix(inner, env(reflect(rdIn, NB)) * 0.6, fb);
-            vec2 uvb = vec2(atan(pEnd.x, pEnd.z) * JR, pEnd.y);
-            float covb = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, pEnd.y)) * smoothstep(0.36, 0.5, pEnd.y) * 0.6;
-            vec4 db = drops(uvb, covb);
-            vec3 mist = mix(uSkyH, vec3(1.0), 0.4) * (0.75 - 0.5 * uNight) + uAmbS * 0.3;
-            inner = mix(inner, mist, db.w * 0.3 + db.z * 0.15);
-            vec4 vb = vines(uvb, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uFlyAmt);
-            if (vb.a > 0.5) inner = vb.rgb * paintLight(pEnd, 0.4) * 0.85;
-        }
-        {
-            float y0 = pIn.y, dy = rdIn.y;
-            float H = 0.16;
-            float a = exp(-(y0 - 0.22) / H);
-            float integ = abs(dy) > 1e-4 ? a * H * (1.0 - exp(-dy * ti / H)) / dy : a * ti;
-            float wisp = 0.6 + 0.8 * vnoise(vec2(pIn.x * 3.0 + uTime * 0.03, pIn.y * 2.0 + uTime * 0.01));
-            float fogA = 1.0 - exp(-max(integ, 0.0) * uFog * 1.2 * wisp);
-            vec3 fogC = mix(uSkyH, vec3(1.0), 0.45) * (0.85 - 0.65 * uNight) + uAmbS * 0.3 + uFlyC * uFlyAmt * 0.025;
-            inner = mix(inner, fogC, fogA * 0.6);
-        }
-        {
-            vec4 vi = vines(uv, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uFlyAmt);
-            if (vi.a > 0.5) inner = vi.rgb * paintLight(p0, 0.5);
-        }
-        vec3 tint = vec3(0.9, 0.97, 0.95);
-        inner *= mix(vec3(1.0), tint * tint * 0.85, pow(1.0 - cosv, 2.5));
-        vec3 mist = mix(uSkyH, vec3(1.0), 0.5) * (0.85 - 0.6 * uNight) + uAmbS * 0.35 + uFlyC * uFlyAmt * 0.05;
-        inner = mix(inner, mist, dr.w * 0.3);
-        if (dr.z > 0.5) {
-            float r2 = dot(dr.xy, dr.xy);
-            vec3 lightC = mix(uSkyH, vec3(1.0), 0.6) * (1.0 - 0.6 * uNight) + uFlyC * uFlyAmt * 0.35;
-            inner = mix(inner, mist, 0.25 * cov);
-            inner *= 1.0 - 0.22 * smoothstep(0.7, 1.0, r2);
-            float hi = smoothstep(0.16, 0.04, length(dr.xy - vec2(-0.3, 0.38)));
-            float lo = smoothstep(0.45, 0.1, length(dr.xy - vec2(0.15, -0.5))) * smoothstep(0.3, 0.9, r2);
-            inner += lightC * (hi * 0.8 + lo * 0.22);
-        }
-        float F = 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
-        col = mix(inner, env(reflect(rd, N)), F);
-        col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
-        col += uGlowSun * 0.25 * smoothstep(0.995, 1.0, sat(1.0 - abs(p0.y - JHN + 0.01) * 18.0)) * step(length(p0.xz), JRN + 0.03);
-    }
+    vec3 ro = roW;
     vec3 acc, thru;
     tubesOver(ro, rd, tTot, acc, thru);
     col = acc + thru * col;

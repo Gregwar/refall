@@ -179,40 +179,97 @@ const CamKey CAMS[] = {
     {0.f, {0.f, 0.8f, 2.9f}, {0.f, 0.36f, 0.f}},      // close on the bare jar
     {10.f, {0.f, 0.92f, 3.45f}, {0.f, 0.42f, 0.f}},
     {15.f, {0.f, 0.98f, 3.9f}, {0.f, 0.45f, 0.f}},    // the whole jar, full
-    {22.f, {0.f, 1.1f, 6.0f}, {0.f, 0.55f, -0.2f}},   // its first neighbours on the sill
-    {30.f, {0.f, 1.35f, 8.6f}, {0.f, 0.8f, -0.5f}},   // the sill full of jars
-    {40.f, {0.f, 1.6f, 11.6f}, {0.f, 1.15f, -0.7f}},  // the shelves beside, above and below the window
-    {50.f, {0.f, 1.7f, 14.2f}, {0.f, 1.35f, -0.8f}},  // the whole wall of jars
+    {19.f, {1.15f, 1.05f, 5.4f}, {1.15f, 0.45f, 0.f}}, // the second jar set down beside it
+    {27.f, {1.2f, 1.07f, 5.6f}, {1.2f, 0.45f, 0.f}},  // watching it come alive
+    {31.f, {0.f, 1.12f, 7.0f}, {0.f, 0.5f, -0.2f}},   // the third, on the other side
+    {36.f, {0.9f, 1.3f, 8.4f}, {0.9f, 0.65f, -0.4f}}, // the fourth
+    {42.f, {0.f, 1.45f, 10.0f}, {0.f, 0.9f, -0.6f}},  // the cluster widens onto the shelves
+    {50.f, {0.f, 1.55f, 11.6f}, {0.f, 1.05f, -0.7f}}, // the cluster at night
 };
 
-// The network's jars (foot, size, shape: 0 jar, 1 globe, 2 bottle, 3 flask, 4 carboy; biome: 0 moss forest, 1 desert,
-// 2 orchid jungle, 3 mushroom grove, 4 pond; the line it appears at): the sill first, beside the window, above it, below
-// the sill, and high up.
-struct NetJar { float x, y, z, s; int shape, biome; float birth; };
-const NetJar NET_JARS[] = {
-    {-2.15f, 0.f, 0.15f, 0.62f, 1, 1, 15.f}, {2.15f, 0.f, 0.1f, 0.6f, 0, 2, 19.f},
-    {-4.0f, 0.f, -0.5f, 0.5f, 2, 3, 23.f}, {3.9f, 0.f, -0.45f, 0.55f, 3, 4, 25.f},
-    {-1.4f, 0.f, -1.55f, 0.42f, 1, 0, 27.f}, {1.45f, 0.f, -1.6f, 0.45f, 4, 1, 28.f},
-    {-5.5f, 0.f, 0.25f, 0.85f, 4, 2, 30.f}, {5.45f, 0.f, 0.2f, 0.75f, 0, 3, 31.f},
-    {-3.4f, 1.35f, -1.95f, 0.4f, 2, 0, 33.f}, {3.45f, 1.35f, -1.95f, 0.42f, 1, 4, 34.f},
-    {-5.0f, 1.35f, -1.95f, 0.45f, 3, 1, 35.f}, {5.0f, 1.35f, -1.95f, 0.38f, 4, 2, 35.5f},
-    {-0.7f, 2.95f, -1.95f, 0.42f, 0, 3, 36.f}, {0.85f, 2.95f, -1.95f, 0.36f, 1, 0, 37.f},
-    {-2.2f, 2.95f, -1.95f, 0.4f, 2, 2, 37.5f}, {2.35f, 2.95f, -1.95f, 0.42f, 3, 1, 38.f},
-    {-3.8f, 2.95f, -1.95f, 0.45f, 4, 4, 39.f}, {3.85f, 2.95f, -1.95f, 0.4f, 0, 0, 39.5f},
-    {-5.3f, 2.95f, -1.95f, 0.38f, 1, 3, 40.f}, {5.3f, 2.95f, -1.95f, 0.42f, 2, 2, 40.5f},
-    {-1.6f, -1.2f, 1.68f, 0.42f, 1, 4, 41.f}, {1.6f, -1.2f, 1.68f, 0.4f, 4, 0, 41.5f},
-    {-3.2f, -1.2f, 1.68f, 0.45f, 0, 1, 42.f}, {3.2f, -1.2f, 1.68f, 0.42f, 2, 3, 42.5f},
-    {0.f, -1.2f, 1.68f, 0.36f, 3, 2, 43.f}, {-4.8f, -1.2f, 1.68f, 0.4f, 1, 0, 43.5f},
-    {4.8f, -1.2f, 1.68f, 0.45f, 0, 4, 44.f}, {-1.5f, 4.05f, -1.95f, 0.42f, 0, 2, 44.5f},
-    {1.5f, 4.05f, -1.95f, 0.28f, 1, 1, 45.f}, {-3.0f, 4.05f, -1.95f, 0.4f, 0, 0, 45.5f},
-    {3.0f, 4.05f, -1.95f, 0.3f, 3, 3, 46.f}, {0.f, 4.05f, -1.95f, 0.42f, 0, 4, 46.5f},
-    {-4.6f, 4.05f, -1.95f, 0.28f, 2, 2, 47.f}, {4.6f, 4.05f, -1.95f, 0.42f, 0, 1, 47.5f},
+// The cluster's other jars, one at a time (foot, size, the line it is set down at, its biome, the lines it takes to
+// fill): the second on its own for a long while, the third and fourth one after the other, then a few more on the
+// shelves beside and above the window. Biomes: 0 moss forest, 1 desert, 2 orchid jungle, 3 flowering meadow, 4 pond.
+struct CJar { float x, y, z, s, birth; int biome; float fill; };
+const CJar CLUSTER[] = {
+    {2.35f, 0.f, 0.05f, 0.85f, 15.f, 3, 12.f},
+    {-2.3f, 0.f, 0.1f, 0.8f, 28.f, 4, 9.f},
+    {4.45f, 0.f, -0.65f, 0.72f, 32.5f, 1, 8.f},
+    {-4.4f, 0.f, -0.6f, 0.75f, 38.f, 2, 7.f},
+    {3.7f, 1.35f, -1.95f, 0.55f, 40.5f, 0, 6.f},
+    {-3.7f, 1.35f, -1.95f, 0.55f, 42.5f, 3, 5.5f},
+    {-1.5f, 2.95f, -1.95f, 0.55f, 44.5f, 1, 5.f},
+    {1.6f, 2.95f, -1.95f, 0.5f, 46.f, 4, 4.f},
 };
-constexpr int NET_N = (int)(sizeof(NET_JARS) / sizeof(NET_JARS[0]));
-const float NECK_TOP[5] = {0.93f, 2.08f, 2.15f, 1.85f, 1.75f};
-const float SOIL_Y[5] = {0.2f, 0.42f, 0.22f, 0.2f, 0.28f};
+constexpr int NET_N = (int)(sizeof(CLUSTER) / sizeof(CLUSTER[0]));
 vec3 bezier(const vec3& a, const vec3& c, const vec3& b, float t) { return lerp(lerp(a, c, t), lerp(c, b, t), t); }
-// the beetle's tube: from the first jar's side, at its soil, to the first neighbour's
+
+// The two biomes no variant has: a flowering meadow and a pond (colors as the variants', sRGB).
+const VariantDef BIOME_MEADOW = {"MEADOW", 0, 0x5e3b22, 0x2a190d, 0x8d98a6, 0x2a2a2e, 0x46464c, 0x9ae85a, 0x3a8a2e, 0xa6ee66, 0x2a8a3a, 0x6aa840,
+     0xee3a6a, 0xfff2dc, 0xff6fae, 0xfff1a0, 0x6e4a2e, 0x2a8ab0, 0xb8b0c8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0}, 0.f, 0.f};
+const VariantDef BIOME_POND = {"POND", 2, 0x3a2616, 0x1a1008, 0x7a8a72, 0x2a2a2e, 0x46464c, 0x5ad86a, 0x1d6a3a, 0x58d890, 0x146a44, 0x4a9a4a,
+     0xffa83a, 0xfff0d0, 0xffffff, 0xffb8e0, 0x5a3a28, 0x18b8c0, 0x7a8a98, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0}, 0.1f, 0.f};
+const Slot SLOTS_MEADOW[] = {
+    {TerrariumUniverse::S_PEBBLE, 0.70f, 0.30f, 0.10f, 0.3f, -1.f, 0.f},
+    {TerrariumUniverse::S_MOSS, -0.50f, 0.35f, 0.10f, 0.f, -1.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, -0.62f, -0.10f, 0.24f, 0.f, 1.f, 0.f},
+    {TerrariumUniverse::S_MOSS, -0.72f, -0.42f, 0.2f, 0.f, 3.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, 0.55f, -0.25f, 0.24f, 0.f, 5.f, 1.f},
+    {TerrariumUniverse::S_FLOWER, -0.25f, 0.58f, 0.2f, 0.f, 7.f, 0.f},
+    {TerrariumUniverse::S_TWIG, 0.05f, -0.62f, 0.55f, 0.f, 9.f, 1.f},
+    {TerrariumUniverse::S_FLOWER, 0.62f, 0.42f, 0.22f, 0.f, 11.f, 0.f},
+    {TerrariumUniverse::S_MUSH, -0.78f, 0.22f, 0.15f, 0.f, 13.f, 0.f},
+    {TerrariumUniverse::S_FERN, -0.45f, -0.66f, 0.48f, 0.5f, 15.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, 0.3f, 0.05f, 0.2f, 0.f, 17.f, 1.f},
+    {TerrariumUniverse::S_MOSS, 0.25f, 0.66f, 0.15f, 0.f, 19.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, -0.15f, -0.2f, 0.22f, 0.f, 21.f, 0.f},
+    {TerrariumUniverse::S_FERN, 0.74f, -0.5f, 0.42f, 1.1f, 24.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, -0.84f, -0.16f, 0.2f, 0.f, 27.f, 1.f},
+    {TerrariumUniverse::S_MOSS, 0.82f, 0.02f, 0.14f, 0.f, 30.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, 0.12f, 0.38f, 0.18f, 0.f, 33.f, 0.f},
+    {TerrariumUniverse::S_MUSH, 0.42f, -0.64f, 0.14f, 0.f, 36.f, 0.f},
+    {TerrariumUniverse::S_FLOWER, -0.42f, 0.05f, 0.18f, 0.f, 40.f, 1.f},
+};
+const Slot SLOTS_POND[] = {
+    {TerrariumUniverse::S_MOSS, -0.60f, -0.45f, 0.16f, 0.f, -1.f, 0.f},
+    {TerrariumUniverse::S_PEBBLE, 0.62f, -0.42f, 0.12f, 0.4f, -1.f, 0.f},
+    {TerrariumUniverse::S_ROCK, -0.62f, 0.42f, 0.17f, 0.3f, 2.f, 1.f},
+    {TerrariumUniverse::S_ROSETTE, 0.72f, -0.05f, 0.24f, 0.f, 4.f, 1.f},
+    {TerrariumUniverse::S_FERN, -0.15f, -0.74f, 0.5f, 0.2f, 6.f, 0.f},
+    {TerrariumUniverse::S_ROSETTE, -0.78f, -0.05f, 0.22f, 0.6f, 8.f, 1.f},
+    {TerrariumUniverse::S_FLOWER, 0.55f, 0.6f, 0.18f, 0.f, 10.f, 0.f},
+    {TerrariumUniverse::S_MOSS, 0.38f, -0.66f, 0.16f, 0.f, 12.f, 0.f},
+    {TerrariumUniverse::S_MUSH, 0.8f, 0.3f, 0.13f, 0.f, 14.f, 0.f},
+    {TerrariumUniverse::S_FERN, 0.7f, -0.42f, 0.38f, 1.0f, 17.f, 0.f},
+    {TerrariumUniverse::S_ROSETTE, -0.3f, 0.72f, 0.2f, 1.2f, 20.f, 1.f},
+    {TerrariumUniverse::S_FLOWER, -0.84f, -0.32f, 0.16f, 0.f, 24.f, 1.f},
+    {TerrariumUniverse::S_MOSS, 0.18f, 0.8f, 0.13f, 0.f, 28.f, 0.f},
+    {TerrariumUniverse::S_MUSH, -0.45f, -0.7f, 0.12f, 0.f, 32.f, 0.f},
+};
+const std::vector<Slot> SLOT_MEADOW(std::begin(SLOTS_MEADOW), std::end(SLOTS_MEADOW));
+const std::vector<Slot> SLOT_POND(std::begin(SLOTS_POND), std::end(SLOTS_POND));
+// a biome's pond: center, radius, depth
+struct PondDef { float x, z, r, depth; };
+PondDef pondOf(int biome, float variantDepth) {
+    if (biome == 4) return {0.05f, 0.15f, 0.36f, 0.1f};
+    if (biome == 3 || biome == 1) return {0.5f, 0.42f, 0.19f, 0.f};
+    return {0.5f, 0.42f, 0.19f, variantDepth};
+}
+// the soil (the shader's soilH)
+float soilAt(float x, float z, const PondDef& pd, float pondFill) {
+    float h = 0.2f;
+    const float ax = x + 0.5f, az = z + 0.45f, bx = x - 0.55f, bz = z + 0.5f, cx = x, cz = z + 0.72f;
+    h += 0.055f * std::exp(-(ax * ax + az * az) * 5.f) + 0.045f * std::exp(-(bx * bx + bz * bz) * 6.f) +
+         0.035f * std::exp(-(cx * cx + cz * cz) * 4.f);
+    h -= 0.02f * z;
+    h += 0.006f * std::sin(x * 9.f + 1.f) * std::sin(z * 8.f + 2.f);
+    const float px = x - pd.x, pz = z - pd.z;
+    const float dp = std::sqrt(px * px + pz * pz) / pd.r;
+    h -= pd.depth * smoothstepf(0.f, 1.f, saturate(pondFill * 2.f)) * (1.f - smoothstepf(0.5f, 1.15f, dp));
+    return h;
+}
+
+// the beetle's tube: from the first jar's side, at its soil, to the second jar's
 constexpr float BUG_TUBE_R = 0.15f;
 constexpr int CAM_KEYS = (int)(sizeof(CAMS) / sizeof(CAMS[0]));
 vec3 catmull(const vec3& p0, const vec3& p1, const vec3& p2, const vec3& p3, float t) {
@@ -433,8 +490,8 @@ void TerrariumUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution (at most 660 lines)
-    const int wh = std::max(180, std::min(660, (int)(height_ * 0.61f)));
+    // the world at a reduced resolution (at most 620 lines)
+    const int wh = std::max(180, std::min(620, (int)(height_ * 0.575f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -477,6 +534,7 @@ TerrariumUniverse::~TerrariumUniverse() {
     for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_}) glDeleteProgram(p);
     for (GLuint v : {spriteVao_, cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    if (jarTex_) glDeleteTextures(1, &jarTex_);
     for (Font* f : {&caps_, &ital_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
@@ -557,17 +615,7 @@ TransitionHints TerrariumUniverse::hints() const {
 // =====================================================================================================
 
 float TerrariumUniverse::soilHeight(float x, float z) const {
-    float h = 0.2f;
-    const float ax = x + 0.5f, az = z + 0.45f, bx = x - 0.55f, bz = z + 0.5f, cx = x, cz = z + 0.72f;
-    h += 0.055f * std::exp(-(ax * ax + az * az) * 5.f) + 0.045f * std::exp(-(bx * bx + bz * bz) * 6.f) +
-         0.035f * std::exp(-(cx * cx + cz * cz) * 4.f);
-    h -= 0.02f * z;
-    h += 0.006f * std::sin(x * 9.f + 1.f) * std::sin(z * 8.f + 2.f);
-    const VariantDef& d = VARIANTS[wrapV(variant_)];
-    const float px = x - 0.5f, pz = z - 0.42f;
-    const float dp = std::sqrt(px * px + pz * pz) / 0.19f;
-    h -= d.pondDepth * smoothstepf(0.f, 1.f, saturate(pond_ * 2.f)) * (1.f - smoothstepf(0.5f, 1.15f, dp));
-    return h;
+    return soilAt(x, z, PondDef{0.5f, 0.42f, 0.19f, VARIANTS[wrapV(variant_)].pondDepth}, pond_);
 }
 
 bool TerrariumUniverse::blocked(float x, float z, float r) const {
@@ -643,16 +691,17 @@ void TerrariumUniverse::addSeed(const vec3& from) {
 }
 
 bool TerrariumUniverse::pickNetSpot(vec3& at) {
-    // the newest jars that are in view, beside the well
+    // the newest jar that has appeared and is in view, beside the well
     for (int tries = 0; tries < 24; tries++) {
         int k = -1;
-        for (int i = NET_N - 1; i >= 0; i--)
-            if (jarAppear(i) > 0.8f && (rng_.chance(0.45f) || i == 0)) { k = i; break; }
+        for (int i = NET_N; i >= 1; i--)
+            if (jarAppear(i) > 0.8f && (rng_.chance(0.6f) || i == 1)) { k = i; break; }
         if (k < 0) return false;
-        const NetJar& j = NET_JARS[k];
+        const float a = rng_.range(0.f, TAU), r = std::sqrt(rng_.uniform()) * 0.6f;
         const vec3 f = jarFoot(k);
-        const float a = rng_.range(0.f, TAU), r = std::sqrt(rng_.uniform()) * 0.5f * j.s;
-        const vec3 p = f + vec3(std::cos(a) * r, SOIL_Y[j.shape] * j.s + 0.01f, std::sin(a) * r);
+        const float s = jarScale(k);
+        const PondDef pd = pondOf(jarBiome(k), 0.f);
+        const vec3 p = f + vec3(std::cos(a) * r, soilAt(std::cos(a) * r, std::sin(a) * r, pd, 0.f) + 0.01f, std::sin(a) * r) * s;
         vec2 b;
         if (!toScreen(p, b)) continue;
         if (std::fabs(b.x) < 5.8f || std::fabs(b.x - viewC_.x) > viewH_.x * 0.97f || std::fabs(b.y - viewC_.y) > viewH_.y * 0.95f) continue;
@@ -662,58 +711,120 @@ bool TerrariumUniverse::pickNetSpot(vec3& at) {
     return false;
 }
 
-float TerrariumUniverse::jarAppear(int k) const { return smoothstepf(NET_JARS[k].birth, NET_JARS[k].birth + 1.4f, linesEased_); }
+float TerrariumUniverse::jarAppear(int k) const {
+    if (k <= 0) return 1.f;
+    return smoothstepf(CLUSTER[k - 1].birth, CLUSTER[k - 1].birth + 1.6f, linesEased_);
+}
+float TerrariumUniverse::jarScale(int k) const { return k <= 0 ? 1.f : CLUSTER[k - 1].s; }
 vec3 TerrariumUniverse::jarFoot(int k) const {
-    const NetJar& j = NET_JARS[k];
+    if (k <= 0) return vec3(0.f);
+    const CJar& j = CLUSTER[k - 1];
     const float a = jarAppear(k);
-    return vec3(j.x, j.y + (1.f - a) * (1.f - a) * 0.7f, j.z);
+    return vec3(j.x, j.y + (1.f - a) * (1.f - a) * 0.6f, j.z);
 }
 vec3 TerrariumUniverse::neckOf(int k) const {
-    if (k < 0) return vec3(0.f, 1.06f, 0.f);
-    const NetJar& j = NET_JARS[k];
-    return vec3(j.x, j.y + (NECK_TOP[j.shape] + 0.1f) * j.s, j.z);
+    const vec3 f = k <= 0 ? vec3(0.f) : vec3(CLUSTER[k - 1].x, CLUSTER[k - 1].y, CLUSTER[k - 1].z);
+    return f + vec3(0.f, 1.06f * jarScale(k), 0.f);
+}
+float TerrariumUniverse::jarLines(int k) const {
+    if (k <= 0) return linesEased_;
+    const CJar& j = CLUSTER[k - 1];
+    return std::max(0.f, (linesEased_ - j.birth - 1.2f) * 20.f / j.fill);
+}
+int TerrariumUniverse::jarBiome(int k) const {
+    const int mine = VARIANTS[wrapV(variant_)].kind;
+    if (k <= 0) return mine;
+    const int b = CLUSTER[k - 1].biome;
+    return b == mine ? (mine == 0 ? 2 : 0) : b;
 }
 
-// The tubes: the beetle's from the first jar's side to its first neighbour's, then each new jar linked by its neck to
-// the nearest jar before it (every third one also to the second nearest): curves bowed up and toward us.
+// The tubes, each an event after its jar has landed: the beetle's from the first jar's side to the second's, one
+// from the first to the third (a little water running along it), then neck to neck.
 void TerrariumUniverse::buildNetwork() {
     tubes_.clear();
-    {
-        const NetJar& j = NET_JARS[0];
-        const float yS = 0.3f;
-        const float sphY = j.s * 1.0f, rr = j.s;
-        const float hx = std::sqrt(std::max(rr * rr - (yS - sphY) * (yS - sphY), 0.01f));
+    auto side = [&](int from, int to, bool water) {
+        const vec3 fa = jarFoot(from), fb = vec3(CLUSTER[to - 1].x, CLUSTER[to - 1].y, CLUSTER[to - 1].z);
+        const float sa = jarScale(from), sb = jarScale(to);
+        const float dir = fb.x > fa.x ? 1.f : -1.f;
         NetTube t;
-        t.a = vec3(-0.97f, yS, 0.05f);
-        t.b = vec3(j.x + hx * 0.92f, yS, j.z);
-        t.c = (t.a + t.b) * 0.5f + vec3(0.f, 0.14f, 0.35f);
-        t.r = BUG_TUBE_R; t.birth = j.birth + 1.f; t.water = false; t.from = -1; t.to = 0;
+        t.a = fa + vec3(dir * 0.97f * sa, 0.3f * sa, 0.05f);
+        t.b = fb + vec3(-dir * 0.97f * sb, 0.3f * sb, 0.f);
+        t.c = (t.a + t.b) * 0.5f + vec3(0.f, 0.12f, 0.3f);
+        t.r = BUG_TUBE_R * (to == 1 ? 1.f : 0.8f);
+        t.birth = CLUSTER[to - 1].birth + 1.6f;
+        t.water = water; t.from = from; t.to = to;
         tubes_.push_back(t);
+    };
+    auto neck = [&](int from, int to, float delay) {
+        NetTube t;
+        t.a = neckOf(from);
+        t.b = neckOf(to);
+        const float d = length(t.b - t.a);
+        t.c = (t.a + t.b) * 0.5f + vec3(0.f, 0.25f * d + 0.3f, 0.35f + 0.1f * d);
+        t.r = 0.045f + 0.03f * std::min(jarScale(from), jarScale(to));
+        t.birth = CLUSTER[to - 1].birth + 1.6f + delay;
+        t.water = false; t.from = from; t.to = to;
+        tubes_.push_back(t);
+    };
+    side(0, 1, false);
+    side(0, 2, true);
+    neck(1, 3, 0.f);
+    neck(2, 4, 0.f);
+    neck(1, 5, 0.f);
+    neck(2, 6, 0.f);
+    neck(0, 7, 0.f);
+    neck(0, 8, 0.f);
+    neck(5, 8, 0.8f);
+}
+
+// The jars' data texture: one row each (palette, pond, soil, place, slots, see shaders.hpp).
+void TerrariumUniverse::uploadJars(const std::vector<Slot>& firstSlots, float after) {
+    constexpr int W = 128, ROWS = 12;
+    if (!jarTex_) {
+        glGenTextures(1, &jarTex_);
+        glBindTexture(GL_TEXTURE_2D, jarTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, W, ROWS, 0, GL_RGBA, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
-    for (int k = 1; k < NET_N; k++) {
-        const vec3 nk = neckOf(k);
-        int best = -1, second = -2;
-        float bd = 1e9f, sd = 1e9f;
-        for (int i = -1; i < k; i++) {
-            const float d = length(neckOf(i) - nk);
-            if (d < bd) { sd = bd; second = best; bd = d; best = i; }
-            else if (d < sd) { sd = d; second = i; }
+    std::vector<float> D(W * ROWS * 4, 0.f);
+    const VariantDef& vd = VARIANTS[wrapV(variant_)];
+    for (int k = 0; k <= NET_N && k < ROWS; k++) {
+        float* row = &D[k * W * 4];
+        auto put = [&](int i, float a, float b, float c, float d) { row[i * 4] = a; row[i * 4 + 1] = b; row[i * 4 + 2] = c; row[i * 4 + 3] = d; };
+        const int biome = jarBiome(k);
+        const VariantDef& bd = biome == 3 ? BIOME_MEADOW : (biome == 4 ? BIOME_POND : VARIANTS[biome]);
+        // the palette: the first jar's eases with its variant, the others are their biome's
+        Palette pal = k == 0 ? pal_ : paletteOf(biome);
+        if (biome >= 3) {
+            const unsigned* src = &bd.soil;
+            vec3* dst = &pal.soil;
+            for (int i = 0; i < 17; i++) dst[i] = ugl::toLinear(hex(src[i]));
         }
-        for (int l = 0; l < (k % 3 == 0 && second > -2 ? 2 : 1); l++) {
-            const int o = l == 0 ? best : second;
-            NetTube t;
-            t.a = neckOf(o);
-            t.b = nk;
-            const float d = length(t.b - t.a);
-            t.c = (t.a + t.b) * 0.5f + vec3(0.f, 0.25f * d + 0.25f, 0.35f + 0.1f * d);
-            t.r = 0.035f + 0.03f * std::min(o < 0 ? 1.f : NET_JARS[o].s, NET_JARS[k].s);
-            t.birth = NET_JARS[k].birth + 0.6f + 0.6f * l;
-            t.water = ((k + l) % 4) == 1;
-            t.from = o; t.to = k;
-            tubes_.push_back(t);
+        const vec3* pc = &pal.soil;
+        for (int i = 0; i < 17; i++) put(i, pc[i].x, pc[i].y, pc[i].z, 0.f);
+        const float L = jarLines(k);
+        const PondDef pd = pondOf(biome, vd.pondDepth);
+        const float pondFill = k == 0 ? pond_ : (pd.depth > 0.f ? smoothstepf(POND_AT, POND_AT + 4.f, L) : 0.f);
+        put(17, pd.x, pd.z, pd.r, pd.depth * smoothstepf(0.f, 1.f, saturate(pondFill * 2.f)));
+        put(18, 0.2f - 0.0084f - pd.depth * (1.f - 0.85f * pondFill) * 0.6f - 0.004f, pondFill,
+            k == 0 ? moss_ : smoothstepf(6.f, 22.f, L), (float)bd.kind);
+        const vec3 f = jarFoot(k);
+        put(19, f.x, f.y, f.z, jarAppear(k) > 0.001f ? jarScale(k) : 0.f);
+        const std::vector<Slot>& sl = k == 0 ? firstSlots : (biome == 3 ? SLOT_MEADOW : (biome == 4 ? SLOT_POND : SLOT_LISTS[biome]));
+        const int n = std::min(24, (int)sl.size());
+        put(20, (float)n, smoothstepf(9.f, 19.f, L), jarAppear(k), 0.f);
+        for (int i = 0; i < n; i++) {
+            const Slot& s = sl[i];
+            const float g = k == 0 ? std::max(0.f, growth_[i])
+                                   : (s.birth < 0.f ? 1.f : smoothstepf(s.birth * BIRTH_SCALE, s.birth * BIRTH_SCALE + SLOT_SPAN, L));
+            put(32 + 3 * i, s.x, soilAt(s.x, s.z, pd, pondFill), s.z, s.size * (k == 0 ? after : 1.f));
+            put(33 + 3 * i, (float)s.type, g, (float)i * 1.37f + 0.5f + (float)k * 7.1f, s.rot);
+            put(34 + 3 * i, s.param, 0.f, 0.f, 0.f);
         }
     }
-    if ((int)tubes_.size() > 48) tubes_.resize(48);
+    glBindTexture(GL_TEXTURE_2D, jarTex_);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, ROWS, GL_RGBA, GL_FLOAT, D.data());
 }
 
 // The beetle's trip: at home it sometimes walks to the tube's mouth, then along the tube's floor to the next jar,
@@ -724,10 +835,12 @@ void TerrariumUniverse::updateTrip(float dt) {
     const float tubeG = smoothstepf(t.birth, t.birth + 2.f, linesEased_);
     auto headOf = [](const vec3& d) { return std::atan2(-d.x, d.z); };
     const float len = length(t.b - t.c) + length(t.c - t.a);
-    const NetJar& j = NET_JARS[0];
-    const vec3 foot = jarFoot(0);
-    const float soil = foot.y + SOIL_Y[j.shape] * j.s - 0.002f;
-    const vec3 inPt(t.b.x - 0.12f, soil, t.b.z), mid(foot.x + 0.05f, soil, foot.z + 0.12f);
+    const vec3 foot = jarFoot(1);
+    const float js = jarScale(1);
+    const PondDef pd = pondOf(jarBiome(1), 0.f);
+    const vec3 inL(-0.8f, 0.f, 0.f), midL(-0.25f, 0.f, 0.25f);
+    const vec3 inPt = foot + vec3(inL.x, soilAt(inL.x, inL.z, pd, 0.f) - 0.002f, inL.z) * js;
+    const vec3 mid = foot + vec3(midL.x, soilAt(midL.x, midL.z, pd, 0.f) - 0.002f, midL.z) * js;
     if (bugMode_ == 0) {
         bugCool_ -= dt;
         if (tubeG < 0.999f) bugGoing_ = false;
@@ -746,7 +859,7 @@ void TerrariumUniverse::updateTrip(float dt) {
         if (!bugBack_ && bugU_ >= 1.f) { bugMode_ = 2; bugPhase_ = 0; bugT_ = 0.f; }
         if (bugBack_ && bugU_ <= 0.f) {
             bugMode_ = 0; bugBack_ = false; bugCool_ = rng_.range(25.f, 45.f);
-            bug_.x = -0.82f; bug_.z = 0.05f; bug_.head = PI * 0.5f; bug_.pause = 1.5f; bug_.speed = 0.f;
+            bug_.x = 0.82f; bug_.z = 0.05f; bug_.head = -PI * 0.5f; bug_.pause = 1.5f; bug_.speed = 0.f;
         }
         return;
     }
@@ -805,7 +918,7 @@ void TerrariumUniverse::updateBeetle(float dt, float wm, float wp) {
         if (b.pause <= 0.f) {
             float x, z;
             const bool tubeReady = !tubes_.empty() && linesEased_ > tubes_[0].birth + 2.f && bugCool_ <= 0.f;
-            if (tubeReady && rng_.chance(0.5f)) { b.tx = -0.8f; b.tz = 0.05f; bugGoing_ = true; }
+            if (tubeReady && rng_.chance(0.5f)) { b.tx = 0.8f; b.tz = 0.05f; bugGoing_ = true; }
             else if (pickSpot(x, z, 0.07f)) { b.tx = x; b.tz = z; bugGoing_ = false; }
         }
     } else if (dist < 0.03f && bugGoing_) {
@@ -1490,9 +1603,14 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         {
             float F[MAX_FLIES * 4] = {};
             int n = 0;
-            for (const Fly& fl : flies_) {
+            std::vector<int> grownJars;
+            for (int k = 1; k <= NET_N; k++) if (jarLines(k) > 12.f) grownJars.push_back(k);
+            for (int i = 0; i < (int)flies_.size(); i++) {
+                const Fly& fl = flies_[i];
                 if (fl.glow <= 0.01f) continue;
-                F[n * 4 + 0] = fl.p.x; F[n * 4 + 1] = fl.p.y; F[n * 4 + 2] = fl.p.z; F[n * 4 + 3] = fl.glow;
+                const int k = (i >= 12 && !grownJars.empty()) ? grownJars[(i - 12) % grownJars.size()] : 0;
+                const vec3 w = jarFoot(k) + fl.p * jarScale(k);
+                F[n * 4 + 0] = w.x; F[n * 4 + 1] = w.y; F[n * 4 + 2] = w.z; F[n * 4 + 3] = fl.glow;
                 n++;
             }
             set1i(P, "uFlies", n);
@@ -1524,7 +1642,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         const float bugMv = bugMode_ == 0 ? saturate(bug_.speed / 0.03f) : saturate(bugSpeed_ / 0.03f);
         set4f(P, "uBug2", bug_.walk, bugMv, bugMode_ == 0 ? bug_.look : 0.f, bug_.blink > 0.f ? std::sin(bug_.blink * PI) : 0.f);
         set1f(P, "uBugMode", (float)bugMode_);
-        set1i(P, "uBugJar", 0);
+        set1i(P, "uBugJar", 1);
         set4f(P, "uPondP", 0.5f, 0.42f, 0.19f, vd.pondDepth * smoothstepf(0.f, 1.f, saturate(pond_ * 2.f)));
         set1f(P, "uPondY", 0.2f - 0.0084f - vd.pondDepth * (1.f - 0.85f * pond_) * 0.6f - 0.004f);
         set1f(P, "uPond", pond_);
@@ -1562,29 +1680,13 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uWorldA", world);
         set1f(P, "uSlow", slow_);
         set1f(P, "uInVine", inVine_);
-        {
-            // the jars: set down gently, then their little worlds grow; near ones ray marched inside, far ones painted
-            const int kindOff = vd.kind == 1 ? 1 : 0;
-            float A[40 * 4] = {}, B[40 * 4] = {};
-            const float pxScale = worldT_.h / (2.f * tanH_);
-            int n = 0;
-            for (int k = 0; k < NET_N && n < 40; k++) {
-                const float a = jarAppear(k);
-                const NetJar& j = NET_JARS[k];
-                const vec3 f = jarFoot(k);
-                A[n * 4 + 0] = f.x; A[n * 4 + 1] = f.y; A[n * 4 + 2] = f.z; A[n * 4 + 3] = a > 0.001f ? j.s : 0.f;
-                const float dist = length(f + vec3(0.f, j.s, 0.f) - eye_);
-                const float px = j.s * 1.3f / std::max(dist, 0.1f) * pxScale;
-                B[n * 4 + 0] = (float)j.shape;
-                B[n * 4 + 1] = (float)((j.biome + kindOff) % 5);
-                B[n * 4 + 2] = smoothstepf(j.birth + 0.6f, j.birth + 7.f, linesEased_);
-                B[n * 4 + 3] = px > 55.f ? 1.f : 0.f;
-                n++;
-            }
-            set1i(P, "uJarN", n);
-            glUniform4fv(ugl::U(P, "uJarA"), 40, A);
-            glUniform4fv(ugl::U(P, "uJarB"), 40, B);
-        }
+        uploadJars(sl, after);
+        set1i(P, "uJarN", NET_N + 1);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, jarTex_);
+        set1i(P, "uJarTex", 1);
+        glActiveTexture(GL_TEXTURE0);
+        set1i(P, "uSnailJar", jarLines(1) > 3.f ? 1 : -1);
         {
             float TA[48 * 4] = {}, TB[48 * 4] = {}, TC[48 * 4] = {};
             int n = 0;
@@ -1601,16 +1703,14 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
             glUniform4fv(ugl::U(P, "uTubeC"), 48, TC);
         }
         {
-            // fireflies: a few along the tubes by day, streams of them at night, and some hovering in the jars
+            // fireflies along the tubes: a few by day, streams of them at night
             float S[48 * 4] = {};
             int n = 0;
             std::vector<int> grown;
             for (int i = 0; i < (int)tubes_.size(); i++)
                 if (linesEased_ > tubes_[i].birth + 2.f) grown.push_back(i);
             const float night = smoothstepf(30.f, 46.f, linesEased_), amt = std::max(night, allLit_);
-            const int count = overT_ >= 0.f ? 0 : (int)(48.f * (0.2f + 0.8f * amt));
-            int jarsIn = 0;
-            for (int k = 0; k < NET_N; k++) if (jarAppear(k) > 0.99f) jarsIn++;
+            const int count = overT_ >= 0.f ? 0 : (int)(32.f * (0.15f + 0.85f * amt));
             for (int i = 0; i < count && n < 48; i++) {
                 const float h = hash01(i * 7 + 3), h2 = hash01(i * 13 + 5);
                 vec3 p;
@@ -1620,11 +1720,6 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
                     float u = std::fmod(time_ * (0.12f + 0.1f * h) / std::max(len, 0.2f) + h2, 2.f);
                     if (u > 1.f) u = 2.f - u;
                     p = bezier(t.a, t.c, t.b, u) + vec3(std::sin(time_ * 1.3f + i), std::cos(time_ * 1.1f + i * 2.f), 0.f) * t.r * 0.35f;
-                } else if (jarsIn > 0) {
-                    const int k = (i / 3) % jarsIn;
-                    const NetJar& j = NET_JARS[k];
-                    const vec3 f = jarFoot(k);
-                    p = f + vec3(std::cos(time_ * 0.4f + i) * 0.4f, SOIL_Y[j.shape] + 0.35f + 0.15f * std::sin(time_ * 0.5f + i * 1.3f), std::sin(time_ * 0.35f + i) * 0.4f) * j.s;
                 } else continue;
                 const float g = (0.25f + 0.75f * amt) * (0.35f + 0.65f * smoothstepf(-0.5f, 0.9f, std::sin(time_ * (0.7f + h) + i * 2.1f)));
                 S[n * 4 + 0] = p.x; S[n * 4 + 1] = p.y; S[n * 4 + 2] = p.z; S[n * 4 + 3] = g;
