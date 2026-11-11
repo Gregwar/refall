@@ -28,7 +28,7 @@ public:
 private:
     // ---- Shapes and tiles (pixels).
     struct Shape { float g[4], c[4], k[4]; };
-    struct Tile { float g[4], c[4], p[4]; };
+    struct Tile { float g[4], c[4], p[4], e[4], f[4]; };
     std::vector<Shape> shapes_;
     std::vector<Tile> tiles_;
     void box(float cx, float cy, float hx, float hy, const vec3& c, float a, float round = 0.f, float outline = 0.f);
@@ -90,13 +90,25 @@ private:
         bool fading, solid, asleep;
         float still, awake;            // seconds nearly still, seconds awake (both put a body to sleep)
         // the throw: a scripted arc (Hermite) out of the well to its release over the band, then physics
-        bool thrown;
-        float t, delay, dur, x0, y0, tx0, ty0, x1, y1, tx1, ty1;
+        bool thrown;                   // waiting in its row for its turn (then thrown: a ballistic impulse)
+        float t, delay, x0, y0, tx1, ty1;
+        bool inBand;                   // reached its band (its walls hold it from then on)
+        float paint, pr, pg, pb;       // the paint left on it and its color (mixed with what ran down from above)
+        float dr, dg, db, drip;        // the paint running down its face from the tile above
+        int hits;                      // drops that hit it this frame (they wash the paint off)
     };
     std::vector<Body> bodies_;
     int nextBody_ = 1;
     float bandIn_ = 11.9f, bandOut_ = 21.f, ground_ = -11.6f;
     float physAcc_ = 0.f;
+    struct PDrip { float x, y, vy, r, g, b; };   // a drop of paint falling off a heaped tile
+    std::vector<PDrip> pdrips_;
+    std::vector<int> bins_[96];                 // the heaped tiles by column of one unit (the rain's queries)
+    float binX0_ = -48.f;
+    void buildBins();
+    float leftOut_ = 21.f;                      // the left heap's outer wall (clear of the HUD's corner lines)
+    vec2 signPos_[2];                           // the blade signs over the heaps (board units)
+    float flood_ = 0.f;                         // the storm's flooding street
     std::vector<vec4> textRects_;      // the HUD's bottom corner lines (board units): the heaps dim under them
     void eject(int x, int y, int type, float delay);
     void stepHeaps(float dt);

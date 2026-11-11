@@ -28,7 +28,11 @@ uniform float uWell;         // 1: the well's backing and the HUD's veil drawn
 uniform vec3 uBridge;        // the bridge's color
 uniform float uBridgeK;
 uniform float uDim;
-const float H = -8.2;        // the street's far edge (the horizon of the reflections)
+uniform float uFlood;        // the storm: the street flooding (more water, stronger reflections)
+uniform float uGust;         // the storm: sheets of rain sweeping across in gusts
+uniform vec2 uSignPos[2];    // the two big blade signs over the heaps (board units): their light falls on the tiles
+uniform vec3 uSignCol[2];
+const float H = -8.2;        // the street's far edge (the sidewalk's line, the horizon of the reflections)
 
 float h11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -37,92 +41,177 @@ float box(vec2 p, vec2 c, vec2 hs, float soft) {
     float s = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
     return smoothstep(soft, -soft, s);
 }
+float sdBox(vec2 p, vec2 c, vec2 hs) {
+    vec2 d = abs(p - c) - hs;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
 
-// The city above the street, `blur` its softness (units): the rain blurs it, the reflections more.
+// The street, `blur` its softness (units; the reflections blur more). From back to front: the sky (lightning glows
+// inside the clouds and silhouettes the skyline), the far skyline (windows as bokeh), the street's buildings (window
+// grids lit in many colors, ledges, the variant's signs), the shop fronts at street level (a lit shop window with its
+// shelves, a door, an awning, a sign board), the passers-by under their umbrellas, the two big blade signs over the
+// heaps, bokeh, mist.
 vec3 city(vec2 p, float blur) {
     float t = clamp((p.y - H) / 24.0, 0.0, 1.0);
     vec3 col = mix(uSkyLow, uSkyTop, pow(t, 0.6));
-    // a slow band of cloud light over the roofs
-    col += uSkyLow * 0.18 * (0.5 + 0.5 * sin(p.x * 0.11 + uTime * 0.02)) * smoothstep(20.0, 6.0, p.y - H);
-    col += uFlash * exp(-length((p - uFlashPos) * vec2(0.05, 0.08)));
-    // far buildings: soft blocks, their windows blurred into bokeh
+    float cl = 0.5 + 0.5 * sin(p.x * 0.13 + uTime * 0.02 + sin(p.y * 0.3 + p.x * 0.05) * 1.5);
+    col += uSkyLow * 0.22 * cl * smoothstep(22.0, 6.0, p.y - H);
+    // lightning: a wide soft glow inside the clouds, brightest where it struck (the skyline stands out against it)
+    vec3 fl = uFlash * (exp(-abs(p.x - uFlashPos.x) * 0.05) * 0.8 + 0.6 * exp(-length((p - uFlashPos) * vec2(0.09, 0.12)))) * (0.6 + 0.4 * cl);
+    col += fl * smoothstep(H + 2.0, H + 12.0, p.y);
+    // the far skyline
     {
         float w = 2.3;
-        float id = floor((p.x + 200.0) / w);
-        float top = H + 7.0 + 9.0 * h11(id + 3.0);
-        float m = smoothstep(blur + 0.1, -blur - 0.1, p.y - top) * smoothstep(-0.05, 0.25, fract((p.x + 200.0) / w)) *
-                  smoothstep(1.0, 0.85, fract((p.x + 200.0) / w));
-        vec3 b = mix(col, uFar, 0.75);
+        float id = floor((p.x + 200.0) / w), fx = fract((p.x + 200.0) / w);
+        float top = H + 9.0 + 9.0 * h11(id + 3.0);
+        float m = smoothstep(blur + 0.12, -blur - 0.12, p.y - top) * smoothstep(-0.05, 0.2, fx) * smoothstep(1.0, 0.85, fx);
+        vec3 b = mix(col, uFar, 0.78);
         vec2 g = vec2(0.62, 0.9);
         vec2 wid = floor(p / g), wf = fract(p / g) - 0.5;
-        float lit = step(0.7, h21(wid + id * 1.7)) * step(p.y, top - 0.6);
-        float bok = smoothstep(0.3 + blur * 0.5, 0.08, length(wf * vec2(1.0, 0.9)));
-        vec3 wc = mix(uWin, uNeon[int(h21(wid + 4.0) * 3.99)], step(0.6, h21(wid + 2.0)) * 0.7);
-        b += wc * lit * bok * (0.3 + 0.35 * h21(wid + 9.0)) * uGlow;
+        float lit = step(0.66, h21(wid + id * 1.7)) * step(p.y, top - 0.6);
+        float bok = smoothstep(0.3 + blur * 0.5, 0.06, length(wf));
+        vec3 wc = mix(uWin, uNeon[int(h21(wid + 4.0) * 3.99)], step(0.55, h21(wid + 2.0)) * 0.8);
+        b += wc * lit * bok * (0.25 + 0.3 * h21(wid + 9.0)) * uGlow;
         col = mix(col, b, m);
     }
-    // near buildings: darker, taller, with the street's lights on them
+    // the street's buildings: facades with lit windows above the shops
+    float shopTop = H + 3.6;
     {
-        float w = 4.6;
-        float id = floor((p.x + 300.0) / w);
-        float fx = fract((p.x + 300.0) / w);
-        float top = H + 4.0 + 13.0 * h11(id * 1.31 + 11.0);
-        float m = smoothstep(blur + 0.06, -blur - 0.06, p.y - top) * smoothstep(0.0, 0.05, fx) * smoothstep(1.0, 0.95, fx);
-        vec3 b = mix(col, uNear, 0.88);
-        // windows: a few warm ones, soft
-        vec2 g = vec2(1.15, 1.5);
-        vec2 wid = floor(p / g), wf = fract(p / g) - 0.5;
-        float lit = step(0.7, h21(wid * 1.3 + id)) * step(p.y, top - 1.0) * step(H + 2.5, p.y);
-        vec3 wc = mix(uWin, uNeon[int(h21(wid + 4.0) * 3.99)], step(0.55, h21(wid + 2.0)) * 0.6);
-        b += wc * lit * box(wf, vec2(0.0), vec2(0.16, 0.22), 0.04 + blur * 0.5) * 0.5 * uGlow;
+        float w = 4.4;
+        float id = floor((p.x + 300.0) / w), fx = fract((p.x + 300.0) / w);
+        float top = H + 7.0 + 11.0 * h11(id * 1.31 + 11.0);
+        float m = smoothstep(blur + 0.04, -blur - 0.04, p.y - top) * smoothstep(0.0, 0.03, fx) * smoothstep(1.0, 0.97, fx);
+        vec3 fac = mix(uNear, uFar, 0.25 * h11(id + 1.0)) * (0.85 + 0.3 * h11(id + 6.0));
+        vec3 b = mix(col, fac, 0.93);
+        // windows: a grid per building, each lit or dark, warm or tinted, some with blinds
+        vec2 g = vec2(0.9 + 0.3 * h11(id + 2.0), 1.25);
+        vec2 lp = vec2(p.x + 300.0 - id * w, p.y - shopTop);
+        vec2 wid = floor(lp / g), wf = fract(lp / g);
+        float inside = step(0.4, lp.x) * step(lp.x, w - 0.4) * step(0.3, lp.y) * step(p.y, top - 0.6);
+        float win = box(wf, vec2(0.5, 0.5), vec2(0.28, 0.32), 0.03 + blur * 0.4) * inside;
+        float hl = h21(wid + id * 3.7);
+        vec3 wc = hl < 0.45 ? uWin : uNeon[int(h21(wid + id) * 3.99)] * 0.8 + uWin * 0.2;
+        float lit = step(0.35, h21(wid * 1.7 + id)) * (0.55 + 0.45 * h21(wid + 5.0));
+        float blinds = step(0.8, h21(wid + 13.0)) * (0.6 + 0.4 * step(0.5, fract(wf.y * 6.0)));
+        vec3 wl = wc * lit * (1.0 - 0.5 * blinds) * (0.55 + 0.45 * smoothstep(0.0, 0.6, wf.y));
+        b = mix(b, mix(fac * 0.5, wl * uGlow, lit), win * 0.95);
+        // ledges between the floors
+        b *= 1.0 - 0.25 * smoothstep(0.05, 0.0, abs(fract(lp.y / g.y) - 0.04)) * step(0.3, lp.y);
         float hs = h11(id * 7.7 + 2.0);
         int k = int(floor(h11(id * 3.3) * 4.0));
-        vec3 nc = uNeon[k];
-        if (uStyle == 0) {
-            // a vertical neon sign on every other building, its glow on the wet facade
-            if (hs > 0.4) {
-                float sx = (id + 0.25 + 0.5 * h11(id + 5.0)) * w - 300.0;
-                float y0 = H + 2.5 + 3.0 * h11(id + 8.0), y1 = min(top - 0.8, y0 + 3.0 + 4.0 * hs);
-                vec2 d = vec2(abs(p.x - sx) - 0.28, max(y0 - p.y, p.y - y1));
-                float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
-                float core = smoothstep(0.08 + blur, -0.02, abs(sd + 0.12) - 0.04);
-                b += nc * (core * 1.4 + 0.55 * exp(-max(sd, 0.0) * 1.3)) * uGlow;
-                col += nc * 0.18 * exp(-max(sd, 0.0) * 0.8) * uGlow * (1.0 - m);
-            }
-        } else if (uStyle == 1) {
-            // the market: striped awnings over the stalls, string lights along the street
-            // one awning per stall (not every building), its lower edge scalloped, flowers in buckets under it
-            float stall = step(0.35, hs) * smoothstep(0.1, 0.16, fx) * smoothstep(0.9, 0.84, fx);
-            float ay = p.y - (H + 2.2);
-            float scal = 0.12 * abs(sin(p.x * 4.5));
-            float aw = smoothstep(blur + 0.04, -0.02, max(-ay - 0.5 + scal, ay - 0.6)) * stall;
-            vec3 stripe = mix(uNeon[k], vec3(0.96, 0.92, 0.85), step(0.5, fract(p.x * 1.25)));
-            b = mix(b, stripe * (0.5 + 0.5 * smoothstep(H + 1.6, H + 2.8, p.y)) * (0.75 + 0.35 * uGlow), aw * 0.92);
-            vec2 fc = vec2(fract(p.x * 2.2) - 0.5, p.y - (H + 0.75 + 0.25 * h11(floor(p.x * 2.2))));
-            float fl = smoothstep(0.32 + blur, 0.1, length(fc * vec2(1.0, 1.4))) * stall * step(p.y, H + 1.4);
-            b = mix(b, uNeon[int(h11(floor(p.x * 2.2) + 3.0) * 3.99)] * 0.95, fl);
-            vec2 sp = vec2(fract(p.x * 0.8) - 0.5, p.y - (H + 3.4 + 0.35 * sin(p.x * 0.5)));
-            float bulb = smoothstep(0.16 + blur, 0.02, length(sp * vec2(1.6, 1.0)));
-            b += uWin * bulb * 0.9 * uGlow;
-            col += uWin * bulb * 0.9 * uGlow * (1.0 - m);
-        } else {
-            // monsoon: paper lanterns hanging in the mist
-            for (int j = 0; j < 2; j++) {
-                float fj = float(j);
-                if (h11(id * 7.7 + 2.0 + fj * 3.0) < 0.25) continue;
-                nc = uNeon[int(h11(id * 3.3 + fj) * 3.99)];
-                float sx = (id + 0.2 + 0.25 * fj + 0.3 * h11(id + 5.0 + fj)) * w - 300.0;
-                float ly = H + 2.5 + 7.0 * h11(id + 4.0 + fj * 2.0);
-                float d = length((p - vec2(sx, ly)) * vec2(1.0, 0.8));
-                float core = smoothstep(0.55 + blur, 0.35, d);
-                b += nc * (core * 1.1 + 0.5 * exp(-d * 1.2)) * uGlow;
-                col += nc * 0.35 * exp(-d * 0.9) * uGlow * (1.0 - m);
-            }
+        if (uStyle == 0 && hs > 0.45) {
+            // a vertical neon sign
+            float sx = (id + 0.2 + 0.6 * h11(id + 5.0)) * w - 300.0;
+            float y0 = shopTop + 0.6 + 2.0 * h11(id + 8.0), y1 = min(top - 0.6, y0 + 3.0 + 3.0 * hs);
+            float sd = sdBox(p, vec2(sx, 0.5 * (y0 + y1)), vec2(0.3, 0.5 * (y1 - y0)));
+            float core = smoothstep(0.07 + blur, 0.0, abs(sd + 0.1) - 0.035);
+            float letters = step(0.35, fract((p.y - y0) * 1.3)) * smoothstep(0.0, -0.05, sd + 0.12);
+            b = mix(b, uNeon[k] * 0.35, smoothstep(0.02, -0.02, sd));
+            b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow;
+            col += uNeon[k] * 0.15 * exp(-max(sd, 0.0) * 0.7) * uGlow * (1.0 - m);
+        } else if (uStyle == 2 && hs > 0.3) {
+            // monsoon: strings of paper lanterns across the facades
+            float ly = shopTop + 1.5 + 4.0 * h11(id + 4.0);
+            float sag = ly - 0.4 * sin(fx * 3.14159);
+            vec2 lc = vec2(fract(p.x * 0.9) - 0.5, p.y - sag);
+            float d = length(lc * vec2(1.0, 0.75));
+            vec3 nc = uNeon[int(h11(floor(p.x * 0.9) + id) * 3.99)];
+            b = mix(b, nc * (0.9 + 0.3 * smoothstep(0.2, 0.0, d)), smoothstep(0.24 + blur, 0.2, d));
+            b += nc * 0.35 * exp(-d * 3.0) * uGlow;
+            col += nc * 0.12 * exp(-d * 1.5) * uGlow * (1.0 - m);
         }
         col = mix(col, b, m);
     }
+    // the shop fronts at street level
+    if (p.y < shopTop + 0.4) {
+        float w = 3.7;
+        float id = floor((p.x + 500.0) / w), fx = fract((p.x + 500.0) / w);
+        float lx = fx * w;
+        vec3 fr = uNear * 0.7;
+        vec3 b = fr;
+        int k = int(floor(h11(id * 5.1) * 4.0));
+        vec3 sc = uNeon[k];
+        // the shop window: a warm lit interior, shelves and goods in silhouette
+        float wx0 = 0.25, wx1 = 2.35, wy0 = H + 0.35, wy1 = H + 2.35;
+        float win = box(vec2(lx, p.y), vec2(0.5 * (wx0 + wx1), 0.5 * (wy0 + wy1)), vec2(0.5 * (wx1 - wx0), 0.5 * (wy1 - wy0)), 0.02 + blur * 0.3);
+        vec3 interior = mix(uWin, sc, 0.35 + 0.3 * h11(id + 3.0)) * (0.55 + 0.45 * smoothstep(wy0, wy1, p.y)) * uGlow;
+        float shelf = smoothstep(0.04, 0.0, abs(fract((p.y - wy0) / 0.6) - 0.1));
+        float goods = step(0.45, h21(vec2(floor(lx * 4.0), floor((p.y - wy0) / 0.6)) + id)) * step(fract((p.y - wy0) / 0.6), 0.45) * step(0.15, fract((p.y - wy0) / 0.6));
+        vec3 gc = mix(uNeon[int(h21(vec2(floor(lx * 4.0), id)) * 3.99)], vec3(1.0), 0.3) * 0.7 * uGlow;
+        interior = mix(interior, interior * 0.35, shelf);
+        interior = mix(interior, gc, goods * 0.7);
+        b = mix(b, interior, win);
+        // the door, dimly lit
+        float door = box(vec2(lx, p.y), vec2(2.95, H + 1.15), vec2(0.38, 1.15), 0.02 + blur * 0.3);
+        b = mix(b, mix(uWin, sc, 0.5) * 0.3 * uGlow, door);
+        // the awning: striped in the shop's colors, scalloped
+        float ay = p.y - (H + 2.75);
+        float scal = 0.08 * abs(sin(lx * 7.0));
+        float aw = smoothstep(blur + 0.03, -0.01, max(-ay - 0.32 + scal, ay - 0.42)) * step(0.1, lx) * step(lx, w - 0.1);
+        float hasAw = uStyle == 1 ? 1.0 : step(0.4, h11(id + 9.0));
+        vec3 stripe = mix(sc, vec3(0.95, 0.92, 0.86), step(0.5, fract(lx * 1.6)));
+        b = mix(b, stripe * (0.45 + 0.55 * smoothstep(-0.3, 0.42, ay)) * (0.75 + 0.3 * uGlow), aw * hasAw);
+        // the sign board with its glowing lettering
+        float sy = H + 3.3;
+        float board = box(vec2(lx, p.y), vec2(w * 0.5, sy), vec2(w * 0.45, 0.24), 0.02 + blur * 0.3);
+        float glyph = step(0.42, h21(vec2(floor(lx * 5.0), id))) * box(vec2(fract(lx * 5.0), p.y), vec2(0.5, sy), vec2(0.32, 0.12), 0.03 + blur * 0.3) * step(0.6, lx) * step(lx, w - 0.6);
+        b = mix(b, uNear * 0.4, board);
+        b += sc * glyph * 1.2 * uGlow + sc * 0.25 * board * uGlow;
+        // flower buckets in front of the market stalls
+        if (uStyle == 1) {
+            vec2 fc = vec2(fract(p.x * 2.4) - 0.5, p.y - (H + 0.45 + 0.2 * h11(floor(p.x * 2.4))));
+            float fl = smoothstep(0.3 + blur, 0.12, length(fc * vec2(1.0, 1.3)));
+            b = mix(b, uNeon[int(h11(floor(p.x * 2.4) + 3.0) * 3.99)] * (0.8 + 0.3 * uGlow), fl * step(lx, 2.6));
+        }
+        float m = step(p.y, shopTop) * smoothstep(-0.02, 0.02, shopTop - p.y);
+        col = mix(col, b, m);
+        // the sidewalk glows under the shop windows
+        col += mix(uWin, sc, 0.4) * 0.12 * uGlow * exp(-(p.y - H) * 2.5) * step(H, p.y);
+    }
+    // passers-by under their umbrellas, walking slowly along the sidewalk
+    for (int i = 0; i < 9; i++) {
+        float fi = float(i);
+        float dir = h11(fi * 3.7) < 0.5 ? -1.0 : 1.0;
+        float sp = 0.25 + 0.3 * h11(fi * 1.3);
+        float x = mod(h11(fi * 7.9) * 64.0 + dir * sp * uTime, 64.0) - 32.0;
+        if (abs(p.x - x) > 1.0 || p.y > H + 2.6) continue;
+        vec2 q = p - vec2(x, H + 0.05);
+        float stride = sin(uTime * sp * 6.0 + fi) * 0.08;
+        float body = sdBox(q, vec2(0.0, 0.95), vec2(0.16, 0.45)) - 0.06;
+        float legs = min(sdBox(q, vec2(-0.07 + stride, 0.25), vec2(0.04, 0.25)), sdBox(q, vec2(0.07 - stride, 0.25), vec2(0.04, 0.25)));
+        float head = length(q - vec2(0.0, 1.55)) - 0.13;
+        float stick = sdBox(q, vec2(0.05, 1.75), vec2(0.012, 0.3));
+        float ur = length((q - vec2(0.05, 1.95)) * vec2(1.0, 1.6)) - 0.62;
+        float umb = max(ur, -(q.y - 1.92));
+        float sil = min(min(body, legs), min(head, stick));
+        vec3 uc = uNeon[int(h11(fi * 5.3) * 3.99)];
+        col = mix(col, uNear * 0.35, smoothstep(blur + 0.02, -0.01, sil));
+        vec3 umbC = uc * (0.55 + 0.35 * uGlow) * (0.7 + 0.3 * smoothstep(1.92, 2.3, q.y));
+        umbC = mix(umbC, umbC * 1.3, step(0.5, fract(atan(q.x - 0.05, q.y - 1.92) * 1.6)));
+        col = mix(col, umbC, smoothstep(blur + 0.02, -0.01, umb));
+    }
+    // the big blade signs over the heaps
+    for (int i = 0; i < 2; i++) {
+        float sd = sdBox(p, uSignPos[i], vec2(0.45, 2.6));
+        vec3 c = uSignCol[i];
+        float core = smoothstep(0.08 + blur, 0.0, abs(sd + 0.12) - 0.05);
+        float letters = step(0.3, fract((p.y - uSignPos[i].y) * 0.9)) * smoothstep(0.0, -0.06, sd + 0.2) * step(abs(p.x - uSignPos[i].x), 0.18);
+        col = mix(col, c * 0.25 + uNear * 0.3, smoothstep(0.03, -0.03, sd));
+        col += c * (core * 1.4 + letters * 1.1) * uGlow + c * 0.45 * exp(-max(sd, 0.0) * 0.6) * uGlow;
+    }
+    // bokeh: lights out of focus, drifting a little
+    {
+        vec2 g = vec2(3.1, 2.7);
+        vec2 bp = p + vec2(uTime * 0.05, 0.0);
+        vec2 id = floor(bp / g), f = fract(bp / g) - 0.5;
+        vec2 o = vec2(h21(id + 1.3), h21(id + 7.1)) - 0.5;
+        float r = 0.28 + 0.25 * h21(id + 3.9);
+        float d = length((f - o * 0.6) * g);
+        float on = step(0.62, h21(id + 11.0)) * smoothstep(H + 1.0, H + 4.0, p.y);
+        col += uNeon[int(h21(id + 5.0) * 3.99)] * on * 0.12 * smoothstep(r, r * 0.75, d) * uGlow;
+    }
     // mist over the street
-    col = mix(col, uMist, (uStyle == 2 ? 0.4 : uStyle == 1 ? 0.12 : 0.25) * exp(-(p.y - H) * 0.25));
+    col = mix(col, uMist, (uStyle == 2 ? 0.32 : uStyle == 1 ? 0.1 : 0.18) * exp(-(p.y - H) * 0.25));
     return col;
 }
 
@@ -156,11 +245,11 @@ void main() {
         vec2 cf = fract(vec2(p.x * 1.2, p.y * 3.0)) - 0.5;
         float ph = fract(uRainT * 0.9 + h21(cell));
         float ring = length(cf * vec2(1.0, 0.45)) - ph * 0.5;
-        float rip = sin(ring * 40.0) * exp(-abs(ring) * 18.0) * (1.0 - ph) * step(h21(cell + 5.0), 0.25 + 0.6 * uRain);
+        float rip = sin(ring * 40.0) * exp(-abs(ring) * 18.0) * (1.0 - ph) * step(h21(cell + 5.0), 0.25 + 0.6 * uRain + 0.3 * uFlood);
         // the reflections stretched down the wet street (lights become long streaks), blurred with the depth
         vec2 q = vec2(p.x + rip * 0.08 + 0.05 * sin(p.y * 7.0 + uTime * 0.7), H + depth * 2.2 + 0.4 + rip * 0.1);
         vec3 refl = city(q, 0.3 + depth * 0.1);
-        float k = mix(0.4, 0.8, pud);
+        float k = mix(mix(0.4, 0.8, pud), 0.95, uFlood);
         col = mix(uStreet, refl * 0.9, k);
         col += vec3(0.5) * max(rip, 0.0) * 0.12 * uRain;
         col *= mix(1.0, 0.75, smoothstep(0.0, 4.5, depth));
@@ -173,7 +262,10 @@ void main() {
     // the far rain
     float wpx = 1.1;
     float r = rainLayer(p, 0.33, 2.6, 21.0, 0.25 + 0.55 * uRain, wpx) * 0.55 + rainLayer(p + 13.0, 0.21, 1.9, 15.0, 0.15 + 0.5 * uRain, wpx) * 0.35;
-    col += mix(uMist, vec3(0.9), 0.5) * r * (0.35 + 0.4 * uRain);
+    // the storm: sheets of rain sweeping across in gusts
+    float gust = mix(1.0, 0.35 + 1.6 * smoothstep(-0.2, 0.9, sin(p.x * 0.11 + p.y * 0.04 + uRainT * 1.7) * 0.7 + sin(p.x * 0.05 - uRainT * 0.6) * 0.3), uGust);
+    col += mix(uMist, vec3(0.9), 0.5) * r * (0.35 + 0.4 * uRain) * gust;
+    col += mix(uMist, vec3(0.8), 0.4) * 0.07 * uGust * smoothstep(0.6, 1.4, gust); // the veil of a passing sheet
     if (uWell > 0.5) {
         // the HUD columns veiled a little, the well's backing dark glass
         vec2 lc = vec2(-8.6, 1.8), rc = vec2(8.6, 3.4);
@@ -258,21 +350,27 @@ layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aGeom;   // center x, y (pixels), half size x, y (pixels)
 layout(location = 2) in vec4 aCol;    // sRGB glaze, alpha
 layout(location = 3) in vec4 aP;      // seed, wetness, plain (preview: no water), angle (radians, counterclockwise)
+layout(location = 4) in vec4 aE;      // a heaped tile: the paint dripping onto it from above (rgb, how far it ran)
+layout(location = 5) in vec4 aF;      // its paint left (0 bare .. 1), outside (1: a heaped tile, lit by the street)
 uniform vec2 uRes;
 out vec2 vPix;
-flat out vec4 vGeom, vCol, vP;
+flat out vec4 vGeom, vCol, vP, vE, vF;
 void main() {
     vec2 p = aGeom.xy + aCorner * (max(aGeom.z, aGeom.w) * 1.42 + 1.0);
     vPix = p;
-    vGeom = aGeom; vCol = aCol; vP = aP;
+    vGeom = aGeom; vCol = aCol; vP = aP; vE = aE; vF = aF;
     gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
 }
 )";
 inline const char* TILE_FS = R"(#version 330 core
 in vec2 vPix;
-flat in vec4 vGeom, vCol, vP;
+flat in vec4 vGeom, vCol, vP, vE, vF;
 out vec4 frag;
 uniform float uTime;
+uniform vec2 uLightPx[2];  // the blade signs (pixels): they light the heaped tiles
+uniform vec3 uLightCol[2];
+uniform float uLightR;     // their reach (pixels)
+uniform float uGroundPx;   // the street (pixels): the heaps darken toward it
 uniform vec3 uSheen;   // the street's light caught in the glaze
 uniform vec3 uSheen2;
 uniform float uGlow;
@@ -289,6 +387,24 @@ void main() {
     float cov = clamp(0.5 - sd, 0.0, 1.0);
     if (cov <= 0.0) discard;
     vec3 base = vCol.rgb;
+    bool outside = vF.y > 0.5;
+    vec2 qs = d0 / hs;                       // screen frame: the paint runs down the screen whatever the tile's turn
+    if (outside) {
+        // the rain washes the paint off in vertical runs, the bare ceramic showing through
+        float paint = vF.x;
+        // (washed from the top down, unevenly: a few narrow runs reach further down than the rest)
+        float wc = qs.x * 3.5 + vP.x * 0.71;
+        float th = mix(h(floor(wc) + vP.x), h(floor(wc) + 1.0 + vP.x), smoothstep(0.3, 0.7, fract(wc)));
+        float wash = (1.0 - paint) * 2.4 - 0.5 - 0.9 * th - (qs.y + 1.0) * 0.45;
+        base = mix(base, vec3(0.84, 0.83, 0.8), smoothstep(-0.08, 0.08, wash));
+        // paint from the tile above running down its face in streaks
+        float col4 = floor(qs.x * 2.2 + vP.x * 0.37);
+        float fx = fract(qs.x * 2.2 + vP.x * 0.37);
+        float len = vE.w * (0.5 + 1.3 * h(col4 + vP.x)) * 2.0;
+        float drip = smoothstep(0.38, 0.12, abs(fx - 0.5)) * smoothstep(len, len - 0.15, qs.y + 1.0);
+        drip *= 1.0 + 0.5 * smoothstep(0.2, 0.0, abs(qs.y + 1.0 - len + 0.05)); // a bead at the tip
+        base = mix(base, vE.rgb, clamp(drip, 0.0, 1.0) * 0.85);
+    }
     float rim = smoothstep(-0.16 * hs.x, 0.0, sd);           // the glaze pooling darker at the rim
     vec3 c = base * mix(1.1, 0.82, (q.y + 1.0) * 0.5);
     c *= 1.0 - 0.32 * rim;
@@ -325,6 +441,21 @@ void main() {
         float line = smoothstep(0.07, 0.0, abs(q.x - rx - 0.04 * sin(q.y * 5.0 + s))) * (1.0 - along * 0.6) * step(0.0, along);
         float tip = smoothstep(0.11, 0.0, length(vec2(q.x - rx, (q.y - head) * 0.8)));
         c = mix(c, c * 0.8 + vec3(0.55), (line * 0.3 * float(along > 0.0 || abs(q.y - head) < 0.1) + tip * 0.6) * on);
+    }
+    if (outside) {
+        // lit by the street: darker in the shade of the heap, the blade signs' light spilling on it, a rim on the
+        // side facing each sign
+        vec3 lit = vec3(0.0);
+        for (int i = 0; i < 2; i++) {
+            vec2 toL = uLightPx[i] - vGeom.xy;
+            float dist = length(toL);
+            vec2 dl = toL / max(dist, 1.0);
+            float fall = 1.0 / (1.0 + pow(dist / uLightR, 2.0));
+            float facing = clamp(dot(normalize(d0 + vec2(1e-3)), dl), 0.0, 1.0) * smoothstep(0.55, 0.95, max(abs(qs.x), abs(qs.y)));
+            lit += uLightCol[i] * fall * (0.3 + 1.6 * facing);
+        }
+        float shade = mix(0.55, 1.0, clamp((uGroundPx - vPix.y) / (8.0 * hs.y), 0.0, 1.0));
+        c = c * shade * 0.62 + c * lit * 0.5 + lit * 0.08;
     }
     float a = vCol.a * cov;
     frag = vec4(c * a, a);
