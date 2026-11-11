@@ -1,13 +1,15 @@
 // The demo video, described for tools/demo.py (JSON with // comment lines).
 //
-// The whole song plays once, uncut: video time = song time. The chapters follow each other; each starts with a
-// title card on black (its first `card.bars` bars) and fills the rest with shots, cut on the song's beat grid
-// (a card's length: "bars": N, or "len": "6beats").
+// The whole song plays once, uncut: video time = song time. The chapters follow each other and fill their span
+// with shots, cut on the song's beat grid ("grid": "bar" or "beat"), none shorter than `min_shot`. A chapter may
+// open with a title card on black ("card": {"text", "bars": N or "len": "6beats", "enabled"}); a chapter or a card
+// with "enabled": false is left out (the cards are kept here, off, to turn back on).
 // Times are anchors on the game's analysis of the song (tetris-universe --analysis), never fixed seconds:
 //   start | end | drop:N (the Nth drop) | section:KIND[:N] (INTRO BREAK VERSE BUILD CHORUS DROP OUTRO) | bar:N | 12.5s
 //   then any offsets: "+ 2bars", "- 4beats", "+ 1.5s". A chapter's `end` is snapped to the nearest downbeat.
 // Shots: {"u": "id[:VARIANT]", "len": "4bars" | "6beats" (fixed) or "weight": 2 (a share of what is left),
-//         "start": anchor (pins where the shot begins), "env": {...}, "seed": N}.
+//         "start": anchor (pins where the shot begins), "fade_in": "1bar" (from black), "env": {...}, "seed": N}.
+// "accelerate": R makes a chapter's first shots R times longer than its last ones (whole grid units).
 // A chapter with "fill": true also gets every enabled universe that no chapter names (in `fill_order`, then in
 // registry order), so all of them appear and a new universe shows up without editing this file.
 {
@@ -17,21 +19,22 @@
   "fps": 30,
   "seed": 2026,
   "max_mb": 29.5,
+  "min_shot": "1bar",
 
   // The environment of every shot (the game's test hooks): progression universes on their 50-line reference
   // scale, a short warm-up started on a played-in stack.
   "env": {"ZEN_SCENE_LINES": "50", "ZEN_WARMUP": "10", "ZEN_CLIP_FILL": "1"},
   // Per universe, wherever it appears (a shot's own env overrides it): a nice stage of the progression ones.
   "universe_env": {
-    "gianttree": {"ZEN_GIANTTREE_LINES": "2", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
-    "megacity": {"ZEN_MEGACITY_LINES": "16", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
+    "gianttree": {"ZEN_GIANTTREE_LINES": "8", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
+    "megacity": {"ZEN_MEGACITY_LINES": "8", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
     "orbital": {"ZEN_ORBITAL_LINES": "26"},
     "library": {"ZEN_LIBRARY_LINES": "30"},
     "planks": {"ZEN_PLANKS_LINES": "18", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
     "mycelium": {"ZEN_MYCELIUM_LINES": "10", "ZEN_GROW_RATE": "1.5", "ZEN_WARMUP": "4"},
     "tidepool": {"ZEN_TIDEPOOL_LINES": "16"},
     "lostpanda": {"ZEN_LOSTPANDA_LINES": "20"},
-    "skywhale": {"ZEN_SKYWHALE_LINES": "28", "ZEN_GROW_RATE": "0.75"},
+    "skywhale": {"ZEN_SKYWHALE_LINES": "31", "ZEN_GROW_RATE": "0.75"},
     "bricks": {"ZEN_WARMUP": "40"},
     "docks": {"ZEN_WARMUP": "40"},
     "biome": {"ZEN_WARMUP": "40"},
@@ -46,35 +49,45 @@
   },
 
   "chapters": [
-    {"id": "opening", "end": "section:BREAK",
+    // off: the video starts on the game
+    {"id": "opening", "enabled": false, "end": "section:BREAK",
      "card": {"text": "Tetris Universe", "style": "title"}},
 
-    {"id": "discover", "end": "drop:1 - 2bars",
-     "card": {"text": "Discover many universes", "bars": 2},
-     "grid": "beat", "accelerate": 2.5, "fill": true,
-     "fill_order": ["vector", "sumi", "fluo", "polar", "risograph", "kintsugi", "laser", "abyss", "watercolor",
-                    "prism", "notepad", "lanterns", "heat", "origami", "rainy", "swiss", "marbles", "sonar",
-                    "white_room", "electron", "microscope", "garden16", "smoke", "city", "topography",
-                    "lightsource", "limbo", "recycle", "blueprint", "forest"],
-     "shots": []},
+    // the intro and the verse: strong, distinct looks, 2 bars each, then 1
+    {"id": "discover", "end": "drop:1 - 1bar",
+     "card": {"text": "Discover many universes", "bars": 2, "enabled": false},
+     "grid": "bar", "accelerate": 2,
+     "shots": [{"u": "vector", "fade_in": "1bar"}, {"u": "sumi"}, {"u": "polar"}, {"u": "fluo"}, {"u": "kintsugi"},
+               {"u": "laser"}, {"u": "watercolor"}, {"u": "lanterns"}, {"u": "rainy"}, {"u": "swiss"},
+               {"u": "abyss"}, {"u": "origami"}, {"u": "prism"}]},
 
-    {"id": "listen", "end": "drop:1 + 8bars",
-     // the card ends 2 beats before the drop: the first shot shows its universe, then the drop hitting it
-     "card": {"text": "Listen to your music", "len": "6beats"},
-     "grid": "beat",
-     "shots": [{"u": "bauhaus", "len": "18beats"}, {"u": "manga", "len": "4bars"}]},
-
-    {"id": "build", "end": "section:VERSE:2 - 2bars",
-     "card": {"text": "Build things", "bars": 2},
-     "grid": "beat",
-     "shots": [{"u": "bricks"}, {"u": "planks"}, {"u": "gianttree"}, {"u": "megacity:TWILIGHT"}, {"u": "orbital"},
-               {"u": "library"}, {"u": "docks"}, {"u": "biome"}, {"u": "mycelium"}, {"u": "brutalist"}]},
-
-    {"id": "enjoy", "end": "end",
-     "card": {"text": "Enjoy the experience", "bars": 2},
+    // a bar before the first drop, a universe that reacts to it: the drop lands on it
+    {"id": "listen", "end": "drop:1 + 2bars",
+     "card": {"text": "Listen to your music", "len": "6beats", "enabled": false},
      "grid": "bar",
-     "shots": [{"u": "skyocean"}, {"u": "diorama"}, {"u": "tidepool"}, {"u": "crystal"}, {"u": "lostpanda"},
-               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars"}],
+     "shots": [{"u": "bauhaus"}]},
+
+    // the drop: the montage, a bar each; every universe no chapter names comes here
+    {"id": "montage", "end": "drop:1 + 26bars",
+     "grid": "bar", "accelerate": 2, "fill": true,
+     "fill_order": ["heat", "marbles", "sonar", "notepad", "white_room", "electron", "microscope", "garden16",
+                    "smoke", "city", "topography", "lightsource", "limbo", "recycle", "blueprint", "forest",
+                    "neon", "tiles", "risograph"],
+     "shots": [{"u": "manga"}]},
+
+    {"id": "build", "end": "drop:2",
+     "card": {"text": "Build things", "bars": 2, "enabled": false},
+     "grid": "bar", "accelerate": 2,
+     "shots": [{"u": "bricks"}, {"u": "planks"}, {"u": "gianttree:SUNSET"}, {"u": "megacity:TWILIGHT"},
+               {"u": "orbital"}, {"u": "library"}, {"u": "docks"}, {"u": "biome"}, {"u": "mycelium"},
+               {"u": "brutalist"}]},
+
+    // from the second drop: the 3D beauties, longer, then the whale around the Moon to the end
+    {"id": "enjoy", "end": "end",
+     "card": {"text": "Enjoy the experience", "bars": 2, "enabled": false},
+     "grid": "bar",
+     "shots": [{"u": "tidepool"}, {"u": "skyocean"}, {"u": "diorama"}, {"u": "crystal"}, {"u": "lostpanda"},
+               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 2bars"}],
      "outro": {"fade": "3bars", "title": {"text": "Tetris Universe", "style": "title", "at": "end - 4bars"}}}
   ]
 }
