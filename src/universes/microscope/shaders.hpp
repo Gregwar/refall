@@ -5,7 +5,7 @@
 // drifting in it far from the well) and the well's calm rounded pane; LIFE_FS the creatures (one signed distance per
 // kind: a bean, a blob, a tadpole, a daisy, a rotifer with its two wheels, a volvox ball with its babies, and plain
 // bubbles), toon shaded (a flat color, one cel shadow, a bold outline, a gloss) with big kawaii eyes always upright;
-// PIECE_FS the pieces (one plump jelly cell per block, one color per type, a gloss, nothing inside); FINAL_FS the
+// PIECE_FS the pieces (one picture-book cell per block: a pale membrane, a bright cytoplasm, one big soft nucleus); FINAL_FS the
 // eyepiece (the round dish in its thick toy rim, on the variant's table color) and the frame. The water and the
 // creatures' colors come from the variant's own palette and the drop's, soaking in unevenly (stainK).
 #include <string>
@@ -102,7 +102,7 @@ in vec2 vL;
 in vec2 vWorld;
 flat in vec4 vA, vB, vC, vD, vE;
 out vec4 frag;
-uniform float uGlow;
+uniform float uGlow, uPane;           // uPane: the well's pane hides what passes behind it
 uniform vec3 uEyeInk, uBlush;
 float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
 float sdRoundCone(vec2 p, vec2 a, vec2 b, float r1, float r2) {
@@ -174,6 +174,8 @@ void main() {
     float d = body(q);
     float aa = max(length(fwidth(q)) * 0.7, 1e-4);
     float cov = 1.0 - smoothstep(-aa, aa, d);
+    float dw = sdRoundBox(vWorld - vec2(0.0, 0.15), vec2(5.24, 10.37), 0.45);
+    if (kind != 6) cov *= 1.0 - uPane * (1.0 - smoothstep(-0.02, 0.06, dw));   // (the hard drop's bubbles stay)
     if (cov <= 0.0) discard;
     float k = stainK(vWorld);
     vec3 col = mix(vC.rgb, vD.rgb, k);
@@ -309,20 +311,20 @@ void main() {
     int type = int(vB.x + 0.5);
     float t = vB.z;
     const float GAP = 0.045;
-    float sc = 1.0, rc = 0.22;
+    float sc = 1.0, rc = 0.28;
     vec2 off = vec2(0.0);
     if (kind == 2) {
         // popping: it puffs up a little into a ball, then shrinks away
         float up = smoothstep(0.0, 0.35, t), down = smoothstep(0.3, 1.0, t);
         sc = (1.0 + 0.1 * up) * (1.0 - down * down);
-        rc = mix(0.2, 0.45, up);
+        rc = mix(0.28, 0.45, up);
     }
     if (kind == 3) {
         // deflating: it sags and shrinks
         float e = smoothstep(0.0, 1.0, t);
         sc = 1.0 - 0.3 * e;
         off = vec2(0.0, -0.14 * e);
-        rc = mix(0.2, 0.32, e);
+        rc = mix(0.28, 0.36, e);
     }
     if (sc <= 0.01) discard;
     float d = sdRoundBox((p - off) / sc, vec2(0.5 - GAP), rc) * sc;
@@ -337,21 +339,28 @@ void main() {
         frag = vec4(col * a, a);
         return;
     }
-    // a jelly cell: plump (a pillow normal), one cel shadow, a gloss, a bold outline in a deep shade of its color
+    // a picture-book cell: a pale, translucent membrane, a bright cytoplasm lighter toward its middle, one big soft
+    // nucleus, a bold outline in a deep shade of its color
+    vec2 q = (p - off) / sc;
+    float in_ = -d / sc;
     vec2 g = vec2(dFdx(d), dFdy(d));
     vec2 n = g / max(length(g), 1e-6);
-    float tin = smoothstep(0.0, 0.16, -d);
-    vec3 N = normalize(vec3(n * (1.0 - tin), 0.35 + tin));
-    float dif = dot(N, normalize(vec3(-0.5, 0.62, 0.6)));
-    vec3 c = mix(col * vec3(0.72, 0.68, 0.86), col, smoothstep(0.18, 0.26, dif));
-    c *= 1.0 + 0.1 * smoothstep(-0.3, 0.4, p.y);
-    vec2 hp = (p - off) / sc - vec2(-0.15, 0.17);
-    hp = mat2(0.87, 0.5, -0.5, 0.87) * hp;
-    float gloss = 1.0 - smoothstep(-0.12, 0.05, length(hp / vec2(0.17, 0.085)) - 1.0);
-    c = mix(c, vec3(1.0), gloss * 0.6);
+    float cyto = smoothstep(0.12, 0.17, in_);
+    vec3 cy = col * (0.86 + 0.26 * (1.0 - smoothstep(0.0, 0.4, length(q - vec2(-0.07, 0.07)))));
+    vec3 mem = mix(col, vec3(1.0), 0.42);
+    vec3 c = mix(mem, cy, cyto);
+    // the membrane catches the light on its upper left
+    float lit = smoothstep(0.1, 0.6, dot(n, normalize(vec2(-0.6, 0.8))));
+    c = mix(c, vec3(1.0), (1.0 - cyto) * lit * 0.45);
+    // the nucleus: one soft round blob, a little off center, deeper in tone
+    vec2 nq = (q - vec2(0.04, -0.04)) / vec2(0.2, 0.18);
+    float nd = length(nq) - 1.0;
+    float nuc = 1.0 - smoothstep(-0.3, 0.12, nd);
+    vec3 nc = mix(col * 0.64, uEyeInk, 0.06) * (1.0 + 0.25 * (1.0 - smoothstep(0.0, 1.0, length(nq + vec2(0.35, -0.35)))));
+    c = mix(c, nc, nuc * 0.9);
     c = mix(c, vec3(1.0), vC.x * 0.35);
     c = mix(c, mix(col * 0.34, uEyeInk, 0.3), smoothstep(-0.05 - aa, -0.05 + aa, d));
-    float a = cov * vB.w;
+    float a = cov * vB.w * mix(0.82, 1.0, max(cyto, smoothstep(-0.07, -0.03, d)));
     if (kind == 2) {
         c = mix(c, vec3(1.0), 0.25 * smoothstep(0.0, 0.4, t));
         a *= 1.0 - smoothstep(0.7, 1.0, t);

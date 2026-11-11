@@ -5,8 +5,8 @@
 // drifting in it and a few big bubbles rising slowly at the sides. The well is a calm rounded pane of a quieter tone
 // (deeper on the dark waters, paler on the light ones), its edge one soft line, so the stack always reads.
 //
-// The pieces are jelly cells: one plump rounded square per block, one clean color per type, a cel shadow, a white
-// gloss and a bold outline in a deep shade of its own color; nothing inside them. The falling piece is exactly a
+// The pieces are picture-book living cells: one soft rounded square per block, one clean color per type, a pale
+// translucent membrane, a bright cytoplasm and one big soft nucleus, a bold outline in a deep shade of its own color. The falling piece is exactly a
 // locked one, the ghost a faint outline, the previews the same cells.
 //
 // The dish starts empty at the start of a song and fills with life as the rows clear: each cleared row pops its cells
@@ -339,7 +339,7 @@ void MicroscopeUniverse::setSong(const SongLook& t, float seconds) {
     p.line = V.light ? lerp(p.water[2], lin(V.inkIn), 0.35f) : lerp(p.water[0], vec3(1.f), 0.25f);
     p.eyeInk = lin(0x1a1028);
     p.blush = lin(0xff6f8e);
-    p.night = V.light ? vec3(0.3f, 0.36f, 0.78f) : vec3(0.6f, 0.72f, 1.35f);
+    p.night = V.light ? vec3(0.26f, 0.36f, 0.95f) : vec3(0.3f, 0.52f, 1.8f);
     const bool instant = !colorsSet_ || seconds <= 0.1f;
     if (instant) {
         pal_ = palT_;
@@ -1191,6 +1191,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progLife_);
         setPalette(progLife_);
         set1f(progLife_, "uGlow", 1.f + 0.06f * wp + 0.12f * swell_);
+        set1f(progLife_, "uPane", bare_ ? 0.f : 1.f - bridgeK);
         drawInst(progLife_, lifeVao_, lifeVbo_, lifeBack_.data(), lifeBack_.size() * sizeof(LInst), lifeBack_.size());
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
