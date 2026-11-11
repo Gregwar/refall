@@ -180,11 +180,11 @@ missing from it still works with a generic layout.
 
 ## Tools
 
-- `zenscope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
+- `tetris-universe-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
   notes on it.
-- `zenscene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
+- `tetris-universe-scene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
 
-Both come with the package (`uvx --from tetris-universe zenscope`). Every option, the tools and how the music drives the
+Both come with the package (`uvx --from tetris-universe tetris-universe-scope`). Every option, the tools and how the music drives the
 game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source

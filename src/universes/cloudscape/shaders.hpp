@@ -424,7 +424,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- flat triangles (zenscene's panels)
+// ---------------------------------------------------------------- flat triangles (tetris-universe-scene's panels)
 
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;

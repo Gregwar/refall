@@ -11,7 +11,7 @@ Node.js, and Node.js is picked up automatically). Songs are downloaded when queu
 
 ```sh
 ./build/tetris-universe "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
-./build/zenscope "https://www.youtube.com/watch?v=..."
+./build/tetris-universe-scope "https://www.youtube.com/watch?v=..."
 ```
 
 Options: `--in-order` (play songs in order: folders alphabetically, playlists in their order; the default is a random order), `--seed N` (repeat a run), `--universe NAME[:VARIANT]` (play every song in that universe, e.g. `--universe vector`
@@ -33,9 +33,9 @@ or discuss further.
 `tools/promo.py [OUT.mp4]` makes a promo video: 5 random songs of the default playlist, each recorded around its
 first drop in its universe, stitched with crossfades (`--songs N`, `--before`, `--after`, `--fade`, `--size`).
 
-## zenscope: see what the game hears
+## tetris-universe-scope: see what the game hears
 
-`./build/zenscope [songs or folders...]` (the default playlist when no song is given) plays a song and shows the analysis that drives the game:
+`./build/tetris-universe-scope [songs or folders...]` (the default playlist when no song is given) plays a song and shows the analysis that drives the game:
 - a phase timebar with the scene levels (calm / mid / peak) and where the scene changes happen
 - the detected structure: intro, verse, build, chorus, drop, break, outro, with similar parts grouped
 - pulse zones, a 16-band spectrum, loudness, intensity and onsets, and bar lines
@@ -59,11 +59,11 @@ They show as cyan flags on the timeline, with their text in the detail view.
 `ytdl:<video id>` plays a single YouTube song, and `--shuffle` plays the songs in a random order. Playlist listings are cached (and refreshed in the background for the
 next run) and songs stay downloaded in the cache, so reopening an annotated song is instant and works offline.
 
-The game and zenscope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
+The game and tetris-universe-scope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
 
-## zenscene: look at universes and transitions
+## tetris-universe-scene: look at universes and transitions
 
-`./build/zenscene [UNIVERSE[:VARIANT]]` shows a universe while the computer plays (`--list` prints the universes
+`./build/tetris-universe-scene [UNIVERSE[:VARIANT]]` shows a universe while the computer plays (`--list` prints the universes
 and their variants). The menu on the left picks the universe, its variant, the song phase (section and level:
 calm, mid, peak) and the transition used for the next change of universe (AUTO picks one as the game does). Up/Down
 choose a row, Left/Right (or a click / the mouse wheel) change it: a new universe or variant comes in with that

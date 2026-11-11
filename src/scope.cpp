@@ -1,7 +1,7 @@
-// zenscope: shows what Tetris Universe "hears" in a song — structure (segments, groups), scene levels and
+// tetris-universe-scope: shows what Tetris Universe "hears" in a song — structure (segments, groups), scene levels and
 // changes, pulse zones, spectrum, loudness / intensity / onsets and the beat grid — while playing it.
 //
-//   zenscope [--song ID|TITLE] [--at SEC] [songs or folders...]   (default: the built-in playlist)
+//   tetris-universe-scope [--song ID|TITLE] [--at SEC] [songs or folders...]   (default: the built-in playlist)
 //   SPACE play/pause, LEFT/RIGHT seek 5 s, UP/DOWN zoom the detail view, N/P next/previous song,
 //   click the overview or the detail view to seek, 1-4 or click a sample button to hear it,
 //   click X0.9 / X0.5 (top right) to slow the song down, ESC quits.
@@ -377,12 +377,12 @@ void Scope::onTrackReady(std::shared_ptr<Track> t) {
     samples_ = extractSamples(*t);
     sampleStarted_.assign(samples_.size(), -1e9);
     for (const SongSample& sm : samples_)
-        std::printf("[zenscope] sample %-4s %s-%s  %d beat(s)  score %.2f  %s\n", sampleName(sm.kind), mmss(sm.start).c_str(),
+        std::printf("[tetris-universe-scope] sample %-4s %s-%s  %d beat(s)  score %.2f  %s\n", sampleName(sm.kind), mmss(sm.start).c_str(),
                     mmss(sm.end).c_str(), sm.beats, sm.score, sm.why.c_str());
     loadNotes();
     audio_.play(track_);
     audio_.setPaused(paused_);
-    std::printf("[zenscope] %s: %zu segments, %zu scene phases, %zu pulse zones\n", t->title.c_str(),
+    std::printf("[tetris-universe-scope] %s: %zu segments, %zu scene phases, %zu pulse zones\n", t->title.c_str(),
                 an.segments.size(), plan_.phases.size(), plan_.pulseZones.size());
 }
 
@@ -413,7 +413,7 @@ void Scope::saveNote() {
     fs::create_directories(fs::path(notesPath_).parent_path(), ec);
     FILE* f = std::fopen(notesPath_.c_str(), "ab");
     if (!f) {
-        std::fprintf(stderr, "[zenscope] cannot write %s\n", notesPath_.c_str());
+        std::fprintf(stderr, "[tetris-universe-scope] cannot write %s\n", notesPath_.c_str());
         return;
     }
     char date[32];
@@ -436,7 +436,7 @@ void Scope::saveNote() {
     std::fprintf(f, "]}\n");
     std::fclose(f);
     notes_.push_back({t, draft_});
-    std::printf("[zenscope] note at %s: %s\n", mmss(t).c_str(), draft_.c_str());
+    std::printf("[tetris-universe-scope] note at %s: %s\n", mmss(t).c_str(), draft_.c_str());
     flash_ = "NOTE SAVED AT " + mmss(t);
     flashUntil_ = glfwGetTime() + 2.5;
 }
@@ -900,8 +900,8 @@ int Scope::run(int argc, char** argv) {
         else if (a == "--shuffle") shuffle = true;
         else if (a == "--hidden") hidden = true;
         else if (a == "-h" || a == "--help") {
-            std::printf("usage: zenscope [options] [songs or folders...]\n"
-                        "  (default: the same built-in YouTube playlist as zentris; ytdl:<video id> plays one\n"
+            std::printf("usage: tetris-universe-scope [options] [songs or folders...]\n"
+                        "  (default: the same built-in YouTube playlist as tetris-universe; ytdl:<video id> plays one\n"
                         "   YouTube song)\n"
                         "  --song ID|TITLE   start at this song (YouTube id, or part of the title)\n"
                         "  --at SEC          start at this time\n"
@@ -913,7 +913,7 @@ int Scope::run(int argc, char** argv) {
             return 0;
         } else paths.push_back(a);
     }
-    // No songs given: the default playlist (same as zentris).
+    // No songs given: the default playlist (same as tetris-universe).
     if (paths.empty()) paths.push_back(DEFAULT_PLAYLIST);
     Library lib;
     lib.scan(paths);
@@ -934,12 +934,12 @@ int Scope::run(int argc, char** argv) {
             if (key == song || key == "ytdl:" + song || title.find(q) != std::string::npos) first = (int)i;
         }
         if (first < 0) {
-            std::fprintf(stderr, "[zenscope] no song matches \"%s\"; trying it as a YouTube id\n", song.c_str());
+            std::fprintf(stderr, "[tetris-universe-scope] no song matches \"%s\"; trying it as a YouTube id\n", song.c_str());
             files_.insert(files_.begin(), youtubeEntryForId(song));
             first = 0;
         }
     }
-    std::printf("[zenscope] notes: %s\n", notesPath_.c_str());
+    std::printf("[tetris-universe-scope] notes: %s\n", notesPath_.c_str());
 
     if (!glfwInit()) return 1;
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -1052,7 +1052,7 @@ int Scope::run(int argc, char** argv) {
             glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
             for (int y = 0; y < h; y++) std::memcpy(&fl[(size_t)y * w * 3], &px[(size_t)(h - 1 - y) * w * 3], w * 3);
             stbi_write_png(shotPath.c_str(), w, h, 3, fl.data(), w * 3);
-            std::printf("[zenscope] wrote %s\n", shotPath.c_str());
+            std::printf("[tetris-universe-scope] wrote %s\n", shotPath.c_str());
             break;
         }
         glfwSwapBuffers(win_);
