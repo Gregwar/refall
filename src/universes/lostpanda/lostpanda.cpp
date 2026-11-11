@@ -11,8 +11,12 @@
 //
 // The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
-// The lines cleared set where the cub should be (the stages at 0, 13, 26, 38, 50, 63, 76 and 89 lines, the family at
-// 100). A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
+// The lines cleared set where the cub should be (the stages at 0, 7, 13, 19, 25, 32, 38 and 45 lines, the family at
+// 50, within a song): the stairs at about 11-12 lines, the platform's end at about 19, the terminus at 25. The
+// subway runs on its own timetable, whatever the cub does: a train glides in, waits with its doors open, leaves;
+// the cub boards if it is at the platform's end then, else it misses it (it watches it go, sad) and takes the next
+// one, under 30 seconds later (a train every 38 s or so). The ride runs on the train's clock; lines cleared meanwhile are banked, and the cub
+// walks on with them from the terminus. A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
 // and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
 // bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
 // wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
@@ -86,13 +90,18 @@ int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT;
 
 // ---- The way home: one continuous world. The cub's place along it is its world x (board units).
 constexpr int STAGES = 8;
-const int LINES_AT[STAGES + 1] = {0, 13, 26, 38, 50, 63, 76, 89, 100};
+const int LINES_AT[STAGES + 1] = {0, 7, 13, 19, 25, 32, 38, 45, 50};
 constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
 const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
 constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
 constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
 constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
+// The subway's timetable (seconds): a train every 38 s or so, whatever the cub does. Between two trains, a gap;
+// then one glides in, opens its doors, waits, closes them and leaves (into the tunnel, with the cub or without it).
+constexpr float T_GAP = 8.f, T_ARRIVE_S = 10.f, T_DOOR_S = 1.2f, T_DWELL = 9.f, T_OUT_S = 10.f;
+constexpr float T_RIDE_S = 36.f;                     // the ride, door to door
+double rideF(double u) { u = std::clamp(u, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
 
 double wayOf(double lines) {
     if (lines <= 0) return 0.0;
@@ -679,6 +688,18 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
             act_ = A_HUG; actT_ = std::max(actT_, 0.7f); actDur_ = std::max(actDur_, 9.f);
         }
     }
+    // a missed train: it watches it pull out into the tunnel, then its head drops, a tear, it sits to wait
+    if (missedT_ > 0.f && overT_ < 0.f && !travelling) {
+        const float m = missedT_;
+        t.turn = m < 4.f ? 0.85f : 0.3f; t.lookX = 1.f; t.lookY = m < 4.f ? 0.f : -0.8f;
+        t.tilt = m < 1.5f ? 0.08f : -0.16f;
+        t.tear = (m > 2.5f && m < 7.f) ? 1.f : 0.f;
+        t.wipe = (m > 6.f && m < 8.f) ? 1.f : 0.f;
+        t.sit = (m > 4.f && m < 11.f) ? 1.f : 0.f;
+        t.mood = std::min(t.mood, 0.15f);
+        t.joyEyes = 0.f; t.hop = 0.f; t.arms = 0.f;
+        actT_ = 0.f; act_ = A_STAND; actDur_ = 2.f;
+    }
     // munching a snack: paws at its mouth, happy
     t.munch = munchT_ > 0.f ? 1.f : 0.f;
     if (munchT_ > 0.f) { t.joyEyes = std::max(t.joyEyes, 0.45f); t.wipe = 0.f; t.tear = 0.f; t.arms = 0.f; }
@@ -1110,92 +1131,125 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             stroll_ = creep_ = P_;
             linesWalk_ = lines;
             noticeT_ = arriveT_ = 0.f;
-            // the train where it should be
-            boardT_ = leaveT_ = trainT_ = 0.f;
-            if (P_ >= XA + 3.0) { train_ = T_GONE; trainX_ = -1000.0; door_ = 0.f; }
-            else if (P_ >= XA - 0.05) { train_ = T_TERM; trainX_ = XA - DOOR; door_ = 1.f; }
-            else if (P_ > XB - 0.7) { train_ = T_RIDE; trainX_ = P_ - DOOR; door_ = 0.f; }
-            else if (P_ >= 90.0) { train_ = T_WAIT; trainX_ = XB - DOOR; door_ = 1.f; }
-            else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
+            // the train where it should be: gone, or the cub riding it, or its timetable starting afresh
+            boardT_ = leaveT_ = trainT_ = missedT_ = 0.f;
+            if (P_ >= XA - 0.05) { train_ = T_GONE; trainX_ = -1000.0; door_ = 0.f; P_ = std::max(P_, XA + 1.2); }
+            else if (P_ > XB - 1.0) {
+                // riding: find where the ride is from where the lines put the cub
+                const double want = (P_ - XB) / (XA - XB);
+                double lo = 0.0, hi = 1.0;
+                for (int i = 0; i < 40; i++) { const double m = 0.5 * (lo + hi); (rideF(m) < want ? lo : hi) = m; }
+                train_ = T_RIDE; rideT_ = (float)(lo * T_RIDE_S); door_ = 0.f;
+                trainX_ = XB - DOOR + (XA - XB) * rideF(lo);
+                P_ = trainX_ + DOOR;
+            } else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
+            C_ = std::min(P_, C_END);
+            camY_ = (float)(pathY(P_) - GY0);
             placed_ = true;
         }
         lineDelay_ -= wdt;
         if (lineDelay_ <= 0.f) linesWalk_ = lines_;
         lineTarget_ = linesWalk_ >= LINES_AT[STAGES] ? pEnd_ : wayOf(linesWalk_);
+        // where the lines would take the cub; the train decides the rest: it waits for a train at the platform's end,
+        // steps in while the doors are open, rides (the train's clock, not the lines), steps out at the terminus;
+        // lines cleared meanwhile are banked: it walks on with them afterwards
+        const bool riding = train_ == T_RIDE;
         double target = lineTarget_;
-        double cap = pEnd_;   // how far the cub may go now (the gates below)
-        // a stroll (on foot, in the open), the train creeping on between clears
+        double cap = pEnd_;
         const bool onFoot = P_ < 78.0 || (P_ > XA + 2.0 && P_ < C_END - 2.0);
         if (onFoot) target = std::max(target, std::min(stroll_, lineTarget_ + 1.3));
-        const bool riding = train_ == T_RIDE;
-        if (riding) creep_ = std::min(std::max(creep_, P_) + wdt * 1.1, std::min(lineTarget_ + 12.0, XA));
-        else creep_ = P_;
-        if (riding) target = std::max(target, creep_);
-        // gates: the train must be there with its doors open, closed before it leaves, open at the terminus
-        if (P_ < XB - 0.5 && !(train_ == T_WAIT && door_ > 0.95f)) cap = std::min(cap, XB - 1.0);
-        if (train_ == T_WAIT) cap = std::min(cap, XB);
-        if (P_ < XA + 0.5 && !(train_ == T_TERM && door_ > 0.95f)) cap = std::min(cap, XA);
+        if (P_ < XB - 0.03) {
+            // before the train: as far as the platform's end, and in through the doors if they are open
+            cap = XB - 1.0;
+            if (train_ == T_WAIT && door_ > 0.95f && trainT_ < T_DOOR_S + T_DWELL && lineTarget_ >= XB - 1.01) { target = XB; cap = XB; }
+            if (P_ > XB - 0.9) { target = XB; cap = XB; }                     // (mid-step: it finishes the step)
+        } else if (P_ < XA - 0.05) {
+            target = cap = P_;                                                // aboard: the train carries it
+        } else {
+            // the terminus: out onto the platform when the doors open, then on with the banked lines
+            target = std::max(target, XA + 1.2);
+            if (train_ == T_TERM && door_ < 0.95f && P_ < XA + 0.5) cap = XA;
+        }
         // the end: the cub sees its family, stops a moment, then runs to them
         if (linesWalk_ >= LINES_AT[STAGES] && P_ >= C_END - 0.1) noticeT_ += wdt;
         if (noticeT_ < 1.8f) cap = std::min(cap, C_END);
         target = std::min(target, cap);
-        if (overT_ >= 0.f) target = P_;
+        if (overT_ >= 0.f && !riding) target = std::min(target, P_);
         const double dist = target - P_;
         const float mood = kid_.mood;
-        const bool lineWalk = lineTarget_ - P_ > 0.05 || (riding && dist > 0.05);
-        double vmax = lineWalk ? lerpf(1.5f, 2.6f, mood) + std::min(2.2, std::max(0.0, dist - 6.0) * 0.25) : 0.45;
+        const bool lineWalk = dist > 0.05;
+        // a calm pace: a stroll, a walk, a brisk walk when it has a long way to make up (never a dash)
+        double vmax = lineWalk ? std::min(3.0, lerpf(1.5f, 2.4f, mood) + std::min(0.8, std::max(0.0, dist - 6.0) * 0.08)) : 0.45;
         if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
-        if (riding) vmax = 6.5;                                                // the train
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
         if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
         { // (testing: with ZEN_GROW_RATE the cub keeps up with the growing lines)
             static const double grow = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
-            if (!riding) vmax += grow * 3.0;
-            else vmax += grow * 6.0;
+            vmax += grow * 2.5;
         }
-        const double want = std::clamp(dist * (riding ? 0.7 : 1.1), 0.0, vmax);
-        vel_ += (want - vel_) * (1.0 - std::exp(-(riding ? 1.2 : 2.6) * wdt));
-        if (dist < 0.002 && vel_ < 0.02) vel_ = 0.0;
-        {
+        if (!riding) {
+            const double want = std::clamp(dist * 1.1, 0.0, vmax);
+            vel_ += (want - vel_) * (1.0 - std::exp(-2.6 * wdt));
+            if (dist < 0.002 && vel_ < 0.02) vel_ = 0.0;
             const double before = P_;
             P_ += vel_ * wdt;
             if (P_ > cap) { P_ = std::max(before, cap); vel_ = 0.0; }   // never past a gate
         }
-        speed = (float)vel_;
-        travelling = (lineWalk || vel_ > 0.12) && !riding;
-        // the train
+        // the train, on its own clock
+        trainT_ += wdt;
         switch (train_) {
         case T_AWAY:
             trainX_ = XB - DOOR - 160.0;
-            if (P_ >= 90.0) { train_ = T_ARRIVE; trainT_ = 0.f; }
+            door_ = 0.f;
+            if (trainT_ >= T_GAP) { train_ = T_ARRIVE; trainT_ = 0.f; }
             break;
         case T_ARRIVE: {
-            trainT_ += wdt;
-            const double u = std::min(1.0, trainT_ / 10.0);
+            const double u = std::min(1.0, trainT_ / (double)T_ARRIVE_S);
             trainX_ = XB - DOOR - 130.0 * (1.0 - u) * (1.0 - u);
-            if (u >= 1.0) { train_ = T_WAIT; trainT_ = 0.f; boardT_ = 0.f; }
+            if (u >= 1.0) { train_ = T_WAIT; trainT_ = 0.f; }
             break;
         }
-        case T_WAIT:
+        case T_WAIT: {
             trainX_ = XB - DOOR;
-            if (P_ >= XB - 0.03) boardT_ += wdt;
-            door_ = std::clamp(door_ + wdt / 1.2f * (boardT_ > 1.0f ? -1.f : 1.f), 0.f, 1.f);
-            if (boardT_ > 1.0f && door_ <= 0.f) train_ = T_RIDE;
+            const bool stepping = P_ > XB - 0.95 && P_ < XB - 0.03;          // (the doors wait for a cub mid-step)
+            if (stepping && trainT_ > T_DOOR_S + T_DWELL - 0.5f) trainT_ = T_DOOR_S + T_DWELL - 0.5f;
+            const bool closing = trainT_ > T_DOOR_S + T_DWELL;
+            door_ = std::clamp(door_ + wdt / T_DOOR_S * (closing ? -1.f : 1.f), 0.f, 1.f);
+            if (closing && door_ <= 0.f) {
+                if (P_ >= XB - 0.03) { train_ = T_RIDE; rideT_ = 0.f; }
+                else {
+                    train_ = T_OUT; trainT_ = 0.f;
+                    if (P_ > 92.0) missedT_ = 0.001f;                        // it missed it
+                }
+            }
             break;
-        case T_RIDE:
-            trainX_ = P_ - DOOR;
+        }
+        case T_OUT: {
+            // leaving without the cub, into the tunnel ahead; the next one comes after the gap
+            const double u = std::min(1.0, trainT_ / (double)T_OUT_S);
+            trainX_ = XB - DOOR + 150.0 * u * u;
+            if (u >= 1.0) { train_ = T_AWAY; trainT_ = 0.f; }
+            break;
+        }
+        case T_RIDE: {
+            rideT_ += wdt;
+            const double u = rideT_ / T_RIDE_S;
+            const double x = XB - DOOR + (XA - XB) * rideF(u);
+            vel_ = (x - trainX_) / std::max((double)wdt, 1e-4);
+            trainX_ = x;
             door_ = 0.f;
-            if (P_ >= XA - 0.03) { train_ = T_TERM; leaveT_ = 0.f; }
+            P_ = trainX_ + DOOR;
+            if (u >= 1.0) { train_ = T_TERM; leaveT_ = 0.f; P_ = XA; vel_ = 0.0; }
             break;
+        }
         case T_TERM:
             trainX_ = XA - DOOR;
-            if (P_ > XA + 1.2) leaveT_ += wdt;
+            if (P_ > XA + 1.15) leaveT_ += wdt;
             door_ = std::clamp(door_ + wdt / 1.0f * (leaveT_ > 0.5f ? -1.f : 1.f), 0.f, 1.f);
             if (leaveT_ > 0.5f && door_ <= 0.f) { train_ = T_LEAVE; trainT_ = 0.f; }
             break;
         case T_LEAVE: {
-            trainT_ += wdt;
             const double u = trainT_ / 14.0;
             trainX_ = XA - DOOR - 170.0 * u * u;
             if (u >= 1.0) train_ = T_GONE;
@@ -1203,18 +1257,23 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
         default: trainX_ = -1000.0; break;
         }
+        if (missedT_ > 0.f) missedT_ += wdt;
+        if (missedT_ > 12.f || P_ >= XB - 0.03) missedT_ = 0.f;
+        speed = (float)std::min(vel_, 3.0);
+        travelling = !riding && (lineWalk || vel_ > 0.12);
         { // (testing: ZEN_LOSTPANDA_TRAINX=X holds the train with its rear at screen x X, both cabs in view)
             static const char* tx = std::getenv("ZEN_LOSTPANDA_TRAINX");
             if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
         }
         // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
         const double cT = std::min(P_, C_END);
-        C_ += (cT - C_) * (1.0 - std::exp(-(riding ? 2.5 : 1.1) * wdt));
-        camY_ = approach(camY_, (float)(pathY(P_) - GY0), riding ? 3.f : 1.6f, wdt);
+        const bool ridingNow = train_ == T_RIDE;
+        C_ += (cT - C_) * (1.0 - std::exp(-(ridingNow ? 2.5 : 1.1) * wdt));
+        camY_ = approach(camY_, (float)(pathY(P_) - GY0), ridingNow ? 3.f : 1.6f, wdt);
         // the walk cycle: steps follow the ground covered (not while riding)
         const float stride = 0.32f * kidH_;
-        if (!riding) kid_.phase += (float)(vel_ * wdt) * TAU / stride;
-        kid_.walk = approach(kid_.walk, riding ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
+        if (!ridingNow) kid_.phase += (float)(vel_ * wdt) * TAU / stride;
+        kid_.walk = approach(kid_.walk, ridingNow ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
         reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
         strength_ = approach(strength_, (float)smd(20.0, C_END - 30.0, P_), 0.5f, wdt);
         munchT_ = std::max(0.f, munchT_ - wdt);
