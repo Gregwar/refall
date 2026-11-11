@@ -63,13 +63,23 @@ private:
     struct Sprout { float x, z, age, seed; };
     std::vector<Sprout> sprouts_;
     void addSeed(const vec3& from);
-    bool pickOutside(vec3& at);           // a spot on the sill or the wall already reclaimed, beside the well
-    std::vector<vec4> blooms_;            // the clears' blooms outside the jar: x, y, z, age
-    int bloomNext_ = 0;
-    float corkA_ = 0.f;                   // the cork's pop, eased 0..1
-    // the growth out of the jar (see render)
-    float treeG_ = 0.f, inVine_ = 0.f, spill_ = 0.f, sillR_ = 0.9f, climb_ = 0.f, wallR_ = 0.f, hang_ = 0.f, drape_ = 0.f,
-          bloomAmt_ = 0.f, swarm_ = 0.f;
+    float inVine_ = 0.f;                  // vines up the inside of the first jar's glass
+    // ---- The network: more jars around the first, glass tubes between them (see terrarium.cpp)
+    struct NetTube { vec3 a, b, c; float r, birth; bool water; int from, to; };
+    std::vector<NetTube> tubes_;
+    int tubesFor_ = -1;                   // the variant they were built for
+    void buildNetwork();
+    vec3 jarFoot(int k) const;            // where another jar stands now (it is set down gently when it appears)
+    vec3 neckOf(int k) const;             // the top of its cork (k = -1: the first jar's)
+    float jarAppear(int k) const;
+    bool pickNetSpot(vec3& at);           // a seed's landing: the soil of a recent jar beside the well
+    // the beetle's trips through the tube to the next jar: 0 at home, 1 in the tube, 2 in the other jar
+    int bugMode_ = 0, bugPhase_ = 0;
+    float bugU_ = 0.f, bugT_ = 0.f, bugCool_ = 20.f;
+    bool bugGoing_ = false, bugBack_ = false;
+    vec3 bugP_{0, 0, 0};
+    float bugHead_ = 0.f, bugSpeed_ = 0.f;
+    void updateTrip(float dt);
     bool pickSpot(float& x, float& z, float clearance);
     float soilHeight(float x, float z) const; // the same function as the shader's
     bool blocked(float x, float z, float r) const;
