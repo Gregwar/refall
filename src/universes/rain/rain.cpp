@@ -835,12 +835,12 @@ void RainUniverse::physicsStep(float h) {
         corners(A, P);
         const float dir = A.side == 0 ? -1.f : 1.f;
         if (!A.inBand && dir * A.x > bandIn_ + A.half * 1.5f) bodies_[i].inBand = true;
+        if (!A.inBand && !A.fading && A.y < ground_ + 1.2f && std::fabs(A.x) > 5.6f) { bodies_[i].fading = true; bodies_[i].fadeRate = 1.5f; } // fell short
         const float outW = A.side == 0 ? leftOut_ : bandOut_;
         for (auto& c : P) {
             if (c[1] < ground_) cs.push_back({i, -1, c[0], c[1], 0.f, 1.f, ground_ - c[1], 0, 0, 0, 0, 0});
             const float in = dir * c[0] - bandIn_, out = outW - dir * c[0];
-            // (a tile that fell short of its band, under the HUD's columns, is pushed out to it along the street)
-            if (!A.inBand && !(std::fabs(A.x) > 5.6f && A.y < -6.9f)) continue;
+            if (!A.inBand) continue;
             if (in < 0.f) cs.push_back({i, -1, c[0], c[1], dir, 0.f, -in, 0, 0, 0, 0, 0});
             if (out < 0.f) cs.push_back({i, -1, c[0], c[1], -dir, 0.f, -out, 0, 0, 0, 0, 0});
         }
@@ -854,8 +854,8 @@ void RainUniverse::physicsStep(float h) {
         }
     }
     // masses (a sleeping box is static), a hard hit wakes it
-    auto invM = [&](int i) { return i < 0 || bodies_[i].asleep ? 0.f : 1.f; };
-    auto invI = [&](int i) { return i < 0 || bodies_[i].asleep ? 0.f : 6.f / (4.f * bodies_[i].half * bodies_[i].half); };
+    auto invM = [&](int i) { return i < 0 ? 0.f : 1.f; };
+    auto invI = [&](int i) { return i < 0 ? 0.f : 6.f / (4.f * bodies_[i].half * bodies_[i].half); };
     auto velAt = [&](int i, float px, float py, float& vx, float& vy) {
         if (i < 0) { vx = vy = 0.f; return; }
         const Body& b = bodies_[i];
@@ -868,9 +868,8 @@ void RainUniverse::physicsStep(float h) {
         velAt(c.j, c.px, c.py, vjx, vjy);
         const float vn = (vix - vjx) * c.nx + (viy - vjy) * c.ny;
         for (int k : {c.i, c.j})
-            if (k >= 0 && bodies_[k].asleep && vn < -0.6f) { bodies_[k].asleep = false; bodies_[k].still = bodies_[k].awake = 0.f; }
         c.bias = 0.2f / h * std::max(0.f, c.depth - 0.004f);
-        c.bias = std::min(c.bias, 2.f);
+        c.bias = std::min(c.bias, 1.f); // (a gentle push out, never a shove)
         if (vn < -1.5f) c.bias = std::max(c.bias, -0.15f * vn); // a small bounce
     }
     for (Contact& c : cs) {
@@ -920,6 +919,12 @@ void RainUniverse::physicsStep(float h) {
             apply(c.i, 1.f, c.px, c.py, tx * dt, ty * dt);
             apply(c.j, -1.f, c.px, c.py, tx * dt, ty * dt);
         }
+    // a sleeping tile that the contacts set moving for real wakes; otherwise it stays put
+    for (Body& b : bodies_) {
+        if (!b.asleep) continue;
+        if (b.vx * b.vx + b.vy * b.vy > 0.3f * 0.3f || std::fabs(b.w) > 0.6f) { b.asleep = false; b.still = b.awake = 0.f; }
+        else b.vx = b.vy = b.w = 0.f;
+    }
     for (Body& b : bodies_) {
         if (b.thrown || !b.solid || b.asleep) continue;
         b.vx *= std::exp(-0.3f * h);
@@ -927,10 +932,10 @@ void RainUniverse::physicsStep(float h) {
         b.x += b.vx * h;
         b.y += b.vy * h;
         b.a += b.w * h;
-        const bool still = b.vx * b.vx + b.vy * b.vy < 0.15f * 0.15f && std::fabs(b.w) < 0.3f;
+        const bool still = b.vx * b.vx + b.vy * b.vy < 0.06f * 0.06f && std::fabs(b.w) < 0.12f;
         b.still = still ? b.still + h : 0.f;
         b.awake += h;
-        if (b.still > 0.5f || b.awake > 7.f) { b.asleep = true; b.vx = b.vy = b.w = 0.f; }
+        if (b.still > 0.6f || b.awake > 20.f) { b.asleep = true; b.vx = b.vy = b.w = 0.f; }
     }
 }
 
