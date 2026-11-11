@@ -13,12 +13,13 @@
 namespace {
 
 // The journey: lines -> the network's reach (meters), interpolated in log space.
-// The whole journey fits in some 100 lines (two or three songs): something new every ten lines or so.
+// The whole journey fits in some 50 lines (one song): something new every five lines or so, the first millimeters a
+// little quicker (some 2x farther a line), then about 1.6x a line, the last lines slowly wrapping the globe.
 struct Stage { float lines, reach; };
 const Stage STAGES[] = {
-    {0, 0.002f}, {2, 0.005f}, {4, 0.014f}, {7, 0.045f}, {11, 0.18f}, {15, 0.9f}, {20, 4.5f}, {26, 22.f},
-    {32, 110.f}, {39, 550.f}, {45, 2800.f}, {52, 1.4e4f}, {59, 7.5e4f}, {67, 4.e5f}, {74, 2.e6f}, {81, 6.5e6f},
-    {88, 1.2e7f}, {95, 1.45e7f}, {100, 1.6e7f},
+    {0, 0.002f}, {1.2f, 0.005f}, {2.6f, 0.014f}, {4.2f, 0.045f}, {6, 0.18f}, {8, 0.9f}, {10.3f, 4.5f}, {13, 22.f},
+    {16, 110.f}, {19.5f, 550.f}, {22.5f, 2800.f}, {26, 1.4e4f}, {29.5f, 7.5e4f}, {34, 4.e5f}, {38, 2.e6f},
+    {43, 6.5e6f}, {46, 1.2e7f}, {48.5f, 1.45e7f}, {50, 1.6e7f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 

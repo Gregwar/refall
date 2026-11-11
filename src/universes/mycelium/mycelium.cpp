@@ -10,8 +10,8 @@
 // its night side, wrapped in a living web of light, the moon beyond. Mushrooms burst up where the threads run, each
 // bigger than the last (a pin, then a cap opening with a little overshoot): caps among the moss, parasols taller than
 // the trees, towers standing above the clouds, glowing pins all over the globe. The growth is G = ln(the network's
-// reach in meters): 2 mm at the start, 1 m at ~15 lines, 500 m (the village) at ~39, 75 km at ~59, the planet a ball
-// at ~81, wrapped at ~100.
+// reach in meters): 2 mm at the start, 1 m at ~8 lines, 500 m (the village) at ~20, 75 km at ~30, the planet a ball
+// at ~43, wrapped at ~50 (one song).
 //
 // The look: a moonlit night in clean colors, toon light (crisp bands, cool tinted shades), the threads and caps the
 // only bright things: the threads glow over the ground (thin, crisp ribbons that never get thinner than a pixel, a
@@ -1186,6 +1186,9 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         // a spurt: a critically damped spring toward the target, over a second or so
         const float w = 4.f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
+        // capped (a line is a big step now the journey fits in one song): an early Tetris spreads a breath longer
+        // instead of jolting the view
+        gVel_ = std::min(gVel_, 3.f);
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
         newT_ += dt;
