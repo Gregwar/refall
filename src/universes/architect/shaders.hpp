@@ -104,6 +104,38 @@ vec3 pointLights(vec3 p, vec3 n) {
 }
 )";
 
+// ---------------------------------------------------------------- the pool's excavation (the ground and its prepass)
+// A convex pit: its opening the pool's rectangle widened by uPitM (the working margin, closed again by the backfill),
+// its sides sloping in (PIT_S horizontal per vertical) down to a floor uPitD deep. A ray that enters it through the
+// opening leaves it through the first of its five planes it crosses.
+inline const char* PIT_GLSL = R"(
+uniform vec4 uPool;
+uniform float uPitD, uPitM, uShell;   // uShell: the concrete shell stands (the ground then opens onto it)
+bool inShell(vec3 p) { return uShell > 0.5 && p.x > uPool.x && p.x < uPool.z && p.z > uPool.y && p.z < uPool.w; }
+const float PIT_S = 0.6;
+vec4 pitRect() { return uPool + vec4(-uPitM, -uPitM, uPitM, uPitM); }
+float pitExit(vec3 ro, vec3 rd, out vec3 n) {
+    vec4 r = pitRect();
+    vec3 g[5];
+    float k[5];
+    g[0] = vec3(1.0, PIT_S, 0.0);  k[0] = -r.x;
+    g[1] = vec3(-1.0, PIT_S, 0.0); k[1] = r.z;
+    g[2] = vec3(0.0, PIT_S, 1.0);  k[2] = -r.y;
+    g[3] = vec3(0.0, PIT_S, -1.0); k[3] = r.w;
+    g[4] = vec3(0.0, 1.0, 0.0);    k[4] = uPitD;
+    float best = 1e9;
+    n = vec3(0.0, 1.0, 0.0);
+    for (int i = 0; i < 5; i++) {
+        float fd = dot(g[i], rd);
+        if (fd < -1e-6) {
+            float tt = -(dot(g[i], ro) + k[i]) / fd;
+            if (tt < best) { best = tt; n = normalize(g[i]); }
+        }
+    }
+    return best;
+}
+)";
+
 // ---------------------------------------------------------------- the world's background: sky and ground
 inline const char* WORLD_BG_FS = R"(#version 330 core
 in vec2 vUv;
@@ -112,8 +144,8 @@ uniform mat4 uInvVP, uVP;
 uniform sampler2D uAO;
 uniform vec3 uGrassA, uGrassB, uDry, uSoil, uLawn, uHill, uHill2;
 uniform vec4 uSite;      // the levelled site: x0, z0, x1, z1
-uniform vec4 uPool;      // the pool's pit: x0, z0, x1, z1
-uniform float uLevel, uLawnK, uDig, uHillK, uCloudK, uStarK, uFlowers;
+
+uniform float uLevel, uLawnK, uPitMark, uHillK, uCloudK, uStarK, uFlowers;
 uniform vec4 uFoot[8];   // the buildings' footprints (the lawn keeps off them)
 uniform int uNumFoot;
 float boxD(vec2 p, vec4 b) {
@@ -165,8 +197,28 @@ void main() {
         return;
     }
     vec3 p = ro + rd * t;
-    // the pool's pit
-    if (uDig > 0.001 && boxD(p.xz, uPool) < 0.0) discard;
+    // the pool's excavation: an earth pit with sloped sides, deepening with the lines, lit and shaded as soil
+    if (inShell(p)) discard;
+    if (uPitD > 0.001 && boxD(p.xz, pitRect()) < 0.0) {
+        vec3 n;
+        float tp = pitExit(ro, rd, n);
+        vec3 q = ro + rd * tp;
+        vec4 cq = uVP * vec4(q, 1.0);
+        gl_FragDepth = clamp(cq.z / cq.w * 0.5 + 0.5, 0.0, 1.0);
+        float depthK = clamp(-q.y / 2.0, 0.0, 1.0);
+        // the earth: darker and redder deeper down (its strata), clods and stones, the bucket's scrapes on the sides
+        float strata = n2(vec2(q.y * 7.0, (q.x + q.z) * 0.3));
+        vec3 earth = mix(uSoil * 0.82, uSoil * vec3(0.72, 0.6, 0.5), depthK) * (0.85 + 0.25 * strata);
+        earth *= 0.88 + 0.22 * n2(q.xz * 3.0 + q.y * 2.0) + 0.06 * (n2(q.xz * 11.0 + q.y * 9.0) - 0.5);
+        if (n.y < 0.9) earth *= 0.92 + 0.12 * smoothstep(0.3, 0.7, n2(vec2((q.x + q.z) * 2.5, q.y * 1.2)));
+        vec3 Lp = normalize(uSunDir);
+        float shp = shadowAt(q + n * 0.03, 12);
+        float aop = texture(uAO, gl_FragCoord.xy * uInvRes).r;
+        float occ = mix(1.0, 0.62, depthK);
+        vec3 litp = earth * (uSunCol * max(dot(n, Lp), 0.0) * shp + (uAmbSky * 0.85 + uAmbGround) * occ * aop + pointLights(q, n));
+        frag = vec4(fogged(litp, length(q - ro), rd), 0.0);
+        return;
+    }
     vec4 cl = uVP * vec4(p, 1.0);
     gl_FragDepth = clamp(cl.z / cl.w * 0.5 + 0.5, 0.0, 1.0);
     vec3 c;
@@ -226,6 +278,14 @@ void main() {
     float stripe = step(0.5, fract(p.x * 0.25));
     vec3 lawn = uLawn * (0.94 + 0.12 * stripe) * (1.0 + (fine - 0.5) * 0.1 * fineK);
     c = mix(c, lawn, lk);
+    // the excavation: its outline sprayed on the soil before the dig, loose dark earth round its lip while it is open
+    {
+        float dp = boxD(p.xz, pitRect());
+        float mark = smoothstep(0.08, 0.03, abs(dp)) * step(0.3, fract((p.x + p.z) * 1.3)) * uPitMark;
+        c = mix(c, vec3(0.95, 0.42, 0.1), mark * 0.85);
+        float lip = (1.0 - smoothstep(0.0, 1.0 + 0.8 * n2(p.xz * 2.0), dp)) * smoothstep(0.001, 0.3, uPitD);
+        c = mix(c, uSoil * 0.7 * (0.85 + 0.3 * n2(p.xz * 6.0)), lip * 0.7);
+    }
     // the light: sun with the shadows, sky, occlusion, lamps
     float sh = shadowAt(p + vec3(0, 0.02, 0), 12);
     float ao = texture(uAO, gl_FragCoord.xy * uInvRes).r;
@@ -391,14 +451,12 @@ void main() {
 }
 )";
 
-// The ground in the prepass (one ray per pixel), with the pool's pit cut out.
+// The ground in the prepass (one ray per pixel), with the pool's excavation.
 inline const char* PRE_GROUND_FS = R"(#version 330 core
 in vec2 vUv;
 layout(location = 0) out vec4 oPos;
 layout(location = 1) out vec4 oNrm;
 uniform mat4 uInvVP, uView, uVP;
-uniform vec4 uPool;
-uniform float uDig;
 void main() {
     vec4 a = uInvVP * vec4(vUv * 2.0 - 1.0, -1.0, 1.0);
     vec4 b = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
@@ -407,11 +465,13 @@ void main() {
     float t = -ro.y / rd.y;
     if (t > 2500.0) discard;
     vec3 p = ro + rd * t;
-    if (uDig > 0.001 && p.x > uPool.x && p.x < uPool.z && p.z > uPool.y && p.z < uPool.w) discard;
+    vec3 n = vec3(0.0, 1.0, 0.0);
+    if (inShell(p)) discard;
+    if (uPitD > 0.001 && p.x > pitRect().x && p.x < pitRect().z && p.z > pitRect().y && p.z < pitRect().w) p = ro + rd * pitExit(ro, rd, n);
     vec4 c = uVP * vec4(p, 1.0);
     gl_FragDepth = clamp(c.z / c.w * 0.5 + 0.5, 0.0, 1.0);
     oPos = vec4((uView * vec4(p, 1.0)).xyz, 1.0);
-    oNrm = vec4(normalize(mat3(uView) * vec3(0.0, 1.0, 0.0)), 1.0);
+    oNrm = vec4(normalize(mat3(uView) * n), 1.0);
 }
 )";
 

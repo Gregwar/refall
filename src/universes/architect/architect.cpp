@@ -237,11 +237,11 @@ constexpr float BACK_Z = -0.62f;  // the well's backing (board space)
 bool ArchitectUniverse::init(int width, int height) {
     using shaders::with;
     const std::string common = std::string(shaders::COMMON) + shaders::SHADOW_GLSL + shaders::LIGHTS_GLSL;
-    progBg_ = ugl::program(ugl::FULLSCREEN_VS, with(shaders::WORLD_BG_FS, common.c_str()).c_str(), "architect world");
+    progBg_ = ugl::program(ugl::FULLSCREEN_VS, with(shaders::WORLD_BG_FS, common.c_str(), shaders::PIT_GLSL).c_str(), "architect world");
     progInst_ = ugl::program(shaders::INST_VS, with(shaders::INST_FS, common.c_str(), shaders::INST_COMMON).c_str(), "architect solids");
     progShadow_ = ugl::program(shaders::INST_VS, with(shaders::SHADOW_FS, shaders::INST_COMMON).c_str(), "architect shadow");
     progPre_ = ugl::program(shaders::INST_VS, with(shaders::PRE_FS, shaders::INST_COMMON).c_str(), "architect prepass");
-    progPreGround_ = ugl::program(ugl::FULLSCREEN_VS, shaders::PRE_GROUND_FS, "architect prepass ground");
+    progPreGround_ = ugl::program(ugl::FULLSCREEN_VS, with(shaders::PRE_GROUND_FS, shaders::PIT_GLSL).c_str(), "architect prepass ground");
     progSsao_ = ugl::program(ugl::FULLSCREEN_VS, shaders::SSAO_FS, "architect ssao");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "architect blur");
     progGlow_ = ugl::program(shaders::GLOW_VS, shaders::GLOW_FS, "architect glow");
@@ -658,9 +658,9 @@ float ArchitectUniverse::elementK(const as::Element& e) const {
     if (p_ > e.gone) k *= 1.f - saturate((p_ - e.gone) / std::max(0.05f, e.goneDur));
     return k;
 }
-float ArchitectUniverse::tilesK() const { return smoother((p_ - (as::L_POOL + 2.f)) / 2.f); }
+float ArchitectUniverse::tilesK() const { return smoother((p_ - (as::L_POOL + 3.5f)) / 1.2f); }
 float ArchitectUniverse::lightK(int room) const {
-    return smoother((p_ - (as::L_LIGHTS + 0.75f * room)) / 1.2f);
+    return smoother((p_ - (as::L_LIGHTS + 0.75f * room)) / 1.2f) * houseK_;
 }
 float ArchitectUniverse::poolLightK() const { return smoother((p_ - 47.5f) / 1.5f); }
 float ArchitectUniverse::lampK() const { return smoother((p_ - 48.5f) / 1.2f); }
@@ -738,7 +738,13 @@ void ArchitectUniverse::drawElements() {
                 }
                 continue;
             }
-            for (const Part& p : e.parts) push(p, lit(p), p.tiles ? tk : 0.f);
+            // set down without its crane (a backlog caught up): it settles softly from a few meters above
+            const float lift = st.direct ? 4.f * (1.f - smoother(st.t / 1.6f)) : 0.f;
+            for (const Part& p0 : e.parts) {
+                Part p = p0;
+                p.c.y += lift;
+                push(p, lit(p0), p0.tiles ? tk : 0.f);
+            }
             continue;
         }
         const float k = elementK(e);
@@ -751,13 +757,6 @@ void ArchitectUniverse::drawElements() {
                 const float bottom = p0.c.y - p0.s.y * 0.5f;
                 p.s.y = p0.s.y * kk;
                 p.c.y = bottom + p.s.y * 0.5f;
-                break;
-            }
-            case as::DIG: {
-                const float kk = smoother(k);
-                const float top = p0.c.y + p0.s.y * 0.5f;
-                p.s.y = p0.s.y * kk;
-                p.c.y = top - p.s.y * 0.5f;
                 break;
             }
             case as::TREE: {
@@ -825,27 +824,65 @@ vec3 ArchitectUniverse::hiddenYard(int i) const {
     return p;
 }
 
+// Every element the paced lines have earned stands in place (or is on its way down, on a hook).
+bool ArchitectUniverse::built() const {
+    for (size_t i = 0; i < prog_.size(); i++)
+        if (prog_[i].kind == as::CRANE && p_ >= prog_[i].due && els_[i].state != 3) return false;
+    return true;
+}
+
+void ArchitectUniverse::setDown(int i) {
+    ElState& s = els_[i];
+    s.state = 3;
+    s.t = 0.f;
+    s.vis = 1.f;
+    s.direct = true;
+    for (auto& c : cranes_) {
+        c.queue.erase(std::remove(c.queue.begin(), c.queue.end(), i), c.queue.end());
+        if (c.job == i) { c.job = -1; c.phase = 0; }
+    }
+}
+
+// The house's state comes from the paced lines (like the pool and the garden): an element is earned when the lines
+// reach its due mark, and the cranes only animate the deliveries. They work faster with a backlog; an element that
+// waits too long for its crane (or has no crane standing to lower it) is set down directly, settling from above, so
+// a structural element is never left out. The cranes leave, and the lights come on, only once the house is complete.
 void ArchitectUniverse::updateCranes(float dt, float workDt) {
+    const bool complete = built();
+    houseK_ = complete ? std::min(1.f, houseK_ + dt / 2.f) : 0.f;
     // the erection and the departure, from the progress
     for (int i = 0; i < 2; i++) {
         Crane& c = cranes_[i];
         const float up = smoother((p_ - as::L_CRANES - 0.6f * i) / 3.f);
         c.erect = up;
-        const bool idle = c.job < 0 && c.queue.empty();
+        const bool idle = c.job < 0 && c.queue.empty() && complete;
         const float dTarget = smoother((p_ - as::L_LEAVE - 0.9f * i) / 2.2f);
         if (dTarget < c.depart) c.depart = dTarget;
         else if (idle) c.depart = std::min(dTarget, c.depart + dt * 0.25f);
     }
-    // the due elements join their crane's queue
+    // the earned elements join their crane's queue
     for (size_t i = 0; i < prog_.size(); i++) {
         const as::Element& e = prog_[i];
         if (e.kind != as::CRANE) continue;
         ElState& s = els_[i];
-        if (s.state == 0 && p_ >= e.due) {
+        if (s.state == 0 && p_ >= e.due && pTarget_ >= e.due) {
             s.state = 1;
+            s.wait = 0.f;
             cranes_[e.crane].queue.push_back((int)i);
         }
     }
+    // the catch-up: an element left waiting is set down without its crane (the oldest first)
+    for (size_t i = 0; i < prog_.size(); i++) {
+        ElState& s = els_[i];
+        if (prog_[i].kind != as::CRANE || s.state != 1) continue;
+        const Crane& c = cranes_[prog_[i].crane];
+        const bool craneUp = c.erect > 0.999f && c.depart < 0.001f;
+        s.wait += workDt;
+        const int ahead = (int)(std::find(c.queue.begin(), c.queue.end(), (int)i) - c.queue.begin());
+        if ((!craneUp && s.wait > 1.f) || s.wait > 14.f || ahead >= 4) setDown((int)i);
+    }
+    // (a paused frame moves nothing: no step to divide by)
+    if (workDt <= 1e-6f) return;
     const float g = 9.81f;
     const int sub = std::max(1, (int)std::ceil(workDt / (1.f / 120.f)));
     const float h = workDt / sub;
@@ -871,9 +908,15 @@ void ArchitectUniverse::updateCranes(float dt, float workDt) {
             c.job = c.queue.front();
             c.queue.erase(c.queue.begin());
             c.phase = 1;
+            c.jobT = 0.f;
             c.yard = hiddenYard(i);
         }
         if (c.job >= 0 && (els_[c.job].state == 0 || els_[c.job].state == 3)) { c.job = -1; c.phase = 0; }
+        // a watchdog: a delivery that takes far too long ends with its element set down
+        if (c.job >= 0) {
+            c.jobT += workDt;
+            if (c.jobT > 30.f) setDown(c.job);
+        }
         const bool angOk = std::fabs(c.a - c.ta) < 0.012f && std::fabs(c.av) < 0.03f;
         const bool radOk = std::fabs(c.r - c.tr) < 0.15f && std::fabs(c.rv) < 0.2f;
         const bool hOk = std::fabs(c.h - c.th) < 0.06f && std::fabs(c.hv) < 0.08f;
@@ -972,6 +1015,16 @@ void ArchitectUniverse::updateCranes(float dt, float workDt) {
             c.sx *= 1.f - near * 0.08f;
             c.sz *= 1.f - near * 0.08f;
             c.wob *= 1.f - near * 0.08f;
+        }
+        // (never let a bad step poison the motion for good)
+        if (!std::isfinite(c.a + c.av + c.r + c.rv + c.h + c.hv + c.sx + c.sz + c.svx + c.svz + c.wob + c.wobV)) {
+            c.a = c.ta = rest;
+            c.r = c.tr = 13.f;
+            c.h = c.th = mastH(i) - 6.f;
+            c.av = c.rv = c.hv = c.sx = c.sz = c.svx = c.svz = c.wob = c.wobV = 0.f;
+            c.lastT = trolleyPos(i);
+            c.lastV = vec3(0, 0, 0);
+            if (c.job >= 0) setDown(c.job);
         }
         c.beacon = approach(c.beacon, 0.f, 3.f, dt);
     }
@@ -1584,7 +1637,7 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
         if (lastLines_ >= 0 && lines < lastLines_ && !game.over()) {
             // a new game: the villa sinks back, the field again
             for (size_t i = 0; i < els_.size(); i++)
-                if (els_[i].state > 0) { els_[i].state = 0; }
+                if (els_[i].state > 0) { els_[i].state = 0; els_[i].direct = false; }
             for (auto& c : cranes_) { c.queue.clear(); c.job = -1; c.phase = 0; }
             overT_ = -1.f;
         }
@@ -1766,7 +1819,11 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
         set1i(p, "uAO", 3);
         glActiveTexture(GL_TEXTURE0);
     };
-    const float dig = smoother((p_ - as::L_POOL) / 0.3f);
+    // the pool's excavation: marked out, dug down with sloped earth sides (eased), the margin backfilled round the shell
+    const float pitD = (as::POOL_DEPTH + 0.2f) * smoother((p_ - as::L_POOL) / 2.5f);
+    const float pitM = 1.5f * (1.f - smoother((p_ - (as::L_POOL + 3.8f)) / 0.8f));
+    const float shell = p_ >= as::L_POOL + 3.5f ? 1.f : 0.f; // (the shell element rises from L_POOL + 2.5 over a line)
+    const float pitMark = smoother((p_ - (as::L_POOL - 1.5f)) / 0.6f) * (1.f - smoother((p_ - (as::L_POOL + 0.4f)) / 0.6f));
     const float level = smoother((p_ - as::L_LEVEL) / 1.8f);
     const float lawn = smoother((p_ - as::L_GARDEN) / 4.f);
 
@@ -1780,7 +1837,9 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
     setMat(progPreGround_, "uView", view_);
     setMat(progPreGround_, "uVP", vp_);
     ugl::set4f(progPreGround_, "uPool", as::POOL[0], as::POOL[1], as::POOL[2], as::POOL[3]);
-    set1f(progPreGround_, "uDig", dig);
+    set1f(progPreGround_, "uPitD", pitD);
+    set1f(progPreGround_, "uPitM", pitM);
+    set1f(progPreGround_, "uShell", shell);
     ugl::drawFullscreen();
     glUseProgram(progPre_);
     setMat(progPre_, "uVP", vp_);
@@ -1842,7 +1901,10 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uLevel", level);
     set1f(progBg_, "uFlowers", V.flora == 3 ? 0.f : 1.f);
     set1f(progBg_, "uLawnK", lawn);
-    set1f(progBg_, "uDig", dig);
+    set1f(progBg_, "uPitD", pitD);
+    set1f(progBg_, "uPitM", pitM);
+    set1f(progBg_, "uShell", shell);
+    set1f(progBg_, "uPitMark", pitMark);
     set1f(progBg_, "uHillK", V.hillK);
     set1f(progBg_, "uCloudK", V.cloudK * (1.f - 0.4f * night_));
     set1f(progBg_, "uStarK", night_);

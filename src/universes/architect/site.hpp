@@ -59,8 +59,8 @@ struct Part {
 };
 
 // How an element comes (and goes): lowered by a crane, grown from its foot (slabs, walls, hedges, the water),
-// dug down from the ground (the pit), a tree planted and growing, popped in (furniture, lamps), driven in.
-enum Kind { CRANE, GROW, DIG, TREE, POP, DRIVE };
+// a tree planted and growing, popped in (furniture, lamps), driven in.
+enum Kind { CRANE, GROW, TREE, POP, DRIVE };
 
 struct Element {
     float due = 0.f, dur = 1.f;   // paced lines: when it starts, over how many lines it comes (not for CRANE)

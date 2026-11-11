@@ -553,7 +553,9 @@ std::vector<Element> program(const Palette& P, uint64_t seed) {
     // ---- the pool: dug, tiled, filled
     {
         const float x0 = POOL[0], z0 = POOL[1], x1 = POOL[2], z1 = POOL[3], D = POOL_DEPTH;
-        Element e = el(DIG, L_POOL, 2.5f);
+        // (the excavation itself, marked out then dug with sloped earth sides, is the ground's, see WORLD_BG_FS;
+        // these are the concrete shell cast in it, rising from its floor, then tiled)
+        Element e = el(GROW, L_POOL + 2.5f, 1.f);
         auto tileBox = [&](float a0, float b0, float c0, float a1, float b1, float c1) {
             Part p = box(a0, b0, c0, a1, b1, c1, TILES, P.tile);
             p.tiles = true;
@@ -566,14 +568,22 @@ std::vector<Element> program(const Palette& P, uint64_t seed) {
         tileBox(x1, -D - 0.2f, z0, x1 + 0.3f, 0.f, z1);
         E.push_back(e);
         // the coping: pale stone round the edge
-        Element c = el(GROW, L_POOL + 3.5f, 1.f);
+        Element c = el(GROW, L_POOL + 4.4f, 0.6f);
         c.parts.push_back(box(x0 - 0.5f, 0.f, z0 - 0.5f, x1 + 0.5f, 0.1f, z0, STONE, P.stone * 1.08f, 1.f));
         c.parts.push_back(box(x0 - 0.5f, 0.f, z1, x1 + 0.5f, 0.1f, z1 + 0.5f, STONE, P.stone * 1.08f, 1.f));
         c.parts.push_back(box(x0 - 0.5f, 0.f, z0, x0, 0.1f, z1, STONE, P.stone * 1.08f, 1.f));
         c.parts.push_back(box(x1, 0.f, z0, x1 + 0.5f, 0.1f, z1, STONE, P.stone * 1.08f, 1.f));
         E.push_back(c);
+        // the dug earth heaped beside the pit, taken back to backfill round the shell
+        Element h = el(GROW, L_POOL + 0.2f, 2.3f);
+        h.gone = L_POOL + 3.8f;
+        h.goneDur = 0.8f;
+        Part heap = shape(SPHERE, vec3(-14.f, 0.f, 16.f), vec3(8.f, 2.6f, 3.2f), SOIL, P.soil * 0.85f);
+        h.parts.push_back(heap);
+        h.parts.push_back(shape(SPHERE, vec3(-9.5f, 0.f, 15.6f), vec3(4.5f, 1.8f, 2.6f), SOIL, P.soil * 0.8f));
+        E.push_back(h);
         // the water rising
-        Element w = el(GROW, L_POOL + 4.5f, 2.f);
+        Element w = el(GROW, L_POOL + 5.f, 1.8f);
         w.parts.push_back(box(x0, -D, z0, x1, -0.12f, z1, WATER, P.water));
         E.push_back(w);
     }
