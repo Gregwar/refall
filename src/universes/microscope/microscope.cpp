@@ -5,8 +5,9 @@
 // drifting in it and a few big bubbles rising slowly at the sides. The well is a calm rounded pane of a quieter tone
 // (deeper on the dark waters, paler on the light ones), its edge one soft line, so the stack always reads.
 //
-// The pieces are picture-book living cells: one soft rounded square per block, one clean color per type, a pale
-// translucent membrane, a bright cytoplasm and one big soft nucleus, a bold outline in a deep shade of its own color. The falling piece is exactly a
+// The pieces are jelly eggs: one soft translucent shell per block in its type's color, a small creature curled up
+// asleep inside (it wakes, wiggles, presses its face to the shell, peeks out of the top, rarely hops out and back in);
+// a cleared row hatches them all, the dish keeping as many as the song's pace allows, the others swimming off. The falling piece is exactly a
 // locked one, the ghost a faint outline, the previews the same cells.
 //
 // The dish starts empty at the start of a song and fills with life as the rows clear: each cleared row pops its cells
@@ -124,6 +125,12 @@ const float KIND_SPEED[K_COUNT] = {0.55f, 0.12f, 0.5f, 0.12f, 0.28f, 0.2f};
 const float KIND_TURN[K_COUNT] = {0.5f, 0.25f, 0.55f, 0.15f, 0.35f, 0.25f};
 const float KIND_STROKE[K_COUNT] = {1.6f, 0.5f, 2.2f, 0.4f, 1.2f, 0.6f};   // swim strokes a second
 const float KIND_STRETCH[K_COUNT] = {0.07f, 0.04f, 0.06f, 0.02f, 0.06f, 0.025f};
+
+// An egg's creature: its kind from its seed (as PIECE_FS draws it), and that kind in the dish.
+int eggKind(float seed) { return std::clamp((int)((seed * 7.13f - std::floor(seed * 7.13f)) * 4.f), 0, 3); }
+const int EGG_TO_DISH[4] = {K_BEAN, K_BLOB, K_TADPOLE, K_DAISY};
+float envf(float t, float dur, float rise, float fall) { return smoothstepf(0.f, rise, t) * (1.f - smoothstepf(dur - fall, dur, t)); }
+float hashSeed(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 
 // Test hooks: ZEN_MICROSCOPE_LINES=N adds N lines to the dish, ZEN_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
@@ -379,6 +386,7 @@ void MicroscopeUniverse::setLevel(int level, float energy, float seconds, float 
 void MicroscopeUniverse::drop(float strength) {
     dropMode_ = true;
     swell_ = std::max(swell_, 0.6f + 0.4f * strength);
+    wakeAllT_ = 0.f;   // every creature in the stack wakes up and looks around
     for (Org& o : orgs_) {
         o.happy = 2.2f + o.seed * 0.8f;
         if (o.hop > 1.2f) o.hop = -o.seed * 0.5f;
@@ -413,6 +421,17 @@ TransitionHints MicroscopeUniverse::hints() const {
 
 void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
+    case GameEvent::Lock: {
+        // the falling piece's eggs keep their creatures as they lock
+        for (size_t i = 0; i < ev.cells.size() && i < 4; i++) {
+            const auto& c = ev.cells[i];
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            seedAt_[c.y][c.x] = fallSeed_[i];
+            has_[c.y][c.x] = true;
+        }
+        for (float& f : fallSeed_) f = rng_.uniform();
+        break;
+    }
     case GameEvent::HardDrop: {
         // a few bubbles pushed out from under the piece, at the contact (behind the stack)
         if (!game.hasPiece()) break;
@@ -447,12 +466,34 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f});
+            const float sd = has_[c.y][c.x] ? seedAt_[c.y][c.x] : rng_.uniform();
             ca.cells.push_back(vec2{p.x, p.y});
+            ca.kinds.push_back(eggKind(sd));
+            ca.types.push_back(std::clamp(c.type, 0, 6));
+            hatches_.push_back({vec2{p.x, p.y}, EGG_TO_DISH[eggKind(sd)], std::clamp(c.type, 0, 6), -0.03f * rng_.uniform() * 4.f, sd});
             if (std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         }
         ca.rows = std::max(1, std::max(ev.count, (int)rows.size()));
         if (!ca.cells.empty()) clears_.push_back(ca);
         if (ev.count >= 4) swell_ = std::max(swell_, 0.5f);
+        // the eggs above step down; whatever the creatures were doing, they settle back in
+        acts_.clear();
+        {
+            bool cleared[Game::H] = {};
+            for (int y : rows) cleared[y] = true;
+            for (auto& c : ev.cells)
+                if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
+            float ns[Game::H][Game::W] = {};
+            bool nh[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (cleared[y]) continue;
+                for (int x = 0; x < Game::W; x++) { ns[dst][x] = seedAt_[y][x]; nh[dst][x] = has_[y][x]; }
+                dst--;
+            }
+            for (int y = 0; y < Game::H; y++)
+                for (int x = 0; x < Game::W; x++) { seedAt_[y][x] = ns[y][x]; has_[y][x] = nh[y][x]; }
+        }
         break;
     }
     case GameEvent::TopOut: {
@@ -478,13 +519,13 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
 
 int MicroscopeUniverse::alive() const {
     int n = 0;
-    for (const Org& o : orgs_) n += o.fade < 0.f;
+    for (const Org& o : orgs_) n += o.fade < 0.f && !o.leaving;
     return n;
 }
 
 int MicroscopeUniverse::sideCount(int side) const {
     int n = 0;
-    for (const Org& o : orgs_) n += o.fade < 0.f && (o.home.x < 0.f) == (side < 0);
+    for (const Org& o : orgs_) n += o.fade < 0.f && !o.leaving && (o.home.x < 0.f) == (side < 0);
     return n;
 }
 
@@ -540,9 +581,11 @@ vec2 MicroscopeUniverse::pickHome(int side, float size) {
 
 // A new creature: out of a cleared row (it swims out of the well behind the stack, growing on the way), or simply
 // fading in at its home.
-void MicroscopeUniverse::spawn(vec2 at, int side, bool fromCell, bool big) {
+void MicroscopeUniverse::spawn(vec2 at, int side, bool fromCell, bool big, int kind, int piece, bool leaving) {
     Org o;
-    o.kind = big ? K_VOLVOX : pickKind();
+    o.kind = big ? K_VOLVOX : kind >= 0 ? kind : pickKind();
+    o.piece = big ? -1 : piece;
+    o.leaving = leaving;
     o.col = pickColor();
     o.seed = rng_.uniform();
     o.depth = 0.f;
@@ -552,7 +595,10 @@ void MicroscopeUniverse::spawn(vec2 at, int side, bool fromCell, bool big) {
     o.spin = rng_.range(0.f, TAU);
     o.nextBlink = rng_.range(1.5f, 6.f);
     o.hop = 9.f;
-    o.home = pickHome(side, o.size * (o.depth > 0.5f ? 0.72f : 1.f));
+    if (leaving) o.size *= 0.6f;
+    // (one swimming off heads for the rim on its side, out of the way)
+    o.home = leaving ? vec2{side * (diskR_ - RIM_W - 1.f), std::clamp(at.y + rng_.range(-4.f, 4.f), -9.f, 9.f)}
+                     : pickHome(side, o.size);
     o.fromCell = fromCell;
     if (fromCell) {
         o.p = at;
@@ -577,32 +623,28 @@ void MicroscopeUniverse::release(const ClearAt& c, float pace) {
     const int al = alive();
     const bool tetris = c.rows >= 4;
     int n = std::min(cap - al, tetris ? 3 : c.rows >= 3 ? 2 : 1);
-    if (tetris) n = std::max(n, 1);
-    for (int i = 0; i < n; i++) {
-        const vec2 at = c.cells[(size_t)rng_.irange(0, (int)c.cells.size() - 1)];
+    // every egg of the row hatches: n of its creatures stay in the dish, the others swim off toward the rim and fade
+    std::vector<size_t> order(c.cells.size());
+    for (size_t i = 0; i < order.size(); i++) order[i] = i;
+    for (size_t i = order.size(); i > 1; i--) std::swap(order[i - 1], order[(size_t)rng_.irange(0, (int)i - 1)]);
+    for (size_t j = 0; j < order.size(); j++) {
+        const size_t i = order[j];
+        const vec2 at = c.cells[i];
         int side = std::fabs(at.x) < 0.3f ? (rng_.chance(0.5f) ? 1 : -1) : at.x < 0.f ? -1 : 1;
-        if (sideCount(side) >= sideCount(-side) + 2) side = -side;   // (the two sides stay balanced)
-        spawn(at, side, true, tetris && i == 0);
+        const bool stays = (int)j < n;
+        if (stays && sideCount(side) >= sideCount(-side) + 2) side = -side;   // (the two sides stay balanced)
+        spawn(at, side, true, false, EGG_TO_DISH[c.kinds[i]], c.types[i], !stays);
     }
+    // a Tetris: a big volvox too
+    if (tetris) spawn(c.cells[0], c.cells[0].x < 0.f ? -1 : 1, true, true);
     // beyond the full dish (a Tetris' big one), the oldest swims away, fading
     int over = alive() - (int)full_;
     for (Org& o : orgs_) {
         if (over <= 0) break;
+        if (o.leaving) continue;
         if (o.fade < 0.f && !o.fromCell) { o.fade = 0.f; over--; }
         else if (o.fade < 0.f && o.age > 5.f) { o.fade = 0.f; over--; }
     }
-    if (n <= 0)
-        for (int i = 0; i < 5; i++) {
-            const vec2 at = c.cells[(size_t)rng_.irange(0, (int)c.cells.size() - 1)];
-            Bubble k;
-            k.p = vec2{at.x + rng_.range(-0.3f, 0.3f), at.y};
-            k.v = vec2{(at.x < 0.f ? -1.f : 1.f) * rng_.range(0.6f, 1.6f), rng_.range(0.6f, 1.2f)};
-            k.t = -0.05f * i;
-            k.life = rng_.range(1.2f, 1.8f);
-            k.r = rng_.range(0.2f, 0.35f);
-            k.deco = false;
-            bubbles_.push_back(k);
-        }
     // the dish cheers: a few creatures hop
     for (Org& o : orgs_)
         if (o.fade < 0.f && !o.fromCell && o.hop > 1.2f && rng_.chance(tetris ? 1.f : 0.3f)) o.hop = -rng_.range(0.f, 0.3f);
@@ -635,12 +677,164 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
 }
 
 // =====================================================================================================
+// The eggs' creatures
+// =====================================================================================================
+
+// Keeps the eggs in step with the board (a new board, a stack inherited from another universe).
+void MicroscopeUniverse::syncSeeds(const Game& g) {
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const bool on = g.cell(x, y).type >= 0;
+            if (on && !has_[y][x]) seedAt_[y][x] = rng_.uniform();
+            has_[y][x] = on;
+        }
+}
+
+// A surface egg may open: nothing falling near it (the piece or its ghost within two columns, above it).
+bool MicroscopeUniverse::safeAt(const Game& g, int x, int y) const {
+    if (!g.hasPiece() || g.over()) return true;
+    Piece p = g.piece();
+    int cells[4][2];
+    for (int k = 0; k < 2; k++) {
+        if (k == 1) p.y = g.ghostY();
+        g.pieceCells(p, cells);
+        for (auto& c : cells)
+            if (std::abs(c[0] - x) <= 2 && c[1] < y && c[1] >= y - 5) return false;
+    }
+    return true;
+}
+
+// Now and then a creature does something in its egg (a few at a time, never in step); every several seconds one peeks
+// out of the top of a surface egg (more often at a peak), and rarely one hops out on the stack and back in.
+void MicroscopeUniverse::updateActs(const Game& g, float dt, float wm, float wp) {
+    auto filled = [&](int x, int y) { return x >= 0 && x < Game::W && y >= 0 && y < Game::H && g.cell(x, y).type >= 0; };
+    auto busy = [&](int x, int y) {
+        for (const Act& a : acts_)
+            if (std::abs(a.x - x) <= 1 && std::abs(a.y - y) <= 1) return true;
+        return false;
+    };
+    for (Act& a : acts_) {
+        float rate = 1.f;
+        if (a.type == A_PEEK || a.type == A_HOP) {
+            // the egg is gone, or something lands on it: it hurries back in
+            const bool ok = filled(a.x, a.y) && !filled(a.x, a.y - 1) && safeAt(g, a.x, a.y) &&
+                            (a.type != A_HOP || (filled(a.x + a.side, a.y) && !filled(a.x + a.side, a.y - 1)));
+            if (!ok) {
+                if (a.type == A_PEEK) a.t = std::max(a.t, a.dur - 0.35f);
+                else rate = 3.f;
+            }
+        }
+        a.t += dt * rate;
+    }
+    acts_.erase(std::remove_if(acts_.begin(), acts_.end(), [&](const Act& a) { return a.t >= a.dur || !filled(a.x, a.y); }), acts_.end());
+    if (g.over() || overT_ >= 0.f) return;
+    // the stack's eggs (and the surface ones)
+    std::vector<std::pair<int, int>> eggs, top;
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (filled(x, y) && !busy(x, y)) {
+                eggs.push_back({x, y});
+                if (!filled(x, y - 1) && y > Game::HIDDEN + 1) top.push_back({x, y});
+            }
+    int inner = 0;
+    for (const Act& a : acts_) inner += a.type <= A_PRESS;
+    innerT_ -= dt;
+    if (innerT_ <= 0.f) {
+        innerT_ = rng_.range(0.8f, 2.2f) / (0.7f + 0.3f * wm + 0.4f * wp);
+        if (inner < 3 && !eggs.empty()) {
+            const auto e = eggs[(size_t)rng_.irange(0, (int)eggs.size() - 1)];
+            const float w[3] = {0.45f, 0.3f, 0.25f};
+            Act a{e.first, e.second, rng_.weighted(w), rng_.chance(0.5f) ? 1 : -1, 0.f, 0.f, 0.f};
+            a.dur = a.type == A_WAKE ? rng_.range(2.2f, 3.2f) : a.type == A_WIGGLE ? 1.3f : 2.4f;
+            const float dirs[3] = {0.f, PI, PI * 0.5f};
+            a.dir = a.type == A_PRESS ? dirs[rng_.irange(0, 2)] : rng_.range(-PI, PI);
+            acts_.push_back(a);
+        }
+    }
+    peekT_ -= dt;
+    if (peekT_ <= 0.f) {
+        peekT_ = lerpf(lerpf(rng_.range(9.f, 15.f), rng_.range(6.f, 10.f), wm), rng_.range(3.5f, 6.f), wp);
+        for (int tries = 0; tries < 6 && !top.empty(); tries++) {
+            const auto e = top[(size_t)rng_.irange(0, (int)top.size() - 1)];
+            if (!safeAt(g, e.first, e.second)) continue;
+            Act a{e.first, e.second, A_PEEK, rng_.chance(0.5f) ? 1 : -1, 0.f, rng_.range(2.2f, 3.f), 0.f};
+            if (rng_.chance(0.2f)) // rarely, a hop out on the stack's surface (to a neighbor egg's top) and back in
+                for (int s : {a.side, -a.side})
+                    if (filled(e.first + s, e.second) && !filled(e.first + s, e.second - 1) && !busy(e.first + s, e.second)) {
+                        a.type = A_HOP;
+                        a.side = s;
+                        a.dur = 3.f;
+                        break;
+                    }
+            acts_.push_back(a);
+            break;
+        }
+    }
+}
+
+// What the creature in the egg at (x, y) shows now (awake, looking, in its egg or out of it, pressed, wiggling).
+MicroscopeUniverse::EggLife MicroscopeUniverse::eggLife(int x, int y, float seed) const {
+    EggLife l;
+    // the drop: everyone wakes up and looks around, in a ripple
+    {
+        const float t = wakeAllT_ - seed * 0.7f;
+        const float w = envf(t, 2.6f, 0.25f, 0.5f);
+        if (w > 0.f) {
+            l.awake = w;
+            l.look = 1.4f * std::sin(t * 2.4f + seed * 9.f);
+        }
+    }
+    for (const Act& a : acts_) {
+        if (a.x != x || a.y != y) continue;
+        const float t = a.t;
+        switch (a.type) {
+        case A_WAKE: {
+            const float blink = 1.f - std::exp(-std::pow((t - a.dur * 0.5f) / 0.08f, 2.f));
+            l.awake = std::max(l.awake, envf(t, a.dur, 0.3f, 0.45f) * blink);
+            l.look = a.dir + 1.3f * std::sin(t * 1.7f);
+            break;
+        }
+        case A_WIGGLE: l.wiggle = envf(t, a.dur, 0.2f, 0.4f); break;
+        case A_PRESS: {
+            const float e = envf(t, a.dur, 0.55f, 0.55f);
+            l.ox = std::cos(a.dir) * 0.09f * e;
+            l.oy = std::sin(a.dir) * 0.09f * e;
+            l.awake = std::max(l.awake, e);
+            l.look = a.dir;
+            break;
+        }
+        default: {
+            // peeking or hopping: it rises to the top of its egg and slips out; the egg is empty until it is back
+            const float up = smoothstepf(0.f, 0.3f, t) * (1.f - smoothstepf(a.dur - 0.3f, a.dur, t));
+            l.oy = 0.2f * up;
+            l.awake = 1.f;
+            l.look = PI * 0.5f;
+            l.inside = (t > 0.25f && t < a.dur - 0.25f) ? 0.f : 1.f;
+            break;
+        }
+        }
+    }
+    return l;
+}
+
+void MicroscopeUniverse::addFront(int kind, int type, vec2 p, float size, float ang, float look, float lid, float happy, float clipY,
+                                  float stretch, float alpha, float seed) {
+    if (alpha <= 0.003f) return;
+    const vec3 c = pal_.piece[type];
+    lifeFront_.push_back({{p.x, p.y, size, ang}, {(float)kind, seed, worldTime_ + seed * 50.f, alpha}, {c.x, c.y, c.z, stretch},
+                          {c.x, c.y, c.z, lid}, {happy, clipY, worldTime_ * 0.3f + seed * 6.f, look}});
+}
+
+// =====================================================================================================
 // Geometry
 // =====================================================================================================
 
-void MicroscopeUniverse::addCell(float x, float y, float half, int type, int kind, float prog, float alpha, float flash) {
+void MicroscopeUniverse::addCell(float x, float y, float half, int type, int kind, float prog, float alpha, float flash, float seed,
+                                 const EggLife* life, bool face) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, (float)kind}, {(float)type, 0.f, prog, alpha}, {flash, 0.f, 0.f, 0.f}, {0.f, 0.f, 0.f, 0.f}});
+    const EggLife l = life ? *life : EggLife();
+    cells_.push_back({{x, y, half, (float)kind}, {(float)type, seed, prog, alpha}, {flash, l.awake, l.look, l.inside},
+                      {l.ox, l.oy, l.wiggle, face ? 1.f : 0.f}});
 }
 
 void MicroscopeUniverse::addLife(std::vector<LInst>& out, const Org& o, float alpha, float sizeK) {
@@ -653,9 +847,9 @@ void MicroscopeUniverse::addLife(std::vector<LInst>& out, const Org& o, float al
     const float blink = o.blink > 0.f ? std::sin(saturate(o.blink / 0.2f) * PI) : 0.f;
     const float lid = std::max(blink, 0.55f * slow_);
     const float happy = smoothstepf(0.f, 0.3f, o.happy) * (1.f - slow_);
-    const vec3 c = pal_.life[o.col], cd = pal_.dropLife[o.col];
+    const vec3 c = o.piece >= 0 ? pal_.piece[o.piece] : pal_.life[o.col], cd = o.piece >= 0 ? c : pal_.dropLife[o.col];
     out.push_back({{o.p.x, o.p.y, o.size * sizeK, rot}, {(float)o.kind, o.seed, worldTime_ + o.seed * 50.f, alpha},
-                   {c.x, c.y, c.z, round ? std::fabs(st) * 0.6f : st}, {cd.x, cd.y, cd.z, lid}, {happy, o.depth, o.spin, o.look}});
+                   {c.x, c.y, c.z, round ? std::fabs(st) * 0.6f : st}, {cd.x, cd.y, cd.z, lid}, {happy, -1e4f, o.spin, o.look}});
 }
 
 void MicroscopeUniverse::buildBoard(const Game& g) {
@@ -681,7 +875,8 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
                 const Cell& c = g.cell(x, y);
                 if (c.type < 0) continue;
                 const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-                addCell(p.x, p.y, 0.5f, c.type, 0, 0.f, 1.f, std::pow(saturate(c.flash), 8.f));
+                const EggLife life = eggLife(x, y, seedAt_[y][x]);
+                addCell(p.x, p.y, 0.5f, c.type, 0, 0.f, 1.f, std::pow(saturate(c.flash), 8.f), seedAt_[y][x], &life);
             }
     // the falling piece: exactly a locked one at its place
     if (g.hasPiece() && !g.over()) {
@@ -692,7 +887,7 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             if (cells[i][1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
-            addCell(w.x, w.y, 0.5f, p.type, 0, 0.f, saturate((10.6f - w.y) / 0.6f), 0.f);
+            addCell(w.x, w.y, 0.5f, p.type, 0, 0.f, saturate((10.6f - w.y) / 0.6f), 0.f, fallSeed_[i]);   // (asleep)
         }
     }
     // the previews
@@ -708,7 +903,8 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         }
         for (int i = 0; i < 4; i++) {
             const float ox = cells[i][0] - (minx + maxx) * 0.5f, oy = cells[i][1] - (miny + maxy) * 0.5f;
-            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, type, 0, 0.f, alpha, 0.f);
+            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, type, 0, 0.f, alpha, 0.f, hashSeed((uint64_t)(type * 7 + i)),
+                    nullptr, false);   // (a simpler one: no face)
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.45f : 1.f);
@@ -987,6 +1183,12 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     kickIn_ = 0.f;
     stain_ = approach(stain_, dropMode_ ? 1.f : 0.f, dropMode_ ? 0.42f : 0.12f, dt);
     swell_ = approach(swell_, 0.f, 0.22f, dt);
+    // ---- The eggs' creatures.
+    if (!bare_ && overT_ < 0.f) syncSeeds(game);
+    wakeAllT_ += wdt;
+    if (!bare_) updateActs(game, wdt, wm, wp);
+    for (Hatch& h : hatches_) h.t += dt;
+    hatches_.erase(std::remove_if(hatches_.begin(), hatches_.end(), [](const Hatch& h) { return h.t > 0.6f; }), hatches_.end());
     // every two beats (mid and peak), a third of the creatures hop, in turn
     const double half = std::floor(beat * 0.5);
     if (half != lastHalf_) {
@@ -1034,7 +1236,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     const float act = (0.45f + 0.35f * wm + 0.4f * wp) * (1.f - 0.4f * slow_);
     for (Org& o : orgs_) {
         o.age += wdt;
-        if (o.fade >= 0.f) o.fade += dt / ORG_FADE;
+        if (o.leaving && o.fade < 0.f && o.age > 1.6f) o.fade = 0.f;   // (swimming off: it fades on its way)
+        if (o.fade >= 0.f) o.fade += dt / (o.leaving ? 1.2f : ORG_FADE);
         o.burst = std::max(0.f, o.burst - wdt * 0.7f);
         o.hop += wdt;
         o.happy -= dt;
@@ -1157,12 +1360,58 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             const float grow = lerpf(o.grow0, 1.f, smoothstepf(0.f, o.fromCell ? 2.4f : 1.5f, o.age));
             addLife(lifeBack_, o, a, grow * growK * fadeK * (o.depth > 0.5f ? 0.72f : 1.f));
         }
+    if (!bare_) {
+        // the creatures out of their eggs: peeking, hopping, hatching (in front, clipped by their egg's top)
+        for (const Act& a : acts_) {
+            if (a.type != A_PEEK && a.type != A_HOP) continue;
+            const float tt = a.t - 0.25f, d2 = a.dur - 0.5f;
+            if (tt <= 0.f || tt >= d2) continue;
+            const vec3 cp = layout::cellPos((float)a.x, a.y - game.rowOffset(a.y));
+            const float top = cp.y + 0.46f, seed = seedAt_[a.y][a.x];
+            const int kind = EGG_TO_DISH[eggKind(seed)];
+            const int type = std::clamp((int)game.cell(a.x, a.y).type, 0, 6);
+            const float blink = 1.f - std::exp(-std::pow((tt - d2 * 0.55f) / 0.07f, 2.f));
+            float x = cp.x, y, clip = -1e4f, st = 0.f;
+            const float sit = top + 0.27f;
+            if (a.type == A_PEEK) {
+                const float e = envf(tt, d2, 0.45f, 0.4f);
+                y = top - 0.32f + 0.52f * e;
+                clip = top;
+                st = 0.08f * std::sin(PI * smoothstepf(0.f, 0.45f, tt));
+            } else if (tt < 0.35f) {
+                y = lerpf(top - 0.32f, sit, smoothstepf(0.f, 0.35f, tt));
+                clip = top;
+            } else if (tt < 2.15f) {
+                const bool out = tt < 1.25f;
+                const float u0 = out ? 0.35f : 1.55f, u = saturate((tt - u0) / 0.6f);
+                const float from = out ? 0.f : 1.f, to = out ? 1.f : 0.f;
+                const bool moving = tt < u0 + 0.6f;
+                x = cp.x + a.side * lerpf(from, to, smoothstepf(0.f, 1.f, u));
+                y = sit + (moving ? 0.7f * std::sin(PI * u) : 0.f);
+                st = moving ? 0.12f * std::sin(PI * u) : 0.f;
+            } else {
+                y = lerpf(sit, top - 0.34f, smoothstepf(2.15f, d2, tt));
+                clip = top;
+            }
+            const float look = PI * 0.5f - 1.2f * std::sin(tt * 1.7f);
+            addFront(kind, type, vec2{x, y}, 0.9f, PI * 0.5f, look, blink < 0.5f ? 1.f : 0.f, 0.f, clip, st, 1.f - bridgeK, seed);
+        }
+        for (const Hatch& h : hatches_) {
+            if (h.t < 0.f) continue;
+            const float sz = 0.5f + 0.35f * smoothstepf(0.f, 0.25f, h.t);
+            const vec2 p{h.p.x, h.p.y + 0.25f * std::sin(PI * std::min(h.t / 0.5f, 1.f))};
+            addFront(h.kind, h.type, p, sz, PI * 0.5f, PI * 0.5f, 0.f, 1.f, -1e4f, 0.1f * std::sin(PI * std::min(h.t / 0.3f, 1.f)),
+                     (1.f - smoothstepf(0.35f, 0.6f, h.t)) * (1.f - bridgeK), h.seed);
+        }
+    }
     if (!bare_) { // the world alone: no stack, nothing popping or deflating
-        for (const Pop& p : pops_) addCell(p.x, p.y, 0.5f, p.type, 2, saturate(p.t / POP_T), 1.f, 0.f);
+        EggLife out;
+        out.inside = 0.f;
+        for (const Pop& p : pops_) addCell(p.x, p.y, 0.5f, p.type, 2, saturate(p.t / POP_T), 1.f, 0.f, 0.f, &out);
         if (overT_ >= 0.f)
             for (const Dying& d : dying_) {
                 const float t = saturate((overT_ - d.delay) / DIE_T);
-                if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, 3, t, 1.f, 0.f);
+                if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, 3, t, 1.f, 0.f, hashSeed((uint64_t)(d.x * 31.f + d.y * 977.f + 5000.f)));
             }
         buildBoard(game);
     }
@@ -1197,7 +1446,15 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(progPiece_);
     setPalette(progPiece_);
+    set1f(progPiece_, "uTime", worldTime_);
     drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
+    if (!lifeFront_.empty()) {
+        glUseProgram(progLife_);
+        setPalette(progLife_);
+        set1f(progLife_, "uGlow", 1.f);
+        set1f(progLife_, "uPane", 0.f);
+        drawInst(progLife_, lifeVao_, lifeVbo_, lifeFront_.data(), lifeFront_.size() * sizeof(LInst), lifeFront_.size());
+    }
 
     // ---- The frame.
     glDisable(GL_BLEND);
