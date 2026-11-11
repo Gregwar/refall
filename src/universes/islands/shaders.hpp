@@ -742,61 +742,47 @@ float nb(vec2 p) {
 void main() {
     vec2 p = vP;
     float s1 = fract(vSeed * 7.13), s2 = fract(vSeed * 3.71);
-    // a piece of sea glass tumbled by the waves: a rounded square, soft worn corners, each its own (one clean
-    // silhouette)
-    const float HS = 0.455;
-    vec4 rads = 0.15 + 0.1 * vec4(fract(vSeed * 11.3), fract(vSeed * 17.9), fract(vSeed * 23.1), fract(vSeed * 29.7));
-    float RAD = p.x > 0.0 ? (p.y > 0.0 ? rads.x : rads.y) : (p.y > 0.0 ? rads.z : rads.w);
+    // a painted driftwood board, one per cell: sun-bleached grain under worn paint, the paint chipped at the
+    // edges and corners, two old nail holes (one clean silhouette, its corners softly worn)
+    const float HS = 0.46, RAD = 0.07;
     vec2 q = abs(p) - (HS - RAD);
     float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - RAD;
     float aa = max(fwidth(d), 1e-4) * 0.8;
     float cov = 1.0 - smoothstep(-aa, aa, d);
     if (cov <= 0.001) discard;
     vec2 gq = (q.x > 0.0 || q.y > 0.0) ? normalize(max(q, 0.0) + 1e-6) * sign(p) : (q.x > q.y ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y)));
-    // its thickness: a low dome, worn round at the shoulders
-    float inner = clamp(-d / 0.24, 0.0, 1.0);
-    float th = sqrt(inner * (2.0 - inner));
-    vec2 wob = (vec2(nb(p * 4.0 + s1 * 9.0), nb(p * 4.0 + s2 * 7.0)) - 0.5) * 0.1;
-    vec3 n = normalize(vec3(gq * (1.0 - th) * 1.3 + wob, 0.5 + th));
+    // the grain: long streaks along the board (each board its own direction and figure), a knot now and then
+    vec2 gp = (fract(vSeed * 5.1) > 0.5 ? p.yx : p) + vec2(s1, s2) * 7.0;
+    float warp = nb(gp * vec2(1.2, 4.0)) * 0.55;
+    float rings = abs(fract(gp.y * 9.0 + warp) - 0.5) * 2.0;
+    float streak = nb(vec2(gp.x * 1.6, gp.y * 34.0 + warp * 4.0));
+    float grain = smoothstep(0.15, 0.0, rings) * 0.6 + streak * 0.4;
+    // the wood (grey, bleached) and its paint, worn thin along the grain
+    vec3 wood = mix(vec3(0.62, 0.57, 0.5), vec3(0.8, 0.76, 0.68), streak) * (0.85 + 0.15 * nb(gp * 3.0));
+    float inner = -d;
+    float chipN = nb(p * 15.0 + s2 * 30.0) * 0.6 + nb(p * 38.0 + s1 * 20.0) * 0.4;
+    float chip = smoothstep(0.6, 0.67, chipN + (0.045 - inner) * 5.0);      // chipped back to the wood here and there at the edges
+    float wear = smoothstep(0.55, 0.85, streak) * 0.35 + smoothstep(0.62, 0.75, nb(p * 6.0 + s1 * 11.0)) * 0.25;
+    vec3 paint = vCol * (0.9 + 0.12 * nb(p * 4.0 + s2 * 5.0));
+    vec3 alb = mix(paint, mix(paint, wood, 0.55), wear * (0.4 + 0.6 * grain));
+    alb = mix(alb, wood, chip);
+    // two nail holes
+    for (int i = 0; i < 2; i++) {
+        vec2 nc = vec2(i == 0 ? -0.31 : 0.31, 0.02 * (s1 - 0.5));
+        float nd = length(p - nc);
+        alb *= 1.0 - 0.55 * smoothstep(0.03, 0.018, nd);
+        alb = mix(alb, vec3(0.42, 0.26, 0.16), 0.35 * smoothstep(0.06, 0.03, nd) * (1.0 - smoothstep(0.03, 0.02, nd)));
+    }
+    // its relief: rounded worn edges, the grain grooves, the chips stepped down (lit by the scene's sun)
+    float edge = 1.0 - smoothstep(0.0, 0.07, inner);
+    vec3 n = normalize(vec3(gq * edge * 0.9 + vec2(0.0, (grain - 0.5) * 0.12) * (1.0 - chip * 0.5), 1.0));
     vec3 L = normalize(uKeyDir);
     float diff = max(dot(n, L), 0.0);
     vec3 amb = mix(uAmbBot, uAmbTop, n.y * 0.5 + 0.5);
-    // the glass on the dark backing: a luminous core (the light scattered in the frosted glass), a deeper,
-    // saturated band toward the thin worn edge (where the dark shows through), the light leaving it glowing
-    // on the far side
-    vec3 deep = pow(vCol, vec3(1.6));
-    vec3 core = vCol * (amb * 0.7 + uKeyCol * (0.6 + 0.32 * diff));
-    float band = pow(1.0 - th, 1.3);
-    vec3 col = mix(core, deep * (0.5 + 0.4 * diff) * uKeyCol, band * 0.85);
-    vec2 ex = p - vec2(0.11, -0.12);
-    float through = exp(-dot(ex, ex) / 0.03) * th;
-    col += mix(vCol, vec3(1.0), 0.3) * through * 0.45 * uKeyCol;
-    // frosted by the sea: a milky veil in soft clouds, a fine pitted grain
-    float grain = nb(p * 42.0 + s1 * 50.0) * 0.55 + nb(p * 90.0 + s2 * 30.0) * 0.45;
-    float cloud = nb(p * 2.4 + vec2(s1, s2) * 20.0);
-    float frost = (0.08 + 0.1 * cloud) * th + (grain - 0.5) * 0.1;
-    col = mix(col, mix(vCol, vec3(1.0), 0.5) * uKeyCol * (0.8 + 0.3 * diff), clamp(frost, 0.0, 1.0));
-    float pits = smoothstep(0.8, 0.93, nb(p * 18.0 + vec2(s2, s1) * 40.0));
-    col *= 1.0 - 0.1 * pits * th;
-    // the worn lip catching the light on the lit side (a frosted line along the edge)
-    float lip = smoothstep(-0.07, -0.02, d) * (1.0 - smoothstep(-0.02, -0.004, d));
-    col += mix(vCol, vec3(1.0), 0.6) * lip * max(dot(gq, normalize(L.xy)), 0.0) * 0.4 * uKeyCol;
-    // an old bubble or two caught in the glass
-    for (int i = 0; i < 2; i++) {
-        float hs = fract(vSeed * (13.7 + float(i) * 5.3));
-        if (hs > 0.55) continue;
-        vec2 bc = vec2(fract(hs * 31.7), fract(hs * 57.3)) * 0.44 - 0.22;
-        float br = 0.014 + 0.016 * fract(hs * 91.1);
-        float bd = length(p - bc) / br;
-        float ring = smoothstep(1.2, 0.95, bd) * smoothstep(0.5, 0.85, bd);
-        col = mix(col, mix(vCol, vec3(1.0), 0.75) * uKeyCol, ring * 0.55 * smoothstep(0.0, -0.4, dot(p - bc, normalize(L.xy)) / br));
-        col *= 1.0 - 0.18 * smoothstep(0.9, 0.3, bd);
-    }
-    // a broad satin sheen on the lit shoulder (never a sharp glint)
-    vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-    col += uKeyCol * pow(max(dot(n, H), 0.0), 9.0) * 0.08;
+    vec3 col = alb * (amb * 0.75 + uKeyCol * (0.45 + 0.55 * diff));
+    col *= 1.0 - 0.25 * chip * smoothstep(0.02, 0.0, abs(chipN + (0.045 - inner) * 5.0 - 0.635)); // the chips rims
     // the outline: crisp, in a deeper tone of its own color
-    col = mix(col, deep * 0.4, smoothstep(-0.012, 0.0, d) * 0.8);
+    col = mix(col, pow(vCol, vec3(1.6)) * 0.35, smoothstep(-0.01, 0.0, d) * 0.8);
     // states: dulled (game over), glowing (a cleared row), held (dim)
     float g = dot(col, vec3(0.3, 0.55, 0.15));
     col = mix(col, vec3(g * 0.55 + 0.08), vE.x);

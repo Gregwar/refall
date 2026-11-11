@@ -1581,9 +1581,11 @@ void IslandsUniverse::buildBoard(const Game& g) {
     if (bare_) return;
     const VariantDef& V = VARIANTS[variant_];
     const vec3 back = lin(V.backing);
-    // the backing: deep and even, a soft shade around it, a fine pale rule
-    quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 6.1f, 11.1f, back * 0.4f, 0.4f, 0.16f, 0.085f);
-    quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 1.f, 0.f, 0.f);
+    // the backing: a tinted pane of deep water over the scene (the sea and the islands show through, darkened),
+    // denser toward the bottom where the stack stands; a soft shade around it, a fine pale rule
+    quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 6.1f, 11.1f, back * 0.4f, 0.3f, 0.16f, 0.085f);
+    quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.72f, 0.f, 0.f);
+    quad(vec3(0.f, -4.f, BACK_Z + 0.001f), 5.1f, 6.1f, back, 0.3f, 0.f, 0.6f);
     const vec3 rule = mixDisplay(back, lin(0xf4ecd8), 0.4f);
     const float bx = 5.1f, by = 10.1f, zr = BACK_Z + 0.002f;
     line(-bx, -by, bx, -by, zr, 0.035f, rule, 0.6f);
@@ -1597,10 +1599,8 @@ void IslandsUniverse::buildBoard(const Game& g) {
     auto tile = [&](const vec3& c, float sc, int type, float seed, float dull, float glowK, float alpha, bool shadow) {
         const vec3 col = pieceCol(type);
         if (shadow) {
-            // its contact shadow, and the light it lets through (a soft tint on the backing below it)
-            quad(vec3(c.x + 0.05f * sc, c.y - 0.07f * sc, BACK_Z + 0.004f), 0.56f * sc, 0.56f * sc, vec3(0.f), 0.5f * alpha, 0.42f, 0.42f);
-            // the light the glass lets through, gathered on the backing below it (a colored caustic)
-            quad(vec3(c.x + 0.1f * sc, c.y - 0.15f * sc, BACK_Z + 0.006f), 0.42f * sc, 0.42f * sc, col * 1.4f, 0.3f * alpha * (1.f - dull), 0.85f, 0.85f);
+            // its contact shadow, toward the sun's side
+            quad(vec3(c.x + 0.06f * sc, c.y - 0.08f * sc, BACK_Z + 0.004f), 0.57f * sc, 0.57f * sc, vec3(0.f), 0.55f * alpha, 0.4f, 0.4f);
         }
         GlassInst gi;
         gi.a[0] = c.x; gi.a[1] = c.y; gi.a[2] = c.z; gi.a[3] = sc;
@@ -2524,10 +2524,15 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
             glUseProgram(progGlass_);
             setMat(progGlass_, "uVP", bvp_);
             set3f(progGlass_, "uKeyDir", normalize(vec3(-0.5f, 0.62f, 0.62f)));
-            const vec3 key = lerp(vec3(1.f, 0.98f, 0.95f), vec3(1.f, 0.9f, 0.8f), night_ * 0.6f);
+            // lit by the scene's sun (golden in the drop, warm at dusk), and by its sky; at night by warm lanterns
+            const vec3 sc = sky_.sunCol;
+            const vec3 tint = sc / std::max(std::max(sc.x, sc.y), std::max(sc.z, 1e-3f));
+            vec3 key = lerp(vec3(1.f), tint, 0.65f) * lerpf(0.82f, 1.f, saturate(sc.y / 1.5f));
+            key = lerp(key, vec3(1.f, 0.78f, 0.55f) * 0.85f, night_ * 0.7f);
             set3f(progGlass_, "uKeyCol", key);
-            set3f(progGlass_, "uAmbTop", vec3(0.36f, 0.4f, 0.44f));
-            set3f(progGlass_, "uAmbBot", vec3(0.2f, 0.22f, 0.26f));
+            const vec3 st = sky_.top / std::max(std::max(sky_.top.x, sky_.top.y), std::max(sky_.top.z, 1e-3f));
+            set3f(progGlass_, "uAmbTop", lerp(vec3(0.38f, 0.4f, 0.44f), st * 0.42f, 0.5f));
+            set3f(progGlass_, "uAmbBot", vec3(0.2f, 0.2f, 0.22f));
             glBindVertexArray(glassVao_);
             glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
             glBufferData(GL_ARRAY_BUFFER, glass_.size() * sizeof(GlassInst), glass_.data(), GL_STREAM_DRAW);
