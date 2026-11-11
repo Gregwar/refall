@@ -63,8 +63,28 @@ private:
         vec3 col{1, 1, 1};
         int stripe = 0;
         bool moored = false;
+        // the fleet (the boats the cleared rows launched): its place along the route, its sails
+        float scale = 1.f, unfurl = 1.f, sailCode = 0.f, latN = 0.f, latOff = 0.f, appear = 1.f, sink = 0.f, launchT = 99.f;
+        vec3 sailCol{1, 1, 1}, jibCol{1, 1, 1}, launchP{0, 0, 0};
+        double sb = 0.0;
+        bool big = false;
     };
     std::vector<Boat> boats_;
+    std::vector<Boat> fleet_;
+    float spread_ = 1.f;
+    void launchBoat(const std::vector<int>& types, bool big);
+    void updateFleet(float dt);
+    vec3 seaPointInBand(int side, float dist) const;
+    // ---- The drop: the regatta (spinnakers, the fleet racing), golden light, dolphins, fireworks at dusk.
+    float dropK_ = 0.f;
+    struct Dolphin { vec3 off; float t0 = -9.f, dur = 1.f, size = 2.4f, seed = 0.f; };
+    struct Pod { float relF = 60.f, relS = 30.f; std::vector<Dolphin> d; };
+    std::vector<Pod> pods_;
+    void dropBeat(double beatLen);
+    struct Spark { vec3 p, v, col; float t, life; };
+    std::vector<Spark> sparks_;
+    void firework();
+    void releaseFlockAt(const vec3& c, int n);
     void updateBoats(float dt);
     void spawnBoat(bool initial);
     void boatParts(const Boat& b);

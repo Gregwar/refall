@@ -587,6 +587,24 @@ void IslandsUniverse::buildWorld() {
     builtVariant_ = variant_;
     // the world near the start, at once (later islands stream in)
     world_->update(vec3(0, 60, 0), s_, 9000.f);
+    fleet_.clear();
+    pods_.clear();
+    sparks_.clear();
+    // Test hook: ZEN_ISLANDS_FLEET=N starts with a fleet of N boats (as if N rows had been cleared)
+    if (const char* fl = std::getenv("ZEN_ISLANDS_FLEET")) {
+        const int n = std::atoi(fl);
+        for (int i = 0; i < n; i++) {
+            std::vector<int> row;
+            for (int k = 0; k < 10; k++) row.push_back(rng_.irange(0, 6));
+            launchBoat(row, i % 12 == 11);
+            Boat& b = fleet_.back();
+            b.sb = s_ + rng_.range(-60.f, 1100.f);
+            b.latN = (rng_.chance(0.5f) ? 1.f : -1.f) * rng_.range(60.f, 260.f);
+            b.launchT = 99.f;
+            b.unfurl = 1.f;
+        }
+        flocks_.clear();
+    }
     if (std::getenv("ZEN_ISLANDS_DEBUG"))
         for (const isl::Hero& h : world_->heroes)
             if (h.sc < 12000.0)
@@ -880,11 +898,15 @@ void IslandsUniverse::boatParts(const Boat& b) {
     const float pitch = 0.025f * std::sin(b.phase * 1.1f + 1.f) + (b.kind == 2 ? 0.05f * saturate(b.speed / 12.f) : 0.f);
     const float heel = (b.kind == 0 ? 0.13f : 0.02f) * (b.cruise > 0.f ? 1.f : 0.f) + 0.025f * std::sin(b.phase * 0.9f);
     const Q q = qMul(qMul(qYaw(-b.head), qAxis(vec3(0, 0, 1), pitch)), qAxis(vec3(1, 0, 0), heel));
-    auto at = [&](float x, float y, float z) { return b.p + vec3(0, bob, 0) + qRot(q, vec3(x, y, z)); };
+    const float K = b.scale;
+    auto at = [&](float x, float y, float z) { return b.p + vec3(0, bob * K, 0) + qRot(q, vec3(x, y, z) * K); };
     auto add = [&](int mesh, int mat, const vec3& p, const vec3& s, const Q& qq, const vec3& col, float param = 0.f) {
-        inst_[mesh].push_back(isl::inst(mat, p, s, qq, col, param, b.len * 0.37f));
+        inst_[mesh].push_back(isl::inst(mat, p, s * K, qq, col, param, b.len * 0.37f));
     };
-    const vec3 white(0.95f, 0.95f, 0.93f), sail = lin(0xf6f2e8), metal(0.75f);
+    const vec3 white(0.95f, 0.95f, 0.93f), metal(0.75f);
+    // the sails: white, or (the fleet) in bands of the colors of the row that launched it, unfurling
+    const vec3 sail = b.sailCode > 0.f ? b.sailCol : lin(0xf6f2e8), jib = b.sailCode > 0.f ? b.jibCol : lin(0xf6f2e8);
+    const float uf = b.unfurl, ufx = 0.25f + 0.75f * b.unfurl;
     const float trim = 0.32f * (std::sin(b.head * 3.f) > 0.f ? 1.f : -1.f);
     switch (b.kind) {
     case 0: { // a sailboat
@@ -897,8 +919,8 @@ void IslandsUniverse::boatParts(const Boat& b) {
         const Q qs = qMul(q, qYaw(trim));
         const vec3 piv = at(mx, 2.f, 0);
         add(M_CYL, MAT_METAL, piv + qRot(qs, vec3(-0.21f * L, 0, 0)), vec3(0.1f, 0.42f * L, 0.1f), qMul(qs, qAxis(vec3(0, 0, 1), PI * 0.5f)), metal);
-        add(M_SAIL, MAT_SAIL, piv, vec3(0.42f * L, mh - 1.6f, 1.f), qs, sail);
-        add(M_JIB, MAT_SAIL, at(0.46f * L, 1.2f, 0), vec3(0.9f * L, mh - 1.f, 1.f), qMul(q, qYaw(trim * 0.8f)), sail);
+        add(M_SAIL, MAT_SAIL, piv, vec3(0.42f * L * ufx, (mh - 1.6f) * uf, 1.f), qs, sail, b.sailCode);
+        add(M_JIB, MAT_SAIL, at(0.46f * L, 1.2f, 0), vec3(0.9f * L * ufx, (mh - 1.f) * uf, 1.f), qMul(q, qYaw(trim * 0.8f)), jib);
         break;
     }
     case 1: { // a catamaran
@@ -913,8 +935,8 @@ void IslandsUniverse::boatParts(const Boat& b) {
             add(M_CYL, MAT_METAL, at(mx, 1.2f + mh * 0.5f, 0), vec3(0.15f, mh, 0.15f), q, metal);
             if (b.cruise > 0.f) {
                 const Q qs = qMul(q, qYaw(trim * 0.7f));
-                add(M_SAIL, MAT_SAIL, at(mx, 2.2f, 0), vec3(0.42f * L, mh - 1.8f, 1.f), qs, sail);
-                add(M_JIB, MAT_SAIL, at(0.45f * L, 1.3f, 0), vec3(0.75f * L, mh - 1.4f, 1.f), qMul(q, qYaw(trim * 0.6f)), sail);
+                add(M_SAIL, MAT_SAIL, at(mx, 2.2f, 0), vec3(0.42f * L * ufx, (mh - 1.8f) * uf, 1.f), qs, sail, b.sailCode);
+                add(M_JIB, MAT_SAIL, at(0.45f * L, 1.3f, 0), vec3(0.75f * L * ufx, (mh - 1.4f) * uf, 1.f), qMul(q, qYaw(trim * 0.6f)), jib);
             }
         }
         break;
@@ -1013,6 +1035,229 @@ void IslandsUniverse::releaseFlock(int n, bool big) {
         f.birds.push_back(b);
     }
     flocks_.push_back(f);
+}
+
+// A burst of seabirds rising from a point on the sea (a boat's launch), flying with the camera, outward and up.
+void IslandsUniverse::releaseFlockAt(const vec3& c0, int n) {
+    Flock f;
+    const vec3 d = c0 - eye_;
+    const float D = std::max(30.f, length(d));
+    const float side = dot(d, right_) >= 0.f ? 1.f : -1.f;
+    f.c = c0 + vec3(0, std::max(4.f, 0.04f * D), 0);
+    const vec3 rh = normalize(vec3(right_.x, 0, right_.z));
+    const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z));
+    f.v = fh * (vel_ * 0.9f) + rh * (side * (3.f + 0.02f * vel_)) + vec3(0, 4.f, 0);
+    f.life = 8.f;
+    f.scale = std::max(1.6f, 0.03f * D);
+    f.frigate = false;
+    f.follow = true;
+    for (int i = 0; i < n; i++) {
+        Bird b;
+        const float r = std::sqrt(rng_.uniform()) * (5.f + n * 0.4f) * f.scale;
+        const float a = rng_.range(0.f, TAU);
+        b.off = vec3(std::cos(a) * r, rng_.range(0.f, 3.f) * f.scale, std::sin(a) * r);
+        b.phase = rng_.range(0.f, 100.f);
+        b.glide = rng_.uniform();
+        b.size = rng_.range(0.85f, 1.15f) * 1.3f * f.scale;
+        f.birds.push_back(b);
+    }
+    flocks_.push_back(f);
+}
+
+// A point on the sea in the band beside the well (side -1 left, +1 right), about `dist` away (or where the band's
+// ray meets the sea, from high up).
+vec3 IslandsUniverse::seaPointInBand(int side, float dist) const {
+    const vec3 dir = normalize(fwd_ + right_ * (0.62f * side) - up_ * 0.12f);
+    if (dir.y < -0.03f) {
+        const float t = eye_.y / -dir.y;
+        if (t < std::max(dist * 3.f, 9000.f)) return vec3(eye_.x + dir.x * t, 0.f, eye_.z + dir.z * t);
+    }
+    const vec3 dh = normalize(vec3(dir.x, 0.f, dir.z));
+    return vec3(eye_.x + dh.x * dist, 0.f, eye_.z + dh.z * dist);
+}
+
+// A cleared row launches a sailboat: from the shore nearest the camera in the band beside the well (or from the
+// open sea there), its sails unfurling in bands of the row's piece colors, a burst of seabirds; then it joins the
+// fleet sailing along the route with the camera. The fleet grows over the song.
+void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
+    const int side = flockSide_;
+    flockSide_ = -flockSide_;
+    const float dist = std::clamp(vel_ * 2.2f + 70.f, 80.f, 320.f);
+    vec3 p = seaPointInBand(side, dist);
+    // from a beach near that point, out into the water
+    float bd = 260.f * spread_;
+    vec3 shore = p;
+    bool found = false;
+    for (const auto& I : world_->islands)
+        for (const vec3& sp : I->shore) {
+            const float dd = length(vec3(sp.x - p.x, 0, sp.z - p.z));
+            if (dd < bd) { bd = dd; shore = sp; found = true; }
+        }
+    if (found) {
+        std::shared_ptr<isl::Island> I = world_->nearestIsland(shore, 50.f);
+        const vec3 out = I ? normalize(vec3(shore.x - I->x, 0, shore.z - I->z)) : normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z));
+        p = vec3(shore.x, 0, shore.z);
+        for (int k = 0; k < 40 && world_->terrain(p.x, p.z) > -1.6f; k++) p = p + out * 5.f;
+    }
+    for (int k = 0; k < 30 && world_->terrain(p.x, p.z) > -1.6f; k++) p = p + normalize(vec3(p.x - eye_.x, 0, p.z - eye_.z)) * 12.f;
+    // the sails: the row's piece types by how many cells each has, up to four bands (base 8 digits, type + 1)
+    int count[7] = {};
+    for (int t : types) count[std::clamp(t, 0, 6)]++;
+    int order[7] = {0, 1, 2, 3, 4, 5, 6};
+    std::sort(order, order + 7, [&](int a, int b) { return count[a] != count[b] ? count[a] > count[b] : a < b; });
+    float code = 0.f;
+    int n = 0;
+    for (int i = 0; i < 4 && count[order[i]] > 0; i++, n++) code = code * 8.f + (float)(order[i] + 1);
+    if (n == 0) code = 1.f;
+    Boat b;
+    b.kind = big ? 1 : 0;
+    b.len = big ? 17.f : rng_.range(9.5f, 12.f);
+    b.beam = big ? b.len * 0.5f : b.len * 0.32f;
+    b.cruise = b.speed = big ? 8.f : rng_.range(6.f, 7.5f);
+    b.col = rng_.chance(0.75f) ? lin(0xf6f4ee) : lin(0x1c2c4c);
+    b.stripe = rng_.irange(0, 2);
+    b.sailCode = 1.f + code;
+    auto pal = [&](int t) { return lerp(pieceCol(t), vec3(1.f), 0.12f); };
+    b.sailCol = pal(order[0]);
+    b.jibCol = pal(count[order[1]] > 0 ? order[1] : order[0]);
+    b.big = big;
+    b.phase = rng_.range(0.f, 50.f);
+    // its place in the fleet: along the route, beside it (normalized by the fleet's spread)
+    const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z)), rh(-fh.z, 0.f, fh.x);
+    const vec3 d = p - eye_;
+    b.sb = s_ + dot(d, fh);
+    float lat = dot(d, rh);
+    if (std::fabs(lat) < 60.f * spread_) lat = (lat < 0.f ? -60.f : 60.f) * spread_;
+    b.latN = lat / spread_;
+    b.launchP = p;
+    b.launchT = 0.f;
+    b.unfurl = 0.f;
+    b.head = std::atan2(fh.z, fh.x);
+    b.p = p;
+    b.scale = std::clamp(1.f + alt_ / 160.f, 1.f, 10.f) * (big ? 1.25f : 1.f);
+    // past the cap, the oldest boat sails away (sinks into the haze)
+    int live = 0;
+    for (const Boat& f : fleet_) live += f.sink <= 0.f;
+    if (live >= 48)
+        for (Boat& f : fleet_)
+            if (f.sink <= 0.f && f.launchT > 12.f) { f.sink = 0.001f; break; }
+    fleet_.push_back(b);
+    releaseFlockAt(p, big ? 22 : 10);
+}
+
+void IslandsUniverse::updateFleet(float dt) {
+    spread_ = approach(spread_, std::clamp(1.f + alt_ / 420.f, 1.f, 5.f), 0.25f, dt);
+    const float scaleT = std::clamp(1.f + alt_ / 160.f, 1.f, 10.f);
+    const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z));
+    for (Boat& b : fleet_) {
+        b.phase += dt;
+        b.launchT += dt;
+        b.unfurl = b.launchT > 50.f ? 1.f : smoothstepf(0.3f, 2.8f, b.launchT);
+        // the regatta: faster through the drop
+        b.speed = b.cruise * (1.f + 1.2f * dropK_);
+        b.sb += (double)(b.speed * dt);
+        const double rel = b.sb - s_;
+        if (b.launchT > 10.f && (rel < -150.0 * spread_ || rel > 1500.0 * spread_)) {
+            // recycled ahead: it sails in again from the haze
+            b.sb = s_ + rng_.range(750.f, 1150.f) * spread_;
+            b.appear = 0.f;
+        }
+        b.appear = std::min(1.f, b.appear + dt / 2.5f);
+        const isl::RoutePt rp = world_->route(b.sb);
+        const vec3 rr(-std::sin(rp.head), 0.f, std::cos(rp.head));
+        // off the land: slide aside to the nearest water (the turn field holds where it goes)
+        float lat0 = b.latN * spread_;
+        // (inside a tight turn, an orbit's loop, never across to the other side of the loop)
+        if (lat0 * rp.curv > 0.f) lat0 = std::clamp(lat0, -0.45f / std::max(std::fabs(rp.curv), 1e-5f), 0.45f / std::max(std::fabs(rp.curv), 1e-5f));
+        auto wet = [&](float lat) { return world_->terrain(rp.x + rr.x * lat, rp.z + rr.z * lat) < -1.4f; };
+        if (!wet(lat0 + b.turn)) {
+            for (int k = 1; k <= 14; k++) {
+                const float step = 22.f * k * std::sqrt(spread_);
+                const float clear = 50.f * spread_; // (never onto the route: the camera flies there)
+                if (std::fabs(lat0 + step) > clear && wet(lat0 + step)) { b.turn = step; break; }
+                if (std::fabs(lat0 - step) > clear && wet(lat0 - step)) { b.turn = -step; break; }
+            }
+        } else if (b.turn != 0.f && wet(lat0)) b.turn = 0.f;
+        b.latOff = approach(b.latOff, b.turn, 0.6f, dt);
+        vec3 pos(rp.x + rr.x * (lat0 + b.latOff), 0.f, rp.z + rr.z * (lat0 + b.latOff));
+        float head = rp.head + 0.04f * std::sin(b.phase * 0.2f);
+        if (b.launchT < 7.f) {
+            // from its launch point (sailing out), it eases into its place in the fleet
+            b.launchP = b.launchP + fh * (b.speed * dt);
+            const float w = smoothstepf(1.5f, 7.f, b.launchT);
+            pos = lerp(b.launchP, pos, w);
+            head = std::atan2(fh.z, fh.x) * (1.f - w) + head * w;
+        }
+        // never too close to the camera (it would loom behind the well): eased aside
+        {
+            const vec3 dv(pos.x - eye_.x, 0.f, pos.z - eye_.z);
+            const float dd = length(dv), keep = 45.f * spread_ * (b.big ? 1.4f : 1.f);
+            if (dd < keep) pos = pos + (dd > 1e-3f ? dv / dd : rr) * (keep - dd);
+        }
+        b.p = pos;
+        b.head = head;
+        float k = scaleT * (b.big ? 1.25f : 1.f) * smoothstepf(0.f, 1.f, b.appear);
+        if (b.sink > 0.f) {
+            b.sink += dt;
+            k *= 1.f - smoothstepf(0.f, 2.5f, b.sink);
+        }
+        b.scale = k;
+    }
+    fleet_.erase(std::remove_if(fleet_.begin(), fleet_.end(), [](const Boat& b) { return b.sink > 2.5f; }), fleet_.end());
+}
+
+// On the drop's beat grid (every two beats): dolphins leap, landing on the next beat; fireworks at dusk.
+void IslandsUniverse::dropBeat(double beatLen) {
+    if (dropK_ < 0.4f) return;
+    if (pods_.empty()) {
+        for (int side = -1; side <= 1; side += 2) {
+            Pod pod;
+            pod.relF = rng_.range(45.f, 80.f);
+            pod.relS = side * rng_.range(30.f, 48.f);
+            for (int i = 0; i < 5; i++) {
+                Dolphin d;
+                d.off = vec3(rng_.range(-9.f, 9.f), 0.f, rng_.range(-6.f, 6.f));
+                d.size = rng_.range(2.2f, 2.8f);
+                d.seed = rng_.uniform();
+                pod.d.push_back(d);
+            }
+            pods_.push_back(pod);
+        }
+    }
+    for (Pod& pod : pods_) {
+        int n = 2 + rng_.irange(0, 1); // two or three of the pod leap together
+        for (Dolphin& d : pod.d) {
+            if (n <= 0) break;
+            if (worldTime_ - d.t0 < d.dur + 0.3f || rng_.chance(0.3f)) continue;
+            d.t0 = worldTime_;
+            d.dur = (float)(2.0 * beatLen) * 0.98f;
+            n--;
+        }
+    }
+    if (lights_ > 0.3f) firework();
+}
+
+void IslandsUniverse::firework() {
+    // above a lit villa or village in view (else over the sea), beside the well
+    std::vector<vec3> spots;
+    for (const Draw& d : draws_) {
+        if (d.dist > 4500.f || d.dist < 150.f) continue;
+        if (d.I->type != isl::T_VILLA && d.I->type != isl::T_VILLAGE) continue;
+        const vec3 c(d.I->focus.x, 0.f, d.I->focus.z);
+        if (dot(normalize(c - eye_), fwd_) < 0.55f) continue;
+        spots.push_back(c);
+    }
+    if (spots.empty()) spots.push_back(seaPointInBand(rng_.chance(0.5f) ? 1 : -1, 900.f));
+    const vec3 c = spots[(size_t)rng_.irange(0, (int)spots.size() - 1)];
+    const float S = std::clamp(length(c - eye_) / 600.f, 0.8f, 3.f);
+    const vec3 at = c + vec3(rng_.range(-40.f, 40.f), rng_.range(70.f, 120.f) * S, rng_.range(-40.f, 40.f));
+    const vec3 col = lerp(pieceCol(rng_.irange(0, 6)), vec3(1.f, 0.85f, 0.6f), 0.12f);
+    for (int i = 0; i < 44; i++) {
+        const float a = rng_.range(0.f, TAU), z = rng_.range(-1.f, 1.f);
+        const float r = std::sqrt(1.f - z * z);
+        const vec3 dir(r * std::cos(a), z, r * std::sin(a));
+        sparks_.push_back({at, dir * (rng_.range(15.f, 19.f) * S), col, 0.f, rng_.range(1.8f, 2.6f)});
+    }
 }
 
 void IslandsUniverse::updateBirds(float dt) {
@@ -1240,9 +1485,20 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         std::memcpy(seeds_, ns, sizeof(seeds_));
         // the world: a flock of seabirds per clear (bigger with the rows), lanterns along the shore at dusk
-        const int n = ev.count >= 4 ? 34 : 7 + 4 * ev.count;
-        releaseFlock(n, ev.count >= 4);
-        if (ev.count >= 4) releaseFlock(16, true);
+        // a sailboat launched for each cleared row (its sails in the row's colors), a big catamaran for a Tetris
+        if (ev.count >= 4) {
+            std::vector<int> all;
+            for (auto& c : ev.cells) all.push_back(c.type);
+            launchBoat(all, true);
+            releaseFlock(24, true);
+        } else
+            for (int y = 0; y < Game::H; y++) {
+                if (!rows[y]) continue;
+                std::vector<int> row;
+                for (auto& c : ev.cells)
+                    if (c.y == y) row.push_back(c.type);
+                launchBoat(row, false);
+            }
         if (lights_ > 0.25f) lightLanterns(ev.count >= 4 ? 30 : 5 * ev.count);
         if (ev.count >= 4) swell_ = std::max(swell_, 0.3f);
         break;
@@ -1696,12 +1952,20 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         if (hb > lastHalf_) {
             lastHalf_ = hb;
             if (wp > 0.3f) sparkle_ = std::max(sparkle_, 0.6f * wp);
+            dropBeat(60.0 / std::max(60.f, music.bpm));
         }
     }
     sparkle_ = std::max(approach(sparkle_, 0.f, 2.5f, dt), kickIn_ * wp * 0.8f);
     std::string section;
     for (const HudText& h : f.hud)
         if (h.role == HUD_SECTION) section = h.text;
+    // the drop: the whole drop section (from the HUD's section, else the drop's peak), eased in, out over seconds
+    {
+        const bool inDrop = section.empty() ? dropMode_ : section == "DROP";
+        const float target = inDrop && overT_ < 0.f ? 1.f : 0.f;
+        dropK_ = approach(dropK_, target, target > dropK_ ? 1.2f : 0.4f, dt);
+        if (dropK_ < 0.03f) pods_.clear();
+    }
 
     // ---- The hour: the day passes over the song.
     {
@@ -1733,6 +1997,20 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         sky_.hor = lerp(sky_.hor, mixDisplay(sky_.hor, lin(0x8aa8d0), 0.55f), slow_);
         sky_.top = lerp(sky_.top, mixDisplay(sky_.top, lin(0x3a5a9a), 0.5f), slow_);
         sky_.fog = lerp(sky_.fog, mixDisplay(sky_.fog, lin(0x9ab4d4), 0.5f), slow_);
+        // the drop: a warm, golden light (a lower sun, the sea glittering), saturated, held through the drop
+        const float gk = smoothstepf(0.f, 1.f, dropK_) * (1.f - lights_) * (1.f - slow_);
+        if (gk > 0.f) {
+            const float e = std::asin(std::clamp(sky_.sunDir.y, -1.f, 1.f));
+            const float e2 = lerpf(e, std::min(e, 0.62f), gk);
+            const vec3 h = normalize(vec3(sky_.sunDir.x, 0.f, sky_.sunDir.z));
+            sky_.sunDir = normalize(h * std::cos(e2) + vec3(0, std::sin(e2), 0));
+            sky_.sunCol = lerp(sky_.sunCol, lin(0xffbc6a) * 2.35f, gk * 0.85f);
+            sky_.hor = mixDisplay(sky_.hor, lin(0xf4d48e), gk * 0.4f);
+            sky_.low = mixDisplay(sky_.low, lin(0xc8b494), gk * 0.3f);
+            sky_.fog = mixDisplay(sky_.fog, lin(0xe8c88c), gk * 0.3f);
+            sky_.haze *= 1.f - 0.5f * gk;
+            sky_.top = mixDisplay(sky_.top, lin(0x1a56c8), gk * 0.4f);
+        }
     }
 
     // ---- The flight, the world streaming around it.
@@ -1756,6 +2034,14 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     updateBoats(wdt);
     updatePlane(wdt);
     updateBirds(wdt);
+    updateFleet(wdt);
+    for (Spark& sp : sparks_) {
+        sp.t += wdt;
+        sp.v = sp.v * std::exp(-1.1f * wdt) + vec3(0, -4.f * wdt, 0);
+        sp.p = sp.p + sp.v * wdt;
+    }
+    sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& sp) { return sp.t > sp.life; }), sparks_.end());
+    sparkle_ = std::max(sparkle_, 0.45f * dropK_ * (1.f - lights_));
     for (Lantern& l : lanterns_) l.t += dt;
     lanterns_.erase(std::remove_if(lanterns_.begin(), lanterns_.end(), [&](const Lantern& l) {
                         const float dx = l.p.x - eye_.x, dz = l.p.z - eye_.z;
@@ -1792,7 +2078,51 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     gatherIslands();
     for (const Boat& b : boats_) {
         const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
-        if (dx * dx + dz * dz < 3500.f * 3500.f) boatParts(b);
+        if (dx * dx + dz * dz < 3500.f * 3500.f) {
+            boatParts(b);
+            // through the drop the other sailboats join the regatta too (a spinnaker in one of the piece colors)
+            if (dropK_ > 0.02f && b.kind <= 1 && b.cruise > 0.f) {
+                const float K = smoothstepf(0.f, 1.f, dropK_), L = b.len, mh = 1.3f * L;
+                const Q q = qYaw(-b.head);
+                const vec3 at = b.p + qRot(q, vec3(0.62f * L, 0.9f + mh * 0.45f, 0.f));
+                const vec3 col = lerp(pieceCol((int)(b.len * 7.3f) % 7), vec3(1.f), 0.12f);
+                inst_[isl::M_DOME].push_back(isl::inst(isl::MAT_CANVAS, at, vec3(mh * 0.78f, 0.5f * L, 0.82f * L) * K,
+                                                       qMul(q, qAxis(vec3(0, 0, 1), -PI * 0.5f)), col, 0.f, 0.f));
+            }
+        }
+    }
+    // the fleet; through the drop every boat raises a big spinnaker in its own colors
+    for (const Boat& b : fleet_) {
+        const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
+        if (dx * dx + dz * dz > 9000.f * 9000.f || b.scale < 0.02f) continue;
+        boatParts(b);
+        if (dropK_ > 0.02f && b.unfurl > 0.5f) {
+            const float K = b.scale * smoothstepf(0.f, 1.f, dropK_);
+            const float L = b.len, mh = 1.3f * L;
+            const Q q = qYaw(-b.head);
+            const vec3 at = b.p + qRot(q, vec3(0.62f * L, 0.9f + mh * 0.45f, 0.f) * b.scale);
+            // a dome turned forward (its axis along the bow): a bellied sail, its panels radiating
+            const Q qs = qMul(q, qAxis(vec3(0, 0, 1), -PI * 0.5f));
+            inst_[isl::M_DOME].push_back(isl::inst(isl::MAT_CANVAS, at, vec3(mh * 0.78f, 0.5f * L, 0.82f * L) * K, qs, b.sailCol, 0.f, 0.f));
+        }
+    }
+    // dolphins leaping beside the camera through the drop (each leap lands on the beat)
+    if (!pods_.empty()) {
+        const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z)), rh(-fh.z, 0.f, fh.x);
+        const float head = std::atan2(fh.z, fh.x);
+        for (const Pod& pod : pods_) {
+            const vec3 c = vec3(eye_.x, 0, eye_.z) + fh * pod.relF + rh * pod.relS;
+            for (const Dolphin& d : pod.d) {
+                const float u = (worldTime_ - d.t0) / d.dur;
+                if (u < 0.f || u > 1.f) continue;
+                const float H = 1.6f + 1.2f * d.seed, Lr = 7.f + 3.f * d.seed;
+                const float y = -0.6f + (H + 0.6f) * 4.f * u * (1.f - u);
+                const float slope = (H + 0.6f) * 4.f * (1.f - 2.f * u) / Lr;
+                const vec3 p = c + fh * (d.off.x + Lr * (u - 0.5f)) + rh * d.off.z + vec3(0, y, 0);
+                const Q q = qMul(qYaw(-head), qAxis(vec3(0, 0, 1), std::atan(slope)));
+                inst_[isl::M_DOLPHIN].push_back(isl::inst(isl::MAT_HULL, p, vec3(d.size), q, lin(0x5c6e80), 0.f, d.seed));
+            }
+        }
     }
     if (plane_.on) {
         using namespace isl;
@@ -1840,9 +2170,9 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
                         glow(l.p, 3.f + d.dist * 0.004f, vec3(1.f, 0.85f, 0.6f) * (3.f * lights_), 0.4f);
                         const float a = worldTime_ * 0.9f + d.I->seed;
                         const vec3 dir(std::cos(a), -0.02f, std::sin(a));
-                        for (int k = 1; k <= 10; k++) {
-                            const float r = k * k * 6.f;
-                            glow(l.p + dir * r, 1.5f + r * 0.12f, vec3(1.f, 0.88f, 0.65f) * (0.8f * lights_ / (1.f + k * 0.4f)), 0.9f);
+                        for (int k = 1; k <= 40; k++) { // (overlapping soft sprites: one continuous beam)
+                            const float r = 3.f + k * 7.f;
+                            glow(l.p + dir * r, 2.f + r * 0.16f, vec3(1.f, 0.88f, 0.65f) * (0.14f * lights_ / (1.f + k * 0.09f)), 1.f);
                         }
                     } else if (l.kind == 2) glow(l.p, l.size, vec3(0.2f, 1.f, 0.95f) * (0.5f * lights_), 0.9f);
                     else glow(l.p, l.size * (l.kind == 1 ? 1.4f : 1.f), l.col * (1.2f * lights_), 0.5f);
@@ -1855,6 +2185,42 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
             glow(l.p, 1.2f, vec3(1.f, 0.62f, 0.3f) * (2.2f * on * fl), 0.45f);
         }
         if (plane_.on) glow(plane_.p + vec3(0, -0.5f, 0), 0.6f, vec3(1.f, 0.2f, 0.15f) * (2.f * std::max(lights_, 0.3f)), 0.2f);
+        // the fleet's lanterns at dusk: at each masthead and over the stern, a field of warm lights on the sea
+        if (lights_ > 0.01f)
+            for (const Boat& b : fleet_) {
+                if (b.scale < 0.05f) continue;
+                const Q q = qYaw(-b.head);
+                const float fl = 0.9f + 0.1f * std::sin(worldTime_ * 5.f + b.phase * 7.f);
+                const float far = std::max(1.f, length(b.p - eye_) / 400.f);
+                glow(b.p + qRot(q, vec3(0.08f * b.len, 0.9f + 1.3f * b.len, 0.f) * b.scale), 0.9f * b.scale * far, vec3(1.f, 0.7f, 0.4f) * (1.6f * lights_ * fl), 0.4f);
+                glow(b.p + qRot(q, vec3(-0.45f * b.len, 1.6f, 0.f) * b.scale), 1.4f * b.scale * far, vec3(1.f, 0.6f, 0.3f) * (1.8f * lights_ * fl), 0.5f);
+            }
+        // fireworks: soft blooms, and their reflections on the sea (where the mirror image meets the surface)
+        for (const Spark& sp : sparks_) {
+            const float u = sp.t / sp.life;
+            const float a = (1.f - u) * (1.f - u) * smoothstepf(0.12f, 0.45f, sp.t); // (born dim: no white flash while they overlap)
+            const float far = std::max(1.f, length(sp.p - eye_) / 500.f);
+            glow(sp.p, 1.5f * far, sp.col * (0.75f * a), 0.6f);
+            const float h = std::max(sp.p.y, 1.f), A = std::max(eye_.y, 1.f);
+            const vec3 dh = vec3(sp.p.x - eye_.x, 0.f, sp.p.z - eye_.z);
+            const vec3 r = vec3(eye_.x, 0.15f, eye_.z) + dh * (A / (A + h));
+            glow(r, 1.8f * far, sp.col * (0.22f * a), 0.9f);
+        }
+        // the splashes of the dolphins' leaps
+        if (!pods_.empty()) {
+            const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z)), rh(-fh.z, 0.f, fh.x);
+            for (const Pod& pod : pods_)
+                for (const Dolphin& d : pod.d) {
+                    const float u = (worldTime_ - d.t0) / d.dur;
+                    if (u < -0.02f || u > 1.25f) continue;
+                    const float Lr = 7.f + 3.f * d.seed;
+                    const vec3 c = vec3(eye_.x, 0.3f, eye_.z) + fh * (pod.relF + d.off.x) + rh * (pod.relS + d.off.z);
+                    const float k0 = std::exp(-u * u * 60.f), k1 = std::exp(-(u - 1.f) * (u - 1.f) * 40.f);
+                    const vec3 lum = (sky_.sunCol * 0.3f + vec3(0.5f)) * 0.35f;
+                    if (k0 > 0.02f) glow(c - fh * (Lr * 0.5f), 1.6f, lum * k0, 0.9f);
+                    if (k1 > 0.02f) glow(c + fh * (Lr * 0.5f), 1.8f, lum * k1, 0.9f);
+                }
+        }
         // mist at the foot of the waterfalls
         for (const Draw& d : draws_) {
             if (d.I->fallW <= 0.f || d.dist > 3000.f) continue;
@@ -1928,6 +2294,14 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uWaterGlow", lin(0x20e8f0) * 0.8f);
         set3f(p, "uRoomNight", vec3(1.f, 0.66f, 0.34f) * 1.8f);
         set1f(p, "uLights", lights_);
+        {
+            float pal[21];
+            for (int t = 0; t < 7; t++) {
+                const vec3 c = lerp(pieceCol(t), vec3(1.f), 0.12f);
+                pal[t * 3] = c.x; pal[t * 3 + 1] = c.y; pal[t * 3 + 2] = c.z;
+            }
+            glUniform3fv(ugl::U(p, "uSailPal"), 7, pal);
+        }
         bindShadow(p);
     };
 
@@ -2007,6 +2381,11 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
             const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
             near.push_back({dx * dx + dz * dz, &b});
         }
+        for (const Boat& b : fleet_) {
+            if (b.scale < 0.3f) continue;
+            const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
+            near.push_back({(dx * dx + dz * dz) * 0.7f, &b});
+        }
         std::sort(near.begin(), near.end(), [](const std::pair<float, const Boat*>& a, const std::pair<float, const Boat*>& b) { return a.first < b.first; });
         float A[24 * 4], B[24 * 4];
         int n = 0;
@@ -2014,7 +2393,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
             if (n >= 24) break;
             const Boat& b = *pb.second;
             A[n * 4] = b.p.x; A[n * 4 + 1] = b.p.z; A[n * 4 + 2] = b.head; A[n * 4 + 3] = b.speed;
-            B[n * 4] = b.len; B[n * 4 + 1] = b.beam; B[n * 4 + 2] = (float)b.kind; B[n * 4 + 3] = 0.f;
+            B[n * 4] = b.len * b.scale; B[n * 4 + 1] = b.beam * b.scale; B[n * 4 + 2] = (float)b.kind; B[n * 4 + 3] = 0.f;
             n++;
         }
         set1i(progWater_, "uNumBoats", n);

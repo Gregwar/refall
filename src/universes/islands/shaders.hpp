@@ -311,6 +311,7 @@ flat in vec4 vQuat;
 layout(location = 0) out vec4 frag;
 uniform int uMode;          // 0 main, 2 the reflection, 3 the shadow map (depth only)
 uniform vec3 uLeaf, uLeaf2, uTrunk, uFoliage, uFoliage2, uWater, uWaterGlow, uRoomNight;
+uniform vec3 uSailPal[7];   // the fleet's sail colors (the pieces')
 uniform float uLights;      // the lights at dusk (windows, the pool, the lighthouse)
 vec3 qrot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
 float hb(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -393,7 +394,18 @@ void main() {
             alb *= 0.85 + 0.25 * nb(vec2(vAux.y * 30.0, vSeed * 9.0));
             trans = 0.6;
         } else alb = vec3(0.32, 0.24, 0.1);
-    } else if (mat == 9) {      // sail: cloth, the light through it
+    } else if (mat == 9) {      // sail: cloth, the light through it (the fleet's: bands of the cleared row's colors)
+        if (vParam > 0.5) {
+            float code = vParam - 1.0;
+            float n = code < 8.0 ? 1.0 : code < 64.0 ? 2.0 : code < 512.0 ? 3.0 : 4.0;
+            float band = min(floor(vAux.y * n * 1.02), n - 1.0);
+            float d = mod(floor(code / pow(8.0, n - 1.0 - band)), 8.0);
+            int ti = int(d + 0.5) - 1;
+            vec3 c = uSailPal[0];
+            for (int k = 0; k < 7; k++) if (k == ti) c = uSailPal[k];
+            alb = c;
+            alb *= 1.0 - 0.18 * smoothstep(0.012, 0.0, abs(fract(vAux.y * n * 1.02) - 0.5) - 0.488) * step(1.5, n);
+        }
         alb *= 0.92 + 0.08 * smoothstep(0.02, 0.0, abs(fract(vAux.y * 7.0) - 0.5) - 0.47);
         trans = 0.7;
     } else if (mat == 10) {     // a hull: its paint, a stripe along the sheer, the deck
@@ -509,7 +521,8 @@ void main() {
         vec2 d = wp - bp;
         float L = uBoatsB[i].x;
         float sp = uBoats[i].w;
-        float wl = 10.0 + sp * 10.0;
+        bool sailing = uBoatsB[i].z < 1.5;  // (sailboats leave a lighter, shorter wake than motorboats)
+        float wl = sailing ? 6.0 + sp * 4.0 + L * 1.5 : 10.0 + sp * 10.0;
         if (dot(d, d) > (wl + L) * (wl + L)) continue;
         vec2 fw = vec2(cos(uBoats[i].z), sin(uBoats[i].z));
         vec2 sd = vec2(-fw.y, fw.x);
@@ -526,7 +539,7 @@ void main() {
             float v = exp(-arm * arm / (0.6 + al * 0.05)) * fade * smoothstep(-2.0, 2.0, along);
             float bow = exp(-pow(abs(across) - B * 0.55, 2.0) / 0.25) * smoothstep(-L, -L * 0.7, along) * smoothstep(0.0, -L * 0.3, along);
             float n = n2(wp * 1.4 + uTime * 0.8);
-            foamW = max(foamW, (trail * (0.55 + 0.45 * n) * (0.4 + 0.6 * sk) + v * 0.5 * sk * smoothstep(0.3, 0.7, n) + bow * 0.6 * (0.3 + 0.7 * sk)));
+            foamW = max(foamW, (trail * (0.55 + 0.45 * n) * (0.4 + 0.6 * sk) * (sailing ? 0.45 : 1.0) + v * 0.5 * sk * (sailing ? 0.5 : 1.0) * smoothstep(0.3, 0.7, n) + bow * 0.6 * (0.3 + 0.7 * sk)));
             gw += sd * sign(across) * v * 0.15 * sk;
         }
     }

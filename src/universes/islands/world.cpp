@@ -292,6 +292,34 @@ void bird(MB& m) {
     }
 }
 
+// A dolphin, 1 long along +x (the beak forward): a tapered body, a curved dorsal fin, flippers, flukes.
+void dolphin(MB& m) {
+    const int NS = 18, NR = 10;
+    auto R = [](float u) { // u 0 tail .. 1 beak
+        const float body = std::pow(std::sin(PI * std::min(1.f, u * 1.08f)), 0.75f) * 0.085f;
+        return u > 0.92f ? body * 0.55f + 0.012f : body + 0.006f;
+    };
+    auto P = [&](int i, int k) {
+        const float u = (float)i / NS, a = TAU * k / NR;
+        const float r = R(u);
+        return vec3(u - 0.5f, std::sin(a) * r * 1.05f + 0.01f * std::sin(PI * u), std::cos(a) * r * 0.9f);
+    };
+    for (int i = 0; i < NS; i++)
+        for (int k = 0; k < NR; k++) {
+            const vec3 a = P(i, k), b = P(i + 1, k), c = P(i + 1, k + 1), d = P(i, k + 1);
+            const float belly = std::sin(TAU * k / NR) < -0.2f ? 1.f : 0.f;
+            m.quad(a, b, c, d, belly, (float)i / NS);
+        }
+    // the dorsal fin, the flippers, the flukes (both faces)
+    auto tri2 = [&](const vec3& a, const vec3& b, const vec3& c) { m.tri(a, b, c); m.tri(a, c, b); };
+    tri2(vec3(0.02f, 0.07f, 0), vec3(-0.14f, 0.07f, 0), vec3(-0.12f, 0.2f, 0));
+    for (int sd = -1; sd <= 1; sd += 2) {
+        tri2(vec3(0.18f, -0.04f, 0.05f * sd), vec3(0.08f, -0.05f, 0.06f * sd), vec3(0.06f, -0.1f, 0.17f * sd));
+        tri2(vec3(-0.46f, 0.f, 0.f), vec3(-0.56f, 0.f, 0.15f * sd), vec3(-0.5f, 0.f, 0.02f * sd));
+        tri2(vec3(-0.44f, 0.f, 0.f), vec3(-0.56f, 0.f, 0.15f * sd), vec3(-0.47f, 0.f, 0.f));
+    }
+}
+
 } // namespace
 
 std::vector<float> buildMesh(int mesh) {
@@ -359,6 +387,7 @@ std::vector<float> buildMesh(int mesh) {
     case M_PALM1: palm(m, 1); break;
     case M_PALM2: palm(m, 2); break;
     case M_BIRD: bird(m); break;
+    case M_DOLPHIN: dolphin(m); break;
     default: break;
     }
     return v;
