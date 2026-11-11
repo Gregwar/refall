@@ -42,7 +42,7 @@ float fbm3(vec3 p) {
 // the view (a macro's haze close up), the air's own perspective farther out; nothing of either in space.
 inline const char* LIGHT_GLSL = R"(
 uniform vec3 uEye, uMoonDir, uMoonC, uAmbC, uMistC, uNetC;
-uniform float uFogK, uMistK, uAlt, uBridge, uTime;
+uniform float uFogK, uMistK, uAlt, uBridge, uTime, uMacro; // uMacro: 1 at the macro start (the first centimeter)
 uniform vec3 uBridgeCol;
 float airDensity(float h0, float h1) {
     const float H = 8500.0;
@@ -148,6 +148,8 @@ vec3 landColor(vec3 p, vec3 n, float t, float foot, float dist, out float water,
     float tone = smoothstep(-0.05, 0.05, v);
     vec3 floorC = mix(uSoil, uMoss, tone);
     if (foot < 0.02) {
+        // scale cues for the macro start: fallen leaves (a midrib, side veins, a darker curled rim), pine needles,
+        // round soil grains, all far bigger than the first threads
         for (int L = 0; L < 2; L++) {
             float s = L == 0 ? 0.035 : 0.011;
             vec2 cell = floor(p.xz / s);
@@ -156,14 +158,40 @@ vec3 landColor(vec3 p, vec3 n, float t, float foot, float dist, out float water,
             vec2 q = p.xz - o;
             q = vec2(cos(a) * q.x + sin(a) * q.y, -sin(a) * q.x + cos(a) * q.y) / s;
             float on = step(hash(cell + 7.1 + float(L)), 0.28);
-            float leaf = smoothstep(1.0, 0.85, length(q * vec2(2.6, 5.2))) * on;
-            float vein = smoothstep(0.03, 0.0, abs(q.y)) * leaf;
-            vec3 lc = uLitter * (0.6 + 0.8 * hash(cell + 3.3));
-            floorC = mix(floorC, lc * (1.0 - 0.4 * vein), leaf * smoothstep(s * 0.5, s * 0.1, foot));
+            float taper = 1.0 - 0.35 * q.x * 2.6;                        // pointed at the tip, broad at the stalk
+            float lr = length(q * vec2(2.6, 5.2 / max(taper, 0.3)));
+            float leaf = smoothstep(1.0, 0.85, lr) * on;
+            float side = abs(fract(q.x * 7.0 - abs(q.y) * 9.0) - 0.5);
+            float vein = max(smoothstep(0.03, 0.0, abs(q.y)), smoothstep(0.06, 0.0, side) * smoothstep(0.17, 0.02, abs(q.y)) * 0.6) * leaf;
+            float stalk = smoothstep(0.025, 0.0, abs(q.y)) * step(-0.52, q.x) * step(q.x, -0.36) * on;
+            vec3 lc = uLitter * (0.6 + 0.8 * hash(cell + 3.3)) * (1.0 - 0.35 * smoothstep(0.7, 1.0, lr));
+            float kL = smoothstep(s * 0.5, s * 0.1, foot);
+            floorC = mix(floorC, lc * (1.0 - 0.4 * vein), max(leaf, stalk) * kL);
+        }
+        for (int L = 0; L < 2; L++) {
+            float s = L == 0 ? 0.045 : 0.028;
+            vec2 cell = floor(p.xz / s + float(L) * 0.37);
+            vec2 o = (cell + 0.5 + (hash2(cell + 11.0 + float(L)) - 0.5) * 0.7 - float(L) * 0.37) * s;
+            float a = hash(cell + 5.9 + float(L)) * 6.2832;
+            vec2 q = p.xz - o;
+            q = vec2(cos(a) * q.x + sin(a) * q.y, -sin(a) * q.x + cos(a) * q.y);
+            float on = step(hash(cell + 9.4 + float(L)), 0.45);
+            float hl = s * 0.42, w = 0.00045;                          // a needle some 4 cm long, under a millimeter wide
+            float dq = length(vec2(max(abs(q.x) - hl, 0.0), q.y));
+            float aa = max(foot, 1e-5);
+            float nd = smoothstep(w + aa, w - aa, dq) * on * smoothstep(w * 4.0, w * 0.8, foot);
+            float ridge = smoothstep(w * 0.6, 0.0, abs(q.y + w * 0.25));
+            vec3 nc = mix(uLitter * 0.55, uLitter * 1.15, hash(cell + 1.9)) * (0.8 + 0.4 * ridge);
+            floorC = mix(floorC, nc, nd);
         }
         vec2 gc = floor(p.xz / 0.0012);
-        float grain = step(0.7, hash(gc)) * smoothstep(0.0009, 0.0002, foot);
-        floorC *= 1.0 + 0.5 * (hash(gc + 1.0) - 0.5) * grain;
+        vec2 go = (gc + 0.5 + (hash2(gc + 4.4) - 0.5) * 0.4) * 0.0012;
+        float gr = 0.0012 * (0.22 + 0.2 * hash(gc + 8.8));
+        vec2 gq = (p.xz - go) / gr;
+        float gl = length(gq);
+        float grain = step(0.55, hash(gc)) * smoothstep(1.0 + foot / gr, 1.0 - foot / gr, gl) * smoothstep(0.0006, 0.00015, foot);
+        float gshade = 0.75 + 0.5 * clamp(-dot(gq, vec2(0.6, 0.6)), -0.5, 0.6);
+        floorC = mix(floorC, mix(uSoil, vec3(dot(uSoil, vec3(0.33))) * 1.4, 0.4 + 0.4 * hash(gc + 1.0)) * gshade, grain);
     }
     float kFloor = 1.0 - smoothstep(0.25, 3.0, foot);
     vec3 col = mix(country, floorC, kFloor);
@@ -267,7 +295,7 @@ void main() {
         float lday = smoothstep(-0.25, 0.25, dot(tn, uSunDir));
         float limb = exp(-hc / 7000.0) * smoothstep(3000.0, 80000.0, alt) * step(0.0, -b);
         col += mix(uSkyLow * 2.0 + uDusk * 0.8, vec3(0.45, 0.7, 1.0) * 1.6, lday) * limb * (0.8 + 1.2 * lday);
-        stars += (uStars + (1.0 - a)) * (1.0 - a * 0.8);
+        stars += (uStars + (1.0 - a)) * (1.0 - a * 0.8) * (1.0 - 0.85 * uMacro);
         // the tree line along the horizon (seen from near the ground)
         if (uHills > 0.0) {
             float az = atan(d.x, -d.z);
@@ -275,8 +303,9 @@ void main() {
             float crowns = vnoise(vec2(az * 140.0, 3.0));
             h1 += 0.012 * crowns * crowns + 0.006 * vnoise(vec2(az * 420.0, 5.0));
             float h2 = 0.004 + 0.012 * fbm(vec2(az * 4.3 + 9.0, 3.0)) + 0.008 * sq(vnoise(vec2(az * 230.0, 9.0)));
-            float aa = uPix * 1.2;
+            float aa = mix(uPix * 1.2, 0.03, uMacro);   // out of focus behind a macro shot
             float m1 = smoothstep(h1 + aa, h1 - aa, el) * uHills, m2 = smoothstep(h2 + aa, h2 - aa, el) * uHills;
+            m1 *= 1.0 - 0.45 * uMacro; m2 *= 1.0 - 0.3 * uMacro;
             vec3 farC = mix(uMistC, uSkyLow, 0.35) * 0.8;
             vec3 nearC = uMistC * 0.45;
             col = mix(col, farC, m1);
@@ -310,10 +339,10 @@ void main() {
                 float s = 0.18 + 0.14 * hash3(ci + 1.7);
                 crater += smoothstep(s, s * 0.7, rr) * 0.3 - smoothstep(s * 1.15, s, rr) * smoothstep(s * 0.85, s, rr) * 0.2;
             }
-            vec3 alb = mix(vec3(1.0), vec3(0.72, 0.74, 0.86), smoothstep(0.5, 0.62, cr)) * (1.0 - crater * 0.5);
-            float ml = smoothstep(-0.04, 0.04, dot(mn, uMoonLit));
+            vec3 alb = mix(vec3(1.0), vec3(0.72, 0.74, 0.86), smoothstep(0.5, 0.62, cr) * (1.0 - 0.8 * uMacro)) * (1.0 - crater * 0.5 * (1.0 - uMacro));
+            float ml = smoothstep(-0.04 - 0.4 * uMacro, 0.04 + 0.4 * uMacro, dot(mn, uMoonLit));
             vec3 mc = alb * mix(uSkyTop * 0.6 + 0.01, uMoonC * 1.5 + 0.12, ml);
-            float edge = smoothstep(0.0, 0.1, -dot(mn, d));
+            float edge = smoothstep(0.0, mix(0.1, 0.7, uMacro), -dot(mn, d)) * (1.0 - 0.35 * uMacro);
             col = mix(col, mc, edge);
             stars = 0.0;
         }
@@ -570,7 +599,7 @@ layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 i0; // center, radius
 layout(location = 2) in vec4 i1; // color, seed
 layout(location = 3) in vec4 i2; // clump center, alpha
-layout(location = 4) in vec4 i3; // kind (0 foliage, 1 moss, 2 pebble), glow from below, -, -
+layout(location = 4) in vec4 i3; // kind (0 foliage, 1 moss, 2 pebble, 3 dew drop), glow from below, -, -
 uniform mat4 uVP;
 uniform vec3 uCamR, uCamU;
 uniform float uPx;
@@ -638,6 +667,16 @@ void main() {
     float below = smoothstep(0.3, -0.7, n.y);
     col += uRimC * vK.y * (below * 0.6 + smoothstep(0.75, 0.97, rn) * 0.25) * (0.3 + alb * 3.0);
     col += uMoonC * alb * smoothstep(0.85, 0.97, rn) * smoothstep(0.3, 0.7, ndl) * 0.5;
+    if (kind > 2.5) {
+        // a dew drop: clear water over the moss, the world seen through it upside down (a dark rim, a bright
+        // lower crescent of focused light), a crisp highlight of the moon, the network's glow caught in it
+        vec2 ld = normalize(vec2(dot(uMoonDir, uCamR), dot(uMoonDir, uCamU)) + 1e-4);
+        float hi = smoothstep(0.2, 0.1, length(l / edge - ld * 0.45));
+        float cres = smoothstep(0.55, 0.9, rn) * smoothstep(0.1, 0.6, dot(-l / edge, ld));
+        vec3 body = mix(alb, vec3(dot(alb, vec3(0.33))), 0.45) * (0.55 + 0.45 * (1.0 - rn)) + uRimC * vK.y * 0.15;
+        col = body * (1.0 - 0.6 * smoothstep(0.75, 1.0, rn)) + alb * cres * 0.9 + uRimC * vK.y * cres * 0.8 + uMoonC * hi * 2.2;
+        cover *= 0.92;
+    }
     frag = vec4(atmos(col, vCtr) * cover, cover);
 }
 )";

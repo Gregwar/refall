@@ -13,8 +13,9 @@
 namespace {
 
 // The journey: lines -> the network's reach (meters), interpolated in log space.
-// The whole journey fits in some 50 lines (one song): something new every five lines or so, the first millimeters a
-// little quicker (some 2x farther a line), then about 1.6x a line, the last lines slowly wrapping the globe.
+// The pacing lives here alone (to rescale it, scale the lines column). The whole journey fits in some 50 lines (one
+// song): something new every five lines or so, the first millimeters a little quicker (some 2x farther a line), then
+// about 1.6x a line, the last lines slowly wrapping the globe.
 struct Stage { float lines, reach; };
 const Stage STAGES[] = {
     {0, 0.002f}, {1.2f, 0.005f}, {2.6f, 0.014f}, {4.2f, 0.045f}, {6, 0.18f}, {8, 0.9f}, {10.3f, 4.5f}, {13, 22.f},
