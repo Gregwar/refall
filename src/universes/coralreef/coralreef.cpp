@@ -141,6 +141,7 @@ constexpr float CLEAR_T = 0.36f;     // a cleared row shrinks away in this long 
 constexpr float GROW_T = 3.2f;       // a coral grows in this long once its seed has settled
 constexpr int N_SLOTS = 176;         // corals at scene completion (and a few more, slowly, after it)
 constexpr int MAX_BUBBLES = 1400;
+constexpr int MAX_EGGS = 3200;      // the drop's coral spawn
 constexpr float CAM_FOV = 56.f;      // degrees, vertical
 const vec3 EYE0(0.f, 3.1f, 15.5f), TARGET0(0.f, 1.3f, 0.f);
 
@@ -895,6 +896,39 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
 }
 
 // =====================================================================================================
+// The drop
+// =====================================================================================================
+
+// A bundle of eggs leaves a coral's top and rises slowly, wavering (upside-down snow).
+void CoralReefUniverse::spawnEgg(const Slot& sl, float delay) {
+    if ((int)eggs_.size() >= MAX_EGGS) return;
+    static const unsigned COLS[5] = {0xffb4c8, 0xffc8a0, 0xfff0d2, 0xff9ab4, 0xffd6b8};
+    Egg e;
+    const float a = rng_.range(0.f, TAU), d = rng_.range(0.f, 0.35f) * sl.size;
+    e.p = sl.p + vec3(std::cos(a) * d, sl.size * rng_.range(0.35f, 0.75f), std::sin(a) * d);
+    e.r = rng_.range(0.06f, 0.1f);
+    e.age = delay;
+    e.life = rng_.range(18.f, 30.f);
+    e.seed = rng_.uniform();
+    e.fade = 1.f;
+    e.col = lin(COLS[rng_.irange(0, 4)]);
+    eggs_.push_back(e);
+}
+
+// The mantas' loop: a slow, wide figure in one side band and the open water above it, seen from the side, coming
+// near and going away (placed in screen space so it stays in view on a 16:9 screen); `enter` 0 .. 1 glides it in.
+vec3 CoralReefUniverse::mantaAt(float t, float enter) const {
+    const float w = TAU / 26.f;
+    const float nx = mantaSide_ * (0.8f + 0.07f * std::sin(w * t) + 0.9f * (1.f - enter));
+    const float ny = 0.32f + 0.2f * std::sin(2.f * w * t + 0.6f);
+    const float dist = 21.f + 4.f * std::cos(w * t);
+    const vec3 d = normalize(look_ + camR_ * (nx * tanH_ * aspect_) + camU_ * (ny * tanH_));
+    vec3 p = eye_ + d * dist;
+    p.y = std::max(p.y, 2.2f);
+    return p;
+}
+
+// =====================================================================================================
 // Board
 // =====================================================================================================
 
@@ -1188,14 +1222,26 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             sectionDrop = h.text == "DROP";
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
-    if (isDrop && !wasDrop_ && (mantaT_ < 0.f || mantaT_ > 20.f)) {
+    if (isDrop && !wasDrop_) {
+        // the drop's downbeat: every coral releases its eggs at once; the mantas come in on one side, the
+        // schools gather on the other
+        dropT_ = 0.f;
         mantaT_ = 0.f;
-        mantaDir_ = -mantaDir_;
-        if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] the manta at %.1f s\n", time_);
+        mantaSide_ = -mantaSide_;
+        dropOn_ = true;
+        for (const Slot& sl : slots_) {
+            if (sl.grow < 0.5f) continue;
+            const int n = 5 + (int)(sl.size * 4.f);
+            for (int i = 0; i < n; i++) spawnEgg(sl, -rng_.range(0.f, 1.2f));
+        }
+        if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] the drop at %.1f s: %d eggs\n", time_, (int)eggs_.size());
     }
+    if (!isDrop && wasDrop_) dropOn_ = false;
     wasDrop_ = isDrop;
+    dropT_ += dt;
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 0.8f : 0.3f, dt);
     const float life = smoothstepf(0.f, 1.f, dropAmt_);
+    dropLight_ = approach(dropLight_, isDrop ? 1.f : 0.f, isDrop ? 0.45f : 0.16f, dt);
     swell_ = approach(swell_, 0.f, 0.4f, dt);
 
     // ---- The lines -> the reef.
@@ -1275,6 +1321,19 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         if (!palSet_) { basePal_ = target; palSet_ = true; }
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
         pal_ = basePal_;
+        // the drop: a magical dusky blue-violet, so the spawn glows
+        const float dusk = smoothstepf(0.f, 1.f, dropLight_) * (1.f - slow_);
+        if (dusk > 0.01f) {
+            Palette d = pal_;
+            d.water = lin(0x2c3aa8); d.deep = lin(0x0e0c48); d.haze = lin(0x7a68d8); d.surface = lin(0x9a8af0);
+            d.sun = pal_.sun * vec3(0.8f, 0.72f, 1.f); d.shade = lin(0x2a2878); d.rim = lin(0xb08aff);
+            d.caustic = lin(0xd0b8ff); d.ray = lin(0xc4a8ff);
+            d.sand = pal_.sand * vec3(0.8f, 0.78f, 0.95f); d.sand2 = pal_.sand2 * vec3(0.8f, 0.78f, 0.95f);
+            d.rays = pal_.rays * 1.15f; d.caustics = pal_.caustics * 0.8f; d.glow = std::max(pal_.glow, 0.35f);
+            lerpPalette(pal_, d, dusk * 0.8f);
+            for (int i = 0; i < 7; i++) pal_.piece[i] = basePal_.piece[i];
+            pal_.ink = basePal_.ink; pal_.accent = basePal_.accent; pal_.veil = basePal_.veil;
+        }
         const float deep = std::max(slow_, 0.7f * over_);
         if (deep > 0.01f) {
             Palette d = pal_;
@@ -1306,28 +1365,65 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Fish.
     if (swirlT_ >= 0.f) swirlT_ += dt;
-    const float swirlK = swirlT_ >= 0.f ? smoothstepf(0.f, 1.5f, swirlT_) * (1.f - smoothstepf(6.f, 9.f, swirlT_)) : 0.f;
+    float swirlK = swirlT_ >= 0.f ? smoothstepf(0.f, 1.5f, swirlT_) * (1.f - smoothstepf(6.f, 9.f, swirlT_)) : 0.f;
     if (swirlT_ > 9.f) swirlT_ = -1.f;
+    {
+        // the drop: every school gathers into one great bait ball on the other side, disperses when it ends
+        const float ball = smoothstepf(0.f, 1.f, mantaK_);
+        if (ball > swirlK) { swirlK = ball; swirlC_ = vec3(-mantaSide_ * 10.5f, 3.4f, 1.f); }
+    }
     swirl_ = swirlK;
     if (!f.paused) updateFish(wdt, energyS_, melody_, swirlK);
 
-    // ---- The manta: once a drop, a slow glide across behind the well.
-    vec3 mantaP(0.f), mantaD(1, 0, 0);
-    float mantaA = 0.f, mantaBank = 0.f;
-    if (mantaT_ >= 0.f) {
-        mantaT_ += wdt;
-        const float T = 27.f;
-        const float u = mantaT_ / T;
-        if (u > 1.f) mantaT_ = -1.f;
-        else {
-            const float x = mantaDir_ * lerpf(-36.f, 36.f, u);
-            mantaP = vec3(x, 2.4f + 0.35f * std::sin(u * 5.f), 1.5f - 2.5f * std::sin(u * PI));
-            const vec3 nx(mantaDir_ * 72.f / T, 0.4f * 5.f / T * std::cos(u * 5.f), -2.5f * PI / T * std::cos(u * PI));
-            mantaD = normalize(nx);
-            mantaBank = (0.42f + 0.1f * std::sin(u * PI * 2.f)) * (mantaD.x >= 0.f ? 1.f : -1.f);
-            mantaA = 1.f;
-        }
+    // ---- The drop: the mantas' loop, the eggs (a burst on the downbeat, then the corals keep spawning while the
+    // drop lasts; at its end they thin out over several seconds), the corals breathing with the beat.
+    const float enter = smoothstepf(0.f, 1.f, mantaK_);
+    mantaK_ = approach(mantaK_, dropOn_ ? 1.f : 0.f, dropOn_ ? 0.18f : 0.12f, dt);
+    mantaT_ += wdt;
+    vec3 mantaP[2], mantaD[2];
+    float mantaBank[2] = {0.f, 0.f};
+    for (int k = 0; k < 2; k++) {
+        const float t = mantaT_ - 1.6f * k;
+        const vec3 p0 = mantaAt(t, enter), p1 = mantaAt(t + 0.15f, enter), p2 = mantaAt(t + 0.3f, enter);
+        mantaP[k] = p0 + camR_ * (k == 0 ? 0.f : -1.8f * mantaSide_) + vec3(0.f, k == 0 ? 0.f : -1.1f, 0.f);
+        mantaD[k] = normalize(p1 - p0);
+        const vec3 d2 = normalize(p2 - p1);
+        mantaBank[k] = std::clamp(-cross(mantaD[k], d2).y * 25.f, -0.6f, 0.6f) + 0.3f * (mantaD[k].x >= 0.f ? 1.f : -1.f);
     }
+    const bool mantaOn = mantaK_ > 0.01f && overT_ < 0.f;
+    if (!f.paused) {
+        if (dropOn_) {
+            spawnAcc_ += dt * (40.f + 0.5f * (float)slots_.size());
+            spawnAcc_ = std::min(spawnAcc_, 40.f);
+            while (spawnAcc_ >= 1.f && !slots_.empty()) {
+                spawnAcc_ -= 1.f;
+                const Slot& sl = slots_[rng_.irange(0, (int)slots_.size() - 1)];
+                if (sl.grow > 0.5f) spawnEgg(sl, 0.f);
+                else {
+                    // (and from the water itself, so a young reef's drop is full of them too)
+                    Slot tmp = sl;
+                    tmp.p = vec3(rng_.range(-24.f, 24.f), rng_.range(-0.5f, 3.f), rng_.range(-20.f, 6.f));
+                    tmp.size = 1.f;
+                    spawnEgg(tmp, 0.f);
+                }
+            }
+        }
+        for (Egg& e : eggs_) {
+            e.age += wdt;
+            if (e.age < 0.f) continue;
+            const float rise = 0.28f + 0.18f * e.seed;
+            e.p += vec3(0.18f * std::sin(time_ * 0.7f + e.seed * 40.f), rise, 0.12f * std::cos(time_ * 0.6f + e.seed * 30.f)) * wdt;
+            if (!dropOn_) e.fade = approach(e.fade, 0.f, 0.15f + 0.2f * e.seed, wdt);
+            if (e.p.y > reef::SURF_Y - 0.2f) e.life = std::min(e.life, e.age);
+        }
+        eggs_.erase(std::remove_if(eggs_.begin(), eggs_.end(), [](const Egg& e) { return e.age >= e.life || e.fade <= 0.f; }), eggs_.end());
+    }
+    {
+        // the corals' breath: on the beat, every two beats (the host's pulse), eased
+        const float bp = music.hasSong ? std::max(music.beatPulse, 0.6f * music.kick) : 0.f;
+        pulse_ = std::max(approach(pulse_, 0.f, 1.6f, dt), bp);
+    }
+    const float coralPulse = smoothstepf(0.f, 1.f, pulse_) * dropLight_;
 
     // ---- Particles in the world.
     for (Bubble& b : bubbles_) {
@@ -1465,6 +1561,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
                 glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(rinst[t].size() / 16));
             }
         }
+        set1f(progCoral_, "uPulse", coralPulse);
         const float sa = 0.18f + 0.1f * wm + 0.12f * wp;
         set2f(progCoral_, "uSurge", sa * std::cos(0.4f), sa * std::sin(0.4f));
         for (int k = 0; k < reef::K_COUNT; k++)
@@ -1499,13 +1596,17 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             glBufferData(GL_ARRAY_BUFFER, inst[s].size() * sizeof(float), inst[s].data(), GL_STREAM_DRAW);
             glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(inst[s].size() / 12));
         }
-        if (mantaA > 0.f) {
-            const float q[12] = {mantaP.x, mantaP.y, mantaP.z, 4.f, mantaD.x, mantaD.y, mantaD.z, time_ * TAU / 4.2f,
-                                 7.f, 0.f, mantaBank, 1.f};
+        if (mantaOn) {
+            float q[24];
+            for (int k = 0; k < 2; k++) {
+                const float v[12] = {mantaP[k].x, mantaP[k].y, mantaP[k].z, k == 0 ? 2.1f : 1.8f, mantaD[k].x, mantaD[k].y, mantaD[k].z,
+                                     time_ * TAU / 4.6f - 1.3f * k, 7.f, 0.f, mantaBank[k], 1.f};
+                std::copy(v, v + 12, q + 12 * k);
+            }
             glBindVertexArray(manta_.vao);
             glBindBuffer(GL_ARRAY_BUFFER, manta_.inst);
             glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
-            glDrawElementsInstanced(GL_TRIANGLES, manta_.count, GL_UNSIGNED_INT, nullptr, 1);
+            glDrawElementsInstanced(GL_TRIANGLES, manta_.count, GL_UNSIGNED_INT, nullptr, 2);
         }
     }
     // the billboards: bubbles, seeds, specks (blended, the distance in alpha kept)
@@ -1537,6 +1638,12 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             if (b.age < 0.f || f.bare) continue;
             const float a = smoothstepf(0.f, 0.2f, b.age) * (1.f - smoothstepf(reef::SURF_Y - 1.2f, reef::SURF_Y - 0.1f, b.p.y));
             glow(b.p, b.r, lerp(pal_.haze, vec3(1.f), 0.4f), a, 0, b.seed);
+        }
+        for (const Egg& e : eggs_) {
+            if (e.age < 0.f) continue;
+            const float a = smoothstepf(0.f, 0.6f, e.age) * (1.f - smoothstepf(e.life - 1.5f, e.life, e.age)) * e.fade *
+                            (0.75f + 0.25f * std::sin(time_ * 2.f + e.seed * 50.f));
+            glow(e.p, e.r * (1.f + 0.4f * dropLight_), e.col, a, 3, e.seed);
         }
         for (const Seed& s : seeds_) {
             if (s.age < 0.f || f.bare) continue;
