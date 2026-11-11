@@ -169,7 +169,8 @@ constexpr float RING_ALT = 2.6e6f;   // the orbital ring's height
 // The journey: lines -> the city's radius (meters), interpolated in log space.
 struct Stage { float lines, radius; };
 // The skyscraper stage is long: the first towers at ~11 lines, megatalls from ~24, arcologies from ~29, the
-// continent from ~35, the planet covered at 43, the orbital ring done by ~50 (one song). The hut, the village and the
+// continent from ~35, the planet covered at 43, the orbital ring done by ~50 (one song). Lines on this scale: 50 at
+// scene completion (paceLines() rescales the real lines to the song's length, 50 for a 3:20 song). The hut, the village and the
 // towns go by quickly (some 2x wider a line), the skyline slowly (some 1.2x a line), the continent faster again.
 const Stage STAGES[] = {
     {0, 4.f}, {1.5f, 14.f}, {2.5f, 35.f}, {4, 90.f}, {5.5f, 220.f}, {7, 550.f}, {8.5f, 1300.f}, {10, 2600.f},
@@ -378,8 +379,8 @@ MegaCityUniverse::~MegaCityUniverse() {
 // =====================================================================================================
 
 // Lines -> G = ln(the city's radius), up to the planet covered.
-float MegaCityUniverse::growthOf(int lines) const {
-    const float l = (float)std::max(0, lines);
+float MegaCityUniverse::growthOf(float lines) const {
+    const float l = std::max(0.f, lines);
     if (l >= STAGES[STAGE_COUNT - 1].lines) return G_MAX;
     int i = 0;
     while (i + 2 < STAGE_COUNT && STAGES[i + 1].lines <= l) i++;
@@ -1047,7 +1048,8 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game starts again from a hut).
     {
-        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
+        // (on the 50-line scale: the song's pace, paceLines; a break: the growth as it was)
+        const float lines = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
         if (citySeed_ == 0) { citySeed_ = seed_ ? seed_ : 1; cityDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             citySeed_ = splitmix64(citySeed_ + 0x9E37ull);
@@ -1072,13 +1074,16 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
             dropLit_ = false;
         }
         gTarget_ = std::min(G_MAX, growthOf(lines) + gBonus_);
-        const float over = (float)(lines - (int)STAGES[STAGE_COUNT - 1].lines) + gBonus_ * 3.f;
+        const float over = lines - STAGES[STAGE_COUNT - 1].lines + gBonus_ * 3.f;
         orbit_ = approach(orbit_, saturate(over / RING_LINES) * (gTarget_ >= G_MAX - 1e-3f ? 1.f : 0.f), 0.6f, wdt);
         if (linesShown_ < 0) { g_ = gTarget_; gVel_ = 0.f; }
         linesShown_ = lines;
         // a spurt: a spring toward the target; a drop's district rises more slowly (a wave rolling outward)
         const float w = dropR1_ > 0.f && std::exp(g_) < dropR1_ * 0.98f ? 1.2f : 3.6f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
+        // capped: in a short song a line is a bigger step (a Tetris in the meadow up to 2.5x the 50-line one), and it
+        // takes a breath longer instead of jolting the view (the 50-line pace stays under it)
+        gVel_ = std::min(gVel_, 4.f);
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
         resetT_ += dt;

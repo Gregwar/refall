@@ -12,6 +12,7 @@
 // src/universes/registry.def, with its weight).
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -226,7 +227,8 @@ protected:
             sceneLines_ = pendingScene_;
             pendingScene_ = -1.f;
         }
-        return std::max(0.f, paceAt_ + (here - paceLine_ + extra) * SCENE_REF_LINES / sceneLines_);
+        const float v = std::max(0.f, paceAt_ + (here - paceLine_ + extra) * SCENE_REF_LINES / sceneLines_);
+        return std::round(v * 1024.f) / 1024.f; // (exactly 50 at the target, not 49.99998)
     }
     // Real lines -> the SCENE_REF_LINES scale (a span or a count of lines at the current pace).
     float paceScale() const { return SCENE_REF_LINES / sceneLines(); }

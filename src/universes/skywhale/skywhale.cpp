@@ -177,6 +177,7 @@ inline float pondR(float x, float z) {
 // The journey: lines -> the creature's length (meters), interpolated in log space; beyond the table, slower and slower.
 struct Stage { float lines, length; };
 const Stage STAGES[] = {
+    // (lines on the 50-line scale: paceLines() rescales the real lines to the song's length, 50 for a 3:20 song)
     // (the whole journey within ~50 lines, one song: the sea by ~7.5, the clouds ~18.5, orbit ~26, the Moon growing
     // ahead from ~33, the glide low over it established by ~50; then slower and slower. The pond keeps a little more
     // than half its old share, the climb through the cumulus (1.4 -> 14 km) a little more too, so that they dissolve
@@ -676,8 +677,8 @@ SkyWhaleUniverse::~SkyWhaleUniverse() {
 // =====================================================================================================
 
 // Lines -> G: the journey's table, then a slow climb on, up to G_MAX.
-float SkyWhaleUniverse::growthOf(int lines) const {
-    const float l = (float)std::max(0, lines);
+float SkyWhaleUniverse::growthOf(float lines) const {
+    const float l = std::max(0.f, lines);
     float h;
     if (l >= STAGES[STAGE_COUNT - 1].lines) {
         h = std::log(STAGES[STAGE_COUNT - 1].length) + (l - STAGES[STAGE_COUNT - 1].lines) * 0.012f;
@@ -1796,8 +1797,9 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game hatches a new koi).
     {
-        if (!f.bare) here_ = linesHere(game);
-        const int lines = here_ + extraLines(time_); // (a break: the growth as it was)
+        // (on the 50-line scale: the song's pace, paceLines; a break: the growth as it was)
+        if (!f.bare) here_ = paceLines(game, (float)extraLines(time_));
+        const float lines = here_;
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             koiSeed_ = splitmix64(koiSeed_ + 0x9E37ull);
             koiSeedF_ = (float)(koiSeed_ % 1000) / 1000.f;
@@ -1826,6 +1828,9 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         linesShown_ = lines;
         const float w = 3.8f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
+        // capped: in a short song a line is a bigger step (up to 2.5x the 50-line one); a Tetris then takes a breath
+        // longer instead of jolting the journey (the 50-line pace stays under it)
+        gVel_ = std::min(gVel_, 4.f);
         g_ += gVel_ * wdt;
         if (g_ > gTarget_ + 0.001f && gVel_ > 0.f) { g_ = gTarget_; gVel_ = 0.f; }
         hatchT_ += dt;

@@ -61,7 +61,7 @@ private:
     float heartT_ = 0.f;
     double lineTarget_ = 0.0;
     float lineDelay_ = 0.f;       // a clear's walk starts once the panda has seen its lights coming
-    int lines_ = 0, linesShown_ = -1, linesWalk_ = 0;
+    float lines_ = 0, linesShown_ = -1, linesWalk_ = 0; // paceLines(): 50 at scene completion
     bool placed_ = false;
     float xP_ = -16.f;            // the panda's spot on the screen (board x)
     float kidH_ = 6.6f, famS_ = 1.f; // the cub's height, the family's scale (both from the free band's width)

@@ -44,8 +44,8 @@ public:
 
 private:
     // ---- The growth: G = ln(the creature's length in meters), from a 30 cm koi to a million kilometers.
-    float growthOf(int lines) const;
-    int lines_ = 0, linesShown_ = -1, here_ = 0;
+    float growthOf(float lines) const;
+    float lines_ = 0, linesShown_ = -1, here_ = 0; // paceLines(): 50 at scene completion
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;
     float gBonus_ = 0.f;
     float stroke_ = 0.f;          // a clear's tail stroke (its glow)

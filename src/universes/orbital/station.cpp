@@ -1112,15 +1112,16 @@ void OrbitalUniverse::emitDrones(Builder& b) {
 }
 
 // The lines -> how many modules: two a line at first, then ever more, each stage an order of magnitude bigger.
-int OrbitalUniverse::wantOf(int lines) const {
+int OrbitalUniverse::wantOf(float lines) const {
     struct P { float l, n; };
+    // (lines on the 50-line scale: paceLines() rescales the real lines to the song's length, 50 for a 3:20 song)
     // (the finale done by 50 lines, one song: the wheel by ~5, the forest ring by ~11, then a new stage every four
     // lines or so; the wheel round the planet with its elevators, the biggest in modules, gets six)
     const P T[] = {{0, 1}, {2.5f, 6}, {5, 22}, {11, 51}, {13.5f, 63}, {18.5f, (float)stageFirst_[1]}, {22, (float)stageFirst_[2]},
                    {26, (float)stageFirst_[3]}, {30, (float)stageFirst_[4]}, {36, (float)stageFirst_[5]}, {39.5f, (float)stageFirst_[6]},
                    {43.5f, (float)stageFirst_[7]}, {50, (float)stageFirst_[8]}};
     const int n = (int)(sizeof(T) / sizeof(T[0]));
-    const float L = (float)std::max(0, lines);
+    const float L = std::max(0.f, lines);
     if (L >= T[n - 1].l) return (int)plan_.size();
     int i = 0;
     while (i + 2 < n && T[i + 1].l <= L) i++;

@@ -105,7 +105,7 @@ private:
     std::vector<vec3> frameA_;    // the bounds' center once module i is in
     void buildPlan();
     int wheelFirst_ = 0, wheelLast_ = 0, greatFirst_ = 0, greatLast_ = 0;
-    int lines_ = 0, linesShown_ = -1;
+    float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     int built_ = 1;               // modules wanted (lines + the capsule)
     float wheelSpin_ = 0.f, wheelW_ = 0.f, greatSpin_ = 0.f, greatW_ = 0.f;
     // Every ring: its center and axis, the modules that make it (complete: it turns), its turn and speed.
@@ -119,7 +119,7 @@ private:
     Ring rings_[RINGS];
     int stageFirst_[16] = {};   // the first module of each later stage (see buildPlan)
     float moonWork_ = 0.f;      // the Moon's works, 0..1
-    int wantOf(int lines) const;
+    int wantOf(float lines) const; // lines on the 50-line scale
     float sparkAcc_ = 0.f;
     void startFlight(int i, float delay);
     float flightA(const Module& m) const;
