@@ -1,9 +1,9 @@
-// LIBRARY: the blocks are books, and every cleared line brings two big books to a small, cosy library room that
-// fills slowly with the game.
+// LIBRARY: the blocks are books, and every cleared line brings three big books to a small, cosy library room that
+// fills with the game (complete at about 50 lines, one song).
 //
 // The board stays a clean Tetris board: each cell is one toy block in its piece's color, a bound volume with its
 // spine toward us (a bevel, two rules, its pages showing down one side), over a deep saturated ground. When a row
-// clears, its blocks dissolve into light where they stand, and two of its cells send a book to the room: from behind
+// clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
 // the HUD), turning over once on the way. Each lands in the next free place (the order of the runs in world.cpp) with
 // a soft glow and never moves again, so the room is the history of the game.
@@ -122,9 +122,10 @@ constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (th
 
 // Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
 // ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
-// Each cleared line brings two big books (so some 100 lines fill the room), launched from these two cells of the row.
-constexpr int BOOKS_LINE = 2;
-constexpr int BOOK_CELL[BOOKS_LINE] = {2, 7};
+// Each cleared line brings three big books (so some 50 lines, one song, fill the room), launched from these three
+// cells of the row.
+constexpr int BOOKS_LINE = 3;
+constexpr int BOOK_CELL[BOOKS_LINE] = {1, 5, 8};
 
 int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
@@ -608,12 +609,15 @@ uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
 // lying, three to five a pile, each pile a little askew). Its size and look come from its seed.
 bool LibraryUniverse::place(Group& g) {
     Rng r(0xB00Cull ^ ((uint64_t)g.seed * 2654435761ull));
-    const float h = r.range(0.58f, 0.84f), t = r.range(0.17f, 0.3f), d = r.range(0.4f, 0.5f);
+    const float h = r.range(0.58f, 0.84f), t = r.range(0.23f, 0.37f), d = r.range(0.4f, 0.5f);
     g.style = r.irange(0, 3);
     g.tone = r.range(0.9f, 1.06f);
     const float askew = r.range(-0.18f, 0.18f);
     while (runIdx_ < (int)runs_.size()) {
         const Run& R = runs_[runIdx_];
+        if (runOff_ == 0.f && pileN_ == 0 && std::getenv("ZEN_LIBRARY_RUNS")) // (a test hook: where each run starts)
+            std::fprintf(stderr, "[library] run %d (kind %d, feature %d) starts with book %zu (line %.1f)\n", runIdx_, R.kind, R.feat,
+                         groups_.size(), groups_.size() / (float)BOOKS_LINE);
         if (R.feat >= 0) featUnlocked_[R.feat] = true;
         if (R.kind == 0) {
             if (runOff_ + t <= R.len) {
@@ -750,9 +754,9 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             full[c.y] = true;
             const vec3 bp = layout::cellPos((float)c.x, (float)c.y);
             if (c.y >= Game::HIDDEN) fx_.push_back({type, sd, bp, 0.f});
-            // each line's two books leave from two of its cells, in its pieces' colors
+            // each line's three books leave from three of its cells, in its pieces' colors
             for (int k = 0; k < BOOKS_LINE; k++)
-                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.12f * i++);
+                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.16f * i++); // (a Tetris's twelve: spread over two seconds)
         }
         // the seeds follow the rows down
         int dst = Game::H - 1;
@@ -1200,7 +1204,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         while (hookLines_ < hookRate) {
             hookLines_++;
             for (int k = 0; k < BOOKS_LINE; k++)
-                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.12f * k);
+                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.16f * k);
         }
         grow_ = (float)lines_;
     }
@@ -1283,9 +1287,11 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             fl.out0 = normalize(vec3(-fwdW_.x, 0.f, -fwdW_.z));
             // the glide: a point out in the room in front of its place (on the open side of the screen, past the
             // HUD's columns), reached through a rise beside the well
-            const vec3 front = oT + g.out * 1.9f + UP * 0.9f;
+            // (each its own height, so a Tetris's books don't bunch)
+            const float hv = ((g.seed >> 4) & 255) / 255.f;
+            const vec3 front = oT + g.out * (1.6f + 0.6f * hv) + UP * (0.6f + 0.7f * hv);
             fl.c2 = front;
-            fl.c1 = lerp(fl.p0, front, 0.55f) + UP * 1.6f;
+            fl.c1 = lerp(fl.p0, front, 0.55f) + UP * (1.1f + 1.0f * hv);
             fl.dur = 2.0f + 0.15f * std::log2(1.f + length(oT - fl.p0) / 4.f);
         }
         const float s = saturate(fl.t / fl.dur);
@@ -1763,7 +1769,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books; each cleared line sends two big books to a cosy toon library room, a diorama that fills slowly, in 3D",
+        "LIBRARY", "the blocks are books; each cleared line sends three big books to a cosy toon library room, a diorama that fills over one song, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A calm, bright world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },

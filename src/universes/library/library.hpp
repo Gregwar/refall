@@ -80,7 +80,7 @@ private:
     // a cell of the board: one clean block, a bound volume (spine toward us)
     void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, float seed);
 
-    // ---- The collection: two big books for every cleared line, placed in the order they came along runs (a shelf,
+    // ---- The collection: three big books for every cleared line, placed in the order they came along runs (a shelf,
     // or a row of piles on the floor), never moved again.
     struct Run {
         vec3 start, along, out; // the front edge at the run's start, at the shelf's top; along the run; into the room
