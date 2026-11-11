@@ -42,13 +42,15 @@ namespace {
 // A bookcase on an angled wall: from t0 to t1 along it, standing at height y0.
 struct CaseSpec { int side; float t0, t1, y0; int shelves; };
 constexpr CaseSpec MAIN_CASE[2] = {{1, CASE_T0, CASE_T1, 0.f, MAIN_SHELVES}, {-1, CASE_T0, CASE_T1, 0.f, MAIN_SHELVES}};
-constexpr CaseSpec LOW_CASE[2] = {{1, 0.12f, 0.44f, 0.f, MAIN_SHELVES}, {-1, 0.12f, 0.44f, 0.f, MAIN_SHELVES}};
+constexpr int LOW_SHELVES = 2;
+constexpr CaseSpec LOW_CASE[2] = {{1, 0.12f, 0.44f, 0.f, LOW_SHELVES}, {-1, 0.12f, 0.44f, 0.f, LOW_SHELVES}};
 constexpr CaseSpec MEZZ_CASE[2] = {{1, 0.5f, 0.93f, MEZZ_Y, MEZZ_SHELVES}, {-1, 0.5f, 0.93f, MEZZ_Y, MEZZ_SHELVES}};
 constexpr float SIDE_T = 0.1f; // a bookcase's sides
 } // namespace
 
 // The places the books go, in order: the two big bookcases shelf by shelf from the bottom (right, left, alternating);
-// piles on the floor in front of them; the mezzanine's bookcases and the second bookcases at the back, in turn.
+// piles on the floor in front of them; the mezzanine's bookcases; the second bookcases at the back. At three books a
+// line: the ladder at about line 14, the piles at 21, the mezzanine at 27, the back bookcases at 40, all full by 50.
 void LibraryUniverse::buildRuns() {
     runs_.clear();
     auto shelf = [&](const CaseSpec& cs, int j, int level, int feat) {
@@ -78,11 +80,10 @@ void LibraryUniverse::buildRuns() {
         r.feat = F_PILES;
         runs_.push_back(r);
     }
-    // then the mezzanine's shelves and the back bookcases' in turn, so both keep growing to the end
-    for (const CaseSpec& cs : MEZZ_CASE) shelf(cs, 0, 1, F_MEZZ);
-    for (const CaseSpec& cs : LOW_CASE) shelf(cs, 0, 0, F_LOW);
-    for (const CaseSpec& cs : MEZZ_CASE) shelf(cs, 1, 1, F_MEZZ);
-    for (int j = 1; j < MAIN_SHELVES; j++)
+    // then the mezzanine's shelves, then the two back bookcases'
+    for (int j = 0; j < MEZZ_SHELVES; j++)
+        for (const CaseSpec& cs : MEZZ_CASE) shelf(cs, j, 1, F_MEZZ);
+    for (int j = 0; j < LOW_SHELVES; j++)
         for (const CaseSpec& cs : LOW_CASE) shelf(cs, j, 0, F_LOW);
 }
 

@@ -1,9 +1,9 @@
-// LIBRARY: the blocks are books, and every cleared line brings two big books to a small, cosy library room that
-// fills slowly with the game.
+// LIBRARY: the blocks are books, and every cleared line brings three big books to a small, cosy library room that
+// fills with the game (complete at about 50 lines, one song).
 //
 // The board stays a clean Tetris board: each cell is one toy block in its piece's color, a bound volume with its
 // spine toward us (a bevel, two rules, its pages showing down one side), over a deep saturated ground. When a row
-// clears, its blocks dissolve into light where they stand, and two of its cells send a book to the room: from behind
+// clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
 // the HUD), turning over once on the way. Each lands in the next free place (the order of the runs in world.cpp) with
 // a soft glow and never moves again, so the room is the history of the game.
@@ -122,9 +122,10 @@ constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (th
 
 // Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
 // ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
-// Each cleared line brings two big books (so some 100 lines fill the room), launched from these two cells of the row.
-constexpr int BOOKS_LINE = 2;
-constexpr int BOOK_CELL[BOOKS_LINE] = {2, 7};
+// Each cleared line brings three big books (so some 50 lines, one song, fill the room), launched from these three
+// cells of the row.
+constexpr int BOOKS_LINE = 3;
+constexpr int BOOK_CELL[BOOKS_LINE] = {1, 5, 8};
 
 int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
@@ -507,7 +508,13 @@ void LibraryUniverse::setSong(const SongLook& t, float seconds) {
     variant_ = v;
     const VariantDef& V = VARIANTS[v];
     Palette& P = pal_;
-    for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]);
+    // the pieces a gentle step toward pastel (lifted toward white in sRGB, a hair less saturated): same hues, still
+    // bright against the deep well, just not flashy
+    for (int i = 0; i < 7; i++) {
+        const vec3 c = hex(V.piece[i]);
+        const float l = dot(c, vec3(0.299f, 0.587f, 0.114f));
+        P.piece[i] = ugl::toLinear(lerp(lerp(c, vec3(l), 0.08f), vec3(1.f), 0.17f));
+    }
     P.oak = lin(V.oak); P.bay = lin(V.bay); P.wall = lin(V.wall); P.wall2 = lin(V.wall2); P.cut = lin(V.cut); P.floor = lin(V.floor);
     P.floorB = lin(V.floorB); P.steel = lin(V.steel); P.paper = lin(V.paper); P.skyA = lin(V.skyA); P.skyB = lin(V.skyB);
     P.ambSky = lin(V.ambSky) * V.ambK; P.ambGround = lin(V.ambGround) * V.ambK; P.key = lin(V.key) * V.keyK; P.led = lin(V.led);
@@ -602,12 +609,15 @@ uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
 // lying, three to five a pile, each pile a little askew). Its size and look come from its seed.
 bool LibraryUniverse::place(Group& g) {
     Rng r(0xB00Cull ^ ((uint64_t)g.seed * 2654435761ull));
-    const float h = r.range(0.58f, 0.84f), t = r.range(0.17f, 0.3f), d = r.range(0.4f, 0.5f);
+    const float h = r.range(0.58f, 0.84f), t = r.range(0.23f, 0.37f), d = r.range(0.4f, 0.5f);
     g.style = r.irange(0, 3);
     g.tone = r.range(0.9f, 1.06f);
     const float askew = r.range(-0.18f, 0.18f);
     while (runIdx_ < (int)runs_.size()) {
         const Run& R = runs_[runIdx_];
+        if (runOff_ == 0.f && pileN_ == 0 && std::getenv("ZEN_LIBRARY_RUNS")) // (a test hook: where each run starts)
+            std::fprintf(stderr, "[library] run %d (kind %d, feature %d) starts with book %zu (line %.1f)\n", runIdx_, R.kind, R.feat,
+                         groups_.size(), groups_.size() / (float)BOOKS_LINE);
         if (R.feat >= 0) featUnlocked_[R.feat] = true;
         if (R.kind == 0) {
             if (runOff_ + t <= R.len) {
@@ -665,7 +675,7 @@ bool LibraryUniverse::shelve(int type, uint32_t seed) {
 // A book as an instance: centered at c in its frame (along / up / out), k its size, grown from its foot by `grow`.
 // The shelved books keep to the pieces' colors, muted toward the walls so the board stays the brightest thing.
 void LibraryUniverse::pushBook(std::vector<Inst>& out, const Group& g, const vec3& c, const vec3& along, const vec3& outD, float k,
-                               float grow, float glow, int index) {
+                               float grow, float glow, int index, float vivid) {
     if (grow <= 0.001f) return;
     const float hx = g.hx * k * grow, hy = g.hy * k * grow, hd = g.hd * k * grow;
     const vec3 foot = c - UP * (g.hy * k);
@@ -674,7 +684,8 @@ void LibraryUniverse::pushBook(std::vector<Inst>& out, const Group& g, const vec
     const vec3 X = g.lying ? UP * hy : along * hx;
     const vec3 Y = g.lying ? along * hx : UP * hy;
     const vec3 Z = outD * hd;
-    const vec3 col = lerp(pieceColor(g.type), pal_.wall, 0.38f) * (0.9f * g.tone);
+    // (in flight, vivid: its piece's full color)
+    const vec3 col = lerp(lerp(pieceColor(g.type), pal_.wall, 0.38f) * (0.9f * g.tone), pieceColor(g.type), vivid);
     Inst in;
     in.c[0] = cc.x; in.c[1] = cc.y; in.c[2] = cc.z; in.c[3] = (float)M_BOOK;
     in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = (float)g.style;
@@ -743,9 +754,9 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             full[c.y] = true;
             const vec3 bp = layout::cellPos((float)c.x, (float)c.y);
             if (c.y >= Game::HIDDEN) fx_.push_back({type, sd, bp, 0.f});
-            // each line's two books leave from two of its cells, in its pieces' colors
+            // each line's three books leave from three of its cells, in its pieces' colors
             for (int k = 0; k < BOOKS_LINE; k++)
-                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.12f * i++);
+                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.16f * i++); // (a Tetris's twelve: spread over two seconds)
         }
         // the seeds follow the rows down
         int dst = Game::H - 1;
@@ -1193,7 +1204,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         while (hookLines_ < hookRate) {
             hookLines_++;
             for (int k = 0; k < BOOKS_LINE; k++)
-                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.12f * k);
+                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.16f * k);
         }
         grow_ = (float)lines_;
     }
@@ -1245,8 +1256,16 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         pushGroup(dyn_[MESH_BOX], i, a > 0.6f ? 1.f : easeOutBack(a / 0.5f), 0.5f * std::exp(-std::max(0.f, a - 0.6f) * 1.4f));
     }
 
-    // ---- Flights: a cleared line's books, from behind their cells' places in the well to their places in the room,
-    // only ever going deeper; they turn over once on the way
+    // ---- Flights: a cleared line's books, from behind their cells' places in the well out into the open room and
+    // into their places. A slow, legible arc: out from behind the well, a glide through the room in front of their
+    // shelf, then in; bigger than life on the way, in their piece's full color with a soft glow and a short ribbon of
+    // light behind them, taking on their shelf tint as they land. (The room is drawn under the board and the HUD, so
+    // nothing of this ever passes in front of them.)
+    auto flightAt = [&](const Flight& fl, const Group& g, float s) {
+        const float e = s * s * (3.f - 2.f * s);
+        const float u = 1.f - e;
+        return fl.p0 * (u * u * u) + fl.c1 * (3.f * u * u * e) + fl.c2 * (3.f * u * e * e) + g.c * (e * e * e);
+    };
     for (auto it = flights_.begin(); it != flights_.end();) {
         Flight& fl = *it;
         fl.t += wdt;
@@ -1266,28 +1285,58 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             fl.p0 = eyeW_ + dir * (d0 / std::max(0.2f, dot(dir, fwdW_)));
             fl.k0 = 2.f * halfNdc * d0 * tanW_ / std::max(0.05f, 2.f * g.hy);
             fl.out0 = normalize(vec3(-fwdW_.x, 0.f, -fwdW_.z));
-            fl.dur = 1.1f + 0.25f * std::log2(1.f + length(oT - fl.p0) / 2.f);
+            // the glide: a point out in the room in front of its place (on the open side of the screen, past the
+            // HUD's columns), reached through a rise beside the well
+            // (each its own height, so a Tetris's books don't bunch)
+            const float hv = ((g.seed >> 4) & 255) / 255.f;
+            const vec3 front = oT + g.out * (1.6f + 0.6f * hv) + UP * (0.6f + 0.7f * hv);
+            fl.c2 = front;
+            fl.c1 = lerp(fl.p0, front, 0.55f) + UP * (1.1f + 1.0f * hv);
+            fl.dur = 2.0f + 0.15f * std::log2(1.f + length(oT - fl.p0) / 4.f);
         }
         const float s = saturate(fl.t / fl.dur);
         if (s >= 1.f) {
             g.t0 = worldTime_ - 0.6f; // in its place, full size, its light fading from now
+            g.landT = worldTime_;
             it = flights_.erase(it);
             continue;
         }
         if (!f.bare) {
             const float e = s * s * (3.f - 2.f * s);
-            const float L = length(oT - fl.p0);
-            const vec3 p = lerp(fl.p0, oT, e) + UP * (0.18f * L * std::sin(PI * e));
+            const vec3 p = flightAt(fl, g, s);
             // its spine turns from us toward its place, once round on the way
-            const float turn = fl.spin * TAU * (1.f - smoothstepf(0.f, 0.85f, s));
-            const vec3 o0 = normalize(lerp(fl.out0, g.out, smoothstepf(0.f, 0.85f, s)));
+            const float turn = fl.spin * TAU * (1.f - smoothstepf(0.f, 0.8f, s));
+            const vec3 o0 = normalize(lerp(fl.out0, g.out, smoothstepf(0.f, 0.8f, s)));
             const vec3 a0 = normalize(cross(UP, o0));
             const vec3 ou = o0 * std::cos(turn) + a0 * std::sin(turn);
             vec3 al = normalize(cross(UP, ou));
             if (dot(cross(UP, g.out), g.along) < 0.f) al = al * -1.f;
-            pushBook(dyn_[MESH_BOX], g, p, al, ou, lerpf(fl.k0, 1.f, e), 1.f, 0.3f, fl.group);
+            const float big = 1.f + 0.7f * std::sin(PI * std::min(1.f, e * 1.15f));
+            const float land = smoothstepf(0.8f, 1.f, s);
+            pushBook(dyn_[MESH_BOX], g, p, al, ou, lerpf(fl.k0, 1.f, e) * big, 1.f, 0.3f * (1.f - land) + 0.15f, fl.group, 1.f - land);
+            // the ribbon of light behind it
+            const vec3 pc = pieceColor(g.type);
+            const vec3 rc = lerp(pc, vec3(1.f), 0.35f);
+            for (int k = 1; k <= 12; k++) {
+                const float sk = s - k * 0.018f;
+                if (sk <= 0.02f) break;
+                const vec3 q = flightAt(fl, g, sk);
+                const float fade = (1.f - k / 13.f) * (1.f - land);
+                sprites_.push_back({{q.x, q.y, q.z, 0.2f * (1.f - 0.5f * k / 12.f)}, {rc.x, rc.y, rc.z, 0.9f * fade * fade}});
+            }
+            sprites_.push_back({{p.x, p.y, p.z, 0.55f}, {rc.x, rc.y, rc.z, 0.5f * (1.f - land)}});
         }
         ++it;
+    }
+    // ---- a soft pulse of light where each book lands, so you see where it went
+    for (int i = std::max(0, nG - 64); i < nG; i++) {
+        const Group& g = groups_[i];
+        const float a = worldTime_ - g.landT;
+        if (a < 0.f || a > 1.f) continue;
+        const vec3 rc = lerp(pieceColor(g.type), vec3(1.f), 0.4f);
+        const float k = 1.f - a;
+        const vec3 p = g.c + g.out * 0.25f;
+        sprites_.push_back({{p.x, p.y, p.z, 0.4f + 0.6f * a}, {rc.x, rc.y, rc.z, 1.4f * k * k}});
     }
 
     // ---- The drop: loose pages fluttering up from the bookcases, behind the well
@@ -1681,7 +1730,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.45f + 0.1f * wp + 0.12f * dropAmt_) * (1.f + 0.4f * slow_));
     set1f(progFinal_, "uExposure", P.exposure);
-    set1f(progFinal_, "uSatF", 1.1f + 0.05f * wp + 0.06f * dropAmt_);
+    set1f(progFinal_, "uSatF", 1.05f + 0.04f * wp + 0.05f * dropAmt_);
     set1f(progFinal_, "uSlow", slow_ * 0.5f);
     set3f(progFinal_, "uSlowTint", slowTint);
     set3f(progFinal_, "uLift", vec3(0.f));
@@ -1720,7 +1769,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_library() {
     static const UniverseEntry e{
-        "LIBRARY", "the blocks are books; each cleared line sends two big books to a cosy toon library room, a diorama that fills slowly, in 3D",
+        "LIBRARY", "the blocks are books; each cleared line sends three big books to a cosy toon library room, a diorama that fills over one song, in 3D",
         [] { return std::unique_ptr<Universe>(new LibraryUniverse()); },
         // A calm, bright world: suits calm and mid-tempo songs best; fits most.
         [](const SongLook& l) { return 0.8f + 0.2f * (1.f - l.density) + 0.1f * (1.f - l.bassWeight); },
