@@ -546,6 +546,7 @@ void AbyssUniverse::onEvent(const GameEvent& ev, const Game&) {
                 m.vx = std::cos(a) * sp; m.vy = std::sin(a) * sp; m.t = 0.f; m.delay = delay + rng_.range(0.f, 0.04f);
                 m.r = rng_.range(0.04f, 0.075f); m.seed = rng_.range(0.f, 10.f); m.type = type;
                 m.buoy = 2.5f + 10.f * m.r; // its rising speed: the bigger, the faster
+                m.rd = m.r;
                 bubbles_.push_back(m);
             }
         }
@@ -775,6 +776,10 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
             b.vx += -b.vx * k + 1.2f * std::sin(b.t * (3.f + 4.f * (0.25f - b.r)) + b.seed) * dt;
             b.x += b.vx * dt;
             b.y += b.vy * dt;
+            // what a merge left: the drawn bubble glides to its new centre and swells to its new size
+            const float e = 1.f - std::exp(-9.f * dt);
+            b.ox -= b.ox * e; b.oy -= b.oy * e;
+            b.rd += (b.r - b.rd) * e;
         }
         // touching bubbles merge (their air adds up: the radius of the summed volume); swept along x
         std::sort(bubbles_.begin(), bubbles_.end(), [](const Bubble& a, const Bubble& b) { return a.x < b.x; });
@@ -795,7 +800,12 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
                 }
                 if (d2 > rr * rr || a.r + b.r > 0.5f) continue;
                 const float va = a.r * a.r * a.r, vb = b.r * b.r * b.r, v = va + vb;
-                a.x = (a.x * va + b.x * vb) / v; a.y = (a.y * va + b.y * vb) / v;
+                const float nx = (a.x * va + b.x * vb) / v, ny = (a.y * va + b.y * vb) / v;
+                // the drawing stays where the larger of the two was drawn, then glides (no jump on the merge)
+                const Bubble& big = vb > va ? b : a;
+                a.ox = big.x + big.ox - nx; a.oy = big.y + big.oy - ny;
+                a.rd = std::max(a.rd, b.rd);
+                a.x = nx; a.y = ny;
                 a.vx = (a.vx * va + b.vx * vb) / v; a.vy = (a.vy * va + b.vy * vb) / v;
                 a.r = std::cbrt(v);
                 a.buoy = 2.5f + 10.f * a.r;
@@ -1013,8 +1023,8 @@ void AbyssUniverse::buildBoard(const Game& g) {
         const float t = b.t - b.delay;
         if (t < 0.f) continue;
         const float form = smoothstepf(0.f, 0.08f, t);
-        const float r = b.r * lerpf(0.4f, 1.f, form);
-        tile(b.x, b.y, r + 0.06f, r + 0.06f, pal_.piece[std::clamp(b.type, 0, 6)], lerpf(1.f, 0.55f, smoothstepf(0.08f, 0.2f, b.r)) * form, 5, b.t, b.type, 0, r, b.seed);
+        const float r = b.rd * lerpf(0.4f, 1.f, form);
+        tile(b.x + b.ox, b.y + b.oy, r + 0.06f, r + 0.06f, pal_.piece[std::clamp(b.type, 0, 6)], lerpf(1.f, 0.55f, smoothstepf(0.08f, 0.2f, b.rd)) * form, 5, b.t, b.type, 0, r, b.seed);
     }
     // The falling piece and its ghost.
     if (g.hasPiece()) {
