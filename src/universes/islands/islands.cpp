@@ -839,6 +839,15 @@ void IslandsUniverse::spawnBoat(bool initial) {
             b.kind = r < 0.45f ? 0 : r < 0.62f ? 1 : 2;
             b.head = rng_.range(0.f, TAU);
         }
+        if (!initial) {
+            // never born inside the view unless far in the haze (and even then it fades in)
+            const vec3 d(p.x - eye_.x, 0.f, p.z - eye_.z);
+            const float dl = length(d);
+            const vec3 fh = normalize(vec3(fwd_.x, 0, fwd_.z));
+            if (dl < 2600.f && dot(d / std::max(dl, 1.f), fh) > 0.55f) continue;
+            b.appear = 0.f;
+        }
+        b.scale = b.appear; // (born invisible: its first frame must not show it at full size)
         b.p = p;
         b.phase = rng_.range(0.f, 50.f);
         switch (b.kind) {
@@ -882,15 +891,21 @@ void IslandsUniverse::updateBoats(float dt) {
             b.p = b.p + vec3(std::cos(b.head), 0, std::sin(b.head)) * (b.speed * dt);
         }
     }
-    boats_.erase(std::remove_if(boats_.begin(), boats_.end(), [&](const Boat& b) {
-                     const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
-                     const float d2 = dx * dx + dz * dz;
-                     const bool behind = dx * fwd_.x + dz * fwd_.z < -900.f;
-                     return d2 > 4200.f * 4200.f || behind;
-                 }),
-                 boats_.end());
+    // they fade in when born and fade out before they go (never a pop at a distance threshold)
+    for (Boat& b : boats_) {
+        const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
+        const float d2 = dx * dx + dz * dz;
+        const bool behind = dx * fwd_.x + dz * fwd_.z < -900.f;
+        if (b.sink <= 0.f && (d2 > 4200.f * 4200.f || behind)) b.sink = 0.001f;
+        if (b.sink > 0.f) b.sink += dt;
+        b.appear = std::min(1.f, b.appear + dt / 2.f);
+        b.scale = smoothstepf(0.f, 1.f, b.appear) * (1.f - smoothstepf(0.f, 2.f, b.sink));
+    }
+    boats_.erase(std::remove_if(boats_.begin(), boats_.end(), [&](const Boat& b) { return b.sink > 2.f; }), boats_.end());
     const int want = 22;
-    for (int k = 0; k < 2 && (int)boats_.size() < want; k++) spawnBoat(false);
+    int live = 0;
+    for (const Boat& b : boats_) live += b.sink <= 0.f;
+    for (int k = 0; k < 2 && live + k < want; k++) spawnBoat(false);
 }
 
 void IslandsUniverse::boatParts(const Boat& b) {
@@ -973,7 +988,7 @@ void IslandsUniverse::updatePlane(float dt) {
         const vec3 rh = normalize(vec3(right_.x, 0, right_.z));
         const vec3 c = eye_ + fh * dist;
         plane_.on = true;
-        plane_.p = c - rh * (side * dist * 0.9f) + vec3(0, 0, 0);
+        plane_.p = c - rh * (side * dist * 1.6f); // (beside, outside the view: it flies into it)
         plane_.p.y = std::clamp(alt_ * 0.6f + 60.f, 80.f, 420.f);
         plane_.v = normalize(rh * side + fh * 0.25f) * 46.f;
         plane_.t = 0.f;
@@ -988,7 +1003,7 @@ void IslandsUniverse::updatePlane(float dt) {
     plane_.bank = approach(plane_.bank, -turn * 4.f, 0.5f, dt);
     plane_.p = plane_.p + plane_.v * dt;
     const float dx = plane_.p.x - eye_.x, dz = plane_.p.z - eye_.z;
-    if (plane_.t > 70.f || dx * dx + dz * dz > 5000.f * 5000.f) {
+    if (plane_.t > 72.f || dx * dx + dz * dz > 5200.f * 5200.f) {
         plane_.on = false;
         planeWait_ = rng_.range(35.f, 60.f);
     }
@@ -1132,6 +1147,7 @@ void IslandsUniverse::launchBoat(const std::vector<int>& types, bool big) {
     b.latN = lat / spread_;
     b.launchP = p;
     b.launchT = 0.f;
+    b.appear = 0.f;
     b.unfurl = 0.f;
     b.head = std::atan2(fh.z, fh.x);
     b.p = p;
@@ -1158,12 +1174,17 @@ void IslandsUniverse::updateFleet(float dt) {
         b.speed = b.cruise * (1.f + 1.2f * dropK_);
         b.sb += (double)(b.speed * dt);
         const double rel = b.sb - s_;
-        if (b.launchT > 10.f && (rel < -150.0 * spread_ || rel > 1500.0 * spread_)) {
-            // recycled ahead: it sails in again from the haze
+        // recycled ahead (it sails in again from the haze): behind the camera at once, ahead (in view) only once
+        // it has faded out
+        if (b.launchT > 10.f && rel > 1500.0 * spread_) b.moored = true; // (the field marks a boat fading out)
+        if (b.moored) {
+            b.age += dt;
+            if (b.age > 1.5f) { b.sb = s_ + rng_.range(750.f, 1150.f) * spread_; b.appear = 0.f; b.moored = false; b.age = 0.f; }
+        } else if (b.launchT > 10.f && rel < -150.0 * spread_) {
             b.sb = s_ + rng_.range(750.f, 1150.f) * spread_;
             b.appear = 0.f;
         }
-        b.appear = std::min(1.f, b.appear + dt / 2.5f);
+        b.appear = std::min(1.f, b.appear + dt / 1.8f);
         const isl::RoutePt rp = world_->route(b.sb);
         const vec3 rr(-std::sin(rp.head), 0.f, std::cos(rp.head));
         // off the land: slide aside to the nearest water (the turn field holds where it goes)
@@ -1202,9 +1223,31 @@ void IslandsUniverse::updateFleet(float dt) {
             b.sink += dt;
             k *= 1.f - smoothstepf(0.f, 2.5f, b.sink);
         }
+        if (b.moored) k *= 1.f - smoothstepf(0.f, 1.5f, b.age);
+        k *= 1.f - smoothstepf(6500.f, 8500.f, length(vec3(pos.x - eye_.x, 0.f, pos.z - eye_.z)));
         b.scale = k;
     }
     fleet_.erase(std::remove_if(fleet_.begin(), fleet_.end(), [](const Boat& b) { return b.sink > 2.5f; }), fleet_.end());
+}
+
+// Test hook: ZEN_ISLANDS_POPCHECK=1 reports a boat that pops (its size or place jumps in one frame) while in view.
+void IslandsUniverse::popCheck(std::vector<Boat>& list, const char* what, float dt) {
+    static const bool on = std::getenv("ZEN_ISLANDS_POPCHECK") != nullptr;
+    for (Boat& b : list) {
+        if (on && b.prevS >= 0.f && dt > 0.f) {
+            const vec3 d = b.p - eye_;
+            const float dl = length(d);
+            const bool inView = dl < 6000.f && dot(d / std::max(dl, 1.f), fwd_) > 0.6f;
+            const float jump = length(b.p - b.prevP) - (b.speed + vel_) * dt * 1.5f - 2.f;
+            const bool teleported = length(b.p - b.prevP) > 50.f; // (a recycle while invisible: not a pop)
+            const bool appears = b.scale - b.prevS > 0.15f * std::max(1.f, b.scale);
+            const bool vanishes = !teleported && b.prevS - b.scale > 0.15f * std::max(1.f, b.prevS);
+            if (inView && (appears || vanishes || (jump > 0.f && b.scale > 0.05f && b.prevS > 0.05f)))
+                std::fprintf(stderr, "[islands] POP %s at %.0f m: scale %.2f -> %.2f, moved %.1f m (appear %.2f sink %.2f)\n", what, dl, b.prevS, b.scale, length(b.p - b.prevP), b.appear, b.sink);
+        }
+        b.prevS = b.scale;
+        b.prevP = b.p;
+    }
 }
 
 // On the drop's beat grid (every two beats): dolphins leap, landing on the next beat; fireworks at dusk.
@@ -1385,7 +1428,7 @@ void IslandsUniverse::gatherIslands() {
     }
     const float shadowR = std::clamp(alt_ * 1.6f + 140.f, 180.f, 5000.f);
     const vec3 shC = eye_ + vec3(fwd_.x, 0, fwd_.z) * std::clamp(alt_ * 1.2f, 60.f, 2600.f);
-    const float objDist = alt_ > 1200.f ? 3600.f : 4200.f;
+    const float objDist = lerpf(4200.f, 3600.f, smoothstepf(900.f, 1500.f, alt_));
     for (const auto& Ip : world_->islands) {
         isl::Island& I = *Ip;
         const float dx = I.x - eye_.x, dz = I.z - eye_.z;
@@ -1411,9 +1454,13 @@ void IslandsUniverse::gatherIslands() {
         draws_.push_back({&I, dc, inShadow && vis});
         if (dmin < objDist) {
             for (const isl::Part& p : I.parts) {
-                if (p.mesh >= isl::M_PALM0 && p.mesh <= isl::M_PALM2 && dmin > 2600.f) continue;
-                if (p.mesh == isl::M_LUMP && dmin > 3000.f) continue;
-                push(p);
+                // (each kind fades out, shrinking, over the last stretch before its cut: no pop)
+                const float cut = p.mesh >= isl::M_PALM0 && p.mesh <= isl::M_PALM2 ? 2600.f : p.mesh == isl::M_LUMP ? 3000.f : objDist;
+                if (dmin > cut) continue;
+                const float k = 1.f - smoothstepf(cut * 0.8f, cut, dmin);
+                isl::Part q = p;
+                for (int i = 0; i < 3; i++) q.in.b[i] *= k;
+                push(q);
             }
         }
     }
@@ -2046,6 +2093,8 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     updatePlane(wdt);
     updateBirds(wdt);
     updateFleet(wdt);
+    popCheck(boats_, "boat", wdt);
+    popCheck(fleet_, "fleet boat", wdt);
     for (Spark& sp : sparks_) {
         sp.t += wdt;
         sp.v = sp.v * std::exp(-1.1f * wdt) + vec3(0, -4.f * wdt, 0);
@@ -2088,8 +2137,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The geometry of the frame: islands, boats, the seaplane, birds, clouds, glows.
     gatherIslands();
     for (const Boat& b : boats_) {
-        const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
-        if (dx * dx + dz * dz < 3500.f * 3500.f) {
+        if (b.scale > 0.01f) {
             boatParts(b);
         }
     }
@@ -2121,9 +2169,12 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         using namespace isl;
         const float head = std::atan2(plane_.v.z, plane_.v.x);
         const Q q = qMul(qYaw(-head), qAxis(vec3(1, 0, 0), plane_.bank));
-        auto at = [&](float x, float y, float z) { return plane_.p + qRot(q, vec3(x, y, z)); };
+        // (it fades in as it arrives and out before it goes)
+        const float pdx = plane_.p.x - eye_.x, pdz = plane_.p.z - eye_.z;
+        const float kp = smoothstepf(0.f, 1.5f, plane_.t) * (1.f - smoothstepf(70.f, 72.f, plane_.t)) * (1.f - smoothstepf(4200.f, 5200.f, std::sqrt(pdx * pdx + pdz * pdz)));
+        auto at = [&](float x, float y, float z) { return plane_.p + qRot(q, vec3(x, y, z) * kp); };
         auto add = [&](int mesh, int mat, const vec3& p, const vec3& s, const Q& qq, const vec3& col, float param = 0.f) {
-            inst_[mesh].push_back(isl::inst(mat, p, s, qq, col, param, 0.3f));
+            inst_[mesh].push_back(isl::inst(mat, p, s * kp, qq, col, param, 0.3f));
         };
         const vec3 white(0.95f), red = lin(0xd8342c);
         add(M_SPHERE, MAT_PAINT, at(0, 0, 0), vec3(9.f, 1.5f, 1.4f), q, white);
