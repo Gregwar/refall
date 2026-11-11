@@ -106,6 +106,7 @@ private:
     // ---- Ground cover at every scale (moss, grass, ferns, bushes, trees), placed once.
     struct Plant { float x, z, s, seed; int level, kind; };
     std::vector<Plant> plants_;
+    float macro_ = 1.f;          // 1 at the macro start (the first centimeter), 0 from some 30 cm on
     void buildFlora();
     std::vector<float> finst_;   // puffs (sphere billboards)
     // ---- Houses of a village, for scale.
@@ -139,6 +140,12 @@ private:
     // ---- Clouds: toon cumulus in a layer.
     struct Puff { vec3 p; float r, seed; };
     std::vector<Puff> clouds_;
+    std::vector<float> cloudA_;  // each puff's opacity, eased toward its wanted one at a limited rate (-1: unset)
+    float cloudDrift_ = 0.f, seaDrift_ = 0.f;
+    bool cloudsOn_ = false;
+    float seaA_ = -1.f;          // the sea of clouds' opacity, eased like the puffs'
+    vec3 prevEye_, eyeVel_;      // the camera's smoothed velocity (meters a second)
+    bool eyeSet_ = false;
     std::vector<float> cinst_;
     void buildClouds();
 

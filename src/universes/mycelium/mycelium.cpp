@@ -1,9 +1,11 @@
 // MYCELIUM: a glowing fungal network grows over the forest floor at night with the cleared lines, from a single spore
 // among the moss until it wraps the whole Earth in filaments of light.
 //
-// It starts as close as a macro lens: one spore glowing on the forest floor at dusk, its first germ tubes reaching
-// out between the fallen leaves, moss cushions and their capsules standing around like a little forest, the real
-// forest a far tree line under the moon. Every cleared line spurts the network outward (it is grown once per game in
+// It starts as close as a macro lens: one spore glowing on the forest floor at dusk, its first germ tubes a tiny tuft
+// a couple of millimeters across in a field about a centimeter and a half tall (the camera only pulls back once the
+// network fills it), among things plainly bigger than it: dew drops, soil grains, pine needles, fallen leaves, moss
+// sprigs and their capsules; the background out of focus (a thick mist behind the tuft, a soft tree line, the moon a
+// blurred disc, few stars) until the network is some 30 cm across. Every cleared line spurts the network outward (it is grown once per game in
 // log space: network.cpp, the same density of threads at every scale it reaches) and the camera rises and pulls back
 // with it: the moss, the clearing, the forest, a valley with a village and hot-air balloons, the clouds, a region
 // where the threads glow under the land like veins of light, a continent, and at last the Earth seen from space on
@@ -171,6 +173,7 @@ constexpr float CLEAR_T = 0.36f;     // a cleared row frays into light in this l
 constexpr float FLOW_T = 1.2f;       // its light flies to the network's heart in this long
 constexpr int MAX_MOTES = 1600;
 constexpr int MAX_SPORES = 2400;
+constexpr float MACRO_F = 0.008f;    // the start's framing (meters, half the frame's height at the spore)
 constexpr float CLOUD_Y = 2000.f;    // the cloud layer (meters)
 constexpr float CAM_AZ = 0.35f;      // the camera's side of the spore
 constexpr int LATHE_U = 22, LATHE_V = 40;
@@ -200,7 +203,10 @@ CamPose cameraFor(float G, float aspect, float wobble, float spin = 0.f) {
     pitch = lerpf(pitch, -29.f, kR);
     pitch = lerpf(pitch, -60.f, kP);
     pitch *= PI / 180.f;
-    const float F = lerpf(lerpf(1.05f, 0.82f, kM) * Rr, 0.95f * R_E, kP) * lerpf(1.f, 1.75f, kO);
+    // a macro floor on the framing: the first millimeters grow inside a field about a centimeter and a half tall (a
+    // tiny tuft among soil grains and fallen leaves), and the camera only starts pulling back once the network fills it
+    const float Fn = lerpf(1.05f, 0.82f, kM) * Rr;
+    const float F = lerpf(std::sqrt(Fn * Fn + MACRO_F * MACRO_F), 0.95f * R_E, kP) * lerpf(1.f, 1.75f, kO);
     const vec3 anchor(0.f, lerpf(0.12f * Rr * (1.f - kR), -R_E, kP), 0.f);
     const float sx = lerpf(lerpf(0.64f, 0.56f, kM) - 0.06f * kR, 0.52f, kP) - 0.04f * kO;
     const float sy = lerpf(lerpf(-0.36f, -0.3f, kM) - 0.05f * kR, -0.42f, kP) + 0.3f * kO;
@@ -422,7 +428,8 @@ void MyceliumUniverse::uploadNet() {
     netDirty_ = false;
 }
 
-// The mushrooms, once per game: one born every third of an e-fold of growth, at a site the threads reached a little
+// The mushrooms, once per game: the first once the network is about a centimeter across (the start is threads
+// alone), then one born every third of an e-fold of growth, at a site the threads reached a little
 // before, at about half the network's reach, where the camera will see it in the open beside the well; each a third of
 // the network's reach tall when it bursts up (capped at some 60 km: then glowing pins all over the globe), with two or
 // three smaller ones at its foot.
@@ -431,7 +438,7 @@ void MyceliumUniverse::planMushrooms() {
     Rng r(netSeed_ ^ 0x5A00ull);
     if (net_.sites.empty()) return;
     int n = 0;
-    for (float Gi = myc::G_MIN + 0.9f; Gi < myc::G_MAX - 0.1f; Gi += r.range(0.26f, 0.38f), n++) {
+    for (float Gi = myc::G_MIN + 1.5f; Gi < myc::G_MAX - 0.1f; Gi += r.range(0.26f, 0.38f), n++) {
         const float reach = std::exp(Gi);
         // the camera a moment after the birth: where it will look
         const CamPose cp = cameraFor(Gi + 0.5f, aspect_, 0.f);
@@ -506,8 +513,8 @@ float MyceliumUniverse::shroomOpen(const Mushroom& m, float G) const {
     return o * (1.f + 0.18f * std::sin(o * PI));
 }
 
-// Ground cover at every scale, around the spore: moss sprigs with their capsules, moss cushions and pebbles, grass
-// tufts, bushes, trees; each scale is shown while it is a sensible size on screen.
+// Ground cover at every scale, around the spore: dew drops and moss sprigs with their capsules, moss cushions and
+// pebbles, grass tufts, bushes, trees; each scale is shown while it is a sensible size on screen.
 void MyceliumUniverse::buildFlora() {
     plants_.clear();
     Rng r(0xF10Aull);
@@ -530,6 +537,18 @@ void MyceliumUniverse::buildFlora() {
             else p.kind = 5;                                          // trees
             plants_.push_back(p);
         }
+    }
+    // dew drops around the spore, a millimeter or two across: water the size of the first network
+    for (int i = 0; i < 16; i++) {
+        const float a = r.range(0.f, TAU), d = std::exp(r.range(std::log(0.005f), std::log(0.035f)));
+        Plant p;
+        p.x = std::cos(a) * d;
+        p.z = std::sin(a) * d;
+        p.s = r.range(0.0004f, 0.0013f);
+        p.seed = r.uniform();
+        p.level = 1;
+        p.kind = 6;
+        plants_.push_back(p);
     }
     // the village: houses gathered in a clearing ahead of the spore, on the left of the view
     houses_.clear();
@@ -585,6 +604,7 @@ void MyceliumUniverse::updateCamera(float dt) {
         gcVel_ += (w * w * (g_ - gc_) + 2.f * w * (0.85f * gVel_ - gcVel_)) * dt;
         gc_ += gcVel_ * dt;
     }
+    macro_ = 1.f - smoothstepf(std::log(0.01f), std::log(0.3f), gc_);
     const CamPose c = cameraFor(gc_, aspect_, 0.035f * std::sin(time_ * 0.021f), time_ * 0.03f);
     tanH_ = c.tanH;
     eye_ = c.eye;
@@ -1470,6 +1490,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             const float px = s / (pxK * std::max(d, 1e-9f));
             const float a = smoothstepf(2.5f, 6.f, px) * (1.f - smoothstepf(H * 0.3f, H * 0.6f, px)) * smoothstepf(0.6f * s, 1.6f * s, d) *
                             smoothstepf(0.55f * camD_, 0.95f * camD_, d) *
+                            (1.f - macro_ * smoothstepf(3.f * camD_, 8.f * camD_, d)) *   // out of focus far behind a macro
                             (pl.kind == 5 ? 1.f - smoothstepf(H * 0.1f, H * 0.2f, px) : pl.kind == 4 ? 1.f - smoothstepf(H * 0.14f, H * 0.26f, px) : 1.f);
             if (a <= 0.01f || !inView(base + vec3(0.f, s, 0.f), s * 2.f)) continue;
             const float rho = std::sqrt(pl.x * pl.x + pl.z * pl.z);
@@ -1516,6 +1537,10 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
                 }
                 break;
             }
+            case 6:     // a dew drop on the moss
+                puff(base + vec3(0.f, s * 0.75f, 0.f), s, pal_.floraLit, pl.seed, base - vec3(0.f, s, 0.f), a, 3,
+                     under);
+                break;
             default: {  // a tree: a trunk, a round crown of puffs
                 const float th = s * pr.range(1.1f, 1.6f);
                 glow(base, th * 0.5f, pal_.bark, a, 10, pl.seed, 0.09f, 0.f);
@@ -1589,7 +1614,11 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     }
 
     // =========================================================== the world (reduced resolution)
-    const float mistK = (1.f / (lerpf(14.f, 40.f, smoothstepf(1.f, 300.f, camD_)) * camD_)) * (1.f - smoothstepf(1000.f, 20000.f, camD_));
+    // the macro start: the background out of focus (a thicker mist behind the tuft, a soft tree line and moon, few
+    // stars), until the network is some 30 cm across
+    const float macro = macro_;
+    const float mistK = (1.f / (lerpf(lerpf(14.f, 40.f, smoothstepf(1.f, 300.f, camD_)), 4.5f, macro) * camD_)) *
+                        (1.f - smoothstepf(1000.f, 20000.f, camD_));
     auto setLight = [&](GLuint p) {
         set3f(p, "uEye", eye_);
         set3f(p, "uMoonDir", moonDir_);
@@ -1599,6 +1628,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uNetC", pal_.thread);
         set1f(p, "uFogK", 2.e-5f);
         set1f(p, "uMistK", mistK);
+        set1f(p, "uMacro", macro);
         set1f(p, "uAlt", alt_);
         set1f(p, "uTime", time_);
         set1f(p, "uBridge", bridge);
@@ -1692,15 +1722,44 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Transparent: the clouds (far to near), the sea of clouds, the threads, then the lights in the air.
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
-    if (alt_ < 2.5e5f) {
+    // The clouds drift with the wind (integrated: a change of pace never jumps the field). Each puff fades in and
+    // out over a second or more on screen whatever the growth's speed: its wanted opacity (none too close to the
+    // camera, under a pixel or two, or high in space) is only followed at a limited rate.
+    cloudDrift_ += wdt * (5.f + 6.f * wm + 6.f * wp);
+    seaDrift_ += wdt * (8.f + 10.f * wm + 10.f * wp);
+    if (cloudA_.size() != clouds_.size()) cloudA_.assign(clouds_.size(), -1.f);
+    // where the camera will be in a moment (its smoothed velocity): a puff it is heading into fades out before it
+    // gets there, never all at once as it passes through
+    if (dt > 1e-4f) {
+        if (eyeSet_) eyeVel_ = lerp(eyeVel_, (eye_ - prevEye_) / dt, 1.f - std::exp(-dt * 12.f));
+        prevEye_ = eye_;
+        eyeSet_ = true;
+    }
+    const vec3 eyeAhead = eye_ + eyeVel_ * 1.3f;
+    if (alt_ < 2.5e5f || cloudsOn_) {
         std::vector<std::pair<float, int>> order;
         order.reserve(clouds_.size());
-        const float drift = time_ * (5.f + 6.f * wm + 6.f * wp);
+        const float drift = cloudDrift_;
+        const float highK = 1.f - smoothstepf(6.e4f, 2.e5f, alt_);
+        const float step = std::min(dt, 0.1f) / 1.2f;   // a full fade in some 1.2 s at least
+        cloudsOn_ = false;
         for (size_t i = 0; i < clouds_.size(); i++) {
             const vec3 p = clouds_[i].p + vec3(drift, 0.f, 0.f);
             const vec3 d = p - eye_;
             const float d2 = dot(d, d);
-            if (clouds_[i].r < 0.6f * pxK * std::sqrt(d2)) continue;
+            const float dEye = std::sqrt(d2);
+            const float rPx = clouds_[i].r / std::max(pxK * dEye, 1e-9f);
+            const float dAhead = length(p - eyeAhead);
+            // and none while it sweeps across the view (the camera shooting up through the layer on a spurt or a
+            // drop: its angular speed, the camera's speed over its distance), so it never flashes by
+            const float sweep = length(eyeVel_) / std::max(dEye, 1.f);
+            const float want = smoothstepf(clouds_[i].r * 1.2f, clouds_[i].r * 3.5f, std::min(dEye, dAhead)) * smoothstepf(0.6f, 2.f, rPx) *
+                               (1.f - smoothstepf(0.25f, 0.8f, sweep)) * highK;
+            float& ca = cloudA_[i];
+            // (out of the view it may change at once: nobody sees it, and it comes in faint if it sweeps in)
+            ca = ca < 0.f || !inView(p, clouds_[i].r) ? want : ca + std::clamp(want - ca, -step, step);
+            if (ca <= 0.002f) continue;
+            cloudsOn_ = true;
             order.push_back({d2, (int)i});
         }
         std::sort(order.begin(), order.end(), [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
@@ -1708,8 +1767,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         for (auto& o : order) {
             const Puff& pf = clouds_[o.second];
             const vec3 p = pf.p + vec3(drift, 0.f, 0.f);
-            const float dEye = std::sqrt(o.first);
-            const float a = smoothstepf(pf.r * 0.8f, pf.r * 2.5f, dEye) * 0.9f;
+            const float a = smoothstepf(0.f, 1.f, cloudA_[o.second]) * 0.9f;
             const float rho = std::sqrt(p.x * p.x + p.z * p.z);
             const float under = std::exp(-sq(rho / (reach * 0.8f))) * (1.f - over_);
             const float q[8] = {p.x, p.y, p.z, pf.r, pf.seed, a, under, 0.f};
@@ -1729,7 +1787,12 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
         }
     }
-    if (eye_.y > CLOUD_Y + 200.f) {
+    {
+        // the sea of clouds under the camera once above them, eased the same way
+        const float want = smoothstepf(CLOUD_Y + 200.f, CLOUD_Y + 1800.f, std::min(eye_.y, eyeAhead.y));
+        seaA_ = seaA_ < 0.f ? want : seaA_ + std::clamp(want - seaA_, -std::min(dt, 0.1f) / 1.2f, std::min(dt, 0.1f) / 1.2f);
+    }
+    if (eye_.y > CLOUD_Y + 200.f && seaA_ > 0.002f) {
         glUseProgram(progSea_);
         setLight(progSea_);
         setMat(progSea_, "uVP", vp3_);
@@ -1740,8 +1803,8 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progSea_, "uTan", tanH_ * aspect_, tanH_);
         set1f(progSea_, "uPix", pxK);
         set1f(progSea_, "uCloudY", CLOUD_Y);
-        set1f(progSea_, "uDrift", time_ * (8.f + 10.f * wm + 10.f * wp));
-        set1f(progSea_, "uFade", 0.6f * smoothstepf(CLOUD_Y + 200.f, CLOUD_Y + 1800.f, eye_.y));
+        set1f(progSea_, "uDrift", seaDrift_);
+        set1f(progSea_, "uFade", 0.6f * smoothstepf(0.f, 1.f, seaA_));
         set3f(progSea_, "uCloudLit", pal_.cloudLit);
         set3f(progSea_, "uCloudShade", pal_.cloudShade);
         ugl::drawFullscreen();
