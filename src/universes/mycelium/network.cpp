@@ -13,8 +13,9 @@
 namespace {
 
 // The journey: lines -> the network's reach (meters), interpolated in log space.
-// The pacing lives here alone (to rescale it, scale the lines column). The whole journey fits in some 50 lines (one
-// song): something new every five lines or so, the first millimeters a little quicker (some 2x farther a line), then
+// The pacing lives here alone (to rescale it, scale the lines column). The lines are on the 50-line scale:
+// paceLines() rescales the real lines to the song's length (50 for a 3:20 song). The whole journey fits in some 50
+// lines (one song): something new every five lines or so, the first millimeters a little quicker (some 2x farther a line), then
 // about 1.6x a line, the last lines slowly wrapping the globe.
 struct Stage { float lines, reach; };
 const Stage STAGES[] = {
@@ -29,8 +30,8 @@ float wrapAng(float a) { return std::remainder(a, TAU); }
 
 } // namespace
 
-float myc::growthOf(int lines) {
-    const float l = (float)std::max(0, lines);
+float myc::growthOf(float lines) {
+    const float l = std::max(0.f, lines);
     float g;
     if (l >= STAGES[STAGE_COUNT - 1].lines) {
         g = std::log(STAGES[STAGE_COUNT - 1].reach) + (l - STAGES[STAGE_COUNT - 1].lines) * 0.004f;
