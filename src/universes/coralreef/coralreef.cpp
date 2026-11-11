@@ -1,0 +1,1682 @@
+// CORAL REEF: a sunny shallow reef seen wide behind the well, under warm sunlight: caustics play on the white sand
+// and the rocks, shafts of light come down from the rippling surface, schools of fish wheel through the water.
+// The reef grows with the cleared lines, over one song: the scene starts as bare rock and white sand, a few
+// chromis; every cleared row bursts into bubbles that rise behind the well, and glowing coral seeds drift out of
+// it and settle on the rocks and the sand, each one where a coral then grows and stays for the whole song: brain
+// corals and anemones first, then staghorn thickets, sea fans, tube sponges, sea whips, table corals; the rocks
+// crust over in pink coralline and green turf, and more and more fish come: chromis, anthias, yellow and blue
+// tangs, moorish idols, parrotfish, clownfish in the anemones. The scene completes at 50 paced lines (paceLines():
+// one song of any length), its stages spread evenly over it (a new form every five lines or so, the slots planted
+// a few a line).
+//
+// The music: calm is still, slow water; mid stirs the fish and the surge; a peak brightens the light shafts, the
+// schools swim fast and tight and the kicks pulse the caustics (a little brighter, the water surging on). The drop
+// brings a manta ray gliding past behind the well, its wings beating slowly. A Tetris: the schools gather and
+// swirl together behind the well for a while. Slow motion turns the light deep blue. Game over: the light sinks
+// to the deep, the reef recedes for the next game.
+//
+// The pieces: one clean rounded tile per cell, one saturated color per piece type, softly lit from above with a
+// faint ripple of light. A cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
+//
+// Cost: the world at a reduced resolution (at most 720 lines) with depth (the water, ~115k triangles of seabed, the
+// corals instanced per form, the fish, the billboards); the composite at full resolution integrates the light
+// shafts in ten steps a pixel.
+#include "universes/coralreef/coralreef.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+
+#include "layout.hpp"
+#include "universes/coralreef/shaders.hpp"
+#include "universes/registry.hpp"
+#define STB_TRUETYPE_IMPLEMENTATION
+#define STBTT_STATIC
+#include "stb_truetype.h"
+
+namespace {
+
+// Fraunces Soft Italic (the song, the variant, the notices) and Nunito SemiBold (labels, numbers), SIL Open Font
+// License, see OFL-Fraunces.txt and OFL-Nunito.txt.
+const unsigned char FONT_ITAL[] = {
+#include "universes/coralreef/Fraunces-SoftItalic.ttf.inc"
+};
+const unsigned char FONT_SANS[] = {
+#include "universes/coralreef/Nunito-SemiBold.ttf.inc"
+};
+
+namespace shaders = coralreef_shaders;
+using ugl::set1f;
+using ugl::set1i;
+using ugl::set2f;
+using ugl::set3f;
+using ugl::set4f;
+using ugl::setMat;
+
+GLuint compile(const char* vs, const char* fs, const char* name, bool world) {
+    const std::string pre = std::string(shaders::COMMON_GLSL) + (world ? shaders::REEF_GLSL : "");
+    std::string f(fs);
+    f.insert(f.find('\n') + 1, pre);
+    std::string v(vs);
+    v.insert(v.find('\n') + 1, pre);
+    return ugl::program(v.c_str(), f.c_str(), name);
+}
+
+vec2 V(float x, float y) { return vec2{x, y}; }
+vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
+vec3 lin(unsigned c) { return ugl::toLinear(hex(c)); }
+float sqf(float x) { return x * x; }
+
+// A variant (sRGB): the water (near, deep, the bright haze up toward the surface, the surface seen from below),
+// the light (sun, shade, rim, caustics, shafts); the sand (two tones), the rock (two tones) and its crusts (pink
+// coralline, green turf); the reef's eight colors (0 pink, 1 violet, 2 yellow, 3 orange, 4 mint, 5 magenta,
+// 6 lime, 7 blue: each coral form picks its pairs among them); the HUD's ink and accent, the veil and the well's
+// rails; the seven pieces; the sun's place (azimuth, elevation), the water's clarity (fog distance, meters), the
+// shafts, the caustics, the corals' glow (fluorescence), night, saturation.
+struct VariantDef {
+    const char* name;
+    unsigned water, deep, haze, surface, sun, shade, rim, caustic, ray;
+    unsigned sand, sand2, rock, rock2, crust, crust2;
+    unsigned reef[8];
+    unsigned ink, accent, veil, rail;
+    unsigned piece[7];
+    float sunAz, sunEl, fog, rays, caustics, glow, night, sat;
+};
+const VariantDef VARIANTS[] = {
+    // A lagoon at midday: turquoise water over white sand, a high sun, the reef in every color.
+    {"LAGOON", 0x0fb8cc, 0x0646a0, 0x6ce4ee, 0xc4fcff, 0xfff6dc, 0x6a8ee0, 0xa8f6ff, 0xfffbe8, 0xeafff8,
+     0xf2e0bc, 0xe0c294, 0xa47c6c, 0x6e5470, 0xf07aa0, 0x66c45a,
+     {0xff5f8a, 0xa45cff, 0xffd02a, 0xff8a2a, 0x2fe0a8, 0xff3fd0, 0x9cf03a, 0x3a9cff},
+     0xffffff, 0xffd84a, 0x033250, 0x86ecf2,
+     {0x2fe6ff, 0xffd23a, 0xb46cff, 0x52e57a, 0xff4f6a, 0x3d78ff, 0xff9636}, 0.55f, 1.18f, 27.f, 1.f, 1.f, 0.08f, 0.f, 1.1f},
+    // A reef at golden hour: green-gold water, the sun low on one side, long warm shafts, warm corals.
+    {"GOLDEN HOUR", 0x1aa2b4, 0x0a3a7c, 0xffc890, 0xffe2b0, 0xffcf88, 0x7a76c8, 0xffcc88, 0xffe2a4, 0xffcf84,
+     0xf0dcc0, 0xdcb894, 0x8c6e6c, 0x6a5868, 0xff6a7a, 0xa0c048,
+     {0xff5a5a, 0xa060ff, 0xffd23a, 0xff8a2a, 0x3ad0a0, 0xe048a8, 0xb0e048, 0x5a8cff},
+     0xfff6e8, 0xffb84a, 0x0e2c46, 0xffcf84,
+     {0x40e0f0, 0xffd040, 0xc070ff, 0x7ae060, 0xff5060, 0x5080ff, 0xff9a40}, -1.15f, 0.62f, 23.f, 1.35f, 0.85f, 0.06f, 0.f, 1.12f},
+    // The outer reef: deep cobalt water, crystal clear, a white sun high above.
+    {"OUTER REEF", 0x1478d8, 0x062a80, 0x62bcff, 0xa4dcff, 0xf4fbff, 0x5a74d0, 0x90d4ff, 0xf0f8ff, 0xd8f0ff,
+     0xd4deec, 0xb0bed6, 0x7c6c8a, 0x5a4c74, 0xd060c8, 0x48b890,
+     {0xff6a7a, 0x9a5aff, 0xffd23a, 0xff7a30, 0x3ae0d0, 0xff4aa0, 0x8cf060, 0x4a8cff},
+     0xffffff, 0x7af0ff, 0x041a48, 0x90d4ff,
+     {0x38e8ff, 0xffd84a, 0xbe78ff, 0x5ae888, 0xff5a72, 0x4a86ff, 0xffa040}, 0.3f, 1.3f, 31.f, 1.1f, 1.f, 0.08f, 0.f, 1.1f},
+    // A moonlit night dive: indigo water, moonlight shafts, the corals glowing in fluorescent colors.
+    {"MOONLIT", 0x0c3a7a, 0x03102e, 0x2a5ab8, 0x3a6ad8, 0xb8ccff, 0x2a3a88, 0x6aa0ff, 0xa8c8ff, 0x8ab0ff,
+     0x8a9ac8, 0x6a78a8, 0x3a3c5a, 0x2a2c48, 0xc04aa0, 0x2a9a7a,
+     {0xff5a8a, 0xb060ff, 0xffe040, 0xffa030, 0x30ffe0, 0xff40d0, 0xa0ff40, 0x6a7aff},
+     0xeef4ff, 0x6affe8, 0x020a24, 0x4a80ff,
+     {0x40f0ff, 0xffe060, 0xc080ff, 0x60f090, 0xff5a8a, 0x5a8cff, 0xffa050}, 0.9f, 1.05f, 21.f, 0.75f, 0.7f, 0.9f, 1.f, 1.1f},
+};
+constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
+int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
+
+using Palette = CoralReefUniverse::Palette;
+static_assert(sizeof(Palette) % sizeof(float) == 0, "a palette is floats only");
+constexpr int PAL_FLOATS = (int)(sizeof(Palette) / sizeof(float));
+
+Palette paletteOf(int v) {
+    const VariantDef& d = VARIANTS[wrapV(v)];
+    Palette p;
+    p.water = lin(d.water); p.deep = lin(d.deep); p.haze = lin(d.haze); p.surface = lin(d.surface);
+    p.sun = lin(d.sun); p.shade = lin(d.shade); p.rim = lin(d.rim); p.caustic = lin(d.caustic); p.ray = lin(d.ray);
+    p.sand = lin(d.sand); p.sand2 = lin(d.sand2); p.rock = lin(d.rock); p.rock2 = lin(d.rock2);
+    p.crust = lin(d.crust); p.crust2 = lin(d.crust2);
+    for (int i = 0; i < 8; i++) p.reef[i] = lin(d.reef[i]);
+    p.ink = lin(d.ink); p.accent = lin(d.accent); p.veil = lin(d.veil); p.rail = lin(d.rail);
+    for (int i = 0; i < 7; i++) p.piece[i] = lin(d.piece[i]);
+    p.sunAz = d.sunAz; p.sunEl = d.sunEl; p.fog = d.fog; p.rays = d.rays; p.caustics = d.caustics;
+    p.glow = d.glow; p.night = d.night; p.sat = d.sat;
+    return p;
+}
+void lerpPalette(Palette& a, const Palette& b, float k) {
+    float* pa = reinterpret_cast<float*>(&a);
+    const float* pb = reinterpret_cast<const float*>(&b);
+    for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
+}
+
+constexpr float CLEAR_T = 0.36f;     // a cleared row shrinks away in this long (real time)
+constexpr float GROW_T = 3.2f;       // a coral grows in this long once its seed has settled
+constexpr int N_SLOTS = 176;         // corals at scene completion (and a few more, slowly, after it)
+constexpr int MAX_BUBBLES = 1400;
+constexpr float CAM_FOV = 56.f;      // degrees, vertical
+const vec3 EYE0(0.f, 3.1f, 15.5f), TARGET0(0.f, 1.3f, 0.f);
+
+// When each coral form joins the reef (lines on the 50-line scale) and how big it is (meters for the template).
+struct KindDef { float unlock, weight, sizeLo, sizeHi, sway, rockPref; };
+const KindDef KINDS[reef::K_COUNT] = {
+    {0.f, 0.55f, 1.0f, 1.6f, 0.f, 1.6f},   // brain
+    {4.f, 1.3f, 1.3f, 2.0f, 0.03f, 1.6f},  // staghorn
+    {24.f, 0.7f, 1.0f, 1.5f, 0.f, 1.8f},   // table
+    {9.f, 0.9f, 1.6f, 2.5f, 0.22f, 1.5f},  // sea fan
+    {14.f, 0.8f, 1.2f, 1.8f, 0.f, 1.3f},   // tube sponges
+    {1.5f, 0.6f, 1.3f, 1.9f, 0.5f, 0.8f},  // anemone
+    {19.f, 0.7f, 1.3f, 1.9f, 0.3f, 1.2f},  // sea whips
+};
+// Color pairs (indices into the reef's eight colors) per form.
+const int PAIRS[reef::K_COUNT][4][2] = {
+    {{2, 6}, {4, 6}, {1, 7}, {3, 2}},
+    {{1, 7}, {7, 4}, {0, 2}, {3, 2}},
+    {{4, 6}, {2, 6}, {7, 4}, {0, 3}},
+    {{5, 0}, {0, 3}, {1, 5}, {3, 2}},
+    {{1, 5}, {3, 2}, {2, 3}, {5, 1}},
+    {{0, 6}, {3, 2}, {5, 4}, {1, 4}},
+    {{2, 3}, {0, 5}, {3, 0}, {7, 1}},
+};
+
+// The schools: species, the line they come at, how many fish at scene completion, size, their stretch of reef.
+struct SchoolDef { int species; float appear; int count; float size; float x0, x1; };
+const SchoolDef SCHOOLS[] = {
+    {reef::F_CHROMIS, 0.f, 20, 0.7f, -13.f, -6.f},
+    {reef::F_ANTHIAS, 5.f, 26, 0.7f, 6.f, 13.f},
+    {reef::F_CHROMIS, 12.f, 24, 0.7f, 5.f, 14.f},
+    {reef::F_YELLOW, 16.f, 12, 1.0f, -13.f, -5.f},
+    {reef::F_BLUE, 22.f, 10, 1.0f, 5.f, 13.f},
+    {reef::F_ANTHIAS, 29.f, 26, 0.7f, -14.f, -6.f},
+    {reef::F_IDOL, 34.f, 4, 1.05f, -11.f, 11.f},
+    {reef::F_PARROT, 39.f, 4, 1.4f, -12.f, 12.f},
+    {reef::F_CHROMIS, 43.f, 36, 0.66f, -10.f, 10.f},
+};
+constexpr float SPECIES_SPEED[reef::F_COUNT] = {1.5f, 1.45f, 1.1f, 1.2f, 0.9f, 1.0f, 0.6f};
+
+// Test hooks: ZEN_CORALREEF_LINES=N adds N lines to the reef, ZEN_GROW_RATE=R adds R lines a second.
+int extraLines(double t) {
+    static const int n = std::getenv("ZEN_CORALREEF_LINES") ? std::atoi(std::getenv("ZEN_CORALREEF_LINES")) : 0;
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return n + (int)(rate * t);
+}
+
+const char* stageName(float L) {
+    if (L < 1.f) return "bare rock";
+    if (L < 10.f) return "first corals";
+    if (L < 20.f) return "young reef";
+    if (L < 32.f) return "growing reef";
+    if (L < 45.f) return "busy reef";
+    return "full reef";
+}
+
+} // namespace
+
+// =====================================================================================================
+// Setup
+// =====================================================================================================
+
+void CoralReefUniverse::upload(MeshGL& m, const reef::Mesh& mesh, int instFloats) {
+    glGenVertexArrays(1, &m.vao);
+    glGenBuffers(1, &m.vbo);
+    glGenBuffers(1, &m.ibo);
+    glGenBuffers(1, &m.inst);
+    glBindVertexArray(m.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    glBufferData(GL_ARRAY_BUFFER, mesh.v.size() * sizeof(float), mesh.v.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 10, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 10, (void*)(sizeof(float) * 3));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 10, (void*)(sizeof(float) * 6));
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m.ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.idx.size() * sizeof(uint32_t), mesh.idx.data(), GL_STATIC_DRAW);
+    m.count = (GLsizei)mesh.idx.size();
+    glBindBuffer(GL_ARRAY_BUFFER, m.inst);
+    for (int i = 0; i < instFloats / 4; i++) {
+        glEnableVertexAttribArray(3 + i);
+        glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * instFloats, (void*)(sizeof(float) * 4 * i));
+        glVertexAttribDivisor(3 + i, 1);
+    }
+    glBindVertexArray(0);
+}
+
+bool CoralReefUniverse::init(int width, int height) {
+    progWater_ = compile(ugl::FULLSCREEN_VS, shaders::WATER_FS, "coralreef water", true);
+    progGround_ = compile(shaders::GROUND_VS, shaders::GROUND_FS, "coralreef ground", true);
+    progCoral_ = compile(shaders::CORAL_VS, shaders::CORAL_FS, "coralreef coral", true);
+    progFish_ = compile(shaders::FISH_VS, shaders::FISH_FS, "coralreef fish", true);
+    progGlow_ = compile(shaders::GLOW_VS, shaders::GLOW_FS, "coralreef glow", true);
+    progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "coralreef comp", true);
+    progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "coralreef veil", false);
+    progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "coralreef cell", false);
+    progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "coralreef sprite", false);
+    progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "coralreef shape", false);
+    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "coralreef text", false);
+    progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "coralreef post", false);
+
+    const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
+    glGenBuffers(1, &quadVbo_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+    auto instanced = [&](GLuint& vao, GLuint& vbo, int attribs, int stride) {
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        for (int i = 0; i < attribs; i++) {
+            glEnableVertexAttribArray(1 + i);
+            glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, stride, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(1 + i, 1);
+        }
+    };
+    instanced(glowVao_, glowVbo_, 3, sizeof(float) * 12);
+    instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
+    instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
+    glGenVertexArrays(1, &shapeVao_);
+    glGenBuffers(1, &shapeVbo_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
+    glGenVertexArrays(1, &textVao_);
+    glGenBuffers(1, &textVbo_);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
+
+    // the seabed: a grid fanning out with the view (fine near the camera, coarse far away)
+    {
+        const int NX = 260, NZ = 220;
+        std::vector<float> g;
+        g.reserve((NX + 1) * (NZ + 1) * 2);
+        for (int j = 0; j <= NZ; j++) {
+            const float v = (float)j / NZ;
+            const float z = 13.5f - 95.f * std::pow(v, 1.6f);
+            const float hw = 7.f + (13.5f - z) * 1.08f;
+            for (int i = 0; i <= NX; i++) {
+                g.push_back(((float)i / NX * 2.f - 1.f) * hw);
+                g.push_back(z);
+            }
+        }
+        std::vector<uint32_t> idx;
+        idx.reserve(NX * NZ * 6);
+        for (int j = 0; j < NZ; j++)
+            for (int i = 0; i < NX; i++) {
+                const uint32_t a = j * (NX + 1) + i, b = a + 1, c = a + (NX + 1), d = c + 1;
+                idx.insert(idx.end(), {a, c, b, b, c, d});
+            }
+        glGenVertexArrays(1, &groundVao_);
+        glGenBuffers(1, &groundVbo_);
+        glGenBuffers(1, &groundIbo_);
+        glBindVertexArray(groundVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, groundVbo_);
+        glBufferData(GL_ARRAY_BUFFER, g.size() * sizeof(float), g.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, groundIbo_);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, idx.size() * sizeof(uint32_t), idx.data(), GL_STATIC_DRAW);
+        groundCount_ = (GLsizei)idx.size();
+    }
+    for (int k = 0; k < reef::K_COUNT; k++)
+        for (int t = 0; t < reef::TEMPLATES; t++) upload(coral_[k][t], reef::buildCoral(k, t), 16);
+    for (int t = 0; t < reef::TEMPLATES; t++) upload(rockM_[t], reef::buildRock(t), 16);
+    for (int s = 0; s < reef::F_COUNT; s++) upload(fishM_[s], reef::buildFish(s), 12);
+    upload(manta_, reef::buildManta(), 12);
+    glBindVertexArray(0);
+
+    buildFont(sans_, FONT_SANS);
+    buildFont(ital_, FONT_ITAL);
+    pal_ = basePal_ = paletteOf(0);
+    resize(width, height);
+    return glGetError() == GL_NO_ERROR;
+}
+
+void CoralReefUniverse::buildFont(Font& f, const unsigned char* ttf) {
+    stbtt_fontinfo* info = new stbtt_fontinfo;
+    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
+        std::fprintf(stderr, "[gl] coralreef font init failed\n");
+        delete info;
+        return;
+    }
+    f.info = info;
+    f.px = 64.f;
+    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
+    int x0, y0, x1, y1;
+    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
+    const int AW = 1024, AH = 1024, PAD = 8;
+    std::vector<unsigned char> atlas(AW * AH, 0);
+    int x = 1, y = 1, rowH = 0;
+    for (int ch = 32; ch < 128; ch++) {
+        Glyph& g = f.g[ch - 32];
+        int adv, lsb;
+        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
+        g.adv = adv * f.scaleTT;
+        int w = 0, h = 0, xo = 0, yo = 0;
+        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
+        if (!sdf) { g.w = g.h = 0; continue; }
+        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
+        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
+        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
+        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
+        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
+        x += w + 1;
+        rowH = std::max(rowH, h);
+        stbtt_FreeSDF(sdf, nullptr);
+    }
+    glGenTextures(1, &f.tex);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    f.ok = true;
+}
+
+void CoralReefUniverse::resize(int width, int height) {
+    width_ = std::max(1, width);
+    height_ = std::max(1, height);
+    aspect_ = (float)width_ / height_;
+    const layout::Camera cam = layout::camera(width_, height_);
+    const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect_;
+    viewH_ = vec2{hw, hh};
+    viewC_ = vec2{cam.target.x, cam.target.y};
+    vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
+    pxPerUnit_ = height_ / (2.f * hh);
+    const int wh = std::max(180, std::min(720, (int)(height_ * 0.7f)));
+    const int ww = std::max(320, (int)std::lround((float)wh * aspect_));
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
+    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    updateCamera();
+    reefDirty_ = true; // (the slots favor what the camera sees)
+}
+
+CoralReefUniverse::~CoralReefUniverse() {
+    for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
+    for (GLuint p : {progWater_, progGround_, progCoral_, progFish_, progGlow_, progComp_, progVeil_, progCell_, progSprite_,
+                     progShape_, progText_, progPost_})
+        glDeleteProgram(p);
+    auto freeMesh = [](MeshGL& m) {
+        if (m.vao) glDeleteVertexArrays(1, &m.vao);
+        for (GLuint b : {m.vbo, m.ibo, m.inst})
+            if (b) glDeleteBuffers(1, &b);
+    };
+    for (auto& row : coral_)
+        for (MeshGL& m : row) freeMesh(m);
+    for (MeshGL& m : fishM_) freeMesh(m);
+    for (MeshGL& m : rockM_) freeMesh(m);
+    freeMesh(manta_);
+    for (GLuint v : {groundVao_, glowVao_, cellVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, groundVbo_, groundIbo_, glowVbo_, cellVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (Font* f : {&sans_, &ital_}) {
+        if (f->tex) glDeleteTextures(1, &f->tex);
+        delete (stbtt_fontinfo*)f->info;
+    }
+}
+
+// =====================================================================================================
+// The camera
+// =====================================================================================================
+
+// A wide, open view from a little above the sand, looking slightly down across the reef; it breathes a little.
+void CoralReefUniverse::updateCamera() {
+    vec3 eye = EYE0 + vec3(0.3f * std::sin(time_ * 0.043f), 0.12f * std::sin(time_ * 0.061f + 1.f), 0.f);
+    const vec3 target = TARGET0 + vec3(0.2f * std::sin(time_ * 0.037f + 2.f), 0.f, 0.f);
+    eye_ = eye;
+    look_ = normalize(target - eye);
+    camR_ = normalize(cross(look_, vec3(0, 1, 0)));
+    camU_ = cross(camR_, look_);
+    tanH_ = std::tan(CAM_FOV * 0.5f * PI / 180.f);
+    view3_ = mat4::lookAt(vec3(0.f), look_, vec3(0, 1, 0));
+    proj3_ = mat4::perspective(CAM_FOV * PI / 180.f, aspect_, 0.1f, 260.f);
+    vp3_ = proj3_ * view3_;
+}
+
+vec3 CoralReefUniverse::boardToWorld(vec2 b, float dist) const {
+    const float nx = (b.x - viewC_.x) / viewH_.x, ny = (b.y - viewC_.y) / viewH_.y;
+    const vec3 d = normalize(look_ + camR_ * (nx * tanH_ * aspect_) + camU_ * (ny * tanH_));
+    // (in the water: short of the sand where the ray comes down to it)
+    if (d.y < -0.02f) dist = std::min(dist, (eye_.y - 0.7f) / -d.y);
+    return eye_ + d * std::max(dist, 2.5f);
+}
+
+bool CoralReefUniverse::toScreen(const vec3& w, vec2* ndc) const {
+    const vec4 c = vp3_ * vec4(w - eye_, 1.f);
+    if (c.w <= 0.05f) return false;
+    *ndc = V(c.x / c.w, c.y / c.w);
+    return true;
+}
+
+// =====================================================================================================
+// The reef's layout
+// =====================================================================================================
+
+// The outcrops, then the slots: one after the other in the order they are planted, each where it is seen best for
+// its turn (the first ones in the open bands left and right of the HUD, at a middle distance; the later ones
+// anywhere, farther, behind the HUD and the well), spaced out, on the rocks rather than the sand.
+void CoralReefUniverse::buildReef() {
+    Rng r(reefSeed_ ^ 0x5EEDC0A1ull);
+    const float M[][4] = {
+        {-13.f, -3.f, 3.2f, 1.5f},  {-9.5f, -9.f, 3.5f, 1.9f}, {-17.5f, -12.f, 4.2f, 2.2f}, {-7.f, 1.5f, 2.f, 0.9f},
+        {12.5f, -2.f, 3.3f, 1.6f},  {9.f, -10.f, 3.8f, 2.1f},  {17.5f, -9.f, 4.2f, 2.f},    {7.5f, 3.f, 1.8f, 0.8f},
+        {-4.f, -24.f, 6.f, 2.6f},   {6.f, -27.f, 7.f, 3.f},    {-17.f, -26.f, 6.f, 2.4f},   {19.f, -25.f, 6.f, 2.6f},
+        {0.5f, -13.f, 2.4f, 0.9f},  {-11.f, 7.5f, 2.2f, 0.7f}, {11.f, 8.f, 2.f, 0.6f},
+    };
+    moundCount_ = 0;
+    for (auto& m : M) {
+        reef::Mound& o = mounds_[moundCount_++];
+        o.x = m[0] + r.range(-0.8f, 0.8f);
+        o.z = m[1] + r.range(-0.8f, 0.8f);
+        o.r = m[2] * r.range(0.9f, 1.1f);
+        o.h = m[3] * r.range(0.85f, 1.15f);
+        o.seed = r.uniform();
+    }
+    // boulders: a few on each outcrop, some loose in the sand
+    rocks_.clear();
+    for (int i = 0; i < moundCount_; i++) {
+        const reef::Mound& m = mounds_[i];
+        const int n = 2 + (int)(m.r * 0.8f);
+        for (int k = 0; k < n; k++) {
+            Rock b;
+            const float a = r.range(0.f, TAU), d = m.r * std::sqrt(r.uniform()) * 0.75f;
+            b.p = vec3(m.x + std::cos(a) * d, 0.f, m.z + std::sin(a) * d);
+            b.size = m.r * r.range(0.35f, 0.62f) * (1.f - 0.4f * d / m.r);
+            b.p.y = reef::groundH(b.p.x, b.p.z, mounds_, moundCount_) - 0.12f * b.size;
+            b.yaw = r.range(0.f, TAU);
+            b.seed = r.uniform();
+            b.tmpl = r.irange(0, reef::TEMPLATES - 1);
+            rocks_.push_back(b);
+        }
+    }
+    for (int k = 0; k < 10; k++) {
+        Rock b;
+        b.p = vec3(r.range(-22.f, 22.f), 0.f, r.range(-18.f, 8.f));
+        b.size = r.range(0.5f, 1.3f);
+        b.p.y = reef::groundH(b.p.x, b.p.z, mounds_, moundCount_) - 0.12f * b.size;
+        b.yaw = r.range(0.f, TAU);
+        b.seed = r.uniform();
+        b.tmpl = r.irange(0, reef::TEMPLATES - 1);
+        rocks_.push_back(b);
+    }
+    slots_.clear();
+    int lastKind[reef::K_COUNT];
+    for (int& k : lastKind) k = -1;
+    for (int i = 0; i < N_SLOTS + 24; i++) {
+        Slot s;
+        const float t = (float)i / (N_SLOTS - 1);
+        s.birth = i < N_SLOTS ? 0.6f + 49.4f * t : 50.f + (i - N_SLOTS + 1) * 1.5f;
+        // its form: a newly unlocked one comes at once; else a weighted pick among the unlocked
+        int kind = -1;
+        for (int k = 0; k < reef::K_COUNT; k++)
+            if (KINDS[k].unlock <= s.birth && lastKind[k] < 0) { kind = k; break; }
+        if (kind < 0) {
+            float w[reef::K_COUNT];
+            for (int k = 0; k < reef::K_COUNT; k++) {
+                w[k] = KINDS[k].unlock <= s.birth ? KINDS[k].weight : 0.f;
+                // a form just unlocked comes a little more often for a while
+                if (KINDS[k].unlock <= s.birth && s.birth < KINDS[k].unlock + 6.f) w[k] *= 1.8f;
+            }
+            kind = r.weighted(w);
+        }
+        lastKind[kind] = i;
+        s.kind = kind;
+        s.tmpl = r.irange(0, reef::TEMPLATES - 1);
+        const KindDef& kd = KINDS[kind];
+        s.size = r.range(kd.sizeLo, kd.sizeHi) * (0.85f + 0.35f * std::min(1.f, s.birth / 50.f));
+        s.yaw = r.range(0.f, TAU);
+        s.seed = r.uniform();
+        const int pr = r.irange(0, 3);
+        s.colIdx[0] = PAIRS[kind][pr][0];
+        s.colIdx[1] = PAIRS[kind][pr][1];
+        // where: the best of a few candidates
+        const float early = 1.f - smoothstepf(0.f, 0.45f, t);
+        float best = -1.f;
+        vec3 bestP(0.f);
+        for (int c = 0; c < 48; c++) {
+            const float x = r.range(-27.f, 27.f), z = r.range(-31.f, 10.f);
+            const float y = surfaceAt(x, z);
+            const vec3 p(x, y, z);
+            vec2 a, b;
+            if (!toScreen(p, &a) || !toScreen(p + vec3(0.f, s.size, 0.f), &b)) continue;
+            if (std::fabs(a.x) > 1.02f || a.y < -1.15f || b.y > 0.9f) continue;
+            const float ax = std::fabs(a.x);
+            const float vis = ax > 0.56f ? 1.f : ax > 0.27f ? 0.5f : 0.3f;
+            const float dist = length(p - EYE0);
+            const float distPref = lerpf(1.f, std::exp(-sqf((dist - 14.f) / 6.f)), early);
+            const float rock = reef::rockAt(x, z, mounds_, moundCount_);
+            const float rockPref = 1.f + (kd.rockPref - 1.f) * rock;
+            float space = 1.f;
+            for (const Slot& o : slots_) {
+                const float d = length(vec3(o.p.x - x, 0.f, o.p.z - z));
+                const float need = (o.size + s.size) * 0.42f;
+                if (d < need) { space = 0.f; break; }
+                space = std::min(space, smoothstepf(need, need * 1.8f, d) * 0.6f + 0.4f);
+            }
+            const float score = std::pow(vis, lerpf(0.8f, 3.f, early)) * distPref * rockPref * space * r.range(0.6f, 1.f);
+            if (score > best) { best = score; bestP = p; }
+        }
+        if (best <= 0.f) continue;
+        s.p = bestP - vec3(0.f, 0.06f * s.size, 0.f);
+        s.startT = -1.f;
+        s.grow = 0.f;
+        s.awaiting = false;
+        slots_.push_back(s);
+    }
+    std::sort(slots_.begin(), slots_.end(), [](const Slot& a, const Slot& b) { return a.birth < b.birth; });
+    reefDirty_ = false;
+}
+
+float CoralReefUniverse::surfaceAt(float x, float z) const {
+    float y = reef::groundH(x, z, mounds_, moundCount_);
+    for (const Rock& b : rocks_) {
+        const float R = b.size * 0.5f;
+        const float dx = (x - b.p.x) / 1.1f, dz = z - b.p.z;
+        const float d2 = (dx * dx + dz * dz) / (R * R);
+        if (d2 < 1.f) y = std::max(y, b.p.y + b.size * (0.1f + 0.36f * std::sqrt(1.f - d2)));
+    }
+    return y;
+}
+
+void CoralReefUniverse::buildSchools() {
+    schools_.clear();
+    Rng r(reefSeed_ ^ 0xF15Bull);
+    for (const SchoolDef& d : SCHOOLS) {
+        School s;
+        s.species = d.species;
+        s.appear = d.appear;
+        s.maxCount = d.count;
+        s.size = d.size;
+        s.zoneX = V(d.x0, d.x1);
+        s.path = r.range(0.f, 100.f);
+        s.speed = SPECIES_SPEED[d.species];
+        s.center = vec3(0.5f * (d.x0 + d.x1), 2.5f, -6.f);
+        s.target = s.center;
+        schools_.push_back(s);
+    }
+    fish_.clear();
+}
+
+// =====================================================================================================
+// Song, level
+// =====================================================================================================
+
+void CoralReefUniverse::setSong(const SongLook& t, float seconds) {
+    int v;
+    if (t.variant >= 0) v = t.variant % VARIANT_COUNT;
+    else {
+        float h = std::fmod(t.hue / TAU, 1.f);
+        if (h < 0) h += 1.f;
+        if (t.hasSong && !t.minor && t.brightness > 0.58f) v = 0;          // the lagoon for bright, major songs
+        else if (t.hasSong && t.minor && t.brightness < 0.4f) v = 3;       // the night dive for dark ones
+        else if (t.hasSong && t.bassWeight > 0.62f && t.dynamics > 0.6f) v = 2; // the outer reef for deep, dynamic ones
+        else {
+            static const int BY_HUE[] = {1, 0, 2, 1, 0, 2};
+            v = BY_HUE[(int)(h * 6.f) % 6];
+        }
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
+    }
+    variant_ = v;
+    seed_ = t.seed ? t.seed : 1;
+    rng_ = Rng(seed_ ^ 0xC0BA1ull);
+    if (reefSeed_ == 0) { reefSeed_ = seed_; reefDirty_ = true; }
+    if (seconds <= 0.f) palSet_ = false;
+}
+
+void CoralReefUniverse::setLevel(int level, float energy, float seconds, float impact) {
+    level = std::clamp(level, 0, 2);
+    energy_ = energy;
+    if (level < 2) dropMode_ = false;
+    (void)impact;
+    if (!hasLevel_ || seconds < 0.1f) {
+        hasLevel_ = true;
+        level_ = level;
+        lv_ = lvFrom_ = lvTo_ = (float)level;
+        lvT_ = 1.f;
+        return;
+    }
+    const bool rising = level > level_;
+    level_ = level;
+    lvFrom_ = lv_;
+    lvTo_ = (float)level;
+    lvT_ = 0.f;
+    lvDur_ = std::clamp(seconds, rising ? 1.5f : 3.f, 6.f);
+}
+
+void CoralReefUniverse::drop(float strength) {
+    dropMode_ = true;
+    swell_ = std::max(swell_, 0.5f + 0.5f * strength);
+}
+
+void CoralReefUniverse::refresh(float strength) { swell_ = std::max(swell_, 0.3f * strength); }
+
+vec2 CoralReefUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
+
+TransitionHints CoralReefUniverse::hints() const {
+    const Palette p = paletteOf(variant_);
+    TransitionHints h;
+    h.background = lerp(p.water, p.deep, 0.4f);
+    h.light = false;
+    h.ink = p.ink;
+    h.accent = p.accent;
+    h.styles = TS_INK | TS_RIPPLE | TS_LUMA;
+    return h;
+}
+
+// =====================================================================================================
+// Game events
+// =====================================================================================================
+
+void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
+    (void)game;
+    switch (ev.type) {
+    case GameEvent::HardDrop: {
+        // a few tiny bubbles squeezed out from under the piece, at its sides
+        float yLo = 99.f, xLo = 99.f, xHi = -99.f;
+        for (auto& c : ev.cells) {
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            yLo = std::min(yLo, p.y);
+        }
+        for (auto& c : ev.cells) {
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            if (p.y > yLo + 0.01f) continue;
+            xLo = std::min(xLo, p.x);
+            xHi = std::max(xHi, p.x);
+        }
+        if (xLo > xHi) break;
+        for (int side = 0; side < 2; side++)
+            for (int i = 0; i < 3; i++) {
+                Puff q;
+                const float sx = side == 0 ? -1.f : 1.f;
+                q.p = V((side == 0 ? xLo - 0.5f : xHi + 0.5f) + sx * rng_.range(0.f, 0.15f), yLo - 0.42f + rng_.range(0.f, 0.15f));
+                q.v = V(sx * rng_.range(0.4f, 0.9f), rng_.range(0.2f, 0.6f));
+                q.age = -rng_.range(0.f, 0.08f);
+                q.life = rng_.range(0.5f, 0.8f);
+                q.size = rng_.range(0.06f, 0.11f);
+                puffs_.push_back(q);
+            }
+        break;
+    }
+    case GameEvent::Clear: {
+        // the row shrinks away; it bursts into bubbles in the water behind the well (see render: the seeds)
+        std::vector<vec2> pts;
+        for (auto& cl : ev.cells) {
+            if (cl.y < Game::HIDDEN) continue;
+            const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
+            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
+            pts.push_back(V(p.x, p.y));
+            // the bubbles burst out of the row sideways behind the well, then rise
+            const float dist = rng_.range(11.f, 15.f);
+            const float side = p.x + rng_.range(-0.6f, 0.6f) < 0.f ? -1.f : 1.f;
+            for (int i = 0; i < 3 && (int)bubbles_.size() < MAX_BUBBLES; i++) {
+                Bubble b;
+                b.p = boardToWorld(V(p.x + rng_.range(-0.45f, 0.45f), p.y + rng_.range(-0.45f, 0.45f)), dist + rng_.range(-1.f, 1.f));
+                b.v = camR_ * (side * rng_.range(1.f, 2.8f) * (0.6f + std::fabs(p.x) / 6.f)) +
+                      vec3(rng_.range(-0.3f, 0.3f), rng_.range(0.3f, 1.2f), rng_.range(-0.5f, 0.3f));
+                b.r = rng_.range(0.0035f, 0.008f) * (i == 0 ? 1.4f : 1.f) * length(b.p - eye_);
+                b.age = -rng_.range(0.f, 0.25f);
+                b.life = 9.f;
+                b.seed = rng_.uniform();
+                bubbles_.push_back(b);
+            }
+        }
+        if (!pts.empty()) {
+            clearPts_.insert(clearPts_.end(), pts.begin(), pts.end());
+            clearPending_ = true;
+        }
+        if (ev.count >= 4) { // a Tetris: the schools gather and swirl together, on one side of the well or the other
+            swirlT_ = 0.f;
+            swirlSide_ = -swirlSide_;
+            swirlC_ = vec3(10.5f * swirlSide_, 3.3f, 1.5f);
+        }
+        break;
+    }
+    case GameEvent::TopOut: overT_ = 0.f; break;
+    default: break;
+    }
+}
+
+// =====================================================================================================
+// Fish
+// =====================================================================================================
+
+// Boids: each fish keeps away from its nearest neighbours, matches their heading, keeps with them and with its
+// school's target, stays over the reef and under the surface; its heading turns at a limited rate (smooth arcs,
+// never a snap), its speed eases. The schools' targets wander along their stretch of reef, their height following
+// the melody, their pace the energy.
+void CoralReefUniverse::updateFish(float dt, float energy, float melody, float swirl) {
+    const float L = shownLines_;
+    // the schools' size with the reef; new fish swim in from out of view
+    for (int si = 0; si < (int)schools_.size(); si++) {
+        School& s = schools_[si];
+        int want = 0;
+        if (L >= s.appear) {
+            const float k = saturate((L - s.appear) / 22.f);
+            want = (int)std::lround(lerpf(std::min(8.f, (float)s.maxCount), (float)s.maxCount, k));
+        }
+        int have = 0;
+        for (const Fish& f : fish_) have += f.school == si;
+        while (have < want) {
+            Fish f;
+            const float side = (s.zoneX.x + s.zoneX.y) < 0.f ? -1.f : 1.f;
+            f.p = vec3(side * rng_.range(30.f, 38.f), rng_.range(1.5f, 4.5f), rng_.range(-14.f, -4.f));
+            if (fish_.empty() || shownLinesFirst_) f.p = s.target + vec3(rng_.range(-3.f, 3.f), rng_.range(-1.f, 1.f), rng_.range(-3.f, 3.f));
+            f.v = vec3(-side, 0.f, 0.f) * s.speed;
+            f.dir = normalize(f.v);
+            f.phase = rng_.range(0.f, TAU);
+            f.size = s.size * rng_.range(0.85f, 1.15f);
+            f.bank = 0.f;
+            f.speed = s.speed;
+            f.seed = rng_.uniform();
+            f.school = si;
+            f.home = -1;
+            f.in = 1.f;
+            fish_.push_back(f);
+            have++;
+        }
+        while (have > want) { // (a new game: they swim off; simply removed)
+            for (size_t i = fish_.size(); i-- > 0;)
+                if (fish_[i].school == si) { fish_.erase(fish_.begin() + (long)i); break; }
+            have--;
+        }
+        // the target wanders
+        const float pace = 0.6f + 0.9f * energy;
+        s.path += dt * pace;
+        const float mid = 0.5f * (s.zoneX.x + s.zoneX.y), half = 0.5f * (s.zoneX.y - s.zoneX.x);
+        vec3 tgt(mid + half * std::sin(s.path * 0.11f + si * 1.7f), 1.6f + 2.6f * melody + 0.7f * std::sin(s.path * 0.23f + si),
+                 1.5f + 3.5f * std::sin(s.path * 0.083f + si * 2.3f));
+        tgt.y = std::max(tgt.y, reef::groundH(tgt.x, tgt.z, mounds_, moundCount_) + 1.2f);
+        if (swirl > 0.f) tgt = lerp(tgt, swirlC_, swirl);
+        s.target = tgt;
+    }
+    // clownfish: two in each grown anemone
+    for (int i = 0; i < (int)slots_.size(); i++) {
+        const Slot& sl = slots_[i];
+        if (sl.kind != reef::K_ANEMONE || sl.grow < 0.9f) continue;
+        int have = 0;
+        for (const Fish& f : fish_) have += f.home == i;
+        for (; have < 2; have++) {
+            Fish f;
+            f.p = sl.p + vec3(rng_.range(-0.3f, 0.3f), 0.4f * sl.size, rng_.range(-0.3f, 0.3f));
+            f.v = vec3(0.2f, 0.f, 0.f);
+            f.dir = vec3(1, 0, 0);
+            f.phase = rng_.range(0.f, TAU);
+            f.size = 0.34f * rng_.range(0.9f, 1.1f) * (have == 0 ? 1.15f : 0.9f);
+            f.bank = 0.f;
+            f.speed = 0.4f;
+            f.seed = rng_.uniform();
+            f.school = -1;
+            f.home = i;
+            f.in = 1.f;
+            fish_.push_back(f);
+        }
+    }
+    fish_.erase(std::remove_if(fish_.begin(), fish_.end(),
+                               [&](const Fish& f) { return f.school < 0 && (f.home < 0 || f.home >= (int)slots_.size() || slots_[f.home].grow < 0.5f); }),
+                fish_.end());
+
+    const int n = (int)fish_.size();
+    const float sub = std::min(dt, 0.05f);
+    int steps = std::max(1, (int)std::ceil(dt / 0.05f));
+    steps = std::min(steps, 3);
+    for (int st = 0; st < steps; st++) {
+        for (int i = 0; i < n; i++) {
+            Fish& f = fish_[i];
+            vec3 want;
+            float spd;
+            if (f.school < 0) {
+                // a clownfish hovers in its anemone's tentacles, darting about a little
+                const Slot& sl = slots_[f.home];
+                const float a = time_ * (0.5f + 0.3f * f.seed) + f.seed * 20.f;
+                const vec3 hp = sl.p + vec3(std::cos(a) * 0.32f * sl.size, (0.32f + 0.08f * std::sin(a * 1.7f)) * sl.size, std::sin(a) * 0.32f * sl.size);
+                want = (hp - f.p) * 1.4f;
+                spd = std::min(0.9f, length(want));
+            } else {
+                const School& s = schools_[f.school];
+                vec3 sep(0.f), ali(0.f), coh(0.f);
+                int cnt = 0;
+                const float R = 2.4f, Rs = f.size * 2.6f;
+                for (int j = 0; j < n; j++) {
+                    if (j == i || fish_[j].school != f.school) continue;
+                    const vec3 d = fish_[j].p - f.p;
+                    const float d2 = dot(d, d);
+                    if (d2 > R * R) continue;
+                    const float dd = std::sqrt(d2) + 1e-4f;
+                    if (dd < Rs) sep += d * (-(Rs - dd) / (dd * Rs));
+                    ali += fish_[j].v;
+                    coh += fish_[j].p;
+                    cnt++;
+                }
+                want = (s.target - f.p) * (0.12f + 0.25f * swirl);
+                const float tl = length(want), cap = 1.2f + 1.6f * swirl;
+                if (tl > cap) want = want * (cap / tl);
+                if (cnt > 0) {
+                    ali = ali / (float)cnt;
+                    coh = coh / (float)cnt - f.p;
+                    want += normalize(ali) * 0.9f + coh * 0.35f + sep * 2.2f;
+                }
+                // a Tetris: they wheel round the swirl's axis
+                if (swirl > 0.f) {
+                    const vec3 rd = f.p - swirlC_;
+                    want += normalize(vec3(-rd.z, 0.f, rd.x) + vec3(0.f, 0.1f * std::sin(time_ + f.seed * 9.f), 0.f)) * (1.3f * swirl);
+                }
+                // over the reef, under the surface, away from the camera
+                const float gh = reef::groundH(f.p.x, f.p.z, mounds_, moundCount_);
+                if (f.p.y < gh + 1.f) want.y += (gh + 1.f - f.p.y) * 2.5f;
+                if (f.p.y > reef::SURF_Y - 1.2f) want.y -= (f.p.y - (reef::SURF_Y - 1.2f)) * 2.f;
+                if (f.p.z > 7.f) want.z -= (f.p.z - 7.f) * 1.5f;
+                if (f.p.z < -30.f) want.z += 1.f;
+                spd = s.speed * (0.75f + 0.75f * energy) * (1.f + 0.35f * swirl) * (0.9f + 0.2f * f.seed);
+            }
+            // steer: the heading turns toward the wish at a limited rate, the speed eases
+            vec3 wd = length(want) > 1e-4f ? normalize(want) : f.dir;
+            wd.y *= 0.6f; // fish swim level more than they climb
+            wd = normalize(wd);
+            const float maxTurn = (f.school < 0 ? 3.f : 1.5f) * sub;
+            const float cosA = std::clamp(dot(f.dir, wd), -1.f, 1.f);
+            const float ang = std::acos(cosA);
+            vec3 nd;
+            if (ang <= maxTurn) nd = wd;
+            else {
+                const vec3 ax = cross(f.dir, wd);
+                const float al = length(ax);
+                const vec3 k = al > 1e-5f ? ax / al : vec3(0, 1, 0);
+                nd = normalize(f.dir * std::cos(maxTurn) + cross(k, f.dir) * std::sin(maxTurn) + k * (dot(k, f.dir) * (1.f - std::cos(maxTurn))));
+            }
+            // bank into the turn (eased)
+            const float turn = cross(f.dir, nd).y / std::max(sub, 1e-4f);
+            f.bank += (std::clamp(-turn * 0.35f, -0.5f, 0.5f) - f.bank) * std::min(1.f, sub * 3.f);
+            f.dir = nd;
+            f.speed += (spd - f.speed) * std::min(1.f, sub * 1.5f);
+            f.v = f.dir * f.speed;
+            f.p += f.v * sub;
+            f.phase += sub * (5.f + f.speed * 7.f) / std::max(0.3f, f.size * 2.5f);
+        }
+    }
+}
+
+// =====================================================================================================
+// Board
+// =====================================================================================================
+
+void CoralReefUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase) {
+    if (alpha <= 0.003f) return;
+    cells_.push_back({{x, y, half, 0.f}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, 0.f}});
+}
+
+void CoralReefUniverse::buildBoard(const Game& g) {
+    auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
+    const float darken = 1.f - 0.45f * smoothstepf(0.f, 1.f, over_);
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const Cell& c = g.cell(x, y);
+            if (c.type < 0) continue;
+            const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
+            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f);
+        }
+    for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T));
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        int cells[4][2];
+        g.pieceCells(p, cells);
+        Piece gp = p;
+        gp.y = g.ghostY();
+        if (gp.y > p.y) {
+            int gc[4][2];
+            g.pieceCells(gp, gc);
+            for (auto& c : gc) {
+                if (c[1] < Game::HIDDEN) continue;
+                const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
+                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.6f, 1, 0.f);
+            }
+        }
+        const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        for (auto& c : cells) {
+            if (c[1] < Game::HIDDEN - 1) continue;
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f);
+        }
+    }
+    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+        if (type < 0) return;
+        Piece p{type, 0, 0, 0};
+        int cells[4][2];
+        g.pieceCells(p, cells);
+        float minx = 9, maxx = -9, miny = 9, maxy = -9;
+        for (auto& c : cells) {
+            minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
+            miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
+        }
+        for (auto& c : cells) {
+            const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
+            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f);
+        }
+    };
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
+    for (int i = 0; i < 3; i++) {
+        const vec3 c = layout::nextCenter(i);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+    }
+}
+
+void CoralReefUniverse::sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param, float param2) {
+    if (alpha <= 0.004f || size <= 0.f) return;
+    sprites_.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}, {param, param2, 0.f, 0.f}});
+}
+
+// =====================================================================================================
+// Text
+// =====================================================================================================
+
+float CoralReefUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
+    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    float w = 0;
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        w += f.g[ch - 32].adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+    return w - track;
+}
+
+void CoralReefUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
+                                  std::vector<float>& out) const {
+    if (!f.ok) return;
+    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
+    const float k = size / f.px;
+    const float baseline = f.capH * k;
+    float pen = 0.f;
+    auto place = [&](float u, float v, float tu, float tv) {
+        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
+    };
+    for (size_t i = 0; i < s.size(); i++) {
+        unsigned char ch = (unsigned char)s[i];
+        if (ch < 32 || ch >= 128) ch = '?';
+        const Glyph& g = f.g[ch - 32];
+        if (g.w > 0) {
+            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
+            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
+            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
+        }
+        pen += g.adv * k + track;
+        if (i + 1 < s.size()) {
+            unsigned char n = (unsigned char)s[i + 1];
+            if (n < 32 || n >= 128) n = '?';
+            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
+        }
+    }
+}
+
+void CoralReefUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float halo) {
+    if (q.empty() || !f.ok || alpha <= 0.004f) return;
+    glUseProgram(progText_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, f.tex);
+    set1i(progText_, "uFont", 0);
+    set2f(progText_, "uRes", (float)width_, (float)height_);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
+    set3f(progText_, "uHalo", lerp(pal_.veil * 0.8f, bridge_.color, b));
+    set1f(progText_, "uHaloA", halo);
+    set1f(progText_, "uAlpha", alpha);
+    glBindVertexArray(textVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+}
+
+// The HUD: Nunito capitals, widely spaced, for the labels and the numbers; Fraunces' soft italics for the song,
+// the variant, the notices, and the reef's stage after the universe's name.
+void CoralReefUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+    if (!panels.empty()) {
+        std::vector<float> v;
+        for (const HudRect& r : panels) {
+            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.veil;
+            const float a = std::min(1.f, r.alpha);
+            const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                                    {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+            for (auto& p : qd) v.insert(v.end(), p, p + 6);
+        }
+        glUseProgram(progShape_);
+        set2f(progShape_, "uRes", (float)width_, (float)height_);
+        glBindVertexArray(shapeVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+    }
+    const vec3 ink = pal_.ink, accent = pal_.accent;
+    std::vector<float> q;
+    const float halo = 0.75f;
+    for (const HudText& h : hud) {
+        if (h.alpha <= 0.01f || h.text.empty()) continue;
+        const float base = h.scale * 12.f;
+        const float alpha = saturate(h.alpha);
+        q.clear();
+        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
+            const float w = textWidth(f, text, size, track);
+            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
+        };
+        switch (h.role) {
+        case HUD_UNIVERSE: {
+            std::string name = h.text, var;
+            const size_t dot = name.find("\xC2\xB7");
+            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
+            while (!name.empty() && name.back() == ' ') name.pop_back();
+            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
+            const float sz = base * 0.95f, tr = sz * 0.28f;
+            const float wName = textWidth(sans_, name, sz, tr);
+            std::string vt = var;
+            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
+            const float vsz = base * 1.3f;
+            const float wVar = vt.empty() ? 0.f : textWidth(ital_, vt, vsz, 0.f);
+            const float gap = base * 0.75f;
+            const std::string st = stageName(std::max(0.f, shownLines_));
+            const float wSt = textWidth(ital_, st, vsz, 0.f);
+            const float total = wName + (vt.empty() ? 0.f : gap + wVar) + gap * 1.3f + wSt;
+            const float x = ugl::hudLeft(h, total, width_);
+            const float a = saturate(0.35f + h.alpha * 1.6f);
+            textQuads(sans_, name, x, h.y, sz, tr, q);
+            drawText(sans_, q, ink, a, halo);
+            float cx = x + wName;
+            if (!vt.empty()) {
+                q.clear();
+                textQuads(ital_, vt, cx + gap, h.y - sz * 0.22f, vsz, 0.f, q);
+                drawText(ital_, q, accent, a * 0.9f, halo);
+                cx += gap + wVar;
+            }
+            cx += gap * 1.3f;
+            q.clear();
+            textQuads(ital_, st, cx, h.y - sz * 0.22f, vsz, 0.f, q);
+            drawText(ital_, q, ink, a * 0.72f, halo);
+            continue;
+        }
+        case HUD_SECTION:
+            place(sans_, h.text, base * 0.9f, base * 0.45f);
+            drawText(sans_, q, ink, saturate(0.2f + h.alpha * 1.9f), halo);
+            continue;
+        case HUD_TITLE:
+            place(ital_, h.text, base * 1.65f, 0.f, -base * 0.35f);
+            drawText(ital_, q, ink, saturate(h.alpha * 1.3f), halo);
+            continue;
+        case HUD_INFO:
+            place(sans_, h.text, base * 0.66f, base * 0.12f);
+            drawText(sans_, q, ink, saturate(alpha * 1.3f) * 0.8f, halo);
+            continue;
+        case HUD_LABEL:
+            place(sans_, h.text, base * 0.78f, base * 0.42f);
+            drawText(sans_, q, lerp(ink, accent, 0.5f), saturate(alpha * 1.2f) * 0.92f, halo);
+            continue;
+        case HUD_VALUE:
+            place(sans_, h.text, base * 1.05f, base * 0.04f);
+            drawText(sans_, q, ink, alpha, halo);
+            continue;
+        case HUD_NOTICE:
+            place(ital_, h.text, base * 1.55f, 0.f);
+            drawText(ital_, q, accent, alpha, halo);
+            continue;
+        case HUD_KEY:
+            place(sans_, h.text, base * 0.75f, base * 0.06f);
+            drawText(sans_, q, ink, alpha, halo);
+            continue;
+        case HUD_TOAST:
+            place(sans_, h.text, base * 1.3f, base * 0.45f, -base * 0.2f);
+            drawText(sans_, q, ink, alpha, 0.85f);
+            continue;
+        case HUD_TOAST_SUB:
+            place(ital_, h.text, base * 1.4f, 0.f);
+            drawText(ital_, q, accent, alpha * 0.9f, 0.85f);
+            continue;
+        case HUD_DIALOG:
+            if (h.scale >= 3.5f * height_ / 1080.f) {
+                place(ital_, h.text, base * 1.3f, 0.f, -base * 0.1f);
+                drawText(ital_, q, ink, alpha, 0.85f);
+            } else {
+                place(sans_, h.text, base * 0.85f, base * 0.14f);
+                drawText(sans_, q, h.accent ? accent : ink, alpha, 0.85f);
+            }
+            continue;
+        default:
+            place(sans_, h.text, base * 0.85f, base * 0.12f);
+            drawText(sans_, q, h.accent ? accent : ink, alpha, halo);
+            continue;
+        }
+    }
+}
+
+// =====================================================================================================
+// Frame
+// =====================================================================================================
+
+void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
+    const Game& game = f.game;
+    const MusicState& music = f.music;
+    const float dt = std::min(f.dt, 0.1f);
+    // ZEN_GPUTIME: the GPU time of a frame, printed every 120 frames
+    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    static GLuint gpuQ = 0;
+    static int gpuN = 0;
+    static double gpuSum = 0.0;
+    if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
+    if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
+
+    slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
+    dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
+    if (overT_ >= 0.f && !f.bare) {
+        if (!game.over()) overT_ = -1.f;
+        else overT_ += dt;
+    }
+    over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 3.f) : 0.f, overT_ >= 0.f ? 3.f : 0.8f, dt);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, slow_);
+    time_ += wdt;
+
+    // ---- Staging.
+    if (lvT_ < 1.f) {
+        lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
+        lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
+    }
+    const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
+    bool sectionKnown = false, sectionDrop = false;
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_SECTION) {
+            sectionKnown = true;
+            sectionDrop = h.text == "DROP";
+        }
+    const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
+    if (isDrop && !wasDrop_ && (mantaT_ < 0.f || mantaT_ > 20.f)) {
+        mantaT_ = 0.f;
+        mantaDir_ = -mantaDir_;
+        if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] the manta at %.1f s\n", time_);
+    }
+    wasDrop_ = isDrop;
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 0.8f : 0.3f, dt);
+    const float life = smoothstepf(0.f, 1.f, dropAmt_);
+    swell_ = approach(swell_, 0.f, 0.4f, dt);
+
+    // ---- The lines -> the reef.
+    updateCamera();
+    if (reefSeed_ == 0) { reefSeed_ = seed_ ? seed_ : 1; reefDirty_ = true; }
+    if (reefDirty_) {
+        // (a rebuild keeps what has grown: the same seed lays the same reef)
+        std::vector<float> grown;
+        for (const Slot& s : slots_) grown.push_back(s.grow);
+        buildReef();
+        for (size_t i = 0; i < slots_.size() && i < grown.size(); i++) {
+            slots_[i].grow = grown[i];
+            if (grown[i] > 0.f) slots_[i].startT = time_ - GROW_T * grown[i];
+        }
+        if (schools_.empty()) buildSchools();
+    }
+    {
+        const float lines = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
+        const bool first = shownLines_ < 0.f;
+        if (!first && lines < lines_ - 0.01f && !game.over()) {
+            // a new game: the reef recedes and grows again from the bare rock
+            for (Slot& s : slots_) { s.startT = -1.f; s.awaiting = false; }
+            seeds_.clear();
+        }
+        const float before = lines_;
+        lines_ = lines;
+        if (first) {
+            shownLines_ = lines;
+            shownLinesFirst_ = true;
+            for (Slot& s : slots_)
+                if (s.birth <= lines) { s.grow = 1.f; s.startT = time_ - GROW_T; }
+        } else shownLinesFirst_ = false;
+        // the new slots: their seeds drift out of the cleared rows and settle; without a clear (a test hook, a
+        // new song's pace), they simply grow, one after the other
+        int fresh = 0;
+        for (int i = 0; i < (int)slots_.size(); i++) {
+            Slot& s = slots_[i];
+            if (s.startT >= 0.f || s.awaiting || s.birth > lines_) continue;
+            if (clearPending_ && !clearPts_.empty() && s.birth > before - 0.01f) {
+                Seed sd;
+                const vec2 bp = clearPts_[rng_.irange(0, (int)clearPts_.size() - 1)];
+                sd.from = boardToWorld(bp, rng_.range(11.f, 14.f));
+                sd.to = s.p + vec3(0.f, 0.25f * s.size, 0.f);
+                sd.ctl = lerp(sd.from, sd.to, 0.4f) + vec3(0.f, rng_.range(2.f, 3.5f), 0.f);
+                sd.age = -0.25f - 0.35f * fresh;
+                sd.life = rng_.range(2.6f, 3.4f);
+                sd.seed = rng_.uniform();
+                sd.slot = i;
+                sd.col = lerp(pal_.reef[s.colIdx[1]], vec3(1.f), 0.15f);
+                seeds_.push_back(sd);
+                s.awaiting = true;
+            } else {
+                s.startT = time_ + 0.4f * fresh;
+            }
+            fresh++;
+        }
+        if (clearPending_ && std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] a clear: %d new corals (lines %.2f -> %.2f)\n", fresh, before, lines_);
+        clearPending_ = false;
+        clearPts_.clear();
+        // the growth shown (the schools, the crusts): springs after the lines, its speed capped
+        const float cap = 1.5f * std::max(1.f, paceScale());
+        shownLines_ += std::clamp((lines_ - shownLines_) * 1.2f * wdt, -8.f * wdt, cap * wdt);
+        if (lines_ < shownLines_ - 5.f) shownLines_ = approach(shownLines_, lines_, 6.f, dt);
+    }
+    for (Slot& s : slots_) {
+        float target = 0.f;
+        if (s.startT >= 0.f && time_ >= s.startT) {
+            const float g = saturate((time_ - s.startT) / GROW_T);
+            target = g * g * (3.f - 2.f * g);
+            s.grow = target;
+        } else if (s.startT < 0.f) s.grow = approach(s.grow, 0.f, 0.35f, wdt);
+    }
+
+    // ---- The palette: the variant, slow motion's deep blue, game over's dusk, the drop's swell.
+    {
+        const Palette target = paletteOf(variant_);
+        if (!palSet_) { basePal_ = target; palSet_ = true; }
+        else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
+        pal_ = basePal_;
+        const float deep = std::max(slow_, 0.7f * over_);
+        if (deep > 0.01f) {
+            Palette d = pal_;
+            d.water = lin(0x0c2c8c); d.deep = lin(0x030c3a); d.haze = lin(0x2a52c8); d.surface = lin(0x4a7ae8);
+            d.sun = pal_.sun * vec3(0.45f, 0.6f, 1.f); d.shade = lin(0x0c1650); d.rim = lin(0x4a7aff);
+            d.caustic = lin(0x7aa8ff); d.ray = lin(0x6a9aff);
+            d.rays = pal_.rays * 0.8f; d.caustics = pal_.caustics * 0.6f; d.sat = 1.05f;
+            lerpPalette(pal_, d, deep);
+            // (the pieces and the HUD keep their colors)
+            for (int i = 0; i < 7; i++) pal_.piece[i] = basePal_.piece[i];
+            pal_.ink = basePal_.ink; pal_.accent = basePal_.accent;
+        }
+    }
+
+    // ---- The music: the melody's height, the energy, the kicks on the caustics.
+    {
+        float sw = 0.f, sc = 0.f;
+        for (int b = 3; b < 13; b++) { sw += music.bandsFast[b]; sc += music.bandsFast[b] * (float)b; }
+        const float centroid = sw > 1e-4f ? sc / sw : 7.f;
+        const float m = saturate((centroid - 5.5f) / 4.5f);
+        melody_ = approach(melody_, music.hasSong && sw > 0.02f ? m : 0.5f, 1.2f, dt);
+        energyS_ = approach(energyS_, saturate(0.25f + 0.35f * wm + 0.4f * wp + 0.2f * life), 0.6f, dt);
+    }
+    const float kick = std::max(music.kick, kickIn_) * (0.35f * wm + 0.65f * wp);
+    kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
+    kickK_ = std::max(approach(kickK_, 0.f, 2.5f, dt), kick);
+    causticPhase_ += wdt * (0.55f + 0.15f * wm + 0.25f * wp) + kick * dt * 1.2f;
+    surge_ += wdt * (0.6f + 0.25f * wm + 0.35f * wp);
+
+    // ---- Fish.
+    if (swirlT_ >= 0.f) swirlT_ += dt;
+    const float swirlK = swirlT_ >= 0.f ? smoothstepf(0.f, 1.5f, swirlT_) * (1.f - smoothstepf(6.f, 9.f, swirlT_)) : 0.f;
+    if (swirlT_ > 9.f) swirlT_ = -1.f;
+    swirl_ = swirlK;
+    if (!f.paused) updateFish(wdt, energyS_, melody_, swirlK);
+
+    // ---- The manta: once a drop, a slow glide across behind the well.
+    vec3 mantaP(0.f), mantaD(1, 0, 0);
+    float mantaA = 0.f, mantaBank = 0.f;
+    if (mantaT_ >= 0.f) {
+        mantaT_ += wdt;
+        const float T = 27.f;
+        const float u = mantaT_ / T;
+        if (u > 1.f) mantaT_ = -1.f;
+        else {
+            const float x = mantaDir_ * lerpf(-36.f, 36.f, u);
+            mantaP = vec3(x, 2.4f + 0.35f * std::sin(u * 5.f), 1.5f - 2.5f * std::sin(u * PI));
+            const vec3 nx(mantaDir_ * 72.f / T, 0.4f * 5.f / T * std::cos(u * 5.f), -2.5f * PI / T * std::cos(u * PI));
+            mantaD = normalize(nx);
+            mantaBank = (0.42f + 0.1f * std::sin(u * PI * 2.f)) * (mantaD.x >= 0.f ? 1.f : -1.f);
+            mantaA = 1.f;
+        }
+    }
+
+    // ---- Particles in the world.
+    for (Bubble& b : bubbles_) {
+        b.age += wdt;
+        if (b.age < 0.f) continue;
+        const float drag = std::exp(-1.1f * wdt);
+        b.v.x *= drag;
+        b.v.z *= drag;
+        b.v.y = std::min(b.v.y + 0.35f * wdt, 1.6f);
+        b.p += (b.v + vec3(0.12f * std::sin(time_ * 3.f + b.seed * 30.f), 0.f, 0.08f * std::cos(time_ * 2.5f + b.seed * 20.f))) * wdt;
+        b.r *= 1.f + 0.03f * wdt;
+        if (b.p.y > reef::SURF_Y - 0.1f) b.life = std::min(b.life, b.age);
+    }
+    bubbles_.erase(std::remove_if(bubbles_.begin(), bubbles_.end(), [](const Bubble& b) { return b.age >= b.life; }), bubbles_.end());
+    for (Seed& s : seeds_) {
+        s.age += wdt;
+        if (s.age >= s.life && s.slot >= 0 && s.slot < (int)slots_.size()) {
+            Slot& sl = slots_[s.slot];
+            if (sl.awaiting) { sl.awaiting = false; sl.startT = time_; }
+        }
+    }
+    seeds_.erase(std::remove_if(seeds_.begin(), seeds_.end(), [](const Seed& s) { return s.age >= s.life; }), seeds_.end());
+    for (auto& fd : fading_) fd.t += dt;
+    fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
+    for (Puff& p : puffs_) {
+        p.age += dt;
+        if (p.age < 0.f) continue;
+        p.p = V(p.p.x + p.v.x * dt, p.p.y + p.v.y * dt);
+        p.v = V(p.v.x * std::exp(-3.f * dt), p.v.y + 0.8f * dt);
+    }
+    puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.age >= p.life; }), puffs_.end());
+    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+
+    cells_.clear();
+    sprites_.clear();
+    if (!f.bare) buildBoard(game);
+
+    // =========================================================== the world (reduced resolution)
+    const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    const vec3 sunDir = normalize(vec3(std::sin(pal_.sunAz) * std::cos(pal_.sunEl), std::sin(pal_.sunEl),
+                                       std::cos(pal_.sunAz) * std::cos(pal_.sunEl) * -0.6f));
+    const float lightK = 1.f + 0.08f * wm + 0.15f * wp + 0.12f * life + 0.08f * swell_;
+    auto setReef = [&](GLuint p) {
+        set3f(p, "uEye", eye_);
+        set3f(p, "uSunDir", sunDir);
+        set3f(p, "uSunC", pal_.sun * (1.08f * lightK));
+        set3f(p, "uShadeC", pal_.shade * 1.1f);
+        set3f(p, "uRimC", pal_.rim);
+        set3f(p, "uWaterC", pal_.water);
+        set3f(p, "uDeepC", pal_.deep);
+        set3f(p, "uHazeC", pal_.haze);
+        set3f(p, "uCausticC", pal_.caustic * (0.9f + 0.25f * wp));
+        set1f(p, "uFogD", pal_.fog * (1.f + 0.06f * wp));
+        set1f(p, "uTime", time_);
+        set1f(p, "uCaustK", pal_.caustics * (1.f + 0.25f * kickK_));
+        set1f(p, "uCaustPhase", causticPhase_);
+        set1f(p, "uBridge", bridge);
+        set1f(p, "uNight", pal_.night);
+        set1f(p, "uGlowK", pal_.glow * (1.f + 0.3f * wp + 0.3f * life));
+        set3f(p, "uBridgeCol", bridge_.color);
+        float mv[reef::MAX_MOUNDS * 4], ms[reef::MAX_MOUNDS];
+        for (int i = 0; i < reef::MAX_MOUNDS; i++) {
+            const reef::Mound& m = mounds_[std::min(i, std::max(0, moundCount_ - 1))];
+            mv[i * 4] = m.x; mv[i * 4 + 1] = m.z; mv[i * 4 + 2] = m.r; mv[i * 4 + 3] = m.h;
+            ms[i] = m.seed;
+        }
+        glUniform4fv(ugl::U(p, "uMounds"), reef::MAX_MOUNDS, mv);
+        glUniform1fv(ugl::U(p, "uMoundSeed"), reef::MAX_MOUNDS, ms);
+        glUniform1i(ugl::U(p, "uMoundN"), moundCount_);
+    };
+
+    worldT_.bind();
+    glClearColor(0, 0, 0, 1000.f);
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    // the water, the surface
+    glUseProgram(progWater_);
+    setReef(progWater_);
+    set3f(progWater_, "uLook", look_);
+    set3f(progWater_, "uCamR", camR_);
+    set3f(progWater_, "uCamU", camU_);
+    set2f(progWater_, "uTan", tanH_ * aspect_, tanH_);
+    set3f(progWater_, "uSurfC", pal_.surface);
+    ugl::drawFullscreen();
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    // the seabed
+    glUseProgram(progGround_);
+    setReef(progGround_);
+    setMat(progGround_, "uVP", vp3_);
+    set3f(progGround_, "uSandC", pal_.sand);
+    set3f(progGround_, "uSand2C", pal_.sand2);
+    set3f(progGround_, "uRockC", pal_.rock);
+    set3f(progGround_, "uRock2C", pal_.rock2);
+    set3f(progGround_, "uCrustC", pal_.crust);
+    set3f(progGround_, "uCrust2C", pal_.crust2);
+    set1f(progGround_, "uCover", smoothstepf(1.f, 46.f, shownLines_));
+    glBindVertexArray(groundVao_);
+    glDrawElements(GL_TRIANGLES, groundCount_, GL_UNSIGNED_INT, nullptr);
+    // the corals
+    {
+        std::vector<float> inst[reef::K_COUNT][reef::TEMPLATES];
+        for (const Slot& s : slots_) {
+            if (s.grow <= 0.002f) continue;
+            const float mature = 0.82f + 0.18f * smoothstepf(s.birth, s.birth + 18.f, shownLines_);
+            const vec3 a = pal_.reef[s.colIdx[0]], b = pal_.reef[s.colIdx[1]];
+            const float q[16] = {s.p.x, s.p.y, s.p.z, s.size * mature, s.yaw, s.grow, s.seed, (float)s.kind,
+                                 a.x, a.y, a.z, KINDS[s.kind].sway, b.x, b.y, b.z, 1.f};
+            inst[s.kind][s.tmpl].insert(inst[s.kind][s.tmpl].end(), q, q + 16);
+        }
+        glUseProgram(progCoral_);
+        setReef(progCoral_);
+        setMat(progCoral_, "uVP", vp3_);
+        set3f(progCoral_, "uRockC", pal_.rock);
+        set3f(progCoral_, "uRock2C", pal_.rock2);
+        set3f(progCoral_, "uCrustC", pal_.crust);
+        set3f(progCoral_, "uCrust2C", pal_.crust2);
+        set1f(progCoral_, "uCover", smoothstepf(1.f, 46.f, shownLines_));
+        {
+            std::vector<float> rinst[reef::TEMPLATES];
+            for (const Rock& b : rocks_) {
+                const float q[16] = {b.p.x, b.p.y, b.p.z, b.size, b.yaw, 1.f, b.seed, 7.f, 0, 0, 0, 0.f, 0, 0, 0, 0.f};
+                rinst[b.tmpl].insert(rinst[b.tmpl].end(), q, q + 16);
+            }
+            for (int t = 0; t < reef::TEMPLATES; t++) {
+                if (rinst[t].empty()) continue;
+                const MeshGL& m = rockM_[t];
+                glBindVertexArray(m.vao);
+                glBindBuffer(GL_ARRAY_BUFFER, m.inst);
+                glBufferData(GL_ARRAY_BUFFER, rinst[t].size() * sizeof(float), rinst[t].data(), GL_STREAM_DRAW);
+                glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(rinst[t].size() / 16));
+            }
+        }
+        const float sa = 0.18f + 0.1f * wm + 0.12f * wp;
+        set2f(progCoral_, "uSurge", sa * std::cos(0.4f), sa * std::sin(0.4f));
+        for (int k = 0; k < reef::K_COUNT; k++)
+            for (int t = 0; t < reef::TEMPLATES; t++) {
+                const std::vector<float>& v = inst[k][t];
+                if (v.empty()) continue;
+                const MeshGL& m = coral_[k][t];
+                glBindVertexArray(m.vao);
+                glBindBuffer(GL_ARRAY_BUFFER, m.inst);
+                glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+                glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(v.size() / 16));
+            }
+    }
+    // the fish, the manta
+    {
+        std::vector<float> inst[reef::F_COUNT];
+        for (const Fish& fi : fish_) {
+            const int sp = fi.school < 0 ? reef::F_CLOWN : schools_[fi.school].species;
+            const float q[12] = {fi.p.x, fi.p.y, fi.p.z, fi.size, fi.dir.x, fi.dir.y, fi.dir.z, fi.phase,
+                                 (float)sp, 0.35f + 0.25f * saturate(fi.speed / 2.f), fi.bank, 1.f};
+            inst[sp].insert(inst[sp].end(), q, q + 12);
+        }
+        glUseProgram(progFish_);
+        setReef(progFish_);
+        setMat(progFish_, "uVP", vp3_);
+        set1f(progFish_, "uFishGlow", pal_.night * 0.6f);
+        for (int s = 0; s < reef::F_COUNT; s++) {
+            if (inst[s].empty()) continue;
+            const MeshGL& m = fishM_[s];
+            glBindVertexArray(m.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, m.inst);
+            glBufferData(GL_ARRAY_BUFFER, inst[s].size() * sizeof(float), inst[s].data(), GL_STREAM_DRAW);
+            glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(inst[s].size() / 12));
+        }
+        if (mantaA > 0.f) {
+            const float q[12] = {mantaP.x, mantaP.y, mantaP.z, 4.f, mantaD.x, mantaD.y, mantaD.z, time_ * TAU / 4.2f,
+                                 7.f, 0.f, mantaBank, 1.f};
+            glBindVertexArray(manta_.vao);
+            glBindBuffer(GL_ARRAY_BUFFER, manta_.inst);
+            glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
+            glDrawElementsInstanced(GL_TRIANGLES, manta_.count, GL_UNSIGNED_INT, nullptr, 1);
+        }
+    }
+    // the billboards: bubbles, seeds, specks (blended, the distance in alpha kept)
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+    {
+        pinst_.clear();
+        auto glow = [&](const vec3& p, float size, const vec3& c, float a, int mode, float seed) {
+            if (a <= 0.004f) return;
+            const float q[12] = {p.x, p.y, p.z, size, c.x, c.y, c.z, a, (float)mode, seed, 0.f, 0.f};
+            pinst_.insert(pinst_.end(), q, q + 12);
+        };
+        // specks drifting in the water around the camera
+        {
+            Rng sr(0x5BECull);
+            const vec3 drift(time_ * 0.12f, std::sin(time_ * 0.05f) * 0.3f, time_ * 0.05f);
+            for (int i = 0; i < 260; i++) {
+                const vec3 base(sr.range(-22.f, 22.f), sr.range(-1.f, 7.f), sr.range(-20.f, 12.f));
+                vec3 p = base + drift + vec3(0.3f * std::sin(time_ * 0.3f + i), 0.f, 0.f);
+                p.x = std::fmod(p.x + 22.f + 440.f, 44.f) - 22.f;
+                p.z = std::fmod(p.z + 20.f + 320.f, 32.f) - 20.f;
+                if (p.y > reef::SURF_Y - 0.3f) continue;
+                const float sz = sr.range(0.012f, 0.03f);
+                glow(p, sz, lerp(pal_.haze, vec3(1.f), 0.5f), 0.35f + 0.3f * wp, 2, sr.uniform());
+            }
+        }
+        for (const Bubble& b : bubbles_) {
+            if (b.age < 0.f || f.bare) continue;
+            const float a = smoothstepf(0.f, 0.2f, b.age) * (1.f - smoothstepf(reef::SURF_Y - 1.2f, reef::SURF_Y - 0.1f, b.p.y));
+            glow(b.p, b.r, lerp(pal_.haze, vec3(1.f), 0.4f), a, 0, b.seed);
+        }
+        for (const Seed& s : seeds_) {
+            if (s.age < 0.f || f.bare) continue;
+            const float t = smoothstepf(0.f, 1.f, saturate(s.age / s.life));
+            const vec3 a = lerp(s.from, s.ctl, t), b = lerp(s.ctl, s.to, t);
+            const vec3 p = lerp(a, b, t) + vec3(0.15f * std::sin(time_ * 2.f + s.seed * 30.f), 0.f, 0.f) * (1.f - t);
+            const float al = smoothstepf(0.f, 0.15f, s.age / s.life) * (1.f - 0.5f * smoothstepf(0.85f, 1.f, s.age / s.life));
+            glow(p, 0.34f, s.col, al, 1, s.seed);
+        }
+        if (!pinst_.empty()) {
+            glUseProgram(progGlow_);
+            setReef(progGlow_);
+            setMat(progGlow_, "uVP", vp3_);
+            set3f(progGlow_, "uCamR", camR_);
+            set3f(progGlow_, "uCamU", camU_);
+            set1f(progGlow_, "uMinPx", 2.f * tanH_ / worldT_.h * 0.9f);
+            glBindVertexArray(glowVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, glowVbo_);
+            glBufferData(GL_ARRAY_BUFFER, pinst_.size() * sizeof(float), pinst_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(pinst_.size() / 12));
+        }
+    }
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
+
+    // =========================================================== the scene (full resolution)
+    sceneT_.bind();
+    glUseProgram(progComp_);
+    setReef(progComp_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, worldT_.tex);
+    set1i(progComp_, "uWorld", 0);
+    set3f(progComp_, "uLook", look_);
+    set3f(progComp_, "uCamR", camR_);
+    set3f(progComp_, "uCamU", camU_);
+    set2f(progComp_, "uTan", tanH_ * aspect_, tanH_);
+    set3f(progComp_, "uRayC", pal_.ray * (1.f - bridge));
+    set2f(progComp_, "uSunVP", 0.5f + 0.35f * std::sin(pal_.sunAz) * std::cos(pal_.sunEl) * 2.f, 1.f + 1.6f * std::tan(pal_.sunEl) * 0.5f);
+    set1f(progComp_, "uRays", pal_.rays * (0.75f + 0.15f * wm + 0.3f * wp + 0.3f * life + 0.15f * swell_));
+    set1f(progComp_, "uSat", pal_.sat);
+    ugl::drawFullscreen();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    if (!f.bare) {
+        glUseProgram(progVeil_);
+        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        set3f(progVeil_, "uVeil", lerp(pal_.veil, bridge_.color, bridge));
+        set3f(progVeil_, "uRail", lerp(pal_.rail * 0.5f, bridge_.ink * 0.4f, bridge));
+        set1f(progVeil_, "uWellA", 0.8f);
+        set1f(progVeil_, "uColA", 0.5f * (1.f - bridge));
+        set1f(progVeil_, "uRailA", 0.45f);
+        set1f(progVeil_, "uPx", pxPerUnit_);
+        set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], -5.f, layout::LEFT_COLUMN[3]);
+        set4f(progVeil_, "uColR", 5.f, layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+        ugl::drawFullscreen();
+
+        // tiny bubbles under the pieces (a hard drop), then the pieces
+        for (const Puff& p : puffs_) {
+            if (p.age < 0.f) continue;
+            const float t = p.age / p.life;
+            sprite(p.p, p.size, lerp(pal_.haze, vec3(1.f), 0.6f), 0.7f * (1.f - smoothstepf(0.5f, 1.f, t)), 2);
+        }
+        auto drawSprites = [&]() {
+            if (sprites_.empty()) return;
+            glUseProgram(progSprite_);
+            setMat(progSprite_, "uVP", vp_);
+            set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
+            glBindVertexArray(spriteVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
+            glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
+            sprites_.clear();
+        };
+        drawSprites();
+        if (!cells_.empty()) {
+            glUseProgram(progCell_);
+            setMat(progCell_, "uVP", vp_);
+            set1f(progCell_, "uTime", time_);
+            set1f(progCell_, "uShimmer", 1.f - pal_.night * 0.5f);
+            set3f(progCell_, "uLightC", pal_.sun);
+            set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
+            set3f(progCell_, "uBridgeInk", bridge_.ink);
+            glBindVertexArray(cellVao_);
+            glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
+            glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+        }
+        // the bonus gauge: a faint ring, the charge a bright arc
+        {
+            const vec3 gc = layout::GAUGE_CENTER;
+            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
+            const bool on = game.bonusReady() || game.bonusActive();
+            sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.accent : pal_.rail, 1.f, 1, fill, on ? 1.f : 0.f);
+        }
+        drawSprites();
+    }
+    drawHud(f.hud, f.panels);
+    glDisable(GL_BLEND);
+
+    // ---- Post.
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, width_, height_);
+    glUseProgram(progPost_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    set1i(progPost_, "uScene", 0);
+    set1f(progPost_, "uFade", saturate(f.fade));
+    set1f(progPost_, "uDim", dimT_);
+    ugl::drawFullscreen();
+
+    if (gpuQ) {
+        glEndQuery(GL_TIME_ELAPSED);
+        GLuint64 ns = 0;
+        glGetQueryObjectui64v(gpuQ, GL_QUERY_RESULT, &ns);
+        gpuSum += ns / 1e6;
+        if (++gpuN % 120 == 0) {
+            std::fprintf(stderr, "[coralreef] gpu %.2f ms/frame (%d corals, %d fish, %dx%d world)\n", gpuSum / 120.0,
+                         (int)std::count_if(slots_.begin(), slots_.end(), [](const Slot& s) { return s.grow > 0.f; }), (int)fish_.size(),
+                         worldT_.w, worldT_.h);
+            gpuSum = 0.0;
+        }
+    }
+}
+
+// =====================================================================================================
+// Registry
+// =====================================================================================================
+
+const UniverseEntry& universe_coralreef() {
+    static const UniverseEntry e{
+        "CORAL REEF", "a sunny shallow reef that grows with every cleared line, from bare rock and white sand to corals full of fish",
+        [] { return std::unique_ptr<Universe>(new CoralReefUniverse()); },
+        // Fits most songs; the bright, flowing ones a little better.
+        [](const SongLook& l) { return 0.85f + 0.2f * l.brightness + 0.1f * (1.f - l.density); },
+        [] {
+            std::vector<std::string> v;
+            for (const VariantDef& x : VARIANTS) v.push_back(x.name);
+            return v;
+        }()};
+    return e;
+}
