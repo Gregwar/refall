@@ -1584,8 +1584,8 @@ void IslandsUniverse::buildBoard(const Game& g) {
     // the backing: a tinted pane of deep water over the scene (the sea and the islands show through, darkened),
     // denser toward the bottom where the stack stands; a soft shade around it, a fine pale rule
     quad(vec3(0.f, 0.f, BACK_Z - 0.01f), 6.1f, 11.1f, back * 0.4f, 0.3f, 0.16f, 0.085f);
-    quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.72f, 0.f, 0.f);
-    quad(vec3(0.f, -4.f, BACK_Z + 0.001f), 5.1f, 6.1f, back, 0.3f, 0.f, 0.6f);
+    quad(vec3(0.f, 0.f, BACK_Z), 5.1f, 10.1f, back, 0.8f, 0.f, 0.f);
+    quad(vec3(0.f, -4.f, BACK_Z + 0.001f), 5.1f, 6.1f, back, 0.35f, 0.f, 0.6f);
     const vec3 rule = mixDisplay(back, lin(0xf4ecd8), 0.4f);
     const float bx = 5.1f, by = 10.1f, zr = BACK_Z + 0.002f;
     line(-bx, -by, bx, -by, zr, 0.035f, rule, 0.6f);
