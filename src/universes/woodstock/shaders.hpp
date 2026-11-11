@@ -349,15 +349,13 @@ void main() {
         layer(acc, lf, B);
         layer(acc, max(lf, min(abs(a1.y), abs(a2.y)) - 0.02), mix(B, vec3(1.0), 0.3));
     } else if (kind == 13) {
-        // the well's backing (board units): a calm dark panel, a white cartoon outline, an ink rim
+        // the well's backing (board units): a calm dark panel, a slim white line, a hairline of ink
         vec2 l = vL;
         AA = max(fwidth(l.x), 1e-4) * 0.7;
         float d = dBox(l, vA.zw, 0.45);
-        layer(acc, d - vE.w - 0.09, uInk);
+        layer(acc, d - vE.w - 0.04, uInk);
         layer(acc, d - vE.w, WH);
         layer(acc, d, mix(B, A, clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0)));
-        // a faint inner glow ring
-        layerA(acc, abs(d + 0.35) - 0.03, mix(A, C, 0.5), 0.35);
     }
     float al = acc.a * vB.z * uFade;
     frag = vec4(acc.rgb * al, al);
@@ -368,7 +366,7 @@ void main() {
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA; // x, y, half, rotation
-layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost), scale
+layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost, 2 preview), scale
 layout(location = 3) in vec4 iC; // color, darkening
 uniform mat4 uVP;
 out vec2 vU;
@@ -393,26 +391,24 @@ void main() {
     AA = max(fwidth(u.x), 1e-4) * 0.75;
     int type = int(vB.x + 0.5);
     vec3 col = vC.rgb;
-    float d = dBox(u, vec2(0.4), 0.15);
+    // a flat rounded square, a small even gap around it (no outline, no shading)
+    float d = dBox(u, vec2(0.455), 0.19);
     vec4 acc = vec4(0.0);
-    if (vB.z > 0.5) {
-        // the ghost: the white outline alone, dashed
-        float dash = step(0.5, fract((u.x + u.y) * 4.0 + 0.25));
-        layerA(acc, abs(d - 0.03) - 0.028, uWhite, 0.4 + 0.3 * dash);
+    if (abs(vB.z - 1.0) < 0.5) {
+        // the ghost: a faint flat fill of the piece's color, a thin line of it
+        layerA(acc, d, col, 0.16);
+        layerA(acc, abs(d + 0.02) - 0.018, col, 0.6);
         frag = vec4(acc.rgb * acc.a * vB.y * uFade, acc.a * vB.y * uFade);
         return;
     }
-    layer(acc, d - 0.095, uInk);
-    layer(acc, d - 0.06, uWhite);
-    // the candy fill: lighter toward the top left, a faint tie-dye swirl
-    float r = length(u), an = atan(u.y, u.x);
-    vec3 fill = mix(col * 0.86, mix(col, vec3(1.0), 0.16), clamp(0.5 + (u.y - u.x) * 0.9, 0.0, 1.0));
-    fill *= 1.0 + 0.055 * sin(r * 26.0 - an * 2.0);
-    layer(acc, d, fill);
-    // the motif: one bold pale shape per type, over a soft shadow of the hue
-    vec3 M = mix(col, vec3(1.0), 0.86);
-    vec3 S = col * 0.62;
-    float sc = 0.27;
+    // (the previews over the kaleidoscope sit on a flat rim of ink, so they read on any band)
+    if (vB.z > 1.5) layer(acc, d - 0.07, uInk);
+    layer(acc, d, col);
+    // the motif: one small flat shape per type, a lighter tone of the color (darker on the pale ones)
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    vec3 M = lum > 0.62 ? mix(col, col * vec3(0.78, 0.66, 0.5), 0.75) : mix(col, vec3(1.0), 0.42);
+    vec3 S = M;
+    float sc = 0.215;
     vec2 q = u / sc;
     vec2 qs = (u - vec2(0.022, -0.026)) / sc;
     float dm, ds;
@@ -422,17 +418,13 @@ void main() {
         vec2 ps = petalFrame(qs, 5.0, 1.5708, k);
         dm = min(dEll(pp - vec2(0.6, 0.0), vec2(0.42, 0.34)), length(q) - 0.36);
         ds = min(dEll(ps - vec2(0.6, 0.0), vec2(0.42, 0.34)), length(qs) - 0.36);
-        layerA(acc, ds * sc, S, 0.7);
         layer(acc, dm * sc, M);
-        layer(acc, (length(q) - 0.3) * sc, vec3(1.0, 0.78, 0.2));
+        layer(acc, (length(q) - 0.3) * sc, col);
     } else if (type == 1) {    // O: a heart
-        layerA(acc, dHeart(qs * 1.08) * sc, S, 0.7);
         layer(acc, dHeart(q * 1.08) * sc, M);
     } else if (type == 2) {    // T: a peace sign
-        layerA(acc, dPeace(qs * 0.98, 0.26) * sc, S, 0.7);
         layer(acc, dPeace(q * 0.98, 0.26) * sc, M);
     } else if (type == 3) {    // S: a sparkle
-        layerA(acc, dSparkle(qs * 0.92) * sc, S, 0.7);
         layer(acc, dSparkle(q * 0.92) * sc, M);
     } else if (type == 4) {    // Z: a tie-dye spiral
         float pitch = 0.46;
@@ -442,7 +434,6 @@ void main() {
         sp = min(sp, rr - 0.16);
         float rs = length(qs), as = atan(qs.y, qs.x) / TAU;
         float sps = min(max(abs(fract(rs / pitch - as + 0.5) - 0.5) * pitch - 0.12, rs - 1.0), rs - 0.16);
-        layerA(acc, sps * sc, S, 0.7);
         layer(acc, sp * sc, M);
     } else if (type == 5) {    // J: a rainbow
         vec2 c = vec2(0.0, -0.4);
@@ -455,16 +446,14 @@ void main() {
         }
         arc = max(arc, c.y - 0.05 - q.y);
         arcs = max(arcs, c.y - 0.05 - qs.y);
-        layerA(acc, arcs * sc, S, 0.7);
         layer(acc, arc * sc, M);
     } else {                   // L: a kawaii face
         vec2 e = vec2(abs(q.x) - 0.42, q.y - 0.12);
-        layer(acc, dEll(e, vec2(0.15, 0.22)) * sc, col * 0.25);
-        layer(acc, (length(e - vec2(-0.05, 0.08)) - 0.06) * sc, vec3(1.0));
+        layer(acc, dEll(e, vec2(0.15, 0.22)) * sc, col * 0.55);
         vec2 c = vec2(0.0, -0.05);
         float sm = max(abs(length(q - c) - 0.28) - 0.07, q.y - c.y + 0.12);
-        layer(acc, sm * sc, col * 0.25);
-        layerA(acc, dEll(vec2(abs(q.x) - 0.66, q.y + 0.2), vec2(0.15, 0.09)) * sc, vec3(1.0, 0.6, 0.72), 0.9);
+        layer(acc, sm * sc, col * 0.55);
+        layerA(acc, dEll(vec2(abs(q.x) - 0.66, q.y + 0.2), vec2(0.15, 0.09)) * sc, mix(col, vec3(1.0, 0.5, 0.6), 0.5), 0.8);
     }
     // a lock's brief brightening, the game over's fading
     acc.rgb = mix(acc.rgb, vec3(1.0), vC.w > 0.0 ? 0.0 : -vC.w);
