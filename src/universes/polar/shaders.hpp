@@ -506,16 +506,17 @@ vec4 iceCube(vec2 wl, float d, vec3 pc, float k, float seed) {
     float milk = smoothstep(0.2, 0.9, k * 0.55) * (0.5 + 0.5 * smoothstep(0.05, 0.4, d));
     vec3 pastel = mix(pc, vec3(lum) * 0.5 + 0.5, 0.15);
     float core = smoothstep(0.08, 0.5, d + (n - 0.5) * 0.15);
-    vec3 cloudy = mix(water, mix(pastel * (0.85 + 0.1 * n), mix(pastel, vec3(1.0), 0.15) * 0.95, core), milk);
-    // frosted surface: whitish, tinted, a crystalline grain
-    // (the material turns to an icy white-blue, its crystals drawn bright, so the progress reads at a glance)
-    vec3 icy = vec3(0.80, 0.90, 1.0);
-    vec3 frost = mix(mix(pastel, icy, 0.4), vec3(1.0), 0.1) * (0.85 + 0.1 * n2) + icy * 0.28 * max(fe, fe2 * 0.7)
-               + vec3(0.1) * smoothstep(0.55, 0.85, grain);
-    vec3 col = mix(cloudy, frost, frosted * 0.88);
+    vec3 cloudy = mix(water, mix(pastel * (0.85 + 0.1 * n), mix(pastel, vec3(1.0), 0.08) * 0.95, core), milk);
+    // frosted surface: coloured ice, not white: the piece's colour, a little deeper, glassier and cooler, with
+    // the frost drawn as thin bright crystal lines (white only in lines and highlights, never in flat areas)
+    vec3 cool = vec3(0.86, 0.95, 1.12);
+    vec3 tinted = mix(pc, vec3(lum), 0.18) * cool * (0.82 + 0.12 * n2);
+    float lines = smoothstep(0.6, 0.9, max(fe, fe2 * 0.85));
+    vec3 frost = mix(tinted, vec3(0.9, 0.96, 1.0), lines * 0.55) + vec3(0.08) * smoothstep(0.6, 0.85, grain);
+    vec3 col = mix(cloudy, frost, frosted * 0.7);
     // the frosted rim: a bright white-blue line at the faces, growing in as soon as the piece lands
-    float rim = exp(-d / (0.02 + 0.03 * k)) * smoothstep(0.0, 0.12, k);
-    col = mix(col, vec3(0.92, 0.97, 1.0), rim * 0.6);
+    float rim = exp(-d / (0.01 + 0.012 * k)) * smoothstep(0.0, 0.12, k);
+    col = mix(col, vec3(0.92, 0.97, 1.0), rim * 0.55);
     // a glint: one sheen sweeping diagonally across the ice as it sets, then sparkles held on the crystals
     float sweep = mix(-1.5, 5.0, smoothstep(0.15, 0.85, k));
     float diag = (wl.x + wl.y) * 0.7 - sweep;
