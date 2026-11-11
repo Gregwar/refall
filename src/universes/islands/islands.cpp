@@ -679,25 +679,26 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     (void)dt;
     const float wc = 1.f - smoothstepf(0.f, 1.f, lv_), wp = smoothstepf(1.f, 2.f, lv_);
     const float wm = std::max(0.f, 1.f - wc - wp);
-    calmPhase_ += wdt * wc / 120.f;
-    cruisePhase_ += wdt / 44.f;
+    calmPhase_ += wdt * wc / 100.f;
+    cruisePhase_ += wdt / 30.f;
     const isl::Hero* hero = world_->heroNear(s_, 1100.0, 200.0);
 
-    // ---- the altitude wanted: calm high and wide (a climb above the clouds now and then), mid cruising, a peak low
+    // ---- the altitude wanted: calm wide (lower, and only now and then a climb above the clouds), mid cruising with
+    // quick climbs and dives over the water, a peak skimming low
     const float cyc = 0.5f - 0.5f * std::cos(calmPhase_ * TAU);
-    float aCalm = std::exp(lerpf(std::log(230.f), std::log(2300.f), smoothstepf(0.32f, 0.88f, cyc)));
-    float aMid = 36.f * std::exp(0.8f * std::sin(cruisePhase_ * TAU));
-    float aPeak = 4.6f + 1.6f * std::sin(cruisePhase_ * TAU * 3.1f);
+    float aCalm = std::exp(lerpf(std::log(90.f), std::log(1700.f), smoothstepf(0.55f, 0.95f, cyc)) + 0.6f * std::sin(cruisePhase_ * TAU * 1.3f));
+    float aMid = 20.f * std::exp(1.1f * std::sin(cruisePhase_ * TAU) + 0.5f * std::sin(cruisePhase_ * TAU * 2.7f + 1.f));
+    float aPeak = 4.2f + 1.4f * std::sin(cruisePhase_ * TAU * 3.1f);
     if (hero && !hero->gap) {
         // a pass: down to the island, close over the water beside its beach, its deck, its palms (or an orbit)
         const float ds = (float)(hero->sc - s_);
         float k = smoothstepf(900.f, 260.f, ds) * smoothstepf(-260.f, -70.f, ds);
         if (hero->orbit) k = smoothstepf((float)(hero->s0), (float)(hero->s0 + 300.0), (float)s_) * smoothstepf((float)hero->s1, (float)(hero->s1 - 200.0), (float)s_);
         aMid = std::exp(lerpf(std::log(aMid), std::log(hero->orbit ? 28.f : 7.f), k * 0.92f));
-        if (hero->orbit) aCalm = std::exp(lerpf(std::log(aCalm), std::log(150.f), k * 0.85f));
+        aCalm = std::exp(lerpf(std::log(aCalm), std::log(hero->orbit ? 90.f : 25.f), k * 0.8f));
     }
     float target = wc * std::log(aCalm) + wm * std::log(aMid) + wp * std::log(aPeak);
-    float omega = 0.3f;
+    float omega = 0.42f;
     buildK_ = approach(buildK_, section == "BUILD" ? 1.f : 0.f, section == "BUILD" ? 0.35f : 0.6f, wdt);
     target = lerpf(target, std::max(target, std::log(620.f)), buildK_);
     if (diveT_ < 9.f) {
@@ -727,15 +728,15 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     }
 
     // ---- the speed: from the altitude (the same sense of speed high and low) and the music
-    float vT = (8.f + 3.f * std::sqrt(alt_)) * (0.74f + 0.36f * lv_) * (hero && hero->orbit ? 0.8f : 1.f) * lerpf(1.f, 0.35f, slow_);
+    float vT = (9.f + 3.f * std::sqrt(alt_)) * (0.62f + 0.42f * lv_ + 0.25f * energy_ + 0.2f * dropK_) * (hero && hero->orbit ? 0.85f : 1.f) * lerpf(1.f, 0.35f, slow_);
     {
         // never a fast turn: the speed is capped by the route's curvature a little ahead (a turn rate under ~7 deg/s)
         float k = 0.f;
         for (int i = 0; i <= 8; i++) k = std::max(k, std::fabs(world_->route(s_ + i * std::max(25.f, vel_ * 0.8f)).curv));
-        vT = std::min(vT, 0.13f / std::max(k, 1e-5f));
+        vT = std::min(vT, 0.19f / std::max(k, 1e-5f));
     }
     if (!camInit_) { speed_.x = vT; speed_.v = 0.f; }
-    speed_.step(vT, 0.45f, wdt);
+    speed_.step(vT, 0.6f, wdt);
     vel_ = std::max(0.f, speed_.x);
     s_ += (double)(vel_ * wdt);
 
@@ -761,9 +762,9 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     heroW_ = wF;
     // the target itself moves slowly (a pan never whips, even passing close by)
     if (!camInit_) offTgt_ = offT;
-    offTgt_ += std::clamp(offT - offTgt_, -0.16f * wdt, 0.16f * wdt);
+    offTgt_ += std::clamp(offT - offTgt_, -0.24f * wdt, 0.24f * wdt);
     if (!camInit_) { yawOff_.x = offTgt_; yawOff_.v = 0.f; }
-    yawOff_.step(offTgt_, 0.6f, wdt);
+    yawOff_.step(offTgt_, 0.75f, wdt);
     yaw_ = travel + yawOff_.x;
     // the pitch: near level skimming, looking down from high, the horizon kept in view above the clouds
     const float la = std::log(alt_);
@@ -773,7 +774,7 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     if (!camInit_) { pitch_.x = p; pitch_.v = 0.f; }
     pitch_.step(p, 0.55f, wdt);
     // the bank: into the route's turns, a coordinated turn's angle, gentle
-    const float bankT = std::clamp(std::atan(vel_ * vel_ * rp.curv / 9.81f) * 0.6f, -0.16f, 0.16f);
+    const float bankT = std::clamp(std::atan(vel_ * vel_ * rp.curv / 9.81f) * 0.9f, -0.26f, 0.26f);
     if (!camInit_) { bank_.x = bankT; bank_.v = 0.f; }
     bank_.step(bankT, 1.f, wdt);
     camInit_ = true;
@@ -1997,19 +1998,19 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         sky_.hor = lerp(sky_.hor, mixDisplay(sky_.hor, lin(0x8aa8d0), 0.55f), slow_);
         sky_.top = lerp(sky_.top, mixDisplay(sky_.top, lin(0x3a5a9a), 0.5f), slow_);
         sky_.fog = lerp(sky_.fog, mixDisplay(sky_.fog, lin(0x9ab4d4), 0.5f), slow_);
-        // the drop: a warm, golden light (a lower sun, the sea glittering), saturated, held through the drop
+        // the drop: a real golden hour (a low warm sun, long shadows, golden glitter, a warm sky under a blue zenith)
         const float gk = smoothstepf(0.f, 1.f, dropK_) * (1.f - lights_) * (1.f - slow_);
         if (gk > 0.f) {
             const float e = std::asin(std::clamp(sky_.sunDir.y, -1.f, 1.f));
-            const float e2 = lerpf(e, std::min(e, 0.62f), gk);
+            const float e2 = lerpf(e, std::min(e, 0.2f), gk);
             const vec3 h = normalize(vec3(sky_.sunDir.x, 0.f, sky_.sunDir.z));
             sky_.sunDir = normalize(h * std::cos(e2) + vec3(0, std::sin(e2), 0));
-            sky_.sunCol = lerp(sky_.sunCol, lin(0xffbc6a) * 2.35f, gk * 0.85f);
-            sky_.hor = mixDisplay(sky_.hor, lin(0xf4d48e), gk * 0.4f);
-            sky_.low = mixDisplay(sky_.low, lin(0xc8b494), gk * 0.3f);
-            sky_.fog = mixDisplay(sky_.fog, lin(0xe8c88c), gk * 0.3f);
+            sky_.sunCol = lerp(sky_.sunCol, lin(0xffb05a) * 2.3f, gk);
+            sky_.hor = mixDisplay(sky_.hor, lin(0xf6c070), gk * 0.7f);
+            sky_.low = mixDisplay(sky_.low, lin(0xd0a888), gk * 0.5f);
+            sky_.fog = mixDisplay(sky_.fog, lin(0xe8b880), gk * 0.5f);
             sky_.haze *= 1.f - 0.5f * gk;
-            sky_.top = mixDisplay(sky_.top, lin(0x1a56c8), gk * 0.4f);
+            sky_.top = mixDisplay(sky_.top, lin(0x2462c8), gk * 0.5f);
         }
     }
 
@@ -2080,31 +2081,13 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
         if (dx * dx + dz * dz < 3500.f * 3500.f) {
             boatParts(b);
-            // through the drop the other sailboats join the regatta too (a spinnaker in one of the piece colors)
-            if (dropK_ > 0.02f && b.kind <= 1 && b.cruise > 0.f) {
-                const float K = smoothstepf(0.f, 1.f, dropK_), L = b.len, mh = 1.3f * L;
-                const Q q = qYaw(-b.head);
-                const vec3 at = b.p + qRot(q, vec3(0.62f * L, 0.9f + mh * 0.45f, 0.f));
-                const vec3 col = lerp(pieceCol((int)(b.len * 7.3f) % 7), vec3(1.f), 0.12f);
-                inst_[isl::M_DOME].push_back(isl::inst(isl::MAT_CANVAS, at, vec3(mh * 0.78f, 0.5f * L, 0.82f * L) * K,
-                                                       qMul(q, qAxis(vec3(0, 0, 1), -PI * 0.5f)), col, 0.f, 0.f));
-            }
         }
     }
-    // the fleet; through the drop every boat raises a big spinnaker in its own colors
+    // the fleet (the boats the cleared rows launched)
     for (const Boat& b : fleet_) {
         const float dx = b.p.x - eye_.x, dz = b.p.z - eye_.z;
         if (dx * dx + dz * dz > 9000.f * 9000.f || b.scale < 0.02f) continue;
         boatParts(b);
-        if (dropK_ > 0.02f && b.unfurl > 0.5f) {
-            const float K = b.scale * smoothstepf(0.f, 1.f, dropK_);
-            const float L = b.len, mh = 1.3f * L;
-            const Q q = qYaw(-b.head);
-            const vec3 at = b.p + qRot(q, vec3(0.62f * L, 0.9f + mh * 0.45f, 0.f) * b.scale);
-            // a dome turned forward (its axis along the bow): a bellied sail, its panels radiating
-            const Q qs = qMul(q, qAxis(vec3(0, 0, 1), -PI * 0.5f));
-            inst_[isl::M_DOME].push_back(isl::inst(isl::MAT_CANVAS, at, vec3(mh * 0.78f, 0.5f * L, 0.82f * L) * K, qs, b.sailCol, 0.f, 0.f));
-        }
     }
     // dolphins leaping beside the camera through the drop (each leap lands on the beat)
     if (!pods_.empty()) {

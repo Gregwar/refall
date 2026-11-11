@@ -1122,14 +1122,14 @@ void World::stepRoute() {
         g_.orbitLeft--;
     } else {
         const double s = g_.s;
-        const float desired = g_.base + 0.55f * std::sin((float)(s / 2600.0) + g_.p1) + 0.3f * std::sin((float)(s / 1150.0) + g_.p2);
+        const float desired = g_.base + 0.6f * std::sin((float)(s / 1700.0) + g_.p1) + 0.45f * std::sin((float)(s / 650.0) + g_.p2);
         float err = desired - g_.head;
         while (err > PI) err -= TAU;
         while (err < -PI) err += TAU;
-        kT = std::clamp(err * 0.0035f, -1.f / 800.f, 1.f / 800.f);
+        kT = std::clamp(err * 0.005f, -1.f / 420.f, 1.f / 420.f);
     }
     // the curvature eases in and out (over ~70 m in the loops, ~120 m elsewhere): no kink in the turns
-    const float maxD = ds * std::max(std::max(std::fabs(g_.curv), std::fabs(kT)) / 70.f, 1.f / 800.f / 120.f);
+    const float maxD = ds * std::max(std::max(std::fabs(g_.curv), std::fabs(kT)) / 70.f, 1.f / 420.f / 90.f);
     g_.curv += std::clamp(kT - g_.curv, -maxD, maxD);
     g_.head += g_.curv * ds;
     g_.x += std::cos(g_.head) * ds;
