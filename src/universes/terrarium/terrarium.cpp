@@ -96,9 +96,13 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 // The forest's: the start (a pebble, a tuft of moss), then one new thing every ~3 lines, the last at 45.
 const Slot SLOTS_MOSS[] = {
     {TerrariumUniverse::S_PEBBLE, 0.80f, 0.12f, 0.11f, 0.6f, -1.f, 0.f},
-    {TerrariumUniverse::S_MOSS, -0.55f, 0.36f, 0.18f, 0.f, -1.f, 0.f},
+    {TerrariumUniverse::S_MOSS, -0.55f, 0.36f, 0.10f, 0.f, -1.f, 0.f},
     {TerrariumUniverse::S_MOSS, -0.72f, -0.10f, 0.23f, 0.f, 1.f, 0.f},
     {TerrariumUniverse::S_FERN, -0.62f, -0.45f, 0.66f, 0.3f, 3.5f, 0.f},
+    {TerrariumUniverse::S_ROCK, 0.66f, 0.62f, 0.15f, 0.4f, 16.f, 1.f},
+    {TerrariumUniverse::S_MUSH, 0.15f, -0.40f, 0.16f, 0.f, 28.f, 0.f},
+    {TerrariumUniverse::S_FERN, 0.02f, -0.86f, 0.85f, 1.4f, 34.f, 0.f},
+    {TerrariumUniverse::S_MUSH, -0.86f, -0.32f, 0.15f, 0.f, 40.f, 0.f},
     {TerrariumUniverse::S_MUSH, -0.40f, 0.56f, 0.22f, 0.f, 6.f, 0.f},
     {TerrariumUniverse::S_MOSS, 0.68f, -0.20f, 0.20f, 0.f, 9.f, 0.f},
     {TerrariumUniverse::S_TWIG, 0.56f, -0.52f, 0.50f, 0.f, 12.f, 1.f},
@@ -115,8 +119,12 @@ const Slot SLOTS_MOSS[] = {
 };
 const Slot SLOTS_DESERT[] = {
     {TerrariumUniverse::S_PEBBLE, 0.80f, 0.12f, 0.11f, 0.6f, -1.f, 0.f},
-    {TerrariumUniverse::S_ROSETTE, -0.55f, 0.36f, 0.14f, 0.f, -1.f, 0.f},
+    {TerrariumUniverse::S_ROSETTE, -0.55f, 0.36f, 0.09f, 0.f, -1.f, 0.f},
     {TerrariumUniverse::S_ROSETTE, -0.72f, -0.10f, 0.18f, 0.4f, 1.f, 0.f},
+    {TerrariumUniverse::S_ROCK, 0.66f, 0.62f, 0.16f, 0.4f, 16.f, 0.f},
+    {TerrariumUniverse::S_CACTUS, 0.15f, -0.40f, 0.15f, 0.f, 28.f, 0.f},
+    {TerrariumUniverse::S_ROSETTE, 0.02f, -0.86f, 0.36f, 1.4f, 34.f, 1.f},
+    {TerrariumUniverse::S_CACTUS, -0.86f, -0.32f, 0.11f, 0.f, 40.f, 0.f},
     {TerrariumUniverse::S_ROSETTE, -0.62f, -0.45f, 0.30f, 0.2f, 3.5f, 1.f},
     {TerrariumUniverse::S_CACTUS, -0.40f, 0.56f, 0.14f, 0.f, 6.f, 0.f},
     {TerrariumUniverse::S_ROSETTE, 0.68f, -0.20f, 0.16f, 1.f, 9.f, 0.f},
@@ -135,9 +143,13 @@ const Slot SLOTS_DESERT[] = {
 };
 const Slot SLOTS_ORCHID[] = {
     {TerrariumUniverse::S_PEBBLE, 0.80f, 0.12f, 0.11f, 0.6f, -1.f, 0.f},
-    {TerrariumUniverse::S_MOSS, -0.55f, 0.36f, 0.18f, 0.f, -1.f, 0.f},
+    {TerrariumUniverse::S_MOSS, -0.55f, 0.36f, 0.10f, 0.f, -1.f, 0.f},
     {TerrariumUniverse::S_MOSS, -0.72f, -0.10f, 0.23f, 0.f, 1.f, 0.f},
     {TerrariumUniverse::S_ROSETTE, -0.62f, -0.45f, 0.35f, 0.3f, 3.5f, 2.f},
+    {TerrariumUniverse::S_ROCK, 0.66f, 0.62f, 0.15f, 0.4f, 16.f, 1.f},
+    {TerrariumUniverse::S_MUSH, 0.15f, -0.40f, 0.15f, 0.f, 28.f, 0.f},
+    {TerrariumUniverse::S_ROSETTE, 0.02f, -0.86f, 0.38f, 1.4f, 34.f, 2.f},
+    {TerrariumUniverse::S_MUSH, -0.86f, -0.32f, 0.13f, 0.f, 40.f, 0.f},
     {TerrariumUniverse::S_MUSH, -0.40f, 0.56f, 0.18f, 0.f, 6.f, 0.f},
     {TerrariumUniverse::S_MOSS, 0.68f, -0.20f, 0.20f, 0.f, 9.f, 0.f},
     {TerrariumUniverse::S_TWIG, 0.56f, -0.52f, 0.50f, 0.f, 12.f, 1.f},
@@ -157,13 +169,31 @@ const std::vector<Slot> SLOT_LISTS[VARIANT_COUNT] = {
     std::vector<Slot>(std::begin(SLOTS_DESERT), std::end(SLOTS_DESERT)),
     std::vector<Slot>(std::begin(SLOTS_ORCHID), std::end(SLOTS_ORCHID)),
 };
-constexpr float SLOT_SPAN = 4.f;   // lines a slot takes to grow
-constexpr float POND_AT = 15.f;    // the pond fills from here, over 4 lines
+constexpr float SLOT_SPAN = 3.f;   // lines a slot takes to grow
+constexpr float BIRTH_SCALE = 0.43f; // the tables' births (0..45) -> the jar full by 20 lines
+constexpr float POND_AT = 7.f;     // the pond fills from here, over 4 lines
+
+// The camera pulls back, calmly and continuously, as the life spills out of the jar (keys on the 50-line scale).
+struct CamKey { float lines; vec3 eye, target; };
+const CamKey CAMS[] = {
+    {0.f, {0.f, 0.8f, 2.9f}, {0.f, 0.36f, 0.f}},     // close on the bare jar
+    {10.f, {0.f, 0.92f, 3.45f}, {0.f, 0.42f, 0.f}},
+    {20.f, {0.f, 0.98f, 3.9f}, {0.f, 0.45f, 0.f}},   // the whole jar, full
+    {30.f, {-0.6f, 1.35f, 5.4f}, {-0.6f, 0.72f, -0.3f}}, // the jar overflowing, the sill
+    {40.f, {-1.4f, 1.75f, 7.4f}, {-1.4f, 1.1f, -0.6f}},  // the window, the jar on its sill right of the well
+    {50.f, {-2.0f, 1.95f, 9.4f}, {-2.0f, 1.3f, -0.8f}},  // the whole wall, overgrown
+};
+constexpr int CAM_KEYS = (int)(sizeof(CAMS) / sizeof(CAMS[0]));
+vec3 catmull(const vec3& p0, const vec3& p1, const vec3& p2, const vec3& p3, float t) {
+    const float t2 = t * t, t3 = t2 * t;
+    return (p1 * 2.f + (p2 - p0) * t + (p0 * 2.f - p1 * 5.f + p2 * 4.f - p3) * t2 + (p1 * 3.f - p0 - p2 * 3.f + p3) * t3) * 0.5f;
+}
 
 using Palette = TerrariumUniverse::Palette;
 static_assert(sizeof(Palette) % sizeof(float) == 0, "a palette is floats only");
 constexpr int PAL_FLOATS = (int)(sizeof(Palette) / sizeof(float));
 
+float hash01(int i) { return (float)((splitmix64((uint64_t)i) >> 40) & 0xFFFFFF) / 16777216.f; }
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
 Palette paletteOf(int v) {
     const VariantDef& d = VARIANTS[wrapV(v)];
@@ -233,7 +263,6 @@ int extraLines(double t) {
 }
 
 // the camera (world units: the jar's radius)
-const vec3 EYE(0.f, 0.95f, 3.9f), TARGET(0.f, 0.43f, 0.f);
 constexpr float TAN_H = 0.212f;
 
 } // namespace
@@ -373,8 +402,8 @@ void TerrariumUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution (at most 720 lines)
-    const int wh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
+    // the world at a reduced resolution (at most 660 lines)
+    const int wh = std::max(180, std::min(660, (int)(height_ * 0.61f)));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -382,10 +411,17 @@ void TerrariumUniverse::resize(int width, int height) {
     updateCamera();
 }
 
-void TerrariumUniverse::updateCamera() {
+void TerrariumUniverse::updateCamera(float lines) {
     aspect_ = (float)width_ / height_;
-    eye_ = EYE;
-    fwd_ = normalize(TARGET - EYE);
+    const float L = std::clamp(lines, 0.f, CAMS[CAM_KEYS - 1].lines);
+    int k = 0;
+    while (k < CAM_KEYS - 2 && L > CAMS[k + 1].lines) k++;
+    const float u = (L - CAMS[k].lines) / (CAMS[k + 1].lines - CAMS[k].lines);
+    const int k0 = std::max(0, k - 1), k3 = std::min(CAM_KEYS - 1, k + 2);
+    const vec3 eye = catmull(CAMS[k0].eye, CAMS[k].eye, CAMS[k + 1].eye, CAMS[k3].eye, u);
+    const vec3 target = catmull(CAMS[k0].target, CAMS[k].target, CAMS[k + 1].target, CAMS[k3].target, u);
+    eye_ = eye;
+    fwd_ = normalize(target - eye);
     right_ = normalize(cross(fwd_, vec3(0.f, 1.f, 0.f)));
     up_ = cross(right_, fwd_);
     tanH_ = TAN_H;
@@ -560,14 +596,45 @@ void TerrariumUniverse::addSeed(const vec3& from) {
     Seed s;
     s.p = from;
     s.v = vec3(0.f);
-    float x = 0.f, z = 0.f;
-    if (!pickSpot(x, z, 0.03f)) return;
-    s.to = vec3(x, soilHeight(x, z), z);
+    s.target = 0;
+    vec3 at;
+    if (linesEased_ > 21.f && pickOutside(at)) { s.to = at; s.target = 1; }
+    else {
+        float x = 0.f, z = 0.f;
+        if (!pickSpot(x, z, 0.03f)) return;
+        s.to = vec3(x, soilHeight(x, z), z);
+    }
     s.age = -rng_.range(0.f, 0.4f);
     s.life = rng_.range(4.5f, 6.5f);
     s.seed = rng_.uniform();
     s.landed = false;
     seeds_.push_back(s);
+}
+
+bool TerrariumUniverse::pickOutside(vec3& at) {
+    constexpr float ZW = -2.3f, SF = 1.3f, WX = 2.4f, WY = 2.7f, WCX = -1.2f;
+    for (int k = 0; k < 40; k++) {
+        vec3 p;
+        if (rng_.chance(wallR_ > 0.3f || climb_ > 1.f ? 0.45f : 0.f)) {
+            // on the wall, where the greenery has reached
+            p = vec3(WCX + rng_.range(-4.4f, 4.4f), rng_.range(0.1f, 3.9f), ZW);
+            const float qx = p.x - WCX;
+            const float dx = std::max(std::fabs(qx) - WX, 0.f), dy = std::max(std::max(p.y - WY, -p.y), 0.f);
+            const float dOpen = (std::fabs(qx) < WX && p.y > 0.f && p.y < WY) ? -1.f : std::sqrt(dx * dx + dy * dy);
+            if (dOpen < 0.f || dOpen > std::max(wallR_, 0.2f) || (dOpen < 0.25f && p.y > climb_)) continue;
+        } else {
+            // on the sill, around the jar
+            const float a = rng_.range(0.f, TAU), r = rng_.range(1.1f, std::max(1.2f, std::min(sillR_ - 0.1f, 3.4f)));
+            p = vec3(std::sin(a) * r, 0.f, std::cos(a) * r);
+            if (p.z < ZW + 0.15f || p.z > SF - 0.1f) continue;
+        }
+        vec2 b;
+        if (!toScreen(p, b)) continue;
+        if (std::fabs(b.x) < 5.8f || std::fabs(b.x - viewC_.x) > viewH_.x * 0.97f || std::fabs(b.y - viewC_.y) > viewH_.y * 0.95f) continue;
+        at = p;
+        return true;
+    }
+    return false;
 }
 
 void TerrariumUniverse::updateBeetle(float dt, float wm, float wp) {
@@ -628,7 +695,7 @@ void TerrariumUniverse::updateBeetle(float dt, float wm, float wp) {
     const float nx = b.x - std::sin(b.head) * b.speed * dt, nz = b.z + std::cos(b.head) * b.speed * dt;
     if (!blocked(nx, nz, 0.045f) || blocked(b.x, b.z, 0.045f)) { b.x = nx; b.z = nz; }
     else { b.head = wrapA(b.head + 1.2f * dt); }
-    b.walk += b.speed * dt * 150.f;
+    b.walk += b.speed * dt * 92.f; // (a planted foot moves back 2 x 0.009 x BS per half cycle: no sliding)
     b.look = approach(b.look, lookWant, 2.5f, dt);
     // blinks
     b.blinkT -= dt;
@@ -1052,9 +1119,10 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
             // (test hooks starting at a stage: the seedlings its clears would have left)
             if (lines > 0.f && (extraLines(0.0) > 0 || std::getenv("ZEN_LINES_HERE"))) {
                 pond_ = VARIANTS[wrapV(variant_)].pondDepth > 0.f ? smoothstepf(POND_AT, POND_AT + 4.f, lines) : 0.f;
+                corkA_ = smoothstepf(20.5f, 24.f, lines);
                 growth_.assign(sl.size(), 0.f);
                 for (size_t i = 0; i < sl.size(); i++)
-                    growth_[i] = sl[i].birth < 0.f ? 1.f : smoothstepf(sl[i].birth, sl[i].birth + SLOT_SPAN, lines);
+                    growth_[i] = sl[i].birth < 0.f ? 1.f : smoothstepf(sl[i].birth * BIRTH_SCALE, sl[i].birth * BIRTH_SCALE + SLOT_SPAN, lines);
                 const int n = std::min(MAX_SPROUTS, (int)(lines * 0.8f));
                 for (int k = 0; k < n; k++) {
                     float x, z;
@@ -1074,14 +1142,31 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         const float L = linesEased_;
         if (growth_.size() != sl.size()) growth_.assign(sl.size(), -1.f);
         for (size_t i = 0; i < sl.size(); i++) {
-            const float target = sl[i].birth < 0.f ? 1.f : smoothstepf(sl[i].birth, sl[i].birth + SLOT_SPAN, L);
+            const float target = sl[i].birth < 0.f ? 1.f : smoothstepf(sl[i].birth * BIRTH_SCALE, sl[i].birth * BIRTH_SCALE + SLOT_SPAN, L);
             if (growth_[i] < 0.f) growth_[i] = target;
             growth_[i] = approach(growth_[i], target, 2.5f, wdt);
         }
         const float pt = VARIANTS[wrapV(variant_)].pondDepth > 0.f ? smoothstepf(POND_AT, POND_AT + 4.f, L) : 0.f;
         pond_ = approach(pond_, pt, 2.f, wdt);
-        moss_ = smoothstepf(14.f, 50.f, L);
+        moss_ = smoothstepf(6.f, 22.f, L);
         tod_ = todOf(L);
+        // out of the jar: vines up the inside of the glass, the cork pushed off, a sapling out of the neck becoming
+        // a tree over the window, vines spilling down the jar and over the sill, up the frame, over the wall
+        inVine_ = smoothstepf(9.f, 19.f, L);
+        treeG_ = smoothstepf(19.f, 40.f, L);
+        spill_ = smoothstepf(23.f, 31.f, L);
+        sillR_ = lerpf(0.9f, 3.6f, smoothstepf(24.f, 40.f, L));
+        climb_ = 3.2f * smoothstepf(29.f, 40.f, L);
+        wallR_ = 3.3f * smoothstepf(36.f, 50.f, L);
+        hang_ = smoothstepf(37.f, 47.f, L);
+        drape_ = 0.9f * smoothstepf(40.f, 50.f, L);
+        bloomAmt_ = smoothstepf(26.f, 40.f, L);
+        swarm_ = smoothstepf(44.f, 50.f, L);
+        // the cork: pushed up by the sapling, then set down against the jar (eased, never faster than ~4 s)
+        const float corkT = smoothstepf(20.5f, 24.f, L);
+        corkA_ += std::clamp(corkT - corkA_, -wdt * 0.25f, wdt * 0.25f);
+        if (linesShown_ >= 0.f && L < 1.f) corkA_ = corkT;
+        updateCamera(L);
         todName_ = todName(tod_);
     }
     // the jar keeps growing slowly after its scene is complete
@@ -1173,11 +1258,18 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         if (s.age < 0.f || s.landed) continue;
         if (s.age >= s.life) {
             s.landed = true;
+            if (s.target == 1) {
+                // outside: a bloom (the oldest gives way when there are many)
+                if ((int)blooms_.size() < 24) blooms_.push_back(vec4(s.to.x, s.to.y, s.to.z, 0.f));
+                else { blooms_[bloomNext_] = vec4(s.to.x, s.to.y, s.to.z, 0.f); bloomNext_ = (bloomNext_ + 1) % 24; }
+            }
             // (one seed in two takes root; the others sink into the moss)
-            if ((int)sprouts_.size() < MAX_SPROUTS && s.seed < 0.55f) sprouts_.push_back({s.to.x, s.to.z, 0.f, s.seed});
+            else if ((int)sprouts_.size() < MAX_SPROUTS && s.seed < 0.55f) sprouts_.push_back({s.to.x, s.to.z, 0.f, s.seed});
         }
     }
     seeds_.erase(std::remove_if(seeds_.begin(), seeds_.end(), [](const Seed& s) { return s.landed; }), seeds_.end());
+    for (vec4& b : blooms_) b.w += wdt;
+    if (lines_ < linesEased_ - 6.f) { blooms_.clear(); bloomNext_ = 0; }
     for (Sprout& s : sprouts_) s.age += (s.age < 1.f && lines_ < linesEased_ - 6.f) ? -wdt : wdt;
     if (lines_ < linesEased_ - 6.f)
         for (Sprout& s : sprouts_) s.age = std::min(s.age, 1.f) - wdt * 0.6f;
@@ -1333,6 +1425,57 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         set3f(P, "uBridgeCol", bridge_.color);
         set1f(P, "uWorldA", world);
         set1f(P, "uSlow", slow_);
+        {
+            // the cork's pose: up out of the neck, then over and down to lean against the jar's left side
+            const float a = corkA_;
+            const float rise = smoothstepf(0.f, 0.35f, a), u = smoothstepf(0.35f, 1.f, a);
+            const vec3 top(0.f, 0.95f + 0.22f * rise, 0.f), rest(1.35f, 0.11f, 0.95f);
+            vec3 cp = lerp(top, rest, u);
+            cp.y += 0.3f * std::sin(u * PI);
+            set3f(P, "uCorkP", cp);
+            set1f(P, "uCorkR", -0.9f * std::sin(u * PI));
+        }
+        set1f(P, "uTreeG", treeG_);
+        set1f(P, "uInVine", inVine_);
+        set1f(P, "uSpill", spill_);
+        set1f(P, "uSillR", sillR_);
+        set1f(P, "uClimb", climb_);
+        set1f(P, "uWallR", wallR_);
+        set1f(P, "uHang", hang_);
+        set1f(P, "uDrape", drape_);
+        set1f(P, "uBloomAmt", bloomAmt_);
+        {
+            float B[24 * 4] = {};
+            const int n = std::min(24, (int)blooms_.size());
+            for (int i = 0; i < n; i++) {
+                B[i * 4 + 0] = blooms_[i].x; B[i * 4 + 1] = blooms_[i].y; B[i * 4 + 2] = blooms_[i].z;
+                B[i * 4 + 3] = smoothstepf(0.f, 3.f, blooms_[i].w);
+            }
+            set1i(P, "uBlooms", n);
+            glUniform4fv(ugl::U(P, "uBloom"), 24, B);
+        }
+        {
+            // the finale: a cloud of fireflies drifting out of the jar's neck, under the tree and out of the window
+            float S[32 * 4] = {};
+            int n = 0;
+            if (swarm_ > 0.01f && overT_ < 0.f)
+                for (int i = 0; i < 32; i++) {
+                    const float h = hash01(i * 7 + 3), h2 = hash01(i * 13 + 5);
+                    const float ph = std::fmod(time_ * 0.03f * (0.8f + 0.4f * h) + i / 32.f, 1.f);
+                    const float sx = (h - 0.5f) * 2.f;
+                    const vec3 a(sx * 0.3f, 0.95f, (h2 - 0.5f) * 0.4f), b(-0.6f + sx * 1.2f, 2.0f + 0.5f * h2, -0.9f),
+                        c(-1.2f + sx * 1.9f, 1.4f + 1.0f * h, -2.8f), d(-1.2f + sx * 3.2f, 2.2f + h2, -6.5f);
+                    const float t = ph, it = 1.f - t;
+                    vec3 p = a * (it * it * it) + b * (3.f * it * it * t) + c * (3.f * it * t * t) + d * (t * t * t);
+                    p += vec3(std::sin(time_ * 0.7f + i), std::sin(time_ * 0.5f + i * 1.7f), std::cos(time_ * 0.6f + i)) * 0.07f;
+                    const float g = swarm_ * smoothstepf(0.f, 0.08f, ph) * (1.f - smoothstepf(0.75f, 1.f, ph)) *
+                                    (0.45f + 0.55f * smoothstepf(-0.5f, 0.9f, std::sin(time_ * (0.8f + h) + i)));
+                    S[n * 4 + 0] = p.x; S[n * 4 + 1] = p.y; S[n * 4 + 2] = p.z; S[n * 4 + 3] = g;
+                    n++;
+                }
+            set1i(P, "uSwarm", n);
+            glUniform4fv(ugl::U(P, "uSw"), 32, S);
+        }
         ugl::drawFullscreen();
     }
 

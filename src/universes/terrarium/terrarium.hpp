@@ -36,7 +36,7 @@ public:
     };
 
     // The things growing in the jar: a slot each, born at a line of the scene (on the 50-line scale).
-    enum SlotType { S_MOSS = 0, S_FERN, S_MUSH, S_TWIG, S_FLOWER, S_ROSETTE, S_CACTUS, S_PEBBLE, S_COUNT };
+    enum SlotType { S_MOSS = 0, S_FERN, S_MUSH, S_TWIG, S_FLOWER, S_ROSETTE, S_CACTUS, S_PEBBLE, S_ROCK, S_COUNT };
     struct Slot {
         int type;
         float x, z, size, rot, birth, param;
@@ -51,18 +51,25 @@ private:
     // ---- The camera (world: the jar's radius is 1, its foot at the origin, y up).
     vec3 eye_{0, 1, 4}, fwd_{0, 0, -1}, right_{1, 0, 0}, up_{0, 1, 0};
     float tanH_ = 0.25f, aspect_ = 1.78f;
-    void updateCamera();
+    void updateCamera(float lines = 0.f);
     bool toScreen(const vec3& w, vec2& board) const; // a world point -> board units (false: behind the eye)
     vec3 boardRay(vec2 b) const;                     // the view ray through a board point
 
     // ---- Life: fireflies, the beetle, seeds drifting down and the sprouts they leave.
     struct Fly { vec3 home, p; float phase, freq, seed, glow, on; };
     std::vector<Fly> flies_;
-    struct Seed { vec3 p, v, to; float age, life, seed; bool landed; };
+    struct Seed { vec3 p, v, to; float age, life, seed; bool landed; int target; }; // target 0: the jar's soil, 1: a bloom outside
     std::vector<Seed> seeds_;
     struct Sprout { float x, z, age, seed; };
     std::vector<Sprout> sprouts_;
     void addSeed(const vec3& from);
+    bool pickOutside(vec3& at);           // a spot on the sill or the wall already reclaimed, beside the well
+    std::vector<vec4> blooms_;            // the clears' blooms outside the jar: x, y, z, age
+    int bloomNext_ = 0;
+    float corkA_ = 0.f;                   // the cork's pop, eased 0..1
+    // the growth out of the jar (see render)
+    float treeG_ = 0.f, inVine_ = 0.f, spill_ = 0.f, sillR_ = 0.9f, climb_ = 0.f, wallR_ = 0.f, hang_ = 0.f, drape_ = 0.f,
+          bloomAmt_ = 0.f, swarm_ = 0.f;
     bool pickSpot(float& x, float& z, float clearance);
     float soilHeight(float x, float z) const; // the same function as the shader's
     bool blocked(float x, float z, float r) const;
