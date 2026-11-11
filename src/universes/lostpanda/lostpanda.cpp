@@ -1203,6 +1203,10 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
         default: trainX_ = -1000.0; break;
         }
+        { // (testing: ZEN_LOSTPANDA_TRAINX=X holds the train with its rear at screen x X, both cabs in view)
+            static const char* tx = std::getenv("ZEN_LOSTPANDA_TRAINX");
+            if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
+        }
         // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
         const double cT = std::min(P_, C_END);
         C_ += (cT - C_) * (1.0 - std::exp(-(riding ? 2.5 : 1.1) * wdt));
