@@ -1,15 +1,16 @@
-// ORBITAL STATION: a space station builds itself in orbit behind the well, one module docked per cleared line.
+// ORBITAL STATION: a space station builds itself in orbit behind the well, modules docking with every cleared line.
 //
 // It starts as a single crew capsule, its two little wings out, over the planet. Each cleared line flies the next
-// module in: a tug carries it from far off and pushes it to a point off its seat, then it eases home (the robot arm
-// on the first lab reaches out, grapples it and guides it in when it is within reach), the seat lights up as it
-// latches, a few welding sparks fly, and the tug backs off and leaves. Over the song the station grows absurdly:
-// nodes and labs, a cupola, the truss across with its solar wings turning to the sun, the habitat wheel behind the
-// core (a hub, three pairs of spokes, six arcs; complete, it turns), a visiting ship, more truss and arrays,
-// radiators, a dish; then a spindle down to a great hub and the great forest ring, 18 km across, its arcs brought in
-// by squads of giant tugs, forests, meadows, a river, lakes and clouds inside, towns lighting up as it fills; then
-// mirrors around its rim and liners mooring along it, for ever. The camera pulls back with it (a spring in log space):
-// from ten meters around the capsule to some ten kilometers around the ring.
+// modules in (two at first, more later), one after the other; for each, a tug carries it from far off and pushes it
+// to a point off its seat, then it eases home (the robot arm on the first lab reaches out, grapples it and guides it
+// in when it is within reach), the seat lights up as it latches, a few welding sparks fly, and the tug backs off and
+// leaves. Over the song the station grows absurdly: nodes and labs, a cupola, the truss across with its solar wings
+// turning to the sun, the habitat wheel behind the core (a hub, three pairs of spokes, six arcs; complete, it turns),
+// a visiting ship, more truss and arrays, radiators, a dish; then a spindle down to a great hub and the great forest
+// ring, 18 km across, its arcs brought in by squads of giant tugs, forests, meadows, a river, lakes and clouds
+// inside, towns lighting up as it fills; then mirrors around its rim and liners mooring along it, and stages each an
+// order of magnitude bigger (station.cpp) every four lines or so, up to the finale's crossed rings at ~50 lines, one
+// song. The camera pulls back with it (a spring in log space): from ten meters around the capsule to some 400,000 km.
 //
 // The planet below (ray-traced at a reduced resolution): continents, oceans with the sun's glint, clouds and their
 // shadows, the terminator, the cities' lights, the limb's glowing air, an aurora by night; the sun, the moon, the
@@ -1159,10 +1160,14 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
                     plan_[i].fading = true;
                     plan_[i].fadeT = -std::min(1.6f, (maxIdx - i) * 0.04f);
                 }
-            // new lines: the next modules fly in, one after the other (a module still shrinking away waits)
+            // new lines: the next modules fly in, one after the other (a module still shrinking away waits), a big
+            // batch (a Tetris late on: some fifty) closer together so that it is all on its way within ~9 s
+            int n = 0;
+            for (int i = 1; i < want; i++) n += plan_[i].state == 0 ? 1 : 0;
+            const float gap = std::min(0.45f, 9.f / (float)std::max(1, n));
             int k = 0;
             for (int i = 1; i < want; i++)
-                if (plan_[i].state == 0) startFlight(i, k++ * 0.45f);
+                if (plan_[i].state == 0) startFlight(i, k++ * gap);
             built_ = want;
         }
         lines_ = lines;
@@ -1719,7 +1724,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_orbital() {
     static const UniverseEntry e{
-        "ORBITAL STATION", "a space station building itself in orbit, one module docked per cleared line, from a lone capsule to a great forest ring",
+        "ORBITAL STATION", "a space station building itself in orbit, modules docked with every cleared line, from a lone capsule to a great forest ring",
         [] { return std::unique_ptr<Universe>(new OrbitalUniverse()); },
         // Fits most songs; the spacious, steady ones a little better.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.density) + 0.1f * l.dynamics; },

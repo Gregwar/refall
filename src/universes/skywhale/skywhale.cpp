@@ -4,9 +4,9 @@
 // balloons in its wake, on through the stratosphere into orbit, where it glides around the Earth with aurora
 // trailing from its fins, and out to the Moon, low over whose craters it glides at the end, the Earth in its sky.
 //
-// The growth is G = ln(the creature's length in meters): 30 cm at the first line, 1 m (leaving the pond) at ~4
-// lines, a 12 m whale reaching the sea at ~13, 160 m leaving the water at ~27, the clouds (2 km) at ~35, orbit at
-// ~50, out to the Moon from ~65, low over it by ~100, then slower and slower. One mesh for its whole life
+// The growth is G = ln(the creature's length in meters): 30 cm at the first line, 1 m (leaving the pond) at ~3
+// lines, a 12 m whale reaching the sea at ~7.5, 160 m leaving the water at ~14.5, the clouds (1.4 km) at ~18.5,
+// orbit at ~26, out to the Moon from ~33, low over it by ~50 (one song), then slower and slower. One mesh for its whole life
 // (a grid per part: body, tail fin, dorsal, pectorals, pelvics) placed by the vertex shader against the morph (koi ->
 // whale: the slender patterned body thickens, the forked vertical tail turns into horizontal flukes, the pectorals
 // grow into a humpback's long flippers, the markings become soft lights), the swimming wave (side to side for the
@@ -177,11 +177,13 @@ inline float pondR(float x, float z) {
 // The journey: lines -> the creature's length (meters), interpolated in log space; beyond the table, slower and slower.
 struct Stage { float lines, length; };
 const Stage STAGES[] = {
-    // (the whole journey within ~100 lines: the sea by ~13, the clouds ~35, orbit ~50, the Moon growing ahead from ~65,
-    // the glide low over it established by ~100; then slower and slower)
-    {0, 0.3f}, {2, 0.5f}, {4, 0.95f}, {7, 2.5f}, {10, 6.f}, {13, 12.f}, {16, 20.f}, {19, 38.f}, {23, 80.f},
-    {27, 160.f}, {31, 500.f}, {35, 1400.f}, {40, 4000.f}, {45, 1.4e4f}, {50, 6.e4f}, {55, 3.e5f}, {60, 1.4e6f},
-    {65, 7.e6f}, {72, 1.e7f}, {80, 1.4e7f}, {90, 2.2e7f}, {100, 3.3e7f}, {125, 4.2e7f}, {160, 5.e7f},
+    // (the whole journey within ~50 lines, one song: the sea by ~7.5, the clouds ~18.5, orbit ~26, the Moon growing
+    // ahead from ~33, the glide low over it established by ~50; then slower and slower. The pond keeps a little more
+    // than half its old share, the climb through the cumulus (1.4 -> 14 km) a little more too, so that they dissolve
+    // over some 4.5 lines; the long cruise out to the Moon gives up the difference)
+    {0, 0.3f}, {1.5f, 0.5f}, {3, 0.95f}, {4.5f, 2.5f}, {6, 6.f}, {7.5f, 12.f}, {9, 20.f}, {10.5f, 38.f}, {12.5f, 80.f},
+    {14.5f, 160.f}, {16.5f, 500.f}, {18.5f, 1400.f}, {21.5f, 4000.f}, {24, 1.4e4f}, {26, 6.e4f}, {28.5f, 3.e5f},
+    {31, 1.4e6f}, {33.5f, 7.e6f}, {37, 1.e7f}, {41, 1.4e7f}, {45.5f, 2.2e7f}, {50, 3.3e7f}, {62, 4.2e7f}, {80, 5.e7f},
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 constexpr float G_MAX = 17.9f;
@@ -192,7 +194,7 @@ constexpr float G_MAX = 17.9f;
 // out and closes on it, until its craters fill the sky and its horizon flattens under the whale.
 constexpr double R_LUNAR = 8.e8, D_MOON = 3.e10;
 vec3 moonPos() { return vec3(0.f, -(float)R_EARTH, (float)D_MOON); }
-// How far it has gone from circling the Earth to gliding over the Moon (the journey out takes ~35 lines).
+// How far it has gone from circling the Earth to gliding over the Moon (the journey out takes ~17 lines).
 float lunarK(float G) { return smoothstepf(15.95f, 17.3f, G); }
 // The finale proper (its low sun, the Earth rising over the Moon's horizon, the dust).
 float lunarDraw(float G) { return smoothstepf(17.f, 17.3f, G); }
@@ -2343,7 +2345,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         ugl::drawFullscreen();
     }
     // the cumulus field: dissolving into the sea of clouds as it falls away below the climbing whale, one cloud after
-    // another over ~8 lines (~35 .. ~43: by the growth, never by the eye's altitude, which a breach or a dive swings),
+    // another over ~4.5 lines (~18.5 .. ~23: by the growth, never by the eye's altitude, which a breach or a dive swings),
     // each shrinking and sinking into the sea, its tops paling toward the sea's own sunlit tops (never darker)
     constexpr float PUFF_G0 = 7.3f, PUFF_GSPAN = 1.2f, PUFF_GW = 0.55f;
     auto puffFade = [&](const Puff& pf) { return 1.f - smoothstepf(PUFF_G0 + PUFF_GSPAN * pf.grp, PUFF_G0 + PUFF_GSPAN * pf.grp + PUFF_GW, G); };
