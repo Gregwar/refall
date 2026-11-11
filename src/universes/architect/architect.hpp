@@ -46,6 +46,8 @@ private:
         int state = 0;          // 0 not yet, 1 waiting for its crane, 2 on the hook, 3 in place
         float t = 0.f;          // since it landed
         float vis = 0.f;        // 1 shown .. 0 gone (a new game takes the villa down)
+        float wait = 0.f;       // how long it has waited for its crane (earned, not yet lowered)
+        bool direct = false;    // set down without its crane (a backlog caught up): it settles from above
     };
     std::vector<ElState> els_;
     arch_site::Palette pal_;
@@ -58,6 +60,9 @@ private:
     void drawElements();
     void placeDueNow();                            // a still: everything due is in place at once
     float tilesK() const, lightK(int room) const, poolLightK() const, lampK() const;
+    void setDown(int i);                           // an element earned but late: set down at once (it settles from above)
+    bool built() const;                            // every element the lines have earned stands in place
+    float houseK_ = 0.f;                           // the finale (the lights), only once the house is complete
     float hillY_ = 0.f;
 
     // ---- The cranes.
@@ -68,6 +73,7 @@ private:
         vec3 lastT{0, 0, 0}, lastV{0, 0, 0};
         bool primed = false;
         int job = -1, phase = 0;
+        float jobT = 0.f;       // how long the job has run (a watchdog)
         float wait = 0.f, wob = 0.f, wobV = 0.f;
         float erect = 0.f, depart = 0.f;
         vec3 yard{0, 0, -16};
