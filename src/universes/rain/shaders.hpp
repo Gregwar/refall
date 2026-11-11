@@ -28,6 +28,10 @@ uniform float uWell;         // 1: the well's backing and the HUD's veil drawn
 uniform vec3 uBridge;        // the bridge's color
 uniform float uBridgeK;
 uniform float uDim;
+uniform float uStorm;        // the drop's storm (darker between the strikes)
+uniform float uNeonGain;     // the neon signs surging and flickering in the storm
+uniform float uSweepX;       // a colored light sweeping across the wet street
+uniform vec3 uSweepCol;
 uniform float uFlood;        // the storm: the street flooding (more water, stronger reflections)
 uniform float uGust;         // the storm: sheets of rain sweeping across in gusts
 uniform vec2 uSignPos[2];    // the two big blade signs over the heaps (board units): their light falls on the tiles
@@ -57,7 +61,7 @@ vec3 city(vec2 p, float blur) {
     float cl = 0.5 + 0.5 * sin(p.x * 0.13 + uTime * 0.02 + sin(p.y * 0.3 + p.x * 0.05) * 1.5);
     col += uSkyLow * 0.22 * cl * smoothstep(22.0, 6.0, p.y - H);
     // lightning: a wide soft glow inside the clouds, brightest where it struck (the skyline stands out against it)
-    vec3 fl = uFlash * (exp(-abs(p.x - uFlashPos.x) * 0.05) * 0.8 + 0.6 * exp(-length((p - uFlashPos) * vec2(0.09, 0.12)))) * (0.6 + 0.4 * cl);
+    vec3 fl = uFlash * (0.55 + exp(-abs(p.x - uFlashPos.x) * 0.05) * 0.8 + 0.8 * exp(-length((p - uFlashPos) * vec2(0.09, 0.12)))) * (0.6 + 0.4 * cl);
     col += fl * smoothstep(H + 2.0, H + 12.0, p.y);
     // the far skyline
     {
@@ -107,7 +111,7 @@ vec3 city(vec2 p, float blur) {
             float core = smoothstep(0.07 + blur, 0.0, abs(sd + 0.1) - 0.035);
             float letters = step(0.35, fract((p.y - y0) * 1.3)) * smoothstep(0.0, -0.05, sd + 0.12);
             b = mix(b, uNeon[k] * 0.35, smoothstep(0.02, -0.02, sd));
-            b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow;
+            b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow * uNeonGain;
             col += uNeon[k] * 0.15 * exp(-max(sd, 0.0) * 0.7) * uGlow * (1.0 - m);
         } else if (uStyle == 2 && hs > 0.3) {
             // monsoon: strings of paper lanterns across the facades
@@ -251,11 +255,16 @@ void main() {
         vec3 refl = city(q, 0.3 + depth * 0.1);
         float k = mix(mix(0.4, 0.8, pud), 0.95, uFlood);
         col = mix(uStreet, refl * 0.9, k);
+        // the storm: a colored light sweeping across the wet street
+        col += uSweepCol * 0.45 * uStorm * exp(-pow((p.x - uSweepX) * 0.22, 2.0)) * (0.4 + 0.6 * k);
         col += vec3(0.5) * max(rip, 0.0) * 0.12 * uRain;
         col *= mix(1.0, 0.75, smoothstep(0.0, 4.5, depth));
         // the curb's soft line at the far edge
         col = mix(col, mix(uMist, uSkyLow, 0.4) * 0.8, exp(-depth * 6.0) * 0.6);
     }
+    // the storm: dark and moody between the strikes; a strike lights the whole street from the sky
+    col *= 1.0 - 0.28 * uStorm;
+    col += uFlash * 0.12 * (0.5 + 0.5 * clamp((p.y - H) / 20.0, 0.0, 1.0));
     // saturation boost (the drop)
     float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = max(mix(vec3(l), col, uSat), 0.0);
@@ -371,6 +380,7 @@ uniform vec2 uLightPx[2];  // the blade signs (pixels): they light the heaped ti
 uniform vec3 uLightCol[2];
 uniform float uLightR;     // their reach (pixels)
 uniform float uGroundPx;   // the street (pixels): the heaps darken toward it
+uniform vec3 uFlashRim;    // a lightning strike: a rim of cold light on the tiles' upper edges
 uniform vec3 uSheen;   // the street's light caught in the glaze
 uniform vec3 uSheen2;
 uniform float uGlow;
@@ -486,6 +496,10 @@ void main() {
         float line = smoothstep(0.07, 0.0, abs(q.x - rx - 0.04 * sin(q.y * 5.0 + s))) * (1.0 - along * 0.6) * step(0.0, along);
         float tip = smoothstep(0.11, 0.0, length(vec2(q.x - rx, (q.y - head) * 0.8)));
         c = mix(c, c * 0.8 + vec3(0.55), (line * 0.3 * float(along > 0.0 || abs(q.y - head) < 0.1) + tip * 0.6) * on);
+    }
+    if (vP.z < 0.5) {
+        float up = smoothstep(-0.55, -0.95, qs.y) + 0.5 * smoothstep(-0.5, -0.95, qs.x) * smoothstep(0.2, -0.6, qs.y);
+        c += uFlashRim * (0.25 + 0.75 * smoothstep(-0.2 * hs.x, 0.0, sd)) * up * 0.9;
     }
     if (outside) {
         // lit by the street: darker in the shade of the heap, the blade signs' light spilling on it, a rim on the

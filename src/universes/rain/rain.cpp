@@ -591,7 +591,7 @@ void RainUniverse::drawRain(bool) {
     const float s = height_ / 1080.f;
     const float vis = 1.f - smoothstepf(0.f, 0.7f, bridge_.amount);
     if (vis <= 0.01f) return;
-    const vec3 tint = lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.65f);
+    const vec3 tint = lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.65f), vec3(0.85f, 0.92f, 1.f), flash_);
     const float w = std::max(1.f, 1.3f * s);
     const float slowLen = lerpf(1.f, 0.35f, slow_);
     for (const Drop& d : drops_) {
@@ -600,7 +600,7 @@ void RainUniverse::drawRain(bool) {
         const float tx = d.x - d.vx / sp * L, ty = d.y - d.vy / sp * L;
         const vec2 a = px(d.x, d.y), b = px(tx, ty);
         const bool inWell = std::fabs(d.x) < 5.f && d.y < 10.f;
-        float al = d.a * (inWell ? 0.32f : 0.42f) * (0.7f + 0.3f * rain_);
+        float al = d.a * (inWell ? 0.32f : 0.42f) * (0.7f + 0.3f * rain_) * (1.f + 1.4f * flash_);
         al *= 1.f - 0.55f * hudCover(d.x, d.y);
         seg(a.x, a.y, b.x, b.y, d.drip ? w * 1.4f : w, tint, al * vis, 0.f);
     }
@@ -722,10 +722,18 @@ void RainUniverse::eject(int x, int y, int type, float delay) {
     const vec3 c = pieceColor(type);
     b.paint = 1.f;
     b.pr = c.x; b.pg = c.y; b.pb = c.z;
-    // a real ballistic flight of 0.7 to 0.95 s
-    const float T = rng_.range(0.7f, 0.95f), g = 22.f;
+    // a real ballistic flight whose apex clears the heap all along the way (from the band's inner edge to the
+    // target), landing on its top: a low row gets a stronger kick
+    float pathTop = top;
+    for (const Body& o : bodies_)
+        if (!o.thrown && o.solid && o.side == side && dir * o.x < dir * tx + 0.9f) pathTop = std::max(pathTop, o.y + o.half);
+    const float g = 22.f;
+    const float apex = std::max(pathTop, p.y) + rng_.range(2.f, 3.f);
+    const float vy = std::sqrt(2.f * g * (apex - p.y));
+    const float land = top + 0.6f;
+    const float T = vy / g + std::sqrt(2.f * std::max(0.1f, apex - land) / g);
     b.tx1 = (tx - p.x) / T;
-    b.ty1 = (top + 0.7f - p.y + 0.5f * g * T * T) / T;
+    b.ty1 = vy;
     b.w = rng_.range(4.f, 11.f) * (rng_.chance(0.5f) ? -1.f : 1.f);
     bodies_.push_back(b);
 }
@@ -1125,7 +1133,8 @@ void RainUniverse::flushTiles() {
         const vec2 a = px(signPos_[0].x, signPos_[0].y), b = px(signPos_[1].x, signPos_[1].y);
         const float lp[4] = {a.x, a.y, b.x, b.y};
         glUniform2fv(ugl::U(progTile_, "uLightPx"), 2, lp);
-        const vec3 c0 = hex(V.neon[1]) * glow_, c1 = hex(V.neon[0]) * glow_;
+        const vec3 c0 = hex(V.neon[1]) * glow_ * neonGain_, c1 = hex(V.neon[0]) * glow_ * neonGain_;
+        set3f(progTile_, "uFlashRim", vec3(0.75f, 0.83f, 1.f) * flash_);
         const float lc[6] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z};
         glUniform3fv(ugl::U(progTile_, "uLightCol"), 2, lc);
         set1f(progTile_, "uLightR", 6.f * unitPx_);
@@ -1381,7 +1390,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         float target = level_ == 0 ? 0.16f + 0.12f * energy_ : level_ == 1 ? 0.48f : 0.74f;
         target = std::max(target, storm_);
         rain_ = approach(rain_, target, 0.7f, dt);
-        glow_ = approach(glow_, 0.62f + 0.18f * level_ + 0.55f * storm_, 0.8f, dt);
+        glow_ = approach(glow_, 0.62f + 0.18f * level_ + 0.15f * storm_, 0.8f, dt);
         flood_ = approach(flood_, storm_, 0.35f, dt);
         const float kick = std::max(music.kick, kickIn_);
         kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
@@ -1391,14 +1400,29 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     {
         const double beat = music.hasSong ? music.beat : time_ * 2.0;
         const long bar = (long)std::floor(beat / 4.0);
-        if (bar != flashBar_) {
-            flashBar_ = bar;
-            if (storm_ > 0.6f && !f.paused && rng_.chance(0.6f)) {
-                flash_ = std::max(flash_, rng_.range(0.6f, 1.f));
-                flashPos_ = vec2{rng_.range(-1.f, 1.f) * viewH_.x * 0.8f, rng_.range(4.f, 11.f)};
+        const long half = (long)std::floor(beat / 2.0);
+        if (half != flashBar_) {
+            const bool onBar = (half & 1) == 0;
+            flashBar_ = half;
+            if (storm_ > 0.6f && !f.paused && rng_.chance(onBar ? 0.85f : 0.3f)) {
+                strikeT_ = 0.f;
+                strikeAmp_ = rng_.range(0.75f, 1.f) * (onBar ? 1.f : 0.6f);
+                flashPos_ = vec2{rng_.range(-1.f, 1.f) * viewH_.x * 0.8f, rng_.range(5.f, 11.f)};
             }
         }
-        flash_ = approach(flash_, 0.f, 1.4f, dt);
+        strikeT_ += dt;
+        {
+            const float t = strikeT_;
+            const float pulse = std::exp(-t * 7.f) + (t > 0.12f ? 0.65f * std::exp(-(t - 0.12f) * 9.f) : 0.f);
+            flash_ = strikeAmp_ * std::min(1.f, pulse) * smoothstepf(0.f, 0.02f, t) * smoothstepf(0.3f, 0.7f, storm_);
+        }
+        // the neon surging on the beats, flickering now and then; the light sweeping across the street
+        const long bt = (long)std::floor(beat);
+        if (bt != surgeBeat_) { surgeBeat_ = bt; if (storm_ > 0.5f) surge_ = 1.f; }
+        surge_ = approach(surge_, 0.f, 5.f, dt);
+        const float flicker = storm_ > 0.5f && std::fmod(time_ * 7.3f, 3.1f) < 0.12f ? 0.35f : 1.f;
+        neonGain_ = lerpf(1.f, (0.75f + 0.8f * surge_) * flicker, ease(storm_));
+        sweepX_ = (float)std::sin(beat * PI / 8.0) * viewH_.x;
     }
     if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     // the HUD's bottom corner lines: the heaps dim under them
@@ -1460,7 +1484,11 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progBg_, "uStyle", V.style);
         set1f(progBg_, "uSat", 1.f + 0.4f * storm_);
         set1f(progBg_, "uGlow", glow_ * lerpf(1.f, 0.8f, sn));
-        set3f(progBg_, "uFlash", lerp(lerp(hex(V.skyLow), hex(V.neon[2]), 0.4f), vec3(0.85f, 0.85f, 1.f), 0.4f) * (1.1f * flash_));
+        set3f(progBg_, "uFlash", vec3(0.72f, 0.8f, 1.f) * (1.6f * flash_));
+        set1f(progBg_, "uStorm", ease(storm_));
+        set1f(progBg_, "uNeonGain", neonGain_);
+        set1f(progBg_, "uSweepX", sweepX_);
+        set3f(progBg_, "uSweepCol", hex(V.neon[((long)std::floor(time_ / 4.f)) & 1 ? 0 : 1]));
         set2f(progBg_, "uFlashPos", flashPos_.x, flashPos_.y);
         set1f(progBg_, "uRain", rain_);
         set1f(progBg_, "uSlant", V.slant + 0.22f * storm_);
@@ -1468,7 +1496,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uGust", storm_);
         const float sp[4] = {signPos_[0].x, signPos_[0].y, signPos_[1].x, signPos_[1].y};
         glUniform2fv(ugl::U(progBg_, "uSignPos"), 2, sp);
-        const vec3 s0 = hex(V.neon[1]) * (1.f + 0.6f * storm_), s1 = hex(V.neon[0]) * (1.f + 0.6f * storm_);
+        const vec3 s0 = hex(V.neon[1]) * neonGain_, s1 = hex(V.neon[0]) * neonGain_;
         const float sc[6] = {s0.x, s0.y, s0.z, s1.x, s1.y, s1.z};
         glUniform3fv(ugl::U(progBg_, "uSignCol"), 2, sc);
         set1f(progBg_, "uRainT", rainT_);
