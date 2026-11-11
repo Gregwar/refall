@@ -1,6 +1,6 @@
 #pragma once
-// LIBRARY: the blocks are books; every cleared row's books fly, behind the board, to the shelves of a contemporary
-// library atrium that fills floor by floor, in 3D (see library.cpp).
+// LIBRARY: the blocks are books; every cleared line's two books fly, behind the board, to a cosy toon library room
+// seen as a diorama, which fills slowly (see library.cpp).
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -33,27 +33,17 @@ public:
     struct Sprite { float p[4], c[4]; };
     struct Line { float a[4], b[4], c[4]; };
     enum Mesh { MESH_BOX = 0, MESH_CYL = 1, MESH_DOME = 2, MESH_COUNT = 3 };
+    static constexpr int F_COUNT_ = 4; // the features that grow in (world.hpp's Feature)
     enum Mat {
         M_PLASTER = 0, M_WOOD = 1, M_CASE = 2, M_BOOK = 3, M_FLOOR = 4, M_CONCRETE = 5, M_STEEL = 6, M_EMIT = 7, M_WINDOW = 8,
-        M_GLASS = 9, M_SKY = 10, M_FELT = 11, M_CELL = 12
+        M_GLASS = 9, M_SKY = 10, M_TOY = 11, M_CELL = 12, M_BACKDROP = 13, M_ROUNDWIN = 14
     };
     struct Lamp {
         vec3 p, col;
         float r = 0.1f, k = 1.f;     // its glow's radius (0: no glow), intensity
         float range = 0.f;           // > 0: a light for the shading
-        int level = 0;               // the floor it lights (on once that floor fills)
+        int level = 0;               // 0: always; 1: the mezzanine's, 2: the low bookcase's (on once it is there)
     };
-    // A book of a stack, in a cell's units (the cell spans -0.5..0.5, its front at z = 0).
-    struct BookDef {
-        float cx, cy;     // center
-        float hx, hy, hd; // half sizes: across, up, depth
-        float z;          // its spine's z (a hair in or out)
-        bool lying;
-        float tone;       // its shade of the piece's color
-        int style;        // the spine's design
-        float seed;
-    };
-    struct Stack { int n = 0; BookDef b[5]; float top = 0.f; };
 
 private:
     // ---- The world (world.cpp).
@@ -66,43 +56,68 @@ private:
     void cyl(const vec3& c, float r, float halfH, const vec3& col, int mat, float p0 = 0, float seed = 0) {
         put(MESH_CYL, c, vec3(r, 0, 0), vec3(0, halfH, 0), vec3(0, 0, r), col, mat, p0, 0, 0, seed);
     }
+    // a round toy shape (two hemispheres); glow > 0: a globe lit from within
+    void sphere(const vec3& c, float r, const vec3& col, float glow) {
+        put(MESH_DOME, c, vec3(r, 0, 0), vec3(0, r, 0), vec3(0, 0, r), col, M_TOY, glow);
+        put(MESH_DOME, c, vec3(r, 0, 0), vec3(0, -r, 0), vec3(0, 0, r), col, M_TOY, glow);
+    }
     void lamp(const vec3& p, const vec3& col, float r, float k, float range, int level);
     std::vector<Inst> stat_[MESH_COUNT], glass_;
     std::vector<Inst>* putTo_ = nullptr; // null: the static lists
-    float stLevel_ = 0.f;                // the floor the builder is placing (for its lights)
+    float stLevel_ = 0.f;                // the level the builder is placing (its lights; -1: no shelf wave)
+    float stFeat_ = -1.f, stPivot_ = 0.f; // the feature the builder is placing (-1: none) and the height it grows from
     std::vector<Lamp> lamps_;
     bool worldDirty_ = true;
     GLuint statVao_[MESH_COUNT] = {}, statVbo_[MESH_COUNT] = {};
     size_t statCount_[MESH_COUNT] = {};
     GLuint glassVao_ = 0, glassVbo_ = 0;
 
-    // ---- The stacks: one per cell, drawn from a seed.
-    static Stack makeStack(uint32_t seed);
+    // ---- The board's cells' seeds (a book's look follows its cell).
     uint32_t seedGrid_[22][10] = {};
     int8_t typeGrid_[22][10];
     uint32_t spawnN_ = 1;
     uint32_t cellSeed(int x, int y, int type);
-    void pushStack(std::vector<Inst>& out, const Stack& s, int type, const vec3& origin, const vec3& along, const vec3& up, const vec3& out_,
-                   float k, float grow, float glow, float fade, bool calm = false);
     // a cell of the board: one clean block, a bound volume (spine toward us)
     void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, float seed);
 
-    // ---- The collection: every cleared cell's stack, shelved in the order they came.
+    // ---- The collection: two big books for every cleared line, placed in the order they came along runs (a shelf,
+    // or a row of piles on the floor), never moved again.
+    struct Run {
+        vec3 start, along, out; // the front edge at the run's start, at the shelf's top; along the run; into the room
+        float len = 0.f;
+        int kind = 0;           // 0: a shelf (books standing), 1: a row of piles (books lying)
+        int level = 0;          // 0 / 1: the mezzanine (its lights, the wave)
+        int feat = -1;          // the feature it needs (grown in when the run is first used)
+        float maxH = 0.9f;      // the tallest book it takes (a shelf's clearance)
+    };
+    std::vector<Run> runs_;
+    void buildRuns();
+    int runIdx_ = 0, pileN_ = 0;
+    float runOff_ = 0.f, pileH_ = 0.f;
     struct Group {
         int type = 0;
         uint32_t seed = 0;
-        int slot = 0;
-        float t0 = 0.f;     // world time it starts to grow on its shelf (-1: there already)
+        float t0 = 0.f;      // world time it starts to settle on its shelf (1e9: in flight)
+        vec3 c, along, out;  // its center and frame, full size
+        float hx = 0.1f, hy = 0.3f, hd = 0.2f; // half sizes: along, up, depth (a lying book: its length along)
+        bool lying = false;
+        int level = 0, style = 0;
+        float tone = 1.f;
     };
     std::vector<Group> groups_;
-    int nextSlot_ = 0;
-    // the settled stacks' instances, kept in their own buffer (uploaded only when a stack settles)
+    bool place(Group& g); // its place: the next free one (false: the room is full)
+    // the settled books' instances, kept in their own buffer (uploaded only when a book settles)
     std::vector<Inst> shelfInst_;
     size_t settled_ = 0;
     bool shelfDirty_ = true;
     GLuint shelfVao_ = 0, shelfVbo_ = 0;
-    void shelve(int type, uint32_t seed, float delay);
-    // a cleared cell's books flying to their shelf, behind the well: launched from the cell's place on screen at a
+    bool shelve(int type, uint32_t seed);
+    void pushBook(std::vector<Inst>& out, const Group& g, const vec3& c, const vec3& along, const vec3& outD, float k, float grow,
+                  float glow, int index);
+    // features: unlocked when their first run is used, then grown in
+    bool featUnlocked_[F_COUNT_] = {};
+    float featGrow_[F_COUNT_] = {};
+    // a cleared line's books flying to their place, behind the well: launched from the cell's place on screen at a
     // depth behind the board, only ever going deeper
     struct Flight {
         int group = -1;
@@ -111,10 +126,10 @@ private:
         bool launched = false;
         vec3 p0, out0;
         float k0 = 0.f;
+        float spin = 0.f;
     };
     std::vector<Flight> flights_;
     void fly(int type, uint32_t seed, const vec3& board, float delay);
-    void slotFrame(int slot, vec3& origin, vec3& along, vec3& out) const;
     int hookLines_ = 0;
     bool hookPlaced_ = false;
     // a cleared cell, swelling into light in the well
@@ -122,12 +137,11 @@ private:
     std::vector<Fx> fx_;
     struct Tumble { int type; uint32_t seed; vec3 p, v; float t, delay, rotV; };
     std::vector<Tumble> tumbles_;
-    float levelOn_[8] = {}; // each floor's lights (on once it starts to fill)
+    float levelOn_[8] = {}; // the lights: 0 the room's, 1 the mezzanine's, 2 the low bookcase's
 
     // ---- Loose motes (dust in the daylight).
     struct Mote { vec3 p; float seed; };
     std::vector<Mote> motes_;
-
     // ---- The board: the stacks in the well.
     void buildBoard(const Game& g);
     vec3 pieceColor(int type) const;
@@ -140,8 +154,6 @@ private:
     mat4 vpB_, vpW_;            // the board's (absolute), the world's (relative to eyeW_)
     vec3 eyeB_, eyeW_, fwdW_, rightW_, upW_, targetW_;
     float tanW_ = 0.47f, aspect_ = 1.f, camD_ = 4.f;
-    vec3 camT_{0.f}, camTv_{0.f};
-    float camDs_ = -1.f, camDv_ = 0.f;
     vec2 viewC_, viewH_;        // the board plane's view (for the veil)
     bool bare_ = false; // a break's frame: the room alone (no well, no gauge)
 
@@ -185,8 +197,9 @@ private:
     int variant_ = 0;
     struct Palette {
         vec3 piece[7];
-        vec3 oak, wall, slab, floor, steel, felt, paper, skyA, skyB, outside, ambSky, ambGround, key, led;
-        vec3 veil, ink, accent, halo;
+        vec3 oak, bay, wall, wall2, cut, floor, floorB, steel, paper, skyA, skyB, ambSky, ambGround, key, led;
+        vec3 chair, rug, rug2, leaf, pot, veil, veilTop, card, cardEdge, line, rim, cloud, cloudShade;
+        vec3 ink, accent, halo;
         float night = 0, keyK = 1, ledK = 1, exposure = 1, floorKind = 0;
         bool light = true;
     };
