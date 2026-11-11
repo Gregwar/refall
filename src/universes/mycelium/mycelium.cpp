@@ -1782,10 +1782,21 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progCloud_, "uCamU", camU_);
             set3f(progCloud_, "uCloudLit", pal_.cloudLit);
             set3f(progCloud_, "uCloudShade", pal_.cloudShade);
+            set1f(progCloud_, "uDepthMax", 2000.f * camD_);
             glBindVertexArray(cloudVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cloudVbo_);
             glBufferData(GL_ARRAY_BUFFER, cinst_.size() * sizeof(float), cinst_.data(), GL_STREAM_DRAW);
+            // the colors far to near without writing depth (far puffs share nearly the same compressed depth: a near
+            // one must not be rejected by a far one drawn before it), then their depth alone, so the threads and the
+            // lights drawn after stay behind them
+            glDepthMask(GL_FALSE);
+            glDepthFunc(GL_LEQUAL);
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+            glDepthMask(GL_TRUE);
+            glDepthFunc(GL_LESS);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(cinst_.size() / 8));
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         }
     }
     {
