@@ -1399,7 +1399,6 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     // soft lightning in the clouds, now and then on a bar line (only in the storm)
     {
         const double beat = music.hasSong ? music.beat : time_ * 2.0;
-        const long bar = (long)std::floor(beat / 4.0);
         const long half = (long)std::floor(beat / 2.0);
         if (half != flashBar_) {
             const bool onBar = (half & 1) == 0;
