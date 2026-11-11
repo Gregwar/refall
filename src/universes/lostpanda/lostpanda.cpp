@@ -90,6 +90,8 @@ int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT;
 
 // ---- The way home: one continuous world. The cub's place along it is its world x (board units).
 constexpr int STAGES = 8;
+// (lines on the 50-line scale: paceLines() rescales the real lines to the song's length, 50 for a 3:20 song; the
+// subway's timetable and the ride stay on the clock)
 const int LINES_AT[STAGES + 1] = {0, 7, 13, 19, 25, 32, 38, 45, 50};
 constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
 const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
@@ -1113,7 +1115,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     float speed = 0.f;
     trainClock_ += wdt;
     {
-        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_);
+        // (on the 50-line scale: the song's pace, paceLines; a break: the way as it was)
+        const float lines = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             // a new game: back to the rainy street (the world dimmed by the game over hides the jump)
             placed_ = false;

@@ -133,6 +133,8 @@ private:
     std::vector<Flight> flights_;
     void fly(int type, uint32_t seed, const vec3& board, float delay);
     int hookLines_ = 0;
+    float bookAcc_ = 0.f;   // the books the lines have earned so far (a fraction: the song's pace)
+    int booksFor();         // how many books the next cleared line sends (BOOKS_LINE x the pace, about)
     bool hookPlaced_ = false;
     // a cleared cell, swelling into light in the well
     struct Fx { int type; uint32_t seed; vec3 p; float t; };

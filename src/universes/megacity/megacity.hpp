@@ -163,8 +163,8 @@ private:
     uint64_t citySeed_ = 0;
     bool cityDirty_ = true;
     void uploadCity();
-    float growthOf(int lines) const;    // lines -> G = ln(the city's radius)
-    int lines_ = 0, linesShown_ = -1;
+    float growthOf(float lines) const;    // lines -> G = ln(the city's radius)
+    float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;   // the growth shown chases its target
     float gBonus_ = 0.f;                             // the drops' extra growth
     float orbit_ = 0.f;                              // past the planet covered: the orbital ring's construction 0..1

@@ -61,6 +61,7 @@ Renderer::Slot Renderer::make(int index, const SongLook& look, int level, float 
     s.index = std::clamp(index, 0, universes::count() - 1);
     s.u = universes::entry(s.index).make();
     if (!s.u->init(w_, h_)) std::fprintf(stderr, "[gl] warning: universe %s init reported a GL error\n", universes::entry(s.index).name);
+    s.u->setSceneLines(sceneLinesFor(look));
     s.u->setSong(look, 0.f);
     s.u->setLevel(level, energy, 0.f, 0.f);
     if (bonus_) s.u->setBonus(true);
@@ -117,7 +118,9 @@ void Renderer::changeUniverse(int index, const SongLook& look, int level, float 
 
 void Renderer::setSong(const SongLook& look, float seconds) {
     finishChange();
-    if (cur_.u) cur_.u->setSong(look, seconds);
+    if (!cur_.u) return;
+    cur_.u->setSceneLines(sceneLinesFor(look)); // the same universe into the next song: on at its pace
+    cur_.u->setSong(look, seconds);
 }
 
 int Renderer::universe() const { return next_.u ? next_.index : cur_.index; }

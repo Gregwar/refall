@@ -10,7 +10,10 @@
 //
 // Adding a universe: see docs/adding-a-universe.md (a folder in src/universes/ and one line in
 // src/universes/registry.def, with its weight).
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -88,8 +91,21 @@ struct SongLook {
     float brightness = 0.5f, bassWeight = 0.5f, airWeight = 0.5f, dynamics = 0.5f, density = 0.5f;
     int variant = -1;       // forced variant index (--universe NAME:VARIANT), -1: the universe picks one
     int avoidVariant = -1;  // a variant not to pick (the one on screen when a universe follows itself), -1: none
+    float duration = 0;     // the song's length in seconds (0: unknown)
+    float remaining = 0;    // seconds of the song left when this look is handed over (a universe coming in mid-song)
 };
 SongLook makeSongLook(const Footprint* fp, uint64_t seed); // fp null: no song (loading)
+
+// The pace of the progression universes (GIANT TREE, MEGACITY, LIBRARY...): they complete their scene in
+// LINES_PER_MINUTE lines per minute of song, so one song of normal play sees the whole journey whatever its length.
+constexpr float LINES_PER_MINUTE = 15.f;
+// Their tables are tuned on this many lines (a 3:20 song); a universe scales its lines by SCENE_REF_LINES / sceneLines().
+constexpr float SCENE_REF_LINES = 50.f;
+constexpr float SCENE_LINES_MIN = 20.f, SCENE_LINES_MAX = 100.f;
+// The lines a scene takes for the time left in the song (look.remaining, else its duration): LINES_PER_MINUTE x
+// minutes, clamped to [SCENE_LINES_MIN, SCENE_LINES_MAX]; SCENE_REF_LINES when the length is unknown (no song,
+// the viewer). Test hooks: ZEN_SCENE_LINES=N forces N, ZEN_LINES_PER_MINUTE=R changes the pace.
+float sceneLinesFor(const SongLook& look);
 
 // How a universe looks from afar, used by the host to color transition fronts and to bridge very different
 // brightnesses (paper white vs CRT black). Linear RGB.
@@ -183,16 +199,50 @@ public:
     virtual int variant() const { return 0; }
     // Testing: force the next slow-motion / Tetris animation (index in its pool, -1 = random).
     virtual void forceFx(int slow, int tetris) { (void)slow; (void)tetris; }
+    // The host, before setSong: the lines this universe's scene takes from now on (sceneLinesFor). A new target
+    // (the next song in the same universe) applies from the lines played so far: what grew stays where it is.
+    void setSceneLines(float lines) { pendingScene_ = std::max(1.f, lines); }
 
 protected:
     int width_ = 1, height_ = 1;
     // The lines cleared since this universe came in, for the universes that grow with the play: one coming in
     // mid-game starts small and grows with the lines played in it; a new game starts it again from nothing.
+    // (Test hook: ZEN_LINES_HERE=N holds it at N whatever the game does: exact stills of a stage.)
     int linesHere(const Game& g) {
+        static const int forced = std::getenv("ZEN_LINES_HERE") ? std::atoi(std::getenv("ZEN_LINES_HERE")) : -1;
+        if (forced >= 0) return forced;
         if (lineBase_ < 0 || g.lines() < lineBase_) lineBase_ = g.lines();
         return g.lines() - lineBase_;
     }
+    // The lines the scene completes in (LINES_PER_MINUTE x the song's minutes, 20..100; 50 for a 3:20 song).
+    float sceneLines() const { return pendingScene_ > 0.f ? pendingScene_ : sceneLines_; }
+    // linesHere() on the SCENE_REF_LINES scale the progression tables are written in: SCENE_REF_LINES at scene
+    // completion. Each line counts SCENE_REF_LINES / sceneLines() (half as much in a 100-line scene, 2.5 times in a
+    // 20-line one). `extra` are real lines added on top (test hooks). When the target changes (a new song), the
+    // progress made so far is kept and the new pace applies to the lines that follow (nothing jumps). A new game
+    // starts it again from nothing.
+    float paceLines(const Game& g, float extra = 0.f) {
+        const int here = linesHere(g);
+        if (here < paceLast_) { paceLine_ = 0; paceAt_ = 0.f; }
+        paceLast_ = here;
+        if (pendingScene_ > 0.f) {
+            if (paceStarted_) { // the lines so far at the old pace, the next ones at the new (the first call: all at this one)
+                paceAt_ += (here - paceLine_) * SCENE_REF_LINES / sceneLines_;
+                paceLine_ = here;
+            }
+            sceneLines_ = pendingScene_;
+            pendingScene_ = -1.f;
+        }
+        paceStarted_ = true;
+        const float v = std::max(0.f, paceAt_ + (here - paceLine_ + extra) * SCENE_REF_LINES / sceneLines_);
+        return std::round(v * 1024.f) / 1024.f; // (exactly 50 at the target, not 49.99998)
+    }
+    // Real lines -> the SCENE_REF_LINES scale (a span or a count of lines at the current pace).
+    float paceScale() const { return SCENE_REF_LINES / sceneLines(); }
 
 private:
     int lineBase_ = -1;
+    float sceneLines_ = SCENE_REF_LINES, pendingScene_ = -1.f, paceAt_ = 0.f;
+    int paceLine_ = 0, paceLast_ = 0;
+    bool paceStarted_ = false;
 };

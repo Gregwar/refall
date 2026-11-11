@@ -92,15 +92,25 @@ When a universe starts to feel busy, remove elements instead of tuning them. Whe
 render two or three alternatives side by side and let the player pick.
 
 **Progression universes.** A universe that grows or travels with the lines cleared in the game (`linesHere(g)`:
-GIANT TREE, MYCELIUM, MEGACITY, ORBITAL STATION, LIBRARY, SKY WHALE, TIDE POOL...) completes its scene, its most
-advanced stage, in about **50 lines**: one song of normal play (a song is some 30 to 50 lines; the default playlist
-averages 3:20). Spread the stages over 0 to 50 so the early and middle ones are enjoyed too, with something visibly
-new every 5 to 10 lines; do not just squeeze the end. After 50 lines slow growth or variation is fine, but no new
-major stage should need more. Where it fills a space (shelves, a village), size the space or the share of each line
-so it is full around 50 lines without looking sparse early or crammed late. Each line carries a big step, so ease it:
-the growth springs smoothly to its target, and a cap on its speed keeps a Tetris calm (a breath longer, never a
-jolt). Extra growth from other sources (a drop's bonus, a Tetris) stays proportionate: it never skips a stage. A
-`ZEN_<ID>_LINES=N` test hook (and `ZEN_GROW_RATE=R`) lets you check the stills at 0, 10, 20, 30, 40 and 50 lines.
+GIANT TREE, MYCELIUM, MEGACITY, ORBITAL STATION, LIBRARY, SKY WHALE, TIDE POOL, LOST PANDA...) completes its scene,
+its most advanced stage, in one song of normal play, whatever the song's length: at `LINES_PER_MINUTE` (15, in
+`src/universe.hpp`) lines a minute of song, clamped to 20..100 lines (50 for a 3:20 song, the default playlist's
+average; 50 too when the length is unknown: no song, the viewer). A universe coming in mid-song paces on the time
+left; one following itself into the next song keeps its progress and goes on at the new song's pace. Write the tables
+for **50 lines** (`SCENE_REF_LINES`) and read the lines through `paceLines(g)`: linesHere() rescaled so that scene
+completion is always 50 (a float; `sceneLines()` is the real target, `paceScale()` the factor). Spread the stages
+over 0 to 50 so the early and middle ones are enjoyed too, with something visibly new every 5 to 10 lines; do not
+just squeeze the end. After 50 slow growth or variation is fine, but no new major stage should need more. Where it
+fills a space (shelves, a village), size the space or the share of each line so it is full around 50 without looking
+sparse early or crammed late; if what fills it comes from the lines themselves (LIBRARY's books), scale each line's
+share by `paceScale()` rather than inventing things. Each line carries a big step (up to 2.5 times bigger in a short
+song), so ease it: the growth springs smoothly to its target, and a cap on its speed keeps a Tetris calm (a breath
+longer, never a jolt); if a cap would stop a short song from reaching the end in time, let it rise with
+`paceScale()`, a little. Extra growth from other sources (a drop's bonus, a Tetris) stays proportionate: it never
+skips a stage. A `ZEN_<ID>_LINES=N` test hook (real lines; and `ZEN_GROW_RATE=R`) lets you check the stills;
+`ZEN_SCENE_LINES=N` forces the target (check 20, 50 and 100: the final stage at the target, half of it looking like
+half), `ZEN_LINES_PER_MINUTE=R` changes the pace, and `ZEN_LINES_HERE=N` holds linesHere() at N whatever the review
+shot's bot clears (exact stills).
 
 **Typography.** One or two fonts that fit the world, under the SIL Open Font License, placed in
 `src/universes/<id>/embed/` with their license text next to the universe (`src/universes/<id>/OFL-*.txt`).

@@ -43,9 +43,9 @@ private:
     double creep_ = 0.0;          // the slow drift inward, always on
     double bonus_ = 0.0;          // the Tetrises' plunges
     double breath_ = 0.0;         // a slow in and out of the zoom
-    int lines_ = 0, linesShown_ = -1;
+    float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     bool zSet_ = false;
-    double zTarget(int lines) const;
+    double zTarget(float lines) const;
     double debugZ_ = -1.0;        // ZEN_TIDEPOOL_DEPTH: a fixed depth (testing)
     vec2 focus_{15.f, -0.8f};     // board units: where the zoom dives
     std::string scaleText_, stageName_;

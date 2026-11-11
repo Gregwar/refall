@@ -169,7 +169,8 @@ constexpr float CLOUD_Y = 1900.f;    // the cloud layer (meters)
 constexpr float CAM_AZ = 0.3f;       // the camera's side of the tree
 
 // The journey: lines -> the trunk's height (meters), interpolated in log space; beyond the table, slower and slower.
-// The whole journey fits in some 50 lines (one song): something new every five lines or so, the meadow's first
+// The whole journey fits in some 50 lines of this scale (scene completion: paceLines() rescales the real lines
+// to the song's length, 50 for a 3:20 song): something new every five lines or so, the meadow's first
 // stages a little quicker (some 2x taller a line), then about 1.4x a line from the clouds on.
 struct Stage { float lines, height; };
 const Stage STAGES[] = {
@@ -372,8 +373,8 @@ GiantTreeUniverse::~GiantTreeUniverse() {
 // =====================================================================================================
 
 // Lines -> G: the journey's table, then a slow climb on (some 30% taller every ten lines), up to G_MAX.
-float GiantTreeUniverse::growthOf(int lines) const {
-    const float l = (float)std::max(0, lines);
+float GiantTreeUniverse::growthOf(float lines) const {
+    const float l = std::max(0.f, lines);
     float h;
     if (l >= STAGES[STAGE_COUNT - 1].lines) {
         h = std::log(STAGES[STAGE_COUNT - 1].height) + (l - STAGES[STAGE_COUNT - 1].lines) * 0.026f;
@@ -1067,7 +1068,8 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the growth (a new game sprouts a new seed).
     {
-        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_); // (a break: the growth as it was)
+        // (on the 50-line scale: the song's pace, paceLines; a break: the growth as it was)
+        const float lines = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
         if (treeSeed_ == 0) { treeSeed_ = seed_ ? seed_ : 1; treeDirty_ = true; }
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             treeSeed_ = splitmix64(treeSeed_ + 0x9E37ull);

@@ -122,10 +122,17 @@ constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (th
 
 // Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
 // ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
-// Each cleared line brings three big books (so some 50 lines, one song, fill the room), launched from these three
-// cells of the row.
+// Each cleared line brings three big books at the reference pace (so some 50 lines, one song of 3:20, fill the room),
+// launched from three of the row's cells (1, 5, 8). The pace follows the song's length (sceneLines()): a line brings
+// BOOKS_LINE x 50 / sceneLines() books on average (1.5 in a 100-line scene, 7.5 in a 20-line one; a fraction carried
+// to the next line), each from its own cell of the row, so every book still comes from a cleared line.
 constexpr int BOOKS_LINE = 3;
-constexpr int BOOK_CELL[BOOKS_LINE] = {1, 5, 8};
+// The k cells of a row that send its books, spread along it (k = 3: cells 1, 5 and 8).
+bool bookCell(int x, int k) {
+    for (int j = 0; j < k; j++)
+        if (x == (int)((j + 0.5f) * Game::W / k)) return true;
+    return false;
+}
 
 int startLines() {
     static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
@@ -617,7 +624,7 @@ bool LibraryUniverse::place(Group& g) {
         const Run& R = runs_[runIdx_];
         if (runOff_ == 0.f && pileN_ == 0 && std::getenv("ZEN_LIBRARY_RUNS")) // (a test hook: where each run starts)
             std::fprintf(stderr, "[library] run %d (kind %d, feature %d) starts with book %zu (line %.1f)\n", runIdx_, R.kind, R.feat,
-                         groups_.size(), groups_.size() / (float)BOOKS_LINE);
+                         groups_.size(), groups_.size() / (BOOKS_LINE * paceScale()));
         if (R.feat >= 0) featUnlocked_[R.feat] = true;
         if (R.kind == 0) {
             if (runOff_ + t <= R.len) {
@@ -707,8 +714,15 @@ void LibraryUniverse::fly(int type, uint32_t seed, const vec3& board, float dela
     flights_.push_back(fl);
 }
 
+int LibraryUniverse::booksFor() {
+    const float before = bookAcc_;
+    bookAcc_ += BOOKS_LINE * paceScale();
+    return std::clamp((int)std::floor(bookAcc_ + 1e-4f) - (int)std::floor(before + 1e-4f), 0, Game::W);
+}
+
 void LibraryUniverse::resetGrowth() {
     groups_.clear();
+    bookAcc_ = 0.f;
     flights_.clear();
     runIdx_ = 0;
     runOff_ = 0.f;
@@ -747,6 +761,13 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // rows bottom first, each left to right: the order they go on the shelves
         std::sort(cs.begin(), cs.end(), [](const GameEvent::CellInfo& a, const GameEvent::CellInfo& b) { return a.y != b.y ? a.y > b.y : a.x < b.x; });
         bool full[Game::H] = {};
+        // each row's share of books (the song's pace), and the gap between their launches: a Tetris's dozen spread
+        // over two seconds; a bigger batch (a short song's Tetris: up to thirty) closer together, within 2.5 s
+        int rowBooks[Game::H] = {}, total = 0;
+        for (auto& c : cs)
+            if (!full[c.y]) { full[c.y] = true; rowBooks[c.y] = booksFor(); total += rowBooks[c.y]; }
+        for (bool& b : full) b = false;
+        const float gap = std::min(0.16f, 2.5f / (float)std::max(1, total));
         int i = 0;
         for (auto& c : cs) {
             const int type = std::clamp(c.type, 0, 6);
@@ -754,9 +775,8 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             full[c.y] = true;
             const vec3 bp = layout::cellPos((float)c.x, (float)c.y);
             if (c.y >= Game::HIDDEN) fx_.push_back({type, sd, bp, 0.f});
-            // each line's three books leave from three of its cells, in its pieces' colors
-            for (int k = 0; k < BOOKS_LINE; k++)
-                if (c.x == BOOK_CELL[k]) fly(type, sd, bp, 0.1f + 0.16f * i++); // (a Tetris's twelve: spread over two seconds)
+            // each line's books leave from some of its cells, in its pieces' colors
+            if (bookCell(c.x, rowBooks[c.y])) fly(type, sd, bp, 0.1f + gap * i++);
         }
         // the seeds follow the rows down
         int dst = Game::H - 1;
@@ -1196,15 +1216,18 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         if (!hookPlaced_) {
             hookPlaced_ = true;
             Rng hr(0xB00C5ull);
-            for (int l = 0; l < hookStart * BOOKS_LINE; l++)
+            int books = 0;
+            for (int l = 0; l < hookStart; l++) books += booksFor();
+            for (int l = 0; l < books; l++)
                 if (shelve(hr.irange(0, 6), (uint32_t)hr.next())) groups_.back().t0 = -100.f;
             for (int k = 0; k < F_COUNT_; k++)
                 if (featUnlocked_[k]) featGrow_[k] = 1.f;
         }
         while (hookLines_ < hookRate) {
             hookLines_++;
-            for (int k = 0; k < BOOKS_LINE; k++)
-                fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)BOOK_CELL[k], (float)(Game::H - 1)), 0.1f + 0.16f * k);
+            const int k = booksFor();
+            for (int x = 0, j = 0; x < Game::W; x++)
+                if (bookCell(x, k)) fly(rng_.irange(0, 6), (uint32_t)rng_.next(), layout::cellPos((float)x, (float)(Game::H - 1)), 0.1f + 0.16f * j++);
         }
         grow_ = (float)lines_;
     }

@@ -138,7 +138,8 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 constexpr double STAGE_OCT = 4.0;                 // octaves per stage (16 times smaller each)
 constexpr int STAGES = 15;
 constexpr double LOOP = STAGE_OCT * STAGES;       // a loop of the fifteen stages: back to the whole universe
-// The pace: the strings, the last stage, at about 50 lines of a game, one song. A line is 1.1 octave, a Tetris its
+// The pace: the strings, the last stage, at about 50 lines of a game, one song (lines on the 50-line scale:
+// paceLines() rescales the real lines to the song's length, 50 for a 3:20 song). A line is 1.1 octave, a Tetris its
 // four lines (4.4 octaves, about a stage), and the slow drift adds some 0.3 octave a minute: a stage every ~3.5 lines
 // in a typical game (the planet at ~11, the rock pool at ~22, the strings at ~50, the universe again at ~54).
 // (Rather than shorter stages: their worlds nest 16 times smaller each (shaders.hpp), and a stage of 2 octaves would
@@ -370,7 +371,7 @@ TransitionHints TidePoolUniverse::hints() const {
     return h;
 }
 
-double TidePoolUniverse::zTarget(int lines) const { return zBase_ + lines * STEP + bonus_ + creep_ + breath_; }
+double TidePoolUniverse::zTarget(float lines) const { return zBase_ + lines * STEP + bonus_ + creep_ + breath_; }
 
 // =====================================================================================================
 // Game events
@@ -902,7 +903,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The dive: the game's lines -> the depth (a new game starts again from the rock pool).
     {
-        const int lines = f.bare ? lines_ : linesHere(game) + extraLines(time_);
+        // (on the 50-line scale: the song's pace, paceLines; a break: the dive as it was)
+        const float lines = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
         if (linesShown_ >= 0 && lines < lines_ && !game.over()) {
             // a new game: start from the universe the last one pulled back to
             zBase_ = std::floor(z_ / LOOP + 0.02) * LOOP;
@@ -921,7 +923,9 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         // faster than a third of an octave a second (the far edge of the screen then moves a few pixels a frame), and
         // it changes smoothly: a clear is a soft push, a Tetris a long glide down through a whole scale
         const bool back = overT_ >= 0.f;
-        const double vmax = back ? 2.4 : 0.36;
+        // (at a third of an octave a second the strings take some 2.6 minutes at least: a song shorter than ~2:45
+        // has a scene of fewer than 50 lines, and the cap rises with its pace, up to twice, so it can keep up)
+        const double vmax = back ? 2.4 : 0.36 * std::clamp((double)paceScale(), 1.0, 2.0);
         const double want = std::clamp((target - z_) * (back ? 1.2 : 0.9), -vmax, vmax);
         zVel_ += (want - zVel_) * (1.0 - std::exp(-2.2 * wdt));
         z_ += zVel_ * wdt;

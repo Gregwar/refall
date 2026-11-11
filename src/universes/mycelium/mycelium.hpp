@@ -32,7 +32,7 @@ inline vec3 normalAt(double x, double z) {
     const double a = r / R_EARTH;
     return vec3((float)(x / r * std::sin(a)), (float)std::cos(a), (float)(z / r * std::sin(a)));
 }
-float growthOf(int lines);  // lines -> G
+float growthOf(float lines);  // lines (on the 50-line scale) -> G
 } // namespace myc
 
 // The network, grown once per game from a seed (network.cpp). Every thread carries the growth at which it is born,
@@ -83,7 +83,7 @@ private:
     uint64_t netSeed_ = 0;
     bool netDirty_ = true;
     void uploadNet();
-    int lines_ = 0, linesShown_ = -1;
+    float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f, gBonus_ = 0.f;
     float spurt_ = 0.f, burst_ = 0.f;
     float newT_ = 99.f;   // a new game: a new spore
