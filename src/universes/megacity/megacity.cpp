@@ -7,8 +7,9 @@
 // tether rising into orbit, the continents, the oceans, until the planet is one glowing ball of lights under an
 // orbital ring being built around it.
 //
-// The lines drive a frontier F (meters, a table interpolated in log space: the first towers at ~21 lines, megatalls
-// from ~48, arcologies from ~58, the continent from ~70, the planet covered at 86, then the ring, done by ~100); each place rises
+// The lines drive a frontier F (meters, a table interpolated in log space: the first towers at ~11 lines, megatalls
+// from ~24, arcologies from ~29, the continent from ~35, the planet covered at 43, then the ring, done by ~50, one
+// song); each place rises
 // when F passes its organic distance D (mcity::field, the same on the CPU and in the ground's shader). The plan is
 // generated once per game (city.cpp): lots sized by D on district-turned grids, each built in its era's style, the
 // downtowns' towers planted on their own; the buildings' shader raises each out of the ground as the frontier passes
@@ -167,15 +168,16 @@ constexpr float RING_ALT = 2.6e6f;   // the orbital ring's height
 
 // The journey: lines -> the city's radius (meters), interpolated in log space.
 struct Stage { float lines, radius; };
-// The skyscraper stage is long: the first towers at ~21 lines, megatalls from ~48, arcologies from ~58, the
-// continent from ~70, the planet covered at 86, the orbital ring done by ~100 (two or three songs).
+// The skyscraper stage is long: the first towers at ~11 lines, megatalls from ~24, arcologies from ~29, the
+// continent from ~35, the planet covered at 43, the orbital ring done by ~50 (one song). The hut, the village and the
+// towns go by quickly (some 2x wider a line), the skyline slowly (some 1.2x a line), the continent faster again.
 const Stage STAGES[] = {
-    {0, 4.f}, {2, 14.f}, {3, 35.f}, {6, 90.f}, {8, 220.f}, {11, 550.f}, {14, 1300.f}, {18, 2600.f}, {21, 4500.f},
-    {25, 6500.f}, {30, 9000.f}, {34, 1.3e4f}, {37, 1.8e4f}, {41, 2.5e4f}, {45, 3.4e4f}, {48, 4.6e4f}, {52, 6.5e4f},
-    {55, 9.5e4f}, {58, 1.4e5f}, {62, 2.2e5f}, {65, 3.8e5f}, {68, 7.e5f}, {72, 1.3e6f}, {76, 2.5e6f}, {79, 5.e6f},
-    {83, 1.e7f}, {86, 2.4e7f},
+    {0, 4.f}, {1.5f, 14.f}, {2.5f, 35.f}, {4, 90.f}, {5.5f, 220.f}, {7, 550.f}, {8.5f, 1300.f}, {10, 2600.f},
+    {11.5f, 4500.f}, {13, 6500.f}, {15, 9000.f}, {17, 1.3e4f}, {18.5f, 1.8e4f}, {20.5f, 2.5e4f}, {22.5f, 3.4e4f},
+    {24, 4.6e4f}, {26, 6.5e4f}, {27.5f, 9.5e4f}, {29, 1.4e5f}, {31, 2.2e5f}, {32.5f, 3.8e5f}, {34, 7.e5f}, {36, 1.3e6f},
+    {38, 2.5e6f}, {39.5f, 5.e6f}, {41.5f, 1.e7f}, {43, 2.4e7f},
 };
-constexpr float RING_LINES = 14.f; // the orbital ring is built over this many lines once the planet is covered
+constexpr float RING_LINES = 7.f; // the orbital ring is built over this many lines once the planet is covered
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 const float G_MAX = std::log(2.4e7f);
 
