@@ -6,12 +6,12 @@
 // glass). Out-of-focus debris floats faintly in the medium; along the well run the eyepiece's reticle (two fine etched
 // lines, a floor and a scale of ticks, one per row).
 //
-// The pieces are plant tissue: each block one cell, a rounded cube of stained cytoplasm in its glassy wall, with its
-// nucleus. The seven types are seven dyes of the variant's stain. The falling piece is exactly a locked one, the ghost
+// The pieces are plant tissue: each block one calm cell, a rounded cube of evenly stained cytoplasm in its glassy wall,
+// nothing else inside. The seven types are seven dyes of the variant's stain. The falling piece is exactly a locked one, the ghost
 // a faint wall, the previews the same cells.
 //
-// About one cell in five has a small microorganism living inside it (a clear pool, its contents flowing slowly; the
-// other cells are still). The dish starts empty at the start of a song. Each cleared row bursts (its cells round off,
+// About one cell in five has a microorganism living inside it, shown large in a clear pool as one bold shape: the one
+// that cell frees (the other cells are empty and still). The dish starts empty at the start of a song. Each cleared row bursts (its cells round off,
 // their walls break open and their content disperses, gone in a third of a second) and frees its organisms: each
 // swims out of its own cell to the nearer side, growing on the way, and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
 // cilia), amoebas (a slow blob reaching out with pseudopods), pennate and centric diatoms (glass boats and discs of
@@ -119,7 +119,7 @@ constexpr float DIE_T = 2.2f;        // game over: a cell's plasmolysis
 constexpr int MAX_ORGS = 30;         // the dish's population; beyond it, the oldest fade away
 constexpr float ORG_FADE = 4.f;
 constexpr float LIFE_SHARE = 0.22f;   // the share of the cells with an organism living inside
-constexpr float DWELL_SIZE = 0.52f;   // an organism's size inside its cell
+constexpr float DWELL_SIZE = 0.82f;   // an organism's size inside its cell (one bold shape, in a clear pool)
 
 // The kinds of life: paramecium, amoeba, pennate diatom, centric diatom, rotifer, volvox.
 enum { K_PARA, K_AMOEBA, K_PENNATE, K_CENTRIC, K_ROTIFER, K_VOLVOX, K_COUNT };
@@ -573,7 +573,6 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             for (size_t i = 0; i < lives.size(); i++) {
                 const auto* c = lives[i];
                 CellLook l = look_[c->y][c->x];
-                if (i == bigAt) l.life = K_VOLVOX;
                 const vec3 p = layout::cellPos((float)c->x, (float)c->y);
                 releaseFrom(l, p.x, p.y, c->type, 0.f, i == bigAt);
             }
@@ -1119,7 +1118,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
         (o.fromCell && o.age < 1.5f ? dwellInst : orgInst_)
             .push_back({{o.p.x, o.p.y, o.size * grow, ang}, {(float)o.kind, o.seed, anim, a},
-                        {blur, o.cilia, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+                        {blur, o.cilia, o.tint, (float)o.type}, {o.spin, o.fromCell ? 1.f - smoothstepf(0.8f, 2.6f, o.age) : 0.f, 0.f, 0.f}});
     }
     if (!bare_) { // the world alone: no tissue, nothing bursting or dying
         for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f);
@@ -1138,7 +1137,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
             const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
             dwellInst.push_back({{o.p.x, o.p.y, o.size, ang}, {(float)o.kind, o.seed, anim, alpha * (1.f - bridgeK)},
-                                 {0.f, 0.15f + 0.3f * wm + 0.6f * kickEnv_, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+                                 {0.f, 0.15f + 0.3f * wm + 0.6f * kickEnv_, o.tint, (float)o.type}, {o.spin, 1.f, 0.f, 0.f}});
         };
         if (overT_ < 0.f)
             for (int y = Game::HIDDEN; y < Game::H; y++)
