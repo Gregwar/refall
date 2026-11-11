@@ -62,9 +62,21 @@ uniform vec3 uSoil, uSoil2, uGravel, uStr1, uStr2, uMoss, uMoss2, uLeaf, uLeaf2,
              uBark, uWater, uStone, uBugC, uBugSpot, uFlyC, uSill, uFrame, uWall, uHill, uHill2;
 uniform vec3 uBridgeCol;
 uniform float uWorldA, uSlow;
+// the growth out of the jar: the cork's pose, the tree from the neck, vines inside the glass and spilling out of it,
+// the greenery over the sill, up the window frame and over the wall, vines hanging over the panes and the sill's edge
+uniform vec3 uCorkP;
+uniform float uCorkR;
+uniform float uTreeG, uInVine, uSpill, uSillR, uClimb, uWallR, uHang, uDrape, uBloomAmt;
+uniform int uBlooms;
+uniform vec4 uBloom[24];                 // x, y, z, growth (on the sill: y = 0; on the wall: z = ZW)
+uniform int uSwarm;
+uniform vec4 uSw[32];                    // the fireflies drifting out of the window: x, y, z, glow
 
 const float JR = 1.0, JHB = 0.8, JRN = 0.62, JHN = 0.93, JT = 0.022;
-const float ZW = -2.3;                   // the window
+const float ZW = -2.3;                   // the window wall
+const float SF = 1.3;                    // the sill's front edge
+const float WX = 2.4, WY = 2.7;          // the window opening (half width, height above the sill)
+const float WCX = -1.2;                  // its center (the jar stands on the right of the sill)
 const float BS = 1.9;                    // the beetle's scale
 const float PI = 3.14159265, TAU = 6.2831853;
 
@@ -93,13 +105,60 @@ float jarOuter(vec3 p) {
     return d;
 }
 float cork(vec3 p) {
-    vec2 q = vec2(length(p.xz), p.y - (JHN + 0.02));
+    vec3 q3 = p - uCorkP;
+    q3.xy = rot(uCorkR) * q3.xy;
+    vec2 q = vec2(length(q3.xz), q3.y);
     float r = JRN - 0.03 + 0.03 * sat(q.y / 0.12);
     return sdRoundBox2(vec2(q.x, q.y), vec2(r, 0.11), vec4(0.03, 0.0, 0.03, 0.0));
 }
 vec3 jarNormal(vec3 p) {
     const vec2 e = vec2(0.0015, 0.0);
     return normalize(vec3(jarOuter(p + e.xyy) - jarOuter(p - e.xyy), jarOuter(p + e.yxy) - jarOuter(p - e.yxy), jarOuter(p + e.yyx) - jarOuter(p - e.yyx)));
+}
+
+// ---------------------------------------------------------------- the tree out of the neck
+// A sapling rooted in the jar pushes the cork off, grows out of the neck and becomes a small tree arching over the
+// window: its trunk and branches are revealed along their length as uTreeG grows, its crown is leafy masses.
+vec3 growTo(vec3 a, vec3 b, float g0, float g1) { return mix(a, b, smoothstep(g0, g1, uTreeG)); }
+float treeD(vec3 p, out float m, out vec4 inf) {
+    m = 8.0; inf = vec4(0.0);
+    if (uTreeG <= 0.001) return 1e3;
+    const vec3 P0 = vec3(0.0, 0.12, 0.0), P1 = vec3(0.06, 0.97, -0.02), P2 = vec3(-0.22, 1.5, -0.45);
+    const vec3 P3 = vec3(-0.35, 2.1, -1.0), P4 = vec3(-1.75, 2.0, -1.25), P5 = vec3(0.75, 2.4, -1.45);
+    vec3 a1 = growTo(P0, P1, 0.0, 0.2), a2 = growTo(P1, P2, 0.18, 0.45), a3 = growTo(P2, P3, 0.4, 0.7);
+    vec3 a4 = growTo(P2, P4, 0.5, 0.8), a5 = growTo(P3, P5, 0.6, 0.9);
+    float th = (0.45 + 0.55 * smoothstep(0.15, 1.0, uTreeG)) * 1.5;
+    float d = sdCapT(p, P0, a1, 0.05 * th, 0.04 * th);
+    if (uTreeG > 0.18) d = smin(d, sdCapT(p, P1, a2, 0.04 * th, 0.03 * th), 0.02);
+    if (uTreeG > 0.4) d = smin(d, sdCapT(p, P2, a3, 0.03 * th, 0.02 * th), 0.015);
+    if (uTreeG > 0.5) d = smin(d, sdCapT(p, P2, a4, 0.024 * th, 0.014 * th), 0.012);
+    if (uTreeG > 0.6) d = smin(d, sdCapT(p, P3, a5, 0.02 * th, 0.012 * th), 0.01);
+    inf = vec4(p.y, 0.0, 0.0, 0.0);
+    // leaves: a tuft at the growing tip, then the crown's leafy masses
+    float gc = smoothstep(0.55, 1.0, uTreeG);
+    vec3 tip = uTreeG < 0.45 ? a2 : a3;
+    float rt = 0.09 * smoothstep(0.08, 0.3, uTreeG) * (1.0 - gc);
+    if (rt > 0.004) {
+        vec3 qt = p - tip - vec3(0.0, rt * 0.5, 0.0);
+        float dl = sdEll(qt, vec3(rt, rt * 0.7, rt));
+        if (dl < d) { d = dl; m = 3.5; inf = vec4(qt / rt, 1.0); }
+    }
+    if (gc > 0.01) {
+        for (int k = 0; k < 12; k++) {
+            float fk = float(k);
+            // tufts along the branches' arc, a little scattered
+            float u = fk / 11.0;
+            vec3 C = u < 0.5 ? mix(P4, P3, u * 2.0) : mix(P3, P5, u * 2.0 - 1.0);
+            C += vec3(sin(fk * 2.3) * 0.18, 0.18 + 0.2 * sin(fk * 1.7 + 1.0) + 0.25 * sin(u * PI), cos(fk * 1.9) * 0.2);
+            float R = (0.24 + 0.1 * sin(fk * 3.1)) * smoothstep(abs(u - 0.5) * 0.5, abs(u - 0.5) * 0.5 + 0.5, gc);
+            if (R < 0.01) continue;
+            vec3 q = p - C;
+            float dl = length(q * vec3(1.0, 1.3, 1.0)) - R;
+            if (dl < d + 0.1) dl += R * 0.3 * (vnoise3(q / R * 2.4 + fk * 3.1) - 0.5) + R * 0.12 * (vnoise3(q / R * 6.0 + fk) - 0.5);
+            if (dl < d) { d = dl; m = 3.5; inf = vec4(q / R, 1.0); }
+        }
+    }
+    return d;
 }
 
 // ---------------------------------------------------------------- the soil (the same function as the CPU's)
@@ -406,6 +465,7 @@ vec4 slotBound(int i) {
     if (t == 4) return vec4(A.x, A.y + s * 0.6, A.z, s * (uSC[i].x > 0.5 ? 1.45 : 1.05));
     if (t == 5) return vec4(A.x, A.y + s * 0.5, A.z, s * 1.6);
     if (t == 6) return vec4(A.x, A.y + s * 0.8, A.z, s * 1.4);
+    if (t == 8) return vec4(A.x, A.y + s * 0.3, A.z, s * 1.6);
     return vec4(A.x, A.y, A.z, s * 1.2);
 }
 
@@ -441,7 +501,7 @@ float beetle(vec3 p, inout vec4 inf, inout float m) {
     q.xz = rot(-uBug.w) * q.xz;
     q /= BS;
     float mv = uBug2.y;
-    q.y -= 0.0015 * mv * abs(sin(uBug2.x));
+    q.y -= 0.0012 * mv * abs(sin(uBug2.x * 2.0));
     float d = 1e3;
     vec3 qs = q - vec3(0.0, 0.028, -0.006);
     float shell = max(sdEll(qs, vec3(0.041, 0.031, 0.05)), -(q.y - 0.012));
@@ -463,18 +523,23 @@ float beetle(vec3 p, inout vec4 inf, inout float m) {
         if (da < d) { d = da; m = 16.0; }
     }
     // six legs, a tripod gait
+    // (front left, middle right and back left swing together, then the other three; a foot on the ground moves back
+    // at the body's speed, so it stays planted; the feet fan out, 0.045 apart, and never swing more than 0.009)
     for (int k = 0; k < 3; k++) {
         float fk = float(k);
-        float zk = 0.022 - 0.022 * fk;
+        float zk = 0.02 - 0.02 * fk;
+        float fz = k == 0 ? 0.046 : (k == 1 ? 0.0 : -0.044);
         for (int s = -1; s <= 1; s += 2) {
             float fs = float(s);
-            float ph = uBug2.x + ((k == 1) == (s > 0) ? 0.0 : PI);
-            float sw = sin(ph) * 0.011 * mv;
-            float lift = max(0.0, cos(ph)) * 0.006 * mv;
-            vec3 hip = vec3(fs * 0.026, 0.014, zk);
-            vec3 knee = vec3(fs * 0.05, 0.024 + lift, zk + sw * 0.5 + (fk - 1.0) * 0.01);
-            vec3 foot = vec3(fs * 0.062, 0.001 + lift * 0.4, zk + sw + (fk - 1.0) * 0.02);
-            float dl = min(sdCap(q, hip, knee, 0.0052), sdCap(q, knee, foot, 0.0046));
+            float c = fract(uBug2.x / TAU + (((k == 1) == (s > 0)) ? 0.0 : 0.5));
+            float A = 0.009 * mv;
+            float off, lift;
+            if (c < 0.5) { off = A - 4.0 * A * c; lift = 0.0; }
+            else { float u = (c - 0.5) * 2.0; off = -A + 2.0 * A * smoothstep(0.0, 1.0, u); lift = sin(PI * u) * 0.007 * mv; }
+            vec3 hip = vec3(fs * 0.026, 0.015, zk);
+            vec3 foot = vec3(fs * (k == 1 ? 0.066 : 0.06), 0.0015 + lift, fz + off);
+            vec3 knee = vec3(fs * 0.052, 0.028 + lift * 0.6, mix(zk, foot.z, 0.55));
+            float dl = min(sdCap(q, hip, knee, 0.005), sdCap(q, knee, foot, 0.0042));
             if (dl < d) { d = dl; m = 16.0; }
         }
     }
@@ -574,6 +639,27 @@ float mapC(vec3 p) {
         else if (t == 4) ds = flowers(p, B, s, g, seed, uSC[i].x, inf, m);
         else if (t == 5) ds = rosette(p, B, s, g, seed, rt, uSC[i].x, inf, m);
         else if (t == 6) ds = cactus(p, B, s, g, seed, inf, m);
+        else if (t == 8) {
+            // a mossy rock, a thin waterfall trickling from its lip into the pond
+            vec3 q = p - B;
+            q.xz = rot(rt) * q.xz;
+            float r = s * (0.35 + 0.65 * smoothstep(0.0, 1.0, g));
+            ds = sdEll(q - vec3(0.0, 0.12 * r, 0.0), vec3(r, 0.78 * r, 0.85 * r));
+            if (ds < 0.06) ds += r * 0.12 * (vnoise3(q / r * 3.0 + seed) - 0.5);
+            m = 21.0; inf = vec4(q / max(r, 1e-3), seed);
+            if (uSC[i].x > 0.5 && uPond > 0.3 && g > 0.5) {
+                vec2 dir = normalize(uPondP.xy - B.xz);
+                vec3 a = B + vec3(dir.x * r * 0.62, r * 0.72, dir.y * r * 0.62);
+                vec3 b = vec3(B.x + dir.x * (r * 0.95 + 0.035), uPondY, B.z + dir.y * (r * 0.95 + 0.035));
+                vec3 pa = p - a, ba = b - a;
+                float h = sat(dot(pa, ba) / dot(ba, ba));
+                vec3 cc = pa - ba * h;
+                vec3 side = normalize(cross(ba, vec3(0.0, 1.0, 0.0)));
+                float across = dot(cc, side);
+                float dw = length(vec2(across * 0.4, length(cc - side * across))) - 0.005 * smoothstep(0.5, 0.9, g);
+                if (dw < ds) { ds = dw; m = 22.0; inf = vec4(h, across, 0.0, 0.0); }
+            }
+        }
         else {
             vec3 q = p - B;
             q.xz = rot(rt) * q.xz;
@@ -595,6 +681,7 @@ float mapC(vec3 p) {
     }
     // the cork, seen through the neck
     if (p.y > JHN - 0.15) take(d, cork(p), 19.0, vec4(0.0));
+    if (uTreeG > 0.001 && length(p.xz) < 0.3) { float tm; vec4 ti; float dt = treeD(p, tm, ti); take(d, dt, tm, ti); }
     return d;
 }
 
@@ -709,74 +796,336 @@ vec3 env(vec3 r) {
     return c;
 }
 
-// the window: its frame, its panes (with the shower's drops), the sill
-vec3 background(vec3 ro, vec3 rd, out float hitSill) {
-    hitSill = 0.0;
-    float tw = (ZW - ro.z) / rd.z;
+// ---------------------------------------------------------------- painted greenery (the room being reclaimed)
+// The jar's life spills out over flat surfaces (the sill, the wall, the window's frame and panes, the jar's own glass):
+// there it is painted as toon foliage, cheap however much of it there is: pointed leaves on jittered grids, each
+// drawn if the surface's coverage there beats its own random threshold, a darker rim and a pale midrib, flowers in
+// some cells; vines are strands with leaves on alternate sides.
+
+// the light on painted things (and the jar's fireflies glowing around it at night)
+vec3 paintLight(vec3 p, float up) {
+    vec3 l = uAmbS * 0.85 + uFill * 0.7 + uSunCol * 0.3 * (0.55 + 0.45 * up);
+    vec3 dj = p - vec3(0.0, 0.55, 0.0);
+    l += uFlyC * uFlyAmt * 0.4 * exp(-dot(dj, dj) / 1.6);
+    return l;
+}
+
+// a pointed leaf, local coordinates in its own radii: color, alpha
+vec4 leafShape(vec2 l, vec3 c1, vec3 c2, float aa) {
+    float w = 1.0 - l.x * l.x;
+    float e = w - abs(l.y) * 1.15;
+    float a = smoothstep(-aa, aa, e) * step(abs(l.x), 1.0);
+    vec3 c = mix(c2, c1, 0.45 + 0.4 * l.y + 0.2 * l.x);
+    c = mix(c, c1 * 1.2, smoothstep(0.07, 0.0, abs(l.y)) * step(-0.85, l.x) * 0.35);
+    c *= 1.0 - 0.35 * smoothstep(0.18, 0.0, e);
+    return vec4(c, a);
+}
+// a little flower: five round petals, a golden heart
+vec4 flowerShape(vec2 l, vec3 pc, float aa) {
+    float r = length(l);
+    float ang = atan(l.y, l.x);
+    float petal = 0.62 + 0.38 * cos(ang * 5.0);
+    float a = smoothstep(petal + aa, petal - aa, r);
+    vec3 c = mix(pc * 1.1, pc * 0.75, smoothstep(0.3, 1.0, r));
+    c = mix(c, vec3(1.0, 0.82, 0.25), smoothstep(0.3, 0.2, r));
+    return vec4(c, a);
+}
+
+// the coverage of greenery: on the sill (mode 0, q = x, z) and on the window wall (mode 1, q = x, y)
+float covAt(vec2 q, int mode) {
+    float n = vnoise(q * 2.1) * 0.65 + vnoise(q * 5.3) * 0.35;
+    if (mode == 0) {
+        float r = length(q);
+        return smoothstep(0.0, 0.3, uSillR - r - (n - 0.5) * 0.7) * smoothstep(0.92, 1.0, r);
+    }
+    q.x -= WCX;
+    float dOpen = sdBox2(q - vec2(0.0, WY * 0.5), vec2(WX, WY * 0.5));
+    // up the casing and the mullions, then out over the wall in clumps
+    float casing = step(-0.03, dOpen) * step(dOpen, 0.2);
+    float mull = smoothstep(0.12, 0.05, abs(abs(q.x) - 1.62)) * step(dOpen, 0.0);
+    float climb = smoothstep(0.0, 0.35, uClimb - q.y - (n - 0.5) * 0.4) * max(casing, mull);
+    float top = casing * step(WY - 0.05, q.y) * smoothstep(0.0, 0.4, uClimb - WY - abs(q.x) * 0.6);
+    float clump = smoothstep(0.25, 0.65, vnoise(q * 0.9 + 3.0) * 0.7 + vnoise(q * 2.3) * 0.3 + 0.25 * smoothstep(1.2, 0.0, dOpen));
+    float wall = step(0.0, dOpen) * smoothstep(0.0, 0.4, uWallR - dOpen - (n - 0.5) * 1.6) * clump;
+    return max(max(climb, top), wall);
+}
+// the clears' blooms near a point of a surface
+float bloomAt(vec3 p, int mode) {
+    float b = 0.0;
+    for (int i = 0; i < uBlooms; i++) {
+        vec4 bl = uBloom[i];
+        bool onSill = bl.y < 0.05;
+        if ((mode == 0) != onSill) continue;
+        vec2 d = mode == 0 ? p.xz - bl.xz : p.xy - bl.xy;
+        b = max(b, bl.w * smoothstep(0.32, 0.05, length(d)));
+    }
+    return b;
+}
+// (a cheap test first: nothing can grow within reach of this point)
+bool bareAt(vec2 q, int mode, float bloom) {
+    if (bloom > 0.001) return false;
+    if (mode == 0) return length(q) > uSillR + 0.5;
+    q.x -= WCX;
+    float dOpen = sdBox2(q - vec2(0.0, WY * 0.5), vec2(WX, WY * 0.5));
+    bool nearFrame = (dOpen > -0.3 && dOpen < 0.5) || (dOpen < 0.0 && abs(abs(q.x) - 1.62) < 0.45);
+    bool climbing = nearFrame && q.y < uClimb + 0.5 && uClimb > 0.0;
+    bool topping = nearFrame && q.y > WY - 0.5 && uClimb > WY;
+    return !climbing && !topping && dOpen > uWallR + 1.0;
+}
+vec4 leafMass(vec2 q, int mode, float cs, float bloom, vec3 c1, vec3 c2) {
+    vec4 res = vec4(0.0);
+    if (bareAt(q, mode, bloom)) return res;
+    float best = -1.0;
+    for (int l = 0; l < 2; l++) {
+        float sz = cs * (l == 0 ? 1.0 : 0.7);
+        float aa = uPx * 6.0 / sz;
+        vec2 g = q / sz + float(l) * 0.37;
+        vec2 gi = floor(g);
+        for (int j = -1; j <= 1; j++)
+            for (int i = -1; i <= 1; i++) {
+                vec2 id = gi + vec2(float(i), float(j));
+                vec2 h2 = hash2(id + float(l) * 31.7);
+                vec2 c = (id + 0.5 + (h2 - 0.5) * 0.7 - float(l) * 0.37) * sz;
+                float cov = covAt(c, mode) + bloom;
+                float h = hash(id * 1.37 + float(l) * 7.1);
+                if (h * 0.98 > cov) continue;
+                float z = hash(id + 91.3 + float(l));
+                if (z < best) continue;
+                vec2 lc = rot(h2.x * 6.2831) * (q - c);
+                bool fl = hash(id + 5.5 + float(l)) < (0.1 + 0.6 * bloom) * uBloomAmt;
+                vec4 lf;
+                if (fl) {
+                    float pick = hash(id + 2.2);
+                    vec3 pc = pick < 0.45 ? uFlower : (pick < 0.75 ? uCap : uFlower2);
+                    lf = flowerShape(lc / (sz * 0.42), pc, aa);
+                } else {
+                    vec3 a1 = mix(uLeaf, uMoss, h2.y), a2 = mix(uLeaf2, uMoss2, h2.y);
+                    lf = leafShape(lc / vec2(sz * 0.85, sz * 0.4), a1 * c1, a2 * c2, aa);
+                }
+                if (lf.a > 0.5) { best = z; res = lf; res.rgb *= 0.7 + 0.45 * sat(cov - h) + 0.15 * z; }
+            }
+    }
+    return res;
+}
+// vines: strands along v from v0 (dir +1 up, -1 down), lane apart across u, each up to len long, leaves on alternate
+// sides, flowers at some of them
+vec4 vines(vec2 uv, float lane, float v0, float dir, float len, float leafS, float seed, float flAmt) {
+    vec4 res = vec4(0.0);
+    if (len <= 0.005) return res;
+    float aa = uPx * 6.0 / leafS;
+    float li = floor(uv.x / lane + 0.5);
+    for (int j = -1; j <= 1; j++) {
+        float idx = li + float(j);
+        float h = hash1(idx * 7.1 + seed);
+        if (h > 0.8) continue;
+        float L = len * (0.55 + 0.45 * hash1(idx * 3.3 + seed));
+        float sAl = (uv.y - v0) * dir;
+        if (sAl < -leafS || sAl > L + leafS) continue;
+        float xs = idx * lane + lane * 0.15 * (h - 0.5);
+        float xc = xs + lane * 0.22 * sin(sAl * 7.0 + h * 20.0);
+        float du = uv.x - xc;
+        if (abs(du) < 0.006 && sAl >= 0.0 && sAl <= L) res = vec4(mix(uStem, uLeaf2, 0.5), 1.0);
+        float gap = leafS * 1.25;
+        float k = floor(sAl / gap + 0.5);
+        for (int kk = -1; kk <= 0; kk++) {
+            float kj = k + float(kk);
+            float sk = kj * gap;
+            if (sk < 0.0 || sk > L) continue;
+            float side = mod(kj, 2.0) * 2.0 - 1.0;
+            float xk = xs + lane * 0.22 * sin(sk * 7.0 + h * 20.0);
+            float sc = leafS * (0.55 + 0.45 * smoothstep(L, L - 0.15, sk));
+            vec2 cpos = vec2(xk + side * sc * 0.85, v0 + dir * (sk + sc * 0.3));
+            vec2 lc = rot(side * 0.6 - dir * 0.3) * (uv - cpos);
+            lc.x *= side;
+            vec4 lf;
+            if (hash1(kj * 1.7 + idx * 13.1 + seed) < flAmt) lf = flowerShape(lc / (sc * 0.62), hash1(kj + idx) < 0.5 ? uFlower : uCap, aa);
+            else lf = leafShape(lc / vec2(sc, sc * 0.55), uLeaf, uLeaf2, aa);
+            if (lf.a > 0.5) res = lf;
+        }
+    }
+    return res;
+}
+
+// the sill: painted wood, the jar's shadow and caustic, moss, leaves and flowers spreading from the jar
+vec3 sillColor(vec3 p, vec3 rd) {
+    float grain = fbm(vec2(p.x * 2.5, p.z * 28.0)) * 0.6 + vnoise(vec2(p.x * 40.0, p.z * 3.0)) * 0.4;
+    vec3 alb = uSill * (0.88 + 0.2 * grain);
+    vec3 L = uSunDir;
+    float tmax = 1.0 / max(L.y, 0.05);
+    vec2 a = p.xz, b = p.xz + L.xz * tmax;
+    vec2 ba = b - a;
+    float hseg = sat(dot(-a, ba) / max(dot(ba, ba), 1e-6));
+    float dmin = length(a + ba * hseg);
+    float ylev = L.y * tmax * hseg;
+    float jarSh = smoothstep(1.02, 0.96, dmin);
+    float soilSh = jarSh * smoothstep(0.45, 0.25, ylev);
+    float caus = exp(-sq((dmin - 0.86) / 0.08)) * smoothstep(0.25, 0.6, ylev) * jarSh;
+    float sh = 1.0 - 0.75 * soilSh - 0.25 * jarSh * (1.0 - soilSh);
+    vec3 lightC = uSunCol * sat(L.y) * sh * 0.55 + uAmbS * 0.65 + uFill * 0.6;
+    vec3 col = alb * lightC + uSunCol * alb * caus * 0.35 * (1.0 - soilSh);
+    col += uFlyC * alb * uFlyAmt * 0.12 * exp(-sq(max(length(p.xz) - 0.9, 0.0) / 0.5));
+    if (uSillR > 1.0 || uBlooms > 0) {
+        float bloom = bloomAt(p, 0);
+        float cov = covAt(p.xz, 0);
+        // a carpet of moss under the leaves
+        vec3 moss = mix(uMoss2, uMoss, smoothstep(0.3, 0.8, vnoise(p.xz * 30.0)) * 0.7 + 0.3 * vnoise(p.xz * 90.0));
+        col = mix(col, moss * paintLight(p, 1.0) * (0.65 + 0.35 * sh), smoothstep(0.35, 0.6, cov));
+        vec4 lm = leafMass(p.xz, 0, 0.12, bloom, vec3(1.0), vec3(1.0));
+        if (lm.a > 0.5) col = lm.rgb * paintLight(p, 1.0) * (0.7 + 0.3 * sh);
+        // vines running out from the jar's foot
+        vec2 pol = vec2(atan(p.x, p.z) * 1.0, length(p.xz));
+        vec4 vn = vines(pol, 0.42, 0.95, 1.0, uSillR - 0.95, 0.05, 3.0, 0.25 * uBloomAmt);
+        if (vn.a > 0.5) col = vn.rgb * paintLight(p, 1.0);
+    }
+    return col;
+}
+
+// the window wall, the panes and the sky through them, the frame; the sill and its front below
+vec3 background(vec3 ro, vec3 rd, out float tHit) {
+    tHit = 1e4;
     if (rd.y < 0.0) {
         float ts = -ro.y / rd.y;
-        if (ts < tw || rd.z > 0.0) {
-            vec3 p = ro + rd * ts;
-            hitSill = 1.0;
-            // the sill: painted wood, its grain
-            float grain = fbm(vec2(p.x * 2.5, p.z * 28.0)) * 0.6 + vnoise(vec2(p.x * 40.0, p.z * 3.0)) * 0.4;
-            vec3 alb = uSill * (0.88 + 0.2 * grain);
-            // the jar's shadow (the soil and plants dark, the glass light) and its caustic
-            vec3 L = uSunDir;
-            float tmax = 1.0 / max(L.y, 0.05);
-            vec2 a = p.xz, b = p.xz + L.xz * tmax;
-            vec2 ba = b - a;
-            float hseg = sat(dot(-a, ba) / max(dot(ba, ba), 1e-6));
-            float dmin = length(a + ba * hseg);
-            float ylev = L.y * tmax * hseg;
-            float jarSh = smoothstep(1.02, 0.96, dmin);
-            float soilSh = jarSh * smoothstep(0.45, 0.25, ylev);
-            float caus = exp(-sq((dmin - 0.86) / 0.08)) * smoothstep(0.25, 0.6, ylev) * jarSh;
-            float sh = 1.0 - 0.75 * soilSh - 0.25 * jarSh * (1.0 - soilSh);
-            float ndl = sat(L.y);
-            vec3 col = alb * (uSunCol * ndl * sh * 0.55 + uAmbS * 0.65 + uFill * 0.6);
-            col += uSunCol * alb * caus * 0.35 * (1.0 - soilSh);
-            // the fireflies' light pools around the jar at night
-            col += uFlyC * alb * uFlyAmt * 0.12 * exp(-sq(max(length(p.xz) - 0.9, 0.0) / 0.5));
+        vec3 p = ro + rd * ts;
+        if (p.z <= SF && p.z >= ZW) { tHit = ts; return sillColor(p, rd); }
+        if (p.z > SF && rd.z < 0.0) {
+            // the front of the sill: a painted panel, its rounded nose, vines draping over it
+            float tf = (SF - ro.z) / rd.z;
+            vec3 pf = ro + rd * tf;
+            tHit = tf;
+            vec3 alb = uSill * mix(0.62, 0.95, smoothstep(-0.1, -0.02, pf.y));
+            vec3 col = alb * (uAmbS * 0.7 + uFill * 0.75);
+            vec4 vn = vines(pf.xy, 0.3, 0.0, -1.0, uDrape, 0.055, 9.0, 0.3 * uBloomAmt);
+            if (vn.a > 0.5) col = vn.rgb * paintLight(pf, 0.3);
             return col;
         }
     }
+    float tw = (ZW - ro.z) / rd.z;
     vec3 W = ro + rd * tw;
-    vec3 col = sky(rd);
-    // drops on the pane (out of focus) during the shower
-    if (uRain > 0.01) {
-        // rain falling outside: fine slanted streaks
-        float u = (W.x + W.y * 0.12) * 60.0;
-        float ci = floor(u);
-        float fx = fract(u) - 0.5;
-        float v = W.y * 2.2 + uTime * (5.0 + 2.0 * hash1(ci)) + hash1(ci + 7.0) * 20.0;
-        float fv = fract(v);
-        float streak = smoothstep(0.12, 0.0, abs(fx)) * smoothstep(0.0, 0.08, fv) * smoothstep(0.5, 0.1, fv) * step(0.45, hash1(ci + 3.0));
-        col = mix(col, vec3(0.75, 0.82, 0.9) * (1.0 - 0.6 * uNight), streak * uRain * 0.22);
-        // water drops on the pane, sliding slowly: little lenses, a dark rim, a glint
-        vec2 dp = W.xy * vec2(9.0, 6.0);
-        vec2 di = floor(dp);
-        vec2 dh = hash2(di);
-        vec2 off = vec2(0.25 + 0.5 * dh.x, fract(dh.y - uTime * (0.03 + 0.06 * dh.x)));
-        vec2 dq = (fract(dp) - off) / (vec2(0.08, 0.11) * (0.7 + 0.6 * dh.y));
-        float r = length(dq);
-        float has = step(0.62, hash(di + 4.0));
-        float drop = smoothstep(1.0, 0.85, r) * has;
-        vec3 lens = mix(uSkyZ, uSkyH, 0.5) * 0.85;
-        col = mix(col, lens, drop * uRain * 0.4);
-        col *= 1.0 - smoothstep(0.7, 1.0, r) * smoothstep(1.05, 0.95, r) * has * uRain * 0.35;
-        col += vec3(0.8, 0.85, 0.9) * smoothstep(0.3, 0.1, length(dq - vec2(-0.3, 0.35))) * has * uRain * 0.35 * (1.0 - 0.6 * uNight);
+    vec3 col;
+    vec2 Wq = vec2(W.x - WCX, W.y);
+    float dOpen = sdBox2(Wq - vec2(0.0, WY * 0.5), vec2(WX, WY * 0.5));
+    if (dOpen < 0.0) {
+        col = sky(rd);
+        if (uRain > 0.01) {
+            float u = (W.x + W.y * 0.12) * 60.0;
+            float ci = floor(u);
+            float fx = fract(u) - 0.5;
+            float v = W.y * 2.2 + uTime * (5.0 + 2.0 * hash1(ci)) + hash1(ci + 7.0) * 20.0;
+            float fv = fract(v);
+            float streak = smoothstep(0.12, 0.0, abs(fx)) * smoothstep(0.0, 0.08, fv) * smoothstep(0.5, 0.1, fv) * step(0.45, hash1(ci + 3.0));
+            col = mix(col, vec3(0.75, 0.82, 0.9) * (1.0 - 0.6 * uNight), streak * uRain * 0.22);
+            vec2 dp = W.xy * vec2(9.0, 6.0);
+            vec2 di = floor(dp);
+            vec2 dh = hash2(di);
+            vec2 off = vec2(0.25 + 0.5 * dh.x, fract(dh.y - uTime * (0.03 + 0.06 * dh.x)));
+            vec2 dq = (fract(dp) - off) / (vec2(0.08, 0.11) * (0.7 + 0.6 * dh.y));
+            float r = length(dq);
+            float has = step(0.62, hash(di + 4.0));
+            float drop = smoothstep(1.0, 0.85, r) * has;
+            col = mix(col, mix(uSkyZ, uSkyH, 0.5) * 0.85, drop * uRain * 0.4);
+            col *= 1.0 - smoothstep(0.7, 1.0, r) * smoothstep(1.05, 0.95, r) * has * uRain * 0.35;
+        }
+    } else {
+        tHit = tw;
+        // the wall: soft plaster lit by the room
+        col = uWall * (0.92 + 0.1 * vnoise(W.xy * 3.0)) * (uAmbS * 0.75 + uFill * 0.8 + uSunCol * 0.04);
     }
-    // the frame: a bottom rail, two mullions, a transom (painted wood, lit from the room, soft: out of focus)
+    // the frame: the casing round the opening, a bottom rail, two mullions, a transom (painted wood)
     float blur = 0.012;
-    float fx = abs(abs(W.x) - 1.62) - 0.05;
+    float fx = abs(abs(Wq.x) - 1.62) - 0.05;
     float fr = min(min(fx, W.y - 0.09), abs(W.y - 1.5) - 0.045);
+    fr = dOpen < 0.0 ? fr : abs(dOpen - 0.07) - 0.08;
     float fm = smoothstep(blur, -blur, fr);
     vec3 frameC = uFrame * (uFill * 0.9 + uAmbS * 0.8 + uSunCol * 0.08);
-    float bevel = smoothstep(-0.05, -0.0, fr) * 0.2;
-    frameC *= 1.0 - bevel;
+    frameC *= 1.0 - smoothstep(-0.05, 0.0, fr) * 0.2;
     col = mix(col, frameC, fm);
+    if (dOpen < 0.0) tHit = fm > 0.5 ? tw : tHit;
+    // the greenery: up the frame, over the wall, vines hanging over the panes
+    if (uClimb > 0.0 || uWallR > 0.0 || uBlooms > 0) {
+        float bloom = bloomAt(W, 1);
+        vec4 lm = leafMass(W.xy, 1, 0.19, bloom, vec3(1.0), vec3(1.0));
+        if (lm.a > 0.5) { col = lm.rgb * paintLight(W, 0.7); tHit = tw; }
+    }
+    if (uHang > 0.0) {
+        vec4 vn = abs(Wq.x) < WX + 0.2 ? vines(W.xy, 0.36, WY + 0.1, -1.0, uHang * 1.9, 0.075, 5.0, 0.3 * uBloomAmt) : vec4(0.0);
+        if (vn.a > 0.5) { col = vn.rgb * paintLight(W, 0.5); tHit = tw; }
+    }
     return col;
+}
+
+// ---------------------------------------------------------------- the things outside the glass: the jar, the cork, the tree
+float objMap(vec3 p, bool withJar, out float id, out float m, out vec4 inf) {
+    float d = 1e3;
+    id = 0.0; m = 0.0; inf = vec4(0.0);
+    if (withJar) { float dj = jarOuter(p); if (dj < d) { d = dj; id = 1.0; } }
+    float dk = cork(p);
+    if (dk < d) { d = dk; id = 2.0; }
+    if (uTreeG > 0.001) {
+        float tm; vec4 ti;
+        float dt = treeD(p, tm, ti);
+        if (dt < d) { d = dt; id = 3.0; m = tm; inf = ti; }
+    }
+    return d;
+}
+bool objMarch(vec3 ro, vec3 rd, bool withJar, out float t, out float id, out float m, out vec4 inf) {
+    vec3 bmin = uTreeG > 0.0 ? vec3(-2.7, -0.05, -2.25) : vec3(-2.0, -0.05, -1.1);
+    vec3 bmax = uTreeG > 0.0 ? vec3(2.7, 3.2, 1.4) : vec3(2.0, 1.45, 1.4);
+    vec3 inv = 1.0 / rd;
+    vec3 t0 = (bmin - ro) * inv, t1 = (bmax - ro) * inv;
+    vec3 tn = min(t0, t1), tf = max(t0, t1);
+    float tin = max(max(tn.x, tn.y), tn.z), tout = min(min(tf.x, tf.y), tf.z);
+    t = 0.0; id = 0.0; m = 0.0; inf = vec4(0.0);
+    if (tout < max(tin, 0.0)) return false;
+    t = max(tin, 0.0);
+    for (int i = 0; i < 110; i++) {
+        vec3 p = ro + rd * t;
+        float d = objMap(p, withJar, id, m, inf);
+        if (d < 0.0004 + t * 0.0002) return true;
+        t += d * 0.9;
+        if (t > tout) break;
+    }
+    return false;
+}
+vec3 objNormal(vec3 p) {
+    const vec2 e = vec2(0.0015, 0.0);
+    float i, m; vec4 f;
+    return normalize(vec3(objMap(p + e.xyy, false, i, m, f) - objMap(p - e.xyy, false, i, m, f),
+                          objMap(p + e.yxy, false, i, m, f) - objMap(p - e.yxy, false, i, m, f),
+                          objMap(p + e.yyx, false, i, m, f) - objMap(p - e.yyx, false, i, m, f)));
+}
+vec3 toonOut(vec3 p, vec3 n, vec3 rd, vec3 alb, float trans) {
+    float ndl = dot(n, uSunDir);
+    float band = smoothstep(-0.05, 0.12, ndl) * 0.78 + smoothstep(0.5, 0.62, ndl) * 0.22;
+    vec3 c = alb * (uSunCol * band + mix(uAmbG, uAmbS, n.y * 0.5 + 0.5) + uFill * 0.55 * sat(dot(n, normalize(vec3(0.3, 0.45, 1.0))) * 0.6 + 0.4));
+    c += alb * uSunCol * trans * sat(-ndl * 0.8 + 0.25) * 0.5;
+    c += mix(uSunCol, uGlowSun, 0.5) * pow(1.0 - sat(dot(n, -rd)), 3.0) * 0.25;
+    vec3 dj = p - vec3(0.0, 0.6, 0.0);
+    c += alb * uFlyC * uFlyAmt * 0.5 * exp(-dot(dj, dj) / 1.2);
+    return c;
+}
+vec3 shadeObj(vec3 p, vec3 rd, float id, float m, vec4 inf) {
+    vec3 n = objNormal(p);
+    if (id < 2.5) {
+        // the cork
+        float sp = vnoise3(p * 180.0);
+        vec3 alb = mix(vec3(0.62, 0.42, 0.24), vec3(0.8, 0.6, 0.38), sp);
+        alb = mix(alb, vec3(0.32, 0.2, 0.1), step(0.86, hash3(floor(p * 220.0))));
+        return toonOut(p, n, rd, alb, 0.0);
+    }
+    if (m < 4.0) {
+        // the crown: leaves, flowers dotting it
+        vec3 q = inf.xyz;
+        vec3 pn = p * 26.0;
+        n = normalize(n + (vec3(vnoise3(pn), vnoise3(pn + 5.2), vnoise3(pn + 9.7)) - 0.5) * 0.9);
+        float lv = vnoise3(p * 34.0);
+        vec3 alb = mix(uLeaf2, uLeaf, smoothstep(-0.6, 0.7, q.y) * 0.6 + 0.4 * smoothstep(0.35, 0.75, lv));
+        alb *= 0.85 + 0.35 * smoothstep(0.55, 0.8, vnoise3(p * 70.0));
+        float fl = step(1.0 - 0.1 * uBloomAmt, hash3(floor(p * 40.0))) * smoothstep(-0.2, 0.4, q.y);
+        alb = mix(alb, uFlower * 1.1, fl);
+        return toonOut(p, n, rd, alb, 0.7) + alb * (uAmbS * 0.35 + uFill * 0.3);
+    }
+    float st = vnoise(vec2(atan(p.x, p.z) * 8.0, p.y * 40.0));
+    return toonOut(p, n, rd, uBark * (0.75 + 0.45 * st), 0.0);
 }
 
 // ---------------------------------------------------------------- condensation on the glass
@@ -1031,6 +1380,18 @@ vec3 shade(vec3 p, vec3 rd, float m, vec4 inf) {
         spec = 0.5;
         rim = 0.5;
     }
+    else if (m > 20.5 && m < 21.5) {
+        alb = uStone * (0.8 + 0.3 * vnoise3(p * 30.0));
+        float mossy = smoothstep(0.25, 0.55, n.y + 0.2 * (vnoise3(p * 40.0) - 0.5));
+        alb = mix(alb, mix(uMoss2, uMoss, vnoise3(p * 90.0)), mossy * (uKind == 1 ? 0.0 : 1.0));
+        trans = 0.2 * mossy;
+    }
+    else if (m > 21.5) {
+        // the trickle: bright, clear water running down
+        float st = smoothstep(0.4, 0.9, vnoise(vec2(inf.y * 300.0, inf.x * 9.0 - uTime * 3.0)));
+        vec3 wc = mix(uWater * 1.3, vec3(0.92, 0.98, 1.0), 0.45 + 0.4 * st);
+        return wc * (uAmbS * 1.1 + uFill * 0.9 + uSunCol * 0.35) + uFlyC * uFlyAmt * 0.1;
+    }
     else if (m < 18.5) { alb = mix(uLeaf2, uLeaf * 1.15, 0.5 + 0.5 * inf.x); alb = mix(alb, vec3(0.75, 1.0, 0.45), 0.25); trans = 0.8; }
     else {
         float sp = vnoise3(p * 180.0);
@@ -1066,50 +1427,25 @@ void main() {
     vec2 ndc = vUv * 2.0 - 1.0;
     vec3 rd = normalize(uFwd + uRight * ndc.x * uTanH * uAspect + uUp * ndc.y * uTanH);
     vec3 ro = uEye;
-    float hs;
     vec3 col;
-    // ---- the jar and its cork, from the outside
-    float t = 0.0;
-    bool hitJar = false, hitCork = false;
-    {
-        // start at the bounding cylinder
-        vec2 oc = ro.xz;
-        float a = dot(rd.xz, rd.xz), b = dot(oc, rd.xz), c = dot(oc, oc) - 1.06 * 1.06;
-        float h = b * b - a * c;
-        if (h > 0.0) {
-            t = max(0.0, (-b - sqrt(h)) / a);
-            float tEnd = (-b + sqrt(h)) / a;
-            for (int i = 0; i < 64; i++) {
-                vec3 p = ro + rd * t;
-                if (p.y > JHN + 0.2 || p.y < -0.02 || t > tEnd) break;
-                float dj = jarOuter(p), dk = cork(p);
-                float d = min(dj, dk);
-                if (d < 0.0004) { hitJar = dj <= dk; hitCork = !hitJar; break; }
-                t += d;
-            }
-        }
-    }
-    if (hitCork) {
-        vec3 p = ro + rd * t;
-        const vec2 e = vec2(0.0015, 0.0);
-        vec3 n = normalize(vec3(cork(p + e.xyy) - cork(p - e.xyy), cork(p + e.yxy) - cork(p - e.yxy), cork(p + e.yyx) - cork(p - e.yyx)));
-        float sp = vnoise3(p * 180.0);
-        vec3 alb = mix(vec3(0.62, 0.42, 0.24), vec3(0.8, 0.6, 0.38), sp);
-        alb = mix(alb, vec3(0.32, 0.2, 0.1), step(0.86, hash3(floor(p * 220.0))));
-        float ndl = dot(n, uSunDir);
-        col = alb * (uSunCol * (smoothstep(-0.05, 0.12, ndl) * 0.8 + 0.2 * smoothstep(0.5, 0.6, ndl)) + mix(uAmbG, uAmbS, n.y * 0.5 + 0.5) + uFill * 0.5);
-        col += uSunCol * pow(1.0 - sat(dot(n, -rd)), 3.0) * 0.3;
-        col += alb * uFlyC * uFlyAmt * 0.08;
-    } else if (hitJar) {
+    float tTot = 1e4;
+    float t, oid, om; vec4 oinf;
+    bool hitObj = objMarch(ro, rd, true, t, oid, om, oinf);
+    if (hitObj && oid > 1.5) {
+        col = shadeObj(ro + rd * t, rd, oid, om, oinf);
+        tTot = t;
+    } else if (hitObj) {
         vec3 p0 = ro + rd * t;
         vec3 N = jarNormal(p0);
         float cosv = sat(dot(N, -rd));
+        bool mouth = distance(uCorkP, vec3(0.0, JHN + 0.02, 0.0)) > 0.15 && p0.y > JHN - 0.04 && length(p0.xz) < JRN - 0.012;
         // the condensation where the ray meets the glass
         vec2 uv = vec2(atan(p0.x, p0.z) * JR, p0.y);
         float cov = uCond * (0.15 + 0.85 * smoothstep(0.45, 0.8, p0.y)) * smoothstep(0.36, 0.5, p0.y);
         vec4 dr = drops(uv, cov);
         vec3 tng = normalize(cross(vec3(0.0, 1.0, 0.0), N));
         vec3 rdIn = normalize(refract(rd, N, 0.94) + (tng * dr.x + vec3(0.0, 1.0, 0.0) * dr.y) * 0.06 * dr.z);
+        if (mouth) { rdIn = rd; dr = vec4(0.0); cov = 0.0; }
         vec3 pIn = p0 + rdIn * (JT * 1.6);
         // ---- inside: march the little world until the far wall
         float ti = 0.0;
@@ -1128,12 +1464,20 @@ void main() {
         }
         vec3 pEnd = pIn + rdIn * ti;
         vec3 inner;
+        tTot = t + ti;
         if (hit) inner = shade(pEnd, rdIn, hm, hinf);
         else {
-            // through the far wall: the window and the sill, the wall's own faint reflection and mist
+            // through the far wall: the vines pressed against it, the tree behind, the window and the sill, the
+            // wall's own faint reflection and mist
             vec3 NB = -jarNormal(pEnd);
-            float hsl;
-            inner = background(pEnd, rdIn, hsl);
+            float tb;
+            inner = background(pEnd, rdIn, tb);
+            float t2, i2, m2; vec4 f2;
+            if (uTreeG > 0.0 && objMarch(pEnd + rdIn * 0.03, rdIn, false, t2, i2, m2, f2) && t2 < tb) {
+                inner = shadeObj(pEnd + rdIn * (0.03 + t2), rdIn, i2, m2, f2);
+                tb = t2;
+            }
+            tTot = t + ti + tb;
             float fb = 0.04 + 0.5 * pow(1.0 - sat(dot(-NB, rdIn)), 5.0);
             inner = mix(inner, env(reflect(rdIn, NB)) * 0.6, fb);
             vec2 uvb = vec2(atan(pEnd.x, pEnd.z) * JR, pEnd.y);
@@ -1141,6 +1485,8 @@ void main() {
             vec4 db = drops(uvb, covb);
             vec3 mist = mix(uSkyH, vec3(1.0), 0.4) * (0.75 - 0.5 * uNight) + uAmbS * 0.3;
             inner = mix(inner, mist, db.w * 0.3 + db.z * 0.15);
+            vec4 vb = vines(uvb, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uBloomAmt);
+            if (vb.a > 0.5) inner = vb.rgb * paintLight(pEnd, 0.4) * 0.85;
         }
         // the mist inside, low over the soil, thicker in the calm
         {
@@ -1154,32 +1500,10 @@ void main() {
             vec3 fogC = mix(uSkyH, vec3(1.0), 0.45) * (0.85 - 0.65 * uNight) + uAmbS * 0.3 + uFlyC * uFlyAmt * 0.025;
             inner = mix(inner, fogC, fogA * 0.6);
         }
-        // the fireflies and the drifting seeds, glowing in the jar
+        // vines climbing the inside of the glass, from the soil up
         {
-            float tEnd = ti;
-            vec3 glow = vec3(0.0);
-            for (int i = 0; i < uFlies; i++) {
-                vec4 f = uFly[i];
-                if (f.w <= 0.01) continue;
-                vec3 v = f.xyz - pIn;
-                float tc = dot(v, rdIn);
-                if (tc < 0.0 || tc > tEnd + 0.01) continue;
-                float d2 = dot(v, v) - tc * tc;
-                float px2 = sq(uPx * tc * 1.2);
-                glow += uFlyC * f.w * (0.00007 / (d2 + 0.000025 + px2) + 0.00028 / (d2 + 0.0008) + 0.0012 / (d2 + 0.006) * 0.1);
-            }
-            for (int i = 0; i < uSeeds; i++) {
-                vec4 s = uSeedP[i];
-                if (s.w <= 0.01) continue;
-                vec3 v = s.xyz - pIn;
-                float tc = dot(v, rdIn);
-                if (tc < 0.0 || tc > tEnd + 0.01) continue;
-                float d2 = dot(v, v) - tc * tc;
-                float px2 = sq(uPx * tc * 1.5);
-                vec3 sc = mix(vec3(1.0, 0.95, 0.82), uFlyC, 0.2);
-                glow += sc * s.w * (0.00005 / (d2 + 0.00004 + px2) + 0.0002 / (d2 + 0.0008) + 0.0005 / (d2 + 0.004) * 0.15);
-            }
-            inner += glow;
+            vec4 vi = vines(uv, 0.24, 0.19, 1.0, uInVine * 0.62, 0.04, 1.0, 0.15 * uBloomAmt);
+            if (vi.a > 0.5) inner = vi.rgb * paintLight(p0, 0.5);
         }
         // the glass: tinted, thicker toward its edges, the drops' lenses, its fresnel reflection, a bright rim
         vec3 tint = vec3(0.9, 0.97, 0.95);
@@ -1196,15 +1520,53 @@ void main() {
             float lo = smoothstep(0.45, 0.1, length(dr.xy - vec2(0.15, -0.5))) * smoothstep(0.3, 0.9, r2);
             inner += lightC * (hi * 0.8 + lo * 0.22);
         }
-        float F = 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
+        float F = mouth ? 0.0 : 0.035 + 0.965 * pow(1.0 - cosv, 5.0);
         vec3 refl = env(reflect(rd, N));
+        if (mouth) inner /= mix(vec3(1.0), tint * tint * 0.85, edge);
         col = mix(inner, refl, F);
-        col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
-        // the light caught in the glass's lip and shoulder
+        if (!mouth) col += mix(uSkyH, vec3(1.0), 0.4) * (1.0 - 0.6 * uNight) * smoothstep(0.16, 0.0, cosv) * 0.35;
         col += uGlowSun * 0.25 * smoothstep(0.995, 1.0, sat(1.0 - abs(p0.y - JHN + 0.01) * 18.0)) * step(length(p0.xz), JRN + 0.03);
+        // flowering vines spilling out of the neck and down the outside of the glass
+        vec4 vo = vines(uv + vec2(0.11, 0.0), 0.3, JHN + 0.03, -1.0, uSpill * (JHN + 0.05), 0.05, 7.0, 0.35 * uBloomAmt);
+        if (vo.a > 0.5) col = vo.rgb * paintLight(p0, N.y * 0.5 + 0.5);
     } else {
-        float hsl;
-        col = background(ro, rd, hsl);
+        col = background(ro, rd, tTot);
+    }
+    // the lights in the air: the jar's fireflies, the seeds drifting down, the fireflies leaving through the window
+    {
+        vec3 glow = vec3(0.0);
+        for (int i = 0; i < uFlies; i++) {
+            vec4 f = uFly[i];
+            if (f.w <= 0.01) continue;
+            vec3 v = f.xyz - ro;
+            float tc = dot(v, rd);
+            if (tc < 0.0 || tc > tTot + 0.01) continue;
+            float d2 = dot(v, v) - tc * tc;
+            float px2 = sq(uPx * tc * 1.2);
+            glow += uFlyC * f.w * (0.00007 / (d2 + 0.000025 + px2) + 0.00028 / (d2 + 0.0008) + 0.0012 / (d2 + 0.006) * 0.1);
+        }
+        for (int i = 0; i < uSwarm; i++) {
+            vec4 f = uSw[i];
+            if (f.w <= 0.01) continue;
+            vec3 v = f.xyz - ro;
+            float tc = dot(v, rd);
+            if (tc < 0.0 || tc > tTot + 0.01) continue;
+            float d2 = dot(v, v) - tc * tc;
+            float px2 = sq(uPx * tc * 1.2);
+            glow += uFlyC * f.w * (0.00016 / (d2 + 0.00006 + px2) + 0.0008 / (d2 + 0.0025) + 0.003 / (d2 + 0.015) * 0.1);
+        }
+        for (int i = 0; i < uSeeds; i++) {
+            vec4 sd = uSeedP[i];
+            if (sd.w <= 0.01) continue;
+            vec3 v = sd.xyz - ro;
+            float tc = dot(v, rd);
+            if (tc < 0.0 || tc > tTot + 0.01) continue;
+            float d2 = dot(v, v) - tc * tc;
+            float px2 = sq(uPx * tc * 1.5);
+            vec3 sc = mix(vec3(1.0, 0.95, 0.82), uFlyC, 0.2);
+            glow += sc * sd.w * (0.00005 / (d2 + 0.00004 + px2) + 0.0002 / (d2 + 0.0008) + 0.0005 / (d2 + 0.004) * 0.15);
+        }
+        col += glow;
     }
     col *= mix(1.0, 0.85, uSlow);
     col = mix(col, mix(col, vec3(dot(col, vec3(0.3, 0.5, 0.2))) * vec3(0.8, 0.9, 1.2), 0.4), uSlow);
