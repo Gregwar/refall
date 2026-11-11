@@ -62,24 +62,27 @@ struct VariantDef {
     const char* name;
     unsigned band[5], dropBand[5];
     unsigned well, rim, ink, accent;
-    unsigned piece[7];
+    unsigned piece[7], dropPiece[7];
 };
 const VariantDef VARIANTS[] = {
     {"BLUSH",
      {0xfde4e7, 0xf9c8d1, 0xf4a9b7, 0xee8e9e, 0xd8617f},
      {0xf9c7b4, 0xf09aa6, 0xe0668d, 0xc23f78, 0x8a2862},
      0x561745, 0xffe1ea, 0x5a1f45, 0xb8336a,
-     {0xffdde5, 0xffbea4, 0xf78fb1, 0xe0477f, 0xc488aa, 0xd9a9f0, 0xff7878}},
+     {0xffc4d4, 0xffa27e, 0xf56c9c, 0xd6286a, 0xc274b0, 0xc996f2, 0xff5c62},
+     {0xffb0cc, 0xff8a5c, 0xff3d8f, 0xd0105e, 0xc24aae, 0xa874ff, 0xff4545}},
     {"ROSE",
      {0xfde9e0, 0xf8ccbf, 0xf2ada1, 0xe78c8e, 0xc8677b},
      {0xf6c391, 0xee9c86, 0xd86d82, 0xae4870, 0x6c2954},
      0x5a1a40, 0xffe6dc, 0x5c2234, 0xb54360,
-     {0xffe6d4, 0xf9b78c, 0xf2949c, 0xc8476a, 0xba8599, 0xe2afd7, 0xff8468}},
+     {0xffd2bf, 0xf99a62, 0xf0747f, 0xbf2b58, 0xbb6f9c, 0xd99ad0, 0xff6a4a},
+     {0xffc39e, 0xff8a3d, 0xff5470, 0xc4124f, 0xb54f9a, 0xd77ce0, 0xff4a2e}},
     {"CANDY",
      {0xfbe7f4, 0xf5c6e3, 0xeea4d0, 0xe081bb, 0xc35c9f},
      {0xd9b6f2, 0xe58dcb, 0xd0569f, 0xa63b86, 0x6a2670},
      0x491650, 0xffe3f3, 0x4e1a4e, 0xb02f86,
-     {0xffe1f1, 0xffb4a6, 0xff8dc6, 0xd3377f, 0xb282c6, 0xc8a6ff, 0xff6e8e}},
+     {0xffcce6, 0xff9a86, 0xff6db6, 0xcc1f72, 0xa866c8, 0xb78cff, 0xff4f7a},
+     {0xffb8e2, 0xff7f6e, 0xff3fae, 0xc80a6e, 0x9a45d6, 0x9c6bff, 0xff2f6a}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -172,7 +175,8 @@ private:
 
     int variant_ = 0;
     uint64_t seed_ = 1;
-    vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7];
+    vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7], dropPiece_[7], shownPiece_[7];
+    float night_ = 0.f;   // the drop's share in the HUD's colors and the blocks' vividness
     bool colSet_ = false;
 
     int level_ = 1;
@@ -390,7 +394,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             p.life = 0.55f;
             p.seed = rng_.uniform();
             p.kind = K_PETAL;
-            p.col = piece_[std::clamp(type, 0, 6)];
+            p.col = shownPiece_[std::clamp(type, 0, 6)];
             p.front = true;
             parts_.push_back(p);
         }
@@ -415,7 +419,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 q.life = rng_.range(2.6f, 3.4f);
                 q.seed = rng_.uniform();
                 q.kind = i == 0 ? K_PETAL : (rng_.chance(0.6f) ? K_BUBBLE : K_PETAL);
-                q.col = i == 0 ? piece_[std::clamp(c.type, 0, 6)] : rim_;
+                q.col = i == 0 ? shownPiece_[std::clamp(c.type, 0, 6)] : rim_;
                 q.front = false;
                 parts_.push_back(q);
             }
@@ -437,7 +441,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 q.life = rng_.range(3.f, 3.8f);
                 q.seed = rng_.uniform();
                 q.kind = i % 3 == 0 ? K_HEART : i % 3 == 1 ? K_PETAL : K_BUBBLE;
-                q.col = q.kind == K_BUBBLE ? rim_ : piece_[rng_.irange(0, 6)];
+                q.col = q.kind == K_BUBBLE ? rim_ : shownPiece_[rng_.irange(0, 6)];
                 q.front = false;
                 parts_.push_back(q);
             }
@@ -455,7 +459,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
 
 void PinkVibeUniverse::cell(float x, float y, float half, float rot, int type, float alpha, int mode, float scale, float k) {
     if (alpha <= 0.003f || scale <= 0.f) return;
-    const vec3 c = piece_[std::clamp(type, 0, 6)];
+    const vec3 c = shownPiece_[std::clamp(type, 0, 6)];
     cells_.push_back({{x, y, half, rot}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
 }
 
@@ -594,9 +598,9 @@ void PinkVibeUniverse::drawText(const Font& f, const std::vector<float>& q, cons
     glBindTexture(GL_TEXTURE_2D, f.tex);
     set1i(progText_, "uFont", 0);
     set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uFill", fill);
-    set3f(progText_, "uHalo", lerp(rim_, vec3(1.f), 0.4f));
-    set1f(progText_, "uHaloA", 0.6f);
+    set3f(progText_, "uFill", lerp(fill, lerp(fill, vec3(1.f, 0.97f, 0.98f), 0.8f), night_));
+    set3f(progText_, "uHalo", lerp(lerp(rim_, vec3(1.f), 0.4f), well_ * 0.75f, night_));
+    set1f(progText_, "uHaloA", 0.6f + 0.15f * night_);
     set1f(progText_, "uAlpha", alpha);
     glBindVertexArray(textVao_);
     glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
@@ -731,7 +735,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         auto mixc = [&](vec3& c, unsigned target) { c = lerp(c, hex(target), k); };
         for (int i = 0; i < 5; i++) { mixc(band_[i], V.band[i]); mixc(dropBand_[i], V.dropBand[i]); }
         mixc(well_, V.well); mixc(rim_, V.rim); mixc(ink_, V.ink); mixc(accent_, V.accent);
-        for (int i = 0; i < 7; i++) mixc(piece_[i], V.piece[i]);
+        for (int i = 0; i < 7; i++) { mixc(piece_[i], V.piece[i]); mixc(dropPiece_[i], V.dropPiece[i]); }
     }
 
     // ---- Staging.
@@ -750,6 +754,9 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
     const bool isDrop = overT_ < 0.f && level_ == 2 && (sectionKnown ? sectionDrop : dropMode_ && (!music.hasSong || music.speed > 1.26f));
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.1f : 0.4f, dt);
     const float sunset = ease(dropAmt_);
+    night_ = sunset;
+    // the blocks glow more vivid with the drop's palette
+    for (int i = 0; i < 7; i++) shownPiece_[i] = lerp(piece_[i], dropPiece_[i], sunset);
     swell_ = approach(swell_, 0.f, 0.45f, dt);
     // the waves: their height breathes with the section's energy (slow envelopes), their flow speeds up from mid on
     intensity_ = approach(intensity_, music.hasSong ? music.intensity : 0.5f, 0.6f, dt);
