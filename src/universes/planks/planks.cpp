@@ -121,9 +121,9 @@ const VariantDef VARIANTS[] = {
      {0x47a3dc, 0xf4c53a, 0x8a5cc4, 0x48a85e, 0xdf4a35, 0x2f5cad, 0xef8a2d},
      0.9f, 0.9f, 0.f, 0.6f, 0.45f, 0xdf4a35, 1.0f, 1.0f, 1.0f, -0.3f, 0.82f, 0.48f, 0xfff8f0},
     // late afternoon: honey light from low on the left, oiled pine, warm stains
-    {"HONEY", 0xf2e3cf, 0xe6d0b4, 0xd6bb98, 0x2a1a08, 0x3a2b22,
+    {"HONEY", 0xf2e3cf, 0xe6d0b4, 0xd6bb98, 0x2a1a08, 0x241a13,
      0xe8bf86, 0xbb7f42,
-     {0x4e9a98, 0xeac030, 0x9a3c78, 0x6a903a, 0xb02a24, 0x2a62b0, 0xe27420},
+     {0x4fbfba, 0xf4c836, 0xc0489a, 0x84b83c, 0xe03a30, 0x3a82e0, 0xf28426},
      0.84f, 0.85f, 0.f, 0.12f, 0.9f, 0xd27a2a, 1.05f, 0.85f, 0.9f, -0.7f, 0.46f, 0.55f, 0xffe2b8},
     // a dark studio under one lamp: the pieces in natural hardwoods (maple, yellowheart, purpleheart, olive,
     // bloodwood, blue-stained ash, padauk) on a walnut plinth
