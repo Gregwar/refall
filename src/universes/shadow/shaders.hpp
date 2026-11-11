@@ -318,7 +318,8 @@ float map(vec3 p) {
         float type, flash;
         float e2 = boardSDF2(p.xy, 0.09, type, flash);
         if (type >= 0.0) {
-            vec2 w = vec2(e2 + 0.09, abs(p.z) - 0.465 + 0.09);
+            // (inset a little more than the shadow: the gaps between two pieces read on the small model too)
+            vec2 w = vec2(e2 + 0.135,abs(p.z) - 0.465 + 0.09);
             float e = min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - 0.09;
             if (e < d) { d = e; gMat = 2; gType = type; gFlash = flash; }
         } else d = min(d, max(e2, abs(p.z) - 0.5));

@@ -297,14 +297,27 @@ TransitionHints ShadowUniverse::hints() const {
 // =====================================================================================================
 
 void ShadowUniverse::syncIds(const Game& g) {
+    // an id is kept only while its cells are one piece's: filled, one type, at most four (anything else, such as a
+    // board filled for a review or a stack inherited from another universe, is grouped again below)
     int wrong = 0;
     for (int y = 0; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++)
-            if ((g.cell(x, y).type >= 0) != (ids_[y][x] != 0)) wrong++;
+        for (int x = 0; x < Game::W; x++) {
+            if (g.cell(x, y).type < 0) { if (ids_[y][x]) { ids_[y][x] = 0; wrong++; } continue; }
+            if (!ids_[y][x]) { wrong++; continue; }
+            int n = 0;
+            bool mixed = false;
+            for (int yy = 0; yy < Game::H; yy++)
+                for (int xx = 0; xx < Game::W; xx++)
+                    if (ids_[yy][xx] == ids_[y][x]) { n++; mixed |= g.cell(xx, yy).type != g.cell(x, y).type; }
+            if (n > 4 || mixed) {
+                const int bad = ids_[y][x];
+                for (int yy = 0; yy < Game::H; yy++)
+                    for (int xx = 0; xx < Game::W; xx++)
+                        if (ids_[yy][xx] == bad) ids_[yy][xx] = 0;
+                wrong++;
+            }
+        }
     if (!wrong) return;
-    for (int y = 0; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++)
-            if (g.cell(x, y).type < 0) ids_[y][x] = 0;
     // cells of unknown origin (a filled board, a stack inherited from another universe): grouped into pieces of at
     // most four cells of one color
     for (int y = 0; y < Game::H; y++)
@@ -356,6 +369,20 @@ void ShadowUniverse::uploadBoard(const Game& g) {
             data[y][x][2] = (unsigned char)std::lround(255.f * saturate(c.flash * c.flash));
             data[y][x][3] = 255;
         }
+    }
+    static const bool check = std::getenv("ZEN_SHADOW_CHECK") != nullptr;
+    if (check) {
+        // (test hook: every join between two cells must be one piece's: same id, same type)
+        int bad = 0;
+        for (int y = 0; y < Game::H; y++)
+            for (int x = 0; x < Game::W; x++) {
+                const int m = data[y][x][1];
+                const int t = g.cell(x, y).type;
+                if ((m & 1) && g.cell(x + 1, y).type != t) bad++;
+                if ((m & 4) && g.cell(x, y - 1).type != t) bad++;
+                if (t >= 0 && !ids_[y][x]) bad++;
+            }
+        if (bad) std::fprintf(stderr, "[shadow] check: %d bad joins\n", bad);
     }
     for (int s = 0; s < 24; s++) {
         const float yc = 11.5f - s;
@@ -468,6 +495,35 @@ void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
             bool any = false;
             for (auto& c : ev.cells) any |= c.y == y;
             if (any) rowsSeen[y] = ++k;
+        }
+        // the piece ids follow the rows down exactly as the game compacts its board (else stale ids would merge
+        // cells of different pieces, and the model's and the shadow's shapes would no longer be the pieces')
+        {
+            bool full[Game::H] = {};
+            for (auto& c : ev.cells)
+                if (c.y >= 0 && c.y < Game::H) full[c.y] = true;
+            // a piece cut by the clear: each part keeps its own id (the part above falls by more rows than the
+            // part below, and stays a separate shape even once they touch again)
+            int below[Game::H] = {};
+            for (int y = Game::H - 2; y >= 0; y--) below[y] = below[y + 1] + (full[y + 1] ? 1 : 0);
+            std::vector<std::pair<long long, int>> remap;
+            for (int y = 0; y < Game::H; y++)
+                for (int x = 0; x < Game::W; x++) {
+                    if (full[y] || !ids_[y][x] || below[y] == 0) continue;
+                    const long long key = (long long)ids_[y][x] * 64 + below[y];
+                    int nid = 0;
+                    for (auto& r : remap) if (r.first == key) nid = r.second;
+                    if (!nid) { nid = nextId_++; remap.push_back({key, nid}); }
+                    ids_[y][x] = nid;
+                }
+            int nb[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (full[y]) continue;
+                std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
+                dst--;
+            }
+            std::memcpy(ids_, nb, sizeof(ids_));
         }
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H) continue;
