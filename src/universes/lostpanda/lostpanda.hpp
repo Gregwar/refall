@@ -49,6 +49,7 @@ private:
     enum { T_AWAY, T_ARRIVE, T_WAIT, T_OUT, T_RIDE, T_TERM, T_LEAVE, T_GONE };
     int train_ = T_AWAY;
     double trainX_ = -1000.0;     // the train's rear (world x)
+    float rideS() const;          // the ride's length: T_RIDE_S, shorter in a shorter song's scene
     float trainT_ = 0.f, door_ = 0.f, boardT_ = 0.f, leaveT_ = 0.f, trainClock_ = 0.f, rideT_ = 0.f;
     float missedT_ = 0.f;          // since the cub missed a train (it watches it go)
     // ---- The end: the camera stops, the cub sees its family on the right and runs to them.

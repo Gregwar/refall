@@ -101,7 +101,7 @@ constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks aw
 // The subway's timetable (seconds): after a gap a train glides in, opens its doors and waits for the cub as long as
 // it takes, then closes them and leaves with it.
 constexpr float T_GAP = 8.f, T_ARRIVE_S = 10.f, T_DOOR_S = 1.2f, T_DWELL = 9.f, T_OUT_S = 10.f;
-constexpr float T_RIDE_S = 36.f;                     // the ride, door to door
+constexpr float T_RIDE_S = 36.f;                     // the ride, door to door (in a 50-line scene; shorter songs ride faster)
 double rideF(double u) { u = std::clamp(u, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
 
 double wayOf(double lines) {
@@ -722,6 +722,8 @@ void LostPandaUniverse::cell(float x, float y, float half, const vec3& tint, flo
     cells_.push_back({{x, y, half, 0.f}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, glow, 0.f}});
 }
 
+float LostPandaUniverse::rideS() const { return T_RIDE_S * std::min(1.f, 1.f / paceScale()); }
+
 void LostPandaUniverse::buildBoard(const Game& g) {
     const VariantDef& vd = VARIANTS[wrapV(variant_)];
     auto tintOf = [&](int t) { return lin(vd.piece[std::clamp(t, 0, 6)]); };
@@ -1141,7 +1143,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
                 const double want = (P_ - XB) / (XA - XB);
                 double lo = 0.0, hi = 1.0;
                 for (int i = 0; i < 40; i++) { const double m = 0.5 * (lo + hi); (rideF(m) < want ? lo : hi) = m; }
-                train_ = T_RIDE; rideT_ = (float)(lo * T_RIDE_S); door_ = 0.f;
+                train_ = T_RIDE; rideT_ = (float)(lo * rideS()); door_ = 0.f;
                 trainX_ = XB - DOOR + (XA - XB) * rideF(lo);
                 P_ = trainX_ + DOOR;
             } else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
@@ -1181,7 +1183,9 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         const float mood = kid_.mood;
         const bool lineWalk = dist > 0.05;
         // a calm pace: a stroll, a walk, a brisk walk when it has a long way to make up (never a dash)
-        double vmax = lineWalk ? std::min(3.0, lerpf(1.5f, 2.4f, mood) + std::min(0.8, std::max(0.0, dist - 6.0) * 0.08)) : 0.45;
+        // the further behind its lines, the faster it goes (a brisk walk, then a trot): the way must always be
+        // feasible within the song, however fast the lines come
+        double vmax = lineWalk ? std::min(6.5, lerpf(1.5f, 2.4f, mood) + std::max(0.0, dist - 6.0) * 0.12) : 0.45;
         if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
@@ -1236,7 +1240,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
         case T_RIDE: {
             rideT_ += wdt;
-            const double u = rideT_ / T_RIDE_S;
+            const double u = rideT_ / rideS();
             const double x = XB - DOOR + (XA - XB) * rideF(u);
             vel_ = (x - trainX_) / std::max((double)wdt, 1e-4);
             trainX_ = x;
