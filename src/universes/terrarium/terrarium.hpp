@@ -64,15 +64,20 @@ private:
     std::vector<Sprout> sprouts_;
     void addSeed(const vec3& from);
     float inVine_ = 0.f;                  // vines up the inside of the first jar's glass
-    // ---- The network: more jars around the first, glass tubes between them (see terrarium.cpp)
+    // ---- The cluster: more jars, one at a time, each the first one's twin with its own biome (see terrarium.cpp)
     struct NetTube { vec3 a, b, c; float r, birth; bool water; int from, to; };
     std::vector<NetTube> tubes_;
     int tubesFor_ = -1;                   // the variant they were built for
     void buildNetwork();
-    vec3 jarFoot(int k) const;            // where another jar stands now (it is set down gently when it appears)
-    vec3 neckOf(int k) const;             // the top of its cork (k = -1: the first jar's)
+    vec3 jarFoot(int k) const;            // where jar k (0 the first) stands now (it is set down gently when it appears)
+    float jarScale(int k) const;
+    vec3 neckOf(int k) const;             // the top of its cork
     float jarAppear(int k) const;
-    bool pickNetSpot(vec3& at);           // a seed's landing: the soil of a recent jar beside the well
+    float jarLines(int k) const;          // its own growth, on the first jar's 0..20 scale
+    int jarBiome(int k) const;
+    bool pickNetSpot(vec3& at);           // a seed's landing: the soil of the newest jar beside the well
+    GLuint jarTex_ = 0;                   // the jars' data (see shaders.hpp)
+    void uploadJars(const std::vector<Slot>& firstSlots, float after);
     // the beetle's trips through the tube to the next jar: 0 at home, 1 in the tube, 2 in the other jar
     int bugMode_ = 0, bugPhase_ = 0;
     float bugU_ = 0.f, bugT_ = 0.f, bugCool_ = 20.f;
