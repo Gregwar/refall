@@ -34,8 +34,8 @@ or discuss further.
 first drop in its universe, stitched with crossfades (`--songs N`, `--before`, `--after`, `--fade`, `--size`).
 
 `tools/demo.py [tools/demo.json] -o demo.mp4` makes the demo video: the whole song of `tools/demo.json`, in chapters
-(a title card on black, then shots of the game in many universes, cut on the song's beats), every enabled universe at
-least once (`--plan-only` prints the timeline, `-j N` records shots in parallel, cached between runs). It uses
+(shots of the game in many universes, cut on the song's bars, none shorter than `min_shot`; optional title cards on
+black), every enabled universe at least once (`--plan-only` prints the timeline, `-j N` records shots in parallel, cached between runs). It uses
 `tetris-universe --analysis OUT.json` (the song's beats, structure and scene levels as JSON) and the test hook
 `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a filled board).
 

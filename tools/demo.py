@@ -4,8 +4,8 @@
 usage: tools/demo.py [CONFIG] [-o OUT.mp4] [--plan-only] [-j N] [--game PATH] [--work DIR] [--size WxH] [--fps N]
                      [--seed N] [--max-mb MB | --crf N] [--only U,U] [--sheet PNG] [--song SPEC]
 
-CONFIG is tools/demo.json by default: the song, the chapters (a title card each, an end anchored on the song's
-structure) and their shots (universe, variant, game test hooks, length). Its header documents the format.
+CONFIG is tools/demo.json by default: the song, the chapters (an end anchored on the song's structure, an optional
+title card on black) and their shots (universe, variant, game test hooks, length; `min_shot` the shortest cut). Its header documents the format.
 The pipeline, one function each:
   1. song + analysis: the song (a file or ytdl:<id>, from the game's YouTube cache or yt-dlp) and the game's own
      analysis of it (tetris-universe --analysis: beats, downbeat, sections, drops), so cuts land on the beats the
@@ -239,13 +239,14 @@ def enabled_universes(game):
     return out
 
 
-def cut_lengths(points, n, accelerate, fixed):
+def cut_lengths(points, n, accelerate, fixed, minimum=1):
     """Splits grid points (times) among n shots: fixed[i] grid units, or a share (weights, ramped by `accelerate`:
-    the first shot that many times longer than the last). Returns the shots' boundary indices into points."""
+    the first shot that many times longer than the last), never under `minimum` units. Returns the shots' boundary
+    indices into points, None when they do not fit."""
     units = len(points) - 1
     free = [i for i in range(n) if fixed[i] is None]
     left = units - sum(f for f in fixed if f is not None)
-    if left < len(free):
+    if left < minimum * len(free):
         return None
     if not free:
         lengths = list(fixed)
@@ -253,16 +254,16 @@ def cut_lengths(points, n, accelerate, fixed):
         # ideal shares, ramped from `accelerate` (the first) to 1 (the last), at least one unit each; whole units by
         # largest remainder, then handed out in the ramp's order so the lengths only shrink (or only grow)
         w = [accelerate ** ((len(free) - 1 - k) / max(1, len(free) - 1)) for k in range(len(free))]
-        ideal = [max(1.0, left * x / sum(w)) for x in w]
+        ideal = [max(float(minimum), left * x / sum(w)) for x in w]
         scale = left / sum(ideal)
         ideal = [x * scale for x in ideal]
-        whole = [max(1, int(x)) for x in ideal]
+        whole = [max(minimum, int(x)) for x in ideal]
         order = sorted(range(len(free)), key=lambda k: -(ideal[k] - int(ideal[k])))
         k = 0
         while sum(whole) < left:
             whole[order[k % len(order)]] += 1
             k += 1
-        while sum(whole) > left:  # the floors at 1 overshot: take from the longest
+        while sum(whole) > left:  # the floors at the minimum overshot: take from the longest
             whole[max(range(len(whole)), key=lambda j: whole[j])] -= 1
         whole.sort(reverse=accelerate >= 1)
         lengths, it = [], iter(whole)
@@ -279,17 +280,19 @@ def cut_lengths(points, n, accelerate, fixed):
 def plan(cfg, grid, universes):
     """The timeline: cards and shots with their song times, from the config."""
     seed = int(cfg.get("seed", 1))
-    named = {s["u"].split(":")[0] for ch in cfg["chapters"] for s in ch.get("shots", [])}
+    named = {s["u"].split(":")[0] for ch in cfg["chapters"] if ch.get("enabled", True) for s in ch.get("shots", [])}
     for u in sorted(named - set(universes)):
         log(f"note: {u} is named in the config but not enabled in this build: skipped")
     timeline, t = [], 0.0
-    for ci, ch in enumerate(cfg["chapters"]):
-        end = grid.duration if ci == len(cfg["chapters"]) - 1 else grid.anchor(ch["end"])
+    min_shot = grid.length(cfg.get("min_shot", "1bar"), grid.bars[len(grid.bars) // 2])
+    chapters = [ch for ch in cfg["chapters"] if ch.get("enabled", True)]
+    for ci, ch in enumerate(chapters):
+        end = grid.duration if ci == len(chapters) - 1 else grid.anchor(ch["end"])
         if end <= t:
             sys.exit(f"chapter {ch['id']} ends at {end:.2f} s, before it starts ({t:.2f} s)")
         card = ch.get("card")
         shots_at = t
-        if card:
+        if card and card.get("enabled", True):
             card_end = end
             if "bars" in card:
                 card_end = min(end, grid.shift(t, card["bars"], "bar"))
@@ -319,24 +322,27 @@ def plan(cfg, grid, universes):
             r0 = starts.get(a, shots_at)
             r1 = starts.get(b, end)
             run = shots[a:b]
-            for unit in ([grid_unit, "beat"] if grid_unit != "beat" else ["beat"]):
-                g = grid.bars if unit == "bar" else grid.beats
-                inner = [float(x) for x in g if r0 + 0.05 < x < r1 - 0.05]
-                points = [r0] + inner + [r1]
-                fixed = []
-                for s in run:
-                    if "len" in s:
-                        d = grid.length(s["len"], r0)
-                        fixed.append(max(1, int(round(d / (grid.period * (4 if unit == "bar" else 1))))))
-                    else:
-                        fixed.append(None)
-                if all(f is not None for f in fixed):  # all fixed: the last one takes what is left
-                    fixed[-1] = None
-                bounds = cut_lengths(points, len(run), float(ch.get("accelerate", 1.0)), fixed)
-                if bounds:
-                    break
+            unit = grid_unit
+            unit_s = grid.period * (4 if unit == "bar" else 1)
+            minimum = max(1, int(math.ceil(min_shot / unit_s - 0.05)))
+            g = grid.bars if unit == "bar" else grid.beats
+            # the grid points inside the run; a sliver at either end (the song starting before its first bar) joins
+            # the shot next to it
+            inner = [float(x) for x in g if r0 + 0.5 * unit_s < x < r1 - 0.5 * unit_s]
+            points = [r0] + inner + [r1]
+            fixed = []
+            for s in run:
+                if "len" in s:
+                    d = grid.length(s["len"], r0)
+                    fixed.append(max(minimum, int(round(d / unit_s))))
+                else:
+                    fixed.append(None)
+            if all(f is not None for f in fixed):  # all fixed: the last one takes what is left
+                fixed[-1] = None
+            bounds = cut_lengths(points, len(run), float(ch.get("accelerate", 1.0)), fixed, minimum)
             if not bounds:
-                sys.exit(f"chapter {ch['id']}: {len(run)} shots do not fit in {r1 - r0:.1f} s on a beat grid")
+                sys.exit(f"chapter {ch['id']}: {len(run)} shots do not fit in {r1 - r0:.1f} s with {minimum} {unit}(s) "
+                         f"at least each (min_shot); move some to another chapter or lengthen this one")
             for i, s in enumerate(run):
                 u, _, variant = s["u"].partition(":")
                 env = dict(cfg.get("env", {}))
@@ -345,6 +351,8 @@ def plan(cfg, grid, universes):
                 timeline.append({"kind": "shot", "chapter": ch["id"], "u": u, "variant": variant,
                                  "t0": points[bounds[i]], "t1": points[bounds[i + 1]], "env": env,
                                  "seed": int(s.get("seed", int(short_hash(seed, ch["id"], u)[:8], 16) | 1))})
+                if "fade_in" in s:
+                    timeline[-1]["fade_in"] = grid.length(s["fade_in"], points[bounds[i]])
         t = end
         if ch.get("outro") and timeline[-1]["kind"] == "shot":
             o = ch["outro"]
@@ -594,10 +602,13 @@ def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, c
             fade_from = grid.duration - e["fade_out"] if e.get("fade_out") else None
             for k, buf in enumerate(read_frames(e["clip"], first, step, f1 - f0, width, height)):
                 t = (f0 + k) / fps
-                if title is None and fade_from is None:
+                fade_in = e.get("fade_in", 0)
+                if title is None and fade_from is None and t >= e["t0"] + fade_in:
                     enc.stdin.write(buf)
                     continue
                 fr = np.frombuffer(buf, np.uint8).reshape(height, width, 3).astype(np.float32) / 255.0
+                if t < e["t0"] + fade_in:
+                    fr *= smooth(e["t0"], e["t0"] + fade_in, t)
                 if fade_from is not None and t > fade_from:
                     x = min(1.0, (t - fade_from) / (grid.duration - 0.3 - fade_from))
                     fr *= (1 - x) ** 1.6
