@@ -118,6 +118,8 @@ void main() {
     // the bands scallop into petals as the music breathes; the drop folds them into a mandala
     s += uBreath * 0.42 * (1.0 - la * la);
     s += uMandala * 1.1 * sqrt(max(0.0, 1.0 - la * la)) - uMandala * 0.5;
+    float la2 = abs(fract(la * 1.0 + 0.5) - 0.5) * 2.0;   // the half-sectors: small petals between the big ones
+    s += uMandala * 0.45 * (1.0 - la2 * la2);
     s += uWarp * 0.16 * sin(an * 3.0 + uTime * 0.21 + log(r) * 2.0);
     float i = floor(s), f = fract(s);
     float checker = 0.0;
@@ -130,26 +132,37 @@ void main() {
     float dl = min(f, 1.0 - f) * bw;
     float aa = fwidth(s) * bw * 0.8 + 0.004;
     col = mix(col, uLine, 1.0 - smoothstep(lineW - aa, lineW + aa, dl));
-    // op-art dots in every other band, one per sector (sparkles in the drop's mandala)
-    if (mod(i, 2.0) > 0.5 && bw > 0.5) {
-        vec2 q = vec2(la * sec * 0.5 * r, (f - 0.5) * bw);
-        float rr = min(0.26 * bw, 0.55);
-        float kk;
-        vec2 pq = petalFrame(q, 5.0, 1.5708 + uTime * 0.3, kk);
-        float daisy = min(dEll(pq - vec2(0.55 * rr, 0.0), vec2(0.45, 0.33) * rr), length(q) - 0.3 * rr);
-        float dd = mix(daisy, dSparkle(q / (rr * 1.25)) * rr * 1.25, uMandala);
-        float a0 = 1.0 - smoothstep(-aa, aa, dd);
-        col = mix(col, mix(uLine, uDot, uMandala), a0);
-        float c0 = 1.0 - smoothstep(-aa, aa, length(q) - 0.26 * rr);
-        col = mix(col, uDot, c0 * (1.0 - uMandala));
+    // printed motifs, part of the pattern: in every other band ring, one per sector on its axis, riding the rings
+    // outward and warping with them; each ring repeats one motif (daisies, hearts, peace signs), in a lighter or
+    // darker tone of its band, outlined like the bands; the drop's mandala turns them all to sparkles
+    // (a motif whose center nears a HUD column fades out whole)
+    vec2 q = vec2(la * sec * 0.5 * r, (f - 0.5) * bw);
+    float anC = (si + 0.5) * sec - 0.025 * uTime;
+    vec2 pc = vec2(0.0, -0.5) + (rc - q.y) * vec2(cos(anC), sin(anC));
+    float v = 1.0 - smoothstep(0.4, 2.2, min(boxD(pc, uColL), boxD(pc, uColR)));   // (fading whole as it rides in)
+    if (mod(i, 2.0) > 0.5 && bw > 0.45 && v < 0.999) {
+        float rr = min(0.3 * bw, 0.75);
+        float t = mod(floor(i * 0.5), 3.0);
+        float dm;
+        if (t < 0.5) {
+            float kk;
+            vec2 pq = petalFrame(q, 6.0, 1.5708, kk);
+            dm = min(dEll(pq - vec2(0.58 * rr, 0.0), vec2(0.42, 0.3) * rr), length(q) - 0.32 * rr);
+        } else if (t < 1.5) dm = dHeart(q / rr) * rr;
+        else dm = dPeace(q / rr, 0.26) * rr;
+        dm = mix(dm, dSparkle(q / (rr * 1.3)) * rr * 1.3, uMandala);
+        vec3 bc = mix(band(i + fl), band(i + fl + 1.0), fract(sh));
+        float lum = dot(bc, vec3(0.299, 0.587, 0.114));
+        vec3 tone = lum > 0.62 ? mix(bc, bc * bc, 0.45) * 0.93 : mix(bc, vec3(1.0), 0.4);
+        float k = 1.0 - v;
+        col = mix(col, uLine, (1.0 - smoothstep(-aa, aa, dm - lineW * 1.2)) * k);
+        col = mix(col, tone, (1.0 - smoothstep(-aa, aa, dm)) * k);
+        if (t < 0.5) col = mix(col, mix(bc, uLine, 0.0) * (lum > 0.62 ? 0.72 : 1.0), (1.0 - smoothstep(-aa, aa, length(q) - 0.22 * rr)) * k * (1.0 - uMandala));
     }
     // calm: the colors softer; slow motion: dusk
     col = mix(col, mix(col, vec3(dot(col, vec3(0.3333))), 0.5) * 0.92 + 0.08, uCalm);
     float l = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(col, vec3(l) * vec3(0.62, 0.66, 0.92), uDesat);
-    // a soft veil behind the HUD columns
-    float v = max(1.0 - smoothstep(-0.6, 1.4, boxD(p, uColL)), 1.0 - smoothstep(-0.6, 1.4, boxD(p, uColR)));
-    col = mix(col, uVeil, v * 0.0);
     frag = vec4(col * uDim, 1.0);
 }
 )";
@@ -207,7 +220,6 @@ void main() {
             pcol = idx + 0.5 < p1 * n ? A : B;
         } else pcol = mod(k, 2.0) < 0.5 ? A : B;
         layer(acc, dP, pcol);
-        layer(acc, dEll(pp - vec2(pc * 0.92, 0.0), vec2(0.2, 0.08) * open), mix(pcol, vec3(1.0), 0.42));
         layer(acc, dC, WH);
         layer(acc, dC + W * 0.8, C);
         layerA(acc, abs(length(q) - 0.2) - 0.035, C * 0.82, 1.0);
@@ -226,7 +238,6 @@ void main() {
         float dC = length(q) - 0.3;
         layer(acc, min(min(dO, dM), dC) - W, WH);
         layer(acc, dO, mod(k, 2.0) < 0.5 ? A : mix(A, B, 0.35));
-        layer(acc, dEll(o - vec2(0.66, 0.0), vec2(0.18, 0.06)), mix(A, vec3(1.0), 0.5));
         layer(acc, dM, WH);
         layer(acc, dM + W * 0.7, B);
         layer(acc, dC, WH);
@@ -240,13 +251,11 @@ void main() {
         float d = dPeace(q, 0.24);
         layer(acc, d - W, WH);
         layer(acc, d, A);
-        layerA(acc, max(d + 0.07, -(q.x + q.y) * 0.7 - 0.2), mix(A, vec3(1.0), 0.4), 0.8);
     } else if (kind == 3) {
         // a heart
         float d = dHeart(q);
         layer(acc, d - W, WH);
         layer(acc, d, A);
-        layer(acc, dEll(q - vec2(-0.4, 0.3), vec2(0.16, 0.1)), mix(A, vec3(1.0), 0.6));
     } else if (kind == 4) {
         // a rainbow and its two clouds
         vec2 c = vec2(0.0, -0.45);
@@ -277,7 +286,6 @@ void main() {
         layer(acc, dR, mod(k, 2.0) < 0.5 ? B : C);
         layer(acc, dD, WH);
         layer(acc, dD + W * 0.8, A);
-        layer(acc, dEll(q - vec2(-0.25, 0.3), vec2(0.14, 0.08)), mix(A, vec3(1.0), 0.55));
         face(acc, q + vec2(0.0, 0.04), 0.62, uInk, step(0.97, fract(uTime * 0.23 + p3)));
     } else if (kind == 6) {
         // a mushroom with a face
@@ -318,13 +326,11 @@ void main() {
         float d = (length(q) - rr) * 0.9;
         layer(acc, d - W, WH);
         layer(acc, d, A);
-        layer(acc, dEll(q - vec2(-0.3, 0.32), vec2(0.2, 0.12)), mix(A, vec3(1.0), 0.6));
     } else if (kind == 9) {
         // a petal
         float d = dEll(q, vec2(1.0, 0.5));
         layer(acc, d - W, WH);
         layer(acc, d, A);
-        layer(acc, dEll(q - vec2(0.15, 0.0), vec2(0.5, 0.14)), mix(A, vec3(1.0), 0.45));
     } else if (kind == 10) {
         // a sparkle
         float d = dSparkle(q);
@@ -347,7 +353,6 @@ void main() {
         layer(acc, min(stem, lf) - vE.w, WH);
         layer(acc, stem, A);
         layer(acc, lf, B);
-        layer(acc, max(lf, min(abs(a1.y), abs(a2.y)) - 0.02), mix(B, vec3(1.0), 0.3));
     } else if (kind == 13) {
         // the well's backing (board units): a calm dark panel, a slim white line, a hairline of ink
         vec2 l = vL;
