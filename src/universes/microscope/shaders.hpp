@@ -5,7 +5,7 @@
 // drifting in it far from the well) and the well's calm rounded pane; LIFE_FS the creatures (one signed distance per
 // kind: a bean, a blob, a tadpole, a daisy, a rotifer with its two wheels, a volvox ball with its babies, and plain
 // bubbles), toon shaded (a flat color, one cel shadow, a bold outline, a gloss) with big kawaii eyes always upright;
-// PIECE_FS the pieces (one picture-book cell per block: a pale membrane, a bright cytoplasm, one big soft nucleus); FINAL_FS the
+// PIECE_FS the pieces (one jelly egg per block, a small creature curled up asleep inside); FINAL_FS the
 // eyepiece (the round dish in its thick toy rim, on the variant's table color) and the frame. The water and the
 // creatures' colors come from the variant's own palette and the drop's, soaking in unevenly (stainK).
 #include <string>
@@ -75,7 +75,8 @@ void main() {
 
 // ---------------------------------------------------------------- the creatures and bubbles (instanced)
 // a: x, y, size, rotation. b: kind, seed, time, alpha. c: color (linear), stretch. d: the drop's color, lid (0 open,
-// 1 closed). e: happy (0..1), depth (0 front, 1 back), spin (wheels, petals, babies), look angle.
+// 1 closed). e: happy (0..1), the egg's top (world y below which it is hidden inside it; -1e4: none), spin (wheels,
+// petals, babies), look angle.
 inline const char* LIFE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -175,6 +176,7 @@ void main() {
     float aa = max(length(fwidth(q)) * 0.7, 1e-4);
     float cov = 1.0 - smoothstep(-aa, aa, d);
     float dw = sdRoundBox(vWorld - vec2(0.0, 0.15), vec2(5.24, 10.37), 0.45);
+    if (vE.y > -1e3) cov *= smoothstep(vE.y - 0.01, vE.y + 0.03, vWorld.y);   // (still half in its egg)
     if (kind != 6) cov *= 1.0 - uPane * (1.0 - smoothstep(-0.02, 0.06, dw));   // (the hard drop's bubbles stay)
     if (cov <= 0.0) discard;
     float k = stainK(vWorld);
@@ -274,15 +276,15 @@ void main() {
     c = mix(c, ink, smoothstep(-0.036 - aa, -0.036 + aa, d));
     c *= uGlow;
     // the far ones sit back in the water
-    c = mix(c, mix(uWaterA[1], uWaterB[1], k) * 1.1, vE.y * 0.4);
     float a = cov * vB.w;
     frag = vec4(nightOf(c, 0.55) * a, a);
 }
 )";
 
 // ---------------------------------------------------------------- the pieces (instanced per cell)
-// a: x, y (cell center), half (board units), kind (0 cell, 1 ghost, 2 popping, 3 deflating). b: type, -, progress,
-// alpha. c: lock flash, -, -, -. d: unused.
+// a: x, y (cell center), half (board units), kind (0 cell, 1 ghost, 2 popping, 3 deflating). b: type, seed, progress,
+// alpha. c: lock flash, awake (0..1), look angle, inside (0: its creature is out). d: the creature's offset x, y, wiggle,
+// face (0: none, the previews).
 inline const char* PIECE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -304,27 +306,28 @@ inline const char* PIECE_FS = R"(#version 330 core
 in vec2 vLocal;
 flat in vec4 vA, vB, vC, vD;
 out vec4 frag;
-uniform vec3 uEyeInk;
+uniform vec3 uEyeInk, uBlush;
+uniform float uTime;
 void main() {
     vec2 p = vLocal;
     int kind = int(vA.w + 0.5);
     int type = int(vB.x + 0.5);
     float t = vB.z;
     const float GAP = 0.045;
-    float sc = 1.0, rc = 0.28;
+    float sc = 1.0, rc = 0.34;
     vec2 off = vec2(0.0);
     if (kind == 2) {
         // popping: it puffs up a little into a ball, then shrinks away
         float up = smoothstep(0.0, 0.35, t), down = smoothstep(0.3, 1.0, t);
         sc = (1.0 + 0.1 * up) * (1.0 - down * down);
-        rc = mix(0.28, 0.45, up);
+        rc = mix(0.34, 0.45, up);
     }
     if (kind == 3) {
         // deflating: it sags and shrinks
         float e = smoothstep(0.0, 1.0, t);
         sc = 1.0 - 0.3 * e;
         off = vec2(0.0, -0.14 * e);
-        rc = mix(0.28, 0.36, e);
+        rc = mix(0.34, 0.4, e);
     }
     if (sc <= 0.01) discard;
     float d = sdRoundBox((p - off) / sc, vec2(0.5 - GAP), rc) * sc;
@@ -339,28 +342,73 @@ void main() {
         frag = vec4(col * a, a);
         return;
     }
-    // a picture-book cell: a pale, translucent membrane, a bright cytoplasm lighter toward its middle, one big soft
-    // nucleus, a bold outline in a deep shade of its color
+    // a jelly egg: a pale translucent shell in the cell's color (lighter toward its top, its rim catching the light on
+    // its upper left), with one small creature curled up asleep inside, a deeper shade of the same color
     vec2 q = (p - off) / sc;
     float in_ = -d / sc;
     vec2 g = vec2(dFdx(d), dFdy(d));
     vec2 n = g / max(length(g), 1e-6);
-    float cyto = smoothstep(0.12, 0.17, in_);
-    vec3 cy = col * (0.86 + 0.26 * (1.0 - smoothstep(0.0, 0.4, length(q - vec2(-0.07, 0.07)))));
-    vec3 mem = mix(col, vec3(1.0), 0.42);
-    vec3 c = mix(mem, cy, cyto);
-    // the membrane catches the light on its upper left
+    vec3 c = mix(col, vec3(1.0), 0.02 + 0.14 * smoothstep(-0.45, 0.45, q.y));
+    float rim = 1.0 - smoothstep(0.07, 0.11, in_);
     float lit = smoothstep(0.1, 0.6, dot(n, normalize(vec2(-0.6, 0.8))));
-    c = mix(c, vec3(1.0), (1.0 - cyto) * lit * 0.45);
-    // the nucleus: one soft round blob, a little off center, deeper in tone
-    vec2 nq = (q - vec2(0.04, -0.04)) / vec2(0.2, 0.18);
-    float nd = length(nq) - 1.0;
-    float nuc = 1.0 - smoothstep(-0.3, 0.12, nd);
-    vec3 nc = mix(col * 0.64, uEyeInk, 0.06) * (1.0 + 0.25 * (1.0 - smoothstep(0.0, 1.0, length(nq + vec2(0.35, -0.35)))));
-    c = mix(c, nc, nuc * 0.9);
-    c = mix(c, vec3(1.0), vC.x * 0.35);
+    c = mix(c, vec3(1.0), rim * (0.2 + 0.5 * lit));
+    // the creature (vC: flash, awake, look angle, inside; vD: offset x, y, wiggle, face)
+    float inside = vC.w * (kind == 2 ? 0.0 : 1.0);
+    if (inside > 0.01) {
+        float seed = vB.y;
+        int ek = int(fract(seed * 7.13) * 4.0);
+        float br = 1.0 + 0.035 * sin(uTime * 1.3 + seed * 40.0);
+        vec2 cc = vec2(0.0, -0.04) + vD.xy + vec2(0.03 * vD.z * sin(uTime * 15.0 + seed * 9.0), 0.0);
+        float S = 0.28 * br;
+        vec2 v = (q - cc) / S;
+        v.x *= fract(seed * 3.7) < 0.5 ? 1.0 : -1.0;   // (curled one way or the other)
+        float th = atan(v.y, v.x), r = length(v);
+        float sd;
+        if (ek == 0) sd = (length(v / vec2(1.12, 0.78)) - 1.0) * 0.78;                       // a bean
+        else if (ek == 1) sd = r - 0.9 - 0.09 * sin(3.0 * th + seed * 20.0) * smoothstep(0.1, 0.6, r);   // a blob
+        else if (ek == 2) {                                                                   // a tadpole, its tail curled
+            vec2 h = v - vec2(0.18, 0.08);
+            float head = length(h) - 0.74;
+            float a = atan(h.y, h.x);
+            float u = clamp((a - 1.7) / 2.9, 0.0, 1.0);
+            float tail = abs(length(h) - 0.9) - 0.2 * (1.0 - u);
+            tail = max(tail, (a > 1.7 && a < 4.6) || (a < -1.6) ? -1.0 : 1.0);
+            sd = min(head, tail);
+        } else sd = (r - 0.8 - 0.14 * cos(6.0 * th + seed * 20.0) * smoothstep(0.1, 0.5, r)) * 0.86;   // a daisy
+        sd *= S;
+        float body = (1.0 - smoothstep(-aa, aa, sd)) * inside;
+        vec3 cb = col * 0.62;
+        cb = mix(cb, col * 0.36, smoothstep(-0.035 - aa, -0.035 + aa, sd));
+        c = mix(c, cb, body);
+        if (vD.w > 0.5) {
+            // its face: asleep (closed eyes, a smile), or awake looking around (open eyes, glints), rosy cheeks
+            vec2 fc = cc + vec2(0.0, 0.02) + vec2(cos(vC.z), sin(vC.z)) * 0.025 * vC.y;
+            float aw = vC.y;
+            for (int i = 0; i < 2; i++) {
+                vec2 ec = fc + vec2(i == 0 ? -0.085 : 0.085, 0.02);
+                vec2 e = q - ec;
+                float ink = 0.0, glint = 0.0;
+                if (aw > 0.25) {
+                    vec2 er = vec2(0.044, 0.058 * smoothstep(0.25, 0.8, aw));
+                    ink = 1.0 - smoothstep(-aa, aa, (length(e / er) - 1.0) * er.y);
+                    glint = (1.0 - smoothstep(-aa, aa, length(e - vec2(-0.014, 0.02)) - 0.016)) * ink;
+                } else {
+                    float arc = max(abs(length(e - vec2(0.0, 0.024)) - 0.036) - 0.011, e.y - 0.018);
+                    ink = 1.0 - smoothstep(-aa, aa, arc);
+                }
+                vec2 bp = (q - ec - vec2(i == 0 ? -0.03 : 0.03, -0.05)) / vec2(0.035, 0.02);
+                c = mix(c, uBlush, (1.0 - smoothstep(0.5, 1.0, length(bp))) * 0.5 * body);
+                c = mix(c, uEyeInk, ink * body);
+                c = mix(c, vec3(1.0), glint * body);
+            }
+            vec2 m = q - fc - vec2(0.0, -0.005);
+            float sm = max(abs(length(m) - 0.026) - 0.009, m.y + 0.012);
+            c = mix(c, uEyeInk, (1.0 - smoothstep(-aa, aa, sm)) * body);
+        }
+    }
+    c = mix(c, vec3(1.0), vC.x * 0.3);
     c = mix(c, mix(col * 0.34, uEyeInk, 0.3), smoothstep(-0.05 - aa, -0.05 + aa, d));
-    float a = cov * vB.w * mix(0.82, 1.0, max(cyto, smoothstep(-0.07, -0.03, d)));
+    float a = cov * vB.w * mix(0.9, 1.0, rim);
     if (kind == 2) {
         c = mix(c, vec3(1.0), 0.25 * smoothstep(0.0, 0.4, t));
         a *= 1.0 - smoothstep(0.7, 1.0, t);

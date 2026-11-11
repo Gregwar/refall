@@ -42,6 +42,27 @@ private:
     bool colorsSet_ = false;
     void setPalette(GLuint prog);
 
+    // ---- The stack's eggs: each cell's seed (its creature's kind, its clock), kept in step with the board.
+    float seedAt_[22][10] = {};
+    bool has_[22][10] = {};
+    float fallSeed_[4] = {0.1f, 0.4f, 0.6f, 0.9f};   // the falling piece's, kept as they are when it locks
+    void syncSeeds(const Game& g);
+    // What a creature in its egg is doing: waking up and looking around, wiggling, pressing its face against the shell,
+    // peeking out of the top of its egg, or (rarely) hopping out on the stack and back in. A few at once.
+    enum { A_WAKE, A_WIGGLE, A_PRESS, A_PEEK, A_HOP };
+    struct Act { int x, y, type, side; float t, dur, dir; };
+    std::vector<Act> acts_;
+    float innerT_ = 1.f, peekT_ = 4.f, wakeAllT_ = 99.f;
+    bool safeAt(const Game& g, int x, int y) const;   // nothing falling near a surface egg (the piece, its ghost)
+    void updateActs(const Game& g, float dt, float wm, float wp);
+    struct EggLife { float awake = 0, look = 0, inside = 1, ox = 0, oy = 0, wiggle = 0; };
+    EggLife eggLife(int x, int y, float seed) const;
+    // A creature hatching out of a cleared row's egg: it pops up happily, in front, then dives into the water.
+    struct Hatch { vec2 p; int kind, type; float t, seed; };
+    std::vector<Hatch> hatches_;
+    void addFront(int kind, int type, vec2 p, float size, float ang, float look, float lid, float happy, float clipY,
+                  float stretch, float alpha, float seed);
+
     // ---- The stack's cells, popping and deflating.
     struct Pop { float x, y; int type; float t; };          // a cleared cell popping
     std::vector<Pop> pops_;
@@ -56,14 +77,16 @@ private:
         float phase = 0, spin = 0, look = 0, hop = 0, happy = 0, blink = 0, nextBlink = 3.f;
         float grow0 = 0.3f;     // its size at birth, a fraction of its full size
         bool fromCell = false;  // born out of a cleared row: it swims out of the well, behind the stack
+        bool leaving = false;   // hatched beyond what the dish holds yet: it swims off toward the rim and fades
+        int piece = -1;         // hatched from an egg: that piece type's color
     };
     std::vector<Org> orgs_;
     struct Bubble { vec2 p, v; float t, life, r; bool deco; };
     std::vector<Bubble> bubbles_;
-    struct ClearAt { std::vector<vec2> cells; int rows; };   // cleared rows waiting for the frame that frees their life
+    struct ClearAt { std::vector<vec2> cells; std::vector<int> kinds, types; int rows; };   // cleared rows waiting for the frame that frees their life
     std::vector<ClearAt> clears_;
     void release(const ClearAt& c, float pace);
-    void spawn(vec2 at, int side, bool fromCell, bool big);
+    void spawn(vec2 at, int side, bool fromCell, bool big, int kind = -1, int piece = -1, bool leaving = false);
     vec2 pickHome(int side, float size);
     int pickKind();
     int pickColor();
@@ -80,7 +103,8 @@ private:
     std::vector<Inst> cells_;
     std::vector<LInst> lifeBack_, lifeFront_;
     void buildBoard(const Game& g);
-    void addCell(float x, float y, float half, int type, int kind, float prog, float alpha, float flash);
+    void addCell(float x, float y, float half, int type, int kind, float prog, float alpha, float flash, float seed = 0.f,
+                 const EggLife* life = nullptr, bool face = true);
     void addLife(std::vector<LInst>& out, const Org& o, float alpha, float sizeK);
     void drawInst(GLuint prog, GLuint vao, GLuint vbo, const void* data, size_t bytes, size_t count);
 
