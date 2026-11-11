@@ -36,7 +36,7 @@ inline Q qYaw(float a) { return qAxis(vec3(0, 1, 0), a); }
 // ---------------------------------------------------------------- meshes and materials
 enum Mesh {
     M_BOX, M_SPHERE, M_LUMP, M_CYL, M_CONE, M_FRUSTUM, M_DOME, M_GABLE, M_HIP, M_HULL, M_SAIL, M_JIB,
-    M_PALM0, M_PALM1, M_PALM2, M_BIRD, M_COUNT
+    M_PALM0, M_PALM1, M_PALM2, M_BIRD, M_DOLPHIN, M_COUNT
 };
 enum Mat {
     MAT_RENDER, MAT_GLASS, MAT_DECK, MAT_WOOD, MAT_THATCH, MAT_POOL, MAT_PAINT, MAT_FOLIAGE, MAT_PALM, MAT_SAIL,
