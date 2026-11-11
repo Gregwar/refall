@@ -117,6 +117,9 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/tidepool.jpg"><br><b>TIDE POOL</b>: the whole universe, and every cleared line zooms deeper, one continuous dive: a galaxy at a node of the cosmic web, a star in its arm, a planet, its coast, the shore and a humble rock pool, then the floor's anemones and limpets, plankton in the water, a diatom's glass rose window, a living cell, then imagined physics (molecules, breathing orbital clouds, a boiling quantum foam, strings of light ringing with the song) until the universe opens out of them again; the pieces are sea glass<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/lostpanda.jpg"><br><b>LOST PANDA</b>: a little kawaii panda, lost in the city at night under the rain, finds its way home one cleared line at a time, in one continuous shot through a world cut away like a cross-section: the shopping street, down the stairs into the subway, a train through the tunnel and out at dawn, the industrial district, the fields, the bamboo forest; fed by bamboo snacks from each clear it grows stronger, and at the end it runs across the screen to its family; the blocks are bamboo segments<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/terrarium.jpg"><br><b>TERRARIUM</b>: a sealed glass jar on a windowsill; every few cleared lines grow its little world (moss cushions, ferns uncurling, toadstools, a pond, a sapling, violets) while the light outside goes from day through the golden hour to dusk, when the fireflies come out; a kawaii beetle wanders the soil, the calm parts mist the glass, the drop is a summer shower with every firefly lighting at once, and clears release seeds that drift down and sprout; the blocks are pebbles<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
