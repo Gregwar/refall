@@ -363,40 +363,6 @@ void boulder(Mesh& m, Rng& r, int variant) {
 
 } // namespace
 
-float motu(float a, float seed) {
-    return 0.62f + 0.22f * std::sin(3.f * a + seed * 9.f) + 0.16f * std::sin(7.f * a + seed * 4.f) + 0.08f * std::sin(13.f * a + seed * 2.f);
-}
-
-// A palm: a slender curved trunk, a crown of drooping fronds.
-Mesh buildPalm(int variant) {
-    Mesh m;
-    Rng r(0x9A1Bull + (uint64_t)variant * 41ull);
-    const float lean = r.range(0.12f, 0.3f);
-    std::vector<vec3> pts;
-    std::vector<float> rad, al;
-    for (int i = 0; i <= 10; i++) {
-        const float t = i / 10.f;
-        pts.push_back(vec3(lean * t * t, t, 0.f));
-        rad.push_back(lerpf(0.035f, 0.022f, t));
-        al.push_back(t);
-    }
-    tube(m, pts, rad, al, 7, 0.f, 0.f, false);
-    const vec3 top = pts.back();
-    const int fronds = 8 + variant;
-    for (int k = 0; k < fronds; k++) {
-        const float a = TAU * (k + r.range(-0.2f, 0.2f)) / fronds, droop = r.range(0.25f, 0.5f), len = r.range(0.38f, 0.5f);
-        const vec3 dir(std::cos(a), 0.f, std::sin(a));
-        const vec3 side(-dir.z, 0.f, dir.x);
-        surface(m, 10, 2,
-                [&](float u, float v) {
-                    const float w = 0.07f * std::sin(PI * std::pow(u, 0.7f)) * (v * 2.f - 1.f);
-                    return top + dir * (u * len) + vec3(0.f, 0.12f * u - droop * u * u, 0.f) + side * w + vec3(0.f, -std::fabs(w) * 0.4f, 0.f);
-                },
-                [&](float u, float) { return vec4(u, 0.f, 1.f, r.uniform()); }, false);
-    }
-    return m;
-}
-
 Mesh buildRock(int variant) {
     Mesh m;
     Rng r(0xB01Dull + (uint64_t)variant * 77ull);
