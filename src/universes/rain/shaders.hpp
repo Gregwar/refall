@@ -375,6 +375,12 @@ uniform vec3 uSheen;   // the street's light caught in the glaze
 uniform vec3 uSheen2;
 uniform float uGlow;
 float h(float x) { return fract(sin(x * 91.3458) * 47453.5453); }
+float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
 void main() {
     vec2 hs = vGeom.zw;
     vec2 d0 = vPix - vGeom.xy;
@@ -390,20 +396,59 @@ void main() {
     bool outside = vF.y > 0.5;
     vec2 qs = d0 / hs;                       // screen frame: the paint runs down the screen whatever the tile's turn
     if (outside) {
-        // the rain washes the paint off in vertical runs, the bare ceramic showing through
-        float paint = vF.x;
-        // (washed from the top down, unevenly: a few narrow runs reach further down than the rest)
-        float wc = qs.x * 3.5 + vP.x * 0.71;
-        float th = mix(h(floor(wc) + vP.x), h(floor(wc) + 1.0 + vP.x), smoothstep(0.3, 0.7, fract(wc)));
-        float wash = (1.0 - paint) * 2.4 - 0.5 - 0.9 * th - (qs.y + 1.0) * 0.45;
-        base = mix(base, vec3(0.84, 0.83, 0.8), smoothstep(-0.08, 0.08, wash));
-        // paint from the tile above running down its face in streaks
-        float col4 = floor(qs.x * 2.2 + vP.x * 0.37);
-        float fx = fract(qs.x * 2.2 + vP.x * 0.37);
-        float len = vE.w * (0.5 + 1.3 * h(col4 + vP.x)) * 2.0;
-        float drip = smoothstep(0.38, 0.12, abs(fx - 0.5)) * smoothstep(len, len - 0.15, qs.y + 1.0);
-        drip *= 1.0 + 0.5 * smoothstep(0.2, 0.0, abs(qs.y + 1.0 - len + 0.05)); // a bead at the tip
-        base = mix(base, vE.rgb, clamp(drip, 0.0, 1.0) * 0.85);
+        // The rain washes the paint off, alive: rivulets of paint of their own width, speed and meander run down the
+        // face (a darker trail behind a bead of paint that flows over the bottom edge), leaving bare ceramic along
+        // their paths as the tile washes; blotchy bare patches spread from the top. Paint from the tile above lands
+        // as spots and runs of its color.
+        float wash = 1.0 - vF.x;                     // 0 freshly painted .. 1 bare
+        float sd0 = vP.x;
+        vec3 bare = vec3(0.84, 0.83, 0.8);
+        vec3 paintC = base;
+        // blotches from the top
+        float n = vnoise(qs * 2.1 + sd0) * 0.65 + vnoise(qs * 4.7 - sd0) * 0.35;
+        float top = wash * 2.2 - (qs.y + 1.0) * 0.55 - n * 0.9;
+        float bareM = smoothstep(-0.04, 0.06, top);
+        float runs = 0.0;
+        vec3 runC = paintC;
+        for (int i = 0; i < 6; i++) {
+            float fi = float(i);
+            float thr = i == 0 ? 0.0 : h(sd0 + fi * 4.1) * 0.7 + fi * 0.04;   // when this rivulet starts (by wash)
+            if (wash < thr - 0.02 && i > 1) continue;
+            float x0 = h(sd0 + fi * 7.3) * 1.6 - 0.8;
+            float w = 0.04 + 0.08 * h(sd0 + fi * 2.9);
+            float v = 0.18 + 0.35 * h(sd0 + fi * 5.3);
+            float path = x0 + 0.07 * sin(qs.y * 3.1 + sd0 + fi) + 0.035 * sin(qs.y * 7.7 + fi * 2.0);
+            float dx = abs(qs.x - path);
+            // the bead flowing down (and over the edge), the trail behind it
+            float head = -1.15 + mod(uTime * v + h(sd0 + fi * 9.1) * 3.0, 2.6);
+            float trail = step(qs.y, head) * step(-1.0, qs.y) * smoothstep(w * 0.7, w * 0.2, dx) * smoothstep(-1.4, head, qs.y);
+            float bead = smoothstep(w * 1.5, w * 0.6, length(vec2(qs.x - path, (qs.y - head) * 0.7)));
+            float active = smoothstep(thr - 0.02, thr + 0.05, wash) + (i < 2 ? 0.6 : 0.0);
+            runs = max(runs, (trail * 0.55 + bead) * min(active, 1.0) * (1.0 - 0.7 * smoothstep(0.85, 1.0, wash)));
+            // the path washed bare behind the runs, widening as the tile washes
+            float reach = clamp((wash - thr) * 5.0, 0.0, 2.2);
+            float pw = w * (0.8 + 2.5 * wash) * (0.7 + 0.6 * n);
+            bareM = max(bareM, smoothstep(pw, pw * 0.5, dx) * step(qs.y + 1.0, reach) * step(thr, wash));
+        }
+        base = mix(paintC, bare, bareM);
+        base = mix(base, paintC * 0.78, runs);    // the runs: deeper, wet paint
+        // paint from the tile above: spots where its drips landed, a run or two of its color
+        float got = vE.w;
+        if (got > 0.01) {
+            float sp = 0.0;
+            for (int i = 0; i < 3; i++) {
+                float fi = float(i);
+                vec2 c0 = vec2(h(sd0 + fi * 3.3 + 50.0) * 1.4 - 0.7, -0.75 + 0.4 * h(sd0 + fi * 6.1 + 50.0));
+                float r0 = (0.08 + 0.14 * h(sd0 + fi + 50.0)) * (0.5 + got);
+                sp = max(sp, smoothstep(r0, r0 * 0.6, length(qs - c0) + 0.05 * vnoise(qs * 9.0 + fi)));
+                float path = c0.x + 0.05 * sin(qs.y * 4.0 + fi);
+                float head = -1.1 + mod(uTime * (0.25 + 0.2 * h(fi + sd0)) + fi, 2.4);
+                float len = got * 1.8;
+                float tr = smoothstep(0.06, 0.02, abs(qs.x - path)) * step(c0.y, qs.y) * step(qs.y, min(head, c0.y + len));
+                sp = max(sp, tr * 0.9);
+            }
+            base = mix(base, vE.rgb * 0.92, sp * min(1.0, got * 2.5));
+        }
     }
     float rim = smoothstep(-0.16 * hs.x, 0.0, sd);           // the glaze pooling darker at the rim
     vec3 c = base * mix(1.1, 0.82, (q.y + 1.0) * 0.5);
