@@ -388,7 +388,7 @@ void App::printReview() const {
     const char* section = an.segments.empty() ? "?" : segmentName(an.segments[an.segmentAt(t)].kind);
     std::printf("[review] {\"file\": %s, \"code\": %s, \"scene\": %s, \"song\": %s, \"title\": %s, \"time\": %.1f, "
                 "\"duration\": %.1f, \"level\": %d, \"phase\": %d, \"phases\": %d, \"energy\": %.2f, \"section\": %s, "
-                "\"bpm\": %.0f, \"levels\": %s}\n",
+                "\"bpm\": %.0f, \"levels\": %s, \"lines\": %d, \"scene_lines\": %.1f}\n",
                 jsonStr(opt_.reviewPath).c_str(), jsonStr(universeSpec()).c_str(), jsonStr(R_.label()).c_str(),
                 jsonStr(track_->path).c_str(), jsonStr(track_->title).c_str(), t, track_->duration(), ph ? ph->level : 1,
                 ph ? plan_.phaseAt(t) : 0, (int)plan_.phases.size(), ph ? ph->energy : 0.f, jsonStr(section).c_str(),
@@ -400,7 +400,7 @@ void App::printReview() const {
                         l += b;
                     }
                     return l;
-                }()).c_str());
+                }()).c_str(), game_.lines(), sceneLinesFor(look_));
 }
 
 void App::computePhases() {

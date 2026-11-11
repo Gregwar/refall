@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -206,7 +207,10 @@ protected:
     int width_ = 1, height_ = 1;
     // The lines cleared since this universe came in, for the universes that grow with the play: one coming in
     // mid-game starts small and grows with the lines played in it; a new game starts it again from nothing.
+    // (Test hook: ZEN_LINES_HERE=N holds it at N whatever the game does: exact stills of a stage.)
     int linesHere(const Game& g) {
+        static const int forced = std::getenv("ZEN_LINES_HERE") ? std::atoi(std::getenv("ZEN_LINES_HERE")) : -1;
+        if (forced >= 0) return forced;
         if (lineBase_ < 0 || g.lines() < lineBase_) lineBase_ = g.lines();
         return g.lines() - lineBase_;
     }
@@ -222,11 +226,14 @@ protected:
         if (here < paceLast_) { paceLine_ = 0; paceAt_ = 0.f; }
         paceLast_ = here;
         if (pendingScene_ > 0.f) {
-            paceAt_ += (here - paceLine_) * SCENE_REF_LINES / sceneLines_;
-            paceLine_ = here;
+            if (paceStarted_) { // the lines so far at the old pace, the next ones at the new (the first call: all at this one)
+                paceAt_ += (here - paceLine_) * SCENE_REF_LINES / sceneLines_;
+                paceLine_ = here;
+            }
             sceneLines_ = pendingScene_;
             pendingScene_ = -1.f;
         }
+        paceStarted_ = true;
         const float v = std::max(0.f, paceAt_ + (here - paceLine_ + extra) * SCENE_REF_LINES / sceneLines_);
         return std::round(v * 1024.f) / 1024.f; // (exactly 50 at the target, not 49.99998)
     }
@@ -237,4 +244,5 @@ private:
     int lineBase_ = -1;
     float sceneLines_ = SCENE_REF_LINES, pendingScene_ = -1.f, paceAt_ = 0.f;
     int paceLine_ = 0, paceLast_ = 0;
+    bool paceStarted_ = false;
 };
