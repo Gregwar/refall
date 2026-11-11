@@ -12,7 +12,7 @@
 //
 // About one cell in five has a microorganism living inside it, shown large in a clear pool as one bold shape: the one
 // that cell frees (the other cells are empty and still). The dish starts empty at the start of a song. Each cleared row bursts (its cells round off,
-// their walls break open and their content disperses, gone in a third of a second) and frees its organisms: each
+// their walls break open and their content disperses, gone in a third of a second) and frees its organisms (a row without one frees nothing): each
 // swims out of its own cell to the nearer side, growing on the way, and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
 // cilia), amoebas (a slow blob reaching out with pseudopods), pennate and centric diatoms (glass boats and discs of
 // fine striae), rotifers (wheels of cilia on a telescoping body), and volvox colonies (rolling spheres of tiny cells,
@@ -552,8 +552,8 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const CellLook l = has_[c.y][c.x] ? look_[c.y][c.x] : lookOf(c.x, c.y);
             lyses_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.f});
         }
-        // the organisms living in the cleared cells swim out (a row with none still gives one; a Tetris, a big
-        // volvox colony among them)
+        // the organisms living in the cleared cells swim out (a row with none frees nothing: only the life shown in
+        // the cells is ever released; a Tetris, a big one among them)
         for (size_t k = 0; k < rows.size(); k++) {
             std::vector<const GameEvent::CellInfo*> row, lives;
             for (auto& c : ev.cells)
@@ -561,14 +561,7 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     row.push_back(&c);
                     if (has_[c.y][c.x] && look_[c.y][c.x].life >= 0) lives.push_back(&c);
                 }
-            if (row.empty()) continue;
-            if (lives.empty()) {
-                const auto* c = row[(size_t)rng_.irange(0, (int)row.size() - 1)];
-                if (!has_[c->y][c->x]) look_[c->y][c->x] = lookOf(c->x, c->y);
-                has_[c->y][c->x] = true;
-                look_[c->y][c->x].life = pickKind();
-                lives.push_back(c);
-            }
+            if (lives.empty()) continue;
             const size_t bigAt = tetris && k == 1 ? (size_t)rng_.irange(0, (int)lives.size() - 1) : lives.size();
             for (size_t i = 0; i < lives.size(); i++) {
                 const auto* c = lives[i];
