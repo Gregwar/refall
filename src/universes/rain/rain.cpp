@@ -691,8 +691,18 @@ void RainUniverse::eject(int x, int y, int type, float delay) {
         n++;
         if (oldest < 0 || b.id < bodies_[oldest].id) oldest = (int)i;
     }
-    const int cap = side == 0 ? 45 : 180;
-    if (n >= cap && oldest >= 0) { bodies_[oldest].fading = true; bodies_[oldest].fadeRate = 0.6f; }
+    // the throw aims at the lowest place of the band (of a few tried): the heap spreads into a mound before it climbs
+    const float out = side == 0 ? leftOut_ : bandOut_;
+    float tx = 0.f, top = 1e9f;
+    for (int k = 0; k < 6; k++) {
+        const float cx = dir * rng_.range(bandIn_ + 0.6f, std::max(bandIn_ + 0.8f, out - 0.5f));
+        float t = ground_;
+        for (const Body& o : bodies_)
+            if (!o.thrown && o.solid && std::fabs(o.x - cx) < 0.9f) t = std::max(t, o.y + o.half);
+        if (t + rng_.range(0.f, 0.5f) < top) { top = t; tx = cx; }
+    }
+    const int cap = side == 0 ? 150 : 170;
+    if ((n >= cap || top > -4.f) && oldest >= 0) { bodies_[oldest].fading = true; bodies_[oldest].fadeRate = 0.6f; }
 
     Body b{};
     b.id = nextBody_++;
@@ -712,12 +722,7 @@ void RainUniverse::eject(int x, int y, int type, float delay) {
     const vec3 c = pieceColor(type);
     b.paint = 1.f;
     b.pr = c.x; b.pg = c.y; b.pb = c.z;
-    // the throw: aimed at a spot of its band (over the heap there), a real ballistic flight of 0.7 to 0.95 s
-    const float out = side == 0 ? leftOut_ : bandOut_;
-    const float tx = dir * rng_.range(bandIn_ + 0.6f, std::max(bandIn_ + 0.8f, out - 0.6f));
-    float top = ground_;
-    for (const Body& o : bodies_)
-        if (!o.thrown && o.solid && std::fabs(o.x - tx) < 1.2f) top = std::max(top, o.y + o.half);
+    // a real ballistic flight of 0.7 to 0.95 s
     const float T = rng_.range(0.7f, 0.95f), g = 22.f;
     b.tx1 = (tx - p.x) / T;
     b.ty1 = (top + 0.7f - p.y + 0.5f * g * T * T) / T;
@@ -967,7 +972,7 @@ void RainUniverse::stepHeaps(float dt) {
     for (Body& b : bodies_) {
         b.drip = std::max(0.f, b.drip - dt * 0.04f);
         if (!b.solid || b.thrown) { b.hits = 0; continue; }
-        const float drain = std::min(b.paint, b.hits * 0.0009f + b.paint * dt * 0.002f * rain_);
+        const float drain = std::min(b.paint, b.hits * (0.0007f + 0.003f * b.paint * b.paint * b.paint * b.paint) + b.paint * dt * 0.004f * rain_);
         b.hits = 0;
         if (drain <= 0.f) continue;
         b.paint -= drain;
@@ -988,7 +993,7 @@ void RainUniverse::stepHeaps(float dt) {
             below->drip = std::min(1.f, below->drip + amt * 30.f);
         }
         // a drop of paint falls off it now and then
-        if (pdrips_.size() < 300 && rng_.chance(std::min(1.f, drain * 60.f)))
+        if (pdrips_.size() < 400 && rng_.chance(std::min(1.f, drain * 120.f + dt * 0.4f * rain_ * b.paint)))
             pdrips_.push_back({b.x + rng_.range(-1.f, 1.f) * b.half, b.y - b.half, -0.5f, b.pr, b.pg, b.pb});
     }
     for (size_t i = 0; i < pdrips_.size();) {
@@ -1028,7 +1033,7 @@ void RainUniverse::drawHeaps() {
     for (const Body& b : bodies_) {
         float a = b.fading ? b.fade : 1.f;
         a *= 1.f - 0.6f * hudCover(b.x, b.y);   // behind the HUD's columns
-        a *= 1.f - 0.6f * textCover(b.x, b.y);  // and its corner lines
+        a *= 1.f - 0.75f * textCover(b.x, b.y); // and its corner lines
         const bool waiting = b.thrown;
         const vec3 c = lerp(waiting ? pieceColor(b.type) : vec3(b.pr, b.pg, b.pb), bInk, bk);
         if (!waiting) a *= 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
@@ -1407,9 +1412,6 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         }
         // the left heap's outer wall keeps it clear of those lines; the blade signs over the heaps
         leftOut_ = bandOut_;
-        for (const vec4& r : textRects_)
-            if (r.z < 0.f) leftOut_ = std::min(leftOut_, -r.z - 0.15f);
-        leftOut_ = std::max(leftOut_, bandIn_ + 2.4f);
         signPos_[0] = vec2{-(bandIn_ + std::max(1.2f, 0.5f * (leftOut_ - bandIn_))), 1.6f};
         signPos_[1] = vec2{bandIn_ + 0.55f * (bandOut_ - bandIn_), 0.8f};
     }
