@@ -114,9 +114,16 @@ private:
     vec3 swirlC_{0, 3, -8};
     float swirl_ = 0.f, swirlT_ = -1.f, swirlSide_ = 1.f; // a Tetris: the schools swirl together for a while
 
-    // ---- The manta (the drop) gliding past behind the well.
-    float mantaT_ = -1.f;
-    float mantaDir_ = 1.f;
+    // ---- The drop: mass coral spawning, a pair of mantas looping through a side band, the schools in one
+    // great bait ball on the other side, the light turning dusky blue-violet.
+    struct Egg { vec3 p; float r, age, life, seed, fade; vec3 col; };
+    std::vector<Egg> eggs_;
+    float spawnAcc_ = 0.f, dropT_ = 0.f, dropLight_ = 0.f, mantaK_ = 0.f, pulse_ = 0.f;
+    float mantaT_ = 0.f;
+    float mantaSide_ = -1.f;  // the band the mantas loop in (the bait ball takes the other)
+    bool dropOn_ = false;
+    vec3 mantaAt(float t, float enter) const;
+    void spawnEgg(const Slot& sl, float delay); // the leader's place (world) at time t of its loop
 
     // ---- Particles in the world: bubbles, coral seeds, specks.
     struct Bubble { vec3 p, v; float r, age, life, seed; };

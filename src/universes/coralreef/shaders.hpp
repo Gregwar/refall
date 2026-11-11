@@ -227,6 +227,7 @@ layout(location = 5) in vec4 iC;     // color A, sway
 layout(location = 6) in vec4 iD;     // color B, glow
 uniform mat4 uVP;
 uniform vec2 uSurge;   // the water's surge (direction * amount)
+uniform float uPulse;  // the drop: the corals breathe with the beat, polyps opening
 out vec3 vWorld;
 out vec3 vN;
 out vec3 vLocal;
@@ -240,7 +241,7 @@ void main() {
     vec3 p = aPos;
     // growing: from a bud at the foot, the tips last
     float grow = g * (0.25 + 0.75 * smoothstep(0.0, 1.0, g));
-    vec3 lp = p * grow;
+    vec3 lp = p * grow * (1.0 + uPulse * 0.04 * aAttr.x);
     vec3 wp = iA.xyz + vec3(c * lp.x + s * lp.z, lp.y, -s * lp.x + c * lp.z) * iA.w;
     vec3 n = vec3(c * aNrm.x + s * aNrm.z, aNrm.y, -s * aNrm.x + c * aNrm.z);
     // the surge sways what is soft (fans, tentacles, whips), more toward the tips
@@ -267,7 +268,7 @@ flat in vec4 vC;
 flat in vec4 vD;
 out vec4 frag;
 uniform vec3 uRockC, uRock2C, uCrustC, uCrust2C;
-uniform float uCover;
+uniform float uCover, uPulse;
 void main() {
     int kind = int(vB.w + 0.5);
     vec3 n = normalize(vN);
@@ -373,6 +374,7 @@ void main() {
     col += rimLight(n, vWorld) * mix(vec3(1.0), alb, 0.5);
     // fluorescence (a night variant), and a touch of glow in every one
     col += B * glow * (uGlowK * vD.w);
+    col += mix(alb, B, 0.5) * (glow * 0.55 + 0.08) * uPulse * vD.w;
     col = waterFog(col, vWorld);
     frag = vec4(col, length(vWorld - uEye));
 }
@@ -565,6 +567,12 @@ void main() {
         float core = exp(-r * r * 12.0), halo = exp(-r * r * 3.5) * 0.45;
         a = min(1.0, core * 1.2 + halo) * vB.a;
         c = mix(vB.rgb * 1.8, vec3(1.6), core * 0.6);
+    } else if (mode == 3) {
+        // a coral egg bundle: a little glowing bead (it keeps glowing through the water a while)
+        float core = exp(-r * r * 10.0), halo = exp(-r * r * 2.6) * 0.5;
+        a = min(1.0, core + halo) * vB.a;
+        c = mix(vB.rgb * 1.6, vec3(1.5, 1.4, 1.3), core * 0.45);
+        fogK = max(fogK, 0.4 * exp(-L / (uFogD * 3.0)));
     } else {
         // a speck drifting in the water
         a = exp(-r * r * 6.0) * vB.a;
