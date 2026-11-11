@@ -1600,12 +1600,22 @@ void IslandsUniverse::buildBoard(const Game& g) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 p = layout::cellPos((float)c[0], (float)c[1]);
                 const float l = p.x - 0.5f + in, r = p.x + 0.5f - in, t = p.y + 0.5f - in, b = p.y - 0.5f + in;
-                const bool L = inG(c[0] - 1, c[1]), R = inG(c[0] + 1, c[1]), U = inG(c[0], c[1] - 1), D = inG(c[0], c[1] + 1);
-                const float l2 = L ? p.x - 0.5f : l, r2 = R ? p.x + 0.5f : r, t2 = U ? p.y + 0.5f : t, b2 = D ? p.y - 0.5f : b;
-                if (!L) line(l, b2, l, t2, zz, w, ink, 0.85f);
-                if (!R) line(r, b2, r, t2, zz, w, ink, 0.85f);
-                if (!U) line(l2, t, r2, t, zz, w, ink, 0.85f);
-                if (!D) line(l2, b, r2, b, zz, w, ink, 0.85f);
+                const int x = c[0], y = c[1];
+                const bool L = inG(x - 1, y), R = inG(x + 1, y), U = inG(x, y - 1), D = inG(x, y + 1);
+                // an edge runs on to the next cell's edge, or turns at a corner: inset at an outer corner, past the
+                // cell boundary by the inset at an inner one (where the diagonal neighbour is in the piece), so the
+                // contour stays closed
+                auto endX = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner : inG(x + sx, y + sy) ? edge + sx * in : edge;
+                };
+                auto endY = [&](bool side, int sx, int sy, float inner, float edge) {
+                    return !side ? inner : inG(x + sx, y + sy) ? edge - sy * in : edge;
+                };
+                const float xl = p.x - 0.5f, xr = p.x + 0.5f, yt = p.y + 0.5f, yb = p.y - 0.5f;
+                if (!L) line(l, endY(D, -1, 1, b, yb), l, endY(U, -1, -1, t, yt), zz, w, ink, 0.85f);
+                if (!R) line(r, endY(D, 1, 1, b, yb), r, endY(U, 1, -1, t, yt), zz, w, ink, 0.85f);
+                if (!U) line(endX(L, -1, -1, l, xl), t, endX(R, 1, -1, r, xr), t, zz, w, ink, 0.85f);
+                if (!D) line(endX(L, -1, 1, l, xl), b, endX(R, 1, 1, r, xr), b, zz, w, ink, 0.85f);
             }
         }
     }
