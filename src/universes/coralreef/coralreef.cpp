@@ -1,13 +1,15 @@
-// CORAL REEF: a sunny shallow reef seen wide behind the well, under warm sunlight: caustics play on the white sand
-// and the rocks, shafts of light come down from the rippling surface, schools of fish wheel through the water.
-// The reef grows with the cleared lines, over one song: the scene starts as bare rock and white sand, a few
-// chromis; every cleared row bursts into bubbles that rise behind the well, and glowing coral seeds drift out of
-// it and settle on the rocks and the sand, each one where a coral then grows and stays for the whole song: brain
-// corals and anemones first, then staghorn thickets, sea fans, tube sponges, sea whips, table corals; the rocks
-// crust over in pink coralline and green turf, and more and more fish come: chromis, anthias, yellow and blue
-// tangs, moorish idols, parrotfish, clownfish in the anemones. The scene completes at 50 paced lines (paceLines():
-// one song of any length), its stages spread evenly over it (a new form every five lines or so, the slots planted
-// a few a line).
+// CORAL REEF: a coral reef growing absurdly with the cleared lines, in one continuous camera pull-back, under a
+// sunny toon light (caustics, shafts of light, a rippling surface). It opens under a macro lens on a single polyp a
+// centimetre tall on a pebble (the sand's grains big, a shallow depth of field); the polyp buds into a coral head
+// with its goby, boulders rise into a bommie with its colonies and little fish, the camera pulls back to the patch
+// reef (its schools, its clownfish), colonies spread over the whole floor into a barrier reef as the camera rises;
+// the reef's ring breaks the surface as an atoll (motus, beaches, palms) and the camera crosses the waterline, then
+// keeps pulling back up through the clouds to an archipelago of atolls on the deep ocean. The camera is keyed on
+// the lines (CAMKEYS: the distance to what it frames, from 4.5 cm to 400 km, eased in log space, on a spring);
+// its depth range follows its scale and the world is drawn relative to the eye. The stages: 0 the polyp, 5 the
+// coral head, 9 the bommie, 17 the reef, 31 the barrier reef, 38 the atoll, 45 the archipelago, 50 completion
+// (paceLines(): one song of any length). Every cleared row bursts into bubbles behind the well and its glowing
+// seeds settle where the next corals grow, at the scale the camera shows.
 //
 // The music: calm is still, slow water; mid stirs the fish and the surge; a peak brightens the light shafts, the
 // schools swim fast and tight and the kicks pulse the caustics (a little brighter, the water surging on). The drop
@@ -127,6 +129,10 @@ Palette paletteOf(int v) {
     for (int i = 0; i < 8; i++) p.reef[i] = lin(d.reef[i]);
     p.ink = lin(d.ink); p.accent = lin(d.accent); p.veil = lin(d.veil); p.rail = lin(d.rail);
     for (int i = 0; i < 7; i++) p.piece[i] = lin(d.piece[i]);
+    // the sky over the atolls and the motus' green, per variant
+    static const unsigned SKY[4][3] = {{0x2f8ae8, 0xbfeeff, 0x3fbf4a}, {0x4a6ac8, 0xffc890, 0x7ab83a},
+                                       {0x1a62e0, 0xa8dcff, 0x34b85a}, {0x060c30, 0x23347a, 0x1e6a50}};
+    p.skyZ = lin(SKY[wrapV(v)][0]); p.skyH = lin(SKY[wrapV(v)][1]); p.leaf = lin(SKY[wrapV(v)][2]);
     p.sunAz = d.sunAz; p.sunEl = d.sunEl; p.fog = d.fog; p.rays = d.rays; p.caustics = d.caustics;
     p.glow = d.glow; p.night = d.night; p.sat = d.sat;
     return p;
@@ -170,15 +176,15 @@ const int PAIRS[reef::K_COUNT][4][2] = {
 // The schools: species, the line they come at, how many fish at scene completion, size, their stretch of reef.
 struct SchoolDef { int species; float appear; int count; float size; float x0, x1; };
 const SchoolDef SCHOOLS[] = {
-    {reef::F_CHROMIS, 0.f, 20, 0.7f, -13.f, -6.f},
-    {reef::F_ANTHIAS, 5.f, 26, 0.7f, 6.f, 13.f},
-    {reef::F_CHROMIS, 12.f, 24, 0.7f, 5.f, 14.f},
-    {reef::F_YELLOW, 16.f, 12, 1.0f, -13.f, -5.f},
-    {reef::F_BLUE, 22.f, 10, 1.0f, 5.f, 13.f},
-    {reef::F_ANTHIAS, 29.f, 26, 0.7f, -14.f, -6.f},
-    {reef::F_IDOL, 34.f, 4, 1.05f, -11.f, 11.f},
-    {reef::F_PARROT, 39.f, 4, 1.4f, -12.f, 12.f},
-    {reef::F_CHROMIS, 43.f, 36, 0.66f, -10.f, 10.f},
+    {reef::F_CHROMIS, 17.f, 20, 0.7f, -13.f, -6.f},
+    {reef::F_ANTHIAS, 19.f, 26, 0.7f, 6.f, 13.f},
+    {reef::F_CHROMIS, 22.f, 24, 0.7f, 5.f, 14.f},
+    {reef::F_YELLOW, 24.f, 12, 1.0f, -13.f, -5.f},
+    {reef::F_BLUE, 26.f, 10, 1.0f, 5.f, 13.f},
+    {reef::F_ANTHIAS, 28.f, 26, 0.7f, -14.f, -6.f},
+    {reef::F_IDOL, 30.f, 4, 1.05f, -11.f, 11.f},
+    {reef::F_PARROT, 32.f, 4, 1.4f, -12.f, 12.f},
+    {reef::F_CHROMIS, 33.f, 36, 0.66f, -10.f, 10.f},
 };
 constexpr float SPECIES_SPEED[reef::F_COUNT] = {1.5f, 1.45f, 1.1f, 1.2f, 0.9f, 1.0f, 0.6f};
 
@@ -190,13 +196,54 @@ int extraLines(double t) {
 }
 
 const char* stageName(float L) {
-    if (L < 1.f) return "bare rock";
-    if (L < 10.f) return "first corals";
-    if (L < 20.f) return "young reef";
-    if (L < 32.f) return "growing reef";
-    if (L < 45.f) return "busy reef";
-    return "full reef";
+    if (L < 4.5f) return "a polyp";
+    if (L < 9.f) return "a coral head";
+    if (L < 17.f) return "a bommie";
+    if (L < 31.f) return "the reef";
+    if (L < 38.f) return "a barrier reef";
+    if (L < 45.f) return "an atoll";
+    return "an archipelago";
 }
+
+// The growth's camera, keyed on the lines (the 50-line scale): the distance to what it frames (meters, eased in
+// log space), its pitch (degrees), where that lies on the screen (NDC, in the open band right of the HUD while it
+// is small), and what it frames (0: the polyp, 1: the reef, then the atoll around it). One continuous pull-back:
+// a macro lens on a polyp a centimetre tall, a coral head, a bommie, the reef (the reef stage's framing at 30), up
+// through the surface at ~37, the atoll seen from above, the archipelago from orbit.
+struct CamKey { float L, D, pitch, sx, sy, anchor; };
+const CamKey CAMKEYS[] = {
+    {0.f, 0.045f, -12.f, 0.7f, -0.1f, 0.f},  {3.f, 0.07f, -13.f, 0.7f, -0.1f, 0.f},
+    {5.f, 0.16f, -14.f, 0.7f, -0.12f, 0.f},  {8.f, 0.38f, -16.f, 0.7f, -0.1f, 0.f},
+    {13.f, 1.3f, -17.f, 0.7f, -0.06f, 0.f},
+    {18.f, 2.6f, -14.f, 0.66f, -0.04f, 0.04f}, {24.f, 7.5f, -9.f, 0.42f, 0.f, 0.5f},
+    {30.f, 15.6f, -6.6f, 0.f, 0.f, 1.f},       {34.f, 22.f, -8.f, 0.f, 0.03f, 1.f},
+    {38.f, 34.f, -11.f, 0.18f, 0.04f, 1.f},    {42.f, 120.f, -20.f, 0.5f, 0.04f, 1.f},
+    {45.f, 800.f, -40.f, 0.66f, 0.f, 1.f},     {46.5f, 1700.f, -50.f, 0.64f, 0.f, 1.f},
+    {48.f, 7000.f, -56.f, 0.58f, 0.f, 1.f},    {49.f, 30000.f, -60.f, 0.5f, 0.f, 1.f},
+    {50.f, 1.2e5f, -62.f, 0.35f, 0.f, 1.f},
+    {56.f, 4.0e5f, -64.f, 0.25f, 0.f, 1.f},
+};
+constexpr int CAMKEY_COUNT = (int)(sizeof(CAMKEYS) / sizeof(CAMKEYS[0]));
+CamKey camAt(float L) {
+    L = std::clamp(L, CAMKEYS[0].L, CAMKEYS[CAMKEY_COUNT - 1].L);
+    int i = 0;
+    while (i + 2 < CAMKEY_COUNT && CAMKEYS[i + 1].L <= L) i++;
+    const CamKey& a = CAMKEYS[i];
+    const CamKey& b = CAMKEYS[i + 1];
+    const float t = saturate((L - a.L) / (b.L - a.L));
+    CamKey k;
+    k.L = L;
+    k.D = std::exp(lerpf(std::log(a.D), std::log(b.D), t));
+    k.pitch = lerpf(a.pitch, b.pitch, t);
+    k.sx = lerpf(a.sx, b.sx, t);
+    k.sy = lerpf(a.sy, b.sy, t);
+    k.anchor = lerpf(a.anchor, b.anchor, t);
+    return k;
+}
+// The growth's large stages: the reef carpet spreading over the lagoon (meters), the ring rising, the archipelago.
+float spreadAt(float L) { return std::exp(lerpf(std::log(40.f), std::log(4000.f), smoothstepf(30.f, 40.f, L))); }
+float ringAt(float L) { return smoothstepf(36.f, 44.f, L); }
+float archAt(float L) { return smoothstepf(45.f, 50.f, L); }
 
 } // namespace
 
@@ -282,25 +329,22 @@ bool CoralReefUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
 
-    // the seabed: a grid fanning out with the view (fine near the camera, coarse far away)
+    // the seabed: a log-polar mesh around the view (rings log-spaced from a fraction of the camera's scale out to
+    // the horizon), placed each frame where the camera looks: fine where it looks, the whole planet beyond
     {
-        const int NX = 260, NZ = 220;
+        const int NR = 700, NA = 288;
         std::vector<float> g;
-        g.reserve((NX + 1) * (NZ + 1) * 2);
-        for (int j = 0; j <= NZ; j++) {
-            const float v = (float)j / NZ;
-            const float z = 13.5f - 95.f * std::pow(v, 1.6f);
-            const float hw = 7.f + (13.5f - z) * 1.08f;
-            for (int i = 0; i <= NX; i++) {
-                g.push_back(((float)i / NX * 2.f - 1.f) * hw);
-                g.push_back(z);
+        g.reserve((NR + 1) * (NA + 1) * 2);
+        for (int j = 0; j <= NR; j++)
+            for (int i = 0; i <= NA; i++) {
+                g.push_back((float)j / NR);
+                g.push_back(TAU * i / NA);
             }
-        }
         std::vector<uint32_t> idx;
-        idx.reserve(NX * NZ * 6);
-        for (int j = 0; j < NZ; j++)
-            for (int i = 0; i < NX; i++) {
-                const uint32_t a = j * (NX + 1) + i, b = a + 1, c = a + (NX + 1), d = c + 1;
+        idx.reserve(NR * NA * 6);
+        for (int j = 0; j < NR; j++)
+            for (int i = 0; i < NA; i++) {
+                const uint32_t a = j * (NA + 1) + i, b = a + 1, c = a + (NA + 1), d = c + 1;
                 idx.insert(idx.end(), {a, c, b, b, c, d});
             }
         glGenVertexArrays(1, &groundVao_);
@@ -318,6 +362,7 @@ bool CoralReefUniverse::init(int width, int height) {
     for (int k = 0; k < reef::K_COUNT; k++)
         for (int t = 0; t < reef::TEMPLATES; t++) upload(coral_[k][t], reef::buildCoral(k, t), 16);
     for (int t = 0; t < reef::TEMPLATES; t++) upload(rockM_[t], reef::buildRock(t), 16);
+    upload(palmM_, reef::buildPalm(0), 16);
     for (int s = 0; s < reef::F_COUNT; s++) upload(fishM_[s], reef::buildFish(s), 12);
     upload(manta_, reef::buildManta(), 12);
     glBindVertexArray(0);
@@ -388,8 +433,10 @@ void CoralReefUniverse::resize(int width, int height) {
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    refVP_ = mat4::perspective(CAM_FOV * PI / 180.f, aspect_, 0.1f, 300.f) *
+             mat4::lookAt(vec3(0.f), normalize(TARGET0 - EYE0), vec3(0, 1, 0));
     updateCamera();
-    reefDirty_ = true; // (the slots favor what the camera sees)
+    reefDirty_ = true; // (the slots favor what the reef's framing sees)
 }
 
 CoralReefUniverse::~CoralReefUniverse() {
@@ -406,6 +453,7 @@ CoralReefUniverse::~CoralReefUniverse() {
         for (MeshGL& m : row) freeMesh(m);
     for (MeshGL& m : fishM_) freeMesh(m);
     for (MeshGL& m : rockM_) freeMesh(m);
+    freeMesh(palmM_);
     freeMesh(manta_);
     for (GLuint v : {groundVao_, glowVao_, cellVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, groundVbo_, groundIbo_, glowVbo_, cellVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
@@ -419,26 +467,58 @@ CoralReefUniverse::~CoralReefUniverse() {
 // The camera
 // =====================================================================================================
 
-// A wide, open view from a little above the sand, looking slightly down across the reef; it breathes a little.
+// The growth's camera (see CAMKEYS): what it frames (the polyp, then the reef and the atoll around it) set at a place
+// of the screen, at its distance, looking down a little more as it rises; it breathes a little. Its depth range
+// follows its scale (near and far a fixed ratio of the distance), the world drawn relative to the eye.
+void CoralReefUniverse::poseAt(float L, float t, vec3* eyeOut, vec3* anchorOut, vec3* fwdOut, vec3* rightOut, vec3* upOut) const {
+    const CamKey k = camAt(std::max(0.f, L));
+    const vec3 polyp = P0_ + vec3(0.f, 0.011f, 0.f);
+    const vec3 A = lerp(polyp, TARGET0, smoothstepf(0.f, 1.f, k.anchor));
+    const float pitch = (k.pitch + 0.5f * std::sin(t * 0.061f + 1.f)) * PI / 180.f;
+    const float yaw = 0.02f * std::sin(t * 0.043f);
+    const float tanH = std::tan(CAM_FOV * 0.5f * PI / 180.f);
+    const vec3 fwd(-std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch));
+    const vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
+    const vec3 up = cross(right, fwd);
+    const vec3 dirA = normalize(fwd + right * (k.sx * tanH * aspect_) + up * (k.sy * tanH));
+    vec3 eye = A - dirA * k.D;
+    eye.y = std::max(eye.y, reef::groundH(eye.x, eye.z, mounds_, moundCount_) + 0.2f * k.D);
+    *eyeOut = eye; *anchorOut = A; *fwdOut = fwd; *rightOut = right; *upOut = up;
+}
+
 void CoralReefUniverse::updateCamera() {
-    vec3 eye = EYE0 + vec3(0.3f * std::sin(time_ * 0.043f), 0.12f * std::sin(time_ * 0.061f + 1.f), 0.f);
-    const vec3 target = TARGET0 + vec3(0.2f * std::sin(time_ * 0.037f + 2.f), 0.f, 0.f);
-    eye_ = eye;
-    look_ = normalize(target - eye);
-    camR_ = normalize(cross(look_, vec3(0, 1, 0)));
-    camU_ = cross(camR_, look_);
+    const CamKey k = camAt(std::max(0.f, camL_));
     tanH_ = std::tan(CAM_FOV * 0.5f * PI / 180.f);
+    vec3 eye, A, fwd, right, up;
+    poseAt(camL_, time_, &eye, &A, &fwd, &right, &up);
+    eye_ = eye;
+    anchor_ = A;
+    camD_ = k.D;
+    look_ = fwd;
+    camR_ = right;
+    camU_ = up;
+    aboveK_ = smoothstepf(reef::SURF_Y - 0.3f, reef::SURF_Y + 0.3f, eye.y);
+    const float zn = k.D * 0.004f;
+    const float zf = std::max(k.D * 60.f, 400.f) + (eye.y > reef::SURF_Y - 1.f ? 2.0e5f + eye.y * 40.f : 0.f);
     view3_ = mat4::lookAt(vec3(0.f), look_, vec3(0, 1, 0));
-    proj3_ = mat4::perspective(CAM_FOV * PI / 180.f, aspect_, 0.1f, 260.f);
+    proj3_ = mat4::perspective(CAM_FOV * PI / 180.f, aspect_, zn, zf);
     vp3_ = proj3_ * view3_;
+}
+
+bool CoralReefUniverse::toScreenRef(const vec3& w, vec2* ndc) const {
+    const vec4 c = refVP_ * vec4(w - EYE0, 1.f);
+    if (c.w <= 0.05f) return false;
+    *ndc = V(c.x / c.w, c.y / c.w);
+    return true;
 }
 
 vec3 CoralReefUniverse::boardToWorld(vec2 b, float dist) const {
     const float nx = (b.x - viewC_.x) / viewH_.x, ny = (b.y - viewC_.y) / viewH_.y;
     const vec3 d = normalize(look_ + camR_ * (nx * tanH_ * aspect_) + camU_ * (ny * tanH_));
     // (in the water: short of the sand where the ray comes down to it)
-    if (d.y < -0.02f) dist = std::min(dist, (eye_.y - 0.7f) / -d.y);
-    return eye_ + d * std::max(dist, 2.5f);
+    const float floorY = reef::groundH(anchor_.x, anchor_.z, mounds_, moundCount_);
+    if (d.y < -0.02f) dist = std::min(dist, (eye_.y - floorY - 0.045f * camD_) / -d.y);
+    return eye_ + d * std::max(dist, 0.16f * camD_);
 }
 
 bool CoralReefUniverse::toScreen(const vec3& w, vec2* ndc) const {
@@ -459,9 +539,9 @@ void CoralReefUniverse::buildReef() {
     Rng r(reefSeed_ ^ 0x5EEDC0A1ull);
     const float M[][4] = {
         {-13.f, -3.f, 3.2f, 1.5f},  {-9.5f, -9.f, 3.5f, 1.9f}, {-17.5f, -12.f, 4.2f, 2.2f}, {-7.f, 1.5f, 2.f, 0.9f},
-        {12.5f, -2.f, 3.3f, 1.6f},  {9.f, -10.f, 3.8f, 2.1f},  {17.5f, -9.f, 4.2f, 2.f},    {7.5f, 3.f, 1.8f, 0.8f},
+        {12.5f, -2.f, 3.3f, 1.6f},  {9.f, -10.f, 3.8f, 2.1f},  {17.5f, -9.f, 4.2f, 2.f},
         {-4.f, -24.f, 6.f, 2.6f},   {6.f, -27.f, 7.f, 3.f},    {-17.f, -26.f, 6.f, 2.4f},   {19.f, -25.f, 6.f, 2.6f},
-        {0.5f, -13.f, 2.4f, 0.9f},  {-11.f, 7.5f, 2.2f, 0.7f}, {11.f, 8.f, 2.f, 0.6f},
+        {0.5f, -13.f, 2.4f, 0.9f},  {-11.f, 7.5f, 2.2f, 0.7f},
     };
     moundCount_ = 0;
     for (auto& m : M) {
@@ -486,36 +566,123 @@ void CoralReefUniverse::buildReef() {
             b.yaw = r.range(0.f, TAU);
             b.seed = r.uniform();
             b.tmpl = r.irange(0, reef::TEMPLATES - 1);
+            b.birth = -1.f;
+            b.grow = 1.f;
             rocks_.push_back(b);
         }
     }
+    P0_.y = reef::groundH(P0_.x, P0_.z, mounds_, moundCount_);
     for (int k = 0; k < 10; k++) {
         Rock b;
         b.p = vec3(r.range(-22.f, 22.f), 0.f, r.range(-18.f, 8.f));
+        if (length(vec3(b.p.x - P0_.x, 0.f, b.p.z - P0_.z)) < 3.5f) continue;
         b.size = r.range(0.5f, 1.3f);
         b.p.y = reef::groundH(b.p.x, b.p.z, mounds_, moundCount_) - 0.12f * b.size;
         b.yaw = r.range(0.f, TAU);
         b.seed = r.uniform();
         b.tmpl = r.irange(0, reef::TEMPLATES - 1);
+        b.birth = -1.f;
+        b.grow = 1.f;
         rocks_.push_back(b);
     }
+    // the camera's path while it pulls back from the polyp to the reef: nothing big grows in its line of sight
+    path_.clear();
+    for (int i = 0; i <= 40; i++) {
+        vec3 e, a, fw, rt, up;
+        poseAt(6.f + 26.f * i / 40.f, 0.f, &e, &a, &fw, &rt, &up);
+        path_.push_back(e);
+        path_.push_back(a);
+    }
+    auto inSight = [&](float x, float z, float size) {
+        for (size_t i = 0; i + 1 < path_.size(); i += 2) {
+            const vec3 e = path_[i], a = path_[i + 1];
+            const vec3 ab(a.x - e.x, 0.f, a.z - e.z);
+            const float l2 = std::max(dot(ab, ab), 1e-6f);
+            const float t = std::clamp(((x - e.x) * ab.x + (z - e.z) * ab.z) / l2, 0.f, 0.85f);
+            const float dx = x - (e.x + ab.x * t), dz = z - (e.z + ab.z * t);
+            if (dx * dx + dz * dz < sqf(0.35f * length(ab) * 0.15f + 0.6f * size + 0.3f)) return true;
+        }
+        return false;
+    };
+    // ---- the beginning, at the polyp's scale: a pebble in the sand, the polyp on it, its buds, the coral head
+    // (it covers them: the colony), little corals around it; then the bommie's boulders rising around the head and
+    // the colonies on them
     slots_.clear();
+    {
+        Rock peb;
+        peb.p = P0_ - vec3(0.f, 0.003f, 0.f);
+        peb.p = P0_ - vec3(0.f, 0.005f, 0.f);
+        peb.size = 0.022f; peb.yaw = 0.7f; peb.seed = 0.3f; peb.tmpl = 1; peb.birth = -1.f; peb.grow = 1.f;
+        rocks_.push_back(peb);
+        auto micro = [&](int kind, vec3 at, float size, float birth, int pair) {
+            Slot sl;
+            sl.p = at; sl.size = size; sl.kind = kind; sl.tmpl = r.irange(0, reef::TEMPLATES - 1);
+            sl.yaw = r.range(0.f, TAU); sl.seed = r.uniform(); sl.birth = birth;
+            sl.colIdx[0] = PAIRS[kind][pair][0]; sl.colIdx[1] = PAIRS[kind][pair][1];
+            sl.startT = -1.f; sl.grow = 0.f; sl.awaiting = false;
+            slots_.push_back(sl);
+        };
+        const float top = P0_.y - 0.005f + 0.022f * 0.42f;
+        micro(reef::K_ANEMONE, vec3(P0_.x, top, P0_.z), 0.022f, -1.f, 0);
+        for (int i = 0; i < 6; i++) {
+            const float a = TAU * i / 6.f + r.range(-0.4f, 0.4f), d = r.range(0.007f, 0.02f);
+            const vec3 at(P0_.x + std::cos(a) * d, 0.f, P0_.z + std::sin(a) * d);
+            const float y = d < 0.011f ? top - 0.002f : reef::groundH(at.x, at.z, mounds_, moundCount_);
+            micro(reef::K_ANEMONE, vec3(at.x, y, at.z), r.range(0.006f, 0.009f), 0.8f + 0.7f * i, i % 4);
+        }
+        micro(reef::K_BRAIN, P0_ - vec3(0.f, 0.006f, 0.f), 0.13f, 5.f, 0);
+        const float around[5][4] = {{0.11f, 0.03f, 0.1f, 1.f}, {-0.1f, 0.05f, 0.05f, 5.f}, {0.02f, -0.11f, 0.13f, 6.f},
+                                    {-0.06f, -0.08f, 0.04f, 5.f}, {0.08f, 0.09f, 0.11f, 3.f}};
+        for (int i = 0; i < 5; i++) {
+            const vec3 at(P0_.x + around[i][0], 0.f, P0_.z + around[i][1]);
+            micro((int)around[i][3], vec3(at.x, reef::groundH(at.x, at.z, mounds_, moundCount_) - 0.004f, at.z), around[i][2], 6.f + 0.6f * i, i % 4);
+        }
+        // the bommie: boulders rising around the head
+        for (int i = 0; i < 5; i++) {
+            Rock b;
+            const float a = PI * (1.05f + 0.9f * i / 4.f) + r.range(-0.15f, 0.15f), d = r.range(0.45f, 0.8f);
+            b.p = vec3(P0_.x + std::cos(a) * d, 0.f, P0_.z + std::sin(a) * d);
+            b.size = r.range(0.55f, 0.95f);
+            b.p.y = reef::groundH(b.p.x, b.p.z, mounds_, moundCount_) - 0.12f * b.size;
+            b.yaw = r.range(0.f, TAU); b.seed = r.uniform(); b.tmpl = r.irange(0, reef::TEMPLATES - 1);
+            b.birth = 9.f + 0.9f * i;
+            b.grow = 0.f;
+            rocks_.push_back(b);
+        }
+        for (int i = 0; i < 18; i++) {
+            const float birth = 10.5f + 6.f * i / 17.f;
+            const int kinds[6] = {reef::K_BRAIN, reef::K_STAG, reef::K_ANEMONE, reef::K_FAN, reef::K_SOFT, reef::K_SPONGE};
+            const int kind = kinds[i % 6];
+            for (int tries = 0; tries < 30; tries++) {
+                const float a = r.range(PI * 0.9f, PI * 2.1f), d = r.range(0.2f, 1.15f);
+                const float x = P0_.x + std::cos(a) * d, z = P0_.z + std::sin(a) * d;
+                const float size = r.range(0.14f, 0.42f) * (kind == reef::K_FAN ? 1.4f : 1.f);
+                bool ok = true;
+                for (const Slot& o : slots_)
+                    if (o.size > 0.05f && length(vec3(o.p.x - x, 0.f, o.p.z - z)) < (o.size + size) * 0.4f) { ok = false; break; }
+                if (!ok) continue;
+                micro(kind, vec3(x, surfaceAt(x, z) - 0.05f * size, z), size, birth, r.irange(0, 3));
+                break;
+            }
+        }
+    }
     int lastKind[reef::K_COUNT];
     for (int& k : lastKind) k = -1;
     for (int i = 0; i < N_SLOTS + 24; i++) {
         Slot s;
         const float t = (float)i / (N_SLOTS - 1);
-        s.birth = i < N_SLOTS ? 0.6f + 49.4f * t : 50.f + (i - N_SLOTS + 1) * 1.5f;
+        s.birth = i < N_SLOTS ? 16.f + 18.f * t : 50.f + (i - N_SLOTS + 1) * 1.5f;
         // its form: a newly unlocked one comes at once; else a weighted pick among the unlocked
         int kind = -1;
         for (int k = 0; k < reef::K_COUNT; k++)
-            if (KINDS[k].unlock <= s.birth && lastKind[k] < 0) { kind = k; break; }
+            if (KINDS[k].unlock * 0.36f + 16.f <= s.birth && lastKind[k] < 0) { kind = k; break; }
         if (kind < 0) {
             float w[reef::K_COUNT];
             for (int k = 0; k < reef::K_COUNT; k++) {
-                w[k] = KINDS[k].unlock <= s.birth ? KINDS[k].weight : 0.f;
+                const float un = KINDS[k].unlock * 0.36f + 16.f;
+                w[k] = un <= s.birth ? KINDS[k].weight : 0.f;
                 // a form just unlocked comes a little more often for a while
-                if (KINDS[k].unlock <= s.birth && s.birth < KINDS[k].unlock + 6.f) w[k] *= 1.8f;
+                if (un <= s.birth && s.birth < un + 2.5f) w[k] *= 1.8f;
             }
             kind = r.weighted(w);
         }
@@ -523,7 +690,7 @@ void CoralReefUniverse::buildReef() {
         s.kind = kind;
         s.tmpl = r.irange(0, reef::TEMPLATES - 1);
         const KindDef& kd = KINDS[kind];
-        s.size = r.range(kd.sizeLo, kd.sizeHi) * (0.85f + 0.35f * std::min(1.f, s.birth / 50.f));
+        s.size = r.range(kd.sizeLo, kd.sizeHi) * (0.85f + 0.35f * saturate((s.birth - 16.f) / 18.f));
         s.yaw = r.range(0.f, TAU);
         s.seed = r.uniform();
         const int pr = r.irange(0, 3);
@@ -535,10 +702,11 @@ void CoralReefUniverse::buildReef() {
         vec3 bestP(0.f);
         for (int c = 0; c < 48; c++) {
             const float x = r.range(-27.f, 27.f), z = r.range(-31.f, 10.f);
+            if (inSight(x, z, s.size)) continue;
             const float y = surfaceAt(x, z);
             const vec3 p(x, y, z);
             vec2 a, b;
-            if (!toScreen(p, &a) || !toScreen(p + vec3(0.f, s.size, 0.f), &b)) continue;
+            if (!toScreenRef(p, &a) || !toScreenRef(p + vec3(0.f, s.size, 0.f), &b)) continue;
             if (std::fabs(a.x) > 1.02f || a.y < -1.15f || b.y > 0.9f) continue;
             const float ax = std::fabs(a.x);
             const float vis = ax > 0.56f ? 1.f : ax > 0.27f ? 0.5f : 0.3f;
@@ -563,7 +731,50 @@ void CoralReefUniverse::buildReef() {
         s.awaiting = false;
         slots_.push_back(s);
     }
+    // the barrier reef: colonies spreading outward over the whole floor around the reef, nearest first
+    {
+        const int kinds[10] = {reef::K_BRAIN, reef::K_BRAIN, reef::K_BRAIN, reef::K_STAG, reef::K_STAG, reef::K_TABLE,
+                               reef::K_TABLE, reef::K_SPONGE, reef::K_SOFT, reef::K_FAN};
+        const size_t first = slots_.size();
+        for (int i = 0; i < 480; i++) {
+            const float a = r.range(0.f, TAU), d = 9.f + 108.f * std::pow(r.uniform(), 0.8f);
+            const float x = std::cos(a) * d, z = std::sin(a) * d + 6.f;
+            bool clash = false;
+            for (size_t k = 0; k < first && !clash; k++) clash = length(vec3(slots_[k].p.x - x, 0.f, slots_[k].p.z - z)) < 2.2f;
+            if (clash || length(vec3(x - P0_.x, 0.f, z - P0_.z)) < 2.f || inSight(x, z, 2.f)) continue;
+            Slot sl;
+            sl.kind = kinds[r.irange(0, 9)];
+            sl.tmpl = r.irange(0, reef::TEMPLATES - 1);
+            sl.size = r.range(1.2f, 2.6f);
+            sl.p = vec3(x, reef::groundH(x, z, mounds_, moundCount_) - 0.06f * sl.size, z);
+            sl.yaw = r.range(0.f, TAU);
+            sl.seed = r.uniform();
+            const int pr = r.irange(0, 3);
+            sl.colIdx[0] = PAIRS[sl.kind][pr][0];
+            sl.colIdx[1] = PAIRS[sl.kind][pr][1];
+            sl.birth = 30.5f + 7.f * saturate((d - 9.f) / 108.f) + r.range(-0.4f, 0.4f);
+            sl.startT = -1.f; sl.grow = 0.f; sl.awaiting = false;
+            slots_.push_back(sl);
+        }
+        (void)first;
+    }
     std::sort(slots_.begin(), slots_.end(), [](const Slot& a, const Slot& b) { return a.birth < b.birth; });
+    // the palms, on the ring's highest motus (each appears when its land breaks the surface)
+    palms_.clear();
+    for (int i = 0; i < 900; i++) {
+        const float a = TAU * (i + r.uniform()) / 900.f;
+        const float m = reef::motu(a, 0.37f);
+        const float dr = r.range(-12.f, 12.f);
+        const float bump = std::exp(-sqf(dr / (reef::RING_R * 0.14f)));
+        if (m * bump < 0.82f) continue;
+        Palm pm;
+        pm.p = vec3(std::cos(a) * (reef::RING_R + dr), 0.f, std::sin(a) * (reef::RING_R + dr));
+        pm.size = r.range(9.f, 15.f);
+        pm.yaw = r.range(0.f, TAU);
+        pm.seed = m * bump;  // (the land's height factor there)
+        pm.rise = ((11.5f / (m * bump)) - 2.f) / 13.f;
+        palms_.push_back(pm);
+    }
     reefDirty_ = false;
 }
 
@@ -706,13 +917,13 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
             pts.push_back(V(p.x, p.y));
             // the bubbles burst out of the row sideways behind the well, then rise
-            const float dist = rng_.range(11.f, 15.f);
+            const float dist = camD_ * rng_.range(0.7f, 0.95f), sc = camD_ / 15.6f;
             const float side = p.x + rng_.range(-0.6f, 0.6f) < 0.f ? -1.f : 1.f;
-            for (int i = 0; i < 3 && (int)bubbles_.size() < MAX_BUBBLES; i++) {
+            for (int i = 0; i < 3 && (int)bubbles_.size() < MAX_BUBBLES && aboveK_ < 0.5f; i++) {
                 Bubble b;
                 b.p = boardToWorld(V(p.x + rng_.range(-0.45f, 0.45f), p.y + rng_.range(-0.45f, 0.45f)), dist + rng_.range(-1.f, 1.f));
-                b.v = camR_ * (side * rng_.range(1.f, 2.8f) * (0.6f + std::fabs(p.x) / 6.f)) +
-                      vec3(rng_.range(-0.3f, 0.3f), rng_.range(0.3f, 1.2f), rng_.range(-0.5f, 0.3f));
+                b.v = (camR_ * (side * rng_.range(1.f, 2.8f) * (0.6f + std::fabs(p.x) / 6.f)) +
+                       vec3(rng_.range(-0.3f, 0.3f), rng_.range(0.3f, 1.2f), rng_.range(-0.5f, 0.3f))) * sc;
                 b.r = rng_.range(0.0035f, 0.008f) * (i == 0 ? 1.4f : 1.f) * length(b.p - eye_);
                 b.age = -rng_.range(0.f, 0.25f);
                 b.life = 9.f;
@@ -789,10 +1000,28 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
         if (swirl > 0.f) tgt = lerp(tgt, swirlC_, swirl);
         s.target = tgt;
     }
-    // clownfish: two in each grown anemone
+    // the coral head's goby, the bommie's little fish
+    {
+        int goby = 0, small = 0;
+        for (const Fish& f : fish_) { goby += f.school == -2 && f.home == -2; small += f.school == -2 && f.home == -3; }
+        const int wantG = L >= 6.f ? 1 : 0, wantS = L >= 11.f ? (L >= 14.f ? 7 : 4) : 0;
+        auto add = [&](int home, float size) {
+            Fish f;
+            f.p = P0_ + vec3(rng_.range(-0.3f, 0.3f), 0.1f, rng_.range(-0.3f, 0.3f)) * (home == -2 ? 0.3f : 2.f);
+            f.v = vec3(0.f); f.dir = vec3(1, 0, 0); f.phase = rng_.range(0.f, TAU); f.size = size;
+            f.bank = 0.f; f.speed = 0.f; f.seed = rng_.uniform(); f.school = -2; f.home = home; f.in = 1.f;
+            fish_.push_back(f);
+        };
+        for (; goby < wantG; goby++) add(-2, 0.032f);
+        for (; small < wantS; small++) add(-3, rng_.range(0.08f, 0.11f));
+        if (goby > wantG || small > wantS)
+            fish_.erase(std::remove_if(fish_.begin(), fish_.end(), [&](const Fish& f) {
+                return f.school == -2 && ((f.home == -2 && wantG == 0) || (f.home == -3 && wantS == 0)); }), fish_.end());
+    }
+    // clownfish: two in each grown anemone (the reef's, not the polyps')
     for (int i = 0; i < (int)slots_.size(); i++) {
         const Slot& sl = slots_[i];
-        if (sl.kind != reef::K_ANEMONE || sl.grow < 0.9f) continue;
+        if (sl.kind != reef::K_ANEMONE || sl.grow < 0.9f || sl.size < 0.5f) continue;
         int have = 0;
         for (const Fish& f : fish_) have += f.home == i;
         for (; have < 2; have++) {
@@ -812,7 +1041,7 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
         }
     }
     fish_.erase(std::remove_if(fish_.begin(), fish_.end(),
-                               [&](const Fish& f) { return f.school < 0 && (f.home < 0 || f.home >= (int)slots_.size() || slots_[f.home].grow < 0.5f); }),
+                               [&](const Fish& f) { return f.school == -1 && (f.home < 0 || f.home >= (int)slots_.size() || slots_[f.home].grow < 0.5f); }),
                 fish_.end());
 
     const int n = (int)fish_.size();
@@ -824,7 +1053,14 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
             Fish& f = fish_[i];
             vec3 want;
             float spd;
-            if (f.school < 0) {
+            if (f.school == -2) {
+                // the goby by its coral head, the little fish round the bommie: hovering, darting about
+                const float R = f.home == -2 ? 0.1f : 0.75f, sp = f.home == -2 ? 0.07f : 0.5f;
+                const float a = time_ * (0.35f + 0.25f * f.seed) * (f.home == -2 ? 1.f : 0.6f) + f.seed * 20.f;
+                const vec3 hp = P0_ + vec3(std::cos(a) * R, (f.home == -2 ? 0.05f : 0.45f) + 0.3f * R * std::sin(a * 1.3f), std::sin(a) * R);
+                want = (hp - f.p) * (2.f / R);
+                spd = std::min(sp, length(hp - f.p) * 1.5f + sp * 0.3f);
+            } else if (f.school < 0) {
                 // a clownfish hovers in its anemone's tentacles, darting about a little
                 const Slot& sl = slots_[f.home];
                 const float a = time_ * (0.5f + 0.3f * f.seed) + f.seed * 20.f;
@@ -890,7 +1126,7 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
             f.speed += (spd - f.speed) * std::min(1.f, sub * 1.5f);
             f.v = f.dir * f.speed;
             f.p += f.v * sub;
-            f.phase += sub * (5.f + f.speed * 7.f) / std::max(0.3f, f.size * 2.5f);
+            f.phase += sub * (5.f + f.speed * 7.f / std::max(0.05f, f.size * 2.f)) / std::max(0.3f, f.size * 2.5f);
         }
     }
 }
@@ -906,7 +1142,7 @@ void CoralReefUniverse::spawnEgg(const Slot& sl, float delay) {
     Egg e;
     const float a = rng_.range(0.f, TAU), d = rng_.range(0.f, 0.35f) * sl.size;
     e.p = sl.p + vec3(std::cos(a) * d, sl.size * rng_.range(0.35f, 0.75f), std::sin(a) * d);
-    e.r = rng_.range(0.06f, 0.1f);
+    e.r = rng_.range(0.06f, 0.1f) * std::clamp(camD_ / 15.6f, 0.002f, 1.f);
     e.age = delay;
     e.life = rng_.range(18.f, 30.f);
     e.seed = rng_.uniform();
@@ -921,7 +1157,7 @@ vec3 CoralReefUniverse::mantaAt(float t, float enter) const {
     const float w = TAU / 26.f;
     const float nx = mantaSide_ * (0.8f + 0.07f * std::sin(w * t) + 0.9f * (1.f - enter));
     const float ny = 0.32f + 0.2f * std::sin(2.f * w * t + 0.6f);
-    const float dist = 21.f + 4.f * std::cos(w * t);
+    const float dist = (21.f + 4.f * std::cos(w * t)) * camD_ / 15.6f;
     const vec3 d = normalize(look_ + camR_ * (nx * tanH_ * aspect_) + camU_ * (ny * tanH_));
     vec3 p = eye_ + d * dist;
     p.y = std::max(p.y, 2.2f);
@@ -1245,7 +1481,6 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     swell_ = approach(swell_, 0.f, 0.4f, dt);
 
     // ---- The lines -> the reef.
-    updateCamera();
     if (reefSeed_ == 0) { reefSeed_ = seed_ ? seed_ : 1; reefDirty_ = true; }
     if (reefDirty_) {
         // (a rebuild keeps what has grown: the same seed lays the same reef)
@@ -1280,12 +1515,12 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         for (int i = 0; i < (int)slots_.size(); i++) {
             Slot& s = slots_[i];
             if (s.startT >= 0.f || s.awaiting || s.birth > lines_) continue;
-            if (clearPending_ && !clearPts_.empty() && s.birth > before - 0.01f) {
+            if (clearPending_ && !clearPts_.empty() && s.birth > before - 0.01f && aboveK_ < 0.5f && fresh < 8) {
                 Seed sd;
                 const vec2 bp = clearPts_[rng_.irange(0, (int)clearPts_.size() - 1)];
-                sd.from = boardToWorld(bp, rng_.range(11.f, 14.f));
+                sd.from = boardToWorld(bp, camD_ * rng_.range(0.7f, 0.9f));
                 sd.to = s.p + vec3(0.f, 0.25f * s.size, 0.f);
-                sd.ctl = lerp(sd.from, sd.to, 0.4f) + vec3(0.f, rng_.range(2.f, 3.5f), 0.f);
+                sd.ctl = lerp(sd.from, sd.to, 0.4f) + vec3(0.f, camD_ * rng_.range(0.13f, 0.22f), 0.f);
                 sd.age = -0.25f - 0.35f * fresh;
                 sd.life = rng_.range(2.6f, 3.4f);
                 sd.seed = rng_.uniform();
@@ -1294,7 +1529,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
                 seeds_.push_back(sd);
                 s.awaiting = true;
             } else {
-                s.startT = time_ + 0.4f * fresh;
+                s.startT = time_ + std::min(0.4f * fresh, 1.5f) + (fresh > 4 ? 0.05f * (fresh % 40) : 0.f);
             }
             fresh++;
         }
@@ -1305,7 +1540,15 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         const float cap = 1.5f * std::max(1.f, paceScale());
         shownLines_ += std::clamp((lines_ - shownLines_) * 1.2f * wdt, -8.f * wdt, cap * wdt);
         if (lines_ < shownLines_ - 5.f) shownLines_ = approach(shownLines_, lines_, 6.f, dt);
+        // the camera follows the growth on a calm spring (a new game dives back down to the polyp)
+        if (camL_ < 0.f) { camL_ = shownLines_; camLv_ = 0.f; }
+        const float w = 1.3f;
+        camLv_ += (w * w * (shownLines_ - camL_) - 2.f * w * camLv_) * dt;
+        camL_ += camLv_ * dt;
     }
+    updateCamera();
+    for (Rock& b : rocks_)
+        if (b.birth >= 0.f) b.grow = approach(b.grow, shownLines_ >= b.birth ? 1.f : 0.f, 0.3f, wdt);
     for (Slot& s : slots_) {
         float target = 0.f;
         if (s.startT >= 0.f && time_ >= s.startT) {
@@ -1385,20 +1628,28 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     for (int k = 0; k < 2; k++) {
         const float t = mantaT_ - 1.6f * k;
         const vec3 p0 = mantaAt(t, enter), p1 = mantaAt(t + 0.15f, enter), p2 = mantaAt(t + 0.3f, enter);
-        mantaP[k] = p0 + camR_ * (k == 0 ? 0.f : -1.8f * mantaSide_) + vec3(0.f, k == 0 ? 0.f : -1.1f, 0.f);
+        mantaP[k] = p0 + (camR_ * (k == 0 ? 0.f : -1.8f * mantaSide_) + vec3(0.f, k == 0 ? 0.f : -1.1f, 0.f)) * (camD_ / 15.6f);
         mantaD[k] = normalize(p1 - p0);
         const vec3 d2 = normalize(p2 - p1);
         mantaBank[k] = std::clamp(-cross(mantaD[k], d2).y * 25.f, -0.6f, 0.6f) + 0.3f * (mantaD[k].x >= 0.f ? 1.f : -1.f);
     }
-    const bool mantaOn = mantaK_ > 0.01f && overT_ < 0.f;
+    const bool mantaOn = mantaK_ > 0.01f && overT_ < 0.f && aboveK_ < 0.5f && camD_ > 7.f && camD_ < 60.f;
     if (!f.paused) {
         if (dropOn_) {
             spawnAcc_ += dt * (40.f + 0.5f * (float)slots_.size());
             spawnAcc_ = std::min(spawnAcc_, 40.f);
             while (spawnAcc_ >= 1.f && !slots_.empty()) {
                 spawnAcc_ -= 1.f;
+                if (aboveK_ > 0.5f) continue; // (above the water: pink slicks on the lagoons instead)
                 const Slot& sl = slots_[rng_.irange(0, (int)slots_.size() - 1)];
-                if (sl.grow > 0.5f) spawnEgg(sl, 0.f);
+                if (camD_ < 5.f || camD_ > 40.f) {
+                    // (at the polyp's or the bommie's scale: eggs drifting up through the view)
+                    Slot tmp = sl;
+                    tmp.p = anchor_ + vec3(rng_.range(-1.6f, 1.6f), rng_.range(-0.4f, 0.2f), rng_.range(-1.2f, 0.6f)) * camD_;
+                    tmp.p.y = std::max(tmp.p.y, reef::groundH(tmp.p.x, tmp.p.z, mounds_, moundCount_));
+                    tmp.size = 0.1f * camD_;
+                    spawnEgg(tmp, 0.f);
+                } else if (sl.grow > 0.5f) spawnEgg(sl, 0.f);
                 else {
                     // (and from the water itself, so a young reef's drop is full of them too)
                     Slot tmp = sl;
@@ -1411,8 +1662,9 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         for (Egg& e : eggs_) {
             e.age += wdt;
             if (e.age < 0.f) continue;
-            const float rise = 0.28f + 0.18f * e.seed;
-            e.p += vec3(0.18f * std::sin(time_ * 0.7f + e.seed * 40.f), rise, 0.12f * std::cos(time_ * 0.6f + e.seed * 30.f)) * wdt;
+            const float es = e.r / 0.08f;
+            const float rise = (0.28f + 0.18f * e.seed) * es;
+            e.p += vec3(0.18f * std::sin(time_ * 0.7f + e.seed * 40.f) * es, rise, 0.12f * std::cos(time_ * 0.6f + e.seed * 30.f) * es) * wdt;
             if (!dropOn_) e.fade = approach(e.fade, 0.f, 0.15f + 0.2f * e.seed, wdt);
             if (e.p.y > reef::SURF_Y - 0.2f) e.life = std::min(e.life, e.age);
         }
@@ -1432,8 +1684,9 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         const float drag = std::exp(-1.1f * wdt);
         b.v.x *= drag;
         b.v.z *= drag;
-        b.v.y = std::min(b.v.y + 0.35f * wdt, 1.6f);
-        b.p += (b.v + vec3(0.12f * std::sin(time_ * 3.f + b.seed * 30.f), 0.f, 0.08f * std::cos(time_ * 2.5f + b.seed * 20.f))) * wdt;
+        const float bs = std::clamp(b.r / 0.08f, 0.01f, 3.f);
+        b.v.y = std::min(b.v.y + 0.35f * bs * wdt, 1.6f * bs);
+        b.p += (b.v + vec3(0.12f * std::sin(time_ * 3.f + b.seed * 30.f), 0.f, 0.08f * std::cos(time_ * 2.5f + b.seed * 20.f)) * bs) * wdt;
         b.r *= 1.f + 0.03f * wdt;
         if (b.p.y > reef::SURF_Y - 0.1f) b.life = std::min(b.life, b.age);
     }
@@ -1465,7 +1718,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const vec3 sunDir = normalize(vec3(std::sin(pal_.sunAz) * std::cos(pal_.sunEl), std::sin(pal_.sunEl),
                                        std::cos(pal_.sunAz) * std::cos(pal_.sunEl) * -0.6f));
-    const float lightK = 1.f + 0.08f * wm + 0.15f * wp + 0.12f * life + 0.08f * swell_;
+    const float lightK = (1.f + 0.08f * wm + 0.15f * wp + 0.12f * life + 0.08f * swell_) * (1.f + 0.2f * smoothstepf(30.f, 37.f, camL_));
     auto setReef = [&](GLuint p) {
         set3f(p, "uEye", eye_);
         set3f(p, "uSunDir", sunDir);
@@ -1484,6 +1737,14 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uNight", pal_.night);
         set1f(p, "uGlowK", pal_.glow * (1.f + 0.3f * wp + 0.3f * life));
         set3f(p, "uBridgeCol", bridge_.color);
+        set1f(p, "uRing", ringAt(camL_ + 1.5f));
+        set1f(p, "uArch", archAt(camL_ + 1.f));
+        set3f(p, "uSkyZ", pal_.skyZ);
+        set3f(p, "uSkyH", pal_.skyH);
+        set1f(p, "uLensD", 0.04f * camD_);
+        set1f(p, "uAboveK", aboveK_);
+        set1f(p, "uSlick", dropLight_ * aboveK_);
+        set1f(p, "uClouds", smoothstepf(4000.f, 20000.f, eye_.y));
         float mv[reef::MAX_MOUNDS * 4], ms[reef::MAX_MOUNDS];
         for (int i = 0; i < reef::MAX_MOUNDS; i++) {
             const reef::Mound& m = mounds_[std::min(i, std::max(0, moundCount_ - 1))];
@@ -1524,14 +1785,28 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progGround_, "uRock2C", pal_.rock2);
     set3f(progGround_, "uCrustC", pal_.crust);
     set3f(progGround_, "uCrust2C", pal_.crust2);
-    set1f(progGround_, "uCover", smoothstepf(1.f, 46.f, shownLines_));
+    set1f(progGround_, "uCover", smoothstepf(9.f, 40.f, shownLines_));
+    set1f(progGround_, "uSpread", spreadAt(camL_));
+    set3f(progGround_, "uReefA", pal_.reef[0]);
+    set3f(progGround_, "uReefB", pal_.reef[2]);
+    set3f(progGround_, "uReefC", pal_.reef[4]);
+    set3f(progGround_, "uReefD", pal_.reef[1]);
+    set3f(progGround_, "uLeafC", pal_.leaf);
+    {
+        // the mesh's centre, between the eye and what it looks at (snapped to the scale's own steps)
+        const float step = std::exp2(std::round(std::log2(std::max(camD_ * 0.01f, 1e-4f))));
+        const float cx = std::round(lerpf(eye_.x, anchor_.x, 0.6f) / step) * step, cz = std::round(lerpf(eye_.z, anchor_.z, 0.6f) / step) * step;
+        set4f(progGround_, "uGrid", cx, cz, camD_ * 0.006f, std::clamp(camD_ * 3000.f, 5000.f, 4.0e6f));
+    }
     glBindVertexArray(groundVao_);
     glDrawElements(GL_TRIANGLES, groundCount_, GL_UNSIGNED_INT, nullptr);
+    const float pixK = 2.f * tanH_ / (float)worldT_.h * 0.6f; // (what is under a pixel or so is not drawn)
+    auto tiny = [&](const vec3& p, float size) { return size < length(p - eye_) * pixK; };
     // the corals
     {
         std::vector<float> inst[reef::K_COUNT][reef::TEMPLATES];
         for (const Slot& s : slots_) {
-            if (s.grow <= 0.002f) continue;
+            if (s.grow <= 0.002f || tiny(s.p, s.size)) continue;
             const float mature = 0.82f + 0.18f * smoothstepf(s.birth, s.birth + 18.f, shownLines_);
             const vec3 a = pal_.reef[s.colIdx[0]], b = pal_.reef[s.colIdx[1]];
             const float q[16] = {s.p.x, s.p.y, s.p.z, s.size * mature, s.yaw, s.grow, s.seed, (float)s.kind,
@@ -1545,11 +1820,12 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progCoral_, "uRock2C", pal_.rock2);
         set3f(progCoral_, "uCrustC", pal_.crust);
         set3f(progCoral_, "uCrust2C", pal_.crust2);
-        set1f(progCoral_, "uCover", smoothstepf(1.f, 46.f, shownLines_));
+        set1f(progCoral_, "uCover", smoothstepf(9.f, 40.f, shownLines_));
         {
             std::vector<float> rinst[reef::TEMPLATES];
             for (const Rock& b : rocks_) {
-                const float q[16] = {b.p.x, b.p.y, b.p.z, b.size, b.yaw, 1.f, b.seed, 7.f, 0, 0, 0, 0.f, 0, 0, 0, 0.f};
+                if (b.grow <= 0.002f || tiny(b.p, b.size)) continue;
+                const float q[16] = {b.p.x, b.p.y - (1.f - b.grow) * 0.3f * b.size, b.p.z, b.size, b.yaw, b.grow, b.seed, 7.f, 0, 0, 0, 0.f, 0, 0, 0, 0.f};
                 rinst[b.tmpl].insert(rinst[b.tmpl].end(), q, q + 16);
             }
             for (int t = 0; t < reef::TEMPLATES; t++) {
@@ -1559,6 +1835,26 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
                 glBindBuffer(GL_ARRAY_BUFFER, m.inst);
                 glBufferData(GL_ARRAY_BUFFER, rinst[t].size() * sizeof(float), rinst[t].data(), GL_STREAM_DRAW);
                 glDrawElementsInstanced(GL_TRIANGLES, m.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(rinst[t].size() / 16));
+            }
+        }
+        // the palms on the motus, as their land breaks the surface
+        {
+            const float ring = ringAt(camL_ + 1.5f);
+            std::vector<float> pinst;
+            for (const Palm& pm : palms_) {
+                const float g = smoothstepf(pm.rise, pm.rise + 0.06f, ring);
+                if (g <= 0.002f || tiny(pm.p, pm.size)) continue;
+                const float h = -3.5f + lerpf(2.f, 15.f, ring) * pm.seed;
+                const vec3 a = pal_.leaf, b = lerp(pal_.leaf, vec3(0.95f, 1.f, 0.6f), 0.45f);
+                const float q[16] = {pm.p.x, h - 0.3f, pm.p.z, pm.size, pm.yaw, g, pm.seed, 8.f, a.x, a.y, a.z, 0.05f, b.x, b.y, b.z, 0.f};
+                pinst.insert(pinst.end(), q, q + 16);
+            }
+            if (!pinst.empty()) {
+                set2f(progCoral_, "uSurge", 0.25f, 0.1f);
+                glBindVertexArray(palmM_.vao);
+                glBindBuffer(GL_ARRAY_BUFFER, palmM_.inst);
+                glBufferData(GL_ARRAY_BUFFER, pinst.size() * sizeof(float), pinst.data(), GL_STREAM_DRAW);
+                glDrawElementsInstanced(GL_TRIANGLES, palmM_.count, GL_UNSIGNED_INT, nullptr, (GLsizei)(pinst.size() / 16));
             }
         }
         set1f(progCoral_, "uPulse", coralPulse);
@@ -1579,7 +1875,9 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     {
         std::vector<float> inst[reef::F_COUNT];
         for (const Fish& fi : fish_) {
-            const int sp = fi.school < 0 ? reef::F_CLOWN : schools_[fi.school].species;
+            if (tiny(fi.p, fi.size)) continue;
+            const int sp = fi.school == -1 ? reef::F_CLOWN : fi.school == -2 ? (fi.home == -2 ? reef::F_ANTHIAS : reef::F_CHROMIS)
+                                                                              : schools_[fi.school].species;
             const float q[12] = {fi.p.x, fi.p.y, fi.p.z, fi.size, fi.dir.x, fi.dir.y, fi.dir.z, fi.phase,
                                  (float)sp, 0.35f + 0.25f * saturate(fi.speed / 2.f), fi.bank, 1.f};
             inst[sp].insert(inst[sp].end(), q, q + 12);
@@ -1599,7 +1897,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         if (mantaOn) {
             float q[24];
             for (int k = 0; k < 2; k++) {
-                const float v[12] = {mantaP[k].x, mantaP[k].y, mantaP[k].z, k == 0 ? 2.1f : 1.8f, mantaD[k].x, mantaD[k].y, mantaD[k].z,
+                const float v[12] = {mantaP[k].x, mantaP[k].y, mantaP[k].z, (k == 0 ? 2.1f : 1.8f) * camD_ / 15.6f, mantaD[k].x, mantaD[k].y, mantaD[k].z,
                                      time_ * TAU / 4.6f - 1.3f * k, 7.f, 0.f, mantaBank[k], 1.f};
                 std::copy(v, v + 12, q + 12 * k);
             }
@@ -1621,16 +1919,18 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             pinst_.insert(pinst_.end(), q, q + 12);
         };
         // specks drifting in the water around the camera
-        {
+        if (aboveK_ < 0.5f) {
             Rng sr(0x5BECull);
+            const float sc = camD_ / 15.6f;
             const vec3 drift(time_ * 0.12f, std::sin(time_ * 0.05f) * 0.3f, time_ * 0.05f);
             for (int i = 0; i < 260; i++) {
                 const vec3 base(sr.range(-22.f, 22.f), sr.range(-1.f, 7.f), sr.range(-20.f, 12.f));
                 vec3 p = base + drift + vec3(0.3f * std::sin(time_ * 0.3f + i), 0.f, 0.f);
                 p.x = std::fmod(p.x + 22.f + 440.f, 44.f) - 22.f;
                 p.z = std::fmod(p.z + 20.f + 320.f, 32.f) - 20.f;
+                p = anchor_ + (p - TARGET0) * sc;
                 if (p.y > reef::SURF_Y - 0.3f) continue;
-                const float sz = sr.range(0.012f, 0.03f);
+                const float sz = sr.range(0.012f, 0.03f) * sc;
                 glow(p, sz, lerp(pal_.haze, vec3(1.f), 0.5f), 0.35f + 0.3f * wp, 2, sr.uniform());
             }
         }
@@ -1651,7 +1951,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             const vec3 a = lerp(s.from, s.ctl, t), b = lerp(s.ctl, s.to, t);
             const vec3 p = lerp(a, b, t) + vec3(0.15f * std::sin(time_ * 2.f + s.seed * 30.f), 0.f, 0.f) * (1.f - t);
             const float al = smoothstepf(0.f, 0.15f, s.age / s.life) * (1.f - 0.5f * smoothstepf(0.85f, 1.f, s.age / s.life));
-            glow(p, 0.34f, s.col, al, 1, s.seed);
+            glow(p, 0.34f * camD_ / 15.6f, s.col, al, 1, s.seed);
         }
         if (!pinst_.empty()) {
             glUseProgram(progGlow_);
@@ -1685,6 +1985,9 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progComp_, "uSunVP", 0.5f + 0.35f * std::sin(pal_.sunAz) * std::cos(pal_.sunEl) * 2.f, 1.f + 1.6f * std::tan(pal_.sunEl) * 0.5f);
     set1f(progComp_, "uRays", pal_.rays * (0.75f + 0.15f * wm + 0.3f * wp + 0.3f * life + 0.15f * swell_));
     set1f(progComp_, "uSat", pal_.sat);
+    set1f(progComp_, "uFocus", camD_);
+    set1f(progComp_, "uDof", 9.f * (1.f - smoothstepf(0.35f, 4.f, camD_)) * worldT_.h / 720.f);
+    set1f(progComp_, "uRayScale", std::clamp(camD_ / 15.6f, 0.01f, 3.f));
     {
         // the well's rectangle in uv (the world is blurred behind it)
         const float u0 = (-5.3f - (viewC_.x - viewH_.x)) / (2.f * viewH_.x), u1 = (5.3f - (viewC_.x - viewH_.x)) / (2.f * viewH_.x);

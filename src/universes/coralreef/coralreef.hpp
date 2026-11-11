@@ -30,6 +30,10 @@ enum Kind { K_BRAIN, K_STAG, K_TABLE, K_FAN, K_SPONGE, K_ANEMONE, K_SOFT, K_COUN
 constexpr int TEMPLATES = 3;              // templates per kind
 Mesh buildCoral(int kind, int variant);   // unit size (about 1 m tall or wide), its base at the origin
 Mesh buildRock(int variant);              // a boulder, unit wide
+Mesh buildPalm(int variant);              // a palm tree, unit tall
+// The atoll's ring (the growth's later stages, as in shaders.hpp): its radius and the motus' height factor.
+constexpr float RING_R = 320.f;
+float motu(float a, float seed);
 enum Species { F_CHROMIS, F_ANTHIAS, F_YELLOW, F_BLUE, F_IDOL, F_PARROT, F_CLOWN, F_COUNT };
 Mesh buildFish(int species);              // unit length along +x (the nose), centered
 Mesh buildManta();                        // unit half span along x, the head toward +z
@@ -61,6 +65,7 @@ public:
         vec3 reef[8];
         vec3 ink, accent, veil, rail;
         vec3 piece[7];
+        vec3 skyZ, skyH, leaf;
         float sunAz, sunEl, fog, rays, caustics, glow, night, sat;
     };
 
@@ -78,8 +83,10 @@ private:
         bool awaiting;   // a seed is on its way to it
     };
     std::vector<Slot> slots_;
-    struct Rock { vec3 p; float size, yaw, seed; int tmpl; };
-    std::vector<Rock> rocks_;           // boulders on the outcrops and in the sand (there from the start)
+    struct Rock { vec3 p; float size, yaw, seed; int tmpl; float birth, grow; };
+    std::vector<Rock> rocks_;           // boulders on the outcrops and in the sand, the bommie's as it rises
+    struct Palm { vec3 p; float size, yaw, seed, rise; };
+    std::vector<Palm> palms_;           // on the atoll's motus, once they break the surface
     float surfaceAt(float x, float z) const; // the seabed or a boulder's top
     uint64_t reefSeed_ = 0;
     bool reefDirty_ = true;
@@ -95,8 +102,8 @@ private:
     struct Fish {
         vec3 p, v, dir;
         float phase, size, bank, speed, seed;
-        int school;     // -1: a clownfish
-        int home;       // clownfish: its anemone slot
+        int school;     // -1: a clownfish, -2: a little fish of the coral head and the bommie
+        int home;       // clownfish: its anemone slot; -2: its hovering radius index
         float in;       // 0..1 fading in (new fish swim in from afar)
     };
     struct School {
@@ -131,6 +138,19 @@ private:
     struct Seed { vec3 from, to, ctl; float age, life, seed; int slot; vec3 col; };
     std::vector<Seed> seeds_;
     std::vector<float> pinst_;
+
+    // ---- The growth's camera: one continuous pull-back from a macro lens on a single polyp to orbit, its scale
+    // (the distance to what it frames, D) and its place set by the lines it follows (camL_, a calm spring).
+    float camL_ = -1.f, camLv_ = 0.f;
+    vec3 anchor_{0, 0, 0};
+    vec3 P0_{9.5f, 0.f, 4.f};          // where the first polyp lives (on its pebble)
+    GLsizei groundRings_ = 0;
+    float camD_ = 15.f, aboveK_ = 0.f;
+    mat4 refVP_;                        // the reef stage's framing (where the reef's slots are laid out)
+    bool toScreenRef(const vec3& w, vec2* ndc) const;
+    // The camera's place at a point of the growth (t: its breathing): the eye, what it frames, its forward axis.
+    void poseAt(float L, float t, vec3* eye, vec3* anchor, vec3* fwd, vec3* right, vec3* up) const;
+    std::vector<vec3> path_;            // the camera's path (eye, what it frames) while it pulls back over the reef
 
     // ---- The camera (world meters).
     vec3 eye_{0, 3, 15}, look_{0, 0, -1}, camR_{1, 0, 0}, camU_{0, 1, 0};
@@ -173,6 +193,7 @@ private:
     struct MeshGL { GLuint vao = 0, vbo = 0, ibo = 0, inst = 0; GLsizei count = 0; };
     MeshGL coral_[reef::K_COUNT][reef::TEMPLATES];
     MeshGL rockM_[reef::TEMPLATES];
+    MeshGL palmM_;
     MeshGL fishM_[reef::F_COUNT];
     MeshGL manta_;
     void upload(MeshGL& m, const reef::Mesh& mesh, int instFloats);

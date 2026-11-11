@@ -66,6 +66,70 @@ float groundBase(vec2 p) {
          0.1 * sin(0.53 * p.x + 0.9) * sin(0.41 * p.y + 0.2);
     return h;
 }
+// ---- The world beyond the reef (the growth's later stages): the reef's own atoll (a ring of motus around the
+// lagoon the reef stands in, rising with uRing), then an archipelago of other atolls on the deep ocean (uArch).
+uniform float uRing, uArch;
+const float RA = 320.0;          // the atoll's ring (meters from the reef)
+const float CELL = 30000.0;      // the archipelago's spacing
+float hash1(float n) { return fract(sin(n * 127.1 + 0.37) * 43758.5453); }
+float motu(float a, float seed) {
+    return 0.62 + 0.22 * sin(3.0 * a + seed * 9.0) + 0.16 * sin(7.0 * a + seed * 4.0) + 0.08 * sin(13.0 * a + seed * 2.0);
+}
+float atollH(vec2 d, float R, float rise, float seed, float lagoon) {
+    float r = length(d);
+    float shelf = mix(-1500.0, lagoon, smoothstep(R * 2.2, R * 1.08, r));
+    float ring = exp(-sq((r - R) / (R * 0.14)));
+    return shelf + ring * rise * motu(atan(d.y, d.x), seed) + 0.6 * sin(r * 0.05 + seed * 7.0) * ring;
+}
+float bigH(vec2 p) {
+    float h = atollH(p, RA, mix(2.0, 15.0, uRing), 0.37, -3.5);
+    h += 0.25 * sin(0.21 * p.x + 0.4) * sin(0.17 * p.y + 1.1) * smoothstep(RA * 1.2, RA, length(p));
+    if (uArch > 0.0 && dot(p, p) > 1.0e6) {
+        vec2 cc = floor((p + CELL * 0.5) / CELL);
+        for (int y = -1; y <= 1; y++)
+            for (int x = -1; x <= 1; x++) {
+                vec2 c = cc + vec2(x, y);
+                if (c == vec2(0.0)) continue;
+                float hs = hash1(c.x * 17.0 + c.y * 131.0);
+                if (hs < 0.42) continue;
+                vec2 ctr = (c + 0.6 * (vec2(hash1(c.x * 3.1 + c.y * 7.7), hash1(c.x * 9.3 - c.y * 2.9)) - 0.5)) * CELL;
+                float R = 1500.0 + 4800.0 * pow(hash1(c.x * 5.7 + c.y * 3.3 + 1.0), 1.6);
+                float g = smoothstep((hs - 0.42) * 1.2, (hs - 0.42) * 1.2 + 0.3, uArch);
+                if (g <= 0.0) continue;
+                h = max(h, mix(-1500.0, atollH(p - ctr, R, 21.0, hs * 13.0, -8.0), smoothstep(0.0, 0.35, g)));
+            }
+    }
+    return h;
+}
+// The whole seabed (meters): the reef's own ground near it, the big terrain beyond.
+float groundH(vec2 p, out float rockAmt) {
+    float r = length(p);
+    float wN = 1.0 - smoothstep(90.0, 220.0, r);
+    rockAmt = 0.0;
+    float near = 0.0;
+    if (wN > 0.0) { rockAmt = r < 80.0 ? moundSum(p) : 0.0; near = groundBase(p) + rockAmt; }
+    float big = wN < 1.0 ? bigH(p) : 0.0;
+    return mix(big, near, wN);
+}
+// ---- The sky (above the surface), the waves, the path through water and air.
+uniform vec3 uSkyZ, uSkyH;
+uniform float uLensD, uAboveK, uSlick;
+vec3 skyColor(vec3 v) {
+    vec3 c = mix(uSkyH, uSkyZ, pow(max(v.y, 0.0), 0.45));
+    c += uSunC * (pow(max(dot(v, uSunDir), 0.0), 900.0) * 6.0 + pow(max(dot(v, uSunDir), 0.0), 12.0) * 0.18);
+    return c;
+}
+float waveH(vec2 p) {
+    return 0.12 * (sin(p.x * 0.9 + uTime * 1.1) * sin(p.y * 0.7 - uTime * 0.8) + 0.5 * sin(p.x * 2.3 - p.y * 1.7 + uTime * 1.9));
+}
+vec3 airHaze(vec3 col, vec3 a, vec3 b) {
+    const float H = 8500.0;
+    float x0 = max(a.y, 0.0) / H, x1 = max(b.y, 0.0) / H;
+    float dx = abs(x1 - x0);
+    float dens = dx > 1e-3 ? (exp(-min(x0, x1)) - exp(-max(x0, x1))) / dx : exp(-x0);
+    float od = length(b - a) * dens / 110000.0;
+    return mix(uSkyH * 0.95, col, exp(-od));
+}
 // Caustics: a web of bright lines (the edges of drifting cells, warped), on what faces the sun.
 float causticCells(vec2 p, float t) {
     vec2 i = floor(p), f = fract(p);
@@ -97,13 +161,72 @@ vec3 waterColor(vec3 v) {
     c += uSunC * pow(max(dot(v, uSunDir), 0.0), 6.0) * 0.12;
     return c;
 }
-// Under water: the deeper, the bluer; the farther, the more of the water's own color.
+// The path from the eye to a point. Under water (the lens, a little in front of the eye, below the waves): the
+// deeper, the bluer; the farther, the more of the water's own color. Above the water: through the air (a haze
+// thickening low down), then, for what lies under the surface, the surface itself (the sky's reflection, the sun's
+// glints, the drop's pink slicks on the lagoons) and the water, absorbing red first (shallows turn turquoise, the
+// deep ocean ink blue).
+bool lensUnder(vec3 v) {
+    vec3 a = uEye + v * uLensD;
+    return a.y < SURF_Y + waveH(a.xz) * min(1.0, uLensD);
+}
+vec3 surfaceSeen(vec3 below, vec3 v, vec3 c, float pxW) {
+    float lod = 1.0 - smoothstep(0.08, 0.8, pxW);
+    vec2 q = c.xz * 0.6;
+    vec2 g = vec2(vnoise(q + uTime * 0.25) - vnoise(q + vec2(0.37, 0.0) + uTime * 0.25),
+                  vnoise(q + uTime * 0.21 + 5.0) - vnoise(q + vec2(0.0, 0.37) + uTime * 0.21 + 5.0));
+    vec2 q2 = c.xz * 1.9;
+    g += 0.5 * vec2(vnoise(q2 - uTime * 0.4) - vnoise(q2 + vec2(0.37, 0.0) - uTime * 0.4),
+                    vnoise(q2 + 3.0 + uTime * 0.35) - vnoise(q2 + vec2(3.0, 0.37) + uTime * 0.35));
+    vec3 n = normalize(vec3(g.x * 0.45 * lod, 1.0, g.y * 0.45 * lod));
+    float cosT = clamp(-dot(v, n), 0.0, 1.0);
+    float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
+    vec3 r = reflect(v, n);
+    vec3 col = mix(below, skyColor(r), F);
+    col += uSunC * pow(max(dot(r, uSunDir), 0.0), 700.0) * 1.2 * lod;
+    // the drop's spawn: pink slicks swirling on the lagoons
+    if (uSlick > 0.0) {
+        vec2 sq = c.xz / 60.0;
+        float sw = fbm(sq + vec2(fbm(sq * 0.7 + uTime * 0.02), fbm(sq * 0.7 + 3.0 - uTime * 0.02)) * 1.6);
+        float lagoon = 1.0 - smoothstep(RA * 0.85, RA * 1.05, length(c.xz));
+        col = mix(col, vec3(1.0, 0.55, 0.7), smoothstep(0.55, 0.75, sw) * uSlick * 0.55 * lagoon);
+    }
+    return col;
+}
+// Seen from high up: a scatter of fair-weather clouds floating at 1.5 km over the ocean.
+uniform float uClouds;
+vec3 cloudLayer(vec3 col, vec3 wp) {
+    const float CY = 1500.0;
+    if (uClouds <= 0.0 || uEye.y < CY || wp.y > CY) return col;
+    vec3 v = wp - uEye;
+    vec3 k = uEye + v * ((CY - uEye.y) / v.y);
+    vec2 q = k.xz / 9000.0;
+    float n = fbm(q + vec2(uTime * 0.002, 0.0)) * 0.7 + 0.3 * fbm(q * 3.1 + 7.0);
+    float c = smoothstep(0.6, 0.74, n) * uClouds;
+    float lit = 0.88 + 0.2 * smoothstep(0.62, 0.85, n);
+    return mix(col, mix(uSkyH, vec3(1.0), 0.7) * lit, c * 0.92);
+}
 vec3 waterFog(vec3 col, vec3 wp) {
     vec3 d = wp - uEye;
     float L = length(d);
-    vec3 v = d / max(L, 1e-3);
-    col *= mix(vec3(1.0), uDeepC / max(uWaterC, vec3(0.02)), sat(-wp.y * 0.12) * 0.45);
-    col = mix(waterColor(v), col, exp(-L / uFogD));
+    vec3 v = d / max(L, 1e-6);
+    vec3 a = uEye + v * min(uLensD, L * 0.5);
+    if (lensUnder(v)) {
+        float Lw = L;
+        if (wp.y > SURF_Y && v.y > 1e-4) Lw = max(0.0, (SURF_Y - a.y) / v.y);
+        col *= mix(vec3(1.0), uDeepC / max(uWaterC, vec3(0.02)), sat(-wp.y * 0.12) * 0.45);
+        col = mix(waterColor(v), col, exp(-Lw / uFogD));
+    } else if (wp.y < SURF_Y && v.y < -1e-4) {
+        float t = max(0.0, (SURF_Y - a.y) / v.y);
+        vec3 c = a + v * t;
+        float path = length(wp - c) + (SURF_Y - wp.y);
+        vec3 tr = exp(-path * vec3(0.16, 0.035, 0.05) * (27.0 / uFogD));
+        vec3 under = col * tr + uDeepC * mix(1.1, 0.75, smoothstep(40.0, 400.0, path)) * (1.0 - exp(-path / (uFogD * 1.5)));
+        float pxW = length(c - uEye) * 0.002;
+        col = cloudLayer(airHaze(surfaceSeen(under, v, c, pxW), uEye, c), wp);
+    } else {
+        col = airHaze(col, uEye, wp);
+    }
     return mix(col, uBridgeCol, uBridge);
 }
 // Toon light: the shade (cool, tinted by the water), the light, the full sun; crisp bands.
@@ -127,22 +250,32 @@ uniform vec2 uTan;
 uniform vec3 uSurfC;
 void main() {
     vec3 d = normalize(uLook + uCamR * (vUv.x * 2.0 - 1.0) * uTan.x + uCamU * (vUv.y * 2.0 - 1.0) * uTan.y);
-    vec3 c = waterColor(d);
-    float dist = 400.0;
-    if (d.y > 0.0) {
-        // the surface from below: a rippling silver sheet (it mirrors the water), bright webs where the sun comes in
-        float t = (SURF_Y - uEye.y) / d.y;
-        vec3 p = uEye + d * t;
-        vec2 q = p.xz * 0.32;
-        float w1 = vnoise(q * 1.3 + vec2(uTime * 0.12, uTime * 0.05));
-        float w2 = vnoise(q * 3.1 - vec2(uTime * 0.09, -uTime * 0.13));
-        float web = smoothstep(0.14, 0.0, causticCells(q * 0.9 + vec2(w1, w2) * 0.6, uTime * 0.45));
-        vec3 s = mix(uSurfC * 0.85, uSurfC * 1.15, w1 * 0.6 + w2 * 0.4);
-        s += uSunC * web * 0.22;
-        s += uSunC * pow(max(dot(d, uSunDir), 0.0), 24.0) * 0.8;
-        float k = exp(-t / (uFogD * 1.3));
-        c = mix(c, s, k * smoothstep(0.0, 0.08, d.y));
-        dist = t;
+    vec3 c;
+    float dist = 1.0e7;
+    if (lensUnder(d)) {
+        c = waterColor(d);
+        dist = 400.0;
+        if (d.y > 0.0) {
+            // the surface from below: a rippling silver sheet (it mirrors the water), bright webs where the sun comes in
+            float t = max(0.0, (SURF_Y - uEye.y) / d.y);
+            vec3 p = uEye + d * t;
+            vec2 q = p.xz * 0.32;
+            float w1 = vnoise(q * 1.3 + vec2(uTime * 0.12, uTime * 0.05));
+            float w2 = vnoise(q * 3.1 - vec2(uTime * 0.09, -uTime * 0.13));
+            float web = smoothstep(0.14, 0.0, causticCells(q * 0.9 + vec2(w1, w2) * 0.6, uTime * 0.45));
+            vec3 s = mix(uSurfC * 0.85, uSurfC * 1.15, w1 * 0.6 + w2 * 0.4);
+            s += uSunC * web * 0.22;
+            s += uSunC * pow(max(dot(d, uSunDir), 0.0), 24.0) * 0.8;
+            float k = exp(-t / (uFogD * 1.3));
+            c = mix(c, s, k * smoothstep(0.0, 0.08, d.y));
+            dist = t;
+        }
+    } else if (d.y > 0.0) {
+        c = skyColor(d);
+    } else {
+        // (beyond the seabed's mesh: the open ocean)
+        vec3 far = uEye + d * min(4.0e6, (uEye.y + 2000.0) / max(-d.y, 1e-3));
+        c = waterFog(uDeepC * 0.2, vec3(far.x, -1500.0, far.z));
     }
     frag = vec4(mix(c, uBridgeCol, uBridge), dist);
 }
@@ -150,35 +283,74 @@ void main() {
 
 // ---------------------------------------------------------------- the seabed
 inline const char* GROUND_VS = R"(#version 330 core
-layout(location = 0) in vec2 aXZ;
+layout(location = 0) in vec2 aRA;   // ring 0..1 (log-spaced radius), angle
 uniform mat4 uVP;
+uniform vec4 uGrid;                 // center xz, inner radius, outer radius
 out vec3 vWorld;
 out vec3 vN;
 out float vRock;
+out float vR;
 void main() {
-    float m = moundSum(aXZ);
-    float h = groundBase(aXZ) + m;
-    float e = 0.12;
-    vec2 ex = vec2(e, 0.0), ez = vec2(0.0, e);
-    float hx = groundBase(aXZ + ex) + moundSum(aXZ + ex) - (groundBase(aXZ - ex) + moundSum(aXZ - ex));
-    float hz = groundBase(aXZ + ez) + moundSum(aXZ + ez) - (groundBase(aXZ - ez) + moundSum(aXZ - ez));
+    float r = uGrid.z * pow(uGrid.w / uGrid.z, aRA.x);
+    vec2 xz = uGrid.xy + vec2(cos(aRA.y), sin(aRA.y)) * r;
+    float rk, dummy;
+    float h = groundH(xz, rk);
+    float e = max(r * 0.03, 0.0008);
+    float hx = groundH(xz + vec2(e, 0.0), dummy) - groundH(xz - vec2(e, 0.0), dummy);
+    float hz = groundH(xz + vec2(0.0, e), dummy) - groundH(xz - vec2(0.0, e), dummy);
     vN = normalize(vec3(-hx, 2.0 * e, -hz));
-    vWorld = vec3(aXZ.x, h, aXZ.y);
-    vRock = m;
-    gl_Position = uVP * vec4(vWorld - uEye, 1.0);
+    if (r > 2500.0 && length(xz) > 2500.0) { h = min(h, SURF_Y - 3.0); vN = vec3(0.0, 1.0, 0.0); }
+    vWorld = vec3(xz.x, h, xz.y);
+    vRock = rk;
+    vR = length(xz);
+    // the planet's curve, far away
+    vec2 dc = xz - uEye.xz;
+    vec3 wp = vWorld - vec3(0.0, dot(dc, dc) / (2.0 * 6.371e6), 0.0);
+    gl_Position = uVP * vec4(wp - uEye, 1.0);
 }
 )";
 inline const char* GROUND_FS = R"(#version 330 core
 in vec3 vWorld;
 in vec3 vN;
 in float vRock;
+in float vR;
 out vec4 frag;
 uniform vec3 uSandC, uSand2C, uRockC, uRock2C, uCrustC, uCrust2C;
-uniform float uCover;
+uniform vec3 uReefA, uReefB, uReefC, uReefD, uLeafC;
+uniform float uCover, uSpread;
+// The reef carpet: rounded coral heads packed on the floor (a cell each, its own color among four), sand between;
+// rgb its color, a its cover; `nrm` the heads' dome (to tilt the normal). Fades to its average when tiny on screen.
+vec4 carpet(vec2 p, float cell, float px, out vec2 nrm) {
+    vec2 q = p / cell;
+    vec2 i = floor(q), f = fract(q);
+    float d1 = 8.0; vec2 id = vec2(0.0), rel = vec2(0.0);
+    for (int y = -1; y <= 1; y++)
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(x, y);
+            vec2 o = 0.2 + 0.6 * hash2(i + g);
+            vec2 r = g + o - f;
+            float d = dot(r, r);
+            if (d < d1) { d1 = d; id = i + g; rel = r; }
+        }
+    float d = sqrt(d1);
+    float rad = 0.42 + 0.14 * hash(id + 5.0);
+    float head = smoothstep(rad, rad * 0.8, d);
+    float hs = hash(id);
+    vec3 c = hs < 0.25 ? uReefA : hs < 0.5 ? uReefB : hs < 0.75 ? uReefC : uReefD;
+    c = mix(c, uCrust2C, 0.25 * hash(id + 9.0));
+    c *= 0.5 + 0.65 * sqrt(max(0.0, 1.0 - sq(d / rad)));          // the dome
+    c *= 1.0 - 0.2 * smoothstep(0.6, 0.7, vnoise(q * 9.0 + id));   // polyps
+    float lod = smoothstep(cell * 0.6, cell * 0.12, px);
+    nrm = -rel / max(rad, 1e-3) * head * 0.9 * lod;
+    vec3 avg = (uReefA + uReefB + uReefC + uReefD) * 0.25 * 0.85;
+    return vec4(mix(avg, c, lod), mix(0.85, head, lod));
+}
 void main() {
     vec3 wp = vWorld;
     vec3 n = normalize(vN);
     vec2 p = wp.xz;
+    float px = max(length(fwidth(p)), 1e-6);   // meters a pixel: fine details fade out as they shrink
+    float lodF = 1.0 - smoothstep(0.08, 0.6, px);
     float fb = fbm(p * 0.9);
     float rock = smoothstep(0.32, 0.55, smoothstep(0.08, 0.42, vRock) + (fb - 0.5) * 0.5);
     // sand: ripples (the light catching their crests), a few warm and cool patches, a fine grain
@@ -188,7 +360,25 @@ void main() {
     vec3 ns = normalize(n + vec3(rd.x, 0.0, rd.y) * cos(ph) * 0.22);
     vec3 sand = mix(uSandC, uSand2C, smoothstep(0.3, 0.8, fbm(p * 0.12 + 3.0)) * 0.7);
     sand *= 0.97 + 0.05 * smoothstep(0.3, 1.0, rip);
-    sand *= 0.98 + 0.04 * hash(floor(p * 40.0));
+    sand *= 0.98 + 0.04 * hash(floor(p * 40.0)) * lodF;
+    // seen up close (a macro lens): the grains themselves, rounded, each its own tone
+    float lodG = 1.0 - smoothstep(0.0004, 0.0016, px);
+    if (lodG > 0.0) {
+        vec2 gq = p * 1400.0;
+        vec2 gi = floor(gq), gf = fract(gq);
+        float d1 = 8.0; vec2 best = vec2(0.0);
+        for (int y = -1; y <= 1; y++)
+            for (int x = -1; x <= 1; x++) {
+                vec2 g = vec2(x, y);
+                vec2 rr = g + 0.15 + 0.7 * hash2(gi + g) - gf;
+                float dd = dot(rr, rr);
+                if (dd < d1) { d1 = dd; best = gi + g; }
+            }
+        float grain = smoothstep(0.5, 0.15, sqrt(d1));
+        vec3 gc = mix(uSandC, uSand2C, hash(best)) * (0.85 + 0.3 * hash(best + 3.1));
+        gc = mix(gc, vec3(1.0, 0.82, 0.8), step(0.93, hash(best + 7.0)) * 0.5);
+        sand = mix(sand, mix(sand * 0.62, gc * (0.8 + 0.35 * grain), grain * 0.9 + 0.1), lodG);
+    }
     // rock: weathered reef limestone, pitted and lumpy, crusting over (pink coralline, green turf) as the reef matures
     float r1 = fbm(p * 1.1 + 9.0), r2 = vnoise(p * 4.3);
     float crev = smoothstep(0.7, 0.8, vnoise(p * 5.0 + 3.0));
@@ -206,11 +396,48 @@ void main() {
     vec3 nr = normalize(n - vec3(gq.x, 0.0, gq.y) * 2.2);
     vec3 alb = mix(sand, rockC, rock);
     vec3 nn = normalize(mix(ns, nr, rock));
+    nn = normalize(mix(n, nn, lodF));
+    // beyond the reef: the reef carpet spreading over the lagoon and the ring (a toon patchwork of corals), the
+    // beaches and the green of the motus above the water, the dark deep floor
+    float depth = SURF_Y - wp.y;
+    if (vR > 2500.0) {
+        // (the atolls far away, finer than the mesh: their height found for each pixel)
+        float hb = bigH(p);
+        wp.y = hb;
+        depth = SURF_Y - hb;
+    }
+    float far = smoothstep(60.0, 140.0, vR);
+    {
+        // the reef carpet over the near ground too, as the barrier reef spreads (between the corals, not on rock)
+        float nearC = 0.0;
+        if (nearC > 0.0) {
+            vec2 dn;
+            vec4 cp = carpet(p, 0.9, px, dn);
+            alb = mix(alb, cp.rgb, nearC * cp.a);
+            nn = normalize(nn + vec3(dn.x, 0.0, dn.y) * nearC * cp.a);
+        }
+    }
+    if (far > 0.0) {
+        vec2 cq = p / 9.0;
+        float n1 = fbm(cq), n2 = fbm(cq * 0.43 + 7.0);
+        vec2 dn;
+        vec4 cp = carpet(p, 4.0, px, dn);
+        float cover = (1.0 - smoothstep(uSpread * 0.85, uSpread, length(p))) * smoothstep(60.0, 1.5, depth) * step(0.0, depth)
+                    * smoothstep(0.25, 0.55, fbm(p * 0.02 + 4.0) + 0.25) * cp.a;
+        vec3 farC = mix(uSandC * mix(0.9, 1.0, n2), cp.rgb, cover);
+        farC = mix(farC, uSand2C * 0.35, smoothstep(30.0, 200.0, depth));
+        // land: white sand at the shore, green inland
+        float land = smoothstep(-0.3, 0.3, -depth);
+        vec3 landC = mix(vec3(1.0, 0.97, 0.9), uLeafC * mix(0.75, 1.1, n1), smoothstep(1.2, 3.5, -depth));
+        farC = mix(farC, landC, land);
+        alb = mix(alb, farC, far);
+        nn = normalize(mix(nn, normalize(n + vec3(dn.x, 0.0, dn.y) * cover), far));
+    }
     // the sand darkens a little at the rocks' feet
     float ao = 1.0 - 0.35 * smoothstep(0.02, 0.25, vRock) * (1.0 - rock);
     vec3 col = alb * toonLight(nn, ao);
     float lit = toonBand(dot(nn, uSunDir));
-    col += uCausticC * caustic(wp) * (0.3 + 0.7 * lit) * mix(0.75, 0.55, rock);
+    col += uCausticC * caustic(wp) * (0.3 + 0.7 * lit) * mix(0.75, 0.55, rock) * (1.0 - smoothstep(0.3, 2.0, px)) * step(0.0, depth);
     col = waterFog(col, wp);
     frag = vec4(col, length(wp - uEye));
 }
@@ -360,6 +587,10 @@ void main() {
         alb = mix(alb, uCrustC * (0.75 + 0.35 * r2), crust * 0.85);
         alb = mix(alb, uCrust2C * (0.7 + 0.4 * r2), turf * (1.0 - 0.6 * crust));
         ao = mix(0.55, 1.0, smoothstep(0.0, 0.45, along));
+    } else if (kind == 8) {
+        // a palm on a motu: a ringed trunk, fronds of a fresh green, paler at their tips
+        if (part < 0.5) { alb = vec3(0.42, 0.26, 0.14) * (0.8 + 0.25 * step(0.5, fract(along * 14.0))); ao = mix(0.6, 1.0, along); }
+        else { alb = mix(A, B, along); ao = mix(0.7, 1.0, along); }
     } else {
         // sea whips: rods bristling with polyps, paler toward their tips
         alb = mix(A, B, smoothstep(0.2, 1.0, along));
@@ -370,7 +601,7 @@ void main() {
     if (kind == 3) n = dot(n, uSunDir) < 0.0 ? normalize(n - 2.0 * dot(n, uSunDir) * uSunDir * 0.7) : n; // (light comes through a fan)
     vec3 col = alb * toonLight(n, ao);
     float lit = toonBand(dot(n, uSunDir));
-    col += uCausticC * caustic(vWorld) * alb * 1.6 * smoothstep(-0.2, 0.6, n.y) * (0.4 + 0.6 * lit);
+    col += uCausticC * caustic(vWorld) * step(vWorld.y, SURF_Y) * alb * 1.6 * smoothstep(-0.2, 0.6, n.y) * (0.4 + 0.6 * lit);
     col += rimLight(n, vWorld) * mix(vec3(1.0), alb, 0.5);
     // fluorescence (a night variant), and a touch of glow in every one
     col += B * glow * (uGlowK * vD.w);
@@ -594,24 +825,32 @@ uniform vec3 uLook, uCamR, uCamU;
 uniform vec2 uTan;
 uniform vec3 uRayC;
 uniform vec2 uSunVP;
-uniform float uRays, uSat;
+uniform float uRays, uSat, uRayScale;
 uniform vec4 uWellUv;   // the well's rectangle (uv), where the world is blurred
 uniform float uBlur;
+uniform float uFocus, uDof; // the macro lens: what lies beyond the focus melts away
 void main() {
     vec4 w = texture(uWorld, vUv);
     vec3 c = w.rgb;
     {
         vec2 dw = max(max(uWellUv.xy - vUv, vUv - uWellUv.zw), 0.0);
         float k = (1.0 - smoothstep(0.0, 0.02, length(dw))) * uBlur;
-        if (k > 0.0) {
+        float coc = uDof * clamp(1.0 - uFocus / max(w.a, 1e-6), 0.0, 1.0);   // pixels of the world target
+        float rad = max(k > 0.0 ? 1.0 : 0.0, coc);
+        if (rad > 0.05) {
             vec2 px = 1.0 / vec2(textureSize(uWorld, 0));
             vec3 acc = c;
-            for (int i = 0; i < 12; i++) {
+            float wsum = 1.0;
+            for (int i = 0; i < 16; i++) {
                 float an = float(i) * 2.39996;
-                float r = 2.5 + float(i) * 0.9;
-                acc += texture(uWorld, vUv + vec2(cos(an), sin(an)) * r * px).rgb;
+                float r = (2.5 + float(i) * 0.9) * max(k, 0.0) + coc * sqrt((float(i) + 0.5) / 16.0);
+                vec4 s = texture(uWorld, vUv + vec2(cos(an), sin(an)) * r * px);
+                // (a sharp foreground does not bleed into the blur)
+                float ws = s.a < uFocus * 0.8 && coc > 0.5 ? 0.15 : 1.0;
+                acc += s.rgb * ws;
+                wsum += ws;
             }
-            c = mix(c, acc / 13.0, k);
+            c = mix(c, acc / wsum, max(k, smoothstep(0.0, 1.5, coc)));
         }
     }
     vec3 d = normalize(uLook + uCamR * (vUv.x * 2.0 - 1.0) * uTan.x + uCamU * (vUv.y * 2.0 - 1.0) * uTan.y);
@@ -624,7 +863,7 @@ void main() {
     float s1 = vnoise(vec2(ang * 17.0, uTime * 0.12));
     float s2 = vnoise(vec2(ang * 43.0 + 5.0, uTime * 0.2));
     float sh = smoothstep(0.45, 0.95, s1) * (0.55 + 0.45 * s2) + 0.25 * smoothstep(0.6, 1.0, s2);
-    float depthK = 1.0 - exp(-min(w.a, 60.0) / 14.0);
+    float depthK = (1.0 - exp(-min(w.a, 60.0 * uRayScale) / (14.0 * uRayScale))) * (1.0 - uAboveK);
     float fall = mix(0.35, 1.0, smoothstep(0.1, 0.95, uv.y));
     c += uRayC * sh * depthK * fall * uRays * 0.16;
     c = mix(c, uBridgeCol, uBridge * 0.0);
