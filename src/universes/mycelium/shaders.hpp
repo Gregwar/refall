@@ -868,6 +868,7 @@ layout(location = 1) in vec4 i0; // world position, radius
 layout(location = 2) in vec4 i1; // seed, alpha, glow from below, -
 uniform mat4 uVP;
 uniform vec3 uCamR, uCamU;
+uniform float uDepthMax;
 out vec2 vLocal;
 out vec3 vW;
 flat out vec4 vI;
@@ -876,7 +877,14 @@ void main() {
     vI = i1;
     vec3 w = i0.xyz + (uCamR * aPos.x + uCamU * aPos.y) * i0.w;
     vW = w;
-    gl_Position = uVP * vec4(w - uEye, 1.0);
+    vec3 rel = w - uEye;
+    gl_Position = uVP * vec4(rel, 1.0);
+    // its depth from a distance smoothly compressed under uDepthMax (monotonic, ~the true one up close): with the
+    // macro start's tiny near plane a puff kilometers away otherwise lands within a step of the far plane's 1.0 and
+    // flips in and out against the sky's depth from frame to frame
+    float L = max(length(rel), 1e-6);
+    vec4 cd = uVP * vec4(rel * (1.0 / (1.0 + L / uDepthMax)), 1.0);
+    gl_Position.z = cd.z / cd.w * gl_Position.w;
 }
 )";
 inline const char* CLOUD_FS = R"(#version 330 core
