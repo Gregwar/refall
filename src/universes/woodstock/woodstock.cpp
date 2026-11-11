@@ -1,24 +1,28 @@
 // WOODSTOCK: a late-60s psychedelic cartoon, peace and love, flower power.
 //
-// One world, flat and outlined: every shape is a flat candy color inside a thick white cartoon outline. Behind
-// everything a kaleidoscope centered on the well: concentric bands in the variant's colors, folded into sectors, its
-// rings flowing slowly outward (a log-polar tunnel) and morphing between circles and squircles over a minute or so;
-// the music makes its bands breathe into scalloped petals (on the half-time beat grid, deeper at a peak). Around it,
-// in the free zones beyond the HUD columns, a garden grows with the cleared lines (paceLines: complete in one song):
-// flowers on stems rising from the bottom edge (daisies, mandala flowers, daisies with kawaii faces), one every line
-// or so, taller and bigger as the song goes; a rainbow (line 7), a smiling sun (15), mushrooms with faces (22..28), a
-// pair of doves (32), then two giant mandalas blooming behind the garden (40, 46). Floating up the sides: peace signs,
-// hearts, sparkles and lava-lamp blobs, a few at calm, more at mid, many at a peak.
+// One world, flat and outlined: every shape is a flat candy color inside a white cartoon outline. Behind everything a
+// kaleidoscope centered on the well: concentric bands in the variant's colors, folded into sectors, its rings flowing
+// slowly outward (a log-polar tunnel) and morphing between circles and squircles over a minute or so; the music makes
+// its bands breathe into scalloped petals (on the half-time beat grid, deeper at a peak). Its motifs are printed in
+// the pattern itself (the same shader, the same distortion): every other ring repeats one motif, daisies, hearts or
+// peace signs, one per sector on its axis, in a lighter or darker tone of its band and outlined like the bands, riding
+// the rings outward (fading out whole near the HUD columns). Around it, in the free zones beyond the HUD columns, a
+// garden grows with the cleared lines (paceLines: complete in one song): flowers on stems rising from the bottom edge
+// (daisies, mandala flowers, daisies with kawaii faces), one every line or so, taller and bigger as the song goes; a
+// rainbow (line 7), a smiling sun (15), mushrooms with faces (22..28), a pair of doves (32), then two big mandala
+// flowers (40, 46); all flat, no highlights, in the bands' outline weight.
 //
-// The well is a calm deep panel with a white cartoon outline, so the stack pops off the busy kaleidoscope. The blocks
-// are candy tiles, one per cell, each in a thick white outline with a dark rim, its fill faintly tie-dyed, and one
-// bold pale motif per piece type: I a daisy, O a heart, T a peace sign, S a sparkle, Z a tie-dye spiral, J a rainbow,
-// L a kawaii face; one hue per type.
+// The well is a calm deep panel with a slim white line, so the stack pops off the busy kaleidoscope. The blocks are
+// flat, in the same flat language as the bands and the flowers: one rounded square of flat color per cell (no
+// outline, no shading), a small even gap between cells, and one small flat motif per piece type in a lighter tone
+// of its color (darker on the pale ones): I a daisy, O a heart, T a peace sign, S a sparkle, Z a spiral, J a
+// rainbow, L a kawaii face; one hue per type. The ghost is a faint flat fill with a thin line of the piece's color.
 //
 // The music: calm is a soft, slow kaleidoscope; mid flows and breathes with the beat, the flowers sway; a peak
-// saturates it and swells the flowers' heads on the kicks. A drop is the trip: the kaleidoscope folds into a mandala
-// (the bands scalloping into petals, alternate sectors offset like a checkerboard, the dots turning to sparkles) and
-// the palette swings to the variant's drop colors, both eased in over a second and out over a few. A cleared row's
+// saturates it and swells the flowers' heads on the kicks. A drop is the trip, held for the whole drop section: the
+// kaleidoscope folds into a two-level mandala (the bands pulled into big petal points with small petals between them,
+// the motifs turned to sparkles) and the palette swings to the variant's drop colors, eased in over a second and out
+// over a few once the drop ends. A cleared row's
 // tiles pop and burst into its motifs (petals, hearts, peace signs, sparkles) flying out sideways behind the well; a
 // Tetris turns the kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
 // dusk (the colors drained to lilac, the flow slowed); game over greys the stack from the top.
@@ -114,8 +118,7 @@ enum Kind { K_DAISY = 0, K_MANDALA, K_PEACE, K_HEART, K_RAINBOW, K_SUN, K_MUSHRO
 
 constexpr float CLEAR_T = 0.38f;   // a cleared tile pops away in this long (real time)
 constexpr int N_FLOWERS = 36;      // the garden's flowers at scene completion
-constexpr int N_FLOATERS = 18;     // icons floating up the sides
-constexpr float OUTLINE = 0.1f;    // the white cartoon outline (board units)
+constexpr float OUTLINE = 0.13f;    // the white cartoon outline (board units)
 
 float ease(float t) {
     t = saturate(t);
@@ -877,7 +880,8 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
             sectionKnown = true;
             sectionDrop = h.text == "DROP";
         }
-    const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
+    // the trip holds for the whole drop section (whether or not its first downbeat was heard: a seek, a review shot)
+    const bool isDrop = overT_ < 0.f && level_ == 2 && (sectionKnown ? sectionDrop : dropMode_ && (!music.hasSong || music.speed > 1.26f));
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.6f : 0.45f, dt);
     const float trip = ease(dropAmt_);
     swell_ = approach(swell_, 0.f, 0.5f, dt);
@@ -978,7 +982,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    // =========================================================== the garden and the floating icons
+    // =========================================================== the garden
     const float zoneIn = layout::RIGHT_COLUMN[2] + 0.6f;
     const float zoneOut = std::max(zoneIn + 0.5f, viewH_.x - 0.9f);
     auto zoneX = [&](float side, float u) { return side * lerpf(zoneIn + 0.6f, zoneOut - 0.4f, u); };
@@ -999,27 +1003,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         } else if (s.kind == K_SUN) {
             const float r = s.size * (0.4f + 0.6f * g) * (1.f + 0.05f * kickK_);
             sprite(K_SUN, x, s.y, r, r, 0.f, g, center_, hex(0xff9a3c), hex(0xff6f7d), 0.f, time_ * 0.12f, s.seed);
-        }
-    }
-    // floating icons (peace signs, hearts, sparkles, lava blobs) rising slowly up the sides
-    {
-        const float shown = 3.f + 6.f * wm + 9.f * wp;
-        const float H = 2.f * viewH_.y + 3.f;
-        Rng fr(0xF10A7ull);
-        for (int i = 0; i < N_FLOATERS; i++) {
-            const float side = i % 2 ? 1.f : -1.f, u = fr.uniform(), sp = fr.range(0.35f, 0.7f), ph = fr.uniform();
-            const float size = fr.range(0.45f, 0.85f);
-            const int kinds[6] = {K_PEACE, K_HEART, K_LAVA, K_SPARKLE, K_HEART, K_LAVA};
-            const int kind = kinds[i % 6];
-            const int ci = fr.irange(0, 5);
-            const float vis = saturate(shown - (float)i);
-            if (vis <= 0.f) continue;
-            const float y = bottom - 1.5f + std::fmod(ph * H + time_ * sp * (0.6f + 0.4f * wm + 0.4f * wp), H);
-            const float x = zoneX(side, u) + 0.5f * std::sin(time_ * 0.5f + ph * 9.f);
-            const float edge = saturate((y - bottom + 1.f) / 2.f) * saturate((viewC_.y + viewH_.y + 1.f - y) / 2.f);
-            const float r = size * (1.f + 0.12f * kickK_ * wp);
-            sprite(kind, x, y, r, r, 0.3f * std::sin(time_ * 0.7f + ph * 5.f), vis * edge, flower_[ci], vec3(1.f),
-                   vec3(1.f), 0.f, 0.f, ph, OUTLINE * 0.8f);
         }
     }
     // the doves circling
