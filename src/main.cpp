@@ -75,6 +75,7 @@ struct Options {
     float clipBefore = 4.f, clipAfter = 6.f;
     float clipAt = -1.f; // the clip's moment (song seconds), the first drop when < 0
     bool clipBreak = false; // --clip-break: the clip spans the break after the first song
+    std::string analysisPath; // --analysis: write the first song's beat grid, structure and scene plan as JSON, then exit
     std::string universe;   // forced universe "NAME" or "NAME:VARIANT" (as shown in the corner), "" = picked per song
     bool universeOnPeak = false; // also change universe when a long song rises into a peak
     std::string toUniverse, transition; // --transition-shots: the universe changed to, the transition forced
@@ -117,7 +118,9 @@ static void usage() {
         "  --clip OUT.mp4       record a video (with sound, needs ffmpeg) around the first drop of the first\n"
         "                       song, then exit; --clip-before / --clip-after SEC set the span (default 4 / 6),\n"
         "                       --clip-at SEC records around that song time instead of the drop, --clip-break around\n"
-        "                       the break between the first song and the next (from 9 s before its end)\n");
+        "                       the break between the first song and the next (from 9 s before its end)\n"
+        "  --analysis OUT.json  write the first song's analysis (beats, downbeat, structure, scene levels, first\n"
+        "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n");
 }
 
 class App {
@@ -129,6 +132,7 @@ private:
     void startTrack(std::shared_ptr<Track> t);
     void newScene(bool instant);
     void computePhases();
+    void writeAnalysis();
     int phaseLevel(int phase) const;
     float phaseEnergy(int phase) const;
     int songUniverse(int* variant);
@@ -411,6 +415,35 @@ void App::computePhases() {
     std::printf("\n[app] scene levels:");
     for (const ScenePhase& p : plan_.phases) std::printf(" L%d@%.0f", p.level, p.start);
     std::printf("\n[app] %zu scene changes, %zu pulse zones\n", plan_.phases.size() - 1, plan_.pulseZones.size());
+    if (!opt_.analysisPath.empty()) writeAnalysis();
+}
+
+// --analysis: the song as the game hears it, for tools that cut on its beats (tools/demo.py); then exit.
+void App::writeAnalysis() {
+    const Analysis& an = track_->analysis;
+    FILE* f = std::fopen(opt_.analysisPath.c_str(), "w");
+    if (!f) { std::fprintf(stderr, "[analysis] could not write %s\n", opt_.analysisPath.c_str()); quit_ = true; return; }
+    std::fprintf(f, "{\"path\": \"%s\", \"duration\": %.4f, \"bpm\": %.3f, \"downbeat\": %d, \"first_drop\": %.4f,\n",
+                 track_->path.c_str(), track_->duration(), an.fp.bpm, an.downbeat, firstDropTime());
+    std::fprintf(f, " \"beats\": [");
+    for (size_t k = 0; k < an.beats.size(); k++) std::fprintf(f, "%s%.4f", k ? ", " : "", an.beats[k]);
+    std::fprintf(f, "],\n \"segments\": [");
+    for (size_t k = 0; k < an.segments.size(); k++) {
+        const Segment& sg = an.segments[k];
+        std::fprintf(f, "%s{\"kind\": \"%s\", \"start\": %.4f, \"end\": %.4f, \"energy\": %.3f}", k ? ", " : "",
+                     segmentName(sg.kind), sg.start, sg.end, sg.energy);
+    }
+    std::fprintf(f, "],\n \"phases\": [");
+    for (size_t k = 0; k < plan_.phases.size(); k++) {
+        const ScenePhase& p = plan_.phases[k];
+        std::fprintf(f, "%s{\"level\": %d, \"start\": %.4f, \"end\": %.4f}", k ? ", " : "", p.level, p.start, p.end);
+    }
+    std::fprintf(f, "],\n \"loudness\": {\"hop\": %.4f, \"values\": [", 0.1);
+    for (int k = 0; k * 0.1 < track_->duration(); k++) std::fprintf(f, "%s%.3f", k ? ", " : "", an.intensityAt(k * 0.1));
+    std::fprintf(f, "]}}\n");
+    std::fclose(f);
+    std::printf("[analysis] wrote %s\n", opt_.analysisPath.c_str());
+    quit_ = true;
 }
 
 int App::phaseLevel(int phase) const {
@@ -772,7 +805,7 @@ int App::run() {
     std::vector<unsigned char> clipPx;
 
     // Offline renders (clips, shots, reviews) run headless on the GPU when they can (ZEN_HEADLESS=0: a window)
-    const bool wantHeadless = (shotMode || reviewMode || !opt_.transitionShots.empty()) && !opt_.fullscreen &&
+    const bool wantHeadless = (shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty()) && !opt_.fullscreen &&
                               !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
     if (wantHeadless && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
@@ -902,6 +935,9 @@ int App::run() {
                 const double drop = opt_.clipBreak ? track_->duration() - 9.0 : opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
                 clipStart_ = std::max(0.0, drop - opt_.clipBefore);
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
+                // Test hook: ZEN_CLIP_FILL=1 starts the warm-up on a played-in stack (the review shots' filled board),
+                // for clips early in a song, where the warm-up is too short to fill it (tools/demo.py).
+                if (std::getenv("ZEN_CLIP_FILL")) game_.debugFillBoard(runSeed_);
                 std::printf("[clip] moment at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
                             clipStart_ + opt_.clipBefore + opt_.clipAfter);
             }
@@ -1349,6 +1385,7 @@ int main(int argc, char** argv) {
         else if (a == "--clip-break") o.clipBreak = true;
         else if (a == "--clip-before" && i + 1 < argc) o.clipBefore = std::stof(argv[++i]);
         else if (a == "--clip-after" && i + 1 < argc) o.clipAfter = std::stof(argv[++i]);
+        else if (a == "--analysis" && i + 1 < argc) { o.analysisPath = argv[++i]; o.mute = true; }
         else o.paths.push_back(a);
     }
     if (!o.universe.empty() && !universes::check(o.universe)) return 1;
