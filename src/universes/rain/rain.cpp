@@ -12,16 +12,15 @@
 // edge some of the water runs down the face as a thin drip and falls off the bottom of the face, splashing again
 // below. The rain never crosses a cell: it stops on it.
 //
-// The pieces are wet glazed ceramic tiles, one tile per cell, one strong glaze per piece type: the glaze deepens
-// at the rim, the street's neon is caught in a soft sheen, a film of water lies along the top edge, beads of water
-// sit on the face and now and then a rivulet slides down it; a tile under the rain stays wet (more beads, a brighter
-// film), a sheltered one slowly dries. The previews are the same tiles, dry and plain.
+// The pieces are little umbrellas seen from above, one canopy per cell: eight wet nylon panels in two tones of the
+// piece's color, scalloped between the rib tips, domed, a metal ferrule, a wet sheen, big beads sliding out along the
+// panels (with the cell's wetness: a sheltered cell slowly dries). The previews are the same canopies, dry and plain.
 //
-// A cleared row's tiles are thrown out of the well, half to each side, on calm eased arcs (behind the HUD: dimmed
-// while they cross its columns), and land in two piles on the street in the side bands, where the rain pours on
-// them with the same physics. The piles grow over the song in a mound; a full column compresses its oldest, lowest
-// tile (it flattens and fades while the column settles), so the piles keep their base and never climb too high. A
-// new song washes them away. Game over throws the whole stack out to the piles, row by row from the top.
+// A cleared row's umbrellas are thrown out of the well, half to each side, on a scripted arc (behind the stack and the
+// HUD) to a release over the side bands, then become rigid boxes in a small 2D solver (sequential impulses, friction,
+// sleeping): they tumble and settle into messy heaps on the street, where the rain falls on their tilted faces and
+// slides off the lower corners. Each heap is capped (the oldest fades away). A new song washes them away; game over
+// throws the whole stack out, row by row from the top.
 //
 // The music sets the rain: a drizzle when calm, steady rain at mid, a downpour at a peak (with a gust on the kicks).
 // The drop is a thunderstorm for the whole drop section: the heaviest rain, a steeper slant, the city's colors and
@@ -89,8 +88,7 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float GAP = 0.07f;         // between tiles, each side (board units)
-constexpr float FLY_S = 1.45f;       // a cleared tile's flight to its pile
+constexpr float GAP = 0.025f;        // between the canopies, each side (board units)
 constexpr float HORIZON = -8.2f;     // the street's far edge (as in the backdrop)
 
 std::string ascii(const std::string& s) {
@@ -230,12 +228,10 @@ void RainUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     unitPx_ = height_ / (2.f * hh);
-    // the piles: on the street in the bands beyond the HUD columns
-    const float inner = 11.9f, outer = std::max(inner + 4.f, hw - 0.3f);
-    pileCell_ = std::min(0.95f, (outer - inner) / PILE_COLS);
-    bandX0_[0] = bandX0_[1] = inner;
+    // the heaps: on the street in the bands beyond the HUD columns
+    bandIn_ = 11.9f;
+    bandOut_ = std::max(bandIn_ + 4.f, hw - 0.2f);
     ground_ = viewC_.y - hh + 0.2f;
-    pileMax_ = std::clamp((int)((-5.5f - ground_) / pileCell_), 3, 6);
 }
 
 RainUniverse::~RainUniverse() {
@@ -266,9 +262,8 @@ void RainUniverse::setSong(const SongLook& t, float seconds) {
     rng_ = Rng(seed_ ^ 0x5A1Full);
     // a new song washes the piles away
     if (seconds > 0.f)
-        for (auto& side : pile_)
-            for (auto& col : side)
-                for (PileBlock& b : col) { b.fading = true; b.fadeRate = 0.5f; }
+        for (Body& b : bodies_)
+            if (!b.fading) { b.fading = true; b.fadeRate = 0.5f; }
 }
 
 void RainUniverse::setLevel(int level, float energy, float seconds, float impact) {
@@ -305,56 +300,6 @@ vec3 RainUniverse::pieceColor(int type) const { return hex(VARIANTS[variant_].pi
 // =====================================================================================================
 // Game events
 // =====================================================================================================
-
-float RainUniverse::pileColX(int side, int c) const {
-    const float x = bandX0_[side] + (c + 0.5f) * pileCell_;
-    return side == 0 ? -x : x;
-}
-
-float RainUniverse::pileTop(int side, int c) const {
-    float top = ground_;
-    for (const PileBlock& b : pile_[side][c]) {
-        if (!b.arrived) break;
-        top = b.y + b.h * pileCell_;
-    }
-    return top;
-}
-
-int RainUniverse::pileColAt(float x, int* side) const {
-    const int s = x < 0.f ? 0 : 1;
-    const float d = std::fabs(x) - bandX0_[s];
-    if (d < 0.f) return -1;
-    const int c = (int)(d / pileCell_);
-    if (c >= PILE_COLS) return -1;
-    *side = s;
-    return c;
-}
-
-// A cleared tile leaves for its pile: its place there is taken now, so the tiles arrive in the order they leave.
-void RainUniverse::eject(int x, int y, int type, float delay) {
-    const int side = x < Game::W / 2 ? 0 : 1;
-    // the column with the most room under its cap (the caps draw a mound), a little at random
-    int best = 0;
-    float bestS = 1e9f;
-    for (int c = 0; c < PILE_COLS; c++) {
-        int n = 0;
-        for (const PileBlock& b : pile_[side][c]) n += b.fading ? 0 : 1;
-        const int cap = colCap_[side][c];
-        const float s = (float)(n - cap) + rng_.range(0.f, 0.9f) + (cap == 0 ? 100.f : 0.f);
-        if (s < bestS) { bestS = s; best = c; }
-    }
-    auto& col = pile_[side][best];
-    int n = 0;
-    for (const PileBlock& b : col) n += b.fading ? 0 : 1;
-    if (n >= std::max(1, colCap_[side][best]))
-        for (PileBlock& b : col)
-            if (!b.fading && b.arrived) { b.fading = true; b.fadeRate = 0.8f; break; }
-    PileBlock b{nextBlock_++, type, rng_.range(0.f, 100.f), 1.f, ground_, 0.5f, 0.8f, false, false};
-    b.seed = seeds_[std::clamp(y, 0, Game::H - 1)][std::clamp(x, 0, Game::W - 1)];
-    col.push_back(b);
-    const vec3 p = layout::cellPos((float)x, (float)y);
-    flies_.push_back({p.x, p.y, side, best, b.id, type, 0.f, delay, FLY_S, rng_.range(1.2f, 2.4f)});
-}
 
 void RainUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
@@ -466,9 +411,8 @@ bool RainUniverse::solidAt(float x, float y) const {
             if (y > s.b && y < s.t) return true;
         return false;
     }
-    int side = 0;
-    const int c = pileColAt(x, &side);
-    if (c >= 0) return y < pileTop(side, c);
+    for (const Body& b : bodies_)
+        if (b.solid && !b.thrown && std::fabs(x - b.x) < b.half * 1.42f && bodyInside(b, x, y)) return true;
     return false;
 }
 
@@ -483,16 +427,17 @@ float RainUniverse::surfaceBelow(float x, float y, int* kind, int* cx, int* cy, 
         }
         return best;
     }
-    int side = 0;
-    const int c = pileColAt(x, &side);
-    if (c >= 0) {
-        const float t = pileTop(side, c);
-        if (y < t - 0.04f) { *inside = true; return y; }
-        *kind = 3; *cx = side; *cy = c;
-        return t;
-    }
+    // the heaped tiles, their tilted faces
+    float best = -1e9f;
     *kind = 4;
-    return -1e9f;
+    for (const Body& b : bodies_) {
+        if (!b.solid || b.thrown || std::fabs(x - b.x) > b.half * 1.42f) continue;
+        if (bodyInside(b, x, y - 0.03f)) { *inside = true; return y; }
+        const float t = bodyTop(b, x, nullptr);
+        if (t <= y + 0.03f && t > best) { best = t; *kind = 3; *cx = b.id; *cy = 0; }
+    }
+    if (best < -1e8f && std::fabs(x) > bandIn_ && std::fabs(x) < bandOut_) { *kind = 5; return ground_; } // the street in the bands
+    return best;
 }
 
 void RainUniverse::impact(float x, float y, float speed, int kind, int cx, int cy) {
@@ -508,24 +453,21 @@ void RainUniverse::impact(float x, float y, float speed, int kind, int cx, int c
     if (crowns_.size() < 900) crowns_.push_back({x, y, 0.f, rng_.range(0.16f, 0.3f)});
     if (kind == 0 && cy >= 0 && cy < Game::H && cx >= 0 && cx < Game::W) wet_[cy][cx] = std::min(1.f, wet_[cy][cx] + 0.06f);
     if (kind == 3) {
-        auto& col = pile_[cx][cy];
-        for (int i = (int)col.size() - 1; i >= 0; i--)
-            if (col[i].arrived) { col[i].wet = std::min(1.f, col[i].wet + 0.06f); break; }
+        // on a heaped tile: wetter, and on a tilted face the water slides down the slope and drips off the corner
+        Body* b = bodyById(cx);
+        if (b) {
+            b->wet = std::min(1.f, b->wet + 0.06f);
+            float sl = 0.f;
+            bodyTop(*b, x, &sl);
+            if (std::fabs(sl) > 0.12f && runs_.size() < 160 && rng_.chance(0.35f))
+                runs_.push_back({x, y, sl > 0.f ? -1.f : 1.f, 0.5f + 2.5f * std::min(1.f, std::fabs(sl)), 0.f, b->id, sl});
+        }
     }
     // near an exposed edge the water runs down the face
-    if ((kind == 0 || kind == 1 || kind == 3) && runs_.size() < 120 && rng_.chance(0.22f)) {
-        float el, er;
-        if (kind == 3) {
-            const float a = bandX0_[cx] + cy * pileCell_, b = a + pileCell_;
-            el = cx == 0 ? -b : a;
-            er = cx == 0 ? -a : b;
-        } else {
-            el = std::floor(x);
-            er = el + 1.f;
-        }
-        const float w = er - el;
-        if (x - el < 0.22f * w && !solidAt(el - 0.08f, y - 0.3f)) runs_.push_back({el, y, -1.f, rng_.range(0.8f, 1.6f), 0.f});
-        else if (er - x < 0.22f * w && !solidAt(er + 0.08f, y - 0.3f)) runs_.push_back({er, y, 1.f, rng_.range(0.8f, 1.6f), 0.f});
+    if ((kind == 0 || kind == 1) && runs_.size() < 160 && rng_.chance(0.22f)) {
+        const float el = std::floor(x), er = el + 1.f;
+        if (x - el < 0.22f && !solidAt(el - 0.08f, y - 0.3f)) runs_.push_back({el, y, -1.f, rng_.range(0.8f, 1.6f), 0.f, -1, 0.f});
+        else if (er - x < 0.22f && !solidAt(er + 0.08f, y - 0.3f)) runs_.push_back({er, y, 1.f, rng_.range(0.8f, 1.6f), 0.f, -1, 0.f});
     }
 }
 
@@ -599,6 +541,27 @@ void RainUniverse::stepRain(float dt, float rdt) {
     for (size_t i = 0; i < runs_.size();) {
         Run& r = runs_[i];
         r.t += rdt;
+        if (r.body >= 0) {
+            // sliding down a heaped tile's slope, dripping off its lower corner
+            Body* b = bodyById(r.body);
+            bool off = !b || !b->solid || r.t > 5.f;
+            if (!off) {
+                const float nx = r.x + r.side * r.v * rdt;
+                float sl = r.sl;
+                const float t = bodyTop(*b, nx, &sl);
+                if (t < r.y - 0.4f) {
+                    off = true;
+                    if (drops_.size() < 4000) drops_.push_back({r.x + r.side * 0.03f, r.y, r.side * 0.4f, -0.8f, 0.18f, 0.9f, viewC_.y - viewH_.y, true});
+                } else {
+                    r.x = nx;
+                    r.y = t;
+                    r.sl = sl;
+                }
+            }
+            if (off) { runs_[i] = runs_.back(); runs_.pop_back(); continue; }
+            i++;
+            continue;
+        }
         r.y -= r.v * rdt;
         const bool face = solidAt(r.x - r.side * 0.1f, r.y - 0.05f);
         const bool landed = solidAt(r.x + r.side * 0.1f, r.y - 0.05f); // it reached the neighbour's top: soaked in
@@ -645,6 +608,13 @@ void RainUniverse::drawRain(bool) {
         box(a.x, a.y - ry, rx, ry, tint, al * vis, ry, std::max(1.f, 1.1f * s));
     }
     for (const Run& r : runs_) {
+        if (r.body >= 0) {
+            const float L = 0.22f / std::sqrt(1.f + r.sl * r.sl);
+            const vec2 a = px(r.x, r.y + 0.02f), b = px(r.x - r.side * L, r.y + 0.02f + r.side * -L * r.sl * -1.f);
+            seg(a.x, a.y, b.x, b.y, w * 1.6f, tint, 0.5f * vis, 0.f);
+            disc(a.x, a.y, w * 1.5f, w * 1.5f, tint, 0.8f * vis);
+            continue;
+        }
         const vec2 a = px(r.x + r.side * 0.035f, r.y), b = px(r.x + r.side * 0.035f, r.y + 0.28f);
         seg(a.x, a.y, b.x, b.y, w * 1.6f, tint, 0.55f * vis, 0.f);
         disc(a.x, a.y, w * 1.4f, w * 1.6f, tint, 0.75f * vis);
@@ -653,83 +623,295 @@ void RainUniverse::drawRain(bool) {
 }
 
 // =====================================================================================================
-// The piles
+// The heaps: thrown tiles, then rigid boxes
 // =====================================================================================================
 
-void RainUniverse::stepPiles(float dt) {
-    for (int side = 0; side < 2; side++)
-        for (int c = 0; c < PILE_COLS; c++) {
-            auto& col = pile_[side][c];
-            float y = ground_;
-            for (size_t i = 0; i < col.size(); i++) {
-                PileBlock& b = col[i];
-                if (b.fading) b.h = std::max(0.f, b.h - dt * b.fadeRate);
-                b.wet = std::max(0.2f, b.wet - dt * 0.08f);
-                if (b.arrived) b.y = std::max(y, b.y - dt * std::max(0.6f, (b.y - y) * 6.f)); // settles onto what is under it
-                else b.y = y;
-                y = b.y + b.h * pileCell_;
-            }
-            col.erase(std::remove_if(col.begin(), col.end(), [](const PileBlock& b) { return b.fading && b.h <= 0.f; }), col.end());
+RainUniverse::Body* RainUniverse::bodyById(int id) {
+    for (Body& b : bodies_)
+        if (b.id == id) return &b;
+    return nullptr;
+}
+
+bool RainUniverse::bodyInside(const Body& b, float x, float y) const {
+    const float c = std::cos(b.a), s = std::sin(b.a), dx = x - b.x, dy = y - b.y;
+    const float lx = c * dx + s * dy, ly = -s * dx + c * dy;
+    return std::fabs(lx) < b.half && std::fabs(ly) < b.half;
+}
+
+float RainUniverse::bodyTop(const Body& b, float x, float* slope) const {
+    const float c = std::cos(b.a), s = std::sin(b.a), h = b.half;
+    float P[4][2];
+    const float L[4][2] = {{-h, -h}, {h, -h}, {h, h}, {-h, h}};
+    for (int i = 0; i < 4; i++) {
+        P[i][0] = b.x + c * L[i][0] - s * L[i][1];
+        P[i][1] = b.y + s * L[i][0] + c * L[i][1];
+    }
+    float best = -1e9f;
+    for (int i = 0; i < 4; i++) {
+        const float* A = P[i];
+        const float* B = P[(i + 1) & 3];
+        const float lo = std::min(A[0], B[0]), hi = std::max(A[0], B[0]);
+        if (x < lo || x > hi || hi - lo < 1e-4f) continue;
+        const float k = (B[1] - A[1]) / (B[0] - A[0]);
+        const float y = A[1] + (x - A[0]) * k;
+        if (y > best) { best = y; if (slope) *slope = k; }
+    }
+    return best;
+}
+
+float RainUniverse::textCover(float x, float y) const {
+    float c = 0.f;
+    for (const vec4& r : textRects_) {
+        const float dx = std::max(r.x - x, x - r.z), dy = std::max(r.y - y, y - r.w);
+        c = std::max(c, 1.f - smoothstepf(-0.3f, 0.5f, std::max(dx, dy)));
+    }
+    return c;
+}
+
+// A cleared tile is thrown out of the well (an arc out and up, behind the stack and the HUD) to its release over its
+// band, where it falls, tumbling, onto the heap.
+void RainUniverse::eject(int x, int y, int type, float delay) {
+    const int side = x < Game::W / 2 ? 0 : 1;
+    const float dir = side == 0 ? -1.f : 1.f;
+    // a full heap: its oldest tile sinks and fades away
+    int n = 0, oldest = -1;
+    for (size_t i = 0; i < bodies_.size(); i++) {
+        const Body& b = bodies_[i];
+        if (b.side != side || b.fading) continue;
+        n++;
+        if (oldest < 0 || b.id < bodies_[oldest].id) oldest = (int)i;
+    }
+    const int cap = side == 0 ? 22 : 32;
+    if (n >= cap && oldest >= 0) { bodies_[oldest].fading = true; bodies_[oldest].fadeRate = 0.6f; }
+
+    Body b{};
+    b.id = nextBody_++;
+    b.type = type;
+    b.side = side;
+    b.seed = seeds_[std::clamp(y, 0, Game::H - 1)][std::clamp(x, 0, Game::W - 1)];
+    b.half = 0.46f;
+    const vec3 p = layout::cellPos((float)x, (float)y);
+    b.x = b.x0 = p.x;
+    b.y = b.y0 = p.y;
+    b.wet = 0.6f;
+    b.fade = 1.f;
+    b.solid = true;
+    b.thrown = true;
+    b.t = 0.f;
+    b.delay = delay;
+    b.dur = rng_.range(0.85f, 1.05f);
+    b.tx0 = dir * rng_.range(9.f, 12.f);
+    b.ty0 = rng_.range(3.5f, 6.5f);
+    // the release: over the band (the left heap keeps clear of the HUD's corner lines), above the heap there
+    const float f = side == 0 ? rng_.range(0.04f, 0.42f) : rng_.range(0.15f, 0.8f);
+    b.x1 = dir * (bandIn_ + 0.6f + (bandOut_ - bandIn_ - 1.2f) * f);
+    float top = ground_;
+    for (const Body& o : bodies_)
+        if (!o.thrown && o.solid && std::fabs(o.x - b.x1) < 1.4f) top = std::max(top, o.y + 0.7f);
+    b.y1 = std::max(-5.f, top + 1.6f);
+    b.tx1 = dir * rng_.range(0.5f, 2.5f);
+    b.ty1 = -rng_.range(3.f, 6.f);
+    b.w = rng_.range(2.f, 6.f) * (rng_.chance(0.5f) ? -1.f : 1.f);
+    bodies_.push_back(b);
+}
+
+namespace {
+struct Contact {
+    int i, j;             // body indices (j < 0: the street or a wall)
+    float px, py, nx, ny; // the point, the normal (from j to i)
+    float depth, pn, pt, bias, kn, kt;
+};
+inline float cross2(float ax, float ay, float bx, float by) { return ax * by - ay * bx; }
+} // namespace
+
+// One step of the boxes: gravity, contacts (corners inside the other box, the street, the band's walls), a few
+// iterations of sequential impulses with friction, sleeping. A sleeping box is static for the others; one hit
+// hard wakes up.
+void RainUniverse::physicsStep(float h) {
+    const int N = (int)bodies_.size();
+    auto live = [&](int i) { const Body& b = bodies_[i]; return b.solid && !b.thrown; };
+    for (Body& b : bodies_)
+        if (!b.thrown && b.solid && !b.asleep) b.vy -= 22.f * h;
+    std::vector<Contact> cs;
+    auto corners = [&](const Body& b, float P[4][2]) {
+        const float c = std::cos(b.a), s = std::sin(b.a), q = b.half;
+        const float L[4][2] = {{-q, -q}, {q, -q}, {q, q}, {-q, q}};
+        for (int k = 0; k < 4; k++) {
+            P[k][0] = b.x + c * L[k][0] - s * L[k][1];
+            P[k][1] = b.y + s * L[k][0] + c * L[k][1];
         }
-    for (size_t i = 0; i < flies_.size();) {
-        Fly& f = flies_[i];
-        f.t += dt;
-        if (f.t >= f.delay + f.dur) {
-            for (PileBlock& b : pile_[f.side][f.col])
-                if (b.id == f.id) {
-                    b.arrived = true;
-                    // it lands with a splash
-                    const float x = pileColX(f.side, f.col);
-                    for (int k = 0; k < 4; k++) {
-                        const float sx = k < 2 ? -1.f : 1.f;
-                        sparks_.push_back({x + sx * pileCell_ * 0.45f, b.y + 0.05f, sx * rng_.range(0.8f, 2.f), rng_.range(1.f, 2.6f), 0.f,
-                                           rng_.range(0.25f, 0.4f), 0.035f});
-                    }
-                    crowns_.push_back({x, b.y, 0.f, pileCell_ * 0.7f});
-                }
-            flies_[i] = flies_.back();
-            flies_.pop_back();
-            continue;
+    };
+    auto pointIn = [&](int i, int j, float x, float y) {
+        // a corner of i inside j: the contact on j's nearest face, its normal from j to i
+        const Body& B = bodies_[j];
+        const float c = std::cos(B.a), s = std::sin(B.a), dx = x - B.x, dy = y - B.y;
+        const float lx = c * dx + s * dy, ly = -s * dx + c * dy;
+        const float ox = B.half - std::fabs(lx), oy = B.half - std::fabs(ly);
+        if (ox <= 0.f || oy <= 0.f) return;
+        float nlx = 0.f, nly = 0.f, d;
+        if (ox < oy) { nlx = lx < 0.f ? -1.f : 1.f; d = ox; }
+        else { nly = ly < 0.f ? -1.f : 1.f; d = oy; }
+        cs.push_back({i, j, x, y, c * nlx - s * nly, s * nlx + c * nly, d, 0, 0, 0, 0, 0});
+    };
+    for (int i = 0; i < N; i++) {
+        if (!live(i) || bodies_[i].asleep) continue;
+        const Body& A = bodies_[i];
+        float P[4][2];
+        corners(A, P);
+        const float dir = A.side == 0 ? -1.f : 1.f;
+        for (auto& c : P) {
+            if (c[1] < ground_) cs.push_back({i, -1, c[0], c[1], 0.f, 1.f, ground_ - c[1], 0, 0, 0, 0, 0});
+            const float in = dir * c[0] - bandIn_, out = bandOut_ - dir * c[0];
+            if (in < 0.f) cs.push_back({i, -1, c[0], c[1], dir, 0.f, -in, 0, 0, 0, 0, 0});
+            if (out < 0.f) cs.push_back({i, -1, c[0], c[1], -dir, 0.f, -out, 0, 0, 0, 0, 0});
         }
-        i++;
+        for (int j = 0; j < N; j++) {
+            if (j == i || !live(j)) continue;
+            const Body& B = bodies_[j];
+            if (!B.asleep && j < i) continue; // awake pairs once
+            const float dx = B.x - A.x, dy = B.y - A.y, r = (A.half + B.half) * 1.42f;
+            if (dx * dx + dy * dy > r * r) continue;
+            float Q[4][2];
+            corners(B, Q);
+            for (auto& c : P) pointIn(i, j, c[0], c[1]);
+            for (auto& c : Q) pointIn(j, i, c[0], c[1]);
+        }
+    }
+    // masses (a sleeping box is static), a hard hit wakes it
+    auto invM = [&](int i) { return i < 0 || bodies_[i].asleep ? 0.f : 1.f; };
+    auto invI = [&](int i) { return i < 0 || bodies_[i].asleep ? 0.f : 6.f / (4.f * bodies_[i].half * bodies_[i].half); };
+    auto velAt = [&](int i, float px, float py, float& vx, float& vy) {
+        if (i < 0) { vx = vy = 0.f; return; }
+        const Body& b = bodies_[i];
+        vx = b.vx - b.w * (py - b.y);
+        vy = b.vy + b.w * (px - b.x);
+    };
+    for (Contact& c : cs) {
+        float vix, viy, vjx, vjy;
+        velAt(c.i, c.px, c.py, vix, viy);
+        velAt(c.j, c.px, c.py, vjx, vjy);
+        const float vn = (vix - vjx) * c.nx + (viy - vjy) * c.ny;
+        for (int k : {c.i, c.j})
+            if (k >= 0 && bodies_[k].asleep && vn < -3.f) { bodies_[k].asleep = false; bodies_[k].still = bodies_[k].awake = 0.f; }
+        c.bias = 0.15f / h * std::max(0.f, c.depth - 0.01f);
+        c.bias = std::min(c.bias, 2.f);
+        if (vn < -1.5f) c.bias = std::max(c.bias, -0.15f * vn); // a small bounce
+    }
+    for (Contact& c : cs) {
+        const float tx = -c.ny, ty = c.nx;
+        float rn = 0.f, rt = 0.f, k = invM(c.i) + invM(c.j), kt = k;
+        for (int s = 0; s < 2; s++) {
+            const int b = s == 0 ? c.i : c.j;
+            if (b < 0) continue;
+            const float rx = c.px - bodies_[b].x, ry = c.py - bodies_[b].y;
+            rn = cross2(rx, ry, c.nx, c.ny);
+            rt = cross2(rx, ry, tx, ty);
+            k += invI(b) * rn * rn;
+            kt += invI(b) * rt * rt;
+        }
+        c.kn = k > 1e-6f ? 1.f / k : 0.f;
+        c.kt = kt > 1e-6f ? 1.f / kt : 0.f;
+    }
+    auto apply = [&](int b, float sgn, float px, float py, float jx, float jy) {
+        if (b < 0) return;
+        Body& B = bodies_[b];
+        const float m = invM(b), I = invI(b);
+        B.vx += sgn * m * jx;
+        B.vy += sgn * m * jy;
+        B.w += sgn * I * cross2(px - B.x, py - B.y, jx, jy);
+    };
+    for (int it = 0; it < 10; it++)
+        for (Contact& c : cs) {
+            float vix, viy, vjx, vjy;
+            velAt(c.i, c.px, c.py, vix, viy);
+            velAt(c.j, c.px, c.py, vjx, vjy);
+            const float rvx = vix - vjx, rvy = viy - vjy;
+            const float vn = rvx * c.nx + rvy * c.ny;
+            float dp = c.kn * (-vn + c.bias);
+            const float p0 = c.pn;
+            c.pn = std::max(0.f, p0 + dp);
+            dp = c.pn - p0;
+            apply(c.i, 1.f, c.px, c.py, c.nx * dp, c.ny * dp);
+            apply(c.j, -1.f, c.px, c.py, c.nx * dp, c.ny * dp);
+            const float tx = -c.ny, ty = c.nx;
+            velAt(c.i, c.px, c.py, vix, viy);
+            velAt(c.j, c.px, c.py, vjx, vjy);
+            const float vt = (vix - vjx) * tx + (viy - vjy) * ty;
+            float dt = -c.kt * vt;
+            const float t0 = c.pt, lim = 0.7f * c.pn;
+            c.pt = std::clamp(t0 + dt, -lim, lim);
+            dt = c.pt - t0;
+            apply(c.i, 1.f, c.px, c.py, tx * dt, ty * dt);
+            apply(c.j, -1.f, c.px, c.py, tx * dt, ty * dt);
+        }
+    for (Body& b : bodies_) {
+        if (b.thrown || !b.solid || b.asleep) continue;
+        b.vx *= std::exp(-0.3f * h);
+        b.w *= std::exp(-1.2f * h);
+        b.x += b.vx * h;
+        b.y += b.vy * h;
+        b.a += b.w * h;
+        const bool still = b.vx * b.vx + b.vy * b.vy < 0.15f * 0.15f && std::fabs(b.w) < 0.3f;
+        b.still = still ? b.still + h : 0.f;
+        b.awake += h;
+        if (b.still > 0.5f || b.awake > 7.f) { b.asleep = true; b.vx = b.vy = b.w = 0.f; }
     }
 }
 
-void RainUniverse::drawPiles() {
-    const float vis = 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
-    if (vis <= 0.01f) return;
-    for (int side = 0; side < 2; side++)
-        for (int c = 0; c < PILE_COLS; c++)
-            for (const PileBlock& b : pile_[side][c]) {
-                if (!b.arrived || b.h <= 0.01f) continue;
-                const float hy = 0.5f * pileCell_ * b.h;
-                const float a = b.fading ? std::min(1.f, b.h * 1.5f) : 1.f;
-                tile(pileColX(side, c), b.y + hy, 0.5f * pileCell_, hy, pieceColor(b.type), a * vis, b.seed, b.wet, false);
-            }
-    flushTiles();
+void RainUniverse::stepHeaps(float dt) {
+    // the throws: an arc out of the well, then released into the physics
+    for (Body& b : bodies_) {
+        if (!b.thrown) continue;
+        b.t += dt;
+        if (b.t < b.delay) continue;
+        const float T = b.dur, s = std::min(1.f, (b.t - b.delay) / T);
+        const float s2 = s * s, s3 = s2 * s;
+        const float h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+        b.x = h00 * b.x0 + h10 * T * b.tx0 + h01 * b.x1 + h11 * T * b.tx1;
+        b.y = h00 * b.y0 + h10 * T * b.ty0 + h01 * b.y1 + h11 * T * b.ty1;
+        const float tau = s * T;
+        b.a = 0.5f * b.w * tau * tau / T;
+        if (s >= 1.f) {
+            b.thrown = false;
+            b.vx = b.tx1;
+            b.vy = b.ty1;
+        }
+    }
+    // the boxes, at a fixed step
+    physAcc_ = std::min(physAcc_ + dt, 4.f / 120.f);
+    while (physAcc_ >= 1.f / 120.f) {
+        physicsStep(1.f / 120.f);
+        physAcc_ -= 1.f / 120.f;
+    }
+    // fading tiles sink away; once gone, what rested on them falls again
+    for (Body& b : bodies_) {
+        b.wet = std::max(0.2f, b.wet - dt * 0.08f);
+        if (!b.fading) continue;
+        b.fade = std::max(0.f, b.fade - dt * b.fadeRate);
+        if (b.solid && b.fade < 0.35f) {
+            b.solid = false;
+            for (Body& o : bodies_)
+                if (o.side == b.side && o.asleep && o.y > b.y - 0.3f && std::fabs(o.x - b.x) < 2.5f) {
+                    o.asleep = false;
+                    o.still = o.awake = 0.f;
+                }
+        }
+    }
+    bodies_.erase(std::remove_if(bodies_.begin(), bodies_.end(), [](const Body& b) { return b.fading && b.fade <= 0.f; }), bodies_.end());
+    // fallen out of the picture (a wall missed at a high speed): gone
+    bodies_.erase(std::remove_if(bodies_.begin(), bodies_.end(), [&](const Body& b) { return b.y < ground_ - 3.f; }), bodies_.end());
 }
 
-void RainUniverse::drawFlies() {
+void RainUniverse::drawHeaps() {
     const vec3 bInk = ugl::toSrgb(bridge_.ink);
     const float bk = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
-    for (const Fly& f : flies_) {
-        if (f.t < f.delay) {
-            // still in its row, an instant
-            tile(f.x0, f.y0, 0.5f, 0.5f, lerp(pieceColor(f.type), bInk, bk), 1.f, 0.f, 0.6f, false);
-            continue;
-        }
-        float ty = ground_;
-        for (const PileBlock& b : pile_[f.side][f.col])
-            if (b.id == f.id) ty = b.y;
-        const float k = saturate((f.t - f.delay) / f.dur);
-        // calm: eased out of the well, a soft arc, eased into its place
-        const float sx = ease(k), sy = k * k * (3.f - 2.f * k);
-        const float tx = pileColX(f.side, f.col), tcy = ty + 0.5f * pileCell_;
-        const float x = lerpf(f.x0, tx, sx);
-        const float y = lerpf(f.y0, tcy, sy) + f.arc * 4.f * sx * (1.f - sx);
-        const float half = lerpf(0.5f, 0.5f * pileCell_, sx);
-        const float behind = 1.f - 0.6f * hudCover(x, y);
-        tile(x, y, half, half, lerp(pieceColor(f.type), bInk, bk), behind, 0.f, 0.6f, false);
+    for (const Body& b : bodies_) {
+        float a = b.fading ? std::min(1.f, b.fade * 1.4f) : 1.f;
+        a *= 1.f - 0.6f * hudCover(b.x, b.y);   // behind the HUD's columns
+        a *= 1.f - 0.6f * textCover(b.x, b.y);  // and its corner lines
+        const vec3 c = lerp(pieceColor(b.type), bInk, bk);
+        if (!(b.thrown && b.t < b.delay)) a *= 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
+        tile(b.x, b.y, b.half + 0.02f, b.half + 0.02f, c, a, b.seed, b.wet, false, b.a);
     }
     flushTiles();
 }
@@ -757,12 +939,13 @@ void RainUniverse::seg(float x0, float y0, float x1, float y1, float w, const ve
     shapes_.push_back({{x0, y0, x1, y1}, {c.x, c.y, c.z, a}, {2.f, w, 0.f, tail}});
 }
 
-void RainUniverse::tile(float bx, float by, float hx, float hy, const vec3& c, float a, float seed, float wet, bool plain) {
+void RainUniverse::tile(float bx, float by, float hx, float hy, const vec3& c, float a, float seed, float wet, bool plain,
+                        float angle) {
     if (a <= 0.002f) return;
     const vec2 p = px(bx, by);
     const float g = GAP * unitPx_ * std::min(1.f, hx * 2.f);
     tiles_.push_back({{p.x, p.y, std::max(1.f, hx * unitPx_ - g), std::max(0.5f, hy * unitPx_ - g)}, {c.x, c.y, c.z, a},
-                      {seed, wet, plain ? 1.f : 0.f, 0.f}});
+                      {seed, wet, plain ? 1.f : 0.f, angle}});
 }
 
 void RainUniverse::flushShapes() {
@@ -1054,45 +1237,25 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         flash_ = approach(flash_, 0.f, 1.4f, dt);
     }
     if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
-    // the piles stay under the HUD's corner lines (the section, the universe)
+    // the HUD's bottom corner lines: the heaps dim under them
     if (!bare_) {
-        int textCap[2][PILE_COLS];
-        for (int side = 0; side < 2; side++)
-            for (int c = 0; c < PILE_COLS; c++) textCap[side][c] = pileMax_;
+        textRects_.clear();
         for (const HudText& h : f.hud) {
             if (h.text.empty() || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB || h.role == HUD_DIALOG) continue;
             const float base = h.scale * 12.f;
             const float w = capWidth(light_, ascii(h.text), 0.14f) * base * 0.55f;
             const float l = ugl::hudLeft(h, w, width_);
-            const float x0 = viewC_.x + (l - 8.f - width_ * 0.5f) / unitPx_, x1 = viewC_.x + (l + w + 8.f - width_ * 0.5f) / unitPx_;
-            const float yb = viewC_.y + (height_ * 0.5f - (h.y + base * 0.9f)) / unitPx_;
-            if (yb > -3.f) continue;
-            const int cap = std::max(0, (int)((yb - 0.2f - ground_) / pileCell_));
-            for (int side = 0; side < 2; side++)
-                for (int c = 0; c < PILE_COLS; c++) {
-                    const float cx = pileColX(side, c);
-                    if (cx + 0.5f * pileCell_ > x0 && cx - 0.5f * pileCell_ < x1) textCap[side][c] = std::min(textCap[side][c], cap);
-                }
-        }
-        // a mound centered on the free columns of each band
-        for (int side = 0; side < 2; side++) {
-            int c0 = PILE_COLS, c1 = -1;
-            for (int c = 0; c < PILE_COLS; c++)
-                if (textCap[side][c] >= 2) { c0 = std::min(c0, c); c1 = std::max(c1, c); }
-            if (c1 < 0) { c0 = 0; c1 = PILE_COLS - 1; }
-            const float mid = 0.5f * (c0 + c1), half = 0.5f * (c1 - c0) + 1.f;
-            for (int c = 0; c < PILE_COLS; c++) {
-                const float t = std::fabs(c - mid) / half;
-                const int mound = std::max(1, (int)std::lround(pileMax_ * (1.f - 0.85f * t * t)));
-                colCap_[side][c] = std::min(mound, textCap[side][c]);
-            }
+            const float x0 = viewC_.x + (l - 6.f - width_ * 0.5f) / unitPx_, x1 = viewC_.x + (l + w + 6.f - width_ * 0.5f) / unitPx_;
+            const float y0 = viewC_.y + (height_ * 0.5f - (h.y + base * 0.9f)) / unitPx_, y1 = viewC_.y + (height_ * 0.5f - h.y + 4.f) / unitPx_;
+            if (y0 > -3.f || std::fabs(0.5f * (x0 + x1)) < bandIn_) continue;
+            textRects_.push_back({x0, y0, x1, y1});
         }
     }
 
     // ---- The world steps: the solids, the rain, the piles, the drying.
     buildSolids(game);
     stepRain(dt, rdt);
-    stepPiles(dt);
+    stepHeaps(dt);
     for (auto& row : wet_)
         for (float& w : row) w = std::max(0.12f, w - dt * 0.1f);
 
@@ -1144,8 +1307,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     // ---- The piles, the tiles in flight (behind the stack and the HUD), the game, the rain over all of it.
-    drawPiles();
-    drawFlies();
+    drawHeaps();
     if (!bare_) drawBoard(game);
     drawRain(true);
     if (!bare_) drawPreviews(game);
@@ -1167,7 +1329,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_rain() {
     static const UniverseEntry e{
-        "RAIN", "rain everywhere over a colorful street at dusk: it pours on wet glazed tiles (the falling piece shelters the cells under it), cleared rows are thrown out to piles on the sides, the drop is a thunderstorm",
+        "RAIN", "rain everywhere over a colorful street at dusk: it pours on little wet umbrellas (the falling piece shelters the cells under it), cleared rows are thrown out and tumble into heaps on the sides, the drop is a thunderstorm",
         [] { return std::unique_ptr<Universe>(new RainUniverse()); },
         // An atmosphere for most songs, moody and mid-tempo ones best.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.brightness) + 0.1f * l.dynamics; },
