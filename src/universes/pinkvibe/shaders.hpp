@@ -158,6 +158,9 @@ void main() {
         AA = max(fwidth(l.x), 1e-4) * 0.7;
         float d = dBox(l, vA.zw, 0.55);
         float g = clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0);
+        // a very slight soft shade under the panel, like the one under each band's edge
+        float ds = dBox(l - vec2(0.05, -0.12), vA.zw, 0.55);
+        acc = vec4(A * 0.5, 0.24 * (1.0 - smoothstep(-0.1, 0.42, ds)));
         layerA(acc, d, mix(A * 0.82, A, g), p1);
         frag = vec4(acc.rgb * acc.a * vB.z, acc.a * vB.z);
         return;
