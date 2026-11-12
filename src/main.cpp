@@ -1601,8 +1601,8 @@ void App::startMenuMusic() {
     musicLoad_ = std::async(std::launch::async, [path, sr]() { return decodeAudio16(path, sr); });
 }
 
-// The menu's music follows the screen: playing on the menu (0.7, a 1.5 s fade in), ducked to near silence while a song
-// preview plays, faded out (0.8 s) when a game starts; silent, it keeps its place and resumes from there.
+// The menu's music follows the screen: playing on the menu (0.7, a 1.5 s fade in), faded out (0.8 s) when a game
+// starts; back on the menu after a game it starts over from its beginning.
 void App::updateMenuMusic() {
     if (musicLoad_.valid() && musicLoad_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         auto pcm = musicLoad_.get();
@@ -1619,6 +1619,7 @@ void App::updateMenuMusic() {
     const int want = mode_ != MODE_MENU ? 0 : 1;
     if (want == musicState_) return;
     static const char* NAMES[3] = {"faded out", "playing", "ducked"};
+    if (want == 1 && musicState_ == 0 && audio_.bedGain() <= 0.f) audio_.rewindBed(); // back from a game: from the top
     const float gain = want == 1 ? MENU_MUSIC_GAIN : want == 2 ? MENU_MUSIC_DUCKED : 0.f;
     const float glide = want == 1 ? (musicState_ == 2 ? 1.0f : 1.5f) : want == 2 ? 0.6f : 0.8f;
     audio_.setBedGain(gain, glide);

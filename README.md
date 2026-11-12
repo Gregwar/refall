@@ -170,8 +170,8 @@ colours); on Voyage the glass takes the focused stage's hue (the same cool grey 
 the focused playlist's. The menu is light: the kaleidoscope is drawn at a third of the resolution and spread over the
 screen, and nothing heavier than cached images is loaded while it shows. The menu has its own music,
 [`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at its loop point) at about 70% of a
-game song's level: it fades in when the menu appears, fades out (0.8 s) when a game starts and comes back where it left
-off on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it).
+game song's level: it fades in when the menu appears, fades out (0.8 s) when a game starts and starts over from the top
+back on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it).
 The file is found in the sources' `data/`, else next to the executable (installed builds ship it there). The menu plays
 no song previews.
 

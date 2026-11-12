@@ -79,6 +79,7 @@ void AudioEngine::setBedGain(float gain, float seconds) {
 // (the tail fading out as the head fades in, equal power), so the loop point is seamless.
 void AudioEngine::mixBed(float* out, unsigned int frames) {
     if (!bed_) return;
+    if (bedRewind_.exchange(false)) { bedPos_ = 0; bedLooped_ = false; bedPosAtomic_ = 0; }
     const float target = bedTarget_, glide = bedGlide_;
     if (bedGain_ == 0.f && target == 0.f) return; // silent: it waits where it was
     const std::vector<int16_t>& pcm = *bed_;

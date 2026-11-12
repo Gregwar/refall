@@ -56,6 +56,8 @@ public:
     // its loop point; its gain slides to `gain` over `seconds`. Silent, it stays where it was (resumes from there).
     void setBed(std::shared_ptr<const std::vector<int16_t>> pcm);
     void setBedGain(float gain, float seconds);
+    // Back to the bed's start (taken by the audio thread at its next block; meant while it is silent).
+    void rewindBed() { bedRewind_ = true; }
     float bedGain() const { return bedGainNow_; }
     double bedPosition() const { return (double)bedPosAtomic_ / sampleRate_; }
     // One-shot sound mixed over the song (interleaved stereo at the engine rate); heard even when paused.
@@ -93,6 +95,7 @@ private:
     float bedGain_ = 0;
     std::atomic<float> bedTarget_{0.f}, bedGlide_{1.f}, bedGainNow_{0.f};
     std::atomic<uint64_t> bedPosAtomic_{0};
+    std::atomic<bool> bedRewind_{false};
     void mixBed(float* out, unsigned int frames);
     float gain_ = 1.f;                        // current song gain (audio thread)
     void applyMuffle(float* out, unsigned int frames);
