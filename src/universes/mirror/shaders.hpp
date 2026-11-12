@@ -61,12 +61,15 @@ uniform float uBoardOn;
 uniform float uHazeK;
 uniform vec3 uPoolC;
 uniform float uPoolR;
-// the mirrors (up to 3)
+// the mirrors (up to 6), their reflections in one atlas (uMirRect: the footprint on screen, uMirTile: its tile)
+const int NM = 6;
 uniform int uMirCount;
-uniform vec3 uMirC[3], uMirR[3], uMirU[3], uMirN[3];
+uniform vec3 uMirC[NM], uMirR[NM], uMirU[NM], uMirN[NM];
 uniform vec2 uMirHalf;
-uniform float uMirA[3], uMirSheen[3], uMirGlint[3];
-uniform sampler2D uMirTex0, uMirTex1, uMirTex2;
+uniform float uMirA[NM], uMirSheen[NM], uMirGlint[NM];
+uniform vec4 uMirRect[NM], uMirTile[NM];
+uniform sampler2D uMirAtlas;
+uniform vec4 uUvRect;            // the part of the screen this pass covers (a mirror's tile: its footprint)
 uniform vec3 uMirTint;
 uniform float uThrow;            // how bright the light thrown back by the mirrors is
 uniform vec3 uBridgeCol;
@@ -187,8 +190,8 @@ vec3 shade(vec3 p, vec3 rd, float t) {
         if (n.y > 0.8) c += uAccCol[i] * pow(max(dot(reflect(rd, n), l), 0.0), 14.0) * fall * 0.35;
     }
     if (n.y > 0.8) c += uKeyCol * pow(max(dot(reflect(rd, n), uKeyDir), 0.0), 10.0) * 0.06 * pool;
-    for (int i = 0; i < 3; i++)
-        if (i < uMirCount) c += alb * thrown(p, n, i) * uThrow;
+    for (int i = 0; i < NM; i++)
+        if (i < uMirCount && uMirA[i] > 0.0) c += alb * thrown(p, n, i) * uThrow;
     return c;
 }
 vec3 haze(vec3 c, vec3 ro, vec3 rd, float t) {
@@ -206,31 +209,38 @@ vec3 haze(vec3 c, vec3 ro, vec3 rd, float t) {
     }
     return c;
 }
-vec3 mirrorLook(sampler2D tex, int i, vec3 ro, vec3 rd, float tm, vec2 uv, float aa, out float cover) {
+vec3 mirrorLook(int i, vec3 ro, vec3 rd, float tm, vec2 suv, float aa, out float cover) {
     vec3 p = ro + rd * tm - uMirC[i];
     vec2 m = vec2(dot(p, uMirR[i]), dot(p, uMirU[i]));
-    float d = sdRound2(m, uMirHalf, 0.9);
+    float d = sdRound2(m, uMirHalf, 0.55);
     cover = 1.0 - smoothstep(-aa, aa, d);
     vec3 col;
     if (dot(rd, uMirN[i]) < 0.0) {
-        col = texture(tex, gl_FragCoord.xy / uRes).rgb * uMirTint;
-        // the polished edge: a thin bright line round it, the sheen of a clear sweeping across it
-        float rim = 1.0 - smoothstep(0.0, 0.07 + aa, abs(d + 0.05));
-        col = mix(col, env(uMirC[i], reflect(rd, uMirN[i])) * 1.2 + uKeyCol * 0.25, rim * 0.85);
+        vec4 rc = uMirRect[i], tl = uMirTile[i];
+        vec2 tuv = clamp((suv - rc.xy) / rc.zw, vec2(0.002), vec2(0.998));
+        col = texture(uMirAtlas, tl.xy + tuv * tl.zw).rgb * uMirTint;
+        vec3 R = reflect(rd, uMirN[i]);
+        // the edge: a fine bevel catching the room's light, a crisp polished line at the very edge
+        float bevel = 1.0 - smoothstep(0.0, 0.11 + aa, -d);
+        float edge = 1.0 - smoothstep(0.0, 0.028 + aa, abs(d + 0.022));
+        vec3 shine = env(uMirC[i], R) * 0.9 + uKeyCol * (0.18 + 0.6 * pow(max(dot(R, uKeyDir), 0.0), 8.0));
+        col = mix(col, col * 0.82 + shine * 0.22, bevel);
+        col = mix(col, shine * 1.15, edge * 0.9);
         float sw = uMirSheen[i];
         if (sw > 0.0) {
             float x = (m.x + m.y * 0.35) / uMirHalf.x;
-            float pos = mix(-2.2, 2.2, sw);
-            col += uKeyCol * exp(-sq((x - pos) / 0.35)) * 0.5 * sin(sw * 3.14159);
+            float pos = mix(-3.0, 3.0, sw);
+            col += uKeyCol * exp(-sq((x - pos) / 0.45)) * 0.4 * sin(sw * 3.14159);
         }
-        col += uKeyCol * rim * uMirGlint[i];
+        col += uKeyCol * edge * uMirGlint[i];
     } else {
         col = uAlbedo * uAmbTop * 0.35; // its back: a dark, matt backing
     }
     return col;
 }
 void main() {
-    vec2 ndc = vUv * 2.0 - 1.0;
+    vec2 suv = uUvRect.xy + vUv * uUvRect.zw;
+    vec2 ndc = suv * 2.0 - 1.0;
     vec3 ro = uEye;
     vec3 rd = normalize(vec3(ndc.x * uTanH * uAspect, ndc.y * uTanH, -1.0));
     float t0 = 0.0;
@@ -261,16 +271,14 @@ void main() {
     float mirCover = 0.0;
     if (uReflect == 0) {
         float aa = 1.5 * uTanH * 2.0 / uRes.y;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < NM; i++) {
             if (i >= uMirCount || uMirA[i] <= 0.001) continue;
             float den = dot(rd, uMirN[i]);
             if (abs(den) < 1e-4) continue;
             float tm = dot(uMirC[i] - ro, uMirN[i]) / den;
             if (tm <= 0.0 || tm >= t) continue;
             float cover;
-            vec3 mc = i == 0 ? mirrorLook(uMirTex0, 0, ro, rd, tm, vUv, aa * tm, cover)
-                    : i == 1 ? mirrorLook(uMirTex1, 1, ro, rd, tm, vUv, aa * tm, cover)
-                             : mirrorLook(uMirTex2, 2, ro, rd, tm, vUv, aa * tm, cover);
+            vec3 mc = mirrorLook(i, ro, rd, tm, suv, aa * tm, cover);
             mc = haze(mc, ro, rd, tm);
             c = mix(c, mc, cover * uMirA[i]);
             mirCover = max(mirCover, cover * uMirA[i]);
