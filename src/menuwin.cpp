@@ -317,8 +317,16 @@ void Worlds::kalCampaign() {
             p.glow(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, (110 + 60 * op) * u, withA(c, 0.25f * f));
             p.setAdditive(false);
         }
-        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op), mixc(c, hex(0xffffff), 0.12f * op),
-             o ? 0.88f : 0.6f, true, focusClosed ? hex(0xffffff, 0.95f * pulse) : cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
+        // three clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
+        // full hue lit, a gold rim, a gold number disc)
+        const Col pc = !o ? c : cl ? mixc(c, hex(0xffffff), 0.12f * op) : mixc(c, hex(0x14141c), 0.5f);
+        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op), pc,
+             !o ? 0.6f : cl ? 0.95f : 0.7f, true, focusClosed ? hex(0xffffff, 0.95f * pulse) : cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
+        if (cl) { // a cleared petal glows from within
+            p.setAdditive(true);
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, 70 * u, withA(c, 0.22f));
+            p.setAdditive(false);
+        }
         if (cl) { // a shine sweeping slowly across a cleared shard
             const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * (1.f - std::fabs(k - 0.45f));
             p.setAdditive(true);
@@ -356,10 +364,11 @@ void Worlds::kalCampaign() {
                 p.setAdditive(false);
             }
             p.circle(nx, ny, rad + 6 * u, hex(0x000000, 0.35f), 10 * u);
-            p.circle(nx, ny, rad, hex(0x0a0a10, 0.82f));
-            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f));
+            p.circle(nx, ny, rad, cl ? hex(0xe8c06a, 0.95f) : hex(0x0a0a10, 0.82f));   // cleared: a gold disc
+            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, cl ? hex(0xfff0c8, 0.95f) : o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f));
             const float ts = (25 + 13 * f) * u;
-            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f), 0, 0.02f);
+            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts,
+                   cl ? hex(0x1a1408) : o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f), 0, 0.02f);
             if (!o) p.lock(nx + rad * 0.95f, ny - rad * 0.95f, 13 * u, hex(0xd0d0d8, 0.8f));
         }
     }
