@@ -56,6 +56,7 @@ uniform float uTanH, uAspect;
 uniform int uReflect;            // 1: a reflection pass (the ray reflected in the plane uPN . x = uPD)
 uniform vec3 uPN;
 uniform float uPD;
+uniform sampler2D uBoardLin;     // the same, filtered (the glow)
 uniform sampler2D uBoard;        // the board's glass, 10 x 20 (rgb: the tint's transmission, a: a cube there)
 uniform float uBoardOn;
 uniform float uHazeK;
@@ -72,6 +73,9 @@ uniform sampler2D uMirAtlas;
 uniform vec4 uUvRect;            // the part of the screen this pass covers (a mirror's tile: its footprint)
 uniform vec3 uMirTint;
 uniform float uThrow;            // how bright the light thrown back by the mirrors is
+uniform vec4 uCol[10];           // each column's light (rgb) and the height of its top (w)
+uniform vec3 uPieceP, uPieceC, uStackAvg;
+uniform float uGlow;
 uniform vec3 uBridgeCol;
 uniform float uBridge, uGrain;
 
@@ -114,6 +118,16 @@ float ao(vec3 p, vec3 n) {
         w *= 0.6;
     }
     return clamp(1.0 - 0.09 * o, 0.0, 1.0);
+}
+// the board's glow around a point (cells), blurred
+vec3 boardGlow(vec2 cell, float blur) {
+    vec3 acc = vec3(0.0);
+    for (int j = -1; j <= 1; j++)
+        for (int i = -1; i <= 1; i++) {
+            vec4 b = texture(uBoardLin, (cell - 0.0 + vec2(float(i), float(j)) * blur) / vec2(10.0, 20.0));
+            acc += b.rgb * b.a;
+        }
+    return acc / 9.0;
 }
 // the light reaching p from the key through the board's glass and the smoked panel: colored shadows, caustics
 vec3 throughGlass(vec3 p) {
@@ -169,6 +183,35 @@ vec3 thrown(vec3 p, vec3 n, int i) {
     float m = 1.0 - smoothstep(-soft, soft, d);
     return uKeyCol * m * max(dot(n, -Lr), 0.0) * uMirA[i];
 }
+// the stack's light: each column a soft vertical light (its color, up to its top), the falling piece, the light the
+// mirrors bounce back from the stack
+vec3 glassLight(vec3 p, vec3 n) {
+    vec3 L = vec3(0.0);
+    for (int i = 0; i < 10; i++) {
+        vec4 cc = uCol[i];
+        if (cc.w < FY) continue;
+        vec3 q = vec3(-4.5 + float(i), clamp(p.y, FY + 0.5, cc.w - 0.3), -0.47);
+        vec3 l = q - p;
+        float d2 = dot(l, l);
+        l *= inversesqrt(d2 + 1e-4);
+        L += cc.rgb * 1.3 * (max(dot(n, l), 0.0) * 0.85 + 0.15) / (1.0 + d2 / 3.5);
+    }
+    {
+        vec3 l = uPieceP - p;
+        float d2 = dot(l, l);
+        l *= inversesqrt(d2 + 1e-4);
+        L += uPieceC * 2.0 * (max(dot(n, l), 0.0) * 0.8 + 0.2) / (1.0 + d2 / 6.0);
+    }
+    for (int i = 0; i < NM; i++) {
+        if (i >= uMirCount || uMirA[i] <= 0.0) continue;
+        vec3 l = uMirC[i] - p;
+        float d2 = dot(l, l);
+        l *= inversesqrt(d2 + 1e-4);
+        float front = max(dot(uMirN[i], -l), 0.0);
+        L += uStackAvg * 7.0 * max(dot(n, l), 0.0) * (0.2 + 0.8 * front) / (1.0 + d2 / 20.0) * uMirA[i];
+    }
+    return L;
+}
 vec3 shade(vec3 p, vec3 rd, float t) {
     vec3 n = nrm(p, 0.002 * t + 0.01);
     bool isVol = vols(p) < room(p);
@@ -192,6 +235,17 @@ vec3 shade(vec3 p, vec3 rd, float t) {
     if (n.y > 0.8) c += uKeyCol * pow(max(dot(reflect(rd, n), uKeyDir), 0.0), 10.0) * 0.06 * pool;
     for (int i = 0; i < NM; i++)
         if (i < uMirCount && uMirA[i] > 0.0) c += alb * thrown(p, n, i) * uThrow;
+    c += alb * glassLight(p, n) * uGlow;
+    // the glossy floor: the glowing cubes softly reflected in front of the well
+    if (n.y > 0.8 && uGlow > 0.0) {
+        vec3 rr = reflect(rd, n);
+        if (p.z > -0.4 && rr.z < -1e-3) {
+            float s = (0.0 - p.z) / rr.z;
+            vec3 q = p + rr * s;
+            float fres = 0.25 + 0.75 * pow(1.0 - max(rr.y, 0.0), 4.0);
+            c += boardGlow(vec2(q.x + 5.0, q.y + 10.0), 0.15 + s * 0.35) * uGlow * 0.55 * fres * exp(-s * 0.08);
+        }
+    }
     return c;
 }
 vec3 haze(vec3 c, vec3 ro, vec3 rd, float t) {
@@ -223,7 +277,7 @@ vec3 mirrorLook(int i, vec3 ro, vec3 rd, float tm, vec2 suv, float aa, out float
         // the edge: a fine bevel catching the room's light, a crisp polished line at the very edge
         float bevel = 1.0 - smoothstep(0.0, 0.11 + aa, -d);
         float edge = 1.0 - smoothstep(0.0, 0.028 + aa, abs(d + 0.022));
-        vec3 shine = env(uMirC[i], R) * 0.9 + uKeyCol * (0.18 + 0.6 * pow(max(dot(R, uKeyDir), 0.0), 8.0));
+        vec3 shine = env(uMirC[i], R) * 0.9 + uKeyCol * (0.18 + 0.6 * pow(max(dot(R, uKeyDir), 0.0), 8.0)) + uStackAvg * uGlow * 0.5;
         col = mix(col, col * 0.82 + shine * 0.22, bevel);
         col = mix(col, shine * 1.15, edge * 0.9);
         float sw = uMirSheen[i];
@@ -295,7 +349,7 @@ void main() {
             float e = min(min(lo.x, hi.x), min(lo.y, hi.y));
             float inside = smoothstep(-px, px, e);
             vec3 lit = throughGlass(q + vec3(0.0, 0.0, -0.001));
-            vec3 pc = uPanelCol * (0.75 + 0.25 * lit);
+            vec3 pc = uPanelCol * (0.75 + 0.25 * lit) + boardGlow(q.xy + vec2(5.0, 10.0), 0.9) * uGlow * 0.16;
             // (a mirror behind the panel is mostly hidden: its reflections never mingle with the stack)
             vec3 pcol = mix(c, cRoom, mirCover * 0.8) * uPanelTrans + pc;
             // its polished rim
@@ -345,7 +399,7 @@ uniform int uReflect;
 uniform vec3 uPN;
 uniform float uPD;
 uniform vec3 uFallback;     // what the glass shows behind it in a reflection pass
-uniform float uDensity, uBody, uRefract, uEdgeK, uSpecK;
+uniform float uDensity, uBody, uRefract, uEdgeK, uSpecK, uEmit;
 uniform vec3 uInk;
 uniform float uBridge;
 vec3 qrot(vec4 q, vec3 v) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
@@ -402,6 +456,11 @@ void main() {
     float onEdge = smoothstep(1.4, 2.0, edgeness);
     float facing = max(dot(N, uKeyDir), 0.0);
     col += mix(tint, vec3(1.0), 0.7) * onEdge * uEdgeK * (0.08 + keyL * 0.9 * facing * facing);
+    // the glass glows from within: a brighter core, crisp brighter edges (the falling piece brightest)
+    float kk = kind > 1.5 && kind < 2.5 ? 1.45 : (kind > 2.5 && kind < 3.5 ? 0.85 : 1.0);
+    float core = 1.0 - smoothstep(0.2, 1.0, max(abs(lp.x), abs(lp.y)));
+    col += tint * uEmit * kk * (0.5 + 0.35 * core + 0.25 * grad);
+    col += mix(tint, vec3(1.0), 0.3) * uEmit * kk * (onEdge * 0.7 + backEdge * 0.55);
     col += (tint * 0.6 + 0.4) * flash;
     // game over: frosted
     col = mix(col, (tint * 0.35 + 0.65) * (uAmbTop + uKeyCol * 0.3) * 0.9 + refl * F, frost * 0.85);
@@ -409,7 +468,7 @@ void main() {
     if (kind > 0.5 && kind < 1.5) {
         // the ghost: a breath of glass (its edges only)
         float e = onEdge;
-        col = bg * mix(vec3(1.0), absorb, 0.18) + mix(tint, vec3(1.0), 0.4) * e * 0.35;
+        col = bg * mix(vec3(1.0), absorb, 0.18) + mix(tint, vec3(1.0), 0.4) * e * 0.35 + tint * e * uEmit * 0.5;
         outA = 0.4;
     }
     col = mix(bg, col, alpha);

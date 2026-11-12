@@ -6,6 +6,12 @@
 // (a broad pool around the well, soft shadows, long gradients up the walls) and two colored accent lights out of
 // frame on either side (a warm / cool split, or one saturated hue), glowing in the haze and gleaming on the floor.
 //
+// v3: the room is dark, and the light comes from the glass: every cube glows from within in its own color (the
+// falling piece brightest), its light pooling on the glossy floor around the well's base (each column its own color,
+// a soft reflection of the cubes in the floor in front) and on the smoked panel behind it; the mirrors bounce the
+// stack's light into the room around them and their edges catch its color. The drop makes the light the star: the
+// pools bloom and the cubes swell every two beats while the mirrors turn in their rings.
+//
 // The pieces are solid glass cubes, one per cell, standing in front of a smoked glass panel (a deep, uniform
 // backing, not opaque, so the board reads in every variant): each cube refracts the room softly behind it, absorbs
 // it in its tint over its path through the glass (seven saturated, elegant glass colors per variant), reflects the
@@ -86,27 +92,27 @@ struct VariantDef {
     unsigned tint[7];
 };
 const VariantDef VARIANTS[] = {
-    // warm and pale: a morning light, peach on the left, a cool blue on the right; the drop is a rose dusk
-    {"DAWN", 0xe4ddd5, 0xdfe6f2, 0xf2dcc6, 0xd9cdc2, 0xfff0dc, 0xffa36e, 0x93a9ff, 0x1c1a22,
-     1.05f, 1.5f, 0.95f, 0.36f, 0.0052f, 0.24f,
-     0xffe2c8, 0xff4d72, 0x6d4dff, 0x8a6a80,
-     0.6f, 2.4f, 2.0f, 0.6f,
-     0x2a2830, 0xf4efe9, 0xc0603e, true, 1.55f, 1.0f,
-     {0x35b6dc, 0xf3b52c, 0x9b57da, 0x3fbf74, 0xe9465a, 0x3d6ae4, 0xf27a2e}},
-    // dark, one cyan accent; the drop brings a magenta counter-light
-    {"NOCTURNE", 0x60646e, 0x7c8cb0, 0x40465a, 0x0c1018, 0xc8d4ff, 0x1fd2ff, 0x2a3f80, 0x06080c,
-     0.42f, 2.3f, 0.5f, 0.07f, 0.0075f, 0.4f,
-     0xd6e0ff, 0x38fff0, 0xff3c96, 0x1a1024,
-     0.55f, 3.0f, 2.4f, 0.12f,
-     0xe8eef8, 0x05070b, 0x5fe4ff, false, 1.35f, 2.6f,
+    // a warm dark: embers of amber light; the drop turns it to a rose and violet night
+    {"DUSK", 0x8c8078, 0x6a5a4c, 0x3a3028, 0x0d0a09, 0xffd6b0, 0xff8a50, 0x5a74ff, 0x080607,
+     0.07f, 0.4f, 0.2f, 0.03f, 0.0065f, 0.45f,
+     0xffc8b0, 0xff3c64, 0x6a4cff, 0x12070d,
+     0.06f, 0.55f, 0.45f, 0.03f,
+     0xf2e8de, 0x070505, 0xffa070, false, 1.3f, 1.0f,
+     {0x35c4ec, 0xffc02c, 0xa45cf0, 0x3fd27c, 0xff4a5e, 0x4474ff, 0xff8030}},
+    // a blue dark, one cyan accent; the drop brings a magenta counter-light
+    {"NOCTURNE", 0x707680, 0x5c6c90, 0x30364a, 0x05070c, 0xc8d4ff, 0x1fd2ff, 0x2a3f80, 0x05060a,
+     0.07f, 0.5f, 0.1f, 0.025f, 0.0075f, 0.45f,
+     0xd6e0ff, 0x38fff0, 0xff3c96, 0x0d0712,
+     0.07f, 0.65f, 0.5f, 0.03f,
+     0xe8eef8, 0x05070b, 0x5fe4ff, false, 1.3f, 1.0f,
      {0x2ee0ff, 0xffd142, 0xb46cff, 0x3ff096, 0xff4d6e, 0x4f7fff, 0xff913e}},
-    // pastel pink and blue; the drop deepens to violet and teal
-    {"VAPOR", 0xeedbe6, 0xc8d6ff, 0xffcde2, 0xe0c4d8, 0xfff0f6, 0xff7fc2, 0x6fc6ff, 0x221a2c,
-     0.92f, 1.6f, 1.45f, 0.36f, 0.0058f, 0.24f,
-     0xffe6f4, 0xa65cff, 0x2fe0cc, 0x8a6aa0,
-     0.55f, 2.4f, 2.2f, 0.62f,
-     0x2c2434, 0xf6eef4, 0xd0508e, true, 1.5f, 1.0f,
-     {0x3fcbe6, 0xffc54a, 0xbe6af0, 0x56d69a, 0xff5a8c, 0x667aff, 0xff965a}},
+    // a violet dark with pastel glass, pink and blue accents; the drop deepens to violet and teal
+    {"VAPOR", 0x9a8aa2, 0x6a5c80, 0x3a2c40, 0x0b0812, 0xffe0f0, 0xff7fc2, 0x6fc6ff, 0x08060b,
+     0.07f, 0.42f, 0.36f, 0.03f, 0.0065f, 0.45f,
+     0xffe6f4, 0xa65cff, 0x2fe0cc, 0x0d0816,
+     0.06f, 0.6f, 0.5f, 0.03f,
+     0xf4ecf4, 0x0a060c, 0xff8fc8, false, 1.3f, 1.0f,
+     {0x50d8f0, 0xffcf5a, 0xc87af8, 0x62e2a6, 0xff6696, 0x7488ff, 0xffa066}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -216,6 +222,14 @@ bool MirrorUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     const float border[4] = {0.f, 0.f, 0.f, 0.f};
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    glGenTextures(1, &boardLin_);
+    glBindTexture(GL_TEXTURE_2D, boardLin_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, Game::W, 20, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
 
     for (auto& row : flash_)
         for (float& v : row) v = 0.f;
@@ -316,6 +330,7 @@ MirrorUniverse::~MirrorUniverse() {
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
     if (boardTex_) glDeleteTextures(1, &boardTex_);
+    if (boardLin_) glDeleteTextures(1, &boardLin_);
     for (GLuint p : {progRoom_, progCube_, progCopy_, progFinal_, progText_, progPanel_}) glDeleteProgram(p);
     for (GLuint v : {cubeVao_, textVao_, panelVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {cubeVbo_, instVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
@@ -456,6 +471,11 @@ void MirrorUniverse::buildCubes(const Game& g) {
     ui_.clear();
     unsigned char board[20][Game::W][4];
     std::memset(board, 0, sizeof(board));
+    vec3 colSum[Game::W];
+    int colN[Game::W];
+    float colTop[Game::W];
+    for (int x = 0; x < Game::W; x++) { colSum[x] = vec3(0.f); colN[x] = 0; colTop[x] = -99.f; }
+    pieceP_ = vec3(0.f, -99.f, 0.f);
     auto mark = [&](int x, int y, const vec3& t) {
         const int j = Game::H - 1 - y;
         if (j < 0 || j >= 20 || x < 0 || x >= Game::W) return;
@@ -474,6 +494,11 @@ void MirrorUniverse::buildCubes(const Game& g) {
                 float frost = 0.f;
                 if (overT_ >= 0.f) frost = saturate((overT_ - (y - overTop_) * 0.06f) / 0.5f);
                 cube(world_, vec3(p.x, p.y, CUBE_Z), CUBE_HALF, QID, tintOf(c.type), 0.f, 1.f, flash_[y][x], frost);
+                // (the lower cells light the floor most)
+                const float wgt = 1.f / (1.f + 0.25f * (p.y + 9.5f)) * (1.f - frost * 0.7f);
+                colSum[x] += tintOf(c.type) * wgt;
+                colN[x]++;
+                colTop[x] = std::max(colTop[x], p.y + 0.5f);
                 mark(x, y, tintOf(c.type));
             }
         if (g.hasPiece() && !g.over()) {
@@ -493,6 +518,13 @@ void MirrorUniverse::buildCubes(const Game& g) {
                 }
             }
             const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+            vec3 pc(0.f);
+            for (int i = 0; i < 4; i++) {
+                const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
+                pc += w * 0.25f;
+            }
+            pieceP_ = vec3(pc.x, pc.y, CUBE_Z);
+            pieceC_ = tint;
             for (int i = 0; i < 4; i++) {
                 if (cells[i][1] < Game::HIDDEN - 1) continue;
                 const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
@@ -547,8 +579,21 @@ void MirrorUniverse::buildCubes(const Game& g) {
         const float alpha = std::pow(1.f - u, 1.4f);
         cube(world_, s.p, s.size * (1.f - 0.4f * u), q, s.tint, 4.f, alpha, 0.22f * std::sin(u * PI), 0.f);
     }
+    vec3 avg(0.f);
+    float an = 0.f;
+    for (int x = 0; x < Game::W; x++) {
+        const float k = colN[x] > 0 ? std::min(1.f, 0.35f + 0.65f * std::sqrt(colN[x] / 6.f)) : 0.f;
+        const vec3 c = colN[x] > 0 ? colSum[x] * (k / std::max(1e-3f, colSum[x].x + colSum[x].y + colSum[x].z) * 1.6f) : vec3(0.f);
+        colLight_[x * 4 + 0] = c.x; colLight_[x * 4 + 1] = c.y; colLight_[x * 4 + 2] = c.z;
+        colLight_[x * 4 + 3] = colTop[x];
+        avg += c;
+        an += colN[x] > 0 ? 1.f : 0.f;
+    }
+    stackAvg_ = an > 0.f ? avg * (1.f / an) * std::min(1.f, an / 5.f) : vec3(0.f);
     glBindTexture(GL_TEXTURE_2D, boardTex_);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Game::W, 20, GL_RGBA, GL_UNSIGNED_BYTE, board);
+    glBindTexture(GL_TEXTURE_2D, boardLin_);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Game::W, 20, GL_RGBA, GL_UNSIGNED_BYTE, board);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
@@ -817,6 +862,13 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     const VariantDef& V = VARIANTS[variant_];
     const float dk = smoothstepf(0.f, 1.f, dropK_);
     const float accLevel = (0.62f + 0.25f * wm + 0.18f * wp) * (1.f + 0.35f * swell_);
+    // the glass's light: a steady level per section; the drop's pools bloom, and its cubes swell every two beats
+    {
+        const float beat2 = music.hasSong ? (float)(music.beat * 0.5 - std::floor(music.beat * 0.5)) : 0.f;
+        const float pulse = dk * std::exp(-beat2 * 5.f) * (music.hasSong ? 1.f : 0.f);
+        emit_ = (0.34f + 0.04f * wm + 0.05f * wp) * (1.f + 0.25f * dk + 0.3f * pulse + 0.2f * swell_);
+        glow_ = (0.9f + 0.15f * wm + 0.15f * wp) * (1.f + 0.6f * dk + 0.5f * pulse + 0.3f * swell_);
+    }
     vec3 keyT = lerp(lin(V.key) * V.keyK, lin(V.dKey) * V.dKeyK, dk) * (0.92f + 0.08f * wm);
     vec3 accT[2] = {lerp(lin(V.accA) * V.accAK, lin(V.dAccA) * V.dAccAK, dk) * accLevel,
                     lerp(lin(V.accB) * V.accBK, lin(V.dAccB) * V.dAccBK, dk) * accLevel};
@@ -904,12 +956,20 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
         glUniform4fv(ugl::U(p, "uMirTile"), MIRRORS, mtile);
         set2f(p, "uMirHalf", MIR_HW, MIR_HH);
         set3f(p, "uMirTint", vec3(0.88f, 0.9f, 0.91f));
-        set1f(p, "uThrow", 0.14f);
+        set1f(p, "uThrow", 0.05f);
+        glUniform4fv(ugl::U(p, "uCol"), Game::W, colLight_);
+        set3f(p, "uPieceP", pieceP_);
+        set3f(p, "uPieceC", bare_ ? vec3(0.f) : pieceC_);
+        set3f(p, "uStackAvg", stackAvg_);
+        set1f(p, "uGlow", bare_ ? 0.f : glow_ * (1.f - bridgeK));
         set1i(p, "uMirCount", mirCount);
         set4f(p, "uUvRect", 0.f, 0.f, 1.f, 1.f);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, mirCount > 0 ? atlas_.tex : 0);
         set1i(p, "uMirAtlas", 1);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, boardLin_);
+        set1i(p, "uBoardLin", 2);
         glActiveTexture(GL_TEXTURE0);
     };
     auto cubeUniforms = [&](const mat4& vp, const vec3& eye, int reflectPass, const vec3& pn, float pd) {
@@ -929,6 +989,7 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uRefract", 0.010f);
         set1f(p, "uEdgeK", reflectPass ? 0.3f : 0.55f);
         set1f(p, "uSpecK", reflectPass ? 0.25f : 1.f);
+        set1f(p, "uEmit", emit_);
         set3f(p, "uInk", bridge_.ink);
         set1f(p, "uBridge", bridgeK);
         glActiveTexture(GL_TEXTURE0);
@@ -1052,7 +1113,7 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
     set2f(progFinal_, "uRes", (float)width_, (float)height_);
-    set1f(progFinal_, "uBloom", (V.pale ? 0.18f : 0.45f) * (1.f + 0.4f * dk));
+    set1f(progFinal_, "uBloom", 0.55f * (1.f + 0.3f * dk));
     set1f(progFinal_, "uSlow", slow_ * 0.35f);
     set3f(progFinal_, "uSlowTint", vec3(0.82f, 0.9f, 1.08f));
     set1f(progFinal_, "uDim", dimT_);

@@ -28,6 +28,10 @@ public:
 
 private:
     struct Inst { float pos[4], rot[4], tint[4], fx[4]; };
+    // the glass's light (the cubes glow): each column's color and height, the falling piece, the stack's average
+    float colLight_[Game::W * 4];
+    vec3 pieceP_{0.f, -99.f, 0.f}, pieceC_{0.f};
+    vec3 stackAvg_{0.f};
     std::vector<Inst> world_, ui_; // world_: seen in the mirrors too; ui_: the ghost, the previews, the gauge
     void cube(std::vector<Inst>& out, const vec3& c, float half, const float q[4], const vec3& tint, float kind,
               float alpha, float flash, float frost);
@@ -78,7 +82,7 @@ private:
     // ---- GL.
     GLuint progRoom_ = 0, progCube_ = 0, progCopy_ = 0, progFinal_ = 0, progText_ = 0, progPanel_ = 0;
     GLuint cubeVao_ = 0, cubeVbo_ = 0, instVbo_ = 0, textVao_ = 0, textVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
-    GLuint boardTex_ = 0;
+    GLuint boardTex_ = 0, boardLin_ = 0; // the board's glass (nearest; filtered, for the glow)
     int cubeVerts_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     ugl::Target roomT_, sceneT_;
@@ -100,6 +104,7 @@ private:
     bool inDrop_ = false;
     float dropWait_ = 0.f;
     float dropK_ = 0.f;        // the drop's state (0 .. 1, eased in, eased out after)
+    float emit_ = 0.35f, glow_ = 1.f; // the cubes' own light, its pools in the room
     float swell_ = 0.f;        // the drop's downbeat: one swell of the accents, settling
     float energy_ = 0.4f;
     float kickIn_ = 0.f, kickPrev_ = 0.f;
