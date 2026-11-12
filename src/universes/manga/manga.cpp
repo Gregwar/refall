@@ -44,6 +44,7 @@
 // Cost: a few thousand triangles of ink and washes and some text into one 4x multisampled target, resolved once.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
+#include "title.hpp"
 #include "universes/manga/manga.hpp"
 
 #include <algorithm>
@@ -1516,7 +1517,7 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         }
         case HUD_TOAST: {
             const float cap = base * 0.75f;
-            const bool tetris = h.text.find("TETRIS") != std::string::npos;
+            const bool tetris = h.text.find(QUAD_NAME) != std::string::npos;   // a four-line clear
             if (tetris) {
                 // a spiky shout balloon behind it
                 const float w = textWidth(bangers_, h.text, cap, 0.06f);

@@ -1,3 +1,4 @@
+#include "title.hpp"
 #include "campaign.hpp"
 
 #include <algorithm>
@@ -216,7 +217,7 @@ bool Progress::save() const {
     const std::string tmp = path_ + ".tmp";
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) { std::fprintf(stderr, "[campaign] could not save %s\n", path_.c_str()); return false; }
-    std::fprintf(f, "# Tetris Universe campaign progress (tetris-universe --reset forgets it)\n");
+    std::fprintf(f, "# %s campaign progress (--reset forgets it)\n", GAME_TITLE);
     if (unlockAll_) std::fprintf(f, "unlock\tall\n");
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {

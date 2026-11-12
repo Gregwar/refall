@@ -20,6 +20,7 @@
 #include <thread>
 #include <vector>
 
+#include "title.hpp"
 #include "game.hpp"
 #include "library.hpp"
 #include "platform.hpp"
@@ -242,7 +243,7 @@ std::vector<HudText> SceneViewer::buildHud() {
     // Shortcuts, one per line: the key in bold (drawn twice, a pixel apart), what it does next to it.
     const char* keys[KEYS][2] = {{"ARROWS", "CHOOSE / CHANGE"}, {"T", "NEXT UNIVERSE"}, {"V", "NEXT VARIANT"},
                                  {"I", "INSTANT SWITCH"},       {"F", "FILL BOARD"},    {"B", "SLOW MOTION"},
-                                 {"X", "TETRIS"},               {"L", "LEVEL UP"},      {"ESC", "QUIT"}};
+                                 {"X", QUAD_NAME},               {"L", "LEVEL UP"},      {"ESC", "QUIT"}};
     for (int i = 0; i < KEYS; i++) {
         const float y = hy + i * 17 * s;
         for (float dx : {0.f, std::max(1.f, std::round(s))}) hud.push_back({keys[i][0], (MENU_X + 12) * s + dx, y, 1.2f * s, 0.8f});

@@ -23,12 +23,13 @@
 // print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
 // drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
 // bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets
-// "tetris" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
+// "quad" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
 // swap). Game over slides the stack out row by row from the top.
 //
 // Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
+#include "title.hpp"
 #include "universes/swiss/swiss.hpp"
 
 #include <algorithm>
@@ -748,12 +749,12 @@ void SwissUniverse::compose(long bar, float dur, bool instant) {
         if (t.on) titleBottom = t.v[1] - cap;
     }
 
-    // ---- The section's name, turned up the right zone (or "tetris" after a Tetris); the left zone when the title
+    // ---- The section's name, turned up the right zone (or "quad" after a four-line clear); the left zone when the title
     // is stacked on the right.
     {
         Target& t = T[E_SECTION];
         const bool tetris = bar <= tetrisUntil_;
-        std::string word = tetris ? "tetris" : lower(section_);
+        std::string word = tetris ? lower(QUAD_NAME) : lower(section_);
         if (word.empty()) word = lvl == 0 ? "calm" : lvl == 1 ? "tempo" : "forte";
         t.on = !drop && (tetris || lvl >= 1 || (fam == STACK && rb.chance(0.5f)));
         const bool inLeft = stackRight;

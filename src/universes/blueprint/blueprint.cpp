@@ -20,6 +20,7 @@
 // each clear is a revision in the title block (a pen-drawn delta and the next letter), a Tetris a revision cloud.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like SUMI).
+#include "title.hpp"
 #include "universes/blueprint/blueprint.hpp"
 
 #include <algorithm>
@@ -817,7 +818,7 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bar
         out.push_back(Stroke{{V(c1, y0), V(c1, r1)}, W_THIN, P_SOLID, R_LINE, 0.9f});
         out.push_back(Stroke{{V(c2, y0), V(c2, r1)}, W_THIN, P_SOLID, R_LINE, 0.9f});
         const float cap = 0.24f * pxPerUnit_, val = 0.42f * pxPerUnit_;
-        labels_.push_back({"TETRIS UNIVERSE", V(x0 + 0.2f, y1 - 0.2f), 0.5f * pxPerUnit_, 0.95f, R_LINE, false, false});
+        labels_.push_back({gameTitleUpper(), V(x0 + 0.2f, y1 - 0.2f), 0.5f * pxPerUnit_, 0.95f, R_LINE, false, false});
         labels_.push_back({"GENERAL ASSEMBLY  -  MECHANISM", V(x0 + 0.2f, y1 - 0.78f), cap, 0.7f, R_LINE, false, false});
         auto field = [&](float x, float yTop, const std::string& k, const std::string& v, float a) {
             labels_.push_back({k, V(x + 0.12f, yTop - 0.1f), cap, 0.6f, R_LINE, false, false});
@@ -826,7 +827,7 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bar
         field(x0, r1, "DWG NO.", dwgNo_, 0.95f);
         field(c1, r1, "SCALE", "1 : 1", 0.95f);
         field(c2, r1, "SHEET", "1 / 1", 0.95f);
-        field(x0, r2, "DRAWN", "T. UNIVERSE", 0.95f);
+        field(x0, r2, "DRAWN", gameTitleUpper(), 0.95f);
         field(c1, r2, "UNITS", "MM", 0.95f);
         // the revision: the letter, a delta drawn around it on each clear (in the accent, settling to ink)
         labels_.push_back({"REV", V(c2 + 0.12f, r2 - 0.1f), cap, 0.6f, R_LINE, false, false});

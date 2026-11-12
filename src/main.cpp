@@ -2,6 +2,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include "title.hpp"
 #include "headless.hpp"
 
 #include <algorithm>
@@ -838,7 +839,7 @@ std::vector<HudText> App::buildHud(float dt) {
         vec2 c = R_.project(vec3(0, 6.5f, 0)); // between the slow-motion and level toasts
         float a = std::min(1.f, tetrisToast_ * 1.5f) * std::min(1.f, (2.4f - tetrisToast_) * 5.f);
         float grow = 1.f + 0.08f * smoothstepf(2.4f, 1.6f, tetrisToast_);
-        hud.push_back({tetrisB2B_ ? "BACK TO BACK TETRIS" : "TETRIS", c.x, c.y, (tetrisB2B_ ? 3.4f : 4.2f) * grow * s, 0.9f * a,
+        hud.push_back({tetrisB2B_ ? std::string("BACK TO BACK ") + QUAD_NAME : std::string(QUAD_NAME), c.x, c.y, (tetrisB2B_ ? 3.4f : 4.2f) * grow * s, 0.9f * a,
                        true, true, HUD_TOAST});
         hud.push_back({"+" + std::to_string(tetrisPoints_), c.x, c.y + 44 * s, 2.2f * s, 0.75f * a, false, true, HUD_TOAST_SUB});
     }

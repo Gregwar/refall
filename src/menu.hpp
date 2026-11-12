@@ -15,10 +15,9 @@
 #include "input.hpp"
 #include "menupaint.hpp"
 #include "playlists.hpp"
+#include "title.hpp"
 
 class WorldPool;
-// The game's name, as the menus' title screens letter it (one place to change it).
-inline constexpr const char* GAME_TITLE = "Refall";
 inline std::string gameTitle(bool upperCase) {
     std::string s = GAME_TITLE;
     if (upperCase)

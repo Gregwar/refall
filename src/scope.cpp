@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "title.hpp"
 #include "library.hpp"
 #include "platform.hpp"
 #include "samples.hpp"
@@ -948,7 +949,7 @@ int Scope::run(int argc, char** argv) {
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
     glfwWindowHint(GLFW_SAMPLES, 4);
     if (hidden || shot) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    win_ = glfwCreateWindow(1680, 960, "Tetris Universe - scope", nullptr, nullptr);
+    win_ = glfwCreateWindow(1680, 960, (std::string(GAME_TITLE) + " - scope").c_str(), nullptr, nullptr);
     if (!win_) return 1;
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shot ? 0 : 1);
