@@ -644,13 +644,20 @@ void Worlds::kalTitle() {
         const float a = t * 0.03f + i * TAU / 12;
         kite(cx, cy, a, 200 * u, 290 * u, 0.2f, hex(i % 2 ? 0xffffff : 0xe8c06a), 0.18f, true, hex(0x08080c, 0.8f));
     }
-    p.circle(cx, cy, 200 * u, hex(0x08080c));   // a plain dark glass disc (no preview)
+    p.circle(cx, cy, 200 * u, hex(0x08080c));   // a plain dark glass disc, the title inside it
     p.ring(cx, cy, 191 * u, 4 * u, hex(0xe8c06a, 0.85f));
-    p.rrect(cx - 520 * u, Y(600), 1040 * u, 120 * u, 24 * u, hex(0x0c0c14, 0.7f));
-    p.rrectLine(cx - 520 * u, Y(600), 1040 * u, 120 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.25f));
-    p.text(F::JOSEFIN_LIGHT, upper(GAME_TITLE), cx, Y(683), 74 * u, hex(0xffffff), 0, 0.22f);
-    p.rrect(cx - 260 * u, Y(762), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
-    menuItems(F::JOSEFIN, 822, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
+    {
+        const std::string title = upper(GAME_TITLE);
+        float size = 76 * u;   // as large as fits inside the disc
+        const float w = p.width(F::JOSEFIN_LIGHT, title, size, 0.22f);
+        if (w > 330 * u) size *= 330 * u / w;
+        p.setAdditive(true);
+        p.glow(cx, cy, 150 * u, hex(0xe8c06a, 0.08f + 0.03f * std::sin(t * 0.8f)));
+        p.setAdditive(false);
+        p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff), 0, 0.22f);
+    }
+    p.rrect(cx - 260 * u, Y(652), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
+    menuItems(F::JOSEFIN, 712, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
     p.text(F::JOSEFIN, "ARROWS  MOVE      ENTER  SELECT      ESC  QUIT", cx, Y(1035), 15 * u, hex(0xffffff, 0.5f), 0, 0.3f);
 }
 
