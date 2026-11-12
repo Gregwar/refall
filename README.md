@@ -162,12 +162,18 @@ roadmap of the universes to come. To make a new one, see [docs/adding-a-universe
 
 ## Modes
 
-Started with no songs, the game opens on a little 8-bit title screen: **CAMPAIGN**, **FREE PLAY** or QUIT (arrows or
-D-pad, Enter / A to choose, Esc / B to go back).
+Started with no songs, the game opens on its title screen (the game is called **Refall** for now: `GAME_TITLE` in
+`src/menu.hpp`, shown by every menu style and the window title): **CAMPAIGN**, **FREE PLAY** or QUIT (arrows or D-pad,
+Enter / A to choose, Esc / B to go back).
 
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines. Choose a difficulty first: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
   (x0.6, x0.8, x1: EXPERT is the full speed). A game over: any key plays again, Esc goes back to the menu.
+  In the `kaleido` menu (the default) free play also picks a **playlist**: down to the PLAYLIST row, left / right
+  through the playlists used before (most recent first) and the game's own; **+ ADD A PLAYLIST** opens a field where a
+  YouTube playlist link, a bare playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it
+  (its song count, and its title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in
+  `playlists.tsv` in the user data folder (url, title, songs, last use; `--playlists FILE` for another file).
 - **The campaign** is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity (a game
   level, fixed for the whole song) and its universe set by the campaign, higher with each stage and song, and with the
   difficulty (EASY, NORMAL, EXPERT, chosen on the stages screen). Each stage is a line of squares, one per song,
@@ -176,7 +182,10 @@ D-pad, Enter / A to choose, Esc / B to go back).
   Surviving all five songs of a run started from the first one **clears** the stage and unlocks the next one (a stage
   cleared on any difficulty unlocks the next). A run started from a later song is fine for practice: the songs it
   survives count as beaten (with their best score) but the stage isn't cleared. A game over ends the run and goes back
-  to the stages. The game remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten
+  to the stages. In the `kaleido` menu the campaign has two levels: left / right moves between the 12 stage
+  petals (numbered 1 to 12, a gold arc with arrows showing the order, the next stage to clear glowing), up reaches the
+  difficulty; Enter opens the focused petal (a locked one only says so), fanning out its five songs: left / right
+  chooses one (its preview plays), Enter plays it, Esc closes the petal. The game remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten
   (with the points scored during each), in `campaign-progress.tsv` in the user data folder
   (`~/.local/share/zentris/` on Linux).
 

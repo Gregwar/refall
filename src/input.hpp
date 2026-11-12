@@ -14,6 +14,8 @@ enum Action {
     A_DEBUG_BONUS,           // B: fill the bonus gauge (testing the slow-motion effects)
     // Menus: arrows / D-pad / stick (with auto-repeat), Enter / Space / A / Start, Esc / Backspace / B.
     A_UI_UP, A_UI_DOWN, A_UI_LEFT, A_UI_RIGHT, A_UI_OK, A_UI_BACK,
+    // Text fields: Enter alone (Space types a space), Backspace (with auto-repeat), Delete, Ctrl+V.
+    A_UI_ENTER, A_UI_ERASE, A_UI_DELETE, A_UI_PASTE,
     A_COUNT
 };
 
@@ -37,8 +39,14 @@ public:
     // Testing without a window (ZEN_TEST_PLAY): a new frame forgets the presses, testPress presses an action.
     void testFrame() {
         for (int i = 0; i < A_COUNT; i++) { prev_[i] = down_[i]; down_[i] = false; repeat_[i] = 0; }
+        typed_.clear();
     }
     void testPress(Action a) { down_[a] = true; repeat_[a] = 1; }
+    void testType(const std::string& s) { typed_ += s; }
+    // The text typed this frame (printable ASCII), and the clipboard (Ctrl+V).
+    const std::string& typed() const { return typed_; }
+    std::string clipboard() const;
+    void onChar(unsigned int cp) { if (cp >= 32 && cp < 127) pending_ += (char)cp; }
     // Set briefly when the device changes, for a HUD toast.
     float deviceChangedTimer() const { return changedTimer_; }
 
@@ -57,4 +65,5 @@ private:
     bool prevPadAny_ = false, prevKeyAny_ = false;
     bool shiftWasDown_ = false, shiftChord_ = false; // Shift holds on a clean tap only
     int letter_[26] = {}; // physical key producing each letter on the current keyboard layout
+    std::string pending_, typed_; // characters from the window, this frame's
 };

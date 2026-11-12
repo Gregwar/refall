@@ -525,6 +525,8 @@ void main() {
     float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y);
     c = mix(c, vec3(0.03, 0.03, 0.05), max(lead * 0.7, segLine * 0.55));
     c *= 0.9 + 0.2 * uLevel;
+    float lum = dot(c, vec3(0.299, 0.587, 0.114));
+    c *= min(1.0, 0.42 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     o = vec4(c, 1.0);
 }

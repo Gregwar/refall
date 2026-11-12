@@ -264,11 +264,27 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         p.text(body, b, rx, y0 + 46 * u, 18 * u, v.beaten ? hex(0xffd27a) : dim, 1, 0.3f);
         p.text(body, upper(v.preview), rx, y0 + 108 * u, 17 * u, withA(accent, 0.95f), 1, 0.3f);
         if (v.song > 0) p.text(body, "A RUN FROM HERE DOESN'T CLEAR THE STAGE", rx, y0 + 196 * u, 13 * u, withA(dim, 0.7f), 1, 0.3f);
+    } else if (kal && m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
+        const int fs = focusedStage();
+        char b[160];
+        std::snprintf(b, sizeof(b), "STAGE %d OF %d   /   %d SONGS", fs + 1, nStages(), nSongs(fs));
+        p.text(body, b, lx, y0 + 46 * u, 17 * u, dim, -1, 0.3f);
+        p.text(head, open(fs) ? "Open the petal to choose a song" : "Locked: clear stage " + std::to_string(fs) + " first", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
+        int beat = 0;
+        for (int k = 0; k < nSongs(fs); k++) beat += beaten(fs, k);
+        std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
+        p.text(body, b, lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
+        if (cleared(fs)) {
+            std::snprintf(b, sizeof(b), "CLEARED    BEST %d", m.progress_->stageBest(fs, m.diff_));
+            p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
+        }
+        p.text(body, open(fs) ? "ENTER  OPEN      ESC  BACK" : "ESC  BACK", rx, y0 + 160 * u, 16 * u, withA(dim, 0.8f), 1, 0.3f);
+        return;
     } else {
         p.text(head, "Choose a difficulty, then a song", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
         p.text(body, "LEFT / RIGHT  DIFFICULTY      DOWN  THE STAGES", lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
     }
-    p.text(body, "ENTER  PLAY      ESC  BACK", rx, y0 + 160 * u, 16 * u, withA(dim, 0.8f), 1, 0.3f);
+    p.text(body, kal && m.petal_ ? "ENTER  PLAY      ESC  CLOSE" : "ENTER  PLAY      ESC  BACK", rx, y0 + 160 * u, 16 * u, withA(dim, 0.8f), 1, 0.3f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -478,70 +494,124 @@ void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng
 
 void Worlds::kalCampaign() {
     const int fs = focusedStage();
-    kalBackground(spec(fs, m.row_ == 1 ? m.song_ : 0));
+    const float ao = sstep(m.aOpen_); // the opened petal, 0 closed .. 1 open
+    kalBackground(spec(fs, m.petal_ ? m.song_ : 0));
     const int n = nStages();
     const float cx = X(720), cy = Y(440);
     // the rosette turns so that the focused stage sits at the reading position (the right)
     const float base = -m.aStage_ * TAU / std::max(1, n);
+    auto ang = [&](float s) { return base + s * TAU / n; };
     p.circle(cx, cy, 300 * u, hex(0x000000, 0.25f), 90 * u);
+    // the order of the journey: an arc from petal to petal (1 -> 12), gold as far as the stages are open
+    int nextStage = -1;
+    for (int s = 0; s < n && nextStage < 0; s++)
+        if (open(s) && !(m.progress_ && m.progress_->clearedAny(s))) nextStage = s;
+    {
+        const float r = 296 * u;
+        for (int s = 0; s + 1 < n; s++) {
+            const bool o = open(s + 1);
+            const float a0 = ang((float)s) + 0.06f, a1 = ang((float)s + 1) - 0.06f;
+            if (o) p.arc(cx, cy, r, r, a0, a1, 2.2f * u, hex(0xe8c06a, 0.7f));
+            else
+                for (int i = 0; i < 6; i += 2)
+                    p.arc(cx, cy, r, r, lerpf(a0, a1, i / 6.f), lerpf(a0, a1, (i + 1) / 6.f), 1.5f * u, hex(0xb0b0c0, 0.3f));
+            // a chevron in the middle points the way
+            const float am = (a0 + a1) * 0.5f, mx = cx + std::cos(am) * r, my = cy + std::sin(am) * r;
+            const float tx = -std::sin(am), ty = std::cos(am), nx = std::cos(am), ny = std::sin(am), k = 7 * u;
+            const Col cc = o ? hex(0xffe0a0, 0.95f) : hex(0xb0b0c0, 0.35f);
+            p.line(mx - tx * k + nx * k, my - ty * k + ny * k, mx + tx * k * 0.6f, my + ty * k * 0.6f, 2.2f * u, cc);
+            p.line(mx - tx * k - nx * k, my - ty * k - ny * k, mx + tx * k * 0.6f, my + ty * k * 0.6f, 2.2f * u, cc);
+        }
+    }
     for (int s = 0; s < n; s++) {
-        const float a = base + s * TAU / n;
+        const float a = ang((float)s);
         const bool o = open(s), cl = o && cleared(s);
         const float f = focusStage(s);
+        const float op = s == fs ? ao : 0.f; // this petal's opening
         const Col c = o ? stageCol(s) : hex(0x5a5c66);
-        kite(cx, cy, a, 135 * u, (262 + 22 * f) * u, (0.2f + 0.03f * f), c, o ? 0.88f : 0.6f, true, cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
+        const bool focusClosed = s == fs && m.aRow_ > 0.5f && !m.petal_;
+        const float pulse = 0.75f + 0.25f * std::sin(t * 2.4f);
+        if (f > 0.05f) {
+            p.setAdditive(true);
+            p.glow(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, (110 + 60 * op) * u, withA(c, 0.25f * f));
+            p.setAdditive(false);
+        }
+        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op), mixc(c, hex(0xffffff), 0.12f * op),
+             o ? 0.88f : 0.6f, true, focusClosed ? hex(0xffffff, 0.95f * pulse) : cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
         if (cl) { // a shine sweeping slowly across a cleared shard
             const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * (1.f - std::fabs(k - 0.45f));
             p.setAdditive(true);
             p.line(cx + std::cos(a - hw) * r, cy + std::sin(a - hw) * r, cx + std::cos(a + hw) * r, cy + std::sin(a + hw) * r, 5 * u, hex(0xffffff, 0.35f * std::sin(k * PI)), 6 * u);
             p.setAdditive(false);
         }
-        if (!o) p.lock(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, 16 * u, hex(0xd0d0d8, 0.6f));
-        // the songs: smaller facets beyond
+        // the songs: five small dots beyond a closed petal; the opened petal fans its five facets out
         for (int k = 0; k < nSongs(s) && k < 5; k++) {
-            const float da = (0.075f + 0.05f * f) * (k - 2);
-            const float r0 = (300 + 40 * f) * u, r1 = r0 + (34 + 30 * f) * u;
             const bool b = o && beaten(s, k);
             const Col sc = o ? songCol(s, k) : hex(0x4a4c55);
-            kite(cx, cy, a + da, r0, r1, 0.028f + 0.018f * f, b ? sc : mixc(sc, hex(0x101018), 0.45f), o ? 0.92f : 0.5f, true, hex(0x08080c, 0.9f));
-            if (b) {
-                const float r = (r0 + r1) * 0.5f;
-                p.setAdditive(true);
-                p.glow(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, (14 + 10 * f) * u, withA(sc, 0.5f));
-                p.setAdditive(false);
+            if (op < 0.98f) {
+                const float da = 0.042f * (k - 2), r = 278 * u;
+                p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(b ? sc : mixc(sc, hex(0x101018), 0.5f), (1.f - op) * (o ? 1.f : 0.6f)));
+            }
+            if (op > 0.02f) {
+                const float da = 0.14f * (k - 2) * op;
+                const float r0 = (300 + 18 * op) * u, r1 = r0 + 74 * u * op;
+                kite(cx, cy, a + da, r0, r1, 0.055f * op, b ? sc : mixc(sc, hex(0x101018), 0.4f), 0.95f * op, true, hex(0x08080c, 0.9f * op));
+                if (b) {
+                    const float r = (r0 + r1) * 0.5f;
+                    p.setAdditive(true);
+                    p.glow(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 24 * u * op, withA(sc, 0.5f * op));
+                    p.setAdditive(false);
+                }
             }
         }
-        const float lr = (f > 0.5f ? 440.f : 395.f) * u;
-        p.text(F::JOSEFIN, roman(s + 1), cx + std::cos(a) * lr, cy + std::sin(a) * lr + 7 * u, (15 + 7 * f) * u, hex(0xffffff, o ? 0.55f + 0.45f * f : 0.3f), 0, 0.1f);
+        // the stage's number, large, on a dark disc ringed in its hue
+        {
+            const float r = 205 * u, nx = cx + std::cos(a) * r, ny = cy + std::sin(a) * r;
+            const float rad = (21 + 9 * f) * u;
+            const bool next = s == nextStage;
+            if (next) {
+                p.setAdditive(true);
+                p.glow(nx, ny, rad * 2.6f, withA(c, 0.35f + 0.25f * std::sin(t * 1.8f)));
+                p.setAdditive(false);
+            }
+            p.circle(nx, ny, rad + 6 * u, hex(0x000000, 0.35f), 10 * u);
+            p.circle(nx, ny, rad, hex(0x0a0a10, 0.82f));
+            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f));
+            const float ts = (25 + 13 * f) * u;
+            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f), 0, 0.02f);
+            if (!o) p.lock(nx + rad * 0.95f, ny - rad * 0.95f, 13 * u, hex(0xd0d0d8, 0.8f));
+        }
     }
-    // the focused facet
-    if (m.aRow_ > 0.5f) {
-        const float a = base + m.aStage_ * TAU / n + 0.125f * (m.aSong_ - 2.f);
-        const float r = 357 * u;
+    // the focused song, when a petal is open
+    if (m.aRow_ > 0.5f && ao > 0.5f) {
+        const float a = ang(m.aStage_) + 0.14f * (m.aSong_ - 2.f) * ao;
+        const float r = (318 + 37) * u;
         const float fx = cx + std::cos(a) * r, fy = cy + std::sin(a) * r;
         const float pulse = 0.8f + 0.2f * std::sin(t * 2.2f);
         p.setAdditive(true);
-        p.glow(fx, fy, 46 * u, hex(0xffffff, 0.3f * pulse));
+        p.glow(fx, fy, 52 * u, hex(0xffffff, 0.3f * pulse * ao));
         p.setAdditive(false);
-        p.ring(fx, fy, 30 * u, 2 * u, hex(0xffffff, 0.9f * pulse));
+        p.ring(fx, fy, 34 * u, 2.2f * u, hex(0xffffff, 0.9f * pulse * ao));
     }
-    // the medallion: a plain dark glass disc, softly tinted by the focused song's color (no preview)
+    // the medallion: a plain dark glass disc, softly tinted by the focused stage
     p.circle(cx, cy, 128 * u, hex(0x08080c));
     {
-        const Col sc = open(fs) ? songCol(fs, m.row_ == 1 ? m.song_ : 0) : hex(0x5a5c66);
-        p.circle(cx, cy, 118 * u, withA(sc, 0.16f), 70 * u);
+        const Col sc = open(fs) ? songCol(fs, m.petal_ ? m.song_ : 0) : hex(0x5a5c66);
+        p.circle(cx, cy, 118 * u, withA(sc, 0.16f + 0.1f * ao), 70 * u);
     }
     p.ring(cx, cy, 121 * u, 3 * u, hex(0xe8c06a, 0.8f));
+    p.text(F::JOSEFIN_LIGHT, std::to_string(fs + 1), cx, cy + 30 * u, 84 * u, hex(0xffffff, 0.9f), 0, 0.02f);
     // the focused stage, on the right
     {
         const float x = X(1240);
         const bool o = open(fs);
-        p.text(F::JOSEFIN_LIGHT, "STAGE " + roman(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
+        p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
         const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
         p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0xffd27a) : hex(0xffffff, 0.6f), -1, 0.4f);
+        if (o && cleared(fs)) p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), x + 560 * u - 16 * u, Y(292), 18 * u, hex(0xffd27a), 1, 0.3f);
         for (int k = 0; k < nSongs(fs) && k < 5; k++) {
             const float y = Y(350 + k * 70);
-            const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) : 0.f;
+            const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) * ao : 0.f;
             p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xffffff, 0.04f + 0.1f * g));
             p.rrectLine(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.5f * g));
             const Col sc = o ? songCol(fs, k) : hex(0x5a5c66);
@@ -553,6 +623,11 @@ void Worlds::kalCampaign() {
             p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.25f);
             if (o && beaten(fs, k)) p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), x + 520 * u, y, 18 * u, hex(0xffd27a), 1, 0.15f);
         }
+        std::string prompt;
+        if (!o) prompt = "CLEAR STAGE " + std::to_string(fs) + " TO OPEN IT";
+        else if (!m.petal_) prompt = "ENTER  OPEN THE PETAL";
+        else prompt = "ENTER  PLAY      ESC  CLOSE";
+        p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.75f), -1, 0.35f);
     }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
     info(F::JOSEFIN_LIGHT, F::JOSEFIN, hex(0xffffff), hex(0xe0e0f0, 0.65f), hex(0xffffff), 1);
@@ -584,24 +659,86 @@ void Worlds::kalFree() {
     float mix;
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
-    p.rrect(X(560), Y(120), 800 * u, 140 * u, 24 * u, hex(0x0c0c14, 0.65f));
-    p.text(F::JOSEFIN_LIGHT, "FREE PLAY", X(960), Y(210), 76 * u, hex(0xffffff), 0, 0.22f);
+    p.rrect(X(560), Y(90), 800 * u, 130 * u, 24 * u, hex(0x0c0c14, 0.65f));
+    p.text(F::JOSEFIN_LIGHT, "FREE PLAY", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
+    const bool rows = m.playlists_ != nullptr;
+    const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
     static const uint32_t C[3] = {0x6fd8c0, 0x9c86ff, 0xff6f9c};
     for (int d = 0; d < DIFF_COUNT; d++) {
-        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 1) * 470.f), y = Y(560);
-        const float R = (150 + 25 * f) * u;
+        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 1) * 430.f), y = Y(420);
+        const float R = (115 + 22 * f * onDiff) * u;
         for (int i = 0; i < 4; i++)
-            kite(x, y, t * 0.05f * freePlayMultiplier(d) + i * TAU / 4, 0, R, 0.55f, hex(C[d]), 0.55f + 0.4f * f, true,
-                 f > 0.5f ? hex(0xffffff, 0.9f) : hex(0x08080c, 0.9f));
-        p.rrect(x - 120 * u, y + R + 20 * u, 240 * u, 90 * u, 16 * u, hex(0x0c0c14, 0.7f));
-        p.text(F::JOSEFIN, difficultyName(d), x, y + R + 62 * u, (26 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
+            kite(x, y, t * 0.05f * freePlayMultiplier(d) + i * TAU / 4, 0, R, 0.55f, hex(C[d]), 0.5f + 0.45f * f, true,
+                 f > 0.5f && onDiff > 0.5f ? hex(0xffffff, 0.9f) : hex(0x08080c, 0.9f));
+        p.rrect(x - 110 * u, y + R + 14 * u, 220 * u, 78 * u, 16 * u, hex(0x0c0c14, 0.7f));
+        p.text(F::JOSEFIN, difficultyName(d), x, y + R + 50 * u, (24 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
         char b[16];
         std::snprintf(b, sizeof(b), "x%.1f", freePlayMultiplier(d));
-        p.text(F::JOSEFIN, b, x, y + R + 94 * u, 20 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
+        p.text(F::JOSEFIN, b, x, y + R + 78 * u, 18 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
+    }
+    if (rows) {
+        // the playlist: the remembered ones (most recent first), the game's own, and "add one"
+        const float onPl = std::min(1.f, m.aFreeRow_);
+        p.rrect(X(160), Y(712), 1600 * u, 196 * u, 24 * u, hex(0x0c0c14, 0.72f));
+        p.rrectLine(X(160), Y(712), 1600 * u, 196 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.15f + 0.35f * onPl));
+        p.text(F::JOSEFIN, "PLAYLIST", X(200), Y(752), 17 * u, hex(0xffffff, 0.6f + 0.4f * onPl), -1, 0.45f);
+        if (m.editing_) {
+            const float fx = X(200), fy = Y(778), fw = 1520 * u, fh = 62 * u;
+            p.rrect(fx, fy, fw, fh, 12 * u, hex(0xffffff, 0.08f));
+            p.rrectLine(fx, fy, fw, fh, 12 * u, 2 * u, hex(0xffffff, 0.85f));
+            std::string shown = m.editText_;
+            const float ts = 24 * u;
+            while (!shown.empty() && p.width(F::JOSEFIN, shown, ts) > fw - 60 * u) shown.erase(0, 1);
+            if (shown.empty()) p.text(F::JOSEFIN, "Type or paste (Ctrl+V) a YouTube playlist link", fx + 24 * u, fy + 40 * u, ts, hex(0xffffff, 0.4f));
+            const float tw = p.text(F::JOSEFIN, shown, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff));
+            if (std::fmod(t, 1.f) < 0.6f && !m.fetching())
+                p.rrect(fx + 26 * u + tw, fy + 14 * u, 2.5f * u, 34 * u, 1 * u, hex(0xffffff, 0.9f));
+        } else {
+            const auto ch = m.plChoices();
+            const int nc = (int)ch.size() + 1;
+            std::vector<std::string> labels;
+            for (const auto& e : ch) {
+                std::string l = asciiFold(e.title.empty() ? e.url : e.title);
+                if (l.size() > 34) l = l.substr(0, 33) + "...";
+                if (e.count > 0) l += "   " + std::to_string(e.count);
+                labels.push_back(l);
+            }
+            labels.push_back("+  ADD A PLAYLIST");
+            std::vector<float> w(nc);
+            float total = 0;
+            for (int i = 0; i < nc; i++) { w[i] = p.width(F::JOSEFIN, labels[i], 21 * u, 0.12f) + 56 * u; total += w[i] + 18 * u; }
+            // the row scrolls so that the selected chip stays in view
+            float xs = 0, selX = 0;
+            for (int i = 0; i < nc; i++) { if (i == m.plSel_) selX = xs + w[i] / 2; xs += w[i] + 18 * u; }
+            const float avail = 1520 * u;
+            float off = X(200);
+            if (total > avail) off = X(960) - std::clamp(selX, avail / 2, total - avail / 2);
+            float x = off;
+            for (int i = 0; i < nc; i++) {
+                const float g = sstep(near1(m.aPl_, i));
+                const bool sel = i == m.plSel_;
+                const float y = Y(780);
+                if (x + w[i] > X(160) && x < X(1760)) {
+                    p.rrect(x, y, w[i], 56 * u, 28 * u, hex(0xffffff, 0.06f + 0.16f * g * onPl));
+                    p.rrectLine(x, y, w[i], 56 * u, 28 * u, (1.2f + 1.2f * g * onPl) * u, hex(0xffffff, 0.2f + 0.7f * g * onPl));
+                    p.text(F::JOSEFIN, labels[i], x + 28 * u, y + 36 * u, 21 * u, hex(0xffffff, sel ? 1.f : 0.65f), -1, 0.12f);
+                }
+                x += w[i] + 18 * u;
+            }
+        }
+        if (!m.plMsg_.empty())
+            p.text(F::JOSEFIN, upper(m.plMsg_), X(200), Y(880), 17 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
+        else if (!m.editing_) {
+            const auto ch = m.plChoices();
+            const std::string& url = m.plSel_ < (int)ch.size() ? ch[m.plSel_].url : std::string();
+            p.text(F::JOSEFIN, url.empty() ? "A YOUTUBE PLAYLIST OR VIDEO LINK" : url, X(200), Y(880), 15 * u, hex(0xffffff, 0.45f), -1, 0.1f);
+        }
     }
     char b[96];
     std::snprintf(b, sizeof(b), "GRAVITY AT %d%% OF ITS FULL SPEED, ON EVERY LEVEL", (int)std::lround(freePlayMultiplier(m.freeDiff_) * 100));
-    p.rrect(X(560), Y(930), 800 * u, 110 * u, 20 * u, hex(0x0c0c14, 0.6f));
-    p.text(F::JOSEFIN, b, X(960), Y(975), 18 * u, hex(0xffffff, 0.85f), 0, 0.3f);
-    p.text(F::JOSEFIN, "ENTER  START      ESC  BACK", X(960), Y(1018), 15 * u, hex(0xffffff, 0.5f), 0, 0.3f);
+    p.text(F::JOSEFIN, b, X(960), Y(965), 17 * u, hex(0xffffff, 0.85f), 0, 0.3f);
+    const char* hint = m.editing_ ? "ENTER  READ IT      CTRL+V  PASTE      ESC  CANCEL"
+                     : (rows && m.freeRow_ == 1) ? "LEFT / RIGHT  CHOOSE      ENTER  START      DEL  REMOVE      UP  DIFFICULTY      ESC  BACK"
+                     : "LEFT / RIGHT  DIFFICULTY      DOWN  PLAYLIST      ENTER  START      ESC  BACK";
+    p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }

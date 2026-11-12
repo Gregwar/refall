@@ -141,6 +141,20 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgT_ = message.empty() ? 0.f : 5.f;
     hoverT_ = 0;
     playingId_.clear();
+    if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
+}
+
+std::vector<PlaylistEntry> Menu::plChoices() const {
+    std::vector<PlaylistEntry> v;
+    const std::string def = std::string(GAME_TITLE) + " playlist";
+    bool hasDefault = false;
+    if (playlists_)
+        for (const PlaylistEntry& e : playlists_->list()) {
+            v.push_back(e);
+            if (e.url == DEFAULT_PLAYLIST) { v.back().title = def; hasDefault = true; }
+        }
+    if (!hasDefault) v.push_back({DEFAULT_PLAYLIST, def, 0, 0});
+    return v;
 }
 
 void Menu::stopPreview() {
@@ -150,6 +164,7 @@ void Menu::stopPreview() {
 
 const CampaignSong* Menu::hovered() const {
     if (screen_ != CAMPAIGN || row_ != 1 || !camp_ || stage_ >= camp_->size()) return nullptr;
+    if (style_ == KALEIDO && !petal_) return nullptr; // a closed petal: no song in focus
     const auto& songs = camp_->stages()[stage_].songs;
     return song_ < (int)songs.size() ? &songs[song_] : nullptr;
 }
@@ -182,6 +197,9 @@ void Menu::snap() {
     aStage_ = (float)stage_;
     aSong_ = (float)song_;
     aRow_ = (float)row_;
+    aOpen_ = petal_ ? 1.f : 0.f;
+    aFreeRow_ = (float)freeRow_;
+    aPl_ = (float)plSel_;
 }
 
 Menu::Choice Menu::update(const Input& in, float dt) {
@@ -194,6 +212,28 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aStage_ += (stage_ - aStage_) * k;
         aSong_ += (song_ - aSong_) * k;
         aRow_ += (row_ - aRow_) * k;
+        aFreeRow_ += (freeRow_ - aFreeRow_) * k;
+        aPl_ += (plSel_ - aPl_) * k;
+        aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
+    }
+    // a playlist being read: its result
+    if (fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const Fetched r = fetch_.get();
+        if (r.ok && playlists_) {
+            playlists_->use({r.url, r.title, r.count, 0});
+            playlists_->save();
+            const auto ch = plChoices();
+            for (int i = 0; i < (int)ch.size(); i++)
+                if (ch[i].url == r.url) plSel_ = i;
+            editing_ = false;
+            char b[160];
+            std::snprintf(b, sizeof(b), "%s: %d SONGS", asciiFold(r.url == DEFAULT_PLAYLIST ? std::string(GAME_TITLE) + " playlist" : r.title).c_str(), r.count);
+            plMsg_ = b;
+            plMsgBad_ = false;
+        } else {
+            plMsg_ = r.error;
+            plMsgBad_ = true;
+        }
     }
     Choice ch;
     auto steps = [&](Action a) { return in.repeatSteps(a); };
@@ -214,13 +254,103 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         }
         if (back) ch.kind = Choice::QUIT;
         break;
-    case FREE:
-        freeDiff_ = std::clamp(freeDiff_ + dy + dx, 0, DIFF_COUNT - 1);
-        if (ok) { ch.kind = Choice::PLAY_FREE; ch.difficulty = freeDiff_; }
-        if (back) open(TITLE);
+    case FREE: {
+        if (style_ != KALEIDO || !playlists_) { // the simpler free play: a difficulty
+            freeDiff_ = std::clamp(freeDiff_ + dy + dx, 0, DIFF_COUNT - 1);
+            if (ok) { ch.kind = Choice::PLAY_FREE; ch.difficulty = freeDiff_; }
+            if (back) open(TITLE);
+            break;
+        }
+        const auto choices = plChoices();
+        const int nCh = (int)choices.size() + 1; // the last: add a playlist
+        if (editing_) { // typing or pasting a playlist link
+            if (!fetch_.valid()) {
+                editText_ += in.typed();
+                if (in.pressed(A_UI_PASTE))
+                    for (char c : in.clipboard())
+                        if (c >= 32 && c < 127) editText_ += c;
+                for (int i = 0; i < in.repeatSteps(A_UI_ERASE) && !editText_.empty(); i++) editText_.pop_back();
+                if (editText_.size() > 300) editText_.resize(300);
+                if (in.pressed(A_UI_ENTER)) {
+                    std::string err;
+                    const std::string url = normalizePlaylistInput(editText_, &err);
+                    if (url.empty()) { plMsg_ = err; plMsgBad_ = true; }
+                    else {
+                        plMsg_ = "READING THE PLAYLIST...";
+                        plMsgBad_ = false;
+                        fetch_ = std::async(std::launch::async, [url]() {
+                            Fetched f;
+                            f.url = url;
+                            const std::vector<std::string> entries = resolveYoutube(url);
+                            if (entries.empty()) { f.error = "Couldn't read it: offline, private, or empty?"; return f; }
+                            f.count = (int)entries.size();
+                            f.title = url == DEFAULT_PLAYLIST ? std::string(GAME_TITLE) + " playlist" : youtubeTitle(url);
+                            if (f.title.empty()) f.title = playlistIdOf(url).empty() ? "YouTube video" : "Playlist " + playlistIdOf(url);
+                            f.ok = true;
+                            return f;
+                        });
+                    }
+                }
+            }
+            if (in.pressed(A_UI_BACK) && !in.down(A_UI_ERASE) && !fetch_.valid()) { editing_ = false; plMsg_.clear(); }
+            break;
+        }
+        if (freeRow_ == 0) {
+            freeDiff_ = std::clamp(freeDiff_ + dx, 0, DIFF_COUNT - 1);
+            if (dy > 0) freeRow_ = 1;
+        } else {
+            plSel_ = std::clamp(plSel_ + dx, 0, nCh - 1);
+            if (dy < 0) freeRow_ = 0;
+            if (in.pressed(A_UI_DELETE) && plSel_ < (int)choices.size() && choices[plSel_].url != DEFAULT_PLAYLIST) {
+                playlists_->remove(choices[plSel_].url);
+                playlists_->save();
+                plMsg_ = "REMOVED " + asciiFold(choices[plSel_].title);
+                plMsgBad_ = false;
+                plSel_ = std::min(plSel_, (int)plChoices().size());
+            }
+        }
+        plSel_ = std::clamp(plSel_, 0, nCh - 1);
+        if (ok) {
+            if (freeRow_ == 1 && plSel_ == nCh - 1) { editing_ = true; editText_.clear(); plMsg_.clear(); }
+            else {
+                const PlaylistEntry e = choices[std::min(plSel_, (int)choices.size() - 1)];
+                ch.kind = Choice::PLAY_FREE;
+                ch.difficulty = freeDiff_;
+                ch.playlist = e.url;
+                playlists_->use(e);
+                playlists_->save();
+            }
+        }
+        if (back) { if (freeRow_ == 1) freeRow_ = 0; else open(TITLE); }
         break;
+    }
     case CAMPAIGN: {
         const int n = camp_ ? camp_->size() : 0;
+        if (style_ == KALEIDO && n > 0) {
+            // two levels: the stage petals (left / right), then the songs of the opened petal
+            const int oldStage = stage_, oldSong = song_, oldRow = row_;
+            if (row_ == 0) {
+                diff_ = std::clamp(diff_ + dx, 0, DIFF_COUNT - 1);
+                if (dy > 0 || ok) row_ = 1;
+                else if (back) open(TITLE);
+            } else if (!petal_) {
+                stage_ = std::clamp(stage_ + dx, 0, n - 1);
+                if (dy < 0) row_ = 0;
+                if (ok && progress_ && progress_->unlocked(stage_)) { petal_ = true; song_ = std::min(song_, (int)camp_->stages()[stage_].songs.size() - 1); }
+                else if (back) open(TITLE);
+            } else {
+                song_ = std::clamp(song_ + dx + dy, 0, (int)camp_->stages()[stage_].songs.size() - 1);
+                if (ok && hovered()) {
+                    ch.kind = Choice::PLAY_CAMPAIGN;
+                    ch.difficulty = diff_;
+                    ch.stage = stage_;
+                    ch.song = song_;
+                }
+                if (back) petal_ = false;
+            }
+            if (stage_ != oldStage || song_ != oldSong || row_ != oldRow) hoverT_ = 0;
+            break;
+        }
         const int oldStage = stage_, oldSong = song_, oldRow = row_;
         if (row_ == 0) {
             diff_ = std::clamp(diff_ + dx, 0, DIFF_COUNT - 1);
@@ -395,7 +525,8 @@ void Menu::drawBackground() {
 void Menu::drawTitle() {
     const int cx = ox_ + 200;
     // TETRIS, one tetromino colour per letter
-    const char* word = "TETRIS";
+    const std::string wordS = gameTitle(true);
+    const char* word = wordS.c_str();
     const int sc = 5;
     int w = pixelfont::width(true, word, sc), x = cx - w / 2;
     for (int i = 0; word[i]; i++) {
@@ -403,7 +534,7 @@ void Menu::drawTitle() {
         const unsigned char* c = PIECE[(i * 2 + 4) % 7];
         x += text(l, x, oy_ + 26, Rgb{c[0], c[1], c[2]}, true, sc) + sc;
     }
-    textC("U N I V E R S E", cx, oy_ + 72, Rgb{235, 232, 255}, true, 2);
+    textC("", cx, oy_ + 72, Rgb{235, 232, 255}, true, 2);
     const char* items[3] = {"CAMPAIGN", "FREE PLAY", "QUIT"};
     for (int i = 0; i < 3; i++) {
         const bool sel = i == titleItem_;
