@@ -250,8 +250,9 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
-ends stage 15) on songs of the default playlist, its velocities rising from 1 to 8 (EASY), 2 to 13 (NORMAL) and 4 to
-20 (EXPERT): an arbitrary first draft, meant to be tuned.
+ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
+EXPERT, 8 levels faster), over a base that rises across the stages (EXPERT goes from 4 to 12 on stage 1 and from 12
+to 20 on the finale; NORMAL tops out at 13.5, EASY at 8.2): a first draft, meant to be tuned.
 
 ## Install
 
