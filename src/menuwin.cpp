@@ -259,19 +259,30 @@ Col playlistHue(const std::string& url, bool featured) {
 // stage's hue (the song's step of it), greyed and dimmed for a locked stage. Tint and brightness ease over ~0.7 s.
 void Worlds::kalBackground(const std::string& cur) {
     static Col tintNow{0.6f, 0.6f, 0.7f, 1.f};
-    static float lvlNow = 0.f, satNow = 1.f;
+    static float lvlNow = 0.f, satNow = 1.f, duoNow = 0.35f;
     static double lastT = -1;
     const bool first = lastT < 0;
     const float dt = first ? 1.f : (float)std::clamp(t - lastT, 0.0, 0.25);
     lastT = t;
     Col tint{0.6f, 0.6f, 0.7f, 1.f};
-    float lvl = 0.f, sat = 1.f;
+    float lvl = 0.f, sat = 1.f, duo = 0.35f; // duo: how far the frames are graded toward the tint
     std::string spec = cur;
     if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) {
         const int fs = focusedStage();
-        spec = this->spec(fs, m.petal_ ? m.song_ : 0);
-        if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; sat = 0.15f; } // locked: a cool, dim grey
-        else tint = m.petal_ ? songCol(fs, m.song_) : stageCol(fs);
+        if (m.petal_) spec = this->spec(fs, m.song_);
+        else { // a closed petal: the most colourful of its universes (among those with a snapshot)
+            spec = this->spec(fs, 0);
+            float best = -1.f;
+            for (int k2 = 0; k2 < nSongs(fs); k2++) {
+                float col, lo, hi;
+                if (pool.stats(this->spec(fs, k2), col, lo, hi) && col > best) { best = col; spec = this->spec(fs, k2); }
+            }
+        }
+        if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; sat = 0.15f; duo = 0.f; } // locked: a cool, dim grey
+        else {
+            tint = m.petal_ ? songCol(fs, m.song_) : stageCol(fs);
+            duo = 0.62f; // graded toward the stage's hue: a pale or grey world still comes out vivid
+        }
     } else if (m.screen_ == Menu::FREE) {
         const auto ch = m.plChoices();
         if (m.plSel_ < (int)ch.size()) tint = playlistHue(ch[m.plSel_].url, m.plSel_ == 0);
@@ -294,8 +305,17 @@ void Worlds::kalBackground(const std::string& cur) {
     tintNow = mixc(tintNow, tint, k);
     lvlNow += (lvl - lvlNow) * k;
     satNow += (sat - satNow) * k;
+    duoNow += (duo - duoNow) * k;
+    auto range = [&](const std::string& kk, float& lo, float& hi) {
+        float col;
+        lo = 0.f; hi = 1.f;
+        if (!kk.empty() && kk.back() != '#') pool.stats(kk, col, lo, hi);
+    };
+    float loA, hiA, loB, hiB;
+    range(g_prev.empty() ? g_cur : g_prev, loA, hiA);
+    range(g_cur, loB, hiB);
     p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12,
-              mixc(tintNow, hex(0xffffff), 0.3f), t, lvlNow, satNow);
+              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, loA, hiA, loB, hiB);
 }
 
 void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {
@@ -534,7 +554,8 @@ void Worlds::kalFree() {
         } else {
             const auto ch = m.plChoices();
             const int nc = (int)ch.size() + 1;
-            auto cardW = [&](int i) { return (i == 0 ? 440.f : i == nc - 1 ? 230.f : 320.f) * u; };
+            const float addW = 122 * u + std::max(p.width(F::JOSEFIN, "ADD A", 17 * u, 0.3f), p.width(F::JOSEFIN, "PLAYLIST", 17 * u, 0.3f)) + 30 * u;
+            auto cardW = [&](int i) { return i == 0 ? 440.f * u : i == nc - 1 ? addW : 320.f * u; };
             auto cardH = [&](int i) { return (i == 0 ? 176.f : 144.f) * u; };
             const float gap = 22 * u;
             float total = 0, selX = 0;

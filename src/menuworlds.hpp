@@ -49,6 +49,8 @@ public:
     static void setWorkerContext(std::function<bool()> bind, std::function<void()> unbind);
     // The texture to show (live frame, else the snapshot), 0 while neither exists yet.
     GLuint tex(const std::string& spec) const;
+    // A snapshot's colourfulness score and luminance range (false while it isn't there).
+    bool stats(const std::string& spec, float& colourful, float& lo, float& hi) const;
     bool isLive(const std::string& spec) const { return live_.count(spec) != 0; }
     // what the pool did this frame (for the logs): instances made, frames rendered, snapshots made
     int made = 0, rendered = 0, snapped = 0;
@@ -64,6 +66,7 @@ private:
     struct Snap {
         ugl::Target tgt;
         bool ok = false, tried = false, saved = false, dead = false;
+        float colourful = 0, lo = 0, hi = 1; // its colourfulness (and contrast), its luminance's 5th / 95th percentiles
     };
     std::map<std::string, Live> live_;
     std::map<std::string, Snap> snaps_;

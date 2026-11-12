@@ -83,11 +83,13 @@ Painter::FontData& Painter::font(Font id) {
     FontData& f = fonts_[id];
     if (f.tried) return f;
     f.tried = true;
-    const int W = 2048, H = 1024;
+    // 128 px glyphs read down to ~12 px through mipmaps: at mip level k a texel covers 2^k atlas pixels, so the glyphs
+    // are 16 px apart (mip 4 still keeps a texel between neighbours) and the mip chain stops at level 4.
+    const int W = 2048, H = 2048, PAD = 16;
     std::vector<unsigned char> bmp((size_t)W * H);
     f.packed.resize(sizeof(stbtt_packedchar) * 95);
     stbtt_pack_context pc;
-    if (!stbtt_PackBegin(&pc, bmp.data(), W, H, 0, 2, nullptr)) return f;
+    if (!stbtt_PackBegin(&pc, bmp.data(), W, H, 0, PAD, nullptr)) return f;
     stbtt_PackSetOversampling(&pc, 1, 1);
     f.ok = stbtt_PackFontRange(&pc, TTFS[id], 0, f.px, 32, 95, (stbtt_packedchar*)f.packed.data()) != 0;
     stbtt_PackEnd(&pc);
@@ -97,6 +99,7 @@ Painter::FontData& Painter::font(Font id) {
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, W, H, 0, GL_RED, GL_UNSIGNED_BYTE, bmp.data());
     glGenerateMipmap(GL_TEXTURE_2D);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 4);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -176,12 +179,13 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
 }
 
 void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,
-                      float saturation) {
+                      float saturation, float duo, float loA, float hiA, float loB, float hiB) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform sampler2D uA, uB;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel, uScale, uSat;
+uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo;
+uniform vec2 uRangeA, uRangeB; // each frame's luminance range (5th and 95th percentiles), stretched to 0..1
 uniform int uSeg, uProcA, uProcB;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -201,7 +205,19 @@ vec3 proc(vec2 uv) {
     c = mix(c, hue3, smoothstep(0.7, 0.95, s) * 0.5);
     return c + smoothstep(0.78, 1.0, n) * 0.25;
 }
-vec3 src(sampler2D t, int isProc, vec2 uv) { return isProc == 1 ? proc(uv) : texture(t, uv).rgb; }
+// a frame graded toward the tint: its luminance stretched to its full range, then a duotone between a deep and a bright
+// shade of the tint, mixed with its own (more saturated) colours
+vec3 grade(vec3 c, vec2 range, vec2 uv) {
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    // (a stretch of at most x4, so the frame's 8-bit steps don't band; a little glassy noise for its flat areas)
+    float ln = clamp((l - range.x) / max(0.25, range.y - range.x), 0.0, 1.0);
+    ln = clamp(ln + (vn(uv * 7.0 + uTime * 0.01) - 0.5) * 0.28 + (vn(uv * 23.0) - 0.5) * 0.08, 0.0, 1.0);
+    vec3 own = max(mix(vec3(l), c, 1.6), 0.0) * (ln / max(l, 0.02));
+    vec3 deep = uTint * vec3(0.10, 0.08, 0.16) * 2.0, bright = mix(uTint, vec3(1.0), 0.25) * 1.15;
+    vec3 duo = mix(deep, bright, smoothstep(0.0, 1.0, ln));
+    return mix(own, duo, uDuo);
+}
+vec3 src(sampler2D t, int isProc, vec2 uv, vec2 range) { return grade(isProc == 1 ? proc(uv) : texture(t, uv).rgb, isProc == 1 ? vec2(0.05, 0.7) : range, uv); }
 void main() {
     vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
     vec2 p = (fc - uC) / uRes.y;
@@ -222,7 +238,8 @@ void main() {
     vec2 uv = q * 0.85 + vec2(0.5 + 0.06 * sin(uTime * 0.05), 0.5 + 0.06 * cos(uTime * 0.04));
     uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;   // each facet refracts a little differently
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
-    vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv) : uMix >= 1.0 ? src(uB, uProcB, uv) : mix(src(uA, uProcA, uv), src(uB, uProcB, uv), uMix);
+    vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv, uRangeA) : uMix >= 1.0 ? src(uB, uProcB, uv, uRangeB)
+                          : mix(src(uA, uProcA, uv, uRangeA), src(uB, uProcB, uv, uRangeB), uMix);
     c *= 0.82 + 0.3 * h21(cell + 9.1);
     c = mix(c, c * uTint * 1.5, 0.22);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -284,6 +301,9 @@ void main() {
     ugl::set1f(kalProg_, "uTime", time);
     ugl::set1f(kalProg_, "uLevel", level);
     ugl::set1f(kalProg_, "uSat", saturation);
+    ugl::set1f(kalProg_, "uDuo", duo);
+    ugl::set2f(kalProg_, "uRangeA", loA, hiA);
+    ugl::set2f(kalProg_, "uRangeB", loB, hiB);
     ugl::set1i(kalProg_, "uSeg", segs);
     glUniform3f(glGetUniformLocation(kalProg_, "uTint"), tint.r, tint.g, tint.b);
     ugl::drawFullscreen();
@@ -381,7 +401,7 @@ float Painter::text(Font id, const std::string& s, float x, float y, float size,
         if (ch < 32 || ch > 126) ch = '?';
         stbtt_aligned_quad q;
         float ax = 0, ay = 0;
-        stbtt_GetPackedQuad(pc, 2048, 1024, ch - 32, &ax, &ay, &q, 0);
+        stbtt_GetPackedQuad(pc, 2048, 2048, ch - 32, &ax, &ay, &q, 0);
         const float x0 = x + pxx + q.x0 * k, x1 = x + pxx + q.x1 * k, y0 = y + pyy + q.y0 * k, y1 = y + pyy + q.y1 * k;
         const float px[4][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
         const float lc[4][2] = {{q.s0, q.t0}, {q.s1, q.t0}, {q.s1, q.t1}, {q.s0, q.t1}};
