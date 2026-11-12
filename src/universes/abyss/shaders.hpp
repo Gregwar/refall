@@ -667,7 +667,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- HUD panels (tetris-universe-scene's menu)
+// ---------------------------------------------------------------- HUD panels (refall-scene's menu)
 
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;

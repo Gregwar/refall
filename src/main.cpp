@@ -1,4 +1,4 @@
-// Tetris Universe: a minimalist, music-driven Tetris.
+// Refall: a minimalist, music-driven Tetris.
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -133,7 +133,7 @@ static double warmup() {
 
 static void usage() {
     std::printf(
-        "usage: tetris-universe [options] [songs or folders...]\n"
+        "usage: refall [options] [songs or folders...]\n"
         "  (default: a built-in YouTube playlist, via yt-dlp; local files, folders and other YouTube\n"
         "   playlist/video URLs work too)\n"
         "  --fullscreen         start fullscreen\n"
@@ -428,7 +428,7 @@ std::string App::universeSpec() const {
 // Prints the universe and the command line that shows it again (same universe and variant, same song).
 void App::printScene() const {
     const UniverseEntry& e = universes::entry(R_.universe());
-    std::printf("[app] universe: %s (%s)\n[app] same universe: tetris-universe --universe %s", R_.label().c_str(), e.blurb,
+    std::printf("[app] universe: %s (%s)\n[app] same universe: refall --universe %s", R_.label().c_str(), e.blurb,
                 platform::quoteArg(universeSpec()).c_str());
     if (track_) std::printf(" %s", platform::quoteArg(track_->path).c_str());
     std::printf("\n");

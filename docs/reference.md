@@ -10,8 +10,8 @@ Node.js, and Node.js is picked up automatically). Songs are downloaded when queu
 `~/.cache/zentris/youtube/`. Downloading from YouTube is against its terms of service: personal use only.
 
 ```sh
-./build/tetris-universe "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
-./build/tetris-universe-scope "https://www.youtube.com/watch?v=..."
+./build/refall "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
+./build/refall-scope "https://www.youtube.com/watch?v=..."
 ```
 
 Options: `--in-order` (play songs in order: folders alphabetically, playlists in their order; the default is a random order), `--seed N` (repeat a run), `--universe NAME[:VARIANT]` (play every song in that universe, e.g. `--universe vector`
@@ -28,7 +28,7 @@ modes: see [the README](../README.md#modes)),
 with the game played at a calm pace; `--clip-before` / `--clip-after SEC` change the span).
 
 `tools/scenereview.py` reviews universes: `generate` renders 100 random snapshots (each for a downloaded song, at a
-calm, mid or peak part of it, with a filled board; `tetris-universe --review-shot OUT.png` makes one), and `serve [--lan]`
+calm, mid or peak part of it, with a filled board; `refall --review-shot OUT.png` makes one), and `serve [--lan]`
 opens a dashboard, on a computer or a phone, to skip scenes or comment on them. Comments become threads that
 `pending` / `watch` hand to whoever processes them, and `reply` answers one with before/after snapshots to accept
 or discuss further.
@@ -39,7 +39,7 @@ first drop in its universe, stitched with crossfades (`--songs N`, `--before`, `
 `tools/demo.py [tools/demo.json] -o demo.mp4` makes the demo video: the whole song of `tools/demo.json`, in chapters
 (shots of the game in many universes, cut on the song's bars, none shorter than `min_shot`; optional title cards on
 black, crossfades on the cuts), each showing a line clear (`--plan-only` prints the timeline, `-j N` records shots in
-parallel, cached between runs). It uses `tetris-universe --analysis OUT.json` (the song's beats, structure and scene
+parallel, cached between runs). It uses `refall --analysis OUT.json` (the song's beats, structure and scene
 levels as JSON), the test hook `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a filled board) and the
 `[clip] clear N at T` lines a clip prints.
 
@@ -48,9 +48,9 @@ overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:
 back, pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
 (each song starts S seconds before its end), e.g. a stage run through with `--autoplay`.
 
-## tetris-universe-scope: see what the game hears
+## refall-scope: see what the game hears
 
-`./build/tetris-universe-scope [songs or folders...]` (the default playlist when no song is given) plays a song and shows the analysis that drives the game:
+`./build/refall-scope [songs or folders...]` (the default playlist when no song is given) plays a song and shows the analysis that drives the game:
 - a phase timebar with the scene levels (calm / mid / peak) and where the scene changes happen
 - the detected structure: intro, verse, build, chorus, drop, break, outro, with similar parts grouped
 - pulse zones, a 16-band spectrum, loudness, intensity and onsets, and bar lines
@@ -74,11 +74,11 @@ They show as cyan flags on the timeline, with their text in the detail view.
 `ytdl:<video id>` plays a single YouTube song, and `--shuffle` plays the songs in a random order. Playlist listings are cached (and refreshed in the background for the
 next run) and songs stay downloaded in the cache, so reopening an annotated song is instant and works offline.
 
-The game and tetris-universe-scope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
+The game and refall-scope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
 
-## tetris-universe-scene: look at universes and transitions
+## refall-scene: look at universes and transitions
 
-`./build/tetris-universe-scene [UNIVERSE[:VARIANT]]` shows a universe while the computer plays (`--list` prints the universes
+`./build/refall-scene [UNIVERSE[:VARIANT]]` shows a universe while the computer plays (`--list` prints the universes
 and their variants). The menu on the left picks the universe, its variant, the song phase (section and level:
 calm, mid, peak) and the transition used for the next change of universe (AUTO picks one as the game does). Up/Down
 choose a row, Left/Right (or a click / the mouse wheel) change it: a new universe or variant comes in with that

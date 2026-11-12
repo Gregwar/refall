@@ -161,10 +161,10 @@ Always test **off screen** (never on your display) and at a low resolution unles
 judged (full 1920x1080 only for final checks):
 
 ```sh
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe-scene --size 960x540 --shot out.png --section drop <id>
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 960x540 --universe <id> --review-level 2 --review-shot out.png song.mp3
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 640x360 --universe <id> --phase-shots out_ song.mp3
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 640x360 --universe vector --to <id> --transition ink --transition-shots tr_ 6 song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall-scene --size 960x540 --shot out.png --section drop <id>
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 960x540 --universe <id> --review-level 2 --review-shot out.png song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 640x360 --universe <id> --phase-shots out_ song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 640x360 --universe vector --to <id> --transition ink --transition-shots tr_ 6 song.mp3
 tools/universesheet.sh <id> sheet.png 2      # every variant in one contact sheet (level 0, 1 or 2)
 ```
 

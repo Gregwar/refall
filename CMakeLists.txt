@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(TetrisUniverse C CXX)
+project(Refall C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,7 @@ if(NOT ZENTRIS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
 endif()
 if(NOT ZENTRIS_MULTI_CONFIG)
-  message(STATUS "Tetris Universe build type: ${CMAKE_BUILD_TYPE}")
+  message(STATUS "Refall build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
 # GLFW: the system one by default; ZENTRIS_BUNDLE_GLFW=ON (used for Python wheels) builds it from
@@ -166,7 +166,7 @@ add_custom_target(universe_dates
 add_dependencies(zenrender universe_dates)
 
 # The game.
-add_executable(tetris-universe
+add_executable(refall
   src/main.cpp
   src/game.cpp
   src/input.cpp
@@ -184,35 +184,35 @@ file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv zen_campaign_hex HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," zen_campaign_arr "${zen_campaign_hex}")
 file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${zen_campaign_arr}\n")
 configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
-target_include_directories(tetris-universe PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_include_directories(refall PRIVATE ${CMAKE_BINARY_DIR}/generated)
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
 if(UNIX AND NOT APPLE)
   find_package(OpenGL QUIET COMPONENTS EGL)
   if(OpenGL_EGL_FOUND)
-    target_link_libraries(tetris-universe PRIVATE OpenGL::EGL)
-    target_compile_definitions(tetris-universe PRIVATE ZEN_HAVE_EGL)
+    target_link_libraries(refall PRIVATE OpenGL::EGL)
+    target_compile_definitions(refall PRIVATE ZEN_HAVE_EGL)
   endif()
 endif()
-target_link_libraries(tetris-universe PRIVATE zenrender zencore glfw glad)
+target_link_libraries(refall PRIVATE zenrender zencore glfw glad)
 # Gamepad mappings (SDL_GameControllerDB): looked up next to the executable, then in the sources.
-target_compile_definitions(tetris-universe PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-add_custom_command(TARGET tetris-universe POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                   ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:tetris-universe>/gamecontrollerdb.txt)
+target_compile_definitions(refall PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                   ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:refall>/gamecontrollerdb.txt)
 
-# tetris-universe-scope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
-add_executable(tetris-universe-scope src/scope.cpp)
-target_link_libraries(tetris-universe-scope PRIVATE zencore glfw glad)
+# refall-scope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
+add_executable(refall-scope src/scope.cpp)
+target_link_libraries(refall-scope PRIVATE zencore glfw glad)
 
-# tetris-universe-scene: a scene viewer; the computer plays while a menu adjusts the scene and picks the song phase.
-add_executable(tetris-universe-scene
+# refall-scene: a scene viewer; the computer plays while a menu adjusts the scene and picks the song phase.
+add_executable(refall-scene
   src/scene.cpp
   src/game.cpp
 )
-target_link_libraries(tetris-universe-scene PRIVATE zenrender zencore glfw glad)
+target_link_libraries(refall-scene PRIVATE zenrender zencore glfw glad)
 # Its "send to dashboard" runs tools/scenereview.py from the sources.
-target_compile_definitions(tetris-universe-scene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(refall-scene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
-foreach(t zencore zenrender tetris-universe tetris-universe-scope tetris-universe-scene)
+foreach(t zencore zenrender refall refall-scope refall-scene)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
@@ -221,6 +221,6 @@ endforeach()
 
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
-  install(TARGETS tetris-universe tetris-universe-scope tetris-universe-scene RUNTIME DESTINATION zentris/bin)
+  install(TARGETS refall refall-scope refall-scene RUNTIME DESTINATION zentris/bin)
   install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv DESTINATION zentris/bin)
 endif()

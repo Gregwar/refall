@@ -1,12 +1,12 @@
-# Tetris Universe
+# Refall
 
 A Tetris game inspired by **Tetris Effect** that plays **any music you like**: your own folder or a YouTube
 playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, chorus, drop...) and the game stages
 it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
 
 ```sh
-uvx tetris-universe            # the title screen: CAMPAIGN or FREE PLAY (the default playlist)
-uvx tetris-universe ~/Music    # free play on any folders, files and YouTube URLs
+uvx refall            # the title screen: CAMPAIGN or FREE PLAY (the default playlist)
+uvx refall ~/Music    # free play on any folders, files and YouTube URLs
 ```
 
 ## Universes
@@ -241,8 +241,8 @@ Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/zen
 [uv](https://docs.astral.sh/uv/) as above, or install them:
 
 ```sh
-pipx install tetris-universe        # or: uv tool install tetris-universe
-tetris-universe ~/Music     # with no argument it plays the default YouTube playlist
+pipx install refall        # or: uv tool install refall
+refall ~/Music     # with no argument it plays the default YouTube playlist
 ```
 
 Quote YouTube URLs (`&` is special in the shell). YouTube also needs a JavaScript runtime
@@ -273,11 +273,11 @@ missing from it still works with a generic layout.
 
 ## Tools
 
-- `tetris-universe-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
+- `refall-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
   notes on it.
-- `tetris-universe-scene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
+- `refall-scene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
 
-Both come with the package (`uvx --from tetris-universe tetris-universe-scope`). Every option, the tools and how the music drives the
+Both come with the package (`uvx --from refall refall-scope`). Every option, the tools and how the music drives the
 game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source
@@ -285,7 +285,7 @@ game are in [docs/reference.md](docs/reference.md).
 ```sh
 sudo apt install cmake g++ libglfw3-dev libglew-dev    # Debian/Ubuntu
 cmake -S . -B build && cmake --build build -j
-./build/tetris-universe ~/Music
+./build/refall ~/Music
 ```
 
 `-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox"` (the default) lists the universes left out of the build;

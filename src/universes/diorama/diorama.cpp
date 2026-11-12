@@ -1927,7 +1927,7 @@ void DioramaUniverse::drawHud(const std::vector<HudText>& hud, const std::vector
     glBindVertexArray(hudVao_);
     glBindBuffer(GL_ARRAY_BUFFER, hudVbo_);
 
-    // The host's panels (tetris-universe-scene's menu) are plain rectangles.
+    // The host's panels (refall-scene's menu) are plain rectangles.
     glUseProgram(progPanel_);
     set2f(progPanel_, "uRes", (float)width_, (float)height_);
     struct R { float x, y, w, h, alpha, feather; vec3 color; };
