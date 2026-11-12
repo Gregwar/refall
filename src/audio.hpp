@@ -19,6 +19,9 @@ struct Track {
     Analysis analysis;
 };
 
+// Decodes a whole audio file (the menu's music) to interleaved stereo 16-bit at `sampleRate`; null on failure.
+std::shared_ptr<std::vector<int16_t>> decodeAudio16(const std::string& path, uint32_t sampleRate);
+
 class AudioEngine {
 public:
     AudioEngine();
@@ -49,6 +52,12 @@ public:
     // The song's volume (sound effects keep theirs), sliding there over `seconds`: 1 = full. With setMuffled, the
     // game over's sound (the bonus' low-pass, quieter).
     void setSongGain(float g, float seconds = 0.6f) { gainGlide_ = seconds; gainTarget_ = g; }
+    // The menu's music: a bed under everything (not muffled, not paused), looping with a 1 s equal-power crossfade at
+    // its loop point; its gain slides to `gain` over `seconds`. Silent, it stays where it was (resumes from there).
+    void setBed(std::shared_ptr<const std::vector<int16_t>> pcm);
+    void setBedGain(float gain, float seconds);
+    float bedGain() const { return bedGainNow_; }
+    double bedPosition() const { return (double)bedPosAtomic_ / sampleRate_; }
     // One-shot sound mixed over the song (interleaved stereo at the engine rate); heard even when paused.
     void playSample(std::shared_ptr<const std::vector<float>> pcm, float gain = 1.f);
 
@@ -78,6 +87,13 @@ private:
     float muffle_ = 0;                        // current muffle amount 0..1 (audio thread)
     float lpZ_[2][2] = {{0, 0}, {0, 0}};      // low-pass biquad state, per channel
     std::atomic<float> gainTarget_{1.f}, gainGlide_{0.6f};
+    std::shared_ptr<const std::vector<int16_t>> bed_; // interleaved stereo at the engine rate (guarded by mutex_)
+    uint64_t bedPos_ = 0;
+    bool bedLooped_ = false;
+    float bedGain_ = 0;
+    std::atomic<float> bedTarget_{0.f}, bedGlide_{1.f}, bedGainNow_{0.f};
+    std::atomic<uint64_t> bedPosAtomic_{0};
+    void mixBed(float* out, unsigned int frames);
     float gain_ = 1.f;                        // current song gain (audio thread)
     void applyMuffle(float* out, unsigned int frames);
 };

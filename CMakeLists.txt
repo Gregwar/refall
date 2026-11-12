@@ -222,5 +222,5 @@ endforeach()
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
   install(TARGETS refall refall-scope refall-scene RUNTIME DESTINATION zentris/bin)
-  install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv DESTINATION zentris/bin)
+  install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv data/menu_music.mp3 DESTINATION zentris/bin)
 endif()

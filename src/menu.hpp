@@ -51,7 +51,8 @@ public:
     void snap(); // the animated focus jumps to its place (screenshots)
     // Free play's playlists (the free screen picks one); the store is the app's.
     void setPlaylists(PlaylistStore* s) { playlists_ = s; }
-    bool editing() const { return editing_; }   // typing a playlist: letters are text, not shortcuts
+    bool editing() const { return editing_; }
+    bool previewPlaying() const { return !playingId_.empty(); } // a song preview is heard (the menu's music steps back)   // typing a playlist: letters are text, not shortcuts
     bool fetching() const { return fetch_.valid(); }
     bool fetchDone() const { return fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
     // The campaign has two levels: the stage petals, then the songs of the opened petal.
