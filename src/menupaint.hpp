@@ -27,6 +27,13 @@ public:
     // A shaded sphere (a planet): type 0 rocky, 1 banded gas, 2 ocean world, 3 soft toy (kawaii), 4 a star; `rot`
     // turns it (radians), `seed` varies its surface.
     void sphere(float cx, float cy, float r, Col c, float seed, int type, float rot);
+    // A texture (an OpenGL frame, rows bottom to top) in a rounded rectangle, tinted; flipV mirrors it upside down.
+    void image(GLuint tex, float x, float y, float w, float h, Col tint, float radius = 0.f, bool flipV = false);
+    // A flat triangle, a colour per corner.
+    void tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2);
+    // A full-screen kaleidoscope folding two frames (mixed by `mixAB`) around (cx, cy) pixels into `segs` mirrored
+    // segments, turned by `rot`, cut into glass facets with lead lines, tinted toward `tint`.
+    void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level);
     // An arc of an ellipse (radians, 0 = right, clockwise on screen), as line segments.
     void arc(float cx, float cy, float rx, float ry, float a0, float a1, float width, Col c, float soft = 1.f);
     ~Painter();
@@ -56,7 +63,7 @@ public:
 private:
     struct V { float x, y, lx, ly, hx, hy, r, g, b, a, rad, soft, lw, mode; };
     std::vector<V> verts_;
-    GLuint prog_ = 0, bgProg_ = 0, vao_ = 0, vbo_ = 0, curTex_ = 0;
+    GLuint prog_ = 0, bgProg_ = 0, kalProg_ = 0, vao_ = 0, vbo_ = 0, curTex_ = 0;
     int w_ = 1, h_ = 1;
     bool additive_ = false;
     struct FontData {

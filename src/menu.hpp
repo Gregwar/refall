@@ -15,6 +15,10 @@
 #include "input.hpp"
 #include "menupaint.hpp"
 
+class WorldPool;
+// The game's name, as the menus' title screens letter it (one place to change it).
+inline constexpr const char* GAME_TITLE = "Tetris Universe";
+
 // A colour per universe for the campaign's squares (the 8-bit palette, in order of first appearance).
 void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned char out[3]);
 
@@ -24,7 +28,8 @@ public:
     // The menus' looks (same screens and navigation): 8-BIT ARCADE (the default), COSMIC, SWISS, WATERCOLOUR, GLASS.
     // The journey variations on COSMIC: GALAXY (3D spiral galaxy), ORRERY (a solar system), ATLAS (an antique star
     // chart), SYNTHWAVE (a neon outrun cosmos), PASTEL (a kawaii candy cosmos).
-    enum Style { ARCADE, COSMIC, SWISS, WATERCOLOUR, GLASS, GALAXY, ORRERY, ATLAS, SYNTHWAVE, PASTEL, STYLE_COUNT };
+    // WINDOWS: windows onto the game's real universes, rendered live; KALEIDO: the universes folded in a kaleidoscope.
+    enum Style { ARCADE, COSMIC, SWISS, WATERCOLOUR, GLASS, GALAXY, ORRERY, ATLAS, SYNTHWAVE, PASTEL, WINDOWS, KALEIDO, STYLE_COUNT };
     static const char* styleName(int s);
     static int parseStyle(const std::string& s); // a number 1..5 or a name, -1 if unknown
     void setStyle(int s) { style_ = s; }
@@ -34,6 +39,7 @@ public:
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
     };
 
+    Menu();
     ~Menu();
     // `audio` plays the previews (null: none, e.g. screenshots).
     void init(const Campaign* c, Progress* p, AudioEngine* audio);
@@ -77,6 +83,9 @@ private:
     void smoothMessage();
     friend struct Cosmos; // the journey styles (menucosmos.cpp)
     void renderCosmos();
+    friend struct Worlds; // WINDOWS and KALEIDO (menuwin.cpp), with live universes
+    std::unique_ptr<WorldPool> worlds_;
+    void renderWorlds(int w, int h);
     float u_ = 1, sx_ = 0, sy_ = 0, fw_ = 1920, fh_ = 1080; // the smooth styles' 1920x1080 layout in the frame
     float X(float v) const { return sx_ + v * u_; }
     float Y(float v) const { return sy_ + v * u_; }

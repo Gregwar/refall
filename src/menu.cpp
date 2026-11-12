@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "library.hpp"
+#include "menuworlds.hpp"
 #include "pixelfont.hpp"
 #include "stb_image_write.h"
 #include "ugl.hpp"
@@ -119,6 +120,8 @@ void main() {
 
 } // namespace
 
+Menu::Menu() = default;
+
 Menu::~Menu() {
     if (tex_) glDeleteTextures(1, &tex_);
     if (prog_) glDeleteProgram(prog_);
@@ -153,7 +156,7 @@ const CampaignSong* Menu::hovered() const {
 
 const char* Menu::styleName(int s) {
     static const char* N[] = {"8-BIT ARCADE", "COSMIC", "SWISS", "WATERCOLOUR", "GLASS",
-                              "GALAXY",       "ORRERY", "ATLAS", "SYNTHWAVE",   "PASTEL"};
+                              "GALAXY",       "ORRERY", "ATLAS", "SYNTHWAVE",   "PASTEL", "WINDOWS", "KALEIDO"};
     return N[std::clamp(s, 0, STYLE_COUNT - 1)];
 }
 
@@ -166,7 +169,7 @@ int Menu::parseStyle(const std::string& s0) {
     }
     static const char* N[][2] = {{"arcade", "8-bit"}, {"cosmic", "space"}, {"swiss", "minimal"}, {"watercolour", "watercolor"},
                                  {"glass", "neon"}, {"galaxy", "galaxy3d"}, {"orrery", "solar"}, {"atlas", "constellation"},
-                                 {"synthwave", "synth"}, {"pastel", "kawaii"}};
+                                 {"synthwave", "synth"}, {"pastel", "kawaii"}, {"windows", "worlds"}, {"kaleido", "kaleidoscope"}};
     for (int i = 0; i < STYLE_COUNT; i++)
         if (s == N[i][0] || s == N[i][1]) return i;
     return -1;
@@ -241,6 +244,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     }
     }
     if (ch.kind != Choice::NONE) {
+        worlds_.reset(); // the live universes free their GPU memory for the game (snapshots stay on disk)
         // the game takes over the sound: the song crossfades from the preview
         playingId_.clear();
         return ch;

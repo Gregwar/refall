@@ -206,7 +206,12 @@ a big sun, the stages planets on brass orbits, locked ones dark and frozen, the 
 (an antique celestial chart in navy and gold, the stages constellations drawn in gold, the songs their stars;
 Cormorant Garamond and Marcellus), 9 `synthwave` (an outrun cosmos over a neon grid and a striped sun, ringed retro
 planets, a ship hopping along a neon route), 10 `pastel` (a candy cosmos of kawaii planets, sleeping while locked,
-with bubbly moons; Comfortaa and Quicksand). `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
+with bubbly moons; Comfortaa and Quicksand), and two that show the game's own worlds: 11 `windows` (a gallery wall of
+12 framed windows, each opening onto the stage's real universes rendered live, a strip of 5 panes for its songs, the
+focused one growing; locked windows shuttered, cleared ones warmly lit with a brass plaque) and 12 `kaleido` (the
+focused song's live universe folded into a turning stained-glass kaleidoscope, the stages glass shards in a rosette
+around a live medallion). Their universes render live at 640x360 (the focused one at 30 fps, the others at 12), and a
+snapshot of each is kept in `~/.cache/zentris/menu-worlds/` for the ones not live. `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
 progress, never saved; `--menu-demo` shows the same progress in `--menu-shot`). The fonts are OFL, in `src/embed/`
 with their licences.
 
