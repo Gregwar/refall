@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
@@ -71,6 +72,8 @@ void main() {
 Painter::~Painter() {
     if (prog_) glDeleteProgram(prog_);
     if (vbo_) glDeleteBuffers(1, &vbo_);
+    if (upProg_) glDeleteProgram(upProg_);
+    kalTgt_.destroy();
     if (vao_) glDeleteVertexArrays(1, &vao_);
     for (auto& f : fonts_)
         if (f.tex) glDeleteTextures(1, &f.tex);
@@ -173,14 +176,33 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
 }
 
 void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level) {
+    // Drawn at a third of the frame (soft glass anyway), then spread over the frame with a light blur: the cost of the
+    // fragment work is a ninth of the full-resolution pass.
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform sampler2D uA, uB;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel;
-uniform int uSeg;
+uniform float uMix, uRot, uTime, uLevel, uScale;
+uniform int uSeg, uProcA, uProcB;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y);
+}
+// no snapshot of the universe: a procedural pane of glass in the stage's hue, its neighbours and light streaks
+vec3 proc(vec2 uv) {
+    vec2 q = uv * 3.0 + vec2(uTime * 0.02, -uTime * 0.015);
+    float n = vn(q) * 0.6 + vn(q * 2.1 + 5.0) * 0.3 + vn(q * 4.3 - 2.0) * 0.1;
+    float s = vn(uv * 5.0 - vec2(uTime * 0.01, 0.0));
+    vec3 hue2 = uTint.gbr * 0.75 + 0.1, hue3 = uTint.brg * 0.6 + 0.15;
+    vec3 c = mix(uTint * 0.25, uTint, smoothstep(0.25, 0.65, n));
+    c = mix(c, hue2, smoothstep(0.62, 0.85, n) * 0.7);
+    c = mix(c, hue3, smoothstep(0.7, 0.95, s) * 0.5);
+    return c + smoothstep(0.78, 1.0, n) * 0.25;
+}
+vec3 src(sampler2D t, int isProc, vec2 uv) { return isProc == 1 ? proc(uv) : texture(t, uv).rgb; }
 void main() {
     vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
     vec2 p = (fc - uC) / uRes.y;
@@ -201,7 +223,7 @@ void main() {
     vec2 uv = q * 0.85 + vec2(0.5 + 0.06 * sin(uTime * 0.05), 0.5 + 0.06 * cos(uTime * 0.04));
     uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;   // each facet refracts a little differently
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
-    vec3 c = mix(texture(uA, uv).rgb, texture(uB, uv).rgb, uMix);
+    vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv) : uMix >= 1.0 ? src(uB, uProcB, uv) : mix(src(uA, uProcA, uv), src(uB, uProcB, uv), uMix);
     c *= 0.82 + 0.3 * h21(cell + 9.1);
     c = mix(c, c * uTint * 1.5, 0.22);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
@@ -209,7 +231,7 @@ void main() {
     c = c * 1.25 + 0.04 + uTint * (0.10 + 0.14 * h21(cell + 5.3)); // lit from behind, tinted glass even over a dark world
     c *= 0.85 + 0.3 * smoothstep(0.85, 0.0, edge);           // brighter toward each facet's middle
     float lead = 1.0 - smoothstep(0.015, 0.04, edge);
-    float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y);
+    float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y * uScale);
     c = mix(c, vec3(0.03, 0.03, 0.05), max(lead * 0.7, segLine * 0.55));
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
@@ -218,25 +240,56 @@ void main() {
     o = vec4(c, 1.0);
 }
 )";
+    // the low-resolution glass, spread over the frame: bilinear with a small 4-tap blur
+    static const char* UFS = R"(#version 330 core
+in vec2 vUv;
+out vec4 o;
+uniform sampler2D uT;
+uniform vec2 uTexel;
+void main() {
+    vec2 d = uTexel * 0.5;
+    vec3 c = texture(uT, vUv + vec2(-d.x, -d.y)).rgb + texture(uT, vUv + vec2(d.x, -d.y)).rgb +
+             texture(uT, vUv + vec2(-d.x, d.y)).rgb + texture(uT, vUv + vec2(d.x, d.y)).rgb;
+    o = vec4(c * 0.25, 1.0);
+}
+)";
     flush();
-    if (!kalProg_) kalProg_ = ugl::program(ugl::FULLSCREEN_VS, KFS, "menu kaleidoscope");
+    if (!kalProg_) {
+        kalProg_ = ugl::program(ugl::FULLSCREEN_VS, KFS, "menu kaleidoscope");
+        upProg_ = ugl::program(ugl::FULLSCREEN_VS, UFS, "menu kaleidoscope upscale");
+    }
+    static const int div = std::getenv("ZEN_MENU_FULLRES") ? 1 : 3; // (testing: the full-resolution pass, to compare)
+    const int lw = std::max(1, w_ / div), lh = std::max(1, h_ / div);
+    if (kalTgt_.w != lw || kalTgt_.h != lh) kalTgt_.create(lw, lh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
+    const float sx = (float)lw / w_, sy = (float)lh / h_;
+    kalTgt_.bind();
     glDisable(GL_BLEND);
     glUseProgram(kalProg_);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, a);
+    glBindTexture(GL_TEXTURE_2D, a ? a : b);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, b ? b : a);
     glActiveTexture(GL_TEXTURE0);
     ugl::set1i(kalProg_, "uA", 0);
     ugl::set1i(kalProg_, "uB", 1);
-    ugl::set2f(kalProg_, "uRes", (float)w_, (float)h_);
-    ugl::set2f(kalProg_, "uC", cx, cy);
+    ugl::set1i(kalProg_, "uProcA", a ? 0 : 1);
+    ugl::set1i(kalProg_, "uProcB", b ? 0 : 1);
+    ugl::set2f(kalProg_, "uRes", (float)lw, (float)lh);
+    ugl::set2f(kalProg_, "uC", cx * sx, cy * sy);
+    ugl::set1f(kalProg_, "uScale", (float)h_ / lh);
     ugl::set1f(kalProg_, "uMix", mixAB);
     ugl::set1f(kalProg_, "uRot", rot);
     ugl::set1f(kalProg_, "uTime", time);
     ugl::set1f(kalProg_, "uLevel", level);
     ugl::set1i(kalProg_, "uSeg", segs);
     glUniform3f(glGetUniformLocation(kalProg_, "uTint"), tint.r, tint.g, tint.b);
+    ugl::drawFullscreen();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w_, h_);
+    glUseProgram(upProg_);
+    glBindTexture(GL_TEXTURE_2D, kalTgt_.tex);
+    ugl::set1i(upProg_, "uT", 0);
+    ugl::set2f(upProg_, "uTexel", 1.f / lw, 1.f / lh);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     curTex_ = 0;
@@ -333,3 +386,30 @@ float Painter::text(Font id, const std::string& s, float x, float y, float size,
     return w;
 }
 
+
+void Painter::inkExtent(Font id, const std::string& s, float size, float tracking, float& left, float& right) {
+    left = right = 0.f;
+    FontData& f = font(id);
+    if (!f.ok || s.empty()) return;
+    const float k = size / f.px;
+    const auto* pc = (const stbtt_packedchar*)f.packed.data();
+    float pen = 0;
+    bool first = true;
+    for (size_t i = 0; i < s.size(); i++) {
+        int ch = (unsigned char)s[i];
+        if (ch < 32 || ch > 126) ch = '?';
+        const stbtt_packedchar& g = pc[ch - 32];
+        if (ch != ' ') {
+            if (first) { left = pen + g.xoff * k; first = false; }
+            right = pen + g.xoff2 * k;
+        }
+        pen += g.xadvance * k + tracking * size;
+    }
+}
+
+float Painter::capHeight(Font id, float size) {
+    FontData& f = font(id);
+    if (!f.ok) return size * 0.7f;
+    const auto* pc = (const stbtt_packedchar*)f.packed.data();
+    return -pc['H' - 32].yoff * size / f.px;
+}

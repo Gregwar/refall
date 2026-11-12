@@ -40,8 +40,7 @@ public:
 
     Menu();
     ~Menu();
-    // `audio` plays the previews (null: none, e.g. screenshots).
-    void init(const Campaign* c, Progress* p, AudioEngine* audio);
+    void init(const Campaign* c, Progress* p);
     // Shows a screen; `message` (e.g. "GAME OVER") shows a moment over it, with `sub` under it.
     void open(Screen s, const std::string& message = "", const std::string& sub = "", bool bad = false);
     Screen screen() const { return screen_; }
@@ -52,17 +51,16 @@ public:
     // Free play's playlists (the free screen picks one); the store is the app's.
     void setPlaylists(PlaylistStore* s) { playlists_ = s; }
     bool editing() const { return editing_; }
-    bool previewPlaying() const { return !playingId_.empty(); } // a song preview is heard (the menu's music steps back)   // typing a playlist: letters are text, not shortcuts
+                                                // (typing a playlist: letters are text, not shortcuts)
     bool fetching() const { return fetch_.valid(); }
     bool fetchDone() const { return fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
     // The campaign has two levels: the stage petals, then the songs of the opened petal.
     void setPetalOpen(bool o) { petal_ = o; }
-    // One frame of navigation; a choice ends the menu (the preview stops).
+    // One frame of navigation; a choice ends the menu.
     Choice update(const Input& in, float dt);
     // Draws the screen over the whole bound framebuffer.
     void render(int fbw, int fbh);
     bool screenshot(const std::string& path, int w, int h);
-    void stopPreview();
 
 private:
     // ---- drawing: the kaleidoscope (menuwin.cpp), on a painter, over live universes (menuworlds.hpp)
@@ -77,7 +75,7 @@ private:
     struct SongView {
         bool has = false, locked = false, beaten = false;
         int stage = 0, song = 0, songs = 0, best = 0;
-        std::string title, universe, status, preview;
+        std::string title, universe, status;
         float velocity = 0;
         unsigned char col[3] = {150, 150, 150};
     };
@@ -86,7 +84,6 @@ private:
 
     // eased focus (indices as floats) for the animated transitions
     float aTitle_ = 0, aFree_ = DIFF_EXPERT, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
-    float level_ = 0; // the preview's loudness (backgrounds breathe with it)
     // the opened petal (its songs fanned out), eased
     bool petal_ = false;
     float aOpen_ = 0;
@@ -103,24 +100,13 @@ private:
     // ---- state
     const Campaign* camp_ = nullptr;
     Progress* progress_ = nullptr;
-    AudioEngine* audio_ = nullptr;
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
-    float time_ = 0, msgT_ = 0, hoverT_ = 0;
+    float time_ = 0, msgT_ = 0;
     std::string msg_, msgSub_;
     bool msgBad_ = false;
 
-    // ---- previews: a ~14 s snippet from the song's drop (else its chorus, else 35% in), faded and loudness-matched
-    struct Snip { std::shared_ptr<Track> track; bool failed = false; };
-    std::map<std::string, Snip> snips_;       // by video id
-    std::vector<std::string> snipOrder_;      // least recently used first
-    std::string loadingId_;                   // the snippet being prepared
-    std::future<std::shared_ptr<Track>> loading_;
-    std::string playingId_;
-    float replayT_ = 0;
     const CampaignSong* hovered() const;
-    void updatePreview(float dt);
-    std::string previewStatus() const;
 };

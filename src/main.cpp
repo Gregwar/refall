@@ -98,6 +98,7 @@ struct Options {
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
     bool menuDemo = false;
+    std::string menuDemoKind; // --menu-demo normal-done: every stage cleared on NORMAL, some on EASY, none on EXPERT
     bool menuMusic = true;     // --no-menu-music: the menu stays silent (no music bed)
     bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
@@ -106,6 +107,7 @@ struct Options {
 // with no sound, the songs on a simulated clock; ZEN_TEST_TAIL=S starts each song S seconds before its end,
 // ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit) at T seconds of the run,
 // ZEN_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, ZEN_TEST_QUIT=T stops the run at T seconds.
+static std::chrono::steady_clock::time_point g_startTime; // (the menu's first frame is timed from it)
 static bool testPlay() {
     static const bool on = std::getenv("ZEN_TEST_PLAY") != nullptr;
     return on;
@@ -161,13 +163,13 @@ static void usage() {
         "                       the break between the first song and the next (from 9 s before its end)\n"
         "  --analysis OUT.json  write the first song's analysis (beats, downbeat, structure, scene levels, first\n"
         "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n"
-        "modes (with no songs and no option above, the game opens on its title screen: CAMPAIGN, FREE PLAY):\n"
+        "modes (with no songs and no option above, the game opens on its title screen: VOYAGE, FREE PLAY):\n"
         "  --free               free play straight away, without the menu (also when songs are given)\n"
         "  --difficulty D       easy, normal or expert (default), or a gravity multiplier (e.g. 0.7): free play's\n"
-        "                       speed (EASY x0.6, NORMAL x0.8, EXPERT x1), the campaign's difficulty\n"
-        "  --stage S[:SONG]     a campaign run straight away: stage S (1..12) from its song SONG (default 1)\n"
-        "  --unlock             unlock every campaign stage (saved)\n"
-        "  --reset              forget the campaign progress (stages cleared, best scores)\n"
+        "                       speed (EASY x0.6, NORMAL x0.8, EXPERT x1), the voyage's difficulty\n"
+        "  --stage S[:SONG]     a voyage run straight away: stage S (1..12) from its song SONG (default 1)\n"
+        "  --unlock             unlock every voyage stage (saved)\n"
+        "  --reset              forget the voyage progress (stages cleared, best scores)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
@@ -894,7 +896,7 @@ std::vector<HudText> App::buildHud(float dt) {
             float b = std::min(1.f, (overTime_ - 2.5f) / 0.8f);
             const bool pad = input_.active() == Input::Gamepad;
             std::string again = pad ? "PRESS A BUTTON TO PLAY AGAIN" : "PRESS A KEY TO PLAY AGAIN";
-            if (mode_ == MODE_CAMPAIGN) again = "BACK TO THE CAMPAIGN";
+            if (mode_ == MODE_CAMPAIGN) again = "BACK TO THE VOYAGE";
             else if (menuEnabled_) again += pad ? "    B  MENU" : "    ESC  MENU";
             hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
@@ -980,7 +982,7 @@ int App::run() {
     audio_.setMuted(opt_.mute || shotMode);
     lib_.setSampleRate(audio_.sampleRate());
     lib_.setShuffle(opt_.shuffle);
-    menu_.init(&campaign_, &progress_, &audio_);
+    menu_.init(&campaign_, &progress_);
     if (mode_ != MODE_MENU && opt_.stage.empty()) { // the menu's sessions (and --stage) scan their own songs
         lib_.scan(opt_.paths);
         std::printf("[app] %zu songs found\n", lib_.size());
@@ -997,7 +999,7 @@ int App::run() {
         forcedUniverse_ = universes::parse(opt_.universe, &forcedVariant_);
     }
     look_ = makeSongLook(nullptr, runSeed_);
-    {
+    if (mode_ != MODE_MENU) { // (on the menu, the first session makes its universe: the menu's first frame comes at once)
         int variant = -1;
         changeUniverse(songUniverse(&variant), variant, transitions::NEW_SCENE, true);
     }
@@ -1036,7 +1038,7 @@ int App::run() {
             input_.testFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(1)); // background loads keep up with the simulated clock
             static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
-                {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"pause", A_PAUSE}, {"quit", A_QUIT}};
+                {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"alt", A_UI_ALT}, {"pause", A_PAUSE}, {"quit", A_QUIT}};
             for (auto& [t, k] : keys)
                 if (runTime_ - dt < t && runTime_ >= t)
                     for (auto& [n, a] : NAMES)
@@ -1054,6 +1056,12 @@ int App::run() {
             const Menu::Choice c = menu_.update(input_, dt);
             fbSize(fbw, fbh);
             if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
+            static bool firstFrame = true;
+            if (firstFrame) {
+                firstFrame = false;
+                std::printf("[menu] first frame %.0f ms after the start\n",
+                            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_startTime).count());
+            }
             if (!testShot_.empty()) { menu_.screenshot(testShot_, fbw, fbh); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
             swap();
             if (c.kind == Menu::Choice::QUIT) quit_ = true;
@@ -1608,7 +1616,7 @@ void App::updateMenuMusic() {
         }
     }
     if (!musicReady_) return;
-    const int want = mode_ != MODE_MENU ? 0 : menu_.previewPlaying() ? 2 : 1;
+    const int want = mode_ != MODE_MENU ? 0 : 1;
     if (want == musicState_) return;
     static const char* NAMES[3] = {"faded out", "playing", "ducked"};
     const float gain = want == 1 ? MENU_MUSIC_GAIN : want == 2 ? MENU_MUSIC_DUCKED : 0.f;
@@ -1623,7 +1631,6 @@ void App::updateMenuMusic() {
 void App::beginSession(const Menu::Choice& c) {
     const bool camp = c.kind == Menu::Choice::PLAY_CAMPAIGN;
     mode_ = camp ? MODE_CAMPAIGN : MODE_FREE;
-    menu_.stopPreview();
     lib_.clear();
     lib_.setShuffle(camp ? false : opt_.shuffle);
     lib_.setOnce(camp);
@@ -1747,7 +1754,7 @@ void App::campaignEnd() {
         progress_.save();
         const bool next = stage + 1 < campaign_.size();
         std::snprintf(sub, sizeof(sub), "%s  SCORE %d%s", difficultyName(run_.diff), game_.score(),
-                      next ? "   NEXT STAGE UNLOCKED" : "   THE CAMPAIGN IS COMPLETE");
+                      next ? "   NEXT STAGE UNLOCKED" : "   THE VOYAGE IS COMPLETE");
         std::printf("[campaign] stage %d cleared on %s (%d points)\n", stage + 1, difficultyName(run_.diff), game_.score());
         menu_.setCursor(next ? stage + 1 : stage, 0);
         toMenu(Menu::CAMPAIGN, "STAGE " + std::to_string(stage + 1) + " CLEAR", sub);
@@ -1763,23 +1770,40 @@ void App::campaignEnd() {
 // built-in key sequence, or ZEN_TEST_KEYS), then exit.
 int App::runMenuShot() {
     if (opt_.menuDemo || !opt_.menuClip.empty()) {
-        // made-up progress, in memory only: stages 1 and 2 cleared, stage 3 started, the rest locked
+        // made-up progress, in memory only (never saved): by default stages 1 and 2 cleared, stage 3 started, the rest
+        // locked; "normal-done": every stage cleared on NORMAL
         progress_ = Progress{};
         playlists_.demo();
-        const int pts[5] = {8210, 9420, 10020, 9900, 10690};
-        for (int k = 0; k < 5; k++) {
-            progress_.setBeaten(0, k, DIFF_NORMAL, pts[k]);
-            progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100);
-            progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300);
+        if (opt_.menuDemoKind == "normal-done") {
+            // every stage cleared on NORMAL (every song beaten), the first five on EASY, nothing on EXPERT
+            for (int s = 0; s < campaign_.size(); s++) {
+                const int n = (int)campaign_.stages()[s].songs.size();
+                int run = 0;
+                for (int k = 0; k < n; k++) {
+                    const int pts = 7400 + s * 860 + ((s * 7 + k * 13) % 9) * 310;
+                    progress_.setBeaten(s, k, DIFF_NORMAL, pts);
+                    run += pts;
+                    if (s < 6) progress_.setBeaten(s, k, DIFF_EASY, pts * 3 / 4);
+                }
+                progress_.setCleared(s, DIFF_NORMAL, run);
+                if (s < 5) progress_.setCleared(s, DIFF_EASY, run * 3 / 4);
+            }
+        } else {
+            const int pts[5] = {8210, 9420, 10020, 9900, 10690};
+            for (int k = 0; k < 5; k++) {
+                progress_.setBeaten(0, k, DIFF_NORMAL, pts[k]);
+                progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100);
+                progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300);
+            }
+            progress_.setCleared(0, DIFF_NORMAL, 48240);
+            progress_.setCleared(0, DIFF_EASY, 37740);
+            progress_.setCleared(1, DIFF_NORMAL, 54720);
+            progress_.setBeaten(2, 0, DIFF_NORMAL, 11240);
+            progress_.setBeaten(2, 1, DIFF_NORMAL, 9870);
+            progress_.setBeaten(0, 0, DIFF_EXPERT, 12650);
         }
-        progress_.setCleared(0, DIFF_NORMAL, 48240);
-        progress_.setCleared(0, DIFF_EASY, 37740);
-        progress_.setCleared(1, DIFF_NORMAL, 54720);
-        progress_.setBeaten(2, 0, DIFF_NORMAL, 11240);
-        progress_.setBeaten(2, 1, DIFF_NORMAL, 9870);
-        progress_.setBeaten(0, 0, DIFF_EXPERT, 12650);
     }
-    menu_.init(&campaign_, &progress_, nullptr);
+    menu_.init(&campaign_, &progress_);
     const std::string& sc = opt_.menuScreen;
     menu_.open(sc == "campaign" ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
     if (!opt_.menuHover.empty()) {
@@ -1797,12 +1821,12 @@ int App::runMenuShot() {
         // difficulties; then free play: a difficulty, the playlists, a playlist link typed and read
         static const std::pair<double, const char*> WALK[] = {
             {1.2, "down"}, {1.9, "up"}, {2.7, "ok"},
-            {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "ok"},
-            {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "ok"},
+            {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "alt"},
+            {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "alt"},
             {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
             {21.9, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
-        const double END = 34.5;
+        const double END = std::getenv("ZEN_MENU_CLIP_SECONDS") ? std::atof(std::getenv("ZEN_MENU_CLIP_SECONDS")) : 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
         if (keys.empty()) {
             for (auto& [t, k] : WALK) keys.push_back({t, k});
@@ -1820,9 +1844,13 @@ int App::runMenuShot() {
         FILE* pipe = platform::openWrite(cmd);
         if (!pipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); return 1; }
         static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
-            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"enter", A_UI_ENTER}};
+            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"enter", A_UI_ENTER}, {"alt", A_UI_ALT}};
         std::vector<unsigned char> px((size_t)w * h * 3);
         const int frames = (int)(END * 60);
+        // the menu's frame cost: CPU (update + drawing calls) and GPU (a timer query around the drawing)
+        GLuint gpuQ = 0;
+        glGenQueries(1, &gpuQ);
+        double cpuSum = 0, cpuMax = 0, gpuSum = 0, gpuMax = 0, wallSum = 0;
         for (int f = 0; f < frames; f++) {
             const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
             input_.testFrame();
@@ -1832,24 +1860,59 @@ int App::runMenuShot() {
                     for (auto& [n, a] : NAMES)
                         if (k == n) input_.testPress(a);
                 }
+            const auto c0 = std::chrono::steady_clock::now();
             const Menu::Choice c = menu_.update(input_, 1.f / 60.f);
             (void)c; // a choice (PLAY) is not followed: the walk stays in the menus
+            double cpu = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c0).count();
             // a playlist being read: the video waits for it (up to 30 s)
             for (int i = 0; i < 1500 && menu_.fetching() && !menu_.fetchDone(); i++)
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            const auto c1 = std::chrono::steady_clock::now();
+            glBeginQuery(GL_TIME_ELAPSED, gpuQ);
             menu_.render(w, h);
+            glEndQuery(GL_TIME_ELAPSED);
+            cpu += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c1).count();
+            if (std::getenv("ZEN_MENU_FINISH")) { // software renderers: the frame's whole cost as wall time
+                glFinish();
+                wallSum += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c1).count();
+            }
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+            GLuint64 ns = 0;
+            glGetQueryObjectui64v(gpuQ, GL_QUERY_RESULT, &ns);
+            const double gpu = ns / 1e6;
+            cpuSum += cpu; gpuSum += gpu;
+            cpuMax = std::max(cpuMax, cpu); gpuMax = std::max(gpuMax, gpu);
             std::fwrite(px.data(), 1, px.size(), pipe);
         }
+        glDeleteQueries(1, &gpuQ);
+        std::printf("[menu] %d frames at %dx%d: CPU %.2f ms on average (max %.1f), GPU %.2f ms on average (max %.1f)\n", frames, w, h,
+                    cpuSum / frames, cpuMax, gpuSum / frames, gpuMax);
+        if (wallSum > 0) std::printf("[menu] drawing with glFinish: %.2f ms on average\n", wallSum / frames);
         const int rc = platform::closeRead(pipe);
         std::printf("[clip] %s %s (%s, %.0f s)\n", rc == 0 ? "wrote" : "FAILED", opt_.menuClip.c_str(), "kaleidoscope", END);
         if (headless_) headless::shutdown();
         return rc == 0 ? 0 : 1;
     }
-    for (int i = 0; i < 12; i++) {
-        menu_.update(input_, 1.f / 60.f);
-        menu_.render(w, h);
+    // ZEN_TEST_KEYS="T:KEY,...": keys pressed before the shot (it is taken 1.5 s after the last one)
+    {
+        const auto keys = testList("ZEN_TEST_KEYS");
+        double end = 0.2;
+        for (auto& [t, k] : keys) end = std::max(end, t + 1.5);
+        static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
+            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"enter", A_UI_ENTER}, {"alt", A_UI_ALT}};
+        const int frames = std::max(12, (int)(end * 60));
+        for (int f = 0; f < frames; f++) {
+            const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
+            input_.testFrame();
+            for (auto& [t, k] : keys)
+                if (t >= t0 && t < t1)
+                    for (auto& [n, a] : NAMES)
+                        if (k == n) input_.testPress(a);
+            menu_.update(input_, 1.f / 60.f);
+            if (keys.empty() && f < frames - 1) continue; // (a plain shot: only its last frame needs drawing)
+            menu_.render(w, h);
+        }
     }
     glFinish();
     const bool ok = menu_.screenshot(opt_.menuShot, w, h);
@@ -1860,6 +1923,7 @@ int App::runMenuShot() {
 }
 
 int main(int argc, char** argv) {
+    g_startTime = std::chrono::steady_clock::now();
     platform::lineBufferStdout();
     Options o;
     bool freePlay = false, unlock = false, reset = false;
@@ -1912,7 +1976,10 @@ int main(int argc, char** argv) {
         else if (a == "--menu-petal") o.menuPetal = true;
         else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
         else if (a == "--menu-clip" && i + 1 < argc) o.menuClip = argv[++i];
-        else if (a == "--menu-demo") o.menuDemo = true;
+        else if (a == "--menu-demo") {
+            o.menuDemo = true;
+            if (i + 1 < argc && std::string(argv[i + 1]) == "normal-done") o.menuDemoKind = argv[++i];
+        }
         else if (a == "--no-menu-music") o.menuMusic = false;
         else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];

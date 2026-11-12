@@ -162,37 +162,41 @@ roadmap of the universes to come. To make a new one, see [docs/adding-a-universe
 
 ## Modes
 
-Started with no songs, the game opens on its menu, a kaleidoscope of its own universes (the game is called **Refall**
-for now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **CAMPAIGN**, **FREE
-PLAY** or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). Behind every screen a real universe of the
-game, rendered live, is folded into a slowly turning stained-glass kaleidoscope (tinted by the focused stage, kept dark
-enough behind the text). The menu has its own music, [`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at
-its loop point) at about 70% of a game song's level: it fades in when the menu appears, steps back to near silence
-while a song preview plays, fades out (0.8 s) when a game starts and comes back where it left off on the menu
-(`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it). The file is
-found in the sources' `data/`, else next to the executable (installed builds ship it there).
+Started with no songs, the game opens on its menu, a stained-glass kaleidoscope (the game is called **Refall** for
+now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY** or
+QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). Behind the title, the game's own universes turn in the
+kaleidoscope in turn (from snapshots cached in `~/.cache/zentris/menu-worlds/` when there are some, else glass in their
+colours); on Voyage the glass takes the focused stage's hue (the same cool grey for every locked stage), in free play
+the focused playlist's. The menu is light: the kaleidoscope is drawn at a third of the resolution and spread over the
+screen, and nothing heavier than cached images is loaded while it shows. The menu has its own music,
+[`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at its loop point) at about 70% of a
+game song's level: it fades in when the menu appears, fades out (0.8 s) when a game starts and comes back where it left
+off on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it).
+The file is found in the sources' `data/`, else next to the executable (installed builds ship it there). The menu plays
+no song previews.
 
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines. Choose a difficulty: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
-  (x0.6, x0.8, x1: EXPERT is the full speed), and a **playlist**: down to the PLAYLIST row, left / right through the
-  playlists used before (most recent first) and the game's own; **+ ADD A PLAYLIST** opens a field where a YouTube
-  playlist link, a bare playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its
-  song count, and its title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in
-  `playlists.tsv` in the user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game
-  over: any key plays again, Esc goes back to the menu.
-- **The campaign** is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity (a game
-  level, fixed for the whole song) and its universe set by the campaign, higher with each stage and song, and with the
-  difficulty (EASY, NORMAL, EXPERT, chosen at the top of the campaign screen). The stages are 12 glass petals in a
-  rosette, numbered 1 to 12, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
+  (x0.6, x0.8, x1: EXPERT is the full speed), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
+  own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
+  small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
+  playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its song count, and its
+  title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in `playlists.tsv` in the
+  user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game over: any key plays
+  again, Esc goes back to the menu.
+- **Voyage** (the campaign) is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity
+  (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
+  with the difficulty (EASY, NORMAL, EXPERT, chosen at the top of the Voyage screen). The stages are 12 glass petals in
+  a rosette, numbered 1 to 12, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
   right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
-  reaches the difficulty; Enter opens the focused petal (a locked one only says so), fanning out its five songs: left /
-  right chooses one (a short preview plays, from its drop or chorus; a song not downloaded yet is fetched in the
-  background), Enter plays the stage from that song to its last one, Esc closes the petal. Surviving all five songs of
-  a run started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty
-  unlocks the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with
-  their best score) but the stage isn't cleared. A game over ends the run and goes back to the stages. The game
-  remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten (with the points scored
-  during each), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
+  reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
+  the petal, fanning out its five songs: left / right chooses one, Enter plays the stage from that song to its last
+  one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all five songs of a run
+  started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty unlocks
+  the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
+  best score) but the stage isn't cleared. A game over ends the run and goes back to the stages. The game remembers,
+  per difficulty, the stages cleared (with the run's score) and the songs beaten (with the points scored during
+  each), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter), and lowers its volume, for as long
 as the game over lasts.
@@ -200,22 +204,22 @@ as the game over lasts.
 | Option | |
 |---|---|
 | `--free` | free play straight away, without the menu |
-| `--difficulty easy\|normal\|expert` | free play's difficulty (default: expert), or a gravity multiplier such as `0.7`; also the campaign's |
-| `--stage S[:SONG]` | a campaign run straight away (stage S, from its song SONG) |
-| `--unlock` | unlock every campaign stage (saved) |
-| `--reset` | forget the campaign progress (prints what was forgotten) |
+| `--difficulty easy\|normal\|expert` | free play's difficulty (default: expert), or a gravity multiplier such as `0.7`; also Voyage's |
+| `--stage S[:SONG]` | a Voyage run straight away (stage S, from its song SONG) |
+| `--unlock` | unlock every Voyage stage (saved) |
+| `--reset` | forget the Voyage progress (prints what was forgotten) |
 
 Songs or playlists given on the command line play free play straight away, as before; so do the offline renders
 (`--review-shot`, `--clip`, `--analysis`, ...).
 
-The menu's universes run as real universe instances drawing their world without the board, at 640x360 (the focused
-one at 30 fps), with a snapshot of each kept in `~/.cache/zentris/menu-worlds/` for the ones not live. Without a
-display, `--menu-shot OUT.png [--menu-screen title|campaign|free] [--menu-hover S:SONG] [--menu-petal]` saves a menu
-screen (`--menu-petal`: the hovered stage's petal open) and `--menu-clip OUT.mp4` records a 34 s walk through the menu
-(needs ffmpeg); both can show made-up progress and playlists (`--menu-demo`, always on in clips, never saved). The
-menu's font, Josefin Sans, is OFL, in `src/embed/` with its licence.
+Without a display, `--menu-shot OUT.png [--menu-screen title|campaign|free] [--menu-hover S:SONG] [--menu-petal]`
+saves a menu screen (`--menu-petal`: the hovered stage's petal open; `ZEN_TEST_KEYS` presses keys before it) and
+`--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `ZEN_MENU_CLIP_SECONDS` changes its
+length), printing the menu's average CPU and GPU time per frame; both can show made-up progress and playlists
+(`--menu-demo`, always on in clips, never saved; `--menu-demo normal-done`: every stage cleared on NORMAL, the first
+five on EASY, none on EXPERT). The menu's font, Josefin Sans, is OFL, in `src/embed/` with its licence.
 
-### The campaign file
+### The Voyage file
 
 The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
 
@@ -233,7 +237,7 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
-else the copy built into it. The shipped campaign tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
+else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
 ends stage 12) on songs of the default playlist, its velocities rising from 1 to 8 (EASY), 2 to 13 (NORMAL) and 4 to
 20 (EXPERT): an arbitrary first draft, meant to be tuned.
 

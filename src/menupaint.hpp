@@ -7,6 +7,8 @@
 
 #include <glad/gl.h>
 
+#include "ugl.hpp"
+
 struct Col {
     float r = 1, g = 1, b = 1, a = 1;
 };
@@ -25,7 +27,8 @@ public:
     // A flat triangle, a colour per corner.
     void tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2);
     // A full-screen kaleidoscope folding two frames (mixed by `mixAB`) around (cx, cy) pixels into `segs` mirrored
-    // segments, turned by `rot`, cut into glass facets with lead lines, tinted toward `tint`.
+    // segments, turned by `rot`, cut into glass facets with lead lines, tinted toward `tint`; a null frame is replaced by a
+    // procedural pane of glass in the tint's hues. Drawn at a third of the resolution, then spread over the frame.
     void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level);
     // An arc of an ellipse (radians, 0 = right, clockwise on screen), as line segments.
     void arc(float cx, float cy, float rx, float ry, float a0, float a1, float width, Col c, float soft = 1.f);
@@ -46,11 +49,17 @@ public:
     // Text on its baseline at y; align -1 left, 0 center, 1 right; tracking in ems. Returns the width.
     float text(Font f, const std::string& s, float x, float y, float size, Col c, int align = -1, float tracking = 0.f);
     float width(Font f, const std::string& s, float size, float tracking = 0.f);
+    // The inked extent of a line set left-aligned at x = 0 (its first letter's left edge, its last letter's right edge:
+    // no side bearing, no trailing tracking), and the height of the capitals above the baseline.
+    void inkExtent(Font f, const std::string& s, float size, float tracking, float& left, float& right);
+    float capHeight(Font f, float size);
     void setAdditive(bool on);
 
 private:
     struct V { float x, y, lx, ly, hx, hy, r, g, b, a, rad, soft, lw, mode; };
     std::vector<V> verts_;
+    ugl::Target kalTgt_; // the kaleidoscope's low-resolution frame
+    GLuint upProg_ = 0;
     GLuint prog_ = 0, kalProg_ = 0, vao_ = 0, vbo_ = 0, curTex_ = 0;
     int w_ = 1, h_ = 1;
     bool additive_ = false;
