@@ -17,6 +17,7 @@ namespace {
 Input* g_input = nullptr;
 bool g_joystickEvent = false;
 void joystickCallback(int, int) { g_joystickEvent = true; }
+void charCallback(GLFWwindow*, unsigned int cp) { if (g_input) g_input->onChar(cp); }
 
 // Auto-repeat: delay before repeating, then the repeat interval (close to modern guideline handling).
 constexpr float DAS = 0.13f, ARR = 0.033f, SOFT_RATE = 0.033f;
@@ -54,6 +55,7 @@ void Input::init(GLFWwindow* w) {
     }
     g_input = this;
     glfwSetJoystickCallback(joystickCallback);
+    glfwSetCharCallback(w, charCallback);
     detectGamepad();
     if (jid_ >= 0) {
         active_ = Gamepad;
@@ -140,6 +142,12 @@ void Input::update(float dt) {
     kb[A_UI_RIGHT] = key(GLFW_KEY_RIGHT);
     kb[A_UI_OK] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER) || key(GLFW_KEY_SPACE);
     kb[A_UI_BACK] = key(GLFW_KEY_ESCAPE) || key(GLFW_KEY_BACKSPACE);
+    kb[A_UI_ENTER] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER);
+    kb[A_UI_ERASE] = key(GLFW_KEY_BACKSPACE);
+    kb[A_UI_DELETE] = key(GLFW_KEY_DELETE);
+    kb[A_UI_PASTE] = ctrl && letter('v');
+    typed_ = pending_;
+    pending_.clear();
 
     // Every connected controller is read and their presses combined: a Bluetooth controller that reconnected
     // can leave a stale duplicate device behind (listed first, sending nothing), which hid the live one.
@@ -230,7 +238,7 @@ void Input::update(float dt) {
         if (!prev_[i]) { repeat_[i] = 1; held_[i] = 0; acc_[i] = 0; continue; }
         held_[i] += dt;
         const bool seek = i == A_SEEK_BACK || i == A_SEEK_FWD;
-        const bool ui = i >= A_UI_UP && i <= A_UI_RIGHT;
+        const bool ui = (i >= A_UI_UP && i <= A_UI_RIGHT) || i == A_UI_ERASE;
         float delay = (i == A_SOFT) ? 0.f : seek ? 0.35f : ui ? 0.32f : DAS;
         float rate = (i == A_SOFT) ? SOFT_RATE : seek ? 0.2f : ui ? 0.09f : ARR;
         if (held_[i] >= delay) {
@@ -242,4 +250,9 @@ void Input::update(float dt) {
     if (down_[A_LEFT] && down_[A_RIGHT]) {
         if (held_[A_LEFT] < held_[A_RIGHT]) repeat_[A_RIGHT] = 0; else repeat_[A_LEFT] = 0;
     }
+}
+
+std::string Input::clipboard() const {
+    const char* c = win_ ? glfwGetClipboardString(win_) : nullptr;
+    return c ? std::string(c) : std::string();
 }

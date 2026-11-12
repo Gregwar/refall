@@ -172,6 +172,7 @@ add_executable(tetris-universe
   src/input.cpp
   src/headless.cpp
   src/campaign.cpp
+  src/playlists.cpp
   src/menu.cpp
   src/menupaint.cpp
   src/menustyles.cpp

@@ -14,10 +14,17 @@
 #include "campaign.hpp"
 #include "input.hpp"
 #include "menupaint.hpp"
+#include "playlists.hpp"
 
 class WorldPool;
 // The game's name, as the menus' title screens letter it (one place to change it).
-inline constexpr const char* GAME_TITLE = "Tetris Universe";
+inline constexpr const char* GAME_TITLE = "Refall";
+inline std::string gameTitle(bool upperCase) {
+    std::string s = GAME_TITLE;
+    if (upperCase)
+        for (char& c : s) c = (char)((c >= 'a' && c <= 'z') ? c - 32 : c);
+    return s;
+}
 
 // A colour per universe for the campaign's squares (the 8-bit palette, in order of first appearance).
 void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned char out[3]);
@@ -37,6 +44,7 @@ public:
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
         int difficulty = DIFF_EXPERT;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
+        std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
     };
 
     Menu();
@@ -48,8 +56,15 @@ public:
     Screen screen() const { return screen_; }
     void setFreeDifficulty(int d) { freeDiff_ = d; }
     void setCampaignDifficulty(int d) { diff_ = d; }
-    void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; }
+    void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
     void snap(); // the animated focus jumps to its place (screenshots)
+    // Free play's playlists (the KALEIDO free screen picks one); the store is the app's.
+    void setPlaylists(PlaylistStore* s) { playlists_ = s; }
+    bool editing() const { return editing_; }   // typing a playlist: letters are text, not shortcuts
+    bool fetching() const { return fetch_.valid(); }
+    bool fetchDone() const { return fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
+    // KALEIDO's campaign has two levels: the stage petals, then the songs of the opened petal.
+    void setPetalOpen(bool o) { petal_ = o; }
     // One frame of navigation; a choice ends the menu (the preview stops).
     Choice update(const Input& in, float dt);
     // Draws the screen over the whole bound framebuffer.
@@ -105,6 +120,18 @@ private:
     // eased focus (indices as floats) for the animated transitions
     float aTitle_ = 0, aFree_ = DIFF_EXPERT, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
     float level_ = 0; // the preview's loudness (backgrounds breathe with it)
+    // KALEIDO: the opened petal (its songs fanned out), eased
+    bool petal_ = false;
+    float aOpen_ = 0;
+    // free play's playlist row (KALEIDO): the remembered playlists, the default, "add one"; a text field to add one
+    PlaylistStore* playlists_ = nullptr;
+    int freeRow_ = 0, plSel_ = 0;
+    float aFreeRow_ = 0, aPl_ = 0;
+    bool editing_ = false, plMsgBad_ = false;
+    std::string editText_, plMsg_;
+    struct Fetched { bool ok = false; std::string url, title, error; int count = 0; };
+    std::future<Fetched> fetch_;
+    std::vector<PlaylistEntry> plChoices() const; // the playlists to pick from, the most recent first
     int texW_ = 0, texH_ = 0;
 
     // ---- state

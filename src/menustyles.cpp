@@ -161,8 +161,8 @@ void Menu::cosmicTitle() {
     p.glow(px, py, 60 * u_, hex(0x4de8ff, 0.5f));
     p.circle(px, py, 9 * u_, hex(0xdff8ff));
     p.setAdditive(false);
-    p.text(F::JOSEFIN_LIGHT, "TETRIS", cx, Y(400), 170 * u_, hex(0xffffff, 0.96f), 0, 0.32f);
-    p.text(F::JOSEFIN, "UNIVERSE", cx, Y(470), 32 * u_, hex(0x9fe8ff, 0.9f), 0, 0.9f);
+    p.text(F::JOSEFIN_LIGHT, gameTitle(true), cx, Y(400), 170 * u_, hex(0xffffff, 0.96f), 0, 0.32f);
+    p.text(F::JOSEFIN, "", cx, Y(470), 32 * u_, hex(0x9fe8ff, 0.9f), 0, 0.9f);
 
     const char* items[3] = {"CAMPAIGN", "FREE PLAY", "QUIT"};
     float wsel = 0;
@@ -360,8 +360,8 @@ void Menu::swissTitle() {
     const float sq = 74 * u_, g = 4 * u_, tx = X(1230 + 10 * std::sin(t * 0.18f)), ty = Y(250);
     const int T[4][2] = {{0, 0}, {1, 0}, {2, 0}, {1, 1}};
     for (auto& c : T) p.rrect(tx + c[0] * (sq + g), ty + c[1] * (sq + g), sq, sq, 0, hex(INK));
-    p.text(F::INTER_BOLD, "Tetris", X(104), Y(330), 200 * u_, hex(INK), -1, -0.03f);
-    p.text(F::INTER_BOLD, "Universe", X(104), Y(540), 200 * u_, hex(RED), -1, -0.03f);
+    p.text(F::INTER_BOLD, GAME_TITLE, X(104), Y(330), 200 * u_, hex(INK), -1, -0.03f);
+    p.text(F::INTER_BOLD, "", X(104), Y(540), 200 * u_, hex(RED), -1, -0.03f);
     p.text(F::INTER, "A music-driven Tetris. Sixty universes, twelve stages, five songs each.", X(112), Y(620), 24 * u_, hex(INK, 0.8f));
     const char* items[3] = {"Campaign", "Free play", "Quit"};
     float wsel = 0;
@@ -558,7 +558,7 @@ void Menu::paperTitle() {
             p.rrectLine(bx + c[0] * q, by + c[1] * q, q - 3 * u_, q - 3 * u_, 6 * u_, 2 * u_, hex(PC[i], 0.4f), 2 * u_);
         }
     }
-    p.text(F::KALAM, "Tetris Universe", cx, Y(400), 150 * u_, hex(W_INK, 0.92f), 0);
+    p.text(F::KALAM, GAME_TITLE, cx, Y(400), 150 * u_, hex(W_INK, 0.92f), 0);
     p.text(F::YRSA, "a journey through sixty painted worlds", cx, Y(475), 34 * u_, hex(W_SEPIA, 0.85f), 0);
     const char* items[3] = {"Campaign", "Free play", "Quit"};
     float wsel = 0;
@@ -753,8 +753,8 @@ void glowText(Painter& p, F f, const std::string& s, float x, float y, float siz
 void Menu::glassTitle() {
     Painter& p = paint_;
     const float cx = X(960);
-    glowText(p, F::MANROPE, "TETRIS", cx, Y(330), 150 * u_, hex(PINK, 0.9f), hex(0xffffff), 0, 0.18f, u_);
-    p.text(F::MANROPE_LIGHT, "UNIVERSE", cx, Y(400), 36 * u_, hex(CYAN, 0.95f), 0, 0.8f);
+    glowText(p, F::MANROPE, gameTitle(true), cx, Y(330), 150 * u_, hex(PINK, 0.9f), hex(0xffffff), 0, 0.18f, u_);
+    p.text(F::MANROPE_LIGHT, "", cx, Y(400), 36 * u_, hex(CYAN, 0.95f), 0, 0.8f);
     const float bx = cx - 310 * u_, by = Y(500), bw = 620 * u_;
     card(p, bx, by, bw, 330 * u_, 32 * u_, u_);
     const float py = Y(530 + aTitle_ * 92);

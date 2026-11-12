@@ -93,11 +93,12 @@ struct Options {
     int difficulty = DIFF_EXPERT; bool difficultyGiven = false;
     float speedMul = 1.f;      // free play's gravity multiplier (--difficulty: EXPERT 1, or a number)
     std::string stage;         // --stage S[:SONG]: a campaign run straight away
-    std::string campaignPath, progressPath;
+    std::string campaignPath, progressPath, playlistsPath;
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
     int menuStyle = Menu::KALEIDO; // --menu-style: the menus' look (Menu::Style), the kaleidoscope by default
-    bool menuDemo = false;     // --menu-demo: made-up campaign progress (never saved), for shots and clips
+    bool menuDemo = false;
+    bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
 // Test hook: ZEN_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
@@ -168,6 +169,7 @@ static void usage() {
         "  --reset              forget the campaign progress (stages cleared, best scores)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
+        "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
         "                       then exit (testing)\n"
         "  --menu-style S       the menus' look: 1 arcade (default), 2 cosmic, 3 swiss, 4 watercolour, 5 glass,\n"
@@ -205,6 +207,7 @@ private:
     bool menuEnabled_ = false; // started on the title screen: game overs and Q go back to it
     Campaign campaign_;
     Progress progress_;
+    PlaylistStore playlists_;
     Menu menu_;
     float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
     // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
@@ -934,7 +937,7 @@ int App::run() {
         GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
         int ww = opt_.width, wh = opt_.height;
         if (mon) { const GLFWvidmode* vm = glfwGetVideoMode(mon); ww = vm->width; wh = vm->height; }
-        win_ = glfwCreateWindow(ww, wh, "Tetris Universe", mon, nullptr);
+        win_ = glfwCreateWindow(ww, wh, GAME_TITLE, mon, nullptr);
         if (win_) break;
         glfwTerminate();
         if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
@@ -951,6 +954,8 @@ int App::run() {
 
     campaign_.load(opt_.campaignPath);
     progress_.load(opt_.progressPath);
+    playlists_.load(opt_.playlistsPath);
+    menu_.setPlaylists(&playlists_);
     menu_.setFreeDifficulty(opt_.difficulty);
     menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
     menu_.setStyle(opt_.menuStyle);
@@ -1035,7 +1040,7 @@ int App::run() {
 
         // ---- The menus.
         if (mode_ == MODE_MENU) {
-            if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
+            if (input_.pressed(A_FULLSCREEN) && !menu_.editing()) toggleFullscreen();
             const Menu::Choice c = menu_.update(input_, dt);
             fbSize(fbw, fbh);
             if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
@@ -1582,7 +1587,8 @@ void App::beginSession(const Menu::Choice& c) {
             forcedUniverse_ = universes::parse(st.songs[c.song].universe, &forcedVariant_);
         std::printf("[campaign] stage %d from song %d on %s\n", c.stage + 1, c.song + 1, difficultyName(c.difficulty));
     } else {
-        paths = opt_.paths;
+        paths = c.playlist.empty() ? opt_.paths : std::vector<std::string>{c.playlist};
+        if (!c.playlist.empty()) std::printf("[app] free play on %s\n", c.playlist.c_str());
         speedMul_ = opt_.difficultyGiven && c.difficulty == opt_.difficulty ? opt_.speedMul : freePlayMultiplier(c.difficulty);
         std::printf("[app] free play on %s (gravity x%.2f)\n", difficultyName(c.difficulty), speedMul_);
     }
@@ -1702,6 +1708,7 @@ int App::runMenuShot() {
     if (opt_.menuDemo || !opt_.menuClip.empty()) {
         // made-up progress, in memory only: stages 1 and 2 cleared, stage 3 started, the rest locked
         progress_ = Progress{};
+        playlists_.demo();
         const int pts[5] = {8210, 9420, 10020, 9900, 10690};
         for (int k = 0; k < 5; k++) {
             progress_.setBeaten(0, k, DIFF_NORMAL, pts[k]);
@@ -1723,6 +1730,8 @@ int App::runMenuShot() {
         std::sscanf(opt_.menuHover.c_str(), "%d:%d", &st, &sg);
         menu_.setCursor(std::max(0, st - 1), std::max(0, sg - 1));
     }
+    if (opt_.menuPetal) menu_.setPetalOpen(true);
+    menu_.setPlaylists(&playlists_);
     menu_.snap();
     int w, h;
     fbSize(w, h);
@@ -1736,10 +1745,27 @@ int App::runMenuShot() {
             {14.8, "right"}, {15.6, "left"}, {16.4, "left"}, {17.2, "right"}, {18.0, "down"},
             {19.2, "back"}, {20.2, "down"}, {21.0, "ok"}, {22.0, "up"}, {22.8, "up"}, {23.6, "down"}, {24.4, "down"},
             {25.6, "back"}, {26.6, "up"}};
-        const double END = 28.0;
+        // KALEIDO: petals focused (one locked), one opened and its songs browsed, closed, another opened, the
+        // difficulties; then free play: a difficulty, the playlists, a playlist link typed and read
+        static const std::pair<double, const char*> KWALK[] = {
+            {1.2, "down"}, {1.9, "up"}, {2.7, "ok"},
+            {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "ok"},
+            {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "ok"},
+            {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
+            {21.9, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
+            {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
+        const bool kal = opt_.menuStyle == Menu::KALEIDO;
+        const double END = kal ? 34.5 : 28.0;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
-        if (keys.empty())
-            for (auto& [t, k] : WALK) keys.push_back({t, k});
+        if (keys.empty()) {
+            if (kal) {
+                for (auto& [t, k] : KWALK) keys.push_back({t, k});
+                const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
+                for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});
+            } else {
+                for (auto& [t, k] : WALK) keys.push_back({t, k});
+            }
+        }
         std::string ff = std::getenv("ZENTRIS_FFMPEG") ? std::getenv("ZENTRIS_FFMPEG") : platform::findExecutable("ffmpeg");
         if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); return 1; }
         char spec[160];
@@ -1751,18 +1777,23 @@ int App::runMenuShot() {
         FILE* pipe = platform::openWrite(cmd);
         if (!pipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); return 1; }
         static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
-            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}};
+            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"enter", A_UI_ENTER}};
         std::vector<unsigned char> px((size_t)w * h * 3);
         const int frames = (int)(END * 60);
         for (int f = 0; f < frames; f++) {
             const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
             input_.testFrame();
             for (auto& [t, k] : keys)
-                if (t >= t0 && t < t1)
+                if (t >= t0 && t < t1) {
+                    if (k.rfind("type:", 0) == 0) input_.testType(k.substr(5));
                     for (auto& [n, a] : NAMES)
                         if (k == n) input_.testPress(a);
+                }
             const Menu::Choice c = menu_.update(input_, 1.f / 60.f);
             (void)c; // a choice (PLAY) is not followed: the walk stays in the menus
+            // a playlist being read: the video waits for it (up to 30 s)
+            for (int i = 0; i < 1500 && menu_.fetching() && !menu_.fetchDone(); i++)
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
             menu_.render(w, h);
             glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
@@ -1834,6 +1865,8 @@ int main(int argc, char** argv) {
         else if (a == "--stage" && i + 1 < argc) o.stage = argv[++i];
         else if (a == "--campaign" && i + 1 < argc) o.campaignPath = argv[++i];
         else if (a == "--progress" && i + 1 < argc) o.progressPath = argv[++i];
+        else if (a == "--playlists" && i + 1 < argc) o.playlistsPath = argv[++i];
+        else if (a == "--menu-petal") o.menuPetal = true;
         else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
         else if (a == "--menu-clip" && i + 1 < argc) o.menuClip = argv[++i];
         else if (a == "--menu-demo") o.menuDemo = true;

@@ -466,13 +466,13 @@ void Cosmos::titleScreen() {
         p.setAdditive(true);
         p.glow(cx, Y(290), 420 * u, hex(0x6a3cff, 0.15f));
         p.setAdditive(false);
-        p.text(F::JOSEFIN_LIGHT, "TETRIS", cx, Y(330), 170 * u, hex(0xffffff, 0.97f), 0, 0.32f);
-        p.text(F::JOSEFIN, "UNIVERSE", cx, Y(400), 32 * u, th.accent, 0, 0.9f);
+        p.text(F::JOSEFIN_LIGHT, gameTitle(true), cx, Y(330), 170 * u, hex(0xffffff, 0.97f), 0, 0.32f);
+        p.text(F::JOSEFIN, "", cx, Y(400), 32 * u, th.accent, 0, 0.9f);
         break;
     }
     case 1: {
         orrery();
-        p.text(F::JURA_LIGHT, "TETRIS UNIVERSE", cx, Y(200), 110 * u, hex(0xfff4e0), 0, 0.2f);
+        p.text(F::JURA_LIGHT, gameTitle(true), cx, Y(200), 110 * u, hex(0xfff4e0), 0, 0.2f);
         p.text(F::JURA, "AN ORRERY OF SIXTY WORLDS", cx, Y(258), 22 * u, withA(th.accent, 0.9f), 0, 0.6f);
         break;
     }
@@ -496,7 +496,7 @@ void Cosmos::titleScreen() {
         p.setAdditive(true);
         p.glow(cx, Y(320), 300 * u, hex(0xffcf7a, 0.1f));
         p.setAdditive(false);
-        p.text(F::CORMORANT_ITALIC, "Tetris Universe", cx, Y(345), 130 * u, th.ink, 0);
+        p.text(F::CORMORANT_ITALIC, GAME_TITLE, cx, Y(345), 130 * u, th.ink, 0);
         p.text(F::MARCELLUS, "A CELESTIAL ATLAS OF SIXTY WORLDS", cx, Y(405), 20 * u, withA(th.gold, 0.85f), 0, 0.4f);
         break;
     }
@@ -506,22 +506,22 @@ void Cosmos::titleScreen() {
         // a chrome title: dark outline, a gradient fill, slanted
         for (int i = 0; i < 8; i++) {
             const float a = i * 0.785f;
-            p.textFx(F::INTER_BOLD, "TETRIS", cx + std::cos(a) * 5 * u, Y(330) + std::sin(a) * 5 * u, 190 * u, hex(0x1a0033), hex(0x1a0033), 0, 0.04f, 0.22f);
+            p.textFx(F::INTER_BOLD, gameTitle(true), cx + std::cos(a) * 5 * u, Y(330) + std::sin(a) * 5 * u, 190 * u, hex(0x1a0033), hex(0x1a0033), 0, 0.04f, 0.22f);
         }
         p.setAdditive(true);
-        p.textFx(F::INTER_BOLD, "TETRIS", cx, Y(330), 190 * u, hex(0xff3fb4, 0.25f), hex(0xff3fb4, 0.25f), 0, 0.04f, 0.22f);
+        p.textFx(F::INTER_BOLD, gameTitle(true), cx, Y(330), 190 * u, hex(0xff3fb4, 0.25f), hex(0xff3fb4, 0.25f), 0, 0.04f, 0.22f);
         p.setAdditive(false);
-        p.textFx(F::INTER_BOLD, "TETRIS", cx, Y(330), 190 * u, hex(0xe8fbff), hex(0x6a5cff), 0, 0.04f, 0.22f);
-        p.textFx(F::INTER_BOLD, "TETRIS", cx, Y(330) - 70 * u, 190 * u, hex(0xffffff, 0.0f), hex(0xffffff, 0.0f), 0, 0.04f, 0.22f);
+        p.textFx(F::INTER_BOLD, gameTitle(true), cx, Y(330), 190 * u, hex(0xe8fbff), hex(0x6a5cff), 0, 0.04f, 0.22f);
+        p.textFx(F::INTER_BOLD, gameTitle(true), cx, Y(330) - 70 * u, 190 * u, hex(0xffffff, 0.0f), hex(0xffffff, 0.0f), 0, 0.04f, 0.22f);
         p.line(cx - 330 * u, Y(262), cx + 360 * u, Y(262), 2 * u, hex(0xffffff, 0.5f));
         p.setAdditive(true);
         for (int i = 0; i < 8; i++) {
             const float a = i * 0.785f;
-            p.textFx(F::MANROPE, "UNIVERSE", cx + 40 * u + std::cos(a) * 4 * u, Y(410) + std::sin(a) * 4 * u, 52 * u, hex(0x3ff0ff, 0.2f), hex(0x3ff0ff, 0.2f), 0, 0.5f, 0.2f);
+            p.textFx(F::MANROPE, "", cx + 40 * u + std::cos(a) * 4 * u, Y(410) + std::sin(a) * 4 * u, 52 * u, hex(0x3ff0ff, 0.2f), hex(0x3ff0ff, 0.2f), 0, 0.5f, 0.2f);
         }
         p.setAdditive(false);
-        p.textFx(F::MANROPE, "UNIVERSE", cx + 43 * u, Y(413), 52 * u, hex(0x12002a, 0.7f), hex(0x12002a, 0.7f), 0, 0.5f, 0.2f);
-        p.textFx(F::MANROPE, "UNIVERSE", cx + 40 * u, Y(410), 52 * u, hex(0xffffff), hex(0xa8f8ff), 0, 0.5f, 0.2f);
+        p.textFx(F::MANROPE, "", cx + 43 * u, Y(413), 52 * u, hex(0x12002a, 0.7f), hex(0x12002a, 0.7f), 0, 0.5f, 0.2f);
+        p.textFx(F::MANROPE, "", cx + 40 * u, Y(410), 52 * u, hex(0xffffff), hex(0xa8f8ff), 0, 0.5f, 0.2f);
         break;
     }
     default: {
@@ -529,8 +529,8 @@ void Cosmos::titleScreen() {
         kawaii(X(1600), Y(300 + 14 * std::sin(t * 1.0f + 2)), 90 * u, hex(0xb8e6ff), 2, true, 0.f, true);
         kawaii(X(1450), Y(700 + 10 * std::sin(t * 1.2f + 1)), 50 * u, hex(0xc8f2c8), 3, std::fmod(t, 9.f) > 3.f, 0.f, false);
         kawaii(X(470), Y(720 + 10 * std::sin(t * 0.9f + 4)), 44 * u, hex(0xffe0a0), 4, true, 0.f, true);
-        p.textFx(F::COMFORTAA, "Tetris", X(960), Y(310), 150 * u, hex(0xff7eb6), hex(0xb07aff), 0, 0.02f);
-        p.textFx(F::COMFORTAA, "Universe", X(960), Y(410), 80 * u, hex(0x7ab8ff), hex(0x9a7aff), 0, 0.04f);
+        p.textFx(F::COMFORTAA, GAME_TITLE, X(960), Y(310), 150 * u, hex(0xff7eb6), hex(0xb07aff), 0, 0.02f);
+        p.textFx(F::COMFORTAA, "", X(960), Y(410), 80 * u, hex(0x7ab8ff), hex(0x9a7aff), 0, 0.04f);
         break;
     }
     }
