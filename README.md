@@ -5,8 +5,8 @@ playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, 
 it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
 
 ```sh
-uvx tetris-universe            # the default playlist
-uvx tetris-universe ~/Music    # or any folders, files and YouTube URLs
+uvx tetris-universe            # the title screen: CAMPAIGN or FREE PLAY (the default playlist)
+uvx tetris-universe ~/Music    # free play on any folders, files and YouTube URLs
 ```
 
 ## Universes
@@ -160,6 +160,63 @@ Disabled for now (not built; their code stays in the repository):
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
 
+## Modes
+
+Started with no songs, the game opens on a little 8-bit title screen: **CAMPAIGN**, **FREE PLAY** or QUIT (arrows or
+D-pad, Enter / A to choose, Esc / B to go back).
+
+- **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
+  rising with the lines. Choose a difficulty first: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
+  (x0.6, x0.8, x1: EXPERT is the full speed). A game over: any key plays again, Esc goes back to the menu.
+- **The campaign** is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity (a game
+  level, fixed for the whole song) and its universe set by the campaign, higher with each stage and song, and with the
+  difficulty (EASY, NORMAL, EXPERT, chosen on the stages screen). Each stage is a line of squares, one per song,
+  coloured by its universe; hovering a square plays a short preview of the song (from its drop or chorus; a song not
+  downloaded yet is fetched in the background). Choose a square to play the stage from that song to its last one.
+  Surviving all five songs of a run started from the first one **clears** the stage and unlocks the next one (a stage
+  cleared on any difficulty unlocks the next). A run started from a later song is fine for practice: the songs it
+  survives count as beaten (with their best score) but the stage isn't cleared. A game over ends the run and goes back
+  to the stages. The game remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten
+  (with the points scored during each), in `campaign-progress.tsv` in the user data folder
+  (`~/.local/share/zentris/` on Linux).
+
+A game over muffles the song like the slow-motion bonus does (a low-pass filter), and lowers its volume, for as long
+as the game over lasts.
+
+| Option | |
+|---|---|
+| `--free` | free play straight away, without the menu |
+| `--difficulty easy\|normal\|expert` | free play's difficulty (default: expert), or a gravity multiplier such as `0.7`; also the campaign's |
+| `--stage S[:SONG]` | a campaign run straight away (stage S, from its song SONG) |
+| `--unlock` | unlock every campaign stage (saved) |
+| `--reset` | forget the campaign progress (prints what was forgotten) |
+
+Songs or playlists given on the command line play free play straight away, as before; so do the offline renders
+(`--review-shot`, `--clip`, `--analysis`, ...). `--menu-shot OUT.png [--menu-screen title|campaign|free]
+[--menu-hover S:SONG]` saves a menu screen without a display.
+
+### The campaign file
+
+The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
+
+```
+# stage  song  id           universe             easy  normal  expert  title
+1        1     h1l4pDXbkic  PRISM                1.0   2.0     4.0     The XX - You Got The Love
+12       5     8ayH60ET4U0  SKY WHALE:MOONLIGHT  8.0   13.0    20.0    ODESZA - Line Of Sight
+```
+
+- `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
+- `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
+- `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
+- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 20
+  (the plateau, x10 gravity); decimals are fine.
+- `title`: shown in the menu and the title card.
+
+The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
+else the copy built into it. The shipped campaign tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
+ends stage 12) on songs of the default playlist, its velocities rising from 1 to 8 (EASY), 2 to 13 (NORMAL) and 4 to
+20 (EXPERT): an arbitrary first draft, meant to be tuned.
+
 ## Install
 
 [![PyPI](https://img.shields.io/pypi/v/zentris)](https://pypi.org/project/zentris/)
@@ -195,7 +252,7 @@ missing from it still works with a generic layout.
 | Seek ±10 s in the song (testing) | Ctrl+Shift+Left/Right | |
 | Next level (debugging) | L | |
 | Fill the bonus gauge (testing) | B | |
-| Pause | Esc / P (Q quits while paused) | Start |
+| Pause | Esc / P (Q quits while paused, or goes back to the menu) | Start |
 | Fullscreen | F / F11 | |
 
 ## Tools

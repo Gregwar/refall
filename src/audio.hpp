@@ -46,6 +46,9 @@ public:
     // Muffle the song (sound effects stay clear): a low-pass that keeps the bass and attenuates the high tones,
     // sliding in or out over `seconds`.
     void setMuffled(bool on, float seconds = 0.6f) { muffleGlide_ = seconds; muffleTarget_ = on ? 1.f : 0.f; }
+    // The song's volume (sound effects keep theirs), sliding there over `seconds`: 1 = full. With setMuffled, the
+    // game over's sound (the bonus' low-pass, quieter).
+    void setSongGain(float g, float seconds = 0.6f) { gainGlide_ = seconds; gainTarget_ = g; }
     // One-shot sound mixed over the song (interleaved stereo at the engine rate); heard even when paused.
     void playSample(std::shared_ptr<const std::vector<float>> pcm, float gain = 1.f);
 
@@ -74,5 +77,7 @@ private:
     std::atomic<float> muffleTarget_{0.f}, muffleGlide_{0.6f};
     float muffle_ = 0;                        // current muffle amount 0..1 (audio thread)
     float lpZ_[2][2] = {{0, 0}, {0, 0}};      // low-pass biquad state, per channel
+    std::atomic<float> gainTarget_{1.f}, gainGlide_{0.6f};
+    float gain_ = 1.f;                        // current song gain (audio thread)
     void applyMuffle(float* out, unsigned int frames);
 };

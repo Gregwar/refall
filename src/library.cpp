@@ -63,9 +63,22 @@ void Library::scan(const std::vector<std::string>& paths) {
     files_.swap(unique);
 }
 
+void Library::clear() {
+    // a std::async future blocks in its destructor until its task ends: keep it alive, unused
+    static std::vector<std::future<std::shared_ptr<Track>>> abandoned;
+    if (pending_.valid()) abandoned.push_back(std::move(pending_));
+    files_.clear();
+    queue_.clear();
+    lastPlayed_ = (size_t)-1;
+    loadingTitle_.clear();
+    once_ = filled_ = false;
+}
+
 std::string Library::pickNext(uint64_t seed) {
     if (files_.empty()) return {};
+    if (queue_.empty() && once_ && filled_) return {};
     if (queue_.empty()) {
+        filled_ = true;
         // queue_ is consumed from the back: fill it reversed so the list plays in its order.
         for (size_t i = files_.size(); i > 0; i--) queue_.push_back(i - 1);
         if (shuffle_) {
@@ -93,6 +106,7 @@ std::string Library::pickNext(uint64_t seed) {
 void Library::prefetch(uint64_t seed) {
     if (pending_.valid() || files_.empty()) return;
     std::string path = pickNext(seed);
+    if (path.empty()) return;
     loadingTitle_ = isYoutubeEntry(path) ? youtubeEntryTitle(path) : fs::path(path).stem().string();
     std::printf("[library] preparing next song: %s%s\n", loadingTitle_.c_str(),
                 isYoutubeEntry(path) && !isYoutubeCached(path) ? " (downloading)" : "");

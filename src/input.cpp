@@ -134,6 +134,12 @@ void Input::update(float dt) {
     kb[A_HUD] = letter('h');
     kb[A_DEBUG_LEVEL] = letter('l');
     kb[A_DEBUG_BONUS] = letter('b');
+    kb[A_UI_UP] = key(GLFW_KEY_UP);
+    kb[A_UI_DOWN] = key(GLFW_KEY_DOWN);
+    kb[A_UI_LEFT] = key(GLFW_KEY_LEFT);
+    kb[A_UI_RIGHT] = key(GLFW_KEY_RIGHT);
+    kb[A_UI_OK] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER) || key(GLFW_KEY_SPACE);
+    kb[A_UI_BACK] = key(GLFW_KEY_ESCAPE) || key(GLFW_KEY_BACKSPACE);
 
     // Every connected controller is read and their presses combined: a Bluetooth controller that reconnected
     // can leave a stale duplicate device behind (listed first, sending nothing), which hid the live one.
@@ -196,6 +202,12 @@ void Input::update(float dt) {
             pad[A_PAUSE] |= b(GLFW_GAMEPAD_BUTTON_START);
             pad[A_NEXT_SONG] |= b(GLFW_GAMEPAD_BUTTON_BACK);
             pad[A_HUD] |= b(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB);
+            pad[A_UI_UP] |= b(GLFW_GAMEPAD_BUTTON_DPAD_UP) || (sy && ay < 0);
+            pad[A_UI_DOWN] |= b(GLFW_GAMEPAD_BUTTON_DPAD_DOWN) || (sy && ay > 0);
+            pad[A_UI_LEFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_LEFT) || (sx && ax < 0);
+            pad[A_UI_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
+            pad[A_UI_OK] |= b(GLFW_GAMEPAD_BUTTON_A) || b(GLFW_GAMEPAD_BUTTON_START);
+            pad[A_UI_BACK] |= b(GLFW_GAMEPAD_BUTTON_B);
         }
     }
 
@@ -218,8 +230,9 @@ void Input::update(float dt) {
         if (!prev_[i]) { repeat_[i] = 1; held_[i] = 0; acc_[i] = 0; continue; }
         held_[i] += dt;
         const bool seek = i == A_SEEK_BACK || i == A_SEEK_FWD;
-        float delay = (i == A_SOFT) ? 0.f : seek ? 0.35f : DAS;
-        float rate = (i == A_SOFT) ? SOFT_RATE : seek ? 0.2f : ARR;
+        const bool ui = i >= A_UI_UP && i <= A_UI_RIGHT;
+        float delay = (i == A_SOFT) ? 0.f : seek ? 0.35f : ui ? 0.32f : DAS;
+        float rate = (i == A_SOFT) ? SOFT_RATE : seek ? 0.2f : ui ? 0.09f : ARR;
         if (held_[i] >= delay) {
             acc_[i] += dt;
             while (acc_[i] >= rate) { acc_[i] -= rate; repeat_[i]++; }

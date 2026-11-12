@@ -67,7 +67,7 @@ public:
     void debugFillBoard(uint64_t seed);
     // Debugging: add the lines needed to reach the next level.
     void skipToNextLevel() {
-        if (level() < MAX_LEVEL) lines_ += LINES_PER_LEVEL - lines_ % LINES_PER_LEVEL;
+        if (fixedLevel_ <= 0.f && level() < MAX_LEVEL) lines_ += LINES_PER_LEVEL - lines_ % LINES_PER_LEVEL;
     }
 
     // Queries
@@ -91,8 +91,16 @@ public:
     int lines() const { return lines_; }
     // Level: 1 + one per 20 lines, plateau at MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at the plateau.
     static constexpr int MAX_LEVEL = 20, LINES_PER_LEVEL = 20;
-    int level() const { return std::min(MAX_LEVEL, 1 + lines_ / LINES_PER_LEVEL); }
-    float difficulty() const { return (level() - 1) / float(MAX_LEVEL - 1); }
+    // A fixed level (the campaign: each song's velocity is set by the campaign data, lines don't raise it) may be
+    // fractional (e.g. 7.5); 0 goes back to levels rising with lines.
+    int level() const {
+        return fixedLevel_ > 0.f ? std::clamp((int)(fixedLevel_ + 0.5f), 1, MAX_LEVEL) : std::min(MAX_LEVEL, 1 + lines_ / LINES_PER_LEVEL);
+    }
+    float difficulty() const {
+        return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, 1.f) : (level() - 1) / float(MAX_LEVEL - 1);
+    }
+    void setFixedLevel(float level) { fixedLevel_ = level; }
+    float fixedLevel() const { return fixedLevel_; }
     int best() const { return best_; }
     int combo() const { return combo_; }
 
@@ -150,6 +158,7 @@ private:
     int bonusLines_ = 0; // gauge steps charged
     bool bonusActive_ = false, lastWasTetris_ = false;
     float bonusLeft_ = 0;
+    float fixedLevel_ = 0;
     void endBonus();
     std::vector<GameEvent> events_;
 };

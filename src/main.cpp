@@ -12,12 +12,15 @@
 #include <filesystem>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "audio.hpp"
+#include "campaign.hpp"
 #include "game.hpp"
 #include "input.hpp"
 #include "library.hpp"
+#include "menu.hpp"
 #include "platform.hpp"
 #include "renderer.hpp"
 #include "songplan.hpp"
@@ -83,7 +86,39 @@ struct Options {
     std::string reviewPath; // --review-shot: one snapshot of a song scene with a filled board, then exit
     int reviewLevel = -1;   // scene level to show (0 calm, 1 mid, 2 peak), -1 any
     int width = 1600, height = 900;
+    // Modes: the title screen (the default when the game is started with no songs and no offline render), free
+    // play straight away (--free, or songs given), or a campaign stage straight away (--stage).
+    bool menu = false;         // start on the title screen
+    bool menuEnabled = false;  // game overs and Q go back to the menu (the title screen or --stage, when playing)
+    int difficulty = DIFF_EXPERT; bool difficultyGiven = false;
+    float speedMul = 1.f;      // free play's gravity multiplier (--difficulty: EXPERT 1, or a number)
+    std::string stage;         // --stage S[:SONG]: a campaign run straight away
+    std::string campaignPath, progressPath;
+    std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
 };
+
+// Test hook: ZEN_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
+// with no sound, the songs on a simulated clock; ZEN_TEST_TAIL=S starts each song S seconds before its end,
+// ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit) at T seconds of the run,
+// ZEN_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, ZEN_TEST_QUIT=T stops the run at T seconds.
+static bool testPlay() {
+    static const bool on = std::getenv("ZEN_TEST_PLAY") != nullptr;
+    return on;
+}
+static std::vector<std::pair<double, std::string>> testList(const char* env) {
+    std::vector<std::pair<double, std::string>> out;
+    const char* v = std::getenv(env);
+    std::string s = v ? v : "";
+    for (size_t a = 0; a < s.size();) {
+        size_t b = s.find(',', a);
+        if (b == std::string::npos) b = s.size();
+        const std::string item = s.substr(a, b - a);
+        const size_t c = item.find(':');
+        if (c != std::string::npos) out.push_back({std::atof(item.substr(0, c).c_str()), item.substr(c + 1)});
+        a = b + 1;
+    }
+    return out;
+}
 
 // Test hook: ZEN_WARMUP=S plays S seconds (default 12) before a shot or a clip, so that the board fills and a
 // universe that accumulates (FLUO's paint) has time to build up.
@@ -120,7 +155,18 @@ static void usage() {
         "                       --clip-at SEC records around that song time instead of the drop, --clip-break around\n"
         "                       the break between the first song and the next (from 9 s before its end)\n"
         "  --analysis OUT.json  write the first song's analysis (beats, downbeat, structure, scene levels, first\n"
-        "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n");
+        "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n"
+        "modes (with no songs and no option above, the game opens on its title screen: CAMPAIGN, FREE PLAY):\n"
+        "  --free               free play straight away, without the menu (also when songs are given)\n"
+        "  --difficulty D       easy, normal or expert (default), or a gravity multiplier (e.g. 0.7): free play's\n"
+        "                       speed (EASY x0.6, NORMAL x0.8, EXPERT x1), the campaign's difficulty\n"
+        "  --stage S[:SONG]     a campaign run straight away: stage S (1..12) from its song SONG (default 1)\n"
+        "  --unlock             unlock every campaign stage (saved)\n"
+        "  --reset              forget the campaign progress (stages cleared, best scores)\n"
+        "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
+        "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
+        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
+        "                       then exit (testing)\n");
 }
 
 class App {
@@ -146,6 +192,32 @@ private:
     void toggleFullscreen();
     std::vector<HudText> buildHud(float dt);
     void updateBreak(float dt, const std::vector<HudText>& hud);
+
+    // ---- Modes: the menu, free play, a campaign run.
+    enum Mode { MODE_MENU, MODE_FREE, MODE_CAMPAIGN } mode_ = MODE_FREE;
+    bool menuEnabled_ = false; // started on the title screen: game overs and Q go back to it
+    Campaign campaign_;
+    Progress progress_;
+    Menu menu_;
+    float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
+    // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
+    struct Run {
+        int stage = 0, from = 0, diff = DIFF_NORMAL, current = -1;
+        int songStartScore = 0;
+        bool survived = false;  // the current song was survived (recorded)
+        bool finishing = false; // the stage's last song was survived: the run ends with its outro
+    } run_;
+    bool muffleWas_ = false;
+    std::string testShot_; // ZEN_TEST_SHOTS: a screenshot of this frame
+    void beginSession(const Menu::Choice& c);
+    void toMenu(Menu::Screen s, const std::string& msg = "", const std::string& sub = "", bool bad = false);
+    void campaignSongStarted();
+    void campaignSongSurvived();
+    void campaignEnd();
+    int runMenuShot();
+    const CampaignStage* runStage() const {
+        return mode_ == MODE_CAMPAIGN && run_.stage < campaign_.size() ? &campaign_.stages()[run_.stage] : nullptr;
+    }
 
     // The break between songs: a little before a song ends the game freezes and fades away with its HUD, the
     // world stays alone a moment, then fades to black; the next song starts on the black with its title and
@@ -250,6 +322,7 @@ private:
 void App::startTrack(std::shared_ptr<Track> t) {
     bool first = !track_;
     track_ = std::move(t);
+    if (mode_ == MODE_CAMPAIGN) campaignSongStarted();
     audio_.play(track_);
     if (first && showHelp_) helpTimer_ = 14.f; // show controls once the music starts
     trackAge_ = 0;
@@ -258,6 +331,8 @@ void App::startTrack(std::shared_ptr<Track> t) {
     pace_ = -1;
     lastSongBeat_ = -1;
     simSongTime_ = 0;
+    if (testPlay() && std::getenv("ZEN_TEST_TAIL"))
+        simSongTime_ = std::max(0.0, track_->duration() - std::atof(std::getenv("ZEN_TEST_TAIL")));
     std::printf("[app] now playing: %s (%s)\n", track_->title.c_str(), track_->path.c_str());
     sceneCounter_++;
     computePhases();
@@ -501,7 +576,7 @@ void App::updateGravity(double songTime, float dt) {
     if (gameRate_ > 0.999f) gameRate_ = 1.f;
     if (!track_ || songFinished()) {
         fallbackTimer_ += dt * gameRate_;
-        if (fallbackTimer_ > 0.9f * (1.f - 0.45f * diff)) { fallbackTimer_ = 0; game_.gravityStep(); }
+        if (fallbackTimer_ * speedMul_ > 0.9f * (1.f - 0.45f * diff)) { fallbackTimer_ = 0; game_.gravityStep(); }
         return;
     }
     const Analysis& an = track_->analysis;
@@ -517,7 +592,8 @@ void App::updateGravity(double songTime, float dt) {
     // Level scaling: x10 at the plateau (level 20), capped at 28 rows per second.
     const float MAX_ROWS_PER_SEC = 28.f;
     const float beatsPerSec = bpm * tempoMul / 60.f;
-    const float rowsPerBeat = std::min(pace_ * (1.f + 9.f * diff), MAX_ROWS_PER_SEC / beatsPerSec);
+    // Free play's difficulty scales every level's speed (EXPERT x1); a campaign song's level is set by the data.
+    const float rowsPerBeat = std::min(pace_ * (1.f + 9.f * diff) * speedMul_, MAX_ROWS_PER_SEC / beatsPerSec);
     // Rows accumulate with the song's beats (scaled during the bonus so gravity runs at gameRate_ in real time).
     const double songBeat = an.beatPosition(songTime);
     double dBeat = 0;
@@ -687,9 +763,16 @@ std::vector<HudText> App::buildHud(float dt) {
     hud.push_back({std::to_string(game_.score()), sc.x, sc.y + 18 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
     hud.push_back({"LINES", sc.x, sc.y + 60 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
     hud.push_back({std::to_string(game_.lines()), sc.x, sc.y + 80 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
-    hud.push_back({"LEVEL", sc.x, sc.y + 122 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
-    hud.push_back({std::to_string(game_.level()) + (game_.level() >= Game::MAX_LEVEL ? " MAX" : ""), sc.x, sc.y + 142 * s,
-                   2.8f * s, 0.9f, false, true, HUD_VALUE});
+    if (const CampaignStage* st = runStage()) {
+        // the campaign has no levels: the stage and the song in it
+        hud.push_back({"STAGE " + std::to_string(run_.stage + 1), sc.x, sc.y + 122 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
+        hud.push_back({std::to_string(std::max(0, run_.current) + 1) + "/" + std::to_string(st->songs.size()), sc.x,
+                       sc.y + 142 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
+    } else {
+        hud.push_back({"LEVEL", sc.x, sc.y + 122 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
+        hud.push_back({std::to_string(game_.level()) + (game_.level() >= Game::MAX_LEVEL ? " MAX" : ""), sc.x, sc.y + 142 * s,
+                       2.8f * s, 0.9f, false, true, HUD_VALUE});
+    }
     if (game_.best() > 0) {
         hud.push_back({"BEST", sc.x, sc.y + 184 * s, 1.6f * s, 0.5f, false, true, HUD_LABEL});
         hud.push_back({std::to_string(game_.best()), sc.x, sc.y + 204 * s, 2.f * s, 0.6f, false, true, HUD_VALUE});
@@ -700,7 +783,7 @@ std::vector<HudText> App::buildHud(float dt) {
     }
 
     // Persistent, discreet skip hint (top right) and feedback when skipping.
-    if (lib_.size() > 1) {
+    if (lib_.size() > 1 && mode_ != MODE_CAMPAIGN) {
         const char* key = input_.active() == Input::Gamepad ? "BACK  NEXT SONG" : "N  NEXT SONG";
         hud.push_back({key, -28 * s, 24 * s, 1.4f * s, 0.3f, false, false, HUD_HINT});
     }
@@ -777,6 +860,9 @@ std::vector<HudText> App::buildHud(float dt) {
         else
             lines = {"MOVE  ARROWS", "ROTATE  UP / Z", "HARD DROP  SPACE", "HOLD  C", "SLOW MOTION  V", "NEW SCENE  T",
                      "NEXT SONG  N", "SEEK  CTRL+SHIFT+ARROWS", "FULLSCREEN  F", "PAUSE  ESC"};
+        if (mode_ == MODE_CAMPAIGN) // no skipping in a campaign
+            lines.erase(std::remove_if(lines.begin(), lines.end(), [](const std::string& l) {
+                return l.rfind("NEXT SONG", 0) == 0 || l.rfind("SEEK", 0) == 0; }), lines.end());
         const float lineH = 20.f * s, bottom = h - 40.f * s;
         for (size_t i = 0; i < lines.size(); i++)
             hud.push_back({lines[i], -28 * s, bottom - (lines.size() - 1 - i) * lineH, 1.3f * s, helpA, false, false, HUD_HELP});
@@ -788,13 +874,16 @@ std::vector<HudText> App::buildHud(float dt) {
         hud.push_back({"BEST  " + std::to_string(game_.best()), w * 0.5f, h * 0.5f + 30 * s, 1.6f * s, 0.6f * a, false, true, HUD_DIALOG});
         if (overTime_ > 2.5f) {
             float b = std::min(1.f, (overTime_ - 2.5f) / 0.8f);
-            hud.push_back({input_.active() == Input::Gamepad ? "PRESS A BUTTON TO PLAY AGAIN" : "PRESS A KEY TO PLAY AGAIN",
-                           w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
+            const bool pad = input_.active() == Input::Gamepad;
+            std::string again = pad ? "PRESS A BUTTON TO PLAY AGAIN" : "PRESS A KEY TO PLAY AGAIN";
+            if (mode_ == MODE_CAMPAIGN) again = "BACK TO THE CAMPAIGN";
+            else if (menuEnabled_) again += pad ? "    B  MENU" : "    ESC  MENU";
+            hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
     }
     if (paused_) {
         hud.push_back({"PAUSED", w * 0.5f, h * 0.5f - 40 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
-        hud.push_back({input_.active() == Input::Gamepad ? "START TO RESUME" : "ESC TO RESUME    Q TO QUIT",
+        hud.push_back({input_.active() == Input::Gamepad ? "START TO RESUME" : menuEnabled_ ? "ESC TO RESUME    Q TO MENU" : "ESC TO RESUME    Q TO QUIT",
                        w * 0.5f, h * 0.5f + 20 * s, 1.8f * s, 0.7f, false, true, HUD_DIALOG});
     }
     return hud;
@@ -812,7 +901,8 @@ int App::run() {
     std::vector<unsigned char> clipPx;
 
     // Offline renders (clips, shots, reviews) run headless on the GPU when they can (ZEN_HEADLESS=0: a window)
-    const bool wantHeadless = (shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty()) && !opt_.fullscreen &&
+    if (testPlay()) { offline_ = true; opt_.mute = true; }
+    const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty()) && !opt_.fullscreen &&
                               !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
     if (wantHeadless && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
@@ -852,6 +942,15 @@ int App::run() {
     glGetError();
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
 
+    campaign_.load(opt_.campaignPath);
+    progress_.load(opt_.progressPath);
+    menu_.setFreeDifficulty(opt_.difficulty);
+    menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
+    if (!opt_.menuShot.empty()) return runMenuShot();
+    menuEnabled_ = opt_.menuEnabled;
+    mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
+    speedMul_ = opt_.speedMul;
+
     int fbw, fbh;
     fbSize(fbw, fbh);
     if (!R_.init(fbw, fbh)) std::fprintf(stderr, "[gl] warning: renderer init reported a GL error\n");
@@ -861,9 +960,12 @@ int App::run() {
     audio_.setMuted(opt_.mute || shotMode);
     lib_.setSampleRate(audio_.sampleRate());
     lib_.setShuffle(opt_.shuffle);
-    lib_.scan(opt_.paths);
-    std::printf("[app] %zu songs found\n", lib_.size());
-    lib_.prefetch(runSeed_);
+    menu_.init(&campaign_, &progress_, &audio_);
+    if (mode_ != MODE_MENU && opt_.stage.empty()) { // the menu's sessions (and --stage) scan their own songs
+        lib_.scan(opt_.paths);
+        std::printf("[app] %zu songs found\n", lib_.size());
+        lib_.prefetch(runSeed_);
+    }
 
     game_.reset(runSeed_);
     blank_.makeBlank();
@@ -880,6 +982,22 @@ int App::run() {
         changeUniverse(songUniverse(&variant), variant, transitions::NEW_SCENE, true);
     }
 
+    if (!opt_.stage.empty()) { // --stage S[:SONG]: a campaign run straight away
+        Menu::Choice c;
+        c.kind = Menu::Choice::PLAY_CAMPAIGN;
+        c.difficulty = opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL;
+        int st = 1, sg = 1;
+        std::sscanf(opt_.stage.c_str(), "%d:%d", &st, &sg);
+        c.stage = std::clamp(st - 1, 0, std::max(0, campaign_.size() - 1));
+        c.song = sg - 1;
+        if (campaign_.size() == 0 || c.song < 0 || c.song >= (int)campaign_.stages()[c.stage].songs.size()) {
+            std::fprintf(stderr, "[campaign] no stage %s\n", opt_.stage.c_str());
+            return 1;
+        }
+        beginSession(c);
+    }
+    if (mode_ == MODE_MENU) menu_.open(Menu::TITLE);
+
     double last = headless_ ? 0.0 : glfwGetTime();
     float fade = 0.f;
     int shotsTaken = 0;
@@ -890,7 +1008,35 @@ int App::run() {
         last = now;
         runTime_ += dt;
         if (win_) glfwPollEvents();
-        if (!shotMode) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
+        if (!shotMode && win_) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
+        if (testPlay()) {
+            static const auto keys = testList("ZEN_TEST_KEYS"), shots = testList("ZEN_TEST_SHOTS");
+            static const double quitAt = std::getenv("ZEN_TEST_QUIT") ? std::atof(std::getenv("ZEN_TEST_QUIT")) : 1e9;
+            input_.testFrame();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1)); // background loads keep up with the simulated clock
+            static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
+                {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"pause", A_PAUSE}, {"quit", A_QUIT}};
+            for (auto& [t, k] : keys)
+                if (runTime_ - dt < t && runTime_ >= t)
+                    for (auto& [n, a] : NAMES)
+                        if (k == n) { input_.testPress(a); std::printf("[test] %.2f s: %s\n", runTime_, n); }
+            for (auto& [t, f] : shots)
+                if (runTime_ - dt < t && runTime_ >= t) testShot_ = f;
+            if (runTime_ >= quitAt) quit_ = true;
+        }
+
+        // ---- The menus.
+        if (mode_ == MODE_MENU) {
+            if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
+            const Menu::Choice c = menu_.update(input_, dt);
+            fbSize(fbw, fbh);
+            if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
+            if (!testShot_.empty()) { menu_.screenshot(testShot_, fbw, fbh); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
+            swap();
+            if (c.kind == Menu::Choice::QUIT) quit_ = true;
+            else if (c.kind != Menu::Choice::NONE) beginSession(c);
+            continue;
+        }
 
         // ---- Songs.
         if (!nextTrack_) {
@@ -903,6 +1049,11 @@ int App::run() {
                 std::printf("[app] could not load %s, trying another song\n", tried.c_str());
                 failedTitle_ = tried;
                 failedToast_ = 4.f;
+                if (mode_ == MODE_CAMPAIGN) { // the run needs its songs in order
+                    toMenu(Menu::CAMPAIGN, "NO SONG", "COULD NOT LOAD " + asciiFold(tried), true);
+                    swap();
+                    continue;
+                }
             }
             if (!nextTrack_ && !lib_.loading() && !lib_.empty()) lib_.prefetch(runSeed_ + (uint64_t)(runTime_ * 1000));
         }
@@ -917,7 +1068,9 @@ int App::run() {
         if (breaks_ && track_) {
             // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
             const double left = track_->duration() - songTime_;
-            if (break_ == BREAK_OFF && ((wantSkip_ && nextTrack_) || left <= outLead() || songFinished())) {
+            const bool lost = mode_ == MODE_CAMPAIGN && game_.over(); // a campaign game over goes back to the menu
+            if (break_ == BREAK_OFF && !lost && ((wantSkip_ && nextTrack_) || left <= outLead() || songFinished())) {
+                if (mode_ == MODE_CAMPAIGN && !wantSkip_) campaignSongSurvived();
                 break_ = BREAK_OUT;
                 breakT_ = 0;
                 breakSkip_ = wantSkip_ || songFinished();
@@ -926,12 +1079,21 @@ int App::run() {
                 std::printf("[app] break: outro\n");
             }
             const bool outroDone = breakSkip_ ? breakT_ >= OUT_HIDE + 0.4f + 1.2f : songFinished() && breakT_ >= OUT_HIDE + 1.f;
+            if (break_ == BREAK_OUT && outroDone && mode_ == MODE_CAMPAIGN && run_.finishing) {
+                campaignEnd();
+                swap();
+                continue;
+            }
             if (break_ == BREAK_OUT && outroDone && nextTrack_) {
                 startTrack(std::move(nextTrack_));
                 break_ = BREAK_IN;
                 breakT_ = 0;
                 std::printf("[app] break: intro\n");
             }
+        } else if (mode_ == MODE_CAMPAIGN && track_ && songFinished() && !game_.over()) { // no breaks (ZEN_NO_BREAK)
+            campaignSongSurvived();
+            if (run_.finishing) { campaignEnd(); swap(); continue; }
+            if (nextTrack_) startTrack(std::move(nextTrack_));
         } else if (track_ && nextTrack_ && (songFinished() || wantSkip_)) {
             wantSkip_ = false;
             skipToast_ = 0;
@@ -962,6 +1124,9 @@ int App::run() {
             }
             simSongTime_ += dt * audio_.currentSpeed();
             songTime_ = simSongTime_;
+        } else if (testPlay()) {
+            if (track_ && !paused_) simSongTime_ += dt;
+            songTime_ = simSongTime_;
         } else {
             songTime_ = audio_.position();
         }
@@ -973,7 +1138,12 @@ int App::run() {
             paused_ = !paused_;
             audio_.setPaused(paused_);
         }
-        if (input_.pressed(A_QUIT) && paused_) quit_ = true;
+        if (input_.pressed(A_QUIT) && paused_) {
+            if (menuEnabled_) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
+            quit_ = true;
+        }
+        // still loading the first song: Esc goes back to the menu
+        if (waiting && menuEnabled_ && input_.pressed(A_UI_BACK)) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
         if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
         // Test hook: ZEN_TEST_SKIP=<seconds> presses "next song" periodically.
         static const double testSkip = std::getenv("ZEN_TEST_SKIP") ? std::atof(std::getenv("ZEN_TEST_SKIP")) : 0.0;
@@ -982,7 +1152,7 @@ int App::run() {
         if (input_.pressed(A_NEXT_SONG) && !testSkipNow)
             std::printf("[input] next song pressed (%zu songs, next %s)\n", lib_.size(),
                         nextTrack_ ? ("ready: " + nextTrack_->title).c_str() : ("loading: " + lib_.loadingTitle()).c_str());
-        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1) {
+        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1 && mode_ != MODE_CAMPAIGN) {
             wantSkip_ = true;
             skipToast_ = 2.5f;
         }
@@ -990,7 +1160,7 @@ int App::run() {
         // Ctrl+Shift+Left/Right: jump 10 s in the song (repeats while held) to test sections quickly.
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
-            if (dir != 0 && track_ && !audio_.finished()) {
+            if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN) { // no shortcuts in a campaign
                 double target = std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0);
                 audio_.seek(target);
                 songTime_ = target;
@@ -1002,7 +1172,7 @@ int App::run() {
             }
         }
         if (input_.pressed(A_DEBUG_LEVEL) && !game_.over()) game_.skipToNextLevel();
-        if (input_.pressed(A_DEBUG_BONUS)) game_.debugChargeBonus();
+        if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN) game_.debugChargeBonus();
         if (input_.pressed(A_HUD)) { showHelp_ = !showHelp_; helpTimer_ = showHelp_ ? 1e9f : 0; }
 
         // ---- Game.
@@ -1033,9 +1203,23 @@ int App::run() {
                 if (input_.pressed(A_HARD)) game_.hardDrop();
                 if (input_.pressed(A_BONUS)) game_.activateBonus();
             }
-            if (game_.over()) {
-                // Game over: the board dissolves, then any gameplay key/button starts a new game.
+            if (game_.over() && mode_ == MODE_CAMPAIGN && !shotMode) { // (offline renders play on)
+                // A campaign game over: a moment of it, then back to the campaign menu.
                 overTime_ += dt;
+                if (overTime_ > 5.f || (overTime_ > 2.5f && (input_.pressed(A_UI_OK) || input_.pressed(A_UI_BACK)))) {
+                    const CampaignStage* st = runStage();
+                    char sub[128];
+                    std::snprintf(sub, sizeof(sub), "STAGE %d  SONG %d/%d  %s  SCORE %d", run_.stage + 1, run_.current + 1,
+                                  st ? (int)st->songs.size() : 0, difficultyName(run_.diff), game_.lastScore());
+                    toMenu(Menu::CAMPAIGN, "GAME OVER", sub, true);
+                    swap();
+                    continue;
+                }
+            } else if (game_.over()) {
+                // Game over: the board dissolves, then any gameplay key/button starts a new game (Esc: the menu, when
+                // the game started on it).
+                overTime_ += dt;
+                if (menuEnabled_ && overTime_ > 1.f && input_.pressed(A_UI_BACK)) { toMenu(Menu::FREE); swap(); continue; }
                 bool any = false;
                 for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE}) any |= input_.pressed(a);
                 if ((any && overTime_ > 2.5f) || ((opt_.autoplay || shotMode) && overTime_ > 4.f)) {
@@ -1047,7 +1231,7 @@ int App::run() {
             }
             game_.update(dt);
             handleEvents();
-            if (game_.level() > lastLevel_ && !game_.over()) {
+            if (game_.level() > lastLevel_ && !game_.over() && mode_ != MODE_CAMPAIGN) {
                 levelToast_ = 2.5f;
                 R_.refresh(0.35f); // soft refresh wave
                 R_.levelUp();
@@ -1056,10 +1240,15 @@ int App::run() {
             lastLevel_ = game_.level();
             R_.setDim(game_.over() && overTime_ > 1.2f);
             // Slow motion: the song is muffled for the whole bonus (bass kept, highs attenuated); gravity's own
-            // slow-down is in updateGravity.
+            // slow-down is in updateGravity. A game over sounds the same, quieter, for as long as it lasts.
+            const bool muffle = game_.bonusActive() || game_.over();
+            if (muffle != muffleWas_) {
+                muffleWas_ = muffle;
+                audio_.setMuffled(muffle, game_.over() ? 1.2f : 0.6f);
+            }
+            audio_.setSongGain(game_.over() ? 0.45f : 1.f, game_.over() ? 1.5f : 0.6f);
             if (game_.bonusActive() != slowWas_) {
                 slowWas_ = game_.bonusActive();
-                audio_.setMuffled(slowWas_, 0.6f);
                 // The screen's colors are reversed for the whole bonus (a front sweeps it in and out).
                 R_.setBonus(slowWas_);
             }
@@ -1220,6 +1409,7 @@ int App::run() {
             R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
         }
 
+        if (!testShot_.empty()) { R_.screenshot(testShot_); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
         static long clipFrames = -1; // frames recorded (the song time restarts with the next song)
         if (clipMode && track_ && clipStart_ >= 0 && (clipFrames >= 0 || songTime_ >= clipStart_)) {
             clipFrames++;
@@ -1349,6 +1539,7 @@ int App::run() {
             (void)acc;
         }
     }
+    std::printf("[app] end of the run (quit %d, %.1f s)\n", (int)quit_, runTime_);
     audio_.shutdown();
     if (headless_) headless::shutdown();
     else {
@@ -1358,9 +1549,173 @@ int App::run() {
     return 0;
 }
 
+// A session from the menu (or --stage): free play on a difficulty, or a campaign run from a song of a stage.
+void App::beginSession(const Menu::Choice& c) {
+    const bool camp = c.kind == Menu::Choice::PLAY_CAMPAIGN;
+    mode_ = camp ? MODE_CAMPAIGN : MODE_FREE;
+    menu_.stopPreview();
+    lib_.clear();
+    lib_.setShuffle(camp ? false : opt_.shuffle);
+    lib_.setOnce(camp);
+    std::vector<std::string> paths;
+    float fixed = 0.f;
+    forcedUniverse_ = forcedVariant_ = -1;
+    if (!opt_.universe.empty()) forcedUniverse_ = universes::parse(opt_.universe, &forcedVariant_);
+    if (camp) {
+        const CampaignStage& st = campaign_.stages()[c.stage];
+        run_ = Run{};
+        run_.stage = c.stage;
+        run_.from = c.song;
+        run_.diff = c.difficulty;
+        for (int k = c.song; k < (int)st.songs.size(); k++) paths.push_back(st.songs[k].entry());
+        fixed = st.songs[c.song].level[c.difficulty];
+        speedMul_ = 1.f;
+        if (opt_.universe.empty() && !st.songs[c.song].universe.empty())
+            forcedUniverse_ = universes::parse(st.songs[c.song].universe, &forcedVariant_);
+        std::printf("[campaign] stage %d from song %d on %s\n", c.stage + 1, c.song + 1, difficultyName(c.difficulty));
+    } else {
+        paths = opt_.paths;
+        speedMul_ = opt_.difficultyGiven && c.difficulty == opt_.difficulty ? opt_.speedMul : freePlayMultiplier(c.difficulty);
+        std::printf("[app] free play on %s (gravity x%.2f)\n", difficultyName(c.difficulty), speedMul_);
+    }
+    lib_.scan(paths);
+    std::printf("[app] %zu songs found\n", lib_.size());
+    sceneCounter_++;
+    lib_.prefetch(runSeed_ + sceneCounter_ * 7919);
+
+    track_.reset();
+    nextTrack_.reset();
+    game_.reset(runSeed_ ^ splitmix64(sceneCounter_));
+    game_.setFixedLevel(fixed);
+    lastLevel_ = game_.level();
+    break_ = BREAK_OFF;
+    breakT_ = 0;
+    breakSkip_ = false;
+    introAtStart_ = breaks_;
+    R_.setBreak(Renderer::Break{});
+    R_.setDim(false);
+    if (slowWas_) R_.setBonus(false);
+    slowWas_ = muffleWas_ = false;
+    audio_.setMuffled(false, 0.3f);
+    audio_.setSongGain(1.f, 0.3f);
+    paused_ = wantSkip_ = false;
+    audio_.setPaused(false);
+    overTime_ = 0;
+    levelToast_ = slowToast_ = tetrisToast_ = skipToast_ = seekToast_ = failedToast_ = 0;
+    songTime_ = simSongTime_ = 0;
+    trackAge_ = 0;
+    helpTimer_ = showHelp_ ? 14.f : 0.f;
+    rowAcc_ = 0;
+    lastSongBeat_ = -1;
+    gameRate_ = 1.f;
+    pace_ = -1;
+    dropAt_ = -1;
+    look_ = makeSongLook(nullptr, runSeed_ ^ splitmix64(sceneCounter_ * 31));
+    int variant = -1;
+    changeUniverse(songUniverse(&variant), variant, transitions::NEW_SCENE, true);
+}
+
+void App::toMenu(Menu::Screen s, const std::string& msg, const std::string& sub, bool bad) {
+    std::printf("[app] menu%s%s (%.1f s)\n", msg.empty() ? "" : ": ", msg.c_str(), runTime_);
+    audio_.setPaused(false);
+    audio_.play(nullptr); // the song fades out (still muffled after a game over)
+    paused_ = false;
+    lib_.clear();
+    track_.reset();
+    nextTrack_.reset();
+    R_.setBreak(Renderer::Break{});
+    R_.setDim(false);
+    if (slowWas_) R_.setBonus(false);
+    slowWas_ = muffleWas_ = false;
+    break_ = BREAK_OFF;
+    mode_ = MODE_MENU;
+    menu_.open(s, msg, sub, bad);
+}
+
+// A campaign song starts: its velocity and universe, from the data.
+void App::campaignSongStarted() {
+    const CampaignStage* st = runStage();
+    if (!st) return;
+    int k = -1;
+    for (int i = std::max(run_.from, run_.current + 1); i < (int)st->songs.size() && k < 0; i++)
+        if (track_->path.find(st->songs[i].id) != std::string::npos) k = i;
+    if (k < 0) k = std::min((int)st->songs.size() - 1, std::max(run_.from, run_.current + 1));
+    run_.current = k;
+    run_.survived = false;
+    run_.songStartScore = game_.score();
+    const CampaignSong& s = st->songs[k];
+    game_.setFixedLevel(s.level[run_.diff]);
+    lastLevel_ = game_.level();
+    if (opt_.universe.empty()) {
+        forcedUniverse_ = forcedVariant_ = -1;
+        if (!s.universe.empty()) forcedUniverse_ = universes::parse(s.universe, &forcedVariant_);
+    }
+    std::printf("[campaign] stage %d song %d/%zu: %s, %s, velocity %.1f (%s)\n", run_.stage + 1, k + 1, st->songs.size(),
+                s.title.c_str(), s.universe.empty() ? "a picked universe" : s.universe.c_str(), s.level[run_.diff],
+                difficultyName(run_.diff));
+}
+
+// The current song was survived to its end: recorded as beaten, with the points scored during it.
+void App::campaignSongSurvived() {
+    const CampaignStage* st = runStage();
+    if (!st || run_.current < 0 || run_.survived) return;
+    run_.survived = true;
+    const int pts = game_.score() - run_.songStartScore;
+    progress_.setBeaten(run_.stage, run_.current, run_.diff, pts);
+    progress_.save();
+    std::printf("[campaign] song %d/%zu survived (%d points)\n", run_.current + 1, st->songs.size(), pts);
+    if (run_.current + 1 >= (int)st->songs.size()) run_.finishing = true;
+}
+
+// The stage's last song is over: a clear when the run started from its first song.
+void App::campaignEnd() {
+    const int stage = run_.stage;
+    char sub[128];
+    if (run_.from == 0) {
+        progress_.setCleared(stage, run_.diff, game_.score());
+        progress_.save();
+        const bool next = stage + 1 < campaign_.size();
+        std::snprintf(sub, sizeof(sub), "%s  SCORE %d%s", difficultyName(run_.diff), game_.score(),
+                      next ? "   NEXT STAGE UNLOCKED" : "   THE CAMPAIGN IS COMPLETE");
+        std::printf("[campaign] stage %d cleared on %s (%d points)\n", stage + 1, difficultyName(run_.diff), game_.score());
+        menu_.setCursor(next ? stage + 1 : stage, 0);
+        toMenu(Menu::CAMPAIGN, "STAGE " + std::to_string(stage + 1) + " CLEAR", sub);
+    } else {
+        std::snprintf(sub, sizeof(sub), "SONGS %d-%zu SURVIVED: START FROM SONG 1 TO CLEAR THE STAGE", run_.from + 1,
+                      campaign_.stages()[stage].songs.size());
+        menu_.setCursor(stage, 0);
+        toMenu(Menu::CAMPAIGN, "WELL PLAYED", sub);
+    }
+}
+
+// --menu-shot: a menu screen, rendered offline, saved, then exit.
+int App::runMenuShot() {
+    menu_.init(&campaign_, &progress_, nullptr);
+    const std::string& sc = opt_.menuScreen;
+    menu_.open(sc == "campaign" ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    if (!opt_.menuHover.empty()) {
+        int st = 1, sg = 1;
+        std::sscanf(opt_.menuHover.c_str(), "%d:%d", &st, &sg);
+        menu_.setCursor(std::max(0, st - 1), std::max(0, sg - 1));
+    }
+    int w, h;
+    fbSize(w, h);
+    for (int i = 0; i < 12; i++) {
+        menu_.update(input_, 1.f / 60.f);
+        menu_.render(w, h);
+    }
+    glFinish();
+    const bool ok = menu_.screenshot(opt_.menuShot, w, h);
+    std::printf("[shot] %s%s\n", opt_.menuShot.c_str(), ok ? "" : " FAILED");
+    if (headless_) headless::shutdown();
+    else { glfwDestroyWindow(win_); glfwTerminate(); }
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char** argv) {
     platform::lineBufferStdout();
     Options o;
+    bool freePlay = false, unlock = false, reset = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-h" || a == "--help") { usage(); return 0; }
@@ -1393,8 +1748,40 @@ int main(int argc, char** argv) {
         else if (a == "--clip-before" && i + 1 < argc) o.clipBefore = std::stof(argv[++i]);
         else if (a == "--clip-after" && i + 1 < argc) o.clipAfter = std::stof(argv[++i]);
         else if (a == "--analysis" && i + 1 < argc) { o.analysisPath = argv[++i]; o.mute = true; }
+        else if (a == "--free") freePlay = true;
+        else if (a == "--difficulty" && i + 1 < argc) {
+            if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, expert or a multiplier (e.g. 0.7)\n", argv[i]);
+                return 1;
+            }
+            o.difficultyGiven = true;
+        }
+        else if (a == "--unlock") unlock = true;
+        else if (a == "--reset") reset = true;
+        else if (a == "--stage" && i + 1 < argc) o.stage = argv[++i];
+        else if (a == "--campaign" && i + 1 < argc) o.campaignPath = argv[++i];
+        else if (a == "--progress" && i + 1 < argc) o.progressPath = argv[++i];
+        else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
+        else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
+        else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
         else o.paths.push_back(a);
     }
+    if (reset || unlock) {
+        Progress p;
+        p.load(o.progressPath);
+        if (reset) p.reset();
+        if (unlock) {
+            p.unlockAll();
+            std::printf("[campaign] every stage unlocked\n");
+        }
+        p.save();
+    }
+    // The title screen when the game is started for play with no songs; songs on the command line, --free and the
+    // offline renders play straight away (free play), --stage runs a campaign stage.
+    const bool offline = !o.shotPrefix.empty() || !o.clipPath.empty() || !o.analysisPath.empty() || !o.reviewPath.empty() ||
+                         !o.transitionShots.empty();
+    o.menuEnabled = !offline && !freePlay && o.paths.empty() && o.menuShot.empty();
+    o.menu = o.menuEnabled && o.stage.empty();
     if (!o.universe.empty() && !universes::check(o.universe)) return 1;
     if (!o.toUniverse.empty() && !universes::check(o.toUniverse)) return 1;
     // No songs given: the default playlist.

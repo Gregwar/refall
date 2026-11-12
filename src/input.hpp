@@ -12,6 +12,8 @@ enum Action {
     A_SEEK_BACK, A_SEEK_FWD, // Ctrl+Shift+Left/Right: seek in the song (testing)
     A_DEBUG_LEVEL,           // L: jump to the next level (debugging)
     A_DEBUG_BONUS,           // B: fill the bonus gauge (testing the slow-motion effects)
+    // Menus: arrows / D-pad / stick (with auto-repeat), Enter / Space / A / Start, Esc / Backspace / B.
+    A_UI_UP, A_UI_DOWN, A_UI_LEFT, A_UI_RIGHT, A_UI_OK, A_UI_BACK,
     A_COUNT
 };
 
@@ -32,6 +34,11 @@ public:
     Device active() const { return active_; }
     bool gamepadConnected() const { return jid_ >= 0; }
     const std::string& gamepadName() const { return padName_; }
+    // Testing without a window (ZEN_TEST_PLAY): a new frame forgets the presses, testPress presses an action.
+    void testFrame() {
+        for (int i = 0; i < A_COUNT; i++) { prev_[i] = down_[i]; down_[i] = false; repeat_[i] = 0; }
+    }
+    void testPress(Action a) { down_[a] = true; repeat_[a] = 1; }
     // Set briefly when the device changes, for a HUD toast.
     float deviceChangedTimer() const { return changedTimer_; }
 
