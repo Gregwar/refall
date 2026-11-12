@@ -98,6 +98,7 @@ struct Options {
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
     bool menuDemo = false;
+    bool menuMusic = true;     // --no-menu-music: the menu stays silent (no music bed)
     bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
@@ -170,6 +171,7 @@ static void usage() {
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
+        "  --no-menu-music      no music on the menu's screens\n"
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
         "                       then exit (testing)\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
@@ -216,6 +218,14 @@ private:
         bool finishing = false; // the stage's last song was survived: the run ends with its outro
     } run_;
     bool muffleWas_ = false;
+    // The menu's music (data/menu_music.mp3): decoded in the background, a looping bed under the menu's screens, ducked
+    // under the song previews, faded out when a game starts and back in on the menu (where it left off).
+    std::future<std::shared_ptr<std::vector<int16_t>>> musicLoad_;
+    bool musicReady_ = false;
+    int musicState_ = 0; // 0 silent, 1 playing, 2 ducked
+    static constexpr float MENU_MUSIC_GAIN = 0.7f, MENU_MUSIC_DUCKED = 0.04f;
+    void startMenuMusic();
+    void updateMenuMusic();
     std::string testShot_; // ZEN_TEST_SHOTS: a screenshot of this frame
     void beginSession(const Menu::Choice& c);
     void toMenu(Menu::Screen s, const std::string& msg = "", const std::string& sub = "", bool bad = false);
@@ -1007,6 +1017,7 @@ int App::run() {
         beginSession(c);
     }
     if (mode_ == MODE_MENU) menu_.open(Menu::TITLE);
+    if (menuEnabled_ && opt_.menuMusic) startMenuMusic();
 
     double last = headless_ ? 0.0 : glfwGetTime();
     float fade = 0.f;
@@ -1034,6 +1045,8 @@ int App::run() {
                 if (runTime_ - dt < t && runTime_ >= t) testShot_ = f;
             if (runTime_ >= quitAt) quit_ = true;
         }
+
+        updateMenuMusic();
 
         // ---- The menus.
         if (mode_ == MODE_MENU) {
@@ -1559,6 +1572,53 @@ int App::run() {
     return 0;
 }
 
+// The menu's music file: next to the campaign data in the sources, else next to the executable (installed builds).
+static std::string menuMusicPath() {
+    std::vector<fs::path> c;
+#ifdef ZEN_SOURCE_DIR
+    c.push_back(fs::path(ZEN_SOURCE_DIR) / "data" / "menu_music.mp3");
+#endif
+    c.push_back(platform::executableDir() / "menu_music.mp3");
+    c.push_back(platform::executableDir() / "data" / "menu_music.mp3");
+    std::error_code ec;
+    for (const fs::path& p : c)
+        if (fs::exists(p, ec)) return p.string();
+    return "";
+}
+
+void App::startMenuMusic() {
+    const std::string path = menuMusicPath();
+    if (path.empty()) { std::printf("[menu music] no menu_music.mp3 found: the menu stays silent\n"); return; }
+    const uint32_t sr = audio_.sampleRate();
+    musicLoad_ = std::async(std::launch::async, [path, sr]() { return decodeAudio16(path, sr); });
+}
+
+// The menu's music follows the screen: playing on the menu (0.7, a 1.5 s fade in), ducked to near silence while a song
+// preview plays, faded out (0.8 s) when a game starts; silent, it keeps its place and resumes from there.
+void App::updateMenuMusic() {
+    if (musicLoad_.valid() && musicLoad_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        auto pcm = musicLoad_.get();
+        if (pcm) {
+            std::printf("[menu music] loaded (%.0f s)\n", pcm->size() / 2.0 / audio_.sampleRate());
+            audio_.setBed(std::move(pcm));
+            musicReady_ = true;
+            musicState_ = 0;
+        } else {
+            std::printf("[menu music] could not decode it: the menu stays silent\n");
+        }
+    }
+    if (!musicReady_) return;
+    const int want = mode_ != MODE_MENU ? 0 : menu_.previewPlaying() ? 2 : 1;
+    if (want == musicState_) return;
+    static const char* NAMES[3] = {"faded out", "playing", "ducked"};
+    const float gain = want == 1 ? MENU_MUSIC_GAIN : want == 2 ? MENU_MUSIC_DUCKED : 0.f;
+    const float glide = want == 1 ? (musicState_ == 2 ? 1.0f : 1.5f) : want == 2 ? 0.6f : 0.8f;
+    audio_.setBedGain(gain, glide);
+    std::printf("[menu music] %s (gain %.2f over %.1f s, at %.1f s of the loop, %.1f s in)\n", NAMES[want], gain, glide,
+                audio_.bedPosition(), runTime_);
+    musicState_ = want;
+}
+
 // A session from the menu (or --stage): free play on a difficulty, or a campaign run from a song of a stage.
 void App::beginSession(const Menu::Choice& c) {
     const bool camp = c.kind == Menu::Choice::PLAY_CAMPAIGN;
@@ -1853,6 +1913,7 @@ int main(int argc, char** argv) {
         else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
         else if (a == "--menu-clip" && i + 1 < argc) o.menuClip = argv[++i];
         else if (a == "--menu-demo") o.menuDemo = true;
+        else if (a == "--no-menu-music") o.menuMusic = false;
         else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
         else o.paths.push_back(a);

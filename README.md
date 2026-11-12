@@ -166,7 +166,11 @@ Started with no songs, the game opens on its menu, a kaleidoscope of its own uni
 for now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **CAMPAIGN**, **FREE
 PLAY** or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). Behind every screen a real universe of the
 game, rendered live, is folded into a slowly turning stained-glass kaleidoscope (tinted by the focused stage, kept dark
-enough behind the text).
+enough behind the text). The menu has its own music, [`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at
+its loop point) at about 70% of a game song's level: it fades in when the menu appears, steps back to near silence
+while a song preview plays, fades out (0.8 s) when a game starts and comes back where it left off on the menu
+(`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it). The file is
+found in the sources' `data/`, else next to the executable (installed builds ship it there).
 
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines. Choose a difficulty: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level

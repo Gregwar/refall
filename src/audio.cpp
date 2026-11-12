@@ -63,6 +63,48 @@ void AudioEngine::seek(double seconds) {
     atomicPos_ = pos_;
 }
 
+void AudioEngine::setBed(std::shared_ptr<const std::vector<int16_t>> pcm) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    bed_ = std::move(pcm);
+    bedPos_ = 0;
+    bedLooped_ = false;
+}
+
+void AudioEngine::setBedGain(float gain, float seconds) {
+    bedGlide_ = seconds;
+    bedTarget_ = gain;
+}
+
+// The bed loops over its first n - xf frames; from the second pass on, its first xf frames are mixed with its last xf
+// (the tail fading out as the head fades in, equal power), so the loop point is seamless.
+void AudioEngine::mixBed(float* out, unsigned int frames) {
+    if (!bed_) return;
+    const float target = bedTarget_, glide = bedGlide_;
+    if (bedGain_ == 0.f && target == 0.f) return; // silent: it waits where it was
+    const std::vector<int16_t>& pcm = *bed_;
+    const uint64_t n = pcm.size() / 2;
+    if (n < 4) return;
+    const uint64_t xf = std::min<uint64_t>(sampleRate_, n / 4), L = n - xf;
+    const float step = glide > 0.f ? 1.f / (glide * sampleRate_) : 1.f;
+    constexpr float K = 1.f / 32768.f;
+    for (unsigned int i = 0; i < frames; i++) {
+        bedGain_ = bedGain_ < target ? std::min(target, bedGain_ + step) : std::max(target, bedGain_ - step);
+        if (bedGain_ <= 0.f) break;
+        const float g = bedGain_;
+        for (int c = 0; c < 2; c++) {
+            float v = pcm[bedPos_ * 2 + c] * K;
+            if (bedLooped_ && bedPos_ < xf) {
+                const float k = (float)bedPos_ / xf;
+                v = v * std::sin(k * 1.5707963f) + pcm[(L + bedPos_) * 2 + c] * K * std::cos(k * 1.5707963f);
+            }
+            out[i * 2 + c] += v * g;
+        }
+        if (++bedPos_ >= L) { bedPos_ = 0; bedLooped_ = true; }
+    }
+    bedGainNow_ = bedGain_;
+    bedPosAtomic_ = bedPos_;
+}
+
 void AudioEngine::playSample(std::shared_ptr<const std::vector<float>> pcm, float gain) {
     if (!pcm || pcm->empty()) return;
     std::lock_guard<std::mutex> lock(mutex_);
@@ -196,6 +238,7 @@ void AudioEngine::render(float* out, unsigned int frames) {
             }
         }
     }
+    mixBed(out, frames); // after the muffle and the song's gain: the game over's sound never reaches the menu's music
     mixVoices();
 
     if (muted_)
@@ -205,4 +248,22 @@ void AudioEngine::render(float* out, unsigned int frames) {
         float a = std::fabs(out[i]);
         if (a > 0.9f) out[i] = std::copysign(0.9f + 0.1f * std::tanh((a - 0.9f) * 10.f), out[i]);
     }
+}
+
+std::shared_ptr<std::vector<int16_t>> decodeAudio16(const std::string& path, uint32_t sampleRate) {
+    ma_decoder_config cfg = ma_decoder_config_init(ma_format_s16, 2, sampleRate);
+    ma_decoder dec;
+    if (ma_decoder_init_file(path.c_str(), &cfg, &dec) != MA_SUCCESS) return nullptr;
+    auto pcm = std::make_shared<std::vector<int16_t>>();
+    ma_uint64 total = 0;
+    if (ma_decoder_get_length_in_pcm_frames(&dec, &total) == MA_SUCCESS && total > 0) pcm->reserve((size_t)total * 2);
+    std::vector<int16_t> chunk(4096 * 2);
+    for (;;) {
+        ma_uint64 got = 0;
+        ma_decoder_read_pcm_frames(&dec, chunk.data(), 4096, &got);
+        if (got == 0) break;
+        pcm->insert(pcm->end(), chunk.begin(), chunk.begin() + got * 2);
+    }
+    ma_decoder_uninit(&dec);
+    return pcm->empty() ? nullptr : pcm;
 }
