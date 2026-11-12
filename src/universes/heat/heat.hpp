@@ -105,7 +105,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false;
-    float dropAmt_ = 0.f, colAmt_ = 0.f, flare_ = 0.f, tetris_ = 0.f;
+    float dropAmt_ = 0.f, colAmt_ = 0.f, flare_ = 0.f, quadFlash_ = 0.f;
     float lo_ = 0.f, hi_ = 1.f; // the camera's range (temperature image units)
     double lastBeat_ = -1.0;
     int beatCount_ = 0, bubbleSide_ = 1;

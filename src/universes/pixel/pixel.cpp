@@ -11,7 +11,7 @@
 // Calm is a still landscape at its golden hour with a few living details; mid slides the near layer in, sways
 // the parallax and lets critters loose on the beat; peak brings the weather and the place's big event, and the
 // foreground. Locks squash for two frames and puff dust; cleared rows flash and burst into their pixels; a
-// Tetris fires a screen-wide pixel firework; the slow motion dissolves the night palette in (ordered dither,
+// quad fires a screen-wide pixel firework; the slow motion dissolves the night palette in (ordered dither,
 // stars, a moon); a game over crumbles the stack pixel by pixel into a sand pile. Changing universe, the world
 // fades smoothly into the bridge while the stack turns to plain ink (no dither there: easy on the eyes).
 #include "universes/pixel/pixel.hpp"
@@ -229,8 +229,8 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
     case GameEvent::Clear: {
         lock_.active = false;
         for (auto& c : ev.cells) dying_.push_back({c.x, c.y, c.type, 0.f, false});
-        if (ev.count >= 4 || forcedTetris_ >= 0) {
-            forcedTetris_ = -1;
+        if (ev.count >= 4 || forcedQuad_ >= 0) {
+            forcedQuad_ = -1;
             // A screen-wide pixel firework.
             flash_ = 1.f;
             const int n = ev.backToBack ? 9 : 7;

@@ -11,9 +11,9 @@
 // well in a stream and are tapped in one after another along the next rows of the figures (their outline first, then
 // row by row inward; then the medallion's ground, the vase, the stems, the leaves, the grapes), each chip taking its
 // smalto's color as it flies, each one standing a little proud and catching the light as it is set (a gold one
-// flashes). The rows alternate between the two sides; a double or a triple lays more, faster. A Tetris sends a swarm
+// flashes). The rows alternate between the two sides; a double or a triple lays more, faster. A quad sends a swarm
 // that lays a great part of a figure in one sweep, then a glint runs around its medallion's gold ring. Once both sides
-// are complete the rows re-set tesserae of the ground, each one glinting (a Tetris: the gold of a whole side).
+// are complete the rows re-set tesserae of the ground, each one glinting (a quad: the gold of a whole side).
 //
 // The pieces are glazed tiles set in the bed: a pillowed glaze rounded over the edges (pale where it breaks over
 // them), a painted motif per type in tin white (or a deep tone on a pale tile) standing a little proud and running on
@@ -689,8 +689,8 @@ void TilesUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             cracks_.push_back({c.x, c.y, c.type, (float)c.x, (float)-c.y, seedOf(ids_[c.y][c.x] ? ids_[c.y][c.x] : nextId_), 0.f});
         }
-        const bool tetris = ev.count >= 4 || forceTetris_ >= 0;
-        forceTetris_ = -1;
+        const bool quadClear = ev.count >= 4 || forceQuad_ >= 0;
+        forceQuad_ = -1;
         const float t0 = time_ + CRACK_T;
         // the rows' tiles, cell by cell
         std::vector<std::vector<vec3>> rowCols;
@@ -705,8 +705,8 @@ void TilesUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         if (!design_.lay.sides || rowCols.empty()) {
             // no room for the medallions: the chips only shatter (a few glints in the ground)
-        } else if (tetris) {
-            // a Tetris: a great part of a figure laid in one sweep, then a glint running around its medallion's
+        } else if (quadClear) {
+            // a quad: a great part of a figure laid in one sweep, then a glint running around its medallion's
             // gold ring; once the figures are complete, the whole gold of that side catches the light in turn
             const int side = nextSide_;
             std::vector<vec3> all;

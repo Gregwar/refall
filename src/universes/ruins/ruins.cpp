@@ -576,7 +576,7 @@ void RuinsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 dust_.push_back(b);
             }
         }
-        // the noise startles a few birds; a Tetris a whole flock
+        // the noise startles a few birds; a quad a whole flock
         if (ev.count >= 4) releaseBirds(12, 0);
         else if (rng_.chance(0.4f)) releaseBirds(3 + rng_.irange(0, 3 - 1), rng_.chance(0.5f) ? 1 : -1);
         // each clear sends dust to the next repairs
@@ -976,7 +976,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         fl.phase += 0.f;
     }
 
-    // ---- The rewind: the lines (50-line scale) eased (a line a breath, a Tetris a few; a new game sends time
+    // ---- The rewind: the lines (50-line scale) eased (a line a breath, a quad a few; a new game sends time
     // forward again, quickly).
     {
         const float target = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));

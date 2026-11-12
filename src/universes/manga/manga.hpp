@@ -188,8 +188,8 @@ private:
     std::vector<Pop> pops_;     // barrage: sound effects in starburst balloons
     bool negative_ = false;     // drawing elements inverted (white on ink)
     int clipOverride_ = -1;     // drawing elements into another clip slot
-    float burst_ = 0.f;        // its burst of color (or a Tetris')
-    float tetrisT_ = -1.f;     // seconds since a Tetris
+    float burst_ = 0.f;        // its burst of color (or a quad's)
+    float quadT_ = -1.f;     // seconds since a quad
     float kickIn_ = 0.f;
     long step_ = -1000;        // the two-beat grid
     int rumble_ = 0;

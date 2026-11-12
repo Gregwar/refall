@@ -9,7 +9,7 @@
 // drifts the clouds with the tempo (a glide on each beat), flocks of birds cross the distance flapping on the beat
 // and gentle beams fall from the sun, peak raises the camera while towering cumulus grow out of the sea on the
 // horizon, god rays stream through their gaps and the kicks light them from inside (lightning). A lock breathes a
-// soft puff of mist from under the piece; a cleared row dissolves into mist that drifts away on the wind; a Tetris
+// soft puff of mist from under the piece; a cleared row dissolves into mist that drifts away on the wind; a quad
 // parts the high veil around the sun and the light bursts through; slow motion is night above the clouds (the moon,
 // stars, silver cloud tops); game over drops the stack through the sea of clouds while the mist rises over it.
 // A change of universe closes the clouds in: the camera sinks into the sea and the fog takes the world.
@@ -491,7 +491,7 @@ void CloudscapeUniverse::onEvent(const GameEvent& ev, const Game&) {
     switch (ev.type) {
     // Locks and hard drops: no mist (only the tile's own breath of light, in the tile shader).
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         const float wind = ev.x < 4.5f ? 1.f : -1.f; // the mist drifts away from where the piece landed
         for (auto& c : ev.cells) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
@@ -502,8 +502,8 @@ void CloudscapeUniverse::onEvent(const GameEvent& ev, const Game&) {
             d.seed = rng_.uniform();
             dying_.push_back(d);
         }
-        if (tetris) {
-            tetrisT_ = 0.f;
+        if (quadClear) {
+            quadT_ = 0.f;
             partT_ = 0.f;
             rayPulse_ = std::max(rayPulse_, 1.6f);
             for (int i = 0; i < 4; i++)
@@ -617,11 +617,11 @@ void CloudscapeUniverse::simulate(const Game& game, const MusicState& music, flo
     }
     rayPulse_ = approach(rayPulse_, 0.f, 1.4f, dt);
 
-    // Tetris: the veil parts from the sun outward, the light floods, then the sky slowly closes again.
-    tetrisT_ += dt;
+    // A quad: the veil parts from the sun outward, the light floods, then the sky slowly closes again.
+    quadT_ += dt;
     partT_ += dt;
     part_ = partT_ < 0.9f ? smoothstepf(0.f, 0.9f, partT_) : 1.f - smoothstepf(3.2f, 6.f, partT_);
-    flare_ = tetrisT_ < 3.f ? (tetrisT_ < 0.25f ? tetrisT_ / 0.25f : 1.f) * (1.f - smoothstepf(0.4f, 3.f, tetrisT_)) : 0.f;
+    flare_ = quadT_ < 3.f ? (quadT_ < 0.25f ? quadT_ / 0.25f : 1.f) * (1.f - smoothstepf(0.4f, 3.f, quadT_)) : 0.f;
     flood_ = flare_ * 0.9f;
 
     // Birds cross the distance at mid, flapping on the beat.

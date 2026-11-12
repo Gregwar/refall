@@ -16,7 +16,7 @@
 // The drop is the sunset, held for the whole drop section: the bands swirl around the well into one big rolling
 // wave and the palette swings to the variant's deeper rose-gold / magenta tones, eased in over a second or two and
 // out over a few once the drop ends. A cleared row's tiles swell softly and vanish, each releasing petals and
-// bubbles that drift out behind the well and float up; a Tetris sends a soft shower of hearts and petals from both
+// bubbles that drift out behind the well and float up; a quad sends a soft shower of hearts and petals from both
 // sides and swells the waves; slow motion is a lavender dusk with slower waves; game over greys the stack from the
 // top. HUD: Quicksand and Nunito (rounded), deep plum on a feathered blush halo.
 #include <algorithm>
@@ -425,7 +425,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
         }
         if (ev.count >= 4) {
-            // a Tetris: a soft shower of hearts and petals from both sides; the waves swell
+            // a quad: a soft shower of hearts and petals from both sides; the waves swell
             swell_ = std::max(swell_, 0.8f);
             for (int i = 0; i < 26; i++) {
                 Part q;

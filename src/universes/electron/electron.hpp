@@ -81,7 +81,7 @@ private:
     float pher(const std::vector<float>& f, vec2 p) const;
     void deposit(std::vector<float>& f, vec2 p, float amount);
     void wear(vec2 p, float amount);
-    void burst(float x, float y, int type, int n, float speedK, bool tetris);
+    void burst(float x, float y, int type, int n, float speedK, bool quadClear);
     void sparks(vec2 at, vec2 dir, const vec3& col, int n, float speed, float spread, float flash);
     void syncCells(const Game& game);
     void warmUp(const Game& game);

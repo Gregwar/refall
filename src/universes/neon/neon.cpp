@@ -17,7 +17,7 @@
 // A cleared row's pigment lifts off (the row is empty in a quarter of a second) and drifts up, behind the stack, as
 // soft washes of color that float out to the skyline and paint a building in, from its foot up: the city grows with
 // the lines, more colorful over the song, each building in the hue of the section it was painted in; once every slot
-// is painted, new lines re-tint the oldest. A Tetris paints a whole block of four at once. A new song starts back
+// is painted, new lines re-tint the oldest. A quad paints a whole block of four at once. A new song starts back
 // from a dark city.
 //
 // The song: calm parts are a dark, quiet city with a few lit windows; mid lights windows on the beat grid (each
@@ -459,7 +459,7 @@ int NeonUniverse::paintBuilding(float phase, float delay, int prefer) {
     return bi;
 }
 
-// A Tetris: a block of neighbouring slots painted at once.
+// A quad: a block of neighbouring slots painted at once.
 int NeonUniverse::paintBlock(float phase, float delay, int side) {
     const int first = paintBuilding(phase, delay, side);
     if (first < 0) return -1;
@@ -686,14 +686,14 @@ void NeonUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        // each row's pigment lifts off, drifts out to the skyline and paints a building in (a Tetris: a block)
+        // each row's pigment lifts off, drifts out to the skyline and paints a building in (a quad: a block)
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         std::vector<int> targets;
-        if (tetris) {
+        if (quadClear) {
             const int side = rng_.chance(0.5f) ? -1 : 1;
             const int first = paintBlock(phase_, 1.0f, side);
             if (first >= 0) {
@@ -703,7 +703,7 @@ void NeonUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     if (city_[i].order > paintStamp_ - 4) recent.push_back({city_[i].order, i});
                 for (auto& pr : recent) targets.push_back(pr.second);
             }
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
         } else {
             for (size_t k = 0; k < rows.size(); k++) {
                 const int bi = paintBuilding(phase_, 1.05f + 0.15f * k, (k % 2) ? 1 : -1);
@@ -725,7 +725,7 @@ void NeonUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 lifts_.push_back({p.x, p.y, m, l, 0.f});
                 Wisp w;
                 w.p0 = w.p = vec2{p.x, p.y};
-                int bi = targets.empty() ? -1 : targets[(tetris ? (size_t)c.x * targets.size() / Game::W : k % targets.size())];
+                int bi = targets.empty() ? -1 : targets[(quadClear ? (size_t)c.x * targets.size() / Game::W : k % targets.size())];
                 if (bi >= 0) {
                     const Building& b = city_[bi];
                     w.target = vec2{b.x + rng_.range(-0.9f, 0.9f) * b.hw, b.base + std::min(b.h * rng_.range(0.2f, 0.6f), 6.f)};
@@ -742,7 +742,7 @@ void NeonUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 w.seed = rng_.uniform();
                 w.rot = rng_.range(0.f, TAU);
                 w.stretch = rng_.range(1.0f, 1.5f);
-                w.peak = tetris ? 0.22f : 0.3f;
+                w.peak = quadClear ? 0.22f : 0.3f;
                 wisps_.push_back(w);
             }
         }
@@ -1130,7 +1130,7 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.85f * smoothstepf(16.f * spb, 40.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.6f : 0.3f, dt);
     swell_ = approach(swell_, 0.f, 0.25f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.35f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.35f, dt);
     kickEnv_ = std::max(kickEnv_ * std::exp(-dt * 5.f), kickIn_ * wp);
     kickIn_ = 0.f;
     // the falling piece's colors follow the section, eased
@@ -1240,7 +1240,7 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBuild_, "uWinStatic", (0.035f + 0.02f * wm) * (1.f - 0.5f * slow_));
         set1f(progBuild_, "uWinVar", (0.07f * wm + 0.07f * wp + 0.05f * fest_) * (1.f - 0.6f * slow_));
         set1f(progBuild_, "uWinGlow", 0.2f + 0.08f * wp + 0.06f * fest_);
-        set1f(progBuild_, "uDrop", saturate(fest_ * 1.1f + 0.35f * tetrisGlow_) * (1.f - 0.6f * slow_));
+        set1f(progBuild_, "uDrop", saturate(fest_ * 1.1f + 0.35f * quadGlow_) * (1.f - 0.6f * slow_));
         set1f(progBuild_, "uRich", 0.5f * wp + 0.3f * swell_);
         set1f(progBuild_, "uPhi", phase_);
         set1f(progBuild_, "uKick", kickEnv_);

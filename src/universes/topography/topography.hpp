@@ -131,7 +131,7 @@ private:
     bool dropMode_ = false;     // this peak is a drop (the flood), not only a chorus
     float dropAmt_ = 0.f;       // eased dropMode_
     float surge_ = 0.f;         // the drop's surge of water, settling over seconds
-    float tetrisFlood_ = 0.f;
+    float quadFlood_ = 0.f;
     float tint_ = 0.f;          // layer tints shown
     float water_level_ = -99.f; // the lakes' level (contour intervals)
     float waterOn_ = 0.f;

@@ -28,7 +28,7 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
-    void forceFx(int slow, int tetris) override { (void)slow; forceTetris_ = tetris; }
+    void forceFx(int slow, int quadClear) override { (void)slow; forceQuad_ = quadClear; }
 
 private:
     // ---- The mosaic.
@@ -171,7 +171,7 @@ private:
     double beat_ = 0.0;
     float bps_ = 2.f;
     bool hasSong_ = false;
-    int forceTetris_ = -1;
+    int forceQuad_ = -1;
 
     bool slowOn_ = false;
     float slow_ = 0.f;

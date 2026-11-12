@@ -16,8 +16,8 @@
 //
 // The dive is one similarity transform about a point left of the HUD's left column, so the whole world streams out
 // from it: depth z (octaves of zoom) drifts slowly inward all the time, each cleared line pushes it 1.1 octave
-// deeper and a Tetris about a stage, eased (the zoom's speed changes smoothly and stays under a third of an octave a
-// second, so a Tetris glides down through the next stage for some twelve seconds): the strings at about 50 lines. Each stage is a whole world in its own frame, its things of a
+// deeper and a quad about a stage, eased (the zoom's speed changes smoothly and stays under a third of an octave a
+// second, so a quad glides down through the next stage for some twelve seconds): the strings at about 50 lines. Each stage is a whole world in its own frame, its things of a
 // fixed size, 16 times smaller than the stage before; the shader draws the stage we are in with the next one's
 // things over it, then crossfades into the next one over the last octave and a half (shaders.hpp). From the universe
 // to the shore the stages nest exactly (each draws the one before it as its background, the one after it at its
@@ -139,13 +139,13 @@ constexpr double STAGE_OCT = 4.0;                 // octaves per stage (16 times
 constexpr int STAGES = 15;
 constexpr double LOOP = STAGE_OCT * STAGES;       // a loop of the fifteen stages: back to the whole universe
 // The pace: the strings, the last stage, at about 50 lines of a game, one song (lines on the 50-line scale:
-// paceLines() rescales the real lines to the song's length, 50 for a 3:20 song). A line is 1.1 octave, a Tetris its
+// paceLines() rescales the real lines to the song's length, 50 for a 3:20 song). A line is 1.1 octave, a quad its
 // four lines (4.4 octaves, about a stage), and the slow drift adds some 0.3 octave a minute: a stage every ~3.5 lines
 // in a typical game (the planet at ~11, the rock pool at ~22, the strings at ~50, the universe again at ~54).
 // (Rather than shorter stages: their worlds nest 16 times smaller each (shaders.hpp), and a stage of 2 octaves would
 // barely grow before the next one fades in. The speed cap is unchanged: the zoom glides more of the time instead.)
 constexpr double STEP = 1.1;                      // a line
-constexpr double TETRIS_EXTRA = 0.0;              // a Tetris: 4 lines + this (already a whole stage)
+constexpr double QUAD_EXTRA = 0.0;              // a quad: 4 lines + this (already a whole stage)
 constexpr float OMEGA = 0.07f;            // the zoom's turn (radians an octave; the shader's REL is 4 of them)
 constexpr double PLANET_Z = 12.0;         // where the planet's stage starts in a loop (its clock slows from there)
 constexpr float CLEAR_T = 0.42f;          // a cleared row melts in this long (real time)
@@ -483,10 +483,10 @@ void TidePoolUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        // a Tetris: a plunge through a whole scale
+        // a quad: a plunge through a whole scale
         if (lines >= 4) {
-            bonus_ += TETRIS_EXTRA;
-            if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[tidepool] tetris at %.1f s\n", time_);
+            bonus_ += QUAD_EXTRA;
+            if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[tidepool] quad at %.1f s\n", time_);
         }
         break;
     }
@@ -872,9 +872,9 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         pal_ = basePal_;
     }
 
-    // Test hook: ZEN_TIDEPOOL_TETRIS=T plays a Tetris's plunge (and its four rows melting) T seconds in.
+    // Test hook: ZEN_TIDEPOOL_QUAD=T plays a quad's plunge (and its four rows melting) T seconds in.
     {
-        static const float tAt = std::getenv("ZEN_TIDEPOOL_TETRIS") ? (float)std::atof(std::getenv("ZEN_TIDEPOOL_TETRIS")) : -1.f;
+        static const float tAt = std::getenv("ZEN_TIDEPOOL_QUAD") ? (float)std::atof(std::getenv("ZEN_TIDEPOOL_QUAD")) : -1.f;
         if (tAt >= 0.f && !f.bare && time_ >= tAt && time_ - wdt < tAt) {
             GameEvent ev{GameEvent::Clear};
             ev.count = 4;
@@ -918,10 +918,10 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         if (debugZ_ >= 0.0) target = debugZ_;
         if (!zSet_) { z_ = target; zVel_ = 0.0; zSet_ = true; }
         linesShown_ = lines;
-        // a critically damped spring: each clear an eased step inward, a Tetris a plunge
+        // a critically damped spring: each clear an eased step inward, a quad a plunge
         // the zoom's speed eases toward a speed set by the distance left (slowing down as it arrives), never
         // faster than a third of an octave a second (the far edge of the screen then moves a few pixels a frame), and
-        // it changes smoothly: a clear is a soft push, a Tetris a long glide down through a whole scale
+        // it changes smoothly: a clear is a soft push, a quad a long glide down through a whole scale
         const bool back = overT_ >= 0.f;
         // (at a third of an octave a second the strings take some 2.6 minutes at least: a song shorter than ~2:45
         // has a scene of fewer than 50 lines, and the cap rises with its pace, up to twice, so it can keep up)

@@ -331,7 +331,7 @@ void navis(float life, float t, Out out) {
 }
 
 // ---------------------------------------------------------------- SCORPIO
-// A scorpion (a Tetris's great constellation): a head with its claws, a segmented body, the tail curling up over
+// A scorpion (a quad's great constellation): a head with its claws, a segmented body, the tail curling up over
 // its back to the sting; in a drop the tail sways and the claws open.
 void scorpio(float life, float t, Out out) {
     const float sway = std::sin(t * 1.3f) * 0.12f * life, open = (0.5f + 0.5f * std::sin(t * 2.f)) * 0.25f * life;

@@ -17,7 +17,7 @@
 //
 // A piece falls whole; landing cracks it, its seams opening molten from the contact upward, then cooling; a cleared row cracks along its
 // seams and its shards fall away into the dark (well under half a second, at the real speed even in slow motion);
-// a Tetris sends a burst of molten veins out of the rows into the stone. Slow motion is moonlight: the light swings
+// a quad sends a burst of molten veins out of the rows into the stone. Slow motion is moonlight: the light swings
 // to the other side, cold and silver, the metal turns to platinum, the gold leaf hangs in the air. Game over opens
 // every seam of the stack wide with gold, row by row, before it sinks into the dark. A change of universe dims the
 // slab to the bridge, the stack turning to plain ink.
@@ -542,7 +542,7 @@ void KintsugiUniverse::walk(Net& n, Rng& r, float x, float y, float ang, float l
 }
 
 // kind 0: a few thin veins creeping into the stone (mid); kind 1: the peak's network, trunks racing in from the edges
-// of the slab (speed: how fast), branches spreading for many seconds after; kind 2: a Tetris burst.
+// of the slab (speed: how fast), branches spreading for many seconds after; kind 2: a quad burst.
 void KintsugiUniverse::growNet(Net& n, int kind, float speed, uint64_t seed) {
     Rng r(seed);
     n.kind = kind;
@@ -591,7 +591,7 @@ void KintsugiUniverse::growNet(Net& n, int kind, float speed, uint64_t seed) {
         return;
     }
     if (kind == 2) {
-        // a Tetris: eight cracks burst in from the edges of the slab, molten, and cool off
+        // a quad: eight cracks burst in from the edges of the slab, molten, and cool off
         for (int i = 0; i < 8; i++) {
             const float sgn = i % 2 == 0 ? -1.f : 1.f;
             fromEdge(sgn, r.range(-H * 0.8f, H * 0.5f), r.range(10.f, 16.f), r.range(0.06f, 0.08f), r.range(0.f, 0.15f), 1, 0.08f,
@@ -677,9 +677,9 @@ std::vector<PolyV> clipBisector(const std::vector<PolyV>& in, vec2 site, vec2 ot
 } // namespace
 
 // A cleared row breaks along the gold seams of its pieces: each cell is cut by the seams' Voronoi diagram, and the
-// fragments of one piece that lie between the same seams (across its cells, across rows in a Tetris) fall as one
+// fragments of one piece that lie between the same seams (across its cells, across rows in a quad) fall as one
 // shard, its broken edges gold, its other edges (the piece's outline) plain.
-void KintsugiUniverse::breakRows(const GameEvent& ev, bool tetris) {
+void KintsugiUniverse::breakRows(const GameEvent& ev, bool quadClear) {
     struct Group { Shard s; float area = 0; vec2 sum = v2(0, 0); int id; };
     std::vector<Group> groups;
     std::vector<std::pair<long long, int>> index; // (piece id, site) -> group
@@ -795,7 +795,7 @@ void KintsugiUniverse::breakRows(const GameEvent& ev, bool tetris) {
         s.pivot = pivot;
         // thrown in a random direction (mostly sideways and up, leaning away from the piece's center), then gravity
         const float ang = std::atan2(out.y / ol, out.x / ol) * 0.35f + rng_.range(0.15f, PI - 0.15f) * 0.65f;
-        const float sp = rng_.range(1.5f, 4.f) * (tetris ? 1.3f : 1.f);
+        const float sp = rng_.range(1.5f, 4.f) * (quadClear ? 1.3f : 1.f);
         s.v = v2(std::cos(ang) * sp, std::sin(ang) * sp);
         // tumbling about a random axis, mostly in the plane (so its thickness shows)
         {
@@ -840,12 +840,12 @@ void KintsugiUniverse::onEvent(const GameEvent& ev, const Game&) {
         lastDrop_ = ev.count;
         break;
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         bool cleared[Game::H] = {};
         // the row breaks along the gold seams of its pieces; its shards fall away into the dark
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
-        breakRows(ev, tetris);
+        breakRows(ev, quadClear);
         // collapse the bookkeeping like the board
         Owner next[Game::H][Game::W];
         int dst = Game::H - 1;
@@ -859,7 +859,7 @@ void KintsugiUniverse::onEvent(const GameEvent& ev, const Game&) {
         }
         for (int y = 0; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) own_[y][x] = next[y][x];
-        if (tetris) {
+        if (quadClear) {
             nets_.emplace_back();
             Net& n = nets_.back();
             growNet(n, 2, 26.f, rng_.next());

@@ -77,7 +77,7 @@ private:
     Pose kid_, mom_, dad_;
     int act_ = 0;
     float actT_ = 0.f, actDur_ = 3.f;
-    float joy_ = 0.f;             // a drop's, a Tetris's lift of the spirits (fading)
+    float joy_ = 0.f;             // a drop's, a quad's lift of the spirits (fading)
     float reunion_ = 0.f;         // 0 .. 1 as the family comes into view and the cub runs to them
     void chooseAct(float mood, int stage, bool home);
     void updateKid(float dt, float stageMood, int stage, bool travelling, float speed);
@@ -92,7 +92,7 @@ private:
         vec2 a{0, 0}, b{0, 0}, ctl{0, 0};
         float age = 0.f, life = 2.f, size = 0.3f, seed = 0.f;
         vec3 col{1.f};
-        int kind = 0;             // 0 a light, 1 a bamboo snack, 2 a big one (a Tetris)
+        int kind = 0;             // 0 a light, 1 a bamboo snack, 2 a big one (a quad)
         bool fed = false;
     };
     std::vector<Light> lights_;

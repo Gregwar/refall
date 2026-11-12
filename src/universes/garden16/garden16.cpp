@@ -17,7 +17,7 @@
 // shifts the sky toward the variant's glow from the horizon, flowers burst open across the banks frame by frame,
 // petals fly, butterflies swarm and the worms hurry. APRIL RAIN rains lightly through its drops (pixel streaks, tiny
 // splashes on the tops). A cleared row pops: its tiles burst into 3x3 dirt bits that fall and shrink away; a hard
-// landing pushes two small dust puffs out from the contact; a Tetris sends dandelion seeds up from the ground line.
+// landing pushes two small dust puffs out from the contact; a quad sends dandelion seeds up from the ground line.
 #include "universes/garden16/garden16.hpp"
 
 #include <cstdio>
@@ -518,7 +518,7 @@ void Garden16Universe::onEvent(const GameEvent& ev, const Game& game) {
         for (int y = 0; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) soil_[y][x] = next[y][x];
         if (ev.count >= 4) {
-            // a Tetris: dandelion seeds rise from the whole ground line, the stack's flowers open at once
+            // a quad: dandelion seeds rise from the whole ground line, the stack's flowers open at once
             rush_ = 1.f;
             for (int i = 0; i < 70; i++) {
                 const int c = rng_.chance(0.5f) ? rng_.irange(cMin_, -1) : rng_.irange(10, cMax_);

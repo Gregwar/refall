@@ -11,7 +11,7 @@
 // (the erosion is kept for the whole song: the map keeps a record). The drop is a flood: the water rises, lakes fill
 // the valleys and ring the stack, lines parallel to the shores ripple outward with the kicks, the layer tints come
 // in, and the level swells slowly with the phrases. A cleared row sinks into the map (the cells shrink and fade; the
-// contours relax as the land slumps) and leaves its debris as fans against the well's walls, a Tetris is a flash
+// contours relax as the land slumps) and leaves its debris as fans against the well's walls, a quad is a flash
 // flood, slow motion is a low dusk sun raking the relief, game over is the sea rising over everything.
 //
 // Cost: the terrain is a CPU grid of four samples per cell (~20k), three box blurs a frame, the drainage network a few times a second; the
@@ -961,7 +961,7 @@ void TopographyUniverse::onEvent(const GameEvent& ev, const Game& game) {
             fading_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), m, 0.f});
         }
         // the debris: fans of sediment against both walls, at the rows' height (kept for the song)
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (int y = 0; y < Game::H; y++) {
             if (!rows[y]) continue;
             const float wy = layout::cellPos(0.f, (float)y).y;
@@ -972,7 +972,7 @@ void TopographyUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     for (int i = std::max(0, ci - 9); i <= std::min(gw_ - 1, ci + 9); i++) {
                         const float dx = gx0_ + i * gs_ - fx, dy = gy0_ + j * gs_ - wy;
                         float& sd = sed_[(size_t)j * gw_ + i];
-                        sd = std::min(2.f, sd + (tetris ? 0.4f : 0.28f) * std::exp(-(dx * dx * 0.7f + dy * dy) / 1.4f));
+                        sd = std::min(2.f, sd + (quadClear ? 0.4f : 0.28f) * std::exp(-(dx * dx * 0.7f + dy * dy) / 1.4f));
                     }
             }
         }
@@ -987,8 +987,8 @@ void TopographyUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        if (tetris) {
-            tetrisFlood_ = 1.f;
+        if (quadClear) {
+            quadFlood_ = 1.f;
         }
         break;
     }
@@ -1356,7 +1356,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     for (auto& pk : peaks_) pk.w = approach(pk.w, pk.wT, 0.8f, dt);
     peaks_.erase(std::remove_if(peaks_.begin(), peaks_.end(), [](const Peak& p) { return p.wT <= 0.f && p.w < 0.01f; }), peaks_.end());
     surge_ = approach(surge_, 0.f, 0.22f, dt);
-    tetrisFlood_ = approach(tetrisFlood_, 0.f, 0.2f, dt);
+    quadFlood_ = approach(quadFlood_, 0.f, 0.2f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     if (!f.paused) {
@@ -1393,12 +1393,12 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
         float p;
         if (lv_ <= 1.f) p = lerpf(-0.05f, 0.025f, lv_);
         else p = lerpf(0.025f, 0.16f + 0.12f * dropAmt_, lv_ - 1.f);
-        p += 0.12f * surge_ + 0.16f * tetrisFlood_;
+        p += 0.12f * surge_ + 0.16f * quadFlood_;
         if (overT_ >= 0.f) p = lerpf(p, 1.1f, over_);
         float W = waterPercentile(p);
         // the drop floods past the well's terrace: the stack stands as an island
         W = std::max(W, lerpf(-99.f, WELL_FLOOR + 0.6f, dropAmt_ * wp));
-        W = std::max(W, lerpf(-99.f, WELL_FLOOR + 0.7f, tetrisFlood_));
+        W = std::max(W, lerpf(-99.f, WELL_FLOOR + 0.7f, quadFlood_));
         if (music.hasSong) W += 0.3f * wp * (0.5f - 0.5f * std::cos((float)(TAU * std::fmod(music.beat, 8.0) / 8.0)));
         if (water_level_ < -90.f) water_level_ = W;
         const float rate = W > water_level_ ? 2.2f : 0.9f;

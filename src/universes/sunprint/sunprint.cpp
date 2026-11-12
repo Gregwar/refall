@@ -11,7 +11,7 @@
 // eight bars); a chorus raises it (shorter shadows, the ferns stirring every two beats, every four bars); a peak is
 // full sun (crisp colored shadows, glints running along the plates' bevels on the kicks, every two bars). The drop
 // brings both tints up a little more saturated on the downbeat. A cleared row's plates are lifted off the sheet
-// (they fade as they rise, their shadows growing soft); a Tetris is a burst of sun over the well. Slow motion is the
+// (they fade as they rise, their shadows growing soft); a quad is a burst of sun over the well. Slow motion is the
 // sun going behind a cloud (a cool, quiet afternoon); game over turns the sheet once more and lifts the plates off
 // from the top down, leaving the stack's silhouette in the old tint. A new song rinses the sheet to its tint.
 //
@@ -489,7 +489,7 @@ void SunprintUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(glint_, ng, sizeof(glint_));
         }
-        // a Tetris: a burst of sun over the cleared rows
+        // a quad: a burst of sun over the cleared rows
         if (ev.count >= 4 && lowest >= 0) {
             flare_ = 1.f;
             flareY_ = 0.5f * (layout::cellPos(0.f, (float)lowest).y + layout::cellPos(0.f, (float)highest).y);

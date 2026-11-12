@@ -68,7 +68,7 @@ private:
     struct Fading { float x, y; int type, mask; float t, delay, seed; }; // a cell dissolving into the fog
     std::vector<Fading> fading_;
 
-    // ---- Motes (a cleared row's drift, a hard drop's dust) and the Tetris flock.
+    // ---- Motes (a cleared row's drift, a hard drop's dust) and the quad flock.
     struct Mote { vec2 p, v; float r, a, life, t; int tone; };
     std::vector<Mote> motes_;
     struct MoteInst { float a[4], b[4]; };
@@ -133,7 +133,7 @@ private:
     float dropHold_ = 0.f;                             // a drop outside a peak holds its look this long (seconds)
     float gustGoal_ = 0.f, gust_ = 0.f;                // the drop's gust bending the trees outward (eased)
     float invert_ = 0.f;                               // the drop's negative (0..1)
-    float gearSpin_ = 0.f;                             // the gears spinning through a drop                            // a Tetris: the light warms for a moment
+    float gearSpin_ = 0.f;                             // the gears spinning through a drop                            // a quad: the light warms for a moment
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float lampKick_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;

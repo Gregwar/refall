@@ -14,7 +14,7 @@
 // motes to the cloud tops on one side, and a creature rises out of the clouds there (breaking through a misty edge,
 // lighting the tops under it) and swims away through the sky, translucent and glowing (a bright membrane, a soft
 // halo, its own lights, a trail of motes): a single row brings a school of small fish, two rows a pair of jellyfish,
-// three a manta ray, a Tetris a whale (with a school of fish around it). They swim on, bobbing gently, and fade
+// three a manta ray, a quad a whale (with a school of fish around it). They swim on, bobbing gently, and fade
 // into the night or leave the screen. When the sky stays empty a while, a small creature drifts by in the distance.
 //
 // The song: calm drifts the clouds slowly under steady stars, a few motes rising from the clouds; mid drifts them
@@ -574,7 +574,7 @@ void SkyOceanUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
         }
         if (lines >= 4) {
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
             // a school of fish keeps the whale company
             spawnCreature(FISH, side, 1.f, false);
             Creature f = creatures_.back();
@@ -961,7 +961,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.4f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.4f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     kickGlow_ = std::max(approach(kickGlow_, 0.f, 4.f, dt), kick * wp);
@@ -995,7 +995,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
             beatPulse = std::max(0.f, 1.f - beatClock_ * 4.f);
         }
     }
-    const float lifeB = (0.78f + 0.12f * wm + 0.22f * wp + 0.2f * life + 0.25f * tetrisGlow_) * (1.f + (0.05f * wm + 0.1f * wp) * beatPulse);
+    const float lifeB = (0.78f + 0.12f * wm + 0.22f * wp + 0.2f * life + 0.25f * quadGlow_) * (1.f + (0.05f * wm + 0.1f * wp) * beatPulse);
 
     // ---- Spawns (the clears' creatures rise once their motes reach the clouds), ambient visitors.
     for (size_t i = 0; i < spawns_.size();) {
@@ -1300,7 +1300,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uAurora", pal_.aurora * (0.7f + 0.2f * wm + 0.3f * wp + 0.3f * life));
     set1f(progSky_, "uDrift", drift_);
     set1f(progSky_, "uTime", time_);
-    set1f(progSky_, "uGlow", 0.25f * wm + 0.45f * wp + 0.6f * life + 0.5f * tetrisGlow_ + 0.2f * swell_);
+    set1f(progSky_, "uGlow", 0.25f * wm + 0.45f * wp + 0.6f * life + 0.5f * quadGlow_ + 0.2f * swell_);
     set1f(progSky_, "uPx", skyT_.h / (2.f * viewH_.y));
     set1f(progSky_, "uSeed", (float)(seed_ % 97));
     set1f(progSky_, "uMoonLight", 1.f + 0.12f * wp + 0.25f * slow_);

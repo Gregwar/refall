@@ -546,18 +546,18 @@ void VectorUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         float yc = 0;
         for (auto& c : ev.cells) yc += layout::cellPos(0, (float)c.y).y;
         yc /= std::max<size_t>(1, ev.cells.size());
         // Each cleared cell's lines fly apart (vector debris): the blocks themselves break.
         for (auto& c : ev.cells) {
             vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            vec3 vel((c.x - 4.5f) * (tetris ? 0.9f : 0.5f), rng_.range(-0.5f, 1.5f), rng_.range(0.5f, 3.f));
-            shatter(p, 0.42f, c.type, vel, tetris ? 1.5f : 0.8f, tetris ? 1.3f : 1.1f, std::fabs(c.x - 4.5f) * 0.012f,
-                    tetris ? 0.45f : 0.8f);
+            vec3 vel((c.x - 4.5f) * (quadClear ? 0.9f : 0.5f), rng_.range(-0.5f, 1.5f), rng_.range(0.5f, 3.f));
+            shatter(p, 0.42f, c.type, vel, quadClear ? 1.5f : 0.8f, quadClear ? 1.3f : 1.1f, std::fabs(c.x - 4.5f) * 0.012f,
+                    quadClear ? 0.45f : 0.8f);
         }
-        if (tetris) {
+        if (quadClear) {
             // A vector shockwave and beam overdrive.
             rings_.push_back({vec3(0, yc, 0), 0.5f, 34.f, 0.f, 1.1f, 0.9f, 128, 1.f});
             if (ev.backToBack) rings_.push_back({vec3(0, yc, 0), 0.5f, 22.f, -0.15f, 1.1f, 0.7f, 4, 1.f});

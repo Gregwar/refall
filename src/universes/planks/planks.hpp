@@ -57,7 +57,7 @@ private:
         int state = 0;            // 0 waiting, 1 in flight, 2 placed
         float t = 0.f;            // since it landed
         int type = 0;
-        bool painted = false;     // a Tetris' plank keeps its paint
+        bool painted = false;     // a quad's plank keeps its paint
         float seed = 0.f;
     };
     std::vector<planks_build::PDef> prog_[2];

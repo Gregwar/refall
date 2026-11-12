@@ -98,7 +98,7 @@ private:
     float slow_ = 0.f;
     float overT_ = -1.f;
     float dimT_ = 0.f;
-    float tetris_ = 0.f;
+    float quadFlash_ = 0.f;
     double lastHalf_ = -1.0;
     Rng rng_{139};
 };

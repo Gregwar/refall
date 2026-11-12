@@ -358,13 +358,13 @@ vec3 ElectronUniverse::pieceColor(int type) const {
 
 // Loose grains of a cube: thrown out mostly sideways, along the row (the ones that land outside the well stay there
 // for the ants; inside the well they melt away at once).
-void ElectronUniverse::burst(float x, float y, int type, int n, float speedK, bool tetris) {
+void ElectronUniverse::burst(float x, float y, int type, int n, float speedK, bool quadClear) {
     const vec3 c = pieceColor(type);
     for (int k = 0; k < n && (int)grains_.size() < MAX_GRAINS; k++) {
         Grain g;
         g.p = v2(x + rng_.range(-0.35f, 0.35f), y + rng_.range(-0.35f, 0.35f));
         float side = x + rng_.range(-3.f, 3.f) > 0.f ? 1.f : -1.f;
-        const float a = (side > 0 ? 0.f : PI) + rng_.range(-0.75f, 0.75f) + (tetris ? rng_.range(-0.6f, 0.6f) : 0.f);
+        const float a = (side > 0 ? 0.f : PI) + rng_.range(-0.75f, 0.75f) + (quadClear ? rng_.range(-0.6f, 0.6f) : 0.f);
         const float sp = rng_.range(0.6f, 3.4f) * speedK * (rng_.chance(0.25f) ? 2.2f : 1.f);
         g.v = dirOf(a) * sp;
         g.col = c * rng_.range(0.9f, 1.08f);

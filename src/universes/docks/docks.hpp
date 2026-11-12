@@ -190,7 +190,7 @@ private:
     double time_ = 0.0;
     float worldTime_ = 0.f, beat_ = 0.f;
     int lastHalf_ = -1;
-    float tetrisT_ = 99.f;
+    float quadT_ = 99.f;
     int sideFlip_ = 0;
 
     bool slowOn_ = false;

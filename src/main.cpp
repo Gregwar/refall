@@ -1,4 +1,4 @@
-// Refall: a minimalist, music-driven Tetris.
+// Refall: a minimalist, music-driven falling-block puzzle game.
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
@@ -291,11 +291,11 @@ private:
     float overTime_ = 0; // seconds since game over
     int lastLevel_ = 1;
     float levelToast_ = 0;
-    // Slow-motion bonus (gravity at x0.25 while it lasts) and Tetris rewards.
+    // Slow-motion bonus (gravity at x0.25 while it lasts) and quad rewards.
     bool slowWas_ = false;
-    float slowToast_ = 0, tetrisToast_ = 0;
-    int tetrisPoints_ = 0;
-    bool tetrisB2B_ = false;
+    float slowToast_ = 0, quadToast_ = 0;
+    int quadPoints_ = 0;
+    bool quadB2B_ = false;
     bool paused_ = false, wantSkip_ = false, showHelp_ = true, quit_ = false;
     double songTime_ = 0, simSongTime_ = 0;
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
@@ -564,9 +564,9 @@ void App::handleEvents() {
         if (ev.type == GameEvent::Clear && !opt_.clipPath.empty() && clipStart_ >= 0 && songTime_ >= clipStart_ - 2.0)
             std::printf("[clip] clear %d at %.3f\n", ev.count, songTime_);
         if (ev.type == GameEvent::Clear && ev.count >= 4) {
-            tetrisToast_ = 2.4f;
-            tetrisPoints_ = ev.points;
-            tetrisB2B_ = ev.backToBack;
+            quadToast_ = 2.4f;
+            quadPoints_ = ev.points;
+            quadB2B_ = ev.backToBack;
         }
         if (ev.type == GameEvent::BonusStart) slowToast_ = 2.f;
     }
@@ -834,14 +834,14 @@ std::vector<HudText> App::buildHud(float dt) {
         float a = std::min(1.f, slowToast_) * std::min(1.f, (2.f - slowToast_) * 4.f);
         hud.push_back({"SLOW MOTION", c.x, c.y, 3.f * s, 0.75f * a, true, true, HUD_TOAST});
     }
-    tetrisToast_ = std::max(0.f, tetrisToast_ - dt);
-    if (tetrisToast_ > 0) {
+    quadToast_ = std::max(0.f, quadToast_ - dt);
+    if (quadToast_ > 0) {
         vec2 c = R_.project(vec3(0, 6.5f, 0)); // between the slow-motion and level toasts
-        float a = std::min(1.f, tetrisToast_ * 1.5f) * std::min(1.f, (2.4f - tetrisToast_) * 5.f);
-        float grow = 1.f + 0.08f * smoothstepf(2.4f, 1.6f, tetrisToast_);
-        hud.push_back({tetrisB2B_ ? std::string("BACK TO BACK ") + QUAD_NAME : std::string(QUAD_NAME), c.x, c.y, (tetrisB2B_ ? 3.4f : 4.2f) * grow * s, 0.9f * a,
+        float a = std::min(1.f, quadToast_ * 1.5f) * std::min(1.f, (2.4f - quadToast_) * 5.f);
+        float grow = 1.f + 0.08f * smoothstepf(2.4f, 1.6f, quadToast_);
+        hud.push_back({quadB2B_ ? std::string("BACK TO BACK ") + QUAD_NAME : std::string(QUAD_NAME), c.x, c.y, (quadB2B_ ? 3.4f : 4.2f) * grow * s, 0.9f * a,
                        true, true, HUD_TOAST});
-        hud.push_back({"+" + std::to_string(tetrisPoints_), c.x, c.y + 44 * s, 2.2f * s, 0.75f * a, false, true, HUD_TOAST_SUB});
+        hud.push_back({"+" + std::to_string(quadPoints_), c.x, c.y + 44 * s, 2.2f * s, 0.75f * a, false, true, HUD_TOAST_SUB});
     }
 
     levelToast_ = std::max(0.f, levelToast_ - dt);
@@ -1449,7 +1449,7 @@ int App::run() {
             }
         }
         if (shotMode && !clipMode && track_) {
-            // Test hook: ZEN_FX=slow:N, tetris:N or drop plays that special animation ZEN_FX_AT seconds before each shot.
+            // Test hook: ZEN_FX=slow:N, quad:N or drop plays that special animation ZEN_FX_AT seconds before each shot.
             static const char* fxEnv = std::getenv("ZEN_FX");
             static const float fxAt = std::getenv("ZEN_FX_AT") ? (float)std::atof(std::getenv("ZEN_FX_AT")) : 6.f;
             if (fxEnv && shotSettle < 12.f - fxAt && shotSettle + dt >= 12.f - fxAt) {
@@ -1466,8 +1466,8 @@ int App::run() {
                     for (int y = 18; y < 22; y++)
                         for (int x = 0; x < Game::W; x++) ev.cells.push_back({x, y, (x + y) % 7});
                     ev.points = 1200;
-                    tetrisToast_ = 2.4f;
-                    tetrisPoints_ = 1200;
+                    quadToast_ = 2.4f;
+                    quadPoints_ = 1200;
                     R_.onEvent(ev, game_);
                 }
             }
@@ -1612,7 +1612,7 @@ void App::beginSession(const Menu::Choice& c) {
     paused_ = wantSkip_ = false;
     audio_.setPaused(false);
     overTime_ = 0;
-    levelToast_ = slowToast_ = tetrisToast_ = skipToast_ = seekToast_ = failedToast_ = 0;
+    levelToast_ = slowToast_ = quadToast_ = skipToast_ = seekToast_ = failedToast_ = 0;
     songTime_ = simSongTime_ = 0;
     trackAge_ = 0;
     helpTimer_ = showHelp_ ? 14.f : 0.f;

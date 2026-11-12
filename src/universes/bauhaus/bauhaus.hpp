@@ -106,9 +106,9 @@ private:
     long bar_ = -1000, step_ = -1000;
     int heavy_ = -1;             // the side holding the big circle (-1 left, +1 right)
     float spin_ = 0.f;           // the big forms' turn at a peak (radians)
-    float tetrisTurn_ = 0.f, tetrisTurnTo_ = 0.f; // a Tetris turns the forms by a quarter
+    float quadTurn_ = 0.f, quadTurnTo_ = 0.f; // a quad turns the forms by a quarter
 
-    // ---- Traces: each cleared row joins the poster as a small form in a growing sampler, a Tetris as a medallion.
+    // ---- Traces: each cleared row joins the poster as a small form in a growing sampler, a quad as a medallion.
     struct Trace {
         int kind;          // 0 square, 1 disc, 2 triangle, 3 half disc, 4 quarter disc
         int col;           // its piece color
@@ -170,7 +170,7 @@ private:
     double lastBeat_ = 0.0;
     uint64_t salt_ = 0;       // a fold after a drop lays down a new composition
     bool folding_ = false;
-    float hop_ = 1.f;         // a Tetris: every card hops off the sheet as it turns (0..1)
+    float hop_ = 1.f;         // a quad: every card hops off the sheet as it turns (0..1)
     float kickIn_ = 0.f, kickShown_ = 0.f;
     float lockLine_ = 0.f, lockX0_ = 0.f, lockX1_ = 0.f, lockY_ = 0.f;
     float time_ = 0.f;

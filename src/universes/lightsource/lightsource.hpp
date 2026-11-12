@@ -159,7 +159,7 @@ private:
     float dropWait_ = 0.f, dropT_ = 99.f, dropAmp_ = 0.f;
     float drop_ = 0.f;    // the drop's state (0..1, eased)
     float chorus_ = 0.f;  // a peak that is not a drop
-    float tetrisT_ = 99.f;
+    float quadT_ = 99.f;
     double lastBeatSlot_ = -1.0;
     float slow_ = 0.f;
     bool slowOn_ = false;

@@ -27,7 +27,7 @@
 // under a spotlight circling the sheet that sweeps their shadows across it; after the drop they fold back flat onto a
 // new composition. Every cleared row closes into discs sliding out of the well
 // sideways (0.35 s, clipped at its edge) and joins the poster as one small form (a square, disc, triangle, half or
-// quarter disc in the row's main color) in a sampler grid that grows over the song; a Tetris hops every card off the
+// quarter disc in the row's main color) in a sampler grid that grows over the song; a quad hops every card off the
 // sheet as every big form turns a quarter, and adds a medallion of four quarter discs in the four rows' colors. Slow
 // motion turns the sheet into a photogram (a dark ground, the cut-outs pale where they held back the light, their
 // shadows a soft grey halo). Game over slides the stack out row by row from the top.
@@ -486,7 +486,7 @@ void BauhausUniverse::onEvent(const GameEvent& ev, const Game& game) {
             wipes_.push_back(w);
         }
         if (ev.count >= 4) {
-            tetrisTurnTo_ += 0.5f * PI; // every big form turns a quarter
+            quadTurnTo_ += 0.5f * PI; // every big form turns a quarter
             hop_ = 0.f;                 // and every card hops off the sheet as it turns
         }
         // compact the ids like the game did
@@ -1102,7 +1102,7 @@ void BauhausUniverse::card(Kind kind, float x, float y, float hx, float hy, floa
 // rows' forms as paper cards, each with its shadow.
 void BauhausUniverse::drawPoster(const MusicState& music) {
     const VariantDef& V = VARIANTS[variant_];
-    const float spin = spin_ + tetrisTurn_;
+    const float spin = spin_ + quadTurn_;
     cards_.clear();
     for (int i : {F_QUARTER, F_HALF, F_SQUARE, F_RING, F_CIRCLE, F_LINE0, F_LINE1, F_BAR0, F_TRIANGLE, F_BAR1}) {
         Form f = el_[i].cur;
@@ -1119,7 +1119,7 @@ void BauhausUniverse::drawPoster(const MusicState& music) {
         f.s *= 1.f + 0.35f * kickShown_;
         drawForm(i, f, spin);
     }
-    // the cleared rows: small cut-outs in the piece colors, the medallions of a Tetris
+    // the cleared rows: small cut-outs in the piece colors, the medallions of a quad
     int n = 0;
     for (size_t ti = 0; ti < traces_.size(); ti++) {
         const Trace& t = traces_[ti];
@@ -1212,7 +1212,7 @@ void BauhausUniverse::drawPoster(const MusicState& music) {
 // about a second), rises toward the eye (kept at its place on screen) and turns in space on its own axes at its own
 // pace on the beat grid: the free forms a quarter turn every two or four beats about a tilted axis, a little leaning,
 // the bars and rules rolling about their length, the sampler's tiles flipping in a wave along its columns. Folding
-// back, each unwinds the turn it had onto its new place. A Tetris hops every card off the sheet for a moment.
+// back, each unwinds the turn it had onto its new place. A quad hops every card off the sheet for a moment.
 void BauhausUniverse::poseCards(const MusicState& music) {
     (void)music;
     const float D = camDist_;
@@ -1837,11 +1837,11 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
         t.cur.s = lerpf(t.from.s, t.to.s, s);
     }
 
-    // ---- Peak: the big forms turn slowly (faster in a drop); a Tetris turns them a quarter.
+    // ---- Peak: the big forms turn slowly (faster in a drop); a quad turns them a quarter.
     {
         const float rate = wp * (realDrop_ ? 0.32f : 0.16f) * (f.paused ? 0.f : 1.f) * lerpf(1.f, 0.35f, slow_);
         spin_ += rate * dt;
-        tetrisTurn_ = approach(tetrisTurn_, tetrisTurnTo_, 3.f, dt);
+        quadTurn_ = approach(quadTurn_, quadTurnTo_, 3.f, dt);
         const float kick = std::max(music.kick, kickIn_);
         kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
         kickShown_ = std::max(kickShown_ * std::exp(-dt * 6.f), kick * wp);

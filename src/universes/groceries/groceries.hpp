@@ -159,7 +159,7 @@ private:
     bool dropMode_ = false, wasDrop_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
     float kickIn_ = 0.f, kickGlow_ = 0.f, refreshK_ = 0.f;
-    float tetrisT_ = 99.f;
+    float quadT_ = 99.f;
     double lastBeat_ = -1.0;
     float beatFlash_ = 0.f, beatAcc_ = 0.f;
     float worldTime_ = 0.f, beltPhase_ = 0.f, beltK_ = 0.5f, beltStep_ = 0.f, railPhase_ = 0.f;

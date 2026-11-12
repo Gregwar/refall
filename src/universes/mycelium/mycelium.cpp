@@ -837,7 +837,7 @@ void MyceliumUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const float dur = lines >= 4 ? 1.8f : 1.5f;
             pulses_.push_back({q0 - (g_ + 0.6f - q0) / dur * 0.9f, (g_ + 0.6f - q0) / dur, lines >= 4 ? 1.3f : 0.7f, 1.f, 0.45f});
         }
-        if (lines >= 4) { tetrisGlow_ = 1.f; burst_ = 1.f; }
+        if (lines >= 4) { quadGlow_ = 1.f; burst_ = 1.f; }
         break;
     }
     case GameEvent::TopOut: {
@@ -1207,7 +1207,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         // a spurt: a critically damped spring toward the target, over a second or so
         const float w = 4.f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
-        // capped (a line is a big step now the journey fits in one song): an early Tetris spreads a breath longer
+        // capped (a line is a big step now the journey fits in one song): an early quad spreads a breath longer
         // instead of jolting the view
         gVel_ = std::min(gVel_, 3.f);
         g_ += gVel_ * wdt;
@@ -1243,7 +1243,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.4f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.4f, dt);
     heart_ = approach(heart_, 0.f, 1.5f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
@@ -1295,7 +1295,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     };
 
     // ---- The mushrooms: their state, the drop's wave reaching them, spores rising from their caps.
-    const float capGlow = (0.62f + 0.12f * wm + 0.35f * wp + 0.25f * life + 0.3f * swell_ + 0.4f * tetrisGlow_ + 0.25f * kickGlow_) * pal_.glow;
+    const float capGlow = (0.62f + 0.12f * wm + 0.35f * wp + 0.25f * life + 0.3f * swell_ + 0.4f * quadGlow_ + 0.25f * kickGlow_) * pal_.glow;
     minst_.clear();
     struct Light { vec3 p; float r; vec3 c; float score; };
     std::vector<Light> lights;
@@ -1405,7 +1405,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
                 spores_.push_back(s);
             }
         }
-        // a Tetris: a burst of spores from the network's heart
+        // a quad: a burst of spores from the network's heart
         if (burst_ > 0.95f) {
             for (int i = 0; i < 60 && (int)spores_.size() < MAX_SPORES; i++) {
                 Spore s;
@@ -1840,7 +1840,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progThread_, "uThreadC", pal_.thread);
         set3f(progThread_, "uTipC", pal_.threadTip);
         set3f(progThread_, "uPulseC", pal_.pulse);
-        set1f(progThread_, "uBright", lerpf(1.f, 0.8f, smoothstepf(2.e4f, 2.e6f, alt_)) * (0.6f + 0.1f * wm + 0.25f * wp + 0.2f * life + 0.25f * swell_ + 0.3f * tetrisGlow_ + 0.2f * heart_) * pal_.glow * world);
+        set1f(progThread_, "uBright", lerpf(1.f, 0.8f, smoothstepf(2.e4f, 2.e6f, alt_)) * (0.6f + 0.1f * wm + 0.25f * wp + 0.2f * life + 0.25f * swell_ + 0.3f * quadGlow_ + 0.2f * heart_) * pal_.glow * world);
         set1f(progThread_, "uOver", smoothstepf(0.f, 1.f, over_));
         glUniform4fv(glGetUniformLocation(progThread_, "uPulse"), 6, pu);
         set4f(progThread_, "uWave", waveQ_, waveAmp_, 0.45f, 0.f);
@@ -1903,7 +1903,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uCamU", camU_);
     set2f(progComp_, "uTan", tanH_ * aspect_, tanH_);
     set2f(progComp_, "uRes", (float)width_, (float)height_);
-    set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.25f * wp + 0.3f * life + 0.4f * tetrisGlow_) * world);
+    set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.25f * wp + 0.3f * life + 0.4f * quadGlow_) * world);
     set1f(progComp_, "uTwinkle", 0.25f + 0.15f * wm + 0.2f * wp);
     set1f(progComp_, "uTime", time_);
     set1f(progComp_, "uSat", 1.08f);

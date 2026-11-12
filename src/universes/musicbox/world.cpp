@@ -225,7 +225,7 @@ void MusicBoxUniverse::buildMoving(float lidOpen) {
             put(MESH_CYL, sc, u * PIN_R, rd * (PIN_L * 0.5f + 0.04f), w * PIN_R, lerp(col, P.brass, 0.4f), M_PIN, 0.f, P.enamel[p.type] * 0.f, 0.f, 0.f);
             float g = p.glow;
             const float f = p.order / maxOrder;
-            if (tetrisT_ < 6.f) g += 0.6f * std::exp(-std::fabs(f - tetrisT_ / 3.f) * 14.f);
+            if (quadT_ < 6.f) g += 0.6f * std::exp(-std::fabs(f - quadT_ / 3.f) * 14.f);
             if (dropAmt_ > 0.01f) g += 0.35f * dropAmt_ * std::exp(-std::fabs(f - std::fmod(worldTime_ * 0.09f, 1.25f) + 0.1f) * 16.f);
             put(MESH_DOME, hp - rd * 0.05f, u * HEAD_R, rd * (HEAD_R * 0.62f), w * HEAD_R, col, M_PIN, g, P.enamel[p.type], 0.f, 0.f);
         }
@@ -385,7 +385,7 @@ void MusicBoxUniverse::render(const Frame& f, GLuint fbo) {
     else dancerHold_ = std::max(0.f, dancerHold_ - dt);
     const bool up = isDrop || dancerHold_ > 0.f;
     dancer_ = approach(dancer_, up ? 1.f : 0.f, up ? 0.55f : 0.18f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
     levelT_ += dt;
     if (levelT_ < 1.6f) windAngle_ += dt * 1.2f * (std::fmod(levelT_, 0.8f) < 0.4f ? 1.f : 0.f);
     kickK_ = std::max(kickK_ * std::exp(-dt * 5.f), kickIn_);

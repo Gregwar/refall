@@ -9,7 +9,7 @@
 // The song drives the drive: calm is a quiet empty road at night (the sun nearly set, thick fog, the floor still),
 // mid moves forward with the tempo (the lines scroll, the lamps pass, light pulses run into the fog on the beat),
 // peak is the fast drive (head- and tail-light trails, the haze lit up, flares blooming on the kicks). A lock
-// flares the piece's rim, a cleared row leaves as a light trail, a Tetris flares the sun and the lens, slow motion
+// flares the piece's rim, a cleared row leaves as a light trail, a quad flares the sun and the lens, slow motion
 // is a time stretch (letterbox, the night drained of color, longer light trails), game over turns the lights off
 // one by one while the camera tilts down into the fog. It leaves and enters through the fog.
 //
@@ -527,7 +527,7 @@ void SynthwaveUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
@@ -544,9 +544,9 @@ void SynthwaveUniverse::onEvent(const GameEvent& ev, const Game&) {
             d.out = false;
             dying_.push_back(d);
         }
-        if (tetris) {
+        if (quadClear) {
             sunFlare_ = 1.f;
-            tetrisT_ = 0.f;
+            quadT_ = 0.f;
             flash_ = std::max(flash_, 0.5f);
             flareKick_ = std::max(flareKick_, 0.8f);
             glintBurst(3, 1.5f);
@@ -691,7 +691,7 @@ void SynthwaveUniverse::simulate(const Game& game, const MusicState& music, floa
     flash_ = approach(flash_, 0.f, 3.f, dt);
     sunFlare_ = approach(sunFlare_, 0.f, 1.1f, dt);
     horizonFlash_ = approach(horizonFlash_, 0.f, 1.8f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
 
     for (auto& f : flares_) f.t += dt;
     flares_.erase(std::remove_if(flares_.begin(), flares_.end(), [](const Flare& f) { return f.t > 0.7f; }), flares_.end());
@@ -916,11 +916,11 @@ void SynthwaveUniverse::buildFx() {
         line(fxLines_, v2(-cx, H), v2(-WELL_X - 0.25f, H), c, 0.015f, 0.05f, a * 0.25f);
         line(fxLines_, v2(WELL_X + 0.25f, H), v2(cx, H), c, 0.015f, 0.05f, a * 0.25f);
     }
-    // The Tetris: an anamorphic flare crossing the screen through the toast, a few lens ghosts toward the sun.
-    if (tetrisT_ < 2.6f) {
-        const float k = tetrisT_ / 2.6f;
-        const float a = (tetrisT_ < 0.12f ? tetrisT_ / 0.12f : 1.f) * (1.f - smoothstepf(0.5f, 1.f, k)) * world;
-        const vec2 c = v2(layout::TETRIS_TOAST.x - 3.f + 6.f * smoothstepf(0.f, 1.f, k), layout::TETRIS_TOAST.y - 0.3f);
+    // The quad: an anamorphic flare crossing the screen through the toast, a few lens ghosts toward the sun.
+    if (quadT_ < 2.6f) {
+        const float k = quadT_ / 2.6f;
+        const float a = (quadT_ < 0.12f ? quadT_ / 0.12f : 1.f) * (1.f - smoothstepf(0.5f, 1.f, k)) * world;
+        const vec2 c = v2(layout::QUAD_TOAST.x - 3.f + 6.f * smoothstepf(0.f, 1.f, k), layout::QUAD_TOAST.y - 0.3f);
         line(fxLines_, v2(c.x - 30.f, c.y), v2(c.x + 30.f, c.y), pal_.flare * 0.9f, 0.02f, 0.08f, a * 0.8f);
         glint(fxLines_, c, 2.0f, lerp(pal_.flare, vec3(1.f), 0.6f) * 2.f, a);
         const vec2 sp = sunPos();

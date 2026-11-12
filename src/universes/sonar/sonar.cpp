@@ -13,7 +13,7 @@
 // types its own clean color. **The chart grows with the lines**: a cleared row's blocks sink into the dark (gone in
 // under half a second, at the real speed even in slow motion) and their light sinks on, as one point, to a spot of
 // the seabed in view (later now and then a building), which stays charted for the rest of the song: its edges
-// faintly lit for good, the seabed's depth contours drawn there. A Tetris charts four spots at once and lets the
+// faintly lit for good, the seabed's depth contours drawn there. A quad charts four spots at once and lets the
 // whole city glow up for a moment.
 //
 // The song: calm is the dark sea, a slow glide and a slow ping now and then on the seabed; mid pings every two
@@ -585,7 +585,7 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
@@ -612,7 +612,7 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
             m.col = lerp(echo_, vec3(1.f), 0.25f);
             motes_.push_back(m);
         }
-        if (tetris) tetrisGlow_ = 1.f;
+        if (quadClear) quadGlow_ = 1.f;
         break;
     }
     case GameEvent::TopOut: {
@@ -954,7 +954,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.8f * smoothstepf(16.f * spb, 40.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.6f : 0.3f, dt);
     swell_ = approach(swell_, 0.f, 0.22f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.45f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.45f, dt);
     kickEnv_ = std::max(kickEnv_ * std::exp(-dt * 4.f), kickIn_ * wp);
     kickIn_ = 0.f;
 
@@ -1072,8 +1072,8 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     }
     set3f(progMesh_, "uEcho", ech);
     set3f(progMesh_, "uEchoCity", echC);
-    set1f(progMesh_, "uBed", (0.004f + 0.03f * wp + 0.3f * fest_ + 0.15f * swell_ + 0.2f * tetrisGlow_) * quietSlow);
-    set1f(progMesh_, "uCity", (0.2f * wp + 0.7f * fest_ + 0.25f * swell_ + 0.55f * tetrisGlow_) * quietSlow);
+    set1f(progMesh_, "uBed", (0.004f + 0.03f * wp + 0.3f * fest_ + 0.15f * swell_ + 0.2f * quadGlow_) * quietSlow);
+    set1f(progMesh_, "uCity", (0.2f * wp + 0.7f * fest_ + 0.25f * swell_ + 0.55f * quadGlow_) * quietSlow);
     set1f(progMesh_, "uWin", (0.6f * kickEnv_ + 0.3f * fest_) * quietSlow);
     set1f(progMesh_, "uSlow", slow_);
     set1f(progMesh_, "uFade", 1.f - bridgeK);

@@ -17,7 +17,7 @@
 // A lock leaves a small point of light where the piece touched down and the falling piece's projector stays with it;
 // a cleared row burns out (gone in under half a second, at the real speed even in slow motion) while the projectors
 // of its cells get weak, blink and switch off (a piece cleared in part keeps its projector for its other cells); a
-// Tetris flares every projector white once; slow motion freezes them in a thick, cold haze (ice white, like rods of
+// quad flares every projector white once; slow motion freezes them in a thick, cold haze (ice white, like rods of
 // light); game over switches them off one by one while the stack goes dark row by row. A change of universe fills the
 // room with haze.
 //

@@ -17,7 +17,7 @@
 // rain thick on the glass, the mist washed off) and its kicks light a few of the city's lights. The drop shifts the
 // whole city to its night's other colors (sodium to neon...) on the downbeat and lets every hanging drop go at once;
 // the colors come back slowly after the peak. A cleared row melts: its glass runs down in drips and clears to water
-// in a third of a second, the water running down over the stack. A Tetris lets every drop go and sends the rows'
+// in a third of a second, the water running down over the stack. A quad lets every drop go and sends the rows'
 // colors into the city as four lanterns of light rising away. Slow motion is a later, colder hour: the rain almost
 // still, the city drained to blue. Game over melts the stack from the top and the pane mists over.
 //
@@ -562,7 +562,7 @@ void RainyUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(poolShow_, ns, sizeof(poolShow_));
         }
         if (ev.count >= 4) {
-            // a Tetris: every drop lets go, and the rows' colors rise into the city as lanterns
+            // a quad: every drop lets go, and the rows' colors rise into the city as lanterns
             for (Drop& d : drops_)
                 if (d.st == STUCK && d.r > 0.15f) { d.st = RUN; d.vy = 0.3f; }
             releaseRuns(8, true);

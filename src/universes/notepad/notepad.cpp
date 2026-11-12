@@ -549,7 +549,7 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 transients_.push_back(t);
             }
         }
-        // A Tetris: two big stars drawn fast in the margins.
+        // A quad: two big stars drawn fast in the margins.
         if (ev.count >= 4) {
             for (int i = 0; i < 2; i++) {
                 Doodle d;

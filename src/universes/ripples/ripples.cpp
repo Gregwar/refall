@@ -13,12 +13,12 @@
 // seconds; the water darkens a little at the foot of the stones and the waves are damped there, so it never rings.
 // A cleared row's stones sink: they darken into the water and are gone in a third of a second, the water closing
 // over them in a line of fine waves that runs up the well and out into the pond. Each cleared row also opens a lily
-// pad on the outer pond (a Tetris a lotus flower): the pond fills with them over the song and keeps them.
+// pad on the outer pond (a quad a lotus flower): the pond fills with them over the song and keeps them.
 //
 // The song: calm parts are still water, nothing but the game's own ripples; mid brings a drop of rain now and then,
 // on the bar; a peak a steady fine breeze on the outer pond (the basin stays sheltered) and drops on every other beat
 // and on the kicks, the light a little stronger. The drop is a gust of wind: patches of fine ripples drift over the
-// whole pond and the light swells, settling over the following bars. A Tetris sends three perfect rings from the
+// whole pond and the light swells, settling over the following bars. A quad sends three perfect rings from the
 // board over the whole pond. Slow motion is night: the light turns to a moon, the water deepens, the waves crawl at a
 // third of their speed. Game over sinks the stack row by row from the top, each row closing in a ring.
 //
@@ -761,7 +761,7 @@ void RipplesUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (int y : rows) {
             // the stones sink (drawn while they go) and the water closes over them in a line of fine waves
             for (auto& c : ev.cells) {
@@ -792,12 +792,12 @@ void RipplesUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 // just above the topmost stone of this column (where it shows while the rows above come down)
                 const float off = y < Game::H ? game.rowOffset(y) : 0.f;
                 const vec3 p = layout::cellPos((float)x, (float)y - off - 1.f);
-                if (p.y < 9.5f) splat(p.x - 0.5f, p.y + 0.0f, p.x + 0.5f, p.y + 0.0f, 0.16f, tetris ? 0.22f : 0.12f);
+                if (p.y < 9.5f) splat(p.x - 0.5f, p.y + 0.0f, p.x + 0.5f, p.y + 0.0f, 0.16f, quadClear ? 0.22f : 0.12f);
             }
         }
-        // a lily pad opens on the outer pond for each row; a Tetris a lotus flower, and three rings over the pond
+        // a lily pad opens on the outer pond for each row; a quad a lotus flower, and three rings over the pond
         const float my = rows.empty() ? 0.f : layout::cellPos(0.f, (float)rows[rows.size() / 2]).y;
-        if (tetris) {
+        if (quadClear) {
             placePad(1, rng_.chance(0.5f) ? -1.f : 1.f, my, 0.5f);
             ringT_ = 0.f;
             ringA_ = 1.f;

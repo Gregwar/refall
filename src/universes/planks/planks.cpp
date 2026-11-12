@@ -4,7 +4,7 @@
 // One world, in real 3D, BRICKS' studio made of wood: a seamless white sweep under one soft key light, seen through
 // the layout's camera raised a little and looking straight ahead with a lens shift (the board's plane keeps its
 // pixels while the table recedes). Everything is wood: grown rings, fibers and darker end grain, rounded arrises, a
-// satin sheen. The board stays a clean Tetris board: each cell is one solid block of three thick planks laid flat,
+// satin sheen. The board stays a clean game board: each cell is one solid block of three thick planks laid flat,
 // tight (fine seams, the end grain at the cell's sides, a small gap around it), stained all over in its piece's color
 // (or painted, or a wood species), so a piece reads at a glance by its color. The well is a painted board standing on
 // a plinth of crossed planks; the falling piece is held a little off it (its shadow says so), its planks a hair
@@ -19,11 +19,11 @@
 // style, and, hidden behind it, comes out from under the well's back low on the table, slides out below the HUD's
 // columns and only then rises on an arc away from the camera to its place in the village, where it settles on the
 // music's beat grid (half beats): nothing crosses the well or the HUD. Every plank of the village is a cleared cell
-// (natural in PINE and HONEY, a Tetris keeping its paint; colored in COLOURS).
+// (natural in PINE and HONEY, a quad keeping its paint; colored in COLOURS).
 //
 // The song: calm, the village stands still; mid and peak send a gentle ripple up the constructions every two beats
 // (each plank lifting a hair and settling, bottom to top), and a peak sets the train shuttling along the right half
-// of its track; the drop speeds it up, ripples higher and warms the light once (a slow swell). A Tetris is one big
+// of its track; the drop speeds it up, ripples higher and warms the light once (a slow swell). A quad is one big
 // ripple through the whole village. Slow motion is an evening light raking in from the right. Game over: the stack's
 // cells drop into the plinth, from the top down, and every plank of the village topples gracefully, from the top
 // down; the next game starts a new village.
@@ -96,7 +96,7 @@ constexpr float SLAB_L = 0.955f, SLAB_H = 0.314f, SLAB_D = 0.94f, SLAB_STEP = 0.
 
 // The variants: the studio (table near, far, the backdrop's top, the light pool), the board, the natural wood
 // (earlywood, latewood), the seven pieces (I O T S Z J L) and how much their stain covers the wood (the pieces, a
-// Tetris' planks in the village, unused, the village's other planks), the grain's contrast, the accent, the light
+// quad's planks in the village, unused, the village's other planks), the grain's contrast, the accent, the light
 // (strength, ambient, sheen, its direction).
 struct VariantDef {
     const char* name;
@@ -596,7 +596,7 @@ void PlanksUniverse::onEvent(const GameEvent& ev, const Game& game) {
         bool rows[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         int rowK = 0;
         for (int y = Game::H - 1; y >= 0; y--) {
             if (!rows[y]) continue;
@@ -613,7 +613,7 @@ void PlanksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 f.idx = reserved_[side]++;
                 slots_[side][f.idx].state = 1;
                 f.type = std::clamp(c.type, 0, 6);
-                f.painted = tetris;
+                f.painted = quadClear;
                 f.seed = hashf((uint32_t)(seed * 1e6f) + (uint32_t)PUSHED * 7919u);
                 vec3 sz;
                 Q qq;
@@ -628,7 +628,7 @@ void PlanksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 f.runDur = 0.06f + (11.5f - std::fabs(f.p0.x)) / 20.f;
                 // it lands on the beat grid (half beats), after the ones before it on its side
                 const float launch = time_ + f.slideDur + f.runDur;
-                const float minFlight = (tetris ? 1.1f : 0.85f) + 0.03f * rowK;
+                const float minFlight = (quadClear ? 1.1f : 0.85f) + 0.03f * rowK;
                 float arrive = std::max(launch + minFlight, lastArrive_[side] + beatLen_ * 0.5f);
                 const float backlog = arrive - launch;
                 if (backlog > 2.4f) arrive = std::max(launch + minFlight, lastArrive_[side] + beatLen_ * 0.25f);
@@ -660,7 +660,7 @@ void PlanksUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(pressV_, nv, sizeof(pressV_));
             std::memcpy(settle_, nt, sizeof(settle_));
         }
-        if (tetris) {
+        if (quadClear) {
             rippleT_ = -0.6f; // after the planks have landed... a wave runs up the whole village
             rippleA_ = 0.2f;
             glowAll_ = 0.1f;
@@ -726,7 +726,7 @@ void PlanksUniverse::ensureProgram(int side, int n) {
 }
 
 // How much of its piece's color a village plank keeps: a little (the natural variants), all of it (the colored
-// planks), and a Tetris' planks keep their paint.
+// planks), and a quad's planks keep their paint.
 float PlanksUniverse::slotTintK(bool painted) const {
     const VariantDef& V = VARIANTS[variant_];
     return painted ? std::max(V.buildK, V.accentK) : V.buildK;
@@ -1332,10 +1332,10 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
             hookLines_ = 0;
         }
         lines_ = lines;
-        // ZEN_PLANKS_TETRIS_AT=T: a Tetris' choreography at T seconds (four rows in the well's middle, for clips:
+        // ZEN_PLANKS_QUAD_AT=T: a quad's choreography at T seconds (four rows in the well's middle, for clips:
         // the autoplay never makes one)
-        static const float tetrisAt = std::getenv("ZEN_PLANKS_TETRIS_AT") ? (float)std::atof(std::getenv("ZEN_PLANKS_TETRIS_AT")) : -1.f;
-        if (tetrisAt >= 0.f && time_ >= tetrisAt && time_ - dt < tetrisAt && !bare_) {
+        static const float quadAt = std::getenv("ZEN_PLANKS_QUAD_AT") ? (float)std::atof(std::getenv("ZEN_PLANKS_QUAD_AT")) : -1.f;
+        if (quadAt >= 0.f && time_ >= quadAt && time_ - dt < quadAt && !bare_) {
             GameEvent ev{GameEvent::Clear};
             ev.count = 4;
             for (int y = 12; y < 16; y++)

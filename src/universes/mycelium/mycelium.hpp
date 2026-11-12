@@ -217,7 +217,7 @@ private:
     bool dropMode_ = false, wasDrop_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
     float kickIn_ = 0.f, kickGlow_ = 0.f;
-    float tetrisGlow_ = 0.f, heart_ = 0.f;
+    float quadGlow_ = 0.f, heart_ = 0.f;
     float windPhase_ = 0.f;
 
     bool slowOn_ = false;

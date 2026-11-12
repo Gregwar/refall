@@ -8,7 +8,7 @@
 namespace biome {
 
 namespace land {
-// how many cleared lines turn the dry land into a full jungle (a Tetris counts 1.5 per line)
+// how many cleared lines turn the dry land into a full jungle (a quad counts 1.5 per line)
 constexpr float FULL_LINES = 60.f;
 // the seeds fly light, on high arcs
 constexpr float SEED_GRAV = 15.f;
@@ -148,12 +148,12 @@ private:
     void uploadLife(float dt);
 
     // ---- Progress: how alive the land is (the lines cleared this song), the wet soil.
-    float lines_ = 0.f;       // cleared lines (Tetris lines count 1.5)
+    float lines_ = 0.f;       // cleared lines (quad lines count 1.5)
     float life_ = 0.f;        // 0 parched .. 1 jungle, shown (approaches the target)
     float lifeTarget() const { return std::min(1.f, lines_ / land::FULL_LINES); }
     float wet_ = 0.f;
     float surge_ = 0.f;       // the drop's growth surge (decays slowly: what it grew stays)
-    float bloom_ = 0.f;       // flowers open (peaks, drops, Tetris)
+    float bloom_ = 0.f;       // flowers open (peaks, drops, quad)
     float wind_ = 0.1f, swayT_ = 0.f;
     float wildAcc_ = 0.f;
     bool started_ = false;

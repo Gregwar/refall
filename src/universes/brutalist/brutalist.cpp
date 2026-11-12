@@ -19,7 +19,7 @@
 // the shadows turn razor sharp, the glazing glints, a cloud of dust shaken out of the slot glitters in the light (by
 // dusk and by night, the monument's floodlights come up and the windows light). A cleared row's blocks pop out
 // of the slot and tumble down onto the plaza, and a module is lowered onto the growing pile for each of them: over the song the
-// building grows, its shadows longer and more complex. A Tetris sends a glint over all the glazing and shakes the
+// building grows, its shadows longer and more complex. A quad sends a glint over all the glazing and shakes the
 // dust out of the slot. Slow motion is the evening: the sun sinks low and warm, the shadows stretch, windows light up,
 // time stretches. Game over topples the stack out of the slot onto the plaza, block by block from the top, in dust.
 //
@@ -598,7 +598,7 @@ void BrutalistUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        if (ev.count >= 4) tetrisT_ = 0.f;
+        if (ev.count >= 4) quadT_ = 0.f;
         clearT_ = 0.f;
         queued_ += (int)rows.size();
         for (auto& c : ev.cells) {
@@ -1014,7 +1014,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
         }
     const bool isDrop = dropMode_ && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
     dropT_ += dt;
-    tetrisT_ += dt;
+    quadT_ += dt;
     clearT_ += dt;
     // the drop's level eases in over half a second (never a jump), out over a few seconds
     dropAmt_ = std::clamp(dropAmt_ + (isDrop ? dt / 0.5f : -dt / 3.f), 0.f, 1.f);
@@ -1364,8 +1364,8 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     const vec3 glow = lerp(P.glow, vec3(1.f, 0.5f, 0.22f) * 1.2f, slowE) * (0.9f + 0.3f * swell_);
     const float winOn = saturate(P.warmLights * (0.45f + 0.25f * wm + 0.3f * drop) + 0.75f * slowE);
     const float glint = 1.f + 1.2f * drop * smoothstepf(0.f, 0.6f, dropT_);
-    // a Tetris: the sun flashes on all the glazing at once, eased in, fading over a second or two
-    const float flash = tetrisT_ < 4.f ? smoothstepf(0.f, 0.3f, tetrisT_) * std::exp(-std::max(0.f, tetrisT_ - 0.3f) * 1.5f) : 0.f;
+    // a quad: the sun flashes on all the glazing at once, eased in, fading over a second or two
+    const float flash = quadT_ < 4.f ? smoothstepf(0.f, 0.3f, quadT_) * std::exp(-std::max(0.f, quadT_ - 0.3f) * 1.5f) : 0.f;
     auto common = [&](GLuint p) {
         set3f(p, "uEye", eye_);
         set3f(p, "uZen", zen);

@@ -85,7 +85,7 @@ private:
     std::vector<std::string> titleWords() const;
     long bar_ = -1000, step_ = -1000;
     int composeCount_ = 0;
-    long tetrisUntil_ = -1;
+    long quadUntil_ = -1;
 
     // ---- Pieces: one id per piece (its cells merge into one flat shape), the palette it locked in.
     int ids_[22][10] = {};

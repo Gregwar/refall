@@ -90,7 +90,7 @@ private:
         float soft = 0.1f;
     };
     std::vector<Light> lights_;
-    struct Lantern { float x, y, r, t, life; vec3 col; }; // a Tetris: the rows' colors rising into the city
+    struct Lantern { float x, y, r, t, life; vec3 col; }; // a quad: the rows' colors rising into the city
     std::vector<Lantern> lanterns_;
     struct BInst { float a[4], b[4]; };   // x, y, r, intensity | rgb, softness
     std::vector<BInst> bokeh_;

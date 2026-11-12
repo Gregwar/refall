@@ -1533,7 +1533,7 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         std::memcpy(seeds_, ns, sizeof(seeds_));
         // the world: a flock of seabirds per clear (bigger with the rows), lanterns along the shore at dusk
-        // a sailboat launched for each cleared row (its sails in the row's colors), a big catamaran for a Tetris
+        // a sailboat launched for each cleared row (its sails in the row's colors), a big catamaran for a quad
         if (ev.count >= 4) {
             std::vector<int> all;
             for (auto& c : ev.cells) all.push_back(c.type);

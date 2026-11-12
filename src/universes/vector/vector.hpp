@@ -54,7 +54,7 @@ private:
     struct Debris { vec3 p, v, half; float spin, life, maxLife, delay, inten, hot; };
     std::vector<Debris> debris_;
     void shatter(const vec3& c, float half, int type, const vec3& vel, float spread, float life, float delay, float hot);
-    // Rings: expanding vector shockwaves (Tetris: circles; level up: the well's outline).
+    // Rings: expanding vector shockwaves (quad: circles; level up: the well's outline).
     struct Ring { vec3 c; float r0, speed, t, life, inten; int sides; float aspect; };
     std::vector<Ring> rings_;
     // A locked piece's outline flaring hot; hard drop streaks; rings along the floor.

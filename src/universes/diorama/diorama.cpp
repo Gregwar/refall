@@ -1135,16 +1135,16 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
     }
     case GameEvent::Clear: {
         // Cleared blocks pop off the tower toward the viewer and shrink away as they tumble (gone in ~0.5 s).
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             vec3 p = cellPos((float)c.x, (float)c.y);
             float side = (c.x - 4.5f) / 4.5f;
-            vec3 vel(side * rng_.range(2.0f, 3.6f) + rng_.range(-0.5f, 0.5f), rng_.range(4.5f, 7.5f) + (tetris ? 1.5f : 0.f),
+            vec3 vel(side * rng_.range(2.0f, 3.6f) + rng_.range(-0.5f, 0.5f), rng_.range(4.5f, 7.5f) + (quadClear ? 1.5f : 0.f),
                      rng_.range(4.f, 6.5f));
             spawnBody(p, c.type, vel, std::fabs(c.x - 4.5f) * 0.012f + rng_.range(0.f, 0.03f), rng_.range(4.f, 10.f), 0.45f);
         }
         rings_.push_back({0.f, 0.35f + 0.15f * ev.count});
-        if (tetris) {
+        if (quadClear) {
             // Confetti and petals burst into the light; the sun flares and a gust goes through the trees.
             float yc = 0;
             for (auto& c : ev.cells) yc += cellPos(0, (float)c.y).y;
@@ -1382,7 +1382,7 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
         parts_.push_back(p);
     }
 
-    // Birds cross the sky in daylight (and after a Tetris or a new level).
+    // Birds cross the sky in daylight (and after a quad or a new level).
     birdTimer_ -= wdt;
     const float day = smoothstepf(0.4f, 0.9f, tod_) * (1.f - smoothstepf(2.2f, 2.5f, tod_)) * (1.f - nightAll_);
     if (birdTimer_ <= 0.f) {

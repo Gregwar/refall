@@ -466,7 +466,7 @@ void MagnetsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (n) cen = mul(sum, 1.f / n);
             dying_.push_back({cellXY((float)c.x, (float)c.y), c.type, mask, cen, mul(m.axis, m.id ? m.shown : 0.f), 0.f, 0.f});
         }
-        // the filings under the rows jump and resettle (a Tetris throws them further)
+        // the filings under the rows jump and resettle (a quad throws them further)
         const float k = ev.count >= 4 ? 1.5f : 1.f;
         for (int y = 0; y < Game::H; y++) {
             if (!cleared[y]) continue;
@@ -474,7 +474,7 @@ void MagnetsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             impulse(-5.f, wy - 0.5f, 5.f, wy + 0.5f, 3.2f * k, 30.f * k, 1.f * k, 0.f);
             if (carry_.size() < 4 * 4) carry_.insert(carry_.end(), {wy + 0.5f, 1.f, 0.f, 0.f});
         }
-        if (ev.count >= 4) spinPending_ = std::max(spinPending_, 22.f); // a Tetris: the whole sheet shivers round once
+        if (ev.count >= 4) spinPending_ = std::max(spinPending_, 22.f); // a quad: the whole sheet shivers round once
         // collapse the bookkeeping like the board
         Mag next[Game::H][Game::W];
         int dst = Game::H - 1;

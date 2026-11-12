@@ -49,7 +49,7 @@ private:
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;
     float gBonus_ = 0.f;
     float stroke_ = 0.f;          // a clear's tail stroke (its glow)
-    float burst_ = 0.f;           // a Tetris' burst
+    float burst_ = 0.f;           // a quad's burst
     float hatchT_ = 99.f;         // a new game: a new koi
     float swimPh_ = 0.f, finPh_ = 0.f, singPh_ = 0.f;
     float breachPh_ = 0.f;        // the breaching cycle at sea (0..1)

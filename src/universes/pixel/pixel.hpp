@@ -25,7 +25,7 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
-    void forceFx(int slow, int tetris) override { (void)slow; forcedTetris_ = tetris; }
+    void forceFx(int slow, int quadClear) override { (void)slow; forcedQuad_ = quadClear; }
 
 private:
     // A loose pixel: explosions, dust, sparks, firework stars.
@@ -78,13 +78,13 @@ private:
     // Slow motion: the night palette dissolves in (0..1).
     bool bonus_ = false;
     float nightK_ = 0;
-    float flash_ = 0;      // a palette flash (lighter): Tetris, drops into a peak
+    float flash_ = 0;      // a palette flash (lighter): quad, drops into a peak
     float kick_ = 0;
     float dimT_ = 0;
     float worldT_ = 0, realT_ = 0;
     int lastBeat_ = -1;
     float gaugeShown_ = 0, readyT_ = 0;
-    int forcedTetris_ = -1;
+    int forcedQuad_ = -1;
     Bridge bridge_;
 
     // Effects.

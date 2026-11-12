@@ -12,7 +12,7 @@
 // grow into a humpback's long flippers, the markings become soft lights), the swimming wave (side to side for the
 // koi, up and down for the whale) and the spine's bend (around the planet in orbit). Each clear is a slow, powerful
 // stroke of the tail: the growth springs to its new target (a critically damped spring), the creature surges ahead
-// along its path and the camera follows a moment later. A Tetris is a huge one, with a burst of light and spray.
+// along its path and the camera follows a moment later. A quad is a huge one, with a burst of light and spray.
 //
 // The world is GIANT TREE's, adapted: a ray-traced planet (the pond, the river and the sea at local scale, with
 // meadows, pebbles and caustics, lily pads; continents and oceans farther) under an exponential atmosphere, a cloud
@@ -1828,7 +1828,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         linesShown_ = lines;
         const float w = 3.8f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
-        // capped: in a short song a line is a bigger step (up to 2.5x the 50-line one); a Tetris then takes a breath
+        // capped: in a short song a line is a bigger step (up to 2.5x the 50-line one); a quad then takes a breath
         // longer instead of jolting the journey (the 50-line pace stays under it)
         gVel_ = std::min(gVel_, 4.f);
         g_ += gVel_ * wdt;
@@ -1874,7 +1874,7 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         const float omega = lerpf(3.2f, 1.5f, m) * (0.75f + 0.25f * wm + 0.4f * wp + 0.2f * life) * (1.f - 0.6f * sink_);
         (void)omega;
         singPh_ += wdt * 0.45f;
-        // the breaching cycle at sea (a Tetris starts a leap at once)
+        // the breaching cycle at sea (a quad starts a leap at once)
         if (kSea > 0.01f) {
             const float p0 = breachPh_ - std::floor(breachPh_);
             breachPh_ += wdt / 11.f;

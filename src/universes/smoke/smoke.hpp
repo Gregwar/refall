@@ -103,9 +103,9 @@ private:
     vec3 flow_{0.f, 0.f, 0.f};   // the smoke's offset in the noise (it rises and drifts)
     float swirl_ = 0.f, bass_ = 0.f, surge_ = 0.f, surgeIn_ = 0.f, beatGlow_ = 0.f; // surge_ eases to surgeIn_
     float prevKick_ = 0.f, kickIn_ = 0.f, sinceKick_ = 9.f;
-    float swell_ = 0.f;            // the light pushed up (phase changes, level up, Tetris)
-    float blastT_ = 9.f;           // a Tetris blows the smoke outward from the well
-    float iris_ = 0.f;             // extra cone opening (peak, Tetris)
+    float swell_ = 0.f;            // the light pushed up (phase changes, level up, quad)
+    float blastT_ = 9.f;           // a quad blows the smoke outward from the well
+    float iris_ = 0.f;             // extra cone opening (peak, quad)
 
     // ---- Effects.
     struct Puff { vec2 p, v; float r, grow, t, life, alpha, seed, delay, stretch; int kind; float minGlow = 0.f; int tint = -1; float drag = -1.f, fall = 0.f; }; // tint: a piece type whose color the smoke takes, -1 none; drag (< 0: the kind's own) and fall (gravity) for dust that sags back
@@ -119,7 +119,7 @@ private:
     std::vector<int> landedFull_;
     int landedDrop_ = 0;
     void landDust(const Game& game);
-    struct Dying { float x, y, t, delay; int type; bool over; float seed; float big = 1.f, cx = 0.f; }; // big: the plume's size (a Tetris), cx: the row's middle
+    struct Dying { float x, y, t, delay; int type; bool over; float seed; float big = 1.f, cx = 0.f; }; // big: the plume's size (a quad), cx: the row's middle
     std::vector<Dying> dying_;
     struct Mote { vec3 p; float phase, size; };
     std::vector<Mote> moteList_;

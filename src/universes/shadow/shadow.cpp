@@ -563,7 +563,7 @@ void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 reserved_[dest]++;
             } else pile_[dest] = std::min(dest >= 7 ? BOX_MAX : TRAY_MAX, pile_[dest] + 1);
         }
-        if (ev.count >= 4) { tetris_ = 1.f; swirlAmp_ = std::max(swirlAmp_, 1.5f); }
+        if (ev.count >= 4) { quadFlash_ = 1.f; swirlAmp_ = std::max(swirlAmp_, 1.5f); }
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -775,7 +775,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     glowIn_ = 0.f;
     swirlAmp_ = approach(swirlAmp_, 0.f, 0.9f, dt);
     lensGlow_ = approach(lensGlow_, 0.f, 1.6f, dt);
-    tetris_ = approach(tetris_, 0.f, 0.6f, dt);
+    quadFlash_ = approach(quadFlash_, 0.f, 0.6f, dt);
     swirl_ += wdt * (0.15f + 2.2f * swirlAmp_);
     // a slight warm flicker of the lamp (no pulse)
     flickT_ -= dt;
@@ -920,7 +920,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     }
     glUniform4fv(ugl::U(progModel_, "uPile"), 7, piles);
     set4f(progModel_, "uBasket", BOX_C.x, BOX_C.y, (float)pile_[7], 0.f);
-    set1f(progModel_, "uLensGlow", lensGlow_ + 0.6f * tetris_);
+    set1f(progModel_, "uLensGlow", lensGlow_ + 0.6f * quadFlash_);
     glBindVertexArray(rectVao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
@@ -949,9 +949,9 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progHaze_, "uTime", worldTime_);
     set1f(progHaze_, "uSwirl", swirl_);
     set1f(progHaze_, "uSwirlAmp", 0.3f + swirlAmp_);
-    set1f(progHaze_, "uDust", saturate(0.3f + 0.35f * lv_ + 0.3f * tetris_));
+    set1f(progHaze_, "uDust", saturate(0.3f + 0.35f * lv_ + 0.3f * quadFlash_));
     set1f(progHaze_, "uHaze", 0.65f + 0.25f * lv_);
-    set1f(progHaze_, "uLensGlow", lensGlow_ + 0.6f * tetris_);
+    set1f(progHaze_, "uLensGlow", lensGlow_ + 0.6f * quadFlash_);
     ugl::drawFullscreen();
     glDisable(GL_BLEND);
 

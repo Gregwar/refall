@@ -115,7 +115,7 @@ private:
         float figureInk = 0.f; // how much of the figure stays between drops
         float nameA = 0.f;
         float age = 0.f;
-        float big = 0.f;     // a Tetris's constellation
+        float big = 0.f;     // a quad's constellation
         bool retired = false; // a crowded hemisphere lets its oldest go: its lines fade, its stars stay
         float shown = 1.f;
         std::string name;
@@ -129,7 +129,7 @@ private:
     void figureStrokes(int fig, float life, float t, std::vector<Stroke>& out) const;
     void penStep(float speed);   // a bar (or a beat): the pen draws the next lines
 
-    // ---- Nebulae (a Tetris) and comets.
+    // ---- Nebulae (a quad) and comets.
     struct Nebula { int disc; vec2 p; float r, ang, born; };
     std::vector<Nebula> nebulae_;
     struct Comet { int disc; vec2 a, b, ctl; float t, dur; };
@@ -204,7 +204,7 @@ private:
     double lastBar_ = -1.0, lastHalf_ = -1.0;
     float barClock_ = 0.f, beatClock_ = 0.f;
     float kickIn_ = 0.f;
-    float tetrisGlow_ = 0.f;
+    float quadGlow_ = 0.f;
 
     bool slowOn_ = false;
     float slow_ = 0.f, armT_ = 0.f;

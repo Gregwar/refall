@@ -16,7 +16,7 @@
 // real speed even in slow motion) and each of its cells flies out as a star, on a gentle arc, to one of the
 // hemispheres, where they light up as a new constellation (its brightest stars on the figure's joints, the others
 // scattered around it as faint stars). Its lines are then engraved one by one on the bars (calm: one a bar; mid: every
-// two beats; peak: every beat), and its name is lettered in italics once it is complete. A Tetris brings a great
+// two beats; peak: every beat), and its name is lettered in italics once it is complete. A quad brings a great
 // constellation, sends a comet across its hemisphere and leaves a nebula there. By the end of a long song both skies
 // are full of constellations.
 //
@@ -636,7 +636,7 @@ void StarChartUniverse::seedField() {
 }
 
 int StarChartUniverse::nextFigure() {
-    // a shuffled bag of the ordinary figures (the scorpion is kept for a Tetris)
+    // a shuffled bag of the ordinary figures (the scorpion is kept for a quad)
     if (figureBagN_ <= 0) {
         const int n = starchart::figureCount() - 1;
         for (int i = 0; i < n; i++) figureBag_[i] = i;
@@ -925,10 +925,10 @@ void StarChartUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         // the cells fly out as the stars of a new constellation, in a shuffled order
         for (int i = (int)from.size() - 1; i > 0; i--) std::swap(from[i], from[rng_.irange(0, i)]);
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         const size_t first = cons_.size();
-        addConstellation(from, tetris);
-        if (tetris && cons_.size() > first) {
+        addConstellation(from, quadClear);
+        if (quadClear && cons_.size() > first) {
             // a comet across that hemisphere, and a nebula where it passes
             const Constellation& k = cons_.back();
             const int d = k.disc;
@@ -951,7 +951,7 @@ void StarChartUniverse::onEvent(const GameEvent& ev, const Game& game) {
             nb.born = -1.2f;
             nebulae_.push_back(nb);
             if ((int)nebulae_.size() > MAX_NEBULAE) nebulae_.erase(nebulae_.begin());
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
         }
         break;
     }
@@ -1393,7 +1393,7 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     swell_ = approach(swell_, 0.f, 0.45f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.5f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.5f, dt);
     detail_ = approach(detail_, wp > 0.5f ? 1.f : 0.f, 0.8f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
@@ -1519,7 +1519,7 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
         labels_.push_back({"N", V(roseC_.x, roseC_.y + roseR_ + 0.32f), 0.34f * pxPerUnit_, 0.9f, 0, false});
     }
     // the constellations' lines
-    const float twFrame = 0.7f + 0.3f * wm + 0.25f * wp + 0.45f * life + 0.35f * tetrisGlow_;
+    const float twFrame = 0.7f + 0.3f * wm + 0.25f * wp + 0.45f * life + 0.35f * quadGlow_;
     for (size_t i = 0; i < cons_.size(); i++) {
         const Constellation& k = cons_[i];
         if (k.shown < 0.005f) continue;
@@ -1688,7 +1688,7 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uSky", pal_.sky);
     set3f(progSky_, "uSky2", pal_.sky2);
     set3f(progSky_, "uWell", pal_.well);
-    set3f(progSky_, "uGlow", pal_.glow * (1.f + 0.5f * life + 0.4f * tetrisGlow_));
+    set3f(progSky_, "uGlow", pal_.glow * (1.f + 0.5f * life + 0.4f * quadGlow_));
     set3f(progSky_, "uInk", pal_.faint);
     set4f(progSky_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set4f(progSky_, "uDisc0", disc_[0].c.x, disc_[0].c.y, disc_[0].R, disc_[0].rot);
@@ -1697,7 +1697,7 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uSeed", (float)(seed_ % 89));
     set1f(progSky_, "uMilky", (0.45f + 0.4f * wm + 0.15f * wp) * skyA);
     set1f(progSky_, "uPx", pxPerUnit_);
-    set1f(progSky_, "uSwell", swell_ * 0.5f + tetrisGlow_ * 0.5f);
+    set1f(progSky_, "uSwell", swell_ * 0.5f + quadGlow_ * 0.5f);
     {
         float nb[MAX_NEBULAE * 4] = {}, na[MAX_NEBULAE * 2] = {};
         int n = 0;

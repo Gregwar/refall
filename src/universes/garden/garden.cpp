@@ -15,7 +15,7 @@
 // grid, and when the drop ends it fades back and dries out over seconds.
 //
 // A cleared row collapses (the earth above slumps into it and crushes it flat, one mass all along; its flowers fall), a hard landing pushes a
-// puff of dust out from the contact, a Tetris sends dandelion seeds up from the whole ground line and opens the
+// puff of dust out from the contact, a quad sends dandelion seeds up from the whole ground line and opens the
 // stack's flowers at once, slow motion brings dusk and fireflies, game over crumbles the stack back into the earth,
 // and a change of universe lets the plants sink and the sky fade to the bridge.
 //
@@ -522,7 +522,7 @@ void GardenUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         bool cleared[Game::H] = {};
         int lowest = -1;
         for (auto& c : ev.cells)
@@ -608,7 +608,7 @@ void GardenUniverse::onEvent(const GameEvent& ev, const Game&) {
             slumpFrom_[y] = from[y];
             slumpT_[y] = since[y];
         }
-        if (tetris) {
+        if (quadClear) {
             // dandelion seeds rise from the whole ground line, and the stack's flowers open at once
             rush_ = 1.f;
             for (int i = 0; i < 70; i++) {

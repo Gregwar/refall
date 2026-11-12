@@ -148,7 +148,7 @@ void Renderer::setBonus(bool on) {
     bonus_ = on;
     each([&](Universe& u) { u.setBonus(on); });
 }
-void Renderer::forceFx(int slow, int tetris) { each([&](Universe& u) { u.forceFx(slow, tetris); }); }
+void Renderer::forceFx(int slow, int quadClear) { each([&](Universe& u) { u.forceFx(slow, quadClear); }); }
 
 vec2 Renderer::project(const vec3& p) const {
     if (!cur_.u) return layout::project(p, w_, h_);

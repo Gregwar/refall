@@ -51,8 +51,8 @@ uniform float uSurge;        // the drop's first seconds: it blooms brighter sti
 uniform float uDrive;        // 0 a chorus' peak .. 1 a drop's: denser, warmer, hit harder by the kicks
 uniform float uBeat;         // creatures' light pulse
 uniform float uFlash;
-uniform float uTetris;       // seconds since a Tetris (the plankton bloom)
-uniform vec3 uTetrisCol;
+uniform float uQuad;       // seconds since a quad (the plankton bloom)
+uniform vec3 uQuadCol;
 uniform float uSlow;         // the abyss goes dark
 uniform vec4 uLure;          // anglerfish lure: x, y, intensity, facing
 uniform vec3 uLureCol;
@@ -154,11 +154,11 @@ void main() {
     // Distant lights: far and dim, a nearer sparse layer.
     col += lightField(p, 0.95, 0.05 + 0.06 * uLights, 0.0, 0.5 + 0.3 * uLights);
     col += lightField(p, 0.42, 0.02 + 0.04 * uLights, 17.0, 0.7 + 0.5 * uLights);
-    // The Tetris: the plankton blooms all through the water at once, in living patches, then dims.
-    if (uTetris < 3.0) {
+    // The quad: the plankton blooms all through the water at once, in living patches, then dims.
+    if (uQuad < 3.0) {
         float n = fbm3(p * vec2(0.12, 0.3) + vec2(0.0, -uTime * 0.4));
-        float env = smoothstep(0.0, 0.15, uTetris) * (1.0 - smoothstep(0.3, 2.6, uTetris));
-        col += uTetrisCol * env * 0.16 * (0.3 + 1.4 * n * n);
+        float env = smoothstep(0.0, 0.15, uQuad) * (1.0 - smoothstep(0.3, 2.6, uQuad));
+        col += uQuadCol * env * 0.16 * (0.3 + 1.4 * n * n);
     }
     col += uGlow * uFlash * 0.05 * (0.5 + t);
 
@@ -562,7 +562,7 @@ void main() {
         if (cov <= 0.0) discard;
         float din = max(-sd, 0.0) / s;
         vec2 q = vLocal / s;
-        // the light: slow breathing in slow motion, the beat, the Tetris bloom
+        // the light: slow breathing in slow motion, the beat, the quad bloom
         light *= 1.0 + uSlow * 0.4 * sin(uTime * 0.8 + vWorld.y * 0.25 + vWorld.x * 0.1);
         light += uWave * 0.6;
         float rim = exp(-din / 0.028);

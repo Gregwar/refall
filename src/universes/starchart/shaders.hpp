@@ -6,7 +6,7 @@ namespace starchart_shaders {
 // ---------------------------------------------------------------- the sheet
 // A deep, even ground with a very slow mottle (the plate's ink, or the parchment's tone); two hemispheres a shade
 // deeper, lit a little toward their poles, each crossed by the Milky Way as a soft band of fine stippling that turns
-// with its disc; the nebulae a Tetris leaves, stippled the same way; the well a calm, darker panel.
+// with its disc; the nebulae a quad leaves, stippled the same way; the well a calm, darker panel.
 inline const char* SKY_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -71,7 +71,7 @@ void main() {
         ink += mw * 0.05 * inside;
         ink += stipple(rot(q, -D.w), mw * 0.42) * 0.36 * inside * uMilky;
     }
-    // nebulae (a Tetris), turning with their disc
+    // nebulae (a quad), turning with their disc
     for (int n = 0; n < 8; n++) {
         if (n >= uNebN) break;
         vec4 N = uNeb[n];

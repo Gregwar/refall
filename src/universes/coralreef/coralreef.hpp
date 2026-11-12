@@ -135,7 +135,7 @@ private:
     void buildSchools();
     void updateFish(float dt, float energy, float melody, float swirl);
     vec3 swirlC_{0, 3, -8};
-    float swirl_ = 0.f, swirlT_ = -1.f, swirlSide_ = 1.f; // a Tetris: the schools swirl together for a while
+    float swirl_ = 0.f, swirlT_ = -1.f, swirlSide_ = 1.f; // a quad: the schools swirl together for a while
 
     // ---- The drop: mass coral spawning, a pair of mantas looping through a side band, the schools in one
     // great bait ball on the other side, the light turning dusky blue-violet.

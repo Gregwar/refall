@@ -16,7 +16,7 @@
 // the other ink's dots, a hatched tint with a keyline...), so the seven types read by color and pattern in every
 // variant; the cells of one piece print as one clean shape and two pieces always keep a hairline of paper between
 // them. A lock presses a soft blot of the second ink out under the piece; a cleared row is torn off as a strip of
-// paper (ragged edges, its dots shrinking away); a Tetris stamps the third ink in one huge soft disc over the sheet;
+// paper (ragged edges, its dots shrinking away); a quad stamps the third ink in one huge soft disc over the sheet;
 // slow motion is a monotone print (one ink, the drums locked in register); game over runs the drum dry, the stack
 // fading in streaks. A change of universe lifts the ink off the paper, leaving the stack plain. A real drop prints
 // the pieces from another pair of drums (the variant's da / db) for its whole length, eased in and out: the pieces
@@ -493,7 +493,7 @@ void RisographUniverse::onEvent(const GameEvent& ev, const Game&) {
             s.dir = dir;
             strips_.push_back(s);
         }
-        if (ev.count >= 4) { // the Tetris: the third ink stamped over the whole sheet
+        if (ev.count >= 4) { // the quad: the third ink stamped over the whole sheet
             stampT_ = 0.f;
         }
         // collapse the bookkeeping like the board
@@ -1060,7 +1060,7 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
             C[i * 4] = std::atan2(-(s.y - viewC_.y) * 0.4f, -s.x); C[i * 4 + 1] = grad[i]; C[i * 4 + 2] = 0.f;
             C[i * 4 + 3] = 0.f;
         }
-        // the Tetris stamp: one huge soft disc of the third ink over the sheet, fading in and out
+        // the quad stamp: one huge soft disc of the third ink over the sheet, fading in and out
         const float st = stampT_;
         const float stamp = st < 0.25f ? smoothstepf(0.f, 0.25f, st) : 1.f - smoothstepf(0.45f, 2.2f, st);
         A[12] = 0.f; A[13] = 0.6f; A[14] = 12.5f; A[15] = 12.5f;

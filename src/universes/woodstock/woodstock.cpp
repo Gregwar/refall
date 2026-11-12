@@ -24,7 +24,7 @@
 // the motifs turned to sparkles) and the palette swings to the variant's drop colors, eased in over a second and out
 // over a few once the drop ends. A cleared row's
 // tiles pop and burst into its motifs (petals, hearts, peace signs, sparkles) flying out sideways behind the well; a
-// Tetris turns the kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
+// quad turns the kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
 // dusk (the colors drained to lilac, the flow slowed); game over greys the stack from the top.
 //
 // Original motifs only (generic period iconography: daisies, peace signs, hearts, rainbows, a smiling sun, doves,
@@ -532,7 +532,7 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
         }
         if (ev.count >= 4) {
-            // a Tetris: the kaleidoscope's colors turn a band on; hearts and peace signs shower out on both sides
+            // a quad: the kaleidoscope's colors turn a band on; hearts and peace signs shower out on both sides
             shiftTo_ += 1.f;
             for (int i = 0; i < 28; i++) {
                 Part q;

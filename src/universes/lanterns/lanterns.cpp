@@ -16,7 +16,7 @@
 // The song is the water: a calm part is a mirror (still reflections, more stars); mid parts ripple the reflections on
 // the beat grid (every two beats) and light far lanterns along the opposite shore; a peak ripples harder, lights more
 // of them, and its kicks make candles flicker here and there. A lock is the piece's candle catching (a brief warm
-// rise, on that piece only); a hard drop pushes a few embers out from under it. A Tetris sends a dozen lanterns up
+// rise, on that piece only); a hard drop pushes a few embers out from under it. A quad sends a dozen lanterns up
 // from the lake. Slow motion is moonlight (a full moon and its path on the water) and mist lying on the lake; game
 // over puts the candles out one by one from the top. A new song lifts the old song's lanterns away.
 //
@@ -445,7 +445,7 @@ bool LanternsUniverse::pickTarget(int side, float& bx, float& bz) {
     return best >= 0.f;
 }
 
-// A sky lantern going up from the lake (the drop, a Tetris): far away or nearer, seen beside the well.
+// A sky lantern going up from the lake (the drop, a quad): far away or nearer, seen beside the well.
 void LanternsUniverse::spawnSky(int side, bool far) {
     const float xmax = viewC_.x + viewH_.x - 0.4f;
     Lantern L;
@@ -807,7 +807,7 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (floating <= MAX_LAKE) break;
             if (!q.sky && q.state == L_FLOAT && !q.dying) { q.dying = true; floating--; }
         }
-        // a Tetris: a dozen lanterns go up from the lake
+        // a quad: a dozen lanterns go up from the lake
         if (ev.count >= 4)
             for (int i = 0; i < 12; i++) spawnSky(i % 2 ? 1 : -1, i % 3 == 2);
         break;

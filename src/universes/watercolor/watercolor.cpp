@@ -11,7 +11,7 @@
 // painting in (the middle range, the foreground and the trees come in as washes spreading, the sky reaches higher)
 // and the beats drop pigment into the wet sky where it blooms; peak glazes everything deeper and more saturated,
 // the sky up to the top of the sheet, bigger drops, and the kicks flick spatter. A cleared row's pigment dissolves
-// back into the paper in a moment (nothing painted over the row, nothing left behind), a Tetris floods the sheet with
+// back into the paper in a moment (nothing painted over the row, nothing left behind), a quad floods the sheet with
 // water (a great backrun blooming out from the well) and a fresh glaze, slow motion is a night glaze of indigo
 // with the moon lifted out of it, game over tilts the wet sheet (the stack runs down in drips and the painting is
 // washed back to paper). A change of universe washes the sheet back to plain paper from the well outward (and
@@ -66,7 +66,7 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 
 // The variants: each a painting with its own pigments (sRGB: the color of a full wash on white paper). Colors: the
 // paper, the HUD's ink, the sky's top and low washes, the sun (painted), the far range, the middle range, the
-// foreground, the trees, the accent (drops, Tetris); the seven piece pigments (I O T S Z J L). Numbers: the horizon
+// foreground, the trees, the accent (drops, quad); the seven piece pigments (I O T S Z J L). Numbers: the horizon
 // (board y), the sky's reach above it at the peak, the sun (x, y, radius, lifted out 0..1, painted 0..1), the far
 // range (height, roughness), the middle range (height, roughness), the foreground (0 meadow, 1 water, 2 rows), the
 // trees (0 none, 1 conifers, 2 round, 3 blossom), granulation, wetness (soft edges), body color (gouache on toned
@@ -525,7 +525,7 @@ void WatercolorUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // each cleared cell's pigment dissolves back into the paper, in a moment; nothing is painted over the row
         for (auto& c : ev.cells) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
@@ -534,7 +534,7 @@ void WatercolorUniverse::onEvent(const GameEvent& ev, const Game&) {
             l.delay = rng_.range(0.f, 0.06f);
             lifted_.push_back(l);
         }
-        if (tetris) {
+        if (quadClear) {
             // water flooded onto the sheet: a great backrun out from the well, and a fresh glaze of the accent
             floodT_ = 0.f;
             floodK_ = absorb(pal_.accent, pal_.paper);

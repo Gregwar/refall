@@ -168,7 +168,7 @@ uniform vec2 uShadowOff;
 uniform float uTime, uSeed;
 uniform float uBreeze, uGust;  // fine wind ripples: the peak's breeze (the outer pond), the drop's gust
 uniform vec2 uWind;
-uniform vec4 uRing;            // a Tetris: center, time since, strength
+uniform vec4 uRing;            // a quad: center, time since, strength
 uniform float uKerbOn;
 uniform float uCalm;           // 1: the surface settled (the bridge)
 
@@ -192,7 +192,7 @@ float windH(vec2 w) {
     a += 0.35 * (vnoise(R * R * q * 16.0 + uTime * 1.3) - 0.5);
     return a * k * patch * 0.005;
 }
-// a Tetris: three fine rings spreading from the board over the whole pond
+// a quad: three fine rings spreading from the board over the whole pond
 float ringH(vec2 w) {
     if (uRing.w <= 0.0005) return 0.0;
     float r = length(w - uRing.xy);

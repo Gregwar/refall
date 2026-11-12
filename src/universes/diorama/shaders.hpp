@@ -475,7 +475,7 @@ void main() {
     float tilt = smoothstep(0.30, 0.5, abs(vUV.y - 0.47));
     float coc = clamp(max(max(far, near), tilt * 0.8) * uDof, 0.0, 1.0);
     vec3 col = mix(s.rgb, b.rgb, coc);
-    // Soft glow around the painted sun (golden hour, Tetris flares).
+    // Soft glow around the painted sun (golden hour, quad flares).
     vec2 sd = (vUV - uSunUV) * vec2(uAspect, 1.0);
     float r2 = dot(sd, sd);
     col += uGlowCol * uGlowAmt * (exp(-r2 * 14.0) * 0.7 + exp(-r2 * 2.5) * 0.3);

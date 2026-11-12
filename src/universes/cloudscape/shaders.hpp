@@ -193,7 +193,7 @@ vec4 highClouds(vec3 d, float mu) {
     float v1 = textureLod(uNoise, q * 0.010 + vec2(0.11, 0.83), 0.0).r;
     float v2 = textureLod(uNoise, q * 0.027 + vec2(0.51, 0.23), 0.0).g;
     float vv = smoothstep(0.38, 0.72, v1 * 0.7 + v2 * 0.45) * uVeil * fade;
-    // a Tetris parts it from the sun outward
+    // a quad parts it from the sun outward
     float ang = acos(clamp(mu, -1.0, 1.0));
     vv *= 1.0 - (1.0 - smoothstep(uPart * 1.4 - 0.12, uPart * 1.4 + 0.1, ang)) * step(0.001, uPart);
     float back = pow(max(mu, 0.0), 5.0);
@@ -398,7 +398,7 @@ void main() {
         float m = exp(-length((p - corner) * vec2(0.075, 0.28)) * 2.0);
         col = mix(col, uCornerCol, m * uCornerShade);
     }
-    // a Tetris: the sun bursts through, a long soft streak and a glow over everything
+    // a quad: the sun bursts through, a long soft streak and a glow over everything
     if (uFlare > 0.001) {
         vec2 q = (uv - uSunUv) * vec2(uView.z / uView.w, 1.0);
         float r = length(q);

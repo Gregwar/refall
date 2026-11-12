@@ -19,7 +19,7 @@ The pipeline, one function each:
      parallel (-j) and are cached in WORK/clips by everything that defines them: a re-run re-records only the
      shots that changed. With "clear", every shot shows a line clear: the game logs its clears with their song
      time and game seeds are tried until a take shows one inside the shot (the best of a few: near a beat, near the
-     middle, a Tetris best), the song time never moving; the report lists each shot's clear;
+     middle, a quad best), the song time never moving; the report lists each shot's clear;
   4. cards: titles drawn with Pillow from the fonts shipped in the repo (a soft wipe in, a slow fade out);
   5. assemble: frame by frame (the whole song uncut is the audio track: video time = song time), crossfades of
      "crossfade" seconds centred on the cuts (each clip is recorded that much longer on both sides), then a
@@ -435,7 +435,7 @@ def run_clip(e, seed, game, song, size, out):
 
 def clear_score(e, clears, grid):
     """The best line clear inside the shot (its animation on screen, away from the cuts), scored: near a beat, near
-    the middle, a Tetris best. None when the shot shows none."""
+    the middle, a quad best. None when the shot shows none."""
     rule = e.get("clear") or {}
     lo, hi = e["t0"] + rule.get("lead", 0.4), e["t1"] - rule.get("tail", 0.8)
     best = None
@@ -519,7 +519,7 @@ def record_all(timeline, game, song, size, work, jobs, grid):
     for e in shots:
         c = e.get("clear_at")
         what = (f"{c:7.2f} s ({e['clear_lines']} line{'s' if e['clear_lines'] > 1 else ''}"
-                f"{', a Tetris' if e['clear_lines'] >= 4 else ''})" if c is not None
+                f"{', a quad' if e['clear_lines'] >= 4 else ''})" if c is not None
                 else ("NONE (no take showed one)" if e.get("clear") else "-"))
         log(f"{(e.get('label') or e['u'])[:34]:<34} {e['t0']:7.2f} {e['t1']:7.2f}  {what}")
 

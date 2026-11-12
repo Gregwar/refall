@@ -63,7 +63,7 @@ private:
     void onChar(unsigned cp);
     void sendToDashboard();
     bool overButton(double mx, double my) const;
-    void tetris();
+    void quadClear();
 
     Options opt_;
     GLFWwindow* win_ = nullptr;
@@ -166,8 +166,8 @@ void SceneViewer::change(int row, int dir) {
     }
 }
 
-// A Tetris on the bottom rows (to look at the celebration).
-void SceneViewer::tetris() {
+// A quad on the bottom rows (to look at the celebration).
+void SceneViewer::quadClear() {
     GameEvent ev{GameEvent::Clear};
     ev.count = 4;
     for (int y = 18; y < 22; y++)
@@ -366,7 +366,7 @@ void SceneViewer::onKey(int key, int action, int mods) {
     case GLFW_KEY_I: if (press) show(false); break;
     case GLFW_KEY_F: if (press) game_.debugFillBoard(rng_()); break;
     case GLFW_KEY_B: if (press) { game_.debugChargeBonus(); game_.activateBonus(); } break;
-    case GLFW_KEY_X: if (press) tetris(); break;
+    case GLFW_KEY_X: if (press) quadClear(); break;
     case GLFW_KEY_L: if (press) R_.levelUp(); break;
     case GLFW_KEY_K: if (press) R_.drop(1.f); break;
     case GLFW_KEY_D:

@@ -28,7 +28,7 @@ const vec3 SCORE_ANCHOR(-8.6f, 1.5f, 0.f);                // score / lines / lev
 const vec3 COMBO_ANCHOR(8.6f, -4.5f, 0.f);
 const vec3 GAUGE_CENTER(8.6f, -2.1f, 0.f);                // the bonus gauge (a ring of radius GAUGE_R)
 constexpr float GAUGE_R = 1.f;
-const vec3 SLOW_TOAST(0.f, 8.5f, 0.f), TETRIS_TOAST(0.f, 6.5f, 0.f), LEVEL_TOAST(0.f, 2.f, 0.f);
+const vec3 SLOW_TOAST(0.f, 8.5f, 0.f), QUAD_TOAST(0.f, 6.5f, 0.f), LEVEL_TOAST(0.f, 2.f, 0.f);
 // The HUD columns (board space x0, y0, x1, y1): keep the world quiet behind them.
 constexpr float LEFT_COLUMN[4] = {-11.2f, -6.8f, -6.0f, 10.4f};
 constexpr float RIGHT_COLUMN[4] = {6.0f, -3.6f, 11.2f, 10.4f};

@@ -50,7 +50,7 @@ private:
     ugl::Target atlas_;        // every mirror's reflection, each in its own tile, supersampled 2x
     int tileW_ = 1, tileH_ = 1;
     double path_ = 0.0;        // the gallery's drift
-    float spinT_ = 9.f;        // a Tetris: each mirror turns once around, one after the other
+    float spinT_ = 9.f;        // a quad: each mirror turns once around, one after the other
     float reach_ = 0.f;        // the drift's width (the music's energy, smoothed)
     float ring_ = 0.f;         // the drop's kaleidoscope: the rings' turn
     void updateMirrors(float dt, float wdt, const vec3& eye);
