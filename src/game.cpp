@@ -51,6 +51,7 @@ void Game::reset(uint64_t seed) {
     bonusActive_ = lastWasQuad_ = false;
     bonusLeft_ = 0;
     active_ = false;
+    over_ = false; // a session started after a game over starts fresh
     spawnDelay_ = 0.4f;
     std::fill(std::begin(rowOffset_), std::end(rowOffset_), 0.f);
 }
