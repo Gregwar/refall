@@ -96,7 +96,6 @@ struct Options {
     std::string campaignPath, progressPath, playlistsPath;
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
-    int menuStyle = Menu::KALEIDO; // --menu-style: the menus' look (Menu::Style), the kaleidoscope by default
     bool menuDemo = false;
     bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
@@ -172,8 +171,6 @@ static void usage() {
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
         "                       then exit (testing)\n"
-        "  --menu-style S       the menus' look: 1 arcade (default), 2 cosmic, 3 swiss, 4 watercolour, 5 glass,\n"
-        "                       6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel, 11 windows, 12 kaleido\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
@@ -958,7 +955,6 @@ int App::run() {
     menu_.setPlaylists(&playlists_);
     menu_.setFreeDifficulty(opt_.difficulty);
     menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
-    menu_.setStyle(opt_.menuStyle);
     if (!opt_.menuShot.empty() || !opt_.menuClip.empty()) return runMenuShot();
     menuEnabled_ = opt_.menuEnabled;
     mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
@@ -1736,35 +1732,21 @@ int App::runMenuShot() {
     int w, h;
     fbSize(w, h);
     if (!opt_.menuClip.empty()) {
-        // the walk: the title's options, the campaign (songs, stages up to a locked one, the difficulties), back, free
-        // play's difficulties, back
-        static const std::pair<double, const char*> WALK[] = {
-            {1.4, "down"}, {2.1, "down"}, {2.8, "up"}, {3.5, "up"}, {4.4, "ok"},
-            {5.6, "right"}, {6.3, "right"}, {7.0, "down"}, {7.7, "right"}, {8.4, "down"}, {9.2, "down"}, {10.0, "down"},
-            {10.8, "left"}, {11.5, "up"}, {12.1, "up"}, {12.7, "up"}, {13.3, "up"}, {14.0, "up"},
-            {14.8, "right"}, {15.6, "left"}, {16.4, "left"}, {17.2, "right"}, {18.0, "down"},
-            {19.2, "back"}, {20.2, "down"}, {21.0, "ok"}, {22.0, "up"}, {22.8, "up"}, {23.6, "down"}, {24.4, "down"},
-            {25.6, "back"}, {26.6, "up"}};
-        // KALEIDO: petals focused (one locked), one opened and its songs browsed, closed, another opened, the
+        // the walk: petals focused (one locked), one opened and its songs browsed, closed, another opened, the
         // difficulties; then free play: a difficulty, the playlists, a playlist link typed and read
-        static const std::pair<double, const char*> KWALK[] = {
+        static const std::pair<double, const char*> WALK[] = {
             {1.2, "down"}, {1.9, "up"}, {2.7, "ok"},
             {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "ok"},
             {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "ok"},
             {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
             {21.9, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
-        const bool kal = opt_.menuStyle == Menu::KALEIDO;
-        const double END = kal ? 34.5 : 28.0;
+        const double END = 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
         if (keys.empty()) {
-            if (kal) {
-                for (auto& [t, k] : KWALK) keys.push_back({t, k});
-                const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
-                for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});
-            } else {
-                for (auto& [t, k] : WALK) keys.push_back({t, k});
-            }
+            for (auto& [t, k] : WALK) keys.push_back({t, k});
+            const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
+            for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});
         }
         std::string ff = std::getenv("ZENTRIS_FFMPEG") ? std::getenv("ZENTRIS_FFMPEG") : platform::findExecutable("ffmpeg");
         if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); return 1; }
@@ -1800,7 +1782,7 @@ int App::runMenuShot() {
             std::fwrite(px.data(), 1, px.size(), pipe);
         }
         const int rc = platform::closeRead(pipe);
-        std::printf("[clip] %s %s (%s, %.0f s)\n", rc == 0 ? "wrote" : "FAILED", opt_.menuClip.c_str(), Menu::styleName(opt_.menuStyle), END);
+        std::printf("[clip] %s %s (%s, %.0f s)\n", rc == 0 ? "wrote" : "FAILED", opt_.menuClip.c_str(), "kaleidoscope", END);
         if (headless_) headless::shutdown();
         return rc == 0 ? 0 : 1;
     }
@@ -1870,13 +1852,6 @@ int main(int argc, char** argv) {
         else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
         else if (a == "--menu-clip" && i + 1 < argc) o.menuClip = argv[++i];
         else if (a == "--menu-demo") o.menuDemo = true;
-        else if (a == "--menu-style" && i + 1 < argc) {
-            o.menuStyle = Menu::parseStyle(argv[++i]);
-            if (o.menuStyle < 0) {
-                std::fprintf(stderr, "unknown menu style '%s': 1 arcade, 2 cosmic, 3 swiss, 4 watercolour, 5 glass, 6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel, 11 windows, 12 kaleido\n", argv[i]);
-                return 1;
-            }
-        }
         else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
         else o.paths.push_back(a);

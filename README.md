@@ -162,32 +162,33 @@ roadmap of the universes to come. To make a new one, see [docs/adding-a-universe
 
 ## Modes
 
-Started with no songs, the game opens on its title screen (the game is called **Refall** for now: `GAME_TITLE` in
-`src/menu.hpp`, shown by every menu style and the window title): **CAMPAIGN**, **FREE PLAY** or QUIT (arrows or D-pad,
-Enter / A to choose, Esc / B to go back).
+Started with no songs, the game opens on its menu, a kaleidoscope of its own universes (the game is called **Refall**
+for now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **CAMPAIGN**, **FREE
+PLAY** or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). Behind every screen a real universe of the
+game, rendered live, is folded into a slowly turning stained-glass kaleidoscope (tinted by the focused stage, kept dark
+enough behind the text).
 
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
-  rising with the lines. Choose a difficulty first: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
-  (x0.6, x0.8, x1: EXPERT is the full speed). A game over: any key plays again, Esc goes back to the menu.
-  In the `kaleido` menu (the default) free play also picks a **playlist**: down to the PLAYLIST row, left / right
-  through the playlists used before (most recent first) and the game's own; **+ ADD A PLAYLIST** opens a field where a
-  YouTube playlist link, a bare playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it
-  (its song count, and its title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in
-  `playlists.tsv` in the user data folder (url, title, songs, last use; `--playlists FILE` for another file).
+  rising with the lines. Choose a difficulty: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
+  (x0.6, x0.8, x1: EXPERT is the full speed), and a **playlist**: down to the PLAYLIST row, left / right through the
+  playlists used before (most recent first) and the game's own; **+ ADD A PLAYLIST** opens a field where a YouTube
+  playlist link, a bare playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its
+  song count, and its title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in
+  `playlists.tsv` in the user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game
+  over: any key plays again, Esc goes back to the menu.
 - **The campaign** is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity (a game
   level, fixed for the whole song) and its universe set by the campaign, higher with each stage and song, and with the
-  difficulty (EASY, NORMAL, EXPERT, chosen on the stages screen). Each stage is a line of squares, one per song,
-  coloured by its universe; hovering a square plays a short preview of the song (from its drop or chorus; a song not
-  downloaded yet is fetched in the background). Choose a square to play the stage from that song to its last one.
-  Surviving all five songs of a run started from the first one **clears** the stage and unlocks the next one (a stage
-  cleared on any difficulty unlocks the next). A run started from a later song is fine for practice: the songs it
-  survives count as beaten (with their best score) but the stage isn't cleared. A game over ends the run and goes back
-  to the stages. In the `kaleido` menu the campaign has two levels: left / right moves between the 12 stage
-  petals (numbered 1 to 12, a gold arc with arrows showing the order, the next stage to clear glowing), up reaches the
-  difficulty; Enter opens the focused petal (a locked one only says so), fanning out its five songs: left / right
-  chooses one (its preview plays), Enter plays it, Esc closes the petal. The game remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten
-  (with the points scored during each), in `campaign-progress.tsv` in the user data folder
-  (`~/.local/share/zentris/` on Linux).
+  difficulty (EASY, NORMAL, EXPERT, chosen at the top of the campaign screen). The stages are 12 glass petals in a
+  rosette, numbered 1 to 12, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
+  right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
+  reaches the difficulty; Enter opens the focused petal (a locked one only says so), fanning out its five songs: left /
+  right chooses one (a short preview plays, from its drop or chorus; a song not downloaded yet is fetched in the
+  background), Enter plays the stage from that song to its last one, Esc closes the petal. Surviving all five songs of
+  a run started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty
+  unlocks the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with
+  their best score) but the stage isn't cleared. A game over ends the run and goes back to the stages. The game
+  remembers, per difficulty, the stages cleared (with the run's score) and the songs beaten (with the points scored
+  during each), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter), and lowers its volume, for as long
 as the game over lasts.
@@ -201,28 +202,14 @@ as the game over lasts.
 | `--reset` | forget the campaign progress (prints what was forgotten) |
 
 Songs or playlists given on the command line play free play straight away, as before; so do the offline renders
-(`--review-shot`, `--clip`, `--analysis`, ...). `--menu-shot OUT.png [--menu-screen title|campaign|free]
-[--menu-hover S:SONG]` saves a menu screen without a display.
+(`--review-shot`, `--clip`, `--analysis`, ...).
 
-The menus come in five looks, the same screens and navigation in each, chosen with `--menu-style N` (or its name):
-1 `arcade` (8-bit pixels on a CRT, scanlines and glow), 2 `cosmic` (a slow nebula; the stages are planets
-along an orbit path, their songs moons; thin Josefin Sans), 3 `swiss` (a typographic poster: Inter, flat red and
-black on warm paper, a strict grid), 4 `watercolour` (a painted journey map: the stages are stops on a winding dotted
-path, each song a painted tile; Kalam and Yrsa), 5 `glass` (frosted glass cards over a slow colour gradient, neon
-focus; Manrope), and five journeys through space growing from COSMIC: 6 `galaxy` (a 3D spiral galaxy, the stages star
-systems along its arm, their songs planets, the camera flying from one to the next), 7 `orrery` (a solar system around
-a big sun, the stages planets on brass orbits, locked ones dark and frozen, the songs their moons; Jura), 8 `atlas`
-(an antique celestial chart in navy and gold, the stages constellations drawn in gold, the songs their stars;
-Cormorant Garamond and Marcellus), 9 `synthwave` (an outrun cosmos over a neon grid and a striped sun, ringed retro
-planets, a ship hopping along a neon route), 10 `pastel` (a candy cosmos of kawaii planets, sleeping while locked,
-with bubbly moons; Comfortaa and Quicksand), and two that show the game's own worlds: 11 `windows` (a gallery wall of
-12 framed windows, each opening onto the stage's real universes rendered live, a strip of 5 panes for its songs, the
-focused one growing; locked windows shuttered, cleared ones warmly lit with a brass plaque) and 12 `kaleido` (the default: the
-focused song's live universe folded into a turning stained-glass kaleidoscope, the stages glass shards in a rosette
-around a plain dark glass medallion). Their universes render live at 640x360 (the focused one at 30 fps, the others at 12), and a
-snapshot of each is kept in `~/.cache/zentris/menu-worlds/` for the ones not live. `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
-progress, never saved; `--menu-demo` shows the same progress in `--menu-shot`). The fonts are OFL, in `src/embed/`
-with their licences.
+The menu's universes run as real universe instances drawing their world without the board, at 640x360 (the focused
+one at 30 fps), with a snapshot of each kept in `~/.cache/zentris/menu-worlds/` for the ones not live. Without a
+display, `--menu-shot OUT.png [--menu-screen title|campaign|free] [--menu-hover S:SONG] [--menu-petal]` saves a menu
+screen (`--menu-petal`: the hovered stage's petal open) and `--menu-clip OUT.mp4` records a 34 s walk through the menu
+(needs ffmpeg); both can show made-up progress and playlists (`--menu-demo`, always on in clips, never saved). The
+menu's font, Josefin Sans, is OFL, in `src/embed/` with its licence.
 
 ### The campaign file
 
