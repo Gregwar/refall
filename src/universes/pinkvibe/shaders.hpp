@@ -223,7 +223,7 @@ void main() {
     AA = max(fwidth(u.x), 1e-4) * 0.75;
     int type = int(vB.x + 0.5);
     vec3 col = vC.rgb;
-    float d = dBox(u, vec2(0.45), 0.2);
+    float d = dBox(u, vec2(0.45), 0.08);  // nearly square corners, like the flat bands
     vec4 acc = vec4(0.0);
     if (abs(vB.z - 1.0) < 0.5) {
         // the ghost: a soft fill and a clear line of the piece's color, lightened so it reads on the plum well
@@ -235,19 +235,10 @@ void main() {
     }
     // (a preview over the bands sits on a soft rim of the well's color)
     if (vB.z > 1.5) layerA(acc, d - 0.06, uRim, 0.4);
-    // one soft tile: flat, a gentle lift toward its top
-    vec3 base = mix(col * vec3(0.95, 0.92, 0.94), mix(col, vec3(1.0), 0.07), smoothstep(-0.45, 0.45, u.y));
-    layer(acc, d, base);
+    // one flat tile: a single color, no lift, no shine (flat design, like the bands)
+    layer(acc, d, col);
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
     vec3 M = lum > 0.8 ? mix(col, vec3(0.86, 0.45, 0.58), 0.38) : mix(col, vec3(1.0, 0.97, 0.98), 0.5);
-    // a soft shine: a thin pale curve along the top left corner (no gloss)
-    {
-        float r = length(u - vec2(-0.13, 0.13));
-        float an = atan(u.y - 0.13, u.x + 0.13);
-        float arc = max(abs(r - 0.2) - 0.032, -(an - 1.75));
-        arc = max(arc, an - 2.95);
-        layerA(acc, arc, mix(col, vec3(1.0), 0.6), 0.75);
-    }
     // the motif, small and calm, one per type, low right of the center
     vec2 q = (u - vec2(0.04, -0.04)) / 0.17;
     if (type == 0) {           // I: a pearl, a row of three dots
