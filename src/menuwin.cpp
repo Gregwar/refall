@@ -217,13 +217,12 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         else std::snprintf(b, sizeof(b), "NOT BEATEN ON %s", difficultyName(m.diff_));
         p.text(body, b, rx, y0 + 46 * u, 18 * u, v.beaten ? hex(0xffd27a) : dim, 1, 0.3f);
         p.text(body, upper(v.preview), rx, y0 + 108 * u, 17 * u, withA(accent, 0.95f), 1, 0.3f);
-        if (v.song > 0) p.text(body, "A RUN FROM HERE DOESN'T CLEAR THE STAGE", rx, y0 + 196 * u, 13 * u, withA(dim, 0.7f), 1, 0.3f);
     } else if (m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
         const int fs = focusedStage();
         char b[160];
         std::snprintf(b, sizeof(b), "STAGE %d OF %d   /   %d SONGS", fs + 1, nStages(), nSongs(fs));
         p.text(body, b, lx, y0 + 46 * u, 17 * u, dim, -1, 0.3f);
-        p.text(head, open(fs) ? "Open the petal to choose a song" : "Locked: clear stage " + std::to_string(fs) + " first", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
+        if (!open(fs)) p.text(head, "Locked", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
         int beat = 0;
         for (int k = 0; k < nSongs(fs); k++) beat += beaten(fs, k);
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
@@ -233,8 +232,6 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
         }
         return;
-    } else {
-        p.text(head, "Choose a difficulty, then a song", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
     }
 }
 
@@ -408,7 +405,7 @@ void Worlds::kalCampaign() {
             if (o && beaten(fs, k)) p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), x + 520 * u, y, 18 * u, hex(0xffd27a), 1, 0.15f);
         }
         std::string prompt;
-        if (!o) prompt = "CLEAR STAGE " + std::to_string(fs) + " TO OPEN IT";
+        if (!o) prompt = "LOCKED";
         p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.75f), -1, 0.35f);
     }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
@@ -522,9 +519,6 @@ void Worlds::kalFree() {
             p.text(F::JOSEFIN, url.empty() ? "A YOUTUBE PLAYLIST OR VIDEO LINK" : url, X(200), Y(880), 15 * u, hex(0xffffff, 0.45f), -1, 0.1f);
         }
     }
-    char b[96];
-    std::snprintf(b, sizeof(b), "GRAVITY AT %d%% OF ITS FULL SPEED, ON EVERY LEVEL", (int)std::lround(freePlayMultiplier(m.freeDiff_) * 100));
-    p.text(F::JOSEFIN, b, X(960), Y(965), 17 * u, hex(0xffffff, 0.85f), 0, 0.3f);
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
     const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
