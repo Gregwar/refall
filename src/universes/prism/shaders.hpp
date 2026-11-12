@@ -266,10 +266,10 @@ void main() {
         // the light takes the glass's color: the cube's own hue, deepened (more saturated than its pastel body),
         // carried by the light's energy, so a lit cube glows in its color instead of paling toward the beam's white
         float tl = dot(tint, vec3(0.3, 0.5, 0.2));
-        vec3 deep = max(mix(vec3(tl), tint, 1.9), vec3(0.0));
+        vec3 deep = max(mix(vec3(tl), tint, 2.4), vec3(0.0));
         deep *= tl / max(dot(deep, vec3(0.3, 0.5, 0.2)), 1e-3);
         vec3 own = deep * litL * 1.6;
-        vec3 tinted = mix(lit * tint, own, 0.75);
+        vec3 tinted = mix(lit * tint, own, 0.85);
         // inside: the light scatters in the body, brighter toward the side it came from
         float side = dot(q, -ldn);
         float body = 0.35 + 0.65 * smoothstep(-0.5, 0.5, side);
@@ -309,9 +309,15 @@ void main() {
     vec3 c = texture(uScene, vUv).rgb * uExposure;
     // a soft shoulder: linear in the darks and mids (the backdrop and the bridge's colors stay exact), the hot
     // cores of the light rolling off to white
+    // the shoulder acts on the brightest channel and scales the color as a whole, so a hot colored light keeps
+    // its hue and saturation instead of bleaching toward white (only the very hottest cores pale a little)
     const float K = 0.55;
-    vec3 over = max(c - K, 0.0);
-    c = min(c, vec3(K)) + (1.0 - K) * (1.0 - exp(-over / (1.0 - K)));
+    float m = max(c.r, max(c.g, c.b));
+    if (m > K) {
+        float mm = K + (1.0 - K) * (1.0 - exp(-(m - K) / (1.0 - K)));
+        c *= mm / m;
+        c = mix(c, vec3(mm), 0.25 * smoothstep(1.5, 4.0, m));
+    }
     c *= uMul;
     c = pow(max(c, 0.0), vec3(1.0 / 2.2));
     c += (hash12(gl_FragCoord.xy) - 0.5) / 255.0; // dither (the dark gradients would band)

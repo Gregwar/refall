@@ -16,14 +16,13 @@
 //
 // Staging: calm is one beam in a light haze; mid brings a second from the other side, a glint on a lit cube every
 // bar; a chorus brings a third, low and raking, and the faintest fringes of color. A drop (the HUD's section, or
-// the song's drive) is a rainbow: on its downbeat the beams swell (one swell that settles) and turn white, and the
-// glass disperses them, each ray splitting into a spectrum that fans out of the cubes into rainbow bands across
-// the room and rainbow pools on the floor, for the whole drop; a glint every two beats. And the light rig moves:
-// each beam swings to a new pose on its own bar line (the second answers the first two beats later, the third
-// every other bar) in an eased move of under a second, so the paths through the glass re-route and the fans
-// sweep across the room; three thin beams snap in from the dark on the downbeat and swing like stage lights over
-// two bars (the two from above crossing like scissors, one raking up and down the stack); the kick widens the
-// spectra for an instant (the light's paths only). Nothing pulses the room with the beat, no move is jerky,
+// the song's drive) is a rainbow, calm on the eyes: the beams swell gently and turn white, and the glass
+// disperses them, each ray splitting into a spectrum that fans out of the cubes into rainbow bands across the room
+// and rainbow pools on the floor, for the whole drop; a soft glint every bar. And the light rig moves, slowly:
+// each beam glides to a new pose every two bars (the second a bar later, the third every four bars) in an even
+// eased move over six beats, so the paths through the glass re-route and the fans drift across the room; three
+// thin beams fade in from the dark and sway like stage lights over six bars (the two from above crossing like
+// scissors, one raking along the stack); the kick breathes the spectra only faintly. Nothing flashes. Nothing pulses the room with the beat, no move is jerky,
 // the stack and the HUD never move.
 //
 // A lock flashes a glint where the piece touched down (a hard drop a brighter one with a few sparks along the
@@ -79,6 +78,13 @@ vec2 norm2(vec2 a) {
 }
 vec2 reflect2(vec2 d, vec2 n) { return sub(d, mul(n, 2.f * dot2(d, n))); }
 float lum(const vec3& c) { return 0.3f * c.x + 0.5f * c.y + 0.2f * c.z; }
+// the glass tints pushed away from grey (at the same luminance): colored glass, not pastel
+vec3 vivid(const vec3& c, float s) {
+    const float l = lum(c);
+    vec3 v(std::max(0.f, l + (c.x - l) * s), std::max(0.f, l + (c.y - l) * s), std::max(0.f, l + (c.z - l) * s));
+    const float lv = lum(v);
+    return lv > 1e-4f ? v * (l / lv) : v;
+}
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
 // The variants: the room (backdrop, floor), the two lights, the HUD's text and accent, and the seven glasses
@@ -129,8 +135,7 @@ constexpr int RIG_RAYS = 6;       // rays per rig beam
 // a drop's beam moves: an eased swing (zero speed at both ends, most of the way covered early: decisive, soft settle)
 float swingEase(float x) {
     x = std::clamp(x, 0.f, 1.f);
-    const float a = 1.f - x;
-    return 1.f - a * a * a * (1.f + 3.f * x);
+    return x * x * x * (x * (x * 6.f - 15.f) + 10.f); // smootherstep: a slow, even glide
 }
 
 constexpr float FLOOR_Y = -10.06f;
@@ -141,12 +146,12 @@ constexpr float N_GLASS = 1.5f;
 // the light buffer's gains: a shaft in the haze is faint, inside the glass brighter, a pool on the floor brighter
 constexpr float AIR_GAIN = 0.045f, INSIDE_GAIN = 0.22f, POOL_GAIN = 0.2f;
 constexpr float BURST_GAIN = 1.6f;    // a cleared row's rays in the air (brief)
-constexpr float SPECTRAL_GAIN = 1.9f; // a dispersed ray in the air (the colors are dimmer than the white they split)
+constexpr float SPECTRAL_GAIN = 2.3f; // a dispersed ray in the air (the colors are dimmer than the white they split)
 constexpr float FAN_K = 1.0f;         // how widely a spectrum fans out leaving the glass (radians per unit of index)
 constexpr float TILT = 0.09f;         // how far off square a face is cut (radians, peak to peak)
-// the spectrum, red (bent least) to violet; normalized at init so that the sum is white
-vec3 SPEC[SPECTRUM] = {{1.f, 0.06f, 0.03f}, {1.f, 0.42f, 0.f}, {0.85f, 0.95f, 0.f},
-                       {0.05f, 1.f, 0.2f},  {0.f, 0.4f, 1.f},  {0.5f, 0.f, 1.f}};
+// the spectrum, pure hues from red (bent least) to violet; normalized at init so that the sum is white
+vec3 SPEC[SPECTRUM] = {{1.f, 0.f, 0.f},   {1.f, 0.38f, 0.f}, {0.8f, 1.f, 0.f},
+                       {0.f, 1.f, 0.12f}, {0.f, 0.3f, 1.f},  {0.55f, 0.f, 1.f}};
 bool specNormalized = false;
 
 float hashf(float x) {
@@ -623,7 +628,7 @@ void PrismUniverse::trace(Ray first) {
             {
                 const vec3 tn = tintOf(B.type);
                 const float m = std::max(tn.x, std::max(tn.y, tn.z));
-                const float k = std::min(1.f, t * 0.45f);
+                const float k = std::min(1.f, t * 0.7f);
                 r.c = vec3(r.c.x * (1.f - k * (1.f - tn.x / m)), r.c.y * (1.f - k * (1.f - tn.y / m)), r.c.z * (1.f - k * (1.f - tn.z / m)));
             }
             const int nb = boxAt(add(p, mul(n, 0.02f)));
@@ -1073,7 +1078,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         light_b_ = lerp(light_b_, ugl::toLinear(hex(d.lightB)), k);
         text_ = lerp(text_, ugl::toLinear(hex(d.text)), k);
         accent_ = lerp(accent_, ugl::toLinear(hex(d.accent)), k);
-        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], ugl::toLinear(hex(d.tint[i])), k);
+        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], vivid(ugl::toLinear(hex(d.tint[i])), 1.55f), k);
     }
     // the section, from the HUD (a drop is a rainbow, a chorus white light)
     sectionKnown_ = false;
@@ -1101,11 +1106,11 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         const bool dropish = sectionKnown_ ? sectionDrop_
                                            : (music.hasSong ? music.speed > 1.33f || (inDrop_ && music.speed > 1.26f) : inDrop_);
         const bool hot = level_ >= 2 && dropWait_ <= 0.f && dropish;
-        rainbow_ = hot ? std::min(1.f, rainbow_ + dt / 0.6f) : std::max(0.f, rainbow_ - dt / 3.f);
+        rainbow_ = hot ? std::min(1.f, rainbow_ + dt / 2.f) : std::max(0.f, rainbow_ - dt / 3.f);
         chorus_ = approach(chorus_, level_ >= 2 && !hot ? 1.f : 0.f, 1.2f, dt);
         kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
         // a glint on a lit cube, on the beat grid: every bar at mid, every two beats at a peak
-        const float every = lv_ > 1.5f ? 2.f : 4.f;
+        const float every = 4.f;
         if (music.hasSong && lv_ > 0.6f) {
             const double slot = std::floor(music.beat / every);
             if (slot != lastHalfBeat_) {
@@ -1123,7 +1128,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
                         const float cx = rng_.chance(0.5f) ? 0.44f : -0.44f, cy = rng_.chance(0.5f) ? 0.44f : -0.44f;
                         const vec3 c = rainbow_ > 0.5f ? SPEC[rng_.irange(0, SPECTRUM - 1)] * (float)SPECTRUM * 0.6f
                                                        : lerp(tintOf(b.type), vec3(1.f), 0.6f);
-                        flares_.push_back({v2(b.c.x + cx, b.c.y + cy), c * 1.6f, 0.f, 0.6f, 0.75f + 0.35f * rainbow_, 0.f});
+                        flares_.push_back({v2(b.c.x + cx, b.c.y + cy), c * (1.6f - 0.8f * rainbow_), 0.f, 0.6f, 0.75f + 0.75f * rainbow_, 0.f});
                     }
                 }
                 lastHalfBeat_ = slot;
@@ -1150,7 +1155,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         bursts_.erase(std::remove_if(bursts_.begin(), bursts_.end(), [](const Burst& b) { return b.t >= b.life; }), bursts_.end());
         gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
     }
-    swell = dropT_ < 12.f ? smoothstepf(0.f, 0.35f, dropT_) * std::exp(-std::max(0.f, dropT_ - 0.35f) / 2.2f) * dropAmp_ * (inDrop_ ? 1.f : 0.f) : 0.f;
+    swell = dropT_ < 12.f ? smoothstepf(0.f, 1.5f, dropT_) * std::exp(-std::max(0.f, dropT_ - 1.5f) / 3.f) * dropAmp_ * (inDrop_ ? 1.f : 0.f) : 0.f;
 
     // ---- The light: the beams' strengths and the dispersion, then the rays through the glass.
     const float lvm = smoothstepf(0.2f, 1.f, lv_), lvp = smoothstepf(1.1f, 2.f, lv_);
@@ -1160,15 +1165,15 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         const float on[3] = {0.75f + 0.15f * lvm + 0.1f * lvp, 0.75f * lvm + 0.1f * lvp, 0.8f * lvp};
         for (int i = 0; i < 3; i++) beams_[i].on = approach(beams_[i].on, on[i], 1.2f, dt);
         const float dispT = 0.035f * chorus_ * lvp + 0.24f * rainbow_ + 0.2f * tet;
-        dispBase_ = approach(dispBase_, dispT, rainbow_ > 0.5f ? 4.f : 2.f, dt);
+        dispBase_ = approach(dispBase_, dispT, 1.f, dt);
         // in a drop the kick makes the spectra breathe: the fans widen on the hit and close again (only the light's
         // paths change, the room's brightness does not)
-        kickFan_ = std::max(kickFan_ * std::exp(-dt / 0.22f), std::max(kickIn_, music.kick));
-        disp_ = dispBase_ + 0.11f * kickFan_ * rainbow_;
+        kickFan_ = approach(kickFan_, std::max(kickIn_, music.kick), 1.5f, dt);
+        disp_ = dispBase_ + 0.025f * kickFan_ * rainbow_;
         airK_ = 1.f - 0.72f * rainbow_;
         // the rig snaps in on the drop's downbeat and fades out slowly after it
         const bool rigOn = rainbow_ > 0.f && inDrop_ && level_ >= 2;
-        rig_ = rigOn ? std::min(1.f, rig_ + dt / 0.15f) : std::max(0.f, rig_ - dt / 2.f);
+        rig_ = rigOn ? std::min(1.f, rig_ + dt / 2.5f) : std::max(0.f, rig_ - dt / 3.f);
     }
     buildGlass(game);
     if (game.hasPiece() && !game.over()) game.pieceCells(game.piece(), pieceCell_);
@@ -1183,21 +1188,21 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     // so the paths through the glass re-route and the rainbow fans sweep across the room.
     const double beatNow = music.hasSong ? music.beat : (double)time_ * 2.0;
     const float secPerBeat = 60.f / std::clamp(music.hasSong ? music.bpm : 120.f, 60.f, 200.f);
-    const float moveDur = std::min(0.85f, 1.8f * secPerBeat);
+    const float moveDur = 6.f * secPerBeat;
     const float drive = smoothstepf(0.f, 1.f, rainbow_);
     auto beamPose = [&](int bi, float& dth, float& dx) {
         dth = dx = 0.f;
         if (drive <= 0.f) return;
-        static const float OFF[3] = {0.f, 2.f, 4.f}; // beats after the bar line (the third moves every other bar)
-        const float period = bi == 2 ? 8.f : 4.f;
+        static const float OFF[3] = {0.f, 4.f, 8.f}; // beats after the bar line (the third moves every other bar)
+        const float period = bi == 2 ? 16.f : 8.f;
         const double rel = beatNow - OFF[bi];
         const double k = std::floor(rel / period);
         const float e = swingEase((float)(rel - k * period) * secPerBeat / moveDur);
         auto target = [&](double kk, float& th, float& x) {
             const float kf = (float)std::fmod(kk, 977.0);
             const float side = (((long long)kk + bi) & 1) ? 1.f : -1.f; // alternately to either side of the well
-            x = side * (1.2f + 2.8f * hashf(kf * 3.17f + bi * 11.1f));
-            th = (hashf(kf * 5.31f + bi * 7.7f + 0.5f) - 0.5f) * (bi == 2 ? 0.22f : 0.5f) - side * 0.12f;
+            x = side * (1.f + 1.8f * hashf(kf * 3.17f + bi * 11.1f));
+            th = (hashf(kf * 5.31f + bi * 7.7f + 0.5f) - 0.5f) * (bi == 2 ? 0.14f : 0.3f) - side * 0.08f;
         };
         float th0, x0, th1, x1;
         target(k - 1.0, th0, x0);
@@ -1240,11 +1245,11 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     // the drop's rig: three thin white beams snapping in from the dark on the downbeat (a little stronger at
     // first), swinging like stage lights on the two-bar grid, dispersed by the glass like the others
     if (rig_ > 0.01f) {
-        const float entry = 1.f + 0.6f * std::exp(-dropT_ / 1.2f) * (inDrop_ ? 1.f : 0.f);
+        const float entry = 1.f;
         for (int ri = 0; ri < 3; ri++) {
             const RigDef& R = RIG[ri];
             const float on = rig_ * worldOn * 0.5f * entry;
-            const float th = R.theta0 + R.amp * std::cos((float)(beatNow * (PI / 4.0)) + R.phase);
+            const float th = R.theta0 + 0.6f * R.amp * std::cos((float)(beatNow * (PI / 12.0)) + R.phase);
             const vec2 d = v2(std::sin(th), -std::cos(th));
             const vec2 perp = v2(-d.y, d.x);
             const vec3 col = lerp(light_a_, vec3(1.f, 0.97f, 0.93f), 0.75f);
