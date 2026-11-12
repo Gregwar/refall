@@ -190,20 +190,24 @@ no song previews.
   title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in `playlists.tsv` in the
   user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game over holds until a key
   is pressed, then goes back to the menu.
-- **Voyage** (the campaign) is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity
+- **Voyage** (the campaign) is 15 stages of 4 songs played in a row. There are no levels: each song has its velocity
   (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
-  with the difficulty (EASY, NORMAL, EXPERT, chosen at the top of the Voyage screen). The stages are 12 glass petals in
-  a rosette, numbered 1 to 12, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
+  with the difficulty (EASY, NORMAL, EXPERT, chosen at the top of the Voyage screen). The stages are 15 glass petals in
+  a rosette, numbered 1 to 15, each in its own hue, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
   right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
   reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
-  the petal, fanning out its five songs: left / right chooses one, Enter plays the stage from that song to its last
-  one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all five songs of a run
+  the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
+  one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
   started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty unlocks
   the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
   best score) but the stage isn't cleared. A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
   lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
-  and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
+  and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder
+  (`~/.local/share/zentris/` on Linux). The file keys songs by their video id and stage clears by their songs, so
+  regrouping the Voyage keeps the songs beaten: a clear of a stage that no longer exists is dropped, and the stages it
+  had opened (and every stage with a beaten song) stay open. A file from the first Voyage (12 stages of 5, keyed by
+  index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`.
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
 to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays
@@ -233,8 +237,8 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 
 ```
 # stage  song  id           universe             easy  normal  expert  title
-1        1     h1l4pDXbkic  PRISM                1.0   2.0     4.0     The XX - You Got The Love
-12       5     8ayH60ET4U0  SKY WHALE:MOONLIGHT  8.0   13.0    20.0    ODESZA - Line Of Sight
+1        1     H_9xqc084UA  PRISM:AURORA         1.0   2.0     4.0     Small Town Kid - Shards
+15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  8.2   13.5    20.0    callah x Laura Brehm - skyline
 ```
 
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
@@ -246,7 +250,7 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
-ends stage 12) on songs of the default playlist, its velocities rising from 1 to 8 (EASY), 2 to 13 (NORMAL) and 4 to
+ends stage 15) on songs of the default playlist, its velocities rising from 1 to 8 (EASY), 2 to 13 (NORMAL) and 4 to
 20 (EXPERT): an arbitrary first draft, meant to be tuned.
 
 ## Install

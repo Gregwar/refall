@@ -337,15 +337,20 @@ Menu::Choice Menu::update(const Input& in, float dt) {
 
 namespace {
 float sstep(float t) { t = std::clamp(t, 0.f, 1.f); return t * t * (3.f - 2.f * t); }
-// The stages' own colours (planets, map stops): a calm 12-step wheel.
-const unsigned char STAGE_COL[12][3] = {{110, 200, 255}, {150, 130, 255}, {255, 120, 200}, {255, 170, 90},
-                                        {120, 230, 170}, {30, 105, 255},  {220, 120, 255}, {255, 210, 110},
-                                        {110, 220, 230}, {255, 130, 120}, {170, 230, 110}, {92, 60, 255}};
+// The stages' own colours (the petals, the kaleidoscope's tint): 15 vivid hues 24 degrees apart on the perceptual
+// (OKLCH) wheel (hue is what survives the kaleidoscope's grading), each halfway between its most saturated and a calmer
+// lightness, the teal and the aqua set apart in lightness too; ordered so that neighbouring stages are at least 120
+// degrees apart. Stage 12 keeps its electric indigo.
+const unsigned char STAGE_COL[][3] = {
+    {72, 164, 254}, {250, 150, 24}, {174, 90, 253}, {144, 222, 54},  {232, 84, 242}, {39, 226, 147}, {252, 80, 127},
+    {0, 178, 160},  {250, 78, 185}, {22, 191, 244}, {204, 203, 20},  {92, 60, 255},  {240, 176, 16}, {120, 232, 245},
+    {252, 114, 64}};
+const int STAGE_COLS = (int)(sizeof(STAGE_COL) / sizeof(STAGE_COL[0]));
 
 } // namespace
 
 void Menu::stageColor(int stage, unsigned char out[3]) const {
-    for (int i = 0; i < 3; i++) out[i] = STAGE_COL[((stage % 12) + 12) % 12][i];
+    for (int i = 0; i < 3; i++) out[i] = STAGE_COL[((stage % STAGE_COLS) + STAGE_COLS) % STAGE_COLS][i];
 }
 
 Menu::SongView Menu::songView() const {
