@@ -47,7 +47,22 @@ private:
     struct Swirl { vec2 c; float age, life, ang, rad, size, seed; };
     std::vector<Swirl> swirls_;
     void dustAt(const vec3& w, int n);
-    void dustSomewhere(int n);
+    // The repairs, one event at a time (a column's top flying back, the block beside it, a step of the temple), in an
+    // order the camera can follow: it goes to each one, frames it beside the well, closer, and only then it starts.
+    struct Ev { int kind, idx; float from, to; vec3 focus; float dist, side; };
+    std::vector<Ev> plan_;
+    int planFor_ = -1, next_ = 0, active_ = -1;
+    float evT_ = -1.f, travelT_ = 0.f, idleT_ = 99.f, colRep_[8] = {}, templeRep_ = 0.f, dustT_ = 0.f;
+    vec3 focusP_{0, 0, 0};
+    float focusA_ = 0.f, focusR_ = 3.f;
+    vec3 ovEye_{0, 3, 14}, ovTgt_{0, 10, -50}, camEye_{0, 3, 14}, camTgt_{0, 10, -50}, eyeV_{0, 0, 0}, tgtV_{0, 0, 0};
+    vec3 goalEye_{0, 3, 14}, goalTgt_{0, 10, -50};
+    bool camInit_ = false;
+    void buildPlan();
+    int owedEvents(float L) const;
+    void applyEv(const Ev& e, float t);
+    void focusPose(const Ev& e, vec3& eye, vec3& tgt) const;
+    void stepCamera(float dt);
 
     // ---- The board (ortho, the layout's plane).
     mat4 vp_;

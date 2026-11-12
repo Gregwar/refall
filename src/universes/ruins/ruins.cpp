@@ -257,31 +257,123 @@ void RuinsUniverse::updateCamera() {
     const float ang = side_ * 0.12f + 0.24f * std::sin(t * 0.026f) + 0.06f * std::sin(t * 0.017f + 1.3f);
     const float R = 64.f + 5.f * std::sin(t * 0.019f + 0.7f);
     const vec3 C(0.f, 0.f, -50.f);
-    eye_ = C + vec3(std::sin(ang) * R, 3.6f + 1.0f * std::sin(t * 0.023f + 2.f), std::cos(ang) * R);
+    ovEye_ = C + vec3(std::sin(ang) * R, 3.6f + 1.0f * std::sin(t * 0.023f + 2.f), std::cos(ang) * R);
     // the temple beside the well (on this song's side), not hidden behind it
-    const vec3 toC = normalize(vec3(C.x - eye_.x, 0.f, C.z - eye_.z));
+    const vec3 toC = normalize(vec3(C.x - ovEye_.x, 0.f, C.z - ovEye_.z));
     const vec3 r0 = normalize(cross(toC, vec3(0.f, 1.f, 0.f)));
-    const vec3 target = C + vec3(0.f, 10.5f, 0.f) - r0 * (side_ * 21.f);
-    fwd_ = normalize(target - eye_);
-    right_ = normalize(cross(fwd_, vec3(0.f, 1.f, 0.f)));
-    up_ = cross(right_, fwd_);
+    ovTgt_ = C + vec3(0.f, 10.5f, 0.f) - r0 * (side_ * 21.f);
     tanH_ = 0.43f;
+    if (!camInit_) {
+        camEye_ = goalEye_ = ovEye_;
+        camTgt_ = goalTgt_ = ovTgt_;
+        eyeV_ = tgtV_ = vec3(0.f, 0.f, 0.f);
+        stepCamera(0.f);
+    }
 }
 
-// The arc, on the 50-line scale: the jungle recedes (1..12), the columns repair one after the other (12.5..37),
-// the temple rebuilds (15..45) while its missing blocks re-form (14..42) and the wear fades (12..46), the prime
-// (43..50: paint, braziers).
+// The camera glides to its goal (the overview, or the repair to watch) on critically damped springs: slow, smooth,
+// no jumps.
+void RuinsUniverse::stepCamera(float dt) {
+    dt = std::min(dt, 0.05f);
+    const float w = 1.0f;
+    eyeV_ = eyeV_ + ((goalEye_ - camEye_) * (w * w) - eyeV_ * (2.f * w)) * dt;
+    tgtV_ = tgtV_ + ((goalTgt_ - camTgt_) * (w * w) - tgtV_ * (2.f * w)) * dt;
+    camEye_ = camEye_ + eyeV_ * dt;
+    camTgt_ = camTgt_ + tgtV_ * dt;
+    eye_ = camEye_;
+    fwd_ = normalize(camTgt_ - camEye_);
+    right_ = normalize(cross(fwd_, vec3(0.f, 1.f, 0.f)));
+    up_ = cross(right_, fwd_);
+}
+
+// A repair framed beside the well: the camera a little in front of it (in the avenue for a column, outside the
+// colonnade for the temple), turned so the repair sits in the open band beside the well, at its height.
+void RuinsUniverse::focusPose(const Ev& e, vec3& eye, vec3& tgt) const {
+    const vec3 P = e.focus;
+    const float s = e.side;
+    const float yaw = e.kind == 2 ? s * 0.12f : -s * 0.5f;
+    eye = P + vec3(std::sin(yaw) * e.dist, 0.f, std::cos(yaw) * e.dist);
+    eye.y = e.kind == 2 ? std::max(3.2f, P.y * 0.4f) : 2.6f;
+    vec3 vh(P.x - eye.x, 0.f, P.z - eye.z);
+    const float lh = std::max(1.f, length(vh));
+    vh = vh * (1.f / lh);
+    const vec3 r = normalize(cross(vh, vec3(0.f, 1.f, 0.f)));
+    const float th = std::atan(0.74f * tanH_ * aspect_);
+    const vec3 fdir = vh * std::cos(th) - r * (std::sin(th) * s);
+    tgt = eye + fdir * lh + vec3(0.f, P.y - eye.y, 0.f);
+}
+
+namespace {
+// GLSL's hash(vec2) (shaders.hpp), to know on the CPU which columns are broken
+float ghash(float x, float y) {
+    auto fr = [](float v) { return v - std::floor(v); };
+    float a = fr(x * 0.1031f), b = fr(y * 0.1031f), cc = fr(x * 0.1031f);
+    const float d = a * (b + 33.33f) + b * (cc + 33.33f) + cc * (a + 33.33f);
+    a += d; b += d; cc += d;
+    return fr((a + b) * cc);
+}
+}
+
+// The plan: first the avenue's columns (down this song's side, back up the other: each broken one's top, then the
+// block beside it), then the temple in eight steps through its parts (as shaders.hpp sequences them on uTemple).
+void RuinsUniverse::buildPlan() {
+    plan_.clear();
+    const int kind = VARIANTS[wrapV(variant_)].kind;
+    const float H = kind == 0 ? 5.4f : (kind == 1 ? 4.8f : 7.6f);
+    for (int si = 0; si < 2; si++)
+        for (int jj = 0; jj < 4; jj++) {
+            const int j = si == 0 ? jj : 3 - jj;
+            const float sd = (si == 0) == (side_ > 0.f) ? 1.f : -1.f;
+            const float h0 = ghash(j * 3.1f + 0.7f, sd * 1.7f + 2.f), h1 = ghash(j * 1.3f + 5.1f, sd * 3.3f + 0.4f);
+            const int ci = j * 2 + (sd > 0.f ? 1 : 0);
+            const bool broken = h0 < 0.62f, block = h1 > 0.45f;
+            const vec3 base(sd * 7.5f, 0.75f, -3.5f - 7.f * j);
+            if (broken || block) plan_.push_back({0, ci, broken ? 0.f : 0.55f, 1.f, base + vec3(0.f, H * 0.6f, 0.f), H * 2.0f + 1.f, sd});
+        }
+    struct Seg { float end; vec3 p; float dist; };
+    static const Seg MAYA[] = {{0.5f, vec3(15.f, 6.f, -33.f), 26.f}, {1.f, vec3(0.f, 25.f, -51.f), 34.f}};
+    static const Seg KHMER[] = {{0.33f, vec3(12.f, 7.f, -41.f), 24.f}, {0.55f, vec3(15.f, 13.f, -53.f), 30.f},
+                                {0.78f, vec3(-15.f, 13.f, -53.f), 30.f}, {1.f, vec3(0.f, 20.f, -58.f), 38.f}};
+    static const Seg GREEK[] = {{0.25f, vec3(0.f, 9.f, -53.f), 28.f}, {0.5f, vec3(8.f, 7.f, -44.f), 24.f},
+                                {0.75f, vec3(5.f, 14.f, -44.f), 26.f}, {1.f, vec3(3.f, 16.f, -44.f), 28.f}};
+    const Seg* segs = kind == 0 ? MAYA : (kind == 1 ? KHMER : GREEK);
+    const int ns = kind == 0 ? 2 : 4;
+    for (int k = 0; k < 8; k++) {
+        const float a = k / 8.f, b = (k + 1) / 8.f, mid = (a + b) * 0.5f;
+        int si = 0;
+        while (si < ns - 1 && mid > segs[si].end) si++;
+        const vec3 p = segs[si].p;
+        plan_.push_back({2, k, a, b, p, segs[si].dist, p.x > 0.5f ? 1.f : (p.x < -0.5f ? -1.f : side_)});
+    }
+}
+
+// the repairs owed at L (50-line scale): spread over 12 .. 45
+int RuinsUniverse::owedEvents(float L) const {
+    const int n = (int)plan_.size();
+    if (L < 12.f || n == 0) return 0;
+    return std::min(n, (int)((L - 12.f) / (33.f / n)) + 1);
+}
+
+void RuinsUniverse::applyEv(const Ev& e, float t) {
+    const float v = lerpf(e.from, e.to, t);
+    if (e.kind == 2) templeRep_ = std::max(templeRep_, v);
+    else colRep_[e.idx] = std::max(colRep_[e.idx], v);
+}
+
+// The arc, on the 50-line scale: the jungle recedes (1..12); the repairs (12..45, one event at a time, see the
+// plan) drive the columns, the temple, the missing blocks (re-forming with the temple) and the wear; the prime
+// (43..50: paint, braziers) once the last repair is done.
 void RuinsUniverse::updateRewind(float L) {
     jungle_ = 1.f - smoothstepf(1.f, 12.f, L);
-    static const int ORDER[8] = {0, 1, 3, 2, 4, 5, 7, 6};
-    for (int i = 0; i < 8; i++) {
-        const float s = 12.5f + ORDER[i] * 3.f;
-        col_[i] = smoothstepf(s, s + 3.5f, L);
-    }
-    temple_ = smoothstepf(15.f, 45.f, L);
-    broken_ = 0.07f * (1.f - smoothstepf(14.f, 42.f, L));
-    wear_ = 1.f - smoothstepf(12.f, 46.f, L);
-    prime_ = smoothstepf(43.f, 50.f, L);
+    for (int i = 0; i < 8; i++) col_[i] = colRep_[i];
+    temple_ = templeRep_;
+    broken_ = 0.07f * (1.f - templeRep_);
+    float done = 0.f;
+    for (int i = 0; i < 8; i++) done += colRep_[i];
+    done = (done / 8.f + templeRep_ * 2.f) / 3.f;
+    wear_ = 1.f - smoothstepf(0.f, 1.f, done);
+    const bool finished = next_ >= (int)plan_.size() && active_ < 0;
+    prime_ = finished ? smoothstepf(43.f, 50.f, L) : std::min(prime_, smoothstepf(43.f, 50.f, L));
 }
 
 bool RuinsUniverse::toBoard(const vec3& w, vec2& b) const {
@@ -302,28 +394,14 @@ void RuinsUniverse::dustAt(const vec3& w, int n) {
     for (int i = 0; i < n; i++) {
         Swirl s;
         s.c = b;
-        s.age = -rng_.range(0.f, 0.5f);
+        s.age = 0.f;
+        s.age = -rng_.range(0.f, 0.25f);
         s.life = rng_.range(1.1f, 1.8f);
         s.ang = rng_.range(0.f, TAU);
-        s.rad = rng_.range(1.0f, 2.6f) * k;
-        s.size = rng_.range(0.04f, 0.09f) * std::clamp(k * 2.5f, 0.6f, 1.6f);
+        s.rad = rng_.range(0.8f, 2.4f) * k;
+        s.size = rng_.range(0.06f, 0.13f) * std::clamp(k * 2.5f, 0.7f, 1.8f);
         s.seed = rng_.uniform();
         swirls_.push_back(s);
-    }
-}
-
-// the next repairs: a column being rebuilt, else a spot of the temple's front
-void RuinsUniverse::dustSomewhere(int n) {
-    const int kind = VARIANTS[wrapV(variant_)].kind;
-    const float H = kind == 0 ? 5.4f : (kind == 1 ? 4.8f : 7.6f);
-    std::vector<int> active;
-    for (int i = 0; i < 8; i++)
-        if (col_[i] > 0.01f && col_[i] < 0.99f) active.push_back(i);
-    if (!active.empty() && rng_.chance(0.6f)) {
-        const int i = active[rng_.irange(0, (int)active.size() - 1)];
-        dustAt(vec3((i & 1) ? 7.5f : -7.5f, 0.75f + H * rng_.range(0.4f, 0.9f), -3.5f - 7.f * (i / 2)), n);
-    } else if (temple_ > 0.0f && temple_ < 0.995f) {
-        dustAt(vec3(rng_.range(-14.f, 14.f), rng_.range(3.f, 18.f), -52.f + rng_.range(12.f, 20.f)), n);
     }
 }
 
@@ -502,7 +580,7 @@ void RuinsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         if (ev.count >= 4) releaseBirds(12, 0);
         else if (rng_.chance(0.4f)) releaseBirds(3 + rng_.irange(0, 3 - 1), rng_.chance(0.5f) ? 1 : -1);
         // each clear sends dust to the next repairs
-        for (int k = 0; k < std::min(4, ev.count) + 1; k++) dustSomewhere(14);
+        if (active_ >= 0) dustAt(focusP_, 16);
         break;
     }
     case GameEvent::TopOut: {
@@ -905,13 +983,73 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         if (linesEased_ < 0.f) linesEased_ = target;
         lines_ = target;
         const float cap = (target < linesEased_ ? 10.f : 0.9f * (1.f + 0.5f * gold_)) * std::clamp(paceScale(), 1.f, 2.5f);
+        const bool reset = linesEased_ >= 0.f && target < linesEased_ - 6.f; // a new game: time forward again
+        const bool first = planFor_ < 0;
         linesEased_ += std::clamp((target - linesEased_) * 1.4f * wdt, -cap * wdt, cap * wdt);
-        updateRewind(linesEased_);
-        swirlT_ -= wdt;
-        if (swirlT_ <= 0.f && linesEased_ > 12.f && linesEased_ < 46.f && linesEased_ < target + 0.5f && !f.paused) {
-            dustSomewhere(10);
-            swirlT_ = rng_.range(0.5f, 0.9f);
+        const int pf = variant_ * 2 + (side_ > 0.f ? 1 : 0);
+        if (pf != planFor_ || reset) {
+            buildPlan();
+            planFor_ = pf;
+            next_ = 0;
+            active_ = -1;
+            for (float& v : colRep_) v = 0.f;
+            templeRep_ = 0.f;
+            if (reset) linesEased_ = target;
         }
+        const int owed = owedEvents(target);
+        if (first || reset || f.bare) {
+            // (coming in mid-way, or a test still: what is owed is already done)
+            while (next_ < owed) applyEv(plan_[next_++], 1.f);
+        }
+        // the next repair: the camera goes to it first; it starts once it is framed, lasts ~2.5 s (shorter when
+        // they pile up), glowing, dust converging on it
+        if (active_ < 0 && next_ < owed && !f.paused) {
+            active_ = next_++;
+            evT_ = -1.f;
+            travelT_ = 0.f;
+        }
+        focusA_ = approach(focusA_, 0.f, 2.f, dt);
+        if (active_ >= 0) {
+            const Ev& e = plan_[active_];
+            focusPose(e, goalEye_, goalTgt_);
+            focusP_ = e.focus;
+            focusR_ = e.kind == 2 ? 6.f : 2.6f;
+            if (evT_ < 0.f) {
+                travelT_ += wdt;
+                const bool framed = length(camEye_ - goalEye_) < 3.5f && length(camTgt_ - goalTgt_) < 5.f;
+                if (framed || travelT_ > 5.f) evT_ = 0.f;
+            } else {
+                const float dur = (e.kind == 2 ? 2.6f : 3.2f) * ((owed - next_) > 1 ? 0.7f : 1.f);
+                evT_ += wdt;
+                const float u = saturate(evT_ / dur);
+                applyEv(e, smoothstepf(0.f, 1.f, u));
+                focusA_ = std::max(focusA_, std::sin(PI * std::min(1.f, u * 1.15f)));
+                dustT_ -= wdt;
+                if (dustT_ <= 0.f) {
+                    const float r = focusR_ * 0.5f;
+                    dustAt(e.focus + vec3(rng_.range(-r, r), rng_.range(-r, r), rng_.range(-r * 0.3f, r * 0.3f)), 4);
+                    dustT_ = 0.08f;
+                }
+                if (u >= 1.f) {
+                    active_ = -1;
+                    idleT_ = 0.f;
+                }
+            }
+        } else {
+            idleT_ += wdt;
+            // between the repairs the camera stays on the last one a moment, then pulls back to the whole temple
+            if (idleT_ > 3.f || next_ == 0 || next_ >= (int)plan_.size()) {
+                goalEye_ = ovEye_;
+                goalTgt_ = ovTgt_;
+            }
+        }
+        updateRewind(linesEased_);
+        if (!camInit_) {
+            camEye_ = goalEye_;
+            camTgt_ = goalTgt_;
+            camInit_ = true;
+        }
+        stepCamera(f.paused ? 0.f : wdt);
         for (Swirl& s : swirls_) s.age += dt;
         swirls_.erase(std::remove_if(swirls_.begin(), swirls_.end(), [](const Swirl& s) { return s.age >= s.life; }), swirls_.end());
     }
@@ -1057,6 +1195,8 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uWear", wear_);
         set1f(P, "uPrime", prime_);
         glUniform1fv(ugl::U(P, "uCol"), 8, col_);
+        set4f(P, "uFocus", focusP_.x, focusP_.y, focusP_.z, focusA_);
+        set1f(P, "uFocusR", focusR_);
         set3f(P, "uBridgeCol", bridge_.color);
         ugl::drawFullscreen();
     }
