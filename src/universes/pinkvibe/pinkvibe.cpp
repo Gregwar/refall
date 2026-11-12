@@ -7,7 +7,7 @@
 // on. A few sparkles, bubble rings and dots, toned to the band they cross, drift very sparsely upward in the free
 // zones (never behind the well, fading out near the HUD columns).
 //
-// The well is a translucent deep plum panel with a soft pale rim: the pastel blocks pop off it and the bands show
+// The well is a translucent deep plum panel without a border: the pastel blocks pop off it and the bands show
 // faintly through. The blocks are one soft rounded tile per cell, flat with a gentle lift toward the top, a thin pale
 // shine curve in their top left corner (no gloss) and one small calm motif in a paler tone: I three pearls, O a heart,
 // T a little flower, S a sparkle, Z a crescent, J a bow, L a bubble ring. The seven types are seven pinks of clearly

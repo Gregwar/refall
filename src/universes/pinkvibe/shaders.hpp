@@ -153,12 +153,11 @@ void main() {
     float p1 = vB.w, p2 = vC.w, p3 = vD.w;
     vec4 acc = vec4(0.0);
     if (kind == 0) {
-        // the well's backing (board units): a translucent deep panel, a vertical gradient, a soft pale rim
+        // the well's backing (board units): a translucent deep panel, a vertical gradient, no border
         vec2 l = vL;
         AA = max(fwidth(l.x), 1e-4) * 0.7;
         float d = dBox(l, vA.zw, 0.55);
         float g = clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0);
-        layerA(acc, d - 0.07, B, 0.55);
         layerA(acc, d, mix(A * 0.82, A, g), p1);
         frag = vec4(acc.rgb * acc.a * vB.z, acc.a * vB.z);
         return;
