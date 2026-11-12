@@ -1,10 +1,7 @@
-// WINDOWS and KALEIDO: the menus that show the game's real universes.
-//   WINDOWS  a dark gallery wall of 12 framed windows (the stages), each opening onto a live universe, with a strip of
-//            5 panes (the songs) under it; the focused pane grows; locked windows have their shutters closed, cleared
-//            ones warm light and a brass plaque; the camera glides along the wall.
-//   KALEIDO  the focused song's live universe folded into a slowly turning stained-glass kaleidoscope; the stages are
-//            glass shards in a rosette around a plain dark glass medallion, the songs smaller facets; focus turns the rosette
-//            to bring the chosen shard to the reading position (the right).
+// The menu: a kaleidoscope of the game's real universes. The focused song's live universe is folded into a slowly
+// turning stained-glass kaleidoscope; the 12 stages are glass petals in a rosette around a dark glass medallion, each
+// opening onto its 5 songs as smaller facets; focus turns the rosette to bring the chosen petal to the reading position
+// (the right).
 // Live universes come from a WorldPool (menuworlds.hpp): small frames, their own frame rate, snapshots otherwise.
 #include <algorithm>
 #include <cmath>
@@ -40,8 +37,7 @@ struct Worlds {
     Painter& p;
     WorldPool& pool;
     float u, t;
-    bool kal;
-    Worlds(Menu& mm) : m(mm), p(mm.paint_), pool(*mm.worlds_), u(mm.u_), t(mm.time_), kal(mm.style_ == Menu::KALEIDO) {}
+    Worlds(Menu& mm) : m(mm), p(mm.paint_), pool(*mm.worlds_), u(mm.u_), t(mm.time_) {}
     float X(float v) const { return m.X(v); }
     float Y(float v) const { return m.Y(v); }
     int nStages() const { return m.camp_ ? m.camp_->size() : 0; }
@@ -108,14 +104,6 @@ struct Worlds {
     void info(F head, F body, Col ink, Col dim, Col accent, int card);
     void tabs(F f, Col ink, Col accent, float track);
     void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track);
-    void showImage(const std::string& sp, float x, float y, float w, float h, Col tint, float r = 0.f);
-    // WINDOWS
-    void wall(float camX);
-    void window(int s, float d);
-    void winTitle();
-    void winFree();
-    void winCampaign();
-    // KALEIDO
     void kalBackground(const std::string& cur);
     void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC);
     void kalTitle();
@@ -153,61 +141,27 @@ void Menu::renderWorlds(int w, int h) {
 // what is on screen: which universes, live at what rate
 
 void Worlds::wants() {
-    if (m.screen_ == Menu::TITLE || (m.screen_ == Menu::FREE && kal)) {
+    if (m.screen_ == Menu::TITLE || m.screen_ == Menu::FREE) {
         std::string cur, next;
         float mix;
-        tourAt(kal ? 11.f : 9.f, cur, next, mix);
+        tourAt(11.f, cur, next, mix);
         pool.want(cur, 30);
-        if (mix > 0.f || std::fmod(t, kal ? 11.f : 9.f) > (kal ? 11.f : 9.f) - 3.f) pool.want(next, 30);
+        if (mix > 0.f || std::fmod(t, 11.f) > 11.f - 3.f) pool.want(next, 30);
         else pool.want(next, 0);
-        return;
-    }
-    if (m.screen_ == Menu::FREE) {
-        const std::string s3[3] = {spec(0, 0), spec(5, 2), spec(11, 4)};
-        for (int d = 0; d < DIFF_COUNT; d++) pool.want(s3[d], d == m.freeDiff_ ? 30.f : 10.f);
         return;
     }
     if (nStages() == 0) return;
     const int fs = focusedStage();
-    if (kal) {
-        const std::string cur = spec(fs, m.row_ == 1 ? m.song_ : 0);
-        pool.want(cur, 30);
-        if (!g_prev.empty() && g_mix < 1.f) pool.want(g_prev, 30);
-        for (int k = 0; k < nSongs(fs); k++) pool.want(spec(fs, k), 0); // the next ones are ready to fold in
-        return;
-    }
-    for (int s = 0; s < nStages(); s++) {
-        const float d = std::fabs(s - m.aStage_);
-        if (d > 3.2f) continue;
-        const bool visible = d < 1.7f;
-        for (int k = 0; k < nSongs(s); k++) {
-            float fps = 0;
-            if (visible && open(s) && s == fs) fps = (m.row_ == 1 && k == m.song_) ? 30.f : 12.f;
-            pool.want(spec(s, k), fps);
-        }
-    }
+    const std::string cur = spec(fs, m.row_ == 1 ? m.song_ : 0);
+    pool.want(cur, 30);
+    if (!g_prev.empty() && g_mix < 1.f) pool.want(g_prev, 30);
+    for (int k = 0; k < nSongs(fs); k++) pool.want(spec(fs, k), 0); // the next ones are ready to fold in
 }
 
 void Worlds::draw() {
-    if (kal) {
-        if (m.screen_ == Menu::TITLE) kalTitle();
-        else if (m.screen_ == Menu::FREE) kalFree();
-        else kalCampaign();
-    } else {
-        if (m.screen_ == Menu::TITLE) winTitle();
-        else if (m.screen_ == Menu::FREE) winFree();
-        else winCampaign();
-    }
-}
-
-void Worlds::showImage(const std::string& sp, float x, float y, float w, float h, Col tint, float r) {
-    const GLuint tx = pool.tex(sp);
-    if (tx) p.image(tx, x, y, w, h, tint, r);
-    else { // not ready yet: a soft placeholder in the universe's colour
-        unsigned char c[3];
-        menuUniverseColor(m.camp_, sp, c);
-        p.rrect(x, y, w, h, r, mixc(rgb8(c, tint.a), hex(0x101014, tint.a), 0.7f));
-    }
+    if (m.screen_ == Menu::TITLE) kalTitle();
+    else if (m.screen_ == Menu::FREE) kalFree();
+    else kalCampaign();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -264,7 +218,7 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         p.text(body, b, rx, y0 + 46 * u, 18 * u, v.beaten ? hex(0xffd27a) : dim, 1, 0.3f);
         p.text(body, upper(v.preview), rx, y0 + 108 * u, 17 * u, withA(accent, 0.95f), 1, 0.3f);
         if (v.song > 0) p.text(body, "A RUN FROM HERE DOESN'T CLEAR THE STAGE", rx, y0 + 196 * u, 13 * u, withA(dim, 0.7f), 1, 0.3f);
-    } else if (kal && m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
+    } else if (m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
         const int fs = focusedStage();
         char b[160];
         std::snprintf(b, sizeof(b), "STAGE %d OF %d   /   %d SONGS", fs + 1, nStages(), nSongs(fs));
@@ -282,171 +236,6 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
     } else {
         p.text(head, "Choose a difficulty, then a song", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
     }
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
-// WINDOWS: a gallery wall
-
-void Worlds::wall(float camX) {
-    // the wall, its panel joints sliding with the camera, the floor
-    p.rrect(0, 0, m.fw_, m.fh_, 0, hex(0x2a1619));                 // an oxblood gallery wall
-    p.rrect(0, 0, m.fw_, Y(260), 0, hex(0x120809, 0.65f), 260 * u);
-    p.rrect(0, Y(560), m.fw_, Y(240), 0, hex(0x120809, 0.35f), 200 * u);
-    for (int i = -2; i < 14; i++) {
-        const float x = X(960 + i * 450.f - std::fmod(camX * 0.999f, 450.f) - 225.f);
-        p.line(x, 0, x, Y(780), 1 * u, hex(0xffffff, 0.035f));
-    }
-    p.rrect(0, Y(780), m.fw_, m.fh_ - Y(780), 0, hex(0x1a0f0c));    // a dark oak floor
-    for (int i = 0; i < 4; i++) p.line(0, Y(790 + i * 14.f), m.fw_, Y(790 + i * 14.f), 1 * u, hex(0x000000, 0.25f));
-    p.line(0, Y(780), m.fw_, Y(780), 2 * u, hex(0xc8a070, 0.25f));
-}
-
-void Worlds::window(int s, float d) {
-    const bool o = open(s);
-    const float ad = std::min(1.f, std::fabs(d));
-    const float sc = 1.f - 0.18f * ad;
-    const float W = 800 * u * sc, H = W * 9.f / 16.f;
-    const float cx = X(960 + d * 900.f), top = Y(150) + (1.f - sc) * 70 * u;
-    const float x0 = cx - W / 2;
-    const float f = focusStage(s);
-    const bool cl = o && cleared(s);
-    const int fs = focusedStage();
-    // the light on the wall: warm over a cleared window, a cool spot over an open one, none when locked
-    p.setAdditive(true);
-    if (o) { // a spotlight from the ceiling, its cone and its pool on the wall
-        const Col lc = cl ? hex(0xffc070) : hex(0xd8e0ff);
-        p.tri(cx, Y(-40), x0 - 90 * u * sc, top + H + 40 * u, x0 + W + 90 * u * sc, top + H + 40 * u, withA(lc, 0.10f + 0.05f * f), withA(lc, 0.0f), withA(lc, 0.0f));
-        p.glow(cx, top - 30 * u, 420 * u * sc, withA(lc, (cl ? 0.22f : 0.12f) + 0.1f * f));
-        p.glow(cx, top + H / 2, W * 0.75f, withA(lc, cl ? 0.10f : 0.05f));
-        p.glow(cx, Y(785), W * 0.6f, withA(lc, 0.08f)); // its light on the floor
-    }
-    p.setAdditive(false);
-    // the frame
-    const float pad = 16 * u * sc;
-    p.rrect(x0 - pad + 8 * u, top - pad + 16 * u, W + 2 * pad, H + 2 * pad, 6 * u, hex(0x000000, 0.55f), 30 * u);
-    p.rrect(x0 - pad, top - pad, W + 2 * pad, H + 2 * pad, 4 * u, cl ? hex(0x2a2218) : hex(0x0b0b0e));
-    p.rrectLine(x0 - pad, top - pad, W + 2 * pad, H + 2 * pad, 4 * u, 1.2f * u, cl ? hex(0xd8b070, 0.6f) : hex(0xffffff, 0.12f));
-    // through the window: the focused song's universe (live) on the focused stage, else the stage's universes in turn
-    std::string sp;
-    if (s == fs && m.row_ == 1) sp = spec(s, m.song_);
-    else sp = spec(s, (int)(t / 6.f + s) % std::max(1, nSongs(s)));
-    if (o) {
-        showImage(sp, x0, top, W, H, hex(0xffffff, 1.f - 0.35f * ad), 2 * u);
-        // glass: a faint sheen across the top left
-        p.tri(x0, top, x0 + W * 0.55f, top, x0, top + H * 0.7f, hex(0xffffff, 0.07f), hex(0xffffff, 0.0f), hex(0xffffff, 0.0f));
-    } else {
-        showImage(spec(s, 0), x0, top, W, H, hex(0x8090a8, 0.14f), 2 * u); // a faint silhouette behind the shutters
-        const int slats = 9;
-        for (int i = 0; i < slats; i++) {
-            const float y = top + i * H / slats;
-            p.rrect(x0, y + 2 * u, W, H / slats - 4 * u, 2 * u, hex(0x26242c, 0.92f));
-            p.line(x0, y + 3 * u, x0 + W, y + 3 * u, 1 * u, hex(0xffffff, 0.06f));
-        }
-        p.lock(cx, top + H / 2, 40 * u * sc, hex(0xb8b4c8, 0.7f));
-    }
-    // the panes: one per song
-    const int n = nSongs(s);
-    const float tw = 138 * u * sc, th = tw * 9.f / 16.f, gap = 16 * u * sc;
-    const float rowW = n * tw + (n - 1) * gap, ty = top + H + pad + 26 * u * sc;
-    for (int k = 0; k < n; k++) {
-        const float g = (s == fs && m.aRow_ > 0.5f) ? sstep(near1(m.aSong_, k)) * f : 0.f;
-        const float k2 = 1.f + 0.32f * g;
-        const float pw = tw * k2, ph = th * k2;
-        const float px = x0 + (W - rowW) / 2 + k * (tw + gap) + tw / 2 - pw / 2, py = ty - 12 * u * g - (ph - th) / 2;
-        p.rrect(px - 5 * u, py - 5 * u, pw + 10 * u, ph + 10 * u, 4 * u, hex(0x0b0b0e));
-        if (o) showImage(spec(s, k), px, py, pw, ph, hex(0xffffff, 0.75f + 0.25f * std::max(g, 1.f - ad)), 2 * u);
-        else p.rrect(px, py, pw, ph, 2 * u, hex(0x2a2830));
-        if (g > 0.05f) {
-            p.setAdditive(true);
-            p.rrectLine(px - 5 * u, py - 5 * u, pw + 10 * u, ph + 10 * u, 5 * u, 6 * u, hex(0xffffff, 0.25f * g), 14 * u);
-            p.setAdditive(false);
-            p.rrectLine(px - 5 * u, py - 5 * u, pw + 10 * u, ph + 10 * u, 5 * u, 2.4f * u, hex(0xffffff, 0.95f * g));
-        }
-        if (o && beaten(s, k)) {
-            const float bx = px + pw - 4 * u, by = py + 4 * u;
-            p.circle(bx, by, 11 * u * sc, hex(0xe8c06a));
-            p.check(bx, by, 11 * u * sc, 2.4f * u, hex(0x1a1408));
-        }
-    }
-    // the plaque
-    char b[96];
-    if (!o) std::snprintf(b, sizeof(b), "STAGE %s  -  LOCKED", roman(s + 1).c_str());
-    else if (cl) std::snprintf(b, sizeof(b), "STAGE %s  -  CLEARED  %d", roman(s + 1).c_str(), m.progress_->stageBest(s, m.diff_));
-    else std::snprintf(b, sizeof(b), "STAGE %s", roman(s + 1).c_str());
-    const float pw = p.width(F::MARCELLUS, b, 16 * u * sc, 0.2f) + 40 * u * sc, ph = 34 * u * sc, py = ty + th + 34 * u * sc;
-    p.rrect(cx - pw / 2, py, pw, ph, 3 * u, cl ? hex(0xc8a460) : o ? hex(0x2c2b33) : hex(0x1e1d22));
-    p.text(F::MARCELLUS, b, cx, py + ph * 0.68f, 16 * u * sc, cl ? hex(0x241a08) : hex(0xffffff, o ? 0.8f : 0.4f), 0, 0.2f);
-}
-
-void Worlds::winCampaign() {
-    const float camX = m.aStage_ * 900.f;
-    wall(camX);
-    for (int s = 0; s < nStages(); s++) {
-        const float d = s - m.aStage_;
-        if (std::fabs(d) < 1.75f) window(s, d);
-    }
-    tabs(F::MANROPE, hex(0xffffff), hex(0xffe0b0), 0.3f);
-    info(F::MARCELLUS, F::MANROPE, hex(0xffffff), hex(0xc8c4d0, 0.6f), hex(0xffd8a0), 0);
-}
-
-void Worlds::winTitle() {
-    wall(t * 4.f);
-    std::string cur, next;
-    float mix;
-    tourAt(9.f, cur, next, mix);
-    const float x0 = X(300), y0 = Y(70), W = 1320 * u, H = W * 9.f / 16.f * 0.92f;
-    p.setAdditive(true);
-    p.glow(X(960), y0 - 20 * u, 700 * u, hex(0xffd0a0, 0.12f));
-    p.setAdditive(false);
-    p.rrect(x0 - 18 * u + 10 * u, y0 - 18 * u + 20 * u, W + 36 * u, H + 36 * u, 6 * u, hex(0x000000, 0.6f), 40 * u);
-    p.rrect(x0 - 18 * u, y0 - 18 * u, W + 36 * u, H + 36 * u, 4 * u, hex(0x0b0b0e));
-    showImage(cur, x0, y0, W, H, hex(0xffffff), 2 * u);
-    if (mix > 0.f) showImage(next, x0, y0, W, H, hex(0xffffff, mix), 2 * u);
-    // the title, on a shade at the foot of the window
-    p.rrect(x0, y0 + H * 0.58f, W, H * 0.42f, 2 * u, hex(0x000000, 0.45f), 120 * u);
-    p.text(F::MARCELLUS, upper(GAME_TITLE), X(960), y0 + H * 0.8f, 104 * u, hex(0xffffff), 0, 0.14f);
-    {   // which world is showing, on a small plaque
-        int vi = 0;
-        const int idx = universes::parse(mix > 0.5f ? next : cur, &vi);
-        const std::string name = idx >= 0 ? universes::label(idx, std::max(0, vi)) : cur;
-        std::string ascii;
-        for (unsigned char c : name) ascii += c < 0x80 ? (char)c : ' ';
-        const float pw = p.width(F::MANROPE, upper(ascii), 14 * u, 0.3f) + 36 * u;
-        p.rrect(x0 + W - pw - 20 * u, y0 + H + 30 * u, pw, 30 * u, 3 * u, hex(0x2c2b33));
-        p.text(F::MANROPE, upper(ascii), x0 + W - pw / 2 - 20 * u, y0 + H + 50 * u, 14 * u, hex(0xffffff, 0.8f), 0, 0.3f);
-    }
-    menuItems(F::MANROPE, 845, 58, 32, hex(0xffffff), hex(0xffe0b0), 0.3f);
-    if (m.progress_ && m.camp_) {
-        char b[64];
-        std::snprintf(b, sizeof(b), "%d / %d STAGES CLEARED", m.progress_->clearedCount(), m.camp_->size());
-        p.text(F::MANROPE, b, X(80), Y(1040), 16 * u, hex(0xffffff, 0.45f), -1, 0.3f);
-    }
-}
-
-void Worlds::winFree() {
-    wall(t * 3.f);
-    p.text(F::MARCELLUS, "FREE PLAY", X(960), Y(170), 84 * u, hex(0xffffff), 0, 0.16f);
-    p.text(F::MANROPE, "THE PLAYLIST IN A RANDOM ORDER, LEVELS RISING WITH THE LINES", X(960), Y(225), 18 * u, hex(0xffffff, 0.55f), 0, 0.3f);
-    const std::string s3[3] = {spec(0, 0), spec(5, 2), spec(11, 4)};
-    for (int d = 0; d < DIFF_COUNT; d++) {
-        const float f = sstep(near1(m.aFree_, d));
-        const float W = (470 + 50 * f) * u, H = W * 9.f / 16.f, cx = X(960 + (d - 1) * 560.f), top = Y(330) - 20 * u * f;
-        p.setAdditive(true);
-        p.glow(cx, top - 20 * u, 360 * u, hex(0xffd0a0, 0.06f + 0.16f * f));
-        p.setAdditive(false);
-        p.rrect(cx - W / 2 - 14 * u + 8 * u, top - 14 * u + 16 * u, W + 28 * u, H + 28 * u, 5 * u, hex(0x000000, 0.55f), 30 * u);
-        p.rrect(cx - W / 2 - 14 * u, top - 14 * u, W + 28 * u, H + 28 * u, 4 * u, hex(0x0b0b0e));
-        showImage(s3[d], cx - W / 2, top, W, H, hex(0xffffff, 0.55f + 0.45f * f), 2 * u);
-        if (f > 0.05f) p.rrectLine(cx - W / 2 - 14 * u, top - 14 * u, W + 28 * u, H + 28 * u, 4 * u, 2 * u, hex(0xffe0b0, 0.8f * f));
-        char b[48];
-        std::snprintf(b, sizeof(b), "%s   x%.1f", difficultyName(d), freePlayMultiplier(d));
-        const float pw = p.width(F::MARCELLUS, b, 18 * u, 0.2f) + 44 * u;
-        p.rrect(cx - pw / 2, top + H + 40 * u, pw, 40 * u, 3 * u, f > 0.5f ? hex(0xc8a460) : hex(0x2c2b33));
-        p.text(F::MARCELLUS, b, cx, top + H + 67 * u, 18 * u, f > 0.5f ? hex(0x241a08) : hex(0xffffff, 0.75f), 0, 0.2f);
-    }
-    char b[96];
-    std::snprintf(b, sizeof(b), "GRAVITY AT %d%% OF ITS FULL SPEED, ON EVERY LEVEL", (int)std::lround(freePlayMultiplier(m.freeDiff_) * 100));
-    p.text(F::MANROPE, b, X(960), Y(900), 19 * u, hex(0xffffff, 0.8f), 0, 0.3f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
