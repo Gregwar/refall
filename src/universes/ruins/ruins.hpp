@@ -1,5 +1,6 @@
 #pragma once
-// RUINS: ancient ruins in a jungle, ray marched in 3D behind the well; the pieces are carved stone column drums
+// RUINS: time running backwards from a jungle to a temple in its prime, ray marched in 3D behind the well; the
+// pieces are carved stone column drums
 // (see ruins.cpp).
 #include <string>
 #include <vector>
@@ -36,6 +37,17 @@ private:
     vec3 eye_{0, 3, 14}, fwd_{0, 0, -1}, right_{1, 0, 0}, up_{0, 1, 0};
     float tanH_ = 0.45f, aspect_ = 16.f / 9.f, camPhase_ = 0.f, side_ = 1.f;
     void updateCamera();
+
+    // ---- The rewind: time runs backwards with the lines (on the SCENE_REF_LINES scale, eased): the jungle
+    // recedes, the ruins repair themselves, the temple comes back to its prime.
+    float linesEased_ = -1.f, lines_ = 0.f, swirlT_ = 0.f;
+    float jungle_ = 1.f, temple_ = 0.f, broken_ = 0.16f, wear_ = 1.f, prime_ = 0.f, col_[8] = {};
+    void updateRewind(float L);
+    bool toBoard(const vec3& w, vec2& b) const;
+    struct Swirl { vec2 c; float age, life, ang, rad, size, seed; };
+    std::vector<Swirl> swirls_;
+    void dustAt(const vec3& w, int n);
+    void dustSomewhere(int n);
 
     // ---- The board (ortho, the layout's plane).
     mat4 vp_;
