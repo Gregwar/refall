@@ -16,6 +16,33 @@ namespace {
 double nowMs() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
+// Colourfulness (Hasler & Suesstrunk: the spread and the mean of the opponent channels) plus contrast (the spread of
+// the luminance), and the luminance's 5th / 95th percentiles; from every 4th pixel.
+void imageStats(const std::vector<unsigned char>& px, float& colourful, float& lo, float& hi) {
+    double srg = 0, syb = 0, srg2 = 0, syb2 = 0, sl = 0, sl2 = 0;
+    int hist[256] = {};
+    int n = 0;
+    for (size_t i = 0; i + 2 < px.size(); i += 12) {
+        const double r = px[i], g = px[i + 1], b = px[i + 2];
+        const double rg = r - g, yb = 0.5 * (r + g) - b, l = 0.299 * r + 0.587 * g + 0.114 * b;
+        srg += rg; syb += yb; srg2 += rg * rg; syb2 += yb * yb; sl += l; sl2 += l * l;
+        hist[std::min(255, (int)l)]++;
+        n++;
+    }
+    if (!n) { colourful = 0; lo = 0; hi = 1; return; }
+    const double mrg = srg / n, myb = syb / n;
+    const double vrg = srg2 / n - mrg * mrg, vyb = syb2 / n - myb * myb, vl = sl2 / n - (sl / n) * (sl / n);
+    colourful = (float)((std::sqrt(std::max(0.0, vrg + vyb)) + 0.3 * std::sqrt(mrg * mrg + myb * myb) + 0.5 * std::sqrt(std::max(0.0, vl))) / 255.0);
+    int acc = 0, l5 = 0, l95 = 255;
+    for (int k = 0; k < 256; k++) {
+        acc += hist[k];
+        if (acc < n * 0.05) l5 = k;
+        if (acc < n * 0.95) l95 = k;
+    }
+    lo = l5 / 255.f;
+    hi = std::max(lo + 0.05f, l95 / 255.f);
+}
+
 uint64_t specSeed(const std::string& s) {
     uint64_t h = 1469598103934665603ull;
     for (char c : s) h = (h ^ (unsigned char)c) * 1099511628211ull;
@@ -123,6 +150,7 @@ void WorldPool::uploadSnap(const std::string& spec, const std::vector<unsigned c
     glBindTexture(GL_TEXTURE_2D, s.tgt.tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, SW, SH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+    imageStats(px, s.colourful, s.lo, s.hi);
     s.ok = s.saved = s.tried = true;
 }
 
@@ -191,6 +219,7 @@ void WorldPool::saveSnap(const std::string& spec) {
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
     glReadPixels(0, 0, SW, SH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    imageStats(px, s.colourful, s.lo, s.hi);
     std::error_code ec;
     fs::create_directories(fs::path(path(spec)).parent_path(), ec);
     std::ofstream f(path(spec), std::ios::binary);
@@ -211,6 +240,7 @@ bool WorldPool::loadSnap(const std::string& spec) {
     glBindTexture(GL_TEXTURE_2D, s.tgt.tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, SW, SH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+    imageStats(px, s.colourful, s.lo, s.hi);
     s.ok = s.saved = true;
     return true;
 }
@@ -360,4 +390,13 @@ int WorldPool::missing() const {
         if (it == snaps_.end() || (!it->second.ok && !it->second.dead)) n++;
     }
     return n;
+}
+
+bool WorldPool::stats(const std::string& spec, float& colourful, float& lo, float& hi) const {
+    auto it = snaps_.find(spec);
+    if (it == snaps_.end() || !it->second.ok) return false;
+    colourful = it->second.colourful;
+    lo = it->second.lo;
+    hi = it->second.hi;
+    return true;
 }

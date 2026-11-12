@@ -30,7 +30,7 @@ public:
     // segments, turned by `rot`, cut into glass facets with lead lines, tinted toward `tint`; a null frame is replaced by a
     // procedural pane of glass in the tint's hues; `saturation` < 1 greys the frames (a locked stage).
     void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,
-                 float saturation = 1.f);
+                 float saturation = 1.f, float duo = 0.f, float loA = 0.f, float hiA = 1.f, float loB = 0.f, float hiB = 1.f);
     // An arc of an ellipse (radians, 0 = right, clockwise on screen), as line segments.
     void arc(float cx, float cy, float rx, float ry, float a0, float a1, float width, Col c, float soft = 1.f);
     ~Painter();

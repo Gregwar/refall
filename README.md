@@ -165,8 +165,10 @@ roadmap of the universes to come. To make a new one, see [docs/adding-a-universe
 Started with no songs, the game opens on its menu, a stained-glass kaleidoscope (the game is called **Refall** for
 now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY** or
 QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). The game's own universes are folded into the
-kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the focused stage's universe (the
-focused song's in an open petal), tinted by the stage's hue (greyed and dimmed for a locked stage); free play takes the
+kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the most colourful of the focused stage's
+universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
+from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
+dimmed for a locked stage); free play takes the
 focused playlist's hue. They come from snapshots of each universe cached in `~/.cache/zentris/menu-worlds/` (640x360);
 the missing ones are made one at a time on a worker thread with its own OpenGL context, only while no key has been
 pressed for a moment (the first launch fills the cache in about a minute on the title), and until a snapshot is ready
