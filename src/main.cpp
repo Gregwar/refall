@@ -95,6 +95,9 @@ struct Options {
     std::string stage;         // --stage S[:SONG]: a campaign run straight away
     std::string campaignPath, progressPath;
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
+    std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
+    int menuStyle = 0;         // --menu-style: the menus' look (Menu::Style)
+    bool menuDemo = false;     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
 // Test hook: ZEN_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
@@ -166,7 +169,10 @@ static void usage() {
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
-        "                       then exit (testing)\n");
+        "                       then exit (testing)\n"
+        "  --menu-style S       the menus' look: 1 arcade (default), 2 cosmic, 3 swiss, 4 watercolour, 5 glass\n"
+        "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
+        "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
 
 class App {
@@ -902,7 +908,7 @@ int App::run() {
 
     // Offline renders (clips, shots, reviews) run headless on the GPU when they can (ZEN_HEADLESS=0: a window)
     if (testPlay()) { offline_ = true; opt_.mute = true; }
-    const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty()) && !opt_.fullscreen &&
+    const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty()) && !opt_.fullscreen &&
                               !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
     if (wantHeadless && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
@@ -946,7 +952,8 @@ int App::run() {
     progress_.load(opt_.progressPath);
     menu_.setFreeDifficulty(opt_.difficulty);
     menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
-    if (!opt_.menuShot.empty()) return runMenuShot();
+    menu_.setStyle(opt_.menuStyle);
+    if (!opt_.menuShot.empty() || !opt_.menuClip.empty()) return runMenuShot();
     menuEnabled_ = opt_.menuEnabled;
     mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
     speedMul_ = opt_.speedMul;
@@ -1688,8 +1695,25 @@ void App::campaignEnd() {
     }
 }
 
-// --menu-shot: a menu screen, rendered offline, saved, then exit.
+// --menu-shot: a menu screen, rendered offline, saved, then exit. --menu-clip: a video walking through the menus (a
+// built-in key sequence, or ZEN_TEST_KEYS), then exit.
 int App::runMenuShot() {
+    if (opt_.menuDemo || !opt_.menuClip.empty()) {
+        // made-up progress, in memory only: stages 1 and 2 cleared, stage 3 started, the rest locked
+        progress_ = Progress{};
+        const int pts[5] = {8210, 9420, 10020, 9900, 10690};
+        for (int k = 0; k < 5; k++) {
+            progress_.setBeaten(0, k, DIFF_NORMAL, pts[k]);
+            progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100);
+            progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300);
+        }
+        progress_.setCleared(0, DIFF_NORMAL, 48240);
+        progress_.setCleared(0, DIFF_EASY, 37740);
+        progress_.setCleared(1, DIFF_NORMAL, 54720);
+        progress_.setBeaten(2, 0, DIFF_NORMAL, 11240);
+        progress_.setBeaten(2, 1, DIFF_NORMAL, 9870);
+        progress_.setBeaten(0, 0, DIFF_EXPERT, 12650);
+    }
     menu_.init(&campaign_, &progress_, nullptr);
     const std::string& sc = opt_.menuScreen;
     menu_.open(sc == "campaign" ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
@@ -1698,8 +1722,56 @@ int App::runMenuShot() {
         std::sscanf(opt_.menuHover.c_str(), "%d:%d", &st, &sg);
         menu_.setCursor(std::max(0, st - 1), std::max(0, sg - 1));
     }
+    menu_.snap();
     int w, h;
     fbSize(w, h);
+    if (!opt_.menuClip.empty()) {
+        // the walk: the title's options, the campaign (songs, stages up to a locked one, the difficulties), back, free
+        // play's difficulties, back
+        static const std::pair<double, const char*> WALK[] = {
+            {1.4, "down"}, {2.1, "down"}, {2.8, "up"}, {3.5, "up"}, {4.4, "ok"},
+            {5.6, "right"}, {6.3, "right"}, {7.0, "down"}, {7.7, "right"}, {8.4, "down"}, {9.2, "down"}, {10.0, "down"},
+            {10.8, "left"}, {11.5, "up"}, {12.1, "up"}, {12.7, "up"}, {13.3, "up"}, {14.0, "up"},
+            {14.8, "right"}, {15.6, "left"}, {16.4, "left"}, {17.2, "right"}, {18.0, "down"},
+            {19.2, "back"}, {20.2, "down"}, {21.0, "ok"}, {22.0, "up"}, {22.8, "up"}, {23.6, "down"}, {24.4, "down"},
+            {25.6, "back"}, {26.6, "up"}};
+        const double END = 28.0;
+        std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
+        if (keys.empty())
+            for (auto& [t, k] : WALK) keys.push_back({t, k});
+        std::string ff = std::getenv("ZENTRIS_FFMPEG") ? std::getenv("ZENTRIS_FFMPEG") : platform::findExecutable("ffmpeg");
+        if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); return 1; }
+        char spec[160];
+        std::snprintf(spec, sizeof(spec), " -y -loglevel error -f rawvideo -pix_fmt rgb24 -s %dx%d -r 60 -i - ", w, h);
+        const std::string cmd = platform::quoteArg(ff) + spec + "-vf vflip " +
+                                std::string(headless_ && headless::nvidia() ? "-c:v h264_nvenc -preset p5 -rc vbr -cq 23 -b:v 0"
+                                                                            : "-c:v libx264 -preset medium -crf 20") +
+                                " -pix_fmt yuv420p -movflags +faststart " + platform::quoteArg(opt_.menuClip);
+        FILE* pipe = platform::openWrite(cmd);
+        if (!pipe) { std::fprintf(stderr, "[clip] could not start ffmpeg\n"); return 1; }
+        static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
+            {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}};
+        std::vector<unsigned char> px((size_t)w * h * 3);
+        const int frames = (int)(END * 60);
+        for (int f = 0; f < frames; f++) {
+            const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
+            input_.testFrame();
+            for (auto& [t, k] : keys)
+                if (t >= t0 && t < t1)
+                    for (auto& [n, a] : NAMES)
+                        if (k == n) input_.testPress(a);
+            const Menu::Choice c = menu_.update(input_, 1.f / 60.f);
+            (void)c; // a choice (PLAY) is not followed: the walk stays in the menus
+            menu_.render(w, h);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+            std::fwrite(px.data(), 1, px.size(), pipe);
+        }
+        const int rc = platform::closeRead(pipe);
+        std::printf("[clip] %s %s (%s, %.0f s)\n", rc == 0 ? "wrote" : "FAILED", opt_.menuClip.c_str(), Menu::styleName(opt_.menuStyle), END);
+        if (headless_) headless::shutdown();
+        return rc == 0 ? 0 : 1;
+    }
     for (int i = 0; i < 12; i++) {
         menu_.update(input_, 1.f / 60.f);
         menu_.render(w, h);
@@ -1762,6 +1834,15 @@ int main(int argc, char** argv) {
         else if (a == "--campaign" && i + 1 < argc) o.campaignPath = argv[++i];
         else if (a == "--progress" && i + 1 < argc) o.progressPath = argv[++i];
         else if (a == "--menu-shot" && i + 1 < argc) o.menuShot = argv[++i];
+        else if (a == "--menu-clip" && i + 1 < argc) o.menuClip = argv[++i];
+        else if (a == "--menu-demo") o.menuDemo = true;
+        else if (a == "--menu-style" && i + 1 < argc) {
+            o.menuStyle = Menu::parseStyle(argv[++i]);
+            if (o.menuStyle < 0) {
+                std::fprintf(stderr, "unknown menu style '%s': 1 arcade, 2 cosmic, 3 swiss, 4 watercolour, 5 glass\n", argv[i]);
+                return 1;
+            }
+        }
         else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
         else o.paths.push_back(a);
@@ -1780,7 +1861,7 @@ int main(int argc, char** argv) {
     // offline renders play straight away (free play), --stage runs a campaign stage.
     const bool offline = !o.shotPrefix.empty() || !o.clipPath.empty() || !o.analysisPath.empty() || !o.reviewPath.empty() ||
                          !o.transitionShots.empty();
-    o.menuEnabled = !offline && !freePlay && o.paths.empty() && o.menuShot.empty();
+    o.menuEnabled = !offline && !freePlay && o.paths.empty() && o.menuShot.empty() && o.menuClip.empty();
     o.menu = o.menuEnabled && o.stage.empty();
     if (!o.universe.empty() && !universes::check(o.universe)) return 1;
     if (!o.toUniverse.empty() && !universes::check(o.toUniverse)) return 1;

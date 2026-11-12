@@ -13,10 +13,19 @@
 #include "audio.hpp"
 #include "campaign.hpp"
 #include "input.hpp"
+#include "menupaint.hpp"
+
+// A colour per universe for the campaign's squares (the 8-bit palette, in order of first appearance).
+void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned char out[3]);
 
 class Menu {
 public:
     enum Screen { TITLE, FREE, CAMPAIGN };
+    // The menus' looks (same screens and navigation): 8-BIT ARCADE (the default), COSMIC, SWISS, WATERCOLOUR, GLASS.
+    enum Style { ARCADE, COSMIC, SWISS, WATERCOLOUR, GLASS, STYLE_COUNT };
+    static const char* styleName(int s);
+    static int parseStyle(const std::string& s); // a number 1..5 or a name, -1 if unknown
+    void setStyle(int s) { style_ = s; }
     struct Choice {
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
         int difficulty = DIFF_EXPERT;
@@ -32,6 +41,7 @@ public:
     void setFreeDifficulty(int d) { freeDiff_ = d; }
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; }
+    void snap(); // the animated focus jumps to its place (screenshots)
     // One frame of navigation; a choice ends the menu (the preview stops).
     Choice update(const Input& in, float dt);
     // Draws the screen over the whole bound framebuffer.
@@ -55,9 +65,33 @@ private:
     void drawFree();
     void drawCampaign();
     void drawMessage();
+    // the smooth styles (menustyles.cpp)
+    Painter paint_;
+    void renderSmooth(int w, int h);
+    void cosmicTitle(), cosmicFree(), cosmicCampaign();
+    void swissTitle(), swissFree(), swissCampaign();
+    void paperTitle(), paperFree(), paperCampaign();
+    void glassTitle(), glassFree(), glassCampaign();
+    void smoothMessage();
+    float u_ = 1, sx_ = 0, sy_ = 0, fw_ = 1920, fh_ = 1080; // the smooth styles' 1920x1080 layout in the frame
+    float X(float v) const { return sx_ + v * u_; }
+    float Y(float v) const { return sy_ + v * u_; }
+    struct SongView {
+        bool has = false, locked = false, beaten = false;
+        int stage = 0, song = 0, songs = 0, best = 0;
+        std::string title, universe, status, preview;
+        float velocity = 0;
+        unsigned char col[3] = {150, 150, 150};
+    };
+    SongView songView() const;
+    void stageColor(int stage, unsigned char out[3]) const;
 
     // ---- GL
     GLuint tex_ = 0, prog_ = 0;
+    int style_ = ARCADE;
+    // eased focus (indices as floats) for the animated transitions
+    float aTitle_ = 0, aFree_ = DIFF_EXPERT, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
+    float level_ = 0; // the preview's loudness (backgrounds breathe with it)
     int texW_ = 0, texH_ = 0;
 
     // ---- state

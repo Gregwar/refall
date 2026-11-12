@@ -23,7 +23,9 @@ const unsigned char PIECE[7][3] = {{0, 228, 238}, {255, 214, 0}, {178, 76, 255},
 const unsigned char PALETTE[12][3] = {{255, 0, 77},   {255, 163, 0},  {255, 236, 39}, {0, 228, 54},
                                       {41, 173, 255}, {255, 119, 168}, {131, 118, 230}, {0, 200, 180},
                                       {255, 204, 170}, {190, 90, 60},  {170, 60, 220},  {160, 220, 60}};
-void universeColor(const Campaign* camp, const std::string& spec, unsigned char out[3]) {
+} // namespace
+
+void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned char out[3]) {
     auto base = [](const std::string& s) {
         std::string n = s.substr(0, s.find(':'));
         for (char& c : n) c = (char)std::toupper((unsigned char)c);
@@ -44,6 +46,8 @@ void universeColor(const Campaign* camp, const std::string& spec, unsigned char 
         }
     std::memcpy(out, PALETTE[0], 3);
 }
+
+namespace {
 
 // The preview snippet of a song: ~14 s from its first drop (else chorus, else 35% in), faded in and out and
 // brought to an even loudness (RMS), its peaks kept under the clip guard.
@@ -90,7 +94,26 @@ const char* FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 o;
 uniform sampler2D uTex;
-void main() { o = vec4(texture(uTex, vUv).rgb, 1.0); }
+uniform vec2 uCanvas; // canvas pixels
+uniform float uTime;
+// 8-BIT ARCADE: the canvas on a CRT: a slight curvature, scanlines, a phosphor glow and a vignette.
+void main() {
+    vec2 c = vUv - 0.5;
+    c *= 1.0 + 0.035 * dot(c, c) * vec2(1.0, 1.4);
+    vec2 uv = c + 0.5;
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) { o = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    vec3 col = texture(uTex, uv).rgb;
+    vec2 px = 1.0 / uCanvas;
+    vec3 glow = vec3(0.0);
+    for (int i = -2; i <= 2; i++)
+        for (int j = -2; j <= 2; j++) glow += texture(uTex, uv + vec2(i, j) * px * 1.3).rgb;
+    glow /= 25.0;
+    float scan = 0.78 + 0.22 * sin((uv.y * uCanvas.y) * 6.2831853 + 1.5708);
+    col = col * scan + glow * 0.55;
+    col *= 0.97 + 0.03 * sin(uTime * 1.3); // a calm breathing of the tube
+    col *= 1.0 - 0.55 * pow(length(c * vec2(1.0, 1.15)) * 1.25, 3.0);
+    o = vec4(col, 1.0);
+}
 )";
 
 } // namespace
@@ -127,8 +150,42 @@ const CampaignSong* Menu::hovered() const {
     return song_ < (int)songs.size() ? &songs[song_] : nullptr;
 }
 
+const char* Menu::styleName(int s) {
+    static const char* N[] = {"8-BIT ARCADE", "COSMIC", "SWISS", "WATERCOLOUR", "GLASS"};
+    return N[std::clamp(s, 0, STYLE_COUNT - 1)];
+}
+
+int Menu::parseStyle(const std::string& s0) {
+    std::string s;
+    for (char c : s0) s += (char)std::tolower((unsigned char)c);
+    if (s.size() == 1 && s[0] >= '1' && s[0] <= '5') return s[0] - '1';
+    static const char* N[][2] = {{"arcade", "8-bit"}, {"cosmic", "space"}, {"swiss", "minimal"}, {"watercolour", "watercolor"},
+                                 {"glass", "neon"}};
+    for (int i = 0; i < STYLE_COUNT; i++)
+        if (s == N[i][0] || s == N[i][1]) return i;
+    return -1;
+}
+
+void Menu::snap() {
+    aTitle_ = (float)titleItem_;
+    aFree_ = (float)freeDiff_;
+    aDiff_ = (float)diff_;
+    aStage_ = (float)stage_;
+    aSong_ = (float)song_;
+    aRow_ = (float)row_;
+}
+
 Menu::Choice Menu::update(const Input& in, float dt) {
     time_ += dt;
+    {
+        const float k = 1.f - std::exp(-dt * 11.f);
+        aTitle_ += (titleItem_ - aTitle_) * k;
+        aFree_ += (freeDiff_ - aFree_) * k;
+        aDiff_ += (diff_ - aDiff_) * k;
+        aStage_ += (stage_ - aStage_) * k;
+        aSong_ += (song_ - aSong_) * k;
+        aRow_ += (row_ - aRow_) * k;
+    }
     Choice ch;
     auto steps = [&](Action a) { return in.repeatSteps(a); };
     const int dy = steps(A_UI_DOWN) - steps(A_UI_UP), dx = steps(A_UI_RIGHT) - steps(A_UI_LEFT);
@@ -188,6 +245,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
 
 void Menu::updatePreview(float dt) {
     if (!audio_) return;
+    level_ *= std::exp(-dt * 1.5f); // (kept up while a preview plays)
     hoverT_ += dt;
     // a finished load goes into the cache
     if (loading_.valid() && loading_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -221,6 +279,15 @@ void Menu::updatePreview(float dt) {
         return;
     }
     if (!it->second.track) return;
+    if (playingId_ == want) { // the preview's loudness, for the backgrounds
+        const Track& tr = *it->second.track;
+        const uint64_t at = (uint64_t)(audio_->position() * tr.sampleRate);
+        double sum = 0;
+        int n = 0;
+        for (uint64_t i = at; i < std::min<uint64_t>(tr.frames(), at + 2048); i++, n++) sum += tr.pcm[i * 2] * tr.pcm[i * 2];
+        const float rms = n ? (float)std::sqrt(sum / n) : 0.f;
+        level_ += (std::min(1.f, rms * 4.f) - level_) * std::min(1.f, dt * 3.f);
+    }
     if (playingId_ != want) {
         audio_->setMuffled(false, 0.3f);
         audio_->setSongGain(1.f, 0.3f);
@@ -413,7 +480,7 @@ void Menu::drawCampaign() {
         for (int k = 0; k < (int)songs.size(); k++) {
             const int x = sqX + k * step;
             unsigned char col[3];
-            universeColor(camp_, songs[k].universe, col);
+            menuUniverseColor(camp_, songs[k].universe, col);
             const bool beat = progress_ && progress_->beaten(s, k, diff_);
             Rgb c{col[0], col[1], col[2]};
             if (!open) { const unsigned char v = (unsigned char)((col[0] + col[1] + col[2]) / 12 + 30); c = Rgb{v, v, (unsigned char)(v + 8)}; }
@@ -450,7 +517,7 @@ void Menu::drawCampaign() {
         std::string title = asciiFold(h->title);
         while (pixelfont::width(true, title) > 384 - 80 && title.size() > 4) title.pop_back();
         unsigned char col[3];
-        universeColor(camp_, h->universe, col);
+        menuUniverseColor(camp_, h->universe, col);
         text(title, ox_ + 8, py + 8, Rgb{255, 255, 255}, true);
         std::string uni = h->universe.empty() ? "UNIVERSE PICKED BY THE SONG" : h->universe;
         std::snprintf(b, sizeof(b), "%s   VELOCITY %.1f", uni.c_str(), h->level[diff_]);
@@ -482,6 +549,7 @@ void Menu::drawMessage() {
 }
 
 void Menu::render(int fbw, int fbh) {
+    if (style_ != ARCADE) { renderSmooth(fbw, fbh); return; }
     const int scale = std::max(1, std::min(fbw / 400, fbh / 225));
     cw_ = std::max(1, fbw / scale);
     ch_ = std::max(1, fbh / scale);
@@ -523,6 +591,8 @@ void Menu::render(int fbw, int fbh) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex_);
     ugl::set1i(prog_, "uTex", 0);
+    ugl::set2f(prog_, "uCanvas", (float)cw_, (float)ch_);
+    ugl::set1f(prog_, "uTime", time_);
     ugl::drawFullscreen();
     glViewport(0, 0, fbw, fbh);
 }
