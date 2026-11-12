@@ -62,9 +62,34 @@ float sdStairs(vec2 q, float tr, float ri, float n, float uMax) {
     return d;
 }
 
-// ---- a column standing on y = 0 of q: height h, broken at hb (< h: a rough break, no capital), radius r;
-// style 0 a square carved pillar (Maya), 1 an octagonal pillar with lotus rings (Khmer), 2 a fluted Doric column
-float column(vec3 q, float h, float hb, float r, int style, float seed) {
+// ---- the restoration (time running backwards over the song): the jungle's cover, each avenue column's repair,
+// the temple's repair, the share of blocks still missing, the wear (erosion, moss, lichen, streaks), the prime
+uniform float uJungle, uTemple, uBroken, uWear, uPrime;
+uniform float uCol[8];
+float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+
+// missing blocks: a wall's coursed blocks carved away where their hash is under uBroken; a block coming back grows
+// from its edges inward out of the dust (k: 1 missing .. 0 whole). The distance of the carved box (or far away).
+float missing(vec3 p, out float k) {
+    const vec3 cs = vec3(1.25, 0.62, 1.25);
+    float row = floor(p.y / cs.y);
+    vec3 pp = p + vec3(row * 0.62, 0.0, row * 0.41);
+    vec3 c = floor(pp / cs);
+    float h = hash3(c + 0.5);
+    k = sat((uBroken - h) / 0.015);
+    if (k <= 0.0) return 1e9;
+    return sdBox(pp - (c + 0.5) * cs, cs * 0.5 * (0.2 + 0.85 * k));
+}
+float carveMissing(float d, vec3 p) {
+    if (d > 0.9 || uBroken <= 0.0) return d;
+    float k;
+    return max(d, -missing(p, k));
+}
+
+// ---- a column standing on y = 0 of q: height h, broken at hb (< h: a break as rough as `rough`, no capital),
+// radius r; style 0 a square carved pillar (Maya), 1 an octagonal pillar with lotus rings (Khmer), 2 a fluted
+// Doric column
+float column(vec3 q, float h, float hb, float r, int style, float seed, float rough) {
     float y = q.y;
     float taper = 1.0 - 0.07 * sat(y / h);
     float d;
@@ -83,18 +108,18 @@ float column(vec3 q, float h, float hb, float r, int style, float seed) {
         if (hb >= h) d = min(d, sdBox(q - vec3(0.0, h - 0.15, 0.0), vec3(r * 1.35, 0.15, r * 1.35)));
     } else {
         float a = atan(q.z, q.x);
-        float fl = 0.055 * sqrt(abs(sin(a * 10.0)));          // twenty flutes, sharp arrises
+        float fl = 0.055 * sqrt(abs(sin(a * 10.0)));
         d = (length(q.xz) - r * taper + fl) * 0.9;
         d = max(d, abs(y - h * 0.5) - h * 0.5);
         if (hb >= h) {
-            float e = y - (h - 0.62);                          // the echinus, then the abacus
+            float e = y - (h - 0.62);
             float ech = max(length(q.xz) - (r * 0.95 + sat(e / 0.36) * r * 0.42), abs(e - 0.18) - 0.18);
             d = min(d, ech);
             d = min(d, sdBox(q - vec3(0.0, h - 0.13, 0.0), vec3(r * 1.42, 0.13, r * 1.42)));
         }
     }
     if (hb < h) {
-        float cut = hb + 0.45 * (vnoise(q.xz * 2.3 + seed * 13.1) - 0.5) + 0.22 * dot(q.xz, vec2(cos(seed * 7.0), sin(seed * 7.0)));
+        float cut = hb + rough * (0.45 * (vnoise(q.xz * 2.3 + seed * 13.1) - 0.5) + 0.22 * dot(q.xz, vec2(cos(seed * 7.0), sin(seed * 7.0))));
         d = max(d, (y - cut) * 0.8);
     }
     return d;
@@ -108,11 +133,33 @@ float lyingDrum(vec3 q, float r, float l, int style) {
     return max(d, abs(q.x) - l);
 }
 
-// ---- the avenue of columns on its stylobates, at x = +-7.5, from z = 0 back to z = -28; fallen drums and
-// blocks beside them
+// a piece of a column (from hb0 up to its capital) flying from where it lay on the ground back onto its stump:
+// lifted, turned upright and set down as e goes 0 .. 1
+float flyingTop(vec3 q, float H, float hb0, float R, int style, float seed, float e, vec3 lying, float yaw) {
+    float a = (1.0 - e) * 1.5708;
+    vec3 pos = mix(lying, vec3(0.0, hb0, 0.0), e) + vec3(0.0, sin(3.14159 * e) * 1.6, 0.0);
+    vec3 dd = q - pos;
+    dd.xz = rot(yaw * (1.0 - e)) * dd.xz;
+    vec3 u = vec3(sin(a), cos(a), 0.0), s = vec3(cos(a), -sin(a), 0.0);
+    vec3 qq = vec3(dot(dd, s), dot(dd, u), dd.z);
+    float d = column(qq + vec3(0.0, hb0, 0.0), H, H, R, style, seed, 0.0);
+    return max(d, -qq.y);
+}
+// a block flying from the ground (pos a, tumbled by rotations ra) to its place b
+float flyingBlock(vec3 p, vec3 a, vec3 b, vec2 ra, vec3 size, float e) {
+    vec3 pos = mix(a, b, e) + vec3(0.0, sin(3.14159 * e) * 2.0, 0.0);
+    vec3 g = p - pos;
+    g.xz = rot(ra.x * (1.0 - e)) * g.xz;
+    g.xy = rot(ra.y * (1.0 - e)) * g.xy;
+    return sdBox(g, size) - 0.04 * (1.0 - e);
+}
+
+// ---- the avenue of columns on their stylobates, at x = +-7.5, from z = -3.5 back to z = -24.5; each broken or
+// fallen column rebuilds as time rewinds (its fallen top flies back onto it), and a block fallen beside it flies
+// back up to rest on it
 float avenue(vec3 p) {
     float ax = abs(p.x);
-    float b = sdBox(vec3(ax - 9.0, p.y - 4.0, p.z + 14.0), vec3(4.6, 4.6, 15.0));
+    float b = sdBox(vec3(ax - 10.0, p.y - 4.0, p.z + 14.0), vec3(5.6, 6.0, 15.0));
     if (b > 1.0) return b;
     float side = p.x > 0.0 ? 1.0 : -1.0;
     float d = sdBox(vec3(ax - 7.5, p.y - 0.25, p.z + 14.0), vec3(1.9, 0.25, 13.5));
@@ -122,34 +169,50 @@ float avenue(vec3 p) {
     float R = uKind == 0 ? 0.62 : (uKind == 1 ? 0.55 : 0.68);
     float j = clamp(floor((-3.5 - p.z) / 7.0 + 0.5), 0.0, 3.0);
     float zc = -3.5 - 7.0 * j;
+    int ci = int(j) * 2 + (side > 0.0 ? 1 : 0);
+    float rep = uCol[ci];
     vec3 q = vec3(ax - 7.5, p.y - 0.75, p.z - zc);
     float h0 = hash(vec2(j * 3.1 + 0.7, side * 1.7 + 2.0));
     float h1 = hash(vec2(j * 1.3 + 5.1, side * 3.3 + 0.4));
-    if (h0 < 0.28) {
-        // fallen: a stump, and its drums lying beside it in the ferns
-        d = min(d, column(q, H, 0.7 + h1 * 0.5, R, style, h1));
-        vec3 g = vec3(ax - 10.4, p.y, p.z - zc - 0.8);
-        g.xz = rot(h1 * 2.4 - 1.2) * g.xz;
-        d = min(d, lyingDrum(g, R * 0.98, 0.62, style));
-        g.xz = rot(0.5 + h0) * g.xz;
-        d = min(d, lyingDrum(g - vec3(1.6, 0.0, 1.0), R * 0.97, 0.55, style));
-    } else if (h0 < 0.62) {
-        d = min(d, column(q, H, H * (0.32 + 0.5 * h1), R, style, h1));
+    if (h0 < 0.62 && rep < 0.999) {
+        float hb0 = h0 < 0.28 ? 0.7 + h1 * 0.5 : H * (0.32 + 0.5 * h1);
+        float e = smoothstep(0.05, 0.6, rep);
+        d = min(d, column(q, H, hb0, R, style, h1, 1.0 - e));
+        d = min(d, flyingTop(q, H, hb0, R, style, h1, e, vec3(2.4, -0.75 + R, 0.4 + h1), (h1 - 0.5) * 1.6));
     } else {
-        d = min(d, column(q, H, H, R, style, h1));
+        d = min(d, column(q, H, H, R, style, h1, 0.0));
     }
-    // a carved block fallen off a lintel, now and then
     if (h1 > 0.45) {
-        vec3 g = vec3(ax - 11.4, p.y - 0.4, p.z - zc + 3.0);
-        g.xz = rot(h1 * 5.0) * g.xz;
-        g.xy = rot((h1 - 0.7) * 0.5) * g.xy;
-        d = min(d, sdBox(g, vec3(0.95, 0.42, 0.62)) - 0.04);
+        float e = smoothstep(0.55, 1.0, rep);
+        d = min(d, flyingBlock(q, vec3(3.9, -0.35, -3.0), vec3(0.0, H + 0.42, 0.0), vec2(h1 * 5.0, (h1 - 0.7) * 0.5),
+                               vec3(0.95, 0.42, 0.62), e));
+    }
+    return d;
+}
+
+// ---- braziers lit in the temple's prime (bowls on stands, rising from the ground as it comes)
+const vec3 BRZ[12] = vec3[12](vec3(-4.8, 21.0, -48.0), vec3(4.8, 21.0, -48.0), vec3(-5.6, 0.0, -24.5), vec3(5.6, 0.0, -24.5),
+                              vec3(-5.0, 4.0, -33.4), vec3(5.0, 4.0, -33.4), vec3(-7.0, 4.0, -40.0), vec3(7.0, 4.0, -40.0),
+                              vec3(-6.0, 2.7, -42.0), vec3(6.0, 2.7, -42.0), vec3(-12.5, 0.0, -38.5), vec3(12.5, 0.0, -38.5));
+float braziers(vec3 p) {
+    if (uPrime <= 0.01) return 1e9;
+    float d = 1e9;
+    for (int i = 0; i < 4; i++) {
+        vec3 b = BRZ[uKind * 4 + i] - vec3(0.0, 1.4 * (1.0 - uPrime), 0.0);
+        vec3 q = p - b;
+        float st = max(length(q.xz) - 0.14, abs(q.y - 0.5) - 0.5);
+        float bowl = max(length(q - vec3(0.0, 1.25, 0.0)) - 0.45, q.y - 1.3);
+        bowl = max(bowl, -(length(q - vec3(0.0, 1.4, 0.0)) - 0.38));
+        st = min(st, max(length(q.xz) - 0.38, abs(q.y - 0.06) - 0.06));
+        d = min(d, min(st, bowl));
     }
     return d;
 }
 
 // ---- MAYA: a stepped pyramid of seven terraces (sloping talud, carved tablero bands), its grand staircase
-// between two ramps, the shrine on top with its roof comb
+// between two ramps, the shrine on top with its roof comb. In ruin, a front corner has collapsed (its blocks
+// tumbled at the foot) and the shrine is broken down; as time rewinds the blocks fly back, the corner and the
+// shrine rebuild
 vec2 maya(vec3 p) {
     vec3 q = p - TC;
     float bd = sdBox(q - vec3(0.0, 16.0, 3.0), vec3(23.5, 16.5, 27.0));
@@ -165,7 +228,6 @@ vec2 maya(vec3 p) {
         d = min(d, sdBox(q - vec3(0.0, k * H + H * 0.5, 0.0), vec3(sl, H * 0.5, sl)) * 0.92);
         d = min(d, sdBox(q - vec3(0.0, k * H + H - 0.45, 0.0), vec3(s - 0.7, 0.45, s - 0.7)));
     }
-    // the shrine
     float sh = sdBox(q - vec3(0.0, 23.6, -0.5), vec3(4.4, 2.6, 3.6));
     sh = max(sh, -sdBox(q - vec3(0.0, 22.5, 3.4), vec3(0.95, 1.5, 1.4)));
     sh = min(sh, sdBox(q - vec3(0.0, 26.45, -0.5), vec3(4.75, 0.25, 3.95)));
@@ -173,28 +235,33 @@ vec2 maya(vec3 p) {
     vec2 hc = vec2(mod(q.x + 0.85, 1.7) - 0.85, mod(q.y - 27.6, 1.5) - 0.75);
     comb = max(comb, -sdBox2(hc, vec2(0.42, 0.4)));
     sh = min(sh, comb);
+    float ru = 1.0 - smoothstep(0.25, 0.85, uTemple);
+    sh = max(sh, (q.y - mix(31.5, 23.4 + 1.8 * vnoise(q.xz * 0.8) + 0.06 * q.x, ru)) * 0.8);
     d = min(d, sh);
-    // the grand staircase, between its two ramps
     float u = 26.0 - q.z;
     float st = max(sdStairs(vec2(u, q.y), 0.58, 0.6, 35.0, 30.0), abs(q.x) - 3.6);
     float ramp = (q.y - (u * 1.0345 + 0.95)) * 0.69;
     float alf = max(max(abs(abs(q.x) - 4.15) - 0.55, ramp), max(-u, q.y - 21.3));
     d = min(d, min(st, alf));
-    // a few blocks tumbled down at the foot
-    vec3 g = q - vec3(-9.0, 0.45, 24.0);
-    g.xz = rot(0.6) * g.xz;
-    d = min(d, sdBox(g, vec3(1.1, 0.45, 0.7)) - 0.05);
-    g = q - vec3(7.5, 0.4, 25.0);
-    g.xz = rot(-0.3) * g.xz;
-    g.xy = rot(0.15) * g.xy;
-    d = min(d, sdBox(g, vec3(0.8, 0.42, 0.8)) - 0.05);
-    return vec2(d, 1.0);
+    // the collapsed corner, closing as its blocks come back
+    float hole = 1.0 - smoothstep(0.05, 0.7, uTemple);
+    if (hole > 0.0) d = max(d, -(length((q - vec3(16.0, 7.0, 18.5)) * vec3(1.0, 1.3, 1.0)) - 8.0 * hole - 0.6 * vnoise(q.xy * 0.9)) * 0.75);
+    d = carveMissing(d, q);
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float e = smoothstep(0.08 + fi * 0.18, 0.4 + fi * 0.18, uTemple);
+        if (e >= 1.0) continue;
+        vec3 a = vec3(10.0 + fi * 3.5, 0.45, 26.0 - fi * 1.4);
+        vec3 b = vec3(13.0 + fi * 2.0, 4.0 + fi * 2.2, 19.5 - fi * 0.8);
+        d = min(d, flyingBlock(q, a, b, vec2(0.6 + fi, 0.15 - fi * 0.2), vec3(1.0, 0.45, 0.7), e));
+    }
+    return vec2(min(d, braziers(p)), 1.0);
 }
 
 // ---- KHMER: a terrace with its stairs, a gallery of balustered windows with a gate tower, the central prang and
-// two side towers (redented tiers up to a lotus bud), a strangler fig straddling the gallery, its roots poured over
-// the wall to the ground
-float prang(vec3 q, float sc) {
+// two side towers (redented tiers up to a lotus bud: the towers lose their upper tiers in ruin and regain them,
+// tier by tier), a strangler fig straddling the gallery (its roots withdrawing as time rewinds)
+float prang(vec3 q, float sc, float tiers) {
     q /= sc;
     float b = sdBox(q - vec3(0.0, 10.0, 0.0), vec3(5.5, 11.0, 6.0));
     if (b > 1.0) return b * sc;
@@ -204,8 +271,10 @@ float prang(vec3 q, float sc) {
     d = max(d, -sdBox(q - vec3(0.0, 1.6, 5.0), vec3(0.75, 1.6, 1.5)));
     float y0 = 6.0;
     for (int i = 0; i < 6; i++) {
+        float g = sat(tiers - float(i));
+        if (g <= 0.0) break;
         float s = 4.1 * pow(0.84, float(i));
-        float h = 2.0 * pow(0.9, float(i));
+        float h = 2.0 * pow(0.9, float(i)) * g;
         float t = sdBox(q - vec3(0.0, y0 + h * 0.5, 0.0), vec3(s, h * 0.5, s));
         t = max(t, (abs(q.x) + abs(q.z)) - s * 1.55);
         float rim = sdBox(q - vec3(0.0, y0 + 0.16, 0.0), vec3(s + 0.3, 0.16, s + 0.3));
@@ -213,26 +282,37 @@ float prang(vec3 q, float sc) {
         d = min(d, min(t, rim));
         y0 += h;
     }
-    vec3 bq = q - vec3(0.0, y0 + 1.1, 0.0);
-    d = min(d, (length(bq / vec3(1.25, 2.1, 1.25)) - 1.0) * 1.2);
+    float bg = sat(tiers - 6.0);
+    if (bg > 0.01) {
+        vec3 bq = q - vec3(0.0, y0 + 1.1 * bg, 0.0);
+        d = min(d, (length(bq / (vec3(1.25, 2.1, 1.25) * bg)) - 1.0) * 1.2 * bg);
+    }
     return d * sc;
 }
 float roots(vec3 p) {
+    float rk = sat(max(uJungle, uWear * 1.2 - 0.1));
+    if (rk <= 0.02) return 1e9;
     float b = sdBox(p - vec3(-10.0, 12.0, -39.0), vec3(8.0, 24.0, 6.0));
     if (b > 1.0) return b;
-    float d = sdCap(p, vec3(-10.0, 9.0, -41.0), vec3(-11.8, 33.0, -42.5), 1.7, 1.1);
+    float w0 = 0.25 + 0.75 * rk;
+    float d = sdCap(p, vec3(-10.0, 9.0, -41.0), vec3(-11.8, 33.0, -42.5), 1.7 * w0, 1.1 * w0);
     for (int i = 0; i < 6; i++) {
+        // each root withdraws from its tip back toward the fig
+        float reach = sat(rk * 1.6 - float(i) * 0.08);
+        if (reach <= 0.02) continue;
         float x0 = -3.6 + float(i) * 1.45 + 0.4 * sin(float(i) * 2.7);
-        float w = 0.62 - 0.05 * abs(float(i) - 2.5);
+        float w = (0.62 - 0.05 * abs(float(i) - 2.5)) * w0;
         vec3 A = vec3(-10.0 + x0 * 0.3, 10.2, -40.6);
         vec3 B = vec3(-10.0 + x0 * 0.8, 7.0, -39.25);
         vec3 C = vec3(-10.0 + x0 + 0.3 * sin(float(i) * 1.9), 4.3, -39.0);
         vec3 D = vec3(-10.0 + x0 * 1.15, 3.8, -37.75);
         vec3 E = vec3(-10.0 + x0 * 1.3, 0.25, -37.3);
         vec3 F = vec3(-10.0 + x0 * 1.6, 0.1, -34.0 + 0.8 * sin(float(i) * 3.3));
-        float r = min(sdCap(p, A, B, w, w * 0.8), sdCap(p, B, C, w * 0.8, w * 0.65));
-        r = min(r, min(sdCap(p, C, D, w * 0.65, w * 0.55), sdCap(p, D, E, w * 0.55, w * 0.45)));
-        r = min(r, sdCap(p, E, F, w * 0.45, w * 0.18));
+        float r = sdCap(p, A, mix(A, B, sat(reach * 5.0)), w, w * 0.8);
+        if (reach > 0.2) r = min(r, sdCap(p, B, mix(B, C, sat(reach * 5.0 - 1.0)), w * 0.8, w * 0.65));
+        if (reach > 0.4) r = min(r, sdCap(p, C, mix(C, D, sat(reach * 5.0 - 2.0)), w * 0.65, w * 0.55));
+        if (reach > 0.6) r = min(r, sdCap(p, D, mix(D, E, sat(reach * 5.0 - 3.0)), w * 0.55, w * 0.45));
+        if (reach > 0.8) r = min(r, sdCap(p, E, mix(E, F, sat(reach * 5.0 - 4.0)), w * 0.45, w * 0.18));
         d = smin(d, r, 0.35);
     }
     return d;
@@ -254,84 +334,114 @@ vec2 khmer(vec3 p) {
     float roof = max(sdBox(g - vec3(0.0, 3.5, 0.0), vec3(24.2, 0.8, 1.8)), (abs(g.z) * 0.9 + (g.y - 3.0)) - 1.6);
     gal = min(gal, roof);
     gal = max(gal, -sdBox(g - vec3(0.0, -0.7, 0.0), vec3(1.7, 2.2, 3.0)));
+    // a fallen stretch of the gallery, rebuilding from the bottom up
+    float fall = 1.0 - smoothstep(0.1, 0.75, uTemple);
+    if (fall > 0.0) {
+        float top = 4.6 - 6.5 * fall + 0.8 * fall * vnoise(g.xz * 1.1);
+        gal = max(gal, -max(sdBox(g - vec3(12.0, 2.0, 0.0), vec3(6.0 * sqrt(fall) + 0.5, 3.0, 3.0)), top - g.y));
+    }
     d = min(d, gal);
-    d = min(d, prang(q - vec3(0.0, 9.6, 11.0), 0.5));
-    d = min(d, prang(q - vec3(0.0, 4.0, -6.0), 1.35));
-    d = min(d, prang(q - vec3(-15.0, 4.0, -1.0), 0.85));
-    d = min(d, prang(q - vec3(15.0, 4.0, -1.0), 0.85));
+    d = carveMissing(d, q);
+    float tw = smoothstep(0.0, 1.0, uTemple);
+    d = min(d, prang(q - vec3(0.0, 9.6, 11.0), 0.5, mix(1.0, 7.0, tw)));
+    d = min(d, prang(q - vec3(0.0, 4.0, -6.0), 1.35, mix(4.2, 7.0, tw)));
+    d = min(d, prang(q - vec3(-15.0, 4.0, -1.0), 0.85, mix(2.0, 7.0, tw)));
+    d = min(d, prang(q - vec3(15.0, 4.0, -1.0), 0.85, mix(1.4, 7.0, tw)));
+    d = min(d, braziers(p));
     float r = roots(p);
     return r < d ? vec2(r, 2.0) : vec2(d, 1.0);
 }
 
-// ---- GREEK: a Doric temple on its three steps, the colonnade broken on its right, the entablature and half the
-// pediment still standing on the left, the cella's walls ruined to uneven heights, pieces fallen on the ground
+// ---- GREEK: a Doric temple on its three steps. In ruin its colonnade is broken on the right, only the left part
+// of the entablature and half the pediment stand, the cella's walls are ruined, pieces lie on the ground; as time
+// rewinds the columns grow back to their capitals, the pieces fly back, the entablature and the pediment close
 vec2 greek(vec3 p) {
     vec3 q = p - TC;
     float bd = sdBox(q - vec3(0.0, 9.0, 1.0), vec3(17.0, 10.0, 14.0));
     if (bd > 1.5) return vec2(bd, 1.0);
+    float T = uTemple;
     float d = sdBox(q - vec3(0.0, 0.45, 0.0), vec3(15.6, 0.45, 11.6));
     d = min(d, sdBox(q - vec3(0.0, 1.35, 0.0), vec3(14.8, 0.45, 10.8)));
     d = min(d, sdBox(q - vec3(0.0, 2.25, 0.0), vec3(14.0, 0.45, 10.0)));
     float cel = sdBox(q - vec3(0.0, 7.5, -1.0), vec3(8.0, 4.8, 6.5));
     cel = max(cel, -sdBox(q - vec3(0.0, 7.5, -1.0), vec3(7.2, 6.0, 5.7)));
-    cel = max(cel, (q.y - (7.0 + 4.5 * vnoise(q.xz * 0.3) + 1.2 * sin(q.x * 0.4))) * 0.7);
+    float wc = smoothstep(0.0, 0.6, T);
+    cel = max(cel, (q.y - mix(7.0 + 4.5 * vnoise(q.xz * 0.3) + 1.2 * sin(q.x * 0.4), 12.4, wc)) * 0.7);
     cel = max(cel, -sdBox(q - vec3(0.0, 5.5, 5.5), vec3(1.6, 3.0, 1.5)));
-    d = min(d, cel);
+    d = carveMissing(min(d, cel), q);
     vec2 r = vec2(d, 1.0);
     const float CH = 10.0;
+    float cg = smoothstep(0.15, 0.65, T);
     float i = clamp(floor((q.x - 2.0) / 4.0 + 0.5), -3.0, 2.0);
-    float hb = i > 1.5 ? 5.2 : (i > 0.5 ? 2.4 : CH);
-    float c = column(vec3(q.x - (4.0 * i + 2.0), q.y - 2.7, q.z - 8.0), CH, hb, 0.8, 2, i + 3.0);
+    float hb = mix(i > 1.5 ? 5.2 : (i > 0.5 ? 2.4 : CH), CH, cg);
+    if (cg > 0.999) hb = CH;
+    float c = column(vec3(q.x - (4.0 * i + 2.0), q.y - 2.7, q.z - 8.0), CH, hb, 0.8, 2, i + 3.0, 1.0 - cg);
     float j = clamp(floor((8.0 - q.z) / 4.0 + 0.5), 1.0, 4.0);
     float sd = q.x > 0.0 ? 1.0 : -1.0;
-    float hb2 = sd > 0.0 ? (j < 2.5 ? 3.6 : 1.4 + j * 1.6) : CH;
-    c = min(c, column(vec3(abs(q.x) - 10.0, q.y - 2.7, q.z - (8.0 - 4.0 * j)), CH, hb2, 0.8, 2, j + sd * 7.0));
+    float hb2 = mix(sd > 0.0 ? (j < 2.5 ? 3.6 : 1.4 + j * 1.6) : CH, CH, cg);
+    if (cg > 0.999) hb2 = CH;
+    c = min(c, column(vec3(abs(q.x) - 10.0, q.y - 2.7, q.z - (8.0 - 4.0 * j)), CH, hb2, 0.8, 2, j + sd * 7.0, 1.0 - cg));
     if (c < r.x) r = vec2(c, 3.0);
-    // the entablature (architrave, triglyph frieze, cornice) and the pediment's left half
-    float ent = sdBox(q - vec3(-4.4, 13.8, 8.0), vec3(6.8, 1.1, 1.0));
-    ent = min(ent, sdBox(q - vec3(-10.0, 13.8, 0.0), vec3(1.0, 1.1, 9.0)));
-    ent = min(ent, sdBox(q - vec3(-4.4, 15.05, 8.1), vec3(7.0, 0.16, 1.2)));
+    // the entablature and the pediment, closing from the left as the columns stand again
+    float ex = mix(2.5, 12.0, smoothstep(0.55, 0.9, T));
+    float ent = sdBox(q - vec3(0.0, 13.8, 8.0), vec3(11.0, 1.1, 1.0));
+    ent = min(ent, sdBox(vec3(abs(q.x) - 10.0, q.y - 13.8, q.z), vec3(1.0, 1.1, 9.0)));
+    ent = min(ent, sdBox(q - vec3(0.0, 15.05, 8.1), vec3(11.2, 0.16, 1.2)));
+    ent = max(ent, q.x - ex - 0.8 * vnoise(q.yz * 1.3) * (1.0 - T));
+    float px = mix(-1.6, 12.0, smoothstep(0.7, 1.0, T));
     float ped = max(abs(q.z - 8.0) - 0.9, (q.y - 15.2 - (11.2 - abs(q.x)) * 0.27) * 0.96);
-    ped = max(ped, max(15.2 - q.y, q.x + 1.6 + 1.2 * vnoise(q.yz * 0.8)));
-    ped = max(ped, -11.2 - q.x);
+    ped = max(ped, max(15.2 - q.y, q.x - px + 1.2 * vnoise(q.yz * 0.8) * (1.0 - T)));
+    ped = max(ped, abs(q.x) - 11.2);
     ent = min(ent, ped);
-    ent = max(ent, q.x - 2.5 - 0.8 * vnoise(q.yz * 1.3));
     if (ent < r.x) r = vec2(ent, 1.0);
-    // fallen: an entablature block and drums on the ground, on the right
-    vec3 g = q - vec3(10.5, 0.75, 14.2);
-    g.xz = rot(0.35) * g.xz;
-    g.xy = rot(-0.12) * g.xy;
-    float f = sdBox(g, vec3(1.9, 0.75, 0.9)) - 0.05;
-    vec3 g2 = q - vec3(13.5, 0.0, 9.0);
-    g2.xz = rot(1.2) * g2.xz;
-    f = min(f, lyingDrum(g2, 0.8, 0.75, 2));
-    g2 = q - vec3(6.8, 0.0, 13.6);
-    g2.xz = rot(-0.4) * g2.xz;
-    f = min(f, lyingDrum(g2, 0.79, 0.7, 2));
+    // the fallen pieces fly back up to the broken columns
+    float f = 1e9;
+    float e1 = smoothstep(0.3, 0.6, T), e2 = smoothstep(0.2, 0.5, T), e3 = smoothstep(0.6, 0.9, T);
+    if (e3 < 1.0) f = min(f, flyingBlock(q, vec3(10.5, 0.75, 14.2), vec3(8.5, 13.8, 8.0), vec2(0.35, -0.12), vec3(1.9, 0.75, 0.9), e3));
+    if (e1 < 1.0) {
+        vec3 g2 = q - mix(vec3(13.5, 0.0, 9.0), vec3(10.0, 6.0, 8.0), e1) - vec3(0.0, sin(3.14159 * e1) * 2.0, 0.0);
+        g2.xz = rot(1.2 * (1.0 - e1)) * g2.xz;
+        f = min(f, lyingDrum(g2, 0.8 * (1.0 - e1 * 0.3), 0.75, 2));
+    }
+    if (e2 < 1.0) {
+        vec3 g2 = q - mix(vec3(6.8, 0.0, 13.6), vec3(6.0, 4.0, 8.0), e2) - vec3(0.0, sin(3.14159 * e2) * 2.0, 0.0);
+        g2.xz = rot(-0.4 * (1.0 - e2)) * g2.xz;
+        f = min(f, lyingDrum(g2, 0.79 * (1.0 - e2 * 0.3), 0.7, 2));
+    }
+    f = min(f, braziers(p));
     if (f < r.x) r = vec2(f, 3.0);
     return r;
 }
 
-// ---- the great trunks, with their buttress roots (x, z, radius, seed)
-const vec4 TREES[10] = vec4[10](vec4(-28.0, -4.0, 1.6, 0.1), vec4(29.0, -8.0, 1.5, 0.7), vec4(-34.0, -22.0, 1.8, 0.3),
+// ---- the great trunks, with their buttress roots (x, z, radius, seed); the jungle's own trees stand in the avenue
+// and around the temple at the start and shrink back as it recedes
+const vec4 TREES[10] = vec4[10](vec4(-36.0, -2.0, 1.6, 0.1), vec4(37.0, -6.0, 1.5, 0.7), vec4(-34.0, -22.0, 1.8, 0.3),
                                 vec4(35.0, -26.0, 1.7, 0.9), vec4(-40.0, 6.0, 2.1, 0.5), vec4(41.0, 2.0, 2.0, 0.2),
                                 vec4(-27.0, -50.0, 1.4, 0.6), vec4(29.0, -52.0, 1.5, 0.4), vec4(-46.0, -14.0, 2.2, 0.8),
                                 vec4(47.0, -16.0, 2.0, 0.15));
+const vec4 JTREES[6] = vec4[6](vec4(3.0, -9.0, 1.2, 0.3), vec4(-4.5, -19.0, 1.4, 0.8), vec4(11.0, -30.0, 1.6, 0.5),
+                               vec4(-13.0, -33.0, 1.8, 0.1), vec4(15.0, -13.0, 1.1, 0.6), vec4(-1.0, -27.5, 1.3, 0.9));
+float trunk(vec3 p, vec4 t, float r, float buttK) {
+    vec2 o = p.xz - t.xy + vec2(0.06, -0.04) * p.y;
+    float l = length(o);
+    if (l > r * 4.5 + 2.0) return l - r * 4.5 - 1.0;
+    float flare = exp(-max(p.y, 0.0) * 0.55);
+    float a = atan(o.y, o.x);
+    float butt = pow(abs(cos(a * 2.5 + t.w * 6.0)), 6.0) * flare * r * 2.2 * buttK;
+    float rr = r * (1.0 + 0.5 * flare) + butt + 0.05 * sin(p.y * 1.3 + a * 3.0);
+    return (l - rr) * 0.6;
+}
 float trees(vec3 p) {
     float d = 1e9;
     int n = uKind == 2 ? 6 : 10;
     for (int i = 0; i < 10; i++) {
         if (i >= n) break;
-        vec4 t = TREES[i];
-        float r = t.z * (uKind == 2 ? 0.55 : 1.0);
-        vec2 o = p.xz - t.xy + vec2(0.06, -0.04) * p.y;
-        float l = length(o);
-        if (l > r * 4.5 + 2.0) { d = min(d, l - r * 4.5 - 1.0); continue; }
-        float flare = exp(-max(p.y, 0.0) * 0.55);
-        float a = atan(o.y, o.x);
-        float butt = pow(abs(cos(a * 2.5 + t.w * 6.0)), 6.0) * flare * r * 2.2 * (uKind == 2 ? 0.2 : 1.0);
-        float rr = r * (1.0 + 0.5 * flare) + butt + 0.05 * sin(p.y * 1.3 + a * 3.0);
-        d = min(d, (l - rr) * 0.6);
+        d = min(d, trunk(p, TREES[i], TREES[i].z * (uKind == 2 ? 0.55 : 1.0), uKind == 2 ? 0.2 : 1.0));
+    }
+    if (uJungle > 0.02) {
+        // shrinking back: thinner and lower, the crowns' wall sinking with them
+        float k = smoothstep(0.0, 1.0, uJungle);
+        for (int i = 0; i < 6; i++) d = min(d, max(trunk(p, JTREES[i], JTREES[i].z * sqrt(k), uKind == 2 ? 0.4 : 1.0), p.y - 34.0 * k));
     }
     return d;
 }
@@ -382,12 +492,12 @@ float calcAO(vec3 p, vec3 n) {
 // ---- the canopy: leaf masses over everything but the clearing around the temple; its light at any point
 float clearing(vec2 q) {
     vec2 c = (q - vec2(0.0, -50.0)) / (uKind == 2 ? vec2(46.0, 40.0) : vec2(33.0, 28.0));
-    return smoothstep(0.82, 1.15, length(c));
+    return smoothstep(0.82, 1.15, length(c) * (1.0 + 0.9 * uJungle));
 }
 float canopy(vec2 q, float detail) {
     vec2 s = q + uSway * vec2(sin(uTime * 0.37 + q.y * 0.05), cos(uTime * 0.29 + q.x * 0.05)) * 0.7;
     float n = fbm(s * 0.045) * 0.68 + mix(0.16, vnoise(s * 0.42), detail) * 0.32;
-    float th = 0.43 - uGap;
+    float th = 0.43 - uGap + 0.1 * uJungle;
     return smoothstep(th - 0.05, th + 0.05, n) * clearing(q);
 }
 float sunThrough(vec3 p) {
@@ -466,7 +576,7 @@ float lianas(vec2 uv, float seed, float fw) {
     float u = uv.x * 0.7 + seed;
     float i = floor(u), f = fract(u) - 0.5;
     float h = hash1(i * 1.7 + seed);
-    if (h < 0.6) return 0.0;
+    if (h < 0.6 - 0.35 * uJungle) return 0.0;
     float bottom = 4.0 + 16.0 * hash1(i + 9.0);
     float x = f + 0.12 * sin(uv.y * 0.18 + i * 3.0 + uSway * sin(uTime * 0.5 + i) * 0.6);
     float leafy = smoothstep(0.55, 0.75, vnoise(vec2(i * 3.0, uv.y * 1.6)));
@@ -508,16 +618,35 @@ void foliage(vec3 ro, vec3 rd, float tmax, inout Lay best, inout Lay edge) {
         float a = crowns(uv, base, pine == 1 ? 8.0 : 10.0, float(i) * 13.7, fw, pine);
         consider(best, edge, t, a, 1.0, float(i), ro + rd * t, uv);
     }
+    // at the start the jungle buries the temple: a mass of crowns in front of it, sinking away as it recedes
+    if (uJungle > 0.01) {
+        float t = (-27.0 - ro.z) / rd.z;
+        if (t > 0.0 && t < tmax) {
+            vec3 p = ro + rd * t;
+            float fw = t * uPx * 1.2 + 0.03;
+            float a = crowns(vec2(p.x, p.y), -12.0 + 33.0 * smoothstep(0.0, 1.0, uJungle), 7.0, 41.0, fw, 0);
+            consider(best, edge, t, a, 1.0, 7.0, p, vec2(p.x, p.y));
+        }
+        float t2 = (-10.0 - ro.z) / rd.z;
+        if (t2 > 0.0 && t2 < tmax) {
+            vec3 p = ro + rd * t2;
+            float fw = t2 * uPx * 1.2 + 0.02;
+            float a = crowns(vec2(p.x * 1.6, p.y), -6.0 + 12.0 * uJungle, 5.0, 13.0, fw, 0) * step(10.0 * (1.0 - uJungle), abs(p.x) + 6.0 * uJungle);
+            consider(best, edge, t2, a, 2.0, 8.0, p, vec2(p.x, p.y));
+        }
+    }
     // undergrowth: rows of ferns across the ground beside the avenue, and along the stylobates
     for (int i = 0; i < 5; i++) {
         float z = 10.0 - float(i) * 11.0;
         float t = (z - ro.z) / rd.z;
         if (t <= 0.0 || t > tmax) continue;
         vec3 p = ro + rd * t;
-        if (abs(p.x) < 10.2 || abs(p.x) > 41.0) continue;
+        float jg = i == 0 ? 0.0 : uJungle;   // (the nearest row stays low: the camera stands by it)
+        if (abs(p.x) < 10.2 * (1.0 - jg) || abs(p.x) > 41.0) continue;
         float fw = t * uPx * 1.2 + 0.01;
-        float a = pine == 1 ? crowns(vec2(p.x, p.y), 1.1, 1.2, float(i) * 5.3, fw, 0)
-                            : ferns(vec2(p.x, p.y), 0.9, 1.5, float(i) * 3.1, fw);
+        float a = pine == 1 ? crowns(vec2(p.x, p.y), 1.1 + 4.0 * jg, 1.2 + 2.0 * jg, float(i) * 5.3, fw, 0)
+                            : ferns(vec2(p.x, p.y), 0.9 + 3.6 * jg, 1.5 + 2.5 * jg, float(i) * 3.1, fw);
+        a *= 1.0 - 0.6 * uPrime * step(abs(p.x), 14.0);
         consider(best, edge, t, a, 2.0, float(i), p, vec2(p.x, p.y));
     }
     for (int i = 0; i < 2; i++) {
@@ -527,7 +656,7 @@ void foliage(vec3 ro, vec3 rd, float tmax, inout Lay best, inout Lay edge) {
         vec3 p = ro + rd * t;
         if (p.z > 6.0 || p.z < -34.0) continue;
         float fw = t * uPx * 1.2 + 0.01;
-        float a = ferns(vec2(p.z, p.y), 0.5, 1.0, 7.0 + float(i) * 2.3, fw);
+        float a = ferns(vec2(p.z, p.y), 0.5 + 3.0 * uJungle, 1.0 + 2.0 * uJungle, 7.0 + float(i) * 2.3, fw) * (1.0 - uPrime);
         consider(best, edge, t, a, 2.0, 5.0 + float(i), p, vec2(p.z, p.y));
     }
     // lianas hanging from the canopy beside the avenue (none in the Mediterranean)
@@ -537,7 +666,7 @@ void foliage(vec3 ro, vec3 rd, float tmax, inout Lay best, inout Lay edge) {
             float t = (z - ro.z) / rd.z;
             if (t <= 0.0 || t > tmax) continue;
             vec3 p = ro + rd * t;
-            if (abs(p.x) < 11.0 || abs(p.x) > 40.0 || p.y > CAN_Y) continue;
+            if (abs(p.x) < 11.0 * (1.0 - uJungle) || abs(p.x) > 40.0 || p.y > CAN_Y) continue;
             float fw = t * uPx * 1.2 + 0.01;
             float a = lianas(vec2(p.x, p.y), float(i) * 4.7, fw);
             consider(best, edge, t, a, 3.0, float(i), p, vec2(p.x, p.y));
@@ -552,7 +681,7 @@ void foliage(vec3 ro, vec3 rd, float tmax, inout Lay best, inout Lay edge) {
         if (i == 1 && abs(p.x) < 24.0) continue;
         float fw = t * uPx * 1.2 + 0.01;
         float u = p.x;
-        float bottom = (i == 0 ? 15.5 : 21.0) + 3.5 * fbm2(vec2(u * 0.07 + float(i) * 5.0, 0.5));
+        float bottom = (i == 0 ? 15.5 : 21.0) - 8.0 * uJungle + 3.5 * fbm2(vec2(u * 0.07 + float(i) * 5.0, 0.5));
         // hanging leaf clumps and trailing fronds
         float cu = u * 0.35 + float(i) * 3.0;
         float ci = floor(cu), cf = fract(cu) - 0.5;
@@ -584,6 +713,10 @@ vec3 foliageCol(Lay l, vec3 rd) {
     c += base * uSunCol * light * (0.25 + 0.45 * top);
     c += uLeafLit * uSunCol * light * back * 0.35;
     c *= 0.75 + 0.25 * vnoise(l.uv * 4.0 + l.seed);
+    // leaf clumps: rounded masses, their upper edges catching the light
+    float clump = fbm(l.uv * 0.32 + l.seed * 7.0);
+    float rim = smoothstep(0.5, 0.75, clump) * (1.0 - smoothstep(0.75, 0.95, clump));
+    c = c * (0.55 + 0.8 * clump) + uLeafLit * (uSunCol * light * 0.22 + uAmb * 0.1) * rim;
     return c;
 }
 
@@ -671,42 +804,53 @@ vec3 shadeSolid(vec3 p, vec3 n, float id, vec3 rd, float t) {
         float joint = (1.0 - smoothstep(0.012, 0.05 + lod * 0.06, m.x)) * (1.0 - lod * 0.6);
         float wn = fbm(p.xz * 0.35 + p.y * vec2(0.27, -0.21));
         alb = mix(uStone2, uStone, 0.45 + 0.55 * smoothstep(0.2, 0.8, wn));
-        alb *= 0.86 + 0.24 * m.y;
+        alb *= 1.0 + (0.24 * m.y - 0.14) * (0.35 + 0.65 * uWear);
         float grain = vnoise(uv * 9.0) * 0.5 + vnoise(uv * 23.0) * 0.5;
         alb *= 0.9 + 0.2 * grain * (1.0 - lod);
         // dark streaks of rain down the faces
         float streak = smoothstep(0.55, 0.85, fbm(vec2(dot(uv, vec2(1.0, 0.0)) * 1.7, p.y * 0.08))) * (1.0 - an.y);
-        alb *= 1.0 - 0.3 * streak;
+        alb *= 1.0 - 0.3 * streak * uWear;
         float h = carve(uv, p, id);
         if (h < 0.999 && lod < 0.8) {
             const float E = 0.015;
             float hx = carve(uv + vec2(E, 0.0), p + tu * E, id) - h, hy = carve(uv + vec2(0.0, E), p + tv * E, id) - h;
             nn = normalize(n - (tu * hx + tv * hy) / E * 0.012);
         }
+        h = mix(1.0, h, 1.0 - 0.55 * uWear);
         alb *= mix(0.5, 1.0, h);
         alb *= 1.0 - 0.45 * joint;
         // worn edges of the blocks: rounded toward the joints
-        float wear = smoothstep(0.12, 0.02, m.x) * (1.0 - joint) * (1.0 - lod);
+        float wear = smoothstep(0.12, 0.02, m.x) * (1.0 - joint) * (1.0 - lod) * uWear;
         nn = normalize(nn + (tv * (fract(uv.y / 0.62) > 0.5 ? 1.0 : -1.0)) * wear * 0.25 * (1.0 - an.y));
         // moss: on the tops, in the crevices and the joints, low on the walls; lichen
         float mn = fbm(p.xz * 0.3 + p.y * 0.23 + 3.0);
         float mossAmt = uKind == 2 ? 0.55 : 1.0;
         moss = smoothstep(0.42, 0.7, mn) * (0.25 + 0.9 * sat(n.y)) + (1.0 - ao) * 0.8 * smoothstep(0.25, 0.55, mn) +
                joint * 0.6 * mn + (1.0 - h) * 0.5 * mn + smoothstep(1.5, 0.0, p.y) * smoothstep(0.3, 0.6, mn);
-        moss = sat(moss * mossAmt);
+        moss = sat(moss * mossAmt * (0.12 + 0.88 * uWear) + uJungle * 0.7 * smoothstep(0.2, 0.5, mn));
         moss *= smoothstep(0.25, 0.5, vnoise(uv * 5.0) * 0.6 + moss * 0.6);
         float lich = smoothstep(0.72, 0.8, vnoise(uv * 2.6 + 5.0)) * (1.0 - moss);
-        alb = mix(alb, uStone * 1.25 + vec3(0.04, 0.035, 0.0), lich * 0.35);
+        alb = mix(alb, uStone * 1.25 + vec3(0.04, 0.035, 0.0), lich * 0.35 * uWear);
         // ivy and vines hanging down the vertical faces
         if (an.y < 0.5) {
             float iv = fbm(vec2(uv.x * 0.32, p.y * 0.1) + vec2(id * 3.0, 0.0)) + 0.25 * sin(uv.x * 0.21);
-            float ivy = smoothstep(0.66, 0.72, iv) * smoothstep(0.25, 0.55, vnoise(uv * 7.0) + 0.2) * (uKind == 2 ? 0.4 : 1.0);
+            float ivy = smoothstep(0.66 - 0.5 * uJungle, 0.72 - 0.5 * uJungle, iv) * smoothstep(0.25, 0.55, vnoise(uv * 7.0) + 0.2 + uJungle) * (uKind == 2 ? 0.4 : 1.0) * max(uWear, uJungle);
             if (ivy > 0.01) {
                 vec2 lh = vec2(vnoise(uv * 5.0), vnoise(uv * 5.0 + 17.0));
                 nn = normalize(mix(nn, normalize(n + (tu * (lh.x - 0.5) + tv * (lh.y - 0.3)) * 1.2), ivy));
                 alb = mix(alb, uLeaf * (0.8 + 0.6 * lh.x), ivy);
                 moss *= 1.0 - ivy;
             }
+        }
+        // the prime: the colors temples had
+        if (uPrime > 0.0) {
+            vec3 paint = alb;
+            bool cut = h < 0.9;
+            if (uKind == 0) paint = cut ? (fract(uv.x * 0.6) < 0.5 ? vec3(0.08, 0.25, 0.42) : vec3(0.85, 0.62, 0.18)) : vec3(0.52, 0.09, 0.05) * (0.9 + 0.2 * m.y);
+            else if (uKind == 1) paint = p.y > 17.0 ? vec3(0.95, 0.66, 0.24) : (cut ? vec3(0.5, 0.16, 0.08) : uStone * 1.08);
+            else paint = cut ? vec3(0.06, 0.12, 0.42) : (h < 0.97 && p.y > 13.5 ? vec3(0.5, 0.08, 0.05) : uStone * 1.1);
+            if (id == 3.0 && uKind != 0) paint = mix(paint, uStone * 1.1, 0.7);
+            alb = mix(alb, paint, uPrime * 0.85);
         }
         rough = 1.0;
     } else if (id == 2.0) {
@@ -728,7 +872,7 @@ vec3 shadeSolid(vec3 p, vec3 n, float id, vec3 rd, float t) {
         float litter = step(0.78, hash(floor(p.xz * 3.0)));
         floorC = mix(floorC, uGround * vec3(1.4, 1.05, 0.7), litter * 0.4 * (1.0 - lod));
         alb = mix(floorC, flag, paved);
-        moss = paved * sat(fm * 0.9 + joint * 0.6) * (uKind == 2 ? 0.5 : 1.0);
+        moss = paved * sat(fm * 0.9 + joint * 0.6) * (uKind == 2 ? 0.5 : 1.0) * (0.1 + 0.9 * uWear) + uJungle * 0.6;
         moss = max(moss, (1.0 - paved) * 0.5 * smoothstep(0.4, 0.7, fbm(p.xz * 0.6)));
     }
     vec3 mossC = mix(uMoss2, uMoss, smoothstep(0.3, 0.8, vnoise(p.xz * 1.7 + p.y)));
@@ -746,7 +890,25 @@ vec3 shadeSolid(vec3 p, vec3 n, float id, vec3 rd, float t) {
     lin += bounce * ao * sat(0.6 - 0.6 * nn.y);
     // the warm light thrown back by the sunlit stones around
     lin += uSunCol * uStone * 0.12 * ao * sat(dot(nn, normalize(vec3(-L.x, 0.25, -L.z))));
+    // the braziers' fire on the stones around
+    if (uPrime > 0.0) {
+        for (int i = 0; i < 4; i++) {
+            vec3 Lb = BRZ[uKind * 4 + i] + vec3(0.0, 1.8, 0.0) - p;
+            float att = 1.0 / (1.0 + dot(Lb, Lb) * 0.12);
+            lin += vec3(2.4, 1.1, 0.35) * uPrime * att * (0.25 + max(dot(nn, normalize(Lb)), 0.0)) * ao;
+        }
+    }
     vec3 col = alb * lin;
+    // the dust of a block re-forming: golden motes swirling on it
+    if (id == 1.0 && uBroken > 0.0) {
+        float k;
+        float dm = missing(p - TC - n * 0.25, k);
+        float f = k * (1.0 - k) * 4.0;
+        if (f > 0.01 && dm < 0.5) {
+            float sp = vnoise(uv * 14.0 + uTime * 3.0) * vnoise(uv * 5.0 - uTime);
+            col += vec3(1.0, 0.75, 0.42) * f * (0.25 + 2.5 * sp * sp) * (0.6 + uGold);
+        }
+    }
     // a soft sheen on the moss in the sun
     col += mossC * uSunCol * moss * sh * through * 0.12 * pow(sat(dot(reflect(rd, nn), L)), 4.0);
     return col;
@@ -786,6 +948,17 @@ void main() {
         tEnd = 1e9;
     }
     if (edge.t < tEnd) col = mix(col, foliageCol(edge, rd), edge.a * 1.6);
+    if (uPrime > 0.01) {
+        for (int i = 0; i < 4; i++) {
+            vec3 fp = BRZ[uKind * 4 + i] + vec3(0.0, 1.55 + 0.35 * uPrime - 1.4 * (1.0 - uPrime), 0.0);
+            float tc = dot(fp - ro, rd);
+            if (tc < 0.0 || tc > tEnd + 0.5) continue;
+            float dd = length(ro + rd * tc - fp);
+            float fl = 0.85 + 0.15 * sin(uTime * 9.0 + float(i) * 2.0) * sin(uTime * 5.3 + float(i));
+            float px = max(tc * uPx, 0.02);
+            col += vec3(3.0, 1.4, 0.4) * uPrime * fl * (exp(-sq(dd / max(0.32, px))) + 0.08 * exp(-dd * 0.9));
+        }
+    }
 
     // ---- mist and light shafts along the ray (the canopy's light at each sample)
     float tm = min(tEnd, 170.0);

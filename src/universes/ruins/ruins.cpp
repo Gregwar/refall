@@ -1,15 +1,17 @@
-// RUINS: ancient ruins in a jungle, seen in 3D behind the well. Nothing grows and nothing gets built: the ruins are
-// simply there, and the camera drifts slowly among them over the song (a slow orbit and dolly around the temple at
-// the end of an avenue of columns, revealing it from changing angles). The pieces are carved stone column drums,
-// one per cell, each piece type its own stone. Leaves, lianas and light shafts sway gently with the music, the mist
-// drifts, birds take off from the trees on the strong beats of a peak; a cleared row's drums crack and crumble, their
-// chips and dust falling away behind the well. The drop turns the sun to golden hour for the whole drop section (a
-// low warm sun raking the stones, long shadows, golden shafts and glowing mist), easing back when it ends.
+// RUINS: time running backwards, behind the well, in 3D. A song starts in a dense jungle (trees, roots, vines, moss,
+// at most a stone corner peeking through); with the lines the jungle recedes (its trees shrink back, the roots
+// withdraw, the undergrowth sinks, the moss leaves the stones) and uncovers the ruins; then time rewinds and the ruins
+// repair themselves: fallen column tops lift from the ground and set back onto their stumps, tumbled blocks fly back
+// up into the walls, missing stones re-form out of golden dust, towers regain their tiers, edges sharpen, carvings
+// come back crisp, lichen and streaks fade; by scene completion (50 paced lines) the temple stands in its prime,
+// painted, its braziers lit, and holds. The camera drifts slowly around it, keeping it beside the well. The pieces
+// are carved stone column drums, one per cell; a cleared row crumbles behind the well and sends dust to the next
+// repairs. The drop turns the sun to golden hour for the whole drop section (and the dust glows).
 //
 // The world is one ray-marched pass at a reduced resolution (shaders.hpp): the temple (a Maya pyramid, a Khmer
 // temple mountain with a strangler fig, a Doric temple), the avenue, the trunks and the ground as signed distance
-// fields; the foliage as layered planes with leafy masks; the canopy a two-layer leaf mask that also dapples the
-// sun on everything below it and carves the light shafts in the mist.
+// fields whose ruin is driven by a few uniforms (each avenue column's repair, the temple's repair, the share of
+// blocks still missing, the wear, the jungle's cover, the prime); the foliage as layered planes with leafy masks.
 #include "universes/ruins/ruins.hpp"
 
 #include <algorithm>
@@ -103,6 +105,13 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 }
 
 constexpr float CLEAR_T = 0.5f; // a cleared drum crumbles away in this long (real time)
+
+// Test hooks: ZEN_RUINS_LINES=N adds N lines to the rewind, ZEN_GROW_RATE=R adds R lines a second.
+int extraLines(double t) {
+    static const int n = std::getenv("ZEN_RUINS_LINES") ? std::atoi(std::getenv("ZEN_RUINS_LINES")) : 0;
+    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    return n + (int)(rate * t);
+}
 
 } // namespace
 
@@ -257,6 +266,65 @@ void RuinsUniverse::updateCamera() {
     right_ = normalize(cross(fwd_, vec3(0.f, 1.f, 0.f)));
     up_ = cross(right_, fwd_);
     tanH_ = 0.43f;
+}
+
+// The arc, on the 50-line scale: the jungle recedes (1..12), the columns repair one after the other (12.5..37),
+// the temple rebuilds (15..45) while its missing blocks re-form (14..42) and the wear fades (12..46), the prime
+// (43..50: paint, braziers).
+void RuinsUniverse::updateRewind(float L) {
+    jungle_ = 1.f - smoothstepf(1.f, 12.f, L);
+    static const int ORDER[8] = {0, 1, 3, 2, 4, 5, 7, 6};
+    for (int i = 0; i < 8; i++) {
+        const float s = 12.5f + ORDER[i] * 3.f;
+        col_[i] = smoothstepf(s, s + 3.5f, L);
+    }
+    temple_ = smoothstepf(15.f, 45.f, L);
+    broken_ = 0.07f * (1.f - smoothstepf(14.f, 42.f, L));
+    wear_ = 1.f - smoothstepf(12.f, 46.f, L);
+    prime_ = smoothstepf(43.f, 50.f, L);
+}
+
+bool RuinsUniverse::toBoard(const vec3& w, vec2& b) const {
+    const vec3 v = w - eye_;
+    const float z = dot(v, fwd_);
+    if (z < 0.5f) return false;
+    const float nx = dot(v, right_) / (z * tanH_ * aspect_), ny = dot(v, up_) / (z * tanH_);
+    b = V(viewC_.x + nx * viewH_.x, viewC_.y + ny * viewH_.y);
+    return std::fabs(nx) < 1.05f && std::fabs(ny) < 1.05f;
+}
+
+// golden dust converging on a world point (a stone re-forming), behind the well
+void RuinsUniverse::dustAt(const vec3& w, int n) {
+    vec2 b;
+    if (!toBoard(w, b) || swirls_.size() > 400) return;
+    const float z = std::max(5.f, dot(w - eye_, fwd_));
+    const float k = viewH_.y / (z * tanH_); // board units per world unit there
+    for (int i = 0; i < n; i++) {
+        Swirl s;
+        s.c = b;
+        s.age = -rng_.range(0.f, 0.5f);
+        s.life = rng_.range(1.1f, 1.8f);
+        s.ang = rng_.range(0.f, TAU);
+        s.rad = rng_.range(1.0f, 2.6f) * k;
+        s.size = rng_.range(0.04f, 0.09f) * std::clamp(k * 2.5f, 0.6f, 1.6f);
+        s.seed = rng_.uniform();
+        swirls_.push_back(s);
+    }
+}
+
+// the next repairs: a column being rebuilt, else a spot of the temple's front
+void RuinsUniverse::dustSomewhere(int n) {
+    const int kind = VARIANTS[wrapV(variant_)].kind;
+    const float H = kind == 0 ? 5.4f : (kind == 1 ? 4.8f : 7.6f);
+    std::vector<int> active;
+    for (int i = 0; i < 8; i++)
+        if (col_[i] > 0.01f && col_[i] < 0.99f) active.push_back(i);
+    if (!active.empty() && rng_.chance(0.6f)) {
+        const int i = active[rng_.irange(0, (int)active.size() - 1)];
+        dustAt(vec3((i & 1) ? 7.5f : -7.5f, 0.75f + H * rng_.range(0.4f, 0.9f), -3.5f - 7.f * (i / 2)), n);
+    } else if (temple_ > 0.0f && temple_ < 0.995f) {
+        dustAt(vec3(rng_.range(-14.f, 14.f), rng_.range(3.f, 18.f), -52.f + rng_.range(12.f, 20.f)), n);
+    }
 }
 
 RuinsUniverse::~RuinsUniverse() {
@@ -433,6 +501,8 @@ void RuinsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // the noise startles a few birds; a Tetris a whole flock
         if (ev.count >= 4) releaseBirds(12, 0);
         else if (rng_.chance(0.4f)) releaseBirds(3 + rng_.irange(0, 3 - 1), rng_.chance(0.5f) ? 1 : -1);
+        // each clear sends dust to the next repairs
+        for (int k = 0; k < std::min(4, ev.count) + 1; k++) dustSomewhere(14);
         break;
     }
     case GameEvent::TopOut: {
@@ -630,7 +700,11 @@ void RuinsUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<H
     const vec3 ink = pal_.ink, accent = pal_.accent;
     std::vector<float> q;
     const float halo = 0.9f;
-    const char* hour = slow_ > 0.5f ? "blue hour" : (gold_ > 0.5f ? "golden hour" : "late morning");
+    const char* hour = slow_ > 0.5f ? "blue hour"
+                       : gold_ > 0.5f ? "golden hour"
+                       : linesEased_ < 12.f ? "overgrown"
+                       : prime_ > 0.5f ? "in its prime"
+                                       : "time rewinding";
     for (const HudText& h : hud) {
         if (h.alpha <= 0.01f || h.text.empty()) continue;
         const float base = h.scale * 12.f;
@@ -824,6 +898,24 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         fl.phase += 0.f;
     }
 
+    // ---- The rewind: the lines (50-line scale) eased (a line a breath, a Tetris a few; a new game sends time
+    // forward again, quickly).
+    {
+        const float target = f.bare ? lines_ : paceLines(game, (float)extraLines(time_));
+        if (linesEased_ < 0.f) linesEased_ = target;
+        lines_ = target;
+        const float cap = (target < linesEased_ ? 10.f : 0.9f * (1.f + 0.5f * gold_)) * std::clamp(paceScale(), 1.f, 2.5f);
+        linesEased_ += std::clamp((target - linesEased_) * 1.4f * wdt, -cap * wdt, cap * wdt);
+        updateRewind(linesEased_);
+        swirlT_ -= wdt;
+        if (swirlT_ <= 0.f && linesEased_ > 12.f && linesEased_ < 46.f && linesEased_ < target + 0.5f && !f.paused) {
+            dustSomewhere(10);
+            swirlT_ = rng_.range(0.5f, 0.9f);
+        }
+        for (Swirl& s : swirls_) s.age += dt;
+        swirls_.erase(std::remove_if(swirls_.begin(), swirls_.end(), [](const Swirl& s) { return s.age >= s.life; }), swirls_.end());
+    }
+
     // ---- Dust, chips, crumbling drums (at the real speed).
     auto stepBits = [&](std::vector<Bit>& v, float grav, float drag) {
         for (Bit& b : v) {
@@ -892,6 +984,16 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
             sprite(front_, b.p, b.size * (1.f + t), b.col, b.alpha * smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.5f, 1.f, t)), 0, b.seed);
         }
     }
+    {
+        const vec3 dc = lerp(vec3(1.0f, 0.82f, 0.55f), vec3(1.4f, 0.9f, 0.45f), g);
+        for (const Swirl& s : swirls_) {
+            if (s.age < 0.f) continue;
+            const float t = s.age / s.life, e = smoothstepf(0.f, 1.f, t);
+            const float a = s.ang + e * 4.f;
+            const vec2 p = V(s.c.x + std::cos(a) * s.rad * (1.f - e), s.c.y + std::sin(a) * s.rad * 0.7f * (1.f - e));
+            sprite(back_, p, s.size * (1.f - 0.5f * e), dc, 0.8f * smoothstepf(0.f, 0.15f, t) * (1.f - smoothstepf(0.8f, 1.f, t)) * world, 0, s.seed);
+        }
+    }
     for (const Bird& b : birds_) {
         if (b.age < 0.f) continue;
         const float a = smoothstepf(0.f, 0.3f, b.age) * (1.f - smoothstepf(5.5f, 7.f, b.age)) * 0.9f * world;
@@ -949,6 +1051,12 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uSway", swayAmp_);
         set1f(P, "uGold", g);
         set1f(P, "uWorldA", world);
+        set1f(P, "uJungle", jungle_);
+        set1f(P, "uTemple", temple_);
+        set1f(P, "uBroken", broken_);
+        set1f(P, "uWear", wear_);
+        set1f(P, "uPrime", prime_);
+        glUniform1fv(ugl::U(P, "uCol"), 8, col_);
         set3f(P, "uBridgeCol", bridge_.color);
         ugl::drawFullscreen();
     }
@@ -1026,7 +1134,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_ruins() {
     static const UniverseEntry e{
-        "RUINS", "ancient ruins in a jungle, in 3D: a temple, an avenue of broken columns, roots, moss, mist and light shafts; the blocks are carved column drums, and the drop turns the sun to golden hour",
+        "RUINS", "time runs backwards over the song: a dense jungle recedes, uncovering ruins that repair themselves, fallen drums flying back onto their columns and stones re-forming from dust, until the temple stands in its prime; the blocks are carved column drums, and the drop turns the sun to golden hour",
         [] { return std::unique_ptr<Universe>(new RuinsUniverse()); },
         // Fits most songs; the calm, contemplative ones a little better.
         [](const SongLook& l) { return 0.8f + 0.25f * (1.f - l.density) + 0.1f * (1.f - l.dynamics); },
