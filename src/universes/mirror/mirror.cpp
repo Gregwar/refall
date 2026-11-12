@@ -118,7 +118,7 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float CUBE_HALF = 0.46f, CUBE_Z = -0.47f;
 const vec3 PANEL_MIN(-5.32f, -10.02f, -1.12f), PANEL_MAX(5.32f, 10.32f, -1.1f);
-constexpr float MIR_HW = 2.0f, MIR_HH = 3.3f; // a mirror's half size
+constexpr float MIR_HW = 2.6f, MIR_HH = 4.3f; // a mirror's half size
 constexpr float FY = -10.02f;
 
 float hashf(float x) {
