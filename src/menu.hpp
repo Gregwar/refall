@@ -48,6 +48,21 @@ public:
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
     void snap(); // the animated focus jumps to its place (screenshots)
+    // Where the player was in the menu (kept between launches): the title entry, Voyage's difficulty and focused
+    // stage, free play's difficulty and playlist.
+    struct Place {
+        int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1;
+        std::string playlist;
+        bool operator==(const Place& o) const {
+            return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff && playlist == o.playlist;
+        }
+        bool operator!=(const Place& o) const { return !(*this == o); }
+    };
+    Place place() const;
+    // Back to a saved place (the stage clamped to the last unlocked one); the difficulties only when `difficulties`.
+    void restore(const Place& p, bool difficulties);
+    static bool loadPlace(const std::string& path, Place& p);
+    static bool savePlace(const std::string& path, const Place& p);
     // Free play's playlists (the free screen picks one); the store is the app's.
     void setPlaylists(PlaylistStore* s) { playlists_ = s; }
     bool editing() const { return editing_; }
@@ -104,7 +119,7 @@ private:
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
-    float time_ = 0, msgT_ = 0;
+    float time_ = 0, msgT_ = 0, lastInput_ = 0; // lastInput_: when a key was last pressed (the menu's idle time)
     std::string msg_, msgSub_;
     bool msgBad_ = false;
 

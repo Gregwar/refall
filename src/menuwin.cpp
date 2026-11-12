@@ -115,9 +115,13 @@ struct Worlds {
 void Menu::renderWorlds(int w, int h) {
     if (!worlds_) {
         worlds_ = std::make_unique<WorldPool>();
-        worlds_->setSnapshotsOnly(true); // no universe instance in the menu: cached snapshots, else procedural glass
+        worlds_->setSnapshotsOnly(true); // cached snapshots; the missing ones made one at a time while the menu is idle
+        worlds_->setGenerate(true, 0.4f);
+        Worlds wd0(*this);
+        worlds_->prefetch(wd0.tour());
     }
     static const MusicState mu; // (the snapshots-only pool renders nothing)
+    worlds_->setIdle(time_ - lastInput_ > 0.6f); // a universe's snapshot (100-500 ms) is never made under a key press
     Worlds wd(*this);
     wd.wants();
     const float dt = (float)std::clamp(time_ - g_lastT, 0.0, 0.1);
@@ -134,7 +138,13 @@ void Menu::renderWorlds(int w, int h) {
 // what is on screen: which universes, live at what rate
 
 void Worlds::wants() {
-    if (m.screen_ != Menu::TITLE) return; // Voyage and free play draw procedural glass in their hues
+    if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) { // the focused stage's universes, and its neighbours'
+        const int fs = focusedStage();
+        for (int s : {fs, fs + 1, fs - 1})
+            if (s >= 0 && s < nStages())
+                for (int k2 = 0; k2 < nSongs(s); k2++) pool.want(spec(s, k2), 0);
+        return;
+    }
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
@@ -243,43 +253,49 @@ Col playlistHue(const std::string& url, bool featured) {
 // The background: on the title, the game's universes (cached snapshots) in turn; on Voyage, procedural glass in the
 // focused stage's hue (the focused song's step of it in an open petal), the same cool grey for every locked stage; in
 // free play, the focused playlist's hue. The hue and the brightness ease over ~0.7 s.
+// The background: a universe of the game folded into the kaleidoscope (its cached snapshot; until it exists, procedural
+// glass in its colours, cross-fading to the image when it arrives). The title and free play tour the voyage's
+// universes; Voyage shows the focused stage's first universe (the focused song's in an open petal), tinted by the
+// stage's hue (the song's step of it), greyed and dimmed for a locked stage. Tint and brightness ease over ~0.7 s.
 void Worlds::kalBackground(const std::string& cur) {
     static Col tintNow{0.6f, 0.6f, 0.7f, 1.f};
-    static float lvlNow = 0.f;
+    static float lvlNow = 0.f, satNow = 1.f;
     static double lastT = -1;
     const bool first = lastT < 0;
     const float dt = first ? 1.f : (float)std::clamp(t - lastT, 0.0, 0.25);
     lastT = t;
     Col tint{0.6f, 0.6f, 0.7f, 1.f};
-    float lvl = 0.f;
-    GLuint a = 0, b = 0;
-    float mixAB = 1.f;
-    if (m.screen_ == Menu::TITLE) {
-        if (cur != g_cur) { // a source change folds in over 1.2 s
-            g_prev = g_cur;
-            g_cur = cur;
-            g_mix = g_prev.empty() ? 1.f : 0.f;
-        }
-        g_mix = std::min(1.f, g_mix + 1.f / 72.f);
-        unsigned char c[3];
-        menuUniverseColor(m.camp_, cur, c);
-        tint = rgb8(c);
-        a = pool.tex(g_prev.empty() ? g_cur : g_prev);
-        b = pool.tex(g_cur);
-        if (!a) a = b; // (a missing snapshot: procedural glass in the hue)
-        mixAB = g_prev.empty() ? 1.f : sstep(g_mix);
-    } else if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) {
+    float lvl = 0.f, sat = 1.f;
+    std::string spec = cur;
+    if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) {
         const int fs = focusedStage();
-        if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; }      // locked: a cool, dim grey
+        spec = this->spec(fs, m.petal_ ? m.song_ : 0);
+        if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; sat = 0.15f; } // locked: a cool, dim grey
         else tint = m.petal_ ? songCol(fs, m.song_) : stageCol(fs);
     } else if (m.screen_ == Menu::FREE) {
         const auto ch = m.plChoices();
         if (m.plSel_ < (int)ch.size()) tint = playlistHue(ch[m.plSel_].url, m.plSel_ == 0);
+    } else {
+        unsigned char c[3];
+        menuUniverseColor(m.camp_, cur, c);
+        tint = rgb8(c);
     }
+    // the source: the image when it exists, else procedural glass ("#"), and a change of either folds in over 0.8 s
+    const std::string key = pool.tex(spec) ? spec : spec + "#";
+    if (key != g_cur) {
+        g_prev = g_cur;
+        g_cur = key;
+        g_mix = g_prev.empty() ? 1.f : 0.f;
+    }
+    g_mix = std::min(1.f, g_mix + dt / 0.8f);
+    auto texOf = [&](const std::string& kk) -> GLuint { return kk.empty() || kk.back() == '#' ? 0 : pool.tex(kk); };
+    const GLuint a = texOf(g_prev.empty() ? g_cur : g_prev), b = texOf(g_cur);
     const float k = first ? 1.f : 1.f - std::exp(-dt / 0.7f);
     tintNow = mixc(tintNow, tint, k);
     lvlNow += (lvl - lvlNow) * k;
-    p.kaleido(a, b, mixAB, X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12, mixc(tintNow, hex(0xffffff), 0.3f), t, lvlNow);
+    satNow += (sat - satNow) * k;
+    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12,
+              mixc(tintNow, hex(0xffffff), 0.3f), t, lvlNow, satNow);
 }
 
 void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {

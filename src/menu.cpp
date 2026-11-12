@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 #include "library.hpp"
 #include "menuworlds.hpp"
@@ -86,6 +87,73 @@ const CampaignSong* Menu::hovered() const {
     return song_ < (int)songs.size() ? &songs[song_] : nullptr;
 }
 
+Menu::Place Menu::place() const {
+    Place p;
+    p.titleItem = titleItem_;
+    p.voyageDiff = diff_;
+    p.stage = stage_;
+    p.freeDiff = freeDiff_;
+    const auto ch = plChoices();
+    if (plSel_ < (int)ch.size()) p.playlist = ch[plSel_].url;
+    return p;
+}
+
+void Menu::restore(const Place& p, bool difficulties) {
+    if (p.titleItem >= 0 && p.titleItem < 3) titleItem_ = p.titleItem;
+    if (difficulties && p.voyageDiff >= 0 && p.voyageDiff < DIFF_COUNT) diff_ = p.voyageDiff;
+    if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
+    if (p.stage >= 0 && camp_ && camp_->size() > 0) {
+        int last = 0; // the last unlocked stage: the saved one if it still is, else that one
+        for (int s = 0; s < camp_->size(); s++)
+            if (!progress_ || progress_->unlocked(s)) last = s;
+        stage_ = std::min(p.stage, last);
+        song_ = 0;
+        row_ = 1;
+        petal_ = false;
+    }
+    if (!p.playlist.empty()) {
+        const auto ch = plChoices();
+        for (int i = 0; i < (int)ch.size(); i++)
+            if (ch[i].url == p.playlist) plSel_ = i;
+    }
+    snap(); // the rosette already turned to the stage
+}
+
+// One "key<TAB>value" per line.
+bool Menu::loadPlace(const std::string& path, Place& p) {
+    FILE* f = std::fopen(path.c_str(), "r");
+    if (!f) return false;
+    char line[1024];
+    while (std::fgets(line, sizeof(line), f)) {
+        std::string l = line;
+        while (!l.empty() && (l.back() == '\n' || l.back() == '\r')) l.pop_back();
+        const size_t tab = l.find('\t');
+        if (tab == std::string::npos) continue;
+        const std::string k = l.substr(0, tab), v = l.substr(tab + 1);
+        if (k == "title") p.titleItem = std::atoi(v.c_str());
+        else if (k == "voyage-difficulty") p.voyageDiff = std::atoi(v.c_str());
+        else if (k == "voyage-stage") p.stage = std::atoi(v.c_str()) - 1;
+        else if (k == "free-difficulty") p.freeDiff = std::atoi(v.c_str());
+        else if (k == "free-playlist") p.playlist = v;
+    }
+    std::fclose(f);
+    return true;
+}
+
+bool Menu::savePlace(const std::string& path, const Place& p) {
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+    const std::string tmp = path + ".tmp";
+    FILE* f = std::fopen(tmp.c_str(), "w");
+    if (!f) return false;
+    std::fprintf(f, "# Refall: where the menu was (--reset forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
+                    "free-difficulty\t%d\nfree-playlist\t%s\n",
+                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.playlist.c_str());
+    std::fclose(f);
+    std::filesystem::rename(tmp, path, ec);
+    return !ec;
+}
+
 void Menu::snap() {
     aTitle_ = (float)titleItem_;
     aFree_ = (float)freeDiff_;
@@ -135,6 +203,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     auto steps = [&](Action a) { return in.repeatSteps(a); };
     const int dy = steps(A_UI_DOWN) - steps(A_UI_UP), dx = steps(A_UI_RIGHT) - steps(A_UI_LEFT);
     const bool ok = in.pressed(A_UI_OK), back = in.pressed(A_UI_BACK);
+    if (dx || dy || ok || back || in.pressed(A_UI_ALT) || in.pressed(A_UI_ENTER) || !in.typed().empty()) lastInput_ = time_;
     if (msgT_ > 0) {
         msgT_ = std::max(0.f, msgT_ - dt);
         if (msgT_ < 4.2f && (ok || back || dx || dy)) { msgT_ = 0; return ch; } // a key dismisses the message

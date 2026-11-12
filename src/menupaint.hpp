@@ -28,8 +28,9 @@ public:
     void tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2);
     // A full-screen kaleidoscope folding two frames (mixed by `mixAB`) around (cx, cy) pixels into `segs` mirrored
     // segments, turned by `rot`, cut into glass facets with lead lines, tinted toward `tint`; a null frame is replaced by a
-    // procedural pane of glass in the tint's hues. Drawn at a third of the resolution, then spread over the frame.
-    void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level);
+    // procedural pane of glass in the tint's hues; `saturation` < 1 greys the frames (a locked stage).
+    void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,
+                 float saturation = 1.f);
     // An arc of an ellipse (radians, 0 = right, clockwise on screen), as line segments.
     void arc(float cx, float cy, float rx, float ry, float a0, float a1, float width, Col c, float soft = 1.f);
     ~Painter();

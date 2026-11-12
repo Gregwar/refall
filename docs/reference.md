@@ -48,7 +48,8 @@ overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:
 back, alt (Space), pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
 (each song starts S seconds before its end), e.g. a stage run through with `--autoplay`. Measuring the menu:
 `--menu-clip` prints its CPU and GPU time per frame; `ZEN_MENU_FINISH=1` adds the wall time with `glFinish` (software
-renderers, whose timer queries mean nothing), `ZEN_MENU_FULLRES=1` draws the kaleidoscope at full resolution to compare.
+renderers, whose timer queries mean nothing), `ZEN_MENU_KALEIDO_DIV=N` draws the kaleidoscope at 1/N of the resolution (it is full resolution by default),
+`ZEN_MENU_SLOW=1` lists the frames over 30 ms; the clip also prints the worst frame within 0.6 s of a key.
 
 ## refall-scope: see what the game hears
 
