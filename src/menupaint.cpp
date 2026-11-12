@@ -94,6 +94,21 @@ float fbm3(vec2 p) {
 }
 void main() {
     float a;
+    if (vPrm.w > 3.5) { // an image
+        vec3 c = texture(uTex, vLocal).rgb;
+        vec2 lp = (vLocal - 0.5) * 2.0 * vHalf;
+        float r = min(vPrm.x, min(vHalf.x, vHalf.y));
+        vec2 q = abs(lp) - vHalf + r;
+        float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+        a = (1.0 - smoothstep(-0.7, 0.7, d * max(vHalf.x, 1.0) / max(vHalf.x, 1.0))) * vCol.a;
+        o = vec4(c * vCol.rgb * a, a);
+        return;
+    }
+    if (vPrm.w > 2.5) { // flat
+        a = vCol.a;
+        o = vec4(vCol.rgb * a, a);
+        return;
+    }
     if (vPrm.w > 1.5) { // a sphere
         vec2 q = vLocal / vHalf.x;
         float r = length(q), aa = 1.6 / vHalf.x;
@@ -446,6 +461,96 @@ void Painter::quad(const float px[4][2], const float lc[4][2], float hx, float h
         const Col& cc = bottom && k >= 2 ? *bottom : c;
         verts_.push_back({px[k][0], px[k][1], lc[k][0], lc[k][1], hx, hy, cc.r, cc.g, cc.b, cc.a, rad, soft, lw, mode});
     }
+}
+
+void Painter::image(GLuint tex, float x, float y, float w, float h, Col tint, float radius, bool flipV) {
+    if (!tex || w <= 0 || h <= 0 || tint.a <= 0.f) return;
+    if (curTex_ != tex) { flush(); curTex_ = tex; }
+    const float hx = w * 0.5f, hy = h * 0.5f;
+    const float px[4][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}};
+    const float t0 = flipV ? 0.f : 1.f, t1 = 1.f - t0;
+    const float lc[4][2] = {{0, t0}, {1, t0}, {1, t1}, {0, t1}};
+    // the rounded corners work on pixel distances: the half size goes in vHalf, the uv in vLocal
+    static const int IDX[6] = {0, 1, 2, 0, 2, 3};
+    for (int k : IDX) {
+        const float lx = lc[k][0], ly = lc[k][1];
+        verts_.push_back({px[k][0], px[k][1], lx, ly, hx, hy, tint.r, tint.g, tint.b, tint.a, radius, 0, 0, 4.f});
+    }
+}
+
+void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2) {
+    const float P[3][2] = {{x0, y0}, {x1, y1}, {x2, y2}};
+    const Col C[3] = {c0, c1, c2};
+    for (int k = 0; k < 3; k++)
+        verts_.push_back({P[k][0], P[k][1], 0, 0, 0, 0, C[k].r, C[k].g, C[k].b, C[k].a, 0, 0, 0, 3.f});
+}
+
+void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level) {
+    static const char* KFS = R"(#version 330 core
+out vec4 o;
+uniform sampler2D uA, uB;
+uniform vec2 uRes, uC;
+uniform float uMix, uRot, uTime, uLevel;
+uniform int uSeg;
+uniform vec3 uTint;
+float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+void main() {
+    vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+    vec2 p = (fc - uC) / uRes.y;
+    float r = length(p);
+    float seg = 6.2831853 / float(uSeg);
+    float an = atan(p.y, p.x) + uRot;
+    float k = mod(an, seg);
+    float m = abs(k - seg * 0.5);               // mirrored inside each segment
+    vec2 q = vec2(cos(m), sin(m)) * r;
+    // glass facets: a triangle grid in the folded space, each facet its own shade, lead between them
+    vec2 g = q * 7.0;
+    vec2 tri = vec2(g.x - g.y * 0.57735, g.y * 1.1547);
+    vec2 id = floor(tri);
+    vec2 f = fract(tri);
+    float up = step(1.0, f.x + f.y);
+    vec2 cell = id * 2.0 + up;
+    float edge = min(min(f.x, f.y), abs(1.0 - f.x - f.y));
+    vec2 uv = q * 0.85 + vec2(0.5 + 0.06 * sin(uTime * 0.05), 0.5 + 0.06 * cos(uTime * 0.04));
+    uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;   // each facet refracts a little differently
+    uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
+    vec3 c = mix(texture(uA, uv).rgb, texture(uB, uv).rgb, uMix);
+    c *= 0.82 + 0.3 * h21(cell + 9.1);
+    c = mix(c, c * uTint * 1.5, 0.22);
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = max(mix(vec3(l), c, 1.35), 0.0);                    // art glass: richer colour
+    c = c * 1.25 + 0.04 + uTint * (0.10 + 0.14 * h21(cell + 5.3)); // lit from behind, tinted glass even over a dark world
+    c *= 0.85 + 0.3 * smoothstep(0.85, 0.0, edge);           // brighter toward each facet's middle
+    float lead = 1.0 - smoothstep(0.015, 0.04, edge);
+    float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y);
+    c = mix(c, vec3(0.03, 0.03, 0.05), max(lead * 0.7, segLine * 0.55));
+    c *= 0.9 + 0.2 * uLevel;
+    c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
+    o = vec4(c, 1.0);
+}
+)";
+    flush();
+    if (!kalProg_) kalProg_ = ugl::program(ugl::FULLSCREEN_VS, KFS, "menu kaleidoscope");
+    glDisable(GL_BLEND);
+    glUseProgram(kalProg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, a);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, b ? b : a);
+    glActiveTexture(GL_TEXTURE0);
+    ugl::set1i(kalProg_, "uA", 0);
+    ugl::set1i(kalProg_, "uB", 1);
+    ugl::set2f(kalProg_, "uRes", (float)w_, (float)h_);
+    ugl::set2f(kalProg_, "uC", cx, cy);
+    ugl::set1f(kalProg_, "uMix", mixAB);
+    ugl::set1f(kalProg_, "uRot", rot);
+    ugl::set1f(kalProg_, "uTime", time);
+    ugl::set1f(kalProg_, "uLevel", level);
+    ugl::set1i(kalProg_, "uSeg", segs);
+    glUniform3f(glGetUniformLocation(kalProg_, "uTint"), tint.r, tint.g, tint.b);
+    ugl::drawFullscreen();
+    glEnable(GL_BLEND);
+    curTex_ = 0;
 }
 
 void Painter::sphere(float cx, float cy, float r, Col c, float seed, int type, float rot) {

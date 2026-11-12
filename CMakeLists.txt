@@ -176,6 +176,8 @@ add_executable(tetris-universe
   src/menupaint.cpp
   src/menustyles.cpp
   src/menucosmos.cpp
+  src/menuworlds.cpp
+  src/menuwin.cpp
   src/pixelfont.cpp
 )
 # The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).

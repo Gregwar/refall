@@ -88,6 +88,12 @@ void Menu::renderSmooth(int w, int h) {
     u_ = std::min(w / 1920.f, h / 1080.f);
     sx_ = (w - 1920.f * u_) * 0.5f;
     sy_ = (h - 1080.f * u_) * 0.5f;
+    if (style_ >= WINDOWS) { // the live universes render first, then the painter draws
+        renderWorlds(w, h);
+        smoothMessage();
+        paint_.end();
+        return;
+    }
     paint_.begin(w, h);
     if (style_ >= GALAXY) {
         renderCosmos();

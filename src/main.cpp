@@ -171,7 +171,7 @@ static void usage() {
         "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
         "                       then exit (testing)\n"
         "  --menu-style S       the menus' look: 1 arcade (default), 2 cosmic, 3 swiss, 4 watercolour, 5 glass,\n"
-        "                       6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel\n"
+        "                       6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel, 11 windows, 12 kaleido\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
@@ -1840,7 +1840,7 @@ int main(int argc, char** argv) {
         else if (a == "--menu-style" && i + 1 < argc) {
             o.menuStyle = Menu::parseStyle(argv[++i]);
             if (o.menuStyle < 0) {
-                std::fprintf(stderr, "unknown menu style '%s': 1 arcade, 2 cosmic, 3 swiss, 4 watercolour, 5 glass, 6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel\n", argv[i]);
+                std::fprintf(stderr, "unknown menu style '%s': 1 arcade, 2 cosmic, 3 swiss, 4 watercolour, 5 glass, 6 galaxy, 7 orrery, 8 atlas, 9 synthwave, 10 pastel, 11 windows, 12 kaleido\n", argv[i]);
                 return 1;
             }
         }
