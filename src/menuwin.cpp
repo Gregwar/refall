@@ -337,6 +337,9 @@ void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng
     }
 }
 
+// The angle between the opened petal's song facets: wider for fewer songs (the fan spans about 0.56 rad).
+static float fanStep(int songs) { return std::min(0.19f, 0.56f / std::max(1, songs - 1)); }
+
 void Worlds::kalCampaign() {
     const int fs = focusedStage();
     const float ao = sstep(m.aOpen_); // the opened petal, 0 closed .. 1 open
@@ -346,6 +349,8 @@ void Worlds::kalCampaign() {
     // the rosette turns so that the focused stage sits at the reading position (the right)
     const float base = -m.aStage_ * TAU / std::max(1, n);
     auto ang = [&](float s) { return base + s * TAU / n; };
+    // angular sizes were drawn for 12 petals: narrower beyond, so that 15 still breathe
+    const float wk = 12.f / std::max(12, n);
     p.circle(cx, cy, 300 * u, hex(0x000000, 0.25f), 90 * u);
     // the order of the journey: an arc from petal to petal (1 -> 12), gold as far as the stages are open
     int nextStage = -1;
@@ -355,7 +360,7 @@ void Worlds::kalCampaign() {
         const float r = 296 * u;
         for (int s = 0; s + 1 < n; s++) {
             const bool o = open(s + 1);
-            const float a0 = ang((float)s) + 0.06f, a1 = ang((float)s + 1) - 0.06f;
+            const float a0 = ang((float)s) + 0.06f * wk, a1 = ang((float)s + 1) - 0.06f * wk;
             if (o) p.arc(cx, cy, r, r, a0, a1, 2.2f * u, hex(0xe8c06a, 0.7f));
             else
                 for (int i = 0; i < 6; i += 2)
@@ -384,7 +389,7 @@ void Worlds::kalCampaign() {
         // three clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
         // full hue lit, a gold rim, a gold number disc)
         const Col pc = !o ? c : cl ? mixc(c, hex(0xffffff), 0.12f * op) : mixc(c, hex(0x14141c), 0.5f);
-        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op), pc,
+        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op) * wk, pc,
              !o ? 0.6f : cl ? 0.95f : 0.7f, true, focusClosed ? hex(0xffffff, 0.95f * pulse) : cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
         if (cl) { // a cleared petal glows from within
             p.setAdditive(true);
@@ -392,21 +397,23 @@ void Worlds::kalCampaign() {
             p.setAdditive(false);
         }
         if (cl) { // a shine sweeping slowly across a cleared shard
-            const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * (1.f - std::fabs(k - 0.45f));
+            const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * wk * (1.f - std::fabs(k - 0.45f));
             p.setAdditive(true);
             p.line(cx + std::cos(a - hw) * r, cy + std::sin(a - hw) * r, cx + std::cos(a + hw) * r, cy + std::sin(a + hw) * r, 5 * u, hex(0xffffff, 0.35f * std::sin(k * PI)), 6 * u);
             p.setAdditive(false);
         }
-        // the songs: five small dots beyond a closed petal; the opened petal fans its five facets out
-        for (int k = 0; k < nSongs(s) && k < 5; k++) {
+        // the songs: small dots beyond a closed petal; the opened petal fans its facets out (centred on the petal)
+        const int ns = nSongs(s);
+        const float mid = (ns - 1) * 0.5f;
+        for (int k = 0; k < ns; k++) {
             const bool b = o && beaten(s, k);
             const Col sc = o ? songCol(s, k) : hex(0x4a4c55);
             if (op < 0.98f) {
-                const float da = 0.042f * (k - 2), r = 278 * u;
+                const float da = 0.042f * wk * (k - mid), r = 278 * u;
                 p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(b ? sc : mixc(sc, hex(0x101018), 0.5f), (1.f - op) * (o ? 1.f : 0.6f)));
             }
             if (op > 0.02f) {
-                const float da = 0.14f * (k - 2) * op;
+                const float da = fanStep(ns) * (k - mid) * op;
                 const float r0 = (300 + 18 * op) * u, r1 = r0 + 74 * u * op;
                 kite(cx, cy, a + da, r0, r1, 0.055f * op, b ? sc : mixc(sc, hex(0x101018), 0.4f), 0.95f * op, true, hex(0x08080c, 0.9f * op));
                 if (b) {
@@ -438,7 +445,7 @@ void Worlds::kalCampaign() {
     }
     // the focused song, when a petal is open
     if (m.aRow_ > 0.5f && ao > 0.5f) {
-        const float a = ang(m.aStage_) + 0.14f * (m.aSong_ - 2.f) * ao;
+        const float a = ang(m.aStage_) + fanStep(nSongs(fs)) * (m.aSong_ - (nSongs(fs) - 1) * 0.5f) * ao;
         const float r = (318 + 37) * u;
         const float fx = cx + std::cos(a) * r, fy = cy + std::sin(a) * r;
         const float pulse = 0.8f + 0.2f * std::sin(t * 2.2f);
@@ -468,8 +475,11 @@ void Worlds::kalCampaign() {
             p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), colS, Y(292), 18 * u, hex(0xffd27a), 1, 0.3f);
             p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * u, hex(0xffd27a, 0.7f), 1, 0.3f);
         }
-        for (int k = 0; k < nSongs(fs) && k < 5; k++) {
-            const float y = Y(350 + k * 70);
+        // the list of songs, spread over the room five rows took
+        const int ns = nSongs(fs);
+        const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
+        for (int k = 0; k < ns; k++) {
+            const float y = Y(350 + k * rowH);
             const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) * ao : 0.f;
             p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xffffff, 0.04f + 0.1f * g));
             p.rrectLine(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.5f * g));

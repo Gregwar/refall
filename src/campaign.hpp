@@ -2,6 +2,7 @@
 // Game modes beyond the music: the difficulty (EASY, NORMAL, EXPERT), the campaign (stages of songs played in a
 // row, each song at a velocity fixed by the campaign data, data/campaign.tsv) and the player's campaign progress
 // (stages cleared and best scores, per difficulty, saved in the user data folder).
+#include <map>
 #include <string>
 #include <vector>
 
@@ -44,17 +45,21 @@ private:
 // best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
 // its songs were all survived in one run started from its first song. Stage N + 1 is unlocked once stage N is
 // cleared on any difficulty (stage 1 always is), or everything with --unlock.
+// The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
+// beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
+// first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
 class Progress {
 public:
     static std::string defaultPath(); // <user data>/zentris/campaign-progress.tsv
-    void load(const std::string& path = "");
+    // `camp` maps the file's song ids to the campaign's stages and songs (without it, ids aren't resolved).
+    void load(const std::string& path = "", const Campaign* camp = nullptr);
     bool save() const;
     // --reset: forgets everything (the file is removed); prints what it held.
     void reset();
     void unlockAll() { unlockAll_ = true; }
     bool allUnlocked() const { return unlockAll_; }
 
-    bool unlocked(int stage) const { return unlockAll_ || stage == 0 || clearedAny(stage - 1); }
+    bool unlocked(int stage) const { return unlockAll_ || stage <= reach_ || clearedAny(stage - 1); }
     bool cleared(int stage, int diff) const;
     bool clearedAny(int stage) const;
     bool beaten(int stage, int song, int diff) const;
@@ -80,5 +85,9 @@ private:
     const StageRec* get(int stage) const { return stage >= 0 && stage < (int)stages_.size() ? &stages_[stage] : nullptr; }
     std::vector<StageRec> stages_;
     bool unlockAll_ = false;
+    int reach_ = 0;                  // stages up to this one are open (kept from clears a regrouping dropped)
     std::string path_;
+    const Campaign* camp_ = nullptr;
+    std::vector<std::string> keep_;  // records of songs the campaign doesn't have (kept as they were)
+    std::string stageKey(int stage) const; // its songs' ids, joined by commas
 };

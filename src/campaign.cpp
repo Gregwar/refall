@@ -143,6 +143,24 @@ bool Campaign::parse(const std::string& text) {
 
 // ---- Progress.
 
+namespace {
+// The first campaign layout (12 stages of 5 songs): progress files written then key songs by (stage, song).
+const char* const LEGACY_12x5[12][5] = {
+    {"H_9xqc084UA", "pJguiXxgaFo", "YyFyudLOkeA", "gjTkkswfVLE", "agu39idW5VY"},
+    {"7PcQtXcOxrY", "uOFTqVi-qp4", "HZ6L_6a7RcQ", "8ayH60ET4U0", "JNVXi3QpaMo"},
+    {"YrAc_iVKn48", "1TlckH2mCmI", "bCneCCvp0N0", "iZAqaykiS70", "u40t4XMxmMc"},
+    {"oHRrxtcm21Q", "PfPfGknEjXE", "sUwm6SjlpJ0", "F0R7LKT9ZaU", "S9KsOqTftFA"},
+    {"komlDqhaAKQ", "pLuQ0MGLBXU", "qbGZDEFHBmc", "TkceGi1EXzk", "IhVvPrGh48E"},
+    {"3KFPGWIfLnM", "Og0A10H7YqU", "xhpudFvsMjU", "S9ld5hiKg8w", "UKou-bIHgYA"},
+    {"lTgIZtKoYQc", "nXIZCMwFKis", "Zy7XaQdWbEg", "D5drYkLiLI8", "QBcX3cZQdek"},
+    {"MlwBZ2MSNtE", "r-sGtrldNKc", "_6-AtgXd27w", "6xD7YhdzmIc", "TsdT5bSGypc"},
+    {"KgkQ_HvNjSQ", "z2qstV9p-EU", "heUI3TYAZjw", "N2hKqI8nU7w", "eqc50IErJxo"},
+    {"iWiilOH4cQE", "fMvEOabCEFc", "zjANqMu7m2c", "ko1x5v-zaNU", "6QvMcQ2Eejo"},
+    {"n1ToxNTIyZc", "VUzg5liIjcs", "qdjmd9J6cr0", "dP7KuXdb-wE", "BSVOAD-Nyfc"},
+    {"4V3exJW1-Ig", "jmnBSB7DCTI", "MHWLaNbUx7M", "a0W9bS7qZSk", "9Sh9ZSecyFU"},
+};
+} // namespace
+
 std::string Progress::defaultPath() { return (platform::dataDir() / "zentris" / "campaign-progress.tsv").string(); }
 
 Progress::StageRec& Progress::at(int stage) {
@@ -197,37 +215,103 @@ int Progress::clearedCount() const {
     return n;
 }
 
+std::string Progress::stageKey(int stage) const {
+    std::string k;
+    if (!camp_ || stage < 0 || stage >= camp_->size()) return k;
+    for (auto& song : camp_->stages()[stage].songs) k += (k.empty() ? "" : ",") + song.id;
+    return k;
+}
+
 // The file, one record per line (tabs):
 //   unlock	all
-//   stage	<stage 1..>	<EASY|NORMAL|EXPERT>	<best run score>	[<its lines>]
-//   song	<stage 1..>	<song 1..>	<EASY|NORMAL|EXPERT>	<best score>	[<its lines>	<most lines>]
-// (the lines columns came later: a file without them loads, its lines unknown; -1 is unknown)
-void Progress::load(const std::string& path) {
+//   reach	<stage 1..>	(stages up to it open)
+//   stage	<stage 1..>	<EASY|NORMAL|EXPERT>	<best run score>	<its lines>	<its songs' ids, comma separated>
+//   songid	<video id>	<EASY|NORMAL|EXPERT>	<best score>	<its lines>	<most lines>
+// Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
+// without the ids (the 12 x 5 layout), migrated on load.
+void Progress::load(const std::string& path, const Campaign* camp) {
     path_ = path.empty() ? defaultPath() : path;
+    camp_ = camp && camp->size() > 0 ? camp : nullptr;
     stages_.clear();
+    keep_.clear();
     unlockAll_ = false;
-    std::istringstream in(readFile(path_));
+    reach_ = 0;
+    std::map<std::string, std::pair<int, int>> where; // video id -> (stage, song) in the campaign
+    if (camp_)
+        for (int s = 0; s < camp_->size(); s++)
+            for (int k = 0; k < (int)camp_->stages()[s].songs.size(); k++) where[camp_->stages()[s].songs[k].id] = {s, k};
+    auto stageOf = [&](const std::string& id) { auto it = where.find(id); return it == where.end() ? -1 : it->second.first; };
+    const std::string text = readFile(path_);
+    std::istringstream in(text);
     std::string line;
     auto diffOf = [](const std::string& s) {
         for (int d = 0; d < DIFF_COUNT; d++)
             if (s == difficultyName(d)) return d;
         return -1;
     };
+    auto num = [](const std::vector<std::string>& c, size_t i) { return c.size() > i && !c[i].empty() ? std::atoi(c[i].c_str()) : -1; };
+    bool legacy = false;
+    int dropped = 0;
+    auto song = [&](const std::string& id, int d, const std::vector<std::string>& c, size_t i, const std::string& raw) {
+        auto it = where.find(id);
+        if (it == where.end()) { keep_.push_back(raw); return; }
+        const int s = it->second.first, k = it->second.second;
+        setBeaten(s, k, d, std::atoi(c[i].c_str()), num(c, i + 1));
+        SongRec& r = at(s).songs[d][k];
+        r.mostLines = std::max(r.mostLines, num(c, i + 2));
+    };
     while (std::getline(in, line)) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         std::vector<std::string> c = splitTabs(line);
         if (c[0] == "unlock") unlockAll_ = true;
+        else if (c[0] == "reach" && c.size() >= 2) reach_ = std::max(reach_, std::atoi(c[1].c_str()) - 1);
         else if (c[0] == "stage" && c.size() >= 4) {
             const int s = std::atoi(c[1].c_str()) - 1, d = diffOf(c[2]);
-            if (s >= 0 && s < 100 && d >= 0) setCleared(s, d, std::atoi(c[3].c_str()), c.size() >= 5 && !c[4].empty() ? std::atoi(c[4].c_str()) : -1);
+            if (s < 0 || s >= 100 || d < 0) continue;
+            if (!camp_) { setCleared(s, d, std::atoi(c[3].c_str()), num(c, 4)); continue; }
+            if (c.size() >= 6 && c[5] == stageKey(s)) { setCleared(s, d, std::atoi(c[3].c_str()), num(c, 4)); continue; }
+            // a clear of a stage that is no longer one (regrouped): dropped, but the stage after it stays open
+            std::string last;
+            if (c.size() >= 6) last = c[5].substr(c[5].rfind(',') == std::string::npos ? 0 : c[5].rfind(',') + 1);
+            else if (s < 12) { legacy = true; last = LEGACY_12x5[s][4]; }
+            if (stageOf(last) >= 0) reach_ = std::max(reach_, std::min(camp_->size() - 1, stageOf(last) + 1));
+            dropped++;
+        } else if (c[0] == "songid" && c.size() >= 4) {
+            const int d = diffOf(c[2]);
+            if (d >= 0) song(c[1], d, c, 3, line);
         } else if (c[0] == "song" && c.size() >= 5) {
             const int s = std::atoi(c[1].c_str()) - 1, k = std::atoi(c[2].c_str()) - 1, d = diffOf(c[3]);
-            if (s >= 0 && s < 100 && k >= 0 && k < 20 && d >= 0) {
-                setBeaten(s, k, d, std::atoi(c[4].c_str()), c.size() >= 6 && !c[5].empty() ? std::atoi(c[5].c_str()) : -1);
-                SongRec& r = at(s).songs[d][k];
-                if (c.size() >= 7 && !c[6].empty()) r.mostLines = std::max(r.mostLines, std::atoi(c[6].c_str()));
+            if (s < 0 || s >= 100 || k < 0 || k >= 20 || d < 0) continue;
+            if (!camp_) { // (nothing to map with: by index, as written)
+                setBeaten(s, k, d, std::atoi(c[4].c_str()), num(c, 5));
+                continue;
+            }
+            legacy = true;
+            if (s < 12 && k < 5) song(LEGACY_12x5[s][k], d, c, 4, "");
+        }
+    }
+    // the stages where songs were beaten are open (they were reached)
+    if (legacy || dropped)
+        for (int s = 0; s < (int)stages_.size(); s++)
+            for (int d = 0; d < DIFF_COUNT; d++)
+                for (auto& r : stages_[s].songs[d])
+                    if (r.beaten) reach_ = std::max(reach_, s);
+    keep_.erase(std::remove(keep_.begin(), keep_.end(), std::string()), keep_.end());
+    if (legacy || dropped) {
+        int songs = 0;
+        for (auto& r : stages_)
+            for (int d = 0; d < DIFF_COUNT; d++)
+                for (auto& x : r.songs[d]) songs += x.beaten;
+        std::printf("[campaign] progress regrouped to %d stages: %d beaten songs kept, %d stage clears dropped, stages 1-%d open%s\n",
+                    camp_->size(), songs, dropped, reach_ + 1, legacy ? " (from the 12 x 5 layout)" : "");
+        if (legacy) { // the old file kept aside, once
+            std::error_code ec;
+            if (!fs::exists(path_ + ".bak", ec)) {
+                fs::copy_file(path_, path_ + ".bak", ec);
+                std::printf("[campaign] the old progress kept as %s.bak\n", path_.c_str());
             }
         }
+        save();
     }
 }
 
@@ -239,15 +323,22 @@ bool Progress::save() const {
     if (!f) { std::fprintf(stderr, "[campaign] could not save %s\n", path_.c_str()); return false; }
     std::fprintf(f, "# %s campaign progress (--reset forgets it)\n", GAME_TITLE);
     if (unlockAll_) std::fprintf(f, "unlock\tall\n");
+    if (reach_ > 0) std::fprintf(f, "reach\t%d\n", reach_ + 1);
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
             if (stages_[s].cleared[d])
-                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\n", s + 1, difficultyName(d), stages_[s].best[d], stages_[s].lines[d]);
+                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\t%s\n", s + 1, difficultyName(d), stages_[s].best[d], stages_[s].lines[d],
+                             stageKey(s).c_str());
             for (int k = 0; k < (int)stages_[s].songs[d].size(); k++) {
                 const SongRec& r = stages_[s].songs[d][k];
-                if (r.beaten) std::fprintf(f, "song\t%d\t%d\t%s\t%d\t%d\t%d\n", s + 1, k + 1, difficultyName(d), r.best, r.lines, r.mostLines);
+                if (!r.beaten) continue;
+                if (camp_ && s < camp_->size() && k < (int)camp_->stages()[s].songs.size())
+                    std::fprintf(f, "songid\t%s\t%s\t%d\t%d\t%d\n", camp_->stages()[s].songs[k].id.c_str(), difficultyName(d), r.best,
+                                 r.lines, r.mostLines);
+                else std::fprintf(f, "song\t%d\t%d\t%s\t%d\t%d\t%d\n", s + 1, k + 1, difficultyName(d), r.best, r.lines, r.mostLines);
             }
         }
+    for (auto& l : keep_) std::fprintf(f, "%s\n", l.c_str());
     std::fclose(f);
     fs::rename(tmp, path_, ec);
     if (ec) { std::fprintf(stderr, "[campaign] could not save %s\n", path_.c_str()); return false; }
@@ -264,7 +355,9 @@ void Progress::reset() {
     std::printf("[campaign] progress reset: %d stage clears and %d beaten songs forgotten%s (%s)\n", cleared, songs,
                 unlockAll_ ? ", stages locked again" : "", path_.c_str());
     stages_.clear();
+    keep_.clear();
     unlockAll_ = false;
+    reach_ = 0;
     std::error_code ec;
     fs::remove(path_, ec);
 }

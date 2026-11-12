@@ -169,7 +169,7 @@ static void usage() {
         "  --free               free play straight away, without the menu (also when songs are given)\n"
         "  --difficulty D       easy, normal or expert (default), or a gravity multiplier (e.g. 0.7): free play's\n"
         "                       speed (EASY x0.6, NORMAL x0.8, EXPERT x1), the voyage's difficulty\n"
-        "  --stage S[:SONG]     a voyage run straight away: stage S (1..12) from its song SONG (default 1)\n"
+        "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
         "  --unlock             unlock every voyage stage (saved)\n"
         "  --reset              forget the voyage progress (stages cleared, best scores)\n"
         "  --campaign FILE      the campaign data (default: data/campaign.tsv)\n"
@@ -1007,7 +1007,7 @@ int App::run() {
     }
 
     campaign_.load(opt_.campaignPath);
-    progress_.load(opt_.progressPath);
+    progress_.load(opt_.progressPath, &campaign_);
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
     menu_.setFreeDifficulty(opt_.difficulty);
@@ -1850,7 +1850,8 @@ int App::runMenuShot() {
         progress_ = Progress{};
         playlists_.demo();
         if (opt_.menuDemoKind == "normal-done") {
-            // every stage cleared on NORMAL (every song beaten), the first five on EASY, nothing on EXPERT
+            // every stage cleared on NORMAL (every song beaten), the first five on EASY (songs of the sixth beaten),
+            // nothing on EXPERT
             for (int s = 0; s < campaign_.size(); s++) {
                 const int n = (int)campaign_.stages()[s].songs.size();
                 int run = 0, runLines = 0;
@@ -1866,17 +1867,23 @@ int App::runMenuShot() {
                 if (s < 5) progress_.setCleared(s, DIFF_EASY, run * 3 / 4, runLines - 4 * n);
             }
         } else {
+            // (as many songs as the data's stages have)
             const int pts[5] = {8210, 9420, 10020, 9900, 10690}, ln[5] = {31, 36, 38, 35, 42};
-            for (int k = 0; k < 5; k++) {
-                progress_.setBeaten(0, k, DIFF_NORMAL, pts[k], ln[k]);
-                progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100, ln[k] - 6);
-                progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300, ln[(k + 2) % 5] + 4);
+            for (int s = 0; s < 2 && s < campaign_.size(); s++) {
+                const int n = (int)campaign_.stages()[s].songs.size();
+                int run = 0, runLines = 0, runE = 0, runLinesE = 0;
+                for (int k = 0; k < n; k++) {
+                    const int i = (k + 2 * s) % 5, p = pts[i] + 1300 * s, l = ln[i] + 4 * s;
+                    progress_.setBeaten(s, k, DIFF_NORMAL, p, l);
+                    run += p; runLines += l;
+                    if (s == 0) { progress_.setBeaten(s, k, DIFF_EASY, p - 2100, l - 6); runE += p - 2100; runLinesE += l - 6; }
+                }
+                progress_.setCleared(s, DIFF_NORMAL, run, runLines);
+                if (s == 0) progress_.setCleared(s, DIFF_EASY, runE, runLinesE);
             }
-            progress_.setCleared(0, DIFF_NORMAL, 48240, 182);
-            progress_.setCleared(0, DIFF_EASY, 37740, 152);
-            progress_.setCleared(1, DIFF_NORMAL, 54720, 202);
-            progress_.setBeaten(2, 0, DIFF_NORMAL, 11240, 40);
-            progress_.setBeaten(2, 1, DIFF_NORMAL, 9870, 37);
+            if (campaign_.size() > 2)
+                for (int k = 0; k < 2 && k < (int)campaign_.stages()[2].songs.size(); k++)
+                    progress_.setBeaten(2, k, DIFF_NORMAL, k ? 9870 : 11240, k ? 37 : 40);
             progress_.setBeaten(0, 0, DIFF_EXPERT, 12650, 44);
         }
     }
