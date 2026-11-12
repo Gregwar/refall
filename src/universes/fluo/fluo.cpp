@@ -16,7 +16,7 @@
 // violet and the stains light up one region after another, saturated and fluorescent (swelling a little on the
 // drop, then settling: no pulse); the drop's kicks set the wet paint dripping here and there. After the drop the
 // lights come back and the stains go dull again. Slow motion drains the paint of its color (only the pieces keep
-// theirs). A lock flicks a few specks of paint from the impact; a Tetris throws two big gobs far onto the walls;
+// theirs). A lock flicks a few specks of paint from the impact; a quad throws two big gobs far onto the walls;
 // game over bursts the whole stack from the top down. A new song in FLUO fades the wall back to clean; a change of
 // universe arrives on a clean wall.
 //
@@ -688,11 +688,11 @@ void FluoUniverse::onEvent(const GameEvent& ev, const Game&) {
         bool cleared[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // the blocks vanish at once (the board has dropped them) and burst into gobs of paint thrown out of the
         // well, the nearest to the completing piece first; each splashes onto the wall where it lands
-        rowBurst(ev.cells, (int)std::lround(ev.x), tetris ? 1.3f : 1.f, 0.f, 0.f);
-        if (tetris) { // the Tetris: two big gobs thrown far onto the walls on either side
+        rowBurst(ev.cells, (int)std::lround(ev.x), quadClear ? 1.3f : 1.f, 0.f, 0.f);
+        if (quadClear) { // the quad: two big gobs thrown far onto the walls on either side
             float my = 0.f;
             int n = 0;
             for (int y = 0; y < Game::H; y++)

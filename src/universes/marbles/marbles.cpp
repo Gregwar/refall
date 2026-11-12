@@ -479,7 +479,7 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         bool cleared[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
@@ -492,7 +492,7 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
             // its place, not this one's
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             pops_.push_back({p.x, p.y, 0.f, 0.f, type});
-            launch(v2(p.x, p.y), type, s.known ? s.seed : hashf((float)c.x, (float)c.y), s.known ? s.rot : 0.f, 0.f, tetris ? 1.25f : 1.f);
+            launch(v2(p.x, p.y), type, s.known ? s.seed : hashf((float)c.x, (float)c.y), s.known ? s.rot : 0.f, 0.f, quadClear ? 1.25f : 1.f);
         }
         // the rows above come down
         Slot next[Game::H][Game::W];
@@ -504,8 +504,8 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         for (int y = 0; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) slots_[y][x] = next[y][x];
-        // a Tetris: a wave of light runs out from the well through every marble
-        if (tetris) startWave(0, 1.3f, 3);
+        // a quad: a wave of light runs out from the well through every marble
+        if (quadClear) startWave(0, 1.3f, 3);
         break;
     }
     case GameEvent::TopOut: {

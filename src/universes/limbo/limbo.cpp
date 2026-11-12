@@ -16,7 +16,7 @@
 // the banks part from the middle and roll away, the whole scene turns to negative, the light sinks into a big low sun
 // with occluded light shafts through the trees, rim-lit silhouettes, a gust, a large flock taking off, every
 // lantern lit, the gears spinning, herons, crows, a far train and a balloon passing; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
-// row dissolves into the fog (its edges erode into mist, a few motes drift off); a Tetris sends a flock up from the
+// row dissolves into the fog (its edges erode into mist, a few motes drift off); a quad sends a flock up from the
 // forest. Slow motion is a still, moonlit fog; game over dissolves the stack from the top down as the fog closes in.
 // Changes of universe: the fog closes in to the bridge's color.
 //
@@ -662,7 +662,7 @@ void LimboUniverse::buildWorld(float sway, float beatStep) {
         prim(lay, p.x + dir * 0.06f * s, p.y - 0.02f * s, p.x + dir * 0.32f * s, p.y - 0.12f * s, 0.05f * s, 0.015f * s, 0, alpha);
         prim(lay, p.x - dir * 0.2f * s, p.y + 0.17f * s, p.x - dir * 0.28f * s, p.y + 0.15f * s, 0.022f * s, 0.006f * s, 0, alpha);
     }
-    // the flock of a Tetris, flying off over the forest
+    // the flock of a quad, flying off over the forest
     for (const Bird& b : flock_) {
         const float a = smoothstepf(0.f, 0.4f, b.t) * (1.f - smoothstepf(7.5f, 10.f, b.t));
         const float flap = std::sin(b.flap) * 0.55f;
@@ -1020,7 +1020,7 @@ void LimboUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(glint_, ng, sizeof(glint_));
         }
-        // a Tetris: a flock rises from the forest edge and flies off, the light warms for a moment
+        // a quad: a flock rises from the forest edge and flies off, the light warms for a moment
         if (ev.count >= 4) {
             celebrate_ = 1.f;
             const float s = rng_.chance(0.5f) ? 1.f : -1.f;

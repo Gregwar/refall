@@ -1391,7 +1391,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         }
         lines_ = lines;
         linesShown_ = lines;
-        // the growth eases toward the lines: a line's step is a breath, a Tetris a few (faster in a short song)
+        // the growth eases toward the lines: a line's step is a breath, a quad a few (faster in a short song)
         const float cap = (lines < linesEased_ ? 8.f : 1.1f) * std::clamp(paceScale(), 1.f, 2.5f);
         linesEased_ += std::clamp((lines - linesEased_) * 1.6f * wdt, -cap * wdt, cap * wdt);
         if (lines < linesEased_ - 6.f) {

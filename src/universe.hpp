@@ -52,7 +52,7 @@ enum HudRole {
     HUD_VALUE,    // the numbers under the labels
     HUD_NOTICE,   // a short notice floating on its own (combo, seek position)
     HUD_KEY,      // the key to press, in the bonus gauge
-    HUD_TOAST,    // a celebration's big word (SLOW MOTION, TETRIS, LEVEL 4)
+    HUD_TOAST,    // a celebration's big word (SLOW MOTION, QUAD, LEVEL 4)
     HUD_TOAST_SUB,// the line under it (+1200)
     HUD_HELP,     // the controls list (one line each)
     HUD_DIALOG,   // the lines of a centered message (paused, game over, loading)
@@ -148,7 +148,7 @@ struct Frame {
     bool dim;                           // dimmed without freezing (behind the game-over screen)
     float fade;                         // 0 black .. 1: startup fade in
     const std::vector<HudText>& hud;    // HUD text, in the universe's own typography
-    const std::vector<HudRect>& panels; // rectangles under the HUD text (tetris-universe-scene's menu)
+    const std::vector<HudRect>& panels; // rectangles under the HUD text (refall-scene's menu)
     // A break between songs: the game is hidden. Draw the world alone, as if there were no game: no well (its
     // walls, glass, back panel, grid, floor), no hold / next boxes, no bonus gauge, no HUD plates; only the HUD
     // text given in `hud` (the corner title). `game` is then a blank board. The host crossfades this frame with
@@ -197,8 +197,8 @@ public:
     // its registry entry. setSong picks one from the SongLook (look.variant >= 0 forces it). The HUD shows
     // "UNIVERSE · VARIANT", and hints() describes the active variant.
     virtual int variant() const { return 0; }
-    // Testing: force the next slow-motion / Tetris animation (index in its pool, -1 = random).
-    virtual void forceFx(int slow, int tetris) { (void)slow; (void)tetris; }
+    // Testing: force the next slow-motion / quad animation (index in its pool, -1 = random).
+    virtual void forceFx(int slow, int quadClear) { (void)slow; (void)quadClear; }
     // The host, before setSong: the lines this universe's scene takes from now on (sceneLinesFor). A new target
     // (the next song in the same universe) applies from the lines played so far: what grew stays where it is.
     void setSceneLines(float lines) { pendingScene_ = std::max(1.f, lines); }

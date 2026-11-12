@@ -1,7 +1,7 @@
 // LIBRARY: the blocks are books, and every cleared line brings three big books to a small, cosy library room that
 // fills with the game (complete at about 50 lines, one song).
 //
-// The board stays a clean Tetris board: each cell is one toy block in its piece's color, a bound volume with its
+// The board stays a clean game board: each cell is one toy block in its piece's color, a bound volume with its
 // spine toward us (a bevel, two rules, its pages showing down one side), over a deep saturated ground. When a row
 // clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
@@ -15,7 +15,7 @@
 //
 // The song: dust in the light; the lamps follow the music; in a real drop the shelves breathe (a wave a beat rolls
 // along each shelf, sliding the books out, tipped forward, and back into their places), loose pages flutter up from
-// the bookcases and a soft light runs along the collection; a Tetris runs one light along it. Slow motion: blue hour.
+// the bookcases and a soft light runs along the collection; a quad runs one light along it. Slow motion: blue hour.
 // Game over: the blocks topple out of the bottom of the well.
 //
 // Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the board
@@ -754,15 +754,15 @@ void LibraryUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        if (ev.count >= 4) tetrisT_ = 0.f;
+        if (ev.count >= 4) quadT_ = 0.f;
         std::vector<GameEvent::CellInfo> cs;
         for (auto& c : ev.cells)
             if (c.x >= 0 && c.x < Game::W && c.y >= 0 && c.y < Game::H) cs.push_back(c);
         // rows bottom first, each left to right: the order they go on the shelves
         std::sort(cs.begin(), cs.end(), [](const GameEvent::CellInfo& a, const GameEvent::CellInfo& b) { return a.y != b.y ? a.y > b.y : a.x < b.x; });
         bool full[Game::H] = {};
-        // each row's share of books (the song's pace), and the gap between their launches: a Tetris's dozen spread
-        // over two seconds; a bigger batch (a short song's Tetris: up to thirty) closer together, within 2.5 s
+        // each row's share of books (the song's pace), and the gap between their launches: a quad's dozen spread
+        // over two seconds; a bigger batch (a short song's quad: up to thirty) closer together, within 2.5 s
         int rowBooks[Game::H] = {}, total = 0;
         for (auto& c : cs)
             if (!full[c.y]) { full[c.y] = true; rowBooks[c.y] = booksFor(); total += rowBooks[c.y]; }
@@ -1196,7 +1196,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.2f : 0.5f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
     kickK_ = std::max(kickK_ * std::exp(-dt * 5.f), kickIn_);
     kickIn_ = 0.f;
     refreshK_ = approach(refreshK_, 0.f, 0.5f, dt);
@@ -1310,7 +1310,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             fl.out0 = normalize(vec3(-fwdW_.x, 0.f, -fwdW_.z));
             // the glide: a point out in the room in front of its place (on the open side of the screen, past the
             // HUD's columns), reached through a rise beside the well
-            // (each its own height, so a Tetris's books don't bunch)
+            // (each its own height, so a quad's books don't bunch)
             const float hv = ((g.seed >> 4) & 255) / 255.f;
             const vec3 front = oT + g.out * (1.6f + 0.6f * hv) + UP * (0.6f + 0.7f * hv);
             fl.c2 = front;
@@ -1463,9 +1463,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const float keyK = (1.f + 0.06f * wp + 0.08f * dropAmt_) * (1.f - 0.55f * slow_);
     const vec3 slowTint(0.72f, 0.84f, 1.18f);
     const vec3 fogCol = P.light ? lerp(P.skyA, vec3(1.f), 0.55f) : lerp(P.skyA, P.skyB, 0.6f) * 0.5f;
-    // the collection's light: the drop runs it slowly and on, a Tetris once along it
+    // the collection's light: the drop runs it slowly and on, a quad once along it
     float dropT = -10.f, dropK = 0.f;
-    if (tetrisT_ < 3.f) { dropT = tetrisT_ / 2.4f * 1.3f - 0.15f; dropK = 0.28f; }
+    if (quadT_ < 3.f) { dropT = quadT_ / 2.4f * 1.3f - 0.15f; dropK = 0.28f; }
     else if (dropAmt_ > 0.01f) { dropT = std::fmod(worldTime_ * 0.07f, 1.4f) - 0.2f; dropK = 0.2f * dropAmt_ * (0.75f + 0.25f * beatPulse_); }
     auto lighting = [&](GLuint p, bool board) {
         if (board) {

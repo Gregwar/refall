@@ -26,7 +26,7 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
-    void forceFx(int slow, int tetris) override { (void)slow; if (tetris >= 0) saluteT_ = 0.f; }
+    void forceFx(int slow, int quadClear) override { (void)slow; if (quadClear >= 0) saluteT_ = 0.f; }
 
     // A laser set (linear RGB once loaded; floats only, so two sets blend).
     struct Palette {
@@ -145,7 +145,7 @@ private:
     float stepPhase_ = 0.f, stepShown_ = 0.f, lastHalf_ = -1.f;
     vec3 flow_{0.f};
     float worldTime_ = 0.f;
-    float saluteT_ = 99.f;    // a Tetris: every projector flares up white once
+    float saluteT_ = 99.f;    // a quad: every projector flares up white once
 
     // ---- Effects.
     struct SparkFx { vec2 p; float t, life, size, len; vec3 c; };

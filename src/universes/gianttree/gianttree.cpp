@@ -12,7 +12,7 @@
 // are born, then it rides the trunk up), vine leaves spiral up the trunk sprouting as the tip passes. Each clear is
 // a spurt: the growth springs to its new target, the crown squashes and stretches, sparkles burst out of it,
 // streaks rush down past it, and the camera follows a moment later (the tree shoots up out of the frame first). A
-// Tetris is a huge spurt. The camera rides with the crown: low in the grass by the sapling, then up with the crown
+// quad is a huge spurt. The camera rides with the crown: low in the grass by the sapling, then up with the crown
 // looking down the soaring trunk at the land falling away, the clouds sinking under it, the planet curving, then
 // a ball far below. Game over: every leaf falls; the next game sprouts a new seed (the camera dives back down).
 //
@@ -712,7 +712,7 @@ void GiantTreeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             petalAcc_ += 8.f * lines;
         }
         if (lines >= 4) {
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
             bloomBurst_ = 1.f;
             if (flowT_ > 3.f) { flowT_ = 0.f; flowDur_ = 1.6f; flowK_ = 0.8f; }
             petalAcc_ += 110.f;
@@ -1095,7 +1095,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         // a spurt: a critically damped spring toward the target, over a second or so
         const float w = 4.2f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
-        // capped (a line is a big step now the journey fits in one song): a Tetris in the meadow takes a breath
+        // capped (a line is a big step now the journey fits in one song): a quad in the meadow takes a breath
         // longer instead of jolting the view
         gVel_ = std::min(gVel_, 3.f);
         g_ += gVel_ * wdt;
@@ -1138,7 +1138,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.4f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.4f, dt);
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     kickGlow_ = std::max(approach(kickGlow_, 0.f, 4.f, dt), kick * wp);
@@ -1362,7 +1362,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uDeep", smoothstepf(18.f, 20.5f, gc_));
     // the ringed planet only once the moon has gone by under the crown
     set1f(progSky_, "uRinged", smoothstepf(19.9f, 20.9f, gc_));
-    set1f(progSky_, "uGlow", 0.3f * wp + 0.6f * life + 0.4f * tetrisGlow_ + 0.2f * swell_);
+    set1f(progSky_, "uGlow", 0.3f * wp + 0.6f * life + 0.4f * quadGlow_ + 0.2f * swell_);
     set1f(progSky_, "uSpaceK", spaceK);
     set3f(progSky_, "uZenithC", pal_.zenith);
     set3f(progSky_, "uHorizonC", pal_.horizon);
@@ -1612,7 +1612,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uCamU", camU_);
     set2f(progComp_, "uTan", tanH_ * aspect_, tanH_);
     set2f(progComp_, "uRes", (float)width_, (float)height_);
-    set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.3f * wp + 0.35f * life + 0.4f * tetrisGlow_) * world);
+    set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.3f * wp + 0.35f * life + 0.4f * quadGlow_) * world);
     set1f(progComp_, "uTwinkle", 0.25f + 0.2f * wm + 0.25f * wp);
     set1f(progComp_, "uTime", time_);
     set1f(progComp_, "uSat", 1.1f);

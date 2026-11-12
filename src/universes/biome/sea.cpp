@@ -769,11 +769,11 @@ void SeaWorld::onEvent(const GameEvent& ev, const Game&) {
             const vec3 v((x - p.x) / T, (ty - p.y) / T + 0.5f * GRAV * T, (z - p.z) / T);
             // tumbling on all axes
             const vec3 axis = normalize(vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f)));
-            // each cube's water: a tenth of a line of sea (more for a Tetris)
+            // each cube's water: a tenth of a line of sea (more for a quad)
             throwCube(vec3(p.x, p.y, 0.f), c.type, v, axis * ctx.rng.range(3.f, 9.f), 0.f, (n >= 4 ? 1.5f : 1.f) / Game::W);
         }
         if (ev.count >= 4) {
-            // a Tetris: the sea answers with spray up from both sides
+            // a quad: the sea answers with spray up from both sides
             ctx.gust = std::max(ctx.gust, 0.8f);
             for (int i = 0; i < 4; i++) {
                 const float side = i % 2 ? 1.f : -1.f;

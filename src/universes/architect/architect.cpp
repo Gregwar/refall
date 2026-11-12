@@ -17,7 +17,7 @@
 //
 // The song: calm is a still site; mid and peak bring the cement mixer's drum turning, soft welding sparks on the
 // beat grid (every two beats), and at a peak the cranes' beacons blink; the drop switches the site's floodlights on
-// (a warm swell, settling over the bars). A Tetris lights every crane lamp and sends a shower of sparks. Slow
+// (a warm swell, settling over the bars). A quad lights every crane lamp and sends a shower of sparks. Slow
 // motion is a hushed, misty blue hour. Game over: the pieces grey out from the top; the next game starts from the
 // field again (the villa sinks back).
 //
@@ -1229,7 +1229,7 @@ void ArchitectUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         std::memcpy(seeds_, ns, sizeof(seeds_));
         if (ev.count >= 4) {
-            // a Tetris: every crane lamp lit, a shower of sparks over the villa
+            // a quad: every crane lamp lit, a shower of sparks over the villa
             for (auto& c : cranes_) c.beacon = 1.f;
             swell_ = std::max(swell_, 0.5f);
             for (int k = 0; k < 40; k++) {

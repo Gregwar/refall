@@ -911,12 +911,12 @@ void RecycleUniverse::onEvent(const GameEvent& ev, const Game& game) {
         bool rows[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) rows[c.y] = true;
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // each cube lifts out of its row and flies back to the heaps on its side
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H) continue;
             const vec3 w = layout::cellPos((float)c.x, (float)c.y);
-            const float delay = 0.018f * std::fabs(c.x - 4.5f) + (tetris ? 0.03f * (Game::H - 1 - c.y) : 0.f);
+            const float delay = 0.018f * std::fabs(c.x - 4.5f) + (quadClear ? 0.03f * (Game::H - 1 - c.y) : 0.f);
             if (incoming_[c.y][c.x]) {
                 for (Flight& fl : flights_)
                     if (fl.target == T_CELL && fl.a == c.x && fl.b == c.y) {
@@ -930,7 +930,7 @@ void RecycleUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 incoming_[c.y][c.x] = false;
             } else {
                 sendHome(vec3(w.x - (c.x < 5 ? 0.001f : -0.001f), w.y, 0.f), c.type, delay,
-                         0.62f + rng_.range(0.f, 0.1f), tetris ? 3.f : 2.1f, true);
+                         0.62f + rng_.range(0.f, 0.1f), quadClear ? 3.f : 2.1f, true);
             }
         }
         // compact like the game did (our view of the stack, the cubes still flying to it)
@@ -951,7 +951,7 @@ void RecycleUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         for (Flight& fl : flights_)
             if (fl.target == T_CELL && fl.b >= 0 && fl.b < Game::H && newY[fl.b] >= 0) fl.b = newY[fl.b];
-        if (tetris) ripple(0.7f, 0.5f, 0.75f);
+        if (quadClear) ripple(0.7f, 0.5f, 0.75f);
         break;
     }
     case GameEvent::TopOut: {

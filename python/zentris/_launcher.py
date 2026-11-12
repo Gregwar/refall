@@ -1,4 +1,4 @@
-"""Console entry points: run the bundled native binaries (tetris-universe, tetris-universe-scope, tetris-universe-scene)."""
+"""Console entry points: run the bundled native binaries (refall, refall-scope, refall-scene)."""
 
 import os
 import shutil
@@ -41,12 +41,12 @@ def _run(name: str) -> None:
 
 
 def main() -> None:
-    _run("tetris-universe")
+    _run("refall")
 
 
 def scope() -> None:
-    _run("tetris-universe-scope")
+    _run("refall-scope")
 
 
 def scene() -> None:
-    _run("tetris-universe-scene")
+    _run("refall-scene")

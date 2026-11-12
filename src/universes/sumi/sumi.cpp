@@ -508,7 +508,7 @@ void SumiUniverse::onEvent(const GameEvent& ev, const Game&) {
         bool cleared[Game::H] = {};
         for (auto& c : ev.cells) if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
         const bool fromRight = rng_.chance(0.5f);
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const InkCell& ic = ink_[c.y][c.x];
@@ -531,11 +531,11 @@ void SumiUniverse::onEvent(const GameEvent& ev, const Game&) {
             // ink lifting off into the water: a few specks that drift and diffuse
             vec3 p = cellPos((float)c.x, (float)c.y);
             vec3 col = piece_[c.type];
-            for (int i = 0; i < (tetris ? 3 : 2) && drops_.size() < 500; i++) {
+            for (int i = 0; i < (quadClear ? 3 : 2) && drops_.size() < 500; i++) {
                 Drop dr;
                 dr.pos = v2(p.x + rng_.range(-0.35f, 0.35f), p.y + rng_.range(-0.3f, 0.3f));
                 float a = rng_.range(0.f, TAU);
-                float sp = rng_.range(0.3f, 1.1f) * (tetris ? 1.6f : 1.f);
+                float sp = rng_.range(0.3f, 1.1f) * (quadClear ? 1.6f : 1.f);
                 dr.vel = v2(std::cos(a) * sp + (fromRight ? -0.6f : 0.6f), std::sin(a) * sp * 0.6f + 0.25f);
                 dr.size = rng_.range(0.07f, 0.16f);
                 dr.grow = rng_.range(1.5f, 3.2f);
@@ -547,8 +547,8 @@ void SumiUniverse::onEvent(const GameEvent& ev, const Game&) {
                 drops_.push_back(dr);
             }
         }
-        // Nothing is painted over the rows: their ink melts back into the paper. A Tetris stamps the red seal.
-        if (tetris) {
+        // Nothing is painted over the rows: their ink melts back into the paper. A quad stamps the red seal.
+        if (quadClear) {
             Stamp st;
             st.pos = v2(layout::HOLD_CENTER.x, 4.0f);
             st.size = 1.05f;
@@ -991,7 +991,7 @@ void SumiUniverse::drawText(const std::vector<HudText>& hud, const std::vector<H
     glBindVertexArray(textVao_);
     glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
     static char quadBuf[200000];
-    // Panels (tetris-universe-scene's menu): plain paint, normal blending.
+    // Panels (refall-scene's menu): plain paint, normal blending.
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (const HudRect& r : panels) {
         const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};

@@ -271,7 +271,7 @@ void main() {
     vec3 tr = trF * trR;
     float cl = 1.0 - 0.14 * uCloud * clouds(w, uTime);
     vec3 sunlit = mix(uSky, vec3(1.0), (1.0 - uShadow) + uShadow * tr) * cl;
-    // a Tetris: a burst of sun over the well
+    // a quad: a burst of sun over the well
     vec2 fq = (w - uFlare.xy) / max(uFlare.z, 0.01);
     sunlit += vec3(1.0, 0.96, 0.86) * uFlare.w * exp(-dot(fq, fq));
     vec2 v = vUv * 2.0 - 1.0;

@@ -233,7 +233,7 @@ private:
     float dropAmt_ = 0.f, dropSeq_ = 0.f, swell_ = 0.f, halo_ = 0.f;
     float groupOn_[3] = {1.f, 0.f, 0.f};
     float kickIn_ = 0.f, kickGlow_ = 0.f;
-    float tetrisT_ = 99.f;
+    float quadT_ = 99.f;
     double beat_ = 0.0;
     int lastHalf_ = -1;
     float planetSpin_ = 0.f, cloudSpin_ = 0.f;

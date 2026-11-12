@@ -19,7 +19,7 @@
 // lift each model gently, whole, on the beat grid (every two beats); a peak lights the studio a little more, lifts them
 // a little higher and its kicks give them a soft glow. The drop spins the turntables up and the models come apart and
 // back together every two bars, in step with the beat grid (a spiral staircase, an exploded view, a twisted column),
-// and come home quickly when it ends. A lock is the piece clicking onto the board; a Tetris throws its bricks high and
+// and come home quickly when it ends. A lock is the piece clicking onto the board; a quad throws its bricks high and
 // the models glow, lift and turn once. Slow motion is an
 // evening light raking in from the right; game over pops the stack's bricks off the board, from the top down.
 #include "universes/bricks/bricks.hpp"
@@ -910,7 +910,7 @@ void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 if (c.x == x && c.y == y) return std::clamp(c.type, 0, 6);
             return 0;
         };
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         int rowK = -1;
         for (int y = Game::H - 1; y >= Game::HIDDEN; y--) {
             if (!rows[y]) continue;
@@ -959,7 +959,7 @@ void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 f.slideDur = 0.3f;
                 const float shift = side ? (5.75f - edgeR) : (edgeL + 5.75f);
                 f.slideTo = vec3(p.x + sg * shift, p.y, 0.45f);
-                f.high = tetris ? 1.8f : 1.f;
+                f.high = quadClear ? 1.8f : 1.f;
                 const float launch = time_ + f.slideDur;
                 const int mid = targetModel(side, launch);
                 Model* m = model(mid);
@@ -970,7 +970,7 @@ void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 m->reserved++;
                 f.model = mid;
                 f.brick = b;
-                const float base = (tetris ? 1.5f : 1.15f) + 0.05f * rowK;
+                const float base = (quadClear ? 1.5f : 1.15f) + 0.05f * rowK;
                 const float arrive = std::max({launch + base, lastArrive_[side] + 0.09f, m->readyAt + 0.3f});
                 lastArrive_[side] = arrive;
                 f.arcDur = arrive - launch;
@@ -1002,7 +1002,7 @@ void BricksUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(press_, np, sizeof(press_));
             std::memcpy(pressV_, nv, sizeof(pressV_));
         }
-        if (tetris) {
+        if (quadClear) {
             // the models glow softly, lift whole and turn once (the gallery's models glow too)
             for (Model& m : models_)
                 if (!m.dying) m.glow = std::max(m.glow, m.onTable ? 0.12f : 0.08f);
@@ -1632,7 +1632,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     for (int s = 0; s < 2; s++) liftT_[s] += wdt;
     kickPrev_ = kick;
 
-    // the Tetris' extra turn, eased out
+    // the quad's extra turn, eased out
     for (int s = 0; s < 2; s++) {
         const float before = extraSpin_[s];
         extraSpin_[s] = approach(extraSpin_[s], 0.f, 1.4f, dt);

@@ -12,7 +12,7 @@
 // aurora (several curtains, folds drifting with the tempo, a light ripple on each beat) and the snow falls, peak
 // fills the sky (curtains overhead, tall rays converging upward, the kicks sending surges of light along them,
 // blowing snow skimming over the drifts). A lock freezes the piece (a front of frost crystallising from where it
-// touched down, the water turning to ice behind it); a cleared row cracks and shatters into falling shards; a Tetris
+// touched down, the water turning to ice behind it); a cleared row cracks and shatters into falling shards; a quad
 // is an auroral substorm (the whole sky flares and dances); slow motion freezes time (the falling snow hangs in the
 // air and glints, the aurora barely moves, the colors drain to silver, frost creeps in from the edges of the screen);
 // game over freezes the stack white from the bottom up, then it crumbles into powder while the blowing snow buries
@@ -561,7 +561,7 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // The rows crack from where the piece landed, then shatter (the shards in the tile shader).
         const float ox = layout::cellPos(ev.x, 0.f).x;
         const float seed = rng_.range(0.f, 50.f);
@@ -570,7 +570,7 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
             Dying d;
             d.x = p.x; d.y = p.y; d.t = 0.f; d.type = std::clamp(c.type, 0, 6); d.mask = maskOf(c);
             d.over = false; d.crumbled = false; d.delay = 0.f;
-            d.seed = seed; d.ox = ox; d.power = tetris ? 1.6f : 1.f;
+            d.seed = seed; d.ox = ox; d.power = quadClear ? 1.6f : 1.f;
             framePiece(d, c.x, c.y, c.type);
             dying_.push_back(d);
         }
@@ -591,7 +591,7 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
             for (int y = 0; y < Game::H; y++)
                 for (int x = 0; x < Game::W; x++) ice_[y][x] = next[y][x];
         }
-        if (tetris) {
+        if (quadClear) {
             stormT_ = 0.f;
             surge_ = std::max(surge_, 1.5f);
             surgeX_ = rng_.range(-30.f, 30.f);
@@ -680,7 +680,7 @@ void PolarUniverse::simulate(const Game& game, const MusicState& music, float dt
     surge_ = approach(surge_, 0.f, 0.8f, dt);
     surgeX_ += wdt * 25.f * (wind_ > 0.f ? 1.f : -1.f);
 
-    // Tetris: the substorm (a fast flare, the curtains dancing), easing over a few seconds.
+    // A quad: the substorm (a fast flare, the curtains dancing), easing over a few seconds.
     stormT_ += dt;
     storm_ = stormT_ < 4.f ? (stormT_ < 0.3f ? stormT_ / 0.3f : 1.f) * (1.f - smoothstepf(0.5f, 4.f, stormT_)) : 0.f;
     flare_ = storm_;

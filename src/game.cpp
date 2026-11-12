@@ -48,7 +48,7 @@ void Game::reset(uint64_t seed) {
     score_ = lines_ = 0;
     combo_ = -1;
     bonusLines_ = 0;
-    bonusActive_ = lastWasTetris_ = false;
+    bonusActive_ = lastWasQuad_ = false;
     bonusLeft_ = 0;
     active_ = false;
     spawnDelay_ = 0.4f;
@@ -293,14 +293,14 @@ void Game::lockPiece(bool dropped) {
         std::memcpy(rowOffset_, off, sizeof(off));
         static const int pts[5] = {0, 100, 300, 500, 800};
         combo_++;
-        const bool tetris = full.size() >= 4;
-        ev.backToBack = tetris && lastWasTetris_;
-        ev.bonus = tetris ? TETRIS_BONUS * (ev.backToBack ? 2 : 1) : 0;
+        const bool quadClear = full.size() >= 4;
+        ev.backToBack = quadClear && lastWasQuad_;
+        ev.bonus = quadClear ? QUAD_BONUS * (ev.backToBack ? 2 : 1) : 0;
         ev.points = pts[std::min(4, (int)full.size())] + 50 * combo_ + ev.bonus;
-        lastWasTetris_ = tetris;
+        lastWasQuad_ = quadClear;
         score_ += ev.points;
         lines_ += (int)full.size();
-        const int steps = (int)full.size() + (tetris ? TETRIS_EXTRA_STEPS : 0);
+        const int steps = (int)full.size() + (quadClear ? QUAD_EXTRA_STEPS : 0);
         const bool charged = !bonusActive_ && bonusLines_ < BONUS_LINES && bonusLines_ + steps >= BONUS_LINES;
         if (!bonusActive_) bonusLines_ = std::min(BONUS_LINES, bonusLines_ + steps);
         best_ = std::max(best_, score_);
@@ -321,7 +321,7 @@ void Game::restart() {
     score_ = lines_ = 0;
     combo_ = -1;
     bonusLines_ = 0;
-    bonusActive_ = lastWasTetris_ = false;
+    bonusActive_ = lastWasQuad_ = false;
     bonusLeft_ = 0;
     holdType_ = -1;
     holdUsed_ = false;
@@ -460,10 +460,10 @@ bool Game::planMove(int& bestRot, int& bestX) const {
             }
             double s = -0.51 * agg + 0.76 * cleared * cleared - 0.36 * holes * 3 - 0.18 * bump - 0.1 * wells -
                        0.05 * landing;
-            // Test hook: ZEN_TEST_TETRIS=1 keeps the right column free and waits for an I to clear four lines at once
-            // (to check a universe's Tetris in a clip).
-            static const bool tetrisTest = std::getenv("ZEN_TEST_TETRIS") != nullptr;
-            if (tetrisTest) {
+            // Test hook: ZEN_TEST_QUAD=1 keeps the right column free and waits for an I to clear four lines at once
+            // (to check a universe's quad in a clip).
+            static const bool quadTest = std::getenv("ZEN_TEST_QUAD") != nullptr;
+            if (quadTest) {
                 bool right = false;
                 for (auto& q : c) right = right || q[0] == W - 1;
                 if (cleared >= 4) s += 100.0;

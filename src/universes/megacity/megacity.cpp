@@ -21,7 +21,7 @@
 // the continent, then the planet as a ball. **The drop** (a real one only) raises a whole new district (a wave of
 // towers in the skyscraper stage) out of the ground (the frontier jumps out by half), and its lights come on patch by
 // patch on the beat; lanterns rise over a town, searchlights sweep the sky over a modern city. A clear's cells
-// dissolve into light that flows out of the well to the city; a Tetris adds fireworks. Slow motion slows the traffic
+// dissolve into light that flows out of the well to the city; a quad adds fireworks. Slow motion slows the traffic
 // and cools the light; game over turns the lights off from the edge inward, and the next game starts again from a
 // hut (the camera dives back down).
 //
@@ -675,7 +675,7 @@ void MegaCityUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         spurt_ = std::max(spurt_, 0.4f + 0.15f * lines);
         if (lines >= 4) {
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
             // fireworks over the city's edge
             const float R = std::min(cityR, 4.e6f);
             for (int b = 0; b < 5; b++) {
@@ -1081,7 +1081,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         // a spurt: a spring toward the target; a drop's district rises more slowly (a wave rolling outward)
         const float w = dropR1_ > 0.f && std::exp(g_) < dropR1_ * 0.98f ? 1.2f : 3.6f;
         gVel_ += (w * w * (gTarget_ - g_) - 2.f * w * gVel_) * wdt;
-        // capped: in a short song a line is a bigger step (a Tetris in the meadow up to 2.5x the 50-line one), and it
+        // capped: in a short song a line is a bigger step (a quad in the meadow up to 2.5x the 50-line one), and it
         // takes a breath longer instead of jolting the view (the 50-line pace stays under it)
         gVel_ = std::min(gVel_, 4.f);
         g_ += gVel_ * wdt;
@@ -1115,7 +1115,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.4f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.4f, dt);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
@@ -1725,7 +1725,7 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uCamU", camU_);
     set2f(progComp_, "uTan", tanH_ * aspect_, tanH_);
     set2f(progComp_, "uRes", (float)width_, (float)height_);
-    set1f(progComp_, "uBloomK", (0.45f + 0.35f * nightK) * (1.f + 0.2f * wp + 0.3f * life + 0.3f * tetrisGlow_) * world);
+    set1f(progComp_, "uBloomK", (0.45f + 0.35f * nightK) * (1.f + 0.2f * wp + 0.3f * life + 0.3f * quadGlow_) * world);
     set1f(progComp_, "uTwinkle", 0.25f + 0.2f * wm + 0.2f * wp);
     set1f(progComp_, "uTime", time_);
     set1f(progComp_, "uSat", 1.12f);

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-// Songs played when none are given (zentris and tetris-universe-scope).
+// Songs played when none are given (zentris and refall-scope).
 inline constexpr const char* DEFAULT_PLAYLIST = "https://www.youtube.com/playlist?list=PLPWC9IDC1n_Q";
 
 // True for http(s) URLs.

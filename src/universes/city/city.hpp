@@ -23,7 +23,7 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
-    void forceFx(int slow, int tetris) override;
+    void forceFx(int slow, int quadClear) override;
 
 private:
     struct Inst { float a0[4], a1[4], a2[4], a3[4]; };
@@ -112,7 +112,7 @@ private:
     bool inDrop_ = false, sectionKnown_ = false, sectionDrop_ = false;
     float dropWait_ = 0.f, dropT_ = 99.f, dropAmp_ = 0.f;
     float drop_ = 0.f, chorus_ = 0.f;
-    float tetrisT_ = 99.f, overT_ = 99.f, cityShift_ = 0.f;
+    float quadT_ = 99.f, overT_ = 99.f, cityShift_ = 0.f;
     float slow_ = 0.f;
     bool slowOn_ = false;
     float time_ = 0.f, world_ = 0.f;

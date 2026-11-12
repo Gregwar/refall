@@ -3,7 +3,7 @@
 scene per song, the game played at a calm pace), stitched together with crossfades.
 
 usage: tools/promo.py [OUT.mp4] [--songs N] [--before SEC] [--after SEC] [--fade SEC] [--size WxH]
-Needs a built tetris-universe (build/tetris-universe), yt-dlp and ffmpeg.
+Needs a built refall (build/refall), yt-dlp and ffmpeg.
 """
 import argparse
 import os
@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GAME = os.path.join(ROOT, "build", "tetris-universe")
+GAME = os.path.join(ROOT, "build", "refall")
 
 
 def default_playlist_id():
@@ -85,7 +85,7 @@ def main():
     ap.add_argument("--size", default="1920x1080")
     args = ap.parse_args()
     if not os.path.exists(GAME):
-        sys.exit(f"build tetris-universe first ({GAME} is missing)")
+        sys.exit(f"build refall first ({GAME} is missing)")
 
     ids = playlist_ids(default_playlist_id())
     random.shuffle(ids)

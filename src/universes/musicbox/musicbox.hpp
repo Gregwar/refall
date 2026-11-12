@@ -183,7 +183,7 @@ private:
     float dancer_ = 0.f;      // the dancer: 0 down (the trap closed) .. 1 up
     float dancerHold_ = 0.f;  // seconds she stays up after the drop ends
     float dancerTurn_ = 0.f;
-    float kickIn_ = 0.f, kickK_ = 0.f, refreshK_ = 0.f, tetrisT_ = 99.f, levelT_ = 99.f, windAngle_ = 0.f;
+    float kickIn_ = 0.f, kickK_ = 0.f, refreshK_ = 0.f, quadT_ = 99.f, levelT_ = 99.f, windAngle_ = 0.f;
     double time_ = 0.0;
     float worldTime_ = 0.f;
     bool slowOn_ = false;

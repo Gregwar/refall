@@ -4,7 +4,7 @@
 // with shots, cut on the song's beat grid ("grid": "bar" or "beat"), none shorter than `min_shot`. A chapter may
 // open with a title card on black ("card": {"text", "bars": N or "len": "6beats", "enabled"}); a chapter or a card
 // with "enabled": false is left out (the cards are kept here, off, to turn back on).
-// Times are anchors on the game's analysis of the song (tetris-universe --analysis), never fixed seconds:
+// Times are anchors on the game's analysis of the song (refall --analysis), never fixed seconds:
 //   start | end | drop:N (the Nth drop) | section:KIND[:N] (INTRO BREAK VERSE BUILD CHORUS DROP OUTRO) | bar:N | 12.5s
 //   then any offsets: "+ 2bars", "- 4beats", "+ 1.5s". A chapter's `end` is snapped to the nearest downbeat.
 // Shots: {"u": "id[:VARIANT]", "len": "4bars" | "6beats" (fixed) or "weight": 2 (a share of what is left),
@@ -60,7 +60,7 @@
   "chapters": [
     // off: the video starts on the game
     {"id": "opening", "enabled": false, "end": "section:BREAK",
-     "card": {"text": "Tetris Universe", "style": "title"}},
+     "card": {"text": "Refall", "style": "title"}},
 
     // the intro and the verse: light in the dark and crafts, fading in from black
     {"id": "discover", "end": "drop:1 - 1bar",
@@ -97,6 +97,6 @@
                {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "12.2"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
      "outro": {"fade": "2bars",
-               "title": {"text": "Tetris Universe", "style": "title", "at": "end - 6bars", "wipe": 9.0, "fade": 2.0}}}
+               "title": {"text": "Refall", "style": "title", "at": "end - 6bars", "wipe": 9.0, "fade": 2.0}}}
   ]
 }

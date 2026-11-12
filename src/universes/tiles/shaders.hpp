@@ -132,7 +132,7 @@ uniform vec4 uHudL, uHudR, uQuietA, uQuietB, uQuietC;
 uniform float uDrop;        // the drop: the gold ablaze (0..1)
 uniform float uIgnite;      // its front's radius from the well
 uniform vec4 uWave;         // a ripple lifting the tesserae: radius, amplitude, width, 0
-uniform vec4 uRingGlint;    // a Tetris's ring: center x, y, angle, strength
+uniform vec4 uRingGlint;    // a quad's ring: center x, y, angle, strength
 uniform vec2 uRingR;        // its inner and outer radius
 uniform float uSparkle;     // how much the smalti sparkle (the section)
 uniform float uGlintK;
@@ -418,7 +418,7 @@ void main() {
     // a glint on the beat grid; the tap of a tessera just set
     c += (mat > 1.5 ? alb * 2.5 + 0.1 : vec3(0.35)) * glint * pow(nh, 6.0) * 2.0 * (1.0 - 0.6 * quiet);
     c += (mat > 1.5 ? alb * 1.8 : alb * 0.6 + 0.12) * tap * 0.9;
-    // a Tetris's ring: a glint running around it
+    // a quad's ring: a glint running around it
     if (uRingGlint.w > 0.001) {
         vec2 d = w - uRingGlint.xy;
         float rr = length(d);

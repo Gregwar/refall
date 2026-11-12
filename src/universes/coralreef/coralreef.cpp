@@ -12,7 +12,7 @@
 //
 // The music: calm is still, slow water; mid stirs the fish and the surge; a peak brightens the light shafts, the
 // schools swim fast and tight and the kicks pulse the caustics (a little brighter, the water surging on). The drop
-// brings a manta ray gliding past behind the well, its wings beating slowly. A Tetris: the schools gather and
+// brings a manta ray gliding past behind the well, its wings beating slowly. A quad: the schools gather and
 // swirl together behind the well for a while. Slow motion turns the light deep blue. Game over: the light sinks
 // to the deep, the reef recedes for the next game.
 //
@@ -951,7 +951,7 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
             clearPts_.insert(clearPts_.end(), pts.begin(), pts.end());
             clearPending_ = true;
         }
-        if (ev.count >= 4) { // a Tetris: the schools gather and swirl together, on one side of the well or the other
+        if (ev.count >= 4) { // a quad: the schools gather and swirl together, on one side of the well or the other
             swirlT_ = 0.f;
             swirlSide_ = -swirlSide_;
             swirlC_ = vec3(10.5f * swirlSide_, 3.3f, 1.5f);
@@ -1107,7 +1107,7 @@ void CoralReefUniverse::updateFish(float dt, float energy, float melody, float s
                     coh = coh / (float)cnt - f.p;
                     want += normalize(ali) * 0.9f + coh * 0.35f + sep * 2.2f;
                 }
-                // a Tetris: they wheel round the swirl's axis
+                // a quad: they wheel round the swirl's axis
                 if (swirl > 0.f) {
                     const vec3 rd = f.p - swirlC_;
                     want += normalize(vec3(-rd.z, 0.f, rd.x) + vec3(0.f, 0.1f * std::sin(time_ + f.seed * 9.f), 0.f)) * (1.3f * swirl);

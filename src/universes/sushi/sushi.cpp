@@ -10,7 +10,7 @@
 // A cleared row's maki slide out of the box, the left half to the left and the right half to the
 // right (out of the row before the stack settles), then hop in arcs to the cats, who open their mouths, catch them
 // and chew, eyes squeezed shut with joy, a heart rising, a little "nom". The more lines, the more cats pop up from
-// behind the counter (a Tetris is a feast and brings two more). The one ornament is a noren in the upper right.
+// behind the counter (a quad is a feast and brings two more). The one ornament is a noren in the upper right.
 //
 // The song: calm parts are a quiet shop (the belt still, the cats dozing); a chorus starts the belt and the cats bob
 // their heads on the beat grid (every two beats), the noren sways; a peak warms the wall, the cats bounce and the
@@ -605,7 +605,7 @@ void SushiUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         eatenLines_ += ev.count;
         if (ev.count >= 4) {
-            // a Tetris: a feast (two more cats come, sparkles all along the counter)
+            // a quad: a feast (two more cats come, sparkles all along the counter)
             feast_ = 1.f;
             feastBonus_ += 2;
             for (const Cat& c : cats_) {
@@ -1193,7 +1193,7 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
     feast_ = approach(feast_, 0.f, 0.5f, dt);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
 
-    // ---- The counter fills with cats as the lines are eaten (a Tetris brings two more).
+    // ---- The counter fills with cats as the lines are eaten (a quad brings two more).
     {
         int active = 0, perSide[2] = {0, 0};
         for (const Cat& c : cats_)

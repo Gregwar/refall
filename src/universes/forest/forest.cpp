@@ -14,7 +14,7 @@
 //
 // The forest grows with the lines: a new song starts with a dark forest and a few faint plants; each cleared row
 // breaks into spores that drift out of the well to an empty spot, where a new plant comes up and stays for the song
-// (a Tetris sows a cluster of four at once and the whole forest flares up). The spots fill in stages (the front row, then
+// (a quad sows a cluster of four at once and the whole forest flares up). The spots fill in stages (the front row, then
 // the bark and the left's threads, then a back row), so the forest keeps growing to the end of a long song; once
 // every spot is taken, new lines make the old plants grow fuller.
 //
@@ -709,9 +709,9 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         std::vector<int> targets;
-        if (tetris) {
+        if (quadClear) {
             // a cluster of four, close together
             const int first = sprout(1.0f, (sideFlip_++ % 2) ? 1.f : -1.f, true);
             if (first >= 0) {
@@ -733,7 +733,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     if (got >= 0) targets.push_back(got);
                 }
             }
-            tetrisGlow_ = 1.f;
+            quadGlow_ = 1.f;
             // the whole forest breathes out spores
             int n = 0;
             for (const Plant& p : plants_) {
@@ -769,7 +769,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 Mote m;
                 m.kind = 1;
                 m.p = m.p0 = vec2{p.x, p.y};
-                const int ti = targets.empty() ? -1 : targets[tetris ? (size_t)c.x * targets.size() / Game::W : k % targets.size()];
+                const int ti = targets.empty() ? -1 : targets[quadClear ? (size_t)c.x * targets.size() / Game::W : k % targets.size()];
                 if (ti >= 0) {
                     const vec2 top = plantTop(plants_[ti]);
                     m.target = vec2{top.x + rng_.range(-0.3f, 0.3f) * plants_[ti].scale, top.y + rng_.range(-0.3f, 0.3f)};
@@ -1132,7 +1132,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     float festT = 0.f;
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.6f * smoothstepf(16.f * spb, 48.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.2f : 0.3f, dt);
-    tetrisGlow_ = approach(tetrisGlow_, 0.f, 0.45f, dt);
+    quadGlow_ = approach(quadGlow_, 0.f, 0.45f, dt);
     float bass = 0.f;
     for (int i = 0; i < 3; i++) bass += music.bandsFast[i];
     bass = saturate(bass / 3.f * 1.6f);
@@ -1291,7 +1291,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float arrive = dist / WAVE_SPEED;
         const float wave = waveK_ * smoothstepf(arrive - 0.4f, arrive + 0.2f, waveT_) * std::exp(-std::max(0.f, waveT_ - arrive - 0.2f) / 1.8f);
         const float pulse = p.group == groupNow ? env * pulseK : 0.f;
-        float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * tetrisGlow_);
+        float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * quadGlow_);
         // a young plant lights up as it grows
         glow *= 0.35f + 0.65f * smoothstepf(0.f, 0.8f, p.grow);
         const vec3 ca = lerp(glow_[0], glow_[1], p.colMix), cb = lerp(glow_[1], glow_[0], 0.3f + 0.4f * p.colMix);

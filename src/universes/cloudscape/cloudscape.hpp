@@ -116,7 +116,7 @@ private:
     std::vector<Dying> dying_;
     struct Glint { vec2 p; float t, life, size; };
     std::vector<Glint> glints_;
-    float tetrisT_ = 9.f;
+    float quadT_ = 9.f;
 
     // ---- Game state seen by the universe.
     bool slowOn_ = false;

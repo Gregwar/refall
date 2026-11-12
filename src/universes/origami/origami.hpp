@@ -44,7 +44,7 @@ private:
     struct Crane {
         vec2 home{0, 0}, pos{0, 0}, from{0, 0};
         float scale = 1.f;
-        int color = 0;           // 0..6 a piece's paper, 7 the accent (a Tetris)
+        int color = 0;           // 0..6 a piece's paper, 7 the accent (a quad)
         int slot = -1;
         float age = 0.f;         // since its row was cleared (the row slides out, is folded into a crane, flies off)
         float arrive = 4.f;      // when it is in its place (the folding, then the flight)

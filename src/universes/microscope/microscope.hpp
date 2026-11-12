@@ -118,7 +118,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     bool dropMode_ = false;
     float stain_ = 0.f;            // the drop's stain soaked in, 0..1
-    float swell_ = 0.f;            // the drop's (and a Tetris') single swell of light
+    float swell_ = 0.f;            // the drop's (and a quad's) single swell of light
     float focus_ = 0.f, focusT_ = 0.f; // the focal plane (organisms' depth in focus)
     float kickIn_ = 0.f, kickEnv_ = 0.f;
     double time_ = 0.0;

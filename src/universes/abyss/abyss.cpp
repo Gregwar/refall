@@ -10,7 +10,7 @@
 // light, peak brings a giant whale with bioluminescent spots passing slowly behind the well and the bioluminescence
 // blooming through the water (the water lit in its accent, dense plankton, brightness pulsing with the kicks; a
 // drop's peak floods it more than a chorus', and its first downbeat surges the light). A lock makes the jelly quiver and stirs a few motes from under
-// it; a cleared row's jelly breaks into points of light (a brief burst of sparks); a Tetris makes the plankton bloom
+// it; a cleared row's jelly breaks into points of light (a brief burst of sparks); a quad makes the plankton bloom
 // all through the water at once; slow motion puts every light out but the pieces' (long slow glows) and an anglerfish's lure; game over
 // sinks the stack into the dark, its lights going out one by one. It leaves and enters by the water closing over it,
 // the distant lights going out one by one.
@@ -526,7 +526,7 @@ void AbyssUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::Clear: {
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             const int type = std::clamp(c.type, 0, 6);
@@ -538,7 +538,7 @@ void AbyssUniverse::onEvent(const GameEvent& ev, const Game&) {
             dying_.push_back(d);
             // deep down, the air bursts out of the jelly as a spray of tiny bubbles: flung outward fast, braked
             // hard by the water; touching ones merge into bigger bubbles, which rise slowly
-            const int n = tetris ? 30 : 24;
+            const int n = quadClear ? 30 : 24;
             for (int i = 0; i < n; i++) {
                 Bubble m;
                 const float a = rng_.range(0.f, TAU), sp = rng_.range(8.f, 18.f);
@@ -550,9 +550,9 @@ void AbyssUniverse::onEvent(const GameEvent& ev, const Game&) {
                 bubbles_.push_back(m);
             }
         }
-        if (tetris) {
+        if (quadClear) {
             // the plankton blooms all through the water at once (no front sweeping the screen): bursts of light
-            tetrisT_ = 0.f;
+            quadT_ = 0.f;
             const float bot = viewC_.y - viewH_.y;
             for (int i = 0; i < 220; i++) {
                 Spark s;
@@ -660,7 +660,7 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
     // structure's pace), and the bloom goes further.
     drive_ = approach(drive_, peak_ * smoothstepf(1.27f, 1.42f, music.hasSong ? music.speed : 1.f), 0.8f, dt);
     flash_ = approach(flash_, 0.f, 1.5f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
 
     // Marine snow sinks slowly, wandering.
     const float bot = viewC_.y - viewH_.y, top = viewC_.y + viewH_.y;
@@ -1351,8 +1351,8 @@ void AbyssUniverse::drawWorld() {
     set1f(progWorld_, "uSurge", surge_);
     set1f(progWorld_, "uBeat", beatGlow_);
     set1f(progWorld_, "uFlash", flash_);
-    set1f(progWorld_, "uTetris", tetrisT_);
-    set3f(progWorld_, "uTetrisCol", lerp(pal_.glow, pal_.glow2, 0.3f));
+    set1f(progWorld_, "uQuad", quadT_);
+    set3f(progWorld_, "uQuadCol", lerp(pal_.glow, pal_.glow2, 0.3f));
     set1f(progWorld_, "uSlow", slow_);
     const float lure = smoothstepf(0.3f, 1.f, slow_) * (1.f - saturate(bridge_.amount)) * (1.f - over_);
     set4f(progWorld_, "uLure", lureX_, lureY_, lure, 1.f);
@@ -1461,7 +1461,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progTile_, "uGlow", pal_.glow);
         set3f(progTile_, "uGlow2", pal_.glow2);
         set3f(progTile_, "uDeep", pal_.deep);
-        set1f(progTile_, "uWave", smoothstepf(0.f, 0.15f, tetrisT_) * (1.f - smoothstepf(0.3f, 2.f, tetrisT_)));
+        set1f(progTile_, "uWave", smoothstepf(0.f, 0.15f, quadT_) * (1.f - smoothstepf(0.3f, 2.f, quadT_)));
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);

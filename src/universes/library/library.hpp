@@ -218,7 +218,7 @@ private:
     float energy_ = 0.5f;
     bool dropMode_ = false;
     float dropAmt_ = 0.f;
-    float kickIn_ = 0.f, kickK_ = 0.f, refreshK_ = 0.f, tetrisT_ = 99.f;
+    float kickIn_ = 0.f, kickK_ = 0.f, refreshK_ = 0.f, quadT_ = 99.f;
     double time_ = 0.0;
     float worldTime_ = 0.f, beatPulse_ = 0.f;
     bool slowOn_ = false;

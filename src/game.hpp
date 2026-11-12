@@ -1,5 +1,5 @@
 #pragma once
-// Tetris rules: SRS rotation with wall kicks, 7-bag, hold, ghost, lock delay.
+// Game rules: SRS rotation with wall kicks, 7-bag, hold, ghost, lock delay.
 // Topping out dissolves the board and ends the game; restart() starts a new one (best score is kept).
 #include <algorithm>
 #include <cstdint>
@@ -19,9 +19,9 @@ struct Cell {
 struct GameEvent {
     enum Type { Move, Rotate, Lock, HardDrop, Clear, Hold, Spawn, TopOut, BonusReady, BonusStart, BonusEnd } type;
     int count = 0;                 // lines cleared / rows dropped
-    int points = 0;                // Clear: points scored; for a Tetris, the Tetris bonus included
-    int bonus = 0;                 // Clear: Tetris bonus points (doubled back-to-back)
-    bool backToBack = false;       // Clear: a Tetris right after another Tetris
+    int points = 0;                // Clear: points scored; for a quad, the quad bonus included
+    int bonus = 0;                 // Clear: quad bonus points (doubled back-to-back)
+    bool backToBack = false;       // Clear: a quad right after another quad
     float x = 0;                   // mean column, for stereo pan
     struct CellInfo { int x, y, type; };
     std::vector<CellInfo> cells;   // cells involved (locked cells, cleared cells, dissolved cells)
@@ -105,7 +105,7 @@ public:
     int combo() const { return combo_; }
 
     // Slow-motion bonus: each cleared line charges one step of a gauge (BONUS_LINES steps to fill it; a
-    // Tetris charges one extra step, so 5). Once full, activateBonus()
+    // quad charges one extra step, so 5). Once full, activateBonus()
     // starts it: the gauge drains over BONUS_SECONDS (meanwhile the app runs gravity at x0.25; the song
     // keeps its speed). Lines cleared during the bonus don't charge it.
     static constexpr int BONUS_LINES = 12;
@@ -118,9 +118,9 @@ public:
     bool bonusActive() const { return bonusActive_; }
     float bonusLeft() const { return bonusActive_ ? bonusLeft_ : 0.f; }
     bool activateBonus();
-    // Tetris bonus on top of the line score, doubled for back-to-back Tetrises.
-    static constexpr int TETRIS_BONUS = 400;
-    static constexpr int TETRIS_EXTRA_STEPS = 1; // a Tetris charges 4 + 1 gauge steps
+    // A quad bonus on top of the line score, doubled for back-to-back quads.
+    static constexpr int QUAD_BONUS = 400;
+    static constexpr int QUAD_EXTRA_STEPS = 1; // a quad charges 4 + 1 gauge steps
 
     std::vector<GameEvent>& events() { return events_; }
 
@@ -156,7 +156,7 @@ private:
     float visX_ = 0, visY_ = 0;
     int score_ = 0, lines_ = 0, best_ = 0, combo_ = -1;
     int bonusLines_ = 0; // gauge steps charged
-    bool bonusActive_ = false, lastWasTetris_ = false;
+    bool bonusActive_ = false, lastWasQuad_ = false;
     float bonusLeft_ = 0;
     float fixedLevel_ = 0;
     void endBonus();

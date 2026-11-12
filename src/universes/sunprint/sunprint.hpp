@@ -88,7 +88,7 @@ private:
     bool dropMode_ = false;
     float dev_ = 0.f;         // the drop's tints 0..1
     float swell_ = 0.f;       // the drop's light swell
-    float flare_ = 0.f;       // a Tetris: a burst of sun over the well
+    float flare_ = 0.f;       // a quad: a burst of sun over the well
     float flareY_ = 0.f;      // where (board y)
     float rinse_ = 0.f;       // a new song: the sheet is rinsed to its tint
     int tint_ = 0;            // the tint the open paper is going to (0, 1)

@@ -130,7 +130,7 @@ private:
     double time_ = 0.0;
     float worldTime_ = 0.f, beat_ = 0.f;
     int lastHalf_ = -1;
-    float tetrisGlow_ = 0.f;
+    float quadGlow_ = 0.f;
     float fireflyAcc_ = 0.f;
     int sideFlip_ = 0;
 

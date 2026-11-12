@@ -39,7 +39,7 @@ public:
     enum Kind { FISH = 0, JELLY = 1, MANTA = 2, WHALE = 3 };
 
 private:
-    // ---- Creatures of light: one per clear (a school of fish, jellyfish, a manta ray, a whale for a Tetris).
+    // ---- Creatures of light: one per clear (a school of fish, jellyfish, a manta ray, a whale for a quad).
     struct Creature {
         int kind = FISH;
         float size = 1.f;       // body length (board units)
@@ -158,7 +158,7 @@ private:
     bool wasDrop_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
     float kickIn_ = 0.f, kickGlow_ = 0.f;
-    float tetrisGlow_ = 0.f;
+    float quadGlow_ = 0.f;
     float drift_ = 0.f;
     float twinkleBeat_ = 0.f;
     double lastBeat_ = -1.0;

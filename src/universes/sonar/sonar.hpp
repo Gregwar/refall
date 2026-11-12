@@ -114,7 +114,7 @@ private:
     bool hasLevel_ = false;
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     bool dropMode_ = false;
-    float dropT_ = 99.f, fest_ = 0.f, swell_ = 0.f, tetrisGlow_ = 0.f;
+    float dropT_ = 99.f, fest_ = 0.f, swell_ = 0.f, quadGlow_ = 0.f;
     float kickIn_ = 0.f, kickEnv_ = 0.f;
     double time_ = 0.0;
     float worldTime_ = 0.f;

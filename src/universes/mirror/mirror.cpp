@@ -31,7 +31,7 @@
 // downbeat that settles) and each side's mirrors gather into a ring that turns slowly, the mirrors rolling with it like
 // the petals of a kaleidoscope, for the whole drop. A cleared row's cubes shatter into glinting shards
 // that drift back into the room and dissolve (at the real speed even in slow motion), and the light of the clear
-// sweeps across the mirrors; a Tetris turns the mirror once around, its thrown light sweeping the room. Slow motion
+// sweeps across the mirrors; a quad turns the mirror once around, its thrown light sweeping the room. Slow motion
 // is a cool moonlight from the right; game over frosts the stack, row by row from the top.
 //
 // Cost: one traced room pass (full resolution), six small reflection passes (each mirror's footprint, 2x

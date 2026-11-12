@@ -17,7 +17,7 @@
 // a bar and fires on the kicks, the cam lifts its follower, the linkage rocks; the print changes (the blueprint turns
 // into a white redline print, the film is exposed into a blueprint...) and the pieces' fills with it; every four bars
 // a new part is drawn. A cleared row is rubbed out (the lines lift in eraser streaks, nothing is drawn over the row);
-// each clear is a revision in the title block (a pen-drawn delta and the next letter), a Tetris a revision cloud.
+// each clear is a revision in the title block (a pen-drawn delta and the next letter), a quad a revision cloud.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like SUMI).
 #include "title.hpp"
@@ -842,7 +842,7 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bar
             for (auto& p : tri.pts) p.y -= 0.02f;
             emit(tri, saturate(revT_ / 0.45f), 1.f);
         }
-        // a Tetris: a revision cloud around the block, drawn by the pen, lifting after a few seconds
+        // a quad: a revision cloud around the block, drawn by the pen, lifting after a few seconds
         if (cloudT_ < 4.5f) {
             const float a = 1.f - smoothstepf(3.2f, 4.5f, cloudT_);
             Stroke cl;

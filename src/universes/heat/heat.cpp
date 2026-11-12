@@ -15,7 +15,7 @@
 // bubble of hot air leaves the stack with the kicks). The drop flares: the whole stack flashes hot and cools over
 // seconds, the camera switches to another colormap, the far shapes swell with the bars. A cleared row vents its heat:
 // its blocks fade out as they cool, the cells above it are warmed by the passing heat and a plume of hot air rises
-// out of the stack. A Tetris is an updraft. Slow motion is the camera's isotherm mode (grey but the hottest band),
+// out of the stack. A quad is an updraft. Slow motion is the camera's isotherm mode (grey but the hottest band),
 // game over the stack cooling into the room from the top down.
 //
 // The frame is one thermal image: the room, the air and the pieces are written as temperatures into a float
@@ -395,7 +395,7 @@ void HeatUniverse::updateAir(const Game& g, float dt) {
     for (const Blob& b : blobs_) splatAir(b.x, b.y + b.ry * 0.5f, 0.6f, b.temp * 1.6f * dt);
 
     // ---- advection: the air rises and sways (semi-Lagrangian), spreads a little and fades
-    const float up = 1.9f + 1.1f * wm + 1.4f * wp * (0.6f + 0.6f * dropAmt_) + 1.5f * tetris_;
+    const float up = 1.9f + 1.1f * wm + 1.4f * wp * (0.6f + 0.6f * dropAmt_) + 1.5f * quadFlash_;
     const float swayA = 0.5f + 0.4f * wp;
     const uint64_t s = seed_ ^ 0xA1Bull;
     for (int j = 0; j < ah_; j++) {
@@ -685,7 +685,7 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         // the vent: each column's heat passes up into the first cell above the cleared rows (the stack warms where
         // the row was), and a plume rises from the top of the stack over each cleared row
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         int lowest = -1, highest = Game::H;
         for (int y = 0; y < Game::H; y++)
             if (rows[y]) { lowest = std::max(lowest, y); highest = std::min(highest, y); }
@@ -701,7 +701,7 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         {
             const float wy = layout::cellPos(0.f, (float)lowest).y;
-            vents_.push_back({-4.5f, 4.5f, wy, (tetris ? 2.5f : 0.8f) * ev.count, 0.f, tetris ? 1.1f : 0.45f});
+            vents_.push_back({-4.5f, 4.5f, wy, (quadClear ? 2.5f : 0.8f) * ev.count, 0.f, quadClear ? 1.1f : 0.45f});
         }
         // compact the heat and the ids like the game did
         {
@@ -717,8 +717,8 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(heat_, nhv, sizeof(heat_));
         }
-        if (tetris) {
-            tetris_ = 1.f;
+        if (quadClear) {
+            quadFlash_ = 1.f;
             for (int y = 0; y < Game::H; y++)
                 for (int x = 0; x < Game::W; x++)
                     if (ids_[y][x]) heat_[y][x] = std::min(1.2f, heat_[y][x] + 0.25f);
@@ -1091,7 +1091,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     // the drop's colormap comes in on the downbeat, quickly (no muddy in-between), and leaves slowly
     colAmt_ = approach(colAmt_, dropMode_ ? wp : 0.f, dropMode_ ? 7.f : 0.5f, dt);
     flare_ = approach(flare_, 0.f, 0.35f, dt);
-    tetris_ = approach(tetris_, 0.f, 0.6f, dt);
+    quadFlash_ = approach(quadFlash_, 0.f, 0.6f, dt);
     const float warm = saturate(0.45f * wm + 0.55f * wp) + 0.2f * dropAmt_ * wp;
     hi_ = approach(hi_, lerpf(1.12f, 0.93f, saturate(warm)) - 0.03f * dropAmt_ * wp, 1.f, dt);
     lo_ = approach(lo_, 0.012f * dropAmt_ * wp, 1.f, dt);
@@ -1190,7 +1190,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", (float)(seed_ % 1000) * 0.137f);
     set1f(progBg_, "uWall", V.wall * (1.f - 0.25f * (1.f - wm)) + 0.01f * wp);
-    set1f(progBg_, "uAirGain", (0.13f + 0.09f * saturate(warm) + 0.06f * flare_ + 0.06f * tetris_) * (1.f - 0.5f * over_));
+    set1f(progBg_, "uAirGain", (0.13f + 0.09f * saturate(warm) + 0.06f * flare_ + 0.06f * quadFlash_) * (1.f - 0.5f * over_));
     set1f(progBg_, "uShimmer", 0.5f + 0.7f * saturate(warm));
     set1f(progBg_, "uGrain", V.grain);
     set1f(progBg_, "uWallHeat", 0.45f);

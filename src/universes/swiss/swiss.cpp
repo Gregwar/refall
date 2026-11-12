@@ -22,7 +22,7 @@
 // it; at a peak the kicks thicken the rules for an instant. The drop is a hard cut on its downbeat to the negative
 // print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
 // drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
-// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a Tetris sets
+// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a quad sets
 // "quad" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
 // swap). Game over slides the stack out row by row from the top.
 //
@@ -436,7 +436,7 @@ void SwissUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(pal_, np, sizeof(pal_));
         }
         if (ev.count >= 4) {
-            tetrisUntil_ = std::max(bar_, 0L) + 2;
+            quadUntil_ = std::max(bar_, 0L) + 2;
             compose(bar_, 1.2f, false);
         }
         break;
@@ -753,15 +753,15 @@ void SwissUniverse::compose(long bar, float dur, bool instant) {
     // is stacked on the right.
     {
         Target& t = T[E_SECTION];
-        const bool tetris = bar <= tetrisUntil_;
-        std::string word = tetris ? lower(QUAD_NAME) : lower(section_);
+        const bool quadClear = bar <= quadUntil_;
+        std::string word = quadClear ? lower(QUAD_NAME) : lower(section_);
         if (word.empty()) word = lvl == 0 ? "calm" : lvl == 1 ? "tempo" : "forte";
-        t.on = !drop && (tetris || lvl >= 1 || (fam == STACK && rb.chance(0.5f)));
+        t.on = !drop && (quadClear || lvl >= 1 || (fam == STACK && rb.chance(0.5f)));
         const bool inLeft = stackRight;
         if (inLeft && leftBusy) t.on = false;
         if (t.on) {
             const float y0 = inLeft ? BB : RB, len = TT - y0;
-            float cap = lvl >= 2 || tetris ? std::min(zw - 1.f, 6.f) : lvl == 1 ? std::min(zw - 2.f, 4.f) : 2.5f;
+            float cap = lvl >= 2 || quadClear ? std::min(zw - 1.f, 6.f) : lvl == 1 ? std::min(zw - 2.f, 4.f) : 2.5f;
             cap = std::min(cap, len / std::max(0.1f, wBold(word)));
             cap = std::max(1.f, std::floor(cap * 2.f) * 0.5f);
             const float x0 = inLeft ? LX : RX;
@@ -773,7 +773,7 @@ void SwissUniverse::compose(long bar, float dur, bool instant) {
             t.v[1] = y0 + std::min(spare, (float)rs.irange(0, 2));
             t.v[2] = cap;
             t.v[3] = step;
-            t.color = tetris ? 1 : 0;
+            t.color = quadClear ? 1 : 0;
             if (inLeft) leftBusy = true;
         }
     }

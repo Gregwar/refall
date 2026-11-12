@@ -27,12 +27,12 @@ Commands:
       Answers a thread: renders the scene again with the current build (same song, seed, time and level) as the
       "after" snapshot, the previous one being "before", and moves the thread to "to review".
   add --code CODE --message TEXT [--section VERSE] [--level 1] [--size 1280x720]
-      Opens a thread "to process" on a scene code (tetris-universe-scene's "send to dashboard"): renders it with tetris-universe-scene, at
+      Opens a thread "to process" on a scene code (refall-scene's "send to dashboard"): renders it with refall-scene, at
       that song section and level, into the "zenscene" batch.
   suggest --code CODE --branch BRANCH --after-bin SCENE_BIN --title TEXT --message TEXT [--section --level --size]
-      Opens a suggestion: the scene rendered with main's build/tetris-universe-scene (before) and with the branch's tetris-universe-scene
+      Opens a suggestion: the scene rendered with main's build/refall-scene (before) and with the branch's refall-scene
       (after). Replies to it re-render "after" with the branch's binary and bring it back to "suggestions".
-      --before-image / --after-image PNG replace the renders (for what tetris-universe-scene can't show, like the game's HUD).
+      --before-image / --after-image PNG replace the renders (for what refall-scene can't show, like the game's HUD).
   suggestions
       Prints the open suggestions (key, status, branch, title), to avoid proposing the same thing twice.
   resolve KEY
@@ -41,10 +41,10 @@ Commands:
 Everything lives in the user data folder (~/.local/share/zentris/scene-review/): one folder per batch (snapshots,
 scenes.jsonl with what reproduces each scene), threads.json (the threads and their state) and feedback.jsonl (every
 message, appended, for later processing).
-Needs a built tetris-universe (build/tetris-universe), and tetris-universe-scene (build/tetris-universe-scene) for the scenes it sends.
+Needs a built refall (build/refall), and refall-scene (build/refall-scene) for the scenes it sends.
 
-With universes, a scene "code" is a universe and its variant ("VECTOR:P3 AMBER", as tetris-universe --universe and
-tetris-universe-scene take it); "scene" is its label ("VECTOR · P3 AMBER"). Old threads keep their old scene codes, which the
+With universes, a scene "code" is a universe and its variant ("VECTOR:P3 AMBER", as refall --universe and
+refall-scene take it); "scene" is its label ("VECTOR · P3 AMBER"). Old threads keep their old scene codes, which the
 current binaries no longer understand (re-rendering those falls back to a random universe).
 """
 import argparse
@@ -68,8 +68,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GAME = os.path.join(ROOT, "build", "tetris-universe")
-SCENE = os.path.join(ROOT, "build", "tetris-universe-scene")
+GAME = os.path.join(ROOT, "build", "refall")
+SCENE = os.path.join(ROOT, "build", "refall-scene")
 DATA = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "zentris", "scene-review")
 CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "zentris", "youtube")
 THREADS = os.path.join(DATA, "threads.json")
@@ -137,7 +137,7 @@ def render(i, song, level, folder, size):
 
 def generate(args):
     if not os.path.exists(GAME):
-        sys.exit(f"build tetris-universe first ({GAME} is missing)")
+        sys.exit(f"build refall first ({GAME} is missing)")
     songs = cached_songs()
     if not songs:
         sys.exit(f"no downloaded song in {CACHE}: play the default playlist a little first")
@@ -355,7 +355,7 @@ def cmd_suggest(args):
     info_after = run_snapshot(after_cmd)
     if not info or not info_after:
         sys.exit("could not render the scene")
-    # Shots tetris-universe-scene can't make (e.g. the game's HUD): given images replace the renders.
+    # Shots refall-scene can't make (e.g. the game's HUD): given images replace the renders.
     for src, dst in ((args.before_image, tmp_before), (args.after_image, tmp_after)):
         if src:
             with open(src, "rb") as a, open(dst, "wb") as b:
@@ -402,7 +402,7 @@ def cmd_resolve(args):
 
 def cmd_add(args):
     if not os.path.exists(SCENE):
-        sys.exit(f"build tetris-universe-scene first ({SCENE} is missing)")
+        sys.exit(f"build refall-scene first ({SCENE} is missing)")
     if not args.message.strip():
         sys.exit("empty comment")
     folder = os.path.join(DATA, "zenscene")
@@ -413,7 +413,7 @@ def cmd_add(args):
     info = run_snapshot(cmd)
     if not info:
         sys.exit("could not render the scene")
-    # Numbered under the threads lock (tetris-universe-scene may send several at once).
+    # Numbered under the threads lock (refall-scene may send several at once).
     with threads_locked():
         jsonl = os.path.join(folder, "scenes.jsonl")
         sid = sum(1 for line in open(jsonl) if line.strip()) if os.path.exists(jsonl) else 0
@@ -583,10 +583,10 @@ function showScene(s, list) {
     <div class="dim" style="font-size:12px">song phases (blue calm, amber mid, red peak); white: the snapshot</div>
     <dl><dt>song</dt><dd>${esc(s.title)}</dd><dt>at</dt><dd>${fmt(s.time)} of ${fmt(s.duration)} · ${s.bpm} BPM</dd>
       <dt>energy</dt><dd>${s.energy.toFixed(2)}</dd><dt>code</dt><dd><code>${esc(s.code)}</code></dd></dl>
-    <div class="dim" style="font-size:12px">same universe: <code>tetris-universe --universe '${esc(s.code)}' 'ytdl:${esc(s.video)}'</code></div>`
-    : `<div><span class="level l${s.level}">${LV[s.level]}</span> ${esc(s.section)} · ${s.branch ? "suggestion, branch <code>" + esc(s.branch) + "</code>" : "sent from tetris-universe-scene"}</div>
+    <div class="dim" style="font-size:12px">same universe: <code>refall --universe '${esc(s.code)}' 'ytdl:${esc(s.video)}'</code></div>`
+    : `<div><span class="level l${s.level}">${LV[s.level]}</span> ${esc(s.section)} · ${s.branch ? "suggestion, branch <code>" + esc(s.branch) + "</code>" : "sent from refall-scene"}</div>
     <dl><dt>code</dt><dd><code>${esc(s.code)}</code></dd></dl>
-    <div class="dim" style="font-size:12px">same universe: <code>tetris-universe-scene --section ${esc(s.section.toLowerCase())} --level ${s.level} '${esc(s.code)}'</code></div>`}
+    <div class="dim" style="font-size:12px">same universe: <code>refall-scene --section ${esc(s.section.toLowerCase())} --level ${s.level} '${esc(s.code)}'</code></div>`}
     <div class="msgs">${msgs}</div>
     <textarea id="comment" placeholder="What is good, what should be reworked..."></textarea>
     <div class="buttons">${actions}</div>
@@ -714,7 +714,7 @@ def main():
     sg = sub.add_parser("suggest", help="open a suggestion (a branch's change, before/after)")
     sg.add_argument("--code", required=True)
     sg.add_argument("--branch", required=True)
-    sg.add_argument("--after-bin", required=True, help="the branch's tetris-universe-scene binary")
+    sg.add_argument("--after-bin", required=True, help="the branch's refall-scene binary")
     sg.add_argument("--title", required=True)
     sg.add_argument("--message", required=True)
     sg.add_argument("--section", default="VERSE")
@@ -725,7 +725,7 @@ def main():
     sub.add_parser("suggestions", help="list the suggestions")
     rs = sub.add_parser("resolve", help="close a merged or dropped suggestion")
     rs.add_argument("key")
-    a = sub.add_parser("add", help="open a thread on a scene code (tetris-universe-scene)")
+    a = sub.add_parser("add", help="open a thread on a scene code (refall-scene)")
     a.add_argument("--code", required=True)
     a.add_argument("--message", required=True)
     a.add_argument("--section", default="VERSE")

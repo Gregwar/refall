@@ -1,4 +1,4 @@
-// tetris-universe-scene: a universe viewer. The computer plays (blocks keep falling) while the menu on the left picks the
+// refall-scene: a universe viewer. The computer plays (blocks keep falling) while the menu on the left picks the
 // universe and its variant, the song phase (section, level) and the transition used for the next change of
 // universe, so universes and the transitions between them can be looked at without a song. "Send to dashboard"
 // makes a scene review thread (tools/scenereview.py) out of the universe shown and a comment.
@@ -63,7 +63,7 @@ private:
     void onChar(unsigned cp);
     void sendToDashboard();
     bool overButton(double mx, double my) const;
-    void tetris();
+    void quadClear();
 
     Options opt_;
     GLFWwindow* win_ = nullptr;
@@ -113,7 +113,7 @@ void SceneViewer::show(bool transition) {
     } else {
         R_.setUniverse(universe_, look, level_, levelEnergy(level_));
     }
-    std::printf("[tetris-universe-scene] %s  |  %s %s\n  tetris-universe --universe '%s'\n", R_.label().c_str(), segmentName(section_),
+    std::printf("[refall-scene] %s  |  %s %s\n  refall --universe '%s'\n", R_.label().c_str(), segmentName(section_),
                 LEVEL_NAMES[level_], spec().c_str());
     std::fflush(stdout);
 }
@@ -166,8 +166,8 @@ void SceneViewer::change(int row, int dir) {
     }
 }
 
-// A Tetris on the bottom rows (to look at the celebration).
-void SceneViewer::tetris() {
+// A quad on the bottom rows (to look at the celebration).
+void SceneViewer::quadClear() {
     GameEvent ev{GameEvent::Clear};
     ev.count = 4;
     for (int y = 18; y < 22; y++)
@@ -366,7 +366,7 @@ void SceneViewer::onKey(int key, int action, int mods) {
     case GLFW_KEY_I: if (press) show(false); break;
     case GLFW_KEY_F: if (press) game_.debugFillBoard(rng_()); break;
     case GLFW_KEY_B: if (press) { game_.debugChargeBonus(); game_.activateBonus(); } break;
-    case GLFW_KEY_X: if (press) tetris(); break;
+    case GLFW_KEY_X: if (press) quadClear(); break;
     case GLFW_KEY_L: if (press) R_.levelUp(); break;
     case GLFW_KEY_K: if (press) R_.drop(1.f); break;
     case GLFW_KEY_D:
@@ -411,7 +411,7 @@ void SceneViewer::sendToDashboard() {
     const std::string cmd = python + " " + platform::quoteArg(script) + " add --code " + platform::quoteArg(spec()) +
                             " --section " + segmentName(section_) + " --level " + std::to_string(level_) +
                             " --message " + platform::quoteArg(comment_);
-    std::printf("[tetris-universe-scene] sending to the dashboard: %s\n", comment_.c_str());
+    std::printf("[refall-scene] sending to the dashboard: %s\n", comment_.c_str());
     std::fflush(stdout);
     auto state = send_;
     state->store(1);
@@ -576,7 +576,7 @@ int SceneViewer::run() {
 
 void usage() {
     std::printf(
-        "usage: tetris-universe-scene [options] [UNIVERSE[:VARIANT]]\n"
+        "usage: refall-scene [options] [UNIVERSE[:VARIANT]]\n"
         "  Shows a universe (a random one, or the one given, as zentris shows it in its corner) while the computer\n"
         "  plays. The menu on the left picks the universe, its variant, the song phase and the transition used for\n"
         "  the next change of universe (T: next universe, V: next variant, both with that transition).\n"

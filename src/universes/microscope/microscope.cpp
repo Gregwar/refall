@@ -16,7 +16,7 @@
 // swims out of its own cell to the nearer side, growing on the way, and lives in the dish for the rest of the song: paramecia (a slipper fringed with beating
 // cilia), amoebas (a slow blob reaching out with pseudopods), pennate and centric diatoms (glass boats and discs of
 // fine striae), rotifers (wheels of cilia on a telescoping body), and volvox colonies (rolling spheres of tiny cells,
-// daughter colonies inside; a Tetris releases a big one). They roam the sides of the dish, steering clear of the well
+// daughter colonies inside; a quad releases a big one). They roam the sides of the dish, steering clear of the well
 // and the HUD, at their own depth: the focal plane drifts, so some of them are soft, out of focus. Beyond a cap the
 // oldest fade away. A new song rinses the dish.
 //
@@ -544,7 +544,7 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // the cells burst
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
@@ -553,7 +553,7 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             lyses_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.f});
         }
         // the organisms living in the cleared cells swim out (a row with none frees nothing: only the life shown in
-        // the cells is ever released; a Tetris, a big one among them)
+        // the cells is ever released; a quad, a big one among them)
         for (size_t k = 0; k < rows.size(); k++) {
             std::vector<const GameEvent::CellInfo*> row, lives;
             for (auto& c : ev.cells)
@@ -562,7 +562,7 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                     if (has_[c.y][c.x] && look_[c.y][c.x].life >= 0) lives.push_back(&c);
                 }
             if (lives.empty()) continue;
-            const size_t bigAt = tetris && k == 1 ? (size_t)rng_.irange(0, (int)lives.size() - 1) : lives.size();
+            const size_t bigAt = quadClear && k == 1 ? (size_t)rng_.irange(0, (int)lives.size() - 1) : lives.size();
             for (size_t i = 0; i < lives.size(); i++) {
                 const auto* c = lives[i];
                 CellLook l = look_[c->y][c->x];
@@ -570,7 +570,7 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 releaseFrom(l, p.x, p.y, c->type, 0.f, i == bigAt);
             }
         }
-        if (tetris) swell_ = std::max(swell_, 0.55f);
+        if (quadClear) swell_ = std::max(swell_, 0.55f);
         // the looks of the rows above step down
         {
             bool cleared[Game::H] = {};

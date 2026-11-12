@@ -19,7 +19,7 @@
 // The song: calm is the still, warm lamp and a slow turn; mid and peak a livelier lamp and glints on the brass, the
 // teeth sparkling as they ring at a peak. A real drop: the dancer's trap opens behind the cylinder and a small
 // porcelain dancer rises and turns in a ring of light on the beat, then settles back over the following bars. A
-// Tetris: a gleam runs round the pins. Slow motion: the governor slows and the light falls to evening. Game over:
+// quad: a gleam runs round the pins. Slow motion: the governor slows and the light falls to evening. Game over:
 // the box winds down. A level: the ratchet winds the spring.
 //
 // Layout contract: the board is drawn through the reference camera (raised a little and shifted back, so the
@@ -670,7 +670,7 @@ void MusicBoxUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (const Flight& f : flights_)
             if (f.kind == 0 && !f.world) start = std::max(start, f.delay - f.t + 0.12f);
         for (int r = 0; r < (int)rows.size(); r++) pinRow(ev.cells, rows[r], (int)rows.size(), true, start + 0.16f * r);
-        if (ev.count >= 4) tetrisT_ = 0.f;
+        if (ev.count >= 4) quadT_ = 0.f;
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;

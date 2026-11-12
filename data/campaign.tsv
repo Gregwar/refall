@@ -1,4 +1,4 @@
-# Tetris Universe campaign: 12 stages of 5 songs, played in a row (song 1 to 5).
+# Refall campaign: 12 stages of 5 songs, played in a row (song 1 to 5).
 # One line per song: stage, song (1..5), YouTube video id, universe (NAME or NAME:VARIANT, as --universe
 # takes it), the velocity as a game level (1..20, decimals allowed) on EASY, NORMAL and EXPERT, and the title.
 # Columns are separated by tabs; lines starting with # are comments. The game reads this file from the

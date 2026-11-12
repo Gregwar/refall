@@ -41,7 +41,7 @@ private:
     double z_ = 0.0, zVel_ = 0.0;
     double zBase_ = 0.0;          // the universe this game started from (a multiple of the loop)
     double creep_ = 0.0;          // the slow drift inward, always on
-    double bonus_ = 0.0;          // the Tetrises' plunges
+    double bonus_ = 0.0;          // the quads' plunges
     double breath_ = 0.0;         // a slow in and out of the zoom
     float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     bool zSet_ = false;

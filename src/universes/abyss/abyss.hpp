@@ -138,7 +138,7 @@ private:
     // never makes a bubble jump or pop)
     struct Bubble { float x, y, vx, vy, t, delay, r, seed, buoy; int type; float ox = 0.f, oy = 0.f, rd = 0.f; };
     std::vector<Bubble> bubbles_;
-    float tetrisT_ = 99.f;
+    float quadT_ = 99.f;
 
     // ---- Game state seen by the universe.
     bool slowOn_ = false;

@@ -13,7 +13,7 @@
 // paper, pleating against the wall, and the pleated packet glides to a folding corner on that side (under the right
 // HUD column, or in the left margin above the corner texts), turns over into a square and is folded into a crane
 // step by step, every flap turning about its crease in 3D. The crane then flies to a place around the well, where it
-// settles for the rest of the song: the margins fill up with the play. A Tetris folds a larger crane in the accent
+// settles for the rest of the song: the margins fill up with the play. A quad folds a larger crane in the accent
 // paper and a ripple of wing beats runs through the whole flock.
 //
 // Staging: calm, the cranes are still, the light soft and the creases faint; at mid, every two beats a few cranes
@@ -67,7 +67,7 @@ vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 vec3 mixHex(unsigned a, unsigned b, float t) { return ugl::toLinear(lerp(hex(a), hex(b), t)); }
 
 // The papers: the sheet and its other side (the drop), the seven papers of the pieces and their drop papers, the
-// back of the paper (seen when a cell folds over), the accent (a Tetris crane, the gauge) on each side; foil: a
+// back of the paper (seen when a cell folds over), the accent (a quad crane, the gauge) on each side; foil: a
 // metallic glint on the facets.
 struct VariantDef {
     const char* name;
@@ -1019,7 +1019,7 @@ void OrigamiUniverse::onEvent(const GameEvent& ev, const Game& game) {
             k++;
         }
         if (ev.count >= 4) {
-            // a Tetris: a ripple of wing beats through the flock
+            // a quad: a ripple of wing beats through the flock
             for (Crane& c : cranes_) {
                 if (c.leaving || c.age < c.arrive || c.fly > 0.05f) continue;
                 c.wingT = 0.f;

@@ -132,7 +132,7 @@ void main() {
         chart = max(chart, uChartA[i] * (1.0 - smoothstep(C.w * 0.4, C.w, length(vP - C.xyz))));
     }
     float chartL = chart * 0.3 * (0.55 + 0.45 * max(n.y, 0.0));
-    // the drop, a peak, a Tetris: the whole world surfacing, lit from above and toward the eye
+    // the drop, a peak, a quad: the whole world surfacing, lit from above and toward the eye
     float base = layer == 3 ? uCity : uBed;
     float baseL = base * (0.3 + 0.5 * max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0) + 0.2 * max(dot(n, V), 0.0));
 
@@ -165,7 +165,7 @@ void main() {
         glowW = wm * step(0.55, hash12(id + vec2(17.0, 3.0))) * uWin * far;
     }
     vec3 ec = layer == 3 ? uEchoCity : uEcho;
-    // the world surfacing (drop, peak, Tetris) shows mostly its lines: faint faces, crisp edges and contours
+    // the world surfacing (drop, peak, quad) shows mostly its lines: faint faces, crisp edges and contours
     vec3 col = ec * (lit * (fill + 1.25 * line + soft) + (baseL + chartL) * (0.28 * fill + 1.1 * line + soft) + cont * (0.35 * chart + 0.5 * base));
     col += uEchoCity * glowW * 0.9;
     float fog = exp(-dist / 48.0);

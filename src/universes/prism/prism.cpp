@@ -29,7 +29,7 @@
 // A lock flashes a glint where the piece touched down (a hard drop a brighter one with a few sparks along the
 // contact); a cleared row's cubes vanish at once and the row becomes a short burst of light traced through the
 // same glass (lighting the cubes around it, pooling on the floor, dispersed in a drop; at the real speed, even in
-// slow motion); a Tetris throws the light into a full spectrum for a few seconds; slow motion is
+// slow motion); a quad throws the light into a full spectrum for a few seconds; slow motion is
 // moonlight (cold beams, the haze and dust slowed); game over turns the stack to light, row by row from the top.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like FLUO).
@@ -768,7 +768,7 @@ void PrismUniverse::onEvent(const GameEvent& ev, const Game&) {
         bool cleared[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // the cubes vanish at once (the board has dropped them) and the row becomes a burst of light
         {
             Burst b;
@@ -776,11 +776,11 @@ void PrismUniverse::onEvent(const GameEvent& ev, const Game&) {
                 const vec3 w = layout::cellPos((float)c.x, (float)c.y);
                 b.cells.push_back(vec3(w.x, w.y, (float)c.type));
             }
-            b.power = tetris ? 1.5f : 1.f;
-            b.life = tetris ? 0.6f : 0.42f;
+            b.power = quadClear ? 1.5f : 1.f;
+            b.life = quadClear ? 0.6f : 0.42f;
             if (!b.cells.empty()) bursts_.push_back(b);
         }
-        if (tetris) tetrisT_ = 0.f;
+        if (quadClear) quadT_ = 0.f;
         // collapse the per-cell light like the board
         vec3 nl[Game::H][Game::W];
         vec2 nd[Game::H][Game::W];
@@ -1096,7 +1096,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
         }
         dropT_ += dt;
-        tetrisT_ += dt;
+        quadT_ += dt;
         dropWait_ = std::max(0.f, dropWait_ - dt);
         const bool dropish = sectionKnown_ ? sectionDrop_
                                            : (music.hasSong ? music.speed > 1.33f || (inDrop_ && music.speed > 1.26f) : inDrop_);
@@ -1154,7 +1154,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The light: the beams' strengths and the dispersion, then the rays through the glass.
     const float lvm = smoothstepf(0.2f, 1.f, lv_), lvp = smoothstepf(1.1f, 2.f, lv_);
-    const float tet = std::exp(-tetrisT_ / 1.6f) * (tetrisT_ < 8.f ? 1.f : 0.f);
+    const float tet = std::exp(-quadT_ / 1.6f) * (quadT_ < 8.f ? 1.f : 0.f);
     {
         // a drop is told by color (the dispersion), not by more light
         const float on[3] = {0.75f + 0.15f * lvm + 0.1f * lvp, 0.75f * lvm + 0.1f * lvp, 0.8f * lvp};

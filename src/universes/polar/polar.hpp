@@ -111,7 +111,7 @@ private:
     struct Powder { vec2 p, v; float size, t, life, alpha, seed, delay; bool puff; };
     std::vector<Powder> powder_;
     // A cleared cell shattering (or, game over, a cell freezing white then crumbling): ox the blast's origin (board
-    // x), power 1 (a Tetris more), seed shared by one clear's cells so its shards run across them.
+    // x), power 1 (a quad more), seed shared by one clear's cells so its shards run across them.
     struct Dying {
         float x, y, t, delay;
         int type, mask;

@@ -43,7 +43,7 @@ private:
         float fadeAt = 1e9f;     // world time it starts to fade
         float fadeDur = 3.f;
         float heat = 0.f, heatTo = 0.f; // molten 0..1 (eased)
-        int kind = 0;            // 0 mid, 1 peak (drop / chorus), 2 Tetris burst, 3 lock crack
+        int kind = 0;            // 0 mid, 1 peak (drop / chorus), 2 quad burst, 3 lock crack
     };
     std::vector<Net> nets_;
     void growNet(Net& n, int kind, float speed, uint64_t seed);
@@ -141,7 +141,7 @@ private:
         int type = 0;
     };
     std::vector<Shard> shards_;
-    void breakRows(const GameEvent& ev, bool tetris);
+    void breakRows(const GameEvent& ev, bool quadClear);
     struct Leaf { vec2 p, v; float rot, spin, turn, turnRate, size, t, life, seed; bool game = false; }; // game: out of the well
     std::vector<Leaf> leaves_;
     struct Glint { vec2 p; float t, life, size; };

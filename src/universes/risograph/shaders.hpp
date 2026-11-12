@@ -307,7 +307,7 @@ void main() {
     frag = uInk * fill;
 }
 )";
-// A plain rectangle in pixels (tetris-universe-scene's menu panels): erases the ink under it (alpha) or adds ink.
+// A plain rectangle in pixels (refall-scene's menu panels): erases the ink under it (alpha) or adds ink.
 inline const char* PANEL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 uniform vec2 uRes;

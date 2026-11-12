@@ -195,7 +195,7 @@ private:
     float overT_ = -1.f;
     float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
-    float rush_ = 0.f;   // a Tetris: the stack's flowers open at once
+    float rush_ = 0.f;   // a quad: the stack's flowers open at once
     Bridge bridge_;
     Rng rng_{4242};
 };

@@ -24,7 +24,7 @@
 //
 // Events: a lock leaves the piece lit (it settles from the falling brightness) with a soft glow along the ledge
 // under it; a cleared floor's rooms go dark (nothing drawn over the row), then the floors above step down one by one
-// in smooth crossfades; a Tetris sends fireworks up over the city and a chase of light up the piers; slow motion is
+// in smooth crossfades; a quad sends fireworks up over the city and a chase of light up the piers; slow motion is
 // a long exposure (a colder night, cold city lights, the bloom wider); game over is a blackout floor by floor from
 // the top, the city going dark with it.
 #include "universes/city/city.hpp"
@@ -428,10 +428,10 @@ void CityUniverse::refresh(float strength) {
     if (strength > 0.2f) cityShift_ += 97.f;
 }
 
-void CityUniverse::forceFx(int slow, int tetris) {
+void CityUniverse::forceFx(int slow, int quadClear) {
     (void)slow;
-    if (tetris >= 0) {
-        tetrisT_ = 0.f;
+    if (quadClear >= 0) {
+        quadT_ = 0.f;
         spawnFireworks();
     }
 }
@@ -691,7 +691,7 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
         offHold_ = 0.16f;
         offStep_ = 0.f;
         if (ev.count >= 4) {
-            tetrisT_ = 0.f;
+            quadT_ = 0.f;
             spawnFireworks();
         }
         break;
@@ -913,7 +913,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
             lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
         }
         dropT_ += dt;
-        tetrisT_ += dt;
+        quadT_ += dt;
         overT_ += dt;
         dropWait_ = std::max(0.f, dropWait_ - dt);
         const bool dropish = sectionKnown_ ? sectionDrop_
@@ -953,7 +953,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     const float worldOn = (1.f - smoothstepf(0.f, 0.8f, bridge)) * (1.f - 0.35f * dimT_);
     const float swell = inDrop_ && dropT_ < 12.f ? smoothstepf(0.f, 0.15f, dropT_) * std::exp(-std::max(0.f, dropT_ - 0.15f) / 2.5f) * dropAmp_ : 0.f;
     const float flash = dropT_ < 3.f ? smoothstepf(0.f, 0.06f, dropT_) * std::exp(-dropT_ / 0.6f) * dropAmp_ : 0.f;
-    const float tet = tetrisT_ < 6.f ? smoothstepf(0.f, 0.2f, tetrisT_) * (1.f - smoothstepf(1.5f, 3.f, tetrisT_)) : 0.f;
+    const float tet = quadT_ < 6.f ? smoothstepf(0.f, 0.2f, quadT_) * (1.f - smoothstepf(1.5f, 3.f, quadT_)) : 0.f;
     const float black = overT_ < 9.f ? smoothstepf(0.2f, 1.8f, overT_) * (1.f - smoothstepf(4.5f, 8.f, overT_)) : 0.f;
     const float peakK = std::max(chorus_ * lvp, drop_);
     const float kickK = music.kick * lvp; // (small lights only: the beacons, the crowns)

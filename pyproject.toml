@@ -3,15 +3,15 @@ requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "tetris-universe"
+name = "refall"
 version = "1.24.0"
-description = "A Tetris Effect inspired game that plays any playlist (local music or YouTube)"
+description = "A music-reactive falling-block puzzle game that plays any playlist (local music or YouTube)"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.9"
 authors = [{ name = "Grégoire Passault" }]
-keywords = ["tetris", "game", "music", "visualizer", "opengl"]
+keywords = ["puzzle", "falling blocks", "game", "music", "visualizer", "opengl"]
 classifiers = [
     "Topic :: Games/Entertainment :: Puzzle Games",
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
@@ -27,9 +27,9 @@ dependencies = ["yt-dlp[default]", "imageio-ffmpeg"]
 Homepage = "https://github.com/Gregwar/tetris-universe"
 
 [project.scripts]
-tetris-universe = "zentris._launcher:main"
-tetris-universe-scope = "zentris._launcher:scope"
-tetris-universe-scene = "zentris._launcher:scene"
+refall = "zentris._launcher:main"
+refall-scope = "zentris._launcher:scope"
+refall-scene = "zentris._launcher:scene"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -45,7 +45,7 @@ ZENTRIS_BUNDLE_GLFW = "ON"
 [tool.cibuildwheel]
 build = "cp312-*"
 skip = "*-musllinux_* *-win32 *_i686"
-test-command = "tetris-universe --help"
+test-command = "refall --help"
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]

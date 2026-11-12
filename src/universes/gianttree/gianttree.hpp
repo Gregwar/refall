@@ -78,7 +78,7 @@ private:
     float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     float gTarget_ = 0.f, g_ = 0.f, gVel_ = 0.f;   // the growth shown chases its target (a spurt)
     float gBonus_ = 0.f;                             // the drops' extra growth
-    float spurt_ = 0.f, bloomBurst_ = 0.f;          // a clear's spurt; a Tetris' burst
+    float spurt_ = 0.f, bloomBurst_ = 0.f;          // a clear's spurt; a quad's burst
     float jelly_ = 0.f, jellyV_ = 0.f;              // the crown's squash and stretch
     float shed_ = 0.f;                               // game over: the leaves fall (0..1+)
     float seedT_ = 99.f;                             // a new game: a new seed sprouts
@@ -175,12 +175,12 @@ private:
     float energy_ = 0.5f;
     bool dropMode_ = false, wasDrop_ = false;
     float dropAmt_ = 0.f, swell_ = 0.f;
-    float flowT_ = 99.f, flowK_ = 0.f, flowDur_ = 2.f; // light flowing up from the root (drop, Tetris)
+    float flowT_ = 99.f, flowK_ = 0.f, flowDur_ = 2.f; // light flowing up from the root (drop, quad)
     float beam_ = 0.f;                                    // the drop's light rushing up into space
     float gust_ = 0.f;
     float kickIn_ = 0.f, kickGlow_ = 0.f;
     float windPhase_ = 0.f;
-    float tetrisGlow_ = 0.f;
+    float quadGlow_ = 0.f;
     double lastBeat_ = -1.0;
     float beatClock_ = 0.f;
     int beatCount_ = 0;

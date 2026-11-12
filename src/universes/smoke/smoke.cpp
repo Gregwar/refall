@@ -12,7 +12,7 @@
 // where the smoke shades itself), the kicks surging the smoke. A lock breathes a little smoke out from under the
 // piece; the blocks of a cleared row turn to smoke (each one eaten from its edges in, its body lifting off as smoke of its
 // own color, the row rising as one billowing sheet through the beam);
-// a Tetris blows a smoke ring up from the well, clears the smoke outward and opens the light; slow motion is a pin
+// a quad blows a smoke ring up from the well, clears the smoke outward and opens the light; slow motion is a pin
 // spot (the lamp swings straight overhead, cold and narrow, the smoke hangs almost still); game over turns the lamp
 // off (its filament cooling to orange), the stack going dark row by row while the smoke rises over it. A change of
 // universe thickens the smoke until it fills the frame.
@@ -566,9 +566,9 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
     case GameEvent::Clear: {
         for (auto& c : ev.cells)
             if (std::find(landedFull_.begin(), landedFull_.end(), c.y) == landedFull_.end()) landedFull_.push_back(c.y);
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         // the blocks themselves turn to smoke: each one erodes from its edges in, its body lifting off as smoke of
-        // its own color; the smoke of a row shares one field, so the row rises as one sheet (a Tetris, a plume)
+        // its own color; the smoke of a row shares one field, so the row rises as one sheet (a quad, a plume)
         float rows[4] = {0, 0, 0, 0};
         int nr = 0;
         const float rowSeed = rng_.uniform();
@@ -582,11 +582,11 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
             d.x = p.x; d.y = p.y; d.t = 0.f; d.type = std::clamp(c.type, 0, 6); d.over = false;
             d.delay = std::fabs(c.x - 4.5f) * 0.02f; // from the middle of the row outward
             d.seed = rowSeed;
-            d.big = tetris ? 1.6f : 1.f + 0.1f * (ev.count - 1);
+            d.big = quadClear ? 1.6f : 1.f + 0.1f * (ev.count - 1);
             d.cx = layout::cellPos(4.5f, (float)c.y).x;
             dying_.push_back(d);
         }
-        if (tetris) {
+        if (quadClear) {
             // a smoke ring rolls up out of the well, the smoke is blown outward, the light opens
             puff(v2(0.f, rows[0] + 2.f), v2(0.f, 5.5f), 2.2f, 1.3f, 4.5f, 0.85f, 0.2f, 1.f, 1);
             blastT_ = 0.f;
@@ -844,7 +844,7 @@ void SmokeUniverse::buildFx() {
         const float glow = std::max(lit, 0.4f);
         const vec3 pc = cur_.piece[d.type];
         const vec3 c = pc * (0.35f + 0.95f * glow) * (0.4f + 0.6f * lightOn);
-        const float a = 0.65f / (0.6f + 0.4f * B) * (1.f - smoothstepf(0.6f, 1.45f, t)); // a Tetris: bigger, not denser
+        const float a = 0.65f / (0.6f + 0.4f * B) * (1.f - smoothstepf(0.6f, 1.45f, t)); // a quad: bigger, not denser
         wisps_.push_back({{d.x, 0.5f * (bottom + top), 1.6f, 0.5f * (top - bottom) / 1.6f}, {c.x, c.y, c.z, a},
                           {4.f, d.seed * 13.f, V, t}});
     }

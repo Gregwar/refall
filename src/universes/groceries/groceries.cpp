@@ -21,7 +21,7 @@
 //
 // The song: calm is a slow belt under a soft, slightly cool light; peaks run the belt a little faster under a
 // warmer light. A real drop (the HUD's section DROP, else the music's pace) stays gentle: a soft glow runs along the
-// belt's rails, the scanner pulses on the beat and the receipt prints a burst. A Tetris glows along the rails and
+// belt's rails, the scanner pulses on the beat and the receipt prints a burst. A quad glows along the rails and
 // prints a little more. Slow motion dims the counter to evening; game over sweeps the stack off the counter.
 //
 // Layout contract: the camera is the layout's reference camera (straight on the board's plane, which is the
@@ -686,7 +686,7 @@ void GroceriesUniverse::onEvent(const GameEvent& ev, const Game& game) {
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
-        if (ev.count >= 4) tetrisT_ = 0.f;
+        if (ev.count >= 4) quadT_ = 0.f;
         // the products go to the lane one after the other: the lowest row first, each row from the right
         std::vector<GameEvent::CellInfo> cells(ev.cells.begin(), ev.cells.end());
         std::sort(cells.begin(), cells.end(), [](const GameEvent::CellInfo& a, const GameEvent::CellInfo& b) {
@@ -874,7 +874,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.2f : 0.5f, dt);
     swell_ = approach(swell_, 0.f, 0.4f, dt);
     refreshK_ = approach(refreshK_, 0.f, 0.6f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
     const float kick = kickIn_;
     kickIn_ = 0.f;
     kickGlow_ = std::max(approach(kickGlow_, 0.f, 5.f, dt), kick);
@@ -948,7 +948,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     }
     linesShown_ = lines;
     gL_ = approach(gL_, (float)lines, 2.f, dt);
-    if (tetrisT_ < dt * 1.5f) burst_ += 1.2f;
+    if (quadT_ < dt * 1.5f) burst_ += 1.2f;
     if (isDrop) burst_ += dt * 0.12f;
     const float receiptTarget = 1.f + 0.3f * lines + burst_;
     const bool printing = receipt_ < receiptTarget - 0.01f;
@@ -1116,7 +1116,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     const Palette& P = pal_;
     float groupK[16] = {};
     const float pulse = beatFlash_ * beatFlash_;
-    const float tet = tetrisT_ < 3.f ? std::exp(-tetrisT_ * 1.2f) : 0.f;
+    const float tet = quadT_ < 3.f ? std::exp(-quadT_ * 1.2f) : 0.f;
     groupK[G_SCAN] = 0.55f + 1.2f * beep_ + dropAmt_ * (0.3f + 1.1f * pulse) + 0.2f * kickGlow_ * wp;
     groupK[G_RAIL] = dropAmt_ * (0.5f + 1.2f * pulse) + 1.6f * tet;
     groupK[G_TILL] = 0.85f;

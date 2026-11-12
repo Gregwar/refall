@@ -96,7 +96,7 @@ private:
     // ---- The sheet: border, zones, title block, revisions.
     int rev_ = 0;                // revisions (clears)
     float revT_ = 9.f;           // time since the last revision
-    float cloudT_ = 9.f;         // a Tetris's revision cloud
+    float cloudT_ = 9.f;         // a quad's revision cloud
     void buildSheet(std::vector<Stroke>& out, float lvA, bool bare);
     std::string dwgNo_ = "BP-0000";
 

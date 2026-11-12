@@ -20,7 +20,7 @@
 // cluster glow. The highs make crystals glint (a small star on a crystal's point, a soft flash on a gem's crown).
 // The drop turns the mineral to the drop's stone and lights the cave in it, eased in over a beat or two and
 // settling after. A cleared row shatters into shards that tumble, flashing, and fall into the pool, where they
-// sink (the row is empty in under half a second); a Tetris rings every crystal of the cave, a ring of light running
+// sink (the row is empty in under half a second); a quad rings every crystal of the cave, a ring of light running
 // outward from the well. Slow motion stills the cave in a cold, silver light. Game over puts the light out of the
 // stack's stones, row by row from the top.
 //
@@ -637,7 +637,7 @@ void CrystalUniverse::onEvent(const GameEvent& ev, const Game& game) {
             for (int y = 0; y < Game::H; y++)
                 for (int x = 0; x < Game::W; x++) st_[y][x] = ns[y][x];
         }
-        // a Tetris: a ring of light runs through the cave's crystals
+        // a quad: a ring of light runs through the cave's crystals
         if (ev.count >= 4) ring_ = 0.f;
         break;
     }
@@ -1155,7 +1155,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     kickPrev_ = kick;
-    // a Tetris: a ring of light running outward through the crystals
+    // a quad: a ring of light running outward through the crystals
     if (ring_ >= 0.f) {
         ring_ += dt;
         const float rad = ring_ * 16.f;

@@ -512,7 +512,7 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 lights_.push_back(l);
             }
         }
-        // the snack: a piece of bamboo (a whole little stalk for a Tetris) flying to the cub's paws
+        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws
         if (firstRow >= 0) {
             Light l;
             l.kind = lines >= 4 ? 2 : 1;
@@ -614,7 +614,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
     if (overT_ >= 0.f) {
         t.sit = 1.f; t.tilt = -0.2f; t.turn = 0.15f; t.lookY = -1.f;
     } else if (travelling) {
-        // walking on: looking ahead; running in a Tetris or a joyful mood
+        // walking on: looking ahead; running in a quad or a joyful mood
         t.turn = 0.7f; t.tilt = -0.04f * (1.f - mood); t.lookX = 1.f; t.lookY = -0.1f;
         t.lean = std::min(1.f, speed / 3.f);
         if (speed > 2.6f) t.hop = std::fabs(std::sin(kid_.phase)) * 0.035f * std::min(1.f, (speed - 2.6f) / 1.f);

@@ -72,7 +72,7 @@ uniform float uLpx;          // board units per pixel of this pass
 uniform float uNight;        // slow motion: the night glaze (0..1)
 uniform vec3 uNightK;
 uniform vec3 uMoon;          // x, y, radius (board)
-uniform float uFlood;        // Tetris: a fresh glaze of the accent
+uniform float uFlood;        // A quad: a fresh glaze of the accent
 uniform vec3 uFloodK;
 
 vec3 K; float G, W;
@@ -232,7 +232,7 @@ void main() {
     // ---- the peak's glaze: deeper, more saturated
     float avgK = dot(K, vec3(0.3333));
     K = max(mix(vec3(avgK), K, 1.0 + 0.22 * uGlaze), 0.0) * (1.0 + 0.12 * uGlaze);
-    // ---- Tetris: a fresh glaze of the accent washed over the painting
+    // ---- Quad: a fresh glaze of the accent washed over the painting
     lay(uFloodK, uFlood * smoothstep(0.25, 0.7, fbm(p * 0.25 + sd)) * paint * 0.3, 0.3);
     // ---- slow motion: a night glaze of indigo spreading over the painting, the moon lifted out of it
     float nightFront = smoothstep(0.0, 0.2, uNight * 1.25 - (fbm(p * 0.18 + 4.0) * 0.8 + (1.0 - vUv.y) * 0.25));

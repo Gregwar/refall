@@ -17,7 +17,7 @@
 // shadows slowly swinging) and relights the whole stack: every piece a light again (a ripple up from the bottom on its
 // first downbeat, then each piece shimmering at its own pace and a few swelling in turn every two beats; the five
 // brightest cast shadows, the others glow), back to embers when it ends. Nothing pulses the whole room. A cleared row's blocks flare into white light and burn out (their light flooding sideways
-// out of the row, at the real speed even in slow motion), a Tetris relights the whole stack from inside, slow motion
+// out of the row, at the real speed even in slow motion), a quad relights the whole stack from inside, slow motion
 // is a cold light with the lamps lingering, game over puts the stack's lights out row by row from the top, each block fading.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like PRISM).
@@ -541,16 +541,16 @@ void LightsourceUniverse::onEvent(const GameEvent& ev, const Game& g) {
         bool cleared[Game::H] = {};
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         for (auto& c : ev.cells) {
             Burn b;
             const vec3 w = layout::cellPos((float)c.x, (float)c.y);
             b.p = v2(w.x, w.y);
             b.type = c.type;
             b.row = c.y;
-            b.life = tetris ? 0.55f : 0.42f;
+            b.life = quadClear ? 0.55f : 0.42f;
             b.delay = std::fabs(c.x - 4.5f) * 0.008f;
-            b.power = tetris ? 1.3f : 1.f;
+            b.power = quadClear ? 1.3f : 1.f;
             b.seed = rng_.uniform();
             burns_.push_back(b);
         }
@@ -572,7 +572,7 @@ void LightsourceUniverse::onEvent(const GameEvent& ev, const Game& g) {
             }
         }
         collapseRows(cleared);
-        if (tetris) tetrisT_ = 0.f;
+        if (quadClear) quadT_ = 0.f;
         break;
     }
     case GameEvent::TopOut: {
@@ -1036,7 +1036,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
             lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
         }
         dropT_ += dt;
-        tetrisT_ += dt;
+        quadT_ += dt;
         dropWait_ = std::max(0.f, dropWait_ - dt);
         const bool dropish = sectionKnown_ ? sectionDrop_
                                            : (music.hasSong ? music.speed > 1.33f || (inDrop_ && music.speed > 1.26f) : inDrop_);
@@ -1091,7 +1091,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     }
     for (Lamp& l : lamps_) l.level = lampLevel(l);
     const float swell = inDrop_ && dropT_ < 12.f ? smoothstepf(0.f, 0.25f, dropT_) * std::exp(-std::max(0.f, dropT_ - 0.25f) / 2.2f) * dropAmp_ : 0.f;
-    const float tet = tetrisT_ < 6.f ? smoothstepf(0.f, 0.3f, tetrisT_) * std::exp(-std::max(0.f, tetrisT_ - 0.3f) / 0.9f) : 0.f;
+    const float tet = quadT_ < 6.f ? smoothstepf(0.f, 0.3f, quadT_) * std::exp(-std::max(0.f, quadT_ - 0.3f) / 0.9f) : 0.f;
 
     // ---- The staging: the light's power, its softness and reach, the room's fill.
     const float lvm = smoothstepf(0.f, 1.f, lv_), lvp = smoothstepf(1.f, 2.f, lv_);

@@ -1,9 +1,9 @@
 # Release: push a tag vX.Y.Z (the version in pyproject.toml) and this builds the wheels for every platform and the
-# sdist, publishes them to PyPI as `tetris-universe` (so `uvx tetris-universe` runs the game) and makes a GitHub
+# sdist, publishes them to PyPI as `refall` (so `uvx refall` runs the game) and makes a GitHub
 # release with the same files. Run it by hand (Actions > Release > Run workflow) to build without publishing.
 #
 # PyPI publishes through trusted publishing: on pypi.org, add a (pending) trusted publisher for the project
-# `tetris-universe`: owner Gregwar, repository tetris-universe, workflow wheels.yml, environment pypi.
+# `refall`: the owner and repository of https://github.com/Gregwar/tetris-universe, workflow wheels.yml, environment pypi.
 name: Release
 
 on:
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: pypi
-      url: https://pypi.org/project/tetris-universe/
+      url: https://pypi.org/project/refall/
     permissions:
       id-token: write  # trusted publishing: no API token needed
     steps:
@@ -99,5 +99,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Tetris Universe $GITHUB_REF_NAME" \
-            --notes "Run it with \`uvx tetris-universe\` (or \`pipx install tetris-universe\`). https://pypi.org/project/tetris-universe/"
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Refall $GITHUB_REF_NAME" \
+            --notes "Run it with \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"

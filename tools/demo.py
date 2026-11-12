@@ -8,7 +8,7 @@ CONFIG is tools/demo.json by default: the song, the chapters (an end anchored on
 title card on black) and their shots (universe, variant, game test hooks, length; `min_shot` the shortest cut). Its header documents the format.
 The pipeline, one function each:
   1. song + analysis: the song (a file or ytdl:<id>, from the game's YouTube cache or yt-dlp) and the game's own
-     analysis of it (tetris-universe --analysis: beats, downbeat, sections, drops), so cuts land on the beats the
+     analysis of it (refall --analysis: beats, downbeat, sections, drops), so cuts land on the beats the
      universes react to;
   2. plan: the config turned into a timeline (chapter ends snapped to downbeats, shot lengths cut on the grid,
      with "cover_all", the universes no chapter names added to the "fill" chapter); --plan-only prints it, with the coverage of the
@@ -19,7 +19,7 @@ The pipeline, one function each:
      parallel (-j) and are cached in WORK/clips by everything that defines them: a re-run re-records only the
      shots that changed. With "clear", every shot shows a line clear: the game logs its clears with their song
      time and game seeds are tried until a take shows one inside the shot (the best of a few: near a beat, near the
-     middle, a Tetris best), the song time never moving; the report lists each shot's clear;
+     middle, a quad best), the song time never moving; the report lists each shot's clear;
   4. cards: titles drawn with Pillow from the fonts shipped in the repo (a soft wipe in, a slow fade out);
   5. assemble: frame by frame (the whole song uncut is the audio track: video time = song time), crossfades of
      "crossfade" seconds centred on the cuts (each clip is recorded that much longer on both sides), then a
@@ -29,7 +29,7 @@ Game options used (added for this tool): `--analysis OUT.json` writes the song a
 starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board); with --clip
 the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
 (ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env.
-Needs a built tetris-universe (default build/tetris-universe), ffmpeg, numpy and Pillow; yt-dlp for a song not
+Needs a built refall (default build/refall), ffmpeg, numpy and Pillow; yt-dlp for a song not
 cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
 """
 import argparse
@@ -435,7 +435,7 @@ def run_clip(e, seed, game, song, size, out):
 
 def clear_score(e, clears, grid):
     """The best line clear inside the shot (its animation on screen, away from the cuts), scored: near a beat, near
-    the middle, a Tetris best. None when the shot shows none."""
+    the middle, a quad best. None when the shot shows none."""
     rule = e.get("clear") or {}
     lo, hi = e["t0"] + rule.get("lead", 0.4), e["t1"] - rule.get("tail", 0.8)
     best = None
@@ -519,7 +519,7 @@ def record_all(timeline, game, song, size, work, jobs, grid):
     for e in shots:
         c = e.get("clear_at")
         what = (f"{c:7.2f} s ({e['clear_lines']} line{'s' if e['clear_lines'] > 1 else ''}"
-                f"{', a Tetris' if e['clear_lines'] >= 4 else ''})" if c is not None
+                f"{', a quad' if e['clear_lines'] >= 4 else ''})" if c is not None
                 else ("NONE (no take showed one)" if e.get("clear") else "-"))
         log(f"{(e.get('label') or e['u'])[:34]:<34} {e['t0']:7.2f} {e['t1']:7.2f}  {what}")
 
@@ -775,7 +775,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("config", nargs="?", default=os.path.join(ROOT, "tools", "demo.json"))
     ap.add_argument("-o", "--out", default="demo.mp4")
-    ap.add_argument("--game", default=os.path.join(ROOT, "build", "tetris-universe"))
+    ap.add_argument("--game", default=os.path.join(ROOT, "build", "refall"))
     ap.add_argument("--work", default=os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
                                                    "zentris", "demo"), help="clip cache and intermediates")
     ap.add_argument("--song", help="override the config's song (a file or ytdl:<id>)")
@@ -796,7 +796,7 @@ def main():
             cfg[k] = getattr(args, k)
     game = os.path.abspath(args.game)
     if not os.path.exists(game):
-        sys.exit(f"build tetris-universe first ({game} is missing), or pass --game")
+        sys.exit(f"build refall first ({game} is missing), or pass --game")
     work = os.path.abspath(args.work)
     os.makedirs(work, exist_ok=True)
     width, height = map(int, cfg.get("size", "1920x1080").split("x"))

@@ -32,7 +32,7 @@
 // panels break apart and drift away, a burst of color floods the page from the well out, focus lines burst in from
 // the page's edges toward the well and a huge "DON!" is lettered down the left column in a bold color, a rumble of
 // "GO" letters building up on the right on the two-beat grid, a few focus lines lunging in with it), DASH, PANELS,
-// IMPACT, SHOJO and BARRAGE. After, the panels come back. A Tetris inks four elements, bursts color and focus lines
+// IMPACT, SHOJO and BARRAGE. After, the panels come back. A quad inks four elements, bursts color and focus lines
 // in and letters "ZUDON!" over the right column, its toast in a spiky balloon. Slow motion is a quiet moment: a deep blue night settles over
 // the drawings, pink petals drift down through them and "SHIIN" (the sound of silence) is lettered in outline. Game
 // over turns the stack back to pencil from the top, then erases it.
@@ -540,7 +540,7 @@ void MangaUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // every cleared row inks the next element of the page
         for (int i = 0; i < ev.count; i++) inkNext(0.15f + 0.3f * i);
         if (ev.count >= 4) {
-            tetrisT_ = 0.f;
+            quadT_ = 0.f;
             addSfx(SFX_ZUDON, {16.3f, 0.6f}, 1.85f, -0.12f, 2.6f, false, SFX_COLOR, 0.3f);
         }
         break;
@@ -1384,7 +1384,7 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
 
 // Comic lettering in the HUD's panels: labels in Comic Neue, numbers and shouts in Bangers; the section and the
 // universe in a caption box in the corner of the crossing's panel; the toasts outlined like sound effects, a
-// Tetris in a spiky balloon.
+// quad in a spiky balloon.
 void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = s_;
     const vec3 ink = ink_, paper = paper_, accent = spot_;
@@ -1517,8 +1517,8 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         }
         case HUD_TOAST: {
             const float cap = base * 0.75f;
-            const bool tetris = h.text.find(QUAD_NAME) != std::string::npos;   // a four-line clear
-            if (tetris) {
+            const bool quadClear = h.text.find(QUAD_NAME) != std::string::npos;   // a four-line clear
+            if (quadClear) {
                 // a spiky shout balloon behind it
                 const float w = textWidth(bangers_, h.text, cap, 0.06f);
                 const float cx = ugl::hudLeft(h, w, width_) + w * 0.5f, cy = h.y + cap * 0.5f;
@@ -1536,7 +1536,7 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
                 strokeLine(pts, 2.4f, 0.f, true, 1.f, ink, alpha, -1);
             }
             place(bangers_, h.text, cap, 0.06f, -base * 0.05f);
-            st = {cur_[K_SFX], 1.f, ink, 1.f, std::max(1.5f, cap * 0.07f), paper, tetris ? 0.f : 1.f, cap * 0.08f};
+            st = {cur_[K_SFX], 1.f, ink, 1.f, std::max(1.5f, cap * 0.07f), paper, quadClear ? 0.f : 1.f, cap * 0.08f};
             drawText(bangers_, q, cap, st, alpha);
             continue;
         }
@@ -1713,9 +1713,9 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     for (Pop& p : pops_) p.t += dt;
     pops_.erase(std::remove_if(pops_.begin(), pops_.end(), [](const Pop& p) { return p.t >= p.life; }), pops_.end());
     jolt_ = approach(jolt_, 0.f, 7.f, dt);
-    if (tetrisT_ >= 0.f) {
-        tetrisT_ += dt;
-        if (tetrisT_ > 2.6f) tetrisT_ = -1.f;
+    if (quadT_ >= 0.f) {
+        quadT_ += dt;
+        if (quadT_ > 2.6f) quadT_ = -1.f;
     }
     if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
@@ -1807,17 +1807,17 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     if (aB > 0.001f) drawBarrage(aB, beat);
     if (aI > 0.001f) drawImpact(aI, beat);
     if (aP > 0.001f) drawPanelBreak(aP, beat);
-    // the burst of color behind the focus lines: the splash's, a Tetris'
+    // the burst of color behind the focus lines: the splash's, a quad's
     {
         float amt = aS;
-        if (tetrisT_ >= 0.f) amt = std::max(amt, 0.6f * easeOut(tetrisT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, tetrisT_)));
+        if (quadT_ >= 0.f) amt = std::max(amt, 0.6f * easeOut(quadT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, quadT_)));
         burst_ = std::max(amt, aI);
         drawBurst(amt);
     }
-    // focus lines: the splash's burst, a Tetris', and short ones at a peak
+    // focus lines: the splash's burst, a quad's, and short ones at a peak
     {
         float reach = aS;
-        if (tetrisT_ >= 0.f) reach = std::max(reach, 0.7f * easeOut(tetrisT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, tetrisT_)));
+        if (quadT_ >= 0.f) reach = std::max(reach, 0.7f * easeOut(quadT_ / 0.3f) * (1.f - smoothstepf(1.4f, 2.6f, quadT_)));
         reach = std::max(reach, 0.2f * wp * (1.f - slow_) * (1.f - splash_));
         drawSplash(reach, (float)(beat / 2.0), ink_);
     }

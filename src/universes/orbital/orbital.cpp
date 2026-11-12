@@ -641,7 +641,7 @@ void OrbitalUniverse::onEvent(const GameEvent& ev, const Game& game) {
             }
             std::memcpy(ids_, nb, sizeof(ids_));
         }
-        if (lines >= 4) tetrisT_ = 0.f;
+        if (lines >= 4) quadT_ = 0.f;
         break;
     }
     case GameEvent::TopOut: {
@@ -1118,7 +1118,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     groupOn_[1] = approach(groupOn_[1], lv_ > 0.6f ? 1.f : 0.f, 1.2f, dt);
     groupOn_[2] = approach(groupOn_[2], lv_ > 1.5f ? 1.f : 0.f, 1.2f, dt);
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    tetrisT_ += dt;
+    quadT_ += dt;
     const float kick = std::max(music.kick, kickIn_);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
     kickGlow_ = std::max(approach(kickGlow_, 0.f, 4.f, dt), kick * wp_);
@@ -1162,7 +1162,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
                     plan_[i].fadeT = -std::min(1.6f, (maxIdx - i) * 0.04f);
                 }
             // new lines: the next modules fly in, one after the other (a module still shrinking away waits), a big
-            // batch (a Tetris late on: some fifty) closer together so that it is all on its way within ~9 s
+            // batch (a quad late on: some fifty) closer together so that it is all on its way within ~9 s
             int n = 0;
             for (int i = 1; i < want; i++) n += plan_[i].state == 0 ? 1 : 0;
             const float gap = std::min(0.45f, 9.f / (float)std::max(1, n));
@@ -1328,7 +1328,7 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     fine_.clear();
     coarse_.clear();
     glows_.clear();
-    const float emitK = (0.55f + 0.3f * groupOn_[1] + 0.25f * groupOn_[2] + 0.3f * slow_ + 0.35f * std::max(0.f, 1.f - tetrisT_ / 2.5f)) * (1.f - 0.85f * over_);
+    const float emitK = (0.55f + 0.3f * groupOn_[1] + 0.25f * groupOn_[2] + 0.3f * slow_ + 0.35f * std::max(0.f, 1.f - quadT_ / 2.5f)) * (1.f - 0.85f * over_);
     {
         Builder b(boxes_, fine_, coarse_, glows_);
         b.minR = camF_ * 0.012f;

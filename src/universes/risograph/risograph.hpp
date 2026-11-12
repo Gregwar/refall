@@ -84,7 +84,7 @@ private:
     bool hasLevel_ = false;
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
 
-    // ---- The world: three big flat shapes (B, A, C) and the Tetris stamp.
+    // ---- The world: three big flat shapes (B, A, C) and the quad stamp.
     struct Shape { float x, y, sx, sy, rot, type; };
     Shape shape_[3]{}, next_[3]{};
     float reprint_[3] = {1.f, 1.f, 1.f}; // a shape re-printed elsewhere (a new song): fades out, then in at the new place

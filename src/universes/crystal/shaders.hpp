@@ -183,7 +183,7 @@ void main() {
     float rim = 1.0 - smoothstep(0.0, 0.07, -d);
     float ridge = (v < t0) ? 1.0 - smoothstep(0.0, 0.015, abs(v - t0)) : 0.0;
     c += mix(body, white, 0.3) * (0.3 * edge + 0.24 * rim + 0.25 * ridge) * (0.35 + 0.65 * diff) * (0.6 + 0.6 * uGlow);
-    // a glint (the highs, a Tetris's ring): the edges and the point light up
+    // a glint (the highs, a quad's ring): the edges and the point light up
     c += mix(tint, white, 0.5) * vC.a * (0.55 * edge + 0.45 * rim * s + 0.3 * s + 0.08);
     // depth: the far crystals sink into the cave's dark
     c = mix(c, uFog, vB.z * 0.7);

@@ -6,11 +6,11 @@ cd "$(dirname "$0")/.."
 U=${1:?universe}; OUT=${2:?output png}; L=${3:-1}; SIZE=${4:-640x360}
 SONG=${5:-}
 TMP=$(mktemp -d)
-mapfile -t VARS < <(xvfb-run -a ./build/tetris-universe-scene --list 2>/dev/null | grep -i "^  $U[^:]*:" | sed 's/^  //')
+mapfile -t VARS < <(xvfb-run -a ./build/refall-scene --list 2>/dev/null | grep -i "^  $U[^:]*:" | sed 's/^  //')
 [ ${#VARS[@]} -gt 0 ] || { echo "no variants for $U"; exit 1; }
 i=0
 for v in "${VARS[@]}"; do
-    xvfb-run -a -s "-screen 0 1920x1080x24" ./build/tetris-universe-scene --size "$SIZE" --review-shot "$TMP/$(printf %02d $i).png" \
+    xvfb-run -a -s "-screen 0 1920x1080x24" ./build/refall-scene --size "$SIZE" --review-shot "$TMP/$(printf %02d $i).png" \
         --level "$L" "$v" $SONG >/dev/null 2>&1 &
     i=$((i + 1))
 done

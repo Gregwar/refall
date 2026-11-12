@@ -30,7 +30,7 @@ jelly...). The seven piece types must stay easy to tell apart, by color, value o
 | Peak | The big picture of the universe; beat pulses and kick hits only here |
 | Lock, hard drop | A small, local reaction |
 | Line clear | How the row leaves, in the world's own material |
-| Tetris | One memorable celebration |
+| Quad | One memorable celebration |
 | Slow motion (bonus) | A clearly different mood of the same world (night, negative, time stretch...) |
 | Game over | How the stack ends, in the world's terms |
 | Exit and entrance | How the world fades to the neutral bridge state (fog, water, clouds closing in...) |
@@ -76,12 +76,12 @@ noticeable at a glance) matter far more than the slow motion bonus or the game o
   never by accident (different pieces of the same color fusing).
 
 **Taste, from play testing the first ten universes.** In one line: minimalist, no bloat, and original, never a
-classical Tetris look. What worked and what did not:
+classic falling-block look. What worked and what did not:
 
 | Liked | Disliked |
 |---|---|
 | WATERCOLOR, SUMI, VECTOR, SMOKE: one strong idea, minimalist, lots of empty space | Bloated screens full of graphics: the first SYNTHWAVE (sun, road, lamps, palms, grain) looked "like an old game of 2010" |
-| Pieces made of the world's own material (ink, phosphor, wash, lit smoke) | Generic, "standard" Tetris looks (PIXEL is fine but not original) |
+| Pieces made of the world's own material (ink, phosphor, wash, lit smoke) | Generic, "standard" falling-block looks (PIXEL is fine but not original) |
 | Limited, deliberate palettes: neutral white or black paper, dark nights with pastel pieces (CLOUDSCAPE's POLAR NIGHT, its blue-hour slow motion) | Tinted "vintage" grounds (SUMI's yellowish paper), pale pieces on pale skies |
 | Pieces with depth and life that read at a glance | Flat, bright, dull blocks (POLAR NIGHT), bevels and relief (old CLOUDSCAPE tiles), visible tile junctions inside a shape |
 | Text set in the world, restrained HUD | Opaque white cards or framed panels around the HUD (DIORAMA's cards, CLOUDSCAPE's pane borders) |
@@ -104,9 +104,9 @@ just squeeze the end. After 50 slow growth or variation is fine, but no new majo
 fills a space (shelves, a village), size the space or the share of each line so it is full around 50 without looking
 sparse early or crammed late; if what fills it comes from the lines themselves (LIBRARY's books), scale each line's
 share by `paceScale()` rather than inventing things. Each line carries a big step (up to 2.5 times bigger in a short
-song), so ease it: the growth springs smoothly to its target, and a cap on its speed keeps a Tetris calm (a breath
+song), so ease it: the growth springs smoothly to its target, and a cap on its speed keeps a quad calm (a breath
 longer, never a jolt); if a cap would stop a short song from reaching the end in time, let it rise with
-`paceScale()`, a little. Extra growth from other sources (a drop's bonus, a Tetris) stays proportionate: it never
+`paceScale()`, a little. Extra growth from other sources (a drop's bonus, a quad) stays proportionate: it never
 skips a stage. A `ZEN_<ID>_LINES=N` test hook (real lines; and `ZEN_GROW_RATE=R`) lets you check the stills;
 `ZEN_SCENE_LINES=N` forces the target (check 20, 50 and 100: the final stage at the target, half of it looking like
 half), `ZEN_LINES_PER_MINUTE=R` changes the pace, and `ZEN_LINES_HERE=N` holds linesHere() at N whatever the review
@@ -134,7 +134,7 @@ shot's bot clears (exact stills).
      `"universes/<id>/<file>.inc"`.
    - `setSong` picks the variant (`look.variant >= 0` forces it; avoid `look.avoidVariant`, the one on screen
      when the universe follows itself); `setLevel` stages calm / mid / peak with its own in-universe change.
-   - `refresh`, `onEvent` (locks, hard drops, clears, Tetris, top out), `setBonus` (slow motion), `levelUp` and
+   - `refresh`, `onEvent` (locks, hard drops, clears, quads, top out), `setBonus` (slow motion), `levelUp` and
      `Frame::music` (beat phase, beat grid, kick, bands) make it react. `Frame::dim` / `paused` / `fade` dim it.
 4. **Layout contract** (`src/layout.hpp`): the well's cells lie on the plane z = 0 of board space (one unit per
    cell, x in [-5, 5], y in [-10, 10]); draw them through `layout::camera()` (or a camera mapping that plane to the
@@ -161,10 +161,10 @@ Always test **off screen** (never on your display) and at a low resolution unles
 judged (full 1920x1080 only for final checks):
 
 ```sh
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe-scene --size 960x540 --shot out.png --section drop <id>
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 960x540 --universe <id> --review-level 2 --review-shot out.png song.mp3
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 640x360 --universe <id> --phase-shots out_ song.mp3
-xvfb-run -a -s "-screen 0 1280x720x24" ./build/tetris-universe --size 640x360 --universe vector --to <id> --transition ink --transition-shots tr_ 6 song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall-scene --size 960x540 --shot out.png --section drop <id>
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 960x540 --universe <id> --review-level 2 --review-shot out.png song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 640x360 --universe <id> --phase-shots out_ song.mp3
+xvfb-run -a -s "-screen 0 1280x720x24" ./build/refall --size 640x360 --universe vector --to <id> --transition ink --transition-shots tr_ 6 song.mp3
 tools/universesheet.sh <id> sheet.png 2      # every variant in one contact sheet (level 0, 1 or 2)
 ```
 

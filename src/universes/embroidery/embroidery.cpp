@@ -597,7 +597,7 @@ void EmbroideryUniverse::onEvent(const GameEvent& ev, const Game& game) {
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(glint_, ng, sizeof(glint_));
         }
-        // the thread goes to the sampler: a run of stitches per row, a long one for a Tetris
+        // the thread goes to the sampler: a run of stitches per row, a long one for a quad
         credit_ += ev.count >= 4 ? 60.f : 12.f * ev.count;
         break;
     }

@@ -624,7 +624,7 @@ void LandWorld::onEvent(const GameEvent& ev, const Game&) {
     case GameEvent::Clear: {
         // The row's cubes break open at once (the row itself is gone from the board), their seeds flying out; a few
         // of them sown near, to be seen sprouting one after the other (never more than a dozen at once).
-        const bool tetris = ev.count >= 4;
+        const bool quadClear = ev.count >= 4;
         int n = 0;
         for (auto& c : ev.cells) n += !(c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W);
         const int want = std::max(0, std::min(2 + 2 * ev.count, MAX_SPROUTS - heroes()));
@@ -633,14 +633,14 @@ void LandWorld::onEvent(const GameEvent& ev, const Game&) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             // the heroes spread evenly over the row's cubes
             const int h = n > 0 ? ((i + 1) * want) / n - (i * want) / n : 0;
-            breakCube(layout::cellPos((float)c.x, (float)c.y), c.type, tetris ? 1.25f : 1.f, tetris ? 3.2f : 2.4f, h,
+            breakCube(layout::cellPos((float)c.x, (float)c.y), c.type, quadClear ? 1.25f : 1.f, quadClear ? 3.2f : 2.4f, h,
                       0.2f * (float)given);
             given += h;
             i++;
         }
-        lines_ += (float)ev.count * (tetris ? 1.5f : 1.f);
-        if (tetris) {
-            // a Tetris: every flower opens, a flock rises from the land
+        lines_ += (float)ev.count * (quadClear ? 1.5f : 1.f);
+        if (quadClear) {
+            // a quad: every flower opens, a flock rises from the land
             bloom_ = 1.f;
             ctx.gust = std::max(ctx.gust, 0.8f);
             if (life_ > 0.1f)

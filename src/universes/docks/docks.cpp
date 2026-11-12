@@ -19,7 +19,7 @@
 // cranes work on the beat grid, a move every two beats); a peak lights every mast, the cranes work faster, their red
 // beacons blink with the grid and the kicks spark their trolleys' lamps. The drop switches the port to full light:
 // the masts come on in a sequence from the well outward, the colors deepen and the sky glows (one swell that settles
-// over seconds). A Tetris flashes the cranes' and masts' lamps in a wave and the ships' decks light up. Slow motion is
+// over seconds). A quad flashes the cranes' and masts' lamps in a wave and the ships' decks light up. Slow motion is
 // a sea fog rolling in (the lamps haloed, the port cooled); game over lifts the stack away, container by container,
 // from the top.
 //
@@ -524,7 +524,7 @@ void DocksUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
         std::sort(rows.begin(), rows.end());
-        if (ev.count >= 4) tetrisT_ = 0.f;
+        if (ev.count >= 4) quadT_ = 0.f;
         for (auto& c : ev.cells) {
             if (c.x < 0 || c.x >= Game::W || c.y < Game::HIDDEN) continue;
             const int k = (int)(std::find(rows.begin(), rows.end(), c.y) - rows.begin());
@@ -984,7 +984,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     else beat_ += wdt * 2.f;
     const float spb = 60.f / std::max(60.f, music.bpm);
     dropT_ += dt;
-    tetrisT_ += dt;
+    quadT_ += dt;
     float festT = 0.f;
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.5f * smoothstepf(16.f * spb, 64.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.5f : 0.25f, dt);
@@ -1131,7 +1131,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         l.on = approach(l.on, want, want > l.on ? 2.5f : 0.6f, dt);
         float k = l.k * l.on * lampLevel;
         if (dropT_ > l.order) k *= 1.f + 0.9f * swell_ * std::exp(-(dropT_ - l.order) * 1.5f);
-        if (tetrisT_ > l.order * 0.5f && tetrisT_ < 4.f) k *= 1.f + 0.7f * std::exp(-(tetrisT_ - l.order * 0.5f) * 2.f);
+        if (quadT_ > l.order * 0.5f && quadT_ < 4.f) k *= 1.f + 0.7f * std::exp(-(quadT_ - l.order * 0.5f) * 2.f);
         const float rr = l.r * (1.f + 0.6f * slow_);
         sprite(l.p, rr, l.col, k);
         if (l.range > 0.f && k > 0.05f) {
@@ -1181,7 +1181,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         const float s = i == 0 ? 1.f : -1.f;
         const float xs = sh.x - s * SHIP_LEN * 0.5f;
         const float deck = (0.5f + 0.3f * wm + 0.3f * wp + 0.4f * fest_) * pal_.lampK;
-        const float tet = tetrisT_ < 6.f ? std::exp(-tetrisT_ * 0.5f) : 0.f;
+        const float tet = quadT_ < 6.f ? std::exp(-quadT_ * 0.5f) : 0.f;
         sprite(vec3(xs + s * 9.8f, DECK_Y + 8.8f, SHIP_Z + 4.f), 0.8f, pal_.lampA, deck * (1.f + tet));
         sprite(vec3(xs + s * 9.8f, DECK_Y + 8.8f, SHIP_Z - 4.f), 0.8f, pal_.lampA, deck * (1.f + tet));
         sprite(vec3(xs + s * 6.f, DECK_Y + 12.5f, SHIP_Z), 0.5f, vec3(1.f), 0.9f);
@@ -1304,7 +1304,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uWinCol", lerp(P.lampA, vec3(1.f, 0.85f, 0.6f), 0.5f) * (0.45f + 0.4f * wm + 0.2f * wp + 0.3f * fest_));
         set3f(p, "uQuayLine", lin(0xc8a030) * 0.9f);
         set1f(p, "uBay", bare_ ? 0.f : 1.f);
-        set1f(p, "uDeckLights", saturate(0.3f + 0.4f * wm + 0.3f * wp + (tetrisT_ < 4.f ? 0.5f : 0.f)));
+        set1f(p, "uDeckLights", saturate(0.3f + 0.4f * wm + 0.3f * wp + (quadT_ < 4.f ? 0.5f : 0.f)));
     };
     auto drawSky = [&](const mat4& vp, bool mirror) {
         glUseProgram(progSky_);

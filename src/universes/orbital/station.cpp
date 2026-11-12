@@ -410,8 +410,8 @@ float OrbitalUniverse::lampK(int group, float order) const {
     float k = groupOn_[std::clamp(group, 0, 2)];
     k = std::max(k, smoothstepf(order - 0.06f, order + 0.06f, dropSeq_));
     k *= 1.f - smoothstepf(1.f - order - 0.1f, 1.f - order + 0.1f, over_ * 1.25f);
-    // a Tetris: a wave of light running out from the core
-    if (tetrisT_ < 2.5f) k += 1.6f * std::exp(-sq((order - tetrisT_ * 0.6f) / 0.1f)) * (1.f - tetrisT_ / 2.5f);
+    // a quad: a wave of light running out from the core
+    if (quadT_ < 2.5f) k += 1.6f * std::exp(-sq((order - quadT_ * 0.6f) / 0.1f)) * (1.f - quadT_ / 2.5f);
     return k;
 }
 

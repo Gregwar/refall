@@ -237,7 +237,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- flat triangles (tetris-universe-scene's panels)
+// ---------------------------------------------------------------- flat triangles (refall-scene's panels)
 
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;

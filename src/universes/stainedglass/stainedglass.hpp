@@ -77,7 +77,7 @@ private:
     float winCx_ = 16.f, winBase_ = -8.f, winSpring_ = 3.f, winA0_ = 3.f, winR0_ = 6.f, winA1_ = 1.5f, winR1_ = 3.f,
           winM_ = 0.13f, roseY_ = 3.f, roseR_ = 1.8f, roseCore_ = 0.5f, panelH_ = 1.6f;
     int fillCount_ = 0;
-    int roseLit_ = -1;            // the rose a Tetris glazed last (it blazes)
+    int roseLit_ = -1;            // the rose a quad glazed last (it blazes)
     std::vector<int> lancetOrder_; // the order lancet panes fill in (bottom up, alternating sides)
     void placeWindows();
     int fillPane(const vec3& a, const vec3& b);
@@ -182,7 +182,7 @@ private:
     float dropStart_ = 0.f;        // (seconds, without a song)
     float dropT_ = 0.f, dropA_ = 0.f, dropEnv_ = 0.f; // the sun striking: two eased stages (no jump)
     bool realDrop_ = false;        // a DROP (the full strike), not a chorus
-    float flare_ = 0.f, flareA_ = 0.f; // a Tetris: the roses blaze
+    float flare_ = 0.f, flareA_ = 0.f; // a quad: the roses blaze
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
     double beat_ = 0.0, lastGlintBeat_ = -1.0;

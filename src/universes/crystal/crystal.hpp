@@ -138,7 +138,7 @@ private:
     double dropBeat_ = 0.0;        // when it came (beats)
     float dropStart_ = 0.f;        // (seconds, without a song)
     float dropT_ = 0.f, dropA_ = 0.f, dropEnv_ = 0.f; // the drop's illumination (two eased stages: no jump)
-    float ring_ = -1.f;            // a Tetris: a ring of light running through the cave's crystals (seconds)
+    float ring_ = -1.f;            // a quad: a ring of light running through the cave's crystals (seconds)
     float kickIn_ = 0.f, kickPrev_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
     double beat_ = 0.0;

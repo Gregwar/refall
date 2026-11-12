@@ -151,7 +151,7 @@ private:
     struct Glint { vec2 p; float t, life, size; vec3 col; };
     std::vector<Glint> glints_;
     void glintBurst(int n, float spread);
-    float tetrisT_ = 9.f;
+    float quadT_ = 9.f;
 
     // ---- Game state seen by the universe.
     bool slowOn_ = false;

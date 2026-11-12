@@ -13,7 +13,7 @@ constexpr float WELL_X = 5.1f;
 // first a lake in the hollow behind the well, then it spills over the far plain out to the horizon and creeps up the
 // beach, up to about three quarters of the well's height
 constexpr float SEA_LOW = -14.6f, SEA_HIGH = 5.0f;
-// how many poured lines fill the sea: it rises linearly, every line by the same amount (a Tetris pours 1.5 per line)
+// how many poured lines fill the sea: it rises linearly, every line by the same amount (a quad pours 1.5 per line)
 constexpr float SEA_FULL_LINES = 60.f;
 // the first boats sail out once the sea is this high
 constexpr float BOAT_LEVEL = -10.4f;

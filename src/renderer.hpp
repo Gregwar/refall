@@ -68,7 +68,7 @@ public:
     };
     void setBreak(Break b) { brk_ = std::move(b); }
     const TitleCard& titleCard() const { return card_; }
-    void forceFx(int slow, int tetris);
+    void forceFx(int slow, int quadClear);
 
     void render(const Game& game, const MusicState& music, double time, float dt, bool paused,
                 const std::vector<HudText>& hud, float fade);

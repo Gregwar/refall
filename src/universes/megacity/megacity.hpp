@@ -260,7 +260,7 @@ private:
     float dropAmt_ = 0.f, swell_ = 0.f;
     float beams_ = 0.f;
     float kickIn_ = 0.f;
-    float tetrisGlow_ = 0.f;
+    float quadGlow_ = 0.f;
     float traffic_ = 0.f, trafficPhase_ = 0.f;
     float beatClock_ = 0.f;
     double fakeBeat_ = 0.0;

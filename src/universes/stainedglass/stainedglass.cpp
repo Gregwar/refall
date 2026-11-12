@@ -20,7 +20,7 @@
 // along the saddle bar to the next empty pane (bottom up, side to side), which it fills from the bottom with a
 // glowing meniscus; the pane then cools from white-hot to its color, a crackle of light running through it and a
 // few sparks as it sets (the stream leaves a trace cooling in the lead behind it). A double or triple sends one
-// stream per row, quicker, branching at the window; a Tetris sends its four rows together up to a whole rose, where
+// stream per row, quicker, branching at the window; a quad sends its four rows together up to a whole rose, where
 // the stream branches around the ring and in along the spokes into every petal, and the rose blazes once set. A
 // long song ends with both windows complete (then the oldest panes are glazed again).
 //
@@ -570,7 +570,7 @@ int StainedGlassUniverse::fillPane(const vec3& a, const vec3& b) {
     return pick;
 }
 
-// A Tetris glazes a whole rose: the emptier one.
+// A quad glazes a whole rose: the emptier one.
 int StainedGlassUniverse::roseSide() {
     int side = 0, best = -1;
     for (int s = 0; s < 2; s++) {
@@ -819,7 +819,7 @@ void StainedGlassUniverse::onEvent(const GameEvent& ev, const Game& game) {
             return true;
         };
         // the rows melt, then run out of the well as molten glass to the windows: each row to its pane (bottom up,
-        // from side to side), a Tetris's four rows together to a whole rose, branching around its ring
+        // from side to side), a quad's four rows together to a whole rose, branching around its ring
         std::vector<vec3> rowCols;
         std::vector<int> rowYs;
         std::vector<std::array<vec3, 10>> rowCells;
@@ -888,7 +888,7 @@ void StainedGlassUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const Sheet& s = sh_[c.y][c.x];
             cracks_.push_back({c.x, c.y, c.type, m, id ? s.px : (float)c.x, id ? s.py : (float)c.y, id ? s.seed : seedOf(nextId_), 0.f});
         }
-        // a Tetris: the windows glint (the rose blazes once its glass has set)
+        // a quad: the windows glint (the rose blazes once its glass has set)
         if (ev.count >= 4)
             for (Pane& p : panes_)
                 if (p.order >= 0 && !p.pending) p.glint = std::max(p.glint, 0.45f);
@@ -1850,7 +1850,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
             const float rr = p.size * (0.6f + 0.9f * std::sqrt(k));
             sprites_.push_back({{p.p.x, p.p.y, rr, rr * 0.35f}, {dustCol.x, dustCol.y, dustCol.z, 0.35f * (1.f - k) * (1.f - k) * worldK}, {5.f, 0.f, 0.f, 0.f}});
         }
-        // a Tetris: the glazed rose blazes, a halo of its glass around it
+        // a quad: the glazed rose blazes, a halo of its glass around it
         if (roseLit_ >= 0 && flareA_ > 0.01f && roseOn_) {
             const int r0 = roseLit_ * slotsPerWin_ + lancets_ * (panelsK_ + 1);
             vec3 avg{0.f};
