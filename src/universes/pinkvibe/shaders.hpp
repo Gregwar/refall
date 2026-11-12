@@ -239,31 +239,31 @@ void main() {
     layer(acc, d, col);
     float lum = dot(col, vec3(0.299, 0.587, 0.114));
     vec3 M = lum > 0.8 ? mix(col, vec3(0.86, 0.45, 0.58), 0.38) : mix(col, vec3(1.0, 0.97, 0.98), 0.5);
-    // the motif, small and calm, one per type, low right of the center
-    vec2 q = (u - vec2(0.04, -0.04)) / 0.17;
+    // the motif, calm, a little larger, one per type, low right of the center
+    vec2 q = (u - vec2(0.02, -0.02)) / 0.21;
     if (type == 0) {           // I: a pearl, a row of three dots
         float dm = min(length(q - vec2(-0.75, 0.0)), min(length(q), length(q - vec2(0.75, 0.0)))) - 0.24;
-        layer(acc, dm * 0.17, M);
+        layer(acc, dm * 0.21, M);
     } else if (type == 1) {    // O: a tiny heart
-        layer(acc, dHeart(q * 1.05) * 0.17, M);
+        layer(acc, dHeart(q * 1.05) * 0.21, M);
     } else if (type == 2) {    // T: a little flower
         float an = atan(q.y, q.x);
         float rr = 0.62 + 0.3 * cos(an * 5.0);
-        layer(acc, (length(q) - rr) * 0.6 * 0.17, M);
-        layer(acc, (length(q) - 0.24) * 0.17, col);
+        layer(acc, (length(q) - rr) * 0.6 * 0.21, M);
+        layer(acc, (length(q) - 0.24) * 0.21, col);
     } else if (type == 3) {    // S: a sparkle
-        layer(acc, dSparkle(q * 0.85) * 0.17 / 0.85, M);
+        layer(acc, dSparkle(q * 0.85) * 0.21 / 0.85, M);
     } else if (type == 4) {    // Z: a crescent moon
         float cm = max(length(q) - 0.78, -(length(q - vec2(0.36, 0.26)) - 0.62));
-        layer(acc, cm * 0.17, M);
+        layer(acc, cm * 0.21, M);
     } else if (type == 5) {    // J: a bow
         vec2 b = vec2(abs(q.x), q.y);
         float wing = max(dEll(b - vec2(0.52, 0.0), vec2(0.5, 0.42)), -b.x + 0.1 + abs(q.y) * 0.4);
         float knot = length(q) - 0.2;
-        layer(acc, min(wing, knot) * 0.17, M);
+        layer(acc, min(wing, knot) * 0.21, M);
     } else {                   // L: a bubble ring
-        layer(acc, (abs(length(q) - 0.62) - 0.14) * 0.17, M);
-        layer(acc, (length(q - vec2(-0.2, 0.2)) - 0.12) * 0.17, M);
+        layer(acc, (abs(length(q) - 0.62) - 0.14) * 0.21, M);
+        layer(acc, (length(q - vec2(-0.2, 0.2)) - 0.12) * 0.21, M);
     }
     if (vC.w < 0.0) acc.rgb = mix(acc.rgb, vec3(1.0, 0.96, 0.97), -vC.w);
     else {
