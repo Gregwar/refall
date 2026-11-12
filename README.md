@@ -186,8 +186,8 @@ no song previews.
   small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
   playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its song count, and its
   title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in `playlists.tsv` in the
-  user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game over: any key plays
-  again, Esc goes back to the menu.
+  user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game over holds until a key
+  is pressed, then goes back to the menu.
 - **Voyage** (the campaign) is 12 stages of 5 songs played in a row. There are no levels: each song has its velocity
   (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
   with the difficulty (EASY, NORMAL, EXPERT, chosen at the top of the Voyage screen). The stages are 12 glass petals in
@@ -198,12 +198,13 @@ no song previews.
   one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all five songs of a run
   started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty unlocks
   the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
-  best score) but the stage isn't cleared. A game over ends the run and goes back to the stages. The game remembers,
+  best score) but the stage isn't cleared. A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score) and the songs beaten (with the points scored during
   each), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
 
-A game over muffles the song like the slow-motion bonus does (a low-pass filter), and lowers its volume, for as long
-as the game over lasts.
+A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
+to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays
+again).
 
 | Option | |
 |---|---|

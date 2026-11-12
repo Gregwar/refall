@@ -237,6 +237,12 @@ private:
     static constexpr float MENU_MUSIC_GAIN = 0.7f, MENU_MUSIC_DUCKED = 0.04f;
     void startMenuMusic();
     void updateMenuMusic();
+    // A key or button meant to move on (a gameplay or a menu action), on a game over's screen.
+    bool anyKeyPressed() const {
+        for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE, A_UI_OK, A_UI_BACK})
+            if (input_.pressed(a)) return true;
+        return false;
+    }
     std::string testShot_; // ZEN_TEST_SHOTS: a screenshot of this frame
     void beginSession(const Menu::Choice& c);
     void toMenu(Menu::Screen s, const std::string& msg = "", const std::string& sub = "", bool bad = false);
@@ -905,8 +911,8 @@ std::vector<HudText> App::buildHud(float dt) {
             float b = std::min(1.f, (overTime_ - 2.5f) / 0.8f);
             const bool pad = input_.active() == Input::Gamepad;
             std::string again = pad ? "PRESS A BUTTON TO PLAY AGAIN" : "PRESS A KEY TO PLAY AGAIN";
-            if (mode_ == MODE_CAMPAIGN) again = "BACK TO THE VOYAGE";
-            else if (menuEnabled_) again += pad ? "    B  MENU" : "    ESC  MENU";
+            if (mode_ == MODE_CAMPAIGN) again = pad ? "PRESS A BUTTON: BACK TO THE VOYAGE" : "PRESS A KEY: BACK TO THE VOYAGE";
+            else if (menuEnabled_) again = pad ? "PRESS A BUTTON: BACK TO THE MENU" : "PRESS A KEY: BACK TO THE MENU";
             hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
     }
@@ -1280,9 +1286,10 @@ int App::run() {
                 if (input_.pressed(A_BONUS)) game_.activateBonus();
             }
             if (game_.over() && mode_ == MODE_CAMPAIGN && !shotMode) { // (offline renders play on)
-                // A campaign game over: a moment of it, then back to the campaign menu.
+                // A campaign game over: it holds (the song muffled, then faded out) until the player presses a key,
+                // then back to the Voyage.
                 overTime_ += dt;
-                if (overTime_ > 5.f || (overTime_ > 2.5f && (input_.pressed(A_UI_OK) || input_.pressed(A_UI_BACK)))) {
+                if (overTime_ > 2.5f && anyKeyPressed()) {
                     const CampaignStage* st = runStage();
                     char sub[128];
                     std::snprintf(sub, sizeof(sub), "STAGE %d  SONG %d/%d  %s  SCORE %d", run_.stage + 1, run_.current + 1,
@@ -1292,10 +1299,10 @@ int App::run() {
                     continue;
                 }
             } else if (game_.over()) {
-                // Game over: the board dissolves, then any gameplay key/button starts a new game (Esc: the menu, when
-                // the game started on it).
+                // Game over: the board dissolves; from the menu it holds until the player presses a key, then back to
+                // the menu; without the menu (songs on the command line) a key starts a new game.
                 overTime_ += dt;
-                if (menuEnabled_ && overTime_ > 1.f && input_.pressed(A_UI_BACK)) { toMenu(Menu::FREE); swap(); continue; }
+                if (menuEnabled_ && overTime_ > 2.5f && anyKeyPressed()) { toMenu(Menu::FREE); swap(); continue; }
                 bool any = false;
                 for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE}) any |= input_.pressed(a);
                 if ((any && overTime_ > 2.5f) || ((opt_.autoplay || shotMode) && overTime_ > 4.f)) {
@@ -1322,7 +1329,9 @@ int App::run() {
                 muffleWas_ = muffle;
                 audio_.setMuffled(muffle, game_.over() ? 1.2f : 0.6f);
             }
-            audio_.setSongGain(game_.over() ? 0.45f : 1.f, game_.over() ? 1.5f : 0.6f);
+            // after a game over the muffled song fades out to silence (from 2.5 s on, over 3 s)
+            audio_.setSongGain(!game_.over() ? 1.f : overTime_ < 2.5f ? 0.45f : 0.f,
+                               !game_.over() ? 0.6f : overTime_ < 2.5f ? 1.5f : 3.f);
             if (game_.bonusActive() != slowWas_) {
                 slowWas_ = game_.bonusActive();
                 // The screen's colors are reversed for the whole bonus (a front sweeps it in and out).
