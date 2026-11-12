@@ -1,6 +1,6 @@
 # Refall
 
-A Tetris game inspired by **Tetris Effect** that plays **any music you like**: your own folder or a YouTube
+A music-reactive falling-block puzzle game that plays **any music you like**: your own folder or a YouTube
 playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, chorus, drop...) and the game stages
 it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
 
@@ -91,7 +91,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 </tr>
 <tr>
 <td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares cut out of thick colored paper and laid on the sheet in relief (soft shadows, lit edges), recomposed on the bar grid; each cleared row joins the poster as a small cut-out in a growing sampler, the drop lifts the forms off the sheet into a turning kinetic sculpture under a circling spotlight, then folds them back into a new composition<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/skyocean.jpg"><br><b>CELESTIAL OCEAN</b>: a sea of clouds at night under a big moon; moonstone pieces, each cleared row rises out of the clouds as a translucent creature of light (a school of fish, jellyfish, a manta ray, a whale for a Tetris) swimming away through the starry sky, the drop brings a giant whale slowly across the whole sky<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/skyocean.jpg"><br><b>CELESTIAL OCEAN</b>: a sea of clouds at night under a big moon; moonstone pieces, each cleared row rises out of the clouds as a translucent creature of light (a school of fish, jellyfish, a manta ray, a whale for a quad) swimming away through the starry sky, the drop brings a giant whale slowly across the whole sky<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a manga color page in ink, screentones and watercolor washes, drawn in pencil, then inked and colored panel by panel as rows clear; the pieces are inked blocks of color under their screentones, the drop is a full-page splash of color, focus lines and a huge sound effect<br><sub>🔍 <i>to review</i></sub></td>
@@ -143,7 +143,7 @@ Disabled for now (not built; their code stays in the repository):
 
 | Universe | Status |
 |---|---|
-| PIXEL | Too close to a classical Tetris look |
+| PIXEL | Too close to a classic falling-block look |
 | SYNTHWAVE | To be redesigned (minimal neon) |
 | CLOUDSCAPE | To be reworked (nights only) |
 | MAGNETS | Iron filings on paper; not convincing yet, waiting for a better idea |

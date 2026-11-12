@@ -83,20 +83,20 @@ and their variants). The menu on the left picks the universe, its variant, the s
 calm, mid, peak) and the transition used for the next change of universe (AUTO picks one as the game does). Up/Down
 choose a row, Left/Right (or a click / the mouse wheel) change it: a new universe or variant comes in with that
 transition, on the next downbeat of the viewer's steady 120 BPM beat. T / V go to the next universe / variant, I
-switches at once, F fills the board, B starts the slow motion, X plays a Tetris, K a drop hit, L a level up. "Send to dashboard"
+switches at once, F fills the board, B starts the slow motion, X plays a quad, K a drop hit, L a level up. "Send to dashboard"
 (or D) asks for a comment and opens a thread on the universe shown in the scene review dashboard
 (`tools/scenereview.py`, "to process"), with a snapshot at the section and level shown.
 
-## Slow motion and Tetris rewards
+## Slow motion and quad rewards
 
 Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it; a
-Tetris charges 5). Once it's full, the slow-motion button starts the bonus: for 10 s the gauge drains, the
+quad charges 5). Once it's full, the slow-motion button starts the bonus: for 10 s the gauge drains, the
 game slows down to ×0.25 (pieces fall four times slower) while the song keeps playing normally: only a very
 slight tape-like slow-down (and back) marks the start and the end. Use it to clean up the stack in a part that's too fast. Gravity gets
 back on the beat when the bonus ends. Meanwhile the universe shows the slow motion its own way (VECTOR sweeps in
 the complementary phosphor with long trails).
 
-A Tetris scores a 400-point bonus (800 back-to-back) and the universe celebrates it (VECTOR: a vector shockwave
+A quad scores a 400-point bonus (800 back-to-back) and the universe celebrates it (VECTOR: a vector shockwave
 and beam overdrive).
 
 ## How the music shapes the game
