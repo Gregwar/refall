@@ -210,7 +210,7 @@ with bubbly moons; Comfortaa and Quicksand), and two that show the game's own wo
 12 framed windows, each opening onto the stage's real universes rendered live, a strip of 5 panes for its songs, the
 focused one growing; locked windows shuttered, cleared ones warmly lit with a brass plaque) and 12 `kaleido` (the default: the
 focused song's live universe folded into a turning stained-glass kaleidoscope, the stages glass shards in a rosette
-around a live medallion). Their universes render live at 640x360 (the focused one at 30 fps, the others at 12), and a
+around a plain dark glass medallion). Their universes render live at 640x360 (the focused one at 30 fps, the others at 12), and a
 snapshot of each is kept in `~/.cache/zentris/menu-worlds/` for the ones not live. `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
 progress, never saved; `--menu-demo` shows the same progress in `--menu-shot`). The fonts are OFL, in `src/embed/`
 with their licences.

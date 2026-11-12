@@ -3,7 +3,7 @@
 //            5 panes (the songs) under it; the focused pane grows; locked windows have their shutters closed, cleared
 //            ones warm light and a brass plaque; the camera glides along the wall.
 //   KALEIDO  the focused song's live universe folded into a slowly turning stained-glass kaleidoscope; the stages are
-//            glass shards in a rosette around a live medallion, the songs smaller facets; focus turns the rosette
+//            glass shards in a rosette around a plain dark glass medallion, the songs smaller facets; focus turns the rosette
 //            to bring the chosen shard to the reading position (the right).
 // Live universes come from a WorldPool (menuworlds.hpp): small frames, their own frame rate, snapshots otherwise.
 #include <algorithm>
@@ -496,9 +496,12 @@ void Worlds::kalCampaign() {
         p.setAdditive(false);
         p.ring(fx, fy, 30 * u, 2 * u, hex(0xffffff, 0.9f * pulse));
     }
-    // the medallion: the focused universe, live
+    // the medallion: a plain dark glass disc, softly tinted by the focused song's color (no preview)
     p.circle(cx, cy, 128 * u, hex(0x08080c));
-    showImage(spec(fs, m.row_ == 1 ? m.song_ : 0), cx - 120 * u, cy - 120 * u, 240 * u, 240 * u, hex(0xffffff), 120 * u);
+    {
+        const Col sc = open(fs) ? songCol(fs, m.row_ == 1 ? m.song_ : 0) : hex(0x5a5c66);
+        p.circle(cx, cy, 118 * u, withA(sc, 0.16f), 70 * u);
+    }
     p.ring(cx, cy, 121 * u, 3 * u, hex(0xe8c06a, 0.8f));
     // the focused stage, on the right
     {
@@ -537,9 +540,7 @@ void Worlds::kalTitle() {
         const float a = t * 0.03f + i * TAU / 12;
         kite(cx, cy, a, 200 * u, 290 * u, 0.2f, hex(i % 2 ? 0xffffff : 0xe8c06a), 0.18f, true, hex(0x08080c, 0.8f));
     }
-    p.circle(cx, cy, 200 * u, hex(0x08080c));
-    showImage(cur, cx - 190 * u, cy - 190 * u, 380 * u, 380 * u, hex(0xffffff), 190 * u);
-    if (mix > 0.f) showImage(next, cx - 190 * u, cy - 190 * u, 380 * u, 380 * u, hex(0xffffff, mix), 190 * u);
+    p.circle(cx, cy, 200 * u, hex(0x08080c));   // a plain dark glass disc (no preview)
     p.ring(cx, cy, 191 * u, 4 * u, hex(0xe8c06a, 0.85f));
     p.rrect(cx - 520 * u, Y(600), 1040 * u, 120 * u, 24 * u, hex(0x0c0c14, 0.7f));
     p.rrectLine(cx - 520 * u, Y(600), 1040 * u, 120 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.25f));
