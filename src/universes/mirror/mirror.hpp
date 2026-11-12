@@ -1,5 +1,5 @@
 #pragma once
-// MIRROR: glass cubes in a liminal room, a frameless mirror flying around them (see mirror.cpp).
+// MIRROR: glass cubes in a liminal room, a gallery of frameless mirrors floating around them (see mirror.cpp).
 #include <string>
 #include <vector>
 
@@ -34,16 +34,21 @@ private:
     void buildCubes(const Game& g);
     vec3 tintOf(int t) const;
 
-    // ---- The mirrors: the main one always, two more in the drop (a triptych opening from behind it).
-    static constexpr int MIRRORS = 3;
-    struct Mirror { vec3 c, r, u, n; float alpha = 0.f, sheenT = 9.f, sheenAmp = 0.f, glint = 0.f; };
+    // ---- The mirrors: a gallery of six, three in each side band, each reflecting the stack from its own place.
+    static constexpr int MIRRORS = 6;
+    struct Mirror {
+        vec3 c, r, u, n;
+        float alpha = 1.f, sheenT = 9.f, sheenAmp = 0.f, glint = 0.f;
+        float rect[4] = {0, 0, 0, 0}, tile[4] = {0, 0, 0, 0}; // its screen footprint (uv), its tile in the atlas (uv)
+        bool live = false;
+    };
     Mirror mir_[MIRRORS];
-    ugl::Target mirT_[MIRRORS];
-    double path_ = 0.0;        // the main mirror's position along its path
-    float spin_ = 0.f;         // a Tetris: one full turn, eased
-    float spinT_ = 9.f;
-    float mirScale_ = 1.f;   // the mirrors' size (a little smaller in the drop's triptych)
-    float reach_ = 0.f;        // the path's width (the music's energy, smoothed)
+    ugl::Target atlas_;        // every mirror's reflection, each in its own tile, supersampled 2x
+    int tileW_ = 1, tileH_ = 1;
+    double path_ = 0.0;        // the gallery's drift
+    float spinT_ = 9.f;        // a Tetris: each mirror turns once around, one after the other
+    float reach_ = 0.f;        // the drift's width (the music's energy, smoothed)
+    float ring_ = 0.f;         // the drop's kaleidoscope: the rings' turn
     void updateMirrors(float dt, float wdt, const vec3& eye);
     void sheen(int i, float amp);
 

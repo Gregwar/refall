@@ -1,4 +1,4 @@
-// MIRROR: glass cubes in a liminal room, a frameless mirror flying around them.
+// MIRROR: glass cubes in a liminal room, a gallery of frameless mirrors floating around them.
 //
 // One world, in real 3D through the layout's camera: a quiet, empty room like a dream of a gallery, a seamless
 // floor curving up into walls that round into each other (an infinity cove), a low two-tread step and one slim
@@ -12,25 +12,24 @@
 // softbox and the accents on its rounded bevels and shows its back edges through the glass. The key light shines
 // through the stack: colored shadows with caustic lines fall on the floor behind the well.
 //
-// The mirror: one tall, frameless mirror with rounded corners and a thin polished edge flies slowly around the room
-// on smooth curves, in the side bands and behind the well (never in front of it), always turned to show the stack
-// (its normal halves the angle between the camera and the stack), turning and rolling a little as it goes. It is a
-// real planar reflection (the room traced in its mirrored ray, the cubes drawn through the mirrored camera, at half
-// resolution, only where the mirror is on screen): the stack, the falling piece and the room from its own angle.
-// It throws the key light back into the room: a soft patch of light that drifts over the floor and the walls as it
-// flies. The music's energy sets its speed and the width of its path (a slow drift when calm, wide sweeping arcs at
-// peaks); a peak's kicks make its edge glint.
+// The mirrors: a gallery of six frameless mirrors (rounded corners, a fine bevel, a crisp polished edge), three in
+// each side band (never over the well or the HUD columns), each drifting and rolling gently on its own slow curves,
+// always turned to show the stack (its normal halves the angle between the camera and the stack). Each is a real
+// planar reflection (the room traced in its mirrored ray, the cubes drawn through the mirrored camera), rendered into
+// its own tile of one atlas at twice the resolution over its footprint only, read back with a 2 x 2 box filter. Each
+// throws the key light back into the room: a soft patch that drifts over the floor and the walls. The music's energy
+// sets their speed and reach; a peak's kicks make their edges glint.
 //
 // Staging: calm is the plain room, dim accents and a slow drift; mid brightens the accents and the mirror ranges
 // further; a peak brightens them again. The drop swings the lights to the variant's drop scheme (one swell on its
-// downbeat that settles) and the mirror opens into a triptych: two more mirrors slide out from behind it and fan
-// in toward the stack, for the whole drop, folding back after. A cleared row's cubes shatter into glinting shards
+// downbeat that settles) and each side's mirrors gather into a ring that turns slowly, the mirrors rolling with it like
+// the petals of a kaleidoscope, for the whole drop. A cleared row's cubes shatter into glinting shards
 // that drift back into the room and dissolve (at the real speed even in slow motion), and the light of the clear
 // sweeps across the mirrors; a Tetris turns the mirror once around, its thrown light sweeping the room. Slow motion
 // is a cool moonlight from the right; game over frosts the stack, row by row from the top.
 //
-// Cost: one traced room pass (full resolution), one to three reflection passes (half resolution, scissored to the
-// mirror), instanced glass cubes (4x MSAA), a mip-chain bloom.
+// Cost: one traced room pass (full resolution), six small reflection passes (each mirror's footprint, 2x
+// supersampled), instanced glass cubes (4x MSAA), a mip-chain bloom.
 #include "universes/mirror/mirror.hpp"
 
 #include <algorithm>
@@ -113,7 +112,7 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float CUBE_HALF = 0.46f, CUBE_Z = -0.47f;
 const vec3 PANEL_MIN(-5.32f, -10.02f, -1.12f), PANEL_MAX(5.32f, 10.32f, -1.1f);
-constexpr float MIR_HW = 3.3f, MIR_HH = 5.8f; // the mirror's half size
+constexpr float MIR_HW = 2.0f, MIR_HH = 3.3f; // a mirror's half size
 constexpr float FY = -10.02f;
 
 float hashf(float x) {
@@ -286,10 +285,11 @@ void MirrorUniverse::resize(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glGenerateMipmap(GL_TEXTURE_2D);
-    for (auto& t : mirT_) {
-        t.destroy();
-        t.create(std::max(1, width_ / 2), std::max(1, height_ / 2), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
-    }
+    // the reflections' atlas: six tiles (3 x 2), each a mirror's footprint at twice the screen's resolution
+    tileW_ = 2 * std::max(8, (int)std::ceil(width_ * 0.2f));
+    tileH_ = 2 * std::max(8, (int)std::ceil(height_ * 0.4f));
+    atlas_.destroy();
+    atlas_.create(3 * tileW_, 2 * tileH_, GL_R11F_G11F_B10F, GL_RGB, GL_FLOAT, true);
     if (msFbo_) {
         glDeleteFramebuffers(1, &msFbo_);
         glDeleteRenderbuffers(1, &msColor_);
@@ -311,7 +311,7 @@ void MirrorUniverse::resize(int width, int height) {
 MirrorUniverse::~MirrorUniverse() {
     roomT_.destroy();
     sceneT_.destroy();
-    for (auto& t : mirT_) t.destroy();
+    atlas_.destroy();
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
@@ -429,7 +429,7 @@ void MirrorUniverse::onEvent(const GameEvent& ev, const Game&) {
             }
         }
         for (int i = 0; i < MIRRORS; i++) sheen(i, ev.count >= 4 ? 1.f : 0.55f);
-        if (ev.count >= 4 && spinT_ > 3.2f) spinT_ = 0.f;
+        if (ev.count >= 4 && spinT_ > 4.f) spinT_ = 0.f;
         for (auto& row : flash_)
             for (float& v : row) v = 0.f;
         break;
@@ -558,43 +558,43 @@ void MirrorUniverse::buildCubes(const Game& g) {
 // =====================================================================================================
 
 void MirrorUniverse::updateMirrors(float dt, float wdt, const vec3& eye) {
-    // the path: a slow Lissajous through the side bands and behind the well; its speed and width follow the energy
-    path_ += wdt * (0.032f + 0.07f * reach_);
+    // the gallery: three mirrors in each side band, each drifting on its own slow curves (their speed and reach
+    // follow the energy), each turned to show the stack (its normal halving the angle between the camera and the
+    // stack), rolling a little; the drop gathers each side into a ring that turns slowly, the mirrors rolling with it
+    // like the petals of a kaleidoscope
+    path_ += wdt * (0.05f + 0.1f * reach_);
     const float s = (float)path_;
-    const float w = 0.7f + 0.45f * reach_;
+    const float w = 0.6f + 0.6f * reach_;
     const float dk = smoothstepf(0.f, 1.f, dropK_);
-    vec3 c;
-    // (it lingers in the side bands and crosses behind the well quickly)
-    c.x = 25.f * std::tanh(2.2f * std::sin(s)) / std::tanh(2.2f) * (0.88f + 0.12f * w);
-    c.z = -12.f - 4.5f * (0.5f + 0.5f * std::sin(0.53f * s + 1.1f)) * w - 2.5f * std::fabs(std::cos(s));
-    // the drop's triptych opens outward (its inner wing where the mirror was)
-    mirScale_ = 1.f - 0.18f * dk;
-    const float hw = MIR_HW * mirScale_;
-    c.x += std::tanh(c.x / 4.f) * (2.f * hw + 0.4f) * 0.9f * dk;
-    c.z -= 4.f * dk;
-    c.y = -1.5f + 2.6f * std::sin(0.71f * s + 0.4f) * w;
-    c.y = std::max(c.y, FY + MIR_HH + 0.9f);
-    // its face: halfway between the camera and the stack (so it shows the stack), turning a little as it goes
-    const vec3 stack(0.f, -4.5f, CUBE_Z);
-    vec3 n = normalize(normalize(eye - c) + normalize(stack - c));
+    ring_ += wdt * (0.06f + 0.16f * dk);
     spinT_ += dt;
-    spin_ = spinT_ < 3.2f ? TAU * smoothstepf(0.f, 1.f, spinT_ / 3.2f) : 0.f;
-    n = rotY(n, 0.05f * std::sin(0.37f * s) * w + spin_);
-    vec3 r = normalize(cross(vec3(0, 1, 0), n));
-    vec3 u = cross(n, r);
-    const float roll = 0.07f * std::sin(0.29f * s + 0.8f);
-    const vec3 r2 = r * std::cos(roll) + u * std::sin(roll), u2 = u * std::cos(roll) - r * std::sin(roll);
-    mir_[0].c = c; mir_[0].n = n; mir_[0].r = r2; mir_[0].u = u2; mir_[0].alpha = 1.f;
-    // the drop's triptych: two more slide out from behind it and fan in toward the stack
-    for (int k = 1; k < MIRRORS; k++) {
-        const float sd = k == 1 ? -1.f : 1.f;
-        Mirror& m = mir_[k];
-        const float open = dk;
-        m.c = c + r2 * (sd * (2.f * hw + 0.4f) * open) - n * (0.35f * (1.f - open) + 0.6f * open);
-        m.n = rotAxis(n, u2, -sd * 0.32f * open);
-        m.r = rotAxis(r2, u2, -sd * 0.32f * open);
-        m.u = u2;
-        m.alpha = smoothstepf(0.f, 0.35f, dk);
+    const vec3 stack(0.f, -4.f, CUBE_Z);
+    static const float BASE[3][3] = {{18.f, 5.0f, -9.f}, {26.5f, -0.2f, -17.f}, {18.5f, -5.6f, -10.f}};
+    for (int side = 0; side < 2; side++) {
+        const float sd = side ? 1.f : -1.f;
+        for (int k = 0; k < 3; k++) {
+            Mirror& m = mir_[side * 3 + k];
+            const float ph = k * 2.1f + side * 1.3f;
+            vec3 g(BASE[k][0] + 1.6f * w * std::sin(0.43f * s + ph), BASE[k][1] + 0.7f * w * std::sin(0.61f * s + ph * 1.7f),
+                   BASE[k][2] + 2.2f * w * std::sin(0.29f * s + ph * 0.6f));
+            const float a = sd * ring_ + k * TAU / 3.f + PI * 0.5f;
+            const vec3 rg(22.f + 4.3f * std::cos(a) * sd, -0.4f + 4.3f * std::sin(a), -12.5f + 1.2f * std::sin(a + ring_));
+            vec3 c = lerp(g, rg, dk);
+            // (never over the HUD column: its inner edge stays out of it)
+            c.x = std::max(c.x, 11.6f * (34.6f - c.z) / 34.6f + MIR_HW + 0.3f);
+            c.y = std::max(c.y, FY + MIR_HH + 0.6f);
+            c.x *= sd;
+            vec3 n = normalize(normalize(eye - c) + normalize(stack - c));
+            const float spin = TAU * smoothstepf(0.f, 1.f, (spinT_ - 0.15f * (side * 3 + k)) / 2.6f);
+            n = rotY(n, 0.03f * std::sin(0.37f * s + ph) + (spinT_ < 4.f ? spin : 0.f));
+            const vec3 r = normalize(cross(vec3(0, 1, 0), n)), u = cross(n, r);
+            const float roll = lerpf(0.1f * std::sin(0.31f * s + ph * 1.3f), sd * (a - PI * 0.5f), dk);
+            m.c = c;
+            m.n = n;
+            m.r = r * std::cos(roll) + u * std::sin(roll);
+            m.u = u * std::cos(roll) - r * std::sin(roll);
+            m.alpha = 1.f;
+        }
     }
     for (Mirror& m : mir_) {
         if (m.sheenT < 1.f) m.sheenT = std::min(1.f, m.sheenT + dt / 0.95f);
@@ -881,33 +881,35 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, boardTex_);
         set1i(p, "uBoard", 0);
-        float mc[9], mr[9], mu[9], mn[9], ma[3], ms[3], mg[3];
+        float mc[3 * MIRRORS], mr[3 * MIRRORS], mu[3 * MIRRORS], mn[3 * MIRRORS], ma[MIRRORS], ms[MIRRORS], mg[MIRRORS];
+        float mrect[4 * MIRRORS], mtile[4 * MIRRORS];
         for (int i = 0; i < MIRRORS; i++) {
             const Mirror& m = mir_[i];
             const vec3* src[4] = {&m.c, &m.r, &m.u, &m.n};
             float* dst[4] = {mc, mr, mu, mn};
             for (int k = 0; k < 4; k++) { dst[k][i * 3] = src[k]->x; dst[k][i * 3 + 1] = src[k]->y; dst[k][i * 3 + 2] = src[k]->z; }
-            ma[i] = m.alpha * mirVis;
+            ma[i] = m.live ? m.alpha * mirVis : 0.f;
             ms[i] = m.sheenT < 1.f ? m.sheenT : 0.f;
             mg[i] = m.glint;
+            for (int k = 0; k < 4; k++) { mrect[i * 4 + k] = m.rect[k]; mtile[i * 4 + k] = m.tile[k]; }
         }
-        glUniform3fv(ugl::U(p, "uMirC"), 3, mc);
-        glUniform3fv(ugl::U(p, "uMirR"), 3, mr);
-        glUniform3fv(ugl::U(p, "uMirU"), 3, mu);
-        glUniform3fv(ugl::U(p, "uMirN"), 3, mn);
-        glUniform1fv(ugl::U(p, "uMirA"), 3, ma);
-        glUniform1fv(ugl::U(p, "uMirSheen"), 3, ms);
-        glUniform1fv(ugl::U(p, "uMirGlint"), 3, mg);
-        set2f(p, "uMirHalf", MIR_HW * mirScale_, MIR_HH * mirScale_);
-        set3f(p, "uMirTint", vec3(0.86f, 0.89f, 0.9f));
-        set1f(p, "uThrow", 0.32f);
+        glUniform3fv(ugl::U(p, "uMirC"), MIRRORS, mc);
+        glUniform3fv(ugl::U(p, "uMirR"), MIRRORS, mr);
+        glUniform3fv(ugl::U(p, "uMirU"), MIRRORS, mu);
+        glUniform3fv(ugl::U(p, "uMirN"), MIRRORS, mn);
+        glUniform1fv(ugl::U(p, "uMirA"), MIRRORS, ma);
+        glUniform1fv(ugl::U(p, "uMirSheen"), MIRRORS, ms);
+        glUniform1fv(ugl::U(p, "uMirGlint"), MIRRORS, mg);
+        glUniform4fv(ugl::U(p, "uMirRect"), MIRRORS, mrect);
+        glUniform4fv(ugl::U(p, "uMirTile"), MIRRORS, mtile);
+        set2f(p, "uMirHalf", MIR_HW, MIR_HH);
+        set3f(p, "uMirTint", vec3(0.88f, 0.9f, 0.91f));
+        set1f(p, "uThrow", 0.14f);
         set1i(p, "uMirCount", mirCount);
-        const char* names[3] = {"uMirTex0", "uMirTex1", "uMirTex2"};
-        for (int i = 0; i < MIRRORS; i++) {
-            glActiveTexture(GL_TEXTURE1 + i);
-            glBindTexture(GL_TEXTURE_2D, mirT_[i].tex);
-            set1i(p, names[i], 1 + i);
-        }
+        set4f(p, "uUvRect", 0.f, 0.f, 1.f, 1.f);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, mirCount > 0 ? atlas_.tex : 0);
+        set1i(p, "uMirAtlas", 1);
         glActiveTexture(GL_TEXTURE0);
     };
     auto cubeUniforms = [&](const mat4& vp, const vec3& eye, int reflectPass, const vec3& pn, float pd) {
@@ -937,48 +939,52 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     // ---- The reflection passes: the room traced in the mirrored ray, the cubes through the mirrored camera.
-    int mirCount = 0;
+    // Each mirror renders into its own tile of the atlas: its screen footprint at twice the resolution (the main
+    // pass reads it back with a 2 x 2 box filter: anti-aliased, steady).
+    glBindFramebuffer(GL_FRAMEBUFFER, atlas_.fbo);
+    glEnable(GL_SCISSOR_TEST);
     for (int i = 0; i < MIRRORS; i++) {
-        const Mirror& m = mir_[i];
-        if (m.alpha * mirVis <= 0.001f) break;
-        mirCount = i + 1;
+        Mirror& m = mir_[i];
+        m.live = false;
+        if (m.alpha * mirVis <= 0.001f) continue;
         const float d = dot(m.n, m.c);
-        ugl::Target& T = mirT_[i];
-        // the mirror's footprint on screen (the pass only runs there)
+        if (dot(eye_, m.n) - d <= 0.1f) continue; // seen from behind
         float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
         bool behind = false;
         for (int k = 0; k < 4; k++) {
-            const vec3 cpt = m.c + m.r * (((k & 1) ? MIR_HW : -MIR_HW) * mirScale_) + m.u * (((k & 2) ? MIR_HH : -MIR_HH) * mirScale_);
+            const vec3 cpt = m.c + m.r * ((k & 1) ? MIR_HW : -MIR_HW) + m.u * ((k & 2) ? MIR_HH : -MIR_HH);
             const vec4 h = vp_ * vec4(cpt, 1.f);
             if (h.w <= 0.01f) { behind = true; break; }
-            const float sx = (h.x / h.w * 0.5f + 0.5f) * T.w, sy = (h.y / h.w * 0.5f + 0.5f) * T.h;
+            const float sx = (h.x / h.w * 0.5f + 0.5f) * width_, sy = (h.y / h.w * 0.5f + 0.5f) * height_;
             x0 = std::min(x0, sx); x1 = std::max(x1, sx); y0 = std::min(y0, sy); y1 = std::max(y1, sy);
         }
-        T.bind();
+        if (behind) continue;
+        const int ix0 = std::max(0, (int)std::floor(x0) - 2), iy0 = std::max(0, (int)std::floor(y0) - 2);
+        const int ix1 = std::min(width_, (int)std::ceil(x1) + 2), iy1 = std::min(height_, (int)std::ceil(y1) + 2);
+        if (ix1 <= ix0 || iy1 <= iy0) continue;
+        const int bw = ix1 - ix0, bh = iy1 - iy0;
+        const float ss = std::min(2.f, std::min((float)tileW_ / bw, (float)tileH_ / bh));
+        const int tw = std::max(1, (int)(bw * ss)), th = std::max(1, (int)(bh * ss));
+        const int tx = (i % 3) * tileW_, ty = (i / 3) * tileH_;
+        m.live = true;
+        m.rect[0] = (float)ix0 / width_; m.rect[1] = (float)iy0 / height_;
+        m.rect[2] = (float)bw / width_; m.rect[3] = (float)bh / height_;
+        m.tile[0] = (float)tx / atlas_.w; m.tile[1] = (float)ty / atlas_.h;
+        m.tile[2] = (float)tw / atlas_.w; m.tile[3] = (float)th / atlas_.h;
+        glViewport(tx, ty, tw, th);
+        glScissor(tx, ty, tw, th);
         glClearColor(0.f, 0.f, 0.f, 0.f);
         glClearDepth(1.0);
-        if (!behind) {
-            const int ix0 = std::max(0, (int)x0 - 3), iy0 = std::max(0, (int)y0 - 3);
-            const int ix1 = std::min(T.w, (int)x1 + 4), iy1 = std::min(T.h, (int)y1 + 4);
-            if (ix1 <= ix0 || iy1 <= iy0) continue;
-            glEnable(GL_SCISSOR_TEST);
-            glScissor(ix0, iy0, ix1 - ix0, iy1 - iy0);
-        }
         glDepthMask(GL_TRUE);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glDisable(GL_DEPTH_TEST);
-        roomUniforms(0, vec2{(float)T.w, (float)T.h});
+        roomUniforms(0, vec2{(float)tw, (float)th});
         set1i(progRoom_, "uReflect", 1);
+        set4f(progRoom_, "uUvRect", m.rect[0], m.rect[1], m.rect[2], m.rect[3]);
         // (seen from the mirror, the smoked panel is lighter: the stack stays the subject of the reflection)
         set1f(progRoom_, "uPanelTrans", bare_ ? 1.f : lerpf(std::max(0.8f, V.panelTrans), 1.f, bridgeK));
         set3f(progRoom_, "uPN", m.n);
         set1f(progRoom_, "uPD", d);
-        // (the mirror pass's room samples no mirror: bind nothing it could feed back from)
-        for (int k = 0; k < MIRRORS; k++) {
-            glActiveTexture(GL_TEXTURE1 + k);
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-        glActiveTexture(GL_TEXTURE0);
         ugl::drawFullscreen();
         if (!world_.empty()) {
             mat4 R = mat4::identity();
@@ -987,19 +993,26 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
                 for (int c = 0; c < 3; c++) R.m[c * 4 + r] = (r == c ? 1.f : 0.f) - 2.f * nn[r] * nn[c];
                 R.m[12 + r] = 2.f * d * nn[r];
             }
+            // the footprint's rectangle stretched over the tile (in clip space)
+            mat4 S = mat4::identity();
+            const float hx = m.rect[2], hy = m.rect[3], cx = 2.f * m.rect[0] + hx - 1.f, cy = 2.f * m.rect[1] + hy - 1.f;
+            S.m[0] = 1.f / hx; S.m[12] = -cx / hx;
+            S.m[5] = 1.f / hy; S.m[13] = -cy / hy;
             const vec3 eyeM = eye_ - m.n * (2.f * (dot(eye_, m.n) - d));
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(GL_LESS);
-            glDepthMask(GL_TRUE);
             glEnable(GL_CLIP_DISTANCE0);
-            cubeUniforms(vp_ * R, eyeM, 1, m.n, d);
+            cubeUniforms(S * vp_ * R, eyeM, 1, m.n, d);
             glBindTexture(GL_TEXTURE_2D, 0);
             drawCubes(world_);
             glDisable(GL_CLIP_DISTANCE0);
             glDisable(GL_DEPTH_TEST);
         }
-        glDisable(GL_SCISSOR_TEST);
     }
+    glDisable(GL_SCISSOR_TEST);
+    int mirCount = 0;
+    for (int i = 0; i < MIRRORS; i++)
+        if (mir_[i].live) mirCount = i + 1;
 
     // ---- The room (with the mirrors and the panel), full resolution.
     roomT_.bind();
@@ -1061,7 +1074,7 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_mirror() {
     static const UniverseEntry e{
-        "MIRROR", "glass cubes in a liminal room, softly lit, while a frameless mirror flies around and reflects them",
+        "MIRROR", "glass cubes in a liminal room, softly lit, among floating frameless mirrors that reflect them",
         [] { return std::unique_ptr<Universe>(new MirrorUniverse()); },
         // Calm, spacious songs suit the quiet room best; it fits most songs.
         [](const SongLook& l) { return 0.85f + 0.2f * (1.f - l.density) + 0.1f * l.airWeight; },
