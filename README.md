@@ -201,8 +201,9 @@ no song previews.
   started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty unlocks
   the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
   best score) but the stage isn't cleared. A game over ends the run; a key goes back to the stages. The game remembers,
-  per difficulty, the stages cleared (with the run's score) and the songs beaten (with the points scored during
-  each), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
+  per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
+  lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
+  and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder (`~/.local/share/zentris/` on Linux).
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
 to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays

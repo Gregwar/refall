@@ -359,6 +359,7 @@ Menu::SongView Menu::songView() const {
     v.locked = progress_ && !progress_->unlocked(stage_);
     v.beaten = progress_ && progress_->beaten(stage_, song_, diff_);
     v.best = progress_ ? progress_->best(stage_, song_, diff_) : 0;
+    v.lines = progress_ ? progress_->lines(stage_, song_, diff_) : -1;
     v.title = asciiFold(h->title);
     v.universe = h->universe.empty() ? "A UNIVERSE PICKED BY THE SONG" : h->universe;
     v.velocity = h->level[diff_];

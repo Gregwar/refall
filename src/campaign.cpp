@@ -165,16 +165,31 @@ int Progress::best(int stage, int song, int diff) const {
     const StageRec* r = get(stage);
     return r && song < (int)r->songs[diff].size() ? r->songs[diff][song].best : 0;
 }
-void Progress::setBeaten(int stage, int song, int diff, int score) {
+int Progress::lines(int stage, int song, int diff) const {
+    const StageRec* r = get(stage);
+    return r && song < (int)r->songs[diff].size() && r->songs[diff][song].beaten ? r->songs[diff][song].lines : -1;
+}
+int Progress::mostLines(int stage, int song, int diff) const {
+    const StageRec* r = get(stage);
+    return r && song < (int)r->songs[diff].size() && r->songs[diff][song].beaten ? r->songs[diff][song].mostLines : -1;
+}
+int Progress::stageLines(int stage, int diff) const { const StageRec* r = get(stage); return r && r->cleared[diff] ? r->lines[diff] : -1; }
+void Progress::setBeaten(int stage, int song, int diff, int score, int lines) {
     auto& v = at(stage).songs[diff];
     if ((int)v.size() <= song) v.resize(song + 1);
-    v[song].beaten = true;
-    v[song].best = std::max(v[song].best, score);
+    SongRec& s = v[song];
+    // the lines go with the best score (a tie keeps known lines over unknown ones)
+    if (!s.beaten || score > s.best || (score == s.best && s.lines < 0)) { s.best = score; s.lines = lines; }
+    s.mostLines = std::max(s.mostLines, lines);
+    s.beaten = true;
 }
-void Progress::setCleared(int stage, int diff, int runScore) {
+void Progress::setCleared(int stage, int diff, int runScore, int runLines) {
     StageRec& r = at(stage);
+    if (!r.cleared[diff] || runScore > r.best[diff] || (runScore == r.best[diff] && r.lines[diff] < 0)) {
+        r.best[diff] = runScore;
+        r.lines[diff] = runLines;
+    }
     r.cleared[diff] = true;
-    r.best[diff] = std::max(r.best[diff], runScore);
 }
 int Progress::clearedCount() const {
     int n = 0;
@@ -184,8 +199,9 @@ int Progress::clearedCount() const {
 
 // The file, one record per line (tabs):
 //   unlock	all
-//   stage	<stage 1..>	<EASY|NORMAL|EXPERT>	<best run score>
-//   song	<stage 1..>	<song 1..>	<EASY|NORMAL|EXPERT>	<best score>
+//   stage	<stage 1..>	<EASY|NORMAL|EXPERT>	<best run score>	[<its lines>]
+//   song	<stage 1..>	<song 1..>	<EASY|NORMAL|EXPERT>	<best score>	[<its lines>	<most lines>]
+// (the lines columns came later: a file without them loads, its lines unknown; -1 is unknown)
 void Progress::load(const std::string& path) {
     path_ = path.empty() ? defaultPath() : path;
     stages_.clear();
@@ -203,10 +219,14 @@ void Progress::load(const std::string& path) {
         if (c[0] == "unlock") unlockAll_ = true;
         else if (c[0] == "stage" && c.size() >= 4) {
             const int s = std::atoi(c[1].c_str()) - 1, d = diffOf(c[2]);
-            if (s >= 0 && s < 100 && d >= 0) setCleared(s, d, std::atoi(c[3].c_str()));
+            if (s >= 0 && s < 100 && d >= 0) setCleared(s, d, std::atoi(c[3].c_str()), c.size() >= 5 && !c[4].empty() ? std::atoi(c[4].c_str()) : -1);
         } else if (c[0] == "song" && c.size() >= 5) {
             const int s = std::atoi(c[1].c_str()) - 1, k = std::atoi(c[2].c_str()) - 1, d = diffOf(c[3]);
-            if (s >= 0 && s < 100 && k >= 0 && k < 20 && d >= 0) setBeaten(s, k, d, std::atoi(c[4].c_str()));
+            if (s >= 0 && s < 100 && k >= 0 && k < 20 && d >= 0) {
+                setBeaten(s, k, d, std::atoi(c[4].c_str()), c.size() >= 6 && !c[5].empty() ? std::atoi(c[5].c_str()) : -1);
+                SongRec& r = at(s).songs[d][k];
+                if (c.size() >= 7 && !c[6].empty()) r.mostLines = std::max(r.mostLines, std::atoi(c[6].c_str()));
+            }
         }
     }
 }
@@ -221,10 +241,12 @@ bool Progress::save() const {
     if (unlockAll_) std::fprintf(f, "unlock\tall\n");
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
-            if (stages_[s].cleared[d]) std::fprintf(f, "stage\t%d\t%s\t%d\n", s + 1, difficultyName(d), stages_[s].best[d]);
-            for (int k = 0; k < (int)stages_[s].songs[d].size(); k++)
-                if (stages_[s].songs[d][k].beaten)
-                    std::fprintf(f, "song\t%d\t%d\t%s\t%d\n", s + 1, k + 1, difficultyName(d), stages_[s].songs[d][k].best);
+            if (stages_[s].cleared[d])
+                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\n", s + 1, difficultyName(d), stages_[s].best[d], stages_[s].lines[d]);
+            for (int k = 0; k < (int)stages_[s].songs[d].size(); k++) {
+                const SongRec& r = stages_[s].songs[d][k];
+                if (r.beaten) std::fprintf(f, "song\t%d\t%d\t%s\t%d\t%d\t%d\n", s + 1, k + 1, difficultyName(d), r.best, r.lines, r.mostLines);
+            }
         }
     std::fclose(f);
     fs::rename(tmp, path_, ec);

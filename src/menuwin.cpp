@@ -27,6 +27,7 @@ std::string roman(int n) {
 }
 std::string upper(std::string s) { for (char& c : s) c = (char)std::toupper((unsigned char)c); return s; }
 std::string fmt1(float v) { char b[16]; std::snprintf(b, sizeof(b), "%.1f", v); return b; }
+std::string linesStr(int n) { return n < 0 ? std::string("-") : std::to_string(n); } // lines, "-" when unknown
 // the kaleidoscope's crossfade between sources (one menu at a time)
 std::string g_cur, g_prev;
 float g_mix = 1.f;
@@ -215,7 +216,7 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         p.text(head, title, lx, y0 + 108 * u, 42 * u, ink, -1, 0.01f);
         const float uw = p.text(body, upper(v.universe), lx, y0 + 160 * u, 19 * u, mixc(m.screen_ == Menu::CAMPAIGN ? songCol(v.stage, v.song) : rgb8(v.col), hex(0xffffff), 0.2f), -1, 0.3f);
         p.text(body, "VELOCITY " + fmt1(v.velocity), lx + uw + 44 * u, y0 + 160 * u, 19 * u, dim, -1, 0.3f);
-        if (v.beaten) std::snprintf(b, sizeof(b), "BEATEN    BEST %d", v.best);
+        if (v.beaten) std::snprintf(b, sizeof(b), "BEATEN    BEST %d    %s LINES", v.best, linesStr(v.lines).c_str());
         else std::snprintf(b, sizeof(b), "NOT BEATEN ON %s", difficultyName(m.diff_));
         p.text(body, b, rx, y0 + 46 * u, 18 * u, v.beaten ? hex(0xffd27a) : dim, 1, 0.3f);
     } else if (m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
@@ -229,7 +230,8 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         std::snprintf(b, sizeof(b), "%d / %d SONGS BEATEN ON %s", beat, nSongs(fs), difficultyName(m.diff_));
         p.text(body, b, lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
         if (cleared(fs)) {
-            std::snprintf(b, sizeof(b), "CLEARED    BEST %d", m.progress_->stageBest(fs, m.diff_));
+            std::snprintf(b, sizeof(b), "CLEARED    BEST %d    %s LINES", m.progress_->stageBest(fs, m.diff_),
+                          linesStr(m.progress_->stageLines(fs, m.diff_)).c_str());
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
         }
         return;
@@ -460,7 +462,12 @@ void Worlds::kalCampaign() {
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
         const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
         p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0xffd27a) : hex(0xffffff, 0.6f), -1, 0.4f);
-        if (o && cleared(fs)) p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), x + 560 * u - 16 * u, Y(292), 18 * u, hex(0xffd27a), 1, 0.3f);
+        // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
+        const float colS = x + 430 * u, colL = x + 528 * u;
+        if (o && cleared(fs)) {
+            p.text(F::JOSEFIN, "BEST " + std::to_string(m.progress_->stageBest(fs, m.diff_)), colS, Y(292), 18 * u, hex(0xffd27a), 1, 0.3f);
+            p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * u, hex(0xffd27a, 0.7f), 1, 0.3f);
+        }
         for (int k = 0; k < nSongs(fs) && k < 5; k++) {
             const float y = Y(350 + k * 70);
             const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) * ao : 0.f;
@@ -473,7 +480,10 @@ void Worlds::kalCampaign() {
             const int idx = universes::parse(spec(fs, k), &vi);
             std::string name = idx >= 0 ? universes::entry(idx).name : spec(fs, k);
             p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.25f);
-            if (o && beaten(fs, k)) p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), x + 520 * u, y, 18 * u, hex(0xffd27a), 1, 0.15f);
+            if (o && beaten(fs, k)) {
+                p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * u, hex(0xffd27a), 1, 0.15f);
+                p.text(F::JOSEFIN, linesStr(m.progress_->lines(fs, k, m.diff_)) + " L", colL, y, 18 * u, hex(0xffd27a, 0.7f), 1, 0.15f);
+            }
         }
         std::string prompt;
         if (!o) prompt = "LOCKED";

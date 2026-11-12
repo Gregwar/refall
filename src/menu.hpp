@@ -89,7 +89,7 @@ private:
     float Y(float v) const { return sy_ + v * u_; }
     struct SongView {
         bool has = false, locked = false, beaten = false;
-        int stage = 0, song = 0, songs = 0, best = 0;
+        int stage = 0, song = 0, songs = 0, best = 0, lines = -1;
         std::string title, universe, status;
         float velocity = 0;
         unsigned char col[3] = {150, 150, 150};
