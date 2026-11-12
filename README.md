@@ -135,6 +135,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 </tr>
 <tr>
 <td><img src="docs/universes/mirror.jpg"><br><b>MIRROR</b>: glass cubes in a liminal, softly lit room (an infinity cove, a step, a pillar, haze); a frameless mirror flies slowly around the side bands and reflects the stack from its own angle, throwing the light back into the room; the cubes cast colored caustics on the floor, a cleared row shatters into glinting shards, the drop swings the lights to a new scheme and opens the mirror into a triptych<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: ancient ruins in a jungle, in real 3D: a Maya pyramid, a Khmer temple held by a strangler fig or a Doric temple under umbrella pines, an avenue of broken columns, moss, lianas and mist, the camera drifting slowly among them; nothing is built, the ruins are simply there; the blocks are carved stone column drums, and the drop turns the sun to golden hour<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
