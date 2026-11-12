@@ -27,6 +27,9 @@ public:
     // at most one per frame, the live ones first.
     void want(const std::string& spec, float fps);
     void update(double time, float dt, const MusicState& music);
+    // Snapshots only: update() just loads cached snapshots from the disk (a few per frame), never makes an instance
+    // (the menu: an instance's init costs 100-500 ms on the main thread).
+    void setSnapshotsOnly(bool on) { snapshotsOnly_ = on; }
     // The texture to show (live frame, else the snapshot), 0 while neither exists yet.
     GLuint tex(const std::string& spec) const;
     bool isLive(const std::string& spec) const { return live_.count(spec) != 0; }
@@ -48,6 +51,7 @@ private:
     std::map<std::string, Live> live_;
     std::map<std::string, Snap> snaps_;
     std::map<std::string, float> wanted_;
+    bool snapshotsOnly_ = false;
     Game blank_;
     std::vector<HudText> noHud_;
     std::vector<HudRect> noPanels_;

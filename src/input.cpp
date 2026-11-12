@@ -140,7 +140,8 @@ void Input::update(float dt) {
     kb[A_UI_DOWN] = key(GLFW_KEY_DOWN);
     kb[A_UI_LEFT] = key(GLFW_KEY_LEFT);
     kb[A_UI_RIGHT] = key(GLFW_KEY_RIGHT);
-    kb[A_UI_OK] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER) || key(GLFW_KEY_SPACE);
+    kb[A_UI_OK] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER);
+    kb[A_UI_ALT] = key(GLFW_KEY_SPACE) || key(GLFW_KEY_TAB);
     kb[A_UI_BACK] = key(GLFW_KEY_ESCAPE) || key(GLFW_KEY_BACKSPACE);
     kb[A_UI_ENTER] = key(GLFW_KEY_ENTER) || key(GLFW_KEY_KP_ENTER);
     kb[A_UI_ERASE] = key(GLFW_KEY_BACKSPACE);
@@ -216,6 +217,7 @@ void Input::update(float dt) {
             pad[A_UI_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
             pad[A_UI_OK] |= b(GLFW_GAMEPAD_BUTTON_A) || b(GLFW_GAMEPAD_BUTTON_START);
             pad[A_UI_BACK] |= b(GLFW_GAMEPAD_BUTTON_B);
+            pad[A_UI_ALT] |= b(GLFW_GAMEPAD_BUTTON_X) || b(GLFW_GAMEPAD_BUTTON_Y);
         }
     }
 

@@ -16,6 +16,7 @@ enum Action {
     A_UI_UP, A_UI_DOWN, A_UI_LEFT, A_UI_RIGHT, A_UI_OK, A_UI_BACK,
     // Text fields: Enter alone (Space types a space), Backspace (with auto-repeat), Delete, Ctrl+V.
     A_UI_ENTER, A_UI_ERASE, A_UI_DELETE, A_UI_PASTE,
+    A_UI_ALT, // the menu's second action (open a stage's petal): Space / Tab, gamepad X / Y
     A_COUNT
 };
 

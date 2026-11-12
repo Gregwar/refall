@@ -22,7 +22,7 @@ the same universe again), `--universe-on-peak` (a long song may also change univ
 `--transition-shots PREFIX N` (at `--shot-time` in the song, with a filled board, changes from `--universe` to `--to NAME`
 with `--transition NAME`, saves N frames across the change and exits),
 `--free`, `--difficulty`, `--stage`, `--unlock`, `--reset`, `--campaign FILE`, `--progress FILE`, `--playlists FILE`,
-`--no-menu-music`, `--menu-shot`, `--menu-screen`, `--menu-hover`, `--menu-petal`, `--menu-demo` and `--menu-clip` (the kaleidoscope menu and
+`--no-menu-music`, `--menu-shot`, `--menu-screen`, `--menu-hover`, `--menu-petal`, `--menu-demo` and `--menu-clip` (the kaleidoscope menu, Voyage and
 modes: see [the README](../README.md#modes)),
 `--clip OUT.mp4` (records a video with sound, via ffmpeg, from 4 s before the first drop of the song to 6 s after it,
 with the game played at a calm pace; `--clip-before` / `--clip-after SEC` change the span).
@@ -43,10 +43,12 @@ parallel, cached between runs). It uses `refall --analysis OUT.json` (the song's
 levels as JSON), the test hook `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a filled board) and the
 `[clip] clear N at T` lines a clip prints.
 
-Test hook for the menus and the campaign: `ZEN_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
+Test hook for the menus and Voyage: `ZEN_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
 overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:KEY,..."` (up, down, left, right, ok,
-back, pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
-(each song starts S seconds before its end), e.g. a stage run through with `--autoplay`.
+back, alt (Space), pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
+(each song starts S seconds before its end), e.g. a stage run through with `--autoplay`. Measuring the menu:
+`--menu-clip` prints its CPU and GPU time per frame; `ZEN_MENU_FINISH=1` adds the wall time with `glFinish` (software
+renderers, whose timer queries mean nothing), `ZEN_MENU_FULLRES=1` draws the kaleidoscope at full resolution to compare.
 
 ## refall-scope: see what the game hears
 

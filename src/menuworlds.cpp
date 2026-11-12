@@ -116,6 +116,17 @@ bool WorldPool::loadSnap(const std::string& spec) {
 void WorldPool::update(double time, float dt, const MusicState& music) {
     made = rendered = snapped = 0;
     makeMs = renderMs = 0;
+    if (snapshotsOnly_) {
+        int loads = 0;
+        for (auto& [spec, fps] : wanted_) {
+            Snap& s = snaps_[spec];
+            if (s.ok || s.tried || loads >= 2) continue;
+            loadSnap(spec);
+            loads++;
+        }
+        wanted_.clear();
+        return;
+    }
     bool madeOne = false;
     // the live ones: render when due, make the missing ones (the fastest wanted first)
     std::vector<std::pair<float, std::string>> order;

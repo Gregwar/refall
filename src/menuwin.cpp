@@ -14,6 +14,7 @@
 #include "menu.hpp"
 #include "universes/registry.hpp"
 #include "menuworlds.hpp"
+#include "playlists.hpp"
 
 namespace {
 using F = Painter::Font;
@@ -112,19 +113,11 @@ struct Worlds {
 };
 
 void Menu::renderWorlds(int w, int h) {
-    if (!worlds_) worlds_ = std::make_unique<WorldPool>();
-    // a steady made-up beat for the live universes, the preview's loudness on top
-    static MusicState mu;
-    mu.hasSong = true;
-    mu.bpm = 112.f;
-    mu.beat = time_ * 112.0 / 60.0;
-    mu.beatPhase = (float)(mu.beat - std::floor(mu.beat));
-    mu.intensity = 0.45f + 0.35f * level_;
-    mu.energy = 0.5f + 0.3f * level_;
-    mu.beatPulse = 0.15f * (1.f - mu.beatPhase);
-    mu.kick = 0.f;
-    for (int b = 0; b < NUM_BANDS; b++) mu.audio.bands[b] = mu.bandsFast[b] = 0.35f + 0.25f * level_;
-    mu.audio.bass = mu.audio.mid = mu.audio.high = mu.audio.loud = 0.4f + 0.3f * level_;
+    if (!worlds_) {
+        worlds_ = std::make_unique<WorldPool>();
+        worlds_->setSnapshotsOnly(true); // no universe instance in the menu: cached snapshots, else procedural glass
+    }
+    static const MusicState mu; // (the snapshots-only pool renders nothing)
     Worlds wd(*this);
     wd.wants();
     const float dt = (float)std::clamp(time_ - g_lastT, 0.0, 0.1);
@@ -141,21 +134,12 @@ void Menu::renderWorlds(int w, int h) {
 // what is on screen: which universes, live at what rate
 
 void Worlds::wants() {
-    if (m.screen_ == Menu::TITLE || m.screen_ == Menu::FREE) {
-        std::string cur, next;
-        float mix;
-        tourAt(11.f, cur, next, mix);
-        pool.want(cur, 30);
-        if (mix > 0.f || std::fmod(t, 11.f) > 11.f - 3.f) pool.want(next, 30);
-        else pool.want(next, 0);
-        return;
-    }
-    if (nStages() == 0) return;
-    const int fs = focusedStage();
-    const std::string cur = spec(fs, m.row_ == 1 ? m.song_ : 0);
-    pool.want(cur, 30);
-    if (!g_prev.empty() && g_mix < 1.f) pool.want(g_prev, 30);
-    for (int k = 0; k < nSongs(fs); k++) pool.want(spec(fs, k), 0); // the next ones are ready to fold in
+    if (m.screen_ != Menu::TITLE) return; // Voyage and free play draw procedural glass in their hues
+    std::string cur, next;
+    float mix;
+    tourAt(11.f, cur, next, mix);
+    pool.want(cur, 0);
+    pool.want(next, 0);
 }
 
 void Worlds::draw() {
@@ -168,7 +152,7 @@ void Worlds::draw() {
 // shared pieces
 
 void Worlds::tabs(F f, Col ink, Col accent, float track) {
-    p.text(f, "CAMPAIGN", X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
+    p.text(f, "VOYAGE", X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
     const float cx = X(1180), sp = 220 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_);
     const float hx = cx + (m.aDiff_ - 1) * sp;
     p.line(hx - 56 * u, y + 16 * u, hx + 56 * u, y + 16 * u, (1.5f + 1.5f * on) * u, withA(accent, 0.6f + 0.4f * on));
@@ -178,15 +162,23 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 }
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track) {
-    static const char* ITEMS[3] = {"CAMPAIGN", "FREE PLAY", "QUIT"};
+    static const char* ITEMS[3] = {"VOYAGE", "FREE PLAY", "QUIT"};
     const float cx = X(960);
-    float wsel = 0;
-    for (int i = 0; i < 3; i++) wsel += near1(m.aTitle_, i) * p.width(f, ITEMS[i], size * u, track);
-    const float ys = Y(y0 + m.aTitle_ * step) + 14 * u;
-    p.line(cx - wsel / 2, ys, cx + wsel / 2, ys, 1.6f * u, withA(accent, 0.9f));
+    // the focused entry's inked edges (eased between entries): the underline spans them, the two halos sit at the same
+    // distance outside them, level with the middle of the capitals
+    float inkL = 0, inkR = 0;
+    for (int i = 0; i < 3; i++) {
+        float l, r;
+        p.inkExtent(f, ITEMS[i], size * u, track, l, r);
+        const float start = cx - p.width(f, ITEMS[i], size * u, track) * 0.5f;
+        inkL += near1(m.aTitle_, i) * (start + l);
+        inkR += near1(m.aTitle_, i) * (start + r);
+    }
+    const float base = Y(y0 + m.aTitle_ * step), ys = base + 14 * u, yc = base - p.capHeight(f, size * u) * 0.5f;
+    p.line(inkL, ys, inkR, ys, 1.6f * u, withA(accent, 0.9f));
     p.setAdditive(true);
-    p.glow(cx - wsel / 2 - 28 * u, ys - size * 0.4f * u, 22 * u, withA(accent, 0.8f));
-    p.glow(cx + wsel / 2 + 28 * u, ys - size * 0.4f * u, 22 * u, withA(accent, 0.8f));
+    p.glow(inkL - 26 * u, yc, 22 * u, withA(accent, 0.8f));
+    p.glow(inkR + 26 * u, yc, 22 * u, withA(accent, 0.8f));
     p.setAdditive(false);
     for (int i = 0; i < 3; i++)
         p.text(f, ITEMS[i], cx, Y(y0 + i * step), size * u, withA(ink, 0.45f + 0.55f * near1(m.aTitle_, i)), 0, track);
@@ -216,7 +208,6 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         if (v.beaten) std::snprintf(b, sizeof(b), "BEATEN    BEST %d", v.best);
         else std::snprintf(b, sizeof(b), "NOT BEATEN ON %s", difficultyName(m.diff_));
         p.text(body, b, rx, y0 + 46 * u, 18 * u, v.beaten ? hex(0xffd27a) : dim, 1, 0.3f);
-        p.text(body, upper(v.preview), rx, y0 + 108 * u, 17 * u, withA(accent, 0.95f), 1, 0.3f);
     } else if (m.screen_ == Menu::CAMPAIGN && m.row_ == 1 && nStages() > 0) { // a petal, closed
         const int fs = focusedStage();
         char b[160];
@@ -238,22 +229,57 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
 // ---------------------------------------------------------------------------------------------------------------------
 // KALEIDO
 
+// A playlist's identity hue (its card, and free play's background): seeded from its playlist ID; the featured one gold.
+Col playlistHue(const std::string& url, bool featured) {
+    if (featured) return hex(0xe8c06a);
+    uint32_t seed = 2166136261u;
+    const std::string key = playlistIdOf(url).empty() ? url : playlistIdOf(url);
+    for (char c : key) seed = (seed ^ (unsigned char)c) * 16777619u;
+    const float h = (seed % 360) / 360.f, s = 0.55f, v = 0.95f;
+    auto f = [&](float n) { const float k2 = std::fmod(n + h * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
+    return Col{f(5), f(3), f(1), 1.f};
+}
+
+// The background: on the title, the game's universes (cached snapshots) in turn; on Voyage, procedural glass in the
+// focused stage's hue (the focused song's step of it in an open petal), the same cool grey for every locked stage; in
+// free play, the focused playlist's hue. The hue and the brightness ease over ~0.7 s.
 void Worlds::kalBackground(const std::string& cur) {
-    // a source change folds in over 1.2 s
-    if (cur != g_cur) {
-        g_prev = g_cur;
-        g_cur = cur;
-        g_mix = g_prev.empty() ? 1.f : 0.f;
+    static Col tintNow{0.6f, 0.6f, 0.7f, 1.f};
+    static float lvlNow = 0.f;
+    static double lastT = -1;
+    const bool first = lastT < 0;
+    const float dt = first ? 1.f : (float)std::clamp(t - lastT, 0.0, 0.25);
+    lastT = t;
+    Col tint{0.6f, 0.6f, 0.7f, 1.f};
+    float lvl = 0.f;
+    GLuint a = 0, b = 0;
+    float mixAB = 1.f;
+    if (m.screen_ == Menu::TITLE) {
+        if (cur != g_cur) { // a source change folds in over 1.2 s
+            g_prev = g_cur;
+            g_cur = cur;
+            g_mix = g_prev.empty() ? 1.f : 0.f;
+        }
+        g_mix = std::min(1.f, g_mix + 1.f / 72.f);
+        unsigned char c[3];
+        menuUniverseColor(m.camp_, cur, c);
+        tint = rgb8(c);
+        a = pool.tex(g_prev.empty() ? g_cur : g_prev);
+        b = pool.tex(g_cur);
+        if (!a) a = b; // (a missing snapshot: procedural glass in the hue)
+        mixAB = g_prev.empty() ? 1.f : sstep(g_mix);
+    } else if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) {
+        const int fs = focusedStage();
+        if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; }      // locked: a cool, dim grey
+        else tint = m.petal_ ? songCol(fs, m.song_) : stageCol(fs);
+    } else if (m.screen_ == Menu::FREE) {
+        const auto ch = m.plChoices();
+        if (m.plSel_ < (int)ch.size()) tint = playlistHue(ch[m.plSel_].url, m.plSel_ == 0);
     }
-    g_mix = std::min(1.f, g_mix + 1.f / 72.f);
-    unsigned char c[3];
-    menuUniverseColor(m.camp_, cur, c);
-    Col tint = rgb8(c);
-    if (m.screen_ == Menu::CAMPAIGN) tint = songCol(focusedStage(), m.row_ == 1 ? m.song_ : 0);   // the stage's hue
-    const GLuint a = pool.tex(g_prev.empty() ? g_cur : g_prev), b = pool.tex(g_cur);
-    if (!a && !b) { p.rrect(0, 0, m.fw_, m.fh_, 0, hex(0x0a0a12)); return; }
-    p.kaleido(a ? a : b, b ? b : a, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12,
-              mixc(tint, hex(0xffffff), 0.3f), t, m.level_);
+    const float k = first ? 1.f : 1.f - std::exp(-dt / 0.7f);
+    tintNow = mixc(tintNow, tint, k);
+    lvlNow += (lvl - lvlNow) * k;
+    p.kaleido(a, b, mixAB, X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12, mixc(tintNow, hex(0xffffff), 0.3f), t, lvlNow);
 }
 
 void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {
@@ -286,7 +312,7 @@ void Worlds::kalCampaign() {
     // the order of the journey: an arc from petal to petal (1 -> 12), gold as far as the stages are open
     int nextStage = -1;
     for (int s = 0; s < n && nextStage < 0; s++)
-        if (open(s) && !(m.progress_ && m.progress_->clearedAny(s))) nextStage = s;
+        if (open(s) && !cleared(s)) nextStage = s;
     {
         const float r = 296 * u;
         for (int s = 0; s + 1 < n; s++) {
@@ -415,6 +441,7 @@ void Worlds::kalCampaign() {
         }
         std::string prompt;
         if (!o) prompt = "LOCKED";
+        else if (!m.petal_) prompt = "SPACE  SONGS"; // the one key Enter doesn't explain: the petal's songs
         p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.75f), -1, 0.35f);
     }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
@@ -471,13 +498,14 @@ void Worlds::kalFree() {
         p.text(F::JOSEFIN, b, x, y + R + 78 * u, 18 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
     }
     if (rows) {
-        // the playlist: the remembered ones (most recent first), the game's own, and "add one"
+        // the playlists as glass cards: the game's own first (featured: larger, a gold rim, the stages' hues), then the
+        // player's, each with a hue and a small rosette of its own (seeded from its playlist ID), then "add one"
         const float onPl = std::min(1.f, m.aFreeRow_);
-        p.rrect(X(160), Y(712), 1600 * u, 196 * u, 24 * u, hex(0x0c0c14, 0.72f));
-        p.rrectLine(X(160), Y(712), 1600 * u, 196 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.15f + 0.35f * onPl));
-        p.text(F::JOSEFIN, "PLAYLIST", X(200), Y(752), 17 * u, hex(0xffffff, 0.6f + 0.4f * onPl), -1, 0.45f);
+        p.rrect(X(120), Y(680), 1680 * u, 262 * u, 24 * u, hex(0x0c0c14, 0.72f));
+        p.rrectLine(X(120), Y(680), 1680 * u, 262 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.3f * onPl));
+        p.text(F::JOSEFIN, "PLAYLIST", X(160), Y(714), 16 * u, hex(0xffffff, 0.55f + 0.45f * onPl), -1, 0.45f);
         if (m.editing_) {
-            const float fx = X(200), fy = Y(778), fw = 1520 * u, fh = 62 * u;
+            const float fx = X(160), fy = Y(760), fw = 1600 * u, fh = 62 * u;
             p.rrect(fx, fy, fw, fh, 12 * u, hex(0xffffff, 0.08f));
             p.rrectLine(fx, fy, fw, fh, 12 * u, 2 * u, hex(0xffffff, 0.85f));
             std::string shown = m.editText_;
@@ -490,43 +518,79 @@ void Worlds::kalFree() {
         } else {
             const auto ch = m.plChoices();
             const int nc = (int)ch.size() + 1;
-            std::vector<std::string> labels;
-            for (const auto& e : ch) {
-                std::string l = asciiFold(e.title.empty() ? e.url : e.title);
-                if (l.size() > 34) l = l.substr(0, 33) + "...";
-                if (e.count > 0) l += "   " + std::to_string(e.count);
-                labels.push_back(l);
-            }
-            labels.push_back("+  ADD A PLAYLIST");
-            std::vector<float> w(nc);
-            float total = 0;
-            for (int i = 0; i < nc; i++) { w[i] = p.width(F::JOSEFIN, labels[i], 21 * u, 0.12f) + 56 * u; total += w[i] + 18 * u; }
-            // the row scrolls so that the selected chip stays in view
-            float xs = 0, selX = 0;
-            for (int i = 0; i < nc; i++) { if (i == m.plSel_) selX = xs + w[i] / 2; xs += w[i] + 18 * u; }
-            const float avail = 1520 * u;
-            float off = X(200);
-            if (total > avail) off = X(960) - std::clamp(selX, avail / 2, total - avail / 2);
-            float x = off;
+            auto cardW = [&](int i) { return (i == 0 ? 440.f : i == nc - 1 ? 230.f : 320.f) * u; };
+            auto cardH = [&](int i) { return (i == 0 ? 176.f : 144.f) * u; };
+            const float gap = 22 * u;
+            float total = 0, selX = 0;
+            for (int i = 0; i < nc; i++) { if (i == m.plSel_) selX = total + cardW(i) / 2; total += cardW(i) + gap; }
+            total -= gap;
+            const float avail = 1600 * u;
+            float x = X(160);
+            if (total > avail) x = X(960) - std::clamp(selX, avail / 2, total - avail / 2);
+            auto hueCol = [](float h, float s, float v) {
+                auto f = [&](float n) { const float k2 = std::fmod(n + h * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
+                return Col{f(5), f(3), f(1), 1.f};
+            };
             for (int i = 0; i < nc; i++) {
-                const float g = sstep(near1(m.aPl_, i));
-                const bool sel = i == m.plSel_;
-                const float y = Y(780);
-                if (x + w[i] > X(160) && x < X(1760)) {
-                    p.rrect(x, y, w[i], 56 * u, 28 * u, hex(0xffffff, 0.06f + 0.16f * g * onPl));
-                    p.rrectLine(x, y, w[i], 56 * u, 28 * u, (1.2f + 1.2f * g * onPl) * u, hex(0xffffff, 0.2f + 0.7f * g * onPl));
-                    p.text(F::JOSEFIN, labels[i], x + 28 * u, y + 36 * u, 21 * u, hex(0xffffff, sel ? 1.f : 0.65f), -1, 0.12f);
+                const float w = cardW(i), h = cardH(i);
+                const float g = sstep(near1(m.aPl_, i)) * onPl;
+                const float y = Y(i == 0 ? 728 : 744) - 10 * u * g;
+                if (x + w < X(120) || x > X(1800)) { x += w + gap; continue; }
+                const bool featured = i == 0, add = i == nc - 1;
+                // the identity: a hue and a seed from the playlist's ID
+                uint32_t seed = 2166136261u;
+                const std::string key = add ? std::string("+") : playlistIdOf(ch[i].url).empty() ? ch[i].url : playlistIdOf(ch[i].url);
+                for (char c : key) seed = (seed ^ (unsigned char)c) * 16777619u;
+                const Col hue = featured ? hex(0xe8c06a) : add ? hex(0x9aa0b8) : hueCol((seed % 360) / 360.f, 0.55f, 0.95f);
+                if (g > 0.02f || featured) {
+                    p.setAdditive(true);
+                    p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), (featured ? 0.10f : 0.f) + 0.16f * g), 26 * u);
+                    p.setAdditive(false);
                 }
-                x += w[i] + 18 * u;
+                p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), 0.78f), 0.92f));
+                p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
+                p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
+                            g > 0.5f ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.95f) : withA(hue, 0.55f));
+                const float mx = x + (featured ? 90.f : 70.f) * u, my = y + h / 2, mr = (featured ? 62.f : 46.f) * u;
+                if (add) {
+                    p.ring(mx, my, 30 * u, 2 * u, hex(0xffffff, 0.5f + 0.4f * g));
+                    p.line(mx - 13 * u, my, mx + 13 * u, my, 2.4f * u, hex(0xffffff, 0.7f + 0.3f * g));
+                    p.line(mx, my - 13 * u, mx, my + 13 * u, 2.4f * u, hex(0xffffff, 0.7f + 0.3f * g));
+                    p.text(F::JOSEFIN, "ADD A", x + 122 * u, my - 4 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
+                    p.text(F::JOSEFIN, "PLAYLIST", x + 122 * u, my + 20 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
+                    x += w + gap;
+                    continue;
+                }
+                // the motif: a small rosette of glass, turning slowly
+                const int petals = featured ? 12 : 5 + (int)(seed >> 8) % 4;
+                const float rot = t * (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) + (seed % 100) * 0.0628f;
+                for (int k2 = 0; k2 < petals; k2++) {
+                    Col pc;
+                    if (featured) { unsigned char sc[3]; m.stageColor(k2, sc); pc = rgb8(sc); }
+                    else pc = hueCol(std::fmod((seed % 360) / 360.f + (k2 % 2) * (0.08f + ((seed >> 12) % 7) * 0.03f), 1.f), 0.55f, 0.95f);
+                    kite(mx, my, rot + k2 * TAU / petals, mr * 0.18f, mr, featured ? 0.24f : 0.42f, pc, 0.92f, true, hex(0x08080c, 0.9f));
+                }
+                p.circle(mx, my, mr * 0.2f, hex(0x0a0a12));
+                p.ring(mx, my, mr * 0.2f, 1.5f * u, featured ? hex(0xe8c06a) : withA(hue, 0.9f));
+                // the name and the count
+                const float tx = mx + mr + 26 * u, tmax = x + w - tx - 18 * u;
+                std::string title = asciiFold(featured ? ch[i].title : ch[i].title.empty() ? ch[i].url : ch[i].title);
+                const float ts = (featured ? 40.f : 23.f) * u;
+                const F tf = featured ? F::JOSEFIN_LIGHT : F::JOSEFIN;
+                while (title.size() > 3 && p.width(tf, title, ts, 0.04f) > tmax) title.pop_back();
+                float ty = my + ts * 0.25f;
+                if (featured) {
+                    p.text(F::JOSEFIN, "FEATURED", tx, y + 42 * u, 14 * u, hex(0xe8c06a), -1, 0.45f);
+                    ty = my + 14 * u;
+                }
+                p.text(tf, title, tx, ty, ts, hex(0xffffff, 0.8f + 0.2f * g), -1, 0.04f);
+                if (ch[i].count > 0)
+                    p.text(F::JOSEFIN, std::to_string(ch[i].count) + " SONGS", tx, ty + (featured ? 34.f : 28.f) * u, 14 * u, withA(featured ? hex(0xe8c06a) : hue, 0.85f), -1, 0.35f);
+                x += w + gap;
             }
         }
         if (!m.plMsg_.empty())
-            p.text(F::JOSEFIN, upper(m.plMsg_), X(200), Y(880), 17 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
-        else if (!m.editing_) {
-            const auto ch = m.plChoices();
-            const std::string& url = m.plSel_ < (int)ch.size() ? ch[m.plSel_].url : std::string();
-            p.text(F::JOSEFIN, url.empty() ? "A YOUTUBE PLAYLIST OR VIDEO LINK" : url, X(200), Y(880), 15 * u, hex(0xffffff, 0.45f), -1, 0.1f);
-        }
+            p.text(F::JOSEFIN, upper(m.plMsg_), X(160), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
     const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
