@@ -219,7 +219,7 @@ private:
     // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
     struct Run {
         int stage = 0, from = 0, diff = DIFF_NORMAL, current = -1;
-        int songStartScore = 0;
+        int songStartScore = 0, songStartLines = 0;
         bool survived = false;  // the current song was survived (recorded)
         bool finishing = false; // the stage's last song was survived: the run ends with its outro
     } run_;
@@ -1292,8 +1292,8 @@ int App::run() {
                 if (overTime_ > 2.5f && anyKeyPressed()) {
                     const CampaignStage* st = runStage();
                     char sub[128];
-                    std::snprintf(sub, sizeof(sub), "STAGE %d  SONG %d/%d  %s  SCORE %d", run_.stage + 1, run_.current + 1,
-                                  st ? (int)st->songs.size() : 0, difficultyName(run_.diff), game_.lastScore());
+                    std::snprintf(sub, sizeof(sub), "STAGE %d  SONG %d/%d  %s  SCORE %d  LINES %d", run_.stage + 1, run_.current + 1,
+                                  st ? (int)st->songs.size() : 0, difficultyName(run_.diff), game_.lastScore(), game_.lines());
                     toMenu(Menu::CAMPAIGN, "GAME OVER", sub, true);
                     swap();
                     continue;
@@ -1794,6 +1794,7 @@ void App::campaignSongStarted() {
     run_.current = k;
     run_.survived = false;
     run_.songStartScore = game_.score();
+    run_.songStartLines = game_.lines();
     const CampaignSong& s = st->songs[k];
     game_.setFixedLevel(s.level[run_.diff]);
     lastLevel_ = game_.level();
@@ -1811,10 +1812,10 @@ void App::campaignSongSurvived() {
     const CampaignStage* st = runStage();
     if (!st || run_.current < 0 || run_.survived) return;
     run_.survived = true;
-    const int pts = game_.score() - run_.songStartScore;
-    progress_.setBeaten(run_.stage, run_.current, run_.diff, pts);
+    const int pts = game_.score() - run_.songStartScore, lines = game_.lines() - run_.songStartLines;
+    progress_.setBeaten(run_.stage, run_.current, run_.diff, pts, lines);
     progress_.save();
-    std::printf("[campaign] song %d/%zu survived (%d points)\n", run_.current + 1, st->songs.size(), pts);
+    std::printf("[campaign] song %d/%zu survived (%d points, %d lines)\n", run_.current + 1, st->songs.size(), pts, lines);
     if (run_.current + 1 >= (int)st->songs.size()) run_.finishing = true;
 }
 
@@ -1823,12 +1824,13 @@ void App::campaignEnd() {
     const int stage = run_.stage;
     char sub[128];
     if (run_.from == 0) {
-        progress_.setCleared(stage, run_.diff, game_.score());
+        progress_.setCleared(stage, run_.diff, game_.score(), game_.lines());
         progress_.save();
         const bool next = stage + 1 < campaign_.size();
-        std::snprintf(sub, sizeof(sub), "%s  SCORE %d%s", difficultyName(run_.diff), game_.score(),
+        std::snprintf(sub, sizeof(sub), "%s  SCORE %d  LINES %d%s", difficultyName(run_.diff), game_.score(), game_.lines(),
                       next ? "   NEXT STAGE UNLOCKED" : "   THE VOYAGE IS COMPLETE");
-        std::printf("[campaign] stage %d cleared on %s (%d points)\n", stage + 1, difficultyName(run_.diff), game_.score());
+        std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)\n", stage + 1, difficultyName(run_.diff),
+                    game_.score(), game_.lines());
         menu_.setCursor(next ? stage + 1 : stage, 0);
         toMenu(Menu::CAMPAIGN, "STAGE " + std::to_string(stage + 1) + " CLEAR", sub);
     } else {
@@ -1851,29 +1853,31 @@ int App::runMenuShot() {
             // every stage cleared on NORMAL (every song beaten), the first five on EASY, nothing on EXPERT
             for (int s = 0; s < campaign_.size(); s++) {
                 const int n = (int)campaign_.stages()[s].songs.size();
-                int run = 0;
+                int run = 0, runLines = 0;
                 for (int k = 0; k < n; k++) {
                     const int pts = 7400 + s * 860 + ((s * 7 + k * 13) % 9) * 310;
-                    progress_.setBeaten(s, k, DIFF_NORMAL, pts);
+                    const int ln = 26 + s * 2 + ((s * 5 + k * 11) % 7) * 3; // a song is a few minutes: ~25-60 lines
+                    progress_.setBeaten(s, k, DIFF_NORMAL, pts, ln);
                     run += pts;
-                    if (s < 6) progress_.setBeaten(s, k, DIFF_EASY, pts * 3 / 4);
+                    runLines += ln;
+                    if (s < 6) progress_.setBeaten(s, k, DIFF_EASY, pts * 3 / 4, ln - 4);
                 }
-                progress_.setCleared(s, DIFF_NORMAL, run);
-                if (s < 5) progress_.setCleared(s, DIFF_EASY, run * 3 / 4);
+                progress_.setCleared(s, DIFF_NORMAL, run, runLines);
+                if (s < 5) progress_.setCleared(s, DIFF_EASY, run * 3 / 4, runLines - 4 * n);
             }
         } else {
-            const int pts[5] = {8210, 9420, 10020, 9900, 10690};
+            const int pts[5] = {8210, 9420, 10020, 9900, 10690}, ln[5] = {31, 36, 38, 35, 42};
             for (int k = 0; k < 5; k++) {
-                progress_.setBeaten(0, k, DIFF_NORMAL, pts[k]);
-                progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100);
-                progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300);
+                progress_.setBeaten(0, k, DIFF_NORMAL, pts[k], ln[k]);
+                progress_.setBeaten(0, k, DIFF_EASY, pts[k] - 2100, ln[k] - 6);
+                progress_.setBeaten(1, k, DIFF_NORMAL, pts[(k + 2) % 5] + 1300, ln[(k + 2) % 5] + 4);
             }
-            progress_.setCleared(0, DIFF_NORMAL, 48240);
-            progress_.setCleared(0, DIFF_EASY, 37740);
-            progress_.setCleared(1, DIFF_NORMAL, 54720);
-            progress_.setBeaten(2, 0, DIFF_NORMAL, 11240);
-            progress_.setBeaten(2, 1, DIFF_NORMAL, 9870);
-            progress_.setBeaten(0, 0, DIFF_EXPERT, 12650);
+            progress_.setCleared(0, DIFF_NORMAL, 48240, 182);
+            progress_.setCleared(0, DIFF_EASY, 37740, 152);
+            progress_.setCleared(1, DIFF_NORMAL, 54720, 202);
+            progress_.setBeaten(2, 0, DIFF_NORMAL, 11240, 40);
+            progress_.setBeaten(2, 1, DIFF_NORMAL, 9870, 37);
+            progress_.setBeaten(0, 0, DIFF_EXPERT, 12650, 44);
         }
     }
     menu_.init(&campaign_, &progress_);

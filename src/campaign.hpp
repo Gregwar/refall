@@ -40,7 +40,8 @@ private:
 };
 
 // Progress, per stage, song and difficulty: a song is "beaten" once survived to its end in a campaign run (started
-// from any song of its stage), with its best score (the points scored during that song); a stage is "cleared" once
+// from any song of its stage), with its best score (the points scored during that song), the lines cleared during that
+// best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
 // its songs were all survived in one run started from its first song. Stage N + 1 is unlocked once stage N is
 // cleared on any difficulty (stage 1 always is), or everything with --unlock.
 class Progress {
@@ -59,13 +60,22 @@ public:
     bool beaten(int stage, int song, int diff) const;
     int best(int stage, int song, int diff) const;   // 0 when never beaten
     int stageBest(int stage, int diff) const;        // best run score of a cleared stage
-    void setBeaten(int stage, int song, int diff, int score);
-    void setCleared(int stage, int diff, int runScore);
+    // Lines cleared, -1 when unknown (never beaten, or recorded before lines were): during the song's best-scoring
+    // run, the most during the song, and the whole run of the stage's best clear.
+    int lines(int stage, int song, int diff) const;
+    int mostLines(int stage, int song, int diff) const;
+    int stageLines(int stage, int diff) const;
+    void setBeaten(int stage, int song, int diff, int score, int lines = -1);
+    void setCleared(int stage, int diff, int runScore, int runLines = -1);
     int clearedCount() const;
 
 private:
-    struct SongRec { bool beaten = false; int best = 0; };
-    struct StageRec { bool cleared[DIFF_COUNT] = {}; int best[DIFF_COUNT] = {}; std::vector<SongRec> songs[DIFF_COUNT]; };
+    struct SongRec { bool beaten = false; int best = 0, lines = -1, mostLines = -1; };
+    struct StageRec {
+        bool cleared[DIFF_COUNT] = {};
+        int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1};
+        std::vector<SongRec> songs[DIFF_COUNT];
+    };
     StageRec& at(int stage);
     const StageRec* get(int stage) const { return stage >= 0 && stage < (int)stages_.size() ? &stages_[stage] : nullptr; }
     std::vector<StageRec> stages_;
