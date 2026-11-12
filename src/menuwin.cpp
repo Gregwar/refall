@@ -278,13 +278,10 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
             std::snprintf(b, sizeof(b), "CLEARED    BEST %d", m.progress_->stageBest(fs, m.diff_));
             p.text(body, b, rx, y0 + 46 * u, 18 * u, hex(0xffd27a), 1, 0.3f);
         }
-        p.text(body, open(fs) ? "ENTER  OPEN      ESC  BACK" : "ESC  BACK", rx, y0 + 160 * u, 16 * u, withA(dim, 0.8f), 1, 0.3f);
         return;
     } else {
         p.text(head, "Choose a difficulty, then a song", lx, y0 + 108 * u, 38 * u, ink, -1, 0.01f);
-        p.text(body, "LEFT / RIGHT  DIFFICULTY      DOWN  THE STAGES", lx, y0 + 160 * u, 17 * u, dim, -1, 0.3f);
     }
-    p.text(body, kal && m.petal_ ? "ENTER  PLAY      ESC  CLOSE" : "ENTER  PLAY      ESC  BACK", rx, y0 + 160 * u, 16 * u, withA(dim, 0.8f), 1, 0.3f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -424,7 +421,6 @@ void Worlds::winTitle() {
         std::snprintf(b, sizeof(b), "%d / %d STAGES CLEARED", m.progress_->clearedCount(), m.camp_->size());
         p.text(F::MANROPE, b, X(80), Y(1040), 16 * u, hex(0xffffff, 0.45f), -1, 0.3f);
     }
-    p.text(F::MANROPE, "ARROWS  MOVE      ENTER  SELECT      ESC  QUIT", X(1840), Y(1040), 15 * u, hex(0xffffff, 0.4f), 1, 0.3f);
 }
 
 void Worlds::winFree() {
@@ -451,7 +447,6 @@ void Worlds::winFree() {
     char b[96];
     std::snprintf(b, sizeof(b), "GRAVITY AT %d%% OF ITS FULL SPEED, ON EVERY LEVEL", (int)std::lround(freePlayMultiplier(m.freeDiff_) * 100));
     p.text(F::MANROPE, b, X(960), Y(900), 19 * u, hex(0xffffff, 0.8f), 0, 0.3f);
-    p.text(F::MANROPE, "ENTER  START      ESC  BACK", X(960), Y(1020), 15 * u, hex(0xffffff, 0.4f), 0, 0.3f);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -625,8 +620,6 @@ void Worlds::kalCampaign() {
         }
         std::string prompt;
         if (!o) prompt = "CLEAR STAGE " + std::to_string(fs) + " TO OPEN IT";
-        else if (!m.petal_) prompt = "ENTER  OPEN THE PETAL";
-        else prompt = "ENTER  PLAY      ESC  CLOSE";
         p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.75f), -1, 0.35f);
     }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
@@ -658,7 +651,6 @@ void Worlds::kalTitle() {
     }
     p.rrect(cx - 260 * u, Y(652), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
     menuItems(F::JOSEFIN, 712, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
-    p.text(F::JOSEFIN, "ARROWS  MOVE      ENTER  SELECT      ESC  QUIT", cx, Y(1035), 15 * u, hex(0xffffff, 0.5f), 0, 0.3f);
 }
 
 void Worlds::kalFree() {
@@ -744,8 +736,7 @@ void Worlds::kalFree() {
     char b[96];
     std::snprintf(b, sizeof(b), "GRAVITY AT %d%% OF ITS FULL SPEED, ON EVERY LEVEL", (int)std::lround(freePlayMultiplier(m.freeDiff_) * 100));
     p.text(F::JOSEFIN, b, X(960), Y(965), 17 * u, hex(0xffffff, 0.85f), 0, 0.3f);
-    const char* hint = m.editing_ ? "ENTER  READ IT      CTRL+V  PASTE      ESC  CANCEL"
-                     : (rows && m.freeRow_ == 1) ? "LEFT / RIGHT  CHOOSE      ENTER  START      DEL  REMOVE      UP  DIFFICULTY      ESC  BACK"
-                     : "LEFT / RIGHT  DIFFICULTY      DOWN  PLAYLIST      ENTER  START      ESC  BACK";
-    p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+    // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
+    const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
+    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }
