@@ -76,19 +76,19 @@ const VariantDef VARIANTS[] = {
     // white, black and red
     {"KUNSTHALLE", 0xf4f4f2, 0x121212,
      {{0xe2231a, 0x2a4fa8, 0xee8a1e}, {0xe2231a, 0x1f3f95, 0xe8a700}, {0xe2231a, 0x23875a, 0x2e9fd0},
-      {0xe2231a, 0x1d4fd8, 0xff7300}, {0xd8004c, 0x0b2fb0, 0xffb000}}},
+      {0xe2231a, 0x1d4fd8, 0xff7300}, {0xd8004c, 0x3d6bff, 0xffb000}}},
     // a cool white, blue and black
     {"ZURICH", 0xedf1f4, 0x0d1520,
      {{0x1d4fd8, 0x1f9ec9, 0xe2231a}, {0x1d4fd8, 0xe2231a, 0x00a074}, {0x1d4fd8, 0x00a074, 0xf0a400},
-      {0x1d4fd8, 0xff5a1f, 0x10a6d8}, {0x2d1bff, 0xe6007e, 0x00b3a4}}},
+      {0x1d4fd8, 0xff5a1f, 0x10a6d8}, {0x4a6bff, 0xe6007e, 0x00b3a4}}},
     // a black ground, white type, signal orange
     {"NIGHT", 0x121314, 0xf1f1ee,
      {{0xff5a1f, 0x3b7ddb, 0xc9c9c4}, {0xff5a1f, 0x2fa8ff, 0x35c27c}, {0xff5a1f, 0x35c27c, 0xb98cff},
-      {0xff5a1f, 0xffd23f, 0x4a7dff}, {0xff2e4d, 0x00d2c0, 0xffe14d}}},
+      {0xff5a1f, 0xffd23f, 0x4a7dff}, {0xff2e4d, 0x00897f, 0x9b6a00}}},
     // white, black and magenta
     {"LAUSANNE", 0xf4f4f4, 0x161616,
      {{0xe6007e, 0x3a57c4, 0x14907f}, {0xe6007e, 0x14907f, 0xeca400}, {0xe6007e, 0x4a4fa8, 0xff6a13},
-      {0xe6007e, 0xff6a13, 0x0094d8}, {0x7a00e6, 0xff2e7e, 0x00c2a8}}},
+      {0xe6007e, 0xff6a13, 0x0094d8}, {0x9a5cff, 0xff2e7e, 0x00c2a8}}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -1052,10 +1052,13 @@ vec3 SwissUniverse::pieceColor(int type, int pal) const {
     case O: return ink_;
     case T: return c1;
     case S: return c2;
-    // a shade of the first color (of the second when the first is too light to shade cleanly: a yellow goes olive)
-    case Z: return ugl::luma(c0) > 0.55f ? lerp(c1, hex(V.ink), 0.45f) : lerp(c0, hex(V.ink), 0.4f);
-    // a tint of the second toward white (pastel on the dark and grey grounds)
-    case J: return lerp(c1, hex(0xf6f6f4), 0.45f);
+    // a shade of the first color (of the second when the first is too light to shade cleanly: a yellow goes olive),
+    // toward the ink as it prints now: in the negative (the drop, slow motion) it lightens on the dark ground
+    // instead of sinking into it
+    case Z: return ugl::luma(c0) > 0.55f ? lerp(c1, ink_, 0.45f) : lerp(c0, ink_, 0.4f);
+    // a tint of the second toward white (pastel on the dark and grey grounds), toward the ink on a light ground
+    // that was dark in the positive (NIGHT's negative), so it does not wash out on it
+    case J: return lerp(c1, ugl::luma(ground_) > 0.5f && ugl::luma(hex(V.ground)) < 0.5f ? ink_ : hex(0xf6f6f4), 0.45f);
     default: return lerp(ink_, ground_, 0.5f);
     }
 }
