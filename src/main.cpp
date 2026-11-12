@@ -2,6 +2,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 
+#include "icon.inc"
 #include "title.hpp"
 #include "headless.hpp"
 
@@ -955,6 +956,14 @@ int App::run() {
         GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
         int ww = opt_.width, wh = opt_.height;
         if (mon) { const GLFWvidmode* vm = glfwGetVideoMode(mon); ww = vm->width; wh = vm->height; }
+        // the desktop's name for the window (the taskbar / Alt+Tab match it to an installed refall.desktop)
+#ifdef GLFW_WAYLAND_APP_ID
+        glfwWindowHintString(GLFW_WAYLAND_APP_ID, "refall");
+#endif
+#ifdef GLFW_X11_CLASS_NAME
+        glfwWindowHintString(GLFW_X11_CLASS_NAME, "refall");
+        glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "refall");
+#endif
         win_ = glfwCreateWindow(ww, wh, GAME_TITLE, mon, nullptr);
         if (win_) break;
         glfwTerminate();
@@ -963,6 +972,14 @@ int App::run() {
         return 1;
     }
     Input::loadMappings();
+    { // the window's icon: the REFALL logo (where the platform takes one; Wayland uses the desktop file's)
+        std::vector<GLFWimage> icons;
+        for (const IconImage& ic : ICON_IMAGES) icons.push_back({ic.size, ic.size, const_cast<unsigned char*>(ic.rgba)});
+#ifdef GLFW_PLATFORM_WAYLAND
+        if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND)
+#endif
+            glfwSetWindowIcon(win_, (int)icons.size(), icons.data());
+    }
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);
     if (!gladLoadGL(glfwGetProcAddress)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }

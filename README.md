@@ -260,6 +260,10 @@ refall ~/Music     # with no argument it plays the default YouTube playlist
 Quote YouTube URLs (`&` is special in the shell). YouTube also needs a JavaScript runtime
 ([Deno](https://deno.com) or Node.js) on your system.
 
+The window carries the REFALL logo ([`data/icon.png`](data/icon.png)). On Linux desktops that take icons from desktop
+entries (Wayland, the app grid), `tools/install-desktop.sh [path/to/refall]` installs a `refall.desktop` entry and the
+icon for the current user, so the taskbar and Alt+Tab show it.
+
 ## Controls
 
 Keyboard and gamepad both work at the same time. A gamepad is detected at startup and on hot-plug,

@@ -4,7 +4,7 @@
 # Columns are separated by tabs; lines starting with # are comments. The game reads this file from the
 # sources when it starts (else the copy built into it, or --campaign FILE).
 # stage	song	id	universe	easy	normal	expert	title
-1	1	h1l4pDXbkic	PRISM:AURORA	1.0	2.0	4.0	The XX - You Got The Love (Florence And The Machine cover)
+1	1	H_9xqc084UA	PRISM:AURORA	1.0	2.0	4.0	Small Town Kid - Shards
 1	2	pJguiXxgaFo	WATERCOLOR:MONSOON GREENS	1.1	2.2	4.3	AVAION - COLORS (Official Video)
 1	3	YyFyudLOkeA	TOPOGRAPHY:GLACIER	1.2	2.4	4.5	Jasper Tygner - First Light (Official Video)
 1	4	gjTkkswfVLE	ORIGAMI:INDIGO	1.4	2.6	4.8	Last Sun - Care 4 U
@@ -30,7 +30,7 @@
 5	4	TkceGi1EXzk	BRUTALIST:MOONLIGHT	3.7	6.3	10.2	felix jaehn - Shine ft. Freddy Verano, Linying
 5	5	IhVvPrGh48E	CRYSTAL CAVE:EMBER	3.8	6.5	10.5	Funkin Matt - Open Your Eyes (Official Audio)
 6	1	3KFPGWIfLnM	MICROSCOPE:METHYLENE BLUE	4.0	6.7	10.8	BUNT. - Only Friends (Lyric Video)
-6	2	btrzs54s1Rc	RUINS:MAYA	4.1	6.8	11.1	Jonas Blue - Rise ft. Jack & Jack (Official Video)
+6	2	Og0A10H7YqU	RUINS:MAYA	4.1	6.8	11.1	Aaron Hibell, Alex Wann - set me free (official visualiser)
 6	3	xhpudFvsMjU	RAINY WINDOW:SODIUM	4.2	7.0	11.3	SRTW ft. Charity Children - Whispering Still (Little Rose Remix)
 6	4	S9ld5hiKg8w	LIMBO:MOOR	4.3	7.2	11.6	Nora En Pure - Come With Me (Original Mix)
 6	5	UKou-bIHgYA	LIGHTSOURCE:NEON	4.4	7.4	11.9	Nu Aspect - Sweet Release
