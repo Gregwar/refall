@@ -16,7 +16,9 @@ namespace {
 EGLDisplay dpy_ = EGL_NO_DISPLAY;
 EGLContext ctx_ = EGL_NO_CONTEXT;
 EGLSurface surf_ = EGL_NO_SURFACE;
+EGLConfig cfg_ = nullptr;
 bool nvidia_ = false;
+struct Worker { EGLContext ctx; EGLSurface surf; };
 }
 
 bool init(int width, int height) {
@@ -61,7 +63,7 @@ bool init(int width, int height) {
             eglTerminate(d);
             continue;
         }
-        dpy_ = d; ctx_ = c; surf_ = s;
+        dpy_ = d; ctx_ = c; surf_ = s; cfg_ = cfg;
         const char* vendor = eglQueryString(d, EGL_VENDOR);
         nvidia_ = vendor && std::strstr(vendor, "NVIDIA");
         std::printf("[gl] headless EGL on device %d (%s)\n", i, eglQueryString(d, EGL_VENDOR));
@@ -73,6 +75,26 @@ bool init(int width, int height) {
 void* proc(const char* name) { return (void*)eglGetProcAddress(name); }
 
 bool nvidia() { return nvidia_; }
+
+void* createWorkerContext() {
+    if (dpy_ == EGL_NO_DISPLAY) return nullptr;
+    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
+                              EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+                              EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, EGL_TRUE, EGL_NONE};
+    EGLContext c = eglCreateContext(dpy_, cfg_, EGL_NO_CONTEXT, ctxAttr);
+    if (c == EGL_NO_CONTEXT) return nullptr;
+    const EGLint pbAttr[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
+    EGLSurface s = eglCreatePbufferSurface(dpy_, cfg_, pbAttr);
+    if (s == EGL_NO_SURFACE) { eglDestroyContext(dpy_, c); return nullptr; }
+    return new Worker{c, s};
+}
+
+bool makeWorkerCurrent(void* worker) {
+    eglBindAPI(EGL_OPENGL_API); // (per thread)
+    if (!worker) return eglMakeCurrent(dpy_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    Worker* w = (Worker*)worker;
+    return eglMakeCurrent(dpy_, w->surf, w->surf, w->ctx);
+}
 
 void shutdown() {
     if (dpy_ == EGL_NO_DISPLAY) return;
@@ -92,6 +114,8 @@ bool init(int, int) { return false; }
 void* proc(const char*) { return nullptr; }
 void shutdown() {}
 bool nvidia() { return false; }
+void* createWorkerContext() { return nullptr; }
+bool makeWorkerCurrent(void*) { return false; }
 } // namespace headless
 
 #endif

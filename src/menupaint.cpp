@@ -175,14 +175,13 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
         verts_.push_back({P[k][0], P[k][1], 0, 0, 0, 0, C[k].r, C[k].g, C[k].b, C[k].a, 0, 0, 0, 3.f});
 }
 
-void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level) {
-    // Drawn at a third of the frame (soft glass anyway), then spread over the frame with a light blur: the cost of the
-    // fragment work is a ninth of the full-resolution pass.
+void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,
+                      float saturation) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform sampler2D uA, uB;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel, uScale;
+uniform float uMix, uRot, uTime, uLevel, uScale, uSat;
 uniform int uSeg, uProcA, uProcB;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -233,6 +232,7 @@ void main() {
     float lead = 1.0 - smoothstep(0.015, 0.04, edge);
     float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y * uScale);
     c = mix(c, vec3(0.03, 0.03, 0.05), max(lead * 0.7, segLine * 0.55));
+    c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c *= min(1.0, 0.42 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
@@ -258,11 +258,13 @@ void main() {
         kalProg_ = ugl::program(ugl::FULLSCREEN_VS, KFS, "menu kaleidoscope");
         upProg_ = ugl::program(ugl::FULLSCREEN_VS, UFS, "menu kaleidoscope upscale");
     }
-    static const int div = std::getenv("ZEN_MENU_FULLRES") ? 1 : 3; // (testing: the full-resolution pass, to compare)
-    const int lw = std::max(1, w_ / div), lh = std::max(1, h_ / div);
-    if (kalTgt_.w != lw || kalTgt_.h != lh) kalTgt_.create(lw, lh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
+    // full resolution; ZEN_MENU_KALEIDO_DIV=N draws it at 1/N and spreads it over the frame (testing, weak GPUs)
+    static const float div = std::getenv("ZEN_MENU_KALEIDO_DIV") ? std::max(1.f, (float)std::atof(std::getenv("ZEN_MENU_KALEIDO_DIV"))) : 1.f;
+    const bool direct = div <= 1.f;
+    const int lw = direct ? w_ : std::max(1, (int)(w_ / div)), lh = direct ? h_ : std::max(1, (int)(h_ / div));
+    if (!direct && (kalTgt_.w != lw || kalTgt_.h != lh)) kalTgt_.create(lw, lh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
     const float sx = (float)lw / w_, sy = (float)lh / h_;
-    kalTgt_.bind();
+    if (!direct) kalTgt_.bind();
     glDisable(GL_BLEND);
     glUseProgram(kalProg_);
     glActiveTexture(GL_TEXTURE0);
@@ -281,16 +283,19 @@ void main() {
     ugl::set1f(kalProg_, "uRot", rot);
     ugl::set1f(kalProg_, "uTime", time);
     ugl::set1f(kalProg_, "uLevel", level);
+    ugl::set1f(kalProg_, "uSat", saturation);
     ugl::set1i(kalProg_, "uSeg", segs);
     glUniform3f(glGetUniformLocation(kalProg_, "uTint"), tint.r, tint.g, tint.b);
     ugl::drawFullscreen();
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, w_, h_);
-    glUseProgram(upProg_);
-    glBindTexture(GL_TEXTURE_2D, kalTgt_.tex);
-    ugl::set1i(upProg_, "uT", 0);
-    ugl::set2f(upProg_, "uTexel", 1.f / lw, 1.f / lh);
-    ugl::drawFullscreen();
+    if (!direct) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, w_, h_);
+        glUseProgram(upProg_);
+        glBindTexture(GL_TEXTURE_2D, kalTgt_.tex);
+        ugl::set1i(upProg_, "uT", 0);
+        ugl::set2f(upProg_, "uTexel", 1.f / lw, 1.f / lh);
+        ugl::drawFullscreen();
+    }
     glEnable(GL_BLEND);
     curTex_ = 0;
 }

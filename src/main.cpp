@@ -22,6 +22,7 @@
 #include "input.hpp"
 #include "library.hpp"
 #include "menu.hpp"
+#include "menuworlds.hpp"
 #include "platform.hpp"
 #include "renderer.hpp"
 #include "songplan.hpp"
@@ -180,6 +181,8 @@ static void usage() {
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
 
+static std::string menuPlacePath(const std::string& progressPath);
+
 class App {
 public:
     explicit App(Options o) : opt_(std::move(o)) {}
@@ -220,6 +223,11 @@ private:
         bool finishing = false; // the stage's last song was survived: the run ends with its outro
     } run_;
     bool muffleWas_ = false;
+    // where the menu was: saved next to the progress (debounced while the menu shows, and when leaving it)
+    std::string placePath_;
+    Menu::Place savedPlace_, lastPlace_;
+    float placeChangedAt_ = -1;
+    void keepPlace(bool now);
     // The menu's music (data/menu_music.mp3): decoded in the background, a looping bed under the menu's screens, ducked
     // under the song previews, faded out when a game starts and back in on the menu (where it left off).
     std::future<std::shared_ptr<std::vector<int16_t>>> musicLoad_;
@@ -961,6 +969,19 @@ int App::run() {
     }
     glGetError();
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
+    // The menu's universe snapshots are made on a worker thread with its own context (an instance's init can take
+    // seconds): a hidden window's context, or a second EGL context when headless.
+    if (opt_.menu || opt_.menuEnabled || !opt_.menuShot.empty() || !opt_.menuClip.empty()) {
+        if (headless_) {
+            if (void* wc = headless::createWorkerContext())
+                WorldPool::setWorkerContext([wc] { return headless::makeWorkerCurrent(wc); }, [] { headless::makeWorkerCurrent(nullptr); });
+        } else {
+            glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+            if (GLFWwindow* ww = glfwCreateWindow(16, 16, "", nullptr, nullptr))
+                WorldPool::setWorkerContext([ww] { glfwMakeContextCurrent(ww); return true; }, [] { glfwMakeContextCurrent(nullptr); });
+            glfwMakeContextCurrent(win_);
+        }
+    }
 
     campaign_.load(opt_.campaignPath);
     progress_.load(opt_.progressPath);
@@ -1019,6 +1040,12 @@ int App::run() {
         beginSession(c);
     }
     if (mode_ == MODE_MENU) menu_.open(Menu::TITLE);
+    if (menuEnabled_) { // back where the menu was last time (the command line's difficulty wins)
+        placePath_ = menuPlacePath(opt_.progressPath);
+        Menu::Place pl;
+        if (Menu::loadPlace(placePath_, pl)) menu_.restore(pl, !opt_.difficultyGiven);
+        savedPlace_ = lastPlace_ = menu_.place();
+    }
     if (menuEnabled_ && opt_.menuMusic) startMenuMusic();
 
     double last = headless_ ? 0.0 : glfwGetTime();
@@ -1064,6 +1091,7 @@ int App::run() {
             }
             if (!testShot_.empty()) { menu_.screenshot(testShot_, fbw, fbh); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
             swap();
+            keepPlace(c.kind != Menu::Choice::NONE);
             if (c.kind == Menu::Choice::QUIT) quit_ = true;
             else if (c.kind != Menu::Choice::NONE) beginSession(c);
             continue;
@@ -1570,6 +1598,7 @@ int App::run() {
             (void)acc;
         }
     }
+    if (mode_ == MODE_MENU) keepPlace(true);
     std::printf("[app] end of the run (quit %d, %.1f s)\n", (int)quit_, runTime_);
     audio_.shutdown();
     if (headless_) headless::shutdown();
@@ -1626,6 +1655,23 @@ void App::updateMenuMusic() {
     std::printf("[menu music] %s (gain %.2f over %.1f s, at %.1f s of the loop, %.1f s in)\n", NAMES[want], gain, glide,
                 audio_.bedPosition(), runTime_);
     musicState_ = want;
+}
+
+// The menu's place file: next to the progress file (a test's temporary progress keeps it there too).
+static std::string menuPlacePath(const std::string& progressPath) {
+    const std::string p = progressPath.empty() ? Progress::defaultPath() : progressPath;
+    return (fs::path(p).parent_path() / "menu-state.tsv").string();
+}
+
+// Saves where the menu is, 1.5 s after it last changed (or at once when leaving the menu).
+void App::keepPlace(bool now) {
+    if (placePath_.empty()) return;
+    const Menu::Place pl = menu_.place();
+    if (pl != lastPlace_) { lastPlace_ = pl; placeChangedAt_ = runTime_; }
+    if (pl != savedPlace_ && (now || runTime_ - placeChangedAt_ > 1.5f)) {
+        Menu::savePlace(placePath_, pl);
+        savedPlace_ = pl;
+    }
 }
 
 // A session from the menu (or --stage): free play on a difficulty, or a campaign run from a song of a stage.
@@ -1851,7 +1897,7 @@ int App::runMenuShot() {
         // the menu's frame cost: CPU (update + drawing calls) and GPU (a timer query around the drawing)
         GLuint gpuQ = 0;
         glGenQueries(1, &gpuQ);
-        double cpuSum = 0, cpuMax = 0, gpuSum = 0, gpuMax = 0, wallSum = 0;
+        double cpuSum = 0, cpuMax = 0, gpuSum = 0, gpuMax = 0, wallSum = 0, navMax = 0, lastKey = -10;
         for (int f = 0; f < frames; f++) {
             const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
             input_.testFrame();
@@ -1884,12 +1930,17 @@ int App::runMenuShot() {
             const double gpu = ns / 1e6;
             cpuSum += cpu; gpuSum += gpu;
             cpuMax = std::max(cpuMax, cpu); gpuMax = std::max(gpuMax, gpu);
+            for (auto& [t, k] : keys)
+                if (t < t1) lastKey = std::max(lastKey, t);
+            if (t0 - lastKey < 0.6) navMax = std::max(navMax, std::max(cpu, gpu)); // a frame right after a key: navigating
+            if (std::getenv("ZEN_MENU_SLOW") && std::max(cpu, gpu) > 30.0) std::printf("[menu] slow frame %d (%.2f s): CPU %.1f ms, GPU %.1f ms\n", f, t0, cpu, gpu);
             std::fwrite(px.data(), 1, px.size(), pipe);
         }
         glDeleteQueries(1, &gpuQ);
         std::printf("[menu] %d frames at %dx%d: CPU %.2f ms on average (max %.1f), GPU %.2f ms on average (max %.1f)\n", frames, w, h,
                     cpuSum / frames, cpuMax, gpuSum / frames, gpuMax);
         if (wallSum > 0) std::printf("[menu] drawing with glFinish: %.2f ms on average\n", wallSum / frames);
+        std::printf("[menu] worst frame while navigating (within 0.6 s of a key): %.1f ms\n", navMax);
         const int rc = platform::closeRead(pipe);
         std::printf("[clip] %s %s (%s, %.0f s)\n", rc == 0 ? "wrote" : "FAILED", opt_.menuClip.c_str(), "kaleidoscope", END);
         if (headless_) headless::shutdown();
@@ -1989,7 +2040,12 @@ int main(int argc, char** argv) {
     if (reset || unlock) {
         Progress p;
         p.load(o.progressPath);
-        if (reset) p.reset();
+        if (reset) {
+            p.reset();
+            const std::string place = menuPlacePath(o.progressPath);
+            std::error_code ec;
+            if (fs::remove(place, ec)) std::printf("[menu] forgot where the menu was (%s)\n", place.c_str());
+        }
         if (unlock) {
             p.unlockAll();
             std::printf("[campaign] every stage unlocked\n");
