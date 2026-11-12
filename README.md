@@ -133,6 +133,9 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/pinkvibe.jpg"><br><b>PINK VIBE</b>: a soft, girly pastel world in flat design: wide bands of pinks, from blush through rose and salmon to raspberry, wave slowly across the screen and breathe with the music; soft rounded pastel pink blocks, seven distinct pinks each with a tiny calm motif (pearls, a heart, a flower, a sparkle, a crescent, a bow, a bubble) on a translucent plum well; cleared rows drift away as petals and bubbles; the drop swirls the bands into one big wave in rose-gold and magenta sunset tones<br><sub>🔍 <i>to review</i></sub></td>
 <td><img src="docs/universes/shadow.jpg"><br><b>SHADOW</b>: the game is a shadow: a little wooden model of the well with glass blocks stands on a table at the bottom left, lit by a vintage spotlight, and the playfield is its shadow cast on the wall, each glass block a pool of colored light; cleared blocks are lifted out of the model and stacked on the table; the drop turns on a second colored lamp that doubles the shadows<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
+<tr>
+<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: ancient ruins in a jungle, in real 3D: a Maya pyramid, a Khmer temple held by a strangler fig or a Doric temple under umbrella pines, an avenue of broken columns, moss, lianas and mist, the camera drifting slowly among them; nothing is built, the ruins are simply there; the blocks are carved stone column drums, and the drop turns the sun to golden hour<br><sub>🔍 <i>to review</i></sub></td>
+</tr>
 </table>
 
 Disabled for now (not built; their code stays in the repository):
