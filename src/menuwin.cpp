@@ -54,7 +54,34 @@ struct Worlds {
     bool open(int s) const { return !m.progress_ || m.progress_->unlocked(s); }
     bool beaten(int s, int k) const { return m.progress_ && m.progress_->beaten(s, k, m.diff_); }
     bool cleared(int s) const { return m.progress_ && m.progress_->cleared(s, m.diff_); }
-    Col songCol(int s, int k) const { unsigned char c[3]; menuUniverseColor(m.camp_, spec(s, k), c); return rgb8(c); }
+    // a song's colour: its stage's hue, in a gradient across the stage's songs (song 1 lighter and a touch warmer,
+    // song 5 deeper and a touch cooler), so a stage reads as one family
+    Col songCol(int s, int k) const {
+        const Col c = stageCol(s);
+        float mx = std::max({c.r, c.g, c.b}), mn = std::min({c.r, c.g, c.b}), h = 0.f;
+        const float d = mx - mn;
+        if (d > 1e-5f) {
+            if (mx == c.r) h = std::fmod((c.g - c.b) / d + 6.f, 6.f);
+            else if (mx == c.g) h = (c.b - c.r) / d + 2.f;
+            else h = (c.r - c.g) / d + 4.f;
+            h /= 6.f;
+        }
+        const float sat = mx > 0.f ? d / mx : 0.f;
+        const float u = nSongs(s) > 1 ? (float)k / (float)(nSongs(s) - 1) : 0.5f;   // 0 .. 1 along the stage
+        const float hh = std::fmod(h - 0.035f + 0.07f * u + 1.f, 1.f);
+        const float ss = std::clamp(sat * (0.6f + 0.55f * u), 0.f, 1.f);
+        const float vv = std::clamp(mx * (1.08f - 0.3f * u), 0.f, 1.f);
+        const float hf = hh * 6.f, f = hf - std::floor(hf);
+        const float P = vv * (1 - ss), Q = vv * (1 - ss * f), T = vv * (1 - ss * (1 - f));
+        switch ((int)std::floor(hf) % 6) {
+        case 0: return {vv, T, P, 1.f};
+        case 1: return {Q, vv, P, 1.f};
+        case 2: return {P, vv, T, 1.f};
+        case 3: return {P, Q, vv, 1.f};
+        case 4: return {T, P, vv, 1.f};
+        default: return {vv, P, Q, 1.f};
+        }
+    }
     Col stageCol(int s) const { unsigned char c[3]; m.stageColor(s, c); return rgb8(c); }
     float focusStage(int s) const { return m.aRow_ > 0.5f ? sstep(near1(m.aStage_, s)) * std::min(1.f, m.aRow_) : 0.f; }
     int focusedStage() const { return std::clamp((int)std::lround(m.aStage_), 0, std::max(0, nStages() - 1)); }
@@ -230,7 +257,7 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         std::string title = v.title;
         while (p.width(head, title, 42 * u) > 1150 * u && title.size() > 4) title.pop_back();
         p.text(head, title, lx, y0 + 108 * u, 42 * u, ink, -1, 0.01f);
-        const float uw = p.text(body, upper(v.universe), lx, y0 + 160 * u, 19 * u, mixc(rgb8(v.col), hex(0xffffff), 0.2f), -1, 0.3f);
+        const float uw = p.text(body, upper(v.universe), lx, y0 + 160 * u, 19 * u, mixc(m.screen_ == Menu::CAMPAIGN ? songCol(v.stage, v.song) : rgb8(v.col), hex(0xffffff), 0.2f), -1, 0.3f);
         p.text(body, "VELOCITY " + fmt1(v.velocity), lx + uw + 44 * u, y0 + 160 * u, 19 * u, dim, -1, 0.3f);
         if (v.beaten) std::snprintf(b, sizeof(b), "BEATEN    BEST %d", v.best);
         else std::snprintf(b, sizeof(b), "NOT BEATEN ON %s", difficultyName(m.diff_));
@@ -424,10 +451,12 @@ void Worlds::kalBackground(const std::string& cur) {
     g_mix = std::min(1.f, g_mix + 1.f / 72.f);
     unsigned char c[3];
     menuUniverseColor(m.camp_, cur, c);
+    Col tint = rgb8(c);
+    if (m.screen_ == Menu::CAMPAIGN) tint = songCol(focusedStage(), m.row_ == 1 ? m.song_ : 0);   // the stage's hue
     const GLuint a = pool.tex(g_prev.empty() ? g_cur : g_prev), b = pool.tex(g_cur);
     if (!a && !b) { p.rrect(0, 0, m.fw_, m.fh_, 0, hex(0x0a0a12)); return; }
     p.kaleido(a ? a : b, b ? b : a, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12,
-              mixc(rgb8(c), hex(0xffffff), 0.3f), t, m.level_);
+              mixc(tint, hex(0xffffff), 0.3f), t, m.level_);
 }
 
 void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {
