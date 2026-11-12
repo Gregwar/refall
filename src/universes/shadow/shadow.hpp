@@ -39,13 +39,14 @@ private:
     struct Flight {
         vec3 from, to, axis;
         float t, dur, spin;
-        int type;
+        int type, dest; // dest: its color's stack (0..6) or the box (7)
     };
     std::vector<Flight> flights_;
     struct Shrink { float x, y, t; int type; };
     std::vector<Shrink> shrinks_;
-    int pile_[7] = {}, reserved_[7] = {};
-    vec3 pileSlot(int type, int n) const;
+    int pile_[8] = {}, reserved_[8] = {}; // the seven stacks in the tray, then the box
+    vec3 pileSlot(int dest, int n) const;
+    int pileDest(int type) const;
     vec2 pileCenter(int type) const;
 
     // ---- Text.

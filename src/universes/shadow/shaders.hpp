@@ -232,10 +232,13 @@ uniform vec4 uFlyR[24];            // their rotation: axis (xyz), angle
 uniform float uFlyS[24];            // their size
 uniform int uFlyN;
 uniform vec4 uPile[7];             // the spent blocks' stacks: x, z, count, type
+uniform vec4 uBasket;              // the box of the oldest ones: x, z, count
 uniform float uLensGlow;
 
 const float TABLE_Y = -10.8, PILE_S = 0.44, TABLE_R = 9.4;
 const vec2 TABLE_C = vec2(-0.6, 2.2);
+const vec2 TRAY_C = vec2(3.95, 5.2), TRAY_H = vec2(3.25, 1.6);
+const float BOX_W = 1.0, BOX_H = 1.5;
 int gMat; float gType; float gFlash;
 
 float sdBox(vec3 p, vec3 b) { vec3 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, max(d.y, d.z)), 0.0); }
@@ -276,32 +279,57 @@ float mapProjector(vec3 p, out int mat) {
     return d;
 }
 
+// A stack of n cubes of side S on an N x N footprint, filled layer by layer (row by row): three boxes, grooved.
+float stackSDF(vec3 q, float n, float N, float S) {
+    float per = N * N;
+    float L = floor(n / per), r = n - L * per, fr = floor(r / N), rr = r - fr * N;
+    float H = 0.5 * N * S;
+    float e = 1e3;
+    if (L > 0.0) e = sdBox(q - vec3(0.0, L * S * 0.5, 0.0), vec3(H, L * S * 0.5, H));
+    if (fr > 0.0) e = min(e, sdBox(q - vec3(0.0, (L + 0.5) * S, -H + fr * S * 0.5), vec3(H, 0.5 * S, fr * S * 0.5)));
+    if (rr > 0.0) e = min(e, sdBox(q - vec3(-H + rr * S * 0.5, (L + 0.5) * S, -H + (fr + 0.5) * S), vec3(rr * S * 0.5, 0.5 * S, 0.5 * S)));
+    vec3 fg = abs(fract((q + vec3(H, 0.0, H)) / S) - 0.5);
+    float plane = (0.5 - max(fg.x, max(fg.y, fg.z))) * S;
+    return max(e, 0.03 - plane);
+}
+
+// The spent blocks: low stacks sorted by color in a tray at the table's front right, out of the beam, and the
+// overflow in a wooden box behind the model (on the side away from the lamp).
 float mapPiles(vec3 p) {
     float d = 1e3;
-    for (int i = 0; i < 7; i++) {
-        float n = uPile[i].z;
-        if (n < 0.5) continue;
-        vec3 q = p - vec3(uPile[i].x, TABLE_Y, uPile[i].y);
-        if (length(q.xz) > 1.6) { d = min(d, length(q.xz) - 1.0); continue; }
-        float L = floor(n / 9.0), r = n - L * 9.0, fr = floor(r / 3.0), rr = r - fr * 3.0;
-        float S = PILE_S, H = 1.5 * S;
-        float e = 1e3;
-        if (L > 0.0) e = sdBox(q - vec3(0.0, L * S * 0.5, 0.0), vec3(H, L * S * 0.5, H));
-        if (fr > 0.0) e = min(e, sdBox(q - vec3(0.0, (L + 0.5) * S, -H + fr * S * 0.5), vec3(H, 0.5 * S, fr * S * 0.5)));
-        if (rr > 0.0) e = min(e, sdBox(q - vec3(-H + rr * S * 0.5, (L + 0.5) * S, -H + (fr + 0.5) * S), vec3(rr * S * 0.5, 0.5 * S, 0.5 * S)));
-        // the cubes: grooves along the grid
-        vec3 fg = abs(fract((q + vec3(H, 0.0, H)) / S) - 0.5);
-        float plane = (0.5 - max(fg.x, max(fg.y, fg.z))) * S;
-        e = max(e, 0.03 - plane);
-        if (e < d) { d = e; gType = uPile[i].w; }
+    float tray = sdRBox(p - vec3(TRAY_C.x, TABLE_Y + 0.06, TRAY_C.y), vec3(TRAY_H.x, 0.06, TRAY_H.y), 0.04);
+    if (tray < d) { d = tray; gMat = 1; }
+    if (sdBox(p - vec3(TRAY_C.x, TABLE_Y + 0.6, TRAY_C.y), vec3(TRAY_H.x, 0.6, TRAY_H.y)) < 0.3) {
+        for (int i = 0; i < 7; i++) {
+            float n = uPile[i].z;
+            if (n < 0.5) continue;
+            float e = stackSDF(p - vec3(uPile[i].x, TABLE_Y + 0.12, uPile[i].y), n, 3.0, PILE_S);
+            if (e < d) { d = e; gMat = 6; gType = uPile[i].w; }
+        }
+    }
+    // the box: thin walls and a floor, filling with the oldest blocks of every color
+    vec3 q = p - vec3(uBasket.x, TABLE_Y, uBasket.y);
+    float outer = sdRBox(q - vec3(0.0, BOX_H * 0.5, 0.0), vec3(BOX_W, BOX_H * 0.5, BOX_W), 0.05);
+    if (outer < d + 0.1) {
+        float box = max(outer, -sdBox(q - vec3(0.0, BOX_H * 0.5 + 0.12, 0.0), vec3(BOX_W - 0.12, BOX_H * 0.5, BOX_W - 0.12)));
+        if (box < d) { d = box; gMat = 1; }
+        if (uBasket.z > 0.5) {
+            vec3 qi = q - vec3(0.0, 0.12, 0.0);
+            float e = stackSDF(qi, uBasket.z, 4.0, PILE_S);
+            if (e < d) {
+                d = e; gMat = 6;
+                vec3 cell = floor((qi + vec3(2.0 * PILE_S, 0.0, 2.0 * PILE_S)) / PILE_S);
+                gType = floor(hash13(cell + 7.0) * 6.999);
+            }
+        }
     }
     return d;
 }
 )" R"(
-float map(vec3 p) {
+// Everything but the glass blocks.
+float mapSolid(vec3 p) {
     gMat = 0; gType = -1.0; gFlash = 0.0;
-    // the table
-    // the table: a thick top with rounded edges (its back edge leaves the wall visible behind)
+    // the table: a round top on a pedestal
     vec3 tq = p - vec3(TABLE_C.x, TABLE_Y - 0.7, TABLE_C.y);
     float d = sdCyl(tq, 0.7, TABLE_R - 0.2) - 0.2;
     d = min(d, sdCyl(tq + vec3(0.0, 9.0, 0.0), 8.5, 1.1));
@@ -312,29 +340,10 @@ float map(vec3 p) {
                  sdRBox(p - vec3(0.0, -10.42, 0.0), vec3(5.67, 0.38, 0.9), 0.12));
         if (dd < d) { d = dd; gMat = 1; }
     }
-    // the gel blocks
-    float wb = sdBox(p - vec3(0.0, 0.5, 0.0), vec3(5.2, 11.2, 0.6));
-    if (wb < d) {
-        float type, flash;
-        float e2 = boardSDF2(p.xy, 0.09, type, flash);
-        if (type >= 0.0) {
-            // (inset a little more than the shadow: the gaps between two pieces read on the small model too)
-            vec2 w = vec2(e2 + 0.135,abs(p.z) - 0.465 + 0.09);
-            float e = min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - 0.09;
-            if (e < d) { d = e; gMat = 2; gType = type; gFlash = flash; }
-        } else d = min(d, max(e2, abs(p.z) - 0.5));
-    }
-    // the blocks lifted out, on their way to the stacks
-    for (int i = 0; i < uFlyN; i++) {
-        vec3 q = rotAxis(p - uFly[i].xyz, uFlyR[i].xyz, uFlyR[i].w);
-        float e = sdRBox(q, vec3(0.42 * uFlyS[i]), 0.08 * uFlyS[i]);
-        if (e < d) { d = e; gMat = 2; gType = uFly[i].w; gFlash = 0.0; }
-    }
-    // the stacks of spent blocks
-    if (p.y < TABLE_Y + 8.0) {
-        float t = gType;
+    if (p.y < TABLE_Y + 3.0) {
+        int m = gMat; float t = gType;
         dd = mapPiles(p);
-        if (dd < d) { d = dd; gMat = 6; } else gType = t;
+        if (dd < d) d = dd; else { gMat = m; gType = t; }
     }
     int pm;
     dd = mapProjector(p, pm);
@@ -342,55 +351,91 @@ float map(vec3 p) {
     return d;
 }
 
-vec3 normalAt(vec3 p) {
-    const vec2 e = vec2(0.0025, -0.0025);
-    return normalize(e.xyy * map(p + e.xyy) + e.yyx * map(p + e.yyx) + e.yxy * map(p + e.yxy) + e.xxx * map(p + e.xxx));
+// The glass blocks: the board's (one seamless block per piece) and those lifted out, flying to the table.
+float gGType, gGFlash;
+float glassMap(vec3 p) {
+    gGType = -1.0; gGFlash = 0.0;
+    float d = 1e3;
+    float wb = sdBox(p - vec3(0.0, 0.5, 0.0), vec3(5.2, 11.2, 0.6));
+    if (wb < 0.5) {
+        float type, flash;
+        float e2 = boardSDF2(p.xy, 0.09, type, flash);
+        if (type >= 0.0) {
+            // (inset a little more than the shadow: the gaps between two pieces read on the small model too)
+            vec2 w = vec2(e2 + 0.135, abs(p.z) - 0.465 + 0.09);
+            d = min(max(w.x, w.y), 0.0) + length(max(w, 0.0)) - 0.09;
+            gGType = type; gGFlash = flash;
+        } else d = max(e2, abs(p.z) - 0.5);
+    } else d = wb;
+    for (int i = 0; i < uFlyN; i++) {
+        vec3 q = rotAxis(p - uFly[i].xyz, uFlyR[i].xyz, uFlyR[i].w);
+        float e = sdRBox(q, vec3(0.42 * uFlyS[i]), 0.08 * uFlyS[i]);
+        if (e < d) { d = e; gGType = uFly[i].w; gGFlash = 0.0; }
+    }
+    return d;
 }
-float softShadow(vec3 ro, vec3 rd, float tmax) {
+
+float map(vec3 p) {
+    float d = mapSolid(p);
+    float g = glassMap(p);
+    if (g < d) { gMat = 2; gType = gGType; gFlash = gGFlash; return g; }
+    return d;
+}
+
+vec3 normalSolid(vec3 p) {
+    const vec2 e = vec2(0.0025, -0.0025);
+    return normalize(e.xyy * mapSolid(p + e.xyy) + e.yyx * mapSolid(p + e.yyx) + e.yxy * mapSolid(p + e.yxy) + e.xxx * mapSolid(p + e.xxx));
+}
+vec3 normalGlass(vec3 p) {
+    const vec2 e = vec2(0.0025, -0.0025);
+    return normalize(e.xyy * glassMap(p + e.xyy) + e.yyx * glassMap(p + e.yyx) + e.yxy * glassMap(p + e.yxy) + e.xxx * glassMap(p + e.xxx));
+}
+vec3 gelTint(float type) {
+    vec3 g = uGelC[int(clamp(type, 0.0, 6.0))];
+    return g / max(max(g.r, g.g), max(g.b, 1e-3));
+}
+// The lamp's light reaching ro: soft shadows of the solids; through the glass it comes out colored (the light
+// that paints the colored shadows on the wall, and spills on the model's floor and the table).
+vec3 lampLight(vec3 ro, vec3 rd, float tmax) {
     float res = 1.0, t = 0.04;
-    for (int i = 0; i < 64 && t < tmax; i++) {
-        float h = map(ro + rd * t);
+    vec3 tr = vec3(1.0);
+    bool through = false;
+    for (int i = 0; i < 80 && t < tmax; i++) {
+        vec3 p = ro + rd * t;
+        float h = mapSolid(p);
         res = min(res, 14.0 * h / t);
         if (res < 0.002) break;
-        t += clamp(h, 0.03, 0.8);
+        float g = glassMap(p);
+        float s = clamp(min(h, max(abs(g), 0.04)), 0.03, 0.8);
+        if (g < 0.0) { tr *= pow(mix(vec3(1.0), gelTint(gGType), 0.92), vec3(s * 1.1)); through = true; }
+        t += s;
     }
-    return clamp(res, 0.0, 1.0);
+    return clamp(res, 0.0, 1.0) * tr * (through ? 1.7 : 1.0);
 }
 float ambientOcc(vec3 p, vec3 n) {
     float o = 0.0, s = 1.0;
     for (int i = 1; i <= 5; i++) {
         float h = 0.06 + 0.16 * float(i);
-        o += (h - map(p + n * h)) * s;
+        o += (h - mapSolid(p + n * h)) * s;
         s *= 0.7;
     }
     return clamp(1.0 - 1.6 * o, 0.0, 1.0);
 }
 
-void main() {
-    vec3 rd = normalize(uFwd + uRight * (vUv.x * 2.0 - 1.0) * uTan.x + uUp * (vUv.y * 2.0 - 1.0) * uTan.y);
-    vec3 ro = uEye;
-    float t = 0.0;
-    bool hit = false;
-    for (int i = 0; i < 160; i++) {
-        float h = map(ro + rd * t);
-        if (h < 0.0015 * t) { hit = true; break; }
-        t += h;
-        if (t > 160.0) break;
-    }
-    if (!hit) { frag = vec4(0.0); return; }
-    vec3 p = ro + rd * t;
-    map(p);
-    int mat = gMat; float type = gType, flash = gFlash;
-    vec3 n = normalAt(p);
-    vec3 v = -rd;
-    // the projector's light: a spot from the lens, shadowed by the model
+vec3 lampAt(vec3 p, vec3 n, out vec3 L) {
     vec3 Lv = uLensPos - p;
     float dist = length(Lv);
-    vec3 L = Lv / dist;
+    L = Lv / dist;
     float cone = smoothstep(0.76, 0.9, dot(-L, uLensDir));
-    float sh = mat == 5 ? 1.0 : softShadow(p + n * 0.03, L, dist - 2.0);
-    vec3 lit = uLight1 * cone * sh * 2.1 / (1.0 + dist * dist * 0.0009);
-    // the wall's bounce from behind, the room, the second projector (a drop)
+    if (cone <= 0.0) return vec3(0.0);
+    return uLight1 * cone * lampLight(p + n * 0.03, L, dist - 2.0) * 2.1 / (1.0 + dist * dist * 0.0009);
+}
+
+// An opaque surface: the table, the wood, the lamp, the spent blocks.
+vec3 shadeSolid(vec3 p, vec3 n, vec3 rd, int mat, float type) {
+    vec3 v = -rd;
+    vec3 L = vec3(0.0, 1.0, 0.0);
+    vec3 lit = mat == 5 ? vec3(0.0) : lampAt(p, n, L);
     float ao = ambientOcc(p, n);
     vec3 bounce = uLight1 * 0.07 * (0.35 + 0.65 * max(-n.z, 0.0)) + uRoom;
     vec3 L2 = normalize(uL2Pos - p);
@@ -398,22 +443,14 @@ void main() {
     float diff = max(dot(n, L), 0.0), diff2 = max(dot(n, L2), 0.0);
     vec3 h = normalize(L + v), h2 = normalize(L2 + v);
     vec3 col;
-    if (mat == 2 || mat == 6) {
+    if (mat == 6) {
+        // the spent blocks: small glass cubes packed together, glowing in the light
         vec3 g = uGelC[int(clamp(type, 0.0, 6.0))];
-        // glass: lit through (it glows whatever face), a crisp highlight, its edges catching the light
         float edge = 1.0 - max(abs(n.x), max(abs(n.y), abs(n.z)));
-        float through = 0.55 + 0.45 * max(dot(-n, L) * 0.5 + 0.5, diff);
-        col = g * lit * (0.25 * diff + 0.55 * through) + g * g * lit * 0.35;
-        col += g * lit2 * (0.3 + 0.7 * diff2) * 0.6;
-        col += g * bounce * 1.4 * ao;
+        col = g * lit * (0.25 * diff + 0.45) + g * lit2 * (0.3 + 0.7 * diff2) * 0.6 + g * bounce * 1.4 * ao;
         col += lit * (pow(max(dot(n, h), 0.0), 90.0) * 1.4 + edge * edge * 2.2 * g);
-        col += lit2 * pow(max(dot(n, h2), 0.0), 60.0) * 0.8;
-        float fr = pow(1.0 - max(dot(n, v), 0.0), 4.0);
-        col = mix(col, col * 0.6 + uLight1 * 0.04, fr * 0.5);
         col *= mix(0.55, 1.0, ao);
-        col += g * flash * lit * 0.5;
     } else if (mat == 1 || mat == 0) {
-        // wood (the frame), the table top
         vec3 base = mat == 1 ? uWood : uTable;
         float along = mat == 1 ? (abs(p.x) > 5.0 ? p.y : p.x) : p.x;
         float across = mat == 1 ? (abs(p.x) > 5.0 ? p.x + p.z * 0.5 : p.y + p.z * 0.5) : p.z;
@@ -424,15 +461,12 @@ void main() {
         col = base * (lit * diff + bounce * ao + lit2 * diff2 * 0.5) * mix(0.35, 1.0, ao);
         float gloss = mat == 1 ? 0.35 : (uTableKind > 1.5 ? 0.0 : 0.18);
         col += gloss * (lit * pow(max(dot(n, h), 0.0), 40.0) + lit2 * pow(max(dot(n, h2), 0.0), 40.0) * 0.5);
-        // the table's own shadow line where it meets the model
         if (mat == 0) col *= mix(0.6, 1.0, smoothstep(0.0, 0.4, ao));
     } else if (mat == 5) {
-        // the lens: the lamp seen through it
         vec3 q = projLocal(p);
         float r = length(q.xy) / 1.02;
         col = uLight1 * (3.0 + 6.0 * uLensGlow) * (1.0 - 0.5 * r * r) + uLight1 * 0.5;
     } else {
-        // enamel (the barrel, the stand), brass (the hood)
         vec3 base = mat == 4 ? vec3(0.62, 0.44, 0.2) : uBody;
         float spec = mat == 4 ? 1.0 : 0.5;
         col = base * (lit * diff * 0.5 + bounce * ao * 1.5 + lit2 * diff2 * 0.5) * mix(0.4, 1.0, ao);
@@ -441,9 +475,82 @@ void main() {
         col += spec * (uLight1 * sky * (mat == 4 ? base : vec3(0.6)) + lit2 * pow(max(dot(n, h2), 0.0), 50.0) * 0.6);
         col += uLight1 * 0.2 * spec * pow(max(dot(rl, normalize(vec3(-0.3, 0.6, 0.7))), 0.0), 30.0);
     }
-    // darkness swallows what the light misses, far off
-    col *= exp(-max(t - 60.0, 0.0) * 0.02);
-    frag = vec4(col, 1.0);
+    return col;
+}
+
+// A glass surface: what it reflects (the dark room, the lamp in a sharp highlight), its edges catching the light,
+// and the lamp's light scattered inside it, glowing in its color.
+vec3 shadeGlass(vec3 p, vec3 n, vec3 rd, float type, float flash, float F) {
+    vec3 v = -rd;
+    vec3 L = vec3(0.0, 1.0, 0.0);
+    vec3 lit = lampAt(p, n, L);
+    vec3 g = uGelC[int(clamp(type, 0.0, 6.0))];
+    vec3 L2 = normalize(uL2Pos - p);
+    vec3 lit2 = uLight2 * uDrop * 0.9;
+    float edge = 1.0 - max(abs(n.x), max(abs(n.y), abs(n.z)));
+    vec3 h = normalize(L + v), h2 = normalize(L2 + v);
+    vec3 col = g * lit * (0.08 + 0.2 * max(dot(-n, L), 0.0)) + g * lit2 * 0.1 + g * uRoom * 1.5;
+    col += lit * (pow(max(dot(n, h), 0.0), 120.0) * 2.6 + edge * edge * 4.0 * mix(g, vec3(1.0), 0.35));
+    col += lit2 * pow(max(dot(n, h2), 0.0), 80.0) * 1.2;
+    vec3 rl = reflect(rd, n);
+    col += F * (uRoom * 3.0 + uLight1 * 0.12 * smoothstep(0.2, 1.0, dot(rl, normalize(vec3(-0.2, 0.25, -1.0)))));
+    col += g * flash * lit * 0.4;
+    return col;
+}
+
+void main() {
+    vec3 rd = normalize(uFwd + uRight * (vUv.x * 2.0 - 1.0) * uTan.x + uUp * (vUv.y * 2.0 - 1.0) * uTan.y);
+    vec3 ro = uEye;
+    vec3 acc = vec3(0.0), tr = vec3(1.0);
+    bool opaque = false;
+    float travelled = 0.0;
+    for (int layer = 0; layer < 4; layer++) {
+        bool glass = layer < 3;
+        float t = 0.0;
+        bool hit = false;
+        for (int i = 0; i < 160; i++) {
+            vec3 q = ro + rd * t;
+            float h = glass ? map(q) : mapSolid(q);
+            if (h < 0.0015 * (t + travelled)) { hit = true; break; }
+            t += h;
+            if (t > 160.0) break;
+        }
+        if (!hit) break;
+        vec3 p = ro + rd * t;
+        travelled += t;
+        if (glass) map(p); else mapSolid(p);
+        int mat = gMat; float type = gType, flash = gFlash;
+        if (mat == 2) {
+            // through the glass: a Fresnel reflection, the tint deepening with the thickness crossed, the view
+            // behind shifted by the refraction
+            vec3 n = normalGlass(p);
+            float F = 0.04 + 0.96 * pow(1.0 - max(dot(n, -rd), 0.0), 5.0);
+            acc += tr * shadeGlass(p, n, rd, type, flash, F);
+            tr *= 1.0 - F;
+            vec3 ri = refract(rd, n, 1.0 / 1.45);
+            float s = 0.02;
+            for (int k = 0; k < 48; k++) {
+                float gd = glassMap(p + ri * s);
+                if (gd > 0.0) break;
+                float ds = max(-gd, 0.04);
+                tr *= pow(mix(vec3(1.0), gelTint(gGType), 0.85), vec3(ds * 0.55));
+                // (the lamp's light crossing the glass, scattered toward the eye: it glows in its color)
+                acc += tr * gelTint(gGType) * uLight1 * 0.05 * ds;
+                s += ds;
+            }
+            ro = p + ri * s + rd * 0.03;
+            travelled += s;
+            continue;
+        }
+        vec3 n = normalSolid(p);
+        vec3 col = shadeSolid(p, n, rd, mat, type);
+        col *= exp(-max(travelled - 60.0, 0.0) * 0.02);
+        acc += tr * col;
+        opaque = true;
+        break;
+    }
+    float alpha = opaque ? 1.0 : 1.0 - dot(tr, vec3(0.3333));
+    frag = vec4(acc, alpha);
 }
 )";
 

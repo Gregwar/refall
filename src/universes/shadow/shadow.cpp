@@ -81,7 +81,10 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 const vec3 MOON(0.42f, 0.58f, 1.0f);
 constexpr float TABLE_Y = -10.8f, PILE_S = 0.44f;
-constexpr int MAX_FLIGHTS = 24, MAX_SHRINKS = 40, PILE_MAX = 90;
+constexpr int MAX_FLIGHTS = 24, MAX_SHRINKS = 40;
+// the spent blocks stay low: two layers per color in the tray, then the oldest go into the box (three layers)
+constexpr int TRAY_MAX = 18, BOX_MAX = 48;
+const vec2 BOX_C{7.2f, 1.9f};
 
 float easeInOut(float t) { t = saturate(t); return t * t * (3.f - 2.f * t); }
 
@@ -131,6 +134,12 @@ bool ShadowUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     buildFont(font_, FONT_MARCELLUS);
+    // test hook: ZEN_SHADOW_SPENT=N starts with N spent blocks set aside (a late still)
+    if (const char* s = std::getenv("ZEN_SHADOW_SPENT"))
+        for (int i = 0, n = std::atoi(s); i < n; i++) {
+            const int type = (i * 3 + i / 7) % 7, dest = pileDest(type);
+            pile_[dest] = std::min(dest >= 7 ? BOX_MAX : TRAY_MAX, pile_[dest] + 1);
+        }
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
 }
@@ -465,17 +474,24 @@ void ShadowUniverse::uploadBoard(const Game& g) {
 }
 
 vec2 ShadowUniverse::pileCenter(int type) const {
-    // the stacks on the table, right of the model, in two staggered rows
-    // (in a row in front of the model, a little turned toward the camera)
-    return vec2{-4.6f + type * 1.95f, 5.4f - type * 0.12f};
+    // a low tray at the table's front right, out of the beam: four stacks in front, three behind
+    if (type < 4) return vec2{1.6f + type * 1.55f, 6.0f};
+    return vec2{2.4f + (type - 4) * 1.55f, 4.45f};
 }
 
-vec3 ShadowUniverse::pileSlot(int type, int n) const {
-    n = std::min(n, PILE_MAX - 1);
-    const vec2 c = pileCenter(type);
-    const int layer = n / 9, i = n % 9;
-    const float H = 1.5f * PILE_S;
-    return vec3(c.x - H + (i % 3 + 0.5f) * PILE_S, TABLE_Y + (layer + 0.5f) * PILE_S, c.y - H + (i / 3 + 0.5f) * PILE_S);
+int ShadowUniverse::pileDest(int type) const {
+    return pile_[type] + reserved_[type] < TRAY_MAX ? type : 7;
+}
+
+vec3 ShadowUniverse::pileSlot(int dest, int n) const {
+    const bool box = dest >= 7;
+    const int N = box ? 4 : 3, per = N * N;
+    if (box && n >= BOX_MAX) n = BOX_MAX - per + n % per; // (a full box: on its top layer)
+    n = std::min(n, box ? BOX_MAX - 1 : TRAY_MAX - 1);
+    const vec2 c = box ? BOX_C : pileCenter(dest);
+    const int layer = n / per, i = n % per;
+    const float H = 0.5f * N * PILE_S;
+    return vec3(c.x - H + (i % N + 0.5f) * PILE_S, TABLE_Y + 0.12f + (layer + 0.5f) * PILE_S, c.y - H + (i / N + 0.5f) * PILE_S);
 }
 
 void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
@@ -531,19 +547,21 @@ void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             const float order = (rowsSeen[c.y] - 1) * 0.22f + std::fabs(c.x - 4.5f) * 0.035f;
             if ((int)shrinks_.size() < MAX_SHRINKS) shrinks_.push_back({p.x, p.y, -std::fabs(c.x - 4.5f) * 0.012f, type});
-            const int n = pile_[type] + reserved_[type];
+            const int dest = pileDest(type);
+            const int n = pile_[dest] + reserved_[dest];
             if ((int)flights_.size() < MAX_FLIGHTS) {
                 Flight f;
                 f.from = vec3(p.x, p.y, 0.f);
-                f.to = pileSlot(type, n);
+                f.to = pileSlot(dest, n);
+                f.dest = dest;
                 f.axis = normalize(vec3(rng_.uniform() - 0.5f, rng_.uniform() - 0.5f, rng_.uniform() - 0.5f) + vec3(0.f, 0.f, 0.3f));
                 f.t = -order;
                 f.dur = 1.05f + 0.15f * rng_.uniform();
                 f.spin = (rng_.uniform() < 0.5f ? -1.f : 1.f) * (1.f + rng_.uniform()) * PI * 0.5f;
                 f.type = type;
                 flights_.push_back(f);
-                reserved_[type]++;
-            } else if (pile_[type] < PILE_MAX) pile_[type]++;
+                reserved_[dest]++;
+            } else pile_[dest] = std::min(dest >= 7 ? BOX_MAX : TRAY_MAX, pile_[dest] + 1);
         }
         if (ev.count >= 4) { tetris_ = 1.f; swirlAmp_ = std::max(swirlAmp_, 1.5f); }
         break;
@@ -778,7 +796,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     std::vector<float> fly, flyR, flyS;
     for (auto& fl : flights_) {
         fl.t += dt;
-        if (fl.t >= fl.dur) { pile_[fl.type] = std::min(PILE_MAX, pile_[fl.type] + 1); reserved_[fl.type]--; fl.type = -1; }
+        if (fl.t >= fl.dur) { pile_[fl.dest] = std::min(fl.dest >= 7 ? BOX_MAX : TRAY_MAX, pile_[fl.dest] + 1); reserved_[fl.dest]--; fl.type = -1; }
     }
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.type < 0; }), flights_.end());
     for (auto& fl : flights_) {
@@ -901,6 +919,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
         piles[i * 4 + 0] = c.x; piles[i * 4 + 1] = c.y; piles[i * 4 + 2] = (float)pile_[i]; piles[i * 4 + 3] = (float)i;
     }
     glUniform4fv(ugl::U(progModel_, "uPile"), 7, piles);
+    set4f(progModel_, "uBasket", BOX_C.x, BOX_C.y, (float)pile_[7], 0.f);
     set1f(progModel_, "uLensGlow", lensGlow_ + 0.6f * tetris_);
     glBindVertexArray(rectVao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
