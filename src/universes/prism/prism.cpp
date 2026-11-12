@@ -583,7 +583,6 @@ void PrismUniverse::trace(Ray first) {
                         stack_.push_back(s);
                     }
                 }
-                emitGlint(p, r.c * 0.8f, 0.12f + 0.35f * std::sqrt(I));
                 const vec3 cin = r.c * (1.f - R);
                 auto refractIn = [&](float nIdx) {
                     const float eta = 1.f / nIdx;
@@ -668,7 +667,6 @@ void PrismUniverse::trace(Ray first) {
                 stack_.push_back(s);
             }
             r.c = r.c * (1.f - R);
-            emitGlint(p, r.c, 0.1f + 0.4f * std::sqrt(lum(r.c)));
             if (r.split) {
                 // the spectrum fans out: each color bent its own way (the cube's chamfers acting as prisms; much
                 // wider than a real cube would, which is the point)
@@ -1078,7 +1076,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         light_b_ = lerp(light_b_, ugl::toLinear(hex(d.lightB)), k);
         text_ = lerp(text_, ugl::toLinear(hex(d.text)), k);
         accent_ = lerp(accent_, ugl::toLinear(hex(d.accent)), k);
-        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], vivid(ugl::toLinear(hex(d.tint[i])), 1.55f), k);
+        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], vivid(ugl::toLinear(hex(d.tint[i])), 2.2f), k);
     }
     // the section, from the HUD (a drop is a rainbow, a chorus white light)
     sectionKnown_ = false;
