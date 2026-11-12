@@ -96,7 +96,7 @@ struct Options {
     std::string campaignPath, progressPath;
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
-    int menuStyle = 0;         // --menu-style: the menus' look (Menu::Style)
+    int menuStyle = Menu::KALEIDO; // --menu-style: the menus' look (Menu::Style), the kaleidoscope by default
     bool menuDemo = false;     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
