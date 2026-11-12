@@ -21,6 +21,8 @@ the same universe again), `--universe-on-peak` (a long song may also change univ
 `--shots PREFIX N` (renders N screenshots of different universes and exits), `--phase-shots PREFIX` (one screenshot per scene level of a song),
 `--transition-shots PREFIX N` (at `--shot-time` in the song, with a filled board, changes from `--universe` to `--to NAME`
 with `--transition NAME`, saves N frames across the change and exits),
+`--free`, `--difficulty`, `--stage`, `--unlock`, `--reset`, `--campaign FILE`, `--progress FILE` and `--menu-shot` (the
+modes: see [the README](../README.md#modes)),
 `--clip OUT.mp4` (records a video with sound, via ffmpeg, from 4 s before the first drop of the song to 6 s after it,
 with the game played at a calm pace; `--clip-before` / `--clip-after SEC` change the span).
 
@@ -39,6 +41,11 @@ black, crossfades on the cuts), each showing a line clear (`--plan-only` prints 
 parallel, cached between runs). It uses `tetris-universe --analysis OUT.json` (the song's beats, structure and scene
 levels as JSON), the test hook `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a filled board) and the
 `[clip] clear N at T` lines a clip prints.
+
+Test hook for the menus and the campaign: `ZEN_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
+overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:KEY,..."` (up, down, left, right, ok,
+back, pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
+(each song starts S seconds before its end), e.g. a stage run through with `--autoplay`.
 
 ## tetris-universe-scope: see what the game hears
 

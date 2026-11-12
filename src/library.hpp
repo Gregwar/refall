@@ -18,6 +18,10 @@ public:
     void setSampleRate(uint32_t sr) { sampleRate_ = sr; }
     // Songs play in the given order (folders alphabetically, playlists in their order) unless shuffled.
     void setShuffle(bool s) { shuffle_ = s; }
+    // Each song plays once (the campaign's run): once the list is played through, nothing more is prepared.
+    void setOnce(bool o) { once_ = o; }
+    // Forgets the songs (a new session from the menu); a song still loading finishes in the background, unused.
+    void clear();
     // Starts loading the next song of the shuffled queue (no-op if already loading).
     void prefetch(uint64_t seed);
     // Returns the prefetched track if ready, else nullptr.
@@ -31,7 +35,7 @@ private:
     std::vector<size_t> queue_;
     size_t lastPlayed_ = (size_t)-1;
     uint32_t sampleRate_ = 48000;
-    bool shuffle_ = false;
+    bool shuffle_ = false, once_ = false, filled_ = false;
     std::future<std::shared_ptr<Track>> pending_;
     std::string loadingTitle_;
     // Remote songs: keep the next few downloaded ahead so skipping is instant.

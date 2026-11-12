@@ -185,6 +185,17 @@ void AudioEngine::render(float* out, unsigned int frames) {
     }
     atomicPos_ = pos_;
     applyMuffle(out, frames);
+    {
+        const float target = gainTarget_, glide = gainGlide_;
+        if (gain_ != 1.f || target != 1.f) {
+            const float step = glide > 0.f ? 1.f / (glide * sampleRate_) : 1.f;
+            for (unsigned int i = 0; i < frames; i++) {
+                gain_ = gain_ < target ? std::min(target, gain_ + step) : std::max(target, gain_ - step);
+                out[i * 2] *= gain_;
+                out[i * 2 + 1] *= gain_;
+            }
+        }
+    }
     mixVoices();
 
     if (muted_)

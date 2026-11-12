@@ -171,7 +171,17 @@ add_executable(tetris-universe
   src/game.cpp
   src/input.cpp
   src/headless.cpp
+  src/campaign.cpp
+  src/menu.cpp
+  src/pixelfont.cpp
 )
+# The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/data/campaign.tsv)
+file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv zen_campaign_hex HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," zen_campaign_arr "${zen_campaign_hex}")
+file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${zen_campaign_arr}\n")
+configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
+target_include_directories(tetris-universe PRIVATE ${CMAKE_BINARY_DIR}/generated)
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
 if(UNIX AND NOT APPLE)
   find_package(OpenGL QUIET COMPONENTS EGL)
@@ -209,5 +219,5 @@ endforeach()
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
   install(TARGETS tetris-universe tetris-universe-scope tetris-universe-scene RUNTIME DESTINATION zentris/bin)
-  install(FILES third_party/gamecontrollerdb.txt DESTINATION zentris/bin)
+  install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv DESTINATION zentris/bin)
 endif()
