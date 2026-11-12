@@ -89,6 +89,12 @@ void Menu::renderSmooth(int w, int h) {
     sx_ = (w - 1920.f * u_) * 0.5f;
     sy_ = (h - 1080.f * u_) * 0.5f;
     paint_.begin(w, h);
+    if (style_ >= GALAXY) {
+        renderCosmos();
+        smoothMessage();
+        paint_.end();
+        return;
+    }
     static const int BG[STYLE_COUNT] = {0, Painter::BG_COSMIC, Painter::BG_SWISS, Painter::BG_PAPER, Painter::BG_GLASS};
     paint_.background(BG[style_], time_, level_);
     switch (style_) {
@@ -113,7 +119,10 @@ void Menu::smoothMessage() {
     std::string m = msg_;
     if (style_ == SWISS) { big = F::INTER_BOLD; small = F::INTER; ink = hex(0xffffff); sub = hex(0xffffff, 0.85f); card = msgBad_ ? hex(0xe4321b) : hex(0x141414); edge = withA(card, 0); }
     if (style_ == WATERCOLOUR) { big = F::KALAM; small = F::YRSA; ink = hex(0x2b3a55); sub = hex(0x5a4632); card = hex(0xfbf6ea, 0.95f); edge = msgBad_ ? hex(0xb8322a, 0.7f) : hex(0x2b3a55, 0.5f); }
-    if (style_ == GLASS) { big = F::MANROPE; small = F::MANROPE_LIGHT; card = hex(0x1a1640, 0.75f); edge = msgBad_ ? hex(0xff4fd8) : hex(0x4de8ff); }
+    if (style_ == GLASS || style_ == SYNTHWAVE) { big = F::MANROPE; small = F::MANROPE_LIGHT; card = hex(0x1a1640, 0.8f); edge = msgBad_ ? hex(0xff4fd8) : hex(0x4de8ff); }
+    if (style_ == ATLAS) { big = F::CORMORANT_ITALIC; small = F::MARCELLUS; ink = hex(0xf0d79a); card = hex(0x0b1730, 0.92f); edge = hex(0xd8b45a); }
+    if (style_ == ORRERY) { big = F::JURA_LIGHT; small = F::JURA; edge = msgBad_ ? hex(0xff8a6a) : hex(0xe8b860); }
+    if (style_ == PASTEL) { big = F::COMFORTAA; small = F::QUICKSAND; ink = hex(0x5b4a7a); sub = hex(0x7a6a96); card = hex(0xffffff, 0.94f); edge = msgBad_ ? hex(0xff8fb0) : hex(0xb9a6ff); }
     if (style_ == WATERCOLOUR || style_ == SWISS) m = title(msg_.c_str());
     const float tw = std::max(p.width(big, m, 110 * u_, 0.05f), p.width(small, sub.a > 0 ? msgSub_ : "", 26 * u_, 0.1f));
     const float bw = tw + 140 * u_, bh = 250 * u_;
