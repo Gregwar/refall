@@ -22,7 +22,9 @@ class Menu {
 public:
     enum Screen { TITLE, FREE, CAMPAIGN };
     // The menus' looks (same screens and navigation): 8-BIT ARCADE (the default), COSMIC, SWISS, WATERCOLOUR, GLASS.
-    enum Style { ARCADE, COSMIC, SWISS, WATERCOLOUR, GLASS, STYLE_COUNT };
+    // The journey variations on COSMIC: GALAXY (3D spiral galaxy), ORRERY (a solar system), ATLAS (an antique star
+    // chart), SYNTHWAVE (a neon outrun cosmos), PASTEL (a kawaii candy cosmos).
+    enum Style { ARCADE, COSMIC, SWISS, WATERCOLOUR, GLASS, GALAXY, ORRERY, ATLAS, SYNTHWAVE, PASTEL, STYLE_COUNT };
     static const char* styleName(int s);
     static int parseStyle(const std::string& s); // a number 1..5 or a name, -1 if unknown
     void setStyle(int s) { style_ = s; }
@@ -73,6 +75,8 @@ private:
     void paperTitle(), paperFree(), paperCampaign();
     void glassTitle(), glassFree(), glassCampaign();
     void smoothMessage();
+    friend struct Cosmos; // the journey styles (menucosmos.cpp)
+    void renderCosmos();
     float u_ = 1, sx_ = 0, sy_ = 0, fw_ = 1920, fh_ = 1080; // the smooth styles' 1920x1080 layout in the frame
     float X(float v) const { return sx_ + v * u_; }
     float Y(float v) const { return sy_ + v * u_; }

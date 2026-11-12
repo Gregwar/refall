@@ -200,7 +200,13 @@ The menus come in five looks, the same screens and navigation in each, chosen wi
 along an orbit path, their songs moons; thin Josefin Sans), 3 `swiss` (a typographic poster: Inter, flat red and
 black on warm paper, a strict grid), 4 `watercolour` (a painted journey map: the stages are stops on a winding dotted
 path, each song a painted tile; Kalam and Yrsa), 5 `glass` (frosted glass cards over a slow colour gradient, neon
-focus; Manrope). `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
+focus; Manrope), and five journeys through space growing from COSMIC: 6 `galaxy` (a 3D spiral galaxy, the stages star
+systems along its arm, their songs planets, the camera flying from one to the next), 7 `orrery` (a solar system around
+a big sun, the stages planets on brass orbits, locked ones dark and frozen, the songs their moons; Jura), 8 `atlas`
+(an antique celestial chart in navy and gold, the stages constellations drawn in gold, the songs their stars;
+Cormorant Garamond and Marcellus), 9 `synthwave` (an outrun cosmos over a neon grid and a striped sun, ringed retro
+planets, a ship hopping along a neon route), 10 `pastel` (a candy cosmos of kawaii planets, sleeping while locked,
+with bubbly moons; Comfortaa and Quicksand). `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
 progress, never saved; `--menu-demo` shows the same progress in `--menu-shot`). The fonts are OFL, in `src/embed/`
 with their licences.
 

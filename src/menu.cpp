@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "library.hpp"
@@ -151,16 +152,21 @@ const CampaignSong* Menu::hovered() const {
 }
 
 const char* Menu::styleName(int s) {
-    static const char* N[] = {"8-BIT ARCADE", "COSMIC", "SWISS", "WATERCOLOUR", "GLASS"};
+    static const char* N[] = {"8-BIT ARCADE", "COSMIC", "SWISS", "WATERCOLOUR", "GLASS",
+                              "GALAXY",       "ORRERY", "ATLAS", "SYNTHWAVE",   "PASTEL"};
     return N[std::clamp(s, 0, STYLE_COUNT - 1)];
 }
 
 int Menu::parseStyle(const std::string& s0) {
     std::string s;
     for (char c : s0) s += (char)std::tolower((unsigned char)c);
-    if (s.size() == 1 && s[0] >= '1' && s[0] <= '5') return s[0] - '1';
+    if (!s.empty() && s.find_first_not_of("0123456789") == std::string::npos) {
+        const int n = std::atoi(s.c_str());
+        return n >= 1 && n <= STYLE_COUNT ? n - 1 : -1;
+    }
     static const char* N[][2] = {{"arcade", "8-bit"}, {"cosmic", "space"}, {"swiss", "minimal"}, {"watercolour", "watercolor"},
-                                 {"glass", "neon"}};
+                                 {"glass", "neon"}, {"galaxy", "galaxy3d"}, {"orrery", "solar"}, {"atlas", "constellation"},
+                                 {"synthwave", "synth"}, {"pastel", "kawaii"}};
     for (int i = 0; i < STYLE_COUNT; i++)
         if (s == N[i][0] || s == N[i][1]) return i;
     return -1;
