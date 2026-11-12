@@ -245,11 +245,16 @@ void main() {
     // ambient: a faint body of tinted glass (light gathering low in it), the chamfers catching a dim key light,
     // a hairline at the silhouette: every cube readable in the dark, none of them shouting
     float keyGlint = pow(max(dot(n2, uKey), 0.0), 2.0);
+    // the glass's jewel color: its hue pushed to full saturation at the same luminance (emerald, sapphire, ruby...)
+    float tl = dot(tint, vec3(0.3, 0.5, 0.2));
+    vec3 deep = max(mix(vec3(tl), tint, 2.4), vec3(0.0));
+    deep *= tl / max(dot(deep, vec3(0.3, 0.5, 0.2)), 1e-3);
     float bevT = smoothstep(-bw, 0.0, d); // across the chamfer: 0 at the face, 1 at the silhouette
-    vec3 col = tint * amb * (0.03 + 0.045 * smoothstep(0.45, -0.45, q.y)) * (1.0 - bev);
-    col += tint * amb * bev * (0.1 + 0.4 * keyGlint) * (0.6 + 0.4 * bevT);
+    // the body glows deep in its own color even unlit (a jewel, not grey glass on black)
+    vec3 col = deep * amb * (0.16 + 0.14 * smoothstep(0.45, -0.45, q.y)) * (1.0 - bev);
+    col += deep * amb * bev * (0.3 + 0.6 * keyGlint) * (0.6 + 0.4 * bevT);
     float rim = exp(-d * d / (px * px * 1.0));
-    col += tint * amb * rim * 0.32;
+    col += deep * amb * rim * 0.7;
     float ridge = exp(-(d + bw) * (d + bw) / (px * px * 1.2));
     col += mix(tint, vec3(1.0), 0.5) * amb * ridge * 0.1 * (0.3 + keyGlint);
     // a broad, faint reflection across the face (the glass reads as glass)
@@ -265,31 +270,28 @@ void main() {
         vec2 ldn = length(ld) > 1e-4 ? normalize(ld) : vec2(0.0, -1.0);
         // the light takes the glass's color: the cube's own hue, deepened (more saturated than its pastel body),
         // carried by the light's energy, so a lit cube glows in its color instead of paling toward the beam's white
-        float tl = dot(tint, vec3(0.3, 0.5, 0.2));
-        vec3 deep = max(mix(vec3(tl), tint, 2.4), vec3(0.0));
-        deep *= tl / max(dot(deep, vec3(0.3, 0.5, 0.2)), 1e-3);
-        vec3 own = deep * litL * 1.6;
-        vec3 tinted = mix(lit * tint, own, 0.85);
+        vec3 own = deep * litL * 1.9;
+        vec3 tinted = mix(lit * tint, own, 0.92);
         // inside: the light scatters in the body, brighter toward the side it came from
         float side = dot(q, -ldn);
         float body = 0.35 + 0.65 * smoothstep(-0.5, 0.5, side);
-        col += tinted * body * 0.4 * (1.0 - bev * 0.5);
+        col += tinted * body * 0.55 * (1.0 - bev * 0.5);
         // the chamfers facing the light blaze (a white hot line only at their crest), those it leaves glow in the
         // glass's color
         float inF = pow(max(dot(n2, -ldn), 0.0), 3.0), outF = pow(max(dot(n2, ldn), 0.0), 2.0);
-        col += bev * (mix(own * 1.3, lit, 0.35 * bevT) * inF * 1.3 + tinted * outF * 1.0);
-        col += rim * mix(own, lit, 0.3) * (0.25 + 0.6 * inF);
+        col += bev * (mix(own * 1.3, lit, 0.12 * bevT) * inF * 1.3 + tinted * outF * 1.0);
+        col += rim * mix(own, lit, 0.1) * (0.4 + 0.8 * inF);
         // the back edges catch it too
         col += back * tinted * 0.8;
         // caustics: a slow net of bright veins inside the body (two noise fields crossing)
         vec2 cq = q * 2.6 + vec2(seed * 17.0, seed * 5.0);
         float n1 = vnoise(cq + vec2(uTime * 0.11, -uTime * 0.07)), n2b = vnoise(cq * 1.37 + vec2(-uTime * 0.09, uTime * 0.05) + 3.7);
         float vein = pow(clamp(1.0 - abs(n1 - n2b) * 3.0, 0.0, 1.0), 3.0);
-        col += mix(own, lit * 0.6, 0.25) * vein * 0.4 * (1.0 - bev);
+        col += mix(own, lit * 0.6, 0.1) * vein * 0.4 * (1.0 - bev);
     }
     col += vec3(1.0) * vA2.w * (0.3 + 0.7 * bev); // a lock's brief glint
     // premultiplied: the glass dims what is behind it a little (a tinted absorption), and adds its own light
-    float a = (0.16 + 0.18 * bev) * cov * alpha;
+    float a = (0.4 + 0.2 * bev) * cov * alpha; // the glass hides most of the haze behind it: its own color reads
     col *= cov * alpha;
     vec3 plain = uBridgeInk * cov * alpha * (0.55 + 0.45 * rim);
     col = mix(col, plain, uBridge);
