@@ -66,6 +66,8 @@ float sdStairs(vec2 q, float tr, float ri, float n, float uMax) {
 // the temple's repair, the share of blocks still missing, the wear (erosion, moss, lichen, streaks), the prime
 uniform float uJungle, uTemple, uBroken, uWear, uPrime;
 uniform float uCol[8];
+uniform vec4 uFocus;   // the repair being watched (its point, its glow)
+uniform float uFocusR;
 float hash3(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 
 // missing blocks: a wall's coursed blocks carved away where their hash is under uBroken; a block coming back grows
@@ -235,7 +237,7 @@ vec2 maya(vec3 p) {
     vec2 hc = vec2(mod(q.x + 0.85, 1.7) - 0.85, mod(q.y - 27.6, 1.5) - 0.75);
     comb = max(comb, -sdBox2(hc, vec2(0.42, 0.4)));
     sh = min(sh, comb);
-    float ru = 1.0 - smoothstep(0.25, 0.85, uTemple);
+    float ru = 1.0 - smoothstep(0.5, 1.0, uTemple);
     sh = max(sh, (q.y - mix(31.5, 23.4 + 1.8 * vnoise(q.xz * 0.8) + 0.06 * q.x, ru)) * 0.8);
     d = min(d, sh);
     float u = 26.0 - q.z;
@@ -244,12 +246,12 @@ vec2 maya(vec3 p) {
     float alf = max(max(abs(abs(q.x) - 4.15) - 0.55, ramp), max(-u, q.y - 21.3));
     d = min(d, min(st, alf));
     // the collapsed corner, closing as its blocks come back
-    float hole = 1.0 - smoothstep(0.05, 0.7, uTemple);
+    float hole = 1.0 - smoothstep(0.0, 0.5, uTemple);
     if (hole > 0.0) d = max(d, -(length((q - vec3(16.0, 7.0, 18.5)) * vec3(1.0, 1.3, 1.0)) - 8.0 * hole - 0.6 * vnoise(q.xy * 0.9)) * 0.75);
     d = carveMissing(d, q);
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
-        float e = smoothstep(0.08 + fi * 0.18, 0.4 + fi * 0.18, uTemple);
+        float e = smoothstep(fi * 0.15, 0.17 + fi * 0.15, uTemple);
         if (e >= 1.0) continue;
         vec3 a = vec3(10.0 + fi * 3.5, 0.45, 26.0 - fi * 1.4);
         vec3 b = vec3(13.0 + fi * 2.0, 4.0 + fi * 2.2, 19.5 - fi * 0.8);
@@ -335,18 +337,18 @@ vec2 khmer(vec3 p) {
     gal = min(gal, roof);
     gal = max(gal, -sdBox(g - vec3(0.0, -0.7, 0.0), vec3(1.7, 2.2, 3.0)));
     // a fallen stretch of the gallery, rebuilding from the bottom up
-    float fall = 1.0 - smoothstep(0.1, 0.75, uTemple);
+    float fall = 1.0 - smoothstep(0.0, 0.33, uTemple);
     if (fall > 0.0) {
         float top = 4.6 - 6.5 * fall + 0.8 * fall * vnoise(g.xz * 1.1);
         gal = max(gal, -max(sdBox(g - vec3(12.0, 2.0, 0.0), vec3(6.0 * sqrt(fall) + 0.5, 3.0, 3.0)), top - g.y));
     }
     d = min(d, gal);
     d = carveMissing(d, q);
-    float tw = smoothstep(0.0, 1.0, uTemple);
-    d = min(d, prang(q - vec3(0.0, 9.6, 11.0), 0.5, mix(1.0, 7.0, tw)));
-    d = min(d, prang(q - vec3(0.0, 4.0, -6.0), 1.35, mix(4.2, 7.0, tw)));
-    d = min(d, prang(q - vec3(-15.0, 4.0, -1.0), 0.85, mix(2.0, 7.0, tw)));
-    d = min(d, prang(q - vec3(15.0, 4.0, -1.0), 0.85, mix(1.4, 7.0, tw)));
+    float tc = smoothstep(0.78, 1.0, uTemple);
+    d = min(d, prang(q - vec3(0.0, 9.6, 11.0), 0.5, mix(1.0, 7.0, tc)));
+    d = min(d, prang(q - vec3(0.0, 4.0, -6.0), 1.35, mix(4.2, 7.0, tc)));
+    d = min(d, prang(q - vec3(-15.0, 4.0, -1.0), 0.85, mix(2.0, 7.0, smoothstep(0.55, 0.78, uTemple))));
+    d = min(d, prang(q - vec3(15.0, 4.0, -1.0), 0.85, mix(1.4, 7.0, smoothstep(0.33, 0.55, uTemple))));
     d = min(d, braziers(p));
     float r = roots(p);
     return r < d ? vec2(r, 2.0) : vec2(d, 1.0);
@@ -365,13 +367,13 @@ vec2 greek(vec3 p) {
     d = min(d, sdBox(q - vec3(0.0, 2.25, 0.0), vec3(14.0, 0.45, 10.0)));
     float cel = sdBox(q - vec3(0.0, 7.5, -1.0), vec3(8.0, 4.8, 6.5));
     cel = max(cel, -sdBox(q - vec3(0.0, 7.5, -1.0), vec3(7.2, 6.0, 5.7)));
-    float wc = smoothstep(0.0, 0.6, T);
+    float wc = smoothstep(0.0, 0.25, T);
     cel = max(cel, (q.y - mix(7.0 + 4.5 * vnoise(q.xz * 0.3) + 1.2 * sin(q.x * 0.4), 12.4, wc)) * 0.7);
     cel = max(cel, -sdBox(q - vec3(0.0, 5.5, 5.5), vec3(1.6, 3.0, 1.5)));
     d = carveMissing(min(d, cel), q);
     vec2 r = vec2(d, 1.0);
     const float CH = 10.0;
-    float cg = smoothstep(0.15, 0.65, T);
+    float cg = smoothstep(0.25, 0.5, T);
     float i = clamp(floor((q.x - 2.0) / 4.0 + 0.5), -3.0, 2.0);
     float hb = mix(i > 1.5 ? 5.2 : (i > 0.5 ? 2.4 : CH), CH, cg);
     if (cg > 0.999) hb = CH;
@@ -383,12 +385,12 @@ vec2 greek(vec3 p) {
     c = min(c, column(vec3(abs(q.x) - 10.0, q.y - 2.7, q.z - (8.0 - 4.0 * j)), CH, hb2, 0.8, 2, j + sd * 7.0, 1.0 - cg));
     if (c < r.x) r = vec2(c, 3.0);
     // the entablature and the pediment, closing from the left as the columns stand again
-    float ex = mix(2.5, 12.0, smoothstep(0.55, 0.9, T));
+    float ex = mix(2.5, 12.0, smoothstep(0.5, 0.75, T));
     float ent = sdBox(q - vec3(0.0, 13.8, 8.0), vec3(11.0, 1.1, 1.0));
     ent = min(ent, sdBox(vec3(abs(q.x) - 10.0, q.y - 13.8, q.z), vec3(1.0, 1.1, 9.0)));
     ent = min(ent, sdBox(q - vec3(0.0, 15.05, 8.1), vec3(11.2, 0.16, 1.2)));
     ent = max(ent, q.x - ex - 0.8 * vnoise(q.yz * 1.3) * (1.0 - T));
-    float px = mix(-1.6, 12.0, smoothstep(0.7, 1.0, T));
+    float px = mix(-1.6, 12.0, smoothstep(0.75, 1.0, T));
     float ped = max(abs(q.z - 8.0) - 0.9, (q.y - 15.2 - (11.2 - abs(q.x)) * 0.27) * 0.96);
     ped = max(ped, max(15.2 - q.y, q.x - px + 1.2 * vnoise(q.yz * 0.8) * (1.0 - T)));
     ped = max(ped, abs(q.x) - 11.2);
@@ -396,7 +398,7 @@ vec2 greek(vec3 p) {
     if (ent < r.x) r = vec2(ent, 1.0);
     // the fallen pieces fly back up to the broken columns
     float f = 1e9;
-    float e1 = smoothstep(0.3, 0.6, T), e2 = smoothstep(0.2, 0.5, T), e3 = smoothstep(0.6, 0.9, T);
+    float e1 = smoothstep(0.35, 0.5, T), e2 = smoothstep(0.25, 0.4, T), e3 = smoothstep(0.5, 0.7, T);
     if (e3 < 1.0) f = min(f, flyingBlock(q, vec3(10.5, 0.75, 14.2), vec3(8.5, 13.8, 8.0), vec2(0.35, -0.12), vec3(1.9, 0.75, 0.9), e3));
     if (e1 < 1.0) {
         vec3 g2 = q - mix(vec3(13.5, 0.0, 9.0), vec3(10.0, 6.0, 8.0), e1) - vec3(0.0, sin(3.14159 * e1) * 2.0, 0.0);
@@ -899,6 +901,11 @@ vec3 shadeSolid(vec3 p, vec3 n, float id, vec3 rd, float t) {
         }
     }
     vec3 col = alb * lin;
+    // the repair being watched glows softly, motes of light running over the stone
+    if (uFocus.w > 0.01 && (id == 1.0 || id == 3.0)) {
+        float fd = length(p - uFocus.xyz) / uFocusR;
+        col += vec3(1.0, 0.72, 0.38) * uFocus.w * 0.55 * exp(-fd * fd) * (0.45 + 0.8 * vnoise(uv * 5.0 + uTime * 2.5));
+    }
     // the dust of a block re-forming: golden motes swirling on it
     if (id == 1.0 && uBroken > 0.0) {
         float k;
