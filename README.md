@@ -195,6 +195,15 @@ Songs or playlists given on the command line play free play straight away, as be
 (`--review-shot`, `--clip`, `--analysis`, ...). `--menu-shot OUT.png [--menu-screen title|campaign|free]
 [--menu-hover S:SONG]` saves a menu screen without a display.
 
+The menus come in five looks, the same screens and navigation in each, chosen with `--menu-style N` (or its name):
+1 `arcade` (the default: 8-bit pixels on a CRT, scanlines and glow), 2 `cosmic` (a slow nebula; the stages are planets
+along an orbit path, their songs moons; thin Josefin Sans), 3 `swiss` (a typographic poster: Inter, flat red and
+black on warm paper, a strict grid), 4 `watercolour` (a painted journey map: the stages are stops on a winding dotted
+path, each song a painted tile; Kalam and Yrsa), 5 `glass` (frosted glass cards over a slow colour gradient, neon
+focus; Manrope). `--menu-clip OUT.mp4 --menu-style N` records a 28 s walk through the menus (needs ffmpeg; made-up
+progress, never saved; `--menu-demo` shows the same progress in `--menu-shot`). The fonts are OFL, in `src/embed/`
+with their licences.
+
 ### The campaign file
 
 The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
