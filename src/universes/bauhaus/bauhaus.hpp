@@ -25,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- Flat shapes (pixels): rotated rectangles, disc sectors and rings, triangles, each clipped to a rectangle.
@@ -38,7 +40,7 @@ private:
     vec2 px(float x, float y) const; // board -> pixels
     float unitPx_ = 45.f;            // pixels per board unit
 
-    // ---- Type.
+    // ---- Type: the words printed on the poster (the HUD is lettered by the host: hudLine).
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
     struct Font {
         bool ok = false;
@@ -55,7 +57,7 @@ private:
     void textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, float angle,
                    std::vector<float>& out) const;
     void drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawHud(const Frame& f); // the HUD's panels, gauge and small forms
 
     // ---- The poster: forms eased between compositions set on the bar grid.
     enum Slot { F_CIRCLE, F_RING, F_SQUARE, F_TRIANGLE, F_HALF, F_QUARTER, F_BAR0, F_BAR1, F_LINE0, F_LINE1,

@@ -19,16 +19,10 @@
 // previews and the HUD anchors sit exactly where the layout puts them.
 #include "universes/abyss/abyss.hpp"
 
-#include <cstdio>
-#include <cstring>
-
 #include "layout.hpp"
 #include "ugl.hpp"
 #include "universes/abyss/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -122,18 +116,6 @@ void lerpPalette(AbyssUniverse::Palette& a, const AbyssUniverse::Palette& b, flo
     for (int i = 0; i < 7; i++) a.piece[i] = lerp(a.piece[i], b.piece[i], k);
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
 } // namespace
 
 // =====================================================================================================
@@ -145,7 +127,6 @@ bool AbyssUniverse::init(int width, int height) {
     progTile_ = compile(shaders::TILE_VS, shaders::TILE_FS, "abyss tile");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "abyss sprite");
     progWhale_ = compile(shaders::WHALE_VS, shaders::WHALE_FS, "abyss whale");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "abyss text");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "abyss shape");
     progDown_ = compile(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "abyss down");
     progUp_ = compile(ugl::FULLSCREEN_VS, shaders::UP_FS, "abyss up");
@@ -180,15 +161,6 @@ bool AbyssUniverse::init(int width, int height) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(WVert), nullptr);
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
-
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -199,8 +171,6 @@ bool AbyssUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontSans_, FONT_SANS);
-    buildFont(fontSerif_, FONT_SERIF);
     pal_ = paletteOf(0);
     resize(width, height);
 
@@ -218,55 +188,6 @@ bool AbyssUniverse::init(int width, int height) {
         snow_.push_back(f);
     }
     return glGetError() == GL_NO_ERROR;
-}
-
-// Glyphs baked as signed distance fields: they scale cleanly, and the distance gives the soft living glow.
-void AbyssUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] abyss font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.data = ttf;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int asc, desc, gap;
-    stbtt_GetFontVMetrics(info, &asc, &desc, &gap);
-    f.ascent = asc * f.scaleTT;
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void AbyssUniverse::resize(int width, int height) {
@@ -318,14 +239,10 @@ void AbyssUniverse::createTargets() {
 
 AbyssUniverse::~AbyssUniverse() {
     destroyTargets();
-    for (GLuint p : {progWorld_, progTile_, progSprite_, progWhale_, progText_, progShape_, progDown_, progUp_, progPost_})
+    for (GLuint p : {progWorld_, progTile_, progSprite_, progWhale_, progShape_, progDown_, progUp_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {tileVao_, spriteVao_, whaleVao_, textVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, tileVbo_, spriteVbo_, whaleVbo_, textVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontSans_, &fontSerif_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint v : {tileVao_, spriteVao_, whaleVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tileVbo_, spriteVbo_, whaleVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1120,198 +1037,143 @@ void AbyssUniverse::buildFx() {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float AbyssUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.6f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void AbyssUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.glow * 0.35f : pal_.deep * 0.6f;
+        const float a = r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.2f);
+        const float pts[6][2] = {{r.x, r.y}, {r.x + r.w, r.y}, {r.x + r.w, r.y + r.h}, {r.x, r.y}, {r.x + r.w, r.y + r.h}, {r.x, r.y + r.h}};
+        for (auto& p : pts) v.insert(v.end(), {p[0], p[1], c.x, c.y, c.z, a});
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
 }
 
-float AbyssUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                               std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float cap = fontSans_.capH / fontSans_.px * size; // the sans' cap height sets the line
-    const float baseline = y + cap;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
+// A scene color (linear) as the post shows it: the soft shoulder (none at the bridge), then the screen's gamma.
+vec3 AbyssUniverse::display(const vec3& linear) const {
+    vec3 c = linear;
+    const float over = std::max(c.x - 1.f, 0.f) + std::max(c.y - 1.f, 0.f) + std::max(c.z - 1.f, 0.f);
+    c = c + vec3(over * 0.12f);
+    const float K = 0.55f;
+    auto tone = [&](float x) { return x < K ? x : K + (1.f - K) * (1.f - std::exp(-(x - K) / (1.f - K))); };
+    const vec3 t(tone(c.x), tone(c.y), tone(c.z));
+    return ugl::toSrgb(lerp(t, linear, saturate(bridge_.amount)));
 }
 
-void AbyssUniverse::drawText(const Font& f, const std::vector<float>& q, const TextStyle& st) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uColor", st.color);
-    set3f(progText_, "uGlow", st.glow);
-    set1f(progText_, "uAlpha", st.alpha);
-    set1f(progText_, "uGlowAmt", st.glowAmt);
-    set1f(progText_, "uWeight", st.weight);
-    set1f(progText_, "uShadow", st.shadow);
-    set1f(progText_, "uBridge", smoothstepf(0.3f, 0.95f, bridge_.amount));
-    set3f(progText_, "uBridgeInk", bridge_.ink);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in ABYSS's typography, like a nature film's titles: a light humanist sans, widely spaced, for labels and
-// numbers, a Garamond italic for the universe's name, the song's section and the celebrations; everything with a
-// faint living glow.
-void AbyssUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.glow * 0.35f : pal_.deep * 0.6f;
-            const float a = r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.2f);
-            const float pts[6][2] = {{r.x, r.y}, {r.x + r.w, r.y}, {r.x + r.w, r.y + r.h}, {r.x, r.y}, {r.x + r.w, r.y + r.h}, {r.x, r.y + r.h}};
-            for (auto& p : pts) v.insert(v.end(), {p[0], p[1], c.x, c.y, c.z, a});
+// The HUD in ABYSS's typography, like a nature film's titles: Cantarell Light, widely spaced, for labels and
+// numbers, EB Garamond Italic for the universe's name, the song's section and the celebrations; each line on a
+// soft dark halo, with a faint living glow in the sea's light (the bloom it used to get). The bridge turns the
+// inks to the bridge's and puts the glow out.
+void AbyssUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* sans = text::font(FONT_SANS);
+    text::Font* serif = text::font(FONT_SERIF);
+    // the sans' cap height sets every line (the italic's baseline too): the italic's own, taller, moved back down
+    constexpr float CAP_SANS = 0.578f, CAP_SERIF = 0.653f;
+    const float s = height_ / 1080.f, base = h.scale * 12.f;
+    const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const vec3 pale = lerp(vec3(0.85f, 0.95f, 1.f), pal_.snow, 0.5f), glowC = pal_.glow;
+    auto ink = [&](const vec3& c) { return display(lerp(c, bridge_.ink, br)); };
+    vec3 glow(0.f);
+    float glowAmt = 0.f, weight = 0.f, shadow = 0.6f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels; a serif one sits on the sans' baseline
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c) {
+        out.add(t, f, size, ink(c), track / size, alpha);
+        out.dy = f == serif ? (CAP_SANS - CAP_SERIF) * size : 0.f;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "Abyss" in italic, the variant in small spaced capitals after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.6f, vsz = base * 0.72f;
+        out.add(text::titleCase(name), serif, sz, ink(lerp(pale, glowC, 0.35f)), 0.f, saturate(0.35f + h.alpha * 1.6f));
+        out.dy = -base * 0.1f + (CAP_SANS - CAP_SERIF) * sz;
+        if (!var.empty()) {
+            text::Span& v = out.add(var, sans, vsz, ink(glowC * 0.9f), 0.3f, saturate(0.3f + h.alpha * 1.5f));
+            v.gap = (base * 0.8f) / vsz; // the gap
+            v.dy = base * 0.35f + CAP_SANS * (vsz - sz); // its own baseline, lower
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+        glow = glowC * 0.8f; glowAmt = 0.5f; weight = 0.01f;
+        break;
     }
-    const vec3 pale = lerp(vec3(0.85f, 0.95f, 1.f), pal_.snow, 0.5f);
-    const vec3 glowC = pal_.glow;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        TextStyle st;
-        st.alpha = saturate(h.alpha);
-        q.clear();
-        const Font* font = &fontSans_;
-        auto place = [&](const Font& f, const std::string& text, float size, float track) {
-            const float w = textWidth(f, text, size, track);
-            const float x = ugl::hudLeft(h, w, width_);
-            textQuads(f, text, x, h.y, size, track, q);
-            font = &f;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "Abyss" in italic, the variant in small spaced capitals after it.
-            std::string name = h.text, var;
-            size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.6f, vsz = base * 0.72f;
-            const float wName = textWidth(fontSerif_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontSans_, var, vsz, vsz * 0.3f);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontSerif_, name, x, h.y - base * 0.1f, sz, 0.f, q);
-            st.color = lerp(pale, glowC, 0.35f); st.glow = glowC * 0.8f; st.glowAmt = 0.55f;
-            st.alpha = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontSerif_, q, st);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontSans_, var, x + wName + gap, h.y + base * 0.25f, vsz, vsz * 0.3f, q);
-                TextStyle vs;
-                vs.color = glowC * 0.9f; vs.glow = glowC * 0.5f; vs.glowAmt = 0.3f; vs.weight = 0.03f;
-                vs.alpha = saturate(0.3f + h.alpha * 1.5f);
-                drawText(fontSans_, q, vs);
-            }
-            continue;
+    case HUD_SECTION:
+        alpha = saturate(0.2f + h.alpha * 1.9f);
+        put(serif, text::titleCase(h.text), base * 1.35f, base * 0.02f, lerp(glowC, pale, 0.3f));
+        glow = glowC * 0.7f; glowAmt = 0.45f;
+        break;
+    case HUD_TITLE:
+        alpha = saturate(h.alpha * 1.2f);
+        put(sans, h.text, base * 0.95f, base * 0.06f, pale);
+        glow = glowC * 0.5f; glowAmt = 0.3f; weight = 0.03f;
+        break;
+    case HUD_INFO:
+        alpha = saturate(h.alpha * 1.3f);
+        put(sans, h.text, base * 0.8f, base * 0.22f, lerp(pal_.glow2, pale, 0.4f) * 0.85f);
+        glow = pal_.glow2 * 0.4f; glowAmt = 0.2f; weight = 0.03f;
+        break;
+    case HUD_LABEL:
+        alpha = saturate(h.alpha * 1.4f);
+        put(sans, h.text, base * 0.78f, base * 0.34f, glowC * 0.95f);
+        glow = glowC * 0.6f; glowAmt = 0.4f; weight = 0.04f;
+        break;
+    case HUD_VALUE:
+        put(sans, h.text, base * 1.1f, base * 0.06f, pale);
+        glow = lerp(glowC * 0.45f, pale * 0.6f, 0.5f); glowAmt = 0.35f; weight = 0.02f; // (the bloom it had)
+        break;
+    case HUD_NOTICE:
+        put(serif, text::titleCase(h.text), base * 1.05f, base * 0.02f, lerp(glowC, pale, 0.4f));
+        out.dy += base * 0.2f;
+        glow = glowC * 0.8f; glowAmt = 0.5f;
+        break;
+    case HUD_KEY:
+        put(sans, h.text, base * 0.95f, base * 0.05f, vec3(1.f));
+        glow = vec3(1.f); glowAmt = 0.15f; weight = 0.06f; shadow = 1.f;
+        break;
+    case HUD_TOAST:
+        put(serif, text::titleCase(h.text), base * 1.3f, base * 0.03f, lerp(pale, glowC, 0.25f) * 1.1f);
+        out.dy -= base * 0.3f; // the italic sits higher, clear of the line under it
+        glow = glowC; glowAmt = 0.8f;
+        break;
+    case HUD_TOAST_SUB:
+        put(sans, h.text, base * 0.9f, base * 0.2f, pal_.glow2);
+        glow = pal_.glow2 * 0.7f; glowAmt = 0.45f; weight = 0.03f;
+        break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(serif, text::titleCase(h.text), base * 1.3f, base * 0.02f, lerp(pale, glowC, 0.25f));
+            glow = glowC; glowAmt = 0.7f;
+        } else {
+            put(sans, h.text, base * 0.9f, base * 0.12f, h.accent ? glowC : pale);
+            glow = glowC * 0.4f; glowAmt = 0.25f; weight = 0.03f;
         }
-        case HUD_SECTION:
-            place(fontSerif_, titleCase(h.text), base * 1.35f, base * 0.02f);
-            st.color = lerp(glowC, pale, 0.3f); st.glow = glowC * 0.7f; st.glowAmt = 0.45f;
-            st.alpha = saturate(0.2f + h.alpha * 1.9f);
-            break;
-        case HUD_TITLE:
-            place(fontSans_, h.text, base * 0.95f, base * 0.06f);
-            st.color = pale; st.glow = glowC * 0.5f; st.glowAmt = 0.3f; st.weight = 0.03f;
-            st.alpha = saturate(h.alpha * 1.2f);
-            break;
-        case HUD_INFO:
-            place(fontSans_, h.text, base * 0.8f, base * 0.22f);
-            st.color = lerp(pal_.glow2, pale, 0.4f) * 0.85f; st.glow = pal_.glow2 * 0.4f; st.glowAmt = 0.2f; st.weight = 0.03f;
-            st.alpha = saturate(h.alpha * 1.3f);
-            break;
-        case HUD_LABEL:
-            place(fontSans_, h.text, base * 0.78f, base * 0.34f);
-            st.color = glowC * 0.95f; st.glow = glowC * 0.6f; st.glowAmt = 0.4f; st.weight = 0.04f;
-            st.alpha = saturate(h.alpha * 1.4f);
-            break;
-        case HUD_VALUE:
-            place(fontSans_, h.text, base * 1.1f, base * 0.06f);
-            st.color = pale; st.glow = glowC * 0.45f; st.glowAmt = 0.25f; st.weight = 0.02f;
-            break;
-        case HUD_NOTICE:
-            place(fontSerif_, titleCase(h.text), base * 1.05f, base * 0.02f);
-            for (size_t i = 1; i < q.size(); i += 4) q[i] += base * 0.2f;
-            st.color = lerp(glowC, pale, 0.4f); st.glow = glowC * 0.8f; st.glowAmt = 0.5f;
-            break;
-        case HUD_KEY:
-            place(fontSans_, h.text, base * 0.95f, base * 0.05f);
-            st.color = vec3(1.f); st.weight = 0.06f; st.shadow = 1.f;
-            break;
-        case HUD_TOAST:
-            place(fontSerif_, titleCase(h.text), base * 1.3f, base * 0.03f);
-            for (size_t i = 1; i < q.size(); i += 4) q[i] -= base * 0.3f; // the italic sits higher, clear of the line under it
-            st.color = lerp(pale, glowC, 0.25f) * 1.1f; st.glow = glowC; st.glowAmt = 0.8f;
-            break;
-        case HUD_TOAST_SUB:
-            place(fontSans_, h.text, base * 0.9f, base * 0.2f);
-            st.color = pal_.glow2; st.glow = pal_.glow2 * 0.7f; st.glowAmt = 0.45f; st.weight = 0.03f;
-            break;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontSerif_, titleCase(h.text), base * 1.3f, base * 0.02f);
-                st.color = lerp(pale, glowC, 0.25f); st.glow = glowC; st.glowAmt = 0.7f;
-            } else {
-                place(fontSans_, h.text, base * 0.9f, base * 0.12f);
-                st.color = h.accent ? glowC : pale; st.glow = glowC * 0.4f; st.glowAmt = 0.25f; st.weight = 0.03f;
-            }
-            break;
-        default: // hints, help, plain
-            place(fontSans_, h.text, base * 0.85f, base * 0.1f);
-            st.color = h.accent ? glowC : pale * 0.85f; st.weight = 0.04f; st.shadow = 0.9f;
-            break;
-        }
-        drawText(*font, q, st);
+        break;
+    default: // hints, help, plain
+        put(sans, h.text, base * 0.85f, base * 0.1f, h.accent ? glowC : pale * 0.85f);
+        weight = 0.04f; shadow = 0.9f;
+        break;
     }
+    // (the old field: 10 px of distance at 64 px, so one unit of it is 0.31 em; its wide edge left the small
+    // letters a little heavier)
+    text::Look& k = out.look;
+    k.weight = weight * 0.31f + 0.15f / std::max(1.f, out.spans[0].size);
+    k.halo = vec3(0.f);
+    k.haloA = shadow * 0.7f;
+    k.haloW = 0.1f;
+    k.haloSmooth = true;
+    k.glow = ugl::toSrgb(glow * glowAmt);
+    k.glowA = glowAmt > 0.f ? 1.f - br : 0.f;
+    k.glowW = 0.14f;
+    // the opacities as they were, blended in the scene's linear light (a lighter veil than over sRGB)
+    for (text::Span& sp : out.spans) sp.alpha = std::pow(saturate(sp.alpha), 1.f / 2.2f);
 }
 
 // =====================================================================================================
@@ -1470,7 +1332,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(fx_);
     drawSprites(front_);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, f.panels);
+    drawPanels(f.panels);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the living lights, blurred down and back up.

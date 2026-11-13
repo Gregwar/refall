@@ -25,19 +25,13 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // One instanced quad (see SPRITE_FS for the kinds).
     struct Sprite { float a[4], b[4], c[4], d[4]; };
 
 private:
-    struct Glyph { float x0 = 0, y0 = 0, x1 = 0, y1 = 0, ox = 0, oy = 0, w = 0, h = 0, adv = 0; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
     struct Ant {
         vec2 p;
         float a = 0, w = 0;       // heading, its wandering turn rate
@@ -87,21 +81,17 @@ private:
     void warmUp(const Game& game);
 
     // drawing
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const std::vector<HudRect>& panels);
     void drawSprites(const std::vector<Sprite>& v);
     void cube(std::vector<Sprite>& out, float x, float y, float scale, const vec3& col, float alpha, float nib,
               float seed, float glint, bool ghost, float crumbled);
     void shadow(std::vector<Sprite>& out, float x, float y, float half, float blur, float alpha);
     vec3 pieceColor(int type) const;
 
-    GLuint progGround_ = 0, progSprite_ = 0, progText_ = 0, progVeil_ = 0, progShape_ = 0;
-    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, textVao_ = 0, textVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+    GLuint progGround_ = 0, progSprite_ = 0, progVeil_ = 0, progShape_ = 0;
+    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint pherTex_ = 0;
-    Font fontSerif_, fontSans_;
+    float veil_ = 0.f; // the veil over the frame (startup fade, pause / game-over dim): the HUD dims under it too
     mat4 vp_;
     vec2 viewC_{0, 0.4f}, viewH_{21, 11.9f};
     float px_ = 0.02f;

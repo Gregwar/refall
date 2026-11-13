@@ -438,38 +438,6 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- text (signed distance field glyphs)
-
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uColor;
-uniform float uAlpha, uHaloAmt, uBias, uBridge;
-uniform vec3 uBridgeInk;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    // a soft pool of darkness behind the letters (readable when a beam passes behind them)
-    float halo = smoothstep(0.1, 0.5, d);
-    halo = halo * halo * uHaloAmt * (1.0 - uBridge);
-    vec3 fc = mix(uColor, uBridgeInk, uBridge);
-    float a = fill + (1.0 - fill) * halo;
-    frag = vec4(fc * fill * uAlpha, a * uAlpha);
-}
-)";
-
 // ---------------------------------------------------------------- bloom and the post
 
 inline const char* DOWN_FS = R"(#version 330 core

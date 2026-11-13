@@ -25,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A stone and its metal (linear RGB once loaded; floats only, so two palettes blend).
     struct Palette {
@@ -62,7 +64,7 @@ private:
     void buildVeins(bool locks);
     void buildFx();
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const std::vector<HudRect>& panels);
     int pickVariant(const SongLook& look) const;
     void bakeMarble();
     void setLight(GLuint prog);
@@ -73,26 +75,11 @@ private:
     Owner own_[22][10];
     int nextId_ = 1;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font fontSerif_, fontItalic_, fontCaps_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& color, float alpha, float halo, float bias);
-
     // ---- GL.
     GLuint progMarble_ = 0, progStone_ = 0, progVein_ = 0, progBlock_ = 0, progShard_ = 0, progSprite_ = 0,
-           progText_ = 0, progDown_ = 0, progUp_ = 0, progPost_ = 0, progShape_ = 0;
+           progDown_ = 0, progUp_ = 0, progPost_ = 0, progShape_ = 0;
     GLuint quadVbo_ = 0, blockVao_ = 0, blockVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, veinVao_ = 0, veinVbo_ = 0,
-           shardVao_ = 0, shardVbo_ = 0, textVao_ = 0, textVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+           shardVao_ = 0, shardVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     ugl::Target marbleT_, sceneT_;
     static constexpr int BLOOM_MIPS = 5;
     ugl::Target bloomT_[BLOOM_MIPS];
