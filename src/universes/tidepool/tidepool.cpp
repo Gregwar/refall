@@ -667,6 +667,11 @@ void TidePoolUniverse::hudLine(const HudText& h, text::Line& out) {
         break;
     default: put(caps, h.text, base * 0.85f, base * 0.12f, h.accent ? accent : ink, alpha); break;
     }
+    // a line fading in or out as it did, blended in linear light over the dark (its translucent ink brighter there)
+    const float li = ugl::luma(pal_.ink), lv = ugl::luma(pal_.veil);
+    const float si = std::pow(li, 1.f / 2.2f), sv = std::pow(lv, 1.f / 2.2f);
+    if (std::fabs(si - sv) > 0.05f)
+        for (text::Span& sp : out.spans) sp.alpha = saturate((std::pow(lerpf(lv, li, sp.alpha), 1.f / 2.2f) - sv) / (si - sv));
     // the letters a touch bold, on a soft halo of the veil (bolder still when light on the dark: they were blended in
     // linear light, which thickened them)
     out.look.weight = ugl::luma(pal_.ink) > ugl::luma(pal_.veil) ? 0.02f : 0.0075f;

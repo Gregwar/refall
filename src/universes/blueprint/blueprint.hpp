@@ -25,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A sheet's colors (linear RGB) and a few numbers.
     struct Palette {
@@ -121,7 +123,7 @@ private:
     struct LockFx { int id; float minY, maxY, t; bool dropped; };
     std::vector<LockFx> lockFx_;
 
-    // ---- Text.
+    // ---- Text: the world's lettering (dimensions, the title block); the HUD's is the host's (hudLine).
     struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
     struct Font {
         bool ok = false;
@@ -131,14 +133,14 @@ private:
         void* info = nullptr;
     };
     Font font_;
-    float hudHalo_ = 1.f;  // the HUD sits on empty paper: no halo
     void buildFont(Font& f, const unsigned char* ttf);
     float textWidth(const std::string& s, float size, float track) const;
     // Quads for a line of text from its top-left (pixels), with a slant and an optional quarter turn (reading up).
     void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out,
                    float slant = 0.f, bool vertical = false) const;
     void drawText(const std::vector<float>& quads, const vec3& ink, float alpha, float halo = 0.85f);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    float fade_ = 1.f; // the frame's fade in, the HUD's own (it was lettered under the post's fade and dim)
+    void drawHud(const std::vector<HudRect>& panels);
     void drawLabels();
 
     // ---- GL.

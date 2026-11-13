@@ -1330,7 +1330,7 @@ void BlueprintUniverse::drawText(const std::vector<float>& q, const vec3& ink, f
     const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
     set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
     set3f(progText_, "uHalo", lerp(pal_.paper, bridge_.color, b));
-    set1f(progText_, "uHaloA", std::min(halo, hudHalo_));
+    set1f(progText_, "uHaloA", halo);
     set1f(progText_, "uAlpha", alpha);
     glBindVertexArray(textVao_);
     glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
@@ -1340,7 +1340,6 @@ void BlueprintUniverse::drawText(const std::vector<float>& q, const vec3& ink, f
 
 // World lettering (dimensions, the title block, zone marks): slanted like hand lettering on a drawing.
 void BlueprintUniverse::drawLabels() {
-    hudHalo_ = 1.f;
     const float world = 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
     std::vector<float> q;
     for (const Label& l : labels_) {
@@ -1356,110 +1355,81 @@ void BlueprintUniverse::drawLabels() {
     }
 }
 
-// The HUD in BLUEPRINT's lettering: condensed technical capitals, labels spaced like the captions of a title block.
-void BlueprintUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD's plates (its lettering: hudLine, the host's).
+void BlueprintUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.paper;
+        const float a = std::min(1.f, r.alpha);
+        const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                                {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+        for (auto& p : qd) v.insert(v.end(), p, p + 6);
+    }
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+}
+
+// The HUD in BLUEPRINT's lettering, by the host (text.hpp): condensed technical capitals, labels spaced like the
+// captions of a title block, the song and the shouts slanted like hand lettering; crisp on the empty paper, no halo.
+// (The palette is linear: the lettering, over the post now, takes it to sRGB.)
+void BlueprintUniverse::hudLine(const HudText& h, text::Line& out) {
+    // the capitals' height of Share Tech, of its size
+    constexpr float CAP = 0.621f;
+    text::Font* font = text::font(FONT);
     const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.paper;
-            const float a = std::min(1.f, r.alpha);
-            const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
-                                    {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
-            for (auto& p : qd) v.insert(v.end(), p, p + 6);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const vec3 ink = ugl::toSrgb(lerp(pal_.ink, bridge_.ink, b)), accent = ugl::toSrgb(lerp(pal_.accent, bridge_.ink, b));
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy, slanted
+    auto put = [&](const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f, float slant = 0.f) {
+        out.add(t, font, size, c, track / size, saturate(a));
+        out.dy = dy;
+        out.look.slant = slant;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.1f, vsz = base * 0.66f, gap = base * 0.8f, a = saturate(0.35f + h.alpha * 1.6f);
+        out.add(name, font, sz, ink, 0.16f, a);
+        if (!var.empty()) {
+            out.add("", font, sz, ink, gap / sz - 0.16f); // the gap (the name's own spacing counts in it)
+            // the variant's small capitals sitting on the name's baseline, a little above it
+            out.add(var, font, vsz, ink, 0.3f, a * 0.75f).dy = (sz - vsz) * 0.72f + CAP * (vsz - sz);
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+        break;
     }
-    const vec3 ink = pal_.ink, accent = pal_.accent;
-    std::vector<float> q;
-    hudHalo_ = 0.f;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const std::string& text, float size, float track, float dy = 0.f, float slant = 0.f) {
-            const float w = textWidth(text, size, track);
-            textQuads(text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q, slant);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 1.1f, vsz = base * 0.66f, tr = sz * 0.16f, vtr = vsz * 0.3f;
-            const float wName = textWidth(name, sz, tr);
-            const float wVar = var.empty() ? 0.f : textWidth(var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(name, x, h.y, sz, tr, q);
-            drawText(q, ink, a);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(var, x + wName + gap, h.y + (sz - vsz) * 0.72f, vsz, vtr, q);
-                drawText(q, ink, a * 0.75f);
-            }
-            continue;
-        }
-        case HUD_SECTION:
-            place(h.text, base * 0.95f, base * 0.42f);
-            drawText(q, ink, saturate(0.2f + h.alpha * 1.9f));
-            continue;
-        case HUD_TITLE:
-            place(h.text, base * 1.2f, base * 0.04f, -base * 0.1f, 0.12f);
-            drawText(q, ink, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(h.text, base * 0.75f, base * 0.14f);
-            drawText(q, ink, saturate(alpha * 1.2f) * 0.75f);
-            continue;
-        case HUD_LABEL:
-            place(h.text, base * 0.72f, base * 0.36f);
-            drawText(q, ink, saturate(alpha * 1.2f) * 0.7f);
-            continue;
-        case HUD_VALUE:
-            place(h.text, base * 1.1f, base * 0.06f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(h.text, base * 1.05f, base * 0.1f, 0.f, 0.15f);
-            drawText(q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(h.text, base * 0.85f, base * 0.1f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(h.text, base * 1.3f, base * 0.45f, -base * 0.15f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(h.text, base * 0.9f, base * 0.1f, 0.f, 0.15f);
-            drawText(q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(h.text, base * 1.2f, base * 0.1f, -base * 0.1f);
-                drawText(q, ink, alpha);
-            } else {
-                place(h.text, base * 0.85f, base * 0.1f);
-                drawText(q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(h.text, base * 0.8f, base * 0.08f);
-            drawText(q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+    case HUD_SECTION: put(h.text, base * 0.95f, base * 0.42f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(h.text, base * 1.2f, base * 0.04f, ink, h.alpha * 1.3f, -base * 0.1f, 0.12f); break;
+    case HUD_INFO: put(h.text, base * 0.75f, base * 0.14f, ink, saturate(alpha * 1.2f) * 0.75f); break;
+    case HUD_LABEL: put(h.text, base * 0.72f, base * 0.36f, ink, saturate(alpha * 1.2f) * 0.7f); break;
+    case HUD_VALUE: put(h.text, base * 1.1f, base * 0.06f, ink, alpha); break;
+    case HUD_NOTICE: put(h.text, base * 1.05f, base * 0.1f, accent, alpha, 0.f, 0.15f); break;
+    case HUD_KEY: put(h.text, base * 0.85f, base * 0.1f, ink, alpha); break;
+    case HUD_TOAST: put(h.text, base * 1.3f, base * 0.45f, ink, alpha, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(h.text, base * 0.9f, base * 0.1f, accent, alpha * 0.9f, 0.f, 0.15f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(h.text, base * 1.2f, base * 0.1f, ink, alpha, -base * 0.1f);
+        else put(h.text, base * 0.85f, base * 0.1f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(h.text, base * 0.8f, base * 0.08f, h.accent ? accent : ink, alpha); break;
     }
+    // a line fading in or out as it did, blended in linear light over the paper (its translucent ink lighter there
+    // on a light paper, brighter on a dark one)
+    const float li = ugl::luma(pal_.ink), lp = ugl::luma(pal_.paper);
+    const float si = std::pow(li, 1.f / 2.2f), sp = std::pow(lp, 1.f / 2.2f);
+    if (std::fabs(si - sp) > 0.05f)
+        for (text::Span& sp_ : out.spans) sp_.alpha = saturate((std::pow(lerpf(lp, li, sp_.alpha), 1.f / 2.2f) - sp) / (si - sp));
+    // the drafting pen's line, a touch bold (bolder light on the dark: it was blended in linear light, which
+    // thickened it)
+    out.look.weight = ugl::luma(pal_.ink) > ugl::luma(pal_.paper) ? 0.022f : 0.0125f;
+    // the post's dim and fade in, which the lettering was under
+    out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }
 
 // =====================================================================================================
@@ -1749,7 +1719,8 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         labels_.push_back({"VOID", V(viewC_.x + viewH_.x - 0.3f - 3.7f, viewC_.y - viewH_.y + 0.3f + 2.2f), 1.1f * pxPerUnit_, a * 0.9f, R_ACCENT, false, true});
     }
     drawLabels();
-    drawHud(f.hud, bare ? std::vector<HudRect>{} : f.panels);
+    drawHud(bare ? std::vector<HudRect>{} : f.panels);
+    fade_ = saturate(f.fade);
     glDisable(GL_BLEND);
 
     // ---- Post.
