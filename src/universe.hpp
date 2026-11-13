@@ -154,6 +154,9 @@ struct Frame {
     // text given in `hud` (the corner title). `game` is then a blank board. The host crossfades this frame with
     // the whole one, so it must keep the same world, camera and light.
     bool bare = false;
+    // The host captures the HUD's corner lines, big, for its title card (shown on black): a universe whose lettering
+    // adapts to the world behind it (dark ink where the world is light) letters them as over its darkest.
+    bool card = false;
 };
 
 class Universe {
