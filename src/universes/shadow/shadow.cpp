@@ -85,6 +85,26 @@ const vec2 BOX_C{7.2f, 1.9f};
 
 float easeInOut(float t) { t = saturate(t); return t * t * (3.f - 2.f * t); }
 
+// A piece's cell joined to its neighbours (the shader's cellShape mask): +x, -x, up, down, and the 2 x 2 corners.
+float joinMask(const int cells[4][2], int i) {
+    int m = 0;
+    for (int j = 0; j < 4; j++) {
+        if (j == i) continue;
+        const int dx = cells[j][0] - cells[i][0], dy = cells[j][1] - cells[i][1];
+        if (dx == 1 && dy == 0) m |= 1;
+        if (dx == -1 && dy == 0) m |= 2;
+        if (dx == 0 && dy == -1) m |= 4;
+        if (dx == 0 && dy == 1) m |= 8;
+    }
+    for (int k = 0; k < 4; k++) {
+        const int sx = (k & 1) ? -1 : 1, sy = (k & 2) ? 1 : -1;
+        const int bx = sx > 0 ? 1 : 2, by = sy < 0 ? 4 : 8;
+        bool diag = false;
+        for (int j = 0; j < 4; j++) diag |= cells[j][0] == cells[i][0] + sx && cells[j][1] == cells[i][1] + sy;
+        if ((m & bx) && (m & by) && diag) m |= 16 << k;
+    }
+    return (float)m;
+}
 } // namespace
 
 // =====================================================================================================
@@ -356,38 +376,19 @@ void ShadowUniverse::uploadBoard(const Game& g) {
         const Piece& p = g.piece();
         int cells[4][2];
         g.pieceCells(p, cells);
-        auto mask = [&](int i) {
-            int m = 0;
-            for (int j = 0; j < 4; j++) {
-                if (j == i) continue;
-                const int dx = cells[j][0] - cells[i][0], dy = cells[j][1] - cells[i][1];
-                if (dx == 1 && dy == 0) m |= 1;
-                if (dx == -1 && dy == 0) m |= 2;
-                if (dx == 0 && dy == -1) m |= 4;
-                if (dx == 0 && dy == 1) m |= 8;
-            }
-            for (int k = 0; k < 4; k++) {
-                const int sx = (k & 1) ? -1 : 1, sy = (k & 2) ? 1 : -1;
-                const int bx = sx > 0 ? 1 : 2, by = sy < 0 ? 4 : 8;
-                bool diag = false;
-                for (int j = 0; j < 4; j++) diag |= cells[j][0] == cells[i][0] + sx && cells[j][1] == cells[i][1] + sy;
-                if ((m & bx) && (m & by) && diag) m |= 16 << k;
-            }
-            return (float)m;
-        };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         pieceType_ = (float)p.type;
         for (int i = 0; i < 4; i++) {
             const float yy = cells[i][1] + dy;
             const vec3 c = layout::cellPos(cells[i][0] + dx, yy);
-            piece_[i * 4 + 0] = c.x; piece_[i * 4 + 1] = c.y; piece_[i * 4 + 2] = mask(i);
+            piece_[i * 4 + 0] = c.x; piece_[i * 4 + 1] = c.y; piece_[i * 4 + 2] = joinMask(cells, i);
             piece_[i * 4 + 3] = 1.f; // (above the well too: it spawns there)
         }
         const int gy = g.ghostY();
         if (gy > p.y + 0) {
             for (int i = 0; i < 4; i++) {
                 const vec3 c = layout::cellPos((float)cells[i][0], (float)(cells[i][1] - p.y + gy));
-                ghost_[i * 4 + 0] = c.x; ghost_[i * 4 + 1] = c.y; ghost_[i * 4 + 2] = mask(i);
+                ghost_[i * 4 + 0] = c.x; ghost_[i * 4 + 1] = c.y; ghost_[i * 4 + 2] = joinMask(cells, i);
                 ghost_[i * 4 + 3] = cells[i][1] - p.y + gy >= Game::HIDDEN ? 1.f : 0.f;
             }
         }
@@ -403,11 +404,11 @@ void ShadowUniverse::uploadBoard(const Game& g) {
         float x0 = 99, x1 = -99, y0 = 99, y1 = -99;
         for (auto& c : cells) { x0 = std::min(x0, (float)c[0]); x1 = std::max(x1, (float)c[0]); y0 = std::min(y0, (float)c[1]); y1 = std::max(y1, (float)c[1]); }
         const float cx = 0.5f * (x0 + x1), cy = 0.5f * (y0 + y1);
-        for (auto& c : cells) {
-            prev_.push_back(center.x + (c[0] - cx) * scale);
-            prev_.push_back(center.y - (c[1] - cy) * scale);
+        for (int i = 0; i < 4; i++) {
+            prev_.push_back(center.x + (cells[i][0] - cx) * scale);
+            prev_.push_back(center.y - (cells[i][1] - cy) * scale);
             prev_.push_back(scale);
-            prev_.push_back((float)type);
+            prev_.push_back((float)type + 8.f * joinMask(cells, i)); // (the type and the join mask)
         }
     };
     preview(g.holdType(), layout::HOLD_CENTER, layout::previewScale(0));
