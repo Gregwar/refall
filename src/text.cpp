@@ -144,19 +144,20 @@ void main() {
     float fill = clamp(dist / fw + 0.5, 0.0, 1.0);
     vec4 c = vec4(0.0);
     if (uHalo.a > 0.0) {
-        float h = pow(clamp(1.0 + dist / max(uHaloShape.x * vEm, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a * vInk.a;
+        float h = pow(clamp(1.0 + dist / max(uHaloShape.x * vEm, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
         c = vec4(uHalo.rgb * h, h);
     }
     if (uOutline.a > 0.0) {
-        float o = clamp((dist + uOutlineW * vEm) / fw + 0.5, 0.0, 1.0) * uOutline.a * vInk.a;
+        float o = clamp((dist + uOutlineW * vEm) / fw + 0.5, 0.0, 1.0) * uOutline.a;
         c = vec4(uOutline.rgb * o, o) + c * (1.0 - o);
     }
-    float f = fill * vInk.a;
-    c = vec4(vInk.rgb * f, f) + c * (1.0 - f);
+    c = vec4(vInk.rgb * fill, fill) + c * (1.0 - fill);
     if (uGlow.a > 0.0) {
         float g = clamp(1.0 + dist / max(uGlowW * vEm, 1e-3), 0.0, 1.0);
-        c.rgb += uGlow.rgb * (g * g * uGlow.a * vInk.a * (1.0 - fill));
+        c.rgb += uGlow.rgb * (g * g * uGlow.a * (1.0 - fill));
     }
+    // a line fades as a whole: its ink stays over its halo
+    c *= vInk.a;
     frag = letter(Letter(dist, vEm, vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y), vLine, vGlyph, vInk, c));
 }
 )";
@@ -361,6 +362,8 @@ Font* font(const unsigned char* ttf, size_t size) {
     return (fonts[ttf] = std::move(f)).get();
 }
 
+float capHeight(const Font* f) { return f ? f->capH / BAKE_PX : 0.7f; }
+
 Font* customFont(const std::string& key, float cap, float descent, Raster raster) {
     static std::map<std::string, std::unique_ptr<Font>> fonts;
     auto it = fonts.find(key);
@@ -439,6 +442,7 @@ Box layoutLine(const Line& l, float x, float y, std::vector<float>* out) {
         if (!f) continue;
         const float k = s.size / BAKE_PX, base = baseline + s.dy;
         b.y1 = std::max(b.y1, base + f->descent * k * 0.5f);
+        pen += s.gap * s.size;
         uint32_t prev = 0;
         for (size_t i = 0; i < s.text.size();) {
             const uint32_t cp = nextCodepoint(s.text, i);

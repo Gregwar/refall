@@ -37,6 +37,8 @@ struct Bitmap {
 };
 using Raster = std::function<bool(uint32_t cp, float px, Bitmap& out)>;
 Font* customFont(const std::string& key, float cap, float descent, Raster raster);
+// The font's capitals' height, in em (to line up the cap lines of two fonts).
+float capHeight(const Font* f);
 
 // A run of text in one font, size and ink.
 struct Span {
@@ -45,6 +47,7 @@ struct Span {
     float size = 16;            // the font size (em), pixels
     float track = 0;            // extra space after each letter, in em
     float dy = 0;               // baseline shift, pixels (down)
+    float gap = 0;              // space before the span, in em
     vec3 ink{1, 1, 1};          // sRGB
     float alpha = 1;
 };
