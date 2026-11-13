@@ -734,6 +734,11 @@ void App::updateGravity(double songTime, float dt) {
         const float k = smoothstepf(0.f, run_.velRamp, (float)songTime);
         game_.setFixedLevel(run_.velFrom + (run_.velTo - run_.velFrom) * k);
     }
+    // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
+    // blend) and the slow-motion bonus (20G lets go meanwhile); it eases back over about a second.
+    const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
+    gameRate_ = approach(gameRate_, rateGoal, 3.f, dt);
+    if (gameRate_ > 0.999f) gameRate_ = 1.f;
     const float diff = game_.speedDifficulty();
     // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
@@ -750,11 +755,6 @@ void App::updateGravity(double songTime, float dt) {
         lastSongBeat_ = -1;
         return;
     }
-    // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
-    // blend) and the slow-motion bonus; it eases back over about a second.
-    const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
-    gameRate_ = approach(gameRate_, rateGoal, 3.f, dt);
-    if (gameRate_ > 0.999f) gameRate_ = 1.f;
     if (!track_ || songFinished()) {
         fallbackTimer_ += dt * gameRate_;
         if (fallbackTimer_ * speedMul_ > 0.9f * (1.f - 0.45f * diff)) { fallbackTimer_ = 0; game_.gravityStep(); }
