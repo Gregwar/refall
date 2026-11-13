@@ -26,16 +26,10 @@
 #include "universes/marbles/marbles.hpp"
 
 #include <algorithm>
-#include <cctype>
-#include <cstdio>
-#include <cstring>
 
 #include "layout.hpp"
 #include "universes/marbles/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -145,18 +139,6 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
 // A marble's jolt in its tile after an impact (board units, down first).
 float jolt(float amp, float t) { return amp <= 0.f ? 0.f : -amp * std::exp(-t * 9.f) * std::cos(t * 30.f); }
 
@@ -170,7 +152,6 @@ bool MarblesUniverse::init(int width, int height) {
     progSky_ = compile(ugl::FULLSCREEN_VS, shaders::SKY_FS, "marbles sky");
     progMarble_ = compile(shaders::MARBLE_VS, shaders::MARBLE_FS, "marbles marble");
     progFx_ = compile(shaders::FX_VS, shaders::FX_FS, "marbles fx");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "marbles text");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "marbles shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "marbles post");
     progLight_ = compile(shaders::LIGHT_VS, shaders::LIGHT_FS, "marbles light");
@@ -201,15 +182,6 @@ bool MarblesUniverse::init(int width, int height) {
     instanced(fxVao_, fxVbo_, 3, sizeof(FxInst));
     instanced(stainVao_, stainVbo_, 3, sizeof(StainInst));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
-
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -220,56 +192,9 @@ bool MarblesUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontMedium_, FONT_MEDIUM);
     pal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-// Glyphs baked as signed distance fields (they scale cleanly).
-void MarblesUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] marbles font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void MarblesUniverse::resize(int width, int height) {
@@ -306,13 +231,9 @@ MarblesUniverse::~MarblesUniverse() {
     lightT_.destroy();
     lightNowT_.destroy();
     stainT_.destroy();
-    for (GLuint p : {progSky_, progMarble_, progFx_, progText_, progShape_, progPost_, progLight_, progStain_, progWash_, progEase_}) glDeleteProgram(p);
-    for (GLuint v : {marbleVao_, fxVao_, textVao_, shapeVao_, lightVao_, stainVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, marbleVbo_, fxVbo_, textVbo_, shapeVbo_, lightVbo_, stainVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontLight_, &fontMedium_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progSky_, progMarble_, progFx_, progShape_, progPost_, progLight_, progStain_, progWash_, progEase_}) glDeleteProgram(p);
+    for (GLuint v : {marbleVao_, fxVao_, shapeVao_, lightVao_, stainVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, marbleVbo_, fxVbo_, shapeVbo_, lightVbo_, stainVbo_}) glDeleteBuffers(1, &b);
 }
 
 // Inside the HUD (its columns, a line of its text, with a margin of r): the way out, to the nearest side away from the
@@ -1360,192 +1281,96 @@ void MarblesUniverse::drawBoard(const Game& g, float world) {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float MarblesUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void MarblesUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : lerp(pal_.felt, pal_.fiber, 0.4f);
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
     }
-    return w - track;
-}
-
-float MarblesUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                 std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-void MarblesUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uBias", bias);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
 
 // The HUD in MARBLES' typography: Outfit Light for the song, the universe's name, the section and the celebrations;
-// widely spaced small capitals in Outfit Medium for the labels, the numbers in Medium. Set straight on the table,
-// pale on its dark ground.
-void MarblesUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : lerp(pal_.felt, pal_.fiber, 0.4f);
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
-        }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
-    }
+// widely spaced small capitals in Outfit Medium for the labels, the numbers in Light. Set straight on the table, no
+// halo: the ink dark or pale from the table behind it (pale on its dark felt), the bridge's ink taking over.
+void MarblesUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* medium = text::font(FONT_MEDIUM);
+    const float s = height_ / 1080.f, base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    // the ink from the table behind the line: dark on a light felt, pale on a dark one (and in the slow motion's night)
     const bool inkDark = ugl::luma(pal_.ink) < 0.2f;
     const vec3 darkInk = inkDark ? pal_.ink : ugl::toLinear(hex(0x1e242c));
     const vec3 lightInk = inkDark ? ugl::toLinear(hex(0xf2f4f6)) : pal_.ink;
-    // the table is dark everywhere: pale ink
-    auto inkAt = [&](float, float) {
-        const vec3 g = lerp(lerp(pal_.felt, pal_.fiber, 0.4f), pal_.night, 0.85f * slow_);
-        return ugl::luma(g) > 0.25f ? darkInk : lightInk;
+    const vec3 ground = lerp(lerp(pal_.felt, pal_.fiber, 0.4f), pal_.night, 0.85f * slow_);
+    const vec3 ink = ugl::luma(ground) > 0.25f ? darkInk : lightInk;
+    const vec3 accent = ugl::luma(ink) > 0.3f ? lerp(pal_.accent, ink, 0.2f) : lerp(pal_.accent, ink, 0.35f);
+    // a scene color as the post shows it (the brightest rolled off), the bridge's ink taking over
+    auto shown = [&](const vec3& c0) {
+        vec3 c = lerp(c0, bridge_.ink, br);
+        const float mx = std::max(c.x, std::max(c.y, c.z));
+        if (mx > 0.85f) c = c * ((0.85f + 0.4f * (1.f - std::exp(-(mx - 0.85f) * 2.5f))) / mx);
+        return ugl::toSrgb(c);
     };
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        vec3 ink = inkAt(h.x < 0.f ? width_ + h.x : h.x, h.y + base * 0.5f);
-        vec3 accent = lerp(pal_.accent, ink, 0.2f);
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            const float x = ugl::hudLeft(h, w, width_);
-            ink = inkAt(x + w * 0.5f, h.y + dy + size * 0.6f);
-            accent = ugl::luma(ink) > 0.3f ? lerp(pal_.accent, ink, 0.2f) : lerp(pal_.accent, ink, 0.35f);
-            textQuads(f, text, x, h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "Marbles" in the light weight, the variant's name in small spaced capitals after it.
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.35f, vsz = base * 0.66f, vtr = vsz * 0.34f;
-            const float wName = textWidth(fontLight_, name, sz, sz * 0.02f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontMedium_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontLight_, name, x, h.y - base * 0.1f, sz, sz * 0.02f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontLight_, q, inkAt(x + wName * 0.5f, h.y + sz * 0.4f), a, 0.03f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontMedium_, var, x + wName + gap, h.y + base * 0.2f, vsz, vtr, q);
-                drawText(fontMedium_, q, inkAt(x + wName + gap + wVar * 0.5f, h.y + base * 0.2f + vsz * 0.5f), a * 0.85f, 0.02f);
-            }
-            continue;
+    float bias = 0.02f;
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, shown(c), track / size, saturate(a));
+        out.dy = dy;
+        bias = f == light ? 0.03f : 0.02f;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "Marbles" in the light weight, the variant's name in small spaced capitals after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.35f, vsz = base * 0.66f, a = saturate(0.35f + h.alpha * 1.6f);
+        put(light, text::titleCase(name), sz, sz * 0.02f, ink, a, -base * 0.1f);
+        if (!var.empty()) {
+            out.add("", light, sz, vec3(0.f), base * 0.8f / sz - 0.02f); // the gap (the name's tracking after it)
+            text::Span& v = out.add(var, medium, vsz, shown(ink), 0.34f, a * 0.85f);
+            v.dy = base * 0.3f + 0.556f * vsz - 0.546f * sz; // its own cap line, lower
         }
-        case HUD_SECTION:
-            place(fontLight_, titleCase(h.text), base * 1.3f, base * 0.03f);
-            drawText(fontLight_, q, ink, saturate(0.2f + h.alpha * 1.9f), 0.03f);
-            continue;
-        case HUD_TITLE:
-            place(fontLight_, h.text, base * 1.2f, base * 0.02f, -base * 0.1f);
-            drawText(fontLight_, q, ink, saturate(h.alpha * 1.3f), 0.03f);
-            continue;
-        case HUD_INFO:
-            place(fontMedium_, h.text, base * 0.72f, base * 0.16f);
-            drawText(fontMedium_, q, ink, saturate(alpha * 1.2f) * 0.8f, 0.02f);
-            continue;
-        case HUD_LABEL:
-            place(fontMedium_, h.text, base * 0.68f, base * 0.36f);
-            drawText(fontMedium_, q, ink, saturate(alpha * 1.2f) * 0.72f, 0.02f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.12f, base * 0.03f);
-            drawText(fontLight_, q, ink, alpha, 0.04f);
-            continue;
-        case HUD_NOTICE:
-            place(fontLight_, h.text, base * 1.1f, base * 0.06f);
-            drawText(fontLight_, q, accent, alpha, 0.04f);
-            continue;
-        case HUD_KEY:
-            place(fontMedium_, h.text, base * 0.85f, base * 0.08f);
-            drawText(fontMedium_, q, ink, alpha, 0.02f);
-            continue;
-        case HUD_TOAST:
-            place(fontLight_, titleCase(h.text), base * 1.45f, base * 0.04f, -base * 0.2f);
-            drawText(fontLight_, q, ink, alpha, 0.04f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontMedium_, h.text, base * 0.8f, base * 0.2f);
-            drawText(fontMedium_, q, accent, alpha * 0.9f, 0.02f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontLight_, titleCase(h.text), base * 1.25f, base * 0.03f, -base * 0.12f);
-                drawText(fontLight_, q, ink, alpha, 0.04f);
-            } else {
-                place(fontMedium_, h.text, base * 0.82f, base * 0.12f);
-                drawText(fontMedium_, q, h.accent ? accent : ink, alpha, 0.02f);
-            }
-            continue;
-        default:
-            place(fontMedium_, h.text, base * 0.8f, base * 0.1f);
-            drawText(fontMedium_, q, h.accent ? accent : ink, alpha, 0.02f);
-            continue;
-        }
+        bias = 0.03f;
+        break;
     }
+    case HUD_SECTION: put(light, text::titleCase(h.text), base * 1.3f, base * 0.03f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(light, h.text, base * 1.2f, base * 0.02f, ink, h.alpha * 1.3f, -base * 0.1f); break;
+    case HUD_INFO: put(medium, h.text, base * 0.72f, base * 0.16f, ink, saturate(alpha * 1.2f) * 0.8f); break;
+    case HUD_LABEL: put(medium, h.text, base * 0.68f, base * 0.36f, ink, saturate(alpha * 1.2f) * 0.72f); break;
+    case HUD_VALUE: put(light, h.text, base * 1.12f, base * 0.03f, ink, alpha); bias = 0.04f; break;
+    case HUD_NOTICE: put(light, h.text, base * 1.1f, base * 0.06f, accent, alpha); bias = 0.04f; break;
+    case HUD_KEY: put(medium, h.text, base * 0.85f, base * 0.08f, ink, alpha); break;
+    case HUD_TOAST: put(light, text::titleCase(h.text), base * 1.45f, base * 0.04f, ink, alpha, -base * 0.2f); bias = 0.04f; break;
+    case HUD_TOAST_SUB: put(medium, h.text, base * 0.8f, base * 0.2f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(light, text::titleCase(h.text), base * 1.25f, base * 0.03f, ink, alpha, -base * 0.12f);
+            bias = 0.04f;
+        } else put(medium, h.text, base * 0.82f, base * 0.12f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(medium, h.text, base * 0.8f, base * 0.1f, h.accent ? accent : ink, alpha); break;
+    }
+    // (the old field: 8 px of distance at 64 px, one unit of it 0.25 em; its wide edge left the small letters a
+    // little heavier)
+    out.look.weight = bias * 0.25f + 0.15f / std::max(1.f, out.spans[0].size);
+    // the opacities as they were, blended in the scene's linear light (a lighter veil than over sRGB)
+    for (text::Span& sp : out.spans) sp.alpha = std::pow(saturate(sp.alpha), 1.f / 2.2f);
 }
 
 // =====================================================================================================
@@ -1566,13 +1391,14 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     keepOut_.clear();
     keepOut_.push_back({layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[3]});
     keepOut_.push_back({layout::RIGHT_COLUMN[0] + 0.6f, layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[3]});
-    for (const HudText& h : f.hud) {
+    for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+        const HudText& h = f.hud[i];
         if (h.alpha <= 0.01f || h.text.empty()) continue;
         if (h.role == HUD_HELP || h.role == HUD_DIALOG || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB) continue;
         const float base = h.scale * 12.f;
-        const float w = (float)h.text.size() * base * (h.role == HUD_UNIVERSE ? 1.05f : 0.75f);
-        const float x0 = ugl::hudLeft(h, w, width_), y0 = h.y - base * 0.3f, y1 = h.y + base * 1.6f;
-        const float bx0 = viewC_.x + (x0 / width_ * 2.f - 1.f) * viewH_.x, bx1 = viewC_.x + ((x0 + w) / width_ * 2.f - 1.f) * viewH_.x;
+        const vec4& box = (*f.hudBoxes)[i]; // the line as the host letters it, with a margin
+        const float x0 = box.x - base * 0.3f, x1 = box.z + base * 0.3f, y0 = box.y - base * 0.3f, y1 = box.w + base * 0.3f;
+        const float bx0 = viewC_.x + (x0 / width_ * 2.f - 1.f) * viewH_.x, bx1 = viewC_.x + (x1 / width_ * 2.f - 1.f) * viewH_.x;
         const float byTop = viewC_.y - (y0 / height_ * 2.f - 1.f) * viewH_.y, byBot = viewC_.y - (y1 / height_ * 2.f - 1.f) * viewH_.y;
         keepOut_.push_back({bx0, bx1, byBot, byTop});
     }
@@ -1752,7 +1578,7 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
             flushFx();
         }
     }
-    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels);
+    if (!f.bare) drawPanels(f.panels);
     glDisable(GL_BLEND);
 
     // ---- Post.

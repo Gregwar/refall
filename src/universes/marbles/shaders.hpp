@@ -449,31 +449,6 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- text
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uInk;
-uniform float uAlpha, uBias;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float a = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    frag = vec4(uInk, a * uAlpha);
-}
-)";
-
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aCol;
