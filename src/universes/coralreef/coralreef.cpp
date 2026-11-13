@@ -25,7 +25,6 @@
 #include "universes/coralreef/coralreef.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -33,9 +32,6 @@
 #include "layout.hpp"
 #include "universes/coralreef/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -47,6 +43,8 @@ const unsigned char FONT_ITAL[] = {
 const unsigned char FONT_SANS[] = {
 #include "universes/coralreef/Nunito-SemiBold.ttf.inc"
 };
+// Their capitals' heights (em): the HUD's runs in both stand on the cap line they were placed by.
+constexpr float CAP_ITAL = 0.5677f, CAP_SANS = 0.522f;
 
 namespace shaders = coralreef_shaders;
 using ugl::set1f;
@@ -291,7 +289,6 @@ bool CoralReefUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "coralreef cell", false);
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "coralreef sprite", false);
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "coralreef shape", false);
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "coralreef text", false);
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "coralreef post", false);
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -323,14 +320,6 @@ bool CoralReefUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
 
     // the seabed: a log-polar mesh around the view (rings log-spaced from a fraction of the camera's scale out to
     // the horizon), placed each frame where the camera looks: fine where it looks, the whole planet beyond
@@ -369,55 +358,9 @@ bool CoralReefUniverse::init(int width, int height) {
     upload(manta_, reef::buildManta(), 12);
     glBindVertexArray(0);
 
-    buildFont(sans_, FONT_SANS);
-    buildFont(ital_, FONT_ITAL);
     pal_ = basePal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void CoralReefUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] coralreef font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void CoralReefUniverse::resize(int width, int height) {
@@ -444,7 +387,7 @@ void CoralReefUniverse::resize(int width, int height) {
 CoralReefUniverse::~CoralReefUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
     for (GLuint p : {progWater_, progGround_, progCoral_, progFish_, progGlow_, progComp_, progVeil_, progCell_, progSprite_,
-                     progShape_, progText_, progPost_})
+                     progShape_, progPost_})
         glDeleteProgram(p);
     auto freeMesh = [](MeshGL& m) {
         if (m.vao) glDeleteVertexArrays(1, &m.vao);
@@ -456,12 +399,8 @@ CoralReefUniverse::~CoralReefUniverse() {
     for (MeshGL& m : fishM_) freeMesh(m);
     for (MeshGL& m : rockM_) freeMesh(m);
     freeMesh(manta_);
-    for (GLuint v : {groundVao_, glowVao_, cellVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, groundVbo_, groundIbo_, glowVbo_, cellVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&sans_, &ital_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint v : {groundVao_, glowVao_, cellVao_, spriteVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, groundVbo_, groundIbo_, glowVbo_, cellVbo_, spriteVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1250,189 +1189,95 @@ void CoralReefUniverse::sprite(vec2 p, float size, const vec3& col, float alpha,
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float CoralReefUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+void CoralReefUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.veil;
+        const float a = std::min(1.f, r.alpha);
+        const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                                {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+        for (auto& p : qd) v.insert(v.end(), p, p + 6);
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
 }
 
-void CoralReefUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                  std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = f.capH * k;
-    float pen = 0.f;
-    auto place = [&](float u, float v, float tu, float tv) {
-        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
+// The lettering, by the host (text.hpp): Nunito capitals, widely spaced, for the labels and the numbers; Fraunces'
+// soft italics for the song, the variant, the notices, and the reef's stage after the universe's name; each line on
+// a soft halo of the water's veil. The inks are the scene's (linear), toned as the post tones the scene: dimmed,
+// their highlights rolled off, to sRGB.
+void CoralReefUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* sans = text::font(FONT_SANS);
+    text::Font* ital = text::font(FONT_ITAL);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount), dim = 1.f - dimT_ * 0.5f;
+    auto tone = [&](const vec3& lin) {
+        vec3 c = lin * dim;
+        for (float* v : {&c.x, &c.y, &c.z}) *v /= 1.f + std::max(*v - 0.8f, 0.f) * 0.8f;
+        return ugl::toSrgb(c);
     };
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
-            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
+    auto inkOf = [&](const vec3& c) { return tone(lerp(c, bridge_.ink, b)); };
+    const vec3 ink = inkOf(pal_.ink), accent = inkOf(pal_.accent);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    float halo = 0.75f; // the halo's amount
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // the name in spaced capitals, then the variant and the reef's stage in italics, a little higher
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        size_t n = 1;
+        while (n < var.size() && ((unsigned char)var[n] & 0xC0) == 0x80) n++;
+        if (!var.empty()) var = var.substr(0, n) + text::lower(var.substr(n));
+        const float sz = base * 0.95f, tr = sz * 0.28f, vsz = base * 1.3f, gap = base * 0.75f;
+        const float a = saturate(0.35f + h.alpha * 1.6f);
+        const float dy = -sz * 0.22f + CAP_ITAL * vsz - CAP_SANS * sz; // (each run was placed by its own cap line)
+        put(sans, name, sz, tr, ink, a);
+        // (a span's spacing stays after its last letter: the gaps take it back)
+        auto gapOf = [&](float px) { out.add("", sans, 1.f, ink, px, 0.f); };
+        if (!var.empty()) {
+            gapOf(gap - tr);
+            out.add(var, ital, vsz, accent, 0.f, a * 0.9f).dy = dy;
+            gapOf(gap * 1.3f);
+        } else {
+            gapOf(gap * 1.3f - tr);
         }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+        out.add(stageName(std::max(0.f, shownLines_)), ital, vsz, ink, 0.f, a * 0.72f).dy = dy;
+        break;
     }
-}
-
-void CoralReefUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float halo) {
-    if (q.empty() || !f.ok || alpha <= 0.004f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set3f(progText_, "uHalo", lerp(pal_.veil * 0.8f, bridge_.color, b));
-    set1f(progText_, "uHaloA", halo);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD: Nunito capitals, widely spaced, for the labels and the numbers; Fraunces' soft italics for the song,
-// the variant, the notices, and the reef's stage after the universe's name.
-void CoralReefUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.veil;
-            const float a = std::min(1.f, r.alpha);
-            const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
-                                    {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
-            for (auto& p : qd) v.insert(v.end(), p, p + 6);
-        }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+    case HUD_SECTION: put(sans, h.text, base * 0.9f, base * 0.45f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(ital, h.text, base * 1.65f, 0.f, ink, h.alpha * 1.3f, -base * 0.35f); break;
+    case HUD_INFO: put(sans, h.text, base * 0.66f, base * 0.12f, ink, saturate(alpha * 1.3f) * 0.8f); break;
+    case HUD_LABEL: put(sans, h.text, base * 0.78f, base * 0.42f, inkOf(lerp(pal_.ink, pal_.accent, 0.5f)), saturate(alpha * 1.2f) * 0.92f); break;
+    case HUD_VALUE: put(sans, h.text, base * 1.05f, base * 0.04f, ink, alpha); break;
+    case HUD_NOTICE: put(ital, h.text, base * 1.55f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(sans, h.text, base * 0.75f, base * 0.06f, ink, alpha); break;
+    case HUD_TOAST: put(sans, h.text, base * 1.3f, base * 0.45f, ink, alpha, -base * 0.2f); halo = 0.85f; break;
+    case HUD_TOAST_SUB: put(ital, h.text, base * 1.4f, 0.f, accent, alpha * 0.9f); halo = 0.85f; break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * height_ / 1080.f) put(ital, h.text, base * 1.3f, 0.f, ink, alpha, -base * 0.1f);
+        else put(sans, h.text, base * 0.85f, base * 0.14f, h.accent ? accent : ink, alpha);
+        halo = 0.85f;
+        break;
+    default: put(sans, h.text, base * 0.85f, base * 0.12f, h.accent ? accent : ink, alpha); break;
     }
-    const vec3 ink = pal_.ink, accent = pal_.accent;
-    std::vector<float> q;
-    const float halo = 0.75f;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.95f, tr = sz * 0.28f;
-            const float wName = textWidth(sans_, name, sz, tr);
-            std::string vt = var;
-            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
-            const float vsz = base * 1.3f;
-            const float wVar = vt.empty() ? 0.f : textWidth(ital_, vt, vsz, 0.f);
-            const float gap = base * 0.75f;
-            const std::string st = stageName(std::max(0.f, shownLines_));
-            const float wSt = textWidth(ital_, st, vsz, 0.f);
-            const float total = wName + (vt.empty() ? 0.f : gap + wVar) + gap * 1.3f + wSt;
-            const float x = ugl::hudLeft(h, total, width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(sans_, name, x, h.y, sz, tr, q);
-            drawText(sans_, q, ink, a, halo);
-            float cx = x + wName;
-            if (!vt.empty()) {
-                q.clear();
-                textQuads(ital_, vt, cx + gap, h.y - sz * 0.22f, vsz, 0.f, q);
-                drawText(ital_, q, accent, a * 0.9f, halo);
-                cx += gap + wVar;
-            }
-            cx += gap * 1.3f;
-            q.clear();
-            textQuads(ital_, st, cx, h.y - sz * 0.22f, vsz, 0.f, q);
-            drawText(ital_, q, ink, a * 0.72f, halo);
-            continue;
-        }
-        case HUD_SECTION:
-            place(sans_, h.text, base * 0.9f, base * 0.45f);
-            drawText(sans_, q, ink, saturate(0.2f + h.alpha * 1.9f), halo);
-            continue;
-        case HUD_TITLE:
-            place(ital_, h.text, base * 1.65f, 0.f, -base * 0.35f);
-            drawText(ital_, q, ink, saturate(h.alpha * 1.3f), halo);
-            continue;
-        case HUD_INFO:
-            place(sans_, h.text, base * 0.66f, base * 0.12f);
-            drawText(sans_, q, ink, saturate(alpha * 1.3f) * 0.8f, halo);
-            continue;
-        case HUD_LABEL:
-            place(sans_, h.text, base * 0.78f, base * 0.42f);
-            drawText(sans_, q, lerp(ink, accent, 0.5f), saturate(alpha * 1.2f) * 0.92f, halo);
-            continue;
-        case HUD_VALUE:
-            place(sans_, h.text, base * 1.05f, base * 0.04f);
-            drawText(sans_, q, ink, alpha, halo);
-            continue;
-        case HUD_NOTICE:
-            place(ital_, h.text, base * 1.55f, 0.f);
-            drawText(ital_, q, accent, alpha, halo);
-            continue;
-        case HUD_KEY:
-            place(sans_, h.text, base * 0.75f, base * 0.06f);
-            drawText(sans_, q, ink, alpha, halo);
-            continue;
-        case HUD_TOAST:
-            place(sans_, h.text, base * 1.3f, base * 0.45f, -base * 0.2f);
-            drawText(sans_, q, ink, alpha, 0.85f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(ital_, h.text, base * 1.4f, 0.f);
-            drawText(ital_, q, accent, alpha * 0.9f, 0.85f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * height_ / 1080.f) {
-                place(ital_, h.text, base * 1.3f, 0.f, -base * 0.1f);
-                drawText(ital_, q, ink, alpha, 0.85f);
-            } else {
-                place(sans_, h.text, base * 0.85f, base * 0.14f);
-                drawText(sans_, q, h.accent ? accent : ink, alpha, 0.85f);
-            }
-            continue;
-        default:
-            place(sans_, h.text, base * 0.85f, base * 0.12f);
-            drawText(sans_, q, h.accent ? accent : ink, alpha, halo);
-            continue;
-        }
-    }
+    // the letters as the scene drew them, on a halo of the veil
+    text::Lettering& l = lettering_[halo > 0.8f ? 1 : 0];
+    l.glsl = shaders::LETTER_GLSL;
+    l.p0 = vec4(tone(lerp(pal_.veil * 0.8f, bridge_.color, b)), halo);
+    out.lettering = &l;
+    out.alpha = saturate(fade_);
 }
 
 // =====================================================================================================
@@ -2095,7 +1940,8 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         }
         drawSprites();
     }
-    drawHud(f.hud, f.panels);
+    drawHud(f.panels);
+    fade_ = f.fade;
     glDisable(GL_BLEND);
 
     // ---- Post.
