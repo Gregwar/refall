@@ -6,7 +6,6 @@
 // stack's glass shows behind it); the ghost, the stack, the falling piece, the previews (glass cubes with the world's
 // fill); what the world draws over the stack; the gauge, the HUD; the final pass.
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -14,9 +13,6 @@
 #include "universes/biome/biome.hpp"
 #include "universes/biome/gl.hpp"
 #include "universes/biome/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 using namespace biome;
 
@@ -29,6 +25,17 @@ const unsigned char FONT_ITALIC[] = {
 const unsigned char FONT_ROMAN[] = {
 #include "universes/biome/Lora-Medium.ttf.inc"
 };
+
+// The lettering on its halo: the halo only around the letters, never through them (a line fading out shows the
+// world behind it, not its halo).
+const text::Lettering HALO_UNDER{R"(
+vec4 letter(Letter L) {
+    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
+    float h = pow(clamp(1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
+    float a = max(fill, h);
+    return vec4(L.ink.rgb * fill + uHalo.rgb * (a - fill), a) * L.ink.a;
+}
+)"};
 
 namespace shaders = biome_shaders;
 using ugl::set1f;
@@ -124,7 +131,6 @@ bool BiomeUniverse::init(int width, int height) {
     progRain_ = compile(ugl::FULLSCREEN_VS, shaders::RAIN_FS, "biome rain", {});
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "biome pane", {});
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "biome gauge", {});
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "biome text", {});
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "biome shape", {});
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "biome post", {});
 
@@ -136,23 +142,6 @@ bool BiomeUniverse::init(int width, int height) {
     c_.instanced(spriteVao_, spriteVbo_, 4);
     c_.instanced(c_.partVao, c_.partVbo, 4);
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
-
-    glGenVertexArrays(1, &shapeVao_);
-    glGenBuffers(1, &shapeVbo_);
-    glBindVertexArray(shapeVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     // the sun's shadow map
@@ -177,8 +166,6 @@ bool BiomeUniverse::init(int width, int height) {
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
     samples_ = std::clamp((int)maxSamples, 1, 4);
 
-    buildFont(fontItalic_, FONT_ITALIC);
-    buildFont(fontRoman_, FONT_ROMAN);
     c_.width = std::max(1, width);
     c_.height = std::max(1, height);
     bool ok = true;
@@ -186,51 +173,6 @@ bool BiomeUniverse::init(int width, int height) {
     c_.pal = w_->palette(0);
     resize(width, height);
     return ok && glGetError() == GL_NO_ERROR;
-}
-
-// Glyphs baked as signed distance fields (they scale cleanly).
-void BiomeUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] biome font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void BiomeUniverse::resize(int width, int height) {
@@ -272,18 +214,14 @@ BiomeUniverse::~BiomeUniverse() {
     for (auto& w : worlds_) w.reset();
     c_.sceneT.destroy();
     c_.bgT.destroy();
-    for (GLuint p : {progVeil_, progRain_, progSprite_, progText_, progShape_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {cellVao_, spriteVao_, c_.partVao, textVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {c_.quadVbo, cellVbo_, spriteVbo_, c_.partVbo, textVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progVeil_, progRain_, progSprite_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {cellVao_, spriteVao_, c_.partVao, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {c_.quadVbo, cellVbo_, spriteVbo_, c_.partVbo, shapeVbo_}) glDeleteBuffers(1, &b);
     glDeleteFramebuffers(1, &c_.msFbo);
     glDeleteRenderbuffers(1, &msColor_);
     glDeleteRenderbuffers(1, &msDepth_);
     glDeleteFramebuffers(1, &shadowFbo_);
     glDeleteTextures(1, &c_.shadowTex);
-    for (Font* f : {&fontItalic_, &fontRoman_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -363,75 +301,8 @@ void BiomeUniverse::flushCells() {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
-
-float BiomeUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
-}
-
-float BiomeUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                               std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-void BiomeUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, c_.bridge.amount);
-    const vec3 c = lerp(ink, c_.bridge.ink, b);
-    // a soft halo of the other value under the letters
-    const bool light = ugl::luma(c) > 0.3f;
-    set3f(progText_, "uInk", c);
-    set3f(progText_, "uHalo", light ? vec3(0.015f, 0.012f, 0.01f) : lerp(c_.pal.skyLow, vec3(1.f), 0.5f));
-    set1f(progText_, "uHaloA", (light ? 0.42f : 0.35f) * (1.f - b));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uBias", bias);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
 
 // How light the world is behind a point (board space): the world's own color there, dusk in slow motion, the well's
 // pane over it.
@@ -445,139 +316,119 @@ float BiomeUniverse::bgLuma(float bx, float by) const {
     return ugl::luma(c);
 }
 
-// The HUD in BIOME's typography: Lora, a book face like a naturalist's field notes; italic for the song, the section
-// and the celebrations, spaced capitals for labels. The ink dark or light, whichever reads best over what is behind it,
-// always on a soft halo.
-void BiomeUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD's plates (its lettering: hudLine, the host's).
+void BiomeUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
     const Palette& pal = c_.pal;
+    std::vector<float> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        for (auto& r : q) v.insert(v.end(), r, r + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal.accent : pal.hudPanel;
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
+    }
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+}
+
+// The HUD in BIOME's typography, lettered by the host (text.hpp): Lora, a book face like a naturalist's field notes;
+// italic for the song, the section and the celebrations, spaced capitals for labels. Each run's ink dark or light,
+// whichever reads best over what is behind it (the world sampled where it will stand), always on a soft halo of the
+// other value. (The palette is linear: the lettering, over the post now, takes it to sRGB.)
+void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
+    // the capitals' height of Lora, of its size; its average advance (a run's width before it is lettered)
+    constexpr float CAP = 0.547f, ADV = 0.5f;
+    const Palette& pal = c_.pal;
+    text::Font* italic = text::font(FONT_ITALIC);
+    text::Font* roman = text::font(FONT_ROMAN);
     const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                                   {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            for (auto& r : q) v.insert(v.end(), r, r + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal.accent : pal.hudPanel;
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
-        }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
-    }
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float b = smoothstepf(0.3f, 0.95f, c_.bridge.amount);
     const vec3 darkInk = pal.inkDark, lightInk = pal.inkLight;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        auto inkAt = [&](float px, float py) {
-            const float bx = c_.viewC.x + (px / width_ * 2.f - 1.f) * c_.viewH.x;
-            const float by = c_.viewC.y - (py / height_ * 2.f - 1.f) * c_.viewH.y;
-            // the ink with the most contrast against what is behind it
-            const float l = (std::sqrt(bgLuma(bx, by - 0.3f)) + std::sqrt(bgLuma(bx, by)) + std::sqrt(bgLuma(bx, by + 0.3f))) / 3.f;
-            return std::fabs(l - std::sqrt(ugl::luma(darkInk))) > std::fabs(l - std::sqrt(ugl::luma(lightInk))) ? darkInk : lightInk;
-        };
-        vec3 ink = inkAt(h.x < 0.f ? width_ + h.x : h.x, h.y + base * 0.5f);
-        vec3 accent = lerp(pal.accent, ink, 0.25f);
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            const float x = ugl::hudLeft(h, w, width_);
-            ink = inkAt(x + w * 0.5f, h.y + dy + size * 0.8f);
-            accent = lerp(pal.accent, ink, 0.25f);
-            textQuads(f, text, x, h.y + dy, size, track, q);
-        };
-        auto titleCase = [](const std::string& str) {
-            std::string o = str;
-            bool start = true;
-            for (char& c : o) {
-                if (std::isalpha((unsigned char)c)) {
-                    c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-                    start = false;
-                } else start = c == ' ' || c == '-';
-            }
-            return o;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "Biome" in the italic, the variant's name in small spaced capitals after it.
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.4f, vsz = base * 0.64f, vtr = vsz * 0.3f;
-            const float wName = textWidth(fontItalic_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontRoman_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontItalic_, name, x, h.y - base * 0.12f, sz, 0.f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontItalic_, q, inkAt(x + wName * 0.5f, h.y + sz * 0.4f), a, 0.03f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontRoman_, var, x + wName + gap, h.y + base * 0.22f, vsz, vtr, q);
-                drawText(fontRoman_, q, inkAt(x + wName + gap + wVar * 0.5f, h.y + base * 0.22f + vsz * 0.5f), a * 0.85f, 0.02f);
-            }
-            continue;
+    // the ink with the most contrast against what is behind (px, py)
+    auto inkAt = [&](float px, float py) {
+        const float bx = c_.viewC.x + (px / width_ * 2.f - 1.f) * c_.viewH.x;
+        const float by = c_.viewC.y - (py / height_ * 2.f - 1.f) * c_.viewH.y;
+        const float l = (std::sqrt(bgLuma(bx, by - 0.3f)) + std::sqrt(bgLuma(bx, by)) + std::sqrt(bgLuma(bx, by + 0.3f))) / 3.f;
+        return std::fabs(l - std::sqrt(ugl::luma(darkInk))) > std::fabs(l - std::sqrt(ugl::luma(lightInk))) ? darkInk : lightInk;
+    };
+    auto glyphs = [](const std::string& t) {
+        int n = 0;
+        for (unsigned char c : t) n += (c & 0xC0) != 0x80;
+        return n;
+    };
+    // a run's width, roughly
+    auto widthOf = [&](const std::string& t, float size, float track) { return glyphs(t) * (size * ADV + track) - track; };
+    vec3 lineInk = lightInk; // the line's first run's (its halo's value)
+    float bias = 0.02f;      // the letters' weight, field units
+    // a run: its size and letter spacing in pixels, moved down by dy, its ink picked where it stands (accent: the
+    // accent leaning to it)
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, bool accent, float a, float dy = 0.f) {
+        const float w = widthOf(t, size, track);
+        const vec3 ink = inkAt(ugl::hudLeft(h, w, width_) + w * 0.5f, h.y + dy + size * 0.8f);
+        lineInk = ink;
+        const vec3 c = accent ? lerp(pal.accent, ink, 0.25f) : ink;
+        out.add(t, f, size, ugl::toSrgb(lerp(c, c_.bridge.ink, b)), track / size, saturate(a));
+        out.dy = dy;
+        bias = f == italic ? 0.03f : 0.02f;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "Biome" in the italic, the variant's name in small spaced capitals after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        name = text::titleCase(name);
+        const float sz = base * 1.4f, vsz = base * 0.64f, vtr = vsz * 0.3f, gap = base * 0.8f;
+        const float wName = widthOf(name, sz, 0.f), wVar = var.empty() ? 0.f : widthOf(var, vsz, vtr);
+        const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
+        const float a = saturate(0.35f + h.alpha * 1.6f);
+        lineInk = inkAt(x + wName * 0.5f, h.y + sz * 0.4f);
+        out.add(name, italic, sz, ugl::toSrgb(lerp(lineInk, c_.bridge.ink, b)), 0.f, a);
+        out.dy = -base * 0.12f;
+        if (!var.empty()) {
+            const vec3 vi = inkAt(x + wName + gap + wVar * 0.5f, h.y + base * 0.22f + vsz * 0.5f);
+            out.add("", italic, sz, vec3(0.f), gap / sz); // the gap
+            // its cap line a third of the base under the name's
+            out.add(var, roman, vsz, ugl::toSrgb(lerp(vi, c_.bridge.ink, b)), 0.3f, a * 0.85f).dy =
+                base * 0.22f + CAP * vsz - (-base * 0.12f + CAP * sz);
         }
-        case HUD_SECTION:
-            place(fontItalic_, titleCase(h.text), base * 1.35f, 0.f);
-            drawText(fontItalic_, q, ink, saturate(0.2f + h.alpha * 1.9f), 0.03f);
-            continue;
-        case HUD_TITLE:
-            place(fontItalic_, h.text, base * 1.25f, 0.f, -base * 0.12f);
-            drawText(fontItalic_, q, ink, saturate(h.alpha * 1.3f), 0.03f);
-            continue;
-        case HUD_INFO:
-            place(fontRoman_, h.text, base * 0.78f, base * 0.12f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.85f, 0.02f);
-            continue;
-        case HUD_LABEL:
-            place(fontRoman_, h.text, base * 0.72f, base * 0.3f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.78f, 0.02f);
-            continue;
-        case HUD_VALUE:
-            place(fontRoman_, h.text, base * 1.08f, base * 0.04f);
-            drawText(fontRoman_, q, ink, alpha, 0.02f);
-            continue;
-        case HUD_NOTICE:
-            place(fontItalic_, h.text, base * 1.15f, 0.f);
-            drawText(fontItalic_, q, accent, alpha, 0.03f);
-            continue;
-        case HUD_KEY:
-            place(fontRoman_, h.text, base * 0.88f, base * 0.05f);
-            drawText(fontRoman_, q, ink, alpha, 0.02f);
-            continue;
-        case HUD_TOAST:
-            place(fontItalic_, titleCase(h.text), base * 1.5f, 0.f, -base * 0.2f);
-            drawText(fontItalic_, q, ink, alpha, 0.04f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontRoman_, h.text, base * 0.82f, base * 0.2f);
-            drawText(fontRoman_, q, accent, alpha * 0.9f, 0.02f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontItalic_, titleCase(h.text), base * 1.3f, 0.f, -base * 0.12f);
-                drawText(fontItalic_, q, ink, alpha, 0.04f);
-            } else {
-                place(fontRoman_, h.text, base * 0.86f, base * 0.1f);
-                drawText(fontRoman_, q, h.accent ? accent : ink, alpha, 0.02f);
-            }
-            continue;
-        default:
-            place(fontRoman_, h.text, base * 0.84f, base * 0.06f);
-            drawText(fontRoman_, q, h.accent ? accent : ink, alpha, 0.02f);
-            continue;
-        }
+        bias = 0.03f;
+        break;
     }
+    case HUD_SECTION: put(italic, text::titleCase(h.text), base * 1.35f, 0.f, false, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(italic, h.text, base * 1.25f, 0.f, false, h.alpha * 1.3f, -base * 0.12f); break;
+    case HUD_INFO: put(roman, h.text, base * 0.78f, base * 0.12f, false, saturate(alpha * 1.2f) * 0.85f); break;
+    case HUD_LABEL: put(roman, h.text, base * 0.72f, base * 0.3f, false, saturate(alpha * 1.2f) * 0.78f); break;
+    case HUD_VALUE: put(roman, h.text, base * 1.08f, base * 0.04f, false, alpha); break;
+    case HUD_NOTICE: put(italic, h.text, base * 1.15f, 0.f, true, alpha); break;
+    case HUD_KEY: put(roman, h.text, base * 0.88f, base * 0.05f, false, alpha); break;
+    case HUD_TOAST: put(italic, text::titleCase(h.text), base * 1.5f, 0.f, false, alpha, -base * 0.2f); bias = 0.04f; break;
+    case HUD_TOAST_SUB: put(roman, h.text, base * 0.82f, base * 0.2f, true, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(italic, text::titleCase(h.text), base * 1.3f, 0.f, false, alpha, -base * 0.12f);
+            bias = 0.04f;
+        } else put(roman, h.text, base * 0.86f, base * 0.1f, h.accent, alpha);
+        break;
+    default: put(roman, h.text, base * 0.84f, base * 0.06f, h.accent, alpha); break;
+    }
+    // the letters' weight (their field's bias), a soft halo of the other value under them
+    const bool light = ugl::luma(lerp(lineInk, c_.bridge.ink, b)) > 0.3f;
+    out.look.weight = bias * 0.25f;
+    out.look.halo = ugl::toSrgb(light ? vec3(0.015f, 0.012f, 0.01f) : lerp(pal.skyLow, vec3(1.f), 0.5f));
+    out.look.haloA = (light ? 0.42f : 0.35f) * (1.f - b);
+    out.look.haloW = 0.075f;
+    out.look.haloPow = 1.5f;
+    out.lettering = &HALO_UNDER;
+    // the post's dim and fade in, which the lettering was under
+    out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }
 
 // =====================================================================================================
@@ -769,7 +620,8 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, 1);
     }
-    drawHud(f.hud, c_.bare ? std::vector<HudRect>() : f.panels);
+    drawHud(c_.bare ? std::vector<HudRect>() : f.panels);
+    fade_ = saturate(f.fade);
     glDisable(GL_BLEND);
 
     // ---- Post.
