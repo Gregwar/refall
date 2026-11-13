@@ -3,6 +3,7 @@
 // row, each song at a velocity fixed by the campaign data, data/campaign.tsv) and the player's campaign progress
 // (stages cleared and best scores, per difficulty, saved in the user data folder).
 #include <map>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -43,8 +44,9 @@ private:
 // Progress, per stage, song and difficulty: a song is "beaten" once survived to its end in a campaign run (started
 // from any song of its stage), with its best score (the points scored during that song), the lines cleared during that
 // best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
-// its songs were all survived in one run started from its first song. Stage N + 1 is unlocked once stage N is
-// cleared on any difficulty (stage 1 always is), or everything with --unlock.
+// its songs were all survived in one run started from its first song. Stage N + 1 is unlocked on a difficulty once
+// stage N is cleared on it or on a harder one (stage 1 always is; reaching a stage on EXPERT opens it on NORMAL and
+// EASY too, not done there but playable), or everything with --unlock.
 // The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
 // beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
@@ -59,7 +61,12 @@ public:
     void unlockAll() { unlockAll_ = true; }
     bool allUnlocked() const { return unlockAll_; }
 
-    bool unlocked(int stage) const { return unlockAll_ || stage <= reach_ || clearedAny(stage - 1); }
+    bool unlocked(int stage, int diff) const {
+        if (unlockAll_ || stage <= reach_) return true;
+        for (int d = std::max(0, diff); d < DIFF_COUNT; d++)
+            if (cleared(stage - 1, d)) return true;
+        return false;
+    }
     bool cleared(int stage, int diff) const;
     bool clearedAny(int stage) const;
     bool beaten(int stage, int song, int diff) const;

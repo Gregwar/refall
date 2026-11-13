@@ -105,7 +105,7 @@ void Menu::restore(const Place& p, bool difficulties) {
     if (p.stage >= 0 && camp_ && camp_->size() > 0) {
         int last = 0; // the last unlocked stage: the saved one if it still is, else that one
         for (int s = 0; s < camp_->size(); s++)
-            if (!progress_ || progress_->unlocked(s)) last = s;
+            if (!progress_ || progress_->unlocked(s, diff_)) last = s;
         stage_ = std::min(p.stage, last);
         song_ = 0;
         row_ = 1;
@@ -300,7 +300,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             } else if (!petal_) {
                 stage_ = std::clamp(stage_ + dx, 0, n - 1);
                 if (dy < 0) row_ = 0;
-                const bool unlocked = progress_ && progress_->unlocked(stage_);
+                const bool unlocked = progress_ && progress_->unlocked(stage_, diff_);
                 if (ok && unlocked) { // the whole stage, from its first song: a real run
                     ch.kind = Choice::PLAY_CAMPAIGN;
                     ch.difficulty = diff_;
@@ -361,7 +361,7 @@ Menu::SongView Menu::songView() const {
     v.stage = stage_;
     v.song = song_;
     v.songs = (int)camp_->stages()[stage_].songs.size();
-    v.locked = progress_ && !progress_->unlocked(stage_);
+    v.locked = progress_ && !progress_->unlocked(stage_, diff_);
     v.beaten = progress_ && progress_->beaten(stage_, song_, diff_);
     v.best = progress_ ? progress_->best(stage_, song_, diff_) : 0;
     v.lines = progress_ ? progress_->lines(stage_, song_, diff_) : -1;
