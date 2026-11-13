@@ -18,8 +18,6 @@ uniform vec3 uPieceA[7], uPieceB[7];
 uniform vec3 uOrgA[3], uOrgB[3];       // organisms: body, rim, organelles
 uniform float uStain, uStainSeed;      // the drop's stain soaked in (0..1)
 uniform float uDark, uSlow;            // dark-field amount, slow motion (silver dark-field)
-uniform float uOrganic;                // SPECIMEN: no eyepiece, lumps of tissue on a dark bench, seen through loupes
-uniform vec3 uBack[2];                 // SPECIMEN's bench: center, edge
 float hash12(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 vec3 hash33(vec3 p) {
     p = fract(p * vec3(0.1031, 0.1030, 0.0973));
@@ -63,19 +61,6 @@ uniform vec2 uDisk;          // the field's center y, radius
 uniform float uTime, uIllum, uSwell, uSeed, uAA, uReticle;
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    if (uOrganic > 0.5) {
-        // SPECIMEN: a dark, damp bench under one soft lamp; the well a darker backing, its walls fine pale lines
-        float rb = length((w - vec2(0.0, 1.5)) / vec2(uView.z * 1.05, uView.w * 1.35));
-        vec3 b = mix(uBack[0], uBack[1], smoothstep(0.0, 1.0, rb));
-        b *= 0.9 + 0.14 * fbm(w * 0.16 + vec2(uSeed, 0.0)) + 0.06 * uSwell;
-        b *= 0.94 + 0.06 * (uIllum - 0.93) / 0.075;
-        float sw = sdBox(w, vec2(5.12, 10.12));
-        b = mix(b, b * 0.42, (1.0 - smoothstep(-0.2, 0.35, sw)) * 0.85);
-        float edge = (1.0 - smoothstep(-uAA, uAA, abs(sw) - 0.012)) * step(w.y, 10.0) * uReticle;
-        b = mix(b, silver(mix(uPieceA[0], vec3(1.0), 0.6)) * 0.5, edge * 0.35);
-        frag = vec4(silver(b), 0.0);
-        return;
-    }
     vec2 cw = w - vec2(0.0, uDisk.x);
     float r = length(cw) / uDisk.y;
     float k = stainK(w);
@@ -386,7 +371,6 @@ void main() {
     float swell = 1.0, rc = RC;
     if (kind == 2) { swell = 1.0 + 0.14 * t; rc = mix(RC, 0.4, smoothstep(0.0, 0.7, t)); }
     vec2 hb = vec2(0.5 - GAP);
-    if (uOrganic > 0.5) rc = mix(0.17, 0.4, kind == 2 ? smoothstep(0.0, 0.7, t) : 0.0);
     float d = (sdBox(p / swell, hb - rc) - rc) * swell;
     if (d > aa) discard;
     float cov = 1.0 - smoothstep(-aa, aa, d);
@@ -427,42 +411,6 @@ void main() {
     float inner = exp(-max(in_ - wallW, 0.0) / 0.025) * step(wallW, in_);
     float tl = smoothstep(-0.5, 0.5, -p.x * 0.6 + p.y * 0.8);
     vec3 field = uFieldA[0];
-    vec3 col;
-    if (uOrganic > 0.5) {
-        // SPECIMEN: a plump, glossy lump of tissue, its fine cells showing through the skin
-        vec2 q = p * 4.6 + vec2(seed * 31.0, seed * 17.0);
-        vec2 ip = floor(q), fp = fract(q);
-        float d1 = 8.0, d2 = 8.0, hn = 0.0;
-        vec2 cc = vec2(0.0);
-        for (int j = -1; j <= 1; j++)
-            for (int i = -1; i <= 1; i++) {
-                vec2 g = vec2(i, j);
-                vec3 h = hash33(vec3(ip + g, 7.0));
-                vec2 o = g + 0.15 + 0.7 * h.xy - fp;
-                float l = dot(o, o);
-                if (l < d1) { d2 = d1; d1 = l; hn = h.z; cc = o; }
-                else if (l < d2) d2 = l;
-            }
-        float edgeC = sqrt(d2) - sqrt(d1);
-        const float e = 0.01;
-        vec2 gd = vec2(sdBox(p + vec2(e, 0.0), hb - rc) - sdBox(p - vec2(e, 0.0), hb - rc),
-                       sdBox(p + vec2(0.0, e), hb - rc) - sdBox(p - vec2(0.0, e), hb - rc));
-        vec2 ng = length(gd) > 1e-5 ? normalize(gd) : vec2(0.0);
-        vec2 L = normalize(vec2(-0.6, 0.8));
-        float dome = smoothstep(0.0, 0.17, in_);
-        float rim = 1.0 - dome;
-        vec3 o = c * (0.72 + 0.22 * dome) * (1.0 + 0.4 * rim * dot(ng, L)) * (1.0 + 0.16 * dot(p, L));
-        o *= 0.93 + 0.12 * hn;
-        float px = aa * 4.6;
-        o *= 1.0 - 0.2 * (1.0 - smoothstep(0.03, 0.03 + px * 2.0, edgeC)) * dome;
-        o *= 1.0 - 0.16 * (1.0 - smoothstep(0.1, 0.1 + px * 2.0, sqrt(d1))) * step(0.5, hn) * dome;
-        o *= mix(0.5, 1.0, smoothstep(0.0, 0.035, in_));
-        float spec = pow(clamp(1.0 - length((p - vec2(-0.15, 0.17)) / vec2(0.2, 0.13)), 0.0, 1.0), 2.0);
-        o += mix(c, vec3(1.0), 0.7) * (spec * 0.32 * dome + 0.22 * exp(-in_ / 0.018) * max(dot(ng, L), 0.0));
-        o = mix(o, vec3(1.0), flash * 0.3);
-        col = silver(o * uGlow);
-        if (kind == 3) col *= mix(0.8, 1.0, proto);
-    } else {
     // the pool: clear in the middle, the stain fading in toward the wall
     float pool = live * smoothstep(0.1, 0.24, in_);
     // bright-field: the stain, a little denser along the wall, a darker wall
@@ -478,8 +426,7 @@ void main() {
     df += gcol * inner * (0.15 + 0.3 * tl) * proto;
     df = mix(df, gcol * (1.2 + 0.6 * flash), wall);
     df *= uGlow;
-    col = mix(bf, df, uDark);
-    }
+    vec3 col = mix(bf, df, uDark);
     float a = cov * vB.w;
     if (kind == 2) {
         // bursting: the wall breaks open, the cell rounds and its content disperses
@@ -496,158 +443,6 @@ void main() {
     }
     if (a <= 0.002) discard;
     frag = vec4(col * a, a);
-}
-)";
-
-// ---------------------------------------------------------------- SPECIMEN's loupes (instanced)
-// a: x, y, radius, mode (0 the view with its bezel and shadow, 1 the bezel alone, over the organism). b: piece type,
-// seed, alpha, a pool (the cell's organism lives in it). c: pan x, y (the slide drifting under the loupe), the tissue
-// (1; 0 the bare bench, an organism crawling over it), -.
-inline const char* LENS_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec4 aA;
-layout(location = 2) in vec4 aB;
-layout(location = 3) in vec4 aC;
-layout(location = 4) in vec4 aD;
-uniform mat4 uVP;
-out vec2 vL;
-flat out vec4 vA, vB, vC;
-void main() {
-    vL = aPos * 1.3;
-    vA = aA; vB = aB; vC = aC;
-    gl_Position = uVP * vec4(aA.xy + vL * aA.z, 0.0, 1.0);
-}
-)";
-inline const char* LENS_FS = R"(#version 330 core
-in vec2 vL;
-flat in vec4 vA, vB, vC;
-out vec4 frag;
-uniform float uTime;
-void main() {
-    vec2 p = vL;
-    float r = length(p);
-    float aa = max(fwidth(r), 1e-4);
-    int mode = int(vA.w + 0.5);
-    int type = int(vB.x + 0.5);
-    float seed = vB.y, alpha = vB.z, live = vB.w;
-    const float R0 = 0.955, R1 = 1.04;   // the bezel
-    float bez = smoothstep(R0 - aa, R0 + aa, r) * (1.0 - smoothstep(R1 - aa, R1 + aa, r));
-    vec3 bc = mix(vec3(0.05, 0.055, 0.06), vec3(0.22, 0.23, 0.24), smoothstep(0.3, -0.6, p.y / max(r, 1e-3)));
-    bc += vec3(0.5) * exp(-abs(r - R0 - 0.012) / 0.006) * 0.35;
-    if (mode == 1) {
-        float a = bez * alpha;
-        if (a <= 0.002) discard;
-        frag = vec4(silver(bc) * a, a);
-        return;
-    }
-    // the shadow it casts on the bench
-    float sh = (1.0 - smoothstep(R1, 1.28, length(p + vec2(-0.03, 0.06)))) * 0.55;
-    vec3 col = vec3(0.0);
-    float a = sh;
-    if (r < R0 + aa) {
-        // the slide under the loupe: the block's tissue, magnified, in bright-field
-        vec2 w = vA.xy + p * vA.z;
-        float k = stainK(w);
-        vec3 c = pieceCol(type, k), field = mix(uFieldA[0], uFieldB[0], k);
-        vec2 q = p * 2.6 + vC.xy + vec2(seed * 53.0, seed * 29.0);
-        vec2 ip = floor(q), fp = fract(q);
-        float d1 = 8.0, d2 = 8.0, hn = 0.0;
-        vec2 cc = vec2(0.0);
-        for (int j = -1; j <= 1; j++)
-            for (int i = -1; i <= 1; i++) {
-                vec2 g = vec2(i, j);
-                vec3 h = hash33(vec3(ip + g, 3.0));
-                vec2 o = g + 0.2 + 0.6 * h.xy - fp;
-                float l = dot(o, o);
-                if (l < d1) { d2 = d1; d1 = l; hn = h.z; cc = o; }
-                else if (l < d2) d2 = l;
-            }
-        float edge = (sqrt(d2) - sqrt(d1)) * 0.5;   // to the cell's wall (cells about 0.8 across)
-        float px = aa * 2.6;
-        // cytoplasm: a light stain, denser toward the wall
-        vec3 t = mix(field, c, 0.2 + 0.1 * hn);
-        t = mix(t, mix(field, c, 0.55), exp(-edge / 0.07));
-        // plastids streaming slowly along the wall
-        float ang = atan(-cc.y, -cc.x);
-        float u = ang / 6.2832 * 9.0 + uTime * 0.05 * (hn < 0.5 ? 1.0 : -1.0) + hn * 7.0;
-        float du = (fract(u) - 0.5) * 0.6, dv = edge - 0.075;
-        float gr = (1.0 - smoothstep(0.03 - px, 0.03 + px, length(vec2(du * length(cc) * 0.7, dv)))) * step(0.25, fract(u * 0.37 + hn * 3.0));
-        t = mix(t, mix(field, c, 0.9) * 0.75, gr * 0.85);
-        // the nucleus, in most cells, with its nucleolus
-        vec2 nc = cc + vec2(hn - 0.5, fract(hn * 7.0) - 0.5) * 0.25;
-        float nd = length(nc) - 0.13;
-        float nuc = (1.0 - smoothstep(-px, px, nd)) * step(0.25, hn);
-        t = mix(t, mix(field, c, 0.7) * 0.8, nuc * 0.9);
-        t = mix(t, c * 0.35, (1.0 - smoothstep(-px, px, length(nc + vec2(0.03, -0.02)) - 0.04)) * step(0.25, hn) * 0.9);
-        t = mix(t, mix(field, c, 0.95) * 0.65, (1.0 - smoothstep(0.0, px * 1.5, abs(nd) - 0.008)) * step(0.25, hn) * 0.6);
-        // the walls: a fine double line
-        float wl = 1.0 - smoothstep(0.012, 0.012 + px * 1.5, edge);
-        t = mix(t, c * 0.42, wl);
-        // the organism's pool: a clear, rounded cell in the middle (the organism is drawn over it)
-        float pr = length(p) - 0.62 - 0.03 * sin(atan(p.y, p.x) * 3.0 + seed * 9.0 + uTime * 0.2);
-        float pool = live * (1.0 - smoothstep(-px, px, pr));
-        t = mix(t, mix(field, c, 0.1), pool);
-        t = mix(t, c * 0.42, live * (1.0 - smoothstep(0.0, px * 1.5, abs(pr) - 0.014)));
-        t = mix(t, mix(field, c, 0.4), live * exp(-max(-pr, 0.0) / 0.05) * step(pr, 0.0) * 0.5);
-        // the bare bench (an organism crawling out over it): a wet film, fine debris passing by
-        if (vC.z < 0.5) {
-            vec2 bq = p * 2.6 + vC.xy;
-            vec3 bt = mix(field, c, 0.1 + 0.08 * fbm(bq * 0.5)) * (0.9 + 0.1 * fbm(bq * 0.7));
-            vec2 mq = bq * 1.6, mc = floor(mq), mf = fract(mq);
-            float hm = hash12(mc + seed * 13.0);
-            vec2 mo = vec2(hash12(mc * 1.3 + 2.0), hash12(mc * 2.1 + 5.0)) * 0.6 + 0.2;
-            float mote = step(0.62, hm) * (1.0 - smoothstep(0.0, px * 1.7, length(mf - mo) - 0.03 - 0.06 * fract(hm * 9.0)));
-            float ring = step(0.62, hm) * (1.0 - smoothstep(0.0, px * 1.5, abs(length(mf - mo) - 0.03 - 0.06 * fract(hm * 9.0)) - 0.006));
-            t = mix(bt, mix(field, c, 0.35), mote * 0.5);
-            t = mix(t, c * 0.45, ring * 0.6);
-        }
-        // the loupe's edge: a darker vignette and a faint fringe
-        t *= mix(1.0, 0.7, smoothstep(0.55, R0, r));
-        t += vec3(0.25, 0.35, 0.7) * exp(-abs(r - R0 + 0.03) / 0.02) * 0.06;
-        float inA = 1.0 - smoothstep(R0 - aa, R0 + aa, r);
-        col = silver(t) * inA;
-        a = mix(a, 1.0, inA);
-    }
-    col = mix(col, silver(bc), bez);
-    a = max(a, bez);
-    a *= alpha;
-    if (a <= 0.002) discard;
-    frag = vec4(col * alpha, a);
-}
-)";
-// A fine line from a loupe to the block it looks into (a: from, to; b: width, alpha), in world units.
-inline const char* LINE_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec4 aA;
-layout(location = 2) in vec4 aB;
-layout(location = 3) in vec4 aC;
-layout(location = 4) in vec4 aD;
-uniform mat4 uVP;
-uniform float uAA;
-out vec2 vS;
-flat out float vLen, vW, vAl;
-void main() {
-    vec2 a = aA.xy, b = aA.zw, d = b - a;
-    float len = max(length(d), 1e-4);
-    vec2 t = d / len, n = vec2(-t.y, t.x);
-    float hw = aB.x * 0.5 + uAA * 1.5;
-    vec2 s = vec2((aPos.x * 0.5 + 0.5) * (len + 2.0 * hw) - hw, aPos.y * hw);
-    vS = s;
-    vLen = len; vW = aB.x; vAl = aB.y;
-    gl_Position = uVP * vec4(a + t * s.x + n * s.y, 0.0, 1.0);
-}
-)";
-inline const char* LINE_FS = R"(#version 330 core
-in vec2 vS;
-flat in float vLen, vW, vAl;
-out vec4 frag;
-uniform float uAA;
-uniform vec3 uCol;
-void main() {
-    float d = length(vec2(vS.x - clamp(vS.x, 0.0, vLen), vS.y)) - vW * 0.5;
-    float a = (1.0 - smoothstep(-uAA * 0.7, uAA * 0.7, d)) * vAl;
-    if (a <= 0.002) discard;
-    frag = vec4(uCol * a, a);
 }
 )";
 
