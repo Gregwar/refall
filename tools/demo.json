@@ -67,7 +67,7 @@
      "card": {"text": "Discover many universes", "bars": 2, "enabled": false},
      "grid": "bar", "fill": true,
      "shots": [{"u": "lanterns", "fade_in": "1bar"}, {"u": "origami"}, {"u": "rainy"}, {"u": "sonar"},
-               {"u": "microscope"}]},
+               {"u": "specimen"}]},
 
     // a bar before the first drop, a universe that reacts to it: the drop lands on it
     {"id": "listen", "end": "drop:1 + 2bars",
