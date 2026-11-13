@@ -941,7 +941,7 @@ std::vector<HudText> App::buildHud(float dt) {
     if (track_) {
         float a = trackAge_ < 7.f ? smoothstepf(0, 1, trackAge_) : 0.35f;
         const Footprint& fp = track_->analysis.fp;
-        hud.push_back({asciiFold(track_->title), 28 * s, 24 * s, 2.2f * s, a, false, false, HUD_TITLE});
+        hud.push_back({displayTitle(track_->title), 28 * s, 24 * s, 2.2f * s, a, false, false, HUD_TITLE});
         char info[128];
         std::snprintf(info, sizeof(info), "%.0f BPM   %s", fp.bpm, keyName(fp.key, fp.minor).c_str());
         hud.push_back({info, 28 * s, 50 * s, 1.5f * s, a * 0.7f, true, false, HUD_INFO});
@@ -993,7 +993,7 @@ std::vector<HudText> App::buildHud(float dt) {
     }
     skipToast_ = std::max(0.f, skipToast_ - dt);
     if (wantSkip_ || skipToast_ > 0)
-        hud.push_back({wantSkip_ ? "NEXT SONG LOADING: " + asciiFold(lib_.loadingTitle()) : "NOW: " + (track_ ? asciiFold(track_->title) : std::string()), -28 * s, 44 * s, 1.4f * s,
+        hud.push_back({wantSkip_ ? "NEXT SONG LOADING: " + displayTitle(lib_.loadingTitle()) : "NOW: " + (track_ ? displayTitle(track_->title) : std::string()), -28 * s, 44 * s, 1.4f * s,
                        wantSkip_ ? 0.8f : std::min(0.8f, skipToast_), true, false, HUD_HINT});
 
     // Seek feedback: song time and the section the song is in.
