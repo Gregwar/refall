@@ -773,16 +773,20 @@ vec3 SkyWhaleUniverse::travelDir(float G) const {
     const vec3 c = pathPos(G);
     const vec3 ctr = orbitCenter(c);
     const double rho = std::max(1.0, (double)length(c - ctr));
+    // (only the parts of the cruise that advanceCruise moves: on the way out to the Moon and over it, no longer the
+    // river nor the orbit around the Earth. Each of those still shifts the place, about the axis: over the Moon,
+    // across the meridian it glides along, which turned its heading some 45 degrees off the way it actually goes)
+    const float kM = lunarK(G);
+    const float wl = legK(kM);
+    const float kEarth = 1.f - wl;
     Cruise a = cr_, b = cr_;
     a.pondA += 0.02f; b.pondA -= 0.02f;
-    a.riverC -= 0.02f * L; b.riverC += 0.02f * L;
-    a.orbitA -= 0.02 * L / rho; b.orbitA += 0.02 * L / rho;
+    a.riverC -= 0.02f * L * kEarth; b.riverC += 0.02f * L * kEarth;
+    a.orbitA -= 0.02 * L / rho * kEarth; b.orbitA += 0.02 * L / rho * kEarth;
     a.moonA -= 0.02f * L / (float)R_LUNAR; b.moonA += 0.02f * L / (float)R_LUNAR;
     vec3 d = pathPosC(G, b) - pathPosC(G, a);
     const vec3 up = normalize(c - ctr);
     // on the way out to the Moon: toward it (its path's own direction with the growth, square to its up)
-    const float kM = lunarK(G);
-    const float wl = legK(kM);
     if (wl > 0.f) {
         vec3 dg = pathPos(G + 0.01f) - pathPos(G - 0.01f);
         dg = dg - up * dot(dg, up);
@@ -1158,9 +1162,11 @@ void SkyWhaleUniverse::updateCamera(float dt) {
     // the finale: low over the Moon, looking ahead along the ground
     const float kLc = smoothstepf(16.9f, 17.25f, G);
     const float pitch = lerpf(keyed(G, K, PITCH, n), -24.f, kLc) * PI / 180.f;
-    // (on the way out the camera looks partly ahead: the Moon, straight ahead of the whale, in the free band right of
-    // the well, growing in place; over the Moon a little ahead along its glide)
-    const float psi = lerpf(lerpf(keyed(G, K, PSI, n), 1.f, legK(lunarK(G))), -0.4f, kLc) + 0.03f * std::sin(time_ * 0.021f);
+    // (psi > 0 looks ahead along the creature's heading, psi < 0 back toward its face: on the way out the camera looks
+    // partly ahead: the Moon, straight ahead of the whale, in the free band right of the well, growing in place; over
+    // the Moon a little ahead along its glide, so the whale glides on into the scene, its head where it goes, the ground
+    // flowing back under it; looking back there, it faced the camera while the ground slid by sideways)
+    const float psi = lerpf(lerpf(keyed(G, K, PSI, n), 1.f, legK(lunarK(G))), 0.3f, kLc) + 0.03f * std::sin(time_ * 0.021f);
     // (the world is drawn mirrored: the creature sits in the free band left of the HUD's left column)
     const float sy = lerpf(keyed(G, K, SY, n), 0.1f, kLc);
     tanH_ = std::tan(27.f * PI / 180.f);
