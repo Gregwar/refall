@@ -144,6 +144,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A variant's colors (linear RGB) and light (floats only: palettes are blended float by float).
     struct Palette {
@@ -218,27 +220,16 @@ private:
     std::vector<SpriteInst> sprites_;
     void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font light_, medium_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, float alpha, float halo = 0.f);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const std::vector<HudRect>& panels);
+    float fade_ = 1.f; // the frame's fade in (the post's, the lettering's too)
+    text::Lettering lettering_[2]; // its halo: the usual one, the celebrations' and the dialogs' fuller one
 
     // ---- GL.
     GLuint progSky_ = 0, progBld_ = 0, progGlow_ = 0, progComp_ = 0, progBright_ = 0, progBlur_ = 0, progSprite_ = 0,
-           progVeil_ = 0, progCell_ = 0, progShape_ = 0, progText_ = 0, progPost_ = 0;
+           progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, meshVbo_ = 0, bldVao_ = 0, bldVbo_ = 0, glowVao_ = 0, glowVbo_ = 0,
-           spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLsizei meshCount_ = 0, bldCount_ = 0;
     ugl::Target worldT_, bloomA_, bloomB_, sceneT_;
     mat4 vp_;

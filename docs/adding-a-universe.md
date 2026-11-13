@@ -126,10 +126,14 @@ shot's bot clears (exact stills).
    lower for a world with a strong identity that would feel repetitive if it came back often (DIORAMA is 0.3).
 3. Implement the interface. The universe owns all its GL resources (created in `init`, freed in its destructor)
    and draws the whole frame into the framebuffer `render` is given (not necessarily the window: during a
-   transition it is a texture): world, well, stack, piece, ghost, previews, bonus gauge, effects, and the HUD text
-   (`Frame::hud`, `Frame::panels`) in its own typography (`ugl::hudLeft` resolves the alignment; each line's
-   `HudRole` says what it is, so a universe can space, weigh or extend each kind its own way: SUMI adds the
-   level's name after its own, DIORAMA sets them over the scene on a feathered halo).
+   transition it is a texture): world, well, stack, piece, ghost, previews, bonus gauge and effects. The HUD text
+   is lettered by the host on top of that frame (`src/text.hpp`): return true from `hostText()` and style each line
+   in `hudLine(h, out)` (its spans from `h.text` at the size `h.scale` gives: fonts, case, tracking, inks; its
+   `text::Look`: halo, glow, outline, shadow, weight, slant; a plate; for a lettering of the medium, a
+   `text::Lettering` GLSL function and a blend). Each line's `HudRole` says what it is, so a universe can space,
+   weigh or extend each kind its own way (SUMI adds the level's name after its own, DIORAMA sets them on a
+   feathered shadow). Sizes and offsets derive from `h` only: the title card letters the same lines big in the
+   middle and glides them into their corners. A world that makes room for the text reads `Frame::hudBoxes`.
    - Assets: every file in `src/universes/<id>/embed/` is compiled in as a byte array, to include as
      `"universes/<id>/<file>.inc"`.
    - `setSong` picks the variant (`look.variant >= 0` forces it; avoid `look.avoidVariant`, the one on screen

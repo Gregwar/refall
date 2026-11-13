@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 
+#include "text.hpp"
 #include "universe.hpp"
 
 class VectorUniverse : public Universe {
@@ -24,6 +25,8 @@ public:
     int variant() const override { return basePhos_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- Beams.
@@ -45,10 +48,7 @@ private:
     void buildWorld(const MusicState& music);
     void buildBoard(const Game& game, float dt);
     void buildFx(float dt);
-    void buildHud(const std::vector<HudText>& hud);
     void glyph(const vec3& c, float half, int type, float inten, float hot, int layer, bool outline = true);
-    void strokeText(const std::string& s, float x, float y, float scale, float inten, float hot);
-    static float textWidth(const std::string& text, float scale);
 
     // Debris: a free beam segment (line clears, game over), spinning in its plane and drifting apart.
     struct Debris { vec3 p, v, half; float spin, life, maxLife, delay, inten, hot; };
@@ -128,5 +128,9 @@ private:
     float overT_ = -1.f; // seconds since the top out (-1: playing)
     float gaugeShown_ = 0, readyFlash_ = 0;
     Bridge bridge_;
+    // the HUD (lettered by the host, hudLine): the tube as last composited (its phosphor, its gain, how much of
+    // the picture is on: the fade, the power-off)
+    vec3 hudPhos_{0.3f, 1.f, 0.4f};
+    float hudGain_ = 1.f, hudOn_ = 1.f;
     Rng rng_{12345};
 };

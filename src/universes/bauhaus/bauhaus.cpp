@@ -1566,17 +1566,25 @@ void BauhausUniverse::drawBoard(const Game& g) {
 // The HUD
 // =====================================================================================================
 
-// Outfit on the paper, lowercase in the Bauhaus manner: labels light and spaced, each after a small form (a square,
-// a disc, a triangle in the primaries), values medium, the section in the signature color after a disc; the bonus
-// gauge a fine ring charged in the signature color.
-void BauhausUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+namespace {
+// Outfit's cap heights (em): the HUD's sizes are cap heights.
+constexpr float CAP_MED = 0.556f, CAP_LIGHT = 0.546f;
+// A label's or the section's small form before it: its size (cap height of the line) and its drop from the anchor.
+float hudCap(const HudText& h) { return h.scale * 12.f * (h.role == HUD_SECTION ? 0.6f : 0.46f); }
+} // namespace
+
+// The panels, the bonus gauge (a fine ring charged in the signature color) and the small forms before the section
+// (a disc in the signature color) and each label (a square, a disc, a triangle in the primaries), placed by the
+// lines as the host letters them (hudLine).
+void BauhausUniverse::drawHud(const Frame& f) {
+    const Game& g = f.game;
     const VariantDef& V = VARIANTS[variant_];
     const float s = height_ / 1080.f;
     const vec3 ink = ink_, ground = ground_, accent = hex(V.col[0]);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
-    if (!panels.empty() && !bare_) {
-        for (const HudRect& r : panels) {
+    if (!f.panels.empty() && !bare_) {
+        for (const HudRect& r : f.panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : ground;
             rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
         }
@@ -1597,93 +1605,61 @@ void BauhausUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         flushShapes();
     }
 
-    std::vector<float> q;
     int labelIdx = 0;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        float left = 0.f;
-        // cap: cap height in pixels, dy: shift of the top of the caps from the anchor
-        auto place = [&](const Font& f, const std::string& text, float cap, float track, float dy = 0.f) {
-            const float w = capWidth(f, text, track) * cap;
-            left = ugl::hudLeft(h, w, width_);
-            textQuads(f, text, left, h.y + dy + cap, cap, track, 0.f, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(light_, lower(h.text), base * 0.55f, 0.06f, base * 0.1f);
-            drawText(light_, q, ink, saturate(0.35f + h.alpha * 1.4f) * vis);
-            continue;
-        case HUD_SECTION: {
-            const float cap = base * 0.6f;
-            place(med_, lower(h.text), cap, 0.04f, base * 0.05f);
+    for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+        const HudText& h = f.hud[i];
+        if (h.alpha <= 0.01f || h.text.empty()) continue;
+        const vec4& box = (*f.hudBoxes)[i]; // its left end, its cap line
+        const float cap = hudCap(h), alpha = saturate(h.alpha) * vis;
+        if (h.role == HUD_SECTION) {
             const float a = saturate(0.4f + h.alpha * 1.5f) * vis;
-            shape(K_DISC, left - cap * 0.75f, h.y + base * 0.05f + cap * 0.62f, cap * 0.32f, cap * 0.32f, 0.f, accent, a, 0.f, 0.f, 4.f);
-            flushShapes();
-            drawText(med_, q, accent, a);
-            continue;
-        }
-        case HUD_TITLE:
-            place(med_, lower(h.text), base * 0.62f, 0.f, base * 0.02f);
-            drawText(med_, q, ink, saturate(h.alpha * 1.6f) * vis);
-            continue;
-        case HUD_INFO:
-            place(light_, lower(h.text), base * 0.5f, 0.05f, base * 0.1f);
-            drawText(light_, q, ink, saturate(alpha * 1.3f) * 0.85f);
-            continue;
-        case HUD_LABEL: {
-            const float cap = base * 0.46f;
-            place(light_, lower(h.text), cap, 0.16f, base * 0.12f);
+            shape(K_DISC, box.x - cap * 0.75f, box.y + cap * 0.62f, cap * 0.32f, cap * 0.32f, 0.f, accent, a, 0.f, 0.f, 4.f);
+        } else if (h.role == HUD_LABEL) {
+            // a square, a disc, a triangle in turn
             const float a = saturate(alpha * 1.3f) * 0.85f;
-            // a small form before the label: a square, a disc, a triangle in turn
             const int k = labelIdx++ % 3;
             const vec3 fc = hex(V.col[k == 0 ? 0 : k == 1 ? 2 : 1]);
-            const float bx = left - cap * 0.95f, by = h.y + base * 0.12f + cap * 0.55f, r = cap * 0.36f;
+            const float bx = box.x - cap * 0.95f, by = box.y + cap * 0.55f, r = cap * 0.36f;
             if (k == 0) shape(K_BOX, bx, by, r, r, 0.f, fc, a);
             else if (k == 1) shape(K_DISC, bx, by, r * 1.1f, r * 1.1f, 0.f, fc, a, 0.f, 0.f, 4.f);
             else shape(K_TRI, bx, by, r * 1.15f, r, 0.f, fc, a, 0.f);
-            flushShapes();
-            drawText(light_, q, ink, a);
-            continue;
         }
-        case HUD_VALUE:
-            place(med_, h.text, base * 0.64f, 0.f, base * 0.02f);
-            drawText(med_, q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(med_, lower(h.text), base * 0.55f, 0.02f);
-            drawText(med_, q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(med_, h.text, base * 0.55f, 0.f);
-            drawText(med_, q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(med_, lower(h.text), base * 0.74f, 0.f, -base * 0.05f);
-            drawText(med_, q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(light_, h.text, base * 0.5f, 0.04f);
-            drawText(light_, q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(med_, lower(h.text), base * 0.62f, 0.f);
-                drawText(med_, q, ink, alpha);
-            } else {
-                place(light_, h.text, base * 0.5f, 0.03f);
-                drawText(light_, q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(light_, h.text, base * 0.5f, 0.02f);
-            drawText(light_, q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+    }
+    flushShapes();
+}
+
+// Outfit on the paper, lowercase in the Bauhaus manner: labels light and spaced, values medium, the section in the
+// signature color; plain ink, no effect (print on paper). The sizes are cap heights, the spacing in caps.
+void BauhausUniverse::hudLine(const HudText& h, text::Line& out) {
+    const VariantDef& V = VARIANTS[variant_];
+    text::Font* med = text::font(FONT_MED);
+    text::Font* light = text::font(FONT_LIGHT);
+    const float s = height_ / 1080.f, base = h.scale * 12.f;
+    const vec3 ink = ink_, accent = hex(V.col[0]);
+    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+    const float alpha = saturate(h.alpha) * vis;
+    // a run: its cap height in pixels and its spacing in caps, its cap line moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float cap, float track, const vec3& c, float a, float dy = 0.f) {
+        const float capEm = f == med ? CAP_MED : CAP_LIGHT;
+        out.add(t, f, cap / capEm, c, track * capEm, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(light, text::lower(h.text), base * 0.55f, 0.06f, ink, saturate(0.35f + h.alpha * 1.4f) * vis, base * 0.1f); break;
+    case HUD_SECTION: put(med, text::lower(h.text), hudCap(h), 0.04f, accent, saturate(0.4f + h.alpha * 1.5f) * vis, base * 0.05f); break;
+    case HUD_TITLE: put(med, text::lower(h.text), base * 0.62f, 0.f, ink, saturate(h.alpha * 1.6f) * vis, base * 0.02f); break;
+    case HUD_INFO: put(light, text::lower(h.text), base * 0.5f, 0.05f, ink, saturate(alpha * 1.3f) * 0.85f, base * 0.1f); break;
+    case HUD_LABEL: put(light, text::lower(h.text), hudCap(h), 0.16f, ink, saturate(alpha * 1.3f) * 0.85f, base * 0.12f); break;
+    case HUD_VALUE: put(med, h.text, base * 0.64f, 0.f, ink, alpha, base * 0.02f); break;
+    case HUD_NOTICE: put(med, text::lower(h.text), base * 0.55f, 0.02f, accent, alpha); break;
+    case HUD_KEY: put(med, h.text, base * 0.55f, 0.f, ink, alpha); break;
+    case HUD_TOAST: put(med, text::lower(h.text), base * 0.74f, 0.f, ink, alpha, -base * 0.05f); break;
+    case HUD_TOAST_SUB: put(light, h.text, base * 0.5f, 0.04f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(med, text::lower(h.text), base * 0.62f, 0.f, ink, alpha);
+        else put(light, h.text, base * 0.5f, 0.03f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(light, h.text, base * 0.5f, 0.02f, h.accent ? accent : ink, alpha); break;
     }
 }
 
@@ -1749,11 +1725,14 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
     if (!bare_) {
         float top = 9.6f, bottom = 8.6f;
         const float x0 = px(-11.5f, 0.f).x;
-        for (const HudText& h : f.hud) {
+        for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+            const HudText& h = f.hud[i];
+            const vec4& box = (*f.hudBoxes)[i]; // the line as the host letters it
             if (h.text.empty() || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB || h.role == HUD_DIALOG) continue;
-            if (ugl::hudLeft(h, 1.f, width_) > x0) continue;
+            if (box.x > x0) continue;
             const float base = h.scale * 12.f;
-            const float yTop = viewC_.y + (height_ * 0.5f - h.y) / unitPx_, yBot = yTop - base * 0.9f / unitPx_;
+            const float yTop = viewC_.y + (height_ * 0.5f - h.y) / unitPx_;
+            const float yBot = viewC_.y + (height_ * 0.5f - std::max(box.w, h.y + base * 0.9f)) / unitPx_;
             if (yBot > 4.f) top = std::min(top, yBot - 0.5f);
             else if (yTop < -4.f) bottom = std::min(bottom, -yTop - 0.5f);
         }
@@ -1924,12 +1903,12 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
         std::vector<vec4> boxes;
         const vec2 a = px(-11.5f, 20.f), b = px(11.5f, -20.f);
         add(a.x, a.y, b.x, b.y, 1.f + 50.f * unitPx_ / 45.f * lit_[3], VEIL);
-        for (const HudText& h : f.hud) {
+        for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+            const HudText& h = f.hud[i];
             if (h.alpha <= 0.02f || h.text.empty()) continue;
             const float base = h.scale * 12.f;
-            const float w = capWidth(light_, ascii(h.text), 0.06f) * base * 0.62f;
-            const float x0 = ugl::hudLeft(h, w, width_);
-            const vec4 r{x0 - pad - base * 0.5f, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad};
+            const vec4& box = (*f.hudBoxes)[i]; // the line as the host letters it (room on its left for a label's form)
+            const vec4 r{box.x - pad - base * 0.5f, std::min(box.y, h.y) - pad, box.z + pad, std::max(box.w, h.y + base * 0.8f) + pad};
             if (r.x > a.x && r.z < b.x) continue; // in the band, veiled already
             boxes.push_back(r);
         }
@@ -1974,7 +1953,7 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) rectPx(0, 0, (float)width_, (float)height_, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(game, f.hud, f.panels);
+    drawHud(f);
     glDisable(GL_BLEND);
 }
 

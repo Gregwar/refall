@@ -25,16 +25,11 @@
 // Layout contract: the layout's own camera (the well's plane z = 0 is exactly where the layout puts it).
 #include "universes/white_room/white_room.hpp"
 
-#include <cctype>
 #include <cstdio>
-#include <cstring>
 
 #include "universes/registry.hpp"
 #include "universes/white_room/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
 #include "q3.h"
-#include "stb_truetype.h"
 
 namespace {
 
@@ -118,24 +113,6 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
-std::string upper(const std::string& s) {
-    std::string o = s;
-    for (char& c : o) c = (char)std::toupper((unsigned char)c);
-    return o;
-}
-
 // The key lamp (its position in front of the well, board space: the lower and the more to the side, the longer and
 // the further the stack's shadow travels across the wall), its radius (softness), its strength and warmth, the
 // ambient, the pool of light on the wall and how dark the shadow play is, for calm, mid and a chorus.
@@ -162,7 +139,6 @@ bool WhiteRoomUniverse::init(int width, int height) {
     progOcc_ = compile(shaders::OCC_VS, shaders::OCC_FS, "white room occupancy");
     progTile_ = compile(shaders::TILE_VS, shaders::TILE_FS, "white room tile");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "white room shape");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "white room text");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "white room post");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -227,14 +203,6 @@ bool WhiteRoomUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     // The occupancy map: the board's blocks seen from the front, blurred by its mip levels for the soft shadows.
@@ -304,56 +272,9 @@ bool WhiteRoomUniverse::init(int width, int height) {
     glGenerateMipmap(GL_TEXTURE_2D);
     hmDirty_ = true;
 
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontMedium_, FONT_MEDIUM);
     pal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-// Glyphs baked as signed distance fields (they scale cleanly, and soften into the lettering's shadow).
-void WhiteRoomUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] white room font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void WhiteRoomUniverse::resize(int width, int height) {
@@ -416,10 +337,10 @@ void WhiteRoomUniverse::createTargets() {
 WhiteRoomUniverse::~WhiteRoomUniverse() {
     delete world_;
     sceneT_.destroy();
-    for (GLuint p : {progRoom_, progOcc_, progTile_, progShape_, progText_, progPost_, progCube_, progShadow_, progCopy_})
+    for (GLuint p : {progRoom_, progOcc_, progTile_, progShape_, progPost_, progCube_, progShadow_, progCopy_})
         glDeleteProgram(p);
-    for (GLuint v : {tileVao_, occVao_, shapeVao_, textVao_, cubeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, tileVbo_, occVbo_, shapeVbo_, textVbo_, cubeMeshVbo_, cubeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {tileVao_, occVao_, shapeVao_, cubeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tileVbo_, occVbo_, shapeVbo_, cubeMeshVbo_, cubeVbo_}) glDeleteBuffers(1, &b);
     for (GLuint f : {occFbo_, shFbo_[0], shFbo_[1], msFbo_, roomFbo_})
         if (f) glDeleteFramebuffers(1, &f);
     for (GLuint t : {occTex_, shTex_[0], shTex_[1], shCovTex_[0], shCovTex_[1], hmTex_, roomTex_, roomZTex_})
@@ -428,10 +349,6 @@ WhiteRoomUniverse::~WhiteRoomUniverse() {
         if (r) glDeleteRenderbuffers(1, &r);
     for (GLuint sm : {shCmpSampler_, shRawSampler_})
         if (sm) glDeleteSamplers(1, &sm);
-    for (Font* f : {&fontLight_, &fontMedium_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -1065,194 +982,92 @@ void WhiteRoomUniverse::buildBoard(const Game& g) {
 // Text
 // =====================================================================================================
 
-float WhiteRoomUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The HUD's panels (its lettering: hudLine, the host letters it).
+void WhiteRoomUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    const float lit = smoothstepf(0.04f, 0.13f, wallLum_);
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.wall * (0.4f + 0.6f * lit);
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.alpha);
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
 
-float WhiteRoomUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                   std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-// Lettering set on the wall (vinyl letters): a faint soft shadow away from the key light, then the letters.
-void WhiteRoomUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias) {
-    if (q.empty() || !f.ok) return;
-    const float bridgeK = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    const float s = height_ / 1080.f;
-    const vec3 L = normalize(l0_.pos);
-    const float sh = std::min(4.f, 1.6f / std::max(0.2f, L.z)) * s;
-    const float shadowA = 0.16f * (1.f - bridgeK) * saturate(wallLum_ * 1.5f);
-    if (shadowA > 0.01f) {
-        set2f(progText_, "uShift", -L.x * sh, L.y * sh);
-        set3f(progText_, "uColor", vec3(0.f));
-        set1f(progText_, "uAlpha", alpha * shadowA);
-        set1f(progText_, "uBias", bias);
-        set1f(progText_, "uSoft", 0.06f);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-    }
-    set2f(progText_, "uShift", 0.f, 0.f);
-    set3f(progText_, "uColor", lerp(color, bridge_.ink, bridgeK));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uSoft", 0.f);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD as a gallery's wall text: the song in a medium weight, small widely spaced capitals for the labels,
-// light numbers; the section in a large light weight. Dark ink on the lit wall, pale ink when the room is dark.
-void WhiteRoomUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD as a gallery's wall text, lettered by the host (text.hpp): the song in a medium weight, small widely spaced
+// capitals for the labels, light numbers; the section in a large light weight. Dark ink on the lit wall, pale ink
+// when the room is dark; vinyl letters with a faint soft shadow away from the key light.
+void WhiteRoomUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* medium = text::font(FONT_MEDIUM);
     const float s = height_ / 1080.f;
     const float lit = smoothstepf(0.04f, 0.13f, wallLum_);
+    const float bridgeK = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    // the inks (linear, as the room's), toward the bridge's, then as the post leaves them (dimmed, faded)
+    auto srgb = [&](const vec3& c) { return ugl::toSrgb(lerp(c, bridge_.ink, bridgeK)) * hudMul_; };
     const vec3 ink = lerp(pal_.inkLight, pal_.ink, lit);
     const vec3 dim = lerp(ink, lerp(pal_.inkLight * 0.6f, pal_.wall, lit), 0.28f);
     const vec3 accent = lerp(pal_.inkLight, pal_.accent, 0.5f + 0.5f * lit);
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.wall * (0.4f + 0.6f * lit);
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.alpha);
+    const float base = h.scale * 12.f;
+    const float alpha = saturate(h.alpha);
+    // a bias on the old distance field (10 px of spread at 64 px), in em
+    constexpr float BIAS = 255.f * 10.f / 128.f / 64.f;
+    float bias = 0.f;
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float b, float dy = 0.f) {
+        out.add(t, f, size, srgb(c), track / size, saturate(a));
+        out.dy = dy;
+        bias = b;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "White Room" in the medium weight, the room's name in small spaced capitals after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.15f, vsz = base * 0.6f, vtr = vsz * 0.45f;
+        const float a = saturate(0.35f + h.alpha * 1.6f);
+        put(medium, text::titleCase(name), sz, 0.f, ink, a, 0.f);
+        if (!var.empty()) {
+            out.add("", medium, base, srgb(ink), 0.9f); // the gap
+            // its cap line base * 0.2 lower (Manrope's capitals: 0.527 of its size)
+            out.add(var, medium, vsz, srgb(ink), vtr / vsz, a * 0.8f).dy = base * 0.2f + 0.527f * (vsz - sz);
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
+        break;
     }
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "White Room" in the medium weight, the room's name in small spaced capitals after it
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.15f, vsz = base * 0.6f, vtr = vsz * 0.45f;
-            const float wName = textWidth(fontMedium_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontLight_, var, vsz, vtr);
-            const float gap = base * 0.9f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontMedium_, name, x, h.y, sz, 0.f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontMedium_, q, ink, a, 0.f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontMedium_, var, x + wName + gap, h.y + base * 0.2f, vsz, vtr, q);
-                drawText(fontMedium_, q, ink, a * 0.8f, 0.f);
-            }
-            continue;
-        }
-        case HUD_SECTION:
-            place(fontLight_, titleCase(h.text), base * 1.5f, 0.f);
-            drawText(fontLight_, q, accent, saturate(0.2f + h.alpha * 1.9f), 0.02f);
-            continue;
-        case HUD_TITLE:
-            place(fontMedium_, h.text, base * 1.12f, 0.f, -base * 0.05f);
-            drawText(fontMedium_, q, ink, saturate(h.alpha * 1.3f), 0.f);
-            continue;
-        case HUD_INFO:
-            place(fontLight_, upper(h.text), base * 0.62f, base * 0.34f);
-            drawText(fontLight_, q, dim, saturate(alpha * 1.4f), 0.05f);
-            continue;
-        case HUD_LABEL:
-            place(fontMedium_, h.text, base * 0.6f, base * 0.42f);
-            drawText(fontMedium_, q, dim, saturate(alpha * 1.3f), 0.02f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.12f, base * 0.04f);
-            drawText(fontLight_, q, ink, alpha, 0.03f);
-            continue;
-        case HUD_NOTICE:
-            place(fontLight_, h.text, base * 1.15f, 0.f);
-            drawText(fontLight_, q, accent, alpha, 0.03f);
-            continue;
-        case HUD_KEY:
-            place(fontMedium_, h.text, base * 0.8f, base * 0.1f);
-            drawText(fontMedium_, q, ink, alpha, 0.f);
-            continue;
-        case HUD_TOAST:
-            place(fontLight_, titleCase(h.text), base * 1.6f, 0.f, -base * 0.15f);
-            drawText(fontLight_, q, ink, alpha, 0.03f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontMedium_, h.text, base * 0.75f, base * 0.3f);
-            drawText(fontMedium_, q, accent, alpha * 0.9f, 0.f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontLight_, titleCase(h.text), base * 1.35f, 0.f, -base * 0.1f);
-                drawText(fontLight_, q, ink, alpha, 0.03f);
-            } else {
-                place(fontMedium_, h.text, base * 0.8f, base * 0.16f);
-                drawText(fontMedium_, q, h.accent ? accent : ink, alpha, 0.f);
-            }
-            continue;
-        default:
-            place(fontMedium_, h.text, base * 0.8f, base * 0.12f);
-            drawText(fontMedium_, q, h.accent ? accent : ink, alpha, 0.f);
-            continue;
-        }
+    case HUD_SECTION: put(light, text::titleCase(h.text), base * 1.5f, 0.f, accent, 0.2f + h.alpha * 1.9f, 0.02f); break;
+    case HUD_TITLE: put(medium, h.text, base * 1.12f, 0.f, ink, h.alpha * 1.3f, 0.f, -base * 0.05f); break;
+    case HUD_INFO: put(light, text::upper(h.text), base * 0.62f, base * 0.34f, dim, alpha * 1.4f, 0.05f); break;
+    case HUD_LABEL: put(medium, h.text, base * 0.6f, base * 0.42f, dim, alpha * 1.3f, 0.02f); break;
+    case HUD_VALUE: put(light, h.text, base * 1.12f, base * 0.04f, ink, alpha, 0.03f); break;
+    case HUD_NOTICE: put(light, h.text, base * 1.15f, 0.f, accent, alpha, 0.03f); break;
+    case HUD_KEY: put(medium, h.text, base * 0.8f, base * 0.1f, ink, alpha, 0.f); break;
+    case HUD_TOAST: put(light, text::titleCase(h.text), base * 1.6f, 0.f, ink, alpha, 0.03f, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(medium, h.text, base * 0.75f, base * 0.3f, accent, alpha * 0.9f, 0.f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(light, text::titleCase(h.text), base * 1.35f, 0.f, ink, alpha, 0.03f, -base * 0.1f);
+        else put(medium, h.text, base * 0.8f, base * 0.16f, h.accent ? accent : ink, alpha, 0.f);
+        break;
+    default: put(medium, h.text, base * 0.8f, base * 0.12f, h.accent ? accent : ink, alpha, 0.f); break;
     }
+    // (pale letters in a dark room a third of a pixel firmer: they were blended in the room's linear light, which
+    // thickened their thin strokes)
+    out.look.weight = bias * BIAS + (1.f - lit) * 0.35f * s / out.spans[0].size;
+    // the faint soft shadow on the wall, away from the key light (up to 4 px at 1080 lines)
+    const vec3 L = normalize(l0_.pos);
+    const float sh = std::min(4.f, 1.6f / std::max(0.2f, L.z)) * s / out.spans[0].size;
+    out.look.shadow = vec3(0.f);
+    out.look.shadowA = 0.16f * (1.f - bridgeK) * saturate(wallLum_ * 1.5f);
+    out.look.shadowSoft = 0.06f * BIAS;
+    out.look.shadowOff = {-L.x * sh, L.y * sh};
 }
 
 // =====================================================================================================
@@ -1568,7 +1383,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
-    drawHud(f.hud, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 
     for (int i = 2; i < 6; i++) glBindSampler(i, 0); // (the samplers are global state)
@@ -1588,6 +1403,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progPost_, "uRes", (float)width_, (float)height_);
     set1f(progPost_, "uTime", (float)f.time);
     set1f(progPost_, "uFade", saturate(f.fade));
+    hudMul_ = (1.f - 0.5f * dimT_) * saturate(f.fade);
     set1f(progPost_, "uDim", dimT_);
     set1f(progPost_, "uBridge", bridge);
     set1f(progPost_, "uExposure", 1.f);

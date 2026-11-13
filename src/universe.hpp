@@ -23,6 +23,7 @@
 #include "analysis.hpp"
 #include "game.hpp"
 #include "mathutil.hpp"
+#include "text.hpp"
 
 // Per-frame audio / music state the visuals react to.
 struct MusicState {
@@ -157,6 +158,9 @@ struct Frame {
     // The host captures the HUD's corner lines, big, for its title card (shown on black): a universe whose lettering
     // adapts to the world behind it (dark ink where the world is light) letters them as over its darkest.
     bool card = false;
+    // A universe lettered by the host (Universe::hostText): each HUD line's box as the host letters it (pixels,
+    // top-left origin: x0, y0, x1, y1), in `hud`'s order, for a world that makes room for the text.
+    const std::vector<vec4>* hudBoxes = nullptr;
 };
 
 class Universe {
@@ -190,6 +194,12 @@ public:
     // the default is the layout's reference camera.
     virtual vec2 project(const vec3& p) const;
     virtual TransitionHints hints() const = 0;
+    // The HUD's lettering. A universe the host letters (hostText() true; see text.hpp) draws no HUD text itself:
+    // after render() the host letters each line of the frame's `hud` as hudLine styles it (its spans from h.text at
+    // the size h.scale gives, its inks and effects, read every frame), at the line's anchor (ugl::hudLeft of its
+    // width), and so is the title card, gliding from the middle into the very same lines. The default: a plain style.
+    virtual bool hostText() const { return false; }
+    virtual void hudLine(const HudText& h, text::Line& out);
     // Optional native exit / entrance: while a change of universe runs, the host calls setBridge every frame
     // before render() (amount rises while leaving, falls while entering; 0 once it's over). A universe that
     // supports it (returns true from bridgeable()) dissolves its own way toward the bridge: its world calms and

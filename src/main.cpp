@@ -905,6 +905,7 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         b.cardId = sceneCounter_;
         b.cardShrink = e;
         b.cardAlpha = a;
+        b.cardIn = smoothstepf(IN_CARD, IN_HOLD, t);
         if (t >= IN_END) {
             if (songHeld_) { // the game starts: so does the song
                 songHeld_ = false;
@@ -921,7 +922,7 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     if ((paused_ || testPause) && break_ != BREAK_OFF) {
         b.black = std::min(b.black, 0.55f);
         b.card[0].alpha = b.card[1].alpha = 0.f;
-        b.cardAlpha = 0.f;
+        b.cardAlpha = b.cardIn = 0.f;
         if (!b.blank) b.blank = &blank_;
         b.play = std::min(b.play, 0.999f); // the world alone, with the menu's lines
         for (const HudText& h : hud)

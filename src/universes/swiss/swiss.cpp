@@ -1254,9 +1254,9 @@ void SwissUniverse::drawBoard(const Game& g) {
 // The HUD
 // =====================================================================================================
 
-// Inter on the poster's ground: labels small and spaced in capitals, values bold, the section in the signature
-// color; the bonus gauge a fine ring whose charge is drawn in the signature color.
-void SwissUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The panels and the bonus gauge (a fine ring whose charge is drawn in the signature color); the text: hudLine,
+// lettered by the host.
+void SwissUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
     const vec3 ink = ink_, ground = ground_, accent = palShown_[1];
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
@@ -1278,75 +1278,39 @@ void SwissUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         ringPx(c.x, c.y, r - th2 * 0.5f, r + th2 * 0.5f, fill, accent, 0.95f * vis);
         flushShapes();
     }
+}
 
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        // cap: cap height in pixels, dy: shift of the top of the caps from the anchor
-        auto place = [&](const Font& f, const std::string& text, float cap, float track, float dy = 0.f) {
-            const float w = capWidth(f, text, track) * cap;
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy + cap, cap, track, 0, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(reg_, upper(h.text), base * 0.5f, 0.08f, base * 0.1f);
-            drawText(reg_, q, ink, saturate(0.35f + h.alpha * 1.4f) * vis);
-            continue;
-        case HUD_SECTION:
-            place(bold_, upper(h.text), base * 0.55f, 0.06f, base * 0.05f);
-            drawText(bold_, q, accent, saturate(0.4f + h.alpha * 1.5f) * vis);
-            continue;
-        case HUD_TITLE:
-            place(bold_, h.text, base * 0.62f, -0.01f, base * 0.02f);
-            drawText(bold_, q, ink, saturate(h.alpha * 1.6f) * vis);
-            continue;
-        case HUD_INFO:
-            place(reg_, h.text, base * 0.48f, 0.06f, base * 0.1f);
-            drawText(reg_, q, ink, saturate(alpha * 1.3f) * 0.8f);
-            continue;
-        case HUD_LABEL:
-            place(reg_, upper(h.text), base * 0.42f, 0.14f, base * 0.12f);
-            drawText(reg_, q, ink, saturate(alpha * 1.3f) * 0.75f);
-            continue;
-        case HUD_VALUE:
-            place(bold_, h.text, base * 0.62f, -0.01f, base * 0.02f);
-            drawText(bold_, q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(bold_, h.text, base * 0.55f, 0.02f);
-            drawText(bold_, q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(bold_, h.text, base * 0.55f, 0.f);
-            drawText(bold_, q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(bold_, lower(h.text), base * 0.72f, -0.02f, -base * 0.05f);
-            drawText(bold_, q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(reg_, h.text, base * 0.5f, 0.04f);
-            drawText(reg_, q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(bold_, h.text, base * 0.62f, -0.01f);
-                drawText(bold_, q, ink, alpha);
-            } else {
-                place(reg_, h.text, base * 0.5f, 0.03f);
-                drawText(reg_, q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(reg_, h.text, base * 0.5f, 0.02f);
-            drawText(reg_, q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+// Inter on the poster's ground: labels small and spaced in capitals, values bold and set tight, the section in the
+// signature color; plain ink (print). The sizes are cap heights, the spacing in caps.
+void SwissUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* bold = text::font(FONT_BOLD);
+    text::Font* reg = text::font(FONT_REG);
+    constexpr float CAP = 0.601f; // Inter's cap height (em)
+    const float s = height_ / 1080.f, base = h.scale * 12.f;
+    const vec3 ink = ink_, accent = palShown_[1];
+    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+    const float alpha = saturate(h.alpha) * vis;
+    // a run: its cap height in pixels and its spacing in caps, its cap line moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float cap, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, cap / CAP, c, track * CAP, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(reg, text::upper(h.text), base * 0.5f, 0.08f, ink, saturate(0.35f + h.alpha * 1.4f) * vis, base * 0.1f); break;
+    case HUD_SECTION: put(bold, text::upper(h.text), base * 0.55f, 0.06f, accent, saturate(0.4f + h.alpha * 1.5f) * vis, base * 0.05f); break;
+    case HUD_TITLE: put(bold, h.text, base * 0.62f, -0.01f, ink, saturate(h.alpha * 1.6f) * vis, base * 0.02f); break;
+    case HUD_INFO: put(reg, h.text, base * 0.48f, 0.06f, ink, saturate(alpha * 1.3f) * 0.8f, base * 0.1f); break;
+    case HUD_LABEL: put(reg, text::upper(h.text), base * 0.42f, 0.14f, ink, saturate(alpha * 1.3f) * 0.75f, base * 0.12f); break;
+    case HUD_VALUE: put(bold, h.text, base * 0.62f, -0.01f, ink, alpha, base * 0.02f); break;
+    case HUD_NOTICE: put(bold, h.text, base * 0.55f, 0.02f, accent, alpha); break;
+    case HUD_KEY: put(bold, h.text, base * 0.55f, 0.f, ink, alpha); break;
+    case HUD_TOAST: put(bold, text::lower(h.text), base * 0.72f, -0.02f, ink, alpha, -base * 0.05f); break;
+    case HUD_TOAST_SUB: put(reg, h.text, base * 0.5f, 0.04f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(bold, h.text, base * 0.62f, -0.01f, ink, alpha);
+        else put(reg, h.text, base * 0.5f, 0.03f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(reg, h.text, base * 0.5f, 0.02f, h.accent ? accent : ink, alpha); break;
     }
 }
 
@@ -1532,12 +1496,12 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         boardBox(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_LABEL.y + 0.7f);
         boardBox(layout::nextCenter(0).x - 2.f, layout::nextCenter(2).y - 1.1f, layout::nextCenter(0).x + 2.f, layout::NEXT_LABEL.y + 0.7f);
         boardBox(layout::GAUGE_CENTER.x - 2.f, layout::GAUGE_CENTER.y - 1.9f, layout::GAUGE_CENTER.x + 2.f, layout::GAUGE_CENTER.y + 1.3f);
-        for (const HudText& h : f.hud) {
+        for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+            const HudText& h = f.hud[i];
             if (h.alpha <= 0.02f || h.text.empty()) continue;
             const float base = h.scale * 12.f;
-            const float w = capWidth(reg_, ascii(h.text), 0.06f) * base * 0.6f;
-            const float x0 = ugl::hudLeft(h, w, width_);
-            const vec4 r{x0 - pad, h.y - pad, x0 + w + pad, h.y + base * 0.8f + pad};
+            const vec4& box = (*f.hudBoxes)[i]; // the line as the host letters it
+            const vec4 r{box.x - pad, std::min(box.y, h.y) - pad, box.z + pad, std::max(box.w, h.y + base * 0.8f) + pad};
             if (r.z > a.x && r.x < b.x) continue; // over the well, veiled already
             boxes.push_back(r);
         }
@@ -1582,7 +1546,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) rectPx(0, 0, (float)width_, (float)height_, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.panels);
     glDisable(GL_BLEND);
 }
 

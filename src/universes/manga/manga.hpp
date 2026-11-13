@@ -27,6 +27,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     using V2 = manga::V2;
@@ -49,7 +51,7 @@ private:
     vec2 px(const V2& b) const; // board -> pixels
     float unitPx_ = 45.f, s_ = 1.f; // pixels per board unit, the 1080p scale
 
-    // ---- Lettering.
+    // ---- Lettering: the sound effects' (the HUD's is the host's, hudLine).
     struct Glyph { int cp; float x0, y0, x1, y1, ox, oy, w, h, adv; };
     struct Font {
         bool ok = false;
@@ -59,7 +61,7 @@ private:
         void* info = nullptr;
         const Glyph* find(int cp) const;
     };
-    Font comic_, bangers_, dela_;
+    Font dela_;
     void buildFont(Font& f, const unsigned char* ttf, float px, const std::vector<int>& cps);
     float textWidth(const Font& f, const std::string& s, float capPx, float track) const;
     // Quads for a string set from (x, base) along a baseline turned by `angle` (radians, clockwise on screen).
@@ -67,7 +69,8 @@ private:
                    std::vector<float>& out) const;
     struct TextStyle { vec3 fill; float fillA = 1.f; vec3 line; float lineA = 0.f, linePx = 0.f; vec3 halo; float haloA = 0.f, haloPx = 0.f; };
     void drawText(const Font& f, const std::vector<float>& q, float capPx, const TextStyle& st, float alpha);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // the HUD's panels, gauge, caption box and balloon (around its lines as lettered: boxes, f.hudBoxes)
+    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<vec4>* boxes, const std::vector<HudRect>& panels);
 
     // ---- The page.
     manga::Page page_;

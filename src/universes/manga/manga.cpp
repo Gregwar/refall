@@ -63,8 +63,8 @@ using manga::V2;
 
 namespace {
 
-// Comic Neue Bold (the lettering), Bangers (the numbers, the shouts) and Dela Gothic One (the sound effects, in
-// katakana), SIL Open Font License, see OFL-ComicNeue.txt, OFL-Bangers.txt and OFL-DelaGothicOne.txt.
+// Comic Neue Bold (the HUD's lettering), Bangers (its numbers and shouts) and Dela Gothic One (the sound effects,
+// in katakana), SIL Open Font License, see OFL-ComicNeue.txt, OFL-Bangers.txt and OFL-DelaGothicOne.txt.
 const unsigned char FONT_COMIC[] = {
 #include "universes/manga/ComicNeue-Bold.ttf.inc"
 };
@@ -74,6 +74,24 @@ const unsigned char FONT_BANGERS[] = {
 const unsigned char FONT_DELA[] = {
 #include "universes/manga/DelaGothicOne-Regular.ttf.inc"
 };
+
+// The HUD's comic lettering: the letters, an ink line around them and a paper rim around that, all crisp (Look's
+// outline and halo give their colors and widths; the rim starts where the line ends).
+const text::Lettering INKED{R"(
+vec4 letter(Letter L) {
+    float fw = max(fwidth(L.dist), 1e-3);
+    float lw = uOutline.a > 0.0 ? uOutlineW * L.em : 0.0;
+    float cf = clamp(L.dist / fw + 0.5, 0.0, 1.0);
+    float cl = uOutline.a > 0.0 ? clamp((L.dist + lw) / fw + 0.5, 0.0, 1.0) : 0.0;
+    float ch = uHalo.a > 0.0 ? clamp((L.dist + lw + uHaloShape.x * L.em) / fw + 0.5, 0.0, 1.0) : 0.0;
+    vec4 c = vec4(uHalo.rgb, 1.0) * uHalo.a * ch;
+    vec4 l = vec4(uOutline.rgb, 1.0) * uOutline.a * cl;
+    c = c * (1.0 - l.a) + l;
+    vec4 f = vec4(L.ink.rgb, 1.0) * cf;
+    c = c * (1.0 - f.a) + f;
+    return c * L.ink.a;
+}
+)"};
 
 namespace shaders = manga_shaders;
 using ugl::set1f;
@@ -165,11 +183,6 @@ std::vector<int> decode(const std::string& s) {
     return v;
 }
 
-std::string upper(std::string s) {
-    for (char& c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
-
 // The sound effects (katakana).
 const char* SFX_ZUDON = "\xE3\x82\xBA\xE3\x83\x89\xE3\x83\xB3\xEF\xBC\x81"; // ズドン！
 const char* SFX_KAN = "\xE3\x82\xAB\xE3\x83\xB3";                         // カン
@@ -210,13 +223,9 @@ bool MangaUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    std::vector<int> latin;
-    for (int c = 32; c < 127; c++) latin.push_back(c);
-    latin.push_back(0xB7);
+    // (the sound effects' letters: the HUD is lettered by the host)
     std::vector<int> kana = {'!', 0xFF01, 0x2026};
     for (int c = 0x30A0; c <= 0x30FF; c++) kana.push_back(c);
-    buildFont(comic_, FONT_COMIC, 64.f, latin);
-    buildFont(bangers_, FONT_BANGERS, 96.f, latin);
     buildFont(dela_, FONT_DELA, 112.f, kana);
 
     GLint maxS = 0;
@@ -338,10 +347,8 @@ MangaUniverse::~MangaUniverse() {
     for (GLuint b : {inkVbo_, textVbo_}) glDeleteBuffers(1, &b);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
-    for (Font* f : {&comic_, &bangers_, &dela_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    if (dela_.tex) glDeleteTextures(1, &dela_.tex);
+    delete (stbtt_fontinfo*)dela_.info;
 }
 
 // =====================================================================================================
@@ -1382,10 +1389,11 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
 // The HUD
 // =====================================================================================================
 
-// Comic lettering in the HUD's panels: labels in Comic Neue, numbers and shouts in Bangers; the section and the
-// universe in a caption box in the corner of the crossing's panel; the toasts outlined like sound effects, a
-// quad in a spiky balloon.
-void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// Comic lettering in the HUD's panels (hudLine, the host's): the section and the universe sit in a caption box in the
+// corner of the crossing's panel, a quad in a spiky balloon, both drawn here around the lines as the host letters
+// them (f.hudBoxes).
+void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<vec4>* boxes,
+                            const std::vector<HudRect>& panels) {
     const float s = s_;
     const vec3 ink = ink_, paper = paper_, accent = spot_;
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
@@ -1416,20 +1424,21 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         if (arc.size() > 1) strokeLine(arc, 5.f, 0.f, false, 1.f, accent, 0.95f * vis, -1);
         flushInk();
     }
+    // (no boxes: a break's frame, its lines lettered over the mix)
+    if (!boxes || boxes->size() != hud.size()) return;
 
     // the caption box under the section and the universe's name
     {
         float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
         float a = 0.f;
-        for (const HudText& h : hud) {
-            if ((h.role != HUD_SECTION && h.role != HUD_UNIVERSE) || h.text.empty()) continue;
+        for (size_t i = 0; i < hud.size(); i++) {
+            const HudText& h = hud[i];
+            const vec4& b = (*boxes)[i];
+            if ((h.role != HUD_SECTION && h.role != HUD_UNIVERSE) || h.text.empty() || b.z <= b.x) continue;
             const float base = h.scale * 12.f;
-            const bool sec = h.role == HUD_SECTION;
-            const float cap = sec ? base * 0.62f : base * 0.45f;
-            const float w = sec ? textWidth(bangers_, upper(h.text), cap, 0.05f) : textWidth(comic_, upper(h.text), cap, 0.06f);
-            const float l = ugl::hudLeft(h, w, width_);
-            x0 = std::min(x0, l);
-            x1 = std::max(x1, l + w);
+            const float cap = h.role == HUD_SECTION ? base * 0.62f : base * 0.45f;
+            x0 = std::min(x0, b.x);
+            x1 = std::max(x1, b.z);
             y0 = std::min(y0, h.y);
             y1 = std::max(y1, h.y + cap * 1.25f);
             a = std::max(a, std::min(1.f, 0.4f + h.alpha * 1.5f));
@@ -1446,132 +1455,98 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         }
     }
 
-    std::vector<float> q;
-    const TextStyle plain{ink, 1.f, ink, 0.f, 0.f, paper, 0.f, 0.f};
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        const HudText& h = h0;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float cap, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, cap, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy + cap, cap, track, 0.f, q);
-        };
-        TextStyle st = plain;
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            const float cap = base * 0.45f;
-            place(comic_, upper(h.text), cap, 0.06f, base * 0.12f);
-            drawText(comic_, q, cap, st, saturate(0.4f + h.alpha * 1.5f) * vis);
-            continue;
+    // a quad's spiky shout balloon
+    for (size_t i = 0; i < hud.size(); i++) {
+        const HudText& h = hud[i];
+        const vec4& b = (*boxes)[i];
+        if (h.role != HUD_TOAST || h.alpha <= 0.01f || h.text.find(QUAD_NAME) == std::string::npos || b.z <= b.x) continue;
+        const float alpha = saturate(h.alpha) * vis, cap = h.scale * 12.f * 0.75f;
+        const float w = b.z - b.x, cx = (b.x + b.z) * 0.5f, cy = h.y + cap * 0.5f;
+        const float rx = w * 0.5f + cap * 0.9f, ry = cap * 1.25f;
+        std::vector<V2> pts;
+        const int spikes = 18;
+        auto toB = [&](float X, float Y) { return V2{(X - width_ * 0.5f) / unitPx_ + viewC_.x, (height_ * 0.5f - Y) / unitPx_ + viewC_.y}; };
+        for (int k = 0; k < spikes * 2; k++) {
+            const float an = k / (float)(spikes * 2) * TAU;
+            const float r = (k % 2 == 0) ? 1.f + 0.18f * std::sin(k * 1.7f) : 0.74f;
+            pts.push_back(toB(cx + std::cos(an) * rx * r, cy + std::sin(an) * ry * r));
         }
-        case HUD_SECTION: {
-            const float cap = base * 0.62f;
-            place(bangers_, upper(h.text), cap, 0.05f, base * 0.02f);
-            st.fill = accent;
-            drawText(bangers_, q, cap, st, saturate(0.4f + h.alpha * 1.5f) * vis);
-            continue;
-        }
-        case HUD_TITLE: {
-            const float cap = base * 0.6f;
-            place(comic_, h.text, cap, 0.01f, base * 0.02f);
-            st.haloA = 1.f;
-            st.haloPx = cap * 0.3f;
-            drawText(comic_, q, cap, st, saturate(h.alpha * 1.6f) * vis);
-            continue;
-        }
-        case HUD_INFO: {
-            const float cap = base * 0.5f;
-            place(comic_, h.text, cap, 0.05f, base * 0.1f);
-            st.haloA = 1.f;
-            st.haloPx = cap * 0.35f;
-            // fully opaque over the drop's burst
-            drawText(comic_, q, cap, st, saturate(alpha * 1.3f) * lerpf(0.75f, 1.f, saturate(burst_ * 1.5f)));
-            continue;
-        }
-        case HUD_LABEL: {
-            const float cap = base * 0.44f;
-            place(comic_, upper(h.text), cap, 0.16f, base * 0.12f);
-            drawText(comic_, q, cap, st, saturate(alpha * 1.3f) * 0.85f);
-            continue;
-        }
-        case HUD_VALUE: {
-            const float cap = base * 0.7f;
-            place(bangers_, h.text, cap, 0.04f, -base * 0.02f);
-            drawText(bangers_, q, cap, st, alpha);
-            continue;
-        }
-        case HUD_NOTICE: {
-            const float cap = base * 0.6f;
-            place(bangers_, h.text, cap, 0.05f);
-            st = {cur_[K_SFX], 1.f, ink, 1.f, std::max(1.5f, cap * 0.08f), paper, 1.f, cap * 0.08f};
-            drawText(bangers_, q, cap, st, alpha);
-            continue;
-        }
-        case HUD_KEY: {
-            const float cap = base * 0.55f;
-            place(comic_, h.text, cap, 0.02f);
-            drawText(comic_, q, cap, st, alpha);
-            continue;
-        }
-        case HUD_TOAST: {
-            const float cap = base * 0.75f;
-            const bool quadClear = h.text.find(QUAD_NAME) != std::string::npos;   // a four-line clear
-            if (quadClear) {
-                // a spiky shout balloon behind it
-                const float w = textWidth(bangers_, h.text, cap, 0.06f);
-                const float cx = ugl::hudLeft(h, w, width_) + w * 0.5f, cy = h.y + cap * 0.5f;
-                const float rx = w * 0.5f + cap * 0.9f, ry = cap * 1.25f;
-                std::vector<V2> pts;
-                const int spikes = 18;
-                auto toB = [&](float X, float Y) { return V2{(X - width_ * 0.5f) / unitPx_ + viewC_.x, (height_ * 0.5f - Y) / unitPx_ + viewC_.y}; };
-                for (int i = 0; i < spikes * 2; i++) {
-                    const float a = i / (float)(spikes * 2) * TAU;
-                    const float k = (i % 2 == 0) ? 1.f + 0.18f * std::sin(i * 1.7f) : 0.74f;
-                    pts.push_back(toB(cx + std::cos(a) * rx * k, cy + std::sin(a) * ry * k));
-                }
-                manga::Tone tn;
-                fillPoly(pts, tn, 1.f, paper, 0.92f * alpha, -1);
-                strokeLine(pts, 2.4f, 0.f, true, 1.f, ink, alpha, -1);
-            }
-            place(bangers_, h.text, cap, 0.06f, -base * 0.05f);
-            st = {cur_[K_SFX], 1.f, ink, 1.f, std::max(1.5f, cap * 0.07f), paper, quadClear ? 0.f : 1.f, cap * 0.08f};
-            drawText(bangers_, q, cap, st, alpha);
-            continue;
-        }
-        case HUD_TOAST_SUB: {
-            const float cap = base * 0.55f;
-            place(bangers_, h.text, cap, 0.05f);
-            drawText(bangers_, q, cap, st, alpha);
-            continue;
-        }
-        case HUD_DIALOG: {
-            if (h.scale >= 3.5f * s) {
-                const float cap = base * 0.7f;
-                place(bangers_, h.text, cap, 0.06f);
-                st = {paper, 1.f, ink, 1.f, std::max(2.f, cap * 0.07f), paper, 1.f, cap * 0.08f};
-                drawText(bangers_, q, cap, st, alpha);
-            } else {
-                const float cap = base * 0.5f;
-                place(comic_, h.text, cap, 0.04f);
-                st.halo = paper;
-                st.haloA = 1.f;
-                st.haloPx = cap * 0.25f;
-                if (h.accent) st.fill = accent;
-                drawText(comic_, q, cap, st, alpha);
-            }
-            continue;
-        }
-        default: {
-            const float cap = base * 0.5f;
-            place(comic_, h.text, cap, 0.03f);
-            if (h.accent) st.fill = accent;
-            drawText(comic_, q, cap, st, alpha);
-            continue;
-        }
-        }
+        manga::Tone tn;
+        fillPoly(pts, tn, 1.f, paper, 0.92f * alpha, -1);
+        strokeLine(pts, 2.4f, 0.f, true, 1.f, ink, alpha, -1);
+        flushInk();
     }
+}
+
+// The lettering, by the host (text.hpp): labels in Comic Neue, numbers and shouts in Bangers (sizes: their capitals'
+// height); the song and its tempo on a rim of paper, the notices and the toasts outlined like sound effects.
+void MangaUniverse::hudLine(const HudText& h, text::Line& out) {
+    // the capitals' height of each font, of its size
+    constexpr float CAP_COMIC = 0.587f, CAP_BANGERS = 0.6955f;
+    text::Font* comic = text::font(FONT_COMIC);
+    text::Font* bangers = text::font(FONT_BANGERS);
+    const vec3 ink = ink_, paper = paper_, accent = spot_;
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its capitals' height and letter spacing (of it) in pixels, moved down by dy
+    float cap = 0.f;
+    auto put = [&](bool shout, const std::string& t, float c, float track, const vec3& col, float a, float dy = 0.f) {
+        cap = c;
+        const float k = shout ? CAP_BANGERS : CAP_COMIC;
+        out.add(t, shout ? bangers : comic, c / k, col, track * k, saturate(a));
+        out.dy = dy;
+    };
+    // the ink line and the paper rim around it (pixels), as a sound effect's
+    auto inked = [&](float linePx, float rimPx) {
+        const float em = out.spans[0].size;
+        out.look.outline = ink;
+        out.look.outlineA = linePx > 0.f ? 1.f : 0.f;
+        out.look.outlineW = linePx / em;
+        out.look.halo = paper;
+        out.look.haloA = rimPx > 0.f ? 1.f : 0.f;
+        out.look.haloW = rimPx / em;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(false, text::upper(h.text), base * 0.45f, 0.06f, ink, 0.4f + h.alpha * 1.5f, base * 0.12f); break;
+    case HUD_SECTION: put(true, text::upper(h.text), base * 0.62f, 0.05f, accent, 0.4f + h.alpha * 1.5f, base * 0.02f); break;
+    case HUD_TITLE:
+        put(false, h.text, base * 0.6f, 0.01f, ink, h.alpha * 1.6f, base * 0.02f);
+        inked(0.f, cap * 0.3f);
+        break;
+    case HUD_INFO:
+        // fully opaque over the drop's burst
+        put(false, h.text, base * 0.5f, 0.05f, ink, saturate(alpha * 1.3f) * lerpf(0.75f, 1.f, saturate(burst_ * 1.5f)), base * 0.1f);
+        inked(0.f, cap * 0.35f);
+        break;
+    case HUD_LABEL: put(false, text::upper(h.text), base * 0.44f, 0.16f, ink, saturate(alpha * 1.3f) * 0.85f, base * 0.12f); break;
+    case HUD_VALUE: put(true, h.text, base * 0.7f, 0.04f, ink, alpha, -base * 0.02f); break;
+    case HUD_NOTICE:
+        put(true, h.text, base * 0.6f, 0.05f, cur_[K_SFX], alpha);
+        inked(std::max(1.5f, cap * 0.08f), cap * 0.08f);
+        break;
+    case HUD_KEY: put(false, h.text, base * 0.55f, 0.02f, ink, alpha); break;
+    case HUD_TOAST:
+        // (a quad's in its balloon: no rim)
+        put(true, h.text, base * 0.75f, 0.06f, cur_[K_SFX], alpha, -base * 0.05f);
+        inked(std::max(1.5f, cap * 0.07f), h.text.find(QUAD_NAME) != std::string::npos ? 0.f : cap * 0.08f);
+        break;
+    case HUD_TOAST_SUB: put(true, h.text, base * 0.55f, 0.05f, ink, alpha); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s_) {
+            put(true, h.text, base * 0.7f, 0.06f, paper, alpha);
+            inked(std::max(2.f, cap * 0.07f), cap * 0.08f);
+        } else {
+            put(false, h.text, base * 0.5f, 0.04f, h.accent ? accent : ink, alpha);
+            inked(0.f, cap * 0.25f);
+        }
+        break;
+    default: put(false, h.text, base * 0.5f, 0.03f, h.accent ? accent : ink, alpha); break;
+    }
+    // the ink line and the paper rim, crisp; together within the letters' field
+    const float reach = out.spans[0].font == bangers ? 0.121f : 0.126f;
+    out.look.outlineW = std::min(out.look.outlineW, reach);
+    out.look.haloW = std::min(out.look.haloW, reach - (out.look.outlineA > 0.f ? out.look.outlineW : 0.f));
+    out.lettering = &INKED;
+    out.alpha = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 }
 
 // =====================================================================================================
@@ -1859,7 +1834,7 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) rectPx(0, 0, (float)width_, (float)height_, vec3(0.f), 1.f - saturate(f.fade));
         flushInk();
     }
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.hud, f.hudBoxes, f.panels);
     flushInk();
     glDisable(GL_BLEND);
 

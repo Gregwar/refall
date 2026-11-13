@@ -49,6 +49,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A solid: center + shape, axis X + material, axis Y + p0, axis Z + p1, color + seed, (p2, p3, glow, -).
     struct Part { float a[4], x[4], y[4], z[4], c[4], e[4]; };
@@ -183,31 +185,20 @@ private:
     std::vector<SpriteInst> sprites_;
     void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font med_, light_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, float alpha, float halo = 0.f);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const std::vector<HudRect>& panels);
+    float fade_ = 1.f; // the frame's fade in (the post's, the lettering's too)
+    text::Lettering lettering_[2]; // its halo: the usual one, the celebrations' and the dialogs' fuller one
 
     // ---- GL.
     GLuint progSky_ = 0, progBg_ = 0, progBox_ = 0, progParam_ = 0, progBoxSh_ = 0, progParamSh_ = 0, progGlow_ = 0,
            progBright_ = 0, progBlur_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
-           progText_ = 0, progPost_ = 0;
+           progPost_ = 0;
     GLuint quadVbo_ = 0, cubeVbo_ = 0, fineVbo_ = 0, fineIbo_ = 0, coarseVbo_ = 0, coarseIbo_ = 0;
     GLuint boxVao_ = 0, boxInst_ = 0, fineVao_ = 0, fineInst_ = 0, coarseVao_ = 0, coarseInst_ = 0;
     GLsizei fineCount_ = 0, coarseCount_ = 0;
     GLuint glowVao_ = 0, glowVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
-           shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
     int msSamples_ = 4;
     static constexpr int SHADOW_N = 2048;

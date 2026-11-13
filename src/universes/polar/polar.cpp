@@ -26,16 +26,10 @@
 // its own.
 #include "universes/polar/polar.hpp"
 
-#include <cctype>
-#include <cstdio>
-#include <cstring>
 
 #include "layout.hpp"
 #include "universes/polar/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -194,7 +188,6 @@ bool PolarUniverse::init(int width, int height) {
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "polar shape");
     progTile_ = compile(shaders::TILE_VS, shaders::TILE_FS, "polar tile");
     progDot_ = compile(shaders::DOT_VS, shaders::DOT_FS, "polar dot");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "polar text");
     progDown_ = compile(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "polar down");
     progUp_ = compile(ugl::FULLSCREEN_VS, shaders::UP_FS, "polar up");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "polar post");
@@ -229,19 +222,9 @@ bool PolarUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     buildNoise();
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontRegular_, FONT_REGULAR);
     pal_ = cur_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
@@ -305,51 +288,6 @@ void PolarUniverse::buildNoise() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
-// Glyphs baked as signed distance fields: they scale cleanly, and the distance gives the halo of night.
-void PolarUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] polar font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
-}
-
 void PolarUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -397,15 +335,11 @@ PolarUniverse::~PolarUniverse() {
     skyT_.destroy();
     sceneT_.destroy();
     for (auto& t : bloomT_) t.destroy();
-    for (GLuint p : {progSky_, progComp_, progShape_, progTile_, progDot_, progText_, progDown_, progUp_, progPost_})
+    for (GLuint p : {progSky_, progComp_, progShape_, progTile_, progDot_, progDown_, progUp_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {tileVao_, dotVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, tileVbo_, dotVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {tileVao_, dotVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tileVbo_, dotVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
-    for (Font* f : {&fontLight_, &fontRegular_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -980,190 +914,103 @@ void PolarUniverse::buildFx() {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float PolarUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void PolarUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? cur_.aurA * 0.8f : cur_.halo;
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
-
-float PolarUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                               std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-void PolarUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float halo, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uColor", color);
-    set3f(progText_, "uHalo", cur_.halo);
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uHaloAmt", halo);
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uBridge", smoothstepf(0.3f, 0.95f, bridge_.amount));
-    set3f(progText_, "uBridgeInk", bridge_.ink);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-namespace {
-std::string upper(const std::string& s) {
-    std::string o = s;
-    for (char& c : o) c = (char)std::toupper((unsigned char)c);
-    return o;
-}
-} // namespace
 
 // The HUD in POLAR NIGHT's typography: Josefin Sans, light and widely spaced capitals (a cold, airy, Nordic hand);
-// icy white ink on a soft halo of night, the variant's name in the aurora's color.
-void PolarUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? cur_.aurA * 0.8f : cur_.halo;
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
+// icy white ink on a soft halo of night (readable over the aurora), the variant's name in the aurora's color, the
+// ink with a faint cold light of its own (the bloom it had).
+void PolarUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* regular = text::font(FONT_REGULAR);
+    const float s = height_ / 1080.f, base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    // a scene color as the post shows it (its exposure and soft shoulder, none at the bridge)
+    auto display = [&](const vec3& raw) {
+        vec3 c = raw * (1.f + 0.15f * flare_);
+        const float over = std::max(c.x - 1.f, 0.f) + std::max(c.y - 1.f, 0.f) + std::max(c.z - 1.f, 0.f);
+        c = c + vec3(over * 0.1f);
+        const float K = 0.62f;
+        auto tone = [&](float x) { return x < K ? x : K + (1.f - K) * (1.f - std::exp(-(x - K) / (1.f - K))); };
+        return ugl::toSrgb(lerp(vec3(tone(c.x), tone(c.y), tone(c.z)), raw, saturate(bridge_.amount)));
+    };
+    auto ink = [&](const vec3& c) { return display(lerp(c, bridge_.ink, br)); };
+    const vec3 inkC = cur_.ink, accent = lerp(cur_.ink, cur_.aurA, 0.6f);
+    float halo = 0.6f, bias = 0.04f;
+    // an opacity as it was, blended in the scene's linear light (over the night: a lighter veil than over sRGB)
+    auto opacity = [](float a) { return std::pow(saturate(a), 1.f / 2.2f); };
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, ink(c), track / size, opacity(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "POLAR NIGHT" in light spaced capitals, the night's name after it in the aurora's color
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 0.82f, vsz = base * 0.66f, a = 0.35f + h.alpha * 1.6f;
+        put(light, text::upper(name), sz, sz * 0.16f, inkC, a);
+        if (!var.empty()) {
+            text::Span& v = out.add(var, regular, vsz, ink(accent), 0.1f, opacity(a));
+            v.gap = (base * 0.6f - sz * 0.16f) / vsz; // the gap (less the name's tracking after it)
+            v.dy = (sz - vsz) * 0.5f + 0.723f * vsz - 0.71f * sz; // centered on the name's height
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
+        halo = 0.7f; bias = 0.06f;
+        break;
     }
-    const vec3 ink = cur_.ink;
-    const vec3 accent = lerp(cur_.ink, cur_.aurA, 0.6f);
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "POLAR NIGHT" in light spaced capitals, the night's name after it in the aurora's color.
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.82f, tr = sz * 0.16f, vsz = base * 0.66f, vtr = vsz * 0.1f;
-            const float wName = textWidth(fontLight_, name, sz, tr);
-            const float wVar = var.empty() ? 0.f : textWidth(fontRegular_, var, vsz, vtr);
-            const float gap = base * 0.6f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontLight_, name, x, h.y, sz, tr, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontLight_, q, ink, a, 0.7f, 0.06f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontRegular_, var, x + wName + gap, h.y + (sz - vsz) * 0.5f, vsz, vtr, q);
-                drawText(fontRegular_, q, accent, a, 0.7f, 0.04f);
-            }
-            continue;
+    case HUD_SECTION: put(light, text::upper(h.text), base * 1.1f, base * 0.42f, inkC, 0.2f + h.alpha * 1.9f); halo = 0.7f; bias = 0.06f; break;
+    case HUD_TITLE: put(light, h.text, base * 1.05f, base * 0.05f, inkC, h.alpha * 1.3f, -base * 0.2f); halo = 0.7f; bias = 0.07f; break;
+    case HUD_INFO: put(regular, text::upper(h.text), base * 0.68f, base * 0.25f, inkC, saturate(alpha * 1.2f) * 0.8f); halo = 0.7f; break;
+    case HUD_LABEL: put(regular, text::upper(h.text), base * 0.7f, base * 0.38f, inkC, saturate(alpha * 1.2f) * 0.75f); halo = 0.5f; break;
+    case HUD_VALUE: put(light, h.text, base * 1.18f, base * 0.08f, inkC, alpha); halo = 0.5f; bias = 0.06f; break;
+    case HUD_NOTICE: put(light, text::upper(h.text), base * 1.0f, base * 0.25f, accent, alpha); bias = 0.06f; break;
+    case HUD_KEY: put(regular, h.text, base * 0.85f, base * 0.1f, inkC, alpha); break;
+    case HUD_TOAST: put(light, text::upper(h.text), base * 1.3f, base * 0.5f, inkC, alpha, -base * 0.1f); halo = 0.8f; bias = 0.07f; break;
+    case HUD_TOAST_SUB: put(regular, h.text, base * 0.85f, base * 0.25f, accent, alpha * 0.95f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(light, text::upper(h.text), base * 1.15f, base * 0.4f, inkC, alpha, -base * 0.08f);
+            halo = 0.8f; bias = 0.07f;
+        } else {
+            put(regular, h.text, base * 0.85f, base * 0.12f, h.accent ? accent : inkC, alpha);
+            halo = 0.65f;
         }
-        case HUD_SECTION:
-            place(fontLight_, upper(h.text), base * 1.1f, base * 0.42f);
-            drawText(fontLight_, q, ink, saturate(0.2f + h.alpha * 1.9f), 0.7f, 0.06f);
-            continue;
-        case HUD_TITLE:
-            place(fontLight_, h.text, base * 1.05f, base * 0.05f, -base * 0.2f);
-            drawText(fontLight_, q, ink, saturate(h.alpha * 1.3f), 0.7f, 0.07f);
-            continue;
-        case HUD_INFO:
-            place(fontRegular_, upper(h.text), base * 0.68f, base * 0.25f);
-            drawText(fontRegular_, q, ink, saturate(alpha * 1.2f) * 0.8f, 0.7f, 0.04f);
-            continue;
-        case HUD_LABEL:
-            place(fontRegular_, upper(h.text), base * 0.7f, base * 0.38f);
-            drawText(fontRegular_, q, ink, saturate(alpha * 1.2f) * 0.75f, 0.5f, 0.04f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.18f, base * 0.08f);
-            drawText(fontLight_, q, ink, alpha, 0.5f, 0.06f);
-            continue;
-        case HUD_NOTICE:
-            place(fontLight_, upper(h.text), base * 1.0f, base * 0.25f);
-            drawText(fontLight_, q, accent, alpha, 0.6f, 0.06f);
-            continue;
-        case HUD_KEY:
-            place(fontRegular_, h.text, base * 0.85f, base * 0.1f);
-            drawText(fontRegular_, q, ink, alpha, 0.6f, 0.04f);
-            continue;
-        case HUD_TOAST:
-            place(fontLight_, upper(h.text), base * 1.3f, base * 0.5f, -base * 0.1f);
-            drawText(fontLight_, q, ink, alpha, 0.8f, 0.07f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontRegular_, h.text, base * 0.85f, base * 0.25f);
-            drawText(fontRegular_, q, accent, alpha * 0.95f, 0.6f, 0.04f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontLight_, upper(h.text), base * 1.15f, base * 0.4f, -base * 0.08f);
-                drawText(fontLight_, q, ink, alpha, 0.8f, 0.07f);
-            } else {
-                place(fontRegular_, h.text, base * 0.85f, base * 0.12f);
-                drawText(fontRegular_, q, h.accent ? accent : ink, alpha, 0.65f, 0.04f);
-            }
-            continue;
-        default:
-            place(fontRegular_, h.text, base * 0.82f, base * 0.1f);
-            drawText(fontRegular_, q, h.accent ? accent : ink, alpha, 0.6f, 0.04f);
-            continue;
-        }
+        break;
+    default: put(regular, h.text, base * 0.82f, base * 0.1f, h.accent ? accent : inkC, alpha); break;
     }
+    // (the old field: 10 px of distance at 64 px, one unit of it 0.31 em; its halo from 0.1, squared; its wide
+    // edge left the small letters a little heavier)
+    text::Look& k = out.look;
+    k.weight = bias * 0.31f + 0.25f / std::max(1.f, out.spans[0].size);
+    k.halo = display(cur_.halo);
+    k.haloA = halo * (1.f - br);
+    k.haloW = 0.125f;
+    k.haloPow = 2.f;
+    k.glow = out.spans[0].ink;
+    k.glowA = 0.22f * (1.f - br);
+    k.glowW = 0.14f;
 }
 
 // =====================================================================================================
@@ -1371,7 +1218,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)tiles_.size());
     }
     drawDots(dots_);
-    drawHud(f.hud, f.panels);
+    drawPanels(f.panels);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the aurora's lower edge, the moon, the rims.

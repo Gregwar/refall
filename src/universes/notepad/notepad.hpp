@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "text.hpp"
 #include "ugl.hpp"
 #include "universe.hpp"
 
@@ -28,6 +29,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // One mark of a drawing, an instanced quad (see MARK_FS): a stroke (a wobbly line of some tool) or a
     // coloured-in area (a cell, a pie).
@@ -64,13 +67,12 @@ public:
     };
 
 private:
-    struct Glyph { float x0 = 0, y0 = 0, x1 = 0, y1 = 0, ox = 0, oy = 0, w = 0, h = 0, adv = 0; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[97];
-        void* info = nullptr;
+    // A HUD line as the hand writes it (see hudLine).
+    struct Word {
+        std::string text;
+        float size = 16, dy = 0, boost = 1.2f;
+        vec3 col{0.f};
+        bool underline = false;
     };
     struct Doodle {
         int shape = 0;
@@ -111,35 +113,35 @@ private:
     void spawnMover(int kind, int side);
     void marginBox(int side, float& x0, float& y0, float& x1, float& y1) const;
     void emitMover(const Item& it, std::vector<Mark>& out);
-    void emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text);
+    void emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<Item>* words);
     void spawnDoodle(bool burst);
     bool freeSpot(float size, vec2& out);
     void syncInk(const Game& game);
     void hudItems(const Frame& f, std::vector<Item>& out);
+    Word word(const HudText& h) const;
 
     // marks
-    void emit(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text);
+    void emit(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<Item>* words);
     void emitCell(const Item& it, int age, bool residue, std::vector<Mark>& out);
     void emitOutline(const Item& it, int age, bool residue, std::vector<Mark>& out);
     void emitPolyline(const std::vector<vec2>& pts, float width, vec3 ink, float alpha, int tool, float seed,
                       float wobble, float reveal, bool world, std::vector<Mark>& out);
-    void emitText(const Item& it, bool residue, std::vector<float>& out);
     void stroke(std::vector<Mark>& out, vec2 a, vec2 b, float width, vec3 ink, float alpha, int tool, float seed,
                 float wobble, float reveal = 1.f, float bow = 0.f, float dash = 0.f, bool world = false, int joints = 0);
     vec3 inkOf(const vec3& c) const;
 
     // GL
     void createTargets();
-    void buildFont();
-    float textWidth(const std::string& s, float size) const;
     void drawMarks(const std::vector<Mark>& m, bool residue, vec2 smear);
-    void drawText(const std::vector<float>& v, bool residue);
+    void drawGhostWords(const std::vector<Item>& words);
     int pickVariant(const SongLook& look) const;
 
-    GLuint progPaper_ = 0, progMark_ = 0, progText_ = 0, progPost_ = 0, progFade_ = 0;
-    GLuint quadVbo_ = 0, markVao_ = 0, markVbo_ = 0, textVao_ = 0, textVbo_ = 0, emptyVao_ = 0;
+    GLuint progPaper_ = 0, progMark_ = 0, progPost_ = 0, progFade_ = 0;
+    GLuint quadVbo_ = 0, markVao_ = 0, markVbo_ = 0, emptyVao_ = 0;
     ugl::Target residueT_, sceneT_;
-    Font font_;
+    // the words: lettered by the host over the page (hudLine), their eraser ghosts written into the residue here
+    text::Lettering hand_, ghostHand_;
+    text::Engine ghostText_;
     mat4 vp_;
     vec2 viewC_{0, 0.4f}, viewH_{22, 12.4f};
     float px_ = 0.05f;
@@ -164,6 +166,7 @@ private:
     float refreshPending_ = 0;
     Bridge bridge_;
     float pauseFade_ = 0;
+    bool bare_ = false; // a break's page: no drawings, the words written as given
 
     // the hand's style on this drawing
     vec3 outlineCol_{0.f}, graphite_{0.f};
@@ -199,7 +202,6 @@ private:
     std::vector<Item> items_;                    // the current drawing
     std::unordered_map<uint64_t, size_t> index_; // key -> item
     std::vector<Mark> marks_;                    // its marks
-    std::vector<float> textVerts_;               // its letters
-    size_t markCount_ = 0, textCount_ = 0;
+    size_t markCount_ = 0;
     Rng rng_{777};
 };

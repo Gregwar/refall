@@ -20,15 +20,11 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <cctype>
 #include <cstring>
 
 #include "layout.hpp"
 #include "universes/notepad/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -276,7 +272,6 @@ vec3 cellPos(float x, float y) { return layout::cellPos(x, y); }
 bool NotepadUniverse::init(int width, int height) {
     progPaper_ = compile(sh::FULLSCREEN_VS, sh::PAPER_FS, "notepad paper");
     progMark_ = compile(sh::MARK_VS, sh::MARK_FS, "notepad marks");
-    progText_ = compile(sh::TEXT_VS, sh::TEXT_FS, "notepad text");
     progPost_ = compile(sh::FULLSCREEN_VS, sh::POST_FS, "notepad post");
     progFade_ = compile(sh::FULLSCREEN_VS, sh::FADE_FS, "notepad eraser");
 
@@ -297,16 +292,31 @@ bool NotepadUniverse::init(int width, int height) {
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Mark), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 8, (void*)(sizeof(float) * 4));
     glBindVertexArray(0);
-    buildFont();
+    // the hand: each letter a little off its line (seeded by the drawing of the line: uP0.x its seed, uP0.y the
+    // boil in em), the felt or graphite a little uneven on the paper's tooth
+    hand_.move = R"(
+vec2 move(float glyph, vec2 pos) {
+    float s = uP0.x;
+    vec2 r = vec2(hash12(vec2(glyph * 1.37 + 0.5, s * 0.71 + 3.1)), hash12(vec2(glyph * 2.11 + 7.3, s * 0.53 + 11.7))) * 2.0 - 1.0;
+    vec2 b = vec2(hash12(vec2(glyph * 0.93 + 19.1, s * 0.37 + 5.3)), hash12(vec2(glyph * 1.79 + 23.9, s * 0.29 + 17.1))) * 2.0 - 1.0;
+    return vec2(r.x * 0.012, r.y * 0.03) + b * uP0.y;
+}
+)";
+    // (the page mixes its words in linear light: so are they here, into the final picture; uP0.z: 0 multiplied
+    // into the paper, -1 screened onto the blackboard, 1 over the picture)
+    hand_.glsl = R"(
+vec4 letter(Letter L) {
+    float a = L.std.a * (0.86 + 0.14 * noise(L.px * 0.35));
+    if (uP0.z > 0.5) return vec4(L.ink.rgb, 1.0) * a;
+    if (uP0.z < -0.5) return vec4(L.ink.rgb, 1.0) * pow(a, 1.0 / 2.2);
+    return vec4(pow(vec3(1.0 - a) + a * pow(L.ink.rgb, vec3(2.2)), vec3(1.0 / 2.2)) - 1.0 + a, a);
+}
+)";
+    // a word rubbed out: blotchy, where the eraser missed
+    ghostHand_.glsl = "vec4 letter(Letter L) { return L.std * (0.86 + 0.14 * noise(L.px * 0.35)) * smoothstep(0.15, 0.85, noise(L.px * 0.05)); }\n";
+    ghostHand_.move = hand_.move;
+    if (!ghostText_.init()) std::fprintf(stderr, "[gl] notepad: the residue's lettering failed\n");
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
 }
@@ -314,11 +324,9 @@ bool NotepadUniverse::init(int width, int height) {
 NotepadUniverse::~NotepadUniverse() {
     residueT_.destroy();
     sceneT_.destroy();
-    for (GLuint p : {progPaper_, progMark_, progText_, progPost_, progFade_}) glDeleteProgram(p);
-    for (GLuint v : {markVao_, textVao_, emptyVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, markVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    if (font_.tex) glDeleteTextures(1, &font_.tex);
-    delete (stbtt_fontinfo*)font_.info;
+    for (GLuint p : {progPaper_, progMark_, progPost_, progFade_}) glDeleteProgram(p);
+    for (GLuint v : {markVao_, emptyVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, markVbo_}) glDeleteBuffers(1, &b);
 }
 
 void NotepadUniverse::resize(int width, int height) {
@@ -348,85 +356,6 @@ void NotepadUniverse::createTargets() {
     glClearColor(1, 1, 1, 1);
     glClear(GL_COLOR_BUFFER_BIT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-// The handwriting: glyphs baked as signed distance fields (ASCII, plus the middle dot and the multiplication sign).
-void NotepadUniverse::buildFont() {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, FONT_TTF, stbtt_GetFontOffsetForIndex(FONT_TTF, 0))) {
-        std::fprintf(stderr, "[gl] notepad font init failed\n");
-        delete info;
-        return;
-    }
-    Font& f = font_;
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int slot = 0; slot < 97; slot++) {
-        const int ch = slot < 95 ? 32 + slot : (slot == 95 ? 0xB7 : 0xD7);
-        Glyph& g = f.g[slot];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) continue;
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
-}
-
-namespace {
-// UTF-8 to glyph slots (ASCII, the middle dot, the multiplication sign; anything else as '?').
-std::vector<int> slots(const std::string& s) {
-    std::vector<int> out;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 0x80) { out.push_back(c >= 32 && c < 127 ? c - 32 : '?' - 32); continue; }
-        int cp = 0, extra = 0;
-        if ((c & 0xE0) == 0xC0) { cp = c & 0x1F; extra = 1; }
-        else if ((c & 0xF0) == 0xE0) { cp = c & 0x0F; extra = 2; }
-        else { cp = c & 0x07; extra = 3; }
-        for (int k = 0; k < extra && i + 1 < s.size(); k++) cp = (cp << 6) | ((unsigned char)s[++i] & 0x3F);
-        out.push_back(cp == 0xB7 ? 95 : cp == 0xD7 ? 96 : '?' - 32);
-    }
-    return out;
-}
-int slotCode(int slot) { return slot < 95 ? 32 + slot : (slot == 95 ? 0xB7 : 0xD7); }
-} // namespace
-
-float NotepadUniverse::textWidth(const std::string& s, float size) const {
-    if (!font_.ok) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)font_.info;
-    const float k = size / font_.px;
-    const std::vector<int> sl = slots(s);
-    float w = 0;
-    for (size_t i = 0; i < sl.size(); i++) {
-        w += font_.g[sl[i]].adv * k;
-        if (i + 1 < sl.size()) w += stbtt_GetCodepointKernAdvance(info, slotCode(sl[i]), slotCode(sl[i + 1])) * font_.scaleTT * k;
-    }
-    return w;
 }
 
 // =====================================================================================================
@@ -1172,67 +1101,73 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
     hudItems(f, out);
 }
 
-// The HUD, handwritten on the page.
-void NotepadUniverse::hudItems(const Frame& f, std::vector<Item>& out) {
+// The HUD, handwritten on the page: each line in the hand's own Kalam (title case, a "!" after a celebration), its
+// ink by role. The host letters it over the page (hudLine); the drawings keep it as an item all the same, for the
+// stop motion (a line steps in and fades on the drawings), the eraser's ghost when it changes and the pencil
+// underline under a label.
+NotepadUniverse::Word NotepadUniverse::word(const HudText& h) const {
     const Variant& V = VARIANTS[variant_];
     const vec3 pen = outlineCol_, accent = hexc(V.marginN ? V.margin : V.accent);
     const vec3 pencil = lerp(graphite_, pen, 0.35f);
-    auto titleCase = [](std::string s) {
-        bool start = true;
-        for (char& c : s) {
-            if (std::isalpha((unsigned char)c)) { c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c); start = false; }
-            else start = c == ' ' || c == '-';
-        }
-        return s;
-    };
+    const float base = h.scale * 12.f;
+    Word w;
+    w.text = h.text;
+    w.size = base;
+    w.col = pen;
+    switch (h.role) {
+    case HUD_TITLE: w.size = base * 1.7f; w.dy = -base * 0.3f; break;
+    case HUD_INFO: w.size = base * 1.15f; w.col = pencil; break;
+    case HUD_SECTION: w.size = base * 1.6f; w.text = text::titleCase(w.text); w.dy = -base * 0.2f; if (stage_ >= 3) w.col = accent; break;
+    case HUD_UNIVERSE: w.size = base * 1.2f; w.text = text::titleCase(w.text); w.col = pencil; break;
+    case HUD_LABEL: w.size = base * 1.2f; w.text = text::titleCase(w.text); w.col = lerp(pencil, pen, 0.5f); w.underline = true; break;
+    case HUD_VALUE: w.size = base * 1.5f; w.dy = -base * 0.1f; break;
+    case HUD_NOTICE: w.size = base * 1.4f; w.col = accent; break;
+    case HUD_KEY: w.size = base * 1.1f; break;
+    case HUD_TOAST: w.size = base * 2.f; w.text = text::titleCase(w.text) + "!"; w.col = accent; w.dy = -base * 0.3f; break;
+    case HUD_TOAST_SUB: w.size = base * 1.3f; break;
+    case HUD_DIALOG: w.size = h.scale >= 3.5f * height_ / 1080.f ? base * 1.7f : base * 1.15f; break;
+    default: w.size = base * 1.08f; if (h.accent) w.col = accent; break;
+    }
+    const bool firm = h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE || h.role == HUD_SECTION || h.role == HUD_DIALOG;
+    w.boost = firm ? 1.8f : 1.2f;
+    return w;
+}
+
+void NotepadUniverse::hudItems(const Frame& f, std::vector<Item>& out) {
+    const Variant& V = VARIANTS[variant_];
+    const vec3 pencil = lerp(graphite_, outlineCol_, 0.35f);
     int counter = 0;
-    for (const HudText& h : f.hud) {
+    for (size_t i = 0; i < f.hud.size(); i++) {
+        const HudText& h = f.hud[i];
         if (h.alpha <= 0.03f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        float size = base;
-        vec3 col = pen;
-        std::string text = h.text;
-        float dy = 0.f;
-        bool underline = false;
-        switch (h.role) {
-        case HUD_TITLE: size = base * 1.7f; dy = -base * 0.3f; break;
-        case HUD_INFO: size = base * 1.15f; col = pencil; break;
-        case HUD_SECTION: size = base * 1.6f; text = titleCase(text); dy = -base * 0.2f; if (stage_ >= 3) col = accent; break;
-        case HUD_UNIVERSE: size = base * 1.2f; text = titleCase(text); col = pencil; break;
-        case HUD_LABEL: size = base * 1.2f; text = titleCase(text); col = lerp(pencil, pen, 0.5f); underline = true; break;
-        case HUD_VALUE: size = base * 1.5f; dy = -base * 0.1f; break;
-        case HUD_NOTICE: size = base * 1.4f; col = accent; break;
-        case HUD_KEY: size = base * 1.1f; break;
-        case HUD_TOAST: size = base * 2.f; text = titleCase(text) + "!"; col = accent; dy = -base * 0.3f; break;
-        case HUD_TOAST_SUB: size = base * 1.3f; break;
-        case HUD_DIALOG: size = h.scale >= 3.5f * height_ / 1080.f ? base * 1.7f : base * 1.15f; break;
-        default: size = base * 1.08f; if (h.accent) col = accent; break;
-        }
-        const float w = textWidth(text, size);
+        const Word w = word(h);
         Item it;
         it.kind = IT_TEXT;
-        it.text = text;
-        it.x = ugl::hudLeft(h, w, width_);
-        it.y = h.y + dy;
-        it.s = size;
-        it.col = col;
-        const float boost = h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE || h.role == HUD_SECTION || h.role == HUD_DIALOG ? 1.8f : 1.2f;
-        it.alpha = std::floor(saturate(h.alpha * boost) * 8.f + 0.5f) / 8.f;
+        it.text = w.text;
+        // where the host letters it (its cap line, its left end)
+        const float x = ugl::hudLeft(h, 0.f, width_);
+        vec4 box{x, h.y + w.dy, x, h.y + w.dy + w.size};
+        if (f.hudBoxes && i < f.hudBoxes->size()) box = (*f.hudBoxes)[i];
+        it.x = box.x;
+        it.y = box.y;
+        it.s = w.size;
+        it.col = w.col;
+        it.alpha = std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
         if (it.alpha <= 0.f) continue;
-        it.key = mix(strHash(text), (uint64_t)h.role * 977u + (uint64_t)std::lround(it.x / 24.f));
+        it.key = mix(strHash(w.text), (uint64_t)h.role * 977u + (uint64_t)std::lround(it.x / 24.f));
         for (const Item& o : out) if (o.key == it.key) { it.key = mix(it.key, (uint64_t)++counter); break; }
         it.residue = 0.16f;
         it.i0 = h.role;
         out.push_back(it);
-        if (underline) {
+        if (w.underline && box.z > box.x) {
             Item u;
             u.key = mix(it.key, 0x0D1);
             u.kind = IT_STROKE;
-            const float yb = it.y + size * 1.05f;
-            u.x = viewC_.x - viewH_.x + (it.x - size * 0.1f) * px_;
+            const float yb = it.y + w.size * 1.05f;
+            u.x = viewC_.x - viewH_.x + (it.x - w.size * 0.1f) * px_;
             u.y = viewC_.y + viewH_.y - yb * px_;
-            u.a = viewC_.x - viewH_.x + (it.x + w + size * 0.15f) * px_;
-            u.b = viewC_.y + viewH_.y - (yb + size * 0.05f) * px_;
+            u.a = viewC_.x - viewH_.x + (box.z + w.size * 0.15f) * px_;
+            u.b = viewC_.y + viewH_.y - (yb + w.size * 0.05f) * px_;
             u.c = V.outlineW * 0.75f;
             u.col = pencil;
             u.tool = V.light ? T_PENCIL : T_CHALK;
@@ -1242,6 +1177,44 @@ void NotepadUniverse::hudItems(const Frame& f, std::vector<Item>& out) {
             out.push_back(u);
         }
     }
+}
+
+namespace {
+vec3 toSrgb(const vec3& c) {
+    return {std::pow(std::max(c.x, 0.f), 1.f / 2.2f), std::pow(std::max(c.y, 0.f), 1.f / 2.2f), std::pow(std::max(c.z, 0.f), 1.f / 2.2f)};
+}
+} // namespace
+
+// A line lettered by the host as the last drawing wrote it: its fading step, its ink and its hand (the seed of its
+// letters' jitter) change on the drawings only; multiplied into the paper like felt or graphite, screened onto the
+// blackboard like chalk. A break's page (no drawings) writes what it is given.
+void NotepadUniverse::hudLine(const HudText& h, text::Line& out) {
+    const Variant& V = VARIANTS[variant_];
+    const Word w = word(h);
+    const Item* drawn = nullptr;
+    if (!bare_)
+        for (const Item& it : items_)
+            if (it.kind == IT_TEXT && it.i0 == (int)h.role && it.text == w.text) { drawn = &it; break; }
+    const float alpha = drawn ? drawn->alpha : std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
+    if (alpha <= 0.f) return;
+    const vec3 col = drawn ? drawn->col : w.col;
+    vec3 ink = toSrgb(col);
+    out.blend = V.light ? text::BLEND_MULTIPLY : text::BLEND_SCREEN;
+    float mode = V.light ? 0.f : -1.f;
+    const float b = smoothstepf(0.f, 1.f, bridge_.amount);
+    if (b > 0.001f) {
+        // the bridge: the words go to its ink, over its backdrop
+        const vec3 P = hexc(V.paper);
+        const vec3 onPage = V.light ? P * col : vec3(1.f) - (vec3(1.f) - P) * (vec3(1.f) - col);
+        ink = toSrgb(lerp(onPage, bridge_.ink, b));
+        out.blend = text::BLEND_OVER;
+        mode = 1.f;
+    }
+    out.add(w.text, text::font(FONT_TTF), w.size, ink, 0.f, alpha);
+    out.dy = w.dy;
+    out.look.weight = 0.01f; // (the felt a touch bolder than the font)
+    hand_.p0 = vec4{drawn ? drawn->seed : (float)(strHash(w.text) % 1000u), boil_ / px_ * 0.9f / w.size, mode, 0.f};
+    out.lettering = &hand_;
 }
 
 // =====================================================================================================
@@ -1284,17 +1257,17 @@ void NotepadUniverse::emitPolyline(const std::vector<vec2>& pts, float width, ve
     }
 }
 
-void NotepadUniverse::emit(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text) {
+void NotepadUniverse::emit(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<Item>* words) {
     // drawn with the hand it was first drawn with: a change of section doesn't redraw what stays
     const float keepWeight = weight_, keepWobble = wobble_;
     weight_ = it.wt;
     wobble_ = it.wob;
-    emitKind(it, age, residue, out, text);
+    emitKind(it, age, residue, out, words);
     weight_ = keepWeight;
     wobble_ = keepWobble;
 }
 
-void NotepadUniverse::emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<float>* text) {
+void NotepadUniverse::emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<Item>* words) {
     eraseNow = 0.f;
     switch (it.kind) {
     case IT_CELL: emitCell(it, age, residue, out); break;
@@ -1399,8 +1372,8 @@ void NotepadUniverse::emitKind(const Item& it, int age, bool residue, std::vecto
         break;
     }
     case IT_MOVER: emitMover(it, out); break;
-    case IT_TEXT:
-        if (text) emitText(it, residue, *text);
+    case IT_TEXT: // (lettered by the host; a ghost's words are written into the residue apart)
+        if (words) words->push_back(it);
         break;
     default: break;
     }
@@ -1556,39 +1529,6 @@ void NotepadUniverse::emitOutline(const Item& it, int age, bool residue, std::ve
                 stroke(out, a, b, width * 0.8f, ink, it.alpha * (V.light ? 0.7f : 0.55f), it.tool, it.seed + 31.f + k * 3.7f + h,
                        wobble_ * 0.5f, 1.f, 0.f, 0.f, false);
             }
-}
-
-void NotepadUniverse::emitText(const Item& it, bool residue, std::vector<float>& out) {
-    if (!font_.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)font_.info;
-    const float k = it.s / font_.px;
-    const float baseline = it.y + font_.capH * k;
-    const std::vector<int> sl = slots(it.text);
-    Rng r(splitmix64((uint64_t)(it.seed * 1000.f) + 11));
-    Rng boil(splitmix64((uint64_t)(it.seed * 1000.f) + 101 + (uint64_t)boilSeedNow * 7));
-    const float boilPx = boil_ / px_ * 0.9f;
-    vec2 smear = v2(0, 0);
-    if (residue) { const float a = r.range(0.f, TAU); smear = v2(std::cos(a) * 1.2f, std::sin(a) * 0.6f); }
-    const vec3 ink = inkOf(it.col);
-    float pen = it.x;
-    for (size_t i = 0; i < sl.size(); i++) {
-        const Glyph& g = font_.g[sl[i]];
-        // the hand: each letter a little off its line, a little different on every drawing
-        const float jx = r.range(-1.f, 1.f) * it.s * 0.012f + boil.range(-1.f, 1.f) * boilPx;
-        const float jy = r.range(-1.f, 1.f) * it.s * 0.03f + boil.range(-1.f, 1.f) * boilPx;
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k + jx + smear.x, y0 = baseline + g.oy * k + jy + smear.y;
-            const float x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) {
-                out.insert(out.end(), q, q + 4);
-                out.push_back(ink.x); out.push_back(ink.y); out.push_back(ink.z); out.push_back(it.alpha);
-            }
-        }
-        pen += g.adv * k;
-        if (i + 1 < sl.size()) pen += stbtt_GetCodepointKernAdvance(info, slotCode(sl[i]), slotCode(sl[i + 1])) * font_.scaleTT * k;
-    }
 }
 
 // =====================================================================================================
@@ -1849,7 +1789,7 @@ void NotepadUniverse::tick(const Frame& f, float since) {
     }
     {
         std::vector<Mark> ghost;
-        std::vector<float> ghostText;
+        std::vector<Item> ghostWords;
         // squares the new drawing fills: a ghost under them is lighter (the hand erased around them)
         auto covered = [&](const Item& o) {
             for (const Item& n : next)
@@ -1866,12 +1806,12 @@ void NotepadUniverse::tick(const Frame& f, float since) {
             Item gi = o;
             gi.alpha *= strength;
             gi.c *= 1.f;
-            emit(gi, 99, true, ghost, &ghostText);
+            emit(gi, 99, true, ghost, &ghostWords);
         }
-        if (!ghost.empty() || !ghostText.empty()) {
+        if (!ghost.empty() || !ghostWords.empty()) {
             const float a = rng_.range(0.f, TAU);
             drawMarks(ghost, true, v2(std::cos(a) * 0.14f, std::sin(a) * 0.05f));
-            drawText(ghostText, true);
+            drawGhostWords(ghostWords);
         }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -1899,14 +1839,10 @@ void NotepadUniverse::tick(const Frame& f, float since) {
     items_.swap(next);
     index_.swap(nextIndex);
     marks_.clear();
-    textVerts_.clear();
-    for (const Item& it : items_) emit(it, drawing_ - it.born, false, marks_, &textVerts_);
+    for (const Item& it : items_) emit(it, drawing_ - it.born, false, marks_, nullptr);
     glBindBuffer(GL_ARRAY_BUFFER, markVbo_);
     glBufferData(GL_ARRAY_BUFFER, marks_.size() * sizeof(Mark), marks_.data(), GL_DYNAMIC_DRAW);
     markCount_ = marks_.size();
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, textVerts_.size() * sizeof(float), textVerts_.data(), GL_DYNAMIC_DRAW);
-    textCount_ = textVerts_.size() / 8;
 }
 
 void NotepadUniverse::drawMarks(const std::vector<Mark>& m, bool residue, vec2 smear) {
@@ -1931,25 +1867,23 @@ void NotepadUniverse::drawMarks(const std::vector<Mark>& m, bool residue, vec2 s
     }
 }
 
-void NotepadUniverse::drawText(const std::vector<float>& v, bool residue) {
-    if (!font_.ok) return;
-    const bool own = residue || &v != &textVerts_; // (a list of its own: a ghost, or a break's page)
-    const size_t count = own ? v.size() / 8 : textCount_;
-    if (count == 0) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font_.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set1f(progText_, "uResidue", residue ? 1.f : 0.f);
-    set1f(progText_, "uBias", 0.04f);
-    glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    if (own) glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)count);
-    if (own && !residue) glBufferData(GL_ARRAY_BUFFER, textVerts_.size() * sizeof(float), textVerts_.data(), GL_DYNAMIC_DRAW);
+// The words the eraser went over, written faintly into the residue (multiplied in like the marks' ghosts), a little
+// smeared, blotchy where it missed.
+void NotepadUniverse::drawGhostWords(const std::vector<Item>& words) {
+    for (const Item& it : words) {
+        Rng r(splitmix64((uint64_t)(it.seed * 1000.f) + 11));
+        const float a = r.range(0.f, TAU);
+        text::Line l;
+        l.add(it.text, text::font(FONT_TTF), it.s, inkOf(it.col), 0.f, it.alpha);
+        l.dx = std::cos(a) * 1.2f;
+        l.dy = std::sin(a) * 0.6f;
+        l.look.weight = 0.01f;
+        l.blend = text::BLEND_MULTIPLY;
+        ghostHand_.p0 = vec4{it.seed, 0.f, 0.f, 0.f};
+        l.lettering = &ghostHand_;
+        ghostText_.draw(l, it.x, it.y, width_, height_, 0.f);
+    }
+    glDisable(GL_BLEND);
 }
 
 void NotepadUniverse::render(const Frame& f, GLuint fbo) {
@@ -2050,27 +1984,16 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPaper_, "uAspect", (float)width_ / height_);
     glBindVertexArray(emptyVao_);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    bare_ = f.bare;
     if (f.bare) {
-        // the world alone: the doodles and the travelling drawings as last drawn, and the HUD's words written for
-        // this frame; the well, the stack, the previews, the gauge and the eraser's ghosts left out
+        // the world alone: the doodles and the travelling drawings as last drawn (the HUD's words lettered by the
+        // host as given); the well, the stack, the previews, the gauge and the eraser's ghosts left out
         std::vector<Mark> marks;
-        std::vector<float> text;
         for (const Item& it : items_)
-            if (it.kind == IT_DOODLE || it.kind == IT_MOVER) emit(it, drawing_ - it.born, false, marks, &text);
-        std::vector<Item> words;
-        hudItems(f, words);
-        for (Item& it : words) {
-            it.wt = weight_;
-            it.wob = wobble_;
-            it.born = drawing_;
-            it.seed = (float)(it.key % 1000u);
-            emit(it, 0, false, marks, &text);
-        }
+            if (it.kind == IT_DOODLE || it.kind == IT_MOVER) emit(it, drawing_ - it.born, false, marks, nullptr);
         drawMarks(marks, false, v2(0, 0));
-        drawText(text, false);
     } else {
         drawMarks(marks_, false, v2(0, 0));
-        drawText(textVerts_, false);
     }
     glDisable(GL_BLEND);
 

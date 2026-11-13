@@ -1260,30 +1260,18 @@ in vec4 vCol;
 out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uInk, uHalo;
-uniform float uAlpha, uHaloA;
-void main() {
-    float d = texture(uFont, vUv).r;
+// The HUD's lettering (text::Lettering, the host letters it over the post): the letters as they were drawn in the
+// linear scene, over their halo of the veil (uP0: its color, sRGB, and amount): the field as baked then (64 px, 8 px
+// of reach); the fill's coverage and the halo's shaped as linear blending shaped them (light over dark, dark over
+// light).
+inline const char* LETTER_GLSL = R"(
+vec4 letter(Letter L) {
+    float d = 0.5 + L.dist / L.em * 4.0157;
     float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.47 - w, 0.47 + w, d);
-    float halo = smoothstep(0.15, 0.45, d) * uHaloA;
+    float fill = pow(smoothstep(0.47 - w, 0.47 + w, d), 1.0 / 2.2);
+    float halo = 1.0 - pow(1.0 - smoothstep(0.15, 0.45, d) * uP0.a, 1.0 / 2.2);
     float a = max(fill, halo);
-    vec3 c = uInk * fill + uHalo * (a - fill);
-    frag = vec4(c, a) * uAlpha;
+    return vec4(L.ink.rgb * fill + uP0.rgb * (a - fill), a) * L.ink.a;
 }
 )";
 

@@ -25,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- The world's silhouettes: instanced primitives, one list per depth (far to near).
@@ -87,30 +89,15 @@ private:
     void spawnFlyer(int kind, float side);
     void buildPassers();
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontSans_, fontSerif_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
-    float haloA_ = 0.5f;
     void flushShapes();
 
     // ---- GL.
-    GLuint progRays_ = 0, progSky_ = 0, progSil_ = 0, progBank_ = 0, progPiece_ = 0, progMote_ = 0, progFinal_ = 0, progShape_ = 0,
-           progText_ = 0;
+    GLuint progRays_ = 0, progSky_ = 0, progSil_ = 0, progBank_ = 0, progPiece_ = 0, progMote_ = 0, progFinal_ = 0, progShape_ = 0;
     GLuint quadVbo_ = 0, primVao_ = 0, primVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, moteVao_ = 0, moteVbo_ = 0,
-           shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           shapeVao_ = 0, shapeVbo_ = 0;
     ugl::Target sceneT_, rayT_; // rayT_: the light shafts (quarter resolution)
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};

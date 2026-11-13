@@ -58,6 +58,7 @@ bool Renderer::init(int width, int height) {
     h_ = std::max(1, height);
     comp_.init();
     card_.init();
+    if (!text_.init()) std::fprintf(stderr, "[text] the text engine could not start\n");
     mixProg_ = ugl::program(ugl::FULLSCREEN_VS, BREAK_FS, "break");
     cardProg_ = ugl::program(ugl::FULLSCREEN_VS, CARD_FS, "card");
     glGenTextures(1, &cellsTex_);
@@ -226,6 +227,16 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, w_, h_);
+        if (cur_.u->hostText()) {
+            std::vector<text::Line> lines;
+            std::vector<vec4> boxes;
+            hudLines(*cur_.u, hud, lines, boxes);
+            Frame fl = f;
+            fl.hudBoxes = &boxes;
+            cur_.u->render(fl, 0);
+            letter(*cur_.u, hud, 1.f, time);
+            return;
+        }
         cur_.u->render(f, 0);
         return;
     }
@@ -240,10 +251,15 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     cur_.u->setBridge(ba);
     next_.u->setBridge(bb);
 
+    std::vector<text::Line> lines;
+    std::vector<vec4> boxA, boxB;
+    Frame fa = f, fb = f;
+    if (cur_.u->hostText()) { hudLines(*cur_.u, hud, lines, boxA); fa.hudBoxes = &boxA; }
+    if (next_.u->hostText()) { hudLines(*next_.u, hud, lines, boxB); fb.hudBoxes = &boxB; }
     texA_.bind();
-    cur_.u->render(f, texA_.fbo);
+    cur_.u->render(fa, texA_.fbo);
     texB_.bind();
-    next_.u->render(f, texB_.fbo);
+    next_.u->render(fb, texB_.fbo);
 
     // The stack, for the bridge the host draws (rows from the bottom).
     unsigned char cells[(Game::H - Game::HIDDEN) * Game::W];
@@ -281,6 +297,10 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     in.time = time;
     in.seed = changes_ * 7919u;
     comp_.draw(kind_, in);
+    // the lettering changes hands at the bridge
+    const float handover = smoothstepf(0.35f, 0.65f, p);
+    if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
+    if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
 
     if (p_ >= 1.f) finishChange();
 }
@@ -293,21 +313,27 @@ void Renderer::renderBreak(const Frame& f) {
         texA_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
         texB_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
     }
-    if (!brk_.cardHud.empty() && brk_.cardId != cardId_ && brk_.blank) {
+    const bool host = cur_.u->hostText();
+    if (!host && !brk_.cardHud.empty() && brk_.cardId != cardId_ && brk_.blank) {
         cardId_ = brk_.cardId;
         captureCard(f);
     }
     const float play = saturate(brk_.play);
     const bool bare = play < 1.f && brk_.blank, whole = play > 0.f || !brk_.blank;
     if (brk_.black < 0.999f) {
+        std::vector<text::Line> lines;
+        std::vector<vec4> boxBare, boxWhole;
         if (bare) {
-            const Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
+            Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
+            if (host) { hudLines(*cur_.u, brk_.bareHud, lines, boxBare); fb.hudBoxes = &boxBare; }
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
         }
         if (whole) {
+            Frame fw = f;
+            if (host) { hudLines(*cur_.u, f.hud, lines, boxWhole); fw.hudBoxes = &boxWhole; }
             texA_.bind();
-            cur_.u->render(f, texA_.fbo);
+            cur_.u->render(fw, texA_.fbo);
         }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -329,8 +355,152 @@ void Renderer::renderBreak(const Frame& f) {
     const TransitionHints hi = cur_.u->hints();
     const float day = hi.light ? 1.f - saturate(brk_.black) : 0.f;
     const vec3 white(0.96f, 0.95f, 0.92f), dark = ugl::toSrgb(hi.ink) * 0.8f;
+    if (host) {
+        // the HUD over the mixed frame: the world alone's lines and the whole frame's, each line once; the card's
+        // lines gliding home instead of the corner's own
+        const bool card = !brk_.cardHud.empty() && brk_.cardIn > 0.f;
+        std::vector<HudText> lines;
+        // (the tempo and key under the title wait for it to land)
+        const float landed = card ? smoothstepf(0.85f, 1.f, brk_.cardShrink) : 1.f;
+        for (const HudText& h : f.hud) {
+            if (card && (h.role == HUD_TITLE || h.role == HUD_UNIVERSE)) continue;
+            lines.push_back(h);
+            lines.back().alpha *= (whole ? (bare ? play : 1.f) : 0.f) * (h.role == HUD_INFO ? landed : 1.f);
+        }
+        for (const HudText& h : brk_.bareHud) {
+            if (!bare || (card && (h.role == HUD_TITLE || h.role == HUD_UNIVERSE))) continue;
+            const float a = h.alpha * (1.f - play) * (h.role == HUD_INFO ? landed : 1.f);
+            auto same = std::find_if(lines.begin(), lines.end(), [&](const HudText& o) { return o.role == h.role && o.text == h.text; });
+            if (same != lines.end()) same->alpha += a;
+            else {
+                lines.push_back(h);
+                lines.back().alpha = a;
+            }
+        }
+        letter(*cur_.u, lines, 1.f, f.time, saturate(brk_.black));
+        if (card) letterCard(*cur_.u, f.time);
+        if (brk_.card[0].alpha > 0.f || brk_.card[1].alpha > 0.f)
+            if (!card) card_.draw(brk_.card, 2, w_, h_, white + (dark - white) * day, vec3(0.f) + (white - vec3(0.f)) * day);
+        return;
+    }
     if (!brk_.cardHud.empty() && cardLines_[0].ok && cardId_ == brk_.cardId) drawCard();
     else card_.draw(brk_.card, 2, w_, h_, white + (dark - white) * day, vec3(0.f) + (white - vec3(0.f)) * day);
+}
+
+// ---- The HUD lettered by the host.
+
+namespace {
+// The default style: the title card's fonts (Cormorant Garamond Italic, Tenor Sans), pale ink on a soft dark halo.
+const unsigned char HOST_SERIF[] = {
+#include "universes/host/CormorantGaramond-Italic.ttf.inc"
+};
+const unsigned char HOST_SANS[] = {
+#include "universes/host/TenorSans-Regular.ttf.inc"
+};
+} // namespace
+
+void Universe::hudLine(const HudText& h, text::Line& out) {
+    text::Font* serif = text::font(HOST_SERIF);
+    text::Font* sans = text::font(HOST_SANS);
+    const float b = h.scale * 12.f;
+    const vec3 ink(0.94f, 0.93f, 0.9f), accent(0.95f, 0.8f, 0.55f);
+    const bool italic = h.role == HUD_TITLE || h.role == HUD_SECTION || h.role == HUD_NOTICE || h.role == HUD_TOAST;
+    const bool caps = h.role == HUD_UNIVERSE || h.role == HUD_LABEL || h.role == HUD_INFO;
+    out.add(caps ? text::upper(h.text) : h.text, italic ? serif : sans, italic ? b * 1.25f : b, h.accent ? accent : ink,
+            caps ? 0.25f : 0.02f, std::min(1.f, h.alpha));
+    out.look.halo = vec3(0.f);
+    out.look.haloA = 0.45f;
+    out.look.haloW = 0.12f;
+}
+
+void Renderer::hudLines(Universe& u, const std::vector<HudText>& hud, std::vector<text::Line>& lines, std::vector<vec4>& boxes) {
+    lines.clear();
+    boxes.clear();
+    for (const HudText& h : hud) {
+        lines.emplace_back();
+        if (h.alpha > 0.002f && !h.text.empty()) u.hudLine(h, lines.back());
+        const text::Box b = text_.measure(lines.back());
+        const float x = ugl::hudLeft(h, b.width(), w_); // (the box's x0 is the line's own dx)
+        boxes.push_back(vec4{x + b.x0, h.y + b.y0, x + b.x1, h.y + b.y1});
+    }
+}
+
+void Renderer::letter(Universe& u, const std::vector<HudText>& hud, float weight, double time, float night) {
+    if (weight <= 0.002f) return;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    const vec3 white(0.96f, 0.95f, 0.92f);
+    for (const HudText& h : hud) {
+        if (h.alpha * weight <= 0.002f || h.text.empty()) continue;
+        text::Line l;
+        u.hudLine(h, l);
+        l.alpha *= weight;
+        if (night > 0.f) {
+            for (text::Span& s : l.spans) s.ink = s.ink + (white - s.ink) * night;
+            l.look.haloA *= 1.f - night;
+            l.look.shadowA *= 1.f - night;
+            l.look.outlineA *= 1.f - night;
+            l.plate.alpha *= 1.f - night;
+            l.plate.borderA *= 1.f - night;
+            if (l.blend == text::BLEND_MULTIPLY) l.blend = text::BLEND_OVER;
+        }
+        const text::Box b = text_.measure(l);
+        text_.draw(l, ugl::hudLeft(h, b.width(), w_), h.y, w_, h_, (float)time);
+    }
+}
+
+// The title card of a universe the host letters: its corner lines (the song, the universe) big in the middle, then
+// gliding and shrinking onto the corner, where they are the HUD's own lines: the same line all along.
+void Renderer::letterCard(Universe& u, double time) {
+    const HudText* t = nullptr;
+    const HudText* un = nullptr;
+    for (const HudText& h : brk_.cardHud) {
+        if (h.role == HUD_TITLE) t = &h;
+        if (h.role == HUD_UNIVERSE) un = &h;
+    }
+    const float e = saturate(brk_.cardShrink), night = saturate(brk_.black), in = saturate(brk_.cardIn);
+    // each line's size in the middle: its capitals as tall as asked, never wider than most of the screen
+    struct Big { const HudText* h; float k, top; text::Box box; };
+    auto bigOf = [&](const HudText* h, float cap) {
+        Big g{h, 1.f, 0.f, {}};
+        if (!h) return g;
+        text::Line l;
+        u.hudLine(*h, l);
+        const text::Box b = text_.measure(l);
+        g.k = std::clamp(std::min(cap / std::max(1.f, b.cap), w_ * 0.86f / std::max(1.f, b.width())), 1.f, 8.f);
+        HudText big = *h;
+        big.scale *= g.k;
+        text::Line lb;
+        u.hudLine(big, lb);
+        g.box = text_.measure(lb);
+        return g;
+    };
+    Big bt = bigOf(t, h_ * 0.075f), bu = bigOf(un, h_ * 0.022f);
+    const float gap = h_ * 0.035f;
+    const float tH = t ? bt.box.y1 - bt.box.y0 : 0.f, uH = un ? bu.box.y1 - bu.box.y0 : 0.f;
+    const float top = h_ * 0.45f - (tH + gap + uH) * 0.5f;
+    bt.top = top;
+    bu.top = top + tH + gap;
+    std::vector<HudText> lines;
+    for (const Big* g : {&bt, &bu}) {
+        if (!g->h) continue;
+        // big: centered; small: the corner line itself (its anchor, its size)
+        const float k = std::exp(std::log(g->k) * (1.f - e));
+        const float bigX = w_ * 0.5f - (g->box.x0 + g->box.x1) * 0.5f, bigY = g->top - g->box.y0;
+        HudText h = *g->h;
+        text::Line l0;
+        u.hudLine(h, l0);
+        const text::Box small = text_.measure(l0);
+        const float smallX = ugl::hudLeft(h, small.width(), w_);
+        // the anchor moves as the box does: the box's left edge and cap line go straight from the middle to the corner
+        h.scale *= k;
+        h.center = false;
+        const float w0 = g->box.x0 * (k / g->k) , y0 = g->box.y0 * (k / g->k);
+        h.x = lerpf(bigX + g->box.x0, smallX + small.x0, e) - w0;
+        h.y = lerpf(bigY + g->box.y0, h.y + small.y0, e) - y0;
+        h.alpha *= in;
+        lines.push_back(h);
+    }
+    letter(u, lines, 1.f, time, night);
 }
 
 // ---- The title card in the universe's lettering. Each corner line is rendered by the universe on its bare world

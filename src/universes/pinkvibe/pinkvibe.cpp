@@ -32,9 +32,6 @@
 #include "ugl.hpp"
 #include "universes/registry.hpp"
 #include "universes/pinkvibe/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -95,26 +92,6 @@ float ease(float t) {
     return t * t * (3.f - 2.f * t);
 }
 
-// UTF-8 to the font's characters (the middle dot kept, accents dropped).
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
 class PinkVibeUniverse : public Universe {
 public:
     ~PinkVibeUniverse() override;
@@ -127,6 +104,8 @@ public:
     void onEvent(const GameEvent& ev, const Game& game) override;
     void setBonus(bool on) override { slowOn_ = on; }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override { return layout::project(vp_, p, width_, height_); }
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -152,23 +131,11 @@ private:
     struct Part { float x, y, vx, vy, rot, spin, size, age, life, seed; int kind; vec3 col; bool front; };
     std::vector<Part> parts_;
 
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font soft_, round_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha);
+    // the HUD (its lettering: hudLine, the host letters it)
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
 
-    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progText_ = 0, progSolid_ = 0;
-    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progSolid_ = 0;
+    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     void solid(float r, float g, float b, float a);
@@ -177,6 +144,7 @@ private:
     uint64_t seed_ = 1;
     vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7], dropPiece_[7], shownPiece_[7];
     float night_ = 0.f;   // the drop's share in the HUD's colors and the blocks' vividness
+    float fade_ = 1.f;    // the scene faded in from black (the HUD's lines with it)
     // the drop's waves of color on the blocks: pulses of vividness rolling up through the stack on the beat (the
     // blocks themselves stay put)
     float wave_ = 0.f;
@@ -207,7 +175,6 @@ bool PinkVibeUniverse::init(int width, int height) {
     progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "pinkvibe bands");
     progSprite_ = ugl::program(sh::SPRITE_VS, (head + sh::PAINT_GLSL + sh::SPRITE_FS).c_str(), "pinkvibe sprites");
     progCell_ = ugl::program(sh::CELL_VS, (head + sh::PAINT_GLSL + sh::CELL_FS).c_str(), "pinkvibe blocks");
-    progText_ = ugl::program(sh::TEXT_VS, sh::TEXT_FS, "pinkvibe text");
     progSolid_ = ugl::program(ugl::FULLSCREEN_VS, sh::SOLID_FS, "pinkvibe solid");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -230,65 +197,10 @@ bool PinkVibeUniverse::init(int width, int height) {
     };
     instanced(spriteVao_, spriteVbo_, 4);
     instanced(cellVao_, cellVbo_, 3);
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(soft_, FONT_SOFT);
-    buildFont(round_, FONT_ROUND);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void PinkVibeUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] pinkvibe font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 14;
-    std::vector<unsigned char> atlas((size_t)AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch;
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(size_t)(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void PinkVibeUniverse::resize(int width, int height) {
@@ -303,13 +215,9 @@ void PinkVibeUniverse::resize(int width, int height) {
 }
 
 PinkVibeUniverse::~PinkVibeUniverse() {
-    for (GLuint p : {progBg_, progSprite_, progCell_, progText_, progSolid_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&soft_, &round_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progBg_, progSprite_, progCell_, progSolid_}) glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -549,69 +457,6 @@ void PinkVibeUniverse::solid(float r, float g, float b, float a) {
 // Text
 // =====================================================================================================
 
-float PinkVibeUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            if (ch != 127 && n != 127) w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
-}
-
-void PinkVibeUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                 std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = f.capH * k;
-    float pen = 0.f;
-    auto place = [&](float u, float v, float tu, float tv) {
-        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
-    };
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
-            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            if (ch != 127 && n != 127) pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void PinkVibeUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha) {
-    if (q.empty() || !f.ok || alpha <= 0.004f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uFill", lerp(fill, lerp(fill, vec3(1.f, 0.97f, 0.98f), 0.8f), night_));
-    set3f(progText_, "uHalo", lerp(lerp(rim_, vec3(1.f), 0.4f), well_ * 0.75f, night_));
-    set1f(progText_, "uHaloA", 0.6f + 0.15f * night_);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 // The HUD: deep plum letters on a feathered blush halo; Quicksand for the words, Nunito for the numbers.
 void PinkVibeUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     if (!panels.empty()) {
@@ -624,92 +469,57 @@ void PinkVibeUniverse::drawHud(const std::vector<HudText>& hud, const std::vecto
         }
         glDisable(GL_SCISSOR_TEST);
     }
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        const std::string text = ascii(h.text);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& s, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, s, size, track);
-            textQuads(f, s, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = ascii(name);
-            std::string vt = ascii(var);
-            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
-            const float sz = base * 0.9f, tr = sz * 0.2f, vsz = base * 1.15f, gap = base * 0.7f;
-            const float wName = textWidth(round_, name, sz, tr);
-            const float wVar = vt.empty() ? 0.f : textWidth(soft_, vt, vsz, 0.f);
-            const float x = ugl::hudLeft(h, wName + (vt.empty() ? 0.f : gap + wVar), width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(round_, name, x, h.y, sz, tr, q);
-            drawText(round_, q, ink_, a);
-            if (!vt.empty()) {
-                q.clear();
-                textQuads(soft_, vt, x + wName + gap, h.y - sz * 0.15f, vsz, 0.f, q);
-                drawText(soft_, q, accent_, a);
-            }
-            continue;
+}
+
+
+// The lettering, by the host (text.hpp): deep plum letters on a wide feathered blush halo, Quicksand for the words,
+// Nunito for the numbers and the universe's name (its variant after it, larger, in Quicksand and the accent); at the
+// drop's sunset the letters pale and the halo turns to the well's dusk. The scene's fade to black goes over them.
+void PinkVibeUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* soft = text::font(FONT_SOFT);
+    text::Font* round = text::font(FONT_ROUND);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    auto ink = [&](const vec3& c) { return lerp(c, lerp(c, vec3(1.f, 0.97f, 0.98f), 0.8f), night_); };
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, ink(c), track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // the name, then its variant ("Blush": only its first letter a capital), larger and set a little higher
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        var = text::lower(var);
+        if (!var.empty()) var = text::upper(var.substr(0, 1)) + var.substr(1);
+        const float sz = base * 0.9f, vsz = base * 1.15f, a = saturate(0.35f + h.alpha * 1.6f);
+        out.add(name, round, sz, ink(ink_), 0.2f, a);
+        if (!var.empty()) {
+            out.add("", soft, base, ink(ink_), 0.52f, 0.f); // the gap: 0.7 base after the name's last letter
+            // (its cap line base * 0.15 above the name's: the two fonts' capitals are 0.517 and 0.56 of their size)
+            out.add(var, soft, vsz, ink(accent_), 0.f, a).dy = -sz * 0.15f + vsz * 0.56f - sz * 0.517f;
         }
-        case HUD_SECTION:
-            place(soft_, text, base * 0.9f, base * 0.34f);
-            drawText(soft_, q, accent_, saturate(0.2f + h.alpha * 1.9f));
-            continue;
-        case HUD_TITLE:
-            place(soft_, text, base * 1.6f, base * 0.02f, -base * 0.3f);
-            drawText(soft_, q, ink_, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(soft_, text, base * 0.75f, base * 0.1f);
-            drawText(soft_, q, ink_, saturate(alpha * 1.3f) * 0.85f);
-            continue;
-        case HUD_LABEL:
-            place(soft_, text, base * 0.8f, base * 0.3f);
-            drawText(soft_, q, accent_, saturate(alpha * 1.2f));
-            continue;
-        case HUD_VALUE:
-            place(round_, text, base * 1.1f, base * 0.04f);
-            drawText(round_, q, ink_, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(soft_, text, base * 1.5f, base * 0.04f);
-            drawText(soft_, q, accent_, alpha);
-            continue;
-        case HUD_KEY:
-            place(round_, text, base * 0.75f, base * 0.06f);
-            drawText(round_, q, ink_, alpha);
-            continue;
-        case HUD_TOAST:
-            place(soft_, text, base * 1.55f, base * 0.12f, -base * 0.3f);
-            drawText(soft_, q, accent_, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(round_, text, base * 1.05f, base * 0.1f);
-            drawText(round_, q, ink_, alpha * 0.95f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * height_ / 1080.f) {
-                place(soft_, text, base * 1.3f, 0.f, -base * 0.1f);
-                drawText(soft_, q, ink_, alpha);
-            } else {
-                place(soft_, text, base * 0.85f, base * 0.1f);
-                drawText(soft_, q, h.accent ? accent_ : ink_, alpha);
-            }
-            continue;
-        default:
-            place(soft_, text, base * 0.85f, base * 0.08f);
-            drawText(soft_, q, h.accent ? accent_ : ink_, alpha);
-            continue;
-        }
+        break;
     }
+    case HUD_SECTION: put(soft, h.text, base * 0.9f, base * 0.34f, accent_, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(soft, h.text, base * 1.6f, base * 0.02f, ink_, h.alpha * 1.3f, -base * 0.3f); break;
+    case HUD_INFO: put(soft, h.text, base * 0.75f, base * 0.1f, ink_, saturate(alpha * 1.3f) * 0.85f); break;
+    case HUD_LABEL: put(soft, h.text, base * 0.8f, base * 0.3f, accent_, alpha * 1.2f); break;
+    case HUD_VALUE: put(round, h.text, base * 1.1f, base * 0.04f, ink_, alpha); break;
+    case HUD_NOTICE: put(soft, h.text, base * 1.5f, base * 0.04f, accent_, alpha); break;
+    case HUD_KEY: put(round, h.text, base * 0.75f, base * 0.06f, ink_, alpha); break;
+    case HUD_TOAST: put(soft, h.text, base * 1.55f, base * 0.12f, accent_, alpha, -base * 0.3f); break;
+    case HUD_TOAST_SUB: put(round, h.text, base * 1.05f, base * 0.1f, ink_, alpha * 0.95f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * height_ / 1080.f) put(soft, h.text, base * 1.3f, 0.f, ink_, alpha, -base * 0.1f);
+        else put(soft, h.text, base * 0.85f, base * 0.1f, h.accent ? accent_ : ink_, alpha);
+        break;
+    default: put(soft, h.text, base * 0.85f, base * 0.08f, h.accent ? accent_ : ink_, alpha); break;
+    }
+    out.look.halo = lerp(lerp(rim_, vec3(1.f), 0.4f), well_ * 0.75f, night_);
+    out.look.haloA = 0.6f + 0.15f * night_;
+    out.look.haloW = 0.146f;
+    out.alpha = fade_;
 }
 
 // =====================================================================================================
@@ -880,6 +690,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
     solid(0.f, 0.f, 0.f, 0.45f * dimT_);
     drawHud(f.hud, f.panels);
     solid(0.f, 0.f, 0.f, 1.f - saturate(f.fade));
+    fade_ = saturate(f.fade);
     glDisable(GL_BLEND);
 }
 

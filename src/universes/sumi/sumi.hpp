@@ -2,6 +2,7 @@
 // SUMI: ink on washi paper (see sumi.cpp).
 #include <vector>
 
+#include "text.hpp"
 #include "universe.hpp"
 
 class SumiUniverse : public Universe {
@@ -23,6 +24,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // One instanced quad per ink mark (see SPRITE_FS for the meaning of each field by kind).
@@ -53,16 +56,20 @@ private:
     void collectScenery(const MusicState& music, std::vector<Sprite>& out, bool bare);
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
     void spawnBloom(vec2 pos, float size, float strength, vec3 col);
-    void drawText(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const std::vector<HudRect>& panels);
     void startWash(int level, float seconds, float impact);
     void buildBranch();
     void spawnPetal(vec2 pos, bool fromBranch);
     vec2 randomSidePoint();
     int pickVariant(const SongLook& look) const;
 
-    GLuint progPaper_ = 0, progBg_ = 0, progSprite_ = 0, progPost_ = 0, progText_ = 0, progTextInk_ = 0;
-    GLuint emptyVao_ = 0, quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, textVao_ = 0, textVbo_ = 0;
-    GLuint paperFbo_ = 0, paperTex_ = 0, sceneFbo_ = 0, sceneTex_ = 0, textFbo_ = 0, textTex_ = 0;
+    GLuint progPaper_ = 0, progBg_ = 0, progSprite_ = 0, progPost_ = 0, progPanel_ = 0;
+    GLuint emptyVao_ = 0, quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
+    GLuint paperFbo_ = 0, paperTex_ = 0, sceneFbo_ = 0, sceneTex_ = 0;
+    // The HUD: lettered by the host in the bitmap font, its ink bleeding into the paper (hudLine).
+    text::Lettering bleed_;
+    bool levelWord_ = true; // the level's name fits after the universe's (clear of the well)
+    float fade_ = 1.f;
 
     // Scene level (0 calm, 1 mid, 2 peak): the one shown, a queued one while a wash runs.
     bool hasLevel_ = false, hasPending_ = false;

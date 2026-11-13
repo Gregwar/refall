@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "text.hpp"
 #include "ugl.hpp"
 #include "universe.hpp"
 
@@ -24,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A painting (linear RGB once loaded; the pigments as the color of a full wash on white paper).
     struct Palette {
@@ -51,32 +54,20 @@ private:
     void buildBoard(const Game& game);
     void drawLand();
     void drawBlooms();
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const std::vector<HudRect>& panels);
     int pickVariant(const SongLook& look) const;
     vec2 skySpot(bool big);      // somewhere in the painted sky, away from the well and the columns
     vec3 pieceK(int type) const;
     vec3 dropColor(float wp);
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font fontItalic_, fontRoman_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, float alpha, float bias);
+    // ---- Text: lettered by the host (hudLine), as ink in the painting's pigment.
+    text::Lettering ink_;
 
     // ---- GL.
     GLuint progPaper_ = 0, progLand_ = 0, progBloom_ = 0, progComp_ = 0, progCell_ = 0, progPencil_ = 0,
-           progShape_ = 0, progText_ = 0, progPost_ = 0;
+           progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, lineVao_ = 0, lineVbo_ = 0, bloomVao_ = 0, bloomVbo_ = 0,
-           shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0, noiseTex_ = 0;
+           shapeVao_ = 0, shapeVbo_ = 0, noiseTex_ = 0;
     ugl::Target paperT_, landT_, wetT_, sceneT_;
     void createTargets();
     void buildNoise();
