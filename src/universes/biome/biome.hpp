@@ -158,6 +158,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { c_.bridge = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // The variants of both worlds, in registry order: the sea's, then the land's.
     static int variantCount();
@@ -192,21 +194,9 @@ private:
     bool hasLevel_ = false;
     float lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
 
-    // ---- Text and the HUD.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font fontItalic_, fontRoman_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, float alpha, float bias);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    float fade_ = 1.f; // the frame's fade in, the HUD's own (it was lettered under the post's fade and dim)
+    void drawHud(const std::vector<HudRect>& panels);
     float bgLuma(float bx, float by) const;
 
     void setCamera();
@@ -214,8 +204,8 @@ private:
     void drawPane();
 
     // ---- GL.
-    GLuint progVeil_ = 0, progRain_ = 0, progSprite_ = 0, progText_ = 0, progShape_ = 0, progPost_ = 0;
-    GLuint cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, textVao_ = 0, textVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+    GLuint progVeil_ = 0, progRain_ = 0, progSprite_ = 0, progShape_ = 0, progPost_ = 0;
+    GLuint cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0;
     int samples_ = 4;
 
