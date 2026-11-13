@@ -82,7 +82,7 @@ private:
     GLuint progWater_ = 0, progMesh_ = 0, progSnow_ = 0, progWell_ = 0, progPiece_ = 0, progMote_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
            progShape_ = 0;
     GLuint quadVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0, moteVao_ = 0, moteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
-           textVao_ = 0, meshVao_ = 0, meshVbo_ = 0, meshIbo_ = 0, snowVao_ = 0, snowVbo_ = 0;
+           meshVao_ = 0, meshVbo_ = 0, meshIbo_ = 0, snowVao_ = 0, snowVbo_ = 0;
     GLsizei meshCount_ = 0, snowCount_ = 0;
     void setWorldUniforms(GLuint prog);
     ugl::Target sceneT_, bloomA_, bloomB_;
