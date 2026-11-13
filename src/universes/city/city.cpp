@@ -37,9 +37,6 @@
 #include "layout.hpp"
 #include "universes/city/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -164,7 +161,6 @@ bool CityUniverse::init(int width, int height) {
     progBright_ = compile(shaders::FULL_VS, shaders::BRIGHT_FS, "city bright");
     progBlur_ = compile(shaders::FULL_VS, shaders::BLUR_FS, "city blur");
     progFinal_ = compile(shaders::FULL_VS, shaders::FINAL_FS, "city final");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "city text");
     progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "city panel");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -221,14 +217,6 @@ bool CityUniverse::init(int width, int height) {
         }
     }
     glGenVertexArrays(1, &emptyVao_);
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glGenVertexArrays(1, &panelVao_);
     glGenBuffers(1, &panelVbo_);
     glBindVertexArray(panelVao_);
@@ -257,53 +245,8 @@ bool CityUniverse::init(int width, int height) {
     Rng fr(99);
     for (int i = 0; i < 360; i++)
         flakes_.push_back({vec3(fr.range(-60.f, 60.f), fr.range(-30.f, 45.f), fr.range(-110.f, -18.f)), fr.range(0.6f, 1.4f), fr.range(0.f, TAU)});
-    buildFont(font_, FONT_BARLOW);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void CityUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] city font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 // The layout's reference camera raised to EYE_Y and looking straight ahead, its image shifted back down: the board
@@ -360,12 +303,10 @@ CityUniverse::~CityUniverse() {
     if (sceneFbo_) glDeleteFramebuffers(1, &sceneFbo_);
     for (GLuint t : {sceneTex_, depthTex_, cellA_, cellB_}) glDeleteTextures(1, &t);
     for (GLuint p : {progSky_, progGround_, progBox_, progTower_, progWin_, progDot_, progBright_, progBlur_, progFinal_,
-                     progText_, progPanel_})
+                     progPanel_})
         glDeleteProgram(p);
-    for (GLuint v : {instVao_, cubeVao_, quadVao_, textVao_, panelVao_, emptyVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, instVbo_, cubeVbo_, cubeInstVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
-    if (font_.tex) glDeleteTextures(1, &font_.tex);
-    delete (stbtt_fontinfo*)font_.info;
+    for (GLuint v : {instVao_, cubeVao_, quadVao_, panelVao_, emptyVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, instVbo_, cubeVbo_, cubeInstVbo_, panelVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -718,143 +659,81 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
 // Text
 // =====================================================================================================
 
-float CityUniverse::textWidth(const std::string& s, float size, float track) const {
-    const Font& f = font_;
-    if (!f.ok || s.empty()) return s.size() * size * 0.6f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
-}
-
-void CityUniverse::textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const {
-    const Font& f = font_;
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void CityUniverse::drawText(const std::vector<float>& q, const vec3& srgb, float alpha, float bias, float soft) {
-    if (q.empty() || !font_.ok || alpha <= 0.003f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font_.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set4f(progText_, "uInk", srgb.x, srgb.y, srgb.z, saturate(alpha));
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uSoft", soft);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in CITY's typography: Barlow (a signage face), the labels in small widely tracked capitals, the numbers
-// plain, each line on a soft halo of the night (of the fog's pale at dawn) so it reads over the lit buildings; the
-// section, the notices and the universe's name in the accent, like a building's sign.
-void CityUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul) {
+// The HUD's panels (its lettering: hudLine, the host letters it).
+void CityUniverse::drawHud(const std::vector<HudRect>& panels, float mul) {
+    if (panels.empty()) return;
     const float bridge = saturate(bridge_.amount);
-    const vec3 ink = lerp(pal_.text, bridge_.ink, bridge) * mul, acc = lerp(pal_.accent, bridge_.ink, bridge) * mul;
+    const vec3 acc = lerp(pal_.accent, bridge_.ink, bridge) * mul;
     const vec3 shadow = ugl::toSrgb(lerp(pal_.shade, bridge_.color, bridge));
-    if (!panels.empty()) {
-        glUseProgram(progPanel_);
-        set2f(progPanel_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(panelVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
-        for (const HudRect& r : panels) {
-            const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};
-            glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
-            const vec3 c = r.custom ? r.color : r.accent ? ugl::toSrgb(acc) : shadow;
-            const float a = saturate(r.accent ? r.alpha * 0.35f : r.alpha * 0.9f);
-            glUniform4f(ugl::U(progPanel_, "uColor"), c.x * a, c.y * a, c.z * a, a);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-        }
-    }
-    const vec3 inkS = ugl::toSrgb(ink), accS = ugl::toSrgb(acc);
-    const float s = height_ / 1080.f;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        auto putText = [&](const std::string& text, float size, float track, float dy, const vec3& c, float a, float bias) {
-            q.clear();
-            const float w = textWidth(text, size, track);
-            textQuads(text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-            drawText(q, shadow, a * 0.85f, 0.32f, 0.36f);
-            drawText(q, c, a, bias, 0.f);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.9f, tr = base * 0.4f, vsz = base * 0.68f, vtr = base * 0.3f;
-            const float wName = textWidth(name, sz, tr), gap = base * 0.9f;
-            const float wVar = var.empty() ? 0.f : textWidth(var, vsz, vtr);
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            q.clear();
-            textQuads(name, x, h.y, sz, tr, q);
-            drawText(q, shadow, a * 0.85f, 0.32f, 0.36f);
-            drawText(q, accS, a, 0.03f, 0.f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(var, x + wName + gap, h.y + (sz - vsz) * 0.75f, vsz, vtr, q);
-                drawText(q, shadow, a * 0.8f, 0.32f, 0.36f);
-                drawText(q, inkS, a * 0.75f, 0.02f, 0.f);
-            }
-            continue;
-        }
-        case HUD_TITLE: putText(h.text, base * 1.0f, base * 0.04f, 0.f, inkS, saturate(h.alpha * 1.3f), 0.03f); continue;
-        case HUD_INFO: putText(h.text, base * 0.74f, base * 0.14f, 0.f, inkS, alpha * 0.65f, 0.01f); continue;
-        case HUD_SECTION: putText(h.text, base * 0.9f, base * 0.45f, 0.f, accS, saturate(0.2f + h.alpha * 1.9f), 0.04f); continue;
-        case HUD_LABEL: putText(h.text, base * 0.64f, base * 0.42f, 0.f, inkS, alpha * 0.85f, 0.04f); continue;
-        case HUD_VALUE: putText(h.text, base * 1.05f, base * 0.06f, 0.f, inkS, alpha * 0.96f, 0.03f); continue;
-        case HUD_NOTICE: putText(h.text, base * 0.95f, base * 0.16f, 0.f, accS, alpha, 0.03f); continue;
-        case HUD_TOAST: putText(h.text, base * 1.2f, base * 0.36f, -base * 0.1f, accS, alpha, 0.05f); continue;
-        case HUD_TOAST_SUB: putText(h.text, base * 0.82f, base * 0.14f, 0.f, inkS, alpha, 0.02f); continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) putText(h.text, base * 1.05f, base * 0.2f, -base * 0.1f, inkS, alpha, 0.03f);
-            else putText(h.text, base * 0.8f, base * 0.06f, 0.f, h.accent ? accS : inkS, alpha, 0.02f);
-            continue;
-        default: putText(h.text, base * 0.8f, base * 0.05f, 0.f, h.accent ? accS : inkS, alpha, 0.02f); continue;
-        }
+    glUseProgram(progPanel_);
+    set2f(progPanel_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(panelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
+    for (const HudRect& r : panels) {
+        const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};
+        glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
+        const vec3 c = r.custom ? r.color : r.accent ? ugl::toSrgb(acc) : shadow;
+        const float a = saturate(r.accent ? r.alpha * 0.35f : r.alpha * 0.9f);
+        glUniform4f(ugl::U(progPanel_, "uColor"), c.x * a, c.y * a, c.z * a, a);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 }
 
+// The HUD in CITY's typography, lettered by the host (text.hpp): Barlow (a signage face), the labels in small widely
+// tracked capitals, the numbers plain, each line on a soft shadow of the night (of the fog's pale at dawn) so it
+// reads over the lit buildings; the section, the notices and the universe's name in the accent, like a building's
+// sign.
+void CityUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* barlow = text::font(FONT_BARLOW);
+    const float bridge = saturate(bridge_.amount);
+    const vec3 ink = ugl::toSrgb(lerp(pal_.text, bridge_.ink, bridge) * hudMul_);
+    const vec3 acc = ugl::toSrgb(lerp(pal_.accent, bridge_.ink, bridge) * hudMul_);
+    const float s = height_ / 1080.f;
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a bias on the old distance field (8 px of spread at 64 px), in em
+    constexpr float BIAS = 255.f / 16.f / 64.f;
+    float bias = 0.02f;
+    auto put = [&](const std::string& t, float size, float track, float dy, const vec3& c, float a, float b) {
+        out.add(t, barlow, size, c, track / size, saturate(a));
+        out.dy = dy;
+        bias = b;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // the name in the accent, the variant smaller and quieter after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 0.9f, tr = base * 0.4f, vsz = base * 0.68f, vtr = base * 0.3f;
+        const float a = saturate(0.35f + h.alpha * 1.6f);
+        put(name, sz, tr, 0.f, acc, a, 0.03f);
+        if (!var.empty()) {
+            out.add("", barlow, base, acc, (base * 0.9f - tr) / base); // the gap
+            // its cap line (sz - vsz) * 0.75 lower (Barlow's capitals: 0.583 of its size)
+            out.add(var, barlow, vsz, ink, vtr / vsz, a * 0.75f).dy = (0.75f - 0.583f) * (sz - vsz);
+        }
+        break;
+    }
+    case HUD_TITLE: put(h.text, base * 1.0f, base * 0.04f, 0.f, ink, h.alpha * 1.3f, 0.03f); break;
+    case HUD_INFO: put(h.text, base * 0.74f, base * 0.14f, 0.f, ink, alpha * 0.65f, 0.01f); break;
+    case HUD_SECTION: put(h.text, base * 0.9f, base * 0.45f, 0.f, acc, 0.2f + h.alpha * 1.9f, 0.04f); break;
+    case HUD_LABEL: put(h.text, base * 0.64f, base * 0.42f, 0.f, ink, alpha * 0.85f, 0.04f); break;
+    case HUD_VALUE: put(h.text, base * 1.05f, base * 0.06f, 0.f, ink, alpha * 0.96f, 0.03f); break;
+    case HUD_NOTICE: put(h.text, base * 0.95f, base * 0.16f, 0.f, acc, alpha, 0.03f); break;
+    case HUD_TOAST: put(h.text, base * 1.2f, base * 0.36f, -base * 0.1f, acc, alpha, 0.05f); break;
+    case HUD_TOAST_SUB: put(h.text, base * 0.82f, base * 0.14f, 0.f, ink, alpha, 0.02f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(h.text, base * 1.05f, base * 0.2f, -base * 0.1f, ink, alpha, 0.03f);
+        else put(h.text, base * 0.8f, base * 0.06f, 0.f, h.accent ? acc : ink, alpha, 0.02f);
+        break;
+    default: put(h.text, base * 0.8f, base * 0.05f, 0.f, h.accent ? acc : ink, alpha, 0.02f); break;
+    }
+    // a wide soft shadow of the night under the letters (bias .32, softness .36 on the old field), then the fill
+    out.look.weight = bias * BIAS;
+    out.look.shadow = ugl::toSrgb(lerp(pal_.shade, bridge_.color, bridge));
+    out.look.shadowA = 0.85f;
+    out.look.shadowW = 0.32f * BIAS;
+    out.look.shadowSoft = 0.36f * BIAS;
+}
 
 // =====================================================================================================
 // Frame
@@ -1386,7 +1265,8 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     fullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels, fade);
+    hudMul_ = fade;
+    if (!f.bare) drawHud(f.panels, fade);
     glDisable(GL_BLEND);
 }
 

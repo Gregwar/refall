@@ -6,7 +6,7 @@
 //
 // Fonts are TrueType files built into the game, their glyphs baked on demand (UTF-8: accents and symbols too) as
 // signed distance fields at BAKE_PX, shared by everything that letters with the same file. Sizes are pixels; the
-// effects' widths are in em (the span's font size), so they scale with the text.
+// effects' widths are in em (the span's font size), so they scale with the text (reaching 0.2 em at most).
 #include <functional>
 #include <memory>
 #include <string>
@@ -37,6 +37,8 @@ struct Bitmap {
 };
 using Raster = std::function<bool(uint32_t cp, float px, Bitmap& out)>;
 Font* customFont(const std::string& key, float cap, float descent, Raster raster);
+// The font's capitals' height, in em (to line up the cap lines of two fonts).
+float capHeight(const Font* f);
 
 // A run of text in one font, size and ink.
 struct Span {
@@ -45,6 +47,7 @@ struct Span {
     float size = 16;            // the font size (em), pixels
     float track = 0;            // extra space after each letter, in em
     float dy = 0;               // baseline shift, pixels (down)
+    float gap = 0;              // space before the span, in em
     vec3 ink{1, 1, 1};          // sRGB
     float alpha = 1;
 };
@@ -57,6 +60,7 @@ struct Look {
     // their edge, fading out over `haloW` (haloPow 2: a tighter falloff)
     vec3 halo{0, 0, 0};
     float haloA = 0, haloW = 0.08f, haloPow = 1;
+    bool haloSmooth = false; // a smoothstep falloff instead (haloPow ignored)
     // a light around the letters, added to what is behind (neon, a lit sign)
     vec3 glow{1, 1, 1};
     float glowA = 0, glowW = 0.12f;
@@ -127,6 +131,10 @@ struct Box {
     float cap = 0;                         // the first span's cap height
     float width() const { return x1 - x0; }
 };
+
+// The line's box from its anchor (a universe sampling its world behind a line: its left x is the anchor's, as
+// ugl::hudLeft gives it for this width).
+Box measure(const Line& l);
 
 // Text transforms the universes use.
 std::string upper(const std::string& utf8);

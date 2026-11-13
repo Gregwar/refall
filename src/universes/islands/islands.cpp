@@ -22,7 +22,6 @@
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -32,9 +31,6 @@
 #include "layout.hpp"
 #include "universes/islands/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -94,25 +90,6 @@ mat4 inverse(const mat4& mm) {
     det = 1.f / det;
     for (int i = 0; i < 16; i++) r.m[i] = inv[i] * det;
     return r;
-}
-
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
 }
 
 // ---------------------------------------------------------------- the variants
@@ -262,7 +239,6 @@ bool IslandsUniverse::init(int width, int height) {
     progGlass_ = ugl::program(sh::GLASS_VS, sh::GLASS_FS, "islands glass");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, sh::FINAL_FS, "islands final");
     progShape_ = ugl::program(sh::SHAPE_VS, sh::SHAPE_FS, "islands shape");
-    progText_ = ugl::program(sh::TEXT_VS, sh::TEXT_FS, "islands text");
 
     // ---- the object meshes (pos, normal, aux) and their instance buffers
     for (int m = 0; m < isl::M_COUNT; m++) {
@@ -346,14 +322,6 @@ bool IslandsUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     // ---- the sun's shadow map
@@ -376,57 +344,9 @@ bool IslandsUniverse::init(int width, int height) {
     glGetIntegerv(GL_MAX_SAMPLES, &maxS);
     samples_ = std::max(1, std::min(4, (int)maxS));
 
-    buildFont(fontMed_, FONT_MED);
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontItal_, FONT_ITAL);
     world_.reset(new isl::World());
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void IslandsUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] islands font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch;
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void IslandsUniverse::resize(int width, int height) {
@@ -481,7 +401,7 @@ IslandsUniverse::~IslandsUniverse() {
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
     if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
     if (shadowTex_) glDeleteTextures(1, &shadowTex_);
-    for (GLuint p : {progSky_, progTerrain_, progObj_, progWater_, progCloud_, progGlow_, progFlat_, progGlass_, progFinal_, progShape_, progText_})
+    for (GLuint p : {progSky_, progTerrain_, progObj_, progWater_, progCloud_, progGlow_, progFlat_, progGlass_, progFinal_, progShape_})
         glDeleteProgram(p);
     for (int m = 0; m < isl::M_COUNT; m++) {
         glDeleteVertexArrays(1, &meshVao_[m]);
@@ -489,12 +409,8 @@ IslandsUniverse::~IslandsUniverse() {
         glDeleteBuffers(1, &instVbo_[m]);
     }
     for (int l = 0; l < isl::LOD_COUNT; l++) glDeleteBuffers(1, &idx_[l]);
-    for (GLuint v : {glowVao_, cloudVao_, glassVao_, flatVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, flatVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontMed_, &fontLight_, &fontItal_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint v : {glowVao_, cloudVao_, glassVao_, flatVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1706,55 +1622,6 @@ void IslandsUniverse::buildBoard(const Game& g) {
 // Text and the HUD
 // =====================================================================================================
 
-float IslandsUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-    }
-    return w - track;
-}
-
-void IslandsUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void IslandsUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, const vec3& halo, float alpha, float haloA) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    ugl::set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set3f(progText_, "uHalo", halo);
-    set1f(progText_, "uHaloA", haloA);
-    set1f(progText_, "uAlpha", alpha * (1.f - smoothstepf(0.4f, 0.9f, bridge_.amount)));
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void IslandsUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -1781,16 +1648,22 @@ const char* IslandsUniverse::hourName() const {
     return "dusk";
 }
 
-// The lettering in a deep navy by day (on a soft white halo), a warm white at dusk; the bonus gauge a ring of
-// twelve small rounded beads like sea glass, the charged ones in the accent.
-void IslandsUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
+// The HUD's inks (sRGB): a deep navy by day on a soft white halo, a warm white at dusk on a dark one.
+void IslandsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     const VariantDef& V = VARIANTS[variant_];
     // (the ink turns from navy to white quickly: never a mid grey on the dusk sky)
     const float dark = smoothstepf(0.4f, 0.52f, night_);
-    const vec3 inkL = lerp(lin(0x0e2238), lin(0xfaf4ea), dark), haloL = lerp(lin(0xf4f8fa), lin(0x0c1426), dark);
-    const vec3 ink = ugl::toSrgb(inkL), halo = ugl::toSrgb(haloL);
-    const vec3 accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.1f));
+    ink = ugl::toSrgb(lerp(lin(0x0e2238), lin(0xfaf4ea), dark));
+    halo = ugl::toSrgb(lerp(lin(0xf4f8fa), lin(0x0c1426), dark));
+    accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.1f));
+}
+
+// The panels and the bonus gauge (the lettering: hudLine): a ring of twelve small rounded beads like sea glass, the
+// charged ones in the accent.
+void IslandsUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
+    const VariantDef& V = VARIANTS[variant_];
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty() && !bare_) {
@@ -1831,87 +1704,55 @@ void IslandsUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         }
         flushShapes();
     }
+}
 
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-            return w;
-        };
-        auto upper = [&](std::string t) {
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            return t;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            const std::string u = upper(h.text);
-            const float w = place(fontMed_, u, base * 0.68f, base * 0.26f, base * 0.1f);
-            drawText(fontMed_, q, ink, halo, saturate(0.3f + h.alpha * 1.5f));
-            if (h.x >= 0 && !h.center) {
-                q.clear();
-                textQuads(fontItal_, std::string("  ") + hourName(), h.x + w + base * 0.3f, h.y - base * 0.02f, base * 0.86f, 0.f, q);
-                drawText(fontItal_, q, accent, halo, saturate(0.3f + h.alpha * 1.5f) * 0.95f);
-            }
-            continue;
+// The lettering, by the host (text.hpp): Outfit Medium for the names and labels, Light for the numbers and hints,
+// Playfair Display Italic for the song, the notices and the hour after the universe's name; deep navy by day on a
+// soft white halo, a warm white at dusk.
+void IslandsUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
+    text::Font* med = text::font(FONT_MED);
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* ital = text::font(FONT_ITAL);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE:
+        put(med, text::upper(h.text), base * 0.68f, base * 0.26f, ink, 0.3f + h.alpha * 1.5f, base * 0.1f);
+        // the hour after it (on the left only), its cap line a little above the name's
+        if (h.x >= 0 && !h.center) {
+            out.add("", med, base * 0.68f, ink, 0.04f / 0.68f); // (a gap of 0.3 base after the name in all)
+            text::Span& hr = out.add(std::string("  ") + hourName(), ital, base * 0.86f, accent, 0.f,
+                                     saturate(0.3f + h.alpha * 1.5f) * 0.95f);
+            hr.dy = -base * 0.04f;
         }
-        case HUD_SECTION:
-            place(fontMed_, upper(h.text), base * 0.82f, base * 0.26f);
-            drawText(fontMed_, q, accent, halo, saturate(0.25f + h.alpha * 1.7f));
-            continue;
-        case HUD_TITLE:
-            place(fontItal_, h.text, base * 1.2f, base * 0.01f, -base * 0.16f);
-            drawText(fontItal_, q, ink, halo, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(fontLight_, h.text, base * 0.72f, base * 0.1f);
-            drawText(fontLight_, q, ink, halo, saturate(alpha * 1.2f) * 0.85f);
-            continue;
-        case HUD_LABEL:
-            place(fontMed_, upper(h.text), base * 0.66f, base * 0.24f, base * 0.04f);
-            drawText(fontMed_, q, ink, halo, saturate(alpha * 1.2f) * 0.85f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.06f, base * 0.04f);
-            drawText(fontLight_, q, ink, halo, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(fontItal_, h.text, base * 1.f, 0.f);
-            drawText(fontItal_, q, accent, halo, alpha);
-            continue;
-        case HUD_KEY:
-            place(fontMed_, h.text, base * 0.85f, 0.f);
-            drawText(fontMed_, q, ink, halo, alpha);
-            continue;
-        case HUD_TOAST:
-            place(fontMed_, upper(h.text), base * 1.1f, base * 0.24f, -base * 0.1f);
-            drawText(fontMed_, q, ink, halo, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontItal_, h.text, base * 1.f, 0.f);
-            drawText(fontItal_, q, accent, halo, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontMed_, h.text, base * 1.05f, base * 0.08f, -base * 0.08f);
-                drawText(fontMed_, q, ink, halo, alpha);
-            } else {
-                place(fontLight_, h.text, base * 0.84f, base * 0.04f);
-                drawText(fontLight_, q, h.accent ? accent : ink, halo, alpha);
-            }
-            continue;
-        default:
-            place(fontLight_, h.text, base * 0.82f, base * 0.03f);
-            drawText(fontLight_, q, h.accent ? accent : ink, halo, alpha);
-            continue;
-        }
+        break;
+    case HUD_SECTION: put(med, text::upper(h.text), base * 0.82f, base * 0.26f, accent, 0.25f + h.alpha * 1.7f); break;
+    case HUD_TITLE: put(ital, h.text, base * 1.2f, base * 0.01f, ink, h.alpha * 1.3f, -base * 0.16f); break;
+    case HUD_INFO: put(light, h.text, base * 0.72f, base * 0.1f, ink, saturate(alpha * 1.2f) * 0.85f); break;
+    case HUD_LABEL: put(med, text::upper(h.text), base * 0.66f, base * 0.24f, ink, saturate(alpha * 1.2f) * 0.85f, base * 0.04f); break;
+    case HUD_VALUE: put(light, h.text, base * 1.06f, base * 0.04f, ink, alpha); break;
+    case HUD_NOTICE: put(ital, h.text, base * 1.f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(med, h.text, base * 0.85f, 0.f, ink, alpha); break;
+    case HUD_TOAST: put(med, text::upper(h.text), base * 1.1f, base * 0.24f, ink, alpha, -base * 0.1f); break;
+    case HUD_TOAST_SUB: put(ital, h.text, base * 1.f, 0.f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(med, h.text, base * 1.05f, base * 0.08f, ink, alpha, -base * 0.08f);
+        else put(light, h.text, base * 0.84f, base * 0.04f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(light, h.text, base * 0.82f, base * 0.03f, h.accent ? accent : ink, alpha); break;
     }
+    out.look.halo = halo;
+    out.look.haloA = 0.7f;
+    out.look.haloW = 0.095f;
+    out.look.haloSmooth = true;
+    out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
 }
 
 // =====================================================================================================
@@ -2571,7 +2412,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.panels);
     glDisable(GL_BLEND);
     if (gpuQ) {
         const double cpuMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - cpu0).count();

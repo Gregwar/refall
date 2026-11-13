@@ -20,6 +20,8 @@ public:
     void levelUp() override;
     void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -75,7 +77,7 @@ private:
     bool placePeak(Peak& p);
     Palette basePal_{};
     std::vector<float> hudRects_; // pixels x0 y0 x1 y1: where the map keeps quiet behind the HUD
-    void buildHudRects(const std::vector<HudText>& hud, bool bare);
+    void buildHudRects(const Frame& f, const std::vector<HudText>& hud, bool bare);
     void splat(std::vector<float>& f, float x, float y, float v);
     float waterPercentile(float p);
     std::vector<float> sorted_;
@@ -91,25 +93,16 @@ private:
               float formA, float shrink, const vec3& line, float extra = 0.f);
     void buildBoard(const Game& g);
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontItalic_, fontRoman_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it), and the spot heights in the same letters.
+    text::Engine text_;
+    float fade_ = 1.f;
+    text::Look paperLook(bool screen) const;
+    vec3 lin(const vec3& c) const;
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progMap_ = 0, progRiver_ = 0, riverVao_ = 0, riverVbo_ = 0, progCell_ = 0, progShape_ = 0, progText_ = 0, progPost_ = 0;
-    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint progMap_ = 0, progRiver_ = 0, riverVao_ = 0, riverVbo_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
+    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint fieldTex_ = 0;
     ugl::Target sceneT_, riverT_;
     mat4 vp_;

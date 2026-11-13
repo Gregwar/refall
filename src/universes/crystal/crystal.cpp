@@ -39,9 +39,6 @@
 #include "layout.hpp"
 #include "universes/crystal/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -121,27 +118,6 @@ constexpr float G_WATER = 26.f, G_SHARD = 34.f;
 // The drop's mineral stays this many beats, then the peak's own comes back.
 constexpr double DROP_BEATS = 32.0;
 
-// UTF-8 to the font's characters: the middle dot is glyph 127, accented Latin letters lose their accent, anything
-// else outside ASCII becomes a '?'.
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
 void instAttribs(GLuint vao, GLuint vbo, GLuint quadVbo, int vec4s, size_t stride) {
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo);
@@ -173,7 +149,6 @@ bool CrystalUniverse::init(int width, int height) {
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "crystal blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "crystal final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "crystal shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "crystal text");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -199,65 +174,10 @@ bool CrystalUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontReg_, FONT_REG);
-    buildFont(fontIt_, FONT_IT);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void CrystalUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] crystal font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch; // the middle dot in DEL's slot
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void CrystalUniverse::resize(int width, int height) {
@@ -282,14 +202,10 @@ void CrystalUniverse::resize(int width, int height) {
 CrystalUniverse::~CrystalUniverse() {
     for (ugl::Target* t : {&bgT_, &sceneT_, &bloomA_, &bloomB_}) t->destroy();
     for (GLuint p : {progBg_, progPool_, progCrys_, progGlow_, progCell_, progShard_, progDown_, progBlur_, progFinal_,
-                     progShape_, progText_})
+                     progShape_})
         glDeleteProgram(p);
-    for (GLuint v : {cellVao_, crysVao_, glowVao_, shardVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, cellVbo_, crysVbo_, glowVbo_, shardVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontReg_, &fontIt_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint v : {cellVao_, crysVao_, glowVao_, shardVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, cellVbo_, crysVbo_, glowVbo_, shardVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -822,55 +738,6 @@ void CrystalUniverse::drawGlows() {
 // Text and the HUD
 // =====================================================================================================
 
-float CrystalUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-    }
-    return w - track;
-}
-
-void CrystalUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void CrystalUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, const vec3& halo, float alpha) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set3f(progText_, "uHalo", halo);
-    set1f(progText_, "uHaloA", 0.45f);
-    set1f(progText_, "uAlpha", alpha * (1.f - smoothstepf(0.4f, 0.9f, bridge_.amount)));
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void CrystalUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -932,89 +799,52 @@ void CrystalUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         flushShapes();
     }
 
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        auto upper = [](std::string t) {
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            return t;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(fontReg_, upper(h.text), base * 0.82f, base * 0.24f, base * 0.06f);
-            drawText(fontReg_, q, ink, halo, saturate(0.3f + h.alpha * 1.5f) * 0.85f);
-            continue;
-        case HUD_SECTION: {
-            // the section, then the mineral of the moment
-            const std::string name = std::string(V.minName[std::clamp(mineral_, 0, 3)]);
-            const float size = base * 1.05f, track = base * 0.06f;
-            const std::string full = h.text + "  \x7f  " + name;
-            const float wFull = textWidth(fontIt_, full, size, track);
-            const float x0 = ugl::hudLeft(h, wFull, width_);
-            textQuads(fontIt_, h.text, x0, h.y - base * 0.1f, size, track, q);
-            drawText(fontIt_, q, accent, halo, saturate(0.25f + h.alpha * 1.7f));
-            q.clear();
-            const float wSec = textWidth(fontIt_, h.text + "  ", size, track);
-            textQuads(fontIt_, std::string("\x7f  ") + name, x0 + wSec + track, h.y - base * 0.1f, size, track, q);
-            drawText(fontIt_, q, ink, halo, saturate(0.25f + h.alpha * 1.7f) * 0.7f);
-            continue;
-        }
-        case HUD_TITLE:
-            place(fontIt_, h.text, base * 1.14f, 0.f, -base * 0.12f);
-            drawText(fontIt_, q, ink, halo, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(fontReg_, h.text, base * 0.74f, base * 0.1f);
-            drawText(fontReg_, q, ink, halo, saturate(alpha * 1.2f) * 0.66f);
-            continue;
-        case HUD_LABEL:
-            place(fontReg_, upper(h.text), base * 0.8f, base * 0.3f);
-            drawText(fontReg_, q, ink, halo, saturate(alpha * 1.2f) * 0.68f);
-            continue;
-        case HUD_VALUE:
-            place(fontReg_, h.text, base * 1.1f, base * 0.04f, -base * 0.08f);
-            drawText(fontReg_, q, ink, halo, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(fontIt_, h.text, base * 1.05f, base * 0.04f);
-            drawText(fontIt_, q, accent, halo, alpha);
-            continue;
-        case HUD_KEY:
-            place(fontReg_, h.text, base * 0.9f, 0.f);
-            drawText(fontReg_, q, ink, halo, alpha);
-            continue;
-        case HUD_TOAST:
-            place(fontIt_, h.text, base * 1.2f, base * 0.12f, -base * 0.15f);
-            drawText(fontIt_, q, ink, halo, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontIt_, h.text, base * 0.95f, base * 0.04f);
-            drawText(fontIt_, q, accent, halo, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontIt_, h.text, base * 1.1f, base * 0.06f);
-                drawText(fontIt_, q, ink, halo, alpha);
-            } else {
-                place(fontReg_, h.text, base * 0.82f, base * 0.06f);
-                drawText(fontReg_, q, h.accent ? accent : ink, halo, alpha);
-            }
-            continue;
-        default:
-            place(fontReg_, h.text, base * 0.8f, base * 0.02f);
-            drawText(fontReg_, q, h.accent ? accent : ink, halo, alpha);
-            continue;
-        }
+}
+
+
+// The lettering, by the host (text.hpp): Marcellus for the names, labels and numbers, Cormorant Garamond Italic for
+// the song, the section and the celebrations; pale crystal light on a soft halo of the cave's dark, the accent the
+// mineral of the moment.
+void CrystalUniverse::hudLine(const HudText& h, text::Line& out) {
+    const VariantDef& V = VARIANTS[variant_];
+    const float s = height_ / 1080.f;
+    const vec3 ink = hex(V.ink), halo = hex(V.rock) * 0.6f;
+    const vec3 accent = lerp(ugl::toSrgb(currentColor()), vec3(1.f), 0.22f);
+    text::Font* reg = text::font(FONT_REG);
+    text::Font* it = text::font(FONT_IT);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(reg, text::upper(h.text), base * 0.82f, base * 0.24f, ink, saturate(0.3f + h.alpha * 1.5f) * 0.85f, base * 0.06f); break;
+    case HUD_SECTION: {
+        // the section, then the mineral of the moment, quieter
+        const float a = saturate(0.25f + h.alpha * 1.7f);
+        put(it, h.text, base * 1.05f, base * 0.06f, accent, a, -base * 0.1f);
+        put(it, std::string("  ·  ") + V.minName[std::clamp(mineral_, 0, 3)], base * 1.05f, base * 0.06f, ink, a * 0.7f, -base * 0.1f);
+        break;
     }
+    case HUD_TITLE: put(it, h.text, base * 1.14f, 0.f, ink, h.alpha * 1.3f, -base * 0.12f); break;
+    case HUD_INFO: put(reg, h.text, base * 0.74f, base * 0.1f, ink, saturate(alpha * 1.2f) * 0.66f); break;
+    case HUD_LABEL: put(reg, text::upper(h.text), base * 0.8f, base * 0.3f, ink, saturate(alpha * 1.2f) * 0.68f); break;
+    case HUD_VALUE: put(reg, h.text, base * 1.1f, base * 0.04f, ink, alpha, -base * 0.08f); break;
+    case HUD_NOTICE: put(it, h.text, base * 1.05f, base * 0.04f, accent, alpha); break;
+    case HUD_KEY: put(reg, h.text, base * 0.9f, 0.f, ink, alpha); break;
+    case HUD_TOAST: put(it, h.text, base * 1.2f, base * 0.12f, ink, alpha, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(it, h.text, base * 0.95f, base * 0.04f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(it, h.text, base * 1.1f, base * 0.06f, ink, alpha);
+        else put(reg, h.text, base * 0.82f, base * 0.06f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(reg, h.text, base * 0.8f, base * 0.02f, h.accent ? accent : ink, alpha); break;
+    }
+    out.look.halo = halo;
+    out.look.haloA = 0.45f;
+    out.look.haloW = 0.07f;
+    out.look.haloPow = 1.5f;
 }
 
 // =====================================================================================================

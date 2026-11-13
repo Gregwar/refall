@@ -640,35 +640,6 @@ void main() {
     frag = vec4(c * vCol.a, vCol.a);
 }
 )";
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-out vec2 vPx;
-void main() {
-    vUv = aUv;
-    vPx = aPos;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-in vec2 vPx;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uInk;   // sRGB, with a dark halo
-uniform float uAlpha, uHaloA;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.47 - w, 0.47 + w, d);
-    float halo = smoothstep(0.22, 0.5, d) * uHaloA;
-    float a = max(fill, halo) * uAlpha;
-    vec3 c = uInk * (fill / max(max(fill, halo), 1e-3));
-    frag = vec4(c * a, a);
-}
-)";
 
 // Builds a fragment shader with the common functions inserted after the version line.
 inline std::string withCommon(const char* src, const char* extra = COMMON) {
