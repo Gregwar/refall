@@ -245,7 +245,10 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
     enterT_ += dt;
-    if (updateDebrief(in, dt)) return Choice{};
+    if (Choice r; updateDebrief(in, dt, r)) {
+        if (r.kind != Choice::NONE) worlds_.reset(); // (as any choice: the GPU's memory for the game)
+        return r;
+    }
     if (celebrate_ >= 0 && screen_ == CAMPAIGN) {
         celebrateT_ += dt;
         if (stage_ != celebrate_ || row_ != 1 || petal_) celebrate_ = -1; // the player moved: it ends (cleared)

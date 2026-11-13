@@ -2029,7 +2029,12 @@ void App::gameOverDebrief() {
                   st ? (int)st->songs.size() : 0, difficultyName(run_.diff));
     std::printf("[campaign] game over: stage %d song %d, %d points, %d lines\n", run_.stage + 1, run_.current + 1,
                 game_.lastScore(), game_.lines());
-    toDebrief({false, "GAME OVER", sub, "", game_.lastScore(), game_.lines()});
+    Menu::Choice retry; // RETRY: the same run, from the song it started from
+    retry.kind = Menu::Choice::PLAY_CAMPAIGN;
+    retry.difficulty = run_.diff;
+    retry.stage = run_.stage;
+    retry.song = run_.from;
+    toDebrief({false, "GAME OVER", sub, "", game_.lastScore(), game_.lines(), retry});
 }
 
 // The end of a run: back to the menu, on the debrief (then the Voyage's screen, on the same stage and difficulty).
@@ -2093,7 +2098,9 @@ int App::runMenuShot() {
         char b[128];
         if (sc == "debrief-over") std::snprintf(b, sizeof(b), "STAGE 3   /   SONG 4 OF %d   /   NORMAL", songs);
         else std::snprintf(b, sizeof(b), "STAGE 3 CLEARED   /   NORMAL");
-        menu_.openDebrief(sc == "debrief-over" ? Menu::Debrief{false, "GAME OVER", b, "", 27340, 96}
+        Menu::Choice retry;
+        retry.kind = Menu::Choice::PLAY_CAMPAIGN;
+        menu_.openDebrief(sc == "debrief-over" ? Menu::Debrief{false, "GAME OVER", b, "", 27340, 96, retry}
                                                : Menu::Debrief{true, "CONGRATULATIONS", b, "NEXT STAGE UNLOCKED", 48710, 163});
         if (sc == "debrief-clear" && campaign_.size() > 3) { // then back on the Voyage: stage 3 turns cleared
             progress_.setCleared(2, DIFF_NORMAL, 48710, 163);
