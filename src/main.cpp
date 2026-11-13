@@ -1816,7 +1816,7 @@ void App::updateMenuMusic() {
         }
     }
     if (!musicReady_) return;
-    const int want = mode_ != MODE_MENU ? 0 : 1;
+    const int want = mode_ != MODE_MENU || menu_.screen() == Menu::DEBRIEF ? 0 : 1; // (silent on a run's debrief)
     if (want == musicState_) return;
     static const char* NAMES[3] = {"faded out", "playing", "ducked"};
     if (want == 1 && musicState_ == 0 && audio_.bedGain() <= 0.f) audio_.rewindBed(); // back from a game: from the top
