@@ -28,7 +28,6 @@
 #include "universes/brutalist/brutalist.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -37,9 +36,6 @@
 #include "universes/brutalist/shaders.hpp"
 #include "universes/brutalist/world.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 using namespace brutalist_world;
 
@@ -52,6 +48,17 @@ const unsigned char FONT_BOLD[] = {
 const unsigned char FONT_REGULAR[] = {
 #include "universes/brutalist/SpaceMono-Regular.ttf.inc"
 };
+
+// The HUD's lettering: the ink over its halo, never the halo through the ink (a fading line stays its own ink, not
+// a paler one), the halo easing out from the letters.
+const text::Lettering HALO_LETTERING{R"(
+vec4 letter(Letter L) {
+    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
+    float halo = smoothstep(0.0, 1.0, 1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3)) * uHalo.a;
+    float a = max(fill, halo);
+    return vec4(mix(uHalo.rgb, L.ink.rgb, fill / max(a, 1e-3)), 1.0) * a * L.ink.a;
+}
+)"};
 
 namespace shaders = brutalist_shaders;
 using ugl::set1f;
@@ -138,24 +145,6 @@ mat4 inverse(const mat4& m) {
     return r;
 }
 
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
 int glyphIndex(unsigned char ch) {
     if (ch < 32 || ch >= 128) ch = '?';
     return ch - 32;
@@ -206,7 +195,6 @@ bool BrutalistUniverse::init(int width, int height) {
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "brutalist blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "brutalist final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "brutalist shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "brutalist text");
 
     // a unit cube (-1..1): 36 vertices, position + normal
     {
@@ -284,14 +272,6 @@ bool BrutalistUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     // the sun's shadow map: a depth texture compared in the shaders (hardware filtered)
@@ -311,8 +291,6 @@ bool BrutalistUniverse::init(int width, int height) {
     glReadBuffer(GL_NONE);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    buildFont(font_, FONT_REGULAR);
-    buildFont(fontBold_, FONT_BOLD);
     resize(width, height);
     // the dust in the air, in front of the monument and around it
     motes_.clear();
@@ -329,51 +307,6 @@ bool BrutalistUniverse::init(int width, int height) {
     none.variant = 0;
     setSong(none, 0.f);
     return glGetError() == GL_NO_ERROR;
-}
-
-void BrutalistUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] brutalist font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch; // the middle dot in DEL's slot
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 // The layout's reference camera lowered to EYE_Y and looking straight ahead, its image shifted back: the board plane
@@ -416,19 +349,15 @@ void BrutalistUniverse::resize(int width, int height) {
 
 BrutalistUniverse::~BrutalistUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progSky_, progBox_, progDepth_, progSprite_, progLine_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+    for (GLuint p : {progSky_, progBox_, progDepth_, progSprite_, progLine_, progDown_, progBlur_, progFinal_, progShape_})
         glDeleteProgram(p);
-    for (GLuint v : {staticVao_, boxVao_, cellVao_, spriteVao_, lineVao_, quadVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {cubeVbo_, quadVbo_, staticVbo_, boxVbo_, cellVbo_, spriteVbo_, lineVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {staticVao_, boxVao_, cellVao_, spriteVao_, lineVao_, quadVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {cubeVbo_, quadVbo_, staticVbo_, boxVbo_, cellVbo_, spriteVbo_, lineVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
     if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
     if (shadowTex_) glDeleteTextures(1, &shadowTex_);
-    for (Font* f : {&font_, &fontBold_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -766,48 +695,6 @@ void BrutalistUniverse::buildBoard(const Game& g) {
 // Text and the HUD
 // =====================================================================================================
 
-float BrutalistUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) w += f.g[glyphIndex((unsigned char)s[i])].adv * k + track;
-    return w - track;
-}
-
-void BrutalistUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        const Glyph& g = f.g[glyphIndex((unsigned char)s[i])];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void BrutalistUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, const vec3& halo, float alpha, float haloA) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set3f(progText_, "uHalo", halo);
-    set1f(progText_, "uHaloA", haloA);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void BrutalistUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -819,13 +706,19 @@ void BrutalistUniverse::flushShapes() {
     shapes_.clear();
 }
 
-void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    // a mono grotesque like stencilled lettering: charcoal on a pale halo by day, pale on a dark halo by night
+// The HUD's inks (sRGB): charcoal on a pale halo by day, pale on a dark halo by night.
+void BrutalistUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     const float day = pal_.hudDark;
-    const vec3 ink = lerp(vec3(0.92f, 0.91f, 0.88f), vec3(0.11f, 0.11f, 0.12f), day);
-    const vec3 halo = lerp(ugl::toSrgb(lerp(pal_.zen, pal_.lining, 0.5f)) * 0.5f, lerp(ugl::toSrgb(pal_.hor), vec3(1.f), 0.4f), day);
-    const vec3 accent = lerp(lerp(ugl::toSrgb(pal_.piece[1]), vec3(1.f), 0.1f), ugl::toSrgb(pal_.piece[2]) * 0.8f, day);
+    ink = lerp(vec3(0.92f, 0.91f, 0.88f), vec3(0.11f, 0.11f, 0.12f), day);
+    halo = lerp(ugl::toSrgb(lerp(pal_.zen, pal_.lining, 0.5f)) * 0.5f, lerp(ugl::toSrgb(pal_.hor), vec3(1.f), 0.4f), day);
+    accent = lerp(lerp(ugl::toSrgb(pal_.piece[1]), vec3(1.f), 0.1f), ugl::toSrgb(pal_.piece[2]) * 0.8f, day);
+}
+
+// The panels and the bonus gauge (the lettering: hudLine).
+void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
+    const float s = height_ / 1080.f;
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
@@ -878,78 +771,48 @@ void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, 
         run(c.x - r, c.y + r, c.x - r, c.y - r);
         flushShapes();
     }
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        auto upper = [](std::string t) {
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            return t;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(fontBold_, upper(h.text), base * 0.72f, base * 0.14f, base * 0.06f);
-            drawText(fontBold_, q, ink, halo, saturate(0.3f + h.alpha * 1.5f) * 0.85f * vis, 0.7f);
-            continue;
-        case HUD_SECTION:
-            place(fontBold_, upper(h.text), base * 0.78f, base * 0.16f, -base * 0.04f);
-            drawText(fontBold_, q, accent, halo, saturate(0.3f + h.alpha * 1.7f) * vis, 0.55f);
-            continue;
-        case HUD_TITLE:
-            place(fontBold_, h.text, base * 1.0f, 0.f, -base * 0.1f);
-            drawText(fontBold_, q, ink, halo, saturate(h.alpha * 1.3f) * vis, 0.55f);
-            continue;
-        case HUD_INFO:
-            place(fontBold_, upper(h.text), base * 0.7f, base * 0.1f);
-            drawText(fontBold_, q, ink, halo, saturate(alpha * 1.2f) * 0.85f, 0.7f);
-            continue;
-        case HUD_LABEL:
-            place(fontBold_, upper(h.text), base * 0.74f, base * 0.22f);
-            drawText(fontBold_, q, ink, halo, saturate(alpha * 1.2f) * 0.88f, 0.75f);
-            continue;
-        case HUD_VALUE:
-            place(fontBold_, h.text, base * 1.0f, 0.f, -base * 0.04f);
-            drawText(fontBold_, q, ink, halo, alpha, 0.75f);
-            continue;
-        case HUD_NOTICE:
-            place(fontBold_, upper(h.text), base * 0.86f, base * 0.1f);
-            drawText(fontBold_, q, accent, halo, alpha, 0.6f);
-            continue;
-        case HUD_KEY:
-            place(fontBold_, h.text, base * 0.8f, 0.f);
-            drawText(fontBold_, q, ink, halo, alpha, 0.6f);
-            continue;
-        case HUD_TOAST:
-            place(fontBold_, upper(h.text), base * 1.0f, base * 0.2f, -base * 0.1f);
-            drawText(fontBold_, q, ink, halo, alpha, 0.7f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(font_, h.text, base * 0.9f, base * 0.04f);
-            drawText(font_, q, accent, halo, alpha * 0.95f, 0.7f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontBold_, upper(h.text), base * 0.9f, base * 0.14f);
-                drawText(fontBold_, q, ink, halo, alpha, 0.75f);
-            } else {
-                place(font_, h.text, base * 0.9f, 0.f);
-                drawText(font_, q, h.accent ? accent : ink, halo, alpha, 0.75f);
-            }
-            continue;
-        default:
-            place(font_, h.text, base * 0.74f, 0.f);
-            drawText(font_, q, h.accent ? accent : ink, halo, alpha, 0.6f);
-            continue;
-        }
+}
+
+// The lettering, by the host (text.hpp): Space Mono, a mono grotesque like stencilled lettering, Bold nearly
+// everywhere (Regular for the small print), a touch heavier than the font; charcoal on a pale halo by day, pale on a
+// dark halo by night, the halo's strength by role.
+void BrutalistUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
+    text::Font* bold = text::font(FONT_BOLD);
+    text::Font* reg = text::font(FONT_REGULAR);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    float haloA = 0.75f;
+    // a run: its size and letter spacing in pixels, moved down by dy, on a halo of strength ha
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float ha, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+        haloA = ha;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(bold, text::upper(h.text), base * 0.72f, base * 0.14f, ink, saturate(0.3f + h.alpha * 1.5f) * 0.85f, 0.7f, base * 0.06f); break;
+    case HUD_SECTION: put(bold, text::upper(h.text), base * 0.78f, base * 0.16f, accent, 0.3f + h.alpha * 1.7f, 0.55f, -base * 0.04f); break;
+    case HUD_TITLE: put(bold, h.text, base * 1.0f, 0.f, ink, h.alpha * 1.3f, 0.55f, -base * 0.1f); break;
+    case HUD_INFO: put(bold, text::upper(h.text), base * 0.7f, base * 0.1f, ink, saturate(alpha * 1.2f) * 0.85f, 0.7f); break;
+    case HUD_LABEL: put(bold, text::upper(h.text), base * 0.74f, base * 0.22f, ink, saturate(alpha * 1.2f) * 0.88f, 0.75f); break;
+    case HUD_VALUE: put(bold, h.text, base * 1.0f, 0.f, ink, alpha, 0.75f, -base * 0.04f); break;
+    case HUD_NOTICE: put(bold, text::upper(h.text), base * 0.86f, base * 0.1f, accent, alpha, 0.6f); break;
+    case HUD_KEY: put(bold, h.text, base * 0.8f, 0.f, ink, alpha, 0.6f); break;
+    case HUD_TOAST: put(bold, text::upper(h.text), base * 1.0f, base * 0.2f, ink, alpha, 0.7f, -base * 0.1f); break;
+    case HUD_TOAST_SUB: put(reg, h.text, base * 0.9f, base * 0.04f, accent, alpha * 0.95f, 0.7f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(bold, text::upper(h.text), base * 0.9f, base * 0.14f, ink, alpha, 0.75f);
+        else put(reg, h.text, base * 0.9f, 0.f, h.accent ? accent : ink, alpha, 0.75f);
+        break;
+    default: put(reg, h.text, base * 0.74f, 0.f, h.accent ? accent : ink, alpha, 0.6f); break;
     }
+    out.look.weight = 0.0075f;
+    out.look.halo = halo;
+    out.look.haloA = haloA;
+    out.look.haloW = 0.092f;
+    out.lettering = &HALO_LETTERING;
+    out.alpha = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 }
 
 // =====================================================================================================
@@ -1525,7 +1388,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.panels);
     glDisable(GL_BLEND);
     (void)ph;
     (void)refreshK_;
