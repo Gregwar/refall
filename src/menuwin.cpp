@@ -747,23 +747,27 @@ void Worlds::kalVoyages() {
         const float fade = std::clamp(1.f + rp * 1.6f, 0.f, 1.f) * std::clamp((SHOWN - rp) * 1.6f, 0.f, 1.f);
         if (fade <= 0.01f) continue;
         p.setFade(fade);
-        const float g = sstep(near1(m.aV_, i)) * (making ? 0.4f : 1.f);
-        const float x = X(x0 + (i % cols) * (CW + GAP)), y = Y(TOP + rp * STEP) - 10 * u * g;
+        // the focused card is lit, the others dull (no easing between them: in a grid it would pass over other cards)
+        const bool sel = i == m.vSel_ && !making;
+        const float g = sel ? 1.f : 0.f;
+        const float x = X(x0 + (i % cols) * (CW + GAP)), y = Y(TOP + rp * STEP);
         const bool featured = i == 0, add = i == nc - 1;
         const CustomVoyage* v = !featured && !add ? &vs[i - 1] : nullptr;
         uint32_t seed = 2166136261u;
         for (char c : add ? std::string("+") : v ? v->id : std::string("refall")) seed = (seed ^ (unsigned char)c) * 16777619u;
-        const Col hue = featured ? hex(0xe8c06a) : add ? hex(0x9aa0b8) : hueCol((seed % 360) / 360.f, 0.55f, 0.95f);
-        if (g > 0.02f || featured) {
+        const Col hue0 = featured ? hex(0xe8c06a) : add ? hex(0x9aa0b8) : hueCol((seed % 360) / 360.f, 0.55f, 0.95f);
+        const Col hue = sel ? hue0 : mixc(hue0, hex(0x6a6c78), 0.6f); // dull: toward a grey
+        if (sel) {
             p.setAdditive(true);
-            p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), (featured ? 0.10f : 0.f) + 0.16f * g), 26 * u);
+            p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), 0.2f), 26 * u);
             p.setAdditive(false);
         }
         p.rrect(x, y + 12 * u, w, h, 22 * u, hex(0x000000, 0.3f), 30 * u);
-        p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), 0.78f), 0.92f));
+        p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), sel ? 0.72f : 0.86f), 0.92f));
         p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
         p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
-                    g > 0.5f ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.95f) : withA(hue, 0.55f));
+                    sel ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.5f) : withA(hue, 0.35f));
+        p.setFade(fade * (sel ? 1.f : 0.6f)); // the dull cards' contents dimmer
         const float mx = x + 100 * u, my = y + h / 2, mr = 70 * u;
         if (add) {
             p.ring(mx, my, 40 * u, 2 * u, hex(0xffffff, 0.5f + 0.4f * g));
@@ -779,12 +783,13 @@ void Worlds::kalVoyages() {
         if (!songs && featured) for (const CampaignStage& s2 : mc.stages()) songs += (int)s2.songs.size();
         if (!songs && v) songs = v->songs;
         // the rosette: a kite per stage in the stages' hues, the cleared ones lit
-        const float rot = t * (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) + (seed % 100) * 0.0628f;
+        const float rot = (sel ? t * (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) : 0.f) + (seed % 100) * 0.0628f; // only the focused one turns
         for (int k = 0; k < st; k++) {
             unsigned char sc[3];
             m.stageColor(k, sc);
             const Col c = rgb8(sc);
-            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < pr.cleared ? c : mixc(c, hex(0x14141c), 0.55f),
+            const Col lit = sel ? c : mixc(c, hex(0x6a6c78), 0.55f);
+            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < pr.cleared ? lit : mixc(lit, hex(0x14141c), 0.55f),
                  0.92f, true, hex(0x08080c, 0.9f));
         }
         p.circle(mx, my, mr * 0.22f, hex(0x0a0a12));
