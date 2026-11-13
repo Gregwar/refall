@@ -222,6 +222,9 @@ private:
         int songStartScore = 0, songStartLines = 0;
         bool survived = false;  // the current song was survived (recorded)
         bool finishing = false; // the stage's last song was survived: the run ends with its outro
+        // The song's velocity is not a constant: it climbs from `velFrom` to the song's own over its first `velRamp`
+        // seconds (a stage's first song from a warm-up, the next ones from where the previous song ended).
+        float velFrom = 1, velTo = 1, velRamp = 0;
     } run_;
     bool muffleWas_ = false;
     // where the menu was: saved next to the progress (debounced while the menu shows, and when leaving it)
@@ -272,6 +275,9 @@ private:
         static const float lead = std::getenv("ZEN_OUT_LEAD") ? (float)std::atof(std::getenv("ZEN_OUT_LEAD")) : 7.5f;
         return lead;
     }
+    // A Voyage run's first song starts at this share of its velocity, reached after WARMUP_SECONDS; the next songs
+    // climb from the previous one's over NEXT_SONG_RAMP_SECONDS.
+    static constexpr float WARMUP_VELOCITY = 0.35f, WARMUP_SECONDS = 30.f, NEXT_SONG_RAMP_SECONDS = 20.f;
     static constexpr float OUT_HIDE = 1.6f;  // the game fades away
     static constexpr float OUT_DARK = 2.0f;  // the world fades to black, ending with the song
     static constexpr float IN_CARD = 0.4f, IN_HOLD = 1.4f, IN_SHRINK = 3.2f, IN_WORLD = 5.2f, IN_SHOW = 6.8f, IN_END = 8.4f;
@@ -633,6 +639,11 @@ void App::handleEvents() {
 // Gravity rides the beat. The song section sets the pace in rows per beat (x0.4 in a break .. x1.3 in a
 // drop), and the level scales it up gradually to x10 at level 20 (capped at 28 rows/s).
 void App::updateGravity(double songTime, float dt) {
+    // A Voyage song's velocity climbs to its own over its first seconds (see Run).
+    if (mode_ == MODE_CAMPAIGN && game_.fixedLevel() > 0.f && run_.velRamp > 0.f) {
+        const float k = smoothstepf(0.f, run_.velRamp, (float)songTime);
+        game_.setFixedLevel(run_.velFrom + (run_.velTo - run_.velFrom) * k);
+    }
     const float diff = game_.speedDifficulty();
     // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
     // blend) and the slow-motion bonus; it eases back over about a second.
@@ -654,8 +665,8 @@ void App::updateGravity(double songTime, float dt) {
     float want = gravityPace(an, songTime + 0.25);
     if (trackAge_ < 20.f) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
-    // Level scaling: x10 at the plateau (level 20; a Voyage song's velocity goes on past it), capped at 28 rows per second.
-    const float MAX_ROWS_PER_SEC = 28.f;
+    // Level scaling: x10 at the plateau (level 20; a Voyage song's velocity goes on past it), capped at 60 rows per second.
+    const float MAX_ROWS_PER_SEC = 60.f;
     const float beatsPerSec = bpm * tempoMul / 60.f;
     // Free play's difficulty scales every level's speed (EXPERT x1); a campaign song's level is set by the data.
     const float rowsPerBeat = std::min(pace_ * (1.f + 9.f * diff) * speedMul_, MAX_ROWS_PER_SEC / beatsPerSec);
@@ -1857,7 +1868,15 @@ void App::campaignSongStarted() {
     run_.songStartScore = game_.score();
     run_.songStartLines = game_.lines();
     const CampaignSong& s = st->songs[k];
-    game_.setFixedLevel(s.level[run_.diff]);
+    run_.velTo = s.level[run_.diff];
+    if (k == run_.from) { // the run's first song: a chill warm-up first
+        run_.velFrom = std::max(1.f, run_.velTo * WARMUP_VELOCITY);
+        run_.velRamp = WARMUP_SECONDS;
+    } else {
+        run_.velFrom = std::min(run_.velTo, st->songs[k - 1].level[run_.diff]);
+        run_.velRamp = NEXT_SONG_RAMP_SECONDS;
+    }
+    game_.setFixedLevel(run_.velFrom);
     lastLevel_ = game_.level();
     if (opt_.universe.empty()) {
         forcedUniverse_ = forcedVariant_ = -1;

@@ -244,15 +244,17 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
 - `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
 - `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
-- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 30
+- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 40
   (20 is the free play's plateau, x10 gravity; past it faster still, up to the gravity's cap); decimals are fine.
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
 ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
-EXPERT, 10 levels faster), over a base that rises across the stages (EXPERT goes from 6 to 16 on stage 1 and from 16
-to 26 on the finale, past the free play's plateau; NORMAL tops out at 17, EASY at 10).
+EXPERT, 13 levels faster on stage 1, 20 on the finale), over a base that rises across the stages (EXPERT goes from 6 to
+19 on stage 1 and from 20 to 40 on the finale, far past the free play's plateau; NORMAL tops out at 24, EASY at 12).
+A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
+climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
 
 ## Install
 
