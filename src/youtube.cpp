@@ -222,9 +222,20 @@ bool download(const std::string& id, const std::string& title) {
     // ffmpeg converts the audio: the launcher points to a bundled one when the system has none.
     if (const char* ff = std::getenv("ZENTRIS_FFMPEG"); ff && *ff) cmd += " --ffmpeg-location " + shellQuote(ff);
     cmd += " -- " + id;
-    bool ok = platform::run(cmd) == 0 && fs::exists(fs::path(cacheDir()) / (id + ".mp3"));
-    if (!ok) std::fprintf(stderr, "[youtube] could not download %s (%s)\n", title.c_str(), id.c_str());
-    return ok;
+    // The song counts as there when its file is (yt-dlp may report a passing error after it), and a failed
+    // download is tried once more (YouTube refuses a first request now and then).
+    const fs::path file = fs::path(cacheDir()) / (id + ".mp3");
+    auto there = [&] {
+        std::error_code ec;
+        return fs::exists(file, ec) && fs::file_size(file, ec) > 0;
+    };
+    for (int attempt = 0; attempt < 2; attempt++) {
+        const int rc = platform::run(cmd);
+        if (there()) return true;
+        std::fprintf(stderr, "[youtube] %s: yt-dlp failed (%d)%s\n", id.c_str(), rc, attempt == 0 ? ", trying again" : "");
+    }
+    std::fprintf(stderr, "[youtube] could not download %s (%s)\n", title.c_str(), id.c_str());
+    return false;
 }
 } // namespace
 
