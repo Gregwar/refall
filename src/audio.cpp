@@ -42,7 +42,7 @@ void AudioEngine::shutdown() {
     }
 }
 
-void AudioEngine::play(std::shared_ptr<Track> track) {
+void AudioEngine::play(std::shared_ptr<Track> track, bool fadeIn) {
     std::lock_guard<std::mutex> lock(mutex_);
     previous_ = current_;
     prevPos_ = pos_;
@@ -51,7 +51,7 @@ void AudioEngine::play(std::shared_ptr<Track> track) {
     pos_ = 0;
     frac_ = 0;
     atomicPos_ = 0;
-    fade_ = 0.f;
+    fade_ = fadeIn ? 0.f : 1.f;
 }
 
 void AudioEngine::seek(double seconds) {

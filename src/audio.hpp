@@ -30,7 +30,8 @@ public:
     void shutdown();
     uint32_t sampleRate() const { return sampleRate_; }
 
-    void play(std::shared_ptr<Track> track); // crossfades from the current track
+    // crossfades from the current track; fadeIn false: the song starts at full level on its first frame
+    void play(std::shared_ptr<Track> track, bool fadeIn = true);
     std::shared_ptr<Track> current() const { return current_; }
     double position() const;                 // seconds into the current track
     bool finished() const;                   // current track reached its end
