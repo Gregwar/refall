@@ -373,13 +373,26 @@ void Worlds::kalCampaign() {
             p.line(mx - tx * k - nx * k, my - ty * k - ny * k, mx + tx * k * 0.6f, my + ty * k * 0.6f, 2.2f * u, cc);
         }
     }
-    for (int s = 0; s < n; s++) {
-        const float a = ang((float)s);
+    // A stage just cleared (see Menu::celebrateClear) is drawn last, over a shade on everything else: it shakes,
+    // faster and faster, then turns into its cleared look at once, a white copy of its contour spreading out as a wave.
+    const int celS = m.celebrate_ >= 0 && m.celebrate_ < n && open(m.celebrate_) && cleared(m.celebrate_) ? m.celebrate_ : -1;
+    const float celT = m.celebrateT_;
+    constexpr float TURN = 2.3f; // when it turns
+    for (int ii = 0; ii < n; ii++) {
+        const int s = celS < 0 ? ii : ii < celS ? ii : ii < n - 1 ? ii + 1 : celS;
+        const bool cel = s == celS;
+        if (cel) {
+            const float shade = 0.62f * sstep(std::clamp(celT / 0.5f, 0.f, 1.f)) * (1.f - sstep(std::clamp((celT - TURN - 0.6f) / 0.9f, 0.f, 1.f)));
+            if (shade > 0.f) p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, shade));
+        }
+        const float cT = cel ? celT : 99.f;
+        float a = ang((float)s);
+        if (cel && cT > 0.35f && cT < TURN) { // the shake: wider and faster up to the turn
+            const float tau = cT - 0.35f, q = tau / (TURN - 0.35f);
+            a += 0.04f * q * std::sqrt(q) * std::sin(TAU * (5.f * tau + 4.6f * tau * tau));
+        }
         const bool o = open(s), cl = o && cleared(s);
-        // a stage just cleared turns into its cleared look (ck 0 .. 1), a gold wave rising through it
-        const bool cel = cl && s == m.celebrate_;
-        const float cT = cel ? m.celebrateT_ : 99.f;
-        const float ck = cl ? sstep(std::clamp((cT - 0.6f) / 1.6f, 0.f, 1.f)) : 0.f;
+        const float ck = cl ? (cel ? sstep(std::clamp((cT - TURN) / 0.12f, 0.f, 1.f)) : 1.f) : 0.f;
         const float f = focusStage(s);
         const float op = s == fs ? ao : 0.f; // this petal's opening
         const Col c = o ? stageCol(s) : hex(0x5a5c66);
@@ -396,28 +409,32 @@ void Worlds::kalCampaign() {
         const Col pc = !o ? c : mixc(pcOpen, pcClear, ck);
         const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
         kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op) * wk, pc,
-             !o ? 0.6f : lerpf(0.7f, 0.95f, ck), true, focusClosed && (!cel || cT > 3.f) ? hex(0xffffff, 0.95f * pulse) : edgeCl);
+             !o ? 0.6f : lerpf(0.7f, 0.95f, ck), true, focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : edgeCl);
         if (cl) { // a cleared petal glows from within
             p.setAdditive(true);
             p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, 70 * u, withA(c, 0.22f * ck));
             p.setAdditive(false);
         }
-        if (cel && cT < 3.6f) {
-            // the moment it turns: a band of gold light rising from the petal's root to its tip, a soft swell of its
-            // hue, then a gold ring spreading from its number
+        if (cel && cT >= TURN && cT < TURN + 2.f) {
+            // the turn: a swell of its hue, and white copies of its contour spreading out over the screen, fading
             p.setAdditive(true);
-            const float rise = std::clamp((cT - 0.5f) / 1.6f, 0.f, 1.f);
-            if (rise > 0.f && rise < 1.f) {
-                const float r = lerpf(140.f, 262.f, sstep(rise)) * u, hw = 0.2f * wk * (1.f - 0.35f * rise);
-                p.line(cx + std::cos(a - hw) * r, cy + std::sin(a - hw) * r, cx + std::cos(a + hw) * r, cy + std::sin(a + hw) * r,
-                       9 * u, hex(0xffe6a8, 0.55f * std::sin(rise * PI)), 14 * u);
-            }
-            const float sw = std::exp(-std::pow((cT - 1.9f) / 0.7f, 2.f));
-            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (120 + 60 * sw) * u, withA(c, 0.45f * sw));
-            const float rk = std::clamp((cT - 1.9f) / 1.4f, 0.f, 1.f);
-            if (rk > 0.f && rk < 1.f) {
-                const float r = 205 * u;
-                p.ring(cx + std::cos(a) * r, cy + std::sin(a) * r, lerpf(30.f, 110.f, sstep(rk)) * u, 3 * u, hex(0xffe0a0, 0.7f * (1.f - rk)));
+            const float sw = std::exp(-std::pow((cT - TURN - 0.1f) / 0.35f, 2.f));
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (140 + 80 * sw) * u, withA(c, 0.6f * sw));
+            const float r0 = (135 + 10 * op) * u, r1 = (262 + 22 * f + 26 * op) * u, ha = (0.2f + 0.03f * f + 0.1f * op) * wk;
+            const float rm = lerpf(r0, r1, 0.45f);
+            float px[4] = {cx + std::cos(a) * r0, cx + std::cos(a - ha) * rm, cx + std::cos(a) * r1, cx + std::cos(a + ha) * rm};
+            float py[4] = {cy + std::sin(a) * r0, cy + std::sin(a - ha) * rm, cy + std::sin(a) * r1, cy + std::sin(a + ha) * rm};
+            const float mx = (px[0] + px[1] + px[2] + px[3]) * 0.25f, my = (py[0] + py[1] + py[2] + py[3]) * 0.25f;
+            for (int w = 0; w < 3; w++) {
+                const float age = cT - TURN - 0.16f * w, life = 1.5f;
+                if (age <= 0.f || age >= life) continue;
+                const float k = age / life, sc = 1.f + 7.f * (1.f - (1.f - k) * (1.f - k));
+                const Col wc = hex(0xffffff, 0.85f * std::pow(1.f - k, 1.6f) * (1.f - 0.25f * w));
+                for (int e = 0; e < 4; e++) {
+                    const int g = (e + 1) % 4;
+                    p.line(mx + (px[e] - mx) * sc, my + (py[e] - my) * sc, mx + (px[g] - mx) * sc, my + (py[g] - my) * sc,
+                           (3.f + 2.f * k) * u, wc, (1.5f + 6.f * k) * u);
+                }
             }
             p.setAdditive(false);
         }
@@ -461,7 +478,7 @@ void Worlds::kalCampaign() {
             }
             p.circle(nx, ny, rad + 6 * u, hex(0x000000, 0.35f), 10 * u);
             // cleared: a gold disc (a just cleared one turns gold as the light reaches it)
-            const float dk = cel ? sstep(std::clamp((cT - 1.7f) / 0.6f, 0.f, 1.f)) : ck;
+            const float dk = ck;
             p.circle(nx, ny, rad, mixc(hex(0x0a0a10, 0.82f), hex(0xe8c06a, 0.95f), dk));
             const Col ringOpen = o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f);
             p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, mixc(ringOpen, hex(0xfff0c8, 0.95f), dk));
