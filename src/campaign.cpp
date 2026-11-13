@@ -1,5 +1,6 @@
 #include "title.hpp"
 #include "campaign.hpp"
+#include "game.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -120,7 +121,7 @@ bool Campaign::parse(const std::string& text) {
         CampaignSong s;
         s.id = c[2];
         s.universe = c[3];
-        for (int d = 0; d < DIFF_COUNT; d++) s.level[d] = std::clamp((float)std::atof(c[4 + d].c_str()), 1.f, 20.f);
+        for (int d = 0; d < DIFF_COUNT; d++) s.level[d] = std::clamp((float)std::atof(c[4 + d].c_str()), 1.f, Game::MAX_VELOCITY);
         s.title = c.size() > 7 ? c[7] : s.id;
         int v = -1;
         if (!s.universe.empty() && universes::parse(s.universe, &v) < 0) {

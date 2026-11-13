@@ -633,7 +633,7 @@ void App::handleEvents() {
 // Gravity rides the beat. The song section sets the pace in rows per beat (x0.4 in a break .. x1.3 in a
 // drop), and the level scales it up gradually to x10 at level 20 (capped at 28 rows/s).
 void App::updateGravity(double songTime, float dt) {
-    const float diff = game_.difficulty();
+    const float diff = game_.speedDifficulty();
     // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
     // blend) and the slow-motion bonus; it eases back over about a second.
     const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
@@ -654,7 +654,7 @@ void App::updateGravity(double songTime, float dt) {
     float want = gravityPace(an, songTime + 0.25);
     if (trackAge_ < 20.f) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
-    // Level scaling: x10 at the plateau (level 20), capped at 28 rows per second.
+    // Level scaling: x10 at the plateau (level 20; a Voyage song's velocity goes on past it), capped at 28 rows per second.
     const float MAX_ROWS_PER_SEC = 28.f;
     const float beatsPerSec = bpm * tempoMul / 60.f;
     // Free play's difficulty scales every level's speed (EXPERT x1); a campaign song's level is set by the data.

@@ -18,7 +18,7 @@ struct CampaignSong {
     std::string id;       // YouTube video id
     std::string title;
     std::string universe; // "NAME" or "NAME:VARIANT" (as --universe takes it)
-    float level[DIFF_COUNT] = {1, 1, 1}; // the velocity, as a game level (1 .. 20, may be fractional)
+    float level[DIFF_COUNT] = {1, 1, 1}; // the velocity, as a game level (1 .. Game::MAX_VELOCITY, may be fractional)
     std::string entry() const { return "ytdl:" + id + "\t" + title; } // a library entry
 };
 struct CampaignStage {
