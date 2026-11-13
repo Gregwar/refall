@@ -169,28 +169,6 @@ std::string asciiFold(const std::string& s) {
     return clean;
 }
 
-std::string displayTitle(const std::string& s) {
-    std::string out;
-    for (size_t i = 0; i < s.size();) {
-        const unsigned char c = (unsigned char)s[i];
-        const int len = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 1;
-        uint32_t cp = c;
-        if (len == 2 && i + 1 < s.size()) cp = ((c & 0x1F) << 6) | (s[i + 1] & 0x3F);
-        else if (len == 3 && i + 2 < s.size()) cp = ((c & 0x0F) << 12) | ((s[i + 1] & 0x3F) << 6) | (s[i + 2] & 0x3F);
-        else if (len == 4) cp = 0x10000;
-        // Latin letters, accents and punctuation; general punctuation (dashes, quotes, ellipsis); the superscripts
-        const bool keep = (cp >= 0x20 && cp < 0x7F) || (cp >= 0xA0 && cp < 0x250) || (cp >= 0x2010 && cp <= 0x2027) ||
-                          (cp >= 0x2070 && cp <= 0x209F);
-        if (keep) out += s.substr(i, len);
-        i += len;
-    }
-    std::string clean;
-    for (char ch : out)
-        if (!(ch == ' ' && (clean.empty() || clean.back() == ' '))) clean += ch;
-    while (!clean.empty() && clean.back() == ' ') clean.pop_back();
-    return clean;
-}
-
 std::shared_ptr<Track> loadTrack(const std::string& entry, uint32_t sampleRate) {
     auto t0 = std::chrono::steady_clock::now();
     std::string path = entry;
