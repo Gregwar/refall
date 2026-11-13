@@ -122,11 +122,11 @@ private:
     // ---- The title card captured from the universe's own HUD lettering (see Break::cardHud).
     struct CardLine {
         bool ok = false;
-        GLuint tex = 0;          // the lettering's coverage (R8, mipmapped), cropped to its box
+        GLuint tex = 0;          // the lettering: its colors and coverage (RGBA, mipmapped), cropped to its box
         float x0 = 0, y0 = 0, x1 = 0, y1 = 0; // its box in the capture, pixels (top-left origin), at scale k
         float k = 1, ax = 0, ay = 0;         // the capture's scale and the point it scales about
         float aMax = 1;                      // the lettering's own opacity in the HUD
-        vec3 ink{1.f};
+        bool dark = false;       // dark ink (a light universe)
     };
     CardLine cardLines_[2];
     int cardId_ = -1;
