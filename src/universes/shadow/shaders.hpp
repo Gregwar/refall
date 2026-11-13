@@ -164,21 +164,25 @@ vec3 transmit(vec2 p, float pen, bool previews) {
         }
     }
     if (previews) {
+        // small shadows of the pieces, the same as the falling one's (the cells joined into one glass shape)
         for (int i = 0; i < uPrevN; i++) {
             float s = uPrev[i].z;
-            float e = sdBox2(p - uPrev[i].xy, vec2(0.5 * s));
-            if (e < 0.3) {
-                // (the preview's cells touch: one seamless shape, its rim drawn by the union's distance)
-                float best = e;
-                for (int j = 0; j < uPrevN; j++) {
-                    if (uPrev[j].w != uPrev[i].w || abs(uPrev[j].z - s) > 1e-3) continue;
-                    best = min(best, sdBox2(p - uPrev[j].xy, vec2(0.5 * s)));
-                }
-                float cov = smoothstep(pen * 0.7, -pen * 0.7, best);
-                float rim = smoothstep(-0.13 * s, -0.05 * s, best);
-                T *= mix(vec3(1.0), uGel[int(uPrev[i].w)] * mix(1.0, 0.36, rim), cov);
-                break;
+            vec2 c = uPrev[i].xy;
+            if (sdBox2(p - c, vec2(0.5 * s)) > 0.35 * s) continue;
+            float pt = mod(uPrev[i].w, 8.0);
+            float e = 1e3;
+            for (int j = 0; j < uPrevN; j++) {
+                if (abs(uPrev[j].z - s) > 1e-3 || mod(uPrev[j].w, 8.0) != pt || length(uPrev[j].xy - c) > 4.0 * s) continue;
+                e = min(e, cellShape(uPrev[j].xy + (p - uPrev[j].xy) / s, uPrev[j].xy, floor(uPrev[j].w / 8.0), 0.07) * s);
             }
+            if (e < 0.35 * s) T *= 1.0 - 0.16 * smoothstep(0.35 * s, 0.0, e) * step(pen, e);
+            if (e < pen) {
+                float cov = smoothstep(pen, -pen, e);
+                float rim = smoothstep(-0.15 * s, -0.07 * s, e);
+                float wav = vnoise(p * 2.7 / s + pt * 3.1) * 0.6 + vnoise(p * 6.3 / s - pt) * 0.4;
+                T *= mix(vec3(1.0), uGel[int(pt)] * mix(1.0, 0.3, rim) * (0.88 + 0.24 * wav), cov);
+            }
+            break;
         }
     }
     return T;
