@@ -60,6 +60,9 @@ public:
     void setFreeDifficulty(int d) { freeDiff_ = d; }
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
+    // A stage just cleared: once the Voyage's screen is back (after the debrief), its petal turns into its cleared look
+    // under the focus, then the focus moves on to the next stage (if the player hasn't moved).
+    void celebrateClear(int stage, int next) { celebrate_ = stage; celebrateNext_ = next; celebrateT_ = 0.f; }
     void snap(); // the animated focus jumps to its place (screenshots)
     // Where the player was in the menu (kept between launches): the title entry, Voyage's difficulty and focused
     // stage, free play's difficulty and playlist.
@@ -141,6 +144,9 @@ private:
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
+    static constexpr float CELEBRATE_MOVE = 4.2f; // when the focus moves on to the next stage
+    int celebrate_ = -1, celebrateNext_ = -1; // the stage just cleared (see celebrateClear), the one to move on to
+    float celebrateT_ = 0;
     float time_ = 0, msgT_ = 0, lastInput_ = 0; // lastInput_: when a key was last pressed (the menu's idle time)
     std::string msg_, msgSub_;
     bool msgBad_ = false;

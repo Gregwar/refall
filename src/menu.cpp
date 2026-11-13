@@ -186,6 +186,14 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     }
     enterT_ += dt;
     if (updateDebrief(in, dt)) return Choice{};
+    if (celebrate_ >= 0 && screen_ == CAMPAIGN) {
+        celebrateT_ += dt;
+        if (stage_ != celebrate_ || row_ != 1 || petal_) celebrate_ = -1; // the player moved: it ends (cleared)
+        else if (celebrateT_ >= CELEBRATE_MOVE) {
+            if (celebrateNext_ >= 0) stage_ = celebrateNext_;
+            celebrate_ = -1;
+        }
+    }
     // a playlist being read: its result
     if (fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const Fetched r = fetch_.get();
