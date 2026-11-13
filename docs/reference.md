@@ -117,7 +117,7 @@ and beam overdrive).
 
 Each song is decoded and analyzed in the background (under 1 s):
 
-- **Tempo and song sections**: gravity follows the beat, at a pace set by the current section, in rows per beat: break ×0.4, intro ×0.5, outro ×0.5, verse ×0.8, build ×1, chorus ×1.2, drop ×1.3 (at most ×1 in a song's first 20 s). During a change of universe gravity eases down to ×0.25 (the stack can be hard to read while two worlds blend) and back up over about a second once the new one is in.
+- **Song sections**: gravity counts beats of a fixed 130 BPM (not the song's tempo: the same velocity falls as fast in every song), at a pace set by the current section, in rows per beat: break ×0.4, intro ×0.5, outro ×0.5, verse ×0.8, build ×1, chorus ×1.2, drop ×1.3 (at most ×1 in a song's first 20 s). During a change of universe gravity eases down to ×0.25 (the stack can be hard to read while two worlds blend) and back up over about a second once the new one is in.
 - **Levels**: one level per 20 lines, up to a plateau at level 20. Each level speeds up the beat-locked gravity (×10 at the plateau, capped at 28 rows/s) and shortens the lock delay (0.55 s → 0.35 s). Game over resets the level.
 - **Key**: the song's hue follows the circle of fifths; universes may pick their variant from it (VECTOR's phosphor).
 - **Tempo, brightness, bass/air balance, dynamics, density**: weigh which universe suits the song.
