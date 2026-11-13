@@ -945,7 +945,7 @@ std::vector<HudText> App::buildHud(float dt) {
         char info[128];
         std::snprintf(info, sizeof(info), "%.0f BPM   %s", fp.bpm, keyName(fp.key, fp.minor).c_str());
         hud.push_back({info, 28 * s, 50 * s, 1.5f * s, a * 0.7f, true, false, HUD_INFO});
-    } else {
+    } else if (!introAtStart_) { // (the intro's black says it in a quieter word)
         hud.push_back({lib_.empty() ? "NO SONGS FOUND" : "LOADING THE FIRST SONG...", w * 0.5f, h * 0.5f - 60 * s,
                        3.f * s, 0.8f, false, true, HUD_DIALOG});
     }
