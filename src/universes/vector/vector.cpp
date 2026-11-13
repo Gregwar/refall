@@ -9,10 +9,13 @@
 #include "universes/vector/vector.hpp"
 
 #include "layout.hpp"
+#include "library.hpp"
 #include "ugl.hpp"
 #include "universes/registry.hpp"
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -940,52 +943,106 @@ void VectorUniverse::buildFx(float dt) {
 }
 
 // =====================================================================================================
-// HUD: stroke text in screen pixels
+// HUD: the stroke font, lettered by the host
 // =====================================================================================================
 
-float VectorUniverse::textWidth(const std::string& text, float scale) {
-    if (text.empty()) return 0.f;
-    const float u = scale * FONT_UNIT;
-    size_t n = 0;
-    for (unsigned char c : text) n += (c & 0xC0) != 0x80; // UTF-8: one glyph per character
-    return n * 6.f * u - 2.f * u;
-}
+namespace {
+// The stroke font as a font of the host's text engine: each letter's polylines stroked with a round pen, about as
+// thick as a beam's core. A capital is 6 grid units tall (the em), 4 wide, 2 of spacing (the track); the middle
+// dot is a dot, accented letters lose their accents.
+constexpr float PEN = 0.45f; // the pen's half width, grid units
 
-void VectorUniverse::strokeText(const std::string& s, float x, float y, float scale, float in, float hot) {
-    const float u = scale * FONT_UNIT;
-    const float wid = std::max(0.85f, 0.42f * scale);
-    float cx = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        char ch = s[i];
-        if ((unsigned char)ch == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { ch = '\x01'; i++; } // "·"
-        const char* st = ch == '\x01' ? "23 23" : glyphStrokes((char)std::toupper((unsigned char)ch));
-        if (st) {
-            bool have = false;
-            vec3 prev;
-            for (const char* q = st; *q;) {
-                if (*q == '|') { have = false; q++; continue; }
-                if (*q == ' ') { q++; continue; }
-                const float gx = (float)(q[0] - '0'), gy = (float)(q[1] - '0');
-                q += 2;
-                vec3 p(cx + gx * u, y + (6.f - gy) * u, 0);
-                if (have) beam(prev, p, in, hot, wid, L_SCREEN); // a repeated point draws a dot
-                prev = p;
-                have = true;
-            }
+bool strokeGlyph(uint32_t cp, float px, text::Bitmap& out) {
+    const float k = px / 6.f; // pixels per grid unit
+    out.adv = 4.f * k;
+    if (cp == ' ') return true;
+    const char* st = nullptr;
+    if (cp == 0xB7) st = "23 23";
+    else {
+        if (cp >= 128) {
+            std::string u;
+            if (cp < 0x800) { u += (char)(0xC0 | (cp >> 6)); u += (char)(0x80 | (cp & 0x3F)); }
+            else { u += (char)(0xE0 | (cp >> 12)); u += (char)(0x80 | ((cp >> 6) & 0x3F)); u += (char)(0x80 | (cp & 0x3F)); }
+            const std::string f = asciiFold(u);
+            if (f.size() != 1) return false;
+            cp = (unsigned char)f[0];
         }
-        cx += 6.f * u;
+        if (cp >= 128) return false;
+        st = glyphStrokes((char)std::toupper((int)cp));
     }
+    if (!st) return false;
+    std::vector<vec4> segs; // grid units, y up from the baseline
+    bool have = false;
+    float px0 = 0, py0 = 0;
+    for (const char* q = st; *q;) {
+        if (*q == '|') { have = false; q++; continue; }
+        if (*q == ' ') { q++; continue; }
+        const float gx = (float)(q[0] - '0'), gy = (float)(q[1] - '0');
+        q += 2;
+        if (have) segs.push_back(vec4(px0, py0, gx, gy)); // a repeated point: a dot
+        px0 = gx; py0 = gy;
+        have = true;
+    }
+    out.ox = -PEN * k;
+    out.oy = -(6.f + PEN) * k;
+    out.w = (int)std::ceil((4.f + 2.f * PEN) * k);
+    out.h = (int)std::ceil((6.f + 2.f * PEN) * k);
+    out.cov.assign((size_t)out.w * out.h, 0);
+    for (int y = 0; y < out.h; y++)
+        for (int x = 0; x < out.w; x++) {
+            const float gx = -PEN + (x + 0.5f) / k, gy = 6.f + PEN - (y + 0.5f) / k;
+            float d = 1e9f;
+            for (const vec4& s : segs) {
+                const float ax = gx - s.x, ay = gy - s.y, bx = s.z - s.x, by = s.w - s.y;
+                const float l2 = bx * bx + by * by;
+                const float t = l2 > 1e-6f ? std::clamp((ax * bx + ay * by) / l2, 0.f, 1.f) : 0.f;
+                const float dx = ax - bx * t, dy = ay - by * t;
+                d = std::min(d, std::sqrt(dx * dx + dy * dy));
+            }
+            out.cov[(size_t)y * out.w + x] = (unsigned char)std::lround(std::clamp((PEN - d) * k + 0.5f, 0.f, 1.f) * 255.f);
+        }
+    return true;
 }
 
-void VectorUniverse::buildHud(const std::vector<HudText>& hud) {
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        float x = h.x;
-        const float wdt = textWidth(h.text, h.scale);
-        if (h.center) x -= wdt * 0.5f;
-        else if (x < 0) x = width_ + x - wdt;
-        const float a = std::min(1.f, h.alpha);
-        strokeText(h.text, x, h.y, h.scale, (h.accent ? 1.05f : 0.95f) * a, h.accent ? 0.22f * a : 0.f);
+vec3 toSrgb(const vec3& c) {
+    return {std::pow(std::max(c.x, 0.f), 1.f / 2.2f), std::pow(std::max(c.y, 0.f), 1.f / 2.2f), std::pow(std::max(c.z, 0.f), 1.f / 2.2f)};
+}
+} // namespace
+
+// Every line in the stroke font, in capitals, as beams of the tube's phosphor (an accent line overexposed toward
+// white): the letters the color COMPOSITE_FS gives a beam's core, their halo a glow, light added to the glass.
+void VectorUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float u = h.scale * FONT_UNIT;
+    const float a = std::min(1.f, h.alpha);
+    const float in = h.accent ? 1.05f : 0.95f, hot = h.accent ? 0.22f : 0.f;
+    // a beam's core through the tube (COMPOSITE_FS): its energy, the toe, the exposure
+    auto expose = [&](float I, float H) {
+        vec3 lin = (hudPhos_ * I + vec3(1.f, 0.97f, 0.92f) * H) * hudGain_;
+        lin = vec3(lin.x * lin.x / (lin.x + 0.035f), lin.y * lin.y / (lin.y + 0.035f), lin.z * lin.z / (lin.z + 0.035f));
+        return toSrgb(vec3(1.f - std::exp(-lin.x), 1.f - std::exp(-lin.y), 1.f - std::exp(-lin.z)));
+    };
+    // (a fading line is a fainter beam: its energy, not its coverage)
+    vec3 ink = expose(in * a * 1.07f, hot * a), glow = expose(in * a * 0.45f, hot * a * 0.3f);
+    {
+        // the glass: its scanlines (on average) and its darker rim where the line sits
+        const float aspect = (float)width_ / height_, b = saturate(bridge_.amount);
+        const float cx = ((h.x < 0 ? width_ + h.x : h.x) / width_ - 0.5f) * aspect, cy = h.y / height_ - 0.5f;
+        const float r2 = (cx * cx + cy * cy) / (aspect * aspect * 0.25f + 0.25f);
+        const float k = std::pow((1.f - 0.25f * r2 * (1.f - b)) * (1.f - 0.07f * (1.f - b)), 1.f / 2.2f);
+        ink = ink * k;
+        glow = glow * k;
+    }
+    out.add(h.text, text::customFont("vector:strokes", 1.f, 0.f, strokeGlyph), 6.f * u, ink, 2.f / 6.f, hudOn_);
+    out.look.glow = glow;
+    out.look.glowA = 0.75f;
+    out.look.glowW = 0.18f;
+    out.blend = text::BLEND_ADD;
+    // the bridge: the beams that are left become ink on the bridge's color
+    const float b = saturate(bridge_.amount);
+    if (b > 0.001f) {
+        out.spans[0].ink = lerp(ink, ugl::toSrgb(bridge_.ink), b);
+        out.look.glowA *= 1.f - b;
+        out.blend = text::BLEND_OVER;
     }
 }
 
@@ -1106,7 +1163,6 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
         cellFill_.clear();
     }
     const size_t boardEnd = beams_.size();
-    buildHud(f.hud);
 
     // ---- Persistence: last frame decays into this one.
     const int pair = f.bare ? 2 : 0, prev = pair + accCur_[pair / 2];
@@ -1293,6 +1349,8 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     // gain barely moves: no full-screen brightness jumps).
     const float dropGlow = dropAmt_ * (1.f - std::exp(-dropT_ / 0.08f)) * std::exp(-dropT_ / 0.6f);
     set1f(progComp_, "uGain", 1.f + 0.2f * overdrive_ + 0.04f * punch_ + 0.06f * dropGlow);
+    hudGain_ = 1.f + 0.2f * overdrive_ + 0.04f * punch_ + 0.06f * dropGlow;
+    hudPhos_ = lerp(phosColor(palSweep_ ? phosPrev_ : phos_), phosColor(phos_), palSweep_ ? smoothstepf(0.f, 0.6f, sp) : 1.f);
     set1f(progComp_, "uBloomAmt", 0.25f + 0.2f * overdrive_ + 0.12f * punch_ + 0.25f * dropGlow);
     set1f(progComp_, "uCurv", 0.07f * (1.f - bridge_.amount)); // the glass flattens onto the bridge
     set1f(progComp_, "uScan", 0.14f);
@@ -1328,6 +1386,7 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     set2f(progComp_, "uCollapse", sx, sy);
+    hudOn_ = saturate(f.fade) * sx * sy;
     set1f(progComp_, "uDot", dot);
     ugl::drawFullscreen();
 }

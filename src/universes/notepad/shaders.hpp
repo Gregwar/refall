@@ -321,37 +321,6 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- handwriting
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec4 aPos; // pixels (top-left origin), uv
-layout(location = 1) in vec4 aCol; // ink, alpha
-uniform vec2 uRes;
-out vec2 vUv;
-out vec4 vCol;
-void main() {
-    vUv = aPos.zw;
-    vCol = aCol;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-in vec4 vCol;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform float uResidue, uBias;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * (0.75 + uResidue * 0.6);
-    float cov = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    cov *= 0.86 + 0.14 * vnoise(gl_FragCoord.xy * 0.35);
-    if (uResidue > 0.5) cov *= smoothstep(0.15, 0.85, vnoise(gl_FragCoord.xy * 0.05));
-    float A = clamp(cov * vCol.a, 0.0, 1.0);
-    if (A <= 0.002) discard;
-    frag = vec4(mix(vec3(1.0), vCol.rgb, A), A);
-}
-)";
-
 // ---------------------------------------------------------------- the print
 inline const char* POST_FS = R"(#version 330 core
 in vec2 vUv;

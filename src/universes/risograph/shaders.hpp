@@ -1,9 +1,9 @@
 #pragma once
 // RISOGRAPH's shaders (see risograph.cpp).
 //
-// The frame is a print. The stack, the well's marks and the HUD are drawn as ink coverage into one buffer, one
-// channel per drum: r = ink A (the key), g = ink B, b = ink C (the third ink of the peaks), a = the structure (the
-// stack and the text, solid, for the bridge); the pieces' tints are screened where they are drawn. The background
+// The frame is a print. The stack and the well's marks are drawn as ink coverage into one buffer, one channel per
+// drum: r = ink A (the key), g = ink B, b = ink C (the third ink of the peaks), a = the structure (the stack, solid,
+// for the bridge); the pieces' tints are screened where they are drawn. The background
 // (big flat shapes, the sheet's gradients) goes into a second buffer as continuous ink densities, a soft riso
 // gradient with no visible screen. COMPOSITE_FS prints both on the paper: the background's drums slightly out of
 // register (only the background: the stack and the HUD never move), a riso grain in the ink, and the inks
@@ -283,30 +283,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- HUD
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec4 uInk;   // coverage of A, B, C, structure (times the alpha)
-uniform float uBias;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    frag = uInk * fill;
-}
-)";
+// ---------------------------------------------------------------- panels
 // A plain rectangle in pixels (refall-scene's menu panels): erases the ink under it (alpha) or adds ink.
 inline const char* PANEL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
@@ -323,7 +300,7 @@ void main() { frag = uColor; }
 inline const char* COMPOSITE_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform sampler2D uInk;              // the well's marks and the HUD: always in register
+uniform sampler2D uInk;              // the well's marks: always in register
 uniform sampler2D uPiece;            // the pieces (A and B drums, structure): always in register
 uniform vec3 uPieceA, uPieceB;       // the pieces' inks: the variant's A and B, or the drop's pair (linear)
 uniform sampler2D uBg;               // the background's gradients
