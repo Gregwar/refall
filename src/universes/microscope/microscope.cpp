@@ -28,9 +28,6 @@
 // kills the tissue: from the top, each cell's protoplast shrinks away from its wall (plasmolysis), the stain drains,
 // and it fades. Exit and entrance: the dish goes out of focus and fades to the bridge.
 //
-// SPECIMEN, a variant without the eyepiece: plump lumps of living tissue on a dark bench, and on each side a loupe
-// looking into one block (its cells magnified in bright-field, the organism living in it), a fine line to the block.
-//
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/microscope/microscope.hpp"
 
@@ -82,7 +79,6 @@ struct VariantDef {
     bool dark;
     StainDef own, drop;
     unsigned accent;
-    bool organic = false;   // SPECIMEN (the stains are then the tissue's, the field the loupes' slide)
 };
 const VariantDef VARIANTS[] = {
     // light scattered on black: cool pastel cells, silver life; the drop: a fluorescent label
@@ -115,15 +111,7 @@ const VariantDef VARIANTS[] = {
      {{0xeef2ee, 0xd8dfda}, {0x2a9a6a, 0xe0b040, 0x7a4aa8, 0x7ac04a, 0xd04a5a, 0x1f5a6a, 0xe8804a}, {0x3a8a5a, 0x1f4a3a, 0x8a2a3a}},
      {{0xeef0f2, 0xd6dce2}, {0x2f7fd0, 0xe0b040, 0x6448b8, 0x1f9e96, 0xc8405a, 0x23367e, 0xe0703a}, {0x3c6ea8, 0x1f3d70, 0x14284e}},
      0x2a8a5a},
-    // no eyepiece: plump lumps of living tissue on a dark bench, two loupes on the sides looking into them (their cells
-    // in bright-field, the organism living in a block); the drop: a second set of dyes
-    {"SPECIMEN", true,
-     {{0xf1efe6, 0xdcdcd2}, {0x2fb4d0, 0xf2c23a, 0xb44ad0, 0x5cc848, 0xe8404e, 0x4a62e0, 0xf27a30}, {0x3c6ea8, 0x1f3d70, 0x14284e}},
-     {{0xf2eef0, 0xded8dc}, {0x3ad6b0, 0xf29a3a, 0xe24aa2, 0xa8d23e, 0xf2503a, 0x7a52e2, 0xf2c83e}, {0xb04a7a, 0x6a2a5a, 0x3a1a4a}},
-     0xf0c060, true},
 };
-constexpr unsigned SPECIMEN_BACK[2] = {0x0f2f3a, 0x03090c};   // SPECIMEN's bench: under the lamp, at the edges
-constexpr float LENS_HOLD = 12.f;    // a loupe looks into one block this long
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float LYSE_T = 0.32f;      // a cleared cell is gone in this long (real time)
@@ -209,8 +197,6 @@ bool MicroscopeUniverse::init(int width, int height) {
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "microscope final");
     progShape_ = ugl::program(shaders::SHAPE_VS, inkShape.c_str(), "microscope shape");
     progText_ = ugl::program(shaders::TEXT_VS, inkText.c_str(), "microscope text");
-    progLens_ = ugl::program(shaders::LENS_VS, withCommon(shaders::LENS_FS).c_str(), "microscope loupes");
-    progLine_ = ugl::program(shaders::LINE_VS, shaders::LINE_FS, "microscope lines");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -219,8 +205,6 @@ bool MicroscopeUniverse::init(int width, int height) {
     instVao(quadVbo_, pieceVao_, pieceVbo_, 4, sizeof(Inst));
     instVao(quadVbo_, orgVao_, orgVbo_, 4, sizeof(Inst));
     instVao(quadVbo_, speckVao_, speckVbo_, 4, sizeof(Inst));
-    instVao(quadVbo_, lensVao_, lensVbo_, 4, sizeof(Inst));
-    instVao(quadVbo_, lineVao_, lineVbo_, 4, sizeof(Inst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -312,11 +296,10 @@ void MicroscopeUniverse::resize(int width, int height) {
 
 MicroscopeUniverse::~MicroscopeUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progField_, progOrg_, progPiece_, progSpeck_, progDown_, progBlur_, progFinal_, progShape_, progText_,
-                      progLens_, progLine_})
+    for (GLuint p : {progField_, progOrg_, progPiece_, progSpeck_, progDown_, progBlur_, progFinal_, progShape_, progText_})
         glDeleteProgram(p);
-    for (GLuint v : {pieceVao_, orgVao_, speckVao_, shapeVao_, textVao_, lensVao_, lineVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, pieceVbo_, orgVbo_, speckVbo_, shapeVbo_, textVbo_, lensVbo_, lineVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {pieceVao_, orgVao_, speckVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, pieceVbo_, orgVbo_, speckVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
     for (Font* f : {&fontSans_, &fontIt_}) {
         if (f->tex) glDeleteTextures(1, &f->tex);
         delete (stbtt_fontinfo*)f->info;
@@ -339,7 +322,6 @@ void MicroscopeUniverse::setSong(const SongLook& t, float seconds) {
         if (dark) v = t.hasSong && t.dynamics > 0.62f ? 1 : t.hasSong && t.airWeight > 0.6f ? 2 : pick;
         else v = 3 + (t.minor ? (pick == 0 ? 1 : pick) : pick);
         v %= VARIANT_COUNT;
-        if (t.hasSong && (t.seed >> 9) % 4 == 0) v = VARIANT_COUNT - 1;   // one song in four: SPECIMEN
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 2)) % VARIANT_COUNT;
     }
     variant_ = v;
@@ -352,13 +334,11 @@ void MicroscopeUniverse::setSong(const SongLook& t, float seconds) {
     fill(baseT_, V.own);
     fill(dropT_, V.drop);
     darkT_ = V.dark ? 1.f : 0.f;
-    organicT_ = V.organic ? 1.f : 0.f;
     const bool instant = !colorsSet_ || seconds <= 0.1f;
     if (instant) {
         base_ = baseT_;
         dropS_ = dropT_;
         dark_ = darkT_;
-        organic_ = organicT_;
         colorsSet_ = true;
     }
     seed_ = t.seed ? t.seed : 1;
@@ -414,8 +394,7 @@ TransitionHints MicroscopeUniverse::hints() const {
     TransitionHints h;
     const bool dark = dark_ > 0.5f;
     h.light = !dark;
-    h.background = organic_ > 0.5f ? lerp(lin(SPECIMEN_BACK[0]), lin(SPECIMEN_BACK[1]), 0.5f)
-                   : dark ? lerp(base_.field[0], base_.field[1], 0.5f) : base_.field[0];
+    h.background = dark ? lerp(base_.field[0], base_.field[1], 0.5f) : base_.field[0];
     vec3 ink(0.f);
     for (int i = 0; i < 7; i++) ink = ink + base_.piece[i] * (1.f / 7.f);
     h.ink = dark ? ink : ink * 0.7f;
@@ -573,40 +552,9 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             const CellLook l = has_[c.y][c.x] ? look_[c.y][c.x] : lookOf(c.x, c.y);
             lyses_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), l, 0.f});
         }
-        // SPECIMEN's loupes: one on a cleared row has lost its block, the others follow theirs down
-        for (Lens& L : lenses_) {
-            if (L.x < 0 || L.lost) continue;
-            int below = 0;
-            for (int y : rows) below += y > L.y;
-            if (std::find(rows.begin(), rows.end(), L.y) != rows.end()) { L.lost = true; L.leaving = true; }
-            else L.y += below;
-        }
         // the organisms living in the cleared cells swim out (a row with none frees nothing: only the life shown in
-        // the cells is ever released; a quad, a big one among them; SPECIMEN has no dish)
-        // (SPECIMEN: they crawl out of the screen, the loupe of their side following one)
-        if (organic_ > 0.5f)
-            for (auto& c : ev.cells) {
-                if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-                if (!has_[c.y][c.x] || look_[c.y][c.x].life < 0) continue;
-                const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-                Crawler cr;
-                cr.o = dweller(look_[c.y][c.x], p.x, p.y, c.type);
-                const float sx = p.x < 0.f ? -1.f : 1.f;
-                cr.dest = vec2{sx * (viewH_.x + 3.f), std::clamp(p.y + rng_.range(-1.f, 3.f), viewC_.y - viewH_.y + 2.f, viewC_.y + viewH_.y - 2.f)};
-                cr.o.ang = std::atan2(cr.dest.y - p.y, cr.dest.x - p.x);
-                cr.speed = (cr.o.kind == K_AMOEBA ? 2.2f : cr.o.kind == K_PARA ? 3.4f : 2.8f) * rng_.range(0.85f, 1.15f);
-                cr.id = ++crawlerIds_;
-                crawlers_.push_back(cr);
-                Lens& L = lenses_[sx < 0.f ? 0 : 1];
-                if (L.follow < 0 || !crawler(L.follow)) {
-                    L.follow = cr.id;
-                    L.x = -1;
-                    L.leaving = L.lost = false;
-                    L.a = std::min(L.a, 0.3f);
-                    L.at = vec2{p.x, p.y};
-                }
-            }
-        for (size_t k = 0; k < rows.size() && organic_ < 0.5f; k++) {
+        // the cells is ever released; a quad, a big one among them)
+        for (size_t k = 0; k < rows.size(); k++) {
             std::vector<const GameEvent::CellInfo*> row, lives;
             for (auto& c : ev.cells)
                 if (c.y == rows[k] && c.x >= 0 && c.x < Game::W) {
@@ -688,81 +636,6 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
         *grad = l > 1e-5f ? vec2{g.x / l, g.y / l} : vec2{p.x < 0 ? -1.f : 1.f, 0.f};
     }
     return d;
-}
-
-// =====================================================================================================
-// SPECIMEN's loupes
-// =====================================================================================================
-
-// In the middle of the band beyond the HUD's column, at the height of its block (clear of the corners' text).
-const MicroscopeUniverse::Crawler* MicroscopeUniverse::crawler(int id) const {
-    for (const Crawler& c : crawlers_)
-        if (c.id == id) return &c;
-    return nullptr;
-}
-
-vec2 MicroscopeUniverse::lensCenter(int side) const {
-    const float sx = side == 0 ? -1.f : 1.f;
-    return vec2{sx * (11.9f + viewH_.x) * 0.5f, lenses_[side].ly};
-}
-
-void MicroscopeUniverse::updateLenses(const Game& g, float dt, float wdt) {
-    lensR_ = std::clamp((viewH_.x - 11.9f) * 0.5f - 0.6f, 2.2f, 4.3f);
-    const float ylo = -6.6f + lensR_, yhi = 8.8f - lensR_;
-    const bool can = organic_ > 0.5f && overT_ < 0.f && !g.over();
-    for (int s = 0; s < 2; s++) {
-        Lens& L = lenses_[s];
-        if (L.follow >= 0) {
-            // following an organism out: on it as it crawls, until it has left the screen
-            const Crawler* c = crawler(L.follow);
-            if (c && !L.leaving) {
-                L.at = c->o.p;
-                L.a = std::min(1.f, L.a + dt / 0.5f);
-            } else {
-                L.leaving = true;
-                L.a = std::max(0.f, L.a - dt / 0.7f);
-                if (L.a <= 0.f) { L.follow = -1; L.leaving = false; }
-            }
-            L.ly += (std::clamp(L.at.y, ylo, std::max(ylo, yhi)) - L.ly) * (1.f - std::exp(-dt * 1.2f));
-            continue;
-        }
-        const bool valid = L.x >= 0 && !L.lost && L.y >= 0 && L.y < Game::H && g.cell(L.x, L.y).type >= 0;
-        if (valid) {
-            const vec3 p = layout::cellPos((float)L.x, L.y - g.rowOffset(L.y));
-            L.at = vec2{p.x, p.y};
-        }
-        L.age += dt;
-        L.pan += wdt * 0.05f;
-        if (L.x >= 0 && (!valid || !can || L.age > LENS_HOLD)) L.leaving = true;
-        if (L.leaving) {
-            L.a = std::max(0.f, L.a - dt / 0.7f);
-            if (L.a <= 0.f) { L.x = -1; L.leaving = L.lost = false; }
-        } else if (L.x >= 0) L.a = std::min(1.f, L.a + dt / 1.2f);
-        // a new block to look into: one of its half of the stack, rather one with life in it, on the surface
-        if (L.x < 0 && can) {
-            const Lens& o = lenses_[1 - s];
-            float best = -1.f;
-            for (int y = Game::HIDDEN; y < Game::H; y++)
-                for (int x = s * Game::W / 2; x < (s + 1) * Game::W / 2; x++) {
-                    if (g.cell(x, y).type < 0 || !has_[y][x] || (o.x == x && o.y == y)) continue;
-                    const bool top = y == 0 || g.cell(x, y - 1).type < 0;
-                    const float score = (look_[y][x].life >= 0 ? 2.f : 0.f) + (top ? 1.f : 0.f) + rng_.uniform() * 1.5f;
-                    if (score > best) { best = score; L.x = x; L.y = y; }
-                }
-            if (L.x >= 0) {
-                L.type = std::clamp((int)g.cell(L.x, L.y).type, 0, 6);
-                L.l = look_[L.y][L.x];
-                L.age = 0.f;
-                L.a = 0.f;
-                const vec3 p = layout::cellPos((float)L.x, L.y - g.rowOffset(L.y));
-                L.at = vec2{p.x, p.y};
-                if (!L.placed) { L.ly = std::clamp(L.at.y, ylo, std::max(ylo, yhi)); L.placed = true; }
-            }
-        }
-        // it glides calmly to the height of its block
-        const float ty = std::clamp(L.at.y, ylo, std::max(ylo, yhi));
-        L.ly += (ty - L.ly) * (1.f - std::exp(-dt * 0.8f));
-    }
 }
 
 // =====================================================================================================
@@ -868,9 +741,6 @@ void MicroscopeUniverse::setStain(GLuint prog) {
     set1f(prog, "uStainSeed", seedF_);
     set1f(prog, "uDark", lerpf(dark_, 1.f, slow_));
     set1f(prog, "uSlow", slow_);
-    set1f(prog, "uOrganic", organic_);
-    const vec3 back[2] = {lin(SPECIMEN_BACK[0]), lin(SPECIMEN_BACK[1])};
-    glUniform3fv(ugl::U(prog, "uBack"), 2, &back[0].x);
 }
 
 // =====================================================================================================
@@ -911,7 +781,7 @@ void MicroscopeUniverse::drawText(const Font& f, const std::vector<float>& q, bo
     set1i(progText_, "uFont", 0);
     set2f(progText_, "uRes", (float)width_, (float)height_);
     const vec2 c = project(vec3(0.f, viewC_.y, 0.f));
-    glUniform3f(ugl::U(progText_, "uDiskPx"), c.x, c.y, organic_ > 0.5f ? -1e5f : diskR_ * height_ / (2.f * viewH_.y));
+    glUniform3f(ugl::U(progText_, "uDiskPx"), c.x, c.y, diskR_ * height_ / (2.f * viewH_.y));
     set3f(progText_, "uInkIn", accent ? accentIn_ : inkIn_);
     set3f(progText_, "uInkOut", accent ? accentOut_ : inkOut_);
     set3f(progText_, "uHaloIn", haloIn_);
@@ -930,7 +800,7 @@ void MicroscopeUniverse::flushShapes(int mode) {
     set2f(progShape_, "uRes", (float)width_, (float)height_);
     set1i(progShape_, "uMode", mode);
     const vec2 c = project(vec3(0.f, viewC_.y, 0.f));
-    glUniform3f(ugl::U(progShape_, "uDiskPx"), c.x, c.y, organic_ > 0.5f ? -1e5f : diskR_ * height_ / (2.f * viewH_.y));
+    glUniform3f(ugl::U(progShape_, "uDiskPx"), c.x, c.y, diskR_ * height_ / (2.f * viewH_.y));
     set3f(progShape_, "uInkIn", mode == 2 ? accentIn_ : inkIn_);
     set3f(progShape_, "uInkOut", mode == 2 ? accentOut_ : inkOut_);
     glBindVertexArray(shapeVao_);
@@ -1099,7 +969,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         ease(dropS_, dropT_);
         dark_ = lerpf(dark_, darkT_, k);
     }
-    organic_ = organicT_;   // (a world of its own: no easing between the eyepiece and the bench)
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f && !bare_) {
@@ -1214,19 +1083,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     }
     specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
     if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
-    // SPECIMEN's crawlers: toward their way out, wandering a little, in a crawling pulse
-    for (Crawler& c : crawlers_) {
-        c.age += wdt;
-        const float want = std::atan2(c.dest.y - c.o.p.y, c.dest.x - c.o.p.x) + 0.45f * std::sin(c.age * 1.1f + c.o.seed * 20.f);
-        c.o.ang += wrapAngle(want - c.o.ang) * (1.f - std::exp(-wdt * 2.f));
-        const float sp = c.speed * smoothstepf(0.f, 0.8f, c.age) * (0.75f + 0.35f * std::sin(c.age * 5.f + c.o.seed * 9.f));
-        c.o.p.x += std::cos(c.o.ang) * sp * wdt;
-        c.o.p.y += std::sin(c.o.ang) * sp * wdt;
-    }
-    crawlers_.erase(std::remove_if(crawlers_.begin(), crawlers_.end(), [&](const Crawler& c) {
-        return std::fabs(c.o.p.x - viewC_.x) > viewH_.x + 1.5f || std::fabs(c.o.p.y - viewC_.y) > viewH_.y + 1.5f || c.age > 40.f;
-    }), crawlers_.end());
-    if (!bare_) updateLenses(game, dt, wdt);
 
     // ---- Instances.
     const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
@@ -1266,8 +1122,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             }
         buildBoard(game);
     }
-    // the organisms living inside cells of the stack and the falling piece (SPECIMEN: too small to see, but in its loupes)
-    if (!bare_ && organic_ < 0.5f) {
+    // the organisms living inside cells of the stack and the falling piece
+    if (!bare_) {
         auto dwell = [&](const CellLook& l, float x, float y, int type, float alpha) {
             if (l.life < 0 || alpha <= 0.003f) return;
             const Org o = dweller(l, x, y, type);
@@ -1296,15 +1152,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
     }
-    // SPECIMEN's crawlers on the bench: tiny, glowing in their cell's dye
-    if (!bare_)
-        for (const Crawler& c : crawlers_) {
-            const Org& o = c.o;
-            const float a = smoothstepf(0.1f, 0.5f, c.age) * (1.f - bridgeK);
-            const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
-            const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 1.2f) + o.seed * 100.f;
-            dwellInst.push_back({{o.p.x, o.p.y, 0.6f, ang}, {(float)o.kind, o.seed, anim, a}, {0.f, 0.8f, 0.75f, (float)o.type}, {o.spin, 1.f, 0.f, 0.f}});
-        }
     std::vector<Inst> speckInst;
     for (const Speck& k : specks_) {
         if (bare_) break; // (pushed out from under a dropped piece)
@@ -1316,58 +1163,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Draw.
     const float dk = lerpf(dark_, 1.f, slow_);
     const float aaW = 2.f * viewH_.y / (float)height_;
-    // SPECIMEN's loupes: the fine lines to their blocks (under the tissue), brackets around the blocks (over it), the
-    // loupes, the organisms in them, their bezels over those
-    std::vector<Inst> leadInst, bracketInst, lensInst, lensOrgInst, rimInst;
-    if (!bare_ && organic_ > 0.5f)
-        for (int s = 0; s < 2; s++) {
-            const Lens& L = lenses_[s];
-            const float a = smoothstepf(0.f, 1.f, L.a) * (1.f - bridgeK);
-            if (a <= 0.003f) continue;
-            const vec2 c = lensCenter(s);
-            const Crawler* cr = L.follow >= 0 ? crawler(L.follow) : nullptr;
-            vec2 d{L.at.x - c.x, L.at.y - c.y};
-            const float dl = std::max(1e-3f, std::sqrt(d.x * d.x + d.y * d.y));
-            d = vec2{d.x / dl, d.y / dl};
-            leadInst.push_back({{c.x + d.x * lensR_ * 1.04f, c.y + d.y * lensR_ * 1.04f, L.at.x, L.at.y}, {aaW * 1.1f, 0.5f * a, 0.f, 0.f}, {}, {}});
-            const float h = cr ? 0.42f : 0.6f, arm = cr ? 0.14f : 0.2f;
-            for (int k = 0; k < 4; k++) {
-                const float sx = k % 2 ? 1.f : -1.f, sy = k / 2 ? 1.f : -1.f;
-                const vec2 q{L.at.x + sx * h, L.at.y + sy * h};
-                bracketInst.push_back({{q.x, q.y, q.x - sx * arm, q.y}, {aaW * 1.4f, 0.85f * a, 0.f, 0.f}, {}, {}});
-                bracketInst.push_back({{q.x, q.y, q.x, q.y - sy * arm}, {aaW * 1.4f, 0.85f * a, 0.f, 0.f}, {}, {}});
-            }
-            const bool live = L.l.life >= 0;
-            if (cr) {
-                // the organism crawling out, over the bare bench sliding by under it
-                lensInst.push_back({{c.x, c.y, lensR_, 0.f}, {(float)cr->o.type, cr->o.seed, a, 0.f}, {cr->o.p.x * 1.5f, cr->o.p.y * 1.5f, 0.f, 0.f}, {}});
-                rimInst.push_back({{c.x, c.y, lensR_, 1.f}, {(float)cr->o.type, cr->o.seed, a, 0.f}, {}, {}});
-                const Org& o = cr->o;
-                const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
-                const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
-                lensOrgInst.push_back({{c.x, c.y, lensR_ * 0.95f, ang}, {(float)o.kind, o.seed, anim, a},
-                                       {0.f, 0.5f + 0.3f * wm + 0.9f * pulse, 0.45f, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
-                continue;
-            }
-            lensInst.push_back({{c.x, c.y, lensR_, 0.f}, {(float)L.type, L.l.seed, a, live ? 1.f : 0.f}, {L.pan, L.pan * 0.6f, 1.f, 0.f}, {}});
-            rimInst.push_back({{c.x, c.y, lensR_, 1.f}, {(float)L.type, L.l.seed, a, 0.f}, {}, {}});
-            if (live) {
-                const Org o = dweller(L.l, c.x, c.y, L.type);
-                const float t = worldTime_ + L.l.seed * 50.f, sd = L.l.seed * 37.f;
-                const vec2 p{c.x + lensR_ * 0.08f * std::sin(t * 0.21f + sd), c.y + lensR_ * 0.08f * std::cos(t * 0.17f + sd)};
-                const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
-                const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
-                lensOrgInst.push_back({{p.x, p.y, lensR_ * 0.95f, ang}, {(float)o.kind, o.seed, anim, a},
-                                       {0.f, 0.15f + 0.3f * wm + 0.9f * pulse + 0.6f * kickEnv_, o.tint, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
-            }
-        }
-    auto drawLines = [&](const std::vector<Inst>& v) {
-        if (v.empty()) return;
-        glUseProgram(progLine_);
-        set1f(progLine_, "uAA", aaW);
-        set3f(progLine_, "uCol", ugl::toLinear(hex(0xdfe6e8)) * (1.f - 0.4f * dimT_));
-        drawInst(progLine_, lineVao_, lineVbo_, v.data(), v.size() * sizeof(Inst), v.size());
-    };
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     sceneT_.bind();
@@ -1375,7 +1170,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     glUseProgram(progField_);
     setStain(progField_);
     set4f(progField_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set2f(progField_, "uDisk", viewC_.y, diskShown());
+    set2f(progField_, "uDisk", viewC_.y, diskR_);
     set1f(progField_, "uTime", worldTime_);
     set1f(progField_, "uIllum", 0.93f + 0.045f * wm + 0.03f * wp);
     set1f(progField_, "uSwell", swell_ * (1.f - 0.6f * slow_));
@@ -1397,7 +1192,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         setStain(progSpeck_);
         drawInst(progSpeck_, speckVao_, speckVbo_, speckInst.data(), speckInst.size() * sizeof(Inst), speckInst.size());
     }
-    drawLines(leadInst);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(progPiece_);
     setStain(progPiece_);
@@ -1411,28 +1205,10 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progOrg_, "uGlow", (0.85f + 0.12f * wm + 0.15f * wp + 0.2f * swell_) * (1.f - 0.2f * slow_));
         drawInst(progOrg_, orgVao_, orgVbo_, dwellInst.data(), dwellInst.size() * sizeof(Inst), dwellInst.size());
     }
-    if (!lensInst.empty()) {
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
-        drawLines(bracketInst);
-        glUseProgram(progLens_);
-        setStain(progLens_);
-        set1f(progLens_, "uTime", worldTime_);
-        drawInst(progLens_, lensVao_, lensVbo_, lensInst.data(), lensInst.size() * sizeof(Inst), lensInst.size());
-        if (!lensOrgInst.empty()) {
-            glUseProgram(progOrg_);
-            setStain(progOrg_);
-            set1f(progOrg_, "uDark", slow_);   // in bright-field under the loupe
-            set1f(progOrg_, "uGlow", 0.95f + 0.1f * wp + 0.15f * swell_);
-            drawInst(progOrg_, orgVao_, orgVbo_, lensOrgInst.data(), lensOrgInst.size() * sizeof(Inst), lensOrgInst.size());
-        }
-        glUseProgram(progLens_);
-        drawInst(progLens_, lensVao_, lensVbo_, rimInst.data(), rimInst.size() * sizeof(Inst), rimInst.size());
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    }
 
     // ---- The glow (dark-field).
     glDisable(GL_BLEND);
-    const float bloomK = dk * (0.22f + 0.1f * wp + 0.2f * swell_) * (1.f - 0.8f * organic_);
+    const float bloomK = dk * (0.22f + 0.1f * wp + 0.2f * swell_);
     if (bloomK > 0.01f) {
         bloomA_.bind();
         glUseProgram(progDown_);
@@ -1468,9 +1244,9 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
     set4f(progFinal_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set2f(progFinal_, "uDisk", viewC_.y, diskShown());
+    set2f(progFinal_, "uDisk", viewC_.y, diskR_);
     set1f(progFinal_, "uBloomK", bloomK);
-    set1f(progFinal_, "uDarkF", dk * (1.f - organic_));
+    set1f(progFinal_, "uDarkF", dk);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
     set1f(progFinal_, "uBridge", bridgeK);

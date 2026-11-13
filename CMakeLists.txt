@@ -74,7 +74,7 @@ endif()
 # An existing build directory follows changes to the default list: the cached value is replaced while it still is
 # a default (the last default seen, or, in a cache from before that was recorded, any subset of the default), and
 # kept once it was set by hand (-D...).
-set(ZEN_DEFAULT_DISABLED "pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox")
+set(ZEN_DEFAULT_DISABLED "pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;microscope")
 set(zen_follow_default FALSE)
 if(NOT DEFINED ZENTRIS_DISABLED_UNIVERSES)
   set(zen_follow_default TRUE)
