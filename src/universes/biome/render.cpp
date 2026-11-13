@@ -26,16 +26,6 @@ const unsigned char FONT_ROMAN[] = {
 #include "universes/biome/Lora-Medium.ttf.inc"
 };
 
-// The lettering on its halo: the halo only around the letters, never through them (a line fading out shows the
-// world behind it, not its halo).
-const text::Lettering HALO_UNDER{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float h = pow(clamp(1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
-    float a = max(fill, h);
-    return vec4(L.ink.rgb * fill + uHalo.rgb * (a - fill), a) * L.ink.a;
-}
-)"};
 
 namespace shaders = biome_shaders;
 using ugl::set1f;
@@ -343,8 +333,6 @@ void BiomeUniverse::drawHud(const std::vector<HudRect>& panels) {
 // whichever reads best over what is behind it (the world sampled where it will stand), always on a soft halo of the
 // other value. (The palette is linear: the lettering, over the post now, takes it to sRGB.)
 void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
-    // the capitals' height of Lora, of its size; its average advance (a run's width before it is lettered)
-    constexpr float CAP = 0.547f, ADV = 0.5f;
     const Palette& pal = c_.pal;
     text::Font* italic = text::font(FONT_ITALIC);
     text::Font* roman = text::font(FONT_ROMAN);
@@ -359,19 +347,18 @@ void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
         const float l = (std::sqrt(bgLuma(bx, by - 0.3f)) + std::sqrt(bgLuma(bx, by)) + std::sqrt(bgLuma(bx, by + 0.3f))) / 3.f;
         return std::fabs(l - std::sqrt(ugl::luma(darkInk))) > std::fabs(l - std::sqrt(ugl::luma(lightInk))) ? darkInk : lightInk;
     };
-    auto glyphs = [](const std::string& t) {
-        int n = 0;
-        for (unsigned char c : t) n += (c & 0xC0) != 0x80;
-        return n;
+    // a run's width, lettered
+    auto widthOf = [&](text::Font* f, const std::string& t, float size, float track) {
+        text::Line l;
+        l.add(t, f, size, vec3(0.f), track / size);
+        return text::measure(l).width();
     };
-    // a run's width, roughly
-    auto widthOf = [&](const std::string& t, float size, float track) { return glyphs(t) * (size * ADV + track) - track; };
     vec3 lineInk = lightInk; // the line's first run's (its halo's value)
     float bias = 0.02f;      // the letters' weight, field units
     // a run: its size and letter spacing in pixels, moved down by dy, its ink picked where it stands (accent: the
     // accent leaning to it)
     auto put = [&](text::Font* f, const std::string& t, float size, float track, bool accent, float a, float dy = 0.f) {
-        const float w = widthOf(t, size, track);
+        const float w = widthOf(f, t, size, track);
         const vec3 ink = inkAt(ugl::hudLeft(h, w, width_) + w * 0.5f, h.y + dy + size * 0.8f);
         lineInk = ink;
         const vec3 c = accent ? lerp(pal.accent, ink, 0.25f) : ink;
@@ -386,7 +373,7 @@ void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
         text::splitUniverse(h.text, name, var);
         name = text::titleCase(name);
         const float sz = base * 1.4f, vsz = base * 0.64f, vtr = vsz * 0.3f, gap = base * 0.8f;
-        const float wName = widthOf(name, sz, 0.f), wVar = var.empty() ? 0.f : widthOf(var, vsz, vtr);
+        const float wName = widthOf(italic, name, sz, 0.f), wVar = var.empty() ? 0.f : widthOf(roman, var, vsz, vtr);
         const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
         const float a = saturate(0.35f + h.alpha * 1.6f);
         lineInk = inkAt(x + wName * 0.5f, h.y + sz * 0.4f);
@@ -394,10 +381,10 @@ void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
         out.dy = -base * 0.12f;
         if (!var.empty()) {
             const vec3 vi = inkAt(x + wName + gap + wVar * 0.5f, h.y + base * 0.22f + vsz * 0.5f);
-            out.add("", italic, sz, vec3(0.f), gap / sz); // the gap
+            text::Span& v = out.add(var, roman, vsz, ugl::toSrgb(lerp(vi, c_.bridge.ink, b)), 0.3f, a * 0.85f);
+            v.gap = gap / vsz;
             // its cap line a third of the base under the name's
-            out.add(var, roman, vsz, ugl::toSrgb(lerp(vi, c_.bridge.ink, b)), 0.3f, a * 0.85f).dy =
-                base * 0.22f + CAP * vsz - (-base * 0.12f + CAP * sz);
+            v.dy = base * 0.22f + text::capHeight(roman) * vsz - (-base * 0.12f + text::capHeight(italic) * sz);
         }
         bias = 0.03f;
         break;
@@ -425,8 +412,7 @@ void BiomeUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = ugl::toSrgb(light ? vec3(0.015f, 0.012f, 0.01f) : lerp(pal.skyLow, vec3(1.f), 0.5f));
     out.look.haloA = (light ? 0.42f : 0.35f) * (1.f - b);
     out.look.haloW = 0.075f;
-    out.look.haloPow = 1.5f;
-    out.lettering = &HALO_UNDER;
+    out.look.haloSmooth = true;
     // the post's dim and fade in, which the lettering was under
     out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }

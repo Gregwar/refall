@@ -59,16 +59,6 @@ const unsigned char FONT_MONO[] = {
 #include "universes/tidepool/DMMono-Light.ttf.inc"
 };
 
-// The lettering on its halo: the halo only around the letters, never through them (a line fading out shows the
-// world behind it, not its halo).
-const text::Lettering HALO_UNDER{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float h = pow(clamp(1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
-    float a = max(fill, h);
-    return vec4(L.ink.rgb * fill + uHalo.rgb * (a - fill), a) * L.ink.a;
-}
-)"};
 
 namespace shaders = tidepool_shaders;
 using ugl::set1f;
@@ -595,8 +585,6 @@ void TidePoolUniverse::drawHud(const std::vector<HudRect>& panels) {
 // is behind the well (a power of ten, in meters, its exponent raised) and the stage's name. (The palette is linear:
 // the lettering, over the post now, takes it to sRGB.)
 void TidePoolUniverse::hudLine(const HudText& h, text::Line& out) {
-    // the capitals' height of each font, of its size
-    constexpr float CAP_SERIF = 0.554f, CAP_MONO = 0.538f;
     text::Font* caps = text::font(FONT_CAPS);
     text::Font* ital = text::font(FONT_ITAL);
     text::Font* mono = text::font(FONT_MONO);
@@ -622,33 +610,23 @@ void TidePoolUniverse::hudLine(const HudText& h, text::Line& out) {
         }
         const float sz = base, vsz = base * 1.35f, gap = base * 0.7f, a = saturate(0.35f + h.alpha * 1.6f);
         const float msz = base * 0.8f, esz = base * 0.58f;
-        // each run's baseline from the capitals' cap line (y: its own cap line from theirs)
-        auto at = [&](float y, float cap, float size) { return y + cap * size - CAP_SERIF * sz; };
         out.add(name, caps, sz, ink, 0.3f, a);
-        // a space between runs (the run before's own tracking counts in it)
-        auto space = [&](float px) {
-            const text::Span& last = out.spans.back();
-            out.add("", last.font, last.size, ink, (px - last.track * last.size) / last.size);
+        // a run after a space of px (the run before's own tracking counts in it), its cap line y under the
+        // capitals'
+        auto then = [&](const std::string& t, text::Font* f, float size, const vec3& c, float al, float px, float y) {
+            const float before = out.spans.back().track * out.spans.back().size;
+            text::Span& sp = out.add(t, f, size, c, 0.f, al);
+            sp.gap = (px - before) / size;
+            sp.dy = y + text::capHeight(f) * size - text::capHeight(caps) * sz;
         };
-        if (!var.empty()) {
-            space(gap);
-            out.add(var, ital, vsz, accent, 0.f, a * 0.9f).dy = at(-sz * 0.2f, CAP_SERIF, vsz);
-        }
+        if (!var.empty()) then(var, ital, vsz, accent, a * 0.9f, gap, -sz * 0.2f);
         // the scale: "10" and its exponent raised, then the unit
-        space(gap * 1.4f);
         const bool one = scaleText_.empty() || scaleText_ == "0";
-        out.add(one ? "1" : "10", mono, msz, ink, 0.f, a * 0.75f).dy = at(sz * 0.1f, CAP_MONO, msz);
-        if (!one) {
-            space(1.f * s);
-            out.add(scaleText_, mono, esz, ink, 0.f, a * 0.75f).dy = at(-sz * 0.2f, CAP_MONO, esz);
-            space(-1.f * s);
-        }
-        out.add(" m", mono, msz, ink, 0.f, a * 0.75f).dy = at(sz * 0.1f, CAP_MONO, msz);
+        then(one ? "1" : "10", mono, msz, ink, a * 0.75f, gap * 1.4f, sz * 0.1f);
+        if (!one) then(scaleText_, mono, esz, ink, a * 0.75f, 1.f * s, -sz * 0.2f);
+        then(" m", mono, msz, ink, a * 0.75f, one ? 0.f : -1.f * s, sz * 0.1f);
         // the stage's name
-        if (!stageName_.empty()) {
-            space(gap);
-            out.add(stageName_, ital, vsz, ink, 0.f, a * 0.7f).dy = at(-sz * 0.2f, CAP_SERIF, vsz);
-        }
+        if (!stageName_.empty()) then(stageName_, ital, vsz, ink, a * 0.7f, gap, -sz * 0.2f);
         break;
     }
     case HUD_SECTION: put(caps, h.text, base * 0.95f, base * 0.5f, ink, 0.2f + h.alpha * 1.9f); break;
@@ -678,8 +656,7 @@ void TidePoolUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = ugl::toSrgb(lerp(pal_.veil * 0.7f, bridge_.color, b));
     out.look.haloA = halo;
     out.look.haloW = 0.08f;
-    out.look.haloPow = 1.4f;
-    out.lettering = &HALO_UNDER;
+    out.look.haloSmooth = true;
     // the post's dim and fade in, which the lettering was under
     out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }

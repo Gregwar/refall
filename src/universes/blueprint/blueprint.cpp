@@ -1378,8 +1378,6 @@ void BlueprintUniverse::drawHud(const std::vector<HudRect>& panels) {
 // captions of a title block, the song and the shouts slanted like hand lettering; crisp on the empty paper, no halo.
 // (The palette is linear: the lettering, over the post now, takes it to sRGB.)
 void BlueprintUniverse::hudLine(const HudText& h, text::Line& out) {
-    // the capitals' height of Share Tech, of its size
-    constexpr float CAP = 0.621f;
     text::Font* font = text::font(FONT);
     const float s = height_ / 1080.f;
     const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
@@ -1398,9 +1396,11 @@ void BlueprintUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.1f, vsz = base * 0.66f, gap = base * 0.8f, a = saturate(0.35f + h.alpha * 1.6f);
         out.add(name, font, sz, ink, 0.16f, a);
         if (!var.empty()) {
-            out.add("", font, sz, ink, gap / sz - 0.16f); // the gap (the name's own spacing counts in it)
-            // the variant's small capitals sitting on the name's baseline, a little above it
-            out.add(var, font, vsz, ink, 0.3f, a * 0.75f).dy = (sz - vsz) * 0.72f + CAP * (vsz - sz);
+            // the variant's small capitals after a gap (the name's own spacing counts in it), a little above the
+            // name's baseline
+            text::Span& v = out.add(var, font, vsz, ink, 0.3f, a * 0.75f);
+            v.gap = (gap - 0.16f * sz) / vsz;
+            v.dy = (sz - vsz) * 0.72f + text::capHeight(font) * (vsz - sz);
         }
         break;
     }

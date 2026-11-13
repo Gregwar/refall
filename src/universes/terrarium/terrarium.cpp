@@ -35,16 +35,6 @@ const unsigned char FONT_ITAL[] = {
 #include "universes/terrarium/Fraunces-SoftItalic.ttf.inc"
 };
 
-// The lettering on its halo: the halo only around the letters, never through them (a line fading out shows the
-// room behind it, not its halo).
-const text::Lettering HALO_UNDER{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float h = pow(clamp(1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
-    float a = max(fill, h);
-    return vec4(L.ink.rgb * fill + uHalo.rgb * (a - fill), a) * L.ink.a;
-}
-)"};
 
 namespace shaders = terrarium_shaders;
 using ugl::set1f;
@@ -1088,8 +1078,6 @@ void TerrariumUniverse::drawHud(const std::vector<HudRect>& panels) {
 // Fraunces' soft italics, all on a soft halo of the room's veil. The universe's line ends with the time of day
 // outside the window. (The palette is linear: the lettering, over the post now, takes it to sRGB.)
 void TerrariumUniverse::hudLine(const HudText& h, text::Line& out) {
-    // the capitals' height of each font, of its size
-    constexpr float CAP_CAPS = 0.523f, CAP_ITAL = 0.568f;
     text::Font* caps = text::font(FONT_CAPS);
     text::Font* ital = text::font(FONT_ITAL);
     const float s = height_ / 1080.f;
@@ -1114,21 +1102,17 @@ void TerrariumUniverse::hudLine(const HudText& h, text::Line& out) {
         }
         const float sz = base * 0.95f, vsz = base * 1.3f, gap = base * 0.7f, a = saturate(0.35f + h.alpha * 1.6f);
         // the italics' cap line a quarter of the capitals higher
-        const float vdy = -sz * 0.25f + CAP_ITAL * vsz - CAP_CAPS * sz;
+        const float vdy = -sz * 0.25f + text::capHeight(ital) * vsz - text::capHeight(caps) * sz;
         out.add(name, caps, sz, ink, 0.28f, a);
-        // a space between runs (the run before's own tracking counts in it)
-        auto space = [&](float px) {
-            const text::Span& last = out.spans.back();
-            out.add("", last.font, last.size, ink, (px - last.track * last.size) / last.size);
+        // an italic run after a space (the run before's own tracking counts in it)
+        auto then = [&](const std::string& t, const vec3& c, float al, float px) {
+            const float before = out.spans.back().track * out.spans.back().size;
+            text::Span& sp = out.add(t, ital, vsz, c, 0.f, al);
+            sp.gap = (px - before) / vsz;
+            sp.dy = vdy;
         };
-        if (!var.empty()) {
-            space(gap);
-            out.add(var, ital, vsz, accent, 0.f, a * 0.92f).dy = vdy;
-        }
-        if (!todName_.empty()) {
-            space(gap * 1.4f);
-            out.add(todName_, ital, vsz, ink, 0.f, a * 0.7f).dy = vdy;
-        }
+        if (!var.empty()) then(var, accent, a * 0.92f, gap);
+        if (!todName_.empty()) then(todName_, ink, a * 0.7f, gap * 1.4f);
         break;
     }
     case HUD_SECTION: put(caps, h.text, base * 0.9f, base * 0.45f, ink, 0.2f + h.alpha * 1.9f); break;
@@ -1152,8 +1136,7 @@ void TerrariumUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = ugl::toSrgb(lerp(pal_.veil * 0.7f, bridge_.color, b));
     out.look.haloA = halo;
     out.look.haloW = 0.09f;
-    out.look.haloPow = 1.4f;
-    out.lettering = &HALO_UNDER;
+    out.look.haloSmooth = true;
     // the post's dim and fade in, which the lettering was under
     out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }

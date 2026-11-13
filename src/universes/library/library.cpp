@@ -49,16 +49,6 @@ const unsigned char FONT_ITAL[] = {
 #include "universes/library/InstrumentSans-Italic.ttf.inc"
 };
 
-// The lettering on its halo: the halo only around the letters, never through them (a line fading out shows the
-// room behind it, not its halo).
-const text::Lettering HALO_UNDER{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float h = pow(clamp(1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a;
-    float a = max(fill, h);
-    return vec4(L.ink.rgb * fill + uHalo.rgb * (a - fill), a) * L.ink.a;
-}
-)"};
 
 namespace shaders = library_shaders;
 using ugl::set1f;
@@ -911,8 +901,7 @@ void LibraryUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = halo;
     out.look.haloA = haloK;
     out.look.haloW = 0.095f;
-    out.look.haloPow = 1.5f;
-    out.lettering = &HALO_UNDER;
+    out.look.haloSmooth = true;
     // the corner lines' tags: a pill in the card's color
     if (h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE || h.role == HUD_SECTION) {
         out.plate.color = ugl::toSrgb(pal_.card);

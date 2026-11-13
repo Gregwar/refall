@@ -1152,8 +1152,6 @@ void RecycleUniverse::drawHud(const std::vector<HudRect>& panels) {
 // spaced capitals for labels, like the labels on a designer's storage boxes; plain ink on the table. (The palette is
 // linear: the lettering, over the post now, takes it to sRGB.)
 void RecycleUniverse::hudLine(const HudText& h, text::Line& out) {
-    // the capitals' height of each weight, of its size
-    constexpr float CAP_LIGHT = 0.546f, CAP_MEDIUM = 0.556f;
     text::Font* light = text::font(FONT_LIGHT);
     text::Font* medium = text::font(FONT_MEDIUM);
     const float s = height_ / 1080.f;
@@ -1173,9 +1171,11 @@ void RecycleUniverse::hudLine(const HudText& h, text::Line& out) {
         out.add(text::titleCase(name), light, sz, ink, 0.02f, a);
         out.dy = -base * 0.1f;
         if (!var.empty()) {
-            out.add("", light, sz, ink, gap / sz - 0.02f); // the gap (the name's own spacing counts in it)
-            // the variant in small spaced capitals, its cap line a third of the base under the name's
-            out.add(var, medium, vsz, ink, 0.34f, a * 0.75f).dy = base * 0.22f + CAP_MEDIUM * vsz - (-base * 0.1f + CAP_LIGHT * sz);
+            // the variant in small spaced capitals after a gap (the name's own spacing counts in it), its cap line
+            // a third of the base under the name's
+            text::Span& v = out.add(var, medium, vsz, ink, 0.34f, a * 0.75f);
+            v.gap = (gap - 0.02f * sz) / vsz;
+            v.dy = base * 0.22f + text::capHeight(medium) * vsz - (-base * 0.1f + text::capHeight(light) * sz);
         }
         break;
     }
