@@ -98,6 +98,7 @@ struct Options {
     std::string stage;         // --stage S[:SONG]: a campaign run straight away
     std::string campaignPath, progressPath, playlistsPath;
     std::string menuShot, menuScreen = "title", menuHover; // --menu-shot: a screenshot of a menu, then exit
+    float menuTime = 0.f;      // --menu-time: the shot taken this many seconds into the screen (a debrief's animation)
     std::string menuClip;      // --menu-clip: a video of the menus walked through, then exit
     bool menuDemo = false;
     std::string menuDemoKind; // --menu-demo normal-done: every stage cleared on NORMAL, some on EASY, none on EXPERT
@@ -176,8 +177,8 @@ static void usage() {
         "  --progress FILE      the progress file (default: campaign-progress.tsv in the user data folder)\n"
         "  --playlists FILE     free play's remembered playlists (default: playlists.tsv in the user data folder)\n"
         "  --no-menu-music      no music on the menu's screens\n"
-        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free, --menu-hover S:SONG),\n"
-        "                       then exit (testing)\n"
+        "  --menu-shot OUT.png  a screenshot of a menu (--menu-screen title|campaign|free|debrief-over|debrief-clear,\n"
+        "                       --menu-hover S:SONG, --menu-time SECONDS into the screen), then exit (testing)\n"
         "  --menu-clip OUT.mp4  a video walking through the menus (needs ffmpeg), then exit; --menu-demo shows\n"
         "                       made-up campaign progress in shots (clips always do; never saved)\n");
 }
@@ -252,6 +253,10 @@ private:
     void campaignSongStarted();
     void campaignSongSurvived();
     void campaignEnd();
+    // A Voyage game over: once the board has dissolved, the frame is kept and the debrief comes over it.
+    bool debriefPending_ = false;
+    void gameOverDebrief();
+    void toDebrief(const Menu::Debrief& d);
     int runMenuShot();
     const CampaignStage* runStage() const {
         return mode_ == MODE_CAMPAIGN && run_.stage < campaign_.size() ? &campaign_.stages()[run_.stage] : nullptr;
@@ -969,7 +974,7 @@ std::vector<HudText> App::buildHud(float dt) {
         for (size_t i = 0; i < lines.size(); i++)
             hud.push_back({lines[i], -28 * s, bottom - (lines.size() - 1 - i) * lineH, 1.3f * s, helpA, false, false, HUD_HELP});
     }
-    if (game_.over() && overTime_ > 1.0f) {
+    if (game_.over() && overTime_ > 1.0f && mode_ != MODE_CAMPAIGN) { // (a Voyage's game over has its debrief)
         float a = std::min(1.f, (overTime_ - 1.0f) / 1.2f);
         hud.push_back({"GAME OVER", w * 0.5f, h * 0.5f - 70 * s, 5.f * s, 0.95f * a, true, true, HUD_DIALOG});
         hud.push_back({"SCORE  " + std::to_string(game_.lastScore()), w * 0.5f, h * 0.5f + 0 * s, 2.f * s, 0.85f * a, false, true, HUD_DIALOG});
@@ -1372,18 +1377,11 @@ int App::run() {
                 if (input_.pressed(A_BONUS)) game_.activateBonus();
             }
             if (game_.over() && mode_ == MODE_CAMPAIGN && !shotMode) { // (offline renders play on)
-                // A campaign game over: it holds (the song muffled, then faded out) until the player presses a key,
-                // then back to the Voyage.
+                // A campaign game over: the board dissolves and the game darkens (the song muffled), then the frame is
+                // kept and the debrief comes over it (see after the drawing); a key there goes back to the Voyage.
+                const bool was = overTime_ > 1.8f;
                 overTime_ += dt;
-                if (overTime_ > 2.5f && anyKeyPressed()) {
-                    const CampaignStage* st = runStage();
-                    char sub[128];
-                    std::snprintf(sub, sizeof(sub), "STAGE %d  SONG %d/%d  %s  SCORE %d  LINES %d", run_.stage + 1, run_.current + 1,
-                                  st ? (int)st->songs.size() : 0, difficultyName(run_.diff), game_.lastScore(), game_.lines());
-                    toMenu(Menu::CAMPAIGN, "GAME OVER", sub, true);
-                    swap();
-                    continue;
-                }
+                if (!was && overTime_ > 1.8f) debriefPending_ = true;
             } else if (game_.over()) {
                 // Game over: the board dissolves; from the menu it holds until the player presses a key, then back to
                 // the menu; without the menu (songs on the command line) a key starts a new game.
@@ -1581,6 +1579,13 @@ int App::run() {
         }
 
         if (!testShot_.empty()) { R_.screenshot(testShot_); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
+        if (debriefPending_) { // this frame stays behind the debrief
+            debriefPending_ = false;
+            if (fbw > 0 && fbh > 0) menu_.captureBackdrop(fbw, fbh);
+            gameOverDebrief();
+            swap();
+            continue;
+        }
         static long clipFrames = -1; // frames recorded (the song time restarts with the next song)
         if (clipMode && track_ && clipStart_ >= 0 && (clipFrames >= 0 || songTime_ >= clipStart_)) {
             clipFrames++;
@@ -1927,13 +1932,32 @@ void App::campaignEnd() {
         std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)\n", stage + 1, difficultyName(run_.diff),
                     game_.score(), game_.lines());
         menu_.setCursor(next ? stage + 1 : stage, 0);
-        toMenu(Menu::CAMPAIGN, "STAGE " + std::to_string(stage + 1) + " CLEAR", sub);
+        std::snprintf(sub, sizeof(sub), "STAGE %d CLEARED   /   %s", stage + 1, difficultyName(run_.diff));
+        toDebrief({true, "CONGRATULATIONS", sub, next ? "NEXT STAGE UNLOCKED" : "THE VOYAGE IS COMPLETE", game_.score(), game_.lines()});
     } else {
-        std::snprintf(sub, sizeof(sub), "SONGS %d-%zu SURVIVED: START FROM SONG 1 TO CLEAR THE STAGE", run_.from + 1,
-                      campaign_.stages()[stage].songs.size());
+        std::snprintf(sub, sizeof(sub), "STAGE %d   /   SONGS %d-%zu SURVIVED   /   %s", stage + 1, run_.from + 1,
+                      campaign_.stages()[stage].songs.size(), difficultyName(run_.diff));
         menu_.setCursor(stage, 0);
-        toMenu(Menu::CAMPAIGN, "WELL PLAYED", sub);
+        toDebrief({true, "WELL PLAYED", sub, "START FROM SONG 1 TO CLEAR THE STAGE", game_.score(), game_.lines()});
     }
+}
+
+// A Voyage game over's debrief: where the run ended, its score and lines.
+void App::gameOverDebrief() {
+    const CampaignStage* st = runStage();
+    char sub[128];
+    std::snprintf(sub, sizeof(sub), "STAGE %d   /   SONG %d OF %d   /   %s", run_.stage + 1, run_.current + 1,
+                  st ? (int)st->songs.size() : 0, difficultyName(run_.diff));
+    std::printf("[campaign] game over: stage %d song %d, %d points, %d lines\n", run_.stage + 1, run_.current + 1,
+                game_.lastScore(), game_.lines());
+    toDebrief({false, "GAME OVER", sub, "", game_.lastScore(), game_.lines()});
+}
+
+// The end of a run: back to the menu, on the debrief (then the Voyage's screen, on the same stage and difficulty).
+void App::toDebrief(const Menu::Debrief& d) {
+    toMenu(Menu::CAMPAIGN);
+    if (d.clear) menu_.dropBackdrop(); // (on the black the outro ended on)
+    menu_.openDebrief(d);
 }
 
 // --menu-shot: a menu screen, rendered offline, saved, then exit. --menu-clip: a video walking through the menus (a
@@ -1984,7 +2008,15 @@ int App::runMenuShot() {
     }
     menu_.init(&campaign_, &progress_);
     const std::string& sc = opt_.menuScreen;
-    menu_.open(sc == "campaign" ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    menu_.open(sc == "campaign" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    if (sc == "debrief-over" || sc == "debrief-clear") { // a made-up run's end (over the black: no game frame here)
+        const int songs = campaign_.size() > 2 ? (int)campaign_.stages()[2].songs.size() : 5;
+        char b[128];
+        if (sc == "debrief-over") std::snprintf(b, sizeof(b), "STAGE 3   /   SONG 4 OF %d   /   NORMAL", songs);
+        else std::snprintf(b, sizeof(b), "STAGE 3 CLEARED   /   NORMAL");
+        menu_.openDebrief(sc == "debrief-over" ? Menu::Debrief{false, "GAME OVER", b, "", 27340, 96}
+                                               : Menu::Debrief{true, "CONGRATULATIONS", b, "NEXT STAGE UNLOCKED", 48710, 163});
+    }
     if (!opt_.menuHover.empty()) {
         int st = 1, sg = 1;
         std::sscanf(opt_.menuHover.c_str(), "%d:%d", &st, &sg);
@@ -2007,7 +2039,7 @@ int App::runMenuShot() {
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
         const double END = std::getenv("ZEN_MENU_CLIP_SECONDS") ? std::atof(std::getenv("ZEN_MENU_CLIP_SECONDS")) : 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
-        if (keys.empty()) {
+        if (keys.empty() && sc.rfind("debrief", 0) != 0) { // (a debrief's clip: its animation, no key)
             for (auto& [t, k] : WALK) keys.push_back({t, k});
             const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
             for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});
@@ -2085,7 +2117,7 @@ int App::runMenuShot() {
         for (auto& [t, k] : keys) end = std::max(end, t + 1.5);
         static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
             {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"enter", A_UI_ENTER}, {"alt", A_UI_ALT}};
-        const int frames = std::max(12, (int)(end * 60));
+        const int frames = std::max({12, (int)(end * 60), (int)std::lround(opt_.menuTime * 60)});
         for (int f = 0; f < frames; f++) {
             const double t0 = f / 60.0, t1 = (f + 1) / 60.0;
             input_.testFrame();
@@ -2167,6 +2199,7 @@ int main(int argc, char** argv) {
         else if (a == "--no-menu-music") o.menuMusic = false;
         else if (a == "--menu-screen" && i + 1 < argc) o.menuScreen = argv[++i];
         else if (a == "--menu-hover" && i + 1 < argc) o.menuHover = argv[++i];
+        else if (a == "--menu-time" && i + 1 < argc) o.menuTime = std::stof(argv[++i]);
         else o.paths.push_back(a);
     }
     if (reset || unlock) {

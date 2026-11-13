@@ -30,7 +30,8 @@ void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned c
 
 class Menu {
 public:
-    enum Screen { TITLE, FREE, CAMPAIGN };
+    // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF };
     struct Choice {
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
         int difficulty = DIFF_EXPERT;
@@ -44,6 +45,18 @@ public:
     // Shows a screen; `message` (e.g. "GAME OVER") shows a moment over it, with `sub` under it.
     void open(Screen s, const std::string& message = "", const std::string& sub = "", bool bad = false);
     Screen screen() const { return screen_; }
+    // The debrief at the end of a run: the REFALL logo (as white contours after a game over; turning from its contours
+    // into its colours for a stage cleared), the heading, the score and lines, a small line of details (the stage, the
+    // song, the difficulty) and an optional note; a key (after a moment) goes on to the Voyage's screen.
+    struct Debrief {
+        bool clear = false;
+        std::string heading, detail, note;
+        int score = 0, lines = 0;
+    };
+    void openDebrief(const Debrief& d);
+    // The frame on screen (the bound framebuffer's back buffer) kept as the next debrief's backdrop, frozen and darkened.
+    void captureBackdrop(int w, int h);
+    void dropBackdrop();
     void setFreeDifficulty(int d) { freeDiff_ = d; }
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
@@ -81,6 +94,15 @@ private:
     // ---- drawing: the kaleidoscope (menuwin.cpp), on a painter, over live universes (menuworlds.hpp)
     Painter paint_;
     void drawMessage();
+    // the debrief (debrief.cpp)
+    Debrief debrief_;
+    float debT_ = 0, leaveT_ = -1, enterT_ = 1e9f; // seconds into it; since a key ended it; since the menu came back
+    GLuint backdrop_ = 0, logoColor_ = 0, logoLines_ = 0;
+    int backW_ = 0, backH_ = 0;
+    void loadLogo();
+    bool updateDebrief(const Input& in, float dt); // true while it shows
+    void drawDebrief(int w, int h);
+    void drawEnterFade();
     friend struct Worlds; // the kaleidoscope (menuwin.cpp), with live universes
     std::unique_ptr<WorldPool> worlds_;
     void renderWorlds(int w, int h);

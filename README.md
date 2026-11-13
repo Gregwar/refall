@@ -229,7 +229,11 @@ saves a menu screen (`--menu-petal`: the hovered stage's petal open; `ZEN_TEST_K
 `--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `ZEN_MENU_CLIP_SECONDS` changes its
 length), printing the menu's average CPU and GPU time per frame; both can show made-up progress and playlists
 (`--menu-demo`, always on in clips, never saved; `--menu-demo normal-done`: every stage cleared on NORMAL, the first
-five on EASY, none on EXPERT). The menu's font, Josefin Sans, is OFL, in `src/embed/` with its licence.
+five on EASY, none on EXPERT). `--menu-screen debrief-over` or `debrief-clear` shows the debrief that ends a Voyage
+run (a game over, a stage cleared: the logo, the score and lines) for a made-up run, `--menu-time S` taking the shot S
+seconds into it (with `--menu-clip`, the clip is its animation, no key pressed). Its two logo images are
+`src/logo.inc`, made by `tools/logo.py --inc src/logo.inc`. The menu's font, Josefin Sans, is OFL, in `src/embed/`
+with its licence.
 
 ### The Voyage file
 

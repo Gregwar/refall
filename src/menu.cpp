@@ -51,7 +51,11 @@ namespace {
 
 Menu::Menu() = default;
 
-Menu::~Menu() = default;
+Menu::~Menu() {
+    dropBackdrop();
+    if (logoColor_) glDeleteTextures(1, &logoColor_);
+    if (logoLines_) glDeleteTextures(1, &logoLines_);
+}
 
 void Menu::init(const Campaign* c, Progress* p) {
     camp_ = c;
@@ -180,6 +184,8 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aPl_ += (plSel_ - aPl_) * k;
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
+    enterT_ += dt;
+    if (updateDebrief(in, dt)) return Choice{};
     // a playlist being read: its result
     if (fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const Fetched r = fetch_.get();
@@ -325,6 +331,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         if (back) open(TITLE);
         break;
     }
+    case DEBRIEF: break; // (updateDebrief)
     }
     if (ch.kind != Choice::NONE) {
         worlds_.reset(); // the live universes free their GPU memory for the game (snapshots stay on disk)
@@ -378,8 +385,14 @@ void Menu::render(int w, int h) {
     u_ = std::min(w / 1920.f, h / 1080.f);
     sx_ = (w - 1920.f * u_) * 0.5f;
     sy_ = (h - 1080.f * u_) * 0.5f;
+    if (screen_ == DEBRIEF) {
+        drawDebrief(w, h);
+        paint_.end();
+        return;
+    }
     renderWorlds(w, h); // the live universes render first, then the painter draws
     drawMessage();
+    drawEnterFade();
     paint_.end();
 }
 

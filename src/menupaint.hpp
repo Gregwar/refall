@@ -47,6 +47,9 @@ public:
     void line(float x0, float y0, float x1, float y1, float width, Col c, float soft = 1.f);
     void check(float cx, float cy, float s, float width, Col c); // a check mark
     void lock(float cx, float cy, float s, Col c);               // a padlock
+    // A texture (premultiplied RGBA) over a rectangle, its colours multiplied by the tint's, faded by its alpha;
+    // `flipY` for a texture read from the framebuffer (its first row at the bottom).
+    void image(GLuint tex, float x, float y, float w, float h, Col tint = {}, bool flipY = false);
     // Text on its baseline at y; align -1 left, 0 center, 1 right; tracking in ems. Returns the width.
     float text(Font f, const std::string& s, float x, float y, float size, Col c, int align = -1, float tracking = 0.f);
     float width(Font f, const std::string& s, float size, float tracking = 0.f);
