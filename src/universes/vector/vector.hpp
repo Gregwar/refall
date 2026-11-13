@@ -72,6 +72,7 @@ private:
     // Two persistence pairs: the whole frame's, and the bare frame's (a break: the world alone, its own phosphor).
     GLuint accFbo_[4] = {}, accTex_[4] = {}, depthRb_ = 0;
     int accCur_[2] = {};
+    double accTime_[2] = {-1.0, -1.0}; // when each pair last decayed (the song's time: a break's world alone renders with dt 0)
     static constexpr int BLOOM_MIPS = 4;
     GLuint bloomFbo_[BLOOM_MIPS] = {}, bloomTex_[BLOOM_MIPS] = {};
     int bloomW_[BLOOM_MIPS] = {}, bloomH_[BLOOM_MIPS] = {};
