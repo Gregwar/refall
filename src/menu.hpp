@@ -41,6 +41,7 @@ public:
         int difficulty = DIFF_EXPERT;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
         std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
+        int level = 1;           // PLAY_FREE: the level the game starts at
     };
 
     Menu();
@@ -64,6 +65,11 @@ public:
     void captureBackdrop(int w, int h);
     void dropBackdrop();
     void setFreeDifficulty(int d) { freeDiff_ = d; }
+    // Free play's starting level: the nearest of FREE_LEVELS; `focus` puts the free screen's focus on its row (shots).
+    static constexpr int FREE_LEVELS[] = {1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
+    static constexpr int FREE_LEVEL_COUNT = sizeof(FREE_LEVELS) / sizeof(FREE_LEVELS[0]);
+    void setFreeLevel(int level, bool focus = false);
+    int freeLevel() const { return FREE_LEVELS[lvlSel_]; }
     void setCampaignDifficulty(int d) { diff_ = d; }
     void setCursor(int stage, int song) { stage_ = stage; song_ = song; row_ = 1; petal_ = false; }
     // A stage just cleared: once the Voyage's screen is back (after the debrief), its petal turns into its cleared look
@@ -74,10 +80,10 @@ public:
     // Where the player was in the menu (kept between launches): the title entry, Voyage's difficulty and focused
     // stage, free play's difficulty and playlist.
     struct Place {
-        int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1;
+        int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1, freeLevel = -1;
         std::string playlist, voyage; // voyage: the custom voyage open ("" the main one), whose stage `stage` is
         bool operator==(const Place& o) const {
-            return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff &&
+            return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff && freeLevel == o.freeLevel &&
                    playlist == o.playlist && voyage == o.voyage;
         }
         bool operator!=(const Place& o) const { return !(*this == o); }
@@ -147,10 +153,11 @@ private:
     // the opened petal (its songs fanned out), eased
     bool petal_ = false;
     float aOpen_ = 0;
-    // free play's playlist row: the remembered playlists, the default, "add one"; a text field to add one
+    // free play's rows: 0 the difficulty, 1 the playlists (the remembered ones, the default, "add one"; a text field
+    // to add one), 2 the starting level (an index in FREE_LEVELS)
     PlaylistStore* playlists_ = nullptr;
-    int freeRow_ = 0, plSel_ = 0;
-    float aFreeRow_ = 0, aPl_ = 0;
+    int freeRow_ = 0, plSel_ = 0, lvlSel_ = 0;
+    float aFreeRow_ = 0, aPl_ = 0, aLvl_ = 0;
     bool editing_ = false, plMsgBad_ = false;
     std::string editText_, plMsg_;
     struct Fetched { bool ok = false; std::string url, title, error; int count = 0; };

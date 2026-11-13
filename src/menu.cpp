@@ -153,6 +153,7 @@ Menu::Place Menu::place() const {
     p.voyageDiff = diff_;
     p.stage = stage_;
     p.freeDiff = freeDiff_;
+    p.freeLevel = freeLevel();
     const auto ch = plChoices();
     if (plSel_ < (int)ch.size()) p.playlist = ch[plSel_].url;
     p.voyage = voyageId_;
@@ -163,6 +164,7 @@ void Menu::restore(const Place& p, bool difficulties) {
     if (p.titleItem >= 0 && p.titleItem < TITLE_ITEMS) titleItem_ = p.titleItem;
     if (difficulties && p.voyageDiff >= 0 && p.voyageDiff < DIFF_COUNT) diff_ = p.voyageDiff;
     if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
+    if (p.freeLevel >= 1) setFreeLevel(p.freeLevel);
     if (p.stage >= 0 && camp_ && camp_->size() > 0) {
         int last = 0; // the last unlocked stage: the saved one if it still is, else that one
         for (int s = 0; s < camp_->size(); s++)
@@ -195,6 +197,7 @@ bool Menu::loadPlace(const std::string& path, Place& p) {
         else if (k == "voyage-difficulty") p.voyageDiff = std::atoi(v.c_str());
         else if (k == "voyage-stage") p.stage = std::atoi(v.c_str()) - 1;
         else if (k == "free-difficulty") p.freeDiff = std::atoi(v.c_str());
+        else if (k == "free-level") p.freeLevel = std::atoi(v.c_str());
         else if (k == "free-playlist") p.playlist = v;
         else if (k == "voyage") p.voyage = v;
     }
@@ -209,11 +212,17 @@ bool Menu::savePlace(const std::string& path, const Place& p) {
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return false;
     std::fprintf(f, "# Refall: where the menu was (--reset forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
-                    "free-difficulty\t%d\nfree-playlist\t%s\nvoyage\t%s\n",
-                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.playlist.c_str(), p.voyage.c_str());
+                    "free-difficulty\t%d\nfree-level\t%d\nfree-playlist\t%s\nvoyage\t%s\n",
+                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.freeLevel, p.playlist.c_str(), p.voyage.c_str());
     std::fclose(f);
     std::filesystem::rename(tmp, path, ec);
     return !ec;
+}
+
+void Menu::setFreeLevel(int level, bool focus) {
+    for (int i = 0; i < FREE_LEVEL_COUNT; i++)
+        if (std::abs(FREE_LEVELS[i] - level) < std::abs(FREE_LEVELS[lvlSel_] - level)) lvlSel_ = i;
+    if (focus) freeRow_ = 2;
 }
 
 void Menu::snap() {
@@ -226,6 +235,7 @@ void Menu::snap() {
     aOpen_ = petal_ ? 1.f : 0.f;
     aFreeRow_ = (float)freeRow_;
     aPl_ = (float)plSel_;
+    aLvl_ = (float)lvlSel_;
 }
 
 Menu::Choice Menu::update(const Input& in, float dt) {
@@ -240,6 +250,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aRow_ += (row_ - aRow_) * k;
         aFreeRow_ += (freeRow_ - aFreeRow_) * k;
         aPl_ += (plSel_ - aPl_) * k;
+        aLvl_ += (lvlSel_ - aLvl_) * k;
         aV_ += (vSel_ - aV_) * k;
         aVRow_ += ((float)(vSel_ / VOYAGE_COLS) - aVRow_) * k;
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
@@ -319,7 +330,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     case FREE: {
         if (!playlists_) { // no playlist store: a difficulty only
             freeDiff_ = std::clamp(freeDiff_ + dy + dx, 0, DIFF_COUNT - 1);
-            if (ok) { ch.kind = Choice::PLAY_FREE; ch.difficulty = freeDiff_; }
+            if (ok) { ch.kind = Choice::PLAY_FREE; ch.difficulty = freeDiff_; ch.level = freeLevel(); }
             if (back) open(TITLE);
             break;
         }
@@ -360,9 +371,13 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         if (freeRow_ == 0) {
             freeDiff_ = std::clamp(freeDiff_ + dx, 0, DIFF_COUNT - 1);
             if (dy > 0) freeRow_ = 1;
+        } else if (freeRow_ == 2) { // the starting level
+            lvlSel_ = std::clamp(lvlSel_ + dx, 0, FREE_LEVEL_COUNT - 1);
+            if (dy < 0) freeRow_ = 1;
         } else {
             plSel_ = std::clamp(plSel_ + dx, 0, nCh - 1);
             if (dy < 0) freeRow_ = 0;
+            if (dy > 0) freeRow_ = 2;
             if (in.pressed(A_UI_DELETE) && plSel_ < (int)choices.size() && choices[plSel_].url != DEFAULT_PLAYLIST) {
                 playlists_->remove(choices[plSel_].url);
                 playlists_->save();
@@ -378,12 +393,13 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 const PlaylistEntry e = choices[std::min(plSel_, (int)choices.size() - 1)];
                 ch.kind = Choice::PLAY_FREE;
                 ch.difficulty = freeDiff_;
+                ch.level = freeLevel();
                 ch.playlist = e.url;
                 playlists_->use(e);
                 playlists_->save();
             }
         }
-        if (back) { if (freeRow_ == 1) freeRow_ = 0; else open(TITLE); }
+        if (back) { if (freeRow_ > 0) freeRow_ = 0; else open(TITLE); }
         break;
     }
     case CAMPAIGN: {

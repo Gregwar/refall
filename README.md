@@ -199,7 +199,8 @@ no song previews.
   rising with the lines (one per 20 lines, up to level 50: the Voyage's velocities, on the same scale). Each song
   starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
   EASY, NORMAL or EXPERT, a multiplier on the gravity of every level (x0.6, x0.8, x1: EXPERT is the full speed, and
-  goes 20G as the Voyage does: the drops from level 38 on, the choruses too at level 50), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
+  goes 20G as the Voyage does: the drops from level 38 on, the choruses too at level 50), a **starting level** (the
+  strip at the bottom of the screen: 1, then every 5 up to 50; `--level N` on the command line, any level), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
   own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
   small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
   playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its song count, and its

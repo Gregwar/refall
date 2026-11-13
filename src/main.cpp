@@ -102,6 +102,7 @@ struct Options {
     bool menu = false;         // start on the title screen
     bool menuEnabled = false;  // game overs and Q go back to the menu (the title screen or --stage, when playing)
     int difficulty = DIFF_EXPERT; bool difficultyGiven = false;
+    int level = 1; bool levelGiven = false; // --level: free play's starting level
     float speedMul = 1.f;      // free play's gravity multiplier (--difficulty: EXPERT 1, or a number)
     std::string stage;         // --stage S[:SONG]: a campaign run straight away
     std::string campaignPath, progressPath, playlistsPath;
@@ -187,6 +188,7 @@ static void usage() {
         "  --free               free play straight away, without the menu (also when songs are given)\n"
         "  --difficulty D       easy, normal or expert (default), or a gravity multiplier (e.g. 0.7): free play's\n"
         "                       speed (EASY x0.6, NORMAL x0.8, EXPERT x1), the voyage's difficulty\n"
+        "  --level N            free play's starting level (1..50, default 1; the menu picks the nearest of its steps)\n"
         "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
         "  --unlock             unlock every voyage stage (saved)\n"
         "  --reset              forget the voyage progress (stages cleared, best scores)\n"
@@ -1273,12 +1275,15 @@ int App::run() {
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
     menu_.setFreeDifficulty(opt_.difficulty);
+    menu_.setFreeLevel(opt_.level);
     menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
     if (!opt_.menuShot.empty() || !opt_.menuClip.empty()) return runMenuShot();
     menuEnabled_ = opt_.menuEnabled;
     mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
     speedMul_ = opt_.speedMul;
     freeDiff_ = opt_.difficulty;
+    game_.setStartLevel(opt_.level);
+    lastLevel_ = game_.level();
 
     int fbw, fbh;
     fbSize(fbw, fbh);
@@ -1333,6 +1338,7 @@ int App::run() {
         Menu::Place pl;
         if (Menu::loadPlace(placePath_, pl)) {
             if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
+            if (opt_.levelGiven) pl.freeLevel = -1; // (--level wins)
             menu_.restore(pl, !opt_.difficultyGiven);
         }
         savedPlace_ = lastPlace_ = menu_.place();
@@ -1546,10 +1552,6 @@ int App::run() {
             }
         }
         if (input_.pressed(A_DEBUG_LEVEL) && !game_.over() && !viewer_) game_.skipToNextLevel();
-        { // test hook: ZEN_TEST_LEVEL=N plays free play from level N
-            static const int testLevel = std::getenv("ZEN_TEST_LEVEL") ? std::atoi(std::getenv("ZEN_TEST_LEVEL")) : 0;
-            while (!viewer_ && game_.fixedLevel() <= 0.f && game_.level() < std::min(testLevel, (int)Game::MAX_LEVEL)) game_.skipToNextLevel();
-        }
         if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
 
         // ---- Game.
@@ -2059,6 +2061,7 @@ void App::beginSession(const Menu::Choice& c) {
 
     track_.reset();
     nextTrack_.reset();
+    game_.setStartLevel(camp ? 1 : c.level);
     game_.reset(runSeed_ ^ splitmix64(sceneCounter_));
     game_.setFixedLevel(fixed);
     lastLevel_ = game_.level();
@@ -2353,6 +2356,7 @@ int App::runMenuShot() {
     menu_.init(&campaign_, &progress_);
     const std::string& sc = opt_.menuScreen;
     menu_.open(sc == "campaign" || sc.rfind("debrief", 0) == 0 ? Menu::CAMPAIGN : sc == "free" ? Menu::FREE : Menu::TITLE);
+    if (sc == "free" && opt_.levelGiven) menu_.setFreeLevel(opt_.level, true); // (the level's row in focus)
     if (sc == "debrief-over" || sc == "debrief-clear") { // a made-up run's end (over the black: no game frame here)
         const int songs = campaign_.size() > 2 ? (int)campaign_.stages()[2].songs.size() : 5;
         char b[128];
@@ -2610,6 +2614,14 @@ int main(int argc, char** argv) {
                 return 1;
             }
             o.difficultyGiven = true;
+        }
+        else if (a == "--level" && i + 1 < argc) {
+            o.level = std::atoi(argv[++i]);
+            if (o.level < 1 || o.level > Game::MAX_LEVEL) {
+                std::fprintf(stderr, "--level: a level from 1 to %d\n", (int)Game::MAX_LEVEL);
+                return 1;
+            }
+            o.levelGiven = true;
         }
         else if (a == "--unlock") unlock = true;
         else if (a == "--reset") reset = true;

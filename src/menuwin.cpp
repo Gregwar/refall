@@ -616,7 +616,7 @@ void Worlds::kalFree() {
     if (rows) {
         // the playlists as glass cards: the game's own first (featured: larger, a gold rim, the stages' hues), then the
         // player's, each with a hue and a small rosette of its own (seeded from its playlist ID), then "add one"
-        const float onPl = std::min(1.f, m.aFreeRow_);
+        const float onPl = near1(m.aFreeRow_, 1);
         p.rrect(X(120), Y(680), 1680 * u, 262 * u, 24 * u, hex(0x0c0c14, 0.72f));
         p.rrectLine(X(120), Y(680), 1680 * u, 262 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.3f * onPl));
         p.text(F::JOSEFIN, "PLAYLIST", X(160), Y(714), 16 * u, hex(0xffffff, 0.55f + 0.45f * onPl), -1, 0.45f);
@@ -708,10 +708,27 @@ void Worlds::kalFree() {
         }
         if (!m.plMsg_.empty())
             p.text(F::JOSEFIN, upper(m.plMsg_), X(160), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
+        // the starting level: a strip of coarse steps along the bottom (EXPERT's 20G levels in its colour)
+        const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
+        const float ly = Y(962), lh = 78 * u, cw = 120 * u, lx = X(440);
+        p.rrect(X(120), ly, 1680 * u, lh, 24 * u, hex(0x0c0c14, 0.72f));
+        p.rrectLine(X(120), ly, 1680 * u, lh, 24 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.3f * onLvl));
+        p.text(F::JOSEFIN, "STARTING LEVEL", X(160), ly + lh / 2 + 6 * u, 16 * u, hex(0xffffff, 0.55f + 0.45f * onLvl), -1, 0.45f);
+        const float sx = lx + (m.aLvl_ + 0.5f) * cw; // the selection, sliding under the numbers
+        p.rrect(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, hex(0xffffff, 0.08f + 0.08f * onLvl));
+        p.rrectLine(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, (1.4f + 1.2f * onLvl) * u, hex(0xffffff, 0.45f + 0.5f * onLvl));
+        for (int i = 0; i < Menu::FREE_LEVEL_COUNT; i++) {
+            const int lv = Menu::FREE_LEVELS[i];
+            const float f = sstep(near1(m.aLvl_, i)), x = lx + (i + 0.5f) * cw;
+            const bool g20 = m.freeDiff_ == DIFF_EXPERT && lv >= 38;
+            p.text(F::JOSEFIN, std::to_string(lv), x, ly + lh / 2 + (g20 ? 3 : 9) * u, (24 + 4 * f) * u,
+                   withA(g20 ? hex(C[DIFF_EXPERT]) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
+            if (g20) p.text(F::JOSEFIN, "20G", x, ly + lh / 2 + 21 * u, 11 * u, hex(C[DIFF_EXPERT], 0.5f + 0.4f * f), 0, 0.3f);
+        }
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
     const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
-    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+    if (*hint) p.text(F::JOSEFIN, hint, X(1760), Y(714), 15 * u, hex(0xffffff, 0.55f), 1, 0.3f);
 }
 
 // A text field being typed into: its frame, the text (its end kept in view), a placeholder while empty, the caret.
