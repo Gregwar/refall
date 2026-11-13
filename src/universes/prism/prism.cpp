@@ -1344,7 +1344,11 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progScene_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progScene_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     set4f(progScene_, "uVeil", -5.08f, FLOOR_Y, 5.08f, 10.f);
-    set1f(progScene_, "uVeilK", WELL_VEIL);
+    // (a cleared row's burst of light lifts the veil while it lasts: the clear stays bright)
+    float burstLift = 0.f;
+    for (const Burst& b : bursts_)
+        if (b.delay <= 0.f) burstLift = std::max(burstLift, std::min(1.f, b.power) * (1.f - b.t / b.life));
+    set1f(progScene_, "uVeilK", lerpf(WELL_VEIL, 1.f, std::sqrt(saturate(burstLift))));
     set1f(progScene_, "uBridge", smoothstepf(0.f, 1.f, bridge));
     set3f(progScene_, "uBridgeColor", bridge_.color);
     ugl::drawFullscreen();
