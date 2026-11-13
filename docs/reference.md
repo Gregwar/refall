@@ -79,17 +79,6 @@ next run) and songs stay downloaded in the cache, so reopening an annotated song
 
 The game and refall-scope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
 
-## refall-scene: look at universes and transitions
-
-`./build/refall-scene [UNIVERSE[:VARIANT]]` shows a universe while the computer plays (`--list` prints the universes
-and their variants). The menu on the left picks the universe, its variant, the song phase (section and level:
-calm, mid, peak) and the transition used for the next change of universe (AUTO picks one as the game does). Up/Down
-choose a row, Left/Right (or a click / the mouse wheel) change it: a new universe or variant comes in with that
-transition, on the next downbeat of the viewer's steady 120 BPM beat. T / V go to the next universe / variant, I
-switches at once, F fills the board, B starts the slow motion, X plays a quad, K a drop hit, L a level up. "Send to dashboard"
-(or D) asks for a comment and opens a thread on the universe shown in the scene review dashboard
-(`tools/scenereview.py`, "to process"), with a snapshot at the section and level shown.
-
 ## Slow motion and quad rewards
 
 Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it; a

@@ -1,4 +1,4 @@
-"""Console entry points: run the bundled native binaries (refall, refall-scope, refall-scene)."""
+"""Console entry points: run the bundled native binaries (refall, refall-scope)."""
 
 import os
 import shutil
@@ -47,6 +47,3 @@ def main() -> None:
 def scope() -> None:
     _run("refall-scope")
 
-
-def scene() -> None:
-    _run("refall-scene")
