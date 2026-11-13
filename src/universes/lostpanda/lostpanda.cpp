@@ -45,8 +45,6 @@ const unsigned char FONT_ITAL[] = {
 const unsigned char FONT_SANS[] = {
 #include "universes/lostpanda/Nunito-SemiBold.ttf.inc"
 };
-// Their capitals' heights (em): the HUD's runs in both stand on the cap line they were placed by.
-constexpr float CAP_ITAL = 0.5677f, CAP_SANS = 0.522f;
 
 namespace shaders = lostpanda_shaders;
 using ugl::set1f;
@@ -793,18 +791,18 @@ void LostPandaUniverse::hudLine(const HudText& h, text::Line& out) {
         if (!var.empty()) var = var.substr(0, n) + text::lower(var.substr(n));
         const float sz = base * 0.95f, tr = sz * 0.28f, vsz = base * 1.3f, gap = base * 0.75f;
         const float a = saturate(0.35f + h.alpha * 1.6f);
-        const float dy = -sz * 0.22f + CAP_ITAL * vsz - CAP_SANS * sz; // (each run was placed by its own cap line)
+        // (each run was placed by its own cap line; a span's spacing stays after its last letter, the gaps take it
+        // back)
+        const float dy = -sz * 0.22f + text::capHeight(ital) * vsz - text::capHeight(sans) * sz;
         put(sans, name, sz, tr, ink, a);
-        // (a span's spacing stays after its last letter: the gaps take it back)
-        auto gapOf = [&](float px) { out.add("", sans, 1.f, ink, px, 0.f); };
         if (!var.empty()) {
-            gapOf(gap - tr);
-            out.add(var, ital, vsz, accent, 0.f, a * 0.9f).dy = dy;
-            gapOf(gap * 1.3f);
-        } else {
-            gapOf(gap * 1.3f - tr);
+            text::Span& v = out.add(var, ital, vsz, accent, 0.f, a * 0.9f);
+            v.gap = (gap - tr) / vsz;
+            v.dy = dy;
         }
-        out.add(stageName_, ital, vsz, ink, 0.f, a * 0.72f).dy = dy;
+        text::Span& st = out.add(stageName_, ital, vsz, ink, 0.f, a * 0.72f);
+        st.gap = (gap * 1.3f - (var.empty() ? tr : 0.f)) / vsz;
+        st.dy = dy;
         break;
     }
     case HUD_SECTION: put(sans, h.text, base * 0.9f, base * 0.45f, ink, 0.2f + h.alpha * 1.9f); break;

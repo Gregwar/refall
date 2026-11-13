@@ -52,8 +52,6 @@ const unsigned char FONT_SANS[] = {
 const unsigned char FONT_ITAL[] = {
 #include "universes/skyocean/CormorantGaramond-Italic.ttf.inc"
 };
-// Their capitals' heights (em): the universe's name and its variant stand on the cap line they were placed by.
-constexpr float CAP_SANS = 0.71f, CAP_ITAL = 0.5161f;
 
 namespace shaders = skyocean_shaders;
 using ugl::set1f;
@@ -730,8 +728,9 @@ void SkyOceanUniverse::hudLine(const HudText& h, text::Line& out) {
         if (!var.empty()) {
             // (the name's spacing stays after its last letter: the gap takes it back; each run was placed by its own
             // cap line)
-            out.add("", sans, 1.f, ink, gap - tr, 0.f);
-            out.add(var, ital, vsz, accent, 0.f, a * 0.9f).dy = -sz * 0.15f + CAP_ITAL * vsz - CAP_SANS * sz;
+            text::Span& v = out.add(var, ital, vsz, accent, 0.f, a * 0.9f);
+            v.gap = (gap - tr) / vsz;
+            v.dy = -sz * 0.15f + text::capHeight(ital) * vsz - text::capHeight(sans) * sz;
         }
         break;
     }

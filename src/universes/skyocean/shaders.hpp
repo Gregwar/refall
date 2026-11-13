@@ -687,17 +687,14 @@ void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 // Moonlit lettering: the ink with a soft glow of its own around it, and a faint shadow of the night under it.
 // The HUD's lettering (text::Lettering, the host letters it over the post): the letters as they were drawn in the
 // linear scene, over their halo of the veil (uP0: its color, sRGB, and amount) and in a glow of their ink (uP1.x),
-// the field as baked then (64 px, 8 px of reach): the letter and its halo mixed in linear light, the halo and the
-// glow over the world as linear blending gave them (uP1.y: about the world's light, linear).
+// the field as baked then (64 px, 8 px of reach): the letter and its halo mixed in linear light, the glow added to
+// the light under it (uP1.y: about the world's, linear).
 inline const char* LETTER_GLSL = R"(
 vec4 letter(Letter L) {
     float d = 0.5 + L.dist / L.em * 4.0157;
     float w = max(fwidth(d), 1e-3) * 0.75;
     float fill = smoothstep(0.47 - w, 0.47 + w, d);
     float halo = smoothstep(0.2, 0.45, d) * uP0.a;
-    // (the halo over the world: as much of it as linear blending let through, over about the world's light)
-    float hs = dot(uP0.rgb, vec3(0.2126, 0.7152, 0.0722)), ws = pow(uP1.y, 1.0 / 2.2);
-    if (abs(hs - ws) > 0.03) halo = (pow(mix(uP1.y, pow(hs, 2.2), halo), 1.0 / 2.2) - ws) / (hs - ws);
     float a = max(fill, halo);
     vec3 ink = pow(L.ink.rgb, vec3(2.2));
     vec3 c = ink * fill + pow(uP0.rgb, vec3(2.2)) * (a - fill);
