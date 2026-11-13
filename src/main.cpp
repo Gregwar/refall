@@ -1460,6 +1460,7 @@ int App::run() {
             } else {
                 updateGravity(songTime_, dt);
             }
+            game_.setHeldShift(opt_.autoplay || shotMode || paused_ || waiting ? 0 : input_.heldDirection());
             game_.update(dt);
             handleEvents();
             if (game_.level() > lastLevel_ && !game_.over() && mode_ != MODE_CAMPAIGN) {

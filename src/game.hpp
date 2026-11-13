@@ -41,6 +41,10 @@ public:
 
     // Controls. Return true when something changed.
     bool move(int dx);
+    // The sideways direction the player holds (-1, 0, +1), given each frame: a piece appears already moved one cell
+    // that way (an initial shift), before any gravity, so a direction held before it appears always counts (in 20G
+    // the piece would otherwise reach the stack first, and a press shorter than the auto-repeat delay was lost).
+    void setHeldShift(int dir) { heldShift_ = dir; }
     bool rotate(int dir); // +1 CW, -1 CCW
     bool softDrop();      // one row
     void hardDrop();
@@ -163,6 +167,7 @@ private:
     int lockResets_ = 0;
     bool grounded_ = false;
     bool twentyG_ = false;
+    int heldShift_ = 0;
     float spawnDelay_ = 0;
     float rowOffset_[H] = {};
     float fallHold_ = 0;

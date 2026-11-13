@@ -33,6 +33,11 @@ public:
     bool pressed(Action a) const { return down_[a] && !prev_[a]; }
     // Auto-repeat for movement (DAS / ARR): returns number of steps to apply this frame.
     int repeatSteps(Action a) const { return repeat_[a]; }
+    // The sideways direction held (-1 left, +1 right, 0 none; both: the latest pressed).
+    int heldDirection() const {
+        if (down_[A_LEFT] && down_[A_RIGHT]) return held_[A_LEFT] < held_[A_RIGHT] ? -1 : 1;
+        return (down_[A_RIGHT] ? 1 : 0) - (down_[A_LEFT] ? 1 : 0);
+    }
 
     Device active() const { return active_; }
     bool gamepadConnected() const { return jid_ >= 0; }

@@ -129,9 +129,10 @@ void Game::spawn(int type) {
     grounded_ = false;
     lockTimer_ = 0;
     lockResets_ = 0;
+    events_.push_back({GameEvent::Spawn});
+    if (heldShift_) move(heldShift_); // the initial shift (see setHeldShift)
     visX_ = (float)cur_.x;
     visY_ = (float)cur_.y;
-    events_.push_back({GameEvent::Spawn});
 }
 
 void Game::respawn() {
