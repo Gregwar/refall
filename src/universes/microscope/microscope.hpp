@@ -37,6 +37,7 @@ private:
     };
     Stain base_, baseT_, dropS_, dropT_;
     float dark_ = 1.f, darkT_ = 1.f;   // 1: dark-field (light on black), 0: bright-field (stains on a pale field)
+    float organic_ = 0.f, organicT_ = 0.f; // SPECIMEN: no eyepiece; lumps of tissue on a bench, loupes on the sides
     bool colorsSet_ = false;
     void setStain(GLuint prog);
 
@@ -73,6 +74,22 @@ private:
     int pickKind();
     float zoneDist(const vec2& p, vec2* grad) const;  // distance to the well and the HUD (negative inside)
     float diskR_ = 20.f;
+    float diskShown() const { return organic_ > 0.5f ? 1e4f : diskR_; }   // (SPECIMEN has no eyepiece)
+
+    // ---- SPECIMEN's loupes: one on each side, looking into a block of its half of the stack (its tissue magnified,
+    // the organism living in it if it has one), a fine line to the block, a while on each.
+    struct Lens {
+        int x = -1, y = -1;     // the board cell it looks into
+        int type = 0;
+        CellLook l;             // that cell, as it was when the loupe found it
+        vec2 at{0, 0};          // the cell's place
+        float a = 0.f, age = 0.f, ly = 0.f, pan = 0.f;
+        bool leaving = false, lost = false, placed = false;
+    };
+    Lens lenses_[2];
+    float lensR_ = 4.f;
+    vec2 lensCenter(int side) const;
+    void updateLenses(const Game& g, float dt, float wdt);
 
     // ---- Drawing.
     std::vector<Inst> cells_, orgInst_;
@@ -102,9 +119,9 @@ private:
 
     // ---- GL.
     GLuint progField_ = 0, progOrg_ = 0, progPiece_ = 0, progSpeck_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
-           progShape_ = 0, progText_ = 0;
+           progShape_ = 0, progText_ = 0, progLens_ = 0, progLine_ = 0;
     GLuint quadVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0, orgVao_ = 0, orgVbo_ = 0, speckVao_ = 0, speckVbo_ = 0, shapeVao_ = 0,
-           shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0, lensVao_ = 0, lensVbo_ = 0, lineVao_ = 0, lineVbo_ = 0;
     ugl::Target sceneT_, bloomA_, bloomB_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
