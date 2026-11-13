@@ -1,7 +1,8 @@
 #pragma once
-// The menus, drawn 8-bit style on a small pixel canvas scaled up with sharp pixels: the title screen (CAMPAIGN,
-// FREE PLAY, QUIT), free play's difficulty, and the campaign's stages (a line of squares per stage, one per song,
+// The menus, drawn 8-bit style on a small pixel canvas scaled up with sharp pixels: the title screen (VOYAGE, CUSTOM
+// VOYAGE, FREE PLAY, QUIT), the custom voyages (made from YouTube playlists), free play's difficulty, and the campaign's stages (a line of squares per stage, one per song,
 // coloured by its universe), with an audio preview of the song under the cursor.
+#include <functional>
 #include <future>
 #include <map>
 #include <memory>
@@ -16,6 +17,7 @@
 #include "menupaint.hpp"
 #include "playlists.hpp"
 #include "title.hpp"
+#include "voyages.hpp"
 
 class WorldPool;
 inline std::string gameTitle(bool upperCase) {
@@ -31,7 +33,8 @@ void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned c
 class Menu {
 public:
     // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
-    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF };
+    // CUSTOM: the custom voyages, and the making of one from a playlist; the one chosen then shows as CAMPAIGN.
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, CUSTOM };
     struct Choice {
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
         int difficulty = DIFF_EXPERT;
@@ -68,9 +71,10 @@ public:
     // stage, free play's difficulty and playlist.
     struct Place {
         int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1;
-        std::string playlist;
+        std::string playlist, voyage; // voyage: the custom voyage open ("" the main one), whose stage `stage` is
         bool operator==(const Place& o) const {
-            return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff && playlist == o.playlist;
+            return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff &&
+                   playlist == o.playlist && voyage == o.voyage;
         }
         bool operator!=(const Place& o) const { return !(*this == o); }
     };
@@ -81,10 +85,20 @@ public:
     static bool savePlace(const std::string& path, const Place& p);
     // Free play's playlists (the free screen picks one); the store is the app's.
     void setPlaylists(PlaylistStore* s) { playlists_ = s; }
+    // The custom voyages; `open` makes the app's campaign and progress those of a voyage ("" the main one), false if
+    // it can't be read.
+    void setVoyages(VoyageStore* s, std::function<bool(const std::string&)> open) { voyages_ = s; openVoyage_ = std::move(open); }
+    // A voyage becomes the one the Voyage's screen shows (its focus where it was this session, else on the next stage
+    // to play); false if it can't be opened.
+    bool selectVoyage(const std::string& id);
+    const std::string& voyage() const { return voyageId_; }
     bool editing() const { return editing_; }
                                                 // (typing a playlist: letters are text, not shortcuts)
-    bool fetching() const { return fetch_.valid(); }
-    bool fetchDone() const { return fetch_.valid() && fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready; }
+    bool fetching() const { return fetch_.valid() || vFetch_.valid(); }
+    bool fetchDone() const {
+        auto done = [](const auto& f) { return f.valid() && f.wait_for(std::chrono::seconds(0)) == std::future_status::ready; };
+        return done(fetch_) || done(vFetch_);
+    }
     // The campaign has two levels: the stage petals, then the songs of the opened petal.
     void setPetalOpen(bool o) { petal_ = o; }
     // One frame of navigation; a choice ends the menu.
@@ -136,12 +150,27 @@ private:
     struct Fetched { bool ok = false; std::string url, title, error; int count = 0; };
     std::future<Fetched> fetch_;
     std::vector<PlaylistEntry> plChoices() const; // the playlists to pick from, the most recent first
+    // the custom voyages: a row of cards (theirs, then "new voyage"); making one: its playlist's link (step 1), being
+    // read, then its name (step 2, the playlist's title to start with)
+    VoyageStore* voyages_ = nullptr;
+    std::function<bool(const std::string&)> openVoyage_;
+    std::string voyageId_, voyageTitle_;       // the voyage the Voyage's screen shows ("" the main one)
+    std::map<std::string, int> voyageStage_;   // the stage each voyage was on, this session
+    int vSel_ = 0, vStep_ = 0;
+    float aV_ = 0;
+    std::vector<int> vCleared_;                // the cards' stages cleared (read when the screen opens)
+    std::string vUrl_, vLink_, vDelete_;       // the playlist read, the link typed, a voyage DEL was pressed on once
+    std::vector<std::string> vEntries_;
+    struct VFetched { bool ok = false; std::string url, title, error; std::vector<std::string> entries; };
+    std::future<VFetched> vFetch_;
+    void enterVoyage(std::string id);          // selectVoyage, then its screen
 
     // ---- state
     const Campaign* camp_ = nullptr;
     Progress* progress_ = nullptr;
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
+    static constexpr int TITLE_ITEMS = 4;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage

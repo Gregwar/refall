@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <random>
 
 #include "library.hpp"
 #include "menuworlds.hpp"
@@ -69,6 +70,59 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgBad_ = bad;
     msgT_ = message.empty() ? 0.f : 5.f;
     if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
+    if (s == CUSTOM) {
+        editing_ = false;
+        vStep_ = 0;
+        plMsg_.clear();
+        vDelete_.clear();
+        vCleared_.clear();
+        if (voyages_) {
+            for (const CustomVoyage& v : voyages_->list()) vCleared_.push_back(voyages_->cleared(v.id));
+            vSel_ = 0; // the voyage played last (the list's first), or "new voyage"
+            for (int i = 0; i < (int)voyages_->list().size(); i++)
+                if (voyages_->list()[i].id == voyageId_) vSel_ = i;
+        }
+        aV_ = (float)vSel_;
+    }
+}
+
+bool Menu::selectVoyage(const std::string& id) {
+    if (openVoyage_ && !openVoyage_(id)) return false;
+    if (id == voyageId_) return true; // (its focus stays)
+    voyageStage_[voyageId_] = stage_;
+    voyageId_ = id;
+    const CustomVoyage* v = voyages_ && !id.empty() ? voyages_->find(id) : nullptr;
+    voyageTitle_ = v ? v->title : "";
+    const int n = camp_ ? camp_->size() : 0;
+    auto it = voyageStage_.find(id);
+    if (it != voyageStage_.end()) stage_ = it->second;
+    else { // the next stage to play: the first open one not cleared, else the last open one
+        stage_ = -1;
+        int last = 0;
+        for (int s = 0; s < n; s++) {
+            const bool o = !progress_ || progress_->unlocked(s, diff_);
+            if (o) last = s;
+            if (o && stage_ < 0 && !(progress_ && progress_->cleared(s, diff_))) stage_ = s;
+        }
+        if (stage_ < 0) stage_ = last;
+    }
+    stage_ = std::clamp(stage_, 0, std::max(0, n - 1));
+    song_ = 0;
+    row_ = 1;
+    petal_ = false;
+    celebrate_ = -1;
+    aStage_ = (float)stage_;
+    aOpen_ = 0;
+    return true;
+}
+
+void Menu::enterVoyage(std::string id) {
+    if (!selectVoyage(id)) {
+        plMsg_ = "Couldn't open this voyage";
+        plMsgBad_ = true;
+        return;
+    }
+    open(CAMPAIGN);
 }
 
 std::vector<PlaylistEntry> Menu::plChoices() const {
@@ -99,11 +153,12 @@ Menu::Place Menu::place() const {
     p.freeDiff = freeDiff_;
     const auto ch = plChoices();
     if (plSel_ < (int)ch.size()) p.playlist = ch[plSel_].url;
+    p.voyage = voyageId_;
     return p;
 }
 
 void Menu::restore(const Place& p, bool difficulties) {
-    if (p.titleItem >= 0 && p.titleItem < 3) titleItem_ = p.titleItem;
+    if (p.titleItem >= 0 && p.titleItem < TITLE_ITEMS) titleItem_ = p.titleItem;
     if (difficulties && p.voyageDiff >= 0 && p.voyageDiff < DIFF_COUNT) diff_ = p.voyageDiff;
     if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
     if (p.stage >= 0 && camp_ && camp_->size() > 0) {
@@ -139,6 +194,7 @@ bool Menu::loadPlace(const std::string& path, Place& p) {
         else if (k == "voyage-stage") p.stage = std::atoi(v.c_str()) - 1;
         else if (k == "free-difficulty") p.freeDiff = std::atoi(v.c_str());
         else if (k == "free-playlist") p.playlist = v;
+        else if (k == "voyage") p.voyage = v;
     }
     std::fclose(f);
     return true;
@@ -151,8 +207,8 @@ bool Menu::savePlace(const std::string& path, const Place& p) {
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return false;
     std::fprintf(f, "# Refall: where the menu was (--reset forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
-                    "free-difficulty\t%d\nfree-playlist\t%s\n",
-                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.playlist.c_str());
+                    "free-difficulty\t%d\nfree-playlist\t%s\nvoyage\t%s\n",
+                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.playlist.c_str(), p.voyage.c_str());
     std::fclose(f);
     std::filesystem::rename(tmp, path, ec);
     return !ec;
@@ -182,6 +238,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aRow_ += (row_ - aRow_) * k;
         aFreeRow_ += (freeRow_ - aFreeRow_) * k;
         aPl_ += (plSel_ - aPl_) * k;
+        aV_ += (vSel_ - aV_) * k;
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
     enterT_ += dt;
@@ -213,6 +270,26 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             plMsgBad_ = true;
         }
     }
+    // a custom voyage's playlist being read: on to its name
+    if (vFetch_.valid() && vFetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const VFetched r = vFetch_.get();
+        if (r.ok) {
+            vUrl_ = r.url;
+            vEntries_ = r.entries;
+            vStep_ = 2;
+            editText_ = asciiFold(r.title);
+            if (editText_.size() > 60) editText_.resize(60);
+            char b[160];
+            const int n = std::min((int)r.entries.size(), VoyageStore::MAX_SONGS), st = (n + VoyageStore::STAGE_SONGS - 1) / VoyageStore::STAGE_SONGS;
+            if ((int)r.entries.size() > n) std::snprintf(b, sizeof(b), "%d OF ITS %d SONGS   /   %d STAGES", n, (int)r.entries.size(), st);
+            else std::snprintf(b, sizeof(b), "%d SONGS   /   %d STAGE%s", n, st, st > 1 ? "S" : "");
+            plMsg_ = b;
+            plMsgBad_ = false;
+        } else {
+            plMsg_ = r.error;
+            plMsgBad_ = true;
+        }
+    }
     Choice ch;
     auto steps = [&](Action a) { return in.repeatSteps(a); };
     const int dy = steps(A_UI_DOWN) - steps(A_UI_UP), dx = steps(A_UI_RIGHT) - steps(A_UI_LEFT);
@@ -225,10 +302,11 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     }
     switch (screen_) {
     case TITLE:
-        titleItem_ = (titleItem_ + dy + 3 * 8) % 3;
+        titleItem_ = (titleItem_ + dy + TITLE_ITEMS * 8) % TITLE_ITEMS;
         if (ok) {
-            if (titleItem_ == 0) open(CAMPAIGN);
-            else if (titleItem_ == 1) open(FREE);
+            if (titleItem_ == 0) enterVoyage("");
+            else if (titleItem_ == 1) open(CUSTOM);
+            else if (titleItem_ == 2) open(FREE);
             else ch.kind = Choice::QUIT;
         }
         if (back) ch.kind = Choice::QUIT;
@@ -310,7 +388,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             if (row_ == 0) {
                 diff_ = std::clamp(diff_ + dx, 0, DIFF_COUNT - 1);
                 if (dy > 0 || ok) row_ = 1;
-                else if (back) open(TITLE);
+                else if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
             } else if (!petal_) {
                 stage_ = std::clamp(stage_ + dx, 0, n - 1);
                 if (dy < 0) row_ = 0;
@@ -323,7 +401,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 } else if (in.pressed(A_UI_ALT) && unlocked) {
                     petal_ = true; // its songs, to start from a later one (practice)
                     song_ = std::min(song_, (int)camp_->stages()[stage_].songs.size() - 1);
-                } else if (back) open(TITLE);
+                } else if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
             } else {
                 song_ = std::clamp(song_ + dx + dy, 0, (int)camp_->stages()[stage_].songs.size() - 1);
                 if (ok && hovered()) {
@@ -335,6 +413,92 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 if (back || in.pressed(A_UI_ALT)) petal_ = false;
             }
             break;
+        }
+        if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
+        break;
+    }
+    case CUSTOM: {
+        if (!voyages_) { if (back) open(TITLE); break; }
+        auto type = [&](size_t max) {
+            editText_ += in.typed();
+            if (in.pressed(A_UI_PASTE))
+                for (char c : in.clipboard())
+                    if (c >= 32 && c < 127) editText_ += c;
+            for (int i = 0; i < in.repeatSteps(A_UI_ERASE) && !editText_.empty(); i++) editText_.pop_back();
+            if (editText_.size() > max) editText_.resize(max);
+        };
+        const bool esc = in.pressed(A_UI_BACK) && !in.down(A_UI_ERASE);
+        if (vStep_ == 1) { // the playlist's link
+            if (!vFetch_.valid()) {
+                type(300);
+                if (in.pressed(A_UI_ENTER)) {
+                    std::string err;
+                    const std::string url = normalizePlaylistInput(editText_, &err);
+                    if (url.empty()) { plMsg_ = err; plMsgBad_ = true; }
+                    else {
+                        vLink_ = editText_;
+                        plMsg_ = "READING THE PLAYLIST...";
+                        plMsgBad_ = false;
+                        vFetch_ = std::async(std::launch::async, [url]() {
+                            VFetched f;
+                            f.url = url;
+                            f.entries = resolveYoutube(url);
+                            if (f.entries.empty()) { f.error = "Couldn't read it: offline, private, or empty?"; return f; }
+                            f.title = url == DEFAULT_PLAYLIST ? std::string(GAME_TITLE) : youtubeTitle(url);
+                            if (f.title.empty()) f.title = playlistIdOf(url).empty() ? "My voyage" : "Playlist " + playlistIdOf(url);
+                            f.ok = true;
+                            return f;
+                        });
+                    }
+                }
+                if (esc) { vStep_ = 0; editing_ = false; plMsg_.clear(); }
+            }
+            break;
+        }
+        if (vStep_ == 2) { // its name
+            type(60);
+            std::string name = editText_;
+            while (!name.empty() && name.back() == ' ') name.pop_back();
+            while (!name.empty() && name[0] == ' ') name.erase(0, 1);
+            if (in.pressed(A_UI_ENTER) && !name.empty()) {
+                std::string err;
+                const std::string id = voyages_->create(name, vUrl_, vEntries_, std::random_device{}() ^ ((uint64_t)std::random_device{}() << 32), &err);
+                if (id.empty()) { plMsg_ = err; plMsgBad_ = true; }
+                else {
+                    vStep_ = 0;
+                    editing_ = false;
+                    plMsg_.clear();
+                    vEntries_.clear();
+                    enterVoyage(id);
+                }
+            } else if (esc) { vStep_ = 1; editText_ = vLink_; plMsg_.clear(); }
+            break;
+        }
+        const auto& vs = voyages_->list();
+        const int nCards = (int)vs.size() + 1; // the last: a new voyage
+        const int was = vSel_;
+        vSel_ = std::clamp(vSel_ + dx + dy, 0, nCards - 1);
+        if (vSel_ != was) { vDelete_.clear(); plMsg_.clear(); }
+        if (in.pressed(A_UI_DELETE) && vSel_ < (int)vs.size()) {
+            const CustomVoyage v = vs[vSel_];
+            if (vDelete_ != v.id) { // once more to delete it (its progress goes with it)
+                vDelete_ = v.id;
+                plMsg_ = "DEL AGAIN TO DELETE " + asciiFold(v.title);
+                plMsgBad_ = true;
+            } else {
+                if (voyageId_ == v.id) selectVoyage("");
+                voyageStage_.erase(v.id);
+                voyages_->remove(v.id);
+                if (vSel_ < (int)vCleared_.size()) vCleared_.erase(vCleared_.begin() + vSel_);
+                vDelete_.clear();
+                plMsg_ = "DELETED " + asciiFold(v.title);
+                plMsgBad_ = false;
+                vSel_ = std::min(vSel_, (int)voyages_->list().size());
+            }
+        }
+        if (ok) {
+            if (vSel_ == nCards - 1) { vStep_ = 1; editing_ = true; editText_.clear(); plMsg_.clear(); }
+            else enterVoyage(std::string(vs[vSel_].id)); // (a copy: opening it reorders the list)
         }
         if (back) open(TITLE);
         break;
