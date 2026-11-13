@@ -438,7 +438,8 @@ void App::startTrack(std::shared_ptr<Track> t) {
 }
 
 // A calm intro: the song's first 6 seconds are much quieter (8 dB and more) than its usual level (the median of its
-// 2 s windows): pads, a voice, before the beat comes in. An opening with its beat already going is within a few dB.
+// 2 s windows), or much sparser in attacks (its onsets, under a third of its usual: a slow start of pads and long notes,
+// AVAION's COLORS): before the beat comes in. An opening with its beat already going is within a few dB and as busy.
 bool App::songHasIntro() const {
     const std::vector<float>& pcm = track_->pcm;
     const size_t win = (size_t)track_->sampleRate * 2 * 2; // 2 s, interleaved stereo
@@ -454,8 +455,30 @@ bool App::songHasIntro() const {
     std::nth_element(sorted.begin(), sorted.begin() + sorted.size() / 2, sorted.end());
     const double usual = sorted[sorted.size() / 2];
     const double db = 10.0 * std::log10((opening + 1e-12) / (usual + 1e-12));
-    std::printf("[app] opening %.1f dB from the song's usual level: %s\n", db, db <= -8.0 ? "a calm intro" : "no intro");
-    return db <= -8.0;
+    // the attacks: the opening's mean onset against the median of the song's 8 s windows from 30 s on
+    const Analysis& an = track_->analysis;
+    double sparse = 1.0;
+    if (!an.frames.empty() && an.hop > 0) {
+        const int per = std::max(1, (int)std::lround(8.0 / an.hop)), n6 = (int)std::lround(6.0 / an.hop);
+        auto mean = [&](int f0, int f1) {
+            double s = 0;
+            int c = 0;
+            for (int f = std::max(0, f0); f < std::min(f1, (int)an.frames.size()); f++, c++) s += an.frames[f].onset;
+            return c ? s / c : 0.0;
+        };
+        std::vector<double> wins;
+        for (int f = (int)std::lround(30.0 / an.hop); f + per < (int)an.frames.size() - (int)std::lround(30.0 / an.hop); f += per)
+            wins.push_back(mean(f, f + per));
+        if (!wins.empty()) {
+            std::nth_element(wins.begin(), wins.begin() + wins.size() / 2, wins.end());
+            const double body = wins[wins.size() / 2];
+            if (body > 1e-6) sparse = mean(0, n6) / body;
+        }
+    }
+    const bool intro = db <= -8.0 || sparse <= 0.3;
+    std::printf("[app] opening %.1f dB from the song's usual level, %.0f%% of its attacks: %s\n", db, 100.0 * sparse,
+                intro ? "a calm intro" : "no intro");
+    return intro;
 }
 
 // The universe for the current song: the forced one, else one picked from the song's footprint.
