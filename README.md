@@ -331,8 +331,11 @@ one, the page shows touch buttons (the gamepad's D-pad, A, B, LB, Back and Start
 
 - `refall-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
   notes on it.
+- `refall-voyage-viewer [campaign]`: review a campaign, the computer playing: each song in its universe at its
+  velocity, a strip of every song by stage (the universe in miniature, the video's thumbnail) and the song's sections
+  to jump around; its tour plays a few seconds of each section, then moves on to the next song.
 
-It comes with the package (`uvx --from refall refall-scope`). Every option, the tools and how the music drives the
+They come with the package (`uvx --from refall refall-scope`). Every option, the tools and how the music drives the
 game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source

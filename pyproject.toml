@@ -29,6 +29,7 @@ Homepage = "https://github.com/Gregwar/tetris-universe"
 [project.scripts]
 refall = "zentris._launcher:main"
 refall-scope = "zentris._launcher:scope"
+refall-voyage-viewer = "zentris._launcher:voyage_viewer"
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"

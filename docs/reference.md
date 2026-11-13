@@ -79,6 +79,28 @@ next run) and songs stay downloaded in the cache, so reopening an annotated song
 
 The game and refall-scope share the same analysis and song plan code (`src/songplan.*`), so what you see is what the game uses.
 
+## refall-voyage-viewer: review a campaign
+
+`./build/refall-voyage-viewer [campaign]` plays a campaign's songs in a row, each in its universe and variant at its
+velocity, the computer playing (a game over starts a new board at once, the song plays on). The campaign is the
+main one by default (`data/campaign.tsv`, as the game reads it), or a campaign file, or a custom voyage (its id or
+its title). An overlay (Tab or H hides it) shows:
+- the campaign's songs by stage, each card the universe in miniature (the menu's snapshots), the video's thumbnail
+  (downloaded once into `~/.cache/zentris/thumbs/`), its title, universe and velocity; the song playing is lit, and
+  a song being downloaded or prepared says so
+- the song's timeline: its sections (intro, verse, build, chorus, drop, break, outro), the scene levels over them
+  (calm, mid, peak) and the playhead
+
+The tour (on at the start; Space) plays each section about 6 s, from 1.5 s into it, then goes on to the next song.
+Taking over pauses it: Left/Right seek 10 s, `[` / `]` go to the previous / next section, Up/Down to the previous /
+next song, Page Up/Down to the previous / next stage; a click on a card plays its song, a click (or a drag) on the
+timeline seeks. Songs not downloaded yet are fetched when played, and the next one is prepared in the background.
+
+Options: `--difficulty easy|normal|expert` (the velocities played, NORMAL by default), `--stage N --song K` (start
+there), `--size WxH`, `--fullscreen`, `--mute`, and `--shot OUT.png` (saves the viewer `--shot-after SEC`, 8 by
+default, into the first song, offscreen, then exits; `ZEN_VIEWER_KEYS="T:COMMAND,..."` gives it commands on the way:
+next, prev, stage+, stage-, fwd, back, sec+, sec-, tour, hide).
+
 ## Slow motion and quad rewards
 
 Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it; a
