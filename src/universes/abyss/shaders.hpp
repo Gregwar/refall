@@ -685,38 +685,6 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- text (signed distance field glyphs)
-
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uColor, uGlow, uBridgeInk;
-uniform float uAlpha, uGlowAmt, uWeight, uShadow, uBridge;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.5 - uWeight - w, 0.5 - uWeight + w, d);
-    float glow = smoothstep(0.05, 0.5, d);
-    glow *= glow;
-    float shadow = smoothstep(0.18, 0.5, d) * uShadow;
-    vec3 fc = mix(uColor, uBridgeInk, uBridge);
-    vec3 col = fc * fill + uGlow * glow * uGlowAmt * (1.0 - fill) * (1.0 - uBridge);
-    float a = max(fill, shadow * 0.7);
-    frag = vec4(col * uAlpha, a * uAlpha);
-}
-)";
-
 // ---------------------------------------------------------------- bloom and the post
 
 inline const char* DOWN_FS = R"(#version 330 core

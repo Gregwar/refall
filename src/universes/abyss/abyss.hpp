@@ -24,6 +24,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // The palette of a variant (linear RGB once loaded).
     struct Palette {
@@ -54,38 +56,20 @@ private:
     void setBoxes(GLuint prog) const;
     void drawWorld();
     void drawSprites(const std::vector<Sprite>& v);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const std::vector<HudRect>& panels);
     int pickVariant(const SongLook& look) const;
     void spawnJelly(bool anywhere);
     void spawnSchool();
     void spawnSiphon(bool anywhere);
 
-    // ---- Text (signed distance field glyphs).
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, ascent = 0.f, capH = 40.f;
-        Glyph g[96];
-        const unsigned char* data = nullptr;
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font fontSans_, fontSerif_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                    std::vector<float>& out) const;
-    struct TextStyle {
-        vec3 color{1.f}, glow{0.f};
-        float glowAmt = 0.f, alpha = 1.f, weight = 0.f, shadow = 0.6f;
-    };
-    void drawText(const Font& f, const std::vector<float>& quads, const TextStyle& st);
+    // ---- The HUD's lettering (hudLine: the host letters it): a color of the scene as the post shows it.
+    vec3 display(const vec3& linear) const;
 
     // ---- GL.
-    GLuint progWorld_ = 0, progTile_ = 0, progSprite_ = 0, progWhale_ = 0, progText_ = 0, progShape_ = 0,
+    GLuint progWorld_ = 0, progTile_ = 0, progSprite_ = 0, progWhale_ = 0, progShape_ = 0,
            progDown_ = 0, progUp_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, tileVao_ = 0, tileVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, whaleVao_ = 0, whaleVbo_ = 0,
-           textVao_ = 0, textVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+           shapeVao_ = 0, shapeVbo_ = 0;
     GLuint sceneFbo_ = 0, sceneTex_ = 0;
     static constexpr int BLOOM_MIPS = 6;
     GLuint bloomFbo_[BLOOM_MIPS] = {}, bloomTex_[BLOOM_MIPS] = {};
