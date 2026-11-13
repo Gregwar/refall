@@ -767,6 +767,12 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         un.x = lerpf(uLeftBig, 28.f * s, e);
         un.y = lerpf(h * 0.42f + h * 0.06f, h - 50.f * s + 2.f * s, e);
         un.alpha = a * lerpf(0.85f, 0.6f, e);
+        // the same card in the universe's own lettering (the host's above when it can't be captured)
+        for (const HudText& h : hud)
+            if (h.role == HUD_TITLE || h.role == HUD_UNIVERSE) b.cardHud.push_back(h);
+        b.cardId = sceneCounter_;
+        b.cardShrink = e;
+        b.cardAlpha = a;
         if (t >= IN_END) {
             if (songHeld_) { // the game starts: so does the song
                 songHeld_ = false;
