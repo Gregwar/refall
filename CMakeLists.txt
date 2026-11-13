@@ -122,6 +122,7 @@ endif()
 add_library(zenrender STATIC
   src/renderer.cpp
   src/titlecard.cpp
+  src/text.cpp
   src/transitions.cpp
   src/layout.cpp
   src/ugl.cpp

@@ -355,18 +355,21 @@ void Renderer::renderBreak(const Frame& f) {
         // lines gliding home instead of the corner's own
         const bool card = !brk_.cardHud.empty() && brk_.cardIn > 0.f;
         std::vector<HudText> lines;
+        // (the tempo and key under the title wait for it to land)
+        const float landed = card ? smoothstepf(0.85f, 1.f, brk_.cardShrink) : 1.f;
         for (const HudText& h : f.hud) {
             if (card && (h.role == HUD_TITLE || h.role == HUD_UNIVERSE)) continue;
             lines.push_back(h);
-            lines.back().alpha *= whole ? (bare ? play : 1.f) : 0.f;
+            lines.back().alpha *= (whole ? (bare ? play : 1.f) : 0.f) * (h.role == HUD_INFO ? landed : 1.f);
         }
         for (const HudText& h : brk_.bareHud) {
             if (!bare || (card && (h.role == HUD_TITLE || h.role == HUD_UNIVERSE))) continue;
+            const float a = h.alpha * (1.f - play) * (h.role == HUD_INFO ? landed : 1.f);
             auto same = std::find_if(lines.begin(), lines.end(), [&](const HudText& o) { return o.role == h.role && o.text == h.text; });
-            if (same != lines.end()) same->alpha += h.alpha * (1.f - play);
+            if (same != lines.end()) same->alpha += a;
             else {
                 lines.push_back(h);
-                lines.back().alpha *= 1.f - play;
+                lines.back().alpha = a;
             }
         }
         letter(*cur_.u, lines, 1.f, f.time, saturate(brk_.black));
