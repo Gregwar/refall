@@ -28,9 +28,6 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/shadow/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -100,7 +97,6 @@ bool ShadowUniverse::init(int width, int height) {
     progHaze_ = compile(ugl::FULLSCREEN_VS, shaders::HAZE_FS, "shadow haze", false);
     progFinal_ = compile(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "shadow final", false);
     progCompose_ = compile(shaders::RECT_VS, shaders::COMPOSE_FS, "shadow compose", false);
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "shadow text", false);
     progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "shadow panel", false);
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -111,14 +107,6 @@ bool ShadowUniverse::init(int width, int height) {
     glBindVertexArray(rectVao_);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glGenVertexArrays(1, &panelVao_);
     glGenBuffers(1, &panelVbo_);
     glBindVertexArray(panelVao_);
@@ -133,7 +121,6 @@ bool ShadowUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    buildFont(font_, FONT_MARCELLUS);
     // test hook: ZEN_SHADOW_SPENT=N starts with N spent blocks set aside (a late still)
     if (const char* s = std::getenv("ZEN_SHADOW_SPENT"))
         for (int i = 0, n = std::atoi(s); i < n; i++) {
@@ -189,56 +176,10 @@ void ShadowUniverse::setupModelCamera() {
 ShadowUniverse::~ShadowUniverse() {
     sceneT_.destroy();
     modelT_.destroy();
-    for (GLuint p : {progWall_, progModel_, progHaze_, progFinal_, progCompose_, progText_, progPanel_}) glDeleteProgram(p);
-    for (GLuint v : {rectVao_, textVao_, panelVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progWall_, progModel_, progHaze_, progFinal_, progCompose_, progPanel_}) glDeleteProgram(p);
+    for (GLuint v : {rectVao_, panelVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, panelVbo_}) glDeleteBuffers(1, &b);
     if (cellsTex_) glDeleteTextures(1, &cellsTex_);
-    if (font_.tex) glDeleteTextures(1, &font_.tex);
-    delete (stbtt_fontinfo*)font_.info;
-}
-
-void ShadowUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] shadow font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 // =====================================================================================================
@@ -575,67 +516,6 @@ void ShadowUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Text
 // =====================================================================================================
 
-float ShadowUniverse::textWidth(const std::string& s, float size, float track) const {
-    const Font& f = font_;
-    if (!f.ok || s.empty()) return s.size() * size * 0.6f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
-}
-
-void ShadowUniverse::textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const {
-    const Font& f = font_;
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void ShadowUniverse::drawText(const std::vector<float>& q, const vec3& srgb, float alpha, float bias, float soft) {
-    if (q.empty() || !font_.ok || alpha <= 0.003f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font_.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set4f(progText_, "uInk", srgb.x, srgb.y, srgb.z, saturate(alpha));
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uSoft", soft);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 float ShadowUniverse::wallLightAt(float px, float py) const {
     // (the CPU twin of the wall's circle: is this pixel on the lit wall or in the dark around it?)
     const float bx = viewC_.x + (px / width_ * 2.f - 1.f) * viewH_.x;
@@ -645,81 +525,82 @@ float ShadowUniverse::wallLightAt(float px, float py) const {
     return smoothstepf(1.02f, 0.9f, r) * (by > TABLE_Y ? 1.f : 0.f);
 }
 
-// The HUD in SHADOW's typography: Marcellus, set on the wall like the titles of a magic-lantern slide. On the lit
-// wall the letters are dark (shadows themselves), in the dark around the circle they are pale.
-void ShadowUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul, bool card) {
+// The HUD's panels (its lettering: hudLine, the host letters it).
+void ShadowUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    const vec3 acc = hex(VARIANTS[variant_].accent);
+    glUseProgram(progPanel_);
+    set2f(progPanel_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(panelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
+    for (const HudRect& r : panels) {
+        const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};
+        glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
+        const vec3 c = r.custom ? r.color : r.accent ? acc : vec3(0.03f, 0.025f, 0.02f);
+        const float a = saturate(r.accent ? r.alpha * 0.35f : r.alpha * 0.9f);
+        glUniform4f(ugl::U(progPanel_, "uColor"), c.x * a, c.y * a, c.z * a, a);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+}
+
+// The HUD in SHADOW's typography, lettered by the host (text.hpp): Marcellus, set on the wall like the titles of a
+// magic-lantern slide. On the lit wall the letters are dark (shadows themselves), in the dark around the circle they
+// are pale, each on a soft halo of the other.
+void ShadowUniverse::hudLine(const HudText& h, text::Line& out) {
     const VariantDef& d = VARIANTS[variant_];
     const vec3 dark = hex(d.inkDark), pale = hex(d.inkLight), acc = hex(d.accent);
-    if (!panels.empty()) {
-        glUseProgram(progPanel_);
-        set2f(progPanel_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(panelVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
-        for (const HudRect& r : panels) {
-            const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};
-            glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
-            const vec3 c = r.custom ? r.color : r.accent ? acc : vec3(0.03f, 0.025f, 0.02f);
-            const float a = saturate(r.accent ? r.alpha * 0.35f : r.alpha * 0.9f);
-            glUniform4f(ugl::U(progPanel_, "uColor"), c.x * a, c.y * a, c.z * a, a);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
+    text::Font* marcellus = text::font(FONT_MARCELLUS);
+    const float s = height_ / 1080.f, mul = hudMul_;
+    const float base = h.scale * 12.f;
+    const float alpha = saturate(h.alpha) * mul;
+    // a bias on the old distance field (8 px of spread at 64 px), in em
+    constexpr float BIAS = 255.f / 16.f / 64.f;
+    out.look.shadowW = 0.25f * BIAS;
+    out.look.shadowSoft = 0.3f * BIAS;
+    out.look.weight = 0.02f * BIAS;
+    auto put = [&](const std::string& t, float size, float track, float dy, bool accent, float a) {
+        out.add(t, marcellus, size, vec3(1.f), track / size, saturate(a));
+        out.dy = dy;
+        // how lit the wall is under the line's middle (its width roughly from its letters)
+        size_t n = 0;
+        for (unsigned char c : t) n += (c & 0xC0) != 0x80;
+        const float w = n * (size * 0.6f + track);
+        const float lit = wallLightAt(ugl::hudLeft(h, w, width_) + w * 0.5f, h.y + size * 0.5f);
+        out.spans.back().ink = (accent ? lerp(acc, dark * 1.2f, lit) : lerp(pale, dark, lit)) * mul;
+        out.look.shadow = lerp(vec3(0.02f, 0.018f, 0.015f), pale, lit);
+        out.look.shadowA = lerpf(0.7f, 0.25f, lit);
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // the name in the accent, the variant smaller and pale after it, on a dark halo
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 0.9f, tr = base * 0.34f, vsz = base * 0.68f, vtr = base * 0.26f;
+        const float a = saturate(0.35f + h.alpha * 1.6f) * mul;
+        out.add(name, marcellus, sz, acc * mul, tr / sz, a);
+        if (!var.empty()) {
+            out.add("", marcellus, base, acc, (base * 0.9f - tr) / base); // the gap
+            // its cap line (sz - vsz) * 0.75 lower (Marcellus' capitals: 0.558 of its size)
+            out.add(var, marcellus, vsz, pale * mul, vtr / vsz, a * 0.75f).dy = (0.75f - 0.558f) * (sz - vsz);
         }
+        out.look.shadow = vec3(0.02f);
+        out.look.shadowA = 0.7f;
+        out.look.weight = 0.03f * BIAS;
+        break;
     }
-    const float s = height_ / 1080.f;
-    (void)s;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * mul;
-        auto put = [&](const std::string& text, float size, float track, float dy, bool accent, float a) {
-            q.clear();
-            const float w = textWidth(text, size, track);
-            const float x = ugl::hudLeft(h, w, width_);
-            const float lit = card ? 0.f : wallLightAt(x + w * 0.5f, h.y + size * 0.5f);
-            textQuads(text, x, h.y + dy, size, track, q);
-            const vec3 ink = accent ? lerp(acc, dark * 1.2f, lit) : lerp(pale, dark, lit);
-            const vec3 halo = lerp(vec3(0.02f, 0.018f, 0.015f), pale, lit);
-            drawText(q, halo, a * lerpf(0.7f, 0.25f, lit), 0.25f, 0.3f);
-            drawText(q, ink * mul, a, 0.02f, 0.f);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.9f, tr = base * 0.34f, vsz = base * 0.68f, vtr = base * 0.26f;
-            const float wName = textWidth(name, sz, tr), gap = base * 0.9f;
-            const float wVar = var.empty() ? 0.f : textWidth(var, vsz, vtr);
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f) * mul;
-            q.clear();
-            textQuads(name, x, h.y, sz, tr, q);
-            drawText(q, vec3(0.02f), a * 0.7f, 0.25f, 0.3f);
-            drawText(q, acc * mul, a, 0.03f, 0.f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(var, x + wName + gap, h.y + (sz - vsz) * 0.75f, vsz, vtr, q);
-                drawText(q, vec3(0.02f), a * 0.6f, 0.25f, 0.3f);
-                drawText(q, pale * mul, a * 0.75f, 0.02f, 0.f);
-            }
-            continue;
-        }
-        case HUD_TITLE: put(h.text, base * 1.0f, base * 0.04f, 0.f, false, saturate(h.alpha * 1.3f) * mul); continue;
-        case HUD_INFO: put(h.text, base * 0.74f, base * 0.12f, 0.f, false, alpha * 0.65f); continue;
-        case HUD_SECTION: put(h.text, base * 0.88f, base * 0.42f, 0.f, true, saturate(0.2f + h.alpha * 1.9f) * mul); continue;
-        case HUD_LABEL: put(h.text, base * 0.66f, base * 0.42f, 0.f, false, saturate(alpha * 1.3f)); continue;
-        case HUD_VALUE: put(h.text, base * 1.05f, base * 0.05f, 0.f, false, alpha); continue;
-        case HUD_NOTICE: put(h.text, base * 0.95f, base * 0.14f, 0.f, true, alpha); continue;
-        case HUD_TOAST: put(h.text, base * 1.2f, base * 0.34f, -base * 0.1f, false, alpha); continue;
-        case HUD_TOAST_SUB: put(h.text, base * 0.82f, base * 0.14f, 0.f, false, alpha); continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) put(h.text, base * 1.05f, base * 0.2f, -base * 0.1f, false, alpha);
-            else put(h.text, base * 0.8f, base * 0.06f, 0.f, h.accent, alpha);
-            continue;
-        default: put(h.text, base * 0.8f, base * 0.05f, 0.f, h.accent, alpha); continue;
-        }
+    case HUD_TITLE: put(h.text, base * 1.0f, base * 0.04f, 0.f, false, saturate(h.alpha * 1.3f) * mul); break;
+    case HUD_INFO: put(h.text, base * 0.74f, base * 0.12f, 0.f, false, alpha * 0.65f); break;
+    case HUD_SECTION: put(h.text, base * 0.88f, base * 0.42f, 0.f, true, saturate(0.2f + h.alpha * 1.9f) * mul); break;
+    case HUD_LABEL: put(h.text, base * 0.66f, base * 0.42f, 0.f, false, saturate(alpha * 1.3f)); break;
+    case HUD_VALUE: put(h.text, base * 1.05f, base * 0.05f, 0.f, false, alpha); break;
+    case HUD_NOTICE: put(h.text, base * 0.95f, base * 0.14f, 0.f, true, alpha); break;
+    case HUD_TOAST: put(h.text, base * 1.2f, base * 0.34f, -base * 0.1f, false, alpha); break;
+    case HUD_TOAST_SUB: put(h.text, base * 0.82f, base * 0.14f, 0.f, false, alpha); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(h.text, base * 1.05f, base * 0.2f, -base * 0.1f, false, alpha);
+        else put(h.text, base * 0.8f, base * 0.06f, 0.f, h.accent, alpha);
+        break;
+    default: put(h.text, base * 0.8f, base * 0.05f, 0.f, h.accent, alpha); break;
     }
 }
 
@@ -969,7 +850,8 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, bare ? std::vector<HudRect>() : f.panels, fade, f.card);
+    hudMul_ = fade;
+    if (!bare) drawHud(f.panels);
     glDisable(GL_BLEND);
     (void)lastHalf_;
 }

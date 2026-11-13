@@ -20,6 +20,8 @@ public:
     void levelUp() override;
     void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -85,29 +87,16 @@ private:
     double nextDripBeat_ = -1.0;
     int dripTurn_ = 0;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontReg_, fontIt_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
     GLuint progBg_ = 0, progPool_ = 0, progCrys_ = 0, progGlow_ = 0, progCell_ = 0, progShard_ = 0, progDown_ = 0,
-           progBlur_ = 0, progFinal_ = 0, progShape_ = 0, progText_ = 0;
+           progBlur_ = 0, progFinal_ = 0, progShape_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, crysVao_ = 0, crysVbo_ = 0, glowVao_ = 0, glowVbo_ = 0,
-           shardVao_ = 0, shardVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           shardVao_ = 0, shardVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     ugl::Target bgT_, sceneT_, bloomA_, bloomB_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};

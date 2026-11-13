@@ -23,6 +23,8 @@ public:
     void levelUp() override;
     void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -105,29 +107,16 @@ private:
     struct Puff { vec2 p; float t, life, size; };
     std::vector<Puff> puffs_;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontCaps_, fontIt_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
     GLuint progGb_ = 0, progComp_ = 0, progCell_ = 0, progFrag_ = 0, progSprite_ = 0, progDown_ = 0, progBlur_ = 0,
-           progFinal_ = 0, progShape_ = 0, progText_ = 0;
+           progFinal_ = 0, progShape_ = 0;
     GLuint quadVbo_ = 0, tessVao_ = 0, tessVbo_ = 0, bareVao_ = 0, bareVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, fragVao_ = 0, fragVbo_ = 0, spriteVao_ = 0,
-           spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint gbFbo_ = 0, gbTex_[3] = {0, 0, 0};
     GLuint stateTex_ = 0, sketchTex_ = 0, geoTex_ = 0;
     int tessCount_ = 0, bareCount_ = 0;

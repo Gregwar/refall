@@ -519,18 +519,5 @@ void main() {
     frag = vec4(uColor, a * uAlpha);
 }
 )";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUV;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uColor;
-uniform float uAlpha, uSoft, uBias;
-void main() {
-    float d = texture(uFont, vUV).r;
-    float w = max(fwidth(d), 1e-3) * 0.75 + uSoft;
-    float a = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    frag = vec4(uColor, a * uAlpha);
-}
-)";
 
 } // namespace diorama_shaders

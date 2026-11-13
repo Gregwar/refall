@@ -27,6 +27,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // A room (linear RGB once loaded; floats only, so two rooms blend).
     struct Palette {
@@ -52,30 +54,16 @@ private:
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
     void buildBoard(const Game& game);
     void computeLights(const MusicState& music);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudRect>& panels); // its panels (the lettering: hudLine, the host letters it)
+    float hudMul_ = 1.f; // the post's dimming and fade, on the inks
     void setLightUniforms(GLuint prog);
     int pickVariant(const SongLook& look) const;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font fontLight_, fontMedium_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    float textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& color, float alpha, float bias);
-
     // ---- GL.
-    GLuint progRoom_ = 0, progOcc_ = 0, progTile_ = 0, progShape_ = 0, progText_ = 0, progPost_ = 0, progCube_ = 0,
+    GLuint progRoom_ = 0, progOcc_ = 0, progTile_ = 0, progShape_ = 0, progPost_ = 0, progCube_ = 0,
            progShadow_ = 0;
-    GLuint quadVbo_ = 0, tileVao_ = 0, tileVbo_ = 0, occVao_ = 0, occVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0,
-           textVbo_ = 0, cubeVao_ = 0, cubeMeshVbo_ = 0, cubeVbo_ = 0;
+    GLuint quadVbo_ = 0, tileVao_ = 0, tileVbo_ = 0, occVao_ = 0, occVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
+           cubeVao_ = 0, cubeMeshVbo_ = 0, cubeVbo_ = 0;
     GLuint occFbo_ = 0, occTex_ = 0;
     // the thrown cubes seen from each lamp: depth maps, their view-projections, (on, tan of the half fov, near, far)
     static constexpr int SH_N = 1024;
