@@ -515,32 +515,6 @@ void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 
 // ---------------------------------------------------------------- text
 
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-uniform vec2 uShift;                 // pixels: the lettering's shadow
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    vec2 p = aPos + uShift;
-    gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-// Lettering set on the wall: the fill, or (uSoft > 0) its soft shadow on the wall.
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uColor;
-uniform float uAlpha, uBias, uSoft;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75 + uSoft;
-    float fill = smoothstep(0.5 - uBias - w, 0.5 - uBias + w, d);
-    frag = vec4(uColor * fill * uAlpha, fill * uAlpha);
-}
-)";
 
 // ---------------------------------------------------------------- the post
 

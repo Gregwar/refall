@@ -23,6 +23,8 @@ public:
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- The board: piece ids (a piece's cells merge into one block), uploaded as a small texture.
@@ -49,27 +51,14 @@ private:
     int pileDest(int type) const;
     vec2 pileCenter(int type) const;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font font_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const std::string& s, float size, float track) const;
-    void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const std::vector<float>& q, const vec3& srgb, float alpha, float bias, float soft);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul, bool card = false);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const std::vector<HudRect>& panels);
+    float hudMul_ = 1.f; // the frame's fade, on the inks
     float wallLightAt(float px, float py) const; // how lit the wall is at a pixel (0..1)
 
     // ---- GL.
-    GLuint progWall_ = 0, progModel_ = 0, progHaze_ = 0, progFinal_ = 0, progCompose_ = 0, progText_ = 0,
-           progPanel_ = 0;
-    GLuint quadVbo_ = 0, rectVao_ = 0, textVao_ = 0, textVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
+    GLuint progWall_ = 0, progModel_ = 0, progHaze_ = 0, progFinal_ = 0, progCompose_ = 0, progPanel_ = 0;
+    GLuint quadVbo_ = 0, rectVao_ = 0, panelVao_ = 0, panelVbo_ = 0;
     ugl::Target sceneT_, modelT_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{1, 1};

@@ -10,15 +10,11 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 
 #include "layout.hpp"
 #include "ugl.hpp"
 #include "universes/diorama/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -27,7 +23,6 @@ const unsigned char FONT_TTF[] = {
 #include "universes/diorama/Comfortaa-Bold.ttf.inc"
 };
 namespace shaders = diorama_shaders;
-stbtt_fontinfo gFont;
 
 using ugl::U;
 using ugl::set1f;
@@ -484,7 +479,6 @@ bool DioramaUniverse::init(int width, int height) {
     progBlur_ = compile(POST_VS, BLUR_FS, "blur");
     progComp_ = compile(POST_VS, COMP_FS, "composite");
     progPanel_ = compile(HUD_VS, PANEL_FS, "panel");
-    progText_ = compile(HUD_VS, TEXT_FS, "text");
 
     glGenVertexArrays(1, &emptyVao_);
     glGenBuffers(1, &instVbo_);
@@ -557,7 +551,6 @@ bool DioramaUniverse::init(int width, int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     buildWorld();
-    buildFont();
 
     GLint maxSamples = 0;
     glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
@@ -814,55 +807,6 @@ void DioramaUniverse::buildWorld() {
     }
 }
 
-// HUD font: Comfortaa (rounded, friendly), baked as a signed distance field so it scales cleanly and gets soft
-// shadows for free.
-void DioramaUniverse::buildFont() {
-    if (!stbtt_InitFont(&gFont, FONT_TTF, stbtt_GetFontOffsetForIndex(FONT_TTF, 0))) {
-        std::fprintf(stderr, "[gl] font init failed\n");
-        return;
-    }
-    fontPx_ = 56.f;
-    fontScaleTT_ = stbtt_ScaleForPixelHeight(&gFont, fontPx_);
-    int asc, desc, gap;
-    stbtt_GetFontVMetrics(&gFont, &asc, &desc, &gap);
-    fontAscent_ = asc * fontScaleTT_;
-    const int AW = 1024, AH = 1024, PAD = 16; // a wide field: room for the feathered halo
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = glyphs_[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(&gFont, ch, &adv, &lsb);
-        g.adv = adv * fontScaleTT_;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(&gFont, fontScaleTT_, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW;
-        g.y0 = y / (float)AH;
-        g.x1 = (x + w) / (float)AW;
-        g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo;
-        g.oy = (float)yo;
-        g.w = (float)w;
-        g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &fontTex_);
-    glBindTexture(GL_TEXTURE_2D, fontTex_);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    fontOk_ = true;
-}
-
 void DioramaUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -887,7 +831,7 @@ void DioramaUniverse::destroyTargets() {
 DioramaUniverse::~DioramaUniverse() {
     destroyTargets();
     for (GLuint p : {progBlock_, progWorld_, progBlockDepth_, progWorldDepth_, progSky_, progWater_, progSprite_, progDown_,
-                     progBlur_, progComp_, progPanel_, progText_})
+                     progBlur_, progComp_, progPanel_})
         glDeleteProgram(p);
     for (GLuint a : {emptyVao_, spriteVao_, hudVao_}) glDeleteVertexArrays(1, &a);
     for (GLuint b : {instVbo_, quadVbo_, spriteVbo_, hudVbo_}) glDeleteBuffers(1, &b);
@@ -897,7 +841,7 @@ DioramaUniverse::~DioramaUniverse() {
     };
     for (Mesh* m : {&cube_, &sphere_, &island_, &tower_, &waterMesh_}) freeMesh(*m);
     for (Mesh& m : propMeshes_) freeMesh(m);
-    for (GLuint t : {occTex_, shadowTex_, fontTex_}) glDeleteTextures(1, &t);
+    for (GLuint t : {occTex_, shadowTex_}) glDeleteTextures(1, &t);
     glDeleteFramebuffers(1, &shadowFbo_);
 }
 
@@ -1905,21 +1849,21 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    std::vector<HudText> hud;
-    layoutHud(f.hud, hud);
-    drawHud(hud, f.panels);
+    // the stats' labels (a label a value follows), for their lettering
+    statLabels_.clear();
+    for (size_t i = 0; i + 1 < f.hud.size(); i++)
+        if (f.hud[i].role == HUD_LABEL && f.hud[i + 1].role == HUD_VALUE) statLabels_.push_back(f.hud[i]);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// HUD: no cards, no plaques: cream lettering in Comfortaa set straight over the scene, each glyph on a feathered
-// dark halo drawn from its own distance field, so it reads on the pale clay by day and on the night sea alike.
+// HUD: no cards, no plaques: cream lettering in Comfortaa (lettered by the host, text.hpp) set straight over the
+// scene, each line on a feathered dark shadow a touch lower than its letters, so it reads on the pale clay by day and
+// on the night sea alike. The host's panels are the diorama's own.
 
-void DioramaUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float hs = std::max(1.f, height_ / 900.f);
-    // Cream lettering set straight over the scene on a feathered dark halo, a warm gold accent.
-    const vec3 CARD = hexS(0x4A3329), ACCENT_INK = hexS(0xC4603F), LIGHT = hexS(0xFFF5E4), ACCENT_LIGHT = hexS(0xFFCF8A),
-               SHADOW = hexS(0x2A1C1E);
+void DioramaUniverse::drawHud(const std::vector<HudRect>& panels) {
+    const vec3 CARD = hexS(0x4A3329), ACCENT_INK = hexS(0xC4603F);
     auto quad = [&](float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, std::vector<float>& out) {
         const float q[24] = {x0, y0, u0, v0, x1, y0, u1, v0, x1, y1, u1, v1, x0, y0, u0, v0, x1, y1, u1, v1, x0, y1, u0, v1};
         out.insert(out.end(), q, q + 24);
@@ -1945,147 +1889,90 @@ void DioramaUniverse::drawHud(const std::vector<HudText>& hud, const std::vector
         set3f(progPanel_, "uColor", r.color);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 4));
     }
-
-    if (!fontOk_) return;
-    glUseProgram(progText_);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, fontTex_);
-    set1i(progText_, "uFont", 0);
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float size = h.scale * 9.6f;      // pixel size of the font
-        const float k = size / fontPx_;
-        const float track = size * 0.03f;       // a little air between letters
-        auto glyphOf = [](char c) {
-            unsigned char ch = (unsigned char)c;
-            return (ch < 32 || ch >= 128) ? (unsigned char)'?' : ch;
-        };
-        float width = 0;
-        for (size_t i = 0; i < h.text.size(); i++) {
-            unsigned char ch = glyphOf(h.text[i]);
-            width += glyphs_[ch - 32].adv * k + track;
-            if (i + 1 < h.text.size()) width += stbtt_GetCodepointKernAdvance(&gFont, ch, glyphOf(h.text[i + 1])) * fontScaleTT_ * k;
-        }
-        width -= track;
-        float x = h.x;
-        if (h.center) x = h.x - width * 0.5f;
-        else if (h.x < 0) x = width_ + h.x - width;
-        const float baseline = h.y + size * 0.74f;
-        std::vector<float> v;
-        float pen = x;
-        for (size_t i = 0; i < h.text.size(); i++) {
-            unsigned char ch = glyphOf(h.text[i]);
-            const Glyph& gl = glyphs_[ch - 32];
-            if (gl.w > 0) {
-                float x0 = pen + gl.ox * k, y0 = baseline + gl.oy * k;
-                quad(x0, y0, x0 + gl.w * k, y0 + gl.h * k, gl.x0, gl.y0, gl.x1, gl.y1, v);
-            }
-            pen += gl.adv * k + track;
-            if (i + 1 < h.text.size()) pen += stbtt_GetCodepointKernAdvance(&gFont, ch, glyphOf(h.text[i + 1])) * fontScaleTT_ * k;
-        }
-        if (v.empty()) continue;
-        const vec3 col = h.accent ? ACCENT_LIGHT : LIGHT;
-        const float bias = size < 16.f ? 0.03f : 0.f; // small text a touch bolder
-        {
-            // A feathered dark halo, straight out of the distance field: dense at the glyph, gone a third of an em
-            // away, a touch lower than the letters, so the words read on the pale clay and the bright sky alike.
-            std::vector<float> s = v;
-            for (size_t i = 0; i < s.size(); i += 4) s[i + 1] += 0.5f * hs + size * 0.04f;
-            glBufferData(GL_ARRAY_BUFFER, s.size() * sizeof(float), s.data(), GL_STREAM_DRAW);
-            set3f(progText_, "uColor", SHADOW);
-            set1f(progText_, "uAlpha", (size < 16.f ? 0.9f : 0.7f) * h.alpha); // small lines need it most
-            set1f(progText_, "uSoft", 0.24f);
-            set1f(progText_, "uBias", 0.26f);
-            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(s.size() / 4));
-        }
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        set3f(progText_, "uColor", col);
-        set1f(progText_, "uAlpha", h.alpha);
-        set1f(progText_, "uSoft", 0.f);
-        set1f(progText_, "uBias", bias);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 4));
-    }
 }
 
-float DioramaUniverse::textWidth(const std::string& text, float scale) const {
-    if (!fontOk_ || text.empty()) return text.size() * scale * 6.f;
-    const float size = scale * 9.6f, k = size / fontPx_, track = size * 0.03f;
-    float w = 0;
-    for (size_t i = 0; i < text.size(); i++) {
-        unsigned char ch = (unsigned char)text[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += glyphs_[ch - 32].adv * k + track;
-        if (i + 1 < text.size()) {
-            unsigned char n = (unsigned char)text[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(&gFont, ch, n) * fontScaleTT_ * k;
+// The host's lines (text, anchor, size) in the diorama's typography: the song and the place in the corners, the
+// stats on the left stele (their labels small in the gold accent), the slot labels above their slots.
+void DioramaUniverse::hudLine(const HudText& h0, text::Line& out) {
+    const vec3 LIGHT = hexS(0xFFF5E4), ACCENT_LIGHT = hexS(0xFFCF8A), SHADOW = hexS(0x2A1C1E);
+    const float hs = std::max(1.f, height_ / 900.f), s = height_ / 1080.f;
+    HudText t = h0;
+    // a nudge of n pixels (at 1080 lines) for a line of the layout's nominal scale, growing with the line (the card)
+    auto nudge = [&](float n, float nominal) { return n * hs * t.scale / (nominal * s); };
+    float lead = 0.f; // the corner lines a little in from their anchor (as blank space ahead of their letters)
+    switch (t.role) {
+    case HUD_TITLE:
+        if (t.text.size() > 60) {
+            size_t k = 57;
+            while (k > 0 && ((unsigned char)t.text[k] & 0xC0) == 0x80) k--; // a whole letter
+            t.text = t.text.substr(0, k) + "...";
         }
+        lead = nudge(10.f, 2.2f); out.dy = nudge(4.f, 2.2f);
+        t.scale *= 0.82f; t.alpha = std::min(1.f, t.alpha * 2.3f);
+        break;
+    case HUD_INFO:
+        lead = nudge(10.f, 1.5f); out.dy = nudge(4.f, 1.5f);
+        t.scale *= 0.87f; t.alpha = std::min(1.f, t.alpha * 2.3f);
+        break;
+    case HUD_SECTION:
+        lead = nudge(10.f, 1.3f);
+        t.scale *= 0.92f; t.alpha = 0.9f;
+        break;
+    case HUD_UNIVERSE: {
+        const int mi = tod_ < 0.5f ? 0 : tod_ < 1.5f ? 1 : tod_ < 2.3f ? 2 : 3;
+        t.text += std::string("  ") + (night_ > 0.5f ? "DAY" : eve_ > 0.5f ? "GOLDEN HOUR" : NIGHT_NAMES[mi]);
+        lead = nudge(10.f, 1.3f);
+        t.alpha = std::min(1.f, 0.4f + t.alpha);
+        break;
     }
-    return w - track;
-}
-
-
-// ---------------------------------------------------------------------------------------------------------
-// HUD layout: the host's lines (text, anchor, size) in the diorama's typography, set straight over the scene: the
-// song and the place in the corners, the stats on the left stele, the slot labels above their slots.
-
-void DioramaUniverse::layoutHud(const std::vector<HudText>& in, std::vector<HudText>& out) const {
-    const float hs = std::max(1.f, height_ / 900.f);
-    out.clear();
-    const float tod = tod_;
-    const int mi = tod < 0.5f ? 0 : tod < 1.5f ? 1 : tod < 2.3f ? 2 : 3;
-    const char* moment = night_ > 0.5f ? "DAY" : eve_ > 0.5f ? "GOLDEN HOUR" : NIGHT_NAMES[mi];
-
-    for (size_t i = 0; i < in.size(); i++) {
-        HudText t = in[i];
-        if (t.alpha <= 0.01f || t.text.empty()) continue;
-        for (size_t k; (k = t.text.find("\xC2\xB7")) != std::string::npos;) t.text.replace(k, 2, "-");
-        switch (t.role) {
-        case HUD_TITLE:
-            if (t.text.size() > 60) t.text = t.text.substr(0, 57) + "...";
-            t.scale *= 0.82f; t.x += 10 * hs; t.y += 4 * hs; t.alpha = std::min(1.f, t.alpha * 2.3f);
-            break;
-        case HUD_INFO:
-            t.scale *= 0.87f; t.x += 10 * hs; t.y += 4 * hs; t.alpha = std::min(1.f, t.alpha * 2.3f);
-            break;
-        case HUD_SECTION:
-            t.scale *= 0.92f; t.x += 10 * hs; t.alpha = 0.9f;
-            break;
-        case HUD_UNIVERSE:
-            t.text += std::string("  ") + moment;
-            t.x += 10 * hs; t.alpha = std::min(1.f, 0.4f + t.alpha);
-            break;
-        case HUD_LABEL: {
-            const bool stat = i + 1 < in.size() && in[i + 1].role == HUD_VALUE;
-            if (stat) {
-                t.scale *= 0.68f; t.accent = true; t.alpha = 0.85f;
-            } else {
-                t.scale *= 0.875f;
-                t.alpha = std::min(1.f, t.alpha * 1.35f);
-            }
-            break;
+    case HUD_LABEL: {
+        // a stat's label (a value follows it in the frame's HUD): small, in the accent
+        bool stat = false;
+        for (const HudText& l : statLabels_) stat = stat || (l.text == t.text && l.x == t.x && l.y == t.y);
+        if (stat) {
+            t.scale *= 0.68f; t.accent = true; t.alpha = 0.85f;
+        } else {
+            t.scale *= 0.875f;
+            t.alpha = std::min(1.f, t.alpha * 1.35f);
         }
-        case HUD_VALUE:
-            t.scale *= 0.82f; t.alpha = std::min(1.f, t.alpha * 1.1f);
-            break;
-        case HUD_NOTICE:
-            t.scale *= 0.85f;
-            break;
-        case HUD_TOAST:
-        case HUD_TOAST_SUB:
-            t.alpha = std::min(1.f, t.alpha * 1.15f);
-            break;
-        case HUD_HELP:
-            t.scale *= 0.92f; t.alpha = std::min(1.f, t.alpha * 1.4f);
-            break;
-        case HUD_DIALOG:
-            t.scale *= 0.85f;
-            break;
-        default: break;
-        }
-        out.push_back(t);
+        break;
     }
+    case HUD_VALUE:
+        t.scale *= 0.82f; t.alpha = std::min(1.f, t.alpha * 1.1f);
+        break;
+    case HUD_NOTICE:
+        t.scale *= 0.85f;
+        break;
+    case HUD_TOAST:
+    case HUD_TOAST_SUB:
+        t.alpha = std::min(1.f, t.alpha * 1.15f);
+        break;
+    case HUD_HELP:
+        t.scale *= 0.92f; t.alpha = std::min(1.f, t.alpha * 1.4f);
+        break;
+    case HUD_DIALOG:
+        t.scale *= 0.85f;
+        break;
+    default: break;
+    }
+    const float size = t.scale * 9.6f; // the font's size
+    if (lead > 0.f) out.add("", text::font(FONT_TTF), size, LIGHT, lead / size);
+    out.add(t.text, text::font(FONT_TTF), size, t.accent ? ACCENT_LIGHT : LIGHT, 0.03f, saturate(t.alpha));
+    // the baseline 0.74 of the size below the anchor (Comfortaa's capitals: 0.70 of its size)
+    out.dy += (0.74f - 0.70f) * size;
+    // small text a touch bolder (a bias of .03 on the old field: 16 px of spread at 56 px)
+    constexpr float BIAS = 255.f / 8.f / 56.f;
+    if (size < 16.f) out.look.weight = 0.03f * BIAS;
+    // the feathered dark shadow, straight out of the distance field: dense at the glyph, fading a third of an em away
+    // (as far as the engine's field reaches; a halo carries it further), a touch lower than the letters
+    out.look.shadow = SHADOW;
+    out.look.shadowA = size < 16.f ? 0.9f : 0.7f; // small lines need it most
+    out.look.shadowW = 0.26f * BIAS;
+    out.look.shadowSoft = 0.24f * BIAS;
+    out.look.shadowOff = {0.f, 0.04f + 0.5f * hs / size};
+    out.look.halo = SHADOW;
+    out.look.haloA = 0.3f;
+    out.look.haloW = 0.15f;
 }
 
 // ---------------------------------------------------------------------------------------------------------
