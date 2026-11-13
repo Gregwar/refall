@@ -11,12 +11,14 @@
 // board plane, so the well, the previews and the HUD anchors sit where the layout contract puts them.
 #include "universes/sumi/sumi.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 #include "layout.hpp"
+#include "library.hpp"
 #include "stb_easy_font.h"
 #include "ugl.hpp"
 #include "universes/registry.hpp"
@@ -139,8 +141,7 @@ bool SumiUniverse::init(int width, int height) {
     progBg_ = compile(shaders::FULLSCREEN_VS, shaders::BG_FS, "background");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "ink");
     progPost_ = compile(shaders::FULLSCREEN_VS, shaders::POST_FS, "post");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "text");
-    progTextInk_ = compile(shaders::FULLSCREEN_VS, shaders::TEXT_INK_FS, "text ink");
+    progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "panel");
 
     glGenVertexArrays(1, &emptyVao_);
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -161,13 +162,27 @@ bool SumiUniverse::init(int width, int height) {
         glVertexAttribDivisor(1 + i, 1);
     }
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
+    glGenVertexArrays(1, &panelVao_);
+    glGenBuffers(1, &panelVbo_);
+    glBindVertexArray(panelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glBindVertexArray(0);
+
+    // The HUD's ink: the bitmap font's letters (their distance in pixels) slightly blurred and cut at a noisy
+    // threshold, which rounds their corners into brushed letterforms, with a faint soak around them.
+    bleed_.glsl = R"(
+vec4 letter(Letter L) {
+    float r = max(0.6, 0.032 * L.em); // the blur's reach: a third of the font's pixel
+    float cov = 0.25 * clamp(L.dist + r + 0.5, 0.0, 1.0) + 0.5 * clamp(L.dist + 0.5, 0.0, 1.0)
+              + 0.25 * clamp(L.dist - r + 0.5, 0.0, 1.0);
+    float n = (noise(L.px * 0.55) - 0.5) * 0.14 + (hash12(L.px) - 0.5) * 0.06;
+    float e = min(smoothstep(0.30, 0.56, cov + n) + 0.09 * cov, 1.0);
+    float a = e * L.ink.a;
+    return vec4(L.ink.rgb * a, a);
+}
+)";
 
     for (int i = 0; i < 7; i++) piece_[i] = VARIANTS[0].piece[i];
     resize(width, height);
@@ -193,20 +208,18 @@ void SumiUniverse::destroyTargets() {
     glDeleteTextures(1, &sceneTex_);
     glDeleteFramebuffers(1, &paperFbo_);
     glDeleteTextures(1, &paperTex_);
-    glDeleteFramebuffers(1, &textFbo_);
-    glDeleteTextures(1, &textTex_);
     sceneFbo_ = 0;
 }
 
 SumiUniverse::~SumiUniverse() {
     destroyTargets();
-    for (GLuint p : {progPaper_, progBg_, progSprite_, progPost_, progText_, progTextInk_}) glDeleteProgram(p);
+    for (GLuint p : {progPaper_, progBg_, progSprite_, progPost_, progPanel_}) glDeleteProgram(p);
     glDeleteVertexArrays(1, &emptyVao_);
     glDeleteVertexArrays(1, &spriteVao_);
-    glDeleteVertexArrays(1, &textVao_);
+    glDeleteVertexArrays(1, &panelVao_);
     glDeleteBuffers(1, &quadVbo_);
     glDeleteBuffers(1, &spriteVbo_);
-    glDeleteBuffers(1, &textVbo_);
+    glDeleteBuffers(1, &panelVbo_);
 }
 
 void SumiUniverse::createTargets() {
@@ -224,10 +237,6 @@ void SumiUniverse::createTargets() {
     glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
     makeTex(sceneTex_, width_, height_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneTex_, 0);
-    glGenFramebuffers(1, &textFbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, textFbo_);
-    makeTex(textTex_, width_, height_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textTex_, 0);
     glGenFramebuffers(1, &paperFbo_);
     glBindFramebuffer(GL_FRAMEBUFFER, paperFbo_);
     makeTex(paperTex_, width_, height_);
@@ -960,101 +969,145 @@ void SumiUniverse::collectBoard(const Game& g, const MusicState&, std::vector<Sp
 
 // ---------------------------------------------------------------- text
 
-// SUMI's typography for each kind of HUD line: airy letter spacing, quieter labels, the level's name after the
-// universe's (the bitmap font has no middle dot: a dash).
+// SUMI's letters: stb_easy_font's little bitmap font (its letters are rows and columns of square pixels), a font
+// of the host's text engine here; ten of its pixels to the em, its capitals seven tall. It has ASCII only: a middle
+// dot of its own, accented letters without their accents.
 namespace {
-struct Styled { HudText t; float spacing; };
-Styled style(const HudText& in, int level) {
-    Styled s{in, 0.5f};
-    HudText& t = s.t;
-    for (size_t i; (i = t.text.find("\xC2\xB7")) != std::string::npos;) t.text.replace(i, 2, "-");
-    switch (in.role) {
-    case HUD_TITLE: s.spacing = 1.f; t.scale *= 0.91f; t.alpha = std::min(0.9f, t.alpha * 1.45f); break;
-    case HUD_INFO: s.spacing = 1.2f; t.scale *= 0.93f; t.alpha = std::min(1.f, t.alpha * 1.1f); break;
-    case HUD_SECTION: s.spacing = 1.5f; t.scale *= 1.077f; t.alpha = std::min(1.f, t.alpha * 1.43f); break;
-    case HUD_UNIVERSE:
-        s.spacing = 1.5f;
-        t.alpha = std::min(1.f, t.alpha * 1.2f);
-        if (level >= 0) t.text += std::string("   ") + LEVEL_WORDS[std::min(level, 2)];
-        break;
-    case HUD_LABEL: s.spacing = 2.f; t.scale *= 0.875f; t.alpha *= 0.8f; break;
-    case HUD_VALUE: s.spacing = 1.f; t.alpha *= 0.98f; break;
-    default: break;
+constexpr float EASY_EM = 10.f;
+
+float easyWidth(const std::string& t, float spacing) {
+    std::string s = asciiFold(t);
+    stb_easy_font_spacing(spacing);
+    const float w = (float)stb_easy_font_width((char*)s.c_str());
+    stb_easy_font_spacing(0.f);
+    return w;
+}
+
+bool easyGlyph(uint32_t cp, float px, text::Bitmap& out) {
+    std::vector<float> rects; // x0, y0, x1, y1 in the font's pixels, y down from the cap line
+    float adv = 0;
+    if (cp == 0xB7) { // the middle dot
+        rects = {1, 3, 2, 4};
+        adv = 3;
+    } else {
+        if (cp >= 128) {
+            std::string u;
+            if (cp < 0x800) { u += (char)(0xC0 | (cp >> 6)); u += (char)(0x80 | (cp & 0x3F)); }
+            else { u += (char)(0xE0 | (cp >> 12)); u += (char)(0x80 | ((cp >> 6) & 0x3F)); u += (char)(0x80 | (cp & 0x3F)); }
+            const std::string f = asciiFold(u);
+            if (f.size() != 1) return false;
+            cp = (unsigned char)f[0];
+        }
+        if (cp < 32 || cp > 126) return false;
+        char s[2] = {(char)cp, 0};
+        static char buf[64 * 64];
+        stb_easy_font_spacing(0.f);
+        const int n = stb_easy_font_print(0, 0, s, nullptr, buf, sizeof(buf));
+        for (int q = 0; q < n; q++) {
+            const float* v = (const float*)(buf + q * 64);
+            rects.insert(rects.end(), {v[0], v[1], v[8], v[9]}); // corners 0 and 2
+        }
+        adv = (float)stb_easy_font_width(s);
     }
-    return s;
+    const float k = px / EASY_EM;
+    out.adv = adv * k;
+    if (rects.empty()) return true;
+    float bx0 = 1e9f, by0 = 1e9f, bx1 = -1e9f, by1 = -1e9f;
+    for (size_t i = 0; i < rects.size(); i += 4) {
+        bx0 = std::min(bx0, rects[i]); by0 = std::min(by0, rects[i + 1]);
+        bx1 = std::max(bx1, rects[i + 2]); by1 = std::max(by1, rects[i + 3]);
+    }
+    out.w = (int)std::ceil((bx1 - bx0) * k);
+    out.h = (int)std::ceil((by1 - by0) * k);
+    out.ox = bx0 * k;
+    out.oy = (by0 - 7.f) * k; // (its baseline seven pixels under the cap line)
+    out.cov.assign((size_t)out.w * out.h, 0);
+    for (int y = 0; y < out.h; y++)
+        for (int x = 0; x < out.w; x++) {
+            // the pixel's area under the font's squares
+            const float px0 = bx0 + x / k, py0 = by0 + y / k, px1 = px0 + 1.f / k, py1 = py0 + 1.f / k;
+            float a = 0;
+            for (size_t i = 0; i < rects.size(); i += 4) {
+                const float ox = std::min(px1, rects[i + 2]) - std::max(px0, rects[i]);
+                const float oy = std::min(py1, rects[i + 3]) - std::max(py0, rects[i + 1]);
+                if (ox > 0 && oy > 0) a += ox * oy * k * k;
+            }
+            out.cov[(size_t)y * out.w + x] = (unsigned char)std::lround(std::min(a, 1.f) * 255.f);
+        }
+    return true;
+}
+
+text::Font* easyFont() { return text::customFont("sumi:stb_easy_font", 0.7f, 0.3f, easyGlyph); }
+
+vec3 negativeOf(const vec3& c, const vec3& lacquer, const vec3& ivory) {
+    // (POST_FS's negative: lightness reversed, the pigments' hue kept)
+    const float Y = c.x * 0.299f + c.y * 0.587f + c.z * 0.114f;
+    const float t = std::pow(saturate((0.94f - Y) / 0.84f), 1.15f);
+    const vec3 base = lerp(lacquer, ivory, t);
+    return vec3(saturate(base.x + (c.x - Y) * 0.85f), saturate(base.y + (c.y - Y) * 0.85f), saturate(base.z + (c.z - Y) * 0.85f));
 }
 } // namespace
 
-void SumiUniverse::drawText(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    glUseProgram(progText_);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    static char quadBuf[200000];
-    // Panels (refall-scene's menu): plain paint, normal blending.
+// SUMI's typography for each kind of HUD line: airy letter spacing (in the font's pixels), quieter labels, the
+// level's name after the universe's. The letters are ink on the paper (multiplied in, bleeding at their edges);
+// where the print is a negative (a lacquer variant, slow motion's front once it has passed them) they are its light
+// ink, and the bridge turns them to its ink.
+void SumiUniverse::hudLine(const HudText& h, text::Line& out) {
+    std::string t = h.text;
+    float scale = h.scale, spacing = 0.5f, alpha = h.alpha;
+    switch (h.role) {
+    case HUD_TITLE: spacing = 1.f; scale *= 0.91f; alpha = std::min(0.9f, alpha * 1.45f); break;
+    case HUD_INFO: spacing = 1.2f; scale *= 0.93f; alpha = std::min(1.f, alpha * 1.1f); break;
+    case HUD_SECTION: spacing = 1.5f; scale *= 1.077f; alpha = std::min(1.f, alpha * 1.43f); break;
+    case HUD_UNIVERSE:
+        spacing = 1.5f;
+        alpha = std::min(1.f, alpha * 1.2f);
+        if (levelWord_) t += std::string("   ") + LEVEL_WORDS[std::min(std::max(level_, 0), 2)];
+        break;
+    case HUD_LABEL: spacing = 2.f; scale *= 0.875f; alpha *= 0.8f; break;
+    case HUD_VALUE: spacing = 1.f; alpha *= 0.98f; break;
+    default: break;
+    }
+    const vec3 ink = h.accent ? verm_ * 0.85f : lerp(inkC_, paperCol_, 0.06f);
+    // how far the print is turned to its negative where the line is (slow motion's front sweeps from the well)
+    float inv = inverted_ ? 1.f : 0.f;
+    if (invT_ < 0.9f) {
+        const float k = saturate(invT_ / 0.9f), front = 1.9f * (1.f - (1.f - k) * (1.f - k));
+        const vec2 c = project(vec3(0, 0, 0));
+        const float lx = h.x < 0 ? width_ + h.x : h.x;
+        const float dx = (lx - c.x) / height_, dy = (h.y - c.y) / height_;
+        const float m = smoothstepf(front, front - 0.06f, std::sqrt(dx * dx + dy * dy));
+        inv = inverted_ ? m : 1.f - m;
+    }
+    inv = std::fabs(neg_ - inv);
+    vec3 col = ink;
+    out.blend = text::BLEND_MULTIPLY;
+    if (inv > 0.001f || bridge_.amount > 0.001f) {
+        // over the print: the ink as it lies on the paper, in the negative as far as the print is
+        const vec3 onPaper = paperCol_ * ink;
+        col = lerp(onPaper, negativeOf(onPaper, lacquer_, ivory_), inv);
+        col = lerp(col, ugl::toSrgb(bridge_.ink), saturate(bridge_.amount));
+        out.blend = text::BLEND_OVER;
+    }
+    out.add(t, easyFont(), scale * EASY_EM, col, spacing / EASY_EM, saturate(alpha) * fade_);
+    out.lettering = &bleed_;
+}
+
+// Panels (refall-scene's menu): plain paint, normal blending.
+void SumiUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    glUseProgram(progPanel_);
+    set2f(progPanel_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(panelVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, panelVbo_);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (const HudRect& r : panels) {
         const float q[12] = {r.x, r.y, r.x + r.w, r.y, r.x + r.w, r.y + r.h, r.x, r.y, r.x + r.w, r.y + r.h, r.x, r.y + r.h};
         glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STREAM_DRAW);
         vec3 c = r.custom ? r.color : r.accent ? verm_ : paperCol_ * 1.04f;
-        glUniform4f(U(progText_, "uColor"), c.x, c.y, c.z, r.alpha);
+        glUniform4f(U(progPanel_, "uColor"), c.x, c.y, c.z, r.alpha);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
-    // Text is ink too: its coverage goes to its own buffer, then it is inked onto the paper (multiplicative).
-    glBindFramebuffer(GL_FRAMEBUFFER, textFbo_);
-    glClearColor(0, 0, 0, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBlendEquation(GL_MAX);
-    glBlendFunc(GL_ONE, GL_ONE);
-    bool any = false;
-    for (const HudText& raw : hud) {
-        if (raw.alpha <= 0.01f || raw.text.empty()) continue;
-        Styled st = style(raw, level_);
-        if (raw.role == HUD_UNIVERSE) { // the level's name only where it clears the well
-            stb_easy_font_spacing(st.spacing);
-            const float right = raw.x + stb_easy_font_width((char*)st.t.text.c_str()) * raw.scale;
-            if (right > layout::boardRect(width_, height_).x0 - 24.f * raw.scale) st = style(raw, -1);
-        }
-        const HudText& h = st.t;
-        std::vector<char> txt(h.text.begin(), h.text.end());
-        txt.push_back(0);
-        unsigned char col[4] = {255, 255, 255, 255};
-        stb_easy_font_spacing(st.spacing);
-        int nq = stb_easy_font_print(0, 0, txt.data(), col, quadBuf, sizeof(quadBuf));
-        float width = (float)stb_easy_font_width(txt.data()) * h.scale;
-        float ox = h.x;
-        if (h.center) ox = h.x - width * 0.5f;
-        else if (h.x < 0) ox = width_ + h.x - width;
-        std::vector<float> tri;
-        tri.reserve(nq * 12);
-        for (int q = 0; q < nq; q++) {
-            float* v = (float*)(quadBuf + q * 64);
-            float px[4], py[4];
-            for (int k = 0; k < 4; k++) {
-                px[k] = std::round(ox + v[k * 4] * h.scale);
-                py[k] = std::round(h.y + v[k * 4 + 1] * h.scale);
-            }
-            const int order[6] = {0, 1, 2, 0, 2, 3};
-            for (int o : order) { tri.push_back(px[o]); tri.push_back(py[o]); }
-        }
-        glBufferData(GL_ARRAY_BUFFER, tri.size() * sizeof(float), tri.data(), GL_STREAM_DRAW);
-        glUniform4f(U(progText_, "uColor"), h.accent ? 0.f : 1.f, h.accent ? 1.f : 0.f, saturate(h.alpha), h.scale / 8.f);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(tri.size() / 2));
-        any = true;
-    }
-    glBlendEquation(GL_FUNC_ADD);
-    glBindFramebuffer(GL_FRAMEBUFFER, sceneFbo_);
-    if (!any) return;
-    glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
-    glUseProgram(progTextInk_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textTex_);
-    set1i(progTextInk_, "uText", 0);
-    set2f(progTextInk_, "uRes", (float)width_, (float)height_);
-    set3f(progTextInk_, "uInkCol", lerp(inkC_, paperCol_, 0.06f));
-    set3f(progTextInk_, "uAccCol", verm_ * 0.85f);
-    glBindVertexArray(emptyVao_);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
 }
 
 // ---------------------------------------------------------------- frame
@@ -1199,8 +1252,16 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     glBufferData(GL_ARRAY_BUFFER, sprites.size() * sizeof(Sprite), sprites.data(), GL_STREAM_DRAW);
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites.size());
 
-    drawText(f.hud, f.panels);
+    drawPanels(f.panels);
     glDisable(GL_BLEND);
+    // whether the level's name clears the well after the universe's (decided on the corner line itself, so that
+    // the title card's big line says the same)
+    fade_ = saturate(f.fade);
+    for (const HudText& h : f.hud)
+        if (h.role == HUD_UNIVERSE && h.scale > 0.f) {
+            const std::string t = h.text + "   " + LEVEL_WORDS[std::min(std::max(level_, 0), 2)];
+            levelWord_ = h.x + easyWidth(t, 1.5f) * h.scale <= layout::boardRect(width_, height_).x0 - 24.f * h.scale;
+        }
 
     // ---- Print: vignette, grain, dusk when paused, ink negative in slow motion.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);

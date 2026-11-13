@@ -519,44 +519,16 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- text (absorbance into the scene)
-inline const char* TEXT_VS = R"(#version 330 core
+// ---------------------------------------------------------------- panels (refall-scene's menu): plain paint
+inline const char* PANEL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 uniform vec2 uRes;
 void main() { gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0); }
 )";
-inline const char* TEXT_FS = R"(#version 330 core
+inline const char* PANEL_FS = R"(#version 330 core
 out vec4 fragColor;
 uniform vec4 uColor;
 void main() { fragColor = uColor; }
-)";
-
-// Text coverage (R ink, G accent, B alpha, A scale / 8) inked onto the paper: a small blur and a noisy threshold
-// round the bitmap font's corners into brushed letterforms, with a faint soak around them.
-inline const char* TEXT_INK_FS = R"(#version 330 core
-in vec2 vUV;
-out vec4 fragColor;
-uniform sampler2D uText;
-uniform vec2 uRes;
-uniform vec3 uInkCol, uAccCol;
-void main() {
-    vec2 px = 1.0 / uRes;
-    vec4 m = vec4(0.0);
-    for (int j = -1; j <= 1; j++)
-        for (int i = -1; i <= 1; i++) m = max(m, texture(uText, vUV + vec2(i, j) * px * 2.0));
-    if (m.b <= 0.0) discard;
-    float r = max(0.6, m.a * 8.0 * 0.32);
-    vec2 cov = vec2(0.0);
-    for (int j = -1; j <= 1; j++)
-        for (int i = -1; i <= 1; i++) {
-            float w = (i == 0 ? 2.0 : 1.0) * (j == 0 ? 2.0 : 1.0) / 16.0;
-            cov += w * texture(uText, vUV + vec2(i, j) * px * r).rg;
-        }
-    float n = (vnoise(gl_FragCoord.xy * 0.55) - 0.5) * 0.14 + (hash12(gl_FragCoord.xy) - 0.5) * 0.06;
-    vec2 e = smoothstep(vec2(0.30), vec2(0.56), cov + n) + 0.09 * cov;
-    vec3 ab = m.b * (min(e.x, 1.0) * (1.0 - uInkCol) + min(e.y, 1.0) * (1.0 - uAccCol));
-    fragColor = vec4(clamp(ab, 0.0, 1.0), 1.0);
-}
 )";
 
 } // namespace sumi_shaders
