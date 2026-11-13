@@ -327,6 +327,7 @@ private:
     int quadPoints_ = 0;
     bool quadB2B_ = false;
     bool paused_ = false, wantSkip_ = false, showHelp_ = true, quit_ = false;
+    int pauseSel_ = 0; // the pause menu's choice: 0 continue, 1 quit (to the menu)
     double songTime_ = 0, simSongTime_ = 0;
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
     // The song reached its end: by the audio's clock when playing, by the simulated song time offline (a slow
@@ -956,10 +957,16 @@ std::vector<HudText> App::buildHud(float dt) {
             hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
     }
-    if (paused_) {
-        hud.push_back({"PAUSED", w * 0.5f, h * 0.5f - 40 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
-        hud.push_back({input_.active() == Input::Gamepad ? "START TO RESUME" : menuEnabled_ ? "ESC TO RESUME    Q TO MENU" : "ESC TO RESUME    Q TO QUIT",
-                       w * 0.5f, h * 0.5f + 20 * s, 1.8f * s, 0.7f, false, true, HUD_DIALOG});
+    // Test hook: ZEN_TEST_PAUSE=0|1 shows the pause menu (that choice lit) without pausing, e.g. in a review shot.
+    static const int testPause = std::getenv("ZEN_TEST_PAUSE") ? std::atoi(std::getenv("ZEN_TEST_PAUSE")) : -1;
+    if (testPause >= 0) pauseSel_ = testPause;
+    if (paused_ || testPause >= 0) {
+        hud.push_back({"PAUSED", w * 0.5f, h * 0.5f - 60 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
+        // the menu: the choice lit in the accent, the other dimmed
+        const char* items[2] = {"CONTINUE", menuEnabled_ ? "MENU" : "QUIT"};
+        for (int i = 0; i < 2; i++)
+            hud.push_back({items[i], w * 0.5f, h * 0.5f + (20.f + 44.f * i) * s, 2.4f * s, pauseSel_ == i ? 0.95f : 0.4f,
+                           pauseSel_ == i, true, HUD_DIALOG});
     }
     return hud;
 }
@@ -1256,11 +1263,24 @@ int App::run() {
         // ---- Global controls.
         // Until the first song is ready the game waits, paused (no play without music).
         const bool waiting = !track_;
-        if (input_.pressed(A_PAUSE) && !game_.over() && !waiting) {
-            paused_ = !paused_;
-            audio_.setPaused(paused_ || songHeld_);
+        // Pause: a menu (continue / quit), with the arrows or the gamepad; Esc / Start / B resume, Q quits at once.
+        bool quitNow = false;
+        if (paused_) {
+            if (input_.pressed(A_UI_UP) || input_.pressed(A_UI_DOWN)) pauseSel_ = 1 - pauseSel_;
+            if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK)) {
+                paused_ = false;
+            } else if (input_.pressed(A_UI_OK)) {
+                if (pauseSel_ == 0) paused_ = false;
+                else quitNow = true;
+            }
+            if (input_.pressed(A_QUIT)) quitNow = true;
+            if (!paused_) audio_.setPaused(songHeld_);
+        } else if (input_.pressed(A_PAUSE) && !game_.over() && !waiting) {
+            paused_ = true;
+            pauseSel_ = 0;
+            audio_.setPaused(true);
         }
-        if (input_.pressed(A_QUIT) && paused_) {
+        if (quitNow) {
             if (menuEnabled_) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
             quit_ = true;
         }
