@@ -208,6 +208,23 @@ private:
     void toggleFullscreen();
     std::vector<HudText> buildHud(float dt);
     void updateBreak(float dt, const std::vector<HudText>& hud);
+    // The mouse pointer hides once it has stayed still a few seconds, and comes back as soon as it moves.
+    double cursorX_ = -1, cursorY_ = -1;
+    float cursorIdle_ = 0;
+    bool cursorHidden_ = false;
+    void hideIdleCursor(float dt) {
+        double x, y;
+        glfwGetCursorPos(win_, &x, &y);
+        if (x != cursorX_ || y != cursorY_) {
+            cursorX_ = x;
+            cursorY_ = y;
+            cursorIdle_ = 0;
+            if (cursorHidden_) { glfwSetInputMode(win_, GLFW_CURSOR, GLFW_CURSOR_NORMAL); cursorHidden_ = false; }
+        } else if ((cursorIdle_ += dt) > 2.5f && !cursorHidden_) {
+            glfwSetInputMode(win_, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+            cursorHidden_ = true;
+        }
+    }
 
     // ---- Modes: the menu, free play, a campaign run.
     enum Mode { MODE_MENU, MODE_FREE, MODE_CAMPAIGN } mode_ = MODE_FREE;
@@ -1169,7 +1186,10 @@ int App::run() {
         float dt = shotMode ? 1.f / 60.f : (float)std::min(0.1, now - last);
         last = now;
         runTime_ += dt;
-        if (win_) glfwPollEvents();
+        if (win_) {
+            glfwPollEvents();
+            hideIdleCursor(dt);
+        }
         if (!shotMode && win_) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
         if (testPlay()) {
             static const auto keys = testList("ZEN_TEST_KEYS"), shots = testList("ZEN_TEST_SHOTS");
@@ -1942,7 +1962,8 @@ void App::campaignEnd() {
                       next ? "   NEXT STAGE UNLOCKED" : "   THE VOYAGE IS COMPLETE");
         std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)\n", stage + 1, difficultyName(run_.diff),
                     game_.score(), game_.lines());
-        menu_.setCursor(next ? stage + 1 : stage, 0);
+        menu_.setCursor(stage, 0);
+        menu_.celebrateClear(stage, next ? stage + 1 : -1);
         std::snprintf(sub, sizeof(sub), "STAGE %d CLEARED   /   %s", stage + 1, difficultyName(run_.diff));
         toDebrief({true, "CONGRATULATIONS", sub, next ? "NEXT STAGE UNLOCKED" : "THE VOYAGE IS COMPLETE", game_.score(), game_.lines()});
     } else {
@@ -2027,6 +2048,12 @@ int App::runMenuShot() {
         else std::snprintf(b, sizeof(b), "STAGE 3 CLEARED   /   NORMAL");
         menu_.openDebrief(sc == "debrief-over" ? Menu::Debrief{false, "GAME OVER", b, "", 27340, 96}
                                                : Menu::Debrief{true, "CONGRATULATIONS", b, "NEXT STAGE UNLOCKED", 48710, 163});
+        if (sc == "debrief-clear" && campaign_.size() > 3) { // then back on the Voyage: stage 3 turns cleared
+            progress_.setCleared(2, DIFF_NORMAL, 48710, 163);
+            menu_.setCampaignDifficulty(DIFF_NORMAL);
+            menu_.setCursor(2, 0);
+            menu_.celebrateClear(2, 3);
+        }
     }
     if (!opt_.menuHover.empty()) {
         int st = 1, sg = 1;
