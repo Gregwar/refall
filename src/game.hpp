@@ -100,13 +100,16 @@ public:
         return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, 1.f) : (level() - 1) / float(MAX_LEVEL - 1);
     }
     // The fall's speed: as difficulty(), but a fixed level goes on past the plateau, up to MAX_VELOCITY (the Voyage's
-    // fastest songs: x10 at level 20, x19.5 at 40, under the gravity's cap in rows per second).
-    static constexpr float MAX_VELOCITY = 40.f;
+    // fastest songs: x10 at level 20, x28.9 at 60, under the gravity's cap in rows per second).
+    static constexpr float MAX_VELOCITY = 60.f;
     float speedDifficulty() const {
         return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1))
                                  : difficulty();
     }
     void setFixedLevel(float level) { fixedLevel_ = level; }
+    // 20G: the app drops each piece to the stack at once; the lock delay is then a little longer
+    void setTwentyG(bool on) { twentyG_ = on; }
+    bool twentyG() const { return twentyG_; }
     float fixedLevel() const { return fixedLevel_; }
     int best() const { return best_; }
     int combo() const { return combo_; }
@@ -136,7 +139,10 @@ public:
 
 private:
     // Lock delay shortens with the level (0.55 s at level 1, 0.35 s at the plateau, level 20).
-    float lockDelay() const { return 0.55f - 0.2f * difficulty(); }
+    // 20G (the pieces fall to the stack at once, see setTwentyG): the lock delay is a little longer, the time to slide
+    // and turn a piece along the stack.
+    float lockDelay() const { return twentyG_ ? 0.5f : 0.55f - 0.2f * difficulty(); }
+
     static constexpr int MAX_RESETS = 15;
 
     void spawn(int type);
@@ -156,6 +162,7 @@ private:
     float lockTimer_ = 0;
     int lockResets_ = 0;
     bool grounded_ = false;
+    bool twentyG_ = false;
     float spawnDelay_ = 0;
     float rowOffset_[H] = {};
     float fallHold_ = 0;
