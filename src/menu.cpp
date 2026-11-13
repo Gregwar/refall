@@ -75,15 +75,16 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
         vStep_ = 0;
         plMsg_.clear();
         vDelete_.clear();
-        vCleared_.clear();
+        vProg_.clear();
         if (voyages_) {
-            vCleared_.push_back(voyages_->cleared(""));
-            for (const CustomVoyage& v : voyages_->list()) vCleared_.push_back(voyages_->cleared(v.id));
+            vProg_.push_back(voyages_->progress(""));
+            for (const CustomVoyage& v : voyages_->list()) vProg_.push_back(voyages_->progress(v.id));
             vSel_ = 0; // the voyage open (the main one first)
             for (int i = 0; i < (int)voyages_->list().size(); i++)
                 if (voyages_->list()[i].id == voyageId_) vSel_ = i + 1;
         }
         aV_ = (float)vSel_;
+        aVRow_ = (float)(vSel_ / VOYAGE_COLS);
     }
 }
 
@@ -240,6 +241,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aFreeRow_ += (freeRow_ - aFreeRow_) * k;
         aPl_ += (plSel_ - aPl_) * k;
         aV_ += (vSel_ - aV_) * k;
+        aVRow_ += ((float)(vSel_ / VOYAGE_COLS) - aVRow_) * k;
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
     enterT_ += dt;
@@ -477,7 +479,13 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         const auto& vs = voyages_->list();
         const int nCards = (int)vs.size() + 2; // the main voyage first, then the player's, then "add a playlist"
         const int was = vSel_;
-        vSel_ = std::clamp(vSel_ + dx + dy, 0, nCards - 1);
+        // a grid: left / right one card, up / down one row
+        if (dx) vSel_ = std::clamp(vSel_ + dx, 0, nCards - 1);
+        if (dy) {
+            const int to = vSel_ + dy * VOYAGE_COLS;
+            if (to >= 0 && to < nCards) vSel_ = to;
+            else if (dy > 0 && vSel_ / VOYAGE_COLS < (nCards - 1) / VOYAGE_COLS) vSel_ = nCards - 1; // a shorter last row
+        }
         if (vSel_ != was) { vDelete_.clear(); plMsg_.clear(); }
         if (in.pressed(A_UI_DELETE) && vSel_ >= 1 && vSel_ <= (int)vs.size()) {
             const CustomVoyage v = vs[vSel_ - 1];
@@ -489,7 +497,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 if (voyageId_ == v.id) selectVoyage("");
                 voyageStage_.erase(v.id);
                 voyages_->remove(v.id);
-                if (vSel_ < (int)vCleared_.size()) vCleared_.erase(vCleared_.begin() + vSel_);
+                if (vSel_ < (int)vProg_.size()) vProg_.erase(vProg_.begin() + vSel_);
                 vDelete_.clear();
                 plMsg_ = "DELETED " + asciiFold(v.title);
                 plMsgBad_ = false;

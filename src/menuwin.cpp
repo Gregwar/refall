@@ -717,10 +717,11 @@ void Worlds::textField(float fx, float fy, float fw, float fh, const std::string
         p.rrect(fx + 26 * u + tw, fy + 14 * u, 2.5f * u, 34 * u, 1 * u, hex(0xffffff, 0.9f));
 }
 
-// The voyages, as free play's playlists: glass cards in a row, the game's own first (featured: larger, a gold rim),
-// then the ones made from the player's playlists (the last played first, each with its own hue), then "add a
-// playlist". Each card's small rosette has a kite per stage, the cleared ones lit. Adding one: a panel under the cards
-// for the playlist's link, then the voyage's name.
+// The voyages, as free play's playlists: glass cards of one size in a grid of two columns (scrolling to the focused
+// card's row, the rows beyond the three in view fading out), the game's own first (featured: a gold rim), then the ones
+// made from the player's playlists (the last played first, each with its own hue), then "add a playlist". Each card
+// has a small rosette, a kite per stage (the cleared ones lit), and how far the voyage went (its songs beaten, in %).
+// Adding one: a panel over the lower rows for the playlist's link, then the voyage's name.
 void Worlds::kalVoyages() {
     std::string cur, next;
     float mix;
@@ -730,27 +731,24 @@ void Worlds::kalVoyages() {
     p.text(F::JOSEFIN_LIGHT, "VOYAGE", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     if (!m.voyages_) return;
     const auto& vs = m.voyages_->list();
-    const int nc = (int)vs.size() + 2;
+    const int nc = (int)vs.size() + 2, cols = Menu::VOYAGE_COLS, rows = (nc + cols - 1) / cols;
     const bool making = m.vStep_ > 0;
-    const float addW = 122 * u + std::max(p.width(F::JOSEFIN, "ADD A", 17 * u, 0.3f), p.width(F::JOSEFIN, "PLAYLIST", 17 * u, 0.3f)) + 30 * u;
-    auto cardW = [&](int i) { return i == 0 ? 520.f * u : i == nc - 1 ? addW : 440.f * u; };
-    auto cardH = [&](int i) { return (i == 0 ? 210.f : 170.f) * u; };
-    const float gap = 24 * u;
-    float total = 0, selX = 0;
-    for (int i = 0; i < nc; i++) { selX += near1(m.aV_, i) * (total + cardW(i) / 2); total += cardW(i) + gap; }
-    total -= gap;
-    const float avail = 1680 * u;
-    float x = total <= avail ? X(960) - total / 2 : X(960) - std::clamp(selX, avail / 2, total - avail / 2);
-    auto hueCol = [](float h, float s, float v) {
-        auto f = [&](float n) { const float k2 = std::fmod(n + h * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
+    constexpr float CW = 660, CH = 190, GAP = 40, STEP = CH + 44, TOP = 290;
+    constexpr int SHOWN = 3; // rows in view
+    const float scroll = std::clamp(m.aVRow_ - 1.f, 0.f, (float)std::max(0, rows - SHOWN));
+    const float x0 = 960 - (cols * CW + (cols - 1) * GAP) / 2;
+    const float w = CW * u, h = CH * u;
+    auto hueCol = [](float hh, float s, float v) {
+        auto f = [&](float n) { const float k2 = std::fmod(n + hh * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
         return Col{f(5), f(3), f(1), 1.f};
     };
-    const float midY = 420.f;
     for (int i = 0; i < nc; i++) {
-        const float w = cardW(i), h = cardH(i);
+        const float rp = (float)(i / cols) - scroll; // the row's place in view (0 .. SHOWN - 1)
+        const float fade = std::clamp(1.f + rp * 1.6f, 0.f, 1.f) * std::clamp((SHOWN - rp) * 1.6f, 0.f, 1.f);
+        if (fade <= 0.01f) continue;
+        p.setFade(fade);
         const float g = sstep(near1(m.aV_, i)) * (making ? 0.4f : 1.f);
-        const float y = Y(midY) - h / 2 - 10 * u * g;
-        if (x + w < X(0) || x > X(1920)) { x += w + gap; continue; }
+        const float x = X(x0 + (i % cols) * (CW + GAP)), y = Y(TOP + rp * STEP) - 10 * u * g;
         const bool featured = i == 0, add = i == nc - 1;
         const CustomVoyage* v = !featured && !add ? &vs[i - 1] : nullptr;
         uint32_t seed = 2166136261u;
@@ -766,63 +764,69 @@ void Worlds::kalVoyages() {
         p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
         p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
                     g > 0.5f ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.95f) : withA(hue, 0.55f));
-        const float mx = x + (featured ? 105.f : 85.f) * u, my = y + h / 2, mr = (featured ? 74.f : 58.f) * u;
+        const float mx = x + 100 * u, my = y + h / 2, mr = 70 * u;
         if (add) {
-            p.ring(mx - 15 * u, my, 30 * u, 2 * u, hex(0xffffff, 0.5f + 0.4f * g));
-            p.line(mx - 28 * u, my, mx - 2 * u, my, 2.4f * u, hex(0xffffff, 0.7f + 0.3f * g));
-            p.line(mx - 15 * u, my - 13 * u, mx - 15 * u, my + 13 * u, 2.4f * u, hex(0xffffff, 0.7f + 0.3f * g));
-            p.text(F::JOSEFIN, "ADD A", x + 122 * u, my - 4 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
-            p.text(F::JOSEFIN, "PLAYLIST", x + 122 * u, my + 20 * u, 17 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
-            x += w + gap;
+            p.ring(mx, my, 40 * u, 2 * u, hex(0xffffff, 0.5f + 0.4f * g));
+            p.line(mx - 17 * u, my, mx + 17 * u, my, 2.6f * u, hex(0xffffff, 0.7f + 0.3f * g));
+            p.line(mx, my - 17 * u, mx, my + 17 * u, 2.6f * u, hex(0xffffff, 0.7f + 0.3f * g));
+            p.text(F::JOSEFIN, "ADD A PLAYLIST", mx + mr + 28 * u, my + 8 * u, 22 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.3f);
             continue;
         }
         const Campaign& mc = m.voyages_->main();
-        int songs = 0;
-        if (featured) for (const CampaignStage& st : mc.stages()) songs += (int)st.songs.size();
         const int st = std::max(1, featured ? mc.size() : v->stages);
-        if (!featured) songs = v->songs;
-        const int cl = i < (int)m.vCleared_.size() ? m.vCleared_[i] : 0;
+        const VoyageProgress pr = i < (int)m.vProg_.size() ? m.vProg_[i] : VoyageProgress{};
+        int songs = pr.songs;
+        if (!songs && featured) for (const CampaignStage& s2 : mc.stages()) songs += (int)s2.songs.size();
+        if (!songs && v) songs = v->songs;
         // the rosette: a kite per stage in the stages' hues, the cleared ones lit
         const float rot = t * (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) + (seed % 100) * 0.0628f;
         for (int k = 0; k < st; k++) {
             unsigned char sc[3];
             m.stageColor(k, sc);
             const Col c = rgb8(sc);
-            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < cl ? c : mixc(c, hex(0x14141c), 0.55f),
+            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < pr.cleared ? c : mixc(c, hex(0x14141c), 0.55f),
                  0.92f, true, hex(0x08080c, 0.9f));
         }
         p.circle(mx, my, mr * 0.22f, hex(0x0a0a12));
-        p.ring(mx, my, mr * 0.22f, 1.5f * u, featured || cl >= st ? hex(0xe8c06a) : withA(hue, 0.9f));
-        // the name, its songs and stages, how far it went
-        const float tx = mx + mr + 28 * u, tmax = x + w - tx - 18 * u;
+        p.ring(mx, my, mr * 0.22f, 1.5f * u, featured || pr.cleared >= st ? hex(0xe8c06a) : withA(hue, 0.9f));
+        // how far it went, large on the right
+        const int pc = pr.percent();
+        const float pw = p.text(F::JOSEFIN_LIGHT, std::to_string(pc) + "%", x + w - 36 * u, my + 16 * u, 46 * u,
+                                pc > 0 ? hex(0xffd27a, 0.95f) : hex(0xffffff, 0.35f), 1, 0.02f);
+        // the name, its songs and stages, its stages cleared
+        const float tx = mx + mr + 30 * u, tmax = x + w - 36 * u - pw - 24 * u - tx;
         std::string title = asciiFold(featured ? std::string(GAME_TITLE) : v->title);
-        const float ts = (featured ? 42.f : 25.f) * u;
+        const float ts = (featured ? 38.f : 28.f) * u;
         const F tf = featured ? F::JOSEFIN_LIGHT : F::JOSEFIN;
         while (title.size() > 3 && p.width(tf, title, ts, 0.04f) > tmax) title.pop_back();
-        float ty = my + ts * 0.2f;
-        if (featured) {
-            p.text(F::JOSEFIN, "FEATURED", tx, y + 48 * u, 14 * u, hex(0xe8c06a), -1, 0.45f);
-            ty = my + 12 * u;
-        }
-        p.text(tf, title, tx, ty - 12 * u, ts, hex(0xffffff, 0.8f + 0.2f * g), -1, 0.04f);
+        if (featured) p.text(F::JOSEFIN, "FEATURED", tx, my - 44 * u, 14 * u, hex(0xe8c06a), -1, 0.45f);
+        p.text(tf, title, tx, my + (featured ? 4.f : 0.f) * u, ts, hex(0xffffff, 0.8f + 0.2f * g), -1, 0.04f);
         char b[96];
         std::snprintf(b, sizeof(b), "%d SONGS  /  %d STAGES", songs, st);
-        p.text(F::JOSEFIN, b, tx, ty + (featured ? 26.f : 20.f) * u, 14 * u, withA(hue, 0.85f), -1, 0.3f);
-        std::snprintf(b, sizeof(b), "%d CLEARED", cl);
-        if (cl > 0) p.text(F::JOSEFIN, b, tx, ty + (featured ? 50.f : 42.f) * u, 14 * u, hex(0xffd27a, 0.9f), -1, 0.3f);
-        x += w + gap;
+        p.text(F::JOSEFIN, b, tx, my + 36 * u, 14 * u, withA(hue, 0.85f), -1, 0.3f);
+        if (pr.cleared > 0) {
+            std::snprintf(b, sizeof(b), "%d CLEARED", pr.cleared);
+            p.text(F::JOSEFIN, b, tx, my + 60 * u, 14 * u, hex(0xffd27a, 0.9f), -1, 0.3f);
+        }
+    }
+    p.setFade(1.f);
+    if (rows > SHOWN) { // where the view is in the list: a thin track on the right
+        const float tx = X(x0 + cols * CW + (cols - 1) * GAP + 34), ty = Y(TOP), th = (SHOWN * STEP - 44) * u;
+        p.rrect(tx - 2 * u, ty, 4 * u, th, 2 * u, hex(0xffffff, 0.15f));
+        const float kh = th * SHOWN / rows, ky = ty + (th - kh) * scroll / (float)(rows - SHOWN);
+        p.rrect(tx - 2 * u, ky, 4 * u, kh, 2 * u, hex(0xffffff, 0.7f));
     }
     if (making) {
-        p.rrect(X(120), Y(650), 1680 * u, 230 * u, 24 * u, hex(0x0c0c14, 0.78f));
+        p.rrect(X(120), Y(650), 1680 * u, 230 * u, 24 * u, hex(0x0c0c14, 0.92f));
         p.rrectLine(X(120), Y(650), 1680 * u, 230 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.4f));
         p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(160), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
         textField(X(160), Y(712), 1600 * u, 62 * u, m.editText_,
-                  m.vStep_ == 1 ? "Type or paste (Ctrl+V) a YouTube playlist link" : nullptr);
+                  m.vStep_ == 1 ? "Type or paste (Ctrl+V) a YouTube playlist link or ID" : nullptr);
     }
     if (!m.plMsg_.empty())
-        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(160) : X(960), Y(making ? 830 : 640), 16 * u,
+        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(160) : X(960), Y(making ? 830 : 1000), 16 * u,
                m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
     // only the keys a player wouldn't guess (paste, delete)
     const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
-    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1050), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }

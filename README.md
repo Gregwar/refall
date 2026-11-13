@@ -181,11 +181,12 @@ back on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences eve
 The file is found in the sources' `data/`, else next to the executable (installed builds ship it there). The menu plays
 no song previews.
 
-- **Voyage** first shows the voyages as free play shows its playlists: glass cards, the game's own first (**Refall**,
-  featured: larger, a gold rim), then the ones made from the player's playlists (the last played first), then
+- **Voyage** first shows the voyages as free play shows its playlists: glass cards of one size, two per row (the grid
+  scrolls to the focused row, three rows in view), the game's own first (**Refall**, featured: a gold rim), then the ones made from the player's playlists (the last played first), then
   **+ ADD A PLAYLIST**: paste a YouTube playlist link or a bare playlist ID (`PL...`), Enter reads it, then its name
   (the playlist's title to start with, editable), Enter registers the voyage and opens it. Each card has a small
-  rosette, a kite per stage, the cleared ones lit; Delete twice deletes a player's voyage with its progress. A voyage
+  rosette, a kite per stage, the cleared ones lit, and how far the voyage went (its songs beaten on any difficulty,
+  in %); Delete twice deletes a player's voyage with its progress. A voyage
   made from a playlist takes up to 60 of its songs (60 drawn at random, in the playlist's order, from a longer one) in
   stages of 4, each in a universe of the main campaign dealt at random (each once before any comes back, never twice in
   a stage) with a random variant, at the velocity the main campaign has at the same point of its journey: the same curve
