@@ -9,6 +9,7 @@
 #include <glad/gl.h>
 
 #include "layout.hpp"
+#include "text.hpp"
 #include "titlecard.hpp"
 #include "transitions.hpp"
 #include "ugl.hpp"
@@ -71,6 +72,7 @@ public:
         std::vector<HudText> cardHud;
         int cardId = 0;
         float cardShrink = 0, cardAlpha = 0;
+        float cardIn = 0; // the card's lines coming up (0 .. 1, held: a universe the host letters glides them home)
     };
     void setBreak(Break b) { brk_ = std::move(b); }
     const TitleCard& titleCard() const { return card_; }
@@ -118,6 +120,13 @@ private:
     Break brk_;
     TitleCard card_;
     GLuint mixProg_ = 0;
+    // ---- The HUD lettered by the host (Universe::hostText).
+    text::Engine text_;
+    // each line of `hud` as `u` styles it, with its box (pixels) where it is lettered
+    void hudLines(Universe& u, const std::vector<HudText>& hud, std::vector<text::Line>& lines, std::vector<vec4>& boxes);
+    // letters them (alpha x `weight`); `night` 0..1 turns them to white letters on the black (the effects fade)
+    void letter(Universe& u, const std::vector<HudText>& hud, float weight, double time, float night = 0.f);
+    void letterCard(Universe& u, double time);
     void renderBreak(const Frame& f);
     // ---- The title card captured from the universe's own HUD lettering (see Break::cardHud).
     struct CardLine {
