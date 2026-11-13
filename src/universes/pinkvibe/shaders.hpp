@@ -288,35 +288,6 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- lettering
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-// SDF letters: the fill over a wide feathered halo (they read over any band).
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uFill, uHalo;
-uniform float uAlpha, uHaloA;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.7;
-    float fill = smoothstep(0.5 - w, 0.5 + w, d);
-    float halo = smoothstep(0.1, 0.49, d) * uHaloA;
-    float a = max(fill, halo);
-    vec3 c = mix(uHalo, uFill, fill / max(a, 1e-4));
-    frag = vec4(c * a, a) * uAlpha;
-}
-)";
-
 inline const char* SOLID_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;

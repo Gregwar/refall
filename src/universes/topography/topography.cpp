@@ -30,9 +30,6 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/topography/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -197,18 +194,6 @@ void boxBlur(std::vector<float>& f, std::vector<float>& tmp, int w, int h, int r
     }
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
 constexpr float STACK_H = 5.5f;   // the plateau's height (contour intervals)
 constexpr float FOOTHILLS = 13.f;
 constexpr float WELL_FLOOR = 0.4f; // the well's terrace
@@ -226,7 +211,6 @@ bool TopographyUniverse::init(int width, int height) {
     progCell_ = ugl::program(shaders::CELL_VS, shaders::CELL_FS, "topography cell");
     progRiver_ = ugl::program(shaders::RIVER_VS, shaders::RIVER_FS, "topography river");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "topography shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "topography text");
     progPost_ = ugl::program(ugl::FULLSCREEN_VS, shaders::POST_FS, "topography post");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -265,14 +249,6 @@ bool TopographyUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     glGenTextures(1, &fieldTex_);
@@ -282,55 +258,10 @@ bool TopographyUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    buildFont(fontItalic_, FONT_ITALIC);
-    buildFont(fontRoman_, FONT_ROMAN);
     pal_ = paletteOf(0);
+    text_.init();
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void TopographyUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] topography font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void TopographyUniverse::resize(int width, int height) {
@@ -350,14 +281,10 @@ void TopographyUniverse::resize(int width, int height) {
 TopographyUniverse::~TopographyUniverse() {
     sceneT_.destroy();
     riverT_.destroy();
-    for (GLuint p : {progMap_, progRiver_, progCell_, progShape_, progText_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {riverVao_, cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, riverVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progMap_, progRiver_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {riverVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, riverVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (fieldTex_) glDeleteTextures(1, &fieldTex_);
-    for (Font* f : {&fontItalic_, &fontRoman_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -631,21 +558,18 @@ bool TopographyUniverse::placePeak(Peak& p) {
 }
 
 // The HUD's text and the previews, as boxes in pixels (padded): the map fades behind them.
-void TopographyUniverse::buildHudRects(const std::vector<HudText>& hud, bool bare) {
+void TopographyUniverse::buildHudRects(const Frame& f, const std::vector<HudText>& hud, bool bare) {
     hudRects_.clear();
     auto add = [&](float x0, float y0, float x1, float y1) {
         if (hudRects_.size() / 4 >= 40) return;
         hudRects_.insert(hudRects_.end(), {x0, y0, x1, y1});
     };
-    for (const HudText& h : hud) {
+    for (size_t i = 0; f.hudBoxes && i < hud.size() && i < f.hudBoxes->size(); i++) {
+        const HudText& h = hud[i];
         if (h.alpha <= 0.05f || h.text.empty() || h.role == HUD_DIALOG || h.role == HUD_HELP) continue;
-        const float base = h.scale * 12.f;
-        const bool spaced = h.role == HUD_LABEL || h.role == HUD_SECTION || h.role == HUD_TOAST;
-        const float size = base * (h.role == HUD_VALUE ? 1.05f : h.role == HUD_TITLE || h.role == HUD_UNIVERSE ? 1.25f : 0.95f);
-        float w = textWidth(fontRoman_, h.text, size, spaced ? base * 0.45f : base * 0.05f);
-        if (h.role == HUD_UNIVERSE) w *= 1.25f;
-        const float x0 = ugl::hudLeft(h, w, width_), pad = size * 0.35f;
-        add(x0 - pad, h.y - pad, x0 + w + pad, h.y + size * 1.1f + pad);
+        const vec4& r = (*f.hudBoxes)[i];
+        const float hh = r.w - r.y, pad = hh * 0.5f;
+        add(r.x - pad, r.y - pad, r.z + pad, r.w + hh * 0.6f + pad);
     }
     auto piece = [&](const vec3& c, float sc) {
         const vec2 a = project(vec3(c.x - 2.1f * sc, c.y + 1.4f * sc, 0.f)), b = project(vec3(c.x + 2.1f * sc, c.y - 1.4f * sc, 0.f));
@@ -1131,72 +1055,8 @@ void TopographyUniverse::buildBoard(const Game& g) {
 // Text
 // =====================================================================================================
 
-float TopographyUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
-}
-
-void TopographyUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                   std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void TopographyUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set3f(progText_, "uHalo", lerp(pal_.paper, bridge_.color, b));
-    set1f(progText_, "uHaloA", 0.85f);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in TOPOGRAPHY's lettering: a map's. Barlow italic for names (the song, the sheet, like the names of
-// waters), small spaced capitals for labels and the section (like the names of regions), the numbers upright.
+// The HUD's panels (its lettering: hudLine below).
 void TopographyUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
     if (!panels.empty()) {
         std::vector<float> v;
         for (const HudRect& r : panels) {
@@ -1213,91 +1073,70 @@ void TopographyUniverse::drawHud(const std::vector<HudText>& hud, const std::vec
         glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
     }
-    const vec3 ink = pal_.ink, accent = pal_.accent;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.25f, vsz = base * 0.62f, vtr = vsz * 0.32f;
-            const float wName = textWidth(fontItalic_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontRoman_, var, vsz, vtr);
-            const float gap = base * 0.7f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontItalic_, name, x, h.y - base * 0.1f, sz, 0.f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontItalic_, q, ink, a);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontRoman_, var, x + wName + gap, h.y + base * 0.2f, vsz, vtr, q);
-                drawText(fontRoman_, q, ink, a * 0.8f);
-            }
-            continue;
+}
+
+
+// The map's printed lettering: Barlow Medium and Italic in the palette's ink, each letter knocked out of the
+// contours by a crisp rim of paper; toward the bridge the ink and the paper turn to the bridge's. The scene is
+// linear (the post's gamma): the HUD, lettered over the post, takes `lin`, the color as it reaches the screen with
+// the post's fade and dim on it; the spot heights, in the scene, the colors as they are.
+text::Look TopographyUniverse::paperLook(bool screen) const {
+    text::Look k;
+    const vec3 paper = lerp(pal_.paper, bridge_.color, smoothstepf(0.3f, 0.95f, bridge_.amount));
+    k.outline = screen ? lin(paper) : paper;
+    k.outlineA = 0.85f;
+    k.outlineW = 0.045f;
+    return k;
+}
+
+vec3 TopographyUniverse::lin(const vec3& c) const {
+    return ugl::toSrgb(c * ((1.f - dimT_ * 0.5f) * fade_));
+}
+
+// The HUD in TOPOGRAPHY's lettering, by the host (text.hpp): a map's. Barlow italic for names (the song, the sheet,
+// like the names of waters), small spaced capitals for labels and the section (like the names of regions), the
+// numbers upright.
+void TopographyUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const vec3 ink = lin(lerp(pal_.ink, bridge_.ink, b)), accent = lin(lerp(pal_.accent, bridge_.ink, b));
+    text::Font* it = text::font(FONT_ITALIC);
+    text::Font* roman = text::font(FONT_ROMAN);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.25f, vsz = base * 0.62f, a = saturate(0.35f + h.alpha * 1.6f);
+        put(it, text::titleCase(name), sz, 0.f, ink, a, -base * 0.1f);
+        if (!var.empty()) {
+            out.add("", roman, base, ink, 0.7f, 0.f); // the gap
+            // its cap line base * 0.3 below the name's (Barlow's capitals: 0.583 of the size)
+            out.add(var, roman, vsz, ink, 0.32f, a * 0.8f).dy = base * 0.3f + (vsz - sz) * 0.583f;
         }
-        case HUD_SECTION:
-            place(fontRoman_, h.text, base * 0.95f, base * 0.45f);
-            drawText(fontRoman_, q, ink, saturate(0.2f + h.alpha * 1.9f));
-            continue;
-        case HUD_TITLE:
-            place(fontItalic_, h.text, base * 1.15f, 0.f, -base * 0.1f);
-            drawText(fontItalic_, q, ink, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(fontRoman_, h.text, base * 0.75f, base * 0.12f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.75f);
-            continue;
-        case HUD_LABEL:
-            place(fontRoman_, h.text, base * 0.7f, base * 0.38f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.7f);
-            continue;
-        case HUD_VALUE:
-            place(fontRoman_, h.text, base * 1.05f, base * 0.05f);
-            drawText(fontRoman_, q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(fontItalic_, h.text, base * 1.1f, 0.f);
-            drawText(fontItalic_, q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(fontRoman_, h.text, base * 0.85f, base * 0.08f);
-            drawText(fontRoman_, q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(fontRoman_, h.text, base * 1.3f, base * 0.5f, -base * 0.15f);
-            drawText(fontRoman_, q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontItalic_, h.text, base * 0.9f, 0.f);
-            drawText(fontItalic_, q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontItalic_, h.text, base * 1.25f, 0.f, -base * 0.1f);
-                drawText(fontItalic_, q, ink, alpha);
-            } else {
-                place(fontRoman_, h.text, base * 0.85f, base * 0.1f);
-                drawText(fontRoman_, q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(fontRoman_, h.text, base * 0.8f, base * 0.06f);
-            drawText(fontRoman_, q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+        break;
     }
+    case HUD_SECTION: put(roman, h.text, base * 0.95f, base * 0.45f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(it, h.text, base * 1.15f, 0.f, ink, h.alpha * 1.3f, -base * 0.1f); break;
+    case HUD_INFO: put(roman, h.text, base * 0.75f, base * 0.12f, ink, saturate(alpha * 1.2f) * 0.75f); break;
+    case HUD_LABEL: put(roman, h.text, base * 0.7f, base * 0.38f, ink, saturate(alpha * 1.2f) * 0.7f); break;
+    case HUD_VALUE: put(roman, h.text, base * 1.05f, base * 0.05f, ink, alpha); break;
+    case HUD_NOTICE: put(it, h.text, base * 1.1f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(roman, h.text, base * 0.85f, base * 0.08f, ink, alpha); break;
+    case HUD_TOAST: put(roman, h.text, base * 1.3f, base * 0.5f, ink, alpha, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(it, h.text, base * 0.9f, 0.f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(it, h.text, base * 1.25f, 0.f, ink, alpha, -base * 0.1f);
+        else put(roman, h.text, base * 0.85f, base * 0.1f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(roman, h.text, base * 0.8f, base * 0.06f, h.accent ? accent : ink, alpha); break;
+    }
+    out.look = paperLook(true);
 }
 
 // =====================================================================================================
@@ -1481,7 +1320,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uFurn", 1.f - over_ * 0.7f);
     set1f(progMap_, "uBridge", bridge);
     set3f(progMap_, "uBridgeCol", bridge_.color);
-    buildHudRects(f.hud, f.bare);
+    buildHudRects(f, f.hud, f.bare);
     set1i(progMap_, "uHudN", (int)(hudRects_.size() / 4));
     if (!hudRects_.empty()) glUniform4fv(ugl::U(progMap_, "uHud"), (GLsizei)(hudRects_.size() / 4), hudRects_.data());
     set1f(progMap_, "uHalf", half_);
@@ -1518,16 +1357,19 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     {
         const float a = 0.75f * (1.f - saturate(bridge_.amount * 2.f)) * (1.f - over_);
         if (a > 0.01f) {
-            std::vector<float> dots, nums;
+            const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+            const vec3 ink = lerp(pal_.index, bridge_.ink, b);
             for (const Spot& sp : spots_) {
                 if (!spotFree(sp.x, sp.y)) continue;
                 const vec2 p = project(vec3(sp.x, sp.y, 0.f));
                 const float ts = std::max(9.f, 17.f * s);
-                textQuads(fontRoman_, ".", p.x - ts * 0.15f, p.y - ts * 1.25f, ts * 1.8f, 0.f, dots);
-                textQuads(fontItalic_, std::to_string(sp.value), p.x + ts * 0.45f, p.y - ts * 0.3f, ts, 0.f, nums);
+                text::Line dot, num;
+                dot.add(".", text::font(FONT_ROMAN), ts * 1.8f, ink, 0.f, a);
+                num.add(std::to_string(sp.value), text::font(FONT_ITALIC), ts, ink, 0.f, a);
+                dot.look = num.look = paperLook(false);
+                text_.draw(dot, p.x - ts * 0.15f, p.y - ts * 1.25f, width_, height_, worldTime_);
+                text_.draw(num, p.x + ts * 0.45f, p.y - ts * 0.3f, width_, height_, worldTime_);
             }
-            drawText(fontRoman_, dots, pal_.index, a);
-            drawText(fontItalic_, nums, pal_.index, a);
         }
     }
     drawHud(f.hud, f.bare ? std::vector<HudRect>{} : f.panels);
@@ -1541,6 +1383,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progPost_, "uScene", 0);
     set1f(progPost_, "uFade", saturate(f.fade));
+    fade_ = saturate(f.fade);
     set1f(progPost_, "uDim", dimT_);
     ugl::drawFullscreen();
 }
