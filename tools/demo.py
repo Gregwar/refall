@@ -371,6 +371,10 @@ def plan(cfg, grid, universes):
                 title = dict(o["title"])
                 title["at"] = grid.anchor(title.get("at", "end - 4bars"))
                 last["title"] = title
+            if "logo" in o:
+                logo = dict(o["logo"])
+                logo["at"] = grid.anchor(logo.get("at", "end - 8bars"))
+                last["logo"] = logo
     # what each shot records: a little more than its span, for the crossfades centred on its cuts
     half = float(cfg.get("crossfade", 0.0)) / 2
     for e in timeline:
@@ -612,6 +616,41 @@ class Card:
                 row += hk2[None, :, None] * self.ink
 
 
+class LogoOutro:
+    """The REFALL logo at the end: its white contours appear over the last scene, then as the scene fades to black
+    the logo takes its colors, alone on black at the very end."""
+
+    def __init__(self, spec, width, height):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import logo
+        n = int(height * float(spec.get("size", 0.66))) // 2 * 2
+        self.rgb, self.a, line = logo.as_arrays(n)
+        # the contours with a soft glow, and a faint dark halo under them (readable over a bright sky)
+        im = Image.fromarray((line * 255).astype(np.uint8))
+        glow = np.asarray(im.filter(ImageFilter.GaussianBlur(n * 0.008)), np.float32) / 255.0
+        shade = np.asarray(im.filter(ImageFilter.GaussianBlur(n * 0.02)), np.float32) / 255.0
+        self.line = np.clip(line + 0.6 * glow, 0, 1)
+        self.shade = np.clip(shade * 1.5, 0, 1) * 0.3
+        self.x0, self.y0 = (width - n) // 2, (height - n) // 2
+        self.n = n
+
+    def draw(self, frame, t, t_at, t_color, t_done):
+        """The contours fade in from t_at; between t_color and t_done they turn into the colored logo."""
+        if t < t_at:
+            return
+        c = smooth(t_color, t_done, t)
+        k = smooth(t_at, t_at + 2.5, t) * (1 - c)
+        r = frame[self.y0:self.y0 + self.n, self.x0:self.x0 + self.n]
+        if k > 0:
+            r *= (1 - self.shade * k)[..., None]
+            lk = self.line * k
+            r *= (1 - lk)[..., None]
+            r += lk[..., None]
+        if c > 0:
+            r *= (1 - self.a * c)[..., None]
+            r += self.rgb * c
+
+
 def make_card(spec, cfg, width, height):
     style = spec.get("style", "chapter")
     font = os.path.join(ROOT, cfg.get("fonts", {}).get("title", "src/embed/CormorantGaramond-Italic.ttf"))
@@ -699,7 +738,7 @@ def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, c
             mix = (i - 1, smooth(e["t0"] - half, e["t0"] + half, t))
         fade_in = e.get("fade_in", 0)
         fade_from = duration - e["fade_out"] if e.get("fade_out") else None
-        if mix is None and not e.get("title") and (fade_from is None or t <= fade_from) and t >= e["t0"] + fade_in:
+        if mix is None and not e.get("title") and not e.get("logo") and (fade_from is None or t <= fade_from) and t >= e["t0"] + fade_in:
             enc.stdin.write(buf)
             continue
         fr = as_float(buf, width, height)
@@ -707,14 +746,21 @@ def assemble(timeline, cfg, grid, song, out, width, height, fps, work, max_mb, c
             fr = fr * mix[1] + as_float(shot_frame(mix[0], t), width, height) * (1 - mix[1])
         if t < e["t0"] + fade_in:
             fr *= smooth(e["t0"], e["t0"] + fade_in, t)
+        # with the logo, the scene is gone a little before the end: the colored logo alone on black
+        fade_to = duration - 0.3 if not e.get("logo") or fade_from is None else fade_from + 0.7 * (duration - fade_from)
         if fade_from is not None and t > fade_from:
-            x = min(1.0, (t - fade_from) / (duration - 0.3 - fade_from))
+            x = min(1.0, (t - fade_from) / (fade_to - fade_from))
             fr *= (1 - x) ** 1.6
         if e.get("title"):
             if i not in titles:
                 titles[i] = make_card(e["title"], cfg, width, height)
             titles[i].draw(fr, t, e["title"]["at"], duration - 0.6, wipe=e["title"].get("wipe", 1.8),
                                  fade=e["title"].get("fade", 2.5))
+        if e.get("logo"):
+            if i not in titles:
+                titles[i] = LogoOutro(e["logo"], width, height)
+            t_color = fade_from if fade_from is not None else duration - 4.0
+            titles[i].draw(fr, t, e["logo"]["at"], t_color, fade_to)
         enc.stdin.write((np.clip(fr, 0, 1) * 255 + 0.5).astype(np.uint8).tobytes())
         if j % (fps * 10) == 0:
             log(f"  {t:7.2f} s  {e.get('label') or e['u']}")

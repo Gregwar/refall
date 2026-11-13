@@ -93,10 +93,11 @@
      "grid": "bar",
      "shots": [{"u": "tidepool"}, {"u": "docks"}, {"u": "skyocean"}, {"u": "crystal"},
                // the game and its HUD fade away at about 2:10 (ZEN_OUT_LEAD: that long before the song's end), so the
-               // clear must come before it; then the whale alone, the title slowly appearing (wipe: seconds)
+               // clear must come before it; then the whale alone under the logo
                {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "12.2"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
-     "outro": {"fade": "2bars",
-               "title": {"text": "Refall", "style": "title", "at": "end - 6bars", "wipe": 9.0, "fade": 2.0}}}
+     // the end: the logo's white contours over the whale, then the logo in color as the scene fades to black
+     "outro": {"fade": "2.5bars",
+               "logo": {"at": "end - 4bars", "size": 0.66}}}
   ]
 }
