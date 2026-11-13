@@ -1247,6 +1247,8 @@ void KintsugiUniverse::hudLine(const HudText& h, text::Line& out) {
     k.glow = ink(metal);
     k.glowA = gilded ? 0.18f * (1.f - br) : 0.f;
     k.glowW = 0.1f;
+    // the opacities as they were, blended in the scene's linear light (a lighter veil than over sRGB)
+    for (text::Span& sp : out.spans) sp.alpha = std::pow(saturate(sp.alpha), 1.f / 2.2f);
 }
 
 // =====================================================================================================

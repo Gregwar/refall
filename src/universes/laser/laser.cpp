@@ -1127,6 +1127,8 @@ void LaserUniverse::hudLine(const HudText& h, text::Line& out) {
     k.glow = out.spans[0].ink;
     k.glowA = bright ? 0.14f * (1.f - br) : 0.f;
     k.glowW = 0.12f;
+    // the opacities as they were, blended in the scene's linear light (a lighter veil than over sRGB)
+    for (text::Span& sp : out.spans) sp.alpha = std::pow(saturate(sp.alpha), 1.f / 2.2f);
 }
 
 // =====================================================================================================
