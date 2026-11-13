@@ -303,7 +303,16 @@ vec2 move(float glyph, vec2 pos) {
     return vec2(r.x * 0.012, r.y * 0.03) + b * uP0.y;
 }
 )";
-    hand_.glsl = "vec4 letter(Letter L) { return L.std * (0.86 + 0.14 * noise(L.px * 0.35)); }\n";
+    // (the page mixes its words in linear light: so are they here, into the final picture; uP0.z: 0 multiplied
+    // into the paper, -1 screened onto the blackboard, 1 over the picture)
+    hand_.glsl = R"(
+vec4 letter(Letter L) {
+    float a = L.std.a * (0.86 + 0.14 * noise(L.px * 0.35));
+    if (uP0.z > 0.5) return vec4(L.ink.rgb, 1.0) * a;
+    if (uP0.z < -0.5) return vec4(L.ink.rgb, 1.0) * pow(a, 1.0 / 2.2);
+    return vec4(pow(vec3(1.0 - a) + a * pow(L.ink.rgb, vec3(2.2)), vec3(1.0 / 2.2)) - 1.0 + a, a);
+}
+)";
     // a word rubbed out: blotchy, where the eraser missed
     ghostHand_.glsl = "vec4 letter(Letter L) { return L.std * (0.86 + 0.14 * noise(L.px * 0.35)) * smoothstep(0.15, 0.85, noise(L.px * 0.05)); }\n";
     ghostHand_.move = hand_.move;
@@ -1186,18 +1195,12 @@ void NotepadUniverse::hudLine(const HudText& h, text::Line& out) {
     if (!bare_)
         for (const Item& it : items_)
             if (it.kind == IT_TEXT && it.i0 == (int)h.role && it.text == w.text) { drawn = &it; break; }
-    float alpha = drawn ? drawn->alpha : std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
+    const float alpha = drawn ? drawn->alpha : std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
     if (alpha <= 0.f) return;
     const vec3 col = drawn ? drawn->col : w.col;
     vec3 ink = toSrgb(col);
     out.blend = V.light ? text::BLEND_MULTIPLY : text::BLEND_SCREEN;
-    // (the page mixed its words in linear light: the same faint step, mixed here over the final picture)
-    if (V.light) {
-        const float k = std::max(0.f, (col.x + col.y + col.z) / 3.f), K = std::pow(k, 1.f / 2.2f);
-        alpha = saturate((1.f - std::pow(1.f - alpha * (1.f - k), 1.f / 2.2f)) / std::max(1e-3f, 1.f - K));
-    } else {
-        alpha = std::pow(alpha, 1.f / 2.2f);
-    }
+    float mode = V.light ? 0.f : -1.f;
     const float b = smoothstepf(0.f, 1.f, bridge_.amount);
     if (b > 0.001f) {
         // the bridge: the words go to its ink, over its backdrop
@@ -1205,11 +1208,12 @@ void NotepadUniverse::hudLine(const HudText& h, text::Line& out) {
         const vec3 onPage = V.light ? P * col : vec3(1.f) - (vec3(1.f) - P) * (vec3(1.f) - col);
         ink = toSrgb(lerp(onPage, bridge_.ink, b));
         out.blend = text::BLEND_OVER;
+        mode = 1.f;
     }
     out.add(w.text, text::font(FONT_TTF), w.size, ink, 0.f, alpha);
     out.dy = w.dy;
     out.look.weight = 0.01f; // (the felt a touch bolder than the font)
-    hand_.p0 = vec4{drawn ? drawn->seed : (float)(strHash(w.text) % 1000u), boil_ / px_ * 0.9f / w.size, 0.f, 0.f};
+    hand_.p0 = vec4{drawn ? drawn->seed : (float)(strHash(w.text) % 1000u), boil_ / px_ * 0.9f / w.size, mode, 0.f};
     out.lettering = &hand_;
 }
 
