@@ -1180,7 +1180,12 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
     float tau = lerpf(0.035f, 0.025f, wGrid);           // calm parts linger a little longer
     tau = lerpf(tau, 0.16f, slowAmt_);                  // slow motion: long, beautiful trails
     if (overT_ >= 0.f) tau = std::max(tau, 0.1f);
-    set2f(progDecay_, "uDecay", std::exp(-dt / tau), std::exp(-dt / (tau * 0.5f)));
+    // the phosphor decays with the time since this pair's last frame, not the frame's dt: a break's world alone
+    // renders with dt 0 (the world holds), and its beams would pile up on themselves without decaying
+    double& last = accTime_[pair / 2];
+    const float decayDt = last < 0.0 ? dt : (float)std::clamp(f.time - last, 0.0, 0.1);
+    last = f.time;
+    set2f(progDecay_, "uDecay", std::exp(-decayDt / tau), std::exp(-decayDt / (tau * 0.5f)));
     ugl::drawFullscreen();
     glClear(GL_DEPTH_BUFFER_BIT);
 
