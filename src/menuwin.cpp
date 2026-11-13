@@ -376,6 +376,10 @@ void Worlds::kalCampaign() {
     for (int s = 0; s < n; s++) {
         const float a = ang((float)s);
         const bool o = open(s), cl = o && cleared(s);
+        // a stage just cleared turns into its cleared look (ck 0 .. 1), a gold wave rising through it
+        const bool cel = cl && s == m.celebrate_;
+        const float cT = cel ? m.celebrateT_ : 99.f;
+        const float ck = cl ? sstep(std::clamp((cT - 0.6f) / 1.6f, 0.f, 1.f)) : 0.f;
         const float f = focusStage(s);
         const float op = s == fs ? ao : 0.f; // this petal's opening
         const Col c = o ? stageCol(s) : hex(0x5a5c66);
@@ -388,15 +392,36 @@ void Worlds::kalCampaign() {
         }
         // three clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
         // full hue lit, a gold rim, a gold number disc)
-        const Col pc = !o ? c : cl ? mixc(c, hex(0xffffff), 0.12f * op) : mixc(c, hex(0x14141c), 0.5f);
+        const Col pcOpen = mixc(c, hex(0x14141c), 0.5f), pcClear = mixc(c, hex(0xffffff), 0.12f * op);
+        const Col pc = !o ? c : mixc(pcOpen, pcClear, ck);
+        const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
         kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op) * wk, pc,
-             !o ? 0.6f : cl ? 0.95f : 0.7f, true, focusClosed ? hex(0xffffff, 0.95f * pulse) : cl ? hex(0xe8c06a, 0.95f) : hex(0x08080c, 0.9f));
+             !o ? 0.6f : lerpf(0.7f, 0.95f, ck), true, focusClosed && (!cel || cT > 3.f) ? hex(0xffffff, 0.95f * pulse) : edgeCl);
         if (cl) { // a cleared petal glows from within
             p.setAdditive(true);
-            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, 70 * u, withA(c, 0.22f));
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, 70 * u, withA(c, 0.22f * ck));
             p.setAdditive(false);
         }
-        if (cl) { // a shine sweeping slowly across a cleared shard
+        if (cel && cT < 3.6f) {
+            // the moment it turns: a band of gold light rising from the petal's root to its tip, a soft swell of its
+            // hue, then a gold ring spreading from its number
+            p.setAdditive(true);
+            const float rise = std::clamp((cT - 0.5f) / 1.6f, 0.f, 1.f);
+            if (rise > 0.f && rise < 1.f) {
+                const float r = lerpf(140.f, 262.f, sstep(rise)) * u, hw = 0.2f * wk * (1.f - 0.35f * rise);
+                p.line(cx + std::cos(a - hw) * r, cy + std::sin(a - hw) * r, cx + std::cos(a + hw) * r, cy + std::sin(a + hw) * r,
+                       9 * u, hex(0xffe6a8, 0.55f * std::sin(rise * PI)), 14 * u);
+            }
+            const float sw = std::exp(-std::pow((cT - 1.9f) / 0.7f, 2.f));
+            p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (120 + 60 * sw) * u, withA(c, 0.45f * sw));
+            const float rk = std::clamp((cT - 1.9f) / 1.4f, 0.f, 1.f);
+            if (rk > 0.f && rk < 1.f) {
+                const float r = 205 * u;
+                p.ring(cx + std::cos(a) * r, cy + std::sin(a) * r, lerpf(30.f, 110.f, sstep(rk)) * u, 3 * u, hex(0xffe0a0, 0.7f * (1.f - rk)));
+            }
+            p.setAdditive(false);
+        }
+        if (cl && ck > 0.99f) { // a shine sweeping slowly across a cleared shard
             const float k = std::fmod(t * 0.18f + s * 0.29f, 1.f), r = lerpf(150.f, 255.f, k) * u, hw = 0.16f * wk * (1.f - std::fabs(k - 0.45f));
             p.setAdditive(true);
             p.line(cx + std::cos(a - hw) * r, cy + std::sin(a - hw) * r, cx + std::cos(a + hw) * r, cy + std::sin(a + hw) * r, 5 * u, hex(0xffffff, 0.35f * std::sin(k * PI)), 6 * u);
@@ -435,11 +460,14 @@ void Worlds::kalCampaign() {
                 p.setAdditive(false);
             }
             p.circle(nx, ny, rad + 6 * u, hex(0x000000, 0.35f), 10 * u);
-            p.circle(nx, ny, rad, cl ? hex(0xe8c06a, 0.95f) : hex(0x0a0a10, 0.82f));   // cleared: a gold disc
-            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, cl ? hex(0xfff0c8, 0.95f) : o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f));
+            // cleared: a gold disc (a just cleared one turns gold as the light reaches it)
+            const float dk = cel ? sstep(std::clamp((cT - 1.7f) / 0.6f, 0.f, 1.f)) : ck;
+            p.circle(nx, ny, rad, mixc(hex(0x0a0a10, 0.82f), hex(0xe8c06a, 0.95f), dk));
+            const Col ringOpen = o ? withA(mixc(c, hex(0xffffff), 0.25f), 0.95f) : hex(0x8a8c96, 0.7f);
+            p.ring(nx, ny, rad, (1.6f + 1.4f * f) * u, mixc(ringOpen, hex(0xfff0c8, 0.95f), dk));
             const float ts = (25 + 13 * f) * u;
-            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts,
-                   cl ? hex(0x1a1408) : o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f), 0, 0.02f);
+            const Col numOpen = o ? hex(0xffffff, 0.85f + 0.15f * f) : hex(0xa0a2ac, 0.75f);
+            p.text(F::JOSEFIN, std::to_string(s + 1), nx, ny + ts * 0.36f, ts, mixc(numOpen, hex(0x1a1408), dk), 0, 0.02f);
             if (!o) p.lock(nx + rad * 0.95f, ny - rad * 0.95f, 13 * u, hex(0xd0d0d8, 0.8f));
         }
     }
