@@ -1022,7 +1022,9 @@ void BlueprintUniverse::onEvent(const GameEvent& ev, const Game& game) {
             yLo = std::min(yLo, p.y); yHi = std::max(yHi, p.y);
         }
         if (!ev.cells.empty()) {
-            lockFx_.push_back({id, yLo, yHi, 0.f});
+            const auto& c0 = ev.cells.front();
+            const bool dropped = c0.y >= 0 && c0.y < Game::H && c0.x >= 0 && c0.x < Game::W && game.cell(c0.x, c0.y).dropped;
+            lockFx_.push_back({id, yLo, yHi, 0.f, dropped});
             // the part is dimensioned above it
             const float top = yHi + 0.5f;
             if (top + 1.4f < 10.f) pieceDim_ = Dim{x0, x1, top, 0.f, 0.f, true, (int)std::lround((x1 - x0) * 10.f)};
@@ -1185,10 +1187,12 @@ void BlueprintUniverse::buildBoard(const Game& g) {
             };
             const vec3 p = layout::cellPos((float)x, y - off);
             float front = 1e4f;
-            for (const LockFx& l : lockFx_)
-                if (l.id == ids_[y][x]) front = lerpf(l.minY - 0.55f, l.maxY + 0.6f, smoothstepf(0.f, 0.26f, l.t));
-            float alpha = 1.f;
             float h = hatch;
+            for (const LockFx& l : lockFx_)
+                if (l.id != ids_[y][x]) continue;
+                else if (l.dropped) front = lerpf(l.minY - 0.55f, l.maxY + 0.6f, smoothstepf(0.f, 0.26f, l.t));
+                else h = hatch * lerpf(0.5f, 1.f, smoothstepf(0.f, 0.3f, l.t)); // from the falling part's
+            float alpha = 1.f;
             if (overT_ >= 0.f) {
                 // game over: the parts are struck out from the bottom, leaving their outlines as hidden lines
                 const float rowFrac = (Game::H - 1 - y) / (float)(Game::H - Game::HIDDEN);
