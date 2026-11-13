@@ -144,7 +144,7 @@ private:
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
-    static constexpr float CELEBRATE_MOVE = 4.2f; // when the focus moves on to the next stage
+    static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage
     int celebrate_ = -1, celebrateNext_ = -1; // the stage just cleared (see celebrateClear), the one to move on to
     float celebrateT_ = 0;
     float time_ = 0, msgT_ = 0, lastInput_ = 0; // lastInput_: when a key was last pressed (the menu's idle time)
