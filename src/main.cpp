@@ -408,10 +408,25 @@ void App::startTrack(std::shared_ptr<Track> t) {
     lib_.prefetch(runSeed_ + sceneCounter_ * 7919);
 }
 
-// An intro: the song opens on a quiet section of a few seconds at least (before its beat comes in).
+// A calm intro: the song's first 6 seconds are much quieter (8 dB and more) than its usual level (the median of its
+// 2 s windows): pads, a voice, before the beat comes in. An opening with its beat already going is within a few dB.
 bool App::songHasIntro() const {
-    const auto& sg = track_->analysis.segments;
-    return !sg.empty() && sg[0].kind == SEG_INTRO && sg[0].end - sg[0].start >= 4.0;
+    const std::vector<float>& pcm = track_->pcm;
+    const size_t win = (size_t)track_->sampleRate * 2 * 2; // 2 s, interleaved stereo
+    if (pcm.size() < win * 8) return false;
+    std::vector<double> rms;
+    for (size_t at = 0; at + win <= pcm.size(); at += win) {
+        double e = 0;
+        for (size_t k = at; k < at + win; k++) e += (double)pcm[k] * pcm[k];
+        rms.push_back(e / win);
+    }
+    const double opening = (rms[0] + rms[1] + rms[2]) / 3.0;
+    std::vector<double> sorted = rms;
+    std::nth_element(sorted.begin(), sorted.begin() + sorted.size() / 2, sorted.end());
+    const double usual = sorted[sorted.size() / 2];
+    const double db = 10.0 * std::log10((opening + 1e-12) / (usual + 1e-12));
+    std::printf("[app] opening %.1f dB from the song's usual level: %s\n", db, db <= -8.0 ? "a calm intro" : "no intro");
+    return db <= -8.0;
 }
 
 // The universe for the current song: the forced one, else one picked from the song's footprint.
