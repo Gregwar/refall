@@ -13,6 +13,7 @@ enum Action {
     A_SEEK_BACK, A_SEEK_FWD, // Ctrl+Shift+Left/Right: seek in the song (testing)
     A_DEBUG_LEVEL,           // L: jump to the next level (debugging)
     A_DEBUG_BONUS,           // B: fill the bonus gauge (testing the slow-motion effects)
+    A_CHEAT_SKIP,            // S with --cheat-skip: complete the song (testing; S is then no soft drop)
     // Menus: arrows / D-pad / stick (with auto-repeat), Enter / Space / A / Start, Esc / Backspace / B.
     A_UI_UP, A_UI_DOWN, A_UI_LEFT, A_UI_RIGHT, A_UI_OK, A_UI_BACK,
     // Text fields: Enter alone (Space types a space), Backspace (with auto-repeat), Delete, Ctrl+V.
@@ -57,6 +58,8 @@ public:
     // A gamepad far away (--stream: the phone's, over the network), read as a local one: its buttons in GLFW's gamepad
     // order (15), its axes (6: the sticks, then the triggers from -1 to 1). Any thread.
     void setRemotePad(const unsigned char* buttons, const float* axes);
+    // --cheat-skip: S completes the song (instead of a soft drop).
+    void setCheatSkip(bool on) { cheatSkip_ = on; }
     // Set briefly when the device changes, for a HUD toast.
     float deviceChangedTimer() const { return changedTimer_; }
 
@@ -64,6 +67,7 @@ private:
     void detectGamepad();
     GLFWwindow* win_ = nullptr;
     bool down_[A_COUNT] = {}, prev_[A_COUNT] = {};
+    bool cheatSkip_ = false;
     int repeat_[A_COUNT] = {};
     float held_[A_COUNT] = {}, acc_[A_COUNT] = {};
     int jid_ = -1;

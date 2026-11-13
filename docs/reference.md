@@ -45,7 +45,7 @@ levels as JSON), the test hook `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a f
 
 Test hook for the menus and Voyage: `ZEN_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
 overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:KEY,..."` (up, down, left, right, ok,
-back, alt (Space), pause, quit pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
+back, alt (Space), pause, quit, skip (S with `--cheat-skip`) pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
 (each song starts S seconds before its end), e.g. a stage run through with `--autoplay`. Measuring the menu:
 `--menu-clip` prints its CPU and GPU time per frame; `ZEN_MENU_FINISH=1` adds the wall time with `glFinish` (software
 renderers, whose timer queries mean nothing), `ZEN_MENU_KALEIDO_DIV=N` draws the kaleidoscope at 1/N of the resolution (it is full resolution by default),
