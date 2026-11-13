@@ -1938,7 +1938,7 @@ void App::campaignEnd() {
         std::snprintf(sub, sizeof(sub), "STAGE %d   /   SONGS %d-%zu SURVIVED   /   %s", stage + 1, run_.from + 1,
                       campaign_.stages()[stage].songs.size(), difficultyName(run_.diff));
         menu_.setCursor(stage, 0);
-        toDebrief({true, "WELL PLAYED", sub, "START FROM SONG 1 TO CLEAR THE STAGE", game_.score(), game_.lines()});
+        toDebrief({true, "WELL PLAYED", sub, "", game_.score(), game_.lines()});
     }
 }
 
