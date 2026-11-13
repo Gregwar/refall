@@ -1137,6 +1137,11 @@ void TopographyUniverse::hudLine(const HudText& h, text::Line& out) {
     default: put(roman, h.text, base * 0.8f, base * 0.06f, h.accent ? accent : ink, alpha); break;
     }
     out.look = paperLook(true);
+    // the letters used to be blended in the scene's linear light: a partial opacity there is a fuller one on the
+    // screen for light ink on dark paper (a lighter one for dark ink on light paper)
+    const bool light = pal_.ink.x + pal_.ink.y + pal_.ink.z > pal_.paper.x + pal_.paper.y + pal_.paper.z;
+    for (text::Span& sp : out.spans)
+        sp.alpha = light ? std::pow(sp.alpha, 1.f / 2.2f) : 1.f - std::pow(1.f - sp.alpha, 1.f / 2.2f);
 }
 
 // =====================================================================================================
