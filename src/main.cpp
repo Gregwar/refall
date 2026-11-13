@@ -78,6 +78,7 @@ static void undoDiscreteGpu() {
 
 struct Options {
     std::vector<std::string> paths;
+    bool cheatSkip = false;  // --cheat-skip: S completes the song
     bool autoplay = false, mute = false, fullscreen = false, hidden = false, shuffle = true;
     bool stream = false; // --stream: played from afar (tools/stream.py)
     std::string shotPrefix;
@@ -122,7 +123,7 @@ struct Options {
 
 // Test hook: ZEN_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
 // with no sound, the songs on a simulated clock; ZEN_TEST_TAIL=S starts each song S seconds before its end,
-// ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit) at T seconds of the run,
+// ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit, skip) at T seconds of the run,
 // ZEN_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, ZEN_TEST_QUIT=T stops the run at T seconds.
 static std::chrono::steady_clock::time_point g_startTime; // (the menu's first frame is timed from it)
 static bool testPlay() {
@@ -165,6 +166,7 @@ static void usage() {
         "  --universe-on-peak   also change universe when a song rises into a peak after a minute in one universe\n"
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
+        "  --cheat-skip         S completes the song (testing the Voyage's logic; S is then no soft drop)\n"
         "  --mute               no sound\n"
         "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
         "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
@@ -1289,6 +1291,7 @@ int App::run() {
     fbSize(fbw, fbh);
     if (!R_.init(fbw, fbh)) std::fprintf(stderr, "[gl] warning: renderer init reported a GL error\n");
     if (win_) input_.init(win_);
+    input_.setCheatSkip(opt_.cheatSkip);
 
     if (opt_.stream) startStream();
     if (!audio_.init(opt_.stream)) std::fprintf(stderr, "[audio] continuing without sound\n");
@@ -1366,7 +1369,8 @@ int App::run() {
             input_.testFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(1)); // background loads keep up with the simulated clock
             static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
-                {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"alt", A_UI_ALT}, {"pause", A_PAUSE}, {"quit", A_QUIT}};
+                {"right", A_UI_RIGHT}, {"ok", A_UI_OK}, {"back", A_UI_BACK}, {"alt", A_UI_ALT}, {"pause", A_PAUSE}, {"quit", A_QUIT},
+                {"skip", A_CHEAT_SKIP}};
             for (auto& [t, k] : keys)
                 if (runTime_ - dt < t && runTime_ >= t)
                     for (auto& [n, a] : NAMES)
@@ -1553,6 +1557,15 @@ int App::run() {
         }
         if (input_.pressed(A_DEBUG_LEVEL) && !game_.over() && !viewer_) game_.skipToNextLevel();
         if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
+        // --cheat-skip: S jumps to the song's last seconds, survived: its outro starts as at a real end (a Voyage song
+        // counts as cleared, the stage and the run go on).
+        if (input_.pressed(A_CHEAT_SKIP) && track_ && break_ == BREAK_OFF && !game_.over() && !paused_ && !viewer_) {
+            const double end = track_->duration() - (OUT_HIDE + 2.0);
+            if (songTime_ < end) {
+                viewerSeek(end);
+                std::printf("[cheat] song skipped to %.1f s\n", end);
+            }
+        }
 
         // ---- Game.
         if (!paused_ && !waiting && gameFrozen()) {
@@ -2570,6 +2583,7 @@ int main(int argc, char** argv) {
         std::string a = argv[i];
         if (a == "-h" || a == "--help") { usage(); return 0; }
         else if (a == "--autoplay") o.autoplay = true;
+        else if (a == "--cheat-skip") o.cheatSkip = true;
         else if (a == "--mute") o.mute = true;
         else if (a == "--shuffle") o.shuffle = true; // the default; kept for older command lines
         else if (a == "--in-order") o.shuffle = false;

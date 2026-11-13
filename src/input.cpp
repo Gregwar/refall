@@ -112,7 +112,8 @@ void Input::update(float dt) {
     kb[A_SEEK_FWD] = seekChord && key(GLFW_KEY_RIGHT);
     kb[A_LEFT] = (!seekChord && key(GLFW_KEY_LEFT)) || letter('a');
     kb[A_RIGHT] = (!seekChord && key(GLFW_KEY_RIGHT)) || letter('d');
-    kb[A_SOFT] = key(GLFW_KEY_DOWN) || letter('s');
+    kb[A_SOFT] = key(GLFW_KEY_DOWN) || (!cheatSkip_ && letter('s'));
+    kb[A_CHEAT_SKIP] = cheatSkip_ && letter('s');
     kb[A_HARD] = key(GLFW_KEY_SPACE) || letter('w');
     kb[A_CW] = key(GLFW_KEY_UP) || letter('x') || letter('k');
     kb[A_CCW] = letter('z') || letter('j');
