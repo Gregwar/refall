@@ -7,6 +7,7 @@
 // Fonts are TrueType files built into the game, their glyphs baked on demand (UTF-8: accents and symbols too) as
 // signed distance fields at BAKE_PX, shared by everything that letters with the same file. Sizes are pixels; the
 // effects' widths are in em (the span's font size), so they scale with the text.
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -23,6 +24,19 @@ class Font;
 // same Font (one atlas), whoever asks. Null when the file can't be read.
 Font* font(const unsigned char* ttf, size_t size);
 template <size_t N> Font* font(const unsigned char (&ttf)[N]) { return font(ttf, N); }
+
+// A font of the universe's own letter shapes (a pixel font, a stroke font...): `raster` draws a letter's coverage
+// (0..255, row by row from the top) for a font size of `px` pixels, its top-left corner at (ox, oy) pixels from the
+// pen on the baseline (y down), and gives its advance; false when it has no such letter. The engine turns it into a
+// distance field like any other. `cap` and `descent` are the capitals' height and the descent, in em. The same
+// `key` gives the same Font.
+struct Bitmap {
+    int w = 0, h = 0;
+    std::vector<unsigned char> cov;
+    float ox = 0, oy = 0, adv = 0;
+};
+using Raster = std::function<bool(uint32_t cp, float px, Bitmap& out)>;
+Font* customFont(const std::string& key, float cap, float descent, Raster raster);
 
 // A run of text in one font, size and ink.
 struct Span {

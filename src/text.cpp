@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <map>
 
@@ -215,7 +216,13 @@ public:
         if (it != glyphs_.end()) return it->second;
         return glyphs_[cp] = bake(cp);
     }
-    float kern(uint32_t a, uint32_t b) { return a && b ? stbtt_GetCodepointKernAdvance(&info_, a, b) * scale_ : 0.f; }
+    float kern(uint32_t a, uint32_t b) { return a && b && !raster_ ? stbtt_GetCodepointKernAdvance(&info_, a, b) * scale_ : 0.f; }
+    void initCustom(float cap, float desc, Raster r) {
+        capH = cap * BAKE_PX;
+        descent = desc * BAKE_PX;
+        raster_ = std::move(r);
+        ok = true;
+    }
     ~Font() {
         if (tex) glDeleteTextures(1, &tex);
     }
@@ -223,10 +230,76 @@ public:
 private:
     stbtt_fontinfo info_{};
     float scale_ = 1;
+    Raster raster_; // a custom font's letters
     std::unordered_map<uint32_t, Glyph> glyphs_;
     int x_ = 1, y_ = 1, rowH_ = 0;
 
+    // A custom letter: its coverage, padded, turned into a distance field (exact Euclidean distances to the nearest
+    // covered / uncovered pixel, by two passes of the 1D squared distance transform).
+    unsigned char* customField(uint32_t cp, int& w, int& h, int& xo, int& yo, float& adv) {
+        Bitmap b;
+        if (!raster_(cp, BAKE_PX, b) || b.w < 0 || b.h < 0) return nullptr;
+        adv = b.adv;
+        w = b.w + 2 * PAD;
+        h = b.h + 2 * PAD;
+        xo = (int)std::lround(b.ox) - PAD;
+        yo = (int)std::lround(b.oy) - PAD;
+        auto edt = [&](bool inside) {
+            const double INF = 1e20;
+            std::vector<double> f((size_t)w * h);
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++) {
+                    const int bx = x - PAD, by = y - PAD;
+                    const bool on = bx >= 0 && by >= 0 && bx < b.w && by < b.h && b.cov[(size_t)by * b.w + bx] >= 128;
+                    f[(size_t)y * w + x] = (on == inside) ? 0.f : INF;
+                }
+            auto pass = [](std::vector<double>& g, int n, int stride, int count, int step) {
+                std::vector<double> d(n), z(n + 1), src(n);
+                std::vector<int> v(n);
+                for (int c = 0; c < count; c++) {
+                    for (int i = 0; i < n; i++) src[i] = g[(size_t)c * step + (size_t)i * stride];
+                    int k = 0;
+                    v[0] = 0; z[0] = -1e20f; z[1] = 1e20f;
+                    for (int q = 1; q < n; q++) {
+                        double sp;
+                        while (true) {
+                            sp = ((src[q] + (double)q * q) - (src[v[k]] + (double)v[k] * v[k])) / (2.0 * q - 2.0 * v[k]);
+                            if (sp <= z[k] && k > 0) k--; else break;
+                        }
+                        if (sp <= z[k]) { v[0] = q; z[0] = -1e20f; z[1] = 1e20f; k = 0; continue; }
+                        k++; v[k] = q; z[k] = sp; z[k + 1] = 1e20f;
+                    }
+                    k = 0;
+                    for (int q = 0; q < n; q++) {
+                        while (z[k + 1] < q) k++;
+                        d[q] = (double)(q - v[k]) * (q - v[k]) + src[v[k]];
+                    }
+                    for (int i = 0; i < n; i++) g[(size_t)c * step + (size_t)i * stride] = d[i];
+                }
+            };
+            pass(f, w, 1, h, w);  // rows
+            pass(f, h, w, w, 1);  // columns
+            return f;
+        };
+        const std::vector<double> out = edt(true), in = edt(false); // to the nearest covered / uncovered pixel
+        unsigned char* field = (unsigned char*)std::malloc((size_t)w * h);
+        for (size_t i = 0; i < (size_t)w * h; i++) {
+            const float d = in[i] > 0.0 ? (float)std::sqrt(in[i]) - 0.5f : -((float)std::sqrt(out[i]) - 0.5f); // > 0 inside
+            field[i] = (unsigned char)std::clamp(128.f + d * DIST_SCALE, 0.f, 255.f);
+        }
+        return field;
+    }
+
     Glyph bake(uint32_t cp) {
+        if (raster_) {
+            Glyph g;
+            int w = 0, h = 0, xo = 0, yo = 0;
+            unsigned char* field = customField(cp, w, h, xo, yo, g.adv);
+            if (!field) return cp == '?' || cp == ' ' ? g : glyph(cp >= 'a' && cp <= 'z' ? cp - 32 : '?');
+            place(g, field, w, h, xo, yo);
+            std::free(field);
+            return g;
+        }
         // a letter the font lacks: its unaccented form, else a question mark
         if (cp != ' ' && !stbtt_FindGlyphIndex(&info_, (int)cp)) {
             std::string s;
@@ -242,6 +315,13 @@ private:
         int w = 0, h = 0, xo = 0, yo = 0;
         unsigned char* sdf = stbtt_GetCodepointSDF(&info_, scale_, (int)cp, PAD, 128, DIST_SCALE, &w, &h, &xo, &yo);
         if (!sdf) return g;
+        place(g, sdf, w, h, xo, yo);
+        stbtt_FreeSDF(sdf, nullptr);
+        return g;
+    }
+
+    // a letter's field into the atlas
+    void place(Glyph& g, const unsigned char* field, int w, int h, int xo, int yo) {
         if (!tex) {
             glGenTextures(1, &tex);
             glBindTexture(GL_TEXTURE_2D, tex);
@@ -254,21 +334,16 @@ private:
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         }
         if (x_ + w + 1 > ATLAS) { x_ = 1; y_ += rowH_ + 1; rowH_ = 0; }
-        if (y_ + h + 1 > ATLAS) { // full (hundreds of distinct letters): the rest shows as spaces
-            stbtt_FreeSDF(sdf, nullptr);
-            return g;
-        }
+        if (y_ + h + 1 > ATLAS) return; // full (hundreds of distinct letters): the rest shows as spaces
         glBindTexture(GL_TEXTURE_2D, tex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, x_, y_, w, h, GL_RED, GL_UNSIGNED_BYTE, sdf);
+        glTexSubImage2D(GL_TEXTURE_2D, 0, x_, y_, w, h, GL_RED, GL_UNSIGNED_BYTE, field);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
         g.u0 = x_ / (float)ATLAS; g.v0 = y_ / (float)ATLAS; g.u1 = (x_ + w) / (float)ATLAS; g.v1 = (y_ + h) / (float)ATLAS;
         g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
         g.ink = true;
         x_ += w + 1;
         rowH_ = std::max(rowH_, h);
-        stbtt_FreeSDF(sdf, nullptr);
-        return g;
     }
 };
 
@@ -284,6 +359,15 @@ Font* font(const unsigned char* ttf, size_t size) {
         return nullptr;
     }
     return (fonts[ttf] = std::move(f)).get();
+}
+
+Font* customFont(const std::string& key, float cap, float descent, Raster raster) {
+    static std::map<std::string, std::unique_ptr<Font>> fonts;
+    auto it = fonts.find(key);
+    if (it != fonts.end()) return it->second.get();
+    auto f = std::make_unique<Font>();
+    f->initCustom(cap, descent, std::move(raster));
+    return (fonts[key] = std::move(f)).get();
 }
 
 // ---- Lines
