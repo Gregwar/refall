@@ -5,7 +5,7 @@ playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, 
 it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
 
 ```sh
-uvx refall            # the title screen: VOYAGE, CUSTOM VOYAGE or FREE PLAY
+uvx refall            # the title screen: VOYAGE or FREE PLAY
 uvx refall ~/Music    # free play on any folders, files and YouTube URLs
 ```
 
@@ -163,8 +163,8 @@ roadmap of the universes to come. To make a new one, see [docs/adding-a-universe
 ## Modes
 
 Started with no songs, the game opens on its menu, a stained-glass kaleidoscope (the game is called **Refall** for
-now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **CUSTOM
-VOYAGE**, **FREE PLAY** or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). The game's own universes are folded into the
+now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**
+or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). The game's own universes are folded into the
 kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the most colourful of the focused stage's
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
 from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
@@ -181,16 +181,18 @@ back on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences eve
 The file is found in the sources' `data/`, else next to the executable (installed builds ship it there). The menu plays
 no song previews.
 
-- **Custom voyage** makes a Voyage from a YouTube playlist: **+ NEW VOYAGE**, paste its link (or ID), Enter reads it,
-  then its name (the playlist's title to start with, editable), Enter registers it and opens it. Up to 60 of its songs
-  (60 drawn at random, in the playlist's order, from a longer one) in stages of 4, each in a universe of the main
-  campaign dealt at random (each once before any comes back, never twice in a stage) with a random variant, at the
-  velocity the main campaign has at the same point of its journey: the same curve for 60 songs, its 15 stages
-  compressed onto fewer for a shorter playlist. It plays like the main Voyage (stages cleared in a row, unlocks,
-  scores, the debriefs) with its own progress. The voyages show as cards (a rosette of their stages, the cleared ones
-  lit), the last played first; Delete twice deletes one with its progress. They live in `voyages/` next to the
-  campaign progress: `voyages.tsv` (the index), and per voyage `<id>.tsv` (`data/campaign.tsv`'s format, editable)
-  and `<id>-progress.tsv` (the code: `src/voyages.cpp`).
+- **Voyage** first shows the voyages as free play shows its playlists: glass cards, the game's own first (**Refall**,
+  featured: larger, a gold rim), then the ones made from the player's playlists (the last played first), then
+  **+ ADD A PLAYLIST**: paste a YouTube playlist link or a bare playlist ID (`PL...`), Enter reads it, then its name
+  (the playlist's title to start with, editable), Enter registers the voyage and opens it. Each card has a small
+  rosette, a kite per stage, the cleared ones lit; Delete twice deletes a player's voyage with its progress. A voyage
+  made from a playlist takes up to 60 of its songs (60 drawn at random, in the playlist's order, from a longer one) in
+  stages of 4, each in a universe of the main campaign dealt at random (each once before any comes back, never twice in
+  a stage) with a random variant, at the velocity the main campaign has at the same point of its journey: the same curve
+  for 60 songs, its 15 stages compressed onto fewer for a shorter playlist. It plays like the main one (stages cleared
+  in a row, unlocks, scores, the debriefs) with its own progress, in `voyages/` next to the campaign progress:
+  `voyages.tsv` (the index), and per voyage `<id>.tsv` (`data/campaign.tsv`'s format, editable) and
+  `<id>-progress.tsv` (the code: `src/voyages.cpp`).
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines. Choose a difficulty: EASY, NORMAL or EXPERT, a multiplier on the gravity of every level
   (x0.6, x0.8, x1: EXPERT is the full speed), and a **playlist**: down to the PLAYLIST row of glass cards, the game's

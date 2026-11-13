@@ -1142,7 +1142,7 @@ int App::run() {
     campaign_.load(opt_.campaignPath);
     progress_.load(opt_.progressPath, &campaign_);
     voyages_.load(VoyageStore::defaultDir(opt_.progressPath));
-    voyages_.setCurve(campaign_);
+    voyages_.setMain(campaign_, opt_.progressPath);
     menu_.setVoyages(&voyages_, [this](const std::string& id) { return openVoyage(id); });
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
@@ -2115,11 +2115,11 @@ int App::runMenuShot() {
         // the walk: petals focused (one locked), one opened and its songs browsed, closed, another opened, the
         // difficulties; then free play: a difficulty, the playlists, a playlist link typed and read
         static const std::pair<double, const char*> WALK[] = {
-            {1.2, "down"}, {1.9, "up"}, {2.7, "ok"},
+            {1.2, "down"}, {1.9, "up"}, {2.7, "ok"}, {3.15, "ok"},
             {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "alt"},
             {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "alt"},
             {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
-            {21.9, "back"}, {22.8, "down"}, {23.15, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
+            {21.9, "back"}, {22.35, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
         const double END = std::getenv("ZEN_MENU_CLIP_SECONDS") ? std::atof(std::getenv("ZEN_MENU_CLIP_SECONDS")) : 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");

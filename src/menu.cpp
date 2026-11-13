@@ -70,17 +70,18 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgBad_ = bad;
     msgT_ = message.empty() ? 0.f : 5.f;
     if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
-    if (s == CUSTOM) {
+    if (s == VOYAGES) {
         editing_ = false;
         vStep_ = 0;
         plMsg_.clear();
         vDelete_.clear();
         vCleared_.clear();
         if (voyages_) {
+            vCleared_.push_back(voyages_->cleared(""));
             for (const CustomVoyage& v : voyages_->list()) vCleared_.push_back(voyages_->cleared(v.id));
-            vSel_ = 0; // the voyage played last (the list's first), or "new voyage"
+            vSel_ = 0; // the voyage open (the main one first)
             for (int i = 0; i < (int)voyages_->list().size(); i++)
-                if (voyages_->list()[i].id == voyageId_) vSel_ = i;
+                if (voyages_->list()[i].id == voyageId_) vSel_ = i + 1;
         }
         aV_ = (float)vSel_;
     }
@@ -304,9 +305,8 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     case TITLE:
         titleItem_ = (titleItem_ + dy + TITLE_ITEMS * 8) % TITLE_ITEMS;
         if (ok) {
-            if (titleItem_ == 0) enterVoyage("");
-            else if (titleItem_ == 1) open(CUSTOM);
-            else if (titleItem_ == 2) open(FREE);
+            if (titleItem_ == 0) open(voyages_ ? VOYAGES : CAMPAIGN);
+            else if (titleItem_ == 1) open(FREE);
             else ch.kind = Choice::QUIT;
         }
         if (back) ch.kind = Choice::QUIT;
@@ -388,7 +388,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             if (row_ == 0) {
                 diff_ = std::clamp(diff_ + dx, 0, DIFF_COUNT - 1);
                 if (dy > 0 || ok) row_ = 1;
-                else if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
+                else if (back) open(voyages_ ? VOYAGES : TITLE);
             } else if (!petal_) {
                 stage_ = std::clamp(stage_ + dx, 0, n - 1);
                 if (dy < 0) row_ = 0;
@@ -401,7 +401,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 } else if (in.pressed(A_UI_ALT) && unlocked) {
                     petal_ = true; // its songs, to start from a later one (practice)
                     song_ = std::min(song_, (int)camp_->stages()[stage_].songs.size() - 1);
-                } else if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
+                } else if (back) open(voyages_ ? VOYAGES : TITLE);
             } else {
                 song_ = std::clamp(song_ + dx + dy, 0, (int)camp_->stages()[stage_].songs.size() - 1);
                 if (ok && hovered()) {
@@ -414,10 +414,10 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             }
             break;
         }
-        if (back) open(voyageId_.empty() ? TITLE : CUSTOM);
+        if (back) open(voyages_ ? VOYAGES : TITLE);
         break;
     }
-    case CUSTOM: {
+    case VOYAGES: {
         if (!voyages_) { if (back) open(TITLE); break; }
         auto type = [&](size_t max) {
             editText_ += in.typed();
@@ -475,12 +475,12 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             break;
         }
         const auto& vs = voyages_->list();
-        const int nCards = (int)vs.size() + 1; // the last: a new voyage
+        const int nCards = (int)vs.size() + 2; // the main voyage first, then the player's, then "add a playlist"
         const int was = vSel_;
         vSel_ = std::clamp(vSel_ + dx + dy, 0, nCards - 1);
         if (vSel_ != was) { vDelete_.clear(); plMsg_.clear(); }
-        if (in.pressed(A_UI_DELETE) && vSel_ < (int)vs.size()) {
-            const CustomVoyage v = vs[vSel_];
+        if (in.pressed(A_UI_DELETE) && vSel_ >= 1 && vSel_ <= (int)vs.size()) {
+            const CustomVoyage v = vs[vSel_ - 1];
             if (vDelete_ != v.id) { // once more to delete it (its progress goes with it)
                 vDelete_ = v.id;
                 plMsg_ = "DEL AGAIN TO DELETE " + asciiFold(v.title);
@@ -493,12 +493,12 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 vDelete_.clear();
                 plMsg_ = "DELETED " + asciiFold(v.title);
                 plMsgBad_ = false;
-                vSel_ = std::min(vSel_, (int)voyages_->list().size());
+                vSel_ = std::min(vSel_, (int)voyages_->list().size() + 1);
             }
         }
         if (ok) {
             if (vSel_ == nCards - 1) { vStep_ = 1; editing_ = true; editText_.clear(); plMsg_.clear(); }
-            else enterVoyage(std::string(vs[vSel_].id)); // (a copy: opening it reorders the list)
+            else enterVoyage(vSel_ == 0 ? std::string() : std::string(vs[vSel_ - 1].id)); // (a copy: opening it reorders the list)
         }
         if (back) open(TITLE);
         break;
