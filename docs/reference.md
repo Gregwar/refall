@@ -105,7 +105,7 @@ next, prev, stage+, stage-, fwd, back, sec+, sec-, tour, hide).
 
 Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it; a
 quad charges 5). Once it's full, the slow-motion button starts the bonus: for 10 s the gauge drains, the
-game slows down to ×0.25 (pieces fall four times slower) while the song keeps playing normally: only a very
+pieces barely fall (one row every two seconds, whatever the velocity, 20G included) while the song keeps playing normally: only a very
 slight tape-like slow-down (and back) marks the start and the end. Use it to clean up the stack in a part that's too fast. Gravity gets
 back on the beat when the bonus ends. Meanwhile the universe shows the slow motion its own way (VECTOR sweeps in
 the complementary phosphor with long trails).
