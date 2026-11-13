@@ -198,8 +198,8 @@ no song previews.
   reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
   the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
   one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
-  started from the first one **clears** the stage and unlocks the next one (a stage cleared on any difficulty unlocks
-  the next). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
+  started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
+  a stage reached on EXPERT is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
   best score) but the stage isn't cleared. A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
   lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header

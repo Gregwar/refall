@@ -126,7 +126,6 @@ private:
         float x0 = 0, y0 = 0, x1 = 0, y1 = 0; // its box in the capture, pixels (top-left origin), at scale k
         float k = 1, ax = 0, ay = 0;         // the capture's scale and the point it scales about
         float aMax = 1;                      // the lettering's own opacity in the HUD
-        bool dark = false;       // dark ink (a light universe)
     };
     CardLine cardLines_[2];
     int cardId_ = -1;

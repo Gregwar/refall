@@ -49,7 +49,7 @@ struct Worlds {
         const std::string& sp = m.camp_->stages()[s].songs[k].universe;
         return sp.empty() ? "VECTOR" : sp;
     }
-    bool open(int s) const { return !m.progress_ || m.progress_->unlocked(s); }
+    bool open(int s) const { return !m.progress_ || m.progress_->unlocked(s, m.diff_); }
     bool beaten(int s, int k) const { return m.progress_ && m.progress_->beaten(s, k, m.diff_); }
     bool cleared(int s) const { return m.progress_ && m.progress_->cleared(s, m.diff_); }
     // a song's colour: its stage's hue, in a gradient across the stage's songs (song 1 lighter and a touch warmer,
