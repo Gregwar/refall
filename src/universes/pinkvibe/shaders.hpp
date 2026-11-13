@@ -204,27 +204,38 @@ layout(location = 1) in vec4 iA; // x, y, half, rotation
 layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost, 2 preview), scale
 layout(location = 3) in vec4 iC; // color, k (< 0: brightening, > 0: game over greying)
 uniform mat4 uVP;
-out vec2 vU;
+out vec2 vU, vW;
 flat out vec4 vB, vC;
 void main() {
     vec2 l = aCorner * 0.56;
     float c = cos(iA.w), s = sin(iA.w);
     vec2 w = vec2(c * l.x - s * l.y, s * l.x + c * l.y) * iA.z * 2.0 * iB.w;
     vU = l;
+    vW = iA.xy + w;
     vB = iB; vC = iC;
     gl_Position = uVP * vec4(iA.xy + w, 0.0, 1.0);
 }
 )";
 inline const char* CELL_FS = R"(
-in vec2 vU;
+in vec2 vU, vW;
 flat in vec4 vB, vC;
 out vec4 frag;
 uniform vec3 uRim;
+uniform vec3 uVivid[7];
+uniform float uWave, uBeat;
 void main() {
     vec2 u = vU;
     AA = max(fwidth(u.x), 1e-4) * 0.75;
     int type = int(vB.x + 0.5);
     vec3 col = vC.rgb;
+    if (uWave > 0.0 && vB.z < 0.5) {
+        // the drop: every two beats a wave of the drop's vivid colors rises from the well's floor through the stack,
+        // a crisp front and a long fading tail, a gradient crawling across the still blocks
+        float dist = length((vW - vec2(0.0, -11.5)) * vec2(1.3, 1.0));
+        float s = fract(uBeat * 0.5 - dist / 9.0);
+        float band = smoothstep(0.0, 0.06, s) * (1.0 - smoothstep(0.06, 0.55, s));
+        col = mix(col, uVivid[type], uWave * (0.12 + 0.88 * band));
+    }
     float d = dBox(u, vec2(0.45), 0.08);  // nearly square corners, like the flat bands
     vec4 acc = vec4(0.0);
     if (abs(vB.z - 1.0) < 0.5) {

@@ -177,6 +177,10 @@ private:
     uint64_t seed_ = 1;
     vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7], dropPiece_[7], shownPiece_[7];
     float night_ = 0.f;   // the drop's share in the HUD's colors and the blocks' vividness
+    // the drop's waves of color on the blocks: pulses of vividness rolling up through the stack on the beat (the
+    // blocks themselves stay put)
+    float wave_ = 0.f;
+    double waveBeat_ = 0.0;
     bool colSet_ = false;
 
     int level_ = 1;
@@ -459,7 +463,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
 
 void PinkVibeUniverse::cell(float x, float y, float half, float rot, int type, float alpha, int mode, float scale, float k) {
     if (alpha <= 0.003f || scale <= 0.f) return;
-    const vec3 c = shownPiece_[std::clamp(type, 0, 6)];
+    const vec3 c = piece_[std::clamp(type, 0, 6)];
     cells_.push_back({{x, y, half, rot}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
 }
 
@@ -755,8 +759,11 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.1f : 0.4f, dt);
     const float sunset = ease(dropAmt_);
     night_ = sunset;
-    // the blocks glow more vivid with the drop's palette
+    // the petals and bubbles glow more vivid with the drop's palette; the blocks keep theirs, the drop's colors
+    // crossing them in waves (see the cell shader)
     for (int i = 0; i < 7; i++) shownPiece_[i] = lerp(piece_[i], dropPiece_[i], sunset);
+    wave_ = sunset;
+    waveBeat_ = music.hasSong ? music.beat : time_ * 2.0;
     swell_ = approach(swell_, 0.f, 0.45f, dt);
     // the waves: their height breathes with the section's energy (slow envelopes), their flow speeds up from mid on
     intensity_ = approach(intensity_, music.hasSong ? music.intensity : 0.5f, 0.6f, dt);
@@ -858,6 +865,12 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
             glUseProgram(progCell_);
             ugl::setMat(progCell_, "uVP", vp_);
             set3f(progCell_, "uRim", well_);
+            set1f(progCell_, "uWave", wave_);
+            set1f(progCell_, "uBeat", (float)std::fmod(waveBeat_, 512.0));
+            for (int i = 0; i < 7; i++) {
+                const std::string n = "uVivid[" + std::to_string(i) + "]";
+                set3f(progCell_, n.c_str(), dropPiece_[i]);
+            }
             glBindVertexArray(cellVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
             glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
