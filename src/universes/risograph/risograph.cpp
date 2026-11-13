@@ -813,11 +813,12 @@ void RisographUniverse::hudLine(const HudText& h, text::Line& out) {
         a = saturate(0.35f + h.alpha * 1.6f);
         put(bold, name, sz, tr);
         if (!var.empty()) {
-            out.add("", reg, base, vec3(1.f), (base * 0.9f - tr) / base); // the gap
             put(reg, var, vsz, vtr);
-            out.spans.back().alpha = 0.85f;
-            // its cap line lower than the name's by three quarters of the difference (Space Mono's capitals: 0.47)
-            out.spans.back().dy = (0.75f - 0.473f) * (sz - vsz);
+            text::Span& v = out.spans.back();
+            v.alpha = 0.85f;
+            v.gap = (base * 0.9f - tr) / vsz; // (after the name's own spacing)
+            // its cap line lower than the name's by three quarters of the difference
+            v.dy = 0.75f * (sz - vsz) + text::capHeight(reg) * vsz - text::capHeight(bold) * sz;
         }
         break;
     }

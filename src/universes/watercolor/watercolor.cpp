@@ -753,10 +753,10 @@ void WatercolorUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.5f, vsz = base * 0.68f, a = saturate(0.35f + h.alpha * 1.6f);
         put(italic, text::titleCase(name), sz, 0.f, ink, a, -base * 0.15f);
         if (!var.empty()) {
-            out.add("", italic, base, ink, 0.8f); // the gap
-            out.add(var, roman, vsz, ink, 0.28f, a * 0.85f);
-            // its cap line 0.37 of the base under the name's (Yrsa's capitals: 0.57 of its size)
-            out.spans.back().dy = base * 0.37f + 0.57f * (vsz - sz);
+            text::Span& v = out.add(var, roman, vsz, ink, 0.28f, a * 0.85f);
+            v.gap = base * 0.8f / vsz;
+            // its cap line 0.37 of the base under the name's
+            v.dy = base * 0.37f + text::capHeight(roman) * vsz - text::capHeight(italic) * sz;
         }
         break;
     }
