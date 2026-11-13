@@ -263,6 +263,9 @@ private:
     bool breakSkip_ = false;   // an outro asked by "next song": a shorter one
     bool breaks_ = true;
     bool introAtStart_ = true; // the program starts on the black, the first song coming in with its title card
+    // A song without an intro waits silent through its title card and starts with the game (see startTrack).
+    bool songHeld_ = false;
+    bool songHasIntro() const;
     Game blank_;               // what the universes draw while the game is hidden
     // the outro starts this long before the song's end (ZEN_OUT_LEAD=SECONDS: earlier or later, for demo videos)
     static float outLead() {
@@ -358,7 +361,12 @@ void App::startTrack(std::shared_ptr<Track> t) {
     bool first = !track_;
     track_ = std::move(t);
     if (mode_ == MODE_CAMPAIGN) campaignSongStarted();
-    audio_.play(track_);
+    // Coming in from the black with its title card: a song that has an intro plays from the title on; one that
+    // starts straight in waits until the game is back and starts with it, on its very first beat.
+    songHeld_ = break_ == BREAK_IN && !songHasIntro();
+    audio_.play(track_, !songHeld_);
+    audio_.setPaused(paused_ || songHeld_);
+    if (songHeld_) std::printf("[app] no intro: the song waits for the game\n");
     if (first && showHelp_) helpTimer_ = 14.f; // show controls once the music starts
     trackAge_ = 0;
     lastPhase_ = 0;
@@ -398,6 +406,12 @@ void App::startTrack(std::shared_ptr<Track> t) {
     sceneNameTimer_ = 8.f;
     printScene();
     lib_.prefetch(runSeed_ + sceneCounter_ * 7919);
+}
+
+// An intro: the song opens on a quiet section of a few seconds at least (before its beat comes in).
+bool App::songHasIntro() const {
+    const auto& sg = track_->analysis.segments;
+    return !sg.empty() && sg[0].kind == SEG_INTRO && sg[0].end - sg[0].start >= 4.0;
 }
 
 // The universe for the current song: the forced one, else one picked from the song's footprint.
@@ -754,6 +768,11 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         un.y = lerpf(h * 0.42f + h * 0.06f, h - 50.f * s + 2.f * s, e);
         un.alpha = a * lerpf(0.85f, 0.6f, e);
         if (t >= IN_END) {
+            if (songHeld_) { // the game starts: so does the song
+                songHeld_ = false;
+                audio_.setPaused(paused_);
+                std::printf("[app] the song starts with the game\n");
+            }
             break_ = BREAK_OFF;
             b = Renderer::Break{};
             std::printf("[app] break: play\n");
@@ -1167,9 +1186,9 @@ int App::run() {
                 continue;
             }
             if (break_ == BREAK_OUT && outroDone && nextTrack_) {
-                startTrack(std::move(nextTrack_));
                 break_ = BREAK_IN;
                 breakT_ = 0;
+                startTrack(std::move(nextTrack_));
                 std::printf("[app] break: intro\n");
             }
         } else if (mode_ == MODE_CAMPAIGN && track_ && songFinished() && !game_.over()) { // no breaks (ZEN_NO_BREAK)
@@ -1207,7 +1226,7 @@ int App::run() {
             simSongTime_ += dt * audio_.currentSpeed();
             songTime_ = simSongTime_;
         } else if (testPlay()) {
-            if (track_ && !paused_) simSongTime_ += dt;
+            if (track_ && !paused_ && !songHeld_) simSongTime_ += dt;
             songTime_ = simSongTime_;
         } else {
             songTime_ = audio_.position();
@@ -1218,7 +1237,7 @@ int App::run() {
         const bool waiting = !track_;
         if (input_.pressed(A_PAUSE) && !game_.over() && !waiting) {
             paused_ = !paused_;
-            audio_.setPaused(paused_);
+            audio_.setPaused(paused_ || songHeld_);
         }
         if (input_.pressed(A_QUIT) && paused_) {
             if (menuEnabled_) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
@@ -1749,7 +1768,7 @@ void App::beginSession(const Menu::Choice& c) {
     slowWas_ = muffleWas_ = false;
     audio_.setMuffled(false, 0.3f);
     audio_.setSongGain(1.f, 0.3f);
-    paused_ = wantSkip_ = false;
+    paused_ = wantSkip_ = songHeld_ = false;
     audio_.setPaused(false);
     overTime_ = 0;
     levelToast_ = slowToast_ = quadToast_ = skipToast_ = seekToast_ = failedToast_ = 0;
@@ -1768,6 +1787,7 @@ void App::beginSession(const Menu::Choice& c) {
 
 void App::toMenu(Menu::Screen s, const std::string& msg, const std::string& sub, bool bad) {
     std::printf("[app] menu%s%s (%.1f s)\n", msg.empty() ? "" : ": ", msg.c_str(), runTime_);
+    songHeld_ = false;
     audio_.setPaused(false);
     audio_.play(nullptr); // the song fades out (still muffled after a game over)
     paused_ = false;
