@@ -24,16 +24,13 @@
 #include "universes/watercolor/watercolor.hpp"
 
 #include <algorithm>
-#include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/watercolor/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -144,18 +141,6 @@ vec3 absorb(const vec3& c, const vec3& paper) {
     return {k(c.x, paper.x), k(c.y, paper.y), k(c.z, paper.z)};
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
 } // namespace
 
 // =====================================================================================================
@@ -170,7 +155,6 @@ bool WatercolorUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "watercolor cell");
     progPencil_ = compile(shaders::PENCIL_VS, shaders::PENCIL_FS, "watercolor pencil");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "watercolor shape");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "watercolor text");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "watercolor post");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -204,19 +188,22 @@ bool WatercolorUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
+    // the HUD's ink: a transparent pigment, absorbed in linear light as the washes are (on the final picture: the
+    // ink to the power of its strength), a touch darker at the edges where it dried; white gouache on the toned
+    // paper (uP0.x)
+    ink_.glsl = R"(
+vec4 letter(Letter L) {
+    float a = L.std.a * (0.86 + 0.14 * (1.0 - smoothstep(0.0, 3.0, L.dist)));
+    if (uP0.x > 0.5) return vec4(L.ink.rgb, 1.0) * pow(a, 0.7); // (light over the darker paper, in linear light)
+    vec3 F = pow(max(L.ink.rgb, vec3(0.003)), vec3(a)); // what the paper keeps
+    float k = max(a, 1.0 - min(F.r, min(F.g, F.b)));      // (multiplied in as F - 1 + k + (1 - k))
+    return vec4(F - 1.0 + k, k);
+}
+)";
+
     buildNoise();
-    buildFont(fontItalic_, FONT_ITALIC);
-    buildFont(fontRoman_, FONT_ROMAN);
     pal_ = paletteOf(0);
     for (auto& b : backruns_) b = vec4(0.f, 0.f, 1.f, 0.f);
     resize(width, height);
@@ -288,51 +275,6 @@ void WatercolorUniverse::bindNoise(GLuint prog, int unit) {
     set1i(prog, "uNoise", unit);
 }
 
-// Glyphs baked as signed distance fields (they scale cleanly).
-void WatercolorUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] watercolor font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
-}
-
 void WatercolorUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -370,15 +312,11 @@ WatercolorUniverse::~WatercolorUniverse() {
     landT_.destroy();
     wetT_.destroy();
     sceneT_.destroy();
-    for (GLuint p : {progPaper_, progLand_, progBloom_, progComp_, progCell_, progPencil_, progShape_, progText_, progPost_})
+    for (GLuint p : {progPaper_, progLand_, progBloom_, progComp_, progCell_, progPencil_, progShape_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {cellVao_, lineVao_, bloomVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, cellVbo_, lineVbo_, bloomVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {cellVao_, lineVao_, bloomVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, cellVbo_, lineVbo_, bloomVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
-    for (Font* f : {&fontItalic_, &fontRoman_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -781,179 +719,92 @@ void WatercolorUniverse::buildBoard(const Game& g) {
 // Text
 // =====================================================================================================
 
-float WatercolorUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
+namespace {
+vec3 toSrgb(const vec3& c) {
+    return {std::pow(std::max(c.x, 0.f), 1.f / 2.2f), std::pow(std::max(c.y, 0.f), 1.f / 2.2f), std::pow(std::max(c.z, 0.f), 1.f / 2.2f)};
 }
-
-float WatercolorUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                    std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-void WatercolorUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uGouache", pal_.body > 0.3f ? 1.f - b : 0.f);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
+} // namespace
 
 // The HUD in WATERCOLOR's typography: a book italic for the song, the painting's name, the section and the
 // celebrations, like a title penciled under a painting; small spaced capitals for labels; the numbers in the
-// roman. All in the painting's own ink (a sepia, an indigo...), transparent like the washes.
-void WatercolorUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// roman. All in the painting's own ink (a sepia, an indigo...), transparent like the washes (multiplied in, a touch
+// darker at the edges where it dried: ink_), white gouache on the toned paper.
+void WatercolorUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* italic = text::font(FONT_ITALIC);
+    text::Font* roman = text::font(FONT_ROMAN);
     const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.paper;
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha * (r.accent || r.custom ? 1.f : 1.1f)));
+    const float base = h.scale * 12.f;
+    const float alpha = saturate(h.alpha);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const vec3 ink = toSrgb(lerp(pal_.body > 0.3f ? ugl::toLinear(hex(0xf0ece0)) : pal_.ink, bridge_.ink, b));
+    const vec3 accent = toSrgb(lerp(lerp(pal_.accent, pal_.ink, 0.25f), bridge_.ink, b));
+    float weight = 0.0075f; // (the roman a touch bolder, the italic a little more)
+    // a run: its size and letter spacing in pixels
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+        if (f == italic) weight = 0.01f;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "Watercolor" in the italic, the painting's name in small spaced capitals after it.
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.5f, vsz = base * 0.68f, a = saturate(0.35f + h.alpha * 1.6f);
+        put(italic, text::titleCase(name), sz, 0.f, ink, a, -base * 0.15f);
+        if (!var.empty()) {
+            out.add("", italic, base, ink, 0.8f); // the gap
+            out.add(var, roman, vsz, ink, 0.28f, a * 0.85f);
+            // its cap line 0.37 of the base under the name's (Yrsa's capitals: 0.57 of its size)
+            out.spans.back().dy = base * 0.37f + 0.57f * (vsz - sz);
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
+        break;
     }
-    const vec3 ink = pal_.body > 0.3f ? ugl::toLinear(hex(0xf0ece0)) : pal_.ink;
-    const vec3 accent = lerp(pal_.accent, pal_.ink, 0.25f);
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "Watercolor" in the italic, the painting's name in small spaced capitals after it.
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.5f, vsz = base * 0.68f, vtr = vsz * 0.28f;
-            const float wName = textWidth(fontItalic_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontRoman_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontItalic_, name, x, h.y - base * 0.15f, sz, 0.f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontItalic_, q, ink, a, 0.04f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontRoman_, var, x + wName + gap, h.y + base * 0.22f, vsz, vtr, q);
-                drawText(fontRoman_, q, ink, a * 0.85f, 0.03f);
-            }
-            continue;
+    case HUD_SECTION: put(italic, text::titleCase(h.text), base * 1.4f, 0.f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(italic, h.text, base * 1.3f, 0.f, ink, h.alpha * 1.3f, -base * 0.15f); break;
+    case HUD_INFO: put(roman, h.text, base * 0.8f, base * 0.12f, ink, saturate(alpha * 1.2f) * 0.8f); break;
+    case HUD_LABEL: put(roman, h.text, base * 0.78f, base * 0.3f, ink, saturate(alpha * 1.2f) * 0.75f); break;
+    case HUD_VALUE: put(roman, h.text, base * 1.12f, base * 0.04f, ink, alpha); break;
+    case HUD_NOTICE: put(italic, h.text, base * 1.2f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(roman, h.text, base * 0.9f, base * 0.05f, ink, alpha); break;
+    case HUD_TOAST: put(italic, text::titleCase(h.text), base * 1.55f, 0.f, ink, alpha, -base * 0.2f); weight = 0.0125f; break;
+    case HUD_TOAST_SUB: put(roman, h.text, base * 0.85f, base * 0.2f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(italic, text::titleCase(h.text), base * 1.35f, 0.f, ink, alpha, -base * 0.12f);
+            weight = 0.0125f;
+        } else {
+            put(roman, h.text, base * 0.88f, base * 0.1f, h.accent ? accent : ink, alpha);
         }
-        case HUD_SECTION:
-            place(fontItalic_, titleCase(h.text), base * 1.4f, 0.f);
-            drawText(fontItalic_, q, ink, saturate(0.2f + h.alpha * 1.9f), 0.04f);
-            continue;
-        case HUD_TITLE:
-            place(fontItalic_, h.text, base * 1.3f, 0.f, -base * 0.15f);
-            drawText(fontItalic_, q, ink, saturate(h.alpha * 1.3f), 0.04f);
-            continue;
-        case HUD_INFO:
-            place(fontRoman_, h.text, base * 0.8f, base * 0.12f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.8f, 0.03f);
-            continue;
-        case HUD_LABEL:
-            place(fontRoman_, h.text, base * 0.78f, base * 0.3f);
-            drawText(fontRoman_, q, ink, saturate(alpha * 1.2f) * 0.75f, 0.03f);
-            continue;
-        case HUD_VALUE:
-            place(fontRoman_, h.text, base * 1.12f, base * 0.04f);
-            drawText(fontRoman_, q, ink, alpha, 0.03f);
-            continue;
-        case HUD_NOTICE:
-            place(fontItalic_, h.text, base * 1.2f, 0.f);
-            drawText(fontItalic_, q, accent, alpha, 0.04f);
-            continue;
-        case HUD_KEY:
-            place(fontRoman_, h.text, base * 0.9f, base * 0.05f);
-            drawText(fontRoman_, q, ink, alpha, 0.03f);
-            continue;
-        case HUD_TOAST:
-            place(fontItalic_, titleCase(h.text), base * 1.55f, 0.f, -base * 0.2f);
-            drawText(fontItalic_, q, ink, alpha, 0.05f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontRoman_, h.text, base * 0.85f, base * 0.2f);
-            drawText(fontRoman_, q, accent, alpha * 0.9f, 0.03f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontItalic_, titleCase(h.text), base * 1.35f, 0.f, -base * 0.12f);
-                drawText(fontItalic_, q, ink, alpha, 0.05f);
-            } else {
-                place(fontRoman_, h.text, base * 0.88f, base * 0.1f);
-                drawText(fontRoman_, q, h.accent ? accent : ink, alpha, 0.03f);
-            }
-            continue;
-        default:
-            place(fontRoman_, h.text, base * 0.85f, base * 0.06f);
-            drawText(fontRoman_, q, h.accent ? accent : ink, alpha, 0.03f);
-            continue;
-        }
+        break;
+    default: put(roman, h.text, base * 0.85f, base * 0.06f, h.accent ? accent : ink, alpha); break;
     }
+    out.look.weight = weight;
+    const bool gouache = pal_.body > 0.3f && b < 0.5f;
+    out.blend = gouache ? text::BLEND_OVER : text::BLEND_MULTIPLY;
+    ink_.p0 = vec4{gouache ? 1.f : 0.f, 0.f, 0.f, 0.f};
+    out.lettering = &ink_;
+}
+
+// The menus' panels: plain paint.
+void WatercolorUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.paper;
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha * (r.accent || r.custom ? 1.f : 1.1f)));
+    }
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
 
 // =====================================================================================================
@@ -1123,7 +974,7 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
     }
     glActiveTexture(GL_TEXTURE0);
-    drawHud(f.hud, f.panels);
+    drawPanels(f.panels);
     glDisable(GL_BLEND);
     (void)wp;
 
