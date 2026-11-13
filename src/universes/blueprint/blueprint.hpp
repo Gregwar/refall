@@ -116,7 +116,9 @@ private:
     float cellLineW() const;  // the parts' outline width (pixels)
     struct Fading { float x, y; int type, mask; float t; };  // a cleared cell being rubbed out
     std::vector<Fading> fading_;
-    struct LockFx { int id; float minY, maxY, t; };          // a part's hatching drawn up from the impact
+    // a part just locked: a hard drop draws its hatching up from the impact; a soft landing only darkens the falling
+    // part's lighter hatching to the locked one's (no redrawing)
+    struct LockFx { int id; float minY, maxY, t; bool dropped; };
     std::vector<LockFx> lockFx_;
 
     // ---- Text.
