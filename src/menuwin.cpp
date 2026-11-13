@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -733,6 +734,11 @@ void Worlds::kalVoyages() {
     const auto& vs = m.voyages_->list();
     const int nc = (int)vs.size() + 2, cols = Menu::VOYAGE_COLS, rows = (nc + cols - 1) / cols;
     const bool making = m.vStep_ > 0;
+    struct Spin { float angle = 0, speed = 0; };
+    static std::map<uint32_t, Spin> spins; // the cards' rosettes, by card
+    static double lastT = t;
+    const float dt = (float)std::clamp(t - lastT, 0.0, 0.1);
+    lastT = t;
     constexpr float CW = 660, CH = 190, GAP = 40, STEP = CH + 44, TOP = 290;
     constexpr int SHOWN = 3; // rows in view
     const float scroll = std::clamp(m.aVRow_ - 1.f, 0.f, (float)std::max(0, rows - SHOWN));
@@ -783,7 +789,11 @@ void Worlds::kalVoyages() {
         if (!songs && featured) for (const CampaignStage& s2 : mc.stages()) songs += (int)s2.songs.size();
         if (!songs && v) songs = v->songs;
         // the rosette: a kite per stage in the stages' hues, the cleared ones lit
-        const float rot = (sel ? t * (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) : 0.f) + (seed % 100) * 0.0628f; // only the focused one turns
+        // only the focused one turns: each card keeps its own angle, its speed easing in and out
+        Spin& sp = spins[seed];
+        sp.speed += ((sel ? (featured ? 0.06f : 0.04f + ((seed >> 4) % 5) * 0.01f) : 0.f) - sp.speed) * (1.f - std::exp(-dt * 3.f));
+        sp.angle += sp.speed * dt;
+        const float rot = sp.angle + (seed % 100) * 0.0628f;
         for (int k = 0; k < st; k++) {
             unsigned char sc[3];
             m.stageColor(k, sc);
