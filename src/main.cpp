@@ -973,9 +973,9 @@ std::vector<HudText> App::buildHud(float dt) {
         else
             lines = {"MOVE  ARROWS", "ROTATE  UP / Z", "HARD DROP  SPACE", "HOLD  C", "SLOW MOTION  V", "NEW SCENE  T",
                      "NEXT SONG  N", "SEEK  CTRL+SHIFT+ARROWS", "FULLSCREEN  F", "PAUSE  ESC"};
-        if (mode_ == MODE_CAMPAIGN) // no skipping in a campaign
+        if (mode_ == MODE_CAMPAIGN) // no skipping in a campaign, its universes are set
             lines.erase(std::remove_if(lines.begin(), lines.end(), [](const std::string& l) {
-                return l.rfind("NEXT SONG", 0) == 0 || l.rfind("SEEK", 0) == 0; }), lines.end());
+                return l.rfind("NEXT SONG", 0) == 0 || l.rfind("SEEK", 0) == 0 || l.rfind("NEW SCENE", 0) == 0; }), lines.end());
         const float lineH = 20.f * s, bottom = h - 40.f * s;
         for (size_t i = 0; i < lines.size(); i++)
             hud.push_back({lines[i], -28 * s, bottom - (lines.size() - 1 - i) * lineH, 1.3f * s, helpA, false, false, HUD_HELP});
@@ -1335,7 +1335,7 @@ int App::run() {
             wantSkip_ = true;
             skipToast_ = 2.5f;
         }
-        if (input_.pressed(A_NEW_SCENE)) newScene(false);
+        if (input_.pressed(A_NEW_SCENE) && mode_ != MODE_CAMPAIGN) newScene(false); // the Voyage keeps its universes
         // Ctrl+Shift+Left/Right: jump 10 s in the song (repeats while held) to test sections quickly.
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
