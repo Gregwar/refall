@@ -1941,7 +1941,7 @@ void App::startMenuMusic() {
 }
 
 // The menu's music follows the screen: playing on the menu (0.7, a 1.5 s fade in), faded out (0.8 s) when a game
-// starts; back on the menu after a game it starts over from its beginning.
+// starts; back on the menu after a game it starts over from its beginning, once a stage's celebration is over.
 void App::updateMenuMusic() {
     if (musicLoad_.valid() && musicLoad_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         auto pcm = musicLoad_.get();
@@ -1955,7 +1955,8 @@ void App::updateMenuMusic() {
         }
     }
     if (!musicReady_) return;
-    const int want = mode_ != MODE_MENU || menu_.screen() == Menu::DEBRIEF ? 0 : 1; // (silent on a run's debrief)
+    // (silent on a run's debrief, and while a cleared stage's petal turns and the next one unlocks)
+    const int want = mode_ != MODE_MENU || menu_.screen() == Menu::DEBRIEF || menu_.celebrating() ? 0 : 1;
     if (want == musicState_) return;
     static const char* NAMES[3] = {"faded out", "playing", "ducked"};
     if (want == 1 && musicState_ == 0 && audio_.bedGain() <= 0.f) audio_.rewindBed(); // back from a game: from the top

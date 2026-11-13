@@ -69,6 +69,7 @@ public:
     // A stage just cleared: once the Voyage's screen is back (after the debrief), its petal turns into its cleared look
     // under the focus, then the focus moves on to the next stage (if the player hasn't moved).
     void celebrateClear(int stage, int next) { celebrate_ = stage; celebrateNext_ = next; celebrateT_ = 0.f; }
+    bool celebrating() const { return celebrate_ >= 0; } // (until the focus has moved on, or the player moved)
     void snap(); // the animated focus jumps to its place (screenshots)
     // Where the player was in the menu (kept between launches): the title entry, Voyage's difficulty and focused
     // stage, free play's difficulty and playlist.
