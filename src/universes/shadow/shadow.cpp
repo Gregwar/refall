@@ -647,7 +647,7 @@ float ShadowUniverse::wallLightAt(float px, float py) const {
 
 // The HUD in SHADOW's typography: Marcellus, set on the wall like the titles of a magic-lantern slide. On the lit
 // wall the letters are dark (shadows themselves), in the dark around the circle they are pale.
-void ShadowUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul) {
+void ShadowUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul, bool card) {
     const VariantDef& d = VARIANTS[variant_];
     const vec3 dark = hex(d.inkDark), pale = hex(d.inkLight), acc = hex(d.accent);
     if (!panels.empty()) {
@@ -675,7 +675,7 @@ void ShadowUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<
             q.clear();
             const float w = textWidth(text, size, track);
             const float x = ugl::hudLeft(h, w, width_);
-            const float lit = wallLightAt(x + w * 0.5f, h.y + size * 0.5f);
+            const float lit = card ? 0.f : wallLightAt(x + w * 0.5f, h.y + size * 0.5f);
             textQuads(text, x, h.y + dy, size, track, q);
             const vec3 ink = accent ? lerp(acc, dark * 1.2f, lit) : lerp(pale, dark, lit);
             const vec3 halo = lerp(vec3(0.02f, 0.018f, 0.015f), pale, lit);
@@ -969,7 +969,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(f.hud, bare ? std::vector<HudRect>() : f.panels, fade);
+    drawHud(f.hud, bare ? std::vector<HudRect>() : f.panels, fade, f.card);
     glDisable(GL_BLEND);
     (void)lastHalf_;
 }

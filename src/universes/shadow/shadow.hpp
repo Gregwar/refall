@@ -63,7 +63,7 @@ private:
     float textWidth(const std::string& s, float size, float track) const;
     void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
     void drawText(const std::vector<float>& q, const vec3& srgb, float alpha, float bias, float soft);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul);
+    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul, bool card = false);
     float wallLightAt(float px, float py) const; // how lit the wall is at a pixel (0..1)
 
     // ---- GL.

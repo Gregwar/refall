@@ -33,20 +33,22 @@ void main() {
 }
 )";
 // A captured line of the title card: its letters (their colors, their coverage) over the box uRect (x0, y0, x1, y1
-// in uv, bottom-left origin), turned toward white by uWhiten (dark ink on the black), premultiplied.
+// in uv, bottom-left origin), dark ink turned white by uNight (on the black), premultiplied.
 const char* CARD_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uTex;
 uniform vec4 uRect;
 uniform vec3 uWhite;
-uniform float uAlpha, uWhiten;
+uniform float uAlpha, uNight;
 void main() {
     vec2 q = (vUv - uRect.xy) / (uRect.zw - uRect.xy);
     if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) discard;
     vec4 t = texture(uTex, vec2(q.x, 1.0 - q.y));
     float a = t.a * uAlpha;
-    frag = vec4(mix(t.rgb, uWhite, uWhiten) * a, a);
+    // dark ink turns white on the black (light ink keeps its color)
+    float l = dot(t.rgb, vec3(0.3, 0.55, 0.15));
+    frag = vec4(mix(t.rgb, uWhite, uNight * (1.0 - smoothstep(0.35, 0.65, l))) * a, a);
 }
 )";
 } // namespace
@@ -351,7 +353,8 @@ void Renderer::captureCard(const Frame& f) {
 bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom, float bigCap, CardLine& out) {
     const std::vector<HudText> none;
     auto grab = [&](const std::vector<HudText>& hud, std::vector<unsigned char>& px) {
-        const Frame fb{*brk_.blank, f.music, f.time, 0.f, false, false, f.fade, hud, panels_, true};
+        Frame fb{*brk_.blank, f.music, f.time, 0.f, false, false, f.fade, hud, panels_, true};
+        fb.card = true;
         texB_.bind();
         cur_.u->render(fb, texB_.fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, texB_.fbo);
@@ -359,8 +362,8 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         px.resize((size_t)w_ * h_ * 4);
         glReadPixels(0, 0, w_, h_, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
     };
-    std::vector<unsigned char> base, with;
-    grab(none, base);
+    std::vector<unsigned char> world, base, with;
+    grab(none, world);
     // the lettering at scale 1 first: its height gives the scale that makes it as big as the card asks
     float k = 1.f;
     for (int pass = 0; pass < 3; pass++) {
@@ -371,6 +374,7 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         big.x = line.x * k;
         big.y = ay + (line.y - ay) * k;
         grab({big}, with);
+        base = world;
         // the difference, and the lettering's ink (the color where it differs most)
         std::vector<float> d((size_t)w_ * h_);
         float dMax = 0;
@@ -388,6 +392,43 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
                 wsum += 1;
             }
         const vec3 I((float)(ink[0] / wsum), (float)(ink[1] / wsum), (float)(ink[2] / wsum));
+        // a pixel's difference when it is a move toward the ink, else none (see the coverage below)
+        auto toward = [&](const unsigned char* W8, const unsigned char* P8) {
+            const vec3 W(W8[0] / 255.f, W8[1] / 255.f, W8[2] / 255.f), P(P8[0] / 255.f, P8[1] / 255.f, P8[2] / 255.f);
+            const vec3 dv = P - W, iv = I - W;
+            const float li = length(iv), ld = length(dv);
+            if (li < 0.14f || dot(dv, iv) < 0.5f * li * ld) return 0.f;
+            return std::max({std::fabs(dv.x), std::fabs(dv.y), std::fabs(dv.z)});
+        };
+        if (pass > 0) {
+            // The lettering again lower (or higher) on the world, each of its pixels kept from where it stands out
+            // most: where the world behind it is as light as its ink (a beam of light, a bright sky) another place
+            // shows it.
+            std::vector<float> best(d.size());
+            for (size_t i = 0; i < d.size(); i++) best[i] = toward(&base[i * 4], &with[i * 4]);
+            std::vector<unsigned char> shot;
+            const int dir = fromBottom ? -1 : 1;
+            for (int j = 1; j < 3; j++) {
+                const int sh = dir * (int)std::lround(h_ * 0.27f * j);
+                HudText moved = big;
+                moved.y += (float)sh;
+                grab({moved}, shot);
+                for (int y = 0; y < h_; y++) {
+                    const int ys = y + sh; // top-left rows: the moved lettering's row
+                    if (ys < 0 || ys >= h_) continue;
+                    const size_t r0 = (size_t)(h_ - 1 - y) * w_, rs = (size_t)(h_ - 1 - ys) * w_;
+                    for (int x = 0; x < w_; x++) {
+                        const size_t i = r0 + x, is = rs + x;
+                        const float v = toward(&world[is * 4], &shot[is * 4]);
+                        if (v > best[i] + 0.02f) {
+                            best[i] = v;
+                            for (int c = 0; c < 4; c++) { base[i * 4 + c] = world[is * 4 + c]; with[i * 4 + c] = shot[is * 4 + c]; }
+                            d[i] = v;
+                        }
+                    }
+                }
+            }
+        }
         // coverage: how much each pixel differs, against the lettering's core (its strongest differences), with a
         // firm threshold: a soft glow or halo around the letters (the universe's style over its world, a blob on
         // black) is left out, the letters' own edges kept. Only a move toward the ink counts: a halo or a plate
@@ -430,14 +471,12 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         }
         if (bx1 < 0) return false;
         const float bw = (float)(bx1 - bx0 + 1), bh = (float)(by1 - by0 + 1);
-        if (pass == 0 || pass == 1) {
-            // the scale for the card: the capital height asked (the box is a little taller than the capitals),
-            // never wider than most of the screen, never off it
-            const float want = std::min({bigCap * 1.25f / (bh / k), w_ * 0.86f / (bw / k), 6.f});
-            if (std::fabs(want - k) / want > 0.04f) {
-                k = want;
-                continue;
-            }
+        if (pass == 0) {
+            // the scale for the card, from the lettering at its own size (bigger, a universe may leave out what runs
+            // off the screen, and the box would shrink): the capital height asked (the box is a little taller than
+            // the capitals), never wider than most of the screen
+            k = std::min({bigCap * 1.25f / bh, w_ * 0.86f / bw, 6.f});
+            continue;
         }
         // keep it: the coverage cropped to its box (a margin for the glow), normalized
         const int m = 4;
@@ -445,7 +484,6 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         const int y0 = std::max(0, by0 - m), y1 = std::min(h_ - 1, by1 + m);
         const int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
         std::vector<unsigned char> cov((size_t)cw * ch * 4);
-        double lumSum = 0, lumW = 0;
         for (int y = 0; y < ch; y++)
             for (int x = 0; x < cw; x++) {
                 const size_t i = (size_t)(h_ - 1 - (y0 + y)) * w_ + (x0 + x);
@@ -454,8 +492,6 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
                 o[1] = (unsigned char)std::lround(255.f * col[i].y);
                 o[2] = (unsigned char)std::lround(255.f * col[i].z);
                 o[3] = (unsigned char)std::lround(255.f * a[i]);
-                lumSum += a[i] * (0.3 * col[i].x + 0.55 * col[i].y + 0.15 * col[i].z);
-                lumW += a[i];
             }
         // the edges' color bled into the transparent texels around, so the mipmaps don't darken them
         for (int pass2 = 0; pass2 < 3; pass2++)
@@ -485,13 +521,12 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         out.ax = 0.f;
         out.ay = fromBottom ? (float)h_ : 0.f;
         out.aMax = aMax;
-        out.dark = lumW > 0 && lumSum / lumW < 0.45; // dark ink (a light universe): white on the black
         out.ok = true;
         // Test hook: ZEN_CARD_DEBUG=DIR writes each capture (the world, the world with the lettering, the coverage).
         if (const char* dbg = std::getenv("ZEN_CARD_DEBUG")) {
             const std::string pre = std::string(dbg) + "/card-" + std::to_string(fromBottom ? 1 : 0);
             stbi_flip_vertically_on_write(1);
-            stbi_write_png((pre + "-world.png").c_str(), w_, h_, 4, base.data(), w_ * 4);
+            stbi_write_png((pre + "-world.png").c_str(), w_, h_, 4, world.data(), w_ * 4);
             stbi_write_png((pre + "-with.png").c_str(), w_, h_, 4, with.data(), w_ * 4);
             stbi_flip_vertically_on_write(0);
             stbi_write_png((pre + "-cov.png").c_str(), cw, ch, 4, cov.data(), cw * 4);
@@ -527,7 +562,7 @@ void Renderer::drawCard() {
         const float x0 = lerpf(bx0, sx0, e), y0 = lerpf(by0, sy0, e), x1 = lerpf(bx0 + bw, sx1, e), y1 = lerpf(by0 + bh, sy1, e);
         ugl::set4f(cardProg_, "uRect", x0 / w_, 1.f - y1 / h_, x1 / w_, 1.f - y0 / h_);
         ugl::set3f(cardProg_, "uWhite", white);
-        ugl::set1f(cardProg_, "uWhiten", l.dark ? 1.f - day : 0.f);
+        ugl::set1f(cardProg_, "uNight", 1.f - day);
         ugl::set1f(cardProg_, "uAlpha", saturate(brk_.cardAlpha) * lerpf(i == 0 ? 1.f : 0.85f, l.aMax, e));
         glBindTexture(GL_TEXTURE_2D, l.tex);
         ugl::drawFullscreen();
