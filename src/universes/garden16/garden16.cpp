@@ -24,6 +24,7 @@
 #include <cstring>
 
 #include "layout.hpp"
+#include "library.hpp"
 #include "ugl.hpp"
 #include "universes/registry.hpp"
 
@@ -148,11 +149,19 @@ void ramp4(C3 b, C3 shade, C3* o) {
     o[3] = mix(b, C3{1.f, 1.f, 0.82f}, 0.3f);
 }
 
+// The fonts' text: ASCII, the middle dot as '\x01', accented letters without their accents.
 std::string fold(const std::string& in) {
     std::string s;
     for (size_t i = 0; i < in.size(); i++) {
         if ((unsigned char)in[i] == 0xC2 && i + 1 < in.size() && (unsigned char)in[i + 1] == 0xB7) { s += '\x01'; i++; continue; }
-        if ((unsigned char)in[i] >= 0x80) continue;
+        if ((unsigned char)in[i] >= 0x80) {
+            size_t n = 1;
+            while (i + n < in.size() && ((unsigned char)in[i + n] & 0xC0) == 0x80) n++;
+            const std::string f = asciiFold(in.substr(i, n));
+            if (f.size() == 1 && (unsigned char)f[0] < 0x80) s += f;
+            i += n - 1;
+            continue;
+        }
         s += in[i];
     }
     return s;
@@ -204,6 +213,9 @@ bool Garden16Universe::init(int width, int height) {
     prog_ = ugl::program(ugl::FULLSCREEN_VS, UPSCALE_FS, "garden16 upscale");
     glGenVertexArrays(1, &vao_);
     buildPatterns();
+    // a celebration's word: each letter a canvas pixel up or down on a wave stepped at ten frames a second (uP0.x:
+    // a canvas pixel in em, uP0.y: the wave's height in canvas pixels)
+    wave_.move = "vec2 move(float glyph, vec2 pos) { return vec2(0.0, floor(sin(floor(uTime * 10.0) * 0.7 + glyph * 0.9) * uP0.y + 0.5) * uP0.x); }\n";
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
 }
@@ -1770,67 +1782,73 @@ void Garden16Universe::drawSide(const Game& g) {
     }
 }
 
-void Garden16Universe::layoutHud(const std::vector<HudText>& hud) {
-    items_.clear();
+// A HUD line as GARDEN sets it, in canvas pixels: PIXEL's fonts at one font pixel per canvas pixel (two for the
+// celebrations and the big dialogs), the title shortened to fit, the level's word after the universe's name.
+Garden16Universe::HudItem Garden16Universe::itemOf(const HudText& h, bool fit) const {
+    HudItem it;
     const float hs = std::max(1.f, height_ / 900.f);
-    const int leftX0 = lx(-11.6f), leftX1 = lx(-5.6f), rightX0 = lx(5.6f), rightX1 = lx(11.6f);
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.02f || h.text.empty()) continue;
-        HudItem it;
-        it.text = fold(h.text);
-        it.role = h.role;
-        it.font = FONT_SMALL;
-        TextStyle st;
-        const float k = h.scale / hs;
-        const float lxr = (h.x - ox_) / s_, lyr = (h.y - oy_) / s_;
-        const bool inRight = lxr >= rightX0 && lxr <= rightX1;
-        int scale = 1;
-        switch (h.role) {
-        case HUD_TITLE: it.font = FONT_BIG; break;
-        case HUD_SECTION: it.font = FONT_BIG; break;
-        case HUD_VALUE: it.font = k < 2.4f ? FONT_SMALL : FONT_BIG; break;
-        case HUD_NOTICE: it.font = FONT_BIG; st.color = ACCENT; break;
-        case HUD_KEY: it.font = it.text.size() > 2 ? FONT_SMALL : FONT_BIG; st.color = ACCENT; break;
-        case HUD_TOAST:
-            it.font = FONT_BIG;
-            scale = 2;
-            st.wave = 1;
-            st.wavePhase = std::floor(realT_ * 10.f) * 0.7f;
-            break;
-        case HUD_TOAST_SUB: it.font = FONT_BIG; st.color = ACCENT; break;
-        case HUD_DIALOG:
-            it.font = k >= 2.5f ? FONT_BIG : FONT_SMALL;
-            scale = k >= 4.f ? 2 : 1;
-            break;
-        default: break;
-        }
-        if (h.accent && h.role != HUD_INFO && h.role != HUD_SECTION) st.color = ACCENT;
-        // fades: no dither on letters (they would break up); a faint line is shown or not
-        if (h.alpha < 0.18f) continue;
-        st.scale = scale;
-        it.st = st;
-        it.w = textWidth(it.font, it.text, st.spacing) * scale;
-        it.h = fontHeight(it.font) * scale;
-        if (h.role == HUD_TITLE) {
-            const int maxW = W_ - iround(lxr) - 70;
-            if (it.w > maxW) { it.font = FONT_SMALL; it.w = textWidth(it.font, it.text, 1); it.h = 5; }
-            while (it.w > maxW && it.text.size() > 4) {
-                it.text = it.text.substr(0, it.text.size() - 4) + "..";
-                it.w = textWidth(it.font, it.text, 1);
-            }
-        }
-        if (h.role == HUD_UNIVERSE) {
-            it.text += "  " + std::string(LEVEL_WORDS[std::clamp(level_, 0, 2)]);
+    it.src = h.text;
+    it.text = fold(h.text);
+    it.role = h.role;
+    it.hs = h.scale;
+    const float k = h.scale / hs;
+    const float lxr = (h.x - ox_) / s_, lyr = (h.y - oy_) / s_;
+    const int rightX0 = lx(5.6f), rightX1 = lx(11.6f);
+    const bool inRight = lxr >= rightX0 && lxr <= rightX1;
+    switch (h.role) {
+    case HUD_TITLE: it.font = FONT_BIG; break;
+    case HUD_SECTION: it.font = FONT_BIG; break;
+    case HUD_VALUE: it.font = k < 2.4f ? FONT_SMALL : FONT_BIG; break;
+    case HUD_NOTICE: it.font = FONT_BIG; it.color = ACCENT; break;
+    case HUD_KEY: it.font = it.text.size() > 2 ? FONT_SMALL : FONT_BIG; it.color = ACCENT; break;
+    case HUD_TOAST: it.font = FONT_BIG; it.scale = 2; it.wave = true; break;
+    case HUD_TOAST_SUB: it.font = FONT_BIG; it.color = ACCENT; break;
+    case HUD_DIALOG:
+        it.font = k >= 2.5f ? FONT_BIG : FONT_SMALL;
+        it.scale = k >= 4.f ? 2 : 1;
+        break;
+    default: break;
+    }
+    if (h.accent && h.role != HUD_INFO && h.role != HUD_SECTION) it.color = ACCENT;
+    it.w = textWidth(it.font, it.text, 1) * it.scale;
+    it.h = fontHeight(it.font) * it.scale;
+    if (h.role == HUD_TITLE && fit) {
+        const int maxW = W_ - iround(lxr) - 70;
+        if (it.w > maxW) { it.font = FONT_SMALL; it.w = textWidth(it.font, it.text, 1); it.h = 5; }
+        while (it.w > maxW && it.text.size() > 4) {
+            it.text = it.text.substr(0, it.text.size() - 4) + "..";
             it.w = textWidth(it.font, it.text, 1);
         }
-        int x = iround(lxr);
-        if (h.center) x = iround(lxr - it.w * 0.5f);
-        else if (h.x < 0) x = iround((width_ + h.x - ox_) / s_) - it.w;
-        it.x = x;
-        it.y = iround(lyr);
-        if (h.role == HUD_KEY) it.y = ly(layout::GAUGE_CENTER.y) - it.h / 2;
-        if (h.role == HUD_NOTICE && inRight) it.y = std::max(it.y, ly(layout::GAUGE_CENTER.y) + 18);
-        items_.push_back(it);
+    }
+    if (h.role == HUD_UNIVERSE) {
+        it.text += "  " + std::string(LEVEL_WORDS[std::clamp(level_, 0, 2)]);
+        it.w = textWidth(it.font, it.text, 1);
+    }
+    int x = iround(lxr);
+    if (h.center) x = iround(lxr - it.w * 0.5f);
+    else if (h.x < 0) x = iround((width_ + h.x - ox_) / s_) - it.w;
+    it.x = x;
+    it.y = iround(lyr);
+    if (h.role == HUD_KEY) it.y = ly(layout::GAUGE_CENTER.y) - it.h / 2;
+    if (h.role == HUD_NOTICE && inRight) it.y = std::max(it.y, ly(layout::GAUGE_CENTER.y) + 18);
+    return it;
+}
+
+// Where the item goes from the host's own anchor for the line (screen pixels: the host letters it there moved by
+// these, scaled with the line when the title card blows it up).
+void Garden16Universe::anchor(const HudText& h, HudItem& it) const {
+    it.offX = ox_ + it.x * s_ - ugl::hudLeft(h, it.w * s_, width_);
+    it.offY = oy_ + it.y * s_ - h.y;
+}
+
+void Garden16Universe::layoutHud(const std::vector<HudText>& hud) {
+    items_.clear();
+    const int leftX0 = lx(-11.6f), leftX1 = lx(-5.6f);
+    for (const HudText& h : hud) {
+        // fades: no dither on letters (they would break up); a faint line is shown or not
+        if (h.alpha < 0.18f || h.text.empty()) continue;
+        items_.push_back(itemOf(h));
+        nominal_[h.role] = h.scale;
     }
     // the host spaces its lines for its own font: the info line goes under the title, the section above the
     // universe's line, the score column's labels and values stacked
@@ -1853,60 +1871,137 @@ void Garden16Universe::layoutHud(const std::vector<HudText>& hud) {
         bottom = it->y + it->h;
         prev = it->role;
     }
-    // the plants keep below the letters in the lower part of the picture
+    size_t i = 0;
+    for (const HudText& h : hud)
+        if (h.alpha >= 0.18f && !h.text.empty()) anchor(h, items_[i++]);
+}
+
+// The plants keep below the letters in the lower part of the picture (the boxes the host letters them in).
+void Garden16Universe::keepOutOf(const Frame& f) {
     keepOut_.clear();
+    auto keep = [&](int x0, int y0, int x1, int y1) {
+        if (y1 > ly(-4.f)) keepOut_.push_back({x0 - 3, x1 + 3, y0 - 3, y1 + 2});
+    };
+    if (f.hudBoxes && f.hudBoxes->size() == f.hud.size()) {
+        for (size_t i = 0; i < f.hud.size(); i++) {
+            const vec4& b = (*f.hudBoxes)[i];
+            if (b.z <= b.x || f.hud[i].alpha < 0.18f) continue;
+            keep((int)std::floor((b.x - ox_) / s_), (int)std::floor((b.y - oy_) / s_), (int)std::ceil((b.z - ox_) / s_),
+                 (int)std::ceil((b.w - oy_) / s_));
+        }
+        return;
+    }
+    for (const HudItem& it : items_) keep(it.x, it.y, it.x + it.w, it.y + it.h);
+}
+
+// A line's inks, from what is behind it on the canvas: over the earth pale straw letters with a dark shadow, set in
+// the earth; over the sky the sky's ink at that height (dark on a pale sky, pale on a dark one), with a pixel ring
+// of the other tone where it crosses the earth.
+void Garden16Universe::inkItem(HudItem& it) const {
+    const int band = std::clamp((int)(std::pow(saturate((float)(it.y + it.h / 2) / std::max(1, floor_)), 0.9f) * 5.999f), 0, 5);
+    const float* sc = pal_[SKY0 + band];
+    const bool darkInk = 0.2126f * sc[0] + 0.7152f * sc[1] + 0.0722f * sc[2] > 0.3f;
+    int earth = 0, total = 0;
+    for (int y = it.y; y < it.y + it.h; y++)
+        for (int x = it.x; x < it.x + it.w; x += 2) {
+            total++;
+            const uint8_t k = cv_.kind(x, y);
+            earth += k == K_DIRT || k == K_GRASS || k == K_PLANT;
+        }
+    it.earth = total > 0 && earth * 2 > total;
+    it.ink = it.color ? it.color : it.earth ? (uint8_t)EARTH_INK : darkInk ? (uint8_t)INK : (uint8_t)PALE;
+    it.ring = !it.earth && earth > 0;
+    it.ringCol = darkInk ? HALO : G_OUT;
+    it.kind = it.earth ? (uint8_t)(K_HUD + 2) : darkInk ? (uint8_t)K_HUD : (uint8_t)(K_HUD + 1);
+}
+
+// The menus' panels, and the level as three small sprouts after the universe's line (where the host letters it).
+void Garden16Universe::drawPanels(const Frame& f) {
+    if (!bare_)
+        for (const HudRect& r : f.panels) {
+            const int x0 = iround((r.x - ox_) / s_), y0 = iround((r.y - oy_) / s_);
+            const int x1 = iround((r.x + r.w - ox_) / s_), y1 = iround((r.y + r.h - oy_) / s_);
+            const uint8_t c = r.accent ? ACCENT : WELL;
+            for (int y = y0; y < y1; y++)
+                for (int x = x0; x < x1; x++)
+                    if (r.alpha >= 0.6f || dith(r.alpha / 0.6f, x, y)) cv_.set(x, y, c, K_HUD);
+        }
+    for (size_t i = 0; i < f.hud.size(); i++) {
+        if (f.hud[i].role != HUD_UNIVERSE) continue;
+        const HudItem* it = itemFor(f.hud[i]);
+        if (!it) continue;
+        int right = it->x + it->w, top = it->y;
+        if (f.hudBoxes && i < f.hudBoxes->size() && (*f.hudBoxes)[i].z > (*f.hudBoxes)[i].x) {
+            right = iround(((*f.hudBoxes)[i].z - ox_) / s_);
+            top = iround(((*f.hudBoxes)[i].y - oy_) / s_);
+        }
+        for (int k = 0; k < 3; k++) {
+            const int px = right + 5 + k * 5, py = top + 4;
+            const bool on = k <= level_;
+            hud_.set(px, py, on ? GR_BASE : GR_OUT, it->kind);
+            hud_.set(px, py - 1, on ? GR_HI : GR_OUT, it->kind);
+            if (on) { hud_.set(px - 1, py - 2, GR_HI, it->kind); hud_.set(px + 1, py - 2, GR_HI, it->kind); }
+        }
+    }
+}
+
+const Garden16Universe::HudItem* Garden16Universe::itemFor(const HudText& h) const {
     for (const HudItem& it : items_)
-        if (it.y + it.h > ly(-4.f)) keepOut_.push_back({it.x - 3, it.x + it.w + 3, it.y - 3, it.y + it.h + 2});
+        if (it.role == h.role && it.src == h.text) return &it;
+    return nullptr;
 }
 
-void Garden16Universe::drawText(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    (void)hud;
-    for (const HudRect& r : panels) {
-        const int x0 = iround((r.x - ox_) / s_), y0 = iround((r.y - oy_) / s_);
-        const int x1 = iround((r.x + r.w - ox_) / s_), y1 = iround((r.y + r.h - oy_) / s_);
-        const uint8_t c = r.accent ? ACCENT : WELL;
-        for (int y = y0; y < y1; y++)
-            for (int x = x0; x < x1; x++)
-                if (r.alpha >= 0.6f || dith(r.alpha / 0.6f, x, y)) cv_.set(x, y, c, K_HUD);
+// A line lettered by the host as GARDEN set it: PIXEL's font at the canvas' pixel size, where the layout put it, in
+// the palette's inks of this frame (a shadow one pixel down in the earth, a pixel ring where a sky line crosses the
+// earth); a celebration's word waves letter by letter at ten frames a second.
+void Garden16Universe::hudLine(const HudText& h, text::Line& out) {
+    if (h.alpha < 0.18f) return;
+    const HudItem* it = itemFor(h);
+    HudItem made;
+    float k = 1.f;
+    if (it) {
+        k = h.scale / std::max(1e-3f, it->hs);
+    } else {
+        // a line the layout hasn't seen (the title card's next song): set alone at its role's usual size (as last
+        // seen, else the host's), scaled up with the card, never shortened (the card keeps it on the screen)
+        HudText h0 = h;
+        const float hs = std::max(1.f, height_ / 900.f);
+        auto n = nominal_.find(h.role);
+        h0.scale = n != nominal_.end() ? n->second
+                   : h.role == HUD_TITLE ? 2.2f * hs : h.role == HUD_UNIVERSE || h.role == HUD_SECTION ? 1.3f * hs
+                   : h.role == HUD_INFO ? 1.5f * hs : h.scale;
+        made = itemOf(h0, false);
+        inkItem(made);
+        k = h.scale / std::max(1e-3f, h0.scale);
+        it = &made;
     }
-    for (const HudItem& it : items_) {
-        // the sky's ink at that height: dark on a pale sky, pale on a dark one
-        const int band = std::clamp((int)(std::pow(saturate((float)(it.y + it.h / 2) / std::max(1, floor_)), 0.9f) * 5.999f), 0, 5);
-        const float* sc = pal_[SKY0 + band];
-        const bool darkInk = 0.2126f * sc[0] + 0.7152f * sc[1] + 0.0722f * sc[2] > 0.3f;
-        TextStyle st = it.st;
-        // over the earth: pale straw letters with a dark shadow, set in the earth (no halo plate)
-        int earth = 0, total = 0;
-        for (int y = it.y; y < it.y + it.h; y++)
-            for (int x = it.x; x < it.x + it.w; x += 2) {
-                total++;
-                const uint8_t k = cv_.kind(x, y);
-                earth += k == K_DIRT || k == K_GRASS || k == K_PLANT;
-            }
-        const bool overEarth = total > 0 && earth * 2 > total;
-        if (overEarth) {
-            if (st.color == 1) st.color = EARTH_INK;
-            st.shadow = G_OUT;
-            st.kind = (uint8_t)(K_HUD + 2);
-        } else {
-            if (st.color == 1) st.color = darkInk ? INK : PALE;
-            st.kind = darkInk ? K_HUD : (uint8_t)(K_HUD + 1); // the halo: pale under dark letters, dark under pale ones
-        }
-        g16::drawText(hud_, it.font, it.text, it.x, it.y, st);
-        if (it.role == HUD_UNIVERSE) {
-            // the level as three small sprouts
-            for (int i = 0; i < 3; i++) {
-                const int px = it.x + it.w + 5 + i * 5, py = it.y + 4;
-                const bool on = i <= level_;
-                hud_.set(px, py, on ? GR_BASE : GR_OUT, st.kind);
-                hud_.set(px, py - 1, on ? GR_HI : GR_OUT, st.kind);
-                if (on) { hud_.set(px - 1, py - 2, GR_HI, st.kind); hud_.set(px + 1, py - 2, GR_HI, st.kind); }
-            }
-        }
+    const float fp = s_ * it->scale * k; // one font pixel, screen pixels
+    const float H = (float)fontHeight(it->font);
+    // the palette as composed (the bridge turns the letters to its ink, the fade dims them)
+    const float bt = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    const vec3 bi = ugl::toSrgb(bridge_.ink);
+    auto col = [&](uint8_t i) { return (lerp(vec3(pal_[i][0], pal_[i][1], pal_[i][2]), bi, bt)) * fade_; };
+    out.add(it->text, hudFont(it->font), fp * H, col(it->ink), 1.f / H);
+    out.dx = it->offX * k;
+    out.dy = it->offY * k;
+    if (it->earth) {
+        out.look.shadow = col(G_OUT);
+        out.look.shadowA = 1.f;
+        out.look.shadowOff = vec2{0.f, 1.f / (H * it->scale)}; // one canvas pixel down
+        out.look.shadowSoft = 0.001f;
+    } else if (it->ring) {
+        out.look.outline = col(it->ringCol);
+        out.look.outlineA = 1.f;
+        out.look.outlineW = 1.f / (H * it->scale);
+    }
+    if (it->wave) {
+        wave_.p0 = vec4{1.f / (H * it->scale), 1.f, 0.f, 0.f};
+        out.lettering = &wave_;
     }
 }
 
-// The HUD layer over the scene: where the earth is behind it, a soft pale halo of two pixel rings around it.
+// The HUD layer over the scene (the previews, the gauge, the sprouts): where the earth is behind it, a soft pale
+// halo of two pixel rings around it.
 void Garden16Universe::mergeLayer() {
     auto earthy = [](uint8_t k) { return k == K_DIRT || k == K_GRASS || k == K_PLANT; };
     for (int Y = 0; Y < H_; Y++)
@@ -1994,6 +2089,8 @@ void Garden16Universe::render(const Frame& f, GLuint fbo) {
     computeTops();
     buildPalette();
     layoutHud(f.hud);
+    keepOutOf(f);
+    fade_ = saturate(f.fade);
 
     drawSky();
     drawAir(true);
@@ -2005,9 +2102,10 @@ void Garden16Universe::render(const Frame& f, GLuint fbo) {
     drawWorms();
     if (!bare_) drawPiece(g);
     drawFront();
+    for (HudItem& it : items_) inkItem(it);
     hud_.fill(255, 0);
     if (!bare_) drawSide(g);
-    drawText(f.hud, bare_ ? std::vector<HudRect>() : f.panels);
+    drawPanels(f);
     mergeLayer();
     compose(f);
 

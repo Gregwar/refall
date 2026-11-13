@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+#include "text.hpp"
+
 namespace g16 {
 
 constexpr int CELL = 12; // native pixels per board cell
@@ -89,17 +91,7 @@ struct Canvas {
 enum Font { FONT_SMALL = 0, FONT_BIG = 1 }; // 3x5 capitals / 5x7 with lower case
 int textWidth(Font f, const std::string& s, int spacing = 1);
 int fontHeight(Font f);
-struct TextStyle {
-    uint8_t color = 1;
-    int shadow = -1;
-    int outline = -1;
-    int scale = 1;
-    int spacing = 1;
-    float alpha = 1.f;
-    uint8_t kind = K_HUD;
-    int wave = 0;
-    float wavePhase = 0;
-};
-int drawText(Canvas& cv, Font f, const std::string& s, int x, int y, const TextStyle& st);
+// The font as a font of the host's text engine ('\x01' is the middle dot): a capital is one em.
+text::Font* hudFont(Font f);
 
 } // namespace g16

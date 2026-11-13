@@ -1,9 +1,10 @@
 // GARDEN borrows PIXEL's two hand-drawn bitmap fonts: a 3x5 capitals font for labels and small print, and a 5x7 font (with
 // lower case and descenders) for titles, numbers and big words. Glyphs are proportional: each row string's
-// length is the glyph's width.
+// length is the glyph's width. The host's text engine letters the HUD in them (hudFont).
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <functional>
 
 #include "universes/garden16/canvas.hpp"
 
@@ -169,43 +170,33 @@ int textWidth(Font f, const std::string& s, int spacing) {
     return w;
 }
 
-int drawText(Canvas& cv, Font f, const std::string& s, int x, int y, const TextStyle& st) {
-    const int sc = std::max(1, st.scale);
-    const int rows = f == FONT_SMALL ? 5 : 9;
-    // Pass 0: outline, pass 1: shadow, pass 2: the letters.
-    for (int pass = 0; pass < 3; pass++) {
-        if (pass == 0 && st.outline < 0) continue;
-        if (pass == 1 && st.shadow < 0) continue;
-        int cx = x;
-        for (size_t i = 0; i < s.size(); i++) {
-            const Glyph* g = glyph(f, s[i]);
-            const int gw = glyphW(g);
-            int wy = 0;
-            if (st.wave) wy = iround(std::sin(st.wavePhase + (float)i * 0.9f) * st.wave);
-            for (int r = 0; r < rows; r++) {
-                const char* row = g->r[r];
-                if (!row) continue;
-                for (int c = 0; c < gw; c++) {
-                    if (row[c] != '#') continue;
-                    for (int dy = 0; dy < sc; dy++)
-                        for (int dx = 0; dx < sc; dx++) {
-                            const int X = cx + c * sc + dx, Y = y + wy + r * sc + dy;
-                            if (st.alpha < 0.999f && !dith(st.alpha, X, Y)) continue;
-                            if (pass == 2) cv.set(X, Y, st.color, st.kind);
-                            else if (pass == 1) cv.set(X, Y + 1, (uint8_t)st.shadow, st.kind);
-                            else {
-                                cv.set(X - 1, Y, (uint8_t)st.outline, st.kind);
-                                cv.set(X + 1, Y, (uint8_t)st.outline, st.kind);
-                                cv.set(X, Y - 1, (uint8_t)st.outline, st.kind);
-                                cv.set(X, Y + 1, (uint8_t)st.outline, st.kind);
-                            }
-                        }
-                }
-            }
-            cx += (gw + st.spacing) * sc;
+// A letter for the host's text engine: its font pixels as squares, px the font size (a capital's height).
+bool rasterGlyph(Font f, uint32_t cp, float px, text::Bitmap& out) {
+    if (cp >= 128) return false;
+    const Glyph* g = glyph(f, (char)cp);
+    const int gw = glyphW(g), cap = fontHeight(f);
+    int rows = 0;
+    for (int r = 0; r < 9; r++)
+        if (g->r[r]) rows = r + 1;
+    const float k = px / cap; // pixels per font pixel
+    out.adv = gw * k;
+    out.ox = 0.f;
+    out.oy = -cap * k;
+    out.w = (int)std::ceil(gw * k);
+    out.h = (int)std::ceil(rows * k);
+    out.cov.assign((size_t)out.w * out.h, 0);
+    for (int y = 0; y < out.h; y++)
+        for (int x = 0; x < out.w; x++) {
+            const int r = std::min(rows - 1, (int)((y + 0.5f) / k)), c = std::min(gw - 1, (int)((x + 0.5f) / k));
+            if (g->r[r] && g->r[r][c] == '#') out.cov[(size_t)y * out.w + x] = 255;
         }
-    }
-    return textWidth(f, s, st.spacing) * sc;
+    return true;
+}
+
+text::Font* hudFont(Font f) {
+    using namespace std::placeholders;
+    return f == FONT_SMALL ? text::customFont("garden16:small", 1.f, 0.f, std::bind(rasterGlyph, FONT_SMALL, _1, _2, _3))
+                           : text::customFont("garden16:big", 1.f, 2.f / 7.f, std::bind(rasterGlyph, FONT_BIG, _1, _2, _3));
 }
 
 } // namespace g16

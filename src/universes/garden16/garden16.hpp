@@ -1,5 +1,6 @@
 #pragma once
 // GARDEN: tiles of earth growing pixel grass and flowers, a 16-bit indie game (see garden16.cpp).
+#include <map>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- The stack's earth: per board cell, the piece it came from (its tiles share one outline) and how long its
@@ -93,11 +96,31 @@ private:
     float pal_[128][3];   // this frame's palette (sRGB 0..1)
 
     // ---- Drawing.
-    struct HudItem { std::string text; g16::Font font; int x, y, w, h; g16::TextStyle st; HudRole role; };
+    // A HUD line as GARDEN sets it (canvas pixels), lettered by the host (hudLine).
+    struct HudItem {
+        std::string src, text;          // the line given, the line set
+        g16::Font font = g16::FONT_SMALL;
+        int x = 0, y = 0, w = 0, h = 0, scale = 1;
+        uint8_t color = 0;              // a given ink (0: by what is behind)
+        bool wave = false;
+        HudRole role = HUD_PLAIN;
+        float hs = 1.f;                 // the line's scale
+        float offX = 0.f, offY = 0.f;   // screen pixels from the host's anchor for the line
+        uint8_t ink = 0, ringCol = 0, kind = 0;
+        bool earth = false, ring = false;
+    };
     std::vector<HudItem> items_;
+    std::map<int, float> nominal_;      // each role's scale, as last seen
+    text::Lettering wave_;              // the celebrations' waving letters
+    float fade_ = 1.f;
     struct KeepOut { int x0, x1, y0, y1; };
     std::vector<KeepOut> keepOut_;
+    HudItem itemOf(const HudText& h, bool fit = true) const;
+    void anchor(const HudText& h, HudItem& it) const;
     void layoutHud(const std::vector<HudText>& hud);
+    void keepOutOf(const Frame& f);
+    void inkItem(HudItem& it) const;
+    const HudItem* itemFor(const HudText& h) const;
     void drawSky();
     void drawWellPanel();
     void drawGround();
@@ -108,7 +131,7 @@ private:
     void drawWorms();
     void drawFront();
     void drawSide(const Game& g);
-    void drawText(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawPanels(const Frame& f);
     void mergeLayer();
     void compose(const Frame& f);
     uint8_t tilePx(int type, int mask, uint32_t seed, int i, int j) const;
