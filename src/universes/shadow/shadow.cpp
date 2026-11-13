@@ -381,7 +381,7 @@ void ShadowUniverse::uploadBoard(const Game& g) {
             const float yy = cells[i][1] + dy;
             const vec3 c = layout::cellPos(cells[i][0] + dx, yy);
             piece_[i * 4 + 0] = c.x; piece_[i * 4 + 1] = c.y; piece_[i * 4 + 2] = mask(i);
-            piece_[i * 4 + 3] = yy > Game::HIDDEN - 0.6f ? 1.f : 0.f;
+            piece_[i * 4 + 3] = 1.f; // (above the well too: it spawns there)
         }
         const int gy = g.ghostY();
         if (gy > p.y + 0) {
