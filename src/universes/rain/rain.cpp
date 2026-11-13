@@ -33,7 +33,6 @@
 #include "universes/rain/rain.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -41,9 +40,6 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/rain/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -92,25 +88,6 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr float GAP = 0.07f;         // between tiles, each side (board units)
 constexpr float HORIZON = -8.2f;     // the street's far edge (as in the backdrop)
 
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
 // The HUD columns, softened (0 outside .. 1 well inside), for what passes behind them.
 float hudCover(float x, float y) {
     auto inside = [](const float* r, float x, float y) {
@@ -130,7 +107,6 @@ bool RainUniverse::init(int width, int height) {
     progBg_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BG_FS, "rain backdrop");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "rain shapes");
     progTile_ = ugl::program(shaders::TILE_VS, shaders::TILE_FS, "rain tiles");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "rain text");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -152,71 +128,12 @@ bool RainUniverse::init(int width, int height) {
     };
     instanced(shapeVao_, shapeVbo_, sizeof(Shape), 3);
     instanced(tileVao_, tileVbo_, sizeof(Tile), 5);
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(med_, FONT_MED, 96.f, 1536);
-    buildFont(light_, FONT_LIGHT, 64.f, 1024);
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) seeds_[y][x] = rng_.range(0.f, 100.f);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void RainUniverse::buildFont(Font& f, const unsigned char* ttf, float pxSize, int AW) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] rain font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = pxSize;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AH = AW, PAD = (int)(f.px / 8.f);
-    std::vector<unsigned char> atlas((size_t)AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    auto cpOf = [](int ch) { return ch == 127 ? 0xB7 : ch; };
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = cpOf(ch);
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(size_t)(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    for (int a = 0; a < 96; a++)
-        for (int b = 0; b < 96; b++)
-            f.kern[a][b] = stbtt_GetCodepointKernAdvance(info, cpOf(a + 32), cpOf(b + 32)) * f.scaleTT;
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void RainUniverse::resize(int width, int height) {
@@ -236,13 +153,9 @@ void RainUniverse::resize(int width, int height) {
 }
 
 RainUniverse::~RainUniverse() {
-    for (GLuint p : {progBg_, progShape_, progTile_, progText_}) glDeleteProgram(p);
-    for (GLuint v : {shapeVao_, tileVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, shapeVbo_, tileVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&med_, &light_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progBg_, progShape_, progTile_}) glDeleteProgram(p);
+    for (GLuint v : {shapeVao_, tileVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, shapeVbo_, tileVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1147,61 +1060,6 @@ void RainUniverse::flushTiles() {
     tiles_.clear();
 }
 
-float RainUniverse::capWidth(const Font& f, const std::string& s, float track) const {
-    if (!f.ok || s.empty()) return s.size() * 0.7f;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv / f.capH + track;
-        if (i + 1 < s.size()) {
-            unsigned char nx = (unsigned char)s[i + 1];
-            if (nx < 32 || nx >= 128) nx = '?';
-            w += f.kern[ch - 32][nx - 32] / f.capH;
-        }
-    }
-    return w - track;
-}
-
-void RainUniverse::textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track,
-                             std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = capPx / f.capH;
-    float pen = 0.f;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = x + pen + g.ox * k, y0 = base + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float P[4][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (int j : {0, 1, 2, 0, 2, 3}) out.insert(out.end(), P[j], P[j] + 4);
-        }
-        pen += g.adv * k + track * capPx;
-        if (i + 1 < s.size()) {
-            unsigned char nx = (unsigned char)s[i + 1];
-            if (nx < 32 || nx >= 128) nx = '?';
-            pen += f.kern[ch - 32][nx - 32] * k;
-        }
-    }
-}
-
-void RainUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float soft) {
-    if (q.empty() || !f.ok || alpha <= 0.002f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uSoft", soft);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 // =====================================================================================================
 // The board
 // =====================================================================================================
@@ -1295,11 +1153,10 @@ void RainUniverse::drawPreviews(const Game& g) {
 // The HUD
 // =====================================================================================================
 
-// Manrope in a pale rain-light white over a soft dark halo (readable over the rain and the piles), labels light
-// and spaced, the section in the street's first neon; the bonus gauge a ring of twelve drops filling with it.
-void RainUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD's panels and the bonus gauge, a ring of twelve drops filling with it (the lettering: hudLine, the host
+// letters it).
+void RainUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
-    const float s = height_ / 1080.f;
     const vec3 ink(0.92f, 0.93f, 0.96f), accent = lerp(hex(V.neon[0]), vec3(1.f), 0.15f), halo = hex(V.panel);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
@@ -1325,39 +1182,48 @@ void RainUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const
         }
         flushShapes();
     }
+}
 
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        const std::string text = ascii(h0.text);
-        const float base = h0.scale * 12.f;
-        const float alpha = saturate(h0.alpha) * vis;
-        const Font* font = &light_;
-        float cap = base * 0.5f, track = 0.04f, dy = 0.f, a = alpha;
-        vec3 col = h0.accent ? accent : ink;
-        switch (h0.role) {
-        case HUD_UNIVERSE: cap = base * 0.5f; track = 0.14f; a = saturate(0.35f + h0.alpha * 1.4f) * vis; break;
-        case HUD_SECTION: font = &med_; cap = base * 0.55f; track = 0.2f; col = accent; a = saturate(0.4f + h0.alpha * 1.5f) * vis; break;
-        case HUD_TITLE: font = &med_; cap = base * 0.6f; track = 0.01f; a = saturate(h0.alpha * 1.6f) * vis; break;
-        case HUD_INFO: cap = base * 0.5f; track = 0.06f; col = ink; a = saturate(alpha * 1.3f) * 0.85f; break;
-        case HUD_LABEL: cap = base * 0.44f; track = 0.24f; dy = base * 0.1f; a = saturate(alpha * 1.3f) * 0.8f; break;
-        case HUD_VALUE: font = &med_; cap = base * 0.64f; track = 0.02f; break;
-        case HUD_NOTICE: font = &med_; cap = base * 0.55f; col = accent; break;
-        case HUD_KEY: font = &med_; cap = base * 0.55f; break;
-        case HUD_TOAST: font = &med_; cap = base * 0.72f; track = 0.08f; break;
-        case HUD_TOAST_SUB: cap = base * 0.5f; col = accent; break;
-        case HUD_DIALOG:
-            if (h0.scale >= 3.5f * s) { font = &med_; cap = base * 0.62f; }
-            break;
-        default: break;
-        }
-        q.clear();
-        const float w = capWidth(*font, text, track) * cap;
-        const float left = ugl::hudLeft(h0, w, width_);
-        textQuads(*font, text, left, h0.y + dy + cap, cap, track, q);
-        drawText(*font, q, halo, a * 0.7f, 0.22f);
-        drawText(*font, q, col, a);
+// Manrope in a pale rain-light white over a soft dark halo (readable over the rain and the piles), labels light and
+// spaced, the section in the street's first neon. Sizes are the capitals' heights, the tracking in capitals.
+void RainUniverse::hudLine(const HudText& h, text::Line& out) {
+    const VariantDef& V = VARIANTS[variant_];
+    const float s = height_ / 1080.f;
+    const vec3 ink(0.92f, 0.93f, 0.96f), accent = lerp(hex(V.neon[0]), vec3(1.f), 0.15f), halo = hex(V.panel);
+    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* med = text::font(FONT_MED);
+    const float base = h.scale * 12.f;
+    const float alpha = saturate(h.alpha) * vis;
+    text::Font* font = light;
+    float cap = base * 0.5f, track = 0.04f, dy = 0.f, a = alpha;
+    vec3 col = h.accent ? accent : ink;
+    switch (h.role) {
+    case HUD_UNIVERSE: cap = base * 0.5f; track = 0.14f; a = saturate(0.35f + h.alpha * 1.4f) * vis; break;
+    case HUD_SECTION: font = med; cap = base * 0.55f; track = 0.2f; col = accent; a = saturate(0.4f + h.alpha * 1.5f) * vis; break;
+    case HUD_TITLE: font = med; cap = base * 0.6f; track = 0.01f; a = saturate(h.alpha * 1.6f) * vis; break;
+    case HUD_INFO: cap = base * 0.5f; track = 0.06f; col = ink; a = saturate(alpha * 1.3f) * 0.85f; break;
+    case HUD_LABEL: cap = base * 0.44f; track = 0.24f; dy = base * 0.1f; a = saturate(alpha * 1.3f) * 0.8f; break;
+    case HUD_VALUE: font = med; cap = base * 0.64f; track = 0.02f; break;
+    case HUD_NOTICE: font = med; cap = base * 0.55f; col = accent; break;
+    case HUD_KEY: font = med; cap = base * 0.55f; break;
+    case HUD_TOAST: font = med; cap = base * 0.72f; track = 0.08f; break;
+    case HUD_TOAST_SUB: cap = base * 0.5f; col = accent; break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) { font = med; cap = base * 0.62f; }
+        break;
+    default: break;
     }
+    // Manrope's capitals: 0.527 of its size
+    constexpr float CAP = 0.527f;
+    out.add(h.text, font, cap / CAP, col, track * CAP, a);
+    out.dy = dy;
+    // a soft pass in the panel's color under the letters (on the old field: from .22 out to .066 in, 4 em-units of
+    // spread per 1000), then the crisp fill
+    out.look.shadow = halo;
+    out.look.shadowA = 0.7f;
+    out.look.shadowW = 0.077f * 0.249f;
+    out.look.shadowSoft = 0.143f * 0.249f;
 }
 
 // =====================================================================================================
@@ -1381,7 +1247,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     for (const HudText& h : f.hud)
         if (h.role == HUD_SECTION) {
             sectionKnown = true;
-            sectionDrop = ascii(h.text) == "DROP";
+            sectionDrop = h.text == "DROP";
         }
     const bool isDrop = !game.over() && level_ == 2 &&
                         (sectionKnown ? sectionDrop : dropMode_ && (!music.hasSong || music.speed > 1.26f));
@@ -1427,13 +1293,13 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     // the HUD's bottom corner lines: the heaps dim under them
     if (!bare_) {
         textRects_.clear();
-        for (const HudText& h : f.hud) {
+        for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+            const HudText& h = f.hud[i];
             if (h.text.empty() || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB || h.role == HUD_DIALOG) continue;
             const float base = h.scale * 12.f;
-            const float w = capWidth(light_, ascii(h.text), 0.14f) * base * 0.55f;
-            const float l = ugl::hudLeft(h, w, width_);
-            const float x0 = viewC_.x + (l - 6.f - width_ * 0.5f) / unitPx_, x1 = viewC_.x + (l + w + 6.f - width_ * 0.5f) / unitPx_;
-            const float y0 = viewC_.y + (height_ * 0.5f - (h.y + base * 0.9f)) / unitPx_, y1 = viewC_.y + (height_ * 0.5f - h.y + 4.f) / unitPx_;
+            const vec4& bx = (*f.hudBoxes)[i]; // the line as lettered
+            const float x0 = viewC_.x + (bx.x - 6.f - width_ * 0.5f) / unitPx_, x1 = viewC_.x + (bx.z + 6.f - width_ * 0.5f) / unitPx_;
+            const float y0 = viewC_.y + (height_ * 0.5f - std::max(bx.w, h.y + base * 0.9f)) / unitPx_, y1 = viewC_.y + (height_ * 0.5f - h.y + 4.f) / unitPx_;
             if (y0 > -3.f || std::fabs(0.5f * (x0 + x1)) < bandIn_) continue;
             textRects_.push_back({x0, y0, x1, y1});
         }
@@ -1521,7 +1387,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) box(width_ * 0.5f, height_ * 0.5f, width_ * 0.5f + 2.f, height_ * 0.5f + 2.f, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.panels);
     glDisable(GL_BLEND);
 }
 

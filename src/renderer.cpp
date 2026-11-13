@@ -415,7 +415,7 @@ void Renderer::hudLines(Universe& u, const std::vector<HudText>& hud, std::vecto
         lines.emplace_back();
         if (h.alpha > 0.002f && !h.text.empty()) u.hudLine(h, lines.back());
         const text::Box b = text_.measure(lines.back());
-        const float x = ugl::hudLeft(h, b.width(), w_) - b.x0;
+        const float x = ugl::hudLeft(h, b.width(), w_); // (the box's x0 is the line's own dx)
         boxes.push_back(vec4{x + b.x0, h.y + b.y0, x + b.x1, h.y + b.y1});
     }
 }
@@ -439,7 +439,7 @@ void Renderer::letter(Universe& u, const std::vector<HudText>& hud, float weight
             if (l.blend == text::BLEND_MULTIPLY) l.blend = text::BLEND_OVER;
         }
         const text::Box b = text_.measure(l);
-        text_.draw(l, ugl::hudLeft(h, b.width(), w_) - b.x0, h.y, w_, h_, (float)time);
+        text_.draw(l, ugl::hudLeft(h, b.width(), w_), h.y, w_, h_, (float)time);
     }
 }
 
@@ -485,7 +485,7 @@ void Renderer::letterCard(Universe& u, double time) {
         text::Line l0;
         u.hudLine(h, l0);
         const text::Box small = text_.measure(l0);
-        const float smallX = ugl::hudLeft(h, small.width(), w_) - small.x0;
+        const float smallX = ugl::hudLeft(h, small.width(), w_);
         // the anchor moves as the box does: the box's left edge and cap line go straight from the middle to the corner
         h.scale *= k;
         h.center = false;

@@ -33,9 +33,6 @@
 #include "layout.hpp"
 #include "universes/specimen/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -111,28 +108,6 @@ constexpr float DWELL_SIZE = 0.82f;   // an organism's size inside its cell (one
 // The kinds of life: paramecium, amoeba, pennate diatom, centric diatom, rotifer, volvox.
 enum { K_PARA, K_AMOEBA, K_PENNATE, K_CENTRIC, K_ROTIFER, K_VOLVOX, K_COUNT };
 
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-int glyphIndex(unsigned char ch) {
-    if (ch < 32 || ch >= 128) ch = '?';
-    return ch - 32;
-}
 float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 float wrapAngle(float a) {
     while (a > PI) a -= TAU;
@@ -178,7 +153,6 @@ bool SpecimenUniverse::init(int width, int height) {
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "specimen blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "specimen final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "specimen shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "specimen text");
     progLens_ = ugl::program(shaders::LENS_VS, withCommon(shaders::LENS_FS).c_str(), "specimen loupes");
     progLine_ = ugl::program(shaders::LINE_VS, shaders::LINE_FS, "specimen lines");
 
@@ -199,68 +173,13 @@ bool SpecimenUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontSans_, FONT_SANS);
-    buildFont(fontIt_, FONT_IT);
     resize(width, height);
     SongLook none;
     none.variant = 0;
     setSong(none, 0.f);
     return glGetError() == GL_NO_ERROR;
-}
-
-void SpecimenUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] microscope font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch; // the middle dot in DEL's slot
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void SpecimenUniverse::resize(int width, int height) {
@@ -280,15 +199,11 @@ void SpecimenUniverse::resize(int width, int height) {
 
 SpecimenUniverse::~SpecimenUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progField_, progOrg_, progPiece_, progSpeck_, progDown_, progBlur_, progFinal_, progShape_, progText_,
+    for (GLuint p : {progField_, progOrg_, progPiece_, progSpeck_, progDown_, progBlur_, progFinal_, progShape_,
                       progLens_, progLine_})
         glDeleteProgram(p);
-    for (GLuint v : {pieceVao_, orgVao_, speckVao_, shapeVao_, textVao_, lensVao_, lineVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, pieceVbo_, orgVbo_, speckVbo_, shapeVbo_, textVbo_, lensVbo_, lineVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontSans_, &fontIt_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint v : {pieceVao_, orgVao_, speckVao_, shapeVao_, lensVao_, lineVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, pieceVbo_, orgVbo_, speckVbo_, shapeVbo_, lensVbo_, lineVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -735,48 +650,6 @@ void SpecimenUniverse::setStain(GLuint prog) {
 // Text and the HUD
 // =====================================================================================================
 
-float SpecimenUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) w += f.g[glyphIndex((unsigned char)s[i])].adv * k + track;
-    return w - track;
-}
-
-void SpecimenUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                   std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        const Glyph& g = f.g[glyphIndex((unsigned char)s[i])];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void SpecimenUniverse::drawText(const Font& f, const std::vector<float>& q, bool accent, float alpha) {
-    if (q.empty() || !f.ok || alpha <= 0.003f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", accent ? accentInk_ : ink_);
-    set1f(progText_, "uHaloA", 0.35f);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void SpecimenUniverse::flushShapes(int mode) {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -847,78 +720,47 @@ void SpecimenUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, c
         }
         flushShapes(2);
     }
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        auto upper = [](std::string t) {
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            return t;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(fontSans_, upper(h.text), base * 0.66f, base * 0.3f, base * 0.08f);
-            drawText(fontSans_, q, false, saturate(0.3f + h.alpha * 1.5f) * 0.75f * vis);
-            continue;
-        case HUD_SECTION:
-            place(fontSans_, upper(h.text), base * 0.72f, base * 0.34f);
-            drawText(fontSans_, q, true, saturate(0.3f + h.alpha * 1.7f) * vis);
-            continue;
-        case HUD_TITLE:
-            place(fontIt_, h.text, base * 1.12f, base * 0.01f, -base * 0.12f);
-            drawText(fontIt_, q, false, saturate(h.alpha * 1.3f) * vis);
-            continue;
-        case HUD_INFO:
-            place(fontSans_, upper(h.text), base * 0.6f, base * 0.24f);
-            drawText(fontSans_, q, false, saturate(alpha * 1.2f) * 0.72f);
-            continue;
-        case HUD_LABEL:
-            place(fontSans_, upper(h.text), base * 0.62f, base * 0.4f);
-            drawText(fontSans_, q, false, saturate(alpha * 1.2f) * 0.62f);
-            continue;
-        case HUD_VALUE:
-            place(fontSans_, h.text, base * 1.0f, base * 0.06f, -base * 0.04f);
-            drawText(fontSans_, q, false, alpha * 0.95f);
-            continue;
-        case HUD_NOTICE:
-            place(fontIt_, h.text, base * 1.1f, base * 0.02f);
-            drawText(fontIt_, q, true, alpha);
-            continue;
-        case HUD_KEY:
-            place(fontSans_, h.text, base * 0.85f, base * 0.1f);
-            drawText(fontSans_, q, false, alpha);
-            continue;
-        case HUD_TOAST:
-            place(fontSans_, upper(h.text), base * 0.95f, base * 0.42f, -base * 0.1f);
-            drawText(fontSans_, q, false, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontIt_, h.text, base * 1.0f, base * 0.02f);
-            drawText(fontIt_, q, true, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontSans_, upper(h.text), base * 0.85f, base * 0.3f);
-                drawText(fontSans_, q, false, alpha);
-            } else {
-                place(fontIt_, h.text, base * 0.95f, base * 0.02f);
-                drawText(fontIt_, q, h.accent, alpha);
-            }
-            continue;
-        default:
-            place(fontSans_, h.text, base * 0.75f, base * 0.06f);
-            drawText(fontSans_, q, h.accent, alpha);
-            continue;
-        }
+}
+
+
+// The lettering, by the host (text.hpp): Lato in spaced capitals for the names, the labels and the numbers, EB
+// Garamond Italic for the song and the notices, like a slide's label; pale ink (or the stain's accent) on a faint
+// black halo against the bench.
+void SpecimenUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
+    const vec3 ink = hex(0xc6ccd4), accent = lerp(hex(VARIANTS[variant_].accent), vec3(1.f), 0.15f);
+    text::Font* sans = text::font(FONT_SANS);
+    text::Font* it = text::font(FONT_IT);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(sans, text::upper(h.text), base * 0.66f, base * 0.3f, ink, saturate(0.3f + h.alpha * 1.5f) * 0.75f, base * 0.08f); break;
+    case HUD_SECTION: put(sans, text::upper(h.text), base * 0.72f, base * 0.34f, accent, 0.3f + h.alpha * 1.7f); break;
+    case HUD_TITLE: put(it, h.text, base * 1.12f, base * 0.01f, ink, h.alpha * 1.3f, -base * 0.12f); break;
+    case HUD_INFO: put(sans, text::upper(h.text), base * 0.6f, base * 0.24f, ink, saturate(alpha * 1.2f) * 0.72f); break;
+    case HUD_LABEL: put(sans, text::upper(h.text), base * 0.62f, base * 0.4f, ink, saturate(alpha * 1.2f) * 0.62f); break;
+    case HUD_VALUE: put(sans, h.text, base * 1.0f, base * 0.06f, ink, alpha * 0.95f, -base * 0.04f); break;
+    case HUD_NOTICE: put(it, h.text, base * 1.1f, base * 0.02f, accent, alpha); break;
+    case HUD_KEY: put(sans, h.text, base * 0.85f, base * 0.1f, ink, alpha); break;
+    case HUD_TOAST: put(sans, text::upper(h.text), base * 0.95f, base * 0.42f, ink, alpha, -base * 0.1f); break;
+    case HUD_TOAST_SUB: put(it, h.text, base * 1.0f, base * 0.02f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(sans, text::upper(h.text), base * 0.85f, base * 0.3f, ink, alpha);
+        else put(it, h.text, base * 0.95f, base * 0.02f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(sans, h.text, base * 0.75f, base * 0.06f, h.accent ? accent : ink, alpha); break;
     }
+    // the letters a hair full, a faint black halo just around them
+    out.look.weight = 0.0075f;
+    out.look.halo = vec3(0.f);
+    out.look.haloA = 0.35f;
+    out.look.haloW = 0.065f;
+    out.look.haloPow = 1.5f;
+    out.alpha = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 }
 
 // =====================================================================================================

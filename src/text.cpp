@@ -20,7 +20,7 @@ namespace {
 // Glyphs are baked at BAKE_PX, their distance field reaching PAD pixels out of (and into) the outline: the effects
 // reach PAD / BAKE_PX em around the letters.
 constexpr float BAKE_PX = 96.f;
-constexpr int PAD = 14;
+constexpr int PAD = 20;
 constexpr float DIST_SCALE = 128.f / PAD; // field units (0..255) per baked pixel
 constexpr int ATLAS = 2048;
 
@@ -114,7 +114,7 @@ uniform int uPass;                  // 0: the shadow, 1: the letters
 uniform float uBake, uScale;        // the baking size, field units per baked pixel
 uniform float uWeight;
 uniform vec4 uHalo;                 // rgb, alpha
-uniform vec3 uHaloShape;            // width (em), power
+uniform vec3 uHaloShape;            // width (em), power, smoothstep falloff
 uniform vec4 uGlow;
 uniform float uGlowW;
 uniform vec4 uOutline;
@@ -144,19 +144,21 @@ void main() {
     float fill = clamp(dist / fw + 0.5, 0.0, 1.0);
     vec4 c = vec4(0.0);
     if (uHalo.a > 0.0) {
-        float h = pow(clamp(1.0 + dist / max(uHaloShape.x * vEm, 1e-3), 0.0, 1.0), uHaloShape.y) * uHalo.a * vInk.a;
+        float h = clamp(1.0 + dist / max(uHaloShape.x * vEm, 1e-3), 0.0, 1.0);
+        h = (uHaloShape.z > 0.5 ? smoothstep(0.0, 1.0, h) : pow(h, uHaloShape.y)) * uHalo.a;
         c = vec4(uHalo.rgb * h, h);
     }
     if (uOutline.a > 0.0) {
-        float o = clamp((dist + uOutlineW * vEm) / fw + 0.5, 0.0, 1.0) * uOutline.a * vInk.a;
+        float o = clamp((dist + uOutlineW * vEm) / fw + 0.5, 0.0, 1.0) * uOutline.a;
         c = vec4(uOutline.rgb * o, o) + c * (1.0 - o);
     }
-    float f = fill * vInk.a;
-    c = vec4(vInk.rgb * f, f) + c * (1.0 - f);
+    c = vec4(vInk.rgb * fill, fill) + c * (1.0 - fill);
     if (uGlow.a > 0.0) {
         float g = clamp(1.0 + dist / max(uGlowW * vEm, 1e-3), 0.0, 1.0);
-        c.rgb += uGlow.rgb * (g * g * uGlow.a * vInk.a * (1.0 - fill));
+        c.rgb += uGlow.rgb * (g * g * uGlow.a * (1.0 - fill));
     }
+    // a line fades as a whole: its ink stays over its halo
+    c *= vInk.a;
     frag = letter(Letter(dist, vEm, vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y), vLine, vGlyph, vInk, c));
 }
 )";
@@ -361,6 +363,8 @@ Font* font(const unsigned char* ttf, size_t size) {
     return (fonts[ttf] = std::move(f)).get();
 }
 
+float capHeight(const Font* f) { return f ? f->capH / BAKE_PX : 0.7f; }
+
 Font* customFont(const std::string& key, float cap, float descent, Raster raster) {
     static std::map<std::string, std::unique_ptr<Font>> fonts;
     auto it = fonts.find(key);
@@ -439,6 +443,7 @@ Box layoutLine(const Line& l, float x, float y, std::vector<float>* out) {
         if (!f) continue;
         const float k = s.size / BAKE_PX, base = baseline + s.dy;
         b.y1 = std::max(b.y1, base + f->descent * k * 0.5f);
+        pen += s.gap * s.size;
         uint32_t prev = 0;
         for (size_t i = 0; i < s.text.size();) {
             const uint32_t cp = nextCodepoint(s.text, i);
@@ -520,6 +525,7 @@ float noise(vec2 p) {
 }
 
 Box Engine::measure(const Line& l) const { return layoutLine(l, 0.f, 0.f, nullptr); }
+Box measure(const Line& l) { return layoutLine(l, 0.f, 0.f, nullptr); }
 
 void Engine::draw(const Line& l, float x, float y, int w, int h, float time) {
     if (l.alpha <= 0.002f || l.spans.empty() || !l.spans[0].font) return;
@@ -559,7 +565,7 @@ void Engine::draw(const Line& l, float x, float y, int w, int h, float time) {
     ugl::set1f(p.prog, "uWeight", k.weight);
     const bool fx = l.blend == BLEND_OVER || l.blend == BLEND_SCREEN || l.blend == BLEND_ADD;
     ugl::set4f(p.prog, "uHalo", k.halo.x, k.halo.y, k.halo.z, fx ? k.haloA : 0.f);
-    glUniform3f(ugl::U(p.prog, "uHaloShape"), std::min(k.haloW, PAD / BAKE_PX), std::max(0.1f, k.haloPow), 0.f);
+    glUniform3f(ugl::U(p.prog, "uHaloShape"), std::min(k.haloW, PAD / BAKE_PX), std::max(0.1f, k.haloPow), k.haloSmooth ? 1.f : 0.f);
     ugl::set4f(p.prog, "uGlow", k.glow.x, k.glow.y, k.glow.z, fx ? k.glowA : 0.f);
     ugl::set1f(p.prog, "uGlowW", std::min(k.glowW, PAD / BAKE_PX));
     ugl::set4f(p.prog, "uOutline", k.outline.x, k.outline.y, k.outline.z, k.outlineA);
