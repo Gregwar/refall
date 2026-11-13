@@ -165,8 +165,9 @@ add_custom_target(universe_dates
   COMMENT "Universe dates")
 add_dependencies(zenrender universe_dates)
 
-# The game.
-add_executable(refall
+# The game, and refall-voyage-viewer: the same program started on a campaign's review (its songs in their
+# universes, the computer playing, an overlay to go from song to song; ZEN_VOYAGE_VIEWER).
+set(ZEN_GAME_SOURCES
   src/main.cpp
   src/game.cpp
   src/input.cpp
@@ -179,25 +180,31 @@ add_executable(refall
   src/menuworlds.cpp
   src/menuwin.cpp
   src/debrief.cpp
+  src/voyageviewer.cpp
 )
+add_executable(refall ${ZEN_GAME_SOURCES})
+add_executable(refall-voyage-viewer ${ZEN_GAME_SOURCES})
+target_compile_definitions(refall-voyage-viewer PRIVATE ZEN_VOYAGE_VIEWER)
 # The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/data/campaign.tsv)
 file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv zen_campaign_hex HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," zen_campaign_arr "${zen_campaign_hex}")
 file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${zen_campaign_arr}\n")
 configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
-target_include_directories(refall PRIVATE ${CMAKE_BINARY_DIR}/generated)
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
 if(UNIX AND NOT APPLE)
   find_package(OpenGL QUIET COMPONENTS EGL)
-  if(OpenGL_EGL_FOUND)
-    target_link_libraries(refall PRIVATE OpenGL::EGL)
-    target_compile_definitions(refall PRIVATE ZEN_HAVE_EGL)
-  endif()
 endif()
-target_link_libraries(refall PRIVATE zenrender zencore glfw glad)
-# Gamepad mappings (SDL_GameControllerDB): looked up next to the executable, then in the sources.
-target_compile_definitions(refall PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+foreach(t refall refall-voyage-viewer)
+  target_include_directories(${t} PRIVATE ${CMAKE_BINARY_DIR}/generated)
+  if(OpenGL_EGL_FOUND)
+    target_link_libraries(${t} PRIVATE OpenGL::EGL)
+    target_compile_definitions(${t} PRIVATE ZEN_HAVE_EGL)
+  endif()
+  target_link_libraries(${t} PRIVATE zenrender zencore glfw glad)
+  # Gamepad mappings (SDL_GameControllerDB): looked up next to the executable, then in the sources.
+  target_compile_definitions(${t} PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+endforeach()
 add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
                    ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:refall>/gamecontrollerdb.txt)
 
@@ -205,7 +212,7 @@ add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_
 add_executable(refall-scope src/scope.cpp)
 target_link_libraries(refall-scope PRIVATE zencore glfw glad)
 
-foreach(t zencore zenrender refall refall-scope)
+foreach(t zencore zenrender refall refall-voyage-viewer refall-scope)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
@@ -214,6 +221,6 @@ endforeach()
 
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
-  install(TARGETS refall refall-scope RUNTIME DESTINATION zentris/bin)
+  install(TARGETS refall refall-voyage-viewer refall-scope RUNTIME DESTINATION zentris/bin)
   install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv data/menu_music.mp3 DESTINATION zentris/bin)
 endif()

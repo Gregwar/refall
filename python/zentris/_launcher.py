@@ -1,4 +1,4 @@
-"""Console entry points: run the bundled native binaries (refall, refall-scope)."""
+"""Console entry points: run the bundled native binaries (refall, refall-scope, refall-voyage-viewer)."""
 
 import os
 import shutil
@@ -46,4 +46,8 @@ def main() -> None:
 
 def scope() -> None:
     _run("refall-scope")
+
+
+def voyage_viewer() -> None:
+    _run("refall-voyage-viewer")
 

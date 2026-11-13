@@ -33,6 +33,7 @@
 #include "renderer.hpp"
 #include "songplan.hpp"
 #include "voyages.hpp"
+#include "voyageviewer.hpp"
 #include "youtube.hpp"
 
 namespace fs = std::filesystem;
@@ -110,6 +111,11 @@ struct Options {
     bool menuDemo = false;
     std::string menuDemoKind; // --menu-demo normal-done: every stage cleared on NORMAL, some on EASY, none on EXPERT
     bool menuMusic = true;     // --no-menu-music: the menu stays silent (no music bed)
+    // refall-voyage-viewer: a campaign reviewed (its songs in their universes, the computer playing), from a song
+    bool viewer = false;
+    int viewStage = 1, viewSong = 1;
+    std::string viewShot;     // --shot: the viewer saved after --shot-after seconds of the first song, then exit
+    float viewShotAfter = 8.f;
     bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
@@ -410,12 +416,25 @@ private:
     bool reviewFilled_ = false;
     void pickReviewTime();
     void printReview() const;
+    // ---- refall-voyage-viewer: the campaign's songs in a row (VoyageViewer's indices), each at its velocity in its
+    // universe, the computer playing; the overlay jumps from song to song and seeks.
+    bool viewer_ = false;
+    std::unique_ptr<VoyageViewer> vv_;
+    int viewCur_ = -1, viewWant_ = -1; // the song playing, the one jumped to (still loading)
+    float viewShotT_ = 0;
+    VoyageViewer::Now viewerNow() const;
+    bool viewerStart();
+    void viewerFrame(float dt);
+    void viewerJump(int i);
+    void viewerSeek(double t);
+    void viewerSongStarted();
 };
 
 void App::startTrack(std::shared_ptr<Track> t) {
     bool first = !track_;
     track_ = std::move(t);
     if (mode_ == MODE_CAMPAIGN) campaignSongStarted();
+    if (viewer_) viewerSongStarted();
     // Coming in from the black with its title card: a song that has an intro plays from the title on; one that
     // starts straight in waits until the game is back and starts with it, on its very first beat.
     songHeld_ = break_ == BREAK_IN && !songHasIntro();
@@ -448,7 +467,7 @@ void App::startTrack(std::shared_ptr<Track> t) {
     // universe shown while the first song loaded (the game doesn't jump to another world as the music starts).
     int variant = -1;
     const bool offline = !opt_.shotPrefix.empty() || !opt_.clipPath.empty();
-    const bool keep = first && !offline && opt_.reviewPath.empty();
+    const bool keep = first && !offline && opt_.reviewPath.empty() && !viewer_;
     const int u = keep ? R_.universe() : songUniverse(&variant);
     if (keep) variant = forcedVariant_ >= 0 ? forcedVariant_ : R_.variant();
     if ((forcedUniverse_ >= 0 || keep) && u == R_.universe() && !offline) {
@@ -776,7 +795,7 @@ void App::autoplay(float dt) {
         if (game_.hasPiece() && botTimer_ <= 0) { game_.hardDrop(); botTimer_ = 0.15f; }
         return;
     }
-    if (game_.bonusReady()) game_.activateBonus();
+    if (game_.bonusReady() && !viewer_) game_.activateBonus(); // (the viewer keeps the song unmuffled)
     if (!game_.hasPiece()) { planned_ = false; return; }
     // Recording a clip: a calm, human pace (a moment to think, unhurried moves, the piece falls visibly).
     const bool calm = !opt_.clipPath.empty();
@@ -967,7 +986,7 @@ std::vector<HudText> App::buildHud(float dt) {
     }
 
     // Persistent, discreet skip hint (top right) and feedback when skipping.
-    if (lib_.size() > 1 && mode_ != MODE_CAMPAIGN) {
+    if (lib_.size() > 1 && mode_ != MODE_CAMPAIGN && !viewer_) {
         const char* key = input_.active() == Input::Gamepad ? "BACK  NEXT SONG" : "N  NEXT SONG";
         hud.push_back({key, -28 * s, 24 * s, 1.4f * s, 0.3f, false, false, HUD_HINT});
     }
@@ -1076,6 +1095,10 @@ std::vector<HudText> App::buildHud(float dt) {
             hud.push_back({items[i], w * 0.5f, h * 0.5f + (20.f + 44.f * i) * s, 2.4f * s, pauseSel_ == i ? 0.95f : 0.4f,
                            pauseSel_ == i, true, HUD_DIALOG});
     }
+    // the viewer's overlay shows the song, its universe and its section: the corners' lines go while it shows
+    if (viewer_ && vv_ && vv_->visible())
+        hud.erase(std::remove_if(hud.begin(), hud.end(), [](const HudText& t) {
+            return t.role == HUD_TITLE || t.role == HUD_INFO || t.role == HUD_UNIVERSE || t.role == HUD_SECTION; }), hud.end());
     return hud;
 }
 
@@ -1145,13 +1168,20 @@ int App::run() {
     const bool shotMode = !opt_.shotPrefix.empty() || clipMode; // offline: fixed time step, no sound
     const bool reviewMode = !opt_.reviewPath.empty();
     offline_ = shotMode;
+    viewer_ = opt_.viewer;
+    if (viewer_) { // the computer always plays; a --shot runs on the song's simulated clock, silent
+        opt_.autoplay = true;
+        showHelp_ = false;
+        helpTimer_ = 0;
+        if (!opt_.viewShot.empty()) offline_ = opt_.mute = true;
+    }
     if (clipMode || reviewMode || !opt_.transitionShots.empty()) { showHelp_ = false; helpTimer_ = 0; }
     FILE* clipPipe = nullptr;
     std::vector<unsigned char> clipPx;
 
     // Offline renders (clips, shots, reviews) run headless on the GPU when they can (ZEN_HEADLESS=0: a window)
     if (testPlay()) { offline_ = true; opt_.mute = true; }
-    const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty()) && !opt_.fullscreen &&
+    const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty() || !opt_.viewShot.empty()) && !opt_.fullscreen &&
                               !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
     const bool streamHeadless = opt_.stream && !opt_.fullscreen;
     if ((wantHeadless || streamHeadless) && headless::init(opt_.width, opt_.height)) {
@@ -1185,7 +1215,7 @@ int App::run() {
         glfwWindowHintString(GLFW_X11_CLASS_NAME, "refall");
         glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "refall");
 #endif
-        win_ = glfwCreateWindow(ww, wh, GAME_TITLE, mon, nullptr);
+        win_ = glfwCreateWindow(ww, wh, (opt_.viewer ? std::string(GAME_TITLE) + " voyage viewer" : std::string(GAME_TITLE)).c_str(), mon, nullptr);
         if (win_) break;
         glfwTerminate();
         if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
@@ -1209,7 +1239,7 @@ int App::run() {
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
     // The menu's universe snapshots are made on a worker thread with its own context (an instance's init can take
     // seconds): a hidden window's context, or a second EGL context when headless.
-    if (opt_.menu || opt_.menuEnabled || !opt_.menuShot.empty() || !opt_.menuClip.empty()) {
+    if (opt_.menu || opt_.menuEnabled || !opt_.menuShot.empty() || !opt_.menuClip.empty() || opt_.viewer) {
         if (headless_) {
             if (void* wc = headless::createWorkerContext())
                 WorldPool::setWorkerContext([wc] { return headless::makeWorkerCurrent(wc); }, [] { headless::makeWorkerCurrent(nullptr); });
@@ -1246,7 +1276,7 @@ int App::run() {
     lib_.setSampleRate(audio_.sampleRate());
     lib_.setShuffle(opt_.shuffle);
     menu_.init(&campaign_, &progress_);
-    if (mode_ != MODE_MENU && opt_.stage.empty()) { // the menu's sessions (and --stage) scan their own songs
+    if (mode_ != MODE_MENU && opt_.stage.empty() && !viewer_) { // the menu's sessions (and --stage, the viewer) scan their own songs
         lib_.scan(opt_.paths);
         std::printf("[app] %zu songs found\n", lib_.size());
         lib_.prefetch(runSeed_);
@@ -1254,13 +1284,14 @@ int App::run() {
 
     game_.reset(runSeed_);
     blank_.makeBlank();
-    breaks_ = !std::getenv("ZEN_NO_BREAK") && (!shotMode || clipMode);
+    breaks_ = !std::getenv("ZEN_NO_BREAK") && (!shotMode || clipMode) && !viewer_; // (the viewer goes straight from song to song)
     introAtStart_ = breaks_ && (!shotMode || std::getenv("ZEN_INTRO_TEST"));
     // A universe while the first song loads (the forced one, else one picked from the run seed); the first song
     // keeps it.
     if (!opt_.universe.empty()) {
         forcedUniverse_ = universes::parse(opt_.universe, &forcedVariant_);
     }
+    if (viewer_ && !viewerStart()) return 1;
     look_ = makeSongLook(nullptr, runSeed_);
     if (mode_ != MODE_MENU) { // (on the menu, the first session makes its universe: the menu's first frame comes at once)
         int variant = -1;
@@ -1432,7 +1463,7 @@ int App::run() {
             }
             simSongTime_ += dt * audio_.currentSpeed();
             songTime_ = simSongTime_;
-        } else if (testPlay()) {
+        } else if (testPlay() || (viewer_ && offline_)) {
             if (track_ && !paused_ && !songHeld_) simSongTime_ += dt;
             songTime_ = simSongTime_;
         } else {
@@ -1466,6 +1497,7 @@ int App::run() {
         // still loading the first song: Esc goes back to the menu
         if (waiting && menuEnabled_ && input_.pressed(A_UI_BACK)) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
         if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
+        if (viewer_) viewerFrame(dt); // (its own keys: the game's shortcuts below are off)
         // Test hook: ZEN_TEST_SKIP=<seconds> presses "next song" periodically.
         static const double testSkip = std::getenv("ZEN_TEST_SKIP") ? std::atof(std::getenv("ZEN_TEST_SKIP")) : 0.0;
         const bool testSkipNow = testSkip > 0 && std::fmod(runTime_, testSkip) < dt && runTime_ > dt;
@@ -1473,15 +1505,15 @@ int App::run() {
         if (input_.pressed(A_NEXT_SONG) && !testSkipNow)
             std::printf("[input] next song pressed (%zu songs, next %s)\n", lib_.size(),
                         nextTrack_ ? ("ready: " + nextTrack_->title).c_str() : ("loading: " + lib_.loadingTitle()).c_str());
-        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1 && mode_ != MODE_CAMPAIGN) {
+        if ((input_.pressed(A_NEXT_SONG) || testSkipNow) && lib_.size() > 1 && mode_ != MODE_CAMPAIGN && !viewer_) {
             wantSkip_ = true;
             skipToast_ = 2.5f;
         }
-        if (input_.pressed(A_NEW_SCENE) && mode_ != MODE_CAMPAIGN) newScene(false); // the Voyage keeps its universes
+        if (input_.pressed(A_NEW_SCENE) && mode_ != MODE_CAMPAIGN && !viewer_) newScene(false); // the Voyage keeps its universes
         // Ctrl+Shift+Left/Right: jump 10 s in the song (repeats while held) to test sections quickly.
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
-            if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN) { // no shortcuts in a campaign
+            if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN && !viewer_) { // no shortcuts in a campaign
                 double target = std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0);
                 audio_.seek(target);
                 songTime_ = target;
@@ -1492,9 +1524,9 @@ int App::run() {
                 seekToast_ = 1.5f;
             }
         }
-        if (input_.pressed(A_DEBUG_LEVEL) && !game_.over()) game_.skipToNextLevel();
-        if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN) game_.debugChargeBonus();
-        if (input_.pressed(A_HUD)) { showHelp_ = !showHelp_; helpTimer_ = showHelp_ ? 1e9f : 0; }
+        if (input_.pressed(A_DEBUG_LEVEL) && !game_.over() && !viewer_) game_.skipToNextLevel();
+        if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
+        if (input_.pressed(A_HUD) && !viewer_) { showHelp_ = !showHelp_; helpTimer_ = showHelp_ ? 1e9f : 0; }
 
         // ---- Game.
         if (!paused_ && !waiting && gameFrozen()) {
@@ -1524,7 +1556,10 @@ int App::run() {
                 if (input_.pressed(A_HARD)) game_.hardDrop();
                 if (input_.pressed(A_BONUS)) game_.activateBonus();
             }
-            if (game_.over() && mode_ == MODE_CAMPAIGN && !shotMode) { // (offline renders play on)
+            if (game_.over() && viewer_) { // the review goes on: a new board at once
+                game_.restart();
+                overTime_ = 0;
+            } else if (game_.over() && mode_ == MODE_CAMPAIGN && !shotMode) { // (offline renders play on)
                 // A campaign game over: the board dissolves and the game darkens (the song muffled), then the frame is
                 // kept and the debrief comes over it (see after the drawing); a key there goes back to the Voyage.
                 const bool was = overTime_ > 1.8f;
@@ -1547,7 +1582,7 @@ int App::run() {
             game_.setHeldShift(opt_.autoplay || shotMode || paused_ || waiting ? 0 : input_.heldDirection());
             game_.update(dt);
             handleEvents();
-            if (game_.level() > lastLevel_ && !game_.over() && mode_ != MODE_CAMPAIGN) {
+            if (game_.level() > lastLevel_ && !game_.over() && mode_ != MODE_CAMPAIGN && !viewer_) {
                 levelToast_ = 2.5f;
                 R_.refresh(0.35f); // soft refresh wave
                 R_.levelUp();
@@ -1557,14 +1592,14 @@ int App::run() {
             R_.setDim(game_.over() && overTime_ > 1.2f);
             // Slow motion: the song is muffled for the whole bonus (bass kept, highs attenuated); gravity's own
             // slow-down is in updateGravity. A game over sounds the same, quieter, for as long as it lasts.
-            const bool muffle = game_.bonusActive() || game_.over();
+            const bool over = game_.over() && !viewer_; // (the viewer's game overs are silent)
+            const bool muffle = game_.bonusActive() || over;
             if (muffle != muffleWas_) {
                 muffleWas_ = muffle;
-                audio_.setMuffled(muffle, game_.over() ? 1.2f : 0.6f);
+                audio_.setMuffled(muffle, over ? 1.2f : 0.6f);
             }
             // after a game over the muffled song fades out to silence (from 2.5 s on, over 3 s)
-            audio_.setSongGain(!game_.over() ? 1.f : overTime_ < 2.5f ? 0.45f : 0.f,
-                               !game_.over() ? 0.6f : overTime_ < 2.5f ? 1.5f : 3.f);
+            audio_.setSongGain(!over ? 1.f : overTime_ < 2.5f ? 0.45f : 0.f, !over ? 0.6f : overTime_ < 2.5f ? 1.5f : 3.f);
             if (game_.bonusActive() != slowWas_) {
                 slowWas_ = game_.bonusActive();
                 // The screen's colors are reversed for the whole bonus (a front sweeps it in and out).
@@ -1725,6 +1760,15 @@ int App::run() {
             std::vector<HudText> hud = buildHud(dt);
             updateBreak(dt, hud);
             R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
+            if (vv_) vv_->draw(fbw, fbh, viewerNow());
+        }
+        if (viewer_ && !opt_.viewShot.empty()) { // --shot: the viewer, a few seconds into the first song
+            if (viewShotT_ >= opt_.viewShotAfter || runTime_ > 300.f) {
+                const bool ok = R_.screenshot(opt_.viewShot);
+                std::printf("[shot] %s %s\n", ok ? "wrote" : "FAILED", opt_.viewShot.c_str());
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(16)); // in real time: the loads keep up
         }
 
         if (!testShot_.empty()) { R_.screenshot(testShot_); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
@@ -2128,6 +2172,112 @@ void App::toDebrief(const Menu::Debrief& d) {
     menu_.openDebrief(d);
 }
 
+// ---- refall-voyage-viewer
+
+VoyageViewer::Now App::viewerNow() const {
+    VoyageViewer::Now n;
+    n.current = track_ ? viewCur_ : -1;
+    n.wanted = viewWant_;
+    n.paused = paused_;
+    if (track_) {
+        n.time = songTime_;
+        n.duration = track_->duration();
+        n.an = &track_->analysis;
+        n.plan = &plan_;
+    }
+    return n;
+}
+
+// The campaign's songs, the first one (--stage, --song) on its way, its universe shown while it loads.
+bool App::viewerStart() {
+    if (campaign_.size() == 0) { std::fprintf(stderr, "[viewer] the campaign has no songs\n"); return false; }
+    vv_ = std::make_unique<VoyageViewer>(&campaign_, opt_.difficulty);
+    const int start = vv_->find(opt_.viewStage - 1, opt_.viewSong - 1);
+    if (start < 0) {
+        std::fprintf(stderr, "[viewer] no stage %d song %d in %s\n", opt_.viewStage, opt_.viewSong, campaign_.source().c_str());
+        return false;
+    }
+    std::printf("[viewer] %d songs (%s), velocities of %s\n", vv_->count(), campaign_.source().c_str(),
+                difficultyName(opt_.difficulty));
+    lib_.setShuffle(false);
+    const std::string& u = vv_->song(start).s->universe;
+    forcedUniverse_ = forcedVariant_ = -1;
+    if (!u.empty()) forcedUniverse_ = universes::parse(u, &forcedVariant_);
+    viewerJump(start);
+    return true;
+}
+
+// Each frame: the overlay's keys, mouse and tour (paused: nothing moves), and the campaign's end starting it over.
+void App::viewerFrame(float dt) {
+    if (!vv_) return;
+    if (track_) viewShotT_ += dt;
+    // Test hook: ZEN_VIEWER_KEYS="T:COMMAND,..." gives the overlay a command (VoyageViewer::command) T seconds after the
+    // first song started.
+    static const auto keys = testList("ZEN_VIEWER_KEYS");
+    for (auto& [t, k] : keys)
+        if (viewShotT_ - dt < t && viewShotT_ >= t) { vv_->command(k); std::printf("[test] %.2f s: %s\n", viewShotT_, k.c_str()); }
+    if (paused_) return;
+    if (track_ && songFinished() && !nextTrack_ && !lib_.loading() && viewWant_ < 0) viewerJump(viewCur_ + 1);
+    for (const VoyageViewer::Action& a : vv_->update(win_, input_, viewerNow(), dt)) {
+        if (a.kind == VoyageViewer::Action::JUMP) viewerJump(a.index);
+        else viewerSeek(a.time);
+    }
+}
+
+// Plays song i: the one playing gives way as soon as it is ready (downloaded, decoded and analysed in the background,
+// then the songs after it, in order).
+void App::viewerJump(int i) {
+    const int n = vv_->count();
+    i = ((i % n) + n) % n;
+    if (i == viewCur_ && viewWant_ < 0 && track_) { // the song playing: from its start
+        viewerSeek(0);
+        vv_->songStarted();
+        return;
+    }
+    viewWant_ = i;
+    wantSkip_ = true;
+    if (nextTrack_ && vv_->indexOf(nextTrack_->path) == i) return;
+    const std::string& id = vv_->song(i).s->id;
+    if (!nextTrack_ && lib_.loading())
+        for (const std::string& e : lib_.files())
+            if (e.rfind("ytdl:" + id + "\t", 0) == 0 && youtubeEntryTitle(e) == lib_.loadingTitle()) return; // on its way
+    lib_.clear();
+    lib_.setOnce(true);
+    std::vector<std::string> paths;
+    for (int k = i; k < n; k++) paths.push_back(vv_->entry(k));
+    lib_.scan(paths);
+    nextTrack_.reset();
+    lib_.prefetch(runSeed_);
+    std::printf("[viewer] to stage %d song %d: %s\n", vv_->song(i).stage + 1, vv_->song(i).song + 1, vv_->song(i).s->title.c_str());
+}
+
+void App::viewerSeek(double t) {
+    if (!track_) return;
+    t = std::clamp(t, 0.0, std::max(0.0, track_->duration() - 1.0));
+    audio_.seek(t);
+    songTime_ = simSongTime_ = t;
+    pace_ = -1; // re-sync the beat-driven gravity
+    lastSongBeat_ = -1;
+    lastSeg_ = track_->analysis.segmentAt(t);
+}
+
+// A song starts: its title, velocity and universe, from the campaign.
+void App::viewerSongStarted() {
+    viewCur_ = vv_->indexOf(track_->path);
+    if (viewCur_ < 0) viewCur_ = std::max(0, viewWant_);
+    viewWant_ = -1;
+    wantSkip_ = false;
+    const VoyageViewer::Song& v = vv_->song(viewCur_);
+    track_->title = v.s->title; // (a song no cached listing names would show its id)
+    game_.setFixedLevel(v.s->level[opt_.difficulty]);
+    lastLevel_ = game_.level();
+    forcedUniverse_ = forcedVariant_ = -1;
+    if (!v.s->universe.empty()) forcedUniverse_ = universes::parse(v.s->universe, &forcedVariant_);
+    vv_->songStarted();
+    std::printf("[viewer] stage %d song %d: %s, %s, velocity %.1f\n", v.stage + 1, v.song + 1, v.s->title.c_str(),
+                v.s->universe.empty() ? "a picked universe" : v.s->universe.c_str(), v.s->level[opt_.difficulty]);
+}
+
 // --menu-shot: a menu screen, rendered offline, saved, then exit. --menu-clip: a video walking through the menus (a
 // built-in key sequence, or ZEN_TEST_KEYS), then exit.
 int App::runMenuShot() {
@@ -2314,9 +2464,76 @@ int App::runMenuShot() {
     return ok ? 0 : 1;
 }
 
+static void viewerUsage() {
+    std::printf(
+        "usage: refall-voyage-viewer [campaign] [options]\n"
+        "  a campaign reviewed: its songs in their universes, the computer playing; the overlay (Tab / H) shows\n"
+        "  the songs by stage and the song's sections, and its tour plays each section a few seconds (Space)\n"
+        "  campaign             a campaign .tsv, or a custom voyage (its id or title); default: the main campaign\n"
+        "  --difficulty D       the velocities played: easy, normal (default) or expert\n"
+        "  --stage N --song K   start on that song (default 1, 1)\n"
+        "  --size WxH           window size (default 1600x900)\n"
+        "  --fullscreen         start fullscreen\n"
+        "  --mute               no sound\n"
+        "  --shot OUT.png       save the viewer --shot-after SEC (default 8) into the first song, then exit (testing)\n"
+        "keys: Space tour, Left/Right seek 10 s, [ ] previous/next section, Up/Down song, Page Up/Down stage,\n"
+        "  Tab / H the overlay, a click on a card plays its song, on the timeline seeks; Esc pause, F fullscreen\n");
+}
+
+// refall-voyage-viewer's command line.
+static int viewerMain(int argc, char** argv) {
+    Options o;
+    o.viewer = o.autoplay = true;
+    o.difficulty = DIFF_NORMAL;
+    std::string camp;
+    for (int i = 1; i < argc; i++) {
+        const std::string a = argv[i];
+        if (a == "-h" || a == "--help") { viewerUsage(); return 0; }
+        else if (a == "--difficulty" && i + 1 < argc) {
+            if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal or expert\n", argv[i]);
+                return 1;
+            }
+        }
+        else if (a == "--stage" && i + 1 < argc) o.viewStage = std::atoi(argv[++i]);
+        else if (a == "--song" && i + 1 < argc) o.viewSong = std::atoi(argv[++i]);
+        else if (a == "--size" && i + 1 < argc) std::sscanf(argv[++i], "%dx%d", &o.width, &o.height);
+        else if (a == "--fullscreen") o.fullscreen = true;
+        else if (a == "--mute") o.mute = true;
+        else if (a == "--seed" && i + 1 < argc) o.seed = std::stoull(argv[++i]);
+        else if (a == "--shot" && i + 1 < argc) o.viewShot = argv[++i];
+        else if (a == "--shot-after" && i + 1 < argc) o.viewShotAfter = std::stof(argv[++i]);
+        else if (a.rfind("--", 0) == 0) { std::fprintf(stderr, "unknown option %s (--help lists them)\n", a.c_str()); return 1; }
+        else camp = a;
+    }
+    if (!camp.empty()) {
+        std::error_code ec;
+        if (fs::is_regular_file(camp, ec)) {
+            o.campaignPath = camp;
+        } else { // a custom voyage, by its id or its title
+            VoyageStore vs;
+            vs.load(VoyageStore::defaultDir(""));
+            auto low = [](std::string x) { for (char& c : x) c = (char)std::tolower((unsigned char)c); return x; };
+            for (const CustomVoyage& v : vs.list())
+                if (v.id == camp || low(v.title) == low(camp)) o.campaignPath = vs.campaignPath(v.id);
+            if (o.campaignPath.empty()) {
+                std::fprintf(stderr, "no campaign file or voyage named '%s'\n", camp.c_str());
+                return 1;
+            }
+        }
+    }
+    App app(o);
+    const int rc = app.run();
+    std::fflush(stdout);
+    std::_Exit(rc); // (background downloads aren't waited for)
+}
+
 int main(int argc, char** argv) {
     g_startTime = std::chrono::steady_clock::now();
     platform::lineBufferStdout();
+#ifdef ZEN_VOYAGE_VIEWER
+    return viewerMain(argc, argv);
+#endif
     Options o;
     bool freePlay = false, unlock = false, reset = false;
     for (int i = 1; i < argc; i++) {
