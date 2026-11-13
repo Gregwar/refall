@@ -22,24 +22,23 @@
 // the pieces from another pair of drums (the variant's da / db) for its whole length, eased in and out: the pieces
 // get an ink buffer of their own so that the HUD keeps the variant's inks.
 //
-// Rendering: the background goes into its own buffer (continuous densities), the stack, the marks and the HUD into
-// the ink buffer (one channel per drum, screened where drawn); COMPOSITE_FS prints both on the paper, only the
-// background with a registration offset (see shaders.hpp).
+// Rendering: the background goes into its own buffer (continuous densities), the stack and the marks into the ink
+// buffer (one channel per drum, screened where drawn); COMPOSITE_FS prints both on the paper, only the background
+// with a registration offset (see shaders.hpp). The HUD is lettered by the host over the print, in the drums' inks
+// and grain (hudLine).
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like SUMI); the
 // stack and the HUD are always printed in register.
 #include "universes/risograph/risograph.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/risograph/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -184,7 +183,6 @@ const CompShape COMPS[4][3] = {
 bool RisographUniverse::init(int width, int height) {
     progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "risograph world");
     progMark_ = compile(shaders::MARK_VS, shaders::MARK_FS, "risograph marks");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "risograph text");
     progPanel_ = compile(shaders::PANEL_VS, shaders::PANEL_FS, "risograph panel");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMPOSITE_FS, "risograph print");
 
@@ -204,14 +202,6 @@ bool RisographUniverse::init(int width, int height) {
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Inst), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glGenVertexArrays(1, &panelVao_);
     glGenBuffers(1, &panelVbo_);
     glBindVertexArray(panelVao_);
@@ -220,57 +210,28 @@ bool RisographUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glBindVertexArray(0);
 
-    buildFont(fontBold_, FONT_BOLD);
-    buildFont(fontReg_, FONT_REGULAR);
+    // the HUD's ink: the drums' grain (COMPOSITE_FS's: a soft mottle, a fine tooth, the odd missing speck), fixed
+    // in the paper (uP0: the frame's top-left corner in board units, board units per pixel; uP1.x: the drum). The
+    // print mixes its inks in linear light: so is the ink here, into the final picture (uP1.y: 0 multiplied into
+    // the paper, -1 laid like light on the black stocks, 1 over the picture)
+    riso_.glsl = R"(
+vec4 letter(Letter L) {
+    vec2 bp = uP0.xy + vec2(L.px.x, -L.px.y) * uP0.z;
+    vec2 g = bp * 34.0;
+    float mott = noise(bp * 1.3) * 0.5 + noise(bp * 3.7 + 7.0) * 0.5;
+    float tooth = noise(g) * 0.6 + noise(g * 2.3 + 3.1) * 0.4;
+    float ga = 1.0 - (0.10 * mott + 0.16 * smoothstep(0.45, 0.95, tooth) + 0.35 * step(0.93, noise(g * 0.71 + 11.0)));
+    float gb = 1.0 - (0.10 * (1.0 - mott) + 0.16 * smoothstep(0.45, 0.95, noise(g + 17.0)) + 0.35 * step(0.93, noise(g * 0.67 + 29.0)));
+    float a = L.std.a * (uP1.x < 0.5 ? ga : uP1.x < 1.5 ? gb : 0.5 * (ga + gb));
+    if (uP1.y > 0.5) return vec4(L.ink.rgb, 1.0) * a;
+    if (uP1.y < -0.5) return vec4(L.ink.rgb, 1.0) * pow(a, 1.0 / 2.2);
+    return vec4(pow(vec3(1.0 - a) + a * pow(L.ink.rgb, vec3(2.2)), vec3(1.0 / 2.2)) - 1.0 + a, a);
+}
+)";
     resize(width, height);
     composition(0, shape_);
     for (int i = 0; i < 3; i++) next_[i] = shape_[i];
     return glGetError() == GL_NO_ERROR;
-}
-
-// Glyphs baked as signed distance fields (they scale cleanly).
-void RisographUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] risograph font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void RisographUniverse::resize(int width, int height) {
@@ -296,13 +257,9 @@ RisographUniverse::~RisographUniverse() {
     inkT_.destroy();
     pieceT_.destroy();
     bgT_.destroy();
-    for (GLuint p : {progWorld_, progMark_, progText_, progPanel_, progComp_}) glDeleteProgram(p);
-    for (GLuint v : {markVao_, textVao_, panelVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, markVbo_, textVbo_, panelVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontBold_, &fontReg_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progWorld_, progMark_, progPanel_, progComp_}) glDeleteProgram(p);
+    for (GLuint v : {markVao_, panelVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, markVbo_, panelVbo_}) glDeleteBuffers(1, &b);
 }
 
 void RisographUniverse::composition(int comp, Shape out[3]) const {
@@ -826,68 +783,83 @@ void RisographUniverse::buildBoard(const Game& g) {
 // Text
 // =====================================================================================================
 
-float RisographUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.6f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return w - track;
+namespace {
+vec3 toSrgb(const vec3& c) {
+    return {std::pow(std::max(c.x, 0.f), 1.f / 2.2f), std::pow(std::max(c.y, 0.f), 1.f / 2.2f), std::pow(std::max(c.z, 0.f), 1.f / 2.2f)};
 }
-
-void RisographUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                  std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void RisographUniverse::drawText(const Font& f, const std::vector<float>& q, const vec4& ink, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set4f(progText_, "uInk", ink.x, ink.y, ink.z, ink.w);
-    set1f(progText_, "uBias", bias);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
+} // namespace
 
 // The HUD in RISOGRAPH's typography: Space Mono, like a riso zine's colophon. Everything in the key ink; the
 // section, the notices and the line under a celebration in the second ink; the celebrations' big words printed
-// by both drums, so they show the registration.
+// by both drums. Lettered by the host in register, as ink: multiplied into the paper (laid like light on the black
+// stocks), with the drums' grain fixed in the paper (riso_).
+void RisographUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* bold = text::font(FONT_BOLD);
+    text::Font* reg = text::font(FONT_REGULAR);
+    const float s = height_ / 1080.f;
+    const float base = h.scale * 12.f;
+    const float alpha = saturate(h.alpha);
+    enum { KEY = 0, SECOND = 1, BOTH = 2 };
+    int drum = KEY;
+    float a = alpha;
+    // a run: its size and letter spacing in pixels
+    auto put = [&](text::Font* f, const std::string& t, float size, float track) { out.add(t, f, size, vec3(1.f), track / size); };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "RISOGRAPH" in the bold, the inks after it in the regular
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 0.95f, tr = base * 0.12f, vsz = base * 0.8f, vtr = base * 0.06f;
+        a = saturate(0.35f + h.alpha * 1.6f);
+        put(bold, name, sz, tr);
+        if (!var.empty()) {
+            out.add("", reg, base, vec3(1.f), (base * 0.9f - tr) / base); // the gap
+            put(reg, var, vsz, vtr);
+            out.spans.back().alpha = 0.85f;
+            // its cap line lower than the name's by three quarters of the difference (Space Mono's capitals: 0.47)
+            out.spans.back().dy = (0.75f - 0.473f) * (sz - vsz);
+        }
+        break;
+    }
+    case HUD_TITLE: put(bold, h.text, base * 1.05f, 0.f); a = saturate(h.alpha * 1.3f); break;
+    case HUD_INFO: put(reg, h.text, base * 0.78f, base * 0.04f); a = saturate(alpha * 1.2f) * 0.85f; break;
+    case HUD_SECTION: put(bold, h.text, base * 1.0f, base * 0.18f); drum = SECOND; a = saturate(0.2f + h.alpha * 1.9f); break;
+    case HUD_LABEL: put(reg, h.text, base * 0.72f, base * 0.22f); a = saturate(alpha * 1.2f) * 0.8f; break;
+    case HUD_VALUE: put(bold, h.text, base * 1.02f, 0.f); break;
+    case HUD_NOTICE: put(bold, h.text, base * 1.0f, base * 0.05f); drum = SECOND; break;
+    case HUD_TOAST: put(bold, h.text, base * 1.3f, base * 0.12f); out.dy = -base * 0.1f; drum = BOTH; break;
+    case HUD_TOAST_SUB: put(reg, h.text, base * 0.85f, base * 0.1f); drum = SECOND; break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) { put(bold, h.text, base * 1.1f, base * 0.08f); out.dy = -base * 0.1f; }
+        else { put(reg, h.text, base * 0.85f, base * 0.03f); drum = h.accent ? SECOND : KEY; }
+        break;
+    default: put(reg, h.text, base * 0.82f, base * 0.02f); drum = h.accent ? SECOND : KEY; break;
+    }
+    // the drum's ink (slow motion: a monotone print, the second drum a lighter tone of the key ink)
+    const vec3 inkB = lerp(inkB_, lerp(paper_, inkA_, 0.45f), slow_);
+    const vec3 ink = drum == KEY ? inkA_ : drum == SECOND ? inkB : inkA_ * inkB;
+    const bool dark = dark_ > 0.5f;
+    vec3 col = toSrgb(ink);
+    out.blend = dark ? text::BLEND_SCREEN : text::BLEND_MULTIPLY;
+    float mode = dark ? -1.f : 0.f;
+    const float b = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    if (b > 0.001f) {
+        // the bridge: the stack and the HUD plain, in its ink
+        const vec3 onPaper = dark ? vec3(1.f) - (vec3(1.f) - paper_) * (vec3(1.f) - ink) : paper_ * ink;
+        col = toSrgb(lerp(onPaper, bridge_.ink, b));
+        out.blend = text::BLEND_OVER;
+        mode = 1.f;
+    }
+    for (text::Span& sp : out.spans) {
+        sp.ink = col;
+        sp.alpha *= a;
+    }
+    out.look.weight = 0.005f;
+    riso_.p0 = vec4{viewC_.x - viewH_.x, viewC_.y + viewH_.y, px_, 0.f};
+    riso_.p1 = vec4{(float)drum, mode, 0.f, 0.f};
+    out.lettering = &riso_;
+}
+
 // The menus' panels: paper (the ink under it lifted) or a screened patch of the second ink. eraseOnly: only the
 // lifting (the pieces' own buffer).
 void RisographUniverse::drawPanels(const std::vector<HudRect>& panels, bool eraseOnly) {
@@ -911,93 +883,6 @@ void RisographUniverse::drawPanels(const std::vector<HudRect>& panels, bool eras
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
     glBlendEquation(GL_MAX);
-}
-
-void RisographUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    drawPanels(panels, false);
-    const float s = height_ / 1080.f;
-    const vec4 key(1.f, 0.f, 0.f, 1.f), second(0.f, 1.f, 0.f, 1.f), both(1.f, 1.f, 0.f, 1.f);
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        auto ink = [&](const vec4& c, float a) { return vec4(c.x * a, c.y * a, c.z * a, c.w * a); };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "RISOGRAPH" in the bold, the inks after it in the regular
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.95f, tr = base * 0.12f, vsz = base * 0.8f, vtr = base * 0.06f;
-            const float wName = textWidth(fontBold_, name, sz, tr);
-            const float gap = base * 0.9f;
-            const float wVar = var.empty() ? 0.f : textWidth(fontReg_, var, vsz, vtr);
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(fontBold_, name, x, h.y, sz, tr, q);
-            drawText(fontBold_, q, ink(key, a), 0.02f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontReg_, var, x + wName + gap, h.y + (sz - vsz) * 0.75f, vsz, vtr, q);
-                drawText(fontReg_, q, ink(key, a * 0.85f), 0.02f);
-            }
-            continue;
-        }
-        case HUD_TITLE:
-            place(fontBold_, h.text, base * 1.05f, 0.f);
-            drawText(fontBold_, q, ink(key, saturate(h.alpha * 1.3f)), 0.02f);
-            continue;
-        case HUD_INFO:
-            place(fontReg_, h.text, base * 0.78f, base * 0.04f);
-            drawText(fontReg_, q, ink(key, saturate(alpha * 1.2f) * 0.85f), 0.02f);
-            continue;
-        case HUD_SECTION:
-            place(fontBold_, h.text, base * 1.0f, base * 0.18f);
-            drawText(fontBold_, q, ink(second, saturate(0.2f + h.alpha * 1.9f)), 0.02f);
-            continue;
-        case HUD_LABEL:
-            place(fontReg_, h.text, base * 0.72f, base * 0.22f);
-            drawText(fontReg_, q, ink(key, saturate(alpha * 1.2f) * 0.8f), 0.02f);
-            continue;
-        case HUD_VALUE:
-            place(fontBold_, h.text, base * 1.02f, 0.f);
-            drawText(fontBold_, q, ink(key, alpha), 0.02f);
-            continue;
-        case HUD_NOTICE:
-            place(fontBold_, h.text, base * 1.0f, base * 0.05f);
-            drawText(fontBold_, q, ink(second, alpha), 0.02f);
-            continue;
-        case HUD_TOAST:
-            place(fontBold_, h.text, base * 1.3f, base * 0.12f, -base * 0.1f);
-            drawText(fontBold_, q, ink(both, alpha), 0.02f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontReg_, h.text, base * 0.85f, base * 0.1f);
-            drawText(fontReg_, q, ink(second, alpha), 0.02f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontBold_, h.text, base * 1.1f, base * 0.08f, -base * 0.1f);
-                drawText(fontBold_, q, ink(key, alpha), 0.02f);
-            } else {
-                place(fontReg_, h.text, base * 0.85f, base * 0.03f);
-                drawText(fontReg_, q, ink(h.accent ? second : key, alpha), 0.02f);
-            }
-            continue;
-        default:
-            place(fontReg_, h.text, base * 0.82f, base * 0.02f);
-            drawText(fontReg_, q, ink(h.accent ? second : key, alpha), 0.02f);
-            continue;
-        }
-    }
 }
 
 // =====================================================================================================
@@ -1153,7 +1038,7 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, inst_.size() * sizeof(Inst), inst_.data(), GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)inst_.size());
     }
-    drawHud(f.hud, f.panels);
+    drawPanels(f.panels, false);
 
     // ---- The pieces, in their own buffer (the same drums, printed in the drop's inks while it lasts), the menus'
     // paper lifting them too.
