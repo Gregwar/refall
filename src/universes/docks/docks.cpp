@@ -46,17 +46,6 @@ const unsigned char FONT_BARLOW[] = {
 #include "universes/docks/Barlow-Medium.ttf.inc"
 };
 
-// The HUD's lettering: the ink over its halo, never the halo through the ink (a fading line stays its own ink, not
-// a paler one), the halo easing out from the letters.
-const text::Lettering HALO_LETTERING{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float halo = smoothstep(0.0, 1.0, 1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3)) * uHalo.a;
-    float a = max(fill, halo);
-    return vec4(mix(uHalo.rgb, L.ink.rgb, fill / max(a, 1e-3)), 1.0) * a * L.ink.a;
-}
-)"};
-
 namespace shaders = docks_shaders;
 using ugl::set1f;
 using ugl::set1i;
@@ -790,7 +779,7 @@ void DocksUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = halo;
     out.look.haloA = haloA;
     out.look.haloW = 0.08f;
-    out.lettering = &HALO_LETTERING;
+    out.look.haloSmooth = true;
     out.alpha = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 }
 

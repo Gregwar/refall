@@ -60,6 +60,7 @@ struct Look {
     // their edge, fading out over `haloW` (haloPow 2: a tighter falloff)
     vec3 halo{0, 0, 0};
     float haloA = 0, haloW = 0.08f, haloPow = 1;
+    bool haloSmooth = false; // a smoothstep falloff instead (haloPow ignored)
     // a light around the letters, added to what is behind (neon, a lit sign)
     vec3 glow{1, 1, 1};
     float glowA = 0, glowW = 0.12f;

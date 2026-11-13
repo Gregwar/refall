@@ -49,17 +49,6 @@ const unsigned char FONT_LIGHT[] = {
 #include "universes/planks/Nunito-Light.ttf.inc"
 };
 
-// The HUD's lettering: the ink over its halo, never the halo through the ink (a fading line stays its own ink, not
-// a paler one), the halo easing out from the letters.
-const text::Lettering HALO_LETTERING{R"(
-vec4 letter(Letter L) {
-    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
-    float halo = smoothstep(0.0, 1.0, 1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3)) * uHalo.a;
-    float a = max(fill, halo);
-    return vec4(mix(uHalo.rgb, L.ink.rgb, fill / max(a, 1e-3)), 1.0) * a * L.ink.a;
-}
-)"};
-
 namespace shaders = planks_shaders;
 namespace pb = planks_build;
 using pb::Q;
@@ -1074,7 +1063,7 @@ void PlanksUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = halo;
     out.look.haloA = 0.5f;
     out.look.haloW = 0.07f;
-    out.lettering = &HALO_LETTERING;
+    out.look.haloSmooth = true;
     out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
 }
 
