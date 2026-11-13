@@ -139,6 +139,8 @@ float swingEase(float x) {
 }
 
 constexpr float FLOOR_Y = -10.06f;
+constexpr float WELL_VEIL = 0.5f;     // the light let through the black veil over the well's frame
+constexpr float WELL_LIT_GAIN = 1.6f; // the light the board's cubes receive, raised (the stack vivid under the veil)
 constexpr int RAYS = 11;          // rays per beam
 constexpr int SPECTRUM = 6;       // rays a dispersed ray splits into
 constexpr int MAX_SEGS = 7000;
@@ -841,7 +843,9 @@ void PrismUniverse::cubeInst(vec2 pos, float scale, int type, float alpha, float
     vec2 d{0.f, 0.f};
     float amb = 1.f;
     if (slot >= 0 && slot < SLOTS) {
-        l = lit_[slot];
+        // the board's cubes take more of the light than they used to: the beams are veiled in the well, the glass
+        // they cross is not
+        l = lit_[slot] * WELL_LIT_GAIN;
         d = litDir_[slot];
     } else {
         // previews and hold: softly lit from above
@@ -1339,6 +1343,8 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progScene_, "uWell", f.bare ? 0.f : 1.f);
     set4f(progScene_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progScene_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
+    set4f(progScene_, "uVeil", -5.08f, FLOOR_Y, 5.08f, 10.f);
+    set1f(progScene_, "uVeilK", WELL_VEIL);
     set1f(progScene_, "uBridge", smoothstepf(0.f, 1.f, bridge));
     set3f(progScene_, "uBridgeColor", bridge_.color);
     ugl::drawFullscreen();

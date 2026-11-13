@@ -118,6 +118,8 @@ uniform float uHaze;       // how much the haze breaks the beams up
 uniform float uSpill;      // light scattered on the backdrop
 uniform float uWell;       // the well's hairlines shown (0 in a break's frame: the room alone)
 uniform vec4 uColL, uColR; // the HUD's columns: the beams quieter there
+uniform vec4 uVeil;        // the well's frame (x0, y0, x1, y1): a black veil over the light inside it
+uniform float uVeilK;      // how much of the light the veil lets through there
 uniform float uBridge;
 uniform vec3 uBridgeColor;
 vec3 light(vec2 uv, float lod) { return textureLod(uLight, clamp(uv, vec2(0.001), vec2(0.999)), lod).rgb; }
@@ -137,6 +139,12 @@ void main() {
     float inR = smoothstep(uColR.x - 1.0, uColR.x + 1.0, p.x) * (1.0 - smoothstep(uColR.z - 1.0, uColR.z + 1.0, p.x))
               * smoothstep(uColR.y - 1.0, uColR.y + 1.0, p.y) * (1.0 - smoothstep(uColR.w - 1.0, uColR.w + 1.0, p.y));
     float hud = 1.0 - 0.5 * max(inL, inR);
+    // the veil: inside the well's frame the beams, their haze and dust are dimmed (the cubes, drawn over, are not),
+    // with an edge a few pixels soft
+    float ve = uPx * 3.0;
+    float inW = smoothstep(uVeil.x - ve, uVeil.x + ve, p.x) * (1.0 - smoothstep(uVeil.z - ve, uVeil.z + ve, p.x))
+              * smoothstep(uVeil.y - ve, uVeil.y + ve, p.y) * (1.0 - smoothstep(uVeil.w - ve, uVeil.w + ve, p.y));
+    float veil = mix(1.0, uVeilK, inW * uWell);
     vec3 L = light(uv, 0.0);
     vec3 spill = light(uv, 4.5) + 0.6 * light(uv, 6.0);
     float floorY = uFloorY;
@@ -151,7 +159,7 @@ void main() {
         col += refl * 0.22 * exp(-k * 0.7) + L * 0.9 + spill * 0.18;
         col += uHair * 0.6 * exp(-k * k * 260.0); // the floor's front edge catches a hair of light
     } else {
-        col += L * haze * hud + spill * uSpill;
+        col += (L * haze * hud + spill * uSpill) * veil;
     }
     // dust motes, glinting only where the light is
     float lum = dot(L + spill * 0.3, vec3(0.3, 0.5, 0.2));
@@ -168,7 +176,7 @@ void main() {
             float sz = uPx * (0.9 + 0.8 * o.y);
             dsum += exp(-d * d / (sz * sz)) * (0.35 + 0.65 * tw) * step(0.35, o.x);
         }
-        col += dsum * uDust * min(lum, 1.5) * 1.1 * vec3(1.0, 0.98, 0.95);
+        col += dsum * uDust * min(lum, 1.5) * 1.1 * vec3(1.0, 0.98, 0.95) * veil;
     }
     // the well: three hairlines of glass edge, almost invisible, catching the light that crosses them
     float hx = min(abs(p.x - 5.08), abs(p.x + 5.08));
