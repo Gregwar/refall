@@ -65,6 +65,12 @@ public:
         const Game* blank = nullptr; // the blank board drawn while the game is hidden (needed when play < 1)
         std::vector<HudText> bareHud; // the HUD while the game is hidden (the corner title)
         TitleCard::Line card[2];     // the title card (the song, the universe), over everything
+        // The title card in the universe's own lettering: its corner lines (the title, the universe: the HUD's own
+        // entries) captured big once per card (`cardId`), shown big in the middle, then shrinking onto the very
+        // spot where the universe's HUD letters them (cardShrink 0 .. 1). Empty: the host's lettering (`card`).
+        std::vector<HudText> cardHud;
+        int cardId = 0;
+        float cardShrink = 0, cardAlpha = 0;
     };
     void setBreak(Break b) { brk_ = std::move(b); }
     const TitleCard& titleCard() const { return card_; }
@@ -113,4 +119,19 @@ private:
     TitleCard card_;
     GLuint mixProg_ = 0;
     void renderBreak(const Frame& f);
+    // ---- The title card captured from the universe's own HUD lettering (see Break::cardHud).
+    struct CardLine {
+        bool ok = false;
+        GLuint tex = 0;          // the lettering's coverage (R8, mipmapped), cropped to its box
+        float x0 = 0, y0 = 0, x1 = 0, y1 = 0; // its box in the capture, pixels (top-left origin), at scale k
+        float k = 1, ax = 0, ay = 0;         // the capture's scale and the point it scales about
+        float aMax = 1;                      // the lettering's own opacity in the HUD
+        vec3 ink{1.f};
+    };
+    CardLine cardLines_[2];
+    int cardId_ = -1;
+    GLuint cardProg_ = 0;
+    void captureCard(const Frame& f);
+    bool captureLine(const Frame& f, const HudText& line, bool fromBottom, float bigCap, CardLine& out);
+    void drawCard();
 };
