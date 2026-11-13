@@ -110,7 +110,9 @@ struct Worlds {
     void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC);
     void kalTitle();
     void kalFree();
+    void kalCustom();
     void kalCampaign();
+    void textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder);
 };
 
 void Menu::renderWorlds(int w, int h) {
@@ -156,6 +158,7 @@ void Worlds::wants() {
 void Worlds::draw() {
     if (m.screen_ == Menu::TITLE) kalTitle();
     else if (m.screen_ == Menu::FREE) kalFree();
+    else if (m.screen_ == Menu::CUSTOM) kalCustom();
     else kalCampaign();
 }
 
@@ -163,7 +166,9 @@ void Worlds::draw() {
 // shared pieces
 
 void Worlds::tabs(F f, Col ink, Col accent, float track) {
-    p.text(f, "VOYAGE", X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
+    std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
+    while (name.size() > 4 && p.width(f, name, 22 * u, track + 0.2f) > 760 * u) name.pop_back();
+    p.text(f, name, X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
     const float cx = X(1180), sp = 220 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_);
     const float hx = cx + (m.aDiff_ - 1) * sp;
     p.line(hx - 56 * u, y + 16 * u, hx + 56 * u, y + 16 * u, (1.5f + 1.5f * on) * u, withA(accent, 0.6f + 0.4f * on));
@@ -173,12 +178,12 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 }
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track) {
-    static const char* ITEMS[3] = {"VOYAGE", "FREE PLAY", "QUIT"};
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "CUSTOM VOYAGE", "FREE PLAY", "QUIT"};
     const float cx = X(960);
     // the focused entry's inked edges (eased between entries): the underline spans them, the two halos sit at the same
     // distance outside them, level with the middle of the capitals
     float inkL = 0, inkR = 0;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < Menu::TITLE_ITEMS; i++) {
         float l, r;
         p.inkExtent(f, ITEMS[i], size * u, track, l, r);
         const float start = cx - p.width(f, ITEMS[i], size * u, track) * 0.5f;
@@ -191,7 +196,7 @@ void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accen
     p.glow(inkL - 26 * u, yc, 22 * u, withA(accent, 0.8f));
     p.glow(inkR + 26 * u, yc, 22 * u, withA(accent, 0.8f));
     p.setAdditive(false);
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < Menu::TITLE_ITEMS; i++)
         p.text(f, ITEMS[i], cx, Y(y0 + i * step), size * u, withA(ink, 0.45f + 0.55f * near1(m.aTitle_, i)), 0, track);
 }
 
@@ -572,8 +577,8 @@ void Worlds::kalTitle() {
         p.setAdditive(false);
         p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff), 0, 0.22f);
     }
-    p.rrect(cx - 260 * u, Y(652), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
-    menuItems(F::JOSEFIN, 712, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
+    p.rrect(cx - 280 * u, Y(646), 560 * u, 262 * u, 24 * u, hex(0x0c0c14, 0.6f));
+    menuItems(F::JOSEFIN, 704, 58, 30, hex(0xffffff), hex(0xffffff), 0.35f);
 }
 
 void Worlds::kalFree() {
@@ -696,5 +701,101 @@ void Worlds::kalFree() {
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
     const char* hint = m.editing_ ? "CTRL+V  PASTE" : (rows && m.freeRow_ == 1) ? "DEL  REMOVE" : "";
+    if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+}
+
+// A text field being typed into: its frame, the text (its end kept in view), a placeholder while empty, the caret.
+void Worlds::textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder) {
+    p.rrect(fx, fy, fw, fh, 12 * u, hex(0xffffff, 0.08f));
+    p.rrectLine(fx, fy, fw, fh, 12 * u, 2 * u, hex(0xffffff, 0.85f));
+    std::string shown = text;
+    const float ts = 24 * u;
+    while (!shown.empty() && p.width(F::JOSEFIN, shown, ts) > fw - 60 * u) shown.erase(0, 1);
+    if (shown.empty() && placeholder) p.text(F::JOSEFIN, placeholder, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff, 0.4f));
+    const float tw = p.text(F::JOSEFIN, shown, fx + 24 * u, fy + 40 * u, ts, hex(0xffffff));
+    if (std::fmod(t, 1.f) < 0.6f && !m.fetching())
+        p.rrect(fx + 26 * u + tw, fy + 14 * u, 2.5f * u, 34 * u, 1 * u, hex(0xffffff, 0.9f));
+}
+
+// The custom voyages: a row of glass cards, each with a small rosette of its stages (the cleared ones lit), its name,
+// its songs and how far it went, then "new voyage"; making one, a panel under them for the playlist's link, then the
+// voyage's name.
+void Worlds::kalCustom() {
+    std::string cur, next;
+    float mix;
+    tourAt(11.f, cur, next, mix);
+    kalBackground(mix > 0.5f ? next : cur);
+    p.rrect(X(460), Y(90), 1000 * u, 130 * u, 24 * u, hex(0x0c0c14, 0.65f));
+    p.text(F::JOSEFIN_LIGHT, "CUSTOM VOYAGE", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
+    if (!m.voyages_) return;
+    const auto& vs = m.voyages_->list();
+    const int nc = (int)vs.size() + 1;
+    const bool making = m.vStep_ > 0;
+    const float cw = 400 * u, chh = 300 * u, gap = 30 * u;
+    const float total = nc * cw + (nc - 1) * gap, avail = 1680 * u;
+    const float selX = m.aV_ * (cw + gap) + cw / 2;
+    float x = total <= avail ? X(960) - total / 2 : X(960) - std::clamp(selX, avail / 2, total - avail / 2);
+    auto hueCol = [](float h, float s, float v) {
+        auto f = [&](float n) { const float k2 = std::fmod(n + h * 6.f, 6.f); return v - v * s * std::max(0.f, std::min({k2, 4.f - k2, 1.f})); };
+        return Col{f(5), f(3), f(1), 1.f};
+    };
+    for (int i = 0; i < nc; i++, x += cw + gap) {
+        if (x + cw < X(0) || x > X(1920)) continue;
+        const bool add = i == nc - 1;
+        const float g = sstep(near1(m.aV_, i)) * (making ? 0.4f : 1.f);
+        const float y = Y(300) - 12 * u * g;
+        uint32_t seed = 2166136261u;
+        for (char c : add ? std::string("+") : vs[i].id) seed = (seed ^ (unsigned char)c) * 16777619u;
+        const Col hue = add ? hex(0x9aa0b8) : hueCol((seed % 360) / 360.f, 0.55f, 0.95f);
+        if (g > 0.02f) {
+            p.setAdditive(true);
+            p.rrect(x - 6 * u, y - 6 * u, cw + 12 * u, chh + 12 * u, 26 * u, hex(0xffffff, 0.16f * g), 26 * u);
+            p.setAdditive(false);
+        }
+        p.rrect(x, y + 12 * u, cw, chh, 22 * u, hex(0x000000, 0.35f), 30 * u);
+        p.rrect(x, y, cw, chh, 20 * u, withA(mixc(hue, hex(0x0a0a12), 0.78f), 0.92f));
+        p.rrect(x, y, cw, chh * 0.45f, 20 * u, hex(0xffffff, 0.035f));
+        p.rrectLine(x, y, cw, chh, 20 * u, 1.4f * u + 1.2f * g * u, g > 0.5f ? hex(0xffffff, 0.95f) : withA(hue, 0.55f));
+        const float mx = x + cw / 2, my = y + 108 * u;
+        if (add) {
+            p.ring(mx, my, 44 * u, 2 * u, hex(0xffffff, 0.5f + 0.4f * g));
+            p.line(mx - 18 * u, my, mx + 18 * u, my, 2.6f * u, hex(0xffffff, 0.7f + 0.3f * g));
+            p.line(mx, my - 18 * u, mx, my + 18 * u, 2.6f * u, hex(0xffffff, 0.7f + 0.3f * g));
+            p.text(F::JOSEFIN, "NEW VOYAGE", mx, y + 222 * u, 22 * u, hex(0xffffff, 0.6f + 0.4f * g), 0, 0.3f);
+            continue;
+        }
+        const CustomVoyage& v = vs[i];
+        const int st = std::max(1, v.stages), cl = i < (int)m.vCleared_.size() ? m.vCleared_[i] : 0;
+        // its stages as a rosette, in their hues: the cleared ones lit, the others dim glass
+        const float rot = t * 0.04f + (seed % 100) * 0.0628f, mr = 74 * u;
+        for (int k = 0; k < st; k++) {
+            unsigned char sc[3];
+            m.stageColor(k, sc);
+            const Col c = rgb8(sc);
+            kite(mx, my, rot + k * TAU / st, mr * 0.3f, mr, std::min(0.42f, 2.6f / st), k < cl ? c : mixc(c, hex(0x14141c), 0.62f),
+                 k < cl ? 0.95f : 0.8f, true, hex(0x08080c, 0.9f));
+        }
+        p.circle(mx, my, mr * 0.3f, hex(0x0a0a12));
+        p.ring(mx, my, mr * 0.3f, 1.5f * u, cl >= st ? hex(0xe8c06a) : withA(hue, 0.9f));
+        std::string title = upper(asciiFold(v.title));
+        const float ts = 24 * u;
+        while (title.size() > 3 && p.width(F::JOSEFIN, title, ts, 0.12f) > cw - 40 * u) title.pop_back();
+        p.text(F::JOSEFIN, title, mx, y + 226 * u, ts, hex(0xffffff, 0.8f + 0.2f * g), 0, 0.12f);
+        char b[96];
+        std::snprintf(b, sizeof(b), "%d SONGS   /   %d OF %d CLEARED", v.songs, cl, st);
+        p.text(F::JOSEFIN, b, mx, y + 262 * u, 14 * u, cl > 0 ? hex(0xffd27a, 0.9f) : withA(hue, 0.85f), 0, 0.3f);
+    }
+    if (making) {
+        p.rrect(X(120), Y(690), 1680 * u, 230 * u, 24 * u, hex(0x0c0c14, 0.78f));
+        p.rrectLine(X(120), Y(690), 1680 * u, 230 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.4f));
+        p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(160), Y(726), 16 * u, hex(0xffffff), -1, 0.45f);
+        textField(X(160), Y(752), 1600 * u, 62 * u, m.editText_,
+                  m.vStep_ == 1 ? "Type or paste (Ctrl+V) a YouTube playlist link" : nullptr);
+    }
+    if (!m.plMsg_.empty())
+        p.text(F::JOSEFIN, upper(m.plMsg_), making ? X(160) : X(960), Y(making ? 870 : 700), 16 * u,
+               m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), making ? -1 : 0, 0.3f);
+    // only the keys a player wouldn't guess (paste, delete)
+    const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : !making && m.vSel_ < (int)vs.size() ? "DEL  DELETE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1020), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
 }

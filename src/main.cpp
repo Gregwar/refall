@@ -27,6 +27,7 @@
 #include "platform.hpp"
 #include "renderer.hpp"
 #include "songplan.hpp"
+#include "voyages.hpp"
 #include "youtube.hpp"
 
 namespace fs = std::filesystem;
@@ -229,8 +230,11 @@ private:
     // ---- Modes: the menu, free play, a campaign run.
     enum Mode { MODE_MENU, MODE_FREE, MODE_CAMPAIGN } mode_ = MODE_FREE;
     bool menuEnabled_ = false; // started on the title screen: game overs and Q go back to it
-    Campaign campaign_;
+    Campaign campaign_;        // the voyage open: the main campaign, or a custom voyage (and its progress)
     Progress progress_;
+    VoyageStore voyages_;
+    std::string voyage_;       // the custom voyage open ("" the main campaign)
+    bool openVoyage(const std::string& id);
     PlaylistStore playlists_;
     Menu menu_;
     float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
@@ -1137,6 +1141,9 @@ int App::run() {
 
     campaign_.load(opt_.campaignPath);
     progress_.load(opt_.progressPath, &campaign_);
+    voyages_.load(VoyageStore::defaultDir(opt_.progressPath));
+    voyages_.setCurve(campaign_);
+    menu_.setVoyages(&voyages_, [this](const std::string& id) { return openVoyage(id); });
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
     menu_.setFreeDifficulty(opt_.difficulty);
@@ -1195,7 +1202,10 @@ int App::run() {
     if (menuEnabled_) { // back where the menu was last time (the command line's difficulty wins)
         placePath_ = menuPlacePath(opt_.progressPath);
         Menu::Place pl;
-        if (Menu::loadPlace(placePath_, pl)) menu_.restore(pl, !opt_.difficultyGiven);
+        if (Menu::loadPlace(placePath_, pl)) {
+            if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
+            menu_.restore(pl, !opt_.difficultyGiven);
+        }
         savedPlace_ = lastPlace_ = menu_.place();
     }
     if (menuEnabled_ && opt_.menuMusic) startMenuMusic();
@@ -1834,6 +1844,19 @@ static std::string menuPlacePath(const std::string& progressPath) {
     return (fs::path(p).parent_path() / "menu-state.tsv").string();
 }
 
+// The main campaign ("") or a custom voyage becomes the one played, with its progress.
+bool App::openVoyage(const std::string& id) {
+    if (!id.empty()) voyages_.used(id);
+    if (id == voyage_) return true;
+    Campaign c;
+    if (id.empty() ? !c.load(opt_.campaignPath) : !voyages_.find(id) || !c.load(voyages_.campaignPath(id))) return false;
+    campaign_ = c;
+    progress_.load(id.empty() ? opt_.progressPath : voyages_.progressPath(id), &campaign_);
+    voyage_ = id;
+    std::printf("[voyages] %s\n", id.empty() ? "the main voyage" : voyages_.find(id)->title.c_str());
+    return true;
+}
+
 // Saves where the menu is, 1.5 s after it last changed (or at once when leaving the menu).
 void App::keepPlace(bool now) {
     if (placePath_.empty()) return;
@@ -2096,7 +2119,7 @@ int App::runMenuShot() {
             {3.6, "right"}, {4.4, "right"}, {5.2, "right"}, {6.0, "ok"}, {6.9, "left"}, {7.7, "left"}, {8.6, "alt"},
             {9.8, "right"}, {10.6, "right"}, {11.4, "right"}, {12.2, "left"}, {13.4, "back"}, {14.2, "right"}, {15.0, "alt"},
             {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
-            {21.9, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
+            {21.9, "back"}, {22.8, "down"}, {23.15, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
         const double END = std::getenv("ZEN_MENU_CLIP_SECONDS") ? std::atof(std::getenv("ZEN_MENU_CLIP_SECONDS")) : 34.5;
         std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");

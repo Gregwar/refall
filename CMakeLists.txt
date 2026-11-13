@@ -173,6 +173,7 @@ add_executable(refall
   src/headless.cpp
   src/campaign.cpp
   src/playlists.cpp
+  src/voyages.cpp
   src/menu.cpp
   src/menupaint.cpp
   src/menuworlds.cpp
