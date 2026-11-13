@@ -20,6 +20,8 @@ public:
     void levelUp() override;
     void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -64,20 +66,8 @@ private:
     struct Fading { float x, y; int gx, gy, type, mask; float h, t; };
     std::vector<Fading> fading_;
 
-    // ---- Text and the camera's overlay.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font font_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const std::string& s, float size, float track) const;
-    void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const std::vector<float>& quads, const vec3& ink, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it), and the overlay's readings in the same letters.
+    text::Engine text_;
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     void drawOverlay(const Game& g, bool bare);
     std::vector<float> shapes_;
@@ -85,8 +75,8 @@ private:
     void flushShapes();
 
     // ---- GL.
-    GLuint progBg_ = 0, progCell_ = 0, progMap_ = 0, progBlur_ = 0, progShape_ = 0, progText_ = 0;
-    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint progBg_ = 0, progCell_ = 0, progMap_ = 0, progBlur_ = 0, progShape_ = 0;
+    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint lutTex_ = 0;
     ugl::Target tempT_, glowA_, glowB_;
     mat4 vp_;

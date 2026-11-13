@@ -37,9 +37,6 @@
 #include "layout.hpp"
 #include "universes/heat/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -116,22 +113,6 @@ float vnoise(float x, float y, uint64_t s) {
     return lerpf(lerpf(a, b, fx), lerpf(c, d, fx), fy);
 }
 
-// UTF-8 to the font's characters: the degree sign is glyph 127, anything else outside ASCII a '?'.
-std::string ascii(const std::string& s) {
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB0) { o += '\x7f'; i++; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += ' '; i++; continue; }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
 } // namespace
 
 // =====================================================================================================
@@ -144,7 +125,6 @@ bool HeatUniverse::init(int width, int height) {
     progMap_ = ugl::program(ugl::FULLSCREEN_VS, shaders::MAP_FS, "heat map");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "heat blur");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "heat shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "heat text");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -170,14 +150,6 @@ bool HeatUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     auto mkTex = [&](GLuint& t) {
@@ -192,56 +164,11 @@ bool HeatUniverse::init(int width, int height) {
     mkTex(airTex_);
     mkTex(lutTex_);
 
-    buildFont(font_, FONT_TTF);
+    text_.init();
     buildLuts();
     resize(width, height);
     placeBlobs();
     return glGetError() == GL_NO_ERROR;
-}
-
-void HeatUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] heat font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB0 : ch; // the degree sign in DEL's slot
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void HeatUniverse::resize(int width, int height) {
@@ -263,13 +190,11 @@ HeatUniverse::~HeatUniverse() {
     tempT_.destroy();
     glowA_.destroy();
     glowB_.destroy();
-    for (GLuint p : {progBg_, progCell_, progMap_, progBlur_, progShape_, progText_}) glDeleteProgram(p);
-    for (GLuint v : {cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progBg_, progCell_, progMap_, progBlur_, progShape_}) glDeleteProgram(p);
+    for (GLuint v : {cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     for (GLuint t : {heatTex_, airTex_, lutTex_})
         if (t) glDeleteTextures(1, &t);
-    if (font_.tex) glDeleteTextures(1, &font_.tex);
-    delete (stbtt_fontinfo*)font_.info;
 }
 
 void HeatUniverse::buildLuts() {
@@ -847,56 +772,6 @@ void HeatUniverse::buildBoard(const Game& g) {
 // Text and the overlay
 // =====================================================================================================
 
-float HeatUniverse::textWidth(const std::string& s, float size, float track) const {
-    const Font& f = font_;
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-    }
-    return w - track;
-}
-
-void HeatUniverse::textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const {
-    const Font& f = font_;
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void HeatUniverse::drawText(const std::vector<float>& q, const vec3& ink, float alpha) {
-    if (q.empty() || !font_.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, font_.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set3f(progText_, "uHalo", vec3(0.01f, 0.01f, 0.015f));
-    set1f(progText_, "uHaloA", 0.45f);
-    set1f(progText_, "uAlpha", alpha * (1.f - smoothstepf(0.4f, 0.9f, bridge_.amount)));
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void HeatUniverse::rect(float x0, float y0, float x1, float y1, const vec3& c, float a) {
     if (a <= 0.003f) return;
     const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
@@ -922,7 +797,6 @@ void HeatUniverse::drawOverlay(const Game& g, bool bare) {
     const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_);
     const vec3 ink(0.93f, 0.94f, 0.95f), shadow(0.f);
     if (vis <= 0.01f) return;
-    std::vector<float> q;
     char buf[32];
     // ---- the scale bar
     {
@@ -935,15 +809,21 @@ void HeatUniverse::drawOverlay(const Game& g, bool bare) {
             rect(x0, b, x1, a + 0.5f, lutAt((i + 0.5f) / N), vis);
         }
         flushShapes();
-        q.clear();
+        // its range, in the camera's own lettering (the world's, not the HUD's: under nothing but the frame)
         const float ts = 15.f * s;
-        std::snprintf(buf, sizeof(buf), "%.0f\x7f", degrees(hi_ - 0.08f * flare_));
-        std::string hiS = buf;
-        std::snprintf(buf, sizeof(buf), "%.0f\x7f", degrees(lo_));
-        std::string loS = buf;
-        textQuads(hiS, x1 - textWidth(hiS, ts, 0.f), y0 - ts * 1.9f, ts, 0.f, q);
-        textQuads(loS, x1 - textWidth(loS, ts, 0.f), y1 + ts * 0.9f, ts, 0.f, q);
-        drawText(q, ink, 0.75f * vis);
+        auto reading = [&](float deg, float y) {
+            std::snprintf(buf, sizeof(buf), "%.0f°", deg);
+            text::Line l;
+            l.add(buf, text::font(FONT_TTF), ts, ink, 0.f, 0.75f * vis);
+            l.look.halo = vec3(0.01f, 0.01f, 0.015f);
+            l.look.haloA = 0.45f;
+            l.look.haloW = 0.07f;
+            l.look.haloPow = 1.5f;
+            const text::Box b = text_.measure(l);
+            text_.draw(l, x1 - b.x1, y, width_, height_, worldTime_);
+        };
+        reading(degrees(hi_ - 0.08f * flare_), y0 - ts * 1.9f);
+        reading(degrees(lo_), y1 + ts * 0.9f);
     }
     // ---- the bonus gauge: a thin ring, its charge an arc in the hot color (none at a break)
     if (!bare) {
@@ -976,7 +856,6 @@ void HeatUniverse::drawOverlay(const Game& g, bool bare) {
 
 // The HUD in the camera's lettering: one monospace, light on a soft dark outline, labels spaced out.
 void HeatUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? lutAt(0.8f) : vec3(0.02f);
@@ -984,78 +863,43 @@ void HeatUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<Hu
         }
         flushShapes();
     }
+}
+
+
+// The lettering, by the host (text.hpp): the camera's monospace (Noto Sans Mono), light characters on a soft dark
+// outline readable over any temperature; the accent a hot reading of the palette.
+void HeatUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
     const vec3 ink(0.93f, 0.94f, 0.95f), accent = lutAt(0.84f);
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(text, size, track);
-            textQuads(text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string t = h.text;
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            place(t, base * 0.8f, base * 0.18f, base * 0.1f);
-            drawText(q, ink, saturate(0.3f + h.alpha * 1.5f));
-            continue;
-        }
-        case HUD_SECTION:
-            place(h.text, base * 0.8f, base * 0.3f);
-            drawText(q, accent, saturate(0.25f + h.alpha * 1.7f));
-            continue;
-        case HUD_TITLE:
-            place(h.text, base * 0.95f, 0.f);
-            drawText(q, ink, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(h.text, base * 0.75f, base * 0.05f);
-            drawText(q, ink, saturate(alpha * 1.2f) * 0.7f);
-            continue;
-        case HUD_LABEL:
-            place(h.text, base * 0.68f, base * 0.3f);
-            drawText(q, ink, saturate(alpha * 1.2f) * 0.68f);
-            continue;
-        case HUD_VALUE:
-            place(h.text, base * 0.95f, 0.f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(h.text, base * 0.95f, base * 0.05f);
-            drawText(q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(h.text, base * 0.85f, 0.f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(h.text, base * 1.05f, base * 0.4f, -base * 0.1f);
-            drawText(q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(h.text, base * 0.85f, base * 0.05f);
-            drawText(q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(h.text, base * 1.0f, base * 0.1f);
-                drawText(q, ink, alpha);
-            } else {
-                place(h.text, base * 0.8f, base * 0.05f);
-                drawText(q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(h.text, base * 0.78f, 0.f);
-            drawText(q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+    text::Font* mono = text::font(FONT_TTF);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, mono, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(text::upper(h.text), base * 0.8f, base * 0.18f, ink, 0.3f + h.alpha * 1.5f, base * 0.1f); break;
+    case HUD_SECTION: put(h.text, base * 0.8f, base * 0.3f, accent, 0.25f + h.alpha * 1.7f); break;
+    case HUD_TITLE: put(h.text, base * 0.95f, 0.f, ink, h.alpha * 1.3f); break;
+    case HUD_INFO: put(h.text, base * 0.75f, base * 0.05f, ink, saturate(alpha * 1.2f) * 0.7f); break;
+    case HUD_LABEL: put(h.text, base * 0.68f, base * 0.3f, ink, saturate(alpha * 1.2f) * 0.68f); break;
+    case HUD_VALUE: put(h.text, base * 0.95f, 0.f, ink, alpha); break;
+    case HUD_NOTICE: put(h.text, base * 0.95f, base * 0.05f, accent, alpha); break;
+    case HUD_KEY: put(h.text, base * 0.85f, 0.f, ink, alpha); break;
+    case HUD_TOAST: put(h.text, base * 1.05f, base * 0.4f, ink, alpha, -base * 0.1f); break;
+    case HUD_TOAST_SUB: put(h.text, base * 0.85f, base * 0.05f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(h.text, base * 1.0f, base * 0.1f, ink, alpha);
+        else put(h.text, base * 0.8f, base * 0.05f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(h.text, base * 0.78f, 0.f, h.accent ? accent : ink, alpha); break;
     }
+    out.look.halo = vec3(0.01f, 0.01f, 0.015f);
+    out.look.haloA = 0.45f;
+    out.look.haloW = 0.07f;
+    out.look.haloPow = 1.5f;
+    out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
 }
 
 // =====================================================================================================

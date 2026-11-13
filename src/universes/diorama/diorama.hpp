@@ -24,6 +24,8 @@ public:
     // The world itself is not dissolved natively (the host draws the bridge over it), but the camera glides to
     // the layout's front view while a change runs, so both wells meet at the same pixels.
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- GPU resources.
@@ -42,10 +44,8 @@ private:
     void drawWorld(GLuint prog, bool depthOnly);
     void drawScene(bool depthOnly, bool mirror);
     void setCommonUniforms(GLuint prog);
-    void layoutHud(const std::vector<HudText>& in, std::vector<HudText>& out) const;
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
-    void buildFont();
-    float textWidth(const std::string& text, float scale) const;
+    void drawHud(const std::vector<HudRect>& panels);
+    std::vector<HudText> statLabels_; // the frame's labels a value follows
     void setCamera(float time);
 
     // ---- Simulation.
@@ -70,7 +70,7 @@ private:
 
     int samples_ = 4;
     GLuint progBlock_ = 0, progWorld_ = 0, progBlockDepth_ = 0, progWorldDepth_ = 0, progSky_ = 0, progWater_ = 0,
-           progSprite_ = 0, progDown_ = 0, progBlur_ = 0, progComp_ = 0, progPanel_ = 0, progText_ = 0;
+           progSprite_ = 0, progDown_ = 0, progBlur_ = 0, progComp_ = 0, progPanel_ = 0;
     GLuint emptyVao_ = 0, instVbo_ = 0, quadVbo_ = 0, spriteVbo_ = 0, spriteVao_ = 0, hudVao_ = 0, hudVbo_ = 0;
     Mesh cube_, sphere_, island_, tower_, waterMesh_;
     // Trees and rocks: one mesh each, placed per landscape (a landscape change regrows them).
@@ -85,11 +85,6 @@ private:
     GLuint reflFbo_ = 0, reflTex_ = 0, reflDepth_ = 0;
     GLuint halfFbo_[2] = {}, halfTex_[2] = {};
     int halfW_ = 1, halfH_ = 1;
-    GLuint fontTex_ = 0;
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    Glyph glyphs_[96] = {};
-    float fontPx_ = 48.f, fontAscent_ = 0.f, fontScaleTT_ = 1.f;
-    bool fontOk_ = false;
 
     // ---- Scene state.
     bool hasLevel_ = false, hasSong_ = false;

@@ -28,6 +28,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     using Q = planks_build::Q;
@@ -97,29 +99,16 @@ private:
     bool toppled_ = false;
     void toppleVillage();
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontMed_, fontLight_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const Game& g, const std::vector<HudRect>& panels);
+    void hudInks(vec3& ink, vec3& halo, vec3& accent) const;
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
     GLuint progStudio_ = 0, progPlank_ = 0, progShadow_ = 0, progPre_ = 0, progPreTable_ = 0, progSsao_ = 0,
-           progBlur_ = 0, progFlat_ = 0, progFinal_ = 0, progShape_ = 0, progText_ = 0;
-    GLuint boxVbo_ = 0, boxVao_ = 0, instVbo_ = 0, flatVao_ = 0, flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
-           textVao_ = 0, textVbo_ = 0;
+           progBlur_ = 0, progFlat_ = 0, progFinal_ = 0, progShape_ = 0;
+    GLuint boxVbo_ = 0, boxVao_ = 0, instVbo_ = 0, flatVao_ = 0, flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     GLuint shadowFbo_[2] = {0, 0}, shadowTex_[2] = {0, 0};
     GLuint preFbo_ = 0, prePos_ = 0, preNrm_ = 0, preDepth_ = 0;

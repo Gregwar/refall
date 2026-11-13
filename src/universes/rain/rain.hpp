@@ -24,6 +24,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- Shapes and tiles (pixels).
@@ -41,22 +43,8 @@ private:
     float unitPx_ = 45.f;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
 
-    // ---- Type.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        float kern[96][96];
-        void* info = nullptr;
-    };
-    Font med_, light_;
-    void buildFont(Font& f, const unsigned char* ttf, float px, int atlas);
-    float capWidth(const Font& f, const std::string& s, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float soft = 0.f);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const Game& g, const std::vector<HudRect>& panels);
     void drawPreviews(const Game& g);
 
     // ---- The rain: near streaks with physics, splashes, drips running down the faces.
@@ -126,8 +114,8 @@ private:
     void drawBoard(const Game& g);
 
     // ---- GL.
-    GLuint progBg_ = 0, progShape_ = 0, progTile_ = 0, progText_ = 0;
-    GLuint quadVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, tileVao_ = 0, tileVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint progBg_ = 0, progShape_ = 0, progTile_ = 0;
+    GLuint quadVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, tileVao_ = 0, tileVbo_ = 0;
     mat4 vp_;
 
     // ---- Song, staging.

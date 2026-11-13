@@ -24,6 +24,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // One instanced quad (paint stamps and the play share the layout: see shaders.hpp).
@@ -78,25 +80,13 @@ private:
     struct Speck { vec2 p, v; vec3 color; float t, life, r; };
     std::vector<Speck> specks_;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr; // stbtt_fontinfo
-    };
-    Font font_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const std::string& s, float size, float track) const;
-    void textQuads(const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const std::vector<float>& quads, const vec3& srgb, float alpha, float bias, float soft);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels, float mul);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const std::vector<HudRect>& panels, float mul);
+    float hudMul_ = 1.f; // the frame's fade, on the inks
 
     // ---- GL.
-    GLuint progWall_ = 0, progPaint_ = 0, progFlat_ = 0, progComp_ = 0, progPlay_ = 0, progText_ = 0, progPanel_ = 0;
-    GLuint quadVbo_ = 0, instVao_ = 0, instVbo_ = 0, textVao_ = 0, textVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
+    GLuint progWall_ = 0, progPaint_ = 0, progFlat_ = 0, progComp_ = 0, progPlay_ = 0, progPanel_ = 0;
+    GLuint quadVbo_ = 0, instVao_ = 0, instVbo_ = 0, panelVao_ = 0, panelVbo_ = 0;
     ugl::Target wallT_, paintT_, heightT_, wetT_, wetHT_;
     bool wallDirty_ = true;
     mat4 vp_;

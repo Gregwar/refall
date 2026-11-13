@@ -521,30 +521,5 @@ void main() {
 }
 )";
 
-// SDF type, one flat ink.
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uInk;
-uniform float uAlpha;
-uniform float uSoft;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-4) * 0.7;
-    float a = smoothstep(0.5 - w - uSoft, 0.5 + w + uSoft * 0.3, d) * uAlpha;
-    frag = vec4(uInk * a, a);
-}
-)";
 
 } // namespace rain_shaders

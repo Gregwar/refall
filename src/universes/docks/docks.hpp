@@ -24,6 +24,8 @@ public:
     int variant() const override { return variant_; }
     bool bridgeable() const override { return true; }
     void setBridge(const Bridge& b) override { bridge_ = b; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
     // Instances (public for the geometry helpers in port.cpp).
     struct Box { float c[4], x[4], y[4], z[4], col[4]; }; // center + material, three half axes (+ params), color + seed
@@ -134,29 +136,17 @@ private:
     size_t staticCount_ = 0;
     bool staticDirty_ = true;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font font_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha, float haloA = 0.5f);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    void drawHud(const Game& g, const std::vector<HudRect>& panels);
+    void hudInks(vec3& ink, vec3& halo, vec3& accent) const;
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
     GLuint progSky_ = 0, progWater_ = 0, progBox_ = 0, progSprite_ = 0, progLine_ = 0, progCone_ = 0, progVeil_ = 0, progDown_ = 0, progBlur_ = 0,
-           progFinal_ = 0, progShape_ = 0, progText_ = 0;
+           progFinal_ = 0, progShape_ = 0;
     GLuint cubeVbo_ = 0, quadVbo_ = 0, quadVao_ = 0, staticVao_ = 0, staticVbo_ = 0, boxVao_ = 0, boxVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0,
-           lineVao_ = 0, lineVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+           lineVao_ = 0, lineVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     ugl::Target sceneT_, reflT_, bloomA_, bloomB_;
     mat4 vp_, invVp_, mirror_;
