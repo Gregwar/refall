@@ -7,6 +7,7 @@
 #include "headless.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -16,6 +17,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "audio.hpp"
 #include "campaign.hpp"
@@ -73,6 +78,7 @@ static void undoDiscreteGpu() {
 struct Options {
     std::vector<std::string> paths;
     bool autoplay = false, mute = false, fullscreen = false, hidden = false, shuffle = true;
+    bool stream = false; // --stream: played from afar (tools/stream.py)
     std::string shotPrefix;
     int shotCount = 0;
     bool phaseShots = false;
@@ -152,6 +158,9 @@ static void usage() {
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
         "  --mute               no sound\n"
+        "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
+        "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
+        "                       gamepad's state per line on stdin (\"pad BUTTONS AXES\": 15 digits, 6 numbers)\n"
         "  --shots PREFIX N     render N screenshots of different scenes then exit (testing)\n"
         "  --shot-time SEC      song position used for screenshots (default 25)\n"
         "  --phase-shots PREFIX one screenshot per phase of the first song, then exit (testing)\n"
@@ -318,7 +327,18 @@ private:
         if (headless_) { w = headW_; h = headH_; }
         else glfwGetFramebufferSize(win_, &w, &h);
     }
+    // --stream: the frames' and the sound's pipes, and the clock pacing the frames (headless, no vsync)
+    int streamVideo_ = -1, streamAudio_ = -1;
+    std::vector<unsigned char> streamPx_;
+    std::chrono::steady_clock::time_point streamNext_{};
+    double clock() const {
+        if (win_) return glfwGetTime();
+        return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    void streamFrame();
+    void startStream();
     void swap() {
+        if (streamVideo_ >= 0) streamFrame();
         if (headless_) return;
         glfwSwapBuffers(win_);
         // Wait for the frame to be shown: otherwise the driver queues up to a few frames ahead under vsync (more
@@ -358,7 +378,8 @@ private:
     float slowToast_ = 0, quadToast_ = 0;
     int quadPoints_ = 0;
     bool quadB2B_ = false;
-    bool paused_ = false, wantSkip_ = false, showHelp_ = true, quit_ = false;
+    bool paused_ = false, wantSkip_ = false, showHelp_ = true;
+    std::atomic<bool> quit_{false}; // (also set by --stream's input thread)
     int pauseSel_ = 0; // the pause menu's choice: 0 continue, 1 quit (to the menu)
     double songTime_ = 0, simSongTime_ = 0;
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
@@ -1057,6 +1078,65 @@ std::vector<HudText> App::buildHud(float dt) {
     return hud;
 }
 
+// --stream: the pipes tools/stream.py hands over, and a thread reading the phone's gamepad from stdin.
+void App::startStream() {
+#ifndef _WIN32
+    auto fd = [](const char* name) { const char* v = std::getenv(name); return v ? std::atoi(v) : -1; };
+    streamVideo_ = fd("ZEN_STREAM_VIDEO_FD");
+    streamAudio_ = fd("ZEN_STREAM_AUDIO_FD");
+    if (streamAudio_ >= 0) {
+        // the sound never waits: a block the server is too late for is dropped
+        fcntl(streamAudio_, F_SETFL, fcntl(streamAudio_, F_GETFL) | O_NONBLOCK);
+        const int afd = streamAudio_;
+        audio_.setTap([afd](const float* pcm, unsigned int frames) {
+            int16_t buf[4096];
+            for (unsigned int i = 0; i < frames * 2;) {
+                const unsigned int n = std::min(frames * 2 - i, 4096u);
+                for (unsigned int k = 0; k < n; k++) buf[k] = (int16_t)std::lround(std::clamp(pcm[i + k], -1.f, 1.f) * 32767.f);
+                if (write(afd, buf, n * 2) < 0) return;
+                i += n;
+            }
+        });
+    }
+    std::thread([this] {
+        char line[256];
+        while (std::fgets(line, sizeof(line), stdin)) {
+            unsigned char b[15] = {};
+            float a[6] = {0, 0, 0, 0, -1, -1};
+            char bits[32] = {};
+            if (std::sscanf(line, "pad %31s %f %f %f %f %f %f", bits, &a[0], &a[1], &a[2], &a[3], &a[4], &a[5]) == 7) {
+                for (int i = 0; i < 15 && bits[i]; i++) b[i] = bits[i] == '1';
+                input_.setRemotePad(b, a);
+            }
+        }
+        quit_ = true; // the server is gone
+    }).detach();
+    std::printf("[stream] %dx%d, video fd %d, audio fd %d\n", opt_.width, opt_.height, streamVideo_, streamAudio_);
+#endif
+}
+
+// --stream: the frame (bottom row first) after an 8-byte header (width, height), then a wait for the next 60th of a second.
+void App::streamFrame() {
+#ifndef _WIN32
+    int w, h;
+    fbSize(w, h);
+    streamPx_.resize(8 + (size_t)w * h * 3);
+    const uint32_t head[2] = {(uint32_t)w, (uint32_t)h};
+    std::memcpy(streamPx_.data(), head, 8);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, streamPx_.data() + 8);
+    for (size_t off = 0; off < streamPx_.size();) {
+        const ssize_t n = write(streamVideo_, streamPx_.data() + off, streamPx_.size() - off);
+        if (n <= 0) { quit_ = true; streamVideo_ = -1; return; }
+        off += (size_t)n;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    streamNext_ = std::max(streamNext_ + std::chrono::microseconds(16667), now - std::chrono::milliseconds(50));
+    if (streamNext_ > now) std::this_thread::sleep_for(streamNext_ - now);
+#endif
+}
+
 int App::run() {
     runSeed_ = opt_.seed ? opt_.seed
                          : (std::random_device{}() ^ (uint64_t)std::chrono::steady_clock::now().time_since_epoch().count());
@@ -1072,7 +1152,8 @@ int App::run() {
     if (testPlay()) { offline_ = true; opt_.mute = true; }
     const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty()) && !opt_.fullscreen &&
                               !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
-    if (wantHeadless && headless::init(opt_.width, opt_.height)) {
+    const bool streamHeadless = opt_.stream && !opt_.fullscreen;
+    if ((wantHeadless || streamHeadless) && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
         headW_ = opt_.width; headH_ = opt_.height;
         if (!gladLoadGL((GLADloadfunc)headless::proc)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
@@ -1158,7 +1239,8 @@ int App::run() {
     if (!R_.init(fbw, fbh)) std::fprintf(stderr, "[gl] warning: renderer init reported a GL error\n");
     if (win_) input_.init(win_);
 
-    if (!audio_.init()) std::fprintf(stderr, "[audio] continuing without sound\n");
+    if (opt_.stream) startStream();
+    if (!audio_.init(opt_.stream)) std::fprintf(stderr, "[audio] continuing without sound\n");
     audio_.setMuted(opt_.mute || shotMode);
     lib_.setSampleRate(audio_.sampleRate());
     lib_.setShuffle(opt_.shuffle);
@@ -1210,12 +1292,13 @@ int App::run() {
     }
     if (menuEnabled_ && opt_.menuMusic) startMenuMusic();
 
-    double last = headless_ ? 0.0 : glfwGetTime();
+    const bool fixedStep = headless_ && !opt_.stream;
+    double last = fixedStep ? 0.0 : clock();
     float fade = 0.f;
     int shotsTaken = 0;
     float shotSettle = 0;
     while (!(win_ && glfwWindowShouldClose(win_)) && !quit_) {
-        double now = headless_ ? last + 1.0 / 60.0 : glfwGetTime();
+        double now = fixedStep ? last + 1.0 / 60.0 : clock();
         float dt = shotMode ? 1.f / 60.f : (float)std::min(0.1, now - last);
         last = now;
         runTime_ += dt;
@@ -1223,7 +1306,7 @@ int App::run() {
             glfwPollEvents();
             hideIdleCursor(dt);
         }
-        if (!shotMode && win_) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
+        if (!shotMode && (win_ || opt_.stream)) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
         if (testPlay()) {
             static const auto keys = testList("ZEN_TEST_KEYS"), shots = testList("ZEN_TEST_SHOTS");
             static const double quitAt = std::getenv("ZEN_TEST_QUIT") ? std::atof(std::getenv("ZEN_TEST_QUIT")) : 1e9;
@@ -2244,6 +2327,7 @@ int main(int argc, char** argv) {
         else if (a == "--in-order") o.shuffle = false;
         else if (a == "--fullscreen") o.fullscreen = true;
         else if (a == "--hidden") o.hidden = true;
+        else if (a == "--stream") o.stream = o.hidden = true;
         else if (a == "--seed" && i + 1 < argc) o.seed = std::stoull(argv[++i]);
         else if ((a == "--universe" || a == "--scene") && i + 1 < argc) o.universe = argv[++i];
         else if (a == "--universe-on-peak") o.universeOnPeak = true;

@@ -101,7 +101,7 @@ void Input::update(float dt) {
     changedTimer_ = std::max(0.f, changedTimer_ - dt);
     for (int i = 0; i < A_COUNT; i++) prev_[i] = down_[i];
 
-    auto key = [&](int k) { return glfwGetKey(win_, k) == GLFW_PRESS; };
+    auto key = [&](int k) { return win_ && glfwGetKey(win_, k) == GLFW_PRESS; };
     auto letter = [&](char c) { return key(letter_[c - 'a']); };
     bool kb[A_COUNT] = {};
     const bool ctrl = key(GLFW_KEY_LEFT_CONTROL) || key(GLFW_KEY_RIGHT_CONTROL);
@@ -153,7 +153,47 @@ void Input::update(float dt) {
     // Every connected controller is read and their presses combined: a Bluetooth controller that reconnected
     // can leave a stale duplicate device behind (listed first, sending nothing), which hid the live one.
     bool pad[A_COUNT] = {};
-    for (int jid = GLFW_JOYSTICK_1; jid_ >= 0 && jid <= GLFW_JOYSTICK_LAST; jid++) {
+    auto readPad = [&](const GLFWgamepadstate& st, bool& live) {
+        auto b = [&](int i) { return st.buttons[i] == GLFW_PRESS; };
+        float ax = st.axes[GLFW_GAMEPAD_AXIS_LEFT_X], ay = st.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
+        float lt = st.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], rt = st.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
+        // The stick counts once it has been seen at rest: a stale duplicate device reports it pushed to a
+        // corner forever, which held hard drop down.
+        if (std::fabs(ax) < 0.3f && std::fabs(ay) < 0.3f) live = true;
+        if (!live) ax = ay = 0.f;
+        // Stick: dominant axis only, to avoid accidental diagonals.
+        bool sx = std::fabs(ax) > 0.5f && std::fabs(ax) > std::fabs(ay);
+        bool sy = std::fabs(ay) > 0.5f && std::fabs(ay) >= std::fabs(ax);
+        pad[A_LEFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_LEFT) || (sx && ax < 0);
+        pad[A_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
+        pad[A_SOFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_DOWN) || (sy && ay > 0);
+        pad[A_HARD] |= b(GLFW_GAMEPAD_BUTTON_DPAD_UP) || (sy && ay < -0.8f);
+        pad[A_CW] |= b(GLFW_GAMEPAD_BUTTON_A);
+        pad[A_CCW] |= b(GLFW_GAMEPAD_BUTTON_B) || b(GLFW_GAMEPAD_BUTTON_X);
+        pad[A_HOLD] |= b(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) || b(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER);
+        pad[A_BONUS] |= lt > 0.5f || rt > 0.5f;
+        pad[A_NEW_SCENE] |= b(GLFW_GAMEPAD_BUTTON_Y);
+        pad[A_PAUSE] |= b(GLFW_GAMEPAD_BUTTON_START);
+        pad[A_NEXT_SONG] |= b(GLFW_GAMEPAD_BUTTON_BACK);
+        pad[A_HUD] |= b(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB);
+        pad[A_UI_UP] |= b(GLFW_GAMEPAD_BUTTON_DPAD_UP) || (sy && ay < 0);
+        pad[A_UI_DOWN] |= b(GLFW_GAMEPAD_BUTTON_DPAD_DOWN) || (sy && ay > 0);
+        pad[A_UI_LEFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_LEFT) || (sx && ax < 0);
+        pad[A_UI_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
+        pad[A_UI_OK] |= b(GLFW_GAMEPAD_BUTTON_A) || b(GLFW_GAMEPAD_BUTTON_START);
+        pad[A_UI_BACK] |= b(GLFW_GAMEPAD_BUTTON_B);
+        pad[A_UI_ALT] |= b(GLFW_GAMEPAD_BUTTON_X) || b(GLFW_GAMEPAD_BUTTON_Y);
+    };
+    {
+        std::lock_guard<std::mutex> lock(remoteMutex_);
+        if (remote_) {
+            GLFWgamepadstate st;
+            std::memcpy(st.buttons, remoteButtons_, sizeof(st.buttons));
+            std::memcpy(st.axes, remoteAxes_, sizeof(st.axes));
+            readPad(st, remoteLive_);
+        }
+    }
+    for (int jid = GLFW_JOYSTICK_1; win_ && jid_ >= 0 && jid <= GLFW_JOYSTICK_LAST; jid++) {
         if (!glfwJoystickPresent(jid)) continue;
         const bool mapped = glfwJoystickIsGamepad(jid);
         GLFWgamepadstate st;
@@ -188,37 +228,7 @@ void Input::update(float dt) {
                 ok = true;
             }
         }
-        if (ok) {
-            auto b = [&](int i) { return st.buttons[i] == GLFW_PRESS; };
-            float ax = st.axes[GLFW_GAMEPAD_AXIS_LEFT_X], ay = st.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
-            float lt = st.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], rt = st.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER];
-            // The stick counts once it has been seen at rest: a stale duplicate device reports it pushed to a
-            // corner forever, which held hard drop down.
-            if (std::fabs(ax) < 0.3f && std::fabs(ay) < 0.3f) stickLive_[jid] = true;
-            if (!stickLive_[jid]) ax = ay = 0.f;
-            // Stick: dominant axis only, to avoid accidental diagonals.
-            bool sx = std::fabs(ax) > 0.5f && std::fabs(ax) > std::fabs(ay);
-            bool sy = std::fabs(ay) > 0.5f && std::fabs(ay) >= std::fabs(ax);
-            pad[A_LEFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_LEFT) || (sx && ax < 0);
-            pad[A_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
-            pad[A_SOFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_DOWN) || (sy && ay > 0);
-            pad[A_HARD] |= b(GLFW_GAMEPAD_BUTTON_DPAD_UP) || (sy && ay < -0.8f);
-            pad[A_CW] |= b(GLFW_GAMEPAD_BUTTON_A);
-            pad[A_CCW] |= b(GLFW_GAMEPAD_BUTTON_B) || b(GLFW_GAMEPAD_BUTTON_X);
-            pad[A_HOLD] |= b(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER) || b(GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER);
-            pad[A_BONUS] |= lt > 0.5f || rt > 0.5f;
-            pad[A_NEW_SCENE] |= b(GLFW_GAMEPAD_BUTTON_Y);
-            pad[A_PAUSE] |= b(GLFW_GAMEPAD_BUTTON_START);
-            pad[A_NEXT_SONG] |= b(GLFW_GAMEPAD_BUTTON_BACK);
-            pad[A_HUD] |= b(GLFW_GAMEPAD_BUTTON_RIGHT_THUMB);
-            pad[A_UI_UP] |= b(GLFW_GAMEPAD_BUTTON_DPAD_UP) || (sy && ay < 0);
-            pad[A_UI_DOWN] |= b(GLFW_GAMEPAD_BUTTON_DPAD_DOWN) || (sy && ay > 0);
-            pad[A_UI_LEFT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_LEFT) || (sx && ax < 0);
-            pad[A_UI_RIGHT] |= b(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT) || (sx && ax > 0);
-            pad[A_UI_OK] |= b(GLFW_GAMEPAD_BUTTON_A) || b(GLFW_GAMEPAD_BUTTON_START);
-            pad[A_UI_BACK] |= b(GLFW_GAMEPAD_BUTTON_B);
-            pad[A_UI_ALT] |= b(GLFW_GAMEPAD_BUTTON_X) || b(GLFW_GAMEPAD_BUTTON_Y);
-        }
+        if (ok) readPad(st, stickLive_[jid]);
     }
 
     bool padAny = false, keyAny = false;
@@ -252,6 +262,13 @@ void Input::update(float dt) {
     if (down_[A_LEFT] && down_[A_RIGHT]) {
         if (held_[A_LEFT] < held_[A_RIGHT]) repeat_[A_RIGHT] = 0; else repeat_[A_LEFT] = 0;
     }
+}
+
+void Input::setRemotePad(const unsigned char* buttons, const float* axes) {
+    std::lock_guard<std::mutex> lock(remoteMutex_);
+    remote_ = true;
+    std::memcpy(remoteButtons_, buttons, sizeof(remoteButtons_));
+    std::memcpy(remoteAxes_, axes, sizeof(remoteAxes_));
 }
 
 std::string Input::clipboard() const {

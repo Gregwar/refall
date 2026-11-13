@@ -9,7 +9,12 @@
 AudioEngine::AudioEngine() = default;
 AudioEngine::~AudioEngine() { shutdown(); }
 
-bool AudioEngine::init() {
+bool AudioEngine::init(bool silent) {
+    if (silent) {
+        context_ = new ma_context();
+        const ma_backend nul = ma_backend_null;
+        if (ma_context_init(&nul, 1, nullptr, context_) != MA_SUCCESS) { delete context_; context_ = nullptr; return false; }
+    }
     device_ = new ma_device();
     ma_device_config cfg = ma_device_config_init(ma_device_type_playback);
     cfg.playback.format = ma_format_f32;
@@ -17,7 +22,7 @@ bool AudioEngine::init() {
     cfg.sampleRate = 48000;
     cfg.dataCallback = [](ma_device* d, void* o, const void* i, ma_uint32 n) { dataCallback(d, o, i, n); };
     cfg.pUserData = this;
-    if (ma_device_init(nullptr, &cfg, device_) != MA_SUCCESS) {
+    if (ma_device_init(context_, &cfg, device_) != MA_SUCCESS) {
         std::fprintf(stderr, "[audio] could not open playback device\n");
         delete device_;
         device_ = nullptr;
@@ -39,6 +44,11 @@ void AudioEngine::shutdown() {
         ma_device_uninit(device_);
         delete device_;
         device_ = nullptr;
+    }
+    if (context_) {
+        ma_context_uninit(context_);
+        delete context_;
+        context_ = nullptr;
     }
 }
 
@@ -160,7 +170,9 @@ bool AudioEngine::finished() const {
 }
 
 void AudioEngine::dataCallback(ma_device* dev, void* out, const void*, unsigned int frameCount) {
-    static_cast<AudioEngine*>(dev->pUserData)->render(static_cast<float*>(out), frameCount);
+    AudioEngine* e = static_cast<AudioEngine*>(dev->pUserData);
+    e->render(static_cast<float*>(out), frameCount);
+    if (e->tap_) e->tap_(static_cast<const float*>(out), frameCount);
 }
 
 void AudioEngine::render(float* out, unsigned int frames) {
