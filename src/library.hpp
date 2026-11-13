@@ -48,3 +48,6 @@ std::shared_ptr<Track> loadTrack(const std::string& path, uint32_t sampleRate);
 // The HUD font is ASCII only: folds UTF-8 text to ASCII (accents removed, quotes/dashes simplified,
 // other symbols dropped).
 std::string asciiFold(const std::string& utf8);
+// A title as the HUD letters it: its accents and typographic punctuation kept, the symbols no lettering has (emoji,
+// chess pieces...) dropped, the spaces they leave collapsed.
+std::string displayTitle(const std::string& utf8);
