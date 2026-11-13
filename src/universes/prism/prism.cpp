@@ -139,7 +139,7 @@ float swingEase(float x) {
 }
 
 constexpr float FLOOR_Y = -10.06f;
-constexpr float WELL_VEIL = 0.5f;     // the light let through the black veil over the well's frame
+constexpr float WELL_VEIL = 0.75f;    // the light let through the black veil over the well's frame
 constexpr float WELL_LIT_GAIN = 1.6f; // the light the board's cubes receive, raised (the stack vivid under the veil)
 constexpr int RAYS = 11;          // rays per beam
 constexpr int SPECTRUM = 6;       // rays a dispersed ray splits into
