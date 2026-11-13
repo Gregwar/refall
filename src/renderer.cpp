@@ -321,14 +321,19 @@ void Renderer::renderBreak(const Frame& f) {
     const float play = saturate(brk_.play);
     const bool bare = play < 1.f && brk_.blank, whole = play > 0.f || !brk_.blank;
     if (brk_.black < 0.999f) {
+        std::vector<text::Line> lines;
+        std::vector<vec4> boxBare, boxWhole;
         if (bare) {
-            const Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
+            Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
+            if (host) { hudLines(*cur_.u, brk_.bareHud, lines, boxBare); fb.hudBoxes = &boxBare; }
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
         }
         if (whole) {
+            Frame fw = f;
+            if (host) { hudLines(*cur_.u, f.hud, lines, boxWhole); fw.hudBoxes = &boxWhole; }
             texA_.bind();
-            cur_.u->render(f, texA_.fbo);
+            cur_.u->render(fw, texA_.fbo);
         }
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
