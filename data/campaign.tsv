@@ -1,66 +1,66 @@
 # Refall campaign: 15 stages of 4 songs, played in a row (song 1 to 4).
 # One line per song: stage, song (1..4), YouTube video id, universe (NAME or NAME:VARIANT, as --universe
-# takes it), the velocity as a game level (1..40, decimals allowed: 20 is ten times level 1, past it faster still; the game climbs to it over the song's first seconds) on EASY, NORMAL and EXPERT, and the title.
+# takes it), the velocity as a game level (1..60, decimals allowed: 20 is ten times level 1, past it faster still, 60 the top, where the loudest sections fall in 20G; the game climbs to it over the song's first seconds) on EASY, NORMAL and EXPERT, and the title.
 # Columns are separated by tabs; lines starting with # are comments. The game reads this file from the
 # sources when it starts (else the copy built into it, or --campaign FILE).
 # stage	song	id	universe	easy	normal	expert	title
 1	1	H_9xqc084UA	PRISM:AURORA	1.5	3.0	6.0	Small Town Kid - Shards
-1	2	pJguiXxgaFo	WATERCOLOR:MONSOON GREENS	2.5	5.3	9.9	AVAION - COLORS (Official Video)
-1	3	YyFyudLOkeA	TOPOGRAPHY:GLACIER	3.5	7.5	13.8	Jasper Tygner - First Light (Official Video)
-1	4	gjTkkswfVLE	ORIGAMI:INDIGO	4.8	10.8	19.0	Last Sun - Care 4 U
-2	1	agu39idW5VY	SMOKE:DAYLIGHT	1.9	3.6	7.0	Magic Wand - Sunset (feat. Emma Carn) (Official Video)
-2	2	7PcQtXcOxrY	MEGACITY:NEON	2.9	6.0	11.1	Mura Masa - Love$ick ft. A$AP Rocky (Lyrics)
-2	3	uOFTqVi-qp4	ELECTRON:PLASMA	3.9	8.4	15.1	San Holo - Light (Official Video)
-2	4	HZ6L_6a7RcQ	MYCELIUM:ORCHID	5.3	11.7	20.5	Elderbrook - Shallow Water (Official Video)
-3	1	8ayH60ET4U0	GARDEN:SPRING DAY	2.3	4.3	8.0	ODESZA - Line Of Sight (feat. WYNNE & Mansionair) - Official Video
-3	2	JNVXi3QpaMo	BRICKS:NIGHT	3.3	6.7	12.2	Louis The Child feat. K.Flay - It's Strange
-3	3	YrAc_iVKn48	WHITE ROOM:NORDIC	4.4	9.2	16.4	Filtered Night Drive
-3	4	1TlckH2mCmI	RISOGRAPH:VIOLET & GREEN	5.8	12.7	22.0	AVAION, PaulWetz, Nu Aspect, YUMA - Sleepless
-4	1	bCneCCvp0N0	CITY:SNOWFALL	2.7	4.9	9.0	Killen. - Get Lost
-4	2	iZAqaykiS70	MANGA:SHONEN	3.8	7.5	13.3	L'Impératrice ♗ VANILLE FRAISE  (edit)
-4	3	u40t4XMxmMc	PINK VIBE:ROSE	4.9	10.0	17.7	Lucian - Do My Thing (ft. Philosofie)
-4	4	oHRrxtcm21Q	MIRROR:VAPOR	6.3	13.6	23.5	Lane 8 - Road feat. Arctic Lake
-5	1	PfPfGknEjXE	ORBITAL STATION:ORBITAL DAWN	3.1	5.6	10.0	James Hersey - Miss You (Official Video)
-5	2	sUwm6SjlpJ0	LIBRARY:MORNING	4.2	8.2	14.5	AVAION - ABOUT YOU
-5	3	F0R7LKT9ZaU	NEON:AURORA	5.3	10.8	19.0	I Adore You
-5	4	S9KsOqTftFA	POLAR NIGHT:SOLAR STORM	6.8	14.6	25.0	MA:RK - That’s Where I Should Be
-6	1	komlDqhaAKQ	ISLANDS:CARIBBEAN	3.5	6.2	11.0	I Like The Way You Move
-6	2	pLuQ0MGLBXU	SUMI:KAKI & CHARCOAL	4.6	8.9	15.7	Mura Masa - What If I Go? (Official Video)
-6	3	qbGZDEFHBmc	DOCKS:NORTH SEA	5.8	11.6	20.3	Jai Wolf - Indian Summer (Official Music Video)
-6	4	TkceGi1EXzk	BRUTALIST:MOONLIGHT	7.3	15.5	26.5	felix jaehn - Shine ft. Freddy Verano, Linying
-7	1	IhVvPrGh48E	CRYSTAL CAVE:EMBER	3.9	6.9	12.0	Funkin Matt - Open Your Eyes (Official Audio)
-7	2	3KFPGWIfLnM	MICROSCOPE:METHYLENE BLUE	5.1	9.7	16.8	BUNT. - Only Friends (Lyric Video)
-7	3	Og0A10H7YqU	RUINS:MAYA	6.3	12.5	21.6	Aaron Hibell, Alex Wann - set me free (official visualiser)
-7	4	xhpudFvsMjU	RAINY WINDOW:SODIUM	7.9	16.5	28.0	SRTW ft. Charity Children - Whispering Still (Little Rose Remix)
-8	1	S9ld5hiKg8w	LIMBO:MOOR	4.2	7.5	13.0	Nora En Pure - Come With Me (Original Mix)
-8	2	UKou-bIHgYA	LIGHTSOURCE:NEON	5.5	10.4	17.9	Nu Aspect - Sweet Release
-8	3	lTgIZtKoYQc	DIORAMA:LANTERN HARBOR	6.7	13.3	22.9	LAVERN ft. NEIMY - All I Want Is You (Official Visualizer)
-8	4	nXIZCMwFKis	BIOME:CALM NOON	8.4	17.4	29.5	I need your kiss (sadagain Version)
-9	1	Zy7XaQdWbEg	ABYSS:ULTRAMARINE	4.6	8.1	14.0	We Won’t Fall Apart
-9	2	D5drYkLiLI8	FLUO:CONCRETE	5.9	11.1	19.1	Kygo & Selena Gomez - It Ain't Me (Audio)
-9	3	QBcX3cZQdek	HEAT:ARCTIC	7.2	14.1	24.2	Lewis Capaldi - Bruises (Delta Jack Remix)
-9	4	MlwBZ2MSNtE	LASER SHOW:AMBER	8.9	18.3	31.0	FISHER x KITA ALEXANDER - ATMOSPHERE [LYRIC VIDEO]
-10	1	r-sGtrldNKc	TILES:BYZANTINE	5.0	8.8	15.0	it's murph - Food for the Soul  (Official Music Video)
-10	2	_6-AtgXd27w	PLANKS:HONEY	6.3	11.8	20.2	Even Now
-10	3	6xD7YhdzmIc	TERRARIUM:ORCHID	7.7	14.9	25.5	Womack & Womack - Teardrops (Rules Remix)
-10	4	TsdT5bSGypc	GLOWING FOREST:VERDIGRIS	9.4	19.3	32.5	Crazy
-11	1	KgkQ_HvNjSQ	GIANT TREE:CANDY	5.4	9.4	16.0	Lost Frequencies - Dance In The Sunlight (feat. Bandit) (Visualizer)
-11	2	z2qstV9p-EU	RAIN:NEON STREET	6.8	12.6	21.4	Come Over
-11	3	heUI3TYAZjw	MARBLES:MIDNIGHT	8.1	15.7	26.8	Crunkz - I Don't Care (Official Audio)
-11	4	N2hKqI8nU7w	SONAR:AMBER	9.9	20.2	34.0	Lonely in the Rain - Chemicals (feat. Oaks) [Official Visualizer]
-12	1	eqc50IErJxo	CELESTIAL OCEAN:DAWN	5.8	10.1	17.0	AVAION - drown (Official Video)
-12	2	iWiilOH4cQE	RECYCLE:TERRAZZO	7.2	13.3	22.6	Gregory Porter - Liquid Spirit (Claptone Remix)
-12	3	fMvEOabCEFc	BAUHAUS:NACHT	8.6	16.5	28.1	CamelPhat, Josh Gigante feat. Kuuda - So Good
-12	4	zjANqMu7m2c	LOST PANDA:BLOSSOM	10.4	21.2	35.5	INNERVERSE - Reverie
-13	1	ko1x5v-zaNU	CORAL REEF:MOONLIT	6.2	10.7	18.0	Magnetic
-13	2	6QvMcQ2Eejo	ARCHITECT:TROPICS	7.6	14.0	23.7	CloZee - Koto
-13	3	n1ToxNTIyZc	VECTOR:P3 AMBER	9.1	17.4	29.4	Good Vibes
-13	4	VUzg5liIjcs	LANTERNS:MIDNIGHT	11.0	22.1	37.0	Elderbrook - 'Lost In The View' (Official Music Video)
-14	1	qdjmd9J6cr0	KINTSUGI:SERPENTINE & GOLD	6.6	11.4	19.0	Petit Biscuit - Memories
-14	2	dP7KuXdb-wE	BLUEPRINT:DIAZO	8.1	14.8	24.9	Sultan + Shepard - Start Again (Official Lyric Video)
-14	3	BSVOAD-Nyfc	TIDE POOL:MORNING	9.5	18.2	30.7	Elderbrook - 'Never Get Enough' (Official Music Video)
-14	4	4V3exJW1-Ig	SWISS POSTER:ZURICH	11.5	23.1	38.5	Elderbrook x Tourist - Howl (Official Visualiser)
-15	1	jmnBSB7DCTI	WOODSTOCK:SUNSHINE	7.0	12.0	20.0	BUNT., Malou - i need u (Lyric Video)
-15	2	MHWLaNbUx7M	NOTEPAD:CHALK	8.5	15.5	26.0	"Say My Name" --- Original Deep House
-15	3	a0W9bS7qZSk	SHADOW:COLOR GEL	10.0	19.0	32.0	BUNT. - Best Day of My Life (BUNT. Version) ft. Tom Odell
-15	4	9Sh9ZSecyFU	SKY WHALE:MOONLIGHT	12.0	24.0	40.0	callah x Laura Brehm - skyline
+1	2	pJguiXxgaFo	WATERCOLOR:MONSOON GREENS	2.4	5.4	11.5	AVAION - COLORS (Official Video)
+1	3	YyFyudLOkeA	TOPOGRAPHY:GLACIER	3.3	7.8	18.0	Jasper Tygner - First Light (Official Video)
+1	4	gjTkkswfVLE	ORIGAMI:INDIGO	4.8	11.4	26.5	Last Sun - Care 4 U
+2	1	agu39idW5VY	SMOKE:DAYLIGHT	2.0	3.8	7.4	Magic Wand - Sunset (feat. Emma Carn) (Official Video)
+2	2	7PcQtXcOxrY	MEGACITY:NEON	2.9	6.3	13.2	Mura Masa - Love$ick ft. A$AP Rocky (Lyrics)
+2	3	uOFTqVi-qp4	ELECTRON:PLASMA	3.8	8.8	20.2	San Holo - Light (Official Video)
+2	4	HZ6L_6a7RcQ	MYCELIUM:ORCHID	5.4	12.6	29.3	Elderbrook - Shallow Water (Official Video)
+3	1	8ayH60ET4U0	GARDEN:SPRING DAY	2.4	4.6	8.7	ODESZA - Line Of Sight (feat. WYNNE & Mansionair) - Official Video
+3	2	JNVXi3QpaMo	BRICKS:NIGHT	3.4	7.2	15.0	Louis The Child feat. K.Flay - It's Strange
+3	3	YrAc_iVKn48	WHITE ROOM:NORDIC	4.4	9.8	22.4	Filtered Night Drive
+3	4	1TlckH2mCmI	RISOGRAPH:VIOLET & GREEN	6.0	13.8	32.1	AVAION, PaulWetz, Nu Aspect, YUMA - Sleepless
+4	1	bCneCCvp0N0	CITY:SNOWFALL	2.9	5.4	10.1	Killen. - Get Lost
+4	2	iZAqaykiS70	MANGA:SHONEN	3.9	8.1	16.8	L'Impératrice ♗ VANILLE FRAISE  (edit)
+4	3	u40t4XMxmMc	PINK VIBE:ROSE	4.9	10.8	24.6	Lucian - Do My Thing (ft. Philosofie)
+4	4	oHRrxtcm21Q	MIRROR:VAPOR	6.7	15.0	35.0	Lane 8 - Road feat. Arctic Lake
+5	1	PfPfGknEjXE	ORBITAL STATION:ORBITAL DAWN	3.4	6.1	11.4	James Hersey - Miss You (Official Video)
+5	2	sUwm6SjlpJ0	LIBRARY:MORNING	4.4	9.0	18.5	AVAION - ABOUT YOU
+5	3	F0R7LKT9ZaU	NEON:AURORA	5.5	11.9	26.9	I Adore You
+5	4	S9KsOqTftFA	POLAR NIGHT:SOLAR STORM	7.3	16.1	37.8	MA:RK - That’s Where I Should Be
+6	1	komlDqhaAKQ	ISLANDS:CARIBBEAN	3.8	6.9	12.8	I Like The Way You Move
+6	2	pLuQ0MGLBXU	SUMI:KAKI & CHARCOAL	4.9	9.9	20.2	Mura Masa - What If I Go? (Official Video)
+6	3	qbGZDEFHBmc	DOCKS:NORTH SEA	6.1	12.9	29.1	Jai Wolf - Indian Summer (Official Music Video)
+6	4	TkceGi1EXzk	BRUTALIST:MOONLIGHT	7.9	17.3	40.6	felix jaehn - Shine ft. Freddy Verano, Linying
+7	1	IhVvPrGh48E	CRYSTAL CAVE:EMBER	4.3	7.7	14.1	Funkin Matt - Open Your Eyes (Official Audio)
+7	2	3KFPGWIfLnM	MICROSCOPE:METHYLENE BLUE	5.4	10.8	22.0	BUNT. - Only Friends (Lyric Video)
+7	3	Og0A10H7YqU	RUINS:MAYA	6.6	13.9	31.3	Aaron Hibell, Alex Wann - set me free (official visualiser)
+7	4	xhpudFvsMjU	RAINY WINDOW:SODIUM	8.5	18.5	43.4	SRTW ft. Charity Children - Whispering Still (Little Rose Remix)
+8	1	S9ld5hiKg8w	LIMBO:MOOR	4.8	8.5	15.5	Nora En Pure - Come With Me (Original Mix)
+8	2	UKou-bIHgYA	LIGHTSOURCE:NEON	6.0	11.7	23.8	Nu Aspect - Sweet Release
+8	3	lTgIZtKoYQc	DIORAMA:LANTERN HARBOR	7.2	14.9	33.5	LAVERN ft. NEIMY - All I Want Is You (Official Visualizer)
+8	4	nXIZCMwFKis	BIOME:CALM NOON	9.2	19.7	46.2	I need your kiss (sadagain Version)
+9	1	Zy7XaQdWbEg	ABYSS:ULTRAMARINE	5.2	9.3	16.9	We Won’t Fall Apart
+9	2	D5drYkLiLI8	FLUO:CONCRETE	6.5	12.6	25.5	Kygo & Selena Gomez - It Ain't Me (Audio)
+9	3	QBcX3cZQdek	HEAT:ARCTIC	7.7	15.9	35.7	Lewis Capaldi - Bruises (Delta Jack Remix)
+9	4	MlwBZ2MSNtE	LASER SHOW:AMBER	9.8	20.9	49.1	FISHER x KITA ALEXANDER - ATMOSPHERE [LYRIC VIDEO]
+10	1	r-sGtrldNKc	TILES:BYZANTINE	5.7	10.1	18.2	it's murph - Food for the Soul  (Official Music Video)
+10	2	_6-AtgXd27w	PLANKS:HONEY	7.0	13.5	27.2	Even Now
+10	3	6xD7YhdzmIc	TERRARIUM:ORCHID	8.2	16.9	37.9	Womack & Womack - Teardrops (Rules Remix)
+10	4	TsdT5bSGypc	GLOWING FOREST:VERDIGRIS	10.4	22.1	51.9	Crazy
+11	1	KgkQ_HvNjSQ	GIANT TREE:CANDY	6.1	10.9	19.6	Lost Frequencies - Dance In The Sunlight (feat. Bandit) (Visualizer)
+11	2	z2qstV9p-EU	RAIN:NEON STREET	7.5	14.4	29.0	Come Over
+11	3	heUI3TYAZjw	MARBLES:MIDNIGHT	8.8	17.9	40.1	Crunkz - I Don't Care (Official Audio)
+11	4	N2hKqI8nU7w	SONAR:AMBER	11.0	23.3	54.7	Lonely in the Rain - Chemicals (feat. Oaks) [Official Visualizer]
+12	1	eqc50IErJxo	CELESTIAL OCEAN:DAWN	6.6	11.6	20.9	AVAION - drown (Official Video)
+12	2	iWiilOH4cQE	RECYCLE:TERRAZZO	8.0	15.3	30.8	Gregory Porter - Liquid Spirit (Claptone Remix)
+12	3	fMvEOabCEFc	BAUHAUS:NACHT	9.3	19.0	42.4	CamelPhat, Josh Gigante feat. Kuuda - So Good
+12	4	zjANqMu7m2c	LOST PANDA:BLOSSOM	11.6	24.4	57.5	INNERVERSE - Reverie
+13	1	ko1x5v-zaNU	CORAL REEF:MOONLIT	7.1	12.4	22.3	Magnetic
+13	2	6QvMcQ2Eejo	ARCHITECT:TROPICS	8.5	16.2	32.5	CloZee - Koto
+13	3	n1ToxNTIyZc	VECTOR:P3 AMBER	9.9	20.0	44.6	Good Vibes
+13	4	VUzg5liIjcs	LANTERNS:MIDNIGHT	12.3	25.6	60.0	Elderbrook - 'Lost In The View' (Official Music Video)
+14	1	qdjmd9J6cr0	KINTSUGI:SERPENTINE & GOLD	7.5	13.2	23.6	Petit Biscuit - Memories
+14	2	dP7KuXdb-wE	BLUEPRINT:DIAZO	9.0	17.1	34.2	Sultan + Shepard - Start Again (Official Lyric Video)
+14	3	BSVOAD-Nyfc	TIDE POOL:MORNING	10.4	21.0	46.8	Elderbrook - 'Never Get Enough' (Official Music Video)
+14	4	4V3exJW1-Ig	SWISS POSTER:ZURICH	12.9	26.8	60.0	Elderbrook x Tourist - Howl (Official Visualiser)
+15	1	jmnBSB7DCTI	WOODSTOCK:SUNSHINE	8.0	14.0	25.0	BUNT., Malou - i need u (Lyric Video)
+15	2	MHWLaNbUx7M	NOTEPAD:CHALK	9.5	18.0	36.0	"Say My Name" --- Original Deep House
+15	3	a0W9bS7qZSk	SHADOW:COLOR GEL	11.0	22.0	49.0	BUNT. - Best Day of My Life (BUNT. Version) ft. Tom Odell
+15	4	9Sh9ZSecyFU	SKY WHALE:MOONLIGHT	13.5	28.0	60.0	callah x Laura Brehm - skyline

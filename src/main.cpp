@@ -645,6 +645,20 @@ void App::updateGravity(double songTime, float dt) {
         game_.setFixedLevel(run_.velFrom + (run_.velTo - run_.velFrom) * k);
     }
     const float diff = game_.speedDifficulty();
+    // 20G: at the Voyage's top velocity, in the song's loudest sections (a chorus, a drop), a piece falls to the stack
+    // the moment it appears; the rest of the song keeps a visible fall (the finales mix both).
+    const bool twentyG = mode_ == MODE_CAMPAIGN && run_.diff == DIFF_EXPERT && game_.fixedLevel() >= Game::MAX_VELOCITY - 0.05f && track_ &&
+                         !track_->analysis.segments.empty() && gravityPace(track_->analysis, songTime) >= 1.2f &&
+                         gameRate_ > 0.999f;
+    if (twentyG != game_.twentyG()) {
+        game_.setTwentyG(twentyG);
+        std::printf("[game] 20G %s at %.1f s\n", twentyG ? "on" : "off", songTime);
+    }
+    if (twentyG) {
+        for (int i = 0; i < Game::H; i++) game_.gravityStep();
+        lastSongBeat_ = -1;
+        return;
+    }
     // Gravity slows right down during a change of universe (the stack can be hard to read while two worlds
     // blend) and the slow-motion bonus; it eases back over about a second.
     const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
