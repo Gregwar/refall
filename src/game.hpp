@@ -104,8 +104,8 @@ public:
         return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, 1.f) : (level() - 1) / float(MAX_LEVEL - 1);
     }
     // The fall's speed: as difficulty(), but a fixed level goes on past the plateau, up to MAX_VELOCITY (the Voyage's
-    // fastest songs: x10 at level 20, x24.2 at 50, under the gravity's cap in rows per second).
-    static constexpr float MAX_VELOCITY = 50.f, TWENTY_G = 37.5f; // (20G: see the app's gravity)
+    // fastest songs: x10 at level 20, x19.5 at 40, under the gravity's cap in rows per second).
+    static constexpr float MAX_VELOCITY = 40.f, TWENTY_G = 30.f; // (20G: see the app's gravity)
     float speedDifficulty() const {
         return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1))
                                  : difficulty();

@@ -262,17 +262,17 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
 - `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
 - `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
-- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 50
+- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 40
   (20 is the free play's plateau, x10 gravity; past it faster still, up to the gravity's cap); decimals are fine.
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
 ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
-EXPERT, 17 levels faster on stage 1, 12 on the finale), over a base that rises across the stages (EXPERT goes from 5.2 to
-22.2 on stage 1 and from 38.4 to 50 on the finale, far past the free play's plateau; NORMAL tops out at 28, EASY at 13.5).
-On EXPERT, from velocity 37.5 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
-delay to slide and turn it along the stack; at velocity 50 the choruses too), the rest of the song keeping a visible
+EXPERT, 14 levels faster on stage 1, 9 on the finale), over a base that rises across the stages (EXPERT goes from 4.3 to
+17.9 on stage 1 and from 30.8 to 40 on the finale, far past the free play's plateau; NORMAL tops out at 28, EASY at 13.5).
+On EXPERT, from velocity 30 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
+delay to slide and turn it along the stack; at velocity 40 the choruses too), the rest of the song keeping a visible
 fall: in the last song of stages 10 to 12, the last two of stages 13 and 14, and every song of the finale.
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
 climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
