@@ -28,16 +28,10 @@
 // previews and the HUD anchors sit exactly where the layout puts them.
 #include "universes/laser/laser.hpp"
 
-#include <cctype>
-#include <cstdio>
-#include <cstring>
 
 #include "layout.hpp"
 #include "universes/laser/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -131,12 +125,6 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-std::string upper(const std::string& s) {
-    std::string o = s;
-    for (char& c : o) c = (char)std::toupper((unsigned char)c);
-    return o;
-}
-
 template <class F> int neighbourMask(F same) {
     int m = 0;
     if (same(-1, 0)) m |= 1;
@@ -171,7 +159,6 @@ bool LaserUniverse::init(int width, int height) {
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "laser shape");
     progTile_ = compile(shaders::TILE_VS, shaders::TILE_FS, "laser tile");
     progSpark_ = compile(shaders::SPARK_VS, shaders::SPARK_FS, "laser spark");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "laser text");
     progDown_ = compile(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "laser down");
     progUp_ = compile(ugl::FULLSCREEN_VS, shaders::UP_FS, "laser up");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "laser post");
@@ -208,19 +195,9 @@ bool LaserUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     buildNoise();
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontMedium_, FONT_MEDIUM);
     pal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
@@ -296,51 +273,6 @@ void LaserUniverse::buildNoise() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
-// Glyphs baked as signed distance fields: they scale cleanly, and the distance gives the halo of darkness.
-void LaserUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] laser font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
-}
-
 void LaserUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -373,16 +305,12 @@ LaserUniverse::~LaserUniverse() {
     hazeT_.destroy();
     sceneT_.destroy();
     for (auto& t : bloomT_) t.destroy();
-    for (GLuint p : {progCone_, progHaze_, progComp_, progBeam_, progWell_, progShape_, progTile_, progSpark_, progText_, progDown_, progUp_, progPost_})
+    for (GLuint p : {progCone_, progHaze_, progComp_, progBeam_, progWell_, progShape_, progTile_, progSpark_, progDown_, progUp_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {coneVao_, tileVao_, beamVao_, sparkVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, coneVbo_, tileVbo_, beamVbo_, sparkVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {coneVao_, tileVao_, beamVao_, sparkVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, coneVbo_, tileVbo_, beamVbo_, sparkVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (volTex_) glDeleteTextures(1, &volTex_);
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
-    for (Font* f : {&fontLight_, &fontMedium_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -1074,7 +1002,7 @@ void LaserUniverse::buildBoard(const Game& g) {
 }
 
 // The HUD's quiet zones: where the text, the previews and the gauge are, the beams fade (board rectangles).
-void LaserUniverse::buildMasks(const std::vector<HudText>& hud) {
+void LaserUniverse::buildMasks(const Frame& f) {
     maskRects_.clear();
     auto rect = [&](float x0, float y0, float x1, float y1) {
         if (maskRects_.size() >= 24 * 4) return;
@@ -1083,14 +1011,14 @@ void LaserUniverse::buildMasks(const std::vector<HudText>& hud) {
     auto toBoard = [&](float px, float py) {
         return v2(viewC_.x - viewH_.x + px / width_ * 2.f * viewH_.x, viewC_.y + viewH_.y - py / height_ * 2.f * viewH_.y);
     };
-    for (const HudText& h : hud) {
+    // each line as the host letters it, with a margin
+    for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
+        const HudText& h = f.hud[i];
         if (h.alpha <= 0.05f || h.text.empty()) continue;
         if (h.role == HUD_HELP || h.role == HUD_DIALOG || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB) continue;
-        const float base = h.scale * 12.f;
-        const float size = base * (h.role == HUD_VALUE ? 1.15f : h.role == HUD_TITLE ? 1.25f : 0.9f);
-        const float w = textWidth(fontLight_, h.text, size, base * 0.2f) * 1.1f;
-        const float x = ugl::hudLeft(h, w, width_);
-        const vec2 a = toBoard(x, h.y - size * 0.1f), b = toBoard(x + w, h.y + size * 1.0f);
+        const vec4& r = (*f.hudBoxes)[i];
+        const float m = (r.w - r.y) * 0.3f;
+        const vec2 a = toBoard(r.x - m, r.y - m), b = toBoard(r.z + m * 2.f, r.w + m);
         rect(a.x, b.y, b.x, a.y);
     }
     rect(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_CENTER.y + 1.3f);
@@ -1102,184 +1030,103 @@ void LaserUniverse::buildMasks(const std::vector<HudText>& hud) {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float LaserUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void LaserUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : vec3(0.006f, 0.006f, 0.008f);
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
 
-float LaserUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                               std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-    return pen - track - x;
-}
-
-void LaserUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float halo, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uColor", color);
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uHaloAmt", halo);
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uBridge", smoothstepf(0.3f, 0.95f, bridge_.amount));
-    set3f(progText_, "uBridgeInk", bridge_.ink);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in LASER SHOW's typography, like the labels of a lighting console: a thin technical sans, small widely
-// spaced capitals for the labels, light numbers, the section and the universe's own word in the laser's color.
-void LaserUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : vec3(0.006f, 0.006f, 0.008f);
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
-        }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
-    }
-    const vec3 ink = pal_.ink * 0.9f;
-    const vec3 dim = pal_.ink * 0.45f;
-    // the accent follows the lasers: the drop's color while it lasts
+// The HUD in LASER SHOW's typography, like the labels of a lighting console: a thin technical sans (Jura), small
+// widely spaced capitals for the labels, light numbers, the section and the universe's own word in the laser's
+// color (the drop's while it lasts); each line on a soft pool of darkness (readable when a beam passes behind it),
+// the bright ones with a faint light of their own (the bloom they had).
+void LaserUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* medium = text::font(FONT_MEDIUM);
+    const float s = height_ / 1080.f, base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    // a scene color as the post shows it (its soft shoulder, none at the bridge), the bridge's ink taking over
+    auto ink = [&](const vec3& c0) {
+        vec3 c = lerp(c0, bridge_.ink, br);
+        const float over = std::max(c.x - 1.f, 0.f) + std::max(c.y - 1.f, 0.f) + std::max(c.z - 1.f, 0.f);
+        const vec3 raw = c;
+        c = c + vec3(over * 0.12f);
+        const float K = 0.62f;
+        auto tone = [&](float x) { return x < K ? x : K + (1.f - K) * (1.f - std::exp(-(x - K) / (1.f - K))); };
+        return ugl::toSrgb(lerp(vec3(tone(c.x), tone(c.y), tone(c.z)), raw, saturate(bridge_.amount)));
+    };
+    const vec3 inkC = pal_.ink * 0.9f, dim = pal_.ink * 0.45f;
     const vec3 accent = lerp(pal_.accent, pal_.dropLaser[0], dropColor_) * 1.05f;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "LASER SHOW" in spaced light capitals, the laser set's name after it in the laser's color
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = upper(name);
-            const float sz = base * 0.9f, tr = sz * 0.22f, vsz = base * 0.68f, vtr = vsz * 0.22f;
-            const float wName = textWidth(fontLight_, name, sz, tr);
-            const float wVar = var.empty() ? 0.f : textWidth(fontLight_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontLight_, name, x, h.y, sz, tr, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontLight_, q, ink, a, 0.55f, 0.06f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontLight_, var, x + wName + gap, h.y + (sz - vsz) * 0.5f, vsz, vtr, q);
-                drawText(fontLight_, q, accent, a, 0.55f, 0.07f);
-            }
-            continue;
+    float halo = 0.55f, bias = 0.06f;
+    bool bright = true;
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, ink(c), track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "LASER SHOW" in spaced light capitals, the laser set's name after it in the laser's color
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 0.9f, vsz = base * 0.68f, a = 0.35f + h.alpha * 1.6f;
+        put(light, text::upper(name), sz, sz * 0.22f, inkC, a);
+        if (!var.empty()) {
+            out.add("", light, sz, vec3(0.f), base * 0.8f / sz); // the gap
+            text::Span& v = out.add(var, light, vsz, ink(accent), 0.22f, saturate(a));
+            v.dy = (sz - vsz) * (0.5f - 0.535f); // centered on the name's height
         }
-        case HUD_SECTION:
-            place(fontMedium_, upper(h.text), base * 0.85f, base * 0.42f);
-            drawText(fontMedium_, q, accent, saturate(0.25f + h.alpha * 1.8f), 0.55f, 0.05f);
-            continue;
-        case HUD_TITLE:
-            place(fontLight_, h.text, base * 1.22f, base * 0.04f, -base * 0.08f);
-            drawText(fontLight_, q, ink, saturate(h.alpha * 1.3f), 0.55f, 0.07f);
-            continue;
-        case HUD_INFO:
-            place(fontLight_, upper(h.text), base * 0.68f, base * 0.3f);
-            drawText(fontLight_, q, dim, saturate(alpha * 1.4f), 0.55f, 0.07f);
-            continue;
-        case HUD_LABEL:
-            place(fontLight_, h.text, base * 0.72f, base * 0.4f);
-            drawText(fontLight_, q, dim, saturate(alpha * 1.3f), 0.55f, 0.07f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.12f, base * 0.08f);
-            drawText(fontLight_, q, ink, alpha, 0.55f, 0.06f);
-            continue;
-        case HUD_NOTICE:
-            place(fontLight_, upper(h.text), base * 0.95f, base * 0.25f);
-            drawText(fontLight_, q, accent, alpha, 0.55f, 0.06f);
-            continue;
-        case HUD_KEY:
-            place(fontMedium_, h.text, base * 0.82f, base * 0.1f);
-            drawText(fontMedium_, q, ink, alpha, 0.55f, 0.05f);
-            continue;
-        case HUD_TOAST:
-            place(fontLight_, upper(h.text), base * 1.25f, base * 0.38f, -base * 0.1f);
-            drawText(fontLight_, q, ink, alpha, 0.65f, 0.07f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontLight_, h.text, base * 0.8f, base * 0.3f);
-            drawText(fontLight_, q, accent, alpha * 0.9f, 0.55f, 0.06f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontLight_, upper(h.text), base * 1.1f, base * 0.3f, -base * 0.1f);
-                drawText(fontLight_, q, ink, alpha, 0.65f, 0.07f);
-            } else {
-                place(fontLight_, h.text, base * 0.82f, base * 0.14f);
-                drawText(fontLight_, q, h.accent ? accent : ink, alpha, 0.55f, 0.06f);
-            }
-            continue;
-        default:
-            place(fontLight_, h.text, base * 0.8f, base * 0.12f);
-            drawText(fontLight_, q, h.accent ? accent : ink, alpha, 0.55f, 0.06f);
-            continue;
-        }
+        break;
     }
+    case HUD_SECTION: put(medium, text::upper(h.text), base * 0.85f, base * 0.42f, accent, 0.25f + h.alpha * 1.8f); bias = 0.05f; break;
+    case HUD_TITLE: put(light, h.text, base * 1.22f, base * 0.04f, inkC, h.alpha * 1.3f, -base * 0.08f); bias = 0.07f; break;
+    case HUD_INFO: put(light, text::upper(h.text), base * 0.68f, base * 0.3f, dim, alpha * 1.4f); bias = 0.07f; bright = false; break;
+    case HUD_LABEL: put(light, h.text, base * 0.72f, base * 0.4f, dim, alpha * 1.3f); bias = 0.07f; bright = false; break;
+    case HUD_VALUE: put(light, h.text, base * 1.12f, base * 0.08f, inkC, alpha); break;
+    case HUD_NOTICE: put(light, text::upper(h.text), base * 0.95f, base * 0.25f, accent, alpha); break;
+    case HUD_KEY: put(medium, h.text, base * 0.82f, base * 0.1f, inkC, alpha); bias = 0.05f; break;
+    case HUD_TOAST:
+        put(light, text::upper(h.text), base * 1.25f, base * 0.38f, inkC, alpha, -base * 0.1f);
+        halo = 0.65f; bias = 0.07f;
+        break;
+    case HUD_TOAST_SUB: put(light, h.text, base * 0.8f, base * 0.3f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(light, text::upper(h.text), base * 1.1f, base * 0.3f, inkC, alpha, -base * 0.1f);
+            halo = 0.65f; bias = 0.07f;
+        } else put(light, h.text, base * 0.82f, base * 0.14f, h.accent ? accent : inkC, alpha);
+        break;
+    default: put(light, h.text, base * 0.8f, base * 0.12f, h.accent ? accent : inkC, alpha); bright = h.accent; break;
+    }
+    // (the old field: 10 px of distance at 64 px, one unit of it 0.31 em; its halo from 0.1, squared; its wide
+    // edge left the small letters a little heavier)
+    text::Look& k = out.look;
+    k.weight = bias * 0.31f + 0.2f / std::max(1.f, out.spans[0].size);
+    k.halo = vec3(0.f);
+    k.haloA = halo * (1.f - br);
+    k.haloW = 0.125f;
+    k.haloPow = 2.f;
+    k.glow = out.spans[0].ink;
+    k.glowA = bright ? 0.14f * (1.f - br) : 0.f;
+    k.glowW = 0.12f;
 }
 
 // =====================================================================================================
@@ -1318,7 +1165,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.2f, slow_);
     if (!f.paused) simulate(game, music, dt, wdt);
     const float world = 1.f - saturate(bridge_.amount);
-    buildMasks(f.hud);
+    buildMasks(f);
     tiles_.clear();
     if (f.bare) {
         // a break: the room, its haze and its projectors, without the well, the stack, the previews or the gauge
@@ -1463,7 +1310,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, sparks_.size() * sizeof(Spark), sparks_.data(), GL_STREAM_DRAW);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sparks_.size());
     }
-    drawHud(f.hud, f.bare ? std::vector<HudRect>() : f.panels);
+    if (!f.bare) drawPanels(f.panels);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the beams' cores, the lit edges.
