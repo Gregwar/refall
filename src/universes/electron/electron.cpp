@@ -889,8 +889,8 @@ void ElectronUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.3f, vsz = base * 0.62f, a = 0.35f + h.alpha * 1.6f;
         put(medium, text::upper(name), sz, sz * 0.22f, inkC, a, -base * 0.06f);
         if (!var.empty()) {
-            out.add("", medium, sz, vec3(0.f), base * 0.8f / sz - 0.22f); // the gap (the name's tracking after it)
             text::Span& v = out.add(var, light, vsz, ink(accent), 0.42f, saturate(a));
+            v.gap = (base * 0.8f - sz * 0.22f) / vsz; // the gap (less the name's tracking after it)
             v.dy = base * 0.32f + 0.535f * vsz - 0.554f * sz; // its own cap line, lower
         }
         bias = 0.05f;

@@ -1342,8 +1342,8 @@ void MarblesUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.35f, vsz = base * 0.66f, a = saturate(0.35f + h.alpha * 1.6f);
         put(light, text::titleCase(name), sz, sz * 0.02f, ink, a, -base * 0.1f);
         if (!var.empty()) {
-            out.add("", light, sz, vec3(0.f), base * 0.8f / sz - 0.02f); // the gap (the name's tracking after it)
             text::Span& v = out.add(var, medium, vsz, shown(ink), 0.34f, a * 0.85f);
+            v.gap = (base * 0.8f - sz * 0.02f) / vsz; // the gap (less the name's tracking after it)
             v.dy = base * 0.3f + 0.556f * vsz - 0.546f * sz; // its own cap line, lower
         }
         bias = 0.03f;

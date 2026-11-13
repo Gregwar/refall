@@ -843,8 +843,8 @@ void SmokeUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.5f, vsz = base * 0.62f, a = 0.35f + h.alpha * 1.6f;
         put(serif, text::titleCase(name), sz, 0.f, inkC, a, -base * 0.12f);
         if (!var.empty()) {
-            out.add("", serif, sz, vec3(0.f), base * 0.8f / sz); // the gap
             text::Span& v = out.add(var, sans, vsz, ink(accent), 0.42f, saturate(a));
+            v.gap = (base * 0.8f) / vsz; // the gap
             v.dy = base * 0.4f + 0.59f * vsz - 0.568f * sz; // its own cap line, lower
         }
         break;

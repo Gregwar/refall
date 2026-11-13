@@ -1208,8 +1208,8 @@ void KintsugiUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 1.5f, vsz = base * 0.56f, a = 0.35f + h.alpha * 1.6f;
         put(italic, text::titleCase(name), sz, 0.f, inkC, a, -base * 0.15f);
         if (!var.empty()) {
-            out.add("", italic, sz, vec3(0.f), base * 0.8f / sz); // the gap
             text::Span& v = out.add(var, caps, vsz, ink(metal), 0.26f, saturate(a));
+            v.gap = (base * 0.8f) / vsz; // the gap
             v.dy = base * 0.45f + 0.558f * vsz - 0.516f * sz; // its own cap line, lower
         }
         break;

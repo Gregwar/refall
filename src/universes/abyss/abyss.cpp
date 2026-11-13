@@ -1098,8 +1098,8 @@ void AbyssUniverse::hudLine(const HudText& h, text::Line& out) {
         out.add(text::titleCase(name), serif, sz, ink(lerp(pale, glowC, 0.35f)), 0.f, saturate(0.35f + h.alpha * 1.6f));
         out.dy = -base * 0.1f + (CAP_SANS - CAP_SERIF) * sz;
         if (!var.empty()) {
-            out.add("", serif, sz, vec3(0.f), base * 0.8f / sz); // the gap
             text::Span& v = out.add(var, sans, vsz, ink(glowC * 0.9f), 0.3f, saturate(0.3f + h.alpha * 1.5f));
+            v.gap = (base * 0.8f) / vsz; // the gap
             v.dy = base * 0.35f + CAP_SANS * (vsz - sz); // its own baseline, lower
         }
         glow = glowC * 0.8f; glowAmt = 0.5f; weight = 0.01f;
@@ -1168,7 +1168,7 @@ void AbyssUniverse::hudLine(const HudText& h, text::Line& out) {
     k.halo = vec3(0.f);
     k.haloA = shadow * 0.7f;
     k.haloW = 0.1f;
-    k.haloPow = 1.5f;
+    k.haloSmooth = true;
     k.glow = ugl::toSrgb(glow * glowAmt);
     k.glowA = glowAmt > 0.f ? 1.f - br : 0.f;
     k.glowW = 0.14f;

@@ -973,8 +973,8 @@ void PolarUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 0.82f, vsz = base * 0.66f, a = 0.35f + h.alpha * 1.6f;
         put(light, text::upper(name), sz, sz * 0.16f, inkC, a);
         if (!var.empty()) {
-            out.add("", light, sz, vec3(0.f), base * 0.6f / sz - 0.16f); // the gap (the name's tracking after it)
             text::Span& v = out.add(var, regular, vsz, ink(accent), 0.1f, opacity(a));
+            v.gap = (base * 0.6f - sz * 0.16f) / vsz; // the gap (less the name's tracking after it)
             v.dy = (sz - vsz) * 0.5f + 0.723f * vsz - 0.71f * sz; // centered on the name's height
         }
         halo = 0.7f; bias = 0.06f;
