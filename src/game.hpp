@@ -93,22 +93,22 @@ public:
     int score() const { return score_; }
     int lastScore() const { return score_; } // final score while the game is over
     int lines() const { return lines_; }
-    // Level: 1 + one per 20 lines, plateau at MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at the plateau.
-    static constexpr int MAX_LEVEL = 20, LINES_PER_LEVEL = 20;
+    // Level: 1 + one per 20 lines, up to MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at PLATEAU_LEVEL and stays there
+    // (the lock delay stops shrinking); the fall's speed goes on past the plateau, see speedDifficulty().
+    static constexpr int MAX_LEVEL = 50, PLATEAU_LEVEL = 20, LINES_PER_LEVEL = 20;
     // A fixed level (the campaign: each song's velocity is set by the campaign data, lines don't raise it) may be
     // fractional (e.g. 7.5); 0 goes back to levels rising with lines.
     int level() const {
         return fixedLevel_ > 0.f ? std::clamp((int)(fixedLevel_ + 0.5f), 1, MAX_LEVEL) : std::min(MAX_LEVEL, 1 + lines_ / LINES_PER_LEVEL);
     }
-    float difficulty() const {
-        return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, 1.f) : (level() - 1) / float(MAX_LEVEL - 1);
-    }
-    // The fall's speed: as difficulty(), but a fixed level goes on past the plateau, up to MAX_VELOCITY (the Voyage's
-    // fastest songs: x10 at level 20, x24.2 at 50, under the gravity's cap in rows per second).
-    static constexpr float MAX_VELOCITY = 50.f, TWENTY_G = 37.5f; // (20G: see the app's gravity)
-    float speedDifficulty() const {
-        return fixedLevel_ > 0.f ? std::clamp((fixedLevel_ - 1.f) / float(MAX_LEVEL - 1), 0.f, (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1))
-                                 : difficulty();
+    // The velocity, as a level: the fixed one, or the level reached with the lines (the same scale: 1 .. MAX_VELOCITY).
+    static constexpr float MAX_VELOCITY = float(MAX_LEVEL), TWENTY_G = 37.5f; // (20G: see the app's gravity)
+    float velocity() const { return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY) : float(level()); }
+    float difficulty() const { return std::clamp((velocity() - 1.f) / float(PLATEAU_LEVEL - 1), 0.f, 1.f); }
+    // The fall's speed at a velocity: as difficulty(), but it goes on past the plateau, up to MAX_VELOCITY (x10 at
+    // level 20, x24.2 at 50, under the gravity's cap in rows per second).
+    static float speedDifficulty(float velocity) {
+        return (std::clamp(velocity, 1.f, MAX_VELOCITY) - 1.f) / float(PLATEAU_LEVEL - 1);
     }
     void setFixedLevel(float level) { fixedLevel_ = level; }
     // 20G: the app drops each piece to the stack at once; the lock delay is then a little longer

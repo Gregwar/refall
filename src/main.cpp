@@ -254,6 +254,7 @@ private:
     PlaylistStore playlists_;
     Menu menu_;
     float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
+    int freeDiff_ = DIFF_EXPERT; // free play: the difficulty (20G is EXPERT's)
     // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
     struct Run {
         int stage = 0, from = 0, diff = DIFF_NORMAL, current = -1;
@@ -320,6 +321,8 @@ private:
     // A Voyage run's first song starts at this share of its velocity, reached after WARMUP_SECONDS; the next songs
     // climb from the previous one's over NEXT_SONG_RAMP_SECONDS.
     static constexpr float WARMUP_VELOCITY = 0.35f, WARMUP_SECONDS = 30.f, NEXT_SONG_RAMP_SECONDS = 20.f;
+    // Free play: every song starts at this share of the level's velocity and climbs to it over its first seconds.
+    static constexpr float FREE_WARMUP_VELOCITY = 0.5f, FREE_WARMUP_SECONDS = 20.f;
     static constexpr float OUT_HIDE = 1.6f;  // the game fades away
     static constexpr float OUT_DARK = 2.0f;  // the world fades to black, ending with the song
     static constexpr float IN_CARD = 0.4f, IN_HOLD = 1.4f, IN_SHRINK = 3.2f, IN_WORLD = 5.2f, IN_SHOW = 6.8f, IN_END = 8.4f;
@@ -728,7 +731,7 @@ void App::handleEvents() {
 }
 
 // Gravity rides the beat. The song section sets the pace in rows per beat (x0.4 in a break .. x1.3 in a
-// drop), and the level scales it up gradually to x10 at level 20 (capped at 28 rows/s).
+// drop), and the level scales it up gradually: x10 at level 20, x24.2 at 50 (capped at 60 rows/s).
 void App::updateGravity(double songTime, float dt) {
     // A Voyage song's velocity climbs to its own over its first seconds (see Run).
     if (mode_ == MODE_CAMPAIGN && game_.fixedLevel() > 0.f && run_.velRamp > 0.f) {
@@ -741,12 +744,17 @@ void App::updateGravity(double songTime, float dt) {
     gameRate_ = approach(gameRate_, rateGoal, 3.f, dt);
     if (gameRate_ > 0.999f) gameRate_ = 1.f;
     bonusFall_ = approach(bonusFall_, game_.bonusActive() ? 1.f : 0.f, 3.f, dt);
-    const float diff = game_.speedDifficulty();
+    // Free play (levels rising with the lines): each song warms up, from a share of the level's velocity to all of it.
+    const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
+    float v = game_.velocity();
+    if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
+    const float diff = Game::speedDifficulty(v);
     // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
-    // stages has some, every song of the finale.
-    const float v = game_.fixedLevel(), pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
-    const bool twentyG = mode_ == MODE_CAMPAIGN && run_.diff == DIFF_EXPERT && gameRate_ > 0.999f &&
+    // stages has some, every song of the finale; free play has it from level 38 on (once the song has warmed up).
+    const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
+    const bool expert = mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT;
+    const bool twentyG = expert && gameRate_ > 0.999f &&
                          v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
         game_.setTwentyG(twentyG);
@@ -773,7 +781,7 @@ void App::updateGravity(double songTime, float dt) {
     float want = gravityPace(an, songTime + 0.25);
     if (trackAge_ < 20.f) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
-    // Level scaling: x10 at the plateau (level 20; a Voyage song's velocity goes on past it), capped at 60 rows per second.
+    // Level scaling: x10 at level 20, x24.2 at 50 (the top level, and velocity), capped at 60 rows per second.
     const float MAX_ROWS_PER_SEC = 60.f;
     const float beatsPerSec = bpm * tempoMul / 60.f;
     // Free play's difficulty scales every level's speed (EXPERT x1); a campaign song's level is set by the data.
@@ -1271,6 +1279,7 @@ int App::run() {
     menuEnabled_ = opt_.menuEnabled;
     mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
     speedMul_ = opt_.speedMul;
+    freeDiff_ = opt_.difficulty;
 
     int fbw, fbh;
     fbSize(fbw, fbh);
@@ -1538,6 +1547,10 @@ int App::run() {
             }
         }
         if (input_.pressed(A_DEBUG_LEVEL) && !game_.over() && !viewer_) game_.skipToNextLevel();
+        { // test hook: ZEN_TEST_LEVEL=N plays free play from level N
+            static const int testLevel = std::getenv("ZEN_TEST_LEVEL") ? std::atoi(std::getenv("ZEN_TEST_LEVEL")) : 0;
+            while (!viewer_ && game_.fixedLevel() <= 0.f && game_.level() < std::min(testLevel, (int)Game::MAX_LEVEL)) game_.skipToNextLevel();
+        }
         if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
 
         // ---- Game.
@@ -2037,6 +2050,7 @@ void App::beginSession(const Menu::Choice& c) {
         paths = c.playlist.empty() ? opt_.paths : std::vector<std::string>{c.playlist};
         if (!c.playlist.empty()) std::printf("[app] free play on %s\n", c.playlist.c_str());
         speedMul_ = opt_.difficultyGiven && c.difficulty == opt_.difficulty ? opt_.speedMul : freePlayMultiplier(c.difficulty);
+        freeDiff_ = c.difficulty;
         std::printf("[app] free play on %s (gravity x%.2f)\n", difficultyName(c.difficulty), speedMul_);
     }
     lib_.scan(paths);
