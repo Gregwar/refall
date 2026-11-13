@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <map>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,13 @@ std::string roman(int n) {
 std::string upper(std::string s) { for (char& c : s) c = (char)std::toupper((unsigned char)c); return s; }
 std::string fmt1(float v) { char b[16]; std::snprintf(b, sizeof(b), "%.1f", v); return b; }
 std::string linesStr(int n) { return n < 0 ? std::string("-") : std::to_string(n); } // lines, "-" when unknown
+// The game's start picks where the title's tour of universes begins and how the kaleidoscope is turned
+// (ZEN_MENU_SEED=N: a given one, e.g. for screenshots).
+unsigned menuSeed() {
+    static const unsigned seed = std::getenv("ZEN_MENU_SEED") ? (unsigned)std::atoi(std::getenv("ZEN_MENU_SEED")) : std::random_device{}();
+    return seed;
+}
+
 // the kaleidoscope's crossfade between sources (one menu at a time)
 std::string g_cur, g_prev;
 float g_mix = 1.f;
@@ -84,12 +92,13 @@ struct Worlds {
     Col stageCol(int s) const { unsigned char c[3]; m.stageColor(s, c); return rgb8(c); }
     float focusStage(int s) const { return m.aRow_ > 0.5f ? sstep(near1(m.aStage_, s)) * std::min(1.f, m.aRow_) : 0.f; }
     int focusedStage() const { return std::clamp((int)std::lround(m.aStage_), 0, std::max(0, nStages() - 1)); }
-    // all the campaign's universes, in order (the title's slow tour)
+    // all the campaign's universes, in order (the title's slow tour), from one picked at random when the game starts
     std::vector<std::string> tour() const {
         std::vector<std::string> v;
         for (int s = 0; s < nStages(); s++)
             for (int k = 0; k < nSongs(s); k++) v.push_back(spec(s, k));
         if (v.empty()) v.push_back("VECTOR");
+        std::rotate(v.begin(), v.begin() + menuSeed() % v.size(), v.end());
         return v;
     }
     // the tour's current universe, the next, and how far the crossfade between them is
@@ -322,7 +331,7 @@ void Worlds::kalBackground(const std::string& cur) {
     float loA, hiA, loB, hiB;
     range(g_prev.empty() ? g_cur : g_prev, loA, hiA);
     range(g_cur, loB, hiB);
-    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f, 12,
+    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
               mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, loA, hiA, loB, hiB);
 }
 
