@@ -30,11 +30,9 @@
 // Original motifs only (generic period iconography: daisies, peace signs, hearts, rainbows, a smiling sun, doves,
 // mushrooms, lava-lamp blobs). Cost: one fullscreen pass, a few hundred instanced SDF quads, SDF type.
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <string>
 #include <vector>
 
@@ -42,9 +40,6 @@
 #include "ugl.hpp"
 #include "universes/registry.hpp"
 #include "universes/woodstock/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -125,26 +120,6 @@ float ease(float t) {
     return t * t * (3.f - 2.f * t);
 }
 
-// UTF-8 to the font's characters (the middle dot to '-' spaced, accents dropped).
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
 // The garden's stages (on the 50-line scale), for the HUD's corner.
 const char* stageName(float L) {
     if (L < 4.f) return "seeds";
@@ -171,6 +146,8 @@ public:
     vec2 project(const vec3& p) const override { return layout::project(vp_, p, width_, height_); }
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
 
 private:
     // ---- Sprites (board units).
@@ -210,25 +187,13 @@ private:
     struct Part { float x, y, vx, vy, rot, spin, size, age, life; int kind; vec3 col; bool front; };
     std::vector<Part> parts_;
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font disp_, round_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha, float stroke);
-    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
+    float fade_ = 1.f; // the frame's fade in (drawn over the HUD: the lettering's own now)
+    void drawHud(const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progText_ = 0, progSolid_ = 0;
-    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, textVao_ = 0, textVbo_ = 0;
+    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progSolid_ = 0;
+    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     void solid(float r, float g, float b, float a);
@@ -266,7 +231,6 @@ bool WoodstockUniverse::init(int width, int height) {
     progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "woodstock kaleidoscope");
     progSprite_ = ugl::program(sh::SPRITE_VS, (head + sh::PAINT_GLSL + sh::SPRITE_FS).c_str(), "woodstock sprites");
     progCell_ = ugl::program(sh::CELL_VS, (head + sh::PAINT_GLSL + sh::CELL_FS).c_str(), "woodstock blocks");
-    progText_ = ugl::program(sh::TEXT_VS, sh::TEXT_FS, "woodstock text");
     progSolid_ = ugl::program(ugl::FULLSCREEN_VS, sh::SOLID_FS, "woodstock solid");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -289,65 +253,10 @@ bool WoodstockUniverse::init(int width, int height) {
     };
     instanced(spriteVao_, spriteVbo_, 5);
     instanced(cellVao_, cellVbo_, 3);
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(disp_, FONT_DISPLAY);
-    buildFont(round_, FONT_ROUND);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void WoodstockUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] woodstock font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 12;
-    std::vector<unsigned char> atlas((size_t)AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch;
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(size_t)(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void WoodstockUniverse::resize(int width, int height) {
@@ -362,13 +271,9 @@ void WoodstockUniverse::resize(int width, int height) {
 }
 
 WoodstockUniverse::~WoodstockUniverse() {
-    for (GLuint p : {progBg_, progSprite_, progCell_, progText_, progSolid_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&disp_, &round_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progBg_, progSprite_, progCell_, progSolid_}) glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -654,178 +559,81 @@ void WoodstockUniverse::solid(float r, float g, float b, float a) {
 // Text
 // =====================================================================================================
 
-float WoodstockUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            if (ch != 127 && n != 127) w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The HUD's plates: plain rectangles in the well's color (its lettering: hudLine, the host's).
+void WoodstockUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    glUseProgram(progSolid_);
+    glEnable(GL_SCISSOR_TEST);
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? r.color : r.accent ? accent_ : wellBottom_;
+        glScissor((GLint)r.x, (GLint)(height_ - r.y - r.h), (GLsizei)std::max(0.f, r.w), (GLsizei)std::max(0.f, r.h));
+        solid(c.x, c.y, c.z, std::min(1.f, r.alpha));
     }
-    return w - track;
+    glDisable(GL_SCISSOR_TEST);
 }
 
-void WoodstockUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                  std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = f.capH * k;
-    float pen = 0.f;
-    auto place = [&](float u, float v, float tu, float tv) {
-        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
-    };
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
-            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            if (ch != 127 && n != 127) pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void WoodstockUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& fill, float alpha, float stroke) {
-    if (q.empty() || !f.ok || alpha <= 0.004f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uFill", fill);
-    set3f(progText_, "uStroke", ink_);
-    set1f(progText_, "uStrokeW", stroke);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD: cream letters in a thick dark cartoon stroke (they read over any band of the kaleidoscope): Comfortaa
-// for the labels and numbers, Fraunces' soft italics for the song, the variant, the notices and the toasts.
-void WoodstockUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    if (!panels.empty()) {
-        // panels: plain rectangles in the well's color
-        glUseProgram(progSolid_);
-        glEnable(GL_SCISSOR_TEST);
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? accent_ : wellBottom_;
-            glScissor((GLint)r.x, (GLint)(height_ - r.y - r.h), (GLsizei)std::max(0.f, r.w), (GLsizei)std::max(0.f, r.h));
-            solid(c.x, c.y, c.z, std::min(1.f, r.alpha));
-        }
-        glDisable(GL_SCISSOR_TEST);
-    }
+// The HUD, lettered by the host (text.hpp): cream letters in a thick dark cartoon stroke (they read over any band of
+// the kaleidoscope): Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the variant, the
+// notices and the toasts. The universe's line ends with the garden's stage.
+void WoodstockUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* disp = text::font(FONT_DISPLAY);
+    text::Font* round = text::font(FONT_ROUND);
     const vec3 cream = hex(0xfff8ec);
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        const std::string text = ascii(h.text);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& s, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, s, size, track);
-            textQuads(f, s, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = ascii(name);
-            std::string vt = ascii(var);
-            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
-            const float sz = base * 0.95f, tr = sz * 0.18f, vsz = base * 1.3f, gap = base * 0.7f;
-            const std::string st = stageName(std::max(0.f, shown_));
-            const float wName = textWidth(round_, name, sz, tr);
-            const float wVar = vt.empty() ? 0.f : textWidth(disp_, vt, vsz, 0.f);
-            const float wSt = textWidth(disp_, st, vsz, 0.f);
-            const float total = wName + (vt.empty() ? 0.f : gap + wVar) + gap * 1.3f + wSt;
-            const float x = ugl::hudLeft(h, total, width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(round_, name, x, h.y, sz, tr, q);
-            drawText(round_, q, cream, a, 0.4f);
-            float cx = x + wName;
-            if (!vt.empty()) {
-                q.clear();
-                textQuads(disp_, vt, cx + gap, h.y - sz * 0.22f, vsz, 0.f, q);
-                drawText(disp_, q, accent_, a, 0.4f);
-                cx += gap + wVar;
-            }
-            q.clear();
-            textQuads(disp_, st, cx + gap * 1.3f, h.y - sz * 0.22f, vsz, 0.f, q);
-            drawText(disp_, q, cream, a * 0.9f, 0.4f);
-            continue;
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    float stroke = 0.32f; // the stroke's width, as the old field's units (0.5 - its edge)
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        // the variant as a word: its first letter kept, the rest small
+        if (!var.empty()) {
+            size_t n = 1;
+            while (n < var.size() && ((unsigned char)var[n] & 0xC0) == 0x80) n++;
+            var = var.substr(0, n) + text::lower(var.substr(n));
         }
-        case HUD_SECTION:
-            place(round_, text, base * 0.9f, base * 0.3f);
-            drawText(round_, q, accent_, saturate(0.2f + h.alpha * 1.9f), 0.4f);
-            continue;
-        case HUD_TITLE:
-            place(disp_, text, base * 1.7f, 0.f, -base * 0.35f);
-            drawText(disp_, q, cream, saturate(h.alpha * 1.3f), 0.3f);
-            continue;
-        case HUD_INFO:
-            place(round_, text, base * 0.7f, base * 0.08f);
-            drawText(round_, q, cream, saturate(alpha * 1.3f), 0.32f);
-            continue;
-        case HUD_LABEL:
-            place(round_, text, base * 0.8f, base * 0.28f);
-            drawText(round_, q, accent_, saturate(alpha * 1.2f), 0.32f);
-            continue;
-        case HUD_VALUE:
-            place(round_, text, base * 1.1f, base * 0.04f);
-            drawText(round_, q, cream, alpha, 0.3f);
-            continue;
-        case HUD_NOTICE:
-            place(disp_, text, base * 1.6f, 0.f);
-            drawText(disp_, q, accent_, alpha, 0.3f);
-            continue;
-        case HUD_KEY:
-            place(round_, text, base * 0.75f, base * 0.06f);
-            drawText(round_, q, cream, alpha, 0.32f);
-            continue;
-        case HUD_TOAST:
-            place(disp_, text, base * 1.6f, base * 0.06f, -base * 0.3f);
-            drawText(disp_, q, accent_, alpha, 0.32f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(round_, text, base * 1.1f, base * 0.1f);
-            drawText(round_, q, cream, alpha * 0.95f, 0.32f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * height_ / 1080.f) {
-                place(disp_, text, base * 1.3f, 0.f, -base * 0.1f);
-                drawText(disp_, q, cream, alpha, 0.3f);
-            } else {
-                place(round_, text, base * 0.85f, base * 0.1f);
-                drawText(round_, q, h.accent ? accent_ : cream, alpha, 0.32f);
-            }
-            continue;
-        default:
-            place(round_, text, base * 0.85f, base * 0.08f);
-            drawText(round_, q, h.accent ? accent_ : cream, alpha, 0.32f);
-            continue;
+        const float sz = base * 0.95f, vsz = base * 1.3f, gap = base * 0.7f, a = saturate(0.35f + h.alpha * 1.6f);
+        // the italics' cap line a fifth of the capitals higher
+        const float vdy = -sz * 0.22f + text::capHeight(disp) * vsz - text::capHeight(round) * sz;
+        out.add(name, round, sz, cream, 0.18f, a);
+        if (!var.empty()) {
+            text::Span& v = out.add(var, disp, vsz, accent_, 0.f, a);
+            v.dy = vdy;
+            v.gap = (gap - 0.18f * sz) / vsz; // (the name's own spacing counts in it)
         }
+        text::Span& st = out.add(stageName(std::max(0.f, shown_)), disp, vsz, cream, 0.f, a * 0.9f);
+        st.dy = vdy;
+        st.gap = (gap * 1.3f - (var.empty() ? 0.18f * sz : 0.f)) / vsz;
+        stroke = 0.4f;
+        break;
     }
+    case HUD_SECTION: put(round, h.text, base * 0.9f, base * 0.3f, accent_, 0.2f + h.alpha * 1.9f); stroke = 0.4f; break;
+    case HUD_TITLE: put(disp, h.text, base * 1.7f, 0.f, cream, h.alpha * 1.3f, -base * 0.35f); stroke = 0.3f; break;
+    case HUD_INFO: put(round, h.text, base * 0.7f, base * 0.08f, cream, alpha * 1.3f); break;
+    case HUD_LABEL: put(round, h.text, base * 0.8f, base * 0.28f, accent_, alpha * 1.2f); break;
+    case HUD_VALUE: put(round, h.text, base * 1.1f, base * 0.04f, cream, alpha); stroke = 0.3f; break;
+    case HUD_NOTICE: put(disp, h.text, base * 1.6f, 0.f, accent_, alpha); stroke = 0.3f; break;
+    case HUD_KEY: put(round, h.text, base * 0.75f, base * 0.06f, cream, alpha); break;
+    case HUD_TOAST: put(disp, h.text, base * 1.6f, base * 0.06f, accent_, alpha, -base * 0.3f); break;
+    case HUD_TOAST_SUB: put(round, h.text, base * 1.1f, base * 0.1f, cream, alpha * 0.95f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * height_ / 1080.f) {
+            put(disp, h.text, base * 1.3f, 0.f, cream, alpha, -base * 0.1f);
+            stroke = 0.3f;
+        } else put(round, h.text, base * 0.85f, base * 0.1f, h.accent ? accent_ : cream, alpha);
+        break;
+    default: put(round, h.text, base * 0.85f, base * 0.08f, h.accent ? accent_ : cream, alpha); break;
+    }
+    // the fat sticker stroke in the ink (the old field: 128 / 12 units a pixel baked at 64)
+    out.look.outline = ink_;
+    out.look.outlineA = 1.f;
+    out.look.outlineW = stroke * 255.f * 12.f / 128.f / 64.f;
+    // the startup fade, drawn over the HUD
+    out.alpha = saturate(fade_);
 }
 
 // =====================================================================================================
@@ -1088,7 +896,8 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     solid(0.f, 0.f, 0.f, 0.45f * dimT_);
-    drawHud(f.hud, f.panels);
+    drawHud(f.panels);
+    fade_ = f.fade;
     solid(0.f, 0.f, 0.f, 1.f - saturate(f.fade));
     glDisable(GL_BLEND);
 
