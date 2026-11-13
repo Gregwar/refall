@@ -20,17 +20,12 @@
 #include "universes/electron/electron.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 
 #include "layout.hpp"
 #include "universes/electron/shaders.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -109,38 +104,6 @@ constexpr float TAU_FOOD = 24.f; // pheromone evaporation (seconds)
 constexpr float TAU_HOME = 20.f;
 constexpr int MAX_GRAINS = 1400;
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else {
-            start = c == ' ' || c == '-' || c == '(';
-        }
-    }
-    return o;
-}
-std::string upper(const std::string& s) {
-    std::string o = s;
-    for (char& c : o) c = (char)std::toupper((unsigned char)c);
-    return o;
-}
-// UTF-8 to ASCII for the glyph set (the middle dot kept as a slot of its own).
-std::string ascii(const std::string& s) {
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 0x80) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0x97) { o += 'x'; i++; continue; }
-        while (i + 1 < s.size() && ((unsigned char)s[i + 1] & 0xC0) == 0x80) i++;
-        o += '?';
-    }
-    return o;
-}
-
 } // namespace
 
 // =====================================================================================================
@@ -150,7 +113,6 @@ std::string ascii(const std::string& s) {
 bool ElectronUniverse::init(int width, int height) {
     progGround_ = compile(ugl::FULLSCREEN_VS, sh::GROUND_FS, "electron ground");
     progSprite_ = compile(sh::SPRITE_VS, sh::SPRITE_FS, "electron sprites");
-    progText_ = compile(sh::TEXT_VS, sh::TEXT_FS, "electron text");
     progShape_ = compile(sh::SHAPE_VS, sh::SHAPE_FS, "electron shapes");
     progVeil_ = compile(ugl::FULLSCREEN_VS, sh::VEIL_FS, "electron veil");
 
@@ -170,14 +132,6 @@ bool ElectronUniverse::init(int width, int height) {
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Sprite), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -188,8 +142,6 @@ bool ElectronUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
     glGenTextures(1, &pherTex_);
-    buildFont(fontSerif_, FONT_SERIF);
-    buildFont(fontSans_, FONT_SANS);
     for (auto& row : occ_)
         for (auto& c : row) c = -1;
     resize(width, height);
@@ -197,14 +149,10 @@ bool ElectronUniverse::init(int width, int height) {
 }
 
 ElectronUniverse::~ElectronUniverse() {
-    for (GLuint p : {progGround_, progSprite_, progText_, progVeil_, progShape_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, textVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, textVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progGround_, progSprite_, progVeil_, progShape_}) glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (pherTex_) glDeleteTextures(1, &pherTex_);
-    for (Font* f : {&fontSerif_, &fontSans_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 void ElectronUniverse::resize(int width, int height) {
@@ -243,51 +191,6 @@ void ElectronUniverse::resize(int width, int height) {
     }
     g0_ = v2(viewC_.x - hw - CELL, viewC_.y - hh - CELL);
     t0_ = v2(viewC_.x - hw - TCELL, viewC_.y - hh - TCELL);
-}
-
-void ElectronUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] ants font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int slot = 0; slot < 96; slot++) {
-        const int ch = slot == 95 ? 0xB7 : 32 + slot; // slot 95 (0x7f): the middle dot
-        Glyph& g = f.g[slot];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 // =====================================================================================================
@@ -938,179 +841,85 @@ void ElectronUniverse::warmUp(const Game& game) {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-namespace {
-int slotOf(unsigned char c) { return c == 0x7f ? 95 : (c >= 32 && c < 127 ? c - 32 : '?' - 32); }
-int codeOf(unsigned char c) { return c == 0x7f ? 0xB7 : c; }
-} // namespace
-
-float ElectronUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char ch = (unsigned char)s[i];
-        w += f.g[slotOf(ch)].adv * k + track;
-        if (i + 1 < s.size())
-            w += stbtt_GetCodepointKernAdvance(info, codeOf(ch), codeOf((unsigned char)s[i + 1])) * f.scaleTT * k;
-    }
-    return w - track;
-}
-
-float ElectronUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                              std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char ch = (unsigned char)s[i];
-        const Glyph& g = f.g[slotOf(ch)];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size())
-            pen += stbtt_GetCodepointKernAdvance(info, codeOf(ch), codeOf((unsigned char)s[i + 1])) * f.scaleTT * k;
-    }
-    return pen - track - x;
-}
-
-void ElectronUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float bias) {
-    if (q.empty() || !f.ok) return;
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void ElectronUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
     const Variant& V = VARIANTS[variant_];
-    const float b = smoothstepf(0.f, 1.f, bridge_.amount);
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uColor", lerp(color, ugl::toSrgb(bridge_.ink), b));
-    set3f(progText_, "uHalo", lerp(hex(V.ground), ugl::toSrgb(bridge_.color), b));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uHaloAmt", 0.55f);
-    set1f(progText_, "uBias", bias);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? r.color : r.accent ? hex(V.accent) : hex(V.ground) * 0.8f;
+        const float a = r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f);
+        const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+        const float q[6][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}};
+        for (auto& p : q) v.insert(v.end(), {p[0], p[1], c.x, c.y, c.z, a});
+    }
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
 }
 
 // The HUD as an instrument panel: Jura Medium for the song, the section and the celebrations, small spaced capitals
-// for the labels, light numbers.
-void ElectronUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// of Jura Light for the labels, light numbers; each line on a halo of the substrate's own color. The inks turn to
+// the bridge's, and the lines dim with the world under the veil (startup, pause, game over).
+void ElectronUniverse::hudLine(const HudText& h, text::Line& out) {
     const Variant& V = VARIANTS[variant_];
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? hex(V.accent) : hex(V.ground) * 0.8f;
-            const float a = r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f);
-            const float x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
-            const float q[6][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y0}, {x1, y1}, {x0, y1}};
-            for (auto& p : q) v.insert(v.end(), {p[0], p[1], c.x, c.y, c.z, a});
+    text::Font* medium = text::font(FONT_SERIF);
+    text::Font* light = text::font(FONT_SANS);
+    const float s = height_ / 1080.f, base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float b = smoothstepf(0.f, 1.f, bridge_.amount);
+    auto ink = [&](const vec3& c) { return lerp(c, ugl::toSrgb(bridge_.ink), b); };
+    const vec3 inkC = hex(V.ink), dim = hex(V.dim), accent = hex(V.accent);
+    float bias = 0.08f;
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, ink(c), track / size, saturate(a));
+        out.dy = dy;
+        if (f == medium) bias = 0.04f;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.3f, vsz = base * 0.62f, a = 0.35f + h.alpha * 1.6f;
+        put(medium, text::upper(name), sz, sz * 0.22f, inkC, a, -base * 0.06f);
+        if (!var.empty()) {
+            out.add("", medium, sz, vec3(0.f), base * 0.8f / sz - 0.22f); // the gap (the name's tracking after it)
+            text::Span& v = out.add(var, light, vsz, ink(accent), 0.42f, saturate(a));
+            v.dy = base * 0.32f + 0.535f * vsz - 0.554f * sz; // its own cap line, lower
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+        bias = 0.05f;
+        break;
     }
-    const vec3 ink = hex(V.ink), dim = hex(V.dim);
-    const vec3 accent = lerp(hex(V.accent), pieceColor(4), dropMix_ * 0.0f);
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        const std::string text = ascii(h.text);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& t, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, t, size, track);
-            textQuads(f, t, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = text, var;
-            const size_t dot = name.find('\x7f');
-            if (dot != std::string::npos) { var = name.substr(dot + 1); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = upper(name);
-            const float sz = base * 1.3f, vsz = base * 0.62f, vtr = vsz * 0.42f, ntr = sz * 0.22f;
-            const float wName = textWidth(fontSerif_, name, sz, ntr);
-            const float wVar = var.empty() ? 0.f : textWidth(fontSans_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontSerif_, name, x, h.y - base * 0.06f, sz, ntr, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontSerif_, q, ink, a, 0.04f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontSans_, var, x + wName + gap, h.y + base * 0.26f, vsz, vtr, q);
-                drawText(fontSans_, q, accent, a, 0.08f);
-            }
-            continue;
-        }
-        case HUD_SECTION:
-            place(fontSerif_, titleCase(text), base * 1.4f, 0.f);
-            drawText(fontSerif_, q, accent, saturate(0.2f + h.alpha * 1.9f), 0.04f);
-            continue;
-        case HUD_TITLE:
-            place(fontSerif_, text, base * 1.3f, 0.f, -base * 0.14f);
-            drawText(fontSerif_, q, ink, saturate(h.alpha * 1.3f), 0.04f);
-            continue;
-        case HUD_INFO:
-            place(fontSans_, upper(text), base * 0.66f, base * 0.32f);
-            drawText(fontSans_, q, dim, saturate(0.3f + alpha * 2.f), 0.1f);
-            continue;
-        case HUD_LABEL:
-            place(fontSans_, text, base * 0.7f, base * 0.42f);
-            drawText(fontSans_, q, dim, saturate(alpha * 1.3f), 0.08f);
-            continue;
-        case HUD_VALUE:
-            place(fontSans_, text, base * 1.12f, base * 0.06f);
-            drawText(fontSans_, q, ink, alpha, 0.07f);
-            continue;
-        case HUD_NOTICE:
-            place(fontSerif_, text, base * 1.2f, 0.f);
-            drawText(fontSerif_, q, accent, alpha, 0.04f);
-            continue;
-        case HUD_KEY:
-            place(fontSans_, text, base * 0.85f, base * 0.1f);
-            drawText(fontSans_, q, ink, alpha, 0.08f);
-            continue;
-        case HUD_TOAST:
-            place(fontSerif_, titleCase(text), base * 1.55f, 0.f, -base * 0.15f);
-            drawText(fontSerif_, q, ink, alpha, 0.04f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontSans_, text, base * 0.8f, base * 0.3f);
-            drawText(fontSans_, q, accent, alpha * 0.9f, 0.08f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontSerif_, titleCase(text), base * 1.35f, 0.f, -base * 0.1f);
-                drawText(fontSerif_, q, ink, alpha, 0.04f);
-            } else {
-                place(fontSans_, text, base * 0.82f, base * 0.16f);
-                drawText(fontSans_, q, h.accent ? accent : ink, alpha, 0.08f);
-            }
-            continue;
-        default:
-            place(fontSans_, text, base * 0.8f, base * 0.12f);
-            drawText(fontSans_, q, h.accent ? accent : ink, alpha, 0.08f);
-            continue;
-        }
+    case HUD_SECTION: put(medium, text::titleCase(h.text), base * 1.4f, 0.f, accent, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(medium, h.text, base * 1.3f, 0.f, inkC, h.alpha * 1.3f, -base * 0.14f); break;
+    case HUD_INFO: put(light, text::upper(h.text), base * 0.66f, base * 0.32f, dim, 0.3f + alpha * 2.f); bias = 0.1f; break;
+    case HUD_LABEL: put(light, h.text, base * 0.7f, base * 0.42f, dim, alpha * 1.3f); break;
+    case HUD_VALUE: put(light, h.text, base * 1.12f, base * 0.06f, inkC, alpha); bias = 0.07f; break;
+    case HUD_NOTICE: put(medium, h.text, base * 1.2f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(light, h.text, base * 0.85f, base * 0.1f, inkC, alpha); break;
+    case HUD_TOAST: put(medium, text::titleCase(h.text), base * 1.55f, 0.f, inkC, alpha, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(light, h.text, base * 0.8f, base * 0.3f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(medium, text::titleCase(h.text), base * 1.35f, 0.f, inkC, alpha, -base * 0.1f);
+        else put(light, h.text, base * 0.82f, base * 0.16f, h.accent ? accent : inkC, alpha);
+        break;
+    default: put(light, h.text, base * 0.8f, base * 0.12f, h.accent ? accent : inkC, alpha); break;
     }
+    // (the old field: 10 px of distance at 64 px, one unit of it 0.31 em; its halo from 0.12, squared; its wide
+    // edge left the small letters a little heavier)
+    text::Look& k = out.look;
+    k.weight = bias * 0.31f + 0.2f / std::max(1.f, out.spans[0].size);
+    k.halo = lerp(hex(V.ground), ugl::toSrgb(bridge_.color), b);
+    k.haloA = 0.55f;
+    k.haloW = 0.118f;
+    k.haloPow = 2.f;
+    out.alpha = 1.f - veil_;
 }
 
 // =====================================================================================================
@@ -1410,14 +1219,14 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(antsV_);
     drawSprites(over_);
     drawSprites(top_);
-    drawHud(f.hud, gameOn ? f.panels : std::vector<HudRect>{});
+    if (gameOn) drawPanels(f.panels);
 
     // ---- the veil: startup fade, pause / game-over dim
-    const float veil = std::max(1.f - saturate(f.fade), dimT_ * 0.5f);
-    if (veil > 0.001f) {
+    veil_ = std::max(1.f - saturate(f.fade), dimT_ * 0.5f);
+    if (veil_ > 0.001f) {
         glUseProgram(progVeil_);
         const vec3 vc(0.f, 0.f, 0.f);
-        set4f(progVeil_, "uVeil", vc.x, vc.y, vc.z, veil);
+        set4f(progVeil_, "uVeil", vc.x, vc.y, vc.z, veil_);
         ugl::drawFullscreen();
     }
     glDisable(GL_BLEND);

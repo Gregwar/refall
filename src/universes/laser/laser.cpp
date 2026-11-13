@@ -1090,7 +1090,7 @@ void LaserUniverse::hudLine(const HudText& h, text::Line& out) {
         const float sz = base * 0.9f, vsz = base * 0.68f, a = 0.35f + h.alpha * 1.6f;
         put(light, text::upper(name), sz, sz * 0.22f, inkC, a);
         if (!var.empty()) {
-            out.add("", light, sz, vec3(0.f), base * 0.8f / sz); // the gap
+            out.add("", light, sz, vec3(0.f), base * 0.8f / sz - 0.22f); // the gap (the name's tracking after it)
             text::Span& v = out.add(var, light, vsz, ink(accent), 0.22f, saturate(a));
             v.dy = (sz - vsz) * (0.5f - 0.535f); // centered on the name's height
         }
