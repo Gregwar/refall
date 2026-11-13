@@ -205,16 +205,7 @@ add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_
 add_executable(refall-scope src/scope.cpp)
 target_link_libraries(refall-scope PRIVATE zencore glfw glad)
 
-# refall-scene: a scene viewer; the computer plays while a menu adjusts the scene and picks the song phase.
-add_executable(refall-scene
-  src/scene.cpp
-  src/game.cpp
-)
-target_link_libraries(refall-scene PRIVATE zenrender zencore glfw glad)
-# Its "send to dashboard" runs tools/scenereview.py from the sources.
-target_compile_definitions(refall-scene PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-
-foreach(t zencore zenrender refall refall-scope refall-scene)
+foreach(t zencore zenrender refall refall-scope)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
@@ -223,6 +214,6 @@ endforeach()
 
 # Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
 if(SKBUILD)
-  install(TARGETS refall refall-scope refall-scene RUNTIME DESTINATION zentris/bin)
+  install(TARGETS refall refall-scope RUNTIME DESTINATION zentris/bin)
   install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv data/menu_music.mp3 DESTINATION zentris/bin)
 endif()

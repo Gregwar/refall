@@ -154,6 +154,7 @@ static void usage() {
         "  --seed N             fixed run seed (default: random each run)\n"
         "  --universe NAME[:VARIANT]  play every song in this universe (and variant), as shown in the bottom-left\n"
         "                       corner (e.g. vector, vector:p3 amber, vector:1); T / Y moves on to the next one\n"
+        "  --list               print the universes and their variants, then exit\n"
         "  --universe-on-peak   also change universe when a song rises into a peak after a minute in one universe\n"
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
@@ -2327,6 +2328,14 @@ int main(int argc, char** argv) {
         else if (a == "--in-order") o.shuffle = false;
         else if (a == "--fullscreen") o.fullscreen = true;
         else if (a == "--hidden") o.hidden = true;
+        else if (a == "--list") {
+            for (int k = 0; k < universes::count(); k++) {
+                const UniverseEntry& e = universes::entry(k);
+                std::printf("%-10s %s%s\n", e.name, e.blurb, e.hidden ? " (test, never picked)" : "");
+                for (size_t v = 0; v < e.variants.size(); v++) std::printf("  %s:%s\n", e.name, e.variants[v].c_str());
+            }
+            return 0;
+        }
         else if (a == "--stream") o.stream = o.hidden = true;
         else if (a == "--seed" && i + 1 < argc) o.seed = std::stoull(argv[++i]);
         else if ((a == "--universe" || a == "--scene") && i + 1 < argc) o.universe = argv[++i];

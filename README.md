@@ -331,9 +331,8 @@ one, the page shows touch buttons (the gamepad's D-pad, A, B, LB, Back and Start
 
 - `refall-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write
   notes on it.
-- `refall-scene [UNIVERSE[:VARIANT]]`: browse universes, variants, song phases and transitions while the computer plays.
 
-Both come with the package (`uvx --from refall refall-scope`). Every option, the tools and how the music drives the
+It comes with the package (`uvx --from refall refall-scope`). Every option, the tools and how the music drives the
 game are in [docs/reference.md](docs/reference.md).
 
 ## Build from source
