@@ -158,8 +158,9 @@ private:
     std::string voyageId_, voyageTitle_;       // the voyage the Voyage's screen shows ("" the main one)
     std::map<std::string, int> voyageStage_;   // the stage each voyage was on, this session
     int vSel_ = 0, vStep_ = 0;
-    float aV_ = 0;
-    std::vector<int> vCleared_;                // the cards' stages cleared (read when the screen opens)
+    static constexpr int VOYAGE_COLS = 2;      // the cards' grid
+    float aV_ = 0, aVRow_ = 0;                 // the focused card, its row (eased: the grid scrolls to it)
+    std::vector<VoyageProgress> vProg_;        // how far each card's voyage went (read when the screen opens)
     std::string vUrl_, vLink_, vDelete_;       // the playlist read, the link typed, a voyage DEL was pressed on once
     std::vector<std::string> vEntries_;
     struct VFetched { bool ok = false; std::string url, title, error; std::vector<std::string> entries; };

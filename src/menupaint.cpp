@@ -172,7 +172,7 @@ void Painter::quad(const float px[4][2], const float lc[4][2], float hx, float h
     static const int IDX[6] = {0, 1, 2, 0, 2, 3};
     for (int k : IDX) {
         const Col& cc = bottom && k >= 2 ? *bottom : c;
-        verts_.push_back({px[k][0], px[k][1], lc[k][0], lc[k][1], hx, hy, cc.r, cc.g, cc.b, cc.a, rad, soft, lw, mode});
+        verts_.push_back({px[k][0], px[k][1], lc[k][0], lc[k][1], hx, hy, cc.r, cc.g, cc.b, cc.a * fade_, rad, soft, lw, mode});
     }
 }
 
@@ -189,7 +189,7 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
     const float P[3][2] = {{x0, y0}, {x1, y1}, {x2, y2}};
     const Col C[3] = {c0, c1, c2};
     for (int k = 0; k < 3; k++)
-        verts_.push_back({P[k][0], P[k][1], 0, 0, 0, 0, C[k].r, C[k].g, C[k].b, C[k].a, 0, 0, 0, 3.f});
+        verts_.push_back({P[k][0], P[k][1], 0, 0, 0, 0, C[k].r, C[k].g, C[k].b, C[k].a * fade_, 0, 0, 0, 3.f});
 }
 
 void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,

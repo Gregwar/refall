@@ -234,15 +234,20 @@ void VoyageStore::used(const std::string& id) {
     save();
 }
 
-int VoyageStore::cleared(const std::string& id) const {
-    if (id.empty()) {
-        Progress p;
-        p.load(mainProgress_, &curve_);
-        return p.clearedCount();
-    }
+VoyageProgress VoyageStore::progress(const std::string& id) const {
+    VoyageProgress r;
     Campaign c;
-    if (!find(id) || !c.load(campaignPath(id))) return 0;
+    if (!id.empty() && (!find(id) || !c.load(campaignPath(id)))) return r;
+    const Campaign& camp = id.empty() ? curve_ : c;
     Progress p;
-    p.load(progressPath(id), &c);
-    return p.clearedCount();
+    p.load(id.empty() ? mainProgress_ : progressPath(id), &camp);
+    r.cleared = p.clearedCount();
+    for (int s = 0; s < camp.size(); s++)
+        for (int k = 0; k < (int)camp.stages()[s].songs.size(); k++) {
+            r.songs++;
+            bool b = false;
+            for (int d = 0; d < DIFF_COUNT; d++) b = b || p.beaten(s, k, d);
+            r.beaten += b;
+        }
+    return r;
 }

@@ -17,6 +17,12 @@ struct CustomVoyage {
     int64_t created = 0, lastUsed = 0; // seconds since the epoch
 };
 
+// Stages cleared and songs beaten, on any difficulty.
+struct VoyageProgress {
+    int cleared = 0, beaten = 0, songs = 0;
+    int percent() const { return songs > 0 ? (beaten * 100 + songs / 2) / songs : 0; }
+};
+
 class VoyageStore {
 public:
     static constexpr int MAX_SONGS = 60, STAGE_SONGS = 4;
@@ -36,8 +42,8 @@ public:
                        uint64_t seed, std::string* err);
     void remove(const std::string& id); // with its files
     void used(const std::string& id);   // now its last use (it moves first)
-    // Stages cleared on any difficulty (read from its progress file); "" the main campaign's.
-    int cleared(const std::string& id) const;
+    // How far a voyage went (read from its progress file); "" the main campaign.
+    VoyageProgress progress(const std::string& id) const;
 
 private:
     std::vector<CustomVoyage> list_;

@@ -58,6 +58,8 @@ public:
     void inkExtent(Font f, const std::string& s, float size, float tracking, float& left, float& right);
     float capHeight(Font f, float size);
     void setAdditive(bool on);
+    // An opacity on everything drawn from now on (1: as given), e.g. a scrolled list fading at its edges.
+    void setFade(float f) { fade_ = f; }
 
 private:
     struct V { float x, y, lx, ly, hx, hy, r, g, b, a, rad, soft, lw, mode; };
@@ -67,6 +69,7 @@ private:
     GLuint prog_ = 0, kalProg_ = 0, vao_ = 0, vbo_ = 0, curTex_ = 0;
     int w_ = 1, h_ = 1;
     bool additive_ = false;
+    float fade_ = 1.f;
     struct FontData {
         bool tried = false, ok = false;
         GLuint tex = 0;
