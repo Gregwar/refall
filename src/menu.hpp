@@ -51,11 +51,13 @@ public:
     Screen screen() const { return screen_; }
     // The debrief at the end of a run: the REFALL logo (as white contours after a game over; turning from its contours
     // into its colours for a stage cleared), the heading, the score and lines, a small line of details (the stage, the
-    // song, the difficulty) and an optional note; a key (after a moment) goes on to the Voyage's screen.
+    // song, the difficulty) and an optional note; a key (after a moment) goes on to the Voyage's screen. With a `retry`
+    // (a game over), it offers RETRY (that run again) or MENU (the Voyage's screen) instead.
     struct Debrief {
         bool clear = false;
         std::string heading, detail, note;
         int score = 0, lines = 0;
+        Choice retry;
     };
     void openDebrief(const Debrief& d);
     // The frame on screen (the bound framebuffer's back buffer) kept as the next debrief's backdrop, frozen and darkened.
@@ -118,7 +120,9 @@ private:
     GLuint backdrop_ = 0, logoColor_ = 0, logoLines_ = 0;
     int backW_ = 0, backH_ = 0;
     void loadLogo();
-    bool updateDebrief(const Input& in, float dt); // true while it shows
+    int debSel_ = 0;                               // the game over's choice: 0 RETRY, 1 MENU
+    bool debRetry_ = false;                        // RETRY chosen: the debrief fades out, then the run starts again
+    bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
     void drawDebrief(int w, int h);
     void drawEnterFade();
     friend struct Worlds; // the kaleidoscope (menuwin.cpp), with live universes

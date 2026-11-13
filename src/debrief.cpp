@@ -104,6 +104,8 @@ void Menu::openDebrief(const Debrief& d) {
     debrief_ = d;
     debT_ = 0;
     leaveT_ = -1;
+    debSel_ = 0;
+    debRetry_ = false;
     msgT_ = 0;
     msg_.clear();
     loadLogo();
@@ -130,15 +132,31 @@ void Menu::dropBackdrop() {
     backdrop_ = 0;
 }
 
-bool Menu::updateDebrief(const Input& in, float dt) {
+bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
     if (screen_ != DEBRIEF) return false;
     debT_ += dt;
+    const bool choice = debrief_.retry.kind != Choice::NONE;
     if (leaveT_ < 0) {
-        bool key = false;
-        for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE, A_UI_OK, A_UI_BACK})
-            key |= in.pressed(a);
-        if (key && debT_ > INPUT_AFTER) leaveT_ = 0;
-    } else if ((leaveT_ += dt) >= LEAVE) { // on to the Voyage's screen, on the black, fading in
+        if (choice) { // RETRY or MENU
+            if (debT_ > INPUT_AFTER) {
+                const int d = in.repeatSteps(A_UI_RIGHT) + in.repeatSteps(A_UI_DOWN) - in.repeatSteps(A_UI_LEFT) - in.repeatSteps(A_UI_UP);
+                if (d) { debSel_ = std::clamp(debSel_ + d, 0, 1); lastInput_ = time_; }
+                if (in.pressed(A_UI_OK) || in.pressed(A_UI_ENTER)) { leaveT_ = 0; debRetry_ = debSel_ == 0; }
+                else if (in.pressed(A_UI_BACK)) { leaveT_ = 0; debRetry_ = false; }
+            }
+        } else {
+            bool key = false;
+            for (Action a : {A_LEFT, A_RIGHT, A_SOFT, A_HARD, A_CW, A_CCW, A_HOLD, A_PAUSE, A_UI_OK, A_UI_BACK})
+                key |= in.pressed(a);
+            if (key && debT_ > INPUT_AFTER) leaveT_ = 0;
+        }
+    } else if ((leaveT_ += dt) >= LEAVE && debRetry_) { // the run again
+        out = debrief_.retry;
+        screen_ = CAMPAIGN;
+        leaveT_ = -1;
+        debRetry_ = false;
+        dropBackdrop();
+    } else if (leaveT_ >= LEAVE) { // on to the Voyage's screen, on the black, fading in
         screen_ = CAMPAIGN;
         leaveT_ = -1;
         enterT_ = 0;
@@ -193,4 +211,22 @@ void Menu::drawDebrief(int w, int h) {
     p.text(F::JOSEFIN, debrief_.detail, cx, Y(950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
     if (!debrief_.note.empty())
         p.text(F::JOSEFIN, debrief_.note, cx, Y(990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
+    if (debrief_.retry.kind != Choice::NONE) { // RETRY or MENU, the chosen one underlined between two glows
+        static const char* ITEMS[2] = {"RETRY", "MENU"};
+        const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, sp = 170 * u, y = Y(1018), size = 26 * u;
+        for (int i = 0; i < 2; i++) {
+            const float x = cx + (i - 0.5f) * 2.f * sp;
+            const bool on = i == debSel_;
+            p.text(F::JOSEFIN, ITEMS[i], x, y, size, withA(ink, (on ? 1.f : 0.45f) * a4), 0, 0.35f);
+            if (!on) continue;
+            float l, r;
+            p.inkExtent(F::JOSEFIN, ITEMS[i], size, 0.35f, l, r);
+            const float x0 = x - p.width(F::JOSEFIN, ITEMS[i], size, 0.35f) * 0.5f, yc = y - p.capHeight(F::JOSEFIN, size) * 0.5f;
+            p.line(x0 + l, y + 12 * u, x0 + r, y + 12 * u, 1.6f * u, withA(ink, 0.9f * a4));
+            p.setAdditive(true);
+            p.glow(x0 + l - 24 * u, yc, 20 * u, withA(ink, 0.8f * a4));
+            p.glow(x0 + r + 24 * u, yc, 20 * u, withA(ink, 0.8f * a4));
+            p.setAdditive(false);
+        }
+    }
 }
