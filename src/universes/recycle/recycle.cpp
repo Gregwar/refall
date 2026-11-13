@@ -21,7 +21,6 @@
 #include "universes/recycle/recycle.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -29,9 +28,6 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/recycle/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -107,18 +103,6 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
 constexpr float CUBE = 0.9f;      // a cube's side (cells are one unit: a fine gap between cubes)
 constexpr float HOVER = 0.35f;    // the falling piece's height above the tray
 constexpr float PERSP = 85.f;     // the camera's height (board units): the parallax of cubes above the table
@@ -144,7 +128,6 @@ bool RecycleUniverse::init(int width, int height) {
     progShadow_ = ugl::program(shaders::INST_VS, shaders::SHADOW_FS, "recycle shadow");
     progCube_ = ugl::program(shaders::INST_VS, shaders::CUBE_FS, "recycle cube");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "recycle shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "recycle text");
     progPost_ = ugl::program(ugl::FULLSCREEN_VS, shaders::POST_FS, "recycle post");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -171,65 +154,11 @@ bool RecycleUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(fontLight_, FONT_LIGHT);
-    buildFont(fontMedium_, FONT_MEDIUM);
     pal_ = basePal_ = paletteOf(0);
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void RecycleUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] recycle font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void RecycleUniverse::resize(int width, int height) {
@@ -250,13 +179,9 @@ void RecycleUniverse::resize(int width, int height) {
 RecycleUniverse::~RecycleUniverse() {
     sceneT_.destroy();
     shadowT_.destroy();
-    for (GLuint p : {progTable_, progShadow_, progCube_, progShape_, progText_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {instVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, instVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&fontLight_, &fontMedium_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progTable_, progShadow_, progCube_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {instVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, instVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1201,174 +1126,83 @@ void RecycleUniverse::drawInst(GLuint prog, const std::vector<Inst>& v) {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float RecycleUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The HUD's plates (its lettering: hudLine, the host's).
+void RecycleUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.table;
+        const float a = std::min(1.f, r.alpha);
+        const float q[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                               {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+        for (auto& p : q) v.insert(v.end(), p, p + 6);
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
 }
 
-void RecycleUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                                std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void RecycleUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in RECYCLE's lettering: Outfit, light and generous for names and numbers, small spaced capitals for
-// labels, like the labels on a designer's storage boxes.
-void RecycleUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD in RECYCLE's lettering, by the host (text.hpp): Outfit, light and generous for names and numbers, small
+// spaced capitals for labels, like the labels on a designer's storage boxes; plain ink on the table. (The palette is
+// linear: the lettering, over the post now, takes it to sRGB.)
+void RecycleUniverse::hudLine(const HudText& h, text::Line& out) {
+    // the capitals' height of each weight, of its size
+    constexpr float CAP_LIGHT = 0.546f, CAP_MEDIUM = 0.556f;
+    text::Font* light = text::font(FONT_LIGHT);
+    text::Font* medium = text::font(FONT_MEDIUM);
     const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.table;
-            const float a = std::min(1.f, r.alpha);
-            const float q[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
-                                   {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
-            for (auto& p : q) v.insert(v.end(), p, p + 6);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    const vec3 ink = ugl::toSrgb(lerp(pal_.ink, bridge_.ink, b)), accent = ugl::toSrgb(lerp(pal_.accent, bridge_.ink, b));
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.2f, vsz = base * 0.6f, gap = base * 0.7f, a = saturate(0.35f + h.alpha * 1.6f);
+        out.add(text::titleCase(name), light, sz, ink, 0.02f, a);
+        out.dy = -base * 0.1f;
+        if (!var.empty()) {
+            out.add("", light, sz, ink, gap / sz - 0.02f); // the gap (the name's own spacing counts in it)
+            // the variant in small spaced capitals, its cap line a third of the base under the name's
+            out.add(var, medium, vsz, ink, 0.34f, a * 0.75f).dy = base * 0.22f + CAP_MEDIUM * vsz - (-base * 0.1f + CAP_LIGHT * sz);
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+        break;
     }
-    const vec3 ink = pal_.ink, accent = pal_.accent;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.2f, vsz = base * 0.6f, vtr = vsz * 0.34f;
-            const float wName = textWidth(fontLight_, name, sz, sz * 0.02f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontMedium_, var, vsz, vtr);
-            const float gap = base * 0.7f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontLight_, name, x, h.y - base * 0.1f, sz, sz * 0.02f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontLight_, q, ink, a);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontMedium_, var, x + wName + gap, h.y + base * 0.22f, vsz, vtr, q);
-                drawText(fontMedium_, q, ink, a * 0.75f);
-            }
-            continue;
-        }
-        case HUD_SECTION:
-            place(fontMedium_, h.text, base * 0.9f, base * 0.42f);
-            drawText(fontMedium_, q, ink, saturate(0.2f + h.alpha * 1.9f));
-            continue;
-        case HUD_TITLE:
-            place(fontLight_, h.text, base * 1.15f, 0.f, -base * 0.1f);
-            drawText(fontLight_, q, ink, saturate(h.alpha * 1.3f));
-            continue;
-        case HUD_INFO:
-            place(fontMedium_, h.text, base * 0.68f, base * 0.16f);
-            drawText(fontMedium_, q, ink, saturate(alpha * 1.2f) * 0.7f);
-            continue;
-        case HUD_LABEL:
-            place(fontMedium_, h.text, base * 0.66f, base * 0.4f);
-            drawText(fontMedium_, q, ink, saturate(alpha * 1.2f) * 0.62f);
-            continue;
-        case HUD_VALUE:
-            place(fontLight_, h.text, base * 1.12f, base * 0.04f);
-            drawText(fontLight_, q, ink, alpha);
-            continue;
-        case HUD_NOTICE:
-            place(fontLight_, h.text, base * 1.1f, 0.f);
-            drawText(fontLight_, q, accent, alpha);
-            continue;
-        case HUD_KEY:
-            place(fontMedium_, h.text, base * 0.8f, base * 0.1f);
-            drawText(fontMedium_, q, ink, alpha);
-            continue;
-        case HUD_TOAST:
-            place(fontMedium_, h.text, base * 1.25f, base * 0.5f, -base * 0.15f);
-            drawText(fontMedium_, q, ink, alpha);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontLight_, h.text, base * 0.95f, 0.f);
-            drawText(fontLight_, q, accent, alpha * 0.9f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontLight_, h.text, base * 1.25f, 0.f, -base * 0.1f);
-                drawText(fontLight_, q, ink, alpha);
-            } else {
-                place(fontMedium_, h.text, base * 0.82f, base * 0.1f);
-                drawText(fontMedium_, q, h.accent ? accent : ink, alpha);
-            }
-            continue;
-        default:
-            place(fontMedium_, h.text, base * 0.78f, base * 0.06f);
-            drawText(fontMedium_, q, h.accent ? accent : ink, alpha);
-            continue;
-        }
+    case HUD_SECTION: put(medium, h.text, base * 0.9f, base * 0.42f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(light, h.text, base * 1.15f, 0.f, ink, h.alpha * 1.3f, -base * 0.1f); break;
+    case HUD_INFO: put(medium, h.text, base * 0.68f, base * 0.16f, ink, saturate(alpha * 1.2f) * 0.7f); break;
+    case HUD_LABEL: put(medium, h.text, base * 0.66f, base * 0.4f, ink, saturate(alpha * 1.2f) * 0.62f); break;
+    case HUD_VALUE: put(light, h.text, base * 1.12f, base * 0.04f, ink, alpha); break;
+    case HUD_NOTICE: put(light, h.text, base * 1.1f, 0.f, accent, alpha); break;
+    case HUD_KEY: put(medium, h.text, base * 0.8f, base * 0.1f, ink, alpha); break;
+    case HUD_TOAST: put(medium, h.text, base * 1.25f, base * 0.5f, ink, alpha, -base * 0.15f); break;
+    case HUD_TOAST_SUB: put(light, h.text, base * 0.95f, 0.f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(light, h.text, base * 1.25f, 0.f, ink, alpha, -base * 0.1f);
+        else put(medium, h.text, base * 0.82f, base * 0.1f, h.accent ? accent : ink, alpha);
+        break;
+    default: put(medium, h.text, base * 0.78f, base * 0.06f, h.accent ? accent : ink, alpha); break;
     }
+    // a line fading in or out as it did, blended in linear light over the table (its translucent ink lighter on a
+    // light table, brighter on a dark one); light letters on the dark a touch bolder for the same reason
+    const float li = ugl::luma(pal_.ink), lt = ugl::luma(pal_.table);
+    const float si = std::pow(li, 1.f / 2.2f), st = std::pow(lt, 1.f / 2.2f);
+    if (std::fabs(si - st) > 0.05f)
+        for (text::Span& sp : out.spans) sp.alpha = saturate((std::pow(lerpf(lt, li, sp.alpha), 1.f / 2.2f) - st) / (si - st));
+    out.look.weight = li > lt ? 0.008f : 0.f;
+    // the post's dim and fade in, which the lettering was under
+    out.alpha = (1.f - dimT_ * 0.5f) * fade_;
 }
 
 // =====================================================================================================
@@ -1557,7 +1391,8 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progCube_, "uBridgeInk", bridge_.ink);
     drawInst(progCube_, flat_);
     drawInst(progCube_, cubes_);
-    drawHud(f.hud, f.bare ? std::vector<HudRect>{} : f.panels);
+    drawHud(f.bare ? std::vector<HudRect>{} : f.panels);
+    fade_ = saturate(f.fade);
     glDisable(GL_BLEND);
 
     // ---- Post.
