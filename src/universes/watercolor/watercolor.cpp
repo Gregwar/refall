@@ -104,13 +104,8 @@ const VariantDef VARIANTS[] = {
     {"AUTUMN EARTH", 0xf5ecdc, 0x3c2a1e, 0x9fb2c2, 0xeecc96, 0xe6a43e, 0xa6988a, 0xa8602e, 0x9a7a30, 0x9a3e22, 0xcc5626,
      {0x5a8090, 0xd8a030, 0x7a3a4a, 0x6a7a2a, 0xb83a20, 0x3a3a50, 0xd06a20},
      -4.5f, 15.5f, -15.5f, -1.2f, 1.5f, 0.35f, 0.75f, 2.8f, 0.3f, 2.0f, 0.4f, 0.f, 2.f, 0.45f, 0.6f, 0.f},
-    // Indigo night on toned paper: indigo washes, the moon in white gouache, gouache pieces.
-    {"INDIGO NIGHT", 0x767c90, 0x1c2038, 0x2c3a72, 0x6a6c8c, 0xf2eee2, 0x3a4468, 0x232a46, 0x2c3860, 0x1c2238, 0x9ab0e0,
-     {0x38b4e8, 0xffc828, 0xa060f0, 0x3cd08a, 0xff5050, 0x5878ff, 0xff8a28},
-     -4.4f, 16.5f, 14.5f, 5.0f, 1.0f, 1.0f, 0.f, 3.0f, 0.5f, 1.8f, 0.4f, 1.f, 1.f, 0.4f, 0.6f, 0.5f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
-constexpr int INDIGO = 7;
 
 using Palette = WatercolorUniverse::Palette;
 static_assert(sizeof(Palette) % sizeof(float) == 0, "a palette is floats only");
@@ -323,7 +318,7 @@ WatercolorUniverse::~WatercolorUniverse() {
 // Song, level, bonus
 // =====================================================================================================
 
-// The painting from the song: dark minor songs paint the night (or the storm when they are dynamic), bright
+// The painting from the song: dark minor songs paint the cold fjord (or the storm when they are dynamic), bright
 // major ones a sunny day; the key's hue picks among the rest.
 int WatercolorUniverse::pickVariant(const SongLook& t) const {
     float h = std::fmod(t.hue / TAU, 1.f);
@@ -331,7 +326,7 @@ int WatercolorUniverse::pickVariant(const SongLook& t) const {
     const bool night = t.hasSong && t.minor && t.brightness < 0.42f;
     const bool bright = t.hasSong && !t.minor && t.brightness > 0.55f;
     int v;
-    if (night) v = t.dynamics > 0.6f ? 4 : (h < 0.5f ? INDIGO : 1);
+    if (night) v = t.dynamics > 0.6f ? 4 : 1;
     else if (bright) v = h < 0.33f ? 0 : (h < 0.66f ? 2 : 5);
     else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
     if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
