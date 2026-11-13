@@ -46,6 +46,17 @@ const unsigned char FONT_LIGHT[] = {
 #include "universes/architect/JosefinSans-Light.ttf.inc"
 };
 
+// The HUD's lettering: the ink over its halo, never the halo through the ink (a fading line stays its own ink, not
+// a paler one), the halo easing out from the letters.
+const text::Lettering HALO_LETTERING{R"(
+vec4 letter(Letter L) {
+    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
+    float halo = smoothstep(0.0, 1.0, 1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3)) * uHalo.a;
+    float a = max(fill, halo);
+    return vec4(mix(uHalo.rgb, L.ink.rgb, fill / max(a, 1e-3)), 1.0) * a * L.ink.a;
+}
+)"};
+
 namespace shaders = architect_shaders;
 namespace as = arch_site;
 using as::Q;
@@ -1408,7 +1419,7 @@ void ArchitectUniverse::hudLine(const HudText& h, text::Line& out) {
             out.add("", reg, base * 0.7f, ink, 0.08f / 0.7f); // (a gap of 0.3 base after the name in all)
             text::Span& st = out.add(std::string("  ") + stageName(), light, base * 0.74f, accent, 0.06f / 0.74f,
                                      saturate(0.3f + h.alpha * 1.5f) * 0.95f);
-            st.dy = base * 0.03f;
+            st.dy = base * 0.02f;
         }
         break;
     case HUD_SECTION: put(reg, text::upper(h.text), base * 0.86f, base * 0.2f, accent, 0.25f + h.alpha * 1.7f); break;
@@ -1429,6 +1440,7 @@ void ArchitectUniverse::hudLine(const HudText& h, text::Line& out) {
     out.look.halo = halo;
     out.look.haloA = 0.75f;
     out.look.haloW = 0.08f;
+    out.lettering = &HALO_LETTERING;
     out.alpha = 1.f - smoothstepf(0.4f, 0.9f, bridge_.amount);
 }
 
