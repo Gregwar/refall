@@ -1125,8 +1125,10 @@ void TerrariumUniverse::hudLine(const HudText& h, text::Line& out) {
             space(gap);
             out.add(var, ital, vsz, accent, 0.f, a * 0.92f).dy = vdy;
         }
-        space(gap * 1.4f);
-        out.add(todName_, ital, vsz, ink, 0.f, a * 0.7f).dy = vdy;
+        if (!todName_.empty()) {
+            space(gap * 1.4f);
+            out.add(todName_, ital, vsz, ink, 0.f, a * 0.7f).dy = vdy;
+        }
         break;
     }
     case HUD_SECTION: put(caps, h.text, base * 0.9f, base * 0.45f, ink, 0.2f + h.alpha * 1.9f); break;
