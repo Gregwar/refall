@@ -377,6 +377,10 @@ void Renderer::renderBreak(const Frame& f) {
                 lines.back().alpha = a;
             }
         }
+        // the lines go dark with the frame they letter (as they did inside it), a dialog (the pause menu) aside
+        const float lit = 1.f - saturate(brk_.black);
+        for (HudText& h : lines)
+            if (h.role != HUD_DIALOG) h.alpha *= lit;
         letter(*cur_.u, lines, 1.f, f.time, saturate(brk_.black));
         if (card) letterCard(*cur_.u, f.time);
         if (brk_.card[0].alpha > 0.f || brk_.card[1].alpha > 0.f)
