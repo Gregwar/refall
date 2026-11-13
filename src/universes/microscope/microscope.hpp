@@ -85,7 +85,13 @@ private:
         vec2 at{0, 0};          // the cell's place
         float a = 0.f, age = 0.f, ly = 0.f, pan = 0.f;
         bool leaving = false, lost = false, placed = false;
+        int follow = -1;        // or the crawler it follows out of the screen (its id)
     };
+    // The organisms a cleared row frees: tiny, they crawl out of the well and off the screen by the nearer side.
+    struct Crawler { Org o; vec2 dest{0, 0}; float age = 0.f, speed = 1.8f; int id = 0; };
+    std::vector<Crawler> crawlers_;
+    int crawlerIds_ = 0;
+    const Crawler* crawler(int id) const;
     Lens lenses_[2];
     float lensR_ = 4.f;
     vec2 lensCenter(int side) const;

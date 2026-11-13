@@ -583,6 +583,29 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         // the organisms living in the cleared cells swim out (a row with none frees nothing: only the life shown in
         // the cells is ever released; a quad, a big one among them; SPECIMEN has no dish)
+        // (SPECIMEN: they crawl out of the screen, the loupe of their side following one)
+        if (organic_ > 0.5f)
+            for (auto& c : ev.cells) {
+                if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+                if (!has_[c.y][c.x] || look_[c.y][c.x].life < 0) continue;
+                const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+                Crawler cr;
+                cr.o = dweller(look_[c.y][c.x], p.x, p.y, c.type);
+                const float sx = p.x < 0.f ? -1.f : 1.f;
+                cr.dest = vec2{sx * (viewH_.x + 3.f), std::clamp(p.y + rng_.range(-1.f, 3.f), viewC_.y - viewH_.y + 2.f, viewC_.y + viewH_.y - 2.f)};
+                cr.o.ang = std::atan2(cr.dest.y - p.y, cr.dest.x - p.x);
+                cr.speed = (cr.o.kind == K_AMOEBA ? 2.2f : cr.o.kind == K_PARA ? 3.4f : 2.8f) * rng_.range(0.85f, 1.15f);
+                cr.id = ++crawlerIds_;
+                crawlers_.push_back(cr);
+                Lens& L = lenses_[sx < 0.f ? 0 : 1];
+                if (L.follow < 0 || !crawler(L.follow)) {
+                    L.follow = cr.id;
+                    L.x = -1;
+                    L.leaving = L.lost = false;
+                    L.a = std::min(L.a, 0.3f);
+                    L.at = vec2{p.x, p.y};
+                }
+            }
         for (size_t k = 0; k < rows.size() && organic_ < 0.5f; k++) {
             std::vector<const GameEvent::CellInfo*> row, lives;
             for (auto& c : ev.cells)
@@ -672,6 +695,12 @@ float MicroscopeUniverse::zoneDist(const vec2& p, vec2* grad) const {
 // =====================================================================================================
 
 // In the middle of the band beyond the HUD's column, at the height of its block (clear of the corners' text).
+const MicroscopeUniverse::Crawler* MicroscopeUniverse::crawler(int id) const {
+    for (const Crawler& c : crawlers_)
+        if (c.id == id) return &c;
+    return nullptr;
+}
+
 vec2 MicroscopeUniverse::lensCenter(int side) const {
     const float sx = side == 0 ? -1.f : 1.f;
     return vec2{sx * (11.9f + viewH_.x) * 0.5f, lenses_[side].ly};
@@ -683,6 +712,20 @@ void MicroscopeUniverse::updateLenses(const Game& g, float dt, float wdt) {
     const bool can = organic_ > 0.5f && overT_ < 0.f && !g.over();
     for (int s = 0; s < 2; s++) {
         Lens& L = lenses_[s];
+        if (L.follow >= 0) {
+            // following an organism out: on it as it crawls, until it has left the screen
+            const Crawler* c = crawler(L.follow);
+            if (c && !L.leaving) {
+                L.at = c->o.p;
+                L.a = std::min(1.f, L.a + dt / 0.5f);
+            } else {
+                L.leaving = true;
+                L.a = std::max(0.f, L.a - dt / 0.7f);
+                if (L.a <= 0.f) { L.follow = -1; L.leaving = false; }
+            }
+            L.ly += (std::clamp(L.at.y, ylo, std::max(ylo, yhi)) - L.ly) * (1.f - std::exp(-dt * 1.2f));
+            continue;
+        }
         const bool valid = L.x >= 0 && !L.lost && L.y >= 0 && L.y < Game::H && g.cell(L.x, L.y).type >= 0;
         if (valid) {
             const vec3 p = layout::cellPos((float)L.x, L.y - g.rowOffset(L.y));
@@ -1171,6 +1214,18 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
     }
     specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
     if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
+    // SPECIMEN's crawlers: toward their way out, wandering a little, in a crawling pulse
+    for (Crawler& c : crawlers_) {
+        c.age += wdt;
+        const float want = std::atan2(c.dest.y - c.o.p.y, c.dest.x - c.o.p.x) + 0.45f * std::sin(c.age * 1.1f + c.o.seed * 20.f);
+        c.o.ang += wrapAngle(want - c.o.ang) * (1.f - std::exp(-wdt * 2.f));
+        const float sp = c.speed * smoothstepf(0.f, 0.8f, c.age) * (0.75f + 0.35f * std::sin(c.age * 5.f + c.o.seed * 9.f));
+        c.o.p.x += std::cos(c.o.ang) * sp * wdt;
+        c.o.p.y += std::sin(c.o.ang) * sp * wdt;
+    }
+    crawlers_.erase(std::remove_if(crawlers_.begin(), crawlers_.end(), [&](const Crawler& c) {
+        return std::fabs(c.o.p.x - viewC_.x) > viewH_.x + 1.5f || std::fabs(c.o.p.y - viewC_.y) > viewH_.y + 1.5f || c.age > 40.f;
+    }), crawlers_.end());
     if (!bare_) updateLenses(game, dt, wdt);
 
     // ---- Instances.
@@ -1241,6 +1296,15 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
     }
+    // SPECIMEN's crawlers on the bench: tiny, glowing in their cell's dye
+    if (!bare_)
+        for (const Crawler& c : crawlers_) {
+            const Org& o = c.o;
+            const float a = smoothstepf(0.1f, 0.5f, c.age) * (1.f - bridgeK);
+            const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
+            const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 1.2f) + o.seed * 100.f;
+            dwellInst.push_back({{o.p.x, o.p.y, 0.6f, ang}, {(float)o.kind, o.seed, anim, a}, {0.f, 0.8f, 0.75f, (float)o.type}, {o.spin, 1.f, 0.f, 0.f}});
+        }
     std::vector<Inst> speckInst;
     for (const Speck& k : specks_) {
         if (bare_) break; // (pushed out from under a dropped piece)
@@ -1261,11 +1325,12 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             const float a = smoothstepf(0.f, 1.f, L.a) * (1.f - bridgeK);
             if (a <= 0.003f) continue;
             const vec2 c = lensCenter(s);
+            const Crawler* cr = L.follow >= 0 ? crawler(L.follow) : nullptr;
             vec2 d{L.at.x - c.x, L.at.y - c.y};
             const float dl = std::max(1e-3f, std::sqrt(d.x * d.x + d.y * d.y));
             d = vec2{d.x / dl, d.y / dl};
             leadInst.push_back({{c.x + d.x * lensR_ * 1.04f, c.y + d.y * lensR_ * 1.04f, L.at.x, L.at.y}, {aaW * 1.1f, 0.5f * a, 0.f, 0.f}, {}, {}});
-            const float h = 0.6f, arm = 0.2f;
+            const float h = cr ? 0.42f : 0.6f, arm = cr ? 0.14f : 0.2f;
             for (int k = 0; k < 4; k++) {
                 const float sx = k % 2 ? 1.f : -1.f, sy = k / 2 ? 1.f : -1.f;
                 const vec2 q{L.at.x + sx * h, L.at.y + sy * h};
@@ -1273,7 +1338,18 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
                 bracketInst.push_back({{q.x, q.y, q.x, q.y - sy * arm}, {aaW * 1.4f, 0.85f * a, 0.f, 0.f}, {}, {}});
             }
             const bool live = L.l.life >= 0;
-            lensInst.push_back({{c.x, c.y, lensR_, 0.f}, {(float)L.type, L.l.seed, a, live ? 1.f : 0.f}, {L.pan, L.pan * 0.6f, 0.f, 0.f}, {}});
+            if (cr) {
+                // the organism crawling out, over the bare bench sliding by under it
+                lensInst.push_back({{c.x, c.y, lensR_, 0.f}, {(float)cr->o.type, cr->o.seed, a, 0.f}, {cr->o.p.x * 1.5f, cr->o.p.y * 1.5f, 0.f, 0.f}, {}});
+                rimInst.push_back({{c.x, c.y, lensR_, 1.f}, {(float)cr->o.type, cr->o.seed, a, 0.f}, {}, {}});
+                const Org& o = cr->o;
+                const float ang = o.kind == K_CENTRIC || o.kind == K_VOLVOX ? 0.f : o.ang;
+                const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
+                lensOrgInst.push_back({{c.x, c.y, lensR_ * 0.95f, ang}, {(float)o.kind, o.seed, anim, a},
+                                       {0.f, 0.5f + 0.3f * wm + 0.9f * pulse, 0.45f, (float)o.type}, {o.spin, 0.f, 0.f, 0.f}});
+                continue;
+            }
+            lensInst.push_back({{c.x, c.y, lensR_, 0.f}, {(float)L.type, L.l.seed, a, live ? 1.f : 0.f}, {L.pan, L.pan * 0.6f, 1.f, 0.f}, {}});
             rimInst.push_back({{c.x, c.y, lensR_, 1.f}, {(float)L.type, L.l.seed, a, 0.f}, {}, {}});
             if (live) {
                 const Org o = dweller(L.l, c.x, c.y, L.type);

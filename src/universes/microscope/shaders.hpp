@@ -501,7 +501,8 @@ void main() {
 
 // ---------------------------------------------------------------- SPECIMEN's loupes (instanced)
 // a: x, y, radius, mode (0 the view with its bezel and shadow, 1 the bezel alone, over the organism). b: piece type,
-// seed, alpha, a pool (the cell's organism lives in it). c: pan x, y (the slide drifting under the loupe), -, -.
+// seed, alpha, a pool (the cell's organism lives in it). c: pan x, y (the slide drifting under the loupe), the tissue
+// (1; 0 the bare bench, an organism crawling over it), -.
 inline const char* LENS_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -588,6 +589,18 @@ void main() {
         t = mix(t, mix(field, c, 0.1), pool);
         t = mix(t, c * 0.42, live * (1.0 - smoothstep(0.0, px * 1.5, abs(pr) - 0.014)));
         t = mix(t, mix(field, c, 0.4), live * exp(-max(-pr, 0.0) / 0.05) * step(pr, 0.0) * 0.5);
+        // the bare bench (an organism crawling out over it): a wet film, fine debris passing by
+        if (vC.z < 0.5) {
+            vec2 bq = p * 2.6 + vC.xy;
+            vec3 bt = mix(field, c, 0.1 + 0.08 * fbm(bq * 0.5)) * (0.9 + 0.1 * fbm(bq * 0.7));
+            vec2 mq = bq * 1.6, mc = floor(mq), mf = fract(mq);
+            float hm = hash12(mc + seed * 13.0);
+            vec2 mo = vec2(hash12(mc * 1.3 + 2.0), hash12(mc * 2.1 + 5.0)) * 0.6 + 0.2;
+            float mote = step(0.62, hm) * (1.0 - smoothstep(0.0, px * 1.7, length(mf - mo) - 0.03 - 0.06 * fract(hm * 9.0)));
+            float ring = step(0.62, hm) * (1.0 - smoothstep(0.0, px * 1.5, abs(length(mf - mo) - 0.03 - 0.06 * fract(hm * 9.0)) - 0.006));
+            t = mix(bt, mix(field, c, 0.35), mote * 0.5);
+            t = mix(t, c * 0.45, ring * 0.6);
+        }
         // the loupe's edge: a darker vignette and a faint fringe
         t *= mix(1.0, 0.7, smoothstep(0.55, R0, r));
         t += vec3(0.25, 0.35, 0.7) * exp(-abs(r - R0 + 0.03) / 0.02) * 0.06;
