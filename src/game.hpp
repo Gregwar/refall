@@ -93,14 +93,17 @@ public:
     int score() const { return score_; }
     int lastScore() const { return score_; } // final score while the game is over
     int lines() const { return lines_; }
-    // Level: 1 + one per 20 lines, up to MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at PLATEAU_LEVEL and stays there
+    // Level: the starting one (1, or free play's choice) + one per 20 lines, up to MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at PLATEAU_LEVEL and stays there
     // (the lock delay stops shrinking); the fall's speed goes on past the plateau, see speedDifficulty().
     static constexpr int MAX_LEVEL = 50, PLATEAU_LEVEL = 20, LINES_PER_LEVEL = 20;
     // A fixed level (the campaign: each song's velocity is set by the campaign data, lines don't raise it) may be
     // fractional (e.g. 7.5); 0 goes back to levels rising with lines.
     int level() const {
-        return fixedLevel_ > 0.f ? std::clamp((int)(fixedLevel_ + 0.5f), 1, MAX_LEVEL) : std::min(MAX_LEVEL, 1 + lines_ / LINES_PER_LEVEL);
+        return fixedLevel_ > 0.f ? std::clamp((int)(fixedLevel_ + 0.5f), 1, MAX_LEVEL) : std::min(MAX_LEVEL, startLevel_ + lines_ / LINES_PER_LEVEL);
     }
+    // The level a game starts at (kept by reset(): a game over starts again from it).
+    void setStartLevel(int level) { startLevel_ = std::clamp(level, 1, MAX_LEVEL); }
+    int startLevel() const { return startLevel_; }
     // The velocity, as a level: the fixed one, or the level reached with the lines (the same scale: 1 .. MAX_VELOCITY).
     static constexpr float MAX_VELOCITY = float(MAX_LEVEL), TWENTY_G = 37.5f; // (20G: see the app's gravity)
     float velocity() const { return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY) : float(level()); }
@@ -178,6 +181,7 @@ private:
     bool bonusActive_ = false, lastWasQuad_ = false;
     float bonusLeft_ = 0;
     float fixedLevel_ = 0;
+    int startLevel_ = 1;
     void endBonus();
     std::vector<GameEvent> events_;
 };
