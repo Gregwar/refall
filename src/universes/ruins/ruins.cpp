@@ -15,7 +15,6 @@
 #include "universes/ruins/ruins.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -23,9 +22,6 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/ruins/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -126,7 +122,6 @@ bool RuinsUniverse::init(int width, int height) {
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "ruins veil");
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "ruins cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "ruins shape");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "ruins text");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "ruins post");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -157,18 +152,8 @@ bool RuinsUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(caps_, FONT_CAPS);
-    buildFont(ital_, FONT_ITAL);
     pal_ = paletteOf(0);
 
     // the butterflies: a few, each with its home beside the well
@@ -185,50 +170,6 @@ bool RuinsUniverse::init(int width, int height) {
     }
     resize(width, height);
     return glGetError() == GL_NO_ERROR;
-}
-
-void RuinsUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] ruins font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int rr = 0; rr < h; rr++) std::memcpy(&atlas[(y + rr) * AW + x], sdf + rr * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 void RuinsUniverse::resize(int width, int height) {
@@ -407,13 +348,9 @@ void RuinsUniverse::dustAt(const vec3& w, int n) {
 
 RuinsUniverse::~RuinsUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progText_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&caps_, &ital_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -688,194 +625,101 @@ void RuinsUniverse::drawSprites(const std::vector<SpriteInst>& list) {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float RuinsUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+void RuinsUniverse::drawHud(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<float> v;
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.veil;
+        const float a = std::min(1.f, r.alpha);
+        const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
+                                {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
+        for (auto& p : qd) v.insert(v.end(), p, p + 6);
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
 }
 
-void RuinsUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                              std::vector<float>& out) const {
-    if (!f.ok) return;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = f.capH * k;
-    float pen = 0.f;
-    auto place = [&](float u, float v, float tu, float tv) {
-        out.push_back(x + u); out.push_back(y + v); out.push_back(tu); out.push_back(tv);
-    };
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            place(x0, y0, g.x0, g.y0); place(x1, y0, g.x1, g.y0); place(x1, y1, g.x1, g.y1);
-            place(x0, y0, g.x0, g.y0); place(x1, y1, g.x1, g.y1); place(x0, y1, g.x0, g.y1);
-        }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
-    }
-}
-
-void RuinsUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, float halo) {
-    if (q.empty() || !f.ok || alpha <= 0.004f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
-    set3f(progText_, "uInk", lerp(ink, bridge_.ink, b));
-    set3f(progText_, "uHalo", lerp(pal_.veil * 0.7f, bridge_.color, b));
-    set1f(progText_, "uHaloA", halo);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD: Marcellus' carved capitals, widely spaced (like an inscription); the song, the variant and the notices
-// in Cormorant Garamond's italics. The universe's line ends with the hour of the light.
-void RuinsUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The lettering, by the host (text.hpp): Marcellus' carved capitals, widely spaced (like an inscription); the song,
+// the variant and the notices in Cormorant Garamond's italics, the universe's line ending with the hour of the light;
+// each line on a halo of the veil. The inks are the scene's (linear), toned as the post tones the scene: dimmed,
+// their highlights rolled off, to sRGB.
+void RuinsUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* caps = text::font(FONT_CAPS);
+    text::Font* ital = text::font(FONT_ITAL);
     const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<float> v;
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? pal_.accent : pal_.veil;
-            const float a = std::min(1.f, r.alpha);
-            const float qd[6][6] = {{r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a},
-                                    {r.x, r.y, c.x, c.y, c.z, a}, {r.x + r.w, r.y + r.h, c.x, c.y, c.z, a}, {r.x, r.y + r.h, c.x, c.y, c.z, a}};
-            for (auto& p : qd) v.insert(v.end(), p, p + 6);
+    const float b = smoothstepf(0.3f, 0.95f, bridge_.amount), dim = 1.f - dimT_ * 0.5f;
+    auto tone = [&](const vec3& lin) {
+        vec3 c = lin * dim;
+        for (float* v : {&c.x, &c.y, &c.z}) *v /= 1.f + std::max(*v - 0.7f, 0.f) * 0.85f;
+        return ugl::toSrgb(c);
+    };
+    auto inkOf = [&](const vec3& c) { return tone(lerp(c, bridge_.ink, b)); };
+    const vec3 ink = inkOf(pal_.ink), accent = inkOf(pal_.accent);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    float halo = 0.9f; // the halo's amount
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // the name in spaced capitals, then the variant and the hour of the light in italics, higher
+        const char* hour = slow_ > 0.5f ? "blue hour"
+                           : gold_ > 0.5f ? "golden hour"
+                           : linesEased_ < 12.f ? "overgrown"
+                           : prime_ > 0.5f ? "in its prime"
+                                           : "time rewinding";
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        size_t n = 1;
+        while (n < var.size() && ((unsigned char)var[n] & 0xC0) == 0x80) n++;
+        if (!var.empty()) var = var.substr(0, n) + text::lower(var.substr(n));
+        const float sz = base * 0.95f, tr = sz * 0.3f, vsz = base * 1.35f, gap = base * 0.7f;
+        const float a = saturate(0.35f + h.alpha * 1.6f);
+        // (each run was placed by its own cap line; a span's spacing stays after its last letter, the gaps take it
+        // back)
+        const float dy = -sz * 0.3f + text::capHeight(ital) * vsz - text::capHeight(caps) * sz;
+        put(caps, name, sz, tr, ink, a);
+        if (!var.empty()) {
+            text::Span& v = out.add(var, ital, vsz, accent, 0.f, a * 0.92f);
+            v.gap = (gap - tr) / vsz;
+            v.dy = dy;
         }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(v.size() / 6));
+        text::Span& w = out.add(hour, ital, vsz, ink, 0.f, a * 0.7f);
+        w.gap = (gap * 1.4f - (var.empty() ? tr : 0.f)) / vsz;
+        w.dy = dy;
+        break;
     }
-    const vec3 ink = pal_.ink, accent = pal_.accent;
-    std::vector<float> q;
-    const float halo = 0.9f;
-    const char* hour = slow_ > 0.5f ? "blue hour"
-                       : gold_ > 0.5f ? "golden hour"
-                       : linesEased_ < 12.f ? "overgrown"
-                       : prime_ > 0.5f ? "in its prime"
-                                       : "time rewinding";
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            const float sz = base * 0.95f, tr = sz * 0.3f;
-            const float wName = textWidth(caps_, name, sz, tr);
-            std::string vt = var;
-            for (size_t i = 1; i < vt.size(); i++) vt[i] = (char)std::tolower((unsigned char)vt[i]);
-            const float vsz = base * 1.35f;
-            const float wVar = vt.empty() ? 0.f : textWidth(ital_, vt, vsz, 0.f);
-            const float gap = base * 0.7f;
-            const float wW = textWidth(ital_, hour, vsz, 0.f);
-            const float total = wName + (vt.empty() ? 0.f : gap + wVar) + gap * 1.4f + wW;
-            const float x = ugl::hudLeft(h, total, width_);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            textQuads(caps_, name, x, h.y, sz, tr, q);
-            drawText(caps_, q, ink, a, halo);
-            float cx = x + wName;
-            if (!vt.empty()) {
-                q.clear();
-                textQuads(ital_, vt, cx + gap, h.y - sz * 0.3f, vsz, 0.f, q);
-                drawText(ital_, q, accent, a * 0.92f, halo);
-                cx += gap + wVar;
-            }
-            cx += gap * 1.4f;
-            q.clear();
-            textQuads(ital_, hour, cx, h.y - sz * 0.3f, vsz, 0.f, q);
-            drawText(ital_, q, ink, a * 0.7f, halo);
-            continue;
-        }
-        case HUD_SECTION:
-            place(caps_, h.text, base * 0.9f, base * 0.5f);
-            drawText(caps_, q, ink, saturate(0.2f + h.alpha * 1.9f), halo);
-            continue;
-        case HUD_TITLE:
-            place(ital_, h.text, base * 1.8f, base * 0.01f, -base * 0.4f);
-            drawText(ital_, q, ink, saturate(h.alpha * 1.3f), halo);
-            continue;
-        case HUD_INFO:
-            place(caps_, h.text, base * 0.66f, base * 0.16f);
-            drawText(caps_, q, ink, saturate(alpha * 1.3f) * 0.8f, halo);
-            continue;
-        case HUD_LABEL:
-            place(caps_, h.text, base * 0.82f, base * 0.45f);
-            drawText(caps_, q, lerp(ink, accent, 0.55f), saturate(alpha * 1.2f) * 0.95f, halo);
-            continue;
-        case HUD_VALUE:
-            place(caps_, h.text, base * 1.08f, base * 0.08f);
-            drawText(caps_, q, ink, alpha, halo);
-            continue;
-        case HUD_NOTICE:
-            place(ital_, h.text, base * 1.7f, base * 0.01f);
-            drawText(ital_, q, accent, alpha, halo);
-            continue;
-        case HUD_KEY:
-            place(caps_, h.text, base * 0.75f, base * 0.1f);
-            drawText(caps_, q, ink, alpha, halo);
-            continue;
-        case HUD_TOAST:
-            place(caps_, h.text, base * 1.3f, base * 0.5f, -base * 0.2f);
-            drawText(caps_, q, ink, alpha, 0.85f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(ital_, h.text, base * 1.5f, base * 0.01f);
-            drawText(ital_, q, accent, alpha * 0.9f, 0.85f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(caps_, h.text, base * 1.15f, base * 0.3f, -base * 0.1f);
-                drawText(caps_, q, ink, alpha, 0.85f);
-            } else {
-                place(caps_, h.text, base * 0.85f, base * 0.16f);
-                drawText(caps_, q, h.accent ? accent : ink, alpha, 0.85f);
-            }
-            continue;
-        default:
-            place(caps_, h.text, base * 0.85f, base * 0.14f);
-            drawText(caps_, q, h.accent ? accent : ink, alpha, halo);
-            continue;
-        }
+    case HUD_SECTION: put(caps, h.text, base * 0.9f, base * 0.5f, ink, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(ital, h.text, base * 1.8f, base * 0.01f, ink, h.alpha * 1.3f, -base * 0.4f); break;
+    case HUD_INFO: put(caps, h.text, base * 0.66f, base * 0.16f, ink, saturate(alpha * 1.3f) * 0.8f); break;
+    case HUD_LABEL: put(caps, h.text, base * 0.82f, base * 0.45f, inkOf(lerp(pal_.ink, pal_.accent, 0.55f)), saturate(alpha * 1.2f) * 0.95f); break;
+    case HUD_VALUE: put(caps, h.text, base * 1.08f, base * 0.08f, ink, alpha); break;
+    case HUD_NOTICE: put(ital, h.text, base * 1.7f, base * 0.01f, accent, alpha); break;
+    case HUD_KEY: put(caps, h.text, base * 0.75f, base * 0.1f, ink, alpha); break;
+    case HUD_TOAST: put(caps, h.text, base * 1.3f, base * 0.5f, ink, alpha, -base * 0.2f); halo = 0.85f; break;
+    case HUD_TOAST_SUB: put(ital, h.text, base * 1.5f, base * 0.01f, accent, alpha * 0.9f); halo = 0.85f; break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(caps, h.text, base * 1.15f, base * 0.3f, ink, alpha, -base * 0.1f);
+        else put(caps, h.text, base * 0.85f, base * 0.16f, h.accent ? accent : ink, alpha);
+        halo = 0.85f;
+        break;
+    default: put(caps, h.text, base * 0.85f, base * 0.14f, h.accent ? accent : ink, alpha); break;
     }
+    // the letters as the scene drew them, on a halo of the veil
+    text::Lettering& l = lettering_[halo < 0.88f ? 1 : 0];
+    l.glsl = shaders::LETTER_GLSL;
+    l.p0 = vec4(tone(lerp(pal_.veil * 0.7f, bridge_.color, b)), halo);
+    out.lettering = &l;
+    out.alpha = saturate(fade_);
 }
 
 // =====================================================================================================
@@ -1240,7 +1084,8 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
     }
     drawSprites(front_);
-    drawHud(f.hud, f.panels);
+    drawHud(f.panels);
+    fade_ = f.fade;
     glDisable(GL_BLEND);
     if (gpuQ) {
         glEndQuery(GL_TIME_ELAPSED);
