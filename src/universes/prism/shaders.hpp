@@ -245,16 +245,15 @@ void main() {
     // ambient: a faint body of tinted glass (light gathering low in it), the chamfers catching a dim key light,
     // a hairline at the silhouette: every cube readable in the dark, none of them shouting
     float keyGlint = pow(max(dot(n2, uKey), 0.0), 2.0);
-    // the glass's jewel color: its hue pushed to full saturation at the same luminance (emerald, sapphire, ruby...)
+    // the glass's jewel color, which the light brings out: its hue pushed to full saturation at the same luminance
     float tl = dot(tint, vec3(0.3, 0.5, 0.2));
-    vec3 deep = max(mix(vec3(tl), tint, 2.4), vec3(0.0));
+    vec3 deep = max(mix(vec3(tl), tint, 3.0), vec3(0.0));
     deep *= tl / max(dot(deep, vec3(0.3, 0.5, 0.2)), 1e-3);
     float bevT = smoothstep(-bw, 0.0, d); // across the chamfer: 0 at the face, 1 at the silhouette
-    // the body glows deep in its own color even unlit (a jewel, not grey glass on black)
-    vec3 col = deep * amb * (0.16 + 0.14 * smoothstep(0.45, -0.45, q.y)) * (1.0 - bev);
-    col += deep * amb * bev * (0.3 + 0.6 * keyGlint) * (0.6 + 0.4 * bevT);
+    vec3 col = tint * amb * (0.03 + 0.045 * smoothstep(0.45, -0.45, q.y)) * (1.0 - bev);
+    col += tint * amb * bev * (0.1 + 0.4 * keyGlint) * (0.6 + 0.4 * bevT);
     float rim = exp(-d * d / (px * px * 1.0));
-    col += deep * amb * rim * 0.7;
+    col += tint * amb * rim * 0.32;
     float ridge = exp(-(d + bw) * (d + bw) / (px * px * 1.2));
     col += mix(tint, vec3(1.0), 0.5) * amb * ridge * 0.1 * (0.3 + keyGlint);
     // a broad, faint reflection across the face (the glass reads as glass)
@@ -291,7 +290,8 @@ void main() {
     }
     col += vec3(1.0) * vA2.w * (0.3 + 0.7 * bev); // a lock's brief glint
     // premultiplied: the glass dims what is behind it a little (a tinted absorption), and adds its own light
-    float a = (0.4 + 0.2 * bev) * cov * alpha; // the glass hides most of the haze behind it: its own color reads
+    // a lit cube hides more of the haze behind it, so its jewel color reads
+    float a = (0.16 + 0.18 * bev + 0.3 * smoothstep(0.0, 0.25, litL)) * cov * alpha;
     col *= cov * alpha;
     vec3 plain = uBridgeInk * cov * alpha * (0.55 + 0.45 * rim);
     col = mix(col, plain, uBridge);

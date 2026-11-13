@@ -1076,7 +1076,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         light_b_ = lerp(light_b_, ugl::toLinear(hex(d.lightB)), k);
         text_ = lerp(text_, ugl::toLinear(hex(d.text)), k);
         accent_ = lerp(accent_, ugl::toLinear(hex(d.accent)), k);
-        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], vivid(ugl::toLinear(hex(d.tint[i])), 2.2f), k);
+        for (int i = 0; i < 7; i++) tint_[i] = lerp(tint_[i], vivid(ugl::toLinear(hex(d.tint[i])), 1.55f), k);
     }
     // the section, from the HUD (a drop is a rainbow, a chorus white light)
     sectionKnown_ = false;
