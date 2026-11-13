@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Refall</title>
+<style>
+  :root { --pad: rgba(255,255,255,0.13); --pad-on: rgba(255,255,255,0.38); --ink: rgba(255,255,255,0.75); }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none;
+               -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #start { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column;
+           gap: 14px; color: #fff; font: 600 22px/1.3 system-ui, sans-serif; letter-spacing: 0.3em; background: #000; }
+  #start small { font-weight: 400; font-size: 13px; letter-spacing: 0.08em; opacity: 0.6; }
+  #touch { position: fixed; inset: 0; pointer-events: none; }
+  #touch.hidden { display: none; }
+  .b { position: absolute; border-radius: 50%; background: var(--pad); color: var(--ink); pointer-events: auto;
+       display: flex; align-items: center; justify-content: center; font: 600 15px system-ui, sans-serif; }
+  .b.on { background: var(--pad-on); }
+  .d { width: 15vh; height: 15vh; border-radius: 22%; }
+  #b11 { left: calc(env(safe-area-inset-left) + 3vw + 15vh); bottom: calc(4vh + 30vh); }
+  #b13 { left: calc(env(safe-area-inset-left) + 3vw + 15vh); bottom: 4vh; }
+  #b14 { left: calc(env(safe-area-inset-left) + 3vw); bottom: calc(4vh + 15vh); }
+  #b12 { left: calc(env(safe-area-inset-left) + 3vw + 30vh); bottom: calc(4vh + 15vh); }
+  .f { width: 17vh; height: 17vh; }
+  #b0 { right: calc(env(safe-area-inset-right) + 3vw); bottom: calc(4vh + 13vh); }
+  #b1 { right: calc(env(safe-area-inset-right) + 3vw + 19vh); bottom: 4vh; }
+  #b4 { right: calc(env(safe-area-inset-right) + 3vw + 2vh); bottom: calc(4vh + 34vh); width: 12vh; height: 12vh; }
+  .s { width: 12vh; height: 7vh; border-radius: 4vh; top: 3vh; font-size: 12px; }
+  #b6 { left: calc(env(safe-area-inset-left) + 3vw); }
+  #b7 { right: calc(env(safe-area-inset-right) + 3vw); }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="touch">
+  <div class="b d" id="b11">▲</div><div class="b d" id="b13">▼</div>
+  <div class="b d" id="b14">◀</div><div class="b d" id="b12">▶</div>
+  <div class="b f" id="b0">A</div><div class="b f" id="b1">B</div><div class="b" id="b4">LB</div>
+  <div class="b s" id="b6">NEXT</div><div class="b s" id="b7">START</div>
+</div>
+<div id="start">REFALL<small id="msg">tap to play</small></div>
+<script>
+"use strict";
+const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+const start = document.getElementById("start"), msg = document.getElementById("msg"), touch = document.getElementById("touch");
+let ws = null, audio = null, node = null, started = false;
+
+function resize() {
+  const r = devicePixelRatio || 1;
+  canvas.width = Math.round(innerWidth * r);
+  canvas.height = Math.round(innerHeight * r);
+}
+addEventListener("resize", resize);
+resize();
+
+// The sound: a ring buffer in an AudioWorklet, played once ~80 ms are in, trimmed back when it runs over 250 ms.
+const WORKLET = `
+class Ring extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buf = new Float32Array(48000 * 2 * 2); this.r = 0; this.w = 0; this.n = 0; this.playing = false;
+    this.port.onmessage = (e) => {
+      const s = new Int16Array(e.data), L = this.buf.length;
+      for (let i = 0; i < s.length; i++) { this.buf[this.w] = s[i] / 32768; this.w = (this.w + 1) % L; }
+      this.n = Math.min(L, this.n + s.length);
+      const max = 0.25 * sampleRate * 2, keep = 0.1 * sampleRate * 2;
+      if (this.n > max) { const drop = (this.n - keep) & ~1; this.r = (this.r + drop) % L; this.n -= drop; }
+    };
+  }
+  process(_, outputs) {
+    const out = outputs[0], l = out[0], r = out[1] || out[0], L = this.buf.length;
+    if (!this.playing && this.n >= 0.08 * sampleRate * 2) this.playing = true;
+    for (let i = 0; i < l.length; i++) {
+      if (this.playing && this.n >= 2) {
+        l[i] = this.buf[this.r]; r[i] = this.buf[(this.r + 1) % L]; this.r = (this.r + 2) % L; this.n -= 2;
+      } else { l[i] = r[i] = 0; this.playing = false; }
+    }
+    return true;
+  }
+}
+registerProcessor("ring", Ring);`;
+
+async function startAudio() {
+  try {
+    audio = new AudioContext({ sampleRate: 48000, latencyHint: "interactive" });
+    const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
+    await audio.audioWorklet.addModule(url);
+    node = new AudioWorkletNode(audio, "ring", { outputChannelCount: [2] });
+    node.connect(audio.destination);
+    await audio.resume();
+  } catch (e) { console.warn("no sound:", e); node = null; }
+}
+
+function draw(bmp) {
+  const cw = canvas.width, ch = canvas.height, s = Math.min(cw / bmp.width, ch / bmp.height);
+  const w = bmp.width * s, h = bmp.height * s;
+  ctx.fillStyle = "#000";
+  if (w < cw || h < ch) ctx.fillRect(0, 0, cw, ch);
+  ctx.drawImage(bmp, (cw - w) / 2, (ch - h) / 2, w, h);
+}
+
+function connect() {
+  ws = new WebSocket(`wss://${location.host}/ws`);
+  ws.binaryType = "arraybuffer";
+  ws.onopen = () => {
+    const w = Math.max(screen.width, screen.height), h = Math.min(screen.width, screen.height);
+    ws.send(`hello ${w} ${h}`);
+    lastSent = "";
+  };
+  ws.onmessage = async (e) => {
+    if (typeof e.data === "string") {
+      if (e.data === "ended") { msg.textContent = "the game ended · tap to play again"; start.style.display = "flex"; started = false; }
+      return;
+    }
+    const kind = new Uint8Array(e.data, 0, 1)[0];
+    if (kind === 1) {
+      try { draw(await createImageBitmap(new Blob([new Uint8Array(e.data, 1)], { type: "image/jpeg" }))); } catch (_) {}
+      if (ws.readyState === 1) ws.send("ack");
+    } else if (kind === 2 && node) {
+      node.port.postMessage(e.data.slice(1), []);
+    }
+  };
+  ws.onclose = () => { setTimeout(() => { if (started) connect(); }, 1000); };
+}
+
+start.addEventListener("click", async () => {
+  if (started) return;
+  started = true;
+  start.style.display = "none";
+  try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch (_) {}
+  try { await screen.orientation.lock("landscape"); } catch (_) {}
+  if (!audio) await startAudio(); else audio.resume();
+  if (!ws || ws.readyState > 1) connect(); else ws.send("restart");
+});
+
+// Controls: a paired gamepad (Gamepad API, standard mapping) and the touch buttons, both sent as one gamepad in
+// GLFW's order: A B X Y LB RB BACK START GUIDE LTHUMB RTHUMB UP RIGHT DOWN LEFT; axes LX LY RX RY LT RT.
+const STD = [0, 1, 2, 3, 4, 5, 8, 9, 16, 10, 11, 12, 15, 13, 14];
+const touchDown = new Map(); // pointer id -> GLFW button
+let lastSent = "", lastTime = 0;
+function buttonAt(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el && el.classList.contains("b") ? +el.id.slice(1) : -1;
+}
+function onPointer(e) {
+  e.preventDefault();
+  if (e.type === "pointerup" || e.type === "pointercancel") touchDown.delete(e.pointerId);
+  else touchDown.set(e.pointerId, buttonAt(e.clientX, e.clientY));
+  for (const el of touch.children) el.classList.toggle("on", [...touchDown.values()].includes(+el.id.slice(1)));
+}
+for (const t of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) touch.addEventListener(t, onPointer);
+
+function poll(now) {
+  requestAnimationFrame(poll);
+  const b = new Array(15).fill(0), a = [0, 0, 0, 0, -1, -1];
+  let pads = 0;
+  for (const gp of (navigator.getGamepads ? navigator.getGamepads() : [])) {
+    if (!gp || !gp.connected) continue;
+    pads++;
+    STD.forEach((s, i) => { if (gp.buttons[s] && gp.buttons[s].pressed) b[i] = 1; });
+    for (let i = 0; i < 4 && i < gp.axes.length; i++) if (Math.abs(gp.axes[i]) > Math.abs(a[i])) a[i] = gp.axes[i];
+    if (gp.buttons[6]) a[4] = Math.max(a[4], gp.buttons[6].value * 2 - 1);
+    if (gp.buttons[7]) a[5] = Math.max(a[5], gp.buttons[7].value * 2 - 1);
+  }
+  touch.classList.toggle("hidden", pads > 0 || !started);
+  for (const v of touchDown.values()) if (v >= 0) b[v] = 1;
+  const line = `pad ${b.join("")} ${a.map((v) => v.toFixed(2)).join(" ")}`;
+  if (ws && ws.readyState === 1 && (line !== lastSent || now - lastTime > 500)) {
+    ws.send(line);
+    lastSent = line;
+    lastTime = now;
+  }
+}
+requestAnimationFrame(poll);
+</script>
+</body>
+</html>

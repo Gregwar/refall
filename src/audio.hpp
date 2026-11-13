@@ -1,6 +1,7 @@
 #pragma once
 // Audio output: song playback with crossfades between tracks.
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -9,6 +10,7 @@
 #include "analysis.hpp"
 
 struct ma_device;
+struct ma_context;
 
 struct Track {
     std::string path, title;
@@ -26,7 +28,10 @@ class AudioEngine {
 public:
     AudioEngine();
     ~AudioEngine();
-    bool init();
+    // silent: no sound card, the mix still runs in real time (miniaudio's null device), for the tap
+    bool init(bool silent = false);
+    // Called on the audio thread with each block of the mix (interleaved stereo at the engine rate): --stream
+    void setTap(std::function<void(const float*, unsigned int)> tap) { tap_ = std::move(tap); }
     void shutdown();
     uint32_t sampleRate() const { return sampleRate_; }
 
@@ -69,6 +74,8 @@ private:
     void render(float* out, unsigned int frames);
 
     ma_device* device_ = nullptr;
+    ma_context* context_ = nullptr; // the null backend's (silent)
+    std::function<void(const float*, unsigned int)> tap_;
     uint32_t sampleRate_ = 48000;
     std::mutex mutex_;
     std::shared_ptr<Track> current_, previous_;

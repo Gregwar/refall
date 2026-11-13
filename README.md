@@ -319,6 +319,14 @@ missing from it still works with a generic layout.
 | Pause | Esc / P (Q quits while paused, or goes back to the menu) | Start |
 | Fullscreen | F / F11 | |
 
+### Playing from a phone
+
+`python3 tools/stream.py` (from the sources, after a build; needs `aiohttp` and `Pillow`) runs the game here, without a
+window, and streams it to a phone's browser on the same Wi-Fi: open the address it prints and accept its self-signed
+certificate (the browser's Gamepad API needs HTTPS). A controller paired with the phone plays as a gamepad; without
+one, the page shows touch buttons (the gamepad's D-pad, A, B, LB, Back and Start). The frames go as JPEG at 60 fps
+(about 3 MB/s) at the phone's aspect ratio, the sound with them. Arguments after `--` go to the game.
+
 ## Tools
 
 - `refall-scope [songs...]`: see what the game hears (the song's structure, phases, beats and spectrum), and write

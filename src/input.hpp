@@ -1,6 +1,7 @@
 #pragma once
 // Unified keyboard / gamepad input. Both always work; the "active" device (the one used last)
 // decides which control hints are shown. Gamepads are detected at startup and hot-plugged.
+#include <mutex>
 #include <string>
 
 struct GLFWwindow;
@@ -53,6 +54,9 @@ public:
     const std::string& typed() const { return typed_; }
     std::string clipboard() const;
     void onChar(unsigned int cp) { if (cp >= 32 && cp < 127) pending_ += (char)cp; }
+    // A gamepad far away (--stream: the phone's, over the network), read as a local one: its buttons in GLFW's gamepad
+    // order (15), its axes (6: the sticks, then the triggers from -1 to 1). Any thread.
+    void setRemotePad(const unsigned char* buttons, const float* axes);
     // Set briefly when the device changes, for a HUD toast.
     float deviceChangedTimer() const { return changedTimer_; }
 
@@ -72,4 +76,8 @@ private:
     bool shiftWasDown_ = false, shiftChord_ = false; // Shift holds on a clean tap only
     int letter_[26] = {}; // physical key producing each letter on the current keyboard layout
     std::string pending_, typed_; // characters from the window, this frame's
+    std::mutex remoteMutex_;
+    bool remote_ = false, remoteLive_ = false;
+    unsigned char remoteButtons_[15] = {};
+    float remoteAxes_[6] = {0, 0, 0, 0, -1, -1};
 };
