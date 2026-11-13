@@ -20,7 +20,7 @@ namespace {
 // Glyphs are baked at BAKE_PX, their distance field reaching PAD pixels out of (and into) the outline: the effects
 // reach PAD / BAKE_PX em around the letters.
 constexpr float BAKE_PX = 96.f;
-constexpr int PAD = 14;
+constexpr int PAD = 20;
 constexpr float DIST_SCALE = 128.f / PAD; // field units (0..255) per baked pixel
 constexpr int ATLAS = 2048;
 
@@ -525,6 +525,7 @@ float noise(vec2 p) {
 }
 
 Box Engine::measure(const Line& l) const { return layoutLine(l, 0.f, 0.f, nullptr); }
+Box measure(const Line& l) { return layoutLine(l, 0.f, 0.f, nullptr); }
 
 void Engine::draw(const Line& l, float x, float y, int w, int h, float time) {
     if (l.alpha <= 0.002f || l.spans.empty() || !l.spans[0].font) return;

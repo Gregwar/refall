@@ -6,7 +6,7 @@
 //
 // Fonts are TrueType files built into the game, their glyphs baked on demand (UTF-8: accents and symbols too) as
 // signed distance fields at BAKE_PX, shared by everything that letters with the same file. Sizes are pixels; the
-// effects' widths are in em (the span's font size), so they scale with the text.
+// effects' widths are in em (the span's font size), so they scale with the text (reaching 0.2 em at most).
 #include <functional>
 #include <memory>
 #include <string>
@@ -131,6 +131,10 @@ struct Box {
     float cap = 0;                         // the first span's cap height
     float width() const { return x1 - x0; }
 };
+
+// The line's box from its anchor (a universe sampling its world behind a line: its left x is the anchor's, as
+// ugl::hudLeft gives it for this width).
+Box measure(const Line& l);
 
 // Text transforms the universes use.
 std::string upper(const std::string& utf8);
