@@ -50,6 +50,11 @@ void main() {
         o = vec4(vCol.rgb * a, a);
         return;
     }
+    if (vPrm.w > 1.5) { // an image (premultiplied), tinted
+        vec4 t = texture(uTex, vLocal);
+        o = vec4(t.rgb * vCol.rgb, t.a) * vCol.a;
+        return;
+    }
     if (vPrm.w > 0.5) {
         a = texture(uTex, vLocal).r;
     } else {
@@ -169,6 +174,15 @@ void Painter::quad(const float px[4][2], const float lc[4][2], float hx, float h
         const Col& cc = bottom && k >= 2 ? *bottom : c;
         verts_.push_back({px[k][0], px[k][1], lc[k][0], lc[k][1], hx, hy, cc.r, cc.g, cc.b, cc.a, rad, soft, lw, mode});
     }
+}
+
+void Painter::image(GLuint tex, float x, float y, float w, float h, Col tint, bool flipY) {
+    if (!tex || tint.a <= 0.f) return;
+    if (curTex_ != tex) { flush(); curTex_ = tex; }
+    const float px[4][2] = {{x, y}, {x + w, y}, {x + w, y + h}, {x, y + h}};
+    const float t0 = flipY ? 1.f : 0.f, t1 = 1.f - t0;
+    const float lc[4][2] = {{0, t0}, {1, t0}, {1, t1}, {0, t1}};
+    quad(px, lc, 0, 0, tint, 0, 0, 0, 2.f);
 }
 
 void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2) {

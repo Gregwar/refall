@@ -177,6 +177,7 @@ add_executable(refall
   src/menupaint.cpp
   src/menuworlds.cpp
   src/menuwin.cpp
+  src/debrief.cpp
 )
 # The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/data/campaign.tsv)

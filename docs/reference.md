@@ -22,7 +22,7 @@ the same universe again), `--universe-on-peak` (a long song may also change univ
 `--transition-shots PREFIX N` (at `--shot-time` in the song, with a filled board, changes from `--universe` to `--to NAME`
 with `--transition NAME`, saves N frames across the change and exits),
 `--free`, `--difficulty`, `--stage`, `--unlock`, `--reset`, `--campaign FILE`, `--progress FILE`, `--playlists FILE`,
-`--no-menu-music`, `--menu-shot`, `--menu-screen`, `--menu-hover`, `--menu-petal`, `--menu-demo` and `--menu-clip` (the kaleidoscope menu, Voyage and
+`--no-menu-music`, `--menu-shot`, `--menu-screen`, `--menu-hover`, `--menu-time`, `--menu-petal`, `--menu-demo` and `--menu-clip` (the kaleidoscope menu, Voyage and
 modes: see [the README](../README.md#modes)),
 `--clip OUT.mp4` (records a video with sound, via ffmpeg, from 4 s before the first drop of the song to 6 s after it,
 with the game played at a calm pace; `--clip-before` / `--clip-after SEC` change the span).
