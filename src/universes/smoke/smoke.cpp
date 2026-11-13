@@ -25,16 +25,10 @@
 // previews and the HUD anchors sit exactly where the layout puts them.
 #include "universes/smoke/smoke.hpp"
 
-#include <cctype>
-#include <cstdio>
-#include <cstring>
 
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/smoke/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
@@ -147,24 +141,6 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-std::string titleCase(const std::string& s) {
-    std::string o = s;
-    bool start = true;
-    for (char& c : o) {
-        if (std::isalpha((unsigned char)c)) {
-            c = start ? (char)std::toupper((unsigned char)c) : (char)std::tolower((unsigned char)c);
-            start = false;
-        } else start = c == ' ' || c == '-';
-    }
-    return o;
-}
-
-std::string upper(const std::string& s) {
-    std::string o = s;
-    for (char& c : o) c = (char)std::toupper((unsigned char)c);
-    return o;
-}
-
 } // namespace
 
 // =====================================================================================================
@@ -177,7 +153,6 @@ bool SmokeUniverse::init(int width, int height) {
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "smoke shape");
     progTile_ = compile(shaders::TILE_VS, shaders::TILE_FS, "smoke tile");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "smoke sprite");
-    progText_ = compile(shaders::TEXT_VS, shaders::TEXT_FS, "smoke text");
     progDown_ = compile(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "smoke down");
     progUp_ = compile(ugl::FULLSCREEN_VS, shaders::UP_FS, "smoke up");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "smoke post");
@@ -212,19 +187,9 @@ bool SmokeUniverse::init(int width, int height) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vert), (void*)(sizeof(float) * 2));
 
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
     buildNoise();
-    buildFont(fontSerif_, FONT_SERIF);
-    buildFont(fontSans_, FONT_SANS);
     pal_ = cur_ = paletteOf(0);
     // the dust in the air: motes scattered through the front of the smoke
     Rng r(0x5E0Cull);
@@ -309,51 +274,6 @@ void SmokeUniverse::buildNoise() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }
 
-// Glyphs baked as signed distance fields: they scale cleanly, and the distance gives the halo of darkness.
-void SmokeUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] smoke font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 10;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, ch, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, ch, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
-}
-
 void SmokeUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -386,16 +306,12 @@ SmokeUniverse::~SmokeUniverse() {
     smokeT_.destroy();
     sceneT_.destroy();
     for (auto& t : bloomT_) t.destroy();
-    for (GLuint p : {progSmoke_, progComp_, progShape_, progTile_, progSprite_, progText_, progDown_, progUp_, progPost_})
+    for (GLuint p : {progSmoke_, progComp_, progShape_, progTile_, progSprite_, progDown_, progUp_, progPost_})
         glDeleteProgram(p);
-    for (GLuint v : {tileVao_, spriteVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, tileVbo_, spriteVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {tileVao_, spriteVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, tileVbo_, spriteVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (volTex_) glDeleteTextures(1, &volTex_);
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
-    for (Font* f : {&fontSerif_, &fontSans_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
 }
 
 // =====================================================================================================
@@ -871,184 +787,100 @@ void SmokeUniverse::buildFx() {
 }
 
 // =====================================================================================================
-// Text
+// The HUD
 // =====================================================================================================
 
-float SmokeUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            w += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+// The panels under the HUD text (the text itself: hudLine, lettered by the host).
+void SmokeUniverse::drawPanels(const std::vector<HudRect>& panels) {
+    if (panels.empty()) return;
+    std::vector<Vert> v;
+    auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
+        const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
+                           {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
+        v.insert(v.end(), q, q + 6);
+    };
+    for (const HudRect& r : panels) {
+        const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? cur_.accent : cur_.panel * 0.6f;
+        quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
     }
-    return w - track;
+    glUseProgram(progShape_);
+    set2f(progShape_, "uRes", (float)width_, (float)height_);
+    glBindVertexArray(shapeVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
 }
 
-float SmokeUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track,
-                               std::vector<float>& out) const {
-    if (!f.ok) return 0.f;
-    const stbtt_fontinfo* info = (const stbtt_fontinfo*)f.info;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
+// The HUD in SMOKE's typography, like a theatre programme: Yrsa Light Italic for the song, the section and the
+// celebrations, Lato Light in small spaced capitals for the labels; each line on a soft pool of darkness (readable
+// when the smoke drifts behind it), the light's color for the accents.
+void SmokeUniverse::hudLine(const HudText& h, text::Line& out) {
+    text::Font* serif = text::font(FONT_SERIF);
+    text::Font* sans = text::font(FONT_SANS);
+    const float s = height_ / 1080.f, base = h.scale * 12.f, alpha = saturate(h.alpha);
+    const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
+    // a scene color as the post shows it (its soft shoulder, none at the bridge), the bridge's ink taking over
+    auto ink = [&](const vec3& c0) {
+        const vec3 raw = lerp(c0, bridge_.ink, br);
+        const float over = std::max(raw.x - 1.f, 0.f) + std::max(raw.y - 1.f, 0.f) + std::max(raw.z - 1.f, 0.f);
+        const vec3 c = raw + vec3(over * 0.1f);
+        const float K = 0.6f;
+        auto tone = [&](float x) { return x < K ? x : K + (1.f - K) * (1.f - std::exp(-(x - K) / (1.f - K))); };
+        return ugl::toSrgb(lerp(vec3(tone(c.x), tone(c.y), tone(c.z)), raw, saturate(bridge_.amount)));
+    };
+    const vec3 inkC = cur_.ink * 0.92f, dim = cur_.ink * 0.55f, accent = cur_.accent * 1.1f;
+    float halo = 0.5f, bias = 0.05f;
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](text::Font* f, const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, ink(c), track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: {
+        // "Smoke" in the italic serif, the light's name in small spaced capitals after it
+        std::string name, var;
+        text::splitUniverse(h.text, name, var);
+        const float sz = base * 1.5f, vsz = base * 0.62f, a = 0.35f + h.alpha * 1.6f;
+        put(serif, text::titleCase(name), sz, 0.f, inkC, a, -base * 0.12f);
+        if (!var.empty()) {
+            out.add("", serif, sz, vec3(0.f), base * 0.8f / sz); // the gap
+            text::Span& v = out.add(var, sans, vsz, ink(accent), 0.42f, saturate(a));
+            v.dy = base * 0.4f + 0.59f * vsz - 0.568f * sz; // its own cap line, lower
         }
-        pen += g.adv * k + track;
-        if (i + 1 < s.size()) {
-            unsigned char n = (unsigned char)s[i + 1];
-            if (n < 32 || n >= 128) n = '?';
-            pen += stbtt_GetCodepointKernAdvance(info, ch, n) * f.scaleTT * k;
-        }
+        break;
     }
-    return pen - track - x;
-}
-
-void SmokeUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& color, float alpha, float halo, float bias) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uColor", color);
-    set3f(progText_, "uHalo", vec3(0.f));
-    set1f(progText_, "uAlpha", alpha);
-    set1f(progText_, "uHaloAmt", halo);
-    set1f(progText_, "uBias", bias);
-    set1f(progText_, "uBridge", smoothstepf(0.3f, 0.95f, bridge_.amount));
-    set3f(progText_, "uBridgeInk", bridge_.ink);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// The HUD in SMOKE's typography, like a theatre programme: a light italic serif for the song, the light's name, the
-// section and the celebrations; small, widely spaced light capitals for the labels; light numbers.
-void SmokeUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    if (!panels.empty()) {
-        std::vector<Vert> v;
-        auto quad = [&](float x0, float y0, float x1, float y1, const vec3& c, float a) {
-            const Vert q[6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
-                               {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
-            v.insert(v.end(), q, q + 6);
-        };
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? ugl::toLinear(r.color) : r.accent ? cur_.accent : cur_.panel * 0.6f;
-            quad(r.x, r.y, r.x + r.w, r.y + r.h, c, r.accent || r.custom ? r.alpha : std::min(1.f, r.alpha * 1.1f));
-        }
-        glUseProgram(progShape_);
-        set2f(progShape_, "uRes", (float)width_, (float)height_);
-        glBindVertexArray(shapeVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Vert), v.data(), GL_STREAM_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)v.size());
+    case HUD_SECTION: put(serif, text::titleCase(h.text), base * 1.4f, 0.f, accent, 0.2f + h.alpha * 1.9f); break;
+    case HUD_TITLE: put(serif, h.text, base * 1.3f, 0.f, inkC, h.alpha * 1.3f, -base * 0.14f); break;
+    case HUD_INFO: put(sans, text::upper(h.text), base * 0.66f, base * 0.32f, dim, alpha * 1.4f); bias = 0.06f; break;
+    case HUD_LABEL: put(sans, h.text, base * 0.7f, base * 0.42f, dim, alpha * 1.3f); bias = 0.06f; break;
+    case HUD_VALUE: put(sans, h.text, base * 1.12f, base * 0.06f, inkC, alpha); bias = 0.04f; break;
+    case HUD_NOTICE: put(serif, h.text, base * 1.2f, 0.f, accent, alpha); bias = 0.04f; break;
+    case HUD_KEY: put(sans, h.text, base * 0.85f, base * 0.1f, inkC, alpha); break;
+    case HUD_TOAST: put(serif, text::titleCase(h.text), base * 1.55f, 0.f, inkC, alpha, -base * 0.15f); halo = 0.6f; break;
+    case HUD_TOAST_SUB: put(sans, h.text, base * 0.8f, base * 0.3f, accent, alpha * 0.9f); break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) {
+            put(serif, text::titleCase(h.text), base * 1.35f, 0.f, inkC, alpha, -base * 0.1f);
+            halo = 0.6f;
+        } else put(sans, h.text, base * 0.82f, base * 0.16f, h.accent ? accent : inkC, alpha);
+        break;
+    default: put(sans, h.text, base * 0.8f, base * 0.12f, h.accent ? accent : inkC, alpha); break;
     }
-    const vec3 ink = cur_.ink * 0.92f;
-    const vec3 dim = cur_.ink * 0.55f;
-    const vec3 accent = cur_.accent * 1.1f;
-    std::vector<float> q;
-    for (const HudText& h : hud) {
-        if (h.alpha <= 0.01f || h.text.empty()) continue;
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha);
-        q.clear();
-        auto place = [&](const Font& f, const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(f, text, size, track);
-            textQuads(f, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE: {
-            // "Smoke" in the italic serif, the light's name in small spaced capitals after it.
-            std::string name = h.text, var;
-            const size_t dot = name.find("\xC2\xB7");
-            if (dot != std::string::npos) { var = name.substr(dot + 2); name = name.substr(0, dot); }
-            while (!name.empty() && name.back() == ' ') name.pop_back();
-            while (!var.empty() && var.front() == ' ') var.erase(var.begin());
-            name = titleCase(name);
-            const float sz = base * 1.5f, vsz = base * 0.62f, vtr = vsz * 0.42f;
-            const float wName = textWidth(fontSerif_, name, sz, 0.f);
-            const float wVar = var.empty() ? 0.f : textWidth(fontSans_, var, vsz, vtr);
-            const float gap = base * 0.8f;
-            const float x = ugl::hudLeft(h, wName + (var.empty() ? 0.f : gap + wVar), width_);
-            textQuads(fontSerif_, name, x, h.y - base * 0.12f, sz, 0.f, q);
-            const float a = saturate(0.35f + h.alpha * 1.6f);
-            drawText(fontSerif_, q, ink, a, 0.5f, 0.05f);
-            if (!var.empty()) {
-                q.clear();
-                textQuads(fontSans_, var, x + wName + gap, h.y + base * 0.28f, vsz, vtr, q);
-                drawText(fontSans_, q, accent, a, 0.5f, 0.06f);
-            }
-            continue;
-        }
-        case HUD_SECTION:
-            place(fontSerif_, titleCase(h.text), base * 1.4f, 0.f);
-            drawText(fontSerif_, q, accent, saturate(0.2f + h.alpha * 1.9f), 0.5f, 0.05f);
-            continue;
-        case HUD_TITLE:
-            place(fontSerif_, h.text, base * 1.3f, 0.f, -base * 0.14f);
-            drawText(fontSerif_, q, ink, saturate(h.alpha * 1.3f), 0.5f, 0.05f);
-            continue;
-        case HUD_INFO:
-            place(fontSans_, upper(h.text), base * 0.66f, base * 0.32f);
-            drawText(fontSans_, q, dim, saturate(alpha * 1.4f), 0.5f, 0.06f);
-            continue;
-        case HUD_LABEL:
-            place(fontSans_, h.text, base * 0.7f, base * 0.42f);
-            drawText(fontSans_, q, dim, saturate(alpha * 1.3f), 0.5f, 0.06f);
-            continue;
-        case HUD_VALUE:
-            place(fontSans_, h.text, base * 1.12f, base * 0.06f);
-            drawText(fontSans_, q, ink, alpha, 0.5f, 0.04f);
-            continue;
-        case HUD_NOTICE:
-            place(fontSerif_, h.text, base * 1.2f, 0.f);
-            drawText(fontSerif_, q, accent, alpha, 0.5f, 0.04f);
-            continue;
-        case HUD_KEY:
-            place(fontSans_, h.text, base * 0.85f, base * 0.1f);
-            drawText(fontSans_, q, ink, alpha, 0.5f, 0.05f);
-            continue;
-        case HUD_TOAST:
-            place(fontSerif_, titleCase(h.text), base * 1.55f, 0.f, -base * 0.15f);
-            drawText(fontSerif_, q, ink, alpha, 0.6f, 0.05f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(fontSans_, h.text, base * 0.8f, base * 0.3f);
-            drawText(fontSans_, q, accent, alpha * 0.9f, 0.5f, 0.05f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(fontSerif_, titleCase(h.text), base * 1.35f, 0.f, -base * 0.1f);
-                drawText(fontSerif_, q, ink, alpha, 0.6f, 0.05f);
-            } else {
-                place(fontSans_, h.text, base * 0.82f, base * 0.16f);
-                drawText(fontSans_, q, h.accent ? accent : ink, alpha, 0.5f, 0.05f);
-            }
-            continue;
-        default:
-            place(fontSans_, h.text, base * 0.8f, base * 0.12f);
-            drawText(fontSans_, q, h.accent ? accent : ink, alpha, 0.5f, 0.05f);
-            continue;
-        }
-    }
+    // (the old field: 10 px of distance at 64 px, one unit of it 0.31 em; its halo from 0.1, squared; its wide
+    // edge left the small letters a little heavier)
+    text::Look& k = out.look;
+    k.weight = bias * 0.31f + 0.2f / std::max(1.f, out.spans[0].size);
+    k.halo = vec3(0.f);
+    k.haloA = halo * (1.f - br);
+    k.haloW = 0.125f;
+    k.haloPow = 2.f;
+    // the bright lines caught the bloom: a faint light of their own (the section's, in the light's color, more)
+    const bool bright = h.role != HUD_INFO && h.role != HUD_LABEL;
+    k.glow = out.spans[0].ink;
+    k.glowA = (h.role == HUD_SECTION ? 0.3f : bright ? 0.12f : 0.f) * (1.f - br);
+    k.glowW = 0.14f;
+    // the opacities as they were, blended in the scene's linear light (a lighter veil than over sRGB)
+    for (text::Span& sp : out.spans) sp.alpha = std::pow(saturate(sp.alpha), 1.f / 2.2f);
 }
 
 // =====================================================================================================
@@ -1234,7 +1066,7 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)tiles_.size());
     }
     drawSprites(blades_);
-    drawHud(f.hud, f.panels);
+    drawPanels(f.panels);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the beam's core, the rims, the blades of light.
