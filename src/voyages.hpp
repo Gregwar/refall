@@ -28,20 +28,23 @@ public:
     const CustomVoyage* find(const std::string& id) const;
     std::string campaignPath(const std::string& id) const;
     std::string progressPath(const std::string& id) const;
-    // The main campaign, whose velocities the voyages follow.
-    void setCurve(const Campaign& main) { curve_ = main; }
+    // The main campaign, whose velocities the voyages follow, and its progress file.
+    void setMain(const Campaign& main, const std::string& progressPath) { curve_ = main; mainProgress_ = progressPath; }
+    const Campaign& main() const { return curve_; }
     // Makes a voyage of `entries` (library entries, "ytdl:ID\tTITLE") and registers it: its id, or "" (*err why not).
     std::string create(const std::string& title, const std::string& url, const std::vector<std::string>& entries,
                        uint64_t seed, std::string* err);
     void remove(const std::string& id); // with its files
     void used(const std::string& id);   // now its last use (it moves first)
-    // Stages cleared on any difficulty (read from its progress file).
+    // Stages cleared on any difficulty (read from its progress file); "" the main campaign's.
     int cleared(const std::string& id) const;
 
 private:
     std::vector<CustomVoyage> list_;
     std::string dir_;
     Campaign curve_;
+    std::string mainProgress_;
+
     void sort();
 };
 

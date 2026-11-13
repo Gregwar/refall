@@ -235,6 +235,11 @@ void VoyageStore::used(const std::string& id) {
 }
 
 int VoyageStore::cleared(const std::string& id) const {
+    if (id.empty()) {
+        Progress p;
+        p.load(mainProgress_, &curve_);
+        return p.clearedCount();
+    }
     Campaign c;
     if (!find(id) || !c.load(campaignPath(id))) return 0;
     Progress p;

@@ -1,6 +1,6 @@
 #pragma once
-// The menus, drawn 8-bit style on a small pixel canvas scaled up with sharp pixels: the title screen (VOYAGE, CUSTOM
-// VOYAGE, FREE PLAY, QUIT), the custom voyages (made from YouTube playlists), free play's difficulty, and the campaign's stages (a line of squares per stage, one per song,
+// The menus, drawn 8-bit style on a small pixel canvas scaled up with sharp pixels: the title screen (VOYAGE, FREE
+// PLAY, QUIT), the voyages to choose from (the game's own, and those made from the player's YouTube playlists), free play's difficulty, and the campaign's stages (a line of squares per stage, one per song,
 // coloured by its universe), with an audio preview of the song under the cursor.
 #include <functional>
 #include <future>
@@ -33,8 +33,9 @@ void menuUniverseColor(const Campaign* camp, const std::string& spec, unsigned c
 class Menu {
 public:
     // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
-    // CUSTOM: the custom voyages, and the making of one from a playlist; the one chosen then shows as CAMPAIGN.
-    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, CUSTOM };
+    // VOYAGES: the voyages (the game's own first, then the player's) and the making of one from a playlist; the one
+    // chosen then shows as CAMPAIGN.
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES };
     struct Choice {
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
         int difficulty = DIFF_EXPERT;
@@ -170,7 +171,7 @@ private:
     Progress* progress_ = nullptr;
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
-    static constexpr int TITLE_ITEMS = 4;
+    static constexpr int TITLE_ITEMS = 3;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage
