@@ -20,6 +20,8 @@ public:
     void setBonus(bool on) override { slowOn_ = on; }
     void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
+    bool hostText() const override { return true; }
+    void hudLine(const HudText& h, text::Line& out) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
     int variant() const override { return variant_; }
@@ -93,20 +95,7 @@ private:
     void addCell(float x, float y, float half, int type, const CellLook& l, int kind, float prog, float alpha, float flash);
     void drawInst(GLuint prog, GLuint vao, GLuint vbo, const void* data, size_t bytes, size_t count);
 
-    // ---- Text.
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        void* info = nullptr;
-    };
-    Font fontSans_, fontIt_;
-    void buildFont(Font& f, const unsigned char* ttf);
-    float textWidth(const Font& f, const std::string& s, float size, float track) const;
-    void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& quads, bool accent, float alpha);
+    // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes(int mode);
@@ -114,9 +103,9 @@ private:
 
     // ---- GL.
     GLuint progField_ = 0, progOrg_ = 0, progPiece_ = 0, progSpeck_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
-           progShape_ = 0, progText_ = 0, progLens_ = 0, progLine_ = 0;
+           progShape_ = 0, progLens_ = 0, progLine_ = 0;
     GLuint quadVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0, orgVao_ = 0, orgVbo_ = 0, speckVao_ = 0, speckVbo_ = 0, shapeVao_ = 0,
-           shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0, lensVao_ = 0, lensVbo_ = 0, lineVao_ = 0, lineVbo_ = 0;
+           shapeVbo_ = 0, lensVao_ = 0, lensVbo_ = 0, lineVao_ = 0, lineVbo_ = 0;
     ugl::Target sceneT_, bloomA_, bloomB_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};

@@ -528,33 +528,6 @@ in vec4 vCol;
 out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
-inline const char* TEXT_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;   // pixels, top-left origin
-layout(location = 1) in vec2 aUv;
-uniform vec2 uRes;
-out vec2 vUv;
-void main() {
-    vUv = aUv;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
-}
-)";
-// Pale letters with a soft halo of the night around them.
-inline const char* TEXT_FS = R"(#version 330 core
-in vec2 vUv;
-out vec4 frag;
-uniform sampler2D uFont;
-uniform vec3 uInk, uHalo;
-uniform float uAlpha, uHaloA;
-void main() {
-    float d = texture(uFont, vUv).r;
-    float w = max(fwidth(d), 1e-3) * 0.75;
-    float fill = smoothstep(0.45 - w, 0.45 + w, d);
-    float halo = smoothstep(0.2, 0.5, d) * uHaloA;
-    float a = max(fill, halo) * uAlpha;
-    vec3 c = mix(uHalo, uInk, fill / max(max(fill, halo), 1e-3));
-    frag = vec4(c * a, a);
-}
-)";
 
 // Builds a fragment shader with the common functions (and the piece outline) inserted after the version line.
 inline std::string withCommon(const char* src, bool shape = false) {
