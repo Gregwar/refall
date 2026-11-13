@@ -826,6 +826,17 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
             std::printf("[app] break: play\n");
         }
     }
+    // Paused in a break (on the title card, the black): the pause menu over the world, dimmed, the card hidden.
+    static const bool testPause = std::getenv("ZEN_TEST_PAUSE") != nullptr; // (see buildHud)
+    if ((paused_ || testPause) && break_ != BREAK_OFF) {
+        b.black = std::min(b.black, 0.55f);
+        b.card[0].alpha = b.card[1].alpha = 0.f;
+        b.cardAlpha = 0.f;
+        if (!b.blank) b.blank = &blank_;
+        b.play = std::min(b.play, 0.999f); // the world alone, with the menu's lines
+        for (const HudText& h : hud)
+            if (h.role == HUD_DIALOG) b.bareHud.push_back(h);
+    }
     R_.setBreak(std::move(b));
 }
 
