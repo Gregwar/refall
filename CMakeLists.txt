@@ -52,6 +52,7 @@ add_library(zencore STATIC
   src/audio.cpp
   src/samples.cpp
   src/library.cpp
+  src/titles.cpp
   src/songplan.cpp
   src/youtube.cpp
   src/platform.cpp
