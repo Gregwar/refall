@@ -400,7 +400,15 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
                     num += (P - W) * (Ic - W);
                     den += (Ic - W) * (Ic - W);
                 }
-                const float v = den > 1e-4f ? std::clamp(num / den, 0.f, 1.f) : 0.f;
+                // only a move from the world toward the ink, along the line between them: a halo or a plate under
+                // the lettering (lifting a line of the world into the paper's color) is not the lettering
+                float v = den > 0.02f ? std::clamp(num / den, 0.f, 1.f) : 0.f;
+                float res = 0;
+                for (int c = 0; c < 3; c++) {
+                    const float W = base[i * 4 + c] / 255.f, P = with[i * 4 + c] / 255.f, Ic = (c == 0 ? I.x : c == 1 ? I.y : I.z);
+                    res = std::max(res, std::fabs(P - (W + v * (Ic - W))));
+                }
+                if (res > 0.12f) v = 0.f;
                 a[i] = v;
                 if (v > 0.06f) {
                     const int yt = h_ - 1 - y; // top-left origin
