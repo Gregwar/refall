@@ -645,11 +645,12 @@ void App::updateGravity(double songTime, float dt) {
         game_.setFixedLevel(run_.velFrom + (run_.velTo - run_.velFrom) * k);
     }
     const float diff = game_.speedDifficulty();
-    // 20G: at the Voyage's top velocity, in the song's loudest sections (a chorus, a drop), a piece falls to the stack
-    // the moment it appears; the rest of the song keeps a visible fall (the finales mix both).
-    const bool twentyG = mode_ == MODE_CAMPAIGN && run_.diff == DIFF_EXPERT && game_.fixedLevel() >= Game::MAX_VELOCITY - 0.05f && track_ &&
-                         !track_->analysis.segments.empty() && gravityPace(track_->analysis, songTime) >= 1.2f &&
-                         gameRate_ > 0.999f;
+    // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
+    // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
+    // stages has some, every song of the finale.
+    const float v = game_.fixedLevel(), pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
+    const bool twentyG = mode_ == MODE_CAMPAIGN && run_.diff == DIFF_EXPERT && gameRate_ > 0.999f &&
+                         v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
         game_.setTwentyG(twentyG);
         std::printf("[game] 20G %s at %.1f s\n", twentyG ? "on" : "off", songTime);
