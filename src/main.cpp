@@ -385,9 +385,9 @@ private:
     float slowToast_ = 0, quadToast_ = 0;
     int quadPoints_ = 0;
     bool quadB2B_ = false;
-    bool paused_ = false, wantSkip_ = false, showHelp_ = true;
+    bool paused_ = false, wantSkip_ = false, pauseControls_ = false; // (the pause menu's controls page)
     std::atomic<bool> quit_{false}; // (also set by --stream's input thread)
-    int pauseSel_ = 0; // the pause menu's choice: 0 continue, 1 quit (to the menu)
+    int pauseSel_ = 0; // the pause menu's choice: 0 continue, 1 controls, 2 quit (to the menu)
     double songTime_ = 0, simSongTime_ = 0;
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
     // The song reached its end: by the audio's clock when playing, by the simulated song time offline (a slow
@@ -395,7 +395,7 @@ private:
     bool songFinished() const {
         return offline_ ? (!track_ || simSongTime_ >= track_->duration()) : audio_.finished();
     }
-    float trackAge_ = 0, helpTimer_ = 14.f, sceneNameTimer_ = 0, runTime_ = 0;
+    float trackAge_ = 0, sceneNameTimer_ = 0, runTime_ = 0;
     // Gravity bookkeeping.
     // Slow-motion bonus: the pieces barely fall, BONUS_ROWS_PER_SEC whatever the velocity, while the music keeps its
     // speed (only a short tape bend marks the start and the end).
@@ -443,7 +443,6 @@ void App::startTrack(std::shared_ptr<Track> t) {
     audio_.play(track_, !songHeld_);
     audio_.setPaused(paused_ || songHeld_);
     if (songHeld_) std::printf("[app] no intro: the song waits for the game\n");
-    if (first && showHelp_) helpTimer_ = 14.f; // show controls once the music starts
     trackAge_ = 0;
     lastPhase_ = 0;
     lastSeg_ = 0;
@@ -1058,24 +1057,6 @@ std::vector<HudText> App::buildHud(float dt) {
         hud.push_back({d, -28 * s, 70.f * s, 1.5f * s, std::min(1.f, input_.deviceChangedTimer()), true, false, HUD_HINT});
     }
 
-    helpTimer_ = std::max(0.f, helpTimer_ - dt);
-    float helpA = paused_ ? 0.9f : (showHelp_ ? std::min(0.6f, helpTimer_ * 0.3f) : 0.f);
-    if (helpA > 0.01f) {
-        // One control per line, right-aligned in the bottom-right corner, clear of the board.
-        std::vector<std::string> lines;
-        if (input_.active() == Input::Gamepad)
-            lines = {"MOVE  DPAD / STICK", "ROTATE  A / B", "HARD DROP  UP", "HOLD  LB / RB", "SLOW MOTION  ZL / ZR", "NEW SCENE  Y",
-                     "NEXT SONG  BACK", "PAUSE  START"};
-        else
-            lines = {"MOVE  ARROWS", "ROTATE  UP / Z", "HARD DROP  SPACE", "HOLD  C", "SLOW MOTION  V", "NEW SCENE  T",
-                     "NEXT SONG  N", "SEEK  CTRL+SHIFT+ARROWS", "FULLSCREEN  F", "PAUSE  ESC"};
-        if (mode_ == MODE_CAMPAIGN) // no skipping in a campaign, its universes are set
-            lines.erase(std::remove_if(lines.begin(), lines.end(), [](const std::string& l) {
-                return l.rfind("NEXT SONG", 0) == 0 || l.rfind("SEEK", 0) == 0 || l.rfind("NEW SCENE", 0) == 0; }), lines.end());
-        const float lineH = 20.f * s, bottom = h - 40.f * s;
-        for (size_t i = 0; i < lines.size(); i++)
-            hud.push_back({lines[i], -28 * s, bottom - (lines.size() - 1 - i) * lineH, 1.3f * s, helpA, false, false, HUD_HELP});
-    }
     if (game_.over() && overTime_ > 1.0f && mode_ != MODE_CAMPAIGN) { // (a Voyage's game over has its debrief)
         float a = std::min(1.f, (overTime_ - 1.0f) / 1.2f);
         hud.push_back({"GAME OVER", w * 0.5f, h * 0.5f - 70 * s, 5.f * s, 0.95f * a, true, true, HUD_DIALOG});
@@ -1090,14 +1071,37 @@ std::vector<HudText> App::buildHud(float dt) {
             hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
     }
-    // Test hook: ZEN_TEST_PAUSE=0|1 shows the pause menu (that choice lit) without pausing, e.g. in a review shot.
+    // Test hook: ZEN_TEST_PAUSE=0|1|2 shows the pause menu (that choice lit) without pausing, e.g. in a review shot;
+    // 3 its controls page.
     static const int testPause = std::getenv("ZEN_TEST_PAUSE") ? std::atoi(std::getenv("ZEN_TEST_PAUSE")) : -1;
-    if (testPause >= 0) pauseSel_ = testPause;
-    if (paused_ || testPause >= 0) {
+    if (testPause >= 0) {
+        pauseSel_ = std::min(testPause, 2);
+        pauseControls_ = testPause == 3;
+    }
+    if ((paused_ || testPause >= 0) && pauseControls_) {
+        // the controls, one per line: the action, then its keys (or buttons)
+        std::vector<std::pair<const char*, const char*>> lines;
+        if (input_.active() == Input::Gamepad)
+            lines = {{"MOVE", "DPAD / STICK"}, {"ROTATE", "A / B"}, {"HARD DROP", "UP"}, {"HOLD", "LB / RB"},
+                     {"SLOW MOTION", "ZL / ZR"}, {"NEW SCENE", "Y"}, {"NEXT SONG", "BACK"}, {"PAUSE", "START"}};
+        else
+            lines = {{"MOVE", "ARROWS"}, {"ROTATE", "UP / Z"}, {"HARD DROP", "SPACE"}, {"HOLD", "C"}, {"SLOW MOTION", "V"},
+                     {"NEW SCENE", "T"}, {"NEXT SONG", "N"}, {"SEEK", "CTRL+SHIFT+ARROWS"}, {"FULLSCREEN", "F"}, {"PAUSE", "ESC"}};
+        if (mode_ == MODE_CAMPAIGN) // no skipping in a campaign, its universes are set
+            lines.erase(std::remove_if(lines.begin(), lines.end(), [](const std::pair<const char*, const char*>& l) {
+                const std::string a = l.first;
+                return a == "NEXT SONG" || a == "SEEK" || a == "NEW SCENE"; }), lines.end());
+        const float lineH = 30.f * s, top = h * 0.5f - (lines.size() - 1) * lineH * 0.5f;
+        hud.push_back({"CONTROLS", w * 0.5f, top - 80 * s, 4.f * s, 0.95f, true, true, HUD_DIALOG});
+        for (size_t i = 0; i < lines.size(); i++)
+            hud.push_back({std::string(lines[i].first) + "   " + lines[i].second, w * 0.5f, top + i * lineH, 1.8f * s, 0.8f,
+                           false, true, HUD_DIALOG});
+        hud.push_back({"BACK", w * 0.5f, top + (lines.size() - 1) * lineH + 60 * s, 2.4f * s, 0.95f, true, true, HUD_DIALOG});
+    } else if (paused_ || testPause >= 0) {
         hud.push_back({"PAUSED", w * 0.5f, h * 0.5f - 60 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
-        // the menu: the choice lit in the accent, the other dimmed
-        const char* items[2] = {"CONTINUE", menuEnabled_ ? "MENU" : "QUIT"};
-        for (int i = 0; i < 2; i++)
+        // the menu: the choice lit in the accent, the others dimmed
+        const char* items[3] = {"CONTINUE", "CONTROLS", menuEnabled_ ? "MENU" : "QUIT"};
+        for (int i = 0; i < 3; i++)
             hud.push_back({items[i], w * 0.5f, h * 0.5f + (20.f + 44.f * i) * s, 2.4f * s, pauseSel_ == i ? 0.95f : 0.4f,
                            pauseSel_ == i, true, HUD_DIALOG});
     }
@@ -1177,11 +1181,8 @@ int App::run() {
     viewer_ = opt_.viewer;
     if (viewer_) { // the computer always plays; a --shot runs on the song's simulated clock, silent
         opt_.autoplay = true;
-        showHelp_ = false;
-        helpTimer_ = 0;
         if (!opt_.viewShot.empty()) offline_ = opt_.mute = true;
     }
-    if (clipMode || reviewMode || !opt_.transitionShots.empty()) { showHelp_ = false; helpTimer_ = 0; }
     FILE* clipPipe = nullptr;
     std::vector<unsigned char> clipPx;
 
@@ -1479,14 +1480,19 @@ int App::run() {
         // ---- Global controls.
         // Until the first song is ready the game waits, paused (no play without music).
         const bool waiting = !track_;
-        // Pause: a menu (continue / quit), with the arrows or the gamepad; Esc / Start / B resume, Q quits at once.
+        // Pause: a menu (continue / controls / quit), with the arrows or the gamepad; Esc / Start / B resume (back
+        // from the controls page), Q quits at once.
         bool quitNow = false;
-        if (paused_) {
-            if (input_.pressed(A_UI_UP) || input_.pressed(A_UI_DOWN)) pauseSel_ = 1 - pauseSel_;
+        if (paused_ && pauseControls_) {
+            if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK) || input_.pressed(A_UI_OK)) pauseControls_ = false;
+        } else if (paused_) {
+            if (input_.pressed(A_UI_UP)) pauseSel_ = (pauseSel_ + 2) % 3;
+            if (input_.pressed(A_UI_DOWN)) pauseSel_ = (pauseSel_ + 1) % 3;
             if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK)) {
                 paused_ = false;
             } else if (input_.pressed(A_UI_OK)) {
                 if (pauseSel_ == 0) paused_ = false;
+                else if (pauseSel_ == 1) pauseControls_ = true;
                 else quitNow = true;
             }
             if (input_.pressed(A_QUIT)) quitNow = true;
@@ -1494,6 +1500,7 @@ int App::run() {
         } else if (input_.pressed(A_PAUSE) && !game_.over() && !waiting) {
             paused_ = true;
             pauseSel_ = 0;
+            pauseControls_ = false;
             audio_.setPaused(true);
         }
         if (quitNow) {
@@ -1532,7 +1539,6 @@ int App::run() {
         }
         if (input_.pressed(A_DEBUG_LEVEL) && !game_.over() && !viewer_) game_.skipToNextLevel();
         if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
-        if (input_.pressed(A_HUD) && !viewer_) { showHelp_ = !showHelp_; helpTimer_ = showHelp_ ? 1e9f : 0; }
 
         // ---- Game.
         if (!paused_ && !waiting && gameFrozen()) {
@@ -2059,7 +2065,6 @@ void App::beginSession(const Menu::Choice& c) {
     levelToast_ = slowToast_ = quadToast_ = skipToast_ = seekToast_ = failedToast_ = 0;
     songTime_ = simSongTime_ = 0;
     trackAge_ = 0;
-    helpTimer_ = showHelp_ ? 14.f : 0.f;
     rowAcc_ = 0;
     lastSongBeat_ = -1;
     gameRate_ = 1.f;

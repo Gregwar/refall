@@ -299,7 +299,7 @@ icon for the current user, so the taskbar and Alt+Tab show it.
 ## Controls
 
 Keyboard and gamepad both work at the same time. A gamepad is detected at startup and on hot-plug,
-and the on-screen hints follow whichever device you used last.
+and the controls page in the pause menu follows whichever device you used last.
 Controllers are recognised through the bundled [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB)
 (`third_party/gamecontrollerdb.txt`; extra mappings can be given in `SDL_GAMECONTROLLERCONFIG`). A controller
 missing from it still works with a generic layout.
@@ -316,7 +316,7 @@ missing from it still works with a generic layout.
 | Seek ±10 s in the song (testing) | Ctrl+Shift+Left/Right | |
 | Next level (debugging) | L | |
 | Fill the bonus gauge (testing) | B | |
-| Pause | Esc / P (Q quits while paused, or goes back to the menu) | Start |
+| Pause (its menu: continue, the controls, back to the menu; Q quits at once) | Esc / P | Start |
 | Fullscreen | F / F11 | |
 
 ### Playing from a phone
