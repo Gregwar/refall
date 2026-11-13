@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "stb_image_write.h"
@@ -31,20 +32,21 @@ void main() {
     frag = vec4(c * uLight, 1.0);
 }
 )";
-// A captured line of the title card: its coverage over the box uRect (x0, y0, x1, y1 in uv, bottom-left origin),
-// in the ink, premultiplied.
+// A captured line of the title card: its letters (their colors, their coverage) over the box uRect (x0, y0, x1, y1
+// in uv, bottom-left origin), turned toward white by uWhiten (dark ink on the black), premultiplied.
 const char* CARD_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uTex;
 uniform vec4 uRect;
-uniform vec3 uInk;
-uniform float uAlpha;
+uniform vec3 uWhite;
+uniform float uAlpha, uWhiten;
 void main() {
     vec2 q = (vUv - uRect.xy) / (uRect.zw - uRect.xy);
     if (q.x < 0.0 || q.y < 0.0 || q.x > 1.0 || q.y > 1.0) discard;
-    float a = texture(uTex, vec2(q.x, 1.0 - q.y)).r * uAlpha;
-    frag = vec4(uInk * a, a);
+    vec4 t = texture(uTex, vec2(q.x, 1.0 - q.y));
+    float a = t.a * uAlpha;
+    frag = vec4(mix(t.rgb, uWhite, uWhiten) * a, a);
 }
 )";
 } // namespace
@@ -386,37 +388,46 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
                 wsum += 1;
             }
         const vec3 I((float)(ink[0] / wsum), (float)(ink[1] / wsum), (float)(ink[2] / wsum));
-        // coverage: how far each pixel went from the world toward the ink
-        std::vector<float> a(d.size(), 0.f);
+        // coverage: how much each pixel differs, against the lettering's core (its strongest differences), with a
+        // firm threshold: a soft glow or halo around the letters (the universe's style over its world, a blob on
+        // black) is left out, the letters' own edges kept. Only a move toward the ink counts: a halo or a plate
+        // lifting a line of the world into the paper's color (MANGA's panel borders) is not the lettering.
+        std::vector<float> strong;
+        for (float v : d)
+            if (v > 0.15f * dMax) strong.push_back(v);
+        std::nth_element(strong.begin(), strong.begin() + strong.size() * 4 / 5, strong.end());
+        const float dCore = std::max(0.05f, strong[strong.size() * 4 / 5]);
+        std::vector<float> a(d.size(), 0.f), opac;
+        std::vector<vec3> col(d.size(), vec3(0.f));
         int bx0 = w_, by0 = h_, bx1 = -1, by1 = -1;
-        float aMax = 0;
         for (int y = 0; y < h_; y++)
             for (int x = 0; x < w_; x++) {
                 const size_t i = (size_t)y * w_ + x;
                 if (d[i] < 0.03f) continue;
-                float num = 0, den = 0;
-                for (int c = 0; c < 3; c++) {
-                    const float W = base[i * 4 + c] / 255.f, P = with[i * 4 + c] / 255.f, Ic = (c == 0 ? I.x : c == 1 ? I.y : I.z);
-                    num += (P - W) * (Ic - W);
-                    den += (Ic - W) * (Ic - W);
-                }
-                // only a move from the world toward the ink, along the line between them: a halo or a plate under
-                // the lettering (lifting a line of the world into the paper's color) is not the lettering
-                float v = den > 0.02f ? std::clamp(num / den, 0.f, 1.f) : 0.f;
-                float res = 0;
-                for (int c = 0; c < 3; c++) {
-                    const float W = base[i * 4 + c] / 255.f, P = with[i * 4 + c] / 255.f, Ic = (c == 0 ? I.x : c == 1 ? I.y : I.z);
-                    res = std::max(res, std::fabs(P - (W + v * (Ic - W))));
-                }
-                if (res > 0.12f) v = 0.f;
+                const vec3 W(base[i * 4] / 255.f, base[i * 4 + 1] / 255.f, base[i * 4 + 2] / 255.f);
+                const vec3 P(with[i * 4] / 255.f, with[i * 4 + 1] / 255.f, with[i * 4 + 2] / 255.f);
+                const vec3 dv = P - W, iv = I - W;
+                const float li = length(iv), ld = length(dv);
+                if (li < 0.14f || dot(dv, iv) < 0.5f * li * ld) continue;
+                const float r = std::min(1.f, d[i] / dCore);
+                const float v = smoothstepf(0.45f, 0.9f, r);
+                if (v <= 0.f) continue;
                 a[i] = v;
+                // the ink's own color here (several inks: SKY WHALE's name and its variant in the accent)
+                const float f = std::max(0.25f, r);
+                col[i] = vec3(std::clamp(W.x + dv.x / f, 0.f, 1.f), std::clamp(W.y + dv.y / f, 0.f, 1.f), std::clamp(W.z + dv.z / f, 0.f, 1.f));
+                if (r > 0.95f) opac.push_back(std::clamp(dot(dv, iv) / (li * li), 0.f, 1.f));
                 if (v > 0.06f) {
                     const int yt = h_ - 1 - y; // top-left origin
                     bx0 = std::min(bx0, x); bx1 = std::max(bx1, x);
                     by0 = std::min(by0, yt); by1 = std::max(by1, yt);
-                    aMax = std::max(aMax, v);
                 }
             }
+        float aMax = 1.f; // the lettering's own opacity (its core's move toward the ink)
+        if (!opac.empty()) {
+            std::nth_element(opac.begin(), opac.begin() + opac.size() / 2, opac.end());
+            aMax = std::max(0.2f, opac[opac.size() / 2]);
+        }
         if (bx1 < 0) return false;
         const float bw = (float)(bx1 - bx0 + 1), bh = (float)(by1 - by0 + 1);
         if (pass == 0 || pass == 1) {
@@ -433,16 +444,37 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         const int x0 = std::max(0, bx0 - m), x1 = std::min(w_ - 1, bx1 + m);
         const int y0 = std::max(0, by0 - m), y1 = std::min(h_ - 1, by1 + m);
         const int cw = x1 - x0 + 1, ch = y1 - y0 + 1;
-        std::vector<unsigned char> cov((size_t)cw * ch);
+        std::vector<unsigned char> cov((size_t)cw * ch * 4);
+        double lumSum = 0, lumW = 0;
         for (int y = 0; y < ch; y++)
             for (int x = 0; x < cw; x++) {
                 const size_t i = (size_t)(h_ - 1 - (y0 + y)) * w_ + (x0 + x);
-                cov[(size_t)y * cw + x] = (unsigned char)std::lround(255.f * std::min(1.f, a[i] / std::max(aMax, 1e-3f)));
+                unsigned char* o = &cov[((size_t)y * cw + x) * 4];
+                o[0] = (unsigned char)std::lround(255.f * col[i].x);
+                o[1] = (unsigned char)std::lround(255.f * col[i].y);
+                o[2] = (unsigned char)std::lround(255.f * col[i].z);
+                o[3] = (unsigned char)std::lround(255.f * a[i]);
+                lumSum += a[i] * (0.3 * col[i].x + 0.55 * col[i].y + 0.15 * col[i].z);
+                lumW += a[i];
             }
+        // the edges' color bled into the transparent texels around, so the mipmaps don't darken them
+        for (int pass2 = 0; pass2 < 3; pass2++)
+            for (int y = 0; y < ch; y++)
+                for (int x = 0; x < cw; x++) {
+                    unsigned char* o = &cov[((size_t)y * cw + x) * 4];
+                    if (o[3] > 8) continue;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++) {
+                            const int xx = x + dx, yy = y + dy;
+                            if (xx < 0 || yy < 0 || xx >= cw || yy >= ch) continue;
+                            const unsigned char* n = &cov[((size_t)yy * cw + xx) * 4];
+                            if (n[3] > 8) { o[0] = n[0]; o[1] = n[1]; o[2] = n[2]; }
+                        }
+                }
         if (!out.tex) glGenTextures(1, &out.tex);
         glBindTexture(GL_TEXTURE_2D, out.tex);
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, cw, ch, 0, GL_RED, GL_UNSIGNED_BYTE, cov.data());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, cw, ch, 0, GL_RGBA, GL_UNSIGNED_BYTE, cov.data());
         glGenerateMipmap(GL_TEXTURE_2D);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -453,16 +485,25 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         out.ax = 0.f;
         out.ay = fromBottom ? (float)h_ : 0.f;
         out.aMax = aMax;
-        out.ink = I;
+        out.dark = lumW > 0 && lumSum / lumW < 0.45; // dark ink (a light universe): white on the black
         out.ok = true;
+        // Test hook: ZEN_CARD_DEBUG=DIR writes each capture (the world, the world with the lettering, the coverage).
+        if (const char* dbg = std::getenv("ZEN_CARD_DEBUG")) {
+            const std::string pre = std::string(dbg) + "/card-" + std::to_string(fromBottom ? 1 : 0);
+            stbi_flip_vertically_on_write(1);
+            stbi_write_png((pre + "-world.png").c_str(), w_, h_, 4, base.data(), w_ * 4);
+            stbi_write_png((pre + "-with.png").c_str(), w_, h_, 4, with.data(), w_ * 4);
+            stbi_flip_vertically_on_write(0);
+            stbi_write_png((pre + "-cov.png").c_str(), cw, ch, 4, cov.data(), cw * 4);
+        }
         std::printf("[card] %s captured at x%.2f (%.0f x %.0f px)\n", line.text.c_str(), k, bw, bh);
         return true;
     }
     return false;
 }
 
-// The captured lines: big in the middle (the title above the universe), shrinking onto their corners. White on
-// the black, taking their own ink as the world comes up.
+// The captured lines: big in the middle (the title above the universe), shrinking onto their corners, in their
+// own colors (dark ink white on the black, taking its color as the world comes up).
 void Renderer::drawCard() {
     const float e = saturate(brk_.cardShrink), day = 1.f - saturate(brk_.black);
     const vec3 white(0.96f, 0.95f, 0.92f);
@@ -485,7 +526,8 @@ void Renderer::drawCard() {
         const float sx1 = l.ax + (l.x1 - l.ax) / l.k, sy1 = l.ay + (l.y1 - l.ay) / l.k;
         const float x0 = lerpf(bx0, sx0, e), y0 = lerpf(by0, sy0, e), x1 = lerpf(bx0 + bw, sx1, e), y1 = lerpf(by0 + bh, sy1, e);
         ugl::set4f(cardProg_, "uRect", x0 / w_, 1.f - y1 / h_, x1 / w_, 1.f - y0 / h_);
-        ugl::set3f(cardProg_, "uInk", white + (l.ink - white) * day);
+        ugl::set3f(cardProg_, "uWhite", white);
+        ugl::set1f(cardProg_, "uWhiten", l.dark ? 1.f - day : 0.f);
         ugl::set1f(cardProg_, "uAlpha", saturate(brk_.cardAlpha) * lerpf(i == 0 ? 1.f : 0.85f, l.aMax, e));
         glBindTexture(GL_TEXTURE_2D, l.tex);
         ugl::drawFullscreen();
