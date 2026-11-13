@@ -28,7 +28,6 @@
 #include "universes/docks/docks.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -37,9 +36,6 @@
 #include "universes/docks/shaders.hpp"
 #include "universes/docks/world.hpp"
 #include "universes/registry.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 using namespace docks_world;
 
@@ -49,6 +45,17 @@ namespace {
 const unsigned char FONT_BARLOW[] = {
 #include "universes/docks/Barlow-Medium.ttf.inc"
 };
+
+// The HUD's lettering: the ink over its halo, never the halo through the ink (a fading line stays its own ink, not
+// a paler one), the halo easing out from the letters.
+const text::Lettering HALO_LETTERING{R"(
+vec4 letter(Letter L) {
+    float fill = clamp(L.dist / max(fwidth(L.dist), 1e-3) + 0.5, 0.0, 1.0);
+    float halo = smoothstep(0.0, 1.0, 1.0 + L.dist / max(uHaloShape.x * L.em, 1e-3)) * uHalo.a;
+    float a = max(fill, halo);
+    return vec4(mix(uHalo.rgb, L.ink.rgb, fill / max(a, 1e-3)), 1.0) * a * L.ink.a;
+}
+)"};
 
 namespace shaders = docks_shaders;
 using ugl::set1f;
@@ -137,24 +144,6 @@ mat4 inverse(const mat4& m) {
     return r;
 }
 
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
 int glyphIndex(unsigned char ch) {
     if (ch < 32 || ch >= 128) ch = '?';
     return ch - 32;
@@ -199,7 +188,6 @@ bool DocksUniverse::init(int width, int height) {
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "docks blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "docks final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "docks shape");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "docks text");
 
     // a unit cube (-1..1): 36 vertices, position + normal
     {
@@ -277,17 +265,8 @@ bool DocksUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
-    buildFont(font_, FONT_BARLOW);
     resize(width, height);
     // the cranes: three working each berth
     cranes_.clear();
@@ -315,51 +294,6 @@ bool DocksUniverse::init(int width, int height) {
     newShip(0, true);
     newShip(1, true);
     return glGetError() == GL_NO_ERROR;
-}
-
-void DocksUniverse::buildFont(Font& f, const unsigned char* ttf) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] docks font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = 64.f;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AW = 1024, AH = 1024, PAD = 8;
-    std::vector<unsigned char> atlas(AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = ch == 127 ? 0xB7 : ch; // the middle dot in DEL's slot
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
 }
 
 // The layout's reference camera raised to EYE_Y and looking straight ahead, its image shifted back down: the board
@@ -406,15 +340,13 @@ void DocksUniverse::resize(int width, int height) {
 
 DocksUniverse::~DocksUniverse() {
     for (ugl::Target* t : {&sceneT_, &reflT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progSky_, progWater_, progBox_, progSprite_, progLine_, progCone_, progVeil_, progDown_, progBlur_, progFinal_, progShape_, progText_})
+    for (GLuint p : {progSky_, progWater_, progBox_, progSprite_, progLine_, progCone_, progVeil_, progDown_, progBlur_, progFinal_, progShape_})
         glDeleteProgram(p);
-    for (GLuint v : {staticVao_, boxVao_, spriteVao_, lineVao_, quadVao_, shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {cubeVbo_, quadVbo_, staticVbo_, boxVbo_, spriteVbo_, lineVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {staticVao_, boxVao_, spriteVao_, lineVao_, quadVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {cubeVbo_, quadVbo_, staticVbo_, boxVbo_, spriteVbo_, lineVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
-    if (font_.tex) glDeleteTextures(1, &font_.tex);
-    delete (stbtt_fontinfo*)font_.info;
 }
 
 // =====================================================================================================
@@ -755,48 +687,6 @@ void DocksUniverse::buildSpreader(const Game& g, float dt) {
 // Text and the HUD
 // =====================================================================================================
 
-float DocksUniverse::textWidth(const Font& f, const std::string& s, float size, float track) const {
-    if (!f.ok || s.empty()) return s.size() * size * 0.5f;
-    const float k = size / f.px;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) w += f.g[glyphIndex((unsigned char)s[i])].adv * k + track;
-    return w - track;
-}
-
-void DocksUniverse::textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = size / f.px;
-    const float baseline = y + f.capH * k;
-    float pen = x;
-    for (size_t i = 0; i < s.size(); i++) {
-        const Glyph& g = f.g[glyphIndex((unsigned char)s[i])];
-        if (g.w > 0) {
-            const float x0 = pen + g.ox * k, y0 = baseline + g.oy * k, x1 = x0 + g.w * k, y1 = y0 + g.h * k;
-            const float v[6][4] = {{x0, y0, g.x0, g.y0}, {x1, y0, g.x1, g.y0}, {x1, y1, g.x1, g.y1},
-                                   {x0, y0, g.x0, g.y0}, {x1, y1, g.x1, g.y1}, {x0, y1, g.x0, g.y1}};
-            for (auto& q : v) out.insert(out.end(), q, q + 4);
-        }
-        pen += g.adv * k + track;
-    }
-}
-
-void DocksUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, const vec3& halo, float alpha, float haloA) {
-    if (q.empty() || !f.ok) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set3f(progText_, "uHalo", halo);
-    set1f(progText_, "uHaloA", haloA);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
 void DocksUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -808,11 +698,18 @@ void DocksUniverse::flushShapes() {
     shapes_.clear();
 }
 
-void DocksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD's inks (sRGB): stencil white on a soft halo of the dusk, the accent in the sodium lamps' amber.
+void DocksUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
+    ink = vec3(0.9f, 0.9f, 0.88f);
+    halo = ugl::toSrgb(lerp(pal_.zen, pal_.fog, 0.3f)) * 0.45f;
+    accent = lerp(ugl::toSrgb(pal_.lampA), vec3(1.f), 0.15f);
+}
+
+// The panels and the bonus gauge (the lettering: hudLine).
+void DocksUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
-    // stencil-white lettering on a soft halo of the dusk, the accent in the sodium lamps' amber
-    const vec3 ink(0.9f, 0.9f, 0.88f), halo = ugl::toSrgb(lerp(pal_.zen, pal_.fog, 0.3f)) * 0.45f;
-    const vec3 accent = lerp(ugl::toSrgb(pal_.lampA), vec3(1.f), 0.15f);
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
@@ -855,78 +752,46 @@ void DocksUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         }
         flushShapes();
     }
-    std::vector<float> q;
-    for (const HudText& h0 : hud) {
-        if (h0.alpha <= 0.01f || h0.text.empty()) continue;
-        HudText h = h0;
-        h.text = ascii(h.text);
-        const float base = h.scale * 12.f;
-        const float alpha = saturate(h.alpha) * vis;
-        q.clear();
-        auto place = [&](const std::string& text, float size, float track, float dy = 0.f) {
-            const float w = textWidth(font_, text, size, track);
-            textQuads(font_, text, ugl::hudLeft(h, w, width_), h.y + dy, size, track, q);
-        };
-        auto upper = [](std::string t) {
-            for (char& c : t) c = (char)std::toupper((unsigned char)c);
-            return t;
-        };
-        switch (h.role) {
-        case HUD_UNIVERSE:
-            place(upper(h.text), base * 0.72f, base * 0.28f, base * 0.06f);
-            drawText(font_, q, ink, halo, saturate(0.3f + h.alpha * 1.5f) * 0.75f * vis);
-            continue;
-        case HUD_SECTION:
-            place(upper(h.text), base * 0.8f, base * 0.3f, -base * 0.04f);
-            drawText(font_, q, accent, halo, saturate(0.3f + h.alpha * 1.7f) * vis);
-            continue;
-        case HUD_TITLE:
-            place(h.text, base * 1.1f, base * 0.02f, -base * 0.1f);
-            drawText(font_, q, ink, halo, saturate(h.alpha * 1.3f) * vis);
-            continue;
-        case HUD_INFO:
-            place(upper(h.text), base * 0.64f, base * 0.22f);
-            drawText(font_, q, ink, halo, saturate(alpha * 1.2f) * 0.72f);
-            continue;
-        case HUD_LABEL:
-            place(upper(h.text), base * 0.66f, base * 0.36f);
-            drawText(font_, q, ink, halo, saturate(alpha * 1.2f) * 0.6f);
-            continue;
-        case HUD_VALUE:
-            place(h.text, base * 1.0f, base * 0.08f, -base * 0.04f);
-            drawText(font_, q, ink, halo, alpha * 0.95f);
-            continue;
-        case HUD_NOTICE:
-            place(upper(h.text), base * 0.9f, base * 0.2f);
-            drawText(font_, q, accent, halo, alpha);
-            continue;
-        case HUD_KEY:
-            place(h.text, base * 0.84f, base * 0.1f);
-            drawText(font_, q, ink, halo, alpha);
-            continue;
-        case HUD_TOAST:
-            place(upper(h.text), base * 1.0f, base * 0.34f, -base * 0.1f);
-            drawText(font_, q, ink, halo, alpha, 0.6f);
-            continue;
-        case HUD_TOAST_SUB:
-            place(h.text, base * 0.95f, base * 0.1f);
-            drawText(font_, q, accent, halo, alpha * 0.9f, 0.6f);
-            continue;
-        case HUD_DIALOG:
-            if (h.scale >= 3.5f * s) {
-                place(upper(h.text), base * 0.9f, base * 0.26f);
-                drawText(font_, q, ink, halo, alpha, 0.7f);
-            } else {
-                place(h.text, base * 0.95f, base * 0.04f);
-                drawText(font_, q, h.accent ? accent : ink, halo, alpha, 0.7f);
-            }
-            continue;
-        default:
-            place(h.text, base * 0.78f, base * 0.06f);
-            drawText(font_, q, h.accent ? accent : ink, halo, alpha);
-            continue;
-        }
+}
+
+// The lettering, by the host (text.hpp): Barlow Medium, a touch heavier, widely tracked capitals for the names and
+// labels; stencil white on a soft halo of the dusk, the accent the sodium lamps' amber.
+void DocksUniverse::hudLine(const HudText& h, text::Line& out) {
+    const float s = height_ / 1080.f;
+    vec3 ink, halo, accent;
+    hudInks(ink, halo, accent);
+    text::Font* f = text::font(FONT_BARLOW);
+    const float base = h.scale * 12.f, alpha = saturate(h.alpha);
+    float haloA = 0.5f;
+    // a run: its size and letter spacing in pixels, moved down by dy
+    auto put = [&](const std::string& t, float size, float track, const vec3& c, float a, float dy = 0.f) {
+        out.add(t, f, size, c, track / size, saturate(a));
+        out.dy = dy;
+    };
+    switch (h.role) {
+    case HUD_UNIVERSE: put(text::upper(h.text), base * 0.72f, base * 0.28f, ink, saturate(0.3f + h.alpha * 1.5f) * 0.75f, base * 0.06f); break;
+    case HUD_SECTION: put(text::upper(h.text), base * 0.8f, base * 0.3f, accent, 0.3f + h.alpha * 1.7f, -base * 0.04f); break;
+    case HUD_TITLE: put(h.text, base * 1.1f, base * 0.02f, ink, h.alpha * 1.3f, -base * 0.1f); break;
+    case HUD_INFO: put(text::upper(h.text), base * 0.64f, base * 0.22f, ink, saturate(alpha * 1.2f) * 0.72f); break;
+    case HUD_LABEL: put(text::upper(h.text), base * 0.66f, base * 0.36f, ink, saturate(alpha * 1.2f) * 0.6f); break;
+    case HUD_VALUE: put(h.text, base * 1.0f, base * 0.08f, ink, alpha * 0.95f, -base * 0.04f); break;
+    case HUD_NOTICE: put(text::upper(h.text), base * 0.9f, base * 0.2f, accent, alpha); break;
+    case HUD_KEY: put(h.text, base * 0.84f, base * 0.1f, ink, alpha); break;
+    case HUD_TOAST: put(text::upper(h.text), base * 1.0f, base * 0.34f, ink, alpha, -base * 0.1f); haloA = 0.6f; break;
+    case HUD_TOAST_SUB: put(h.text, base * 0.95f, base * 0.1f, accent, alpha * 0.9f); haloA = 0.6f; break;
+    case HUD_DIALOG:
+        if (h.scale >= 3.5f * s) put(text::upper(h.text), base * 0.9f, base * 0.26f, ink, alpha);
+        else put(h.text, base * 0.95f, base * 0.04f, h.accent ? accent : ink, alpha);
+        haloA = 0.7f;
+        break;
+    default: put(h.text, base * 0.78f, base * 0.06f, h.accent ? accent : ink, alpha); break;
     }
+    out.look.weight = 0.0075f;
+    out.look.halo = halo;
+    out.look.haloA = haloA;
+    out.look.haloW = 0.08f;
+    out.lettering = &HALO_LETTERING;
+    out.alpha = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 }
 
 // =====================================================================================================
@@ -1541,7 +1406,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(game, f.panels);
     glDisable(GL_BLEND);
     (void)ph;
 }
