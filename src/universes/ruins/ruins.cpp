@@ -1,6 +1,6 @@
-// RUINS: time running backwards, behind the well, in 3D. A song starts in a dense jungle (trees, roots, vines, moss,
-// at most a stone corner peeking through); with the lines the jungle recedes (its trees shrink back, the roots
-// withdraw, the undergrowth sinks, the moss leaves the stones) and uncovers the ruins; then time rewinds and the ruins
+// RUINS: time running backwards, behind the well, in 3D. A song starts in overgrown ruins (broken columns and the
+// temple in plain sight among trees, roots, vines and moss); with the lines the jungle recedes (its trees shrink
+// back, the roots withdraw, the undergrowth sinks, the moss leaves the stones) and clears the ruins; then time rewinds and the ruins
 // repair themselves: fallen column tops lift from the ground and set back onto their stumps, tumbled blocks fly back
 // up into the walls, missing stones re-form out of golden dust, towers regain their tiers, edges sharpen, carvings
 // come back crisp, lichen and streaks fade; by scene completion (50 paced lines) the temple stands in its prime,
@@ -305,7 +305,7 @@ void RuinsUniverse::applyEv(const Ev& e, float t) {
 // plan) drive the columns, the temple, the missing blocks (re-forming with the temple) and the wear; the prime
 // (43..50: paint, braziers) once the last repair is done.
 void RuinsUniverse::updateRewind(float L) {
-    jungle_ = 1.f - smoothstepf(1.f, 12.f, L);
+    jungle_ = 0.4f * (1.f - smoothstepf(1.f, 12.f, L)); // (overgrown, never a wall: the ruins seen from the start)
     for (int i = 0; i < 8; i++) col_[i] = colRep_[i];
     temple_ = templeRep_;
     broken_ = 0.07f * (1.f - templeRep_);
@@ -1119,7 +1119,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_ruins() {
     static const UniverseEntry e{
-        "RUINS", "time runs backwards over the song: a dense jungle recedes, uncovering ruins that repair themselves, fallen drums flying back onto their columns and stones re-forming from dust, until the temple stands in its prime; the blocks are carved column drums, and the drop turns the sun to golden hour",
+        "RUINS", "time runs backwards over the song: the jungle recedes from overgrown ruins that repair themselves, fallen drums flying back onto their columns and stones re-forming from dust, until the temple stands in its prime; the blocks are carved column drums, and the drop turns the sun to golden hour",
         [] { return std::unique_ptr<Universe>(new RuinsUniverse()); },
         // Fits most songs; the calm, contemplative ones a little better.
         [](const SongLook& l) { return 0.8f + 0.25f * (1.f - l.density) + 0.1f * (1.f - l.dynamics); },
