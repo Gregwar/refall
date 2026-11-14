@@ -417,6 +417,7 @@ private:
     double rowAcc_ = 0, lastGravityTime_ = -1; // gravity rows accumulated, song time at the last update
     static constexpr float GRAVITY_BPM = 130.f; // the tempo gravity counts its beats in, whatever the song's
     float gameRate_ = 1.f; // gravity speed in real time (eased)
+    float gravityV_ = 1.f; // the velocity gravity runs at (the autoplay hurries as it rises)
     float bonusFall_ = 0.f; // how much the bonus's crawl has taken over the fall (eased)
     float pace_ = -1, fallbackTimer_ = 0; // section pace (rows per beat before level scaling), eased
     // Autoplay.
@@ -763,6 +764,7 @@ void App::updateGravity(double songTime, float dt) {
     // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V, as EXPERT (20G included; tools/demo.py ramps it up)
     static const float clipVel = std::getenv("ZEN_CLIP_VELOCITY") ? (float)std::atof(std::getenv("ZEN_CLIP_VELOCITY")) : 0.f;
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
+    gravityV_ = v;
     const float diff = Game::speedDifficulty(v);
     // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
@@ -826,7 +828,9 @@ void App::autoplay(float dt) {
     // Test hook: ZEN_CLIP_PACE=K plays a clip K times faster (tools/demo.py speeds the trailer up toward its end).
     const bool calm = !opt_.clipPath.empty();
     static const float pace = std::getenv("ZEN_CLIP_PACE") ? std::max(0.2f, (float)std::atof(std::getenv("ZEN_CLIP_PACE"))) : 1.f;
-    const float k = calm ? 1.f / pace : 1.f;
+    // (and hurries as the fall gets faster: no time to think once a piece reaches the stack in a second or two)
+    const float rush = smoothstepf(4.f, 22.f, gravityV_);
+    const float k = (calm ? 1.f / pace : 1.f) * (1.f - 0.85f * rush);
     if (!planned_) {
         planned_ = game_.planMove(planRot_, planX_);
         botTimer_ = (calm ? 0.45f : 0.25f) * k;
