@@ -16,6 +16,7 @@
 #include <EGL/eglext.h>
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#include <pthread.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -313,6 +314,22 @@ const unsigned char* glfwGetJoystickHats(int, int* n) { *n = 0; return nullptr; 
 
 // ---------------------------------------------------------------------------------------------------------------------
 
+// Threads get Bionic's ~1 MB stack (the desktop's are 8 MB, and the game's loop runs on the glue's thread here): every
+// thread created (the glue's, std::thread's) is given 16 MB, linked with -Wl,--wrap=pthread_create.
+extern "C" int __real_pthread_create(pthread_t*, const pthread_attr_t*, void* (*)(void*), void*);
+extern "C" int __wrap_pthread_create(pthread_t* t, const pthread_attr_t* attr, void* (*fn)(void*), void* arg) {
+    constexpr size_t STACK = 16u << 20;
+    pthread_attr_t a;
+    if (attr) a = *attr;
+    else pthread_attr_init(&a);
+    size_t size = 0;
+    pthread_attr_getstacksize(&a, &size);
+    if (size < STACK) pthread_attr_setstacksize(&a, STACK);
+    const int r = __real_pthread_create(t, &a, fn, arg);
+    if (!attr) pthread_attr_destroy(&a);
+    return r;
+}
+
 void android_main(android_app* app) {
     g_app = app;
     app->onAppCmd = onCmd;
@@ -339,6 +356,7 @@ void android_main(android_app* app) {
     std::printf("[android] HOME %s\n", home);
     while (!app->window && !g_quit) pump(); // the window first
     if (g_quit) return;
+    // (on the glue's thread, whose stack the wrap below made 16 MB: the activity's events are read on it)
     char a0[] = "refall";
     char* argv[] = {a0, nullptr};
     refall_main(1, argv);

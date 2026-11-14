@@ -204,7 +204,7 @@ set(ZEN_GAME_SOURCES
 if(ANDROID)
   add_library(refall SHARED ${ZEN_GAME_SOURCES})
   set_target_properties(refall PROPERTIES OUTPUT_NAME main)
-  target_link_options(refall PRIVATE -u ANativeActivity_onCreate)
+  target_link_options(refall PRIVATE -u ANativeActivity_onCreate -Wl,--wrap=pthread_create)
   set(ZEN_GAME_TARGETS refall)
 else()
   add_executable(refall ${ZEN_GAME_SOURCES})
