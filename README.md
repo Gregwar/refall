@@ -135,7 +135,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 </tr>
 <tr>
 <td><img src="docs/universes/mirror.jpg"><br><b>MIRROR</b>: glowing glass cubes light a dark liminal room (an infinity cove, a step, a pillar), their colors pooling on the glossy floor; a gallery of frameless mirrors floats in the side bands, each reflecting the stack from its own angle and bouncing its light into the room; a cleared row shatters into glinting shards, the drop blooms the light and gathers the mirrors into turning kaleidoscope rings<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: time runs backwards over one song, in real 3D: overgrown ruins, broken columns in plain sight, are cleared of their jungle and repair themselves (fallen column tops flying back onto their stumps, stones re-forming from golden dust, towers regaining their tiers) until a Maya, Khmer or Greek temple stands painted in its prime, braziers lit; the blocks are carved stone column drums, and the drop turns the sun to golden hour<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: time runs backwards over one song, in real 3D: overgrown ruins, broken columns in plain sight, are cleared of their jungle and repair themselves (fallen column tops flying back onto their stumps, stones re-forming from golden dust, towers regaining their tiers) until a Maya, Khmer or Greek temple stands painted in its prime, braziers lit; the blocks are pale stone carved with a glyph per piece (bars, sun, cross, spiral, waves, pyramid, eye), and the drop turns the sun to golden hour<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 </table>
 
