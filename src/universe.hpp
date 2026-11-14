@@ -25,6 +25,9 @@
 #include "mathutil.hpp"
 #include "text.hpp"
 
+// MusicState::inDrop ends this long before a DROP section does.
+constexpr double DROP_OUT_LEAD = 1.2;
+
 // Per-frame audio / music state the visuals react to.
 struct MusicState {
     FrameFeatures audio;
@@ -38,6 +41,7 @@ struct MusicState {
     std::array<float, NUM_BANDS> bandsFast{}; // quickly smoothed band levels (equalizer)
     float bpm = 120.f;       // the song's tempo
     double beat = 0;         // beats since the song's beat grid origin (bars are 4 beats: beat 0, 4, 8... downbeats)
+    bool inDrop = false;     // in a DROP section, from its first beat to DROP_OUT_LEAD s before its end
     bool hasSong = false;    // false while no song plays (no beat grid)
 };
 

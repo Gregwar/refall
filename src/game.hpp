@@ -84,6 +84,13 @@ public:
     bool holdUsed() const { return holdUsed_; }
     int next(int i) const { return next_[i]; }
     float rowOffset(int y) const { return rowOffset_[y]; }
+    // the stack at rest: the rows above a clear have fallen into place (within a hundredth of a row)
+    bool settled() const {
+        if (fallHold_ > 0) return false;
+        for (float o : rowOffset_)
+            if (o > 0.01f) return false;
+        return true;
+    }
     float pieceVisualY() const { return visY_; }
     float pieceVisualX() const { return visX_; }
     float lockProgress() const { return grounded_ ? lockTimer_ / lockDelay() : 0.f; }
