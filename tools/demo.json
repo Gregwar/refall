@@ -23,6 +23,8 @@
   // false: only the universes the chapters name (true: every enabled universe, the ones no chapter names added to
   // the "fill" chapter)
   "cover_all": false,
+  // the play speeds up over the video, from the first shot's pace to the last one's (x the clip's calm pace)
+  "pace": [1.0, 2.6],
   // seconds of crossfade between two shots, centred on the cut
   "crossfade": 0.4,
   // every shot shows a line clear: game seeds are tried (up to `tries`, the best of the first `pick_of` that show one)
@@ -92,9 +94,10 @@
      "card": {"text": "Enjoy the experience", "bars": 2, "enabled": false},
      "grid": "bar",
      "shots": [{"u": "tidepool"}, {"u": "docks"}, {"u": "skyocean"}, {"u": "crystal"},
-               // the game and its HUD fade away at about 2:10 (ZEN_OUT_LEAD: that long before the song's end), so the
-               // clear must come before it; then the whale alone under the logo
-               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "12.2"},
+               // the game and its HUD fade away at about 2:10, on the first piece landing from 13.7 s to 9.2 s before
+               // the song's end (ZEN_OUT_LEAD + 2.5 .. - 2), so the clear must come before it; then the whale alone
+               // under the logo
+               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "11.2"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
      // the end: the logo's white contours over the whale, then the logo in color as the scene fades to black
      "outro": {"fade": "2.5bars",

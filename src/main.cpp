@@ -319,6 +319,10 @@ private:
     bool songHasIntro() const;
     Game blank_;               // what the universes draw while the game is hidden
     // the outro starts this long before the song's end (ZEN_OUT_LEAD=SECONDS: earlier or later, for demo videos)
+    // The outro starts on a piece landing, so the game never fades out mid-fall: from OUT_EARLY s before outLead() to
+    // OUT_LATE s after it the first lock starts it, and at the window's end it starts anyway.
+    static constexpr float OUT_EARLY = 2.5f, OUT_LATE = 2.f;
+    bool landed_ = false; // a piece locked since the last check
     static float outLead() {
         static const float lead = std::getenv("ZEN_OUT_LEAD") ? (float)std::atof(std::getenv("ZEN_OUT_LEAD")) : 7.5f;
         return lead;
@@ -732,6 +736,7 @@ void App::handleEvents() {
             quadB2B_ = ev.backToBack;
         }
         if (ev.type == GameEvent::BonusStart) slowToast_ = 2.f;
+        if (ev.type == GameEvent::Lock) landed_ = true;
     }
     game_.events().clear();
 }
@@ -815,20 +820,29 @@ void App::autoplay(float dt) {
     if (game_.bonusReady() && !viewer_ && !noBonus) game_.activateBonus(); // (the viewer keeps the song unmuffled)
     if (!game_.hasPiece()) { planned_ = false; return; }
     // Recording a clip: a calm, human pace (a moment to think, unhurried moves, the piece falls visibly).
+    // Test hook: ZEN_CLIP_PACE=K plays a clip K times faster (tools/demo.py speeds the trailer up toward its end).
     const bool calm = !opt_.clipPath.empty();
+    static const float pace = std::getenv("ZEN_CLIP_PACE") ? std::max(0.2f, (float)std::atof(std::getenv("ZEN_CLIP_PACE"))) : 1.f;
+    const float k = calm ? 1.f / pace : 1.f;
     if (!planned_) {
         planned_ = game_.planMove(planRot_, planX_);
-        botTimer_ = calm ? 0.45f : 0.25f;
+        botTimer_ = (calm ? 0.45f : 0.25f) * k;
         if (!planned_) return;
     }
     botTimer_ -= dt;
     if (botTimer_ > 0) return;
-    botTimer_ = calm ? 0.13f : 0.07f;
+    const float late = botTimer_; // (how far past its time this step is)
+    botTimer_ = (calm ? 0.13f : 0.07f) * k;
     const Piece& p = game_.piece();
     if (p.rot != planRot_) { if (!game_.rotate(1)) planned_ = false; return; }
     if (p.x < planX_) { if (!game_.move(1)) planned_ = false; return; }
     if (p.x > planX_) { if (!game_.move(-1)) planned_ = false; return; }
-    if (calm && game_.softDrop()) { botTimer_ = 0.035f; return; }
+    if (calm && game_.softDrop()) { // (several rows in one frame when the pace outruns the frames)
+        botTimer_ = late + 0.035f * k;
+        while (botTimer_ <= 0.f && game_.softDrop()) botTimer_ += 0.035f * k;
+        botTimer_ = std::max(botTimer_, 0.f);
+        return;
+    }
     game_.hardDrop();
     planned_ = false;
 }
@@ -1451,7 +1465,9 @@ int App::run() {
             // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
             const double left = track_->duration() - songTime_;
             const bool lost = mode_ == MODE_CAMPAIGN && game_.over(); // a campaign game over goes back to the menu
-            if (break_ == BREAK_OFF && !lost && ((wantSkip_ && nextTrack_) || left <= outLead() || songFinished())) {
+            const bool outroDue = (left <= outLead() + OUT_EARLY && landed_) || left <= outLead() - OUT_LATE;
+            landed_ = false;
+            if (break_ == BREAK_OFF && !lost && ((wantSkip_ && nextTrack_) || outroDue || songFinished())) {
                 if (mode_ == MODE_CAMPAIGN && !wantSkip_) campaignSongSurvived();
                 break_ = BREAK_OUT;
                 breakT_ = 0;
