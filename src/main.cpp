@@ -811,7 +811,8 @@ void App::autoplay(float dt) {
         if (game_.hasPiece() && botTimer_ <= 0) { game_.hardDrop(); botTimer_ = 0.15f; }
         return;
     }
-    if (game_.bonusReady() && !viewer_) game_.activateBonus(); // (the viewer keeps the song unmuffled)
+    static const bool noBonus = std::getenv("ZEN_TEST_BONUS") && std::getenv("ZEN_TEST_BONUS")[0] == '0';
+    if (game_.bonusReady() && !viewer_ && !noBonus) game_.activateBonus(); // (the viewer keeps the song unmuffled)
     if (!game_.hasPiece()) { planned_ = false; return; }
     // Recording a clip: a calm, human pace (a moment to think, unhurried moves, the piece falls visibly).
     const bool calm = !opt_.clipPath.empty();
@@ -1502,6 +1503,13 @@ int App::run() {
             } else {
                 if (reviewMode && reviewPhase_ < 0) pickReviewTime();
                 if (simSongTime_ < opt_.shotTime - warmup()) simSongTime_ = std::max(0.0, opt_.shotTime - warmup());
+                // Test hook: ZEN_TEST_BONUS=1 starts the slow-motion bonus 4 s before the shot (its look settled),
+                // ZEN_TEST_BONUS=0 keeps it off (autoplay won't start it)
+                static const char* tb = std::getenv("ZEN_TEST_BONUS");
+                if (tb && tb[0] == '1' && simSongTime_ >= opt_.shotTime - 4.0 && !game_.bonusActive()) {
+                    game_.debugChargeBonus();
+                    game_.activateBonus();
+                }
             }
             simSongTime_ += dt * audio_.currentSpeed();
             songTime_ = simSongTime_;
