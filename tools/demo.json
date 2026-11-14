@@ -24,9 +24,9 @@
   // the "fill" chapter)
   "cover_all": false,
   // the play speeds up over the video, from the first shot to the last one: the autoplay's pace (x the clip's calm
-  // pace) and the fall's velocity (1 .. 50, as the game's levels; from 37.5 on, 20G in the drops)
+  // pace) and the fall's velocity (as the game's levels, 1 .. 50; from 37.5 on, 20G in the drops)
   "pace": [1.0, 2.6],
-  "velocity": [1, 50],
+  "velocity": [1, 30],
   // seconds of crossfade between two shots, centred on the cut
   "crossfade": 0.4,
   // every shot shows a line clear: game seeds are tried (up to `tries`, the best of the first `pick_of` that show one)
