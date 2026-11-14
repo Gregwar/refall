@@ -126,6 +126,7 @@ struct Options {
 // with no sound, the songs on a simulated clock; ZEN_TEST_TAIL=S starts each song S seconds before its end,
 // ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit, skip) at T seconds of the run,
 // ZEN_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, ZEN_TEST_QUIT=T stops the run at T seconds.
+static bool g_refresh = false; // the window must be drawn again (uncovered)
 static std::chrono::steady_clock::time_point g_startTime; // (the menu's first frame is timed from it)
 static bool testPlay() {
     static const bool on = std::getenv("ZEN_TEST_PLAY") != nullptr;
@@ -248,6 +249,10 @@ private:
     double cursorX_ = -1, cursorY_ = -1;
     float cursorIdle_ = 0;
     bool cursorHidden_ = false;
+    // A screen holding still (the pause menu, a run's debrief) is drawn a while, then kept as it is: the frames are
+    // not drawn again, swap() waits for a key instead (the gamepads read 30 times a second).
+    float stillT_ = 0;
+    bool held_ = false;
     void hideIdleCursor(float dt) {
         double x, y;
         glfwGetCursorPos(win_, &x, &y);
@@ -373,6 +378,7 @@ private:
     void swap() {
         if (streamVideo_ >= 0) streamFrame();
         if (headless_) return;
+        if (held_) { glfwWaitEventsTimeout(1.0 / 30.0); return; }
         glfwSwapBuffers(win_);
         // Wait for the frame to be shown: otherwise the driver queues up to a few frames ahead under vsync (more
         // through PRIME offload), and every key press waits behind them. ZEN_FRAME_QUEUE=1 lets it queue.
@@ -1309,6 +1315,7 @@ int App::run() {
     }
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);
+    glfwSetWindowRefreshCallback(win_, [](GLFWwindow*) { g_refresh = true; }); // (a held frame is drawn again)
     if (!gladLoadGL(glfwGetProcAddress)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
     if (gles::active()) { gles::setLoader([](const char* n) { return (void*)glfwGetProcAddress(n); }); gles::install(); }
     }
@@ -1422,6 +1429,11 @@ int App::run() {
             hideIdleCursor(dt);
         }
         if (!shotMode && (win_ || opt_.stream)) input_.update(dt); // offline renders ignore the keyboard and gamepads: they must be reproducible
+        const bool still = win_ && !shotMode && !testPlay() && !viewer_ && (mode_ == MODE_MENU ? menu_.still() : paused_) &&
+                           !input_.changed() && cursorIdle_ > 0 && !g_refresh;
+        g_refresh = false;
+        stillT_ = still ? stillT_ + dt : 0;
+        held_ = stillT_ > 2.5f; // (the world's dimming settled)
         if (testPlay()) {
             static const auto keys = testList("ZEN_TEST_KEYS"), shots = testList("ZEN_TEST_SHOTS");
             static const double quitAt = std::getenv("ZEN_TEST_QUIT") ? std::atof(std::getenv("ZEN_TEST_QUIT")) : 1e9;
@@ -1469,7 +1481,7 @@ int App::run() {
                 glViewport(0, 0, fbw, fbh);
                 glClearColor(0.f, 0.f, 0.f, 1.f);
                 glClear(GL_COLOR_BUFFER_BIT);
-            } else if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
+            } else if (fbw > 0 && fbh > 0 && !held_) menu_.render(fbw, fbh);
             static bool firstFrame = true;
             if (firstFrame) {
                 firstFrame = false;
@@ -1903,7 +1915,7 @@ int App::run() {
         if (fbw > 0 && fbh > 0) {
             std::vector<HudText> hud = buildHud(dt);
             updateBreak(dt, hud);
-            if (!preroll_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
+            if (!preroll_ && !held_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
             if (vv_) vv_->draw(fbw, fbh, viewerNow());
         }
         if (viewer_ && !opt_.viewShot.empty()) { // --shot: the viewer, a few seconds into the first song

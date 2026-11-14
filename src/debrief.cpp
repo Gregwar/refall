@@ -166,6 +166,8 @@ bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
     return true;
 }
 
+bool Menu::still() const { return screen_ == DEBRIEF && leaveT_ < 0 && debT_ > COLOR_AT + COLOR_FOR + 0.2f; }
+
 void Menu::drawEnterFade() {
     if (enterT_ >= ENTER) return;
     paint_.rrect(0, 0, fw_, fh_, 0, hex(0x000000, 1.f - sstep(enterT_ / ENTER)), 0);

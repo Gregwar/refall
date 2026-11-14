@@ -1,6 +1,8 @@
 #pragma once
+
 // Unified keyboard / gamepad input. Both always work; the "active" device (the one used last)
 // decides which control hints are shown. Gamepads are detected at startup and hot-plugged.
+#include <cstring>
 #include <mutex>
 #include <string>
 
@@ -33,6 +35,8 @@ public:
 
     bool down(Action a) const { return down_[a]; }
     bool pressed(Action a) const { return down_[a] && !prev_[a]; }
+    // whether any action went down or up this frame
+    bool changed() const { return std::memcmp(down_, prev_, sizeof(down_)) != 0; }
     // Auto-repeat for movement (DAS / ARR): returns number of steps to apply this frame.
     int repeatSteps(Action a) const { return repeat_[a]; }
     // The sideways direction held (-1 left, +1 right, 0 none; both: the latest pressed).
