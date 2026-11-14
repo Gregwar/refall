@@ -181,7 +181,7 @@ static void usage() {
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
         "  --cheat-skip         S completes the song, or on the Voyage's screen clears the focused stage (testing;\n"
-        "                       S is then no soft drop)\n"
+        "                       S is then no soft drop); Ctrl+Shift+Left/Right also seek in a Voyage's song\n"
         "  --mute               no sound\n"
         "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
         "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
@@ -1666,7 +1666,7 @@ int App::run() {
         // Ctrl+Shift+Left/Right: jump 10 s in the song (repeats while held) to test sections quickly.
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
-            if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN && !viewer_) { // no shortcuts in a campaign
+            if (dir != 0 && track_ && !audio_.finished() && (mode_ != MODE_CAMPAIGN || opt_.cheatSkip) && !viewer_) { // (in a campaign: only with --cheat-skip)
                 seekSong(std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0));
                 seekToast_ = 1.5f;
             }
