@@ -254,16 +254,18 @@ void main() {
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
     vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv, uRangeA) : uMix >= 1.0 ? src(uB, uProcB, uv, uRangeB)
                           : mix(src(uA, uProcA, uv, uRangeA), src(uB, uProcB, uv, uRangeB), uMix);
-    c *= 0.82 + 0.3 * h21(cell + 9.1);
     c = mix(c, c * uTint * 1.5, 0.22);
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     c = max(mix(vec3(l), c, 1.35), 0.0);                    // art glass: richer colour
     c = c * 1.25 + 0.04 + uTint * (0.10 + 0.14 * h21(cell + 5.3)); // lit from behind, tinted glass even over a dark world
-    c *= 0.85 + 0.3 * smoothstep(0.85, 0.0, edge);           // brighter toward each facet's middle
     c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c *= min(1.0, 0.42 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
+    // each facet its own shade and a slightly different hue, brighter toward its middle (after the cap, so even a flat
+    // world shows its cells)
+    c *= (0.72 + 0.42 * h21(cell + 9.1)) * (0.88 + 0.24 * smoothstep(0.85, 0.0, edge));
+    c *= 0.86 + 0.28 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     o = vec4(c, 1.0);
 }
