@@ -1,8 +1,9 @@
 // ELECTRON: bare silicon dies on a dark substrate, and charges finding them.
 //
 // A dark, softly textured slab seen from straight above. The well is a hairline frame on it and the pieces' blocks are
-// bare dies: the piece's color shimmering, a fine grid of circuitry, a border of gold bond pads. Two terminals sit at the edges of the picture, one on the left, one on the right, half out of it: a
-// dark plate with a ring of contact pads and a glowing core.
+// bare dies: the piece's color shimmering, a fine grid of circuitry, a border of gold bond pads. Two terminals sit at
+// the edges of the picture, one on the left, one on the right, half out of it: a dark plate with a ring of contact
+// pads and a glowing core.
 //
 // The charges are a real (small) ant-colony model, only drawn abstract: hot points with a short tail. They leave the
 // terminals and wander; the ones that touch a cube take a little of its charge (the contact throws sparks, the cube's
@@ -11,9 +12,10 @@
 // filament along their middle.
 //
 // A cleared row's cubes shatter into shards and burst into fragments with sparks; the fragments thrown out of the
-// well stay on the substrate until charges fetch them. A drop pours charges out of both terminals: many more, much
-// faster, the traces brighter, more sparks, the cubes in vivid colors. A chorus is a busy circuit, a break a few slow
-// charges on fading traces. A lock scatters the charges around the impact (a hard one sparks there); slow motion slows
+// well stay on the substrate until charges fetch them. A DROP section (and it alone) pours charges out of both
+// terminals: many more, much faster, the traces brighter, more sparks, the cubes in vivid colors, and on every beat
+// an arc jumps from a terminal to a cube on the stack's top. A chorus is a busy circuit, a break a few slow charges on
+// fading traces. A lock scatters the charges around the impact (a hard one sparks there); slow motion slows
 // the circuit; a game over shatters the whole stack.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
@@ -219,19 +221,59 @@ void ElectronUniverse::setLevel(int level, float energy, float seconds, float im
     (void)impact;
     level_ = std::clamp(level, 0, 2);
     energy_ = energy;
-    lvTarget_ = (float)level_;
-    if (level_ < 2) inDrop_ = false;
+    lvTarget_ = std::min((float)level_, 1.f); // (the peak: a DROP section's alone, see simulate)
     if (seconds <= 0.1f) lv_ = lvTarget_;
 }
 
-// The drop's first downbeat: the charges pour out of both terminals, the cubes turn vivid, the traces brighten.
-void ElectronUniverse::drop(float strength) {
-    if (level_ < 2) return;
-    inDrop_ = true;
-    swell_ = std::max(swell_, 0.6f + 0.4f * saturate(strength));
-    const int n = 40 + (int)(40 * saturate(strength));
-    pour(0, n);
-    pour(1, n);
+// The drop's first downbeat: the charges pour out of both terminals (if it lands in a DROP section; see simulate).
+void ElectronUniverse::drop(float strength) { hit_ = std::max(hit_, saturate(strength)); }
+
+// A DROP's beat: an arc jumps from a terminal (one, then the other) to a cube on the stack's top, jagged, with a short
+// fork; the cube it strikes lights up and throws sparks.
+void ElectronUniverse::arc(const Game& game) {
+    const Variant& V = VARIANTS[variant_];
+    int cols[Game::W], tops[Game::W], nc = 0;
+    for (int x = 0; x < Game::W; x++)
+        for (int y = Game::HIDDEN; y < Game::H; y++)
+            if (game.cell(x, y).type >= 0) { cols[nc] = x; tops[nc] = y; nc++; break; }
+    const int pick = nc > 0 ? (int)rng_.range(0.f, nc - 0.001f) : -1;
+    const int tx = pick >= 0 ? cols[pick] : (int)rng_.range(0.f, Game::W - 0.001f), ty = pick >= 0 ? tops[pick] : Game::H - 1;
+    const vec3 cp = layout::cellPos((float)tx, (float)ty);
+    const vec2 E = v2(cp.x, cp.y + (pick >= 0 ? 0.45f : -0.5f));
+    const int side = arcSide_;
+    arcSide_ ^= 1;
+    const vec2 S = nest_[side] + v2(side == 0 ? 1.f : -1.f, 0.f) * (nestR_ * 0.3f);
+    // jagged: each segment's middle pushed aside, less at each finer level (the whole stays on its way, the line
+    // crackles)
+    auto jag = [&](vec2 a, vec2 b, int levels, float amp) {
+        std::vector<vec2> pts{a, b};
+        for (int l = 0; l < levels; l++, amp *= 0.62f) {
+            std::vector<vec2> next{pts[0]};
+            for (size_t i = 0; i + 1 < pts.size(); i++) {
+                const vec2 d = pts[i + 1] - pts[i];
+                next.push_back((pts[i] + pts[i + 1]) * 0.5f + v2(-d.y, d.x) * (amp * rng_.range(-1.f, 1.f)));
+                next.push_back(pts[i + 1]);
+            }
+            pts.swap(next);
+        }
+        return pts;
+    };
+    Arc a;
+    a.pts = jag(S, E, 6, 0.14f);
+    a.life = 0.24f;
+    a.w = 0.06f;
+    // the fork: from a point in its middle third, off to one side
+    const size_t i0 = a.pts.size() / 3 + (size_t)rng_.range(0.f, a.pts.size() / 3.f);
+    const vec2 dir = a.pts[std::min(i0 + 1, a.pts.size() - 1)] - a.pts[i0];
+    const float ang = std::atan2(dir.y, dir.x) + (rng_.chance(0.5f) ? 0.7f : -0.7f);
+    Arc f;
+    f.pts = jag(a.pts[i0], a.pts[i0] + dirOf(ang) * (len(E - S) * rng_.range(0.12f, 0.22f)), 4, 0.18f);
+    f.life = 0.16f;
+    f.w = 0.035f;
+    arcs_.push_back(a);
+    arcs_.push_back(f);
+    if (pick >= 0) nib_[ty][tx] = 1.f;
+    sparks(E, v2(0.f, 1.f), hex(V.charge), 10, 3.5f, 1.4f, 1.f);
 }
 
 void ElectronUniverse::refresh(float strength) {
@@ -749,7 +791,25 @@ void ElectronUniverse::relax(std::vector<float>& f, float tau, float dt) {
 void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const MusicState& music) {
     (void)game;
     (void)dt;
-    // the staging
+    // the staging: a DROP section alone floods the circuit (a chorus stays a busy circuit, the level below)
+    inDrop_ = music.inDrop;
+    if (inDrop_) lvTarget_ = 2.f;
+    else lvTarget_ = std::min((float)level_, 1.f);
+    if (hit_ > 0.f && inDrop_) {
+        swell_ = std::max(swell_, 0.6f + 0.4f * hit_);
+        const int nh = 40 + (int)(40 * hit_);
+        pour(0, nh);
+        pour(1, nh);
+    }
+    hit_ = 0.f;
+    // through it, an arc on every beat
+    if (inDrop_ && music.hasSong && wdt > 0.f) {
+        const double b = std::floor(music.beat);
+        if (arcBeat_ >= 0.0 && b != arcBeat_) arc(game);
+        arcBeat_ = b;
+    } else {
+        arcBeat_ = -1.0;
+    }
     lv_ = approach(lv_, lvTarget_, 0.9f, dt);
     dropMix_ = approach(dropMix_, inDrop_ ? 1.f : 0.f, inDrop_ ? 5.f : 0.8f, dt);
     swell_ = approach(swell_, 0.f, 0.35f, dt);
@@ -837,6 +897,7 @@ void ElectronUniverse::warmUp(const Game& game) {
     for (int i = 0; i < 900; i++) simulate(game, 0.05f, 0.05f, quiet);
     sparks_.clear();
     flashes_.clear();
+    arcs_.clear();
     warm_ = true;
 }
 
@@ -994,6 +1055,8 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         }
         sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& sp) { return sp.t > sp.life; }),
                       sparks_.end());
+        for (Arc& ar : arcs_) ar.t += dt;
+        arcs_.erase(std::remove_if(arcs_.begin(), arcs_.end(), [](const Arc& ar) { return ar.t > ar.life; }), arcs_.end());
         for (Flash& fl : flashes_) fl.t += dt;
         flashes_.erase(std::remove_if(flashes_.begin(), flashes_.end(), [](const Flash& fl) { return fl.t > fl.life; }),
                        flashes_.end());
@@ -1140,6 +1203,22 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         const float al = (1.f - k) * (1.f - k) * world;
         over_.push_back({{fl.p.x, fl.p.y, fl.r * 1.3f, fl.r * 1.3f}, {0.f, 6.f, 0.f, al}, {fl.col.x, fl.col.y, fl.col.z, 0.f},
                          {fl.r * (0.7f + 0.3f * k), 0.f, 0.f, 0.f}});
+    }
+    // a DROP's arcs: white hot in the charges' glow, flickering as they fade
+    {
+        const Variant& V = VARIANTS[variant_];
+        const vec3 ac = lerp(hex(V.charge), hex(V.core), 0.3f);
+        for (const Arc& ar : arcs_) {
+            if (!gameOn) break;
+            const float k = ar.t / ar.life;
+            const float al = (1.f - k) * (0.6f + 0.4f * std::sin(ar.t * 95.f + (float)ar.pts.size())) * world;
+            for (size_t i = 0; i + 1 < ar.pts.size(); i++) {
+                const vec2 a = ar.pts[i], b = ar.pts[i + 1], d = b - a, c = (a + b) * 0.5f;
+                const float Lh = len(d) * 0.5f;
+                over_.push_back({{c.x, c.y, Lh + ar.w * 3.f, ar.w * 3.f}, {std::atan2(d.y, d.x), 7.f, 0.f, al}, {ac.x, ac.y, ac.z, 0.f},
+                                 {Lh, ar.w, 0.f, 0.f}});
+            }
+        }
     }
     // the bonus gauge: twelve grains of sugar in a ring
     if (gameOn) {
