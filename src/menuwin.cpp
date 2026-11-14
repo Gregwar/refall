@@ -523,7 +523,7 @@ void Worlds::kalCampaign() {
         const bool o = open(fs);
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
         const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
-        p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0xffd27a) : hex(0xffffff, 0.6f), -1, 0.4f);
+        p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0xffd27a) : hex(0xffffff, 0.9f), -1, 0.4f);
         // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
         const float colS = x + 430 * u, colL = x + 528 * u;
         if (o && cleared(fs)) {
@@ -536,15 +536,17 @@ void Worlds::kalCampaign() {
         for (int k = 0; k < ns; k++) {
             const float y = Y(350 + k * rowH);
             const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) * ao : 0.f;
-            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xffffff, 0.04f + 0.1f * g));
-            p.rrectLine(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.5f * g));
+            // dark glass under each row, so it reads over a bright world
+            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0x0c0c14, 0.55f));
+            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xffffff, 0.1f * g));
+            p.rrectLine(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, 1.2f * u, hex(0xffffff, 0.2f + 0.6f * g));
             const Col sc = o ? songCol(fs, k) : hex(0x5a5c66);
             p.rrect(x, y - 24 * u, 32 * u, 32 * u, 4 * u, sc);
             if (o && beaten(fs, k)) p.check(x + 16 * u, y - 8 * u, 18 * u, 3 * u, hex(0xffffff));
             int vi = 0;
             const int idx = universes::parse(spec(fs, k), &vi);
             std::string name = idx >= 0 ? universes::entry(idx).name : spec(fs, k);
-            p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.6f + 0.4f * g), -1, 0.25f);
+            p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.85f + 0.15f * g), -1, 0.25f);
             if (o && beaten(fs, k)) {
                 p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * u, hex(0xffd27a), 1, 0.15f);
                 p.text(F::JOSEFIN, linesStr(m.progress_->lines(fs, k, m.diff_)) + " L", colL, y, 18 * u, hex(0xffd27a, 0.7f), 1, 0.15f);
@@ -798,11 +800,11 @@ void Worlds::kalVoyages() {
         const Col hue = sel ? hue0 : mixc(hue0, hex(0x6a6c78), 0.6f); // dull: toward a grey
         if (sel) {
             p.setAdditive(true);
-            p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), 0.2f), 26 * u);
+            p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), 0.32f), 30 * u);
             p.setAdditive(false);
         }
         p.rrect(x, y + 12 * u, w, h, 22 * u, hex(0x000000, 0.3f), 30 * u);
-        p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), sel ? 0.72f : 0.86f), 0.92f));
+        p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), sel ? 0.5f : 0.86f), 0.92f));
         p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
         p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
                     sel ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.5f) : withA(hue, 0.35f));
@@ -832,7 +834,8 @@ void Worlds::kalVoyages() {
             m.stageColor(k, sc);
             const Col c = rgb8(sc);
             const Col lit = sel ? c : mixc(c, hex(0x6a6c78), 0.55f);
-            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < pr.cleared ? lit : mixc(lit, hex(0x14141c), 0.55f),
+            // (the stages not cleared yet darker: on the focused card only a little)
+            kite(mx, my, rot + k * TAU / st, mr * 0.22f, mr, std::min(0.42f, 2.8f / st), k < pr.cleared ? lit : mixc(lit, hex(0x14141c), sel ? 0.2f : 0.55f),
                  0.92f, true, hex(0x08080c, 0.9f));
         }
         p.circle(mx, my, mr * 0.22f, hex(0x0a0a12));
@@ -840,18 +843,18 @@ void Worlds::kalVoyages() {
         // how far it went, large on the right
         const int pc = pr.percent();
         const float pw = p.text(F::JOSEFIN_LIGHT, std::to_string(pc) + "%", x + w - 36 * u, my + 16 * u, 46 * u,
-                                pc > 0 ? hex(0xffd27a, 0.95f) : hex(0xffffff, 0.35f), 1, 0.02f);
+                                pc > 0 ? hex(0xffd27a, 0.95f) : hex(0xffffff, sel ? 0.8f : 0.35f), 1, 0.02f);
         // the name, its songs and stages, its stages cleared
         const float tx = mx + mr + 30 * u, tmax = x + w - 36 * u - pw - 24 * u - tx;
         std::string title = asciiFold(featured ? std::string(GAME_TITLE) : v->title);
         const float ts = (featured ? 38.f : 28.f) * u;
         const F tf = featured ? F::JOSEFIN_LIGHT : F::JOSEFIN;
         while (title.size() > 3 && p.width(tf, title, ts, 0.04f) > tmax) title.pop_back();
-        if (featured) p.text(F::JOSEFIN, "FEATURED", tx, my - 44 * u, 14 * u, hex(0xe8c06a), -1, 0.45f);
+        if (featured) p.text(F::JOSEFIN, "FEATURED", tx, my - 44 * u, 14 * u, sel ? hex(0xfff2d0) : hex(0xe8c06a), -1, 0.45f);
         p.text(tf, title, tx, my + (featured ? 4.f : 0.f) * u, ts, hex(0xffffff, 0.8f + 0.2f * g), -1, 0.04f);
         char b[96];
         std::snprintf(b, sizeof(b), "%d SONGS  /  %d STAGES", songs, st);
-        p.text(F::JOSEFIN, b, tx, my + 36 * u, 14 * u, withA(hue, 0.85f), -1, 0.3f);
+        p.text(F::JOSEFIN, b, tx, my + 36 * u, 14 * u, sel ? mixc(hue, hex(0xffffff), 0.45f) : withA(hue, 0.85f), -1, 0.3f);
         if (pr.cleared > 0) {
             std::snprintf(b, sizeof(b), "%d CLEARED", pr.cleared);
             p.text(F::JOSEFIN, b, tx, my + 60 * u, 14 * u, hex(0xffd27a, 0.9f), -1, 0.3f);
