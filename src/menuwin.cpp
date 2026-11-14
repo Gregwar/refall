@@ -564,7 +564,9 @@ void Worlds::kalTitle() {
     float mix;
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
-    const float cx = X(960), cy = Y(330);
+    // the logo (its petals from 40 to 620) and the menu (652..862) centred on the screen's height together
+    const float dy = 540.f - 0.5f * (40.f + 862.f);
+    const float cx = X(960), cy = Y(330 + dy);
     p.circle(cx, cy, 250 * u, hex(0x000000, 0.4f), 60 * u);
     // the logo's petals: the stages' colours in rainbow order round the wheel
     std::vector<std::pair<float, Col>> hues;
@@ -592,8 +594,8 @@ void Worlds::kalTitle() {
         p.setAdditive(false);
         p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff), 0, 0.22f);
     }
-    p.rrect(cx - 260 * u, Y(652), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
-    menuItems(F::JOSEFIN, 712, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
+    p.rrect(cx - 260 * u, Y(652 + dy), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
+    menuItems(F::JOSEFIN, 712 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
 }
 
 void Worlds::kalFree() {
