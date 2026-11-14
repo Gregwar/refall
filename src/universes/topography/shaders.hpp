@@ -296,7 +296,13 @@ void main() {
     float sd = shapeSdf(vLocal, int(vA.w + 0.5)) + vC.w;
     float aa = max(pxL, 1e-4);
     if (kind == 2) {
-        // the hovering piece's soft shadow on the map
+        // the hovering piece's soft shadow on the map, each place drawn once: by the nearest of the piece's cells (the
+        // cells' padded quads overlap, and the shadows would add up into darker squares and seams)
+        int m = int(vA.w + 0.5);
+        const vec2 nb[8] = vec2[8](vec2(-1, 0), vec2(1, 0), vec2(0, -1), vec2(0, 1), vec2(-1, -1), vec2(1, -1), vec2(-1, 1), vec2(1, 1));
+        float own = length(vLocal);
+        for (int i = 0; i < 8; i++)
+            if (has(m, i) && length(vLocal - nb[i]) < own) discard;
         float a = (1.0 - smoothstep(-0.2, 0.3, sd)) * vB.a;
         frag = vec4(fillC * a, a);
         return;
