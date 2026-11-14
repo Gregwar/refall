@@ -455,7 +455,7 @@ void SmokeUniverse::landDust(const Game& game) {
         if (inPiece(q.x + s, q.y)) continue; // the piece goes on that way: the contact's end is under it, closed
         const vec3 p = layout::cellPos((float)q.x, (float)q.y);
         puff(v2(p.x + 0.45f * s, p.y - 0.35f), v2(0.6f * s, 3.f + 0.8f * hard), 0.3f, 1.5f + 0.5f * hard, 1.4f,
-             0.38f + 0.14f * hard, 0.f, 1.25f);
+             0.26f + 0.1f * hard, 0.f, 1.25f);
         puffs_.back().drag = 2.6f; // braked hard by the air...
         puffs_.back().fall = 1.9f; // ...then pulled back down while it fades
         puffs_.back().minGlow = 0.45f; // caught in the stray light, even outside the beam
@@ -753,7 +753,7 @@ void SmokeUniverse::buildFx() {
         const float glow = std::max(lit, 0.4f);
         const vec3 pc = cur_.piece[d.type];
         const vec3 c = pc * (0.35f + 0.95f * glow) * (0.4f + 0.6f * lightOn);
-        const float a = 0.65f / (0.6f + 0.4f * B) * (1.f - smoothstepf(0.6f, 1.45f, t)); // a quad: bigger, not denser
+        const float a = 0.44f / (0.6f + 0.4f * B) * (1.f - smoothstepf(0.6f, 1.45f, t)); // a quad: bigger, not denser
         wisps_.push_back({{d.x, 0.5f * (bottom + top), 1.6f, 0.5f * (top - bottom) / 1.6f}, {c.x, c.y, c.z, a},
                           {4.f, d.seed * 13.f, V, t}});
     }
