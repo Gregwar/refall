@@ -418,7 +418,7 @@ void main() {
 
 // ---------------------------------------------------------------- sprites: smoke puffs and wisps, the ring, motes
 
-// a0: center xy, radius, stretch y. a1: rgb, alpha. a2: kind (0 puff, 1 ring, 2 mote, 3 blade, 4 a cleared block's smoke), seed,
+// a0: center xy, radius, stretch y. a1: rgb, alpha. a2: kind (0 puff, 2 mote, 3 blade, 4 a cleared block's smoke), seed,
 // progress, swirl (4: seconds).
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
@@ -499,18 +499,6 @@ void main() {
     vec2 w = vec2(texture(uNoise, q * 0.21 + seed + vec2(0.0, k * 0.2)).r, texture(uNoise, q * 0.21 + seed * 1.3 + 0.5).b) - 0.5;
     float c = cos(sw * k), s = sin(sw * k);
     vec2 r2 = mat2(c, s, -s, c) * q + w * (0.6 + 0.8 * k);
-    if (kind == 1) {
-        // a smoke ring rolling up: an annulus seen a little from below, its far side thinner
-        vec2 rq = q * 1.3 + w * (0.12 + 0.2 * k);
-        vec2 e = rq * vec2(1.0, 2.8);
-        float d = length(e);
-        float n = texture(uNoise, rq * 0.8 + seed).g * 0.6 + texture(uNoise, rq * 2.1 + seed * 1.3).r * 0.4;
-        float tube = exp(-pow((d - 0.8 + (n - 0.5) * 0.12) / (0.1 + 0.08 * k), 2.0));
-        float back = 0.55 + 0.45 * smoothstep(-0.2, 0.15, -q.y);
-        float a = tube * back * (0.55 + 0.75 * n) * v1.a * fade;
-        frag = vec4(v1.rgb * a, a);
-        return;
-    }
     float r = length(r2);
     float n1 = texture(uNoise, r2 * 0.35 + seed).g;
     float n2 = texture(uNoise, r2 * 0.9 + seed * 1.7).r;
