@@ -466,6 +466,7 @@ private:
     void viewerFrame(float dt);
     void viewerJump(int i);
     void viewerSeek(double t);
+    void seekSong(double t);
     void viewerSongStarted();
 };
 
@@ -1666,13 +1667,7 @@ int App::run() {
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
             if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN && !viewer_) { // no shortcuts in a campaign
-                double target = std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0);
-                audio_.seek(target);
-                songTime_ = target;
-                simSongTime_ = target;
-                pace_ = -1; // re-sync the beat-driven gravity
-                lastGravityTime_ = -1;
-                lastSeg_ = track_->analysis.segmentAt(target);
+                seekSong(std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0));
                 seekToast_ = 1.5f;
             }
         }
@@ -1845,6 +1840,9 @@ int App::run() {
             // The song is known in advance: start the ripple early so it crosses the board on the boundary.
             // Soft refresh: a new section inside the same scene (chorus -> chorus, verse -> verse) is marked
             // by a light wave and a small glow lift; colors and layout stay the same.
+            // a DROP section (as the corner shows it), until a little before its end: what leaves with it is gone by then
+            music_.inDrop = !an.segments.empty() && an.segments[an.segmentAt(songTime_)].kind == SEG_DROP &&
+                            an.segments[an.segmentAt(songTime_ + DROP_OUT_LEAD)].kind == SEG_DROP;
             if (!an.segments.empty()) {
                 int seg = an.segmentAt(songTime_ + 0.45);
                 if (seg > lastSeg_) {
@@ -1905,6 +1903,7 @@ int App::run() {
             music_.beatPulse = 0;
             music_.beat = runTime_ * 2.0;
             music_.hasSong = false;
+            music_.inDrop = false;
         }
         universeAge_ += dt;
 
@@ -2439,12 +2438,28 @@ void App::viewerJump(int i) {
 
 void App::viewerSeek(double t) {
     if (!track_) return;
-    t = std::clamp(t, 0.0, std::max(0.0, track_->duration() - 1.0));
+    seekSong(std::clamp(t, 0.0, std::max(0.0, track_->duration() - 1.0)));
+}
+
+// A jump in the song: the scene is set to where it lands at once (into a peak, with its drop hit, which a jump past
+// the peak's first beat would otherwise miss: the universes would never take their drop look).
+void App::seekSong(double t) {
     audio_.seek(t);
     songTime_ = simSongTime_ = t;
     pace_ = -1; // re-sync the beat-driven gravity
     lastGravityTime_ = -1;
     lastSeg_ = track_->analysis.segmentAt(t);
+    if (plan_.phases.empty()) return;
+    const int ph = plan_.phaseAt(t);
+    dropAt_ = -1;
+    if (ph == lastPhase_) return;
+    lastPhase_ = ph;
+    const ScenePhase& to = plan_.phases[ph];
+    R_.setLevel(to.level, to.energy, 1.f, to.level >= 2 ? 1.f : 0.f);
+    if (to.level >= 2) {
+        R_.drop(1.f);
+        std::printf("[app] drop (landed in the peak)\n");
+    }
 }
 
 // A song starts: its title, velocity and universe, from the campaign.

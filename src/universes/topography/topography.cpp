@@ -1176,9 +1176,9 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     dropAmt_ = approach(dropAmt_, dropMode_ ? 1.f : 0.f, dropMode_ ? 3.f : 0.4f, dt);
     {
-        // the drop's colors come in with the flood (and leave slowly after it)
+        // the drop's colors, through a DROP section: in on its first beat, out as it ends
         // (switched quickly on the downbeat, so the pieces never pass through muddy in-between tints)
-        colAmt_ = approach(colAmt_, dropMode_ ? wp : 0.f, dropMode_ ? 7.f : 0.5f, dt);
+        colAmt_ = approach(colAmt_, music.inDrop ? 1.f : 0.f, music.inDrop ? 7.f : 2.5f, dt);
         pal_ = basePal_;
         lerpPalette(pal_, dropPaletteOf(variant_), smoothstepf(0.f, 1.f, colAmt_));
     }
