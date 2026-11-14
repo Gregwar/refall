@@ -341,8 +341,9 @@ private:
     // the outro starts this long before the song's end (ZEN_OUT_LEAD=SECONDS: earlier or later, for demo videos)
     // The outro starts on a piece landing, so the game never fades out mid-fall: from OUT_EARLY s before outLead() to
     // OUT_LATE s after it the first lock starts it, and at the window's end it starts anyway.
-    static constexpr float OUT_EARLY = 2.5f, OUT_LATE = 2.f;
-    bool landed_ = false; // a piece locked since the last check
+    // A lock clearing lines waits for the stack to settle (up to OUT_SETTLE s more at the window's end).
+    static constexpr float OUT_EARLY = 2.5f, OUT_LATE = 2.f, OUT_SETTLE = 1.5f;
+    bool landed_ = false; // a piece locked since the last check (or since its clear, until the stack settled)
     static float outLead() {
         static const float lead = std::getenv("ZEN_OUT_LEAD") ? (float)std::atof(std::getenv("ZEN_OUT_LEAD")) : 7.5f;
         return lead;
@@ -1527,8 +1528,11 @@ int App::run() {
             // The break: the outro starts before the song's end (or at once for "next song"), the next song on its black.
             const double left = track_->duration() - songTime_;
             const bool lost = mode_ == MODE_CAMPAIGN && game_.over(); // a campaign game over goes back to the menu
-            const bool outroDue = (left <= outLead() + OUT_EARLY && landed_) || left <= outLead() - OUT_LATE;
-            landed_ = false;
+            // (a lock that clears lines: once the rows above have fallen, so that the next song never opens on them falling)
+            const bool rest = game_.settled();
+            const bool outroDue = (left <= outLead() + OUT_EARLY && landed_ && rest) || (left <= outLead() - OUT_LATE && rest) ||
+                                  left <= outLead() - OUT_LATE - OUT_SETTLE;
+            if (rest) landed_ = false;
             if (break_ == BREAK_OFF && !lost && ((wantSkip_ && nextTrack_) || outroDue || songFinished())) {
                 if (mode_ == MODE_CAMPAIGN && !wantSkip_) campaignSongSurvived();
                 break_ = BREAK_OUT;
