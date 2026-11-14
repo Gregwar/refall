@@ -181,7 +181,7 @@ static void usage() {
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
         "  --cheat-skip         S completes the song, or on the Voyage's screen clears the focused stage (testing;\n"
-        "                       S is then no soft drop)\n"
+        "                       S is then no soft drop); Ctrl+Shift+Left/Right also seek in a Voyage's song\n"
         "  --mute               no sound\n"
         "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
         "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
@@ -1666,7 +1666,7 @@ int App::run() {
         // Ctrl+Shift+Left/Right: jump 10 s in the song (repeats while held) to test sections quickly.
         {
             int dir = input_.repeatSteps(A_SEEK_FWD) - input_.repeatSteps(A_SEEK_BACK);
-            if (dir != 0 && track_ && !audio_.finished() && mode_ != MODE_CAMPAIGN && !viewer_) { // no shortcuts in a campaign
+            if (dir != 0 && track_ && !audio_.finished() && (mode_ != MODE_CAMPAIGN || opt_.cheatSkip) && !viewer_) { // (in a campaign: only with --cheat-skip)
                 seekSong(std::clamp(audio_.position() + 10.0 * dir, 0.0, track_->duration() - 1.0));
                 seekToast_ = 1.5f;
             }
@@ -1854,6 +1854,9 @@ int App::run() {
                         R_.refresh(strength);
                         std::printf("[app] refresh (%s)\n", segmentName(sg.kind));
                     }
+                    // A DROP section inside a scene that was already at its peak (after a loud build or chorus)
+                    // lands too: its drop hit, on its first beat.
+                    if (!phaseStart && sg.kind == SEG_DROP && ph.level >= 2) dropAt_ = sg.start;
                     lastSeg_ = seg;
                 } else if (seg < lastSeg_) {
                     lastSeg_ = seg; // seeked back
@@ -1873,7 +1876,8 @@ int App::run() {
                         lastPhase_ = nxt;
                         float impact = rising ? (to.level >= 2 ? 1.f : 0.5f) : 0.f;
                         R_.setLevel(to.level, to.energy, rising ? 1.8f : 4.5f, impact);
-                        dropAt_ = rising && to.level >= 2 ? to.start : -1.0;
+                        // (a peak that starts on a loud BUILD has no drop hit: its DROP section brings it, see above)
+                        dropAt_ = rising && to.level >= 2 && an.segments[to.seg].kind != SEG_BUILD ? to.start : -1.0;
                         // Optional (--universe-on-peak): a long song may also move to another universe when it
                         // rises into a peak, after a minute in the current one.
                         if (opt_.universeOnPeak && rising && to.level >= 2 && universeAge_ > 60.f && forcedUniverse_ < 0 &&

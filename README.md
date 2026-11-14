@@ -317,7 +317,7 @@ missing from it still works with a generic layout.
 | Slow motion (when the gauge is full) | V / E | ZL / ZR (LT / RT) |
 | Next universe (with `--universe`: its next variant, a new seed) | T | Y |
 | Next song | N / Tab / Enter / PageDown | Back |
-| Seek ±10 s in the song (testing) | Ctrl+Shift+Left/Right | |
+| Seek ±10 s in the song (testing; in the Voyage only with `--cheat-skip`) | Ctrl+Shift+Left/Right | |
 | Next level (debugging) | L | |
 | Fill the bonus gauge (testing) | B | |
 | Complete the song; on the Voyage's screen, clear the focused stage (testing, with `--cheat-skip`; S is then no soft drop) | S | |
