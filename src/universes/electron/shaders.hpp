@@ -143,6 +143,7 @@ uniform mat4 uVP;
 out vec2 vL;
 flat out vec4 vB, vC, vD;
 flat out vec2 vH;
+flat out float vY; // the sprite's center height (board units)
 void main() {
     vec2 l = aCorner * aA.zw;
     float c = cos(aB.x), s = sin(aB.x);
@@ -150,24 +151,28 @@ void main() {
     gl_Position = uVP * vec4(w, 0.0, 1.0);
     vL = l;
     vB = aB; vC = aC; vD = aD; vH = aA.zw;
+    vY = aA.y;
 }
 )";
 
 // Kinds: 0 a block, a bare die (p0 charge: its edges lit, p1 half size, p3 ghost, p4 shattered), 1 a soft shadow (p1 half
 // size, p2 blur), 2 a charge (p1 radius, p2 tail length, p3 carrying, p0 flicker), 3 a fragment (p1 size, p0 glow),
 // 4 a soft round dot (p1 radius, p2 ring width: 0 a disc), 5 a spark streak (p1 length, p2 width, p0 heat),
-// 6 a flash (p1 radius), 7 an arc's segment (p1 half length, p2 width).
+// 6 a flash (p1 radius).
 // Glows are written with less alpha than color, so they add light (the blending is premultiplied).
 inline const char* SPRITE_FS = R"(#version 330 core
 in vec2 vL;
 flat in vec4 vB, vC, vD;
 flat in vec2 vH;
+flat in float vY;
 out vec4 frag;
 uniform float uPx;
 uniform vec3 uLightDir;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
 uniform vec3 uRim;           // the color of a cube's edges when a charge touches it
+uniform float uPower;        // a DROP: the dies powered, their circuitry glowing in uRim
+uniform float uWave;         // the height of the wave of current running up the stack (board units)
 
 // A bare silicon die's top (u: -1..1 across it; lit: the chamfer's light, 1 on the flat): the piece's color shimmering
 // with the angle of view, a fine grid of circuitry, a border of gold bond pads.
@@ -178,11 +183,16 @@ vec3 dieTop(vec2 u, float seed, vec3 base, float lit, float px) {
     vec2 g = u * 7.0;
     vec2 lf = abs(fract(g) - 0.5);
     float lines = smoothstep(0.06 + px * 7.0, 0.06 - px * 7.0, min(lf.x, lf.y)) * step(0.35, hash2(floor(g) + seed));
-    col *= 1.0 - 0.18 * lines * step(sdRBox(u, vec2(0.66), 0.02), 0.0);
+    float inner = step(sdRBox(u, vec2(0.66), 0.02), 0.0);
+    col *= 1.0 - 0.18 * lines * inner;
     float rim = step(0.0, sdRBox(u, vec2(0.7), 0.02)) * step(sdRBox(u, vec2(0.9), 0.04), 0.0);
     vec2 pd = abs(fract(u * 3.5) - 0.5);
     float pad = rim * smoothstep(0.26 + px * 3.5, 0.26 - px * 3.5, max(pd.x, pd.y));
-    return mix(col, vec3(0.95, 0.76, 0.36) * (0.6 + 0.5 * lit), pad);
+    col = mix(col, vec3(0.95, 0.76, 0.36) * (0.6 + 0.5 * lit), pad);
+    // powered (a DROP): the circuitry and the pads lit, brighter as the wave of current passes
+    float wv = (vY - uWave) / 1.4;
+    float power = uPower * (0.3 + 0.7 * exp(-wv * wv));
+    return col + uRim * (lines * inner * 1.3 + pad * 0.7) * power;
 }
 
 // A block: a bare silicon die (dieTop) seen from above and a little in front, its top with a narrow chamfer lit from
@@ -308,7 +318,7 @@ void main() {
         float i = exp(-vL.y * vL.y / (wy * wy)) * smoothstep(-1.0, -0.2, x) * smoothstep(1.0, 0.8, x);
         vec3 col = mix(vC.rgb, vec3(1.0), k * k * vC.w);
         o = vec4(col * i * (0.6 + 0.6 * k), i * 0.4);
-    } else if (kind < 6.5) {
+    } else {
         // a flash: a hot point and its bloom
         float R = vD.x;
         float d = length(vL);
@@ -316,14 +326,6 @@ void main() {
         float bloom = exp(-d * d / (R * R * 0.3));
         vec3 col = vec3(1.0) * core + vC.rgb * bloom * 0.8;
         o = vec4(col, core * 0.5);
-    } else {
-        // an arc's segment: an even line, white hot along its middle in a glow of its color, its ends round
-        float Lh = vD.x, w = vD.y;
-        float dd = length(vec2(max(abs(vL.x) - Lh, 0.0), vL.y));
-        float core = exp(-dd * dd / (w * w * 0.06));
-        float glow = exp(-dd * dd / (w * w * 1.4));
-        vec3 col = vec3(1.0) * core + vC.rgb * glow * 1.3;
-        o = vec4(col, core * 0.6 + glow * 0.1);
     }
     frag = o * alpha;
 }
