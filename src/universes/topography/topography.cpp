@@ -195,6 +195,7 @@ void boxBlur(std::vector<float>& f, std::vector<float>& tmp, int w, int h, int r
 }
 
 constexpr float STACK_H = 5.5f;   // the plateau's height (contour intervals)
+constexpr float PIECE_HILL = 0.8f; // the falling piece's hill, against a locked cell's plateau
 constexpr float FOOTHILLS = 13.f;
 constexpr float WELL_FLOOR = 0.4f; // the well's terrace
 constexpr float POND_MIN = 0.35f;   // the depth of a hollow that holds a pond in the rain
@@ -618,27 +619,35 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt, bo
     // so a tall stack is a mountain and its flanks rise unevenly).
     std::fill(mask_.begin(), mask_.end(), 0.f);
     const float keep = 1.f - over_;
-    for (int y = Game::HIDDEN; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++) {
-            const Cell& c = game.cell(x, y);
-            if (c.type < 0) continue;
-            const vec3 p = layout::cellPos((float)x, y - game.rowOffset(y));
-            const float wgt = (1.f + 0.03f * (Game::H - 1 - y)) * keep;
-            const float xa = p.x - 0.5f, xb = p.x + 0.5f, ya = p.y - 0.5f, yb = p.y + 0.5f;
-            const int i0 = std::max(0, (int)std::floor((xa - gx0_) / gs_)), i1 = std::min(gw_ - 1, (int)std::ceil((xb - gx0_) / gs_));
-            const int j0 = std::max(0, (int)std::floor((ya - gy0_) / gs_)), j1 = std::min(gh_ - 1, (int)std::ceil((yb - gy0_) / gs_));
-            for (int j = j0; j <= j1; j++) {
-                const float sy = gy0_ + j * gs_;
-                const float oy = std::max(0.f, std::min(yb, sy + gs_ * 0.5f) - std::max(ya, sy - gs_ * 0.5f)) / gs_;
-                if (oy <= 0.f) continue;
-                for (int i = i0; i <= i1; i++) {
-                    const float sx = gx0_ + i * gs_;
-                    const float ox = std::max(0.f, std::min(xb, sx + gs_ * 0.5f) - std::max(xa, sx - gs_ * 0.5f)) / gs_;
-                    if (ox > 0.f) mask_[(size_t)j * gw_ + i] += ox * oy * wgt;
-                }
+    auto mass = [&](const vec3& p, float wgt) { // a cell's square, at p, into the mask
+        const float xa = p.x - 0.5f, xb = p.x + 0.5f, ya = p.y - 0.5f, yb = p.y + 0.5f;
+        const int i0 = std::max(0, (int)std::floor((xa - gx0_) / gs_)), i1 = std::min(gw_ - 1, (int)std::ceil((xb - gx0_) / gs_));
+        const int j0 = std::max(0, (int)std::floor((ya - gy0_) / gs_)), j1 = std::min(gh_ - 1, (int)std::ceil((yb - gy0_) / gs_));
+        for (int j = j0; j <= j1; j++) {
+            const float sy = gy0_ + j * gs_;
+            const float oy = std::max(0.f, std::min(yb, sy + gs_ * 0.5f) - std::max(ya, sy - gs_ * 0.5f)) / gs_;
+            if (oy <= 0.f) continue;
+            for (int i = i0; i <= i1; i++) {
+                const float sx = gx0_ + i * gs_;
+                const float ox = std::max(0.f, std::min(xb, sx + gs_ * 0.5f) - std::max(xa, sx - gs_ * 0.5f)) / gs_;
+                if (ox > 0.f) mask_[(size_t)j * gw_ + i] += ox * oy * wgt;
             }
         }
+    };
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (game.cell(x, y).type >= 0)
+                mass(layout::cellPos((float)x, y - game.rowOffset(y)), (1.f + 0.03f * (Game::H - 1 - y)) * keep);
     big_ = mask_;
+    // The falling piece: a lower hill under it, which it carries down (the land rises quickly ahead of it and slumps
+    // slowly behind, see disp_: its contours trail it); not in the foothills, which are the stack's.
+    if (!bare && game.hasPiece() && !game.over()) {
+        int cells[4][2];
+        game.pieceCells(game.piece(), cells);
+        const float dx = game.pieceVisualX() - game.piece().x, dy = game.pieceVisualY() - game.piece().y;
+        for (auto& c : cells)
+            if (c[1] >= Game::HIDDEN) mass(layout::cellPos(c[0] + dx, c[1] + dy), PIECE_HILL * keep);
+    }
     boxBlur(mask_, tmp_, gw_, gh_, 2, 3);   // the plateau's flanks
     boxBlur(big_, tmp2_, gw_, gh_, 10, 3);  // the foothills
 
