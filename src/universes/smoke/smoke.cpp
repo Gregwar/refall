@@ -12,7 +12,7 @@
 // where the smoke shades itself), the kicks surging the smoke. A lock breathes a little smoke out from under the
 // piece; the blocks of a cleared row turn to smoke (each one eaten from its edges in, its body lifting off as smoke of its
 // own color, the row rising as one billowing sheet through the beam);
-// a quad blows a smoke ring up from the well, clears the smoke outward and opens the light; slow motion is a pin
+// a quad blows the smoke outward and opens the light; slow motion is a pin
 // spot (the lamp swings straight overhead, cold and narrow, the smoke hangs almost still); game over turns the lamp
 // off (its filament cooling to orange), the stack going dark row by row while the smoke rises over it. A change of
 // universe thickens the smoke until it fills the frame.
@@ -485,15 +485,9 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
         const bool quadClear = ev.count >= 4;
         // the blocks themselves turn to smoke: each one erodes from its edges in, its body lifting off as smoke of
         // its own color; the smoke of a row shares one field, so the row rises as one sheet (a quad, a plume)
-        float rows[4] = {0, 0, 0, 0};
-        int nr = 0;
         const float rowSeed = rng_.uniform();
         for (auto& c : ev.cells) {
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            bool seen = false;
-            for (int i = 0; i < nr; i++)
-                if (rows[i] == p.y) seen = true;
-            if (!seen && nr < 4) rows[nr++] = p.y;
             Dying d;
             d.x = p.x; d.y = p.y; d.t = 0.f; d.type = std::clamp(c.type, 0, 6); d.over = false;
             d.delay = std::fabs(c.x - 4.5f) * 0.02f; // from the middle of the row outward
@@ -503,8 +497,7 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
             dying_.push_back(d);
         }
         if (quadClear) {
-            // a smoke ring rolls up out of the well, the smoke is blown outward, the light opens
-            puff(v2(0.f, rows[0] + 2.f), v2(0.f, 5.5f), 2.2f, 1.3f, 4.5f, 0.85f, 0.2f, 1.f, 1);
+            // the smoke is blown outward, the light opens
             blastT_ = 0.f;
             swell_ = std::max(swell_, 1.3f);
         } else {
@@ -600,7 +593,7 @@ void SmokeUniverse::simulate(const Game& game, const MusicState& music, float dt
         p.t += wdt;
         if (p.t < p.delay) continue;
         p.p = p.p + p.v * wdt;
-        p.v = p.v * std::exp(-(p.drag >= 0.f ? p.drag : p.kind == 1 ? 0.35f : 0.7f) * wdt);
+        p.v = p.v * std::exp(-(p.drag >= 0.f ? p.drag : 0.7f) * wdt);
         p.v.y -= p.fall * wdt;
         if (p.kind == 0) p.v.x += std::sin(p.t * 1.7f + p.seed * 9.f) * 0.35f * wdt; // a curl as it rises
     }
