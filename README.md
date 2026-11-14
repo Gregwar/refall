@@ -319,7 +319,7 @@ missing from it still works with a generic layout.
 | Seek ±10 s in the song (testing) | Ctrl+Shift+Left/Right | |
 | Next level (debugging) | L | |
 | Fill the bonus gauge (testing) | B | |
-| Complete the song (testing, with `--cheat-skip`; S is then no soft drop) | S | |
+| Complete the song; on the Voyage's screen, clear the focused stage (testing, with `--cheat-skip`; S is then no soft drop) | S | |
 | Pause (its menu: continue, the controls, back to the menu; Q quits at once) | Esc / P | Start |
 | Fullscreen | F / F11 | |
 
