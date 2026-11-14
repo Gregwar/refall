@@ -13,8 +13,8 @@
 //
 // A cleared row's cubes shatter into shards and burst into fragments with sparks; the fragments thrown out of the
 // well stay on the substrate until charges fetch them. A DROP section (and it alone) pours charges out of both
-// terminals: many more, much faster, the traces brighter, more sparks, the cubes in vivid colors, and the dies power
-// on: their circuitry and pads glowing in the charges' color, a wave of current running up the stack every two beats.
+// terminals: many more, much faster, the traces brighter, more sparks, and the dies power on: a wave of current runs
+// up the stack every two beats, lighting their circuitry and pads in the charges' color as it passes.
 // A chorus is a busy circuit, a break a few slow charges on
 // fading traces. A lock scatters the charges around the impact (a hard one sparks there); slow motion slows
 // the circuit; a game over shatters the whole stack.
@@ -70,34 +70,30 @@ float wrapAngle(float a) {
 }
 
 // The substrates, all dark. Colors are sRGB (the whole frame is drawn in display colors). Each has its own seven
-// cubes, and the drop's vivid ones.
+// cubes.
 struct Variant {
     const char* name;
     uint32_t ground, mottle, panel, trace, core, term, charge, ink, dim, accent, frame, slow;
     float frameA, grain, traceAmt, shadow;
-    uint32_t piece[7], drop[7];
+    uint32_t piece[7];
 };
 const Variant VARIANTS[] = {
     // Graphite: a cold dark grey, blue-white current.
     {"GRAPHITE", 0x16181c, 0x1e2126, 0x121417, 0x2c8cff, 0xdff3ff, 0x0d0f12, 0x7fd4ff, 0xe4e9f0, 0x7b8594, 0x6cc8ff,
      0x5a6575, 0x101a2c, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x3fa7c9, 0xe0a83c, 0x9370d8, 0x52b874, 0xd85a5e, 0x5277de, 0xe0843f},
-     {0x1ed0ff, 0xffc21a, 0xb45cff, 0x22e07e, 0xff3a5c, 0x3d66ff, 0xff7a1a}},
+     {0x3fa7c9, 0xe0a83c, 0x9370d8, 0x52b874, 0xd85a5e, 0x5277de, 0xe0843f}},
     // Oxide: dark rusted iron, amber current.
     {"OXIDE", 0x1c1512, 0x261c17, 0x15100e, 0xff8a2a, 0xfff0d6, 0x0f0b09, 0xffbd6e, 0xf3e7dc, 0x96837a, 0xffb25a,
      0x76604f, 0x1e1428, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x5fb3c0, 0xe8c25a, 0xa982d0, 0x7dbd6a, 0xe0705a, 0x6f8fd8, 0xf09a50},
-     {0x2fe0ff, 0xffd83a, 0xc070ff, 0x5cf060, 0xff4a3a, 0x5a80ff, 0xffa020}},
+     {0x5fb3c0, 0xe8c25a, 0xa982d0, 0x7dbd6a, 0xe0705a, 0x6f8fd8, 0xf09a50}},
     // Verdigris: a deep green-black like an old board, mint current.
     {"VERDIGRIS", 0x0f1916, 0x15221e, 0x0c1412, 0x22e0a0, 0xe4fff4, 0x080e0c, 0x8affd6, 0xe0f2ea, 0x77908a, 0x5af0c0,
      0x4f6f66, 0x0f1626, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x48a8d0, 0xe2b94a, 0xa07ad8, 0xb0d060, 0xe0606a, 0x5f80e0, 0xe89048},
-     {0x20d8ff, 0xffd020, 0xc060ff, 0xc8ff30, 0xff3a62, 0x4870ff, 0xff8a1e}},
+     {0x48a8d0, 0xe2b94a, 0xa07ad8, 0xb0d060, 0xe0606a, 0x5f80e0, 0xe89048}},
     // Plasma: dark indigo, violet-white current.
     {"PLASMA", 0x15121f, 0x1d182c, 0x110f19, 0xb060ff, 0xf6e8ff, 0x0c0a12, 0xd8a8ff, 0xece6f6, 0x8a82a0, 0xd090ff,
      0x675d80, 0x0e1530, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x4ab4d4, 0xe8b850, 0xc07ad0, 0x5cc08a, 0xe85c78, 0x6a7ce8, 0xf08c5a},
-     {0x18e0ff, 0xffd02a, 0xf060ff, 0x20f0a0, 0xff3070, 0x5060ff, 0xff7a30}},
+     {0x4ab4d4, 0xe8b850, 0xc07ad0, 0x5cc08a, 0xe85c78, 0x6a7ce8, 0xf08c5a}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -251,7 +247,7 @@ TransitionHints ElectronUniverse::hints() const {
 vec3 ElectronUniverse::pieceColor(int type) const {
     const Variant& V = VARIANTS[variant_];
     type = std::clamp(type, 0, 6);
-    return lerp(hex(V.piece[type]), hex(V.drop[type]), dropMix_);
+    return hex(V.piece[type]); // (the same in a DROP: its wave of current runs through them)
 }
 
 // Loose grains of a cube: thrown out mostly sideways, along the row (the ones that land outside the well stay there
@@ -835,10 +831,10 @@ void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const Mus
     for (float& v : trace_) v *= kt;
 }
 
-void ElectronUniverse::warmUp(const Game& game) {
+void ElectronUniverse::warmUp(const Game& game, bool bare) {
     // the colony has been there a while: its trails already lead to the stack
     MusicState quiet;
-    syncCells(game);
+    if (!bare) syncCells(game);
     for (int i = 0; i < 900; i++) simulate(game, 0.05f, 0.05f, quiet);
     sparks_.clear();
     flashes_.clear();
@@ -961,11 +957,10 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         if (!game.over()) overT_ = -1.f;
         else overT_ += dt;
     }
-    // (a break's blank board is not the stack: the colony keeps the cubes it knows)
-    if (!f.bare) {
-        syncCells(game);
-        if (!warm_) warmUp(game);
-    }
+    // (a break's blank board is not the stack: the colony keeps the cubes it knows; but it has been there a while from
+    // the first frame on, a song's title card included: warmed up then, it never fills up all at once as play starts)
+    if (!f.bare) syncCells(game);
+    if (!warm_) warmUp(game, f.bare);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
     if (!f.paused) {
         clock_ += wdt;

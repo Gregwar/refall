@@ -189,10 +189,12 @@ vec3 dieTop(vec2 u, float seed, vec3 base, float lit, float px) {
     vec2 pd = abs(fract(u * 3.5) - 0.5);
     float pad = rim * smoothstep(0.26 + px * 3.5, 0.26 - px * 3.5, max(pd.x, pd.y));
     col = mix(col, vec3(0.95, 0.76, 0.36) * (0.6 + 0.5 * lit), pad);
-    // powered (a DROP): the circuitry and the pads lit, brighter as the wave of current passes
-    float wv = (vY - uWave) / 1.4;
-    float power = uPower * (0.3 + 0.7 * exp(-wv * wv));
-    return col + uRim * (lines * inner * 1.3 + pad * 0.7) * power;
+    // powered (a DROP): a wave of current runs up the stack, the die it passes lit up (its circuitry and pads in the
+    // charges' color, the whole top a little brighter), a faint glow left in its circuitry between two waves
+    float wv = (vY - uWave) / 1.8;
+    float wave = exp(-wv * wv) * uPower;
+    col *= 1.0 + 0.35 * wave;
+    return col + uRim * (lines * inner * (0.3 * uPower + 2.4 * wave) + pad * (0.2 * uPower + 1.5 * wave) + 0.12 * wave);
 }
 
 // A block: a bare silicon die (dieTop) seen from above and a little in front, its top with a narrow chamfer lit from
