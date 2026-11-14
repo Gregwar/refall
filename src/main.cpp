@@ -1494,6 +1494,15 @@ int App::run() {
             }
             simSongTime_ += dt; // real song time: the recorded audio is cut from the same span
             songTime_ = simSongTime_;
+            // Test hook: ZEN_TEST_BONUS=1 also starts the slow-motion bonus ZEN_TEST_BONUS_AT s into a clip (default 3)
+            static const char* tbc = std::getenv("ZEN_TEST_BONUS");
+            static const double tbAt = std::getenv("ZEN_TEST_BONUS_AT") ? std::atof(std::getenv("ZEN_TEST_BONUS_AT")) : 3.0;
+            static bool tbDone = false;
+            if (tbc && tbc[0] == '1' && !tbDone && simSongTime_ >= clipStart_ + tbAt) {
+                tbDone = true;
+                game_.debugChargeBonus();
+                game_.activateBonus();
+            }
         } else if (shotMode && track_) {
             if (opt_.phaseShots) {
                 // Settle for 12 s ending 2 s before the next phase change (or the song end).

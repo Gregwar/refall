@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -22,6 +23,44 @@ Renderer::~Renderer() {
 
 namespace {
 // A break's frame: the world alone (B) and the whole frame (A) mixed by how much of the game shows, then toward black.
+// The slow-motion bonus's common look (uK eases it in and out): outside the well the world goes a cold desaturated
+// silver, darker, with a vignette; a pale halo hugs the well's edge. The well (uv, x0 y0 x1 y1) and the bonus gauge
+// (uv center, radius in screen heights) keep their colors, and a bright ring round the gauge empties clockwise with
+// the time left (uLeft), so the bonus is seen running out whatever the universe's own gauge looks like.
+const char* BONUS_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uT;
+uniform float uK, uTime;
+uniform vec2 uAspect;
+uniform vec4 uWell;
+uniform vec3 uGauge;
+uniform float uLeft;
+float boxOut(vec4 b) { vec2 q = max(max(b.xy - vUv, vUv - b.zw), 0.0) * uAspect; return length(q); }
+void main() {
+    vec3 c = texture(uT, vUv).rgb;
+    float dw = boxOut(uWell);
+    vec2 pg = (vUv - uGauge.xy) * uAspect;
+    float dg = length(pg), rg = uGauge.z;
+    float keep = max((1.0 - smoothstep(0.0, 0.012, dw)) * 0.9, 1.0 - smoothstep(rg * 1.1, rg * 1.6, dg));
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 g = mix(c, vec3(l) * vec3(0.8, 0.92, 1.22), 0.82) * 0.8;
+    float vig = smoothstep(0.3, 0.95, length((vUv - 0.5) * uAspect));
+    g *= 1.0 - 0.6 * vig;
+    g = mix(g, c, keep);
+    float halo = exp(-dw * 18.0) * step(0.0005, dw) * (0.85 + 0.15 * sin(uTime * 1.6));
+    g += vec3(0.6, 0.75, 1.0) * halo * 0.3;
+    // the time left: a ring round the gauge, lit over the part left (from 12 o'clock, clockwise), a faint track
+    float fr = fract(atan(pg.x, pg.y) / 6.2831853 + 1.0);
+    float ring = 1.0 - smoothstep(rg * 0.05, rg * 0.05 + 1.5 / 1080.0, abs(dg - rg * 1.32));
+    float glow = exp(-abs(dg - rg * 1.32) / (rg * 0.12));
+    float lit = step(fr, uLeft);
+    g = mix(g, vec3(0.92, 0.97, 1.0), ring * mix(0.18, 1.0, lit));
+    g += vec3(0.5, 0.7, 1.0) * glow * lit * 0.35;
+    frag = vec4(mix(c, g, uK), 1.0);
+}
+)";
+
 const char* BREAK_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -61,6 +100,7 @@ bool Renderer::init(int width, int height) {
     if (!text_.init()) std::fprintf(stderr, "[text] the text engine could not start\n");
     mixProg_ = ugl::program(ugl::FULLSCREEN_VS, BREAK_FS, "break");
     cardProg_ = ugl::program(ugl::FULLSCREEN_VS, CARD_FS, "card");
+    bonusProg_ = ugl::program(ugl::FULLSCREEN_VS, BONUS_FS, "bonus look");
     glGenTextures(1, &cellsTex_);
     glBindTexture(GL_TEXTURE_2D, cellsTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Game::W, Game::H - Game::HIDDEN, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
@@ -194,6 +234,7 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
                       const std::vector<HudText>& hud, float fade) {
     if (!cur_.u) return;
     const Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
+    bonusK_ = std::clamp(bonusK_ + (game.bonusActive() && !game.over() ? dt / 0.5f : -dt / 0.9f), 0.f, 1.f);
     const float bpm = music.hasSong ? std::clamp(music.bpm, 40.f, 220.f) : 120.f;
 
     // ---- A change waits for the next downbeat (or the next beat if the bar is far), then runs for a few bars.
@@ -235,9 +276,11 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
             fl.hudBoxes = &boxes;
             cur_.u->render(fl, 0);
             letter(*cur_.u, hud, 1.f, time);
+            bonusLook(game, time);
             return;
         }
         cur_.u->render(f, 0);
+        bonusLook(game, time);
         return;
     }
 
@@ -301,8 +344,39 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     const float handover = smoothstepf(0.35f, 0.65f, p);
     if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
     if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
+    bonusLook(game, time);
 
     if (p_ >= 1.f) finishChange();
+}
+
+void Renderer::bonusLook(const Game& game, double time) {
+    if (bonusK_ <= 0.002f || !bonusProg_) return;
+    if (post_.w != w_ || post_.h != h_) post_.create(w_, h_);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, post_.tex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, w_, h_);
+    // the well, from board units to the screen's uv (through the universe's own projection)
+    auto box = [&](float x0, float y0, float x1, float y1) {
+        const vec2 a = project({x0, y0, 0.f}), b = project({x1, y1, 0.f});
+        return std::array<float, 4>{std::min(a.x, b.x) / w_, 1.f - std::max(a.y, b.y) / h_, std::max(a.x, b.x) / w_, 1.f - std::min(a.y, b.y) / h_};
+    };
+    const vec3 lo = layout::cellPos(-0.5f, Game::H - 0.5f), hi = layout::cellPos(Game::W - 0.5f, Game::HIDDEN - 0.5f);
+    const auto well = box(lo.x, lo.y, hi.x, hi.y);
+    glViewport(0, 0, w_, h_);
+    glDisable(GL_BLEND);
+    glDisable(GL_DEPTH_TEST);
+    glUseProgram(bonusProg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, post_.tex);
+    ugl::set1i(bonusProg_, "uT", 0);
+    ugl::set1f(bonusProg_, "uK", smoothstepf(0.f, 1.f, bonusK_));
+    ugl::set1f(bonusProg_, "uTime", (float)time);
+    ugl::set2f(bonusProg_, "uAspect", (float)w_ / h_, 1.f);
+    ugl::set4f(bonusProg_, "uWell", well[0], well[1], well[2], well[3]);
+    const vec2 gc = project(layout::GAUGE_CENTER), ge = project(layout::GAUGE_CENTER + vec3(0.f, layout::GAUGE_R, 0.f));
+    ugl::set3f(bonusProg_, "uGauge", vec3(gc.x / w_, 1.f - gc.y / h_, std::fabs(ge.y - gc.y) / h_));
+    ugl::set1f(bonusProg_, "uLeft", game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : 0.f);
+    ugl::drawFullscreen();
 }
 
 // A break: the world alone (a blank board, the bare HUD) and the whole frame, each in its own texture while both
