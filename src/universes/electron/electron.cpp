@@ -100,8 +100,8 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float ANT_L = 0.3f;    // an ant's length unit (board units; the body is ~0.8 of it)
 constexpr float CUBE = 0.43f;    // a sugar cube's half size (a cell is 0.5)
-constexpr float TAU_FOOD = 24.f; // pheromone evaporation (seconds)
-constexpr float TAU_HOME = 20.f;
+constexpr float TAU_FOOD = 9.f; // pheromone evaporation (seconds)
+constexpr float TAU_HOME = 8.f;
 constexpr int MAX_GRAINS = 1400;
 
 } // namespace
@@ -623,11 +623,11 @@ void ElectronUniverse::stepAnts(float dt, float speedK, float explore, float lay
         a.gait += moved / (ANT_L * 0.42f) * PI;
         // the pheromones, and the paths worn on the ground (by the foragers)
         if (a.state == 1) {
-            deposit(food_, a.p, dt * layK * 4.f * std::exp(-a.dist / 20.f));
-            wear(a.p, dt * 3.f);
+            deposit(food_, a.p, dt * layK * 8.f * std::exp(-a.dist / 20.f));
+            wear(a.p, dt * 7.f);
         } else if (a.state == 0 && !a.retire) {
-            deposit(home_, a.p, dt * layK * 1.2f * std::exp(-a.dist / 25.f));
-            if (a.trail) wear(a.p, dt * 0.8f);
+            deposit(home_, a.p, dt * layK * 2.4f * std::exp(-a.dist / 25.f));
+            if (a.trail) wear(a.p, dt * 1.8f);
         }
         // sugar under the jaws: a crumb, and back home
         if (a.state == 0 && !a.retire) {
@@ -825,8 +825,8 @@ void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const Mus
 
     relax(food_, TAU_FOOD, wdt);
     relax(home_, TAU_HOME, wdt);
-    // the traces fade fast once no one walks them (a route left behind is gone in ~15 s)
-    const float kt = std::exp(-wdt / 6.f);
+    // the traces fade fast once no one walks them (a route left behind is gone in ~6 s)
+    const float kt = std::exp(-wdt / 2.4f);
     for (float& v : trace_) v *= kt;
 }
 
