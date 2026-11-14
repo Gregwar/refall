@@ -462,7 +462,8 @@ def clear_score(e, clears, grid):
         if lo <= t <= hi:
             beat = float(np.min(np.abs(grid.beats - t)))
             mid = abs(t - (e["t0"] + e["t1"]) / 2) / max(0.5, e["t1"] - e["t0"])
-            score = (2.0 if n >= 4 else 0.0) - beat / grid.period - 0.5 * mid
+            quad = 2.0 if rule.get("quad", True) else -3.0  # ("quad": false in a shot's rule: rather not one)
+            score = (quad if n >= 4 else 0.0) - beat / grid.period - 0.5 * mid
             if best is None or score > best[0]:
                 best = (score, t, n)
     return best
