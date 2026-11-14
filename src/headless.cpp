@@ -19,6 +19,20 @@ EGLSurface surf_ = EGL_NO_SURFACE;
 EGLConfig cfg_ = nullptr;
 bool nvidia_ = false;
 struct Worker { EGLContext ctx; EGLSurface surf; };
+
+// ZEN_GLES=1: an OpenGL ES 3.2 context instead of desktop 3.3 core, to test the Android port on the desktop
+bool es() {
+    static const bool on = std::getenv("ZEN_GLES") != nullptr;
+    return on;
+}
+EGLenum api() { return es() ? EGL_OPENGL_ES_API : EGL_OPENGL_API; }
+const EGLint* ctxAttr() {
+    static const EGLint gl[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
+                                EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+                                EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, EGL_TRUE, EGL_NONE};
+    static const EGLint gles[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 2, EGL_NONE};
+    return es() ? gles : gl;
+}
 }
 
 bool init(int width, int height) {
@@ -46,16 +60,13 @@ bool init(int width, int height) {
         EGLDisplay d = platformDisplay(EGL_PLATFORM_DEVICE_EXT, devs[i], nullptr);
         EGLint maj = 0, min = 0;
         if (d == EGL_NO_DISPLAY || !eglInitialize(d, &maj, &min)) continue;
-        const EGLint cfgAttr[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        const EGLint cfgAttr[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, es() ? EGL_OPENGL_ES3_BIT : EGL_OPENGL_BIT,
                                   EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                                   EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8, EGL_NONE};
         EGLConfig cfg;
         EGLint nc = 0;
-        if (!eglChooseConfig(d, cfgAttr, &cfg, 1, &nc) || nc < 1 || !eglBindAPI(EGL_OPENGL_API)) { eglTerminate(d); continue; }
-        const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
-                                  EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
-                                  EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, EGL_TRUE, EGL_NONE};
-        EGLContext c = eglCreateContext(d, cfg, EGL_NO_CONTEXT, ctxAttr);
+        if (!eglChooseConfig(d, cfgAttr, &cfg, 1, &nc) || nc < 1 || !eglBindAPI(api())) { eglTerminate(d); continue; }
+        EGLContext c = eglCreateContext(d, cfg, EGL_NO_CONTEXT, ctxAttr());
         const EGLint pbAttr[] = {EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE};
         EGLSurface s = c != EGL_NO_CONTEXT ? eglCreatePbufferSurface(d, cfg, pbAttr) : EGL_NO_SURFACE;
         if (s == EGL_NO_SURFACE || !eglMakeCurrent(d, s, s, c)) {
@@ -78,10 +89,7 @@ bool nvidia() { return nvidia_; }
 
 void* createWorkerContext() {
     if (dpy_ == EGL_NO_DISPLAY) return nullptr;
-    const EGLint ctxAttr[] = {EGL_CONTEXT_MAJOR_VERSION, 3, EGL_CONTEXT_MINOR_VERSION, 3,
-                              EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
-                              EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, EGL_TRUE, EGL_NONE};
-    EGLContext c = eglCreateContext(dpy_, cfg_, EGL_NO_CONTEXT, ctxAttr);
+    EGLContext c = eglCreateContext(dpy_, cfg_, EGL_NO_CONTEXT, ctxAttr());
     if (c == EGL_NO_CONTEXT) return nullptr;
     const EGLint pbAttr[] = {EGL_WIDTH, 16, EGL_HEIGHT, 16, EGL_NONE};
     EGLSurface s = eglCreatePbufferSurface(dpy_, cfg_, pbAttr);
@@ -90,7 +98,7 @@ void* createWorkerContext() {
 }
 
 bool makeWorkerCurrent(void* worker) {
-    eglBindAPI(EGL_OPENGL_API); // (per thread)
+    eglBindAPI(api()); // (per thread)
     if (!worker) return eglMakeCurrent(dpy_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     Worker* w = (Worker*)worker;
     return eglMakeCurrent(dpy_, w->surf, w->surf, w->ctx);

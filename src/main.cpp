@@ -4,6 +4,7 @@
 
 #include "icon.inc"
 #include "title.hpp"
+#include "gles.hpp"
 #include "headless.hpp"
 
 #include <algorithm>
@@ -1262,6 +1263,7 @@ int App::run() {
         headless_ = true;
         headW_ = opt_.width; headH_ = opt_.height;
         if (!gladLoadGL((GLADloadfunc)headless::proc)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
+        if (gles::active()) { gles::setLoader(headless::proc); gles::install(); }
     } else {
     if (wantHeadless) std::fprintf(stderr, "[gl] no headless GPU context, using a window\n");
     // on the discrete GPU when there are two; if that fails, again on the default one
@@ -1308,6 +1310,7 @@ int App::run() {
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);
     if (!gladLoadGL(glfwGetProcAddress)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
+    if (gles::active()) { gles::setLoader([](const char* n) { return (void*)glfwGetProcAddress(n); }); gles::install(); }
     }
     glGetError();
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
@@ -2673,7 +2676,11 @@ static int viewerMain(int argc, char** argv) {
     std::_Exit(rc); // (background downloads aren't waited for)
 }
 
+#ifdef __ANDROID__
+int refall_main(int argc, char** argv) { // (called by android/glfw_android.cpp once the activity has a window)
+#else
 int main(int argc, char** argv) {
+#endif
     g_startTime = std::chrono::steady_clock::now();
     platform::lineBufferStdout();
 #ifdef ZEN_VOYAGE_VIEWER

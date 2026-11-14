@@ -16,10 +16,26 @@ endif()
 # GLFW: the system one by default; ZENTRIS_BUNDLE_GLFW=ON (used for Python wheels) builds it from
 # source and links it statically, so the binaries only need the system's OpenGL/X11 at runtime.
 option(ZENTRIS_BUNDLE_GLFW "Build GLFW from source and link it statically" OFF)
-if(NOT ZENTRIS_BUNDLE_GLFW)
+if(NOT ZENTRIS_BUNDLE_GLFW AND NOT ANDROID)
   find_package(glfw3 QUIET)
 endif()
-if(ZENTRIS_BUNDLE_GLFW OR NOT glfw3_FOUND)
+if(ANDROID)
+  # Android (android/build.sh): GLFW's header, with the part of its API the game uses implemented over a NativeActivity
+  # and EGL (android/glfw_android.cpp); the game is libmain.so, loaded by the NativeActivity
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+  include(FetchContent)
+  FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.4 GIT_SHALLOW TRUE)
+  FetchContent_GetProperties(glfw)
+  if(NOT glfw_POPULATED)
+    FetchContent_Populate(glfw)
+  endif()
+  add_library(native_app_glue STATIC ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
+  target_include_directories(native_app_glue PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
+  add_library(glfw STATIC android/glfw_android.cpp)
+  target_include_directories(glfw PUBLIC ${glfw_SOURCE_DIR}/include)
+  target_compile_definitions(glfw PUBLIC GLFW_INCLUDE_NONE)
+  target_link_libraries(glfw PUBLIC native_app_glue EGL android log)
+elseif(ZENTRIS_BUNDLE_GLFW OR NOT glfw3_FOUND)
   include(FetchContent)
   set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -127,6 +143,7 @@ add_library(zenrender STATIC
   src/transitions.cpp
   src/layout.cpp
   src/ugl.cpp
+  src/gles.cpp
   src/universes/registry.cpp
   ${ZEN_UNIVERSE_SOURCES}
 )
@@ -184,9 +201,17 @@ set(ZEN_GAME_SOURCES
   src/debrief.cpp
   src/voyageviewer.cpp
 )
-add_executable(refall ${ZEN_GAME_SOURCES})
-add_executable(refall-voyage-viewer ${ZEN_GAME_SOURCES})
-target_compile_definitions(refall-voyage-viewer PRIVATE ZEN_VOYAGE_VIEWER)
+if(ANDROID)
+  add_library(refall SHARED ${ZEN_GAME_SOURCES})
+  set_target_properties(refall PROPERTIES OUTPUT_NAME main)
+  target_link_options(refall PRIVATE -u ANativeActivity_onCreate)
+  set(ZEN_GAME_TARGETS refall)
+else()
+  add_executable(refall ${ZEN_GAME_SOURCES})
+  add_executable(refall-voyage-viewer ${ZEN_GAME_SOURCES})
+  target_compile_definitions(refall-voyage-viewer PRIVATE ZEN_VOYAGE_VIEWER)
+  set(ZEN_GAME_TARGETS refall refall-voyage-viewer)
+endif()
 # The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/data/campaign.tsv)
 file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv zen_campaign_hex HEX)
@@ -194,10 +219,10 @@ string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," zen_campaign_arr "${zen_campa
 file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${zen_campaign_arr}\n")
 configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
   find_package(OpenGL QUIET COMPONENTS EGL)
 endif()
-foreach(t refall refall-voyage-viewer)
+foreach(t ${ZEN_GAME_TARGETS})
   target_include_directories(${t} PRIVATE ${CMAKE_BINARY_DIR}/generated)
   if(OpenGL_EGL_FOUND)
     target_link_libraries(${t} PRIVATE OpenGL::EGL)
@@ -211,10 +236,13 @@ add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_
                    ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:refall>/gamecontrollerdb.txt)
 
 # refall-scope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
-add_executable(refall-scope src/scope.cpp)
-target_link_libraries(refall-scope PRIVATE zencore glfw glad)
+if(NOT ANDROID)
+  add_executable(refall-scope src/scope.cpp)
+  target_link_libraries(refall-scope PRIVATE zencore glfw glad)
+  list(APPEND ZEN_GAME_TARGETS refall-scope)
+endif()
 
-foreach(t zencore zenrender refall refall-voyage-viewer refall-scope)
+foreach(t zencore zenrender ${ZEN_GAME_TARGETS})
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
