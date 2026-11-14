@@ -180,6 +180,12 @@ bool Progress::beaten(int stage, int song, int diff) const {
     const StageRec* r = get(stage);
     return r && song < (int)r->songs[diff].size() && r->songs[diff][song].beaten;
 }
+bool Progress::allBeaten(int stage, int diff) const {
+    if (!camp_ || stage < 0 || stage >= camp_->size() || camp_->stages()[stage].songs.empty()) return false;
+    for (int k = 0; k < (int)camp_->stages()[stage].songs.size(); k++)
+        if (!beaten(stage, k, diff)) return false;
+    return true;
+}
 int Progress::best(int stage, int song, int diff) const {
     const StageRec* r = get(stage);
     return r && song < (int)r->songs[diff].size() ? r->songs[diff][song].best : 0;

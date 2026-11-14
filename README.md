@@ -217,7 +217,8 @@ no song previews.
   one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
   started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
   a stage reached on EXPERT is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
-  best score) but the stage isn't cleared. A game over ends the run; a key goes back to the stages. The game remembers,
+  best score) but the stage isn't cleared; once all of a stage's songs are beaten, in any runs, the next stage opens
+  too (quietly: only a clear turns the petal and celebrates). A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
   lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
   and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder

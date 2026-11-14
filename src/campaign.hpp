@@ -45,8 +45,8 @@ private:
 // from any song of its stage), with its best score (the points scored during that song), the lines cleared during that
 // best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
 // its songs were all survived in one run started from its first song. Stage N + 1 is unlocked on a difficulty once
-// stage N is cleared on it or on a harder one (stage 1 always is; reaching a stage on EXPERT opens it on NORMAL and
-// EASY too, not done there but playable), or everything with --unlock.
+// stage N is cleared on it or on a harder one, or once its songs are all beaten there, in any runs (stage 1 always is;
+// reaching a stage on EXPERT opens it on NORMAL and EASY too, not done there but playable), or everything with --unlock.
 // The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
 // beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
@@ -64,10 +64,11 @@ public:
     bool unlocked(int stage, int diff) const {
         if (unlockAll_ || stage <= reach_) return true;
         for (int d = std::max(0, diff); d < DIFF_COUNT; d++)
-            if (cleared(stage - 1, d)) return true;
+            if (cleared(stage - 1, d) || allBeaten(stage - 1, d)) return true;
         return false;
     }
     bool cleared(int stage, int diff) const;
+    bool allBeaten(int stage, int diff) const; // every song of the stage beaten on that difficulty (not in one run)
     bool clearedAny(int stage) const;
     bool beaten(int stage, int song, int diff) const;
     int best(int stage, int song, int diff) const;   // 0 when never beaten
