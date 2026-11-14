@@ -758,7 +758,8 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
             an.segments[i].cluster = c;
         }
         // Labels, from energy and structure. A drop is the song's most intense material entered by a rise
-        // (its energy near the song's maximum, clearly above the section before it or after a build),
+        // (its energy near the song's maximum, clearly above the section before it or after a build; or, on a
+        // bass return, at least as loud as the section before it and clearly above how that one ended),
         // whatever its group. Otherwise only the song's peak texture (the group(s) with the highest
         // energy) can be a chorus: a loud section of another group is still a verse.
         {
@@ -782,9 +783,21 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
             for (int i = 0; i < n; i++)
                 for (double pt : punchBounds)
                     if (std::fabs(pt - an.segments[i].start) < 0.05) punchStart[i] = 1;
+            // Sections that start on a bass return (the full bass back after a cut).
+            std::vector<char> returnStart(n, 0);
+            for (int i = 0; i < n; i++)
+                for (double rt : returnBounds)
+                    if (std::fabs(rt - an.segments[i].start) < 0.05) returnStart[i] = 1;
             for (int i = 0; i < n; i++) {
                 Segment& sg = an.segments[i];
                 float prevE = i > 0 ? an.segments[i - 1].energy : sg.energy;
+                // How the section before it ended (its last quarter): a loud section that thins out into a breakdown
+                // keeps a high mean, so the drop that follows is no louder than it on average, only than its end.
+                float prevTail = prevE;
+                if (i > 0) {
+                    const Segment& p = an.segments[i - 1];
+                    prevTail = meanIntensity(p.start + 0.75 * (p.end - p.start), p.end);
+                }
                 int prevKind = i > 0 ? an.segments[i - 1].kind : -1;
                 bool climax = sg.energy >= std::max(0.8f, maxSegE - 0.15f);
                 if (i == 0 && n > 1 && sg.energy < 0.55f) sg.kind = SEG_INTRO;
@@ -792,6 +805,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                 else if (sg.rise > 0.22f && sg.energy < 0.8f) sg.kind = SEG_BUILD;
                 else if (i > 0 && climax && (sg.energy - prevE >= 0.08f || prevKind == SEG_BUILD)) sg.kind = SEG_DROP;
                 else if (i > 0 && punchStart[i] && sg.energy >= 0.65f && sg.energy >= prevE - 0.05f) sg.kind = SEG_DROP;
+                else if (i > 0 && returnStart[i] && climax && sg.energy >= prevE && sg.energy - prevTail >= 0.08f) sg.kind = SEG_DROP;
                 else if (peakGroup(sg.cluster) && sg.energy >= 0.65f) sg.kind = SEG_CHORUS;
                 else if (sg.energy < 0.4f) sg.kind = SEG_BREAK;
                 else sg.kind = SEG_VERSE;
