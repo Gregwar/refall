@@ -190,8 +190,7 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track) {
     static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "QUIT"};
     const float cx = X(960);
-    // the focused entry's inked edges (eased between entries): the underline spans them, the two halos sit at the same
-    // distance outside them, level with the middle of the capitals
+    // the focused entry's inked edges (eased between entries): the underline spans them
     float inkL = 0, inkR = 0;
     for (int i = 0; i < Menu::TITLE_ITEMS; i++) {
         float l, r;
@@ -200,12 +199,8 @@ void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accen
         inkL += near1(m.aTitle_, i) * (start + l);
         inkR += near1(m.aTitle_, i) * (start + r);
     }
-    const float base = Y(y0 + m.aTitle_ * step), ys = base + 14 * u, yc = base - p.capHeight(f, size * u) * 0.5f;
+    const float base = Y(y0 + m.aTitle_ * step), ys = base + 14 * u;
     p.line(inkL, ys, inkR, ys, 1.6f * u, withA(accent, 0.9f));
-    p.setAdditive(true);
-    p.glow(inkL - 26 * u, yc, 22 * u, withA(accent, 0.8f));
-    p.glow(inkR + 26 * u, yc, 22 * u, withA(accent, 0.8f));
-    p.setAdditive(false);
     for (int i = 0; i < Menu::TITLE_ITEMS; i++)
         p.text(f, ITEMS[i], cx, Y(y0 + i * step), size * u, withA(ink, 0.45f + 0.55f * near1(m.aTitle_, i)), 0, track);
 }
