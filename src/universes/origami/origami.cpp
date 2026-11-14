@@ -1261,8 +1261,8 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
     }
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    // the sheet turns over on the drop's downbeat and back slowly after the peak
-    dev_ = approach(dev_, dropMode_ ? wp : 0.f, dropMode_ ? 1.2f : 0.3f, dt);
+    // the sheet turns over to its coloured side on a DROP section's first beat, and back as it ends
+    dev_ = approach(dev_, music.inDrop ? 1.f : 0.f, music.inDrop ? 1.2f : 2.5f, dt);
     flock_ = dropMode_ && wp > 0.3f ? 1.f : 0.f;
     swell_ = approach(swell_, 0.f, 0.4f, dt);
     if (patternOut_) {
