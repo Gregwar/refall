@@ -13,11 +13,11 @@
 //
 // A cleared row's cubes shatter into shards and burst into fragments with sparks; the fragments thrown out of the
 // well stay on the substrate until charges fetch them. A DROP section (and it alone) pours charges out of both
-// terminals: many more, much faster, the traces brighter, more sparks, and the dies power on: a wave of current runs
-// up the stack every two beats, lighting their circuitry and pads in the charges' color as it passes.
-// A chorus is a busy circuit, a break a few slow charges on
-// fading traces. A lock scatters the charges around the impact (a hard one sparks there); slow motion slows
-// the circuit; a game over shatters the whole stack.
+// terminals: many more, much faster, the traces brighter, more sparks, the substrate in a deep shade of its current's
+// color, and the dies power on: a wave of current runs up the stack every two beats, lighting their circuitry and pads
+// in the charges' color as it passes. A chorus is a busy circuit, a break a few slow charges on fading traces. A lock
+// scatters the charges around the impact (a hard one sparks there); slow motion slows the circuit; a game over
+// shatters the whole stack.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/electron/electron.hpp"
@@ -752,7 +752,7 @@ void ElectronUniverse::simulate(const Game& game, float wdt, float dt, const Mus
     }
     hit_ = 0.f;
     lv_ = approach(lv_, lvTarget_, 0.9f, dt);
-    dropMix_ = approach(dropMix_, inDrop_ ? 1.f : 0.f, inDrop_ ? 5.f : 0.8f, dt);
+    dropMix_ = approach(dropMix_, inDrop_ ? 1.f : 0.f, inDrop_ ? 5.f : 2.f, dt); // (gone by the section's end)
     swell_ = approach(swell_, 0.f, 0.35f, dt);
     const float pm = smoothstepf(0.f, 1.f, lv_), pk = smoothstepf(1.f, 2.f, lv_);
     const float kick = music.hasSong ? music.kick : 0.f;
@@ -1167,6 +1167,13 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_BLEND);
     {
         vec3 ground = hex(V.ground), mottle = hex(V.mottle), panel = hex(V.panel);
+        // a DROP: the substrate takes a deep shade of its current's color (still dark: the stack reads on it)
+        if (dropMix_ > 0.001f) {
+            const vec3 ch = hex(V.charge);
+            ground = lerp(ground, ch * 0.2f, 0.65f * dropMix_);
+            mottle = lerp(mottle, ch * 0.27f, 0.65f * dropMix_);
+            panel = lerp(panel, ch * 0.12f, 0.4f * dropMix_);
+        }
         if (slow_ > 0.001f) {
             ground = lerp(ground, hex(V.slow), 0.35f * slow_);
             mottle = lerp(mottle, hex(V.slow), 0.35f * slow_);
