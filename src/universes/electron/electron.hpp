@@ -62,7 +62,6 @@ private:
     };
     struct Spark { vec2 p, v; vec3 col; float t = 0, life = 0.2f, w = 0.012f; };
     struct Flash { vec2 p; vec3 col; float t, life, r; };
-    struct Arc { std::vector<vec2> pts; float t = 0.f, life = 0.2f, w = 0.03f; };
     struct Dying { float x, y; int type; float t, delay, seed, nib; bool over; };
 
     // sim
@@ -77,7 +76,6 @@ private:
     void deposit(std::vector<float>& f, vec2 p, float amount);
     void wear(vec2 p, float amount);
     void burst(float x, float y, int type, int n, float speedK, bool quadClear);
-    void arc(const Game& game); // an arc from a terminal to the stack's top (a DROP's beat)
     void sparks(vec2 at, vec2 dir, const vec3& col, int n, float speed, float spread, float flash);
     void syncCells(const Game& game);
     void warmUp(const Game& game);
@@ -118,9 +116,6 @@ private:
     std::vector<Dying> dying_;
     std::vector<Spark> sparks_;
     std::vector<Flash> flashes_;
-    std::vector<Arc> arcs_;         // a DROP's arcs, terminal to stack
-    double arcBeat_ = -1.0;         // the beat of the last arc
-    int arcSide_ = 0;               // the terminal the next arc leaves from
     float sparkTok_ = 0;       // sparking contacts allowed (refills over time)
     static constexpr int MAX_SPARKS = 600;
     float nib_[22][10] = {};
