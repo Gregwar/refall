@@ -153,7 +153,7 @@ void main() {
 }
 )";
 
-// Kinds: 0 a solid cube (p0 charge: its edges lit, p1 half size, p3 ghost, p4 shattered), 1 a soft shadow (p1 half
+// Kinds: 0 a block, a bare die (p0 charge: its edges lit, p1 half size, p3 ghost, p4 shattered), 1 a soft shadow (p1 half
 // size, p2 blur), 2 a charge (p1 radius, p2 tail length, p3 carrying, p0 flicker), 3 a fragment (p1 size, p0 glow),
 // 4 a soft round dot (p1 radius, p2 ring width: 0 a disc), 5 a spark streak (p1 length, p2 width, p0 heat),
 // 6 a flash (p1 radius).
@@ -169,8 +169,24 @@ uniform float uBridge;
 uniform vec3 uBridgeInk;
 uniform vec3 uRim;           // the color of a cube's edges when a charge touches it
 
-// A solid cube seen from above and a little in front: a flat top with a narrow chamfer lit from the upper left, a
-// shaded front wall below it, nothing else.
+// A bare silicon die's top (u: -1..1 across it; lit: the chamfer's light, 1 on the flat): the piece's color shimmering
+// with the angle of view, a fine grid of circuitry, a border of gold bond pads.
+vec3 dieTop(vec2 u, float seed, vec3 base, float lit, float px) {
+    vec3 col = base * (0.7 + 0.25 * lit);
+    float sh = 0.5 + 0.5 * sin((u.x + u.y) * 3.0 + seed * 6.0);
+    col = mix(col, col * vec3(0.85, 1.05, 1.15), sh * 0.35);
+    vec2 g = u * 7.0;
+    vec2 lf = abs(fract(g) - 0.5);
+    float lines = smoothstep(0.06 + px * 7.0, 0.06 - px * 7.0, min(lf.x, lf.y)) * step(0.35, hash2(floor(g) + seed));
+    col *= 1.0 - 0.18 * lines * step(sdRBox(u, vec2(0.66), 0.02), 0.0);
+    float rim = step(0.0, sdRBox(u, vec2(0.7), 0.02)) * step(sdRBox(u, vec2(0.9), 0.04), 0.0);
+    vec2 pd = abs(fract(u * 3.5) - 0.5);
+    float pad = rim * smoothstep(0.26 + px * 3.5, 0.26 - px * 3.5, max(pd.x, pd.y));
+    return mix(col, vec3(0.95, 0.76, 0.36) * (0.6 + 0.5 * lit), pad);
+}
+
+// A block: a bare silicon die (dieTop) seen from above and a little in front, its top with a narrow chamfer lit from
+// the upper left, a shaded front wall below it.
 vec4 cube(vec2 q) {
     float h = vD.x;
     float seed = vB.z;
@@ -217,11 +233,8 @@ vec4 cube(vec2 q) {
     }
     vec3 n = normalize(mix(vec3(0.0, 0.0, 1.0), vec3(out2 * 0.9, 1.0), onBev));
     float dif = max(dot(n, L), 0.0) / L.z;
-    vec3 col = base * (0.86 + 0.06 * (q.y - q.x) / h);
-    col = col * mix(1.0, 0.55 + 0.6 * dif, onBev);
+    vec3 col = dieTop(q / h, seed, base, mix(1.0, 0.55 + 0.6 * dif, onBev), fw / h);
     col += vec3(1.0) * pow(max(reflect(-L, n).z, 0.0), 30.0) * 0.22 * onBev;
-    // a whisper of surface (a solid that is not quite plastic)
-    col *= 0.985 + 0.03 * vnoise(q / h * 6.0 + seed);
     // the front wall: in the shade
     float onTop = clamp(0.5 - d / fw, 0.0, 1.0);
     float wy = clamp((-h - q.y) / wall, 0.0, 1.0);
