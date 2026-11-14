@@ -29,7 +29,8 @@ Game options used (added for this tool): `--analysis OUT.json` writes the song a
 starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board); with --clip
 the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
 (ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env; ZEN_TEST_BONUS=0
-keeps the slow-motion bonus out of every shot; ZEN_CLIP_PACE speeds a shot's play up ("pace" in the config).
+keeps the slow-motion bonus out of every shot; ZEN_CLIP_PACE and ZEN_CLIP_VELOCITY speed a shot's play and fall
+up ("pace" and "velocity" in the config).
 Needs a built refall (default build/refall), ffmpeg, numpy and Pillow; yt-dlp for a song not
 cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
 """
@@ -351,11 +352,6 @@ def plan(cfg, grid, universes):
             for i, s in enumerate(run):
                 u, _, variant = s["u"].partition(":")
                 env = {"ZEN_TEST_BONUS": "0"}  # (no slow-motion bonus in a trailer: the autoplay would start it)
-                # the play speeds up over the video: "pace": [first, last] (ZEN_CLIP_PACE), by the shot's start
-                pace = cfg.get("pace")
-                if pace:
-                    k = points[bounds[i]] / grid.duration
-                    env["ZEN_CLIP_PACE"] = f"{pace[0] + (pace[1] - pace[0]) * k:.2f}"
                 env.update(cfg.get("env", {}))
                 env.update(cfg.get("universe_env", {}).get(u, {}))
                 env.update(s.get("env", {}))
@@ -388,6 +384,18 @@ def plan(cfg, grid, universes):
         if e["kind"] == "shot":
             e["c0"], e["c1"] = max(0.0, e["t0"] - half), min(grid.duration, e["t1"] + half)
     missing = [u for u in universes if u not in {e.get("u") for e in timeline}]
+    # the play speeds up over the video, from the first shot to the last one (by their starts): "pace": [first, last]
+    # (the autoplay's, ZEN_CLIP_PACE) and "velocity": [first, last] (the fall's, ZEN_CLIP_VELOCITY: at 37.5 and over,
+    # 20G in the drops); a shot's own env overrides them
+    shots = [e for e in timeline if e["kind"] == "shot"]
+    if shots:
+        t0, t1 = shots[0]["t0"], max(shots[-1]["t0"], shots[0]["t0"] + 1e-3)
+        for e in shots:
+            k = min(1.0, max(0.0, (e["t0"] - t0) / (t1 - t0)))
+            for key, var, fmt in (("pace", "ZEN_CLIP_PACE", "{:.2f}"), ("velocity", "ZEN_CLIP_VELOCITY", "{:.1f}")):
+                r = cfg.get(key)
+                if r and var not in e["env"]:
+                    e["env"] = {var: fmt.format(r[0] + (r[1] - r[0]) * k), **e["env"]}
     return timeline, missing
 
 

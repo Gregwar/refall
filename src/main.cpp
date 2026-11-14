@@ -760,12 +760,15 @@ void App::updateGravity(double songTime, float dt) {
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
     if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
+    // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V, as EXPERT (20G included; tools/demo.py ramps it up)
+    static const float clipVel = std::getenv("ZEN_CLIP_VELOCITY") ? (float)std::atof(std::getenv("ZEN_CLIP_VELOCITY")) : 0.f;
+    if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     const float diff = Game::speedDifficulty(v);
     // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
     // stages has some, every song of the finale; free play has it from level 38 on (once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
-    const bool expert = mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT;
+    const bool expert = clipVel > 0.f || (mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT);
     const bool twentyG = expert && gameRate_ > 0.999f &&
                          v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
@@ -828,6 +831,22 @@ void App::autoplay(float dt) {
         planned_ = game_.planMove(planRot_, planX_);
         botTimer_ = (calm ? 0.45f : 0.25f) * k;
         if (!planned_) return;
+    }
+    // 20G: the piece is on the stack the moment it appears, so it is turned and slid into place at once (an expert's
+    // reflexes), before the lock delay runs out
+    if (game_.twentyG()) {
+        for (int i = 0; i < 12; i++) {
+            const Piece& p = game_.piece();
+            bool ok = true;
+            if (p.rot != planRot_) ok = game_.rotate(1);
+            else if (p.x < planX_) ok = game_.move(1);
+            else if (p.x > planX_) ok = game_.move(-1);
+            else break;
+            if (!ok) break;
+        }
+        game_.hardDrop();
+        planned_ = false;
+        return;
     }
     botTimer_ -= dt;
     if (botTimer_ > 0) return;
