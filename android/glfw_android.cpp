@@ -47,6 +47,7 @@ bool g_haveMain = false, g_focused = false;
 std::atomic<bool> g_quit{false};
 const auto g_t0 = std::chrono::steady_clock::now();
 GLFWcharfun g_charCb = nullptr;
+GLFWwindowrefreshfun g_refreshCb = nullptr;
 GLFWjoystickfun g_joyCb = nullptr;
 int g_hintVisible = GLFW_TRUE;
 
@@ -162,7 +163,11 @@ void dropSurface() {
 
 void onCmd(android_app* app, int32_t cmd) {
     switch (cmd) {
-    case APP_CMD_INIT_WINDOW: if (g_haveMain) makeSurface(); break;
+    case APP_CMD_INIT_WINDOW:
+        if (g_haveMain) makeSurface();
+        if (g_refreshCb) g_refreshCb(nullptr); // (a frame held on the screen is gone with the old window)
+        break;
+    case APP_CMD_WINDOW_REDRAW_NEEDED: if (g_refreshCb) g_refreshCb(nullptr); break;
     case APP_CMD_TERM_WINDOW: dropSurface(); break;
     case APP_CMD_GAINED_FOCUS: g_focused = true; break;
     case APP_CMD_LOST_FOCUS:
@@ -252,6 +257,21 @@ void glfwSwapBuffers(GLFWwindow* w) {
 }
 GLFWglproc glfwGetProcAddress(const char* name) { return (GLFWglproc)eglGetProcAddress(name); }
 int glfwWindowShouldClose(GLFWwindow*) { return g_quit ? GLFW_TRUE : GLFW_FALSE; }
+// (one wait for an event, then the frame goes on as polled)
+void glfwWaitEventsTimeout(double timeout) {
+    if (g_taps.empty()) {
+        int events = 0;
+        android_poll_source* src = nullptr;
+        if (ALooper_pollOnce((int)(timeout * 1000.0), nullptr, &events, (void**)&src) >= 0 && src) src->process(g_app, src);
+        if (g_app->destroyRequested) g_quit = true;
+    }
+}
+GLFWwindowrefreshfun glfwSetWindowRefreshCallback(GLFWwindow*, GLFWwindowrefreshfun cb) {
+    GLFWwindowrefreshfun o = g_refreshCb;
+    g_refreshCb = cb;
+    return o;
+}
+
 void glfwPollEvents(void) {
     pump();
     // the taps, one after the other: its keys down for two frames, then up for one
