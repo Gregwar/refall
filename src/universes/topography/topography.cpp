@@ -760,33 +760,18 @@ void TopographyUniverse::setSong(const SongLook& t, float seconds) {
     }
 }
 
+// The map keeps its usual regime through every phase but a DROP section (see render: MusicState::inDrop), whatever
+// the scene's level.
 void TopographyUniverse::setLevel(int level, float energy, float seconds, float impact) {
-    level = std::clamp(level, 0, 2);
     energy_ = energy;
-    if (level < 2) dropMode_ = false;
-    if (!hasLevel_ || seconds < 0.1f) {
-        hasLevel_ = true;
-        level_ = level;
-        lv_ = lvFrom_ = lvTo_ = (float)level;
-        lvT_ = 1.f;
-        return;
-    }
-    const bool rising = level > level_;
-    level_ = level;
-    lvFrom_ = lv_;
-    lvTo_ = (float)level;
-    lvT_ = 0.f;
-    lvDur_ = std::clamp(seconds, rising ? 1.5f : 3.f, 6.f);
+    (void)level;
+    (void)seconds;
     (void)impact;
 }
 
-// The drop: the flood. The water surges up the valleys and the layer tints come in.
-void TopographyUniverse::drop(float strength) {
-    dropMode_ = true;
-    surge_ = std::max(surge_, 0.6f + 0.4f * strength);
-    heave_ = std::max(heave_, 0.6f + 0.4f * strength); // the land heaves around the stack
-    for (auto& pk : peaks_) pk.w = std::max(pk.w, 0.6f);
-}
+// The drop: the flood. The water surges up the valleys and the layer tints come in (if the hit lands in a DROP
+// section: a chorus's peak keeps the usual map).
+void TopographyUniverse::drop(float strength) { hit_ = std::max(hit_, strength); }
 
 void TopographyUniverse::refresh(float strength) {
     // a shower over one side of the sheet
@@ -1047,7 +1032,8 @@ void TopographyUniverse::buildBoard(const Game& g) {
     {
         const vec3 gc = layout::GAUGE_CENTER;
         const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        cell(gc.x, gc.y, layout::GAUGE_R, 0, pal_.lake, g.bonusReady() ? 1.f : 0.f, 3, 0.f, 1.f, 0.f, pal_.index, fill);
+        // (drawn while it fills: the inset carries the ready ring)
+        cell(gc.x, gc.y, layout::GAUGE_R, 0, pal_.lake, 1.f, 3, g.bonusReady() ? 1.f : 0.f, 1.f, 0.f, pal_.index, fill);
     }
 }
 
@@ -1168,7 +1154,20 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     worldTime_ += wdt;
 
-    // ---- Staging.
+    // ---- Staging: a DROP section floods the map (and its end drains it, by the section's end).
+    if (music.inDrop != dropMode_) {
+        dropMode_ = music.inDrop;
+        lvFrom_ = lv_;
+        lvTo_ = dropMode_ ? 2.f : 1.f;
+        lvT_ = 0.f;
+        lvDur_ = dropMode_ ? 1.5f : (float)DROP_OUT_LEAD;
+    }
+    if (hit_ > 0.f && dropMode_) {
+        surge_ = std::max(surge_, 0.6f + 0.4f * hit_);
+        heave_ = std::max(heave_, 0.6f + 0.4f * hit_); // the land heaves around the stack
+        for (auto& pk : peaks_) pk.w = std::max(pk.w, 0.6f);
+    }
+    hit_ = 0.f;
     if (lvT_ < 1.f) {
         lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
