@@ -738,6 +738,7 @@ void App::handleEvents() {
         }
         if (ev.type == GameEvent::BonusStart) slowToast_ = 2.f;
         if (ev.type == GameEvent::Lock) landed_ = true;
+        if (ev.type == GameEvent::Spawn) planned_ = false; // (a clip's autoplay lets its piece land: plan the next)
     }
     game_.events().clear();
 }
@@ -761,7 +762,7 @@ void App::updateGravity(double songTime, float dt) {
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
     if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
-    // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V, as EXPERT (20G included; tools/demo.py ramps it up)
+    // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V (tools/demo.py ramps it up), with no 20G unless ZEN_CLIP_20G=1
     static const float clipVel = std::getenv("ZEN_CLIP_VELOCITY") ? (float)std::atof(std::getenv("ZEN_CLIP_VELOCITY")) : 0.f;
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     gravityV_ = v;
@@ -770,7 +771,8 @@ void App::updateGravity(double songTime, float dt) {
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
     // stages has some, every song of the finale; free play has it from level 38 on (once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
-    const bool expert = clipVel > 0.f || (mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT);
+    static const bool clip20G = std::getenv("ZEN_CLIP_20G") && std::getenv("ZEN_CLIP_20G")[0] == '1';
+    const bool expert = clipVel > 0.f ? clip20G : mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT;
     const bool twentyG = expert && gameRate_ > 0.999f &&
                          v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
@@ -854,18 +856,13 @@ void App::autoplay(float dt) {
     }
     botTimer_ -= dt;
     if (botTimer_ > 0) return;
-    const float late = botTimer_; // (how far past its time this step is)
     botTimer_ = (calm ? 0.13f : 0.07f) * k;
     const Piece& p = game_.piece();
     if (p.rot != planRot_) { if (!game_.rotate(1)) planned_ = false; return; }
     if (p.x < planX_) { if (!game_.move(1)) planned_ = false; return; }
     if (p.x > planX_) { if (!game_.move(-1)) planned_ = false; return; }
-    if (calm && game_.softDrop()) { // (several rows in one frame when the pace outruns the frames)
-        botTimer_ = late + 0.035f * k;
-        while (botTimer_ <= 0.f && game_.softDrop()) botTimer_ += 0.035f * k;
-        botTimer_ = std::max(botTimer_, 0.f);
-        return;
-    }
+    // a clip: in place, the piece falls at the gravity's own speed (what the velocity shows), no drop by the player
+    if (calm) return;
     game_.hardDrop();
     planned_ = false;
 }
