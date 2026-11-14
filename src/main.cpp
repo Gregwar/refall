@@ -1439,7 +1439,14 @@ int App::run() {
             }
             const Menu::Choice c = menu_.update(input_, dt);
             fbSize(fbw, fbh);
-            if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
+            // (a choice leaves the menu at once: its screen may already have moved on, e.g. RETRY back on the Voyage's,
+            // so this last frame is black, as the leaving screen faded to, rather than a flash of the menu)
+            if (c.kind != Menu::Choice::NONE && c.kind != Menu::Choice::QUIT) {
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                glViewport(0, 0, fbw, fbh);
+                glClearColor(0.f, 0.f, 0.f, 1.f);
+                glClear(GL_COLOR_BUFFER_BIT);
+            } else if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
             static bool firstFrame = true;
             if (firstFrame) {
                 firstFrame = false;
