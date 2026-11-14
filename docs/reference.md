@@ -108,7 +108,9 @@ quad charges 5). Once it's full, the slow-motion button starts the bonus: for 10
 pieces barely fall (one row every two seconds, whatever the velocity, 20G included) while the song keeps playing normally: only a very
 slight tape-like slow-down (and back) marks the start and the end. Use it to clean up the stack in a part that's too fast. Gravity gets
 back on the beat when the bonus ends. Meanwhile the universe shows the slow motion its own way (VECTOR sweeps in
-the complementary phosphor with long trails).
+the complementary phosphor with long trails), under a look common to every universe: outside the well the world
+drains to a cold silver, darker, with a vignette and a pale halo round the well; the well and the gauge keep their
+colors, and a bright ring round the gauge empties with the time left.
 
 A quad scores a 400-point bonus (800 back-to-back) and the universe celebrates it (VECTOR: a vector shockwave
 and beam overdrive).
