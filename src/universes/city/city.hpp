@@ -39,7 +39,7 @@ private:
         float ghost = 0.f;
         bool falling = false;
     };
-    static constexpr int ROWS = 20, COLS = 10;
+    static constexpr int ROWS = 22, COLS = 10; // the board's rows, the two above the well too (pieces spawn there)
     Win win_[ROWS][COLS];
     int pendingOff_[ROWS][COLS]; // how the next switch-off goes (0 plain, 1 a cleared floor, 2 the blackout)
     float pendingDelay_[ROWS][COLS];

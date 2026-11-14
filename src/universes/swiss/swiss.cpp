@@ -1205,8 +1205,7 @@ void SwissUniverse::drawBoard(const Game& g) {
             return false;
         };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
-        for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN) continue;
+        for (auto& c : cells) { // (whole above the well too: it spawns there)
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
             drawCell(w.x, w.y, 0.5f, mask8(c[0], c[1], in), tone(pieceColor(p.type, palIdx_)), 1.f);
         }

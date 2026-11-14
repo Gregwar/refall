@@ -6,7 +6,7 @@
 //  - boxes: the buildings (instanced boxes), their faces lit by the night (a dim moon, the sky, the streets' glow
 //    from below), glass reflecting the sky, small windows lit and put out slowly (or switched into the drop's
 //    patterns), lit crowns, all in the haze;
-//  - tower: the facade facing the camera whose 10 x 20 windows are the board: recessed openings (their reveals seen
+//  - tower: the facade facing the camera whose 10 x 22 windows are the board (two floors above the well): recessed openings (their reveals seen
 //    in perspective), glass reflecting the sky, and behind each one a real room (interior mapping: back wall, side
 //    walls, floor and ceiling traced per pixel, furnished per window, lit by the window's light), the frame lit by
 //    the rooms next to it;
@@ -281,7 +281,7 @@ void main() {
 inline const char* TOWER_FS = R"(#version 330 core
 in vec3 vW;
 out vec4 frag;
-uniform sampler2D uCellA; // 10 x 20 (row 0 at the top): rgb the window's light (color x level)
+uniform sampler2D uCellA; // 10 x 22, the board's rows (row 0 at the top: two floors above the well, where pieces spawn): rgb the window's light (color x level)
 uniform sampler2D uCellB; // r ghost, g falling
 uniform vec3 uEye, uFrame, uGlassTint, uGhostCol, uPierCol, uCrownCol, uAmb, uUpCol, uMoonCol, uMoonDir, uSnowCol, uReflCity;
 uniform vec3 uFlood;
@@ -376,23 +376,23 @@ void main() {
     float up = exp(-max(P.y - uGroundY, 0.0) / 30.0);
     vec3 lightIn = (uAmb + uMoonCol * max(uMoonDir.z, 0.0) + uUpCol * up * 0.5) * uFrameLight
                  + uFlood * (0.35 + 0.65 * smoothstep(12.0, -12.0, P.y));
-    if (P.y > 11.1) {
-        bool box = P.x > -3.4 && P.x < 0.4 && P.y < 11.75;
-        bool mast = abs(P.x - 2.6) < 0.06 + 0.03 * step(P.y, 11.5) && P.y < 14.5;
+    if (P.y > 13.1) {
+        bool box = P.x > -3.4 && P.x < 0.4 && P.y < 13.75;
+        bool mast = abs(P.x - 2.6) < 0.06 + 0.03 * step(P.y, 13.5) && P.y < 16.5;
         if (!box && !mast) discard;
         c = uFrame * lightIn * (box ? 0.7 : 0.6);
-        if (box) c += uCrownCol * uCrown * 0.6 * smoothstep(0.06, 0.0, 11.75 - P.y);
-    } else if (P.y > 10.0) {
-        if (P.y < 10.2) c = uFrame * lightIn;
-        else if (P.y < 10.95) {
+        if (box) c += uCrownCol * uCrown * 0.6 * smoothstep(0.06, 0.0, 13.75 - P.y);
+    } else if (P.y > 12.0) {
+        if (P.y < 12.2) c = uFrame * lightIn;
+        else if (P.y < 12.95) {
             float l = fract(P.y * 12.0);
             c = uFrame * lightIn * mix(0.35, 1.1, smoothstep(0.2, 0.5, l) * (1.0 - smoothstep(0.75, 0.95, l)));
             c += uCrownCol * 0.03 * uCrown;
         } else {
             c = uFrame * lightIn * 1.2;
-            c += uCrownCol * uCrown * smoothstep(0.05, 0.0, abs(P.y - 11.02));
+            c += uCrownCol * uCrown * smoothstep(0.05, 0.0, abs(P.y - 13.02));
         }
-        if (uSnow > 0.0) c = mix(c, uSnowCol * lightIn * 3.0, uSnow * smoothstep(0.06, 0.0, 11.1 - P.y));
+        if (uSnow > 0.0) c = mix(c, uSnowCol * lightIn * 3.0, uSnow * smoothstep(0.06, 0.0, 13.1 - P.y));
     } else if (P.y < -10.0) {
         // a plant floor under the board: louvres, then the facade going on down
         float l = fract(P.y * 12.0);
@@ -409,12 +409,12 @@ void main() {
             sc += uChaseCol[k] * uChase * 1.5;
         }
         c += sc * strip;
-        vec2 tc = vec2(P.x < 0.0 ? 0.5 / 10.0 : 9.5 / 10.0, (10.0 - P.y) / 20.0);
+        vec2 tc = vec2(P.x < 0.0 ? 0.5 / 10.0 : 9.5 / 10.0, (12.0 - P.y) / 22.0);
         c += texture(uCellA, tc).rgb * 0.06 * smoothstep(5.5, 5.0, ax);
     } else {
         int col = clamp(int(floor(P.x + 5.0)), 0, 9);
-        int row = clamp(int(floor(10.0 - P.y)), 0, 19);
-        vec2 ctr = vec2(float(col) - 4.5, 9.5 - float(row));
+        int row = clamp(int(floor(12.0 - P.y)), 0, 21);
+        vec2 ctr = vec2(float(col) - 4.5, 11.5 - float(row));
         vec2 lp = P.xy - ctr;
         vec3 A = texelFetch(uCellA, ivec2(col, row), 0).rgb;
         vec4 B = texelFetch(uCellB, ivec2(col, row), 0);
@@ -433,7 +433,7 @@ void main() {
         vec3 fr = uFrame * lightIn;
         float sill = smoothstep(gb - 0.09, gb - 0.06, lp.y) * smoothstep(gb + 0.005, gb - 0.02, lp.y) * step(abs(lp.x), gx + 0.04);
         fr *= 1.0 + 0.5 * sill;
-        vec3 spill = texture(uCellA, vec2((P.x + 5.0) / 10.0, (10.0 - P.y) / 20.0)).rgb;
+        vec3 spill = texture(uCellA, vec2((P.x + 5.0) / 10.0, (12.0 - P.y) / 22.0)).rgb;
         fr += spill * 0.04 + A * 0.2 * sill + A * 0.06 * smoothstep(0.08, 0.0, sd);
         fr += reflection(reflect(r, vec3(0.0, 0.0, 1.0))) * 0.06 * uReflK;
         if (uSnow > 0.0) fr = mix(fr, uSnowCol * (lightIn * 3.0 + A * 0.5), uSnow * sill);
@@ -505,8 +505,8 @@ void main() {
     }
     if (uBridge > 0.0) {
         float lit = 0.0;
-        if (abs(P.x) < 5.0 && abs(P.y) < 10.0) {
-            int col = clamp(int(floor(P.x + 5.0)), 0, 9), row = clamp(int(floor(10.0 - P.y)), 0, 19);
+        if (abs(P.x) < 5.0 && P.y > -10.0 && P.y < 12.0) {
+            int col = clamp(int(floor(P.x + 5.0)), 0, 9), row = clamp(int(floor(12.0 - P.y)), 0, 21);
             lit = clamp(lumv(texelFetch(uCellA, ivec2(col, row), 0).rgb) * 4.0, 0.0, 1.0);
         }
         c = mix(c, mix(uBridgeColor, uBridgeInk, lit), uBridge);

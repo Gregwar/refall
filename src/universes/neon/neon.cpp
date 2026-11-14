@@ -780,11 +780,8 @@ void NeonUniverse::buildBoard(const Game& g) {
         };
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN - 1) continue;
-            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            // above the well's top it fades in
-            const float a = saturate((10.6f - w.y) / 0.6f);
-            addCell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), pieceLook(cells, nextId_, c[0], c[1], phase_), 0.f, a, 0, 0.f);
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy); // (whole above the well too: it spawns there)
+            addCell(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), pieceLook(cells, nextId_, c[0], c[1], phase_), 0.f, 1.f, 0, 0.f);
         }
     }
     // the previews: in the colors of the well's middle, where they come in
