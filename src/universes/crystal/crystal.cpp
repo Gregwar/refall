@@ -78,20 +78,20 @@ const VariantDef VARIANTS[] = {
      {{0x80a8de, 0x9a9fd6, 0x62b8de}, {0xa45ce2, 0x7656e6, 0xc95fd0}, {0x3cc49a, 0x62c066, 0x27b7c0}, {0xf59ac0, 0xf7ad9c, 0xe788d8}},
      {"celestite", "amethyst", "tourmaline", "rose quartz"}},
     {"ICE", 0x070b12, 0x22374c, 0x52708a, 0x060a12, 0x03060b, 0xe6eef6,
-     {{0xa6bacd, 0x93a6d0, 0xb6c8c4}, {0x45c6d2, 0x5ad6b4, 0x3caee2}, {0x416ef2, 0x6058ea, 0x2c8cee}, {0xffc23a, 0xffa042, 0xf8dc66}},
+     {{0xa6bacd, 0x93a6d0, 0xb6c8c4}, {0x45c6d2, 0x5ad6b4, 0x3caee2}, {0x6c98ff, 0x8a84ff, 0x52b0ff}, {0xffc23a, 0xffa042, 0xf8dc66}},
      {"rock crystal", "aquamarine", "sapphire", "citrine"}},
     {"EMBER", 0x100907, 0x3c2419, 0x7a5642, 0x0f0806, 0x070504, 0xf2e8e0,
      {{0x9e8474, 0x8a7f7c, 0xae8a68}, {0xea922e, 0xf0742c, 0xdcae36}, {0xe4384e, 0xd22f6c, 0xec5236}, {0xbfeaf6, 0xd8d4ff, 0xb8f4d8}},
      {"smoky topaz", "amber", "ruby", "opal"}},
     {"FLUORITE", 0x061010, 0x1c3b3b, 0x3f6c66, 0x050d0e, 0x030807, 0xe4f2ee,
-     {{0x88d2ac, 0x74c4c4, 0xa2d690}, {0x8e6ce2, 0xa660cc, 0x7276ee}, {0x3f92f2, 0x28aee4, 0x5274f2}, {0xf2e04c, 0xdcef5e, 0xfac63c}},
+     {{0x88d2ac, 0x74c4c4, 0xa2d690}, {0x8e6ce2, 0xa660cc, 0x7276ee}, {0x5ca8ff, 0x3cc4f0, 0x7290ff}, {0xf2e04c, 0xdcef5e, 0xfac63c}},
      {"green fluorite", "purple fluorite", "blue fluorite", "yellow fluorite"}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 // The seven piece types inside one mineral: a slight turn of hue and a value of their own.
-const float TYPE_HUE[7] = {0.f, -5.f, 5.f, -2.5f, 2.5f, -7.5f, 7.5f}; // degrees
-const float TYPE_VAL[7] = {1.06f, 0.84f, 1.f, 1.18f, 0.78f, 0.92f, 1.12f};
+const float TYPE_HUE[7] = {0.f, -8.f, 8.f, -4.f, 4.f, -12.f, 12.f}; // degrees
+const float TYPE_VAL[7] = {1.1f, 0.9f, 1.02f, 1.22f, 0.86f, 0.96f, 1.16f};
 
 // A hue turn (YIQ, the luma kept) and a value, on a linear color (done in display space).
 vec3 shade(const vec3& linCol, float deg, float val) {
