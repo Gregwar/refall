@@ -166,7 +166,8 @@ static void usage() {
         "  --universe-on-peak   also change universe when a song rises into a peak after a minute in one universe\n"
         "  --in-order           play songs in order (default: random order)\n"
         "  --autoplay           let the computer play\n"
-        "  --cheat-skip         S completes the song (testing the Voyage's logic; S is then no soft drop)\n"
+        "  --cheat-skip         S completes the song, or on the Voyage's screen clears the focused stage (testing;\n"
+        "                       S is then no soft drop)\n"
         "  --mute               no sound\n"
         "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
         "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
@@ -1385,6 +1386,22 @@ int App::run() {
         // ---- The menus.
         if (mode_ == MODE_MENU) {
             if (input_.pressed(A_FULLSCREEN) && !menu_.editing()) toggleFullscreen();
+            // --cheat-skip: S on an open petal clears its stage as a whole run would (the debrief, then the petal's
+            // unlock), its songs beaten, with no score
+            if (opt_.cheatSkip && input_.pressed(A_CHEAT_SKIP) && menu_.screen() == Menu::CAMPAIGN && !menu_.editing() && !menu_.celebrating()) {
+                const Menu::Place pl = menu_.place();
+                if (pl.stage >= 0 && pl.stage < campaign_.size() && progress_.unlocked(pl.stage, pl.voyageDiff)) {
+                    run_ = Run{};
+                    run_.stage = pl.stage;
+                    run_.diff = pl.voyageDiff;
+                    game_.reset(runSeed_);
+                    for (int k = 0; k < (int)campaign_.stages()[pl.stage].songs.size(); k++) progress_.setBeaten(pl.stage, k, run_.diff, 0, 0);
+                    std::printf("[cheat] stage %d cleared\n", pl.stage + 1);
+                    campaignEnd();
+                    swap();
+                    continue;
+                }
+            }
             const Menu::Choice c = menu_.update(input_, dt);
             fbSize(fbw, fbh);
             if (fbw > 0 && fbh > 0) menu_.render(fbw, fbh);
@@ -1559,7 +1576,7 @@ int App::run() {
         if (input_.pressed(A_DEBUG_BONUS) && mode_ != MODE_CAMPAIGN && !viewer_) game_.debugChargeBonus();
         // --cheat-skip: S jumps to the song's last seconds, survived: its outro starts as at a real end (a Voyage song
         // counts as cleared, the stage and the run go on).
-        if (input_.pressed(A_CHEAT_SKIP) && track_ && break_ == BREAK_OFF && !game_.over() && !paused_ && !viewer_) {
+        if (opt_.cheatSkip && input_.pressed(A_CHEAT_SKIP) && track_ && break_ == BREAK_OFF && !game_.over() && !paused_ && !viewer_) {
             const double end = track_->duration() - (OUT_HIDE + 2.0);
             if (songTime_ < end) {
                 viewerSeek(end);
