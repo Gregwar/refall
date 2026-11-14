@@ -78,7 +78,7 @@ private:
     void burst(float x, float y, int type, int n, float speedK, bool quadClear);
     void sparks(vec2 at, vec2 dir, const vec3& col, int n, float speed, float spread, float flash);
     void syncCells(const Game& game);
-    void warmUp(const Game& game);
+    void warmUp(const Game& game, bool bare); // (bare: a break's frame, its blank board not the stack)
 
     // drawing
     void drawPanels(const std::vector<HudRect>& panels);
