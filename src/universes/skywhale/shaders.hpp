@@ -535,7 +535,7 @@ void main() {
 
 
 // ---------------------------------------------------------------- the finale: the Moon's landscape
-// Ray-marched per pixel (at the sky's reduced resolution) over the Moon's sphere, in Moon radii: grey regolith,
+// Ray-marched per pixel (at the sky's resolution) over the Moon's sphere, in Moon radii: grey regolith,
 // darker maria, mountain ranges (ridged), craters at six scales (bowls, raised rims, ejecta blankets, central peaks in
 // the great ones, the young ones bright with rays), rilles; a low sun, hard shadows marched toward it, the creature's
 // own shadow on the ground; the black sky with the Earth hanging in it. Writes its depth.
@@ -603,26 +603,31 @@ float terrain(vec3 n, float foot, bool lo, out float alb) {
         vec3 P = n / cell;
         vec3 ci = floor(P);
         if (hash3(ci + 1.7) < (i < 0 ? 0.45 : (i < 3 ? 0.6 : 0.62 - 0.1 * float(i)))) {
-            vec3 o = ci + 0.5 + (vec3(hash3(ci), hash3(ci + 3.1), hash3(ci + 7.7)) - 0.5) * 0.3;
+            vec3 jo = (vec3(hash3(ci), hash3(ci + 3.1), hash3(ci + 7.7)) - 0.5) * 0.3;
+            vec3 o = ci + 0.5 + jo;
             vec3 f = P - o;
-            float R = 0.12 + 0.24 * pow(hash3(ci + 5.3), 1.5);
+            // a crater lives in its cell: its rim kept clear of the cell's faces, its ejecta and rays fading out before
+            // them (cut there, they showed as straight lines and squares across the ground)
+            vec3 fc = abs(P - ci - 0.5);
+            float win = smoothstep(0.5, 0.4, max(max(fc.x, fc.y), fc.z));
+            float R = min(0.12 + 0.24 * pow(hash3(ci + 5.3), 1.5), (0.4 - max(max(abs(jo.x), abs(jo.y)), abs(jo.z))) / 1.25);
             float x = length(f) / R;
-            if (x < 2.7) {
+            if (x < 2.7 && win > 0.0) {
                 float dr = i < 0 ? 0.05 : (i < 2 ? 0.09 : 0.16);
                 float prof = x < 1.0 ? (x * x - 1.0) : 0.0;
                 prof += 0.32 * exp(-sq((x - 1.0) / 0.17));
                 prof += 0.14 * smoothstep(0.85, 1.05, x) * exp(-max(x - 1.0, 0.0) * 2.0);
                 float peak = i < 3 ? 0.5 * exp(-sq(x / 0.15)) * (1.0 - 0.5 * hash3(ci + 2.2)) : 0.0;
-                h += (prof + peak) * R * cell * dr * 2.0 * k;
+                h += (prof + peak) * R * cell * dr * 2.0 * k * win;
                 if (!lo) {
                     // its albedo: a bright rim and ejecta, a darker floor; the young ones bright, with rays
                     float young = step(hash3(ci + 9.9), 0.3);
                     alb += (0.07 * exp(-sq((x - 1.0) / 0.22)) + 0.03 * exp(-max(x - 1.0, 0.0) * 3.0) * step(1.0, x)
-                            - 0.04 * smoothstep(0.95, 0.7, x) * (1.0 - young)) * ka;
+                            - 0.04 * smoothstep(0.95, 0.7, x) * (1.0 - young)) * ka * win;
                     if (young > 0.5) {
                         vec3 fd = normalize(f + 1e-5);
                         float ray = pow(vnoise3(fd * 9.0 + ci * 0.37), 3.0) * 2.0;
-                        alb += (ray * exp(-max(x - 1.0, 0.0) * 1.1) * smoothstep(0.95, 1.1, x) + 0.1 * step(x, 1.0)) * 0.3 * ka;
+                        alb += (ray * exp(-max(x - 1.0, 0.0) * 1.1) * smoothstep(0.95, 1.1, x) + 0.1 * step(x, 1.0)) * 0.3 * ka * win;
                     }
                     // the bowl's shadow: its floor behind the sunward rim, where the rim stands above the sun's line
                     if (x < 1.0 && k > 0.0) {
@@ -630,7 +635,7 @@ float terrain(vec3 n, float foot, bool lo, out float alb) {
                         float bb = dot(fx, sDir);
                         float dR = -bb + sqrt(max(bb * bb - (dot(fx, fx) - 1.0), 0.0)); // to the rim (crater radii)
                         float drop = (0.32 - prof) * dr * 2.0;                          // the rim above (crater radii)
-                        gCast = min(gCast, mix(1.0, smoothstep(-0.03, 0.03, dR * tanEl - drop), k));
+                        gCast = min(gCast, mix(1.0, smoothstep(-0.03, 0.03, dR * tanEl - drop), k * win));
                     }
                 }
             }
