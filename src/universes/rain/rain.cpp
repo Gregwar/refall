@@ -20,7 +20,9 @@
 // A cleared row's tiles are thrown out of the well, half to each side, on a scripted arc (behind the stack and the
 // HUD) to a release over the side bands, then become rigid boxes in a small 2D solver (sequential impulses, friction,
 // sleeping): they tumble and settle into messy heaps on the street, where the rain falls on their tilted faces and
-// slides off the lower corners. Each heap is capped (the oldest fades away). A new song washes them away; game over
+// slides off the lower corners. The rain soaks them like cardboard: dark water stains creep down from their tops, they
+// go matte and limp (sagging in the middle, bulging, their turn relaxing toward lying flat) and are crushed thinner, so
+// the heaps slump and pack down little by little over the song. Each heap is capped (the oldest fades away). A new song washes them away; game over
 // throws the whole stack out, row by row from the top.
 //
 // The music sets the rain: a drizzle when calm, steady rain at mid, a downpour at a peak (with a gust on the kicks).
@@ -35,6 +37,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "layout.hpp"
@@ -86,6 +89,7 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float GAP = 0.07f;         // between tiles, each side (board units)
+constexpr float HEAP_HALF = 0.38f;   // a heaped tile's half size, dry (board units)
 constexpr float HORIZON = -8.2f;     // the street's far edge (as in the backdrop)
 
 // The HUD columns, softened (0 outside .. 1 well inside), for what passes behind them.
@@ -622,7 +626,7 @@ void RainUniverse::eject(int x, int y, int type, float delay) {
     b.type = type;
     b.side = side;
     b.seed = seeds_[std::clamp(y, 0, Game::H - 1)][std::clamp(x, 0, Game::W - 1)];
-    b.half = 0.38f;
+    b.half = HEAP_HALF;
     const vec3 p = layout::cellPos((float)x, (float)y);
     b.x = b.x0 = p.x;
     b.y = b.y0 = p.y;
@@ -632,9 +636,6 @@ void RainUniverse::eject(int x, int y, int type, float delay) {
     b.thrown = true;
     b.t = 0.f;
     b.delay = delay;
-    const vec3 c = pieceColor(type);
-    b.paint = 1.f;
-    b.pr = c.x; b.pg = c.y; b.pb = c.z;
     // a real ballistic flight whose apex clears the heap all along the way (from the band's inner edge to the
     // target), landing on its top: a low row gets a stronger kick
     float pathTop = top;
@@ -892,45 +893,23 @@ void RainUniverse::stepHeaps(float dt) {
     }
     bodies_.erase(std::remove_if(bodies_.begin(), bodies_.end(), [](const Body& b) { return b.fading && b.fade <= 0.f; }), bodies_.end());
     buildBins();
-    // the rain washes the paint off: each drop takes a little, which runs down onto the tile below (tinting it)
-    // and on, and off the heap; old tiles end up bare ceramic
+    // the rain soaks the heaped tiles like cardboard: each drop and the steady rain soften them; a soggy tile goes
+    // limp (its turn relaxes toward lying flat) and is crushed thinner under the ones above, so the heap slumps and
+    // packs down little by little
     for (Body& b : bodies_) {
-        b.drip = std::max(0.f, b.drip - dt * 0.04f);
         if (!b.solid || b.thrown) { b.hits = 0; continue; }
-        const float drain = std::min(b.paint, b.hits * (0.0007f + 0.003f * b.paint * b.paint * b.paint * b.paint) + b.paint * dt * 0.004f * rain_);
+        b.soak = std::min(1.f, b.soak + b.hits * 0.004f + dt * 0.012f * rain_);
         b.hits = 0;
-        if (drain <= 0.f) continue;
-        b.paint -= drain;
-        Body* below = nullptr;
-        const int c = std::clamp((int)std::floor(b.x - binX0_), 0, 95);
-        for (int i : bins_[c]) {
-            Body& o = bodies_[i];
-            if (&o == &b || o.y > b.y - 0.35f || b.y - o.y > 1.1f || std::fabs(o.x - b.x) > 0.75f) continue;
-            if (!below || o.y > below->y) below = &o;
+        const float half = HEAP_HALF * (1.f - 0.32f * smoothstepf(0.f, 1.f, b.soak));
+        if (half < b.half) { b.slump += b.half - half; b.half = half; }
+        if (b.soak > 0.25f) {
+            const float flat = std::round(b.a / (PI * 0.5f)) * (PI * 0.5f);
+            const float da = (flat - b.a) * std::min(1.f, dt * 0.25f * b.soak);
+            b.a += da;
+            b.slump += std::fabs(da) * b.half;
         }
-        if (below) {
-            const float amt = drain * 0.7f, k = 0.5f * amt / (below->paint + amt + 1e-4f);
-            below->pr = lerpf(below->pr, b.pr, k);
-            below->pg = lerpf(below->pg, b.pg, k);
-            below->pb = lerpf(below->pb, b.pb, k);
-            below->paint = std::min(1.f, below->paint + amt);
-            below->dr = b.pr; below->dg = b.pg; below->db = b.pb;
-            below->drip = std::min(1.f, below->drip + amt * 30.f);
-        }
-        // a drop of paint falls off it now and then
-        if (pdrips_.size() < 400 && rng_.chance(std::min(1.f, drain * 120.f + dt * 0.4f * rain_ * b.paint)))
-            pdrips_.push_back({b.x + rng_.range(-1.f, 1.f) * b.half, b.y - b.half, -0.5f, b.pr, b.pg, b.pb});
-    }
-    for (size_t i = 0; i < pdrips_.size();) {
-        PDrip& d = pdrips_[i];
-        d.vy -= 18.f * dt;
-        const float ny = d.y + d.vy * dt;
-        int kind = 4, cx = 0, cy = 0;
-        bool inside = false;
-        const float sf = surfaceBelow(d.x, d.y, &kind, &cx, &cy, &inside);
-        if (inside || ny <= std::max(sf, ground_)) { pdrips_[i] = pdrips_.back(); pdrips_.pop_back(); continue; }
-        d.y = ny;
-        i++;
+        if (b.asleep && b.slump > 0.02f) { b.asleep = false; b.still = b.awake = 0.f; } // it sinks onto what holds it
+        if (!b.asleep) b.slump = 0.f;
     }
     // a sleeping tile left without support (what held it went away) wakes and falls again
     for (Body& b : bodies_) {
@@ -960,21 +939,17 @@ void RainUniverse::drawHeaps() {
         a *= 1.f - 0.6f * hudCover(b.x, b.y);   // behind the HUD's columns
         a *= 1.f - 0.75f * textCover(b.x, b.y); // and its corner lines
         const bool waiting = b.thrown;
-        const vec3 c = lerp(waiting ? pieceColor(b.type) : vec3(b.pr, b.pg, b.pb), bInk, bk);
+        const vec3 c = lerp(pieceColor(b.type), bInk, bk);
         if (!waiting) a *= 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
         if (a <= 0.002f) continue;
         const vec2 p = px(b.x, b.y);
-        const float h = (waiting ? 0.5f - GAP : b.half - 0.01f) * unitPx_;
-        tiles_.push_back({{p.x, p.y, h, h}, {c.x, c.y, c.z, a}, {b.seed, b.wet, 0.f, b.a}, {b.dr, b.dg, b.db, b.drip},
-                          {waiting ? 1.f : b.paint, waiting ? 0.f : 1.f, 0.f, 0.f}});
+        // a soggy tile is crushed: as tall as its box, a little wider than it (bulging over its neighbours)
+        const float hy = (waiting ? 0.5f - GAP : b.half - 0.01f) * unitPx_;
+        const float hx = (waiting ? 0.5f - GAP : HEAP_HALF * (1.f + 0.1f * b.soak) - 0.01f) * unitPx_;
+        tiles_.push_back({{p.x, p.y, hx, hy}, {c.x, c.y, c.z, a}, {b.seed, b.wet, 0.f, b.a}, {0.f, 0.f, 0.f, 0.f},
+                          {0.f, waiting ? 0.f : 1.f, waiting ? 0.f : b.soak, 0.f}});
     }
     flushTiles();
-    // the drops of paint falling off the heaps
-    const float w = std::max(1.f, 2.f * height_ / 1080.f);
-    for (const PDrip& d : pdrips_) {
-        const vec2 a = px(d.x, d.y), t = px(d.x, d.y - d.vy * 0.03f + 0.08f);
-        seg(a.x, a.y, t.x, t.y, w, vec3(d.r, d.g, d.b), 0.85f, 0.2f);
-    }
     // the storm floods the street: the water rises around the heaps
     if (flood_ > 0.01f) {
         const float top = ground_ + 0.15f + 0.9f * flood_;
@@ -1312,6 +1287,11 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The world steps: the solids, the rain, the piles, the drying.
     buildSolids(game);
     stepRain(dt, rdt);
+    // (test hook: ZEN_RAIN_HEAP=N throws N tiles onto the heaps 90 frames in)
+    static int heapTest = std::getenv("ZEN_RAIN_HEAP") ? std::atoi(std::getenv("ZEN_RAIN_HEAP")) : 0;
+    static int heapFrame = 0;
+    if (heapTest > 0 && ++heapFrame >= 90) // (after the start's settling)
+        for (; heapTest > 0; heapTest--) eject(heapTest % 2 ? 0 : Game::W - 1, Game::HIDDEN + 2 + heapTest % 6, heapTest % 7, 0.04f * heapTest);
     stepHeaps(dt);
     for (auto& row : wet_)
         for (float& w : row) w = std::max(0.12f, w - dt * 0.1f);
