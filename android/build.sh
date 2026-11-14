@@ -23,6 +23,7 @@ cmake --build $OUT/cmake -j"$(nproc)" --target refall
 RES=$OUT/res
 mkdir -p $RES/mipmap-xxxhdpi
 cp $ROOT/data/icon.png $RES/mipmap-xxxhdpi/icon.png
+cp -r $ROOT/android/res/. $RES/
 $BT/aapt2 compile --dir $RES -o $OUT/res.zip
 $BT/aapt2 link -o $OUT/unsigned.apk -I $PLATFORM --manifest $ROOT/android/AndroidManifest.xml $OUT/res.zip
 
