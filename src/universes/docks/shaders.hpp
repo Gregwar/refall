@@ -317,6 +317,10 @@ void main() {
         alb *= 0.93 + 0.07 * smoothstep(-sz.y, sz.y * 0.4, q.y);
         spec = 0.22;
         rough = 30.0;
+        // contact shade: the light is occluded toward the foot of each container (the one below, the quay), the sides
+        // in the shade
+        if (face != 1) alb *= mix(0.42, 1.0, smoothstep(-sz.y, -sz.y + 0.4, q.y));
+        if (face == 0) alb *= 0.6;
         alb = saturateC(alb, uSat);
     } else if (mat == 2) {
         // concrete: slabs, tyre marks, the painted lines
@@ -592,7 +596,7 @@ void main() {
     // the containers (the scene's alpha) stay out of the glow: they stay crisp, the lamps glow
     vec3 c = s0.rgb * (1.0 - s0.a) + s1.rgb * (1.0 - s1.a) + s2.rgb * (1.0 - s2.a) + s3.rgb * (1.0 - s3.a);
     c *= 0.25;
-    // (the alpha carries the containers, blurred into the halo around them)
+    // (the alpha carries the containers, blurred: their cast shadow)
     frag = vec4(max(c - vec3(uThr), 0.0), 0.25 * (s0.a + s1.a + s2.a + s3.a));
 }
 )";
@@ -612,14 +616,18 @@ inline const char* FINAL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uScene, uBloom;
-uniform float uBloomK, uSlow, uDim, uFade, uBridge, uExposure, uSatF, uHalo;
+uniform float uBloomK, uSlow, uDim, uFade, uBridge, uExposure, uSatF;
+uniform vec2 uShadowOff;    // the stack's cast shadow, offset on screen (uv)
 uniform vec3 uBridgeCol, uBridgeInk, uSlowTint;
 void main() {
     vec4 s = texture(uScene, vUv);
     vec4 b = texture(uBloom, vUv);
     vec3 c = s.rgb * uExposure + b.rgb * uBloomK;
-    // a faint white halo around the containers, outside them only
-    c += vec3(1.0, 0.98, 0.95) * uHalo * smoothstep(0.0, 0.5, b.a) * (1.0 - clamp(s.a, 0.0, 1.0));
+    // the stack's soft shadow on the well's backing (the key light from above left), and the gaps between boxes
+    // (the bloom's alpha is the stack's coverage, blurred), outside the containers only
+    float m = texture(uBloom, vUv + uShadowOff).a;
+    float occ = smoothstep(0.0, 0.5, m) * 0.7 + smoothstep(0.4, 0.9, b.a) * 0.3;
+    c *= 1.0 - min(occ, 0.85) * (1.0 - clamp(s.a, 0.0, 1.0));
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = max(mix(vec3(l), c, uSatF), 0.0);
     // slow motion: the fog rolls in, the port cools

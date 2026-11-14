@@ -1329,7 +1329,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progVeil_, "uRect", -5.4f, Y_Q, 5.4f, 11.5f);
         set1f(progVeil_, "uZ", -2.f * CELL_D - 0.1f);
         set3f(progVeil_, "uTint", P.zen * 0.3f);
-        set1f(progVeil_, "uA", 0.32f + 0.08f * bright);
+        set1f(progVeil_, "uA", 0.5f + 0.1f * bright); // (deep enough for the stack's shadow to read on it)
         set1f(progVeil_, "uHorY", EYE_Y);
         glBindVertexArray(quadVao_);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -1383,7 +1383,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.55f + 0.1f * wp + 0.2f * fest_) * (1.f + 0.5f * slow_));
     set1f(progFinal_, "uExposure", 1.f);
-    set1f(progFinal_, "uHalo", 0.16f + 0.06f * bright);  // a halo around the containers (a little more under a bright sky)
+    set2f(progFinal_, "uShadowOff", -0.008f, 0.015f); // (sampled up-left: the shadow falls down-right)
     set1f(progFinal_, "uSatF", 1.f + 0.06f * wp + 0.1f * fest_);
     set1f(progFinal_, "uSlow", slow_ * 0.45f);
     set3f(progFinal_, "uSlowTint", vec3(0.8f, 0.9f, 1.05f));
