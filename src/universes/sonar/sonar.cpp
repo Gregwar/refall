@@ -589,10 +589,8 @@ void SonarUniverse::buildBoard(const Game& g) {
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN - 1) continue;
-            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            const float a = saturate((10.6f - w.y) / 0.6f);
-            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], a, 0.f, 0.f);
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy); // (whole above the well too: it spawns there)
+            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], 1.f, 0.f, 0.f);
         }
     }
     // the previews

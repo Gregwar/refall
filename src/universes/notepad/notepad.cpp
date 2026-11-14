@@ -913,7 +913,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
         int cells[4][2];
         g.pieceCells(p, cells);
         int n = 0;
-        for (auto& c : cells) n += c[1] >= Game::HIDDEN;
+        for (auto& c : cells) n += c[1] >= 0; // (whole above the well too: it spawns there)
         const vec3 o = cellPos(0, 0);
         // the ghost first (under), a dashed pencil outline where the piece would land
         Piece gp = p;
@@ -931,7 +931,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
         if (n > 0) {
             int all[4][2], m = 0;
             for (int i = 0; i < 4; i++)
-                if (cells[i][1] >= Game::HIDDEN) { all[m][0] = cells[i][0]; all[m][1] = cells[i][1]; m++; }
+                if (cells[i][1] >= 0) { all[m][0] = cells[i][0]; all[m][1] = cells[i][1]; m++; }
             addPiece(out, mix(activeId_, 0x5C21), all, m, v2(o.x, o.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
         }
     }

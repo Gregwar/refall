@@ -1928,6 +1928,9 @@ int App::run() {
             if (stats && !statQ) glGenQueries(1, &statQ);
             const auto r0 = std::chrono::steady_clock::now();
             if (stats) glBeginQuery(GL_TIME_ELAPSED, statQ);
+            // Test hook: ZEN_TEST_SPAWN=1 draws a review's piece where it spawns (its top row in the rows above the well)
+            static const bool spawnTest = std::getenv("ZEN_TEST_SPAWN") != nullptr;
+            if (spawnTest && reviewFilled_) game_.respawn();
             if (!preroll_ && !held_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
             if (stats) {
                 glEndQuery(GL_TIME_ELAPSED);

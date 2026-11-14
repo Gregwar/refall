@@ -681,10 +681,8 @@ void MicroscopeUniverse::buildBoard(const Game& g) {
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (int i = 0; i < 4; i++) {
-            if (cells[i][1] < Game::HIDDEN - 1) continue;
-            const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
-            const float a = saturate((10.6f - w.y) / 0.6f);
-            addCell(w.x, w.y, 0.5f, p.type, fallLook_[i], 0, 0.f, a, 0.f);
+            const vec3 w = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy); // (whole above the well too: it spawns there)
+            addCell(w.x, w.y, 0.5f, p.type, fallLook_[i], 0, 0.f, 1.f, 0.f);
         }
     }
     // the previews
@@ -1146,9 +1144,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
             game.pieceCells(p, pc);
             const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
             for (int i = 0; i < 4; i++) {
-                if (pc[i][1] < Game::HIDDEN - 1) continue;
                 const vec3 w = layout::cellPos(pc[i][0] + dx, pc[i][1] + dy);
-                dwell(fallLook_[i], w.x, w.y, p.type, saturate((10.6f - w.y) / 0.6f));
+                dwell(fallLook_[i], w.x, w.y, p.type, 1.f);
             }
         }
     }
