@@ -81,16 +81,13 @@ private:
         bool thrown;                   // waiting in its row for its turn (then thrown: a ballistic impulse)
         float t, delay, x0, y0, tx1, ty1;
         bool inBand;                   // reached its band (its walls hold it from then on)
-        float paint, pr, pg, pb;       // the paint left on it and its color (mixed with what ran down from above)
-        float dr, dg, db, drip;        // the paint running down its face from the tile above
-        int hits;                      // drops that hit it this frame (they wash the paint off)
+        float soak, slump;             // how soggy it is (0 firm .. 1 pulp), how far it has sunk since it last moved
+        int hits;                      // drops that hit it this frame (they soak it)
     };
     std::vector<Body> bodies_;
     int nextBody_ = 1;
     float bandIn_ = 11.9f, bandOut_ = 21.f, ground_ = -11.6f;
     float physAcc_ = 0.f;
-    struct PDrip { float x, y, vy, r, g, b; };   // a drop of paint falling off a heaped tile
-    std::vector<PDrip> pdrips_;
     std::vector<int> bins_[96];                 // the heaped tiles by column of one unit (the rain's queries)
     float binX0_ = -48.f;
     void buildBins();
