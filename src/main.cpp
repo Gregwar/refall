@@ -147,6 +147,19 @@ static std::vector<std::pair<double, std::string>> testList(const char* env) {
 
 // Test hook: ZEN_WARMUP=S plays S seconds (default 12) before a shot or a clip, so that the board fills and a
 // universe that accumulates (FLUO's paint) has time to build up.
+// Test hook: ZEN_CLIP_VELOCITY / ZEN_CLIP_PACE given as "A:B" ramp from A to B over the song times of ZEN_CLIP_RAMP
+// ("T0:T1"); a single number is constant. (tools/demo.py: every shot of a continuous trailer at the same values.)
+static float clipRamp(const char* var, double songTime, float none) {
+    const char* v = std::getenv(var);
+    if (!v) return none;
+    float a = 0.f, b = 0.f;
+    if (std::sscanf(v, "%f:%f", &a, &b) != 2) return (float)std::atof(v);
+    float t0 = 0.f, t1 = 1.f;
+    const char* r = std::getenv("ZEN_CLIP_RAMP");
+    if (!r || std::sscanf(r, "%f:%f", &t0, &t1) != 2 || t1 <= t0) return b;
+    return a + (b - a) * saturate(((float)songTime - t0) / (t1 - t0));
+}
+
 static double warmup() {
     static const double w = std::getenv("ZEN_WARMUP") ? std::max(0.0, std::atof(std::getenv("ZEN_WARMUP"))) : 12.0;
     return w;
@@ -418,6 +431,7 @@ private:
     static constexpr float GRAVITY_BPM = 130.f; // the tempo gravity counts its beats in, whatever the song's
     float gameRate_ = 1.f; // gravity speed in real time (eased)
     float gravityV_ = 1.f; // the velocity gravity runs at (the autoplay hurries as it rises)
+    bool preroll_ = false; // a clip played from the song's start: the game alone until its warm-up (nothing drawn)
     float bonusFall_ = 0.f; // how much the bonus's crawl has taken over the fall (eased)
     float pace_ = -1, fallbackTimer_ = 0; // section pace (rows per beat before level scaling), eased
     // Autoplay.
@@ -727,9 +741,11 @@ void App::toggleFullscreen() {
 // Game events only drive visuals: the song is the only thing you hear.
 void App::handleEvents() {
     for (const GameEvent& ev : game_.events()) {
-        R_.onEvent(ev, game_);
+        if (!preroll_) R_.onEvent(ev, game_);
         // --clip: the line clears with their song time (tools/demo.py keeps the shots that show one)
-        if (ev.type == GameEvent::Clear && !opt_.clipPath.empty() && clipStart_ >= 0 && songTime_ >= clipStart_ - 2.0)
+        // (ZEN_CLIP_ALL_CLEARS=1: all of them, from the song's start: tools/demo.py's seed search for a continuous game)
+        static const bool allClears = std::getenv("ZEN_CLIP_ALL_CLEARS") != nullptr;
+        if (ev.type == GameEvent::Clear && !opt_.clipPath.empty() && clipStart_ >= 0 && (allClears || songTime_ >= clipStart_ - 2.0))
             std::printf("[clip] clear %d at %.3f\n", ev.count, songTime_);
         if (ev.type == GameEvent::Clear && ev.count >= 4) {
             quadToast_ = 2.4f;
@@ -763,7 +779,7 @@ void App::updateGravity(double songTime, float dt) {
     float v = game_.velocity();
     if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
     // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V (tools/demo.py ramps it up), with no 20G unless ZEN_CLIP_20G=1
-    static const float clipVel = std::getenv("ZEN_CLIP_VELOCITY") ? (float)std::atof(std::getenv("ZEN_CLIP_VELOCITY")) : 0.f;
+    const float clipVel = clipRamp("ZEN_CLIP_VELOCITY", songTime, 0.f);
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     gravityV_ = v;
     const float diff = Game::speedDifficulty(v);
@@ -829,7 +845,7 @@ void App::autoplay(float dt) {
     // Recording a clip: a calm, human pace (a moment to think, unhurried moves, the piece falls visibly).
     // Test hook: ZEN_CLIP_PACE=K plays a clip K times faster (tools/demo.py speeds the trailer up toward its end).
     const bool calm = !opt_.clipPath.empty();
-    static const float pace = std::getenv("ZEN_CLIP_PACE") ? std::max(0.2f, (float)std::atof(std::getenv("ZEN_CLIP_PACE"))) : 1.f;
+    const float pace = std::max(0.2f, clipRamp("ZEN_CLIP_PACE", songTime_, 1.f));
     // (and hurries as the fall gets faster: no time to think once a piece reaches the stack in a second or two)
     const float rush = smoothstepf(4.f, 22.f, gravityV_);
     const float k = (calm ? 1.f / pace : 1.f) * (1.f - 0.85f * rush);
@@ -1533,6 +1549,10 @@ int App::run() {
                 const double drop = opt_.clipBreak ? track_->duration() - 9.0 : opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
                 clipStart_ = std::max(0.0, drop - opt_.clipBefore);
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
+                // Test hook: ZEN_CLIP_FROM_START=1 plays the game from the song's start, unseen until the warm-up, so
+                // that every clip of one song (same seed, same hooks) shows the same game at the same moment: a
+                // continuous game across the cuts of a trailer (tools/demo.py)
+                if (std::getenv("ZEN_CLIP_FROM_START")) simSongTime_ = 0.0;
                 // Test hook: ZEN_CLIP_FILL=1 starts the warm-up on a played-in stack (the review shots' filled board),
                 // for clips early in a song, where the warm-up is too short to fill it (tools/demo.py).
                 if (std::getenv("ZEN_CLIP_FILL") && std::getenv("ZEN_CLIP_FILL")[0] == '1') game_.debugFillBoard(runSeed_);
@@ -1541,6 +1561,7 @@ int App::run() {
             }
             simSongTime_ += dt; // real song time: the recorded audio is cut from the same span
             songTime_ = simSongTime_;
+            preroll_ = simSongTime_ < clipStart_ - warmup();
             // Test hook: ZEN_TEST_BONUS=1 also starts the slow-motion bonus ZEN_TEST_BONUS_AT s into a clip (default 3)
             static const char* tbc = std::getenv("ZEN_TEST_BONUS");
             static const double tbAt = std::getenv("ZEN_TEST_BONUS_AT") ? std::atof(std::getenv("ZEN_TEST_BONUS_AT")) : 3.0;
@@ -1879,7 +1900,7 @@ int App::run() {
         if (fbw > 0 && fbh > 0) {
             std::vector<HudText> hud = buildHud(dt);
             updateBreak(dt, hud);
-            R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
+            if (!preroll_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
             if (vv_) vv_->draw(fbw, fbh, viewerNow());
         }
         if (viewer_ && !opt_.viewShot.empty()) { // --shot: the viewer, a few seconds into the first song
