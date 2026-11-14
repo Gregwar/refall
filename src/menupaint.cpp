@@ -241,7 +241,7 @@ void main() {
     float k = mod(an, seg);
     float m = abs(k - seg * 0.5);               // mirrored inside each segment
     vec2 q = vec2(cos(m), sin(m)) * r;
-    // glass facets: a triangle grid in the folded space, each facet its own shade, lead between them
+    // glass facets: a triangle grid in the folded space, each facet its own shade (no lead: only the coloured cells)
     vec2 g = q * 7.0;
     vec2 tri = vec2(g.x - g.y * 0.57735, g.y * 1.1547);
     vec2 id = floor(tri);
@@ -260,9 +260,6 @@ void main() {
     c = max(mix(vec3(l), c, 1.35), 0.0);                    // art glass: richer colour
     c = c * 1.25 + 0.04 + uTint * (0.10 + 0.14 * h21(cell + 5.3)); // lit from behind, tinted glass even over a dark world
     c *= 0.85 + 0.3 * smoothstep(0.85, 0.0, edge);           // brighter toward each facet's middle
-    float lead = 1.0 - smoothstep(0.015, 0.04, edge);
-    float segLine = 1.0 - smoothstep(0.0, 2.0, m * r * uRes.y * uScale);
-    c = mix(c, vec3(0.03, 0.03, 0.05), max(lead * 0.7, segLine * 0.55));
     c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
