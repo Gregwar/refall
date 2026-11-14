@@ -656,7 +656,7 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                     if (i >= 18 && (deepGap || shallowGap)) {
                         std::vector<float> pb(beatBass.begin() + i - 18, beatBass.begin() + i - 2),
                             pl(beatLoud.begin() + i - 18, beatLoud.begin() + i - 2), nl(beatLoud.begin() + i, beatLoud.begin() + i + 8);
-                        punch = percentile(pb, 0.25f) >= (deepGap ? 0.5f : 0.65f) && percentile(next, 0.75f) >= 1.12f * percentile(pb, 0.75f) &&
+                        punch = percentile(pb, 0.25f) >= (deepGap ? 0.5f : 0.65f) && percentile(next, 0.75f) >= (deepGap ? 1.12f : 1.1f) * percentile(pb, 0.75f) &&
                                 percentile(nl, 0.75f) >= 1.06f * percentile(pl, 0.75f) && percentile(next, 0.75f) >= 0.7f &&
                                 (deepGap || after >= 0.8f);
                     }
