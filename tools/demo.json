@@ -50,7 +50,8 @@
     "skywhale": {"ZEN_SKYWHALE_LINES": "31", "ZEN_GROW_RATE": "0.75"},
     "bricks": {"ZEN_WARMUP": "40"},
     "docks": {"ZEN_WARMUP": "40"},
-    "biome": {"ZEN_WARMUP": "40"},
+    // (no played-in stack: BIOME's world would take it as grown already; the sea just starting over the dunes)
+    "biome": {"ZEN_WARMUP": "8", "ZEN_CLIP_FILL": "0"},
     "brutalist": {"ZEN_WARMUP": "40"},
     "tiles": {"ZEN_WARMUP": "40"},
     "neon": {"ZEN_WARMUP": "40"}

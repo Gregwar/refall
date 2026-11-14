@@ -1527,7 +1527,7 @@ int App::run() {
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
                 // Test hook: ZEN_CLIP_FILL=1 starts the warm-up on a played-in stack (the review shots' filled board),
                 // for clips early in a song, where the warm-up is too short to fill it (tools/demo.py).
-                if (std::getenv("ZEN_CLIP_FILL")) game_.debugFillBoard(runSeed_);
+                if (std::getenv("ZEN_CLIP_FILL") && std::getenv("ZEN_CLIP_FILL")[0] == '1') game_.debugFillBoard(runSeed_);
                 std::printf("[clip] moment at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
                             clipStart_ + opt_.clipBefore + opt_.clipAfter);
             }
