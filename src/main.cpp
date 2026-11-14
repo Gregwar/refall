@@ -861,8 +861,12 @@ void App::autoplay(float dt) {
     if (p.rot != planRot_) { if (!game_.rotate(1)) planned_ = false; return; }
     if (p.x < planX_) { if (!game_.move(1)) planned_ = false; return; }
     if (p.x > planX_) { if (!game_.move(-1)) planned_ = false; return; }
-    // a clip: in place, the piece falls at the gravity's own speed (what the velocity shows), no drop by the player
-    if (calm) return;
+    // a clip: in place, the piece falls at the gravity's own speed (what the velocity shows), no drop by the player;
+    // while the fall is slow, some pieces are hard dropped (more line clears to see)
+    if (calm) {
+        const float hard = 1.f - smoothstepf(10.f, 20.f, gravityV_);
+        if (hard <= 0.f || std::fmod((float)game_.lines() * 0.37f + game_.piece().x * 0.61f + game_.piece().rot * 0.29f, 1.f) >= hard) return;
+    }
     game_.hardDrop();
     planned_ = false;
 }
