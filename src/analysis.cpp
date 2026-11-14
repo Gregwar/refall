@@ -646,14 +646,19 @@ Analysis analyzeAudio(const std::vector<float>& mono, uint32_t sr) {
                     // the same mean level as the chorus before it, but its hits land harder: it is heard as
                     // the drop although neither the mean bass nor the smoothed intensity rises. Only out of
                     // steady loud material, full bass all along (a return from a quiet or choppy part is the
-                    // usual case below).
+                    // usual case below). The gap may be shallower (a beat or two at 60% rather than cut) between
+                    // two stretches of steady full bass: a pre-drop that already has the bass, then the drop
+                    // itself, the bass holding at its new level over the next two bars.
                     bool punch = false;
-                    if (i >= 18 && std::min(beatBass[i - 1], beatBass[i - 2]) < 0.4f * beatBass[i] &&
-                        std::min(beatLoud[i - 1], beatLoud[i - 2]) < 0.5f * beatLoud[i]) {
+                    const float gapBass = std::min(beatBass[i - 1], beatBass[i - 2]), gapLoud = std::min(beatLoud[i - 1], beatLoud[i - 2]);
+                    const bool deepGap = gapBass < 0.4f * beatBass[i] && gapLoud < 0.5f * beatLoud[i];
+                    const bool shallowGap = gapBass < 0.6f * beatBass[i] && gapLoud < 0.65f * beatLoud[i];
+                    if (i >= 18 && (deepGap || shallowGap)) {
                         std::vector<float> pb(beatBass.begin() + i - 18, beatBass.begin() + i - 2),
                             pl(beatLoud.begin() + i - 18, beatLoud.begin() + i - 2), nl(beatLoud.begin() + i, beatLoud.begin() + i + 8);
-                        punch = percentile(pb, 0.25f) >= 0.5f && percentile(next, 0.75f) >= 1.12f * percentile(pb, 0.75f) &&
-                                percentile(nl, 0.75f) >= 1.06f * percentile(pl, 0.75f) && percentile(next, 0.75f) >= 0.7f;
+                        punch = percentile(pb, 0.25f) >= (deepGap ? 0.5f : 0.65f) && percentile(next, 0.75f) >= 1.12f * percentile(pb, 0.75f) &&
+                                percentile(nl, 0.75f) >= 1.06f * percentile(pl, 0.75f) && percentile(next, 0.75f) >= 0.7f &&
+                                (deepGap || after >= 0.8f);
                     }
                     if (!punch && std::min(beatBass[i + 1], beatBass[i + 2]) < 0.6f * after) continue;
                     float before = 0.f;
