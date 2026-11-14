@@ -6,11 +6,10 @@
 //
 // Nothing moves smoothly: the page is redrawn a few times a second, like hand-drawn stop motion. Each drawing
 // is a list of things (cells, outlines, doodles, words) compared with the previous one: what stayed is drawn
-// exactly as it was (no boil: each thing keeps its own hand-drawn imperfection), what is new is drawn (a falling
-// piece is a quick scribble, a landed one is outlined and coloured in at once), what moved or disappeared is rubbed
-// out with an eraser:
+// exactly as it was (no boil: each thing keeps its own hand-drawn imperfection), what is new is drawn (a piece is
+// outlined and coloured in at once, falling or landed), what moved or disappeared is rubbed out with an eraser:
 // it leaves a faint ghost in a residue layer that the eraser keeps going over, fainter on every drawing. A
-// falling piece leaves a fading trail of its scribbles; cleared rows are rubbed out, crumbs and all.
+// falling piece leaves a fading trail of its drawings; cleared rows are rubbed out, crumbs and all.
 //
 // The music sets the hand: a break is a slow pencil sketch, faint, almost without colour; the verse draws in
 // colour; a chorus draws faster, small doodles appearing in the margins; a drop is frantic: twelve drawings a
@@ -440,7 +439,7 @@ void NotepadUniverse::onEvent(const GameEvent& ev, const Game& game) {
         hardPending_ = true;
         break;
     case GameEvent::Lock: {
-        // The falling scribble becomes a piece: outlined and coloured in, in the drawing it lands in.
+        // The falling piece lands: its cells join the stack's drawing.
         for (size_t i = 0; i < ev.cells.size(); i++) {
             const auto& c = ev.cells[i];
             if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ink_[c.y][c.x] = {activeId_, (int)i, c.type};
@@ -927,34 +926,13 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 if (c[1] >= Game::HIDDEN) { gv[gn][0] = c[0]; gv[gn][1] = c[1]; gn++; }
             addPiece(out, mix(activeId_, 0x6057), gv, gn, v2(o.x, o.y), 1.f, p.type, 1.f, true, 0.f, 0.f);
         }
-        // the piece: a quick scribble in its colour, a new one wherever it goes (not coloured in until it lands)
+        // the piece: drawn as it will lie, outlined and coloured in, redrawn wherever it goes (its old place rubbed
+        // out, a fading trail behind it)
         if (n > 0) {
             int all[4][2], m = 0;
             for (int i = 0; i < 4; i++)
                 if (cells[i][1] >= Game::HIDDEN) { all[m][0] = cells[i][0]; all[m][1] = cells[i][1]; m++; }
-            Item sc;
-            sc.key = mix(activeId_, 0x5C21);
-            sc.kind = IT_OUTLINE;
-            sc.x = o.x + all[0][0];
-            sc.y = o.y - all[0][1];
-            sc.s = 1.f;
-            sc.n = m;
-            for (int k = 0; k < m; k++) {
-                sc.pts[k * 2] = (float)(all[k][0] - all[0][0]);
-                sc.pts[k * 2 + 1] = (float)(all[k][1] - all[0][1]);
-            }
-            sc.i0 = p.type;
-            sc.i1 = 2; // a scribble
-            vec3 col = lerp(hexc(V.piece[p.type]), outlineCol_, V.light ? 0.15f : 0.f);
-            if (slow_ > 0.01f) col = lerp(col, hexc(V.blue), slow_ * 0.85f);
-            sc.col = col;
-            sc.tool = slow_ > 0.5f ? (V.light ? T_CPENCIL : T_CHALK) : V.fillTool;
-            sc.alpha = 1.f;
-            sc.b = 1.f;
-            sc.d = hseed(sc.key);
-            sc.residue = 0.36f;
-            sc.moveResidue = 0.26f;
-            out.push_back(sc);
+            addPiece(out, mix(activeId_, 0x5C21), all, m, v2(o.x, o.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
         }
     }
 
@@ -1483,13 +1461,13 @@ void NotepadUniverse::emitOutline(const Item& it, int age, bool residue, std::ve
         return rank(a) != rank(b) ? rank(a) < rank(b) : (a.x + a.y) < (b.x + b.y);
     });
     const float s = it.s, inset = 0.075f * s;
-    const bool ghost = it.i1 == 1, scribble = it.i1 == 2;
+    const bool ghost = it.i1 == 1;
     Rng r(splitmix64((uint64_t)(it.seed * 1000.f) + 3));
     (void)age; // the whole outline in one drawing, with its colouring
     const float drawnRuns = (float)runs.size();
     auto toWorld = [&](float gx, float gy) { return v2(it.x + (gx - 0.5f) * s, it.y + (gy - 0.5f) * s); };
     const vec3 ink = inkOf(it.col);
-    const float width = V.outlineW * it.b * weight_ * (ghost ? 0.8f : scribble ? (it.tool == T_MARKER ? 1.7f : 1.9f) : 1.f) * (0.75f + 0.25f * s);
+    const float width = V.outlineW * it.b * weight_ * (ghost ? 0.8f : 1.f) * (0.75f + 0.25f * s);
     for (size_t k = 0; k < runs.size(); k++) {
         const float reveal = saturate(drawnRuns - (float)k);
         if (reveal <= 0.f) break;
@@ -1501,31 +1479,16 @@ void NotepadUniverse::emitOutline(const Item& it, int age, bool residue, std::ve
         const bool concave0 = cellAt(sx - 0.5f * D[0] + 0.5f * N[0], sy - 0.5f * D[1] + 0.5f * N[1]);
         const bool concave1 = cellAt(ex + 0.5f * D[0] + 0.5f * N[0], ey + 0.5f * D[1] + 0.5f * N[1]);
         const float i0 = (concave0 ? -inset : inset) / s, i1 = (concave1 ? inset : -inset) / s;
-        const float ovMax = scribble ? 0.24f : 0.14f; // a scribble overshoots more
+        const float ovMax = 0.14f;
         const float ov0 = (concave0 ? r.range(-0.03f, 0.04f) : r.range(0.f, ovMax)) / s;
         const float ov1 = (concave1 ? r.range(-0.03f, 0.04f) : r.range(0.f, ovMax)) / s;
         const float off = -inset / s;
         vec2 a = toWorld(sx + D[0] * (i0 - ov0) + N[0] * off, sy + D[1] * (i0 - ov0) + N[1] * off);
         vec2 b = toWorld(ex + D[0] * (i1 + ov1) + N[0] * off, ey + D[1] * (i1 + ov1) + N[1] * off);
-        const float bow = r.range(-0.025f, 0.025f) * (scribble ? 2.2f : 1.f) * std::min(2.f, (float)q.length);
-        stroke(out, a, b, width, ink, it.alpha, it.tool, it.seed + k * 2.3f, wobble_ * (ghost ? 0.6f : scribble ? 1.8f : 1.f), reveal, bow,
+        const float bow = r.range(-0.025f, 0.025f) * std::min(2.f, (float)q.length);
+        stroke(out, a, b, width, ink, it.alpha, it.tool, it.seed + k * 2.3f, wobble_ * (ghost ? 0.6f : 1.f), reveal, bow,
                ghost ? 0.17f * s : 0.f, false);
     }
-    // the falling scribble: a fast zigzag through each square, never quite inside it
-    if (scribble)
-        for (int k = 0; k < n; k++) {
-            std::vector<vec2> zz;
-            // back and forth across the square's diagonal, loosely, a little over its edges
-            const int steps = r.irange(4, 6);
-            const float sgn = r.chance(0.5f) ? 1.f : -1.f;
-            for (int t = 0; t <= steps; t++) {
-                const float along = (t / (float)steps - 0.5f) * 0.95f + r.range(-0.07f, 0.07f);
-                const float across = ((t % 2) ? 0.36f : -0.36f) + r.range(-0.1f, 0.08f);
-                const float gx = 0.5f + (along + across) * 0.7071f, gy = 0.5f + sgn * (along - across) * 0.7071f;
-                zz.push_back(toWorld(ci[k] + gx, cj[k] + gy));
-            }
-            emitPolyline(zz, width * 0.9f, ink, it.alpha * 0.95f, it.tool, it.seed + 41.f + k * 5.3f, wobble_ * 1.4f, 1.f, false, out);
-        }
     // the ghost's light hatching: three diagonals a cell, all the same way (not a coloured-in piece)
     if (ghost)
         for (int k = 0; k < n; k++)
