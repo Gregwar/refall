@@ -566,9 +566,19 @@ void Worlds::kalTitle() {
     kalBackground(mix > 0.5f ? next : cur);
     const float cx = X(960), cy = Y(330);
     p.circle(cx, cy, 250 * u, hex(0x000000, 0.4f), 60 * u);
+    // the logo's petals: the stages' colours in rainbow order round the wheel
+    std::vector<std::pair<float, Col>> hues;
+    for (int k = 0; k < nStages(); k++) {
+        const Col c = stageCol(k);
+        const float mx = std::max({c.r, c.g, c.b}), d = mx - std::min({c.r, c.g, c.b});
+        const float h = d <= 0.f ? 0.f : mx == c.r ? std::fmod((c.g - c.b) / d + 6.f, 6.f) : mx == c.g ? (c.b - c.r) / d + 2.f : (c.r - c.g) / d + 4.f;
+        hues.push_back({h, c});
+    }
+    std::sort(hues.begin(), hues.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
     for (int i = 0; i < 12; i++) {
         const float a = t * 0.03f + i * TAU / 12;
-        kite(cx, cy, a, 200 * u, 290 * u, 0.2f, hex(i % 2 ? 0xffffff : 0xe8c06a), 0.18f, true, hex(0x08080c, 0.8f));
+        const Col c = hues.empty() ? hex(i % 2 ? 0xffffff : 0xe8c06a) : hues[i * hues.size() / 12].second;
+        kite(cx, cy, a, 200 * u, 290 * u, 0.2f, c, hues.empty() ? 0.18f : 0.95f, true, hex(0x08080c, 0.8f));
     }
     p.circle(cx, cy, 200 * u, hex(0x08080c));   // a plain dark glass disc, the title inside it
     p.ring(cx, cy, 191 * u, 4 * u, hex(0xe8c06a, 0.85f));
