@@ -20,7 +20,7 @@
 // around the well, the palette swinging to the variant's drop colors, eased in over a second and out over a few once
 // the drop ends. A cleared row's tiles pop and burst into its motifs (petals, hearts, peace signs, sparkles) flying
 // out sideways behind the well, and send a shock wave of color through the kaleidoscope, from the well outward (its
-// rings pushed out a couple of bands as it passes, a stronger one for more lines); a quad turns the
+// rings pushed out about a band as it passes, a stronger one for more lines); a quad turns the
 // kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
 // dusk (the colors drained to lilac, the flow slowed); game over greys the stack from the top.
 //
@@ -373,7 +373,7 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         // the shock wave (the oldest dropped past four)
         if (waves_.size() >= 4) waves_.erase(waves_.begin());
-        waves_.push_back({0.f, 0.6f + 0.2f * std::min(ev.count, 4)});
+        waves_.push_back({0.f, 0.36f + 0.12f * std::min(ev.count, 4)});
         if (ev.count >= 4) {
             // a quad: the kaleidoscope's colors turn a band on; hearts and peace signs shower out on both sides
             shiftTo_ += 1.f;
