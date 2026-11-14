@@ -28,7 +28,8 @@ The pipeline, one function each:
 Game options used (added for this tool): `--analysis OUT.json` writes the song analysis and exits; ZEN_CLIP_FILL=1
 starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board); with --clip
 the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
-(ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env.
+(ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env; ZEN_TEST_BONUS=0
+keeps the slow-motion bonus out of every shot.
 Needs a built refall (default build/refall), ffmpeg, numpy and Pillow; yt-dlp for a song not
 cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
 """
@@ -349,7 +350,8 @@ def plan(cfg, grid, universes):
                          f"at least each (min_shot); move some to another chapter or lengthen this one")
             for i, s in enumerate(run):
                 u, _, variant = s["u"].partition(":")
-                env = dict(cfg.get("env", {}))
+                env = {"ZEN_TEST_BONUS": "0"}  # (no slow-motion bonus in a trailer: the autoplay would start it)
+                env.update(cfg.get("env", {}))
                 env.update(cfg.get("universe_env", {}).get(u, {}))
                 env.update(s.get("env", {}))
                 timeline.append({"kind": "shot", "chapter": ch["id"], "u": u, "variant": variant,
