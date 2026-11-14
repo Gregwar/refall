@@ -381,6 +381,9 @@ void NotepadUniverse::setSong(const SongLook& look, float seconds) {
         clearPage_ = true; // a new page
         if (seconds > 0.f) { items_.clear(); index_.clear(); doodles_.clear(); }
     }
+    // the variant's pens at once (style() sets them on the drawings: a break's card letters before the first one)
+    graphite_ = hexc(VARIANTS[variant_].graphite);
+    outlineCol_ = hexc(VARIANTS[variant_].outline);
     dirty_ = true;
 }
 
@@ -1163,7 +1166,8 @@ void NotepadUniverse::hudItems(const Frame& f, std::vector<Item>& out) {
             Item u;
             u.key = mix(it.key, 0x0D1);
             u.kind = IT_STROKE;
-            const float yb = it.y + w.size * 1.05f;
+            // just under the label's baseline (it.y is its cap line), clear of the value under it
+            const float yb = it.y + w.size * (text::capHeight(text::font(FONT_TTF)) + 0.12f);
             u.x = viewC_.x - viewH_.x + (it.x - w.size * 0.1f) * px_;
             u.y = viewC_.y + viewH_.y - yb * px_;
             u.a = viewC_.x - viewH_.x + (box.z + w.size * 0.15f) * px_;
@@ -1194,8 +1198,11 @@ void NotepadUniverse::hudLine(const HudText& h, text::Line& out) {
     const Item* drawn = nullptr;
     if (!bare_)
         for (const Item& it : items_)
-            if (it.kind == IT_TEXT && it.i0 == (int)h.role && it.text == w.text) { drawn = &it; break; }
-    const float alpha = drawn ? drawn->alpha : std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
+            // (the same line at the same size: the title card's lines, larger, keep their own fade)
+            if (it.kind == IT_TEXT && it.i0 == (int)h.role && it.text == w.text && std::fabs(it.s - w.size) < 0.5f) { drawn = &it; break; }
+    // (never below its own: the title card lands on the corner before the drawings have written the line)
+    const float own = std::floor(saturate(h.alpha * w.boost) * 8.f + 0.5f) / 8.f;
+    const float alpha = drawn ? std::max(drawn->alpha, own) : own;
     if (alpha <= 0.f) return;
     const vec3 col = drawn ? drawn->col : w.col;
     vec3 ink = toSrgb(col);
