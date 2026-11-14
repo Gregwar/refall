@@ -211,7 +211,7 @@ void Menu::drawDebrief(int w, int h) {
     p.text(F::JOSEFIN, debrief_.detail, cx, Y(950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
     if (!debrief_.note.empty())
         p.text(F::JOSEFIN, debrief_.note, cx, Y(990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
-    if (debrief_.retry.kind != Choice::NONE) { // RETRY or MENU, the chosen one underlined between two glows
+    if (debrief_.retry.kind != Choice::NONE) { // RETRY or MENU, the chosen one underlined
         static const char* ITEMS[2] = {"RETRY", "MENU"};
         const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, sp = 170 * u, y = Y(1018), size = 26 * u;
         for (int i = 0; i < 2; i++) {
@@ -221,12 +221,8 @@ void Menu::drawDebrief(int w, int h) {
             if (!on) continue;
             float l, r;
             p.inkExtent(F::JOSEFIN, ITEMS[i], size, 0.35f, l, r);
-            const float x0 = x - p.width(F::JOSEFIN, ITEMS[i], size, 0.35f) * 0.5f, yc = y - p.capHeight(F::JOSEFIN, size) * 0.5f;
+            const float x0 = x - p.width(F::JOSEFIN, ITEMS[i], size, 0.35f) * 0.5f;
             p.line(x0 + l, y + 12 * u, x0 + r, y + 12 * u, 1.6f * u, withA(ink, 0.9f * a4));
-            p.setAdditive(true);
-            p.glow(x0 + l - 24 * u, yc, 20 * u, withA(ink, 0.8f * a4));
-            p.glow(x0 + r + 24 * u, yc, 20 * u, withA(ink, 0.8f * a4));
-            p.setAdditive(false);
         }
     }
 }
