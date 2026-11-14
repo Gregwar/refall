@@ -156,7 +156,7 @@ void main() {
 // Kinds: 0 a block, a bare die (p0 charge: its edges lit, p1 half size, p3 ghost, p4 shattered), 1 a soft shadow (p1 half
 // size, p2 blur), 2 a charge (p1 radius, p2 tail length, p3 carrying, p0 flicker), 3 a fragment (p1 size, p0 glow),
 // 4 a soft round dot (p1 radius, p2 ring width: 0 a disc), 5 a spark streak (p1 length, p2 width, p0 heat),
-// 6 a flash (p1 radius).
+// 6 a flash (p1 radius), 7 an arc's segment (p1 half length, p2 width).
 // Glows are written with less alpha than color, so they add light (the blending is premultiplied).
 inline const char* SPRITE_FS = R"(#version 330 core
 in vec2 vL;
@@ -308,7 +308,7 @@ void main() {
         float i = exp(-vL.y * vL.y / (wy * wy)) * smoothstep(-1.0, -0.2, x) * smoothstep(1.0, 0.8, x);
         vec3 col = mix(vC.rgb, vec3(1.0), k * k * vC.w);
         o = vec4(col * i * (0.6 + 0.6 * k), i * 0.4);
-    } else {
+    } else if (kind < 6.5) {
         // a flash: a hot point and its bloom
         float R = vD.x;
         float d = length(vL);
@@ -316,6 +316,14 @@ void main() {
         float bloom = exp(-d * d / (R * R * 0.3));
         vec3 col = vec3(1.0) * core + vC.rgb * bloom * 0.8;
         o = vec4(col, core * 0.5);
+    } else {
+        // an arc's segment: an even line, white hot along its middle in a glow of its color, its ends round
+        float Lh = vD.x, w = vD.y;
+        float dd = length(vec2(max(abs(vL.x) - Lh, 0.0), vL.y));
+        float core = exp(-dd * dd / (w * w * 0.06));
+        float glow = exp(-dd * dd / (w * w * 1.4));
+        vec3 col = vec3(1.0) * core + vC.rgb * glow * 1.3;
+        o = vec4(col, core * 0.6 + glow * 0.1);
     }
     frag = o * alpha;
 }
