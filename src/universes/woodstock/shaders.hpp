@@ -92,6 +92,7 @@ uniform vec4 uView;            // center, half extents (board units)
 uniform vec3 uBand[5];
 uniform vec3 uLine, uDot;
 uniform float uFlow, uBreath, uMorph, uMandala, uShift, uTime, uFolds, uCalm, uDesat, uDim, uWarp;
+uniform vec4 uWave[4];         // the clears' shock waves: front radius (board units), strength
 uniform vec4 uColL, uColR;     // the HUD columns (board units), veiled a little
 uniform vec3 uVeil;
 vec3 band(float i) {
@@ -109,7 +110,9 @@ void main() {
     vec2 a4 = abs(d);
     float rs = pow(pow(a4.x, 4.0) + pow(a4.y * 1.12, 4.0), 0.25);
     float r = max(mix(rc, rs, uMorph), 0.05);
-    float an = atan(d.y, d.x) + 0.025 * uTime;
+    // the drop twists the kaleidoscope into a slow spiral around the well
+    float twist = uMandala * (2.4 * exp(-r / 9.0) + 0.05 * uTime);
+    float an = atan(d.y, d.x) + 0.025 * uTime + twist;
     float sec = TAU / uFolds;
     float si = floor(an / sec);
     float la = abs(an - (si + 0.5) * sec) / (sec * 0.5);   // 0 in a sector's middle, 1 at its edges
@@ -121,6 +124,14 @@ void main() {
     float la2 = abs(fract(la * 1.0 + 0.5) - 0.5) * 2.0;   // the half-sectors: small petals between the big ones
     s += uMandala * 0.45 * (1.0 - la2 * la2);
     s += uWarp * 0.16 * sin(an * 3.0 + uTime * 0.21 + log(r) * 2.0);
+    // the shock waves of color: the rings pushed out by a couple of bands as a front passes (crisp and outlined: the
+    // colors there are the ones from further in)
+    float wave = 0.0;
+    for (int k = 0; k < 4; k++) {
+        float wd = (r - uWave[k].x) / (1.2 + 0.12 * uWave[k].x);
+        wave += uWave[k].y * exp(-wd * wd);
+    }
+    s -= 1.8 * wave;
     float i = floor(s), f = fract(s);
     float checker = 0.0;
     float sh = uShift + checker * 2.0;
@@ -137,7 +148,7 @@ void main() {
     // darker tone of its band, outlined like the bands; the drop's mandala turns them all to sparkles
     // (a motif whose center nears a HUD column fades out whole)
     vec2 q = vec2(la * sec * 0.5 * r, (f - 0.5) * bw);
-    float anC = (si + 0.5) * sec - 0.025 * uTime;
+    float anC = (si + 0.5) * sec - 0.025 * uTime - twist;
     vec2 pc = vec2(0.0, -0.5) + (rc - q.y) * vec2(cos(anC), sin(anC));
     float v = 1.0 - smoothstep(0.4, 2.2, min(boxD(pc, uColL), boxD(pc, uColR)));   // (fading whole as it rides in)
     if (mod(i, 2.0) > 0.5 && bw > 0.45 && v < 0.999) {
