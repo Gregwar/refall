@@ -6,11 +6,7 @@
 // its bands breathe into scalloped petals (on the half-time beat grid, deeper at a peak). Its motifs are printed in
 // the pattern itself (the same shader, the same distortion): every other ring repeats one motif, daisies, hearts or
 // peace signs, one per sector on its axis, in a lighter or darker tone of its band and outlined like the bands, riding
-// the rings outward (fading out whole near the HUD columns). Around it, in the free zones beyond the HUD columns, a
-// garden grows with the cleared lines (paceLines: complete in one song): flowers on stems rising from the bottom edge
-// (daisies, mandala flowers, daisies with kawaii faces), one every line or so, taller and bigger as the song goes; a
-// rainbow (line 7), a smiling sun (15), mushrooms with faces (22..28), a pair of doves (32), then two big mandala
-// flowers (40, 46); all flat, no highlights, in the bands' outline weight.
+// the rings outward (fading out whole near the HUD columns).
 //
 // The well is a calm deep panel with a slim white line, so the stack pops off the busy kaleidoscope. The blocks are
 // flat, in the same flat language as the bands and the flowers: one rounded square of flat color per cell (no
@@ -18,17 +14,17 @@
 // of its color (darker on the pale ones): I a daisy, O a heart, T a peace sign, S a sparkle, Z a spiral, J a
 // rainbow, L a kawaii face; one hue per type. The ghost is a faint flat fill with a thin line of the piece's color.
 //
-// The music: calm is a soft, slow kaleidoscope; mid flows and breathes with the beat, the flowers sway; a peak
-// saturates it and swells the flowers' heads on the kicks. A drop is the trip, held for the whole drop section: the
-// kaleidoscope folds into a two-level mandala (the bands pulled into big petal points with small petals between them,
-// the motifs turned to sparkles) and the palette swings to the variant's drop colors, eased in over a second and out
-// over a few once the drop ends. A cleared row's
-// tiles pop and burst into its motifs (petals, hearts, peace signs, sparkles) flying out sideways behind the well; a
-// quad turns the kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
+// The music: calm is a soft, slow kaleidoscope; mid flows and breathes with the beat; a peak saturates it. A drop is
+// the trip, held for the whole drop section: the kaleidoscope folds into a two-level mandala (the bands pulled into
+// big petal points with small petals between them, the motifs turned to sparkles) and twists into a slow spiral
+// around the well, the palette swinging to the variant's drop colors, eased in over a second and out over a few once
+// the drop ends. A cleared row's tiles pop and burst into its motifs (petals, hearts, peace signs, sparkles) flying
+// out sideways behind the well, and send a shock wave of color through the kaleidoscope, from the well outward (its
+// rings pushed out a couple of bands as it passes, a stronger one for more lines); a quad turns the
+// kaleidoscope's colors one band on and sends a shower of hearts and peace signs; slow motion is
 // dusk (the colors drained to lilac, the flow slowed); game over greys the stack from the top.
 //
-// Original motifs only (generic period iconography: daisies, peace signs, hearts, rainbows, a smiling sun, doves,
-// mushrooms, lava-lamp blobs). Cost: one fullscreen pass, a few hundred instanced SDF quads, SDF type.
+// Original motifs only (generic period iconography: daisies, peace signs, hearts, rainbows). Cost: one fullscreen pass, a few hundred instanced SDF quads, SDF type.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -112,22 +108,11 @@ enum Kind { K_DAISY = 0, K_MANDALA, K_PEACE, K_HEART, K_RAINBOW, K_SUN, K_MUSHRO
             K_GAUGE, K_STEM, K_PANEL };
 
 constexpr float CLEAR_T = 0.38f;   // a cleared tile pops away in this long (real time)
-constexpr int N_FLOWERS = 36;      // the garden's flowers at scene completion
 constexpr float OUTLINE = 0.13f;    // the white cartoon outline (board units)
 
 float ease(float t) {
     t = saturate(t);
     return t * t * (3.f - 2.f * t);
-}
-
-// The garden's stages (on the 50-line scale), for the HUD's corner.
-const char* stageName(float L) {
-    if (L < 4.f) return "seeds";
-    if (L < 12.f) return "first blooms";
-    if (L < 24.f) return "sunshine";
-    if (L < 36.f) return "flower power";
-    if (L < 48.f) return "summer of love";
-    return "peace & love";
 }
 
 class WoodstockUniverse : public Universe {
@@ -170,18 +155,9 @@ private:
     struct Pop { float x, y; int type; float t, spin; };
     std::vector<Pop> pops_;
 
-    // ---- The garden (slots laid out once; positions as fractions of the side zones).
-    struct Flower {
-        float birth, side, u, stem, head, seed, grow;
-        int kind, petals, col, col2;
-        bool face;
-        float startT;
-    };
-    std::vector<Flower> flowers_;
-    struct Special { int kind; float birth, side, u, y, size, seed, grow, startT; };
-    std::vector<Special> specials_;
-    void buildGarden();
-    float lines_ = 0.f, shown_ = -1.f;
+    // ---- The clears' shock waves of color through the kaleidoscope (age in seconds, strength).
+    struct Wave { float age, strength; };
+    std::vector<Wave> waves_;
 
     // ---- Particles: the clears' bursts (behind the well), the hard drops' puffs (at the contact).
     struct Part { float x, y, vx, vy, rot, spin, size, age, life; int kind; vec3 col; bool front; };
@@ -202,7 +178,7 @@ private:
     int variant_ = 0;
     uint64_t seed_ = 1;
     vec3 band_[5], line_{1.f}, dot_{1.f}, wellTop_{0.f}, wellBottom_{0.f}, ink_{0.f}, accent_{1.f}, piece_[7], flower_[6],
-        center_{1.f}, green_{0.f}, leaf_{0.f};
+        center_{1.f};
     bool colSet_ = false;
 
     // ---- Staging.
@@ -298,7 +274,6 @@ void WoodstockUniverse::setSong(const SongLook& t, float seconds) {
     variant_ = v;
     seed_ = t.seed ? t.seed : 1;
     rng_ = Rng(seed_ ^ 0x5EACEull);
-    if (flowers_.empty()) buildGarden();
     if (seconds <= 0.f) colSet_ = false;
 }
 
@@ -333,46 +308,6 @@ TransitionHints WoodstockUniverse::hints() const {
     h.light = variant_ != 3;
     h.styles = TS_INK | TS_RIPPLE | TS_TILES;
     return h;
-}
-
-void WoodstockUniverse::buildGarden() {
-    Rng r(0xF10E5ull);
-    flowers_.clear();
-    for (int i = 0; i < N_FLOWERS; i++) {
-        Flower fl;
-        const float k = (i + 0.5f) / N_FLOWERS;
-        fl.birth = 0.6f + 49.f * k * (0.92f + 0.08f * k);
-        fl.side = (i % 2) ? 1.f : -1.f;
-        // spread over the zone's width, interleaved so neighbors in time sit apart
-        fl.u = std::fmod(0.13f + 0.618034f * (float)(i / 2) + r.range(-0.06f, 0.06f), 1.f);
-        if (fl.u < 0.f) fl.u += 1.f;
-        fl.stem = r.range(2.4f, 3.4f) + 4.6f * k * r.range(0.45f, 1.f);
-        fl.head = r.range(0.7f, 0.95f) + 0.55f * k * r.range(0.5f, 1.f);
-        fl.seed = r.uniform();
-        fl.kind = r.chance(0.24f) ? K_MANDALA : K_DAISY;
-        fl.face = fl.kind == K_DAISY && r.chance(0.28f);
-        fl.petals = fl.kind == K_MANDALA ? r.irange(8, 12) : r.irange(6, 10);
-        fl.col = r.irange(0, 5);
-        fl.col2 = (fl.col + r.irange(1, 5)) % 6;
-        fl.grow = 0.f;
-        fl.startT = -1.f;
-        flowers_.push_back(fl);
-    }
-    // the taller behind the shorter
-    std::sort(flowers_.begin(), flowers_.end(), [](const Flower& a, const Flower& b) { return a.stem > b.stem; });
-    specials_.clear();
-    auto add = [&](int kind, float birth, float side, float u, float y, float size) {
-        specials_.push_back({kind, birth, side, u, y, size, r.uniform(), 0.f, -1.f});
-    };
-    add(K_RAINBOW, 7.f, -1.f, 0.5f, 5.6f, 3.4f);
-    add(K_SUN, 15.f, 1.f, 0.55f, 7.4f, 2.3f);
-    add(K_MUSHROOM, 22.f, 1.f, 0.2f, -10.6f, 1.0f);
-    add(K_MUSHROOM, 25.f, -1.f, 0.75f, -10.7f, 0.85f);
-    add(K_MUSHROOM, 28.f, 1.f, 0.82f, -10.75f, 0.75f);
-    add(K_DOVE, 32.f, -1.f, 0.45f, 2.2f, 0.9f);
-    add(K_DOVE, 32.5f, 1.f, 0.5f, 3.6f, 0.8f);
-    add(K_MANDALA, 40.f, -1.f, 0.5f, -1.0f, 2.7f);
-    add(K_MANDALA, 46.f, 1.f, 0.45f, 0.2f, 2.6f);
 }
 
 void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
@@ -436,6 +371,9 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 parts_.push_back(q);
             }
         }
+        // the shock wave (the oldest dropped past four)
+        if (waves_.size() >= 4) waves_.erase(waves_.begin());
+        waves_.push_back({0.f, 0.6f + 0.2f * std::min(ev.count, 4)});
         if (ev.count >= 4) {
             // a quad: the kaleidoscope's colors turn a band on; hearts and peace signs shower out on both sides
             shiftTo_ += 1.f;
@@ -574,7 +512,7 @@ void WoodstockUniverse::drawHud(const std::vector<HudRect>& panels) {
 
 // The HUD, lettered by the host (text.hpp): cream letters in a thick dark cartoon stroke (they read over any band of
 // the kaleidoscope): Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the variant, the
-// notices and the toasts. The universe's line ends with the garden's stage.
+// notices and the toasts.
 void WoodstockUniverse::hudLine(const HudText& h, text::Line& out) {
     text::Font* disp = text::font(FONT_DISPLAY);
     text::Font* round = text::font(FONT_ROUND);
@@ -605,9 +543,6 @@ void WoodstockUniverse::hudLine(const HudText& h, text::Line& out) {
             v.dy = vdy;
             v.gap = (gap - 0.18f * sz) / vsz; // (the name's own spacing counts in it)
         }
-        text::Span& st = out.add(stageName(std::max(0.f, shown_)), disp, vsz, cream, 0.f, a * 0.9f);
-        st.dy = vdy;
-        st.gap = (gap * 1.3f - (var.empty() ? 0.18f * sz : 0.f)) / vsz;
         stroke = 0.4f;
         break;
     }
@@ -660,7 +595,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 2.5f) : 0.f, overT_ >= 0.f ? 3.f : 1.f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += wdt;
-    if (flowers_.empty()) buildGarden();
 
     // ---- The colors: the variant's, eased in on a change of song.
     {
@@ -673,7 +607,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         mixc(wellTop_, V.wellTop); mixc(wellBottom_, V.wellBottom); mixc(ink_, V.ink); mixc(accent_, V.accent);
         for (int i = 0; i < 7; i++) mixc(piece_[i], V.piece[i]);
         for (int i = 0; i < 6; i++) mixc(flower_[i], V.flower[i]);
-        mixc(center_, V.center); mixc(green_, V.green); mixc(leaf_, V.leaf);
+        mixc(center_, V.center);
     }
 
     // ---- Staging.
@@ -707,35 +641,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     flow_ += wdt * (0.06f + 0.14f * wm + 0.2f * wp + 0.15f * trip);
     shift_ = approach(shift_, shiftTo_, 1.4f, dt);
 
-    // ---- The garden: lines -> flowers (springing after the paced lines, the speed capped).
-    {
-        // (test hook: ZEN_WOODSTOCK_LINES=N adds N real lines)
-        static const float extra = std::getenv("ZEN_WOODSTOCK_LINES") ? (float)std::atof(std::getenv("ZEN_WOODSTOCK_LINES")) : 0.f;
-        const float lines = f.bare ? lines_ : paceLines(game, extra);
-        if (shown_ >= 0.f && lines < lines_ - 0.01f && !game.over()) {
-            for (Flower& fl : flowers_) fl.startT = -1.f; // a new game: the garden wilts and grows again
-            for (Special& s : specials_) s.startT = -1.f;
-        }
-        lines_ = lines;
-        if (shown_ < 0.f) {
-            shown_ = lines_;
-            for (Flower& fl : flowers_)
-                if (fl.birth <= shown_) { fl.startT = time_ - 10.f; fl.grow = 1.f; }
-            for (Special& s : specials_)
-                if (s.birth <= shown_) { s.startT = time_ - 10.f; s.grow = 1.f; }
-        }
-        const float cap = 1.6f * std::max(1.f, paceScale());
-        shown_ += std::clamp((lines_ - shown_) * 1.5f * wdt, -8.f * wdt, cap * wdt);
-        if (lines_ < shown_ - 5.f) shown_ = approach(shown_, lines_, 6.f, dt);
-        for (Flower& fl : flowers_) {
-            if (fl.startT < 0.f && fl.birth <= shown_) fl.startT = time_;
-            fl.grow = fl.startT >= 0.f ? saturate((time_ - fl.startT) / 1.8f) : approach(fl.grow, 0.f, 0.6f, wdt);
-        }
-        for (Special& s : specials_) {
-            if (s.startT < 0.f && s.birth <= shown_) s.startT = time_;
-            s.grow = s.startT >= 0.f ? saturate((time_ - s.startT) / 2.2f) : approach(s.grow, 0.f, 0.6f, wdt);
-        }
-    }
+    // ---- The shock waves (gone once past the frame's corners).
+    for (Wave& w : waves_) w.age += wdt;
+    waves_.erase(std::remove_if(waves_.begin(), waves_.end(), [](const Wave& w) { return w.age > 3.5f; }), waves_.end());
 
     // ---- Particles, pops.
     for (Pop& p : pops_) p.t += dt;
@@ -775,6 +683,13 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uBreath", breath_ + 0.25f * swell_);
         set1f(progBg_, "uMorph", 0.5f + 0.5f * std::sin(time_ * 0.07f));
         set1f(progBg_, "uMandala", trip);
+        float waves[16] = {};
+        for (size_t i = 0; i < waves_.size(); i++) {
+            const Wave& w = waves_[i];
+            waves[i * 4] = 13.f * w.age;                                  // the front's radius (board units)
+            waves[i * 4 + 1] = w.strength * (1.f - ease((w.age - 2.f) / 1.5f));
+        }
+        glUniform4fv(ugl::U(progBg_, "uWave"), 4, waves);
         set1f(progBg_, "uShift", shift_);
         set1f(progBg_, "uTime", time_);
         set1f(progBg_, "uFolds", 10.f);
@@ -790,66 +705,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    // =========================================================== the garden
-    const float zoneIn = layout::RIGHT_COLUMN[2] + 0.6f;
-    const float zoneOut = std::max(zoneIn + 0.5f, viewH_.x - 0.9f);
-    auto zoneX = [&](float side, float u) { return side * lerpf(zoneIn + 0.6f, zoneOut - 0.4f, u); };
-    const float bottom = viewC_.y - viewH_.y;
-    const float beatSway = std::sin((float)(music.hasSong ? music.beat : time_ * 2.0) * PI * 0.5f) * (0.04f + 0.06f * wm);
-    // the big specials behind: the mandalas, the rainbow, the sun
-    for (const Special& s : specials_) {
-        if (s.grow <= 0.f) continue;
-        const float g = ease(s.grow);
-        const float x = zoneX(s.side, s.u);
-        if (s.kind == K_MANDALA) {
-            const float r = s.size * (0.3f + 0.7f * g) * (1.f + 0.04f * kickK_);
-            sprite(K_MANDALA, x, s.y, r, r, 0.f, g, flower_[(int)(s.seed * 6) % 6], flower_[((int)(s.seed * 6) + 2) % 6],
-                   center_, 12.f, time_ * 0.15f * s.side, 0.f);
-        } else if (s.kind == K_RAINBOW) {
-            const float r = s.size * (0.5f + 0.5f * g);
-            sprite(K_RAINBOW, x, s.y, r, r, 0.f, g, hex(0xc9b6ff));
-        } else if (s.kind == K_SUN) {
-            const float r = s.size * (0.4f + 0.6f * g) * (1.f + 0.05f * kickK_);
-            sprite(K_SUN, x, s.y, r, r, 0.f, g, center_, hex(0xff9a3c), hex(0xff6f7d), 0.f, time_ * 0.12f, s.seed);
-        }
-    }
-    // the doves circling
-    for (const Special& s : specials_) {
-        if (s.kind != K_DOVE || s.grow <= 0.f) continue;
-        const float g = ease(s.grow);
-        const float a = time_ * 0.35f + s.seed * TAU;
-        const float x = zoneX(s.side, s.u) + 2.2f * std::cos(a), y = s.y + 1.2f * std::sin(a) + (1.f - g) * -3.f;
-        const float dir = -std::sin(a) >= 0.f ? 1.f : -1.f;
-        const float r = s.size;
-        sprite(K_DOVE, x, y, r, r, 0.f, g, lerp(ink_, vec3(0.75f, 0.65f, 1.f), 0.5f), vec3(1.f), vec3(1.f), 0.f,
-               time_ * 7.f + s.seed * 5.f, dir, OUTLINE * 0.8f);
-    }
-    // the flowers on their stems, from the bottom edge
-    for (const Flower& fl : flowers_) {
-        if (fl.grow <= 0.f) continue;
-        const float gs = ease(fl.grow / 0.6f), gh = ease((fl.grow - 0.35f) / 0.65f);
-        const float x = zoneX(fl.side, fl.u);
-        const float h = fl.stem * gs;
-        const float bend = (0.25f + 0.15f * std::sin(time_ * 0.6f + fl.seed * 20.f) + beatSway * 2.f) * (fl.seed < 0.5f ? 1.f : -1.f);
-        if (h > 0.05f) sprite(K_STEM, x, bottom + h * 0.5f - 0.3f, 1.0f, h * 0.5f + 0.3f, 0.f, 1.f, green_, leaf_, vec3(1.f),
-                              ease(fl.grow / 0.8f), bend, 0.f, 0.07f);
-        if (gh > 0.f) {
-            const float r = fl.head * (0.25f + 0.75f * gh) * (1.f + 0.07f * kickK_ * (0.4f + 0.6f * wp));
-            const vec3 a = flower_[fl.col], b = flower_[fl.col2];
-            const float tilt = 0.08f * std::sin(time_ * 0.6f + fl.seed * 20.f) + beatSway;
-            if (fl.kind == K_MANDALA) sprite(K_MANDALA, x + bend, bottom + h - 0.3f, r, r, tilt, 1.f, a, b, center_,
-                                             (float)fl.petals, time_ * 0.2f * (fl.seed - 0.5f), 0.f);
-            else sprite(K_DAISY, x + bend, bottom + h - 0.3f, r, r, tilt, 1.f, a, fl.face ? a : b, center_, (float)fl.petals,
-                        fl.face ? 1.f : 0.f, gh);
-        }
-    }
-    for (const Special& s : specials_) {
-        if (s.kind != K_MUSHROOM || s.grow <= 0.f) continue;
-        const float g = ease(s.grow);
-        const float r = s.size * g;
-        sprite(K_MUSHROOM, zoneX(s.side, s.u), bottom + 0.15f + r * 0.95f, r, r, 0.f, 1.f, flower_[0], hex(0xfff1dc),
-               vec3(1.f), 0.f, 0.f, s.seed);
-    }
     // the clears' bursts (behind the well)
     for (const Part& p : parts_) {
         if (p.front || p.age < 0.f) continue;
@@ -907,7 +762,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         glGetQueryObjectui64v(gpuQ, GL_QUERY_RESULT, &ns);
         gpuSum += ns / 1e6;
         if (++gpuN % 120 == 0) {
-            std::fprintf(stderr, "[woodstock] gpu %.2f ms/frame (lines %.1f)\n", gpuSum / 120.0, shown_);
+            std::fprintf(stderr, "[woodstock] gpu %.2f ms/frame \n", gpuSum / 120.0);
             gpuSum = 0.0;
         }
     }
@@ -921,7 +776,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_woodstock() {
     static const UniverseEntry e{
-        "WOODSTOCK", "a late-60s psychedelic cartoon: a breathing kaleidoscope, flower power and peace signs, a garden growing with the lines",
+        "WOODSTOCK", "a late-60s psychedelic cartoon: a breathing kaleidoscope, flower power and peace signs, shock waves of color with the lines",
         [] { return std::unique_ptr<Universe>(new WoodstockUniverse()); },
         // Bright, happy, groovy songs suit it best.
         [](const SongLook& l) { return 0.65f + 0.35f * l.brightness + (l.minor ? 0.f : 0.15f) + 0.1f * (1.f - l.bassWeight); },
