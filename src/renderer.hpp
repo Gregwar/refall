@@ -120,6 +120,12 @@ private:
     Break brk_;
     TitleCard card_;
     GLuint mixProg_ = 0;
+    // ---- The slow-motion bonus's common look, over every universe: the world drained to a cold silver, a dark
+    // vignette and a pale halo round the well (the well keeps its colors).
+    ugl::Target post_;
+    GLuint bonusProg_ = 0;
+    float bonusK_ = 0.f;
+    void bonusLook(const Game& game, double time);
     // ---- The HUD lettered by the host (Universe::hostText).
     text::Engine text_;
     // each line of `hud` as `u` styles it, with its box (pixels) where it is lettered
