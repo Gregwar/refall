@@ -1,7 +1,7 @@
-// ELECTRON: solid cubes on a dark substrate, and charges finding them.
+// ELECTRON: bare silicon dies on a dark substrate, and charges finding them.
 //
-// A dark, softly textured slab seen from straight above. The well is a hairline frame on it and the pieces are plain
-// solid cubes. Two terminals sit at the edges of the picture, one on the left, one on the right, half out of it: a
+// A dark, softly textured slab seen from straight above. The well is a hairline frame on it and the pieces' blocks are
+// bare dies: the piece's color shimmering, a fine grid of circuitry, a border of gold bond pads. Two terminals sit at the edges of the picture, one on the left, one on the right, half out of it: a
 // dark plate with a ring of contact pads and a glowing core.
 //
 // The charges are a real (small) ant-colony model, only drawn abstract: hot points with a short tail. They leave the
@@ -1240,7 +1240,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_electron() {
     static const UniverseEntry e{
-        "ELECTRON", "solid cubes on a dark substrate, and charges wiring themselves to them",
+        "ELECTRON", "bare silicon dies on a dark substrate, and charges wiring themselves to them",
         [] { return std::unique_ptr<Universe>(new ElectronUniverse()); },
         // busy, lively songs suit the circuit a little better
         [](const SongLook& l) { return 0.8f + 0.3f * l.density; },
