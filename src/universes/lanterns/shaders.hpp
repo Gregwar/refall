@@ -254,6 +254,15 @@ void main() {
         col = mix(col, col * uFlame * 1.15, 0.35 * hot);
         vec3 c = max(col * light, tint * 0.05 * paper);
         vec3 wood = uWood * 0.6 + tint * 0.04 * light;
+        // a fine seam of the frame between the piece's own cells, the paper a little darker along it: each cell
+        // reads as its own small lantern inside the lit piece
+        float ds = 9.0;
+        if (!eL) ds = min(ds, e0.x);
+        if (!eR) ds = min(ds, e1.x);
+        if (!eB) ds = min(ds, e0.y);
+        if (!eT) ds = min(ds, e1.y);
+        c *= 1.0 - 0.28 * (1.0 - smoothstep(0.02, 0.16, ds));
+        c = mix(c, wood, (1.0 - smoothstep(0.016 - uPx, 0.016 + uPx, ds)) * 0.9);
         c = mix(c, wood, frame);
         if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
         frag = vec4(c, uStackA * vC.w);

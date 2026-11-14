@@ -5,7 +5,7 @@
 // low hills, a few faint stars. The water reflects the sky through rippled normals and a planar reflection of the
 // scene (rendered mirrored). The well is two bamboo poles standing in the water, and the stack floats on the lake.
 // The pieces are paper lanterns: every cell a thin opaque box, the faces inside a piece removed, so each piece is
-// one volume of lit paper (darker toward its thin wooden frame, ribs and fibers seen through the paper, its candle at
+// one volume of lit paper, a fine seam of the frame between its cells (darker toward its thin wooden frame, ribs and fibers seen through the paper, its candle at
 // the piece's heart), each of the seven types its own paper. The cleared row becomes lanterns: each run of one piece
 // in it slides out of the well to its side as a box of its paper (in the 0.3 s the row stays empty), folds into a box
 // lantern as it floats down beside the well onto the water behind it, and drifts to a free place on the lake, where
