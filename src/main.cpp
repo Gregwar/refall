@@ -1854,6 +1854,9 @@ int App::run() {
                         R_.refresh(strength);
                         std::printf("[app] refresh (%s)\n", segmentName(sg.kind));
                     }
+                    // A DROP section inside a scene that was already at its peak (after a loud build or chorus)
+                    // lands too: its drop hit, on its first beat.
+                    if (!phaseStart && sg.kind == SEG_DROP && ph.level >= 2) dropAt_ = sg.start;
                     lastSeg_ = seg;
                 } else if (seg < lastSeg_) {
                     lastSeg_ = seg; // seeked back
@@ -1873,7 +1876,8 @@ int App::run() {
                         lastPhase_ = nxt;
                         float impact = rising ? (to.level >= 2 ? 1.f : 0.5f) : 0.f;
                         R_.setLevel(to.level, to.energy, rising ? 1.8f : 4.5f, impact);
-                        dropAt_ = rising && to.level >= 2 ? to.start : -1.0;
+                        // (a peak that starts on a loud BUILD has no drop hit: its DROP section brings it, see above)
+                        dropAt_ = rising && to.level >= 2 && an.segments[to.seg].kind != SEG_BUILD ? to.start : -1.0;
                         // Optional (--universe-on-peak): a long song may also move to another universe when it
                         // rises into a peak, after a minute in the current one.
                         if (opt_.universeOnPeak && rising && to.level >= 2 && universeAge_ > 60.f && forcedUniverse_ < 0 &&
