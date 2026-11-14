@@ -7,7 +7,9 @@
 // north sea night, an afterglow). The basin mirrors it all (a reflection pass, rippled), the haze softens the distance.
 //
 // The pieces are shipping containers, one per cell: steel boxes with corner posts and castings, corrugated walls and
-// their doors facing us (two leaves, the locking rods), each of the seven piece types a clean color of the variant.
+// their doors facing us (two leaves, the locking rods), the seven piece types seven paints well apart (the same at
+// every hour), stacked against an opaque dark hull rising behind the well (its coaming lit) so the stack reads on a
+// calm ground, casting a soft shadow on it.
 // The falling piece hangs from the gantry: a slim lifting beam rests on it, hairline cables run up out of frame; it
 // follows the piece exactly (moves, rotations, drops) and lets go when the piece lands, rising away. The ghost is a
 // thin outline. A cleared row is taken by other cranes: its containers are lifted swiftly back out of the well, then
@@ -60,12 +62,11 @@ float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 
 // An hour at the port (sRGB): the sky (zenith, middle, horizon, the sun's glow), the low sun's light, the haze, the
 // ambient light (sky, ground), the work lights over the well, the water, the lamps (sodium, LED), the concrete, the
-// cranes' paint (main, second), the seven containers (I O T S Z J L) and three hulls; the sun's azimuth and height,
+// cranes' paint (main, second), three hulls; the sun's azimuth and height,
 // stars, haze density, the moon, the low haze over the water, how bright the lamps are.
 struct VariantDef {
     const char* name;
     unsigned zen, mid, hor, glow, sun, fog, amb, ground, key, water, lampA, lampB, quay, crane, crane2;
-    unsigned piece[7];
     unsigned hull[3];
     float sunAz, sunEl, stars, fogD, moon, haze, lampK, keyK, ambK;
 };
@@ -73,32 +74,32 @@ const VariantDef VARIANTS[] = {
     // the sun just set behind the terminal: an orange horizon, sodium lamps coming on, white and red cranes
     {"SODIUM DUSK", 0x1a2546, 0x4a4a74, 0xe8865a, 0xff9248, 0x8a5a40, 0x6a5a70, 0x2e3450, 0x1c1a22, 0xfff0dc, 0x1a2a3e, 0xffa24a,
      0xfff0d8, 0x8a8680, 0xd8dce2, 0xc8382c,
-     {0x2e9ee0, 0xf2c23a, 0x8e62d6, 0x3fb46a, 0xe2463a, 0x2c58c8, 0xf2862a}, {0x1a2a44, 0x6a1c1c, 0x1e3a30},
+     {0x1a2a44, 0x6a1c1c, 0x1e3a30},
      -0.32f, 0.02f, 0.12f, 0.0042f, 0.f, 0.6f, 1.f, 1.f, 1.f},
     // the deep blue after sunset: a cobalt sky, amber lamps, blue cranes
     {"BLUE HOUR", 0x0a1434, 0x1c3468, 0x5876ae, 0xb08098, 0x34406a, 0x2a3a5c, 0x22304e, 0x101420, 0xeef2ff, 0x0e1a30, 0xffa040,
      0xd8e6ff, 0x767a84, 0x2c6cc4, 0xe6e8ea,
-     {0x3fb2e8, 0xf0d060, 0xd04a8e, 0x2cb59c, 0xf0664a, 0x4a6ae0, 0xe89a3a}, {0x22283a, 0x7a2420, 0x1c3a4a},
+     {0x22283a, 0x7a2420, 0x1c3a4a},
      0.25f, 0.f, 0.35f, 0.0040f, 0.f, 0.5f, 1.f, 1.f, 1.f},
     // the night shift: stars and a low moon, white LED floods, yellow cranes
     {"NIGHT SHIFT", 0x03060e, 0x0a1426, 0x1c2a42, 0x34405a, 0x182238, 0x141c2e, 0x121a2a, 0x080a10, 0xf0f6ff, 0x081220, 0xffb060,
      0xdceaff, 0x6a6c70, 0xf0b428, 0x34383e,
-     {0x30c8e8, 0xf2e04c, 0xb08af0, 0x82d860, 0xf05a78, 0x4a7cf0, 0xff9a3c}, {0x1c2232, 0x5e1a1a, 0x16302a},
+     {0x1c2232, 0x5e1a1a, 0x16302a},
      0.45f, 0.06f, 1.f, 0.0036f, 1.f, 0.45f, 1.1f, 1.f, 0.9f},
     // first light: a lilac sky warming to peach, the morning mist on the basin, the lamps going pale; red cranes
     {"DAWN", 0x3a4a7a, 0x8a8cb4, 0xf0bc9c, 0xffcc98, 0xc89070, 0x9a94aa, 0x5e6888, 0x34343c, 0xfff6ec, 0x3e5070, 0xffb060,
      0xfff0e0, 0xa4a09a, 0x5a6c8e, 0xe8eaee,
-     {0x1670c4, 0xe0a010, 0x6438b4, 0x1a8a4c, 0xc42624, 0x1c3a98, 0xd85a10}, {0x1a2a44, 0x6a1c1c, 0x203a32},
+     {0x1a2a44, 0x6a1c1c, 0x203a32},
      -0.2f, 0.035f, 0.f, 0.0026f, 0.f, 0.4f, 0.55f, 0.95f, 1.6f},
     // a north sea night: low cloud, a grey-teal sky, cold lamps, green cranes
     {"NORTH SEA", 0x0a1418, 0x1c2e34, 0x3e5658, 0x48605e, 0x2a3c3c, 0x2a3c40, 0x1c2c30, 0x0c1012, 0xe6f2f4, 0x0a181c, 0xffae5a,
      0xcaf0ff, 0x6e7270, 0x3a8a7a, 0xe0e0d8,
-     {0x3cb8c8, 0xe8d26a, 0xa48ad8, 0x6cc48a, 0xe87060, 0x5288d8, 0xe8a254}, {0x1a2428, 0x5a1e1a, 0x223028},
+     {0x1a2428, 0x5a1e1a, 0x223028},
      0.1f, 0.f, 0.f, 0.0050f, 0.f, 0.9f, 1.f, 1.f, 1.f},
     // the afterglow: a violet sky, a magenta horizon, white cranes
     {"AFTERGLOW", 0x140a2a, 0x3a2058, 0xd04e78, 0xff6a58, 0x6a2a40, 0x4a2a4c, 0x2a1e3c, 0x120c16, 0xfff0f0, 0x160e26, 0xffa050,
      0xf0e0ff, 0x7a7480, 0xe6e6ee, 0x2a2a3a,
-     {0x38c0e0, 0xf6d050, 0x9a70f0, 0x50d090, 0xff5a6a, 0x4a70f0, 0xff9a40}, {0x1c1c30, 0x601c2a, 0x1c3038},
+     {0x1c1c30, 0x601c2a, 0x1c3038},
      -0.4f, 0.015f, 0.4f, 0.0042f, 0.f, 0.55f, 1.f, 1.f, 1.f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
@@ -139,6 +140,9 @@ int glyphIndex(unsigned char ch) {
 }
 
 void lerpPal(vec3& a, const vec3& b, float k) { a = lerp(a, b, k); }
+
+// The containers' paints, the same at every hour: the seven types well apart in hue and lightness (I O T S Z J L).
+const unsigned PIECES[7] = {0x28c8f0, 0xffd21e, 0xb24ae6, 0x34c24a, 0xec2f3c, 0x2f5cf0, 0xff8a1a};
 
 } // namespace
 
@@ -373,7 +377,7 @@ void DocksUniverse::setSong(const SongLook& t, float seconds) {
     P.fog = lin(V.fog); P.amb = lin(V.amb) * 0.55f * V.ambK; P.ground = lin(V.ground) * 0.5f * V.ambK;
     P.key = lin(V.key) * 0.95f * V.keyK; P.water = lin(V.water);
     P.lampA = lin(V.lampA); P.lampB = lin(V.lampB); P.quay = lin(V.quay) * 0.55f; P.crane = lin(V.crane); P.crane2 = lin(V.crane2);
-    for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]);
+    for (int i = 0; i < 7; i++) P.piece[i] = lin(PIECES[i]);
     for (int i = 0; i < 3; i++) P.hull[i] = lin(V.hull[i]);
     P.sunAz = V.sunAz; P.sunEl = V.sunEl; P.stars = V.stars; P.fogD = V.fogD * 0.8f; P.moon = V.moon; P.haze = V.haze; P.lampK = V.lampK;
     const bool instant = !colSet_ || seconds <= 0.1f;
@@ -1318,21 +1322,22 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
     glDepthMask(GL_FALSE);
-    // the well's soft shade, behind the stack
+    // the well's backing, behind the stack
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    // (deeper under a bright sky, so the containers stand out from the port)
-    const float skyLum = 0.2126f * P.hor.x + 0.7152f * P.hor.y + 0.0722f * P.hor.z;
-    const float bright = smoothstepf(0.35f, 0.6f, skyLum);
     if (!bare_) {
         glUseProgram(progVeil_);
         setMat(progVeil_, "uVP", vp_);
-        set4f(progVeil_, "uRect", -5.4f, Y_Q, 5.4f, 11.5f);
+        // an opaque dark hull behind the well, its coaming lit: the stack reads on a calm ground, whatever the hour
+        set4f(progVeil_, "uRect", -5.25f, Y_Q, 5.25f, 10.35f);
         set1f(progVeil_, "uZ", -2.f * CELL_D - 0.1f);
-        set3f(progVeil_, "uTint", P.zen * 0.3f);
-        set1f(progVeil_, "uA", 0.5f + 0.1f * bright); // (deep enough for the stack's shadow to read on it)
-        set1f(progVeil_, "uHorY", EYE_Y);
+        set3f(progVeil_, "uTint", vec3(0.010f, 0.012f, 0.016f) + P.zen * 0.02f);
+        set1f(progVeil_, "uA", 1.f);
+        set1f(progVeil_, "uRimW", 0.12f);
+        set3f(progVeil_, "uRim", vec3(0.09f, 0.095f, 0.1f) + P.key * 0.05f);
         glBindVertexArray(quadVao_);
+        glDepthMask(GL_TRUE); // (the lamps behind it are hidden)
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glDepthMask(GL_FALSE);
     }
     // the lamps, the cables, the ghost
     glBlendFunc(GL_ONE, GL_ONE);

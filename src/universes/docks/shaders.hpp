@@ -571,15 +571,14 @@ inline const char* VEIL_FS = R"(#version 330 core
 in vec2 vQ;
 out vec4 frag;
 uniform vec4 uRect;
-uniform vec3 uTint;
-uniform float uA, uHorY;
+uniform vec3 uTint, uRim;
+uniform float uA, uRimW;
 void main() {
     vec2 d = min(vQ - uRect.xy, uRect.zw - vQ);
-    float k = smoothstep(0.0, 1.0, d.x) * smoothstep(0.0, 0.6, d.y);
-    // only over the port, fading out toward the sky
-    k *= 1.0 - smoothstep(uHorY - 3.0, uHorY + 1.0, vQ.y);
-    float a = uA * k;
-    frag = vec4(uTint * a, a);
+    // the hull: opaque, its lit coaming along the sides and the top
+    float e = min(d.x, uRect.w - vQ.y);
+    vec3 c = mix(uTint, uRim, 1.0 - smoothstep(uRimW * 0.6, uRimW, e));
+    frag = vec4(c * uA, uA);
 }
 )";
 
