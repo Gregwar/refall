@@ -1121,13 +1121,11 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
         const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
-        for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN) continue;
+        for (auto& c : cells) { // (whole above the well too: it spawns there)
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
             shadow(over_, w.x + 0.16f, w.y - 0.22f, CUBE, 0.16f, shA * 0.8f);
         }
         for (auto& c : cells) {
-            if (c[1] < Game::HIDDEN) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
             cube(top_, w.x, w.y, 1.f, col, 1.f, 0.f, 11.f + c[0] * 3.f + c[1] * 7.f, glint, false, 0.f);
         }

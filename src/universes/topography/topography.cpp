@@ -646,7 +646,7 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt, bo
         game.pieceCells(game.piece(), cells);
         const float dx = game.pieceVisualX() - game.piece().x, dy = game.pieceVisualY() - game.piece().y;
         for (auto& c : cells)
-            if (c[1] >= Game::HIDDEN) mass(layout::cellPos(c[0] + dx, c[1] + dy), PIECE_HILL * keep);
+            mass(layout::cellPos(c[0] + dx, c[1] + dy), PIECE_HILL * keep);
     }
     boxBlur(mask_, tmp_, gw_, gh_, 2, 3);   // the plateau's flanks
     boxBlur(big_, tmp2_, gw_, gh_, 10, 3);  // the foothills

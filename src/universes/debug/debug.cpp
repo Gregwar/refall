@@ -174,8 +174,8 @@ public:
             const int gy = g.ghostY() - g.piece().y;
             for (auto& c : cs) cell(layout::cellPos((float)c[0], (float)(c[1] + gy)), 0.47f, V.paper, 0.35f);
             const float dy = g.pieceVisualY() - g.piece().y;
-            for (auto& c : cs)
-                if (c[1] + dy > 1.6f) cell(layout::cellPos((float)c[0], c[1] + dy), 0.47f, V.pieces[g.piece().type], 1.f);
+            for (auto& c : cs) // (whole above the well too: it spawns there)
+                cell(layout::cellPos((float)c[0], c[1] + dy), 0.47f, V.pieces[g.piece().type], 1.f);
         }
         auto preview = [&](int type, vec3 center, float sc, float a) {
             Piece p{type, 0, 0, 0};

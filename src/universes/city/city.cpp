@@ -2,7 +2,7 @@
 //
 // One world, in 3D: we look across at a tall modern tower from about thirty floors up, through a shift lens (the
 // camera looks straight ahead and its image is shifted so that the board plane keeps the layout's pixels): the
-// tower's facade faces the camera and fills the well, its 10 x 20 windows are the board. Each window is a recessed
+// tower's facade faces the camera and fills the well, its 10 x 22 windows are the board (two floors above the well, where the pieces spawn). Each window is a recessed
 // opening (its reveals seen in perspective), glass reflecting the night, and behind it a real room traced per pixel
 // (back wall, side walls, floor, ceiling): each window is its own room, furnished its own way, each floor its own
 // use (offices with strip lights and screens, flats with a lamp and a sofa, hotel rooms), with its own blinds,
@@ -525,7 +525,7 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
         for (int x = 0; x < COLS; x++) {
             const int t = g.cell(x, y).type;
             if (t < 0) continue;
-            const int vr = y - off_[y] - Game::HIDDEN;
+            const int vr = y - off_[y];
             if (vr < 0 || vr >= ROWS) continue;
             want[vr][x].on = true;
             want[vr][x].type = t;
@@ -536,7 +536,7 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
         int cells[4][2];
         g.pieceCells(p, cells);
         for (auto& c : cells) {
-            const int vr = c[1] - Game::HIDDEN;
+            const int vr = c[1];
             if (vr < 0 || vr >= ROWS || c[0] < 0 || c[0] >= COLS) continue;
             want[vr][c[0]] = {true, true, p.type};
         }
@@ -546,7 +546,7 @@ void CityUniverse::updateWindows(const Game& g, float dt) {
             int gc[4][2];
             g.pieceCells(gp, gc);
             for (auto& c : gc) {
-                const int vr = c[1] - Game::HIDDEN;
+                const int vr = c[1];
                 if (vr < 0 || vr >= ROWS || c[0] < 0 || c[0] >= COLS || want[vr][c[0]].on) continue;
                 ghost[vr][c[0]] = true;
             }
@@ -616,7 +616,7 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
         for (auto& c : ev.cells)
             if (c.y >= 0 && c.y < Game::H) {
                 cleared[c.y] = true;
-                const int vr = c.y - off_[c.y] - Game::HIDDEN;
+                const int vr = c.y - off_[c.y];
                 if (vr >= 0 && vr < ROWS && c.x >= 0 && c.x < COLS) pendingOff_[vr][c.x] = 1;
             }
         // the floors above keep their lights until the cleared floor is dark, then step down
@@ -642,7 +642,7 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
         int top = Game::H;
         for (auto& c : ev.cells) top = std::min(top, c.y);
         for (auto& c : ev.cells) {
-            const int vr = c.y - off_[c.y] - Game::HIDDEN;
+            const int vr = c.y - off_[c.y];
             if (vr < 0 || vr >= ROWS || c.x < 0 || c.x >= COLS) continue;
             pendingOff_[vr][c.x] = 2;
             pendingDelay_[vr][c.x] = (c.y - top) * 0.08f + rng_.range(0.f, 0.04f);
@@ -1006,7 +1006,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progTower_);
         setSky(progTower_);
         setMat(progTower_, "uVP", vp_);
-        set4f(progTower_, "uRect", -5.5f, -40.f, 5.5f, 14.6f);
+        set4f(progTower_, "uRect", -5.5f, -40.f, 5.5f, 16.6f);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, cellA_);
         glActiveTexture(GL_TEXTURE1);
