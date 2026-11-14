@@ -28,6 +28,11 @@
   // own speed (the autoplay only turns and slides them), so the first shots' velocity keeps a few clears in them.
   "pace": [1.0, 2.6],
   "velocity": [8, 40],
+  // one game across the whole video: the stack carries on across the cuts (every shot replays the same game from the
+  // song's start, unseen until its warm-up; one seed, no seed search for clears)
+  "continuous": true,
+  // its seed: the one of this many whose game clears a line inside the most shots
+  "seed_search": 12,
   // seconds of crossfade between two shots, centred on the cut
   "crossfade": 0.4,
   // every shot shows a line clear: game seeds are tried (up to `tries`, the best of the first `pick_of` that show one)

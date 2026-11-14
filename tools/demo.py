@@ -30,7 +30,7 @@ starts a clip's warm-up on a played-in stack (a shot early in the song has no ti
 the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
 (ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env; ZEN_TEST_BONUS=0
 keeps the slow-motion bonus out of every shot; ZEN_CLIP_PACE and ZEN_CLIP_VELOCITY speed a shot's play and fall
-up ("pace" and "velocity" in the config).
+up ("pace" and "velocity" in the config); with "continuous", ZEN_CLIP_FROM_START plays one game across all the shots.
 Needs a built refall (default build/refall), ffmpeg, numpy and Pillow; yt-dlp for a song not
 cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
 """
@@ -388,7 +388,23 @@ def plan(cfg, grid, universes):
     # (the autoplay's, ZEN_CLIP_PACE) and "velocity": [first, last] (the fall's, ZEN_CLIP_VELOCITY: at 37.5 and over,
     # 20G in the drops); a shot's own env overrides them
     shots = [e for e in timeline if e["kind"] == "shot"]
-    if shots:
+    if shots and cfg.get("continuous"):
+        # one game across the whole video: every shot plays the same game from the song's start (one seed, the same
+        # hooks, the ramps as functions of the song time), seen from its warm-up on, so the stack carries on across
+        # the cuts; no seed search then (the clears are what the game gives)
+        t0, t1 = shots[0]["t0"], max(shots[-1]["t0"], shots[0]["t0"] + 1e-3)
+        common = {"ZEN_CLIP_FROM_START": "1", "ZEN_CLIP_FILL": "0", "ZEN_CLIP_RAMP": f"{t0:.2f}:{t1:.2f}"}
+        if cfg.get("pace"):
+            common["ZEN_CLIP_PACE"] = "{}:{}".format(*cfg["pace"])
+        if cfg.get("velocity"):
+            common["ZEN_CLIP_VELOCITY"] = "{}:{}".format(*cfg["velocity"])
+        for e in shots:
+            e["seed"] = seed
+            e["env"] = {**e["env"], **common}
+            rule = e.get("clear")
+            if rule:
+                e["clear"] = {**rule, "tries": 1, "pick_of": 1}
+    elif shots:
         t0, t1 = shots[0]["t0"], max(shots[-1]["t0"], shots[0]["t0"] + 1e-3)
         for e in shots:
             k = min(1.0, max(0.0, (e["t0"] - t0) / (t1 - t0)))
@@ -517,6 +533,38 @@ def record_shot(e, game, song, size, clips, grid):
         json.dump(result, f)
     e.update(result)
     return e, True, label
+
+
+def continuous_seed(timeline, cfg, game, song, size, work, jobs, grid):
+    """A continuous game shows the same clears in every shot: its seed is picked once, the one (of "seed_search")
+    whose game clears a line inside the most shots, from cheap runs of the game alone (nothing drawn)."""
+    shots = [e for e in timeline if e["kind"] == "shot"]
+    n = int(cfg.get("seed_search", 1))
+    if not shots or n <= 1:
+        return
+    base = shots[0]["seed"]
+    env = {k: v for k, v in shots[0]["env"].items()}
+    env.update({"ZEN_CLIP_ALL_CLEARS": "1", "ZEN_WARMUP": "0"})
+    end = grid.duration - 1.0
+
+    def run(k):
+        seed = base + 7919 * k
+        out = os.path.join(work, f"seed-search-{seed}.mp4")
+        cmd = [game, "--hidden", "--seed", str(seed), "--size", "320x180", "--universe", "lanterns", "--clip", out,
+               "--clip-at", f"{end:.3f}", "--clip-before", "0", "--clip-after", "0.2", song]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, env={**os.environ, **env})
+        if os.path.exists(out):
+            os.remove(out)
+        clears = [(float(t), int(c)) for c, t in re.findall(r"\[clip\] clear (\d+) at ([\d.]+)", r.stdout + r.stderr)]
+        shown = sum(1 for e in shots if clear_score(e, clears, grid) is not None)
+        return shown, -k, seed
+
+    with concurrent.futures.ThreadPoolExecutor(jobs) as ex:
+        results = list(ex.map(run, range(n)))
+    shown, _, seed = max(results)
+    log(f"continuous game: seed {seed}, a line clear in {shown} of {len(shots)} shots (best of {n} seeds)")
+    for e in shots:
+        e["seed"] = seed
 
 
 def record_all(timeline, game, song, size, work, jobs, grid):
@@ -874,6 +922,8 @@ def main():
     print_plan(timeline, grid, universes, missing)
     if args.plan_only:
         return
+    if cfg.get("continuous"):
+        continuous_seed(timeline, cfg, game, song, f"{width}x{height}", work, args.jobs, grid)
     if args.only:
         keep = set(args.only.split(","))
         record_all([e for e in timeline if e.get("u") in keep], game, song, f"{width}x{height}", work, args.jobs, grid)
