@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <future>
 #include <map>
 
 #include "library.hpp"
@@ -211,6 +212,14 @@ public:
         stbtt_GetFontVMetrics(&info_, &asc, &desc, &gap);
         descent = -desc * scale_;
         ok = true;
+        // the usual letters' fields, made ahead on a worker: one takes up to 20 ms, a hitch when made in a frame (the
+        // score's next digit, a section's name); they go into the atlas, in the same order, as they are first drawn
+        aheadJob_ = std::async(std::launch::async, [this] {
+            std::unordered_map<uint32_t, Field> out;
+            for (uint32_t cp = 0x21; cp <= 0xb7; cp = cp == 0x7e ? 0xb7 : cp + 1)
+                if (stbtt_FindGlyphIndex(&info_, (int)cp)) out[cp] = field(cp);
+            return out;
+        });
         return true;
     }
     const Glyph& glyph(uint32_t cp) {
@@ -235,6 +244,21 @@ private:
     Raster raster_; // a custom font's letters
     std::unordered_map<uint32_t, Glyph> glyphs_;
     int x_ = 1, y_ = 1, rowH_ = 0;
+    // a letter's distance field, before it goes into the atlas
+    struct Field {
+        std::vector<unsigned char> px;
+        int w = 0, h = 0, xo = 0, yo = 0;
+    };
+    std::future<std::unordered_map<uint32_t, Field>> aheadJob_;
+    std::unordered_map<uint32_t, Field> ahead_;
+
+    Field field(uint32_t cp) const {
+        Field f;
+        unsigned char* sdf = stbtt_GetCodepointSDF(&info_, scale_, (int)cp, PAD, 128, DIST_SCALE, &f.w, &f.h, &f.xo, &f.yo);
+        if (sdf) f.px.assign(sdf, sdf + (size_t)f.w * f.h);
+        stbtt_FreeSDF(sdf, nullptr);
+        return f;
+    }
 
     // A custom letter: its coverage, padded, turned into a distance field (exact Euclidean distances to the nearest
     // covered / uncovered pixel, by two passes of the 1D squared distance transform).
@@ -314,11 +338,11 @@ private:
         int adv, lsb;
         stbtt_GetCodepointHMetrics(&info_, (int)cp, &adv, &lsb);
         g.adv = adv * scale_;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(&info_, scale_, (int)cp, PAD, 128, DIST_SCALE, &w, &h, &xo, &yo);
-        if (!sdf) return g;
-        place(g, sdf, w, h, xo, yo);
-        stbtt_FreeSDF(sdf, nullptr);
+        if (aheadJob_.valid() && aheadJob_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) ahead_ = aheadJob_.get();
+        auto a = ahead_.find(cp);
+        const Field f = a != ahead_.end() ? std::move(a->second) : field(cp); // (made here while the worker is not done)
+        if (f.px.empty()) return g;
+        place(g, f.px.data(), f.w, f.h, f.xo, f.yo);
         return g;
     }
 
