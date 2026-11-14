@@ -283,10 +283,10 @@ void main() {
         float rim = 1.0 - smoothstep(uLineW * pr * 0.6, uLineW * pr * 0.6 + pr, abs(r - 1.0));
         float rim2 = (1.0 - smoothstep(0.5 * pr, 1.5 * pr, abs(r - 0.78))) * 0.5;
         float surf = (1.0 - smoothstep(0.4 * pr, 1.4 * pr, abs(vLocal.y * 2.0 - level))) * inside;
-        vec3 c = mix(uLake, uWaterLine, 0.15);
+        vec3 c = mix(uLake, uWaterLine, 0.4); // (deeper than the lakes: it shows on the flood)
         float a = water * 0.9;
         vec3 col = c * a;
-        float la = clamp(rim * 0.9 + rim2 * vB.a + surf * 0.8 * step(0.01, vD.w), 0.0, 1.0);
+        float la = clamp(rim * 0.9 + rim2 * vC.y + surf * 0.8 * step(0.01, vD.w), 0.0, 1.0); // (vC.y: ready)
         vec3 lc = mix(uRing, uWaterLine, surf);
         col = mix(col, lc, la);
         a = max(a, la);

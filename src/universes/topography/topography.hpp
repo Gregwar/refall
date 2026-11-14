@@ -116,12 +116,11 @@ private:
     struct Spot { float x, y; int value; };
     std::vector<Spot> spots_;
 
-    // ---- Staging: continuous level 0 calm .. 2 peak.
-    int level_ = 1;
-    bool hasLevel_ = false;
+    // ---- Staging: continuous level 1 (the map's usual regime) .. 2 (a DROP section, the flood).
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
-    bool dropMode_ = false;     // this peak is a drop (the flood), not only a chorus
+    bool dropMode_ = false;     // in a DROP section (the flood)
+    float hit_ = 0.f;           // a drop hit, played on the frame it lands in a DROP section
     float dropAmt_ = 0.f;       // eased dropMode_
     float surge_ = 0.f;         // the drop's surge of water, settling over seconds
     float quadFlood_ = 0.f;
