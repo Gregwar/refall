@@ -252,6 +252,8 @@ private:
     // not drawn again, swap() waits for a key instead (the gamepads read 30 times a second).
     float stillT_ = 0;
     bool held_ = false;
+    long statFrames_ = 0; // ZEN_FRAME_STATS
+    double statUpd_ = 0, statCpu_ = 0, statGpu_ = 0, statCpuMax_ = 0, statGpuMax_ = 0;
     void hideIdleCursor(float dt) {
         double x, y;
         glfwGetCursorPos(win_, &x, &y);
@@ -1418,6 +1420,7 @@ int App::run() {
     float shotSettle = 0;
     while (!(win_ && glfwWindowShouldClose(win_)) && !quit_) {
         double now = fixedStep ? last + 1.0 / 60.0 : clock();
+        const auto frameStart = std::chrono::steady_clock::now();
         float dt = shotMode ? 1.f / 60.f : (float)std::min(0.1, now - last);
         last = now;
         runTime_ += dt;
@@ -1912,7 +1915,26 @@ int App::run() {
         if (fbw > 0 && fbh > 0) {
             std::vector<HudText> hud = buildHud(dt);
             updateBreak(dt, hud);
+            // ZEN_FRAME_STATS=1 (or slow): each frame's cost (the game's update, the drawing calls, the GPU), printed at the end
+            static const bool stats = std::getenv("ZEN_FRAME_STATS") != nullptr;
+            static GLuint statQ = 0;
+            if (stats && !statQ) glGenQueries(1, &statQ);
+            const auto r0 = std::chrono::steady_clock::now();
+            if (stats) glBeginQuery(GL_TIME_ELAPSED, statQ);
             if (!preroll_ && !held_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
+            if (stats) {
+                glEndQuery(GL_TIME_ELAPSED);
+                const double cpu = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - r0).count();
+                GLuint64 ns = 0;
+                glGetQueryObjectui64v(statQ, GL_QUERY_RESULT, &ns);
+                const double upd = std::chrono::duration<double, std::milli>(r0 - frameStart).count();
+                statFrames_++; statUpd_ += upd; statCpu_ += cpu; statGpu_ += ns / 1e6;
+                statCpuMax_ = std::max(statCpuMax_, cpu); statGpuMax_ = std::max(statGpuMax_, ns / 1e6);
+                static const bool slow = std::string(std::getenv("ZEN_FRAME_STATS")) == "slow"; // =slow: each frame over 10 ms
+                if (slow && std::max(cpu, ns / 1e6) > 10.0)
+                    std::printf("[stats] slow frame at %.2f s (song %.2f s): drawing calls %.1f ms, GPU %.1f ms (%s%s)\n", runTime_,
+                                songTime_, cpu, ns / 1e6, R_.label().c_str(), R_.changing() ? ", changing" : "");
+            }
             if (vv_) vv_->draw(fbw, fbh, viewerNow());
         }
         if (viewer_ && !opt_.viewShot.empty()) { // --shot: the viewer, a few seconds into the first song
@@ -2061,6 +2083,10 @@ int App::run() {
             (void)acc;
         }
     }
+    if (statFrames_ > 0)
+        std::printf("[stats] %s: %ld frames, update %.2f ms, drawing calls %.2f ms (max %.1f), GPU %.2f ms (max %.1f)\n",
+                    R_.label().c_str(), statFrames_, statUpd_ / statFrames_, statCpu_ / statFrames_, statCpuMax_,
+                    statGpu_ / statFrames_, statGpuMax_);
     if (mode_ == MODE_MENU) keepPlace(true);
     std::printf("[app] end of the run (quit %d, %.1f s)\n", (int)quit_, runTime_);
     audio_.shutdown();
