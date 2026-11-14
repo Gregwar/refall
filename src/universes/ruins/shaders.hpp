@@ -1153,7 +1153,7 @@ flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
 uniform float uBridge;
-uniform vec3 uBridgeInk, uLightC, uMossC;
+uniform vec3 uBridgeInk, uLightC;
 float sdBoxR(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
 // cracks: the distance to the borders of a few fragments, and the fragment's id
 vec3 voro(vec2 p) {
@@ -1170,21 +1170,67 @@ vec3 voro(vec2 p) {
         }
     return vec3(d2 - d1, best);
 }
+
+// ---- the glyph blocks
+const vec3 LD = vec3(-0.5145, 0.5613, 0.6489); // normalize(-0.55, 0.6, 0.7)
+float sdBox(vec2 p, vec2 b) { vec2 q = abs(p) - b; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0); }
+float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+// a relief glyph per type: the distance to its strokes' center lines
+float glyph(vec2 p, int t) {
+    float d = 9.0;
+    if (t == 0) { // three bars (the Maya numeral's)
+        for (int i = -1; i <= 1; i++) d = min(d, sdSeg(p, vec2(-0.19, float(i) * 0.12), vec2(0.19, float(i) * 0.12)));
+    } else if (t == 1) { // sun disc: a ring and its dot
+        d = min(abs(length(p) - 0.18), max(length(p) - 0.035, 0.0));
+    } else if (t == 2) { // the Kan cross
+        d = min(sdSeg(p, vec2(0.0, -0.2), vec2(0.0, 0.2)), sdSeg(p, vec2(-0.2, 0.0), vec2(0.2, 0.0)));
+        d = min(d, max(abs(p.x) + abs(p.y) - 0.06, 0.0));
+    } else if (t == 3) { // spiral
+        float r = length(p), a = atan(p.y, p.x) / 6.2832;
+        float k = 0.075;
+        float f = r / k - a;
+        d = abs(fract(f) - 0.5) * k;
+        d = max(d, r - 0.215);
+        d = min(d, max(r - 0.03, 0.0));
+    } else if (t == 4) { // the serpent: two waves of water
+        for (int i = -1; i <= 1; i += 2) {
+            float yc = float(i) * 0.08;
+            float x = clamp(p.x, -0.2, 0.2);
+            float dw = abs(p.y - yc - sin(x * 23.5) * 0.045) / sqrt(1.0 + pow(cos(x * 23.5) * 1.06, 2.0));
+            vec2 e = vec2(x, yc + sin(x * 23.5) * 0.045);
+            d = min(d, abs(p.x) <= 0.2 ? dw : length(p - e));
+        }
+    } else if (t == 5) { // a stepped pyramid
+        const vec2 P[13] = vec2[](vec2(-0.23, -0.17), vec2(-0.23, -0.06), vec2(-0.13, -0.06), vec2(-0.13, 0.05),
+            vec2(-0.05, 0.05), vec2(-0.05, 0.17), vec2(0.05, 0.17), vec2(0.05, 0.05), vec2(0.13, 0.05),
+            vec2(0.13, -0.06), vec2(0.23, -0.06), vec2(0.23, -0.17), vec2(-0.23, -0.17));
+        for (int i = 0; i < 12; i++) d = min(d, sdSeg(p, P[i], P[i + 1]));
+    } else { // the eye
+        float v = max(length(p - vec2(0.0, -0.16)) - 0.3, length(p - vec2(0.0, 0.16)) - 0.3);
+        d = min(abs(v), max(length(p) - 0.045, 0.0));
+    }
+    return d;
+}
+float glyphH(vec2 p, int t) {
+    float g = glyph(p, t) - 0.026;
+    float fr = abs(sdBox(p, vec2(0.35))) - 0.01;
+    return smoothstep(0.016, -0.008, min(g, fr)); // 1 in the carving
+}
 void main() {
     int mode = int(vC.x + 0.5);
     float erase = vC.y;
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     vec2 q = vLocal;
     vec2 sd = vA.xy * vec2(0.173, 0.291) + vA.w;
-    // the silhouette: a square drum, its corners worn (each its own)
+    // the silhouette: a square block, its corners worn (each its own)
     float wear = 0.06 + 0.05 * hash(sd * 7.0);
     float d = sdBoxR(q, vec2(0.465, 0.465), wear);
     d += 0.012 * (vnoise(q * 16.0 + sd * 31.0) - 0.5);
     vec3 t = vB.rgb;
     if (mode == 1) {
         float ring = 1.0 - smoothstep(0.02, 0.02 + aa * 1.5, abs(d + 0.035));
-        float flutes = (1.0 - smoothstep(0.0, aa * 1.5, abs(fract((q.x + 0.465) / 0.93 * 5.0) - 0.5) - 0.47)) * step(d, -0.06) * 0.25;
-        float a = (ring * 0.8 + flutes + step(d, 0.0) * 0.07) * vB.a;
+        float carving = glyphH(q, int(vC.w + 0.5)) * 0.3;
+        float a = (ring * 0.8 + carving + step(d, 0.0) * 0.07) * vB.a;
         vec3 c = mix(mix(t, vec3(1.0), 0.35), uBridgeInk, uBridge);
         frag = vec4(c * a, a);
         return;
@@ -1202,37 +1248,26 @@ void main() {
     float inside = 1.0 - smoothstep(-aa, aa, d);
     float ds = sdBoxR(q - vec2(0.04, -0.055), vec2(0.465), wear);
     float shadow = (1.0 - smoothstep(-0.02, 0.09, ds)) * (1.0 - inside) * 0.55 * (1.0 - smoothstep(0.0, 0.3, erase));
-    // the drum's roundness (a cylinder across x), the flutes, the carved band, the joints
-    float x = clamp(q.x / 0.5, -1.0, 1.0);
-    float fl = (q.x + 0.465) / 0.93 * 5.0;
-    float ff = fract(fl) - 0.5;
-    float inFlute = step(-0.33, q.y) * step(q.y, 0.24);
-    vec3 n = vec3(x * 0.8, 0.0, sqrt(max(1.0 - x * x * 0.64, 0.0)));
-    n.x += -ff * 1.1 * inFlute * (1.0 - smoothstep(0.38, 0.5, abs(ff)));
-    float band = smoothstep(0.035, 0.0, abs(q.y - 0.32) - 0.035);
-    float groove = smoothstep(0.012, 0.0, abs(q.y - 0.27) - 0.008) + smoothstep(0.012, 0.0, abs(q.y - 0.37) - 0.008);
-    n.y += band * sign(q.y - 0.32) * 0.6 + smoothstep(0.08, 0.0, abs(q.y + 0.36)) * -0.3;
-    // the stone's grain and its pits
-    float h = fbm(q * 5.0 + sd * 17.0);
-    n.xy += (vec2(fbm(q * 9.0 + sd * 11.0 + 0.03), fbm(q * 9.0 + sd * 11.0 + 7.0)) - 0.5) * 0.35;
+    // a pale block of the variant's stone, its worn edge, a frame and one glyph per type cut into its face, a deeper
+    // pigment in the cuts
+    int ty = int(vC.w + 0.5);
+    vec2 kq = abs(q) - vec2(0.3);
+    vec2 out_ = sign(q) * ((kq.x > 0.0 && kq.y > 0.0) ? normalize(kq) : (kq.x > kq.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0)));
+    float e = 0.006;
+    float h0 = glyphH(q, ty);
+    float hx = glyphH(q + vec2(e, 0.0), ty), hy = glyphH(q + vec2(0.0, e), ty);
+    vec3 n = normalize(vec3((hx - h0) / e * 0.025, (hy - h0) / e * 0.025, 1.0));
+    n = normalize(n + vec3(out_ * smoothstep(-0.07, 0.0, d) * 0.9, 0.0));
+    n.xy += (vec2(fbm(q * 9.0 + sd * 11.0 + 0.03), fbm(q * 9.0 + sd * 11.0 + 7.0)) - 0.5) * 0.25;
     n = normalize(n);
-    vec3 L = normalize(vec3(-0.55, 0.6, 0.7));
-    float lit = max(dot(n, L), 0.0);
-    vec3 c = t * mix(0.86, 1.1, smoothstep(0.3, 0.75, h));
+    float lit = max(dot(n, LD), 0.0);
+    float h = fbm(q * 5.0 + sd * 17.0);
+    vec3 c = t * mix(0.88, 1.08, smoothstep(0.3, 0.75, h));
+    c = mix(c, t * t * 1.25, h0 * 0.75);
+    c *= (0.48 + 0.66 * lit) * (1.0 - 0.25 * h0);
     float pit = step(0.9, hash(floor((q + sd) * 30.0))) * smoothstep(0.4, 0.15, length(fract((q + sd) * 30.0) - 0.5));
-    c *= 1.0 - 0.3 * pit;
-    c *= 0.5 + 0.62 * lit + 0.1 * n.z;
-    c *= 1.0 - 0.35 * groove;
-    // the fluting's arrises catch the light, the flute bottoms hold a little shade
-    c *= 1.0 - 0.12 * inFlute * smoothstep(0.25, 0.48, abs(ff));
-    // moss low in the flutes, on some drums
-    float mossy = step(0.55, hash(sd * 3.1)) * smoothstep(0.62, 0.78, fbm(q * 4.5 + sd * 9.0) + smoothstep(0.1, -0.5, q.y) * 0.35);
-    mossy *= smoothstep(-0.05, -0.45, q.y);
-    c = mix(c, uMossC * (0.7 + 0.5 * lit), mossy * 0.75);
-    // a crisp edge: a thin light top-left bevel, a darker rim all round
-    float edgeIn = 1.0 - smoothstep(0.0, 0.05, -d);
-    c = mix(c, mix(t, vec3(1.0), 0.4), edgeIn * sat(dot(normalize(q + 1e-5), vec2(-0.6, 0.8))) * 0.4);
-    c = mix(c, t * 0.45, 1.0 - smoothstep(0.0, 0.018 + aa, -d));
+    c *= 1.0 - 0.25 * pit;
+    c = mix(c, c * 0.5, 1.0 - smoothstep(0.0, 0.014 + aa, -d));
     c *= 1.0 - 0.6 * crack;
     c = mix(c, c * 0.45, smoothstep(0.2, 1.0, erase));
     float dull = vC.z;

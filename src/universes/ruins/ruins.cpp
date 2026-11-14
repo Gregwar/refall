@@ -5,7 +5,8 @@
 // up into the walls, missing stones re-form out of golden dust, towers regain their tiers, edges sharpen, carvings
 // come back crisp, lichen and streaks fade; by scene completion (50 paced lines) the temple stands in its prime,
 // painted, its braziers lit, and holds. The camera drifts slowly around it, keeping it beside the well. The pieces
-// are carved stone column drums, one per cell; a cleared row crumbles behind the well and sends dust to the next
+// are pale stone blocks, one per cell, each with a frame and a relief glyph cut in, a deeper pigment in the cuts (I
+// three bars, O a sun disc, T a cross, S a spiral, Z two waves, J a stepped pyramid, L an eye); a cleared row crumbles behind the well and sends dust to the next
 // repairs. The drop turns the sun to golden hour for the whole drop section (and the dust glows).
 //
 // The world is one ray-marched pass at a reduced resolution (shaders.hpp): the temple (a Maya pyramid, a Khmer
@@ -54,7 +55,7 @@ GLuint compile(const char* vs, const char* fs, const char* name) {
 vec2 V(float x, float y) { return vec2{x, y}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// A variant (sRGB): its temple (0 Maya, 1 Khmer, 2 Greek), its stone, its jungle, its light, its seven drums
+// A variant (sRGB): its temple (0 Maya, 1 Khmer, 2 Greek), its stone, its jungle, its light, its seven blocks
 // (sandstone, ochre, jade, slate blue, terracotta, white marble, rose granite, each tuned to the place).
 struct VariantDef {
     const char* name;
@@ -100,7 +101,7 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < (int)(sizeof(Palette) / sizeof(vec3)); i++) pa[i] = lerp(pa[i], pb[i], k);
 }
 
-constexpr float CLEAR_T = 0.5f; // a cleared drum crumbles away in this long (real time)
+constexpr float CLEAR_T = 0.5f; // a cleared block crumbles away in this long (real time)
 
 // Test hooks: ZEN_RUINS_LINES=N adds N lines to the rewind, ZEN_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
@@ -538,13 +539,14 @@ void RuinsUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Pieces
 // =====================================================================================================
 
-void RuinsUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed) {
+void RuinsUniverse::cell(float x, float y, float half, int type, float alpha, int mode, float erase, float seed) {
+    type = std::clamp(type, 0, 6);
+    const vec3& tint = pal_.piece[type];
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, seed}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, 0.f}});
+    cells_.push_back({{x, y, half, seed}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, (float)type}});
 }
 
 void RuinsUniverse::buildBoard(const Game& g) {
-    auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
     auto seedOf = [](int x, int y) { return (float)((x * 7 + y * 13) % 17) / 17.f; };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
@@ -552,17 +554,17 @@ void RuinsUniverse::buildBoard(const Game& g) {
             if (c.type < 0) continue;
             const float off = g.rowOffset(y);
             const vec3 p = layout::cellPos((float)x, y - off);
-            cell(p.x, p.y, 0.5f, tintOf(c.type), 1.f, 0, 0.f, seedOf(x, y));
+            cell(p.x, p.y, 0.5f, c.type, 1.f, 0, 0.f, seedOf(x, y));
         }
-    // game over: the drums grey and darken from the top down, like stones long fallen
+    // game over: the blocks grey and darken from the top down, like stones long fallen
     if (overT_ >= 0.f)
         for (const Over& o : overCells_) {
             const float rowFrac = (o.row - Game::HIDDEN) / (float)(Game::H - Game::HIDDEN);
             const float k = smoothstepf(rowFrac * 0.6f, rowFrac * 0.6f + 0.3f, over_);
-            cell(o.x, o.y, 0.5f, tintOf(o.type), 1.f - 0.4f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, 0.f);
+            cell(o.x, o.y, 0.5f, o.type, 1.f - 0.4f * smoothstepf(0.7f, 1.f, over_), 0, 0.f, 0.f);
             cells_.back().c[2] = k;
         }
-    for (const Crumble& c : crumbling_) cell(c.x, c.y, 0.5f, tintOf(c.type), 1.f, 0, std::max(0.001f, saturate(c.t / CLEAR_T)), c.seed);
+    for (const Crumble& c : crumbling_) cell(c.x, c.y, 0.5f, c.type, 1.f, 0, std::max(0.001f, saturate(c.t / CLEAR_T)), c.seed);
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -575,14 +577,14 @@ void RuinsUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.6f, 1, 0.f, 0.f);
+                cell(w.x, w.y, 0.5f, p.type, 0.6f, 1, 0.f, 0.f);
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, seedOf(c[0], c[1]));
+            cell(w.x, w.y, 0.5f, p.type, 1.f, 0, 0.f, seedOf(c[0], c[1]));
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -597,7 +599,7 @@ void RuinsUniverse::buildBoard(const Game& g) {
         }
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, seedOf(c[0], c[1]));
+            cell(px, py, 0.5f * sc, type, alpha, 0, 0.f, seedOf(c[0], c[1]));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
@@ -898,7 +900,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         swirls_.erase(std::remove_if(swirls_.begin(), swirls_.end(), [](const Swirl& s) { return s.age >= s.life; }), swirls_.end());
     }
 
-    // ---- Dust, chips, crumbling drums (at the real speed).
+    // ---- Dust, chips, crumbling blocks (at the real speed).
     auto stepBits = [&](std::vector<Bit>& v, float grav, float drag) {
         for (Bit& b : v) {
             b.age += dt;
@@ -1075,7 +1077,6 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progCell_);
         setMat(progCell_, "uVP", vp_);
         set3f(progCell_, "uLightC", vec3(1.f, 0.96f, 0.88f));
-        set3f(progCell_, "uMossC", lerp(pal_.moss, pal_.moss2, 0.3f) * 1.3f);
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(cellVao_);
@@ -1119,7 +1120,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_ruins() {
     static const UniverseEntry e{
-        "RUINS", "time runs backwards over the song: the jungle recedes from overgrown ruins that repair themselves, fallen drums flying back onto their columns and stones re-forming from dust, until the temple stands in its prime; the blocks are carved column drums, and the drop turns the sun to golden hour",
+        "RUINS", "time runs backwards over the song: the jungle recedes from overgrown ruins that repair themselves, fallen drums flying back onto their columns and stones re-forming from dust, until the temple stands in its prime; the blocks are stone carved with glyphs, and the drop turns the sun to golden hour",
         [] { return std::unique_ptr<Universe>(new RuinsUniverse()); },
         // Fits most songs; the calm, contemplative ones a little better.
         [](const SongLook& l) { return 0.8f + 0.25f * (1.f - l.density) + 0.1f * (1.f - l.dynamics); },

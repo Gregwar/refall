@@ -1,7 +1,6 @@
 #pragma once
-// RUINS: time running backwards from a jungle to a temple in its prime, ray marched in 3D behind the well; the
-// pieces are carved stone column drums
-// (see ruins.cpp).
+// RUINS: time running backwards from overgrown ruins to a temple in its prime, ray marched in 3D behind the well;
+// the pieces are stone blocks carved with a glyph each (see ruins.cpp).
 #include <string>
 #include <vector>
 
@@ -71,10 +70,10 @@ private:
     vec2 viewH_{10, 10}, viewC_{0, 0};
     float pxPerUnit_ = 50.f;
 
-    // ---- Pieces: one carved drum per cell.
-    struct CellInst { float a[4], b[4], c[4]; }; // x y half seed | tint alpha | mode erase dull -
+    // ---- Pieces: one carved glyph block per cell.
+    struct CellInst { float a[4], b[4], c[4]; }; // x y half seed | tint alpha | mode erase dull type
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float seed);
+    void cell(float x, float y, float half, int type, float alpha, int mode, float erase, float seed);
     void buildBoard(const Game& g);
     struct Crumble { float x, y; int type; float t, seed; };
     std::vector<Crumble> crumbling_;
