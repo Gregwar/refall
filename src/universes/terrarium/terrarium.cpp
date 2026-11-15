@@ -13,7 +13,8 @@
 // fresnel reflection of the room, condensation droplets that act as small lenses, trickles running down), and the
 // world inside (the soil seen in section through the glass, the slots' plants as signed distance fields, the beetle,
 // the sprouts; each ray only evaluates the slots whose bounds it comes near). The pieces are pebbles, one clean
-// rounded cell each.
+// rounded cell each. Before a song the misted jar clears (its mist settling, the condensation drying off the glass)
+// as the light comes up; after it the jar mists over again and the light goes down.
 #include "universes/terrarium/terrarium.hpp"
 
 #include <algorithm>
@@ -1184,7 +1185,9 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
     rain_ = approach(rain_, isDrop ? 1.f : 0.f, isDrop ? 0.7f : 0.18f, dt);
     allLit_ = approach(allLit_, isDrop ? 1.f : 0.f, isDrop ? 1.5f : 0.12f, dt);
     swell_ = approach(swell_, 0.f, 0.5f, dt);
-    // the calm: mist in the jar, condensation on its glass (slowly)
+    // the calm: mist in the jar, condensation on its glass (slowly); the setup clears a misted jar, the teardown
+    // mists it over again
+    const float breath = std::max(1.f - smoothstepf(0.1f, 0.85f, f.setup), smoothstepf(0.f, 0.9f, f.teardown));
     {
         const float fogT = lerpf(lerpf(1.f, 0.35f, wm), 0.12f, wp);
         const float condT = lerpf(lerpf(1.f, 0.5f, wm), 0.28f, wp);
@@ -1295,6 +1298,15 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         disc *= 1.f - r;
         // a peak: a little brighter, steady
         sunC = sunC * (1.f + 0.06f * wp);
+        // the setup: the light comes up, outside and in the room; the teardown: it goes down
+        const float lamp = lerpf(0.35f, 1.f, smoothstepf(0.f, 0.8f, f.setup) * (1.f - smoothstepf(0.2f, 1.f, f.teardown)));
+        sunC = sunC * lamp;
+        glowC = glowC * lamp;
+        ambS = ambS * lamp;
+        ambG = ambG * lamp;
+        fill = fill * lamp;
+        skyZ = skyZ * (0.3f + 0.7f * lamp);
+        skyH = skyH * (0.3f + 0.7f * lamp);
         // slow motion: a cool hush
         sunC = lerp(sunC, sunC * vec3(0.7f, 0.8f, 1.1f), slow_);
     }
@@ -1498,8 +1510,8 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uMoon", moon);
         set1f(P, "uStars", stars * (1.f - rain_));
         set1f(P, "uRain", rain_);
-        set1f(P, "uFog", fog_ * (0.7f + 0.3f * (1.f - wp)));
-        set1f(P, "uCond", cond_);
+        set1f(P, "uFog", fog_ * (0.7f + 0.3f * (1.f - wp)) + 2.f * breath);
+        set1f(P, "uCond", std::max(cond_, breath));
         set1f(P, "uNight", night);
         set1f(P, "uFlyAmt", flyAmt);
         set3f(P, "uSoil", pal_.soil); set3f(P, "uSoil2", pal_.soil2); set3f(P, "uGravel", pal_.gravel);
