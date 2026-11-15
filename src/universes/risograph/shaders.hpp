@@ -307,10 +307,15 @@ uniform float uGrain;
 uniform float uBridge;
 uniform vec3 uBridgeColor, uBridgeInk;
 uniform float uDim, uFade;
+uniform vec3 uPress;                 // the setup / teardown: the sheet's feed (uv, up), the print's front (from the
+                                     // top, 0..1.2), the background's ink running dry (0..1)
 void main() {
-    vec2 bp = uView.xy + (vUv * 2.0 - 1.0) * uView.zw; // board units
-    vec4 fg = texture(uInk, vUv);
-    vec4 fp = texture(uPiece, vUv);
+    // the sheet fed in or out of the press: the black of the machine beyond it
+    vec2 uv = vUv - vec2(0.0, uPress.x);
+    if (uv.y < 0.0 || uv.y > 1.0) { frag = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    vec2 bp = uView.xy + (uv * 2.0 - 1.0) * uView.zw; // board units
+    vec4 fg = texture(uInk, uv);
+    vec4 fp = texture(uPiece, uv);
     float a = fg.r, b = fg.g, c = fg.b, s = max(fg.a, fp.a);
     float pa = fp.r, pb = fp.g;
     // the riso grain: the ink laid unevenly (a soft mottle, a fine tooth, the odd missing speck), fixed in the paper
@@ -324,13 +329,18 @@ void main() {
     a *= ga; b *= gb; c *= gc; pa *= ga; pb *= gb;
     // the background's gradients, slightly out of register, with a fine grain (a pixel-scale tooth, nearly
     // invisible: the gradient stays smooth at viewing size)
-    float ba = texture(uBg, vUv - uOffA).r;
-    float bb = texture(uBg, vUv - uOffB).g;
-    float bc = texture(uBg, vUv - uOffC).b;
-    float bd = texture(uBg, vUv + uOffB).a;
+    float ba = texture(uBg, uv - uOffA).r;
+    float bb = texture(uBg, uv - uOffB).g;
+    float bc = texture(uBg, uv - uOffC).b;
+    float bd = texture(uBg, uv + uOffB).a;
     vec2 pp = gl_FragCoord.xy;
     float fine = (hash12(pp) - 0.5) * 0.5 + (vnoise(bp * 9.0) - 0.5) * 0.5;
     float bg = 1.0 + 0.16 * fine;
+    // the press: the drum lays the background's ink from the top down (a ragged front), and runs it dry in streaks
+    float rag = vnoise(vec2(bp.x * 1.7, 3.0)) * 0.6 + vnoise(vec2(bp.x * 9.0, 5.0)) * 0.4;
+    float streak = vnoise(vec2(bp.x * 2.3, bp.y * 0.12) + 21.0) * 0.7 + vnoise(vec2(bp.x * 11.0, 1.0)) * 0.3;
+    bg *= 1.0 - smoothstep(uPress.y - 0.12, uPress.y, 1.0 - uv.y + 0.05 * rag);
+    bg *= 1.0 - smoothstep(streak * 0.6, streak * 0.6 + 0.4, uPress.z);
     ba = clamp(ba * bg, 0.0, 1.0); bb = clamp(bb * bg, 0.0, 1.0); bc = clamp(bc * bg, 0.0, 1.0); bd = clamp(bd * bg, 0.0, 1.0);
     a = 1.0 - (1.0 - a) * (1.0 - ba);
     b = 1.0 - (1.0 - b) * (1.0 - bb);
