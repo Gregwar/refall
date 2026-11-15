@@ -165,7 +165,7 @@ flat in vec4 vC;
 flat in vec4 vD;
 out vec4 frag;
 uniform float uLineW, uHatchW, uFillA, uSpacing, uPxPerUnit, uHatchShade;
-uniform vec3 uPaper, uRing, uAccent;
+uniform vec3 uPaper;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
 
@@ -218,28 +218,10 @@ float hatch(int style, vec2 w) {
 }
 
 void main() {
-    int kind = int(vC.x + 0.5);
     float pxL = length(fwidth(vLocal)) * 0.7071; // cell units per pixel
     float aa = max(pxL, 1e-4);
     vec3 tint = mix(vB.rgb, uBridgeInk, uBridge);
     vec3 lineC = mix(vD.rgb, uBridgeInk, uBridge);
-    if (kind == 3) {
-        // the gauge: a drafted circle, its fill hatched from the bottom up as it charges
-        float r = length(vLocal) * 2.0;
-        float pr = pxL * 2.0;
-        float level = vD.w * 2.0 - 1.0;
-        float rim = 1.0 - smoothstep(uLineW * pr * 0.5, uLineW * pr * 0.5 + pr, abs(r - 1.0));
-        float inside = 1.0 - smoothstep(0.92 - pr, 0.92, r);
-        float filled = inside * smoothstep(level + pr, level - pr, vLocal.y * 2.0);
-        float h = lines((vWorld.x + vWorld.y) * 0.7071, uSpacing * 0.9, uHatchW) * filled;
-        float cm = (1.0 - smoothstep(0.0, pr, abs(vLocal.x * 2.0))) * step(abs(vLocal.y * 2.0), 1.18)
-                 + (1.0 - smoothstep(0.0, pr, abs(vLocal.y * 2.0))) * step(abs(vLocal.x * 2.0), 1.18);
-        float on = vB.a;
-        float a = clamp(rim * 0.9 + h * (0.5 + 0.5 * on) + min(cm, 1.0) * 0.35, 0.0, 1.0);
-        vec3 c = mix(uRing, uAccent, on * filled * 0.6);
-        frag = vec4(c * a, a) * vC.z;
-        return;
-    }
     int mk = int(vA.w + 0.5);
     // each cell paints only its own square toward its neighbors of the same part (no overlap: no seams)
     {

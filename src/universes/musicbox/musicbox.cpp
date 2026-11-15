@@ -833,7 +833,7 @@ void MusicBoxUniverse::flushShapes() {
     shapes_.clear();
 }
 
-void MusicBoxUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+void MusicBoxUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
     const vec3 ink = pal_.ink, halo = ugl::toSrgb(pal_.veil) * 0.6f;
     const vec3 accent = pal_.accent;
@@ -845,33 +845,6 @@ void MusicBoxUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, c
             const float qd[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-    // the bonus gauge: a ring of SLOTS pins, set one by one in brass as it charges (none in a break)
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        auto disc = [&](float x, float y, float rr, const vec3& col, float al) {
-            const int n = 12;
-            for (int i = 0; i < n; i++) {
-                const float a0 = TAU * i / n, a1 = TAU * (i + 1) / n;
-                const float v[3][6] = {{x, y, col.x, col.y, col.z, al},
-                                       {x + std::cos(a0) * rr, y + std::sin(a0) * rr, col.x, col.y, col.z, al},
-                                       {x + std::cos(a1) * rr, y + std::sin(a1) * rr, col.x, col.y, col.z, al}};
-                for (auto& q : v) shapes_.insert(shapes_.end(), q, q + 6);
-            }
-        };
-        const int N = SLOTS;
-        const float rd = std::max(1.6f, 3.2f * s);
-        for (int i = 0; i < N; i++) {
-            const float a = TAU * i / N;
-            const float x = c.x + std::sin(a) * r, y = c.y - std::cos(a) * r;
-            const bool on = (i + 0.5f) / N <= fill;
-            if (on) disc(x, y, rd * 1.25f, accent, 0.95f * dimk);
-            else disc(x, y, rd * 0.6f, ink, (g.bonusReady() ? 0.6f : 0.3f) * dimk);
         }
         flushShapes();
     }

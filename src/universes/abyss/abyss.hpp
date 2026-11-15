@@ -129,7 +129,6 @@ private:
     float slow_ = 0.f, slowT_ = 0.f;
     float lureX_ = -15.f, lureY_ = -2.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f, readyT_ = 9.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the sea alone, no well, no columns, no jelly blocks
     Bridge bridge_;

@@ -669,7 +669,7 @@ void FluoUniverse::onEvent(const GameEvent& ev, const Game&) {
 }
 
 // =====================================================================================================
-// The play: pieces, ghost, previews, gauge, specks
+// The play: pieces, ghost, previews, specks
 // =====================================================================================================
 
 void FluoUniverse::cellInst(vec2 pos, float scale, int type, int mask, float alpha, float flash, bool ghost) {
@@ -748,16 +748,6 @@ void FluoUniverse::buildPlay(const Game& g, float) {
         play_.push_back({{-5.12f, 0.f, 0.05f, 10.1f}, {c.x, c.y, c.z, a}, {4.f, 0.f, 0.f, 0.f}, {0.012f, 10.05f, 0.f, 0.f}});
         play_.push_back({{5.12f, 0.f, 0.05f, 10.1f}, {c.x, c.y, c.z, a}, {4.f, 0.f, 0.f, 0.f}, {0.012f, 10.05f, 0.f, 0.f}});
         play_.push_back({{0.f, -10.1f, 5.2f, 0.05f}, {c.x, c.y, c.z, a * 1.4f}, {4.f, 0.f, 0.f, 0.f}, {5.13f, 0.014f, 0.f, 0.f}});
-    }
-    // the bonus gauge: a faint ring filling in the accent, a disc of it once ready
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        const float fill = active ? saturate(g.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const vec3 c = accent_;
-        play_.push_back({{gc.x, gc.y, R + 0.2f, R + 0.2f}, {c.x, c.y, c.z, 1.f}, {2.f, 0.f, 0.f, 0.f},
-                         {R, 0.045f, ready ? 1.f : fill, ready ? 1.f : 0.f}});
     }
 }
 
@@ -944,7 +934,6 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
             s.p.y += s.v.y * dt;
         }
         specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& s) { return s.t >= s.life; }), specks_.end());
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
         updatePaint(dt, wdt);
     }
 
@@ -1072,7 +1061,7 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The play, over the wall.
     const float mul = (1.f - 0.55f * dimT_) * saturate(f.fade);
     play_.clear();
-    if (!f.bare) buildPlay(game, time_); // a break: no stack, previews, well lines or gauge
+    if (!f.bare) buildPlay(game, time_); // a break: no stack, previews or well lines
     buildFlight();
     glEnable(GL_BLEND);
     glBlendEquation(GL_FUNC_ADD);

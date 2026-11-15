@@ -442,7 +442,7 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- tiles: the stack, the piece, previews, gauge
+// ---------------------------------------------------------------- tiles: the stack, the piece, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, age, angle, fog. a3: extra.
 inline const char* TILE_VS = R"(#version 330 core
@@ -473,8 +473,8 @@ out vec4 frag;
 uniform sampler2D uNoise;
 uniform float uPx;
 uniform vec2 uSunScr;
-uniform vec3 uSkyTint, uSunTint, uShadow, uMist, uRim, uGaugeSun, uGaugeMoon, uGaugeTrack;
-uniform float uNight, uBridge, uTime;
+uniform vec3 uSkyTint, uSunTint, uShadow, uMist, uRim;
+uniform float uNight, uBridge;
 uniform vec3 uBridgeInk;
 
 float tileSd(vec2 p, float s) { return sdRound(p, vec2(0.43 * s), 0.12 * s); }
@@ -550,43 +550,6 @@ void main() {
         col += vec3(1.0) * edge * 0.8;
         float a = cov * max(keep, edge * 0.8) * alpha * (1.0 - uBridge);
         frag = vec4(col * a, a);
-        return;
-    }
-    if (kind == 4) {
-        // the bonus gauge: a halo around the sun, filled clockwise; a small sun when ready, the moon when active
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.5;
-        float a01 = fract(atan(q.x, q.y) / 6.2831853 + 1.0);
-        float lvl = v3.x, ready = v3.y, isOn = v3.z;
-        float ring = exp(-pow((r - 0.8) / (0.055 + aa), 2.0));
-        float fill = 1.0 - smoothstep(lvl - 0.004, lvl + 0.004, a01);
-        if (lvl >= 0.999) fill = 1.0;
-        float back = (1.0 - smoothstep(0.98 - aa, 0.98 + aa, r));
-        vec3 col = uMist * back * 0.18;
-        float a = back * 0.22;
-        col += uGaugeTrack * ring * 0.5;
-        a = max(a, ring * 0.5);
-        float pulse = 0.75 + 0.25 * sin(uTime * 4.0);
-        vec3 fc = uGaugeSun * 1.3;
-        col += fc * ring * fill * (1.0 + ready * pulse);
-        a = max(a, ring * fill);
-        float disc = 1.0 - smoothstep(0.42 - aa, 0.42 + aa, r);
-        if (isOn > 0.5) {
-            // the moon: a crescent
-            float sh = 1.0 - smoothstep(0.42 - aa, 0.42 + aa, length(q - vec2(0.16, 0.1)));
-            float m = disc * (1.0 - sh * 0.85);
-            col = mix(col, uGaugeMoon * 1.4, m);
-            a = max(a, m);
-        } else if (ready > 0.5) {
-            float rays = pow(max(cos(atan(q.y, q.x) * 8.0 + uTime * 0.8), 0.0), 6.0) * smoothstep(0.95, 0.42, r) * (1.0 - disc);
-            col = mix(col, uGaugeSun * (1.6 + 0.6 * pulse), disc);
-            col += uGaugeSun * rays * 0.9 * pulse;
-            a = max(a, max(disc, rays * 0.8));
-        }
-        col = mix(col, uBridgeInk * a, uBridge);
-        frag = vec4(col * alpha, a * alpha);
         return;
     }
     discard;

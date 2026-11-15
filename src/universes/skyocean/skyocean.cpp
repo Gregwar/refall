@@ -183,7 +183,7 @@ bool SkyOceanUniverse::init(int width, int height) {
         }
     };
     instanced(bodyVao_, bodyVbo_, 4, sizeof(BodyInst));
-    instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
+    instanced(spriteVao_, spriteVbo_, 2, sizeof(SpriteInst));
     instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
@@ -665,9 +665,9 @@ void SkyOceanUniverse::body(int kind, vec2 p, float size, float angle, float fli
                        {e.x + m, e.y + m, flip, glow}});
 }
 
-void SkyOceanUniverse::sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param, float param2) {
+void SkyOceanUniverse::sprite(vec2 p, float size, const vec3& col, float alpha, int mode) {
     if (alpha <= 0.004f || size <= 0.f) return;
-    sprites_.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}, {param, param2, 0.f, 0.f}});
+    sprites_.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}});
 }
 
 // =====================================================================================================
@@ -1008,7 +1008,6 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     }
     for (auto& fd : fading_) fd.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The moon.
     const float sky = top - horizon_;
@@ -1095,7 +1094,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     std::sort(lights.begin(), lights.end(), [](const Light& a, const Light& b) { return a.k > b.k; });
     if ((int)lights.size() > MAX_LIGHTS) lights.resize(MAX_LIGHTS);
 
-    // ---- Motes into sprites (back: behind the veil; front: the clears' motes and the gauge).
+    // ---- Motes into sprites (back: behind the veil; front: the clears' motes).
     std::vector<SpriteInst> front;
     for (const Mote& m : motes_) {
         if (m.age < 0.f) continue;
@@ -1110,15 +1109,6 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
             sprite(m.p, size, m.col, a * world, mode);
             if (sprites_.size() > n) { front.push_back(sprites_.back()); sprites_.pop_back(); }
         } else sprite(m.p, size, m.col, a * creatureA * (0.8f + 0.3f * wp + 0.3f * life), mode);
-    }
-    if (!f.bare) {
-        // the bonus gauge: a faint ring of moonlight, the charge a bright arc
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const bool on = game.bonusReady() || game.bonusActive();
-        const size_t n = sprites_.size();
-        sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.life[2] : pal_.accent, 1.f, 1, fill, on ? 1.f : 0.f);
-        if (sprites_.size() > n) { front.push_back(sprites_.back()); sprites_.pop_back(); }
     }
 
     cells_.clear();
@@ -1200,7 +1190,6 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
         glBlendFunc(GL_ONE, GL_ONE);
         glUseProgram(progSprite_);
         setMat(progSprite_, "uVP", vp_);
-        set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
         glBindVertexArray(spriteVao_);
         glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
         glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(SpriteInst), v.data(), GL_STREAM_DRAW);

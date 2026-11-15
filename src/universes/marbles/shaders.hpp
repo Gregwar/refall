@@ -440,11 +440,11 @@ void main() {
     float r = length(vQ);
     float a;
     if (kind == 0) a = exp(-r * r * 5.0) * smoothstep(1.0, 0.6, r);
-    else if (kind == 1) {
+    else {
         // a four-pointed glint: two thin rays and a hot point
         float rays = exp(-abs(vQ.y) * 40.0) * pow(max(1.0 - abs(vQ.x), 0.0), 2.0) + exp(-abs(vQ.x) * 40.0) * pow(max(1.0 - abs(vQ.y), 0.0), 2.0);
         a = rays * 0.8 + exp(-r * r * 60.0);
-    } else a = smoothstep(1.0, 0.0, r);
+    }
     frag = vec4(v1.rgb * a * v1.a, 1.0);
 }
 )";

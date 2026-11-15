@@ -992,9 +992,9 @@ void RecycleUniverse::buildScene(const Game& g, bool bare) {
             if (same(x + dx[i], y + dy[i])) m |= 1 << i;
         return m;
     };
-    auto flat = [&](float x, float y, float half, int mask, const vec3& col, float alpha, int kind, float fill = 0.f) {
+    auto flat = [&](float x, float y, float half, int mask, const vec3& col, float alpha, int kind) {
         if (alpha <= 0.003f) return;
-        flat_.push_back({{x, y, half, 0.f}, {col.x, col.y, col.z, alpha}, {(float)kind, 0.f, 0.f, (float)mask}, {0.f, 0.f, fill, 0.f}});
+        flat_.push_back({{x, y, half, 0.f}, {col.x, col.y, col.z, alpha}, {(float)kind, 0.f, 0.f, (float)mask}, {0.f, 0.f, 0.f, 0.f}});
     };
     // ---- The heaps.
     for (Pile& p : piles_)
@@ -1098,20 +1098,6 @@ void RecycleUniverse::buildScene(const Game& g, bool bare) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), i == 0 ? 0.95f : 0.8f);
-    }
-    // ---- The bonus gauge: twelve pips, one per line.
-    if (!bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int n = Game::BONUS_LINES;
-        const bool ready = g.bonusReady() || g.bonusActive();
-        for (int i = 0; i < n; i++) {
-            const float a = PI * 0.5f - TAU * i / n;
-            const float x = gc.x + std::cos(a) * layout::GAUGE_R * 0.82f, y = gc.y + std::sin(a) * layout::GAUGE_R * 0.82f;
-            const float f = saturate(fill * n - i);
-            const vec3 col = ready ? pal_.accent : pal_.ink;
-            flat(x, y, 0.13f, 0, col, (0.35f + 0.6f * f) * bridgeA, 4, f);
-        }
     }
 }
 
@@ -1323,7 +1309,6 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
         fl.a = -1;
     }
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& x) { return x.a < 0; }), flights_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Geometry.
     shadows_.clear();
@@ -1377,7 +1362,7 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progTable_, "uBridgeCol", bridge_.color);
     ugl::drawFullscreen();
 
-    // ---- Things on the table: the previews, the ghost, the gauge; then the cubes.
+    // ---- Things on the table: the previews, the ghost; then the cubes.
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(progCube_);
