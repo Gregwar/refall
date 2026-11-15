@@ -30,6 +30,8 @@
 // same glass (lighting the cubes around it, pooling on the floor, dispersed in a drop; at the real speed, even in
 // slow motion); a quad throws the light into a full spectrum for a few seconds; slow motion is
 // moonlight (cold beams, the haze and dust slowed); game over turns the stack to light, row by row from the top.
+// Before a song the beams open one by one out of the dark, each a thin line of light widening to its full width
+// like a stage light's iris; after it they close one by one the same way, the first beam last.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like FLUO).
 #include "universes/prism/prism.hpp"
@@ -1090,10 +1092,17 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         dth = drive * lerpf(th0, th1, e);
         dx = drive * lerpf(x0, x1, e);
     };
+    // the setup opens the beams one by one (a thin line widening), the teardown closes them, the first one last
+    auto iris = [&](int bi) {
+        return smoothstepf(0.05f + 0.15f * bi, 0.55f + 0.15f * bi, f.setup) *
+               (1.f - smoothstepf(0.3f - 0.15f * bi, 0.85f - 0.15f * bi, f.teardown));
+    };
     for (int bi = 0; bi < 3; bi++) {
         const BeamDef& B = BEAMS[bi];
-        const float on = beams_[bi].on * worldOn * (1.f + 0.25f * swell + 0.15f * tet);
+        const float open = iris(bi);
+        const float on = beams_[bi].on * worldOn * (1.f + 0.25f * swell + 0.15f * tet) * smoothstepf(0.f, 0.3f, open);
         if (on < 0.01f) continue;
+        const float width = B.width * lerpf(0.06f, 1.f, open * open);
         const float w = TAU / B.period;
         float dth, dx;
         beamPose(bi, dth, dx);
@@ -1109,10 +1118,10 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             const float u = 2.f * k / (RAYS - 1) - 1.f;
             const float g = std::exp(-u * u * 2.2f);
             Ray r;
-            r.o = add(sub(aim, mul(d, 45.f)), mul(perp, u * B.width * 0.5f));
+            r.o = add(sub(aim, mul(d, 45.f)), mul(perp, u * width * 0.5f));
             r.d = d;
             r.c = col * (on * g);
-            r.w = B.width / RAYS * 1.5f;
+            r.w = width / RAYS * 1.5f;
             r.dw = 0.f;
             r.depth = 0;
             r.box = -1;
@@ -1128,7 +1137,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         const float entry = 1.f;
         for (int ri = 0; ri < 3; ri++) {
             const RigDef& R = RIG[ri];
-            const float on = rig_ * worldOn * 0.5f * entry;
+            const float on = rig_ * worldOn * 0.5f * entry * iris(0);
             const float th = R.theta0 + 0.6f * R.amp * std::cos((float)(beatNow * (PI / 12.0)) + R.phase);
             const vec2 d = v2(std::sin(th), -std::cos(th));
             const vec2 perp = v2(-d.y, d.x);
