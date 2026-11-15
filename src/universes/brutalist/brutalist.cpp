@@ -73,6 +73,7 @@ struct VariantDef {
     unsigned zen, hor, glow, sun, sky, ground, conc, lining, glass, win, plant, steel, far;
     unsigned piece[7];
     float sunAz, sunEl, sunK, snow, haze, veil, stars, warmLights, hudDark;
+    float pieceK = 1.f; // the pieces' brightness (a moonlit night lifts them: they read in the dark)
 };
 const VariantDef VARIANTS[] = {
     // a high summer sun, a deep blue sky, pale grey concrete
@@ -104,7 +105,7 @@ const VariantDef VARIANTS[] = {
     {"MOONLIGHT", 0x060a18, 0x1c2842, 0x34446a, 0x8ea8d8, 0x2a3656, 0x14161e, 0x9c9ea6, 0x1e2026, 0x10131a, 0xffbe6c, 0x3a4a34, 0xb0b4bc,
      0x2a3044,
      {0xe6e8ee, 0xe2b45c, 0xd06a50, 0x8ec4a2, 0xeaa6b0, 0x82a6e0, 0xd4c4a2},
-     0.75f, 0.7f, 0.42f, 0.f, 0.0055f, 0.f, 1.f, 1.f, 0.f},
+     0.75f, 0.7f, 0.42f, 0.f, 0.0055f, 0.f, 1.f, 1.f, 0.f, 1.35f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -380,7 +381,7 @@ void BrutalistUniverse::setSong(const SongLook& t, float seconds) {
     P.sky = lin(V.sky) * 0.46f; P.ground = lin(V.ground) * 0.34f;
     P.conc = lin(V.conc) * 0.72f; P.lining = lin(V.lining) * 1.5f; P.glass = lin(V.glass); P.win = lin(V.win) * 1.1f;
     P.plant = lin(V.plant); P.steel = lin(V.steel); P.far = lin(V.far);
-    for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]);
+    for (int i = 0; i < 7; i++) P.piece[i] = lin(V.piece[i]) * V.pieceK;
     P.sunAz = V.sunAz; P.sunEl = V.sunEl; P.snow = V.snow; P.haze = V.haze; P.veil = V.veil; P.stars = V.stars;
     P.warmLights = V.warmLights; P.hudDark = V.hudDark;
     const bool instant = !colSet_ || seconds <= 0.1f;
