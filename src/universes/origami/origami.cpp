@@ -21,7 +21,9 @@
 // creases come up and the light warms. The drop turns the sheet over to its coloured side and sets every crane
 // flying in slow loops in the margins (wings on the two-beat grid), until the peak ends and they land back. Slow
 // motion is the blue hour, a low light from the right. Game over folds the stack away row by row from the top. A new
-// song sends the cranes away and starts a new flock.
+// song sends the cranes away and starts a new flock. Around a song: the setup opens the sheet out flat from its
+// folds (its old creases relaxing) as the light comes up; the teardown sends the flock off and folds the sheet back
+// up into its creases in the blue hour.
 //
 // Cost: one full-screen pass for the sheet (the shadows from a half-resolution target), the pieces as instanced
 // cells drawing their facets procedurally, the cranes as a few triangles each.
@@ -775,15 +777,17 @@ void OrigamiUniverse::setSong(const SongLook& t, float seconds) {
     if (seconds <= 0.1f) {
         cranes_.clear();
         slotUsed_.assign(slots_.size(), 0);
-    } else {
-        for (Crane& c : cranes_) {
-            if (c.leaving) continue;
-            c.leaving = true;
-            c.leaveT = -rng_.range(0.f, 1.5f);
-            c.slot = -1;
-        }
-        slotUsed_.assign(slots_.size(), 0);
+    } else flockAway();
+}
+
+void OrigamiUniverse::flockAway() {
+    for (Crane& c : cranes_) {
+        if (c.leaving) continue;
+        c.leaving = true;
+        c.leaveT = -rng_.range(0.f, 1.5f);
+        c.slot = -1;
     }
+    slotUsed_.assign(slots_.size(), 0);
 }
 
 void OrigamiUniverse::setLevel(int level, float energy, float seconds, float impact) {
@@ -1218,6 +1222,12 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     over_ = approach(over_, overT_ >= 0.f ? 1.f : 0.f, 1.f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += dt;
+    // the setup: the sheet arrives folded and opens out flat (its creases relaxing) as the light comes up; the
+    // teardown: the flock flies off, the sheet folds back up into its creases and the light sinks into the blue hour
+    const float unfold = smoothstepf(0.f, 0.85f, f.setup), refold = smoothstepf(0.1f, 1.f, f.teardown);
+    const float folded = (1.f - unfold) * (1.f - unfold) + refold;
+    if (f.teardown > 0.02f && !flownOff_) { flownOff_ = true; flockAway(); }
+    if (f.teardown <= 0.f) flownOff_ = false;
 
     // ---- Staging.
     if (lvT_ < 1.f) {
@@ -1283,11 +1293,11 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     set2f(progPaper_, "uRes", (float)width_, (float)height_);
     set1f(progPaper_, "uSeed", seedU);
     set3f(progPaper_, "uSheet", sheet());
-    set1f(progPaper_, "uLight", 0.95f + 0.03f * wm + 0.04f * wp + 0.04f * swell_);
+    set1f(progPaper_, "uLight", (0.95f + 0.03f * wm + 0.04f * wp + 0.04f * swell_) * lerpf(0.55f, 1.f, unfold));
     set1f(progPaper_, "uDark", dark);
     set2f(progPaper_, "uLightXY", L.x, L.y);
     // the sheet's old creases: faint at calm, catching the light at a peak; a new pattern after each drop
-    set1f(progPaper_, "uCrease", (0.022f + 0.02f * wm + 0.035f * wp + 0.03f * swell_) * patternA_);
+    set1f(progPaper_, "uCrease", (0.022f + 0.02f * wm + 0.035f * wp + 0.03f * swell_) * patternA_ + 0.16f * folded);
     set1f(progPaper_, "uPattern", (float)pattern_);
     set1f(progPaper_, "uWarm", 0.35f + 0.25f * wm + 0.4f * wp);
     set1f(progPaper_, "uWell", bare_ ? 0.f : 1.f);
@@ -1324,7 +1334,7 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
-    set1f(progFinal_, "uSlow", slow_ * 0.85f);
+    set1f(progFinal_, "uSlow", std::max(slow_, refold) * 0.85f);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uOver", over_);
     set1f(progFinal_, "uFade", saturate(f.fade));

@@ -72,6 +72,8 @@ private:
     void planSlots();
     int takeSlot(float side);
     void addCrane(float rowY, float side, const int* strip, int color, float scale);
+    void flockAway();            // every crane flies off (a new song, the teardown)
+    bool flownOff_ = false;      // the teardown sent the flock away
     float lastSide_ = -1.f;      // the wall the last row left by
     // The paper model: a face of folded paper (local units, z toward the viewer), its two sides' colours.
     struct PFace { vec3 v[3]; vec3 front, back; float key; };

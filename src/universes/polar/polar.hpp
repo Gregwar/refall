@@ -85,6 +85,9 @@ private:
     static constexpr int RIBBONS = 6;
     float worldTime_ = 0.f, aurTime_ = 0.f, lastBeatPhase_ = 0.f, beats_ = 0.f;
     float pitch_ = 0.17f, beatGlow_ = 0.f;
+    float wake_ = 1.f; // the setup / teardown: 0 a dark sky (no aurora, no stars) .. 1 the night as usual
+    float look_ = 0.f; // the setup / teardown: the camera tilted up to the sky (radians more than pitch_)
+    float ribbonOn(int k) const { return smoothstepf(0.25f + 0.1f * k, 0.5f + 0.1f * k, wake_); } // one by one, the far first
     float band_[RIBBONS] = {}, ribbon_[RIBBONS] = {};
     float prevKick_ = 0.f, kickIn_ = 0.f, sinceKick_ = 9.f;
     float surge_ = 0.f, surgeX_ = 0.f, storm_ = 0.f, stormT_ = 9.f, flare_ = 0.f, pulse_ = 0.f;

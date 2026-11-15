@@ -59,6 +59,7 @@ in vec2 vUv;
 out vec4 frag;
 uniform vec4 uView;          // center, half extents (board units)
 uniform float uTime, uIllum, uSwell, uSeed, uAA, uReticle;
+uniform float uLamp;         // the lamp's pool of light opening (the setup) and closing (the teardown): 0 off .. 1 full
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     // a dark, damp bench under one soft lamp; the well a darker backing, its walls fine pale lines
@@ -66,6 +67,7 @@ void main() {
     vec3 b = mix(uBack[0], uBack[1], smoothstep(0.0, 1.0, rb));
     b *= 0.9 + 0.14 * fbm(w * 0.16 + vec2(uSeed, 0.0)) + 0.06 * uSwell;
     b *= 0.94 + 0.06 * (uIllum - 0.93) / 0.075;
+    b *= uLamp >= 1.0 ? 1.0 : mix(0.08, 1.0, smoothstep(0.35, -0.15, rb - 1.9 * uLamp) * smoothstep(0.0, 0.4, uLamp));
     float sw = sdBox(w, vec2(5.12, 10.12));
     b = mix(b, b * 0.42, (1.0 - smoothstep(-0.2, 0.35, sw)) * 0.85);
     float edge = (1.0 - smoothstep(-uAA, uAA, abs(sw) - 0.012)) * step(w.y, 10.0) * uReticle;

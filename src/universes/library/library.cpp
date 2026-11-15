@@ -16,7 +16,8 @@
 // The song: dust in the light; the lamps follow the music; in a real drop the shelves breathe (a wave a beat rolls
 // along each shelf, sliding the books out, tipped forward, and back into their places), loose pages flutter up from
 // the bookcases and a soft light runs along the collection; a quad runs one light along it. Slow motion: blue hour.
-// Game over: the blocks topple out of the bottom of the well.
+// Game over: the blocks topple out of the bottom of the well. Around a song the camera comes in to the dim room as
+// its lamps come on one by one (the setup), and draws back as they go out one by one (the teardown).
 //
 // Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the board
 // plane keeps its pixels, the books' tops show); the room has its own camera behind it.
@@ -890,12 +891,19 @@ void LibraryUniverse::hudLine(const HudText& h, text::Line& out) {
 
 // The diorama's view: from above and far, through a long lens (a tabletop model), the whole room framed around the
 // well, drifting very slowly.
+float LibraryUniverse::lampOn(int i) const {
+    const float k = std::fmod((float)i * 0.618034f, 1.f); // each lamp its turn
+    return smoothstepf(0.15f + 0.6f * k, 0.25f + 0.6f * k, setup_) * (1.f - smoothstepf(0.6f * k, 0.1f + 0.6f * k, teardown_));
+}
+
 void LibraryUniverse::updateCamera(float dt) {
     (void)dt;
     tanW_ = std::tan(13.f * PI / 180.f);
     const float sway = 0.4f * std::sin(worldTime_ * 0.045f), bob = 0.12f * std::sin(worldTime_ * 0.063f);
+    // around a song the camera comes in to the room from further back, and draws back there
+    const float away = std::max(1.f - smoothstepf(0.f, 0.9f, setup_), smoothstepf(0.f, 1.f, teardown_));
     targetW_ = vec3(0.f, 2.3f, -1.0f);
-    eyeW_ = targetW_ + vec3(sway, 11.2f + bob, 25.f);
+    eyeW_ = targetW_ + vec3(sway, 11.2f + bob, 25.f) * (1.f + 0.45f * away);
     fwdW_ = normalize(targetW_ - eyeW_);
     rightW_ = normalize(cross(fwdW_, UP));
     upW_ = cross(rightW_, fwdW_);
@@ -961,6 +969,8 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.3f, slow_);
     time_ += dt;
     worldTime_ += wdt;
+    setup_ = f.setup;
+    teardown_ = f.teardown;
 
     // ---- Staging.
     if (lvT_ < 1.f) {
@@ -1206,7 +1216,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         std::vector<std::pair<float, int>> cand;
         for (int i = 0; i < (int)lamps_.size(); i++) {
             const Lamp& l = lamps_[i];
-            const float on = levelOn_[std::clamp(l.level, 0, 7)];
+            const float on = levelOn_[std::clamp(l.level, 0, 7)] * lampOn(i);
             if (on <= 0.01f) continue;
             if (l.r > 0.f) sprites_.push_back({{l.p.x, l.p.y, l.p.z, l.r}, {l.col.x, l.col.y, l.col.z, l.k * lampLevel * on}});
             const float d = length(l.p - targetW_);
@@ -1217,7 +1227,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         for (int j = 0; j < (int)cand.size() && j < 16; j++) {
             const Lamp& l = lamps_[cand[j].second];
             LP.push_back(vec4(l.p, l.range));
-            LC.push_back(vec4(l.col, l.k * lampLevel * levelOn_[std::clamp(l.level, 0, 7)] * 0.9f));
+            LC.push_back(vec4(l.col, l.k * lampLevel * levelOn_[std::clamp(l.level, 0, 7)] * lampOn(cand[j].second) * 0.9f));
         }
     }
     // dust in the daylight (barely any at night); it hangs still in slow motion
@@ -1531,7 +1541,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.45f + 0.1f * wp + 0.12f * dropAmt_) * (1.f + 0.4f * slow_));
-    set1f(progFinal_, "uExposure", P.exposure);
+    set1f(progFinal_, "uExposure", P.exposure * lerpf(0.35f, 1.f, std::min(smoothstepf(0.f, 0.8f, f.setup), 1.f - smoothstepf(0.f, 1.f, f.teardown))));
     set1f(progFinal_, "uSatF", 1.05f + 0.04f * wp + 0.05f * dropAmt_);
     set1f(progFinal_, "uSlow", slow_ * 0.5f);
     set3f(progFinal_, "uSlowTint", slowTint);

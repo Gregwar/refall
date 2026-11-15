@@ -52,6 +52,8 @@ uniform vec4 uView;            // center, half extents (board units)
 uniform vec3 uBand[5];         // blush .. the deepest band (mirrored: 0 1 2 3 4 3 2 1)
 uniform float uTime, uFlow, uAmp, uSway, uSwirl, uDesat, uDecor;
 uniform vec4 uColL, uColR;     // the HUD columns (board units): the motifs fade out there
+uniform float uLaid, uDusk;    // the setup / teardown fronts (in bands): laid up to uLaid, under the dusk up to uDusk
+uniform vec3 uDuskCol;         // the deep plum the bands go under after a song
 vec3 band(float i) {
     float k = mod(i, 8.0);
     k = k > 4.0 ? 8.0 - k : k;
@@ -84,13 +86,17 @@ void main() {
     const float BW = 3.3;                              // a band's width (board units)
     float s = bandCoord(p) / BW + 0.5;
     float i = floor(s), f = fract(s);
-    vec3 col = band(i);
+    // around a song: the bands laid one after another over the blush (the setup), going under the plum dusk one
+    // after another (the teardown)
+    float laid = clamp(uLaid - i, 0.0, 1.0), laidN = clamp(uLaid - i - 1.0, 0.0, 1.0);
+    float dusk = clamp(uDusk - i, 0.0, 1.0), duskN = clamp(uDusk - i - 1.0, 0.0, 1.0);
+    vec3 col = mix(mix(uBand[0], band(i), laid), uDuskCol, dusk);
     // a soft flat shade under each band's upper edge (the band above lies over it), a slight lift at its lower edge
     float px = fwidth(s);
     float edge = 1.0 - smoothstep(0.0, 0.16, f);
-    col = mix(col, col * vec3(0.9, 0.84, 0.88), edge * 0.32);
+    col = mix(col, col * vec3(0.9, 0.84, 0.88), edge * 0.32 * max(laid, dusk));
     float aa = smoothstep(1.0 - px * 1.2, 1.0, f);
-    col = mix(col, band(i + 1.0), aa);
+    col = mix(col, mix(mix(uBand[0], band(i + 1.0), laidN), uDuskCol, duskN), aa);
     // sparse sparkles and bubbles, toned to their band, drifting very slowly upward
     if (uDecor > 0.01) {
         const float G = 4.6;
@@ -114,7 +120,7 @@ void main() {
             if (kind < 0.45) d = dSparkle(l / (0.42 * tw)) * 0.42 * tw;
             else if (kind < 0.75) d = abs(length(l) - 0.34) - 0.07;     // a little bubble ring
             else d = length(l) - 0.16;                                  // a dot
-            float k = (1.0 - smoothstep(-AAl, AAl, d)) * vis * uDecor * 0.75;
+            float k = (1.0 - smoothstep(-AAl, AAl, d)) * vis * uDecor * 0.75 * laid * (1.0 - dusk);
             col = mix(col, tone, k);
         }
     }

@@ -18,7 +18,9 @@
 // lights come back and the stains go dull again. Slow motion drains the paint of its color (only the pieces keep
 // theirs). A lock flicks a few specks of paint from the impact; a quad throws two big gobs far onto the walls;
 // game over bursts the whole stack from the top down. A new song in FLUO fades the wall back to clean; a change of
-// universe arrives on a clean wall.
+// universe arrives on a clean wall. Around a song: the room's light comes up and the song's painting begins with a
+// few gobs thrown from the well onto the wall (the setup); the lights go off and the blacklight comes on, the
+// painting glowing a last time (the teardown).
 //
 // Rendering: finished splashes are stamped once into a persistent pair of buffers (color, premultiplied "over";
 // thickness, added), so the cost stays constant however many there are; splashes still spreading and drips still
@@ -890,6 +892,21 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     if (bridge_.entering && bridge > 0.9f && !cleanedForEntry_) { clearPaint(); cleanedForEntry_ = true; }
     if (bridge < 0.01f) cleanedForEntry_ = false;
 
+    // the setup: the room's light comes up and the song's painting begins, a few gobs thrown from the well onto the
+    // wall one after the other; the teardown: the lights go off and the blacklight on, the painting glows a last time
+    {
+        static const float AT[4] = {0.3f, 0.42f, 0.54f, 0.66f};
+        if (f.setup <= 0.02f) firstGobs_ = 0;
+        while (f.setup < 1.f && firstGobs_ < 4 && f.setup >= AT[firstGobs_]) {
+            const float s = firstGobs_ % 2 ? 1.f : -1.f;
+            const float y = rng_.range(-6.f, 6.f);
+            fling(v2(s * 2.f, y - 2.f), v2(s * std::min(viewH_.x - 4.f, rng_.range(9.f, 16.f)), y), pieceColor(rng_.irange(0, 6)),
+                  rng_.range(1.4f, 2.f), 0.f, 0.2f);
+            firstGobs_++;
+        }
+    }
+    const float roomOn = lerpf(0.12f, 1.f, smoothstepf(0.f, 0.6f, f.setup)), uvOn = smoothstepf(0.f, 0.45f, f.teardown);
+
     if (!f.paused) {
         time_ += wdt;
         if (lvT_ < 1.f) {
@@ -986,8 +1003,8 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The fluorescence: on with the blacklight, swelling a little on the drop and settling (no pulse).
     const float dropSwell = dropT_ < 12.f ? smoothstepf(0.f, 0.6f, dropT_) * std::exp(-std::max(0.f, dropT_ - 0.6f) / 2.2f) * dropAmp_ : 0.f;
-    const float uvE = smoothstepf(0.f, 1.f, uv_) * (1.f - bridge);
-    const float glow = uvE * (1.f + 0.3f * dropSwell * (inDrop_ ? 1.f : 0.f));
+    const float uvE = std::max(smoothstepf(0.f, 1.f, uv_), uvOn) * (1.f - bridge);
+    const float glow = uvE * (1.f + 0.3f * dropSwell * (inDrop_ ? 1.f : 0.f)) * (1.f - 0.5f * smoothstepf(0.75f, 1.f, f.teardown));
     // the drop's blacklight: one strong beam sweeping slowly across the wall, left to right and back, the stains
     // blazing where it passes and sinking back to paint elsewhere; across and back in two bars
     {
@@ -1021,10 +1038,10 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uWallB", wallB_);
     set3f(progComp_, "uUvTint", uvTint_);
     set4f(progComp_, "uTex", tex_[0], tex_[1], tex_[2], tex_[3]);
-    set1f(progComp_, "uLight", light_ * (1.f - 0.15f * slow_));
+    set1f(progComp_, "uLight", light_ * (1.f - 0.15f * slow_) * roomOn);
     set1f(progComp_, "uDark", uvE);
     set1f(progComp_, "uGlow", glow);
-    set1f(progComp_, "uIgnite", ignite_);
+    set1f(progComp_, "uIgnite", std::max(ignite_, smoothstepf(0.1f, 0.75f, f.teardown)));
     set2f(progComp_, "uSweep", sweepX_, sweepA_);
     set1f(progComp_, "uSlow", slow_ * (1.f - uvE));
     set4f(progComp_, "uWell", 0.f, 0.f, 5.f, 10.f);

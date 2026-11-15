@@ -19,7 +19,8 @@
 // The song: calm parts are a dimmer bench and slow life; mid wakes the cilia on the beat grid (every two beats); a
 // peak brightens the lamp, the kicks flicking the cilia. The drop washes in the variant's second set of dyes, soaking
 // unevenly into the tissue, with one swell of light; it is rinsed out slowly after the peak. Slow motion drains the
-// dyes to silver, time stretched. Game over kills the tissue from the top: the lumps shrink, drain and fade.
+// dyes to silver, time stretched. Game over kills the tissue from the top: the lumps shrink, drain and fade. Around a
+// song the lamp's pool of light opens over the bench from its middle (the setup) and closes back (the teardown).
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/specimen/specimen.hpp"
@@ -882,6 +883,8 @@ void SpecimenUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progField_, "uSeed", seedF_);
     set1f(progField_, "uAA", aaW);
     set1f(progField_, "uReticle", bare_ ? 0.f : 1.f - bridgeK);
+    // the lamp's pool of light opens over the bench before a song and closes after it
+    set1f(progField_, "uLamp", std::min(smoothstepf(0.f, 0.85f, f.setup), 1.f - smoothstepf(0.f, 1.f, f.teardown)));
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);

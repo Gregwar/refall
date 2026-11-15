@@ -212,6 +212,10 @@ private:
     float worldTime_ = 0.f, beatPulse_ = 0.f;
     bool slowOn_ = false;
     float slow_ = 0.f;
+    // around a song: the room's lamps coming on one by one and the camera coming in (the setup), the lamps going out
+    // one by one and the camera drawing back (the teardown)
+    float setup_ = 1.f, teardown_ = 0.f;
+    float lampOn(int i) const;
     float overT_ = -1.f;
     float dimT_ = 0.f;
     Bridge bridge_;
