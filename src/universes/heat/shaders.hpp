@@ -183,14 +183,24 @@ uniform sampler2D uTemp, uLut, uGlow;
 uniform float uGlowAmt;
 uniform float uLo, uHi, uMix, uIso, uIsoThr, uDim, uFade, uBridge;
 uniform vec3 uBridgeCol, uBridgeInk; // display colors
+uniform float uFocus;  // the setup's focus pull: the blur's radius (uv height)
+uniform float uCool;   // the teardown: the image drains to the cold end of the scale
+uniform float uAspect; // width / height
 vec3 lut(float t, float row) { return texture(uLut, vec2(t * (255.0 / 256.0) + 0.5 / 256.0, row)).rgb; }
 void main() {
     vec4 T = texture(uTemp, vUv);
+    if (uFocus > 0.0005) { // out of focus: a disc of taps (a golden-angle spiral)
+        for (int i = 1; i < 16; i++) {
+            float r = sqrt(float(i) / 15.0) * uFocus, a = float(i) * 2.39996;
+            T += texture(uTemp, vUv + r * vec2(cos(a) / uAspect, sin(a)));
+        }
+        T /= 16.0;
+    }
     // the halo around hot things (the lens and the warmed air), hotter pieces glowing farther
     vec4 G = texture(uGlow, vUv);
     float gl = G.r * (0.3 + 0.7 * G.r) * uGlowAmt * (1.0 - 0.8 * clamp(T.g, 0.0, 1.0));
     T.r += gl;
-    float t = clamp((T.r - uLo) / max(uHi - uLo, 1e-3), 0.0, 1.0);
+    float t = clamp((T.r - uLo) / max(uHi - uLo, 1e-3), 0.0, 1.0) * (1.0 - uCool);
     vec3 c = mix(lut(t, 0.25), lut(t, 0.75), uMix);
     // slow motion: the isotherm mode, everything grey but the hottest band
     float g = dot(c, vec3(0.299, 0.587, 0.114));

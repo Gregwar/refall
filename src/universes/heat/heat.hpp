@@ -69,7 +69,7 @@ private:
     // ---- The HUD (its lettering: hudLine, the host letters it), and the overlay's readings in the same letters.
     text::Engine text_;
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
-    void drawOverlay();
+    void drawOverlay(float shown); // shown: 0 .. 1 as the camera comes on (its scale bar drawn in from the bottom) or goes off
     std::vector<float> shapes_;
     void rect(float x0, float y0, float x1, float y1, const vec3& c, float a);
     void flushShapes();

@@ -16,7 +16,9 @@
 // seconds, the camera switches to another colormap, the far shapes swell with the bars. A cleared row vents its heat:
 // its blocks fade out as they cool, the cells above it are warmed by the passing heat and a plume of hot air rises
 // out of the stack. A quad is an updraft. Slow motion is the camera's isotherm mode (grey but the hottest band),
-// game over the stack cooling into the room from the top down.
+// game over the stack cooling into the room from the top down. Before a song the camera comes on: the image pulls
+// into focus, the far shapes warm into view and a warm draft rises off the floor, then the scale bar draws in; after
+// it the scale bar goes and the whole image cools down to the cold end of the colormap.
 //
 // The frame is one thermal image: the room, the air and the pieces are written as temperatures into a float
 // target, then mapped through the colormap; the camera's overlay (a scale bar with the range in degrees, the
@@ -791,9 +793,9 @@ void HeatUniverse::flushShapes() {
 }
 
 // The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge.
-void HeatUniverse::drawOverlay() {
+void HeatUniverse::drawOverlay(float shown) {
     const float s = height_ / 1080.f;
-    const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_);
+    const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_) * shown;
     const vec3 ink(0.93f, 0.94f, 0.95f), shadow(0.f);
     if (vis <= 0.01f) return;
     char buf[32];
@@ -803,7 +805,7 @@ void HeatUniverse::drawOverlay() {
         const float y0 = height_ * 0.3f, y1 = height_ * 0.7f;
         rect(x0 - 1.5f * s, y0 - 1.5f * s, x1 + 1.5f * s, y1 + 1.5f * s, shadow, 0.45f * vis);
         const int N = 64;
-        for (int i = 0; i < N; i++) {
+        for (int i = 0; i < N * shown; i++) {
             const float a = y1 - (y1 - y0) * i / N, b = y1 - (y1 - y0) * (i + 1) / N;
             rect(x0, b, x1, a + 0.5f, lutAt((i + 0.5f) / N), vis);
         }
@@ -939,8 +941,10 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     kickPrev_ = kick;
+    // the setup: as the camera comes on, the far shapes warm into view and a warm draft rises off the floor
+    const float waking = smoothstepf(0.1f, 0.4f, f.setup) * (1.f - smoothstepf(0.6f, 1.f, f.setup));
     {
-        const float target = 0.035f + 0.05f * wm + 0.06f * wp + 0.04f * dropAmt_ * wp;
+        const float target = 0.035f + 0.05f * wm + 0.06f * wp + 0.04f * dropAmt_ * wp + 0.08f * waking;
         for (auto& b : blobs_) b.temp = approach(b.temp, target * (overT_ >= 0.f ? 0.3f : 1.f), 0.5f, wdt);
     }
     for (auto& fd : fading_)
@@ -949,6 +953,10 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The heat.
     if (!bare) conduct(game, wdt);
+    if (waking > 0.f)
+        for (float x = -viewH_.x; x <= viewH_.x; x += 1.5f)
+            splatAir(x + 0.6f * std::sin(x * 1.7f + worldTime_), viewC_.y - viewH_.y + 0.5f, 0.7f,
+                     waking * 5.f * (0.6f + 0.4f * std::sin(x * 0.9f + worldTime_ * 0.8f)) * wdt);
     updateAir(game, wdt);
     const float gain = (0.92f + 0.12f * saturate(warm) + 0.25f * flare_) * (1.f - over_);
 
@@ -1088,6 +1096,12 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uIsoThr", 0.62f);
     set1f(progMap_, "uDim", dimT_);
     set1f(progMap_, "uFade", saturate(f.fade));
+    {
+        const float blur = 1.f - smoothstepf(0.f, 0.6f, f.setup);
+        set1f(progMap_, "uFocus", 0.05f * blur * blur);
+        set1f(progMap_, "uCool", smoothstepf(0.2f, 1.f, f.teardown));
+        set1f(progMap_, "uAspect", (float)width_ / (float)height_);
+    }
     set1f(progMap_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
     set3f(progMap_, "uBridgeCol", ugl::toSrgb(bridge_.color));
     set3f(progMap_, "uBridgeInk", ugl::toSrgb(bridge_.ink));
@@ -1096,7 +1110,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The overlay and the HUD.
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawOverlay();
+    drawOverlay(smoothstepf(0.35f, 0.7f, f.setup) * (1.f - smoothstepf(0.f, 0.5f, f.teardown)));
     drawHud(f.hud, bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 }

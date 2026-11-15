@@ -19,6 +19,7 @@ uniform float uTable, uWall;          // the table's plane (y), the backdrop's p
 uniform vec3 uTableNear, uTableFar, uWallTop, uPoolCol;
 uniform vec3 uLightDir, uLightCol;
 uniform vec3 uEye;
+uniform vec2 uLamp;                   // the studio's light opening (0 a small spot on the well .. 1 the whole studio), the spot's own light
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7)) + uSeed) * 43758.5453); }
 float vnoise(vec2 p) {
     vec2 i = floor(p), f = fract(p);
@@ -49,6 +50,8 @@ vec3 studioAt(vec3 ro, vec3 rd, out vec4 hit) {
     // the pool of the key light, wide and soft, around the well
     vec2 q = vec2(p.x + 4.0, (hit.w < 0.5 ? p.z : uWall - (p.y - uTable)) + 10.0);
     c += uPoolCol * exp(-dot(q, q) / 2600.0);
+    // the setup / teardown: the light opens out of a small spot on the well (and closes back onto it)
+    c *= mix(uLamp.y * exp(-dot(q, q) / (40.0 + 2600.0 * uLamp.x)), 1.0, pow(uLamp.x, 1.5));
     return c;
 }
 vec3 studio(vec3 rd) {

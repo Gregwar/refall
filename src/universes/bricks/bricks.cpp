@@ -22,6 +22,8 @@
 // and come home quickly when it ends. A lock is the piece clicking onto the board; a quad throws its bricks high and
 // the models glow, lift and turn once. Slow motion is an
 // evening light raking in from the right; game over pops the stack's bricks off the board, from the top down.
+// Before a song the studio's light opens out of a small spot on the well until it fills the studio, and the
+// turntables start turning; after it they slow to a stop and the light closes back onto the well, then goes out.
 #include "universes/bricks/bricks.hpp"
 
 #include <algorithm>
@@ -48,6 +50,7 @@ namespace shaders = bricks_shaders;
 namespace bm = bricks_models;
 using ugl::set1f;
 using ugl::set1i;
+using ugl::set2f;
 using ugl::set3f;
 using ugl::set4f;
 using ugl::setMat;
@@ -664,7 +667,7 @@ void BricksUniverse::updateModels(float dt, float wdt) {
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
     for (int s = 0; s < 2; s++) {
         const float target = (0.11f + 0.05f * wm + 0.06f * wp + 0.75f * dropRelease_) * (1.f - 0.8f * slow_);
-        tableSpin_[s] = approach(tableSpin_[s], target, 0.9f, dt);
+        tableSpin_[s] = approach(tableSpin_[s], target * lamp_, 0.9f, dt); // (still while the studio's light is off)
         const float dir = s ? -1.f : 1.f;
         tableYaw_[s] += dir * tableSpin_[s] * (overT_ >= 0.f ? 0.4f : 1.f) * wdt;
     }
@@ -1362,6 +1365,8 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     // a break: the studio, its turntables and the models alone (the blank board leaves the pieces' ids as they are)
     bare_ = f.bare;
     if (!bare_) syncIds(game);
+    lamp_ = smoothstepf(0.f, 0.75f, f.setup) * (1.f - smoothstepf(0.05f, 0.8f, f.teardown));
+    spot_ = 1.f - smoothstepf(0.7f, 1.f, f.teardown);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.2f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f) {
@@ -1455,10 +1460,11 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Light: a soft key from the upper left (an evening light from the right in slow motion).
     const VariantDef& V = VARIANTS[variant_];
+    const float lampK = lerpf(0.12f * spot_, 1.f, lamp_);
     const vec3 Lday = normalize(vec3(-0.24f, 0.72f, 0.66f)), Leve = normalize(vec3(0.72f, 0.42f, 0.6f));
     const vec3 L = normalize(lerp(Lday, Leve, smoothstepf(0.f, 1.f, slow_)));
     const float keyK = V.key * (0.9f + 0.05f * wm + 0.08f * wp + 0.05f * swell_);
-    const vec3 keyCol = lerp(vec3(1.0f, 0.96f, 0.9f), vec3(1.0f, 0.72f, 0.45f), slow_) * keyK * 1.05f;
+    const vec3 keyCol = lerp(vec3(1.0f, 0.96f, 0.9f), vec3(1.0f, 0.72f, 0.45f), slow_) * keyK * 1.05f * lampK;
     const vec3 tableNear = lin(V.tableNear), tableFar = lin(V.tableFar), wallTop = lin(V.wallTop);
     // the light's pool on the table: the variant's warmth, warmer and wider in the drop (one slow swell)
     const vec3 poolCol = lin(V.pool) + lin(V.dropGlow) * (0.03f * dropRelease_ + 0.03f * swell_ + 0.01f * wp);
@@ -1510,6 +1516,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
         set3f(p, "uLightDir", L);
         set3f(p, "uLightCol", keyCol);
         set3f(p, "uEye", eye_);
+        set2f(p, "uLamp", lamp_, spot_);
     };
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -1557,7 +1564,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, occTex_);
     set1i(progBrick_, "uOcc", 2);
     glActiveTexture(GL_TEXTURE0);
-    const float ambK = V.amb * (1.f - 0.25f * slow_);
+    const float ambK = V.amb * (1.f - 0.25f * slow_) * lampK;
     set3f(progBrick_, "uAmbTop", mixDisplay(wallTop, vec3(0.75f, 0.8f, 0.9f), 0.35f) * (0.42f * ambK));
     set3f(progBrick_, "uAmbBot", tableNear * (0.22f * ambK));
     set3f(progBrick_, "uFillDir", vec3(0.6f, 0.2f, 0.8f));

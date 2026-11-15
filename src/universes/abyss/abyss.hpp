@@ -131,6 +131,9 @@ private:
     float overT_ = -1.f, over_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the sea alone, no well, no columns, no jelly blocks
+    // around a song (Frame::setup / teardown): 1 at the surface .. 0 down in the deep; the living lights out (one by
+    // one); the water closing to black
+    float descent_ = 0.f, phaseOut_ = 0.f, closing_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};
 };

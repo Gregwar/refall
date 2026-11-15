@@ -34,6 +34,9 @@
 //
 // The pieces are sea glass: frosted, worn round, the water's light moving through them. Cleared rows melt into
 // bubbles.
+//
+// Before a song the view glides in toward the focus from an octave and a half out (from the scale before, round the
+// loop at the very start), and after it the view drifts back out the same way.
 #include "universes/tidepool/tidepool.hpp"
 
 #include <algorithm>
@@ -819,7 +822,10 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     {
         // the focus (left of the HUD's left column) wanders a little; the two stages' frames from the depth
         const vec2 F = V(focus_.x + 0.4f * std::sin(time_ * 0.031f), focus_.y + 0.5f * std::sin(time_ * 0.023f + 1.f));
-        const double zz = std::max(0.0, z_);
+        // the setup glides in from farther out, the teardown drifts back out (round the loop before the universe)
+        const float in = 1.f - smoothstepf(0.f, 0.85f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
+        double zz = std::max(0.0, z_) - 1.5 * (in * in + out * out);
+        if (zz < 0.0) zz += LOOP;
         const double a = std::floor(zz / STAGE_OCT);
         float layers[8];
         for (int i = 0; i < 2; i++) {

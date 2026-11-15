@@ -28,7 +28,9 @@
 // brightens the life steadily, the pulses swell with the bass, the kicks light single plants and spores rise. The drop
 // sends one slow wave of light through the forest: from the well outward, plant after plant and the moss between them
 // flare up as it passes and settle back over the following seconds. Slow motion is the forest under a cold moon, its
-// glow paled to silver; game over puts the stack's glow out from the top, the blocks crumbling away.
+// glow paled to silver; game over puts the stack's glow out from the top, the blocks crumbling away. Before a song
+// the forest wakes in the dark: its plants light up one by one, the glow climbs the bark and the fireflies come out;
+// after it the fireflies leave, the lights go out one by one and the night deepens over the sleeping forest.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/forest/forest.hpp"
@@ -946,6 +948,12 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     for (int i = 0; i < 3; i++) bass += music.bandsFast[i];
     bass = saturate(bass / 3.f * 1.6f);
     // the life's overall level: a steady step per section, never pulsing with the beat
+    // the setup wakes the forest, light by light; the teardown puts it to sleep the same way
+    const float wake = smoothstepf(0.05f, 0.85f, f.setup) * (1.f - smoothstepf(0.f, 0.85f, f.teardown));
+    auto awake = [&](float seed) { // a plant's own turn (by its seed) to light up or go out
+        const float h = seed * 0.1f;
+        return smoothstepf(0.65f * h, 0.65f * h + 0.35f, wake);
+    };
     const float life = (0.55f + 0.2f * wm + 0.3f * wp + 0.25f * fest_) * (1.f - 0.35f * slow_);
     // the beat grid: a quarter of the plants glow on each two beats
     const float half = beat_ * 0.5f;
@@ -1101,7 +1109,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float pulse = p.group == groupNow ? env * pulseK : 0.f;
         float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * quadGlow_);
         // a young plant lights up as it grows
-        glow *= 0.35f + 0.65f * smoothstepf(0.f, 0.8f, p.grow);
+        glow *= (0.35f + 0.65f * smoothstepf(0.f, 0.8f, p.grow)) * awake(p.seed);
         const vec3 ca = lerp(glow_[0], glow_[1], p.colMix), cb = lerp(glow_[1], glow_[0], 0.3f + 0.4f * p.colMix);
         const float sc = p.scale * (1.f + 0.05f * wave);
         plantInst_.push_back({{p.x, p.y, sc, (float)p.kind}, {p.seed, p.grow, glow, p.flip ? 1.f : 0.f},
@@ -1131,6 +1139,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             // a firefly: fades in and out over its life, glows and dims slowly (never flashing)
             const float blink = 0.5f + 0.5f * std::sin(m.t * (0.9f + 0.4f * std::fmod(m.seed, 1.f)) + m.seed * 3.f);
             a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.8f, 1.f, s)) * (0.15f + 0.85f * blink * blink);
+            a *= smoothstepf(0.5f, 0.8f, wake); // (the fireflies come out last, and leave first)
             core = 1.f;
             // never over the well or the HUD's text
             a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
@@ -1191,7 +1200,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", seedF_);
     set1f(progBg_, "uMistK", (0.5f + 0.15f * wm + 0.25f * wp + 0.25f * fest_) * (1.f - 0.25f * slow_));
-    set1f(progBg_, "uLife", life);
+    set1f(progBg_, "uLife", life * wake);
     set1f(progBg_, "uWaveR", waveR);
     set1f(progBg_, "uWaveK", waveK_);
     set1f(progBg_, "uAA", aaW);
@@ -1274,7 +1283,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uBloomK", (0.5f + 0.12f * wp + 0.15f * fest_) * (1.f - 0.3f * slow_));
     set1f(progFinal_, "uSlow", slow_ * 0.8f);
     set1f(progFinal_, "uDim", dimT_);
-    set1f(progFinal_, "uFade", saturate(f.fade));
+    set1f(progFinal_, "uFade", saturate(f.fade) * (1.f - 0.7f * smoothstepf(0.4f, 1.f, f.teardown))); // (the night deepens)
     set1f(progFinal_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
     set3f(progFinal_, "uBridgeCol", bridge_.color);
     set3f(progFinal_, "uBridgeInk", bridge_.ink);

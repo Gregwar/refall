@@ -41,7 +41,9 @@
 // cleared row closes into a flat bar and slides out of the well sideways in 0.3 s, and a small flock of birds takes
 // off from the meadow on one side and flies away outward (more birds for more lines); a hard drop leaves a thin rule
 // at the contact. Slow motion stills the scene (the pan, the clouds and the birds slow down) and cools its light.
-// Game over slides the stack out row by row from the top.
+// Game over slides the stack out row by row from the top. Before a song the poster is laid out depth by depth: each
+// range, the meadow, then the foreground slides up into place, back to front, under the sky; after it they sink away
+// again, front to back, and the sky goes to dusk.
 //
 // Cost: one full-screen pass for the landscape (a few dozen elements tested per pixel), the board, plates and birds as
 // instanced flat shapes.
@@ -429,6 +431,8 @@ void SwissUniverse::drawLandscape() {
     glUniform3f(ugl::U(p, "uView"), viewC_.x, viewC_.y, unitPx_);
     set1f(p, "uTime", sceneT_);
     glUniform1fv(ugl::U(p, "uOff"), 7, layerOff_);
+    glUniform1fv(ugl::U(p, "uSink"), 7, sink_);
+    set1f(p, "uDusk", dusk_);
     glUniform3f(ugl::U(p, "uCloudOff"), cloudOff_[0], cloudOff_[1], cloudOff_[2]);
     set1f(p, "uSeed", (float)(seed_ % 997) * 0.37f);
     const float drop = smoothstepf(0.f, 1.f, dropAmt_);
@@ -977,6 +981,13 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     const VariantDef& V = VARIANTS[variant_];
     bare_ = f.bare;
     if (!bare_) syncIds(game); // the world alone: the pieces' ids kept for the whole frame
+    // the setup lays the depths out back to front (each slides up into place), the teardown sinks them front to back
+    for (int i = 1; i < 7; i++) {
+        const float in = 1.f - smoothstepf(0.04f + 0.08f * (i - 1), 0.36f + 0.08f * (i - 1), f.setup);
+        const float out = smoothstepf(0.06f * (6 - i), 0.3f + 0.06f * (6 - i), f.teardown);
+        sink_[i] = 16.f * (in * in + out * out);
+    }
+    dusk_ = smoothstepf(0.3f, 1.f, f.teardown);
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
     if (overT_ >= 0.f && !bare_) {
