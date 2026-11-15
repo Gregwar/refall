@@ -1,21 +1,27 @@
-// SWISS POSTER: a vintage travel poster in flat design, its landscape drifting in parallax behind the well.
+// SWISS POSTER: a vintage travel poster in flat design, its landscape travelling by in parallax behind the well.
 //
 // One world: the landscape of a mid-century travel poster, all flat shapes with crisp edges (no photographic
 // shading, a faint print grain), in seven depths. A flat sky gradient with a sun and its pale halos and flat clouds
 // in three bands; a far range of peaks, each face lit or in shade, snow above a jagged snow line with rock showing
-// through in flat patches; a hero peak on one side (a snow horn, or a pale limestone tooth with cliff bands and
-// grass on its lower slopes); two nearer ranges in receding tones (aerial perspective: the farther, the paler, with a
-// mist at their feet in the misty scenes); a lake in some scenes, its long glints and the sun's path on the water; a
-// meadow dotted with flowers, darker patches of grass and a winding path up to a village of chalets and houses
-// (gable fronts lit, long sides in shade, red roof slabs, windows, a church with a clock and a spire) among cypresses
-// and firs, each casting a flat shadow to the right; a foreground hill with big firs at the poster's corners. No
-// lettering on the poster.
+// through in flat patches, in massifs and gaps (the high massifs carry their glaciers lower); hero peaks (a snow
+// horn, or a pale limestone tooth with cliff streaks and grass on its lower slopes); two nearer ranges in receding
+// tones (aerial perspective: the farther, the paler, with a mist at their feet in the misty scenes); a lake with
+// long glints and the sun's path on the water (everywhere in the lake scenes, in stretches elsewhere: between them
+// its shore runs back in perspective and a valley floor of fields takes over); a meadow dotted with flowers and
+// darker patches of grass; a foreground hill with big firs. No lettering on the poster.
 //
-// Parallax: every depth is shifted by its own share of one pan (sky 3 %, far range 8 %, then 16, 26, 38, 60 and
-// 100 % for the foreground): a slow, calm swing across the scene (80 s back and forth), a gentle sway on the bars
-// (one way, then the other, over two bars; a little more at mid and peak, more in a drop) and a lean away from the
-// falling piece (the scene turns slightly as it moves across the well). The clouds drift on their own, each band at
-// its speed; the trees' tips sway in the wind.
+// The camera travels to the right, steadily and forever, every depth at its share of the travel (sky 3 %, far range
+// 8 %, then 16, 26, 38, 60 and 100 % for the foreground): a slow drift when calm, a little faster at mid and peak,
+// much faster in a drop; the speed follows the eased level and drop light and eases once more, so it never jerks.
+// The scenery loops, every depth periodic in x (its noises' lattices wrap at its period: 120 to 140 units for the
+// ranges, 384 for the meadow, 576 for the foreground, many screen widths), and it changes as it goes: the meadow is a
+// sequence of 16 stretches of 24 units in an order of the song's own (a village opens it), each lifting or sinking
+// the ground and blended smoothly into the next: a village of chalets and houses (gable fronts lit, long sides in
+// shade, red roof slabs, windows, a church with a clock and a spire) among cypresses and firs with a winding path
+// down from it, a hamlet, a pasture with a hut, a forest, a valley with a river winding out of its floor, a valley
+// spanned by a stone viaduct with a little train crossing it now and then, a chapel on a hill with a road zigzagging
+// up, a pass with its switchbacks and a hut. Everything casts a flat shadow away from the sun. The clouds drift on
+// their own, each band at its speed, and loop too; the trees' tips sway in the wind; the sun stands still.
 //
 // The well stands on a calm paper panel (the poster's own paper, nearly opaque) with two side rules and a baseline;
 // the hold and next previews on small paper plates, the bonus gauge (the host's ring) on a paper disc. The pieces are
@@ -28,10 +34,9 @@
 // over a gold horizon, rosy-violet far ranges, mauve then amber nearer ones, pink-gold snow, warm walls, the windows
 // lit, the trees' sunny sides catching an orange rim), the sun sinks low among the ranges and grows, throwing strong
 // flat rays across the sky, a rim of light runs along the ridges' sunny faces, the cast shadows stretch long away
-// from the sun, a light sweeps across the layers on the drop's start. The camera travels: a lateral dolly out and
-// back over eight bars (the foreground crosses about five cells, the far range a fraction of one) and a push-in
-// breathing over four bars (each depth scaled by its parallax share: the foreground most), both from the drop's
-// first beat and eased in and out with its light; the bar sway widens, the clouds speed up, the pieces' colors
+// from the sun, a light sweeps across the layers on the drop's start. The travel speeds up (about four times the
+// calm drift) and the view pushes in, breathing over four bars (each depth scaled by its parallax share: the
+// foreground most), eased in and out with its light; the clouds speed up, the pieces' colors
 // deepen, and flocks of birds cross the sky every two bars (a big flock rises from both sides on the downbeat). A
 // cleared row closes into a flat bar and slides out of the well sideways in 0.3 s, and a small flock of birds takes
 // off from the meadow on one side and flies away outward (more birds for more lines); a hard drop leaves a thin rule
@@ -171,6 +176,9 @@ constexpr float GAP = 0.055f;
 constexpr float WIPE_S = 0.3f;
 // Each depth's share of the pan: sky, far range, hero and first range, second, third and lake, meadow, foreground.
 constexpr float DEPTH[7] = {0.03f, 0.08f, 0.16f, 0.26f, 0.38f, 0.6f, 1.0f};
+// Each depth's loop (its units; the shader's lattices wrap there): the sky's clouds loop band by band.
+constexpr float PERIOD[7] = {0.f, 120.f, 130.f, 110.f, 140.f, 384.f, 576.f};
+constexpr float P_FG = 576.f;
 
 float ease(float t) {
     t = saturate(t);
@@ -297,69 +305,118 @@ TransitionHints SwissUniverse::hints() const {
 // The scene
 // =====================================================================================================
 
-// The village, the trees and the foreground's firs, in each layer's own units (sorted far to near: drawn in order).
-// The village stands on one side of the poster, the hero peak on the other.
+// The meadow's stretches, the roads and rivers, the village and the trees, in each depth's own units along its loop
+// (sorted far to near: drawn in order). The stretches follow each other in an order of the song's own; each variant
+// keeps its palette and season.
 void SwissUniverse::composeScene() {
     const VariantDef& V = VARIANTS[variant_];
     Rng r(seed_ ^ 0xA1F5ull ^ ((uint64_t)variant_ << 32));
-    const float W = viewH_.x;
-    const float side = (seed_ >> 7) & 1 ? 1.f : -1.f; // the village's side
-    const float vx = side * std::max(14.5f, (W + 12.f) * 0.5f);
     std::vector<El> m, fg;
+    roads_.clear();
     auto treeKind = [&](bool nearVillage) -> float {
         if (V.trees == 0) return nearVillage && r.chance(0.6f) ? 4.f : 3.f;
         if (V.trees == 2) return r.chance(0.55f) ? 6.f : 3.f;
         return 3.f;
     };
-    // the village: a back row, the church, a front row
-    if (V.village > 0) {
-        const int nBack = r.irange(4, 5), nFront = r.irange(3, 4);
-        float x = vx - 4.2f;
-        for (int i = 0; i < nBack; i++) {
-            x += r.range(1.2f, 1.8f);
-            const float kind = V.village == 2 || r.chance(0.45f) ? 0.f : 1.f;
-            m.push_back({x, r.range(0.25f, 0.55f), r.range(0.68f, 0.82f), kind});
+    auto tree = [&](float x, float d0, float d1, float s0, float s1, bool nearVillage) {
+        m.push_back({x, r.range(d0, d1), r.range(s0, s1), treeKind(nearVillage)});
+    };
+    auto houseKind = [&](float pChalet) { return V.village == 2 || r.chance(pChalet) ? 0.f : 1.f; };
+    // The order: a village first (the poster opens on it), then a shuffle of the other stretches, no two alike in a
+    // row.
+    std::vector<int> order = {ST_VILLAGE};
+    {
+        std::vector<int> bag = {ST_PASTURE, ST_FOREST, ST_VALLEY, ST_VIADUCT, ST_CHAPEL, ST_PASS, ST_HAMLET, ST_VILLAGE,
+                                ST_FOREST, ST_PASTURE, ST_HAMLET, ST_VALLEY, ST_CHAPEL, ST_FOREST, ST_PASS};
+        for (int tries = 0; tries < 200; tries++) {
+            for (int k = (int)bag.size() - 1; k > 0; k--) std::swap(bag[k], bag[r.irange(0, k)]);
+            bool ok = bag.front() != ST_VILLAGE && bag.back() != ST_VILLAGE;
+            for (size_t k = 1; k < bag.size(); k++) ok = ok && bag[k] != bag[k - 1];
+            if (ok) break;
         }
-        m.push_back({vx + side * r.range(-1.2f, -0.2f), 0.6f, 0.82f, 2.f});
-        x = vx - 3.6f;
-        for (int i = 0; i < nFront; i++) {
-            x += r.range(1.5f, 2.3f);
-            const float kind = V.village == 2 || r.chance(0.5f) ? 0.f : 1.f;
-            m.push_back({x, r.range(1.15f, 1.75f), r.range(0.95f, 1.1f), kind});
-        }
-        // cypresses and firs at the village's edges
-        for (int i = 0; i < 4; i++) {
-            const float ex = vx + (i & 1 ? 1.f : -1.f) * r.range(4.4f, 6.2f) + r.range(-0.5f, 0.5f);
-            m.push_back({ex, r.range(0.4f, 1.6f), r.range(0.8f, 1.0f), treeKind(true)});
-        }
-    } else {
-        // a hut or two on the alpine pasture
-        m.push_back({vx + r.range(-1.f, 1.f), 0.5f, 0.8f, 0.f});
-        if (r.chance(0.6f)) m.push_back({vx + r.range(2.f, 3.f), 0.9f, 0.7f, 0.f});
+        order.insert(order.end(), bag.begin(), bag.end());
     }
-    // trees scattered over the meadow, in clumps, away from the village
-    for (int c = 0; c < 6; c++) {
-        float cx = r.range(-W - 4.f, W + 4.f);
-        if (V.village > 0 && std::fabs(cx - vx) < 6.f) cx = vx - side * r.range(7.f, 12.f);
-        const int n = r.irange(2, 4);
-        for (int i = 0; i < n; i++)
-            m.push_back({cx + r.range(-1.6f, 1.6f), r.range(0.05f, 1.2f), r.range(0.5f, 0.8f), treeKind(false)});
+    for (int k = 0; k < STRETCHES; k++) {
+        const int st = order[k];
+        const float c = ST_ORIGIN + (k + 0.5f) * SPAN; // the stretch's middle, meadow units
+        static const float LIFT[] = {0.f, 0.5f, 0.3f, 0.7f, -2.3f, -2.2f, 2.0f, 1.3f};
+        lift_[k] = LIFT[st] + r.range(-0.15f, 0.15f);
+        switch (st) {
+        case ST_VILLAGE:
+        case ST_HAMLET: {
+            const bool big = st == ST_VILLAGE && V.village > 0;
+            if (V.village == 0) { // the pasture's huts
+                m.push_back({c + r.range(-1.f, 1.f), 0.5f, 0.8f, 0.f});
+                if (r.chance(0.6f)) m.push_back({c + r.range(2.f, 3.f), 0.9f, 0.7f, 0.f});
+                for (int i = 0; i < 4; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(4.f, 8.f), 0.1f, 1.2f, 0.55f, 0.85f, false);
+                break;
+            }
+            const int nBack = big ? r.irange(4, 5) : 2, nFront = big ? r.irange(3, 4) : r.irange(1, 2);
+            float x = c - (big ? 4.2f : 2.4f);
+            for (int i = 0; i < nBack; i++) {
+                x += r.range(1.2f, 1.8f);
+                m.push_back({x, r.range(0.25f, 0.55f), r.range(0.68f, 0.82f), houseKind(0.45f)});
+            }
+            if (big || r.chance(0.5f)) m.push_back({c + r.range(-1.2f, 0.4f), 0.6f, big ? 0.82f : 0.7f, 2.f});
+            x = c - (big ? 3.6f : 2.f);
+            for (int i = 0; i < nFront; i++) {
+                x += r.range(1.5f, 2.3f);
+                m.push_back({x, r.range(1.15f, 1.75f), r.range(0.95f, 1.1f), houseKind(0.5f)});
+            }
+            const int nt = big ? 4 : 3;
+            for (int i = 0; i < nt; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(4.4f, 6.4f), 0.4f, 1.6f, 0.8f, 1.f, true);
+            if (V.hasPath) roads_.push_back({c, 1.f});
+            break;
+        }
+        case ST_PASTURE:
+            m.push_back({c + r.range(-3.f, 3.f), r.range(0.3f, 0.9f), r.range(0.65f, 0.8f), 0.f});
+            for (int i = 0; i < 3; i++) tree(c + r.range(-9.f, 9.f), 0.1f, 1.3f, 0.5f, 0.85f, false);
+            m.push_back({c + r.range(-8.f, 8.f), r.range(0.6f, 1.5f), r.range(0.6f, 0.8f), 5.f});
+            break;
+        case ST_FOREST:
+            for (int i = 0; i < 16; i++) tree(c + r.range(-11.f, 11.f), 0.02f, 1.8f, 0.5f, 1.f, false);
+            break;
+        case ST_VALLEY:
+            roads_.push_back({c, 3.f});
+            for (int i = 0; i < 4; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(5.f, 10.f), 0.1f, 1.2f, 0.55f, 0.85f, false);
+            if (r.chance(0.6f)) m.push_back({c + (r.chance(0.5f) ? 1.f : -1.f) * r.range(6.f, 9.f), 0.5f, 0.75f, houseKind(0.7f)});
+            break;
+        case ST_VIADUCT:
+            roads_.push_back({c, 3.f});
+            m.push_back({c, 0.9f, 1.f, 7.f});
+            for (int i = 0; i < 3; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(7.f, 10.5f), 0.1f, 1.3f, 0.55f, 0.85f, false);
+            break;
+        case ST_CHAPEL:
+            m.push_back({c, 0.25f, 0.72f, 2.f});
+            for (int i = 0; i < 2; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(1.6f, 2.4f), 0.3f, 0.6f, 0.75f, 0.9f, true);
+            for (int i = 0; i < 2; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(7.f, 10.f), 0.2f, 1.2f, 0.55f, 0.85f, false);
+            roads_.push_back({c, 2.f});
+            break;
+        case ST_PASS:
+            m.push_back({c + r.range(-0.6f, 0.6f), 0.2f, 0.62f, 0.f});
+            for (int i = 0; i < 6; i++) tree(c + (i & 1 ? 1.f : -1.f) * r.range(3.5f, 10.f), 0.05f, 1.5f, 0.5f, 0.9f, false);
+            roads_.push_back({c, 2.f});
+            break;
+        }
     }
     std::sort(m.begin(), m.end(), [](const El& a, const El& b) { return a.depth < b.depth; });
-    // the foreground: big trees at the poster's corners and a few bushes
-    for (float s : {-1.f, 1.f}) {
-        const int n = r.irange(3, 4);
+    // the foreground: big trees in clumps along its loop, a dense run now and then, a few bushes
+    for (float x = r.range(0.f, 10.f); x < P_FG - 12.f;) {
+        const bool run = r.chance(0.15f);
+        const int n = run ? r.irange(4, 5) : r.irange(1, 3);
         for (int i = 0; i < n; i++) {
-            const float ex = s * (W - r.range(0.f, 6.5f));
             const float k = r.chance(0.2f) ? 5.f : treeKind(false);
-            fg.push_back({ex, r.range(0.3f, 1.4f), k == 5.f ? r.range(0.8f, 1.1f) : r.range(1.1f, 1.6f), k});
+            fg.push_back({x + r.range(-1.8f, 1.8f) * (run ? 2.f : 1.f), r.range(0.3f, 1.4f),
+                          k == 5.f ? r.range(0.8f, 1.1f) : r.range(1.1f, 1.6f), k});
         }
+        x += r.range(16.f, 34.f);
     }
     std::sort(fg.begin(), fg.end(), [](const El& a, const El& b) { return a.depth < b.depth; });
     els_.clear();
-    for (const El& e : m) if (els_.size() < 34) els_.push_back(e);
+    for (const El& e : m) if (els_.size() < 112) els_.push_back(e);
     elFg_ = (int)els_.size();
-    for (const El& e : fg) if (els_.size() < 48) els_.push_back(e);
+    for (const El& e : fg) if (els_.size() < 160) els_.push_back(e);
+    if (roads_.size() > 16) roads_.resize(16);
 }
 
 void SwissUniverse::drawLandscape() {
@@ -398,14 +455,21 @@ void SwissUniverse::drawLandscape() {
     set1f(p, "uZoom", zoom_);
     glUniform2f(ugl::U(p, "uSweep"), sweepX_, sweepA_);
     set4f(p, "uP0", V.farBase, V.snowLine, V.farHeight, V.round);
-    const float heroX = -side * std::max(13.f, (W + 9.f) * 0.5f);
-    set4f(p, "uP1", (float)V.hero, heroX, V.lakeY, V.mist);
-    const float vx = side * std::max(14.5f, (W + 12.f) * 0.5f);
-    set4f(p, "uP2", vx, (float)V.hasPath, V.cloudFlat, V.cloudCover);
+    // a lake everywhere in the lake scenes, in stretches elsewhere (at the level of the scenes without one)
+    const bool lake = V.lakeY > -50.f;
+    set4f(p, "uP1", (float)V.hero, 0.f, lake ? V.lakeY : -2.0f, V.mist);
+    set4f(p, "uP2", -side * 16.f, lake ? 1.f : 0.f, V.cloudFlat, V.cloudCover);
     set4f(p, "uP3", V.meadowY, V.fgY, 0.f, V.midH);
-    // the sun: at the golden hour it sinks low over the ranges on the village's side (clear of the hero peak) and
-    // grows
-    const float sunX = lerpf(V.sunR > 0.f ? -side * V.sunX * W : 0.f, side * std::max(13.5f, W * 0.62f), drop);
+    glUniform1fv(ugl::U(p, "uLift"), STRETCHES, lift_);
+    set1f(p, "uStOrg", ST_ORIGIN);
+    {
+        std::vector<float> rd;
+        for (const vec2& q : roads_) rd.insert(rd.end(), {q.x, q.y, 0.f, 0.f});
+        set1i(p, "uRoadN", (int)roads_.size());
+        if (!roads_.empty()) glUniform4fv(ugl::U(p, "uRoad"), (GLsizei)roads_.size(), rd.data());
+    }
+    // the sun stands still in the sky; at the golden hour it sinks low behind the ranges and grows
+    const float sunX = (V.sunR > 0.f ? -side * V.sunX : 0.55f * side) * W;
     glUniform3f(ugl::U(p, "uSun"), sunX, lerpf(V.sunY, 5.6f, drop), lerpf(std::max(V.sunR, 0.8f), 2.3f, drop));
     // long flat shadows away from the sun
     glUniform2f(ugl::U(p, "uShadow"), sunX > 0.f ? -1.f : 1.f, 1.f + 1.8f * drop);
@@ -962,33 +1026,25 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
 
-    // ---- Parallax: a slow swing, a sway on the bars, a lean away from the falling piece.
+    // ---- The travel: the camera runs steadily to the right, every depth at its share; a slow drift when calm,
+    // faster at mid and peak, much faster in a drop (the speed follows the eased level and drop light, then eases
+    // once more: never a jerk). Each depth's offset wraps at its loop's period.
     {
-        panT_ += sdt;
-        float target = 0.f;
-        if (game.hasPiece() && !game.over() && !bare_) {
-            int cells[4][2];
-            game.pieceCells(game.piece(), cells);
-            float cx = 0.f;
-            for (auto& c : cells) cx += c[0];
-            cx = cx / 4.f + game.pieceVisualX() - game.piece().x;
-            target = -0.12f * layout::cellPos(cx, 0.f).x;
-        }
-        pieceLean_ = approach(pieceLean_, target, 1.2f, sdt);
         const float g = smoothstepf(0.f, 1.f, dropAmt_);
-        const float swayA = 0.12f + 0.12f * saturate(lv_ * 0.5f) + 0.6f * g;
-        const float sway = swayA * (float)std::sin(beat_ / 8.0 * TAU);
-        // the drop's camera travel: a lateral dolly out and back over eight bars (the foreground crosses about
-        // five cells, the far range a fraction of one) and a push-in breathing over four bars, both from the
-        // drop's first beat and eased in and out with its light
+        const float target = lerpf(0.5f + 0.22f * std::clamp(lv_, 0.f, 2.f), 2.2f, g); // foreground units / s
+        speed_ = approach(speed_, target, 0.8f, sdt);
+        scroll_ += (double)speed_ * sdt;
+        for (int i = 0; i < 7; i++) layerOff_[i] = PERIOD[i] > 0.f ? (float)std::fmod(scroll_ * DEPTH[i], (double)PERIOD[i]) : 0.f;
+        // the drop's push-in, breathing over four bars from its first beat (no sideways move)
         const double db = beat_ - dropBeat_;
-        const float dolly = 5.f * g * (float)std::sin(db / 32.0 * TAU);
         zoom_ = g * (0.1f + 0.09f * (0.5f - 0.5f * (float)std::cos(db / 16.0 * TAU)));
-        pan_ = 2.6f * std::sin(panT_ * TAU / 80.f) + (f.paused ? 0.f : 1.f) * sway + pieceLean_ + dolly;
-        for (int i = 0; i < 7; i++) layerOff_[i] = pan_ * DEPTH[i];
-        const float cs = 1.f + 2.5f * smoothstepf(0.f, 1.f, dropAmt_);
+        // the clouds: their own drift (faster in a drop) and the sky's share of the travel, band by band
+        const float cs = 1.f + 2.5f * g;
         const float speeds[3] = {0.11f, 0.17f, 0.25f};
-        for (int i = 0; i < 3; i++) cloudOff_[i] = std::fmod(cloudOff_[i] + sdt * speeds[i] * cs, 1000.f);
+        for (int i = 0; i < 3; i++) {
+            cloudDrift_[i] += (double)sdt * speeds[i] * cs;
+            cloudOff_[i] = (float)std::fmod(cloudDrift_[i] + scroll_ * DEPTH[0] * (1.0 + 0.6 * i), 12.0 * (10.0 + 3.0 * i));
+        }
     }
     updateBirds(sdt);
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);

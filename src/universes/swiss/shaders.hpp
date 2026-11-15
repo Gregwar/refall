@@ -66,8 +66,9 @@ out vec4 frag;
 uniform vec2 uRes;
 uniform vec3 uView;             // the view's center (board units), pixels per unit
 uniform float uTime;
-uniform float uOff[7];          // parallax: sky, far range, hero + first range, second, third + lake, meadow, foreground
-uniform vec3 uCloudOff;         // each cloud band's drift
+uniform float uOff[7];          // the camera's travel in each depth's units (sky, far range, hero + first range, second,
+                                // third + lake, meadow, foreground), wrapped to each depth's period
+uniform vec3 uCloudOff;         // each cloud band's drift and travel, wrapped to its period
 uniform float uSeed;
 uniform vec3 uSkyTop, uSkyBot, uHaze, uCloudC, uSunC;
 uniform vec3 uSnow, uSnowSh, uRock, uRockSh;
@@ -79,13 +80,20 @@ uniform vec3 uPath, uWall, uWallSh, uRoof, uRoofSh, uTimber, uWindow;
 uniform vec3 uTree, uTreeLit, uTree2, uTree2Lit;
 uniform vec4 uP0;               // far range: base, snow line, height, summits' rounding
 uniform vec4 uP1;               // hero kind (0 none, 1 snow horn, 2 limestone), hero x, lake level, mist
-uniform vec4 uP2;               // village x, path (0/1), clouds' flatness, cloud cover
+uniform vec4 uP2;               // hero x, lake everywhere (1) or in stretches (0), clouds' flatness, cloud cover
 uniform vec4 uP3;               // meadow level, foreground level, -, mid ranges' height
 uniform vec3 uSun;              // x, y, radius
 uniform vec4 uGrade;            // warmth, calm haze, cool (slow motion), the sun's rays
 uniform float uWind;
 uniform int uElCount, uElFg;    // elements: [0, uElFg) on the meadow, [uElFg, uElCount) in the foreground
-uniform vec4 uEl[48];           // x (layer units), depth under the crest, size, kind
+uniform vec4 uEl[160];          // x (layer units), depth under the crest, size, kind
+// The meadow's stretches (village, forest, valley, viaduct, chapel hill, pass...): 16 of SPAN units from uStOrg along
+// its period, each lifting or sinking the ground; the roads and rivers running down from them (x, kind 1 path,
+// 2 zigzag road, 3 river).
+uniform float uLift[16];
+uniform float uStOrg;
+uniform int uRoadN;
+uniform vec4 uRoad[16];
 uniform float uGold;            // the drop's golden hour 0..1
 uniform float uZoom;            // the drop's push-in: each depth scaled by 1 + uZoom x its parallax share
 uniform vec2 uShadow;           // the cast shadows' direction (-1 left, 1 right) and length
@@ -101,6 +109,18 @@ float vnoise(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(H2(i), H2(i + vec2(1, 0)), f.x), mix(H2(i + vec2(0, 1)), H2(i + vec2(1, 1)), f.x), f.y);
 }
+// The scenery loops: every depth is periodic in x (its noises' lattices wrap at its period, n cells).
+float lnoiseP(float x, float n) { float i = floor(x); return mix(H(mod(i, n)), H(mod(i + 1.0, n)), fract(x)); }
+float vnoiseP(vec2 p, float n) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float x0 = mod(i.x, n), x1 = mod(i.x + 1.0, n);
+    return mix(mix(H2(vec2(x0, i.y)), H2(vec2(x1, i.y)), f.x), mix(H2(vec2(x0, i.y + 1.0)), H2(vec2(x1, i.y + 1.0)), f.x), f.y);
+}
+// x - c folded into [-P/2, P/2): the nearest copy of something at c in a world of period P.
+float wrapd(float x, float c, float P) { return mod(x - c + 0.5 * P, P) - 0.5 * P; }
+const float TAU = 6.2831853;
+const float P_MEADOW = 384.0, P_FG = 576.0, SPAN = 24.0;
 // Coverage of an implicit field (positive inside), antialiased over a pixel (uniform control flow only).
 float fill(float v) { return clamp(v / max(fwidth(v), 1e-5) + 0.5, 0.0, 1.0); }
 // Coverage of a signed distance in board units (negative inside).
@@ -139,18 +159,18 @@ vec3 rim(vec3 c, float h, float y, float lit) {
 float tents(float x, float L, float cw, vec2 hr, vec2 sr, float r) {
     float c = floor(x / cw), h = -1e4;
     for (int i = -2; i <= 2; i++) {
-        float k = c + float(i);
-        float px = (k + 0.2 + 0.6 * H(k * 1.7 + L * 31.0)) * cw;
-        float ph = mix(hr.x, hr.y, H(k * 2.3 + L * 17.0));
-        float s = mix(sr.x, sr.y, H(k * 3.1 + L * 7.0));
-        float sl = s * (0.7 + 0.6 * H(k * 4.1 + L)), srt = s * (0.7 + 0.6 * H(k * 5.3 + L * 2.0));
+        float k = c + float(i), kk = mod(k, L < 1.5 ? 24.0 : 20.0); // peaks a period: 24 (far range), 20
+        float px = (k + 0.2 + 0.6 * H(kk * 1.7 + L * 31.0)) * cw;
+        float ph = mix(hr.x, hr.y, H(kk * 2.3 + L * 17.0));
+        float s = mix(sr.x, sr.y, H(kk * 3.1 + L * 7.0));
+        float sl = s * (0.7 + 0.6 * H(kk * 4.1 + L)), srt = s * (0.7 + 0.6 * H(kk * 5.3 + L * 2.0));
         float t = smin(ph + (x - px) * sl, ph - (x - px) * srt, r + 0.02);
         h = smax(h, t, 0.25 + r * 0.5);
     }
     return h;
 }
-float jag(float x, float L, float a) {
-    return a * ((lnoise(x * 1.7 + L * 13.0) - 0.5) + 0.45 * (lnoise(x * 4.1 + L * 7.0) - 0.5));
+float jag(float x, float L, float a, float P) {
+    return a * ((lnoiseP(x * 1.7 + L * 13.0, 1.7 * P) - 0.5) + 0.45 * (lnoiseP(x * 4.1 + L * 7.0, 4.1 * P) - 0.5));
 }
 // Lit (1) where the ridge, looked up along the light (down to the right), rises: the faces toward the sun.
 float facet(float x, float y, float h, float L, float cw, vec2 hr, vec2 sr, float r, float lean) {
@@ -159,11 +179,20 @@ float facet(float x, float y, float h, float L, float cw, vec2 hr, vec2 sr, floa
     return fill(d * 4.0);
 }
 
+// The stretches' lift: each stretch's own, blended smoothly into the next one's.
+float lift(float x) {
+    float u = (x - uStOrg) / SPAN - 0.5;
+    float i = floor(u), f = fract(u);
+    float a = uLift[int(mod(i, 16.0))], b = uLift[int(mod(i + 1.0, 16.0))];
+    return mix(a, b, smoothstep(0.0, 1.0, f));
+}
 float meadowH(float x) {
-    return uP3.x + 0.9 * sin(x * 0.17 + 1.3 + uSeed) + 0.5 * sin(x * 0.41 + 0.5 + uSeed * 2.0) + 0.18 * sin(x * 1.1 + uSeed);
+    return uP3.x + 0.9 * sin(x * (TAU * 10.0 / P_MEADOW) + 1.3 + uSeed) + 0.5 * sin(x * (TAU * 25.0 / P_MEADOW) + 0.5 + uSeed * 2.0)
+         + 0.18 * sin(x * (TAU * 67.0 / P_MEADOW) + uSeed) + lift(x);
 }
 float fgH(float x) {
-    return uP3.y + 0.9 * sin(x * 0.13 + 2.0 + uSeed * 3.0) + 0.45 * sin(x * 0.37 + 1.0) + 0.12 * sin(x * 1.3 + uSeed);
+    return uP3.y + 0.9 * sin(x * (TAU * 12.0 / P_FG) + 2.0 + uSeed * 3.0) + 0.45 * sin(x * (TAU * 34.0 / P_FG) + 1.0)
+         + 0.12 * sin(x * (TAU * 119.0 / P_FG) + uSeed);
 }
 
 // ---- The village and the trees.
@@ -274,12 +303,39 @@ void bush(vec2 q, float s, vec3 dk, vec3 lit, inout vec3 col) {
     paint(col, lit, cov(max(d, l) * s));
 }
 
+// A stone viaduct across a valley: arches on piers standing on the slopes, its deck level with the higher rim, and
+// now and then a little train crossing it.
+void viaduct(vec2 q, vec4 e, float yb, inout vec3 col) {
+    float s = e.z, span = 6.0 * s;
+    if (abs(q.x) > span) return;
+    float hd = max(meadowH(e.x - span), meadowH(e.x + span)) - e.y - yb + 0.25 * s;
+    float g = meadowH(e.x + q.x) - e.y - yb;
+    if (q.y < g - 0.05 || q.y > hd + 0.6 * s) return;
+    float a = 1.15 * s, r = 0.4 * a;
+    float fu = (fract(q.x / a) - 0.5) * a;
+    float archTop = hd - 0.42 * s - (r - sqrt(max(r * r - fu * fu, 0.0)));
+    float open = (abs(fu) < r && q.y < archTop) ? 1.0 : 0.0;
+    float body = cov(max(q.y - hd, abs(q.x) - span)) * (1.0 - open);
+    paint(col, mix(uWall, uWallSh, 0.35), body);
+    paint(col, uWallSh, body * step(hd - 0.1 * s, q.y));
+    // the train: three carriages running across, every so often
+    float tx = (fract(uTime * 0.035 + fract(e.x * 0.31)) * 2.0 - 1.0) * (span + 4.0 * s);
+    float tq = q.x - tx;
+    float car = step(abs(fract(tq / (0.9 * s)) - 0.5), 0.46);
+    float tb = max(max(abs(tq + 1.35 * s) - 1.35 * s, abs(q.x) - span), max(hd - q.y, q.y - hd - 0.32 * s));
+    paint(col, uRoof, cov(tb) * car);
+    float win = step(abs(fract(tq / (0.3 * s)) - 0.5), 0.22) * step(hd + 0.14 * s, q.y) * step(q.y, hd + 0.24 * s);
+    paint(col, uWindow, cov(tb) * car * win);
+}
+
 void element(vec2 p, vec4 e, float off, bool fg, inout vec3 col) {
-    float x = e.x - off;
-    float yb = (fg ? fgH(e.x) : meadowH(e.x)) - e.y;
-    vec2 q = p - vec2(x, yb);
     float s = e.z, kind = e.w;
-    if (abs(q.x) > 4.0 * s || q.y < -0.4 || q.y > 4.0 * s) return;
+    float dx = wrapd(p.x, e.x, fg ? P_FG : P_MEADOW);
+    if (abs(dx) > (kind > 6.5 ? 6.5 : 4.0) * s) return;
+    float yb = (fg ? fgH(e.x) : meadowH(e.x)) - e.y;
+    vec2 q = vec2(dx, p.y - yb);
+    if (kind > 6.5) { viaduct(q, e, yb, col); return; }
+    if (q.y < -0.4 || q.y > 4.0 * s) return;
     float hs = fract(e.x * 0.137 + e.y * 1.31);
     if (kind < 1.5) house(q, s, kind, hs, col);
     else if (kind < 2.5) church(q, s, hs, col);
@@ -291,10 +347,12 @@ void element(vec2 p, vec4 e, float off, bool fg, inout vec3 col) {
 
 // Its cast shadow on the grass, to the right.
 float shadowOf(vec2 p, vec4 e, float off, bool fg) {
-    float x = e.x - off;
-    float yb = (fg ? fgH(e.x) : meadowH(e.x)) - e.y;
+    if (e.w > 6.5) return 0.0;
     float w = (e.w < 2.5 ? 1.6 : 0.8) * uShadow.y;
-    vec2 q = (p - vec2(x + uShadow.x * w * 0.55 * e.z, yb + 0.02)) / (vec2(w, 0.18) * e.z);
+    float dx = wrapd(p.x, e.x, fg ? P_FG : P_MEADOW);
+    if (abs(dx) > 3.0 * w * e.z) return 0.0;
+    float yb = (fg ? fgH(e.x) : meadowH(e.x)) - e.y;
+    vec2 q = (vec2(dx, p.y) - vec2(uShadow.x * w * 0.55 * e.z, yb + 0.02)) / (vec2(w, 0.18) * e.z);
     return cov((length(q) - 1.0) * 0.18 * e.z);
 }
 
@@ -303,15 +361,15 @@ float cloudD(vec2 p, int band) {
     float fb = float(band);
     float y0 = 10.6 - fb * 2.3 + 0.0;
     float cw = 10.0 + 3.0 * fb;
-    float xx = p.x + uCloudOff[band] + uOff[0] * (1.0 + fb * 0.6);
+    float xx = p.x + uCloudOff[band];
     float c = floor(xx / cw), d = 1e4;
     float fl = mix(1.0, 0.45, uP2.z);
     for (int i = -1; i <= 1; i++) {
-        float k = c + float(i);
-        if (H(k * 3.7 + fb * 11.0) > uP2.w) continue;
-        float cx = (k + 0.25 + 0.5 * H(k * 5.1 + fb)) * cw;
-        float w = (1.6 + 2.2 * H(k * 7.3 + fb * 3.0)) * (1.0 + 0.5 * uP2.z);
-        float yb = y0 + 1.2 * (H(k * 9.7 + fb) - 0.5);
+        float k = c + float(i), kk = mod(k, 12.0); // 12 cells a period
+        if (H(kk * 3.7 + fb * 11.0) > uP2.w) continue;
+        float cx = (k + 0.25 + 0.5 * H(kk * 5.1 + fb)) * cw;
+        float w = (1.6 + 2.2 * H(kk * 7.3 + fb * 3.0)) * (1.0 + 0.5 * uP2.z);
+        float yb = y0 + 1.2 * (H(kk * 9.7 + fb) - 0.5);
         vec2 q = vec2(xx - cx, (p.y - yb) / fl);
         float r0 = 0.45 * w * 0.5;
         float base = length(max(abs(q - vec2(0.0, r0)) - vec2(w - r0, 0.0), 0.0)) - r0;
@@ -334,7 +392,7 @@ void main() {
     // ---- Sky: a flat gradient, the sun with its halos, the rays of a drop.
     float sy = clamp((p.y + 2.0) / 15.0, 0.0, 1.0);
     vec3 col = mix(uSkyBot, uSkyTop, smoothstep(0.0, 1.0, sy));
-    vec2 sp = vec2(uSun.x - uOff[0], uSun.y);
+    vec2 sp = vec2(uSun.x, uSun.y);
     {
         vec2 d = p - sp;
         float a = atan(d.y, d.x);
@@ -356,10 +414,12 @@ void main() {
         float L = 1.0, x = p.x;
         vec2 hr = vec2(uP0.x + uP0.z * 0.45, uP0.x + uP0.z), sr = vec2(0.75, 1.35);
         float cw = 5.0;
-        float h = tents(x, L, cw, hr, sr, uP0.w) + jag(x, L, 0.45);
+        // massifs and gaps along the range: the high ones carry their glaciers lower
+        float env = 0.5 + 0.5 * sin(x * (TAU * 2.0 / 120.0) + uSeed);
+        float h = uP0.x + (tents(x, L, cw, hr, sr, uP0.w) - uP0.x) * (0.68 + 0.38 * env) + jag(x, L, 0.45, 120.0);
         float lit = facet(x, p.y, h, L, cw, hr, sr, uP0.w, 0.45);
-        float sl = uP0.y + 1.1 * (lnoise(x * 0.45) - 0.5) + 0.5 * (lnoise(x * 1.5 + 3.0) - 0.5);
-        float sn = (p.y - sl) + 1.5 * (vnoise(vec2(x * 1.4, p.y * 0.5)) - 0.5) + 0.8 * (vnoise(vec2(x * 3.1, p.y * 1.8)) - 0.5);
+        float sl = uP0.y - 1.6 * env + 1.1 * (lnoiseP(x * 0.45, 54.0) - 0.5) + 0.5 * (lnoiseP(x * 1.5 + 3.0, 180.0) - 0.5);
+        float sn = (p.y - sl) + 1.5 * (vnoiseP(vec2(x * 1.4, p.y * 0.5), 168.0) - 0.5) + 0.8 * (vnoiseP(vec2(x * 3.1, p.y * 1.8), 372.0) - 0.5);
         sn += (lit - 0.5) * 0.5;
         float snow = fill(sn);
         vec3 rock = mix(uRockSh, uRock, lit), ice = mix(uSnowSh, uSnow, lit);
@@ -377,27 +437,27 @@ void main() {
         vec3 m = uMid1;
         float L = 2.0, cw = 6.5;
         vec2 hr = vec2(midH * 0.55, midH), sr = vec2(0.45, 0.9);
-        float h = tents(x, L, cw, hr, sr, 0.6 + uP0.w) + jag(x, L, 0.25);
+        float h = tents(x, L, cw, hr, sr, 0.6 + uP0.w) + jag(x, L, 0.25, 130.0);
         float lit = facet(x, p.y, h, L, cw, hr, sr, 0.6 + uP0.w, 0.5);
         vec3 c = mix(m, mix(m, uHaze, 0.24), lit);
         c = mix(c, uHaze, uP1.w * smoothstep(0.0, 5.0, h - p.y));
         if (uP1.x > 0.5) {
-            float hx = uP1.y, top = midH + 6.5;
-            float dx = x - hx;
-            float hh = top - (dx < 0.0 ? -dx * 0.85 : dx * 1.9) + jag(x, 9.0, 0.35);
-            float spine = hx + (top - p.y) * 0.22;
-            float hl = fill(spine - x);
+            // a hero every 65 units, every other one a little lower
+            float dx = wrapd(x, uP2.x, 65.0);
+            float top = midH + 6.5 - 1.3 * mod(floor((x - uP2.x + 32.5) / 65.0), 2.0);
+            float hh = top - (dx < 0.0 ? -dx * 0.85 : dx * 1.9) + jag(x, 9.0, 0.35, 130.0);
+            float hl = fill((top - p.y) * 0.22 - dx);
             vec3 hc;
             if (uP1.x < 1.5) {
-                float sn = (p.y - (top - 4.5)) + 2.0 * (vnoise(vec2(x * 1.6, p.y * 0.45)) - 0.5) + (hl - 0.5) * 1.2;
+                float sn = (p.y - (top - 4.5)) + 2.0 * (vnoiseP(vec2(x * 1.6, p.y * 0.45), 208.0) - 0.5) + (hl - 0.5) * 1.2;
                 hc = mix(mix(uRockSh, uRock, hl), mix(uSnowSh, uSnow, hl), fill(sn));
             } else {
-                float u = (x - hx) - (p.y - top) * 0.42;
+                float u = dx - (p.y - top) * 0.42;
                 u = u * 1.3 + 0.6 * vnoise(vec2(u * 0.7, p.y * 0.35));
                 float band = fill(0.09 - abs(fract(u) - 0.5)) * step(0.35, H(floor(u) + 4.0));
                 hc = mix(uHeroSh, uHeroLit, hl);
                 hc = mix(hc, mix(uHeroLit, uHeroSh, 0.6), band * hl);
-                float gr = (top - 5.2 - (x - hx) * 0.3) - p.y + 1.4 * (vnoise(vec2(x * 1.2, p.y * 0.6)) - 0.5);
+                float gr = (top - 5.2 - dx * 0.3) - p.y + 1.4 * (vnoiseP(vec2(x * 1.2, p.y * 0.6), 156.0) - 0.5);
                 hc = mix(hc, mix(uHeroGrass, mix(uHeroGrass, uMid2, 0.4), 1.0 - hl), fill(gr));
             }
             float inH = fill(hh - p.y);
@@ -414,7 +474,7 @@ void main() {
         float x = p.x;
         float L = 3.0, cw = 5.5;
         vec2 hr = vec2(midH * 0.3, midH * 0.7), sr = vec2(0.35, 0.75);
-        float h = tents(x, L, cw, hr, sr, 0.9 + uP0.w) + jag(x, L, 0.2) - 1.5;
+        float h = tents(x, L, cw, hr, sr, 0.9 + uP0.w) + jag(x, L, 0.2, 110.0) - 1.5;
         float lit = facet(x, p.y, h, L, cw, hr, sr, 0.9 + uP0.w, 0.5);
         vec3 c = mix(uMid2, mix(uMid2, uHaze, 0.2), lit);
         c = mix(c, uHaze, uP1.w * smoothstep(0.0, 5.0, h - p.y));
@@ -426,26 +486,35 @@ void main() {
         float x = p.x;
         float L = 4.0, cw = 7.0;
         vec2 hr = vec2(midH * 0.1, midH * 0.45), sr = vec2(0.3, 0.6);
-        float h = tents(x, L, cw, hr, sr, 1.2 + uP0.w) + jag(x, L, 0.15) - 3.0;
+        float h = tents(x, L, cw, hr, sr, 1.2 + uP0.w) + jag(x, L, 0.15, 140.0) - 3.0;
         float lit = facet(x, p.y, h, L, cw, hr, sr, 1.2 + uP0.w, 0.5);
         vec3 c = mix(uMid3, mix(uMid3, uHaze, 0.16), lit);
         c = mix(c, uHaze, uP1.w * 0.8 * smoothstep(0.0, 5.0, h - p.y));
         c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
         // the lake: a flat water plane with long glints, the sun's path on it
-        if (uP1.z > -50.0) {
+        {
             float ly = uP1.z;
+            // the lake's stretches (two a period, or everywhere in the lake scenes); between them the shore runs back
+            // in perspective and the valley's floor takes over, in fields
+            float xs = x + (ly - p.y) * 1.6;
+            float lk = max(uP2.y, smoothstep(0.1, 0.25, sin(xs * (TAU * 2.0 / 140.0) + uSeed * 1.7)));
+            vec3 floorC = mix(mix(uMeadow, uMid3, 0.55), uHaze, 0.15);
+            float fieldB = step(0.5, fract((p.y + 0.3 * sin(x * (TAU * 9.0 / 140.0))) * 1.4));
+            floorC = mix(floorC, mix(floorC, uMeadowLit, 0.14), fieldB);
+            paint(col, floorC, fill(ly - p.y) * (1.0 - lk));
             float rows = 3.0;
             float r = floor(p.y * rows);
-            float u = (x + uTime * 0.06 * (H(r) - 0.5)) / (1.4 + 2.0 * H(r + 3.0));
-            float seg = floor(u);
+            float nr = 60.0 + floor(H(r + 3.0) * 60.0); // glints a period on this row
+            float u = x * nr / 140.0 + uTime * 0.06 * (H(r) - 0.5);
+            float seg = mod(floor(u), nr);
             float sunNear = exp(-pow((pw.x - sp.x) / (1.0 + (ly - p.y) * 0.6), 2.0));
             float on = step(H(seg * 1.3 + r * 7.1), 0.32 + 0.6 * sunNear);
             float g = abs(fract(p.y * rows) - 0.5) * 2.0;
             float glint = on * step(0.15, fract(u)) * step(fract(u), 0.85) * fill((0.25 - g) * 3.0);
             vec3 w = mix(uLake, uLakeLit, glint * 0.9);
             w = mix(w, mix(uLake, uSkyBot, 0.35), smoothstep(ly - 0.25, ly, p.y));
-            paint(col, w, fill(ly - p.y));
+            paint(col, w, fill(ly - p.y) * lk);
         }
     }
 
@@ -456,29 +525,50 @@ void main() {
         float h = meadowH(x);
         float inM = fill(h - p.y);
         vec3 g = uMeadow;
-        float crest = fill((h - p.y) - 0.0) * (1.0 - fill((h - p.y) - 0.3 - 0.15 * sin(x * 0.9)));
+        float crest = fill((h - p.y) - 0.0) * (1.0 - fill((h - p.y) - 0.3 - 0.15 * sin(x * (TAU * 55.0 / P_MEADOW))));
         g = mix(g, uMeadowLit, crest);
-        float patchN = vnoise(vec2(x * 0.3, p.y * 0.8)) + 0.3 * vnoise(vec2(x * 1.1, p.y * 2.3));
+        float patchN = vnoiseP(vec2(x * 0.3125, p.y * 0.8), 120.0) + 0.3 * vnoiseP(vec2(x * 1.09375, p.y * 2.3), 420.0);
         g = mix(g, uMeadowDk, fill((patchN - 1.02) * 2.0) * 0.7);
         // flowers: a sparse dotting, larger nearer
         {
-            float cs = 0.33;
-            vec2 cid = floor(vec2(x, p.y) / cs);
+            float cs = 0.32;
+            vec2 cell = floor(vec2(x, p.y) / cs);
+            vec2 cid = vec2(mod(cell.x, 1200.0), cell.y);
             vec2 j = vec2(H2(cid), H2(cid + 17.0));
-            vec2 c = (cid + 0.2 + 0.6 * j) * cs;
+            vec2 c = (cell + 0.2 + 0.6 * j) * cs;
             float rr = 0.022 + 0.009 * clamp(h - p.y, 0.0, 4.0);
             float on = step(H2(cid + 5.0), 0.24);
             g = mix(g, uDot, on * cov(length(vec2(x, p.y) - c) - rr) * 0.9);
         }
-        // the path: a winding ribbon from the village down to the foot of the poster
-        if (uP2.y > 0.5) {
-            float vx = uP2.x;
-            float top = meadowH(vx + 1.6) - 1.0;
-            float t = top - p.y;
-            float cx = vx + 1.6 + 1.5 * sin(t * 0.55 + 0.4) * min(1.0, t * 0.4) + t * 0.35;
-            float w = 0.06 + 0.11 * max(t, 0.0);
-            float dp = max(abs(x - cx) - w, -t);
-            g = mix(g, uPath, cov(dp * 0.9));
+        // the roads and rivers: a winding path down from a village, a road zigzagging down from a hilltop, a river
+        // winding out of a valley's floor, each widening toward the foot of the poster
+        for (int i = 0; i < uRoadN; i++) {
+            vec4 rd = uRoad[i];
+            float dx = wrapd(x, rd.x, P_MEADOW);
+            if (abs(dx) > 16.0) continue;
+            if (rd.y < 1.5) {
+                float top = meadowH(rd.x + 1.6) - 1.0;
+                float t = top - p.y;
+                float cx = 1.6 + 1.5 * sin(t * 0.55 + 0.4) * min(1.0, t * 0.4) + t * 0.35;
+                float w = 0.06 + 0.11 * max(t, 0.0);
+                g = mix(g, uPath, cov(max(abs(dx - cx) - w, -t) * 0.9));
+            } else if (rd.y < 2.5) {
+                float top = meadowH(rd.x) - 0.45;
+                float t = top - p.y;
+                // switchbacks, longer and wider nearer
+                float tri = abs(fract(t / (0.5 + 0.3 * t) + 0.25) - 0.5) * 4.0 - 1.0;
+                float cx = (0.35 + 0.22 * t) * tri + t * 0.2;
+                float w = 0.05 + 0.07 * max(t, 0.0);
+                g = mix(g, uPath, cov(max(abs(dx - cx) - w, -t) * 0.6));
+            } else {
+                float top = meadowH(rd.x) - 0.12;
+                float t = top - p.y;
+                float cx = 1.3 * sin(t * 0.7 + 1.0) * min(1.0, t * 0.5) - t * 0.3;
+                float w = 0.08 + 0.2 * max(t, 0.0);
+                float inR = cov(max(abs(dx - cx) - w, -t));
+                float flow = step(fract(t * 1.4 - uTime * 0.25 + 0.3 * sin(dx * 3.0)), 0.18) * step(abs(dx - cx), w * 0.55);
+                g = mix(g, mix(uLake, uLakeLit, flow * 0.7), inR);
+            }
         }
         paint(col, g, inM);
         float sh = 0.0;
@@ -494,13 +584,14 @@ void main() {
         float h = fgH(x);
         float inF = fill(h - p.y);
         vec3 g = uFg;
-        float crest = 1.0 - fill((h - p.y) - 0.22 - 0.1 * sin(x * 1.3));
+        float crest = 1.0 - fill((h - p.y) - 0.22 - 0.1 * sin(x * (TAU * 119.0 / P_FG)));
         g = mix(g, mix(uFg, uMeadowLit, 0.5), crest);
         {
             float cs = 0.45;
-            vec2 cid = floor(vec2(x, p.y) / cs) + 101.0;
+            vec2 cell = floor(vec2(x, p.y) / cs);
+            vec2 cid = vec2(mod(cell.x, 1280.0), cell.y) + 101.0;
             vec2 j = vec2(H2(cid), H2(cid + 17.0));
-            vec2 c = (cid - 101.0 + 0.2 + 0.6 * j) * cs;
+            vec2 c = (cell + 0.2 + 0.6 * j) * cs;
             float on = step(H2(cid + 5.0), 0.3);
             g = mix(g, mix(uDot, uFg, 0.3), on * cov(length(vec2(x, p.y) - c) - 0.05) * 0.85);
         }
