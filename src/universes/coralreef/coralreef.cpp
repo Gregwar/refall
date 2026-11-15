@@ -14,7 +14,8 @@
 // schools swim fast and tight and the kicks pulse the caustics (a little brighter, the water surging on). The drop
 // brings a manta ray gliding past behind the well, its wings beating slowly. A quad: the schools gather and
 // swirl together behind the well for a while. Slow motion turns the light deep blue. Game over: the light sinks
-// to the deep, the reef recedes for the next game.
+// to the deep, the reef recedes for the next game. Around a song the camera dives down onto its view as the light
+// comes down from the surface, and after it drifts back as the light sinks to the deep.
 //
 // The pieces: one clean rounded tile per cell, one saturated color per piece type, softly lit from above with a
 // faint ripple of light. A cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
@@ -435,6 +436,7 @@ void CoralReefUniverse::updateCamera() {
     tanH_ = std::tan(CAM_FOV * 0.5f * PI / 180.f);
     vec3 eye, A, fwd, right, up;
     poseAt(camL_, time_, &eye, &A, &fwd, &right, &up);
+    eye = eye + (up * (0.35f * dive_) - fwd * (0.45f * drift_)) * camAt(std::max(0.f, camL_)).D;
     eye_ = eye;
     anchor_ = A;
     camD_ = camAt(std::max(0.f, camL_)).D;
@@ -1400,10 +1402,17 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         shownLines_ += std::clamp((lines_ - shownLines_) * 1.2f * wdt, -8.f * wdt, cap * wdt);
         if (lines_ < shownLines_ - 5.f) shownLines_ = approach(shownLines_, lines_, 6.f, dt);
         // the camera follows the growth on a calm spring (a new game dives back down to the polyp)
+        // (the setup: it dives down onto its view, the light coming down from the surface; the teardown: it drifts
+        // back, the light sinking to the deep)
         if (camL_ < 0.f) { camL_ = shownLines_; camLv_ = 0.f; }
         const float w = 1.3f;
         camLv_ += (w * w * (shownLines_ - camL_) - 2.f * w * camLv_) * dt;
         camL_ += camLv_ * dt;
+    }
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.7f, f.setup), out = smoothstepf(0.2f, 1.f, f.teardown);
+        dive_ = in * in;
+        drift_ = out * out;
     }
     updateCamera();
     for (Rock& b : rocks_)
@@ -1436,7 +1445,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             for (int i = 0; i < 7; i++) pal_.piece[i] = basePal_.piece[i];
             pal_.ink = basePal_.ink; pal_.accent = basePal_.accent; pal_.veil = basePal_.veil;
         }
-        const float deep = std::max(slow_, 0.7f * over_);
+        const float deep = std::max({slow_, 0.7f * over_, 1.f - smoothstepf(0.05f, 0.65f, f.setup), smoothstepf(0.3f, 0.95f, f.teardown)});
         if (deep > 0.01f) {
             Palette d = pal_;
             d.water = lin(0x0c2c8c); d.deep = lin(0x030c3a); d.haze = lin(0x2a52c8); d.surface = lin(0x4a7ae8);
