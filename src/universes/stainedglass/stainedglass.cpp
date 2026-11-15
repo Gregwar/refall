@@ -1260,14 +1260,12 @@ void StainedGlassUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The lettering pale as lit stone over a dark halo; the section followed by the hour of its light; the bonus gauge
-// a small rose of twelve petals, glazed in the accent as it charges.
-void StainedGlassUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The lettering pale as lit stone over a dark halo; the section followed by the hour of its light.
+void StainedGlassUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
     const float s = height_ / 1080.f;
     const vec3 ink = hex(V.ink), halo = hex(V.stone) * 0.5f;
     const vec3 accent = hex(V.accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
@@ -1276,32 +1274,6 @@ void StainedGlassUniverse::drawHud(const Game& g, const std::vector<HudText>& hu
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    // the bonus gauge: a ring of petals (pointed ovals)
-    if (vis > 0.01f) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 12;
-        for (int i = 0; i < N; i++) {
-            const float am = TAU * (i + 0.5f) / N;
-            const bool on = (i + 0.5f) / N <= fill;
-            const vec3 col = on ? accent : ink;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.55f : 0.24f)) * vis * (1.f - 0.5f * dimT_);
-            const float wA = TAU / N * (on ? 0.3f : 0.22f);
-            const float ri = r * 0.62f, ro = r * 1.05f, rm = r * 0.86f;
-            const float pts[4][2] = {{c.x + std::sin(am) * ri, c.y - std::cos(am) * ri},
-                                     {c.x + std::sin(am - wA) * rm, c.y - std::cos(am - wA) * rm},
-                                     {c.x + std::sin(am) * ro, c.y - std::cos(am) * ro},
-                                     {c.x + std::sin(am + wA) * rm, c.y - std::cos(am + wA) * rm}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
         }
         flushShapes();
     }
@@ -1628,7 +1600,6 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
     sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
     for (Puff& p : puffs_) p.t += dt;
     puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.t > p.life; }), puffs_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Dust in the air: slow motes drifting (only the beams show them).
     if (motes_.empty()) {
@@ -1944,7 +1915,7 @@ void StainedGlassUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
 

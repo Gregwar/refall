@@ -460,7 +460,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- tiles: jelly blocks, ghost, previews, gauge
+// ---------------------------------------------------------------- tiles: jelly blocks, ghost, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, age, type, neighbor mask. a3: scale, light, e2, e3.
 inline const char* TILE_VS = R"(#version 330 core
@@ -487,7 +487,7 @@ in vec2 vWorld;
 flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
 uniform float uPx, uTime, uBeat, uSlow, uBridge, uWave;
-uniform vec3 uBridgeInk, uGlow, uGlow2, uDeep;
+uniform vec3 uBridgeInk, uGlow, uDeep;
 
 // Each piece carries its own pattern inside the jelly, so pieces read apart by pattern as well as by hue.
 float motif(int type, vec2 q) {
@@ -636,31 +636,6 @@ void main() {
         float a = clamp(0.25 * fres + 0.6 * skin + spec * 0.6 + arc * 0.2, 0.0, 1.0) * disc;
         col *= disc * alpha * (1.0 - uBridge);
         frag = vec4(col, a * alpha * (1.0 - uBridge));
-        return;
-    }
-    if (kind == 4) {
-        // The bonus gauge: a glowing orb filling with living light (v3: level, ready, active, radius).
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.5;
-        float disc = 1.0 - smoothstep(1.0 - aa, 1.0, r);
-        float lvl = v3.x;
-        float fy = -1.0 + 2.0 * lvl + 0.05 * sin(q.x * 5.0 + uTime * 1.8) * step(0.01, lvl) * step(lvl, 0.99);
-        float filled = (1.0 - smoothstep(fy - aa, fy + aa, q.y)) * disc;
-        vec3 fc = mix(uGlow, uGlow2, v3.z);
-        float pulse = v3.y * (0.6 + 0.4 * sin(uTime * 3.0));
-        vec2 g = q * 6.0 + vec2(0.0, -uTime * 0.6);
-        float sp = exp(-pow(length(fract(g) - 0.5), 2.0) / 0.01) * step(0.65, hash12(floor(g)));
-        vec3 col = fc * (0.22 + 0.55 * smoothstep(fy - 0.9, fy, q.y) + 0.8 * sp) * filled * (1.0 + 1.2 * pulse);
-        col += mix(fc, vec3(1.0), 0.4) * exp(-pow((q.y - fy) / 0.05, 2.0)) * disc * step(0.01, lvl) * 0.8;
-        float ring = exp(-pow((r - 1.0) / (0.045 + aa), 2.0));
-        col += mix(uGlow, vec3(1.0), 0.25) * ring * (0.55 + 1.2 * pulse);
-        col += fc * exp(-max(r - 1.0, 0.0) * 4.0) * (0.06 + 0.4 * pulse) * (1.0 - disc);
-        col += uDeep * 0.0;
-        float a = max(disc * 0.85, ring);
-        col = mix(col, uBridgeInk * max(disc * 0.6, ring), uBridge);
-        frag = vec4(col * alpha, a * alpha);
         return;
     }
     discard;

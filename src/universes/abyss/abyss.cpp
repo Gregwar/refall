@@ -487,9 +487,6 @@ void AbyssUniverse::onEvent(const GameEvent& ev, const Game&) {
         }
         break;
     }
-    case GameEvent::BonusReady:
-        readyT_ = 0.f;
-        break;
     case GameEvent::TopOut: {
         // The stack sinks into the dark, its lights going out one by one.
         auto typeAt = [&](int x, int y) {
@@ -738,9 +735,6 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
     // The anglerfish's lure wanders slowly beside the well while the bonus lasts.
     lureX_ = -13.8f + 1.3f * std::sin(slowT_ * 0.23f) ;
     lureY_ = -3.4f + 1.f * std::sin(slowT_ * 0.37f + 1.f);
-
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
-    readyT_ += dt;
 }
 
 // =====================================================================================================
@@ -1007,13 +1001,6 @@ void AbyssUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.f : 0.7f);
-    }
-    // The bonus gauge: an orb filling with living light.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.8f, R * 1.8f, vec3(1.f), 1.f, 4, -1.f, 0, 0, saturate(gaugeShown_),
-             g.bonusReady() ? 1.f : 0.f, g.bonusActive() ? 1.f : 0.f, R);
     }
 }
 
@@ -1321,7 +1308,6 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
         set3f(progTile_, "uGlow", pal_.glow);
-        set3f(progTile_, "uGlow2", pal_.glow2);
         set3f(progTile_, "uDeep", pal_.deep);
         set1f(progTile_, "uWave", smoothstepf(0.f, 0.15f, quadT_) * (1.f - smoothstepf(0.3f, 2.f, quadT_)));
         glBindVertexArray(tileVao_);

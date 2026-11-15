@@ -110,11 +110,11 @@ private:
     // ---- Instanced creatures and sprites.
     struct BodyInst { float a[4], b[4], c[4], d[4]; };
     std::vector<BodyInst> bodies_;
-    struct SpriteInst { float a[4], b[4], c[4]; };
+    struct SpriteInst { float a[4], b[4]; };
     std::vector<SpriteInst> sprites_;
     void body(int kind, vec2 p, float size, float angle, float flip, const vec3& col, float alpha, float phase,
               float seed, float surface, float glow);
-    void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);
+    void sprite(vec2 p, float size, const vec3& col, float alpha, int mode);
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const std::vector<HudRect>& panels);
@@ -159,7 +159,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
     Bridge bridge_;

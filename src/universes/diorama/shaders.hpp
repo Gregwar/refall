@@ -88,11 +88,11 @@ vec3 shade(vec3 albedo, vec3 n, vec3 wp, float ao, float sh) {
 }
 )";
 
-// ---------- Blocks (instanced: falling pieces, the stack, previews, tumbling bodies, gauge beads).
+// ---------- Blocks (instanced: falling pieces, the stack, previews, tumbling bodies).
 inline const char* BLOCK_VS = R"(
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNrm;
-layout(location = 2) in vec4 iPosKind;   // world position, kind (0 block, 1 ghost tile, 2 bead)
+layout(location = 2) in vec4 iPosKind;   // world position, kind (0 block, 1 ghost tile)
 layout(location = 3) in vec4 iScaleMask; // scale, neighbour mask (1 left, 2 right, 4 up, 8 down)
 layout(location = 4) in vec4 iQuat;
 layout(location = 5) in vec4 iColGlow;   // albedo (linear), glow
@@ -149,7 +149,7 @@ void main() {
     }
     float sh = shadowAt(vWP, n);
     vec3 col = shade(alb, n, vWP, ao, sh);
-    // Lanterns: at night (and for the lit gauge beads) the blocks glow from inside, through their walls.
+    // Lanterns: at night the blocks glow from inside, through their walls.
     float glow = vGlow + uLanternGlow * (vKind < 0.5 ? 1.0 : 0.0);
     if (glow > 0.0) {
         float inner = 1.0 - smoothstep(0.15, 1.0, edge);

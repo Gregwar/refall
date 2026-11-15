@@ -537,9 +537,6 @@ void PolarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         break;
     }
-    case GameEvent::BonusReady:
-        glints_.push_back({v2(layout::GAUGE_CENTER.x + 0.5f, layout::GAUGE_CENTER.y + 0.5f), 0.f, 0.9f, 1.f});
-        break;
     case GameEvent::TopOut: {
         // The stack freezes white from the bottom up, then crumbles into powder.
         for (auto& c : ev.cells) {
@@ -681,8 +678,6 @@ void PolarUniverse::simulate(const Game& game, const MusicState& music, float dt
     iceClock_ += wdt;
     for (auto& g : glints_) g.t += dt;
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > g.life; }), glints_.end());
-
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -851,13 +846,6 @@ void PolarUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
-    }
-    // The bonus gauge: a ring of frost, a snowflake at its heart.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.3f, R * 1.3f, vec3(1.f), 1.f, 4, -1.f, 0, 0.f, saturate(gaugeShown_),
-             g.bonusReady() ? 1.f : 0.f, g.bonusActive() ? 1.f : 0.f, R);
     }
 }
 
@@ -1204,9 +1192,6 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progTile_, "uAurLight", aurLight_ * 1.4f);
         set3f(progTile_, "uMoonLight", cur_.moonCol * cur_.moon);
         set3f(progTile_, "uFrostCol", lerp(cur_.frost, cur_.snow, 0.15f));
-        set3f(progTile_, "uGaugeCol", lerp(cur_.frost, cur_.aurA, 0.5f));
-        set3f(progTile_, "uGaugeTrack", cur_.ink * 0.6f);
-        set3f(progTile_, "uShadow", cur_.halo);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
         set1f(progTile_, "uTime", timeGlint_);

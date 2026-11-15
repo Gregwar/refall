@@ -155,7 +155,6 @@ private:
     bool slowOn_ = false;
     float time_ = 0.f, world_ = 0.f;
     float dimT_ = 0.f;
-    float gaugeShown_ = 0.f;
     float side_[2] = {0.f, 0.f}; // the side lights of a peak (eased on)
     Bridge bridge_;
     Rng rng_{4242};

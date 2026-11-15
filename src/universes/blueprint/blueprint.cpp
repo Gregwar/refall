@@ -1255,12 +1255,6 @@ void BlueprintUniverse::buildBoard(const Game& g) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
-    // the bonus gauge: a drafted circle hatched as it charges
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        cell(gc.x, gc.y, layout::GAUGE_R, 0, pal_.accent, g.bonusReady() || g.bonusActive() ? 1.f : 0.f, 3, 0, 1.f, 0.f, pal_.line, fill);
-    }
 }
 
 // =====================================================================================================
@@ -1538,7 +1532,6 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     lockFx_.erase(std::remove_if(lockFx_.begin(), lockFx_.end(), [](const LockFx& l) { return l.t > 0.5f; }), lockFx_.end());
     for (auto& fd : fading_) fd.t += dt; // a clear runs in real time, even in slow motion
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > 0.36f; }), fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     revT_ += dt;
     cloudT_ += dt;
     if (pieceDim_.alive) {
@@ -1692,7 +1685,7 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         ugl::drawFullscreen();
     }
 
-    // ---- Pieces, previews, gauge.
+    // ---- Pieces, previews.
     if (!cells_.empty()) {
         const float s = height_ / 1080.f;
         glUseProgram(progCell_);
@@ -1704,8 +1697,6 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progCell_, "uFillA", pal_.fillA);
         set1f(progCell_, "uHatchShade", lerpf(0.72f, 1.f, pal_.dark)); // darker hatching on light paper
         set3f(progCell_, "uPaper", pal_.paper);
-        set3f(progCell_, "uRing", pal_.line);
-        set3f(progCell_, "uAccent", pal_.accent);
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(cellVao_);

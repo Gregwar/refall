@@ -391,7 +391,6 @@ void MusicBoxUniverse::render(const Frame& f, GLuint fbo) {
     kickK_ = std::max(kickK_ * std::exp(-dt * 5.f), kickIn_);
     kickIn_ = 0.f;
     refreshK_ = approach(refreshK_, 0.f, 0.5f, dt);
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The cylinder's turn: a slot past the comb per beat (two in calm parts), locked to the song's beat grid.
     {
@@ -868,6 +867,6 @@ void MusicBoxUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }

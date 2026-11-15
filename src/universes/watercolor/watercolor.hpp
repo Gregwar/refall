@@ -91,7 +91,6 @@ private:
     float energy_ = 0.5f;
 
     // ---- Music.
-    float worldTime_ = 0.f;
     double lastBeat_ = -1.0;
     float prevKick_ = 0.f, kickIn_ = 0.f, sinceKick_ = 9.f;
     int beatCount_ = 0;
@@ -112,7 +111,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, run_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the painting alone, no pencil frame, no pieces
     Bridge bridge_;

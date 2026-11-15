@@ -71,9 +71,9 @@ private:
     void buildBoard(const Game& g);
     struct Fading { float x, y; int type, mask; float t; };
     std::vector<Fading> fading_, overCells_;
-    struct SpriteInst { float a[4], b[4], c[4]; };
+    struct SpriteInst { float a[4], b[4]; };
     std::vector<SpriteInst> sprites_;
-    void sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f, float param2 = 0.f);
+    void sprite(vec2 p, float size, const vec3& col, float alpha, int mode);
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     float fade_ = 1.f; // the frame's fade in, the HUD's own (it was lettered under the post's fade and dim)
@@ -112,7 +112,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
     Bridge bridge_;

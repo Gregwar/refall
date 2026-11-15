@@ -513,9 +513,6 @@ void CloudscapeUniverse::onEvent(const GameEvent& ev, const Game&) {
         }
         break;
     }
-    case GameEvent::BonusReady:
-        glints_.push_back({v2(layout::GAUGE_CENTER.x + 0.6f, layout::GAUGE_CENTER.y + 0.6f), 0.f, 0.9f, 1.1f});
-        break;
     case GameEvent::TopOut: {
         // The floor gives way: the stack falls through the sea of clouds.
         for (auto& c : ev.cells) {
@@ -664,8 +661,6 @@ void CloudscapeUniverse::simulate(const Game& game, const MusicState& music, flo
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.t > d.delay + (d.fall ? 2.4f : 0.45f); }), dying_.end());
     for (auto& g : glints_) g.t += dt;
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > g.life; }), glints_.end());
-
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -793,13 +788,6 @@ void CloudscapeUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
-    }
-    // The bonus gauge: a halo filling around a small sun.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.3f, R * 1.3f, vec3(1.f), 1.f, 4, -1.f, 0.f, 0.f, saturate(gaugeShown_),
-             g.bonusReady() ? 1.f : 0.f, g.bonusActive() ? 1.f : 0.f, R);
     }
 }
 
@@ -1212,13 +1200,9 @@ void CloudscapeUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progTile_, "uShadow", cur_.deep * 0.5f);
         set3f(progTile_, "uMist", lerp(cur_.lit * 0.85f, cur_.haze, 0.5f));
         set3f(progTile_, "uRim", cur_.rim);
-        set3f(progTile_, "uGaugeSun", lerp(cur_.sun, cur_.glow, 0.4f));
-        set3f(progTile_, "uGaugeMoon", vec3(0.85f, 0.9f, 1.f));
-        set3f(progTile_, "uGaugeTrack", cur_.ink * 0.7f);
         set1f(progTile_, "uNight", cur_.moon);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
-        set1f(progTile_, "uTime", worldTime_);
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);

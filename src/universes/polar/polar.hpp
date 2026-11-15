@@ -122,7 +122,6 @@ private:
     float overT_ = -1.f, overDrift_ = 0.f, overFade_ = 0.f;
     float timeGlint_ = 0.f;
     bool worldPaused_ = false;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the night alone, no ice sheet, no blocks
     Bridge bridge_;
