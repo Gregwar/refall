@@ -178,7 +178,8 @@ struct Frame {
     // appearing, alone, then the game coming in) and stays 1; `teardown` rises 0 -> 1 after a song (the game fading
     // away, then the world alone fading to black) and is 0 otherwise. The same values in the world-alone frame and in
     // the whole one. A universe makes something happen in them (its scene assembling, coming to life, or settling
-    // and going away) rather than standing still; they follow the host's fades, so time keeps passing in them.
+    // and going away) rather than standing still; they run on the break's clock (through its holds too: the world
+    // alone, a song's outro), and time keeps passing in them.
     // Test hooks: ZEN_TEST_SETUP=x / ZEN_TEST_TEARDOWN=x force them (with ZEN_BARE=1 for the world alone).
     float setup = 1.f, teardown = 0.f;
 };
