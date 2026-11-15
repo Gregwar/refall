@@ -156,7 +156,7 @@ Disabled for now (not built; their code stays in the repository):
 | STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
 | GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
 | MUSIC BOX | A cylinder music box pinned with the cleared rows; disabled, not convincing yet |
-| MICROSCOPE | A Petri dish through the eyepiece; replaced by SPECIMEN (`src/universes/specimen/`) |
+| MICROSCOPE | A micrograph's field of view, the pieces colonies of living cells; disabled, SPECIMEN (`src/universes/specimen/`) plays instead |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
