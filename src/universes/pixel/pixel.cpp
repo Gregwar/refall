@@ -228,7 +228,7 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
         t.rows = ev.count;
         t.age = 0;
         trails_.push_back(t);
-        contactDust(ev, 4, 1.6f);
+        contactDust(ev, 2, 1.1f);
         break;
     }
     case GameEvent::Clear: {
@@ -337,7 +337,7 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
     }
     for (size_t i = 0; i < trails_.size();) {
         trails_[i].age += wdt;
-        if (trails_[i].age > 0.16f) { trails_.erase(trails_.begin() + i); continue; }
+        if (trails_[i].age > 0.1f) { trails_.erase(trails_.begin() + i); continue; }
         i++;
     }
     // Cleared cells: two frames of flash, then they burst into their pixels.
@@ -502,7 +502,7 @@ void PixelUniverse::drawWell(const Game& g) {
 void PixelUniverse::drawStack(const Game& g) {
     const Variant& V = VAR(variant_);
     auto inLock = [&](int x, int y) {
-        if (!lock_.active || lock_.age >= 2.f / 12.f) return false;
+        if (!lock_.active || lock_.age >= 1.f / 12.f) return false;
         for (auto& c : lock_.cells) if (c[0] == x && c[1] == y) return true;
         return false;
     };
@@ -517,9 +517,9 @@ void PixelUniverse::drawStack(const Game& g) {
                 drawBlock(bx0_ + x * CELL, by0_ + iround((y - Game::HIDDEN - g.rowOffset(y)) * CELL), c.type, CELL, fl, K_STACK);
             }
     }
-    // The landed piece's two-frame squash: shorter and wider, anchored on its bottom.
-    if (lock_.active && lock_.age < 2.f / 12.f) {
-        const int sq = lock_.age < 1.f / 12.f ? 2 : 1;
+    // The landed piece's one-frame squash: a pixel shorter and wider, anchored on its bottom.
+    if (lock_.active && lock_.age < 1.f / 12.f) {
+        const int sq = 1;
         int minX = 99, maxX = -1, minY = 99, maxY = -1;
         for (auto& c : lock_.cells) {
             minX = std::min(minX, c[0]); maxX = std::max(maxX, c[0]);
@@ -534,7 +534,7 @@ void PixelUniverse::drawStack(const Game& g) {
         std::swap(cv_, tmp);
         bx0_ = -minX * CELL;
         by0_ = -(minY - Game::HIDDEN) * CELL;
-        for (auto& c : lock_.cells) drawBlock(bx0_ + c[0] * CELL, by0_ + (c[1] - Game::HIDDEN) * CELL, lock_.type, CELL, 2 - sq, K_STACK);
+        for (auto& c : lock_.cells) drawBlock(bx0_ + c[0] * CELL, by0_ + (c[1] - Game::HIDDEN) * CELL, lock_.type, CELL, 0, K_STACK);
         std::swap(cv_, tmp);
         bx0_ = saveBx;
         by0_ = saveBy;
@@ -574,13 +574,13 @@ void PixelUniverse::drawStack(const Game& g) {
     for (const Trail& t : trails_) {
         int tc[4][2];
         std::memcpy(tc, t.cells, sizeof(tc));
-        const float fade = 1.f - t.age / 0.16f;
+        const float fade = 1.f - t.age / 0.1f;
         for (int i = 0; i < 4; i++) {
             if (has(tc, tc[i][0], tc[i][1] - 1)) continue;
             const int x = bx0_ + tc[i][0] * CELL, yTop = by0_ + (tc[i][1] - Game::HIDDEN) * CELL;
             const int len = std::min(t.rows, 2) * CELL;
             for (int k = 1; k <= len; k++) {
-                const float cov = fade * (1.f - (float)k / len) * 0.8f;
+                const float cov = fade * (1.f - (float)k / len) * 0.4f;
                 for (int ii = 1; ii < CELL - 1; ii++)
                     if (yTop - k >= by0_ && dith(cov, x + ii, yTop - k) && cv_.kind(x + ii, yTop - k) == K_WELL)
                         cv_.set(x + ii, yTop - k, ii == 1 || ii == CELL - 2 ? V.pieceLit[t.type] : V.wellDot, K_FX);
