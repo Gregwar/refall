@@ -587,25 +587,37 @@ void PixelUniverse::drawStack(const Game& g) {
             }
         }
     }
-    // Ghost: the piece's outline, dotted.
+    // Ghost: the piece's outline, dashed: the pixels of its shape touching the outside (corners in), in dashes of two
+    // pixels laid on the screen's grid (so every edge has the same rhythm), each corner always lit.
     Piece gp = p;
     gp.y = g.ghostY();
     if (gp.y > p.y) {
         int gc[4][2];
         g.pieceCells(gp, gc);
         const uint8_t col = V.pieceLit[p.type];
-        for (int i = 0; i < 4; i++) {
-            if (gc[i][1] < Game::HIDDEN) continue;
-            const int x = bx0_ + gc[i][0] * CELL, y = by0_ + (gc[i][1] - Game::HIDDEN) * CELL;
-            for (int k = 0; k < CELL; k++) {
-                const bool on = ((k + gc[i][0] + gc[i][1]) & 1) == 0;
-                if (!on) continue;
-                if (!has(gc, gc[i][0], gc[i][1] - 1)) cv_.set(x + k, y, col, K_FX);
-                if (!has(gc, gc[i][0], gc[i][1] + 1)) cv_.set(x + k, y + CELL - 1, col, K_FX);
-                if (!has(gc, gc[i][0] - 1, gc[i][1])) cv_.set(x, y + k, col, K_FX);
-                if (!has(gc, gc[i][0] + 1, gc[i][1])) cv_.set(x + CELL - 1, y + k, col, K_FX);
-            }
+        int minX = 99, maxX = -1, minY = 99, maxY = -1;
+        for (auto& c : gc) {
+            minX = std::min(minX, c[0]); maxX = std::max(maxX, c[0]);
+            minY = std::min(minY, c[1]); maxY = std::max(maxY, c[1]);
         }
+        const int X0 = bx0_ + minX * CELL, Y0 = by0_ + (minY - Game::HIDDEN) * CELL;
+        const int w = (maxX - minX + 1) * CELL, h = (maxY - minY + 1) * CELL;
+        auto in = [&](int i, int j) { return i >= 0 && j >= 0 && i < w && j < h && has(gc, minX + i / CELL, minY + j / CELL); };
+        auto edge = [&](int i, int j) {
+            if (!in(i, j)) return false;
+            for (int dj = -1; dj <= 1; dj++)
+                for (int di = -1; di <= 1; di++)
+                    if (!in(i + di, j + dj)) return true;
+            return false;
+        };
+        for (int j = 0; j < h; j++)
+            for (int i = 0; i < w; i++) {
+                if (!edge(i, j) || Y0 + j < by0_) continue;
+                const bool horiz = edge(i - 1, j) || edge(i + 1, j), vert = edge(i, j - 1) || edge(i, j + 1);
+                const bool corner = (edge(i - 1, j) != edge(i + 1, j)) && (edge(i, j - 1) != edge(i, j + 1));
+                const int t = horiz && !vert ? X0 + i : Y0 + j; // along the edge
+                if (corner || (t & 3) < 2) cv_.set(X0 + i, Y0 + j, col, K_FX);
+            }
     }
     // The falling piece, in whole pixels.
     const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
