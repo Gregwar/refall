@@ -121,6 +121,7 @@ private:
     float tanH_ = 0.5f, aspect_ = 1.78f;
     mat4 proj3_, vp3_;
     float gc_ = -99.f, gcVel_ = 0.f;   // the growth the camera frames (it lags behind a spurt)
+    float pull_ = 0.f;                 // around a song (setup / teardown): the camera framing a little more (log reach)
     float alt_ = 1.f, camD_ = 1.f;
     vec3 moonDir_{0, 0.2f, -1}, sunDir_{0, -1, 0};
     void updateCamera(float dt);

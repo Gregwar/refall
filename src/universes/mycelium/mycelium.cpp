@@ -26,7 +26,9 @@
 // each mushroom it climbs the stem, the cap flares and a cloud of glowing spores rises into the night.
 //
 // The pieces are mycelium felt: deep translucent shapes woven of glowing threads. Cleared rows fray into light that
-// flies to the network's heart, which pulses it out along the threads.
+// flies to the network's heart, which pulses it out along the threads. Before a song the camera eases in as the
+// network grows back out from its heart to the reach it had (the threads and mushrooms coming up as it passes); after
+// it the threads draw back into the heart as the camera stands back, leaving the night.
 //
 // Cost: the world at a reduced resolution (at most 720 lines) with depth: one ray-traced sky pass, ~80k thread quads
 // (most culled in the vertex shader: not yet born, or far under a pixel), the visible mushrooms turned on a lathe
@@ -541,7 +543,7 @@ void MyceliumUniverse::updateCamera(float dt) {
         gc_ += gcVel_ * dt;
     }
     macro_ = 1.f - smoothstepf(std::log(0.01f), std::log(0.3f), gc_);
-    const CamPose c = cameraFor(gc_, aspect_, 0.035f * std::sin(time_ * 0.021f), time_ * 0.03f);
+    const CamPose c = cameraFor(gc_ + pull_, aspect_, 0.035f * std::sin(time_ * 0.021f), time_ * 0.03f);
     tanH_ = c.tanH;
     eye_ = c.eye;
     look_ = c.fwd;
@@ -1016,6 +1018,9 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 3.5f) : 0.f, overT_ >= 0.f ? 10.f : 0.8f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += wdt;
+    // around a song: the network drawn back into its heart (log reach), the camera standing back a little
+    const float away = 1.f - smoothstepf(0.05f, 0.85f, f.setup) + smoothstepf(0.f, 0.85f, f.teardown);
+    pull_ = 0.4f * away;
 
     // ---- Staging.
     if (lvT_ < 1.f) {
@@ -1126,6 +1131,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
 
     updateCamera(dt);
     const float G = g_;
+    const float Gs = G - 2.5f * away; // the network as shown
     const float reach = std::exp(G);
     const float pxK = 2.f * tanH_ / worldT_.h;   // meters per pixel per meter of distance
     const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
@@ -1150,7 +1156,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     std::vector<Light> lights;
     std::vector<vec4> capSpots;   // where spores rise from (cap center, size)
     for (Mushroom& m : shrooms_) {
-        const float h = shroomHeight(m, G);
+        const float h = shroomHeight(m, Gs);
         if (h <= 0.f) { m.burst = false; continue; }
         const vec3 base = myc::toWorld(m.x, m.z, -0.03 * h);
         const vec3 up = myc::normalAt(m.x, m.z);
@@ -1195,7 +1201,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         }
         if (px < 1.2f || !inView(capC, h)) continue;
         if (px > 0.f) capSpots.push_back(vec4(capC.x, capC.y, capC.z, h));
-        const float open = shroomOpen(m, G);
+        const float open = shroomOpen(m, Gs);
         const float wilt = smoothstepf(0.f, 1.f, over_);
         const float glow = capGlow * (1.f + 0.7f * m.flare) * (0.85f + 0.3f * m.seed);
         const vec3 lean(std::cos(m.leanA) * m.lean, 0.f, std::sin(m.leanA) * m.lean);
@@ -1676,7 +1682,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         setMat(progThread_, "uVP", vp3_);
         set3f(progThread_, "uCamR", camR_);
         set3f(progThread_, "uCamU", camU_);
-        set1f(progThread_, "uG", G);
+        set1f(progThread_, "uG", Gs);
         set1f(progThread_, "uPx", pxK);
         set1f(progThread_, "uNear", camD_);
         set3f(progThread_, "uThreadC", pal_.thread);
