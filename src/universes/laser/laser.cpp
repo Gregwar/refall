@@ -6,8 +6,8 @@
 // the laser were drawing it. The rays are made visible only by the haze they cross (uneven along their length); they
 // are fainter over the well, a slab of black glass. The pieces are dark acrylic, edge-lit: a smoked, tinted body whose
 // silhouette glows in the piece's color (one shape per piece, no seam inside it). Before a song the room's projectors
-// switch on one after the other, all tracing the well's frame, and give way to the pieces'; after it they trace the
-// empty frame again and go out one by one.
+// switch on one after the other, sweeping thin fans of light up into the haze, and give way to the pieces'; after
+// it they sweep again and go out one by one.
 //
 // The song decides how many projectors are on, newest pieces first: calm keeps the falling piece's and one or two
 // more, dim; mid a few; a build switches more on as the pace rises; a peak without a drop (a chorus) most of the stack,
@@ -864,9 +864,9 @@ void LaserUniverse::buildProjection(const Game& g) {
     }
 }
 
-// The show's warm-up and its close, around a song: the room's projectors switch on one after the other, all tracing
-// the well's frame, and give way to the pieces' as the game comes in; after the song they trace the empty frame
-// again and switch off one by one.
+// The show's warm-up and its close, around a song, as a laser show opens: the room's projectors switch on one after
+// the other, each sweeping a thin fan of light slowly through the haze above the room (no target: beams into the
+// dark), and fade as the game comes in; after the song they sweep again and switch off one by one.
 void LaserUniverse::buildStage(float setup, float teardown) {
     if (setup >= 1.f && teardown <= 0.f) return;
     if (stage_.empty()) {
@@ -879,13 +879,20 @@ void LaserUniverse::buildStage(float setup, float teardown) {
             stage_.push_back(p);
         }
     }
-    const std::vector<vec2> frame = {v2(-WELL_X, -WELL_Y), v2(WELL_X, -WELL_Y), v2(WELL_X, WELL_Y), v2(-WELL_X, WELL_Y)};
     for (int i = 0; i < (int)stage_.size(); i++) {
         const float k = (float)i;
         float on;
-        if (teardown > 0.f) on = smoothstepf(0.f, 0.3f, teardown) * (1.f - smoothstepf(0.4f + 0.08f * k, 0.48f + 0.08f * k, teardown));
-        else on = smoothstepf(0.1f + 0.08f * k, 0.18f + 0.08f * k, setup) * (1.f - smoothstepf(0.72f, 0.98f, setup));
-        addProjection(srcPos(stage_[i]), frame, laserColor(stage_[i].type, i), 0.8f * on, std::fmod(stage_[i].seed * 7.3f + 0.1f, 1.f), true);
+        if (teardown > 0.f) on = smoothstepf(0.f, 0.25f, teardown) * (1.f - smoothstepf(0.35f + 0.09f * k, 0.45f + 0.09f * k, teardown));
+        else on = smoothstepf(0.05f + 0.08f * k, 0.15f + 0.08f * k, setup) * (1.f - smoothstepf(0.72f, 0.98f, setup));
+        if (on <= 0.003f) continue;
+        // a narrow fan swinging slowly to and fro, upward and outward, each projector on its own phase
+        const vec2 src = srcPos(stage_[i]);
+        const float out = src.x < 0.f ? -1.f : 1.f;
+        const float a = 1.5708f - out * (0.35f + 0.55f * (0.5f + 0.5f * std::sin(worldTime_ * 0.45f + stage_[i].seed * 6.28f)));
+        const float r = 60.f;
+        const std::vector<vec2> fan = {v2(src.x + std::cos(a - 0.04f) * r, src.y + std::sin(a - 0.04f) * r),
+                                       v2(src.x + std::cos(a + 0.04f) * r, src.y + std::sin(a + 0.04f) * r)};
+        addProjection(src, fan, laserColor(stage_[i].type, i), 0.75f * on, std::fmod(stage_[i].seed * 7.3f + 0.1f, 1.f), true);
     }
 }
 

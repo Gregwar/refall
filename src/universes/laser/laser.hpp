@@ -72,7 +72,7 @@ private:
     void addProjection(vec2 src, const std::vector<vec2>& corners, const vec3& col, float power, float depth, bool lens);
     void addLens(vec2 src, const vec3& col, float power, float gain);
     void buildLenses(); // a break: the projectors alone, glowing in the haze, nothing projected
-    void buildStage(float setup, float teardown); // the room's projectors tracing the well's frame around a song
+    void buildStage(float setup, float teardown); // the room's projectors sweeping the haze around a song
     std::vector<Proj> stage_;
     void updateProjectors(const Game& game, const MusicState& music, float dt);
     // The outline corners of a set of cells (game grid), at their drawn positions.
