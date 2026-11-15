@@ -86,11 +86,11 @@ void main() {
     quiet = max(quiet, 0.6 * (1.0 - smoothstep(-0.8, 0.8, sdBox(w - vec2(8.6, 3.4), vec2(2.6, 7.0)))));
     // the lamp's light, a little uneven; a soft haze of things out of focus drifting through
     float n1 = fbm(w * 0.045 + vec2(uSeed, uTime * 0.003));
-    float n2 = fbm(w * 0.16 + vec2(uTime * 0.012, uSeed * 1.3 - uTime * 0.004));
+    float n2 = fbm(w * 0.16 + vec2(uTime * 0.03, uSeed * 1.3 - uTime * 0.01));
     float haze = smoothstep(0.52, 0.82, n2) * (1.0 - quiet);
     vec3 sh = vec3(0.0);
     // small round cells and bubbles drifting in the medium (two sizes), and fine debris
-    vec2 flow = vec2(uTime * 0.035, uTime * 0.012);
+    vec2 flow = vec2(uTime * 0.09, uTime * 0.03);
     for (int L = 0; L < 3; L++) {
         float S = L == 0 ? 4.2 : (L == 1 ? 2.6 : 1.3);
         float dens = L == 0 ? 0.19 : (L == 1 ? 0.15 : 0.22);
@@ -99,7 +99,7 @@ void main() {
         float h = hash12(ci + vec2(uSeed * 3.1, float(L) * 7.7));
         if (h > dens) continue;
         vec2 jit = vec2(hash12(ci * 1.7 + 3.1 + float(L)), hash12(ci * 2.3 + 7.7 - float(L)));
-        float tt = uTime * (0.25 + 0.3 * h);
+        float tt = uTime * (0.45 + 0.5 * h);
         vec2 c = (ci + 0.4 + 0.2 * jit + 0.05 * vec2(sin(tt + h * 40.0), cos(tt * 0.8 + h * 23.0))) * S;
         c -= flow * (0.6 + 0.4 * float(L)) + vec2(float(L) * 17.3 + uSeed, float(L) * 5.1);
         float hr = fract(h * 31.7);
@@ -485,7 +485,7 @@ void main() {
     }
     // the cytoplasm: the stain, denser along the walls, finely mottled
     float n = vnoise(gp * 13.0 + seed * 31.0) * 0.6 + vnoise(gp * 31.0 - seed * 17.0) * 0.4;
-    float dens = 0.6 + 0.16 * exp(-wallD / 0.07) + 0.08 * (n - 0.5);
+    float dens = 0.8 + 0.14 * exp(-wallD / 0.07) + 0.08 * (n - 0.5);   // (strongly stained: the stack reads on the pale field)
     vec3 cyto = mix(field, tint, dens);
     // a pale line of light just inside the walls (the cell's volume)
     float lip = exp(-pow((wallD - 0.075) / 0.03, 2.0));
@@ -527,11 +527,11 @@ void main() {
         over(bf, mix(cyto, vec3(1.0), 0.45), gr * 0.85 * proto * inside);
         over(bf, tint * 0.45, gr * (1.0 - gr) * 3.0 * proto * inside);
     } else over(bf, tint * (type == 3 ? 0.45 : 0.6), gr * 0.65 * proto * inside);
-    over(bf, mix(tint * 0.42, cyto, 0.25 + 0.2 * chrom), nucAll * 0.85 * proto);
+    over(bf, mix(tint * 0.32, cyto, 0.2 + 0.2 * chrom), nucAll * 0.9 * proto);
     over(bf, tint * 0.3, nucRim * 0.45 * proto);
     over(bf, tint * 0.25, blob(p, nc + vec2(0.03, 0.02), vec2(0.035, 0.035)) * 0.6 * proto * step(nuc2, 0.01));
-    over(bf, mix(tint * 0.45, field, 0.25), wall * 0.6);
-    over(bf, mix(tint * 0.36, vec3(1.0), 0.4 * flash), mem * 0.92);
+    over(bf, mix(tint * 0.38, field, 0.15), wall * 0.75);
+    over(bf, mix(tint * 0.24, vec3(1.0), 0.4 * flash), mem);
     // dark-field: the membranes glow, the cytoplasm a soft glow, the nuclei lit
     vec3 glow = tint * (0.04 + 0.2 * exp(-wallD / 0.07) + 0.05 * n) * inside * proto;
     glow += tint * (gr * 0.35 + vacu * 0.08) * proto;
