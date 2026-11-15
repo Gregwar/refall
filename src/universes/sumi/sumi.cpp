@@ -9,6 +9,9 @@
 //
 // The view is flat: an orthographic projection with the same scale as the layout's reference camera on the
 // board plane, so the well, the previews and the HUD anchors sit where the layout contract puts them.
+//
+// Around a song, the sheet is painted and let dry: in the setup the ranges soak into the paper in blots, the far one
+// first, the near one last; in the teardown the ink dries away from the sheet's edges inward to the bare paper.
 #include "universes/sumi/sumi.hpp"
 
 #include <cmath>
@@ -1190,6 +1193,10 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     if (f.bare) set2f(progBg_, "uWell", -1.f, -1.f);
     else set2f(progBg_, "uWell", WELL_HX + 0.05f, WELL_HY + 0.05f);
     set1f(progBg_, "uWorld", world);
+    // The setup paints the ranges in one after another; the teardown dries the ink away from the edges.
+    const float tear = smoothstepf(0.05f, 0.85f, f.teardown);
+    set4f(progBg_, "uPaint", smoothstepf(0.f, 0.4f, f.setup), smoothstepf(0.2f, 0.6f, f.setup),
+          smoothstepf(0.4f, 0.8f, f.setup), tear);
     set3f(progBg_, "uSkyCol", skyCol_);
     set1f(progBg_, "uSky", saturate(skyWash_ + 0.6f * skySwell_ * sunPresence_));
     {
@@ -1205,7 +1212,12 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     sprites.reserve(512);
     collectScenery(music, sprites, f.bare);
     for (Sprite& s : sprites)
-        if (s.kind >= K_BEHIND || s.kind == K_DROP) s.alpha *= world; // blooms, petals, enso, sun, specks
+        if (s.kind >= K_BEHIND || s.kind == K_DROP) {
+            s.alpha *= world; // blooms, petals, enso, sun, specks
+            // the landscape's own marks come with the near range and dry away with the rest
+            const float rim = std::hypot((s.x - viewC_.x) / viewH_.x, (s.y - viewC_.y) / viewH_.y);
+            s.alpha *= smoothstepf(0.5f, 0.85f, f.setup) * saturate((1.8f * (1.f - tear) - 0.1f - rim) / 0.2f + 0.5f);
+        }
     if (!f.bare) collectBoard(game, music, sprites);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ZERO, GL_ONE_MINUS_SRC_COLOR);
