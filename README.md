@@ -275,7 +275,7 @@ else the copy built into it. The shipped Voyage tours 60 universes once each (SK
 ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
 EXPERT, 17 levels faster on stage 1, 12 on the finale), over a base that rises across the stages (EXPERT goes from 5.1 to
 22.2 on stage 1 and from 38.4 to 50 on the finale, far past the free play's plateau; NORMAL tops out at 28, EASY at 13.5).
-On EXPERT, from velocity 37.5 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
+On EXPERT, from velocity 30 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
 delay to slide and turn it along the stack; at velocity 50 the choruses too), the rest of the song keeping a visible
 fall: in the last song of stages 10 to 12, the last two of stages 13 and 14, and every song of the finale.
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and

@@ -111,12 +111,16 @@ public:
     // The level a game starts at (kept by reset(): a game over starts again from it).
     void setStartLevel(int level) { startLevel_ = std::clamp(level, 1, MAX_LEVEL); }
     int startLevel() const { return startLevel_; }
-    // The velocity, as a level: the fixed one, or the level reached with the lines (the same scale: 1 .. MAX_VELOCITY).
-    static constexpr float MAX_VELOCITY = float(MAX_LEVEL), TWENTY_G = 37.5f; // (20G: see the app's gravity)
-    float velocity() const { return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY) : float(level()); }
+    // The velocity: the fixed one, or the level reached with the lines spread over the same scale (level 1 .. MAX_LEVEL
+    // over velocity 1 .. MAX_VELOCITY).
+    static constexpr float MAX_VELOCITY = 40.f, TWENTY_G = 30.f; // (20G: see the app's gravity)
+    float velocity() const {
+        return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY)
+                                 : 1.f + (level() - 1) * (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1);
+    }
     float difficulty() const { return std::clamp((velocity() - 1.f) / float(PLATEAU_LEVEL - 1), 0.f, 1.f); }
     // The fall's speed at a velocity: as difficulty(), but it goes on past the plateau, up to MAX_VELOCITY (x10 at
-    // level 20, x24.2 at 50, under the gravity's cap in rows per second).
+    // velocity 20, x19.5 at 40, under the gravity's cap in rows per second).
     static float speedDifficulty(float velocity) {
         return (std::clamp(velocity, 1.f, MAX_VELOCITY) - 1.f) / float(PLATEAU_LEVEL - 1);
     }

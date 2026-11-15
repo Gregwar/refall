@@ -772,7 +772,7 @@ void App::handleEvents() {
 }
 
 // Gravity: the song section sets the pace in rows per beat (x0.4 in a break .. x1.3 in a drop), beats of a fixed
-// GRAVITY_BPM whatever the song's tempo, and the level scales it up gradually: x10 at level 20, x24.2 at 50 (capped
+// GRAVITY_BPM whatever the song's tempo, and the velocity scales it up gradually: x10 at 20, x19.5 at 40 (capped
 // at 60 rows/s).
 void App::updateGravity(double songTime, float dt) {
     // A Voyage song's velocity climbs to its own over its first seconds (see Run).
@@ -825,7 +825,7 @@ void App::updateGravity(double songTime, float dt) {
     float want = gravityPace(an, songTime + 0.25);
     if (trackAge_ < 20.f) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
-    // Level scaling: x10 at level 20, x24.2 at 50 (the top level, and velocity), capped at 60 rows per second.
+    // Velocity scaling: x10 at 20, x19.5 at 40 (the top velocity), capped at 60 rows per second.
     const float MAX_ROWS_PER_SEC = 60.f;
     // The fall doesn't follow the song's tempo: a beat is always that of a 130 BPM song (the same velocity falls as
     // fast in every song).
