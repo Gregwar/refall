@@ -144,6 +144,7 @@ private:
     float overT_ = -1.f, over_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the slab alone, no well, no ceramic, no cracks of the locks
+    float reach_ = 44.f; // how far the raking light reaches over the slab (the setup / teardown move it, see uReach)
     float levelGlint_ = 0.f;
     Bridge bridge_;
     Rng rng_{1313};

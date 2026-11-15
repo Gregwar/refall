@@ -31,16 +31,22 @@ float fbm(vec2 p) {
 }
 // The raking light: a soft key from one side of the slab (uLight.xy its direction in the board plane, uLight.z its
 // spread), and the broad reflection of a soft box across the polished stone (uSheen: angle, offset, width, gain).
+// uReach: how far from its side the light reaches over the slab (the setup brings it across, the teardown takes it
+// back), board units from the slab's middle.
 uniform vec3 uLight;
 uniform vec4 uSheen;
+uniform float uReach;
+float reach(vec2 p) {
+    return smoothstep(-7.0, 7.0, uReach + dot(p, normalize(uLight.xy)));
+}
 float rake(vec2 p) {
     float t = dot(p, normalize(uLight.xy)) / uLight.z;
-    return 0.35 + 0.65 * smoothstep(-1.2, 1.0, t);
+    return (0.35 + 0.65 * smoothstep(-1.2, 1.0, t)) * reach(p);
 }
 float sheen(vec2 p) {
     vec2 d = vec2(cos(uSheen.x), sin(uSheen.x));
     float u = dot(p, d) - uSheen.y;
-    return exp(-u * u / (uSheen.z * uSheen.z)) * uSheen.w;
+    return exp(-u * u / (uSheen.z * uSheen.z)) * uSheen.w * reach(p);
 }
 )";
 

@@ -20,7 +20,8 @@
 // a quad sends a burst of molten veins out of the rows into the stone. Slow motion is moonlight: the light swings
 // to the other side, cold and silver, the metal turns to platinum, the gold leaf hangs in the air. Game over opens
 // every seam of the stack wide with gold, row by row, before it sinks into the dark. A change of universe dims the
-// slab to the bridge, the stack turning to plain ink.
+// slab to the bridge, the stack turning to plain ink. Before a song the raking light comes across the slab from its
+// side, out of the dark, and after it the light withdraws there, leaving the stone in the dark.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane, like SMOKE.
 #include "universes/kintsugi/kintsugi.hpp"
@@ -1262,6 +1263,7 @@ void KintsugiUniverse::setLight(GLuint prog) {
     set3f(prog, "uLight", vec3(lx, ly, 16.f));
     const float drift = std::sin(now_ * 0.013f + seedF_) * 4.f;
     set4f(prog, "uSheen", cur_.sheenAngle, -3.f + drift, 5.5f, 1.f);
+    set1f(prog, "uReach", reach_);
 }
 
 void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
@@ -1269,6 +1271,8 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     bare_ = f.bare;
+    // the setup brings the raking light across the slab from its side, the teardown takes it back there
+    reach_ = lerpf(-24.f, 44.f, smoothstepf(0.f, 0.8f, f.setup) * (1.f - smoothstepf(0.05f, 0.95f, f.teardown)));
     {
         const Palette target = paletteOf(variant_);
         if (!palSet_) { pal_ = target; palSet_ = true; }
