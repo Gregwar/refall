@@ -30,7 +30,8 @@
 // quarter disc in the row's main color) in a sampler grid that grows over the song; a quad hops every card off the
 // sheet as every big form turns a quarter, and adds a medallion of four quarter discs in the four rows' colors. Slow
 // motion turns the sheet into a photogram (a dark ground, the cut-outs pale where they held back the light, their
-// shadows a soft grey halo). Game over slides the stack out row by row from the top.
+// shadows a soft grey halo). Game over slides the stack out row by row from the top. Around a song the cards are laid
+// onto the bare sheet one by one, coming down tilted from above it, and lifted off it one by one after it.
 //
 // Cost: a few dozen cards, each its box rasterized and ray-cast in the fragment shader, each with one analytic soft
 // shadow quad; flat instanced shapes and SDF type; one full-resolution poster target with depth, one composite pass.
@@ -1258,6 +1259,19 @@ void BauhausUniverse::poseCards(const MusicState& music) {
             const float ph = r(9) * PI;
             R = mul(rotAxis(vec3(std::cos(ph), std::sin(ph), 0.f), 0.3f * std::sin(TAU * hop_) * (r(10) - 0.5f) * 2.f), R);
         }
+        // the setup: each card is laid onto the sheet in turn, coming down tilted from above it; the teardown: they
+        // are lifted off it in turn, tilting away
+        {
+            const float in = ease((setup_ - 0.04f - 0.4f * r(11)) / 0.26f);
+            const float out = ease((teardown_ - 0.3f - 0.42f * r(11)) / 0.26f);
+            const float off = (1.f - in) + out;
+            if (off > 0.f) {
+                const float ph = r(12) * TAU;
+                R = mul(rotAxis(vec3(std::cos(ph), std::sin(ph), 0.f), (r(13) < 0.5f ? -0.7f : 0.7f) * off), R);
+                z += off * (5.f + 4.f * r(14));
+                k.a *= smoothstepf(0.f, 0.45f, in) * (1.f - smoothstepf(0.4f, 1.f, out));
+            }
+        }
         // risen toward the eye, it keeps its place on screen (a free form drifting a little into its zone, away from
         // the well) and most of its size, so the sculpture stays in the free zones
         const float sc = (D - z) / D;
@@ -1656,6 +1670,8 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
     const float dt = f.dt;
     const VariantDef& V = VARIANTS[variant_];
     bare_ = f.bare;
+    setup_ = f.setup;
+    teardown_ = f.teardown;
     if (!bare_) syncIds(game); // the world alone: the pieces' ids kept for the whole frame
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
