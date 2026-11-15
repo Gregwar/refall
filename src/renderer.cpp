@@ -61,6 +61,49 @@ void main() {
 }
 )";
 
+// The speed gauge: a hairline from uLine.x to uLine.z at height uLine.y (window pixels, bottom-left origin), uLine.w
+// thick, filled to uFill (pixels), its zone from uZone on (< 0: none) and a notch there; while hot it takes the
+// accent and a soft glow. uAuto: the universe letters its own HUD, the ink is pale or dark on what is behind (uBg).
+const char* SPEED_FS = R"(#version 330 core
+out vec4 frag;
+uniform sampler2D uBg;
+uniform vec2 uRes;
+uniform vec4 uLine;
+uniform float uFill, uZone, uHot, uAlpha, uAuto;
+uniform vec3 uInk, uAcc;
+void main() {
+    vec2 p = gl_FragCoord.xy;
+    vec3 ink = uInk, acc = uAcc;
+    if (uAuto > 0.5) {
+        bool pale = dot(texture(uBg, p / uRes).rgb, vec3(0.2126, 0.7152, 0.0722)) > 0.55;
+        ink = pale ? vec3(0.13, 0.12, 0.11) : vec3(0.94, 0.93, 0.9);
+        acc = pale ? vec3(0.72, 0.36, 0.1) : vec3(0.98, 0.7, 0.42);
+    }
+    float x0 = uLine.x, x1 = uLine.z, th = uLine.w;
+    float dy = abs(p.y - uLine.y);
+    float line = (1.0 - smoothstep(th * 0.5 - 0.5, th * 0.5 + 0.5, dy)) * smoothstep(x0 - 0.5, x0 + 0.5, p.x) * (1.0 - smoothstep(x1 - 0.5, x1 + 0.5, p.x));
+    float fill = 1.0 - smoothstep(uFill - 0.5, uFill + 0.5, p.x);
+    float zone = uZone >= 0.0 ? smoothstep(uZone - 0.5, uZone + 0.5, p.x) : 0.0;
+    // the track (faint, warmer in the zone), the filled part, the notch
+    vec3 c = mix(ink, acc, zone);
+    float a = line * mix(0.16, 0.3, zone);
+    vec3 cf = mix(ink, acc, uHot);
+    float af = line * fill * mix(0.72, 1.0, uHot);
+    c = mix(c, cf, af);
+    a = max(a, af);
+    float notch = uZone >= 0.0 ? (1.0 - smoothstep(0.4, 1.2, abs(p.x - uZone))) * (1.0 - smoothstep(th * 0.5 + 2.5, th * 0.5 + 3.5, dy)) : 0.0;
+    c = mix(c, acc, notch);
+    a = max(a, notch * 0.6);
+    // the glow round the filled part while hot
+    float d = length(vec2(max(max(x0 - p.x, p.x - uFill), 0.0), max(dy - th * 0.5, 0.0)));
+    float g = uHot * 0.4 * exp(-d / (1.8 * th)) * (1.0 - af);
+    c = mix(c, acc, g / max(a + g, 1e-4));
+    a = min(1.0, a + g);
+    a *= uAlpha;
+    frag = vec4(c * a, a);
+}
+)";
+
 const char* BREAK_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -101,6 +144,7 @@ bool Renderer::init(int width, int height) {
     mixProg_ = ugl::program(ugl::FULLSCREEN_VS, BREAK_FS, "break");
     cardProg_ = ugl::program(ugl::FULLSCREEN_VS, CARD_FS, "card");
     bonusProg_ = ugl::program(ugl::FULLSCREEN_VS, BONUS_FS, "bonus look");
+    speedProg_ = ugl::program(ugl::FULLSCREEN_VS, SPEED_FS, "speed gauge");
     glGenTextures(1, &cellsTex_);
     glBindTexture(GL_TEXTURE_2D, cellsTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Game::W, Game::H - Game::HIDDEN, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
@@ -276,10 +320,12 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
             fl.hudBoxes = &boxes;
             cur_.u->render(fl, 0);
             letter(*cur_.u, hud, 1.f, time);
+            speedGauge(*cur_.u);
             bonusLook(game, time);
             return;
         }
         cur_.u->render(f, 0);
+        speedGauge(*cur_.u);
         bonusLook(game, time);
         return;
     }
@@ -344,9 +390,62 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     const float handover = smoothstepf(0.35f, 0.65f, p);
     if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
     if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
+    speedGauge(handover < 0.5f ? *cur_.u : *next_.u);
     bonusLook(game, time);
 
     if (p_ >= 1.f) finishChange();
+}
+
+void Renderer::speedGauge(Universe& u) {
+    const Speed& s = speed_;
+    if (s.alpha <= 0.002f || s.w <= 0.f || !speedProg_) return;
+    const float th = std::round(std::max(1.f, h_ / 540.f));
+    const int pad = (int)std::ceil(th * 10.f + 6.f);
+    const int x0 = std::max(0, (int)s.x - pad), x1 = std::min(w_, (int)(s.x + s.w) + pad);
+    const float yg = h_ - s.y; // (bottom-left origin)
+    const int y0 = std::max(0, (int)yg - pad), y1 = std::min(h_, (int)yg + pad);
+    if (x1 <= x0 || y1 <= y0) return;
+    // the label ink (and its accent) of a universe the host letters; otherwise pale or dark on the world behind
+    const bool host = u.hostText();
+    vec3 ink(0.94f, 0.93f, 0.9f), acc(0.95f, 0.8f, 0.55f);
+    if (host) {
+        HudText h{"SPEED", 0, 0, 1.6f, 1.f, false, true, HUD_LABEL};
+        text::Line l;
+        u.hudLine(h, l);
+        if (!l.spans.empty()) ink = l.spans[0].ink;
+        h.accent = true;
+        text::Line la;
+        u.hudLine(h, la);
+        if (!la.spans.empty()) acc = la.spans[0].ink;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w_, h_);
+    if (!host) {
+        if (post_.w != w_ || post_.h != h_) post_.create(w_, h_);
+        glBindTexture(GL_TEXTURE_2D, post_.tex);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, x0, y0, x1 - x0, y1 - y0);
+    }
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(x0, y0, x1 - x0, y1 - y0);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(speedProg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, post_.tex);
+    ugl::set1i(speedProg_, "uBg", 0);
+    ugl::set2f(speedProg_, "uRes", (float)w_, (float)h_);
+    ugl::set4f(speedProg_, "uLine", s.x, std::floor(yg) + (int(th) % 2 ? 0.5f : 0.f), s.x + s.w, th);
+    ugl::set1f(speedProg_, "uFill", s.x + s.w * saturate(s.pos));
+    ugl::set1f(speedProg_, "uZone", s.zone >= 0.f ? s.x + s.w * s.zone : -1.f);
+    ugl::set1f(speedProg_, "uHot", saturate(s.hot));
+    ugl::set1f(speedProg_, "uAlpha", saturate(s.alpha));
+    ugl::set1f(speedProg_, "uAuto", host ? 0.f : 1.f);
+    ugl::set3f(speedProg_, "uInk", ink);
+    ugl::set3f(speedProg_, "uAcc", acc);
+    ugl::drawFullscreen();
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
 }
 
 void Renderer::bonusLook(const Game& game, double time) {

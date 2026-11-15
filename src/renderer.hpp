@@ -57,6 +57,14 @@ public:
     void setBonus(bool on);
     void setDim(bool d) { dim_ = d; }
     void setPanels(std::vector<HudRect> p) { panels_ = std::move(p); }
+    // The speed gauge (the app's HUD): a hairline (pixels, top-left origin: its left end, its width) filled to `pos`
+    // (0 .. 1), the hyperdrop's zone from `zone` on (< 0: none), `hot` 0 .. 1 while hyperdrop is on. The host draws
+    // it over every universe in the ink of its labels (and their accent for the zone and hyperdrop).
+    struct Speed {
+        float x = 0, y = 0, w = 0;
+        float pos = 0, zone = -1, hot = 0, alpha = 0;
+    };
+    void setSpeed(const Speed& s) { speed_ = s; }
 
     // ---- A break between songs (the app's timeline): the game and its HUD fade away, leaving the world alone,
     // the frame fades to black, the host's title card shows the new song, and everything comes back in turn.
@@ -126,6 +134,11 @@ private:
     GLuint bonusProg_ = 0;
     float bonusK_ = 0.f;
     void bonusLook(const Game& game, double time);
+    // ---- The speed gauge, in the label ink of `u` (a universe lettering its own HUD: pale or dark ink on what is
+    // behind the gauge).
+    Speed speed_;
+    GLuint speedProg_ = 0;
+    void speedGauge(Universe& u);
     // ---- The HUD lettered by the host (Universe::hostText).
     text::Engine text_;
     // each line of `hud` as `u` styles it, with its box (pixels) where it is lettered

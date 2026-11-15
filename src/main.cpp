@@ -440,6 +440,8 @@ private:
     static constexpr float GRAVITY_BPM = 130.f; // the tempo gravity counts its beats in, whatever the song's
     float gameRate_ = 1.f; // gravity speed in real time (eased)
     float gravityV_ = 1.f; // the velocity gravity runs at (the autoplay hurries as it rises)
+    bool hyperAble_ = false; // hyperdrop (20G) can happen in this game (EXPERT)
+    float speedPos_ = -1.f, speedHot_ = 0.f; // the speed gauge as shown (eased): its fill, hyperdrop on
     bool preroll_ = false; // a clip played from the song's start: the game alone until its warm-up (nothing drawn)
     float bonusFall_ = 0.f; // how much the bonus's crawl has taken over the fall (eased)
     float pace_ = -1, fallbackTimer_ = 0; // section pace (rows per beat before level scaling), eased
@@ -793,17 +795,18 @@ void App::updateGravity(double songTime, float dt) {
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     gravityV_ = v;
     const float diff = Game::speedDifficulty(v);
-    // 20G (EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
+    // Hyperdrop (20G, EXPERT only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of EXPERT's later
     // stages has some, every song of the finale; free play has it from level 38 on (once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
     static const bool clip20G = std::getenv("ZEN_CLIP_20G") && std::getenv("ZEN_CLIP_20G")[0] == '1';
     const bool expert = clipVel > 0.f ? clip20G : mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_EXPERT : freeLevels && freeDiff_ == DIFF_EXPERT;
+    hyperAble_ = expert;
     const bool twentyG = expert && gameRate_ > 0.999f &&
                          v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
         game_.setTwentyG(twentyG);
-        std::printf("[game] 20G %s at %.1f s\n", twentyG ? "on" : "off", songTime);
+        std::printf("[game] hyperdrop %s at %.1f s\n", twentyG ? "on" : "off", songTime);
     }
     if (twentyG) {
         for (int i = 0; i < Game::H; i++) game_.gravityStep();
@@ -1061,6 +1064,27 @@ std::vector<HudText> App::buildHud(float dt) {
     if (game_.best() > 0) {
         hud.push_back({"BEST", sc.x, sc.y + 184 * s, 1.6f * s, 0.5f, false, true, HUD_LABEL});
         hud.push_back({std::to_string(game_.best()), sc.x, sc.y + 204 * s, 2.f * s, 0.6f, false, true, HUD_VALUE});
+    }
+    // The speed gauge under the panel: the velocity on a log scale (level 1 .. MAX_VELOCITY, so the slow ones still
+    // fill some of it), the hyperdrop's zone from TWENTY_G on where it can happen (EXPERT), "SPEED" under it and
+    // "HYPERDROP" in the accent while it is on.
+    {
+        const float lnMax = std::log(Game::MAX_VELOCITY);
+        const float pos = std::log(std::clamp(gravityV_, 1.f, Game::MAX_VELOCITY)) / lnMax;
+        speedPos_ = speedPos_ < 0.f ? pos : approach(speedPos_, pos, 4.f, dt);
+        speedHot_ = approach(speedHot_, game_.twentyG() ? 1.f : 0.f, 6.f, dt);
+        const float bw = 80.f * s, by = sc.y + 236.f * s;
+        Renderer::Speed sp;
+        sp.x = sc.x - bw * 0.5f;
+        sp.y = by;
+        sp.w = bw;
+        sp.pos = speedPos_;
+        sp.zone = hyperAble_ ? std::log(Game::TWENTY_G) / lnMax : -1.f;
+        sp.hot = speedHot_;
+        sp.alpha = 1.f;
+        R_.setSpeed(sp);
+        const bool hot = speedHot_ > 0.5f;
+        hud.push_back({hot ? "HYPERDROP" : "SPEED", sc.x, by + 12 * s, 1.4f * s, hot ? 0.7f : 0.5f, hot, true, HUD_LABEL});
     }
     if (game_.combo() > 0) {
         vec2 c = R_.project(vec3(8.6f, -4.5f, 0));
