@@ -1053,7 +1053,7 @@ std::vector<HudText> App::buildHud(float dt) {
     hud.push_back({"HOLD", hold.x, hold.y, 1.6f * s, 0.62f, false, true, HUD_LABEL});
     hud.push_back({"NEXT", next.x, next.y, 1.6f * s, 0.62f, false, true, HUD_LABEL});
     hud.push_back({"SCORE", sc.x, sc.y - 2 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
-    hud.push_back({std::to_string(game_.score()), sc.x, sc.y + 18 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
+    hud.push_back({text::thousands(game_.score()), sc.x, sc.y + 18 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
     hud.push_back({"LINES", sc.x, sc.y + 60 * s, 1.6f * s, 0.62f, false, true, HUD_LABEL});
     hud.push_back({std::to_string(game_.lines()), sc.x, sc.y + 80 * s, 2.8f * s, 0.9f, false, true, HUD_VALUE});
     if (const CampaignStage* st = runStage()) {
@@ -1068,7 +1068,7 @@ std::vector<HudText> App::buildHud(float dt) {
     }
     if (game_.best() > 0) {
         hud.push_back({"BEST", sc.x, sc.y + 184 * s, 1.6f * s, 0.5f, false, true, HUD_LABEL});
-        hud.push_back({std::to_string(game_.best()), sc.x, sc.y + 204 * s, 2.f * s, 0.6f, false, true, HUD_VALUE});
+        hud.push_back({text::thousands(game_.best()), sc.x, sc.y + 204 * s, 2.f * s, 0.6f, false, true, HUD_VALUE});
     }
     // The speed gauge under the panel: the velocity on a log scale (level 1 .. MAX_VELOCITY, so the slow ones still
     // fill some of it), the hyperdrop's zone from TWENTY_G on where it can happen (EXPERT), "SPEED" under it and
@@ -1147,7 +1147,7 @@ std::vector<HudText> App::buildHud(float dt) {
         float grow = 1.f + 0.08f * smoothstepf(2.4f, 1.6f, quadToast_);
         hud.push_back({quadB2B_ ? std::string("BACK TO BACK ") + QUAD_NAME : std::string(QUAD_NAME), c.x, c.y, (quadB2B_ ? 3.4f : 4.2f) * grow * s, 0.9f * a,
                        true, true, HUD_TOAST});
-        hud.push_back({"+" + std::to_string(quadPoints_), c.x, c.y + 44 * s, 2.2f * s, 0.75f * a, false, true, HUD_TOAST_SUB});
+        hud.push_back({"+" + text::thousands(quadPoints_), c.x, c.y + 44 * s, 2.2f * s, 0.75f * a, false, true, HUD_TOAST_SUB});
     }
 
     levelToast_ = std::max(0.f, levelToast_ - dt);
@@ -1166,8 +1166,8 @@ std::vector<HudText> App::buildHud(float dt) {
     if (game_.over() && overTime_ > 1.0f && mode_ != MODE_CAMPAIGN) { // (a Voyage's game over has its debrief)
         float a = std::min(1.f, (overTime_ - 1.0f) / 1.2f);
         hud.push_back({"GAME OVER", w * 0.5f, h * 0.5f - 70 * s, 5.f * s, 0.95f * a, true, true, HUD_DIALOG});
-        hud.push_back({"SCORE  " + std::to_string(game_.lastScore()), w * 0.5f, h * 0.5f + 0 * s, 2.f * s, 0.85f * a, false, true, HUD_DIALOG});
-        hud.push_back({"BEST  " + std::to_string(game_.best()), w * 0.5f, h * 0.5f + 30 * s, 1.6f * s, 0.6f * a, false, true, HUD_DIALOG});
+        hud.push_back({"SCORE  " + text::thousands(game_.lastScore()), w * 0.5f, h * 0.5f + 0 * s, 2.f * s, 0.85f * a, false, true, HUD_DIALOG});
+        hud.push_back({"BEST  " + text::thousands(game_.best()), w * 0.5f, h * 0.5f + 30 * s, 1.6f * s, 0.6f * a, false, true, HUD_DIALOG});
         if (overTime_ > 2.5f) {
             float b = std::min(1.f, (overTime_ - 2.5f) / 0.8f);
             const bool pad = input_.active() == Input::Gamepad;
@@ -2354,7 +2354,7 @@ void App::campaignEnd() {
         progress_.setCleared(stage, run_.diff, game_.score(), game_.lines());
         progress_.save();
         const bool next = stage + 1 < campaign_.size();
-        std::snprintf(sub, sizeof(sub), "%s  SCORE %d  LINES %d%s", difficultyName(run_.diff), game_.score(), game_.lines(),
+        std::snprintf(sub, sizeof(sub), "%s  SCORE %s  LINES %d%s", difficultyName(run_.diff), text::thousands(game_.score()).c_str(), game_.lines(),
                       next ? "   NEXT STAGE UNLOCKED" : "   THE VOYAGE IS COMPLETE");
         std::printf("[campaign] stage %d cleared on %s (%d points, %d lines)\n", stage + 1, difficultyName(run_.diff),
                     game_.score(), game_.lines());
