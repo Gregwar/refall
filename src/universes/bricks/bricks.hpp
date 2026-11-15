@@ -156,6 +156,9 @@ private:
     float overT_ = -1.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the studio and its models alone
+    // around a song (Frame::setup / teardown): the studio's light open (0 a small spot on the well .. 1 the whole
+    // studio, the turntables turning), the spot's own light (going out at the end of the teardown)
+    float lamp_ = 1.f, spot_ = 1.f;
     Bridge bridge_;
     Rng rng_{57};
 };
