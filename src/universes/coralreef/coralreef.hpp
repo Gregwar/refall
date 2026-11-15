@@ -234,6 +234,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
+    float dive_ = 0.f, drift_ = 0.f; // the setup's dive down to the view, the teardown's drift back from it (0..1)
     float dimT_ = 0.f;
     float time_ = 0.f;
     Bridge bridge_;

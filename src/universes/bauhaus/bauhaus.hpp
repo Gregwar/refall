@@ -173,6 +173,7 @@ private:
     uint64_t salt_ = 0;       // a fold after a drop lays down a new composition
     bool folding_ = false;
     float hop_ = 1.f;         // a quad: every card hops off the sheet as it turns (0..1)
+    float setup_ = 1.f, teardown_ = 0.f; // the frame's: the cards laid onto the sheet one by one, lifted off it
     float kickIn_ = 0.f, kickShown_ = 0.f;
     float lockLine_ = 0.f, lockX0_ = 0.f, lockX1_ = 0.f, lockY_ = 0.f;
     float time_ = 0.f;

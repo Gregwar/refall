@@ -13,7 +13,8 @@
 // The song: a break is still; mid parts move a cube from one heap to another every bar, the chorus every two beats
 // (the heaps get tidied); a drop throws every cube in the air on its downbeat and lands them in a new formation
 // (rows of colors, concentric rings, towers; a new one every four bars), the cubes take the drop's colors and hop in a wave
-// every two beats. Slow motion is a low evening light (long shadows), game over sends the whole stack back.
+// every two beats. Slow motion is a low evening light (long shadows), game over sends the whole stack back. Around a
+// song the heaps are rained in onto the bare table from above, bottom layer first, and lifted away after it, top first.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like SUMI); a
 // cube above the table is drawn a little larger and further from the center (a long-lens parallax), cubes on the
@@ -1001,12 +1002,22 @@ void RecycleUniverse::buildScene(const Game& g, bool bare) {
         for (size_t i = 0; i < p.occ.size(); i++) {
             Occ& o = p.occ[i];
             if (o.state != FULL) continue;
-            const vec3 q = slotPos(p, (int)i);
+            vec3 q = slotPos(p, (int)i);
             float rot = p.slots[i].rot;
             if (o.t < o.delay + o.dur) rot = lerpf(o.rotFrom, rot, ease(saturate((o.t - o.delay) / o.dur)));
             o.shown = q;
             o.rotShown = rot;
-            addCube(q, rot, pileColor(p, o, (int)i), bridgeA, 0.f, (float)((i * 37 + p.side * 11) % 97), false);
+            // the setup: the heaps are rained in from above, bottom layer first; the teardown: they are lifted away,
+            // the top first (the cubes shown in the air, the heaps themselves untouched)
+            float a = bridgeA;
+            {
+                const float u = (float)i / std::max<size_t>(1, p.occ.size()) + 0.08f * (float)((i * 37 + p.side * 11) % 97) / 97.f;
+                const float in = saturate((setup_ - 0.06f - 0.42f * u) / 0.12f);
+                const float out = saturate((teardown_ - 0.36f - 0.45f * (1.08f - u)) / 0.14f);
+                q.z += 30.f * ((1.f - in) * (1.f - in) + out * out);
+                a *= smoothstepf(0.f, 0.35f, in) * (1.f - smoothstepf(0.5f, 1.f, out));
+            }
+            addCube(q, rot, pileColor(p, o, (int)i), a, 0.f, (float)((i * 37 + p.side * 11) % 97), false);
         }
     // A break shows the table and its heaps alone (and the cubes moving between heaps): the rest is the game.
     // ---- The stack: cubes resting in the tray (a hard drop squashes them a little as they land).
@@ -1314,6 +1325,8 @@ void RecycleUniverse::render(const Frame& f, GLuint fbo) {
     shadows_.clear();
     flat_.clear();
     cubes_.clear();
+    setup_ = f.setup;
+    teardown_ = f.teardown;
     buildScene(game, f.bare);
     flushCubes();
 

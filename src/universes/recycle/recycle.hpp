@@ -152,6 +152,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
+    float setup_ = 1.f, teardown_ = 0.f; // the frame's (see buildScene: the heaps rained in, lifted away)
     float dimT_ = 0.f;
     float worldTime_ = 0.f;
     Bridge bridge_;

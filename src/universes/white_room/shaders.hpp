@@ -185,6 +185,8 @@ uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform float uPx;            // a pixel in board units (at the well)
 uniform float uPane;          // 1: the well's pane, 0: none (a break: the room alone)
+uniform vec3 uSpotDir;        // the setup / teardown: a spotlight from the front, its axis (from the eye) ...
+uniform float uSpot;          // ... and its radius (tangent of the half angle; 2: the whole room lit)
 
 // ray / box: t of entry (or -1) and the normal
 float boxHit(vec3 ro, vec3 rd, vec3 c, vec3 h, out vec3 n) {
@@ -271,6 +273,12 @@ void main() {
         col = mix(col, uPanel, 0.8 * inside); // the room shows faintly through it
         float line = 1.0 - smoothstep(0.0, uPx * 1.2, abs(sd));
         col *= 1.0 - 0.22 * line;
+    }
+    if (uSpot < 2.0) {
+        // the setup and the teardown: the room is dark but for a spot on the wall, opening onto it or closing
+        float ca = max(dot(rd, uSpotDir), 1e-3);
+        float tg = sqrt(max(1.0 - ca * ca, 0.0)) / ca;
+        col *= mix(0.01, 1.0, smoothstep(uSpot, uSpot * 0.72 - 0.004, tg));
     }
     col = mix(col, uBridgeCol, uBridge);
     frag = vec4(col, 1.0);

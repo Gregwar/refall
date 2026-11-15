@@ -18,6 +18,8 @@
 // petals fly, butterflies swarm and the worms hurry. APRIL RAIN rains lightly through its drops (pixel streaks, tiny
 // splashes on the tops). A cleared row pops: its tiles burst into 3x3 dirt bits that fall and shrink away; a hard
 // landing pushes two small dust puffs out from the contact; a quad sends dandelion seeds up from the ground line.
+// Around a song: dawn before it (the sun rising from behind the ground, the grass sprouting tuft by tuft), dusk after
+// it (the sun setting back behind the ground, the stars coming out).
 #include "universes/garden16/garden16.hpp"
 
 #include <cstdio>
@@ -1094,12 +1096,13 @@ void Garden16Universe::buildPalette() {
     p[EARTH_INK] = C3{0.96f, 0.91f, 0.78f}; // straw letters set in the earth, in every light
     for (int t = 0; t < 7; t++) ramp5(mix(H(V.ground), H(V.soil[t]), 0.4f), shade, &p[PIECE0 + t * 5]);
     // slow motion: dusk falls over the garden (the stack keeps more of its color, the HUD all of it)
-    if (slow_ > 0.001f) {
+    const float duskK = std::max(slow_, evening_);
+    if (duskK > 0.001f) {
         const C3 dusk = H(V.dusk);
         for (int i = 0; i < PAL_N; i++) {
             if (i >= INK && i <= HALO2) continue;
             if (i == FIREFLY || i == FIREFLY_DIM) continue;
-            const float k = slow_ * (i >= PIECE0 ? 0.35f : 0.75f);
+            const float k = duskK * (i >= PIECE0 ? 0.35f : 0.75f);
             const C3 n = {p[i].r * 0.42f + dusk.r * 0.35f, p[i].g * 0.42f + dusk.g * 0.35f, p[i].b * 0.5f + dusk.b * 0.45f};
             p[i] = mix(p[i], n, k);
         }
@@ -1132,7 +1135,7 @@ void Garden16Universe::drawSky() {
         }
     }
     // stars (night, and dusk in slow motion): a few still points, a rare one twinkling
-    const float st = std::max(V.stars, slow_ * 0.8f);
+    const float st = std::max(V.stars, std::max(slow_, evening_) * 0.8f);
     if (st > 0.05f)
         for (int Y = 0; Y < hz * 2 / 3; Y++)
             for (int X = 0; X < W_; X++) {
@@ -1144,7 +1147,8 @@ void Garden16Universe::drawSky() {
             }
     // the sun or the moon: a disc, a solid ring and a dithered halo
     {
-        const int cx = lx(V.sunX), cy = ly(V.sunY), R = V.sunR;
+        // (around a song it rises from behind the ground and sets back behind it)
+        const int R = V.sunR, cx = lx(V.sunX), cy = ly(V.sunY) + iround(evening_ * (floor_ - ly(V.sunY) + R + 6));
         for (int y = -R - 5; y <= R + 5; y++)
             for (int x = -R - 5; x <= R + 5; x++) {
                 const float d = std::sqrt((float)(x * x + y * y));
@@ -1355,7 +1359,7 @@ void Garden16Universe::drawGroundPlants() {
             if (X < -3 || X > W_ + 3) continue;
             const int sway = swayAt(X, h2);
             if (inWell) {
-                if (h1 < density_ * 0.8f) tuft(cv_, X, top, 1 + (h2 > 0.6f ? 1 : 0), 0, K_PLANT, (uint32_t)slot);
+                if (h1 < density_ * 0.8f) tuft(cv_, X, top, iround((1 + (h2 > 0.6f ? 1 : 0)) * grow_), 0, K_PLANT, (uint32_t)slot);
                 continue;
             }
             // dry stems with seed heads stand when the line is dry
@@ -1370,7 +1374,8 @@ void Garden16Universe::drawGroundPlants() {
                 continue;
             }
             if (h1 < density_) {
-                const int ht = plantCap(X, top, 2 + iround(grassH_ * 2.5f) + (int)(h2 * (2.f + 3.f * lush_)) + (int)(far * 1.5f));
+                const int ht0 = 2 + iround(grassH_ * 2.5f) + (int)(h2 * (2.f + 3.f * lush_)) + (int)(far * 1.5f);
+                const int ht = plantCap(X, top, iround(ht0 * saturate(grow_ * 1.4f - 0.4f * h1 / density_)));
                 tuft(cv_, X, top, ht, sway, K_PLANT, (uint32_t)slot);
             }
         }
@@ -2054,6 +2059,10 @@ void Garden16Universe::render(const Frame& f, GLuint fbo) {
         else overT_ += dt;
     }
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, slow_);
+    // the setup: dawn (the sun rising from behind the ground, the dusk lifting) and the grass sprouting tuft by tuft;
+    // the teardown: the sun sets back behind the ground and dusk falls, the stars coming out
+    evening_ = std::max(1.f - smoothstepf(0.f, 0.6f, f.setup), smoothstepf(0.3f, 0.95f, f.teardown));
+    grow_ = smoothstepf(0.12f, 0.62f, f.setup);
     // a break: the world alone; the stack's earth is kept as it is (the board given is blank), only not drawn
     bare_ = f.bare;
     computeTops();

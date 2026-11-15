@@ -142,6 +142,7 @@ private:
     mat4 bvp_;                                    // the board's (the layout's)
     vec3 beye_{0, 0, 40};
     float camYaw_ = 0.f;
+    float camRise_ = 0.f; // the setup / teardown: the camera high and far, swung aside (0: its place; see render)
     void updateCamera();
     void drawInstances(GLuint prog, bool shadowPass);
 

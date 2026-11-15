@@ -123,6 +123,8 @@ private:
     bool dropMode_ = false;
     float rain_ = 0.4f;      // the rain's intensity shown (0 drizzle .. 1 downpour)
     float storm_ = 0.f;      // the drop's thunderstorm (0..1, held for the whole drop section)
+    float lights_ = 1.f;     // the setup / teardown: how many of the street's lights are on (0..1)
+    float shower_ = 1.f;     // the setup / teardown: the rain starting, stopping (scales the near rain)
     float glow_ = 0.8f;
     float flash_ = 0.f;      // the soft lightning glow
     vec2 flashPos_{0, 8};
