@@ -75,7 +75,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 </tr>
 <tr>
 <td><img src="docs/universes/crystal.jpg"><br><b>CRYSTAL CAVE</b>: gemstone pieces in a geode cave; each phase of the song is its own mineral, frozen into the stack at lock time, so the stack grows in strata that record the song<br><sub>🔍 <i>to review</i></sub></td>
-<td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a Swiss typographic poster set from the song's words, recomposed on the bar grid; flat pieces lock in each section's palette, the drop cuts to the negative print, the title giant<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/swiss.jpg"><br><b>SWISS POSTER</b>: a vintage flat-design travel poster, peaks, ranges, a lake and a village in parallax behind a paper panel; birds rise on clears, the drop warms the light with sun rays and flocks<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/limbo.jpg"><br><b>LIMBO</b>: black silhouettes in a luminous fog; each cleared row adds something to the landscape (birds, trees, lanterns, distant towers), the drop parts the fog and turns the scene to negative<br><sub>🔍 <i>to review</i></sub></td>

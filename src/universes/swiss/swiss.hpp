@@ -1,5 +1,5 @@
 #pragma once
-// SWISS POSTER: the International Typographic Style, a poster recomposed by the music (see swiss.cpp).
+// SWISS POSTER: a flat-design travel poster's landscape in parallax behind the well (see swiss.cpp).
 #include <string>
 #include <vector>
 
@@ -14,11 +14,10 @@ public:
     void setSong(const SongLook& look, float seconds) override;
     void setLevel(int level, float energy, float seconds, float impact) override;
     void drop(float strength) override;
-    void refresh(float strength) override;
+    void refresh(float strength) override { (void)strength; }
     void onEvent(const GameEvent& ev, const Game& game) override;
     void setBonus(bool on) override { slowOn_ = on; }
     void levelUp() override {}
-    void kick(float amount) override { kickIn_ = std::max(kickIn_, amount); }
     void render(const Frame& f, GLuint fbo) override;
     vec2 project(const vec3& p) const override;
     TransitionHints hints() const override;
@@ -27,107 +26,72 @@ public:
     void setBridge(const Bridge& b) override { bridge_ = b; }
     bool hostText() const override { return true; }
     void hudLine(const HudText& h, text::Line& out) override;
+    HudInk hudInk(const HudText& h) override;
 
 private:
-    // ---- Flat shapes (pixels): rectangles, discs, ring arcs, each clipped to a rectangle.
+    // ---- Flat shapes (pixels): rectangles, rounded plates, discs, birds, each clipped to a rectangle.
     struct Shape { float r[4], c[4], k[4], clip[4]; };
     std::vector<Shape> shapes_;
     void rectPx(float x0, float y0, float x1, float y1, const vec3& c, float a);
     void rectPxClip(float x0, float y0, float x1, float y1, const vec3& c, float a, const float clip[4]);
     void rectB(float x0, float y0, float x1, float y1, const vec3& c, float a); // board units (y up)
+    void plateB(float x0, float y0, float x1, float y1, float radius, const vec3& c, float a);
     void discB(float cx, float cy, float r, const vec3& c, float a);
+    void birdB(float cx, float cy, float halfW, float beat, const vec3& c, float a);
     void flushShapes();
     vec2 px(float x, float y) const; // board -> pixels
     float unitPx_ = 45.f;            // pixels per board unit
 
-    // ---- Type: the words printed on the poster (the HUD is lettered by the host: hudLine).
-    struct Glyph { float x0, y0, x1, y1, ox, oy, w, h, adv; };
-    struct Font {
-        bool ok = false;
-        GLuint tex = 0;
-        float px = 64.f, scaleTT = 1.f, capH = 40.f;
-        Glyph g[96];
-        float kern[96][96];
-        void* info = nullptr;
-    };
-    Font bold_, reg_;
-    void buildFont(Font& f, const unsigned char* ttf, float px, int atlas);
-    // Width of a string in cap heights (track in cap heights too).
-    float capWidth(const Font& f, const std::string& s, float track) const;
-    // Quads for a string: (x, base) its baseline's start in pixels, rot 1 = turned 90 degrees, reading upward.
-    void textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, int rot,
-                   std::vector<float>& out) const;
-    void drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, bool adaptive = false);
-    void drawHud(const std::vector<HudRect>& panels); // the HUD's panels
+    // ---- The landscape.
+    struct El { float x, depth, size, kind; }; // kind: 0 chalet, 1 house, 2 church, 3 fir, 4 cypress, 5 bush, 6 larch
+    std::vector<El> els_;
+    int elFg_ = 0;                   // els_[0, elFg_) stand on the meadow, the rest in the foreground
+    void composeScene();
+    void drawLandscape();
+    float layerOff_[7] = {};
+    float cloudOff_[3] = {};
+    float pan_ = 0.f, panT_ = 0.f, pieceLean_ = 0.f;
 
-    // ---- The poster's composition: elements eased between layouts set on the bar grid.
-    enum Slot { E_TITLE, E_ARTIST, E_SECTION, E_FIELD0, E_FIELD1, E_FIELD2, E_DISC, E_RULE0, E_RULE1, E_RULE2,
-                E_INFO, E_BULLET, E_COUNT };
-    struct Target {
-        bool on = false;
-        float v[4] = {0, 0, 0, 0}; // field: x0 y0 x1 y1 | text: x, top, cap, - | disc: cx cy r - | rule: x0 y x1 -
-        int color = 0;             // 0 ink, 1..3 the palette's colors
-        int rot = 0;
-        std::string text;
-    };
-    struct Element {
-        Target cur, from, to;
-        float alpha = 0.f, alphaFrom = 0.f;
-        float t = 1.f, dur = 1.f;
-        bool twoPhase = false, swapped = false;
-        float ruleBase = 0.f;      // rules: their place in the layout (the beat shifts them along the grid)
-    };
-    Element el_[E_COUNT];
-    void compose(long bar, float dur, bool instant);
-    void retarget(int slot, const Target& t, float dur, bool instant);
-    void updateElements(float dt);
-    void drawPoster();
-    std::string title_, artist_, info1_, info2_, section_;
-    std::vector<std::string> titleWords() const;
-    long bar_ = -1000, step_ = -1000;
-    int composeCount_ = 0;
-    long quadUntil_ = -1;
+    // Birds: a flock from the meadow on a clear, flocks crossing the sky in a drop.
+    struct Bird { vec2 p, v; float phase, rate, size, glide, wob; };
+    std::vector<Bird> birds_;
+    void flock(float x, float y, int n, float dir, float climb);
+    void updateBirds(float dt);
+    float flockBar_ = -1.f;
 
-    // ---- Pieces: one id per piece (its cells merge into one flat shape), the palette it locked in.
+    // ---- Pieces: one id per piece (its cells merge into one flat shape).
     int ids_[22][10] = {};
-    int pal_[22][10] = {};
     int nextId_ = 1;
     void syncIds(const Game& g);
-    struct Wipe { float y; int type[10], pal[10], mask[10]; float t, delay, dir; };
+    struct Wipe { float y; int type[10], mask[10]; float t, delay, dir; };
     std::vector<Wipe> wipes_;
-    vec3 pieceColor(int type, int pal) const;
+    vec3 pieceColor(int type) const;
     void drawCell(float x, float y, float half, int mask, const vec3& c, float a, bool snap = true);
     void drawBoard(const Game& g);
 
     // ---- GL.
-    GLuint progShape_ = 0, progText_ = 0, progComp_ = 0;
-    GLuint quadVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0, textVao_ = 0, textVbo_ = 0;
-    ugl::Target posterT_;
+    GLuint progShape_ = 0, progLand_ = 0;
+    GLuint quadVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
 
-    // ---- Song, variant, palettes.
+    // ---- Song, variant.
     int variant_ = 0;
     uint64_t seed_ = 1;
-    int palIdx_ = 1;           // the section's palette (pieces lock in it)
-    vec3 palShown_[4];         // the poster's colors (ink, c0, c1, c2), eased
-    vec3 ground_{1.f}, ink_{0.f};
-    bool palInit_ = false;
 
     // ---- Staging.
     int level_ = 1;
     bool hasLevel_ = false;
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
-    bool dropMode_ = false, dropPending_ = false;
-    float dropNeg_ = 0.f; // the drop's negative print (1 while the drop lasts)
-    float kickIn_ = 0.f, kickShown_ = 0.f;
+    float dropAmt_ = 0.f;            // the drop's look, eased (only while music.inDrop)
+    bool dropHit_ = false;
     float lockLine_ = 0.f, lockX0_ = 0.f, lockX1_ = 0.f, lockY_ = 0.f;
-    float time_ = 0.f;
-    float bpm_ = 120.f;
+    float time_ = 0.f, sceneT_ = 0.f;
+    double beat_ = 0.0;
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    bool bare_ = false; // this frame is the world alone (a break): the poster, no game, no veil
+    bool bare_ = false; // this frame is the world alone (a break): the landscape, no game, no panel
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

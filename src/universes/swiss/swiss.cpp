@@ -1,39 +1,43 @@
-// SWISS POSTER: the International Typographic Style (Mueller-Brockmann, Neue Grafik), a poster set by the song.
+// SWISS POSTER: a vintage travel poster in flat design, its landscape drifting in parallax behind the well.
 //
-// One world: a poster on a strict modular grid, the grid of the well's own cells (one unit per cell, every element
-// sits on whole units). Huge flush-left lowercase words taken from the song (its title, its artist, the section's
-// name), flat color fields, a disc, thin rules and small blocks of information, in asymmetric balance with a lot of
-// empty ground. The poster runs at full strength everywhere except behind what is played or read: the well and a
-// crisp box behind each HUD element (previews, gauge, lettering) veil it, so the words and fields run behind them
-// without ever competing with the stack or the HUD.
+// One world: the landscape of a mid-century travel poster, all flat shapes with crisp edges (no photographic
+// shading, a faint print grain), in seven depths. A flat sky gradient with a sun and its pale halos and flat clouds
+// in three bands; a far range of peaks, each face lit or in shade, snow above a jagged snow line with rock showing
+// through in flat patches; a hero peak on one side (a snow horn, or a pale limestone tooth with cliff bands and
+// grass on its lower slopes); two nearer ranges in receding tones (aerial perspective: the farther, the paler, with a
+// mist at their feet in the misty scenes); a lake in some scenes, its long glints and the sun's path on the water; a
+// meadow dotted with flowers, darker patches of grass and a winding path up to a village of chalets and houses
+// (gable fronts lit, long sides in shade, red roof slabs, windows, a church with a clock and a spire) among cypresses
+// and firs, each casting a flat shadow to the right; a foreground hill with big firs at the poster's corners. No
+// lettering on the poster.
 //
-// The pieces are flat, crisp color blocks on the grid: one clean shape per piece (its cells merge, a narrow gutter
-// of ground around it, so two pieces never fuse), no bevels, no gradients. Every section of the song has its own
-// poster palette (three colors plus the ink); the falling piece takes the current palette and keeps it when it locks,
-// so the stack records the song's structure, band after band. Within a palette the seven types read by color and
-// value (each color, a shade of the first, a tint of the second, the ink and a grey).
+// Parallax: every depth is shifted by its own share of one pan (sky 3 %, far range 8 %, then 16, 26, 38, 60 and
+// 100 % for the foreground): a slow, calm swing across the scene (80 s back and forth), a gentle sway on the bars
+// (one way, then the other, over two bars; a little more at mid and peak, more in a drop) and a lean away from the
+// falling piece (the scene turns slightly as it moves across the well). The clouds drift on their own, each band at
+// its speed; the trees' tips sway in the wind.
 //
-// The song sets the composition. On the bar grid the words and fields recompose: they slide and resize along the
-// grid lines with slow eased motion (a big move crosses by a quick fade instead of sliding across the screen, a
-// field wipes shut along its length and opens elsewhere), small changes every bar, the structure every two or four.
-// Calm is sparse (a small title stacked in one zone, one field, much ground); mid adds the section's name set
-// vertically up the other zone and a second field; a peak is dense (bigger type running across, a stripe across the
-// whole poster, a disc, three fields). Every two beats a thin rule steps along the grid and a small square moves along
-// it; at a peak the kicks thicken the rules for an instant. The drop is a hard cut on its downbeat to the negative
-// print (ground and ink swap, the stack and the HUD with them), the song's title set giant across the poster in the
-// drop's palette; it holds while the drop lasts and eases back to the positive after. A cleared row closes into a flat
-// bar and slides out of the well sideways (alternating sides) in 0.3 s, clipped at the well's edge; a quad sets
-// "quad" up the free zone in the signature color for two bars. Slow motion is the negative print (ground and ink
-// swap). Game over slides the stack out row by row from the top.
+// The well stands on a calm paper panel (the poster's own paper, nearly opaque) with two side rules and a baseline;
+// the hold and next previews on small paper plates, the bonus gauge (the host's ring) on a paper disc. The pieces are
+// flat, crisp color blocks taken from the scene's palette: one clean shape per piece (its cells merge, a narrow
+// gutter around it), the falling piece exactly a locked one, the ghost a fine outline.
 //
-// Cost: flat instanced shapes and SDF type into one full-resolution poster target, one composite pass.
+// Staging: calm is a hazier, softer light; mid and peak clear it, a peak warms it a little. The drop look holds only
+// while the song plan's DROP section lasts (music.inDrop): the light warms, the sun swells and throws flat rays
+// across the sky, the clouds speed up, the sway widens, the pieces' colors deepen, and flocks of birds cross the sky
+// every two bars (a big flock rises from both sides on the drop's downbeat). A cleared row closes into a flat bar and
+// slides out of the well sideways in 0.3 s, and a small flock of birds takes off from the meadow on one side and
+// flies away outward (more birds for more lines); a hard drop leaves a thin rule at the contact. Slow motion stills
+// the scene (the pan, the clouds and the birds slow down) and cools its light. Game over slides the stack out row by
+// row from the top.
+//
+// Cost: one full-screen pass for the landscape (a few dozen elements tested per pixel), the board, plates and birds as
+// instanced flat shapes.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
-#include "title.hpp"
 #include "universes/swiss/swiss.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -41,14 +45,11 @@
 #include "layout.hpp"
 #include "universes/registry.hpp"
 #include "universes/swiss/shaders.hpp"
-#define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_STATIC
-#include "stb_truetype.h"
 
 namespace {
 
-// Inter (Bold: the poster's words, the values; Regular: the information, the labels), SIL Open Font License, see
-// OFL-Inter.txt.
+// Inter (Bold: the values; Regular: the information, the labels), SIL Open Font License, see OFL-Inter.txt: the
+// HUD's own lettering when the host does not unify it (ZEN_HUD=universe).
 const unsigned char FONT_BOLD[] = {
 #include "universes/swiss/Inter-Bold.ttf.inc"
 };
@@ -65,93 +66,114 @@ using ugl::set4f;
 
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// The posters: a ground, an ink, and one palette of three colors per kind of section (0 intro / outro, 1 verse,
-// 2 build / break, 3 chorus, 4 drop). The signature color leads every palette but the drop's.
+// A poster: its palette, its pieces, its scene.
 struct VariantDef {
     const char* name;
-    unsigned ground, ink;
-    unsigned pal[5][3];
+    unsigned skyTop, skyBot, haze, cloud, sun;
+    unsigned snow, snowSh, rock, rockSh;
+    unsigned mid1, mid2, mid3;
+    unsigned heroLit, heroSh, heroGrass;
+    unsigned lake, lakeLit;
+    unsigned meadow, meadowLit, meadowDk, fg, dot;
+    unsigned path, wall, wallSh, roof, roofSh, timber, window;
+    unsigned tree, treeLit, tree2, tree2Lit;
+    unsigned paper, ink, accent;
+    unsigned pieces[7];       // I O T S Z J L
+    float farBase, snowLine, farHeight, round; // the far range
+    int hero;                 // 0 none, 1 snow horn, 2 limestone
+    float lakeY, mist;        // lake level (-99: none), mist at the ranges' feet
+    int village;              // 0 a hut or two, 1 a village of houses and chalets, 2 a village of chalets
+    int hasPath;
+    float cloudFlat, cloudCover;
+    float meadowY, fgY, midH;
+    float sunX, sunY, sunR;   // the sun: x as a share of the half width on the hero's side, height, radius
+    int trees;                // 0 cypresses and firs, 1 firs, 2 larches and firs
 };
+
 const VariantDef VARIANTS[] = {
-    // white, black and red
-    {"KUNSTHALLE", 0xf4f4f2, 0x121212,
-     {{0xe2231a, 0x2a4fa8, 0xee8a1e}, {0xe2231a, 0x1f3f95, 0xe8a700}, {0xe2231a, 0x23875a, 0x2e9fd0},
-      {0xe2231a, 0x1d4fd8, 0xff7300}, {0xd8004c, 0x3d6bff, 0xffb000}}},
-    // a cool white, blue and black
-    {"ZURICH", 0xedf1f4, 0x0d1520,
-     {{0x1d4fd8, 0x1f9ec9, 0xe2231a}, {0x1d4fd8, 0xe2231a, 0x00a074}, {0x1d4fd8, 0x00a074, 0xf0a400},
-      {0x1d4fd8, 0xff5a1f, 0x10a6d8}, {0x4a6bff, 0xe6007e, 0x00b3a4}}},
-    // a black ground, white type, signal orange
-    {"NIGHT", 0x121314, 0xf1f1ee,
-     {{0xff5a1f, 0x3b7ddb, 0xc9c9c4}, {0xff5a1f, 0x2fa8ff, 0x35c27c}, {0xff5a1f, 0x35c27c, 0xb98cff},
-      {0xff5a1f, 0xffd23f, 0x4a7dff}, {0xff2e4d, 0x00897f, 0x9b6a00}}},
-    // white, black and magenta
-    {"LAUSANNE", 0xf4f4f4, 0x161616,
-     {{0xe6007e, 0x3a57c4, 0x14907f}, {0xe6007e, 0x14907f, 0xeca400}, {0xe6007e, 0x4a4fa8, 0xff6a13},
-      {0xe6007e, 0xff6a13, 0x0094d8}, {0x9a5cff, 0xff2e7e, 0x00c2a8}}},
+    // Blue and white peaks over a green meadow, a village of red roofs, a church tower, cypresses (the reference).
+    {"ALPINE VILLAGE",
+     0x4f9fdc, 0xd8edf6, 0xbad9ee, 0xf7fbfe, 0xfff7dc,
+     0xfafcfd, 0xa9cbe8, 0x3f84c8, 0x28609f,
+     0x4a86c0, 0x336fa8, 0x285f8c,
+     0xf3ead2, 0xa9b9c6, 0x5aa83c,
+     0x3d8cc8, 0xd5ecf6,
+     0x5ab43d, 0x86cc4a, 0x3d8c33, 0x47a23a, 0xf6f6e2,
+     0xf3e9c8, 0xf6f2e6, 0xbcb6d2, 0xd8262c, 0x9b1c24, 0x5b2e24, 0x3b2c33,
+     0x1f5848, 0x2f7a58, 0x2a6b3f, 0x3d8a4a,
+     0xf5f2e9, 0x16233a, 0xd8262c,
+     {0x2f6fb5, 0xe2a62a, 0xd8262c, 0x4ea83a, 0x1d3d6b, 0x2f8f86, 0x7b4630},
+     4.0f, 5.5f, 6.5f, 0.0f, 1, -99.f, 0.15f, 1, 1, 0.0f, 0.42f, -4.4f, -9.0f, 5.0f, 0.62f, 9.8f, 0.85f, 0},
+    // Teal and green: misty ridges, a lake, a pale limestone peak, firs, a yellow path, long cloud bands.
+    {"GRAND SOM",
+     0x3f9a92, 0xf2e7b4, 0xcae3c6, 0xdcefd6, 0xfff3c4,
+     0xa8d4c3, 0x8cc2b4, 0x83bcab, 0x6eac9e,
+     0x5aa596, 0x428e80, 0x2f7668,
+     0xefdda2, 0xb9c197, 0x92c247,
+     0x9fd0c2, 0xeef5e0,
+     0x9cc43f, 0xc8d659, 0x6ea438, 0x5f9c3a, 0xeedb7e,
+     0xe9c04a, 0xf0e8d0, 0xb7b89a, 0xc8552e, 0x8e3a22, 0x5a3a28, 0x3a3a30,
+     0x2b6a4a, 0x3f8c58, 0x245c40, 0x357a50,
+     0xf4f1df, 0x1d3a36, 0xe0662c,
+     {0x2a8f86, 0xe8b53a, 0xe0662c, 0x6aa636, 0x2b5f4a, 0x3a78a8, 0x8a5a3a},
+     2.4f, 99.f, 5.0f, 0.8f, 2, -1.6f, 0.55f, 0, 1, 1.0f, 0.62f, -4.2f, -8.9f, 4.6f, -0.62f, 9.0f, 1.1f, 1},
+    // An indigo dusk over a lake: rose snow, violet ranges, the sun's path on the water, lit windows.
+    {"LAKE AT DUSK",
+     0x2c3a72, 0xf4b277, 0xd99a8c, 0xf2a58c, 0xffe2a8,
+     0xf6cdbf, 0x9c88b8, 0x705f95, 0x584c82,
+     0x5e4f88, 0x483f71, 0x37305b,
+     0xf3ead2, 0xa9b9c6, 0x5aa83c,
+     0x6d5b8e, 0xf7c48a,
+     0x3c5c52, 0x557862, 0x2c4640, 0x263c3a, 0x86a088,
+     0xc9a98a, 0xddc8c8, 0x8f7e9e, 0xa83e45, 0x6e2a3a, 0x3e2b36, 0xffcf74,
+     0x1e3030, 0x2e4644, 0x1e3030, 0x2e4644,
+     0xf6eee4, 0x2a2342, 0xe86a52,
+     {0x3d4f96, 0xf0b44a, 0xe86a52, 0x2f8a86, 0x7a4a8a, 0xd987a0, 0x4a4070},
+     2.6f, 7.6f, 6.0f, 0.3f, 0, -2.2f, 0.35f, 1, 0, 1.0f, 0.5f, -5.0f, -9.2f, 4.0f, 0.72f, 5.6f, 1.6f, 0},
+    // Ochre meadows, orange larches, brown chalets under the first snow.
+    {"AUTUMN VALLEY",
+     0x7fb9d6, 0xf5e3bf, 0xe4d4bd, 0xfbf3e4, 0xfff1cc,
+     0xfbfaf6, 0xbac4dd, 0x8f86a8, 0x6f6b92,
+     0x8c819e, 0x72708c, 0x5d6a62,
+     0xf3ead2, 0xa9b9c6, 0x5aa83c,
+     0x3d8cc8, 0xd5ecf6,
+     0xd7a53f, 0xe8c45c, 0xb07a2e, 0xa8692c, 0xf6e2a6,
+     0xf3e6c8, 0xf2e7d2, 0xc0aa9a, 0x8a3a26, 0x5c2618, 0x6a3420, 0x3a2620,
+     0x2f4f3a, 0x456a4a, 0xd8682a, 0xec8f3a,
+     0xf6f0e3, 0x2e2420, 0xc8482a,
+     {0x4f6f9a, 0xe6b43a, 0xc4482a, 0x7f8a3a, 0x6a3f2a, 0xe8892a, 0x8a4a6a},
+     3.6f, 8.0f, 6.2f, 0.1f, 1, -99.f, 0.2f, 2, 1, 0.3f, 0.36f, -4.5f, -9.0f, 4.6f, 0.5f, 8.6f, 1.0f, 2},
+    // Snow everywhere at dawn: white meadows, chalets under snowy roofs, dark firs, a pink horizon.
+    {"WINTER MORNING",
+     0x86b5df, 0xf1e5e2, 0xd8e2ee, 0xffffff, 0xfff4e2,
+     0xffffff, 0xb0c8e4, 0x5f86b4, 0x48709f,
+     0xa2bad7, 0x86a2c4, 0x6f8db1,
+     0xf3ead2, 0xa9b9c6, 0x5aa83c,
+     0x3d8cc8, 0xd5ecf6,
+     0xf2f6fb, 0xffffff, 0xc6d6e9, 0xe4edf7, 0xd2dfee,
+     0xc3d1e4, 0xf1e4cf, 0xa9a3bd, 0xfafcff, 0xb5c7dd, 0x6b3a2a, 0xffc85a,
+     0x24463f, 0x3c6a5c, 0x24463f, 0x3c6a5c,
+     0xf3f6f9, 0x1c2b44, 0xd23a3a,
+     {0x4f9ad0, 0xe2a63a, 0xd23a3a, 0x2f8a6a, 0x24406e, 0x7a3f6a, 0x5f6f86},
+     3.0f, 3.0f, 6.5f, 0.0f, 1, -99.f, 0.25f, 2, 1, 0.2f, 0.25f, -4.5f, -9.0f, 4.6f, -0.55f, 6.8f, 1.1f, 1},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 // The gutter around a piece (board units, each side), the clear's slide (seconds).
 constexpr float GAP = 0.055f;
 constexpr float WIPE_S = 0.3f;
-// How much of the poster is veiled behind the well and the HUD's boxes.
-constexpr float VEIL = 0.93f;
+// Each depth's share of the pan: sky, far range, hero and first range, second, third and lake, meadow, foreground.
+constexpr float DEPTH[7] = {0.03f, 0.08f, 0.16f, 0.26f, 0.38f, 0.6f, 1.0f};
 
 float ease(float t) {
     t = saturate(t);
     return t * t * t * (t * (t * 6.f - 15.f) + 10.f);
 }
 
-// UTF-8 to the font's characters: the middle dot is glyph 127, accented Latin letters lose their accent, anything
-// else outside ASCII becomes a '?'.
-std::string ascii(const std::string& s) {
-    static const char* LATIN = "AAAAAAACEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaaceeeeiiiidnooooo/ouuuuypy";
-    std::string o;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c < 128) { o += (char)c; continue; }
-        if (c == 0xC2 && i + 1 < s.size() && (unsigned char)s[i + 1] == 0xB7) { o += '\x7f'; i++; continue; }
-        if (c == 0xC3 && i + 1 < s.size()) {
-            const unsigned char d = (unsigned char)s[i + 1];
-            if (d >= 0x80 && d <= 0xBF) { o += LATIN[d - 0x80]; i++; continue; }
-        }
-        if ((c & 0xE0) == 0xC0) i += 1;
-        else if ((c & 0xF0) == 0xE0) i += 2;
-        else if ((c & 0xF8) == 0xF0) i += 3;
-        o += '?';
-    }
-    return o;
-}
-
-std::string lower(std::string s) {
-    for (char& c : s) c = (char)std::tolower((unsigned char)c);
-    return s;
-}
-std::string upper(std::string s) {
-    for (char& c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
-
-std::vector<std::string> splitLines(const std::string& s) {
-    std::vector<std::string> v;
-    size_t a = 0;
-    while (a <= s.size()) {
-        size_t b = s.find('\n', a);
-        if (b == std::string::npos) b = s.size();
-        v.push_back(s.substr(a, b - a));
-        a = b + 1;
-    }
-    return v;
-}
-
-int sectionPalette(const std::string& s) {
-    if (s == "INTRO" || s == "OUTRO") return 0;
-    if (s == "VERSE") return 1;
-    if (s == "BUILD" || s == "BREAK") return 2;
-    if (s == "CHORUS") return 3;
-    if (s == "DROP") return 4;
-    return -1;
+vec3 saturateColor(const vec3& c, float k) {
+    const float l = ugl::luma(c);
+    const vec3 o = vec3(l) + (c - vec3(l)) * (1.f + k);
+    return {saturate(o.x), saturate(o.y), saturate(o.z)};
 }
 
 } // namespace
@@ -162,8 +184,7 @@ int sectionPalette(const std::string& s) {
 
 bool SwissUniverse::init(int width, int height) {
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "swiss shapes");
-    progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "swiss text");
-    progComp_ = ugl::program(ugl::FULLSCREEN_VS, shaders::COMP_FS, "swiss composite");
+    progLand_ = ugl::program(ugl::FULLSCREEN_VS, shaders::LAND_FS, "swiss landscape");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -181,69 +202,9 @@ bool SwissUniverse::init(int width, int height) {
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(Shape), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
-    glGenVertexArrays(1, &textVao_);
-    glGenBuffers(1, &textVbo_);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
-
-    buildFont(bold_, FONT_BOLD, 128.f, 2048);
-    buildFont(reg_, FONT_REG, 64.f, 1024);
     resize(width, height);
-    return glGetError() == GL_NO_ERROR;
-}
-
-void SwissUniverse::buildFont(Font& f, const unsigned char* ttf, float pxSize, int AW) {
-    stbtt_fontinfo* info = new stbtt_fontinfo;
-    if (!stbtt_InitFont(info, ttf, stbtt_GetFontOffsetForIndex(ttf, 0))) {
-        std::fprintf(stderr, "[gl] swiss font init failed\n");
-        delete info;
-        return;
-    }
-    f.info = info;
-    f.px = pxSize;
-    f.scaleTT = stbtt_ScaleForPixelHeight(info, f.px);
-    int x0, y0, x1, y1;
-    if (stbtt_GetCodepointBox(info, 'H', &x0, &y0, &x1, &y1)) f.capH = y1 * f.scaleTT;
-    const int AH = AW, PAD = (int)(f.px / 8.f);
-    std::vector<unsigned char> atlas((size_t)AW * AH, 0);
-    int x = 1, y = 1, rowH = 0;
-    auto cpOf = [](int ch) { return ch == 127 ? 0xB7 : ch; }; // the middle dot in DEL's slot
-    for (int ch = 32; ch < 128; ch++) {
-        const int cp = cpOf(ch);
-        Glyph& g = f.g[ch - 32];
-        int adv, lsb;
-        stbtt_GetCodepointHMetrics(info, cp, &adv, &lsb);
-        g.adv = adv * f.scaleTT;
-        int w = 0, h = 0, xo = 0, yo = 0;
-        unsigned char* sdf = stbtt_GetCodepointSDF(info, f.scaleTT, cp, PAD, 128, 128.f / PAD, &w, &h, &xo, &yo);
-        if (!sdf) { g.w = g.h = 0; continue; }
-        if (x + w + 1 > AW) { x = 1; y += rowH + 1; rowH = 0; }
-        if (y + h + 1 > AH) { stbtt_FreeSDF(sdf, nullptr); break; }
-        for (int r = 0; r < h; r++) std::memcpy(&atlas[(size_t)(y + r) * AW + x], sdf + r * w, w);
-        g.x0 = x / (float)AW; g.y0 = y / (float)AH; g.x1 = (x + w) / (float)AW; g.y1 = (y + h) / (float)AH;
-        g.ox = (float)xo; g.oy = (float)yo; g.w = (float)w; g.h = (float)h;
-        x += w + 1;
-        rowH = std::max(rowH, h);
-        stbtt_FreeSDF(sdf, nullptr);
-    }
-    for (int a = 0; a < 96; a++)
-        for (int b = 0; b < 96; b++)
-            f.kern[a][b] = stbtt_GetCodepointKernAdvance(info, cpOf(a + 32), cpOf(b + 32)) * f.scaleTT;
-    glGenTextures(1, &f.tex);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, AW, AH, 0, GL_RED, GL_UNSIGNED_BYTE, atlas.data());
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    f.ok = true;
+    return progShape_ && progLand_ && glGetError() == GL_NO_ERROR;
 }
 
 void SwissUniverse::resize(int width, int height) {
@@ -256,19 +217,13 @@ void SwissUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     unitPx_ = height_ / (2.f * hh);
-    posterT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
-    if (bar_ > -1000) compose(bar_, 0.f, true);
+    composeScene();
 }
 
 SwissUniverse::~SwissUniverse() {
-    posterT_.destroy();
-    for (GLuint p : {progShape_, progText_, progComp_}) glDeleteProgram(p);
-    for (GLuint v : {shapeVao_, textVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, shapeVbo_, textVbo_}) glDeleteBuffers(1, &b);
-    for (Font* f : {&bold_, &reg_}) {
-        if (f->tex) glDeleteTextures(1, &f->tex);
-        delete (stbtt_fontinfo*)f->info;
-    }
+    for (GLuint p : {progShape_, progLand_}) glDeleteProgram(p);
+    glDeleteVertexArrays(1, &shapeVao_);
+    for (GLuint b : {quadVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -276,29 +231,27 @@ SwissUniverse::~SwissUniverse() {
 // =====================================================================================================
 
 void SwissUniverse::setSong(const SongLook& t, float seconds) {
+    (void)seconds;
     int v;
     if (t.variant >= 0) v = t.variant % VARIANT_COUNT;
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        static const int LIGHT[3] = {0, 1, 3};
-        if (t.hasSong && t.minor && t.brightness < 0.45f) v = 2;
-        else v = LIGHT[(int)(h * 3) % 3];
+        static const int BRIGHT[3] = {0, 1, 3}, DARK[2] = {2, 4};
+        if (t.hasSong && t.minor && t.brightness < 0.45f) v = DARK[(int)(h * 2) % 2];
+        else v = BRIGHT[(int)(h * 3) % 3];
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
     variant_ = v;
     seed_ = t.seed ? t.seed : 1;
     rng_ = Rng(seed_ ^ 0x5A155ull);
-    bpm_ = t.bpm > 30.f ? t.bpm : 120.f;
-    if (seconds <= 0.1f) palInit_ = false;
-    bar_ = -1000; // recompose on the next frame
+    composeScene();
 }
 
 void SwissUniverse::setLevel(int level, float energy, float seconds, float impact) {
     (void)energy;
     (void)impact;
     level = std::clamp(level, 0, 2);
-    if (level < 2) dropMode_ = false;
     if (!hasLevel_ || seconds < 0.1f) {
         hasLevel_ = true;
         level_ = level;
@@ -313,35 +266,179 @@ void SwissUniverse::setLevel(int level, float energy, float seconds, float impac
     lvDur_ = std::clamp(seconds, 1.f, 5.f);
 }
 
-// The drop: a hard cut on its downbeat to the negative print, the title set giant across the poster in the drop's
-// palette; it holds while the drop lasts.
+// The drop's downbeat: a big flock rises from both sides (only if this is a real DROP section: see render).
 void SwissUniverse::drop(float strength) {
     (void)strength;
-    dropMode_ = true;
-    dropPending_ = true;
+    dropHit_ = true;
 }
-
-void SwissUniverse::refresh(float strength) { (void)strength; }
 
 vec2 SwissUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
 
 TransitionHints SwissUniverse::hints() const {
     const VariantDef& V = VARIANTS[variant_];
     TransitionHints h;
-    h.background = ugl::toLinear(hex(V.ground));
+    const vec3 bg = lerp(hex(V.skyTop), hex(V.skyBot), 0.55f);
+    h.background = ugl::toLinear(bg);
     h.ink = ugl::toLinear(hex(V.ink));
-    h.accent = ugl::toLinear(hex(V.pal[palIdx_][0]));
-    h.light = ugl::luma(hex(V.ground)) > 0.4f;
+    h.accent = ugl::toLinear(hex(V.accent));
+    h.light = ugl::luma(bg) > 0.4f;
     h.styles = TS_TILES | TS_CURTAIN | TS_REBUILD;
     return h;
+}
+
+// =====================================================================================================
+// The scene
+// =====================================================================================================
+
+// The village, the trees and the foreground's firs, in each layer's own units (sorted far to near: drawn in order).
+// The village stands on one side of the poster, the hero peak on the other.
+void SwissUniverse::composeScene() {
+    const VariantDef& V = VARIANTS[variant_];
+    Rng r(seed_ ^ 0xA1F5ull ^ ((uint64_t)variant_ << 32));
+    const float W = viewH_.x;
+    const float side = (seed_ >> 7) & 1 ? 1.f : -1.f; // the village's side
+    const float vx = side * std::max(14.5f, (W + 12.f) * 0.5f);
+    std::vector<El> m, fg;
+    auto treeKind = [&](bool nearVillage) -> float {
+        if (V.trees == 0) return nearVillage && r.chance(0.6f) ? 4.f : 3.f;
+        if (V.trees == 2) return r.chance(0.55f) ? 6.f : 3.f;
+        return 3.f;
+    };
+    // the village: a back row, the church, a front row
+    if (V.village > 0) {
+        const int nBack = r.irange(4, 5), nFront = r.irange(3, 4);
+        float x = vx - 4.2f;
+        for (int i = 0; i < nBack; i++) {
+            x += r.range(1.2f, 1.8f);
+            const float kind = V.village == 2 || r.chance(0.45f) ? 0.f : 1.f;
+            m.push_back({x, r.range(0.25f, 0.55f), r.range(0.68f, 0.82f), kind});
+        }
+        m.push_back({vx + side * r.range(-1.2f, -0.2f), 0.6f, 0.82f, 2.f});
+        x = vx - 3.6f;
+        for (int i = 0; i < nFront; i++) {
+            x += r.range(1.5f, 2.3f);
+            const float kind = V.village == 2 || r.chance(0.5f) ? 0.f : 1.f;
+            m.push_back({x, r.range(1.15f, 1.75f), r.range(0.95f, 1.1f), kind});
+        }
+        // cypresses and firs at the village's edges
+        for (int i = 0; i < 4; i++) {
+            const float ex = vx + (i & 1 ? 1.f : -1.f) * r.range(4.4f, 6.2f) + r.range(-0.5f, 0.5f);
+            m.push_back({ex, r.range(0.4f, 1.6f), r.range(0.8f, 1.0f), treeKind(true)});
+        }
+    } else {
+        // a hut or two on the alpine pasture
+        m.push_back({vx + r.range(-1.f, 1.f), 0.5f, 0.8f, 0.f});
+        if (r.chance(0.6f)) m.push_back({vx + r.range(2.f, 3.f), 0.9f, 0.7f, 0.f});
+    }
+    // trees scattered over the meadow, in clumps, away from the village
+    for (int c = 0; c < 6; c++) {
+        float cx = r.range(-W - 4.f, W + 4.f);
+        if (V.village > 0 && std::fabs(cx - vx) < 6.f) cx = vx - side * r.range(7.f, 12.f);
+        const int n = r.irange(2, 4);
+        for (int i = 0; i < n; i++)
+            m.push_back({cx + r.range(-1.6f, 1.6f), r.range(0.05f, 1.2f), r.range(0.5f, 0.8f), treeKind(false)});
+    }
+    std::sort(m.begin(), m.end(), [](const El& a, const El& b) { return a.depth < b.depth; });
+    // the foreground: big trees at the poster's corners and a few bushes
+    for (float s : {-1.f, 1.f}) {
+        const int n = r.irange(3, 4);
+        for (int i = 0; i < n; i++) {
+            const float ex = s * (W - r.range(0.f, 6.5f));
+            const float k = r.chance(0.2f) ? 5.f : treeKind(false);
+            fg.push_back({ex, r.range(0.3f, 1.4f), k == 5.f ? r.range(0.8f, 1.1f) : r.range(1.1f, 1.6f), k});
+        }
+    }
+    std::sort(fg.begin(), fg.end(), [](const El& a, const El& b) { return a.depth < b.depth; });
+    els_.clear();
+    for (const El& e : m) if (els_.size() < 34) els_.push_back(e);
+    elFg_ = (int)els_.size();
+    for (const El& e : fg) if (els_.size() < 48) els_.push_back(e);
+}
+
+void SwissUniverse::drawLandscape() {
+    const VariantDef& V = VARIANTS[variant_];
+    const float W = viewH_.x;
+    const float side = (seed_ >> 7) & 1 ? 1.f : -1.f;
+    const GLuint p = progLand_;
+    glUseProgram(p);
+    set2f(p, "uRes", (float)width_, (float)height_);
+    glUniform3f(ugl::U(p, "uView"), viewC_.x, viewC_.y, unitPx_);
+    set1f(p, "uTime", sceneT_);
+    glUniform1fv(ugl::U(p, "uOff"), 7, layerOff_);
+    glUniform3f(ugl::U(p, "uCloudOff"), cloudOff_[0], cloudOff_[1], cloudOff_[2]);
+    set1f(p, "uSeed", (float)(seed_ % 997) * 0.37f);
+    const float drop = smoothstepf(0.f, 1.f, dropAmt_);
+    auto c = [&](const char* n, unsigned v) { set3f(p, n, hex(v)); };
+    c("uSkyTop", V.skyTop);
+    set3f(p, "uSkyBot", lerp(hex(V.skyBot), hex(V.sun), 0.35f * drop));
+    c("uHaze", V.haze); c("uCloudC", V.cloud); c("uSunC", V.sun);
+    c("uSnow", V.snow); c("uSnowSh", V.snowSh); c("uRock", V.rock); c("uRockSh", V.rockSh);
+    c("uMid1", V.mid1); c("uMid2", V.mid2); c("uMid3", V.mid3);
+    c("uHeroLit", V.heroLit); c("uHeroSh", V.heroSh); c("uHeroGrass", V.heroGrass);
+    c("uLake", V.lake); c("uLakeLit", V.lakeLit);
+    c("uMeadow", V.meadow); c("uMeadowLit", V.meadowLit); c("uMeadowDk", V.meadowDk); c("uFg", V.fg); c("uDot", V.dot);
+    c("uPath", V.path); c("uWall", V.wall); c("uWallSh", V.wallSh); c("uRoof", V.roof); c("uRoofSh", V.roofSh);
+    c("uTimber", V.timber); c("uWindow", V.window);
+    c("uTree", V.tree); c("uTreeLit", V.treeLit); c("uTree2", V.tree2); c("uTree2Lit", V.tree2Lit);
+    set4f(p, "uP0", V.farBase, V.snowLine, V.farHeight, V.round);
+    const float heroX = -side * std::max(13.f, (W + 9.f) * 0.5f);
+    set4f(p, "uP1", (float)V.hero, heroX, V.lakeY, V.mist);
+    const float vx = side * std::max(14.5f, (W + 12.f) * 0.5f);
+    set4f(p, "uP2", vx, (float)V.hasPath, V.cloudFlat, V.cloudCover);
+    set4f(p, "uP3", V.meadowY, V.fgY, 0.f, V.midH);
+    const float sunX = V.sunR > 0.f ? -side * V.sunX * W : 0.f;
+    glUniform3f(ugl::U(p, "uSun"), sunX, V.sunY, V.sunR * (1.f + 0.25f * drop));
+    const float calm = 1.f - saturate(lv_);
+    set4f(p, "uGrade", 0.3f * drop + 0.1f * smoothstepf(1.f, 2.f, lv_), 0.1f * calm, smoothstepf(0.f, 1.f, slow_), drop);
+    set1f(p, "uWind", 0.5f + 0.4f * saturate(lv_ * 0.5f) + 0.8f * drop);
+    std::vector<float> el;
+    for (const El& e : els_) el.insert(el.end(), {e.x, e.depth, e.size, e.kind});
+    set1i(p, "uElCount", (int)els_.size());
+    set1i(p, "uElFg", elFg_);
+    if (!els_.empty()) glUniform4fv(ugl::U(p, "uEl"), (GLsizei)els_.size(), el.data());
+    ugl::drawFullscreen();
+}
+
+// =====================================================================================================
+// Birds
+// =====================================================================================================
+
+// A loose V of n birds from (x, y), flying toward dir (-1 left, 1 right), climbing at first.
+void SwissUniverse::flock(float x, float y, int n, float dir, float climb) {
+    const float speed = rng_.range(1.7f, 2.3f);
+    for (int i = 0; i < n && birds_.size() < 96; i++) {
+        const int k = (i + 1) / 2, s = (i & 1) ? 1 : -1;
+        Bird b;
+        b.p = vec2{x - dir * 0.55f * k + rng_.range(-0.2f, 0.2f), y + s * 0.35f * k + rng_.range(-0.2f, 0.2f)};
+        b.v = vec2{dir * speed * rng_.range(0.92f, 1.08f), climb * rng_.range(0.8f, 1.2f)};
+        b.phase = rng_.range(0.f, TAU);
+        b.rate = rng_.range(9.f, 12.f);
+        b.size = rng_.range(0.22f, 0.32f);
+        b.glide = rng_.range(0.f, TAU);
+        b.wob = rng_.range(0.f, TAU);
+        birds_.push_back(b);
+    }
+}
+
+void SwissUniverse::updateBirds(float dt) {
+    for (Bird& b : birds_) {
+        b.v.y = approach(b.v.y, 0.25f + 0.2f * std::sin(b.wob), 0.35f, dt);
+        b.wob += dt * 0.6f;
+        b.p = vec2{b.p.x + b.v.x * dt, b.p.y + b.v.y * dt};
+        b.phase += b.rate * dt;
+        b.glide += dt * 0.9f;
+    }
+    const float W = viewH_.x + 3.f, Ht = viewH_.y + 3.f;
+    birds_.erase(std::remove_if(birds_.begin(), birds_.end(),
+                                [&](const Bird& b) { return std::fabs(b.p.x - viewC_.x) > W || b.p.y - viewC_.y > Ht; }),
+                 birds_.end());
 }
 
 // =====================================================================================================
 // Game events
 // =====================================================================================================
 
-// Keeps the pieces' ids in step with the board (a new board, or one changed behind our back, gets fresh ids and the
-// current palette).
+// Keeps the pieces' ids in step with the board (a new board, or one changed behind our back, gets fresh ids).
 void SwissUniverse::syncIds(const Game& g) {
     int wrong = 0;
     for (int y = 0; y < Game::H; y++)
@@ -358,7 +455,6 @@ void SwissUniverse::syncIds(const Game& g) {
             int stack[8][2], sp = 0, count = 0;
             stack[sp][0] = x; stack[sp][1] = y; sp++;
             ids_[y][x] = id;
-            pal_[y][x] = palIdx_;
             while (sp > 0 && count < 4) {
                 sp--;
                 const int cx = stack[sp][0], cy = stack[sp][1];
@@ -369,7 +465,6 @@ void SwissUniverse::syncIds(const Game& g) {
                     if (nx < 0 || ny < 0 || nx >= Game::W || ny >= Game::H || ids_[ny][nx]) continue;
                     if (g.cell(nx, ny).type != g.cell(x, y).type || sp >= 8 || count + sp >= 4) continue;
                     ids_[ny][nx] = id;
-                    pal_[ny][nx] = palIdx_;
                     stack[sp][0] = nx; stack[sp][1] = ny; sp++;
                 }
             }
@@ -381,11 +476,8 @@ void SwissUniverse::onEvent(const GameEvent& ev, const Game& game) {
     switch (ev.type) {
     case GameEvent::Lock: {
         const int id = nextId_++;
-        for (auto& c : ev.cells) {
-            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
-            ids_[c.y][c.x] = id;
-            pal_[c.y][c.x] = palIdx_;
-        }
+        for (auto& c : ev.cells)
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) ids_[c.y][c.x] = id;
         break;
     }
     case GameEvent::HardDrop: {
@@ -410,12 +502,9 @@ void SwissUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (!rows[y]) continue;
             Wipe w;
             w.y = layout::cellPos(0.f, (float)y).y;
-            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.pal[x] = palIdx_; w.mask[x] = 0; }
+            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.mask[x] = 0; }
             for (auto& c : ev.cells)
-                if (c.y == y && c.x >= 0 && c.x < Game::W) {
-                    w.type[c.x] = std::clamp(c.type, 0, 6);
-                    w.pal[c.x] = ids_[y][c.x] ? pal_[y][c.x] : palIdx_;
-                }
+                if (c.y == y && c.x >= 0 && c.x < Game::W) w.type[c.x] = std::clamp(c.type, 0, 6);
             w.t = 0.f;
             w.delay = 0.f;
             w.dir = ((y + k) & 1) ? 1.f : -1.f;
@@ -424,20 +513,21 @@ void SwissUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         // compact the ids like the game did
         {
-            int nb[Game::H][Game::W] = {}, np[Game::H][Game::W] = {};
+            int nb[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (rows[y]) continue;
                 std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
-                std::memcpy(np[dst], pal_[y], sizeof(pal_[y]));
                 dst--;
             }
             std::memcpy(ids_, nb, sizeof(ids_));
-            std::memcpy(pal_, np, sizeof(pal_));
         }
-        if (ev.count >= 4) {
-            quadUntil_ = std::max(bar_, 0L) + 2;
-            compose(bar_, 1.2f, false);
+        // a flock takes off from the meadow on one side and flies away outward
+        {
+            const float s = rng_.chance(0.5f) ? 1.f : -1.f;
+            const float x = viewC_.x + s * rng_.range(12.5f, std::max(13.f, viewH_.x - 2.f));
+            const VariantDef& V = VARIANTS[variant_];
+            flock(x, V.meadowY - 0.3f, 2 + 2 * std::min(ev.count, 4), s, rng_.range(1.0f, 1.4f));
         }
         break;
     }
@@ -448,11 +538,10 @@ void SwissUniverse::onEvent(const GameEvent& ev, const Game& game) {
             Wipe w;
             bool any = false;
             w.y = layout::cellPos(0.f, (float)y).y;
-            for (int x = 0; x < Game::W; x++) { w.type[x] = -1; w.pal[x] = palIdx_; }
+            for (int x = 0; x < Game::W; x++) w.type[x] = -1;
             for (auto& c : ev.cells)
                 if (c.y == y && c.x >= 0 && c.x < Game::W) {
                     w.type[c.x] = std::clamp(c.type, 0, 6);
-                    w.pal[c.x] = ids_[y][c.x] ? pal_[y][c.x] : palIdx_;
                     any = true;
                 }
             if (!any) continue;
@@ -502,11 +591,25 @@ void SwissUniverse::rectB(float x0, float y0, float x1, float y1, const vec3& c,
     rectPx(p0.x, p0.y, p1.x, p1.y, c, a);
 }
 
+void SwissUniverse::plateB(float x0, float y0, float x1, float y1, float radius, const vec3& c, float a) {
+    if (a <= 0.002f) return;
+    const vec2 p0 = px(std::min(x0, x1), std::max(y0, y1)), p1 = px(std::max(x0, x1), std::min(y0, y1));
+    Shape s{{p0.x, p0.y, p1.x, p1.y}, {c.x, c.y, c.z, a}, {1, radius * unitPx_, 0, 0}, {-1e5f, -1e5f, 1e5f, 1e5f}};
+    shapes_.push_back(s);
+}
+
 void SwissUniverse::discB(float cx, float cy, float r, const vec3& c, float a) {
     if (r <= 0.01f || a <= 0.002f) return;
     const vec2 p = px(cx, cy);
     const float rp = r * unitPx_;
     Shape s{{p.x - rp, p.y - rp, p.x + rp, p.y + rp}, {c.x, c.y, c.z, a}, {2, rp, 0, 0}, {-1e5f, -1e5f, 1e5f, 1e5f}};
+    shapes_.push_back(s);
+}
+
+void SwissUniverse::birdB(float cx, float cy, float halfW, float beat, const vec3& c, float a) {
+    const vec2 p = px(cx, cy);
+    const float h = halfW * unitPx_;
+    Shape s{{p.x - h, p.y - h, p.x + h, p.y + h}, {c.x, c.y, c.z, a}, {3, beat, 0, 0}, {-1e5f, -1e5f, 1e5f, 1e5f}};
     shapes_.push_back(s);
 }
 
@@ -522,539 +625,13 @@ void SwissUniverse::flushShapes() {
 }
 
 // =====================================================================================================
-// Type
-// =====================================================================================================
-
-float SwissUniverse::capWidth(const Font& f, const std::string& s, float track) const {
-    if (!f.ok || s.empty()) return s.size() * 0.7f;
-    float w = 0;
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        w += f.g[ch - 32].adv / f.capH + track;
-        if (i + 1 < s.size()) {
-            unsigned char nx = (unsigned char)s[i + 1];
-            if (nx < 32 || nx >= 128) nx = '?';
-            w += f.kern[ch - 32][nx - 32] / f.capH;
-        }
-    }
-    return w - track;
-}
-
-void SwissUniverse::textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, int rot,
-                              std::vector<float>& out) const {
-    if (!f.ok) return;
-    const float k = capPx / f.capH;
-    float pen = 0.f;
-    auto map = [&](float u, float v, float& X, float& Y) {
-        if (rot == 0) { X = x + u; Y = base + v; }
-        else { X = x + v; Y = base - u; }
-    };
-    for (size_t i = 0; i < s.size(); i++) {
-        unsigned char ch = (unsigned char)s[i];
-        if (ch < 32 || ch >= 128) ch = '?';
-        const Glyph& g = f.g[ch - 32];
-        if (g.w > 0) {
-            const float u0 = pen + g.ox * k, v0 = g.oy * k, u1 = u0 + g.w * k, v1 = v0 + g.h * k;
-            float P[4][2];
-            map(u0, v0, P[0][0], P[0][1]);
-            map(u1, v0, P[1][0], P[1][1]);
-            map(u1, v1, P[2][0], P[2][1]);
-            map(u0, v1, P[3][0], P[3][1]);
-            const float T[4][2] = {{g.x0, g.y0}, {g.x1, g.y0}, {g.x1, g.y1}, {g.x0, g.y1}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int j : idx) {
-                const float v[4] = {P[j][0], P[j][1], T[j][0], T[j][1]};
-                out.insert(out.end(), v, v + 4);
-            }
-        }
-        pen += g.adv * k + track * capPx;
-        if (i + 1 < s.size()) {
-            unsigned char nx = (unsigned char)s[i + 1];
-            if (nx < 32 || nx >= 128) nx = '?';
-            pen += f.kern[ch - 32][nx - 32] * k;
-        }
-    }
-}
-
-void SwissUniverse::drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, bool adaptive) {
-    (void)adaptive;
-    if (q.empty() || !f.ok || alpha <= 0.002f) return;
-    glUseProgram(progText_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, f.tex);
-    set1i(progText_, "uFont", 0);
-    set2f(progText_, "uRes", (float)width_, (float)height_);
-    set3f(progText_, "uInk", ink);
-    set1f(progText_, "uAlpha", alpha);
-    glBindVertexArray(textVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, textVbo_);
-    glBufferData(GL_ARRAY_BUFFER, q.size() * sizeof(float), q.data(), GL_STREAM_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
-}
-
-// =====================================================================================================
-// The composition
-// =====================================================================================================
-
-// The title's words, lower case, without what is in brackets (an artist before " - " goes to artist_).
-std::vector<std::string> SwissUniverse::titleWords() const {
-    std::vector<std::string> w;
-    std::string cur;
-    for (char c : title_) {
-        if (c == ' ') {
-            if (!cur.empty()) w.push_back(cur);
-            cur.clear();
-        } else cur += c;
-    }
-    if (!cur.empty()) w.push_back(cur);
-    if (w.size() > 6) w.resize(6);
-    return w;
-}
-
-namespace {
-// Greedy lines of words no wider than maxW (in cap heights).
-template <class F>
-std::vector<std::string> breakLines(const std::vector<std::string>& words, float maxW, F width) {
-    std::vector<std::string> lines;
-    std::string line;
-    for (const std::string& w : words) {
-        if (line.empty()) { line = w; continue; }
-        if (width(line + " " + w) <= maxW) line += " " + w;
-        else { lines.push_back(line); line = w; }
-    }
-    if (!line.empty()) lines.push_back(line);
-    return lines;
-}
-std::string joinLines(const std::vector<std::string>& v) {
-    std::string s;
-    for (size_t i = 0; i < v.size(); i++) s += (i ? "\n" : "") + v[i];
-    return s;
-}
-} // namespace
-
-// A layout on the grid for this bar: the structure (the title's family and zone, the type's size) changes every two
-// or four bars, the details (fields' lengths, the stripe, the disc's height) on every bar.
-//
-// The zones: the free columns left and right of the game's band (x beyond +-12). The left one runs from the HUD's top
-// corner to its bottom corner (y -9 .. 10); the right one keeps its foot (y -9.5 .. -6) for the information block.
-// Families of the title: STACK (horizontal, small, stacked in a zone: calm), VERT (turned up the left zone, as big
-// as the zone allows, wholly in the free space), ACROSS (horizontal from the left edge, big, running on behind the
-// veil), GIANT (the drop: across the whole poster).
-void SwissUniverse::compose(long bar, float dur, bool instant) {
-    const float W = viewH_.x;
-    const float Wi = std::floor(W - 0.8f);
-    const float ZX = 12.f;                    // the zones start on the grid line past the HUD columns
-    const float zw = std::max(4.f, Wi - ZX);  // narrow screens: the zones run under the veil
-    const float LX = -(ZX + zw), RX = ZX;     // left edges of the left and right zones
-    const float TT = 10.f, BB = -9.f;         // the type's top and bottom lines (clear of the HUD's corners)
-    const float RB = -5.f;                    // the right zone's type starts above its information block
-    const int lvl = level_;
-    const bool drop = dropMode_;
-    const int period = lvl >= 1 ? 2 : 4;
-    const long era = (long)std::floor((double)bar / period);
-    Rng rb(seed_ ^ ((uint64_t)(era + 100000) * 0x9E3779B97F4A7C15ull) ^ ((uint64_t)lvl << 40) ^ (drop ? 0xD0Dull : 0ull));
-    Rng rs(seed_ ^ ((uint64_t)(bar + 100000) * 0xC2B2AE3D27D4EB4Full));
-    composeCount_++;
-
-    Target T[E_COUNT];
-    std::vector<std::string> words = titleWords();
-    if (words.empty()) words.push_back(lower(VARIANTS[variant_].name));
-    auto wBold = [&](const std::string& s) { return capWidth(bold_, s, -0.02f); };
-    const float step = 1.2f;
-
-    enum { STACK, VERT, ACROSS, GIANT };
-    int fam;
-    if (drop) fam = GIANT;
-    else if (lvl == 0) fam = rb.chance(0.5f) ? STACK : ACROSS;
-    else if (lvl == 1) fam = rb.chance(0.5f) ? VERT : ACROSS;
-    else fam = rb.chance(0.4f) ? VERT : ACROSS;
-    const bool stackRight = fam == STACK && rb.chance(0.5f);
-    bool leftBusy = fam != STACK || !stackRight; // the title holds the left zone
-
-    // Best line breaking of the words into 1..3 lines for a box (maxW along the lines, maxH across them, in units).
-    auto fit = [&](float maxW, float maxH, float capMax, std::vector<std::string>& out) {
-        float best = 0.f;
-        const float total = wBold(joinLines(words));
-        for (int n = 1; n <= std::min<int>(3, (int)words.size()); n++) {
-            std::vector<std::string> ls = breakLines(words, total / n + 0.8f, wBold);
-            if ((int)ls.size() > 3) continue;
-            float wmax = 0.f;
-            for (auto& l : ls) wmax = std::max(wmax, wBold(l));
-            const float c = std::min({capMax, maxW / std::max(0.1f, wmax), maxH / (1.f + step * (ls.size() - 1))});
-            if (c > best + 0.05f) { best = c; out = ls; }
-        }
-        return std::floor(best * 4.f) * 0.25f;
-    };
-
-    float titleBottom = BB, titleX = LX, titleCap = 2.f;
-    int titleLines = 1;
-    {
-        Target& t = T[E_TITLE];
-        t.on = true;
-        t.color = 0;
-        std::vector<std::string> lines;
-        if (fam == GIANT) {
-            t.v[2] = fit(2.f * Wi, TT - BB + 1.f, 8.5f, lines);
-            t.v[0] = -Wi;
-            t.v[1] = TT + 0.5f;
-            t.color = 1;
-        } else if (fam == ACROSS) {
-            const float capMax = lvl >= 2 ? (float)rb.irange(4, 5) : lvl == 1 ? 3.f : 2.5f;
-            t.v[2] = fit(2.f * Wi - 1.f, TT - BB - 3.f, capMax, lines);
-            t.v[0] = -Wi;
-            const float h = t.v[2] * (1.f + step * (lines.size() - 1));
-            t.v[1] = rb.chance(0.5f) ? TT : std::ceil(BB + 3.f + h);
-            t.color = lvl >= 2 && rb.chance(0.4f) ? 1 : 0;
-        } else if (fam == VERT) {
-            // turned up the left zone, from its foot
-            t.rot = 1;
-            t.v[2] = fit(TT - BB - 1.f, zw - 0.5f, 6.f, lines);
-            t.v[0] = LX + t.v[2];
-            t.v[1] = BB + 1.f;
-            t.color = lvl >= 2 && rb.chance(0.5f) ? 1 : 0;
-        } else {
-            const float x0 = stackRight ? RX : LX;
-            const float hMax = stackRight ? TT - RB : TT - BB - 3.f;
-            t.v[2] = std::max(0.75f, fit(zw - 0.3f, hMax, 1.75f, lines));
-            t.v[0] = x0;
-            const float h = t.v[2] * (1.f + step * (lines.size() - 1));
-            t.v[1] = stackRight || rb.chance(0.5f) ? TT : std::ceil(BB + 3.f + h);
-        }
-        t.v[3] = step;
-        t.text = joinLines(lines);
-        titleLines = (int)lines.size();
-        titleCap = t.v[2];
-        titleX = t.v[0];
-        titleBottom = t.rot ? BB : t.v[1] - titleCap * (1.f + step * (titleLines - 1));
-    }
-
-    // ---- The artist, small, under a horizontal title.
-    if (!artist_.empty() && T[E_TITLE].rot == 0) {
-        Target& t = T[E_ARTIST];
-        const float cap = std::max(0.5f, std::min(1.f, titleCap * 0.25f));
-        t.text = lower(artist_);
-        t.v[0] = titleX;
-        t.v[1] = std::floor(titleBottom - std::max(0.6f, titleCap * 0.3f));
-        t.v[2] = cap;
-        t.v[3] = 1.3f;
-        t.color = drop ? 0 : 1;
-        t.on = t.v[1] - cap > BB;
-        if (t.on) titleBottom = t.v[1] - cap;
-    }
-
-    // ---- The section's name, turned up the right zone (or "quad" after a four-line clear); the left zone when the title
-    // is stacked on the right.
-    {
-        Target& t = T[E_SECTION];
-        const bool quadClear = bar <= quadUntil_;
-        std::string word = quadClear ? lower(QUAD_NAME) : lower(section_);
-        if (word.empty()) word = lvl == 0 ? "calm" : lvl == 1 ? "tempo" : "forte";
-        t.on = !drop && (quadClear || lvl >= 1 || (fam == STACK && rb.chance(0.5f)));
-        const bool inLeft = stackRight;
-        if (inLeft && leftBusy) t.on = false;
-        if (t.on) {
-            const float y0 = inLeft ? BB : RB, len = TT - y0;
-            float cap = lvl >= 2 || quadClear ? std::min(zw - 1.f, 6.f) : lvl == 1 ? std::min(zw - 2.f, 4.f) : 2.5f;
-            cap = std::min(cap, len / std::max(0.1f, wBold(word)));
-            cap = std::max(1.f, std::floor(cap * 2.f) * 0.5f);
-            const float x0 = inLeft ? LX : RX;
-            const float inset = rb.chance(0.5f) ? 0.f : std::max(0.f, std::floor(zw - cap - 0.5f));
-            t.text = word;
-            t.rot = 1;
-            t.v[0] = x0 + inset + cap; // the baseline (the caps fill to its left)
-            const float spare = std::max(0.f, std::floor(len - cap * wBold(word)));
-            t.v[1] = y0 + std::min(spare, (float)rs.irange(0, 2));
-            t.v[2] = cap;
-            t.v[3] = step;
-            t.color = quadClear ? 1 : 0;
-            if (inLeft) leftBusy = true;
-        }
-    }
-
-    // ---- Fields: flat color on whole units, bleeding off the poster's outer edges.
-    auto field = [&](int slot, float x0, float y0, float x1, float y1, int color) {
-        Target& t = T[slot];
-        t.on = true;
-        t.v[0] = x0; t.v[1] = y0; t.v[2] = x1; t.v[3] = y1;
-        t.color = color;
-    };
-    const float bleedR = W + 1.f, bleedL = -W - 1.f;
-    const bool disc = !drop && lvl >= 1 && rb.chance(0.5f); // the right zone takes a disc or a block, not both
-    if (drop) {
-        // the title over a block bleeding off the right edge and a band across
-        field(E_FIELD0, RX + 2.f, (float)rs.irange(-5, -4), bleedR, (float)rs.irange(2, 4), 2);
-        const float sy = (float)rs.irange(-8, -6);
-        field(E_FIELD1, bleedL, sy, bleedR, sy + 1.f, 3);
-    } else if (lvl == 0) {
-        // one column, in the free zone
-        const float w = (float)rb.irange(2, 3);
-        if (!leftBusy || (fam == ACROSS && rb.chance(0.5f))) {
-            const float x0 = LX + (rb.chance(0.5f) ? 0.f : std::floor(zw - w));
-            field(E_FIELD0, x0, BB + (float)rs.irange(0, 1), x0 + w, TT - (float)rb.irange(2, 5) - (float)rs.irange(0, 1), 1);
-        } else {
-            const float x0 = RX + (rb.chance(0.5f) ? 0.f : std::floor(zw - w));
-            field(E_FIELD0, x0, RB + (float)rs.irange(0, 2), x0 + w, TT - (float)rb.irange(1, 4), 1);
-        }
-    } else if (lvl == 1) {
-        // a block bleeding off the right edge, a column in the left zone
-        const float y0 = (float)rs.irange(-3, 0);
-        if (!disc) field(E_FIELD0, RX + (float)rb.irange(2, 4), y0, bleedR, y0 + (float)rs.irange(3, 5), 1);
-        const float w = (float)rb.irange(2, 3);
-        const float x0 = LX + (rb.chance(0.5f) ? 0.f : std::floor(zw - w));
-        field(E_FIELD1, x0, (float)rs.irange(1, 3), x0 + w, TT + 0.f, 2);
-    } else {
-        // dense: a block bleeding off the right edge, a stripe across the poster, a square in the left zone
-        const float y0 = (float)rs.irange(-4, -1);
-        if (!disc) field(E_FIELD0, RX + (float)rb.irange(1, 3), y0, bleedR, y0 + (float)rb.irange(5, 8), 1);
-        const float sy = (float)rs.irange(-6, 6);
-        field(E_FIELD1, bleedL, sy, bleedR, sy + (float)rb.irange(1, 2), 2);
-        const float s = (float)rb.irange(3, 4);
-        const float sy2 = (float)rb.irange(0, 4);
-        const float sx = LX + (float)rs.irange(0, 1) + (rb.chance(0.5f) ? std::floor(zw - s - 1.f) : 0.f);
-        field(E_FIELD2, sx, sy2, sx + s, sy2 + s, 3);
-    }
-
-    // ---- A disc (from mid on), in the right zone.
-    if (disc) {
-        Target& t = T[E_DISC];
-        t.on = true;
-        const float r = std::max(1.f, std::min(std::floor(zw * 0.5f) - 0.5f, (float)rb.irange(2, 3)));
-        t.v[0] = RX + std::floor(zw * 0.5f) + (float)rb.irange(-1, 1);
-        t.v[1] = (float)rs.irange((int)RB + 1 + (int)r, (int)(TT - r));
-        t.v[2] = r;
-        t.color = lvl >= 2 ? 3 : 1;
-    }
-
-    // ---- The information block at the foot of the right zone, a rule above it, a small square stepping along it.
-    {
-        Target& info = T[E_INFO];
-        info.on = true;
-        std::string s = upper(section_.empty() ? std::string(VARIANTS[variant_].name) : section_);
-        if (!info1_.empty()) s += "\n" + info1_;
-        if (!info2_.empty()) s += "\n" + info2_;
-        info.text = s;
-        info.v[0] = RX;
-        info.v[1] = -7.5f;
-        info.v[2] = 0.36f;
-        info.v[3] = 1.7f;
-        info.color = 0;
-        Target& r0 = T[E_RULE0];
-        r0.on = true;
-        r0.v[0] = RX;
-        r0.v[1] = -6.5f;
-        r0.v[2] = RX + std::min(zw, (float)rb.irange(4, 6));
-        Target& b = T[E_BULLET];
-        b.on = lvl >= 1 || drop;
-        b.v[0] = RX;
-        b.v[1] = r0.v[1] + 0.3f;
-        b.v[2] = RX + 0.6f;
-        b.v[3] = r0.v[1] + 0.9f;
-        b.color = 1;
-        // a rule under a horizontal title
-        Target& r1 = T[E_RULE1];
-        r1.on = (lvl >= 1 || drop) && T[E_TITLE].rot == 0;
-        r1.v[0] = titleX;
-        r1.v[1] = std::floor(titleBottom - 0.5f);
-        r1.v[2] = titleX + zw;
-        if (r1.v[1] < BB) r1.on = false;
-        // a long rule across the poster (peak)
-        Target& r2 = T[E_RULE2];
-        r2.on = lvl >= 2 && !drop;
-        // clear of the title: under it, or above it, or at the foot of a turned title
-        if (T[E_TITLE].rot) r2.v[1] = BB + 0.5f;
-        else if (titleBottom - 2.5f >= BB) r2.v[1] = std::floor(titleBottom - 2.5f);
-        else if (T[E_TITLE].v[1] + 1.f <= TT + 0.5f) r2.v[1] = std::ceil(T[E_TITLE].v[1] + 0.7f);
-        else r2.on = false;
-        r2.v[0] = -Wi;
-        r2.v[2] = Wi;
-    }
-
-    for (int i = 0; i < E_COUNT; i++) retarget(i, T[i], dur, instant);
-    for (int i = E_RULE0; i <= E_RULE2; i++) el_[i].ruleBase = T[i].v[1];
-}
-
-namespace {
-bool sameTarget(const SwissUniverse* /*unused*/, const float a[4], const float b[4]) {
-    for (int i = 0; i < 4; i++)
-        if (std::fabs(a[i] - b[i]) > 1e-3f) return false;
-    return true;
-}
-} // namespace
-
-void SwissUniverse::retarget(int slot, const Target& t, float dur, bool instant) {
-    Element& e = el_[slot];
-    if (instant) {
-        e.cur = e.from = e.to = t;
-        e.alpha = e.alphaFrom = t.on ? 1.f : 0.f;
-        e.t = 1.f;
-        e.twoPhase = false;
-        return;
-    }
-    if (e.to.on == t.on && (!t.on || (sameTarget(this, e.to.v, t.v) && e.to.text == t.text && e.to.color == t.color &&
-                                      e.to.rot == t.rot)))
-        return;
-    const bool text = slot == E_TITLE || slot == E_ARTIST || slot == E_SECTION || slot == E_INFO;
-    e.from = e.cur;
-    e.alphaFrom = e.alpha;
-    e.to = t;
-    e.t = 0.f;
-    e.dur = std::max(0.05f, dur);
-    e.swapped = false;
-    const bool changed = e.cur.text != t.text || e.cur.rot != t.rot || e.cur.color != t.color;
-    float far;
-    if (text) far = std::max(std::fabs(e.cur.v[0] - t.v[0]), std::fabs(e.cur.v[1] - t.v[1]));
-    else far = std::fabs((e.cur.v[0] + e.cur.v[2]) - (t.v[0] + t.v[2])) * 0.5f;
-    e.twoPhase = e.cur.on && t.on && e.alpha > 0.01f && (changed || far > (text ? 9.f : 12.f));
-}
-
-namespace {
-// A shape's hidden form: a field wipes shut along its longer side (toward its left or bottom edge), a disc shrinks
-// to its center, a rule to its start.
-void collapse(int slot, const float in[4], float out[4], int fieldSlots0, int disc, int rule0, int rule2) {
-    for (int i = 0; i < 4; i++) out[i] = in[i];
-    if (slot >= fieldSlots0 && slot < disc) {
-        if (in[2] - in[0] > in[3] - in[1]) out[2] = in[0];
-        else out[3] = in[1];
-    } else if (slot == disc) out[2] = 0.f;
-    else if (slot >= rule0 && slot <= rule2) out[2] = in[0];
-}
-} // namespace
-
-void SwissUniverse::updateElements(float dt) {
-    for (int i = 0; i < E_COUNT; i++) {
-        Element& e = el_[i];
-        const bool text = i == E_TITLE || i == E_ARTIST || i == E_SECTION || i == E_INFO;
-        const bool bullet = i == E_BULLET;
-        if (e.t >= 1.f) {
-            e.cur = e.to;
-            e.alpha = e.to.on ? 1.f : 0.f;
-            continue;
-        }
-        e.t = std::min(1.f, e.t + dt / e.dur);
-        float hidF[4], hidT[4];
-        collapse(i, e.from.v, hidF, E_FIELD0, E_DISC, E_RULE0, E_RULE2);
-        collapse(i, e.to.v, hidT, E_FIELD0, E_DISC, E_RULE0, E_RULE2);
-        auto lerp4 = [&](const float* a, const float* b, float s, float* o) {
-            for (int k = 0; k < 4; k++) o[k] = a[k] + (b[k] - a[k]) * s;
-        };
-        if (e.twoPhase) {
-            if (e.t < 0.5f) {
-                const float s = ease(e.t * 2.f);
-                if (text || bullet) e.alpha = e.alphaFrom * (1.f - s);
-                else { lerp4(e.from.v, hidF, s, e.cur.v); e.alpha = 1.f; }
-            } else {
-                if (!e.swapped) {
-                    e.swapped = true;
-                    e.cur = e.to;
-                }
-                const float s = ease(e.t * 2.f - 1.f);
-                if (text || bullet) { e.alpha = s; std::memcpy(e.cur.v, e.to.v, sizeof(e.cur.v)); }
-                else { lerp4(hidT, e.to.v, s, e.cur.v); e.alpha = 1.f; }
-            }
-            continue;
-        }
-        const float s = ease(e.t);
-        if (e.to.on && e.from.on) {
-            const std::string keepText = e.to.text;
-            lerp4(e.from.v, e.to.v, s, e.cur.v);
-            e.cur.text = keepText;
-            e.cur.color = e.to.color;
-            e.cur.rot = e.to.rot;
-            e.cur.on = true;
-            e.alpha = e.alphaFrom + (1.f - e.alphaFrom) * s;
-        } else if (e.to.on) {
-            const float v0[4] = {e.cur.v[0], e.cur.v[1], e.cur.v[2], e.cur.v[3]};
-            (void)v0;
-            e.cur.on = true;
-            e.cur.text = e.to.text;
-            e.cur.color = e.to.color;
-            e.cur.rot = e.to.rot;
-            if (text || bullet) { std::memcpy(e.cur.v, e.to.v, sizeof(e.cur.v)); e.alpha = e.alphaFrom + (1.f - e.alphaFrom) * s; }
-            else { lerp4(hidT, e.to.v, s, e.cur.v); e.alpha = 1.f; }
-        } else {
-            if (text || bullet) e.alpha = e.alphaFrom * (1.f - s);
-            else { lerp4(e.from.v, hidF, s, e.cur.v); e.alpha = e.from.on ? 1.f : 0.f; }
-            if (e.t >= 1.f) e.cur.on = false;
-        }
-    }
-}
-
-// The poster itself (into posterT_): fields, the disc, the words, the rules.
-void SwissUniverse::drawPoster() {
-    auto col = [&](int c) { return palShown_[std::clamp(c, 0, 3)]; };
-    // fields and the disc
-    for (int i = E_FIELD0; i <= E_FIELD2; i++) {
-        const Element& e = el_[i];
-        if (!e.cur.on && e.alpha <= 0.f) continue;
-        rectB(e.cur.v[0], e.cur.v[1], e.cur.v[2], e.cur.v[3], col(e.cur.color), e.alpha);
-    }
-    {
-        const Element& e = el_[E_DISC];
-        if (e.cur.on || e.alpha > 0.f) discB(e.cur.v[0], e.cur.v[1], e.cur.v[2], col(e.cur.color), e.alpha);
-    }
-    flushShapes();
-    // the words
-    std::vector<float> q;
-    for (int i : {E_SECTION, E_TITLE, E_ARTIST, E_INFO}) {
-        const Element& e = el_[i];
-        if (e.alpha <= 0.002f || e.cur.text.empty()) continue;
-        const Font& f = (i == E_ARTIST || i == E_INFO) ? reg_ : bold_;
-        const float track = i == E_INFO ? 0.06f : i == E_ARTIST ? 0.f : -0.02f;
-        const float capPx = e.cur.v[2] * unitPx_;
-        q.clear();
-        const std::vector<std::string> lines = splitLines(e.cur.text);
-        for (size_t l = 0; l < lines.size(); l++) {
-            if (e.cur.rot == 1) {
-                const vec2 a = px(e.cur.v[0] + l * e.cur.v[2] * e.cur.v[3], e.cur.v[1]);
-                textQuads(f, lines[l], a.x, a.y, capPx, track, 1, q);
-            } else {
-                const float base = e.cur.v[1] - e.cur.v[2] - l * e.cur.v[2] * e.cur.v[3];
-                const vec2 a = px(e.cur.v[0], base);
-                textQuads(f, lines[l], a.x, a.y, capPx, track, 0, q);
-            }
-        }
-        drawText(f, q, col(e.cur.color), e.alpha);
-    }
-    // the rules and the small square
-    const float th = std::max(1.f, height_ / 1080.f * (2.f + 2.5f * kickShown_));
-    for (int i = E_RULE0; i <= E_RULE2; i++) {
-        const Element& e = el_[i];
-        if (!e.cur.on && e.alpha <= 0.f) continue;
-        const vec2 a = px(e.cur.v[0], e.cur.v[1]), b = px(e.cur.v[2], e.cur.v[1]);
-        rectPx(a.x, a.y - th * 0.5f, b.x, a.y + th * 0.5f, col(0), e.alpha);
-    }
-    {
-        const Element& e = el_[E_BULLET];
-        if (e.alpha > 0.f) rectB(e.cur.v[0], e.cur.v[1], e.cur.v[2], e.cur.v[3], col(e.cur.color), e.alpha);
-    }
-    flushShapes();
-}
-
-// =====================================================================================================
 // The board
 // =====================================================================================================
 
-// The seven types within a palette: its three colors, a shade of the first, a tint of the second, the ink and a
-// grey.
-vec3 SwissUniverse::pieceColor(int type, int pal) const {
-    const VariantDef& V = VARIANTS[variant_];
-    const unsigned* p = V.pal[std::clamp(pal, 0, 4)];
-    const vec3 c0 = hex(p[0]), c1 = hex(p[1]), c2 = hex(p[2]);
-    switch (std::clamp(type, 0, 6)) {
-    case I: return c0;
-    case O: return ink_;
-    case T: return c1;
-    case S: return c2;
-    // a shade of the first color (of the second when the first is too light to shade cleanly: a yellow goes olive),
-    // toward the ink as it prints now: in the negative (the drop, slow motion) it lightens on the dark ground
-    // instead of sinking into it
-    case Z: return ugl::luma(c0) > 0.55f ? lerp(c1, ink_, 0.45f) : lerp(c0, ink_, 0.4f);
-    // a tint of the second toward white (pastel on the dark and grey grounds), toward the ink on a light ground
-    // that was dark in the positive (NIGHT's negative), so it does not wash out on it
-    case J: return lerp(c1, ugl::luma(ground_) > 0.5f && ugl::luma(hex(V.ground)) < 0.5f ? ink_ : hex(0xf6f6f4), 0.45f);
-    default: return lerp(ink_, ground_, 0.5f);
-    }
+// The seven types: the scene's own colors (roofs, sky, meadow, path...), deeper in a drop.
+vec3 SwissUniverse::pieceColor(int type) const {
+    const vec3 c = hex(VARIANTS[variant_].pieces[std::clamp(type, 0, 6)]);
+    return saturateColor(c, 0.25f * smoothstepf(0.f, 1.f, dropAmt_));
 }
 
 // One cell of a piece: a flat square, inset by the gutter on the sides it does not share with its piece, its corner
@@ -1083,8 +660,10 @@ void SwissUniverse::drawCell(float x, float y, float half, int m, const vec3& c,
 }
 
 void SwissUniverse::drawBoard(const Game& g) {
+    const VariantDef& V = VARIANTS[variant_];
     const float br = saturate(bridge_.amount);
     const vec3 bInk = ugl::toSrgb(bridge_.ink);
+    const vec3 ink = hex(V.ink), paper = hex(V.paper);
     auto tone = [&](const vec3& c) { return lerp(c, bInk, smoothstepf(0.f, 1.f, br)); };
     auto mask8 = [&](int x, int y, auto same) {
         const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, 1, 1, -1, -1};
@@ -1093,11 +672,20 @@ void SwissUniverse::drawBoard(const Game& g) {
             if (same(x + dx[i], y + dy[i])) m |= 1 << i;
         return m;
     };
+    const float plate = 0.965f * (1.f - smoothstepf(0.f, 1.f, br));
 
-    // the well's frame: two rules at its sides, the baseline under it across the poster's game band
+    // the paper: the well's panel, the previews' plates, a disc under the gauge
+    rectB(-5.45f, -10.45f, 5.45f, 10.f, paper, plate);
+    plateB(layout::HOLD_CENTER.x - 1.9f, layout::HOLD_CENTER.y - 1.45f, layout::HOLD_CENTER.x + 1.9f,
+           layout::HOLD_LABEL.y + 0.75f, 0.3f, paper, plate);
+    plateB(layout::nextCenter(0).x - 1.9f, layout::nextCenter(2).y - 1.25f, layout::nextCenter(0).x + 1.9f,
+           layout::NEXT_LABEL.y + 0.75f, 0.3f, paper, plate);
+    discB(layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y, layout::GAUGE_R + 0.45f, paper, plate);
+
+    // the well's frame: two rules at its sides, the baseline under it
     {
         const float th = std::max(1.f, height_ / 1080.f * 1.5f);
-        const vec3 c = tone(ink_);
+        const vec3 c = tone(ink);
         const vec2 a = px(-5.f, 10.f), b = px(5.f, -10.f);
         const float al = 0.55f * (1.f - 0.6f * br);
         rectPx(std::round(a.x) - 2.f * th, a.y, std::round(a.x) - th, b.y + th, c, al);
@@ -1122,7 +710,7 @@ void SwissUniverse::drawBoard(const Game& g) {
                 return false;
             };
             const float th = std::max(1.f, std::round(height_ / 1080.f * 2.f));
-            const vec3 c = tone(lerp(ground_, ink_, 0.45f));
+            const vec3 c = tone(lerp(paper, ink, 0.45f));
             auto X = [&](float bx) { return std::round(px(bx, 0.f).x); };
             auto Y = [&](float by) { return std::round(px(0.f, by).y); };
             const float gg = GAP;
@@ -1131,10 +719,7 @@ void SwissUniverse::drawBoard(const Game& g) {
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
                 auto has = [&](int dx, int dy) { return in(cc[0] + dx, cc[1] + dy); };
                 const float xl = w.x - 0.5f, xr = w.x + 0.5f, yb = w.y - 0.5f, yt = w.y + 0.5f;
-                // the inset outline (pixels, y down)
                 const float L = X(xl + gg), R = X(xr - gg), T = Y(yt - gg), B = Y(yb + gg);
-                // a side's ends: the inset corner (convex), the cell's edge (straight on), or across the next
-                // side's rule (concave). Game y grows downward: dy -1 is above.
                 auto topEnd = [&](int ox) { return !has(0, -1) ? T : has(ox, -1) ? Y(yt + gg) - th : Y(yt); };
                 auto botEnd = [&](int ox) { return !has(0, 1) ? B : has(ox, 1) ? Y(yb - gg) + th : Y(yb); };
                 auto leftEnd = [&](int oy) { return !has(-1, 0) ? L : has(-1, oy) ? X(xl - gg) - th : X(xl); };
@@ -1160,7 +745,7 @@ void SwissUniverse::drawBoard(const Game& g) {
                 return false;
             };
             const vec3 p = layout::cellPos((float)x, y - off);
-            drawCell(p.x, p.y, 0.5f, mask8(x, y, same), tone(pieceColor(c.type, ids_[y][x] ? pal_[y][x] : palIdx_)), 1.f);
+            drawCell(p.x, p.y, 0.5f, mask8(x, y, same), tone(pieceColor(c.type)), 1.f);
         }
 
     // cleared rows: a flat bar sliding out sideways, clipped at the well's edges
@@ -1172,7 +757,7 @@ void SwissUniverse::drawBoard(const Game& g) {
                 for (int x = 0; x < Game::W; x++) {
                     if (w.type[x] < 0) continue;
                     const vec3 p = layout::cellPos((float)x, 0.f);
-                    drawCell(p.x, w.y, 0.5f, w.mask[x], tone(pieceColor(w.type[x], w.pal[x])), 1.f);
+                    drawCell(p.x, w.y, 0.5f, w.mask[x], tone(pieceColor(w.type[x])), 1.f);
                 }
                 continue;
             }
@@ -1183,12 +768,12 @@ void SwissUniverse::drawBoard(const Game& g) {
                 const vec3 p = layout::cellPos((float)x, 0.f);
                 vec2 p0 = px(p.x - 0.5f + dx, w.y + 0.5f - GAP), p1 = px(p.x + 0.5f + dx, w.y - 0.5f + GAP);
                 rectPxClip(std::round(p0.x), std::round(p0.y), std::round(p1.x), std::round(p1.y),
-                           tone(pieceColor(w.type[x], w.pal[x])), 1.f, clip);
+                           tone(pieceColor(w.type[x])), 1.f, clip);
             }
         }
     }
 
-    // the falling piece: exactly a locked piece, in the current palette
+    // the falling piece: exactly a locked piece
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1201,7 +786,7 @@ void SwissUniverse::drawBoard(const Game& g) {
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cells) { // (whole above the well too: it spawns there)
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            drawCell(w.x, w.y, 0.5f, mask8(c[0], c[1], in), tone(pieceColor(p.type, palIdx_)), 1.f);
+            drawCell(w.x, w.y, 0.5f, mask8(c[0], c[1], in), tone(pieceColor(p.type)), 1.f);
         }
     }
 
@@ -1211,10 +796,10 @@ void SwissUniverse::drawBoard(const Game& g) {
         const float cx = 0.5f * (lockX0_ + lockX1_), hw = (0.5f * (lockX1_ - lockX0_) + 0.4f) * (1.f - ease(k));
         const float th = std::max(1.f, height_ / 1080.f * 2.f);
         const vec2 a = px(cx - hw, lockY_), b = px(cx + hw, lockY_);
-        rectPx(a.x, a.y + th, b.x, a.y + 2.f * th, tone(ink_), 0.9f);
+        rectPx(a.x, a.y + th, b.x, a.y + 2.f * th, tone(ink), 0.9f);
     }
 
-    // previews: small flat pieces in the HUD columns
+    // previews: small flat pieces on their plates
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
@@ -1232,7 +817,7 @@ void SwissUniverse::drawBoard(const Game& g) {
         };
         for (auto& c : cells) {
             const float x = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, y = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            drawCell(x, y, 0.5f * sc, mask8(c[0], c[1], in), tone(pieceColor(type, palIdx_)), alpha);
+            drawCell(x, y, 0.5f * sc, mask8(c[0], c[1], in), tone(pieceColor(type)), alpha);
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
@@ -1244,35 +829,38 @@ void SwissUniverse::drawBoard(const Game& g) {
 }
 
 // =====================================================================================================
-// The HUD
+// The HUD (lettered by the host)
 // =====================================================================================================
 
-// The panels; the text: hudLine, lettered by the host.
-void SwissUniverse::drawHud(const std::vector<HudRect>& panels) {
-    const vec3 ground = ground_, accent = palShown_[1];
-    if (!panels.empty() && !bare_) {
-        for (const HudRect& r : panels) {
-            const vec3 c = r.custom ? r.color : r.accent ? accent : ground;
-            rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
-        }
-        flushShapes();
-    }
+// The unified HUD's inks: the poster's paper over the dark parts of the scene, its ink over the light ones, the
+// roofs' red (or the scene's accent).
+HudInk SwissUniverse::hudInk(const HudText& h) {
+    (void)h;
+    const VariantDef& V = VARIANTS[variant_];
+    HudInk k;
+    k.pale = hex(V.paper);
+    k.deep = hex(V.ink);
+    k.accent = hex(V.accent);
+    return k;
 }
 
-// Inter on the poster's ground: labels small and spaced in capitals, values bold and set tight, the section in the
-// signature color; plain ink (print). The sizes are cap heights, the spacing in caps.
+// The HUD's own lettering (ZEN_HUD=universe): Inter, labels small and spaced in capitals, values bold and set tight,
+// in the poster's ink and accent.
 void SwissUniverse::hudLine(const HudText& h, text::Line& out) {
+    const VariantDef& V = VARIANTS[variant_];
     text::Font* bold = text::font(FONT_BOLD);
     text::Font* reg = text::font(FONT_REG);
     constexpr float CAP = 0.601f; // Inter's cap height (em)
     const float s = height_ / 1080.f, base = h.scale * 12.f;
-    const vec3 ink = ink_, accent = palShown_[1];
+    const vec3 ink = hex(V.ink), accent = hex(V.accent);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     const float alpha = saturate(h.alpha) * vis;
-    // a run: its cap height in pixels and its spacing in caps, its cap line moved down by dy
     auto put = [&](text::Font* f, const std::string& t, float cap, float track, const vec3& c, float a, float dy = 0.f) {
         out.add(t, f, cap / CAP, c, track * CAP, saturate(a));
         out.dy = dy;
+        out.look.halo = hex(V.paper);
+        out.look.haloA = 0.6f;
+        out.look.haloW = 0.18f;
     };
     switch (h.role) {
     case HUD_UNIVERSE: put(reg, text::upper(h.text), base * 0.5f, 0.08f, ink, saturate(0.35f + h.alpha * 1.4f) * vis, base * 0.1f); break;
@@ -1317,196 +905,77 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
     }
+    // the scene's own clock: still when paused, slowed in slow motion
+    const float sdt = f.paused ? 0.f : dt * (1.f - 0.8f * smoothstepf(0.f, 1.f, slow_));
+    sceneT_ += sdt;
 
-    // ---- What the song says: its title (and artist), its information, its section.
-    for (const HudText& h : f.hud) {
-        if (h.role == HUD_TITLE) {
-            std::string t = ascii(h.text), a;
-            // brackets go, "artist - title" splits
-            std::string clean;
-            int depth = 0;
-            for (char c : t) {
-                if (c == '(' || c == '[') depth++;
-                else if (c == ')' || c == ']') depth = std::max(0, depth - 1);
-                else if (!depth) clean += (c == '_' ? ' ' : c);
-            }
-            const size_t dash = clean.find(" - ");
-            if (dash != std::string::npos) {
-                a = clean.substr(0, dash);
-                clean = clean.substr(dash + 3);
-            }
-            auto trim = [](std::string x) {
-                while (!x.empty() && x.front() == ' ') x.erase(x.begin());
-                while (!x.empty() && x.back() == ' ') x.pop_back();
-                return x;
-            };
-            title_ = lower(trim(clean));
-            artist_ = trim(a);
-        } else if (h.role == HUD_INFO) {
-            const std::string t = ascii(h.text);
-            const size_t sp = t.find("   ");
-            info1_ = upper(sp == std::string::npos ? t : t.substr(0, sp));
-            info2_ = sp == std::string::npos ? std::string() : upper(t.substr(sp + 3));
-            while (!info2_.empty() && info2_.front() == ' ') info2_.erase(info2_.begin());
-        } else if (h.role == HUD_SECTION) {
-            section_ = upper(ascii(h.text));
+    // ---- The drop's look, only while the song plan's DROP section lasts.
+    const bool inDrop = music.hasSong && music.inDrop;
+    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 1.6f : 0.8f, dt);
+    const float W = viewH_.x;
+    if (dropHit_) {
+        dropHit_ = false;
+        if (inDrop || dropAmt_ > 0.05f) {
+            for (float s : {-1.f, 1.f}) flock(viewC_.x + s * rng_.range(13.f, std::max(13.5f, W - 2.f)), V.meadowY, 9, s, 1.3f);
+        }
+    }
+    beat_ = music.hasSong ? music.beat : time_ * 2.0;
+    if (inDrop && !f.paused) {
+        // a flock crossing the sky every two bars, from either side
+        const float two = (float)std::floor(beat_ / 8.0);
+        if (two != flockBar_) {
+            flockBar_ = two;
+            const float s = rng_.chance(0.5f) ? 1.f : -1.f;
+            flock(viewC_.x - s * (W + 1.5f), rng_.range(5.5f, 10.5f), rng_.irange(4, 7), s, rng_.range(-0.1f, 0.3f));
         }
     }
 
-    // ---- The palette: the section's (the drop's in a drop), the poster easing to it.
+    // ---- Parallax: a slow swing, a sway on the bars, a lean away from the falling piece.
     {
-        int p = sectionPalette(section_);
-        if (p < 0) p = level_ == 0 ? 0 : level_ == 1 ? 1 : 3;
-        if (dropMode_) p = 4;
-        palIdx_ = p;
-        const vec3 g0 = hex(V.ground), i0 = hex(V.ink);
-        // the negative print: slow motion eases into it; the drop cuts to it on its downbeat, holds it while it
-        // lasts and eases back after (both at once print positive again)
-        dropNeg_ = dropMode_ ? 1.f : approach(dropNeg_, 0.f, 1.25f, dt);
-        const float sn = smoothstepf(0.f, 1.f, slow_), dn = smoothstepf(0.f, 1.f, dropNeg_);
-        const float neg = sn + dn - 2.f * sn * dn;
-        const vec3 gT = lerp(g0, i0, neg), iT = lerp(i0, g0, neg);
-        const vec3 targ[4] = {iT, hex(V.pal[p][0]), hex(V.pal[p][1]), hex(V.pal[p][2])};
-        if (!palInit_ || dropPending_) { // the drop cuts to its palette
-            for (int i = 0; i < 4; i++) palShown_[i] = targ[i];
-            palInit_ = true;
+        panT_ += sdt;
+        float target = 0.f;
+        if (game.hasPiece() && !game.over() && !bare_) {
+            int cells[4][2];
+            game.pieceCells(game.piece(), cells);
+            float cx = 0.f;
+            for (auto& c : cells) cx += c[0];
+            cx = cx / 4.f + game.pieceVisualX() - game.piece().x;
+            target = -0.12f * layout::cellPos(cx, 0.f).x;
         }
-        const float k = 1.f - std::exp(-dt * (dropMode_ ? 3.f : 1.6f));
-        for (int i = 0; i < 4; i++) palShown_[i] = lerp(palShown_[i], targ[i], k);
-        ground_ = gT;
-        ink_ = iT;
-        palShown_[0] = iT;
+        pieceLean_ = approach(pieceLean_, target, 1.2f, sdt);
+        const float swayA = 0.12f + 0.12f * saturate(lv_ * 0.5f) + 0.3f * smoothstepf(0.f, 1.f, dropAmt_);
+        const float sway = swayA * (float)std::sin(beat_ / 8.0 * TAU);
+        pan_ = 2.6f * std::sin(panT_ * TAU / 80.f) + (f.paused ? 0.f : 1.f) * sway + pieceLean_;
+        for (int i = 0; i < 7; i++) layerOff_[i] = pan_ * DEPTH[i];
+        const float cs = 1.f + 2.5f * smoothstepf(0.f, 1.f, dropAmt_);
+        const float speeds[3] = {0.11f, 0.17f, 0.25f};
+        for (int i = 0; i < 3; i++) cloudOff_[i] = std::fmod(cloudOff_[i] + sdt * speeds[i] * cs, 1000.f);
     }
-
-    // ---- The bar grid: a new layout on every bar, a step every two beats.
-    {
-        const double beat = music.hasSong ? music.beat : time_ * 2.0;
-        const long bar = (long)std::floor(beat / 4.0);
-        const long step = (long)std::floor(beat / 2.0);
-        const float barS = 4.f * 60.f / (music.hasSong ? std::max(40.f, music.bpm) : 120.f);
-        if (bar_ <= -1000) {
-            bar_ = bar;
-            compose(bar, 0.f, true);
-        } else if (dropPending_) {
-            dropPending_ = false;
-            bar_ = bar;
-            compose(bar, 0.f, true); // a hard cut on the downbeat
-        } else if (bar != bar_ && overT_ < 0.f) {
-            bar_ = bar;
-            compose(bar, std::clamp(barS * 0.75f, 1.2f, 2.4f), false);
-        }
-        if (step != step_) {
-            step_ = step;
-            // a rule steps along the grid, the small square along its rule
-            if (lv_ > 0.5f && !f.paused) {
-                const int r = E_RULE0 + (int)(((step % 3) + 3) % 3);
-                Element& e = el_[r];
-                if (e.to.on && e.t >= 1.f) {
-                    Target t = e.to;
-                    t.v[1] = e.ruleBase + (((step / 3) & 1) ? -1.f : 0.f) * (r == E_RULE0 ? 0.f : 1.f);
-                    if (r == E_RULE0) { t.v[2] = t.v[0] + std::max(2.f, (t.v[2] - t.v[0]) + (((step / 3) & 1) ? -2.f : 2.f)); }
-                    retarget(r, t, 0.4f, false);
-                }
-                Element& b = el_[E_BULLET];
-                if (b.to.on && b.t >= 1.f) {
-                    Target t = b.to;
-                    const float x0 = el_[E_RULE0].to.v[0];
-                    const float k = (float)(((step % 4) + 4) % 4);
-                    t.v[0] = x0 + k;
-                    t.v[2] = t.v[0] + 0.7f;
-                    retarget(E_BULLET, t, 0.35f, false);
-                }
-            }
-        }
-    }
-    updateElements(dt);
-
-    // ---- Kicks (peak only): the rules thicken for an instant.
-    {
-        const float kick = std::max(music.kick, kickIn_);
-        kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
-        const float wp = smoothstepf(1.2f, 2.f, lv_);
-        kickShown_ = std::max(kickShown_ * std::exp(-dt * 7.f), kick * wp);
-    }
+    updateBirds(sdt);
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);
     for (Wipe& w : wipes_) w.t += dt;
     wipes_.erase(std::remove_if(wipes_.begin(), wipes_.end(), [](const Wipe& w) { return w.t > w.delay + WIPE_S; }), wipes_.end());
 
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
-    // ---- The poster.
-    posterT_.bind();
-    glClearColor(ground_.x, ground_.y, ground_.z, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    drawPoster();
-
-    // ---- On screen: the poster, faint behind the well and the HUD's boxes.
+    // ---- The landscape.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
-    glUseProgram(progComp_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, posterT_.tex);
-    set1i(progComp_, "uPoster", 0);
-    set2f(progComp_, "uRes", (float)width_, (float)height_);
-    set3f(progComp_, "uGround", ground_);
-    {
-        std::vector<float> rects, soft;
-        auto add = [&](float x0, float y0, float x1, float y1, float feather, float k) {
-            if (rects.size() / 4 >= 24) return;
-            rects.insert(rects.end(), {x0, y0, x1, y1});
-            soft.insert(soft.end(), {feather, k});
-        };
-        // The veil covers only what is played or read: the well, and a crisp box behind each HUD element
-        // (the hold and next previews, the gauge, each group of lettering), so the poster runs at full strength
-        // everywhere else. Boxes that touch are merged, so a column of lines reads as one block.
-        const float pad = 12.f * height_ / 1080.f;
-        std::vector<vec4> boxes;
-        auto boardBox = [&](float x0, float y0, float x1, float y1) {
-            const vec2 p0 = px(x0, y1), p1 = px(x1, y0);
-            boxes.push_back({p0.x, p0.y, p1.x, p1.y});
-        };
-        const vec2 a = px(-5.45f, 10.f), b = px(5.45f, -10.45f);
-        add(a.x, a.y, b.x, b.y, 1.f, VEIL); // the well, from its top edge to just under its baseline
-        boardBox(layout::HOLD_CENTER.x - 2.f, layout::HOLD_CENTER.y - 1.3f, layout::HOLD_CENTER.x + 2.f, layout::HOLD_LABEL.y + 0.7f);
-        boardBox(layout::nextCenter(0).x - 2.f, layout::nextCenter(2).y - 1.1f, layout::nextCenter(0).x + 2.f, layout::NEXT_LABEL.y + 0.7f);
-        boardBox(layout::GAUGE_CENTER.x - 2.f, layout::GAUGE_CENTER.y - 1.9f, layout::GAUGE_CENTER.x + 2.f, layout::GAUGE_CENTER.y + 1.3f);
-        for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
-            const HudText& h = f.hud[i];
-            if (h.alpha <= 0.02f || h.text.empty()) continue;
-            const float base = h.scale * 12.f;
-            const vec4& box = (*f.hudBoxes)[i]; // the line as the host letters it
-            const vec4 r{box.x - pad, std::min(box.y, h.y) - pad, box.z + pad, std::max(box.w, h.y + base * 0.8f) + pad};
-            if (r.z > a.x && r.x < b.x) continue; // over the well, veiled already
-            boxes.push_back(r);
-        }
-        // merge boxes that touch or overlap (until stable)
-        for (bool merged = true; merged;) {
-            merged = false;
-            for (size_t i = 0; i < boxes.size() && !merged; i++)
-                for (size_t j = i + 1; j < boxes.size() && !merged; j++) {
-                    vec4 &p = boxes[i], &q = boxes[j];
-                    if (p.x <= q.z + 1.f && q.x <= p.z + 1.f && p.y <= q.w + 1.f && q.y <= p.w + 1.f) {
-                        p = {std::min(p.x, q.x), std::min(p.y, q.y), std::max(p.z, q.z), std::max(p.w, q.w)};
-                        boxes.erase(boxes.begin() + j);
-                        merged = true;
-                    }
-                }
-        }
-        for (const vec4& r : boxes) add(r.x, r.y, r.z, r.w, 1.f, VEIL);
-        const int n = bare_ ? 0 : (int)rects.size() / 4; // the world alone: the poster unveiled
-        set1i(progComp_, "uCount", n);
-        if (n) {
-            glUniform4fv(ugl::U(progComp_, "uRects"), n, rects.data());
-            glUniform2fv(ugl::U(progComp_, "uSoft"), n, soft.data());
-        }
-    }
-    ugl::drawFullscreen();
+    drawLandscape();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    // ---- The birds, over the landscape (behind the paper).
+    if (!birds_.empty()) {
+        const vec3 bc = lerp(hex(V.ink), hex(V.skyTop), 0.18f);
+        for (const Bird& b : birds_) {
+            const float gl = smoothstepf(0.2f, 0.8f, std::sin(b.glide)); // gliding stretches between wing beats
+            const float beat = lerpf(std::sin(b.phase), 0.35f, gl);
+            birdB(b.p.x, b.p.y + 0.04f * std::sin(b.phase), b.size, beat, bc, 0.92f);
+        }
+        flushShapes();
+    }
 
     // ---- The bridge: the world gives way to the bridge's color (the stack turns to its ink in drawBoard).
     if (bridge_.amount > 0.001f) {
@@ -1520,11 +989,17 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Dim (pause, game over screen) and the startup fade.
     {
         const float d = 0.45f * dimT_;
-        if (d > 0.002f) rectPx(0, 0, (float)width_, (float)height_, ground_, d);
+        if (d > 0.002f) rectPx(0, 0, (float)width_, (float)height_, hex(V.paper), d);
         if (f.fade < 0.999f) rectPx(0, 0, (float)width_, (float)height_, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(f.panels);
+    if (!f.panels.empty() && !bare_) {
+        for (const HudRect& r : f.panels) {
+            const vec3 c = r.custom ? r.color : r.accent ? hex(V.accent) : hex(V.paper);
+            rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
+        }
+        flushShapes();
+    }
     glDisable(GL_BLEND);
 }
 
@@ -1534,10 +1009,10 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_swiss() {
     static const UniverseEntry e{
-        "SWISS POSTER", "a Swiss typographic poster: the song's words and flat color fields recompose on the bar grid, the pieces flat blocks in each section's palette",
+        "SWISS POSTER", "a vintage travel poster in flat design: peaks, ranges, a lake, a village and firs in parallax behind a paper panel; birds rise on clears, the drop warms the light and sends flocks across the sky",
         [] { return std::unique_ptr<Universe>(new SwissUniverse()); },
-        // Graphic and clean: it suits most songs, steady, rhythmic ones best.
-        [](const SongLook& l) { return 0.8f + 0.2f * l.density + 0.1f * (1.f - l.dynamics); },
+        // Bright and calm: it suits most songs, airy, melodic ones best.
+        [](const SongLook& l) { return 0.8f + 0.2f * l.brightness + 0.1f * (1.f - l.dynamics); },
         [] {
             std::vector<std::string> v;
             for (const VariantDef& x : VARIANTS) v.push_back(x.name);
