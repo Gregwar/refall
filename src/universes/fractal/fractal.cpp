@@ -660,6 +660,18 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progBg_, "uCenter", view.screen.x, view.screen.y);
         set2f(progBg_, "uC", (float)JULIA_C.real(), (float)JULIA_C.imag());
         set2f(progBg_, "uFix", (float)view.center.real(), (float)view.center.imag());
+        {
+            // the view center's exact orbit (in double) for the shader's perturbation
+            float ref[130];
+            cplx z = view.center;
+            for (int i = 0; i <= 64; i++) {
+                ref[i * 2] = (float)z.real();
+                ref[i * 2 + 1] = (float)z.imag();
+                z = z * z + JULIA_C;
+            }
+            glUniform2fv(ugl::U(progBg_, "uRef"), 65, ref);
+            glUniform1i(ugl::U(progBg_, "uRefN"), 64);
+        }
         set2f(progBg_, "uMul", (float)view.mul.real(), (float)view.mul.imag());
         set1f(progBg_, "uColOff", (float)colOff_);
         glUniform2fv(ugl::U(progBg_, "uCycle"), 8, F.cycle);
