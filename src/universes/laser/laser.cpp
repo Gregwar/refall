@@ -3,10 +3,11 @@
 // One world: a black room filled with a light haze. Every piece (the falling one and each piece of the stack) has its
 // own small laser projector standing at a random spot of the dark room, away from the well and the HUD: a point of
 // light from which a faint sheet of light opens to the piece, thin rays running to each corner of its outline, as if
-// the laser were drawing it. Before a song the room's projectors switch on one after the other, all tracing the
-// well's frame, and give way to the pieces'; after it they trace the empty frame again and go out one by one. The rays are made visible only by the haze they cross (uneven along their length); they
+// the laser were drawing it. The rays are made visible only by the haze they cross (uneven along their length); they
 // are fainter over the well, a slab of black glass. The pieces are dark acrylic, edge-lit: a smoked, tinted body whose
-// silhouette glows in the piece's color (one shape per piece, no seam inside it).
+// silhouette glows in the piece's color (one shape per piece, no seam inside it). Before a song the room's projectors
+// switch on one after the other, all tracing the well's frame, and give way to the pieces'; after it they trace the
+// empty frame again and go out one by one.
 //
 // The song decides how many projectors are on, newest pieces first: calm keeps the falling piece's and one or two
 // more, dim; mid a few; a build switches more on as the pace rises; a peak without a drop (a chorus) most of the stack,
