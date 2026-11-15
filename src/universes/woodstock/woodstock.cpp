@@ -13,10 +13,10 @@
 //
 // The music: calm is very slow; mid flows a little more. A DROP section (music.inDrop only) is the trip, there within
 // a second: the arcs' center rises behind the well and swings slowly, so the arcs close into clean full rings
-// radiating outward (a little faster at the top of each bar), folding into six shallow petals and twisting into a
+// radiating outward at an even pace, folding into six shallow petals and twisting into a
 // slow six-armed spiral, the waves calmer and simpler than outside it; the bands cross-fade (each one whole) into the
 // variant's drop palette (a sunset; rose, violet and teal; turquoise, lime and lemon; neon pastels between bands of
-// night), a soft light glows from behind the well and the pattern swells very gently on each beat. It eases back to
+// night), a soft light glows from behind the well and the pattern breathes very gently with each bar. It eases back to
 // the calm arcs and colors over a few seconds once the drop ends; nothing strobes. A line clear sends one soft ripple out through the bands from the
 // cleared rows (a stronger one for more lines); nothing flies. Slow motion is dusk (the colors drained toward lilac,
 // the flow slowed); game over greys the stack from the top.
@@ -469,8 +469,8 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     dropMix_ = approach(dropMix_, inDrop ? 1.f : 0.f, inDrop ? 3.f : 0.6f, dt);   // the drop's palette, in ~1 s
     const double beats = music.hasSong ? music.beat : time_ * 2.0;
     const float bar1 = (float)std::fmod(beats / 4.0, 1.0);
-    // bands a second, rising; in a drop the rings radiate out, a little faster at the top of each bar
-    flow_ += wdt * (0.03f + 0.03f * wm + drop * (0.16f + 0.22f * std::exp(-bar1 * 5.f)));
+    // bands a second, rising; in a drop the rings radiate out at an even pace
+    flow_ += wdt * (0.03f + 0.03f * wm + drop * 0.2f);
     phase_ += wdt * (0.1f + 0.08f * wm + 0.06f * drop);    // the waves rolling along them
     spin_ += wdt * 0.06f * drop;                           // the drop's petals turning, slowly
     // the waves: calmer and simpler in a drop (cleaner rings)
@@ -478,9 +478,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     // the swell with the bars: one slow breath every two bars
     const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
     const float breath = (0.06f + 0.05f * wm) * (0.5f - 0.5f * std::cos(bar));
-    // the drop's gentle pulse on each beat (the pattern swelling a little, the light a little brighter)
-    const float bf = (float)(beats - std::floor(beats));
-    const float pulse = drop * std::exp(-bf * 4.f);
+    // the drop's slow breath, one per bar (the pattern swelling a hair, the light a little brighter): a smooth wave,
+    // never a kick on the beat
+    const float pulse = drop * (0.5f - 0.5f * std::cos(bar1 * TAU));
     // the arcs' center: below the screen, wandering; the drop raises it behind the well (the arcs close into
     // full rings around it) and swings it slowly
     const vec2 calm{ARC_CENTER.x + 1.6f * std::sin(time_ * 0.031f), ARC_CENTER.y + 0.8f * std::sin(time_ * 0.023f + 1.f)};
@@ -523,9 +523,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uBreath", breath);
         set1f(progBg_, "uTrip", drop);
         set1f(progBg_, "uSpin", spin_);
-        set1f(progBg_, "uZoom", 1.f - 0.016f * pulse);
+        set1f(progBg_, "uZoom", 1.f - 0.006f * pulse);
         set3f(progBg_, "uGlow", lerp(col_[LINE], vec3(1.f, 0.99f, 0.95f), 0.5f));
-        set1f(progBg_, "uGlowAmt", drop * (0.75f + 0.2f * pulse));
+        set1f(progBg_, "uGlowAmt", drop * (0.75f + 0.08f * pulse));
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
         set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
         float rip[16] = {};
