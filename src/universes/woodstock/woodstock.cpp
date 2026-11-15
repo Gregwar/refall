@@ -7,9 +7,9 @@
 // small bolts. Lots of calm paper around them; no lettering in the scene. Now and then a petal comes off a daisy and
 // drifts down.
 //
-// The well is a pale panel inside the same ink line. The blocks are flat stickers in the same language: one rounded
-// square of flat color inside the ink outline (the same weight as the motifs'), a small pale glint in its corner;
-// seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside a thin line of it.
+// The well is a pale panel inside the same ink line. The blocks are truly flat: one square of a single flat color
+// per cell (no outline, no shading, no highlight), a hairline gap between cells, the corners barely rounded; seven
+// soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside a thin line of it.
 //
 // The music: calm and mid stay sparse and slow (the sway a little wider at mid). A DROP section (music.inDrop
 // only) warms the paper and the halo, opens the halo into a burst of soft rays around the disc, makes the
@@ -671,9 +671,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         if (!cells_.empty()) {
             glUseProgram(progCell_);
             ugl::setMat(progCell_, "uVP", vp_);
-            set3f(progCell_, "uInk", col_[BLOCK_INK]);
             set3f(progCell_, "uShine", vec3(1.f, 0.98f, 0.94f));
-            set1f(progCell_, "uW", OUTLINE);
+            set1f(progCell_, "uGap", 0.06f);
+            set1f(progCell_, "uLine", 0.05f);
             glBindVertexArray(cellVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
             glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);

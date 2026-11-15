@@ -1,8 +1,8 @@
 #pragma once
 // WOODSTOCK's shaders. Flat 70s sticker art in display (sRGB) colors: every shape a signed distance field in flat
-// color with one even ink outline (OUTLINE board units, the same on the motifs, the petals and the blocks). The
-// paper behind everything (its grain, the thin double border, the sunburst peace disc, the two daisies, the small
-// heart and bolts, the well's panel), the drifting petals and hearts, the blocks.
+// color with one even ink outline (OUTLINE board units, the same on the motifs and the petals). The paper behind
+// everything (its grain, the thin double border, the sunburst peace disc, the two daisies, the small heart and bolts,
+// the well's panel), the drifting petals and hearts, the blocks (plain flat squares, no outline).
 
 namespace woodstock_shaders {
 
@@ -253,32 +253,26 @@ inline const char* CELL_FS = R"(
 in vec2 vU;
 flat in vec4 vB, vC;
 out vec4 frag;
-uniform vec3 uInk, uShine;
-uniform float uW;          // the outline (in cells, at scale 1)
+uniform vec3 uShine;
+uniform float uGap;        // the hairline between cells (board units, the same at any scale)
+uniform float uLine;       // the ghost's line (board units)
 void main() {
     vec2 u = vU;
-    AA = max(fwidth(u.x), 1e-4) * 0.75;
-    float W = uW / max(vB.w, 0.3);
+    AA = max(fwidth(u.x), 1e-4) * 0.6;
+    float sc = max(vB.w, 0.3);
     vec3 col = vC.rgb;
-    float d = dBox(u, vec2(0.47), 0.16);
+    // one flat square of the piece's color, a hairline gap around it, corners barely rounded
+    float d = dBox(u, vec2(0.5 - uGap * 0.5 / sc), 0.035);
     float a = cov(d);
-    vec3 c;
+    vec3 c = col;
     if (abs(vB.z - 1.0) < 0.5) {
         // the ghost: a faint wash of the piece's color inside a thin line of it
-        float line = cov(abs(d + W * 0.5) - W * 0.3);
-        c = col;
-        a = max(a * 0.18, line * 0.75);
-    } else {
-        // a flat sticker: the color inside the ink line, one small pale glint in its corner
-        c = mix(uInk, col, cov(d + W));
-        float g = length(u - vec2(-0.22, 0.22)) - 0.065;
-        c = mix(c, mix(col, uShine, 0.6), cov(g));
-        // a lock's brief brightening, the game over's greying
-        if (vC.w < 0.0) c = mix(c, uShine, -vC.w);
-        else {
-            float l = dot(c, vec3(0.299, 0.587, 0.114));
-            c = mix(c, vec3(l) * 0.8 + 0.1, vC.w);
-        }
+        float W = uLine / sc;
+        a = max(a * 0.16, cov(abs(d + W * 0.5) - W * 0.5) * 0.7);
+    } else if (vC.w < 0.0) c = mix(c, uShine, -vC.w);   // a lock's brief brightening
+    else {
+        float l = dot(c, vec3(0.299, 0.587, 0.114));     // the game over's greying
+        c = mix(c, vec3(l) * 0.8 + 0.1, vC.w);
     }
     float al = a * vB.y;
     frag = vec4(c * al, al);
