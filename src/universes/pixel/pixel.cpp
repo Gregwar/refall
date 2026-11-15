@@ -425,19 +425,22 @@ void PixelUniverse::drawBlock(int px, int py, int type, int size, int flash, uin
     const Variant& V = VAR(variantFor >= 0 ? variantFor : variant_);
     const uint8_t base = V.piece[type], lit = V.pieceLit[type], dark = V.pieceDark[type];
     const uint8_t shine = pal_.lighter[lit];
+    // A flat cushion: its corners cut, one flat fill with a lit top row and a shaded bottom row and right column,
+    // a short glint on its top; the row and column it leaves bare are the gap to its neighbors.
+    const int n = size - 1;
     for (int j = 0; j < size; j++)
         for (int i = 0; i < size; i++) {
             const int X = px + i, Y = py + j;
             if (Y < by0_ - 1 && kind == K_STACK && !aboveWell) continue; // above the well: hidden rows (not the falling piece)
-            uint8_t c = base, k = kind;
-            const bool edgeDark = i == size - 1 || j == size - 1;
-            if (edgeDark) { c = dark; if (kind == K_STACK) k = K_GAP; }
-            else if (i == 0 || j == 0) c = lit;
-            else if (size >= 8 && ((i == 1 && j == 1) || (i == 2 && j == 1) || (i == 1 && j == 2))) c = shine;
-            else if (size >= 8 && ((i == size - 2 && j >= 3) || (j == size - 2 && i >= 3))) c = pal_.darker[base] == dark ? dark : base;
-            if (flash == 2) c = edgeDark ? lit : shine;
-            else if (flash == 1) c = edgeDark ? base : lit;
-            cv_.set(X, Y, c, k);
+            const bool gap = i == n || j == n, corner = (i == 0 || i == n - 1) && (j == 0 || j == n - 1);
+            if (gap || (corner && size >= 6)) continue;
+            uint8_t c = base;
+            if (j == n - 1 || i == n - 1) c = dark;
+            else if (j == 0) c = lit;
+            if (size >= 8 && j == 1 && i >= 1 && i <= 3) c = lit;
+            if (flash == 2) c = j == n - 1 || i == n - 1 ? lit : shine;
+            else if (flash == 1) c = j == n - 1 || i == n - 1 ? base : lit;
+            cv_.set(X, Y, c, kind);
         }
 }
 
