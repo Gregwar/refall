@@ -12,7 +12,7 @@
 
 namespace pixu {
 
-constexpr int CELL = 8; // native pixels per board cell
+constexpr int CELL = 10; // native pixels per board cell
 
 // Pixel classes (low 6 bits of Canvas::cls); bit 7 selects the previous variant's palette (a variant wipe).
 enum Cls : uint8_t {
