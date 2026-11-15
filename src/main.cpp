@@ -1078,7 +1078,7 @@ std::vector<HudText> App::buildHud(float dt) {
         const float pos = std::log(std::clamp(gravityV_, 1.f, Game::MAX_VELOCITY)) / lnMax;
         speedPos_ = speedPos_ < 0.f ? pos : approach(speedPos_, pos, 4.f, dt);
         speedHot_ = approach(speedHot_, game_.twentyG() ? 1.f : 0.f, 6.f, dt);
-        const float bw = 80.f * s, by = sc.y + 236.f * s;
+        const float bw = 80.f * s, by = sc.y + 248.f * s;
         Renderer::Speed sp;
         sp.x = sc.x - bw * 0.5f;
         sp.y = by;

@@ -326,10 +326,10 @@ void MangaUniverse::resize(int width, int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // the page follows the screen (its inking state kept): the score's panel reaches under the speed gauge's label,
-    // set by the host at 248 px (x its scale, max(1, height / 900)) under the score's anchor
+    // set by the host at 260 px (x its scale, max(1, height / 900)) under the score's anchor
     {
         const float hostS = std::max(1.f, height_ / 900.f);
-        const float bottomPx = project(layout::SCORE_ANCHOR).y + 272.f * hostS;
+        const float bottomPx = project(layout::SCORE_ANCHOR).y + 284.f * hostS;
         scoreBottom_ = viewC_.y + (height_ * 0.5f - bottomPx) / unitPx_ - 0.3f;
     }
     const size_t n = page_.elems.size();
