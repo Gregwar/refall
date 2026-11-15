@@ -106,6 +106,8 @@ private:
     float slow_ = 0.f;
     float overT_ = -1.f;
     bool bare_ = false; // this frame is the world alone (a break): the landscape, no game, no panel
+    // around a song (Frame::setup / teardown): how far each depth is lowered out of place, the sky's dusk
+    float sink_[7] = {}, dusk_ = 0.f;
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

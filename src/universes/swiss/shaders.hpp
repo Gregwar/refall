@@ -98,6 +98,8 @@ uniform float uGold;            // the drop's golden hour 0..1
 uniform float uZoom;            // the drop's push-in: each depth scaled by 1 + uZoom x its parallax share
 uniform vec2 uShadow;           // the cast shadows' direction (-1 left, 1 right) and length
 uniform vec2 uSweep;            // a light sweeping across the layers on the drop: its position (board x), strength
+uniform float uSink[7];         // the setup / teardown: how far each depth is lowered out of place (board units)
+uniform float uDusk;            // the teardown's dusk
 
 float PU; // board units per pixel
 
@@ -146,7 +148,7 @@ vec2 lay(vec2 pw, int i) {
     float s = 1.0 + uZoom * DEP[i];
     PU = PU0 / s;
     vec2 pv = vec2(uView.x, -4.0);
-    return pv + (pw - pv) / s + vec2(uOff[i], 0.0);
+    return pv + (pw - pv) / s + vec2(uOff[i], uSink[i]);
 }
 // The rim of light along a ridge's sunny faces at the golden hour.
 vec3 rim(vec3 c, float h, float y, float lit) {
@@ -615,6 +617,7 @@ void main() {
     col = clamp(mix(vec3(dot(col, vec3(0.3, 0.59, 0.11))), col, 1.0 + 0.2 * uGrade.w), 0.0, 1.0);
     float l = dot(col, vec3(0.3, 0.59, 0.11));
     col = mix(col, l * vec3(0.84, 0.93, 1.12), uGrade.z * 0.55);
+    col = mix(col, col * vec3(0.2, 0.24, 0.42), uDusk);
     col += (H2(floor(gl_FragCoord.xy) * 0.913 + 0.5) - 0.5) * 0.022;
     frag = vec4(clamp(col, 0.0, 1.0), 1.0);
 }
