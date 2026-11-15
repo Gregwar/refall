@@ -241,6 +241,7 @@ private:
     float burst_ = 0.f;       // the clears' zoom still to come (e-folds)
     float burstV_ = 0.f;      // its speed (e-folds a second)
     float dropV_ = 0.f;       // the drop's zoom speed (e-folds a second)
+    float holdHalo_ = 0.f;    // the hold preview's halo, shown while a piece is held
     // a glide to another target: from the view it left (frozen), 0..1
     bool gliding_ = false;
     float glide_ = 0.f;
@@ -667,14 +668,16 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
         set4f(progBg_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
         {
-            float pv[12];
+            float pv[16];
             const vec3 h = layout::HOLD_CENTER;
-            pv[0] = h.x; pv[1] = h.y; pv[2] = 1.15f;
+            // (the hold's halo only while a piece is held, fading in and out)
+            holdHalo_ = approach(holdHalo_, game.holdType() >= 0 ? 1.f : 0.f, 4.f, dt);
+            pv[0] = h.x; pv[1] = h.y; pv[2] = 1.15f; pv[3] = holdHalo_;
             for (int i = 0; i < 3; i++) {
                 const vec3 c = layout::nextCenter(i);
-                pv[3 + i * 3] = c.x; pv[4 + i * 3] = c.y; pv[5 + i * 3] = i == 0 ? 1.15f : 0.95f;
+                pv[4 + i * 4] = c.x; pv[5 + i * 4] = c.y; pv[6 + i * 4] = i == 0 ? 1.15f : 0.95f; pv[7 + i * 4] = 1.f;
             }
-            glUniform3fv(ugl::U(progBg_, "uPrev"), 4, pv);
+            glUniform4fv(ugl::U(progBg_, "uPrev"), 4, pv);
         }
         // ZEN_GPUTIME: the fractal's GPU time, printed every 120 frames
         static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
