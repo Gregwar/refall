@@ -1141,7 +1141,7 @@ void DioramaUniverse::computeEnv(float dt, const MusicState& music) {
     // A drop brings a golden evening (the bonus' day wins over it).
     eve_ = approach(eve_, inDrop_ ? 1.f : 0.f, inDrop_ ? 1.1f : 0.6f, dt);
     const float n = smoothstepf(0.f, 1.f, night_);
-    const float ev = smoothstepf(0.f, 1.f, eve_) * (1.f - n); // evening share of the light
+    const float ev = 0.6f * smoothstepf(0.f, 1.f, eve_) * (1.f - n); // evening share of the light (a dusk: part of the night stays)
     const float d = std::max(n, ev);                           // how much it is not night
     nightV_ = 1.f - d;
     nightAll_ = nightV_;
@@ -1185,7 +1185,7 @@ void DioramaUniverse::computeEnv(float dt, const MusicState& music) {
     e.cloud = L.cloud;
     e.stars = L.stars;
     e.lantern = L.lantern;
-    e.exposure = L.exposure * (1.f - 0.12f * ev); // the evening a little lower than the day: the pieces read on the clay
+    e.exposure = L.exposure * (1.f - 0.3f * ev); // the evening lower than the day: the pieces read on the clay
     e.sunDir = normalize(L.sunDir);
     e.skySunDir = normalize(L.skySun);
     // Music: the wind and the water carry the energy; the beat is felt, not hammered.
