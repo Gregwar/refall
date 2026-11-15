@@ -138,6 +138,7 @@ uniform vec2 uRes;
 uniform sampler2D uCity, uBlur, uWater, uMist;
 uniform vec3 uMistTint, uFrame, uFrameRim;
 uniform float uMistA, uLens, uSpec, uMullions;
+uniform float uFog;     // the teardown: the whole pane misting over, 0..1
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     float pxw = 2.0 * uView.w / uRes.y;           // board units per pixel
@@ -154,7 +155,7 @@ void main() {
     float wet = smoothstep(0.0, 0.012, h);
 
     // the glass: the city, veiled where the pane is misted
-    float m = texture(uMist, vUv).r * uMistA;
+    float m = mix(texture(uMist, vUv).r, 1.0, uFog) * uMistA;
     vec3 city = texture(uCity, vUv).rgb;
     vec3 blur = texture(uBlur, vUv).rgb;
     vec3 c = mix(city, blur * 0.8 + uMistTint, m);

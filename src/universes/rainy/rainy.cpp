@@ -19,7 +19,9 @@
 // the colors come back slowly after the peak. A cleared row melts: its glass runs down in drips and clears to water
 // in a third of a second, the water running down over the stack. A quad lets every drop go and sends the rows'
 // colors into the city as four lanterns of light rising away. Slow motion is a later, colder hour: the rain almost
-// still, the city drained to blue. Game over melts the stack from the top and the pane mists over.
+// still, the city drained to blue. Game over melts the stack from the top and the pane mists over. Before a song the
+// city's lights come on one by one behind the glass (and the glow over it with them); after it they go out one by
+// one while the whole pane mists over.
 //
 // Cost: the city at half resolution (instanced soft discs) blurred at a quarter, the water as a height field of
 // instanced domes (a few hundred), a 400 x 225 mist grid on the CPU, one full-screen pass for the pane.
@@ -1162,12 +1164,15 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uTop", sky(0));
     set3f(progSky_, "uBottom", sky(1));
     set3f(progSky_, "uGlow", lerp(lamp(0), lamp(1), 0.4f));
-    set1f(progSky_, "uGlowA", (0.05f + 0.025f * wm + 0.035f * wp) * (1.f - 0.5f * over_));
+    set1f(progSky_, "uGlowA", (0.05f + 0.025f * wm + 0.035f * wp) * (1.f - 0.5f * over_) *
+                                  smoothstepf(0.f, 0.8f, f.setup) * (1.f - smoothstepf(0.f, 0.85f, f.teardown)));
     ugl::drawFullscreen();
 
     const float bright = (0.62f + 0.25f * wm + 0.22f * wp) * (1.f + 0.35f * swell_) * (1.f - 0.55f * over_);
     bokeh_.clear();
     const float X = viewH_.x + 3.f;
+    // the setup lights the city's windows, lamps and cars one by one; the teardown puts them out one by one
+    const float lit = smoothstepf(0.f, 0.8f, f.setup) * (1.f - smoothstepf(0.f, 0.85f, f.teardown));
     for (Light& l : lights_) {
         l.on = approach(l.on, l.onTo, 1.4f, dt);
         if (l.vx != 0.f) {
@@ -1175,7 +1180,8 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
             if (l.x > X) l.x -= 2.f * X;
             if (l.x < -X) l.x += 2.f * X;
         }
-        float k = l.base * l.on * bright;
+        const float turn = std::fmod((float)(&l - lights_.data()) * 0.618034f, 1.f) * 0.8f; // each light its turn
+        float k = l.base * l.on * bright * smoothstepf(turn, turn + 0.2f, lit);
         if (l.bass) k *= 1.f + 0.9f * kick * wp;
         k = std::min(k, 0.95f);
         if (k < 0.004f) continue;
@@ -1259,6 +1265,7 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progGlass_, "uFrame", lin(V.skyTop) * 0.5f + vec3(0.004f));
     set3f(progGlass_, "uFrameRim", lamp(0) * 0.08f);
     set1f(progGlass_, "uMistA", 0.85f);
+    set1f(progGlass_, "uFog", 0.75f * smoothstepf(0.15f, 0.9f, f.teardown));
     set1f(progGlass_, "uLens", 0.9f);
     set1f(progGlass_, "uSpec", 0.5f + 0.2f * wp);
     set1f(progGlass_, "uMullions", bare_ ? 0.f : 1.f);
