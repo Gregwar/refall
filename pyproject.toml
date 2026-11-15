@@ -24,7 +24,7 @@ classifiers = [
 dependencies = ["yt-dlp[default]", "imageio-ffmpeg"]
 
 [project.urls]
-Homepage = "https://github.com/Gregwar/tetris-universe"
+Homepage = "https://github.com/Gregwar/refall"
 
 [project.scripts]
 refall = "zentris._launcher:main"

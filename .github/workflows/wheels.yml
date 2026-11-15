@@ -3,7 +3,7 @@
 # release with the same files. Run it by hand (Actions > Release > Run workflow) to build without publishing.
 #
 # PyPI publishes through trusted publishing: on pypi.org, add a (pending) trusted publisher for the project
-# `refall`: the owner and repository of https://github.com/Gregwar/tetris-universe, workflow wheels.yml, environment pypi.
+# `refall`: the owner and repository of https://github.com/Gregwar/refall, workflow wheels.yml, environment pypi.
 name: Release
 
 on:
