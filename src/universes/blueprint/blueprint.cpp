@@ -18,6 +18,8 @@
 // into a white redline print, the film is exposed into a blueprint...) and the pieces' fills with it; every four bars
 // a new part is drawn. A cleared row is rubbed out (the lines lift in eraser streaks, nothing is drawn over the row);
 // each clear is a revision in the title block (a pen-drawn delta and the next letter), a quad a revision cloud.
+// Before a song the pen drafts the blank sheet (its border and zones, the well, the title block, then the
+// construction lines); after it the print fades off the paper and the lamp over the sheet dims.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like SUMI).
 #include "title.hpp"
@@ -840,7 +842,7 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bar
             Stroke tri{{polar(tc, tr, PI / 2), polar(tc, tr, PI / 2 + TAU / 3), polar(tc, tr, PI / 2 + 2 * TAU / 3), polar(tc, tr, PI / 2)},
                        W_THIN, P_SOLID, fresh > 0.3f ? R_ACCENT : R_LINE, 0.9f};
             for (auto& p : tri.pts) p.y -= 0.02f;
-            emit(tri, saturate(revT_ / 0.45f), 1.f);
+            emit(tri, saturate(revT_ / 0.45f), sheetInk_);
         }
         // a quad: a revision cloud around the block, drawn by the pen, lifting after a few seconds
         if (cloudT_ < 4.5f) {
@@ -862,7 +864,7 @@ void BlueprintUniverse::buildSheet(std::vector<Stroke>& out, float lvA, bool bar
                     cl.pts.insert(cl.pts.end(), arc.begin(), arc.end());
                 }
             }
-            emit(cl, saturate(cloudT_ / 1.1f), a);
+            emit(cl, saturate(cloudT_ / 1.1f), a * sheetInk_);
         }
     }
 }
@@ -1471,9 +1473,9 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         pal_ = basePal_;
         Palette dp = dropPalette(variant_);
         lerpPalette(pal_, dp, smoothstepf(0.f, 1.f, colAmt_));
-        // slow motion: the sheet under a dimmer lamp
-        if (slow_ > 0.01f) {
-            const float k = 0.22f * slow_;
+        // slow motion, and the teardown: the sheet under a dimmer lamp
+        if (slow_ > 0.01f || f.teardown > 0.f) {
+            const float k = 0.22f * slow_ + 0.5f * smoothstepf(0.3f, 1.f, f.teardown);
             pal_.paper = pal_.paper * (1.f - k);
             pal_.paper2 = pal_.paper2 * (1.f - k);
         }
@@ -1560,9 +1562,14 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
     lines_.clear();
     labels_.clear();
+    // the setup: the drafter draws the sheet (its border, zones, the well, the title block), then the construction
+    // lines; the teardown: the print fades off the paper
+    const float draft = smoothstepf(0.05f, 0.8f, f.setup), fade = world * (1.f - smoothstepf(0.1f, 0.9f, f.teardown));
+    sheetInk_ = smoothstepf(0.55f, 0.9f, f.setup) * (1.f - smoothstepf(0.1f, 0.9f, f.teardown));
     std::vector<Stroke> ss;
     buildSheet(ss, 1.f, bare);
-    for (const Stroke& s : ss) emit(s, 1.f, world);
+    for (Label& l : labels_) l.alpha *= sheetInk_;
+    emitAll(ss, draft, fade);
     // construction lines through the machine's centers (a break shows only these)
     if (machOn_) {
         ss.clear();
@@ -1580,16 +1587,16 @@ void BlueprintUniverse::render(const Frame& f, GLuint fbo) {
         vline(link_.x, -7.2f, cam_.y - 1.f);
         ss.push_back(Stroke{arcPts(gA_, rA_ + 1.2f * machScale_, 3.5f, 4.6f, 24), W_THIN, P_SOLID, R_CONS, 0.55f});
         ss.push_back(Stroke{arcPts(cam_, 2.4f * machScale_, 0.2f, 1.2f, 24), W_THIN, P_SOLID, R_CONS, 0.55f});
-        const float reveal = saturate(time_ / 4.f);
-        emitAll(ss, reveal, consA_ * world * (1.f - over_ * 0.6f));
+        const float reveal = std::min(saturate(time_ / 4.f), smoothstepf(0.4f, 0.95f, f.setup));
+        emitAll(ss, reveal, consA_ * fade * (1.f - over_ * 0.6f));
         // the parts
         for (const Part& p : parts_) {
             if (!p.started && !p.ever) continue;
             ss.clear();
             buildPart(p.kind, ss);
             const float ghost = 0.16f;
-            if (p.ever && p.reveal < 1.f) emitAll(ss, 1.f, ghost * world);
-            if (p.started) emitAll(ss, p.reveal, (ghost + (1.f - ghost) * p.ink) * world);
+            if (p.ever && p.reveal < 1.f) emitAll(ss, 1.f, ghost * fade);
+            if (p.started) emitAll(ss, p.reveal, (ghost + (1.f - ghost) * p.ink) * fade);
         }
     }
     // dimensions: the last part, the stack's height

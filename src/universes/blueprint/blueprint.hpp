@@ -100,6 +100,7 @@ private:
     float revT_ = 9.f;           // time since the last revision
     float cloudT_ = 9.f;         // a quad's revision cloud
     void buildSheet(std::vector<Stroke>& out, float lvA, bool bare);
+    float sheetInk_ = 1.f; // the title block's lettering and marks (the setup letters it, the teardown fades it)
     std::string dwgNo_ = "BP-0000";
 
     // ---- Pieces.
