@@ -27,6 +27,7 @@ uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform vec4 uLeftCol, uRightCol;
 uniform float uHalf, uDropFx, uShoreKick;
+uniform float uDraw; // the setup: the survey drawn in, from the valleys up to the peaks (0 blank paper .. 1 done)
 uniform vec4 uHud[40];
 uniform int uHudN;
 
@@ -65,6 +66,8 @@ void main() {
     float px = 2.0 * uView.w / uRes.y; // board units per pixel
     vec4 F = fieldAt(w);
     float h = F.r;
+    // the survey being drawn: what lies below the surveyor's level is on the sheet, the rest still blank
+    float drawn = uDraw >= 1.0 ? 1.0 : 1.0 - smoothstep(-1.5, 0.0, h - mix(uHMin + 0.5, 6.0, uDraw));
     float fw = max(fwidth(h), 1e-5);
     // the slope, for the relief shading
     float e = 0.5 / uGrid.z;
@@ -74,7 +77,7 @@ void main() {
     // ---- The ground: paper, woodland, layer tints, relief shading.
     vec3 col = uPaper;
     float wood = smoothstep(0.5 - fwidth(F.b), 0.5 + fwidth(F.b), F.b) * uWoodAmt;
-    col = mix(col, uWood, wood);
+    col = mix(col, uWood, wood * drawn);
     float f = fract(h);
     float hq = floor(h) + smoothstep(1.0 - fw, 1.0, f);
     float band = clamp((hq + 0.5 - uHMin) / max(uHMax - uHMin, 1.0), 0.0, 1.0);
@@ -84,7 +87,7 @@ void main() {
     vec3 n = normalize(vec3(-gx * z, -gy * z, 1.0));
     vec3 L = normalize(mix(vec3(-0.55, 0.65, 0.75), vec3(-0.85, 0.35, 0.3), uSlow));
     float sh = min(dot(n, L) - L.z, 0.12);
-    col *= 1.0 + sh * uShade * (uDark > 0.5 ? 1.4 : 1.0);
+    col *= 1.0 + sh * uShade * drawn * (uDark > 0.5 ? 1.4 : 1.0);
     col = max(col, vec3(0.0));
 
     // ---- Where the world keeps quiet: the well, the HUD columns.
@@ -106,7 +109,7 @@ void main() {
     // the ponds the rain fills in the hollows (their spill level, rising with the rain) and the flood
     float pondD = F.g - uPondMin * 0.6 - (1.0 - uPond) * 1.5;
     float depth = max(uWater - h, pondD);
-    float wet = smoothstep(-fw, fw, depth) * uWaterOn;
+    float wet = smoothstep(-fw, fw, depth) * uWaterOn * drawn;
     vec3 lake = mix(uLake, uLake * 0.93, smoothstep(0.0, 3.0, depth));
     col = mix(col, lake, wet);
 
@@ -119,7 +122,7 @@ void main() {
     float spacing = 1.0 / fw; // pixels between two lines
     line *= mix(smoothstep(2.5, 6.0, spacing), smoothstep(1.2, 2.5, spacing), idx);
     vec3 lc = mix(uLine, uIndex, idx);
-    float la = uLineAlpha * quiet * mix(1.0, 0.8, uSlow);
+    float la = uLineAlpha * quiet * mix(1.0, 0.8, uSlow) * drawn;
     col = mix(col, mix(lc, uWaterLine, wet), line * la * mix(1.0, 0.22, wet));
     // the drop's half-interval contours: the map gets denser
     float dh = abs(fract(h) - 0.5) / fw;
@@ -128,7 +131,7 @@ void main() {
 
     // shoreline and water lines (parallel to the shore, sparser and fainter offshore, moving out with the music)
     float sd = abs(depth) / fw;
-    float shore = stroke(sd, max(uLineW * (1.6 + 1.6 * uShoreKick), 1.0)) * uWaterOn;
+    float shore = stroke(sd, max(uLineW * (1.6 + 1.6 * uShoreKick), 1.0)) * uWaterOn * drawn;
     float wd = depth * 3.0 - uPhase;
     float wfw = max(fwidth(wd), 1e-5);
     float wl = stroke(abs(fract(wd + 0.5) - 0.5) / wfw, max(uLineW, 0.85)) * smoothstep(0.05, 0.2, depth) *
@@ -136,7 +139,7 @@ void main() {
     col = mix(col, uWaterLine, clamp(shore * 0.9 + wl * wet, 0.0, 1.0) * mix(1.0, 0.55, inWell) * (1.0 - 0.85 * hud));
 
     // rivers (their coverage drawn beforehand), with a slow flow downhill
-    float riv = texture(uRivers, vUv).r * uRiver * (1.0 - wet) * (1.0 - hud);
+    float riv = texture(uRivers, vUv).r * uRiver * (1.0 - wet) * (1.0 - hud) * drawn;
     float fa = mix(0.28, 0.6, uDropFx);
     float flow = 1.0 - fa + fa * sin(6.2832 * (h * 1.3 + uFlow));
     col = mix(col, uWaterLine, riv * flow * mix(1.0, 0.6, inWell) * mix(1.0, 0.6, inCols));

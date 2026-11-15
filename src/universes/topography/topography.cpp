@@ -13,6 +13,8 @@
 // in, and the level swells slowly with the phrases. A cleared row sinks into the map (the cells shrink and fade; the
 // contours relax as the land slumps) and leaves its debris as fans against the well's walls, a quad is a flash
 // flood, slow motion is a low dusk sun raking the relief, game over is the sea rising over everything.
+// Around a song: the setup draws the survey in on the blank sheet, from the valleys up to the peaks, then its
+// furniture and spot heights; the teardown is the sea rising over the whole sheet.
 //
 // Cost: the terrain is a CPU grid of four samples per cell (~20k), three box blurs a frame, the drainage network a few times a second; the
 // map is one full-screen pass sampling it with a B-spline.
@@ -1259,6 +1261,10 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
 
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float s = height_ / 1080.f;
+    // the setup: the survey drawn in from the valleys up to the peaks, then its furniture; the teardown: the sea
+    // rising over the sheet, the furniture going under with it
+    const float drawn = saturate(f.setup / 0.9f), furnIn = smoothstepf(0.7f, 0.95f, f.setup);
+    const float sea = smoothstepf(0.05f, 1.f, f.teardown);
 
     // ---- The rivers' coverage.
     buildRivers();
@@ -1311,7 +1317,8 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uWoodAmt", pal_.woodAmt * (0.6f + 0.4f * wm) * (1.f - 0.6f * tint_));
     set1f(progMap_, "uHMin", -3.f);
     set1f(progMap_, "uHMax", 9.f);
-    set1f(progMap_, "uWater", water_level_);
+    set1f(progMap_, "uWater", lerpf(water_level_, 5.f, sea));
+    set1f(progMap_, "uDraw", drawn);
     set1f(progMap_, "uWaterOn", 1.f);
     set1f(progMap_, "uPond", pond_);
     set1f(progMap_, "uPondMin", POND_MIN);
@@ -1322,7 +1329,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uGameOn", f.bare ? 0.f : 1.f); // a break: no neat line round the well, no quiet HUD columns
     set1f(progMap_, "uSlow", slow_);
     set1f(progMap_, "uDark", pal_.dark);
-    set1f(progMap_, "uFurn", 1.f - over_ * 0.7f);
+    set1f(progMap_, "uFurn", (1.f - over_ * 0.7f) * furnIn * (1.f - sea));
     set1f(progMap_, "uBridge", bridge);
     set3f(progMap_, "uBridgeCol", bridge_.color);
     buildHudRects(f, f.hud, f.bare);
@@ -1357,7 +1364,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     }
     // ---- Spot heights and the HUD.
     {
-        const float a = 0.75f * (1.f - saturate(bridge_.amount * 2.f)) * (1.f - over_);
+        const float a = 0.75f * (1.f - saturate(bridge_.amount * 2.f)) * (1.f - over_) * furnIn * (1.f - sea);
         if (a > 0.01f) {
             const float b = smoothstepf(0.3f, 0.95f, bridge_.amount);
             const vec3 ink = lerp(pal_.index, bridge_.ink, b);
