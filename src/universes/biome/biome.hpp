@@ -5,7 +5,7 @@
 //
 // This header holds what both worlds share: the palette, the state the frame and the worlds read (the camera, the
 // song's level, the weather, the GL targets), and the interface a world implements. The shell (biome.cpp, render.cpp)
-// owns the camera, the glass cubes of the stack, the well's pane, the rain, the gauge, the HUD, the variant pick and
+// owns the camera, the glass cubes of the stack, the well's pane, the rain, the HUD, the variant pick and
 // the transitions; a world owns its ground, its life and what a clear does to it.
 #include <memory>
 #include <string>
@@ -24,8 +24,8 @@ struct Palette {
     // the well's pane (and its edge), the HUD (its panels, the ink and its dark and light choices, the accent)
     vec3 panel, edge, hudPanel, ink, inkDark, inkLight, accent;
     // the stack's cubes: what fills each piece type's cube, the world's own color per piece (the sea's life, the
-    // seeds' flowers), what the glass reflects under the horizon, the gauge's fill
-    vec3 cell[7], piece[7], envLow, gauge;
+    // seeds' flowers), what the glass reflects under the horizon
+    vec3 cell[7], piece[7], envLow;
     // the sea
     vec3 sea0, sea1, sea2, deep, foam, stormSea, hull, super_, sail, baccent, window, cont0, cont1, cont2;
     // the land
@@ -129,7 +129,6 @@ public:
     virtual float rainSlant() const { return 1.f; }
     virtual GLuint cellProgram() const = 0;   // the stack's glass cubes (CELL_FS with this world's fill)
     virtual void cellUniforms(GLuint p) const { (void)p; }
-    virtual bool seedGauge() const = 0;       // the gauge fills with seeds (else water)
     virtual vec3 background(const Palette& p) const = 0; // the transitions' backdrop
 
 protected:
@@ -204,13 +203,12 @@ private:
     void drawPane();
 
     // ---- GL.
-    GLuint progVeil_ = 0, progRain_ = 0, progSprite_ = 0, progShape_ = 0, progPost_ = 0;
-    GLuint cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
+    GLuint progVeil_ = 0, progRain_ = 0, progShape_ = 0, progPost_ = 0;
+    GLuint cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0;
     int samples_ = 4;
 
     // ---- Game state seen by the universe.
     bool slowOn_ = false;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
 };

@@ -81,7 +81,7 @@ private:
     std::vector<Over> overCells_;
     float overT_ = -1.f, over_ = 0.f;
 
-    // ---- Sprites: dust, stone chips, birds, butterflies (behind the well), the hard drop's dust and the gauge.
+    // ---- Sprites: dust, stone chips, birds, butterflies (behind the well), and the hard drop's dust.
     struct SpriteInst { float a[4], b[4], c[4]; }; // x y size mode | rgb alpha | param param2 - -
     std::vector<SpriteInst> back_, front_;
     void sprite(std::vector<SpriteInst>& to, vec2 p, float size, const vec3& col, float alpha, int mode, float param = 0.f,
@@ -118,7 +118,7 @@ private:
     int level_ = 1;
     bool hasLevel_ = false, dropMode_ = false, slowOn_ = false;
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f, energy_ = 0.5f;
-    float gold_ = 0.f, swell_ = 0.f, kickIn_ = 0.f, kickS_ = 0.f, slow_ = 0.f, dimT_ = 0.f, gaugeShown_ = 0.f;
+    float gold_ = 0.f, swell_ = 0.f, kickIn_ = 0.f, kickS_ = 0.f, slow_ = 0.f, dimT_ = 0.f;
     float time_ = 0.f, sway_ = 0.f, swayAmp_ = 0.3f;
     Bridge bridge_;
 };

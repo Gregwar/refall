@@ -818,11 +818,10 @@ void LibraryUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The HUD's plates and the bonus gauge (the lettering: hudLine, the host's).
+// The HUD's plates (the lettering: hudLine, the host's).
 void LibraryUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const vec3 ink = pal_.ink, halo = pal_.halo;
+    const vec3 halo = pal_.halo;
     const vec3 accent = pal_.accent;
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -830,34 +829,6 @@ void LibraryUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels)
             const float qd[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-    // the bonus gauge: a hairline ring, its charge a solid arc in the accent (none in a break)
-    if (vis > 0.01f && !bare_) {
-        const float s = height_ / 1080.f;
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 120;
-        const float th = std::max(1.f, 1.3f * s), th2 = std::max(3.f, 5.f * s);
-        auto seg = [&](float a0, float a1, float rr, float w, const vec3& col, float al) {
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = rr - w * 0.5f, ro = rr + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, r, th, ink, (g.bonusReady() ? 0.6f : 0.3f) * dimk);
-        flushShapes();
-        for (int i = 0; i < N; i++) {
-            if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, r, th2, accent, 0.95f * dimk);
         }
         flushShapes();
     }
@@ -1010,7 +981,6 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     kickIn_ = 0.f;
     refreshK_ = approach(refreshK_, 0.f, 0.5f, dt);
     beatPulse_ = music.hasSong ? std::pow(1.f - (float)(music.beat - std::floor(music.beat)), 3.f) : 0.f;
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The game's lines -> the collection (a new game empties the shelves).
     {

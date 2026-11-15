@@ -488,24 +488,6 @@ void MirrorUniverse::buildCubes(const Game& g) {
         preview(g.holdType(), layout::HOLD_CENTER, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
         for (int i = 0; i < 3; i++)
             if (g.next(i) >= 0) preview(g.next(i), layout::nextCenter(i), layout::previewScale(i), 1.f);
-        // the bonus gauge: a ring of small glass cubes, lit in the accent as it charges
-        {
-            const VariantDef& V = VARIANTS[variant_];
-            const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-            const int N = Game::BONUS_LINES;
-            const vec3 acc = lin(V.accA);
-            for (int i = 0; i < N; i++) {
-                const float a = TAU * i / N;
-                const vec3 c(layout::GAUGE_CENTER.x + std::sin(a) * layout::GAUGE_R,
-                             layout::GAUGE_CENTER.y + std::cos(a) * layout::GAUGE_R, -0.15f);
-                const float part = saturate(fill * N - i);
-                float q[4];
-                quatAxis(vec3(0, 0, 1), -a + PI * 0.25f, q);
-                if (part > 0.02f)
-                    cube(ui_, c, 0.14f, q, acc, 3.f, part, g.bonusReady() ? 0.12f : 0.f, 0.f);
-                else cube(ui_, c, 0.14f, q, acc, 1.f, 1.f, 0.f, 0.f);
-            }
-        }
     }
     // the shards
     for (const Shard& s : shards_) {
@@ -720,7 +702,6 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     if (!f.paused && wp > 0.5f && kick > 0.5f && kickPrev_ <= 0.3f)
         for (Mirror& m : mir_) m.glint = std::max(m.glint, 0.35f * kick * wp);
     kickPrev_ = kick;
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     for (auto& row : flash_)
         for (float& v : row) v = approach(v, 0.f, 1.6f, dt);
     for (Shard& s : shards_) {

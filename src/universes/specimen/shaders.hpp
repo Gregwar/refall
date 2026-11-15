@@ -616,7 +616,7 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the HUD (pixels)
-// Pale ink on the dark bench (uMode 1: ink, 2: accent; 0: the vertex color).
+// Flat quads in their vertex color.
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aCol;
@@ -633,11 +633,8 @@ inline const char* SHAPE_FS = R"(#version 330 core
 in vec4 vCol;
 in vec2 vPx;
 out vec4 frag;
-uniform int uMode;
-uniform vec3 uInk;   // sRGB
 void main() {
-    vec3 c = uMode == 0 ? vCol.rgb : uInk;
-    frag = vec4(c * vCol.a, vCol.a);
+    frag = vec4(vCol.rgb * vCol.a, vCol.a);
 }
 )";
 

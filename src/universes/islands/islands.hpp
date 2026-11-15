@@ -182,7 +182,7 @@ private:
     float lv_ = 1.f, lvFrom_ = 1.f, lvTo_ = 1.f, lvT_ = 1.f, lvDur_ = 1.f;
     float energy_ = 0.5f;
     bool dropMode_ = false;
-    float swell_ = 0.f, kickIn_ = 0.f, sparkle_ = 0.f, gaugeShown_ = 0.f;
+    float swell_ = 0.f, kickIn_ = 0.f, sparkle_ = 0.f;
     double lastHalf_ = -1.0;
     float time_ = 0.f, worldTime_ = 0.f;
     bool slowOn_ = false;

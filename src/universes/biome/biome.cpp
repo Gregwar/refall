@@ -15,7 +15,7 @@
 //
 // This file is the shell both worlds share: the variants over both worlds and the pick from the song, the scene's
 // level, the weather's director (a drop's storm, its lightning, the kicks), game over, the registry. render.cpp draws
-// the frame around the world's passes: the camera, the stack's cubes, the well's pane, the rain, the gauge, the HUD.
+// the frame around the world's passes: the camera, the stack's cubes, the well's pane, the rain, the HUD.
 #include "universes/biome/biome.hpp"
 
 #include <algorithm>
@@ -233,7 +233,6 @@ void BiomeUniverse::simulate(const Game& game, const MusicState& music, float dt
         }
     }
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.gone; }), dying_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     w_->simulate(game, music, dt, wdt);
 }

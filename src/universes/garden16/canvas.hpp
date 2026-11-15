@@ -27,7 +27,7 @@ enum Cls : uint8_t {
     K_PIECE = 7, // the falling piece, the previews
     K_GHOST = 8, // the ghost's dotted outline
     K_FX = 9,    // dirt bits, dust puffs, crumbs, splashes
-    K_HUD = 10,  // text, gauge
+    K_HUD = 10,  // text
 };
 
 // 4x4 ordered (Bayer) dither threshold, 0..1 exclusive.

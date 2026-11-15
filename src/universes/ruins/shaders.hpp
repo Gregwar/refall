@@ -1044,18 +1044,6 @@ void main() {
     float r = length(q);
     vec3 c = vB.rgb;
     float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-    if (mode == 1) {
-        // the gauge: a fine ring, the charge an arc of light from the top, clockwise
-        float ring = 1.0 - smoothstep(px * 0.6, px * 1.6, abs(r - 0.8));
-        float ang = atan(q.x, q.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float on = step(ang, vC.x * 6.2831853);
-        float arc = (1.0 - smoothstep(px * 1.4, px * 3.0, abs(r - 0.8))) * on;
-        float halo = exp(-sq((r - 0.8) / 0.12)) * on * 0.35 * (0.5 + 0.5 * vC.y);
-        float v = ring * 0.35 + arc + halo;
-        frag = vec4(c * v * vB.a, v * vB.a * 0.6);
-        return;
-    }
     if (mode == 2) {
         // a stone chip: an irregular angular fragment, lit from the top left
         vec2 p = rot(vC.x) * q;

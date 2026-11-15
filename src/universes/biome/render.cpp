@@ -1,10 +1,10 @@
 // BIOME's frame (see biome.cpp): the shared GL resources, the camera, the passes around the world's own, the stack's
-// glass cubes, the gauge and the HUD.
+// glass cubes and the HUD.
 //
 // The frame: the sun's shadow map (the world's casters); then the world, multisampled, with depth (the world's passes);
 // the rain; the well's pane (and the bridge); what the world draws over the pane; resolved, a copy of it (what the
 // stack's glass shows behind it); the ghost, the stack, the falling piece, the previews (glass cubes with the world's
-// fill); what the world draws over the stack; the gauge, the HUD; the final pass.
+// fill); what the world draws over the stack; the HUD; the final pass.
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -120,7 +120,6 @@ void Ctx::drawParts(GLuint p, const std::vector<float>& v) const {
 bool BiomeUniverse::init(int width, int height) {
     progRain_ = compile(ugl::FULLSCREEN_VS, shaders::RAIN_FS, "biome rain", {});
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "biome pane", {});
-    progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "biome gauge", {});
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "biome shape", {});
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "biome post", {});
 
@@ -129,7 +128,6 @@ bool BiomeUniverse::init(int width, int height) {
     glBindBuffer(GL_ARRAY_BUFFER, c_.quadVbo);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     c_.instanced(cellVao_, cellVbo_, 4);
-    c_.instanced(spriteVao_, spriteVbo_, 4);
     c_.instanced(c_.partVao, c_.partVbo, 4);
 
     glBindVertexArray(0);
@@ -204,9 +202,9 @@ BiomeUniverse::~BiomeUniverse() {
     for (auto& w : worlds_) w.reset();
     c_.sceneT.destroy();
     c_.bgT.destroy();
-    for (GLuint p : {progVeil_, progRain_, progSprite_, progShape_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {cellVao_, spriteVao_, c_.partVao, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {c_.quadVbo, cellVbo_, spriteVbo_, c_.partVbo, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progVeil_, progRain_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {cellVao_, c_.partVao, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {c_.quadVbo, cellVbo_, c_.partVbo, shapeVbo_}) glDeleteBuffers(1, &b);
     glDeleteFramebuffers(1, &c_.msFbo);
     glDeleteRenderbuffers(1, &msColor_);
     glDeleteRenderbuffers(1, &msDepth_);
@@ -481,7 +479,6 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
         if (!c_.bare) watchBoard(game); // (a break's board is blank: not a stack gone)
         simulate(game, f.music, dt, wdt);
     }
-    const float bridge = saturate(c_.bridge.amount);
     setCamera();
 
     // ---- The sun's shadow map.
@@ -587,25 +584,6 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
     flushCells();
     w_->drawAfterStack();
 
-    // ---- The bonus gauge: a round glass filling with the world's water or seeds.
-    if (!c_.bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const float ready = game.bonusReady() || game.bonusActive() ? 1.f : 0.f;
-        const vec3 col = c_.pal.gauge;
-        const float v[16] = {gc.x, gc.y, R, R, 0.f, 0.f, fill, ready, col.x, col.y, col.z, 1.f - 0.6f * smoothstepf(0.3f, 0.95f, bridge), 0.f, 0.f, 0.f, 0.f};
-        glUseProgram(progSprite_);
-        setMat(progSprite_, "uVP", c_.vp);
-        set1f(progSprite_, "uTime", c_.time);
-        set1f(progSprite_, "uPx", c_.px);
-        set1f(progSprite_, "uLightPanel", c_.pal.lightPanel);
-        set1f(progSprite_, "uSeeds", w_->seedGauge() ? 1.f : 0.f);
-        glBindVertexArray(spriteVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(v), v, GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, 1);
-    }
     drawHud(c_.bare ? std::vector<HudRect>() : f.panels);
     fade_ = saturate(f.fade);
     glDisable(GL_BLEND);

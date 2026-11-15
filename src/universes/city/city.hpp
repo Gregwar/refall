@@ -106,7 +106,7 @@ private:
     float slow_ = 0.f;
     bool slowOn_ = false;
     float time_ = 0.f, world_ = 0.f;
-    float dimT_ = 0.f, gaugeShown_ = 0.f;
+    float dimT_ = 0.f;
     float eq_[8] = {};
     float patEpoch_ = 0.f, patPhase_ = 0.f;
     Bridge bridge_;

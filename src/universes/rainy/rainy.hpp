@@ -138,7 +138,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the window and the rain alone
     Bridge bridge_;
