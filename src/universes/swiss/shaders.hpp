@@ -1,15 +1,15 @@
 #pragma once
-// SWISS POSTER shaders: flat, crisp shapes (antialiased rectangles, discs and ring arcs), SDF type, and the
+// SWISS POSTER shaders: flat, crisp shapes (antialiased rectangles and discs), SDF type, and the
 // composite that knocks the poster back behind the well and the HUD.
 
 namespace swiss_shaders {
 
-// Instanced shapes in pixels (top-left origin): a rectangle, a disc or a ring arc, clipped to a rectangle.
+// Instanced shapes in pixels (top-left origin): a rectangle or a disc, clipped to a rectangle.
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;   // -1..1
 layout(location = 1) in vec4 aRect;     // x0, y0, x1, y1 (pixels)
 layout(location = 2) in vec4 aCol;      // sRGB, straight alpha
-layout(location = 3) in vec4 aKind;     // kind (0 rect, 1 ring arc, 2 disc), p1, p2, p3
+layout(location = 3) in vec4 aKind;     // kind (0 rect, 2 disc), p1, p2, p3
 layout(location = 4) in vec4 aClip;     // x0, y0, x1, y1 (pixels)
 uniform vec2 uRes;
 out vec2 vPix;
@@ -34,16 +34,7 @@ void main() {
     } else {
         vec2 c = 0.5 * (vRect.xy + vRect.zw);
         vec2 d = vPix - c;
-        float r = length(d);
-        if (vKind.x < 1.5) {
-            cov = span(r, vKind.y, vKind.z);
-            float a = atan(d.x, -d.y);                 // 0 at the top, clockwise
-            if (a < 0.0) a += 6.2831853;
-            float edge = vKind.w * 6.2831853;
-            cov *= clamp((edge - a) * r + 0.5, 0.0, 1.0);
-        } else {
-            cov = clamp(vKind.y - r + 0.5, 0.0, 1.0);
-        }
+        cov = clamp(vKind.y - length(d) + 0.5, 0.0, 1.0);
     }
     cov *= span(vPix.x, vClip.x, vClip.z) * span(vPix.y, vClip.y, vClip.w);
     float a = vCol.a * cov;

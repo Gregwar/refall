@@ -510,12 +510,6 @@ void SwissUniverse::discB(float cx, float cy, float r, const vec3& c, float a) {
     shapes_.push_back(s);
 }
 
-void SwissUniverse::ringPx(float cx, float cy, float rIn, float rOut, float fill, const vec3& c, float a) {
-    if (a <= 0.002f || fill <= 0.f) return;
-    Shape s{{cx - rOut, cy - rOut, cx + rOut, cy + rOut}, {c.x, c.y, c.z, a}, {1, rIn, rOut, fill}, {-1e5f, -1e5f, 1e5f, 1e5f}};
-    shapes_.push_back(s);
-}
-
 void SwissUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
@@ -1253,28 +1247,14 @@ void SwissUniverse::drawBoard(const Game& g) {
 // The HUD
 // =====================================================================================================
 
-// The panels and the bonus gauge (a fine ring whose charge is drawn in the signature color); the text: hudLine,
-// lettered by the host.
-void SwissUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    const vec3 ink = ink_, ground = ground_, accent = palShown_[1];
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
+// The panels; the text: hudLine, lettered by the host.
+void SwissUniverse::drawHud(const std::vector<HudRect>& panels) {
+    const vec3 ground = ground_, accent = palShown_[1];
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : ground;
             rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
         }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const float th = std::max(1.f, 1.5f * s), th2 = std::max(2.f, 5.f * s);
-        ringPx(c.x, c.y, r - th * 0.5f, r + th * 0.5f, 1.f, ink, (g.bonusReady() ? 0.7f : 0.3f) * vis);
-        ringPx(c.x, c.y, r - th2 * 0.5f, r + th2 * 0.5f, fill, accent, 0.95f * vis);
         flushShapes();
     }
 }
@@ -1451,7 +1431,6 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);
     for (Wipe& w : wipes_) w.t += dt;
     wipes_.erase(std::remove_if(wipes_.begin(), wipes_.end(), [](const Wipe& w) { return w.t > w.delay + WIPE_S; }), wipes_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -1545,7 +1524,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) rectPx(0, 0, (float)width_, (float)height_, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

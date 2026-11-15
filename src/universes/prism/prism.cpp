@@ -1034,7 +1034,6 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             else b.t += dt;
         }
         bursts_.erase(std::remove_if(bursts_.begin(), bursts_.end(), [](const Burst& b) { return b.t >= b.life; }), bursts_.end());
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
     }
     swell = dropT_ < 12.f ? smoothstepf(0.f, 1.5f, dropT_) * std::exp(-std::max(0.f, dropT_ - 1.5f) / 3.f) * dropAmp_ * (inDrop_ ? 1.f : 0.f) : 0.f;
 
@@ -1163,7 +1162,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
             litDir_[i] = add(litDir_[i], mul(sub(accDir_[i], litDir_[i]), k));
         }
     }
-    // sparks, flares and the gauge, at full resolution
+    // sparks and flares, at full resolution
     for (const Spark& s : sparks_) {
         if (s.delay > 0.f || f.bare) continue;
         const float a = 1.f - smoothstepf(0.4f, 1.f, s.t / s.life);
@@ -1175,14 +1174,6 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
         const float u = fl.t / fl.life;
         const float a = smoothstepf(0.f, 0.12f, u) * (1.f - smoothstepf(0.25f, 1.f, u));
         glow_.push_back({{fl.p.x, fl.p.y, 0.f, 0.f}, {fl.size * (0.8f + 0.3f * u), 0.f, a, 0.f}, {fl.c.x, fl.c.y, fl.c.z, 2.f}, {0.f, 0.f, 0.f, 0.f}});
-    }
-    if (!f.bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const bool ready = game.bonusReady(), active = game.bonusActive();
-        const float fill = active ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const vec3 c = lerp(accent_, bridge_.ink, bridge) * 0.9f;
-        glow_.push_back({{gc.x, gc.y, R, 0.04f}, {0.f, 0.f, ready ? 1.f : fill, ready ? 1.f : 0.f}, {c.x, c.y, c.z, 4.f}, {0.f, 0.f, 0.f, 0.f}});
     }
 
     glDisable(GL_DEPTH_TEST);
@@ -1232,7 +1223,7 @@ void PrismUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progScene_, "uBridgeColor", bridge_.color);
     ugl::drawFullscreen();
 
-    // ---- The glass cubes over it (premultiplied), then the glints, sparks and gauge (additive).
+    // ---- The glass cubes over it (premultiplied), then the glints and sparks (additive).
     const float mul = 1.f;
     cubes_.clear();
     if (!f.bare) buildCubes(game); // a break: the beams cross the empty room (the board given is blank anyway)

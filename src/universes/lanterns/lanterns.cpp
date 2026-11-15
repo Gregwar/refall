@@ -940,14 +940,10 @@ void LanternsUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = ugl::toSrgb(pale ? lin(0x7a3a10) : lin(VARIANTS[variant_].accent));
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a thin ring of rice paper whose charge glows in the
-// accent.
-void LanternsUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
+// The panels (the lettering: hudLine).
+void LanternsUniverse::drawHud(const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -955,31 +951,6 @@ void LanternsUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 72;
-        const float th = std::max(1.f, 1.3f * s), th2 = std::max(2.f, 3.4f * s);
-        for (int i = 0; i < N; i++) {
-            const bool on = (i + 0.5f) / N <= fill;
-            const float a0 = TAU * i / N, a1 = TAU * (i + 1.02f) / N;
-            const float w = on ? th2 : th;
-            const vec3 col = on ? accent : ink;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.6f : 0.3f)) * vis * (1.f - 0.5f * dimT_);
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
         }
         flushShapes();
     }
@@ -1065,7 +1036,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // a break: the lake, its lanterns and the far lights alone (no poles, stack, ghost, previews nor gauge; the
+    // a break: the lake, its lanterns and the far lights alone (no poles, stack, ghost nor previews; the
     // blank board leaves the pieces' ids as they are)
     bare_ = f.bare;
     if (!bare_) syncIds(game);
@@ -1131,7 +1102,6 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     ripple_ = (0.1f + 0.5f * wm + 0.4f * wp + 0.5f * pulse_ * (0.3f + 0.7f * wm)) * (1.f - 0.85f * slow_);
     light_ = (0.92f + 0.05f * wm + 0.06f * wp + 0.05f * swell_) * (1.f - 0.1f * slow_);
     updateLanterns(dt, wdt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     if (bare_) {
         stack_.clear();
         ghost_.clear();
@@ -1258,7 +1228,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

@@ -130,7 +130,7 @@ private:
     float textWidth(const Font& f, const std::string& s, float size, float track) const;
     void textQuads(const Font& f, const std::string& s, float x, float y, float size, float track, std::vector<float>& out) const;
     void drawText(const Font& f, const std::vector<float>& quads, const vec3& ink, const vec3& halo, float alpha, float haloA = 0.5f);
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes();
 
@@ -169,7 +169,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{0x6E0C};

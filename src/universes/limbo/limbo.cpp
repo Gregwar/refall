@@ -1093,16 +1093,13 @@ void LimboUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// Quiet lettering in the fog, each line with a soft halo of the fog's light; the bonus gauge a fine ring.
-void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// Quiet lettering in the fog, each line with a soft halo of the fog's light.
+void LimboUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
-    const float s = height_ / 1080.f;
     // the drop's negative turns the lettering over with the scene
     const float inv = smoothstepf(0.f, 1.f, invert_) * (1.f - saturate(bridge_.amount));
     auto neg = [&](vec3 c) { return vec3(lerpf(c.x, 1.f - c.x, inv), lerpf(c.y, 1.f - c.y, inv), lerpf(c.z, 1.f - c.z, inv)); };
-    const vec3 ink = neg(hex(V.text)), halo = neg(hex(V.halo)), accent = neg(hex(V.accent));
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
+    const vec3 halo = neg(hex(V.halo)), accent = neg(hex(V.accent));
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? neg(r.color) : r.accent ? accent : halo;
@@ -1112,35 +1109,6 @@ void LimboUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
         }
         flushShapes();
-    }
-
-    // the bonus gauge: a fine ring, its charge a firmer stroke
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 96;
-        const float th = std::max(1.f, 1.3f * s), th2 = std::max(2.f, 3.4f * s);
-        for (int pass = 0; pass < 2; pass++) {
-            for (int i = 0; i < N; i++) {
-                const float a0 = TAU * i / N, a1 = TAU * (i + 1) / N;
-                const bool on = (i + 0.5f) / N <= fill;
-                // a soft halo of the fog under the ring, then the ring
-                const float w = pass == 0 ? (on ? th2 : th) + 5.f * s : (on ? th2 : th);
-                const vec3 col = pass == 0 ? halo : on ? accent : ink;
-                const float al = (pass == 0 ? 0.35f : (on ? 0.95f : (g.bonusReady() ? 0.7f : 0.38f))) * vis * (1.f - 0.5f * dimT_);
-                const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-                const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-                const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                         {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-                const int idx[6] = {0, 1, 2, 0, 2, 3};
-                for (int k : idx) {
-                    const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                    shapes_.insert(shapes_.end(), v, v + 6);
-                }
-            }
-            flushShapes();
-        }
     }
 }
 
@@ -1354,7 +1322,6 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(),
                                  [](const Fading& l) { return l.t > l.delay + (l.delay > 0.f ? 0.95f : 0.45f); }),
                   fading_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     buildWorld(sway, notch);
     cells_.clear();
@@ -1523,7 +1490,7 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
 

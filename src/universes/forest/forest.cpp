@@ -841,12 +841,8 @@ void ForestUniverse::flushShapes() {
     shapes_.clear();
 }
 
-void ForestUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
-    // pale lettering, faintly tinted by the forest's glow, on a soft halo of the night
-    const vec3 ink = lerp(vec3(0.80f, 0.82f, 0.80f), ugl::toSrgb(glow_[0]), 0.08f), halo = ugl::toSrgb(sky_[1]) * 0.5f;
-    const vec3 accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+void ForestUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+    const vec3 halo = ugl::toSrgb(sky_[1]) * 0.5f, accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -854,34 +850,6 @@ void ForestUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, con
             const float qd[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-    // the bonus gauge: a fine pale ring, its charge in the forest's glow
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 120;
-        const float th = std::max(1.2f, 1.5f * s), th2 = std::max(2.5f, 4.5f * s);
-        auto seg = [&](float a0, float a1, float w, const vec3& col, float al) {
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, th, ink, (g.bonusReady() ? 0.5f : 0.2f) * dimk);
-        flushShapes();
-        const vec3 ga = ugl::toSrgb(glow_[0]), gb = ugl::toSrgb(glow_[1]);
-        for (int i = 0; i < N; i++) {
-            if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, th2, lerp(ga, gb, (i + 0.5f) / N), 0.9f * dimk);
         }
         flushShapes();
     }
@@ -1112,7 +1080,6 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     }
     for (Fade& c : clears_) c.t += dt;
     clears_.erase(std::remove_if(clears_.begin(), clears_.end(), [](const Fade& c) { return c.t > CLEAR_T; }), clears_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     plantInst_.clear();
@@ -1320,7 +1287,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
 
