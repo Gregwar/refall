@@ -164,13 +164,13 @@ void main() {
         h = texture(uHeat, tc / vec2(12.0, 23.0)).r;
     }
     float base = vC.x;
-    // the piece radiates through its outline: a cooler rim, a warmer core
+    // the piece radiates through its outline: a thin cooler rim, a warmer core (the rim narrow, so the edge reads crisp)
     float depth = clamp(-sd, 0.0, 0.5);
-    float rim = 1.0 - smoothstep(0.0, 0.22, depth);
+    float rim = 1.0 - smoothstep(0.0, 0.09, depth);
     float hv = h * (1.0 - 0.45 * uRim * rim);
     float d = base * (1.0 - 0.35 * uRim * rim) + (1.02 - base) * min(1.0, 0.88 * hv * uGain);
     d += 0.025 * smoothstep(0.15, 0.5, depth) * (0.4 + h);
-    float a = (1.0 - smoothstep(-aa, aa * 0.5, sd)) * vB.w;
+    float a = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd)) * vB.w;
     frag = vec4(d * a, a, 0.0, a);
 }
 )";
