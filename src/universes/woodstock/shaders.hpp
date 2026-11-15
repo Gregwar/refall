@@ -30,6 +30,12 @@ uniform float uPhase;        // the waves' clock
 uniform float uWobble;       // the waves' depth (board units)
 uniform float uBreath;       // the bands swelling with the bars (in bands)
 uniform float uBright;       // the drop: the colors a little brighter
+uniform float uTrip;         // the drop: 0 the arcs .. 1 the kaleidoscope (petals, a spiral, rings around the well)
+uniform float uSpin;         // the petals' turn
+uniform float uHue;          // the colors' shift along the bands (in bands)
+uniform float uZoom;         // the pattern's scale (the drop's pulse on the beat)
+uniform vec3 uGlow;
+uniform float uGlowAmt;
 uniform float uDesat;        // slow motion's dusk
 uniform float uGrain;
 uniform vec4 uRipple[4];     // the clears' soft ripples: front radius, strength
@@ -38,17 +44,25 @@ float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     AA = max(fwidth(p.x), 1e-4) * 0.75;
-    vec2 d = p - uCenter;
+    // (the drop's zoom pulse on the beat, around the center)
+    vec2 d = (p - uCenter) * uZoom;
     float an = atan(d.y, d.x);
-    float r0 = length(d * vec2(0.84, 1.0));
+    float r0 = length(d * vec2(mix(0.84, 1.0, uTrip), 1.0));
     // the melt: slow waves along the arcs and a few low harmonics across them, deeper further out
-    float w = uWobble * smoothstep(3.0, 14.0, r0) * (0.6 + 0.4 * smoothstep(10.0, 30.0, r0));
+    float w = uWobble * mix(smoothstep(3.0, 14.0, r0), smoothstep(1.5, 8.0, r0), uTrip)
+            * (0.6 + 0.4 * smoothstep(10.0, 30.0, r0));
     float r = r0 + w * (0.9 * sin(p.x * 0.33 + r0 * 0.12 - uPhase * 1.3)
                       + 0.6 * sin(3.0 * an + uPhase * 0.7 + r0 * 0.13)
                       + 0.4 * sin(5.0 * an - uPhase * 0.45 - r0 * 0.07));
+    // the drop: the rings fold into six slow petals (a kaleidoscope), turning
+    float ad = atan(-d.x, d.y) + uSpin;      // from straight up (its seam points down, under the well)
+    r += uTrip * (0.5 + 0.06 * r0) * smoothstep(1.0, 6.0, r0) * sin(6.0 * ad - uPhase * 0.9 + r0 * 0.18);
     r = max(r, 0.0);
     const float R0 = 5.0, K = 6.3;
     float s = log(1.0 + r / R0) * K - uFlow - uBreath;
+    // ... and twist into a six-armed spiral (six bands a turn: the colors meet again)
+    float sBase = s;                         // (its derivatives, free of the spiral's seam)
+    s += uTrip * 6.0 * (atan(-d.x, d.y) / TAU);
     // the clears' ripples: the bands pushed out softly as a front passes
     for (int k = 0; k < 4; k++) {
         float wd = (r0 - uRipple[k].x) / 2.2;
@@ -56,17 +70,21 @@ void main() {
     }
     float i = floor(s), f = fract(s);
     float bw = (R0 + r) / K;                                  // a band's width (board units)
-    vec3 col = uBand[int(mod(i, 6.0))];
+    // the colors sliding from band to band (the drop's slow cycle; still otherwise)
+    float hf = floor(uHue), ht = fract(uHue);
+    vec3 col = mix(uBand[int(mod(i + hf, 6.0))], uBand[int(mod(i + hf + 1.0, 6.0))], ht);
     // cut paper: the band inside lies over this one, its soft shadow along the edge
     float de = f * bw;
     col = mix(col, col * uShade, 0.22 * exp(-de / 0.55));
     // the thin pale line between two bands
     float dl = min(f, 1.0 - f) * bw;
-    float aa = fwidth(s) * bw * 0.8 + 0.004;
+    float aa = fwidth(sBase) * bw * 0.8 + 0.004;
     col = mix(col, uLine, 0.8 * (1.0 - smoothstep(0.05 - aa, 0.05 + aa, dl)));
     // the drop: a little brighter, a little richer
     float l = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(col, clamp(mix(vec3(l), col, 1.3) * 1.04 + 0.01, 0.0, 1.0), uBright);
+    // the drop's light, glowing from the center behind the well
+    col = mix(col, uGlow, clamp(uGlowAmt * exp(-r0 / 10.0), 0.0, 1.0));
     // the paper's faint grain
     col *= 1.0 + uGrain * (hash(floor(gl_FragCoord.xy)) - 0.5);
     // the well: a soft shadow under it, a calm panel inside a slim line

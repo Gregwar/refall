@@ -11,9 +11,12 @@
 // barely rounded; seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside
 // a thin line of it.
 //
-// The music: calm is very slow; mid flows a little more. A DROP section (music.inDrop only) makes the bands rise
-// faster and undulate deeper and the colors a little brighter, eased in over a second or so and out over a few
-// seconds once the drop ends; nothing strobes. A line clear sends one soft ripple out through the bands from the
+// The music: calm is very slow; mid flows a little more. A DROP section (music.inDrop only) is the trip, there within
+// a second: the arcs' center rises behind the well and swings slowly, so the arcs close into full rings radiating
+// outward (a push out on every bar), folding into six slow petals and twisting into a six-armed spiral, the waves
+// much deeper; the colors slide from band to band in a slow cycle and brighten, a soft light glows from behind the
+// well and the whole pattern swells gently on each beat. It eases back to the calm arcs over a few seconds once the
+// drop ends (the colors settling on whole bands); nothing strobes. A line clear sends one soft ripple out through the bands from the
 // cleared rows (a stronger one for more lines); nothing flies. Slow motion is dusk (the colors drained toward lilac,
 // the flow slowed); game over greys the stack from the top.
 //
@@ -140,7 +143,8 @@ private:
     // ---- Staging.
     int level_ = 1;
     float lv_ = 1.f;
-    float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f;
+    float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f, spin_ = 0.f, hue_ = 0.f;
+    vec2 center_ = ARC_CENTER;
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
@@ -256,7 +260,7 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
         if (!n) break;
         // one soft ripple out through the bands from the cleared rows
         if (ripples_.size() >= 4) ripples_.erase(ripples_.begin());
-        ripples_.push_back({yMid / n - ARC_CENTER.y, 0.f, 0.22f + 0.08f * std::min(ev.count, 4)});
+        ripples_.push_back({std::abs(yMid / n - center_.y), 0.f, 0.22f + 0.08f * std::min(ev.count, 4)});
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -450,16 +454,29 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     lv_ = approach(lv_, (float)level_, 0.5f, dt);
     const float wm = smoothstepf(0.2f, 1.f, lv_);
     const bool inDrop = music.inDrop && overT_ < 0.f;
-    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 1.f : 0.45f, dt);
+    // the drop: in within a second, out over a few once it ends
+    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 2.2f : 0.4f, dt);
     const float drop = ease(dropAmt_);
-    flow_ += wdt * (0.03f + 0.03f * wm + 0.09f * drop);    // bands a second, rising
-    phase_ += wdt * (0.1f + 0.08f * wm + 0.2f * drop);     // the waves rolling along them
-    wobble_ = approach(wobble_, 1.2f + 0.4f * wm + 0.8f * drop, 0.6f, dt);
-    // the swell with the bars: one slow breath every two bars, wider in a drop
+    flow_ += wdt * (0.03f + 0.03f * wm + 0.3f * drop);     // bands a second, rising (radiating out in a drop)
+    phase_ += wdt * (0.1f + 0.08f * wm + 0.25f * drop);    // the waves rolling along them
+    spin_ += wdt * 0.15f * drop;                           // the drop's petals turning
+    hue_ += wdt * 0.3f * drop;                             // the drop's colors sliding from band to band
+    if (!inDrop) hue_ = approach(hue_, std::round(hue_), 0.6f, dt);    // (settling on whole bands after it)
+    wobble_ = approach(wobble_, 1.2f + 0.4f * wm + 1.4f * drop, 0.8f, dt);
+    // the swell with the bars: one slow breath every two bars (a push out on each bar in a drop)
     const double beats = music.hasSong ? music.beat : time_ * 2.0;
     const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
-    const float breath = (0.06f + 0.05f * wm + 0.1f * drop) * (0.5f - 0.5f * std::cos(bar));
-    const vec2 center{ARC_CENTER.x + 1.6f * std::sin(time_ * 0.031f), ARC_CENTER.y + 0.8f * std::sin(time_ * 0.023f + 1.f)};
+    const float bar1 = (float)std::fmod(beats / 4.0, 1.0);
+    const float breath = (0.06f + 0.05f * wm) * (0.5f - 0.5f * std::cos(bar)) + 0.3f * drop * ease(bar1 / 0.35f);
+    // the drop's gentle pulse on each beat (the pattern swelling a little, the light a little brighter)
+    const float bf = (float)(beats - std::floor(beats));
+    const float pulse = drop * std::exp(-bf * 4.f);
+    // the arcs' center: below the screen, wandering; the drop raises it behind the well (the arcs close into
+    // full rings around it) and swings it slowly
+    const vec2 calm{ARC_CENTER.x + 1.6f * std::sin(time_ * 0.031f), ARC_CENTER.y + 0.8f * std::sin(time_ * 0.023f + 1.f)};
+    const vec2 trip{1.2f * std::sin(time_ * 0.17f), -1.f + 0.9f * std::sin(time_ * 0.13f + 0.5f)};
+    center_ = vec2{lerpf(calm.x, trip.x, drop), lerpf(calm.y, trip.y, drop)};
+    const vec2 center = center_;
 
     // ---- Ripples, pops.
     for (Ripple& r : ripples_) r.age += wdt;
@@ -492,7 +509,13 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uPhase", phase_);
         set1f(progBg_, "uWobble", wobble_);
         set1f(progBg_, "uBreath", breath);
-        set1f(progBg_, "uBright", 0.6f * drop);
+        set1f(progBg_, "uBright", 0.7f * drop);
+        set1f(progBg_, "uTrip", drop);
+        set1f(progBg_, "uSpin", spin_);
+        set1f(progBg_, "uHue", hue_);
+        set1f(progBg_, "uZoom", 1.f - 0.035f * pulse);
+        set3f(progBg_, "uGlow", lerp(col_[LINE], vec3(1.f, 0.99f, 0.95f), 0.5f));
+        set1f(progBg_, "uGlowAmt", drop * (0.75f + 0.2f * pulse));
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
         set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
         float rip[16] = {};
