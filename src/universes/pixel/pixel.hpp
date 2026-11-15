@@ -42,6 +42,8 @@ private:
     void layoutHud(const std::vector<HudText>& hud, std::vector<HudItem>& out) const;
     void drawWell(const Game& g);
     void drawStack(const Game& g);
+    // A block's pixel (i, j) of `size` in the cushion style: false where it is bare (the cut corners, the gap)
+    bool blockPixel(int i, int j, int size, int type, int flash, int variantFor, uint8_t& c) const;
     void drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor = -1, bool aboveWell = false);
     void drawCard(int x0, int y0, int x1, int y1, int tabW);
     void drawSide(const Game& g, const std::vector<HudItem>& items, int hop);

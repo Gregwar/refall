@@ -267,12 +267,10 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
             if (c.y < Game::HIDDEN) continue;
             const float start = 0.25f + (c.y - top) * 0.07f + rng_.range(0.f, 0.15f);
             const int px0 = bx0_ + c.x * CELL, py0 = by0_ + (c.y - Game::HIDDEN) * CELL;
-            const Variant& VV = VAR(variant_);
             for (int j = 0; j < CELL; j++)
                 for (int i = 0; i < CELL; i++) {
-                    uint8_t col = VV.piece[c.type];
-                    if (i == CELL - 1 || j == CELL - 1) col = VV.pieceDark[c.type];
-                    else if (i == 0 || j == 0) col = VV.pieceLit[c.type];
+                    uint8_t col;
+                    if (!blockPixel(i, j, CELL, c.type, 0, -1, col)) continue; // (the blocks as they were drawn)
                     Grain gr{(float)(px0 + i), (float)(py0 + j), 0, 0, start + rng_.range(0.f, 0.8f) + (CELL - j) * 0.02f, col,
                              false, false, rng_.chance(0.09f)};
                     grains_.push_back(gr);
@@ -338,9 +336,8 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
             const float cx = (float)(bx0_ + 40), px0 = (float)(bx0_ + d.x * CELL), py0 = (float)(by0_ + (d.y - Game::HIDDEN) * CELL);
             for (int j = 0; j < CELL; j++)
                 for (int k = 0; k < CELL; k++) {
-                    uint8_t col = V.piece[d.type];
-                    if (k == CELL - 1 || j == CELL - 1) col = V.pieceDark[d.type];
-                    else if (k == 0 || j == 0) col = V.pieceLit[d.type];
+                    uint8_t col;
+                    if (!blockPixel(k, j, CELL, d.type, 1, -1, col)) continue;
                     if (!rng_.chance(0.3f)) continue; // (a soft crumble: a few of its pixels, not all of them)
                     const float x = px0 + k, y = py0 + j;
                     const float out = (x - cx) * rng_.range(0.4f, 0.9f);
@@ -410,26 +407,30 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
 
 // ================================================================== drawing: the well
 
-void PixelUniverse::drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor, bool aboveWell) {
+// A flat cushion: its corners cut, one flat fill with a lit top row and a shaded bottom row and right column, a short
+// glint on its top; the row and column it leaves bare are the gap to its neighbors.
+bool PixelUniverse::blockPixel(int i, int j, int size, int type, int flash, int variantFor, uint8_t& c) const {
     const Variant& V = VAR(variantFor >= 0 ? variantFor : variant_);
     const uint8_t base = V.piece[type], lit = V.pieceLit[type], dark = V.pieceDark[type];
-    const uint8_t shine = pal_.lighter[lit];
-    // A flat cushion: its corners cut, one flat fill with a lit top row and a shaded bottom row and right column,
-    // a short glint on its top; the row and column it leaves bare are the gap to its neighbors.
     const int n = size - 1;
+    const bool gap = i == n || j == n, corner = (i == 0 || i == n - 1) && (j == 0 || j == n - 1);
+    if (gap || (corner && size >= 6)) return false;
+    c = base;
+    if (j == n - 1 || i == n - 1) c = dark;
+    else if (j == 0) c = lit;
+    if (size >= 8 && j == 1 && i >= 1 && i <= 3) c = lit;
+    if (flash == 2) c = j == n - 1 || i == n - 1 ? lit : pal_.lighter[lit];
+    else if (flash == 1) c = j == n - 1 || i == n - 1 ? base : lit;
+    return true;
+}
+
+void PixelUniverse::drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor, bool aboveWell) {
     for (int j = 0; j < size; j++)
         for (int i = 0; i < size; i++) {
             const int X = px + i, Y = py + j;
             if (Y < by0_ - 1 && kind == K_STACK && !aboveWell) continue; // above the well: hidden rows (not the falling piece)
-            const bool gap = i == n || j == n, corner = (i == 0 || i == n - 1) && (j == 0 || j == n - 1);
-            if (gap || (corner && size >= 6)) continue;
-            uint8_t c = base;
-            if (j == n - 1 || i == n - 1) c = dark;
-            else if (j == 0) c = lit;
-            if (size >= 8 && j == 1 && i >= 1 && i <= 3) c = lit;
-            if (flash == 2) c = j == n - 1 || i == n - 1 ? lit : shine;
-            else if (flash == 1) c = j == n - 1 || i == n - 1 ? base : lit;
-            cv_.set(X, Y, c, kind);
+            uint8_t c;
+            if (blockPixel(i, j, size, type, flash, variantFor, c)) cv_.set(X, Y, c, kind);
         }
 }
 
