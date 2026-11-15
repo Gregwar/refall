@@ -17,7 +17,9 @@
 // hue across the wheel from its own (PLASMA's indigo to orange, OXIDE's to blue...), and the dies power on: a wave of current runs up the stack every two beats, lighting their circuitry and pads
 // in the charges' color as it passes. A chorus is a busy circuit, a break a few slow charges on fading traces. A lock
 // scatters the charges around the impact (a hard one sparks there); slow motion slows the circuit; a game over
-// shatters the whole stack.
+// shatters the whole stack. Before a song the terminals power up one after the other (their cores lighting, the
+// rings, the pads and the substrate catching it), then the current comes into the traces and the charges; after it the current is cut
+// (traces and charges fade) and the terminals power down in turn.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/electron/electron.hpp"
@@ -1009,6 +1011,11 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
 
     const float b = smoothstepf(0.f, 1.f, bridge_.amount);
     const float world = 1.f - b;
+    // the setup powers the terminals up one after the other, then the current comes into the traces and the
+    // charges; the teardown cuts the current, then powers the terminals down in turn
+    const float power[2] = {smoothstepf(0.05f, 0.4f, f.setup) * (1.f - smoothstepf(0.55f, 0.95f, f.teardown)),
+                            smoothstepf(0.25f, 0.6f, f.setup) * (1.f - smoothstepf(0.3f, 0.75f, f.teardown))};
+    const float current = smoothstepf(0.45f, 0.9f, f.setup) * (1.f - smoothstepf(0.f, 0.45f, f.teardown));
     const vec3 bridgeCol = ugl::toSrgb(bridge_.color), bridgeInk = ugl::toSrgb(bridge_.ink);
     const float pm = smoothstepf(0.f, 1.f, lv_), pk = smoothstepf(1.f, 2.f, lv_);
 
@@ -1108,7 +1115,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         const Ant& a = ants_[i];
         // inside the well (over the blocks) a charge is faint, fading in across the border
         const float inside = std::min(std::min(5.f - std::fabs(a.p.x), a.p.y + 10.f), 10.f - a.p.y);
-        float al = saturate(a.alpha) * world * (1.f - (gameOn ? 0.66f : 0.f) * smoothstepf(-0.3f, 0.3f, inside));
+        float al = saturate(a.alpha) * world * current * (1.f - (gameOn ? 0.66f : 0.f) * smoothstepf(-0.3f, 0.3f, inside));
         const bool carry = a.state == 1;
         if (!carry) al *= a.state == 2 || a.retire ? 0.3f : 0.5f;
         if (al <= 0.f) continue;
@@ -1180,12 +1187,13 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progGround_, "uWell", gameOn ? 1.f : 0.f); // a break: no panel, no frame
         set1f(progGround_, "uGrain", V.grain);
         // a steady glow per section, brighter at a peak, a swell on the drop that settles
-        set1f(progGround_, "uTraceAmt", V.traceAmt * (0.62f + 0.12f * pm + 0.16f * pk + 0.3f * dropMix_ + 0.3f * swell_));
+        set1f(progGround_, "uTraceAmt", current * V.traceAmt * (0.62f + 0.12f * pm + 0.16f * pk + 0.3f * dropMix_ + 0.3f * swell_));
         set1f(progGround_, "uTermGlow", 0.25f * pk + 0.6f * dropMix_ + 0.6f * swell_);
         set1f(progGround_, "uTime", clock_);
         set1f(progGround_, "uWorld", world);
-        set4f(progGround_, "uNest0", nest_[0].x, nest_[0].y, nestR_, 0.f);
-        set4f(progGround_, "uNest1", nest_[1].x, nest_[1].y, nestR_, 0.f);
+        set1f(progGround_, "uLit", 0.3f + 0.35f * (power[0] + power[1]));
+        set4f(progGround_, "uNest0", nest_[0].x, nest_[0].y, nestR_, power[0]);
+        set4f(progGround_, "uNest1", nest_[1].x, nest_[1].y, nestR_, power[1]);
         set3f(progGround_, "uBridgeCol", bridgeCol);
         set1f(progGround_, "uBridge", b);
         ugl::drawFullscreen();

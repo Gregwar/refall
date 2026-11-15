@@ -23,7 +23,9 @@
 // and the seabed's contours) and the glide surges to about twice the peak's pace, eased up and down by a critically
 // damped spring over a couple of seconds, then settles back over the following bars. Slow motion is silent running
 // (the echoes linger, the glide slows, one cold light); game over sinks the stack into the dark from the top, the
-// chart fades and the glide drifts to a halt.
+// chart fades and the glide drifts to a halt. Before a song the camera sinks down into its glide from above, the
+// seabed's contours glowing up softly as it nears them, then settling; after it the camera rises away into the dark
+// and the chart fades.
 //
 // Layout contract: the well, the blocks and the HUD are drawn through a flat orthographic view at the reference
 // camera's scale on the board plane, and never move; only the world behind them has its own moving camera.
@@ -228,6 +230,9 @@ void SonarUniverse::updateCamera(float wdt, float targetSpeed, float dt) {
     camPos_ = scene_.path(pathS_);
     vec3 ahead = scene_.path(pathS_ + CAM_AHEAD);
     ahead.y -= 2.6f;
+    // (above the glide: looking down a little more)
+    camPos_.y += rise_;
+    ahead.y += 0.55f * rise_;
     const vec3 up(0.f, 1.f, 0.f);
     camF_ = normalize(ahead - camPos_);
     camR_ = normalize(cross(camF_, up));
@@ -775,6 +780,8 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     {
         float target = lerpf(0.8f, 1.1f, wm) + 0.4f * wp + 1.4f * fest_;
         if (overT_ >= 0.f) target = 0.25f;
+        // the setup sinks the camera down into its glide, the teardown lets it rise away into the dark
+        rise_ = 16.f * (1.f - smoothstepf(0.f, 0.9f, f.setup)) + 16.f * smoothstepf(0.1f, 1.f, f.teardown);
         updateCamera(wdt, target, f.paused ? 0.f : dt);
     }
 
@@ -883,11 +890,15 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     }
     set3f(progMesh_, "uEcho", ech);
     set3f(progMesh_, "uEchoCity", echC);
-    set1f(progMesh_, "uBed", (0.004f + 0.03f * wp + 0.3f * fest_ + 0.15f * swell_ + 0.2f * quadGlow_) * quietSlow);
+    // (the setup: the seabed's contours glowing up softly as the camera sinks to them, then settling; the teardown:
+    // the chart fading into the dark)
+    const float sink = smoothstepf(0.15f, 0.55f, f.setup) * (1.f - smoothstepf(0.6f, 1.f, f.setup));
+    const float away = 1.f - smoothstepf(0.25f, 0.95f, f.teardown);
+    set1f(progMesh_, "uBed", (0.004f + 0.03f * wp + 0.3f * fest_ + 0.15f * swell_ + 0.2f * quadGlow_ + 0.12f * sink) * quietSlow);
     set1f(progMesh_, "uCity", (0.2f * wp + 0.7f * fest_ + 0.25f * swell_ + 0.55f * quadGlow_) * quietSlow);
     set1f(progMesh_, "uWin", (0.6f * kickEnv_ + 0.3f * fest_) * quietSlow);
     set1f(progMesh_, "uSlow", slow_);
-    set1f(progMesh_, "uFade", 1.f - bridgeK);
+    set1f(progMesh_, "uFade", (1.f - bridgeK) * away);
     glBindVertexArray(meshVao_);
     glDrawElements(GL_TRIANGLES, meshCount_, GL_UNSIGNED_INT, nullptr);
     // the particles in the water

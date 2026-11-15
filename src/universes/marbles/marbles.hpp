@@ -148,6 +148,7 @@ private:
     std::vector<vec2> accDir_;
     int segs_ = 0;
     float beamOn_[2] = {0.f, 0.f};
+    float lampUp_[2] = {1.f, 1.f}; // the setup / teardown: each lamp switched on (swinging in) or out, 0..1
     float disp_ = 0.f, beamWorld_ = 0.f;
     vec2 keyDir_{0.5f, -0.86f};
     vec3 keyCol_{1.f, 1.f, 1.f};

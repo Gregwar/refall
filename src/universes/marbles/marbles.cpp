@@ -20,7 +20,9 @@
 // makes the marbles glimmer (a few glint on the kicks) under a soft glow around the well; a drop splits the beams into
 // spectra and sends waves of light flowing through the marbles every two beats (each drop its own shape: out from the
 // well, in from the edges, sweeping across, rising, rings from a marble, diagonal bands), the marbles lighting up in
-// sequence from within, and the kicks nudge the lit marbles into their neighbors (more color).
+// sequence from within, and the kicks nudge the lit marbles into their neighbors (more color). Before a song the
+// lamps come on one after the other, each band of light swinging in from its side of the table; after it they go out
+// in the reverse order, swinging away, and leave the table in the dark.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like GARDEN).
 #include "universes/marbles/marbles.hpp"
@@ -1068,11 +1070,12 @@ void MarblesUniverse::traceLight(float dt, float world) {
         vec2 d = v2(-sx * std::cos(th), (b == 0 ? -1.f : 1.f) * std::sin(th));
         if (b == 0) {
             keyDir_ = d;
-            keyAmt_ = 0.32f * beamOn_[0] * gain;
+            keyAmt_ = 0.32f * beamOn_[0] * gain * lampUp_[0];
         }
-        const float on = beamOn_[b] * gain;
+        const float on = beamOn_[b] * gain * lampUp_[b];
         if (on < 0.02f) continue;
-        const vec2 aim = v2(sx * (12.f + 3.f * std::sin(beamWorld_ * TAU / (71.f + 23.f * b) + ph)),
+        // a lamp switched on swings its band in from its side of the table (and out again when it goes out)
+        const vec2 aim = v2(sx * (12.f + 3.f * std::sin(beamWorld_ * TAU / (71.f + 23.f * b) + ph) + 9.f * (1.f - lampUp_[b])),
                             (b == 0 ? 2.f : -2.f) + 3.5f * std::sin(beamWorld_ * TAU / (83.f + 17.f * b) + ph * 0.7f));
         const float width = 7.5f + 1.2f * std::sin(beamWorld_ * TAU / 53.f + ph * 1.3f);
         const vec2 perp = v2(-d.y, d.x);
@@ -1421,6 +1424,9 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     const float bridge = saturate(bridge_.amount);
     const float world = 1.f - smoothstepf(0.f, 0.6f, bridge);
 
+    // the setup switches the lamps on one after the other, the teardown switches them off in the reverse order
+    lampUp_[0] = smoothstepf(0.05f, 0.45f, f.setup) * (1.f - smoothstepf(0.4f, 0.9f, f.teardown));
+    lampUp_[1] = smoothstepf(0.35f, 0.8f, f.setup) * (1.f - smoothstepf(0.f, 0.5f, f.teardown));
     traceLight(f.paused ? 0.f : dt, world);
     // ---- The traced light: shafts, additive, at half resolution, then its mipmaps (the scattered light).
     glDisable(GL_DEPTH_TEST);
@@ -1570,7 +1576,8 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progPost_, "uScene", 0);
-    set1f(progPost_, "uFade", saturate(f.fade));
+    // (the room goes dim with the lamps out)
+    set1f(progPost_, "uFade", saturate(f.fade) * (0.3f + 0.35f * (lampUp_[0] + lampUp_[1])));
     set1f(progPost_, "uDim", dimT_);
     ugl::drawFullscreen();
 }

@@ -55,6 +55,8 @@ private:
     float spinT_ = 9.f;        // a quad: each mirror turns once around, one after the other
     float reach_ = 0.f;        // the drift's width (the music's energy, smoothed)
     float ring_ = 0.f;         // the drop's kaleidoscope: the rings' turn
+    float arrive_ = 1.f, leave_ = 0.f; // the setup floats the mirrors down into place, the teardown lifts them away
+    float lit_ = 1.f;          // the setup / teardown: the room's lights coming up, going down
     void updateMirrors(float dt, float wdt, const vec3& eye);
     void sheen(int i, float amp);
 

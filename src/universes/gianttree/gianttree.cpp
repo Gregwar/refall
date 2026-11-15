@@ -27,7 +27,8 @@
 // blooms under a shower of rainbow petals.
 //
 // The pieces are seed glass: translucent glass shapes with a warm seed of light inside, fine leaf veins. Cleared rows
-// dissolve into light that flows out of the well to the crown.
+// dissolve into light that flows out of the well to the crown. Before a song the camera eases in to the tree from
+// further back, turning a little around it; after it, it drifts back away from it.
 //
 // Cost: the world at a reduced resolution (at most 720 lines) with depth: one ray-traced sky pass (planet, moon,
 // space), ~25k triangles of bark, ~1.5k puffs (most of them too small to draw at any time), ~1300 cloud puffs, a
@@ -407,7 +408,7 @@ void GiantTreeUniverse::updateCamera(float dt) {
     const float sx = lerpf(0.62f, 0.64f, kF), sy = lerpf(0.f, 0.36f, kF) + 0.1f * kP;
     const float kD = smoothstepf(18.f, 20.f, G);      // deep space: looking out at the moon, the planets
     const float pitch = (lerpf(4.f, -15.f, kF) - 12.f * kH * (1.f - kD) - 40.f * kP) * PI / 180.f;
-    const float az = CAM_AZ + 0.04f * std::sin(time_ * 0.023f);
+    const float az = CAM_AZ + 0.04f * std::sin(time_ * 0.023f) + camSwing_;
     // looking toward the tree (-z, turned by the azimuth), then turned left so the anchor lands right of the well
     const float yaw = std::atan(sx * tanH_ * aspect_ / std::cos(pitch));
     const float phi = az + yaw;
@@ -415,7 +416,7 @@ void GiantTreeUniverse::updateCamera(float dt) {
     vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
     vec3 upv = cross(right, fwd);
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
-    const float D = F / tanH_;
+    const float D = F / tanH_ * (1.f + camBack_);
     vec3 eye = anchor - dirA * D;
     eye.y = std::max(eye.y, 0.25f + 0.2f * std::min(T, 4.f));
     eye_ = eye;
@@ -1006,6 +1007,12 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     const float wind = 0.35f + 0.45f * wm + 0.7f * wp + 0.3f * life;
     windPhase_ += wdt * (0.7f + 0.3f * wm + 0.35f * wp);
 
+    // the setup: the camera eases in to the tree, turning a little around it; the teardown: it drifts back, away
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.9f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
+        camBack_ = 0.7f * in * in + 0.9f * out * out;
+        camSwing_ = -0.3f * in * in + 0.2f * out;
+    }
     updateCamera(dt);
     const float W = gtree::crownW(g_);
     const float Rc = crownRadius(g_);

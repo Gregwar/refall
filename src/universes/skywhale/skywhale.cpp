@@ -22,7 +22,8 @@
 // The music: calm is a slow glide; mid and peak swim livelier with glints around it. The drop (a real one only, not
 // a chorus) is its song: it surges, its lights run from its head to its tail and soft rings of light ripple out of
 // it through the sky on the beat (every two beats), then it settles. Game over: it sinks into the deep, fading; the
-// next game hatches a new koi in the pond (the camera dives back). The pieces are koi-scale enamel.
+// next game hatches a new koi in the pond (the camera dives back). The pieces are koi-scale enamel. Before a song the
+// camera comes down out of the sky to the creature; after it, it rises away, looking down on it.
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind it
 // has its own 3D camera.
@@ -1099,7 +1100,7 @@ void SkyWhaleUniverse::updateCamera(float dt) {
     const int n = (int)(sizeof(K) / sizeof(K[0]));
     // the finale: low over the Moon, looking ahead along the ground
     const float kLc = smoothstepf(16.9f, 17.25f, G);
-    const float pitch = lerpf(keyed(G, K, PITCH, n), -24.f, kLc) * PI / 180.f;
+    const float pitch = lerpf(keyed(G, K, PITCH, n), -24.f, kLc) * PI / 180.f - camTilt_;
     // (psi > 0 looks ahead along the creature's heading, psi < 0 back toward its face: on the way out the camera looks
     // partly ahead: the Moon, straight ahead of the whale, in the free band right of the well, growing in place; over
     // the Moon a little ahead along its glide, so the whale glides on into the scene, its head where it goes, the ground
@@ -1153,7 +1154,7 @@ void SkyWhaleUniverse::updateCamera(float dt) {
     vec3 upv = cross(right, fwd);
     camUp_ = upL;
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
-    const float D = F / tanH_;
+    const float D = F / tanH_ * (1.f + camBack_);
     vec3 eye = anchor - dirA * D;
     // above the water and the ground (the planet's curve, locally)
     if (L < 2000.f) {
@@ -1773,6 +1774,12 @@ void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
         if (wdt > 0.f) updateSwim(G, wdt, std::max(target, 0.03f));
     }
     pose_ = poseAt(G);
+    // the setup: the camera comes down out of the sky to the creature; the teardown: it rises away, looking down
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.9f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
+        camBack_ = 0.8f * in * in + 0.8f * out * out;
+        camTilt_ = 0.3f * in * in + 0.25f * out * out;
+    }
     updateCamera(dt);
     if (wdt > 0.f) updateBirds(G, wdt);
     const float spaceK = smoothstepf(1.2e4f, 9.e4f, alt_);

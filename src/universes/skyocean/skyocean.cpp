@@ -24,7 +24,9 @@
 // beating once a bar, the cloud sea lit beneath it and motes streaming off it; when the drop ends it dives back into
 // the clouds (only on a real drop: a chorus rising into a peak brings no whale). Slow motion slows everything and
 // brightens the moon; game over sends every creature diving into the clouds and drains the stack's light from the
-// top. It leaves and enters through the bridge.
+// top. It leaves and enters through the bridge. Before a song the moon rises out of the sea of clouds, its light
+// spreading over the tops, and the stars and the aurora come out; after it the moon sets back into the clouds and
+// the night drains after it.
 //
 // Cost: the sky and the clouds (14 rows of domes, each a few square roots, front to back with an early exit) are
 // drawn at a reduced resolution (at most 540 lines); the stars, the creatures (one quad each, a signed distance),
@@ -1011,8 +1013,12 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The moon.
     const float sky = top - horizon_;
-    moonP_ = V(viewC_.x + hw * pal_.moonX, horizon_ + sky * pal_.moonY);
     moonR_ = pal_.moonR;
+    // the setup: a moonrise out of the sea of clouds, the stars coming out; the teardown: the moon sets back into
+    // it, the night draining after it
+    const float rise = smoothstepf(0.f, 0.85f, f.setup) * (1.f - smoothstepf(0.f, 0.8f, f.teardown));
+    const float night = smoothstepf(0.2f, 0.85f, f.setup) * (1.f - smoothstepf(0.35f, 1.f, f.teardown));
+    moonP_ = V(viewC_.x + hw * pal_.moonX, lerpf(horizon_ - moonR_ - 1.5f, horizon_ + sky * pal_.moonY, rise));
 
     // ---- Creatures to draw, and their light on the clouds.
     bodies_.clear();
@@ -1136,13 +1142,13 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uCloudShadow", pal_.cloudShadow);
     set3f(progSky_, "uAur1", pal_.aur1);
     set3f(progSky_, "uAur2", pal_.aur2);
-    set1f(progSky_, "uAurora", pal_.aurora * (0.7f + 0.2f * wm + 0.3f * wp + 0.3f * life));
+    set1f(progSky_, "uAurora", pal_.aurora * (0.7f + 0.2f * wm + 0.3f * wp + 0.3f * life) * night);
     set1f(progSky_, "uDrift", drift_);
     set1f(progSky_, "uTime", time_);
     set1f(progSky_, "uGlow", 0.25f * wm + 0.45f * wp + 0.6f * life + 0.5f * quadGlow_ + 0.2f * swell_);
     set1f(progSky_, "uPx", skyT_.h / (2.f * viewH_.y));
     set1f(progSky_, "uSeed", (float)(seed_ % 97));
-    set1f(progSky_, "uMoonLight", 1.f + 0.12f * wp + 0.25f * slow_);
+    set1f(progSky_, "uMoonLight", (1.f + 0.12f * wp + 0.25f * slow_) * (0.15f + 0.85f * rise));
     {
         float lp[MAX_LIGHTS * 4] = {}, lc[MAX_LIGHTS * 3] = {};
         for (size_t i = 0; i < lights.size(); i++) {
@@ -1166,7 +1172,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progComp_, "uSky", 0);
     set2f(progComp_, "uRes", (float)width_, (float)height_);
     set1f(progComp_, "uTwinkle", std::min(0.9f, 0.18f + 0.15f * wm + 0.15f * wp + twinkleBeat_ * 0.5f));
-    set1f(progComp_, "uStarA", (0.85f + 0.1f * wp + 0.2f * life) * (1.f - 0.5f * over_));
+    set1f(progComp_, "uStarA", (0.85f + 0.1f * wp + 0.2f * life) * (1.f - 0.5f * over_) * night);
     set1f(progComp_, "uTime", time_);
     set1f(progComp_, "uSeed", (float)(seed_ % 61));
     ugl::drawFullscreen();
@@ -1240,7 +1246,7 @@ void SkyOceanUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progPost_, "uScene", 0);
-    set1f(progPost_, "uFade", saturate(f.fade));
+    set1f(progPost_, "uFade", saturate(f.fade) * (0.35f + 0.65f * rise)); // (the night darker without its moon)
     set1f(progPost_, "uDim", dimT_);
     ugl::drawFullscreen();
 }

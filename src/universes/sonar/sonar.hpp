@@ -35,6 +35,7 @@ private:
     // ---- The sunken world (3D) and the camera gliding along its loop.
     sonar_scene::Scene scene_;
     float pathS_ = 0.f, speed_ = 0.9f, speedV_ = 0.f; // arc length along the loop, speed (units/s) and its rate
+    float rise_ = 0.f;         // the setup / teardown: the camera above its glide (sinking into place, rising away)
     vec3 camPos_, camF_{0, 0, 1}, camR_{1, 0, 0}, camU_{0, 1, 0};
     mat4 wvp_;
     float decay_ = 1.5f;
