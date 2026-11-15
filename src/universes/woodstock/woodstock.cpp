@@ -22,7 +22,12 @@
 // the flow slowed); game over greys the stack from the top.
 //
 // Four pastel variants (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night), from the key, mode, brightness and
-// air. Cost: one fullscreen pass, the blocks as instanced quads.
+// air. A fifth, BLOOM (by name only: --universe woodstock:BLOOM), has its own background, an infinite flower: a
+// dahlia centered behind the well whose rings of petals repeat at every scale (log-polar, so one level of zoom gives
+// the very same picture and the zoom loops forever), each ring one flat step of a smooth pastel gradient, laid over
+// the next like cut paper. Each line clear zooms in a little (eased); calm turns it very slowly; a DROP zooms in
+// steadily (eased in and to a stop after it), the colors sliding along the gradient. Cost: one fullscreen pass, the
+// blocks as instanced quads.
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -91,9 +96,17 @@ const VariantDef VARIANTS[] = {
       0x241d45, 0x62c9dc, 0x2e2556, 0xf27fc2, 0x2a2350, 0xa995f2,
       0xa898c8, 0x1c1630, 0x221c35, 0x8f80b4, 0xf3b6a0, 0xf6ead6, 0x221c35,
       0x7fb0d0, 0xeabb52, 0xc49ad4, 0x59ac8e, 0xe0604a, 0x6f8fd6, 0xf0904a}},
+    // the infinite flower (its own background, BLOOM_FS): a pastel gradient through peach, pink, lilac, sky, mint
+    // and butter, one step every other ring
+    {"BLOOM",
+     {0xf9c6a8, 0xf4adc4, 0xcdb5ea, 0xaed4f0, 0xb8e6d0, 0xf8e3a6,
+      // the drop: the same gradient a little richer
+      0xffb48f, 0xf795bb, 0xbb9ef0, 0x92c6f2, 0x99e0c0, 0xffd982,
+      0xfff9f2, 0xb8919c, 0xfffaf4, 0xd8b2bd, 0xd0566e, 0xfff7ee, 0x4a3242,
+      0x7fb2d3, 0xedae2c, 0xa47aa6, 0x3f9a84, 0xe2553b, 0x3f6c9c, 0xf0893c}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
-constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3;
+constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3, V_BLOOM = 4; // (BLOOM: by name only)
 
 constexpr float CLEAR_T = 0.4f;    // a cleared cell shrinks away in this long (real time)
 const vec2 ARC_CENTER{0.f, -15.f}; // the arcs' center, below the screen (board units)
@@ -138,7 +151,7 @@ private:
     void drawHud(const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progBg_ = 0, progCell_ = 0, progSolid_ = 0;
+    GLuint progBg_ = 0, progBloom_ = 0, progCell_ = 0, progSolid_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
@@ -153,6 +166,8 @@ private:
     int level_ = 1;
     float lv_ = 1.f;
     float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f, spin_ = 0.f, dropMix_ = 0.f;
+    // BLOOM: the zoom (in levels) eased toward its target, the drop's steady zoom speed, the flower's turn
+    float zoomLv_ = 0.f, levelTo_ = 0.f, zoomVel_ = 0.f, bloomSpin_ = 0.f;
     vec2 center_ = ARC_CENTER;
     bool slowOn_ = false;
     float slow_ = 0.f;
@@ -168,6 +183,7 @@ private:
 bool WoodstockUniverse::init(int width, int height) {
     const std::string head = "#version 330 core\n";
     progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "woodstock bands");
+    progBloom_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BLOOM_FS).c_str(), "woodstock bloom");
     progCell_ = ugl::program(sh::CELL_VS, (head + sh::PAINT_GLSL + sh::CELL_FS).c_str(), "woodstock blocks");
     progSolid_ = ugl::program(ugl::FULLSCREEN_VS, sh::SOLID_FS, "woodstock solid");
 
@@ -205,7 +221,7 @@ void WoodstockUniverse::resize(int width, int height) {
 }
 
 WoodstockUniverse::~WoodstockUniverse() {
-    for (GLuint p : {progBg_, progCell_, progSolid_}) glDeleteProgram(p);
+    for (GLuint p : {progBg_, progBloom_, progCell_, progSolid_}) glDeleteProgram(p);
     glDeleteVertexArrays(1, &cellVao_);
     for (GLuint b : {quadVbo_, cellVbo_}) glDeleteBuffers(1, &b);
 }
@@ -227,7 +243,7 @@ void WoodstockUniverse::setSong(const SongLook& t, float seconds) {
             static const int BY_HUE[] = {V_SUNSHINE, V_APRICOT, V_SAGE, V_APRICOT, V_SAGE, V_SUNSHINE};
             v = BY_HUE[(int)(h * 6.f) % 6];
         }
-        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
+        if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % V_BLOOM;
     }
     variant_ = v;
     if (seconds <= 0.f) colSet_ = false;
@@ -270,6 +286,8 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // one soft ripple out through the bands from the cleared rows
         if (ripples_.size() >= 4) ripples_.erase(ripples_.begin());
         ripples_.push_back({std::abs(yMid / n - center_.y), 0.f, 0.22f + 0.08f * std::min(ev.count, 4)});
+        // BLOOM: the flower zooms in a little with each clear (eased: render)
+        levelTo_ += 0.18f + 0.07f * (std::min(ev.count, 4) - 1);
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -487,6 +505,13 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     const vec2 trip{1.2f * std::sin(time_ * 0.17f), -1.f + 0.9f * std::sin(time_ * 0.13f + 0.5f)};
     center_ = vec2{lerpf(calm.x, trip.x, drop), lerpf(calm.y, trip.y, drop)};
     const vec2 center = center_;
+    // BLOOM: the zoom eases toward its target (the clears nudge it); a drop adds a steady zoom-in, eased in at the
+    // drop and to a stop after it; the flower turns very slowly. (Kept small: the pattern is the same every level.)
+    zoomVel_ = approach(zoomVel_, inDrop ? 0.4f : 0.f, inDrop ? 0.8f : 0.5f, dt);
+    levelTo_ += zoomVel_ * wdt;
+    zoomLv_ = approach(zoomLv_, levelTo_, 1.6f, wdt);
+    if (zoomLv_ > 48.f) { zoomLv_ -= 48.f; levelTo_ -= 48.f; }   // (48 levels: the same picture, the same colors)
+    bloomSpin_ += wdt * (0.012f + 0.006f * wm);
 
     // ---- Ripples, pops.
     for (Ripple& r : ripples_) r.age += wdt;
@@ -500,7 +525,30 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
-    {
+    if (variant_ == V_BLOOM) {
+        glUseProgram(progBloom_);
+        set4f(progBloom_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+        float bands[36];
+        for (int i = 0; i < 12; i++) {
+            bands[i * 3] = col_[BAND0 + i].x;
+            bands[i * 3 + 1] = col_[BAND0 + i].y;
+            bands[i * 3 + 2] = col_[BAND0 + i].z;
+        }
+        glUniform3fv(ugl::U(progBloom_, "uBand"), 6, bands);
+        glUniform3fv(ugl::U(progBloom_, "uDropBand"), 6, bands + 18);
+        set1f(progBloom_, "uDropMix", ease(dropMix_));
+        set3f(progBloom_, "uLine", col_[LINE]);
+        set3f(progBloom_, "uShade", col_[SHADE]);
+        set3f(progBloom_, "uWellFill", col_[WELL]);
+        set3f(progBloom_, "uWellLine", col_[WELL_LINE]);
+        set2f(progBloom_, "uCenter", 0.f, 0.f);
+        set1f(progBloom_, "uLevel", zoomLv_);
+        set1f(progBloom_, "uSpin", bloomSpin_);
+        set1f(progBloom_, "uDesat", 0.45f * slow_ + 0.2f * over_);
+        set1f(progBloom_, "uGrain", 0.022f);
+        set4f(progBloom_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
+        ugl::drawFullscreen();
+    } else {
         glUseProgram(progBg_);
         set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         float bands[36];

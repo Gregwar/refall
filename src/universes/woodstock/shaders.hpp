@@ -99,6 +99,82 @@ void main() {
 }
 )";
 
+// ---------------------------------------------------------------- BLOOM: the infinite flower
+// A dahlia with no end, centered behind the well: rings of NP petals in log-polar space (log-polar is conformal, so
+// a petal keeps its shape at every scale), one ring every LV of log(r), each ring turned half a petal from the next
+// and laid over the one outside it like cut paper (a soft shadow under its edge, a fine pale line round it). The
+// pattern is the same at r and r * exp(LV): zooming by one level (uLevel + 1) gives the very same picture, so the
+// zoom loops forever. Each ring is one flat color, the next step of a smooth pastel gradient through the six stops
+// (counted in the world, not on screen: zooming slides the colors along the gradient, never a jump).
+inline const char* BLOOM_FS = R"(
+in vec2 vUv;
+out vec4 frag;
+uniform vec4 uView;          // center, half extents (board units)
+uniform vec3 uBand[6], uDropBand[6];  // the gradient's stops, calm and in the drop
+uniform float uDropMix;
+uniform vec3 uLine, uShade, uWellFill, uWellLine;
+uniform vec2 uCenter;
+uniform float uLevel;        // the zoom, in levels (one level: the same picture again)
+uniform float uSpin;         // the flower's turn
+uniform float uDesat, uGrain;
+uniform vec4 uWell;
+const float NP = 24.0;       // petals a ring
+const float LV = 0.23;       // a ring's depth in log(r)
+const float STEP = 0.5;      // the gradient's stops a ring
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec3 stopc(float i) {
+    int k = int(mod(i, 6.0));
+    return mix(uBand[k], uDropBand[k], uDropMix);
+}
+vec3 grad(float t) {
+    float i = floor(t);
+    return mix(stopc(i), stopc(i + 1.0), smoothstep(0.0, 1.0, t - i));
+}
+float dEll(vec2 p, vec2 r) { return (length(p / r) - 1.0) * min(r.x, r.y); }
+void main() {
+    vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
+    vec2 d = p - uCenter;
+    float r = max(length(d), 1e-3);
+    float X = log(r);
+    float Y = atan(d.y, d.x) - uSpin;
+    AA = max(fwidth(X), 1e-5) * 0.8;          // (log space: everything below is in relative units)
+    float W = X / LV - uLevel;                // the world level (zooming in: uLevel up, the rings move out)
+    float sig = TAU / NP;
+    float k0 = floor(W);
+    float lineW = min(0.009, 0.06 / r);       // the pale line, at most a slim constant width on screen
+    // the deep gaps between the petals: the ring further out, in shadow
+    vec3 col = mix(mix(grad((k0 + 2.0) * STEP), uLine, 0.2), grad((k0 + 2.0) * STEP) * uShade, 0.1);
+    for (int n = 1; n >= -1; n--) {           // outside first, the inner rings laid over
+        float k = k0 + float(n);
+        float off = mod(k, 2.0) * 0.5;        // each ring turned half a petal from the next
+        float yc = Y / sig - off;
+        float j = floor(yc);
+        float py = (yc - j - 0.5) * sig;
+        float px = (W - (k + 0.5)) * LV;
+        float hl = 0.8 * LV, hw = 0.47 * sig;
+        float t = clamp(px / hl, -1.0, 1.0);
+        // a petal: narrow at its base, full and round toward its tip (pointing out)
+        float dp = dEll(vec2(px, py / (0.75 + 0.3 * t)), vec2(hl, hw));
+        vec3 pc = grad(k * STEP);
+        col = mix(col, col * uShade, 0.28 * exp(-max(dp, 0.0) / 0.05) * (1.0 - cov(dp)));
+        col = mix(col, uLine, cov(dp - lineW));
+        col = mix(col, pc, cov(dp));
+    }
+    col *= 1.0 + uGrain * (hash(floor(gl_FragCoord.xy)) - 0.5);
+    AA = max(fwidth(p.x), 1e-4) * 0.75;
+    if (uWell.w > 0.5) {
+        float ds = dBox(p - vec2(0.18, -0.3), uWell.xy, uWell.z);
+        col = mix(col, col * uShade, 0.35 * (1.0 - smoothstep(-0.3, 1.1, ds)));
+        float dw = dBox(p, uWell.xy, uWell.z);
+        col = mix(col, uWellLine, cov(dw));
+        col = mix(col, uWellFill, cov(dw + 0.07));
+    }
+    float l = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(col, vec3(l) * vec3(0.88, 0.86, 1.02), uDesat);
+    frag = vec4(col, 1.0);
+}
+)";
+
 // ---------------------------------------------------------------- blocks
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
