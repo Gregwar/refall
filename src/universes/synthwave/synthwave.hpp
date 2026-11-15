@@ -157,7 +157,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f, slowT_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f, readyT_ = 0.f;
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{777};

@@ -322,7 +322,7 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- tiles: the stack, the piece, previews, gauge
+// ---------------------------------------------------------------- tiles: the stack, the piece, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, age, aux, 0. a3: extra.
 inline const char* TILE_VS = R"(#version 330 core
@@ -349,10 +349,9 @@ in vec2 vWorld;
 flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
 uniform float uPx;           // board units per pixel
-uniform vec3 uSkyTop, uSunCore, uSunEdge, uGrid, uAcc;
+uniform vec3 uSkyTop;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
-uniform float uTime;
 
 void main() {
     int kind = int(v2.x + 0.5);
@@ -418,30 +417,6 @@ void main() {
         float fade = 1.0 - k * k;
         vec3 col = hot * core * (along * along * along * 3.0 + along * 0.4) * fade;
         frag = vec4(col * alpha * (1.0 - uBridge), 0.0);
-        return;
-    }
-    if (kind == 4) {
-        // The bonus gauge: a hairline ring, a soft light rising inside as lines are cleared
-        // (v3.x level, v3.y ready, v3.z active, v3.w radius).
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.5;
-        float disc = 1.0 - smoothstep(0.92 - aa, 0.92, r);
-        float lvl = v3.x;
-        float fillY = -0.92 + 1.84 * lvl;
-        float filled = (1.0 - smoothstep(fillY - aa, fillY + aa, q.y)) * disc;
-        float pulse = v3.y * (0.7 + 0.3 * sin(uTime * 3.0));
-        vec3 lc = v3.z > 0.5 ? uAcc : mix(uSunEdge, uSunCore, smoothstep(-0.9, 0.9, q.y) * 0.5);
-        vec3 col = lc * filled * (0.35 + 0.25 * smoothstep(-1.0, 1.0, q.y) + 0.8 * pulse);
-        float surface = exp(-sq((q.y - fillY) / (0.02 + aa))) * disc * step(0.01, lvl) * step(lvl, 0.99);
-        col += mix(lc, vec3(1.0), 0.3) * surface * 1.2;
-        float ring = exp(-sq((r - 1.0) / (0.012 + aa)));
-        col += mix(uGrid * 0.6, mix(lc, vec3(1.0), 0.3) * 1.8, v3.y) * ring;
-        col += lc * exp(-max(r - 1.0, 0.0) * 5.0) * 0.3 * pulse * (1.0 - disc);
-        float a = max(disc * 0.75, ring);
-        col = mix(col + uSkyTop * 0.4 * disc * (1.0 - filled), uBridgeInk * a, uBridge);
-        frag = vec4(col * alpha, a * alpha);
         return;
     }
     discard;

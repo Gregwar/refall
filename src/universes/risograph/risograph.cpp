@@ -597,7 +597,6 @@ void RisographUniverse::simulate(const Game& game, const MusicState& music, floa
     strips_.erase(std::remove_if(strips_.begin(), strips_.end(), [](const Strip& s) { return s.t > s.delay + 0.45f; }), strips_.end());
     for (auto& d : dying_) d.t += dt;
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.t > d.delay + 1.4f; }), dying_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
 }
 
 // =====================================================================================================
@@ -614,10 +613,9 @@ void RisographUniverse::rule(vec2 a, vec2 b, float width, const vec4& ink) {
     inst_.push_back(q);
 }
 
-void RisographUniverse::ring(vec2 c, float r, float width, const vec4& ink, float discR, float discDens, const vec3& discInk) {
+void RisographUniverse::ring(vec2 c, float r, float width, const vec4& ink) {
     const float h = r + width + 2.f * px_;
-    inst_.push_back({{c.x, c.y, h, h}, {0.f, 2.f, 0.f, 0.f}, {ink.x, ink.y, ink.z, ink.w}, {r, width, discR, discDens},
-                     {discInk.x, discInk.y, discInk.z, 0.f}});
+    inst_.push_back({{c.x, c.y, h, h}, {0.f, 2.f, 0.f, 0.f}, {ink.x, ink.y, ink.z, ink.w}, {r, width, 0.f, 0.f}, {0, 0, 0, 0}});
 }
 
 void RisographUniverse::cell(vec2 pos, float scale, float rot, int type, int mask, float alpha, vec2 offA, vec2 offB,
@@ -758,7 +756,7 @@ void RisographUniverse::buildBoard(const Game& g) {
         }
     {
         const vec2 c = v2(0.f, -Y - 0.95f);
-        ring(c, 0.26f, 0.035f, all, 0.f, 0.f, vec3(0.f));
+        ring(c, 0.26f, 0.035f, all);
         rule(v2(c.x - 0.45f, c.y), v2(c.x + 0.45f, c.y), 0.03f, all);
         rule(v2(c.x, c.y - 0.45f), v2(c.x, c.y + 0.45f), 0.03f, all);
     }
@@ -767,16 +765,6 @@ void RisographUniverse::buildBoard(const Game& g) {
     rule(v2(-X - 0.06f, -Y - 0.06f), v2(-X - 0.06f, Y), 0.022f, trim);
     rule(v2(X + 0.06f, -Y - 0.06f), v2(X + 0.06f, Y), 0.022f, trim);
     rule(v2(-X - 0.06f, -Y - 0.06f), v2(X + 0.06f, -Y - 0.06f), 0.022f, trim);
-
-    // The bonus gauge: a keyline circle whose disc fills as a deepening tint of B, solid B + C once ready.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        const float fill = active ? saturate(g.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        ring(v2(gc.x, gc.y), R, 0.045f, vec4(1.f, 0.f, 0.f, 1.f), R * 0.84f, ready ? 1.f : fill * 0.85f,
-             ready ? vec3(0.f, 1.f, 1.f) : vec3(0.f, 1.f, 0.f));
-    }
 }
 
 // =====================================================================================================

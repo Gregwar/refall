@@ -83,7 +83,6 @@ private:
     float dimT_ = 0;
     float worldT_ = 0, realT_ = 0;
     int lastBeat_ = -1;
-    float gaugeShown_ = 0, readyT_ = 0;
     int forcedQuad_ = -1;
     Bridge bridge_;
 

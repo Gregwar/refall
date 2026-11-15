@@ -1394,7 +1394,7 @@ void main() {
 }
 )";
 
-// ------------------------------------------------------------------------------------------------ lights, butterflies, the gauge
+// ----------------------------------------------------------------------------------------------------------- lights, butterflies
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, size (radius, board units), mode
@@ -1423,18 +1423,6 @@ void main() {
     float r = length(vLocal);
     vec3 c = vB.rgb;
     float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-    if (mode == 1) {
-        // the gauge: a fine ring, the charge an arc of light from the top, clockwise
-        float ring = 1.0 - smoothstep(px * 0.6, px * 1.6, abs(r - 0.8));
-        float ang = atan(vLocal.x, vLocal.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float on = step(ang, vC.x * 6.2831853);
-        float arc = (1.0 - smoothstep(px * 1.2, px * 2.6, abs(r - 0.8))) * on;
-        float halo = exp(-sq((r - 0.8) / 0.1)) * on * 0.3 * (0.5 + 0.5 * vC.y);
-        float v = ring * 0.3 + arc + halo;
-        frag = vec4(c * v * vB.a, v * vB.a * 0.5);
-        return;
-    }
     if (mode == 3) {
         // a butterfly: two pairs of wings flapping (param: the flap 0 shut .. 1 open), a body
         vec2 q = vLocal;

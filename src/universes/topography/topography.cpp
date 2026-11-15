@@ -923,10 +923,10 @@ void TopographyUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // =====================================================================================================
 
 void TopographyUniverse::cell(float x, float y, float half, int mask, const vec3& fill, float alpha, int kind, float inset,
-                              float formA, float shrink, const vec3& line, float extra) {
+                              float formA, float shrink, const vec3& line) {
     if (alpha <= 0.003f) return;
     cells_.push_back({{x, y, half, (float)mask}, {fill.x, fill.y, fill.z, alpha}, {(float)kind, inset, formA, shrink},
-                      {line.x, line.y, line.z, extra}});
+                      {line.x, line.y, line.z, 0.f}});
 }
 
 void TopographyUniverse::buildBoard(const Game& g) {
@@ -1036,13 +1036,6 @@ void TopographyUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
-    }
-    // The bonus gauge: a round tarn filling up.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        // (drawn while it fills: the inset carries the ready ring)
-        cell(gc.x, gc.y, layout::GAUGE_R, 0, pal_.lake, 1.f, 3, g.bonusReady() ? 1.f : 0.f, 1.f, 0.f, pal_.index, fill);
     }
 }
 
@@ -1261,7 +1254,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     pond_ = approach(pond_, smoothstepf(0.35f, 1.f, lv_) * (overT_ < 0.f ? 1.f : 0.f), 0.25f, dt); // the hollows fill slowly
     for (auto& fd : fading_) fd.t += dt; // a clear runs in real time, even in slow motion
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > 0.4f; }), fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     updateTerrain(game, f.paused ? 0.f : dt, wdt, f.bare);
 
@@ -1343,9 +1335,9 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progMap_, "uRightCol", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     ugl::drawFullscreen();
 
-    // ---- Pieces, ghost, previews, gauge.
+    // ---- Pieces, ghost, previews.
     cells_.clear();
-    if (!f.bare) buildBoard(game); // a break: no pieces, debris, previews nor gauge
+    if (!f.bare) buildBoard(game); // a break: no pieces, debris nor previews
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!cells_.empty()) {
@@ -1356,9 +1348,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progCell_);
         setMat(progCell_, "uVP", vp_);
         set1f(progCell_, "uLineW", std::max(0.9f, 1.15f * s));
-        set3f(progCell_, "uLake", pal_.lake);
-        set3f(progCell_, "uWaterLine", pal_.water);
-        set3f(progCell_, "uRing", pal_.index);
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(cellVao_);

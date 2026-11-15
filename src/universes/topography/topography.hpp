@@ -90,7 +90,7 @@ private:
     struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
     void cell(float x, float y, float half, int mask, const vec3& fill, float alpha, int kind, float inset,
-              float formA, float shrink, const vec3& line, float extra = 0.f);
+              float formA, float shrink, const vec3& line);
     void buildBoard(const Game& g);
 
     // ---- The HUD (its lettering: hudLine, the host letters it), and the spot heights in the same letters.
@@ -141,7 +141,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float worldTime_ = 0.f;
     Bridge bridge_;

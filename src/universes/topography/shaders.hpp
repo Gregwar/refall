@@ -5,7 +5,7 @@
 // intervals, g: how deep a pond the hollow there holds, b: woodland): it is sampled with a B-spline (four bilinear taps)
 // so the contours stay smooth between the grid's samples, and the isolines are drawn at screen-space width with
 // fwidth. CELL_FS draws the pieces as small tinted plateaus (a crisp outline and two form lines inside, the cells of
-// one piece merged into one shape), the ghost as a dashed boundary, the hovering piece's shadow and the gauge.
+// one piece merged into one shape), the ghost as a dashed boundary and the hovering piece's shadow.
 // Colors are linear; the post pass encodes them.
 
 namespace topography_shaders {
@@ -214,13 +214,13 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- pieces, ghost, shadow, gauge
+// ---------------------------------------------------------------- pieces, ghost, shadow
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
 layout(location = 2) in vec4 aB; // fill rgb, alpha
 layout(location = 3) in vec4 aC; // kind, form-line inset, form-line alpha, shrink
-layout(location = 4) in vec4 aD; // line rgb, extra
+layout(location = 4) in vec4 aD; // line rgb, -
 uniform mat4 uVP;
 out vec2 vLocal;
 out vec2 vWorld;
@@ -247,7 +247,6 @@ flat in vec4 vC;
 flat in vec4 vD;
 out vec4 frag;
 uniform float uLineW;
-uniform vec3 uLake, uWaterLine, uRing;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
 
@@ -273,26 +272,6 @@ void main() {
     float pxL = length(fwidth(vLocal)) * 0.7071; // cell units per pixel
     vec3 fillC = mix(vB.rgb, uBridgeInk, uBridge);
     vec3 lineC = mix(vD.rgb, uBridgeInk, uBridge);
-    if (kind == 3) {
-        // the gauge: a round tarn filling from the bottom, its rim a contour
-        float r = length(vLocal) * 2.0;
-        float pr = pxL * 2.0;
-        float level = vD.w * 2.0 - 1.0;
-        float inside = 1.0 - smoothstep(1.0 - pr, 1.0, r);
-        float water = inside * smoothstep(level + pr, level - pr, vLocal.y * 2.0);
-        float rim = 1.0 - smoothstep(uLineW * pr * 0.6, uLineW * pr * 0.6 + pr, abs(r - 1.0));
-        float rim2 = (1.0 - smoothstep(0.5 * pr, 1.5 * pr, abs(r - 0.78))) * 0.5;
-        float surf = (1.0 - smoothstep(0.4 * pr, 1.4 * pr, abs(vLocal.y * 2.0 - level))) * inside;
-        vec3 c = mix(uLake, uWaterLine, 0.4); // (deeper than the lakes: it shows on the flood)
-        float a = water * 0.9;
-        vec3 col = c * a;
-        float la = clamp(rim * 0.9 + rim2 * vC.y + surf * 0.8 * step(0.01, vD.w), 0.0, 1.0); // (vC.y: ready)
-        vec3 lc = mix(uRing, uWaterLine, surf);
-        col = mix(col, lc, la);
-        a = max(a, la);
-        frag = vec4(col, a) * vC.z;
-        return;
-    }
     float sd = shapeSdf(vLocal, int(vA.w + 0.5)) + vC.w;
     float aa = max(pxL, 1e-4);
     if (kind == 2) {

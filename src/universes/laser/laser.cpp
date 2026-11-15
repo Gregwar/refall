@@ -797,7 +797,6 @@ void LaserUniverse::simulate(const Game& game, const MusicState& music, float dt
     dyingCones_.erase(std::remove_if(dyingCones_.begin(), dyingCones_.end(),
                                      [](const DyingCone& d) { return d.t > d.delay + 0.75f; }),
                       dyingCones_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // This frame's projections: every piece's projector, the falling piece's, and the dying ones.
@@ -985,13 +984,6 @@ void LaserUniverse::buildBoard(const Game& g) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), pieceCounter_ + 1 + i, v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
-    // the bonus gauge: a ring of laser light
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.25f, vec3(1.f), 1.f, 4, 0, -1.f, 1.f, saturate(gaugeShown_), g.bonusReady() ? 1.f : 0.f,
-             g.bonusActive() ? 1.f : 0.f, R);
-    }
     // sparks
     sparks_.clear();
     for (const SparkFx& s : sparkFx_) {
@@ -1170,7 +1162,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
     buildMasks(f);
     tiles_.clear();
     if (f.bare) {
-        // a break: the room, its haze and its projectors, without the well, the stack, the previews or the gauge
+        // a break: the room, its haze and its projectors, without the well, the stack or the previews
         buildLenses();
         sparks_.clear();
     } else {
@@ -1283,7 +1275,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
     }
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    // ---- The stack, the pieces, the previews, the gauge.
+    // ---- The stack, the pieces, the previews.
     if (!tiles_.empty()) {
         glUseProgram(progTile_);
         glActiveTexture(GL_TEXTURE0);
@@ -1295,9 +1287,6 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progTile_, "uLight", 1.f);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
-        set3f(progTile_, "uGaugeCol", lerp(pal_.accent, pal_.dropLaser[0], dropColor_));
-        set3f(progTile_, "uGaugeSlow", lin(0xd6e6ff));
-        set3f(progTile_, "uTrack", pal_.ink * 0.3f);
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);

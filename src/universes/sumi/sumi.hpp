@@ -115,7 +115,7 @@ private:
     bool inverted_ = false;
     float invT_ = 10.f;
     float slow_ = 0;
-    float gaugeShown_ = 0, readyFlash_ = 0, readyT_ = 0;
+    float readyFlash_ = 0;
     float pauseFade_ = 0;
     float kick_ = 0;
     Bridge bridge_;

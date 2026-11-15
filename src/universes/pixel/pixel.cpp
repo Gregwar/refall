@@ -322,8 +322,6 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
         wipeT_ += dt / wipeDur_;
         if (wipeT_ >= 1.f) { wipeT_ = -1; prevVariant_ = -1; }
     }
-    gaugeShown_ = approach(gaugeShown_, g.bonusGauge(), 6.f, dt);
-    readyT_ = g.bonusReady() ? readyT_ + dt : 0.f;
     if (levelUpT_ >= 0) { levelUpT_ += dt; if (levelUpT_ > 1.6f) levelUpT_ = -1; }
     (void)m;
 
@@ -824,31 +822,6 @@ void PixelUniverse::drawSide(const Game& g, const std::vector<HudItem>& items, i
     };
     if (g.holdType() >= 0) preview(g.holdType(), cxL, ly(layout::HOLD_CENTER.y) - hop, 5, g.holdUsed());
     for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), cxR, ly(layout::nextCenter(i).y) - hop, i == 0 ? 6 : 5, false);
-
-    // The bonus gauge: a medallion with twelve segments, lit as lines are cleared.
-    {
-        const int gx = lx(layout::GAUGE_CENTER.x), gy = ly(layout::GAUGE_CENTER.y) - hop;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        cv_.disc(gx + 1, gy + 1, 10.f, V.ink, K_PANEL);
-        cv_.disc(gx, gy, 10.f, V.panelEdge, K_PANEL);
-        cv_.disc(gx, gy, 9.f, V.panel, K_PANEL);
-        const int lit = (int)std::floor(gaugeShown_ * 12.f + 0.02f);
-        const bool blink = ready && ((int)(readyT_ * 4) & 1);
-        for (int y = -9; y <= 9; y++)
-            for (int x = -9; x <= 9; x++) {
-                const float d = std::sqrt((float)(x * x + y * y));
-                if (d < 5.2f || d > 8.2f) continue;
-                float a = std::atan2((float)x, (float)-y); // 0 at the top, clockwise
-                if (a < 0) a += TAU;
-                const float seg = a / TAU * 12.f;
-                const int si = (int)seg;
-                if (seg - si < 0.12f || seg - si > 0.92f) continue; // gaps between segments
-                uint8_t c = V.panelEdge;
-                if (si < lit) c = (ready || active) ? (blink ? V.text : V.accent) : V.text;
-                if (d > 7.4f) c = si < lit ? pal_.darker[c] : V.well;
-                cv_.set(gx + x, gy + y, c, K_HUD);
-            }
-    }
 }
 
 void PixelUniverse::drawText(const std::vector<HudItem>& items, const std::vector<HudRect>& panels, int hop) {

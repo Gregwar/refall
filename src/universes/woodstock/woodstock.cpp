@@ -105,7 +105,7 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 enum Kind { K_DAISY = 0, K_MANDALA, K_PEACE, K_HEART, K_RAINBOW, K_SUN, K_MUSHROOM, K_DOVE, K_LAVA, K_PETAL, K_SPARKLE,
-            K_GAUGE, K_STEM, K_PANEL };
+            K_STEM = 12, K_PANEL };
 
 constexpr float CLEAR_T = 0.38f;   // a cleared tile pops away in this long (real time)
 constexpr float OUTLINE = 0.13f;    // the white cartoon outline (board units)
@@ -192,7 +192,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
     Rng rng_{0x60D5u};
@@ -659,7 +658,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         p.rot += p.spin * dt;
     }
     parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Part& p) { return p.age >= p.life; }), parts_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // =========================================================== the kaleidoscope
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -723,15 +721,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
             if (!p.front) continue;
             const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);
             sprite(K_PETAL, p.x, p.y, p.size, p.size * 0.55f, p.rot, a, p.col, vec3(1.f), vec3(1.f), 0.f, 0.f, 0.f, 0.04f);
-        }
-        // the bonus flower: a petal per step, a face when it's ready
-        {
-            const vec3 gc = layout::GAUGE_CENTER;
-            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-            const bool on = game.bonusReady() || game.bonusActive();
-            const float r = layout::GAUGE_R * 1.05f * (on ? 1.f + 0.04f * std::sin(time_ * 3.f) : 1.f);
-            sprite(K_GAUGE, gc.x, gc.y, r, r, 0.f, 1.f, accent_, lerp(wellTop_, vec3(1.f), 0.25f), on ? center_ : lerp(wellTop_, center_, 0.5f),
-                   fill, on ? 1.f : 0.f, 0.f, 0.08f);
         }
         flushSprites();
 
