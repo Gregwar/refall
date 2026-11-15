@@ -161,7 +161,7 @@ private:
     vec3 eyeB_, eyeW_, fwdW_, rightW_, upW_, targetW_;
     float tanW_ = 0.47f, aspect_ = 1.f, camD_ = 4.f;
     vec2 viewC_, viewH_;        // the board plane's view (for the veil)
-    bool bare_ = false; // a break's frame: the room alone (no well, no gauge)
+    bool bare_ = false; // a break's frame: the room alone (no well)
 
     // ---- Growth.
     int lines_ = 0, linesSeen_ = -1;
@@ -213,7 +213,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{0x11B7};

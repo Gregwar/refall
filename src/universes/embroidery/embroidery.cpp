@@ -796,15 +796,13 @@ void EmbroideryUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The lettering in a thread color over the cloth (dark on a pale cloth, pale on a dark one); the bonus gauge a ring
-// of running stitches whose charge is stitched solid in the accent.
+// The lettering in a thread color over the cloth (dark on a pale cloth, pale on a dark one).
 void EmbroideryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
     const vec3 cl = cloth();
     const bool pale = ugl::luma(cl) > 0.2f;
     const vec3 ink = ugl::toSrgb(pale ? lin(0x2b2a33) : lin(0xf1ede4)), halo = ugl::toSrgb(cl);
     const vec3 accent = ugl::toSrgb(lerp(lin(VARIANTS[variant_].accent), thread(4), smoothstepf(0.f, 1.f, dev_)));
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
@@ -813,33 +811,6 @@ void EmbroideryUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 48;
-        const float th = std::max(1.2f, 1.6f * s), th2 = std::max(2.f, 3.6f * s);
-        for (int i = 0; i < N; i++) {
-            const bool on = (i + 0.5f) / N <= fill;
-            // a running stitch: every other segment only, unless charged
-            if (!on && i % 2 == 1) continue;
-            const float a0 = TAU * (i + 0.08f) / N, a1 = TAU * (i + 0.92f) / N;
-            const float w = on ? th2 : th;
-            const vec3 col = on ? accent : ink;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.75f : 0.45f)) * vis * (1.f - 0.5f * dimT_);
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
         }
         flushShapes();
     }
@@ -1012,7 +983,6 @@ void EmbroideryUniverse::render(const Frame& f, GLuint fbo) {
     unpick_.erase(std::remove_if(unpick_.begin(), unpick_.end(),
                                  [](const Unpick& u) { return u.t > u.delay + (u.delay > 0.f ? 0.6f : 0.36f); }),
                   unpick_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     if (designDirty_ && !design_.empty()) {
         glBindTexture(GL_TEXTURE_2D, designTex_);

@@ -34,7 +34,7 @@ private:
     float colLight_[Game::W * 4];
     vec3 pieceP_{0.f, -99.f, 0.f}, pieceC_{0.f};
     vec3 stackAvg_{0.f};
-    std::vector<Inst> world_, ui_; // world_: seen in the mirrors too; ui_: the ghost, the previews, the gauge
+    std::vector<Inst> world_, ui_; // world_: seen in the mirrors too; ui_: the ghost, the previews
     void cube(std::vector<Inst>& out, const vec3& c, float half, const float q[4], const vec3& tint, float kind,
               float alpha, float flash, float frost);
     void buildCubes(const Game& g);
@@ -101,7 +101,6 @@ private:
     bool slowOn_ = false;
     float time_ = 0.f, world_t_ = 0.f;
     float dimT_ = 0.f;
-    float gaugeShown_ = 0.f;
     bool bare_ = false;
     Bridge bridge_;
     Rng rng_{4242};

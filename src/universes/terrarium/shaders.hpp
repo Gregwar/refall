@@ -1655,7 +1655,7 @@ void main() {
 }
 )";
 
-// ------------------------------------------------------------------------------------------------ dust, the gauge
+// ------------------------------------------------------------------------------------------------ dust
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, size (radius, board units), mode
@@ -1678,24 +1678,10 @@ flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
-uniform float uPxPerUnit;
 void main() {
     int mode = int(vA.w + 0.5);
     float r = length(vLocal);
     vec3 c = vB.rgb;
-    float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-    if (mode == 1) {
-        // the gauge: a fine ring, the charge an arc of light from the top, clockwise
-        float ring = 1.0 - smoothstep(px * 0.6, px * 1.6, abs(r - 0.8));
-        float ang = atan(vLocal.x, vLocal.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float on = step(ang, vC.x * 6.2831853);
-        float arc = (1.0 - smoothstep(px * 1.4, px * 3.0, abs(r - 0.8))) * on;
-        float halo = exp(-sq((r - 0.8) / 0.12)) * on * 0.35 * (0.5 + 0.5 * vC.y);
-        float v = ring * 0.35 + arc + halo;
-        frag = vec4(c * v * vB.a, v * vB.a * 0.6);
-        return;
-    }
     // a puff of soil
     float v = exp(-r * r * 6.0) * smoothstep(1.0, 0.7, r);
     frag = vec4(c * v * vB.a, v * vB.a);

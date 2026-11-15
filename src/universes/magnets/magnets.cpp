@@ -631,9 +631,9 @@ vec2 MagnetsUniverse::fieldAt(vec2 p) const {
 // Drawing helpers
 // =====================================================================================================
 
-void MagnetsUniverse::shape(vec2 a, vec2 b, float w0, float w1, vec3 col, float alpha, int kind, float extra) {
+void MagnetsUniverse::shape(vec2 a, vec2 b, float w0, float w1, vec3 col, float alpha) {
     if (alpha <= 0.003f) return;
-    shapes_.push_back({{a.x, a.y, b.x, b.y}, {w0, w1, (float)kind, extra}, {col.x, col.y, col.z, alpha}});
+    shapes_.push_back({{a.x, a.y, b.x, b.y}, {w0, w1, 0.f, 0.f}, {col.x, col.y, col.z, alpha}});
 }
 
 // Cells of one piece (game cell coordinates, laid out from `origin` at `scale`): merged into one magnet.
@@ -811,19 +811,6 @@ void MagnetsUniverse::render(const Frame& f, GLuint fbo) {
     buildCharges(game);
     if (!f.paused) simulate(dt);
 
-    // the compass in the gauge turns toward the field where it sits (a damped needle)
-    {
-        const vec2 gc = v2(layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y);
-        const vec2 B = fieldAt(gc);
-        if (len(B) > 1e-4f && !f.paused) {
-            const float tgt = std::atan2(B.y, B.x);
-            float d = tgt - needleA_;
-            d -= TAU * std::floor((d + PI) / TAU);
-            needleW_ += (60.f * std::sin(d) - 9.f * needleW_) * dt;
-            needleA_ += needleW_ * dt;
-        }
-    }
-
     // ---- colours of the moment (the slow motion inverts the sheet: filings pale on dark paper, or the reverse)
     const vec3 paper = lerp(hexc(V.paper), hexc(V.filing) * 0.9f, slow_);
     const vec3 filing = lerp(hexc(V.filing), hexc(V.paper), slow_);
@@ -994,7 +981,7 @@ void MagnetsUniverse::render(const Frame& f, GLuint fbo) {
     drawCells(ghost, 2);
     drawCells(cells_, 0);
 
-    // ---- the well (a hairline frame) and the compass in the gauge
+    // ---- the well (a hairline frame)
     shapes_.clear();
     {
         const float w = 1.3f * px_ * std::max(1.f, height_ / 1080.f);
@@ -1002,17 +989,6 @@ void MagnetsUniverse::render(const Frame& f, GLuint fbo) {
         shape(v2(x0, y1), v2(x0, y0), w, w, ink, 0.55f);
         shape(v2(x0, y0), v2(x1, y0), w, w, ink, 0.55f);
         shape(v2(x1, y0), v2(x1, y1), w, w, ink, 0.55f);
-        const vec2 gc = v2(layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y);
-        const float R = layout::GAUGE_R;
-        const float fill = game.bonusGauge();
-        shape(gc, v2(R, 0), w, w, ink, 0.4f, 1, 1.f);
-        shape(gc, v2(R, 0), 0.085f, 0.085f, accent, game.bonusActive() || game.bonusReady() ? 1.f : 0.85f, 1, fill);
-        const float needleA = game.bonusReady() ? 0.f : 1.f;
-        const vec2 d = v2(std::cos(needleA_), std::sin(needleA_));
-        const float L = 0.66f * R;
-        shape(gc, add(gc, mul(d, L)), 0.12f, 0.f, accent, needleA);
-        shape(gc, sub(gc, mul(d, L)), 0.12f, 0.f, ink, 0.8f * needleA);
-        shape(gc, gc, 0.07f, 0.07f, paper, needleA);
     }
     if (!shapes_.empty()) {
         glUseProgram(progShape_);

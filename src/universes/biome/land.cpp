@@ -112,9 +112,8 @@ Palette LandWorld::palette(int v) const {
     const bool inkDark = ugl::luma(p.ink) < 0.2f;
     p.inkDark = inkDark ? p.ink : lin(0x231a12);
     p.inkLight = inkDark ? lin(0xf6f0e4) : p.ink;
-    // the cubes reflect the soil under the horizon; the gauge fills with the fourth seed; the cubes see the 3D sun
+    // the cubes reflect the soil under the horizon; the cubes see the 3D sun
     p.envLow = p.soilDry * 0.6f;
-    p.gauge = p.piece[3];
     p.sunX = p.sunY = 0.f;
     return p;
 }

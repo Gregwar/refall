@@ -990,13 +990,10 @@ void RainyUniverse::hudInks(vec3& ink, vec3& halo, vec3& acc) const {
     acc = ugl::toSrgb(accent());
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a ring of beads of water, those charged lit in the
-// accent.
+// The panels (the lettering: hudLine).
 void RainyUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
     vec3 ink, halo, acc;
     hudInks(ink, halo, acc);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
@@ -1005,24 +1002,6 @@ void RainyUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 24;
-        for (int i = 0; i < N; i++) {
-            const bool on = (i + 0.5f) / N <= fill;
-            const float a = TAU * (i + 0.5f) / N;
-            const float px = c.x + std::sin(a) * r, py = c.y - std::cos(a) * r;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.7f : 0.38f)) * vis * (1.f - 0.5f * dimT_);
-            const float br = on ? std::max(2.f, 4.2f * s) : std::max(1.2f, 2.2f * s);
-            disc(px, py, br, on ? acc : ink, al);
-            // a bead's highlight
-            if (on) disc(px - br * 0.3f, py - br * 0.35f, br * 0.32f, vec3(1.f), al * 0.8f);
         }
         flushShapes();
     }
@@ -1076,7 +1055,7 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // a break: the window, the rain and the city alone (no mullions, glass tiles, ghost, previews nor gauge; the
+    // a break: the window, the rain and the city alone (no mullions, glass tiles, ghost nor previews; the
     // blank board leaves the pieces' ids as they are)
     bare_ = f.bare;
     if (!bare_) syncIds(game);
@@ -1155,7 +1134,6 @@ void RainyUniverse::render(const Frame& f, GLuint fbo) {
         s.y -= s.vy * dt;
     }
     splash_.erase(std::remove_if(splash_.begin(), splash_.end(), [](const Splash& s) { return s.t > s.life; }), splash_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     if (!mist_.empty()) {
         for (size_t i = 0; i < mist_.size(); i++) mistTex_[i] = (unsigned char)(saturate(mist_[i]) * 255.f + 0.5f);

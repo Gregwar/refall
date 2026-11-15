@@ -916,7 +916,6 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     stepBits(puffs_, 0.f, 2.5f);
     for (Crumble& c : crumbling_) c.t += dt;
     crumbling_.erase(std::remove_if(crumbling_.begin(), crumbling_.end(), [](const Crumble& c) { return c.t > CLEAR_T; }), crumbling_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
@@ -989,12 +988,6 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
             const vec3 c = ugl::toLinear(hex(FLY_C[(int)fl.hue & 3])) * lerpf(0.8f, 1.1f, g);
             sprite(back_, fl.p, 0.2f, c, 0.85f * world * (1.f - over_), 4, time_ * 9.f + fl.phase);
         }
-    }
-    if (!f.bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const bool on = game.bonusReady() || game.bonusActive();
-        sprite(front_, V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.ink : pal_.accent, 1.f, 1, fill, on ? 1.f : 0.f);
     }
     cells_.clear();
     if (!f.bare) buildBoard(game);

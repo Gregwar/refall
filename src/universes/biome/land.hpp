@@ -78,7 +78,6 @@ public:
     vec3 rainColor() const override { return lerp(ctx.pal.mist, vec3(1.f), 0.4f); }
     GLuint cellProgram() const override { return progCell_; }
     void cellUniforms(GLuint p) const override;
-    bool seedGauge() const override { return true; }
     vec3 background(const Palette& p) const override { return lerp(p.skyLow, p.soilDry, 0.45f); }
 
     // The plants' kinds (their meshes); the last two are a sown seed's soil mound and its sprout.

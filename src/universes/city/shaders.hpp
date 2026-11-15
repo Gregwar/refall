@@ -10,7 +10,7 @@
 //    in perspective), glass reflecting the sky, and behind each one a real room (interior mapping: back wall, side
 //    walls, floor and ceiling traced per pixel, furnished per window, lit by the window's light), the frame lit by
 //    the rooms next to it;
-//  - windows: the previews; dots: beacons, fireworks, rain, snow, the gauge (3D points, depth tested);
+//  - windows: the previews; dots: beacons, fireworks, rain, snow (3D points, depth tested);
 //  - bloom (bright pass, blur), then final: the searchlights' volumetric beams (against the depth), the bloom, a
 //    filmic curve, sRGB, before the HUD.
 
@@ -568,7 +568,7 @@ void main() {
     vA0 = aA0; vA1 = aA1; vA2 = aA2; vA3 = aA3;
     vec2 d = length(aA2.xy) > 1e-4 ? normalize(aA2.xy) : vec2(1.0, 0.0);
     vec2 n = vec2(-d.y, d.x);
-    float r = aA0.w * (aA3.x > 1.5 && aA3.x < 2.5 ? 1.0 : 2.2);
+    float r = aA0.w * 2.2;
     float hl = aA2.w * 0.5 + r, hw = r;
     vQ = vec2(aCorner.x * hl, aCorner.y * hw);
     vec3 w = aA0.xyz + vec3(d * vQ.x + n * vQ.y, 0.0);
@@ -582,18 +582,11 @@ out vec4 frag;
 void main() {
     float r = vA0.w, L = vA2.w * 0.5;
     int kind = int(vA3.x + 0.5);
-    float a;
-    if (kind == 2) {
-        vec2 q = abs(vQ) / r;
-        float fw = fwidth(q.x);
-        a = 1.0 - smoothstep(1.0 - fw, 1.0 + fw, max(q.x, q.y));
-    } else {
-        float dx = max(abs(vQ.x) - L, 0.0);
-        float d = length(vec2(dx, vQ.y)) / r;
-        a = exp(-d * d * 2.0);
-        if (kind == 3) a = a * 0.3 + (1.0 - smoothstep(0.35, 0.5, d));
-        if (kind == 1 && L > 0.0) a *= mix(0.05, 1.0, clamp((vQ.x + L) / (2.0 * L), 0.0, 1.0));
-    }
+    float dx = max(abs(vQ.x) - L, 0.0);
+    float d = length(vec2(dx, vQ.y)) / r;
+    float a = exp(-d * d * 2.0);
+    if (kind == 3) a = a * 0.3 + (1.0 - smoothstep(0.35, 0.5, d));
+    if (kind == 1 && L > 0.0) a *= mix(0.05, 1.0, clamp((vQ.x + L) / (2.0 * L), 0.0, 1.0));
     a *= vA1.a;
     frag = vec4(vA1.rgb * a, 0.0);
 }

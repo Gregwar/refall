@@ -1,6 +1,6 @@
 #pragma once
 // BIOME's shared shaders (see biome.hpp): the helpers, the sky and its light, the sun's shadow map, the glass cube
-// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the bonus gauge, the
+// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the
 // HUD's letters and the final pass. Each world adds its own (sea_shaders.hpp, land_shaders.hpp): its WORLD_GLSL (its
 // ground, its haze, `partFog`), its sky's main, its meshes, its cells' fill.
 
@@ -424,69 +424,6 @@ void main() {
     vec3 c1 = mix(uPanel, uEdge, wellE * 0.38 / max(a1, 1e-3));
     vec3 pre = enc(c1) * a1 * (1.0 - uBridge) + enc(uBridgeCol) * uBridge;
     frag = vec4(pre, 1.0 - (1.0 - a1) * (1.0 - uBridge));
-}
-)";
-
-// ---------------------------------------------------------------- the bonus gauge: a round glass filling with the
-// world's water or seeds
-inline const char* SPRITE_VS = R"(#version 330 core
-layout(location = 0) in vec2 aQ;
-layout(location = 1) in vec4 a0;   // x, y, half x, half y
-layout(location = 2) in vec4 a1;   // -, -, fill, ready
-layout(location = 3) in vec4 a2;   // linear rgb, alpha
-layout(location = 4) in vec4 a3;   // -
-uniform mat4 uVP;
-out vec2 vQ;
-flat out vec4 v0, v1, v2;
-void main() {
-    vQ = aQ;
-    v0 = a0; v1 = a1; v2 = a2;
-    gl_Position = uVP * vec4(a0.xy + aQ * a0.zw, 0.0, 1.0);
-}
-)";
-inline const char* SPRITE_FS = R"(#version 330 core
-in vec2 vQ;
-flat in vec4 v0, v1, v2;
-out vec4 frag;
-uniform float uTime, uPx, uLightPanel, uSeeds;
-void main() {
-    vec3 col = v2.rgb;
-    float R = 0.92;
-    float pxl = uPx / v0.z;
-    float r = length(vQ);
-    float fill = v1.z, ready = v1.w;
-    float pulse = ready * (0.5 + 0.5 * sin(uTime * 2.0));
-    float rim = smoothstep(pxl * 1.5, 0.0, abs(r - R) - 0.025);
-    float inside = smoothstep(R - 0.05 + pxl, R - 0.05 - pxl, r);
-    vec3 c;
-    float aa;
-    if (uSeeds > 0.5) {
-        // seeds: a bed of small round grains
-        float lvl = -R + 2.0 * R * fill + 0.03 * sin(vQ.x * 14.0);
-        float bed = smoothstep(pxl, -pxl, vQ.y - lvl) * inside;
-        vec2 g = vQ * 9.0;
-        vec2 gi = floor(g);
-        float grain = smoothstep(0.48, 0.3, length(fract(g) - 0.5 + (vec2(hash12(gi), hash12(gi + 3.0)) - 0.5) * 0.15));
-        vec3 sc = col * (0.55 + 0.6 * grain * (0.8 + 0.4 * hash12(gi + 7.0)));
-        sc = mix(sc, mix(col, vec3(1.0), 0.5), pulse * 0.3);
-        c = mix(vec3(1.0), sc, bed);
-        aa = mix(inside * 0.1, 0.95, bed);
-        c = mix(c, vec3(1.0), rim * 0.85);
-    } else {
-        // water: a swaying level, a bright meniscus
-        float lvl = -R + 2.0 * R * fill + 0.03 * sin(uTime * 1.7 + vQ.x * 4.0) + 0.015 * sin(uTime * 2.9 - vQ.x * 7.0);
-        float water = smoothstep(pxl, -pxl, vQ.y - lvl) * inside;
-        vec3 wc = col * (1.15 - 0.35 * smoothstep(lvl, -R, vQ.y));
-        wc = mix(wc, mix(col, vec3(1.0), 0.6), smoothstep(-0.12, 0.0, vQ.y - lvl) * 0.6 + pulse * 0.25);
-        c = mix(mix(col, vec3(1.0), 0.6), wc, water);
-        aa = mix(inside * 0.12, 0.9, water);
-        float men = smoothstep(pxl * 2.0, 0.0, abs(vQ.y - lvl)) * inside;
-        c = mix(c, vec3(1.0), men * 0.7);
-        aa = max(aa, men * 0.9);
-        c = mix(c, uLightPanel > 0.5 ? col * 0.55 : mix(col, vec3(1.0), 0.6), rim);
-    }
-    aa = max(aa, rim * 0.85);
-    frag = vec4(enc(c), aa * v2.a);
 }
 )";
 

@@ -1,6 +1,6 @@
 #pragma once
 // MAGNETS' shaders: the filings (a GPU simulation in two state textures and their instanced strokes), the magnets
-// (instanced cells merged into one shape per piece), a few vector shapes (the well, the compass), the paper, the
+// (instanced cells merged into one shape per piece), a few vector shapes (the well), the paper, the
 // lettering and the final pass (fade, dim, bridge).
 
 namespace magnets_shaders {
@@ -279,13 +279,12 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- vector shapes (the well, the compass)
-// kind 0: a segment a -> b, width w0 -> w1 (board units); kind 1: a ring around a, radius b.x, width w0, drawn
-// over a fraction `extra` of the turn clockwise from the top.
+// ---------------------------------------------------------------- vector shapes (the well)
+// a segment a -> b, width w0 -> w1 (board units)
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aP;
-layout(location = 2) in vec4 aQ; // w0, w1, kind, extra
+layout(location = 2) in vec4 aQ; // w0, w1, -, -
 layout(location = 3) in vec4 aC;
 uniform mat4 uVP;
 uniform float uPx;
@@ -293,9 +292,7 @@ out vec2 vW;
 flat out vec4 vP, vQ, vC;
 void main() {
     float pad = max(aQ.x, aQ.y) + uPx * 2.0;
-    vec2 lo, hi;
-    if (aQ.z < 0.5) { lo = min(aP.xy, aP.zw) - pad; hi = max(aP.xy, aP.zw) + pad; }
-    else { lo = aP.xy - aP.z - pad; hi = aP.xy + aP.z + pad; }
+    vec2 lo = min(aP.xy, aP.zw) - pad, hi = max(aP.xy, aP.zw) + pad;
     vW = mix(lo, hi, aCorner * 0.5 + 0.5);
     vP = aP; vQ = aQ; vC = aC;
     gl_Position = uVP * vec4(vW, 0.0, 1.0);
@@ -307,18 +304,9 @@ flat in vec4 vP, vQ, vC;
 out vec4 frag;
 uniform float uPx;
 void main() {
-    float d;
-    if (vQ.z < 0.5) {
-        vec2 a = vP.xy, ba = vP.zw - vP.xy;
-        float t = clamp(dot(vW - a, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
-        d = length(vW - a - ba * t) - 0.5 * mix(vQ.x, vQ.y, t);
-    } else {
-        vec2 r = vW - vP.xy;
-        d = abs(length(r) - vP.z) - 0.5 * vQ.x;
-        float f = fract(atan(r.x, r.y) / 6.2831853 + 1.0);
-        float edge = (f - vQ.w) * 6.2831853 * vP.z;
-        if (vQ.w < 0.999) d = max(d, edge);
-    }
+    vec2 p0 = vP.xy, ba = vP.zw - vP.xy;
+    float t = clamp(dot(vW - p0, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);
+    float d = length(vW - p0 - ba * t) - 0.5 * mix(vQ.x, vQ.y, t);
     float a = (1.0 - smoothstep(-0.5 * uPx, 0.5 * uPx, d)) * vC.a;
     if (a <= 0.003) discard;
     frag = vec4(vC.rgb, a);
