@@ -40,6 +40,8 @@ uniform int uPeriod;
 uniform float uDesat, uGrain;
 uniform vec4 uWell;          // the well's half extents, its corner, 1 shown / 0 not (a break between songs)
 uniform vec4 uPrev[4];       // the hold and next previews: center, half size, strength (a soft pale halo behind each)
+uniform vec2 uRef[65];       // the exact orbit of uFix (its first uRefN + 1 points; uRefN 0: none)
+uniform int uRefN;
 const int MAXIT = 200;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
@@ -53,11 +55,22 @@ vec3 grad(float t) {
 }
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    vec2 z = uFix + cmul(uMul, p - uCenter);
+    // Deep in the zoom the point is uFix plus a tiny offset: iterated as is, each step's rounding (relative to the point)
+    // grows into the offset and the picture turns to pixels. So the offset is iterated against uFix's exact orbit
+    // (perturbation: (r + d)^2 + c - (r^2 + c) = (2r + d) d, its error relative to d itself) until it is large enough.
+    vec2 d = cmul(uMul, p - uCenter);
+    int i0 = 0;
+    if (uRefN > 0) {
+        while (i0 < uRefN && dot(d, d) < 1e-4) {
+            d = cmul(2.0 * uRef[i0] + d, d);
+            i0++;
+        }
+    }
+    vec2 z = (uRefN > 0 ? uRef[i0] : uFix) + d;
     float g = -1.0;
     bool inside = false;
     const float EPS = 1e-3;
-    for (int i = 0; i < MAXIT; i++) {
+    for (int i = i0; i < MAXIT; i++) {
         z = cmul(z, z) + uC;
         float m = dot(z, z);
         if (m > 1e4) {
