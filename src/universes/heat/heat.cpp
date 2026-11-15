@@ -790,9 +790,8 @@ void HeatUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge, the bonus gauge
-// as a thin ring.
-void HeatUniverse::drawOverlay(const Game& g, bool bare) {
+// The camera's overlay: the scale bar (the colormap and its range in degrees) on the right edge.
+void HeatUniverse::drawOverlay() {
     const float s = height_ / 1080.f;
     const float vis = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (1.f - 0.6f * dimT_);
     const vec3 ink(0.93f, 0.94f, 0.95f), shadow(0.f);
@@ -824,33 +823,6 @@ void HeatUniverse::drawOverlay(const Game& g, bool bare) {
         };
         reading(degrees(hi_ - 0.08f * flare_), y0 - ts * 1.9f);
         reading(degrees(lo_), y1 + ts * 0.9f);
-    }
-    // ---- the bonus gauge: a thin ring, its charge an arc in the hot color (none at a break)
-    if (!bare) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 96;
-        const vec3 hot = lutAt(0.86f);
-        const float th = std::max(1.f, 1.3f * s), th2 = std::max(2.f, 3.f * s);
-        for (int i = 0; i < N; i++) {
-            const float a0 = TAU * i / N, a1 = TAU * (i + 1) / N;
-            const bool on = (i + 0.5f) / N <= fill;
-            const float w = on ? th2 : th;
-            const vec3 col = on ? hot : ink;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.6f : 0.28f)) * vis;
-            // a quad along the arc (clockwise from the top)
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        }
-        flushShapes();
     }
 }
 
@@ -974,7 +946,6 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     for (auto& fd : fading_)
         if (fd.t > -50.f) fd.t += dt; // a clear runs in real time, even in slow motion
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > 0.4f; }), fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The heat.
     if (!bare) conduct(game, wdt);
@@ -1125,7 +1096,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The overlay and the HUD.
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawOverlay(game, bare);
+    drawOverlay();
     drawHud(f.hud, bare ? std::vector<HudRect>{} : f.panels);
     glDisable(GL_BLEND);
 }

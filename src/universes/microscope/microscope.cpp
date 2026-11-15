@@ -187,7 +187,6 @@ bool MicroscopeUniverse::init(int width, int height) {
     using shaders::withCommon;
     for (auto& l : fallLook_) l = lookOf(0, 0);
     const std::string inkText = withCommon(shaders::TEXT_FS, shaders::INK_GLSL);
-    const std::string inkShape = withCommon(shaders::SHAPE_FS, shaders::INK_GLSL);
     progField_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FIELD_FS).c_str(), "microscope field");
     progOrg_ = ugl::program(shaders::ORG_VS, withCommon(shaders::ORG_FS).c_str(), "microscope life");
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "microscope cells");
@@ -195,7 +194,7 @@ bool MicroscopeUniverse::init(int width, int height) {
     progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "microscope down");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "microscope blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "microscope final");
-    progShape_ = ugl::program(shaders::SHAPE_VS, inkShape.c_str(), "microscope shape");
+    progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "microscope shape");
     progText_ = ugl::program(shaders::TEXT_VS, inkText.c_str(), "microscope text");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -792,15 +791,10 @@ void MicroscopeUniverse::drawText(const Font& f, const std::vector<float>& q, bo
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(q.size() / 4));
 }
 
-void MicroscopeUniverse::flushShapes(int mode) {
+void MicroscopeUniverse::flushShapes() {
     if (shapes_.empty()) return;
     glUseProgram(progShape_);
     set2f(progShape_, "uRes", (float)width_, (float)height_);
-    set1i(progShape_, "uMode", mode);
-    const vec2 c = project(vec3(0.f, viewC_.y, 0.f));
-    glUniform3f(ugl::U(progShape_, "uDiskPx"), c.x, c.y, diskR_ * height_ / (2.f * viewH_.y));
-    set3f(progShape_, "uInkIn", mode == 2 ? accentIn_ : inkIn_);
-    set3f(progShape_, "uInkOut", mode == 2 ? accentOut_ : inkOut_);
     glBindVertexArray(shapeVao_);
     glBindBuffer(GL_ARRAY_BUFFER, shapeVbo_);
     glBufferData(GL_ARRAY_BUFFER, shapes_.size() * sizeof(float), shapes_.data(), GL_STREAM_DRAW);
@@ -829,47 +823,7 @@ void MicroscopeUniverse::drawHud(const Game& g, const std::vector<HudText>& hud,
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
         }
-        flushShapes(0);
-    }
-    // the bonus gauge: a fine ring like a field stop, its charge in the accent
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 120;
-        const float th = std::max(1.f, 1.3f * s), th2 = std::max(2.f, 3.5f * s);
-        auto seg = [&](float a0, float a1, float w, float al) {
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], 0.f, 0.f, 0.f, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, th, (g.bonusReady() ? 0.55f : 0.25f) * dimk);
-        // a scale of ticks inside the ring, every 30 degrees
-        for (int i = 0; i < 12; i++) {
-            const float a = TAU * i / 12.f;
-            const float sn = std::sin(a), cs = std::cos(a), w = th * 0.5f;
-            const float r0 = r * 0.8f, r1 = r * 0.9f;
-            const float pts[4][2] = {{c.x + sn * r0 - cs * w, c.y - cs * r0 - sn * w}, {c.x + sn * r1 - cs * w, c.y - cs * r1 - sn * w},
-                                     {c.x + sn * r1 + cs * w, c.y - cs * r1 + sn * w}, {c.x + sn * r0 + cs * w, c.y - cs * r0 + sn * w}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], 0.f, 0.f, 0.f, 0.25f * dimk};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        }
-        flushShapes(1);
-        for (int i = 0; i < N; i++) {
-            if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, th2, 0.95f * dimk);
-        }
-        flushShapes(2);
+        flushShapes();
     }
     std::vector<float> q;
     for (const HudText& h0 : hud) {
@@ -1080,7 +1034,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         k.v.y *= std::exp(-dt * 3.f);
     }
     specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     const float bridgeK = smoothstepf(0.f, 1.f, saturate(bridge_.amount));

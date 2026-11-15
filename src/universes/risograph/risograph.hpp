@@ -35,7 +35,7 @@ private:
     std::vector<Inst> inst_;
     std::vector<Inst> cellInst_; // the pieces' cells: their own ink buffer (the drop prints them in other inks)
     void rule(vec2 a, vec2 b, float width, const vec4& ink);
-    void ring(vec2 c, float r, float width, const vec4& ink, float discR, float discDens, const vec3& discInk);
+    void ring(vec2 c, float r, float width, const vec4& ink);
     void cell(vec2 pos, float scale, float rot, int type, int mask, float alpha, vec2 offA, vec2 offB, float tear = 0.f,
               float starve = 0.f, bool ghost = false, float seed = 0.f);
     void buildBoard(const Game& g);
@@ -117,7 +117,6 @@ private:
     // ---- Game state seen by the universe.
     bool slowOn_ = false;
     float slow_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the sheet's forms alone, no marks, no pieces
     Bridge bridge_;

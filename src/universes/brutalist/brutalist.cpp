@@ -703,12 +703,10 @@ void BrutalistUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = lerp(lerp(ugl::toSrgb(pal_.piece[1]), vec3(1.f), 0.1f), ugl::toSrgb(pal_.piece[2]) * 0.8f, day);
 }
 
-// The panels and the bonus gauge (the lettering: hudLine).
-void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
+// The panels (the lettering: hudLine).
+void BrutalistUniverse::drawHud(const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -717,47 +715,6 @@ void BrutalistUniverse::drawHud(const Game& g, const std::vector<HudRect>& panel
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
         }
-        flushShapes();
-    }
-    // the bonus gauge: a square frame (cast, like the slot), its charge running round it in the accent
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = (project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x) * 0.86f;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const float th = std::max(1.5f, 2.f * s), th2 = std::max(3.f, 6.f * s);
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        auto rect = [&](float x0, float y0, float x1, float y1, const vec3& col, float al) {
-            const float qd[6][6] = {{x0, y0, col.x, col.y, col.z, al}, {x1, y0, col.x, col.y, col.z, al}, {x1, y1, col.x, col.y, col.z, al},
-                                    {x0, y0, col.x, col.y, col.z, al}, {x1, y1, col.x, col.y, col.z, al}, {x0, y1, col.x, col.y, col.z, al}};
-            for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
-        };
-        // the frame
-        const float fa = (g.bonusReady() ? 0.85f : 0.55f) * dimk;
-        rect(c.x - r, c.y - r - th * 0.5f, c.x + r, c.y - r + th * 0.5f, ink, fa);
-        rect(c.x - r, c.y + r - th * 0.5f, c.x + r, c.y + r + th * 0.5f, ink, fa);
-        rect(c.x - r - th * 0.5f, c.y - r, c.x - r + th * 0.5f, c.y + r, ink, fa);
-        rect(c.x + r - th * 0.5f, c.y - r, c.x + r + th * 0.5f, c.y + r, ink, fa);
-        // ticks: one per line of the charge, along the top edge
-        for (int i = 1; i < Game::BONUS_LINES; i++) {
-            const float x = c.x - r + 2.f * r * i / Game::BONUS_LINES;
-            rect(x - th * 0.5f, c.y - r, x + th * 0.5f, c.y - r + th2 * 1.3f, ink, 0.4f * dimk);
-        }
-        flushShapes();
-        // the charge: clockwise from the top left corner
-        float left = fill * 8.f * r;
-        auto run = [&](float x0, float y0, float x1, float y1) {
-            const float len = std::fabs(x1 - x0) + std::fabs(y1 - y0);
-            if (left <= 0.f) return;
-            const float k = std::min(1.f, left / len);
-            left -= len;
-            const float xe = x0 + (x1 - x0) * k, ye = y0 + (y1 - y0) * k;
-            rect(std::min(x0, xe) - th2 * 0.5f, std::min(y0, ye) - th2 * 0.5f, std::max(x0, xe) + th2 * 0.5f, std::max(y0, ye) + th2 * 0.5f, accent,
-                 0.95f * dimk);
-        };
-        run(c.x - r, c.y - r, c.x + r, c.y - r);
-        run(c.x + r, c.y - r, c.x + r, c.y + r);
-        run(c.x + r, c.y + r, c.x - r, c.y + r);
-        run(c.x - r, c.y + r, c.x - r, c.y - r);
         flushShapes();
     }
 }
@@ -1029,7 +986,6 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     }
     flights_.erase(std::remove_if(flights_.begin(), flights_.end(), [](const Flight& fl) { return fl.kind == 0 && fl.scale <= 0.f; }),
                    flights_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The dust: the air's motes drift (and glitter on the grid at a peak); the puffs spread and settle.
     sprites_.clear();
@@ -1377,7 +1333,7 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
     (void)ph;
     (void)refreshK_;

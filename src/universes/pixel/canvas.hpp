@@ -25,7 +25,7 @@ enum Cls : uint8_t {
     K_GAP = 6,     // blocks: their dark edge (a gap at the bridge)
     K_FX = 7,      // effects (explosions, dust, fireworks)
     K_PANEL = 8,   // HUD cards
-    K_HUD = 9,     // HUD text, gauge
+    K_HUD = 9,     // HUD text
     K_PREV_PAL = 0x80,
 };
 

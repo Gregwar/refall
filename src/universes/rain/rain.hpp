@@ -44,7 +44,7 @@ private:
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
-    void drawHud(const Game& g, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudRect>& panels);
     void drawPreviews(const Game& g);
 
     // ---- The rain: near streaks with physics, splashes, drips running down the faces.
@@ -138,7 +138,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float dimT_ = 0.f;
-    float gaugeShown_ = 0.f;
     bool bare_ = false;
     Bridge bridge_;
     Rng rng_{777};

@@ -749,15 +749,12 @@ void CrystalUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The lettering in pale crystal light over a dark halo; the section in the mineral of the moment, followed by its
-// name; the bonus gauge a ring of small facets, charged in the mineral's light.
-void CrystalUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The HUD's panels, on a dark halo of the cave (the lettering: hudLine).
+void CrystalUniverse::drawHud(const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
-    const float s = height_ / 1080.f;
-    const vec3 ink = hex(V.ink), halo = hex(V.rock) * 0.6f;
+    const vec3 halo = hex(V.rock) * 0.6f;
     vec3 accent = ugl::toSrgb(currentColor());
     accent = lerp(accent, vec3(1.f), 0.22f);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
@@ -769,38 +766,7 @@ void CrystalUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, co
         }
         flushShapes();
     }
-
-    // the bonus gauge: a ring of small facets
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 24;
-        for (int i = 0; i < N; i++) {
-            const float am = TAU * (i + 0.5f) / N;
-            const bool on = (i + 0.5f) / N <= fill;
-            const vec3 col = on ? accent : ink;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.55f : 0.26f)) * vis * (1.f - 0.5f * dimT_);
-            const float half = on ? 0.42f : 0.32f; // of the step
-            const float a0 = am - TAU / N * half, a1 = am + TAU / N * half;
-            const float w = (on ? 4.f : 2.4f) * std::max(0.6f, s);
-            const float ri = r - w, ro = r + w * 0.6f;
-            // a small kite: inner point, two shoulders, outer point
-            const float pts[4][2] = {{c.x + std::sin(am) * ri, c.y - std::cos(am) * ri},
-                                     {c.x + std::sin(a0) * r, c.y - std::cos(a0) * r},
-                                     {c.x + std::sin(am) * ro, c.y - std::cos(am) * ro},
-                                     {c.x + std::sin(a1) * r, c.y - std::cos(a1) * r}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        }
-        flushShapes();
-    }
-
 }
-
 
 // The lettering, by the host (text.hpp): Marcellus for the names, labels and numbers, Cormorant Garamond Italic for
 // the song, the section and the celebrations; pale crystal light on a soft halo of the cave's dark, the accent the
@@ -1054,7 +1020,6 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
 
     for (Sparkle& sp : sparkles_) sp.t += dt;
     sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The cave's light: the clusters' glow.
     for (Cluster& cl : clusters_) cl.col = vec3(0.f);
@@ -1316,7 +1281,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

@@ -167,8 +167,7 @@ void main() {
 //     The cell's shape is its square inset at the piece's outline, so a piece is one clean shape and two pieces
 //     always keep a hairline of paper between them.
 //   1 a rule (a filled rectangle). v2: coverage of A, B, C, structure; v3.xy: its half extents.
-//   2 a ring and a tinted disc. v2: ring coverage of A, B, C, structure; v3: radius, ring width, disc radius,
-//     disc density; v4: disc drums A, B, C (weights), -.
+//   2 a ring. v2: coverage of A, B, C, structure; v3.xy: radius, width.
 inline const char* MARK_FS = R"(#version 330 core
 in vec2 vLocal;
 in vec2 vWorld;
@@ -221,11 +220,7 @@ void main() {
     if (kind == 2) {
         float r = length(vLocal);
         float ring = clamp(0.5 - (abs(r - v3.x) - v3.y * 0.5) / px, 0.0, 1.0);
-        float disc = clamp(0.5 - (r - v3.z) / px, 0.0, 1.0);
-        vec4 o = v2 * ring;
-        for (int k = 0; k < 3; k++)
-            if (v4[k] > 0.0) o[k] = max(o[k], v4[k] * disc * v3.w); // a flat tint (no screen)
-        frag = o;
+        frag = v2 * ring;
         return;
     }
     // ---- a piece's cell

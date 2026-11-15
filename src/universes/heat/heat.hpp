@@ -69,7 +69,7 @@ private:
     // ---- The HUD (its lettering: hudLine, the host letters it), and the overlay's readings in the same letters.
     text::Engine text_;
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
-    void drawOverlay(const Game& g, bool bare);
+    void drawOverlay();
     std::vector<float> shapes_;
     void rect(float x0, float y0, float x1, float y1, const vec3& c, float a);
     void flushShapes();
@@ -104,7 +104,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float worldTime_ = 0.f;
     Bridge bridge_;

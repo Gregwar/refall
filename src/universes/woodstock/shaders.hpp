@@ -214,27 +214,22 @@ void main() {
     float p1 = vB.w, p2 = vC.w, p3 = vD.w;
     vec4 acc = vec4(0.0);
     vec3 WH = uWhite;
-    if (kind == 0 || kind == 11) {
-        // a daisy (p1 petals, p2 > 0.5: a face, p3: how open); the bonus flower (p1: its fill, p2: ready)
-        float n = kind == 11 ? 12.0 : p1;
-        float open = kind == 11 ? 1.0 : p3;
+    if (kind == 0) {
+        // a daisy (p1 petals, p2 > 0.5: a face, p3: how open)
+        float n = p1;
+        float open = p3;
         float k;
-        vec2 pp = petalFrame(q, n, kind == 11 ? 1.5708 : 0.0, k);
+        vec2 pp = petalFrame(q, n, 0.0, k);
         float sec = TAU / n;
         float pc = 0.6 * open + 0.05;
         float dP = dEll(pp - vec2(pc, 0.0), vec2(0.4 * open + 0.02, min(0.42, pc * tan(sec * 0.5) * 1.05) * open + 0.02));
         float dC = length(q) - 0.36;
         layer(acc, min(dP, dC) - W, WH);
-        vec3 pcol;
-        if (kind == 11) {
-            float idx = mod(-k, n);
-            pcol = idx + 0.5 < p1 * n ? A : B;
-        } else pcol = mod(k, 2.0) < 0.5 ? A : B;
-        layer(acc, dP, pcol);
+        layer(acc, dP, mod(k, 2.0) < 0.5 ? A : B);
         layer(acc, dC, WH);
         layer(acc, dC + W * 0.8, C);
         layerA(acc, abs(length(q) - 0.2) - 0.035, C * 0.82, 1.0);
-        if ((kind == 0 && p2 > 0.5) || (kind == 11 && p2 > 0.5)) {
+        if (p2 > 0.5) {
             layer(acc, length(q) - 0.33, C);
             face(acc, q, 0.36, uInk, 0.0);
         }

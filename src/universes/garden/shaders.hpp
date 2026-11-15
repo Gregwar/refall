@@ -101,7 +101,7 @@ uniform float uGlowAmt, uSlow, uBridge, uSeed, uPx, uStars, uVeil, uDry, uHaze, 
 uniform vec4 uGroundL, uGroundR; // each bank: lip, height, start, end (not mirrored)
 uniform vec2 uRaise;             // the ground raised beside the well (left, right), following the outer columns
 uniform vec4 uHalo[16];          // the previews' cells (center, half size, strength): a soft pale halo over the earth
-uniform vec4 uHaloRing;          // the bonus gauge (center, radius, strength), the same halo
+uniform vec4 uHaloRing;          // the bonus gauge's spot (center, radius, strength), the same halo
 uniform float uColTop[10];       // the stack's surface over each column of the well (the floor where it is empty)
 uniform float uRoots;            // how far the grass's roots reach under the banks
 // the ground line before it rises beside the well
@@ -381,7 +381,7 @@ void main() {
 
 // ---------------------------------------------------------------- sprites
 // Kinds: 0 a blade of grass or a stem (root at x, y; half width, length; bent), 1 a soft dot (dust, pollen,
-// fireflies), 2 a flower head (opening), 3 a petal, 4 a seed with its pappus, 5 the bonus gauge, 6 a bud.
+// fireflies), 2 a flower head (opening), 3 a petal, 4 a seed with its pappus, 6 a bud.
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aQ;
 layout(location = 1) in vec4 a0;   // x, y, half x (width), half y (length)
@@ -413,7 +413,6 @@ in vec2 vQ;
 flat in vec4 v1, v2, v3;
 out vec4 frag;
 uniform vec3 uCenter;   // the flowers' hearts
-uniform vec3 uRing;     // the gauge's ring
 void main() {
     int kind = int(v1.y + 0.5);
     vec3 col = v2.rgb;
@@ -449,15 +448,6 @@ void main() {
         float fil = pow(abs(cos(ang * 5.0)), 12.0) * smoothstep(1.0, 0.85, r) * step(0.15, r) * 0.5;
         float fuzz = smoothstep(1.0, 0.5, r) * 0.18;
         a = max(core, max(fil, fuzz));
-    } else if (kind == 5) {
-        // the bonus gauge: a fine ring, a meadow rising inside it
-        float fill = v1.z, ready = v1.w;
-        float ring = smoothstep(0.035, 0.0, abs(r - 0.96)) * (0.55 + 0.45 * ready);
-        float inside = smoothstep(0.92, 0.89, r);
-        float lvl = -0.9 + 1.8 * fill + 0.03 * sin(vQ.x * 9.0 + v3.z);
-        float f = inside * smoothstep(lvl + 0.02, lvl - 0.02, vQ.y) * step(0.001, fill);
-        col = mix(uRing, v2.rgb * (0.8 + 0.3 * smoothstep(lvl - 0.6, lvl, vQ.y)), f);
-        a = max(ring, f);
     } else if (kind == 6) {
         // a bud: a closed drop of color in a green sheath
         vec2 q = vQ;

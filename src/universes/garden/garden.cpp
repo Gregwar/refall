@@ -907,8 +907,6 @@ void GardenUniverse::simulate(const Game& game, const MusicState& music, float d
         slumpT_[y] += dt;
         if (slumpT_[y] >= COLLAPSE) slumpFrom_[y] = 0.f;
     }
-
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -1210,7 +1208,6 @@ void GardenUniverse::flushSprites() {
     glUseProgram(progSprite_);
     setMat(progSprite_, "uVP", vp_);
     set3f(progSprite_, "uCenter", pal_.center);
-    set3f(progSprite_, "uRing", pal_.ink);
     glBindVertexArray(spriteVao_);
     glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
     glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);
@@ -1903,16 +1900,6 @@ void GardenUniverse::render(const Frame& f, GLuint fbo) {
         if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     flushCells();
-    // ---- The bonus gauge: a fine ring, a meadow rising inside, a flower opening in it when it is ready.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const float ready = game.bonusReady() || game.bonusActive() ? 1.f : 0.f;
-        sprite(gc.x, gc.y, R, R, 0.f, 5, lerp(pal_.lush, pal_.grass, 0.3f), 0.85f * (1.f - 0.6f * smoothstepf(0.3f, 0.95f, bridge)),
-               fill, ready, 0.f, 0.f, worldTime_ * 0.5f);
-        if (ready > 0.f) sprite(gc.x, gc.y + 0.1f, 0.34f, 0.34f, worldTime_ * 0.05f, 2, pal_.flower[0], world, 1.f, 6.f);
-    }
     // ---- Dust of the stack itself (crumbling rows, landings, falling flowers).
     drawParticles(true, world);
     flushSprites();

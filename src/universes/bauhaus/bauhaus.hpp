@@ -57,7 +57,7 @@ private:
     void textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, float angle,
                    std::vector<float>& out) const;
     void drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha);
-    void drawHud(const Frame& f); // the HUD's panels, gauge and small forms
+    void drawHud(const Frame& f); // the HUD's panels and small forms
 
     // ---- The poster: forms eased between compositions set on the bar grid.
     enum Slot { F_CIRCLE, F_RING, F_SQUARE, F_TRIANGLE, F_HALF, F_QUARTER, F_BAR0, F_BAR1, F_LINE0, F_LINE1,
@@ -179,8 +179,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
-    bool bare_ = false; // this frame is the world alone (a break): the poster, no game, no veil, no gauge
+    bool bare_ = false; // this frame is the world alone (a break): the poster, no game, no veil
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

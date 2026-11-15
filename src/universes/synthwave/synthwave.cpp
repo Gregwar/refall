@@ -63,7 +63,7 @@ vec2 operator*(vec2 a, float k) { return {a.x * k, a.y * k}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
 // The variants: each a night, graded like a film (sRGB here, linear once loaded). Fields: the sky above, the haze
-// on the horizon, the sun's core and limb, the road, the grid's lines, the accent (HUD, gauge), the lens streak
+// on the horizon, the sun's core and limb, the road, the grid's lines, the accent (HUD), the lens streak
 // tint, the lamps, the seven piece lights (I O T S Z J L), then fog density, rain, street lamps, a city skyline,
 // a moon instead of the sun, stars.
 struct VariantDef {
@@ -556,7 +556,6 @@ void SynthwaveUniverse::onEvent(const GameEvent& ev, const Game&) {
         break;
     }
     case GameEvent::BonusReady:
-        readyT_ = 0.f;
         glints_.push_back({v2(layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y + layout::GAUGE_R), 0.f, 0.9f, 1.0f,
                            lerp(pal_.accent, vec3(1.f), 0.4f)});
         break;
@@ -706,9 +705,6 @@ void SynthwaveUniverse::simulate(const Game& game, const MusicState& music, floa
                  dying_.end());
     for (auto& g : glints_) g.t += dt;
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > g.life; }), glints_.end());
-
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
-    readyT_ += dt;
 }
 
 // =====================================================================================================
@@ -866,13 +862,6 @@ void SynthwaveUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.f : 0.7f);
-    }
-    // The bonus gauge: a ring with a light rising in it.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const float ready = g.bonusReady() ? 1.f : 0.f, active = g.bonusActive() ? 1.f : 0.f;
-        tile(gc.x, gc.y, R * 1.6f, R * 1.6f, vec3(1.f), 1.f, 4, -1.f, 0.f, saturate(gaugeShown_), ready, active, R);
     }
 }
 
@@ -1280,13 +1269,8 @@ void SynthwaveUniverse::render(const Frame& f, GLuint fbo) {
         setMat(progTile_, "uVP", vp_);
         set1f(progTile_, "uPx", px_);
         set3f(progTile_, "uSkyTop", pal_.skyTop);
-        set3f(progTile_, "uSunCore", pal_.sunCore);
-        set3f(progTile_, "uSunEdge", pal_.sunEdge);
-        set3f(progTile_, "uGrid", pal_.grid);
-        set3f(progTile_, "uAcc", pal_.accent);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
-        set1f(progTile_, "uTime", worldTime_);
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);

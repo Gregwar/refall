@@ -1001,7 +1001,6 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         dying_.erase(std::remove_if(dying_.begin(), dying_.end(),
                                     [](const Dying& d) { return d.t > d.delay + (d.over ? 1.4f : 0.5f); }),
                      dying_.end());
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
         // the trails, as the ground shows them
         glBindTexture(GL_TEXTURE_2D, pherTex_);
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, tw_, th_, GL_RED, GL_FLOAT, trace_.data());
@@ -1020,7 +1019,7 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     top_.clear();
     const float shA = V.shadow;
     const float glint = 0.25f * pk + 0.5f * dropMix_;
-    // a break: the substrate, its terminals, traces and charges alone (no cubes, fragments, sparks nor gauge)
+    // a break: the substrate, its terminals, traces and charges alone (no cubes, fragments nor sparks)
     const bool gameOn = !f.bare;
     // the stack
     for (int y = Game::HIDDEN; y < Game::H && gameOn; y++)
@@ -1138,25 +1137,6 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
         const float al = (1.f - k) * (1.f - k) * world;
         over_.push_back({{fl.p.x, fl.p.y, fl.r * 1.3f, fl.r * 1.3f}, {0.f, 6.f, 0.f, al}, {fl.col.x, fl.col.y, fl.col.z, 0.f},
                          {fl.r * (0.7f + 0.3f * k), 0.f, 0.f, 0.f}});
-    }
-    // the bonus gauge: twelve grains of sugar in a ring
-    if (gameOn) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R * 0.78f;
-        const int N = Game::BONUS_LINES;
-        const float lvl = saturate(gaugeShown_) * N;
-        const bool ready = game.bonusReady(), active = game.bonusActive();
-        const vec3 lit = ready || active ? hex(V.accent) : hex(V.ink);
-        for (int i = 0; i < N; i++) {
-            const float ang = PI * 0.5f - TAU * i / N;
-            const vec2 p = v2(gc.x + std::cos(ang) * R, gc.y + std::sin(ang) * R);
-            const float fill = saturate(lvl - i);
-            const float s = 0.075f;
-            top_.push_back({{p.x, p.y, 0.14f, 0.14f}, {0.f, 4.f, 0.f, 0.35f}, {hex(V.dim).x, hex(V.dim).y, hex(V.dim).z, 1.f},
-                            {s * 0.75f, 0.012f, 0.f, 0.f}});
-            if (fill > 0.f)
-                top_.push_back({{p.x, p.y, s * 2.6f, s * 2.6f}, {ang + PI * 0.25f, 3.f, 0.f, fill}, {lit.x, lit.y, lit.z, ready || active ? 0.8f : 0.f}, {s, 0.f, 0.f, 0.f}});
-        }
     }
 
     // ---- draw

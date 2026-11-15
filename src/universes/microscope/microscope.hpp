@@ -97,7 +97,7 @@ private:
     void drawText(const Font& f, const std::vector<float>& quads, bool accent, float alpha);
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
-    void flushShapes(int mode);
+    void flushShapes();
     vec3 inkIn_, inkOut_, accentIn_, accentOut_, haloIn_, haloOut_;
 
     // ---- GL.
@@ -127,7 +127,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     bool bare_ = false; // this frame is the world alone (a break): the dish and its life, no tissue, no reticle
     float dimT_ = 0.f;
     Bridge bridge_;
