@@ -932,7 +932,10 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             int all[4][2], m = 0;
             for (int i = 0; i < 4; i++)
                 if (cells[i][1] >= 0) { all[m][0] = cells[i][0]; all[m][1] = cells[i][1]; m++; }
-            addPiece(out, mix(activeId_, 0x5C21), all, m, v2(o.x, o.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
+            // (it falls by half cells: whole cells read as jerks; the hand redraws it every half cell)
+            const float dy = std::round((g.pieceVisualY() - (float)p.y) * 2.f) * 0.5f;
+            const vec3 oh = cellPos(0.f, dy);
+            addPiece(out, mix(activeId_, 0x5C21), all, m, v2(oh.x, oh.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
         }
     }
 
