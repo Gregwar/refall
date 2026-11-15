@@ -15,7 +15,8 @@
 // a quad blows the smoke outward and opens the light; slow motion is a pin
 // spot (the lamp swings straight overhead, cold and narrow, the smoke hangs almost still); game over turns the lamp
 // off (its filament cooling to orange), the stack going dark row by row while the smoke rises over it. A change of
-// universe thickens the smoke until it fills the frame.
+// universe thickens the smoke until it fills the frame. Before a song the lamp warms up from its filament and its
+// iris opens while the smoke rises in; after one the iris closes, the lamp cools back down and dies, the smoke thinning.
 //
 // Cost: the smoke (a slab of noise ray-marched through the beam, with a few steps toward the lamp for the shafts)
 // is drawn at a reduced resolution (at most 400 lines); only the well, the blocks, the sprites and the text are
@@ -405,7 +406,7 @@ float SmokeUniverse::spotAt(const vec3& p) const {
     const float a = dot(v, ax);
     if (a <= 0.5f) return 0.f;
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    const float cone = cur_.cone * (1.f + 0.08f * wm + 0.3f * wp + iris_);
+    const float cone = cur_.cone * stageIris_ * (1.f + 0.08f * wm + 0.3f * wp + iris_);
     const float r = length(v - ax * a) / (a * cone);
     const float edge = 1.f - smoothstepf(0.85f, 1.05f, r);
     return edge * lerpf(1.f, 0.7f, r * r) / (1.f + a * a * 0.0004f);
@@ -712,7 +713,7 @@ void SmokeUniverse::buildFx() {
     blades_.clear();
     motes_.clear();
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
-    const float lightOn = 1.f - over_;
+    const float lightOn = lamp_;
     const float gain = cur_.gain * lightOn;
     wisps_.clear();
     // the smoke puffs, lit by the beam where they drift into it (all kicked up by the game: none in a break)
@@ -883,7 +884,7 @@ void SmokeUniverse::drawSmoke() {
     const float thick = smoothstepf(0.0f, 0.85f, bridge_.amount);
     const float blast = blastT_ < 4.f ? smoothstepf(0.f, 0.25f, blastT_) * (1.f - smoothstepf(1.f, 4.f, blastT_)) : 0.f;
     const vec3 ax = lampAxis();
-    const float lightOn = 1.f - over_;
+    const float lightOn = lamp_;
     // (the light never pulses with the beat or the kicks: the section and the drop's swell set it)
     const float gain = cur_.gain * (0.95f + 0.15f * wm + 0.5f * wp + 0.6f * swell_) *
                        lightOn * (1.f - 0.6f * thick);
@@ -897,17 +898,17 @@ void SmokeUniverse::drawSmoke() {
     set4f(progSmoke_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set3f(progSmoke_, "uLPos", lampPos());
     set3f(progSmoke_, "uLAxis", ax);
-    set1f(progSmoke_, "uCone", cur_.cone * (1.f + 0.08f * wm + 0.3f * wp + iris_ + 0.4f * thick));
+    set1f(progSmoke_, "uCone", cur_.cone * stageIris_ * (1.f + 0.08f * wm + 0.3f * wp + iris_ + 0.4f * thick));
     set3f(progSmoke_, "uLCol", cur_.light * cur_.smoke);
     set3f(progSmoke_, "uFill", cur_.fill * (0.3f + 1.2f * thick));
     set1f(progSmoke_, "uGain", gain);
     set1f(progSmoke_, "uHaze", 0.009f * cur_.haze * (1.f + 0.2f * wm + 0.4f * wp));
-    set1f(progSmoke_, "uSmoke", 0.06f * cur_.smokeAmt * (1.f + 1.6f * wm + 3.0f * wp));
+    set1f(progSmoke_, "uSmoke", 0.06f * cur_.smokeAmt * stageSmoke_ * (1.f + 1.6f * wm + 3.0f * wp));
     set1f(progSmoke_, "uWarp", 1.1f + 0.6f * bass_ + 0.4f * surge_);
     set1f(progSmoke_, "uCov", 0.56f - 0.04f * wm - 0.06f * wp);
     set1f(progSmoke_, "uExt", 1.0f);
     set1f(progSmoke_, "uShadowK", 1.6f);
-    set3f(progSmoke_, "uFlow", flow_);
+    set3f(progSmoke_, "uFlow", flow_ + vec3(0.f, stageRise_, 0.f));
     set1f(progSmoke_, "uSwirl", swirl_);
     setWell(progSmoke_);
     set1f(progSmoke_, "uBlast", 2.f + 22.f * smoothstepf(0.f, 3.f, blastT_));
@@ -940,7 +941,15 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
     }
     // game over: the lamp dies (its filament cooling to orange), then the smoke rises
     over_ = overT_ >= 0.f ? smoothstepf(0.6f, 3.2f, overT_) * 0.85f : approach(over_, 0.f, 1.5f, dt);
-    if (over_ > 0.001f) cur_.light = lerp(cur_.light, lin(0xff6a24), smoothstepf(0.f, 0.6f, over_));
+    // the setup: the lamp warms up from its filament and the iris opens while the smoke rises in; the teardown: the
+    // iris closes, the lamp cools back to its filament and dies, the smoke thinning out
+    const float off = std::max(1.f - smoothstepf(0.05f, 0.75f, f.setup), smoothstepf(0.25f, 0.95f, f.teardown));
+    lamp_ = (1.f - over_) * (1.f - off);
+    stageIris_ = lerpf(0.3f, 1.f, 1.f - std::max(1.f - smoothstepf(0.2f, 0.9f, f.setup), smoothstepf(0.f, 0.8f, f.teardown)));
+    stageSmoke_ = lerpf(0.15f, 1.f, smoothstepf(0.f, 0.85f, f.setup) * (1.f - 0.7f * smoothstepf(0.3f, 1.f, f.teardown)));
+    stageRise_ = 2.5f * (1.f - smoothstepf(0.f, 0.95f, f.setup)) - 1.5f * smoothstepf(0.f, 1.f, f.teardown);
+    const float cool = std::max(over_, off);
+    if (cool > 0.001f) cur_.light = lerp(cur_.light, lin(0xff6a24), smoothstepf(0.f, 0.6f, cool));
     overFog_ = approach(overFog_, overT_ > 1.5f ? 0.55f : 0.f, overT_ >= 0.f ? 0.12f : 1.5f, dt);
     const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.2f, slow_);
     // (a break's bare frame drawn beside the whole one passes no time: the whole one moves the smoke on, and must
@@ -960,8 +969,8 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
     buildFx();
 
     const vec3 lp = lampPos(), ax = lampAxis();
-    const float cone = cur_.cone * (1.f + 0.08f * wm + 0.3f * wp + iris_);
-    const float lightOn = 1.f - over_;
+    const float cone = cur_.cone * stageIris_ * (1.f + 0.08f * wm + 0.3f * wp + iris_);
+    const float lightOn = lamp_;
 
     // ---- The stage at full resolution.
     glBindFramebuffer(GL_FRAMEBUFFER, sceneT_.fbo);
