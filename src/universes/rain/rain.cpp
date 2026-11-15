@@ -1128,32 +1128,15 @@ void RainUniverse::drawPreviews(const Game& g) {
 // The HUD
 // =====================================================================================================
 
-// The HUD's panels and the bonus gauge, a ring of twelve drops filling with it (the lettering: hudLine, the host
-// letters it).
-void RainUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
+// The HUD's panels (the lettering: hudLine, the host letters it).
+void RainUniverse::drawHud(const std::vector<HudRect>& panels) {
     const VariantDef& V = VARIANTS[variant_];
-    const vec3 ink(0.92f, 0.93f, 0.96f), accent = lerp(hex(V.neon[0]), vec3(1.f), 0.15f), halo = hex(V.panel);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
+    const vec3 accent = lerp(hex(V.neon[0]), vec3(1.f), 0.15f), halo = hex(V.panel);
 
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
             box(r.x + r.w * 0.5f, r.y + r.h * 0.5f, r.w * 0.5f, r.h * 0.5f, c, std::min(1.f, r.alpha));
-        }
-        flushShapes();
-    }
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        for (int i = 0; i < 12; i++) {
-            const float a = -PI * 0.5f + i * TAU / 12.f;
-            const float x = c.x + r * std::cos(a), y = c.y + r * std::sin(a);
-            const float lit = saturate(fill * 12.f - i);
-            const float dr = r * 0.11f;
-            disc(x, y, dr, dr * 1.25f, ink, 0.22f * vis);
-            if (lit > 0.f) disc(x, y, dr, dr * 1.25f, accent, lit * 0.95f * vis);
-            if (g.bonusReady()) disc(x, y, dr * 2.6f, dr * 2.6f, accent, 0.25f * vis * (0.6f + 0.4f * std::sin(time_ * 2.f + i * 0.5f)), 1.f);
         }
         flushShapes();
     }
@@ -1264,7 +1247,6 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         neonGain_ = lerpf(1.f, (0.75f + 0.8f * surge_) * flicker, ease(storm_));
         sweepX_ = (float)std::sin(beat * PI / 8.0) * viewH_.x;
     }
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     // the HUD's bottom corner lines: the heaps dim under them
     if (!bare_) {
         textRects_.clear();
@@ -1367,7 +1349,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         if (f.fade < 0.999f) box(width_ * 0.5f, height_ * 0.5f, width_ * 0.5f + 2.f, height_ * 0.5f + 2.f, vec3(0.f), 1.f - saturate(f.fade));
         flushShapes();
     }
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

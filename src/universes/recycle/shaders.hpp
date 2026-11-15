@@ -5,8 +5,8 @@
 // with the cubes' shadows, rendered first into a coverage target (SHADOW_FS, max-blended so overlapping shadows of
 // one light never double). CUBE_FS draws everything else on the table as instanced quads: the cubes (a flat top
 // face with softly rounded edges, lit from the upper left; matte, glossy or wooden), the soft contact shadow a cube
-// casts on the cubes under it, the flat printed silhouettes of the previews, the ghost's outline and the gauge's
-// pips. Colors are linear; the post pass encodes them.
+// casts on the cubes under it, the flat printed silhouettes of the previews and the ghost's outline. Colors are
+// linear; the post pass encodes them.
 
 namespace recycle_shaders {
 
@@ -211,16 +211,6 @@ void main() {
         float lw = uLineW * aa;
         float band = 1.0 - smoothstep(lw * 0.5, lw * 0.5 + aa, abs(sd + lw));
         float a = band * vB.a;
-        frag = vec4(base * a, a);
-        return;
-    }
-    if (kind == 4) {
-        // a gauge pip: a small square, filled (d.z 1) or only outlined
-        float sd = rbox(vLocal, 0.5, 0.18);
-        float lw = uLineW * aa;
-        float fill = 1.0 - smoothstep(-aa, aa, sd);
-        float ring = 1.0 - smoothstep(lw * 0.5, lw * 0.5 + aa, abs(sd + lw));
-        float a = mix(ring, fill, vD.z) * vB.a;
         frag = vec4(base * a, a);
         return;
     }

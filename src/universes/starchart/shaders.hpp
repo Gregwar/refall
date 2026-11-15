@@ -234,7 +234,7 @@ inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
 layout(location = 2) in vec4 aB; // tint rgb, alpha
-layout(location = 3) in vec4 aC; // mode (0 piece, 1 ghost, 2 gauge), erase 0..1, shine, drain
+layout(location = 3) in vec4 aC; // mode (0 piece, 1 ghost), erase 0..1, shine, drain
 uniform mat4 uVP;
 out vec2 vLocal;
 out vec2 vWorld;

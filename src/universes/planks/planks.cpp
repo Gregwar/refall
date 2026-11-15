@@ -983,12 +983,10 @@ void PlanksUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = ugl::toSrgb(pale ? mixDisplay(lin(V.accent), lin(0x000000), 0.12f) : lin(V.accent));
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a ring of twelve little planks laid like the spokes of a
-// wheel, the charged ones in the accent.
+// The panels (the lettering: hudLine).
 void PlanksUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
@@ -997,33 +995,6 @@ void PlanksUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) 
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = Game::BONUS_LINES;
-        auto plank = [&](float cx, float cy, float ang, float len, float wid, const vec3& col, float al) {
-            const float ux = std::sin(ang), uy = -std::cos(ang), vx = -uy, vy = ux;
-            const float hl = len * 0.5f, hw = wid * 0.5f;
-            const float px[4] = {cx - ux * hl - vx * hw, cx + ux * hl - vx * hw, cx + ux * hl + vx * hw, cx - ux * hl + vx * hw};
-            const float py[4] = {cy - uy * hl - vy * hw, cy + uy * hl - vy * hw, cy + uy * hl + vy * hw, cy - uy * hl + vy * hw};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {px[k], py[k], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        for (int i = 0; i < N; i++) {
-            const float a = TAU * i / N;
-            const float cx = c.x + std::sin(a) * r * 0.78f, cy = c.y - std::cos(a) * r * 0.78f;
-            const float part = saturate(fill * N - i);
-            const float al = (g.bonusReady() ? 0.8f : 0.45f) * vis * (1.f - 0.5f * dimT_);
-            plank(cx, cy, a, r * 0.5f, r * 0.13f, ink, al * (1.f - part) * 0.55f);
-            plank(cx, cy, a, r * 0.5f, r * 0.13f, accent, part * 0.95f * vis * (1.f - 0.5f * dimT_));
         }
         flushShapes();
     }
@@ -1203,7 +1174,6 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
         if (trainS_ < lo) { trainS_ = lo; trainDir_ = 1.f; }
     }
     updateFlights(f.paused ? 0.f : dt);
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Geometry.
     inst_.clear();

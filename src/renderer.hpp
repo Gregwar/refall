@@ -4,11 +4,13 @@
 // only the active universe renders, straight to the window.
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <glad/gl.h>
 
 #include "layout.hpp"
+#include "hud.hpp"
 #include "text.hpp"
 #include "titlecard.hpp"
 #include "transitions.hpp"
@@ -57,6 +59,10 @@ public:
     void setBonus(bool on);
     void setDim(bool d) { dim_ = d; }
     void setPanels(std::vector<HudRect> p) { panels_ = std::move(p); }
+    // The unified HUD (hud.hpp): the host letters every universe's HUD in one typographic system, each universe
+    // giving only its colors (Universe::hudInk). On by default; ZEN_HUD=universe turns it off at start.
+    void setUnifiedHud(bool on) { unified_ = on; }
+    bool unifiedHud() const { return unified_; }
     // The speed gauge (the app's HUD): a hairline (pixels, top-left origin: its left end, its width) filled to `pos`
     // (0 .. 1), the hyperdrop's zone from `zone` on (< 0: none), `hot` 0 .. 1 while hyperdrop is on. The host draws
     // it over every universe in the ink of its labels (and their accent for the zone and hyperdrop).
@@ -139,8 +145,41 @@ private:
     Speed speed_;
     GLuint speedProg_ = 0;
     void speedGauge(Universe& u);
-    // ---- The HUD lettered by the host (Universe::hostText).
+    // ---- The bonus gauge, the same in every universe: a fine ring round layout::GAUGE_CENTER in the label ink, its
+    // charge running clockwise from 12 o'clock; full, it takes the accent and a soft glow; in the bonus it drains.
+    GLuint ringProg_ = 0;
+    float ringShown_ = 0.f, ringHot_ = 0.f; // the charge and the full / running look as shown (eased)
+    void bonusRing(Universe& u, const Game& game, double time);
+    // the label ink and its accent where a label at (x, y) (pixels) is lettered: the unified HUD's, or u's own
+    // hudLine's (false: u letters its own HUD, none to read)
+    bool labelInks(Universe& u, float x, float y, vec3& ink, vec3& acc);
+    // ---- The HUD lettered by the host (Universe::hostText, or every universe in the unified HUD).
     text::Engine text_;
+    bool unified_ = false;
+    Universe* mixWith_ = nullptr; // the unified HUD during a change: the incoming universe's colors, mixed by mixT_
+    float mixT_ = 0.f;
+    bool hosted(const Universe& u) const { return unified_ || u.hostText(); }
+    // line h in the HUD's style: the unified one in u's colors, else u's own hudLine
+    void style(Universe& u, const HudText& h, text::Line& out);
+    HudInk inkOf(Universe& u, const HudText& h);
+    // what is behind each line, read from the frame (see sampleFrame), each line's side (pale / deep ink) eased
+    struct Sampler {
+        GLuint tex = 0, fbo = 0, pbo[2] = {0, 0};
+        int w = 0, h = 0, cur = 0;
+        bool filled[2] = {false, false};
+        std::vector<unsigned char> px; // the last frame read, 1/8 scale, RGBA, rows from the bottom
+        int pw = 0, ph = 0;
+        uint64_t frame = 0;
+        struct Side { float deep = 0, target = 0; uint64_t seen = 0; };
+        std::unordered_map<uint64_t, Side> lines;
+    } smp_;
+    float hudDt_ = 0.f;
+    void sampleFrame();
+    void backdrop(const HudText& h, float x0, float y0, float x1, float y1, hud::Backdrop& out);
+    // the HUD handed to u's render(): in the unified HUD, a universe lettering its own gets its lines silent
+    // (alpha 0, their text and roles kept for what it reads from them), so it draws no text of its own
+    const std::vector<HudText>& quiet(const Universe& u, const std::vector<HudText>& hud, std::vector<HudText>& store) const;
+    static Frame withHud(const Frame& f, const std::vector<HudText>& hud);
     // each line of `hud` as `u` styles it, with its box (pixels) where it is lettered
     void hudLines(Universe& u, const std::vector<HudText>& hud, std::vector<text::Line>& lines, std::vector<vec4>& boxes);
     // letters them (alpha x `weight`); `night` 0..1 turns them to white letters on the black (the effects fade)

@@ -115,7 +115,6 @@ private:
     bool slowOn_ = false;
     float time_ = 0.f, world_ = 0.f;
     float dimT_ = 0.f;
-    float gaugeShown_ = 0.f;
     Bridge bridge_;
     Rng rng_{31337};
 };

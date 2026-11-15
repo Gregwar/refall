@@ -36,7 +36,6 @@ private:
     void rectPxClip(float x0, float y0, float x1, float y1, const vec3& c, float a, const float clip[4]);
     void rectB(float x0, float y0, float x1, float y1, const vec3& c, float a); // board units (y up)
     void discB(float cx, float cy, float r, const vec3& c, float a);
-    void ringPx(float cx, float cy, float rIn, float rOut, float fill, const vec3& c, float a);
     void flushShapes();
     vec2 px(float x, float y) const; // board -> pixels
     float unitPx_ = 45.f;            // pixels per board unit
@@ -59,7 +58,7 @@ private:
     void textQuads(const Font& f, const std::string& s, float x, float base, float capPx, float track, int rot,
                    std::vector<float>& out) const;
     void drawText(const Font& f, const std::vector<float>& q, const vec3& ink, float alpha, bool adaptive = false);
-    void drawHud(const Game& g, const std::vector<HudRect>& panels); // the HUD's panels and gauge
+    void drawHud(const std::vector<HudRect>& panels); // the HUD's panels
 
     // ---- The poster's composition: elements eased between layouts set on the bar grid.
     enum Slot { E_TITLE, E_ARTIST, E_SECTION, E_FIELD0, E_FIELD1, E_FIELD2, E_DISC, E_RULE0, E_RULE1, E_RULE2,
@@ -128,8 +127,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
-    bool bare_ = false; // this frame is the world alone (a break): the poster, no game, no veil, no gauge
+    bool bare_ = false; // this frame is the world alone (a break): the poster, no game, no veil
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

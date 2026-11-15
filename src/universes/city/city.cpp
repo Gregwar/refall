@@ -823,7 +823,6 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
             p.p = p.p + p.v * dt;
         }
         sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Particle& p) { return p.delay <= 0.f && p.t >= p.life; }), sparks_.end());
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
         if (!f.bare) updateWindows(game, dt); // (a break's board is blank: the windows are kept as they are)
     }
 
@@ -1138,9 +1137,8 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
 
-    // ---- The previews (small lit windows) and the gauge, on the board plane (none in a break's frame).
+    // ---- The previews (small lit windows), on the board plane (none in a break's frame).
     wins_.clear();
-    dots_.clear();
     if (!f.bare) {
         auto preview = [&](int type, vec2 center, float sc, float level) {
             if (type < 0) return;
@@ -1173,24 +1171,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progWin_, "uBridgeInk", bridge_.ink);
             drawInst(wins_);
         }
-        {
-            // the gauge: twelve small windows in a ring, lit one by one as it charges (a step per line)
-            const vec3 gc = layout::GAUGE_CENTER;
-            const bool ready = game.bonusReady(), active = game.bonusActive();
-            const float fill = active ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-            const float pulse = ready && music.hasSong ? 0.75f + 0.25f * std::cos((float)std::fmod(music.beat / 2.0, 1.0) * TAU) : 1.f;
-            for (int i = 0; i < 12; i++) {
-                const float a = PI * 0.5f - TAU * (i + 0.5f) / 12.f;
-                const vec3 p(gc.x + std::cos(a) * layout::GAUGE_R, gc.y + std::sin(a) * layout::GAUGE_R, 0.f);
-                const float k = ready ? 1.f : saturate(fill * 12.f - i);
-                const vec3 lc = lerp(pal_.text * 0.03f, pal_.accent * (active ? 1.2f : 0.9f) * pulse, k);
-                dot(p, 0.1f, lc, worldOn * (1.f - 0.4f * dimT_), vec3(1.f, 0.f, 0.f), 0.f, 2.f);
-            }
-        }
     }
-    glBlendFunc(GL_ONE, GL_ONE);
-    glUseProgram(progDot_);
-    drawInst(dots_);
     glDisable(GL_BLEND);
 
     // ---- Bloom: the lit windows and lights glow in the night air (wider in slow motion).

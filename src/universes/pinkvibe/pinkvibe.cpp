@@ -83,7 +83,7 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-enum Kind { K_PANEL = 0, K_PETAL, K_HEART, K_BUBBLE, K_SPARKLE, K_RING };
+enum Kind { K_PANEL = 0, K_PETAL, K_HEART, K_BUBBLE, K_SPARKLE };
 
 constexpr float CLEAR_T = 0.36f;   // a cleared tile vanishes in this long (real time)
 
@@ -114,9 +114,9 @@ private:
     struct Sprite { float a[4], b[4], c[4], d[4]; };
     std::vector<Sprite> sprites_;
     void sprite(int kind, float x, float y, float hx, float hy, float rot, float alpha, const vec3& A,
-                const vec3& B = vec3(1.f), float p1 = 0.f, float p2 = 0.f, float p3 = 0.f) {
+                const vec3& B = vec3(1.f), float p1 = 0.f) {
         if (alpha <= 0.004f || hx <= 0.f || hy <= 0.f) return;
-        sprites_.push_back({{x, y, hx, hy}, {rot, (float)kind, alpha, p1}, {A.x, A.y, A.z, p2}, {B.x, B.y, B.z, p3}});
+        sprites_.push_back({{x, y, hx, hy}, {rot, (float)kind, alpha, p1}, {A.x, A.y, A.z, 0.f}, {B.x, B.y, B.z, 0.f}});
     }
     void flushSprites();
 
@@ -160,7 +160,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
     Rng rng_{0x9171u};
@@ -602,7 +601,6 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         p.rot += p.spin * dt;
     }
     parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Part& p) { return p.age >= p.life; }), parts_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // =========================================================== the bands
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -657,14 +655,6 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
             if (!p.front) continue;
             const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);
             sprite(K_PETAL, p.x, p.y, p.size, p.size * 0.6f, p.rot, a, p.col, lerp(p.col, vec3(1.f), 0.5f));
-        }
-        // the bonus ring: its arc fills with the gauge, a heart in its middle when it's ready
-        {
-            const vec3 gc = layout::GAUGE_CENTER;
-            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-            const bool on = game.bonusReady() || game.bonusActive();
-            const float r = layout::GAUGE_R * (on ? 1.f + 0.03f * std::sin(time_ * 2.5f) : 1.f);
-            sprite(K_RING, gc.x, gc.y, r, r, 0.f, 1.f, accent_, lerp(well_, rim_, 0.35f), fill, on ? 1.f : 0.f);
         }
         flushSprites();
 

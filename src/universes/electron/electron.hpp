@@ -142,7 +142,6 @@ private:
     float slow_ = 0;
     float dimT_ = 0;
     float overT_ = -1;
-    float gaugeShown_ = 0;
     float clock_ = 0;
     Bridge bridge_;
     Rng rng_{0xA175};

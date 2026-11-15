@@ -88,7 +88,7 @@ private:
     int dripTurn_ = 0;
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes();
 
@@ -137,8 +137,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
-    bool bare_ = false; // this frame is the world alone (a break): no stones, no gauge, no plates
+    bool bare_ = false; // this frame is the world alone (a break): no stones, no plates
     float dimT_ = 0.f;
     Bridge bridge_;
     Rng rng_{4242};

@@ -1,7 +1,7 @@
 #pragma once
 // PINK VIBE's shaders. Flat design in display (sRGB) colors, every shape a signed distance field without outlines:
 // the flowing bands behind everything (with their sparse sparkles and bubbles), the sprites (the well's backing,
-// petals, hearts, bubbles, the bonus ring), the blocks (one soft rounded tile per cell and one small motif per piece
+// petals, hearts, bubbles), the blocks (one soft rounded tile per cell and one small motif per piece
 // type), the lettering on a feathered blush halo.
 
 namespace pinkvibe_shaders {
@@ -129,8 +129,8 @@ inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA;  // x, y, half width, half height (board units)
 layout(location = 2) in vec4 iB;  // rotation, kind, alpha, p1
-layout(location = 3) in vec4 iC;  // color A, p2
-layout(location = 4) in vec4 iD;  // color B, p3
+layout(location = 3) in vec4 iC;  // color A, -
+layout(location = 4) in vec4 iD;  // color B, -
 uniform mat4 uVP;
 out vec2 vL;
 flat out vec4 vA, vB, vC, vD;
@@ -150,7 +150,7 @@ out vec4 frag;
 void main() {
     int kind = int(vB.y + 0.5);
     vec3 A = vC.rgb, B = vD.rgb;
-    float p1 = vB.w, p2 = vC.w, p3 = vD.w;
+    float p1 = vB.w;
     vec4 acc = vec4(0.0);
     if (kind == 0) {
         // the well's backing (board units): a translucent deep panel, a vertical gradient, no border
@@ -182,15 +182,6 @@ void main() {
         layerA(acc, dEll(q - vec2(-0.38, 0.4), vec2(0.22, 0.13)), B, 0.9);
     } else if (kind == 4) {
         layer(acc, dSparkle(q), A);
-    } else if (kind == 5) {
-        // the bonus ring: a track, its filled arc (p1), a soft heart in its middle when it's ready (p2)
-        float r = length(q);
-        float ring = abs(r - 0.82) - 0.11;
-        layerA(acc, ring, B, 0.7);
-        float an = fract(0.25 - atan(q.y, q.x) / TAU);
-        float arc = max(ring, an > p1 ? 1.0 : -1.0);
-        layer(acc, arc, A);
-        if (p2 > 0.5) layerA(acc, dHeart(q * 2.6) / 2.6, A, 0.9);
     }
     float al = acc.a * vB.z;
     frag = vec4(acc.rgb * al, al);

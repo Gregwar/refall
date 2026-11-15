@@ -72,7 +72,7 @@ private:
     GLuint progBlock_ = 0, progWorld_ = 0, progBlockDepth_ = 0, progWorldDepth_ = 0, progSky_ = 0, progWater_ = 0,
            progSprite_ = 0, progDown_ = 0, progBlur_ = 0, progComp_ = 0, progPanel_ = 0;
     GLuint emptyVao_ = 0, instVbo_ = 0, quadVbo_ = 0, spriteVbo_ = 0, spriteVao_ = 0, hudVao_ = 0, hudVbo_ = 0;
-    Mesh cube_, sphere_, island_, tower_, waterMesh_;
+    Mesh cube_, island_, tower_, waterMesh_;
     // Trees and rocks: one mesh each, placed per landscape (a landscape change regrows them).
     struct Prop { int mesh; vec3 pos; float scale, yaw; int world; };
     std::vector<Mesh> propMeshes_;
@@ -124,10 +124,9 @@ private:
     float squashT_[Game::H][Game::W] = {};
 
     // Per frame.
-    std::vector<Inst> solid_, beads_;
+    std::vector<Inst> solid_;
     std::vector<Sprite> sprites_;
     mat4 view_, proj_, vp_, lightVP_, mirror_;
     vec3 camPos_, camRight_, camUp_;
-    float gaugeShown_ = 0, readyGlow_ = 0;
     Rng rng_{12345};
 };

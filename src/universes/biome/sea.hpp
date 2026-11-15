@@ -81,7 +81,6 @@ public:
     vec3 rainColor() const override { return lerp(ctx.pal.foam, ctx.pal.skyLow, 0.5f); }
     float rainSlant() const override { return dir_; }
     GLuint cellProgram() const override { return progCell_; }
-    bool seedGauge() const override { return false; }
     void cellUniforms(GLuint p) const override;
     vec3 background(const Palette& p) const override { return lerp(p.skyLow, p.sea1, 0.4f); }
 

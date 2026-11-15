@@ -515,17 +515,15 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the HUD (pixels)
-// The ink depends on the pixel: dark inside a pale field, pale on the black around it (uMode 1: ink, 2: accent;
-// 0: the vertex color).
+// The panels in their vertex color; the lettering's ink depends on the pixel: dark inside a pale field, pale on the
+// black around it.
 inline const char* SHAPE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aCol;
 uniform vec2 uRes;
 out vec4 vCol;
-out vec2 vPx;
 void main() {
     vCol = aCol;
-    vPx = aPos;
     gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
 }
 )";
@@ -536,13 +534,8 @@ float inField(vec2 px) { return 1.0 - smoothstep(-6.0, 6.0, length(px - uDiskPx.
 )";
 inline const char* SHAPE_FS = R"(#version 330 core
 in vec4 vCol;
-in vec2 vPx;
 out vec4 frag;
-uniform int uMode;
-void main() {
-    vec3 c = uMode == 0 ? vCol.rgb : mix(uInkOut, uInkIn, inField(vPx));
-    frag = vec4(c * vCol.a, vCol.a);
-}
+void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 inline const char* TEXT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;   // pixels, top-left origin

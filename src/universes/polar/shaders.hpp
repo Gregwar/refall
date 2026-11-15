@@ -392,7 +392,7 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- tiles: the stack, the piece, previews, gauge
+// ---------------------------------------------------------------- tiles: the stack, the piece, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, age, mask, frost. a3: extra.
 inline const char* TILE_VS = R"(#version 330 core
@@ -422,7 +422,7 @@ out vec4 frag;
 uniform sampler2D uNoise, uSky;
 uniform vec2 uRes;
 uniform float uPx;
-uniform vec3 uAurLight, uMoonLight, uFrostCol, uGaugeCol, uGaugeTrack, uShadow;
+uniform vec3 uAurLight, uMoonLight, uFrostCol;
 uniform float uBridge, uTime, uBeat, uGlint;
 uniform vec3 uBridgeInk;
 
@@ -726,54 +726,6 @@ void main() {
         col += uFrostCol * exp(-pow((n - th) / 0.05, 2.0)) * 0.6 * step(0.25, k);
         float a = cov * keep * alpha * (1.0 - uBridge);
         frag = vec4(col * a, a);
-        return;
-    }
-    if (kind == 4) {
-        // the bonus gauge: a ring of frost filling clockwise; a snowflake grows at its heart when it is ready
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.5;
-        float a01 = fract(atan(q.x, q.y) / 6.2831853 + 1.0);
-        float lvl = v3.x, ready = v3.y, isOn = v3.z;
-        float ring = exp(-pow((r - 0.8) / (0.04 + aa), 2.0));
-        float fill = 1.0 - smoothstep(lvl - 0.004, lvl + 0.004, a01);
-        if (lvl >= 0.999) fill = 1.0;
-        float back = 1.0 - smoothstep(0.98 - aa, 0.98 + aa, r);
-        vec3 col = uShadow * back * 0.5;
-        float a = back * 0.35;
-        col += uGaugeTrack * ring * 0.35;
-        a = max(a, ring * 0.4);
-        float pulse = 0.75 + 0.25 * sin(uTime * 4.0);
-        col += uGaugeCol * ring * fill * (1.1 + ready * pulse);
-        a = max(a, ring * fill);
-        if (ready > 0.5 || isOn > 0.5) {
-            // a six-armed snowflake (slowly turning while the time is frozen)
-            float ang = atan(q.y, q.x) + (isOn > 0.5 ? uTime * 0.3 : 0.0);
-            float sect = 3.14159265 / 3.0;
-            float aa2 = mod(ang + sect * 0.5, sect) - sect * 0.5;
-            vec2 s = vec2(cos(aa2), abs(sin(aa2))) * r;
-            float arm = abs(s.y) - 0.035;
-            arm = max(arm, s.x - 0.6);
-            // two branches on each arm
-            float br = 1e3;
-            for (int i = 0; i < 2; i++) {
-                float at = 0.25 + 0.17 * float(i);
-                vec2 b = s - vec2(at, 0.0);
-                vec2 dir = normalize(vec2(1.0, 1.1));
-                float along = clamp(dot(b, dir), 0.0, 0.2 - 0.06 * float(i));
-                br = min(br, length(b - dir * along) - 0.028);
-            }
-            float sdF = min(arm, br);
-            float flake = 1.0 - smoothstep(-aa, aa, sdF);
-            float glow = exp(-max(sdF, 0.0) / 0.06) * 0.4;
-            vec3 fc = uGaugeCol * (isOn > 0.5 ? 1.8 : 1.3 + 0.5 * pulse);
-            col = mix(col, fc, flake);
-            col += uGaugeCol * glow * (isOn > 0.5 ? 1.0 : pulse);
-            a = max(a, max(flake, glow * 0.6));
-        }
-        col = mix(col, uBridgeInk * a, uBridge);
-        frag = vec4(col * alpha, a * alpha);
         return;
     }
     discard;

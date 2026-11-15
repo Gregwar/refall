@@ -969,7 +969,6 @@ void KintsugiUniverse::simulate(const Game& game, const MusicState& music, float
     for (Dying& d : dying_) d.t += dt;
     dying_.erase(std::remove_if(dying_.begin(), dying_.end(), [](const Dying& d) { return d.t > d.delay + 6.f; }), dying_.end());
     levelGlint_ = approach(levelGlint_, 0.f, 0.8f, dt);
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -1365,19 +1364,15 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- Sprites: glints and gold leaf, behind the pieces.
     buildFx();
-    auto drawSprites = [&](const std::vector<Sprite>& v) {
-        if (v.empty()) return;
+    if (!sprites_.empty()) {
         glUseProgram(progSprite_);
         setMat(progSprite_, "uVP", vp_);
         set1f(progSprite_, "uBridge", saturate(bridge_.amount));
-        set3f(progSprite_, "uMetal", cur_.metal);
-        set3f(progSprite_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(spriteVao_);
         glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
-        glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(Sprite), v.data(), GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)v.size());
-    };
-    drawSprites(sprites_);
+        glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(Sprite), sprites_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
+    }
 
     // ---- The ceramic: the stack, the piece, the ghost, the previews; then the shards of cleared rows.
     if (bare_) {
@@ -1414,16 +1409,6 @@ void KintsugiUniverse::render(const Frame& f, GLuint fbo) {
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(shardVerts_.size() / 16));
     }
     if (!bare_) drawVeins(true); // the hairline cracks of the locks, at the contact
-
-    // ---- The gauge: a thin ring of metal, mended as it fills.
-    if (!bare_) {
-        std::vector<Sprite> g;
-        const vec3 c = layout::GAUGE_CENTER;
-        const vec3 m = cur_.metal;
-        g.push_back({{c.x, c.y, layout::GAUGE_R * 1.1f, 0.f}, {m.x, m.y, m.z, 1.f},
-                     {2.f, saturate(gaugeShown_), game.bonusReady() ? 1.f : 0.f, game.bonusActive() ? 1.f : 0.f}});
-        drawSprites(g);
-    }
 
     drawPanels(f.panels);
     glDisable(GL_BLEND);

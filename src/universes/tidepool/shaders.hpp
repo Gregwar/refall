@@ -1480,20 +1480,18 @@ void main() {
 }
 )";
 
-// ------------------------------------------------------------------------------------------------ bubbles, the gauge
+// ------------------------------------------------------------------------------------------------ bubbles
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, size (radius, board units), mode
 layout(location = 2) in vec4 aB; // rgb, alpha
-layout(location = 3) in vec4 aC; // param, param2, -, -
 uniform mat4 uVP;
 out vec2 vLocal;
 flat out vec4 vA;
 flat out vec4 vB;
-flat out vec4 vC;
 void main() {
     vLocal = aPos;
-    vA = aA; vB = aB; vC = aC;
+    vA = aA; vB = aB;
     gl_Position = uVP * vec4(aA.xy + aPos * aA.z, 0.0, 1.0);
 }
 )";
@@ -1501,7 +1499,6 @@ inline const char* SPRITE_FS = R"(#version 330 core
 in vec2 vLocal;
 flat in vec4 vA;
 flat in vec4 vB;
-flat in vec4 vC;
 out vec4 frag;
 uniform float uPxPerUnit;
 void main() {
@@ -1509,18 +1506,6 @@ void main() {
     float r = length(vLocal);
     vec3 c = vB.rgb;
     float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-    if (mode == 1) {
-        // the gauge: a fine ring, the charge an arc of light from the top, clockwise
-        float ring = 1.0 - smoothstep(px * 0.6, px * 1.6, abs(r - 0.8));
-        float ang = atan(vLocal.x, vLocal.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float on = step(ang, vC.x * 6.2831853);
-        float arc = (1.0 - smoothstep(px * 1.2, px * 2.6, abs(r - 0.8))) * on;
-        float halo = exp(-sq((r - 0.8) / 0.1)) * on * 0.3 * (0.5 + 0.5 * vC.y);
-        float v = ring * 0.3 + arc + halo;
-        frag = vec4(c * v * vB.a, v * vB.a * 0.5);
-        return;
-    }
     if (mode == 2) {
         // a bubble: a thin bright ring, a glint
         float ring = 1.0 - smoothstep(px * 0.8, px * 2.0, abs(r - 0.82));

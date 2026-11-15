@@ -498,7 +498,6 @@ void WatercolorUniverse::onEvent(const GameEvent& ev, const Game&) {
 // =====================================================================================================
 
 void WatercolorUniverse::simulate(const Game& game, const MusicState& music, float dt, float wdt) {
-    worldTime_ += wdt;
     if (lvT_ < 1.f) {
         lvT_ = std::min(1.f, lvT_ + dt / lvDur_);
         lv_ = lerpf(lvFrom_, lvTo_, smoothstepf(0.f, 1.f, lvT_));
@@ -555,7 +554,6 @@ void WatercolorUniverse::simulate(const Game& game, const MusicState& music, flo
     floodT_ += wdt;
     flood_ = floodT_ < 0.6f ? smoothstepf(0.f, 0.6f, floodT_) : 1.f - smoothstepf(2.f, 7.f, floodT_);
 
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -683,21 +681,6 @@ void WatercolorUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
-    }
-    // The bonus gauge: a round pan, its pencil circle, a wash filling it from the bottom.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        cell(gc.x, gc.y, R, 0, absorb(pal_.accent, pal_.paper), 1.f, 4, 0.f, 3.3f, fill,
-             vec3(g.bonusReady() ? 1.f : 0.f, g.bonusActive() ? 1.f : 0.f, 0.f), 0.f);
-        const int N = 28;
-        for (int i = 0; i < N; i++) {
-            const float a0 = TAU * i / N + 0.4f, a1 = TAU * (i + 1.08f) / N + 0.4f;
-            const float r0 = R * (1.02f + 0.02f * std::sin(a0 * 3.f)), r1 = R * (1.02f + 0.02f * std::sin(a1 * 3.f));
-            pencilLine(v2(gc.x + std::cos(a0) * r0, gc.y + std::sin(a0) * r0), v2(gc.x + std::cos(a1) * r1, gc.y + std::sin(a1) * r1),
-                       0.02f, i == 0 || i == N - 1 ? 0.25f : 0.42f, 40.f + i);
-        }
     }
     // The well's pencil frame: four light strokes overshooting the corners.
     {
@@ -962,7 +945,6 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
         const float bb = smoothstepf(0.2f, 0.9f, bridge);
         set1f(progCell_, "uBridge", bb);
         set3f(progCell_, "uBridgeK", absorb(bridge_.ink, vec3(std::max(0.05f, ugl::luma(bridge_.color) * 1.4f))) * 0.6f);
-        set1f(progCell_, "uTime", worldTime_);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
         glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);

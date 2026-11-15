@@ -959,20 +959,18 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- motes over the board, the gauge
+// ---------------------------------------------------------------- motes over the board
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, size (radius, board units), mode
 layout(location = 2) in vec4 aB; // rgb, alpha
-layout(location = 3) in vec4 aC; // param, param2, -, -
 uniform mat4 uVP;
 out vec2 vLocal;
 flat out vec4 vA;
 flat out vec4 vB;
-flat out vec4 vC;
 void main() {
     vLocal = aPos;
-    vA = aA; vB = aB; vC = aC;
+    vA = aA; vB = aB;
     gl_Position = uVP * vec4(aA.xy + aPos * aA.z, 0.0, 1.0);
 }
 )";
@@ -980,26 +978,11 @@ inline const char* SPRITE_FS = R"(#version 330 core
 in vec2 vLocal;
 flat in vec4 vA;
 flat in vec4 vB;
-flat in vec4 vC;
 out vec4 frag;
-uniform float uPxPerUnit;
 void main() {
     int mode = int(vA.w + 0.5);
     float r = length(vLocal);
     vec3 c = vB.rgb;
-    if (mode == 1) {
-        // the gauge: a faint ring, the charge a bright arc from the top, clockwise, a leaf at its tip
-        float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-        float ring = exp(-sq((r - 0.8) / max(px * 1.2, 0.012)));
-        float ang = atan(vLocal.x, vLocal.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float on = step(ang, vC.x * 6.2831853);
-        float arc = exp(-sq((r - 0.8) / max(px * 2.5, 0.03))) * on;
-        float halo = exp(-sq((r - 0.8) / 0.12)) * on * 0.35 * (0.6 + 0.4 * vC.y);
-        float v = ring * 0.35 + arc + halo;
-        frag = vec4(c * v * vB.a, 0.0);
-        return;
-    }
     float v = exp(-r * r * 14.0) + 0.3 * exp(-r * r * 3.5);
     if (mode == 2) {
         float rays = exp(-abs(vLocal.x) * 40.0) * exp(-abs(vLocal.y) * 3.0) + exp(-abs(vLocal.y) * 40.0) * exp(-abs(vLocal.x) * 3.0);

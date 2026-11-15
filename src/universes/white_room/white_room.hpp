@@ -75,7 +75,7 @@ private:
     void drawCubes(int first, int count);
     vec4 occRect_{0, 0, 1, 1};
     float shadowK_ = 1.f;
-    bool bare_ = false; // a break: the room alone (no pane, no gauge, no thrown cubes or their piles)
+    bool bare_ = false; // a break: the room alone (no pane, no thrown cubes or their piles)
     // the multisampled scene (color, depth), resolved into sceneT_
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     // the room, shaded once per pixel: its color and its depth (copied into the multisampled scene)
@@ -166,7 +166,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float worldTime_ = 0.f;
     Bridge bridge_;

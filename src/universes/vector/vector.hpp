@@ -127,7 +127,6 @@ private:
     bool inverted_ = false;
     float dimT_ = 0;
     float overT_ = -1.f; // seconds since the top out (-1: playing)
-    float gaugeShown_ = 0, readyFlash_ = 0;
     Bridge bridge_;
     // the HUD (lettered by the host, hudLine): the tube as last composited (its phosphor, its gain, how much of
     // the picture is on: the fade, the power-off)

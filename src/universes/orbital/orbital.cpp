@@ -1152,7 +1152,6 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
     for (auto& fd : fading_) fd.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     sprites_.clear();
     for (const Mote& m : motes_) {
         if (m.age < 0.f || f.bare) continue; // (the motes over the board: none in a break)
@@ -1160,12 +1159,6 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         float a = smoothstepf(0.f, 0.12f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * m.bright;
         if (m.kind == 1) a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.85f, 1.f, t)) * m.bright;
         sprite(m.p, m.size * (m.kind == 1 ? 2.f : 1.6f), m.col, a * world, 0);
-    }
-    if (!f.bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const bool on = game.bonusReady() || game.bonusActive();
-        sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.chase * 1.4f : pal_.accent, 1.f, 1, fill, on ? 1.f : 0.f);
     }
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
@@ -1544,7 +1537,6 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         glBlendFunc(GL_ONE, GL_ONE);
         glUseProgram(progSprite_);
         setMat(progSprite_, "uVP", vp_);
-        set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
         glBindVertexArray(spriteVao_);
         glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
         glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);

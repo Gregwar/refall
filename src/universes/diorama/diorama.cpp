@@ -421,7 +421,7 @@ void cone(std::vector<float>& out, vec3 base, float radius, float height, int se
     }
 }
 
-// Smooth sphere (lanterns, beads).
+// Smooth sphere (lanterns).
 void sphere(std::vector<float>& out, vec3 c, float radius, int slot) {
     std::vector<vec3> v;
     std::vector<int> idx;
@@ -483,17 +483,12 @@ bool DioramaUniverse::init(int width, int height) {
     glGenVertexArrays(1, &emptyVao_);
     glGenBuffers(1, &instVbo_);
 
-    // Instanced meshes: the clay block (rounded cube, unit size) and a sphere (gauge beads).
+    // The instanced mesh: the clay block (rounded cube, unit size).
     {
         std::vector<float> w, v;
         roundedBox(w, vec3(0.f), vec3(1.f), 0.13f, 0);
         for (size_t i = 0; i < w.size(); i += 9) v.insert(v.end(), w.begin() + i, w.begin() + i + 6);
         uploadInstMesh(cube_, v);
-        w.clear();
-        v.clear();
-        sphere(w, vec3(0.f), 0.5f, 0);
-        for (size_t i = 0; i < w.size(); i += 9) v.insert(v.end(), w.begin() + i, w.begin() + i + 6);
-        uploadInstMesh(sphere_, v);
     }
     // Sprites.
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -596,8 +591,8 @@ void DioramaUniverse::uploadInstMesh(Mesh& m, const std::vector<float>& v) {
     m.count = (int)(v.size() / 6);
 }
 
-// The static world: the island, the clay tower holding the well, two steles for the previews, the gauge's
-// dial, distant layered hills; trees and rocks are separate props (they regrow when the landscape changes).
+// The static world: the island, the clay tower holding the well, two steles for the previews, distant layered
+// hills; trees and rocks are separate props (they regrow when the landscape changes).
 void DioramaUniverse::buildWorld() {
     // ---- Island: an elliptical low-poly mound: grass top, a soft bank, a sand beach sloping under the water.
     {
@@ -675,7 +670,7 @@ void DioramaUniverse::buildWorld() {
     }
 
     // ---- The tower: back wall, two pillars with caps and lanterns, the well's floor, a stepped plinth;
-    //      two steles with arched tops for the previews; the gauge's dial.
+    //      two steles with arched tops for the previews.
     {
         std::vector<float> v;
         roundedBox(v, vec3(0, 0, -0.78f), vec3(BOARD_W + 0.1f, BOARD_H + 0.1f, 0.56f), 0.05f, S_WALL);
@@ -692,9 +687,6 @@ void DioramaUniverse::buildWorld() {
         roundedBox(v, vec3(0, -10.32f, -0.22f), vec3(10.1f, 0.64f, 1.75f), 0.1f, S_TOWER2);
         roundedBox(v, vec3(0, -10.95f, -0.25f), vec3(12.6f, 0.9f, 2.5f), 0.16f, S_TOWER);
         roundedBox(v, vec3(0, -11.55f, -0.25f), vec3(13.8f, 0.6f, 3.3f), 0.14f, S_TOWER2);
-        // The gauge's dial: a clay disc behind the beads.
-        const vec3 g = layout::GAUGE_CENTER;
-        cylinder(v, vec3(g.x, g.y, -0.5f), 2, layout::GAUGE_R + 0.42f, 0.28f, 48, S_TOWER2);
         uploadWorld(tower_, v);
     }
 
@@ -839,7 +831,7 @@ DioramaUniverse::~DioramaUniverse() {
         if (m.vao) glDeleteVertexArrays(1, &m.vao);
         if (m.vbo) glDeleteBuffers(1, &m.vbo);
     };
-    for (Mesh* m : {&cube_, &sphere_, &island_, &tower_, &waterMesh_}) freeMesh(*m);
+    for (Mesh* m : {&cube_, &island_, &tower_, &waterMesh_}) freeMesh(*m);
     for (Mesh& m : propMeshes_) freeMesh(m);
     for (GLuint t : {occTex_, shadowTex_}) glDeleteTextures(1, &t);
     glDeleteFramebuffers(1, &shadowFbo_);
@@ -1116,7 +1108,6 @@ void DioramaUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         break;
     }
-    case GameEvent::BonusReady: readyGlow_ = 1.f; break;
     case GameEvent::TopOut: {
         // Game over: the stack crumbles row by row from the top and falls into the water.
         int topRow = Game::H;
@@ -1221,8 +1212,6 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
     cloudTime_ += wdt * (0.5f + env_.wind);
     gust_ = approach(gust_, 0.f, 0.8f, dt);
     flare_ = approach(flare_, 0.f, 1.1f, dt);
-    readyGlow_ = approach(readyGlow_, 0.f, 1.5f, dt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 6.f, dt);
 
     // Kicks: a ring spreads on the water from the island's shore.
     kick_ = approach(kick_, 0.f, 4.f, dt);
@@ -1357,18 +1346,17 @@ void DioramaUniverse::simulate(const Game& game, const MusicState& music, float 
 }
 
 // ---------------------------------------------------------------------------------------------------------
-// What to draw this frame: blocks (board, piece, ghost, previews, tumbling bodies), gauge beads, sprites.
+// What to draw this frame: blocks (board, piece, ghost, previews, tumbling bodies), sprites.
 
 void DioramaUniverse::collect(const Game& g, const MusicState& music, double time) {
     solid_.clear();
-    beads_.clear();
     sprites_.clear();
     (void)music;
     if (!bare_) collectBlocks(g, time);
     collectSprites();
 }
 
-// The game's blocks: the stack, the piece and its ghost, the previews, the tumbling bodies, the gauge's beads.
+// The game's blocks: the stack, the piece and its ghost, the previews, the tumbling bodies.
 void DioramaUniverse::collectBlocks(const Game& g, double time) {
     const float S = 0.95f;
     auto inst = [&](vec3 p, vec3 sc, vec3 col, float kind = 0, float mask = 0, vec4 q = vec4(0, 0, 0, 1), float glow = 0) {
@@ -1481,24 +1469,6 @@ void DioramaUniverse::collectBlocks(const Game& g, double time) {
         float sc = S * b.scale;
         if (b.delay > 0.f) sc *= 1.f + 0.1f * std::sin(std::min(1.f, b.delay * 8.f) * PI);
         inst(b.pos, vec3(sc), b.color, 0, 0, quatAxis(b.axis, b.angle));
-    }
-
-    // Gauge: twelve clay beads around the dial; lit beads glow like little lanterns.
-    {
-        const vec3 c = layout::GAUGE_CENTER;
-        const int N = Game::BONUS_LINES;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        const float br = 0.5f + 0.5f * std::sin((float)time * TAU * 0.5f);
-        const vec3 lit = hex(0xFFB867), off = env_.pal[S_TOWER] * 0.82f;
-        for (int i = 0; i < N; i++) {
-            const float ang = PI * 0.5f - TAU * (i + 0.5f) / N;
-            const vec3 p = c + vec3(std::cos(ang), std::sin(ang), 0) * layout::GAUGE_R + vec3(0, 0, -0.2f);
-            float fill = saturate(gaugeShown_ * N - i);
-            float glow = fill * (ready ? 0.55f + 0.45f * br : active ? 0.75f : 0.45f) + readyGlow_ * 0.8f * fill;
-            vec3 col = lerp(off, lit, fill);
-            float sz = 0.36f * (1.f + 0.12f * fill * (ready ? br : 0.f));
-            beads_.push_back({vec4(p, 2), vec4(vec3(sz), 0), vec4(0, 0, 0, 1), vec4(col, glow)});
-        }
     }
 
 }
@@ -1629,7 +1599,6 @@ void DioramaUniverse::drawScene(bool depthOnly, bool mirror) {
     set1f(pb, "uClipY", clipY);
     if (!depthOnly) set1f(pb, "uLanternGlow", 0.3f * nightV_);
     drawInstances(cube_, solid_, pb);
-    drawInstances(sphere_, beads_, pb);
 }
 
 void DioramaUniverse::setCamera(float t) {

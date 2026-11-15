@@ -308,7 +308,7 @@ bool CoralReefUniverse::init(int width, int height) {
         }
     };
     instanced(glowVao_, glowVbo_, 3, sizeof(float) * 12);
-    instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
+    instanced(spriteVao_, spriteVbo_, 2, sizeof(SpriteInst));
     instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
@@ -1181,9 +1181,9 @@ void CoralReefUniverse::buildBoard(const Game& g) {
     }
 }
 
-void CoralReefUniverse::sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param, float param2) {
+void CoralReefUniverse::sprite(vec2 p, float size, const vec3& col, float alpha) {
     if (alpha <= 0.004f || size <= 0.f) return;
-    sprites_.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}, {param, param2, 0.f, 0.f}});
+    sprites_.push_back({{p.x, p.y, size, 0.f}, {col.x, col.y, col.z, alpha}});
 }
 
 // =====================================================================================================
@@ -1574,7 +1574,6 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         p.v = V(p.v.x * std::exp(-3.f * dt), p.v.y + 0.8f * dt);
     }
     puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.age >= p.life; }), puffs_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     cells_.clear();
     sprites_.clear();
@@ -1894,13 +1893,12 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         for (const Puff& p : puffs_) {
             if (p.age < 0.f) continue;
             const float t = p.age / p.life;
-            sprite(p.p, p.size, lerp(pal_.haze, vec3(1.f), 0.6f), 0.7f * (1.f - smoothstepf(0.5f, 1.f, t)), 2);
+            sprite(p.p, p.size, lerp(pal_.haze, vec3(1.f), 0.6f), 0.7f * (1.f - smoothstepf(0.5f, 1.f, t)));
         }
         auto drawSprites = [&]() {
             if (sprites_.empty()) return;
             glUseProgram(progSprite_);
             setMat(progSprite_, "uVP", vp_);
-            set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
             glBindVertexArray(spriteVao_);
             glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
             glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);
@@ -1929,14 +1927,6 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
                 glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
             }
         }
-        // the bonus gauge: a faint ring, the charge a bright arc
-        {
-            const vec3 gc = layout::GAUGE_CENTER;
-            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-            const bool on = game.bonusReady() || game.bonusActive();
-            sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.accent : pal_.rail, 1.f, 1, fill, on ? 1.f : 0.f);
-        }
-        drawSprites();
     }
     drawHud(f.panels);
     fade_ = f.fade;

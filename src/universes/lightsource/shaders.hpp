@@ -349,7 +349,6 @@ void main() {
 //   a0: a xy, b xy        a1: w, intensity, extra, extra        a2: color rgb, kind
 // kind 0: a soft glow (a disc at a, radius w)
 // kind 1: a glow along a segment a -> b, width w (a lock's contact)
-// kind 2: a ring (the bonus gauge: center a, radius b.x, thickness b.y, fill a1.z, ready a1.w)
 inline const char* FX_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aA0;
@@ -364,13 +363,13 @@ void main() {
     float kind = aA2.w;
     vec2 a = aA0.xy, b = aA0.zw, w;
     if (kind < 0.5) w = a + aCorner * aA1.x * 1.6;
-    else if (kind < 1.5) {
+    else {
         vec2 d = b - a;
         float L = length(d);
         vec2 u = L > 1e-5 ? d / L : vec2(1.0, 0.0), v = vec2(-u.y, u.x);
         float e = aA1.x * 2.0;
         w = (a + b) * 0.5 + u * aCorner.x * (L * 0.5 + e) + v * aCorner.y * e;
-    } else w = a + aCorner * (b.x + b.y * 4.0);
+    }
     vP = w;
     gl_Position = uVP * vec4(w, 0.0, 1.0);
 }
@@ -379,27 +378,17 @@ inline const char* FX_FS = R"(#version 330 core
 in vec2 vP;
 flat in vec4 vA0, vA1, vA2;
 out vec4 frag;
-uniform float uPx;
 void main() {
     vec2 a = vA0.xy, b = vA0.zw;
     float kind = vA2.w, g = 0.0;
     if (kind < 0.5) {
         float d = length(vP - a) / vA1.x;
         g = exp(-d * d * 3.0) * vA1.y;
-    } else if (kind < 1.5) {
+    } else {
         vec2 ab = b - a;
         float t = clamp(dot(vP - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
         float d = length(vP - (a + ab * t)) / vA1.x;
         g = exp(-d * d * 2.5) * vA1.y;
-    } else {
-        // the gauge: a hairline circle, its filled arc brighter (clockwise from the top), all bright when ready
-        float r = length(vP - a), R = b.x, th = max(b.y, uPx * 0.8);
-        float ang = atan(vP.x - a.x, vP.y - a.y);
-        float u = fract(ang / 6.2831853 + 1.0);
-        float ring = 1.0 - smoothstep(th * 0.5, th * 0.5 + uPx * 1.2, abs(r - R));
-        float filled = step(u, vA1.z);
-        g = ring * mix(0.18, 1.0, max(filled, vA1.w));
-        g += vA1.w * exp(-pow((r - R) / (th * 3.0), 2.0)) * 0.25;
     }
     vec3 c = vA2.rgb * g;
     frag = vec4(c, 0.0);

@@ -964,7 +964,6 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         dflares_.erase(std::remove_if(dflares_.begin(), dflares_.end(), [](const DFlare& d) { return d.t > 5.f; }), dflares_.end());
         for (Contact& c : contacts_) c.t += dt;
         contacts_.erase(std::remove_if(contacts_.begin(), contacts_.end(), [](const Contact& c) { return c.t >= c.life; }), contacts_.end());
-        gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 2.5f, dt);
         // the side lights: one in a chorus, both in a drop, off otherwise
         side_[0] = approach(side_[0], std::max(0.75f * chorus_, drop_), 0.8f, dt);
         side_[1] = approach(side_[1], drop_, 0.8f, dt);
@@ -1246,7 +1245,7 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progBlock_, "uBridgeInk", bridge_.ink);
     drawInst(blocks_);
 
-    // the glows: a faint halo around the lamps (light in the air), the contacts, the gauge
+    // the glows: a faint halo around the lamps (light in the air), the contacts
     fx_.clear();
     if (game.hasPiece() && !game.over()) {
         const Piece& p = game.piece();
@@ -1272,17 +1271,9 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 c = ct.c * 0.9f;
         fx_.push_back({{ct.a.x, ct.a.y, ct.b.x, ct.b.y}, {0.16f + 0.1f * u, k, 0.f, 0.f}, {c.x, c.y, c.z, 1.f}, {0.f, 0.f, 0.f, 0.f}});
     }
-    if (!bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const bool ready = game.bonusReady(), active = game.bonusActive();
-        const float fill = active ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const vec3 c = lerp(accent_, bridge_.ink, bridge) * 0.55f * (1.f - 0.4f * dimT_);
-        fx_.push_back({{gc.x, gc.y, layout::GAUGE_R, 0.035f}, {0.f, 0.f, ready ? 1.f : fill, ready ? 1.f : 0.f}, {c.x, c.y, c.z, 2.f}, {0.f, 0.f, 0.f, 0.f}});
-    }
     glBlendFunc(GL_ONE, GL_ONE);
     glUseProgram(progFx_);
     setMat(progFx_, "uVP", vp_);
-    set1f(progFx_, "uPx", px_);
     drawInst(fx_);
     glDisable(GL_BLEND);
 

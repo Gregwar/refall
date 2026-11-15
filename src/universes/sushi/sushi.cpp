@@ -1016,7 +1016,7 @@ void SushiUniverse::drawPops() {
     }
 }
 
-void SushiUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+void SushiUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
     const vec3 ink = ugl::toSrgb(pal_.ink), halo = ugl::toSrgb(lerp(pal_.wallTop, pal_.wallBot, 0.5f)),
                accent = ugl::toSrgb(pal_.accent);
@@ -1033,48 +1033,6 @@ void SushiUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
         }
         flushShapes();
-    }
-
-    // the bonus gauge: a soft round track, its charge in the accent, a dot at its end
-    if (vis > 0.01f) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 96;
-        const float th = std::max(2.f, 5.f * s), th2 = std::max(3.f, 9.f * s);
-        auto seg = [&](float a0, float a1, float w, const vec3& col, float al) {
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = r - w * 0.5f, ro = r + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro},
-                                     {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, th, ink, (g.bonusReady() ? 0.4f : 0.18f) * dimk);
-        flushShapes();
-        for (int i = 0; i < N; i++) {
-            if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, th2, accent, 0.95f * dimk);
-        }
-        flushShapes();
-        if (fill > 0.01f) {
-            // a round cap at the end of the charge
-            const float a = TAU * fill;
-            const vec2 e{c.x + std::sin(a) * r, c.y - std::cos(a) * r};
-            const int M = 20;
-            for (int i = 0; i < M; i++) {
-                const float a0 = TAU * i / M, a1 = TAU * (i + 1) / M, rr = th2 * 0.62f;
-                const float v[3][6] = {{e.x, e.y, accent.x, accent.y, accent.z, 0.95f * dimk},
-                                       {e.x + std::cos(a0) * rr, e.y + std::sin(a0) * rr, accent.x, accent.y, accent.z, 0.95f * dimk},
-                                       {e.x + std::cos(a1) * rr, e.y + std::sin(a1) * rr, accent.x, accent.y, accent.z, 0.95f * dimk}};
-                for (auto& vv : v) shapes_.insert(shapes_.end(), vv, vv + 6);
-            }
-            flushShapes();
-        }
     }
 
     std::vector<float> q;
@@ -1219,7 +1177,6 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
     for (Fading& fd : fading_) fd.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& fd) { return fd.t > 0.2f; }), fading_.end());
     updateFlights(dt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Instances.
     back_.clear();
@@ -1381,7 +1338,7 @@ void SushiUniverse::render(const Frame& f, GLuint fbo) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawPops();
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
 

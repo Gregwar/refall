@@ -368,7 +368,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- cells: pieces, stack, previews, the gauge, spatter
+// ---------------------------------------------------------------- cells: pieces, stack, previews, spatter
 
 // a0: center xy, half size (board), neighbor mask (8 bits). a1: absorbance rgb, alpha.
 // a2: kind, wetness, seed, extra. a3: body color rgb (gouache, linear), body amount.
@@ -386,7 +386,6 @@ void main() {
     float kind = a2.x;
     vec2 ext = vec2(0.72);
     if (kind > 1.5 && kind < 2.5) ext = vec2(0.72, 0.72 + a2.w * 2.4);   // running down (game over)
-    if (kind > 3.5 && kind < 4.5) ext = vec2(1.25);                       // the gauge
     vec2 l = aCorner * ext;
     if (kind > 1.5 && kind < 2.5) l.y = l.y < 0.0 ? -(0.72 + a2.w * 2.4) : 0.72;
     vec2 p = a0.xy + l * a0.z * 2.0;
@@ -408,7 +407,6 @@ uniform float uPx;           // board units per pixel
 uniform float uGran;
 uniform float uBridge;
 uniform vec3 uBridgeK;
-uniform float uTime;
 
 bool bit(float m, float b) { return mod(floor(m / b), 2.0) > 0.5; }
 
@@ -428,24 +426,6 @@ void main() {
     vec3 K = v1.rgb;
     K = mix(K, uBridgeK, uBridge);
     vec2 wp = vWorld;
-
-    if (kind > 3.5 && kind < 4.5) {
-        // ---- the gauge: a round pan filling with a wash from the bottom (v2.w: fill, v3.x ready, v3.y active)
-        float r = length(q);
-        float R = 0.5;
-        float fill = v2.w;
-        float lvl = -R + 2.0 * R * fill + 0.025 * sin(q.x * 9.0 + uTime * 2.0) * (1.0 - v3.y);
-        float disc = smoothstep(R + aa, R - aa, r + (nz(wp * 6.0) - 0.5) * 0.03);
-        float below = smoothstep(lvl + 0.02, lvl - 0.02, q.y);
-        float d = (0.55 + 0.35 * fbm(wp * 1.4 + seed)) + 0.7 * exp(-abs(q.y - lvl) / 0.035) * (1.0 - step(0.999, fill));
-        d += 0.5 * exp(-(R - r) / 0.03);
-        float ready = v3.x;
-        d *= 1.0 + ready * (0.25 + 0.15 * sin(uTime * 3.0));
-        float cov = disc * below * v1.a;
-        float gf = clamp(1.0 + uGran * 2.0 * (0.52 - h), 0.0, 2.0);
-        outPigment(K * d * gf, cov, vec3(0.0), 0.0);
-        return;
-    }
 
     if (kind > 2.5) {
         // ---- a spatter dot: a round drop dried with a dark rim

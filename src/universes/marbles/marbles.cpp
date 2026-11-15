@@ -880,7 +880,6 @@ void MarblesUniverse::simulate(const Game& game, const MusicState& music, float 
             s.bounceT += dt;
             s.flare = approach(s.flare, 0.f, 7.f, dt);
         }
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -1559,24 +1558,7 @@ void MarblesUniverse::render(const Frame& f, GLuint fbo) {
             const vec3 c = layout::nextCenter(i);
             if (game.next(i) >= 0) preview(game.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
         }
-        // ---- The bonus gauge: a ring of twelve marbles, one more for each cleared line; ready, a light runs around it.
-        {
-            const vec3 gc = layout::GAUGE_CENTER;
-            const float fill = game.bonusActive() ? saturate(game.bonusLeft() / 10.f) : saturate(gaugeShown_);
-            const bool ready = game.bonusReady() || game.bonusActive();
-            const float n = fill * 12.f;
-            const float ga = 1.f - 0.6f * smoothstepf(0.3f, 0.95f, bridge);
-            for (int i = 0; i < 12; i++) {
-                const float a = PI * 0.5f - TAU * i / 12.f;
-                const float x = gc.x + std::cos(a) * 0.82f, y = gc.y + std::sin(a) * 0.82f;
-                const float on = saturate(n - i);
-                putFx(x, y, 0.07f, 0.f, ugl::luma(pal_.ink) > 0.3f ? pal_.ink * 0.25f : pal_.ink * 0.4f, 0.5f * ga * (1.f - on), 2);
-                const float run = ready ? std::pow(0.5f + 0.5f * std::cos(time_ * 3.f - TAU * i / 12.f), 6.f) : 0.f;
-                put(x, y, 0.f, 0.15f, pal_.piece[i % 7], on * ga, (float)i, 0.15f * ready + 0.8f * run, mseed(i % 7, hashf((float)i, 3.f)), 0, 0.f, 0.f, run, 1.f);
-            }
-            flush();
-            flushFx();
-        }
+        flush();
     }
     if (!f.bare) drawPanels(f.panels);
     glDisable(GL_BLEND);

@@ -6,7 +6,7 @@
 // STONE_FS lights it every frame (a soft raking light, the polished slab's broad reflection) and draws the well,
 // a honed, darker panel with a hairline of metal. VEIN_FS draws the gold veins (line strips that grow along their
 // arrival times, molten at their fronts); BLOCK_FS the ceramic shards; SHARD_FS the pieces of a cleared row;
-// SPRITE_FS the gold leaf, the glints and the gauge.
+// SPRITE_FS the gold leaf and the glints.
 
 namespace kintsugi_shaders {
 
@@ -343,7 +343,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- sprites: gold leaf, glints, the gauge
+// ---------------------------------------------------------------- sprites: gold leaf, glints
 
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
@@ -370,7 +370,6 @@ flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
 uniform float uBridge;
-uniform vec3 uMetal, uBridgeInk;
 void main() {
     int kind = int(vC.x + 0.5);
     float r = length(vQ);
@@ -378,20 +377,11 @@ void main() {
         // a glint: a soft point of light
         float a = exp(-r * r * 9.0) + 0.6 * exp(-r * r * 60.0);
         frag = vec4(vB.rgb * a * vB.a * (1.0 - uBridge), 0.0);
-    } else if (kind == 1) {
+    } else {
         // a flake of gold leaf: a ragged little square turning in the air (bright when it faces the light)
         float n = hash12(floor(vQ * 3.0 + vC.z * 13.0));
         float a = 1.0 - smoothstep(0.62, 0.8, max(abs(vQ.x), abs(vQ.y)) + 0.18 * n);
         frag = vec4(vB.rgb * a * vB.a * (1.0 - uBridge), a * vB.a * (1.0 - uBridge));
-    } else {
-        // the gauge: a thin ring of metal that fills like a mended rim (e0 fill, e1 ready, e2 active)
-        float ang = atan(vQ.x, vQ.y) / 6.2831853 + 0.5; // 0 at the bottom, clockwise
-        float ring = 1.0 - smoothstep(0.0, 0.035, abs(r - 0.82));
-        float filled = step(ang, vC.y);
-        float a = ring * mix(0.18, 1.0, filled);
-        vec3 c = mix(vB.rgb * 0.5, vB.rgb * (1.2 + 1.2 * vC.z + 0.8 * vC.w), filled);
-        c = mix(c, uBridgeInk, uBridge);
-        frag = vec4(c * a * vB.a, a * vB.a);
     }
 }
 )";

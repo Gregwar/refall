@@ -74,7 +74,7 @@ private:
     void drawInst(GLuint prog, GLuint vao, GLuint vbo, const void* data, size_t bytes, size_t count);
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
-    void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
     void flushShapes();
 
@@ -112,7 +112,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     bool bare_ = false; // this frame is the world alone (a break): the sea and its echoes, no well, no blocks
     float dimT_ = 0.f;
     Bridge bridge_;

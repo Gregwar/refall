@@ -957,22 +957,6 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
     for (int i = 0; i < 3; i++)
         if (g.next(i) >= 0) preview(tag('N', (uint64_t)(i * 16 + g.next(i))), g.next(i), layout::nextCenter(i), i == 0 ? 1.f : 0.7f, 0.3f);
 
-    // ---- the bonus gauge: a pie coloured in as the lines charge it
-    {
-        Item it;
-        it.key = tag('P', 1);
-        it.kind = IT_PIE;
-        it.x = layout::GAUGE_CENTER.x;
-        it.y = layout::GAUGE_CENTER.y;
-        it.s = layout::GAUGE_R * 0.92f;
-        it.a = std::floor(g.bonusGauge() * 24.f + 0.001f) / 24.f;
-        it.i0 = g.bonusReady() ? 1 : g.bonusActive() ? 2 : 0;
-        it.col = it.i0 ? hexc(V.accent) : outlineCol_;
-        it.tool = it.i0 ? V.accentTool : (V.light ? T_PENCIL : T_CHALK);
-        it.residue = 0.25f;
-        out.push_back(it);
-    }
-
     // ---- impact marks and crumbs
     for (const Transient& t : transients_) {
         if (clock_ < t.from || clock_ >= t.until) continue;

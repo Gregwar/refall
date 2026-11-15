@@ -1573,14 +1573,11 @@ constexpr float CAP_MED = 0.556f, CAP_LIGHT = 0.546f;
 float hudCap(const HudText& h) { return h.scale * 12.f * (h.role == HUD_SECTION ? 0.6f : 0.46f); }
 } // namespace
 
-// The panels, the bonus gauge (a fine ring charged in the signature color) and the small forms before the section
-// (a disc in the signature color) and each label (a square, a disc, a triangle in the primaries), placed by the
-// lines as the host letters them (hudLine).
+// The panels and the small forms before the section (a disc in the signature color) and each label (a square, a
+// disc, a triangle in the primaries), placed by the lines as the host letters them (hudLine).
 void BauhausUniverse::drawHud(const Frame& f) {
-    const Game& g = f.game;
     const VariantDef& V = VARIANTS[variant_];
-    const float s = height_ / 1080.f;
-    const vec3 ink = ink_, ground = ground_, accent = hex(V.col[0]);
+    const vec3 ground = ground_, accent = hex(V.col[0]);
     const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
 
     if (!f.panels.empty() && !bare_) {
@@ -1588,20 +1585,6 @@ void BauhausUniverse::drawHud(const Frame& f) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : ground;
             rectPx(r.x, r.y, r.x + r.w, r.y + r.h, c, std::min(1.f, r.alpha));
         }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const float th = std::max(1.f, 1.5f * s), th2 = std::max(2.f, 6.f * s);
-        shape(K_DISC, c.x, c.y, r + th * 0.5f, r + th * 0.5f, 0.f, ink, (g.bonusReady() ? 0.75f : 0.35f) * vis, r - th * 0.5f, 0.f, 4.f);
-        if (fill > 0.002f)
-            shape(K_DISC, c.x, c.y, r + th2 * 0.5f, r + th2 * 0.5f, 0.f, accent, 0.95f * vis, r - th2 * 0.5f,
-                  fill * PI, fill * PI);
-        // a small yellow triangle in the ring once it is charged
-        if (g.bonusReady()) shape(K_TRI, c.x, c.y + r * 0.05f, r * 0.32f, r * 0.28f, 0.f, hex(V.col[V.style == ST_KANDINSKY ? 2 : 1]), vis);
         flushShapes();
     }
 
@@ -1859,7 +1842,6 @@ void BauhausUniverse::render(const Frame& f, GLuint fbo) {
     lockLine_ = std::max(0.f, lockLine_ - dt / 0.28f);
     for (Wipe& w : wipes_) w.t += dt;
     wipes_.erase(std::remove_if(wipes_.begin(), wipes_.end(), [](const Wipe& w) { return w.t > w.delay + WIPE_S; }), wipes_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);

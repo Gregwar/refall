@@ -63,7 +63,7 @@ vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 vec3 mixHex(unsigned a, unsigned b, float t) { return ugl::toLinear(lerp(hex(a), hex(b), t)); }
 
 // The papers: the sheet and its other side (the drop), the seven papers of the pieces and their drop papers, the
-// back of the paper (seen when a cell folds over), the accent (a quad crane, the gauge) on each side; foil: a
+// back of the paper (seen when a cell folds over), the accent (a quad crane) on each side; foil: a
 // metallic glint on the facets.
 struct VariantDef {
     const char* name;
@@ -1141,14 +1141,10 @@ void OrigamiUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = ugl::toSrgb(paper(7));
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a ring of folded paper segments, each in two facets,
-// charged in the accent paper.
-void OrigamiUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
-    const float s = height_ / 1080.f;
+// The panels (the lettering: hudLine).
+void OrigamiUniverse::drawHud(const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -1156,38 +1152,6 @@ void OrigamiUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels)
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 16;
-        const float th = std::max(2.f, 5.f * s);
-        for (int i = 0; i < N; i++) {
-            const bool on = (i + 0.5f) / N <= fill;
-            const float a0 = TAU * (i + 0.06f) / N, a1 = TAU * (i + 0.94f) / N, am = (a0 + a1) * 0.5f;
-            const float ri = r - th * 0.5f, ro = r + th * 0.5f;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.6f : 0.32f)) * vis * (1.f - 0.5f * dimT_);
-            const vec3 col = on ? accent : ink;
-            // two facets: the outer half lit, the inner half in shade (a folded strip)
-            const vec3 cA = col, cB = on ? col * 0.78f : col;
-            const float alB = on ? al : al * 0.7f;
-            auto pt = [&](float ang, float rr) { return vec2{c.x + std::sin(ang) * rr, c.y - std::cos(ang) * rr}; };
-            const vec2 o0 = pt(a0, ro), o1 = pt(a1, ro), i0 = pt(a0, ri), i1 = pt(a1, ri), mo = pt(am, ro + th * 0.25f),
-                       mi = pt(am, ri + th * 0.25f);
-            const float tris[4][3][2] = {{{o0.x, o0.y}, {mo.x, mo.y}, {mi.x, mi.y}}, {{o0.x, o0.y}, {mi.x, mi.y}, {i0.x, i0.y}},
-                                         {{mo.x, mo.y}, {o1.x, o1.y}, {i1.x, i1.y}}, {{mo.x, mo.y}, {i1.x, i1.y}, {mi.x, mi.y}}};
-            for (int t = 0; t < 4; t++) {
-                const vec3 cc = (t % 2 == 0) ? cA : cB;
-                const float aa = (t % 2 == 0) ? al : alB;
-                for (int k = 0; k < 3; k++) {
-                    const float v[6] = {tris[t][k][0], tris[t][k][1], cc.x, cc.y, cc.z, aa};
-                    shapes_.insert(shapes_.end(), v, v + 6);
-                }
-            }
         }
         flushShapes();
     }
@@ -1239,7 +1203,7 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // a break: the sheet and the flock alone (no tray, pieces, ghost, previews nor gauge; the blank board leaves the
+    // a break: the sheet and the flock alone (no tray, pieces, ghost, nor previews; the blank board leaves the
     // pieces' ids as they are)
     bare_ = f.bare;
     if (!bare_) syncIds(game);
@@ -1282,7 +1246,6 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
     folding_.erase(std::remove_if(folding_.begin(), folding_.end(),
                                   [](const Folding& u) { return u.t > u.delay + (u.delay > 0.f ? 0.52f : 0.34f); }),
                    folding_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     cells_.clear();
     shadows_.clear();
@@ -1373,7 +1336,7 @@ void OrigamiUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

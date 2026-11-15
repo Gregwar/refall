@@ -807,14 +807,10 @@ void TilesUniverse::flushShapes() {
     shapes_.clear();
 }
 
-// The lettering in pale Roman capitals over a dark halo; the bonus gauge a ring of twelve tesserae, set in gold as it
-// charges.
-void TilesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+// The lettering in pale Roman capitals over a dark halo.
+void TilesUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const tiles::VariantDef& V = VARIANTS[variant_];
-    const vec3 ink = hex(V.ink), halo = hex(V.well) * 0.6f;
-    const vec3 accent = hex(V.accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
+    const vec3 halo = hex(V.well) * 0.6f, accent = hex(V.accent);
     if (!panels.empty()) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -825,32 +821,6 @@ void TilesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         }
         flushShapes();
     }
-
-    // the bonus gauge: twelve small tesserae in a ring (none in a break: the HUD's text alone)
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 12;
-        for (int i = 0; i < N; i++) {
-            const float am = TAU * (i + 0.5f) / N;
-            const bool on = (i + 0.5f) / N <= fill;
-            const vec3 col = on ? accent : ink * 0.8f;
-            const float al = (on ? 0.95f : (g.bonusReady() ? 0.5f : 0.22f)) * vis * (1.f - 0.5f * dimT_);
-            const float rm = r * 0.84f, hs = r * (on ? 0.17f : 0.13f);
-            const vec2 m{c.x + std::sin(am) * rm, c.y - std::cos(am) * rm};
-            const float ca = std::cos(am), sa = std::sin(am);
-            auto P = [&](float u, float v) { return vec2{m.x + ca * u - sa * v, m.y + sa * u + ca * v}; };
-            const vec2 pts[4] = {P(-hs, -hs), P(hs, -hs), P(hs, hs), P(-hs, hs)};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k].x, pts[k].y, col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        }
-        flushShapes();
-    }
-
 }
 
 
@@ -1052,7 +1022,6 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     sparkles_.erase(std::remove_if(sparkles_.begin(), sparkles_.end(), [](const Sparkle& s) { return s.t > s.life; }), sparkles_.end());
     for (Puff& p : puffs_) p.t += dt;
     puffs_.erase(std::remove_if(puffs_.begin(), puffs_.end(), [](const Puff& p) { return p.t > p.life; }), puffs_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     if (stateDirty_) {
         glBindTexture(GL_TEXTURE_2D, stateTex_);
@@ -1277,7 +1246,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
 

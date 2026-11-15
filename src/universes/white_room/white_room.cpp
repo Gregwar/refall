@@ -820,7 +820,6 @@ void WhiteRoomUniverse::simulate(const Game& game, const MusicState& music, floa
     // a line clear runs at the real speed, even in slow motion
     for (auto& d : dying_) d.t += dt;
     stepEjected(dt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // The light of this frame: the section's look (calm, mid, chorus) and the drop's two gels, the side, the slow
@@ -968,13 +967,6 @@ void WhiteRoomUniverse::buildBoard(const Game& g) {
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
-    }
-    // The bonus gauge: a groove in the wall.
-    if (!bare_) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.05f, R * 1.05f, vec3(1.f), 1.f, 4, saturate(gaugeShown_), g.bonusReady() ? 1.f : 0.f,
-             g.bonusActive() ? 1.f : 0.f, R);
     }
 }
 
@@ -1358,7 +1350,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
     }
     glDisable(GL_CULL_FACE);
 
-    // ---- The ghost, the gauge.
+    // ---- The ghost.
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
@@ -1367,14 +1359,7 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progTile_);
         setMat(progTile_, "uVP", vp_);
         set1f(progTile_, "uPx", px_);
-        set1f(progTile_, "uTime", worldTime_);
-        const float lit = smoothstepf(0.04f, 0.13f, wallLum_);
-        const vec3 ink = lerp(pal_.inkLight, pal_.ink, lit);
-        set3f(progTile_, "uInk", ink);
-        set3f(progTile_, "uGroove", lerp(ink, pal_.wall, 0.55f));
-        set3f(progTile_, "uAccent", pal_.accent);
         set1f(progTile_, "uBridge", bridge);
-        set3f(progTile_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);

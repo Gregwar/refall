@@ -193,7 +193,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     float dimT_ = 0.f;
     float rush_ = 0.f;   // a quad: the stack's flowers open at once
     Bridge bridge_;

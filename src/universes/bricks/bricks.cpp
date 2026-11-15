@@ -1271,13 +1271,10 @@ void BricksUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = ugl::toSrgb(pale ? mixDisplay(lin(V.accent), lin(0x000000), 0.15f) : lin(V.accent));
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a ring of twelve studs seen from above, the charged
-// ones in the accent.
-void BricksUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
+// The panels (the lettering: hudLine).
+void BricksUniverse::drawHud(const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -1285,35 +1282,6 @@ void BricksUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) 
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = Game::BONUS_LINES;
-        auto disc = [&](float cx, float cy, float rad, const vec3& col, float al) {
-            const int S = 20;
-            for (int k = 0; k < S; k++) {
-                const float a0 = TAU * k / S, a1 = TAU * (k + 1) / S;
-                const float v[3][6] = {{cx, cy, col.x, col.y, col.z, al},
-                                       {cx + std::cos(a0) * rad, cy + std::sin(a0) * rad, col.x, col.y, col.z, al},
-                                       {cx + std::cos(a1) * rad, cy + std::sin(a1) * rad, col.x, col.y, col.z, al}};
-                for (auto& q : v) shapes_.insert(shapes_.end(), q, q + 6);
-            }
-        };
-        for (int i = 0; i < N; i++) {
-            const float a = TAU * i / N;
-            const float cx = c.x + std::sin(a) * r, cy = c.y - std::cos(a) * r;
-            const float part = saturate(fill * N - i);
-            const float rad = r * 0.17f;
-            const float al = (g.bonusReady() ? 0.75f : 0.4f) * vis * (1.f - 0.5f * dimT_);
-            // a stud: its rim, then its top (charged: the accent)
-            disc(cx, cy, rad, halo, al * 0.6f);
-            disc(cx, cy, rad * 0.78f, ink, al * (1.f - part) * 0.7f);
-            disc(cx, cy, rad * 0.78f, accent, part * 0.95f * vis * (1.f - 0.5f * dimT_));
         }
         flushShapes();
     }
@@ -1478,7 +1446,6 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
     }
     updateModels(dt, wdt);
     updateFlights(dt, wdt);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- Geometry.
     boxes_.clear();
@@ -1638,7 +1605,7 @@ void BricksUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
 }
 

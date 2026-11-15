@@ -905,7 +905,12 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     (void)dt;
     Renderer::Break b;
     b.blank = &blank_;
-    const float t = breakT_;
+    float t = breakT_;
+    // Test hook: ZEN_TEST_CARD=<seconds> holds the break's intro (the title card) at that moment, e.g. in a review
+    // shot (0.4 the card comes up, 1.4 .. 3.2 held big, 5.2 landed in the corners).
+    static const float testCard = std::getenv("ZEN_TEST_CARD") ? std::atof(std::getenv("ZEN_TEST_CARD")) : -1.f;
+    const bool cardTest = testCard >= 0.f && break_ == BREAK_OFF;
+    if (cardTest) t = std::min(testCard, IN_SHOW - 0.01f);
     // Test hook: ZEN_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
     static const bool bareTest = std::getenv("ZEN_BARE") != nullptr;
     if (bareTest && break_ == BREAK_OFF) b.play = 0.f;
@@ -936,7 +941,7 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
             if (songFinished() && t >= OUT_HIDE + 1.f) black = 1.f;
         }
         b.black = black;
-    } else if (break_ == BREAK_IN) {
+    } else if (break_ == BREAK_IN || cardTest) {
         if (t >= IN_SHOW && t - dt < IN_SHOW) {
             game_.respawn(); // the falling piece back at the top, to fall again as the game comes back
             handleEvents();

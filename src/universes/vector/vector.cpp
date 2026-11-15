@@ -570,9 +570,6 @@ void VectorUniverse::onEvent(const GameEvent& ev, const Game&) {
         }
         break;
     }
-    case GameEvent::BonusReady:
-        readyFlash_ = 1.f;
-        break;
     case GameEvent::TopOut: {
         // The stack goes to pieces from the top, then the tube switches off.
         int topRow = Game::H;
@@ -733,7 +730,7 @@ void VectorUniverse::buildWorld(const MusicState& music) {
 }
 
 // =====================================================================================================
-// The board: the well, the stack, the piece, ghost, previews, gauge
+// The board: the well, the stack, the piece, ghost, previews
 // =====================================================================================================
 
 void VectorUniverse::buildBoard(const Game& g, float dt) {
@@ -846,27 +843,6 @@ void VectorUniverse::buildBoard(const Game& g, float dt) {
         beam(a, b, in, 0, 1.f, L_BOARD);
         beam(a, a + vec3(0, -0.2f, 0), in, 0, 1.f, L_BOARD);
         beam(b, b + vec3(0, -0.2f, 0), in, 0, 1.f, L_BOARD);
-    }
-
-    // ---- Bonus gauge: a dial of ticks; full, it breathes hot; in use, it drains.
-    {
-        const float target = g.bonusGauge();
-        gaugeShown_ = approach(gaugeShown_, target, 6.f, dt);
-        readyFlash_ = approach(readyFlash_, 0.f, 2.f, dt);
-        const vec3 gc = layout::GAUGE_CENTER;
-        const int N = 36;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        const float breathe = ready ? 0.5f + 0.5f * std::sin(worldTime_ * 4.f) : 0.f;
-        for (int j = 0; j < N; j++) {
-            const float a = PI * 0.5f - TAU * (j + 0.5f) / N;
-            const vec3 d(std::cos(a), std::sin(a), 0);
-            const bool lit = (j + 0.5f) / N <= gaugeShown_;
-            float in = lit ? 0.8f : 0.13f, hot = 0.f;
-            if (lit && ready) { in = 0.9f; hot = 0.15f + 0.35f * breathe + readyFlash_; }
-            if (lit && active) hot = 0.2f;
-            const float r0 = (j % 3 == 0) ? 0.68f : 0.76f;
-            beam(gc + d * (layout::GAUGE_R * r0), gc + d * layout::GAUGE_R, in * gain, hot * gain, 1.1f, L_BOARD);
-        }
     }
 }
 

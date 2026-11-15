@@ -945,26 +945,6 @@ void SumiUniverse::collectBoard(const Game& g, const MusicState&, std::vector<Sp
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), i == 0 ? 1.f : 0.8f);
     }
-
-    // The bonus gauge: a small enso that the cleared lines draw, vermilion once complete.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float GAUGE_R = layout::GAUGE_R;
-        const float sweep = TAU * 0.93f, start = 1.75f;
-        const bool ready = g.bonusReady(), active = g.bonusActive();
-        Sprite track{gc.x, gc.y, 1.3f, 1.3f, 0, (float)K_ENSO, 2.f, 0.16f, {inkC_.x, inkC_.y, inkC_.z, sweep},
-                     {GAUGE_R, 0.07f, start, 1.f}};
-        out.push_back(track);
-        float lvl = gaugeShown_;
-        if (lvl > 0.005f) {
-            vec3 col = ready || active ? verm_ : inkC_;
-            float a = 0.85f;
-            if (ready) a = 0.72f + 0.2f * (0.5f + 0.5f * std::sin(readyT_ * TAU * 0.45f));
-            Sprite arc{gc.x, gc.y, 1.4f, 1.4f, 0, (float)K_ENSO, 5.f, a, {col.x, col.y, col.z, sweep},
-                       {GAUGE_R, 0.15f, start, std::min(1.f, lvl * 1.005f)}};
-            out.push_back(arc);
-        }
-    }
 }
 
 // ---------------------------------------------------------------- text
@@ -1183,10 +1163,6 @@ void SumiUniverse::render(const Frame& f, GLuint fbo) {
     if (!paused) {
         const float wdt = dt * lerpf(1.f, 0.35f, slow_);
         simulate(game, music, dt, wdt);
-        if (!f.bare) { // (a break's blank board: the gauge keeps its state for the game's return)
-            gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 1.5f, dt);
-            readyT_ = game.bonusReady() ? readyT_ + dt : 0.f;
-        }
         readyFlash_ = approach(readyFlash_, 0.f, 1.f, dt);
     }
 

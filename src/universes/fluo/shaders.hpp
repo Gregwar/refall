@@ -5,7 +5,7 @@
 // COMPOSITE_FS), the paint (a persistent pair of buffers the splashes are stamped into once they are done: the
 // color, premultiplied linear + coverage, and the coat's thickness, for its relief; never cleared during a song; a
 // "wet" pair, redrawn each frame, holds the splashes still spreading and the drips still running) and the play (the
-// pieces, the ghost, the gauge, the paint in flight, specks, drawn last over the composite).
+// pieces, the ghost, the paint in flight, specks, drawn last over the composite).
 
 namespace fluo_shaders {
 
@@ -275,11 +275,11 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- the play: pieces, ghost, gauge, specks
+// ---------------------------------------------------------------- the play: pieces, ghost, specks
 // Instanced quads in board space.
 //   a0: center xy, quad half extents xy
 //   a1: color (linear), alpha
-//   a2: kind (0 cell, 1 ghost cell, 2 ring, 3 dot, 4 line, 5 paint in flight), mask (cell: same-piece neighbors),
+//   a2: kind (0 cell, 1 ghost cell, 3 dot, 4 line, 5 paint in flight), mask (cell: same-piece neighbors),
 //       rotation, glow
 //   a3: kind's parameters (cell: scale, flash; ring: radius, width, fill, ready; dot: radius; line: half length, half
 //       width; paint in flight: the head's radius, the tail's length (along -x), the tail's radius)
@@ -403,22 +403,6 @@ void main() {
             outc = mix(outc, col * 0.45, shared ? (1.0 - smoothstep(0.004 * s, 0.004 * s + aa, e)) * 0.7 : 0.0);
             outc = mix(outc, vec3(1.0), vA3.y);
             a = inside * alpha;
-        }
-    } else if (kind == 2) { // the gauge's ring
-        if (uPass == 0) discard;
-        float R = vA3.x, wd = vA3.y, fill = vA3.z;
-        float r = length(p);
-        float ring = 1.0 - smoothstep(wd - aa, wd + aa, abs(r - R));
-        float ang = atan(p.x, p.y); // 0 at the top, clockwise
-        float f = fract(ang / 6.2831853 + 1.0);
-        float on = fill >= 0.999 ? 1.0 : smoothstep(0.004, 0.0, f - fill);
-        float base = ring * 0.22;
-        a = max(base, ring * on) * alpha;
-        outc = mix(vec3(0.6), col, on);
-        if (vA3.w > 0.5) { // ready: a filled disc glowing softly inside
-            float disc = (1.0 - smoothstep(R * 0.55 - aa, R * 0.55 + aa, r)) * 0.9;
-            a = max(a, disc * alpha);
-            outc = col;
         }
     } else if (kind == 3) { // a speck of paint
         if (uPass == 0) discard;

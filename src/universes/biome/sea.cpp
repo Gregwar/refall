@@ -173,9 +173,8 @@ Palette SeaWorld::palette(int v) const {
     const bool inkDark = ugl::luma(p.ink) < 0.2f;
     p.inkDark = inkDark ? p.ink : lin(0x1b2a38);
     p.inkLight = inkDark ? lin(0xf2f5f4) : p.ink;
-    // the cubes reflect the sea under the horizon; the gauge fills with the first water
+    // the cubes reflect the sea under the horizon
     p.envLow = p.sea2 * 0.5f;
-    p.gauge = p.piece[0];
     return p;
 }
 int sea::variantCount() { return VARIANT_COUNT; }

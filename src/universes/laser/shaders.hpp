@@ -264,10 +264,10 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- tiles: the stack, the piece, previews, gauge
+// ---------------------------------------------------------------- tiles: the stack, the piece, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, neighbour mask, lock flash age (< 0 none), scale.
-// a3: extra (burn: progress, seed; gauge: level, ready, active, radius).
+// a3: extra (burn: progress, seed).
 inline const char* TILE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 a0;
@@ -294,7 +294,7 @@ flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
 uniform sampler2D uNoise;
 uniform float uPx, uTime, uBridge, uLight;
-uniform vec3 uBridgeInk, uGaugeCol, uGaugeSlow, uTrack;
+uniform vec3 uBridgeInk;
 
 // The silhouette of a piece seen from one of its cells (cell units, the cell's center at 0): the sides shared with a
 // cell of the same piece open (no seam inside a piece), the others inset by a hairline gap; the inner corners notched.
@@ -376,28 +376,6 @@ void main() {
         col += hot * front;
         float a = cov * max(keep, front * 0.9) * alpha * (1.0 - uBridge);
         frag = vec4(col * cov * alpha * (1.0 - uBridge), a);
-        return;
-    }
-    if (kind == 4) {
-        // the bonus gauge: a ring of laser light drawn clockwise from the top as it fills; whole and brighter when
-        // ready, cold white while the slow motion drains it
-        float R = v3.w;
-        vec2 q = vLocal / R;
-        float r = length(q);
-        float aa = uPx / R;
-        float lvl = v3.x, ready = v3.y, isOn = v3.z;
-        float ang = atan(q.x, q.y);                 // 0 at the top, clockwise
-        float t = fract(ang / 6.2831853 + 1.0);
-        float ring = exp(-pow((r - 0.86) / (0.018 + aa), 2.0));
-        float fill = 1.0 - smoothstep(lvl - 0.004, lvl + 0.004, t);
-        vec3 lc = isOn > 0.5 ? uGaugeSlow : uGaugeCol;
-        vec3 col = uTrack * ring * 0.35;
-        col += lc * ring * fill * (1.4 + 0.8 * ready);
-        // a soft halo around the ring once it is whole
-        col += lc * exp(-pow((r - 0.86) / 0.12, 2.0)) * 0.18 * max(ready, isOn);
-        float a = clamp(ring, 0.0, 1.0) * 0.6;
-        col = mix(col, uBridgeInk * ring, uBridge);
-        frag = vec4(col * alpha, a * alpha * 0.0);
         return;
     }
     discard;

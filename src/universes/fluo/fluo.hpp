@@ -129,7 +129,6 @@ private:
     int maskAt(const Game& g, int x, int y) const;
     void adoptUnknown(const Game& g);
 
-    float gaugeShown_ = 0.f;
     Bridge bridge_;
     Rng rng_{90210};
 };

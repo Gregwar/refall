@@ -782,7 +782,6 @@ void Garden16Universe::simulate(const Game& game, const MusicState& music, float
         parts_.push_back(q);
     }
     if (parts_.size() > 3000) parts_.erase(parts_.begin(), parts_.begin() + (parts_.size() - 3000));
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // The falling clod sheds a crumb of soil now and then from its underside.
@@ -1697,7 +1696,7 @@ void Garden16Universe::drawFront() {
 }
 
 // =====================================================================================================
-// Drawing: previews, gauge, HUD (into the HUD layer, merged with a pale halo where the earth is behind)
+// Drawing: previews, HUD (into the HUD layer, merged with a pale halo where the earth is behind)
 // =====================================================================================================
 
 void Garden16Universe::drawMini(Canvas& cv, int X0, int Y0, int size, int t, int m, uint8_t cls) {
@@ -1756,30 +1755,6 @@ void Garden16Universe::drawSide(const Game& g) {
     preview(g.holdType(), lx(layout::HOLD_CENTER.x), ly(layout::HOLD_CENTER.y), 7, g.holdUsed());
     for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), lx(layout::nextCenter(i).x), ly(layout::nextCenter(i).y), i == 0 ? 7 : 6, false);
 
-    // The bonus gauge: a ring with a meadow rising inside, a flower opening in it when it is ready.
-    {
-        const int gx = lx(layout::GAUGE_CENTER.x), gy = ly(layout::GAUGE_CENTER.y), R = CELL;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / 10.f) : saturate(gaugeShown_);
-        const bool ready = g.bonusReady() || g.bonusActive();
-        const float level = gy + R - fill * 2.f * R;
-        for (int y = -R; y <= R; y++)
-            for (int x = -R; x <= R; x++) {
-                const float d = std::sqrt((float)(x * x + y * y));
-                if (d > R + 0.45f) continue;
-                const int X = gx + x, Y = gy + y;
-                if (d > R - 0.55f) { hud_.set(X, Y, GR_OUT, K_HUD); continue; }
-                const int wave = ((int)(realT_ * 3.f) + x / 3) & 1;
-                const int lv = iround(level) + (fill > 0.02f && fill < 0.98f ? wave : 0);
-                if (Y < lv) continue;
-                uint8_t c = Y == lv ? GR_HI : (Y > gy + R - 4 ? G_BASE : GR_BASE);
-                if (Y == gy + R - 4) c = GR_SH;
-                hud_.set(X, Y, c, K_HUD);
-            }
-        if (ready) {
-            const int stage = std::min(3, (int)(realT_ * 4.f) % 8);
-            flower(hud_, gx, gy + 4, 4, std::max(1, stage), 0, 0, K_HUD);
-        }
-    }
 }
 
 // A HUD line as GARDEN sets it, in canvas pixels: PIXEL's fonts at one font pixel per canvas pixel (two for the
@@ -2000,7 +1975,7 @@ void Garden16Universe::hudLine(const HudText& h, text::Line& out) {
     }
 }
 
-// The HUD layer over the scene (the previews, the gauge, the sprouts): where the earth is behind it, a soft pale
+// The HUD layer over the scene (the previews, the sprouts): where the earth is behind it, a soft pale
 // halo of two pixel rings around it.
 void Garden16Universe::mergeLayer() {
     auto earthy = [](uint8_t k) { return k == K_DIRT || k == K_GRASS || k == K_PLANT; };

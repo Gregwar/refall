@@ -1011,7 +1011,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- motes over the board, the gauge
+// ---------------------------------------------------------------- motes over the board
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, size (radius, board units), mode
@@ -1034,25 +1034,10 @@ flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
-uniform float uPxPerUnit;
 void main() {
     int mode = int(vA.w + 0.5);
     float r = length(vLocal);
     vec3 c = vB.rgb;
-    if (mode == 1) {
-        // the gauge: a faint ring of segments, the charge lit from the top clockwise
-        float px = 1.0 / max(vA.z * uPxPerUnit, 1e-3);
-        float ang = atan(vLocal.x, vLocal.y);
-        if (ang < 0.0) ang += 6.2831853;
-        float seg = abs(fract(ang / 6.2831853 * 24.0) - 0.5);
-        float gap = smoothstep(0.38, 0.32, seg);
-        float ring = exp(-sq((r - 0.8) / max(px * 1.5, 0.02))) * gap;
-        float on = step(ang, vC.x * 6.2831853);
-        float halo = exp(-sq((r - 0.8) / 0.1)) * on * 0.3 * (0.6 + 0.4 * vC.y);
-        float v = ring * (0.25 + 0.95 * on) + halo;
-        frag = vec4(c * v * vB.a, 0.0);
-        return;
-    }
     float v = exp(-r * r * 14.0) + 0.3 * exp(-r * r * 3.5);
     v *= smoothstep(1.0, 0.8, r);
     frag = vec4(c * v * vB.a, 0.0);

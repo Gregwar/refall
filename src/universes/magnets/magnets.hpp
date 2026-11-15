@@ -62,7 +62,7 @@ private:
     vec2 fieldAt(vec2 p) const;
     void addPieceCells(const int (*cells)[2], int n, int type, vec2 origin, float scale, bool gameCoords, vec2 axis,
                        float shown, float alpha, int mode, float lift, std::vector<CellInst>& out);
-    void shape(vec2 a, vec2 b, float w0, float w1, vec3 col, float alpha, int kind = 0, float extra = 1.f);
+    void shape(vec2 a, vec2 b, float w0, float w1, vec3 col, float alpha);
     void impulse(float x0, float y0, float x1, float y1, float speed, float spin, float reach, float up);
     void tap(float amount) { tapNow_ = std::max(tapNow_, amount); }
     void simulate(float dt);
@@ -110,8 +110,6 @@ private:
     float curShown_ = 1.f;
     std::vector<Dying> dying_;
     float overT_ = -1.f;
-    vec2 needle_{0, 1};
-    float needleA_ = 0.f, needleW_ = 0.f;
 
     // per frame
     std::vector<float> charges_; // x y q 0

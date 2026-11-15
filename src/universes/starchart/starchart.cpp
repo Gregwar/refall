@@ -137,11 +137,6 @@ std::vector<vec2> circlePts(vec2 c, float r, int n, float a0 = 0.f) {
     for (int i = 0; i <= n; i++) p.push_back(polar(c, r, a0 + TAU * i / n));
     return p;
 }
-std::vector<vec2> arcPts(vec2 c, float r, float a0, float a1, int n) {
-    std::vector<vec2> p;
-    for (int i = 0; i <= n; i++) p.push_back(polar(c, r, a0 + (a1 - a0) * i / n));
-    return p;
-}
 
 const char* ROMAN[] = {"XII", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI"};
 const char* SUFFIX[] = {"", " Minor", " Australis", " Borealis", " Nova", " Altera"};
@@ -1482,7 +1477,6 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > 0.5f; }), glints_.end());
     for (auto& fd : fading_) fd.t += dt; // a clear runs in real time, even in slow motion
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The engraving.
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
@@ -1633,24 +1627,6 @@ void StarChartUniverse::render(const Frame& f, GLuint fbo) {
     for (const Glint& g : glints_) {
         const float k = g.t / 0.5f;
         sprite(g.p, (0.22f + 0.2f * k) * g.size, pal_.star, (1.f - k) * (1.f - k) * 0.9f, 1.f, 0.6f, 0.4f);
-    }
-    // the bonus gauge: an engraved ring with its degrees, the charge a gold arc
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const vec2 c = V(gc.x, gc.y);
-        const float R = layout::GAUGE_R;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const bool on = game.bonusReady() || game.bonusActive();
-        ss.clear();
-        ss.push_back(Stroke{circlePts(c, R, 90), 0.9f, 0.85f, 0});
-        ss.push_back(Stroke{circlePts(c, R * 0.86f, 90), 0.6f, 0.6f, 1});
-        for (int i = 0; i < 36; i++) {
-            const float a = TAU * i / 36.f;
-            ss.push_back(Stroke{{polar(c, R * 0.86f, a), polar(c, R * (i % 3 == 0 ? 0.76f : 0.81f), a)}, 0.6f, 0.6f, 0});
-        }
-        if (fill > 0.002f) ss.push_back(Stroke{arcPts(c, R * 0.93f, PI * 0.5f, PI * 0.5f - TAU * fill, std::max(4, (int)(90 * fill))),
-                                                3.f, on ? 1.f : 0.75f, on ? 2 : 0, on ? 1.f : 0.4f});
-        for (const Stroke& s : ss) emit(s, 1.f, 1.f);
     }
 
     cells_.clear();

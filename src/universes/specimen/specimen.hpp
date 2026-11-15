@@ -98,8 +98,7 @@ private:
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
     std::vector<float> shapes_;
-    void flushShapes(int mode);
-    vec3 ink_, accentInk_;
+    void flushShapes();
 
     // ---- GL.
     GLuint progField_ = 0, progOrg_ = 0, progPiece_ = 0, progSpeck_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
@@ -126,7 +125,6 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f;
-    float gaugeShown_ = 0.f;
     bool bare_ = false; // this frame is the world alone (a break): the bench, no tissue, no loupes
     float dimT_ = 0.f;
     Bridge bridge_;

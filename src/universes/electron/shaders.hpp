@@ -157,8 +157,7 @@ void main() {
 
 // Kinds: 0 a block, a bare die (p0 charge: its edges lit, p1 half size, p3 ghost, p4 shattered), 1 a soft shadow (p1 half
 // size, p2 blur), 2 a charge (p1 radius, p2 tail length, p3 carrying, p0 flicker), 3 a fragment (p1 size, p0 glow),
-// 4 a soft round dot (p1 radius, p2 ring width: 0 a disc), 5 a spark streak (p1 length, p2 width, p0 heat),
-// 6 a flash (p1 radius).
+// 5 a spark streak (p1 length, p2 width, p0 heat), 6 a flash (p1 radius).
 // Glows are written with less alpha than color, so they add light (the blending is premultiplied).
 inline const char* SPRITE_FS = R"(#version 330 core
 in vec2 vL;
@@ -306,11 +305,6 @@ void main() {
         float a = clamp(0.5 - d / fw, 0.0, 1.0);
         float g = exp(-max(d, 0.0) / (s * 0.9)) * (1.0 - a) * vC.w;
         o = vec4(col * a + vC.rgb * g * 0.6, a);
-    } else if (kind < 4.5) {
-        float r = length(vL), R = vD.x, ring = vD.y;
-        float fw = max(fwidth(vL.x), 1e-4);
-        float d = ring > 0.0 ? abs(r - R) - ring : r - R;
-        o = vec4(mix(vC.rgb, uBridgeInk, uBridge * vC.w), 1.0) * clamp(0.5 - d / fw, 0.0, 1.0);
     } else if (kind < 5.5) {
         // a spark: a thin streak, white hot at its head (+x), cooling to its color along the tail
         float Lh = vD.x, w = vD.y;

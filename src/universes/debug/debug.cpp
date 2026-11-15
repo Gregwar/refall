@@ -135,7 +135,7 @@ public:
         ugl::set1f(bg_, "uGrid", 0.12f + 0.3f * lv_);
         ugl::drawFullscreen();
 
-        // ---- Board, pieces, previews, gauge, HUD: flat quads.
+        // ---- Board, pieces, previews, HUD: flat quads.
         q_.clear();
         const Game& g = f.game;
         const float gain = 1.f - 0.4f * dimT_;
@@ -187,13 +187,6 @@ public:
         };
         if (g.holdType() >= 0) preview(g.holdType(), layout::HOLD_CENTER, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
         for (int i = 0; i < 3; i++) if (g.next(i) >= 0) preview(g.next(i), layout::nextCenter(i), layout::previewScale(i), i ? 0.7f : 1.f);
-        // Gauge: a ring of dots.
-        for (int j = 0; j < 24; j++) {
-            const float a = PI * 0.5f - TAU * (j + 0.5f) / 24;
-            const vec3 c = layout::GAUGE_CENTER + vec3(std::cos(a), std::sin(a), 0) * (layout::GAUGE_R * 0.85f);
-            const bool lit = (j + 0.5f) / 24 <= g.bonusGauge();
-            cell(c, 0.09f, lit ? V.accent : V.paper, lit ? 1.f : 0.5f);
-        }
         for (const HudRect& r : f.panels)
             rect(r.x, r.y, r.w, r.h, r.custom ? ugl::toLinear(r.color) : (r.accent ? V.accent : V.paper * 0.8f), r.alpha);
         for (const HudText& h : f.hud) text(h, h.accent ? V.accent : ink);

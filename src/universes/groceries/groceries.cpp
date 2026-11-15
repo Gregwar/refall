@@ -318,7 +318,7 @@ void GroceriesUniverse::flushShapes() {
     shapes_.clear();
 }
 
-void GroceriesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
+void GroceriesUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
     const float s = height_ / 1080.f;
     // clean white lettering, like a shop's digital price displays, on a soft dark halo; the accent the store's color
     const vec3 ink(0.95f, 0.95f, 0.93f), halo = ugl::toSrgb(pal_.veil) * 0.8f;
@@ -331,36 +331,6 @@ void GroceriesUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, 
             const float qd[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                     {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : qd) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-    // the bonus gauge: a fine ring, its charge in the accent, ticked
-    if (vis > 0.01f) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = 120;
-        const float th = std::max(1.2f, 1.6f * s), th2 = std::max(2.5f, 5.f * s);
-        auto seg = [&](float a0, float a1, float rr, float w, const vec3& col, float al) {
-            const float s0 = std::sin(a0), c0 = std::cos(a0), s1 = std::sin(a1), c1 = std::cos(a1);
-            const float ri = rr - w * 0.5f, ro = rr + w * 0.5f;
-            const float pts[4][2] = {{c.x + s0 * ri, c.y - c0 * ri}, {c.x + s0 * ro, c.y - c0 * ro}, {c.x + s1 * ro, c.y - c1 * ro}, {c.x + s1 * ri, c.y - c1 * ri}};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {pts[k][0], pts[k][1], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        const float dimk = vis * (1.f - 0.5f * dimT_);
-        for (int i = 0; i < N; i++) seg(TAU * i / N, TAU * (i + 1) / N, r, th, ink, (g.bonusReady() ? 0.55f : 0.25f) * dimk);
-        for (int i = 0; i < Game::BONUS_LINES; i++) {
-            const float a = TAU * i / Game::BONUS_LINES;
-            seg(a - 0.012f, a + 0.012f, r - th2, th2 * 0.9f, ink, 0.35f * dimk);
-        }
-        flushShapes();
-        for (int i = 0; i < N; i++) {
-            if ((i + 0.5f) / N > fill) break;
-            seg(TAU * i / N, TAU * (i + 1) / N, r, th2, accent, 0.95f * dimk);
         }
         flushShapes();
     }
@@ -953,7 +923,6 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     const float receiptTarget = 1.f + 0.3f * lines + burst_;
     const bool printing = receipt_ < receiptTarget - 0.01f;
     receipt_ = std::min(receiptTarget, receipt_ + dt * 1.1f);
-    gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The full bags at the counter's edge: set aside, then taken away when the edge is full.
     bagPop_ = approach(bagPop_, 1.f, 5.f, dt);
@@ -1313,7 +1282,7 @@ void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.hud, f.panels);
+    drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
     if (gpuQ) {
         glEndQuery(GL_TIME_ELAPSED);
