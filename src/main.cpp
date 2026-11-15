@@ -932,6 +932,10 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     if (break_ == BREAK_OUT) {
         b.leaving = true;
         const float hide = breakSkip_ ? 1.f : OUT_HIDE;
+        // the teardown runs from the song's last game frame to the end of the black (with the song when it plays on)
+        float tEnd = hide + 1.6f;
+        if (!breakSkip_ && track_) tEnd = std::max(OUT_HIDE + 1.f, t + (float)(track_->duration() - 0.2 - songTime_));
+        b.teardown = saturate(t / std::max(0.1f, tEnd));
         b.play = 1.f - smoothstepf(0.f, hide, t);
         const float dark0 = hide + 0.4f;
         float black = smoothstepf(dark0, dark0 + 1.2f, t);
@@ -949,6 +953,8 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         }
         b.play = smoothstepf(IN_SHOW, IN_END, t);
         b.black = 1.f - smoothstepf(IN_SHRINK, IN_WORLD, t);
+        // the setup runs from the world's first light to the game's arrival
+        b.setup = saturate((t - IN_SHRINK) / (IN_END - IN_SHRINK));
         const float bareA = smoothstepf(IN_WORLD - 0.6f, IN_WORLD + 0.2f, t);
         for (const HudText& h : hud)
             if (h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE) {

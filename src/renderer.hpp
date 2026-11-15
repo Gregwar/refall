@@ -88,6 +88,7 @@ public:
         float cardShrink = 0, cardAlpha = 0;
         float cardIn = 0; // the card's lines coming up (0 .. 1, held: a universe the host letters glides them home)
         bool leaving = false; // after a song (the teardown), else before one (the setup)
+        float setup = 1, teardown = 0; // the scene's phases (Frame::setup / teardown), on the break's clock
     };
     void setBreak(Break b) { brk_ = std::move(b); }
     const TitleCard& titleCard() const { return card_; }

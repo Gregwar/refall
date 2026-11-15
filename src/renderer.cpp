@@ -324,12 +324,10 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
                       const std::vector<HudText>& hud, float fade) {
     if (!cur_.u) return;
     Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
-    // the scene's setup / teardown, from the break's fades: the world coming out of the black then the game coming in,
-    // or the game going away then the world into the black
+    // the scene's setup / teardown, on the break's clock (the app's: they keep moving through its holds)
     {
-        const float play = saturate(brk_.play), black = saturate(brk_.black);
-        if (brk_.leaving) f.teardown = saturate(0.4f * (1.f - play) + 0.6f * black);
-        else if (play < 1.f || black > 0.f) f.setup = saturate(0.6f * (1.f - black) + 0.4f * play);
+        f.setup = saturate(brk_.setup);
+        f.teardown = saturate(brk_.teardown);
         static const char* ts = std::getenv("ZEN_TEST_SETUP");
         static const char* tt = std::getenv("ZEN_TEST_TEARDOWN");
         if (ts) f.setup = saturate((float)std::atof(ts));
