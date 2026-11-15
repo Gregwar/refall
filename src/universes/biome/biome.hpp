@@ -198,6 +198,8 @@ private:
     void drawHud(const std::vector<HudRect>& panels);
     float bgLuma(float bx, float by) const;
 
+    // away_: the scene's setup and teardown (0 the lens in place .. 1 risen high above the diorama and drawn back)
+    float away_ = 0.f;
     void setCamera();
     void drawRain();
     void drawPane();

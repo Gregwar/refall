@@ -16,6 +16,9 @@
 // This file is the shell both worlds share: the variants over both worlds and the pick from the song, the scene's
 // level, the weather's director (a drop's storm, its lightning, the kicks), game over, the registry. render.cpp draws
 // the frame around the world's passes: the camera, the stack's cubes, the well's pane, the rain, the HUD.
+//
+// Around a song, the lens is craned: the setup brings it down from high above onto the diorama, the teardown lifts
+// it back up and away.
 #include "universes/biome/biome.hpp"
 
 #include <algorithm>
