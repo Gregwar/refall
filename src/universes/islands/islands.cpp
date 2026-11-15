@@ -1118,7 +1118,11 @@ void IslandsUniverse::updateFleet(float dt) {
                 if (std::fabs(lat0 - step) > clear && wet(lat0 - step)) { b.turn = -step; break; }
             }
         } else if (b.turn != 0.f && wet(lat0)) b.turn = 0.f;
-        b.latOff = approach(b.latOff, b.turn, 0.6f, dt);
+        // (sliding aside no faster than a gentle course change: a quarter of its speed, so it reads as steering)
+        {
+            const float maxStep = (0.25f * b.speed + 0.5f) * dt;
+            b.latOff += std::clamp(approach(b.latOff, b.turn, 0.6f, dt) - b.latOff, -maxStep, maxStep);
+        }
         vec3 pos(rp.x + rr.x * (lat0 + b.latOff), 0.f, rp.z + rr.z * (lat0 + b.latOff));
         float head = rp.head + 0.04f * std::sin(b.phase * 0.2f);
         if (b.launchT < 7.f) {
@@ -1134,8 +1138,18 @@ void IslandsUniverse::updateFleet(float dt) {
             const float dd = length(dv), keep = 45.f * spread_ * (b.big ? 1.4f : 1.f);
             if (dd < keep) pos = pos + (dd > 1e-3f ? dv / dd : rr) * (keep - dd);
         }
+        // the bow points where it goes: the heading follows its actual motion (the route's turns, sliding aside, the
+        // camera's clearance), eased; a jump (recycled ahead, just appeared) takes the route's heading at once
+        {
+            const vec3 mv(pos.x - b.p.x, 0.f, pos.z - b.p.z);
+            const float ml = length(mv);
+            if (b.appear < 0.05f || ml > b.speed * dt * 4.f + 2.f || b.launchT < 7.f) b.head = head;
+            else if (ml > 1e-4f) {
+                const float want = std::atan2(mv.z, mv.x);
+                b.head += std::remainder(want - b.head, TAU) * std::min(1.f, 2.5f * dt);
+            }
+        }
         b.p = pos;
-        b.head = head;
         float k = scaleT * (b.big ? 1.25f : 1.f) * smoothstepf(0.f, 1.f, b.appear);
         if (b.sink > 0.f) {
             b.sink += dt;
