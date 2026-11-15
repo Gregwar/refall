@@ -17,6 +17,9 @@
 // washed back to paper). A change of universe washes the sheet back to plain paper from the well outward (and
 // paints it in from the edges when entering).
 //
+// Around a song: in the setup one loaded brush lays the washes down the white sheet from the top, a wet bead at its
+// front; in the teardown the sheet tilts like at a game over, the washes running down and lifted back to paper.
+//
 // Cost: the landscape is drawn at a reduced resolution (at most 540 lines), the wet layer is a small pigment and
 // water simulation at most 360 lines high, a few steps a frame; the paper is rendered once per size.
 //
@@ -901,7 +904,9 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
         // (a break: no well masked out of the painting, which runs on through its place)
         set4f(progComp_, "uWell", WELL_X, WELL_Y, bare_ ? 1.f : 0.f, bare_ ? 0.f : 0.15f);
         set1f(progComp_, "uWetGain", 1.f - smoothstepf(0.f, 0.6f, run_));
-        set1f(progComp_, "uRun", run_);
+        // the teardown: the sheet tilted, its washes running down and lifted back to paper (the game over's run)
+        set1f(progComp_, "uRun", std::max(run_, smoothstepf(0.05f, 0.9f, f.teardown)));
+        set1f(progComp_, "uPaint", smoothstepf(0.1f, 0.85f, f.setup));
         set1f(progComp_, "uBridge", bridge);
         set3f(progComp_, "uBridgeCol", bridge_.color);
         set1f(progComp_, "uLift", 1.f);
