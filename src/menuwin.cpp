@@ -115,7 +115,7 @@ struct Worlds {
     // pieces
     void info(F head, F body, Col ink, Col dim, Col accent, int card);
     void tabs(F f, Col ink, Col accent, float track);
-    void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track);
+    void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha = 1.f);
     void kalBackground(const std::string& cur);
     void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC);
     void kalTitle();
@@ -187,7 +187,7 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
         p.text(f, difficultyName(d), cx + (d - 1) * sp, y, 21 * u, withA(ink, 0.45f + 0.55f * near1(m.aDiff_, d)), 0, track);
 }
 
-void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track) {
+void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
     static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "QUIT"};
     const float cx = X(960);
     // the focused entry's inked edges (eased between entries): the underline spans them
@@ -200,9 +200,9 @@ void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accen
         inkR += near1(m.aTitle_, i) * (start + r);
     }
     const float base = Y(y0 + m.aTitle_ * step), ys = base + 14 * u;
-    p.line(inkL, ys, inkR, ys, 1.6f * u, withA(accent, 0.9f));
+    p.line(inkL, ys, inkR, ys, 1.6f * u, withA(accent, 0.9f * alpha));
     for (int i = 0; i < Menu::TITLE_ITEMS; i++)
-        p.text(f, ITEMS[i], cx, Y(y0 + i * step), size * u, withA(ink, 0.45f + 0.55f * near1(m.aTitle_, i)), 0, track);
+        p.text(f, ITEMS[i], cx, Y(y0 + i * step), size * u, withA(ink, (0.45f + 0.55f * near1(m.aTitle_, i)) * alpha), 0, track);
 }
 
 void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
@@ -566,38 +566,47 @@ void Worlds::kalTitle() {
     float mix;
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
+    // the opening (Menu::startIntro), out of the black: the disc and its gold ring, the name (its letters drawing
+    // together), the petals opening one by one round it, then the world and the menu
+    const float k = m.introT_ < 0.f ? 99.f : m.introT_;
+    const float worldA = sstep((k - 2.8f) / 2.2f), discA = sstep((k - 0.5f) / 1.f), ringA = sstep((k - 1.1f) / 1.3f);
+    const float nameA = sstep((k - 1.4f) / 1.4f), menuA = sstep((k - 4.8f) / 0.9f);
+    if (worldA < 1.f) p.rrect(X(-100), Y(-100), X(2020) - X(-100), Y(1180) - Y(-100), 0, hex(0x000000, 1.f - worldA));
     // the logo (its petals from 40 to 620) and the menu (652..862) centred on the screen's height together
     const float dy = 540.f - 0.5f * (40.f + 862.f);
     const float cx = X(960), cy = Y(330 + dy);
-    p.circle(cx, cy, 250 * u, hex(0x000000, 0.4f), 60 * u);
+    p.circle(cx, cy, 250 * u, hex(0x000000, 0.4f * worldA), 60 * u);
     // the logo's petals: the stages' colours in rainbow order round the wheel
     std::vector<std::pair<float, Col>> hues;
-    for (int k = 0; k < nStages(); k++) {
-        const Col c = stageCol(k);
+    for (int k2 = 0; k2 < nStages(); k2++) {
+        const Col c = stageCol(k2);
         const float mx = std::max({c.r, c.g, c.b}), d = mx - std::min({c.r, c.g, c.b});
         const float h = d <= 0.f ? 0.f : mx == c.r ? std::fmod((c.g - c.b) / d + 6.f, 6.f) : mx == c.g ? (c.b - c.r) / d + 2.f : (c.r - c.g) / d + 4.f;
         hues.push_back({h, c});
     }
     std::sort(hues.begin(), hues.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
     for (int i = 0; i < 12; i++) {
-        const float a = t * 0.03f + i * TAU / 12;
+        const float pa = sstep((k - 2.3f - 0.11f * i) / 0.55f); // (one after the other, round the wheel)
+        if (pa <= 0.f) continue;
+        const float a = t * 0.03f + i * TAU / 12 - 0.35f * (1.f - pa);
         const Col c = hues.empty() ? hex(i % 2 ? 0xffffff : 0xe8c06a) : hues[i * hues.size() / 12].second;
-        kite(cx, cy, a, 200 * u, 290 * u, 0.2f, c, hues.empty() ? 0.18f : 0.95f, true, hex(0x08080c, 0.8f));
+        kite(cx, cy, a, 200 * u, lerpf(205.f, 290.f, pa) * u, 0.2f, c, (hues.empty() ? 0.18f : 0.95f) * pa, true, hex(0x08080c, 0.8f * pa));
     }
-    p.circle(cx, cy, 200 * u, hex(0x08080c));   // a plain dark glass disc, the title inside it
-    p.ring(cx, cy, 191 * u, 4 * u, hex(0xe8c06a, 0.85f));
+    p.circle(cx, cy, 200 * u * lerpf(0.94f, 1.f, discA), hex(0x08080c, discA)); // a plain dark glass disc, the title inside it
+    if (ringA > 0.f) p.arc(cx, cy, 191 * u, 191 * u, -1.5708f, -1.5708f + TAU * ringA, 4 * u, hex(0xe8c06a, 0.85f)); // (drawn round)
     {
         const std::string title = upper(GAME_TITLE);
         float size = 76 * u;   // as large as fits inside the disc
         const float w = p.width(F::JOSEFIN_LIGHT, title, size, 0.22f);
         if (w > 330 * u) size *= 330 * u / w;
         p.setAdditive(true);
-        p.glow(cx, cy, 150 * u, hex(0xe8c06a, 0.08f + 0.03f * std::sin(t * 0.8f)));
+        p.glow(cx, cy, 150 * u, hex(0xe8c06a, (0.08f + 0.03f * std::sin(t * 0.8f)) * nameA));
         p.setAdditive(false);
-        p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff), 0, 0.22f);
+        p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff, nameA), 0, lerpf(0.5f, 0.22f, nameA));
     }
-    p.rrect(cx - 260 * u, Y(652 + dy), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f));
-    menuItems(F::JOSEFIN, 712 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f);
+    if (menuA <= 0.f) return;
+    p.rrect(cx - 260 * u, Y(652 + dy), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f * menuA));
+    menuItems(F::JOSEFIN, 712 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
 }
 
 void Worlds::kalFree() {

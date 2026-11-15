@@ -91,6 +91,10 @@ public:
     Place place() const;
     // Back to a saved place (the stage clamped to the last unlocked one); the difficulties only when `difficulties`.
     void restore(const Place& p, bool difficulties);
+    // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
+    // petals open round it, then the world and the menu; a key hurries it to its end.
+    static constexpr float INTRO_END = 6.f;
+    void startIntro() { introT_ = 0.f; }
     static bool loadPlace(const std::string& path, Place& p);
     static bool savePlace(const std::string& path, const Place& p);
     // Free play's playlists (the free screen picks one); the store is the app's.
@@ -193,6 +197,7 @@ private:
     int celebrate_ = -1, celebrateNext_ = -1; // the stage just cleared (see celebrateClear), the one to move on to
     float celebrateT_ = 0;
     float time_ = 0, msgT_ = 0, lastInput_ = 0; // lastInput_: when a key was last pressed (the menu's idle time)
+    float introT_ = -1.f; // the opening's time (< 0: none)
     std::string msg_, msgSub_;
     bool msgBad_ = false;
 

@@ -1463,7 +1463,10 @@ int App::run() {
     if (menuEnabled_) { // back where the menu was last time (the command line's difficulty wins)
         placePath_ = menuPlacePath(opt_.progressPath);
         Menu::Place pl;
-        if (Menu::loadPlace(placePath_, pl)) {
+        // the game's first launch (or after --reset: no place kept), or ZEN_MENU_INTRO=1: the title's opening
+        const bool known = Menu::loadPlace(placePath_, pl);
+        if ((!known && mode_ == MODE_MENU) || std::getenv("ZEN_MENU_INTRO")) menu_.startIntro();
+        if (known) {
             if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
             if (opt_.levelGiven) pl.freeLevel = -1; // (--level wins)
             menu_.restore(pl, !opt_.difficultyGiven);
@@ -2617,6 +2620,7 @@ int App::runMenuShot() {
     if (opt_.menuPetal) menu_.setPetalOpen(true);
     menu_.setPlaylists(&playlists_);
     menu_.snap();
+    if (std::getenv("ZEN_MENU_INTRO") && sc == "title") menu_.startIntro(); // (the opening, as on a first launch)
     int w, h;
     fbSize(w, h);
     if (!opt_.menuClip.empty()) {
