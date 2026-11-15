@@ -361,8 +361,7 @@ bool Game::activateBonus() {
     bonusActive_ = true;
     bonusLeft_ = BONUS_SECONDS;
     bonusLines_ = 0;
-    lockTimer_ = 0;     // (a piece about to lock gets all the bonus to think)
-    holdUsed_ = false;  // (and may be held again)
+    lockTimer_ = 0; // (a piece about to lock gets all the bonus to think)
     events_.push_back({GameEvent::BonusStart});
     return true;
 }
