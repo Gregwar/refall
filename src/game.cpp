@@ -361,6 +361,8 @@ bool Game::activateBonus() {
     bonusActive_ = true;
     bonusLeft_ = BONUS_SECONDS;
     bonusLines_ = 0;
+    lockTimer_ = 0;     // (a piece about to lock gets all the bonus to think)
+    holdUsed_ = false;  // (and may be held again)
     events_.push_back({GameEvent::BonusStart});
     return true;
 }
@@ -369,6 +371,7 @@ void Game::endBonus() {
     if (!bonusActive_) return;
     bonusActive_ = false;
     bonusLeft_ = 0;
+    lockTimer_ = 0; // (a fresh lock delay as the fall comes back)
     events_.push_back({GameEvent::BonusEnd});
 }
 
@@ -401,7 +404,7 @@ void Game::update(float dt) {
     below.y++;
     grounded_ = collides(below);
     if (grounded_) {
-        lockTimer_ += dt;
+        if (!bonusActive_) lockTimer_ += dt; // (the bonus: a resting piece waits for a hard drop)
         if (lockTimer_ >= lockDelay()) lockPiece();
     } else {
         lockTimer_ = 0;

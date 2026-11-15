@@ -431,10 +431,9 @@ private:
     }
     float trackAge_ = 0, sceneNameTimer_ = 0, runTime_ = 0;
     // Gravity bookkeeping.
-    // Slow-motion bonus: the pieces barely fall, BONUS_ROWS_PER_SEC whatever the velocity, while the music keeps its
-    // speed (only a short tape bend marks the start and the end).
+    // Slow-motion bonus: nothing falls, whatever the velocity, while the music keeps its speed (only a short tape bend
+    // marks the start and the end).
     static constexpr float BONUS_GAME_SPEED = 0.25f;
-    static constexpr float BONUS_ROWS_PER_SEC = 0.5f;
     static constexpr float TRANSITION_GAME_SPEED = 0.25f; // gravity during a change of universe
     double rowAcc_ = 0, lastGravityTime_ = -1; // gravity rows accumulated, song time at the last update
     static constexpr float GRAVITY_BPM = 130.f; // the tempo gravity counts its beats in, whatever the song's
@@ -443,7 +442,7 @@ private:
     bool hyperAble_ = false; // hyperdrop (20G) can happen in this game (EXPERT)
     float speedPos_ = -1.f, speedHot_ = 0.f; // the speed gauge as shown (eased): its fill, hyperdrop on
     bool preroll_ = false; // a clip played from the song's start: the game alone until its warm-up (nothing drawn)
-    float bonusFall_ = 0.f; // how much the bonus's crawl has taken over the fall (eased)
+    float bonusFall_ = 0.f; // how much the bonus's stillness has taken over the fall (eased)
     float pace_ = -1, fallbackTimer_ = 0; // section pace (rows per beat before level scaling), eased
     // Autoplay.
     bool planned_ = false;
@@ -785,7 +784,7 @@ void App::updateGravity(double songTime, float dt) {
     const float rateGoal = std::min(game_.bonusActive() ? BONUS_GAME_SPEED : 1.f, R_.changeProgress() >= 0.f ? TRANSITION_GAME_SPEED : 1.f);
     gameRate_ = approach(gameRate_, rateGoal, 3.f, dt);
     if (gameRate_ > 0.999f) gameRate_ = 1.f;
-    bonusFall_ = approach(bonusFall_, game_.bonusActive() ? 1.f : 0.f, 3.f, dt);
+    bonusFall_ = game_.bonusActive() ? 1.f : approach(bonusFall_, 0.f, 3.f, dt); // (still at once, the fall eased back)
     // Free play (levels rising with the lines): each song warms up, from a share of the level's velocity to all of it.
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
@@ -815,7 +814,7 @@ void App::updateGravity(double songTime, float dt) {
     }
     if (!track_ || songFinished()) {
         fallbackTimer_ += dt * gameRate_;
-        const float every = lerpf(0.9f * (1.f - 0.45f * diff) / speedMul_, 1.f / BONUS_ROWS_PER_SEC, bonusFall_);
+        const float every = 0.9f * (1.f - 0.45f * diff) / speedMul_ / std::max(1e-3f, 1.f - bonusFall_);
         if (fallbackTimer_ > every) { fallbackTimer_ = 0; game_.gravityStep(); }
         return;
     }
@@ -837,8 +836,8 @@ void App::updateGravity(double songTime, float dt) {
     if (lastGravityTime_ < 0 || songTime < lastGravityTime_ || songTime - lastGravityTime_ > 4.0) rowAcc_ = 0; // start, seek, new song
     else dBeat = (songTime - lastGravityTime_) * beatsPerSec * std::min(1.f, gameRate_ / std::max(0.05f, audio_.currentSpeed()));
     lastGravityTime_ = songTime;
-    // (the bonus: a crawl of its own, the same at every velocity)
-    rowAcc_ += lerpf((float)(dBeat * rowsPerBeat), BONUS_ROWS_PER_SEC * dt, bonusFall_);
+    // (the bonus: no fall at all, easing back after it)
+    rowAcc_ += (float)(dBeat * rowsPerBeat) * (1.f - bonusFall_);
     const int steps = (int)std::min(4.0, std::floor(rowAcc_));
     for (int i = 0; i < steps; i++) game_.gravityStep();
     rowAcc_ = std::min(rowAcc_ - steps, 1.0); // a long frame doesn't pile up steps
