@@ -666,6 +666,16 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
         set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
         set4f(progBg_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
+        {
+            float pv[12];
+            const vec3 h = layout::HOLD_CENTER;
+            pv[0] = h.x; pv[1] = h.y; pv[2] = 1.15f;
+            for (int i = 0; i < 3; i++) {
+                const vec3 c = layout::nextCenter(i);
+                pv[3 + i * 3] = c.x; pv[4 + i * 3] = c.y; pv[5 + i * 3] = i == 0 ? 1.15f : 0.95f;
+            }
+            glUniform3fv(ugl::U(progBg_, "uPrev"), 4, pv);
+        }
         // ZEN_GPUTIME: the fractal's GPU time, printed every 120 frames
         static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
         static GLuint query = 0;
