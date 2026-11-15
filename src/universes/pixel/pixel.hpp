@@ -35,7 +35,6 @@ private:
     struct Dying { int x, y, type; float age; bool burst; };
     struct Grain { float x, y, vx, vy, at; uint8_t col; bool loose, dead, sand; };
     struct LockFx { int cells[4][2]; int type; float age; bool active; };
-    struct Trail { int cells[4][2]; int type, rows; float age; };
     struct HudItem { std::string text; pixu::Font font; int x, y, scale, w, h; pixu::TextStyle st; HudRole role; bool center; };
 
     int pickVariant(const SongLook& look) const;
@@ -96,7 +95,6 @@ private:
     float pileSink_ = 0;
     LockFx lock_{};
     bool hardDropped_ = false; // a HardDrop just came: the Lock after it bounces
-    std::vector<Trail> trails_;
     float levelUpT_ = -1;
     Rng rng_{4242};
 };

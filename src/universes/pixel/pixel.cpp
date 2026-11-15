@@ -222,12 +222,6 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
     case GameEvent::HardDrop: {
         hardDropped_ = true;
         if (ev.cells.size() != 4) break;
-        Trail t;
-        for (int i = 0; i < 4; i++) { t.cells[i][0] = ev.cells[i].x; t.cells[i][1] = ev.cells[i].y; }
-        t.type = ev.cells[0].type;
-        t.rows = ev.count;
-        t.age = 0;
-        trails_.push_back(t);
         contactDust(ev, 2, 1.1f);
         break;
     }
@@ -330,15 +324,10 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
     if (levelUpT_ >= 0) { levelUpT_ += dt; if (levelUpT_ > 1.6f) levelUpT_ = -1; }
     (void)m;
 
-    // Lock squash and hard-drop trails.
+    // Lock squash.
     if (lock_.active) {
         lock_.age += wdt;
         if (lock_.age > 0.2f) lock_.active = false;
-    }
-    for (size_t i = 0; i < trails_.size();) {
-        trails_[i].age += wdt;
-        if (trails_[i].age > 0.1f) { trails_.erase(trails_.begin() + i); continue; }
-        i++;
     }
     // Cleared cells: two frames of flash, then they burst into their pixels.
     for (size_t i = 0; i < dying_.size();) {
@@ -573,23 +562,6 @@ void PixelUniverse::drawStack(const Game& g) {
         for (int i = 0; i < 4; i++) if (cs[i][0] == x && cs[i][1] == y) return true;
         return false;
     };
-    // Hard-drop trails: short streaks just above the landed piece for a few frames.
-    for (const Trail& t : trails_) {
-        int tc[4][2];
-        std::memcpy(tc, t.cells, sizeof(tc));
-        const float fade = 1.f - t.age / 0.1f;
-        for (int i = 0; i < 4; i++) {
-            if (has(tc, tc[i][0], tc[i][1] - 1)) continue;
-            const int x = bx0_ + tc[i][0] * CELL, yTop = by0_ + (tc[i][1] - Game::HIDDEN) * CELL;
-            const int len = std::min(t.rows, 2) * CELL;
-            for (int k = 1; k <= len; k++) {
-                const float cov = fade * (1.f - (float)k / len) * 0.4f;
-                for (int ii = 1; ii < CELL - 1; ii++)
-                    if (yTop - k >= by0_ && dith(cov, x + ii, yTop - k) && cv_.kind(x + ii, yTop - k) == K_WELL)
-                        cv_.set(x + ii, yTop - k, ii == 1 || ii == CELL - 2 ? V.pieceLit[t.type] : V.wellDot, K_FX);
-            }
-        }
-    }
     // Ghost: the piece's outline, dashed: the pixels of its shape touching the outside (corners in), in dashes of two
     // pixels laid on the screen's grid (so every edge has the same rhythm), each corner always lit.
     Piece gp = p;
