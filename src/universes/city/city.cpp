@@ -590,6 +590,9 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
     switch (ev.type) {
     case GameEvent::HardDrop: hardPending_ = true; break;
     case GameEvent::Lock: {
+        // the landed piece's ghost goes at once (fading, it would take the next piece's color, which lights the ghost)
+        for (auto& row : win_)
+            for (Win& w : row) w.ghost = 0.f;
         // a soft glow along the ledge under the piece (no surge, no flicker: the windows simply stay lit)
         float lowY = 1e9f, x0 = 1e9f, x1 = -1e9f;
         int type = 0;
