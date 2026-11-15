@@ -30,7 +30,9 @@
 // tessera by tessera over the whole ground (a sunburst, frames, a spiral, a lattice, waves) drifting slowly; the
 // medallions' rings chase a soft light, the lamp sways from side to side every bar (kept soft: no flash, no slap);
 // the drop over, a last wave lays the mosaic back. Slow motion is night: an oil lamp low under the wall, the gold glowing
-// warm in the dark. Game over: the tiles come off the wall row by row from the top and fall.
+// warm in the dark. Game over: the tiles come off the wall row by row from the top and fall. Around a song: a lamp
+// carried in from the left over the dark wall, its raking light catching the tesserae (the setup); the light sinking
+// to the oil lamp of the night, which goes out (the teardown).
 //
 // Variants (from the song): BYZANTINE (a gold ground, lapis and crimson), ROMAN (a floor of black basalt, marble,
 // terracotta and ochre stone, matte), NOCTURNE (a vault of deep blue glass strewn with gold stars), TRENCADIS (broken
@@ -945,7 +947,11 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     const float waveAmp = waveA_ * std::exp(-waveT_ * 0.55f) * (dropOn_ && realDrop_ ? 1.f : 0.f) * smoothstepf(0.f, 0.1f, waveT_);
 
     // ---- The lamp: still and dim in a calm part, travelling over the wall from mid on, quicker at a peak; at night
-    // (slow motion) an oil lamp low under the wall.
+    // (slow motion, and after a song) an oil lamp low under the wall. Before a song it is carried in from the left
+    // over the dark wall, its raking light catching the tesserae as it comes; after one it sinks to the oil lamp,
+    // which goes out.
+    const float night = std::max(slow_, smoothstepf(0.f, 0.5f, f.teardown));
+    const float lampIn = smoothstepf(0.f, 0.9f, f.setup), lampOut = 1.f - smoothstepf(0.5f, 1.f, f.teardown);
     lightPhase_ += wdt * (0.02f + 0.05f * wm + 0.06f * wp + 0.05f * dropEnv_);
     {
         const float ph = lightPhase_;
@@ -954,20 +960,22 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
         const vec3 travel{17.f * std::sin(ph), 2.f + 6.5f * std::sin(ph * 0.73f + 1.1f), 11.f + 2.f * wp};
         vec3 tgt = lerp(still, travel, wm);
         const vec3 lamp{sideL * (15.f + 2.f * std::sin(worldTime_ * 0.3f)), viewC_.y - viewH_.y - 1.5f, 7.5f};
-        tgt = lerp(tgt, lamp, slow_);
+        tgt = lerp(tgt, lamp, night);
         // the show: the lamp sways from one side to the other every bar, its raking light gliding over the wall
         const float sw = std::fmod((float)std::floor(beat_ / 4.0), 2.f) < 1.f ? 1.f : -1.f;
         const vec3 swing{sw * 16.f, viewC_.y + 3.f * std::sin((float)beat_ * 0.2f), 10.f};
-        tgt = lerp(tgt, swing, showK_ * (1.f - slow_));
+        tgt = lerp(tgt, swing, showK_ * (1.f - night));
         lightPos_ = lerp(lightPos_, tgt, 1.f - std::exp(-dt * lerpf(1.5f, 2.2f, showK_)));
         const float target = (0.7f + 0.3f * wm + 0.35f * wp) * (1.f - 0.25f * slow_) * (1.f - 0.6f * over_);
         lightI_ = approach(lightI_, target, 1.2f, dt);
     }
-    const float flick = slow_ * (0.9f + 0.1f * std::sin(worldTime_ * 9.f) * std::sin(worldTime_ * 5.3f + 1.f));
+    const float flick = night * (0.9f + 0.1f * std::sin(worldTime_ * 9.f) * std::sin(worldTime_ * 5.3f + 1.f));
     vec3 lightCol = lin(V.light) * (lightI_ + 0.2f * dropEnv_);
-    lightCol = lerp(lightCol, vec3(1.f, 0.62f, 0.3f) * 1.3f * (0.85f + 0.15f * flick), slow_);
-    const float reach = 13.f + 4.f * wp + 2.f * dropEnv_ + 2.f * slow_;
-    const vec3 amb = lerp(vec3(0.13f, 0.125f, 0.12f) * (0.8f + 0.25f * wm + 0.3f * wp), vec3(0.035f, 0.03f, 0.03f), slow_) * (1.f - 0.5f * over_);
+    lightCol = lerp(lightCol, vec3(1.f, 0.62f, 0.3f) * 1.3f * (0.85f + 0.15f * flick), night) * smoothstepf(0.05f, 0.5f, f.setup) * lampOut;
+    const float reach = 13.f + 4.f * wp + 2.f * dropEnv_ + 2.f * night;
+    const vec3 amb = lerp(vec3(0.13f, 0.125f, 0.12f) * (0.8f + 0.25f * wm + 0.3f * wp), vec3(0.035f, 0.03f, 0.03f), night) * (1.f - 0.5f * over_) *
+                     lerpf(0.05f, 1.f, lampIn) * lerpf(0.4f, 1.f, lampOut);
+    const vec3 lampPos = lerp(vec3(viewC_.x - viewH_.x - 8.f, viewC_.y - 2.f, 8.f), lightPos_, lampIn);
     const float sparkle = 0.5f + 0.25f * wm + 0.4f * wp + 0.4f * dropEnv_;
 
     // ---- Fragments landing: each one sets its tessera (real time, even in slow motion).
@@ -992,7 +1000,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
             const tiles::Tessera& t = design_.tess[i];
             if (t.mat == tiles::MAT_STONE || !isSet(i)) continue;
             if (std::fabs(t.center.x) < 6.5f || (std::fabs(t.center.x) < 11.4f && t.center.y > -7.f)) continue;
-            const float dx = t.center.x - lightPos_.x, dy = t.center.y - lightPos_.y;
+            const float dx = t.center.x - lampPos.x, dy = t.center.y - lampPos.y;
             if (dx * dx + dy * dy > reach * reach * 0.6f) continue;
             glintTess(i, time_);
             sparkles_.push_back({t.center, 0.f, 0.55f, 0.28f + 0.12f * wp, lerp(t.color * 2.f, vec3(1.f, 0.95f, 0.85f), 0.6f)});
@@ -1007,6 +1015,8 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
             if (lv_ > 0.6f && slow_ < 0.5f) glintNearLamp(wp > 0.5f ? 4 : 1);
         }
         if (wp > 0.5f && kick > 0.45f && kickPrev_ <= 0.3f) glintNearLamp(2);
+        // the lamp carried in before a song: the smalti catch it as it passes
+        if (f.setup > 0.1f && f.setup < 0.95f && rng_.chance(dt * 7.f)) glintNearLamp(1);
     }
     kickPrev_ = kick;
 
@@ -1038,7 +1048,7 @@ void TilesUniverse::render(const Frame& f, GLuint fbo) {
     const float worldK = 1.f - bridgeK;
     auto lightSet = [&](GLuint p) {
         set4f(p, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-        set4f(p, "uLight", lightPos_.x, lightPos_.y, lightPos_.z, reach);
+        set4f(p, "uLight", lampPos.x, lampPos.y, lampPos.z, reach);
         set3f(p, "uLightCol", lightCol * worldK);
         set3f(p, "uAmb", amb);
     };
