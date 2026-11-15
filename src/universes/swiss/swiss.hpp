@@ -43,14 +43,24 @@ private:
     float unitPx_ = 45.f;            // pixels per board unit
 
     // ---- The landscape.
-    struct El { float x, depth, size, kind; }; // kind: 0 chalet, 1 house, 2 church, 3 fir, 4 cypress, 5 bush, 6 larch
+    struct El { float x, depth, size, kind; }; // kind: 0 chalet, 1 house, 2 church, 3 fir, 4 cypress, 5 bush, 6 larch,
+                                               // 7 viaduct
     std::vector<El> els_;
     int elFg_ = 0;                   // els_[0, elFg_) stand on the meadow, the rest in the foreground
     void composeScene();
     void drawLandscape();
     float layerOff_[7] = {};
     float cloudOff_[3] = {};
-    float pan_ = 0.f, panT_ = 0.f, pieceLean_ = 0.f;
+    double cloudDrift_[3] = {};
+    double scroll_ = 0.0;            // the camera's travel to the right (foreground units)
+    float speed_ = 0.5f;
+    // The meadow's stretches along its loop (SPAN units each from ST_ORIGIN): their lift, and the roads and rivers
+    // running down from them (x, kind: 1 path, 2 zigzag road, 3 river).
+    enum { ST_VILLAGE, ST_HAMLET, ST_PASTURE, ST_FOREST, ST_VALLEY, ST_VIADUCT, ST_CHAPEL, ST_PASS };
+    static constexpr int STRETCHES = 16;
+    static constexpr float SPAN = 24.f, ST_ORIGIN = 2.f;
+    float lift_[16] = {};
+    std::vector<vec2> roads_;
     // The drop: its camera travel (from its first beat), its push-in, the light sweeping across on its start.
     double dropBeat_ = 0.0;
     bool wasDrop_ = false;
