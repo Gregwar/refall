@@ -13,8 +13,8 @@
 //
 // A cleared row's cubes shatter into shards and burst into fragments with sparks; the fragments thrown out of the
 // well stay on the substrate until charges fetch them. A DROP section (and it alone) pours charges out of both
-// terminals: many more, much faster, the traces brighter, more sparks, the substrate in a deep shade of its current's
-// color, and the dies power on: a wave of current runs up the stack every two beats, lighting their circuitry and pads
+// terminals: many more, much faster, the traces brighter, more sparks, the substrate turning to a deep shade of the
+// hue across the wheel from its own (PLASMA's indigo to orange, OXIDE's to blue...), and the dies power on: a wave of current runs up the stack every two beats, lighting their circuitry and pads
 // in the charges' color as it passes. A chorus is a busy circuit, a break a few slow charges on fading traces. A lock
 // scatters the charges around the impact (a hard one sparks there); slow motion slows the circuit; a game over
 // shatters the whole stack.
@@ -76,24 +76,25 @@ struct Variant {
     uint32_t ground, mottle, panel, trace, core, term, charge, ink, dim, accent, frame, slow;
     float frameA, grain, traceAmt, shadow;
     uint32_t piece[7];
+    uint32_t drop; // the substrate's hue through a DROP (across the wheel from its own)
 };
 const Variant VARIANTS[] = {
     // Graphite: a cold dark grey, blue-white current.
     {"GRAPHITE", 0x16181c, 0x1e2126, 0x121417, 0x2c8cff, 0xdff3ff, 0x0d0f12, 0x7fd4ff, 0xe4e9f0, 0x7b8594, 0x6cc8ff,
      0x5a6575, 0x101a2c, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x3fa7c9, 0xe0a83c, 0x9370d8, 0x52b874, 0xd85a5e, 0x5277de, 0xe0843f}},
+     {0x3fa7c9, 0xe0a83c, 0x9370d8, 0x52b874, 0xd85a5e, 0x5277de, 0xe0843f}, 0xff9a3c},
     // Oxide: dark rusted iron, amber current.
     {"OXIDE", 0x1c1512, 0x261c17, 0x15100e, 0xff8a2a, 0xfff0d6, 0x0f0b09, 0xffbd6e, 0xf3e7dc, 0x96837a, 0xffb25a,
      0x76604f, 0x1e1428, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x5fb3c0, 0xe8c25a, 0xa982d0, 0x7dbd6a, 0xe0705a, 0x6f8fd8, 0xf09a50}},
+     {0x5fb3c0, 0xe8c25a, 0xa982d0, 0x7dbd6a, 0xe0705a, 0x6f8fd8, 0xf09a50}, 0x3c8cff},
     // Verdigris: a deep green-black like an old board, mint current.
     {"VERDIGRIS", 0x0f1916, 0x15221e, 0x0c1412, 0x22e0a0, 0xe4fff4, 0x080e0c, 0x8affd6, 0xe0f2ea, 0x77908a, 0x5af0c0,
      0x4f6f66, 0x0f1626, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x48a8d0, 0xe2b94a, 0xa07ad8, 0xb0d060, 0xe0606a, 0x5f80e0, 0xe89048}},
+     {0x48a8d0, 0xe2b94a, 0xa07ad8, 0xb0d060, 0xe0606a, 0x5f80e0, 0xe89048}, 0xff4aa8},
     // Plasma: dark indigo, violet-white current.
     {"PLASMA", 0x15121f, 0x1d182c, 0x110f19, 0xb060ff, 0xf6e8ff, 0x0c0a12, 0xd8a8ff, 0xece6f6, 0x8a82a0, 0xd090ff,
      0x675d80, 0x0e1530, 0.5f, 0.022f, 1.f, 0.55f,
-     {0x4ab4d4, 0xe8b850, 0xc07ad0, 0x5cc08a, 0xe85c78, 0x6a7ce8, 0xf08c5a}},
+     {0x4ab4d4, 0xe8b850, 0xc07ad0, 0x5cc08a, 0xe85c78, 0x6a7ce8, 0xf08c5a}, 0xff8a2a},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -1147,12 +1148,12 @@ void ElectronUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_BLEND);
     {
         vec3 ground = hex(V.ground), mottle = hex(V.mottle), panel = hex(V.panel);
-        // a DROP: the substrate takes a deep shade of its current's color (still dark: the stack reads on it)
+        // a DROP: the substrate turns to a deep shade of its drop hue (still dark: the stack reads on it)
         if (dropMix_ > 0.001f) {
-            const vec3 ch = hex(V.charge);
-            ground = lerp(ground, ch * 0.2f, 0.65f * dropMix_);
-            mottle = lerp(mottle, ch * 0.27f, 0.65f * dropMix_);
-            panel = lerp(panel, ch * 0.12f, 0.4f * dropMix_);
+            const vec3 ch = hex(V.drop);
+            ground = lerp(ground, ch * 0.2f, 0.75f * dropMix_);
+            mottle = lerp(mottle, ch * 0.27f, 0.75f * dropMix_);
+            panel = lerp(panel, ch * 0.12f, 0.45f * dropMix_);
         }
         if (slow_ > 0.001f) {
             ground = lerp(ground, hex(V.slow), 0.35f * slow_);
