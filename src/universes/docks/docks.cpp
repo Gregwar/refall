@@ -23,7 +23,9 @@
 // the masts come on in a sequence from the well outward, the colors deepen and the sky glows (one swell that settles
 // over seconds). A quad flashes the cranes' and masts' lamps in a wave and the ships' decks light up. Slow motion is
 // a sea fog rolling in (the lamps haloed, the port cooled); game over lifts the stack away, container by container,
-// from the top.
+// from the top. Before a song, in the dark, the port's lamps come on mast by mast from the well outward (the cranes'
+// and the ships' after them), then the sky's light comes up; after it the sky's light sinks first, then the lamps go
+// out from the far ends back to the well.
 //
 // Layout contract: the reference camera raised to EYE_Y and looking straight ahead, its image shifted back down (a
 // lens shift): the board's plane keeps its pixels, the port recedes in perspective.
@@ -949,11 +951,19 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     pointP_.clear();
     pointC_.clear();
     sprites_.clear();
+    // the setup: in the dark, the port's lamps come on mast by mast from the well outward (the cranes' and the ships'
+    // after them), then the sky's light comes up; the teardown: the sky's light sinks first, then the lamps go out
+    // from the far ends back to the well
+    auto shift = [&](float order) {
+        const float u = saturate(order / 1.6f);
+        return smoothstepf(0.05f + 0.4f * u, 0.17f + 0.4f * u, f.setup) * (1.f - smoothstepf(0.35f + 0.45f * (1.f - u), 0.47f + 0.45f * (1.f - u), f.teardown));
+    };
+    const float stageLamps = shift(1.f);
     for (Lamp& l : lamps_) {
         float want = l.group == 0 ? 1.f : l.group == 1 ? smoothstepf(0.3f, 0.9f, lv_) : smoothstepf(1.2f, 1.8f, lv_);
         if (dropMode_ && dropT_ > l.order) want = 1.f;
         l.on = approach(l.on, want, want > l.on ? 2.5f : 0.6f, dt);
-        float k = l.k * l.on * lampLevel;
+        float k = l.k * l.on * lampLevel * shift(l.order);
         if (dropT_ > l.order) k *= 1.f + 0.9f * swell_ * std::exp(-(dropT_ - l.order) * 1.5f);
         if (quadT_ > l.order * 0.5f && quadT_ < 4.f) k *= 1.f + 0.7f * std::exp(-(quadT_ - l.order * 0.5f) * 2.f);
         const float rr = l.r * (1.f + 0.6f * slow_);
@@ -970,7 +980,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     // the cranes' lamps: floods under the boom (lighting the decks), a red beacon at the apex, the trolley's lamp
     for (size_t i = 0; i < cranes_.size(); i++) {
         const Crane& c = cranes_[i];
-        const float fk = pal_.lampK * (0.3f + 0.45f * wm + 0.35f * wp + 0.35f * fest_);
+        const float fk = pal_.lampK * (0.3f + 0.45f * wm + 0.35f * wp + 0.35f * fest_) * stageLamps;
         for (int k = 0; k < 3 && c.raise < 0.5f; k++) {
             const float z = lerpf(CRANE_SEA + 2.f, BOOM_TIP + 3.f, k / 2.f);
             const vec3 lp(c.x + (k == 1 ? 0.f : 1.8f * (k ? 1.f : -1.f)), BOOM_Y - 0.9f, z);
@@ -988,15 +998,15 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
             // the raised boom's tip lamp
             const float ang = c.raise * 1.32f;
             const vec3 tip(c.x, BOOM_Y + std::sin(ang) * (BOOM_TIP - CRANE_SEA - 1.f), CRANE_SEA + 1.f + std::cos(ang) * (BOOM_TIP - CRANE_SEA - 1.f));
-            sprite(tip + vec3(0, 0.6f, 0), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.2f * (0.35f + 0.65f * own * own));
-            sprite(vec3(c.x, CRANE_APEX + 0.5f, (CRANE_SEA + CRANE_LAND) * 0.5f + 1.f), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.2f * (0.35f + 0.65f * own * own));
+            sprite(tip + vec3(0, 0.6f, 0), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.2f * (0.35f + 0.65f * own * own) * stageLamps);
+            sprite(vec3(c.x, CRANE_APEX + 0.5f, (CRANE_SEA + CRANE_LAND) * 0.5f + 1.f), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.2f * (0.35f + 0.65f * own * own) * stageLamps);
             continue;
         }
         const float grid = (((halfI + (int)i) % 2) == 0 ? 1.f : 0.f) * (1.f - smoothstepf(0.15f, 0.45f, ph));
         const float beacon = lerpf(0.35f + 0.65f * own * own, grid, wp);
-        sprite(vec3(c.x, CRANE_APEX + 0.5f, (CRANE_SEA + CRANE_LAND) * 0.5f + 1.f), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.4f * beacon);
+        sprite(vec3(c.x, CRANE_APEX + 0.5f, (CRANE_SEA + CRANE_LAND) * 0.5f + 1.f), 0.9f, vec3(1.f, 0.06f, 0.03f), 1.4f * beacon * stageLamps);
         const float tz = lerpf(BOOM_BACK + 12.f, BOOM_TIP + 2.f, c.trolley);
-        sprite(vec3(c.x, BOOM_Y - 1.1f, tz + 1.4f), 0.7f, lerp(pal_.lampA, vec3(1.f), c.blink), 0.6f + 2.2f * c.blink);
+        sprite(vec3(c.x, BOOM_Y - 1.1f, tz + 1.4f), 0.7f, lerp(pal_.lampA, vec3(1.f), c.blink), (0.6f + 2.2f * c.blink) * stageLamps);
     }
     // the ships' lamps: deck floods on the house, the mast's lights
     for (int i = 0; i < 2; i++) {
@@ -1004,12 +1014,12 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
         if (sh.state == 3) continue;
         const float s = i == 0 ? 1.f : -1.f;
         const float xs = sh.x - s * SHIP_LEN * 0.5f;
-        const float deck = (0.5f + 0.3f * wm + 0.3f * wp + 0.4f * fest_) * pal_.lampK;
+        const float deck = (0.5f + 0.3f * wm + 0.3f * wp + 0.4f * fest_) * pal_.lampK * stageLamps;
         const float tet = quadT_ < 6.f ? std::exp(-quadT_ * 0.5f) : 0.f;
         sprite(vec3(xs + s * 9.8f, DECK_Y + 8.8f, SHIP_Z + 4.f), 0.8f, pal_.lampA, deck * (1.f + tet));
         sprite(vec3(xs + s * 9.8f, DECK_Y + 8.8f, SHIP_Z - 4.f), 0.8f, pal_.lampA, deck * (1.f + tet));
-        sprite(vec3(xs + s * 6.f, DECK_Y + 12.5f, SHIP_Z), 0.5f, vec3(1.f), 0.9f);
-        sprite(vec3(xs + s * (SHIP_LEN - 1.5f), DECK_Y + 2.6f, SHIP_Z), 0.45f, vec3(1.f), 0.7f);
+        sprite(vec3(xs + s * 6.f, DECK_Y + 12.5f, SHIP_Z), 0.5f, vec3(1.f), 0.9f * stageLamps);
+        sprite(vec3(xs + s * (SHIP_LEN - 1.5f), DECK_Y + 2.6f, SHIP_Z), 0.45f, vec3(1.f), 0.7f * stageLamps);
         pointP_.push_back(vec4(vec3(xs + s * 11.f, DECK_Y + 9.f, SHIP_Z + 3.f), 22.f));
         pointC_.push_back(vec4(pal_.lampA, deck * (0.8f + 1.2f * tet)));
     }
@@ -1091,18 +1101,19 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Uniforms shared by the passes.
     const Palette& P = pal_;
     const vec3 sunDir = normalize(vec3(std::sin(P.sunAz) * std::cos(P.sunEl), std::sin(P.sunEl) + 0.001f, -std::cos(P.sunAz) * std::cos(P.sunEl)));
-    const float glowK = (0.72f + 0.18f * wm + 0.15f * wp + 0.4f * fest_ + 0.3f * swell_) * (1.f - 0.4f * slow_);
+    const float night = 1.f - smoothstepf(0.35f, 0.95f, f.setup) * (1.f - smoothstepf(0.f, 0.55f, f.teardown)); // (the setup, the teardown)
+    const float glowK = (0.72f + 0.18f * wm + 0.15f * wp + 0.4f * fest_ + 0.3f * swell_) * (1.f - 0.4f * slow_) * (1.f - 0.6f * night);
     const float fogD = P.fogD * (1.f + 0.7f * (1.f - wm) - 0.15f * wp) * (1.f + 2.2f * slow_);
     const float haze = std::min(1.5f, P.haze * (1.f + 0.4f * (1.f - wm)) + 0.35f * (1.f - wm) + 0.9f * slow_);
     const float sat = 1.f + 0.1f * wp + 0.18f * fest_;
     const vec3 keyDir = normalize(vec3(-0.25f, 0.8f, 0.55f));
-    const float keyK = 0.9f + 0.06f * wm + 0.08f * wp + 0.1f * fest_;
-    const vec3 fogCol = lerp(P.fog, lerp(P.fog, vec3(0.55f, 0.6f, 0.68f), 0.5f) * 0.6f, slow_);
+    const float keyK = (0.9f + 0.06f * wm + 0.08f * wp + 0.1f * fest_) * (1.f - 0.6f * night);
+    const vec3 fogCol = lerp(P.fog, lerp(P.fog, vec3(0.55f, 0.6f, 0.68f), 0.5f) * 0.6f, slow_) * (1.f - 0.65f * night);
     auto common = [&](GLuint p) {
         set3f(p, "uEye", eye_);
-        set3f(p, "uZen", P.zen);
-        set3f(p, "uMid", P.mid);
-        set3f(p, "uHor", P.hor * (0.9f + 0.1f * glowK));
+        set3f(p, "uZen", P.zen * (1.f - 0.6f * night));
+        set3f(p, "uMid", P.mid * (1.f - 0.65f * night));
+        set3f(p, "uHor", P.hor * (0.9f + 0.1f * glowK) * (1.f - 0.7f * night));
         set3f(p, "uGlow", P.glow * glowK * 0.55f);
         set3f(p, "uSunDir", sunDir);
         set3f(p, "uFogCol", fogCol);
@@ -1353,7 +1364,7 @@ void DocksUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
     set1f(progFinal_, "uBloomK", (0.55f + 0.1f * wp + 0.2f * fest_) * (1.f + 0.5f * slow_));
-    set1f(progFinal_, "uExposure", 1.f);
+    set1f(progFinal_, "uExposure", 1.f - 0.2f * night);
     set2f(progFinal_, "uShadowOff", -0.008f, 0.015f); // (sampled up-left: the shadow falls down-right)
     set1f(progFinal_, "uSatF", 1.f + 0.06f * wp + 0.1f * fest_);
     set1f(progFinal_, "uSlow", slow_ * 0.45f);
