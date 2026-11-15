@@ -143,6 +143,18 @@ void main() {
         return;
     }
     float fill = clamp(dist / fw + 0.5, 0.0, 1.0);
+    if (vEm < 40.0) {
+        // small letters: the coverage of four points of the pixel (one point misses a stroke thinner than a pixel,
+        // a light E's stem, depending on where the letter falls)
+        vec2 du = dFdx(vUv) * 0.25, dv = dFdy(vUv) * 0.25;
+        float k = vEm / (uBake * uScale), w = 2.0 / fw;
+        fill = 0.0;
+        for (int i = 0; i < 4; i++) {
+            vec2 o = (i == 0 ? du + dv : i == 1 ? du - dv : i == 2 ? -du + dv : -du - dv);
+            float d = (texture(uAtlas, vUv + o).r * 255.0 - 128.0) * k + uWeight * vEm;
+            fill += 0.25 * clamp(d * w + 0.5, 0.0, 1.0);
+        }
+    }
     vec4 c = vec4(0.0);
     if (uHalo.a > 0.0) {
         float h = clamp(1.0 + dist / max(uHaloShape.x * vEm, 1e-3), 0.0, 1.0);
