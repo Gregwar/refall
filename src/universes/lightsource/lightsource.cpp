@@ -19,6 +19,8 @@
 // brightest cast shadows, the others glow), back to embers when it ends. Nothing pulses the whole room. A cleared row's blocks flare into white light and burn out (their light flooding sideways
 // out of the row, at the real speed even in slow motion), a quad relights the whole stack from inside, slow motion
 // is a cold light with the lamps lingering, game over puts the stack's lights out row by row from the top, each block fading.
+// Before a song the first light comes down into the dark room to the top of the well (the room's fill rising after
+// it) and gives way to the first piece; after it a last light floats up out of the room, cooling, and the fill dims.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane (like PRISM).
 #include "universes/lightsource/lightsource.hpp"
@@ -978,7 +980,8 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
     const float power = (lerpf(0.75f, 1.f, lvm) + 0.1f * chorus_ * lvp + 0.3f * drop_ + 0.45f * swell) * worldOn;
     const float spread = lerpf(lerpf(1.0f, 0.75f, lvm), 0.6f, lvp * chorus_) * (1.f - 0.62f * drop_);
     const float reach = lerpf(3.5f, 5.f, lvm) + 1.f * chorus_ * lvp + 0.5f * drop_;
-    const float ambK = lerpf(0.8f, 1.f, lvm) * (1.f - 0.12f * drop_) * (1.f - 0.25f * slow_);
+    const float ambK = lerpf(0.8f, 1.f, lvm) * (1.f - 0.12f * drop_) * (1.f - 0.25f * slow_) *
+                       lerpf(0.2f, 1.f, smoothstepf(0.25f, 0.9f, f.setup) * (1.f - smoothstepf(0.2f, 0.9f, f.teardown)));
     const float ember = (1.f + 2.f * swell + 4.f * tet) * worldOn;
 
     // ---- The lights.
@@ -1077,6 +1080,25 @@ void LightsourceUniverse::render(const Frame& f, GLuint fbo) {
         L.height = 1.2f;
         L.sub = 4;
         L.rank = 90.f;
+        lights_.push_back(L);
+    }
+    if (f.setup < 1.f || f.teardown > 0.f) {
+        // the setup: the first light comes down into the dark room, to the top of the well, and gives way to the
+        // first piece; the teardown: a last light floats up out of the room, cooling and dimming
+        const float top = layout::cellPos(4.5f, (float)Game::HIDDEN).y;
+        const float down = smoothstepf(0.f, 0.85f, f.setup), up = smoothstepf(0.05f, 1.f, f.teardown);
+        const float y = f.teardown > 0.f ? lerpf(top - 1.f, viewC_.y + viewH_.y + 3.f, up) : lerpf(viewC_.y + viewH_.y + 3.f, top - 1.f, down);
+        const float k = f.teardown > 0.f ? smoothstepf(0.f, 0.15f, f.teardown) * (1.f - smoothstepf(0.4f, 1.f, up))
+                                         : smoothstepf(0.f, 0.3f, f.setup) * (1.f - smoothstepf(0.8f, 1.f, f.setup));
+        LightDef L;
+        for (int i = 0; i < 4; i++) L.pts.push_back(v2(viewC_.x + ((i & 1) ? 0.5f : -0.5f), y + ((i & 2) ? 0.5f : -0.5f)));
+        const vec3 lc = light_ * (1.f / std::max(0.05f, lum(light_)));
+        L.color = lerp(lc, mulv(lc, vec3(1.f, 0.6f, 0.38f)), f.teardown > 0.f ? up : 0.f) * (0.9f * k * worldOn);
+        L.reach = reach * 1.35f;
+        L.spread = spread * 0.7f;
+        L.nearW = 0.6f;
+        L.sub = 4;
+        L.rank = 95.f;
         lights_.push_back(L);
     }
     for (int i = 0; i < 2; i++) {
