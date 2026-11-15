@@ -22,17 +22,16 @@ inline const char* BG_FS = R"(
 in vec2 vUv;
 out vec4 frag;
 uniform vec4 uView;          // center, half extents (board units)
-uniform vec3 uBand[6];
+uniform vec3 uBand[6], uDropBand[6];  // the bands' colors, calm and in the drop
+uniform float uDropMix;      // 0 the calm palette .. 1 the drop's
 uniform vec3 uLine, uShade, uWellFill, uWellLine;
 uniform vec2 uCenter;        // the arcs' center (below the screen, wandering slowly)
 uniform float uFlow;         // the bands rising (in bands)
 uniform float uPhase;        // the waves' clock
 uniform float uWobble;       // the waves' depth (board units)
 uniform float uBreath;       // the bands swelling with the bars (in bands)
-uniform float uBright;       // the drop: the colors a little brighter
 uniform float uTrip;         // the drop: 0 the arcs .. 1 the kaleidoscope (petals, a spiral, rings around the well)
 uniform float uSpin;         // the petals' turn
-uniform float uHue;          // the colors' shift along the bands (in bands)
 uniform float uZoom;         // the pattern's scale (the drop's pulse on the beat)
 uniform vec3 uGlow;
 uniform float uGlowAmt;
@@ -51,12 +50,13 @@ void main() {
     // the melt: slow waves along the arcs and a few low harmonics across them, deeper further out
     float w = uWobble * mix(smoothstep(3.0, 14.0, r0), smoothstep(1.5, 8.0, r0), uTrip)
             * (0.6 + 0.4 * smoothstep(10.0, 30.0, r0));
-    float r = r0 + w * (0.9 * sin(p.x * 0.33 + r0 * 0.12 - uPhase * 1.3)
-                      + 0.6 * sin(3.0 * an + uPhase * 0.7 + r0 * 0.13)
-                      + 0.4 * sin(5.0 * an - uPhase * 0.45 - r0 * 0.07));
+    // (the drop: longer, simpler waves, fewer bumps along each ring)
+    float r = r0 + w * (0.9 * sin(p.x * mix(0.33, 0.17, uTrip) + r0 * 0.12 - uPhase * 1.3)
+                      + (1.0 - 0.75 * uTrip) * (0.6 * sin(3.0 * an + uPhase * 0.7 + r0 * 0.13)
+                                              + 0.4 * sin(5.0 * an - uPhase * 0.45 - r0 * 0.07)));
     // the drop: the rings fold into six slow petals (a kaleidoscope), turning
     float ad = atan(-d.x, d.y) + uSpin;      // from straight up (its seam points down, under the well)
-    r += uTrip * (0.5 + 0.06 * r0) * smoothstep(1.0, 6.0, r0) * sin(6.0 * ad - uPhase * 0.9 + r0 * 0.18);
+    r += uTrip * (0.25 + 0.025 * r0) * smoothstep(1.0, 6.0, r0) * sin(6.0 * ad - uPhase * 0.5 + r0 * 0.06);
     r = max(r, 0.0);
     const float R0 = 5.0, K = 6.3;
     float s = log(1.0 + r / R0) * K - uFlow - uBreath;
@@ -71,8 +71,8 @@ void main() {
     float i = floor(s), f = fract(s);
     float bw = (R0 + r) / K;                                  // a band's width (board units)
     // the colors sliding from band to band (the drop's slow cycle; still otherwise)
-    float hf = floor(uHue), ht = fract(uHue);
-    vec3 col = mix(uBand[int(mod(i + hf, 6.0))], uBand[int(mod(i + hf + 1.0, 6.0))], ht);
+    int bi = int(mod(i, 6.0));
+    vec3 col = mix(uBand[bi], uDropBand[bi], uDropMix);   // (each band one whole flat color)
     // cut paper: the band inside lies over this one, its soft shadow along the edge
     float de = f * bw;
     col = mix(col, col * uShade, 0.22 * exp(-de / 0.55));
@@ -80,9 +80,6 @@ void main() {
     float dl = min(f, 1.0 - f) * bw;
     float aa = fwidth(sBase) * bw * 0.8 + 0.004;
     col = mix(col, uLine, 0.8 * (1.0 - smoothstep(0.05 - aa, 0.05 + aa, dl)));
-    // the drop: a little brighter, a little richer
-    float l = dot(col, vec3(0.299, 0.587, 0.114));
-    col = mix(col, clamp(mix(vec3(l), col, 1.3) * 1.04 + 0.01, 0.0, 1.0), uBright);
     // the drop's light, glowing from the center behind the well
     col = mix(col, uGlow, clamp(uGlowAmt * exp(-r0 / 10.0), 0.0, 1.0));
     // the paper's faint grain
@@ -96,7 +93,7 @@ void main() {
         col = mix(col, uWellFill, cov(dw + 0.07));
     }
     // slow motion: dusk (the colors drained toward lilac)
-    l = dot(col, vec3(0.299, 0.587, 0.114));
+    float l = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(col, vec3(l) * vec3(0.88, 0.86, 1.02), uDesat);
     frag = vec4(col, 1.0);
 }

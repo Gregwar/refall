@@ -12,11 +12,12 @@
 // a thin line of it.
 //
 // The music: calm is very slow; mid flows a little more. A DROP section (music.inDrop only) is the trip, there within
-// a second: the arcs' center rises behind the well and swings slowly, so the arcs close into full rings radiating
-// outward (a push out on every bar), folding into six slow petals and twisting into a six-armed spiral, the waves
-// much deeper; the colors slide from band to band in a slow cycle and brighten, a soft light glows from behind the
-// well and the whole pattern swells gently on each beat. It eases back to the calm arcs over a few seconds once the
-// drop ends (the colors settling on whole bands); nothing strobes. A line clear sends one soft ripple out through the bands from the
+// a second: the arcs' center rises behind the well and swings slowly, so the arcs close into clean full rings
+// radiating outward (a little faster at the top of each bar), folding into six shallow petals and twisting into a
+// slow six-armed spiral, the waves calmer and simpler than outside it; the bands cross-fade (each one whole) into the
+// variant's drop palette (a sunset; rose, violet and teal; turquoise, lime and lemon; neon pastels between bands of
+// night), a soft light glows from behind the well and the pattern swells very gently on each beat. It eases back to
+// the calm arcs and colors over a few seconds once the drop ends; nothing strobes. A line clear sends one soft ripple out through the bands from the
 // cleared rows (a stronger one for more lines); nothing flies. Slow motion is dusk (the colors drained toward lilac,
 // the flow slowed); game over greys the stack from the top.
 //
@@ -54,7 +55,7 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 // A variant's colors (sRGB), by slot: the six bands (from the inside out), the lines between them, the shadows'
 // tint, the well and its line, the accent, the HUD's two inks, the seven pieces.
 enum Slot {
-    BAND0, LINE = BAND0 + 6, SHADE, WELL, WELL_LINE, ACCENT, HUD_PALE, HUD_DEEP, PIECE0, SLOTS = PIECE0 + 7
+    BAND0, DROP0 = BAND0 + 6, LINE = DROP0 + 6, SHADE, WELL, WELL_LINE, ACCENT, HUD_PALE, HUD_DEEP, PIECE0, SLOTS = PIECE0 + 7
 };
 struct VariantDef {
     const char* name;
@@ -64,22 +65,30 @@ const VariantDef VARIANTS[] = {
     // peach, butter, sky
     {"SUNSHINE",
      {0xfbe2a4, 0xf9c7a3, 0xf5b0a5, 0xfbead7, 0xbddcec, 0xf6cad6,
+      // the drop: a sunset, saturated but still pastel (gold, tangerine, coral, magenta-pink, violet, peach)
+      0xffd166, 0xffa25e, 0xff7f7a, 0xf47fb5, 0xb98be6, 0xffc2a8,
       0xfff8ee, 0xc58f86, 0xfffaf2, 0xe0ad94, 0xd9573a, 0xfff7e8, 0x55392f,
       // I O T S Z J L
       0x7fb2d3, 0xedae2c, 0xa47aa6, 0x3f9a84, 0xe2553b, 0x3f6c9c, 0xf0893c}},
     // dusk: apricot, rose, lilac, sand
     {"APRICOT",
      {0xf8c8a8, 0xf1b0b2, 0xd8bade, 0xf8dcc4, 0xf4bf9e, 0xe6c6df,
+      // the drop: rose, violet, teal
+      0xf58fa8, 0xc48be0, 0x6fc9c2, 0xffb3a1, 0x9b8ef0, 0xf7c6d9,
       0xfff3ec, 0xb07f8e, 0xfff6f0, 0xd7a3a3, 0xc4515b, 0xfff4ec, 0x4b2c37,
       0x93b0d8, 0xe6a43a, 0x9a7fc0, 0x6aa38d, 0xcf5a5e, 0x5a6ba4, 0xe8875c}},
     // sage, butter, seafoam, sand
     {"SAGE",
      {0xcfe3c6, 0xf2e5bd, 0xb7d7d1, 0xf5eddb, 0xe5cba8, 0xc8dcb2,
+      // the drop: turquoise, lime, lemon
+      0x5fd3c7, 0xb5e36b, 0xfbe97a, 0x8fe0b0, 0x43b8d1, 0xe3f59a,
       0xfbfaf0, 0x8c9c87, 0xfbfbf3, 0xa9bfa2, 0xb4572f, 0xfbf9ef, 0x2f3a31,
       0x7cb3ae, 0xd99f2b, 0x977aa0, 0x6a9a5a, 0xc0473a, 0x46708a, 0xe8894a}},
     // a deep pastel night: dusty indigo, violet, mauve, rose
     {"MIDNIGHT",
      {0x4a4275, 0x5f4f86, 0x7c6594, 0x3f4b78, 0x8a6c95, 0x585a8b,
+      // the drop: glowing neon pastels (cyan, pink, lavender) between bands of deep night
+      0x241d45, 0x62c9dc, 0x2e2556, 0xf27fc2, 0x2a2350, 0xa995f2,
       0xa898c8, 0x1c1630, 0x221c35, 0x8f80b4, 0xf3b6a0, 0xf6ead6, 0x221c35,
       0x7fb0d0, 0xeabb52, 0xc49ad4, 0x59ac8e, 0xe0604a, 0x6f8fd6, 0xf0904a}},
 };
@@ -143,7 +152,7 @@ private:
     // ---- Staging.
     int level_ = 1;
     float lv_ = 1.f;
-    float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f, spin_ = 0.f, hue_ = 0.f;
+    float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f, spin_ = 0.f, dropMix_ = 0.f;
     vec2 center_ = ARC_CENTER;
     bool slowOn_ = false;
     float slow_ = 0.f;
@@ -457,17 +466,18 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     // the drop: in within a second, out over a few once it ends
     dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 2.2f : 0.4f, dt);
     const float drop = ease(dropAmt_);
-    flow_ += wdt * (0.03f + 0.03f * wm + 0.3f * drop);     // bands a second, rising (radiating out in a drop)
-    phase_ += wdt * (0.1f + 0.08f * wm + 0.25f * drop);    // the waves rolling along them
-    spin_ += wdt * 0.15f * drop;                           // the drop's petals turning
-    hue_ += wdt * 0.3f * drop;                             // the drop's colors sliding from band to band
-    if (!inDrop) hue_ = approach(hue_, std::round(hue_), 0.6f, dt);    // (settling on whole bands after it)
-    wobble_ = approach(wobble_, 1.2f + 0.4f * wm + 1.4f * drop, 0.8f, dt);
-    // the swell with the bars: one slow breath every two bars (a push out on each bar in a drop)
+    dropMix_ = approach(dropMix_, inDrop ? 1.f : 0.f, inDrop ? 3.f : 0.6f, dt);   // the drop's palette, in ~1 s
     const double beats = music.hasSong ? music.beat : time_ * 2.0;
-    const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
     const float bar1 = (float)std::fmod(beats / 4.0, 1.0);
-    const float breath = (0.06f + 0.05f * wm) * (0.5f - 0.5f * std::cos(bar)) + 0.3f * drop * ease(bar1 / 0.35f);
+    // bands a second, rising; in a drop the rings radiate out, a little faster at the top of each bar
+    flow_ += wdt * (0.03f + 0.03f * wm + drop * (0.16f + 0.22f * std::exp(-bar1 * 5.f)));
+    phase_ += wdt * (0.1f + 0.08f * wm + 0.06f * drop);    // the waves rolling along them
+    spin_ += wdt * 0.06f * drop;                           // the drop's petals turning, slowly
+    // the waves: calmer and simpler in a drop (cleaner rings)
+    wobble_ = approach(wobble_, (1.2f + 0.4f * wm) * (1.f - 0.5f * drop), 0.8f, dt);
+    // the swell with the bars: one slow breath every two bars
+    const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
+    const float breath = (0.06f + 0.05f * wm) * (0.5f - 0.5f * std::cos(bar));
     // the drop's gentle pulse on each beat (the pattern swelling a little, the light a little brighter)
     const float bf = (float)(beats - std::floor(beats));
     const float pulse = drop * std::exp(-bf * 4.f);
@@ -493,13 +503,15 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     {
         glUseProgram(progBg_);
         set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-        float bands[18];
-        for (int i = 0; i < 6; i++) {
+        float bands[36];
+        for (int i = 0; i < 12; i++) {
             bands[i * 3] = col_[BAND0 + i].x;
             bands[i * 3 + 1] = col_[BAND0 + i].y;
             bands[i * 3 + 2] = col_[BAND0 + i].z;
         }
         glUniform3fv(ugl::U(progBg_, "uBand"), 6, bands);
+        glUniform3fv(ugl::U(progBg_, "uDropBand"), 6, bands + 18);
+        set1f(progBg_, "uDropMix", ease(dropMix_));
         set3f(progBg_, "uLine", col_[LINE]);
         set3f(progBg_, "uShade", col_[SHADE]);
         set3f(progBg_, "uWellFill", col_[WELL]);
@@ -509,11 +521,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uPhase", phase_);
         set1f(progBg_, "uWobble", wobble_);
         set1f(progBg_, "uBreath", breath);
-        set1f(progBg_, "uBright", 0.7f * drop);
         set1f(progBg_, "uTrip", drop);
         set1f(progBg_, "uSpin", spin_);
-        set1f(progBg_, "uHue", hue_);
-        set1f(progBg_, "uZoom", 1.f - 0.035f * pulse);
+        set1f(progBg_, "uZoom", 1.f - 0.016f * pulse);
         set3f(progBg_, "uGlow", lerp(col_[LINE], vec3(1.f, 0.99f, 0.95f), 0.5f));
         set1f(progBg_, "uGlowAmt", drop * (0.75f + 0.2f * pulse));
         set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
