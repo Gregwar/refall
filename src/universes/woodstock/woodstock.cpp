@@ -1,25 +1,28 @@
-// WOODSTOCK: a calm 70s peace-and-love sticker sheet, flat and sober.
+// WOODSTOCK: 70s groovy bands, pastel and chill.
 //
-// Cream paper (a faint grain, a thin double border framing the screen) and, in the free space beyond the HUD
-// columns, a few flat motifs in one even ink outline and a short warm palette: on the left a big sunburst disc (two
-// rings of scallops turning very slowly around a yellow ring, a pale sky and an upright peace sign, on a soft halo);
-// on the right two daisies on slim stems with two leaves each, swaying gently with the bars; a small heart and two
-// small bolts. Lots of calm paper around them; no lettering in the scene. Now and then a petal comes off a daisy and
-// drifts down.
+// The whole screen is one big slow pattern: huge rainbow arcs rising from below the screen in six soft pastel bands
+// (peach, butter, sky... per variant), layered like cut paper (each band laid over the next one out, a soft shadow
+// along its edge, a thin pale line between them), melting into slow waves that travel along them; the arcs widen
+// as they rise, so the sides of the screen get the biggest bands. They drift upward very slowly, the waves roll on,
+// the arcs' center wanders a little and the bands swell and settle with the bars. A faint paper grain. No motifs.
 //
-// The well is a pale panel inside the same ink line. The blocks are truly flat: one square of a single flat color
-// per cell (no outline, no shading, no highlight), a hairline gap between cells, the corners barely rounded; seven
-// soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside a thin line of it.
+// The well is a calm pale panel inside a slim line, a soft shadow under it. The blocks are truly flat: one square
+// of a single flat color per cell (no outline, no shading, no highlight), a hairline gap between cells, the corners
+// barely rounded; seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside
+// a thin line of it.
 //
-// The music: calm and mid stay sparse and slow (the sway a little wider at mid). A DROP section (music.inDrop
-// only) warms the paper and the halo, opens the halo into a burst of soft rays around the disc, makes the
-// scallops pulse gently on the beat, the disc turn a little faster and the daisies shed more petals; it settles
-// over a few seconds once the drop ends. A cleared row's cells shrink away, a petal drifts out of the well's side
-// for each line and a heart pops softly over the rows (three for a quad); slow motion is dusk (the colors drained
-// toward lilac, the motion slowed); game over greys the stack from the top.
+// The music: calm is very slow; mid flows a little more. A DROP section (music.inDrop only) is the trip, there within
+// a second: the arcs' center rises behind the well and swings slowly, so the arcs close into clean full rings
+// radiating outward (a little faster at the top of each bar), folding into six shallow petals and twisting into a
+// slow six-armed spiral, the waves calmer and simpler than outside it; the bands cross-fade (each one whole) into the
+// variant's drop palette (a sunset; rose, violet and teal; turquoise, lime and lemon; neon pastels between bands of
+// night), a soft light glows from behind the well and the pattern swells very gently on each beat. It eases back to
+// the calm arcs and colors over a few seconds once the drop ends; nothing strobes. A line clear sends one soft ripple out through the bands from the
+// cleared rows (a stronger one for more lines); nothing flies. Slow motion is dusk (the colors drained toward lilac,
+// the flow slowed); game over greys the stack from the top.
 //
-// Four variants (SUNSHINE, APRICOT, SAGE, MIDNIGHT: cream motifs' lines on deep plum), from the key, mode, brightness
-// and air. Original motifs only (generic period iconography). Cost: one fullscreen pass, a few instanced quads.
+// Four pastel variants (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night), from the key, mode, brightness and
+// air. Cost: one fullscreen pass, the blocks as instanced quads.
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -49,43 +52,51 @@ using ugl::set4f;
 
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// A variant's colors (sRGB), by slot.
+// A variant's colors (sRGB), by slot: the six bands (from the inside out), the lines between them, the shadows'
+// tint, the well and its line, the accent, the HUD's two inks, the seven pieces.
 enum Slot {
-    GROUND, FRAME, HALO, WELL, INK, BLOCK_INK, SCALLOP, SCALLOP2, RING, PEACE, SKY, GLINT, PETAL, CENTER, CENTER2, LEAF,
-    HEART, BOLT, ACCENT, HUD_PALE, HUD_DEEP, PIECE0, SLOTS = PIECE0 + 7
+    BAND0, DROP0 = BAND0 + 6, LINE = DROP0 + 6, SHADE, WELL, WELL_LINE, ACCENT, HUD_PALE, HUD_DEEP, PIECE0, SLOTS = PIECE0 + 7
 };
 struct VariantDef {
     const char* name;
     unsigned c[SLOTS];
 };
 const VariantDef VARIANTS[] = {
-    // the reference: cream, red-orange, orange, yellow, a pale sky, teal leaves, a dark brown line
+    // peach, butter, sky
     {"SUNSHINE",
-     {0xfbf0dc, 0xf1b48e, 0xf7dcc0, 0xfff8eb, 0x3b2723, 0x3b2723, 0xe2553b, 0xf08038, 0xf5bf47, 0xee7a36, 0x88b7d4,
-      0xfcf3e2, 0xe5573c, 0xf5b843, 0xee7f35, 0x2e8b80, 0xe2553b, 0xf5bf47, 0xd9573a, 0xfff7e8, 0x3b2723,
+     {0xfbe2a4, 0xf9c7a3, 0xf5b0a5, 0xfbead7, 0xbddcec, 0xf6cad6,
+      // the drop: a sunset, saturated but still pastel (gold, tangerine, coral, magenta-pink, violet, peach)
+      0xffd166, 0xffa25e, 0xff7f7a, 0xf47fb5, 0xb98be6, 0xffc2a8,
+      0xfff8ee, 0xc58f86, 0xfffaf2, 0xe0ad94, 0xd9573a, 0xfff7e8, 0x55392f,
       // I O T S Z J L
-      0x7fb2d3, 0xf4be47, 0xa47aa6, 0x3f9a84, 0xe2553b, 0x3f6c9c, 0xf0893c}},
-    // dusk: peach paper, dusty rose and apricot, a lilac sky, a plum line
+      0x7fb2d3, 0xedae2c, 0xa47aa6, 0x3f9a84, 0xe2553b, 0x3f6c9c, 0xf0893c}},
+    // dusk: apricot, rose, lilac, sand
     {"APRICOT",
-     {0xf7e2d2, 0xdea08f, 0xf1cdb9, 0xfdf1e7, 0x4b2c37, 0x4b2c37, 0xcf6460, 0xe58e69, 0xf1c27f, 0xdc7c5e, 0xab9dcf,
-      0xfbefe7, 0xd7696a, 0xf1c27f, 0xe08a5e, 0x5d8d84, 0xcf6460, 0xf0b56c, 0xc4515b, 0xfff4ec, 0x4b2c37,
-      0x93b0d8, 0xf1c27f, 0x9a7fc0, 0x6aa38d, 0xcf5a5e, 0x5a6ba4, 0xe8875c}},
-    // sage paper, white daisies, mustard and rust, a pale teal sky, a deep green line
+     {0xf8c8a8, 0xf1b0b2, 0xd8bade, 0xf8dcc4, 0xf4bf9e, 0xe6c6df,
+      // the drop: rose, violet, teal
+      0xf58fa8, 0xc48be0, 0x6fc9c2, 0xffb3a1, 0x9b8ef0, 0xf7c6d9,
+      0xfff3ec, 0xb07f8e, 0xfff6f0, 0xd7a3a3, 0xc4515b, 0xfff4ec, 0x4b2c37,
+      0x93b0d8, 0xe6a43a, 0x9a7fc0, 0x6aa38d, 0xcf5a5e, 0x5a6ba4, 0xe8875c}},
+    // sage, butter, seafoam, sand
     {"SAGE",
-     {0xeeecd8, 0xaebc93, 0xdfe2c4, 0xf9f7ea, 0x2f3a31, 0x2f3a31, 0x5f9a7c, 0x8db68f, 0xe3b04b, 0xc8693b, 0x9cc4bd,
-      0xf8f4e3, 0xfbf7ea, 0xe3b04b, 0xc8693b, 0x5c8e69, 0xc8693b, 0xe3b04b, 0xb4572f, 0xfbf9ef, 0x2f3a31,
-      0x7cb3ae, 0xe3b04b, 0x977aa0, 0x6a9a5a, 0xc0473a, 0x46708a, 0xe8894a}},
-    // night: deep plum paper, cream lines, the warm motifs dimmed a little
+     {0xcfe3c6, 0xf2e5bd, 0xb7d7d1, 0xf5eddb, 0xe5cba8, 0xc8dcb2,
+      // the drop: turquoise, lime, lemon
+      0x5fd3c7, 0xb5e36b, 0xfbe97a, 0x8fe0b0, 0x43b8d1, 0xe3f59a,
+      0xfbfaf0, 0x8c9c87, 0xfbfbf3, 0xa9bfa2, 0xb4572f, 0xfbf9ef, 0x2f3a31,
+      0x7cb3ae, 0xd99f2b, 0x977aa0, 0x6a9a5a, 0xc0473a, 0x46708a, 0xe8894a}},
+    // a deep pastel night: dusty indigo, violet, mauve, rose
     {"MIDNIGHT",
-     {0x2b1e33, 0x5d4362, 0x3a2944, 0x22172a, 0xf1e1c4, 0x170f1c, 0xd2603f, 0xe48a42, 0xe6b650, 0xe48a42, 0x7f9ec0,
-      0xf1e1c4, 0xf1e1c4, 0xe6b650, 0xd2603f, 0x4f9a8c, 0xd2603f, 0xe6b650, 0xf0b04a, 0xf6ead6, 0x2b1e33,
-      0x7fb0d0, 0xeabb52, 0xb48cc4, 0x59ac8e, 0xe0604a, 0x6383c6, 0xf0904a}},
+     {0x4a4275, 0x5f4f86, 0x7c6594, 0x3f4b78, 0x8a6c95, 0x585a8b,
+      // the drop: glowing neon pastels (cyan, pink, lavender) between bands of deep night
+      0x241d45, 0x62c9dc, 0x2e2556, 0xf27fc2, 0x2a2350, 0xa995f2,
+      0xa898c8, 0x1c1630, 0x221c35, 0x8f80b4, 0xf3b6a0, 0xf6ead6, 0x221c35,
+      0x7fb0d0, 0xeabb52, 0xc49ad4, 0x59ac8e, 0xe0604a, 0x6f8fd6, 0xf0904a}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr int V_SUNSHINE = 0, V_APRICOT = 1, V_SAGE = 2, V_MIDNIGHT = 3;
 
 constexpr float CLEAR_T = 0.4f;    // a cleared cell shrinks away in this long (real time)
-constexpr float OUTLINE = 0.085f;  // the ink line, everywhere (board units)
+const vec2 ARC_CENTER{0.f, -15.f}; // the arcs' center, below the screen (board units)
 
 float ease(float t) {
     t = saturate(t);
@@ -110,59 +121,44 @@ public:
     HudInk hudInk(const HudText& h) override;
 
 private:
-    // ---- Petals and hearts (board units).
-    struct Sprite { float a[4], b[4], c[4], d[4]; };
-    std::vector<Sprite> sprites_;
-    void flushSprites();
-    struct Part {
-        float x, y, vx, vy, rot, size, age, life, phase;
-        int kind;   // 0 a petal, 1 a heart
-        bool drift; // a daisy's petal drifting down (else one of the clears')
-        vec3 col;
-    };
-    std::vector<Part> parts_;
-    void drawParts(int kind);
-    float nextPetal_ = 4.f;
-
     // ---- Blocks.
     struct CellInst { float a[4], b[4], c[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float rot, int type, float alpha, int mode, float scale, float k);
+    void cell(float x, float y, int type, float alpha, int mode, float scale, float k);
     void buildBoard(const Game& g);
     struct Pop { float x, y; int type; float t; };
     std::vector<Pop> pops_;
+
+    // ---- The clears' ripples through the bands (radius they start at, age in seconds, strength).
+    struct Ripple { float r0, age, strength; };
+    std::vector<Ripple> ripples_;
 
     // ---- The HUD's plates (its lettering: the host's).
     float fade_ = 1.f;
     void drawHud(const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progBg_ = 0, progSprite_ = 0, progCell_ = 0, progSolid_ = 0;
-    GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0;
+    GLuint progBg_ = 0, progCell_ = 0, progSolid_ = 0;
+    GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     void solid(float r, float g, float b, float a);
 
-    // ---- The motifs' places (board units, from the view: resize).
-    float zoneX_ = 16.1f, zoneS_ = 1.f;
-    vec2 head_[2], foot_[2];
-
     // ---- Song, variant, colors (sRGB, eased on a change of song).
     int variant_ = 0;
-    uint64_t seed_ = 1;
     vec3 col_[SLOTS];
     bool colSet_ = false;
 
     // ---- Staging.
     int level_ = 1;
     float lv_ = 1.f;
-    float dropAmt_ = 0.f, spin_ = 0.f, turn_ = 0.f;
+    float dropAmt_ = 0.f, flow_ = 0.f, phase_ = 0.f, wobble_ = 1.2f, spin_ = 0.f, dropMix_ = 0.f;
+    vec2 center_ = ARC_CENTER;
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
-    Rng rng_{0x60D5u};
 };
 
 // =====================================================================================================
@@ -171,8 +167,7 @@ private:
 
 bool WoodstockUniverse::init(int width, int height) {
     const std::string head = "#version 330 core\n";
-    progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "woodstock paper");
-    progSprite_ = ugl::program(sh::SPRITE_VS, (head + sh::PAINT_GLSL + sh::SPRITE_FS).c_str(), "woodstock petals");
+    progBg_ = ugl::program(ugl::FULLSCREEN_VS, (head + sh::PAINT_GLSL + sh::BG_FS).c_str(), "woodstock bands");
     progCell_ = ugl::program(sh::CELL_VS, (head + sh::PAINT_GLSL + sh::CELL_FS).c_str(), "woodstock blocks");
     progSolid_ = ugl::program(ugl::FULLSCREEN_VS, sh::SOLID_FS, "woodstock solid");
 
@@ -180,22 +175,18 @@ bool WoodstockUniverse::init(int width, int height) {
     glGenBuffers(1, &quadVbo_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
-    auto instanced = [&](GLuint& vao, GLuint& vbo, int vec4s) {
-        glGenVertexArrays(1, &vao);
-        glGenBuffers(1, &vbo);
-        glBindVertexArray(vao);
-        glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-        glBindBuffer(GL_ARRAY_BUFFER, vbo);
-        for (int i = 0; i < vec4s; i++) {
-            glEnableVertexAttribArray(1 + i);
-            glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4 * vec4s, (void*)(sizeof(float) * 4 * i));
-            glVertexAttribDivisor(1 + i, 1);
-        }
-    };
-    instanced(spriteVao_, spriteVbo_, 4);
-    instanced(cellVao_, cellVbo_, 3);
+    glGenVertexArrays(1, &cellVao_);
+    glGenBuffers(1, &cellVbo_);
+    glBindVertexArray(cellVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
+    for (int i = 0; i < 3; i++) {
+        glEnableVertexAttribArray(1 + i);
+        glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(CellInst), (void*)(sizeof(float) * 4 * i));
+        glVertexAttribDivisor(1 + i, 1);
+    }
     glBindVertexArray(0);
 
     resize(width, height);
@@ -211,16 +202,12 @@ void WoodstockUniverse::resize(int width, int height) {
     viewH_ = vec2{hw, hh};
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
-    // the free zones beyond the HUD columns (9.8 wide at 16:9): the motifs centered in them, scaled to fit
-    const float zoneW = hw - layout::RIGHT_COLUMN[2];
-    zoneX_ = layout::RIGHT_COLUMN[2] + zoneW * 0.5f;
-    zoneS_ = std::clamp(zoneW / 9.8f, 0.3f, 1.25f);
 }
 
 WoodstockUniverse::~WoodstockUniverse() {
-    for (GLuint p : {progBg_, progSprite_, progCell_, progSolid_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progBg_, progCell_, progSolid_}) glDeleteProgram(p);
+    glDeleteVertexArrays(1, &cellVao_);
+    for (GLuint b : {quadVbo_, cellVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -243,8 +230,6 @@ void WoodstockUniverse::setSong(const SongLook& t, float seconds) {
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
     variant_ = v;
-    seed_ = t.seed ? t.seed : 1;
-    rng_ = Rng(seed_ ^ 0x5EACEull);
     if (seconds <= 0.f) colSet_ = false;
 }
 
@@ -258,11 +243,13 @@ void WoodstockUniverse::setLevel(int level, float energy, float seconds, float i
 TransitionHints WoodstockUniverse::hints() const {
     const VariantDef& V = VARIANTS[variant_];
     TransitionHints h;
-    h.background = ugl::toLinear(hex(V.c[GROUND]));
-    h.ink = ugl::toLinear(hex(variant_ == V_MIDNIGHT ? V.c[INK] : V.c[BLOCK_INK]));
+    vec3 bg(0.f);
+    for (int i = 0; i < 6; i++) bg += hex(V.c[BAND0 + i]) * (1.f / 6.f);
+    h.background = ugl::toLinear(bg);
+    h.ink = ugl::toLinear(hex(V.c[variant_ == V_MIDNIGHT ? HUD_PALE : HUD_DEEP]));
     h.accent = ugl::toLinear(hex(V.c[ACCENT]));
     h.light = variant_ != V_MIDNIGHT;
-    h.styles = TS_INK | TS_TILES;
+    h.styles = TS_RIPPLE | TS_INK;
     return h;
 }
 
@@ -270,55 +257,19 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
     case GameEvent::Clear: {
-        float yTop = -99.f;
-        std::vector<int> rows;
+        float yMid = 0.f;
+        int n = 0;
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             pops_.push_back({p.x, p.y, std::clamp(c.type, 0, 6), 0.f});
-            yTop = std::max(yTop, p.y);
-            if (std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
+            yMid += p.y;
+            n++;
         }
-        if (rows.empty()) break;
-        // a petal drifting out of the well's side for each line, in the color of one of its cells
-        for (int r : rows) {
-            const float side = rng_.chance(0.5f) ? 1.f : -1.f;
-            std::vector<int> types;
-            for (auto& c : ev.cells) if (c.y == r) types.push_back(c.type);
-            const int type = types[rng_.irange(0, (int)types.size() - 1)];
-            Part q;
-            q.x = side * 5.2f;
-            q.y = layout::cellPos(0.f, (float)r).y;
-            q.vx = side * rng_.range(1.4f, 2.2f);
-            q.vy = rng_.range(0.4f, 0.9f);
-            q.rot = side > 0.f ? rng_.range(-0.4f, 0.4f) : PI + rng_.range(-0.4f, 0.4f);
-            q.size = 0.3f;
-            q.age = -rng_.range(0.f, 0.15f);
-            q.life = rng_.range(2.6f, 3.4f);
-            q.phase = rng_.range(0.f, TAU);
-            q.kind = 0;
-            q.drift = false;
-            q.col = col_[PIECE0 + std::clamp(type, 0, 6)];
-            parts_.push_back(q);
-        }
-        // a heart popping softly over the rows (three for a quad)
-        const int hearts = ev.count >= 4 ? 3 : 1;
-        for (int i = 0; i < hearts; i++) {
-            Part q;
-            q.x = hearts == 1 ? rng_.range(-1.5f, 1.5f) : (i - 1) * 2.6f + rng_.range(-0.4f, 0.4f);
-            q.y = yTop + 0.3f;
-            q.vx = 0.f;
-            q.vy = 1.1f;
-            q.rot = rng_.range(-0.15f, 0.15f);
-            q.size = hearts == 1 ? 0.62f : (i == 1 ? 0.75f : 0.55f);
-            q.age = -0.12f * i;
-            q.life = 1.5f;
-            q.phase = 0.f;
-            q.kind = 1;
-            q.drift = false;
-            q.col = col_[HEART];
-            parts_.push_back(q);
-        }
+        if (!n) break;
+        // one soft ripple out through the bands from the cleared rows
+        if (ripples_.size() >= 4) ripples_.erase(ripples_.begin());
+        ripples_.push_back({std::abs(yMid / n - center_.y), 0.f, 0.22f + 0.08f * std::min(ev.count, 4)});
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -330,10 +281,10 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Board
 // =====================================================================================================
 
-void WoodstockUniverse::cell(float x, float y, float rot, int type, float alpha, int mode, float scale, float k) {
+void WoodstockUniverse::cell(float x, float y, int type, float alpha, int mode, float scale, float k) {
     if (alpha <= 0.003f || scale <= 0.f) return;
     const vec3 c = col_[PIECE0 + std::clamp(type, 0, 6)];
-    cells_.push_back({{x, y, 0.5f, rot}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
+    cells_.push_back({{x, y, 0.5f, 0.f}, {(float)type, alpha, (float)mode, scale}, {c.x, c.y, c.z, k}});
 }
 
 void WoodstockUniverse::buildBoard(const Game& g) {
@@ -345,11 +296,11 @@ void WoodstockUniverse::buildBoard(const Game& g) {
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             float k = -0.3f * std::pow(saturate(c.flash), 8.f);
             if (over_ > 0.f) k = 0.7f * saturate(overRows - (y - Game::HIDDEN));
-            cell(p.x, p.y, 0.f, c.type, 1.f, 0, 1.f, k);
+            cell(p.x, p.y, c.type, 1.f, 0, 1.f, k);
         }
     for (const Pop& p : pops_) {
         const float t = saturate(p.t / CLEAR_T);
-        cell(p.x, p.y, 0.f, p.type, 1.f - ease((t - 0.5f) / 0.5f), 0, 1.f - 0.6f * ease(t), -0.35f * (1.f - t));
+        cell(p.x, p.y, p.type, 1.f - ease((t - 0.5f) / 0.5f), 0, 1.f - 0.6f * ease(t), -0.35f * (1.f - t));
     }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
@@ -363,14 +314,14 @@ void WoodstockUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.f, p.type, 1.f, 1, 1.f, 0.f);
+                cell(w.x, w.y, p.type, 1.f, 1, 1.f, 0.f);
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (auto& c : cs) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.f, p.type, 1.f, 0, 1.f, 0.f);
+            cell(w.x, w.y, p.type, 1.f, 0, 1.f, 0.f);
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -384,7 +335,7 @@ void WoodstockUniverse::buildBoard(const Game& g) {
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
         for (auto& c : cs)
-            cell(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc, 0.f, type,
+            cell(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc, type,
                  alpha, 0, sc, 0.f);
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
@@ -392,37 +343,6 @@ void WoodstockUniverse::buildBoard(const Game& g) {
         const vec3 c = layout::nextCenter(i);
         if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
     }
-}
-
-void WoodstockUniverse::drawParts(int kind) {
-    const vec3 ink = col_[INK];
-    for (const Part& p : parts_) {
-        if (p.kind != kind || p.age < 0.f) continue;
-        float a = saturate(p.age / 0.25f) * (1.f - ease((p.age - p.life + 1.f) / 1.f));
-        float hx = p.size, hy = p.size * 0.48f;
-        if (kind == 1) {
-            // the heart pops in (a soft overshoot) and fades as it rises
-            const float t = saturate(p.age / 0.35f);
-            const float s = 1.f + 0.15f * std::sin(t * PI) * (t < 1.f ? 1.f : 0.f);
-            hx = hy = p.size * ease(t * 1.6f) * s;
-            a = saturate(p.age / 0.12f) * (1.f - ease((p.age - p.life + 0.6f) / 0.6f)) * 0.95f;
-        }
-        if (a <= 0.004f || hx <= 0.f) continue;
-        sprites_.push_back({{p.x, p.y, hx, hy}, {p.rot, (float)kind, a, OUTLINE}, {p.col.x, p.col.y, p.col.z, 0.f},
-                            {ink.x, ink.y, ink.z, 0.f}});
-    }
-    flushSprites();
-}
-
-void WoodstockUniverse::flushSprites() {
-    if (sprites_.empty()) return;
-    glUseProgram(progSprite_);
-    ugl::setMat(progSprite_, "uVP", vp_);
-    glBindVertexArray(spriteVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
-    glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(Sprite), sprites_.data(), GL_STREAM_DRAW);
-    glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)sprites_.size());
-    sprites_.clear();
 }
 
 void WoodstockUniverse::solid(float r, float g, float b, float a) {
@@ -449,7 +369,7 @@ void WoodstockUniverse::drawHud(const std::vector<HudRect>& panels) {
     glDisable(GL_SCISSOR_TEST);
 }
 
-// The unified HUD's inks: the paper's dark line, a warm cream, the variant's accent.
+// The unified HUD's inks: a warm cream, the variant's deep tone, its accent.
 HudInk WoodstockUniverse::hudInk(const HudText& h) {
     (void)h;
     HudInk k;
@@ -459,8 +379,9 @@ HudInk WoodstockUniverse::hudInk(const HudText& h) {
     return k;
 }
 
-// The universe's own lettering (ZEN_HUD=universe): the line's ink on the paper (cream on MIDNIGHT), a soft halo of
-// the paper; Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the notices and the toasts.
+// The universe's own lettering (ZEN_HUD=universe): the deep ink on the pastel bands (cream on MIDNIGHT), a soft
+// halo of the bands; Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the notices and the
+// toasts.
 void WoodstockUniverse::hudLine(const HudText& h, text::Line& out) {
     text::Font* disp = text::font(FONT_DISPLAY);
     text::Font* round = text::font(FONT_ROUND);
@@ -505,7 +426,7 @@ void WoodstockUniverse::hudLine(const HudText& h, text::Line& out) {
         break;
     default: put(round, h.text, base * 0.85f, base * 0.08f, h.accent ? acc : ink, alpha); break;
     }
-    out.look.halo = col_[GROUND];
+    out.look.halo = variant_ == V_MIDNIGHT ? col_[WELL] : col_[HUD_PALE];
     out.look.haloA = 0.6f;
     out.look.haloW = 0.14f;
     out.alpha = saturate(fade_);
@@ -527,7 +448,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         else overT_ += dt;
     }
     over_ = approach(over_, overT_ >= 0.f ? saturate(overT_ / 2.5f) : 0.f, overT_ >= 0.f ? 3.f : 1.f, dt);
-    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.4f, slow_);
+    const float wdt = f.paused ? 0.f : dt * lerpf(1.f, 0.35f, slow_);
     time_ += wdt;
 
     // ---- The colors: the variant's, eased in on a change of song.
@@ -538,132 +459,88 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         for (int i = 0; i < SLOTS; i++) col_[i] = lerp(col_[i], hex(V.c[i]), k);
     }
 
-    // ---- Staging: the level eased (the sway's width), the drop (music.inDrop only).
-    lv_ = approach(lv_, (float)level_, 0.6f, dt);
+    // ---- Staging: the level eased, the drop (music.inDrop only), all of it smooth.
+    lv_ = approach(lv_, (float)level_, 0.5f, dt);
     const float wm = smoothstepf(0.2f, 1.f, lv_);
     const bool inDrop = music.inDrop && overT_ < 0.f;
-    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 1.2f : 0.5f, dt);
+    // the drop: in within a second, out over a few once it ends
+    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 2.2f : 0.4f, dt);
     const float drop = ease(dropAmt_);
+    dropMix_ = approach(dropMix_, inDrop ? 1.f : 0.f, inDrop ? 3.f : 0.6f, dt);   // the drop's palette, in ~1 s
     const double beats = music.hasSong ? music.beat : time_ * 2.0;
-    // the scallops' gentle pulse on each beat of the drop
+    const float bar1 = (float)std::fmod(beats / 4.0, 1.0);
+    // bands a second, rising; in a drop the rings radiate out, a little faster at the top of each bar
+    flow_ += wdt * (0.03f + 0.03f * wm + drop * (0.16f + 0.22f * std::exp(-bar1 * 5.f)));
+    phase_ += wdt * (0.1f + 0.08f * wm + 0.06f * drop);    // the waves rolling along them
+    spin_ += wdt * 0.06f * drop;                           // the drop's petals turning, slowly
+    // the waves: calmer and simpler in a drop (cleaner rings)
+    wobble_ = approach(wobble_, (1.2f + 0.4f * wm) * (1.f - 0.5f * drop), 0.8f, dt);
+    // the swell with the bars: one slow breath every two bars
+    const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
+    const float breath = (0.06f + 0.05f * wm) * (0.5f - 0.5f * std::cos(bar));
+    // the drop's gentle pulse on each beat (the pattern swelling a little, the light a little brighter)
     const float bf = (float)(beats - std::floor(beats));
     const float pulse = drop * std::exp(-bf * 4.f);
-    spin_ += wdt * (0.035f + 0.02f * wm + 0.05f * drop);
+    // the arcs' center: below the screen, wandering; the drop raises it behind the well (the arcs close into
+    // full rings around it) and swings it slowly
+    const vec2 calm{ARC_CENTER.x + 1.6f * std::sin(time_ * 0.031f), ARC_CENTER.y + 0.8f * std::sin(time_ * 0.023f + 1.f)};
+    const vec2 trip{1.2f * std::sin(time_ * 0.17f), -1.f + 0.9f * std::sin(time_ * 0.13f + 0.5f)};
+    center_ = vec2{lerpf(calm.x, trip.x, drop), lerpf(calm.y, trip.y, drop)};
+    const vec2 center = center_;
 
-    // ---- The motifs' places (they lean with the bars: a two-bar sway).
-    const float zx = zoneX_, s = zoneS_;
-    const float bar = (float)std::fmod(beats / 8.0, 1.0) * TAU;
-    const float sway = 0.022f + 0.018f * wm + 0.025f * drop;
-    head_[0] = vec2{zx + 1.3f * s, 3.9f * s};
-    foot_[0] = vec2{zx - 0.5f * s, -1.3f * s};
-    head_[1] = vec2{zx - 1.6f * s, -3.1f * s};
-    foot_[1] = vec2{zx + 0.3f * s, -7.6f * s};
-    const float lean[2] = {sway * std::sin(bar), sway * std::sin(bar - 1.7f)};
-    turn_ += wdt * 0.04f;
-
-    // ---- Petals now and then off the daisies (more in a drop), drifting down.
-    nextPetal_ -= wdt;
-    if (nextPetal_ <= 0.f && !f.paused) {
-        const int i = rng_.irange(0, 1);
-        const vec2 ft = foot_[i];
-        const float hdx = head_[i].x - ft.x, hdy = head_[i].y - ft.y;
-        const float c = std::cos(lean[i]), sn = std::sin(lean[i]);
-        const vec2 h{ft.x + c * hdx - sn * hdy, ft.y + sn * hdx + c * hdy};
-        Part q;
-        const float an = rng_.range(0.f, TAU);
-        const float r = (i ? 1.35f : 1.75f) * s * 0.75f;
-        q.x = h.x + std::cos(an) * r;
-        q.y = h.y + std::sin(an) * r;
-        q.vx = rng_.range(-0.35f, 0.05f);
-        q.vy = -rng_.range(0.35f, 0.55f);
-        q.rot = an;
-        q.size = 0.34f * s;
-        q.age = 0.f;
-        q.life = rng_.range(6.f, 8.f);
-        q.phase = rng_.range(0.f, TAU);
-        q.kind = 0;
-        q.drift = true;
-        q.col = col_[PETAL];
-        parts_.push_back(q);
-        nextPetal_ = drop > 0.5f ? rng_.range(1.2f, 2.4f) : wm > 0.5f ? rng_.range(6.f, 9.f) : rng_.range(9.f, 14.f);
-    }
-
-    // ---- Particles, pops.
+    // ---- Ripples, pops.
+    for (Ripple& r : ripples_) r.age += wdt;
+    ripples_.erase(std::remove_if(ripples_.begin(), ripples_.end(), [](const Ripple& r) { return r.age > 4.f; }), ripples_.end());
     for (Pop& p : pops_) p.t += dt;
     pops_.erase(std::remove_if(pops_.begin(), pops_.end(), [](const Pop& p) { return p.t > CLEAR_T; }), pops_.end());
-    for (Part& p : parts_) {
-        p.age += wdt;
-        if (p.age < 0.f) continue;
-        if (p.drift) {
-            // a slow fall, swaying from side to side
-            const float w = std::sin(p.age * 1.3f + p.phase);
-            p.x += (p.vx + 0.45f * w) * wdt;
-            p.y += p.vy * wdt;
-            p.rot += 0.6f * std::cos(p.age * 1.3f + p.phase) * wdt;
-        } else if (p.kind == 0) {
-            // out of the well's side, slowing, then falling softly
-            p.x += p.vx * wdt;
-            p.y += p.vy * wdt;
-            p.vx *= std::exp(-1.1f * wdt);
-            p.vy = approach(p.vy, -0.45f, 0.9f, wdt);
-            p.rot += 0.5f * std::sin(p.age * 2.f + p.phase) * wdt;
-        } else {
-            p.y += p.vy * wdt;
-            p.vy *= std::exp(-1.2f * wdt);
-        }
-    }
-    parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Part& p) { return p.age >= p.life; }), parts_.end());
 
-    // =========================================================== the paper and its motifs
+    // =========================================================== the bands
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     {
-        // a drop warms the paper and the halo
-        const vec3 ground = lerp(col_[GROUND], col_[HALO], 0.3f * drop);
-        const vec3 halo = lerp(col_[HALO], col_[SCALLOP2], 0.38f * drop);
         glUseProgram(progBg_);
         set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-        set1f(progBg_, "uW", OUTLINE);
-        set3f(progBg_, "uGround", ground);
-        set3f(progBg_, "uFrame", col_[FRAME]);
-        set3f(progBg_, "uHalo", halo);
+        float bands[36];
+        for (int i = 0; i < 12; i++) {
+            bands[i * 3] = col_[BAND0 + i].x;
+            bands[i * 3 + 1] = col_[BAND0 + i].y;
+            bands[i * 3 + 2] = col_[BAND0 + i].z;
+        }
+        glUniform3fv(ugl::U(progBg_, "uBand"), 6, bands);
+        glUniform3fv(ugl::U(progBg_, "uDropBand"), 6, bands + 18);
+        set1f(progBg_, "uDropMix", ease(dropMix_));
+        set3f(progBg_, "uLine", col_[LINE]);
+        set3f(progBg_, "uShade", col_[SHADE]);
         set3f(progBg_, "uWellFill", col_[WELL]);
-        set3f(progBg_, "uInk", col_[INK]);
-        set3f(progBg_, "uScallop", col_[SCALLOP]);
-        set3f(progBg_, "uScallop2", col_[SCALLOP2]);
-        set3f(progBg_, "uRing", col_[RING]);
-        set3f(progBg_, "uPeace", col_[PEACE]);
-        set3f(progBg_, "uSky", col_[SKY]);
-        set3f(progBg_, "uGlint", col_[GLINT]);
-        set3f(progBg_, "uPetal", col_[PETAL]);
-        set3f(progBg_, "uCenter", col_[CENTER]);
-        set3f(progBg_, "uCenter2", col_[CENTER2]);
-        set3f(progBg_, "uLeaf", col_[LEAF]);
-        set3f(progBg_, "uHeart", col_[HEART]);
-        set3f(progBg_, "uBolt", col_[BOLT]);
-        set4f(progBg_, "uDisc", -zx + 0.35f * s, 1.2f * s, 3.4f * s, spin_);
-        set2f(progBg_, "uDiscFx", drop, pulse);
-        const float heads[8] = {head_[0].x, head_[0].y, 1.75f * s, turn_ + lean[0] * 2.f,
-                                head_[1].x, head_[1].y, 1.35f * s, -turn_ * 0.8f + lean[1] * 2.f};
-        glUniform4fv(ugl::U(progBg_, "uHead"), 2, heads);
-        const float stems[8] = {foot_[0].x, foot_[0].y, 1.5f * s, lean[0], foot_[1].x, foot_[1].y, 1.25f * s, lean[1]};
-        glUniform4fv(ugl::U(progBg_, "uStem"), 2, stems);
-        set4f(progBg_, "uHeartAt", -zx - 2.4f * s, -6.4f * s, 0.7f * s, 0.22f + 0.04f * std::sin(bar + 0.6f));
-        const float bolts[8] = {-zx + 2.8f * s, 7.7f, 0.85f * s, -0.18f + 0.03f * std::sin(bar + 2.4f),
-                                zx - 2.5f * s, 7.9f, 0.8f * s, 0.22f + 0.03f * std::sin(bar + 4.f)};
-        glUniform4fv(ugl::U(progBg_, "uBoltAt"), 2, bolts);
+        set3f(progBg_, "uWellLine", col_[WELL_LINE]);
+        set2f(progBg_, "uCenter", center.x, center.y);
+        set1f(progBg_, "uFlow", flow_);
+        set1f(progBg_, "uPhase", phase_);
+        set1f(progBg_, "uWobble", wobble_);
+        set1f(progBg_, "uBreath", breath);
+        set1f(progBg_, "uTrip", drop);
+        set1f(progBg_, "uSpin", spin_);
+        set1f(progBg_, "uZoom", 1.f - 0.016f * pulse);
+        set3f(progBg_, "uGlow", lerp(col_[LINE], vec3(1.f, 0.99f, 0.95f), 0.5f));
+        set1f(progBg_, "uGlowAmt", drop * (0.75f + 0.2f * pulse));
+        set1f(progBg_, "uDesat", 0.45f * slow_ + 0.2f * over_);
+        set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.045f : 0.022f);
+        float rip[16] = {};
+        for (size_t i = 0; i < ripples_.size(); i++) {
+            const Ripple& r = ripples_[i];
+            rip[i * 4] = r.r0 + 7.f * r.age;                                   // the front's radius
+            rip[i * 4 + 1] = r.strength * ease(r.age / 0.3f) * (1.f - ease(r.age / 4.f));
+        }
+        glUniform4fv(ugl::U(progBg_, "uRipple"), 4, rip);
         set4f(progBg_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
-        set1f(progBg_, "uDesat", 0.4f * slow_ + 0.2f * over_);
-        set1f(progBg_, "uGrain", variant_ == V_MIDNIGHT ? 0.05f : 0.025f);
         ugl::drawFullscreen();
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-    drawParts(0);
     if (!f.bare) {
         // =========================================================== the blocks
         cells_.clear();
@@ -680,7 +557,6 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
         }
     }
-    drawParts(1);
     solid(0.f, 0.f, 0.f, 0.4f * dimT_);
     drawHud(f.panels);
     fade_ = f.fade;
@@ -696,7 +572,7 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_woodstock() {
     static const UniverseEntry e{
-        "WOODSTOCK", "a calm 70s peace-and-love sticker sheet: cream paper, a slow sunburst peace disc, swaying daisies",
+        "WOODSTOCK", "70s groovy bands, pastel and chill: huge layered rainbow arcs melting into slow waves",
         [] { return std::unique_ptr<Universe>(new WoodstockUniverse()); },
         // Bright, happy, easy songs suit it best.
         [](const SongLook& l) { return 0.65f + 0.35f * l.brightness + (l.minor ? 0.f : 0.15f) + 0.1f * (1.f - l.bassWeight); },
