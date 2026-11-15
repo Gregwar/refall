@@ -43,7 +43,7 @@ private:
     void layoutHud(const std::vector<HudText>& hud, std::vector<HudItem>& out) const;
     void drawWell(const Game& g);
     void drawStack(const Game& g);
-    void drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor = -1);
+    void drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor = -1, bool aboveWell = false);
     void drawCard(int x0, int y0, int x1, int y1, int tabW);
     void drawSide(const Game& g, const std::vector<HudItem>& items, int hop);
     void drawFx();

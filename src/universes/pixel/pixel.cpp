@@ -416,14 +416,14 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
 
 // ================================================================== drawing: the well
 
-void PixelUniverse::drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor) {
+void PixelUniverse::drawBlock(int px, int py, int type, int size, int flash, uint8_t kind, int variantFor, bool aboveWell) {
     const Variant& V = VAR(variantFor >= 0 ? variantFor : variant_);
     const uint8_t base = V.piece[type], lit = V.pieceLit[type], dark = V.pieceDark[type];
     const uint8_t shine = pal_.lighter[lit];
     for (int j = 0; j < size; j++)
         for (int i = 0; i < size; i++) {
             const int X = px + i, Y = py + j;
-            if (Y < by0_ - 1 && kind == K_STACK) continue; // above the well: hidden rows
+            if (Y < by0_ - 1 && kind == K_STACK && !aboveWell) continue; // above the well: hidden rows (not the falling piece)
             uint8_t c = base, k = kind;
             const bool edgeDark = i == size - 1 || j == size - 1;
             if (edgeDark) { c = dark; if (kind == K_STACK) k = K_GAP; }
@@ -605,8 +605,8 @@ void PixelUniverse::drawStack(const Game& g) {
     // The falling piece, in whole pixels.
     const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
     for (int i = 0; i < 4; i++) {
-        if (cells[i][1] < Game::HIDDEN - 1) continue;
-        drawBlock(bx0_ + iround((cells[i][0] + dx) * CELL), by0_ + iround((cells[i][1] - Game::HIDDEN + dy) * CELL), p.type, CELL, 0, K_STACK);
+        // (whole from the moment it appears: its top row may stand above the well)
+        drawBlock(bx0_ + iround((cells[i][0] + dx) * CELL), by0_ + iround((cells[i][1] - Game::HIDDEN + dy) * CELL), p.type, CELL, 0, K_STACK, -1, true);
     }
 }
 
