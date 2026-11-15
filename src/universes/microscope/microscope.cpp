@@ -20,8 +20,7 @@
 // pseudopods, pennate and centric diatoms, a volvox rolling slowly. The focal plane drifts and refocuses at each new
 // section, so some of them are soft.
 //
-// A cleared row's cells burst softly: each rounds off, its membrane breaks open and its content spills out and
-// fades, a few granules drifting away. The song: calm is a still, dimmer field and slow life; mid wakes the cilia on
+// A cleared row's cells burst at once: each scatters into a spray of granules of its stain, flung out and fading. The song: calm is a still, dimmer field and slow life; mid wakes the cilia on
 // the beat grid (every two beats); a peak brightens the lamp, the kicks flicking the cilia and making the paramecia
 // dart. A DROP section (music.inDrop) switches the illumination to the variant's second one (dark-field or
 // fluorescence: light on black, the membranes and nuclei glowing), eased in and out, with one swell of light, the
@@ -103,7 +102,6 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float LYSE_T = 0.75f;      // a cleared cell is gone in this long (real time)
 constexpr float DIE_T = 2.2f;        // game over: a cell's plasmolysis
 constexpr int FREE_COLONY = 1 << 20; // the colony of cells found on the board (inherited): joined by type
 
@@ -462,21 +460,19 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
-        // the cells burst softly, a few granules drifting away from each
+        // the cells burst at once: each scatters into a spray of granules of its stain, flung out and fading
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            const CellLook l = has_[c.y][c.x] >= 0 ? look_[c.y][c.x] : lookOf();
             const int type = std::clamp(c.type, 0, 6);
-            lyses_.push_back({p.x, p.y, type, l, 0.f});
-            for (int i = 0; i < 2; i++) {
-                const float an = rng_.range(0.f, TAU), sp = rng_.range(0.25f, 0.6f);
+            for (int i = 0; i < 9; i++) {
+                const float an = rng_.range(0.f, TAU), r0 = rng_.range(0.f, 0.35f), sp = rng_.range(0.8f, 2.2f);
                 Speck k;
-                k.p = vec2{p.x + std::cos(an) * 0.2f, p.y + std::sin(an) * 0.2f};
+                k.p = vec2{p.x + std::cos(an) * r0, p.y + std::sin(an) * r0};
                 k.v = vec2{std::cos(an) * sp, std::sin(an) * sp};
-                k.t = -rng_.range(0.15f, 0.35f);
-                k.life = rng_.range(1.4f, 2.4f);
-                k.r = rng_.range(0.045f, 0.08f);
+                k.t = 0.f;
+                k.life = rng_.range(0.6f, 1.1f);
+                k.r = rng_.range(0.05f, 0.11f);
                 k.type = type;
                 specks_.push_back(k);
             }
@@ -859,8 +855,6 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         o.cilia = 0.15f + 0.3f * wm + 0.9f * pulse + 0.6f * kickEnv_ + 0.5f * dk;
         o.spin += wdt * (o.kind == K_CENTRIC ? 0.06f : 0.f);
     }
-    for (Lyse& l : lyses_) l.t += dt;
-    lyses_.erase(std::remove_if(lyses_.begin(), lyses_.end(), [](const Lyse& l) { return l.t > LYSE_T; }), lyses_.end());
     for (Speck& k : specks_) {
         k.t += dt;
         if (k.t < 0.f) continue;
@@ -887,8 +881,7 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         const float anim = worldTime_ * (o.kind == K_AMOEBA ? 1.f : 0.8f + 0.5f * act) + o.seed * 100.f;
         orgInst.push_back({{o.p.x, o.p.y, o.size, ang}, {(float)o.kind, o.seed, anim, a}, {blur, o.cilia, 0.f, 0.f}, {o.spin, 0.f, 0.f, 0.f}});
     }
-    if (!bare_) { // the world alone: no tissue, nothing bursting or dying
-        for (const Lyse& l : lyses_) addCell(l.x, l.y, 0.5f, l.type, l.l, 2, saturate(l.t / LYSE_T), 1.f, 0.f, 0, l.x, l.y);
+    if (!bare_) { // the world alone: no tissue, nothing dying
         if (overT_ >= 0.f)
             for (const Dying& d : dying_) {
                 const float t = saturate((overT_ - d.delay) / DIE_T);

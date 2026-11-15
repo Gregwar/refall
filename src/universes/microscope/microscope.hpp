@@ -55,8 +55,6 @@ private:
     CellLook fallLook_[4];   // the falling piece's cells, kept as they are when it locks
     int colonies_ = 0;
     void syncLooks(const Game& g);
-    struct Lyse { float x, y; int type; CellLook l; float t; };   // a cleared cell bursting
-    std::vector<Lyse> lyses_;
     struct Dying { float x, y; int type; CellLook l; float delay; }; // game over: plasmolysis
     std::vector<Dying> dying_;
     struct Speck { vec2 p, v; float t, life, r; int type; };       // loose granules (a hard drop, a burst cell)

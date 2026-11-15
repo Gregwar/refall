@@ -393,7 +393,7 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the pieces (instanced per cell)
-// a: x, y (cell center), half (board units), kind (0 cell, 1 ghost, 2 bursting, 3 dying). b: type, seed, progress,
+// a: x, y (cell center), half (board units), kind (0 cell, 1 ghost, 3 dying). b: type, seed, progress,
 // alpha. c: nucleus x, y, lock flash, joined neighbors (bits: left, right, up, down, up-left, up-right, down-left,
 // down-right). d: the cell's place in its grid (for the membrane's wobble, continuous across a colony), -, -.
 inline const char* PIECE_VS = R"(#version 330 core
@@ -406,8 +406,7 @@ uniform mat4 uVP;
 out vec2 vLocal;
 flat out vec4 vA, vB, vC, vD;
 void main() {
-    float grow = aA.w > 1.5 && aA.w < 2.5 ? 1.0 + 0.5 * aB.z : 1.0;   // a bursting cell spreads out
-    vec2 l = aPos * 0.64 * grow;
+    vec2 l = aPos * 0.64;
     vLocal = l;
     vec2 wp = aA.xy + l * 2.0 * aA.z;
     vA = aA; vB = aB; vC = aC; vD = aD;
@@ -542,16 +541,6 @@ void main() {
     vec4 df = vec4(glow, max(inside * 0.85, mem * 0.6));
     vec4 o = mix(bf, df, kDark);
     float a = vB.w;
-    if (kind == 2) {
-        // bursting: the membrane breaks open, the cell rounds and its content spills out softly and fades
-        float an = atan(p.y, p.x);
-        float brk = vnoise(vec2(an * 2.4 + seed * 9.0, seed * 3.0));
-        float open = step(t * 1.25, brk + 0.15);
-        float spill = exp(-max(d, 0.0) / (0.05 + 0.25 * t)) * smoothstep(-AA, AA, d) * smoothstep(0.0, 0.3, t);
-        o *= mix(1.0, open, mem);
-        o += vec4(mix(field, tint, 0.5) * (1.0 - kDark) + tint * 0.2 * kDark, 1.0 - kDark) * spill * 0.35;
-        a *= 1.0 - smoothstep(0.25, 1.0, t);
-    }
     if (kind == 3) {
         // dying: the stain drains to grey, then the cell fades
         float Lm = lumOf(o.rgb / max(o.a, 1e-3));
