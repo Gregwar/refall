@@ -914,6 +914,27 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     // Test hook: ZEN_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
     static const bool bareTest = std::getenv("ZEN_BARE") != nullptr;
     if (bareTest && break_ == BREAK_OFF) b.play = 0.f;
+    // Test hook: ZEN_TEST_PHASES=T plays a scene's setup then its teardown around song time T, as a break would
+    // (from black: the world alone, then the game for two seconds, then the game away and the world to black), for
+    // clips of them (--clip-at T+5.5 --clip-before 5.5 --clip-after 6).
+    static const float phasesAt = std::getenv("ZEN_TEST_PHASES") ? (float)std::atof(std::getenv("ZEN_TEST_PHASES")) : -1.f;
+    if (phasesAt >= 0.f && break_ == BREAK_OFF) {
+        const float u = (float)songTime_ - phasesAt;
+        if (u < 5.2f) {
+            b.setup = saturate(u / 5.2f);
+            b.black = 1.f - smoothstepf(0.f, 1.2f, u);
+            b.play = smoothstepf(3.4f, 5.2f, u);
+        } else if (u > 7.2f) {
+            const float t = u - 7.2f;
+            b.leaving = true;
+            b.teardown = saturate(t / 4.f);
+            b.play = 1.f - smoothstepf(0.f, 1.6f, t);
+            b.black = smoothstepf(2.6f, 4.f, t);
+        }
+        if (b.play < 1.f)
+            for (const HudText& h : hud)
+                if (h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_UNIVERSE) b.bareHud.push_back(h);
+    }
     if (introAtStart_ && !track_) {
         // Before the first song: the black, a quiet word while it loads.
         int w, h;
