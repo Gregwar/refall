@@ -5,7 +5,9 @@
 // light from which a faint sheet of light opens to the piece, thin rays running to each corner of its outline, as if
 // the laser were drawing it. The rays are made visible only by the haze they cross (uneven along their length); they
 // are fainter over the well, a slab of black glass. The pieces are dark acrylic, edge-lit: a smoked, tinted body whose
-// silhouette glows in the piece's color (one shape per piece, no seam inside it).
+// silhouette glows in the piece's color (one shape per piece, no seam inside it). Before a song the room's projectors
+// switch on one after the other, all tracing the well's frame, and give way to the pieces'; after it they trace the
+// empty frame again and go out one by one.
 //
 // The song decides how many projectors are on, newest pieces first: calm keeps the falling piece's and one or two
 // more, dim; mid a few; a build switches more on as the pace rises; a peak without a drop (a chorus) most of the stack,
@@ -572,11 +574,11 @@ void LaserUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // =====================================================================================================
 
 // A spot for a projector: somewhere in the dark room, never on the well, the HUD's columns or the corners' text.
-vec2 LaserUniverse::randomSpot() {
+vec2 LaserUniverse::randomSpot(Rng& rng) {
     const float xMax = std::max(8.f, viewH_.x - 2.8f), yMax = viewH_.y - 2.2f;
     vec2 best = v2(-xMax, 0.f);
     for (int tries = 0; tries < 40; tries++) {
-        const vec2 p = v2(rng_.range(-xMax, xMax), viewC_.y + rng_.range(-yMax, yMax));
+        const vec2 p = v2(rng.range(-xMax, xMax), viewC_.y + rng.range(-yMax, yMax));
         if (std::fabs(p.x) < WELL_X + 1.4f) continue;
         if (p.x > layout::LEFT_COLUMN[0] - 0.8f && p.x < layout::LEFT_COLUMN[2] + 0.4f && p.y > layout::LEFT_COLUMN[1] - 0.8f) continue;
         if (p.x > layout::RIGHT_COLUMN[0] - 0.4f && p.x < layout::RIGHT_COLUMN[2] + 0.8f && p.y > layout::RIGHT_COLUMN[1] - 0.8f) continue;
@@ -719,7 +721,7 @@ void LaserUniverse::updateProjectors(const Game& game, const MusicState& music, 
     }
     // the falling piece always has its projector (a new one at each spawn)
     if (game.hasPiece() && !hasFall_) {
-        fall_.home = randomSpot();
+        fall_.home = randomSpot(rng_);
         fall_.seed = rng_.uniform();
         fall_.power = 0.f;
         fall_.type = game.piece().type;
@@ -820,7 +822,7 @@ void LaserUniverse::buildProjection(const Game& g) {
     for (auto& kv : cells)
         if (projs_.find(kv.first) == projs_.end()) {
             Proj p;
-            p.home = randomSpot();
+            p.home = randomSpot(rng_);
             p.seed = rng_.uniform();
             p.power = 0.f;
             p.type = g.cell(kv.second[0].first, kv.second[0].second).type;
@@ -859,6 +861,31 @@ void LaserUniverse::buildProjection(const Game& g) {
             k = weak * lerpf(1.f, blink, smoothstepf(0.04f, 0.12f, t)) * 0.75f;
         }
         addProjection(d.src, d.corners, laserColor(d.type, d.id), d.power * k, std::fmod(d.seed * 3.1f, 1.f), d.lens);
+    }
+}
+
+// The show's warm-up and its close, around a song: the room's projectors switch on one after the other, all tracing
+// the well's frame, and give way to the pieces' as the game comes in; after the song they trace the empty frame
+// again and switch off one by one.
+void LaserUniverse::buildStage(float setup, float teardown) {
+    if (setup >= 1.f && teardown <= 0.f) return;
+    if (stage_.empty()) {
+        Rng rng(seed_ ^ 0x5a5a);
+        for (int i = 0; i < 6; i++) {
+            Proj p;
+            p.home = randomSpot(rng);
+            p.seed = rng.uniform();
+            p.type = (int)((seed_ + i * 3) % 7);
+            stage_.push_back(p);
+        }
+    }
+    const std::vector<vec2> frame = {v2(-WELL_X, -WELL_Y), v2(WELL_X, -WELL_Y), v2(WELL_X, WELL_Y), v2(-WELL_X, WELL_Y)};
+    for (int i = 0; i < (int)stage_.size(); i++) {
+        const float k = (float)i;
+        float on;
+        if (teardown > 0.f) on = smoothstepf(0.f, 0.3f, teardown) * (1.f - smoothstepf(0.4f + 0.08f * k, 0.48f + 0.08f * k, teardown));
+        else on = smoothstepf(0.1f + 0.08f * k, 0.18f + 0.08f * k, setup) * (1.f - smoothstepf(0.72f, 0.98f, setup));
+        addProjection(srcPos(stage_[i]), frame, laserColor(stage_[i].type, i), 0.8f * on, std::fmod(stage_[i].seed * 7.3f + 0.1f, 1.f), true);
     }
 }
 
@@ -1169,6 +1196,7 @@ void LaserUniverse::render(const Frame& f, GLuint fbo) {
         buildBoard(game); // (groups an inherited stack into pieces before the projectors look at it)
         buildProjection(game);
     }
+    buildStage(f.setup, f.teardown);
 
     // ---- The haze (reduced resolution).
     {

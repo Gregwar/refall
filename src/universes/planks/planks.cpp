@@ -26,7 +26,8 @@
 // of its track; the drop speeds it up, ripples higher and warms the light once (a slow swell). A quad is one big
 // ripple through the whole village. Slow motion is an evening light raking in from the right. Game over: the stack's
 // cells drop into the plinth, from the top down, and every plank of the village topples gracefully, from the top
-// down; the next game starts a new village.
+// down; the next game starts a new village. Before a song the camera comes down and in from a step back as the
+// studio's light comes up; after it the camera pulls back up into an evening light that dims.
 #include "universes/planks/planks.hpp"
 
 #include <algorithm>
@@ -281,7 +282,7 @@ void PlanksUniverse::resize(int width, int height) {
     const float aspect = (float)width_ / height_;
     const float half = ref.fovDeg * 0.5f * PI / 180.f;
     const float focal = 1.f / std::tan(half);
-    eye_ = vec3(ref.target.x, EYE_Y, ref.target.z + ref.dist);
+    eyeHome_ = eye_ = vec3(ref.target.x, EYE_Y, ref.target.z + ref.dist);
     view_ = mat4::lookAt(eye_, eye_ + vec3(0.f, 0.f, -1.f), vec3(0.f, 1.f, 0.f));
     mat4 shift = mat4::identity();
     shift.at(1, 3) = focal * (EYE_Y - ref.target.y) / ref.dist;
@@ -1175,6 +1176,18 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
     }
     updateFlights(f.paused ? 0.f : dt);
 
+    // ---- The setup and the teardown: the camera comes down and in from a step back as the studio's light comes up;
+    // after the song it pulls back up into an evening light that dims.
+    {
+        const float away = 1.f - smoothstepf(0.f, 0.75f, f.setup) + smoothstepf(0.05f, 1.f, f.teardown);
+        eye_ = eyeHome_ + vec3(0.f, 4.f * away, 16.f * away);
+        view_ = mat4::lookAt(eye_, eye_ + vec3(0.f, -0.1f * away, -1.f), vec3(0.f, 1.f, 0.f));
+        vp_ = proj_ * view_;
+        invVp_ = inverse(vp_);
+    }
+    const float stageOn = smoothstepf(0.f, 0.7f, f.setup) * (1.f - smoothstepf(0.2f, 1.f, f.teardown));
+    const float evening = std::max(slow_, smoothstepf(0.f, 0.6f, f.teardown));
+
     // ---- Geometry.
     inst_.clear();
     buildVillage();
@@ -1183,11 +1196,12 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Light: a soft key from the variant's side (an evening light from the right in slow motion).
     const VariantDef& V = VARIANTS[variant_];
     const vec3 Lday = normalize(vec3(V.lx, V.ly, V.lz)), Leve = normalize(vec3(0.75f, 0.36f, 0.55f));
-    const vec3 L = normalize(lerp(Lday, Leve, smoothstepf(0.f, 1.f, slow_)));
-    const float keyK = V.key * (0.92f + 0.04f * wp + 0.06f * swell_);
-    const vec3 keyCol = lerp(lin(V.keyCol), vec3(1.0f, 0.68f, 0.4f), slow_) * keyK * 1.05f;
-    const vec3 tableNear = lin(V.tableNear), tableFar = lin(V.tableFar), wallTop = lin(V.wallTop);
-    const vec3 poolCol = lin(V.pool) * (1.f + 0.6f * swell_ + 0.25f * wp);
+    const vec3 L = normalize(lerp(Lday, Leve, smoothstepf(0.f, 1.f, evening)));
+    const float keyK = V.key * (0.92f + 0.04f * wp + 0.06f * swell_) * lerpf(0.35f, 1.f, stageOn);
+    const vec3 keyCol = lerp(lin(V.keyCol), vec3(1.0f, 0.68f, 0.4f), evening) * keyK * 1.05f;
+    const float studio = lerpf(0.5f, 1.f, stageOn); // the sweep under the studio's lights
+    const vec3 tableNear = lin(V.tableNear) * studio, tableFar = lin(V.tableFar) * studio, wallTop = lin(V.wallTop) * studio;
+    const vec3 poolCol = lin(V.pool) * (1.f + 0.6f * swell_ + 0.25f * wp) * studio;
 
     // the shadow maps: the village (far) and the well (near)
     auto lightMat = [&](const float xs[2], const float ys[2], const float zs[2], const vec3& center) {

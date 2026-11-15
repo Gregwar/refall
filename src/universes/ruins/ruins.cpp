@@ -8,6 +8,8 @@
 // are pale stone blocks, one per cell, each with a frame and a relief glyph cut in, a deeper pigment in the cuts (I
 // three bars, O a sun disc, T a cross, S a spiral, Z two waves, J a stepped pyramid, L an eye); a cleared row crumbles behind the well and sends dust to the next
 // repairs. The drop turns the sun to golden hour for the whole drop section (and the dust glows).
+// Before a song the camera comes in from a step back as the morning mist lifts off the ruins; after it the camera
+// pulls back as the mist settles back and the sun weakens.
 //
 // The world is one ray-marched pass at a reduced resolution (shaders.hpp): the temple (a Maya pyramid, a Khmer
 // temple mountain with a strangler fig, a Doric temple), the avenue, the trunks and the ground as signed distance
@@ -896,6 +898,14 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
             camInit_ = true;
         }
         stepCamera(f.paused ? 0.f : wdt);
+        // the setup: the camera comes in from a step back; the teardown: it pulls back
+        const float away = 1.f - smoothstepf(0.f, 0.8f, f.setup) + smoothstepf(0.05f, 1.f, f.teardown);
+        if (away > 0.f) {
+            eye_ = camEye_ - fwd_ * (14.f * away) + vec3(0.f, 1.5f * away, 0.f);
+            fwd_ = normalize(camTgt_ - eye_);
+            right_ = normalize(cross(fwd_, vec3(0.f, 1.f, 0.f)));
+            up_ = cross(right_, fwd_);
+        }
         for (Swirl& s : swirls_) s.age += dt;
         swirls_.erase(std::remove_if(swirls_.begin(), swirls_.end(), [](const Swirl& s) { return s.age >= s.life; }), swirls_.end());
     }
@@ -931,9 +941,12 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     vec3 amb = lerp(pal_.amb * 0.9f, pal_.amb * vec3(0.95f, 0.66f, 0.5f) * 0.7f, g);
     vec3 fog = lerp(pal_.fog, vec3(1.0f, 0.7f, 0.36f), g);
     float fogK = VARIANTS[wrapV(variant_)].fogK * (1.f + 0.15f * g) * (1.f + 0.25f * (1.f - wm));
-    float mist = lerpf(lerpf(1.4f, 0.9f, wm), 0.6f, wp) * (1.f + 0.1f * g);
+    // the setup: the morning mist lifts off the ruins; the teardown: it settles back as the sun weakens
+    const float haze = 1.f - smoothstepf(0.1f, 0.9f, f.setup) + smoothstepf(0.15f, 1.f, f.teardown);
+    fogK *= 1.f + 0.8f * haze;
+    float mist = lerpf(lerpf(1.4f, 0.9f, wm), 0.6f, wp) * (1.f + 0.1f * g) * (1.f + 1.2f * haze);
     float shaft = (1.f + 0.25f * wp) * (1.f + 1.1f * g);
-    sunC = sunC * 1.2f;
+    sunC = sunC * (1.2f * (1.f - 0.5f * smoothstepf(0.15f, 1.f, f.teardown)));
     float gap = VARIANTS[wrapV(variant_)].gap + 0.16f * g;
     {
         const vec3 hush(0.55f, 0.7f, 1.15f);

@@ -117,6 +117,8 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f, overFog_ = 0.f;
+    float lamp_ = 1.f;      // the lamp on (game over, the setup and the teardown turn it off)
+    float stageIris_ = 1.f, stageSmoke_ = 1.f, stageRise_ = 0.f; // the setup / teardown: iris, smoke amount, smoke lift
     float dimT_ = 0.f;
     bool bare_ = false; // this frame is a break's: the stage alone, no well's glass, no blocks, no smoke of theirs
     Bridge bridge_;

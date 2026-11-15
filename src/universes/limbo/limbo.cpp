@@ -18,6 +18,8 @@
 // lantern lit, the gears spinning, herons, crows, a far train and a balloon passing; it holds for the peak (16 s for a drop outside one) and closes slowly. A cleared
 // row dissolves into the fog (its edges erode into mist, a few motes drift off); a quad sends a flock up from the
 // forest. Slow motion is a still, moonlit fog; game over dissolves the stack from the top down as the fog closes in.
+// Before a song the world comes out of a white-out of fog (the nearest shapes first, the far planes last) as the light
+// behind rises; after it the fog closes back over it and the light sinks.
 // Changes of universe: the fog closes in to the bridge's color.
 //
 // Cost: one full-resolution float target; the sky and three fog banks are full-screen passes, the silhouettes a few
@@ -1250,9 +1252,16 @@ void LimboUniverse::render(const Frame& f, GLuint fbo) {
     layerFog_[L_EDGE] = std::min(0.96f, 0.24f + 0.64f * fog);
     layerFog_[L_MID] = std::min(0.9f, 0.1f + 0.56f * fog);
     layerFog_[L_NEAR] = 0.02f + 0.2f * fog;
+    // the setup: the world comes out of a white-out of fog, the far planes last, as the light behind rises; the
+    // teardown: the fog closes back over it, the nearest shapes last, and the light sinks
+    const float whiteout = std::max(1.f - smoothstepf(0.05f, 0.85f, f.setup), smoothstepf(0.1f, 0.95f, f.teardown));
+    layerFog_[L_FAR] = lerpf(layerFog_[L_FAR], 1.f, smoothstepf(0.f, 0.5f, whiteout));
+    layerFog_[L_EDGE] = lerpf(layerFog_[L_EDGE], 1.f, smoothstepf(0.1f, 0.65f, whiteout));
+    layerFog_[L_MID] = lerpf(layerFog_[L_MID], 1.f, smoothstepf(0.2f, 0.8f, whiteout));
+    layerFog_[L_NEAR] = lerpf(layerFog_[L_NEAR], 1.f, smoothstepf(0.35f, 1.f, whiteout));
     const float glow = (V.glowK * (lerpf(0.75f, 1.f, wm) + 0.18f * wp + 0.22f * part_ + 0.08f * swell_ + 0.12f * celebrate_)) *
-                       (1.f - 0.45f * slow_);
-    drift_ += wdt * (0.18f + 0.25f * wm + 0.45f * wp);
+                       (1.f - 0.45f * slow_) * (1.f - 0.65f * whiteout);
+    drift_ += wdt * (0.18f + 0.25f * wm + 0.45f * wp + 0.5f * whiteout);
     millAngle_ += wdt * (0.06f + 0.12f * wm + 0.2f * wp + 0.5f * part_);
 
     // ---- Motion on the beat grid: the shapes sway to one side, then the other, every two beats (a breeze when calm).
