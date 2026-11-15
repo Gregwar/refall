@@ -22,7 +22,8 @@
 // settling after. A cleared row shatters into shards that tumble, flashing, and fall into the pool, where they
 // sink (the row is empty in under half a second); a quad rings every crystal of the cave, a ring of light running
 // outward from the well. Slow motion stills the cave in a cold, silver light. Game over puts the light out of the
-// stack's stones, row by row from the top.
+// stack's stones, row by row from the top. Around a song the crystals grow out of the walls cluster after cluster,
+// lighting up as they come (the setup), and their light goes out cluster after cluster (the teardown).
 //
 // Cost: one full-screen pass for the rock, ~150 instanced crystals, one pass for the pool (the cave mirrored),
 // instanced gems, a quarter-resolution bloom.
@@ -1034,6 +1035,13 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
             if (cnt[i] > 0.f) clusters_[i].col = clusters_[i].col / cnt[i];
     }
 
+    // ---- Around a song: the crystals grow out of the walls cluster after cluster, lighting up as they come (the
+    // setup); their light goes out cluster after cluster (the teardown). Each cluster has its turn (0 .. 1).
+    auto clusterTurn = [](int i) { return std::fmod((float)i * 0.618034f, 1.f); };
+    auto turn = [&](const Crys& c) { return c.cluster >= 0 ? clusterTurn(c.cluster) : c.u; };
+    auto grown = [&](float k) { return smoothstepf(0.05f + 0.5f * k, 0.4f + 0.5f * k, f.setup); };
+    auto lit = [&](float k) { return grown(k) * (1.f - smoothstepf(0.05f + 0.55f * k, 0.35f + 0.55f * k, f.teardown)); };
+
     cells_.clear();
     if (!bare_) buildBoard(game);
 
@@ -1067,7 +1075,8 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
         // the section's light, tinted by the stack's minerals
         const float l = luminance(stackAvg_);
         const vec3 tint = l > 1e-4f ? stackAvg_ / (l * 3.f + 0.05f) : vec3(1.f);
-        const vec3 amb = lerp(vec3(1.f), tint, 0.45f) * (0.85f + 0.5f * wm + 0.75f * wp) * (1.f - 0.35f * slow_) * worldK;
+        const vec3 amb = lerp(vec3(1.f), tint, 0.45f) * (0.85f + 0.5f * wm + 0.75f * wp) * (1.f - 0.35f * slow_) * worldK *
+                         lerpf(0.25f, 1.f, std::min(smoothstepf(0.f, 0.8f, f.setup), 1.f - smoothstepf(0.2f, 1.f, f.teardown)));
         set3f(progBg_, "uAmb", amb);
     }
     {
@@ -1084,7 +1093,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
             L[i * 4 + 0] = cl.c.x;
             L[i * 4 + 1] = cl.c.y;
             L[i * 4 + 2] = cl.r * 1.4f;
-            L[i * 4 + 3] = glow * 1.5f * worldK;
+            L[i * 4 + 3] = glow * 1.5f * worldK * lit(clusterTurn(i));
             C[i * 3 + 0] = cl.col.x;
             C[i * 3 + 1] = cl.col.y;
             C[i * 3 + 2] = cl.col.z;
@@ -1104,9 +1113,12 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
     crysInst_.clear();
     for (const Crys& c : crys_) {
         const float sh = 0.04f * std::sin(worldTime_ * 0.3f + c.phase); // a very slow breath of inner light
-        crysInst_.push_back({{c.base.x, c.base.y, c.angle, c.len},
-                             {c.width, c.tip, c.depth, c.alpha * worldK},
-                             {c.col.x, c.col.y, c.col.z, c.glint + sh + 0.04f}});
+        const float g = grown(turn(c)), l = lit(turn(c));
+        if (g <= 0.f) continue;
+        const vec3 col = c.col * lerpf(0.2f, 1.f, l);
+        crysInst_.push_back({{c.base.x, c.base.y, c.angle, c.len * g},
+                             {c.width * lerpf(0.5f, 1.f, g), c.tip, c.depth, c.alpha * worldK * lerpf(0.3f, 1.f, l)},
+                             {col.x, col.y, col.z, (c.glint + sh + 0.04f) * l}});
     }
     if (!crysInst_.empty()) {
         glUseProgram(progCrys_);
@@ -1131,7 +1143,7 @@ void CrystalUniverse::render(const Frame& f, GLuint fbo) {
         const vec2 dir{std::cos(c.angle), std::sin(c.angle)};
         const vec2 p{c.base.x + dir.x * c.len * 0.72f, c.base.y + dir.y * c.len * 0.72f};
         const float rr = c.len * 0.55f;
-        const float in = (0.05f * glow + 0.25f * c.glint) * worldK;
+        const float in = (0.05f * glow + 0.25f * c.glint) * worldK * lit(turn(c));
         glows_.push_back({{p.x, p.y, rr, rr}, {c.col.x, c.col.y, c.col.z, in}, {0.f, 0.f, 0.f, 0.f}});
     }
     {
