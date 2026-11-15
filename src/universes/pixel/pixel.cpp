@@ -995,7 +995,7 @@ void PixelUniverse::render(const Frame& f, GLuint fbo) {
     ws.night = nightK_ > 0.f ? 1.f : 0.f;
     {
         // the sun rises in the setup's dawn and sets in the teardown's dusk
-        const float up = smoothstepf(0.1f, 0.75f, f.setup) * (1.f - smoothstepf(0.f, 0.6f, f.teardown));
+        const float up = smoothstepf(0.1f, 0.75f, f.setup) * (1.f - smoothstepf(0.f, 0.75f, f.teardown));
         ws.sunDip = iround((1.f - up) * (VAR(variant_).sunUp + 12));
     }
     ws.bass = m.audio.bass;

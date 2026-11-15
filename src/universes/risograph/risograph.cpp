@@ -1091,8 +1091,8 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progComp_, "uFade", saturate(f.fade));
     // the setup feeds a blank sheet in from the top and prints the background on it from the top down; the
     // teardown runs the drum dry (the background's ink fading in streaks), then feeds the sheet out at the bottom
-    set3f(progComp_, "uPress", vec3(1.05f * (1.f - smoothstepf(0.f, 0.3f, f.setup)) - 1.05f * smoothstepf(0.5f, 1.f, f.teardown),
-          1.2f * smoothstepf(0.25f, 0.85f, f.setup), smoothstepf(0.f, 0.55f, f.teardown)));
+    set3f(progComp_, "uPress", vec3(1.05f * (1.f - smoothstepf(0.1f, 0.4f, f.setup)) - 1.05f * smoothstepf(0.4f, 0.9f, f.teardown),
+          1.2f * smoothstepf(0.35f, 0.9f, f.setup), smoothstepf(0.f, 0.45f, f.teardown)));
     ugl::drawFullscreen();
 }
 
