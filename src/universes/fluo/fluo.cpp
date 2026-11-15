@@ -18,9 +18,8 @@
 // lights come back and the stains go dull again. Slow motion drains the paint of its color (only the pieces keep
 // theirs). A lock flicks a few specks of paint from the impact; a quad throws two big gobs far onto the walls;
 // game over bursts the whole stack from the top down. A new song in FLUO fades the wall back to clean; a change of
-// universe arrives on a clean wall. Around a song: the room's light comes up and the song's painting begins with a
-// few gobs thrown from the well onto the wall (the setup); the lights go off and the blacklight comes on, the
-// painting glowing a last time (the teardown).
+// universe arrives on a clean wall. Around a song: the room's light comes up on the clean wall (the setup); the
+// lights go off and the blacklight comes on, the painting glowing a last time (the teardown).
 //
 // Rendering: finished splashes are stamped once into a persistent pair of buffers (color, premultiplied "over";
 // thickness, added), so the cost stays constant however many there are; splashes still spreading and drips still
@@ -892,19 +891,8 @@ void FluoUniverse::render(const Frame& f, GLuint fbo) {
     if (bridge_.entering && bridge > 0.9f && !cleanedForEntry_) { clearPaint(); cleanedForEntry_ = true; }
     if (bridge < 0.01f) cleanedForEntry_ = false;
 
-    // the setup: the room's light comes up and the song's painting begins, a few gobs thrown from the well onto the
-    // wall one after the other; the teardown: the lights go off and the blacklight on, the painting glows a last time
-    {
-        static const float AT[4] = {0.3f, 0.42f, 0.54f, 0.66f};
-        if (f.setup <= 0.02f) firstGobs_ = 0;
-        while (f.setup < 1.f && firstGobs_ < 4 && f.setup >= AT[firstGobs_]) {
-            const float s = firstGobs_ % 2 ? 1.f : -1.f;
-            const float y = rng_.range(-6.f, 6.f);
-            fling(v2(s * 2.f, y - 2.f), v2(s * std::min(viewH_.x - 4.f, rng_.range(9.f, 16.f)), y), pieceColor(rng_.irange(0, 6)),
-                  rng_.range(1.4f, 2.f), 0.f, 0.2f);
-            firstGobs_++;
-        }
-    }
+    // the setup: the room's light comes up on the clean wall (the painting starts with the game's own clears); the
+    // teardown: the lights go off and the blacklight on, the painting glows a last time
     const float roomOn = lerpf(0.12f, 1.f, smoothstepf(0.f, 0.6f, f.setup)), uvOn = smoothstepf(0.f, 0.45f, f.teardown);
 
     if (!f.paused) {
