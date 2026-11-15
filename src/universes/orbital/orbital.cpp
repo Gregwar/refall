@@ -28,6 +28,9 @@
 // and chase their lights round it. Slow motion is an eclipse (the sunlight fades, the windows glow). Game over powers
 // the station down from its rim inward; a new game takes the modules away (they shrink back) to the capsule.
 //
+// Around a song: the setup powers the station up from the core outward as the camera eases in; the teardown powers it
+// down from the rim inward as the camera draws back.
+//
 // The pieces are panels of colored light: satin color, a line of light just inside their edge like an edge-lit
 // pane, a glow at the heart. Cleared rows flare and shrink into their light, which flies out to the module's seat.
 //
@@ -875,7 +878,7 @@ void OrbitalUniverse::updateCamera(float dt) {
     const float F = camF_;
     orient(F);
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
-    const float D = F / tanH_;
+    const float D = F / tanH_ * (1.f + 0.7f * away_ * away_);
     eye_ = camA_ - dirA * D;
     {
         // never inside the planet's air
@@ -1076,6 +1079,11 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     planetSpin_ += wdt * 0.0012f;
     cloudSpin_ += wdt * 0.0016f;
 
+    // the scene's setup and teardown: the station powered up from the core outward as the camera eases in, then
+    // powered down from its rim inward as it draws back
+    powerUp_ = smoothstepf(0.1f, 0.75f, f.setup);
+    powerDown_ = smoothstepf(0.05f, 0.8f, f.teardown);
+    away_ = std::max(1.f - smoothstepf(0.f, 0.8f, f.setup), smoothstepf(0.1f, 1.f, f.teardown));
     updateCamera(dt);
 
     // ---- Sparks: welding on the beat grid at a peak (every two beats), the kicks adding a few.
@@ -1168,7 +1176,8 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     fine_.clear();
     coarse_.clear();
     glows_.clear();
-    const float emitK = (0.55f + 0.3f * groupOn_[1] + 0.25f * groupOn_[2] + 0.3f * slow_ + 0.35f * std::max(0.f, 1.f - quadT_ / 2.5f)) * (1.f - 0.85f * over_);
+    const float emitK = (0.55f + 0.3f * groupOn_[1] + 0.25f * groupOn_[2] + 0.3f * slow_ + 0.35f * std::max(0.f, 1.f - quadT_ / 2.5f)) *
+                        (1.f - 0.85f * std::max(over_, std::max(powerDown_, 1.f - powerUp_)));
     {
         Builder b(boxes_, fine_, coarse_, glows_);
         b.minR = camF_ * 0.012f;

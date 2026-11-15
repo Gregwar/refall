@@ -405,11 +405,12 @@ void OrbitalUniverse::startFlight(int i, float delay) {
 // =====================================================================================================
 
 // A lamp's level: its group on with the song's level, all of them switched on in a sequence on the drop (from the
-// core outward), off from the rim inward at game over.
+// core outward), off from the rim inward at game over (and the same around a song: powered up, then down).
 float OrbitalUniverse::lampK(int group, float order) const {
     float k = groupOn_[std::clamp(group, 0, 2)];
     k = std::max(k, smoothstepf(order - 0.06f, order + 0.06f, dropSeq_));
-    k *= 1.f - smoothstepf(1.f - order - 0.1f, 1.f - order + 0.1f, over_ * 1.25f);
+    k *= 1.f - smoothstepf(1.f - order - 0.1f, 1.f - order + 0.1f, std::max(over_, powerDown_) * 1.25f);
+    k *= smoothstepf(order - 0.1f, order + 0.1f, powerUp_ * 1.25f - 0.1f);
     // a quad: a wave of light running out from the core
     if (quadT_ < 2.5f) k += 1.6f * std::exp(-sq((order - quadT_ * 0.6f) / 0.1f)) * (1.f - quadT_ / 2.5f);
     return k;
