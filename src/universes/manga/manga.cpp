@@ -325,11 +325,11 @@ void MangaUniverse::resize(int width, int height) {
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) std::fprintf(stderr, "[gl] manga: incomplete target\n");
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    // the page follows the screen (its inking state kept): the score's panel reaches under the BEST line, set by
-    // the host at 204 px (x its scale, max(1, height / 900)) under the score's anchor
+    // the page follows the screen (its inking state kept): the score's panel reaches under the speed gauge's label,
+    // set by the host at 248 px (x its scale, max(1, height / 900)) under the score's anchor
     {
         const float hostS = std::max(1.f, height_ / 900.f);
-        const float bottomPx = project(layout::SCORE_ANCHOR).y + 230.f * hostS;
+        const float bottomPx = project(layout::SCORE_ANCHOR).y + 272.f * hostS;
         scoreBottom_ = viewC_.y + (height_ * 0.5f - bottomPx) / unitPx_ - 0.3f;
     }
     const size_t n = page_.elems.size();
@@ -1406,24 +1406,6 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         flushInk();
     }
 
-    // the bonus gauge: a fine ring, its charge a bold arc
-    if (vis > 0.01f && !bare_) {
-        const V2 c{layout::GAUGE_CENTER.x, layout::GAUGE_CENTER.y};
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        std::vector<V2> ring, arc;
-        for (int i = 0; i <= 64; i++) {
-            const float a = PI * 0.5f - i / 64.f * TAU;
-            ring.push_back({c.x + std::cos(a) * layout::GAUGE_R, c.y + std::sin(a) * layout::GAUGE_R});
-        }
-        const int na = (int)std::ceil(fill * 64.f);
-        for (int i = 0; i <= na; i++) {
-            const float a = PI * 0.5f - std::min(fill, i / 64.f) * TAU;
-            arc.push_back({c.x + std::cos(a) * layout::GAUGE_R, c.y + std::sin(a) * layout::GAUGE_R});
-        }
-        strokeLine(ring, 1.2f, 0.f, false, 1.f, ink, (g.bonusReady() ? 0.9f : 0.5f) * vis, -1);
-        if (arc.size() > 1) strokeLine(arc, 5.f, 0.f, false, 1.f, accent, 0.95f * vis, -1);
-        flushInk();
-    }
     // (no boxes: a break's frame, its lines lettered over the mix)
     if (!boxes || boxes->size() != hud.size()) return;
 
@@ -1692,7 +1674,6 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         quadT_ += dt;
         if (quadT_ > 2.6f) quadT_ = -1.f;
     }
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
     kickIn_ = approach(kickIn_, 0.f, 6.f, dt);
 
     // ---- Draw.

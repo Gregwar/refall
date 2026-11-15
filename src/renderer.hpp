@@ -139,6 +139,13 @@ private:
     Speed speed_;
     GLuint speedProg_ = 0;
     void speedGauge(Universe& u);
+    // ---- The bonus gauge, the same in every universe: a fine ring round layout::GAUGE_CENTER in the label ink, its
+    // charge running clockwise from 12 o'clock; full, it takes the accent and a soft glow; in the bonus it drains.
+    GLuint ringProg_ = 0;
+    float ringShown_ = 0.f, ringHot_ = 0.f; // the charge and the full / running look as shown (eased)
+    void bonusRing(Universe& u, const Game& game, double time);
+    // the label ink and its accent of a universe the host letters (false: it letters its own, none to read)
+    bool labelInks(Universe& u, vec3& ink, vec3& acc);
     // ---- The HUD lettered by the host (Universe::hostText).
     text::Engine text_;
     // each line of `hud` as `u` styles it, with its box (pixels) where it is lettered

@@ -493,7 +493,7 @@ void drawChime(Ink& k) {
 void drawVending(Ink& k) {
     k.begin({8.8f, -8.5f});
     k.e->pencil = false;
-    k.fill(rectPts(5.8f, -11.3f, 11.8f, -5.9f), wash(pal(H_NIGHT), shade(H_NIGHT), -6.f, -10.5f));
+    k.fill(rectPts(5.8f, -11.3f, 11.8f, -4.5f), wash(pal(H_NIGHT), shade(H_NIGHT), -4.6f, -10.5f));
     k.panelFill(dots(0.55f, 0.13f, shade(H_NIGHT)));
 
     const float x0 = 7.75f, x1 = 9.85f, yb = -10.5f, yt = -6.65f;
@@ -799,9 +799,10 @@ Page buildPage(float halfW, float scoreBottom, uint64_t seed) {
     box(P_SCORE, -11.7f, chime ? sb : bot, -5.9f, 5.2f, false);
     box(P_C, -11.7f, bot, -5.9f, sb - 0.4f, chime);
     pg.panels[P_C].shown = chime;
-    box(P_NEXT, 5.9f, -0.9f, 11.7f, top, false);
-    box(P_GAUGE, 5.9f, -5.6f, 11.7f, -1.3f, false);
-    box(P_D, 5.9f, bot, 11.7f, -6.0f, true);
+    // (the gauge's panel round the host's ring and its label under it: layout::GAUGE_CENTER, radius GAUGE_R)
+    box(P_NEXT, 5.9f, -0.4f, 11.7f, top, false);
+    box(P_GAUGE, 5.9f, -4.2f, 11.7f, -0.8f, false);
+    box(P_D, 5.9f, bot, 11.7f, -4.6f, true);
     pg.outer = X - 12.1f > 3.f;
     quad(P_A, {-X, top}, {-12.1f, top}, {-12.1f, 3.4f}, {-X, 1.9f}, pg.outer);
     quad(P_B, {-X, 1.5f}, {-12.1f, 3.0f}, {-12.1f, bot}, {-X, bot}, pg.outer);

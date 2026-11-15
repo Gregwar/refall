@@ -104,6 +104,44 @@ void main() {
 }
 )";
 
+// The bonus gauge: a ring of radius uRing.z round uRing.xy (window pixels, bottom-left origin), uRing.w thick: a faint
+// track and the charge (uFill, clockwise from 12 o'clock) in the ink, the accent and a soft glow while hot. uAuto:
+// the universe letters its own HUD, the ink is pale or dark on what is behind (uBg).
+const char* RING_FS = R"(#version 330 core
+out vec4 frag;
+uniform sampler2D uBg;
+uniform vec2 uRes;
+uniform vec4 uRing;
+uniform float uFill, uHot, uAlpha, uAuto;
+uniform vec3 uInk, uAcc;
+void main() {
+    vec2 p = gl_FragCoord.xy;
+    vec3 ink = uInk, acc = uAcc;
+    if (uAuto > 0.5) {
+        bool pale = dot(texture(uBg, p / uRes).rgb, vec3(0.2126, 0.7152, 0.0722)) > 0.55;
+        ink = pale ? vec3(0.13, 0.12, 0.11) : vec3(0.94, 0.93, 0.9);
+        acc = pale ? vec3(0.72, 0.36, 0.1) : vec3(0.98, 0.7, 0.42);
+    }
+    vec2 q = p - uRing.xy;
+    float dr = abs(length(q) - uRing.z), th = uRing.w;
+    float track = 1.0 - smoothstep(th * 0.5 - 0.5, th * 0.5 + 0.5, dr);
+    float band = 1.0 - smoothstep(th * 0.8 - 0.5, th * 0.8 + 0.5, dr);
+    // along the ring, antialiased over a pixel of its length
+    float u = fract(atan(q.x, q.y) / 6.2831853 + 1.0);
+    float px = 1.0 / (6.2831853 * uRing.z);
+    float on = uFill <= 0.0 ? 0.0 : uFill >= 1.0 ? 1.0 : (1.0 - smoothstep(uFill - px, uFill + px, u)) * smoothstep(0.0, px, u);
+    vec3 c = ink;
+    float a = track * 0.2;
+    float af = band * on * mix(0.8, 1.0, uHot);
+    c = mix(c, mix(ink, acc, uHot), af);
+    a = max(a, af);
+    float g = uHot * 0.4 * exp(-max(dr - th * 0.8, 0.0) / (2.0 * th)) * on * (1.0 - af);
+    c = mix(c, acc, g / max(a + g, 1e-4));
+    a = min(1.0, a + g) * uAlpha;
+    frag = vec4(c * a, a);
+}
+)";
+
 const char* BREAK_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -145,6 +183,7 @@ bool Renderer::init(int width, int height) {
     cardProg_ = ugl::program(ugl::FULLSCREEN_VS, CARD_FS, "card");
     bonusProg_ = ugl::program(ugl::FULLSCREEN_VS, BONUS_FS, "bonus look");
     speedProg_ = ugl::program(ugl::FULLSCREEN_VS, SPEED_FS, "speed gauge");
+    ringProg_ = ugl::program(ugl::FULLSCREEN_VS, RING_FS, "bonus ring");
     glGenTextures(1, &cellsTex_);
     glBindTexture(GL_TEXTURE_2D, cellsTex_);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Game::W, Game::H - Game::HIDDEN, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
@@ -279,6 +318,8 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     if (!cur_.u) return;
     const Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
     bonusK_ = std::clamp(bonusK_ + (game.bonusActive() && !game.over() ? dt / 0.5f : -dt / 0.9f), 0.f, 1.f);
+    ringShown_ = approach(ringShown_, game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : game.bonusGauge(), game.bonusActive() ? 12.f : 3.f, dt);
+    ringHot_ = approach(ringHot_, game.bonusReady() || game.bonusActive() ? 1.f : 0.f, 4.f, dt);
     const float bpm = music.hasSong ? std::clamp(music.bpm, 40.f, 220.f) : 120.f;
 
     // ---- A change waits for the next downbeat (or the next beat if the bar is far), then runs for a few bars.
@@ -321,11 +362,13 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
             cur_.u->render(fl, 0);
             letter(*cur_.u, hud, 1.f, time);
             speedGauge(*cur_.u);
+            bonusRing(*cur_.u, game, time);
             bonusLook(game, time);
             return;
         }
         cur_.u->render(f, 0);
         speedGauge(*cur_.u);
+        bonusRing(*cur_.u, game, time);
         bonusLook(game, time);
         return;
     }
@@ -391,9 +434,69 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
     if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
     speedGauge(handover < 0.5f ? *cur_.u : *next_.u);
+    bonusRing(handover < 0.5f ? *cur_.u : *next_.u, game, time);
     bonusLook(game, time);
 
     if (p_ >= 1.f) finishChange();
+}
+
+bool Renderer::labelInks(Universe& u, vec3& ink, vec3& acc) {
+    ink = vec3(0.94f, 0.93f, 0.9f);
+    acc = vec3(0.95f, 0.8f, 0.55f);
+    if (!u.hostText()) return false;
+    HudText h{"BONUS", 0, 0, 1.6f, 1.f, false, true, HUD_LABEL};
+    text::Line l;
+    u.hudLine(h, l);
+    if (!l.spans.empty()) ink = l.spans[0].ink;
+    h.accent = true;
+    text::Line la;
+    u.hudLine(h, la);
+    if (!la.spans.empty()) acc = la.spans[0].ink;
+    return true;
+}
+
+void Renderer::bonusRing(Universe& u, const Game& game, double time) {
+    if (!ringProg_ || game.over()) return;
+    const vec2 c = project(layout::GAUGE_CENTER), e = project(layout::GAUGE_CENTER + vec3(0.f, layout::GAUGE_R, 0.f));
+    const float r = std::fabs(e.y - c.y);
+    if (r < 2.f) return;
+    const float th = std::round(std::max(1.f, h_ / 540.f));
+    const float yg = h_ - c.y;
+    const int pad = (int)std::ceil(th * 10.f + 6.f);
+    const int x0 = std::max(0, (int)(c.x - r) - pad), x1 = std::min(w_, (int)(c.x + r) + pad);
+    const int y0 = std::max(0, (int)(yg - r) - pad), y1 = std::min(h_, (int)(yg + r) + pad);
+    if (x1 <= x0 || y1 <= y0) return;
+    vec3 ink, acc;
+    const bool host = labelInks(u, ink, acc);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w_, h_);
+    if (!host) {
+        if (post_.w != w_ || post_.h != h_) post_.create(w_, h_);
+        glBindTexture(GL_TEXTURE_2D, post_.tex);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, x0, y0, x0, y0, x1 - x0, y1 - y0);
+    }
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(x0, y0, x1 - x0, y1 - y0);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(ringProg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, post_.tex);
+    ugl::set1i(ringProg_, "uBg", 0);
+    ugl::set2f(ringProg_, "uRes", (float)w_, (float)h_);
+    ugl::set4f(ringProg_, "uRing", c.x, yg, r, th);
+    ugl::set1f(ringProg_, "uFill", ringShown_ > 0.995f ? 1.f : saturate(ringShown_));
+    // full and waiting: the glow breathes a little
+    const float breathe = game.bonusReady() ? 0.85f + 0.15f * std::sin((float)time * TAU * 0.4f) : 1.f;
+    ugl::set1f(ringProg_, "uHot", saturate(ringHot_) * breathe);
+    ugl::set1f(ringProg_, "uAlpha", 1.f);
+    ugl::set1f(ringProg_, "uAuto", host ? 0.f : 1.f);
+    ugl::set3f(ringProg_, "uInk", ink);
+    ugl::set3f(ringProg_, "uAcc", acc);
+    ugl::drawFullscreen();
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_BLEND);
 }
 
 void Renderer::speedGauge(Universe& u) {
@@ -406,18 +509,8 @@ void Renderer::speedGauge(Universe& u) {
     const int y0 = std::max(0, (int)yg - pad), y1 = std::min(h_, (int)yg + pad);
     if (x1 <= x0 || y1 <= y0) return;
     // the label ink (and its accent) of a universe the host letters; otherwise pale or dark on the world behind
-    const bool host = u.hostText();
-    vec3 ink(0.94f, 0.93f, 0.9f), acc(0.95f, 0.8f, 0.55f);
-    if (host) {
-        HudText h{"SPEED", 0, 0, 1.6f, 1.f, false, true, HUD_LABEL};
-        text::Line l;
-        u.hudLine(h, l);
-        if (!l.spans.empty()) ink = l.spans[0].ink;
-        h.accent = true;
-        text::Line la;
-        u.hudLine(h, la);
-        if (!la.spans.empty()) acc = la.spans[0].ink;
-    }
+    vec3 ink, acc;
+    const bool host = labelInks(u, ink, acc);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w_, h_);
     if (!host) {
