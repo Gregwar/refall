@@ -208,14 +208,19 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
     switch (ev.type) {
     case GameEvent::Lock: {
         if (ev.cells.size() != 4) break;
+        // the bounce for a hard drop only (its HardDrop comes just before); a piece settling down gently just lands
+        const bool hard = hardDropped_;
+        hardDropped_ = false;
+        contactDust(ev, 2, 1.f);
+        if (!hard) break;
         lock_.active = true;
         lock_.age = 0;
         lock_.type = ev.cells[0].type;
         for (int i = 0; i < 4; i++) { lock_.cells[i][0] = ev.cells[i].x; lock_.cells[i][1] = ev.cells[i].y; }
-        contactDust(ev, 2, 1.f);
         break;
     }
     case GameEvent::HardDrop: {
+        hardDropped_ = true;
         if (ev.cells.size() != 4) break;
         Trail t;
         for (int i = 0; i < 4; i++) { t.cells[i][0] = ev.cells[i].x; t.cells[i][1] = ev.cells[i].y; }
