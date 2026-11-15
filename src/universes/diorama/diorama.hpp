@@ -108,6 +108,7 @@ private:
     float propGrow_[MAX_VARIANTS] = {1};                 // per variant: how grown its trees are
     Bridge bridge_;
     float camK_ = 0.f; // 0: the diorama's own camera .. 1: the layout's front view (during a change)
+    float away_ = 0.f; // the setup / teardown: 0 the camera at the island .. 1 high and far back, the light low
     float focus_ = 1.f;
 
     // Effects.

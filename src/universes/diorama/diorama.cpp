@@ -1,6 +1,7 @@
 // DIORAMA: the board is a clay tower standing on a small island in a still sea, in a soft sunlit miniature
 // world. One place, one material, one light: the music moves the light (time of day), the wind and the water;
-// the game moves clay.
+// the game moves clay. Around a song the camera swings in to the island from high and far back as the light comes
+// up (the setup), and pulls back up there as the light goes (the teardown).
 //
 // Layout contract: the camera is a long lens, slightly elevated and turned, framing the whole island; the well
 // stays near the layout's rectangle, and while a change of universe runs the camera glides to the layout's front
@@ -1609,9 +1610,11 @@ void DioramaUniverse::setCamera(float t) {
     const float k = smoothstepf(0.f, 1.f, camK_);
     const layout::Camera ref = layout::camera(width_, height_);
     const float refVisH = 2.f * ref.dist * std::tan(ref.fovDeg * 0.5f * PI / 180.f);
-    const float yaw = (0.16f + 0.025f * std::sin(t * 0.071f) + 0.01f * std::sin(t * 0.13f)) * (1.f - k);
-    const float pitch = (0.115f + 0.012f * std::sin(t * 0.053f + 1.f)) * (1.f - k);
-    const float visH = lerpf(std::max(27.6f, 25.5f / aspect), refVisH, k);
+    // around a song (away_) it swings round from high and far back, and goes back there
+    const float a = away_ * (1.f - k);
+    const float yaw = (0.16f + 0.025f * std::sin(t * 0.071f) + 0.01f * std::sin(t * 0.13f)) * (1.f - k) + 0.45f * a;
+    const float pitch = (0.115f + 0.012f * std::sin(t * 0.053f + 1.f)) * (1.f - k) + 0.22f * a;
+    const float visH = lerpf(std::max(27.6f, 25.5f / aspect), refVisH, k) * (1.f + 0.7f * a);
     const float dist = visH / (2.f * std::tan(fov * 0.5f));
     const vec3 target = lerp(vec3(0.f, -0.55f, 0.f), ref.target, k);
     focus_ = dist;
@@ -1633,7 +1636,12 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
     if (!paused) simulate(game, music, dt);
     pauseFade_ = approach(pauseFade_, paused ? 1.f : (f.dim ? 0.55f : 0.f), paused ? 4.f : 1.5f, dt);
 
-    // ---- Camera (rises with the bridge at once, settles back slowly after a change).
+    // ---- Camera (rises with the bridge at once, settles back slowly after a change; comes in to the island in
+    // the setup, pulls back from it in the teardown).
+    {
+        const float in = smoothstepf(0.f, 0.9f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
+        away_ = std::max(1.f - in, out);
+    }
     const float want = smoothstepf(0.f, 0.25f, bridge_.amount);
     camK_ = std::max(want, approach(camK_, want, 1.2f, dt));
     const float aspect = (float)width_ / height_;
@@ -1791,7 +1799,7 @@ void DioramaUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progComp_, "uFocus", dist);
     set1f(progComp_, "uDof", 1.f);
-    set1f(progComp_, "uExposure", env_.exposure * (1.f + 0.08f * flare_));
+    set1f(progComp_, "uExposure", env_.exposure * (1.f + 0.08f * flare_) * (1.f - 0.6f * away_ * away_));
     set1f(progComp_, "uFade", f.fade);
     set1f(progComp_, "uDim", pauseFade_);
     set1f(progComp_, "uSat", lerpf(1.04f, 0.5f, pauseFade_));
