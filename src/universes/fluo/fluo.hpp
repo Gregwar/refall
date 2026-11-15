@@ -120,6 +120,7 @@ private:
     float dimT_ = 0.f;
     float wipe_ = 0.f;        // a new song: the paint fades out, then the wall is clean
     bool cleanedForEntry_ = false;
+    int firstGobs_ = 0; // the setup's first gobs thrown so far (back to none before a song)
 
     // ---- Board bookkeeping: which piece each cell came from (one piece = one shape) and when it locked.
     struct PCell { int id = -1, type = -1; float lockT = -9.f; };
