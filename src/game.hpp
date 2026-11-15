@@ -134,8 +134,10 @@ public:
 
     // Slow-motion bonus: each cleared line charges one step of a gauge (BONUS_LINES steps to fill it; a
     // quad charges one extra step, so 5). Once full, activateBonus()
-    // starts it: the gauge drains over BONUS_SECONDS (meanwhile the app runs gravity at x0.25; the song
-    // keeps its speed). Lines cleared during the bonus don't charge it.
+    // starts it: the gauge drains over BONUS_SECONDS. Meanwhile nothing falls (the app stops gravity, the song keeps
+    // its speed) and a piece resting on the stack never locks by itself (only a hard drop sets it down): time to think
+    // or hold (starting the bonus frees the hold again); when it ends, a resting piece gets a fresh lock delay.
+    // Lines cleared during the bonus don't charge it.
     static constexpr int BONUS_LINES = 12;
     static constexpr float BONUS_SECONDS = 10.f;
     // Gauge level 0..1 (while active: the time left).
