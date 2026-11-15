@@ -368,14 +368,6 @@ void main() {
         c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
     }
-    // the golden hour's sun, low among the ranges (in front of the far one)
-    {
-        PU = PU0;
-        float r = length(pw - sp);
-        paint(col, mix(col, uSunC, 0.35), cov(r - uSun.z * 2.1) * 0.55 * uGold);
-        paint(col, mix(col, uSunC, 0.6), cov(r - uSun.z * 1.5) * 0.6 * uGold);
-        paint(col, uSunC, cov(r - uSun.z) * uGold);
-    }
 
     // ---- The hero peak (a snow horn or a limestone tooth), then three receding ranges and the lake.
     float midH = uP3.w;
