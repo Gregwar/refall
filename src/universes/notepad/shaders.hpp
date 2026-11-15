@@ -78,7 +78,7 @@ void main() {
         float fibre = smoothstep(0.62, 0.9, vnoise(vec2(px.x * 0.06, px.y * 0.5) + 3.0));
         c *= 1.0 - (0.09 * (fine - 0.5) + 0.03 * fibre + 0.05 * speck) * uWorld;
     } else {
-        c = mix(c, vec3(0.82, 0.85, 0.82), (0.05 * fine + 0.07 * speck) * uWorld);
+        c = mix(c, vec3(0.82, 0.85, 0.82), (0.022 * fine + 0.03 * speck) * uWorld);
     }
     // paper tooth
     float gr = 0.6 * vnoise(p * 23.0) + 0.4 * vnoise(p * 61.0 + 9.0);
