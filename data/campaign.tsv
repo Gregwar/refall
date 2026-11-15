@@ -1,6 +1,6 @@
 # Refall campaign: 15 stages of 4 songs, played in a row (song 1 to 4).
 # One line per song: stage, song (1..4), YouTube video id, universe (NAME or NAME:VARIANT, as --universe
-# takes it), the velocity as a game level (1..50, decimals allowed: 20 is ten times level 1, past it faster still, on EXPERT from 37.5 on its drops fall in 20G (at 50 its choruses too); the game climbs to it over the song's first seconds) on EASY, NORMAL and EXPERT, and the title.
+# takes it), the velocity as a game level (1..50, decimals allowed: 20 is ten times level 1, past it faster still, on EXPERT from 37.5 on its drops fall in hyperdrop (20G) (at 50 its choruses too); the game climbs to it over the song's first seconds) on EASY, NORMAL and EXPERT, and the title.
 # Columns are separated by tabs; lines starting with # are comments. The game reads this file from the
 # sources when it starts (else the copy built into it, or --campaign FILE).
 # stage	song	id	universe	easy	normal	expert	title

@@ -121,7 +121,7 @@ public:
         return (std::clamp(velocity, 1.f, MAX_VELOCITY) - 1.f) / float(PLATEAU_LEVEL - 1);
     }
     void setFixedLevel(float level) { fixedLevel_ = level; }
-    // 20G: the app drops each piece to the stack at once; the lock delay is then a little longer
+    // 20G (the game calls it hyperdrop): the app drops each piece to the stack at once; the lock delay is then a little longer
     void setTwentyG(bool on) { twentyG_ = on; }
     bool twentyG() const { return twentyG_; }
     float fixedLevel() const { return fixedLevel_; }
