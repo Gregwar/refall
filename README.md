@@ -351,5 +351,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/refall ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="pixel;cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;microscope"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;microscope"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
