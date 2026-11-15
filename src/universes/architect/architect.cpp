@@ -19,7 +19,8 @@
 // beat grid (every two beats), and at a peak the cranes' beacons blink; the drop switches the site's floodlights on
 // (a warm swell, settling over the bars). A quad lights every crane lamp and sends a shower of sparks. Slow
 // motion is a hushed, misty blue hour. Game over: the pieces grey out from the top; the next game starts from the
-// field again (the villa sinks back).
+// field again (the villa sinks back). Around a song the camera comes down onto the site from high and far, swinging
+// round to it, and rises and draws back after it.
 //
 // The pieces are pigmented architectural concrete panels, one per cell: a chamfered block, a cloudy mottle, fine
 // pores and the four tie holes of its formwork (the architect's concrete), one strong pigment per piece type, a
@@ -456,6 +457,8 @@ void ArchitectUniverse::updateCamera() {
     float dist = 50.f, pitch = 7.5f, fov = 42.f, yaw0 = 0.f;
     if (const char* c = std::getenv("ZEN_ARCH_CAM")) std::sscanf(c, "%f,%f,%f,%f", &dist, &pitch, &fov, &yaw0);
     const vec3 target(-2.f, 4.5f, -1.f);
+    dist *= 1.f + 0.7f * camRise_;
+    pitch += 16.f * camRise_;
     const float yaw = camYaw_ + yaw0 * PI / 180.f, pr = pitch * PI / 180.f;
     eye_ = target + vec3(std::sin(yaw) * std::cos(pr), std::sin(pr), std::cos(yaw) * std::cos(pr)) * dist;
     view_ = mat4::lookAt(eye_, target, vec3(0, 1, 0));
@@ -1551,6 +1554,13 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The camera: a slow orbit (a few degrees each way), the yard's place follows it.
     camYaw_ = 0.045f * std::sin(worldTime_ * TAU / 140.f) + 0.02f * std::sin(worldTime_ * TAU / 61.f);
+    // the setup: the camera comes down from high and far onto the site, swinging round to it; the teardown: it
+    // rises and draws back, swinging on the same way (the site left behind)
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.7f, f.setup), out = smoothstepf(0.25f, 1.f, f.teardown);
+        camRise_ = in * in + out * out;
+        camYaw_ += 0.35f * (in * in - out * out);
+    }
     updateCamera();
 
     // ---- Geometry.
