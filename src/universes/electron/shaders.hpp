@@ -48,8 +48,9 @@ uniform vec2 uPherTexel;     // one texel in uv
 uniform vec4 uNest0, uNest1; // x, y, radius, -
 uniform vec3 uBridgeCol;
 uniform float uBridge;
+uniform float uLit;           // the substrate's light (the setup / teardown: dark with the terminals off)
 
-vec3 terminal(vec3 col, vec2 p, vec4 n) {
+vec3 terminal(vec3 col, vec2 p, vec4 n) { // n: x, y, radius, power (0: dark, 1: on)
     vec2 d = p - n.xy;
     float r = length(d), R = n.z;
     float fw = uPx * 1.2;
@@ -57,11 +58,11 @@ vec3 terminal(vec3 col, vec2 p, vec4 n) {
     float plate = smoothstep(R * 0.95 + fw, R * 0.95 - fw, r);
     col = mix(col, uTerm, plate * 0.9);
     float rim = 1.0 - smoothstep(0.0, fw * 1.5, abs(r - R * 0.95));
-    col += uCharge * rim * 0.12;
+    col += uCharge * rim * 0.12 * n.w;
     // two thin rings and a ring of contact pads
     for (int i = 0; i < 2; i++) {
         float rr = R * (0.72 - 0.16 * float(i));
-        col += uCharge * (1.0 - smoothstep(0.0, fw * 1.2, abs(r - rr))) * (0.1 + 0.08 * uTermGlow);
+        col += uCharge * (1.0 - smoothstep(0.0, fw * 1.2, abs(r - rr))) * (0.1 + 0.08 * uTermGlow) * n.w;
     }
     float ang = atan(d.y, d.x);
     float pads = 16.0;
@@ -72,11 +73,11 @@ vec3 terminal(vec3 col, vec2 p, vec4 n) {
     float core = R * 0.3;
     float disc = smoothstep(core + fw, core - fw, r);
     float glow = exp(-r * r / (core * core * 2.5));
-    col = mix(col, uCharge * 0.35, disc * 0.8);
-    col += uCharge * glow * (0.25 + 0.45 * uTermGlow);
-    col += vec3(1.0) * exp(-r * r / (core * core * 0.15)) * (0.35 + 0.35 * uTermGlow);
+    col = mix(col, uCharge * 0.35 * n.w, disc * 0.8);
+    col += uCharge * glow * (0.25 + 0.45 * uTermGlow) * n.w;
+    col += vec3(1.0) * exp(-r * r / (core * core * 0.15)) * (0.35 + 0.35 * uTermGlow) * n.w * n.w;
     // and a soft light on the substrate around the plate
-    col += uCharge * exp(-max(r - R, 0.0) / (R * 0.5)) * (1.0 - plate) * 0.05 * (1.0 + uTermGlow);
+    col += uCharge * exp(-max(r - R, 0.0) / (R * 0.5)) * (1.0 - plate) * 0.05 * (1.0 + uTermGlow) * n.w;
     return col;
 }
 
@@ -95,6 +96,7 @@ void main() {
     // a vignette toward the picture's edges
     vec2 vq = (p - uView.xy) / uView.zw;
     col *= 1.0 - 0.28 * smoothstep(0.55, 1.45, length(vq * vec2(0.85, 1.0)));
+    col *= uLit;
 
     // the connections
     vec2 tq = (p - uPherRect.xy) / uPherRect.zw;
