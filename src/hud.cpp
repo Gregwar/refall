@@ -28,9 +28,9 @@ struct Style {
 Style styleOf(HudRole r) {
     switch (r) {
     case HUD_TITLE: return {true, 1.05f, 0.02f, false, 1.f};
-    case HUD_INFO: return {true, 0.72f, 0.24f, true, 0.9f};
-    case HUD_SECTION: return {true, 0.8f, 0.32f, true, 1.f};
-    case HUD_UNIVERSE: return {true, 0.8f, 0.32f, true, 1.f};
+    case HUD_INFO: return {true, 0.8f, 0.24f, true, 0.9f};
+    case HUD_SECTION: return {true, 0.9f, 0.32f, true, 1.f};
+    case HUD_UNIVERSE: return {true, 0.9f, 0.32f, true, 1.f};
     case HUD_LABEL: return {true, 0.68f, 0.32f, true, 1.f};
     case HUD_VALUE: return {true, 0.92f, 0.03f, false, 1.f};
     case HUD_NOTICE: return {true, 0.8f, 0.24f, true, 1.f};
@@ -90,12 +90,14 @@ void line(const HudText& h, const HudInk& ink, const Backdrop& back, text::Line&
     const vec3 inkC = lerp(sideOf(ink.pale, true), sideOf(ink.deep, false), d);
     const vec3 accC = lerp(accentFor(ink.accent, true), accentFor(ink.accent, false), d);
     const vec3 col = h.accent ? accC : inkC;
-    // the corners' and the panel's opacity lifted (1 - (1 - a)^3): their quiet lines still read, a fade still ends
-    // at 0; the others keep theirs (a dimmed choice in a menu says it is not the one)
+    // the corners' and the panel's opacity lifted (the panel 1 - (1 - a)^3, the corners, quieter still, (1 - a)^5):
+    // their quiet lines still read, a fade still ends at 0; the others keep theirs (a dimmed choice in a menu says
+    // it is not the one)
     const float a0 = saturate(h.alpha);
-    const bool lift = h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_SECTION || h.role == HUD_UNIVERSE ||
-                      h.role == HUD_LABEL || h.role == HUD_VALUE;
-    const float a = (lift ? 1.f - (1.f - a0) * (1.f - a0) * (1.f - a0) : a0) * st.opacity;
+    const bool corner = h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_SECTION || h.role == HUD_UNIVERSE;
+    const bool lift = corner || h.role == HUD_LABEL || h.role == HUD_VALUE;
+    const float q = 1.f - a0, kept = corner ? q * q * q * q * q : q * q * q;
+    const float a = (lift ? 1.f - kept : a0) * st.opacity;
     if (h.role == HUD_UNIVERSE) {
         // the universe in Regular, its variant after a middle dot in Light, a little dimmer
         std::string name, variant;
