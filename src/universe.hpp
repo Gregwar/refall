@@ -74,6 +74,15 @@ struct HudText {
     HudRole role = HUD_PLAIN;
 };
 
+// The unified HUD (hud.hpp, ZEN_HUD=unified): the host letters every universe's HUD in one typographic system and
+// picks, line by line, the pale or the deep ink from the frame behind the letters; a universe only gives the two
+// inks and its accent in its own colors. sRGB.
+struct HudInk {
+    vec3 pale{0.95f, 0.94f, 0.91f};   // the letters over a dark world
+    vec3 deep{0.16f, 0.15f, 0.17f};   // the letters over a light world
+    vec3 accent{0.95f, 0.8f, 0.55f};  // the accented lines (a toast, HYPERDROP, the lit choice), either side
+};
+
 // A filled rectangle under the HUD text (pixels, top-left origin): the universe's backdrop tone (dark on dark
 // universes, light on pale ones), the accent color, or a given color.
 struct HudRect {
@@ -204,6 +213,11 @@ public:
     // width), and so is the title card, gliding from the middle into the very same lines. The default: a plain style.
     virtual bool hostText() const { return false; }
     virtual void hudLine(const HudText& h, text::Line& out);
+    // The unified HUD's inks for line h (read every frame, like hudLine). The default: a universe the host letters
+    // gives its hudLine's ink (as the pale or the deep one, by its lightness) and accent; one lettering its own HUD
+    // gives its hints(): its ink as the deep one on a light universe, its accent. In unified mode a universe
+    // lettering its own HUD is handed its lines with alpha 0 (their text and roles kept): it draws none.
+    virtual HudInk hudInk(const HudText& h);
     // Optional native exit / entrance: while a change of universe runs, the host calls setBridge every frame
     // before render() (amount rises while leaving, falls while entering; 0 once it's over). A universe that
     // supports it (returns true from bridgeable()) dissolves its own way toward the bridge: its world calms and

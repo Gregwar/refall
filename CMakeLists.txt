@@ -122,6 +122,7 @@ if(ZENTRIS_DISABLED_UNIVERSES)
 endif()
 add_library(zenrender STATIC
   src/renderer.cpp
+  src/hud.cpp
   src/titlecard.cpp
   src/text.cpp
   src/transitions.cpp

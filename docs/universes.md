@@ -623,7 +623,14 @@ Cormorant Garamond Italic and Tenor Sans, SIL Open Font License, `src/embed/`); 
 the new world fades in, where the universe's own HUD takes them over; the game comes back last, its falling piece
 back at the top. "Next song" plays a shorter outro. The program starts the same way: on the black (a quiet "loading the first song"), the first song coming in with its title card (`ZEN_INTRO_TEST=1` plays it in a `--clip`). `ZEN_NO_BREAK=1` goes back to the transitions below (still
 used by T / Y and `--universe-on-peak`); `ZEN_BARE=1` shows the bare world in screenshots, `--clip-break` records
-a break.
+a break, `ZEN_TEST_CARD=<seconds>` holds a review shot on the break's intro at that moment (the title card).
+
+An experiment, off by default: `ZEN_HUD=unified` letters every universe's HUD in one typographic system
+(`src/hud.*`): Josefin Sans in two weights, a fixed size, case, tracking and opacity per `HudRole`, the host's
+layout. Only the colors adapt: the host reads the frame behind each line (a mipmapped copy read back a frame late)
+and letters it in the universe's deep ink on a light world or its pale ink on a dark one (`Universe::hudInk`, by
+default from its `hudLine` or its hints), over a soft veil of the world's own tone as dense as the world is busy.
+The universes that letter their own HUD are handed their lines silent (alpha 0) and draw no text.
 
 ## Transitions between universes
 

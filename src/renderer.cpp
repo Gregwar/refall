@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "hud.hpp"
 #include "stb_image_write.h"
 
 Renderer::~Renderer() {
@@ -17,6 +18,11 @@ Renderer::~Renderer() {
     if (cellsTex_) glDeleteTextures(1, &cellsTex_);
     if (mixProg_) glDeleteProgram(mixProg_);
     if (cardProg_) glDeleteProgram(cardProg_);
+    if (smp_.tex) {
+        glDeleteTextures(1, &smp_.tex);
+        glDeleteFramebuffers(1, &smp_.fbo);
+        glDeleteBuffers(2, smp_.pbo);
+    }
     for (CardLine& l : cardLines_)
         if (l.tex) glDeleteTextures(1, &l.tex);
 }
@@ -138,6 +144,7 @@ void main() {
 bool Renderer::init(int width, int height) {
     w_ = std::max(1, width);
     h_ = std::max(1, height);
+    unified_ = hud::unifiedFromEnv();
     comp_.init();
     card_.init();
     if (!text_.init()) std::fprintf(stderr, "[text] the text engine could not start\n");
@@ -280,6 +287,7 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     const Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
     bonusK_ = std::clamp(bonusK_ + (game.bonusActive() && !game.over() ? dt / 0.5f : -dt / 0.9f), 0.f, 1.f);
     const float bpm = music.hasSong ? std::clamp(music.bpm, 40.f, 220.f) : 120.f;
+    hudDt_ = dt;
 
     // ---- A change waits for the next downbeat (or the next beat if the bar is far), then runs for a few bars.
     if (state_ == PENDING) {
@@ -312,13 +320,15 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
         }
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, w_, h_);
-        if (cur_.u->hostText()) {
+        if (hosted(*cur_.u)) {
             std::vector<text::Line> lines;
             std::vector<vec4> boxes;
             hudLines(*cur_.u, hud, lines, boxes);
-            Frame fl = f;
+            std::vector<HudText> mute;
+            Frame fl = withHud(f, quiet(*cur_.u, hud, mute));
             fl.hudBoxes = &boxes;
             cur_.u->render(fl, 0);
+            if (unified_) sampleFrame();
             letter(*cur_.u, hud, 1.f, time);
             speedGauge(*cur_.u);
             bonusLook(game, time);
@@ -342,9 +352,10 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
 
     std::vector<text::Line> lines;
     std::vector<vec4> boxA, boxB;
-    Frame fa = f, fb = f;
-    if (cur_.u->hostText()) { hudLines(*cur_.u, hud, lines, boxA); fa.hudBoxes = &boxA; }
-    if (next_.u->hostText()) { hudLines(*next_.u, hud, lines, boxB); fb.hudBoxes = &boxB; }
+    std::vector<HudText> muteA, muteB;
+    Frame fa = withHud(f, quiet(*cur_.u, hud, muteA)), fb = withHud(f, quiet(*next_.u, hud, muteB));
+    if (hosted(*cur_.u)) { hudLines(*cur_.u, hud, lines, boxA); fa.hudBoxes = &boxA; }
+    if (hosted(*next_.u)) { hudLines(*next_.u, hud, lines, boxB); fb.hudBoxes = &boxB; }
     texA_.bind();
     cur_.u->render(fa, texA_.fbo);
     texB_.bind();
@@ -386,10 +397,18 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     in.time = time;
     in.seed = changes_ * 7919u;
     comp_.draw(kind_, in);
+    if (unified_) sampleFrame();
     // the lettering changes hands at the bridge
     const float handover = smoothstepf(0.35f, 0.65f, p);
-    if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
-    if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
+    if (unified_) { // one lettering all along, its colors crossing over
+        mixWith_ = next_.u.get();
+        mixT_ = handover;
+        letter(*cur_.u, hud, 1.f, time);
+        mixWith_ = nullptr;
+    } else {
+        if (cur_.u->hostText()) letter(*cur_.u, hud, 1.f - handover, time);
+        if (next_.u->hostText()) letter(*next_.u, hud, handover, time);
+    }
     speedGauge(handover < 0.5f ? *cur_.u : *next_.u);
     bonusLook(game, time);
 
@@ -406,9 +425,19 @@ void Renderer::speedGauge(Universe& u) {
     const int y0 = std::max(0, (int)yg - pad), y1 = std::min(h_, (int)yg + pad);
     if (x1 <= x0 || y1 <= y0) return;
     // the label ink (and its accent) of a universe the host letters; otherwise pale or dark on the world behind
-    const bool host = u.hostText();
+    const bool host = hosted(u);
     vec3 ink(0.94f, 0.93f, 0.9f), acc(0.95f, 0.8f, 0.55f);
-    if (host) {
+    if (unified_) {
+        // the SPEED label's own colors, read where it is lettered
+        HudText h{"SPEED", s.x + s.w * 0.5f, s.y, 1.4f * std::max(1.f, h_ / 900.f), 1.f, false, true, HUD_LABEL};
+        text::Line l;
+        style(u, h, l);
+        if (!l.spans.empty()) ink = l.spans[0].ink;
+        h.accent = true;
+        text::Line la;
+        style(u, h, la);
+        if (!la.spans.empty()) acc = la.spans[0].ink;
+    } else if (host) {
         HudText h{"SPEED", 0, 0, 1.6f, 1.f, false, true, HUD_LABEL};
         text::Line l;
         u.hudLine(h, l);
@@ -486,7 +515,7 @@ void Renderer::renderBreak(const Frame& f) {
         texA_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
         texB_.create(w_, h_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
     }
-    const bool host = cur_.u->hostText();
+    const bool host = hosted(*cur_.u);
     if (!host && !brk_.cardHud.empty() && brk_.cardId != cardId_ && brk_.blank) {
         cardId_ = brk_.cardId;
         captureCard(f);
@@ -497,13 +526,15 @@ void Renderer::renderBreak(const Frame& f) {
         std::vector<text::Line> lines;
         std::vector<vec4> boxBare, boxWhole;
         if (bare) {
-            Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, brk_.bareHud, panels_, true};
+            std::vector<HudText> mute;
+            Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, quiet(*cur_.u, brk_.bareHud, mute), panels_, true};
             if (host) { hudLines(*cur_.u, brk_.bareHud, lines, boxBare); fb.hudBoxes = &boxBare; }
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
         }
         if (whole) {
-            Frame fw = f;
+            std::vector<HudText> mute;
+            Frame fw = withHud(f, quiet(*cur_.u, f.hud, mute));
             if (host) { hudLines(*cur_.u, f.hud, lines, boxWhole); fw.hudBoxes = &boxWhole; }
             texA_.bind();
             cur_.u->render(fw, texA_.fbo);
@@ -524,6 +555,7 @@ void Renderer::renderBreak(const Frame& f) {
     ugl::set1f(mixProg_, "uPlay", bare ? play : 1.f);
     ugl::set1f(mixProg_, "uLight", 1.f - saturate(brk_.black));
     ugl::drawFullscreen();
+    if (unified_) sampleFrame();
     // White on the black; on a light universe it turns to the universe's ink as its world comes up.
     const TransitionHints hi = cur_.u->hints();
     const float day = hi.light ? 1.f - saturate(brk_.black) : 0.f;
@@ -590,12 +622,186 @@ void Universe::hudLine(const HudText& h, text::Line& out) {
     out.look.haloW = 0.12f;
 }
 
+HudInk Universe::hudInk(const HudText& h) {
+    HudInk k;
+    const TransitionHints hi = hints();
+    if (hostText()) {
+        // the universe's own lettering of this line: its ink (the pale or the deep one, by its lightness), its accent
+        HudText q = h;
+        q.alpha = 1.f;
+        q.accent = false;
+        text::Line l;
+        hudLine(q, l);
+        if (!l.spans.empty()) (ugl::luma(l.spans[0].ink) >= 0.45f ? k.pale : k.deep) = l.spans[0].ink;
+        q.accent = true;
+        text::Line la;
+        hudLine(q, la);
+        // (a lettering whose accent doesn't show on this kind of line: the universe's accent)
+        const bool same = la.spans.empty() || l.spans.empty() || length(la.spans[0].ink - l.spans[0].ink) < 0.02f;
+        k.accent = same ? ugl::toSrgb(hi.accent) : la.spans[0].ink;
+    } else {
+        // a universe lettering its own HUD: the board's ink as the deep one on a light universe, its accent
+        if (hi.light) k.deep = ugl::toSrgb(hi.ink);
+        k.accent = ugl::toSrgb(hi.accent);
+    }
+    return k;
+}
+
+HudInk Renderer::inkOf(Universe& u, const HudText& h) {
+    HudInk k = u.hudInk(h);
+    if (mixWith_) k = hud::mix(k, mixWith_->hudInk(h), mixT_);
+    return k;
+}
+
+void Renderer::style(Universe& u, const HudText& h, text::Line& out) {
+    if (!unified_) {
+        u.hudLine(h, out);
+        return;
+    }
+    const HudInk k = inkOf(u, h);
+    // the line laid out once to find its box, then lettered for what is behind it
+    hud::Backdrop back;
+    text::Line probe;
+    hud::line(h, k, back, probe);
+    const text::Box b = text_.measure(probe);
+    const float x = ugl::hudLeft(h, b.width(), w_);
+    backdrop(h, x + b.x0, h.y + b.y0, x + b.x1, h.y + b.y1, back);
+    hud::line(h, k, back, out);
+}
+
+// ---- The unified HUD's eyes: the frame (before the HUD is lettered) copied, mipmapped, and its 1/8 scale read back
+// a frame later (no stall); each line reads its box there.
+void Renderer::sampleFrame() {
+    const int L = 3;
+    const int sw = std::max(1, w_ >> L), sh = std::max(1, h_ >> L);
+    if (smp_.w != w_ || smp_.h != h_) {
+        if (!smp_.tex) {
+            glGenTextures(1, &smp_.tex);
+            glGenFramebuffers(1, &smp_.fbo);
+            glGenBuffers(2, smp_.pbo);
+        }
+        glBindTexture(GL_TEXTURE_2D, smp_.tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w_, h_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glBindFramebuffer(GL_FRAMEBUFFER, smp_.fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, smp_.tex, L);
+        for (GLuint pb : smp_.pbo) {
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, pb);
+            glBufferData(GL_PIXEL_PACK_BUFFER, (GLsizeiptr)sw * sh * 4, nullptr, GL_STREAM_READ);
+        }
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        smp_.w = w_;
+        smp_.h = h_;
+        smp_.filled[0] = smp_.filled[1] = false;
+    }
+    // last frame's read
+    const int prev = smp_.cur ^ 1;
+    if (smp_.filled[prev]) {
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, smp_.pbo[prev]);
+        if (const void* m = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, (GLsizeiptr)sw * sh * 4, GL_MAP_READ_BIT)) {
+            smp_.px.assign((const unsigned char*)m, (const unsigned char*)m + (size_t)sw * sh * 4);
+            smp_.pw = sw;
+            smp_.ph = sh;
+            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+        }
+        smp_.filled[prev] = false;
+    }
+    // this frame's
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, smp_.tex);
+    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, w_, h_);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, smp_.fbo);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, smp_.pbo[smp_.cur]);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, sw, sh, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    smp_.filled[smp_.cur] = true;
+    smp_.cur ^= 1;
+    smp_.frame++;
+    // forget the lines not seen for a while
+    if (smp_.lines.size() > 192)
+        for (auto it = smp_.lines.begin(); it != smp_.lines.end();)
+            it = smp_.frame - it->second.seen > 60 ? smp_.lines.erase(it) : std::next(it);
+}
+
+void Renderer::backdrop(const HudText& h, float x0, float y0, float x1, float y1, hud::Backdrop& out) {
+    float lum = 0.f, lum2 = 0.f, n = 0.f;
+    vec3 col(0.f);
+    if (!smp_.px.empty()) {
+        // the box and a margin round it (the veil's reach)
+        const float m = (y1 - y0) * 0.5f;
+        const int tx0 = std::clamp((int)std::floor((x0 - m) / w_ * smp_.pw), 0, smp_.pw - 1);
+        const int tx1 = std::clamp((int)std::ceil((x1 + m) / w_ * smp_.pw), tx0 + 1, smp_.pw);
+        const int ty0 = std::clamp((int)std::floor((h_ - (y1 + m)) / h_ * smp_.ph), 0, smp_.ph - 1);
+        const int ty1 = std::clamp((int)std::ceil((h_ - (y0 - m)) / h_ * smp_.ph), ty0 + 1, smp_.ph);
+        for (int y = ty0; y < ty1; y++)
+            for (int x = tx0; x < tx1; x++) {
+                const unsigned char* p = &smp_.px[((size_t)y * smp_.pw + x) * 4];
+                const vec3 c(p[0] / 255.f, p[1] / 255.f, p[2] / 255.f);
+                const float l = ugl::luma(c);
+                col = col + c;
+                lum += l;
+                lum2 += l * l;
+                n += 1.f;
+            }
+    }
+    if (n <= 0.f) { // nothing read yet: the universe's own idea of its ground
+        const TransitionHints hi = cur_.u->hints();
+        out.color = ugl::toSrgb(hi.background);
+        out.luma = hi.light ? 0.8f : 0.12f;
+        out.busy = 0.4f;
+    } else {
+        out.color = col * (1.f / n);
+        out.luma = lum / n;
+        out.busy = saturate(std::sqrt(std::max(0.f, lum2 / n - out.luma * out.luma)) * 5.f);
+    }
+    // deep ink over a light world; between the thresholds a line keeps its side, and it turns over gently
+    // (a line shown once at a time, which may glide or grow, is known by its role, a toast by its text too; the
+    // others, many of a role, by their place)
+    const bool single = h.role == HUD_TITLE || h.role == HUD_INFO || h.role == HUD_SECTION || h.role == HUD_UNIVERSE;
+    const bool toast = h.role == HUD_TOAST || h.role == HUD_TOAST_SUB || h.role == HUD_NOTICE;
+    const uint64_t key = single ? (uint64_t)h.role << 48
+                         : toast ? ((uint64_t)h.role << 48) ^ (std::hash<std::string>{}(h.text) & 0xFFFFFFFFFFFull)
+                                 : ((uint64_t)h.role << 48) ^ ((uint64_t)(uint32_t)std::lround(h.x / 24.f) << 24) ^
+                                       (uint64_t)(uint32_t)std::lround(h.y / 24.f) ^ (h.center ? 1ull << 60 : 0ull);
+    const bool fresh = smp_.lines.find(key) == smp_.lines.end();
+    Sampler::Side& sd = smp_.lines[key];
+    if (fresh) {
+        sd.target = out.luma > 0.5f ? 1.f : 0.f;
+        sd.deep = sd.target;
+        sd.seen = smp_.frame;
+    } else if (sd.seen != smp_.frame) {
+        if (out.luma > 0.56f) sd.target = 1.f;
+        if (out.luma < 0.44f) sd.target = 0.f;
+        const float k = 1.f - std::exp(-std::max(0.f, hudDt_) * 5.f);
+        sd.deep += (sd.target - sd.deep) * k;
+        sd.seen = smp_.frame;
+    }
+    out.deep = sd.deep;
+}
+
+const std::vector<HudText>& Renderer::quiet(const Universe& u, const std::vector<HudText>& hud, std::vector<HudText>& store) const {
+    if (!unified_ || u.hostText()) return hud;
+    store = hud;
+    for (HudText& h : store) h.alpha = 0.f;
+    return store;
+}
+
+Frame Renderer::withHud(const Frame& f, const std::vector<HudText>& hud) {
+    Frame g{f.game, f.music, f.time, f.dt, f.paused, f.dim, f.fade, hud, f.panels, f.bare, f.card, f.hudBoxes};
+    return g;
+}
+
 void Renderer::hudLines(Universe& u, const std::vector<HudText>& hud, std::vector<text::Line>& lines, std::vector<vec4>& boxes) {
     lines.clear();
     boxes.clear();
     for (const HudText& h : hud) {
         lines.emplace_back();
-        if (h.alpha > 0.002f && !h.text.empty()) u.hudLine(h, lines.back());
+        if (h.alpha > 0.002f && !h.text.empty()) style(u, h, lines.back());
         const text::Box b = text_.measure(lines.back());
         const float x = ugl::hudLeft(h, b.width(), w_); // (the box's x0 is the line's own dx)
         boxes.push_back(vec4{x + b.x0, h.y + b.y0, x + b.x1, h.y + b.y1});
@@ -609,7 +815,7 @@ void Renderer::letter(Universe& u, const std::vector<HudText>& hud, float weight
     for (const HudText& h : hud) {
         if (h.alpha * weight <= 0.002f || h.text.empty()) continue;
         text::Line l;
-        u.hudLine(h, l);
+        style(u, h, l);
         l.alpha *= weight;
         if (night > 0.f) {
             for (text::Span& s : l.spans) s.ink = s.ink + (white - s.ink) * night;
@@ -641,13 +847,13 @@ void Renderer::letterCard(Universe& u, double time) {
         Big g{h, 1.f, 0.f, {}};
         if (!h) return g;
         text::Line l;
-        u.hudLine(*h, l);
+        style(u, *h, l);
         const text::Box b = text_.measure(l);
         g.k = std::clamp(std::min(cap / std::max(1.f, b.cap), w_ * 0.86f / std::max(1.f, b.width())), 1.f, 8.f);
         HudText big = *h;
         big.scale *= g.k;
         text::Line lb;
-        u.hudLine(big, lb);
+        style(u, big, lb);
         g.box = text_.measure(lb);
         return g;
     };
@@ -665,7 +871,7 @@ void Renderer::letterCard(Universe& u, double time) {
         const float bigX = w_ * 0.5f - (g->box.x0 + g->box.x1) * 0.5f, bigY = g->top - g->box.y0;
         HudText h = *g->h;
         text::Line l0;
-        u.hudLine(h, l0);
+        style(u, h, l0);
         const text::Box small = text_.measure(l0);
         const float smallX = ugl::hudLeft(h, small.width(), w_);
         // the anchor moves as the box does: the box's left edge and cap line go straight from the middle to the corner
