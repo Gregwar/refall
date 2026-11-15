@@ -32,7 +32,9 @@
 // the petals of a kaleidoscope, for the whole drop. A cleared row's cubes shatter into glinting shards
 // that drift back into the room and dissolve (at the real speed even in slow motion), and the light of the clear
 // sweeps across the mirrors; a quad turns the mirror once around, its thrown light sweeping the room. Slow motion
-// is a cool moonlight from the right; game over frosts the stack, row by row from the top.
+// is a cool moonlight from the right; game over frosts the stack, row by row from the top. Before a song the room's light comes up
+// (the accents out of nothing) and the mirrors float down into their places one after the other; after it they lift
+// away in turn and the light goes down.
 //
 // Cost: one traced room pass (full resolution), six small reflection passes (each mirror's footprint, 2x
 // supersampled), instanced glass cubes (4x MSAA), a mip-chain bloom.
@@ -548,6 +550,10 @@ void MirrorUniverse::updateMirrors(float dt, float wdt, const vec3& eye) {
             c.x = std::max(c.x, 11.6f * (34.6f - c.z) / 34.6f + MIR_HW + 0.3f);
             c.y = std::max(c.y, FY + MIR_HH + 0.6f);
             c.x *= sd;
+            // floating down into place one after the other (the setup), lifting away in turn (the teardown)
+            const float o = 0.07f * (k * 2 + side);
+            const float away = 1.f - smoothstepf(o, o + 0.5f, arrive_) + smoothstepf(o, o + 0.5f, leave_);
+            c.y += 22.f * away;
             vec3 n = normalize(normalize(eye - c) + normalize(stack - c));
             const float spin = TAU * smoothstepf(0.f, 1.f, (spinT_ - 0.15f * (side * 3 + k)) / 2.6f);
             n = rotY(n, 0.03f * std::sin(0.37f * s + ph) + (spinT_ < 4.f ? spin : 0.f));
@@ -750,6 +756,9 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     const vec3 accPos[2] = {vec3(-34.f, -3.f + 2.5f * drift * std::sin(tw * 0.08f), -16.f + 5.f * std::sin(tw * 0.05f)),
                             vec3(34.f, 1.5f + 2.5f * drift * std::sin(tw * 0.067f + 2.f), -22.f + 5.f * std::sin(tw * 0.043f + 1.f))};
 
+    arrive_ = smoothstepf(0.f, 0.85f, f.setup);
+    leave_ = smoothstepf(0.f, 0.85f, f.teardown);
+    lit_ = smoothstepf(0.f, 0.55f, f.setup) * (1.f - smoothstepf(0.35f, 0.95f, f.teardown));
     updateMirrors(dt, wdt, eye_);
     buildCubes(game);
 
@@ -758,13 +767,16 @@ void MirrorUniverse::render(const Frame& f, GLuint fbo) {
     const float aspect = (float)width_ / height_;
     auto lights = [&](GLuint p) {
         set3f(p, "uKeyDir", keyDir);
-        set3f(p, "uKeyCol", keyCol_);
+        // (the setup brings the room's light up, the accents from nothing; the teardown takes it down)
+        const float room = 0.2f + 0.8f * lit_;
+        set3f(p, "uKeyCol", keyCol_ * room);
         const float ap[6] = {accPos[0].x, accPos[0].y, accPos[0].z, accPos[1].x, accPos[1].y, accPos[1].z};
-        const float ac[6] = {accCol_[0].x, accCol_[0].y, accCol_[0].z, accCol_[1].x, accCol_[1].y, accCol_[1].z};
+        const float ac[6] = {accCol_[0].x * lit_, accCol_[0].y * lit_, accCol_[0].z * lit_,
+                             accCol_[1].x * lit_, accCol_[1].y * lit_, accCol_[1].z * lit_};
         glUniform3fv(ugl::U(p, "uAccPos"), 2, ap);
         glUniform3fv(ugl::U(p, "uAccCol"), 2, ac);
-        set3f(p, "uAmbTop", ambTop_);
-        set3f(p, "uAmbBot", ambBot_);
+        set3f(p, "uAmbTop", ambTop_ * room);
+        set3f(p, "uAmbBot", ambBot_ * room);
         set3f(p, "uAlbedo", albedo_);
         set3f(p, "uHaze", haze_);
         set3f(p, "uPanelMin", PANEL_MIN);
