@@ -1021,12 +1021,16 @@ void PixelUniverse::render(const Frame& f, GLuint fbo) {
                 cv_.cls[i] = (uint8_t)(prevCv_.cls[i] | K_PREV_PAL);
             }
     }
-    drawWell(g);
-    drawStack(g);
+    // (a break's world alone: the landscape without the well, its pedestal and the side cards, so the play area
+    // fades away with the game)
+    if (!f.bare) {
+        drawWell(g);
+        drawStack(g);
+    }
     const int hop = ws.bounce > 0 ? 1 : 0;
     std::vector<HudItem> items;
     layoutHud(f.hud, items);
-    drawSide(g, items, hop);
+    if (!f.bare) drawSide(g, items, hop);
     world_.drawFront(cv_, ws);
     drawFx();
     drawText(items, f.panels, hop);
