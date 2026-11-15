@@ -19,7 +19,8 @@
 // left, the right or back toward the wall: they fly, tumble, bounce and land on the floor, the plinth or the cubes
 // already there, piling up into messy mounds (tilted, turned, leaning, tipping off an edge), lie there a minute or
 // two and fade away (the ones above then drop); game over turns the stack to white plaster row by row as the light
-// sets. Every cube (the stack, the piece, the previews, the thrown ones) is the same real cube, rasterized in the
+// sets. Around a song the room is dark but for a spot on the wall behind the well: it opens onto the room before the
+// game comes in, and closes back to a point once it has gone. Every cube (the stack, the piece, the previews, the thrown ones) is the same real cube, rasterized in the
 // layout's camera and lit by the room.
 //
 // Layout contract: the layout's own camera (the well's plane z = 0 is exactly where the layout puts it).
@@ -1308,6 +1309,11 @@ void WhiteRoomUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progRoom_, "uBridgeCol", bridge_.color);
         set1f(progRoom_, "uPx", px_);
         set1f(progRoom_, "uPane", bare_ ? 0.f : 1.f);
+        // the setup: a spot opens on the wall behind the well and the room comes out of the dark around it; the
+        // teardown: it closes back to a point
+        const float open = smoothstepf(0.05f, 0.75f, f.setup) * (1.f - smoothstepf(0.38f, 0.97f, f.teardown));
+        set3f(progRoom_, "uSpotDir", normalize(vec3(0.f, 1.5f, WALL_Z) - cam_.eye));
+        set1f(progRoom_, "uSpot", open >= 1.f ? 2.f : 0.01f + 1.3f * open * open * open);
         ugl::drawFullscreen();
     }
     // ... copied into the multisampled scene
