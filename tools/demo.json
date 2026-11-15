@@ -79,7 +79,7 @@
      "grid": "bar", "fill": true,
      "shots": [{"u": "lanterns", "fade_in": "1bar", "env": {"ZEN_CLIP_FILL": "0"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8, "quad": false}}, {"u": "origami"}, {"u": "rainy"}, {"u": "sonar"},
-               {"u": "specimen"}]},
+               {"u": "microscope:PHASE"}]},
 
     // a bar before the first drop, a universe that reacts to it: the drop lands on it
     {"id": "listen", "end": "drop:1 + 2bars",

@@ -82,7 +82,7 @@ song, and between songs the game takes a short break into the next universe. Fif
 <td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/specimen.jpg"><br><b>SPECIMEN</b>: plump lumps of living tissue on a dark bench, and on each side a loupe looking into one block (its cells magnified, the organism living in it); a cleared row frees its organisms, which crawl off the screen with a loupe following one, the drop washes in new dyes<br><sub>🔍 <i>to review</i></sub></td>
+<td><img src="docs/universes/microscope.jpg"><br><b>MICROSCOPE</b>: a micrograph's field of view, the pieces colonies of stained living cells, a paramecium, an amoeba and diatoms wandering by; a cleared row bursts into granules, the drop swings in dark-field or fluorescence</td>
 <td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a glide through a dark 3D sunken city where shapes glow up from the black as echoes return on the beat; each cleared row charts the seabed for good, the drop lights the whole world and the glide surges<br><sub>🔍 <i>to review</i></sub></td>
 </tr>
 <tr>
@@ -156,7 +156,7 @@ Disabled for now (not built; their code stays in the repository):
 | STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
 | GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
 | MUSIC BOX | A cylinder music box pinned with the cleared rows; disabled, not convincing yet |
-| MICROSCOPE | A micrograph's field of view, the pieces colonies of living cells; disabled, SPECIMEN (`src/universes/specimen/`) plays instead |
+| SPECIMEN | Lumps of living tissue on a dark bench, loupes looking into them; disabled, MICROSCOPE plays instead |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants, the transitions, and the
 roadmap of the universes to come. To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
@@ -351,5 +351,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/refall ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox"` (the default) lists the universes left out of the build;
+`-DZENTRIS_DISABLED_UNIVERSES="cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen"` (the default) lists the universes left out of the build;
 `-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
