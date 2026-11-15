@@ -19,8 +19,8 @@
 // paper (ragged edges, its dots shrinking away); a quad stamps the third ink in one huge soft disc over the sheet;
 // slow motion is a monotone print (one ink, the drums locked in register); game over runs the drum dry, the stack
 // fading in streaks. A change of universe lifts the ink off the paper, leaving the stack plain. Before a song a blank
-// sheet feeds in and the drum prints the background on it from the top down; after it, the drum runs dry (the
-// background fading in streaks) and the sheet feeds out of the press. A real drop prints
+// drum prints the background on the blank sheet from the top down; after it, the drum runs dry (the background
+// fading in streaks), leaving the bare sheet. A real drop prints
 // the pieces from another pair of drums (the variant's da / db) for its whole length, eased in and out: the pieces
 // get an ink buffer of their own so that the HUD keeps the variant's inks.
 //
@@ -1089,10 +1089,9 @@ void RisographUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progComp_, "uBridgeInk", bridge_.ink);
     set1f(progComp_, "uDim", dimT_);
     set1f(progComp_, "uFade", saturate(f.fade));
-    // the setup feeds a blank sheet in from the top and prints the background on it from the top down; the
-    // teardown runs the drum dry (the background's ink fading in streaks), then feeds the sheet out at the bottom
-    set3f(progComp_, "uPress", vec3(1.05f * (1.f - smoothstepf(0.1f, 0.4f, f.setup)) - 1.05f * smoothstepf(0.4f, 0.9f, f.teardown),
-          1.2f * smoothstepf(0.35f, 0.9f, f.setup), smoothstepf(0.f, 0.45f, f.teardown)));
+    // the setup prints the background on the blank sheet from the top down; the teardown runs the drum dry (the
+    // background's ink fading in streaks), leaving the bare sheet
+    set2f(progComp_, "uPress", 1.2f * smoothstepf(0.1f, 0.85f, f.setup), smoothstepf(0.f, 0.8f, f.teardown));
     ugl::drawFullscreen();
 }
 
