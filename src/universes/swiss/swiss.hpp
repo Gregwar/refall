@@ -51,6 +51,10 @@ private:
     float layerOff_[7] = {};
     float cloudOff_[3] = {};
     float pan_ = 0.f, panT_ = 0.f, pieceLean_ = 0.f;
+    // The drop: its camera travel (from its first beat), its push-in, the light sweeping across on its start.
+    double dropBeat_ = 0.0;
+    bool wasDrop_ = false;
+    float zoom_ = 0.f, sweepT_ = 99.f, sweepX_ = 0.f, sweepA_ = 0.f;
 
     // Birds: a flock from the meadow on a clear, flocks crossing the sky in a drop.
     struct Bird { vec2 p, v; float phase, rate, size, glide, wob; };

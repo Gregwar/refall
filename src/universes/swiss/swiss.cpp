@@ -23,13 +23,20 @@
 // gutter around it), the falling piece exactly a locked one, the ghost a fine outline.
 //
 // Staging: calm is a hazier, softer light; mid and peak clear it, a peak warms it a little. The drop look holds only
-// while the song plan's DROP section lasts (music.inDrop): the light warms, the sun swells and throws flat rays
-// across the sky, the clouds speed up, the sway widens, the pieces' colors deepen, and flocks of birds cross the sky
-// every two bars (a big flock rises from both sides on the drop's downbeat). A cleared row closes into a flat bar and
-// slides out of the well sideways in 0.3 s, and a small flock of birds takes off from the meadow on one side and
-// flies away outward (more birds for more lines); a hard drop leaves a thin rule at the contact. Slow motion stills
-// the scene (the pan, the clouds and the birds slow down) and cools its light. Game over slides the stack out row by
-// row from the top.
+// while the song plan's DROP section lasts (music.inDrop): the whole scene turns to the golden hour in about two
+// seconds (and back over a few seconds after): every color leans toward its golden-hour tone (a peach and rose sky
+// over a gold horizon, rosy-violet far ranges, mauve then amber nearer ones, pink-gold snow, warm walls, the windows
+// lit, the trees' sunny sides catching an orange rim), the sun sinks low among the ranges and grows, throwing strong
+// flat rays across the sky, a rim of light runs along the ridges' sunny faces, the cast shadows stretch long away
+// from the sun, a light sweeps across the layers on the drop's start. The camera travels: a lateral dolly out and
+// back over eight bars (the foreground crosses about five cells, the far range a fraction of one) and a push-in
+// breathing over four bars (each depth scaled by its parallax share: the foreground most), both from the drop's
+// first beat and eased in and out with its light; the bar sway widens, the clouds speed up, the pieces' colors
+// deepen, and flocks of birds cross the sky every two bars (a big flock rises from both sides on the downbeat). A
+// cleared row closes into a flat bar and slides out of the well sideways in 0.3 s, and a small flock of birds takes
+// off from the meadow on one side and flies away outward (more birds for more lines); a hard drop leaves a thin rule
+// at the contact. Slow motion stills the scene (the pan, the clouds and the birds slow down) and cools its light.
+// Game over slides the stack out row by row from the top.
 //
 // Cost: one full-screen pass for the landscape (a few dozen elements tested per pixel), the board, plates and birds as
 // instanced flat shapes.
@@ -368,28 +375,42 @@ void SwissUniverse::drawLandscape() {
     glUniform3f(ugl::U(p, "uCloudOff"), cloudOff_[0], cloudOff_[1], cloudOff_[2]);
     set1f(p, "uSeed", (float)(seed_ % 997) * 0.37f);
     const float drop = smoothstepf(0.f, 1.f, dropAmt_);
-    auto c = [&](const char* n, unsigned v) { set3f(p, n, hex(v)); };
-    c("uSkyTop", V.skyTop);
-    set3f(p, "uSkyBot", lerp(hex(V.skyBot), hex(V.sun), 0.35f * drop));
-    c("uHaze", V.haze); c("uCloudC", V.cloud); c("uSunC", V.sun);
-    c("uSnow", V.snow); c("uSnowSh", V.snowSh); c("uRock", V.rock); c("uRockSh", V.rockSh);
-    c("uMid1", V.mid1); c("uMid2", V.mid2); c("uMid3", V.mid3);
-    c("uHeroLit", V.heroLit); c("uHeroSh", V.heroSh); c("uHeroGrass", V.heroGrass);
-    c("uLake", V.lake); c("uLakeLit", V.lakeLit);
-    c("uMeadow", V.meadow); c("uMeadowLit", V.meadowLit); c("uMeadowDk", V.meadowDk); c("uFg", V.fg); c("uDot", V.dot);
-    c("uPath", V.path); c("uWall", V.wall); c("uWallSh", V.wallSh); c("uRoof", V.roof); c("uRoofSh", V.roofSh);
-    c("uTimber", V.timber); c("uWindow", V.window);
-    c("uTree", V.tree); c("uTreeLit", V.treeLit); c("uTree2", V.tree2); c("uTree2Lit", V.tree2Lit);
+    // Every color leans toward its golden-hour tone by its own share (the variant keeps a little of itself): a
+    // peach and rose sky over a gold horizon, rosy-violet far ranges, mauve then amber nearer, pink-gold snow,
+    // warm walls, lit windows, the trees' sunny sides catching an orange rim.
+    auto c = [&](const char* n, unsigned v, unsigned gold, float k) { set3f(p, n, lerp(hex(v), hex(gold), k * drop)); };
+    c("uSkyTop", V.skyTop, 0xe8876e, 0.85f);
+    c("uSkyBot", V.skyBot, 0xffd59a, 0.9f);
+    c("uHaze", V.haze, 0xf4b98e, 0.85f); c("uCloudC", V.cloud, 0xffd2a6, 0.85f); c("uSunC", V.sun, 0xfff1b8, 0.9f);
+    c("uSnow", V.snow, 0xffdcc2, 0.8f); c("uSnowSh", V.snowSh, 0xc493b4, 0.8f);
+    c("uRock", V.rock, 0x9c6f98, 0.75f); c("uRockSh", V.rockSh, 0x76568c, 0.75f);
+    c("uMid1", V.mid1, 0xb98095, 0.75f); c("uMid2", V.mid2, 0x9a6a7e, 0.7f); c("uMid3", V.mid3, 0x8f6a4e, 0.65f);
+    c("uHeroLit", V.heroLit, 0xffd7a0, 0.8f); c("uHeroSh", V.heroSh, 0xa87590, 0.75f); c("uHeroGrass", V.heroGrass, 0xc9a23e, 0.7f);
+    c("uLake", V.lake, 0xb8708a, 0.75f); c("uLakeLit", V.lakeLit, 0xffe09a, 0.9f);
+    c("uMeadow", V.meadow, 0xc9a43a, 0.6f); c("uMeadowLit", V.meadowLit, 0xffd36a, 0.75f);
+    c("uMeadowDk", V.meadowDk, 0x86662c, 0.6f); c("uFg", V.fg, 0x8a5e2c, 0.6f); c("uDot", V.dot, 0xfff0b0, 0.6f);
+    c("uPath", V.path, 0xffe0a0, 0.7f); c("uWall", V.wall, 0xffe4bc, 0.7f); c("uWallSh", V.wallSh, 0x9c7290, 0.7f);
+    c("uRoof", V.roof, 0xe5532c, 0.6f); c("uRoofSh", V.roofSh, 0x8a2c34, 0.6f);
+    c("uTimber", V.timber, 0x5a2a20, 0.4f); c("uWindow", V.window, 0xffd06a, 1.f);
+    c("uTree", V.tree, 0x3a3428, 0.6f); c("uTreeLit", V.treeLit, 0xe39a48, 0.8f);
+    c("uTree2", V.tree2, 0xc8602a, 0.5f); c("uTree2Lit", V.tree2Lit, 0xffb050, 0.8f);
+    set1f(p, "uGold", drop);
+    set1f(p, "uZoom", zoom_);
+    glUniform2f(ugl::U(p, "uSweep"), sweepX_, sweepA_);
     set4f(p, "uP0", V.farBase, V.snowLine, V.farHeight, V.round);
     const float heroX = -side * std::max(13.f, (W + 9.f) * 0.5f);
     set4f(p, "uP1", (float)V.hero, heroX, V.lakeY, V.mist);
     const float vx = side * std::max(14.5f, (W + 12.f) * 0.5f);
     set4f(p, "uP2", vx, (float)V.hasPath, V.cloudFlat, V.cloudCover);
     set4f(p, "uP3", V.meadowY, V.fgY, 0.f, V.midH);
-    const float sunX = V.sunR > 0.f ? -side * V.sunX * W : 0.f;
-    glUniform3f(ugl::U(p, "uSun"), sunX, V.sunY, V.sunR * (1.f + 0.25f * drop));
+    // the sun: at the golden hour it sinks low over the ranges on the village's side (clear of the hero peak) and
+    // grows
+    const float sunX = lerpf(V.sunR > 0.f ? -side * V.sunX * W : 0.f, side * std::max(13.5f, W * 0.62f), drop);
+    glUniform3f(ugl::U(p, "uSun"), sunX, lerpf(V.sunY, 5.6f, drop), lerpf(std::max(V.sunR, 0.8f), 2.3f, drop));
+    // long flat shadows away from the sun
+    glUniform2f(ugl::U(p, "uShadow"), sunX > 0.f ? -1.f : 1.f, 1.f + 1.8f * drop);
     const float calm = 1.f - saturate(lv_);
-    set4f(p, "uGrade", 0.3f * drop + 0.1f * smoothstepf(1.f, 2.f, lv_), 0.1f * calm, smoothstepf(0.f, 1.f, slow_), drop);
+    set4f(p, "uGrade", 0.1f * drop + 0.1f * smoothstepf(1.f, 2.f, lv_), 0.1f * calm, smoothstepf(0.f, 1.f, slow_), drop);
     set1f(p, "uWind", 0.5f + 0.4f * saturate(lv_ * 0.5f) + 0.8f * drop);
     std::vector<float> el;
     for (const El& e : els_) el.insert(el.end(), {e.x, e.depth, e.size, e.kind});
@@ -911,7 +932,7 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The drop's look, only while the song plan's DROP section lasts.
     const bool inDrop = music.hasSong && music.inDrop;
-    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 1.6f : 0.8f, dt);
+    dropAmt_ = approach(dropAmt_, inDrop ? 1.f : 0.f, inDrop ? 1.9f : 0.45f, dt);
     const float W = viewH_.x;
     if (dropHit_) {
         dropHit_ = false;
@@ -920,6 +941,17 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     beat_ = music.hasSong ? music.beat : time_ * 2.0;
+    if (inDrop && !wasDrop_) {
+        if (dropAmt_ < 0.05f) dropBeat_ = beat_; // the camera's travel starts from here (unless one still runs)
+        sweepT_ = 0.f;     // a light sweeps across the layers
+    }
+    wasDrop_ = inDrop;
+    sweepT_ += sdt;
+    {
+        const float k = sweepT_ / 2.6f;
+        sweepX_ = viewC_.x - W - 6.f + k * (2.f * W + 12.f);
+        sweepA_ = k < 1.f ? 0.55f * std::sin(PI * k) : 0.f;
+    }
     if (inDrop && !f.paused) {
         // a flock crossing the sky every two bars, from either side
         const float two = (float)std::floor(beat_ / 8.0);
@@ -943,9 +975,16 @@ void SwissUniverse::render(const Frame& f, GLuint fbo) {
             target = -0.12f * layout::cellPos(cx, 0.f).x;
         }
         pieceLean_ = approach(pieceLean_, target, 1.2f, sdt);
-        const float swayA = 0.12f + 0.12f * saturate(lv_ * 0.5f) + 0.3f * smoothstepf(0.f, 1.f, dropAmt_);
+        const float g = smoothstepf(0.f, 1.f, dropAmt_);
+        const float swayA = 0.12f + 0.12f * saturate(lv_ * 0.5f) + 0.6f * g;
         const float sway = swayA * (float)std::sin(beat_ / 8.0 * TAU);
-        pan_ = 2.6f * std::sin(panT_ * TAU / 80.f) + (f.paused ? 0.f : 1.f) * sway + pieceLean_;
+        // the drop's camera travel: a lateral dolly out and back over eight bars (the foreground crosses about
+        // five cells, the far range a fraction of one) and a push-in breathing over four bars, both from the
+        // drop's first beat and eased in and out with its light
+        const double db = beat_ - dropBeat_;
+        const float dolly = 5.f * g * (float)std::sin(db / 32.0 * TAU);
+        zoom_ = g * (0.1f + 0.09f * (0.5f - 0.5f * (float)std::cos(db / 16.0 * TAU)));
+        pan_ = 2.6f * std::sin(panT_ * TAU / 80.f) + (f.paused ? 0.f : 1.f) * sway + pieceLean_ + dolly;
         for (int i = 0; i < 7; i++) layerOff_[i] = pan_ * DEPTH[i];
         const float cs = 1.f + 2.5f * smoothstepf(0.f, 1.f, dropAmt_);
         const float speeds[3] = {0.11f, 0.17f, 0.25f};
