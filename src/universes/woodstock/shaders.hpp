@@ -1,36 +1,28 @@
 #pragma once
-// WOODSTOCK's shaders. Everything is flat cartoon in display (sRGB) colors, every shape a signed distance field
-// with a thick white outline: the kaleidoscope behind everything, the sprites (flowers, mandalas, peace signs,
-// hearts, rainbows, the kawaii sun and mushrooms, doves, lava blobs, petals, stems, the well's backing, the bonus
-// flower), the blocks (a candy tile with a white outline and one bold motif per piece type), the lettering.
+// WOODSTOCK's shaders. Flat 70s sticker art in display (sRGB) colors: every shape a signed distance field in flat
+// color with one even ink outline (OUTLINE board units, the same on the motifs, the petals and the blocks). The
+// paper behind everything (its grain, the thin double border, the sunburst peace disc, the two daisies, the small
+// heart and bolts, the well's panel), the drifting petals and hearts, the blocks.
 
 namespace woodstock_shaders {
 
-// Shared painting helpers (prepended after the #version line).
+// Shared painting helpers (prepended after the #version line). Distances in board units; AA set per fragment.
 inline const char* PAINT_GLSL = R"(
 const float TAU = 6.2831853;
 float AA = 0.01;
-// Paints `col` over `acc` where d < 0 (antialiased); the first layer sets the color outright.
-void layer(inout vec4 acc, float d, vec3 col) {
-    float a = 1.0 - smoothstep(-AA, AA, d);
-    acc.rgb = mix(acc.rgb, col, acc.a > 0.0 ? a : 1.0);
-    acc.a = max(acc.a, a);
-}
-void layerA(inout vec4 acc, float d, vec3 col, float k) {
-    float a = (1.0 - smoothstep(-AA, AA, d)) * k;
-    acc.rgb = mix(acc.rgb, col, acc.a > 0.0 ? a : 1.0);
-    acc.a = max(acc.a, a);
-}
-float dEll(vec2 p, vec2 r) { return (length(p / r) - 1.0) * min(r.x, r.y); }
-float dSeg(vec2 p, vec2 a, vec2 b) {
-    vec2 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return length(pa - ba * h);
+float cov(float d) { return 1.0 - smoothstep(-AA, AA, d); }
+// Paints `c` where d < 0 (antialiased).
+void paint(inout vec3 col, float d, vec3 c) { col = mix(col, c, cov(d)); }
+// Paints `c` where d < 0 with an ink outline of width w centered on its edge.
+void sticker(inout vec3 col, float d, vec3 c, vec3 ink, float w) {
+    col = mix(col, ink, cov(d - w * 0.5));
+    col = mix(col, c, cov(d + w * 0.5));
 }
 float dBox(vec2 p, vec2 b, float r) {
     vec2 q = abs(p) - b + r;
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
 }
+float dEll(vec2 p, vec2 r) { return (length(p / r) - 1.0) * min(r.x, r.y); }
 float dot2(vec2 v) { return dot(v, v); }
 // A heart about 2 wide, its point at the bottom.
 float dHeart(vec2 q) {
@@ -41,21 +33,8 @@ float dHeart(vec2 q) {
     else d = sqrt(min(dot2(p - vec2(0.0, 1.0)), dot2(p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
     return d / 0.62;
 }
-// The peace symbol: a ring and its three bars (radius 1), bar width w.
-float dPeace(vec2 q, float w) {
-    float ring = abs(length(q) - (1.0 - w * 0.5)) - w * 0.5;
-    float r = 1.0 - w * 0.5;
-    float bars = min(dSeg(q, vec2(0.0, -r), vec2(0.0, r)),
-                     min(dSeg(q, vec2(0.0), vec2(-0.7071 * r, -0.7071 * r)), dSeg(q, vec2(0.0), vec2(0.7071 * r, -0.7071 * r))));
-    return min(ring, bars - w * 0.5);
-}
-// A four-pointed sparkle (radius 1).
-float dSparkle(vec2 q) {
-    vec2 p = abs(q);
-    float v = sqrt(p.x + 0.002) + sqrt(p.y + 0.002);
-    return (v - 1.0) * 0.55;
-}
-// Petals around a center: the petal index (k) and the point in the petal's own frame (x along the petal).
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+// The point in the frame of its nearest of n petals around the origin (x along the petal), k its index.
 vec2 petalFrame(vec2 q, float n, float turn, out float k) {
     float an = atan(q.y, q.x) - turn;
     float sec = TAU / n;
@@ -63,313 +42,192 @@ vec2 petalFrame(vec2 q, float n, float turn, out float k) {
     float la = an - k * sec;
     return length(q) * vec2(cos(la), sin(la));
 }
-// A kawaii face (s: its scale): glossy eyes, a smile, pink cheeks.
-void face(inout vec4 acc, vec2 q, float s, vec3 ink, float blink) {
-    vec2 e = vec2(abs(q.x) - 0.34 * s, q.y - 0.06 * s);
-    float h = mix(0.17, 0.025, blink) * s;
-    layer(acc, dEll(e, vec2(0.11 * s, h)), ink);
-    if (blink < 0.5) layer(acc, length(e - vec2(-0.035, 0.06) * s) - 0.04 * s, vec3(1.0));
-    vec2 c = vec2(0.0, -0.02 * s);
-    float smile = max(abs(length(q - c) - 0.2 * s) - 0.04 * s, q.y - c.y + 0.1 * s);
-    layer(acc, smile, ink);
-    layerA(acc, dEll(vec2(abs(q.x) - 0.5 * s, q.y + 0.13 * s), vec2(0.11, 0.065) * s), vec3(1.0, 0.55, 0.68), 0.85);
-}
-vec3 hueRot(vec3 c, float a) {
-    const mat3 toYIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
-    const mat3 toRGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
-    vec3 y = toYIQ * c;
-    float cs = cos(a), sn = sin(a);
-    y.yz = mat2(cs, sn, -sn, cs) * y.yz;
-    return clamp(toRGB * y, 0.0, 1.0);
-}
 )";
 
-// ---------------------------------------------------------------- the kaleidoscope
+// ---------------------------------------------------------------- the paper and its motifs
 inline const char* BG_FS = R"(
 in vec2 vUv;
 out vec4 frag;
-uniform vec4 uView;            // center, half extents (board units)
-uniform vec3 uBand[5];
-uniform vec3 uLine, uDot;
-uniform float uFlow, uBreath, uMorph, uMandala, uShift, uTime, uFolds, uCalm, uDesat, uDim, uWarp;
-uniform vec4 uWave[4];         // the clears' shock waves: front radius (board units), strength
-uniform vec4 uColL, uColR;     // the HUD columns (board units), veiled a little
-uniform vec3 uVeil;
-vec3 band(float i) {
-    float k = mod(i, 5.0);
-    return k < 1.0 ? uBand[0] : k < 2.0 ? uBand[1] : k < 3.0 ? uBand[2] : k < 4.0 ? uBand[3] : uBand[4];
+uniform vec4 uView;          // center, half extents (board units)
+uniform float uW;            // the outline (board units)
+uniform vec3 uGround, uFrame, uHalo, uWellFill, uInk;
+uniform vec3 uScallop, uScallop2, uRing, uPeace, uSky, uGlint;
+uniform vec3 uPetal, uCenter, uCenter2, uLeaf, uHeart, uBolt;
+uniform vec4 uDisc;          // the sunburst peace disc: center, radius, the scallops' turn
+uniform vec2 uDiscFx;        // its rays (0 calm .. 1 the drop), its scallops' pulse
+uniform vec4 uHead[2];       // the daisies' heads: center, radius, turn
+uniform vec4 uStem[2];       // their stems' foot, the leaves' size, the flower's lean
+uniform vec4 uHeartAt, uBoltAt[2]; // center, size, tilt
+uniform vec4 uWell;          // the well's half extents, its corner, 1 shown / 0 not (a break between songs)
+uniform float uDesat;        // slow motion's dusk
+uniform float uGrain;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// iq's polygon distance: the lightning bolt (unit height 2)
+float dBolt(vec2 p) {
+    vec2 v[7] = vec2[7](vec2(-0.22, 1.0), vec2(0.5, 1.0), vec2(0.12, 0.18), vec2(0.5, 0.18), vec2(-0.36, -1.0),
+                        vec2(-0.08, -0.12), vec2(-0.46, -0.12));
+    float d = dot(p - v[0], p - v[0]);
+    float s = 1.0;
+    for (int i = 0, j = 6; i < 7; j = i, i++) {
+        vec2 e = v[j] - v[i], w = p - v[i];
+        vec2 b = w - e * clamp(dot(w, e) / dot(e, e), 0.0, 1.0);
+        d = min(d, dot(b, b));
+        bvec3 c = bvec3(p.y >= v[i].y, p.y < v[j].y, e.x * w.y > e.y * w.x);
+        if (all(c) || all(not(c))) s *= -1.0;
+    }
+    return s * sqrt(d);
 }
-float boxD(vec2 p, vec4 b) {
-    vec2 c = (b.xy + b.zw) * 0.5, h = (b.zw - b.xy) * 0.5;
-    return dBox(p - c, h, 0.8);
+// A leaf (a vesica pointing up its local y), length L, width w.
+float dLeaf(vec2 p, float L, float w) {
+    float b = L * 0.5;
+    float r = (b * b + w * w * 0.25) / w, d = r - w * 0.5;
+    p = abs(p);
+    return ((p.y - b) * d > p.x * b) ? length(p - vec2(0.0, b)) : length(p - vec2(-d, 0.0)) - r;
+}
+void daisy(inout vec3 col, vec2 p, vec4 head, vec4 stem) {
+    // the stem: one slim ink stroke from its foot to the head, two leaves on it (all leaning with the flower)
+    vec2 foot = stem.xy;
+    vec2 h = foot + rot(stem.w) * (head.xy - foot);
+    vec2 ax = normalize(h - foot);
+    float len = length(h - foot);
+    vec2 rel = p - foot;
+    float t = clamp(dot(rel, ax), 0.0, len);
+    float dStem = length(rel - ax * t) - uW * 0.75;
+    paint(col, dStem, uInk);
+    vec2 nrm = vec2(-ax.y, ax.x);
+    for (int s = 0; s < 2; s++) {
+        float side = s == 0 ? 1.0 : -1.0;
+        float at = len * (s == 0 ? 0.3 : 0.5);
+        vec2 dir = normalize(ax * 0.75 + nrm * side * 0.9);
+        float L = stem.z * (s == 0 ? 1.0 : 0.85);
+        vec2 c = foot + ax * at + dir * (L * 0.5 + uW);
+        vec2 lp = p - c;
+        lp = vec2(dot(lp, vec2(dir.y, -dir.x)), dot(lp, dir));
+        float dl = dLeaf(lp, L, L * 0.42);
+        sticker(col, dl, uLeaf, uInk, uW);
+        // its midrib
+        paint(col, max(abs(lp.x) - uW * 0.28, abs(lp.y) - L * 0.36), uInk);
+    }
+    // the head: eight round petals, a two-tone center
+    vec2 q = p - h;
+    float r = head.z;
+    if (length(q) > r * 1.1 + uW) return;
+    float k;
+    vec2 pp = petalFrame(q, 8.0, head.w, k);
+    float dP = dEll(pp - vec2(0.56 * r, 0.0), vec2(0.44 * r, 0.21 * r));
+    sticker(col, dP, uPetal, uInk, uW);
+    sticker(col, length(q) - 0.36 * r, uCenter, uInk, uW);
+    paint(col, length(q) - 0.2 * r, uCenter2);
 }
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
-    vec2 d = p - vec2(0.0, -0.5);
-    float rc = length(d);
-    vec2 a4 = abs(d);
-    float rs = pow(pow(a4.x, 4.0) + pow(a4.y * 1.12, 4.0), 0.25);
-    float r = max(mix(rc, rs, uMorph), 0.05);
-    // the drop twists the kaleidoscope into a slow spiral around the well
-    float twist = uMandala * (2.4 * exp(-r / 9.0) + 0.05 * uTime);
-    float an = atan(d.y, d.x) + 0.025 * uTime + twist;
-    float sec = TAU / uFolds;
-    float si = floor(an / sec);
-    float la = abs(an - (si + 0.5) * sec) / (sec * 0.5);   // 0 in a sector's middle, 1 at its edges
-    const float K = 7.0;
-    float s = log(r) * K - uFlow;
-    // the bands scallop into petals as the music breathes; the drop folds them into a mandala
-    s += uBreath * 0.42 * (1.0 - la * la);
-    s += uMandala * 1.1 * sqrt(max(0.0, 1.0 - la * la)) - uMandala * 0.5;
-    float la2 = abs(fract(la * 1.0 + 0.5) - 0.5) * 2.0;   // the half-sectors: small petals between the big ones
-    s += uMandala * 0.45 * (1.0 - la2 * la2);
-    s += uWarp * 0.16 * sin(an * 3.0 + uTime * 0.21 + log(r) * 2.0);
-    // the shock waves of color: the rings pushed out by a couple of bands as a front passes (crisp and outlined: the
-    // colors there are the ones from further in)
-    float wave = 0.0;
-    for (int k = 0; k < 4; k++) {
-        float wd = (r - uWave[k].x) / (1.2 + 0.12 * uWave[k].x);
-        wave += uWave[k].y * exp(-wd * wd);
+    AA = max(fwidth(p.x), 1e-4) * 0.75;
+    vec3 col = uGround;
+    // the paper: a faint grain
+    col *= 1.0 + uGrain * (hash(floor(gl_FragCoord.xy)) - 0.5);
+    // the thin double border framing the screen
+    {
+        float d = dBox(p - uView.xy, uView.zw, 0.0);
+        float dl = min(abs(d + 0.3) - 0.035, abs(d + 0.48) - 0.035);
+        paint(col, dl, uFrame);
     }
-    s -= 1.8 * wave;
-    float i = floor(s), f = fract(s);
-    float checker = 0.0;
-    float sh = uShift + checker * 2.0;
-    float fl = floor(sh);
-    vec3 col = mix(band(i + fl), band(i + fl + 1.0), fract(sh));
-    // white lines between the bands, a constant width on screen
-    float bw = r / K;                                         // a band's width in board units
-    float lineW = 0.075;
-    float dl = min(f, 1.0 - f) * bw;
-    float aa = fwidth(s) * bw * 0.8 + 0.004;
-    col = mix(col, uLine, 1.0 - smoothstep(lineW - aa, lineW + aa, dl));
-    // printed motifs, part of the pattern: in every other band ring, one per sector on its axis, riding the rings
-    // outward and warping with them; each ring repeats one motif (daisies, hearts, peace signs), in a lighter or
-    // darker tone of its band, outlined like the bands; the drop's mandala turns them all to sparkles
-    // (a motif whose center nears a HUD column fades out whole)
-    vec2 q = vec2(la * sec * 0.5 * r, (f - 0.5) * bw);
-    float anC = (si + 0.5) * sec - 0.025 * uTime - twist;
-    vec2 pc = vec2(0.0, -0.5) + (rc - q.y) * vec2(cos(anC), sin(anC));
-    float v = 1.0 - smoothstep(0.4, 2.2, min(boxD(pc, uColL), boxD(pc, uColR)));   // (fading whole as it rides in)
-    if (mod(i, 2.0) > 0.5 && bw > 0.45 && v < 0.999) {
-        float rr = min(0.3 * bw, 0.75);
-        float t = mod(floor(i * 0.5), 3.0);
-        float dm;
-        if (t < 0.5) {
-            float kk;
-            vec2 pq = petalFrame(q, 6.0, 1.5708, kk);
-            dm = min(dEll(pq - vec2(0.58 * rr, 0.0), vec2(0.42, 0.3) * rr), length(q) - 0.32 * rr);
-        } else if (t < 1.5) dm = dHeart(q / rr) * rr;
-        else dm = dPeace(q / rr, 0.26) * rr;
-        dm = mix(dm, dSparkle(q / (rr * 1.3)) * rr * 1.3, uMandala);
-        vec3 bc = mix(band(i + fl), band(i + fl + 1.0), fract(sh));
-        float lum = dot(bc, vec3(0.299, 0.587, 0.114));
-        vec3 tone = lum > 0.62 ? mix(bc, bc * bc, 0.45) * 0.93 : mix(bc, vec3(1.0), 0.4);
-        float k = 1.0 - v;
-        col = mix(col, uLine, (1.0 - smoothstep(-aa, aa, dm - lineW * 1.2)) * k);
-        col = mix(col, tone, (1.0 - smoothstep(-aa, aa, dm)) * k);
-        if (t < 0.5) col = mix(col, mix(bc, uLine, 0.0) * (lum > 0.62 ? 0.72 : 1.0), (1.0 - smoothstep(-aa, aa, length(q) - 0.22 * rr)) * k * (1.0 - uMandala));
+    // ---- the sunburst peace disc
+    {
+        vec2 q = p - uDisc.xy;
+        float R = uDisc.z, rr = length(q);
+        if (rr < R * 1.6) {
+            // the halo, which a drop opens into a burst of soft pointed rays
+            float an = atan(q.y, q.x) - uDisc.w * 0.5;
+            float ray = abs(fract(an / TAU * 16.0) - 0.5) * TAU / 16.0 * rr;    // the arc to a ray's middle
+            float tip = R * mix(1.12, 1.42, uDiscFx.x);
+            float wr = mix(R * 0.2, 0.0, clamp((rr - R) / (tip - R), 0.0, 1.0));
+            paint(col, max(ray - wr, rr - tip), uHalo);
+            paint(col, rr - R * 1.12, uHalo);
+            // two rings of scallops, turning slowly
+            float k;
+            float rs = R * 0.12 * (1.0 + 0.18 * uDiscFx.y);
+            float rb = R - R * 0.12;
+            vec2 pp = petalFrame(q, 16.0, uDisc.w, k);
+            float dS = min(rr - rb, length(pp - vec2(rb, 0.0)) - rs);
+            sticker(col, dS, uScallop, uInk, uW);
+            float rs2 = R * 0.085 * (1.0 + 0.18 * uDiscFx.y);
+            float rb2 = R * 0.86 - R * 0.085;
+            pp = petalFrame(q, 16.0, uDisc.w + TAU / 32.0, k);
+            float dS2 = min(rr - rb2, length(pp - vec2(rb2, 0.0)) - rs2);
+            sticker(col, dS2, uScallop2, uInk, uW);
+            // the yellow ring, the sky inside, its pale glint, the peace sign (upright)
+            sticker(col, rr - R * 0.74, uRing, uInk, uW);
+            float Rp = R * 0.63;
+            sticker(col, rr - Rp, uSky, uInk, uW);
+            paint(col, rr - R * 0.27, uGlint);
+            float w = Rp * 0.2;
+            float ring = abs(rr - (Rp - w * 0.5)) - w * 0.5;
+            float rp = Rp - w * 0.5;
+            vec2 a = abs(q);
+            float bars = min(max(a.x - w * 0.5, a.y - rp), 1e3);
+            vec2 dq = vec2(a.x, q.y);
+            vec2 bd = normalize(vec2(0.7071, -0.7071));
+            float tt = clamp(dot(dq, bd), 0.0, rp);
+            bars = min(bars, length(dq - bd * tt) - w * 0.5);
+            float dPeace = min(ring, bars);
+            sticker(col, dPeace, uPeace, uInk, uW);
+        }
     }
-    // calm: the colors softer; slow motion: dusk
-    col = mix(col, mix(col, vec3(dot(col, vec3(0.3333))), 0.5) * 0.92 + 0.08, uCalm);
+    // ---- the daisies
+    daisy(col, p, uHead[0], uStem[0]);
+    daisy(col, p, uHead[1], uStem[1]);
+    // ---- a heart and two bolts, small
+    {
+        vec2 q = rot(-uHeartAt.w) * (p - uHeartAt.xy);
+        sticker(col, dHeart(q / uHeartAt.z) * uHeartAt.z, uHeart, uInk, uW);
+        for (int i = 0; i < 2; i++) {
+            vec2 b = rot(-uBoltAt[i].w) * (p - uBoltAt[i].xy);
+            sticker(col, dBolt(b / uBoltAt[i].z) * uBoltAt[i].z, uBolt, uInk, uW);
+        }
+    }
+    // ---- the well's panel
+    if (uWell.w > 0.5) {
+        float d = dBox(p, uWell.xy, uWell.z);
+        sticker(col, d, uWellFill, uInk, uW);
+    }
+    // slow motion: dusk (the colors drained toward lilac)
     float l = dot(col, vec3(0.299, 0.587, 0.114));
-    col = mix(col, vec3(l) * vec3(0.62, 0.66, 0.92), uDesat);
-    frag = vec4(col * uDim, 1.0);
+    col = mix(col, vec3(l) * vec3(0.86, 0.84, 1.02), uDesat);
+    frag = vec4(col, 1.0);
 }
 )";
 
-// ---------------------------------------------------------------- sprites
+// ---------------------------------------------------------------- the petals and hearts (instanced)
 inline const char* SPRITE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA;  // x, y, half width, half height (board units)
-layout(location = 2) in vec4 iB;  // rotation, kind, alpha, p1
-layout(location = 3) in vec4 iC;  // color A, p2
-layout(location = 4) in vec4 iD;  // color B, p3
-layout(location = 5) in vec4 iE;  // color C, outline width (board units)
+layout(location = 2) in vec4 iB;  // rotation, kind (0 petal, 1 heart), alpha, outline (board units)
+layout(location = 3) in vec4 iC;  // fill
+layout(location = 4) in vec4 iD;  // ink
 uniform mat4 uVP;
 out vec2 vL;
-flat out vec4 vA, vB, vC, vD, vE;
+flat out vec4 vA, vB, vC, vD;
 void main() {
-    vec2 ext = iA.zw * (iB.y > 12.5 ? 1.0 : 1.12) + iE.w * 1.6 + 0.06;
+    vec2 ext = iA.zw * 1.15 + iB.w + 0.04;
     vec2 l = aCorner * ext;
     float c = cos(iB.x), s = sin(iB.x);
     vL = l;
-    vA = iA; vB = iB; vC = iC; vD = iD; vE = iE;
+    vA = iA; vB = iB; vC = iC; vD = iD;
     gl_Position = uVP * vec4(iA.xy + vec2(c * l.x - s * l.y, s * l.x + c * l.y), 0.0, 1.0);
 }
 )";
 inline const char* SPRITE_FS = R"(
 in vec2 vL;
-flat in vec4 vA, vB, vC, vD, vE;
+flat in vec4 vA, vB, vC, vD;
 out vec4 frag;
-uniform vec3 uInk, uWhite;
-uniform float uTime, uFade;
 void main() {
-    int kind = int(vB.y + 0.5);
-    float hy = vA.w;
-    vec2 q = vL / hy;
-    AA = max(fwidth(q.x), 1e-4) * 0.7;
-    float W = min(vE.w / hy, 0.22);
-    vec3 A = vC.rgb, B = vD.rgb, C = vE.rgb;
-    float p1 = vB.w, p2 = vC.w, p3 = vD.w;
-    vec4 acc = vec4(0.0);
-    vec3 WH = uWhite;
-    if (kind == 0) {
-        // a daisy (p1 petals, p2 > 0.5: a face, p3: how open)
-        float n = p1;
-        float open = p3;
-        float k;
-        vec2 pp = petalFrame(q, n, 0.0, k);
-        float sec = TAU / n;
-        float pc = 0.6 * open + 0.05;
-        float dP = dEll(pp - vec2(pc, 0.0), vec2(0.4 * open + 0.02, min(0.42, pc * tan(sec * 0.5) * 1.05) * open + 0.02));
-        float dC = length(q) - 0.36;
-        layer(acc, min(dP, dC) - W, WH);
-        layer(acc, dP, mod(k, 2.0) < 0.5 ? A : B);
-        layer(acc, dC, WH);
-        layer(acc, dC + W * 0.8, C);
-        layerA(acc, abs(length(q) - 0.2) - 0.035, C * 0.82, 1.0);
-        if (p2 > 0.5) {
-            layer(acc, length(q) - 0.33, C);
-            face(acc, q, 0.36, uInk, 0.0);
-        }
-    } else if (kind == 1) {
-        // a mandala flower: pointed outer petals, round inner petals turned half a petal, rings of dots
-        float n = p1, k, k2;
-        vec2 o = petalFrame(q, n, p2, k);
-        float sec = TAU / n;
-        float dO = max(dEll(o - vec2(0.62, 0.0), vec2(0.38, 0.62 * tan(sec * 0.5))), abs(o.y) - (1.02 - o.x) * 0.9);
-        vec2 m = petalFrame(q, n, p2 * -0.6 + sec * 0.5, k2);
-        float dM = dEll(m - vec2(0.45, 0.0), vec2(0.24, 0.45 * tan(sec * 0.5) * 0.95));
-        float dC = length(q) - 0.3;
-        layer(acc, min(min(dO, dM), dC) - W, WH);
-        layer(acc, dO, mod(k, 2.0) < 0.5 ? A : mix(A, B, 0.35));
-        layer(acc, dM, WH);
-        layer(acc, dM + W * 0.7, B);
-        layer(acc, dC, WH);
-        layer(acc, dC + W * 0.7, C);
-        float kd;
-        vec2 dp = petalFrame(q, n, p2 * 0.4, kd);
-        layer(acc, length(dp - vec2(0.2, 0.0)) - 0.045, WH);
-        layer(acc, length(q) - 0.09, A);
-    } else if (kind == 2) {
-        // a peace sign
-        float d = dPeace(q, 0.24);
-        layer(acc, d - W, WH);
-        layer(acc, d, A);
-    } else if (kind == 3) {
-        // a heart
-        float d = dHeart(q);
-        layer(acc, d - W, WH);
-        layer(acc, d, A);
-    } else if (kind == 4) {
-        // a rainbow and its two clouds
-        vec2 c = vec2(0.0, -0.45);
-        float r = length(q - c);
-        float d = max(abs(r - 0.72) - 0.28, c.y - q.y);
-        layer(acc, d - W, WH);
-        float bi = clamp(floor((1.0 - r) / (0.56 / 6.0)), 0.0, 5.0);
-        vec3 bc = bi < 1.0 ? vec3(0.96, 0.29, 0.43) : bi < 2.0 ? vec3(0.99, 0.6, 0.24) : bi < 3.0 ? vec3(0.99, 0.85, 0.3)
-                : bi < 4.0 ? vec3(0.36, 0.8, 0.55) : bi < 5.0 ? vec3(0.29, 0.66, 0.92) : vec3(0.62, 0.45, 0.9);
-        layer(acc, d, bc);
-        float fb = fract((1.0 - r) / (0.56 / 6.0));
-        layerA(acc, max(d, (min(fb, 1.0 - fb) * 0.56 / 6.0) - W * 0.25), WH, step(0.48, r) * step(r, 0.98));
-        for (int s = -1; s <= 1; s += 2) {
-            vec2 cq = vec2(q.x * float(s), q.y);
-            float cl = min(min(length(cq - vec2(0.72, -0.47)) - 0.22, length(cq - vec2(0.97, -0.55)) - 0.15),
-                           min(length(cq - vec2(0.48, -0.55)) - 0.15, dBox(cq - vec2(0.72, -0.62), vec2(0.38, 0.08), 0.08)));
-            layer(acc, cl - W, A);
-            layer(acc, cl, WH);
-        }
-    } else if (kind == 5) {
-        // the kawaii sun: wavy rays turning slowly, a face
-        float n = 12.0, k;
-        vec2 pp = petalFrame(q, n, p2, k);
-        float wob = 0.06 * sin(length(q) * 9.0 - uTime * 2.0 + k);
-        float dR = max(abs(pp.y + wob * (pp.x - 0.5)) - (1.0 - pp.x) * 0.36, pp.x - 1.0);
-        float dD = length(q) - 0.62;
-        layer(acc, min(dR, dD) - W, WH);
-        layer(acc, dR, mod(k, 2.0) < 0.5 ? B : C);
-        layer(acc, dD, WH);
-        layer(acc, dD + W * 0.8, A);
-        face(acc, q + vec2(0.0, 0.04), 0.62, uInk, step(0.97, fract(uTime * 0.23 + p3)));
-    } else if (kind == 6) {
-        // a mushroom with a face
-        float cap = max(dEll(q - vec2(0.0, -0.05), vec2(1.0, 0.85)), -(q.y + 0.05));
-        cap = min(cap, dBox(q - vec2(0.0, -0.08), vec2(0.98, 0.1), 0.1));
-        float stem = dBox(q - vec2(0.0, -0.55), vec2(0.36, 0.42), 0.2);
-        layer(acc, min(cap, stem) - W, WH);
-        layer(acc, stem, B);
-        face(acc, q - vec2(0.0, -0.52), 0.42, uInk, step(0.96, fract(uTime * 0.19 + p3)));
-        layer(acc, cap + W * 0.0, A);
-        float dots = min(min(length(q - vec2(-0.5, 0.28)) - 0.16, length(q - vec2(0.12, 0.52)) - 0.13),
-                         min(length(q - vec2(0.58, 0.22)) - 0.14, length(q - vec2(-0.08, 0.15)) - 0.09));
-        layer(acc, max(dots, cap), WH);
-    } else if (kind == 7) {
-        // a dove (white, lilac outline): p2 the wing's beat
-        vec3 O = A;
-        if (p3 < 0.0) q.x = -q.x;
-        float body = dEll(q - vec2(-0.05, -0.1), vec2(0.62, 0.3));
-        float head = length(q - vec2(0.52, 0.12)) - 0.24;
-        float tail = max(dSeg(q, vec2(-0.55, -0.1), vec2(-0.95, 0.05)) - 0.16, -q.x - 1.0);
-        float fl = sin(p2);
-        vec2 wq = q - vec2(-0.05, 0.12);
-        float wa = 0.5 + 0.5 * fl;
-        wq = mat2(cos(wa), -sin(wa), sin(wa), cos(wa)) * wq;
-        float wing = dEll(wq - vec2(-0.05, 0.32), vec2(0.28, 0.5));
-        float beak = max(dSeg(q, vec2(0.7, 0.12), vec2(0.92, 0.08)) - 0.07, 0.0);
-        float sil = min(min(body, head), min(tail, wing));
-        layer(acc, min(sil, beak) - W, O);
-        layer(acc, beak, vec3(1.0, 0.68, 0.25));
-        layer(acc, sil, WH);
-        layer(acc, wing + W * 0.0, WH);
-        layer(acc, abs(wing) - W * 0.35, O);
-        layer(acc, length(q - vec2(0.6, 0.18)) - 0.05, uInk);
-    } else if (kind == 8) {
-        // a lava-lamp blob
-        float an = atan(q.y, q.x);
-        float rr = 0.82 + 0.1 * sin(3.0 * an + uTime * 0.9 + p3 * 6.0) + 0.06 * sin(5.0 * an - uTime * 1.3 + p3 * 3.0);
-        float d = (length(q) - rr) * 0.9;
-        layer(acc, d - W, WH);
-        layer(acc, d, A);
-    } else if (kind == 9) {
-        // a petal
-        float d = dEll(q, vec2(1.0, 0.5));
-        layer(acc, d - W, WH);
-        layer(acc, d, A);
-    } else if (kind == 10) {
-        // a sparkle
-        float d = dSparkle(q);
-        layer(acc, d - W, WH);
-        layer(acc, d, A);
-    } else if (kind == 12) {
-        // a stem with two leaves (board units, p2 its bend)
-        vec2 l = vL;
-        float h = vA.w;
-        float t = clamp((l.y + h) / (2.0 * h), 0.0, 1.0);
-        float bx = p2 * t * t;
-        float stem = max(abs(l.x - bx) - 0.075, abs(l.y) - h);
-        float ly1 = -h * 0.35, ly2 = h * 0.05;
-        vec2 a1 = l - vec2(p2 * 0.1 - 0.42, ly1);
-        a1 = mat2(0.86, 0.5, -0.5, 0.86) * a1;
-        vec2 a2 = l - vec2(p2 * 0.3 + 0.42, ly2);
-        a2 = mat2(0.86, -0.5, 0.5, 0.86) * a2;
-        float lf = min(dEll(a1, vec2(0.44, 0.17) * p1), dEll(a2, vec2(0.4, 0.16) * p1));
-        AA = max(fwidth(l.x), 1e-4) * 0.7;
-        layer(acc, min(stem, lf) - vE.w, WH);
-        layer(acc, stem, A);
-        layer(acc, lf, B);
-    } else if (kind == 13) {
-        // the well's backing (board units): a calm dark panel, a slim white line, a hairline of ink
-        vec2 l = vL;
-        AA = max(fwidth(l.x), 1e-4) * 0.7;
-        float d = dBox(l, vA.zw, 0.45);
-        layer(acc, d - vE.w - 0.04, uInk);
-        layer(acc, d - vE.w, WH);
-        layer(acc, d, mix(B, A, clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0)));
-    }
-    float al = acc.a * vB.z * uFade;
-    frag = vec4(acc.rgb * al, al);
+    AA = max(fwidth(vL.x), 1e-4) * 0.75;
+    float d = vB.y < 0.5 ? dEll(vL, vA.zw) : dHeart(vL / vA.w) * vA.w;
+    float w = vB.w;
+    float a = cov(d - w * 0.5);
+    vec3 col = mix(vD.rgb, vC.rgb, cov(d + w * 0.5));
+    float al = a * vB.z;
+    frag = vec4(col * al, al);
 }
 )";
 
@@ -377,13 +235,13 @@ void main() {
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA; // x, y, half, rotation
-layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost, 2 preview), scale
-layout(location = 3) in vec4 iC; // color, darkening
+layout(location = 2) in vec4 iB; // type, alpha, mode (0 block, 1 ghost), scale
+layout(location = 3) in vec4 iC; // color, k (< 0 a lock's brightening, > 0 the game over's greying)
 uniform mat4 uVP;
 out vec2 vU;
 flat out vec4 vB, vC;
 void main() {
-    vec2 l = aCorner * 0.56;           // the cell spans -0.5..0.5
+    vec2 l = aCorner * 0.58;           // the cell spans -0.5..0.5
     float c = cos(iA.w), s = sin(iA.w);
     vec2 w = vec2(c * l.x - s * l.y, s * l.x + c * l.y) * iA.z * 2.0 * iB.w;
     vU = l;
@@ -395,85 +253,35 @@ inline const char* CELL_FS = R"(
 in vec2 vU;
 flat in vec4 vB, vC;
 out vec4 frag;
-uniform vec3 uInk, uWhite;
-uniform float uFade;
+uniform vec3 uInk, uShine;
+uniform float uW;          // the outline (in cells, at scale 1)
 void main() {
     vec2 u = vU;
     AA = max(fwidth(u.x), 1e-4) * 0.75;
-    int type = int(vB.x + 0.5);
+    float W = uW / max(vB.w, 0.3);
     vec3 col = vC.rgb;
-    // a flat rounded square, a small even gap around it (no outline, no shading)
-    float d = dBox(u, vec2(0.455), 0.19);
-    vec4 acc = vec4(0.0);
+    float d = dBox(u, vec2(0.47), 0.16);
+    float a = cov(d);
+    vec3 c;
     if (abs(vB.z - 1.0) < 0.5) {
-        // the ghost: a faint flat fill of the piece's color, a thin line of it
-        layerA(acc, d, col, 0.16);
-        layerA(acc, abs(d + 0.02) - 0.018, col, 0.6);
-        frag = vec4(acc.rgb * acc.a * vB.y * uFade, acc.a * vB.y * uFade);
-        return;
-    }
-    // (the previews over the kaleidoscope sit on a flat rim of ink, so they read on any band)
-    if (vB.z > 1.5) layer(acc, d - 0.07, uInk);
-    layer(acc, d, col);
-    // the motif: one small flat shape per type, a lighter tone of the color (darker on the pale ones)
-    float lum = dot(col, vec3(0.299, 0.587, 0.114));
-    vec3 M = lum > 0.62 ? mix(col, col * vec3(0.78, 0.66, 0.5), 0.75) : mix(col, vec3(1.0), 0.42);
-    vec3 S = M;
-    float sc = 0.215;
-    vec2 q = u / sc;
-    vec2 qs = (u - vec2(0.022, -0.026)) / sc;
-    float dm, ds;
-    if (type == 0) {           // I: a daisy
-        float k;
-        vec2 pp = petalFrame(q, 5.0, 1.5708, k);
-        vec2 ps = petalFrame(qs, 5.0, 1.5708, k);
-        dm = min(dEll(pp - vec2(0.6, 0.0), vec2(0.42, 0.34)), length(q) - 0.36);
-        ds = min(dEll(ps - vec2(0.6, 0.0), vec2(0.42, 0.34)), length(qs) - 0.36);
-        layer(acc, dm * sc, M);
-        layer(acc, (length(q) - 0.3) * sc, col);
-    } else if (type == 1) {    // O: a heart
-        layer(acc, dHeart(q * 1.08) * sc, M);
-    } else if (type == 2) {    // T: a peace sign
-        layer(acc, dPeace(q * 0.98, 0.26) * sc, M);
-    } else if (type == 3) {    // S: a sparkle
-        layer(acc, dSparkle(q * 0.92) * sc, M);
-    } else if (type == 4) {    // Z: a tie-dye spiral
-        float pitch = 0.46;
-        float rr = length(q), aa = atan(q.y, q.x) / TAU;
-        float sp = abs(fract(rr / pitch - aa + 0.5) - 0.5) * pitch - 0.12;
-        sp = max(sp, rr - 1.0);
-        sp = min(sp, rr - 0.16);
-        float rs = length(qs), as = atan(qs.y, qs.x) / TAU;
-        float sps = min(max(abs(fract(rs / pitch - as + 0.5) - 0.5) * pitch - 0.12, rs - 1.0), rs - 0.16);
-        layer(acc, sp * sc, M);
-    } else if (type == 5) {    // J: a rainbow
-        vec2 c = vec2(0.0, -0.4);
-        float r0 = length(q - c), r1 = length(qs - c);
-        float arc = 1e3, arcs = 1e3;
-        for (int i = 0; i < 3; i++) {
-            float R = 0.38 + 0.32 * float(i);
-            arc = min(arc, abs(r0 - R) - 0.11);
-            arcs = min(arcs, abs(r1 - R) - 0.11);
+        // the ghost: a faint wash of the piece's color inside a thin line of it
+        float line = cov(abs(d + W * 0.5) - W * 0.3);
+        c = col;
+        a = max(a * 0.18, line * 0.75);
+    } else {
+        // a flat sticker: the color inside the ink line, one small pale glint in its corner
+        c = mix(uInk, col, cov(d + W));
+        float g = length(u - vec2(-0.22, 0.22)) - 0.065;
+        c = mix(c, mix(col, uShine, 0.6), cov(g));
+        // a lock's brief brightening, the game over's greying
+        if (vC.w < 0.0) c = mix(c, uShine, -vC.w);
+        else {
+            float l = dot(c, vec3(0.299, 0.587, 0.114));
+            c = mix(c, vec3(l) * 0.8 + 0.1, vC.w);
         }
-        arc = max(arc, c.y - 0.05 - q.y);
-        arcs = max(arcs, c.y - 0.05 - qs.y);
-        layer(acc, arc * sc, M);
-    } else {                   // L: a kawaii face
-        vec2 e = vec2(abs(q.x) - 0.42, q.y - 0.12);
-        layer(acc, dEll(e, vec2(0.15, 0.22)) * sc, col * 0.55);
-        vec2 c = vec2(0.0, -0.05);
-        float sm = max(abs(length(q - c) - 0.28) - 0.07, q.y - c.y + 0.12);
-        layer(acc, sm * sc, col * 0.55);
-        layerA(acc, dEll(vec2(abs(q.x) - 0.66, q.y + 0.2), vec2(0.15, 0.09)) * sc, mix(col, vec3(1.0, 0.5, 0.6), 0.5), 0.8);
     }
-    // a lock's brief brightening, the game over's fading
-    acc.rgb = mix(acc.rgb, vec3(1.0), vC.w > 0.0 ? 0.0 : -vC.w);
-    if (vC.w > 0.0) {
-        float l = dot(acc.rgb, vec3(0.299, 0.587, 0.114));
-        acc.rgb = mix(acc.rgb, vec3(l) * 0.55, vC.w);
-    }
-    float al = acc.a * vB.y * uFade;
-    frag = vec4(acc.rgb * al, al);
+    float al = a * vB.y;
+    frag = vec4(c * al, al);
 }
 )";
 
