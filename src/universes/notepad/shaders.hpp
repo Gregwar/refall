@@ -30,7 +30,7 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the page
-// The paper: tone (a little uneven: clouds and fibres, the board's chalk dust), grain, the printed grid (and its major lines), the margin rules, a soft light and the corner
+// The paper: tone, a fine grain (fibres and specks; the slate's grain and chalk dust on the board), tooth, the printed grid (and its major lines), the margin rules, a soft light and the corner
 // lifting a little; times the residue of everything erased.
 inline const char* PAPER_FS = R"(#version 330 core
 in vec2 vUv;
@@ -46,13 +46,17 @@ uniform float uLight, uWorld, uGrain, uAspect;
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     vec3 c = uPaper;
-    // the printed grid, a little uneven
+    // the printed grid, a little imperfect
     float lw = uGridP.w * uPx * 0.5;
-    vec2 g = abs(fract(p + 0.5) - 0.5);
-    float line = 1.0 - smoothstep(lw, lw + uPx, min(g.x, g.y));
+    // (each line wanders a hair off true along its length, and its ink comes and goes a little)
+    vec2 li = floor(p + 0.5);
+    vec2 pw = p + vec2(vnoise(vec2(p.y * 0.7, li.x * 1.37)) - 0.5, vnoise(vec2(p.x * 0.7, li.y * 1.91 + 5.0)) - 0.5) * 0.04;
+    vec2 g = abs(fract(pw + 0.5) - 0.5);
+    vec2 inkL = vec2(0.7 + 0.45 * vnoise(vec2(p.y * 2.6, li.x * 2.3)), 0.7 + 0.45 * vnoise(vec2(p.x * 2.6, li.y * 2.9 + 11.0)));
+    float line = max((1.0 - smoothstep(lw, lw + uPx, g.x)) * inkL.x, (1.0 - smoothstep(lw, lw + uPx, g.y)) * inkL.y);
     float ga = uGridP.x * (0.8 + 0.4 * vnoise(p * 0.6 + 3.0));
     if (uGridP.y > 0.5) {
-        vec2 gm = abs(fract(p / uGridP.y + 0.5) - 0.5) * uGridP.y;
+        vec2 gm = abs(fract(pw / uGridP.y + 0.5) - 0.5) * uGridP.y;
         float major = 1.0 - smoothstep(lw * 1.3, lw * 1.3 + uPx, min(gm.x, gm.y));
         ga = mix(ga, min(1.0, ga * uGridP.z), major);
         line = max(line, major);
@@ -65,16 +69,16 @@ void main() {
         float m = 1.0 - smoothstep(0.7 * uPx, 1.6 * uPx, d);
         c = mix(c, uMargin, m * uMarginP.z * (0.85 + 0.15 * vnoise(vec2(p.y * 2.0, 5.0))) * uWorld);
     }
-    // the sheet isn't even: a faint cloudy tone and the fibres of the paper; on the board, the chalk dust of past
-    // erasings, wiped across in broad strokes
-    float cloud = 0.5 * vnoise(p * 0.12 + 4.0) + 0.3 * vnoise(p * 0.26 + 17.0) + 0.2 * vnoise(p * 0.55 + 31.0);
+    // a fine grain, a few pixels across, so the page is never flat: the paper's fibres and specks on the sheet,
+    // the slate's grain and specks of chalk dust on the board
+    vec2 px = p / uPx;
+    float fine = 0.6 * vnoise(px * 0.5) + 0.4 * vnoise(px * 0.21 + 7.0);
+    float speck = step(uLight > 0.5 ? 0.982 : 0.993, hash21(floor(px / 2.0)));
     if (uLight > 0.5) {
-        float fibre = vnoise(vec2(p.x * 1.3, p.y * 11.0) + 2.0) * vnoise(vec2(p.x * 0.7 + 5.0, p.y * 4.0));
-        c *= 1.0 - (0.11 * (cloud - 0.5) + 0.035 * smoothstep(0.35, 0.7, fibre)) * uWorld;
+        float fibre = smoothstep(0.62, 0.9, vnoise(vec2(px.x * 0.06, px.y * 0.5) + 3.0));
+        c *= 1.0 - (0.09 * (fine - 0.5) + 0.03 * fibre + 0.05 * speck) * uWorld;
     } else {
-        float wipe = vnoise(vec2(p.x * 0.14 + 1.6 * vnoise(p * 0.17 + 8.0), p.y * 0.45 + 2.0 * vnoise(p * 0.09 + 21.0)));
-        float dust = smoothstep(0.4, 0.9, 0.6 * cloud + 0.4 * wipe);
-        c = mix(c, vec3(0.82, 0.85, 0.82), (0.045 * dust + 0.015 * cloud) * uWorld);
+        c = mix(c, vec3(0.82, 0.85, 0.82), (0.05 * fine + 0.07 * speck) * uWorld);
     }
     // paper tooth
     float gr = 0.6 * vnoise(p * 23.0) + 0.4 * vnoise(p * 61.0 + 9.0);
