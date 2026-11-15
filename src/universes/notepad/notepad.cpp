@@ -13,7 +13,8 @@
 //
 // The music sets the hand: a break is a slow pencil sketch, faint, almost without colour; the verse draws in
 // colour; a chorus draws faster, small doodles appearing in the margins; a drop is frantic: twelve drawings a
-// second, bold strokes, the well gone over in marker and doodles everywhere, hopping on the kicks.
+// second, bold strokes, the well gone over in marker and doodles everywhere, hopping on the kicks. Around a song the
+// notebook's cover swings open off the page, and shut over it after.
 #include "universes/notepad/notepad.hpp"
 
 #include <algorithm>
@@ -1961,6 +1962,13 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uFade", saturate(f.fade));
     set1f(progPost_, "uDim", pauseFade_);
     set1f(progPost_, "uBridge", smoothstepf(0.f, 1.f, bridge_.amount));
+    {
+        // the setup: the notebook's cover swings open off the page; the teardown: it swings shut over it (in the
+        // page's stop motion: 24 positions)
+        const float c = std::max(1.f - smoothstepf(0.05f, 0.58f, f.setup), smoothstepf(0.4f, 0.92f, f.teardown));
+        set1f(progPost_, "uCover", std::round(c * 24.f) / 24.f);
+        set3f(progPost_, "uCoverCol", V.light ? vec3(0.018f, 0.026f, 0.06f) : vec3(0.008f, 0.012f, 0.01f));
+    }
     set3f(progPost_, "uBridgeCol", bridge_.color);
     set3f(progPost_, "uBridgeInk", bridge_.ink);
     glBindVertexArray(emptyVao_);

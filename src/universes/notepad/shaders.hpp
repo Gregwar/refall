@@ -343,10 +343,22 @@ out vec4 frag;
 uniform sampler2D uScene;
 uniform float uLight, uFade, uDim, uBridge;
 uniform vec3 uBridgeCol, uBridgeInk;
+uniform float uCover;   // the setup / teardown: the notebook's cover, hinged on the left (0 open .. 1 closed)
+uniform vec3 uCoverCol;
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = uLight > 0.5 ? s.rgb : 1.0 - s.rgb;
     float cov = clamp(s.a, 0.0, 1.0);
+    if (uCover > 0.0) {
+        // the cover swinging up off the page (foreshortened toward its hinge, darker as it turns away from the
+        // light), its shadow on the page beside its edge
+        float px = 1.5 / float(textureSize(uScene, 0).x);
+        float d = vUv.x - uCover;
+        c *= 1.0 - 0.35 * uCover * (1.0 - uCover) * 4.0 * exp(-max(d, 0.0) / 0.05) * step(0.0, d);
+        vec3 cc = uCoverCol * mix(0.55, 1.0, uCover) * (1.0 + 0.6 * smoothstep(-px * 3.0, 0.0, d)); // a worn edge
+        cc *= 0.94 + 0.12 * fract(sin(dot(floor(gl_FragCoord.xy / 2.0), vec2(12.9898, 78.233))) * 43758.5453); // board
+        c = mix(c, cc, 1.0 - smoothstep(-px, px, d));
+    }
     c = mix(c, mix(uBridgeCol, uBridgeInk, cov), uBridge);
     c *= 1.0 - 0.45 * uDim;
     c *= uFade;
