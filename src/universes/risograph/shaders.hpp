@@ -307,12 +307,10 @@ uniform float uGrain;
 uniform float uBridge;
 uniform vec3 uBridgeColor, uBridgeInk;
 uniform float uDim, uFade;
-uniform vec3 uPress;                 // the setup / teardown: the sheet's feed (uv, up), the print's front (from the
-                                     // top, 0..1.2), the background's ink running dry (0..1)
+uniform vec2 uPress;                 // the setup / teardown: the print's front (from the top, 0..1.2), the
+                                     // background's ink running dry (0..1)
 void main() {
-    // the sheet fed in or out of the press: the black of the machine beyond it
-    vec2 uv = vUv - vec2(0.0, uPress.x);
-    if (uv.y < 0.0 || uv.y > 1.0) { frag = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    vec2 uv = vUv;
     vec2 bp = uView.xy + (uv * 2.0 - 1.0) * uView.zw; // board units
     vec4 fg = texture(uInk, uv);
     vec4 fp = texture(uPiece, uv);
@@ -339,8 +337,8 @@ void main() {
     // the press: the drum lays the background's ink from the top down (a ragged front), and runs it dry in streaks
     float rag = vnoise(vec2(bp.x * 1.7, 3.0)) * 0.6 + vnoise(vec2(bp.x * 9.0, 5.0)) * 0.4;
     float streak = vnoise(vec2(bp.x * 2.3, bp.y * 0.12) + 21.0) * 0.7 + vnoise(vec2(bp.x * 11.0, 1.0)) * 0.3;
-    bg *= 1.0 - smoothstep(uPress.y - 0.12, uPress.y, 1.0 - uv.y + 0.05 * rag);
-    bg *= 1.0 - smoothstep(streak * 0.6, streak * 0.6 + 0.4, uPress.z);
+    bg *= 1.0 - smoothstep(uPress.x - 0.12, uPress.x, 1.0 - uv.y + 0.05 * rag);
+    bg *= 1.0 - smoothstep(streak * 0.6, streak * 0.6 + 0.4, uPress.y);
     ba = clamp(ba * bg, 0.0, 1.0); bb = clamp(bb * bg, 0.0, 1.0); bc = clamp(bc * bg, 0.0, 1.0); bd = clamp(bd * bg, 0.0, 1.0);
     a = 1.0 - (1.0 - a) * (1.0 - ba);
     b = 1.0 - (1.0 - b) * (1.0 - bb);
