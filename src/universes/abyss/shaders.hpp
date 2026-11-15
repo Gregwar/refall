@@ -56,8 +56,10 @@ uniform vec3 uQuadCol;
 uniform float uSlow;         // the abyss goes dark
 uniform vec4 uLure;          // anglerfish lure: x, y, intensity, facing
 uniform vec3 uLureCol;
-uniform float uOut;          // lights going out (game over, bridge)
+uniform float uOut;          // lights going out (game over, bridge, setup / teardown)
 uniform float uOver;
+uniform float uSurface;      // the setup's descent: 1 just under the surface .. 0 in the deep
+uniform float uClose;        // the teardown: the water closing to black
 uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform vec4 uWell, uColL, uColR;
@@ -180,6 +182,9 @@ void main() {
     // The abyss goes dark (slow motion) and the lights go out (game over).
     col *= 1.0 - 0.94 * uSlow;
     col *= 1.0 - 0.55 * uOver;
+    // The descent: the surface's light overhead, fading as the scene sinks; the teardown closes the water.
+    col += (uSurf * 0.35 + uWater * 0.6) * uSurface * uSurface * exp(-(top - p.y) * 0.12) * (0.7 + 0.5 * murk);
+    col *= 1.0 - 0.85 * uClose;
 
     // The anglerfish (slow motion): its lure lights the water, its body only a silhouette in that halo.
     if (uLure.z > 0.001) {

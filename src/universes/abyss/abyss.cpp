@@ -13,7 +13,9 @@
 // it; a cleared row's jelly breaks into points of light (a brief burst of sparks); a quad makes the plankton bloom
 // all through the water at once; slow motion puts every light out but the pieces' (long slow glows) and an anglerfish's lure; game over
 // sinks the stack into the dark, its lights going out one by one. It leaves and enters by the water closing over it,
-// the distant lights going out one by one.
+// the distant lights going out one by one. Before a song the scene sinks in from the surface (its light overhead
+// fading, the snow streaming up, the seabed rising into view), then the living lights come on one by one; after
+// it they go out one by one and the water closes to black.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane, so the well, the
 // previews and the HUD anchors sit exactly where the layout puts them.
@@ -579,9 +581,10 @@ void AbyssUniverse::simulate(const Game& game, const MusicState& music, float dt
     // Marine snow sinks slowly, wandering.
     const float bot = viewC_.y - viewH_.y, top = viewC_.y + viewH_.y;
     for (Flake& f : snow_) {
-        f.y -= (0.10f + 0.35f * f.z) * wdt;
+        f.y -= (0.10f + 0.35f * f.z - (1.5f + 4.f * f.z) * descent_) * wdt; // (the descent: it streams up past)
         f.x += 0.06f * std::sin(worldTime_ * 0.3f + f.phase) * wdt;
         if (f.y < bot - 0.5f) { f.y = top + 0.5f; f.x = rng_.range(-viewH_.x, viewH_.x); }
+        if (f.y > top + 0.5f) { f.y = bot - 0.5f; f.x = rng_.range(-viewH_.x, viewH_.x); }
     }
 
     // Jellyfish (mid, peak): rise on each contraction, drift, fade away.
@@ -757,13 +760,13 @@ void AbyssUniverse::sprite(std::vector<Sprite>& out, int kind, vec2 a, vec2 b, f
 void AbyssUniverse::buildLife(const MusicState& music) {
     (void)music;
     const float dark = (1.f - 0.95f * slow_) * (1.f - 0.6f * over_);
-    const float out = std::max(saturate(bridge_.amount * 1.25f), over_ * 0.85f); // lights going out one by one
+    const float out = std::max({saturate(bridge_.amount * 1.25f), over_ * 0.85f, phaseOut_}); // lights going out one by one
     auto alive = [&](float h) { return smoothstepf(h, h + 0.12f, 1.f - out); };
     const float wm = life_;
 
     // Marine snow: faint, sparse, lit a little more in the calm.
     {
-        const float lit = (0.55f + 0.45f * rays_) * dark * (1.f - saturate(bridge_.amount));
+        const float lit = (0.55f + 0.45f * rays_ + descent_) * dark * (1.f - saturate(bridge_.amount)) * (1.f - closing_);
         for (const Flake& f : snow_) {
             const float s = lerpf(0.018f, 0.06f, f.z) * f.size;
             const float a = lerpf(0.10f, 0.42f, f.z) * lit * (0.8f + 0.2f * std::sin(worldTime_ * 0.7f + f.phase));
@@ -1179,9 +1182,12 @@ void AbyssUniverse::setBoxes(GLuint p) const {
 }
 
 void AbyssUniverse::drawWorld() {
-    const float out = std::max(saturate(bridge_.amount * 1.25f), over_ * 0.85f);
+    const float out = std::max({saturate(bridge_.amount * 1.25f), over_ * 0.85f, phaseOut_});
     glUseProgram(progWorld_);
-    set4f(progWorld_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    // (the descent: the water's view starts higher up, the seabed below the frame)
+    set4f(progWorld_, "uView", viewC_.x, viewC_.y + 10.f * descent_ * descent_, viewH_.x, viewH_.y);
+    set1f(progWorld_, "uSurface", descent_);
+    set1f(progWorld_, "uClose", closing_);
     set1f(progWorld_, "uPx", px_);
     set1f(progWorld_, "uTime", worldTime_);
     set1f(progWorld_, "uLv", lv_);
@@ -1232,6 +1238,10 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     bare_ = f.bare;
+    // the setup: the descent from the surface, then the lights coming on; the teardown: they go out, the water closes
+    descent_ = 1.f - smoothstepf(0.f, 0.6f, f.setup);
+    phaseOut_ = std::max(1.f - smoothstepf(0.3f, 0.9f, f.setup), smoothstepf(0.f, 0.75f, f.teardown));
+    closing_ = smoothstepf(0.35f, 1.f, f.teardown);
     {
         Palette target = paletteOf(variant_);
         if (inDrop_) {
@@ -1275,7 +1285,7 @@ void AbyssUniverse::render(const Frame& f, GLuint fbo) {
     // the whale, far behind
     if (!whaleMesh_.empty()) {
         const float k = whale_.t / whale_.dur;
-        const float a = (0.88f * smoothstepf(0.f, 0.06f, k) * (1.f - smoothstepf(0.94f, 1.f, k))) * world * (1.f - 0.95f * slow_) * (1.f - over_);
+        const float a = (0.88f * smoothstepf(0.f, 0.06f, k) * (1.f - smoothstepf(0.94f, 1.f, k))) * world * (1.f - 0.95f * slow_) * (1.f - over_) * (1.f - phaseOut_);
         if (a > 0.005f) {
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             glUseProgram(progWhale_);
