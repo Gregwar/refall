@@ -23,6 +23,9 @@
 // dust out of the slot. Slow motion is the evening: the sun sinks low and warm, the shadows stretch, windows light up,
 // time stretches. Game over topples the stack out of the slot onto the plaza, block by block from the top, in dust.
 //
+// Around a song, a day: the setup is a sunrise (the sun up from the horizon, low and warm, its long shadows drawing in
+// across the plaza, the lit windows going out); the teardown a sunset, the evening falling and the windows lighting.
+//
 // Layout contract: the reference camera lowered to EYE_Y and looking straight ahead, its image shifted back (a lens
 // shift): the board's plane keeps its pixels, the place recedes in perspective.
 #include "universes/brutalist/brutalist.hpp"
@@ -846,12 +849,16 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     float kick = kickIn_;
     kickIn_ = 0.f;
     const float slowE = smoothstepf(0.f, 1.f, slow_);
+    // the scene's setup and teardown: a sunrise (the sun up from the horizon, low and warm, the long shadows drawing
+    // in, the lit windows going out) and a sunset (the evening of slow motion, the sun sinking to the horizon)
+    const float dusk = std::max(1.f - smoothstepf(0.f, 0.8f, f.setup), smoothstepf(0.f, 0.9f, f.teardown));
+    const float eveE = std::max(slowE, smoothstepf(0.f, 1.f, dusk));
 
     // ---- The sun along its arc (slow motion: the evening, low and warm).
     sunAz_ = approach(sunAz_, sunAzTo_, 0.28f, wdt);
     sunEl_ = approach(sunEl_, sunElTo_, 0.28f, wdt);
-    const float el = lerpf(sunEl_, std::min(sunEl_, 0.13f), slowE);
-    float az = lerpf(sunAz_, sunAz_ * 0.6f + (sunAz_ < 0.f ? -0.55f : 0.55f), slowE);
+    const float el = lerpf(lerpf(sunEl_, std::min(sunEl_, 0.13f), eveE), 0.02f, dusk * dusk);
+    float az = lerpf(sunAz_, sunAz_ * 0.6f + (sunAz_ < 0.f ? -0.55f : 0.55f), eveE);
     {
         // never so far round that the stack's faces lose the sun
         const float lim = std::acos(std::min(1.f, 0.3f / std::cos(el)));
@@ -1159,18 +1166,18 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     // ---- Uniforms shared by the passes.
     const Palette& P = pal_;
     // the light by level: a veiled sun when calm, out at mid, hard at a peak; the drop's swell on top
-    const float veil = std::max(P.veil, saturate(1.f - 0.45f * wm - 0.3f * wp - 0.25f * drop)) * (1.f - 0.6f * slowE);
-    const float sunK = (0.33f + 0.3f * wm + 0.22f * wp + 0.15f * drop + 0.3f * swell_) * (1.f + 0.3f * slowE);
+    const float veil = std::max(P.veil, saturate(1.f - 0.45f * wm - 0.3f * wp - 0.25f * drop)) * (1.f - 0.6f * eveE);
+    const float sunK = (0.33f + 0.3f * wm + 0.22f * wp + 0.15f * drop + 0.3f * swell_) * (1.f + 0.3f * eveE) * (1.f - 0.6f * dusk);
     const vec3 warm = vec3(1.f, 0.62f, 0.34f);
-    const vec3 sunCol = lerp(lerp(P.sun, P.sun * vec3(1.06f, 0.98f, 0.88f), drop), P.sun * warm * 1.1f, slowE) * sunK;
-    const float ambK = (1.f + 0.6f * veil) * (1.f - 0.25f * slowE);
-    const vec3 ambSky = lerp(P.sky, P.sky * vec3(0.8f, 0.75f, 1.f), slowE) * ambK, ambGround = P.ground * ambK * lerpf(1.f, 0.7f, slowE);
+    const vec3 sunCol = lerp(lerp(P.sun, P.sun * vec3(1.06f, 0.98f, 0.88f), drop), P.sun * warm * 1.1f, eveE) * sunK;
+    const float ambK = (1.f + 0.6f * veil) * (1.f - 0.25f * eveE);
+    const vec3 ambSky = lerp(P.sky, P.sky * vec3(0.8f, 0.75f, 1.f), eveE) * ambK, ambGround = P.ground * ambK * lerpf(1.f, 0.7f, eveE);
     const float soft = lerpf(1.f, 7.f, veil) * (1.f - 0.3f * drop);
     const float sat = 0.9f + 0.06f * wm + 0.04f * wp + 0.1f * drop;
-    const vec3 zen = lerp(P.zen, P.zen * vec3(0.55f, 0.5f, 0.75f), slowE * 0.7f);
-    const vec3 hor = lerp(P.hor, lerp(P.hor, vec3(1.f, 0.55f, 0.35f), 0.5f) * 0.9f, slowE * 0.8f);
-    const vec3 glow = lerp(P.glow, vec3(1.f, 0.5f, 0.22f) * 1.2f, slowE) * (0.9f + 0.3f * swell_);
-    const float winOn = saturate(P.warmLights * (0.45f + 0.25f * wm + 0.3f * drop) + 0.75f * slowE);
+    const vec3 zen = lerp(P.zen, P.zen * vec3(0.55f, 0.5f, 0.75f), eveE * 0.7f);
+    const vec3 hor = lerp(P.hor, lerp(P.hor, vec3(1.f, 0.55f, 0.35f), 0.5f) * 0.9f, eveE * 0.8f);
+    const vec3 glow = lerp(P.glow, vec3(1.f, 0.5f, 0.22f) * 1.2f, eveE) * (0.9f + 0.3f * swell_);
+    const float winOn = saturate(P.warmLights * (0.45f + 0.25f * wm + 0.3f * drop) + 0.75f * eveE);
     const float glint = 1.f + 1.2f * drop * smoothstepf(0.f, 0.6f, dropT_);
     // a quad: the sun flashes on all the glazing at once, eased in, fading over a second or two
     const float flash = quadT_ < 4.f ? smoothstepf(0.f, 0.3f, quadT_) * std::exp(-std::max(0.f, quadT_ - 0.3f) * 1.5f) : 0.f;
@@ -1237,9 +1244,9 @@ void BrutalistUniverse::render(const Frame& f, GLuint fbo) {
     glUseProgram(progSky_);
     common(progSky_);
     setMat(progSky_, "uInvVP", invVp_);
-    set1f(progSky_, "uStars", P.stars * (1.f - 0.5f * slowE));
+    set1f(progSky_, "uStars", P.stars * (1.f - 0.5f * eveE));
     set1f(progSky_, "uSeed", seedF_);
-    set3f(progSky_, "uDisc", lerp(P.sun, P.sun * warm, slowE) * (P.stars > 0.5f ? 1.5f : 6.f));
+    set3f(progSky_, "uDisc", lerp(P.sun, P.sun * warm, eveE) * (P.stars > 0.5f ? 1.5f : 6.f));
     ugl::drawFullscreen();
     glDepthRange(0.0, 1.0);
     glDepthFunc(GL_LESS);
