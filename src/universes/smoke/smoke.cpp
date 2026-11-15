@@ -604,7 +604,6 @@ void SmokeUniverse::simulate(const Game& game, const MusicState& music, float dt
     for (auto& s : sweeps_) s.t += wdt;
     sweeps_.erase(std::remove_if(sweeps_.begin(), sweeps_.end(), [](const Sweep& s) { return s.t > 0.6f; }), sweeps_.end());
 
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 }
 
 // =====================================================================================================
@@ -706,13 +705,6 @@ void SmokeUniverse::buildBoard(const Game& g) {
         if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
     }
     tiles_.insert(tiles_.end(), blocks.begin(), blocks.end());
-    // The bonus gauge: an iris.
-    {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float R = layout::GAUGE_R;
-        tile(gc.x, gc.y, R * 1.1f, R * 1.1f, vec3(1.f), 1.f, 4, saturate(gaugeShown_), g.bonusReady() ? 1.f : 0.f,
-             g.bonusActive() ? 1.f : 0.f, R);
-    }
 }
 
 void SmokeUniverse::buildFx() {
@@ -1032,7 +1024,6 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progTile_, "uNoise", 0);
         setMat(progTile_, "uVP", vp_);
         set1f(progTile_, "uPx", px_);
-        set1f(progTile_, "uTime", worldTime_);
         set3f(progTile_, "uLPos", lp);
         set3f(progTile_, "uLAxis", ax);
         set1f(progTile_, "uCone", cone * 1.15f);
@@ -1046,10 +1037,6 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progTile_, "uKey", lerp(cur_.light, vec3(1.f), 0.45f));
         set1f(progTile_, "uKeyGain", keyOn);
         set3f(progTile_, "uFill", cur_.fill);
-        set3f(progTile_, "uRim", cur_.rim);
-        set3f(progTile_, "uGaugeLit", lerp(cur_.light, vec3(1.f), 0.3f) * 1.2f);
-        set3f(progTile_, "uGaugeBlade", lerp(cur_.panel, cur_.ink, 0.12f));
-        set3f(progTile_, "uGaugeSlow", lin(0xc9d6ff) * 0.6f);
         set1f(progTile_, "uSlow", slow_);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);

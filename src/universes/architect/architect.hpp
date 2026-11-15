@@ -119,7 +119,7 @@ private:
     bool hardPending_ = false;
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
-    void drawHud(const Game& g, const std::vector<HudRect>& panels);
+    void drawHud(const std::vector<HudRect>& panels);
     void hudInks(vec3& ink, vec3& halo, vec3& accent) const;
     std::vector<float> shapes_;
     void flushShapes();
@@ -161,7 +161,7 @@ private:
     float beatClock_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
     bool slowOn_ = false;
-    float slow_ = 0.f, gaugeShown_ = 0.f, dimT_ = 0.f, night_ = 0.f;
+    float slow_ = 0.f, dimT_ = 0.f, night_ = 0.f;
     bool bare_ = false;
     Bridge bridge_;
     Rng rng_{77};

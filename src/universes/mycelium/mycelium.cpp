@@ -267,7 +267,7 @@ bool MyceliumUniverse::init(int width, int height) {
     instanced(puffVao_, puffVbo_, 4, sizeof(float) * 16);
     instanced(glowVao_, glowVbo_, 3, sizeof(float) * 12);
     instanced(cloudVao_, cloudVbo_, 2, sizeof(float) * 8);
-    instanced(spriteVao_, spriteVbo_, 3, sizeof(SpriteInst));
+    instanced(spriteVao_, spriteVbo_, 2, sizeof(SpriteInst));
     instanced(cellVao_, cellVbo_, 3, sizeof(CellInst));
     // the mushrooms' lathe: (u around, v along the profile), instanced
     {
@@ -901,9 +901,9 @@ void MyceliumUniverse::buildBoard(const Game& g) {
     }
 }
 
-void MyceliumUniverse::sprite(vec2 p, float size, const vec3& col, float alpha, int mode, float param, float param2) {
+void MyceliumUniverse::sprite(vec2 p, float size, const vec3& col, float alpha) {
     if (alpha <= 0.004f || size <= 0.f) return;
-    sprites_.push_back({{p.x, p.y, size, (float)mode}, {col.x, col.y, col.z, alpha}, {param, param2, 0.f, 0.f}});
+    sprites_.push_back({{p.x, p.y, size, 0.f}, {col.x, col.y, col.z, alpha}});
 }
 
 // =====================================================================================================
@@ -1297,7 +1297,6 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
     for (auto& fd : fading_) fd.t += dt;
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > CLEAR_T; }), fading_.end());
-    if (!f.bare) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     sprites_.clear();
     for (const Mote& m : motes_) {
@@ -1305,13 +1304,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         const float t = m.age / m.life;
         float a = smoothstepf(0.f, 0.12f, t) * (1.f - smoothstepf(0.6f, 1.f, t)) * m.bright;
         if (m.kind == 1) a = smoothstepf(0.f, 0.08f, t) * (1.f - smoothstepf(0.85f, 1.f, t)) * m.bright;
-        sprite(m.p, m.size * (m.kind == 1 ? 2.f : 1.6f), m.col, a * world, 0);
-    }
-    if (!f.bare) {
-        const vec3 gc = layout::GAUGE_CENTER;
-        const float fill = game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const bool on = game.bonusReady() || game.bonusActive();
-        sprite(V(gc.x, gc.y), layout::GAUGE_R * 1.25f, on ? pal_.threadTip : pal_.accent, 1.f, 1, fill, on ? 1.f : 0.f);
+        sprite(m.p, m.size * (m.kind == 1 ? 2.f : 1.6f), m.col, a * world);
     }
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
@@ -1792,7 +1785,6 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         glBlendFunc(GL_ONE, GL_ONE);
         glUseProgram(progSprite_);
         setMat(progSprite_, "uVP", vp_);
-        set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
         glBindVertexArray(spriteVao_);
         glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
         glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);

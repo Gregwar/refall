@@ -255,7 +255,7 @@ out vec4 frag;
 void main() { frag = vec4(vCol.rgb * vCol.a, vCol.a); }
 )";
 
-// ---------------------------------------------------------------- tiles: the stack, the piece, previews, gauge
+// ---------------------------------------------------------------- tiles: the stack, the piece, previews
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, age, angle, unused. a3: extra.
 inline const char* TILE_VS = R"(#version 330 core
@@ -284,8 +284,8 @@ in vec2 vWorld;
 flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
 uniform sampler2D uNoise;
-uniform float uPx, uTime, uBridge;
-uniform vec3 uTint, uKey, uFill, uRim, uBridgeInk, uGaugeLit, uGaugeBlade, uGaugeSlow;
+uniform float uPx, uBridge;
+uniform vec3 uTint, uKey, uFill, uBridgeInk;
 uniform float uKeyGain, uSlow;
 
 vec2 boxGrad(vec2 p, vec2 b, float r) {
@@ -379,37 +379,6 @@ void main() {
         col = mix(smokeC, col, keep);
         float a = cov * (keep + rim * 0.45) * alpha * (1.0 - uBridge);
         frag = vec4(col * a, a);
-        return;
-    }
-    if (kind == 4) {
-        // the bonus gauge: a camera's iris opening as it fills (six blades); the lamp shines through it when ready,
-        // silver while the slow motion runs
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.3;
-        float lvl = v3.x, ready = v3.y, isOn = v3.z;
-        float open = mix(0.1, 0.78, lvl);
-        float rot = lvl * 1.2;
-        float ang = atan(q.y, q.x) + rot;
-        const float SEG = 1.0471976;
-        float sa = mod(ang, SEG) - SEG * 0.5;
-        float hexR = length(q) * cos(sa) / cos(SEG * 0.5);
-        float hole = 1.0 - smoothstep(open - aa, open + aa, hexR);
-        float disc = 1.0 - smoothstep(0.92 - aa, 0.92 + aa, r);
-        float blades = disc * (1.0 - hole);
-        float bi = floor(mod(ang, 6.2831853) / SEG);
-        float bladeShade = 0.55 + 0.45 * fract(bi * 0.618 + 0.2);
-        float ringR = exp(-pow((r - 0.96) / (0.03 + aa), 2.0));
-        float pulse = 0.75 + 0.25 * sin(uTime * 3.5);
-        vec3 lightC = isOn > 0.5 ? uGaugeSlow : uGaugeLit;
-        vec3 col = uGaugeBlade * bladeShade * blades;
-        float glow = hole * disc * (0.25 + 0.75 * lvl) * (ready > 0.5 || isOn > 0.5 ? 0.9 + 0.3 * pulse : 0.5);
-        col += lightC * glow;
-        col += uRim * ringR * (0.4 + 0.6 * ready);
-        float a = max(disc, ringR * 0.8);
-        col = mix(col, uBridgeInk * a, uBridge);
-        frag = vec4(col * alpha, a * alpha);
         return;
     }
     discard;

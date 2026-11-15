@@ -1339,13 +1339,10 @@ void ArchitectUniverse::hudInks(vec3& ink, vec3& halo, vec3& accent) const {
     accent = ugl::toSrgb(dark > 0.5f ? lin(V.accent) : mixDisplay(lin(V.accent), lin(0x000000), 0.15f));
 }
 
-// The panels and the bonus gauge (the lettering: hudLine): a ring of twelve fine strokes, like an architect's
-// scale, the charged ones in the accent.
-void ArchitectUniverse::drawHud(const Game& g, const std::vector<HudRect>& panels) {
+// The panels (the lettering: hudLine).
+void ArchitectUniverse::drawHud(const std::vector<HudRect>& panels) {
     vec3 ink, halo, accent;
     hudInks(ink, halo, accent);
-    const float vis = 1.f - smoothstepf(0.3f, 0.8f, bridge_.amount);
-
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -1353,34 +1350,6 @@ void ArchitectUniverse::drawHud(const Game& g, const std::vector<HudRect>& panel
             const float q[6][6] = {{x0, y0, c.x, c.y, c.z, a}, {x1, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a},
                                    {x0, y0, c.x, c.y, c.z, a}, {x1, y1, c.x, c.y, c.z, a}, {x0, y1, c.x, c.y, c.z, a}};
             for (auto& v : q) shapes_.insert(shapes_.end(), v, v + 6);
-        }
-        flushShapes();
-    }
-
-    if (vis > 0.01f && !bare_) {
-        const vec2 c = project(layout::GAUGE_CENTER);
-        const float r = project(vec3(layout::GAUGE_CENTER.x + layout::GAUGE_R, layout::GAUGE_CENTER.y, 0.f)).x - c.x;
-        const float fill = g.bonusActive() ? saturate(g.bonusLeft() / Game::BONUS_SECONDS) : saturate(gaugeShown_);
-        const int N = Game::BONUS_LINES;
-        auto stroke = [&](float cx, float cy, float ang, float len, float wid, const vec3& col, float al) {
-            const float ux = std::sin(ang), uy = -std::cos(ang), vx = -uy, vy = ux;
-            const float hl = len * 0.5f, hw = wid * 0.5f;
-            const float px[4] = {cx - ux * hl - vx * hw, cx + ux * hl - vx * hw, cx + ux * hl + vx * hw, cx - ux * hl + vx * hw};
-            const float py[4] = {cy - uy * hl - vy * hw, cy + uy * hl - vy * hw, cy + uy * hl + vy * hw, cy - uy * hl + vy * hw};
-            const int idx[6] = {0, 1, 2, 0, 2, 3};
-            for (int k : idx) {
-                const float v[6] = {px[k], py[k], col.x, col.y, col.z, al};
-                shapes_.insert(shapes_.end(), v, v + 6);
-            }
-        };
-        for (int i = 0; i < N; i++) {
-            const float a = TAU * i / N;
-            const float cx = c.x + std::sin(a) * r * 0.78f, cy = c.y - std::cos(a) * r * 0.78f;
-            const float part = saturate(fill * N - i);
-            const float al = (g.bonusReady() ? 0.85f : 0.5f) * vis * (1.f - 0.5f * dimT_);
-            stroke(cx, cy, a, r * 0.42f, r * 0.07f, halo, al * 0.5f);
-            stroke(cx, cy, a, r * 0.38f, r * 0.04f, ink, al * (1.f - part) * 0.7f);
-            stroke(cx, cy, a, r * 0.42f, r * 0.075f, accent, part * 0.95f * vis * (1.f - 0.5f * dimT_));
         }
         flushShapes();
     }
@@ -1564,7 +1533,6 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
     clearing_.erase(std::remove_if(clearing_.begin(), clearing_.end(), [](const ClearCell& c) { return c.t > c.delay + 0.36f; }), clearing_.end());
     for (Dust& d : dust_) d.t += dt;
     dust_.erase(std::remove_if(dust_.begin(), dust_.end(), [](const Dust& d) { return d.t > d.life; }), dust_.end());
-    if (!bare_) gaugeShown_ = approach(gaugeShown_, game.bonusGauge(), 3.f, dt);
 
     // ---- The hour.
     const float tod = saturate(p_ / as::L_DONE);
@@ -1897,7 +1865,7 @@ void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    drawHud(game, f.panels);
+    drawHud(f.panels);
     glDisable(GL_BLEND);
     if (gpuQ) {
         glEndQuery(GL_TIME_ELAPSED);

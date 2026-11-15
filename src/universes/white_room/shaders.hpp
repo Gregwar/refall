@@ -425,7 +425,7 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- tiles: the ghost, the gauge
+// ---------------------------------------------------------------- tiles: the ghost
 
 // a0: center xy, half size xy (board). a1: rgb, alpha. a2: kind, unused x3. a3: extra.
 inline const char* TILE_VS = R"(#version 330 core
@@ -451,8 +451,7 @@ inline const char* TILE_FS = R"(#version 330 core
 in vec2 vLocal;
 flat in vec4 v0, v1, v2, v3;
 out vec4 frag;
-uniform float uPx, uBridge, uTime;
-uniform vec3 uInk, uGroove, uAccent, uBridgeInk;
+uniform float uPx, uBridge;
 
 void main() {
     int kind = int(v2.x + 0.5);
@@ -467,30 +466,6 @@ void main() {
         float fill = (1.0 - smoothstep(-px, px, sd)) * 0.07;
         float a = (line + fill) * alpha * (1.0 - uBridge);
         frag = vec4(pc * a, a);
-        return;
-    }
-    if (kind == 4) {
-        // the bonus gauge: a fine groove in the wall, the filled arc in ink, a dot of the accent once it is ready
-        float R = v3.w;
-        vec2 q = p / R;
-        float r = length(q);
-        float aa = px / R * 1.2;
-        float lvl = v3.x, ready = v3.y, isOn = v3.z;
-        float ang = atan(q.x, q.y);                  // 0 at the top, clockwise
-        float frac = (ang < 0.0 ? ang + 6.2831853 : ang) / 6.2831853;
-        float ring = 1.0 - smoothstep(0.012, 0.012 + aa, abs(r - 0.82));
-        float arc = (1.0 - smoothstep(0.035, 0.035 + aa, abs(r - 0.82))) * step(frac, lvl);
-        float dot_ = 1.0 - smoothstep(0.13, 0.13 + aa, length(q - vec2(0.0, 0.0)));
-        float breathe = 0.75 + 0.25 * sin(uTime * 2.5);
-        vec3 col = uGroove * ring;
-        float a = ring * 0.6;
-        col = mix(col, uInk, arc);
-        a = max(a, arc);
-        float dk = dot_ * max(ready, isOn) * (isOn > 0.5 ? 1.0 : breathe);
-        col = mix(col, uAccent, dk);
-        a = max(a, dk);
-        col = mix(col, uBridgeInk * a, uBridge);
-        frag = vec4(col * alpha * a, a * alpha);
         return;
     }
     discard;

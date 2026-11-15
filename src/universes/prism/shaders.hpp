@@ -29,7 +29,6 @@ float fbm3(vec2 p) {
 // kind 1: a pool of light (an ellipse at a, radii b)
 // kind 2: a glint (a star at a, size w0: a hot core, a soft halo and four thin rays, the horizontal ones longer)
 // kind 3: a spark (a short crisp streak from a to b)
-// kind 4: a ring (the bonus gauge: center a, radius b.x, thickness b.y, fill i0, ready i1)
 inline const char* LIGHT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aA0;
@@ -51,10 +50,8 @@ void main() {
         w = (a + b) * 0.5 + u * aCorner.x * (L * 0.5 + e) + v * aCorner.y * e;
     } else if (kind < 1.5) {
         w = a + aCorner * b * 1.8;
-    } else if (kind < 2.5) {
-        w = a + aCorner * aA1.x;
     } else {
-        w = a + aCorner * (b.x + b.y * 3.0);
+        w = a + aCorner * aA1.x;
     }
     vP = w;
     gl_Position = uVP * vec4(w, 0.0, 1.0);
@@ -80,7 +77,7 @@ void main() {
     } else if (kind < 1.5) {
         vec2 q = (vP - a) / b;
         g = exp(-dot(q, q) * 2.2) * vA1.z;
-    } else if (kind < 2.5) {
+    } else {
         float s = vA1.x;
         vec2 q = (vP - a) / s;
         float r2 = dot(q, q);
@@ -88,16 +85,6 @@ void main() {
         float rays = exp(-abs(q.y) / (th * 1.4)) * pow(max(0.0, 1.0 - abs(q.x)), 3.0)
                    + 0.55 * exp(-abs(q.x) / (th * 1.4)) * pow(max(0.0, 1.0 - abs(q.y) * 1.6), 3.0);
         g = (exp(-r2 * 90.0) * 1.6 + exp(-r2 * 14.0) * 0.35 + rays * 0.7) * vA1.z;
-    } else {
-        // the gauge: a thin ring, filled clockwise from the top
-        vec2 q = vP - a;
-        float R = b.x, th = b.y;
-        float d = abs(length(q) - R);
-        float ring = 1.0 - smoothstep(th * 0.5 - uPx, th * 0.5 + uPx, d);
-        float ang = atan(q.x, q.y);
-        float f = ang < 0.0 ? ang + 6.2831853 : ang;
-        float filled = step(f, vA1.z * 6.2831853);
-        g = ring * mix(0.12, 1.0, max(filled, vA1.w)) + vA1.w * exp(-d * d / (th * th) * 0.4) * 0.25;
     }
     frag = vec4(vA2.rgb * g, 0.0);
 }
