@@ -95,6 +95,7 @@ private:
     int pile_[10 * pixu::CELL] = {};
     float pileSink_ = 0;
     LockFx lock_{};
+    bool hardDropped_ = false; // a HardDrop just came: the Lock after it bounces
     std::vector<Trail> trails_;
     float levelUpT_ = -1;
     Rng rng_{4242};
