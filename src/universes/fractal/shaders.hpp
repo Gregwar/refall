@@ -39,6 +39,7 @@ uniform vec2 uCycle[8];      // the attracting cycle (the inside) and its period
 uniform int uPeriod;
 uniform float uDesat, uGrain;
 uniform vec4 uWell;          // the well's half extents, its corner, 1 shown / 0 not (a break between songs)
+uniform vec3 uPrev[4];       // the hold and next previews: center, half size (a soft pale halo behind each)
 const int MAXIT = 200;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
@@ -90,6 +91,11 @@ void main() {
     col *= 1.0 + uGrain * (hash(floor(gl_FragCoord.xy)) - 0.5);
     AA = max(fwidth(p.x), 1e-4) * 0.75;
     if (uWell.w > 0.5) {
+        // the previews: a soft pale halo behind each, so the small pieces read over the flower (no edge, no panel)
+        for (int i = 0; i < 4; i++) {
+            float dp = dBox(p - uPrev[i].xy, vec2(uPrev[i].z * 1.35, uPrev[i].z * 0.8), uPrev[i].z * 0.8);
+            col = mix(col, uWellFill, 0.78 * (1.0 - smoothstep(-0.5, 0.9, dp)));
+        }
         float ds = dBox(p - vec2(0.18, -0.3), uWell.xy, uWell.z);
         col = mix(col, col * uShade, 0.35 * (1.0 - smoothstep(-0.3, 1.1, ds)));
         float dw = dBox(p, uWell.xy, uWell.z);
