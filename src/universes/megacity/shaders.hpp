@@ -772,7 +772,8 @@ void main() {
             vec2 dq = vec2(vUV.x + 0.9, hy - 0.85);
             float door = (1.0 - side) * (1.0 - smoothstep(0.4, 0.43, abs(dq.x))) * (1.0 - smoothstep(0.85, 0.88, abs(dq.y)));
             float flick = 0.85 + 0.15 * vnoise(vec2(uTime * 3.0, 1.0));
-            em += uWinWarm * (wnd * 2.6 + door * 1.2 * (0.6 + 0.4 * smoothstep(0.85, -0.6, dq.y))) * flick;
+            em += uWinWarm * (wnd * 2.6 + door * 1.2 * (0.6 + 0.4 * smoothstep(0.85, -0.6, dq.y))) * flick *
+                  smoothstep(0.0, 0.25, uLit); // (the fire lit, put out around a song)
             alb = mix(alb, uRoofB * 0.35, frameW + door * 0.3);
             alb *= 1.0 - wnd * 0.6;
             // the log ends at the corners

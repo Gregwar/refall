@@ -259,6 +259,7 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
+    float camPull_ = 0.f; // the setup / teardown: the camera drawn back (0: its place)
     float dimT_ = 0.f;
     float time_ = 0.f;
     Bridge bridge_;

@@ -23,7 +23,8 @@
 // patch on the beat; lanterns rise over a town, searchlights sweep the sky over a modern city. A clear's cells
 // dissolve into light that flows out of the well to the city; a quad adds fireworks. Slow motion slows the traffic
 // and cools the light; game over turns the lights off from the edge inward, and the next game starts again from a
-// hut (the camera dives back down).
+// hut (the camera dives back down). Around a song the camera eases in as the lights come on from the heart of the
+// town out, and after it they go out from the edge in as the camera draws back.
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind it
 // has its own 3D camera.
@@ -392,7 +393,7 @@ void MegaCityUniverse::updateCamera(float dt) {
     vec3 right = normalize(cross(fwd, vec3(0, 1, 0)));
     vec3 upv = cross(right, fwd);
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
-    const float D = F / tanH_;
+    const float D = F / tanH_ * (1.f + 0.45f * camPull_);
     vec3 eye = anchor - dirA * D;
     eye.y = std::max(eye.y, 0.9f + 0.05f * Htop * wSky);
     eye_ = eye;
@@ -969,13 +970,21 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     traffic_ = approach(traffic_, 0.35f + 0.3f * wm + 0.35f * wp + 0.3f * life, 0.8f, dt);
     trafficPhase_ += wdt * (0.25f + 0.25f * wm + 0.35f * wp + 0.2f * life);
 
+    // the setup: the camera eases in as the lights come on from the heart of the town out; the teardown: they go
+    // out from the edge in (as at a game over) as the camera draws back
+    const float lightsOn = smoothstepf(0.08f, 0.62f, f.setup) * (1.f - smoothstepf(0.3f, 0.9f, f.teardown));
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.75f, f.setup), out = smoothstepf(0.2f, 1.f, f.teardown);
+        camPull_ = in * in + out * out;
+    }
     updateCamera(dt);
     const float G = std::min(g_, G_MAX);
     const float cityR = std::exp(G);
     const float gcv = std::min(gc_, G_MAX);
     const float nightK0 = smoothstepf(std::log(7.f), std::log(5000.f), gcv);
     const float nightK = nightK0 + pal_.nightBias * (1.f - nightK0);
-    const float glowK = smoothstepf(std::log(300.f), std::log(2.e4f), gcv) * (0.85f + 0.15f * wp + 0.2f * life) * (1.f - 0.7f * over_);
+    const float glowK = smoothstepf(std::log(300.f), std::log(2.e4f), gcv) * (0.85f + 0.15f * wp + 0.2f * life) * (1.f - 0.7f * over_) *
+                        (0.3f + 0.7f * lightsOn);
     const float spaceK = smoothstepf(1.2e4f, 9.e4f, alt_);
     const float R = mcity::R_EARTH;
     const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
@@ -984,8 +993,8 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     const float sunElR = sunEl * PI / 180.f;
     const vec3 sunDir = normalize((fwdH * std::cos(pal_.sunAz) + rightH * std::sin(pal_.sunAz)) * std::cos(sunElR) + vec3(0.f, std::sin(sunElR), 0.f));
     const float sunUp = smoothstepf(-0.06f, 0.03f, std::sin(sunElR));
-    const float lit = saturate((0.42f + 0.14f * wm + 0.16f * wp + 0.08f * life + 0.1f * swell_) * (0.75f + 0.25f * nightK));
-    const float overR = over_ > 0.001f ? cityR * 1.02f * (1.f - over_) : 1e30f;
+    const float lit = saturate((0.42f + 0.14f * wm + 0.16f * wp + 0.08f * life + 0.1f * swell_) * (0.75f + 0.25f * nightK)) * lightsOn;
+    const float overR = std::min(over_ > 0.001f ? cityR * 1.02f * (1.f - over_) : 1e30f, lightsOn < 1.f ? cityR * 1.02f * lightsOn : 1e30f);
     // the pixel's size at the anchor; lots smaller than a few of them are left to the ground's shader
     const float pxM = camD_ * 2.f * tanH_ / (float)worldT_.h;
     const float drawR0 = 2.2f * pxM / 0.07f;
