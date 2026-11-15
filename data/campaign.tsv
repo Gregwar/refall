@@ -4,62 +4,62 @@
 # Columns are separated by tabs; lines starting with # are comments. The game reads this file from the
 # sources when it starts (else the copy built into it, or --campaign FILE).
 # stage	song	id	universe	easy	normal	expert	title
-1	1	H_9xqc084UA	PRISM:AURORA	1.5	3.0	9.0	Small Town Kid - Shards
-1	2	pJguiXxgaFo	WATERCOLOR:TURNER SUNSET	2.4	5.4	11.1	AVAION - Colors
-1	3	YyFyudLOkeA	TOPOGRAPHY:GLACIER	3.3	7.8	13.3	Jasper Tygner - First Light
-1	4	gjTkkswfVLE	ORIGAMI:INDIGO	4.8	11.4	16.0	Last Sun - Care 4 U
-2	1	agu39idW5VY	SMOKE:DAYLIGHT	2.0	3.8	11.4	Magic Wand ft. Emma Carn - Sunset
-2	2	7PcQtXcOxrY	NOTEPAD:CHALK	2.9	6.3	13.5	Mura Masa ft. A$AP Rocky - Love$ick
-2	3	uOFTqVi-qp4	ELECTRON:PLASMA	3.8	8.8	15.8	San Holo - Light
-2	4	HZ6L_6a7RcQ	FRACTAL:SUNSHINE	5.4	12.6	18.4	Elderbrook - Shallow Water
-3	1	8ayH60ET4U0	GARDEN:SPRING DAY	2.4	4.6	13.8	ODESZA ft. WYNNE & Mansionair - Line Of Sight
-3	2	JNVXi3QpaMo	BRICKS:NIGHT	3.4	7.2	15.9	Louis The Child ft. K.Flay - It's Strange
-3	3	-h96iBmn2LE	WHITE ROOM:NORDIC	4.4	9.8	18.2	oskar med k - Too Tense
-3	4	1TlckH2mCmI	RISOGRAPH:VIOLET & GREEN	6.0	13.8	20.9	AVAION, PaulWetz, Nu Aspect, YUMA - Sleepless
-4	1	bCneCCvp0N0	CITY:SNOWFALL	2.9	5.4	16.2	Killen. - Get Lost
-4	2	iZAqaykiS70	MANGA:SHONEN	3.9	8.1	18.3	L'Impératrice - Vanille Fraise (Edit)
-4	3	u40t4XMxmMc	PINK VIBE:ROSE	4.9	10.8	20.6	Lucian ft. Philosofie - Do My Thing
-4	4	oHRrxtcm21Q	MIRROR:VAPOR	6.7	15.0	23.3	Lane 8 ft. Arctic Lake - Road
-5	1	sUwm6SjlpJ0	ORBITAL STATION:ORBITAL DAWN	3.4	6.1	18.6	AVAION - About You
-5	2	HQl4o0g-wy0	LIBRARY:MORNING	4.4	9.0	20.7	nimino - Rest Easy
-5	3	KiIc54yyktw	NEON:AURORA	5.5	11.9	23.0	HUGEL x Topic x Arash ft. Daecolm - I Adore You
-5	4	S9KsOqTftFA	POLAR NIGHT:SOLAR STORM	7.3	16.1	25.7	MA:RK - That's Where I Should Be
-6	1	-NHdDcdJCIk	ISLANDS:CARIBBEAN	3.8	6.9	21.0	Matteo Cole - I Like The Way You Move
-6	2	pLuQ0MGLBXU	SUMI:KAKI & CHARCOAL	4.9	9.9	23.1	Mura Masa - What If I Go?
-6	3	qbGZDEFHBmc	DOCKS:NORTH SEA	6.1	12.9	25.4	Jai Wolf - Indian Summer
-6	4	TkceGi1EXzk	BRUTALIST:MOONLIGHT	7.9	17.3	28.1	Felix Jaehn ft. Freddy Verano, Linying - Shine
-7	1	IhVvPrGh48E	MEGACITY:NEON	4.3	7.7	23.4	Funkin Matt - Open Your Eyes
-7	2	N2hKqI8nU7w	SPECIMEN:INDIGO	5.4	10.8	25.6	Lonely in the Rain ft. Oaks - Chemicals
-7	3	Og0A10H7YqU	RUINS:MAYA	6.6	13.9	27.9	Aaron Hibell, Alex Wann - set me free
-7	4	xhpudFvsMjU	RAINY WINDOW:SODIUM	8.5	18.5	30.6	SRTW ft. Charity Children - Whispering Still (Little Rose Remix)
-8	1	S9ld5hiKg8w	LIMBO:MOOR	4.8	8.5	25.8	Nora En Pure - Come With Me
-8	2	UKou-bIHgYA	LIGHTSOURCE:NEON	6.0	11.7	28.0	Nu Aspect - Sweet Release
-8	3	lTgIZtKoYQc	DIORAMA:LANTERN HARBOR	7.2	14.9	30.3	LAVERN ft. NEIMY - All I Want Is You
-8	4	QBcX3cZQdek	BIOME:CALM NOON	9.2	19.7	33.0	Lewis Capaldi - Bruises (Delta Jack Remix)
-9	1	SHg5c59JF7w	ABYSS:ULTRAMARINE	5.2	9.3	28.2	Rome in Silver - Waiting
-9	2	H6jDQK1-O6I	FLUO:CONCRETE	6.5	12.6	30.4	Palastic x ALLKNIGHT - Heaven
-9	3	nXIZCMwFKis	HEAT:ARCTIC	7.7	15.9	32.7	sadagain & iilliaa - I Need Your Kiss (sadagain Version)
-9	4	MlwBZ2MSNtE	LASER SHOW:AMBER	9.8	20.9	35.4	FISHER x Kita Alexander - Atmosphere
-10	1	r-sGtrldNKc	TILES:BYZANTINE	5.7	10.1	30.6	it's murph - Food for the Soul
-10	2	QjCiLzm-0kI	PLANKS:HONEY	7.0	13.5	32.8	Mozambo & Basic Tape ft. Julia Church - Bright Side
-10	3	6xD7YhdzmIc	TERRARIUM:ORCHID	8.2	16.9	35.1	Womack & Womack - Teardrops (Rules Remix)
-10	4	TsdT5bSGypc	GLOWING FOREST:VERDIGRIS	10.4	22.1	37.9	Zen/it - Crazy
-11	1	KgkQ_HvNjSQ	GIANT TREE:CANDY	6.1	10.9	33.0	Lost Frequencies ft. Bandit - Dance In The Sunlight
-11	2	dwvCb0FKEwY	RAIN:NEON STREET	7.5	14.4	35.2	PhatAdam - I Know You See
-11	3	heUI3TYAZjw	MARBLES:MIDNIGHT	8.8	17.9	37.5	Crunkz - I Don't Care
-11	4	3KFPGWIfLnM	SONAR:AMBER	11.0	23.3	40.3	BUNT. - Only Friends
-12	1	eqc50IErJxo	CELESTIAL OCEAN:DAWN	6.6	11.6	35.4	AVAION - drown
-12	2	iWiilOH4cQE	RECYCLE:TERRAZZO	8.0	15.3	37.6	Gregory Porter - Liquid Spirit (Claptone Remix)
-12	3	fMvEOabCEFc	BAUHAUS:NACHT	9.3	19.0	39.9	CamelPhat, Josh Gigante ft. Kuuda - So Good
-12	4	zjANqMu7m2c	LOST PANDA:BLOSSOM	11.6	24.4	42.7	INNERVERSE - Reverie
-13	1	NwxenaTGGA4	CORAL REEF:MOONLIT	7.1	12.4	37.8	The Bausa - Magnetic
-13	2	6QvMcQ2Eejo	ARCHITECT:TROPICS	8.5	16.2	40.0	CloZee - Koto
-13	3	43A0MdrRZzE	CRYSTAL CAVE:EMBER	9.9	20.0	42.4	NOTSOBAD - Inna Fire
-13	4	VUzg5liIjcs	LANTERNS:MIDNIGHT	12.3	25.6	45.2	Elderbrook - Lost In The View
-14	1	qdjmd9J6cr0	KINTSUGI:SERPENTINE & GOLD	7.5	13.2	40.2	Petit Biscuit - Memories
-14	2	dP7KuXdb-wE	BLUEPRINT:DIAZO	9.0	17.1	42.4	Sultan + Shepard - Start Again
-14	3	BSVOAD-Nyfc	TIDE POOL:MORNING	10.4	21.0	44.8	Elderbrook - Never Get Enough
-14	4	4V3exJW1-Ig	SWISS POSTER:ALPINE VILLAGE	12.9	26.8	47.6	Elderbrook x Tourist - Howl
+1	1	H_9xqc084UA	PRISM:AURORA	1.5	3.0	7.0	Small Town Kid - Shards
+1	2	pJguiXxgaFo	WATERCOLOR:TURNER SUNSET	2.4	5.4	8.8	AVAION - Colors
+1	3	YyFyudLOkeA	TOPOGRAPHY:GLACIER	3.3	7.8	10.7	Jasper Tygner - First Light
+1	4	gjTkkswfVLE	ORIGAMI:INDIGO	4.8	11.4	13.0	Last Sun - Care 4 U
+2	1	agu39idW5VY	SMOKE:DAYLIGHT	2.0	3.8	7.5	Magic Wand ft. Emma Carn - Sunset
+2	2	7PcQtXcOxrY	NOTEPAD:CHALK	2.9	6.3	9.4	Mura Masa ft. A$AP Rocky - Love$ick
+2	3	uOFTqVi-qp4	ELECTRON:PLASMA	3.8	8.8	11.3	San Holo - Light
+2	4	HZ6L_6a7RcQ	FRACTAL:SUNSHINE	5.4	12.6	13.6	Elderbrook - Shallow Water
+3	1	8ayH60ET4U0	GARDEN:SPRING DAY	2.4	4.6	8.6	ODESZA ft. WYNNE & Mansionair - Line Of Sight
+3	2	JNVXi3QpaMo	BRICKS:NIGHT	3.4	7.2	10.4	Louis The Child ft. K.Flay - It's Strange
+3	3	-h96iBmn2LE	WHITE ROOM:NORDIC	4.4	9.8	12.4	oskar med k - Too Tense
+3	4	1TlckH2mCmI	RISOGRAPH:VIOLET & GREEN	6.0	13.8	14.8	AVAION, PaulWetz, Nu Aspect, YUMA - Sleepless
+4	1	bCneCCvp0N0	CITY:SNOWFALL	2.9	5.4	10.0	Killen. - Get Lost
+4	2	iZAqaykiS70	MANGA:SHONEN	3.9	8.1	11.9	L'Impératrice - Vanille Fraise (Edit)
+4	3	u40t4XMxmMc	PINK VIBE:ROSE	4.9	10.8	13.9	Lucian ft. Philosofie - Do My Thing
+4	4	oHRrxtcm21Q	MIRROR:VAPOR	6.7	15.0	16.3	Lane 8 ft. Arctic Lake - Road
+5	1	sUwm6SjlpJ0	ORBITAL STATION:ORBITAL DAWN	3.4	6.1	11.8	AVAION - About You
+5	2	HQl4o0g-wy0	LIBRARY:MORNING	4.4	9.0	13.7	nimino - Rest Easy
+5	3	KiIc54yyktw	NEON:AURORA	5.5	11.9	15.8	HUGEL x Topic x Arash ft. Daecolm - I Adore You
+5	4	S9KsOqTftFA	POLAR NIGHT:SOLAR STORM	7.3	16.1	18.2	MA:RK - That's Where I Should Be
+6	1	-NHdDcdJCIk	ISLANDS:CARIBBEAN	3.8	6.9	13.9	Matteo Cole - I Like The Way You Move
+6	2	pLuQ0MGLBXU	SUMI:KAKI & CHARCOAL	4.9	9.9	15.8	Mura Masa - What If I Go?
+6	3	qbGZDEFHBmc	DOCKS:NORTH SEA	6.1	12.9	17.9	Jai Wolf - Indian Summer
+6	4	TkceGi1EXzk	BRUTALIST:MOONLIGHT	7.9	17.3	20.4	Felix Jaehn ft. Freddy Verano, Linying - Shine
+7	1	IhVvPrGh48E	MEGACITY:NEON	4.3	7.7	16.2	Funkin Matt - Open Your Eyes
+7	2	N2hKqI8nU7w	SPECIMEN:INDIGO	5.4	10.8	18.2	Lonely in the Rain ft. Oaks - Chemicals
+7	3	Og0A10H7YqU	RUINS:MAYA	6.6	13.9	20.3	Aaron Hibell, Alex Wann - set me free
+7	4	xhpudFvsMjU	RAINY WINDOW:SODIUM	8.5	18.5	22.8	SRTW ft. Charity Children - Whispering Still (Little Rose Remix)
+8	1	S9ld5hiKg8w	LIMBO:MOOR	4.8	8.5	18.7	Nora En Pure - Come With Me
+8	2	UKou-bIHgYA	LIGHTSOURCE:NEON	6.0	11.7	20.8	Nu Aspect - Sweet Release
+8	3	lTgIZtKoYQc	DIORAMA:LANTERN HARBOR	7.2	14.9	22.9	LAVERN ft. NEIMY - All I Want Is You
+8	4	QBcX3cZQdek	BIOME:CALM NOON	9.2	19.7	25.4	Lewis Capaldi - Bruises (Delta Jack Remix)
+9	1	SHg5c59JF7w	ABYSS:ULTRAMARINE	5.2	9.3	21.5	Rome in Silver - Waiting
+9	2	H6jDQK1-O6I	FLUO:CONCRETE	6.5	12.6	23.6	Palastic x ALLKNIGHT - Heaven
+9	3	nXIZCMwFKis	HEAT:ARCTIC	7.7	15.9	25.8	sadagain & iilliaa - I Need Your Kiss (sadagain Version)
+9	4	MlwBZ2MSNtE	LASER SHOW:AMBER	9.8	20.9	28.3	FISHER x Kita Alexander - Atmosphere
+10	1	r-sGtrldNKc	TILES:BYZANTINE	5.7	10.1	24.6	it's murph - Food for the Soul
+10	2	QjCiLzm-0kI	PLANKS:HONEY	7.0	13.5	26.6	Mozambo & Basic Tape ft. Julia Church - Bright Side
+10	3	6xD7YhdzmIc	TERRARIUM:ORCHID	8.2	16.9	28.8	Womack & Womack - Teardrops (Rules Remix)
+10	4	TsdT5bSGypc	GLOWING FOREST:VERDIGRIS	10.4	22.1	31.5	Zen/it - Crazy
+11	1	KgkQ_HvNjSQ	GIANT TREE:CANDY	6.1	10.9	27.8	Lost Frequencies ft. Bandit - Dance In The Sunlight
+11	2	dwvCb0FKEwY	RAIN:NEON STREET	7.5	14.4	29.9	PhatAdam - I Know You See
+11	3	heUI3TYAZjw	MARBLES:MIDNIGHT	8.8	17.9	32.1	Crunkz - I Don't Care
+11	4	3KFPGWIfLnM	SONAR:AMBER	11.0	23.3	34.8	BUNT. - Only Friends
+12	1	eqc50IErJxo	CELESTIAL OCEAN:DAWN	6.6	11.6	31.2	AVAION - drown
+12	2	iWiilOH4cQE	RECYCLE:TERRAZZO	8.0	15.3	33.3	Gregory Porter - Liquid Spirit (Claptone Remix)
+12	3	fMvEOabCEFc	BAUHAUS:NACHT	9.3	19.0	35.6	CamelPhat, Josh Gigante ft. Kuuda - So Good
+12	4	zjANqMu7m2c	LOST PANDA:BLOSSOM	11.6	24.4	38.3	INNERVERSE - Reverie
+13	1	NwxenaTGGA4	CORAL REEF:MOONLIT	7.1	12.4	34.8	The Bausa - Magnetic
+13	2	6QvMcQ2Eejo	ARCHITECT:TROPICS	8.5	16.2	37.0	CloZee - Koto
+13	3	43A0MdrRZzE	CRYSTAL CAVE:EMBER	9.9	20.0	39.3	NOTSOBAD - Inna Fire
+13	4	VUzg5liIjcs	LANTERNS:MIDNIGHT	12.3	25.6	42.0	Elderbrook - Lost In The View
+14	1	qdjmd9J6cr0	KINTSUGI:SERPENTINE & GOLD	7.5	13.2	38.6	Petit Biscuit - Memories
+14	2	dP7KuXdb-wE	BLUEPRINT:DIAZO	9.0	17.1	40.8	Sultan + Shepard - Start Again
+14	3	BSVOAD-Nyfc	TIDE POOL:MORNING	10.4	21.0	43.1	Elderbrook - Never Get Enough
+14	4	4V3exJW1-Ig	SWISS POSTER:ALPINE VILLAGE	12.9	26.8	45.9	Elderbrook x Tourist - Howl
 15	1	jmnBSB7DCTI	MYCELIUM:ORCHID	8.0	14.0	42.6	BUNT., Malou - i need u
 15	2	h1l4pDXbkic	VECTOR:P4 WHITE	9.5	18.0	44.8	The xx - You Got The Love (Florence And The Machine Cover)
 15	3	a0W9bS7qZSk	SHADOW:COLOR GEL	11.0	22.0	47.2	BUNT. ft. Tom Odell - Best Day of My Life (BUNT. Version)
