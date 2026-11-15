@@ -115,7 +115,7 @@ private:
     ugl::Target sceneT_, aoT_[2];
     int samples_ = 4;
     mat4 vp_, view_, proj_, invVp_, lightVp_[2];
-    vec3 eye_{0, 5, 34};
+    vec3 eye_{0, 5, 34}, eyeHome_{0, 5, 34}; // this frame's eye, the layout's (the setup and teardown move it)
     void drawPlanks(GLuint prog, bool shadow);
 
     // ---- Song, variant.
