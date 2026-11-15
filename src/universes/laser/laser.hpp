@@ -64,7 +64,7 @@ private:
     struct ConeGpu { float a0[4], a1[4], a2[4]; };
     std::vector<BeamGpu> beams_;
     std::vector<ConeGpu> cones_;
-    vec2 randomSpot();
+    vec2 randomSpot(Rng& rng);
     vec2 srcPos(const Proj& p) const;
     vec3 laserColor(int type, int id) const;
     vec3 pieceColor(int type, int id) const;
@@ -72,6 +72,8 @@ private:
     void addProjection(vec2 src, const std::vector<vec2>& corners, const vec3& col, float power, float depth, bool lens);
     void addLens(vec2 src, const vec3& col, float power, float gain);
     void buildLenses(); // a break: the projectors alone, glowing in the haze, nothing projected
+    void buildStage(float setup, float teardown); // the room's projectors tracing the well's frame around a song
+    std::vector<Proj> stage_;
     void updateProjectors(const Game& game, const MusicState& music, float dt);
     // The outline corners of a set of cells (game grid), at their drawn positions.
     std::vector<vec2> outline(const std::vector<std::pair<int, int>>& cells, const Game* game, float dx, float dy) const;
