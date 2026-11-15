@@ -108,6 +108,7 @@ private:
     // ---- The camera (world: meters, the pond at the origin, y up; drawn relative to the eye).
     vec3 eye_{0, 1, 10}, look_{0, 0, -1}, camR_{1, 0, 0}, camU_{0, 1, 0}, camUp_{0, 1, 0};
     float tanH_ = 0.5f, aspect_ = 1.78f;
+    float camBack_ = 0.f, camTilt_ = 0.f; // the setup / teardown: the camera further back (x its distance), looking down more (rad)
     mat4 proj3_, vp3_;
     float gc_ = -99.f, gcVel_ = 0.f;
     float alt_ = 1.f;
