@@ -16,6 +16,9 @@
 // sorted on stacks by color: the table fills up with spent blocks over the song. Slow motion turns the lamp to a cool
 // moonlight; game over dims it.
 //
+// Around a song, the projector is switched on and off: in the setup its lamp warms up from a dull red filament and
+// its iris opens on the wall; in the teardown the iris closes back to a spot and the lamp cools down to dark.
+//
 // Layout contract: a flat orthographic view of the wall at the reference camera's scale on the board plane; the
 // model is ray marched in its own corner with a camera of its own.
 #include "universes/shadow/shadow.hpp"
@@ -666,7 +669,12 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
 
     float intensity = lerpf(0.8f, 1.02f, saturate(lv_ * 0.5f)) * (0.95f + 0.1f * energyS_) * flicker_ * (1.f + 0.12f * dropSwell_);
     if (overT_ >= 0.f) intensity *= 1.f - 0.55f * smoothstepf(0.f, 0.6f, overT_) * (1.f - smoothstepf(2.2f, 4.f, overT_));
-    vec3 light1 = lin(V.light) * intensity;
+    // the scene's setup and teardown: the projector switched on (its lamp warming up from a dull filament, then its
+    // iris opening on the wall), and switched off (the iris closing, the lamp cooling down)
+    const float lamp = std::min(smoothstepf(0.f, 0.5f, f.setup), 1.f - smoothstepf(0.4f, 0.95f, f.teardown));
+    const float iris = 0.12f + 0.88f * std::min(smoothstepf(0.25f, 0.8f, f.setup), 1.f - smoothstepf(0.05f, 0.7f, f.teardown));
+    intensity *= lamp * lamp;
+    vec3 light1 = lin(V.light) * intensity * lerp(vec3(1.f, 0.35f, 0.08f), vec3(1.f), lamp);
     light1 = lerp(light1, MOON * 0.8f * intensity, 0.75f * slow_);
     // a peak warms the tungsten a touch
     light1 = light1 * lerp(vec3(1.f), vec3(1.05f, 1.f, 0.92f), peak * (variant_ == 1 ? 0.3f : 1.f));
@@ -724,8 +732,8 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
         gelShadow[i] = gelModel[i] * comp * 0.6f;
         gelShadow[i] = vec3(std::min(gelShadow[i].x, 1.1f), std::min(gelShadow[i].y, 1.1f), std::min(gelShadow[i].z, 1.1f));
     }
-    const float circle1[4] = {0.f, 0.3f, 13.6f, 12.9f};
-    const float circle2[4] = {2.6f, -0.2f, 14.6f, 13.6f};
+    const float circle1[4] = {0.f, 0.3f, 13.6f * iris, 12.9f * iris};
+    const float circle2[4] = {2.6f, -0.2f, 14.6f * iris, 13.6f * iris};
     const float sway = std::sin((float)(music.hasSong ? music.beat : worldTime_ * 2.0) * TAU / 32.f);
     const vec2 echoOff{(2.1f + 0.3f * sway) * drop_, 0.15f * drop_};
     const vec2 echoScale{1.f + 0.05f * drop_, 1.f + 0.1f * drop_};
