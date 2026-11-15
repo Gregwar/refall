@@ -930,6 +930,7 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         l.alpha = 0.45f * smoothstepf(0.5f, 1.5f, runTime_);
     }
     if (break_ == BREAK_OUT) {
+        b.leaving = true;
         const float hide = breakSkip_ ? 1.f : OUT_HIDE;
         b.play = 1.f - smoothstepf(0.f, hide, t);
         const float dark0 = hide + 0.4f;

@@ -174,6 +174,13 @@ struct Frame {
     // A universe lettered by the host (Universe::hostText): each HUD line's box as the host letters it (pixels,
     // top-left origin: x0, y0, x1, y1), in `hud`'s order, for a world that makes room for the text.
     const std::vector<vec4>* hudBoxes = nullptr;
+    // The scene's setup and teardown, around a song: `setup` rises 0 -> 1 from the black before a song (the world
+    // appearing, alone, then the game coming in) and stays 1; `teardown` rises 0 -> 1 after a song (the game fading
+    // away, then the world alone fading to black) and is 0 otherwise. The same values in the world-alone frame and in
+    // the whole one. A universe makes something happen in them (its scene assembling, coming to life, or settling
+    // and going away) rather than standing still; they follow the host's fades, so time keeps passing in them.
+    // Test hooks: ZEN_TEST_SETUP=x / ZEN_TEST_TEARDOWN=x force them (with ZEN_BARE=1 for the world alone).
+    float setup = 1.f, teardown = 0.f;
 };
 
 class Universe {

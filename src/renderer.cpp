@@ -323,7 +323,18 @@ vec2 Renderer::project(const vec3& p) const {
 void Renderer::render(const Game& game, const MusicState& music, double time, float dt, bool paused,
                       const std::vector<HudText>& hud, float fade) {
     if (!cur_.u) return;
-    const Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
+    Frame f{game, music, time, dt, paused, dim_, fade, hud, panels_};
+    // the scene's setup / teardown, from the break's fades: the world coming out of the black then the game coming in,
+    // or the game going away then the world into the black
+    {
+        const float play = saturate(brk_.play), black = saturate(brk_.black);
+        if (brk_.leaving) f.teardown = saturate(0.4f * (1.f - play) + 0.6f * black);
+        else if (play < 1.f || black > 0.f) f.setup = saturate(0.6f * (1.f - black) + 0.4f * play);
+        static const char* ts = std::getenv("ZEN_TEST_SETUP");
+        static const char* tt = std::getenv("ZEN_TEST_TEARDOWN");
+        if (ts) f.setup = saturate((float)std::atof(ts));
+        if (tt) f.teardown = saturate((float)std::atof(tt));
+    }
     bonusK_ = std::clamp(bonusK_ + (game.bonusActive() && !game.over() ? dt / 0.5f : -dt / 0.9f), 0.f, 1.f);
     ringShown_ = approach(ringShown_, game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : game.bonusGauge(), game.bonusActive() ? 12.f : 3.f, dt);
     ringHot_ = approach(ringHot_, game.bonusReady() || game.bonusActive() ? 1.f : 0.f, 4.f, dt);
@@ -611,6 +622,8 @@ void Renderer::renderBreak(const Frame& f) {
         if (bare) {
             std::vector<HudText> mute;
             Frame fb{*brk_.blank, f.music, f.time, whole ? 0.f : f.dt, false, false, f.fade, quiet(*cur_.u, brk_.bareHud, mute), panels_, true};
+            fb.setup = f.setup;
+            fb.teardown = f.teardown;
             if (host) { hudLines(*cur_.u, brk_.bareHud, lines, boxBare); fb.hudBoxes = &boxBare; }
             texB_.bind();
             cur_.u->render(fb, texB_.fbo);
@@ -876,6 +889,8 @@ const std::vector<HudText>& Renderer::quiet(const Universe& u, const std::vector
 
 Frame Renderer::withHud(const Frame& f, const std::vector<HudText>& hud) {
     Frame g{f.game, f.music, f.time, f.dt, f.paused, f.dim, f.fade, hud, f.panels, f.bare, f.card, f.hudBoxes};
+    g.setup = f.setup;
+    g.teardown = f.teardown;
     return g;
 }
 
@@ -991,6 +1006,8 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
     auto grab = [&](const std::vector<HudText>& hud, std::vector<unsigned char>& px) {
         Frame fb{*brk_.blank, f.music, f.time, 0.f, false, false, f.fade, hud, panels_, true};
         fb.card = true;
+        fb.setup = f.setup;
+        fb.teardown = f.teardown;
         texB_.bind();
         cur_.u->render(fb, texB_.fbo);
         glBindFramebuffer(GL_FRAMEBUFFER, texB_.fbo);
