@@ -140,6 +140,8 @@ Box measure(const Line& l);
 std::string upper(const std::string& utf8);
 std::string lower(const std::string& utf8);
 std::string titleCase(const std::string& utf8); // "VERSE" -> "Verse", "LIMBO" -> "Limbo"
+// A number with its thousands grouped: 123635 -> "123,635".
+std::string thousands(long long n);
 // "NAME · VARIANT" split at its middle dot (variant empty when there is none).
 void splitUniverse(const std::string& utf8, std::string& name, std::string& variant);
 

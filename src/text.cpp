@@ -444,6 +444,14 @@ std::string titleCase(const std::string& s) {
     }
     return o;
 }
+std::string thousands(long long n) {
+    std::string d = std::to_string(n < 0 ? -n : n), o;
+    for (size_t i = 0; i < d.size(); i++) {
+        if (i && (d.size() - i) % 3 == 0) o += ',';
+        o += d[i];
+    }
+    return n < 0 ? "-" + o : o;
+}
 void splitUniverse(const std::string& s, std::string& name, std::string& variant) {
     const size_t dot = s.find("\xC2\xB7");
     auto trim = [](std::string t) {

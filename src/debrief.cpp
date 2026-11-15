@@ -206,7 +206,7 @@ void Menu::drawDebrief(int w, int h) {
     const float a2 = at(0.9f), colX = 190 * u;
     p.text(F::JOSEFIN, "SCORE", cx - colX, Y(812), 17 * u, withA(dim, dim.a * a2), 0, 0.35f);
     p.text(F::JOSEFIN, "LINES", cx + colX, Y(812), 17 * u, withA(dim, dim.a * a2), 0, 0.35f);
-    p.text(F::JOSEFIN_LIGHT, std::to_string(debrief_.score), cx - colX, Y(874), 54 * u, withA(ink, a2), 0, 0.04f);
+    p.text(F::JOSEFIN_LIGHT, text::thousands(debrief_.score), cx - colX, Y(874), 54 * u, withA(ink, a2), 0, 0.04f);
     p.text(F::JOSEFIN_LIGHT, std::to_string(debrief_.lines), cx + colX, Y(874), 54 * u, withA(ink, a2), 0, 0.04f);
     p.line(cx, Y(822), cx, Y(878), 1 * u, withA(ink, 0.18f * a2));
     const float a3 = at(1.3f);

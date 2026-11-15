@@ -548,7 +548,7 @@ void Worlds::kalCampaign() {
             std::string name = idx >= 0 ? universes::entry(idx).name : spec(fs, k);
             p.text(F::JOSEFIN, name, x + 52 * u, y, 20 * u, hex(0xffffff, 0.85f + 0.15f * g), -1, 0.25f);
             if (o && beaten(fs, k)) {
-                p.text(F::JOSEFIN, std::to_string(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * u, hex(0xffd27a), 1, 0.15f);
+                p.text(F::JOSEFIN, text::thousands(m.progress_->best(fs, k, m.diff_)), colS, y, 18 * u, hex(0xffd27a), 1, 0.15f);
                 p.text(F::JOSEFIN, linesStr(m.progress_->lines(fs, k, m.diff_)) + " L", colL, y, 18 * u, hex(0xffd27a, 0.7f), 1, 0.15f);
             }
         }
