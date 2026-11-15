@@ -985,7 +985,8 @@ void main() {
             // a crane: lattice steel, yellow, a red light at its top
             float lat = gridLine(hy / max(vS.x * 2.0, 1.0), 0.07) + gridLine((hy + vUV.x) / max(vS.x * 2.0, 1.0), 0.05);
             alb = vec3(0.75, 0.55, 0.08) * (0.55 + 0.6 * clamp(lat, 0.0, 1.0));
-            em += vec3(1.0, 0.1, 0.05) * smoothstep(vS.z * 0.985, vS.z, hy) * 2.0 * lit;
+            // (on the mast alone: the jib is a thin box, its whole height would glow as a red bar)
+            em += vec3(1.0, 0.1, 0.05) * smoothstep(vS.z - 1.5, vS.z, hy) * step(vS.x * 8.0, vS.z) * 2.0 * lit;
         }
     } else if (kind == 11) {
         // a bridge: stone or steel, arches below the deck, a lit parapet
