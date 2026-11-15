@@ -23,7 +23,8 @@
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
 // rising around it, a few happy hops (it never walks further: a drop never skips a stage).
-// The pieces are clean bamboo-segment cells, one solid color each; a cleared row shrinks away.
+// The pieces are clean bamboo-segment cells, one solid color each; a cleared row shrinks away. Before a song the camera
+// comes down out of the sky to the cub; after it the camera rises back into the sky.
 #include "universes/lostpanda/lostpanda.hpp"
 
 #include <algorithm>
@@ -1191,7 +1192,9 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // background sprites: the lights of hope, the snacks on their way, the fireflies
     bgSprites_.clear();
     fgSprites_.clear();
-    const vec2 kidHead = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - camY_ + kidH_ * 0.55f);
+    // the setup: the camera comes down out of the sky to the cub; the teardown: it rises back into the sky
+    viewY_ = camY_ + 9.f * (1.f - smoothstepf(0.f, 0.85f, f.setup) + smoothstepf(0.05f, 1.f, f.teardown));
+    const vec2 kidHead = V(xP_ + (float)(P_ - C_), GY + (float)(pathY(P_) - GY0) - viewY_ + kidH_ * 0.55f);
     for (Light& l : lights_) {
         if (l.age < 0.f) continue;
         if (l.kind > 0) {
@@ -1268,7 +1271,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progFront_, "uViewC", viewC_.x, viewC_.y);
         set2f(progFront_, "uViewH", viewH_.x, viewH_.y);
         set1f(progFront_, "uD", (float)C_ - xP_);
-        set1f(progFront_, "uCamY", camY_);
+        set1f(progFront_, "uCamY", viewY_);
         set1f(progFront_, "uPxP", 1.f / pxPerUnit_);
         set1f(progFront_, "uWorldA", world);
         set1f(progFront_, "uOver", smoothstepf(0.f, 1.f, over_));
@@ -1288,7 +1291,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
         set1f(progWorld_, "uPxP", 2.f * viewH_.y / worldT_.h);
         set1f(progWorld_, "uD", (float)C_ - xP_);
-        set1f(progWorld_, "uCamY", camY_);
+        set1f(progWorld_, "uCamY", viewY_);
         set1f(progWorld_, "uDawn", dawn);
         set1f(progWorld_, "uSubLight", 1.f);
         setTrain(progWorld_, 2.f * viewH_.y / worldT_.h);
@@ -1308,7 +1311,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progWorld_, "uSkyHor", look.skyHor);
         set3f(progWorld_, "uFog", look.fog);
         set3f(progWorld_, "uSunCol", look.sunCol);
-        set4f(progWorld_, "uSun", look.sunX, look.sunY - camY_ * 0.08f, look.sunR, look.sun);
+        set4f(progWorld_, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
         set3f(progWorld_, "uBridgeCol", bridge_.color);
         set1f(progWorld_, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
         ugl::drawFullscreen();
@@ -1334,12 +1337,12 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         const float alpha = world;
         const float fs = famS_;
         const float shift = (float)(C_END - C_);
-        const float fy = -camY_;
+        const float fy = -viewY_;
         if (shift < 2.f * viewH_.x + 12.f) {
             drawPanda(dad_, V(dadEndX_ + shift, GY + 0.7f * fs + fy), 6.9f * fs, -1.f, 1.f, alpha, 0.06f, false, 0);
             drawPanda(mom_, V(momEndX_ + shift, GY + 0.35f * fs + fy), 6.6f * fs, -1.f, 1.f, alpha, 0.03f, false, 0);
         }
-        const float ky = GY + (float)(pathY(P_) - GY0) - camY_;
+        const float ky = GY + (float)(pathY(P_) - GY0) - viewY_;
         {
             const double x0 = trainX_ + 17.6;
             kidRoll_ = inside ? (float)std::atan((trackY(x0 + 17.0) - trackY(x0)) / 17.0) : 0.f;

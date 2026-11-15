@@ -47,6 +47,7 @@ private:
     // at the cub's spot on the screen), camY_ the camera's height (the world y at the screen's ground line - GY).
     double P_ = 0.0, C_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
     float camY_ = 0.f;
+    float viewY_ = 0.f; // the height drawn: camY_, raised into the sky in the setup and the teardown
     // ---- The subway train: away, arriving, waiting (doors), riding with the cub, at the terminus, leaving, gone.
     enum { T_AWAY, T_ARRIVE, T_WAIT, T_OUT, T_RIDE, T_TERM, T_LEAVE, T_GONE };
     int train_ = T_AWAY;
