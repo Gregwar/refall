@@ -35,6 +35,7 @@ uniform vec4 uView;          // the board plane on screen: center, half extents 
 uniform vec3 uEye;
 uniform float uFocal, uAspect, uShift; // the camera: 1 / tan(half fov), aspect, lens shift (NDC)
 uniform float uWater, uTime, uRipple, uStars, uMoon, uPxAng;
+uniform float uStarsOn; // the scene's setup and teardown: the share of the stars out (they come out one by one)
 uniform vec3 uSkyTop, uSkyHor, uLake, uShore, uGlow;
 uniform vec4 uColL, uColR, uCorner;   // HUD rectangles (board plane x0, y0, x1, y1): no stars behind them
 uniform sampler2D uRefl;
@@ -53,7 +54,7 @@ vec3 sky(vec3 dir, bool stars, float hudClear, float glint) {
         vec2 a = vec2(atan(dir.x, -dir.z), asin(clamp(e, -1.0, 1.0))) * 38.0;
         vec2 gi = floor(a);
         float h = hash(gi);
-        if (h > 0.9) {
+        if (h > 0.9 && hash(gi + 11.3) < uStarsOn * 1.02 - 0.01) {
             vec2 sp = gi + vec2(hash(gi + 3.1), hash(gi + 7.7)) * 0.8 + 0.1;
             float d = length(a - sp) / 38.0;
             float tw = 0.75 + 0.25 * sin(uTime * (0.3 + h) + h * 40.0);

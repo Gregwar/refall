@@ -106,6 +106,10 @@ private:
     float swellIn_ = 0.f;
     float pulse_ = 0.f;        // the ripple of the beat grid (every two beats)
     float kickIn_ = 0.f, kickPrev_ = 0.f;
+    // The scene's setup and teardown: the clock of the lanterns released across the lake as the night comes out of
+    // the dark, the lake's lanterns lifted away once the song is over.
+    float setupClock_ = 0.f;
+    bool liftedAway_ = false;
     double lastHalf_ = -1.0;
     float beatClock_ = 0.f;
     float time_ = 0.f, worldTime_ = 0.f;
