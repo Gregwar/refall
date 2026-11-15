@@ -43,6 +43,7 @@ uniform vec3 uPaper, uGrid, uMargin;
 uniform vec4 uGridP;    // alpha, major every N (0: none), major alpha factor, line width (px)
 uniform vec4 uMarginP;  // x, count, alpha, -
 uniform float uLight, uWorld, uGrain, uAspect;
+uniform float uRule;     // the setup: how far down the page its grid and margin are ruled in (0 .. 1)
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     vec3 c = uPaper;
@@ -61,13 +62,15 @@ void main() {
         ga = mix(ga, min(1.0, ga * uGridP.z), major);
         line = max(line, major);
     }
-    c = mix(c, uGrid, line * ga * uWorld);
+    // (the setup: ruled in from the top down, row by row, the pen's front a little ahead in the middle)
+    float ruled = step(1.0 - vUv.y, uRule * 1.08 - 0.04 * (1.0 - abs(vUv.x * 2.0 - 1.0)));
+    c = mix(c, uGrid, line * ga * uWorld * ruled);
     // the margin rules
     for (int i = 0; i < 2; i++) {
         if (float(i) >= uMarginP.y) break;
         float d = abs(p.x - (uMarginP.x - float(i) * 0.16));
         float m = 1.0 - smoothstep(0.7 * uPx, 1.6 * uPx, d);
-        c = mix(c, uMargin, m * uMarginP.z * (0.85 + 0.15 * vnoise(vec2(p.y * 2.0, 5.0))) * uWorld);
+        c = mix(c, uMargin, m * uMarginP.z * (0.85 + 0.15 * vnoise(vec2(p.y * 2.0, 5.0))) * uWorld * ruled);
     }
     // a fine grain, a few pixels across, so the page is never flat: the paper's fibres and specks on the sheet,
     // the slate's grain and specks of chalk dust on the board
@@ -343,21 +346,19 @@ out vec4 frag;
 uniform sampler2D uScene;
 uniform float uLight, uFade, uDim, uBridge;
 uniform vec3 uBridgeCol, uBridgeInk;
-uniform float uCover;   // the setup / teardown: the notebook's cover, hinged on the left (0 open .. 1 closed)
-uniform vec3 uCoverCol;
+uniform vec2 uErase;    // the teardown: the eraser's reach (0 .. 1, rubbing up from the bottom) and its wobble
+uniform vec3 uPaperCol; // the bare page
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = uLight > 0.5 ? s.rgb : 1.0 - s.rgb;
     float cov = clamp(s.a, 0.0, 1.0);
-    if (uCover > 0.0) {
-        // the cover swinging up off the page (foreshortened toward its hinge, darker as it turns away from the
-        // light), its shadow on the page beside its edge
-        float px = 1.5 / float(textureSize(uScene, 0).x);
-        float d = vUv.x - uCover;
-        c *= 1.0 - 0.35 * uCover * (1.0 - uCover) * 4.0 * exp(-max(d, 0.0) / 0.05) * step(0.0, d);
-        vec3 cc = uCoverCol * mix(0.55, 1.0, uCover) * (1.0 + 0.6 * smoothstep(-px * 3.0, 0.0, d)); // a worn edge
-        cc *= 0.94 + 0.12 * fract(sin(dot(floor(gl_FragCoord.xy / 2.0), vec2(12.9898, 78.233))) * 43758.5453); // board
-        c = mix(c, cc, 1.0 - smoothstep(-px, px, d));
+    if (uErase.x > 0.0) {
+        // the eraser rubs the page clean, up from the bottom in the page's stop motion: a ragged, smudged front
+        float y = vUv.y + 0.03 * sin(vUv.x * 23.0 + uErase.y) + 0.02 * sin(vUv.x * 61.0 - uErase.y * 1.7);
+        float front = 1.0 - smoothstep(uErase.x * 1.12 - 0.06, uErase.x * 1.12, y);
+        vec3 smudge = uPaperCol * (0.93 + 0.04 * sin(vUv.x * 140.0 + vUv.y * 37.0));
+        c = mix(c, uPaperCol, front);
+        c = mix(c, smudge, front * (1.0 - smoothstep(0.0, 0.08, uErase.x * 1.12 - y)));
     }
     c = mix(c, mix(uBridgeCol, uBridgeInk, cov), uBridge);
     c *= 1.0 - 0.45 * uDim;
