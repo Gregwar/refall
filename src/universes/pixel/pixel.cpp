@@ -231,8 +231,8 @@ void PixelUniverse::onEvent(const GameEvent& ev, const Game& g) {
         if (ev.count >= 4 || forcedQuad_ >= 0) {
             forcedQuad_ = -1;
             // A screen-wide pixel firework.
-            flash_ = 1.f;
-            const int n = ev.backToBack ? 9 : 7;
+            flash_ = 0.3f;
+            const int n = ev.backToBack ? 5 : 4;
             for (int i = 0; i < n; i++) {
                 Rocket r;
                 const float u = (i + 0.5f) / n;
@@ -329,7 +329,7 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
         lock_.age += wdt;
         if (lock_.age > 0.2f) lock_.active = false;
     }
-    // Cleared cells: two frames of flash, then they burst into their pixels.
+    // Cleared cells: lit for two frames, then they crumble softly into a few of their pixels.
     for (size_t i = 0; i < dying_.size();) {
         Dying& d = dying_[i];
         d.age += wdt;
@@ -341,10 +341,10 @@ void PixelUniverse::simulate(const Game& g, const MusicState& m, float dt, float
                     uint8_t col = V.piece[d.type];
                     if (k == CELL - 1 || j == CELL - 1) col = V.pieceDark[d.type];
                     else if (k == 0 || j == 0) col = V.pieceLit[d.type];
-                    if (((k + j) & 1) && rng_.chance(0.35f)) continue;
+                    if (!rng_.chance(0.3f)) continue; // (a soft crumble: a few of its pixels, not all of them)
                     const float x = px0 + k, y = py0 + j;
-                    const float out = (x - cx) * rng_.range(1.2f, 2.6f);
-                    px_.push_back({x, y, out + rng_.range(-22.f, 22.f), -rng_.range(25.f, 95.f), 0, rng_.range(0.3f, 0.55f), 170.f,
+                    const float out = (x - cx) * rng_.range(0.4f, 0.9f);
+                    px_.push_back({x, y, out + rng_.range(-8.f, 8.f), -rng_.range(8.f, 32.f), 0, rng_.range(0.25f, 0.42f), 120.f,
                                    col, PX_DEBRIS});
                 }
         }
@@ -540,10 +540,10 @@ void PixelUniverse::drawStack(const Game& g) {
                 cv_.set(dx0 + i, dy1 - dh + j, tmp.px[k], tmp.cls[k]);
             }
     }
-    // Cleared cells: white, then light, then they burst (simulate()).
+    // Cleared cells: lit, then they crumble (simulate()).
     for (const Dying& d : dying_) {
         if (d.burst) continue;
-        drawBlock(bx0_ + d.x * CELL, by0_ + (d.y - Game::HIDDEN) * CELL, d.type, CELL, d.age < 0.05f ? 2 : 1, K_STACK);
+        drawBlock(bx0_ + d.x * CELL, by0_ + (d.y - Game::HIDDEN) * CELL, d.type, CELL, 1, K_STACK); // (lit, not a white flash)
     }
     // Game over grains and the sand pile.
     if (crumbleT_ >= 0) {
