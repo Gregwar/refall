@@ -86,6 +86,10 @@ uniform vec4 uGrade;            // warmth, calm haze, cool (slow motion), the su
 uniform float uWind;
 uniform int uElCount, uElFg;    // elements: [0, uElFg) on the meadow, [uElFg, uElCount) in the foreground
 uniform vec4 uEl[48];           // x (layer units), depth under the crest, size, kind
+uniform float uGold;            // the drop's golden hour 0..1
+uniform float uZoom;            // the drop's push-in: each depth scaled by 1 + uZoom x its parallax share
+uniform vec2 uShadow;           // the cast shadows' direction (-1 left, 1 right) and length
+uniform vec2 uSweep;            // a light sweeping across the layers on the drop: its position (board x), strength
 
 float PU; // board units per pixel
 
@@ -114,6 +118,21 @@ float sdBox(vec2 p, vec2 lo, vec2 hi) { vec2 d = max(lo - p, p - hi); return max
 float smin(float a, float b, float k) { float h = max(k - abs(a - b), 0.0) / k; return min(a, b) - h * h * k * 0.25; }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 void paint(inout vec3 col, vec3 c, float a) { col = mix(col, c, clamp(a, 0.0, 1.0)); }
+
+const float DEP[7] = float[7](0.03, 0.08, 0.16, 0.26, 0.38, 0.6, 1.0);
+float PU0;
+// The view point in depth i's own units: pushed in about a point low in the scene, shifted by its parallax.
+vec2 lay(vec2 pw, int i) {
+    float s = 1.0 + uZoom * DEP[i];
+    PU = PU0 / s;
+    vec2 pv = vec2(uView.x, -4.0);
+    return pv + (pw - pv) / s + vec2(uOff[i], 0.0);
+}
+// The rim of light along a ridge's sunny faces at the golden hour.
+vec3 rim(vec3 c, float h, float y, float lit) {
+    float band = fill(h - y) - fill(h - y - 0.16);
+    return mix(c, mix(c, uSunC, 0.6), uGold * lit * band);
+}
 
 // A range of peaks: tents of random heights and slopes (summits rounded by r), the highest of them, plus a jagged
 // detail. L: the range's own seed.
@@ -274,8 +293,8 @@ void element(vec2 p, vec4 e, float off, bool fg, inout vec3 col) {
 float shadowOf(vec2 p, vec4 e, float off, bool fg) {
     float x = e.x - off;
     float yb = (fg ? fgH(e.x) : meadowH(e.x)) - e.y;
-    float w = e.w < 2.5 ? 1.6 : 0.8;
-    vec2 q = (p - vec2(x + w * 0.55 * e.z, yb + 0.02)) / (vec2(w, 0.18) * e.z);
+    float w = (e.w < 2.5 ? 1.6 : 0.8) * uShadow.y;
+    vec2 q = (p - vec2(x + uShadow.x * w * 0.55 * e.z, yb + 0.02)) / (vec2(w, 0.18) * e.z);
     return cov((length(q) - 1.0) * 0.18 * e.z);
 }
 
@@ -307,8 +326,10 @@ float cloudD(vec2 p, int band) {
 }
 
 void main() {
-    PU = 1.0 / uView.z;
-    vec2 p = (gl_FragCoord.xy - 0.5 * uRes) * PU + uView.xy;
+    PU0 = 1.0 / uView.z;
+    PU = PU0;
+    vec2 pw = (gl_FragCoord.xy - 0.5 * uRes) * PU + uView.xy;
+    vec2 p = pw;
 
     // ---- Sky: a flat gradient, the sun with its halos, the rays of a drop.
     float sy = clamp((p.y + 2.0) / 15.0, 0.0, 1.0);
@@ -318,7 +339,7 @@ void main() {
         vec2 d = p - sp;
         float a = atan(d.y, d.x);
         float rays = step(0.5, fract(a / 6.28318 * 18.0 + uTime * 0.004));
-        paint(col, mix(col, uSunC, 0.4), uGrade.w * 0.3 * rays * smoothstep(uSun.z, uSun.z * 3.0, length(d)));
+        paint(col, mix(col, uSunC, 0.45), uGrade.w * 0.42 * rays * smoothstep(uSun.z, uSun.z * 3.0, length(d)));
         float r = length(d);
         paint(col, mix(col, uSunC, 0.35), cov(r - uSun.z * 2.1) * 0.55);
         paint(col, mix(col, uSunC, 0.6), cov(r - uSun.z * 1.5) * 0.6);
@@ -331,7 +352,8 @@ void main() {
 
     // ---- The far range: snow and rock, lit and shaded faces.
     {
-        float L = 1.0, x = p.x + uOff[1];
+        vec2 p = lay(pw, 1);
+        float L = 1.0, x = p.x;
         vec2 hr = vec2(uP0.x + uP0.z * 0.45, uP0.x + uP0.z), sr = vec2(0.75, 1.35);
         float cw = 5.0;
         float h = tents(x, L, cw, hr, sr, uP0.w) + jag(x, L, 0.45);
@@ -343,13 +365,23 @@ void main() {
         vec3 rock = mix(uRockSh, uRock, lit), ice = mix(uSnowSh, uSnow, lit);
         vec3 c = mix(rock, ice, snow);
         c = mix(c, uHaze, uP1.w * 0.35 * smoothstep(0.0, 6.0, h - p.y));
+        c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
+    }
+    // the golden hour's sun, low among the ranges (in front of the far one)
+    {
+        PU = PU0;
+        float r = length(pw - sp);
+        paint(col, mix(col, uSunC, 0.35), cov(r - uSun.z * 2.1) * 0.55 * uGold);
+        paint(col, mix(col, uSunC, 0.6), cov(r - uSun.z * 1.5) * 0.6 * uGold);
+        paint(col, uSunC, cov(r - uSun.z) * uGold);
     }
 
     // ---- The hero peak (a snow horn or a limestone tooth), then three receding ranges and the lake.
     float midH = uP3.w;
     {
-        float x = p.x + uOff[2];
+        vec2 p = lay(pw, 2);
+        float x = p.x;
         vec3 m = uMid1;
         float L = 2.0, cw = 6.5;
         vec2 hr = vec2(midH * 0.55, midH), sr = vec2(0.45, 0.9);
@@ -380,27 +412,33 @@ void main() {
             // the hero stands in front of the first range
             c = mix(c, hc, inH);
             h = max(h, hh);
+            lit = mix(lit, hl, inH);
         }
+        c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
     }
     {
-        float x = p.x + uOff[3];
+        vec2 p = lay(pw, 3);
+        float x = p.x;
         float L = 3.0, cw = 5.5;
         vec2 hr = vec2(midH * 0.3, midH * 0.7), sr = vec2(0.35, 0.75);
         float h = tents(x, L, cw, hr, sr, 0.9 + uP0.w) + jag(x, L, 0.2) - 1.5;
         float lit = facet(x, p.y, h, L, cw, hr, sr, 0.9 + uP0.w, 0.5);
         vec3 c = mix(uMid2, mix(uMid2, uHaze, 0.2), lit);
         c = mix(c, uHaze, uP1.w * smoothstep(0.0, 5.0, h - p.y));
+        c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
     }
     {
-        float x = p.x + uOff[4];
+        vec2 p = lay(pw, 4);
+        float x = p.x;
         float L = 4.0, cw = 7.0;
         vec2 hr = vec2(midH * 0.1, midH * 0.45), sr = vec2(0.3, 0.6);
         float h = tents(x, L, cw, hr, sr, 1.2 + uP0.w) + jag(x, L, 0.15) - 3.0;
         float lit = facet(x, p.y, h, L, cw, hr, sr, 1.2 + uP0.w, 0.5);
         vec3 c = mix(uMid3, mix(uMid3, uHaze, 0.16), lit);
         c = mix(c, uHaze, uP1.w * 0.8 * smoothstep(0.0, 5.0, h - p.y));
+        c = rim(c, h, p.y, lit);
         paint(col, c, fill(h - p.y));
         // the lake: a flat water plane with long glints, the sun's path on it
         if (uP1.z > -50.0) {
@@ -409,7 +447,7 @@ void main() {
             float r = floor(p.y * rows);
             float u = (x + uTime * 0.06 * (H(r) - 0.5)) / (1.4 + 2.0 * H(r + 3.0));
             float seg = floor(u);
-            float sunNear = exp(-pow((p.x - sp.x) / (1.0 + (ly - p.y) * 0.6), 2.0));
+            float sunNear = exp(-pow((pw.x - sp.x) / (1.0 + (ly - p.y) * 0.6), 2.0));
             float on = step(H(seg * 1.3 + r * 7.1), 0.32 + 0.6 * sunNear);
             float g = abs(fract(p.y * rows) - 0.5) * 2.0;
             float glint = on * step(0.15, fract(u)) * step(fract(u), 0.85) * fill((0.25 - g) * 3.0);
@@ -421,7 +459,8 @@ void main() {
 
     // ---- The meadow: grass, its flowers and darker patches, the path, the village and its trees.
     {
-        float off = uOff[5], x = p.x + off;
+        vec2 p = lay(pw, 5);
+        float off = 0.0, x = p.x;
         float h = meadowH(x);
         float inM = fill(h - p.y);
         vec3 g = uMeadow;
@@ -458,7 +497,8 @@ void main() {
 
     // ---- The foreground hill and its trees.
     {
-        float off = uOff[6], x = p.x + off;
+        vec2 p = lay(pw, 6);
+        float off = 0.0, x = p.x;
         float h = fgH(x);
         float inF = fill(h - p.y);
         vec3 g = uFg;
@@ -477,6 +517,13 @@ void main() {
         for (int i = uElFg; i < uElCount; i++) sh = max(sh, shadowOf(p, uEl[i], off, true));
         col = mix(col, mix(col, uFg * 0.7, 0.5), sh * inF);
         for (int i = uElFg; i < uElCount; i++) element(p, uEl[i], off, true, col);
+    }
+
+    PU = PU0;
+    // ---- The drop's light sweeping across the layers
+    {
+        float b = exp(-pow((pw.x + pw.y * 0.45 - uSweep.x) / 2.2, 2.0));
+        col = mix(col, min(col * 1.18 + uSunC * 0.12, vec3(1.0)), b * uSweep.y);
     }
 
     // ---- The grade: the calm's haze, a drop's warmth, slow motion's cool stillness; a faint print grain.
