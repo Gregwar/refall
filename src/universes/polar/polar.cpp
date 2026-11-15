@@ -16,7 +16,9 @@
 // is an auroral substorm (the whole sky flares and dances); slow motion freezes time (the falling snow hangs in the
 // air and glints, the aurora barely moves, the colors drain to silver, frost creeps in from the edges of the screen);
 // game over freezes the stack white from the bottom up, then it crumbles into powder while the blowing snow buries
-// the field. A change of universe goes through a whiteout of blowing snow.
+// the field. A change of universe goes through a whiteout of blowing snow. Around a song the stars come out and the
+// aurora's ribbons rise from the horizon one by one while the camera tilts down from the sky to the field (the
+// setup), and sink back and go out, the stars after them, the camera looking up again (the teardown).
 //
 // Cost: the world (sky, aurora slices, ranges, snowfield) is drawn at a reduced resolution (at most 540 lines); only
 // the ice, the snow, the glitter and the text are drawn at full resolution.
@@ -1019,7 +1021,7 @@ void PolarUniverse::drawSky() {
     set2f(progSky_, "uRes", (float)skyT_.w, (float)skyT_.h);
     set1f(progSky_, "uTanH", TAN_H);
     set1f(progSky_, "uAspect", aspect);
-    set1f(progSky_, "uPitch", pitch_);
+    set1f(progSky_, "uPitch", pitch_ + look_);
     set1f(progSky_, "uEye", EYE);
     set1f(progSky_, "uTime", worldTime_);
     set1f(progSky_, "uSeed", seedF_);
@@ -1035,8 +1037,9 @@ void PolarUniverse::drawSky() {
     set1f(progSky_, "uMoon", cur_.moon);
     set1f(progSky_, "uMoonSize", cur_.moonSize);
     set1f(progSky_, "uHalo22", cur_.halo22);
-    set1f(progSky_, "uStars", cur_.stars * (1.f - 0.35f * wp));
-    set1f(progSky_, "uMilky", cur_.milky * (1.f - 0.6f * wm));
+    const float stars = smoothstepf(0.f, 0.45f, wake_);
+    set1f(progSky_, "uStars", cur_.stars * (1.f - 0.35f * wp) * stars);
+    set1f(progSky_, "uMilky", cur_.milky * (1.f - 0.6f * wm) * stars);
     set1f(progSky_, "uTrees", cur_.trees);
     set1f(progSky_, "uHaze", cur_.haze);
     set3f(progSky_, "uMoonDir", dirOf(cur_.moonAz, cur_.moonEl));
@@ -1050,8 +1053,9 @@ void PolarUniverse::drawSky() {
             const float zj = r.range(0.85f, 1.15f);
             const float ph = r.range(0.f, TAU);
             rib[k * 4 + 0] = RIB_Z[k] * zj;
-            rib[k * 4 + 1] = ribbon_[k] * (0.3f + 1.1f * band_[k]) * world;
-            rib[k * 4 + 2] = saturate(cur_.aurHeight * (0.3f + 0.35f * wm + 0.45f * wp) + 0.35f * band_[k] - 0.1f);
+            const float on = ribbonOn(k);
+            rib[k * 4 + 1] = ribbon_[k] * (0.3f + 1.1f * band_[k]) * world * on;
+            rib[k * 4 + 2] = saturate(cur_.aurHeight * (0.3f + 0.35f * wm + 0.45f * wp) + 0.35f * band_[k] - 0.1f) * on;
             rib[k * 4 + 3] = ph;
         }
         glUniform4fv(ugl::U(progSky_, "uRib"), 6, rib);
@@ -1098,6 +1102,11 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
     timeGlint_ += dt;
     const float world = 1.f - saturate(bridge_.amount);
     const float wm = smoothstepf(0.2f, 1.f, lv_), wp = smoothstepf(1.1f, 2.f, lv_);
+    // Around a song: the stars come out and the aurora's ribbons rise from the horizon one by one (the setup), then
+    // sink back and go out, the stars after them (the teardown).
+    wake_ = std::min(f.setup, 1.f - f.teardown);
+    // the camera tilts down from the sky to the field as the night comes, and back up to it as it goes
+    look_ = 0.42f * (1.f - smoothstepf(0.f, 0.9f, f.setup)) + 0.36f * smoothstepf(0.f, 1.f, f.teardown);
     // The camera looks up a little more at the peaks: more sky.
     pitch_ = approach(pitch_, 0.15f + 0.03f * wm + 0.06f * wp, 0.5f, dt);
 
@@ -1105,7 +1114,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
     {
         vec3 l(0.f);
         for (int k = 0; k < RIBBONS; k++) {
-            const float b = ribbon_[k] * (0.3f + 1.1f * band_[k]) * (0.5f + 0.18f * k);
+            const float b = ribbon_[k] * (0.3f + 1.1f * band_[k]) * (0.5f + 0.18f * k) * ribbonOn(k);
             const vec3 c = lerp(cur_.aurA, cur_.aurB, cur_.lightMix);
             l = l + lerp(c, vec3(ugl::luma(c)) * vec3(0.8f, 0.95f, 1.2f), 0.15f) * b;
         }
@@ -1149,7 +1158,7 @@ void PolarUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progComp_, "uTime", worldTime_);
         set1f(progComp_, "uTanH", TAN_H);
         set1f(progComp_, "uAspect", (float)width_ / height_);
-        set1f(progComp_, "uPitch", pitch_);
+        set1f(progComp_, "uPitch", pitch_ + look_);
         set1f(progComp_, "uGlitter", (0.5f + 0.5f * cur_.moon + 0.4f * wp) * world);
         set1f(progComp_, "uFrost", smoothstepf(0.f, 1.f, slow_) * world);
         set1f(progComp_, "uOver", overDrift_ * 0.75f);
