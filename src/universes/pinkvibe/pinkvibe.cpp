@@ -18,7 +18,9 @@
 // out over a few once the drop ends. A cleared row's tiles swell softly and vanish, each releasing petals and
 // bubbles that drift out behind the well and float up; a quad sends a soft shower of hearts and petals from both
 // sides and swells the waves; slow motion is a lavender dusk with slower waves; game over greys the stack from the
-// top. HUD: Quicksand and Nunito (rounded), deep plum on a feathered blush halo.
+// top. Around a song the bands are laid one after another over the blush, from the bottom left (the setup), and go
+// under a deep plum dusk the same way (the teardown). HUD: Quicksand and Nunito (rounded), deep plum on a feathered
+// blush halo.
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -624,6 +626,11 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uSwirl", sunset);
         set1f(progBg_, "uDesat", 0.5f * slow_ + 0.3f * over_);
         set1f(progBg_, "uDecor", 0.55f + 0.25f * wm + 0.2f * sunset);
+        // around a song: the bands laid one after another, from the bottom left (the setup), and going under the
+        // plum dusk the same way (the teardown); some 13 bands span the view, its waves included
+        set1f(progBg_, "uLaid", f.setup >= 1.f ? 99.f : lerpf(-6.f, 7.f, smoothstepf(0.05f, 0.9f, f.setup)));
+        set1f(progBg_, "uDusk", f.teardown <= 0.f ? -99.f : lerpf(-6.f, 7.f, smoothstepf(0.05f, 0.95f, f.teardown)));
+        set3f(progBg_, "uDuskCol", well_ * 0.6f);
         set4f(progBg_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
         set4f(progBg_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
         ugl::drawFullscreen();
