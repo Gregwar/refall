@@ -312,6 +312,12 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     const int dy = steps(A_UI_DOWN) - steps(A_UI_UP), dx = steps(A_UI_RIGHT) - steps(A_UI_LEFT);
     const bool ok = in.pressed(A_UI_OK), back = in.pressed(A_UI_BACK);
     if (dx || dy || ok || back || in.pressed(A_UI_ALT) || in.pressed(A_UI_ENTER) || !in.typed().empty()) lastInput_ = time_;
+    if (introT_ >= 0.f) { // the opening: no menu yet (a key hurries it)
+        introT_ += dt;
+        if (ok || back || dx || dy) introT_ = std::max(introT_, INTRO_END - 0.6f);
+        if (introT_ >= INTRO_END) introT_ = -1.f;
+        else return ch;
+    }
     if (msgT_ > 0) {
         msgT_ = std::max(0.f, msgT_ - dt);
         if (msgT_ < 4.2f && (ok || back || dx || dy)) { msgT_ = 0; return ch; } // a key dismisses the message
