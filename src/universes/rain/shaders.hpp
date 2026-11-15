@@ -30,6 +30,7 @@ uniform float uBridgeK;
 uniform float uDim;
 uniform float uStorm;        // the drop's storm (darker between the strikes)
 uniform float uNeonGain;     // the neon signs surging and flickering in the storm
+uniform float uLights;       // the setup / teardown: the street's lights coming on, going out (each its own threshold)
 uniform float uSweepX;       // a colored light sweeping across the wet street
 uniform vec3 uSweepCol;
 uniform float uFlood;        // the storm: the street flooding (more water, stronger reflections)
@@ -72,7 +73,7 @@ vec3 city(vec2 p, float blur) {
         vec3 b = mix(col, uFar, 0.78);
         vec2 g = vec2(0.62, 0.9);
         vec2 wid = floor(p / g), wf = fract(p / g) - 0.5;
-        float lit = step(0.66, h21(wid + id * 1.7)) * step(p.y, top - 0.6);
+        float lit = step(0.66, h21(wid + id * 1.7)) * step(p.y, top - 0.6) * step(h21(wid + id * 2.3 + 31.0), uLights);
         float bok = smoothstep(0.3 + blur * 0.5, 0.06, length(wf));
         vec3 wc = mix(uWin, uNeon[int(h21(wid + 4.0) * 3.99)], step(0.55, h21(wid + 2.0)) * 0.8);
         b += wc * lit * bok * (0.25 + 0.3 * h21(wid + 9.0)) * uGlow;
@@ -95,7 +96,7 @@ vec3 city(vec2 p, float blur) {
         float win = box(wf, vec2(0.5, 0.5), vec2(0.28, 0.32), 0.03 + blur * 0.4) * inside;
         float hl = h21(wid + id * 3.7);
         vec3 wc = hl < 0.45 ? uWin : uNeon[int(h21(wid + id) * 3.99)] * 0.8 + uWin * 0.2;
-        float lit = step(0.35, h21(wid * 1.7 + id)) * (0.55 + 0.45 * h21(wid + 5.0));
+        float lit = step(0.35, h21(wid * 1.7 + id)) * (0.55 + 0.45 * h21(wid + 5.0)) * step(h21(wid + id * 2.9 + 17.0), uLights);
         float blinds = step(0.8, h21(wid + 13.0)) * (0.6 + 0.4 * step(0.5, fract(wf.y * 6.0)));
         vec3 wl = wc * lit * (1.0 - 0.5 * blinds) * (0.55 + 0.45 * smoothstep(0.0, 0.6, wf.y));
         b = mix(b, mix(fac * 0.5, wl * uGlow, lit), win * 0.95);
@@ -111,8 +112,9 @@ vec3 city(vec2 p, float blur) {
             float core = smoothstep(0.07 + blur, 0.0, abs(sd + 0.1) - 0.035);
             float letters = step(0.35, fract((p.y - y0) * 1.3)) * smoothstep(0.0, -0.05, sd + 0.12);
             b = mix(b, uNeon[k] * 0.35, smoothstep(0.02, -0.02, sd));
-            b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow * uNeonGain;
-            col += uNeon[k] * 0.15 * exp(-max(sd, 0.0) * 0.7) * uGlow * (1.0 - m);
+            float on = uNeonGain * step(h11(id + 23.0), uLights);
+            b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow * on;
+            col += uNeon[k] * 0.15 * exp(-max(sd, 0.0) * 0.7) * uGlow * (1.0 - m) * step(h11(id + 23.0), uLights);
         } else if (uStyle == 2 && hs > 0.3) {
             // monsoon: strings of paper lanterns across the facades
             float ly = shopTop + 1.5 + 4.0 * h11(id + 4.0);
@@ -138,7 +140,8 @@ vec3 city(vec2 p, float blur) {
         // the shop window: a warm lit interior, shelves and goods in silhouette
         float wx0 = 0.25, wx1 = 2.35, wy0 = H + 0.35, wy1 = H + 2.35;
         float win = box(vec2(lx, p.y), vec2(0.5 * (wx0 + wx1), 0.5 * (wy0 + wy1)), vec2(0.5 * (wx1 - wx0), 0.5 * (wy1 - wy0)), 0.02 + blur * 0.3);
-        vec3 interior = mix(uWin, sc, 0.35 + 0.3 * h11(id + 3.0)) * (0.55 + 0.45 * smoothstep(wy0, wy1, p.y)) * uGlow;
+        vec3 interior = mix(uWin, sc, 0.35 + 0.3 * h11(id + 3.0)) * (0.55 + 0.45 * smoothstep(wy0, wy1, p.y)) * uGlow *
+                        mix(0.12, 1.0, step(h11(id + 41.0), uLights));
         float shelf = smoothstep(0.04, 0.0, abs(fract((p.y - wy0) / 0.6) - 0.1));
         float goods = step(0.45, h21(vec2(floor(lx * 4.0), floor((p.y - wy0) / 0.6)) + id)) * step(fract((p.y - wy0) / 0.6), 0.45) * step(0.15, fract((p.y - wy0) / 0.6));
         vec3 gc = mix(uNeon[int(h21(vec2(floor(lx * 4.0), id)) * 3.99)], vec3(1.0), 0.3) * 0.7 * uGlow;

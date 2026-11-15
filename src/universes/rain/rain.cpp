@@ -29,6 +29,8 @@
 // The drop is a thunderstorm for the whole drop section: the heaviest rain, a steeper slant, the city's colors and
 // lights intensified, soft lightning glowing in the clouds now and then on a bar line (a tinted glow, never a white
 // flash); after the drop it eases back over a few seconds. Slow motion slows the rain until it hangs in the air.
+// Around a song the street's lights come on one by one (windows, shops, signs) as the rain sets in, and go out one by
+// one after it, the rain thinning.
 //
 // Cost: one fullscreen backdrop pass, the rain stepped on the CPU against per-column spans of the solids (a few
 // dozen tests per drop), instanced shapes and tiles, SDF type.
@@ -401,7 +403,7 @@ void RainUniverse::stepRain(float dt, float rdt) {
     const float slant = V.slant + 0.22f * storm_;
     // spawn: a drizzle .. a downpour
     if (bridge_.amount < 0.98f) {
-        const float rate = lerpf(220.f, 2600.f, std::pow(saturate(rain_), 1.4f)) * (1.f + 0.6f * storm_) * (rdt / std::max(dt, 1e-4f));
+        const float rate = lerpf(220.f, 2600.f, std::pow(saturate(rain_), 1.4f)) * (1.f + 0.6f * storm_) * (rdt / std::max(dt, 1e-4f)) * shower_;
         spawnAcc_ += rate * dt;
         int n = (int)spawnAcc_;
         spawnAcc_ -= n;
@@ -1266,6 +1268,11 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         signPos_[1] = vec2{bandIn_ + 0.55f * (bandOut_ - bandIn_), 0.8f};
     }
 
+    // ---- The setup: the street's lights come on one by one (windows, shops, signs) as the rain sets in; the
+    // teardown: they go out one by one, the rain thinning, the street sinking into the dusk.
+    lights_ = smoothstepf(0.1f, 0.62f, f.setup) * (1.f - smoothstepf(0.3f, 0.85f, f.teardown));
+    shower_ = smoothstepf(0.f, 0.45f, f.setup) * (1.f - 0.85f * smoothstepf(0.35f, 0.9f, f.teardown));
+
     // ---- The world steps: the solids, the rain, the piles, the drying.
     buildSolids(game);
     stepRain(dt, rdt);
@@ -1314,10 +1321,11 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progBg_, "uFlash", vec3(0.72f, 0.8f, 1.f) * (1.6f * flash_));
         set1f(progBg_, "uStorm", ease(storm_));
         set1f(progBg_, "uNeonGain", neonGain_);
+        set1f(progBg_, "uLights", lights_ * 1.001f);
         set1f(progBg_, "uSweepX", sweepX_);
         set3f(progBg_, "uSweepCol", hex(V.neon[((long)std::floor(time_ / 4.f)) & 1 ? 0 : 1]));
         set2f(progBg_, "uFlashPos", flashPos_.x, flashPos_.y);
-        set1f(progBg_, "uRain", rain_);
+        set1f(progBg_, "uRain", rain_ * shower_);
         set1f(progBg_, "uSlant", V.slant + 0.22f * storm_);
         set1f(progBg_, "uFlood", flood_);
         set1f(progBg_, "uGust", storm_);
@@ -1330,7 +1338,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uWell", bare_ ? 0.f : 1.f - smoothstepf(0.f, 0.8f, bridge_.amount));
         set3f(progBg_, "uBridge", ugl::toSrgb(bridge_.color));
         set1f(progBg_, "uBridgeK", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
-        set1f(progBg_, "uDim", 0.f);
+        set1f(progBg_, "uDim", 0.55f * (1.f - smoothstepf(0.f, 0.4f, f.setup)) + 0.55f * smoothstepf(0.55f, 1.f, f.teardown));
     }
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
