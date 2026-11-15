@@ -5,7 +5,8 @@
 // (phosphor persistence), so motion leaves short trails. Calm parts of a song show only the well and a lone
 // oscilloscope trace on the horizon; mid parts lay a floor grid that scrolls one row per beat; peaks raise that
 // floor into mountains driven by the spectrum, with a Lissajous figure in the sky and the camera breathing.
-// Pieces differ by their glyph (the line pattern inside each cell), not by hue.
+// Pieces differ by their glyph (the line pattern inside each cell), not by hue. Around a song the tube powers on
+// out of a dot (dot, line, picture) and switches off the same way once the game has gone.
 #include "universes/vector/vector.hpp"
 
 #include "layout.hpp"
@@ -1364,6 +1365,18 @@ void VectorUniverse::render(const Frame& f, GLuint fbo) {
             const float k = smoothstepf(2.2f, 2.5f, t);
             sy = lerpf(LINE, 1.f, k);
             dot = 0.4f * (1.f - k);
+        }
+    }
+    // The setup and teardown: the tube warms up out of a dot (dot, line, picture) while the world comes out of the
+    // black, and switches off the same way once the game has gone (picture to a line, line to a dot that fades).
+    {
+        const float k = std::max(1.f - smoothstepf(0.04f, 0.6f, f.setup), smoothstepf(0.42f, 0.97f, f.teardown));
+        if (k > 0.f) {
+            const float LINE = 0.004f, DOT = 0.004f;
+            const float ky = smoothstepf(0.f, 0.4f, k), kx = smoothstepf(0.38f, 0.7f, k);
+            sy = std::min(sy, lerpf(1.f, LINE, ky * ky));
+            sx = std::min(sx, lerpf(1.f, DOT, kx * kx));
+            dot = std::max(dot, 0.8f * smoothstepf(0.38f, 0.46f, k) * (1.f - smoothstepf(0.75f, 1.f, k))); // once a line
         }
     }
     set2f(progComp_, "uCollapse", sx, sy);
