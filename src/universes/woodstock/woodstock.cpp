@@ -22,14 +22,18 @@
 // the flow slowed); game over greys the stack from the top.
 //
 // Four pastel variants (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night), from the key, mode, brightness and
-// air. A fifth, BLOOM (by name only: --universe woodstock:BLOOM), has its own background, an infinite flower: a
-// dahlia centered behind the well whose rings of petals repeat at every scale (log-polar, so one level of zoom gives
-// the very same picture and the zoom loops forever), each ring one flat step of a smooth pastel gradient, laid over
-// the next like cut paper. Each line clear zooms in a little (eased); calm turns it very slowly; a DROP zooms in
-// steadily (eased in and to a stop after it), the colors sliding along the gradient. Cost: one fullscreen pass, the
-// blocks as instanced quads.
+// air. A fifth, BLOOM (by name only: --universe woodstock:BLOOM), has its own background, an infinite flower: the
+// filled Julia set of a four-petal c, in flat pastel bands (the escape count outside, pale like paper; the
+// convergence count inside its petals, a band of the gradient for each step), zoomed for ever into the point where
+// its four petals meet, its heart in the left free zone. There it is self-similar, so the zoom loops seamlessly and
+// the frilled contour keeps revealing finer petals; each band keeps its flat color as it grows and new ones bloom
+// with the next colors of the gradient. A line clear zooms in by a level (x1.27, a quad x1.7, eased over about a
+// second); calm only turns it very slowly; a DROP zooms in steadily, eased in and to a stop after it. Cost: one
+// fullscreen pass (the fractal: under a millisecond at 1080p), the blocks as instanced quads.
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -114,6 +118,56 @@ const vec2 ARC_CENTER{0.f, -15.f}; // the arcs' center, below the screen (board 
 float ease(float t) {
     t = saturate(t);
     return t * t * (3.f - 2.f * t);
+}
+
+// BLOOM's fractal: the filled Julia set of z -> z^2 + c for c at the center of the 1/4 bulb (a four-petal flower),
+// zoomed for ever into its alpha fixed point, where its four petals meet. Near it f^4 is a similarity (multiplier
+// lambda^4, a scale of about 1.27 and almost no turn), so the picture at depth d + 1 is the picture at depth d: one
+// level of zoom is four iterations. The attracting 4-cycle (the petals' inside) is found by iterating 0.
+struct Julia {
+    vec2 c, fix;
+    float logLam = 0.f, argLam = 0.f; // log |lambda^K|, arg lambda^K (a level)
+    float cycle[16] = {};
+    int period = 0;
+};
+constexpr int BLOOM_K = 4;            // iterations a level
+constexpr float BLOOM_S0 = 0.08f;     // complex units a board unit at depth 0
+constexpr float BLOOM_D0 = 30.f;      // the depth drawn (levels: self-similar to within a hair from there)
+const vec2 BLOOM_CENTER{-15.f, 1.f};  // the flower's heart on screen, in the left free zone (board units)
+const Julia& julia() {
+    static const Julia J = [] {
+        Julia j;
+        const double cr = 0.2822, ci = 0.5301;
+        j.c = vec2{(float)cr, (float)ci};
+        // alpha = (1 - sqrt(1 - 4c)) / 2
+        const double ar = 1.0 - 4.0 * cr, ai = -4.0 * ci;
+        const double mod = std::sqrt(std::sqrt(ar * ar + ai * ai)), an = 0.5 * std::atan2(ai, ar);
+        const double fr = 0.5 * (1.0 - mod * std::cos(an)), fi = -0.5 * mod * std::sin(an);
+        j.fix = vec2{(float)fr, (float)fi};
+        j.logLam = (float)(BLOOM_K * std::log(2.0 * std::sqrt(fr * fr + fi * fi)));
+        j.argLam = (float)std::remainder(BLOOM_K * std::atan2(fi, fr), 2.0 * 3.14159265358979);
+        // the attracting cycle
+        double zr = 0.0, zi = 0.0;
+        for (int i = 0; i < 4000; i++) {
+            const double t = zr * zr - zi * zi + cr;
+            zi = 2.0 * zr * zi + ci;
+            zr = t;
+        }
+        double pr = zr, pi = zi;
+        for (int p = 1; p <= 8; p++) {
+            j.cycle[(p - 1) * 2] = (float)pr;
+            j.cycle[(p - 1) * 2 + 1] = (float)pi;
+            const double nr = pr * pr - pi * pi + cr;
+            pi = 2.0 * pr * pi + ci;
+            pr = nr;
+            if (std::hypot(pr - zr, pi - zi) < 1e-7) {
+                j.period = p;
+                break;
+            }
+        }
+        return j;
+    }();
+    return J;
 }
 
 class WoodstockUniverse : public Universe {
@@ -287,7 +341,7 @@ void WoodstockUniverse::onEvent(const GameEvent& ev, const Game& game) {
         if (ripples_.size() >= 4) ripples_.erase(ripples_.begin());
         ripples_.push_back({std::abs(yMid / n - center_.y), 0.f, 0.22f + 0.08f * std::min(ev.count, 4)});
         // BLOOM: the flower zooms in a little with each clear (eased: render)
-        levelTo_ += 0.18f + 0.07f * (std::min(ev.count, 4) - 1);
+        levelTo_ += 1.f + 0.4f * (std::min(ev.count, 4) - 1);   // (a level: x1.27; a quad: x1.7)
         break;
     }
     case GameEvent::TopOut: overT_ = 0.f; break;
@@ -507,9 +561,9 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
     const vec2 center = center_;
     // BLOOM: the zoom eases toward its target (the clears nudge it); a drop adds a steady zoom-in, eased in at the
     // drop and to a stop after it; the flower turns very slowly. (Kept small: the pattern is the same every level.)
-    zoomVel_ = approach(zoomVel_, inDrop ? 0.4f : 0.f, inDrop ? 0.8f : 0.5f, dt);
+    zoomVel_ = approach(zoomVel_, inDrop ? 0.7f : 0.f, inDrop ? 0.8f : 0.5f, dt);
     levelTo_ += zoomVel_ * wdt;
-    zoomLv_ = approach(zoomLv_, levelTo_, 1.6f, wdt);
+    zoomLv_ = approach(zoomLv_, levelTo_, 2.6f, wdt);
     if (zoomLv_ > 48.f) { zoomLv_ -= 48.f; levelTo_ -= 48.f; }   // (48 levels: the same picture, the same colors)
     bloomSpin_ += wdt * (0.012f + 0.006f * wm);
 
@@ -541,13 +595,38 @@ void WoodstockUniverse::render(const Frame& f, GLuint fbo) {
         set3f(progBloom_, "uShade", col_[SHADE]);
         set3f(progBloom_, "uWellFill", col_[WELL]);
         set3f(progBloom_, "uWellLine", col_[WELL_LINE]);
-        set2f(progBloom_, "uCenter", 0.f, 0.f);
-        set1f(progBloom_, "uLevel", zoomLv_);
-        set1f(progBloom_, "uSpin", bloomSpin_);
+        // the Julia set and its zoom: drawn at depth D0 + the fraction of a level (the picture repeats every level)
+        const Julia& J = julia();
+        const float depth = BLOOM_D0 + (zoomLv_ - std::floor(zoomLv_));
+        const float mag = BLOOM_S0 * std::exp(-depth * J.logLam), ang = -depth * J.argLam + bloomSpin_;
+        set2f(progBloom_, "uCenter", BLOOM_CENTER.x, BLOOM_CENTER.y);
+        set2f(progBloom_, "uC", J.c.x, J.c.y);
+        set2f(progBloom_, "uFix", J.fix.x, J.fix.y);
+        set2f(progBloom_, "uMul", mag * std::cos(ang), mag * std::sin(ang));
+        set1f(progBloom_, "uWhole", std::floor(zoomLv_) * BLOOM_K);
+        glUniform2fv(ugl::U(progBloom_, "uCycle"), 8, J.cycle);
+        glUniform1i(ugl::U(progBloom_, "uPeriod"), J.period);
         set1f(progBloom_, "uDesat", 0.45f * slow_ + 0.2f * over_);
         set1f(progBloom_, "uGrain", 0.022f);
         set4f(progBloom_, "uWell", 5.15f, 10.15f, 0.3f, f.bare ? 0.f : 1.f);
+        // ZEN_GPUTIME: the fractal's GPU time, printed every 120 frames
+        static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+        static GLuint query = 0;
+        static int queries = 0;
+        static double queryMs = 0.0;
+        if (gpuTime && !query) glGenQueries(1, &query);
+        if (query) glBeginQuery(GL_TIME_ELAPSED, query);
         ugl::drawFullscreen();
+        if (query) {
+            glEndQuery(GL_TIME_ELAPSED);
+            GLuint64 ns = 0;
+            glGetQueryObjectui64v(query, GL_QUERY_RESULT, &ns);
+            queryMs += ns / 1e6;
+            if (++queries % 120 == 0) {
+                std::fprintf(stderr, "[woodstock] bloom gpu %.2f ms/frame (%dx%d)\n", queryMs / 120.0, width_, height_);
+                queryMs = 0.0;
+            }
+        }
     } else {
         glUseProgram(progBg_);
         set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
