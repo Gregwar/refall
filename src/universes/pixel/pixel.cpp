@@ -13,7 +13,9 @@
 // foreground. Locks squash for two frames and puff dust; cleared rows flash and burst into their pixels; a
 // quad fires a screen-wide pixel firework; the slow motion dissolves the night palette in (ordered dither,
 // stars, a moon); a game over crumbles the stack pixel by pixel into a sand pile. Changing universe, the world
-// fades smoothly into the bridge while the stack turns to plain ink (no dither there: easy on the eyes).
+// fades smoothly into the bridge while the stack turns to plain ink (no dither there: easy on the eyes). Before a
+// song the place comes out of the dark at dawn, the sun rising and the night palette dissolving away; after it,
+// dusk: the sun sets, the night and its stars come in, then the dark (ordered-dither steps all along).
 #include "universes/pixel/pixel.hpp"
 
 #include <cstdio>
@@ -920,8 +922,12 @@ void PixelUniverse::compose(const Frame& f) {
     }
     const float bt = smoothstepf(0.f, 1.f, b);
     const float lightning = world_.lightning();
-    const float nightStep = std::floor(nightK_ * 8.f) / 8.f; // eight ordered-dither steps
-    const float dim = dimT_;
+    // the setup is a dawn (out of the dark, through the night palette, to the place's own light), the teardown a
+    // dusk (the night palette and its stars dissolving in, then the dark)
+    const float dawn = std::min(f.setup, 1.f - f.teardown);
+    const float dusk = 1.f - smoothstepf(0.3f, 0.85f, dawn), dark = 1.f - smoothstepf(0.f, 0.45f, dawn);
+    const float nightStep = std::floor(std::max(nightK_, dusk) * 8.f) / 8.f; // eight ordered-dither steps
+    const float dim = std::max(dimT_, std::floor(dark * 8.f) / 8.f);
     const float fade = saturate(f.fade);
     for (int y = 0; y < H_; y++)
         for (int x = 0; x < W_; x++) {
@@ -987,6 +993,11 @@ void PixelUniverse::render(const Frame& f, GLuint fbo) {
     ws.beatPhase = m.beatPhase;
     ws.bounce = (peakP_ > 0.5f && m.hasSong && m.beatPhase < 0.16f) ? (beat % 4 == 0 ? 2 : 1) : 0;
     ws.night = nightK_ > 0.f ? 1.f : 0.f;
+    {
+        // the sun rises in the setup's dawn and sets in the teardown's dusk
+        const float up = smoothstepf(0.1f, 0.75f, f.setup) * (1.f - smoothstepf(0.f, 0.6f, f.teardown));
+        ws.sunDip = iround((1.f - up) * (VAR(variant_).sunUp + 12));
+    }
     ws.bass = m.audio.bass;
     ws.high = m.audio.high;
     if (!f.paused) {

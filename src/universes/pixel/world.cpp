@@ -274,9 +274,9 @@ void drawWater(Ctx& c, const Palette& P, int top, int bottom, int sunX, uint8_t 
             const int sx = std::clamp(x + sh, 0, c.W - 1), sy = std::clamp(srcY, 0, c.H - 1);
             uint8_t col = P.darker[c.cv.get(sx, sy)];
             if ((d % 5) == 2 && dith(0.18f * live, x + st, y)) col = ripple;
-            // sun glitter: short streaks in a column under the sun, blinking with the beat
+            // sun glitter: short streaks in a column under the sun, blinking with the beat (while the sun is up)
             const int gw = 3 + d / 3;
-            if (std::abs(x - sunX) < gw && (hash2(x / 3, y, (uint32_t)(c.s.beatIndex() + st / 4)) & 7) == 0 &&
+            if (c.s.sunDip < c.V.sunUp && std::abs(x - sunX) < gw && (hash2(x / 3, y, (uint32_t)(c.s.beatIndex() + st / 4)) & 7) == 0 &&
                 (d % 2 == 0))
                 col = glitter;
             c.cv.set(x, y, col, K_WORLD);
@@ -604,7 +604,7 @@ void World::drawBack(Canvas& cv, const WorldState& s) {
     const Palette& P = pal_;
     Ctx c{cv, V, s, (uint32_t)(seed_ & 0xFFFFFFFF), s.W, s.H, s.hz, V.sunX < 0.5f ? -1 : 1};
     const int b1 = s.bounce, b2 = s.bounce > 0 ? s.bounce : 0;
-    const int sunX = iround(V.sunX * s.W), sunY = s.hz - V.sunUp;
+    const int sunX = iround(V.sunX * s.W), sunY = s.hz - V.sunUp + s.sunDip;
     const int sunR = (V.theme == TH_CITY ? 6 : 8) + (s.peak > 0.5f ? s.bounce : 0);
     const int sway = (s.mid > 0.5f && ((s.beatIndex() & 1) == 0)) ? 1 : 0;
     const float cloudSpeed = 0.3f + 1.5f * s.mid + 2.5f * s.peak;

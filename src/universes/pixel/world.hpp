@@ -23,6 +23,7 @@ struct WorldState {
     float beatPhase = 0;
     int bounce = 0;               // 0 / 1 / 2 pixels: the beat's hop (peak)
     float night = 0;              // slow motion
+    int sunDip = 0;               // pixels the sun sits below its place (the setup's dawn, the teardown's dusk)
     float bass = 0, high = 0;     // smoothed bands
     int beatIndex() const { return (int)std::floor(beat); }
     int step(float fps) const { return (int)std::floor(t * fps); } // stepped animation frames
