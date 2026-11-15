@@ -15,6 +15,8 @@
 // (and now and then a climb above the clouds, the sea curving away); mid is cruising, dipping low past the islands;
 // a peak skims the waves a few meters up; a build climbs; the drop is one big dive from up there down to the waves.
 // The day passes over the song: midday, the afternoon, the golden hour, the sunset, dusk (the villas light up).
+// Before a song the drone's camera tilts down from the sky onto the sea and its islands; after it the camera tilts
+// back up into the sky.
 // Every cleared row releases a flock of seabirds beside the well (at dusk, it lights lanterns along the shore too).
 //
 // The pieces are polished sea glass: one tumbled tile per cell, one luminous color per piece type, frosted, the
@@ -1889,6 +1891,15 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The flight, the world streaming around it.
     fly(dt, wdt, section);
+    // the setup tilts the view down from the sky onto the sea, the teardown back up (the look only, not the flight)
+    {
+        const float in = 1.f - smoothstepf(0.f, 0.8f, f.setup), out = smoothstepf(0.05f, 0.95f, f.teardown);
+        const float tilt = 0.5f * (in * in + out * out);
+        if (tilt > 0.f) {
+            fwd_ = normalize(fwd_ * std::cos(tilt) + up_ * std::sin(tilt));
+            up_ = cross(right_, fwd_);
+        }
+    }
     curv_ = lerpf(1.f / 6.4e6f, 1.f / 1.3e5f, smoothstepf(250.f, 2600.f, alt_));
     world_->update(eye_, s_, std::clamp(alt_ * 6.f, 9000.f, 14000.f));
     if (std::fabs(eye_.x) > 50000.f || std::fabs(eye_.z) > 50000.f) {
