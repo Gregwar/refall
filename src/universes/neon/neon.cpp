@@ -26,6 +26,9 @@
 // whole skyline in the luminous spectrum, then settles back over the following bars. Slow motion is deep night,
 // desaturated; game over lets the stack's pigment run down in drips and fade.
 //
+// Around a song: the setup paints the skyline in, each building from its foot up, left to right along the spectrum;
+// the teardown drains them back down one after another, leaving the night.
+//
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/neon/neon.hpp"
 
@@ -987,11 +990,19 @@ void NeonUniverse::render(const Frame& f, GLuint fbo) {
     builds_.clear();
     cells_.clear();
     wispInst_.clear();
+    // the scene's setup and teardown: the skyline painted in from the buildings' feet, left to right along the
+    // spectrum; then drained back down, one building after another
+    auto shown = [&](const Building& b) {
+        const float u = saturate((b.x - (viewC_.x - viewH_.x)) / (2.f * viewH_.x));
+        const float in = smoothstepf(0.05f + 0.45f * u, 0.3f + 0.45f * u, f.setup);
+        const float h = std::fmod(b.seed * 7.31f, 1.f);
+        return std::min(in, 1.f - smoothstepf(0.05f + 0.5f * h, 0.4f + 0.5f * h, f.teardown));
+    };
     for (int pass = 0; pass < 2; pass++)
         for (const Building& b : city_) {
             if (b.layer != pass) continue;
             const float fa = b.fadeOut >= 0.f ? 1.f - smoothstepf(0.f, 1.f, b.fadeOut) : 1.f;
-            const float paint = b.layer == 1 ? (b.painted ? b.paint : 0.f) : b.paint;
+            const float paint = (b.layer == 1 ? (b.painted ? b.paint : 0.f) : b.paint) * shown(b);
             if (paint <= 0.f || fa <= 0.f) continue;
             builds_.push_back({{b.x, b.base, b.hw, b.h}, {(float)b.kind, b.seed, paint, b.alpha * fa},
                                {b.phaseA, b.phaseB, b.mixAB, b.tint}, {(float)b.layer, b.windows ? 1.f : 0.f, 0.f, 0.f}});

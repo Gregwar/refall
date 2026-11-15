@@ -103,6 +103,7 @@ in vec3 vW;
 out vec4 frag;
 uniform vec3 uEye, uFogCol, uStreetCol, uAmb;
 uniform float uFogD, uTime, uTraffic, uBlack;
+uniform float uWake; // the scene's setup and teardown: the share of the city's lights on (0 .. 1)
 void main() {
     vec3 P = vW;
     float dist = length(P - uEye);
@@ -137,6 +138,8 @@ void main() {
     // far away: the average glow of the streets
     e = mix(e, uStreetCol * 0.12 * (ST * 2.0 / PITCH), far);
     e *= 1.0 - uBlack * 0.8;
+    // waking or going to sleep: block by block (an average far away)
+    e *= mix(step(hash12(cell * 1.31 + 7.7), uWake * 1.02 - 0.01), uWake, far);
     float fog = 1.0 - exp(-dist * uFogD);
     c = mix(c, uFogCol, fog) + e * (1.0 - 0.75 * fog);
     frag = vec4(c, 1.0);
@@ -171,6 +174,7 @@ flat in vec4 vA0, vA1, vA2, vA3;
 out vec4 frag;
 uniform vec3 uEye, uMoonDir, uMoonCol, uAmb, uUpCol, uFogCol, uCityLight, uDropA, uDropB, uCrownCol, uSnowCol;
 uniform float uFogD, uTime, uLitFrac, uDropK, uPatEpoch, uPatPhase, uBlack, uFlash, uSnow, uGroundY;
+uniform float uWake; // the scene's setup and teardown: the share of the city's lights on (0 .. 1)
 uniform float uEq[8];
 uniform vec3 uLamp[5]; // the city's room lights (unit luminance): tungsten, fluorescent, halogen, a TV, sodium
 uniform vec4 uQuiet[2]; // the HUD's columns, in pixels (gl_FragCoord): the windows there are dimmer
@@ -227,6 +231,8 @@ void main() {
         float ep = floor((uTime + h * per) / per);
         float frac = uLitFrac * vA2.x;
         float lit = mix(step(hash12(key * 1.37 + ep * 3.7), frac), frac, tiny);
+        // waking or going to sleep: the windows switched on, or put out, one by one
+        lit *= mix(step(hash12(key * 0.71 + 5.3), uWake * 1.02 - 0.01), uWake, tiny);
         // each window a real lamp: mostly tungsten, some fluorescent offices, halogen, the odd TV, a sodium stairwell
         float pk = hash12(key * 2.1 + ep);
         vec3 lampC = pk < 0.52 ? uLamp[0] : (pk < 0.74 ? uLamp[1] : (pk < 0.88 ? uLamp[2] : (pk < 0.95 ? uLamp[3] : uLamp[4])));

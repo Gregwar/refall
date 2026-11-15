@@ -232,6 +232,9 @@ private:
     bool slowOn_ = false;
     float slow_ = 0.f;
     float overT_ = -1.f, over_ = 0.f;
+    // The scene's setup and teardown: the station powered up from the core outward (0 .. 1) and down from the rim
+    // inward (0 .. 1), the camera drawn back around them (0 .. 1).
+    float powerUp_ = 1.f, powerDown_ = 0.f, away_ = 0.f;
     float dimT_ = 0.f;
     float time_ = 0.f;
     Bridge bridge_;

@@ -20,6 +20,9 @@
 // faster, eased in and to a stop after it, the bands cross-fading into the palette's drop colors. No beat pulses.
 // Slow motion is dusk (the colors drained toward lilac, the zoom slowed); game over greys the stack from the top.
 //
+// Around a song: the setup dives from the whole flower, small on the paper, down into its point; the teardown pulls
+// the camera back out to the whole flower.
+//
 // The well is a calm pale panel inside a slim line, a soft shadow under it. The blocks are truly flat: one square of
 // a single flat color per cell (no outline, no shading, no highlight), a hairline gap between cells, the corners
 // barely rounded; seven soft retro colors, one per piece type. The ghost is a faint wash of the piece's color inside
@@ -628,6 +631,15 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
         }
         colOff_ = std::fmod(colOff_, 12.0);   // (the gradient's period: 6 stops, half a stop a band)
         view = targetView(tg, frac_, spin_);
+    }
+    // ---- The scene's setup and teardown: the camera dives from the whole flower down to its point, and pulls back
+    // out to the whole flower on the paper after the song.
+    {
+        const float away = std::max(1.f - smoothstepf(0.f, 0.8f, f.setup), smoothstepf(0.f, 1.f, f.teardown));
+        if (away > 0.f) {
+            const double la = std::log(std::abs(view.mul)), lo = std::max(la, std::log(0.15));
+            view.mul *= std::exp((lo - la) * ease(away));
+        }
     }
 
     // ---- Pops.

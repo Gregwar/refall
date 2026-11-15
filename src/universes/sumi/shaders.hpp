@@ -100,6 +100,7 @@ uniform float uWorld;     // 1: the landscape, 0: bare paper (the bridge of a ch
 uniform vec3 uSkyCol;     // the peak's sky wash: its pigment, its density, the sun (center xy, radius)
 uniform float uSky;
 uniform vec3 uSun;
+uniform vec4 uPaint;      // the scene's setup and teardown: far, mid, near ranges painted in (0..1), the ink drying away
 float wellMask(vec2 p, float soft) {
     vec2 d = abs(p) - uWell;
     return 1.0 - smoothstep(0.0, soft, max(d.x, d.y));
@@ -165,6 +166,14 @@ void main() {
     float dMid = mid * aMid * (1.0 - 0.75 * mist);
     float dNear = near * aNear * (1.0 - 0.35 * mist);
     float behind = (1.0 - 0.94 * well) * uWorld;
+    // The setup: each range soaks into the wet paper in blots, the far one first; the teardown: the ink dries
+    // away from the sheet's edges inward, leaving the bare paper.
+    float soak = fbm3(p * 0.45 + 7.0);
+    dFar *= smoothstep(soak - 0.12, soak + 0.12, uPaint.x * 1.3 - 0.15);
+    dMid *= smoothstep(soak - 0.12, soak + 0.12, uPaint.y * 1.3 - 0.15);
+    dNear *= smoothstep(soak - 0.12, soak + 0.12, uPaint.z * 1.3 - 0.15);
+    float rim = length((p - uView.xy) / uView.zw) + 0.35 * (soak - 0.5);
+    behind *= smoothstep(0.1, -0.1, rim - 1.8 * (1.0 - uPaint.w) + 0.1);
     // The peak's sky: a wash of color soaked into the paper, graded up from the hills and deepest around the
     // sun; the top of the sheet stays white.
     if (uSky > 0.001) {

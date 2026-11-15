@@ -218,15 +218,16 @@ BiomeUniverse::~BiomeUniverse() {
 
 // The layout's reference camera, raised above the world (at the world's height: the sea raises it as it rises, so its
 // surface stays seen from above) and looking straight ahead, its image shifted back down: the board plane lands on the
-// reference camera's pixels.
+// reference camera's pixels. Around a song (away_) it is craned up and back, still looking straight ahead, so the
+// diorama sinks down the picture and is seen from high above.
 void BiomeUniverse::setCamera() {
     const layout::Camera ref = layout::camera(width_, height_);
     const float aspect = (float)width_ / height_;
     const float half = ref.fovDeg * 0.5f * PI / 180.f;
     const float f = 1.f / std::tan(half);
-    const float eyeY = w_->eyeY();
-    c_.eye = vec3(ref.target.x, eyeY, ref.target.z + ref.dist);
-    c_.horizon = f * (eyeY - ref.target.y) / ref.dist;
+    const float eyeY = w_->eyeY() + 12.f * away_, dist = ref.dist + 14.f * away_;
+    c_.eye = vec3(ref.target.x, eyeY, ref.target.z + dist);
+    c_.horizon = f * (eyeY - ref.target.y) / dist;
     c_.view = mat4::lookAt(c_.eye, c_.eye + vec3(0.f, 0.f, -1.f), vec3(0.f, 1.f, 0.f));
     mat4 shift = mat4::identity();
     shift.at(1, 3) = c_.horizon;
@@ -479,6 +480,8 @@ void BiomeUniverse::render(const Frame& f, GLuint fbo) {
         if (!c_.bare) watchBoard(game); // (a break's board is blank: not a stack gone)
         simulate(game, f.music, dt, wdt);
     }
+    // the setup cranes the lens down onto the diorama, the teardown lifts it away
+    away_ = std::max(1.f - smoothstepf(0.f, 0.75f, f.setup), smoothstepf(0.1f, 1.f, f.teardown));
     setCamera();
 
     // ---- The sun's shadow map.

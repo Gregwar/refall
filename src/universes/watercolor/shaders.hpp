@@ -325,6 +325,7 @@ uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform float uLift;         // the whole painting's strength (0..1)
 uniform float uSeed;
+uniform float uPaint;        // the scene's setup: the washes laid down the sheet from the top (0 white .. 1 painted)
 void main() {
     vec2 p = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     vec4 paper = texture(uPaper, vUv);
@@ -336,6 +337,9 @@ void main() {
     vec4 land = texture(uLand, uv);
     vec4 wet = texture(uWet, uv);
     vec3 K = land.rgb * uLift;
+    // the setup: one loaded brush laying the washes down the sheet, a wet bead (a little darker) at its front
+    float front = 0.2 + 0.65 * uPaint - (1.0 - vUv.y) - (fbm(p * 0.25 + 5.0) - 0.5) * 0.12;
+    K *= smoothstep(-0.06, 0.06, front) * (1.0 + 0.6 * exp(-abs(front - 0.04) / 0.05) * (1.0 - smoothstep(0.8, 1.0, uPaint)));
     float gran = land.a;
     // the well is masked: only a faint ghost of the washes, a crisp edge with pigment pooled against it
     float e = sdBox(p, uWell.xy) + (fbm(p * 2.2) - 0.5) * 0.06 + (nz(p * 8.0) - 0.5) * 0.02;

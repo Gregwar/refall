@@ -20,6 +20,9 @@
 // from the lake. Slow motion is moonlight (a full moon and its path on the water) and mist lying on the lake; game
 // over puts the candles out one by one from the top. A new song lifts the old song's lanterns away.
 //
+// Around a song: in the setup the stars come out one by one and a few lanterns are released far across the lake;
+// in the teardown the lake's lanterns lift away into the sky and the stars go out.
+//
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/lanterns/lanterns.hpp"
 
@@ -473,7 +476,7 @@ void LanternsUniverse::updateLanterns(float dt, float wdt) {
             // after the drop the last ones hurry away, leaving the sky to the next ones
             // (as seen: far ones rise as visibly as near ones)
             const float fz = dist_ / (dist_ - L.z);
-            const float speed = std::min(10.f, (0.8f + 0.6f * L.seed) / fz) * (dropMode_ ? 1.f : 1.6f);
+            const float speed = std::min(10.f, (0.8f + 0.6f * L.seed) / fz) * (dropMode_ ? 1.f : liftedAway_ ? 2.6f : 1.6f);
             L.vy = lerpf(L.vy, speed, 1.f - std::exp(-wdt * 1.1f));
             L.y += L.vy * wdt;
             L.z -= 0.15f * L.vy * wdt;
@@ -1098,6 +1101,17 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
                     if (ids_[y][x] == pick) flare_[y][x] = std::max(flare_[y][x], 0.22f * kick);
     }
     kickPrev_ = kick;
+    // ---- The setup: a few lanterns released far across the lake as the night comes out of the dark; the teardown:
+    // the lake's lanterns lifted away into the sky.
+    if (f.setup < 0.6f && f.setup > 0.05f) {
+        setupClock_ += dt;
+        if (setupClock_ > 0.45f) {
+            setupClock_ = 0.f;
+            spawnSky(rng_.chance(0.5f) ? 1 : -1, true);
+        }
+    }
+    if (f.teardown > 0.02f && !liftedAway_) { liftAll(1.2f); liftedAway_ = true; }
+    else if (f.teardown <= 0.f) liftedAway_ = false;
 
     ripple_ = (0.1f + 0.5f * wm + 0.4f * wp + 0.5f * pulse_ * (0.3f + 0.7f * wm)) * (1.f - 0.85f * slow_);
     light_ = (0.92f + 0.05f * wm + 0.06f * wp + 0.05f * swell_) * (1.f - 0.1f * slow_);
@@ -1148,6 +1162,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progEnv_, "uTime", worldTime_);
     set1f(progEnv_, "uRipple", ripple_);
     set1f(progEnv_, "uStars", (1.f - 0.5f * wp - 0.4f * dev_) * (1.f - 0.6f * slow_));
+    set1f(progEnv_, "uStarsOn", std::min(smoothstepf(0.f, 0.6f, f.setup), 1.f - smoothstepf(0.2f, 0.95f, f.teardown)));
     set1f(progEnv_, "uMoon", smoothstepf(0.f, 1.f, slow_));
     set1f(progEnv_, "uPxAng", 2.f / (focal_ * height_));
     set3f(progEnv_, "uSkyTop", skyTop());

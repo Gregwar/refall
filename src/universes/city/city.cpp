@@ -27,6 +27,9 @@
 // in smooth crossfades; a quad sends fireworks up over the city and a chase of light up the piers; slow motion is
 // a long exposure (a colder night, cold city lights, the bloom wider); game over is a blackout floor by floor from
 // the top, the city going dark with it.
+//
+// Around a song: the setup wakes the city from the dark, its windows, street blocks and beacons switched on one by
+// one; the teardown puts them out again, one by one, the city falling asleep under its sky.
 #include "universes/city/city.hpp"
 
 #include <algorithm>
@@ -833,6 +836,8 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     const float flash = dropT_ < 3.f ? smoothstepf(0.f, 0.06f, dropT_) * std::exp(-dropT_ / 0.6f) * dropAmp_ : 0.f;
     const float tet = quadT_ < 6.f ? smoothstepf(0.f, 0.2f, quadT_) * (1.f - smoothstepf(1.5f, 3.f, quadT_)) : 0.f;
     const float black = overT_ < 9.f ? smoothstepf(0.2f, 1.8f, overT_) * (1.f - smoothstepf(4.5f, 8.f, overT_)) : 0.f;
+    // the scene's setup and teardown: the city's lights switched on one by one, then put out
+    const float wake = std::min(smoothstepf(0.05f, 0.75f, f.setup), 1.f - smoothstepf(0.05f, 0.9f, f.teardown));
     const float peakK = std::max(chorus_ * lvp, drop_);
     const float kickK = music.kick * lvp; // (small lights only: the beacons, the crowns)
     const float crown = std::max(0.f, 0.55f * chorus_ * lvp + 1.1f * drop_ + 0.6f * tet) * worldOn * (1.f - black);
@@ -900,6 +905,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progGround_, "uTime", world_);
     set1f(progGround_, "uTraffic", lerpf(0.35f, 1.f, lvm) * worldOn);
     set1f(progGround_, "uBlack", black);
+    set1f(progGround_, "uWake", wake);
     glBindVertexArray(quadVao_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
@@ -970,6 +976,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBox_, "uPatEpoch", patEpoch_);
     set1f(progBox_, "uPatPhase", patPhase_);
     set1f(progBox_, "uBlack", black);
+    set1f(progBox_, "uWake", wake);
     set1f(progBox_, "uFlash", flash);
     set1f(progBox_, "uSnow", pal_.snow);
     set1f(progBox_, "uGroundY", GROUND_Y);
@@ -1095,11 +1102,12 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
             on = std::max(on, 0.06f) * (1.f + 0.8f * kickK * drop_);
             const float dz = eye_.z - bs[i].z;
             const float r = 0.09f * dz / eye_.z + 0.05f * slow_ * dz / eye_.z;
-            dot(bs[i], r, BEACON_RED * 3.f, on * worldOn * (1.f - 0.8f * black), vec3(1.f, 0.f, 0.f), 0.f, 3.f);
+            const float awake = hashf((float)i + 0.37f) < wake * 1.02f - 0.01f ? 1.f : 0.f;
+            dot(bs[i], r, BEACON_RED * 3.f, on * worldOn * (1.f - 0.8f * black) * awake, vec3(1.f, 0.f, 0.f), 0.f, 3.f);
         }
         if (craneHost) {
             const float blink = 0.55f + 0.45f * (std::fmod(world_ * 0.5f, 1.f) < 0.5f ? 1.f : 0.f);
-            dot(craneTip, 0.2f, BEACON_RED * 3.f, blink * worldOn, vec3(1.f, 0.f, 0.f), 0.f, 3.f);
+            dot(craneTip, 0.2f, BEACON_RED * 3.f, blink * worldOn * smoothstepf(0.4f, 0.6f, wake), vec3(1.f, 0.f, 0.f), 0.f, 3.f);
         }
     }
     for (const Particle& p : sparks_) {
