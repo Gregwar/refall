@@ -85,6 +85,11 @@ private:
     void drawElement(const manga::Element& e, float inkT, float fade, float rotA);
     void drawBurst(float amt);
     void drawFrames(float shatter);
+    // the setup: each drawing panel ruled in then drawn out of the blank paper in turn (0..1); the teardown: each
+    // goes dark in turn (0..1), the ink coming down over it like a curtain
+    float setup_ = 1.f, teardown_ = 0.f;
+    float panelIn(int panel) const;
+    float panelOut(int panel) const;
     void drawSplash(float amt, float t, const vec3& color);
     void setClips();
     // the panels' clips, then spare slots for the drop's own panels (set per frame)

@@ -35,7 +35,8 @@
 // IMPACT, SHOJO and BARRAGE. After, the panels come back. A quad inks four elements, bursts color and focus lines
 // in and letters "ZUDON!" over the right column, its toast in a spiky balloon. Slow motion is a quiet moment: a deep blue night settles over
 // the drawings, pink petals drift down through them and "SHIIN" (the sound of silence) is lettered in outline. Game
-// over turns the stack back to pencil from the top, then erases it.
+// over turns the stack back to pencil from the top, then erases it. Around a song the drawing panels are ruled in and
+// drawn out of the blank paper one after the other, and after it each goes dark in turn, the ink coming down over it.
 //
 // Variants: SHONEN (a bright summer evening), NEWSPRINT (a Sunday comic: muted inks printed in CMYK halftone on
 // yellowed paper), AKA (dusk reds), YORU (the night page: pale ink on deep blues, warm windows and neon glows) and
@@ -1036,13 +1037,27 @@ void MangaUniverse::drawPanels(float t, float wm, float wp) {
 
 // The frames of the panels: bold ruled lines. On the drop the art panels' frames break into pieces that drift
 // away from the well and fade (shatter 0..1), and come back after.
+float MangaUniverse::panelIn(int panel) const {
+    int j = 0;
+    for (int i = manga::P_A; i < panel; i++) j += page_.panels[i].art ? 1 : 0;
+    return saturate((setup_ - 0.04f - 0.075f * j) / 0.26f);
+}
+
+float MangaUniverse::panelOut(int panel) const {
+    int j = 0;
+    for (int i = manga::P_A; i < panel; i++) j += page_.panels[i].art ? 1 : 0;
+    return ease(saturate((teardown_ - 0.32f - 0.065f * j) / 0.3f));
+}
+
 void MangaUniverse::drawFrames(float shatter) {
     const float w = 2.8f;
     for (int i = 0; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
         if (!p.shown || (bare_ && !p.art)) continue;
         if (!p.art || shatter <= 0.001f) {
-            strokeLine({p.c[0], p.c[1], p.c[2], p.c[3]}, w, 0.f, true, 1.f, ink_, 1.f, -1);
+            // (the setup: a drawing panel's frame ruled in along its edges)
+            const float upTo = p.art ? smoothstepf(0.f, 0.55f, panelIn(i)) : 1.f;
+            if (upTo > 0.f) strokeLine({p.c[0], p.c[1], p.c[2], p.c[3]}, w, 0.f, true, upTo, ink_, 1.f, -1);
             continue;
         }
         if (shatter >= 0.999f) continue;
@@ -1540,6 +1555,8 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     const MusicState& music = f.music;
     const float dt = f.dt;
     bare_ = f.bare;
+    setup_ = f.setup;
+    teardown_ = f.teardown;
     if (!f.bare) syncIds(game); // (a break's blank board keeps the stack's ids)
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.5f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
@@ -1789,6 +1806,23 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         drawSfx(sh, ease(slow_));
     }
 
+    // the setup: the drawing panels blank but for their ground until their turn; the teardown: the ink coming down
+    // over them one after the other (the darker of the page's two inks)
+    {
+        const vec3 dark = ugl::luma(paper_) > 0.4f ? ink_ : paper_;
+        for (int i = manga::P_A; i < manga::P_COUNT; i++) {
+            const manga::Panel& p = page_.panels[i];
+            if (!p.art) continue;
+            manga::Tone tn;
+            const float in = panelIn(i), out = panelOut(i);
+            if (in < 1.f) fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, 1.f - smoothstepf(0.4f, 1.f, in), i);
+            if (out > 0.f) {
+                const V2 b0 = p.c[0] + (p.c[3] - p.c[0]) * out, b1 = p.c[1] + (p.c[2] - p.c[1]) * out;
+                fillPoly({b0, b1, p.c[1], p.c[0]}, tn, 1.f, dark, 1.f, i);
+            }
+        }
+        flushInk();
+    }
     // the HUD's panels and the well's: plain paper, then every frame (a break: only the art panels' frames)
     for (int i = manga::P_WELL; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
