@@ -186,6 +186,8 @@ private:
     bool slowOn_ = false;
     bool bare_ = false; // this frame is a break's: the world alone (no well, no stack, no side panel)
     float slow_ = 0.f, overT_ = -1.f, dimT_ = 0.f, rush_ = 0.f;
+    // around a song: dusk over the garden (the sun below the ground, the dusk's palette, the stars), and the grass grown
+    float evening_ = 0.f, grow_ = 1.f;
     Bridge bridge_;
     Rng rng_{4242};
 };
