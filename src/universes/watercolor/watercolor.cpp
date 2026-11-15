@@ -906,7 +906,7 @@ void WatercolorUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progComp_, "uWetGain", 1.f - smoothstepf(0.f, 0.6f, run_));
         // the teardown: the sheet tilted, its washes running down and lifted back to paper (the game over's run)
         set1f(progComp_, "uRun", std::max(run_, smoothstepf(0.05f, 0.9f, f.teardown)));
-        set1f(progComp_, "uPaint", smoothstepf(0.1f, 0.85f, f.setup));
+        set1f(progComp_, "uPaint", smoothstepf(0.05f, 0.72f, f.setup));
         set1f(progComp_, "uBridge", bridge);
         set3f(progComp_, "uBridgeCol", bridge_.color);
         set1f(progComp_, "uLift", 1.f);

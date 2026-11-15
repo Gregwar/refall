@@ -672,7 +672,7 @@ void ShadowUniverse::render(const Frame& f, GLuint fbo) {
     // the scene's setup and teardown: the projector switched on (its lamp warming up from a dull filament, then its
     // iris opening on the wall), and switched off (the iris closing, the lamp cooling down)
     const float lamp = std::min(smoothstepf(0.f, 0.5f, f.setup), 1.f - smoothstepf(0.4f, 0.95f, f.teardown));
-    const float iris = 0.12f + 0.88f * std::min(smoothstepf(0.25f, 0.8f, f.setup), 1.f - smoothstepf(0.05f, 0.7f, f.teardown));
+    const float iris = 0.12f + 0.88f * std::min(smoothstepf(0.2f, 0.68f, f.setup), 1.f - smoothstepf(0.05f, 0.7f, f.teardown));
     intensity *= lamp * lamp;
     vec3 light1 = lin(V.light) * intensity * lerp(vec3(1.f, 0.35f, 0.08f), vec3(1.f), lamp);
     light1 = lerp(light1, MOON * 0.8f * intensity, 0.75f * slow_);
