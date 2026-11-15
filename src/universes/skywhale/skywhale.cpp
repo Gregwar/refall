@@ -553,9 +553,9 @@ void SkyWhaleUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the ray-traced sky at the full resolution up to 1440 lines, with its depth in a texture (the Moon's crisp
-    // shadows at the end: at a reduced resolution, upsampled, the craters' edges showed as saw teeth)
-    const int sh = std::max(180, std::min(1440, height_));
+    // the ray-traced sky at two thirds of the resolution (at most 960 lines), with its depth in a texture (at the full
+    // resolution it cost the Moon's end of the journey too much on modest GPUs)
+    const int sh = std::max(180, std::min(960, (int)(height_ * 0.66f)));
     const int sw = std::max(320, (int)std::lround((float)sh * width_ / height_));
     skyT_.create(sw, sh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
     if (!skyDepthTex_) glGenTextures(1, &skyDepthTex_);
