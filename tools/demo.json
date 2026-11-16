@@ -41,9 +41,8 @@
   "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8},
 
   // The environment of every shot (the game's test hooks): progression universes on their 50-line reference
-  // scale, a short warm-up started on a played-in stack. REFALL_INTRO_TEST: the song comes in as in the game (its
-  // title card on the black, the scene's setup, then the game), in every shot so that the continuous game is the same.
-  "env": {"REFALL_SCENE_LINES": "50", "REFALL_WARMUP": "10", "REFALL_CLIP_FILL": "1", "REFALL_INTRO_TEST": "1"},
+  // scale, a short warm-up started on a played-in stack.
+  "env": {"REFALL_SCENE_LINES": "50", "REFALL_WARMUP": "10", "REFALL_CLIP_FILL": "1"},
   // Per universe, wherever it appears (a shot's own env overrides it): a nice stage of the progression ones.
   "universe_env": {
     "gianttree": {"REFALL_GIANTTREE_LINES": "16"},
@@ -74,12 +73,11 @@
     {"id": "opening", "enabled": false, "end": "section:BREAK",
      "card": {"text": "Refall", "style": "title"}},
 
-    // the intro and the verse: light in the dark and crafts; the first shot is the game's own intro (the black,
-    // the stars and the first lanterns coming out, then the game)
+    // the intro and the verse: light in the dark and crafts, fading in from black
     {"id": "discover", "end": "drop:1 - 1bar",
      "card": {"text": "Discover many universes", "bars": 2, "enabled": false},
      "grid": "bar", "fill": true,
-     "shots": [{"u": "lanterns", "len": "6bars", "env": {"REFALL_CLIP_FILL": "0"},
+     "shots": [{"u": "lanterns", "fade_in": "1bar", "env": {"REFALL_CLIP_FILL": "0"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8, "quad": false}}, {"u": "origami"}, {"u": "rainy"}, {"u": "sonar"},
                {"u": "microscope:PHASE"}]},
 
@@ -111,8 +109,9 @@
                // under the logo
                {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"REFALL_OUT_LEAD": "11.2"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
-     // the end: the logo's white contours over the whale, then the logo in color as the scene fades to black
+     // the end: the logo's white contours over the whale as soon as the game's HUD fades away ("at": "hud"), then
+     // the logo in color as the scene fades to black
      "outro": {"fade": "2.5bars",
-               "logo": {"at": "end - 4bars", "size": 0.66}}}
+               "logo": {"at": "hud", "size": 0.66}}}
   ]
 }

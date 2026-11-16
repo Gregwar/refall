@@ -376,7 +376,9 @@ def plan(cfg, grid, universes):
                 last["title"] = title
             if "logo" in o:
                 logo = dict(o["logo"])
-                logo["at"] = grid.anchor(logo.get("at", "end - 8bars"))
+                # "hud": when the game's HUD fades away in the recorded shot (its outro), set once it is recorded
+                logo["hud"] = logo.get("at") == "hud"
+                logo["at"] = grid.anchor("end - 8bars" if logo["hud"] else logo.get("at", "end - 8bars"))
                 last["logo"] = logo
     # what each shot records: a little more than its span, for the crossfades centred on its cuts
     half = float(cfg.get("crossfade", 0.0)) / 2
@@ -444,7 +446,8 @@ def shot_key(e, game, song, size):
 
 
 def run_clip(e, seed, game, song, size, out):
-    """Records the shot's clip [c0, c1] with this game seed; returns (ok, label, clears, log)."""
+    """Records the shot's clip [c0, c1] with this game seed; returns (ok, label, clears, outro, log): outro is the song
+    time the game's outro starts (its HUD fading away), None when it did not."""
     start = round(e["c0"] * CLIP_FPS) / CLIP_FPS  # on the game's frame grid
     dur = e["c1"] - e["c0"] + 0.25
     spec = e["u"] + (":" + e["variant"] if e["variant"] else "")
@@ -457,15 +460,16 @@ def run_clip(e, seed, game, song, size, out):
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, env=env)
         text = r.stdout + r.stderr
     except subprocess.TimeoutExpired:
-        return False, spec, [], "timeout"
+        return False, spec, [], None, "timeout"
     with open(out + ".log", "w") as f:
         f.write(" ".join(cmd) + "\n" + text)
     if "[clip] wrote" not in text or not os.path.exists(tmp):
-        return False, spec, [], text[-400:]
+        return False, spec, [], None, text[-400:]
     os.replace(tmp, out)
     label = re.search(r"\[clip\] wrote .* \((.*)\)", text)
     clears = [(float(t), int(n)) for n, t in re.findall(r"\[clip\] clear (\d+) at ([\d.]+)", text)]
-    return True, label.group(1) if label else spec, clears, ""
+    outro = re.search(r"\[app\] break: outro at ([\d.]+)", text)
+    return True, label.group(1) if label else spec, clears, float(outro.group(1)) if outro else None, ""
 
 
 def clear_score(e, clears, grid):
@@ -504,18 +508,18 @@ def record_shot(e, game, song, size, clips, grid):
     for k in range(tries):
         seed = e["seed"] + 7919 * k
         out = os.path.join(clips, f"{key}-{seed}.mp4")
-        ok, label, clears, msg = run_clip(e, seed, game, song, size, out)
+        ok, label, clears, outro, msg = run_clip(e, seed, game, song, size, out)
         if not ok:
             continue
         sc = clear_score(e, clears, grid) if rule else (0.0, None, 0)
         if sc is not None:
-            found.append((sc, seed, out, label, clears))
+            found.append((sc, seed, out, label, clears, outro))
             if len(found) >= keep:
                 break
         else:
             if last and os.path.exists(last[2]):
                 os.remove(last[2])
-            last = ((-99.0, None, 0), seed, out, label, clears)
+            last = ((-99.0, None, 0), seed, out, label, clears, outro)
     if not found and last:  # no take showed a clear: keep the last one, reported
         found.append(last)
     elif last and os.path.exists(last[2]):
@@ -523,12 +527,12 @@ def record_shot(e, game, song, size, clips, grid):
     if not found:
         return e, False, msg
     found.sort(key=lambda f: -f[0][0])
-    sc, seed, out, label, clears = found[0]
+    sc, seed, out, label, clears, outro = found[0]
     for f in found[1:]:
         if os.path.exists(f[2]):
             os.remove(f[2])
     result = {"clip": out, "label": label, "game_seed": seed, "clear_at": sc[1], "clear_lines": sc[2],
-              "clears": clears}
+              "clears": clears, "outro_at": outro}
     with open(meta, "w") as f:
         json.dump(result, f)
     e.update(result)
@@ -929,6 +933,12 @@ def main():
         record_all([e for e in timeline if e.get("u") in keep], game, song, f"{width}x{height}", work, args.jobs, grid)
         return
     record_all(timeline, game, song, f"{width}x{height}", work, args.jobs, grid)
+    for e in timeline:
+        if e.get("logo", {}).get("hud"):
+            if e.get("outro_at") is None:
+                sys.exit(f"the logo waits for the HUD to fade away, but the game's outro never started in {e['u']}")
+            e["logo"]["at"] = e["outro_at"]
+            log(f"the logo at {e['outro_at']:.2f} s, as the HUD fades away")
     out = os.path.abspath(args.out)
     assemble(timeline, cfg, grid, song, out, width, height, fps, work, cfg.get("max_mb", 29.5), args.crf)
     contact_sheet(timeline, args.sheet or os.path.splitext(out)[0] + "-sheet.png", out, fps)
