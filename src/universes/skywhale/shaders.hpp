@@ -773,6 +773,18 @@ void main() {
         }
     }
     float a = cov * uMoonK;
+    {
+        // behind the planet (the sea, the land, the horizon from up high): hidden, its edge antialiased on the limb
+        const float RP = 6.371e6;
+        vec3 oc = vec3(uEye.x, uEye.y + RP, uEye.z);
+        float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * RP);
+        float bp = dot(oc, d);
+        float gapP = (bp * bp - c0) / max(-bp, 1.0);   // > 0: the ray reaches the planet (the miss distance, meters)
+        float ahead = step(bp, 0.0);
+        float hidden = ahead * smoothstep(-1.0, 1.0, gapP / max(-bp * uPix * 2.0, 1e-3));
+        a *= 1.0 - hidden;
+        ce *= 1.0 - hidden;
+    }
     if (uDay > 0.0 && cov > 0.0) {
         // by day: pale and bright, washed into the sky, its shaded side lost in the sky's light
         float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
