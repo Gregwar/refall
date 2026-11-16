@@ -127,7 +127,7 @@ private:
     // ---- GL.
     GLuint progWorld_ = 0, progWorldCity_ = 0, progWorldCountry_ = 0;   // the whole way; the city only; the countryside only
     GLuint progFront_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
-           progPost_ = 0, progPanda_ = 0;
+           progPost_ = 0, progPanda_ = 0, progNear_ = 0;
     GLuint quadVbo_ = 0, quadVao_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
            shapeVbo_ = 0;
     ugl::Target worldT_, sceneT_;

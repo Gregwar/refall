@@ -1312,9 +1312,9 @@ vec3 bambooClump(vec2 p, vec3 c, float k, float base, float scale, float dens0, 
     return c;
 }
 
-// the bamboo nearest of all (layer 1.7, in front of the way): a few big dark culms and their leaves framing the
-// view, fastest of all; quieter behind the well
-vec3 nearBamboo(vec2 p, vec3 c) {
+// the bamboo nearest of all (layer 1.7, in front of the way and the pandas: drawn in its own pass over them, its
+// coverage in a): a few big dark culms and their leaves framing the view, fastest of all; quieter behind the well
+vec3 nearBamboo(vec2 p, vec3 c, inout float a) {
     float k = 1.7;
     float u = p.x + uD * k;
     float cw = 9.0;
@@ -1340,7 +1340,9 @@ vec3 nearBamboo(vec2 p, vec3 c) {
             cc = mix(cc, col * 1.4, fillA(abs(nyy + 0.16) - 0.07));
             cc = mix(cc, inkOf(col), fillA(abs(nyy) - 0.05));
             cc = mix(cc, inkOf(col), fillA(abs(d) - 0.05));
-            c = mix(c, dayLit(cc), fillA(d - 0.05) * calm);
+            float ca = fillA(d - 0.05) * calm;
+            c = mix(c, dayLit(cc), ca);
+            a = mix(a, 1.0, ca);
         }
         for (int l = 0; l < 2; l++) {
             float fl = float(l);
@@ -1361,7 +1363,9 @@ vec3 nearBamboo(vec2 p, vec3 c) {
                 float lw = 0.32 * sin(sqrt(tt) * PI) * (1.0 - tt * 0.3);
                 float ld = max(abs(r.y + 0.25 * tt * tt) - lw, max(-r.x, r.x - L));
                 vec3 lcol = mix(lc * (0.9 + 0.1 * fb), inkOf(lc), fillA(abs(ld) - 0.035));
-                c = mix(c, dayLit(lcol), fillA(ld - 0.035) * calm);
+                float la = fillA(ld - 0.035) * calm;
+                c = mix(c, dayLit(lcol), la);
+                a = mix(a, 1.0, la);
             }
         }
     }
@@ -2086,6 +2090,17 @@ void main() {
     vec2 p = uViewC + (vUv * 2.0 - 1.0) * uViewH;
     gPx = uPxP;
     vec2 w = p + vec2(uD, uCamY);
+#ifdef NEAR_PASS
+    // the near bamboo alone, over the pandas (premultiplied)
+    float na = 0.0;
+    vec3 nc = nearBamboo(p, vec3(0.0), na);
+    if (na < 0.002) discard;
+    nc /= na;
+    nc = mix(nc, nc * vec3(0.3, 0.32, 0.4), uOver * 0.75);
+    nc = mix(uBridgeCol, nc, uWorldA);
+    frag = vec4(max(nc, 0.0) * na, na);
+    return;
+#endif
     float fl, ce;
     int cv = cavity(w, fl, ce);
     vec3 c;
@@ -2160,7 +2175,6 @@ void main() {
     }
     if (air) c = cityFront(p, w, c, 1.35);
     if (COUNTRY && air) c = grassFront(p, w, c, 1.35);
-    if (COUNTRY && uD + uViewC.x > 1380.0) c = nearBamboo(p, c);
     if (air) c = rain(p, c, uRain);
     if (CITY && air && w.x < 1251.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
     c += uSunCol * uDrop * 0.05 * smoothstep(4.0, -10.0, p.y);

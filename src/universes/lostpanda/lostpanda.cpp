@@ -285,6 +285,7 @@ bool LostPandaUniverse::init(int width, int height) {
     // (lighter variants where only the city, or only the countryside, can show)
     progWorldCity_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (city)", "#define ZONES\n#define CITY true\n#define COUNTRY false\n");
     progWorldCountry_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (country)", "#define ZONES\n#define CITY false\n#define COUNTRY true\n");
+    progNear_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda near bamboo", "#define ZONES\n#define CITY false\n#define COUNTRY true\n#define NEAR_PASS\n");
     progFront_ = compile(ugl::FULLSCREEN_VS, shaders::FRONT_FS, "lostpanda front");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "lostpanda comp");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "lostpanda sprite");
@@ -368,7 +369,7 @@ void LostPandaUniverse::resize(int width, int height) {
 
 LostPandaUniverse::~LostPandaUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progWorldCity_, progWorldCountry_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_})
+    for (GLuint p : {progWorld_, progWorldCity_, progWorldCountry_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_, progNear_})
         glDeleteProgram(p);
     for (GLuint v : {quadVao_, spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -1387,27 +1388,17 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         setTrain(progFront_, 1.f / pxPerUnit_);
         ugl::drawFullscreen();
     };
-    // the cub is inside the train (behind its near side) from its door to the terminus
-    const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
-
-    // =========================================================== the world (full resolution, up to 1440 lines)
-    {
-        worldT_.bind();
-        glDisable(GL_BLEND);
-        // the city's layers show until its street (at half speed) leaves the screen's left edge past 1290 along the
-        // way; the countryside's from when the works' warehouses (at 0.4) reach its right edge at 1245
-        const double ud = C_ - xP_;
-        const bool city = ud + 2.0 * (viewC_.x - viewH_.x) < 1290.0, country = ud + 2.5 * (viewC_.x + viewH_.x) > 1245.0;
-        const GLuint pw = !country ? progWorldCity_ : (!city ? progWorldCountry_ : progWorld_);
+    // the world shader's uniforms (the world pass, and the near bamboo's pass over the pandas)
+    auto setWorld = [&](GLuint pw, float pxp) {
         glUseProgram(pw);
         set2f(pw, "uViewC", viewC_.x, viewC_.y);
         set2f(pw, "uViewH", viewH_.x, viewH_.y);
-        set1f(pw, "uPxP", 2.f * viewH_.y / worldT_.h);
+        set1f(pw, "uPxP", pxp);
         set1f(pw, "uD", (float)C_ - xP_);
         set1f(pw, "uCamY", viewY_);
         set1f(pw, "uDawn", dawn);
         set1f(pw, "uSubLight", 1.f);
-        setTrain(pw, 2.f * viewH_.y / worldT_.h);
+        setTrain(pw, pxp);
         set1f(pw, "uTime", time_);
         set1f(pw, "uBeat", (float)std::fmod(beat, 4096.0));
         set1f(pw, "uPeak", wp);
@@ -1427,6 +1418,20 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set4f(pw, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
         set3f(pw, "uBridgeCol", bridge_.color);
         set1f(pw, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
+    };
+    // the cub is inside the train (behind its near side) from its door to the terminus
+    const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
+
+    // =========================================================== the world (full resolution, up to 1440 lines)
+    {
+        worldT_.bind();
+        glDisable(GL_BLEND);
+        // the city's layers show until its street (at half speed) leaves the screen's left edge past 1290 along the
+        // way; the countryside's from when the works' warehouses (at 0.4) reach its right edge at 1245
+        const double ud = C_ - xP_;
+        const bool city = ud + 2.0 * (viewC_.x - viewH_.x) < 1290.0, country = ud + 2.5 * (viewC_.x + viewH_.x) > 1245.0;
+        const GLuint pw = !country ? progWorldCity_ : (!city ? progWorldCountry_ : progWorld_);
+        setWorld(pw, 2.f * viewH_.y / worldT_.h);
         ugl::drawFullscreen();
     }
 
@@ -1468,6 +1473,11 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     }
     if (inside) drawFront();
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // the near bamboo, in front of the way and of the pandas
+    if (C_ - xP_ + viewC_.x > 1380.0) {
+        setWorld(progNear_, 1.f / pxPerUnit_);
+        ugl::drawFullscreen();
+    }
     // hearts rising from the pandas when they meet (on the right of the HUD, behind nothing of the board)
     {
         const float fs = famS_;
