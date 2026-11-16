@@ -1703,16 +1703,10 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     glClearColor(paper_.x, paper_.y, paper_.z, 1.f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    // the drawings (jolting with the drop's barrage)
+    // the drawings
     const float aS = ease(fxAmt_[DF_SPLASH]), aD = ease(fxAmt_[DF_DASH]), aP = ease(fxAmt_[DF_PANELS]);
     const float aI = ease(fxAmt_[DF_IMPACT]), aJ = ease(fxAmt_[DF_SHOJO]), aB = ease(fxAmt_[DF_BARRAGE]);
-    {
-        const vec2 c0 = viewC_;
-        const float j = 0.32f * jolt_ * aB;
-        viewC_ = vec2{c0.x + joltDir_.x * j, c0.y + joltDir_.y * j};
-        drawPanels(time_, wm, wp);
-        viewC_ = c0;
-    }
+    drawPanels(time_, wm, wp);
     // slow motion: night settles over the drawings (a deep blue wash, night tones), petals drift down through them
     if (slow_ > 0.01f) {
         // the night's tone is the darker of the two inks, the petals the lighter, blushed pink
@@ -1763,9 +1757,9 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
             discPx(c.x, c.y, rr, light, ease(slow_), clip);
         }
     }
-    // the drop: the drawings fade back to the paper (the splash's, the dash's, the barrage's)
+    // the drop: the drawings fade back to the paper (the splash's; the other moments paint their own full page)
     {
-        const float k = std::max(0.9f * aS, std::max(0.7f * aD, 0.35f * aB));
+        const float k = 0.9f * aS;
         if (k > 0.001f)
             for (int i = manga::P_A; i < manga::P_COUNT; i++) {
                 const manga::Panel& p = page_.panels[i];

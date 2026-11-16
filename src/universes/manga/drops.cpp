@@ -1,20 +1,23 @@
 // MANGA's drops: a real drop takes the page into one of six manga moments, never the same twice in a row (a
-// shuffled rotation, seeded per song), and a long drop moves on to another every 32 beats:
+// shuffled rotation, seeded per song), and a long drop moves on to another every 32 beats. Each is a full page in
+// some color (the drawings may still be in pencil early in a song) and moves calmly, on the bar:
 //
 // - SPLASH: a full-page splash of color behind focus lines, a huge "DON!" and a rumble of "GO" (manga.cpp).
-// - DASH: the page turns into speed lines streaming past, the drawings smeared behind them, big sound effects
-//   sliding across with the stream.
+// - DASH: speed lines streaming past over a soft wash of the sky's and the burst's colors, a big sound effect
+//   sliding across with the stream on every bar.
 // - PANELS: the outer columns break into slanted panels, each a close-up of the drawings (crosshatched shadows,
-//   focus lines), the cuts and close-ups changing on the two-beat grid.
-// - IMPACT: impact frames: the page flips to its negative (the drawings in white lines on ink) and to red, white
-//   focus lines, shock-wave rings and flying shards on the two-beat grid.
+//   focus lines), the cuts and close-ups changing on every bar.
+// - IMPACT: impact frames on the bar: a bar of the page's negative (the drawings in white lines on a red-tinted
+//   ink), three of the red page, focus lines, shock-wave rings and flying shards.
 // - SHOJO: a soft pastel wash, screentone flowers blooming on the beats, twinkling sparkles, bubbles and petals.
-// - BARRAGE: sound effects bursting out in rhythm, one a beat in spiky balloons, the drawings jolting with them.
+// - BARRAGE: a warm halftone page, sound effects bursting out every two beats in spiky balloons over blots of
+//   color, the older balloons shuddering as a new one bursts in.
 //
 // Everything is drawn behind the well's and the HUD's panels (painted over it), so the stack and the HUD stay
-// readable.
+// readable. REFALL_MANGA_FX=N forces moment N (0 SPLASH .. 5 BARRAGE).
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #include "universes/manga/manga.hpp"
 
@@ -30,8 +33,8 @@ float easeOut(float t) {
     return 1.f - (1.f - t) * (1.f - t) * (1.f - t);
 }
 float fract(double x) { return (float)(x - std::floor(x)); }
-// the dash's stream: leftward, turning around every eight beats
-float dashDir(double rb) { return ((long)std::floor(rb / 8.0)) % 2 ? 1.f : -1.f; }
+// the dash's stream: leftward, turning around every sixteen beats
+float dashDir(double rb) { return ((long)std::floor(rb / 16.0)) % 2 ? 1.f : -1.f; }
 
 constexpr float INK_DONE = 1.1f * 3.f; // an element's inking long done (manga.cpp's INK_S x 3)
 constexpr float TOP = 10.5f, BOT = -11.1f, COL_IN = 12.1f; // the page's art columns (art.cpp)
@@ -74,6 +77,9 @@ int letters(const char* s) {
 // =====================================================================================================
 
 int MangaUniverse::pickFx() {
+    // a test hook: REFALL_MANGA_FX=N forces moment N (0 SPLASH .. 5 BARRAGE)
+    static const int forced = std::getenv("REFALL_MANGA_FX") ? std::atoi(std::getenv("REFALL_MANGA_FX")) : -1;
+    if (forced >= 0 && forced < DF_COUNT) return forced;
     for (int tries = 0; tries < 4 * DF_COUNT; tries++) {
         if (bagPos_ >= DF_COUNT) {
             for (int i = 0; i < DF_COUNT; i++) bag_[i] = i;
@@ -113,24 +119,24 @@ void MangaUniverse::fxBeat(int fx, long n, double beat, float bpm) {
         }
         break;
     case DF_DASH:
-        // a sound effect sliding across a column with the stream, a big one on every bar
-        if (n % 2 == 0) {
-            const bool big = n % 4 == 0;
-            const float side = (n / 2) % 2 ? 1.f : -1.f;
+        // a sound effect sliding across a column with the stream on every bar, a big one every other bar
+        if (n % 4 == 0) {
+            const bool big = n % 8 == 0;
+            const float side = (n / 4) % 2 ? 1.f : -1.f;
             Rng r(seed_ ^ (uint64_t)(n * 977 + 13));
-            const char* t = big ? (n % 8 == 0 ? K_ZUBA : K_GOO) : K_BYUN;
+            const char* t = big ? (n % 16 == 0 ? K_ZUBA : K_GOO) : K_BYUN;
             const float size = big ? 2.3f : 1.6f;
             const float dir = dashDir((double)n);
-            const V2 at{side * cx - dir * 2.2f, big ? r.range(-3.f, 4.f) : r.range(-8.5f, 7.5f)};
-            Sfx& s = addSfx(t, at, size, -0.06f * dir, 2.1f * spb, false, big ? SFX_COLOR : SFX_BLACK, 0.15f);
-            s.vel = {dir * 4.4f / (2.f * spb), 0.f};
+            const V2 at{side * cx - dir * 2.f, big ? r.range(-3.f, 4.f) : r.range(-8.5f, 7.5f)};
+            Sfx& s = addSfx(t, at, size, -0.06f * dir, 3.6f * spb, false, big ? SFX_COLOR : SFX_BLACK, 0.25f);
+            s.vel = {dir * 4.f / (3.6f * spb), 0.f};
             s.fx = DF_DASH;
         }
         break;
     case DF_PANELS:
-        if (n % 4 == 0) {
-            const bool left = (n / 4) % 2 == 0;
-            addSfx(left ? K_DODODO : K_GOGOGO, {(left ? -1.f : 1.f) * (X - 1.1f), 1.0f}, 1.25f, left ? -0.1f : 0.1f, 4.2f * spb, true,
+        if (n % 8 == 0) {
+            const bool left = (n / 8) % 2 == 0;
+            addSfx(left ? K_DODODO : K_GOGOGO, {(left ? -1.f : 1.f) * (X - 1.1f), 1.0f}, 1.25f, left ? -0.1f : 0.1f, 7.f * spb, true,
                    SFX_BLACK, 0.2f)
                 .fx = DF_PANELS;
         }
@@ -138,24 +144,24 @@ void MangaUniverse::fxBeat(int fx, long n, double beat, float bpm) {
     case DF_IMPACT:
         if (n == 0) addSfx(K_DOGOON, {-cx, 1.2f}, 3.1f, -0.1f, 1e9f, true, SFX_WHITE, 0.3f).fx = DF_IMPACT;
         if (n % 8 == 4) addSfx(K_DON2, {cx, n % 16 == 4 ? 5.5f : -4.5f}, 2.3f, 0.12f, 3.5f * spb, false, SFX_WHITE, 0.15f).fx = DF_IMPACT;
-        if (n % 2 == 0) {
-            // a shock wave out of the well, shards flying out with it
+        if (n % 4 == 0) {
+            // a shock wave out of the well on every bar, shards flying out with it
             const V2 c{0.f, 0.4f};
-            rings_.push_back({c, 0.f, 0.75f, 9.f, 30.f});
-            rings_.push_back({c, -0.08f, 0.7f, 8.f, 24.f});
-            const int count = n % 8 == 0 ? 34 : 18;
+            rings_.push_back({c, 0.f, 1.1f, 9.f, 30.f});
+            rings_.push_back({c, -0.12f, 1.f, 8.f, 24.f});
+            const int count = n % 16 == 0 ? 26 : 14;
             for (int i = 0; i < count; i++) {
                 Shard s;
                 const float a = rng_.range(0.f, TAU);
                 const float r0 = rng_.range(10.f, 13.f);
                 s.p = {c.x + std::cos(a) * r0 * 1.15f, c.y + std::sin(a) * r0 * 0.8f};
-                const float sp = rng_.range(9.f, 26.f);
+                const float sp = rng_.range(6.f, 17.f);
                 s.v = {std::cos(a) * sp * 1.2f, std::sin(a) * sp * 0.8f};
                 s.rot = rng_.range(0.f, TAU);
                 s.vr = rng_.range(-9.f, 9.f);
                 s.size = rng_.range(0.15f, 0.6f);
                 s.t = 0.f;
-                s.life = rng_.range(0.6f, 1.2f);
+                s.life = rng_.range(0.9f, 1.6f);
                 s.kind = rng_.chance(0.3f) ? 1 : 0;
                 shards_.push_back(s);
             }
@@ -170,24 +176,26 @@ void MangaUniverse::fxBeat(int fx, long n, double beat, float bpm) {
         }
         break;
     case DF_BARRAGE: {
-        // one sound effect a beat in a spiky balloon, a big one on every bar's downbeat
+        // one sound effect every two beats in a spiky balloon, the columns in turn, a big one every other bar
+        if (n % 2) break;
+        const long m = n / 2;
         Rng r(seed_ ^ (uint64_t)(n * 7919 + 3));
         Pop p;
-        const bool big = n % 4 == 0;
-        const float side = n % 2 ? 1.f : -1.f;
-        // the slots of a column in turn, so the balloons of the last beats stay clear
+        const bool big = m % 4 == 0;
+        const float side = m % 2 ? 1.f : -1.f;
+        // the slots of a column in turn, so the balloons of the last bars stay clear
         const float ys[4] = {7.4f, -7.6f, 3.6f, -3.4f};
-        p.at = {side * cx + (big ? 0.f : r.range(-0.9f, 0.9f)), big ? r.range(-1.f, 1.5f) : ys[(n / 2) % 4] + r.range(-0.6f, 0.6f)};
+        p.at = {side * cx + (big ? 0.f : r.range(-0.9f, 0.9f)), big ? r.range(-1.f, 1.5f) : ys[(m / 2) % 4] + r.range(-0.6f, 0.6f)};
         p.size = big ? 2.2f : r.range(1.4f, 1.75f);
-        p.text = BARRAGE_TEXTS[(n + (seed_ % 5)) % BARRAGE_COUNT];
+        p.text = BARRAGE_TEXTS[(m + (long)(seed_ % 5)) % BARRAGE_COUNT];
         // its balloon fits in the column
         p.size = std::min(p.size, (X - COL_IN - 0.6f) / (0.97f * letters(p.text.c_str()) + 1.5f) * (big ? 1.25f : 1.f));
         p.angle = r.range(-0.22f, 0.22f);
         p.t = 0.f;
-        p.life = (big ? 5.f : 4.f) * spb;
-        p.kind = big ? 2 : (int)(n / 2 % 2);
+        p.life = (big ? 9.f : 7.f) * spb;
+        p.kind = big ? 2 : (int)(m / 2 % 2);
         pops_.push_back(p);
-        jolt_ = big ? 1.f : 0.6f;
+        jolt_ = big ? 1.f : 0.5f;
         const float a = r.range(0.f, TAU);
         joltDir_ = {std::cos(a), std::sin(a)};
         break;
@@ -328,21 +336,40 @@ void MangaUniverse::flower(V2 c, float r, float rot, float open, const vec3& pet
 // The effects
 // =====================================================================================================
 
-// DASH: the page turns into speed lines streaming past, the drawings smeared behind them; the stream turns
-// around every eight beats.
+// DASH: the page turns into speed lines streaming past over a soft wash of the sky's colors; the stream turns
+// around every sixteen beats.
 void MangaUniverse::drawDash(float a, float t, double beat) {
     const double rb = std::max(0.0, beat - fxBeat0_);
     const float dir = dashDir(rb);
-    // the drawings smeared along the stream
-    for (int k = 1; k <= 3; k++) drawArtAt(-1, -1, {0.f, 0.f}, 1.f, {-dir * 0.8f * k * a, 0.f}, 0, 0.26f * a, false, nullptr);
     const float H = viewH_.y + 0.5f, W = viewH_.x + 0.5f;
     const ToneP solid{manga::TONE_SOLID, 4.f, 0.f, {0, 0}, -1};
+    // the ground: the sky's middle wash at the top warming to the burst's glow at the foot, the stream's dot tone
+    // thinning toward the middle of the page
+    {
+        const float mixK = ugl::luma(paper_) < 0.4f ? 0.4f : 0.5f;
+        const vec3 top = lerp(paper_, hue(manga::H_SKY_MID), mixK), mid = lerp(paper_, cur_[K_BURST], mixK * 1.4f);
+        const vec3 foot = lerp(paper_, cur_[K_BURST + 1], mixK);
+        gradRect(-W, 0.5f, W, H, top, mid, a);
+        gradRect(-W, -H, W, 0.5f, mid, foot, a);
+        manga::Tone tn;
+        tn.kind = manga::TONE_LINES;
+        tn.d0 = 0.3f;
+        tn.d1 = 0.f;
+        tn.g0 = {0.f, H};
+        tn.g1 = {0.f, 3.f};
+        tn.cell = 0.18f;
+        tn.angle = 0.f;
+        fillPoly({{-W, 2.5f}, {W, 2.5f}, {W, H}, {-W, H}}, tn, 1.f, shadeOf(top), a, -1);
+        tn.g0 = {0.f, -H};
+        tn.g1 = {0.f, -3.5f};
+        fillPoly({{-W, -H}, {W, -H}, {W, -3.f}, {-W, -3.f}}, tn, 1.f, shadeOf(foot), a, -1);
+    }
     // streaks of color blurred by the speed: opaque at the front, fading out at the tail
     {
         Rng r(0x57EAull);
         const vec3 cols[4] = {cur_[K_BURST], cur_[K_BURST + 1], cur_[K_BURST + 2], hue(manga::H_SKY_MID)};
         for (int i = 0; i < 26; i++) {
-            const float y = r.range(-H, H), hh = r.range(0.15f, 0.9f), L = r.range(8.f, 22.f), v = r.range(14.f, 30.f), ph = r.uniform();
+            const float y = r.range(-H, H), hh = r.range(0.15f, 0.9f), L = r.range(8.f, 22.f), v = r.range(6.f, 13.f), ph = r.uniform();
             const vec3 c = lerp(paper_, cols[i % 4], r.range(0.45f, 0.85f));
             const float span = 2.f * W + L;
             const float x = dir < 0.f ? W - std::fmod(ph * span + v * t, span) : -W + std::fmod(ph * span + v * t, span);
@@ -356,28 +383,28 @@ void MangaUniverse::drawDash(float a, float t, double beat) {
     }
     // the speed lines: blunt at the front, sharp at the tail
     Rng r(0xDA5Bull);
-    const int N = 300;
+    const int N = 170;
     for (int i = 0; i < N; i++) {
         const float y = r.range(-H, H);
         const float L = r.range(2.5f, 12.f) * (r.chance(0.2f) ? 1.7f : 1.f);
         const float h = r.range(0.025f, 0.14f) * (r.chance(0.12f) ? 2.3f : 1.f);
-        const float v = r.range(30.f, 75.f);
+        const float v = r.range(14.f, 34.f);
         const float ph = r.uniform();
-        const bool white = r.chance(0.14f);
+        const float kind = r.uniform(); // ink mostly, some in the burst's deep color, a few in white
         if (i > N * a) continue;
         const float span = 2.f * W + L;
         const float x = dir < 0.f ? W - std::fmod(ph * span + v * t, span) : -W + std::fmod(ph * span + v * t, span);
+        const vec3 c = kind < 0.14f ? paper_ : kind < 0.4f ? lerp(cur_[K_BURST + 2], ink_, 0.2f) : ink_;
         manga::Tone tn;
-        fillPoly({{x, y + h}, {x - dir * L, y}, {x, y - h}}, tn, 1.f, white ? paper_ : ink_, a * (white ? 0.9f : 0.95f), -1);
+        fillPoly({{x, y + h}, {x - dir * L, y}, {x, y - h}}, tn, 1.f, c, a * 0.9f, -1);
     }
 }
 
-// PANELS: the outer columns break into slanted panels, each a close-up of the drawings, cut anew on the two-beat
-// grid.
+// PANELS: the outer columns break into slanted panels, each a close-up of the drawings, cut anew on every bar.
 void MangaUniverse::drawPanelBreak(float a, double beat) {
     const double rb = std::max(0.0, beat - fxBeat0_);
-    const long step = (long)std::floor(rb / 2.0);
-    const float ph = fract(rb / 2.0);
+    const long step = (long)std::floor(rb / 4.0);
+    const float ph = fract(rb / 4.0);
     const float X = std::max(12.6f, viewH_.x - 0.6f);
     // the elements worth a close-up
     std::vector<int> subjects;
@@ -401,7 +428,7 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
             manga::Tone tn;
             fillPoly({q[3], q[2], q[1], q[0]}, tn, 1.f, paper_, a, -1);
         }
-        // the cuts: the last step's sliding to this step's right after the beat
+        // the cuts: the last bar's sliding to this bar's over the downbeat
         auto cuts = [&](long s, float* yc, float* sl) {
             Rng r(seed_ ^ (uint64_t)(s * 7919 + side * 104729 + 17));
             yc[0] = r.range(2.f, 6.5f);
@@ -412,7 +439,7 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
         float yA[2], sA[2], yB[2], sB[2];
         cuts(step - 1, yA, sA);
         cuts(step, yB, sB);
-        const float k = easeOut(ph / 0.14f);
+        const float k = ease(ph / 0.12f);
         float yc[2], sl[2];
         for (int i = 0; i < 2; i++) {
             yc[i] = lerpf(yA[i], yB[i], k);
@@ -428,11 +455,11 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
             const int slot = manga::P_COUNT + side * 3 + j;
             setClip(slot, q);
             const V2 cen{(q[0].x + q[1].x + q[2].x + q[3].x) * 0.25f, (q[0].y + q[1].y + q[2].y + q[3].y) * 0.25f};
-            // its close-up: a subject, zoomed in, slowly pushing in through the step
+            // its close-up: a subject, zoomed in, slowly pushing in through the bar
             Rng rc(seed_ ^ (uint64_t)(step * 131 + side * 31 + j * 7 + 1));
             const int si = subjects[(size_t)rc.irange(0, (int)subjects.size() - 1)];
             const manga::Element& e = page_.elems[(size_t)si];
-            const float zoom = rc.range(1.9f, 3.4f) * (1.f + 0.12f * ph);
+            const float zoom = rc.range(1.9f, 3.4f) * (1.f + 0.1f * ph);
             const V2 focus = e.center + V2{rc.range(-0.4f, 0.4f), rc.range(-0.4f, 0.4f)};
             const int overlay = rc.irange(0, 3);
             // drawn under a scissor around the panel (cheap on software rasterizers)
@@ -490,21 +517,48 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
             strokeLine({q[0], q[1], q[2], q[3]}, 3.2f, 0.f, true, 1.f, ink_, a, -1);
         }
     }
+    // the small panels between the HUD's: the burst's colors under a dot tone, so the page reads full
+    for (const int i : {(int)manga::P_C, (int)manga::P_D}) {
+        const manga::Panel& p = page_.panels[i];
+        if (!p.art || !p.shown) continue;
+        const float mixK = ugl::luma(paper_) < 0.4f ? 0.5f : 0.6f;
+        const vec3 top = lerp(paper_, cur_[K_BURST + 1], mixK), foot = lerp(paper_, cur_[K_BURST + 2], mixK);
+        const ToneP t{manga::TONE_WASH, 4.f, 0.f, px({0.f, 0.f}), i};
+        const vec2 c0 = px(p.c[0]), c1 = px(p.c[1]), c2 = px(p.c[2]), c3 = px(p.c[3]);
+        const vec3 ca[3] = {top, top, foot}, cb[3] = {top, foot, foot};
+        const float al[3] = {a, a, a};
+        triC({c0.x, c0.y}, {c1.x, c1.y}, {c2.x, c2.y}, t, 1.f, ca, al);
+        triC({c0.x, c0.y}, {c2.x, c2.y}, {c3.x, c3.y}, t, 1.f, cb, al);
+        manga::Tone tn;
+        tn.kind = manga::TONE_DOTS;
+        tn.d0 = 0.55f;
+        tn.d1 = 0.f;
+        tn.g0 = p.c[3];
+        tn.g1 = p.c[0];
+        tn.cell = 0.17f;
+        tn.angle = 0.785f;
+        fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, shadeOf(foot), a, i);
+    }
 }
 
-// IMPACT: impact frames, the page flipping to its negative and to red on the beats, white focus lines, shock
-// waves and shards.
+// IMPACT: impact frames on the bar: a bar of the page's negative (tinted with the burst's red), three of the red
+// page, focus lines, shock waves and shards.
 void MangaUniverse::drawImpact(float a, double beat) {
     const double rb = std::max(0.0, beat - fxBeat0_);
-    const long n = (long)std::floor(rb);
-    const bool neg = n < 4 ? n % 2 == 0 : n % 8 != 7;
-    const vec3 ground = neg ? ink_ : cur_[K_BURST + 2], line = neg ? paper_ : ink_;
-    rectPx(0.f, 0.f, (float)width_, (float)height_, ground, a);
+    const long bar = (long)std::floor(rb / 4.0);
+    const bool neg = bar % 4 == 0;
+    const vec3 red = cur_[K_BURST + 2], line = neg ? paper_ : ink_;
+    const vec3 ground = neg ? lerp(ink_, red, 0.3f) : red;
+    // the red page glowing toward the burst's middle color at its foot, the negative darkening at its foot
+    const vec3 foot = neg ? lerp(ink_, red, 0.12f) : lerp(red, cur_[K_BURST + 1], 0.45f);
+    const float H = viewH_.y + 0.5f, W = viewH_.x + 0.5f;
+    gradRect(-W, -H, W, H, ground, foot, a);
     drawArtAt(-1, -1, {0.f, 0.f}, 1.f, {0.f, 0.f}, neg ? 1 : 2, a, true, nullptr);
-    // a flash of the paper on each bar's downbeat
-    if (n % 4 == 0) rectPx(0.f, 0.f, (float)width_, (float)height_, paper_, a * 0.75f * std::max(0.f, 1.f - fract(rb) * 4.f));
-    // focus lines in the frame's line color, lunging on the two-beat grid
-    drawSplash(0.9f * a, (float)(rb / 2.0), line);
+    // a soft flash of the paper as the frame flips
+    if (fract(rb / 4.0) < 0.0625f && (bar % 4 == 0 || bar % 4 == 1))
+        rectPx(0.f, 0.f, (float)width_, (float)height_, paper_, a * 0.4f * (1.f - fract(rb / 4.0) * 16.f));
+    // focus lines in the frame's line color, lunging on the bar
+    drawSplash(0.9f * a, (float)(rb / 4.0), line);
     // the shock waves: ellipses spreading out of the well
     for (const Ring& rg : rings_) {
         if (rg.t <= 0.f) continue;
@@ -639,43 +693,60 @@ void MangaUniverse::drawShojo(float a, double beat) {
     }
 }
 
-// BARRAGE: sound effects bursting out one a beat in spiky balloons, the drawings jolting with them.
+// BARRAGE: sound effects bursting out every two beats in spiky balloons over a warm halftone page, the balloons
+// jolting as a new one bursts in.
 void MangaUniverse::drawBarrage(float a, double beat) {
     (void)beat;
-    // a halftone flash over the drawings on each beat
-    if (jolt_ > 0.01f)
-        for (int i = manga::P_A; i < manga::P_COUNT; i++) {
-            const manga::Panel& p = page_.panels[i];
-            if (!p.art || !p.shown) continue;
+    const float H = viewH_.y + 0.5f, W = viewH_.x + 0.5f;
+    // the ground: the burst's pale center at the top warming to its middle color at the foot, a halftone of dots
+    // swelling toward the page's edges, pulsing a little as a balloon bursts in
+    {
+        const float mixK = ugl::luma(paper_) < 0.4f ? 0.5f : 0.72f;
+        const vec3 top = lerp(paper_, cur_[K_BURST], std::min(1.f, mixK * 1.3f)), foot = lerp(paper_, cur_[K_BURST + 1], mixK);
+        gradRect(-W, -H, W, H, top, foot, a);
+        const vec3 dot = shadeOf(lerp(top, foot, 0.5f));
+        for (int side = 0; side < 2; side++) {
+            const float sx = side ? 1.f : -1.f, x0 = side ? 0.f : -W, x1 = side ? W : 0.f;
             manga::Tone tn;
             tn.kind = manga::TONE_DOTS;
-            tn.d0 = tn.d1 = 0.42f;
-            tn.cell = 0.15f;
+            tn.d0 = 0.5f + 0.08f * jolt_;
+            tn.d1 = 0.f;
+            tn.g0 = {sx * W, 0.f};
+            tn.g1 = {sx * (COL_IN - 1.f), 0.f};
+            tn.cell = 0.17f;
             tn.angle = 0.785f;
-            fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, cur_[K_BURST + 2], a * 0.85f * jolt_, i);
-        }
-    // focus lines from the page's edges onto the newest balloon, for a moment
-    if (!pops_.empty() && pops_.back().t < 0.4f) {
-        const Pop& p = pops_.back();
-        const float al = a * (1.f - p.t / 0.4f);
-        Rng r(0xF0C1ull + (uint64_t)pops_.size());
-        for (float ang = 0.f; ang < TAU;) {
-            ang += r.range(0.02f, 0.08f);
-            const V2 d{std::cos(ang), std::sin(ang)}, nn{-d.y, d.x};
-            const float rin = p.size * r.range(2.4f, 3.4f), half = r.range(0.04f, 0.22f);
-            manga::Tone tn;
-            fillPoly({p.at + d * rin, p.at + d * 40.f + nn * half * 6.f, p.at + d * 40.f - nn * half * 6.f}, tn, 1.f, ink_, al, -1);
+            fillPoly({{x0, -H}, {x1, -H}, {x1, H}, {x0, H}}, tn, 1.f, dot, 0.7f * a, -1);
         }
     }
-    for (const Pop& p : pops_) {
+    // short focus lines onto a new big balloon, softly, for a moment
+    if (!pops_.empty() && pops_.back().kind == 2 && pops_.back().t < 0.35f) {
+        const Pop& p = pops_.back();
+        const float al = 0.35f * a * (1.f - ease(p.t / 0.35f));
+        Rng r(0xF0C1ull + (uint64_t)pops_.size());
+        for (float ang = 0.f; ang < TAU;) {
+            ang += r.range(0.04f, 0.12f);
+            const V2 d{std::cos(ang), std::sin(ang)}, nn{-d.y, d.x};
+            const float rin = p.size * r.range(3.f, 4.2f), half = r.range(0.03f, 0.12f);
+            manga::Tone tn;
+            fillPoly({p.at + d * rin, p.at + d * 14.f + nn * half * 4.f, p.at + d * 14.f - nn * half * 4.f}, tn, 1.f, ink_, al, -1);
+        }
+    }
+    // the older balloons shudder a little as a new one bursts in
+    const V2 shake{joltDir_.x * 0.14f * jolt_, joltDir_.y * 0.14f * jolt_};
+    for (const Pop& pop : pops_) {
+        Pop p = pop;
+        if (&pop != &pops_.back()) p.at = p.at + shake;
         const float al = a * (1.f - smoothstepf(p.life - 0.3f, p.life, p.t));
         if (al <= 0.002f) continue;
-        const float in = easeOut(p.t / 0.12f);
-        const float sc = in * (1.f + 0.3f * (1.f - easeOut(p.t / 0.3f)));
+        const float in = easeOut(p.t / 0.18f);
+        const float sc = in * (1.f + 0.15f * (1.f - easeOut(p.t / 0.4f)));
         const float n = (float)letters(p.text.c_str());
         const float rx = (0.5f * n * p.size * 0.97f + p.size * 0.75f) * sc, ry = p.size * 1.15f * sc;
         const vec3 fill = p.kind == 2 ? ink_ : p.kind == 1 ? cur_[K_BURST + 1] : paper_;
-        const uint64_t seed = (uint64_t)(p.at.x * 1000.f) ^ (uint64_t)(p.at.y * 777.f);
+        const uint64_t seed = (uint64_t)(pop.at.x * 1000.f) ^ (uint64_t)(pop.at.y * 777.f);
+        // a big blot of the burst's deep color behind it, a paler one around that
+        starburst(p.at, rx * 1.7f, ry * 1.9f, 7 + (int)n, 0.8f, seed ^ 0xB10Bull, lerp(paper_, cur_[K_BURST + 2], 0.25f), 0.8f * al, 0.f);
+        starburst(p.at, rx * 1.35f, ry * 1.45f, 7 + (int)n, 0.8f, seed ^ 0xB10Cull, lerp(paper_, cur_[K_BURST + 2], 0.5f), 0.8f * al, 0.f);
         // accent lines around it
         Rng r(seed ^ 0x51ull);
         for (int i = 0; i < 12; i++) {
