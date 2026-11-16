@@ -842,7 +842,7 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             int k = 0;
             const size_t last = out.size();
             for (size_t i = first; i < last; i++) {
-                out[i].i2 |= 16;
+                out[i].i2 |= 16 | (slow_ > 0.01f ? 128 : 0);
                 if (out[i].kind != IT_CELL) continue;
                 out[i].key = mix(gr.id, 1 + (uint64_t)gr.idx[k]);
                 k++;
@@ -1684,6 +1684,15 @@ bool sameItem(const NotepadUniverse::Item& a, const NotepadUniverse::Item& b) {
     for (int k = 0; k < 8; k++) if (a.pts[k] != b.pts[k]) return false;
     return a.d == b.d;
 }
+// the same thing at the same place, whatever its style
+bool sameShape(const NotepadUniverse::Item& a, const NotepadUniverse::Item& b) {
+    if (a.kind != b.kind || a.i0 != b.i0 || a.i1 != b.i1 || a.n != b.n) return false;
+    const float fa[] = {a.x, a.y, a.s, a.r, a.a};
+    const float fb[] = {b.x, b.y, b.s, b.r, b.a};
+    for (size_t i = 0; i < sizeof(fa) / sizeof(fa[0]); i++) if (std::fabs(fa[i] - fb[i]) > 1e-4f) return false;
+    for (int k = 0; k < 8; k++) if (a.pts[k] != b.pts[k]) return false;
+    return a.d == b.d;
+}
 bool movedItem(const NotepadUniverse::Item& a, const NotepadUniverse::Item& b) {
     return std::fabs(a.x - b.x) + std::fabs(a.y - b.y) > 0.01f;
 }
@@ -1768,6 +1777,15 @@ void NotepadUniverse::tick(const Frame& f, float since) {
         } else {
             const Item& o = items_[ito->second];
             n.born = o.born;
+            // a piece of the stack keeps the hand it was drawn with while it stays where it is (a change of section
+            // never redraws the stack; only the slow motion's blue pencil, coming or going, does)
+            if ((n.i2 & 16) && (o.i2 & 16) && !((n.i2 ^ o.i2) & 128) && sameShape(o, n)) {
+                n.col = o.col;
+                n.c = o.c;
+                n.alpha = o.alpha;
+                n.tool = o.tool;
+                n.b = o.b;
+            }
             if (sameItem(o, n)) {
                 n.seed = o.seed;
                 n.wt = o.wt;
