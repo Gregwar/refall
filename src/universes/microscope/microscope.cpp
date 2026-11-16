@@ -6,11 +6,12 @@
 // chamber: its walls and floor etched in pairs of fine lines, a faint ruling of one line per row and column, the
 // chamber a hair clearer than the field.
 //
-// The pieces are living tissue, seen through the same optics as the life around them (its shading shared): until a
-// drop each block one translucent cell at the organisms' own value, only tinted by its stain, in a darker membrane
-// breathing a little, a pale phase halo outside it, a soft nucleus, the type's organelles as soft blobs and fine
-// ringed vacuoles, fine granules; a drop brings the stains' colors out (each block then a cell of stained cytoplasm,
-// denser along its walls, finely mottled, glowing in the drop's light); the four cells of a piece are one colony, joined by thin walls inside one outer membrane.
+// The pieces are living tissue. Until a drop each piece is one living colony like the organisms around it: a soft
+// body (its four cells merged like metaballs, rounded, a slight waist between cells, its outline wobbling and
+// breathing slowly, a pale gap kept between pieces, each cell in its square), a strong dark membrane with a bright
+// phase halo, soft wavy walls between its cells, each cell a deep stain clear along the membrane, granules streaming
+// slowly, an irregular nucleus off center; a drop brings the stains' glowing colors (each block then a cell of
+// stained cytoplasm, denser along its walls, in a darker membrane, its nucleus, a pale phase halo around it).
 // The seven types are seven stains (methylene blue, iodine, crystal violet, malachite, safranin...), each with its
 // own inner life: a vacuole, starch grains, a big nucleus with its nucleolus, chloroplasts along the wall, two
 // nuclei, dense granules, a large vacuole pushing the nucleus aside. The falling piece is exactly a locked one, the

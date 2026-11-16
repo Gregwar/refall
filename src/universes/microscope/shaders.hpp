@@ -5,10 +5,10 @@
 // little uneven, out-of-focus haze, small round cells and bubbles ringed by phase halos drifting in the medium, fine
 // debris, the counting chamber's etched lines around the well); ORG_FS the organisms wandering on the sides (one
 // signed distance per kind: paramecium, amoeba, two diatoms, rotifer, volvox), translucent bodies with a darker rim,
-// a pale phase halo and fine dark cilia, blurred when out of focus (lifeLook, which the pieces' cells share until a
-// drop); PIECE_FS the pieces (each block a living cell:
+// a pale phase halo and fine dark cilia, blurred when out of focus; PIECE_FS the pieces (each block a living cell:
 // translucent stained cytoplasm in a darker membrane, a nucleus, the cells of a piece joined into one colony with
-// thin walls between them, a phase halo around it); SPECK_FS loose granules; DOWN_FS / BLUR_FS a soft blur (the
+// thin walls between them, a phase halo around it; until a drop, livingCell: the colony one living body, its cells
+// merged as metaballs); SPECK_FS loose granules; DOWN_FS / BLUR_FS a soft blur (the
 // dark-field glow, the out-of-focus slide) and FINAL_FS the frame (the lamp, the focus).
 // Each color comes from the variant's illumination and the drop's, blended by uMix; uDark shades in dark-field
 // (light scattered on black) rather than bright-field (stains on a lit field).
@@ -53,32 +53,6 @@ vec3 pieceCol(int t) { return mix(uPieceA[t], uPieceB[t], kMix); }
 vec3 orgCol(int i) { return mix(uOrgA[i], uOrgB[i], kMix); }
 // premultiplied "over": c at alpha a laid over acc
 void over(inout vec4 acc, vec3 c, float a) { a = clamp(a, 0.0, 1.0); acc = acc * (1.0 - a) + vec4(c * a, a); }
-// the stains' hue: dim like the life around until the drop, which brings their colors out
-vec3 dimHue(vec3 c) { return mix(vec3(lumOf(c)), c, mix(0.42, 1.0, kMix)); }
-// Living matter under the lens, the organisms and the pieces' cells alike: a body of signed distance d (negative
-// inside, its edge ew soft), a membrane of width rimw, a phase halo reaching haloW outside; dens how much the body
-// absorbs, fillK how much it scatters in dark-field; its structures (granules, organelles, ringed vacuoles, an inner
-// contour, fine lines: 0..1, already kept inside); its colors (body, rim, organelles), the dark-field gain, its blur.
-// Bright-field: a translucent body a little darker than the field, its edge a darker line, a pale phase halo just
-// outside, dark organelles; dark-field: light scattered by the edges and the structures, on black.
-vec4 lifeLook(float d, float ew, float rimw, float haloW, float dens, float fillK, float gran, float org, float vac, float innerL,
-              float lines, vec3 body, vec3 rimc, vec3 orgc, float glow, float blur) {
-    float inside = 1.0 - smoothstep(-ew, ew, d);
-    float rim = exp(-pow((d + rimw) / (rimw * 1.2), 2.0));
-    float halo = smoothstep(-ew, ew, d) * exp(-max(d, 0.0) / haloW);
-    vec4 bf = vec4(0.0);
-    over(bf, vec3(1.0), halo * 0.35 * kPhase * (1.0 - 0.5 * blur));
-    over(bf, body, inside * dens * (1.0 - 0.3 * blur));
-    over(bf, mix(body, rimc, 0.5), gran * 0.35);
-    over(bf, orgc, org * 0.55);
-    over(bf, mix(rimc, vec3(1.0), 0.15), vac * 0.6);
-    over(bf, rimc, (rim * 0.75 + innerL * 0.5) * (1.0 - 0.4 * blur));
-    over(bf, rimc, lines * 0.7);
-    vec3 df = rimc * (rim * 0.9 + innerL * 0.4 + lines * 0.55 + vac * 0.4) + body * inside * (fillK * 0.06 + gran * 0.2) +
-              orgc * org * 0.4;
-    df *= glow * (1.0 - 0.45 * blur);
-    return mix(bf, vec4(df, 0.0), kDark);
-}
 )";
 
 // ---------------------------------------------------------------- the field of view (full screen)
@@ -385,6 +359,9 @@ void main() {
     // the shading
     float ew = AA + blur * 0.03;
     float inside = 1.0 - smoothstep(-ew, ew, d);
+    float rimw = 0.008 + blur * 0.04;
+    float rim = exp(-pow((d + rimw) / (rimw * 1.2), 2.0));
+    float halo = smoothstep(-ew, ew, d) * exp(-max(d, 0.0) / (0.025 + blur * 0.04));
     float innerL = inner < 8.0 ? (1.0 - smoothstep(-AA, AA, inner)) : 0.0;
     float sharp = 1.0 - 0.8 * blur;
     lines *= sharp * sharp;
@@ -393,11 +370,24 @@ void main() {
     gran *= inside * sharp;
     innerL *= sharp;
     vec3 body = mix(orgCol(0), tint * lumOf(orgCol(0)) * 2.2, tintK * (1.0 - kDark));
-    vec4 life = lifeLook(d, ew, 0.008 + blur * 0.04, 0.025 + blur * 0.04, 0.28 + 0.12 * fillK, fillK, gran, org, vac, innerL, lines,
-                         body, orgCol(1), orgCol(2), uGlow, blur);
+    vec3 rimc = orgCol(1), orgc = orgCol(2);
+    // bright-field: a translucent body a little darker than the field, its edge a darker line, a pale phase halo
+    // just outside; dark organelles, fine dark cilia
+    vec4 bf = vec4(0.0);
+    over(bf, vec3(1.0), halo * 0.35 * kPhase * (1.0 - 0.5 * blur));
+    over(bf, body, inside * (0.28 + 0.12 * fillK) * (1.0 - 0.3 * blur));
+    over(bf, mix(body, rimc, 0.5), gran * 0.35);
+    over(bf, orgc, org * 0.55);
+    over(bf, mix(rimc, vec3(1.0), 0.15), vac * 0.6);
+    over(bf, rimc, (rim * 0.75 + innerL * 0.5) * (1.0 - 0.4 * blur));
+    over(bf, rimc, lines * 0.7);
+    // dark-field: light scattered by the edges and the structures, on black
+    vec3 df = rimc * (rim * 0.9 + innerL * 0.4 + lines * 0.55 + vac * 0.4) + body * inside * (fillK * 0.06 + gran * 0.2) +
+              orgc * org * 0.4;
+    df *= uGlow * (1.0 - 0.45 * blur);
     // nothing reaches the quad's edge
     float win = 1.0 - smoothstep(0.58, 0.71, max(abs(q.x), abs(q.y)));
-    vec4 o = life * vB.w * win;
+    vec4 o = mix(bf, vec4(df, 0.0), kDark) * vB.w * win;
     if (o.r + o.g + o.b + o.a <= 0.0005) discard;
     frag = o;
 }
@@ -434,6 +424,131 @@ float AA;
 // a concave corner of the colony: the empty quadrant q > 0, its corner rounded
 float notch(vec2 q, float rn) { vec2 a = vec2(rn) - q; return length(max(a, 0.0)) + min(max(a.x, a.y), 0.0) - rn; }
 float blob(vec2 p, vec2 c, vec2 r) { return 1.0 - smoothstep(1.0 - AA * 2.0 / min(r.x, r.y), 1.0, length((p - c) / r)); }
+// A colony's cell as a metaball: its field (x) and the field's gradient (yz) at q from the cell's center: 1 on a
+// rounded core, falling to 0 within MB_W of it (so a cell reaches no farther than 1.5 cells: the two cells on each
+// side of a wall see the same field, the colony's outline is seamless); the colony's membrane is where the summed
+// fields cross MB_T: one body, its cells merged with soft waists and filleted inner corners, its corners round.
+const float MB_W = 0.8, MB_T = 0.5, MB_CR = 0.1;
+const float MB_H = 0.5 - 0.085 - MB_W * (1.0 - 0.70710678);   // the core: the membrane 0.085 inside the cell's square
+vec3 cellField(vec2 q) {
+    vec2 w = abs(q) - vec2(MB_H - MB_CR);
+    vec2 wp = max(w, 0.0);
+    float lw = length(wp);
+    float e = lw + min(max(w.x, w.y), 0.0) - MB_CR;
+    if (e <= 0.0) return vec3(1.0, 0.0, 0.0);
+    if (e >= MB_W) return vec3(0.0);
+    vec2 ge = lw > 1e-5 ? wp / lw : (w.x > w.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+    ge *= sign(q + 1e-6);
+    float k = 1.0 - e / MB_W;
+    return vec3(k * k, -2.0 * k / MB_W * ge);
+}
+// round granules: one at most per cell of a jittered grid at x (a fraction dens of the cells), soft-edged
+float granules(vec2 x, float seed, float dens, float px) {
+    vec2 i = floor(x), f = fract(x);
+    float h = hash12(i + seed);
+    if (h > dens) return 0.0;
+    vec2 c = 0.3 + 0.4 * vec2(hash12(i * 1.7 + seed + 3.1), hash12(i * 2.3 + seed + 7.7));
+    float r = 0.16 + 0.1 * fract(h * 31.7);
+    return 1.0 - smoothstep(r - px, r + px, length(f - c));
+}
+vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+// a soft blob of radius r around c, its outline irregular (seeded) and slowly changing
+float softBlob(vec2 p, vec2 c, vec2 r, float seed, float t) {
+    vec2 q = (p - c) / r;
+    float l = length(q);
+    vec2 dir = q / max(l, 1e-4);
+    l *= 1.0 + 0.32 * (vnoise(dir * 1.3 + seed * 17.0 + vec2(t * 0.04, 0.0)) - 0.5);
+    float e = AA * 1.5 / min(r.x, r.y);
+    return 1.0 - smoothstep(1.0 - e - 0.08, 1.0 + e, l);
+}
+// a fine ring (a vacuole's, a grain's edge) of radius r around c
+float softRing(vec2 p, vec2 c, vec2 r, float w) { return 1.0 - smoothstep(w - AA, w + AA, abs(length((p - c) / r) - 1.0) * min(r.x, r.y)); }
+// A cell of a living colony, as the organisms are seen (until the drop): p its place in the cell, gp in the colony's
+// grid, d the colony's membrane; a deep stain (the type's) denser inward, the clear ectoplasm along the membrane, the
+// membrane a strong dark line with a bright phase halo outside it, soft wavy walls
+// between the colony's cells, an irregular nucleus off center with its chromatin and nucleolus, granules streaming
+// slowly, the type's inner life (a vacuole, starch grains, a big nucleus, chloroplasts, two nuclei, dense granules,
+// a large vacuole).
+vec4 livingCell(vec2 p, vec2 gp, float d, int type, float seed, vec2 ncIn, int m, float flash, vec3 field) {
+    float t = uTime;
+    vec3 stain = uPieceA[type];
+    vec3 deep = pow(stain, vec3(1.7)) * 0.9;           // the stain's dense, saturated tone
+    vec3 rimc = mix(orgCol(1), deep * 0.3, 0.35);
+    float inside = 1.0 - smoothstep(-AA, AA, d);
+    float din = max(-d, 0.0);
+    // the walls shared with the colony's other cells: soft, wavy (laid in the grid, so both sides agree)
+    float iw = 9.0;
+    if ((m & 1) != 0) iw = min(iw, abs(p.x + 0.5 + 0.1 * (vnoise(vec2(gp.y * 2.2, 3.1 + t * 0.03)) - 0.5)));
+    if ((m & 2) != 0) iw = min(iw, abs(p.x - 0.5 + 0.1 * (vnoise(vec2(gp.y * 2.2, 3.1 + t * 0.03)) - 0.5)));
+    if ((m & 4) != 0) iw = min(iw, abs(p.y - 0.5 + 0.1 * (vnoise(vec2(gp.x * 2.2, 7.3 + t * 0.03)) - 0.5)));
+    if ((m & 8) != 0) iw = min(iw, abs(p.y + 0.5 + 0.1 * (vnoise(vec2(gp.x * 2.2, 7.3 + t * 0.03)) - 0.5)));
+    float edge = min(din, iw);
+    float wall = exp(-pow(iw / 0.017, 2.0)) * inside;
+    float mem = exp(-pow((d + 0.022) / 0.017, 2.0));
+    float halo = smoothstep(-AA, AA, d) * exp(-max(d, 0.0) / 0.04);
+    // the cytoplasm: clear along the membrane, the stain dense inside, granules streaming around the cell
+    float endo = smoothstep(0.03, 0.14, edge);
+    float n = vnoise(gp * 7.0 + seed * 31.0 + vec2(t * 0.02, 0.0));
+    vec2 sp = rot(p, t * 0.05 + seed * 6.0);
+    float px = AA * 9.0;
+    float grD = (granules(sp * 9.0, seed * 40.0, 0.35, px) * 0.8 + (vnoise(sp * 30.0 + seed * 9.0) - 0.4) * 0.5) * endo;
+    float grL = granules(sp * 7.0 + 0.5, seed * 23.0 + 5.0, 0.18, px * 0.78) * endo;
+    vec3 cyto = mix(mix(field, stain, 0.75), deep, 0.25 + 0.45 * endo + 0.15 * (n - 0.5));
+    // the nucleus: off center, irregular, its chromatin, its nucleolus; the type's own inner life
+    vec2 nc = ncIn * 2.2;
+    float nr = 0.15, nuc = 0.0, nuc2 = 0.0, vac = 0.0, vacR = 0.0, gr = 0.0;
+    if (type == 2) nr = 0.2;
+    if (type == 6) {
+        nc = vec2(nc.x > 0.0 ? 0.22 : -0.22, nc.y * 0.5); nr = 0.11;
+        vec2 vc = vec2(-nc.x * 0.5, 0.02), vr = vec2(0.19, 0.24);
+        vac = softBlob(p, vc, vr, seed + 3.0, t); vacR = softRing(p, vc, vr, 0.012);
+    }
+    if (type == 4) {
+        nuc = softBlob(p, nc * 0.5 + vec2(-0.13, 0.09), vec2(0.12, 0.105), seed, t);
+        nuc2 = softBlob(p, nc * 0.5 + vec2(0.13, -0.1), vec2(0.105, 0.12), seed + 5.0, t);
+    } else nuc = softBlob(p, nc, vec2(nr, nr * 0.84), seed, t);
+    if (type == 0) { vec2 vc = -nc * 1.3 + vec2(0.1, -0.12); vac = softBlob(p, vc, vec2(0.09), seed + 2.0, t); vacR = softRing(p, vc, vec2(0.09), 0.01); }
+    if (type == 1)
+        for (int i = 0; i < 5; i++) {
+            float an = float(i) * 1.2566 + seed * 6.0 + 0.3 * sin(t * 0.05 + float(i));
+            vec2 c = vec2(cos(an), sin(an)) * 0.27;
+            vac = max(vac, softBlob(p, c, vec2(0.07, 0.056), seed + float(i), t));
+            vacR = max(vacR, softRing(p, c, vec2(0.07, 0.056), 0.01));
+        }
+    if (type == 3)
+        for (int i = 0; i < 7; i++) {
+            float an = float(i) * 0.8976 + seed * 6.0 + t * 0.03;
+            gr = max(gr, softBlob(p, vec2(cos(an), sin(an)) * (0.29 - 0.03 * float(i % 2)), vec2(0.065, 0.045), seed + float(i), t));
+        }
+    if (type == 5) gr = granules(sp * 11.0, seed * 3.0 + 1.0, 0.6, px * 1.22) * 0.9;
+    gr *= inside;
+    float nucAll = clamp(nuc + nuc2, 0.0, 1.0);
+    float nucRim = clamp(nucAll * (1.0 - nucAll) * 4.0, 0.0, 1.0);
+    float chrom = vnoise(p * 38.0 + seed * 9.0 + t * 0.02);
+    float nucl = type == 4 ? 0.0 : softBlob(p, nc + vec2(0.035, 0.02), vec2(0.04), seed + 9.0, t);
+    vec3 nucC = mix(deep * 0.35, mix(orgCol(2), deep, 0.5) * 0.5, 0.3);
+    // bright-field: the stained cell on the lit field, with real dark and light
+    vec4 bf = vec4(0.0);
+    over(bf, vec3(1.0), halo * (0.35 + 0.4 * kPhase) * (1.0 - 0.5 * flash));
+    over(bf, cyto, inside * 0.9);
+    over(bf, deep * 0.5, clamp(grD, 0.0, 1.0) * 0.55);
+    over(bf, mix(cyto, vec3(1.0), 0.5), grL * 0.4 * kPhase);
+    over(bf, mix(field, cyto, 0.35), vac * 0.85);
+    over(bf, rimc, vacR * 0.7);
+    over(bf, type == 3 ? deep * 0.55 : deep * 0.45, gr * 0.8);
+    over(bf, mix(nucC, cyto, 0.25 * chrom), nucAll * 0.95);
+    over(bf, nucC * 0.6, nucRim * 0.5 + nucl * 0.85);
+    over(bf, mix(field, cyto, 0.3), exp(-pow(iw / 0.045, 2.0)) * inside * 0.25 * kPhase);   // (pale beside the walls)
+    over(bf, rimc, wall * 0.85);
+    over(bf, mix(rimc, vec3(1.0), 0.4 * flash), mem * 0.95);
+    // dark-field: the membranes and walls glow in the stain, the cytoplasm a soft glow, granules and nuclei lit
+    vec3 glow = stain * (0.05 + 0.12 * (1.0 - endo)) * inside + stain * (grL * 0.5 + grD * 0.15 + gr * 0.4 + vacR * 0.6);
+    glow += mix(stain, uNucGlow, 0.6) * (nucAll * 0.45 + nucRim * 0.35 + nucl * 0.3);
+    glow += stain * (wall * 0.55 + mem * (1.3 + 0.8 * flash));
+    glow *= uGlow;
+    vec4 df = vec4(glow, max(inside * 0.85, mem * 0.6));
+    return mix(bf, df, kDark);
+}
 void main() {
     vec2 p = vLocal;
     lightAt(vA.xy);
@@ -460,7 +575,26 @@ void main() {
     // the membrane breathes a little, the same along the whole colony
     vec2 gp = vD.xy + p;
     d += (vnoise(gp * 2.6 + vec2(uTime * 0.11, -uTime * 0.07)) - 0.5) * 0.045 * uLife;
-    if (d > 0.14) discard;
+    // ---- Until the drop, a living colony (its look below): one body, the union of its cells' rounded squares
+    // smoothly merged, inset from the cells' edges, its membrane wobbling and breathing slowly (the same along the
+    // colony: in its grid's noise); between pieces stays a pale gap, a cell never leaves its square.
+    float dl = 9.0;
+    if (kMix < 0.999) {
+        vec3 f = cellField(p);
+        for (int i = 0; i < 8; i++) {
+            if ((m & (1 << i)) == 0) continue;
+            vec2 o = i == 0 ? vec2(-1, 0) : i == 1 ? vec2(1, 0) : i == 2 ? vec2(0, 1) : i == 3 ? vec2(0, -1) :
+                     i == 4 ? vec2(-1, 1) : i == 5 ? vec2(1, 1) : i == 6 ? vec2(-1, -1) : vec2(1, -1);
+            f += cellField(p - o);
+        }
+        float gl = length(f.yz);
+        dl = (MB_T - f.x) / max(gl, 0.8);   // (a distance near the membrane)
+        float wob = (vnoise(gp * 1.5 + vec2(uTime * 0.06, -uTime * 0.05)) - 0.5) * 0.07 +
+                    (vnoise(gp * 0.4 + vec2(uTime * 0.09, 0.0)) - 0.5) * 0.03;
+        dl += wob * uLife;
+        if (kind == 3) dl += 0.04 + 0.2 * smoothstep(0.0, 0.7, t) - 0.03 * vnoise(p * 9.0 + seed * 7.0);   // plasmolysis
+    }
+    if (d > 0.14 && dl > 0.14) discard;
     vec3 tint = pieceCol(type);
     vec3 field = fieldCol(0);
     float inside = 1.0 - smoothstep(-AA, AA, d);
@@ -484,8 +618,12 @@ void main() {
         proto = 1.0 - smoothstep(-AA, AA, d + 0.04 + 0.2 * s - 0.03 * vnoise(p * 9.0 + seed * 7.0));
     }
     if (kind == 1) {
-        // the ghost: the colony's membrane alone, faint, a breath of its stain inside
-        tint = dimHue(tint);
+        // the ghost: the colony's membrane alone, faint, a breath of its stain inside (the living colony's until the drop)
+        if (dl < 8.0) {
+            float dg = mix(dl, d, kMix);
+            inside = 1.0 - smoothstep(-AA, AA, dg);
+            mem = exp(-pow((dg + MW) / (MW * 0.9), 2.0));
+        }
         vec4 g = vec4(0.0);
         over(g, mix(field, tint, 0.5), inside * 0.1);
         over(g, tint * 0.55, mem * 0.55);
@@ -552,48 +690,7 @@ void main() {
     glow *= uGlow;
     vec4 df = vec4(glow, max(inside * 0.85, mem * 0.6));
     vec4 o = mix(bf, df, kDark);
-    // Until the drop the cell is seen like the life around it, through the same optics (lifeLook): a translucent body
-    // at the organisms' own value, only tinted by its stain, its membrane and the colony's walls, a soft nucleus, the
-    // type's organelles as soft blobs and ringed vacuoles, fine granules; the drop's colors come in with its look.
-    if (kMix < 0.999) {
-        vec3 own = uPieceA[type];
-        vec3 sn = mix(vec3(1.0), own / max(lumOf(own), 1e-3), 0.55);
-        vec3 lb = orgCol(0) * sn, lr = mix(orgCol(1) * sn, vec3(1.0), 0.4 * flash), lo = orgCol(2) * sn;
-        float dl = d;
-        if (kind == 3) dl = d + 0.04 + 0.2 * smoothstep(0.0, 0.7, t) - 0.03 * vnoise(p * 9.0 + seed * 7.0);   // plasmolysis
-        float lin = 1.0 - smoothstep(-AA, AA, dl);
-        float tex = 0.75 + 0.25 * vnoise(p * 30.0 + seed * 5.0);
-        float lorg, lvac = 0.0;
-        // soft-edged blobs (a nucleus...) and fine rings (vacuoles)
-        #define SOFT(nd) (1.0 - smoothstep(0.78, 1.18, nd))
-        #define RING(nd, r) (1.0 - smoothstep(0.014 - AA, 0.014 + AA, abs(nd - 1.0) * (r)))
-        if (type == 4) {
-            lorg = SOFT(length((p - nc * 0.5 - vec2(-0.12, 0.08)) / vec2(0.12, 0.11))) +
-                   SOFT(length((p - nc * 0.5 - vec2(0.13, -0.09)) / vec2(0.11, 0.12)));
-        } else lorg = SOFT(length((p - nc) / vec2(nr, nr * 0.86)));
-        lorg *= tex;
-        if (type == 2) lorg += SOFT(length(p - nc - vec2(0.03, 0.02)) / 0.045) * 0.5;   // the nucleolus
-        if (type == 0) lvac = RING(length(p - (-nc * 1.6 + vec2(0.1, -0.12))) / 0.09, 0.09);
-        if (type == 6) lvac = RING(length((p - vec2(-nc.x * 0.55, 0.0)) / vec2(0.2, 0.24)), 0.22);
-        if (type == 1)
-            for (int i = 0; i < 5; i++) {
-                float an = float(i) * 1.2566 + seed * 6.0;
-                lvac += RING(length((p - vec2(cos(an), sin(an)) * 0.27) / vec2(0.075, 0.06)), 0.065) * 0.8;
-            }
-        if (type == 3)
-            for (int i = 0; i < 7; i++) {
-                float an = float(i) * 0.8976 + seed * 6.0;
-                lorg += SOFT(length((p - vec2(cos(an), sin(an)) * (0.3 - 0.03 * float(i % 2))) / vec2(0.06, 0.048))) * 0.6;
-            }
-        float lgran = vnoise(gp * 20.0 + seed * 13.0) * 0.5;
-        if (type == 5) lgran += smoothstep(0.6, 0.8, vnoise(gp * 24.0 + seed * 3.0)) * 0.6;
-        float walls = exp(-pow(iw / 0.012, 2.0)) * inside;
-        float dens = 0.56 + 0.08 * exp(-wallD / 0.07) + 0.05 * (n - 0.5);   // (denser than the organisms: the stack reads)
-        vec4 life = lifeLook(dl, AA, 0.02, 0.04, dens, 1.0, clamp(lgran, 0.0, 1.0) * lin, clamp(lorg, 0.0, 1.0) * lin,
-                             clamp(lvac, 0.0, 1.0) * lin, walls, 0.0, lb, lr, lo, uGlow, 0.0);
-        life.a = max(life.a, kDark * lin * 0.85);   // (in dark-field the cell hides the faint glow behind it)
-        o = mix(life, o, kMix);
-    }
+    if (dl < 8.0) o = mix(livingCell(p, gp, dl, type, seed, nc, m, flash, field), o, kMix);
     float a = vB.w;
     if (kind == 3) {
         // dying: the stain drains to grey, then the cell fades
@@ -618,7 +715,7 @@ void main() {
     float r = length(vLocal) / 0.5;
     float core = 1.0 - smoothstep(0.45, 0.65, r);
     float halo = exp(-pow((r - 0.8) / 0.18, 2.0));
-    vec3 tint = dimHue(vC.rgb);
+    vec3 tint = vC.rgb;
     vec4 bf = vec4(0.0);
     over(bf, vec3(1.0), halo * 0.3 * kPhase);
     over(bf, tint * 0.45, core * 0.8);
