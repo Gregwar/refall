@@ -32,14 +32,14 @@ float sdEll(vec2 p, vec2 r) { float k = length(p / r); return (k - 1.0) * min(r.
 // cut-away: the back wall with its windows (the world behind through them), benches, poles, straps, the floor and the
 // roof cut; the low near-side wall and its doors are drawn by trainFront (over the cub when it rides).
 inline const char* TRAIN_GLSL = R"(
-const float GY0 = -7.4, PLAT_Y = -17.4;
+const float GY0 = -7.4, PLAT_Y = -20.4;
 const float CAR = 17.0, CGAP = 0.6;
 uniform float uTrainX, uDoor, uTrainLit, uTrainBody, uSway, uTrainT;
 uniform float uDir;       // which way the train runs: +1 its front car leads (head lamps there), -1 backing away
 uniform float uHead;      // how much its head lamps light the walls around them
 uniform float uBlur;      // the camera's motion blur (world units over a shutter's time)
 uniform float uRunBlur;   // the train's own motion blur against the world (likewise)
-// the track: level through the station and the tunnel, then a steady grade under 5 degrees (eased at both ends) up
+// the track: level through the station and the tunnel, then a steady grade under 7 degrees (eased at both ends) up
 // the cutting to the surface
 float trackY(float x) {
     float t = clamp((x - 1182.0) / 112.0, 0.0, 1.0);
@@ -79,7 +79,7 @@ void cab(vec2 l, float n, bool lead, inout vec3 col, inout float a) {
     float inCab = step(-CABIN, n);
     // the outline round the outer shape only (not where the cab meets the car)
     float bo = fillA(d - gPx * 1.5) * inCab, ba = fillA(d) * inCab;
-    vec3 bc = vec3(0.13, 0.15, 0.18) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y));
+    vec3 bc = vec3(0.3, 0.32, 0.36) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y));
     // the stripes the cars carry, following the nose
     bc = mix(bc, vec3(0.5, 0.07, 0.07) * uTrainBody, fillA(abs(l.y - 1.95) - 0.12));
     bc = mix(bc, vec3(0.45, 0.06, 0.06) * uTrainBody, fillA(abs(l.y - 6.75) - 0.08) * step(n, NOSE - 0.9));
@@ -112,7 +112,7 @@ void cab(vec2 l, float n, bool lead, inout vec3 col, inout float a) {
     float wall = abs(n + CABIN + 0.15) - 0.15;
     wall = max(wall, max(0.2 - l.y, l.y - 7.3));
     col = mix(col, vec3(0.02), fillA(wall - gPx * 1.5) * step(n, -CABIN + 0.01));
-    col = mix(col, vec3(0.13, 0.15, 0.18) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y)), fillA(wall));
+    col = mix(col, vec3(0.3, 0.32, 0.36) * uTrainBody * (0.8 + 0.3 * smoothstep(0.0, 8.0, l.y)), fillA(wall));
     a = max(a, max(bo, fillA(wall - gPx * 1.5)));
     // the lamp's glow
     float gl = exp(-dot(hq, hq) / (lead ? 0.7 : 0.25)) * (lead ? 0.55 : 0.35);
@@ -135,7 +135,7 @@ vec4 trainInside(vec2 w, vec3 behind) {
     for (int ci = 0; ci < 2; ci++) {
         vec2 l = carLocal(w, float(ci));
         if (l.x < -2.8 || l.x > CAR + 2.8 || l.y < -0.8 || l.y > 7.8) continue;
-        vec3 body = vec3(0.13, 0.15, 0.18) * uTrainBody;
+        vec3 body = vec3(0.3, 0.32, 0.36) * uTrainBody;
         vec3 inside = vec3(0.16, 0.15, 0.13);
         // the gangway to the next car
         if (ci == 0) {
@@ -158,6 +158,22 @@ vec4 trainInside(vec2 w, vec3 behind) {
         float wa = fillA(min(wh, bog));
         col = mix(col, vec3(0.025), wa);
         a = max(a, wa);
+        // sparks from the bogies now and then at speed, flying back
+        if (uRunBlur > 0.4) {
+            for (int k = 0; k < 2; k++) {
+                float ph = floor(uTrainT * 9.0 + float(ci) * 3.0 + float(k) * 7.0);
+                if (hash1(ph + float(k) * 13.0) > 0.3) continue;
+                float t = fract(uTrainT * 9.0);
+                vec2 sq0 = l - vec2(k == 0 ? 3.0 : CAR - 3.0, 0.0);
+                for (int j = 0; j < 5; j++) {
+                    float fj = float(j);
+                    vec2 sp = vec2(-(0.6 + 2.2 * hash1(ph + fj)) * t, (0.3 + 1.0 * hash1(ph + fj + 9.0)) * t - 1.4 * t * t);
+                    float g = exp(-dot(sq0 - sp, sq0 - sp) / 0.005) * (1.0 - t);
+                    col += vec3(1.0, 0.62, 0.22) * g * 1.6;
+                    a = max(a, g);
+                }
+            }
+        }
         // the back wall: windows (the world behind), doors, benches, adverts, the light strip, poles, straps
         float wallA = fillA(sdBox(l - vec2(CAR * 0.5, 3.7), vec2(CAR * 0.5 - 0.3, 2.9)));
         if (wallA > 0.0) {
@@ -188,6 +204,18 @@ vec4 trainInside(vec2 w, vec3 behind) {
             vec2 s0 = rot(-0.07 * sin(uTrainT * 0.9 + sid * 0.7) * uSway) * vec2(sx, l.y - 6.15);
             float strap = min(sdBox(s0 - vec2(0.0, -0.3), vec2(0.035, 0.3)), abs(length(s0 - vec2(0.0, -0.74)) - 0.13) - 0.035);
             wc = mix(wc, vec3(0.45, 0.43, 0.38), fillA(strap) * inRange);
+            // passengers: silhouettes on the benches or standing (none at the cub's door)
+            for (int k = 0; k < 4; k++) {
+                float fk = float(k);
+                float px = ci == 0 ? (k == 0 ? 5.4 : (k == 1 ? 7.4 : (k == 2 ? 9.6 : 14.6))) : (k == 0 ? 1.8 : (k == 1 ? 3.3 : (k == 2 ? 6.6 : 8.8)));
+                float hp = hash1(fk * 3.7 + float(ci) * 11.0);
+                if (hp > 0.75) continue;
+                vec2 mq = vec2(l.x - px, l.y - (hp < 0.4 ? 1.5 : 0.35));
+                float pd = hp < 0.4 ? min(sdBox(mq - vec2(0.0, 0.85), vec2(0.3, 0.6)) - 0.12, length(mq - vec2(0.0, 1.9)) - 0.3)
+                                    : min(min(sdBox(mq - vec2(0.0, 2.3), vec2(0.28, 0.8)) - 0.12, length(mq - vec2(0.0, 3.5)) - 0.3),
+                                          min(sdSeg(mq, vec2(-0.12, 1.5), vec2(-0.14, 0.0)), sdSeg(mq, vec2(0.12, 1.5), vec2(0.14, 0.0))) - 0.11);
+                wc = mix(wc, vec3(0.05, 0.04, 0.04), fillA(pd));
+            }
             wc *= uTrainLit;
             col = mix(col, wc, wallA);
             a = max(a, wallA);
@@ -220,7 +248,7 @@ vec4 trainFront(vec2 w) {
         panel = max(panel, -sdBox(l - vec2(12.4, 1.55), vec2(open, 1.0)));
         float a = fillA(panel - gPx * 1.5);
         if (a <= 0.0) continue;
-        vec3 c = vec3(0.16, 0.18, 0.21) * (0.85 + 0.3 * smoothstep(0.8, 2.3, l.y)) * uTrainBody;
+        vec3 c = vec3(0.34, 0.36, 0.4) * (0.85 + 0.3 * smoothstep(0.8, 2.3, l.y)) * uTrainBody;
         c = mix(c, vec3(0.5, 0.07, 0.07) * uTrainBody, fillA(abs(l.y - 1.95) - 0.12));
         for (int k = 0; k < 2; k++) {
             float dx = abs(l.x - (k == 0 ? 4.6 : 12.4));
@@ -292,6 +320,16 @@ vec3 sky(vec2 p) {
         float tw = 0.6 + 0.4 * sin(uTime * (0.7 + hash(i + 9.0)) + hash(i) * 20.0);
         c += vec3(0.9, 0.92, 1.0) * on * exp(-d * d * 500.0) * uStars * smoothstep(0.25, 0.8, h) * tw * 0.8;
     }
+    // over the city at night: a soft violet haze, and the crescent moon (fixed on the screen)
+    float moon = zCity(uD + 20.0) * (1.0 - uDawn) * uLamp;
+    if (moon > 0.0) {
+        c += vec3(0.22, 0.1, 0.36) * smoothstep(0.4, 0.85, fbm(vec2(p.x * 0.05 + uD * 0.004, py * 0.12))) * 0.3 * moon * (1.0 - h * 0.5);
+        vec2 mq = p - (uViewC + uViewH * vec2(0.55, 0.64));
+        float disc = length(mq) - 0.95;
+        float cres = max(disc, -(length(mq - vec2(0.4, 0.22)) - 0.85));
+        c += vec3(0.45, 0.85, 1.0) * exp(-max(disc, 0.0) * 1.1) * 0.13 * moon;
+        c = mix(c, vec3(0.82, 0.97, 1.0), fillS(cres, gPx * 1.5) * moon);
+    }
     if (uSun.w > 0.0) {
         float r = length(p - uSun.xy);
         c += uSunCol * (exp(-r * r / sq(uSun.z * 3.0)) * 0.45 + exp(-r / (uSun.z * 6.0)) * 0.35) * uSun.w;
@@ -332,29 +370,6 @@ float windowsLit(vec2 q, vec2 cell, vec2 half, float seed, float prob, out float
     float l = lod(min(cell.x, cell.y));
     glass = mix(half.x * half.y * 4.0 / (cell.x * cell.y), w, l);
     return mix(prob * 0.75 * glass, w * lit, l);
-}
-
-// a far skyline of towers in layer k (p in layer coords): only where the city is
-vec3 skyline(vec2 p, vec3 c, float k, float base, float hmin, float hmax, float cw, vec3 bc, float prob, float seed, float hz) {
-    float u = p.x + uD * k + seed * 13.0;
-    float id = floor(u / cw);
-    float dens = zCity(xFar((id + 0.5) * cw - seed * 13.0 - uD * k));
-    if (dens <= 0.005) return c;
-    float lx = (u / cw - id) * cw;
-    float h = hmin + (hmax - hmin) * pow(hash1(id + seed), 1.4);
-    float w = cw * (0.62 + 0.3 * hash1(id * 1.3 + seed));
-    float x0 = 0.2 * cw * hash1(id + 5.0);
-    float top = base + h;
-    float d = max(abs(lx - x0 - w * 0.5) - w * 0.5, p.y - top);
-    if (hash1(id + 11.0) > 0.6) d = min(d, max(abs(lx - x0 - w * 0.5) - w * 0.25, p.y - top - 0.9));
-    float a = fillA(d);
-    if (a <= 0.0) return c;
-    vec3 b = bc * (0.85 + 0.3 * hash1(id + 2.0));
-    b *= 0.9 + 0.25 * sat((p.y - base) / max(h, 1.0));
-    float gl;
-    float lit = windowsLit(vec2(lx - x0, p.y - base), vec2(0.36, 0.5), vec2(0.1, 0.13), id * 7.3 + seed, prob, gl);
-    b += vec3(1.0, 0.68, 0.36) * lit * 0.55 * uLamp;
-    return mix(c, haze(b, hz), a * dens);
 }
 
 // a street lamp every `sp` (world, layer 1): `on` its light; exists where `zone` says
@@ -443,59 +458,336 @@ vec3 bokeh(vec2 p, vec3 c, float amt, vec3 c1, vec3 c2) {
     return c;
 }
 
-// ---- the facades across the street (layer k, p in layer coords): shops and neon where the shopping street is
-vec3 facades(vec2 p, vec3 c, float k, float base, float hz) {
-    float u = p.x + uD * k + 21.0;
-    float cw = 6.2;
-    float id = floor(u / cw);
-    float xe = ((id + 0.5) * cw - 21.0) / k;
-    float city = zCity(xe);
-    if (city <= 0.0 || hash1(id + 0.3) > city) return c;   // (a hash can be 0)
-    float shop = zShop(xe), neon = shop;
-    float lx = (u / cw - id) * cw;
-    float h1 = hash1(id * 3.1);
-    float top = base + (6.0 + 7.0 * h1) * (0.45 + 0.55 * city);
-    float bw = cw - 0.35;
-    vec3 bc = mix(vec3(0.03, 0.04, 0.07), vec3(0.06, 0.04, 0.045), hash1(id + 1.0));
-    bc = mix(bc, vec3(0.035, 0.06, 0.065), step(0.7, hash1(id + 12.0)));
-    bc *= 0.9 + 0.2 * hash1(id + 4.0);
-    bc = mix(bc, bc * 1.6 + uFog * 0.25, uDawn * 0.6);
-    float inB = fillA(max(abs(lx - bw * 0.5) - bw * 0.5, p.y - top));
-    float roof = fillA(max(abs(lx - bw * 0.5) - bw * 0.5 - 0.12, abs(p.y - top + 0.1) - 0.12));
-    if (inB + roof <= 0.0) return c;
-    vec3 b = bc * (0.85 + 0.35 * sat((p.y - base) / 10.0));
-    b = mix(b, bc * 1.6, roof);
-    float gl;
-    float wl = windowsLit(vec2(lx - 0.45, p.y - base - 3.2), vec2(1.32, 1.75), vec2(0.34, 0.5), id * 3.7, 0.3 + 0.1 * shop, gl);
-    float inWin = step(base + 3.0, p.y) * step(p.y, top - 0.7) * step(0.3, lx) * step(lx, bw - 0.3);
-    gl *= inWin; wl *= inWin;
-    vec3 warm = mix(vec3(1.0, 0.62, 0.3), vec3(1.0, 0.82, 0.55), hash1(id + 8.0));
-    b = mix(b, mix(uFog * 0.5, b * 1.2, 0.5), gl * 0.5);
-    b += warm * wl * 0.8 * uLamp;
-    float sx = lx - bw * 0.5;
-    float shopW = fillA(sdBox(vec2(sx, p.y - base - 1.15), vec2(bw * 0.38, 1.05)));
-    vec3 shopC = mix(vec3(1.0, 0.75, 0.45), vec3(0.75, 0.9, 1.0), step(0.6, hash1(id + 21.0)));
-    float lit = (0.25 + 0.75 * shop) * step(0.3, hash1(id + 17.0));
-    float slat = 0.8 + 0.2 * smoothstep(0.3, 0.5, abs(fract((p.y - base) * 4.0) - 0.5)) * lod(0.25);
-    vec3 shutter = vec3(0.05, 0.055, 0.07) * slat + uFog * 0.15;
-    float shelves = 0.7 + 0.3 * step(0.5, fract((p.y - base) * 1.6));
-    vec3 window = shopC * shelves * (0.4 + 0.6 * uLamp) * 0.9;
-    b = mix(b, mix(shutter, window, lit * step(0.5, shop + 0.3)), shopW);
-    float aw = fillA(sdBox(vec2(sx, p.y - base - 2.45), vec2(bw * 0.44, 0.22)));
-    vec3 awC = mix(vec3(0.35, 0.08, 0.08), vec3(0.08, 0.2, 0.22), step(0.5, hash1(id + 31.0)));
-    awC = mix(awC, awC * 1.8 + 0.03, step(0.5, fract(sx * 1.5)));
-    b = mix(b, awC * (0.5 + 0.5 * uLamp), aw);
-    if (neon > 0.05 && hash1(id + 41.0) < 0.7 * neon) {
-        vec3 nc = hash1(id + 43.0) < 0.5 ? vec3(1.0, 0.25, 0.55) : (hash1(id + 44.0) < 0.5 ? vec3(0.25, 0.85, 1.0) : vec3(1.0, 0.65, 0.2));
-        vec2 nq = vec2(lx - bw + 0.65, p.y - base - 5.0 - 2.5 * hash1(id + 47.0));
-        float sign = sdBox(nq, vec2(0.38, 1.4));
-        float tube = 1.0 - smoothstep(0.03, 0.03 + gPx * 1.5, abs(sign + 0.1));
-        float letters = (1.0 - smoothstep(0.04, 0.04 + gPx * 1.5, abs(nq.x))) * step(0.35, fract(nq.y * 1.1)) * step(abs(nq.y), 1.2);
-        b = mix(b, vec3(0.02), fillA(sign) * 0.8);
-        float glow = exp(-max(sign, 0.0) * 1.6) * 0.35;
-        b += nc * (tube + letters + glow) * (0.85 + 0.15 * sin(uTime * 0.8 + id)) * (0.6 + 0.4 * uLamp) * uLamp;
+// ---- the city: a cartoon night city in layers (thin dark outlines, flat shading, warm windows, glowing neon): far
+// misty skyscrapers, a denser middle row of towers, an elevated line on a viaduct, the street's brick buildings with
+// their shops and signs, power lines, and black silhouettes at the very front. Each layer is a row of cells along
+// its own parallax (u = p.x + uD * k), every cell its own hashes: the city never repeats.
+const vec3 INK = vec3(0.018, 0.014, 0.04);
+const vec3 WARM = vec3(0.95, 0.56, 0.2);
+// one of the neon colors: pink, cyan, violet, orange
+vec3 neonCol(float h) {
+    return h < 0.3 ? vec3(1.0, 0.3, 0.72) : (h < 0.58 ? vec3(0.3, 0.9, 1.0) : (h < 0.8 ? vec3(0.72, 0.42, 1.0) : vec3(1.0, 0.56, 0.22)));
+}
+// a neon tube (d: its distance): a bright core and a soft bloom
+vec3 neonTube(vec3 c, float d, vec3 nc, float on) {
+    c = mix(c, nc * 1.5 + 0.3, fillS(d - 0.03, gPx) * on);
+    return c + nc * exp(-max(d, 0.0) * 6.0) * 0.32 * on;
+}
+// an abstract letter in a box of half size b: a few strokes picked by a hash (a distance)
+float glyph(vec2 g, vec2 b, float h) {
+    float d = 1e3;
+    if (fract(h * 3.0) < 0.7) d = min(d, sdSeg(g, -b, vec2(-b.x, b.y)));
+    if (fract(h * 7.0) < 0.55) d = min(d, sdSeg(g, vec2(b.x, -b.y), b));
+    if (fract(h * 13.0) < 0.6) d = min(d, sdSeg(g, vec2(-b.x, b.y), b));
+    if (fract(h * 17.0) < 0.45) d = min(d, sdSeg(g, vec2(-b.x, 0.0), vec2(b.x, 0.0)));
+    if (fract(h * 23.0) < 0.55) d = min(d, sdSeg(g, -b, vec2(b.x, -b.y)));
+    if (fract(h * 29.0) < 0.2) d = min(d, sdSeg(g, vec2(-b.x, b.y), vec2(b.x, -b.y)));
+    if (d > 1e2) d = sdSeg(g, vec2(0.0, -b.y), vec2(0.0, b.y));
+    return d;
+}
+// a row of n letters across a sign (q centered, half size hs); `vert` stacks them
+float lettering(vec2 q, vec2 hs, float n, float seed, bool vert) {
+    if (vert) { q = q.yx; hs = hs.yx; }
+    float gw = 2.0 * hs.x / n;
+    float gi = clamp(floor((q.x + hs.x) / gw), 0.0, n - 1.0);
+    vec2 g = vec2(q.x + hs.x - (gi + 0.5) * gw, q.y);
+    if (vert) g = g.yx;
+    vec2 b = vert ? vec2(hs.y * 0.62, gw * 0.3) : vec2(gw * 0.3, hs.y * 0.62);
+    return glyph(g, b, hash1(gi * 7.13 + seed));
+}
+
+// far skyscrapers (layer k): misty silhouettes, setbacks, spires and antennas with red lights, sparse windows, a few
+// cyan neon strips; two rows, the back one mistier
+vec3 cityFar(vec2 p, vec3 c, float k) {
+    vec3 mist = mix(uFog, vec3(0.1, 0.05, 0.2), 0.4) * (1.0 + 0.5 * uDawn);
+    for (int r = 0; r < 2; r++) {
+        float fr = float(r);
+        float cw = 3.6 - 0.8 * fr;
+        float u = p.x + uD * k + fr * 11.7;
+        float id = floor(u / cw);
+        float dens = zCity(xFar((id + 0.5) * cw - fr * 11.7 - uD * k));
+        if (dens <= 0.005) continue;
+        float sd = id + fr * 101.0;
+        float lx = (u / cw - id) * cw;
+        float h = (r == 0 ? 8.0 : 4.5) + (r == 0 ? 9.0 : 6.0) * pow(hash1(sd), 1.3);
+        float w = cw * (0.55 + 0.4 * hash1(sd + 1.0));
+        float cx = (cw - w) * hash1(sd + 2.0) + w * 0.5;
+        float base = GY0 + 2.0;
+        vec2 q = vec2(lx - cx, p.y - base);
+        float d = max(abs(q.x) - w * 0.5, q.y - h);
+        float st = hash1(sd + 3.0);
+        if (st > 0.45) d = min(d, max(abs(q.x) - w * 0.32, q.y - h - 1.4));                  // a setback
+        if (st > 0.75) d = min(d, max(abs(q.x) - 0.05 - 0.25 * sat((h + 4.0 - q.y) / 2.6), q.y - h - 4.0)); // a spire
+        float ant = hash1(sd + 4.0) > 0.6 ? max(abs(q.x - w * 0.2) - 0.04, q.y - h - (st > 0.45 ? 3.0 : 1.8)) : 1e3;
+        float a = fillA(min(d, ant)) * dens;
+        if (a > 0.0) {
+            vec3 b = mix(vec3(0.02, 0.022, 0.06), mist, r == 0 ? 0.45 : 0.2);
+            b *= 0.9 + 0.2 * hash1(sd + 5.0);
+            float gl;
+            float lit = windowsLit(vec2(q.x + w * 0.5, q.y), vec2(0.4, 0.6), vec2(0.1, 0.14), sd * 3.1, 0.13, gl) * step(d, 0.0);
+            vec3 wc = hash1(sd + 6.0) > 0.8 ? vec3(0.35, 0.85, 1.0) : WARM;
+            b += wc * lit * (r == 0 ? 0.35 : 0.55) * uLamp;
+            if (hash1(sd + 7.0) > 0.82) b = neonTube(b, max(abs(q.x - w * 0.3) - 0.03, abs(q.y - h * 0.5) - h * 0.35), vec3(0.3, 0.9, 1.0), 0.6 * uLamp);
+            c = mix(c, b, a);
+        }
+        // the red lights atop the spires and antennas, blinking
+        if (st > 0.75 || hash1(sd + 4.0) > 0.6) {
+            float ty = st > 0.75 ? h + 4.0 : h + (st > 0.45 ? 3.0 : 1.8);
+            vec2 rl = vec2(q.x - (st > 0.75 ? 0.0 : w * 0.2), q.y - ty);
+            c += vec3(1.0, 0.15, 0.12) * exp(-dot(rl, rl) / 0.012) * (0.5 + 0.5 * step(0.5, fract(uTime * 0.6 + hash1(sd)))) * dens * uLamp;
+        }
+        // a purple mist between the rows, thicker low down
+        c = mix(c, mist, 0.18 * dens * (1.0 - smoothstep(GY0 + 2.0, GY0 + 12.0, p.y)));
     }
-    return mix(c, haze(b, hz), sat(inB + roof));
+    return c;
+}
+
+// the middle row of towers (layer k): denser and darker, more windows, water tanks and boxes on the roofs
+vec3 cityMid(vec2 p, vec3 c, float k) {
+    float cw = 2.7;
+    float u = p.x + uD * k + 5.3;
+    float id = floor(u / cw);
+    float dens = zCity(xFar((id + 0.5) * cw - 5.3 - uD * k));
+    if (dens <= 0.005) return c;
+    float lx = (u / cw - id) * cw;
+    float h = 4.0 + 7.0 * pow(hash1(id + 31.0), 1.2);
+    float w = cw * (0.7 + 0.3 * hash1(id + 32.0));
+    vec2 q = vec2(lx - cw * 0.5, p.y - (GY0 + 1.2));
+    float d = max(abs(q.x) - w * 0.5, q.y - h);
+    float rt = hash1(id + 33.0);
+    vec2 tq = q - vec2(w * (rt - 0.5) * 0.5, h + 0.55);
+    float tank = rt > 0.55 ? min(sdBox(tq, vec2(0.32, 0.32)) - 0.06, max(abs(abs(tq.x) - 0.22) - 0.04, abs(tq.y + 0.5) - 0.25)) : 1e3;
+    float box = rt < 0.35 ? sdBox(q - vec2(-w * 0.2, h + 0.18), vec2(0.35, 0.2)) : 1e3;
+    float dd = min(d, min(tank, box));
+    float a = fillA(dd) * dens;
+    if (a <= 0.0) return c;
+    vec3 b = mix(vec3(0.015, 0.016, 0.045), uFog, 0.15) * (0.85 + 0.3 * hash1(id + 34.0)) * (1.0 + 0.6 * uDawn);
+    float gl;
+    float lit = windowsLit(vec2(q.x + w * 0.5 - 0.1, q.y - 0.3), vec2(0.42, 0.62), vec2(0.11, 0.15), id * 5.7, 0.26, gl) * step(d, -0.08);
+    vec3 wc = hash1(id + 35.0) > 0.8 ? vec3(0.35, 0.85, 1.0) : WARM;
+    b += wc * lit * 0.75 * uLamp;
+    b = mix(b, INK, fillA(abs(dd) - 0.03) * 0.6);
+    return mix(c, b, a);
+}
+
+// the elevated line (layer k): stretches of a viaduct on pillars, a lit train running along its deck now and then,
+// cars with their lights on its lower deck
+vec3 viaduct(vec2 p, vec3 c, float k) {
+    float u = p.x + uD * k;
+    float sl = 96.0;
+    float sid = floor(u / sl);
+    float dens = zCity(xFar((sid + 0.5) * sl - uD * k)) * step(0.4, hash1(sid + 61.0));
+    if (dens <= 0.005) return c;
+    float sx = u - (sid + 0.5) * sl;
+    float ends = abs(sx) - sl * 0.42;
+    float deckY = GY0 + 5.4, lowY = GY0 + 2.9;
+    float px = mod(u, 8.0) - 4.0;
+    float d = max(abs(p.y - deckY) - 0.34, ends);
+    d = min(d, max(abs(p.y - lowY) - 0.16, ends));
+    d = min(d, max(sdBox(vec2(px, p.y - (GY0 + 3.0)), vec2(0.3, 2.4)), ends - 1.0));
+    vec3 vc = mix(vec3(0.02, 0.024, 0.06), uFog, 0.2) * (1.0 + 0.6 * uDawn);
+    // the train on the upper deck: four cars, its windows lit, passing every so often
+    float tx = mod(u - uTime * 10.0 + hash1(sid) * 300.0, 300.0);
+    vec2 tq = vec2(mod(tx, 5.2) - 2.6, p.y - deckY - 1.0);
+    float car = step(tx, 20.8);
+    float body = car > 0.0 ? sdBox(tq, vec2(2.45, 0.62)) - 0.08 : 1e3;
+    float wins = sdBox(vec2(mod(tq.x + 2.6, 0.75) - 0.375, tq.y + 0.05), vec2(0.22, 0.2));
+    float a = fillA(min(d, body)) * dens;
+    if (a > 0.0) {
+        vec3 b = vc;
+        b = mix(b, mix(vec3(0.07, 0.075, 0.11), uFog, 0.2), fillA(body));
+        b = mix(b, WARM * (0.6 + 0.6 * uLamp), fillA(wins) * fillA(body + 0.12) * car);
+        b = mix(b, INK, fillA(abs(min(d, body)) - 0.03) * 0.7);
+        // lamps under the deck
+        b += vec3(0.6, 0.5, 1.0) * exp(-sq(mod(u, 4.0) - 2.0) * 6.0 - sq(p.y - deckY + 0.4) * 30.0) * 0.4 * uLamp * step(ends, 0.0);
+        c = mix(c, b, a);
+    }
+    // the cars on the lower deck: head and tail lights going both ways
+    float cx = mod(u + uTime * 6.0, 13.0) - 6.5, cx2 = mod(u - uTime * 5.0 + 4.0, 17.0) - 8.5;
+    float onDeck = step(ends, 0.0) * dens * uLamp;
+    vec2 h1 = vec2(cx, p.y - lowY - 0.35), h2 = vec2(cx2, p.y - lowY - 0.35);
+    c += vec3(1.0, 0.95, 0.8) * exp(-dot(h1, h1) / 0.02) * onDeck + vec3(1.0, 0.15, 0.1) * exp(-dot(h2, h2) / 0.02) * onDeck;
+    return c;
+}
+
+// the street's buildings (layer k): brick corner buildings of three to five storeys, warm windows (some with blinds),
+// a cyan-lit one now and then, cornices, fire escapes, water tanks and boxes on the roofs; shopfronts with awnings,
+// neon shop signs and tall vertical neon signs where the shopping street is, arcade cabinets glowing in some shops;
+// power lines sagging between poles in front of them
+vec3 cityStreet(vec2 p, vec3 c, float k) {
+    float cw = 6.6;
+    float u = p.x + uD * k + 3.1;
+    float id = floor(u / cw);
+    float xe = ((id + 0.5) * cw - 3.1) / k;              // where it stands along the way
+    float city = zCity(xe);
+    if (city > 0.005 && hash1(id + 0.7) > 0.1) {
+        float shop = zShop(xe);
+        float lx = (u / cw - id) * cw;
+        float bw = cw * (0.86 + 0.13 * hash1(id + 1.0));
+        float x0 = (cw - bw) * 0.5;
+        float base = GY0 + 0.6;
+        float nfl = 2.0 + floor(hash1(id + 2.0) * 3.0);
+        const float GF = 2.7, FH = 1.7;
+        float top = GF + nfl * FH + 0.3;
+        vec2 q = vec2(lx - x0, p.y - base);                // building space: 0..bw across, 0 at its foot
+        float d = sdBox(q - vec2(bw * 0.5, top * 0.5), vec2(bw * 0.5, top * 0.5));
+        d = min(d, sdBox(q - vec2(bw * 0.5, top + 0.12), vec2(bw * 0.5 + 0.12, 0.14)));      // the cornice
+        // on the roof: a water tank on legs, boxes, a chimney
+        float rh = hash1(id + 3.0);
+        vec2 tq = q - vec2(bw * (0.25 + 0.5 * hash1(id + 4.0)), top + 1.05);
+        float roof = 1e3;
+        if (rh > 0.5) roof = min(sdBox(tq, vec2(0.45, 0.45)) - 0.08, max(abs(abs(tq.x) - 0.32) - 0.05, abs(tq.y + 0.7) - 0.3));
+        if (rh < 0.6) roof = min(roof, sdBox(q - vec2(bw * 0.18, top + 0.42), vec2(0.42, 0.24)));
+        if (fract(rh * 7.0) < 0.4) roof = min(roof, sdBox(q - vec2(bw * 0.85, top + 0.6), vec2(0.16, 0.45)));
+        float sil = min(d, roof);
+        float a = fillA(sil) * city;
+        if (a > 0.0) {
+            float pal = hash1(id + 5.0);
+            vec3 bc = pal < 0.3 ? vec3(0.075, 0.032, 0.05) : (pal < 0.55 ? vec3(0.035, 0.035, 0.085) : (pal < 0.8 ? vec3(0.025, 0.05, 0.065) : vec3(0.055, 0.03, 0.08)));
+            bc *= (1.0 + 0.7 * uDawn) * (0.9 + 0.2 * hash1(id + 6.0));
+            // brick courses, a soft light from the street below, the cornice lighter
+            vec3 b = bc * (1.0 - 0.12 * (1.0 - smoothstep(0.02, 0.05, abs(fract(q.y / 0.24) - 0.5) * 0.24)) * lod(0.24));
+            b *= 0.85 + 0.3 * vnoise(q * vec2(2.0, 5.0)) * 0.5;
+            b += vec3(0.25, 0.14, 0.22) * exp(-q.y * 0.6) * 0.25 * uLamp;
+            b = mix(b, bc * 1.7, fillA(sdBox(q - vec2(bw * 0.5, top + 0.12), vec2(bw * 0.5 + 0.12, 0.14))));
+            b = mix(b, bc * 1.35, fillA(abs(q.y - GF) - 0.09) * step(q.x, bw) * step(0.0, q.x));   // the ledge over the shops
+            b = mix(b, mix(bc * 0.6, uFog * 0.6, 0.3), fillA(roof));
+            // the windows: three or four a floor, warm or cyan when lit (some with blinds), dark glass when not
+            if (q.y > GF && q.y < top - 0.2) {
+                float nw = bw > 6.0 ? 4.0 : 3.0;
+                float wcw = bw / nw;
+                float wi = floor(q.x / wcw), fi = floor((q.y - GF) / FH);
+                vec2 wq = vec2(q.x - (wi + 0.5) * wcw, q.y - GF - (fi + 0.5) * FH + 0.05);
+                float wd = sdBox(wq, vec2(0.3, 0.46));
+                float hw = hash1(id * 13.0 + wi * 3.0 + fi * 7.0);
+                float litW = step(hw, 0.58) * uLamp;
+                vec3 wc = hash1(id + 7.0) > 0.78 ? vec3(0.3, 0.9, 1.0) : mix(WARM, vec3(1.0, 0.86, 0.55), fract(hw * 9.0));
+                vec3 glass = mix(vec3(0.03, 0.04, 0.09) + uFog * 0.15, wc * (1.0 + 0.2 * (wq.y + 0.46)), litW);
+                glass *= 1.0 - 0.45 * step(0.6, fract(hw * 31.0)) * litW * step(0.5, fract(wq.y / 0.13)) * lod(0.13);   // blinds
+                b = mix(b, INK, fillA(wd - 0.06));
+                b = mix(b, glass, fillA(wd));
+                b = mix(b, bc * 1.6, fillA(sdBox(wq - vec2(0.0, -0.52), vec2(0.36, 0.05))));      // the sill
+                b += wc * exp(-max(wd, 0.0) * 4.0) * 0.08 * litW;
+            }
+            // the ground floor: a shop (a lit front, a door, an awning, its neon sign) or a front door and a shutter
+            bool isShop = hash1(id + 8.0) < 0.3 + 0.65 * shop;
+            if (q.y < GF) {
+                float fw = bw * 0.6;
+                vec2 sq0 = q - vec2(0.35 + fw * 0.5, 1.0);
+                float front = sdBox(sq0, vec2(fw * 0.5, 0.8));
+                vec2 dq = q - vec2(bw * 0.8, 0.9);
+                float door = sdBox(dq, vec2(0.38, 0.9));
+                if (isShop) {
+                    vec3 inC = mix(WARM, vec3(1.0, 0.9, 0.7), 0.3) * (0.5 + 0.5 * uLamp);
+                    inC *= 0.75 + 0.25 * step(0.5, fract(sq0.y * 1.6 + 0.3));                  // shelves inside
+                    if (hash1(id + 9.0) > 0.7) {
+                        // two arcade cabinets, their screens glowing
+                        float cab = abs(mod(sq0.x + fw * 0.5, 1.1) - 0.55);
+                        vec2 cq = vec2(cab, sq0.y + 0.1);
+                        inC = mix(inC, vec3(0.05, 0.04, 0.1), fillA(sdBox(cq, vec2(0.28, 0.65))));
+                        inC = mix(inC, neonCol(hash1(id + floor((sq0.x + fw * 0.5) / 1.1))) * 1.3, fillA(sdBox(cq - vec2(0.0, 0.25), vec2(0.18, 0.15))));
+                    }
+                    b = mix(b, INK, fillA(front - 0.08));
+                    b = mix(b, inC, fillA(front));
+                    b = mix(b, INK, fillA(door - 0.07));
+                    b = mix(b, inC * 0.9, fillA(door));
+                    b += inC * exp(-max(min(front, door), 0.0) * 2.5) * 0.1;
+                    // an awning (striped), or a neon shop sign across the front
+                    if (hash1(id + 10.0) < 0.45) {
+                        vec2 aq = q - vec2(0.35 + fw * 0.5, 1.98);
+                        float aw = sdBox(vec2(aq.x, aq.y), vec2(fw * 0.5 + 0.2 - aq.y * 0.3, 0.17));
+                        vec3 ac = neonCol(hash1(id + 11.0)) * 0.45;
+                        ac = mix(ac, vec3(0.85), 0.5 * step(0.5, fract(aq.x * 1.4)));
+                        b = mix(b, INK, fillA(aw - 0.05));
+                        b = mix(b, ac * (0.4 + 0.6 * uLamp), fillA(aw));
+                    } else {
+                        vec2 nq = q - vec2(bw * 0.5, 2.25);
+                        vec2 ns = vec2(bw * 0.38, 0.27);
+                        float sb = sdBox(nq, ns) - 0.05;
+                        vec3 nc = neonCol(hash1(id + 12.0));
+                        float on = uLamp * (0.85 + 0.15 * step(0.03, fract(uTime * 0.23 + hash1(id))));
+                        b = mix(b, vec3(0.02, 0.015, 0.04), fillA(sb));
+                        b = neonTube(b, abs(sb) - 0.0, nc, on * 0.8);
+                        b = neonTube(b, lettering(nq, ns - vec2(0.15, 0.06), 4.0 + floor(hash1(id + 13.0) * 4.0), id, false), neonCol(hash1(id + 14.0)), on);
+                    }
+                } else {
+                    b = mix(b, INK, fillA(door - 0.07));
+                    b = mix(b, vec3(0.06, 0.05, 0.08) + WARM * 0.25 * uLamp * step(0.5, hash1(id + 15.0)), fillA(door));
+                    float sh = sdBox(sq0, vec2(fw * 0.5, 0.8));
+                    vec3 shut = bc * 0.7 * (0.85 + 0.15 * step(0.5, fract(sq0.y * 4.0)));
+                    b = mix(b, INK, fillA(sh - 0.06));
+                    b = mix(b, shut, fillA(sh));
+                }
+            }
+            // a fire escape up one side: a landing at each floor, a ladder between them
+            if (hash1(id + 16.0) < 0.3 && q.x < 1.7 && q.y > GF - 0.2) {
+                float fy = mod(q.y - GF, FH);
+                float landing = abs(fy - 0.05) - 0.04;
+                float rail = max(abs(fy - 0.5) - 0.025, 0.0);
+                float ladder = abs(q.x - 0.4 - fy * 0.55) - 0.04;
+                float fe = min(min(landing, rail + 0.0), ladder);
+                fe = max(fe, max(q.x - 1.6, 0.15 - q.x));
+                b = mix(b, INK, fillA(fe) * step(q.y, top - 0.3));
+            }
+            // a tall vertical neon sign at one corner
+            if (hash1(id + 17.0) < 0.15 + 0.55 * shop) {
+                float side = hash1(id + 18.0) < 0.5 ? bw - 0.2 : 0.2;
+                vec2 vq = q - vec2(side, GF + 1.2 + 1.3 * hash1(id + 19.0));
+                vec2 vs = vec2(0.32, 1.0 + 0.6 * hash1(id + 20.0));
+                float vb = sdBox(vq, vs) - 0.05;
+                vec3 nc = neonCol(hash1(id + 21.0));
+                b = mix(b, vec3(0.02, 0.015, 0.04), fillA(vb));
+                b = neonTube(b, abs(vb), nc, uLamp * 0.8);
+                b = neonTube(b, lettering(vq, vs - vec2(0.1, 0.12), 3.0 + floor(hash1(id + 22.0) * 3.0), id + 5.0, true), nc, uLamp);
+            }
+            b = mix(b, INK, fillA(abs(sil) - 0.045));     // the outline
+            c = mix(c, b, a);
+        }
+    }
+    // the power lines: a pole every 14, two wires sagging between them
+    float pu = p.x + uD * k + 0.7;
+    float pid = floor(pu / 14.0);
+    float pcity = zCity(((pid + 0.5) * 14.0 - 0.7) / k);
+    if (pcity > 0.005) {
+        float pt = pu / 14.0 - pid;
+        float top = GY0 + 11.2;
+        float pole = max(abs((pt - 0.5) * 14.0) - 0.08, p.y - top - 0.2);
+        float arm = max(abs((pt - 0.5) * 14.0) - 0.6, abs(p.y - top + 0.1) - 0.06);
+        float s = fract(pt + 0.5);
+        float w1 = abs(p.y - (top - 0.1 - 1.3 * 4.0 * s * (1.0 - s))) - 0.025;
+        float w2 = abs(p.y - (top - 0.6 - 1.0 * 4.0 * s * (1.0 - s))) - 0.025;
+        c = mix(c, INK, fillA(min(min(pole, arm), min(w1, w2))) * pcity * step(GY0 + 0.6, p.y));
+    }
+    return c;
+}
+
+// black silhouettes at the very front (layer k > 1): bins, sign posts, bollards, a traffic light, standing at the
+// pavement's front edge
+vec3 cityFront(vec2 p, vec2 w, vec3 c, float k) {
+    float cw = 15.0;
+    float u = p.x + uD * k;
+    float id = floor(u / cw);
+    float city = zCity(((id + 0.5) * cw) / k);
+    if (city <= 0.005 || hash1(id + 71.0) > 0.6) return c;
+    float lx = u - (id + 0.5) * cw + (hash1(id + 72.0) - 0.5) * 8.0;
+    vec2 q = vec2(lx, w.y - (GY0 - 1.8));
+    float t = hash1(id + 73.0);
+    float d;
+    if (t < 0.3) {          // two bins
+        d = min(sdBox(q - vec2(0.0, 0.75), vec2(0.38 - q.y * 0.03, 0.75)), sdBox(q - vec2(0.0, 1.55), vec2(0.45, 0.07)));
+        d = min(d, sdBox(q - vec2(1.0, 0.65), vec2(0.34, 0.65)));
+    } else if (t < 0.6) {   // a sign post, its arrows
+        d = sdBox(q - vec2(0.0, 2.6), vec2(0.08, 2.6));
+        d = min(d, sdBox(q - vec2(0.6, 4.6), vec2(0.65, 0.22)) - 0.02);
+        d = min(d, sdBox(q - vec2(-0.5, 4.0), vec2(0.6, 0.2)) - 0.02);
+    } else if (t < 0.8) {   // bollards
+        float bx = mod(q.x + 0.75, 1.5) - 0.75;
+        d = max(sdBox(vec2(bx, q.y - 0.5), vec2(0.13, 0.5)) - 0.04, abs(q.x) - 2.3);
+    } else {                // a traffic light
+        d = min(sdBox(q - vec2(0.0, 2.8), vec2(0.09, 2.8)), sdBox(q - vec2(0.0, 5.3), vec2(0.28, 0.7)) - 0.06);
+    }
+    vec3 sc = vec3(0.012, 0.01, 0.02) + uFog * 0.08 * uDawn;
+    return mix(c, sc, fillA(d) * city);
 }
 
 // ---- passers-by under umbrellas (layer k), on the shopping street
@@ -741,11 +1033,13 @@ vec3 catenary(vec2 w, vec3 c);
 vec3 airScene(vec2 p, vec2 w) {
     vec3 c = sky(p);
     c = ridges(p, c);
-    c = skyline(layerP(p, 0.12), c, 0.12, GY0 + 2.0, 4.0, 15.0, 2.9, mix(vec3(0.03, 0.04, 0.07), uFog * 0.7, uDawn * 0.6), 0.1, 3.0, 0.35);
+    c = cityFar(layerP(p, 0.06), c, 0.06);
     c = industry(layerP(p, 0.1), c, 0.1);
     c = hills(p, c);
     c = bambooClump(layerP(p, 0.12), c, 0.12, GY0 + 2.0, 0.55, 0.8, mix(vec3(0.3, 0.42, 0.2), uFog, 0.5), 0.55, 1.0);
-    c = facades(layerP(p, 0.42), c, 0.42, GY0 + 1.0, 0.12);
+    c = cityMid(layerP(p, 0.16), c, 0.16);
+    c = viaduct(layerP(p, 0.28), c, 0.28);
+    c = cityStreet(layerP(p, 0.5), c, 0.5);
     c = warehouses(layerP(p, 0.4), c, 0.4);
     c = pylons(p, c);
     c = bambooClump(layerP(p, 0.28), c, 0.28, GY0 + 1.5, 0.75, 0.75 * (1.0 - 0.5 * zGlade(w.x)), vec3(0.16, 0.27, 0.08), 0.3, 2.0);
@@ -783,7 +1077,7 @@ vec3 airScene(vec2 p, vec2 w) {
         float sp = 15.0, n = floor((w.x - 4.0) / sp + 0.5);
         float lxw = n * sp + 4.0;
         float lx = w.x - lxw;
-        if (abs(lxw - 79.0) > 6.0) c = lampAt(w, c, lx, vec3(1.0, 0.72, 0.38), 6.6, uLamp);
+        if (abs(lxw - 86.5) > 9.0) c = lampAt(w, c, lx, vec3(1.0, 0.72, 0.38), 6.6, uLamp);
     } else if (w.x > 1332.0 && w.x < 1381.0) {
         float sp = 13.0, n = floor((w.x - 2.0) / sp + 0.5);
         c = lampAt(w, c, w.x - (n * sp + 2.0), vec3(1.0, 0.55, 0.2), 5.6, uLamp);
@@ -791,14 +1085,14 @@ vec3 airScene(vec2 p, vec2 w) {
     // the subway's entrance: railings round the stairwell, a lit sign on a post
     {
         vec2 q = w - vec2(79.0, GY0);
-        float rail = min(sdBox(q - vec2(0.7, 1.0), vec2(0.06, 1.0)), sdBox(q - vec2(9.2, 1.0), vec2(0.06, 1.0)));
-        rail = min(rail, sdBox(q - vec2(4.95, 1.95), vec2(4.25, 0.05)));
-        rail = min(rail, max(abs(mod(q.x - 0.7, 1.7) - 0.85) - 0.03, max(abs(q.y - 1.0) - 0.95, abs(q.x - 4.95) - 4.25)));
+        float rail = min(sdBox(q - vec2(0.7, 1.0), vec2(0.06, 1.0)), sdBox(q - vec2(14.2, 1.0), vec2(0.06, 1.0)));
+        rail = min(rail, sdBox(q - vec2(7.45, 1.95), vec2(6.75, 0.05)));
+        rail = min(rail, max(abs(mod(q.x - 0.7, 1.7) - 0.85) - 0.03, max(abs(q.y - 1.0) - 0.95, abs(q.x - 7.45) - 6.75)));
         // the canopy: glass on a light frame, on two posts
-        float cp = min(sdBox(q - vec2(0.3, 2.8), vec2(0.08, 2.8)), sdBox(q - vec2(9.4, 2.6), vec2(0.08, 2.6)));
-        vec2 cq = q - vec2(4.85, 5.4 + (q.x - 4.85) * -0.04);
-        float roofF = sdBox(cq, vec2(4.9, 0.1));
-        c = mix(c, mix(c, vec3(0.5, 0.7, 0.8) * (0.2 + 0.3 * uLamp), 0.35), fillA(sdBox(cq - vec2(0.0, 0.25), vec2(4.8, 0.2))));
+        float cp = min(sdBox(q - vec2(0.3, 2.8), vec2(0.08, 2.8)), sdBox(q - vec2(14.4, 2.4), vec2(0.08, 2.4)));
+        vec2 cq = q - vec2(7.35, 5.2 + (q.x - 7.35) * -0.03);
+        float roofF = sdBox(cq, vec2(7.4, 0.1));
+        c = mix(c, mix(c, vec3(0.5, 0.7, 0.8) * (0.2 + 0.3 * uLamp), 0.35), fillA(sdBox(cq - vec2(0.0, 0.25), vec2(7.3, 0.2))));
         rail = min(rail, min(cp, roofF));
         rail = min(rail, sdBox(q - vec2(-1.6, 2.4), vec2(0.07, 2.4)));
         c = lay(c, vec3(0.06, 0.07, 0.06) + vec3(0.1, 0.12, 0.1) * uLamp * 0.3, fillA(rail));
@@ -871,10 +1165,10 @@ vec3 airScene(vec2 p, vec2 w) {
 }
 
 // =========================================================================== underground
-// The stairs: nine steps down from the pavement's edge (a step a quarter of the cub's height), the station's
+// The stairs: eleven steps down from the pavement's edge (a step a quarter of the cub's height), the station's
 // platform, the tunnels' track bed (the one ahead runs on level under the city for over a thousand units: the ride's
-// long run); then a gentle grade (under 5 degrees) out of a portal up a walled cutting.
-const float STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;
+// long run); then a grade (under 7 degrees) out of a portal up a walled cutting.
+const float STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 11.0;
 const float RISE = (GY0 - PLAT_Y) / NSTEPS;
 const float STAIR_END = STAIR_X + TREAD * NSTEPS;
 float stairLine(float x) { return GY0 - (x - STAIR_X) / TREAD * RISE; }   // through the steps' noses
@@ -912,6 +1206,54 @@ vec3 concrete(vec2 w) {
     c *= 1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.04 + gPx, abs(fract(w.x / 3.0) - 0.5) * 3.0 - 1.45)) * lod(3.0);
     return c * (0.8 + 0.4 * uDawn);
 }
+// a pipe across the earth (its axis at y, radius r): a lit top, a dark underside, an outline; a flange every `fl`
+vec3 pipeAt(vec2 w, vec3 c, float y, float r, vec3 col, float fl) {
+    float d = abs(w.y - y) - r;
+    if (d > gPx * 2.0 + 0.12) return c;
+    float t = (w.y - y) / r;
+    vec3 pc = col * (0.55 + 0.6 * smoothstep(-1.0, 0.7, t)) + col * 0.8 * exp(-sq((t - 0.45) / 0.18));
+    float fx = abs(mod(w.x, fl) - fl * 0.5) - 0.1;
+    float fd = max(fx, abs(w.y - y) - r - 0.1);
+    c = mix(c, INK, fillA(min(d, fd) - 0.04));
+    c = mix(c, pc, fillA(d));
+    return mix(c, col * 1.2, fillA(fd) * 0.8);
+}
+// the services in the earth under the street (as far as the tunnel runs): a big water main with its flanges, a bundle
+// of conduits, cables sagging between their hangers, a sewer pipe below (glowing green through its cracks here and
+// there), pipes dropping from the street now and then
+vec3 services(vec2 w, vec3 c) {
+    if (w.x > 1186.0 || w.y > GY0 - 2.3 || w.y < PLAT_Y + 7.6) return c;
+    float y0 = GY0 - 2.3;
+    // the drops: a pipe down from the street every so often, an elbow into the main
+    float vx = mod(w.x - 7.0, 23.0) - 11.5;
+    float vd = max(abs(vx) - 0.14, max(w.y - y0, (y0 - 0.75) - w.y));
+    c = mix(c, INK, fillA(vd - 0.04));
+    c = mix(c, vec3(0.09, 0.09, 0.085) * (0.7 + 0.5 * smoothstep(-0.14, 0.1, vx)), fillA(vd));
+    c = pipeAt(w, c, y0 - 0.9, 0.3, vec3(0.08, 0.085, 0.09), 6.0);
+    c = pipeAt(w, c, y0 - 1.48, 0.1, vec3(0.1, 0.06, 0.04), 9.0);
+    c = pipeAt(w, c, y0 - 1.72, 0.09, vec3(0.06, 0.08, 0.07), 9.0);
+    c = pipeAt(w, c, y0 - 1.94, 0.09, vec3(0.08, 0.08, 0.08), 9.0);
+    // cables sagging between hangers (a hanger every 5)
+    float s = fract(w.x / 5.0);
+    for (int i = 0; i < 2; i++) {
+        float fi = float(i);
+        float cy = y0 - 0.32 - 0.12 * fi - (0.35 + 0.1 * fi) * 4.0 * s * (1.0 - s);
+        c = mix(c, vec3(0.012, 0.01, 0.012), fillA(abs(w.y - cy) - 0.035));
+    }
+    c = mix(c, INK, fillA(max(abs(mod(w.x, 5.0) - 2.5) - 0.04, abs(w.y - (y0 - 0.25)) - 0.25)) * step(2.4, abs(mod(w.x, 5.0) - 2.5)));
+    // the sewer: a wide pipe below, its glow where it is cracked
+    float sy = y0 - 2.5;
+    c = pipeAt(w, c, sy, 0.38, vec3(0.07, 0.065, 0.06), 12.0);
+    float sid = floor(w.x / 40.0);
+    if (hash1(sid + 91.0) < 0.35 && abs(w.y - sy) < 0.36) {
+        float cr = abs(vnoise(vec2(w.x * 1.4, (w.y - sy) * 6.0 + sid)) - 0.5);
+        float span = 1.0 - smoothstep(6.0, 14.0, abs(w.x - (sid + 0.5) * 40.0));
+        vec3 g = vec3(0.25, 1.0, 0.5);
+        c = mix(c, g * 1.3, (1.0 - smoothstep(0.02, 0.05, cr)) * span);
+        c += g * exp(-cr * 18.0) * 0.18 * span;
+    }
+    return c;
+}
 vec3 earth(vec2 w) {
     if (lining(w) > 0.5) return concrete(w);
     float depth = GY0 - w.y;
@@ -924,9 +1266,7 @@ vec3 earth(vec2 w) {
     vec2 pi = floor(pq), pf = fract(pq) - 0.5;
     float pb = fillS(length(pf - (hash2(pi) - 0.5) * 0.5) - 0.12 * hash(pi + 3.0), 0.03) * step(0.7, hash(pi + 1.0));
     c = mix(c, vec3(0.12, 0.1, 0.09), pb * 0.6 * lod(0.6));
-    // a pipe and a cable under the street
-    c = mix(c, vec3(0.1, 0.11, 0.1), fillA(abs(w.y - (GY0 - 3.1)) - 0.18) * step(w.x, 1186.0));
-    c = mix(c, vec3(0.06, 0.05, 0.05), fillA(abs(w.y - (GY0 - 3.7)) - 0.08) * step(w.x, 1186.0));
+    c = services(w, c);
     return c * (0.8 + 0.4 * uDawn);
 }
 vec3 tiles(vec2 w, vec3 tile) {
@@ -971,10 +1311,21 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
         return c * (0.35 + 0.65 * L);
     }
     if (cv == 2) {
-        // the hall: tiles, a band of color, the station's name, posters, strip lights, the track bed below the wall
-        vec3 c = tiles(w, vec3(0.13, 0.16, 0.15));
+        // the hall: pale tiles (grimier low down), graffiti, a band of color, the station's name, posters, vending
+        // machines, benches, a ticket machine, commuters waiting, strip lights hanging from the ceiling, the track bed
         float yy = w.y - PLAT_Y;
-        c = mix(c, vec3(0.02, 0.07, 0.06), fillA(abs(yy - 3.9) - 0.45));
+        vec3 c = tiles(w, vec3(0.3, 0.285, 0.24)) * (0.75 + 0.25 * smoothstep(0.8, 3.0, yy));
+        c = mix(c, vec3(0.025, 0.07, 0.07), fillA(abs(yy - 3.9) - 0.4));
+        c = mix(c, INK, fillA(abs(abs(yy - 3.9) - 0.4) - 0.03) * 0.6);
+        // graffiti: blobs of letters sprayed on the lower wall, outlined, here and there
+        float gid = floor(w.x / 9.0);
+        if (hash1(gid + 81.0) < 0.5 && yy > 0.9 && yy < 3.2) {
+            vec2 gq = vec2(w.x - (gid + 0.5) * 9.0, yy - 2.0);
+            float blob = fbm(vec2(w.x * 1.1, yy * 1.6) + gid * 3.7) - 0.5 + 0.22 * (1.0 - length(gq / vec2(2.6, 0.95)));
+            vec3 gc = neonCol(hash1(gid + 82.0)) * 0.42;
+            c = mix(c, INK, fillA(-blob + 0.035) * 0.8);
+            c = mix(c, gc, fillA(-blob + 0.07));
+        }
         float nx = mod(w.x - 92.0, 26.0) - 13.0;
         float nameB = fillA(sdBox(vec2(nx, yy - 5.4), vec2(3.0, 0.55)) - 0.05);
         c = mix(c, vec3(0.03, 0.05, 0.12), nameB);
@@ -985,15 +1336,61 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
         vec3 pc1 = 0.5 + 0.5 * cos(TAU * (hash1(pid) + vec3(0.0, 0.33, 0.67)));
         vec3 pic = mix(pc1 * 0.5, (0.5 + 0.5 * cos(TAU * (hash1(pid + 3.0) + vec3(0.1, 0.4, 0.7)))) * 0.7, smoothstep(-1.0, 1.0, pq.y + sin(pq.x * 2.0 + pid) * 0.5));
         pic += 0.25 * fillA(length(pq - vec2(0.3 * sin(pid), 0.4)) - 0.55);
-        c = mix(c, vec3(0.05), fillA(sdBox(pq, vec2(1.15, 1.35))));
-        c = mix(c, pic * 0.35, fillA(sdBox(pq, vec2(1.0, 1.2))));
+        float kind = hash1(pid + 51.0);
+        if (kind < 0.45) {
+            c = mix(c, INK, fillA(sdBox(pq, vec2(1.15, 1.35))));
+            c = mix(c, pic * 0.45, fillA(sdBox(pq, vec2(1.0, 1.2))));
+        } else if (kind < 0.75) {
+            // two vending machines, lit, their rows of cans
+            for (int i = 0; i < 2; i++) {
+                vec2 vq = pq - vec2(-0.75 + 1.5 * float(i), -0.3);
+                float vd = sdBox(vq, vec2(0.66, 1.75)) - 0.05;
+                vec3 vc = mix(vec3(0.35, 0.12, 0.18), vec3(0.12, 0.25, 0.22), float(i));
+                vec3 win = vec3(0.8, 0.85, 0.75) * 0.8;
+                vec2 cq = vec2(fract((vq.x + 0.42) / 0.21) - 0.5, fract((vq.y - 0.1) / 0.36) - 0.5);
+                win = mix(win, neonCol(hash1(pid + floor((vq.y - 0.1) / 0.36) + float(i) * 5.0)) * 0.5, fillA(sdBox(cq * vec2(0.21, 0.36), vec2(0.06, 0.1))));
+                c = mix(c, INK, fillA(vd - 0.05));
+                c = mix(c, vc, fillA(vd));
+                c = mix(c, win, fillA(sdBox(vq - vec2(-0.08, 0.55), vec2(0.42, 0.95))));
+                c += vec3(0.6, 0.7, 0.6) * exp(-max(vd, 0.0) * 2.0) * 0.06;
+            }
+        } else if (kind < 0.9) {
+            // a bench, a poster over it
+            c = mix(c, INK, fillA(sdBox(pq, vec2(1.0, 1.15)) - 0.05));
+            c = mix(c, pic * 0.45, fillA(sdBox(pq, vec2(0.9, 1.05))));
+            float bench = min(sdBox(pq - vec2(0.0, -1.35), vec2(1.6, 0.09)), max(abs(abs(pq.x) - 1.3) - 0.07, abs(pq.y + 1.75) - 0.4));
+            c = mix(c, INK, fillA(bench - 0.04));
+            c = mix(c, vec3(0.08, 0.13, 0.12), fillA(bench));
+        } else {
+            // a ticket machine
+            vec2 tq = pq - vec2(0.0, -0.75);
+            float td = sdBox(tq, vec2(0.45, 1.3)) - 0.05;
+            c = mix(c, INK, fillA(td - 0.05));
+            c = mix(c, vec3(0.16, 0.17, 0.19), fillA(td));
+            c = mix(c, vec3(0.3, 0.75, 0.9), fillA(sdBox(tq - vec2(0.0, 0.6), vec2(0.28, 0.22))));
+        }
         float lx = mod(w.x, 8.0) - 4.0;
         float tube = fillA(sdBox(vec2(lx, w.y - (ce - 0.45)), vec2(2.2, 0.11)));
         c *= 0.55 + 0.6 * exp(-sq(lx / 3.5)) * smoothstep(PLAT_Y, ce, w.y);
         c = mix(c, vec3(0.02, 0.025, 0.025), smoothstep(ce - 0.8, ce - 0.75, w.y));
+        c = mix(c, INK, fillA(max(abs(abs(lx) - 1.8) - 0.03, abs(w.y - (ce - 0.25)) - 0.2)));     // its rods
         c = mix(c, lc * 1.8, tube);
         c += lc * exp(-sq(sdBox(vec2(lx, w.y - (ce - 0.45)), vec2(2.2, 0.0)) / 0.5)) * 0.12;
         c = mix(c, vec3(0.015, 0.016, 0.018), smoothstep(0.9, 0.7, yy));
+        // commuters waiting on the platform: silhouettes, swaying a little (none where the cub boards)
+        float cid = floor(w.x / 7.0);
+        if (hash1(cid + 61.0) < 0.5 && abs((cid + 0.5) * 7.0 - 128.0) > 8.0) {
+            float hc = hash1(cid + 62.0);
+            vec2 mq = vec2(w.x - (cid + 0.5) * 7.0 - (hc - 0.5) * 3.0, yy);
+            mq.x += 0.05 * sin(uTime * 0.7 + hc * 9.0) * mq.y;
+            float sz = 0.9 + 0.2 * hash1(cid + 63.0);
+            mq /= sz;
+            float body = sdBox(mq - vec2(0.0, 1.95), vec2(0.36 - (mq.y - 1.95) * 0.05, 0.75)) - 0.12;
+            body = min(body, length(mq - vec2(0.0, 3.15)) - 0.32);
+            body = min(body, min(sdSeg(mq, vec2(-0.14, 1.2), vec2(-0.16, 0.02)), sdSeg(mq, vec2(0.14, 1.2), vec2(0.17, 0.02))) - 0.12);
+            if (hc > 0.6) body = min(body, sdBox(mq - vec2(0.45, 1.5), vec2(0.18, 0.25)));       // a bag
+            c = mix(c, vec3(0.025, 0.022, 0.03), fillA(body * sz));
+        }
         return c * (0.3 + 0.7 * L);
     }
     if (cv == 5) {
@@ -1026,10 +1423,30 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
     // signals draw streaks behind them
     float yy = w.y - fl;
     float bl = uBlur;
-    vec3 c = mix(vec3(0.03, 0.03, 0.032), vec3(0.018, 0.018, 0.02), sat(yy / 7.0));
+    vec3 c = mix(vec3(0.05, 0.048, 0.046), vec3(0.022, 0.021, 0.022), sat(yy / 7.5));
     c *= 0.9 + 0.2 * hash1(floor(w.x / 3.0)) * 1.2 / (1.2 + bl);
     float jx = (fract(w.x / 3.0 + 0.5) - 0.5) * 3.0;
     c *= 1.0 - 0.45 * (1.0 - smoothstep(0.03, 0.03 + gPx * 1.5 + bl * 0.5, abs(jx))) * lod(3.0) * 0.1 / (0.1 + bl);
+    // the vault: ribs every 6 (outlined), a pillar every 18, a ventilation grille now and then, the contact wire under
+    // the crown on its hangers (each smeared by the blur in proportion to its width)
+    float es = gPx + bl * 0.5;
+    float rib = abs(mod(w.x, 6.0) - 3.0) - 0.28;
+    c = mix(c, c * 1.6 + 0.006, fillS(rib, es) * 0.56 / (0.56 + bl));
+    c = mix(c, INK, fillS(abs(rib) - 0.025, es) * 0.6 * 0.05 / (0.05 + bl));
+    float pcx = mod(w.x - 4.0, 18.0) - 9.0;
+    float pil = sdBox(vec2(pcx, yy - 3.9), vec2(0.5, 3.9));
+    vec3 pilC = vec3(0.075, 0.072, 0.068) * (0.65 + 0.5 * smoothstep(-0.5, 0.4, pcx));
+    c = mix(c, INK, fillS(pil - 0.05, es) * 0.8 * 1.1 / (1.1 + bl));
+    c = mix(c, pilC, fillS(pil, es) * 1.0 / (1.0 + bl));
+    float gx = mod(w.x - 13.0, 45.0) - 22.5;
+    vec2 gq = vec2(gx, yy - 5.6);
+    float gr = sdBox(gq, vec2(0.75, 0.42));
+    c = mix(c, INK, fillS(gr - 0.05, es) * 1.5 / (1.5 + bl));
+    c = mix(c, vec3(0.03) * (0.6 + 0.6 * step(0.5, fract(gq.y / 0.14))), fillS(gr, es) * 1.5 / (1.5 + bl));
+    float cwire = abs(yy - 7.05) - 0.03;
+    float hang = max(abs(mod(w.x, 4.0) - 2.0) - 0.025, abs(yy - 7.3) - 0.25);
+    c = mix(c, vec3(0.06, 0.05, 0.04), fillA(cwire));
+    c = mix(c, INK, fillS(hang, es) * 0.05 / (0.05 + bl));
     float nx = mod(w.x - 22.0, 36.0) - 18.0;
     float niche = sdBox(vec2(nx, yy - 2.1), vec2(0.75, 2.1));
     c = mix(c, vec3(0.006, 0.006, 0.007), fillS(niche, gPx + bl * 0.5) * (0.4 + 0.6 * 1.5 / (1.5 + bl)));
@@ -1185,6 +1602,7 @@ void main() {
         if (cv > 0) e = min(e, min(abs(w.y - ce), abs(w.y - (fl - 1.6))));
         if (!(cv == 0 && w.y > GY0 - 1.8 && w.y < GY0)) c = mix(c, vec3(0.015, 0.01, 0.01), (1.0 - smoothstep(gPx * 0.8, gPx * 2.0, e)) * 0.7);
     }
+    if (air) c = cityFront(p, w, c, 1.35);
     if (air) c = rain(p, c, uRain);
     if (air && w.x < 1251.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
     c += uSunCol * uDrop * 0.05 * smoothstep(4.0, -10.0, p.y);

@@ -1,8 +1,10 @@
 // LOST PANDA: a journey home told in pictures behind the well, one continuous shot. A little kawaii panda cub is lost
 // in the city at night, alone under the rain. Every cleared line is a few steps further on its way home, through one
-// world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
-// hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
-// cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
+// world the camera follows it through, never cutting: the rainy street becomes the shopping street, a cartoon night
+// city in layers of parallax (a moon, misty skyscrapers, towers, an elevated line, brick buildings with warm windows
+// and neon signs, people hurrying by under umbrellas, black silhouettes at the front); the cub goes down the subway's
+// stairs (the world cut away like a cross-section, the street still above, pipes and cables in the earth between);
+// waits on the platform (tiles, graffiti, vending machines, commuters) while a silver train glides in, steps in;
 // the train pulls out (the camera holds back a moment, then catches up), gathers speed hard and runs flat out under
 // the city through a tunnel over a thousand units long (the street whipping past above, the tunnel's lamps streaking
 // past its windows), climbs a cutting into the dawn and brakes into a terminus in the industrial district; the cub steps out,
@@ -96,7 +98,7 @@ const int LINES_AT[STAGES + 1] = {0, 7, 13, 19, 25, 32, 38, 45, 50};
 constexpr double C_END = 1498.0;                     // the camera stops here (the glade); the family is on the right
 const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 1327, 1381, 1431, 1476, C_END};
 constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
-constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
+constexpr double GY0 = -7.4, PLAT_Y = -20.4;         // the street, the subway's platform (world y, as in the shaders)
 constexpr double XB = 128.0, XA = 1327.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 // The subway's timetable (seconds): after a gap a train glides in, opens its doors and waits for the cub as long as
@@ -145,7 +147,7 @@ double trackY(double x) {
     const double t = std::clamp((x - 1182.0) / 112.0, 0.0, 1.0);
     return PLAT_Y + (GY0 - PLAT_Y) * (0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
 }
-constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;   // the subway's stairs (as in the shaders)
+constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 11.0;  // the subway's stairs (as in the shaders)
 // the cub's feet (world y) along the way: the street, the stairs down, the platform, a hop into the train (its floor
 // following the track up the cutting), a hop down onto the terminus's platform, the ground
 double pathY(double x) {
@@ -180,13 +182,13 @@ struct StageDef {
     float keyX, keyY, mood, reflect, fireflies, butterfly;
 };
 const StageDef STAGE[STAGES] = {
-    {"a rainy street", 0x070b16, 0x222a3c, 0x1e2536, 0xffb060, 0x070a12, 0, 0, 1, 0, 0.0f, 0, 1.0f, 1.0f,
+    {"a rainy street", 0x0e0c2a, 0x33285a, 0x2a2350, 0xffb060, 0x08081a, 0, 0, 1, 0, 0.35f, 0, 0.7f, 1.0f,
      {0.30f, 0.34f, 0.46f}, {0.42f, 0.36f, 0.30f}, {0.55f, 0.42f, 0.28f}, 0.7f, 0.6f, 0.0f, 0.55f, 0.f, 0.f},
-    {"the shopping street", 0x0d0a1c, 0x34243e, 0x2c2238, 0xff9a80, 0x0c0814, 0, 0, 1, 0, 0.0f, 0, 0.6f, 1.0f,
+    {"the shopping street", 0x110c30, 0x3d2c66, 0x33285a, 0xff9a80, 0x0c0818, 0, 0, 1, 0, 0.5f, 0, 0.4f, 1.0f,
      {0.36f, 0.34f, 0.48f}, {0.48f, 0.38f, 0.44f}, {0.6f, 0.35f, 0.5f}, 0.7f, 0.6f, 0.08f, 0.45f, 0.f, 0.f},
-    {"the subway", 0x0d0a1c, 0x34243e, 0x2c2238, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.0f, 0, 0.45f, 1.0f,
+    {"the subway", 0x110c30, 0x3d2c66, 0x33285a, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.5f, 0, 0.3f, 1.0f,
      {0.50f, 0.56f, 0.55f}, {0.45f, 0.50f, 0.46f}, {0.45f, 0.55f, 0.5f}, 0.2f, 1.0f, 0.22f, 0.25f, 0.f, 0.f},
-    {"the night train", 0x0c1020, 0x262838, 0x2a2a36, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.1f, 0, 0.2f, 1.0f,
+    {"the night train", 0x100e30, 0x342c60, 0x302a58, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.55f, 0, 0.15f, 1.0f,
      {0.56f, 0.56f, 0.54f}, {0.50f, 0.50f, 0.46f}, {0.4f, 0.4f, 0.36f}, 0.0f, 1.0f, 0.34f, 0.0f, 0.f, 0.f},
     {"the industrial district", 0x18204a, 0xdf9584, 0x7a6278, 0xffa868, 0x120e1c, 9.f, -6.8f, 1.0f, 0.45f, 0.3f, 0.25f, 0.0f, 0.8f,
      {0.46f, 0.42f, 0.52f}, {0.62f, 0.44f, 0.40f}, {0.9f, 0.55f, 0.42f}, 0.9f, 0.3f, 0.45f, 0.f, 0.f, 0.f},
@@ -1059,7 +1061,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         // the further behind its lines, the faster it goes (a brisk walk, then a trot): the way must always be
         // feasible within the song, however fast the lines come
         double vmax = lineWalk ? std::min(6.5, lerpf(1.5f, 2.4f, mood) + std::max(0.0, dist - 6.0) * 0.12) : 0.45;
-        if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
+        if (P_ > 79.0 && P_ < 95.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
         if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
@@ -1391,7 +1393,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             kidRoll_ = inside ? (float)std::atan((trackY(x0 + 17.0) - trackY(x0)) / 17.0) : 0.f;
         }
         kid_.tilt += 0.035f * nod;
-        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 96.0 && P_ < XB - 0.7), 0);
+        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 98.0 && P_ < XB - 0.7), 0);
         kid_.tilt -= 0.035f * nod;
     }
     if (inside) drawFront();
