@@ -754,6 +754,19 @@ vec3 cityStreet(vec2 p, vec3 c, float k) {
             c = mix(c, b, a);
         }
     }
+    // under the buildings, down to the near pavement: the far pavement (its kerb catching the light) and the wet road
+    // (the buildings stand on it, never floating over the city behind)
+    float gz = zCity((p.x + uD * k) / k);
+    float gyq = p.y - (GY0 + 0.6);
+    if (gz > 0.005 && gyq < 0.02) {
+        vec3 pave = vec3(0.05, 0.04, 0.08) * (1.0 + 0.7 * uDawn);
+        vec3 road = vec3(0.026, 0.022, 0.05) * (1.0 + 0.7 * uDawn);
+        vec3 g = mix(road, pave, step(-0.5, gyq));
+        g = mix(g, pave * 2.2, fillA(abs(gyq + 0.5) - 0.04));                                          // the kerb
+        g += WARM * 0.05 * uLamp * smoothstep(-2.5, -0.5, gyq) * (0.6 + 0.4 * vnoise(vec2(p.x * 0.7, gyq * 6.0)));   // the shops' light on it
+        g = mix(g, INK, fillA(abs(gyq) - 0.03));
+        c = mix(c, g, gz);
+    }
     // the power lines: a pole every 14, two wires sagging between them
     float pu = p.x + uD * k + 0.7;
     float pid = floor(pu / 14.0);
