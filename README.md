@@ -198,7 +198,7 @@ no song previews.
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines (one per 20 lines, up to level 50: the Voyage's velocities, on the same scale). Each song
   starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
-  EASY, NORMAL or EXPERT, a multiplier on the gravity of every level (x0.6, x0.8, x1: EXPERT is the full speed, and
+  EASY, NORMAL or HARD, a multiplier on the gravity of every level (x0.6, x0.8, x1: HARD is the full speed, and
   goes 20G as the Voyage does: the drops from level 38 on, the choruses too at level 50), a **starting level** (the
   strip at the bottom of the screen: 1, then every 5 up to 50; `--level N` on the command line, any level), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
   own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
@@ -209,14 +209,14 @@ no song previews.
   is pressed, then goes back to the menu.
 - **Voyage** (the campaign) is 15 stages of 4 songs played in a row. There are no levels: each song has its velocity
   (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
-  with the difficulty (EASY, NORMAL, EXPERT, chosen at the top of the Voyage screen). The stages are 15 glass petals in
+  with the difficulty (EASY, NORMAL, HARD, chosen at the top of the Voyage screen). The stages are 15 glass petals in
   a rosette, numbered 1 to 15, each in its own hue, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
   right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
   reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
   the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
   one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
   started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
-  a stage reached on EXPERT is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
+  a stage reached on HARD is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
   best score) but the stage isn't cleared; once all of a stage's songs are beaten, in any runs, the next stage opens
   too (quietly: only a clear turns the petal and celebrates). A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
@@ -234,7 +234,7 @@ again).
 | Option | |
 |---|---|
 | `--free` | free play straight away, without the menu |
-| `--difficulty easy\|normal\|expert` | free play's difficulty (default: expert), or a gravity multiplier such as `0.7`; also Voyage's |
+| `--difficulty easy\|normal\|hard` | free play's difficulty (default: hard), or a gravity multiplier such as `0.7`; also Voyage's |
 | `--stage S[:SONG]` | a Voyage run straight away (stage S, from its song SONG) |
 | `--unlock` | unlock every Voyage stage (saved) |
 | `--reset` | forget the Voyage progress (prints what was forgotten) |
@@ -247,7 +247,7 @@ saves a menu screen (`--menu-petal`: the hovered stage's petal open; `ZEN_TEST_K
 `--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `ZEN_MENU_CLIP_SECONDS` changes its
 length), printing the menu's average CPU and GPU time per frame; both can show made-up progress and playlists
 (`--menu-demo`, always on in clips, never saved; `--menu-demo normal-done`: every stage cleared on NORMAL, the first
-five on EASY, none on EXPERT). `--menu-screen debrief-over` or `debrief-clear` shows the debrief that ends a Voyage
+five on EASY, none on HARD). `--menu-screen debrief-over` or `debrief-clear` shows the debrief that ends a Voyage
 run (a game over, a stage cleared: the logo, the score and lines) for a made-up run, `--menu-time S` taking the shot S
 seconds into it (with `--menu-clip`, the clip is its animation, no key pressed). Its two logo images are
 `src/logo.inc`, made by `tools/logo.py --inc src/logo.inc`. The menu's font, Josefin Sans, is OFL, in `src/embed/`
@@ -258,7 +258,7 @@ with its licence.
 The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
 
 ```
-# stage  song  id           universe             easy  normal  expert  title
+# stage  song  id           universe             easy  normal  hard    title
 1        1     H_9xqc084UA  PRISM:AURORA         1.0   2.0     4.0     Small Town Kid - Shards
 15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  8.2   13.5    20.0    callah x Laura Brehm - skyline
 ```
@@ -266,16 +266,16 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
 - `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
 - `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
-- `easy`, `normal`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 50
+- `easy`, `normal`, `hard`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 50
   (20 is the free play's plateau, x10 gravity; past it faster still, up to the gravity's cap); decimals are fine.
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
 ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
-EXPERT, 17 levels faster on stage 1, 12 on the finale), over a base that rises across the stages (EXPERT goes from 5.1 to
+HARD, 17 levels faster on stage 1, 12 on the finale), over a base that rises across the stages (HARD goes from 5.1 to
 22.2 on stage 1 and from 38.4 to 50 on the finale, far past the free play's plateau; NORMAL tops out at 28, EASY at 13.5).
-On EXPERT, from velocity 30 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
+On HARD, from velocity 30 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
 delay to slide and turn it along the stack; at velocity 50 the choruses too), the rest of the song keeping a visible
 fall: in the last song of stages 10 to 12, the last two of stages 13 and 14, and every song of the finale.
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and

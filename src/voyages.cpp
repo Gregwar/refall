@@ -94,7 +94,7 @@ std::string makeVoyageCampaign(const std::string& title, const std::vector<std::
     };
     std::ostringstream o;
     o << "# Refall custom voyage: " << clean(title) << "\n"
-      << "# stage, song, video id, universe, velocity on EASY, NORMAL, EXPERT, title (as data/campaign.tsv)\n";
+      << "# stage, song, video id, universe, velocity on EASY, NORMAL, HARD, title (as data/campaign.tsv)\n";
     int i = 0;
     for (int s = 0; s < S; s++) {
         // stages of 4, the first ones taking one more when the songs don't divide evenly

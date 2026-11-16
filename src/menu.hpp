@@ -38,7 +38,7 @@ public:
     enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES };
     struct Choice {
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
-        int difficulty = DIFF_EXPERT;
+        int difficulty = DIFF_HARD;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
         std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
         int level = 1;           // PLAY_FREE: the level the game starts at
@@ -155,7 +155,7 @@ private:
     void stageColor(int stage, unsigned char out[3]) const;
 
     // eased focus (indices as floats) for the animated transitions
-    float aTitle_ = 0, aFree_ = DIFF_EXPERT, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
+    float aTitle_ = 0, aFree_ = DIFF_HARD, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
     // the opened petal (its songs fanned out), eased
     bool petal_ = false;
     float aOpen_ = 0;
@@ -189,7 +189,7 @@ private:
     const Campaign* camp_ = nullptr;
     Progress* progress_ = nullptr;
     Screen screen_ = TITLE;
-    int titleItem_ = 0, freeDiff_ = DIFF_EXPERT, diff_ = DIFF_NORMAL;
+    int titleItem_ = 0, freeDiff_ = DIFF_HARD, diff_ = DIFF_NORMAL;
     static constexpr int TITLE_ITEMS = 3;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
