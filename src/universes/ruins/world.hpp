@@ -51,12 +51,16 @@ enum Role {
     R_GONE,       // rubble: there while its group's condition holds, then gone (dust)
     R_BRAZIER,    // rises from the ground in the prime
     R_SINK,       // a jungle tree: shrinks back with the jungle (about its foot, from)
+    R_FLYIN,      // MAYA's fallen block: lies on the scree (from, tumbled by rot; b: the slope's height under it),
+                  // flies into the crater as e goes 0..1 (e0, e1 on the temple), gone in dust as it lands
+    R_CORE,       // MAYA's crater's bowl: shrinks toward its center (from) as the corner closes
+    R_MOUND,      // MAYA's scree's slope: sinks as the corner closes
+    R_CHUNK,      // MAYA's rubble in the crater: carried by its bowl (about from), gone in dust once it nears the face
 };
 // The groups of R_SHOW / R_GONE pieces (each with its own condition on the restoration)
 enum Group {
     G_NONE,
     G_SHRINE,     // MAYA's shrine and roof comb: under the ruin's ragged top (a, b: the piece's x, z)
-    G_CORNER,     // MAYA's collapsed corner: closed
     G_GALLERY,    // KHMER's fallen stretch of gallery: under its ragged top (a: the piece's x)
     G_TIER,       // KHMER's tower tiers and buds (a: the tower, b: the tier)
     G_CELLA,      // GREEK's cella walls: under the ruin's ragged top
@@ -98,6 +102,10 @@ public:
     // the fig's roots, rebuilt as they withdraw (KHMER); true when they changed
     bool figChanged() const { return figChanged_; }
     const std::vector<Vtx>& figVerts() const { return fig_; }
+    // MAYA's corner stones' dissolves (1 gone .. 0 there; 255 per texel, CORNER_W a row), true when they changed
+    static constexpr int CORNER_W = 256;
+    bool cornerChanged() const { return cornerChanged_; }
+    const std::vector<unsigned char>& cornerTex() const { return cornerTex_; }
     int triangles() const { return (int)verts_.size() / 3; }
     int instancedTriangles() const { return instTris_; }
 
@@ -108,6 +116,10 @@ private:
     std::vector<Piece> pieces_;
     std::vector<float> vis_;   // each piece's dissolve (1 gone .. 0 there)
     float figK_ = -1.f;
+    std::vector<float> tileRho_, tileVis_; // MAYA's corner stones: their place in the crater, their dissolve
+    std::vector<unsigned char> cornerTex_;
+    bool cornerChanged_ = false;
+    float bowl_ = -1.f;                    // the bowl's scale (lags the corner as it closes: the stones re-form first)
     bool figChanged_ = false;
     int instTris_ = 0;
     void buildFig(float rk);

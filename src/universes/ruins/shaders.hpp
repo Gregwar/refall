@@ -40,9 +40,8 @@ uniform vec3 uSunDir, uSunCol, uSkyZ, uSkyH, uAmb, uFog;
 uniform vec3 uStone, uStone2, uMoss, uMoss2, uLeaf, uLeafLit, uBark, uGround;
 uniform float uFogK, uMist, uShaft, uGap, uSway, uGold, uWorldA;
 uniform vec3 uBridgeCol;
-// the restoration: the jungle's cover, the temple's repair, the share of blocks still missing, the wear, the prime,
-// MAYA's collapsed corner (1 open .. 0 closed)
-uniform float uJungle, uTemple, uBroken, uWear, uPrime, uCorner;
+// the restoration: the jungle's cover, the temple's repair, the share of blocks still missing, the wear, the prime
+uniform float uJungle, uTemple, uBroken, uWear, uPrime;
 uniform vec4 uFocus;   // the repair being watched (its point, its glow)
 uniform float uFocusR;
 const vec3 TC = vec3(0.0, 0.0, -52.0);   // the temple
@@ -107,6 +106,23 @@ float shadowAt(vec3 wp, vec3 n) {
 }
 // a part re-forming out of golden dust (its dissolve: 1 gone .. 0 there)
 float dissolveN(vec3 p) { return vnoise(p.xy * 2.3 + p.z * 0.7) * 0.6 + vnoise(p.zy * 5.1 - p.x * 1.3) * 0.4; }
+// MAYA's collapsed corner. Its facing stones carry their index in their pattern (16 + 2 i: the terrace's face,
+// 17 + 2 i: a cut face), their dissolve in uCornerTex (gone while the crater holds them, re-forming from dust as it
+// shrinks past them). Its bowl of rubble (pattern 3) is only seen inside the pyramid.
+uniform sampler2D uCornerTex;
+void cornerStone(float pat, inout float dis, inout float glow) {
+    if (pat < 15.5) return;
+    int i = (int(pat + 0.5) - 16) / 2;
+    float c = texelFetch(uCornerTex, ivec2(i % 256, i / 256), 0).r;
+    if (c > dis) { dis = c; glow = c * (1.0 - c) * 4.0; }
+}
+float pyramidDepth(vec3 w) {
+    vec3 q = w - TC;
+    float k = clamp(floor(q.y / 3.0), 0.0, 6.0), yl = q.y - 3.0 * k, s = 22.0 - 2.6 * k;
+    float f = yl < 2.1 ? s - yl / 3.0 : (yl < 2.82 ? s - 0.7 : s - 0.62 + 0.222 * (yl - 2.82));
+    return min(f - max(abs(q.x), abs(q.z)), q.y);
+}
+bool outsidePyramid(vec3 w) { return pyramidDepth(w) < 0.03; }
 )";
 
 // ---- the meshes: the instance's model (rest -> now), its rest placement (pattern space), its params
@@ -145,7 +161,10 @@ in vec3 vW, vP, vNP, vObj;
 flat in vec4 vAttr, vS, vInfo;
 out vec4 frag;
 void main() {
-    if (vS.w > 0.0 && dissolveN(vP) < vS.w * 1.1 - 0.05) discard;
+    float dis = vS.w, glow = 0.0;
+    cornerStone(vAttr.z, dis, glow);
+    if (dis > 0.0 && dissolveN(vP) < dis * 1.1 - 0.05) discard;
+    if (vAttr.z > 2.9 && vAttr.z < 3.1 && outsidePyramid(vW)) discard;
     frag = vec4(1.0);
 }
 )";
@@ -222,16 +241,6 @@ vec4 masonryCell(vec2 uv, float ch, float bl) {
     return vec4((c + 0.5 - off) * bl, (row + 0.5) * ch, hash(vec2(c, row)), e);
 }
 
-// MAYA's collapsed corner: 1 where its facing stones are gone (the rough core of rubble seen), its fringe between
-float cornerK(vec3 p) {
-    if (uKind != 0 || uCorner <= 0.0) return 0.0;
-    vec3 q = (p - TC - vec3(16.0, 7.0, 18.5)) * vec3(1.0, 1.3, 1.0);
-    float d = length(q) - 8.0 * uCorner - 1.6 * vnoise(p.xy * 0.45 + p.z * 0.3);
-    return sat(0.5 - d / 2.4);
-}
-// the share of the stones missing here (the ruin's, the corner's fringe)
-float missRate(vec3 p, float ck) { return max(uBroken, smoothstep(0.0, 0.5, ck) * 0.55); }
-
 vec3 mossC0(vec3 p) { return mix(uMoss2, uMoss, smoothstep(0.3, 0.8, vnoise(p.xz * 1.7 + p.y))); }
 vec3 lightAt(vec3 wp, vec3 nn, float sh, float through, float ao) {
     vec3 L = uSunDir;
@@ -254,17 +263,20 @@ vec3 lightAt(vec3 wp, vec3 nn, float sh, float through, float ao) {
 
 void main() {
     // re-forming out of golden dust
-    float edge = 0.0;
-    if (vS.w > 0.0) {
-        float n = dissolveN(vP), th = vS.w * 1.1 - 0.05;
+    float edge = 0.0, dis = vS.w, glw = vInfo.x;
+    cornerStone(vAttr.z, dis, glw);
+    if (dis > 0.0) {
+        float n = dissolveN(vP), th = dis * 1.1 - 0.05;
         if (n < th) discard;
-        edge = (1.0 - smoothstep(0.0, 0.07, n - th)) * vInfo.x;
+        edge = (1.0 - smoothstep(0.0, 0.07, n - th)) * glw;
     }
+    if (vAttr.z > 2.9 && vAttr.z < 3.1 && outsidePyramid(vW)) discard;
     mat3 Dl = mat3(vD0, vD1, vD2);
     vec3 p = vP, wp = vW;
     vec3 n = normalize(vNP);
     if (!gl_FrontFacing && dot(Dl * n, uEye - wp) < 0.0) n = -n;
-    float id = floor(vAttr.x + 0.5), flag = floor(vAttr.z + 0.5), seed = vAttr.w;
+    // (the pattern: 0 coursed, 1 a block, 2 a drum, 3 rubble, 4 plain stone (a corner stone's cut face))
+    float id = floor(vAttr.x + 0.5), flag = vAttr.z > 15.5 ? (mod(floor(vAttr.z + 0.5), 2.0) > 0.5 ? 4.0 : 0.0) : floor(vAttr.z + 0.5), seed = vAttr.w;
     vec3 rd = normalize(wp - uEye);
     float t = length(wp - uEye);
     vec3 an = abs(n);
@@ -291,8 +303,9 @@ void main() {
         // carved, mossy
         float ch = uKind == 2 ? 0.9 : 0.62, bl = uKind == 2 ? 1.8 : 1.25;
         vec4 m;
-        float ck = id == 1.0 && flag < 0.5 ? cornerK(p) : 0.0;
+        float ck = flag == 3.0 ? 1.0 : 0.0;
         if (flag < 0.5) m = masonryCell(uv, ch, bl);
+        else if (flag > 2.5) m = vec4(0.0, 0.0, hash1(seed * 13.7 + 0.3), 1.0);
         else {
             vec3 hs = vS.xyz, q = vObj * hs;
             float e;
@@ -313,7 +326,7 @@ void main() {
         // dark streaks of rain down the faces
         float streak = smoothstep(0.55, 0.85, fbm(vec2(uv.x * 1.7, p.y * 0.08))) * (1.0 - an.y);
         alb *= 1.0 - 0.3 * streak * uWear;
-        h = carve(uv, p, id);
+        h = flag > 2.5 ? 1.0 : carve(uv, p, id);
         if (h < 0.999 && fw < 0.2) {
             const float E = 0.015;
             float hx = carve(uv + vec2(E, 0.0), p + tu * E, id) - h, hy = carve(uv + vec2(0.0, E), p + tv * E, id) - h;
@@ -358,7 +371,7 @@ void main() {
         }
         // a missing stone (its hole in the wall, seen inside: its walls lit through the opening)
         if (id == 1.0 && flag < 0.5) {
-            float rate = ck > 0.5 ? 0.0 : missRate(p, ck);
+            float rate = uBroken;
             if (rate > 0.0) {
                 float hh = hash(vec2(m.x * 1.7 + dot(n, vec3(3.1, 7.3, 11.9)), m.y * 2.3));
                 float k = sat((rate - hh) / 0.015);
@@ -420,6 +433,8 @@ void main() {
             vec2 bulge = -bo * 0.35 * (1.0 - mortar) + (vec2(vnoise(uv * 9.0), vnoise(uv * 9.0 + 5.0)) - 0.5) * 0.4;
             nn = normalize(mix(nn, normalize(n + tu * bulge.x + tv * bulge.y), k));
             ao *= mix(1.0, 1.0 - 0.35 * mortar, k);
+            // (the crater's bowl: darker the deeper it goes into the pyramid)
+            if (vAttr.z < 3.1) ao *= mix(1.0, 0.4, smoothstep(0.5, 7.0, pyramidDepth(wp)));
             joint *= 1.0 - k;
         }
     } else if (id == 2.0) {
