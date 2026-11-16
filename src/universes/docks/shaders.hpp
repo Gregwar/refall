@@ -319,9 +319,11 @@ void main() {
         rough = 30.0;
         // contact shade: the light is occluded toward the foot of each container (the one below, the quay), the sides
         // in the shade
-        if (face != 1) alb *= mix(0.42, 1.0, smoothstep(-sz.y, -sz.y + 0.4, q.y));
+        // (the well's stack, on its dark hull, keeps more of its paint)
+        float stack = step(0.5, uStackA);
+        if (face != 1) alb *= mix(mix(0.42, 0.62, stack), 1.0, smoothstep(-sz.y, -sz.y + 0.4, q.y));
         if (face == 0) alb *= 0.6;
-        alb = saturateC(alb, uSat);
+        alb = saturateC(alb, mix(uSat, 1.0, stack));
     } else if (mat == 2) {
         // concrete: slabs, tyre marks, the painted lines
         vec2 g = vP.xz;
@@ -424,6 +426,14 @@ void main() {
     }
     vec3 Nb = normalize(N + T * bend.x + B * bend.y);
     vec3 c = shade(vP, Nb, alb, spec, rough) + emit;
+    if (mat == 1 && uStackA > 0.5) {
+        // the stack's containers in their own paint: the hour's light sets how bright they are, not their hue, and
+        // they stand a little brighter and richer than the port's
+        const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
+        float lit = dot(c, LUM) / max(dot(alb, LUM), 1e-4);
+        c = mix(c, alb * lit, 0.65) * 1.18;
+        c = saturateC(c, 1.25);
+    }
     c = applyFog(c, vP);
     frag = vec4(c, uStackA);
 }
