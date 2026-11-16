@@ -109,7 +109,9 @@ void main() {
     // the ponds the rain fills in the hollows (their spill level, rising with the rain) and the flood
     float pondD = F.g - uPondMin * 0.6 - (1.0 - uPond) * 1.5;
     float depth = max(uWater - h, pondD);
-    float wet = smoothstep(-fw, fw, depth) * uWaterOn * drawn;
+    // the shore at screen-space width by the depth's own gradient: a pond's (from g) is not the elevation's
+    float dfw = max(fwidth(depth), 1e-5);
+    float wet = smoothstep(-dfw, dfw, depth) * uWaterOn * drawn;
     vec3 lake = mix(uLake, uLake * 0.93, smoothstep(0.0, 3.0, depth));
     col = mix(col, lake, wet);
 
@@ -130,7 +132,7 @@ void main() {
     col = mix(col, mix(uLine, uWaterLine, wet), hl * la * 0.6 * mix(1.0, 0.22, wet));
 
     // shoreline and water lines (parallel to the shore, sparser and fainter offshore, moving out with the music)
-    float sd = abs(depth) / fw;
+    float sd = abs(depth) / dfw;
     float shore = stroke(sd, max(uLineW * (1.6 + 1.6 * uShoreKick), 1.0)) * uWaterOn * drawn;
     float wd = depth * 3.0 - uPhase;
     float wfw = max(fwidth(wd), 1e-5);
