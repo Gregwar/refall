@@ -19,6 +19,10 @@
 // and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
 // bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
 // wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
+// The pandas follow a chibi model sheet (drawn in shaders.hpp: a big round head, round ears, oval patches with big
+// shiny eyes, a w of a mouth, blush, cream fur with a tufted edge, black limbs and a black shoulder band, a thin dark
+// outline): turned toward us (the sheet's front view) when it sits, sighs, wipes a tear or hops, in profile (the
+// sheet's walk) when it walks on or runs; the pose's turn moves it between the two.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
@@ -1148,7 +1152,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             const bool seen = noticeT_ > 0.6f;
             t.mood = seen ? 1.f : 0.6f;
             t.sit = (seen && arriveT_ < 4.5f) ? 0.f : 1.f;
-            t.turn = seen ? 0.7f : 0.35f * std::sin(tt) + 0.25f;     // (their +x: toward the cub, on their left)
+            t.turn = seen ? (arrived ? 0.7f : 0.3f) : 0.35f * std::sin(tt) + 0.25f;    // (their +x: toward the cub, on their left)
             t.lookX = t.turn > 0.f ? 1.f : -1.f;
             t.lookY = 0.f;
             t.arms = (seen && !arrived) ? 0.85f : 0.f;
