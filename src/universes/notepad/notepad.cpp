@@ -115,8 +115,8 @@ const Variant VARIANTS[] = {
      {45.f, 30.f, -45.f, 20.f, 0.f, 12.f, 90.f},
      {0.095f, 0.11f, 0.095f, 0.12f, 0.09f, 0.09f, 0.095f},
      0x45464c, T_PENCIL, 0xd63c30, T_CPENCIL, {0xd63c30, 0x2a82cc, 0xd99c18, 0x3f9944}, T_CPENCIL, 0x8f8f96, 0x3d63c9},
-    // A squared blackboard: slate green, faint painted squares, white and pastel chalks.
-    {"CHALK", false, 0x25322c, 0xdce8e0, 0.075f, 0, 1.f, 0, 0, 0.f, 0.12f, 0xeeefe8, T_CHALK, 0.075f, T_CHALK, 1.1f,
+    // A squared blackboard: a deep slate black with a hint of green, faint painted squares, white and pastel chalks.
+    {"CHALK", false, 0x141a17, 0xdce8e0, 0.075f, 0, 1.f, 0, 0, 0.f, 0.12f, 0xeeefe8, T_CHALK, 0.075f, T_CHALK, 1.1f,
      {0x96d1f2, 0xf6e27a, 0xd2a9f2, 0xa2e39a, 0xf79494, 0x8ca8f8, 0xf8b673},
      {P_HATCH, P_RUB, P_CROSS, P_SCRIBBLE, P_HATCH, P_RUB, P_HATCH},
      {45.f, 0.f, 30.f, 20.f, -45.f, 80.f, 0.f},
