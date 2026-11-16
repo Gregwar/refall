@@ -107,16 +107,19 @@ struct SongLook {
     int avoidVariant = -1;  // a variant not to pick (the one on screen when a universe follows itself), -1: none
     float duration = 0;     // the song's length in seconds (0: unknown)
     float remaining = 0;    // seconds of the song left when this look is handed over (a universe coming in mid-song)
+    int difficulty = 2;     // the run's difficulty (DIFF_EASY 0, DIFF_NORMAL 1, DIFF_HARD 2): the progression's pace
 };
 SongLook makeSongLook(const Footprint* fp, uint64_t seed); // fp null: no song (loading)
 
 // The pace of the progression universes (GIANT TREE, MEGACITY, LIBRARY...): they complete their scene in
-// LINES_PER_MINUTE lines per minute of song, so one song of normal play sees the whole journey whatever its length.
-constexpr float LINES_PER_MINUTE = 15.f;
+// linesPerMinute() lines per minute of song, so one song of normal play sees the whole journey whatever its length;
+// fewer on the easier difficulties (EASY, NORMAL, HARD), whose players clear fewer lines.
+constexpr float LINES_PER_MINUTE[3] = {10.f, 12.f, 15.f};
+inline float linesPerMinute(int difficulty) { return LINES_PER_MINUTE[difficulty < 0 ? 0 : difficulty > 2 ? 2 : difficulty]; }
 // Their tables are tuned on this many lines (a 3:20 song); a universe scales its lines by SCENE_REF_LINES / sceneLines().
 constexpr float SCENE_REF_LINES = 50.f;
 constexpr float SCENE_LINES_MIN = 20.f, SCENE_LINES_MAX = 100.f;
-// The lines a scene takes for the time left in the song (look.remaining, else its duration): LINES_PER_MINUTE x
+// The lines a scene takes for the time left in the song (look.remaining, else its duration): linesPerMinute() x
 // minutes, clamped to [SCENE_LINES_MIN, SCENE_LINES_MAX]; SCENE_REF_LINES when the length is unknown (no song,
 // the viewer). Test hooks: REFALL_SCENE_LINES=N forces N, REFALL_LINES_PER_MINUTE=R changes the pace.
 float sceneLinesFor(const SongLook& look);
@@ -253,7 +256,7 @@ protected:
         if (lineBase_ < 0 || g.lines() < lineBase_) lineBase_ = g.lines();
         return g.lines() - lineBase_;
     }
-    // The lines the scene completes in (LINES_PER_MINUTE x the song's minutes, 20..100; 50 for a 3:20 song).
+    // The lines the scene completes in (linesPerMinute() x the song's minutes, 20..100; 50 for a 3:20 song on HARD).
     float sceneLines() const { return pendingScene_ > 0.f ? pendingScene_ : sceneLines_; }
     // linesHere() on the SCENE_REF_LINES scale the progression tables are written in: SCENE_REF_LINES at scene
     // completion. Each line counts SCENE_REF_LINES / sceneLines() (half as much in a 100-line scene, 2.5 times in a

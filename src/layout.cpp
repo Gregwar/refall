@@ -75,5 +75,5 @@ float sceneLinesFor(const SongLook& look) {
     if (forced > 0.f) return forced;
     const float seconds = look.remaining > 0.f ? look.remaining : look.duration;
     if (!look.hasSong || seconds <= 0.f) return SCENE_REF_LINES;
-    return std::clamp((perMin > 0.f ? perMin : LINES_PER_MINUTE) * seconds / 60.f, SCENE_LINES_MIN, SCENE_LINES_MAX);
+    return std::clamp((perMin > 0.f ? perMin : linesPerMinute(look.difficulty)) * seconds / 60.f, SCENE_LINES_MIN, SCENE_LINES_MAX);
 }

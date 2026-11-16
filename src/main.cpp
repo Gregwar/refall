@@ -495,12 +495,13 @@ void App::startTrack(std::shared_ptr<Track> t) {
     computePhases();
     lastPhase_ = first ? plan_.phaseAt(0.0) : 0;
     look_ = makeSongLook(&track_->analysis.fp, runSeed_ ^ splitmix64(sceneCounter_));
+    look_.difficulty = mode_ == MODE_CAMPAIGN ? run_.diff : freeDiff_;
     songTime_ = 0;
     if (track_->duration() > 0) look_.duration = look_.remaining = (float)track_->duration();
     {
         const int sec = (int)look_.duration;
-        std::printf("[app] song %d:%02d: a progression scene completes in %.0f lines (%.0f lines/min)\n", sec / 60, sec % 60,
-                    sceneLinesFor(look_), LINES_PER_MINUTE);
+        std::printf("[app] song %d:%02d: a progression scene completes in %.0f lines (%.0f lines/min on %s)\n", sec / 60,
+                    sec % 60, sceneLinesFor(look_), linesPerMinute(look_.difficulty), difficultyName(look_.difficulty));
     }
     // Each song gets its universe (picked from its footprint, never the same twice in a row), swept in with a
     // transition on the beat; a forced universe stays and performs its own change of song, and so does the
