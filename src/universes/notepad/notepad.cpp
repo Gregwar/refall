@@ -835,11 +835,6 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 gr->n++;
             }
         const vec3 o = cellPos(0, 0);
-        // the drop's stronger colouring: a second, crossing layer over every coloured-in cell, there at once on the
-        // drop's downbeat (and on a piece landing in a drop); when it ends it is rubbed lighter in a few passes
-        // over two or three seconds (quarter steps, each pass leaving its eraser ghost)
-        const float layerK = std::round(layerA_ * 4.f) / 4.f;
-        const bool strong = layerK > 0.f;
         for (const Group& gr : groups) {
             const size_t first = out.size();
             addPiece(out, mix(gr.id, 0xC311), gr.cells, gr.n, v2(o.x, o.y), 1.f, gr.type, 1.f, false, 0.38f, 0.12f);
@@ -850,17 +845,6 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
                 out[i].i2 |= 16;
                 if (out[i].kind != IT_CELL) continue;
                 out[i].key = mix(gr.id, 1 + (uint64_t)gr.idx[k]);
-                if (strong) {
-                    Item ov = out[i];
-                    ov.key = mix(out[i].key, 0x0E7);
-                    ov.i2 = 16 | 64;
-                    ov.col = lerp(out[i].col, outlineCol_, V.light ? 0.22f : 0.f);
-                    ov.c = 0.9f;
-                    ov.alpha *= layerK;
-                    ov.residue = 0.3f;
-                    ov.moveResidue = 0.1f;
-                    out.push_back(ov);
-                }
                 k++;
             }
         }
@@ -1369,14 +1353,13 @@ void NotepadUniverse::emitCell(const Item& it, int age, bool residue, std::vecto
     m.head[3] = it.c * it.alpha * (residue ? 0.6f : 1.f);
     m.p[0] = it.x; m.p[1] = it.y; m.p[2] = h; m.p[3] = h;
     m.q[0] = (float)V.pattern[type];
-    const bool layer = (it.i2 & 64) != 0; // the drop's stronger colouring, across the first
-    m.q[1] = V.angle[type] * PI / 180.f + (std::fmod(it.d, 1.f) - 0.5f) * 0.3f + (layer ? 1.25f : 0.f);
-    m.q[2] = V.spacing[type] * s * calm * (layer ? 1.15f : 1.f);
+    m.q[1] = V.angle[type] * PI / 180.f + (std::fmod(it.d, 1.f) - 0.5f) * 0.3f;
+    m.q[2] = V.spacing[type] * s * calm;
     m.q[3] = 0.075f * s;
     const vec3 ink = inkOf(it.col);
     m.c[0] = ink.x; m.c[1] = ink.y; m.c[2] = ink.z; m.c[3] = (float)it.i1;
     m.e[0] = 1.f; m.e[1] = V.fillLw * (0.85f + 0.15f * weight_); m.e[2] = inset * 0.6f;
-    m.e[3] = layer ? 0.f : V.fillTool == T_CPENCIL ? 0.5f : V.light ? 0.f : 0.24f; // colour rubbed in under the hatching
+    m.e[3] = V.fillTool == T_CPENCIL ? 0.5f : V.light ? 0.f : 0.24f; // colour rubbed in under the hatching
     m.f[0] = eraseNow; m.f[1] = eraseSeedNow;
     out.push_back(m);
     if (it.i2 & 8) {
@@ -1874,7 +1857,6 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
         // the hand's style: a lift is at once (a chorus, a drop hit), calming down takes a few seconds
         stageF_ = (float)st >= stageF_ ? (float)st : approach(stageF_, (float)st, 0.9f, dt);
         markerA_ = st == 3 && dropOn_ ? 1.f : approach(markerA_, 0.f, 1.2f, dt);
-        layerA_ = st == 3 ? 1.f : approach(layerA_, 0.f, 0.9f, dt);
         // beats
         if (music.hasSong) {
             const long b = (long)std::floor(music.beat);
