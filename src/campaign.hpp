@@ -1,5 +1,5 @@
 #pragma once
-// Game modes beyond the music: the difficulty (EASY, NORMAL, EXPERT), the campaign (stages of songs played in a
+// Game modes beyond the music: the difficulty (EASY, NORMAL, HARD), the campaign (stages of songs played in a
 // row, each song at a velocity fixed by the campaign data, data/campaign.tsv) and the player's campaign progress
 // (stages cleared and best scores, per difficulty, saved in the user data folder).
 #include <map>
@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
-enum Difficulty { DIFF_EASY = 0, DIFF_NORMAL, DIFF_EXPERT, DIFF_COUNT };
-const char* difficultyName(int d); // "EASY", "NORMAL", "EXPERT"
-// Free play: the gravity multiplier of each difficulty (on every level's speed); EXPERT is the game as it was.
+enum Difficulty { DIFF_EASY = 0, DIFF_NORMAL, DIFF_HARD, DIFF_COUNT };
+const char* difficultyName(int d); // "EASY", "NORMAL", "HARD"
+// Free play: the gravity multiplier of each difficulty (on every level's speed); HARD is the game as it was.
 float freePlayMultiplier(int d);
-// "easy" / "normal" / "expert" (any case, or e/n/x) or a number (the multiplier itself, e.g. 0.7): false if neither.
+// "easy" / "normal" / "hard" (any case, or e/n/h; "expert" / "x", its former name, too) or a number (the multiplier itself, e.g. 0.7): false if neither.
 // A number sets *mul and *d to the nearest difficulty; a name sets *d and its multiplier.
 bool parseDifficulty(const std::string& s, int* d, float* mul);
 
@@ -46,7 +46,7 @@ private:
 // best-scoring song and the most lines ever cleared during it; a stage is "cleared" once
 // its songs were all survived in one run started from its first song. Stage N + 1 is unlocked on a difficulty once
 // stage N is cleared on it or on a harder one, or once its songs are all beaten there, in any runs (stage 1 always is;
-// reaching a stage on EXPERT opens it on NORMAL and EASY too, not done there but playable), or everything with --unlock.
+// reaching a stage on HARD opens it on NORMAL and EASY too, not done there but playable), or everything with --unlock.
 // The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
 // beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.

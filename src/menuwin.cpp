@@ -726,7 +726,7 @@ void Worlds::kalFree() {
         }
         if (!m.plMsg_.empty())
             p.text(F::JOSEFIN, upper(m.plMsg_), X(160), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
-        // the starting level: a strip of coarse steps along the bottom (EXPERT's hyperdrop levels in its colour)
+        // the starting level: a strip of coarse steps along the bottom (HARD's hyperdrop levels in its colour)
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
         const float ly = Y(962), lh = 78 * u, cw = 120 * u, lx = X(440);
         p.rrect(X(120), ly, 1680 * u, lh, 24 * u, hex(0x0c0c14, 0.72f));
@@ -738,10 +738,10 @@ void Worlds::kalFree() {
         for (int i = 0; i < Menu::FREE_LEVEL_COUNT; i++) {
             const int lv = Menu::FREE_LEVELS[i];
             const float f = sstep(near1(m.aLvl_, i)), x = lx + (i + 0.5f) * cw;
-            const bool g20 = m.freeDiff_ == DIFF_EXPERT && lv >= 38;
+            const bool g20 = m.freeDiff_ == DIFF_HARD && lv >= 38;
             p.text(F::JOSEFIN, std::to_string(lv), x, ly + lh / 2 + (g20 ? 3 : 9) * u, (24 + 4 * f) * u,
-                   withA(g20 ? hex(C[DIFF_EXPERT]) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
-            if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(C[DIFF_EXPERT], 0.5f + 0.4f * f), 0, 0.12f);
+                   withA(g20 ? hex(C[DIFF_HARD]) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
+            if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(C[DIFF_HARD], 0.5f + 0.4f * f), 0, 0.12f);
         }
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying

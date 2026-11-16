@@ -44,7 +44,7 @@ std::vector<std::string> splitTabs(const std::string& line) {
 } // namespace
 
 const char* difficultyName(int d) {
-    static const char* N[] = {"EASY", "NORMAL", "EXPERT"};
+    static const char* N[] = {"EASY", "NORMAL", "HARD"};
     return N[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 
@@ -59,7 +59,7 @@ bool parseDifficulty(const std::string& s0, int* d, float* mul) {
     for (int k = 0; k < DIFF_COUNT; k++) {
         std::string n = difficultyName(k);
         for (char& c : n) c = (char)std::tolower((unsigned char)c);
-        if (s == n || (s.size() == 1 && s[0] == "enx"[k])) {
+        if (s == n || (s.size() == 1 && s[0] == "enh"[k]) || (k == DIFF_HARD && (s == "expert" || s == "x"))) {
             *d = k;
             *mul = freePlayMultiplier(k);
             return true;
@@ -110,7 +110,7 @@ bool Campaign::parse(const std::string& text) {
         if (line.empty() || line[0] == '#') continue;
         std::vector<std::string> c = splitTabs(line);
         if (c.size() < 7) {
-            std::fprintf(stderr, "[campaign] line %d: expected stage, song, id, universe, easy, normal, expert, title\n", n);
+            std::fprintf(stderr, "[campaign] line %d: expected stage, song, id, universe, easy, normal, hard, title\n", n);
             continue;
         }
         const int stage = std::atoi(c[0].c_str()), song = std::atoi(c[1].c_str());
@@ -232,8 +232,8 @@ std::string Progress::stageKey(int stage) const {
 // The file, one record per line (tabs):
 //   unlock	all
 //   reach	<stage 1..>	(stages up to it open)
-//   stage	<stage 1..>	<EASY|NORMAL|EXPERT>	<best run score>	<its lines>	<its songs' ids, comma separated>
-//   songid	<video id>	<EASY|NORMAL|EXPERT>	<best score>	<its lines>	<most lines>
+//   stage	<stage 1..>	<EASY|NORMAL|HARD>	<best run score>	<its lines>	<its songs' ids, comma separated>
+//   songid	<video id>	<EASY|NORMAL|HARD>	<best score>	<its lines>	<most lines>
 // Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
 // without the ids (the 12 x 5 layout), migrated on load.
 void Progress::load(const std::string& path, const Campaign* camp) {
@@ -254,7 +254,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
     auto diffOf = [](const std::string& s) {
         for (int d = 0; d < DIFF_COUNT; d++)
             if (s == difficultyName(d)) return d;
-        return -1;
+        return s == "EXPERT" ? (int)DIFF_HARD : -1;   // (HARD's former name, in older progress files)
     };
     auto num = [](const std::vector<std::string>& c, size_t i) { return c.size() > i && !c[i].empty() ? std::atoi(c[i].c_str()) : -1; };
     bool legacy = false;
