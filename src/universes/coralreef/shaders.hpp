@@ -732,7 +732,7 @@ uniform vec3 uRayC;
 uniform vec2 uSunVP;
 uniform float uRays, uSat, uRayScale;
 uniform vec4 uWellUv;   // the well's rectangle (uv), where the world is blurred
-uniform float uBlur;
+uniform float uBlur, uBlurPx;
 uniform float uFocus, uDof; // the macro lens: what lies beyond the focus melts away
 void main() {
     vec4 w = texture(uWorld, vUv);
@@ -748,7 +748,7 @@ void main() {
             float wsum = 1.0;
             for (int i = 0; i < 16; i++) {
                 float an = float(i) * 2.39996;
-                float r = (2.5 + float(i) * 0.9) * max(k, 0.0) + coc * sqrt((float(i) + 0.5) / 16.0);
+                float r = (2.5 + float(i) * 0.9) * max(k, 0.0) * uBlurPx + coc * sqrt((float(i) + 0.5) / 16.0);
                 vec4 s = texture(uWorld, vUv + vec2(cos(an), sin(an)) * r * px);
                 // (a sharp foreground does not bleed into the blur)
                 float ws = s.a < uFocus * 0.8 && coc > 0.5 ? 0.15 : 1.0;
