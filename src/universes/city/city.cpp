@@ -24,7 +24,7 @@
 //
 // Events: a lock leaves the piece lit (it settles from the falling brightness), a hard drop with a soft glow along
 // the ledge under it; a cleared floor's rooms go dark (nothing drawn over the row), then the floors above step down one by one
-// in smooth crossfades; a quad sends fireworks up over the city and a chase of light up the piers; slow motion is
+// in smooth crossfades; a quad sends fireworks up over the city; slow motion is
 // a long exposure (a colder night, cold city lights, the bloom wider); game over is a blackout floor by floor from
 // the top, the city going dark with it.
 //
@@ -1048,16 +1048,12 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progTower_, "uSnow", pal_.snow);
         set1f(progTower_, "uRain", pal_.rain);
         set1f(progTower_, "uTime", world_);
-        set1f(progTower_, "uChase", tet * worldOn);
         set1f(progTower_, "uRoomAmb", 0.0035f);
         set1f(progTower_, "uFrameLight", 4.f);
         // the facade's floodlights, from the ledge of each floor and from below
         set3f(progTower_, "uFlood", pal_.upl * 3.f * (1.f - 0.7f * black) * worldOn);
         set1f(progTower_, "uGroundY", GROUND_Y);
         {
-            float cc[21];
-            for (int i = 0; i < 7; i++) { cc[i * 3] = pal_.piece[i].x; cc[i * 3 + 1] = pal_.piece[i].y; cc[i * 3 + 2] = pal_.piece[i].z; }
-            glUniform3fv(ugl::U(progTower_, "uChaseCol"), 7, cc);
             float ct[16] = {}, ccol[12] = {};
             for (size_t i = 0; i < contacts_.size() && i < 4; i++) {
                 const Contact& c = contacts_[i];
@@ -1252,6 +1248,15 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     }
     set1f(progFinal_, "uBloomK", lerpf(0.9f, 1.6f, slow_));
     set1f(progFinal_, "uExposure", pal_.exposure);
+    set1f(progFinal_, "uFocus", eye_.z);
+    set1f(progFinal_, "uCoc", 2.6f * height_ / 1080.f);
+    {
+        // the well and its frame on screen (gl_FragCoord), the city darker around it
+        const vec2 a = project(vec3(-5.6f, -10.6f, 0.f)), b = project(vec3(5.6f, 10.6f, 0.f));
+        set4f(progFinal_, "uWell", std::min(a.x, b.x), height_ - std::max(a.y, b.y), std::max(a.x, b.x), height_ - std::min(a.y, b.y));
+        set1f(progFinal_, "uDim", 0.22f * (1.f - bri));
+        set1f(progFinal_, "uDimR", 0.35f * height_);
+    }
     const float fade = (1.f - 0.5f * dimT_) * saturate(f.fade);
     set1f(progFinal_, "uMul", fade);
     fullscreen();
