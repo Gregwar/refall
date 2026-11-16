@@ -112,6 +112,6 @@
      // the end: the logo's white contours over the whale as soon as the game's HUD fades away ("at": "hud"), then
      // the logo in color as the scene fades to black
      "outro": {"fade": "2.5bars",
-               "logo": {"at": "hud", "size": 0.66}}}
+               "logo": {"at": "hud", "size": 0.66, "fade_in": 4.0}}}
   ]
 }

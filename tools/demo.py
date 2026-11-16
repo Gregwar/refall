@@ -684,6 +684,9 @@ class Card:
                 row += hk2[None, :, None] * self.ink
 
 
+HUD_HIDE = 1.6  # the game's OUT_HIDE: the HUD's fade away at the outro (src/main.cpp)
+
+
 class LogoOutro:
     """The REFALL logo at the end: its white contours appear over the last scene, then as the scene fades to black
     the logo takes its colors, alone on black at the very end."""
@@ -701,13 +704,14 @@ class LogoOutro:
         self.shade = np.clip(shade * 1.5, 0, 1) * 0.3
         self.x0, self.y0 = (width - n) // 2, (height - n) // 2
         self.n = n
+        self.fade = float(spec.get("fade_in", 4.0))
 
     def draw(self, frame, t, t_at, t_color, t_done):
         """The contours fade in from t_at; between t_color and t_done they turn into the colored logo."""
         if t < t_at:
             return
         c = smooth(t_color, t_done, t)
-        k = smooth(t_at, t_at + 2.5, t) * (1 - c)
+        k = smooth(t_at, t_at + self.fade, t) * (1 - c)
         r = frame[self.y0:self.y0 + self.n, self.x0:self.x0 + self.n]
         if k > 0:
             r *= (1 - self.shade * k)[..., None]
@@ -937,8 +941,9 @@ def main():
         if e.get("logo", {}).get("hud"):
             if e.get("outro_at") is None:
                 sys.exit(f"the logo waits for the HUD to fade away, but the game's outro never started in {e['u']}")
-            e["logo"]["at"] = e["outro_at"]
-            log(f"the logo at {e['outro_at']:.2f} s, as the HUD fades away")
+            # once the HUD has faded away (the game's OUT_HIDE)
+            e["logo"]["at"] = e["outro_at"] + HUD_HIDE
+            log(f"the logo at {e['logo']['at']:.2f} s, once the HUD has faded away")
     out = os.path.abspath(args.out)
     assemble(timeline, cfg, grid, song, out, width, height, fps, work, cfg.get("max_mb", 29.5), args.crf)
     contact_sheet(timeline, args.sheet or os.path.splitext(out)[0] + "-sheet.png", out, fps)
