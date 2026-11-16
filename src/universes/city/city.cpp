@@ -2,19 +2,28 @@
 //
 // One world, in 3D: we look across at a tall modern tower from about thirty floors up, through a shift lens (the
 // camera looks straight ahead and its image is shifted so that the board plane keeps the layout's pixels): the
-// tower's facade faces the camera and fills the well, its 10 x 22 windows are the board (two floors above the well, where the pieces spawn). Each window is a recessed
-// opening (its reveals seen in perspective), glass reflecting the night, and behind it a real room traced per pixel
-// (back wall, side walls, floor, ceiling): each window is its own room, furnished its own way, each floor its own
-// use (offices with strip lights and screens, flats with a lamp and a sofa, hotel rooms), with its own blinds,
-// drapes, roller blind or sheer. A block is a lit window: its room lit by the piece's light (the seven pieces told
-// apart by their light's color only); an empty cell is a dark room behind dark glass. The falling piece is four
-// rooms lighting up as it moves, brighter, settling softly when it lands; the ghost four window frames lit in its
-// color. Lights only change smoothly (short eased blends); only a cleared floor goes dark quickly.
+// tower's facade faces the camera and fills the well, its 10 x 22 windows are the board (two floors above the well,
+// where the pieces spawn). Each window is a window of a home or an office: a recessed opening (its reveals seen in
+// perspective) over a stone sill, a casement frame, glass reflecting the night (each pane at its own tilt), and
+// behind it a real room traced per pixel (back wall, side walls, floor, ceiling). The tower is mixed-use, in bands of
+// three floors (each night its own stack): offices (venetian or vertical blinds, strip lights, desks, screens), flats
+// (curtains drawn or drawn to the sides, sheers, blinds, roller shutters part way or all the way down with their
+// slits open, window boxes; a sofa, a picture, shelves, a floor lamp), flats with balconies (French windows, a slab
+// and a railing traced in front of the facade) and a hotel (sheers and drapes, a bed head, bedside lamps). All of it
+// belongs to the cell, whatever piece lands in it. A block is a lit window: its room lit by the piece's light (the
+// seven pieces told apart by their light's color only, kept pure through the fabrics); an empty cell is a dark home
+// at night, its frame, curtains, blinds or shutter faintly lit by the night. The falling piece is four rooms lighting
+// up as it moves, brighter, settling softly when it lands; the ghost four window frames lit in its color. Lights only
+// change smoothly (short eased blends); only a cleared floor goes dark quickly.
 //
-// Around it the city at night, in perspective: blocks of towers on a street grid far below (glass or stone, their
-// faces lit by a dim moon, the sky and the streets' glow from below, the glass reflecting the sky), their small
-// windows lit and put out slowly; the streets with their lamps and traffic; light pollution on the horizon, a deck
-// of clouds lit from below, haze; red aircraft beacons, a crane; bloom on every light.
+// Around it the city at night, in perspective: blocks on a street grid far below, of five kinds mixed per night:
+// glass office towers (mullions, spandrel bands, tinted glass reflecting the sky, offices lit in runs), brick
+// apartment blocks (sills, lintels, stacked balconies, water tanks), art-deco stone towers (piers, dark panels,
+// setbacks, a spire, their tops floodlit), concrete slabs with loggias (traced in perspective) and precast office
+// blocks; rooftop plant rooms, masts, units, a few signs in soft white letters over the near corners. Their faces lit
+// by a dim moon, the sky, the city's glow and the streets' glow from below; homes lit window by window behind their
+// curtains, put out slowly; the streets with their lamps and traffic; light pollution on the horizon, a deck of
+// clouds lit from below, haze; red aircraft beacons, a crane; bloom on every light.
 //
 // Staging: a break is the city asleep (few windows, thick haze, the beacons blinking on their own); mid wakes it
 // (more windows, the traffic, the beacons on the beat grid every two beats); a chorus lights the crowns and the
@@ -147,6 +156,33 @@ float hashf(float x) {
     const float s = std::sin(x * 127.1f + 311.7f) * 43758.5453f;
     return s - std::floor(s);
 }
+
+// The buildings' kinds (the box shader's styles).
+enum { GLASS = 0, BRICK = 1, SOLID = 2, DECO = 3, SLAB = 4, PRECAST = 5, PLANT = 6, TANK = 7, SIGN = 8 };
+
+// A few rooftop signs' words, in a 3 x 5 font (rows from the top, each row's bits from the left).
+int glyphBits(char ch) {
+    static const struct { char c; const char* rows[5]; } FONT[] = {
+        {'A', {".#.", "#.#", "###", "#.#", "#.#"}}, {'C', {"###", "#..", "#..", "#..", "###"}},
+        {'D', {"##.", "#.#", "#.#", "#.#", "##."}}, {'E', {"###", "#..", "##.", "#..", "###"}},
+        {'G', {"###", "#..", "#.#", "#.#", "###"}}, {'H', {"#.#", "#.#", "###", "#.#", "#.#"}},
+        {'I', {"###", ".#.", ".#.", ".#.", "###"}}, {'K', {"#.#", "#.#", "##.", "#.#", "#.#"}},
+        {'L', {"#..", "#..", "#..", "#..", "###"}}, {'M', {"#.#", "###", "###", "#.#", "#.#"}},
+        {'N', {"##.", "#.#", "#.#", "#.#", "#.#"}}, {'O', {"###", "#.#", "#.#", "#.#", "###"}},
+        {'P', {"###", "#.#", "###", "#..", "#.."}}, {'R', {"##.", "#.#", "##.", "#.#", "#.#"}},
+        {'S', {"###", "#..", "###", "..#", "###"}}, {'T', {"###", ".#.", ".#.", ".#.", ".#."}},
+    };
+    for (const auto& g : FONT)
+        if (g.c == ch) {
+            int b = 0;
+            for (int y = 0; y < 5; y++)
+                for (int x = 0; x < 3; x++)
+                    if (g.rows[y][x] == '#') b |= 1 << (y * 3 + x);
+            return b;
+        }
+    return 0;
+}
+const char* SIGN_WORDS[8] = {"HOTEL", "CINEMA", "PRESS", "GARAGE", "RADIO", "DINER", "PARKING", "THEATRE"};
 
 } // namespace
 
@@ -417,23 +453,154 @@ TransitionHints CityUniverse::hints() const {
 void CityUniverse::buildCity(int variant) {
     bldgs_.clear();
     Rng r(0xC1C1ull + (uint64_t)variant * 7919ull);
-    const VariantDef& d = VARIANTS[variant];
     const float dist = eye_.z;
-    auto add = [&](float x0, float x1, float z0, float z1, float h, int style, float crown, bool beacon, bool patterned) {
+    // each night its own mix of buildings: glass, brick, art deco, concrete slabs, precast offices
+    static const float MIX[5][5] = {
+        {0.42f, 0.2f, 0.1f, 0.12f, 0.16f}, // BLUE HOUR: a glass downtown
+        {0.24f, 0.3f, 0.2f, 0.1f, 0.16f},  // MIDNIGHT: old downtown, deco and brick
+        {0.3f, 0.3f, 0.1f, 0.16f, 0.14f},  // RAIN
+        {0.3f, 0.26f, 0.14f, 0.16f, 0.14f}, // FOG DAWN
+        {0.16f, 0.44f, 0.14f, 0.16f, 0.1f}, // SNOWFALL: brick
+    };
+    const float* mix = MIX[std::clamp(variant, 0, 4)];
+    auto pickStyle = [&](float h) -> int {
+        float w[5] = {mix[0], mix[1], mix[2], mix[3], mix[4]};
+        if (h > 45.f) { w[1] = 0.f; w[3] = 0.f; w[0] *= 1.6f; w[2] *= 2.f; }  // the tall ones: glass and deco
+        else if (h < 20.f) { w[0] *= 0.5f; w[2] *= 0.3f; w[1] *= 1.4f; }      // the low ones: homes
+        float t = 0.f;
+        for (float x : w) t += x;
+        float u = r.uniform() * t;
+        const int S[5] = {GLASS, BRICK, DECO, SLAB, PRECAST};
+        for (int i = 0; i < 5; i++) {
+            if (u < w[i]) return S[i];
+            u -= w[i];
+        }
+        return PRECAST;
+    };
+    // the materials' albedos (the night's light makes them dark): glass, bricks (red, brown, yellow, dark),
+    // limestone, concrete, precast
+    auto material = [&](int st) {
+        vec3 a;
+        switch (st) {
+        case GLASS: a = vec3(0.05f, 0.06f, 0.07f) * r.range(0.8f, 1.4f); break;
+        case BRICK: {
+            const vec3 B[4] = {{0.3f, 0.13f, 0.09f}, {0.22f, 0.13f, 0.09f}, {0.34f, 0.27f, 0.17f}, {0.17f, 0.1f, 0.08f}};
+            a = B[r.irange(0, 3)];
+            break;
+        }
+        case DECO: a = r.chance(0.6f) ? vec3(0.44f, 0.4f, 0.32f) : vec3(0.36f, 0.34f, 0.33f); break;
+        case SLAB: a = vec3(0.3f, 0.3f, 0.29f); break;
+        default: a = vec3(0.34f, 0.31f, 0.27f); break;
+        }
+        return a * r.range(0.8f, 1.2f);
+    };
+    int signs = 0;
+    auto put = [&](float x0, float x1, float z0, float z1, float y0, float y1, int st, float seed, vec3 alb) -> Bldg& {
         Bldg b;
         b.cx = (x0 + x1) * 0.5f; b.cz = (z0 + z1) * 0.5f;
         b.hw = (x1 - x0) * 0.5f; b.hd = (z1 - z0) * 0.5f;
-        b.y0 = GROUND_Y; b.y1 = GROUND_Y + h;
-        b.style = style;
-        b.seed = r.uniform();
-        b.lit = r.range(0.6f, 1.25f);
-        b.crown = crown;
-        b.beacon = beacon;
-        b.patterned = patterned;
-        const vec3 base = lin(std::fabs(b.cz) < 60.f ? d.nearB : d.farB);
-        b.alb = style == 1 ? base * r.range(1.6f, 2.6f) : base * r.range(0.8f, 1.3f);
-        b.refl = style == 0 ? r.range(0.6f, 1.f) : 0.3f;
+        b.y0 = y0; b.y1 = y1;
+        b.style = st;
+        b.seed = seed;
+        b.alb = alb;
         bldgs_.push_back(b);
+        return bldgs_.back();
+    };
+    // a building: its body (stepped back near the top for the tall deco and some glass towers), then what stands
+    // on its roof
+    auto building = [&](float x0, float x1, float z0, float z1, float h, int st, bool crownOk, bool patterned, float seed = -1.f) {
+        if (seed < 0.f) seed = r.uniform();
+        const float lit = r.range(0.6f, 1.25f);
+        const vec3 alb = material(st);
+        const float refl = st == GLASS ? r.range(0.6f, 1.f) : 0.3f;
+        const float top = GROUND_Y + h;
+        float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f, hw = (x1 - x0) * 0.5f, hd = (z1 - z0) * 0.5f;
+        const bool tiers = (st == DECO && h > 28.f) || (st == GLASS && h > 40.f && r.chance(0.45f));
+        auto body = [&](float a0, float a1, float b0, float b1, float y0, float y1, bool isMain) {
+            Bldg& b = put(a0, a1, b0, b1, y0, y1, st, seed, alb);
+            b.lit = lit;
+            b.refl = refl;
+            b.patterned = patterned;
+            b.main = isMain;
+        };
+        if (tiers) {
+            const float t1 = GROUND_Y + h * r.range(0.55f, 0.68f), t2 = GROUND_Y + h * r.range(0.78f, 0.88f);
+            body(x0, x1, z0, z1, GROUND_Y, t1, true);
+            body(cx - hw * 0.78f, cx + hw * 0.78f, cz - hd * 0.78f, cz + hd * 0.78f, t1, t2, false);
+            hw *= 0.55f;
+            hd *= 0.55f;
+            body(cx - hw, cx + hw, cz - hd, cz + hd, t2, top, false);
+        } else {
+            body(x0, x1, z0, z1, GROUND_Y, top, true);
+        }
+        const size_t crownI = bldgs_.size() - 1; // (the top tier)
+        bldgs_[crownI].crown = crownOk && h > 40.f && r.chance(0.5f) ? 1.f : 0.f;
+        bool beacon = h > 55.f;
+        auto solid = [&](float a0, float a1, float b0, float b1, float y0, float y1, int s2, vec3 a) -> Bldg& {
+            return put(a0, a1, b0, b1, y0, y1, s2, r.uniform(), a);
+        };
+        const vec3 metal = vec3(0.12f, 0.12f, 0.13f), dark = vec3(0.08f, 0.08f, 0.09f);
+        // a spot on the roof, inside its parapet
+        auto spot = [&](float m) { return v2(cx + r.range(-1.f, 1.f) * std::max(0.f, hw - m), cz + r.range(-1.f, 1.f) * std::max(0.f, hd - m)); };
+        if (st == DECO && h > 28.f && r.chance(0.6f)) {
+            // a spire
+            const float sh = h * r.range(0.1f, 0.18f);
+            solid(cx - 0.12f, cx + 0.12f, cz - 0.12f, cz + 0.12f, top, top + sh, SOLID, alb * 0.6f).beacon = beacon;
+            beacon = false;
+        } else if (st == GLASS && h > 22.f) {
+            // a plant room, maybe a mast on it
+            const float pw = hw * r.range(0.45f, 0.7f), pd = hd * r.range(0.45f, 0.7f), ph = r.range(1.2f, 2.4f);
+            solid(cx - pw, cx + pw, cz - pd, cz + pd, top, top + ph, PLANT, alb * 3.f + vec3(0.06f));
+            if (r.chance(0.4f) || beacon) {
+                const float mh = r.range(3.f, 8.f);
+                solid(cx - 0.07f, cx + 0.07f, cz - 0.07f, cz + 0.07f, top + ph, top + ph + mh, SOLID, metal).beacon = beacon;
+                beacon = false;
+            }
+        } else if (st == BRICK) {
+            // a water tank on its legs, a stair bulkhead
+            if (r.chance(0.65f) && hw > 1.6f && hd > 1.6f) {
+                const vec2 p = spot(1.2f);
+                const float tw = r.range(0.55f, 0.8f);
+                solid(p.x - tw * 0.8f, p.x + tw * 0.8f, p.y - tw * 0.8f, p.y + tw * 0.8f, top, top + 0.8f, SOLID, dark);
+                solid(p.x - tw, p.x + tw, p.y - tw, p.y + tw, top + 0.8f, top + 0.8f + tw * 2.4f, TANK, vec3(0.2f, 0.13f, 0.08f));
+                solid(p.x - tw * 0.6f, p.x + tw * 0.6f, p.y - tw * 0.6f, p.y + tw * 0.6f, top + 0.8f + tw * 2.4f, top + 1.1f + tw * 2.4f, SOLID, dark);
+            }
+            if (r.chance(0.4f)) {
+                const vec2 p = spot(1.f);
+                solid(p.x - 0.8f, p.x + 0.8f, p.y - 0.6f, p.y + 0.6f, top, top + 1.5f, PLANT, alb);
+            }
+        } else if (st == SLAB) {
+            // the lift's housing, a couple of antennas
+            const vec2 p = spot(1.5f);
+            solid(p.x - 1.2f, p.x + 1.2f, p.y - 0.9f, p.y + 0.9f, top, top + 1.8f, PLANT, alb);
+            for (int i = 0, k = r.irange(0, 2); i < k; i++) {
+                const vec2 q = spot(0.5f);
+                solid(q.x - 0.04f, q.x + 0.04f, q.y - 0.04f, q.y + 0.04f, top, top + r.range(1.5f, 3.5f), SOLID, metal);
+            }
+        } else if (st == PRECAST || st == GLASS) {
+            // air-conditioning units
+            for (int i = 0, k = r.irange(1, 4); i < k; i++) {
+                const vec2 q = spot(0.8f);
+                const float u = r.range(0.3f, 0.5f);
+                solid(q.x - u, q.x + u, q.y - u * 0.7f, q.y + u * 0.7f, top, top + r.range(0.4f, 0.8f), PLANT, metal * 2.f);
+            }
+        }
+        if (beacon) bldgs_[crownI].beacon = true;
+        // a few rooftop signs, facing the city, in the middle distance
+        // (seen against the sky over the near corners, away from the HUD's columns and the well)
+        const vec2 sp = project(vec3(cx, top + 1.f, cz + hd));
+        const float sxn = sp.x / width_, syn = sp.y / height_;
+        if ((st == BRICK || st == PRECAST || st == DECO) && -cz > 35.f && -cz < 200.f && signs < 6 && syn > 0.06f &&
+            ((sxn > 0.03f && sxn < 0.24f && syn < 0.25f) || (sxn > 0.76f && sxn < 0.97f && syn < 0.44f)) && r.chance(0.6f)) {
+            const int w = signs % 8;
+            const float len = (float)std::strlen(SIGN_WORDS[w]);
+            const float sw = std::min(hw * 0.9f, len * 0.7f), sh = sw * 2.f / len * 1.05f;
+            const float zf = cz + hd - 0.8f;
+            Bldg& s = put(cx - sw, cx + sw, zf - 0.05f, zf + 0.05f, top + 0.5f, top + 0.5f + sh, SIGN, r.uniform(), dark);
+            s.word = w;
+            for (float px : {cx - sw * 0.7f, cx + sw * 0.7f}) put(px - 0.05f, px + 0.05f, zf - 0.08f, zf - 0.02f, top, top + 0.5f, SOLID, r.uniform(), dark);
+            signs++;
+        }
     };
     // the blocks between the streets, from near to far; the tower's own block left to it
     for (int m = -1; m >= -16; m--) {
@@ -445,7 +612,7 @@ void CityUniverse::buildCity(int variant) {
             if (m == -1 && k >= -1 && k <= 1) continue; // the tower's block, and the near corners (set below)
             if (m == -2 && k == 0) {
                 // right behind the tower: low, so it never peeks over its crown
-                add(x0 + 1.f, x1 - 1.f, z0 + 1.f, z1 - 1.f, r.range(10.f, 24.f), 1, 0.f, false, false);
+                building(x0 + 1.f, x1 - 1.f, z0 + 1.f, z1 - 1.f, r.range(10.f, 24.f), BRICK, false, false);
                 continue;
             }
             const float far = saturate((-z0 - 60.f) / 250.f);
@@ -457,10 +624,9 @@ void CityUniverse::buildCity(int variant) {
             };
             auto one = [&](float a0, float a1, float b0, float b1) {
                 const float h = height();
-                const int st = r.chance(0.55f) ? 0 : 1;
+                const int st = pickStyle(h);
                 const float in = r.range(0.4f, 1.6f);
-                add(a0 + in, a1 - in, b0 + in, b1 - in, h, st, h > 40.f && r.chance(0.5f) ? 1.f : 0.f, h > 55.f,
-                    -z0 > 55.f && -z0 < 200.f && r.chance(0.6f));
+                building(a0 + in, a1 - in, b0 + in, b1 - in, h, st, true, -z0 > 55.f && -z0 < 200.f && r.chance(0.6f));
             };
             if (split == 0) one(x0, x1, z0, z1);
             else if (split == 1) {
@@ -473,10 +639,27 @@ void CityUniverse::buildCity(int variant) {
             }
         }
     }
-    // the near corners, at the edges of the screen: tall, their inner faces seen at an angle
-    add(-38.f, -16.f, -17.f, -3.f, 36.f, 0, 1.f, true, false);
-    add(16.f, 34.f, -17.f, -5.f, 31.f, 1, 1.f, false, false);
-    bldgs_[bldgs_.size() - 1].lit = bldgs_[bldgs_.size() - 2].lit = 0.6f;
+    // the near corners, at the edges of the screen: tall, their inner faces seen at an angle; a brick block with
+    // balconies on every bay (left), a concrete slab with loggias (right)
+    float seedL = 0.f, seedR = 0.f;
+    for (int i = 0; i < 200; i++) {
+        const float s = r.uniform();
+        if (std::fmod(s * 5.17f, 1.f) < 0.5f && std::fmod(s * 11.3f, 1.f) < 0.4f) { seedL = s; break; }
+    }
+    seedR = r.uniform();
+    const size_t n0 = bldgs_.size();
+    building(-38.f, -16.f, -17.f, -3.f, 36.f, BRICK, true, false, seedL);
+    const size_t n1 = bldgs_.size();
+    building(16.f, 34.f, -17.f, -5.f, 31.f, SLAB, true, false, seedR);
+    for (size_t i = n0; i < bldgs_.size(); i++)
+        if (bldgs_[i].main) {
+            bldgs_[i].lit = 0.6f;
+            bldgs_[i].crown = 1.f;
+            if (i < n1) bldgs_[i].beacon = true;
+        }
+    // the signs' words
+    for (int w = 0; w < 8; w++)
+        for (int i = 0; i < 8; i++) glyphs_[w * 8 + i] = i < (int)std::strlen(SIGN_WORDS[w]) ? glyphBits(SIGN_WORDS[w][i]) : 0;
     builtFor_ = variant;
 }
 
@@ -918,14 +1101,15 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     inst_.clear();
     for (const Bldg& b : bldgs_) {
         inst_.push_back(Inst{{b.cx, b.cz, b.hw, b.hd}, {b.y0, b.y1, b.seed, (float)b.style},
-                             {b.lit, b.crown * crown, b.patterned ? 1.f : 0.f, 1.f}, {b.alb.x, b.alb.y, b.alb.z, b.refl}});
+                             {b.lit, b.crown * crown, b.style == SIGN ? (float)b.word : b.patterned ? 1.f : 0.f, 1.f},
+                             {b.alb.x, b.alb.y, b.alb.z, b.refl}});
     }
     const Bldg* craneHost = nullptr;
     for (const Bldg& b : bldgs_)
-        if (b.cz < -45.f && b.cz > -100.f && b.cx > 25.f && b.cx < 70.f && b.y1 - b.y0 < 40.f && (!craneHost || b.y1 > craneHost->y1)) craneHost = &b;
+        if (b.main && b.cz < -45.f && b.cz > -100.f && b.cx > 25.f && b.cx < 70.f && b.y1 - b.y0 < 40.f && (!craneHost || b.y1 > craneHost->y1)) craneHost = &b;
     vec3 craneTip(0.f);
     if (craneHost) {
-        const vec3 c = pal_.near * 1.4f;
+        const vec3 c = vec3(0.1f, 0.09f, 0.07f);
         const float mx = craneHost->cx + craneHost->hw * 0.3f, mz = craneHost->cz, base = craneHost->y1;
         auto solid = [&](float x0, float x1, float y0, float y1, float z0, float z1) {
             inst_.push_back(Inst{{(x0 + x1) * 0.5f, (z0 + z1) * 0.5f, (x1 - x0) * 0.5f, (z1 - z0) * 0.5f}, {y0, y1, 0.f, 2.f},
@@ -983,6 +1167,9 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBox_, "uFlash", flash);
     set1f(progBox_, "uSnow", pal_.snow);
     set1f(progBox_, "uGroundY", GROUND_Y);
+    set1f(progBox_, "uWallK", 4.5f);
+    set3f(progBox_, "uWallGlow", pal_.glow * (pal_.glowK * lerpf(0.7f, 1.f, lvm) * 0.12f * (1.f - 0.6f * black)));
+    glUniform1iv(ugl::U(progBox_, "uGlyph"), 64, glyphs_);
     glUniform1fv(ugl::U(progBox_, "uEq"), 8, eq_);
     glUniform4fv(ugl::U(progBox_, "uQuiet"), 2, quiet);
     glBindVertexArray(cubeVao_);
@@ -1049,6 +1236,7 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progTower_, "uRain", pal_.rain);
         set1f(progTower_, "uTime", world_);
         set1f(progTower_, "uRoomAmb", 0.0035f);
+        set1f(progTower_, "uTowerSeed", (float)variant_);
         set1f(progTower_, "uFrameLight", 4.f);
         // the facade's floodlights, from the ledge of each floor and from below
         set3f(progTower_, "uFlood", pal_.upl * 3.f * (1.f - 0.7f * black) * worldOn);
