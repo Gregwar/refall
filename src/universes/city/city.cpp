@@ -1248,8 +1248,6 @@ void CityUniverse::render(const Frame& f, GLuint fbo) {
     }
     set1f(progFinal_, "uBloomK", lerpf(0.9f, 1.6f, slow_));
     set1f(progFinal_, "uExposure", pal_.exposure);
-    set1f(progFinal_, "uFocus", eye_.z);
-    set1f(progFinal_, "uCoc", 2.6f * height_ / 1080.f);
     {
         // the well and its frame on screen (gl_FragCoord), the city darker around it
         const vec2 a = project(vec3(-5.6f, -10.6f, 0.f)), b = project(vec3(5.6f, 10.6f, 0.f));
