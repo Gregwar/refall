@@ -102,7 +102,7 @@ public:
     int lines() const { return lines_; }
     // Level: the starting one (1, or free play's choice) + one per 20 lines, up to MAX_LEVEL. difficulty() is 0 at level 1 .. 1 at PLATEAU_LEVEL and stays there
     // (the lock delay stops shrinking); the fall's speed goes on past the plateau, see speedDifficulty().
-    static constexpr int MAX_LEVEL = 50, PLATEAU_LEVEL = 20, LINES_PER_LEVEL = 20;
+    static constexpr int MAX_LEVEL = 40, PLATEAU_LEVEL = 20, LINES_PER_LEVEL = 20;
     // A fixed level (the campaign: each song's velocity is set by the campaign data, lines don't raise it) may be
     // fractional (e.g. 7.5); 0 goes back to levels rising with lines.
     int level() const {
@@ -111,8 +111,8 @@ public:
     // The level a game starts at (kept by reset(): a game over starts again from it).
     void setStartLevel(int level) { startLevel_ = std::clamp(level, 1, MAX_LEVEL); }
     int startLevel() const { return startLevel_; }
-    // The velocity: the fixed one, or the level reached with the lines spread over the same scale (level 1 .. MAX_LEVEL
-    // over velocity 1 .. MAX_VELOCITY).
+    // The velocity: the fixed one, or the level reached with the lines (level 1 .. MAX_LEVEL is velocity 1 .. MAX_VELOCITY:
+    // the same scale).
     static constexpr float MAX_VELOCITY = 40.f, TWENTY_G = 30.f; // (20G: see the app's gravity)
     float velocity() const {
         return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY)
