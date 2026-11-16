@@ -50,6 +50,8 @@ float lumOf(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 vec3 fieldCol(int i) { return mix(uFieldA[i], uFieldB[i], kMix); }
 vec3 pieceCol(int t) { return mix(uPieceA[t], uPieceB[t], kMix); }
 vec3 orgCol(int i) { return mix(uOrgA[i], uOrgB[i], kMix); }
+// the stains' hue: dim like the life around until the drop, which brings their colors out
+vec3 dimHue(vec3 c) { return mix(vec3(lumOf(c)), c, mix(0.42, 1.0, kMix)); }
 // premultiplied "over": c at alpha a laid over acc
 void over(inout vec4 acc, vec3 c, float a) { a = clamp(a, 0.0, 1.0); acc = acc * (1.0 - a) + vec4(c * a, a); }
 )";
@@ -450,8 +452,9 @@ void main() {
     vec2 gp = vD.xy + p;
     d += (vnoise(gp * 2.6 + vec2(uTime * 0.11, -uTime * 0.07)) - 0.5) * 0.045 * uLife;
     if (d > 0.14) discard;
-    vec3 tint = pieceCol(type);
+    vec3 tint = dimHue(pieceCol(type));
     vec3 field = fieldCol(0);
+    vec3 rimc = orgCol(1);   // the life's own dark line: the membranes drawn like the organisms' rims
     float inside = 1.0 - smoothstep(-AA, AA, d);
     float din = max(-d, 0.0);
     // the walls shared with the colony's other cells
@@ -461,9 +464,10 @@ void main() {
     if (U) iw = min(iw, abs(p.y - 0.5));
     if (D) iw = min(iw, abs(p.y + 0.5));
     float wallD = min(din, iw);
-    const float MW = 0.032;
-    float mem = exp(-pow((d + MW) / (MW * 0.9), 2.0));
-    float wall = (1.0 - smoothstep(0.011, 0.011 + AA * 1.5, iw)) * inside;
+    // a fine, crisp membrane (an antialiased line, not a soft band) and fine walls
+    const float MW = 0.016;
+    float mem = 1.0 - smoothstep(MW * 0.55, MW * 0.55 + AA * 1.2, abs(d + MW));
+    float wall = (1.0 - smoothstep(0.007, 0.007 + AA * 1.2, iw)) * inside;
     float halo = smoothstep(-AA, AA, d) * exp(-d / 0.045);
     float flash = vC.z;
     // the protoplast (shrinks away from its membrane as the cell dies)
@@ -486,7 +490,12 @@ void main() {
     // the cytoplasm: the stain, denser along the walls, finely mottled
     float n = vnoise(gp * 13.0 + seed * 31.0) * 0.6 + vnoise(gp * 31.0 - seed * 17.0) * 0.4;
     float dens = 0.8 + 0.14 * exp(-wallD / 0.07) + 0.08 * (n - 0.5);   // (strongly stained: the stack reads on the pale field)
-    vec3 cyto = mix(field, tint, dens);
+    // a deep stain, darker than the field like the organisms' bodies, so the stack reads well on it
+    vec3 deep = tint * 0.56;
+    vec3 cyto = mix(field, deep, dens);
+    // fine granules, like the organisms' cytoplasm
+    float fine = vnoise(gp * 70.0 + seed * 13.0);
+    cyto *= 1.0 - 0.18 * smoothstep(0.45, 0.85, fine);
     // a pale line of light just inside the walls (the cell's volume)
     float lip = exp(-pow((wallD - 0.075) / 0.03, 2.0));
     cyto = mix(cyto, vec3(1.0), lip * 0.1 * kPhase);
@@ -515,23 +524,24 @@ void main() {
         }
     if (type == 5) gr = smoothstep(0.68, 0.8, vnoise(gp * 24.0 + seed * 3.0)) * 0.6;
     float nucAll = clamp(nuc + nuc2, 0.0, 1.0);
-    float nucRim = nucAll * (1.0 - nucAll) * 4.0;
+    float nucRim = clamp(nucAll * (1.0 - nucAll) * 4.0 * 1.6, 0.0, 1.0);
     float chrom = vnoise(p * 40.0 + seed * 9.0);
     // bright-field: stains on the lit field
     vec4 bf = vec4(0.0);
     over(bf, mix(field * 1.06 + 0.03, vec3(1.0), 0.3), halo * 0.55 * kPhase * (1.0 - flash * 0.5));
-    over(bf, cyto, inside * 0.94 * mix(0.35, 1.0, proto));
-    over(bf, mix(cyto, vec3(1.0), 0.35), vacu * 0.8 * proto);
-    over(bf, tint * 0.5, vacu * (1.0 - vacu) * 3.0 * proto);
+    vec3 line = mix(rimc, deep * 0.4, 0.35);   // the dark lines: membranes, walls, organelles' rims
+    over(bf, cyto, inside * 0.96 * mix(0.35, 1.0, proto));
+    over(bf, mix(cyto, field, 0.45), vacu * 0.85 * proto);
+    over(bf, line, clamp(vacu * (1.0 - vacu) * 5.0, 0.0, 1.0) * 0.7 * proto);
     if (type == 1) {
-        over(bf, mix(cyto, vec3(1.0), 0.45), gr * 0.85 * proto * inside);
-        over(bf, tint * 0.45, gr * (1.0 - gr) * 3.0 * proto * inside);
-    } else over(bf, tint * (type == 3 ? 0.45 : 0.6), gr * 0.65 * proto * inside);
-    over(bf, mix(tint * 0.32, cyto, 0.2 + 0.2 * chrom), nucAll * 0.9 * proto);
-    over(bf, tint * 0.3, nucRim * 0.45 * proto);
-    over(bf, tint * 0.25, blob(p, nc + vec2(0.03, 0.02), vec2(0.035, 0.035)) * 0.6 * proto * step(nuc2, 0.01));
-    over(bf, mix(tint * 0.38, field, 0.15), wall * 0.75);
-    over(bf, mix(tint * 0.24, vec3(1.0), 0.4 * flash), mem);
+        over(bf, mix(cyto, field, 0.5), gr * 0.85 * proto * inside);
+        over(bf, line, clamp(gr * (1.0 - gr) * 5.0, 0.0, 1.0) * 0.6 * proto * inside);
+    } else over(bf, deep * (type == 3 ? 0.6 : 0.7), gr * 0.75 * proto * inside);
+    over(bf, mix(deep * 0.55, cyto, 0.15 + 0.25 * chrom), nucAll * 0.92 * proto);
+    over(bf, line, nucRim * 0.7 * proto);
+    over(bf, deep * 0.3, blob(p, nc + vec2(0.03, 0.02), vec2(0.035, 0.035)) * 0.7 * proto * step(nuc2, 0.01));
+    over(bf, line, wall * 0.8);
+    over(bf, mix(line, vec3(1.0), 0.4 * flash), mem * 0.95);
     // dark-field: the membranes glow, the cytoplasm a soft glow, the nuclei lit
     vec3 glow = tint * (0.04 + 0.2 * exp(-wallD / 0.07) + 0.05 * n) * inside * proto;
     glow += tint * (gr * 0.35 + vacu * 0.08) * proto;
@@ -564,10 +574,10 @@ void main() {
     float r = length(vLocal) / 0.5;
     float core = 1.0 - smoothstep(0.45, 0.65, r);
     float halo = exp(-pow((r - 0.8) / 0.18, 2.0));
-    vec3 tint = vC.rgb;
+    vec3 tint = dimHue(vC.rgb);
     vec4 bf = vec4(0.0);
     over(bf, vec3(1.0), halo * 0.3 * kPhase);
-    over(bf, tint * 0.45, core * 0.8);
+    over(bf, tint * 0.4, core * 0.8);
     vec4 df = vec4(tint * (core * 0.5 + halo * 0.6), 0.0);
     vec4 o = mix(bf, df, kDark) * vB.w;
     if (o.a + o.r <= 0.002) discard;
