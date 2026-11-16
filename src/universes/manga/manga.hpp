@@ -170,7 +170,7 @@ private:
     float fxT_[DF_COUNT] = {};     // seconds since it started
     double fxBeat0_ = 0.0;         // the beat it started on
     long fxStep_ = -1000;          // its own beat counter
-    float jolt_ = 0.f;             // the drawings' jolt on a beat (barrage)
+    float jolt_ = 0.f;             // the balloons' jolt as a new one bursts in (barrage)
     V2 joltDir_{0, 0};
     int pickFx();
     void startFx(int fx, double beat);
