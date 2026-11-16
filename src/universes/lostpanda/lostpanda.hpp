@@ -40,6 +40,7 @@ public:
         float breath = 0, wind = 0.3f;
         float blinkT = 2.f, blinkAge = 9.f;
         float munch = 0, chew = 0;
+        float surprise = 0;
     };
 
 private:

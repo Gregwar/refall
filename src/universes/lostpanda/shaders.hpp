@@ -1184,10 +1184,11 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the pandas
-// A chibi panda after the model sheet: a big round head (about as big as its body), round black ears, oval black
-// patches with big round shiny eyes (a white rim, a dot of light), a small black nose over a little w of a mouth,
-// pink blush; cream fur with a tufted edge, a round belly, a little white tail; short black legs; black arms joined by
-// a black band over the shoulders like a shawl; a thin dark brown outline around everything, flat soft shading. It
+// A kawaii chibi panda after the model sheets: a big wide head (the widest part of it) on a body some 83 % as wide,
+// round black ears, oval black patches with big round shiny eyes (a white rim, a dot of light; ^ ^ in joy), a small
+// black nose over a cat-like w of a mouth, big round pink blush; cream fur with a tufted edge, a little white tail;
+// short black legs apart; slim black arms joined by a black band over the shoulders like a shawl; little pink hearts
+// by the head when it waves for joy, yellow sparkles when surprised; a thin dark brown outline around everything, flat soft shading. It
 // turns from facing us (the sheet's front view: the patches side by side, the arms at its sides) to a profile (the
 // sheet's walk: one patch near the front of the head, the snout, the near arm hanging from the band, the legs striding
 // front and back, the tail): uTurn sets how far, its sign to which side. Local units: its height is 1, feet at the
@@ -1220,6 +1221,7 @@ uniform float uHug;
 uniform int uPart;
 uniform float uMunch, uChew, uStrength;   // munching a bamboo snack; strength gained on the way
 uniform float uRoll;                      // the floor's tilt under it (a climbing car)
+uniform float uSurprise;                  // surprised: eyes wide, a little o of a mouth, sparkles
 
 float gAA, gLW, gS;
 vec3 gCol;
@@ -1247,14 +1249,18 @@ float capsule(vec2 q, vec2 a, vec2 b, float r) { return sdSeg(q, a, b) - r; }
 float smin(float a, float b, float k) { float h = sat(0.5 + 0.5 * (b - a) / k); return mix(b, a, h) - k * h * (1.0 - h); }
 // the fur's tufted edge: little points all around an outline (n of them), amp high
 float tufts(vec2 p, float n, float amp) { return amp * (1.0 - abs(cos(atan(p.y, p.x) * n * 0.5))); }
+// a heart, its point at the origin, its lobes up (some 1.1 tall)
+float sdHeart(vec2 p) {
+    p.x = abs(p.x);
+    if (p.y + p.x > 1.0) return length(p - vec2(0.25, 0.75)) - 0.35355;
+    return sqrt(min(dot(p - vec2(0.0, 1.0), p - vec2(0.0, 1.0)), dot(p - 0.5 * max(p.x + p.y, 0.0), p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
+}
 // a limb, thicker at its end b (a paw)
 float limb(vec2 q, vec2 a, vec2 b, float ra, float rb) {
     vec2 pa = q - a, ba = b - a;
     float h = sat(dot(pa, ba) / dot(ba, ba));
     return length(pa - ba * h) - mix(ra, rb, h);
 }
-// a rounded box of a body: a superellipse
-float sdBody(vec2 p, vec2 r) { vec2 a = abs(p / r); return (pow(pow(a.x, 2.6) + pow(a.y, 2.6), 1.0 / 2.6) - 1.0) * min(r.x, r.y); }
 
 vec4 panda(vec2 q) {
     gCol = vec3(0.0); gA = 0.0;
@@ -1270,12 +1276,14 @@ vec4 panda(vec2 q) {
     float rock = sin(ph) * 0.08 * walk * (1.0 - 0.75 * ts) - uLean * 0.06 + uRoll * gS;   // (leaning: forward)
     vec2 qr = rot(-rock) * q;
     qr.y -= walk * 0.03 * (1.0 + 0.8 * uStrength) * abs(cos(ph)) + 0.005 * sin(uBreath);
-    // a big round head on a round body, short limbs
-    vec2 Br = vec2(mix(0.28, 0.3, A) * (1.0 + 0.08 * uStrength), mix(0.195, 0.23, A) * (1.0 + 0.012 * sin(uBreath)));
-    Br *= mix(vec2(1.0), vec2(1.06, 0.9), sit);
-    vec2 B = vec2(-0.03 * ts, mix(0.115, 0.03, sit) + Br.y);
-    float headR = mix(0.28, 0.25, A), k = headR / 0.28;
-    vec2 Hc = B + vec2(0.035 * ts, Br.y + headR * 0.5 - sad * 0.02);
+    // a big wide head, the widest part of it, on a body some 83 % as wide, gently rounded (narrowing a little under
+    // the band), short legs apart under it
+    vec2 Br = vec2(mix(0.25, 0.235, A) * (1.0 + 0.04 * uStrength), mix(0.19, 0.24, A) * (1.0 + 0.012 * sin(uBreath)));
+    Br *= mix(vec2(1.0), vec2(1.05, 0.92), sit);
+    vec2 B = vec2(-0.03 * ts, mix(0.125, 0.04, sit) + Br.y);
+    float headR = mix(0.28, 0.255, A), k = headR / 0.28;
+    vec2 Hr = vec2(headR * 1.07, headR * 0.88);   // its half width, half height
+    vec2 Hc = B + vec2(0.05 * ts, Br.y + headR * 0.52 - sad * 0.02);
     float tilt = uTilt - sad * 0.04;
     mat2 toHead = rot(-tilt), fromHead = rot(tilt);
     vec2 qh = toHead * (qr - Hc);
@@ -1284,26 +1292,26 @@ vec4 panda(vec2 q) {
     // arm, leg); its right side turns away, behind the snout and the body.
     // the face's places (head space), facing us -> in profile: the near patch comes to the front of the head, the far
     // one slides on toward the snout and thins away, the nose comes to the snout's tip
-    vec2 pNc = k * vec2(mix(-0.13, 0.135, ts), 0.03 + 0.012 * ts);
-    vec2 pFc = k * vec2(mix(0.13, 0.36, ts), 0.03);
+    vec2 pNc = k * vec2(mix(-0.135, 0.14, ts), 0.005 + 0.008 * ts);
+    vec2 pFc = k * vec2(mix(0.135, 0.37, ts), 0.005);
     float wF = sat(1.0 - ts * 1.3);
-    vec2 nC = k * vec2(mix(0.0, 0.293, ts), mix(-0.02, -0.008, ts));
+    vec2 nC = k * vec2(mix(0.0, 0.305, ts), mix(-0.05, -0.03, ts));
     vec2 mouthP = Hc + fromHead * (nC + k * vec2(-0.02 * ts, -0.03));
 
     // legs: facing us apart, lifted in turn; in profile one in front of the other, striding
-    float legR = mix(0.068, 0.078, A);
+    float legR = mix(0.078, 0.084, A);
     float stride = sin(ph) * walk;
-    vec2 fN = vec2(mix(-0.125, 0.02 + 0.14 * stride, ts), legR - 0.004 + max(0.0, mix(-sin(ph), cos(ph), ts)) * 0.045 * walk);
-    vec2 fF = vec2(mix(0.125, -0.07 - 0.14 * stride, ts), legR - 0.004 + max(0.0, mix(sin(ph), -cos(ph), ts)) * 0.045 * walk);
-    fN = mix(fN, vec2(mix(-0.175, 0.2, ts), legR - 0.004), sit);           // sitting: the legs out in front
-    fF = mix(fF, vec2(mix(0.175, 0.09, ts), legR + 0.006), sit);
-    vec2 hipN = vec2(mix(-0.1, 0.0, ts), B.y - Br.y * 0.35), hipF = vec2(mix(0.1, -0.07, ts), B.y - Br.y * 0.35);
+    vec2 fN = vec2(mix(-0.115, 0.03 + 0.13 * stride, ts), legR - 0.004 + max(0.0, mix(-sin(ph), cos(ph), ts)) * 0.045 * walk);
+    vec2 fF = vec2(mix(0.115, -0.08 - 0.13 * stride, ts), legR - 0.004 + max(0.0, mix(sin(ph), -cos(ph), ts)) * 0.045 * walk);
+    fN = mix(fN, vec2(mix(-0.16, 0.19, ts), legR - 0.004), sit);           // sitting: the legs out in front
+    fF = mix(fF, vec2(mix(0.16, 0.08, ts), legR + 0.006), sit);
+    vec2 hipN = vec2(mix(-0.11, 0.02, ts), B.y - Br.y * 0.45), hipF = vec2(mix(0.11, -0.07, ts), B.y - Br.y * 0.45);
     // arms: facing us they hang at its sides, in profile the near one under the band's middle, swinging as it walks
-    float armR = mix(0.066, 0.074, A);
-    vec2 shN = B + vec2(mix(-Br.x * 0.76, 0.0, ts), Br.y * 0.5), shF = B + vec2(mix(Br.x * 0.76, 0.04, ts), Br.y * 0.5);
-    float L = Br.y * 0.95, sw = 0.1 * sin(ph) * walk;
-    vec2 hN = shN + rot(mix(-0.3 + sw, 0.12 - 0.55 * stride, ts)) * vec2(0.0, -L);
-    vec2 hF = shF + rot(mix(0.3 + sw, 0.12 + 0.55 * stride, ts)) * vec2(0.0, -L);
+    float armR = mix(0.05, 0.055, A);
+    vec2 shN = B + vec2(mix(-Br.x * 0.88, 0.0, ts), Br.y * 0.55), shF = B + vec2(mix(Br.x * 0.88, 0.04, ts), Br.y * 0.55);
+    float L = Br.y * 1.05, sw = 0.1 * sin(ph) * walk;
+    vec2 hN = shN + rot(mix(-0.35 + sw, 0.12 - 0.55 * stride, ts)) * vec2(0.0, -L);
+    vec2 hF = shF + rot(mix(0.35 + sw, 0.12 + 0.55 * stride, ts)) * vec2(0.0, -L);
     vec2 eyeN = Hc + fromHead * pNc;
     hN = mix(hN, eyeN + vec2(mix(-0.035, 0.05, ts) + 0.01 * sin(uBreath * 7.0), -0.045), uWipe);
     // arms up, waving (the sheet's waving front view, its surprised run in profile)
@@ -1318,9 +1326,9 @@ vec4 panda(vec2 q) {
     hN = mix(hN, mix(mouthP + vec2(-0.06, -0.035), sc - sDir * sLen * 0.55 + vec2(0.0, -0.01), ts), uMunch);
     hF = mix(hF, mix(mouthP + vec2(0.06, -0.035), sc - sDir * sLen * 0.1 + vec2(0.03, 0.0), ts), uMunch);
     // ears, dropping when sad
-    float ear = mix(0.09, 0.08, A), earDrop = sad * 0.05;
-    vec2 eN = Hc + fromHead * (k * mix(vec2(-0.2, 0.215), vec2(-0.085, 0.25), ts) + vec2(-earDrop * 0.5 * (1.0 - ts), -earDrop + uEars.x * 0.05));
-    vec2 eF = Hc + fromHead * (k * mix(vec2(0.2, 0.215), vec2(0.035, 0.255), ts) + vec2(earDrop * 0.5 * (1.0 - ts), -earDrop + uEars.y * 0.05));
+    float ear = mix(0.082, 0.075, A), earDrop = sad * 0.05;
+    vec2 eN = Hc + fromHead * (k * mix(vec2(-0.205, 0.2), vec2(-0.08, 0.22), ts) + vec2(-earDrop * 0.5 * (1.0 - ts), -earDrop + uEars.x * 0.05));
+    vec2 eF = Hc + fromHead * (k * mix(vec2(0.205, 0.2), vec2(0.04, 0.225), ts) + vec2(earDrop * 0.5 * (1.0 - ts), -earDrop + uEars.y * 0.05));
     bool armOver = uWipe > 0.3 || uMunch > 0.3 || uArms > 0.4;
     bool farOver = uMunch > 0.3;
     bool farBehind = ts > 0.35;
@@ -1328,8 +1336,8 @@ vec4 panda(vec2 q) {
     // the body (tufted below), its band
     vec2 bq = qr - B;
     vec2 bn = bq / Br;
-    float bodyD = sdBody(bq, Br) - tufts(bq, 28.0, 0.005) * (1.0 - smoothstep(-0.75, -0.2, bn.y));
-    float edge = mix(0.12 - 0.16 * (1.0 - bn.x * bn.x), 0.18 - 0.16 * bn.x, ts);
+    float bodyD = sdEll(vec2(bq.x * (1.0 + 0.07 * sat(bn.y)), bq.y), Br) - tufts(bq, 26.0, 0.005) * (1.0 - smoothstep(-0.2, 0.4, bn.y));
+    float edge = mix(0.3 - 0.3 * bn.x * bn.x, 0.36 - 0.22 * bn.x, ts);
     float band = fillP(bodyD) * smoothstep(-gAA, gAA, bq.y - Br.y * edge);
     float armOm = 1.0 - band;
 
@@ -1339,8 +1347,8 @@ vec4 panda(vec2 q) {
     paint(length(qr - eN) - ear, tone(BLACK, qr, eN, ear), 1.0);
     float tail = smoothstep(0.25, 0.7, t);
     if (tail > 0.0) {
-        vec2 tc = B + vec2(-Br.x * 0.97, -Br.y * 0.2);
-        paint(length(qr - tc) - 0.055 * tail - tufts(qr - tc, 10.0, 0.004), tone(FUR, qr, tc, 0.05), 1.0);
+        vec2 tc = B + vec2(-Br.x * 0.97, -Br.y * 0.55);
+        paint(length(qr - tc) - 0.045 * tail - tufts(qr - tc, 10.0, 0.004), tone(FUR, qr, tc, 0.05), 1.0);
     }
     paint(capsule(qr, hipF, fF, legR), tone(BLACK, qr, fF, 0.1) * mix(1.0, 0.85, ts), 1.0);
     paint(capsule(qr, hipN, fN, legR), tone(BLACK, qr, fN, 0.1), 1.0);
@@ -1351,11 +1359,11 @@ vec4 panda(vec2 q) {
 
     // the head: round, a little wider than tall, tufted on the crown and the cheeks, a snout in profile
     float puff = uMunch * (0.6 + 0.4 * sin(uChew));
-    vec2 hn = qh / headR;
-    float headD = sdEll(qh, vec2(headR * 1.05 * (1.0 + 0.035 * puff), headR * 0.95));
-    headD = smin(headD, length(qh - k * vec2(0.225 * ts, -0.035)) - k * 0.09, 0.04 * k);
-    float fluff = smoothstep(0.88, 0.99, hn.y) * 1.2 * smoothstep(0.35, 0.0, abs(hn.x - 0.1 * ts)) + smoothstep(0.6, 0.95, mix(abs(hn.x), -hn.x, ts)) * smoothstep(0.35, -0.2, hn.y) * 0.8;
-    headD -= tufts(qh, 30.0, 0.007 * k) * fluff;
+    vec2 hn = qh / Hr;
+    float headD = sdEll(qh, Hr * vec2(1.0 + 0.035 * puff, 1.0));
+    headD = smin(headD, length(qh - k * vec2(0.24 * ts, -0.045)) - k * 0.085, 0.04 * k);
+    float fluff = smoothstep(0.8, 0.98, hn.y) * 1.4 * smoothstep(0.55, 0.1, abs(hn.x - 0.1 * ts)) + smoothstep(0.6, 0.95, mix(abs(hn.x), -hn.x, ts)) * smoothstep(0.35, -0.2, hn.y) * 0.8;
+    headD -= tufts(qh, 32.0, 0.0065 * k) * fluff;
     paint(headD, tone(FUR, qh, vec2(0.0), headR), 1.0);
     float headIn = fillP(headD + gLW * 0.2);
 
@@ -1365,7 +1373,7 @@ vec4 panda(vec2 q) {
     float lean = mix(0.5, 0.18, mood);
     float open = 1.0 - max(uBlink, 0.0);
     float o = smoothstep(0.2, 0.45, open);
-    float esz = k * mix(0.94, 1.0, mood);
+    float esz = k * mix(0.94, 1.0, mood) * (1.0 + 0.1 * uSurprise);
     float joy = smoothstep(0.2, 0.4, uJoyEyes);   // (a little joy is enough for the happy ^ ^)
     float hs = gS * uFace;   // the shine's side, the same on the screen whichever way it faces
     vec2 look = vec2(uLook.x * gS * 0.007, uLook.y * 0.006) * k;
@@ -1374,7 +1382,7 @@ vec4 panda(vec2 q) {
         if (vis < 0.02) continue;
         vec2 pc = i == 0 ? pNc : pFc;
         float ang = i == 0 ? mix(-lean, -0.22, ts) : lean;
-        vec2 pr = k * mix(vec2(0.088, 0.077), vec2(0.078, 0.098), i == 0 ? ts : 0.0) * vec2(vis, 1.0);
+        vec2 pr = k * mix(vec2(0.086, 0.072), vec2(0.075, 0.088), i == 0 ? ts : 0.0) * vec2(vis, 1.0);
         float pd = sdEll(rot(ang) * (qh - pc), pr);
         gCol = mix(gCol, lit(BLACK), fillP(pd) * headIn);
         vec2 ec = pc + k * vec2(i == 0 ? 0.014 * ts : 0.0, -0.002) + look;
@@ -1405,9 +1413,9 @@ vec4 panda(vec2 q) {
         gCol = mix(gCol, vec3(0.6, 0.82, 1.0) * (uAmb + uKey), fillP(drop) * smoothstep(0.0, 0.4, uTear) * headIn);
     }
     // blush, under the patches toward the cheeks
-    vec2 bN = k * mix(vec2(-0.175, -0.06), vec2(0.13, -0.075), ts), bF = k * vec2(mix(0.175, 0.31, ts), -0.06);
-    float ck = min(sdEll(qh - bN, k * vec2(0.042, 0.025)), sdEll(qh - bF, k * vec2(0.042 * max(wF, 0.05), 0.025)) + (1.0 - wF) * 0.05);
-    gCol = mix(gCol, lit(PINK), fillP(ck - 0.01 * puff) * (0.5 + 0.25 * mood + 0.2 * puff) * headIn);
+    vec2 bN = k * mix(vec2(-0.19, -0.07), vec2(0.13, -0.085), ts), bF = k * vec2(mix(0.19, 0.33, ts), -0.07);
+    float ck = min(sdEll(qh - bN, k * vec2(0.056, 0.04)), sdEll(qh - bF, k * vec2(0.056 * max(wF, 0.05), 0.04)) + (1.0 - wF) * 0.05);
+    gCol = mix(gCol, lit(PINK), fillP(ck - 0.01 * puff) * (0.62 + 0.25 * mood + 0.13 * puff) * headIn);
     // nose: a small rounded black triangle
     vec2 nq = qh - nC;
     float nose = sdEll(nq, k * vec2(mix(0.028, 0.017, ts) * (1.0 + 5.0 * clamp(nq.y / k, -0.02, 0.02)), 0.018));
@@ -1427,6 +1435,7 @@ vec4 panda(vec2 q) {
     float mouth = mix(frown, wArc, happyM);
     float openM = smoothstep(0.85, 1.0, mood) * uJoyEyes;
     if (openM > 0.02) mouth = min(mouth, sdEll(mq - vec2(-0.006 * ts, -0.008), vec2(0.014, 0.014 * openM)));
+    mouth = mix(mouth, abs(sdEll(mq - vec2(-0.004 * ts, -0.012), vec2(0.011, 0.014))) - sw2, smoothstep(0.3, 0.6, uSurprise));
     gCol = mix(gCol, INK, fillP(mouth * km) * headIn);
     if (farOver) paint(limb(qr, shF, hF, armR * 0.85, armR * 1.1), tone(BLACK, qr, hF, 0.1), 1.0);
     if (armOver) paint(limb(qr, shN, hN, armR * 0.85, armR * 1.1), tone(BLACK, qr, hN, 0.1), 1.0);
@@ -1439,12 +1448,37 @@ vec4 panda(vec2 q) {
         gCol = mix(gCol, INK, fillP(st - gLW) * smoothstep(0.05, 0.3, uMunch));
         gCol = mix(gCol, stc, fillP(st) * smoothstep(0.05, 0.3, uMunch));
     }
+    // around a joyful wave little pink hearts float up by the head; sparkles for a surprise
+    float hearts = uArms * smoothstep(0.6, 0.9, mood) * (1.0 - uHug);
+    if (hearts > 0.02 || uSurprise > 0.02) {
+        for (int i = 0; i < 3; i++) {
+            float fi = float(i), u = fract(uTime * 0.25 + fi * 0.37);
+            vec2 at = Hc + vec2(vec3(-0.38, 0.36, 0.26)[i] + 0.02 * sin(uTime * 2.0 + fi * 2.0), vec3(0.02, 0.1, 0.24)[i] + 0.1 * u);
+            float s = vec3(0.06, 0.068, 0.05)[i];
+            if (hearts > 0.02) {
+                float hd = sdHeart((qr - at) / s + vec2(0.0, 0.55));
+                float a = hearts * smoothstep(0.0, 0.15, u) * (1.0 - smoothstep(0.7, 1.0, u));
+                gCol = mix(gCol, INK, fillP(hd * s - gLW) * a);
+                gA = max(gA, fillP(hd * s - gLW) * a);
+                gCol = mix(gCol, lit(vec3(1.0, 0.42, 0.5)), fillP(hd * s) * a);
+            }
+            if (uSurprise > 0.02 && i < 2) {
+                vec2 sq0 = qr - Hc - vec2(0.33 + 0.05 * fi, 0.14 + 0.12 * fi);
+                float an = atan(sq0.y, sq0.x) + uTime * 0.6, r = length(sq0);
+                float st = r - (0.04 - 0.01 * fi) * (0.55 + 0.45 * cos(an * 5.0));   // a little five-pointed star
+                float a = uSurprise * (0.75 + 0.25 * sin(uTime * 6.0 + fi * 2.0));
+                gCol = mix(gCol, INK, fillP(st - gLW * 0.8) * a);
+                gA = max(gA, fillP(st - gLW * 0.8) * a);
+                gCol = mix(gCol, lit(vec3(1.0, 0.82, 0.25)) * 1.3, fillP(st) * a);
+            }
+        }
+    }
     return vec4(gCol, gA);
 }
 
 void main() {
     gAA = uPx / uH * 0.85;
-    gLW = max(uPx / uH * 1.7, 0.009);
+    gLW = max(uPx / uH * 1.7, 0.011);
     vec2 q = (vP - uPos) / uH;
     q.x *= uFace;
     vec4 c = vec4(0.0);
