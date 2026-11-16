@@ -79,7 +79,7 @@
      "grid": "bar", "fill": true,
      "shots": [{"u": "lanterns", "fade_in": "1bar", "env": {"REFALL_CLIP_FILL": "0"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8, "quad": false}}, {"u": "origami"}, {"u": "rainy"}, {"u": "sonar"},
-               {"u": "microscope:PHASE"}]},
+               {"u": "pixel:PINE DUSK"}, {"u": "topography:CYANOTYPE"}]},
 
     // a bar before the first drop, a universe that reacts to it: the drop lands on it
     {"id": "listen", "end": "drop:1 + 2bars",
@@ -90,7 +90,7 @@
     // the drop
     {"id": "drop", "end": "drop:1 + 26bars",
      "grid": "bar",
-     "shots": [{"u": "manga"}, {"u": "forest"}, {"u": "neon"}, {"u": "laser"}, {"u": "limbo"}, {"u": "brutalist"}]},
+     "shots": [{"u": "manga"}, {"u": "forest"}, {"u": "neon"}, {"u": "laser"}, {"u": "limbo"}, {"u": "ruins:MAYA"}, {"u": "brutalist"}]},
 
     {"id": "build", "end": "drop:2",
      "card": {"text": "Build things", "bars": 2, "enabled": false},
