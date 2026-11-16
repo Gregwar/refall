@@ -633,39 +633,14 @@ uniform sampler2D uScene, uDepth, uBloom, uBloom2;
 uniform mat4 uInvVP;
 uniform vec3 uEye;
 uniform float uMul, uExposure, uBloomK;
-uniform float uFocus, uCoc;   // the facade's depth along the view; the widest blur (px)
 uniform vec4 uWell;           // the well on screen (px: x0, y0, x1, y1)
 uniform float uDim, uDimR;    // how much darker the city around it, over what distance (px)
 uniform vec4 uBeamO[4];   // origin, intensity
 uniform vec4 uBeamD[4];   // direction, width
 uniform vec3 uBeamCol[4];
-// the blur's radius (px) at a depth: none on the facade, growing toward the near corners and the far city
-float coc(float z) {
-    if (z >= 0.99999) return uCoc;
-    vec4 wp = uInvVP * vec4(0.0, 0.0, z * 2.0 - 1.0, 1.0);
-    float d = uEye.z - wp.z / wp.w;
-    return uCoc * smoothstep(0.08, 0.6, abs(1.0 - uFocus / max(d, 1e-3)));
-}
 void main() {
     vec3 c = texture(uScene, vUv).rgb;
     float z = texture(uDepth, vUv).r;
-    // the depth of field: a soft disc gathered where out of focus, each tap only from what is itself as blurred
-    // (the sharp facade never smears over the city behind it)
-    float r = coc(z);
-    if (r > 0.3) {
-        vec2 px = 1.0 / vec2(textureSize(uScene, 0));
-        vec3 acc = c;
-        float wsum = 1.0;
-        for (int i = 0; i < 16; i++) {
-            float fi = float(i) + 0.5;
-            vec2 o = vec2(cos(fi * 2.39996), sin(fi * 2.39996)) * sqrt(fi / 16.0) * r;
-            vec2 uv = vUv + o * px;
-            float w = smoothstep(length(o) - 0.5, length(o) + 0.5, coc(texture(uDepth, uv).r) + 0.5);
-            acc += texture(uScene, uv).rgb * w;
-            wsum += w;
-        }
-        c = acc / wsum;
-    }
     vec4 wp = uInvVP * vec4(vUv * 2.0 - 1.0, min(z, 0.99999) * 2.0 - 1.0, 1.0);
     vec3 P = wp.xyz / wp.w;
     vec3 rd = normalize(P - uEye);
