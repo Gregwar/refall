@@ -59,6 +59,9 @@ private:
     std::vector<Dying> dying_;
     struct Speck { vec2 p, v; float t, life, r; int type; };       // loose granules (a hard drop, a burst cell)
     std::vector<Speck> specks_;
+    // a cleared cell bursting: its look and its joins (to the other cleared cells of its colony) as it was
+    struct Burst { float x, y; int type; CellLook l; int mask; float gx, gy, t; };
+    std::vector<Burst> bursts_;
 
     // ---- The life: a few organisms wandering on the sides, each on its own side, at its own depth.
     struct Org {
