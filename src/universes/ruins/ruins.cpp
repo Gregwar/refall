@@ -11,13 +11,19 @@
 // Before a song the camera comes in from a step back as the morning mist lifts off the ruins; after it the camera
 // pulls back as the mist settles back and the sun weakens.
 //
-// The world is one ray-marched pass at a reduced resolution (shaders.hpp): the temple (a Maya pyramid, a Khmer
-// temple mountain with a strangler fig, a Doric temple), the avenue, the trunks and the ground as signed distance
-// fields whose ruin is driven by a few uniforms (each avenue column's repair, the temple's repair, the share of
-// blocks still missing, the wear, the jungle's cover, the prime); the foliage as layered planes with leafy masks.
+// The world is meshes (world.cpp), built per variant on the CPU from the ruin's parameters and drawn instanced at the
+// full resolution, 4x multisampled (up to 1440 lines): the temple (a Maya pyramid, a Khmer temple mountain with a
+// strangler fig, a Doric temple), the avenue, the trunks and the ground; the repairs are instance transforms (parts
+// flying back into place) and dissolves (stones and tiers re-forming out of golden dust), the missing blocks holes
+// seen into the walls (shaders.hpp), the wear, the jungle's cover and the prime uniforms of the stone's material. The
+// sun casts a shadow map, dappled by the canopy; the foliage is cards with leafy masks (alpha to coverage). Only the
+// soft terms are at a reduced resolution: the mist and light shafts along each ray to the depth, and a little
+// ambient occlusion, upsampled with the depth.
 #include "universes/ruins/ruins.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -46,13 +52,16 @@ using ugl::set4f;
 using ugl::setMat;
 using Palette = RuinsUniverse::Palette;
 
-GLuint compile(const char* vs, const char* fs, const char* name) {
+GLuint compile(const char* vs, const char* fs, const char* name, bool scene = false) {
+    const std::string common = std::string(shaders::COMMON_GLSL) + (scene ? shaders::SCENE_GLSL : "");
     std::string f(fs);
-    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    f.insert(f.find('\n') + 1, common);
     std::string v(vs);
-    v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
+    v.insert(v.find('\n') + 1, common);
     return ugl::program(v.c_str(), f.c_str(), name);
 }
+constexpr int SHADOW_SIZE = 3072;
+constexpr float NEAR = 0.4f, FAR = 900.f;
 
 vec2 V(float x, float y) { return vec2{x, y}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
@@ -119,8 +128,12 @@ int extraLines(double t) {
 // =====================================================================================================
 
 bool RuinsUniverse::init(int width, int height) {
-    progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "ruins world");
-    progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "ruins comp");
+    progMesh_ = compile(shaders::MESH_VS, shaders::MESH_FS, "ruins mesh", true);
+    progShadow_ = compile(shaders::MESH_VS, shaders::SHADOW_FS, "ruins shadow", true);
+    progSky_ = compile(ugl::FULLSCREEN_VS, shaders::SKY_FS, "ruins sky", true);
+    progFol_ = compile(shaders::FOL_VS, shaders::FOL_FS, "ruins foliage", true);
+    progVol_ = compile(ugl::FULLSCREEN_VS, shaders::VOL_FS, "ruins mist", true);
+    progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "ruins comp", true);
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "ruins sprite");
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "ruins veil");
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "ruins cell");
@@ -157,6 +170,55 @@ bool RuinsUniverse::init(int width, int height) {
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
     glBindVertexArray(0);
 
+    // ---- the meshes: one vertex buffer per scene (and one for the fig's roots), the instances
+    glGenBuffers(1, &instVbo_);
+    auto meshVao = [&](GLuint& vao, GLuint& vbo) {
+        glGenVertexArrays(1, &vao);
+        glGenBuffers(1, &vbo);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ruins::Vtx), (void*)offsetof(ruins::Vtx, p));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(ruins::Vtx), (void*)offsetof(ruins::Vtx, n));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(ruins::Vtx), (void*)offsetof(ruins::Vtx, a));
+        glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
+        for (int i = 0; i < 6; i++) {
+            glEnableVertexAttribArray(3 + i);
+            glVertexAttribDivisor(3 + i, 1);
+        }
+    };
+    meshVao(meshVao_, meshVbo_);
+    meshVao(figVao_, figVbo_);
+    glGenVertexArrays(1, &folVao_);
+    glGenBuffers(1, &folVbo_);
+    glBindVertexArray(folVao_);
+    glBindBuffer(GL_ARRAY_BUFFER, folVbo_);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
+    glBindVertexArray(0);
+
+    // ---- the sun's shadow map
+    glGenTextures(1, &shadowTex_);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glGenFramebuffers(1, &shadowFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLint maxS = 4;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxS);
+    samples_ = std::max(1, std::min(4, (int)maxS));
+
     pal_ = paletteOf(0);
 
     // the butterflies: a few, each with its home beside the well
@@ -184,10 +246,43 @@ void RuinsUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution (at most 600 lines)
-    const int wh = std::max(180, std::min(600, (int)(height_ * 0.56f)));
-    const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    // the world: multisampled at the full resolution (up to 1440 lines), resolved with its depth
+    msH_ = std::max(180, std::min(1440, height_));
+    msW_ = std::max(320, (int)std::lround((float)msH_ * width_ / height_));
+    if (!msFbo_) { glGenFramebuffers(1, &msFbo_); glGenRenderbuffers(1, &msColor_); glGenRenderbuffers(1, &msDepth_); }
+    glBindRenderbuffer(GL_RENDERBUFFER, msColor_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, msW_, msH_);
+    glBindRenderbuffer(GL_RENDERBUFFER, msDepth_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT32F, msW_, msH_);
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msColor_);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, msDepth_);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::fprintf(stderr, "[ruins] multisampled framebuffer incomplete (%dx%d x%d)\n", msW_, msH_, samples_);
+    worldT_.create(msW_, msH_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    auto tex = [](GLuint& t, int w, int h, GLenum internal, GLenum format, GLenum type, GLenum filter) {
+        if (!t) glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexImage2D(GL_TEXTURE_2D, 0, internal, w, h, 0, format, type, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    };
+    tex(worldDepth_, msW_, msH_, GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, worldT_.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, worldDepth_, 0);
+    // the mist, the shafts and the occlusion: at half the resolution (at most 540 lines)
+    const int vh = std::max(90, std::min(540, msH_ / 2));
+    const int vw = std::max(160, (int)std::lround((float)vh * width_ / height_));
+    volT_.create(vw, vh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, GL_NEAREST);
+    tex(auxTex_, vw, vh, GL_RGBA32F, GL_RGBA, GL_FLOAT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, volT_.fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, auxTex_, 0);
+    {
+        const GLenum bufs[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(2, bufs);
+    }
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     aspect_ = (float)width_ / height_;
@@ -247,16 +342,7 @@ void RuinsUniverse::focusPose(const Ev& e, vec3& eye, vec3& tgt) const {
     tgt = eye + fdir * lh + vec3(0.f, P.y - eye.y, 0.f);
 }
 
-namespace {
-// GLSL's hash(vec2) (shaders.hpp), to know on the CPU which columns are broken
-float ghash(float x, float y) {
-    auto fr = [](float v) { return v - std::floor(v); };
-    float a = fr(x * 0.1031f), b = fr(y * 0.1031f), cc = fr(x * 0.1031f);
-    const float d = a * (b + 33.33f) + b * (cc + 33.33f) + cc * (a + 33.33f);
-    a += d; b += d; cc += d;
-    return fr((a + b) * cc);
-}
-}
+using ruins::ghash; // (GLSL's hash: which columns are broken)
 
 // The plan: first the avenue's columns (down this song's side, back up the other: each broken one's top, then the
 // block beside it), then the temple in eight steps through its parts (as shaders.hpp sequences them on uTemple).
@@ -350,10 +436,14 @@ void RuinsUniverse::dustAt(const vec3& w, int n) {
 }
 
 RuinsUniverse::~RuinsUniverse() {
-    for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (ugl::Target* t : {&worldT_, &volT_, &sceneT_}) t->destroy();
+    for (GLuint p : {progMesh_, progShadow_, progSky_, progFol_, progVol_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_})
+        glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_, shapeVao_, meshVao_, figVao_, folVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, meshVbo_, figVbo_, instVbo_, folVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint t : {worldDepth_, auxTex_, shadowTex_}) glDeleteTextures(1, &t);
+    for (GLuint fb : {msFbo_, shadowFbo_}) glDeleteFramebuffers(1, &fb);
+    for (GLuint rb : {msColor_, msDepth_}) glDeleteRenderbuffers(1, &rb);
 }
 
 // =====================================================================================================
@@ -846,6 +936,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         }
         const int owed = owedEvents(target);
         if (first || reset || f.bare) {
+            if (first || reset) snapNext_ = true;
             // (coming in mid-way, or a test still: what is owed is already done)
             while (next_ < owed) applyEv(plan_[next_++], 1.f);
         }
@@ -1005,12 +1096,41 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (meshes, multisampled)
+    if (scene_.kind() != kind) buildScene(kind);
     {
-        worldT_.bind();
-        glDisable(GL_BLEND);
-        const GLuint P = progWorld_;
-        glUseProgram(P);
+        ruins::State st;
+        st.kind = kind;
+        st.jungle = jungle_;
+        st.temple = temple_;
+        st.broken = broken_;
+        st.wear = wear_;
+        st.prime = prime_;
+        for (int i = 0; i < 8; i++) st.col[i] = col_[i];
+        scene_.animate(st, f.paused ? 0.f : wdt, snapNext_ || f.bare, inst_, draws_);
+        snapNext_ = false;
+        glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
+        glBufferData(GL_ARRAY_BUFFER, inst_.size() * sizeof(ruins::Inst), inst_.data(), GL_STREAM_DRAW);
+        if (scene_.figChanged()) {
+            glBindBuffer(GL_ARRAY_BUFFER, figVbo_);
+            glBufferData(GL_ARRAY_BUFFER, scene_.figVerts().size() * sizeof(ruins::Vtx), scene_.figVerts().data(), GL_DYNAMIC_DRAW);
+        }
+    }
+    vp3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, NEAR, FAR) * mat4::lookAt(eye_, eye_ + fwd_, up_);
+    {
+        // the sun's shadow map, fitted to the scene as the sun sees it
+        const vec3 C(0.f, 10.f, -45.f);
+        const mat4 lv = mat4::lookAt(C + sunDir * 200.f, C, vec3(0.f, 1.f, 0.f));
+        float mn[3] = {1e9f, 1e9f, 1e9f}, mx[3] = {-1e9f, -1e9f, -1e9f};
+        for (int i = 0; i < 8; i++) {
+            const vec4 l = lv * vec4((i & 1) ? 54.f : -54.f, (i & 2) ? 66.f : -1.f, (i & 4) ? 24.f : -120.f, 1.f);
+            const float c[3] = {l.x, l.y, l.z};
+            for (int k = 0; k < 3; k++) { mn[k] = std::min(mn[k], c[k]); mx[k] = std::max(mx[k], c[k]); }
+        }
+        lightVp_ = mat4::ortho(mn[0], mx[0], mn[1], mx[1], -mx[2] - 5.f, -mn[2] + 5.f) * lv;
+    }
+    const float corner = kind == 0 ? 1.f - smoothstepf(0.f, 0.5f, temple_) : 0.f;
+    auto setScene = [&](GLuint P) {
         set3f(P, "uEye", eye_);
         set3f(P, "uFwd", fwd_);
         set3f(P, "uRight", right_);
@@ -1018,7 +1138,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uTanH", tanH_);
         set1f(P, "uAspect", aspect_);
         set1f(P, "uTime", std::fmod(sway_, 2000.f));
-        set1f(P, "uPx", 2.f * tanH_ / worldT_.h);
+        set1f(P, "uPx", 2.f * tanH_ / msH_);
         set1i(P, "uKind", kind);
         set3f(P, "uSunDir", sunDir);
         set3f(P, "uSunCol", sunC);
@@ -1046,20 +1166,91 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uBroken", broken_);
         set1f(P, "uWear", wear_);
         set1f(P, "uPrime", prime_);
-        glUniform1fv(ugl::U(P, "uCol"), 8, col_);
+        set1f(P, "uCorner", corner);
         set4f(P, "uFocus", focusP_.x, focusP_.y, focusP_.z, focusA_);
         set1f(P, "uFocusR", focusR_);
         set3f(P, "uBridgeCol", bridge_.color);
-        ugl::drawFullscreen();
-    }
+        setMat(P, "uLightVP", lightVp_);
+        set1i(P, "uShadow", 3);
+        set1f(P, "uSoft", 1.7f / SHADOW_SIZE);
+        set2f(P, "uNF", NEAR, FAR);
+    };
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    // ---- the sun's shadow map
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1.5f, 2.f);
+    glUseProgram(progShadow_);
+    setMat(progShadow_, "uVP", lightVp_);
+    drawMeshes(progShadow_);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    // ---- the sky, the meshes, the foliage: multisampled, at the full resolution
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
+    glViewport(0, 0, msW_, msH_);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glActiveTexture(GL_TEXTURE0);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glUseProgram(progSky_);
+    setScene(progSky_);
+    ugl::drawFullscreen();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glUseProgram(progMesh_);
+    setScene(progMesh_);
+    setMat(progMesh_, "uVP", vp3_);
+    drawMeshes(progMesh_);
+    glEnable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glUseProgram(progFol_);
+    setScene(progFol_);
+    setMat(progFol_, "uVP", vp3_);
+    glBindVertexArray(folVao_);
+    glDrawArrays(GL_TRIANGLES, 0, folCount_);
+    glDisable(GL_SAMPLE_ALPHA_TO_COVERAGE);
+    glDisable(GL_DEPTH_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo_);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, worldT_.fbo);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    // ---- the mist, the light shafts, the occlusion (reduced resolution)
+    volT_.bind();
+    glUseProgram(progVol_);
+    setScene(progVol_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, worldDepth_);
+    set1i(progVol_, "uDepth", 0);
+    set2f(progVol_, "uFull", (float)msW_, (float)msH_);
+    ugl::drawFullscreen();
 
     // =========================================================== the scene (full resolution)
     sceneT_.bind();
     glUseProgram(progComp_);
+    setScene(progComp_);
+    set1f(progComp_, "uPx", 2.f * tanH_ / height_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
-    set1i(progComp_, "uWorld", 0);
-    set2f(progComp_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    set1i(progComp_, "uColor", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, worldDepth_);
+    set1i(progComp_, "uDepth", 1);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, volT_.tex);
+    set1i(progComp_, "uVol", 2);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, auxTex_);
+    set1i(progComp_, "uAux", 4);
+    glActiveTexture(GL_TEXTURE0);
+    set2f(progComp_, "uLow", (float)volT_.w, (float)volT_.h);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
@@ -1102,7 +1293,7 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         static int n = 0;
         acc += ns * 1e-6;
         if (++n == 60) {
-            std::fprintf(stderr, "[ruins] gpu %.2f ms/frame (%dx%d world)\n", acc / n, worldT_.w, worldT_.h);
+            std::fprintf(stderr, "[ruins] gpu %.2f ms/frame (%dx%d world x%d)\n", acc / n, msW_, msH_, samples_);
             acc = 0.0;
             n = 0;
         }
@@ -1118,6 +1309,62 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uFade", saturate(f.fade));
     set1f(progPost_, "uDim", dimT_);
     ugl::drawFullscreen();
+}
+
+// The world's meshes for a variant (world.cpp), uploaded, and its foliage cards (planes whose leafy masks the
+// shader computes where they are: the jungle's walls, its mass before the temple, the undergrowth, the ferns, the
+// lianas, the canopy's edge)
+void RuinsUniverse::buildScene(int kind) {
+    const auto t0 = std::chrono::steady_clock::now();
+    scene_.build(kind);
+    const double buildMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    glBindBuffer(GL_ARRAY_BUFFER, meshVbo_);
+    glBufferData(GL_ARRAY_BUFFER, scene_.verts().size() * sizeof(ruins::Vtx), scene_.verts().data(), GL_STATIC_DRAW);
+    glBindBuffer(GL_ARRAY_BUFFER, figVbo_);
+    glBufferData(GL_ARRAY_BUFFER, scene_.figVerts().size() * sizeof(ruins::Vtx), scene_.figVerts().data(), GL_DYNAMIC_DRAW);
+    std::vector<float> v;
+    auto quad = [&](const vec3& a, const vec3& b, const vec3& c, const vec3& d, float layer) {
+        for (const vec3* p : {&a, &b, &c, &a, &c, &d}) v.insert(v.end(), {p->x, p->y, p->z, layer});
+    };
+    auto qx = [&](float x, float z0, float z1, float y0, float y1, float L) {
+        quad(vec3(x, y0, z0), vec3(x, y0, z1), vec3(x, y1, z1), vec3(x, y1, z0), L);
+    };
+    auto qz = [&](float z, float x0, float x1, float y0, float y1, float L) {
+        quad(vec3(x0, y0, z), vec3(x1, y0, z), vec3(x1, y1, z), vec3(x0, y1, z), L);
+    };
+    qx(-42.f, -320.f, 120.f, -1.f, 70.f, 0.f);
+    qx(42.f, -320.f, 120.f, -1.f, 70.f, 1.f);
+    qz(-96.f, -280.f, 280.f, -1.f, 70.f, 2.f);
+    qz(-140.f, -320.f, 320.f, -1.f, 80.f, 3.f);
+    qz(-27.f, -60.f, 60.f, -1.f, 40.f, 4.f);
+    qz(-10.f, -60.f, 60.f, -1.f, 20.f, 5.f);
+    for (int i = 0; i < 5; i++) qz(10.f - 11.f * i, -41.f, 41.f, -0.5f, 13.f, 6.f + i);
+    qx(-11.f, -34.f, 6.f, -0.5f, 10.f, 11.f);
+    qx(11.f, -34.f, 6.f, -0.5f, 10.f, 12.f);
+    qz(-2.f, -40.f, 40.f, 0.f, 31.f, 13.f);
+    qz(-18.f, -40.f, 40.f, 0.f, 31.f, 14.f);
+    qz(-8.f, -260.f, 260.f, 4.f, 95.f, 15.f);
+    qz(-30.f, -260.f, 260.f, 4.f, 95.f, 16.f);
+    glBindBuffer(GL_ARRAY_BUFFER, folVbo_);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
+    folCount_ = (int)v.size() / 4;
+    snapNext_ = true;
+    if (std::getenv("ZEN_GPUTIME"))
+        std::fprintf(stderr, "[ruins] %s: %d triangles in the mesh buffer, %d drawn (with the instances), built in %.1f ms\n",
+                     VARIANTS[wrapV(variant_)].name, scene_.triangles(), scene_.instancedTriangles(), buildMs);
+}
+
+void RuinsUniverse::drawMeshes(GLuint) {
+    for (const ruins::Draw& d : draws_) {
+        if (d.dyn && scene_.figVerts().empty()) continue;
+        glBindVertexArray(d.dyn ? figVao_ : meshVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
+        const size_t base = (size_t)d.first * sizeof(ruins::Inst);
+        for (int i = 0; i < 6; i++)
+            glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(ruins::Inst), (void*)(base + sizeof(float) * 4 * i));
+        glDrawArraysInstanced(GL_TRIANGLES, d.r.first, d.r.count, d.count);
+    }
+    glBindVertexArray(0);
 }
 
 // =====================================================================================================
