@@ -14,7 +14,7 @@ namespace topography_shaders {
 inline const char* MAP_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
-uniform sampler2D uField, uRivers;
+uniform sampler2D uField;
 uniform vec4 uGrid;      // x0, y0, 1 / spacing (board units)
 uniform vec4 uView;      // center, half extents (board units)
 uniform vec2 uRes;
@@ -22,11 +22,11 @@ uniform float uLineW;    // the minor contour's width (pixels)
 uniform vec3 uPaper, uLine, uIndex, uWaterLine, uLake, uTint0, uTint1, uTint2, uWood;
 uniform float uLineAlpha, uTintAmt, uShade, uWoodAmt, uHMin, uHMax;
 uniform float uPond, uPondMin;
-uniform float uWater, uWaterOn, uPhase, uRiver, uFlow, uWellCalm, uSlow, uDark, uFurn, uGameOn;
+uniform float uWater, uWaterOn, uPhase, uWellCalm, uSlow, uDark, uFurn, uGameOn;
 uniform float uBridge;
 uniform vec3 uBridgeCol;
 uniform vec4 uLeftCol, uRightCol;
-uniform float uHalf, uDropFx, uShoreKick;
+uniform float uHalf, uShoreKick;
 uniform float uDraw; // the setup: the survey drawn in, from the valleys up to the peaks (0 blank paper .. 1 done)
 uniform vec4 uHud[40];
 uniform int uHudN;
@@ -105,7 +105,7 @@ void main() {
     }
     quiet *= 1.0 - 0.85 * hud;
 
-    // ---- Water: the lakes (with the lines along their shores) and the rivers.
+    // ---- Water: the lakes (with the lines along their shores).
     // the ponds the rain fills in the hollows (their spill level, rising with the rain) and the flood
     float pondD = F.g - uPondMin * 0.6 - (1.0 - uPond) * 1.5;
     float depth = max(uWater - h, pondD);
@@ -140,12 +140,6 @@ void main() {
                exp(-depth * 1.1) * smoothstep(2.5, 6.0, 1.0 / wfw);
     col = mix(col, uWaterLine, clamp(shore * 0.9 + wl * wet, 0.0, 1.0) * mix(1.0, 0.55, inWell) * (1.0 - 0.85 * hud));
 
-    // rivers (their coverage drawn beforehand), with a slow flow downhill
-    float riv = texture(uRivers, vUv).r * uRiver * (1.0 - wet) * (1.0 - hud) * drawn;
-    float fa = mix(0.28, 0.6, uDropFx);
-    float flow = 1.0 - fa + fa * sin(6.2832 * (h * 1.3 + uFlow));
-    col = mix(col, uWaterLine, riv * flow * mix(1.0, 0.6, inWell) * mix(1.0, 0.6, inCols));
-
     // ---- Map furniture: the well's neat line with ticks, a scale bar and a north arrow.
     {
         vec2 q = abs(w) - vec2(5.12, 10.12);
@@ -179,43 +173,6 @@ void main() {
     col = mix(col, col * vec3(0.78, 0.84, 1.0), uSlow * 0.55);
     col = mix(col, uBridgeCol, uBridge);
     frag = vec4(col, 1.0);
-}
-)";
-
-// ---------------------------------------------------------------- rivers (coverage, max-blended)
-inline const char* RIVER_VS = R"(#version 330 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec4 aA; // x0 y0 x1 y1 (board)
-layout(location = 2) in vec4 aB; // width at each end (px), alpha
-uniform mat4 uVP;
-uniform float uPxW; // board units per pixel
-out vec2 vW;
-flat out vec4 vA;
-flat out vec4 vB;
-void main() {
-    vec2 a = aA.xy, b = aA.zw, d = b - a;
-    float L = max(length(d), 1e-5);
-    vec2 t = d / L, n = vec2(-t.y, t.x);
-    float r = (max(aB.x, aB.y) * 0.5 + 1.5) * uPxW;
-    vec2 p = (aPos.x < 0.0 ? a - t * r : b + t * r) + n * aPos.y * r;
-    vW = p; vA = aA; vB = aB;
-    gl_Position = uVP * vec4(p, 0.0, 1.0);
-}
-)";
-inline const char* RIVER_FS = R"(#version 330 core
-in vec2 vW;
-flat in vec4 vA;
-flat in vec4 vB;
-out vec4 frag;
-uniform float uPxW;
-void main() {
-    vec2 a = vA.xy, b = vA.zw, d = b - a;
-    float s = clamp(dot(vW - a, d) / max(dot(d, d), 1e-8), 0.0, 1.0);
-    float dist = length(vW - (a + d * s)) / uPxW;
-    float w = mix(vB.x, vB.y, s);
-    float hw = max(w, 0.9) * 0.5;
-    float c = (1.0 - smoothstep(hw - 0.5, hw + 0.5, dist)) * min(1.0, w / 0.9) * vB.z;
-    frag = vec4(c);
 }
 )";
 
