@@ -246,6 +246,7 @@ bool MyceliumUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "mycelium cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "mycelium shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "mycelium post");
+    progUp_ = compile(ugl::FULLSCREEN_VS, ugl::UPSAMPLE_DEPTH_FS, "mycelium upsample");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -332,19 +333,28 @@ void MyceliumUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    const int wh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
+    // the sky at a reduced resolution (at most 720 lines), with its depth
+    const int sh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
+    const int sw = std::max(320, (int)std::lround((float)sh * width_ / height_));
+    skyT_.create(sw, sh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    skyT_.attachDepthTexture();
+    // the meshes: multisampled (4x) at the full resolution, up to 1440 lines
+    const int wh = std::max(180, std::min(1440, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
-    bloomA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    bloomB_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    msT_.create(ww, wh, 4);
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    // the bloom from the sky's resolution / 4, as before
+    bloomA_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    bloomB_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 MyceliumUniverse::~MyceliumUniverse() {
-    for (ugl::Target* t : {&worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    for (ugl::Target* t : {&skyT_, &worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    msT_.destroy();
     for (GLuint p : {progSky_, progThread_, progShroom_, progPuff_, progGlow_, progCloud_, progSea_, progComp_, progBright_,
-                     progBlur_, progSprite_, progVeil_, progCell_, progShape_, progPost_})
+                     progBlur_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progUp_})
         glDeleteProgram(p);
     for (GLuint v : {threadVao_, shroomVao_, puffVao_, glowVao_, cloudVao_, spriteVao_, cellVao_, shapeVao_})
         glDeleteVertexArrays(1, &v);
@@ -1133,7 +1143,9 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     const float G = g_;
     const float Gs = G - 2.5f * away; // the network as shown
     const float reach = std::exp(G);
-    const float pxK = 2.f * tanH_ / worldT_.h;   // meters per pixel per meter of distance
+    // meters per pixel per meter of distance (in the reduced resolution's pixels: the sizes under which things are culled
+    // or held stay as they were)
+    const float pxK = 2.f * tanH_ / skyT_.h;
     const vec3 fwdH(-std::sin(CAM_AZ), 0.f, -std::cos(CAM_AZ)), rightH(std::cos(CAM_AZ), 0.f, -std::sin(CAM_AZ));
     auto pxOf = [&](const vec3& p, float size) {
         const vec3 d = p - eye_;
@@ -1331,7 +1343,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         finst_.insert(finst_.end(), q, q + 16);
     };
     {
-        const float H = (float)worldT_.h;
+        const float H = (float)skyT_.h;
         for (const Plant& pl : plants_) {
             const float s = pl.s;
             const vec3 base = myc::toWorld(pl.x, pl.z);
@@ -1462,7 +1474,8 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (the sky at a reduced resolution, the meshes
+    // multisampled at the full resolution)
     // the macro start: the background out of focus (a thicker mist behind the tuft, a soft tree line and moon, few
     // stars), until the network is some 30 cm across
     const float macro = macro_;
@@ -1483,7 +1496,7 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uBridge", bridge);
         set3f(p, "uBridgeCol", bridge_.color);
     };
-    worldT_.bind();
+    skyT_.bind();
     glClearColor(0, 0, 0, 0);
     glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1535,6 +1548,19 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
         glUniform4fv(glGetUniformLocation(progSky_, "uLightP"), 6, lp);
         glUniform4fv(glGetUniformLocation(progSky_, "uLightC"), 6, lc);
     }
+    ugl::drawFullscreen();
+
+    // ---- the meshes, multisampled, over the sky upsampled with its depth
+    msT_.bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(progUp_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, skyT_.tex);
+    set1i(progUp_, "uColor", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, skyT_.depthTex);
+    set1i(progUp_, "uDepth", 1);
+    glActiveTexture(GL_TEXTURE0);
     ugl::drawFullscreen();
 
     glDepthFunc(GL_LESS);
@@ -1713,14 +1739,15 @@ void MyceliumUniverse::render(const Frame& f, GLuint fbo) {
     glDepthFunc(GL_LESS);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
+    msT_.resolve(worldT_);
 
-    // ---- The bloom (quarter resolution).
+    // ---- The bloom (the sky's resolution / 4, its taps as far apart as before).
     bloomA_.bind();
     glUseProgram(progBright_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progBright_, "uSrc", 0);
-    set2f(progBright_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    set2f(progBright_, "uTexel", 1.f / skyT_.w, 1.f / skyT_.h);
     set1f(progBright_, "uThreshold", 0.3f);
     ugl::drawFullscreen();
     for (int pass = 0; pass < 2; pass++) {
