@@ -77,6 +77,12 @@ const VariantDef VARIANTS[] = {
     // Glacier: blue contours on white like the ice on alpine sheets, warm plateaus.
     {"GLACIER", 0xf8fbfd, 0x86afd6, 0x3f74a8, 0x1f5fa8, 0xb4d2ef, 0xf1f6fa, 0xf6f9fc, 0xffffff, 0xe2eef7, 0x23364a, 0x1f5fa8,
      {0x2fa39a, 0xf0b43c, 0xc0569a, 0x6aa84a, 0xe2553f, 0x34418f, 0xf08a3c}, 0.f, 0.85f, 0.f, 0.22f},
+    // Cyanotype: a sun print, white lines on deep Prussian blue, the water drawn whitest; cream and warm plateaus.
+    {"CYANOTYPE", 0x0c2846, 0x6f95bd, 0xd2e2f2, 0xf2f8ff, 0x1d4a77, 0x0e2c4c, 0x123354, 0x173b5f, 0x0e2b48, 0xeef4fa, 0x9fd4ff,
+     {0x9ff0e0, 0xffe08a, 0xd9c2ff, 0xc8eb8f, 0xff9f8f, 0xb4c8ff, 0xffbf80}, 1.f, 0.8f, 0.f, 0.3f},
+    // Lacquer: gold leaf on black lacquer, the water in pale gold over bronze, jewel plateaus.
+    {"LACQUER", 0x0b0a09, 0x8a6c3e, 0xd8b062, 0xf6dc9a, 0x2a1f10, 0x110f0c, 0x18140e, 0x221b11, 0x0e0d0a, 0xf0e6d2, 0xe0b45e,
+     {0x62d6b4, 0xf5c95e, 0xc994ee, 0xa9d870, 0xf2725a, 0x7d95f2, 0xf7a253}, 1.f, 0.8f, 0.f, 0.3f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -88,6 +94,8 @@ const unsigned DROP_PIECES[][7] = {
     {0xd23c77, 0x1f9e89, 0xf2a900, 0x4b3fa0, 0x2e86de, 0xe8603c, 0x6aa121}, // QUADRANGLE
     {0xe4572e, 0x29a19c, 0xf3a712, 0x5f4bb6, 0x3c91e6, 0xc33c8f, 0x8bbf3f}, // GRAPHITE
     {0x5b6ee1, 0xff7a59, 0x2ec4b6, 0xf6b93b, 0xb5179e, 0x26a269, 0xe8505b}, // GLACIER
+    {0xfff1a8, 0x8ff5e6, 0xffb3a3, 0xe0d0ff, 0xb8f59a, 0xffc98a, 0xa8d8ff}, // CYANOTYPE
+    {0xff8f6b, 0x7fe8c8, 0xffd36e, 0xe0a8ff, 0x93b4ff, 0xffb070, 0xc4ec7c}, // LACQUER
 };
 static_assert(sizeof(DROP_PIECES) / sizeof(DROP_PIECES[0]) == VARIANT_COUNT, "a drop set per variant");
 
@@ -752,7 +760,9 @@ void TopographyUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && t.minor && t.brightness < 0.45f) v = 1;
+        // dark minor songs take one of the dark sheets (NIGHT SURVEY, CYANOTYPE, LACQUER) by their hue
+        static const int DARK[] = {1, 5, 6};
+        if (t.hasSong && t.minor && t.brightness < 0.45f) v = DARK[(int)(h * 3) % 3];
         else if (t.hasSong && !t.minor && t.brightness > 0.55f) v = h < 0.5f ? 0 : 4;
         else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
