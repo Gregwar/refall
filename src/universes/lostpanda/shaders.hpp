@@ -40,7 +40,7 @@ uniform float uHead;      // how much its head lamps light the walls around them
 // the track: level through the station and the tunnel, then a steady grade under 5 degrees (eased at both ends) up
 // the cutting to the surface
 float trackY(float x) {
-    float t = clamp((x - 146.0) / 112.0, 0.0, 1.0);
+    float t = clamp((x - 242.0) / 112.0, 0.0, 1.0);
     return mix(PLAT_Y, GY0, 0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
 }
 vec2 carLocal(vec2 w, float i) {
@@ -226,7 +226,7 @@ vec4 trainFront(vec2 w) {
 
 // ------------------------------------------------------------------------------------------------ the world
 // One continuous world in a side view, its near plane cut away like a cross-section where it goes underground:
-// world x along the way (0 the rainy street .. ~470 the glade), world y up (the street at GY0, the subway's platform
+// world x along the way (0 the rainy street .. ~570 the glade), world y up (the street at GY0, the subway's platform
 // at PLAT_Y). The camera (uD, uCamY: the world point at the screen's origin) follows the cub. Layers behind the near
 // plane scroll at their own parallax k (x and y); what stands on the near plane (lamps, the stairs, the train, the
 // ground and the earth's cut) moves with the world. Where each kind of scenery stands is a density along the way,
@@ -257,13 +257,13 @@ vec2 layerP(vec2 p, float k) { return vec2(p.x, p.y + uCamY * k); }
 //@TRAIN
 
 // ---- where things are along the way (world x)
-float zCity(float x) { return 1.0 - smoothstep(205.0, 250.0, x); }
-float zShop(float x) { return smoothstep(24.0, 50.0, x) * (1.0 - smoothstep(190.0, 215.0, x)); }
-float zInd(float x) { return smoothstep(215.0, 250.0, x) * (1.0 - smoothstep(330.0, 355.0, x)); }
-float zNature(float x) { return smoothstep(300.0, 350.0, x); }
-float zField(float x) { return smoothstep(328.0, 352.0, x) * (1.0 - smoothstep(392.0, 418.0, x)); }
-float zBamboo(float x) { return smoothstep(360.0, 400.0, x) * (1.0 - 0.8 * smoothstep(436.0, 454.0, x)); }
-float zGlade(float x) { return smoothstep(436.0, 454.0, x); }
+float zCity(float x) { return 1.0 - smoothstep(301.0, 346.0, x); }
+float zShop(float x) { return smoothstep(24.0, 50.0, x) * (1.0 - smoothstep(286.0, 311.0, x)); }
+float zInd(float x) { return smoothstep(311.0, 346.0, x) * (1.0 - smoothstep(426.0, 451.0, x)); }
+float zNature(float x) { return smoothstep(396.0, 446.0, x); }
+float zField(float x) { return smoothstep(424.0, 448.0, x) * (1.0 - smoothstep(488.0, 514.0, x)); }
+float zBamboo(float x) { return smoothstep(456.0, 496.0, x) * (1.0 - 0.8 * smoothstep(532.0, 550.0, x)); }
+float zGlade(float x) { return smoothstep(532.0, 550.0, x); }
 // the place far layers show at an object's screen x (sx): far things fade in and out with the way, gently
 float xFar(float sx) { return uD + sx * 1.3; }
 
@@ -737,7 +737,7 @@ vec3 airScene(vec2 p, vec2 w) {
     c = bambooClump(layerP(p, 0.5), c, 0.5, GY0 + 1.0, 1.0, 0.55, vec3(0.08, 0.16, 0.04), 0.12, 5.0);
     // the meadow behind the path: grass and flowers (fields, forest, glade)
     {
-        float nat = smoothstep(330.0, 350.0, w.x);
+        float nat = smoothstep(426.0, 446.0, w.x);
         if (nat > 0.01 && w.y < GY0 + 2.0) {
             float top = GY0 + 0.5 + 0.25 * sin(w.x * 0.4);
             vec3 mc = mix(vec3(0.3, 0.5, 0.18), vec3(0.45, 0.62, 0.22), vnoise(vec2(w.x * 0.3, w.y)));
@@ -756,12 +756,12 @@ vec3 airScene(vec2 p, vec2 w) {
     }
     c = bambooClump(layerP(p, 0.8), c, 0.8, GY0 + 0.5, 1.35, 0.4 * (1.0 - 0.8 * zGlade(w.x)), vec3(0.035, 0.07, 0.02), 0.03, 9.0);
     // ---- on the near plane: lamps, the subway's entrance, the crossing's light, the station's canopy, bollards
-    if (w.x < 160.0) {
+    if (w.x < 256.0) {
         float sp = 15.0, n = floor((w.x - 4.0) / sp + 0.5);
         float lxw = n * sp + 4.0;
         float lx = w.x - lxw;
         if (abs(lxw - 79.0) > 6.0) c = lampAt(w, c, lx, vec3(1.0, 0.72, 0.38), 6.6, uLamp);
-    } else if (w.x > 296.0 && w.x < 345.0) {
+    } else if (w.x > 392.0 && w.x < 441.0) {
         float sp = 13.0, n = floor((w.x - 2.0) / sp + 0.5);
         c = lampAt(w, c, w.x - (n * sp + 2.0), vec3(1.0, 0.55, 0.2), 5.6, uLamp);
     }
@@ -800,8 +800,8 @@ vec3 airScene(vec2 p, vec2 w) {
         c += vec3(0.2, 1.0, 0.6) * grn * (fillA(length(r2) - 0.17) * 1.5 + exp(-dot(r2, r2) / 0.4) * 0.6);
     }
     // the terminus: a canopy on posts over the platform, its lamps
-    if (w.x > 250.0 && w.x < 312.0) {
-        vec2 q = w - vec2(281.0, GY0);
+    if (w.x > 346.0 && w.x < 408.0) {
+        vec2 q = w - vec2(377.0, GY0);
         float roof = sdBox(q - vec2(0.0, 8.6), vec2(26.0, 0.18)) - 0.05;
         float px = mod(q.x + 26.0, 6.5) - 3.25;
         float post = max(abs(px) - 0.09, abs(q.y - 4.3) - 4.3) ;
@@ -817,12 +817,12 @@ vec3 airScene(vec2 p, vec2 w) {
     c = catenary(w, c);
     // the terminus: the buffer stop at the end of the track, the way out to the street (a gate, a lit sign)
     {
-        vec2 q = w - vec2(297.0, GY0);
+        vec2 q = w - vec2(393.0, GY0);
         float bs = min(sdBox(q - vec2(0.0, 1.0), vec2(0.35, 0.35)), sdBox(q - vec2(0.0, 0.4), vec2(0.12, 0.45)));
         c = lay(c, vec3(0.5, 0.08, 0.06) * (0.4 + 0.6 * uDawn), fillA(bs));
         c = lay(c, vec3(0.9) * (0.4 + 0.6 * uDawn), fillA(sdBox(q - vec2(0.0, 1.0), vec2(0.35, 0.08))));
         c += vec3(1.0, 0.15, 0.1) * exp(-dot(q - vec2(0.0, 1.55), q - vec2(0.0, 1.55)) / 0.03) * 0.8;
-        vec2 g = w - vec2(308.5, GY0);
+        vec2 g = w - vec2(404.5, GY0);
         float gate = min(min(sdBox(g - vec2(-1.6, 2.6), vec2(0.1, 2.6)), sdBox(g - vec2(1.6, 2.6), vec2(0.1, 2.6))), sdBox(g - vec2(0.0, 5.1), vec2(1.75, 0.12)));
         c = lay(c, vec3(0.1, 0.1, 0.11) + uFog * 0.15, fillA(gate));
         vec2 sq1 = g - vec2(0.0, 5.75);
@@ -832,14 +832,14 @@ vec3 airScene(vec2 p, vec2 w) {
         c += vec3(0.3, 1.0, 0.6) * exp(-max(sgn, 0.0) * 2.0) * 0.12 * uLamp;
     }
     // a fence and a few posts where the town gives way to the fields
-    if (w.x > 330.0 && w.x < 362.0) {
+    if (w.x > 426.0 && w.x < 458.0) {
         float fx = mod(w.x, 2.2) - 1.1;
         float f = min(sdBox(vec2(fx, w.y - GY0 - 0.8), vec2(0.06, 0.8)), sdBox(vec2(fx, w.y - GY0 - 1.2), vec2(1.1, 0.04)));
-        c = lay(c, vec3(0.2, 0.17, 0.14) * (0.5 + 0.5 * uDawn), fillA(f) * (1.0 - smoothstep(352.0, 362.0, w.x)) * smoothstep(330.0, 336.0, w.x));
+        c = lay(c, vec3(0.2, 0.17, 0.14) * (0.5 + 0.5 * uDawn), fillA(f) * (1.0 - smoothstep(448.0, 458.0, w.x)) * smoothstep(426.0, 432.0, w.x));
     }
     // the little bridge over the glade's stream: its rails
-    if (w.x > 441.0 && w.x < 452.0) {
-        vec2 q = w - vec2(446.5, GY0);
+    if (w.x > 537.0 && w.x < 548.0) {
+        vec2 q = w - vec2(542.5, GY0);
         float r = min(sdBox(q - vec2(0.0, 1.1), vec2(5.0, 0.07)), max(abs(mod(q.x + 5.0, 2.5) - 1.25) - 0.07, abs(q.y - 0.55) - 0.55));
         r = max(r, abs(q.x) - 5.05);
         c = lay(c, vec3(0.32, 0.2, 0.12) * (0.5 + 0.6 * uDawn), fillA(r));
@@ -849,7 +849,8 @@ vec3 airScene(vec2 p, vec2 w) {
 
 // =========================================================================== underground
 // The stairs: nine steps down from the pavement's edge (a step a quarter of the cub's height), the station's
-// platform, the tunnels' track bed; then a gentle grade (under 5 degrees) out of a portal up a walled cutting.
+// platform, the tunnels' track bed (the one ahead runs on level under the city for some hundred units: the ride's
+// long run); then a gentle grade (under 5 degrees) out of a portal up a walled cutting.
 const float STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;
 const float RISE = (GY0 - PLAT_Y) / NSTEPS;
 const float STAIR_END = STAIR_X + TREAD * NSTEPS;
@@ -866,8 +867,8 @@ int cavity(vec2 w, out float fl, out float ce) {
     }
     if (w.x > 88.0 && w.x < 146.0) { fl = PLAT_Y; ce = PLAT_Y + 7.2; if (w.y > fl - 1.6 && w.y < ce) return 2; }
     if (w.x > 10.0 && w.x <= 88.0) { fl = PLAT_Y - 0.4; ce = PLAT_Y + 7.4; if (w.y > fl - 1.6 && w.y < ce) return 3; }
-    if (w.x >= 146.0 && w.x < 155.0) { fl = trackY(w.x) - 0.4; ce = trackY(w.x) + 7.4; if (w.y > fl - 1.6 && w.y < ce) return 4; }
-    if (w.x >= 155.0 && w.x < 262.0) { fl = trackY(w.x) - 0.4; ce = GY0; if (w.y > fl - 1.6 && w.y < GY0 + 0.01) return 5; }
+    if (w.x >= 146.0 && w.x < 251.0) { fl = trackY(w.x) - 0.4; ce = trackY(w.x) + 7.4; if (w.y > fl - 1.6 && w.y < ce) return 4; }
+    if (w.x >= 251.0 && w.x < 358.0) { fl = trackY(w.x) - 0.4; ce = GY0; if (w.y > fl - 1.6 && w.y < GY0 + 0.01) return 5; }
     return 0;
 }
 // the concrete lining round the cavities (0.5 thick), the street's slab
@@ -879,7 +880,7 @@ float lining(vec2 w) {
     }
     if (w.x > 87.5 && w.x < 146.5) a = max(a, step(PLAT_Y - 2.1, w.y) * step(w.y, PLAT_Y + 7.7));
     if (w.x > 10.0 && w.x <= 88.0) a = max(a, step(PLAT_Y - 2.0, w.y) * step(w.y, PLAT_Y + 7.9));
-    if (w.x >= 146.0 && w.x < 155.6) a = max(a, step(trackY(w.x) - 2.0, w.y) * step(w.y, trackY(w.x) + 7.9));
+    if (w.x >= 146.0 && w.x < 251.6) a = max(a, step(trackY(w.x) - 2.0, w.y) * step(w.y, trackY(w.x) + 7.9));
     a = max(a, step(GY0 - 2.3, w.y));   // the street's slab under the pavement
     return a;
 }
@@ -901,8 +902,8 @@ vec3 earth(vec2 w) {
     float pb = fillS(length(pf - (hash2(pi) - 0.5) * 0.5) - 0.12 * hash(pi + 3.0), 0.03) * step(0.7, hash(pi + 1.0));
     c = mix(c, vec3(0.12, 0.1, 0.09), pb * 0.6 * lod(0.6));
     // a pipe and a cable under the street
-    c = mix(c, vec3(0.1, 0.11, 0.1), fillA(abs(w.y - (GY0 - 3.1)) - 0.18) * step(w.x, 150.0));
-    c = mix(c, vec3(0.06, 0.05, 0.05), fillA(abs(w.y - (GY0 - 3.7)) - 0.08) * step(w.x, 150.0));
+    c = mix(c, vec3(0.1, 0.11, 0.1), fillA(abs(w.y - (GY0 - 3.1)) - 0.18) * step(w.x, 246.0));
+    c = mix(c, vec3(0.06, 0.05, 0.05), fillA(abs(w.y - (GY0 - 3.7)) - 0.08) * step(w.x, 246.0));
     return c * (0.8 + 0.4 * uDawn);
 }
 vec3 tiles(vec2 w, vec3 tile) {
@@ -913,9 +914,9 @@ vec3 tiles(vec2 w, vec3 tile) {
 }
 // overhead line posts along the track out of the tunnel (a post every 12, its arm, the wire)
 vec3 catenary(vec2 w, vec3 c) {
-    if (w.x < 155.0 || w.x > 300.0) return c;
+    if (w.x < 251.0 || w.x > 396.0) return c;
     float ty = trackY(w.x);
-    float px = mod(w.x - 157.0, 12.0) - 6.0;
+    float px = mod(w.x - 253.0, 12.0) - 6.0;
     float pole = max(abs(px) - 0.09, max(ty - 0.4 - w.y, w.y - (ty + 8.2)));
     float arm = max(abs(w.y - (ty + 7.75)) - 0.05, max(px - 0.0, -px - 1.6));
     vec3 pc = vec3(0.12, 0.12, 0.13) * (0.5 + 0.8 * uDawn);
@@ -988,20 +989,38 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
         c = mix(c, rw, 1.0 - smoothstep(wallTop - gPx, wallTop + gPx, w.y));
         c *= 0.55 + 0.8 * uDawn;
         // the portal: a concrete face with the tunnel's arch, where the cutting begins
-        float pf = max(abs(w.x - 155.6) - 0.6, w.y - GY0);
+        float pf = max(abs(w.x - 251.6) - 0.6, w.y - GY0);
         vec3 pcc = concrete(w) * (1.2 + 0.6 * uDawn);
-        float arch = abs(length(vec2(w.x - 155.0, (w.y - fl - 3.2) * 0.6)) - 3.3) - 0.12;
+        float arch = abs(length(vec2(w.x - 251.0, (w.y - fl - 3.2) * 0.6)) - 3.3) - 0.12;
         pcc = mix(pcc, pcc * 0.6, fillA(arch));
         c = mix(c, pcc, fillA(pf));
         return catenary(w, c);
     }
-    // tunnels: dark concrete, a lamp every few meters, cables
-    vec3 c = mix(vec3(0.03, 0.03, 0.032), vec3(0.018, 0.018, 0.02), sat((w.y - fl) / 7.0));
+    // tunnels: dark concrete in rings (a joint every 3), a lamp every 9 and its pool of light on the wall, two cables
+    // on brackets, now and then a refuge niche or a signal: the rhythm that streams past the train as it runs
+    float yy = w.y - fl;
+    vec3 c = mix(vec3(0.03, 0.03, 0.032), vec3(0.018, 0.018, 0.02), sat(yy / 7.0));
+    c *= 0.9 + 0.2 * hash1(floor(w.x / 3.0));
+    float jx = (fract(w.x / 3.0 + 0.5) - 0.5) * 3.0;
+    c *= 1.0 - 0.45 * (1.0 - smoothstep(0.03, 0.03 + gPx * 1.5, abs(jx))) * lod(3.0);
+    float nx = mod(w.x - 22.0, 36.0) - 18.0;
+    float niche = sdBox(vec2(nx, yy - 2.1), vec2(0.75, 2.1));
+    c = mix(c, vec3(0.006, 0.006, 0.007), fillA(niche));
+    c = mix(c, vec3(0.1, 0.1, 0.095), fillA(abs(niche) - 0.07) * step(0.0, yy));
+    float sx = mod(w.x - 40.0, 54.0) - 27.0;
+    vec2 sq0 = vec2(sx, yy - 3.0);
+    c = mix(c, vec3(0.012), fillA(sdBox(sq0, vec2(0.2, 0.45)) - 0.04));
+    vec2 sl = sq0 - vec2(0.0, 0.18);
+    c += vec3(0.25, 1.0, 0.55) * (fillA(length(sl) - 0.1) * 1.2 + exp(-dot(sl, sl) / 0.12) * 0.25);
     float lx = mod(w.x, 9.0) - 4.5;
-    vec2 lq = vec2(lx, w.y - fl - 5.4);
+    vec2 lq = vec2(lx, yy - 5.4);
+    c += vec3(1.0, 0.75, 0.45) * (exp(-sq(lx / 2.0)) * exp(-sq((yy - 4.6) / 2.6)) * 0.035);
+    c = mix(c, vec3(0.05), fillA(sdBox(lq - vec2(0.0, 0.12), vec2(0.32, 0.07))));
     c += vec3(1.0, 0.75, 0.45) * (exp(-dot(lq, lq) / 0.08) * 1.4 + exp(-length(lq) / 1.5) * 0.06);
-    c = mix(c, vec3(0.06), fillA(abs(w.y - fl - 4.0 - 0.06 * sin(w.x * 0.5)) - 0.03) * 0.5);
-    c = mix(c, vec3(0.05), fillA(abs(w.y - fl - 3.6 - 0.06 * sin(w.x * 0.45 + 1.0)) - 0.025) * 0.5);
+    float br = max(abs(mod(w.x, 1.5) - 0.75) - 0.035, abs(yy - 3.8) - 0.32);
+    c = mix(c, vec3(0.055), fillA(br) * 0.6);
+    c = mix(c, vec3(0.06), fillA(abs(yy - 4.0 - 0.06 * sin(w.x * 0.5)) - 0.03) * 0.5);
+    c = mix(c, vec3(0.05), fillA(abs(yy - 3.6 - 0.06 * sin(w.x * 0.45 + 1.0)) - 0.025) * 0.5);
     return c;
 }
 // the floor bands (the solids seen in front, below the floors), in front of the train
@@ -1051,19 +1070,19 @@ vec3 surfaceBand(vec2 w, vec2 p) {
     float curb = fillA(abs(my - 0.06) - 0.06);
     float pud = smoothstep(0.55, 0.62, fbm(vec2(x * 0.25, my * 1.4)));
     float lxw = x - (floor((x - 4.0) / 15.0 + 0.5) * 15.0 + 4.0) - 0.7;
-    float refl = lampReflectAt(lxw + 0.04 * sin(w.y * 9.0 + uTime * 2.3), my) * (0.35 + 0.65 * pud) * uLamp * step(x, 160.0);
+    float refl = lampReflectAt(lxw + 0.04 * sin(w.y * 9.0 + uTime * 2.3), my) * (0.35 + 0.65 * pud) * uLamp * step(x, 256.0);
     pv += vec3(1.0, 0.72, 0.4) * refl;
     pv += mix(uSkyHor, uSkyTop, 0.3) * pud * 0.4;
     pv += vec3(0.6, 0.7, 0.8) * puddleRings(w) * smoothstep(0.62, 0.7, fbm(vec2(x * 0.25, my * 1.4))) * 0.12 * uRain;
     pv = mix(pv, vec3(0.09, 0.09, 0.11) * (1.0 + uDawn), curb);
     vec3 c = pv;
     // the terminus's platform: concrete, a yellow line along its edge
-    float term = smoothstep(252.0, 256.0, x) * (1.0 - smoothstep(306.0, 310.0, x));
+    float term = smoothstep(348.0, 352.0, x) * (1.0 - smoothstep(402.0, 406.0, x));
     vec3 pl = mix(vec3(0.2, 0.19, 0.19), vec3(0.1, 0.095, 0.1), sat(my / 1.6)) * (0.5 + 0.6 * uDawn);
     pl = mix(pl, vec3(0.6, 0.45, 0.06) * (0.5 + 0.5 * uDawn), fillA(abs(my - 0.2) - 0.1));
     c = mix(c, pl, term);
     // the towpath: cobbles, the canal under its edge
-    float tow = smoothstep(306.0, 312.0, x) * (1.0 - smoothstep(334.0, 340.0, x));
+    float tow = smoothstep(402.0, 408.0, x) * (1.0 - smoothstep(430.0, 436.0, x));
     vec3 path = mix(vec3(0.16, 0.12, 0.12), vec3(0.09, 0.07, 0.08), sat(my / 1.2)) * (0.6 + 0.6 * uDawn);
     path *= 1.0 - lod(0.6) * (1.0 - smoothstep(0.32, 0.5, length(fract(vec2(x / 0.6, my / 0.35)) - 0.5))) * 0.15;
     c = mix(c, path, tow);
@@ -1071,15 +1090,15 @@ vec3 surfaceBand(vec2 w, vec2 p) {
     vec3 dirt = mix(vec3(0.6, 0.48, 0.32), vec3(0.42, 0.33, 0.22), sat(my / 1.6)) * (0.92 + 0.12 * vnoise(vec2(x * 1.5, my * 4.0)));
     vec3 moss = mix(vec3(0.3, 0.22, 0.1), vec3(0.14, 0.2, 0.05), sat(my / 1.6)) * (0.85 + 0.25 * vnoise(vec2(x * 1.2, my * 3.0)));
     vec3 grass = mix(vec3(0.45, 0.42, 0.16), vec3(0.28, 0.32, 0.1), sat(my / 1.6)) * (0.85 + 0.25 * vnoise(vec2(x * 1.2, my * 3.0)));
-    vec3 nat = mix(dirt, moss, smoothstep(390.0, 405.0, x));
-    nat = mix(nat, grass, smoothstep(436.0, 448.0, x));
+    vec3 nat = mix(dirt, moss, smoothstep(486.0, 501.0, x));
+    nat = mix(nat, grass, smoothstep(532.0, 544.0, x));
     vec2 lq = vec2(x / 0.45, my / 0.25);
     vec2 li = floor(lq), lf = fract(lq) - 0.5;
-    float leaf = fillS(sdEll(rot(hash(li) * 6.0) * lf, vec2(0.38, 0.12)), 0.08) * step(0.8, hash(li + 1.0)) * lod(0.25) * smoothstep(392.0, 405.0, x);
+    float leaf = fillS(sdEll(rot(hash(li) * 6.0) * lf, vec2(0.38, 0.12)), 0.08) * step(0.8, hash(li + 1.0)) * lod(0.25) * smoothstep(488.0, 501.0, x);
     nat = mix(nat, mix(vec3(0.75, 0.6, 0.25), vec3(0.55, 0.45, 0.2), hash(li + 2.0)), leaf * 0.6);
-    c = mix(c, nat * (0.55 + 0.45 * uDawn), smoothstep(336.0, 344.0, x));
+    c = mix(c, nat * (0.55 + 0.45 * uDawn), smoothstep(432.0, 440.0, x));
     // the little bridge over the stream: planks
-    float br = smoothstep(441.0, 441.5, x) * (1.0 - smoothstep(451.5, 452.0, x));
+    float br = smoothstep(537.0, 537.5, x) * (1.0 - smoothstep(547.5, 548.0, x));
     vec3 pk = vec3(0.4, 0.26, 0.15) * (0.85 + 0.15 * step(0.5, fract(x / 0.5))) * (0.5 + 0.6 * uDawn);
     c = mix(c, pk, br * step(my, 0.5));
     return c;
@@ -1111,8 +1130,8 @@ void main() {
     } else {
         c = earth(w);
         // the canal's water under the towpath, the stream under the bridge
-        float can = step(310.0, w.x) * step(w.x, 336.0) * step(GY0 - 4.2, w.y);
-        float strm = step(442.0, w.x) * step(w.x, 451.0) * step(GY0 - 3.4, w.y);
+        float can = step(406.0, w.x) * step(w.x, 432.0) * step(GY0 - 4.2, w.y);
+        float strm = step(538.0, w.x) * step(w.x, 547.0) * step(GY0 - 3.4, w.y);
         if (can + strm > 0.0) {
             float wy = GY0 - 1.8 - w.y;
             vec3 water = mix(uSkyHor, uSkyTop, sat(wy / 3.0)) * 0.7;
@@ -1138,7 +1157,7 @@ void main() {
         if (!(cv == 0 && w.y > GY0 - 1.8 && w.y < GY0)) c = mix(c, vec3(0.015, 0.01, 0.01), (1.0 - smoothstep(gPx * 0.8, gPx * 2.0, e)) * 0.7);
     }
     if (air) c = rain(p, c, uRain);
-    if (air && w.x < 215.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
+    if (air && w.x < 311.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
     c += uSunCol * uDrop * 0.05 * smoothstep(4.0, -10.0, p.y);
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);

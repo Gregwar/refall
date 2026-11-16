@@ -3,22 +3,25 @@
 // world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
 // hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
 // cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
-// the train runs through the tunnel (the clears drive it, it creeps on between them), climbs a cutting into the dawn
-// and stops at a terminus in the industrial district; the cub steps out, the train leaves; it walks on along the
-// canal, past the last fences into the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over
-// a little bridge into a glade at sunset. There the camera stops: its family waits on the right of the screen, it sees
-// them, runs across behind the well to them, and they hug.
+// the train pulls out, gathers speed and runs on under the city through a long tunnel (the street streaming past above,
+// the tunnel's lamps, rings and niches past its windows), climbs a cutting into the dawn and brakes into a terminus in
+// the industrial district; the cub steps out, the train leaves; it walks on along the canal, past the last fences into
+// the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over a little bridge into a glade at
+// sunset. There the camera stops: its family waits on the right of the screen, it sees them, runs across behind the
+// well to them, and they hug (from the moment it sees them it eats no more snacks: it is only with them).
 //
 // The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
 // The lines cleared set where the cub should be (the stages at 0, 7, 13, 19, 25, 32, 38 and 45 lines, the family at
 // 50, within a song): the stairs at about 11-12 lines, the platform's end at about 19, the terminus at 25. The
 // subway comes on its own timetable: a train glides in some 18 s into the scene and waits at the platform, its doors
-// open, until the cub steps in (a missed train would leave a short song without its reunion). The ride runs on the train's clock; lines cleared meanwhile are banked, and the cub
-// walks on with them from the terminus. A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
-// and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
-// bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
-// wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
+// open, until the cub steps in (a missed train would leave a short song without its reunion). The ride runs on the
+// train's clock (30 s door to door in a 50-line scene: a few seconds gathering speed, a steady run, a long braking);
+// lines cleared meanwhile are banked, and the cub walks on with them from the terminus. A clear sends a few lights and
+// a bamboo snack from the row, behind the well, to the cub: it catches the snack and munches it (paws at its mouth,
+// cheeks puffing), then walks on; fed, it grows stronger on the way (straighter, bouncier, a little rounder). Between
+// clears it lives: it breathes, blinks, looks around, looks back, sits, sighs, wipes a tear in the rain; later it
+// hops, follows a butterfly. Every value of its pose eases toward its target.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
@@ -89,17 +92,29 @@ constexpr int STAGES = 8;
 // (lines on the 50-line scale: paceLines() rescales the real lines to the song's length, 50 for a 3:20 song; the
 // subway's timetable and the ride stay on the clock)
 const int LINES_AT[STAGES + 1] = {0, 7, 13, 19, 25, 32, 38, 45, 50};
-constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
-const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
+constexpr double C_END = 558.0;                      // the camera stops here (the glade); the family is on the right
+const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 387, 441, 491, 536, C_END};
 constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
 constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
-constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
+constexpr double XB = 128.0, XA = 387.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 // The subway's timetable (seconds): after a gap a train glides in, opens its doors and waits for the cub as long as
 // it takes, then closes them and leaves with it.
 constexpr float T_GAP = 8.f, T_ARRIVE_S = 10.f, T_DOOR_S = 1.2f, T_DWELL = 9.f, T_OUT_S = 10.f;
-constexpr float T_RIDE_S = 36.f;                     // the ride, door to door (in a 50-line scene; shorter songs ride faster)
-double rideF(double u) { u = std::clamp(u, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
+constexpr float T_RIDE_S = 30.f;                     // the ride, door to door (in a 50-line scene; shorter songs ride faster)
+// The ride's course (0..1 of the way) over its time (0..1): a real journey, not an ease from door to door. The train
+// pulls out of the platform and gathers speed (the first RIDE_ACC of the time), runs at a steady speed under the city
+// and up the cutting, and brakes into the terminus (the last RIDE_BRK); its speed eases in and out of each (a
+// smoothstep), so it never jerks. The cruise is 1 / (1 - (RIDE_ACC + RIDE_BRK) / 2) of the mean speed.
+constexpr double RIDE_ACC = 0.22, RIDE_BRK = 0.26;
+double rideF(double u) {
+    u = std::clamp(u, 0.0, 1.0);
+    const double vc = 1.0 / (1.0 - 0.5 * (RIDE_ACC + RIDE_BRK));
+    auto ramp = [](double t) { return t * t * t * (1.0 - 0.5 * t); };   // the way covered while the speed eases 0..1
+    if (u < RIDE_ACC) return vc * RIDE_ACC * ramp(u / RIDE_ACC);
+    if (u > 1.0 - RIDE_BRK) return 1.0 - vc * RIDE_BRK * ramp((1.0 - u) / RIDE_BRK);
+    return vc * (0.5 * RIDE_ACC + u - RIDE_ACC);
+}
 
 double wayOf(double lines) {
     if (lines <= 0) return 0.0;
@@ -115,7 +130,7 @@ double smd(double a, double b, double x) {
     return t * t * (3.0 - 2.0 * t);
 }
 double trackY(double x) {
-    const double t = std::clamp((x - 146.0) / 112.0, 0.0, 1.0);
+    const double t = std::clamp((x - 242.0) / 112.0, 0.0, 1.0);
     return PLAT_Y + (GY0 - PLAT_Y) * (0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
 }
 constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;   // the subway's stairs (as in the shaders)
@@ -195,7 +210,7 @@ void mixLook(Look& a, const Look& b, float w) {
 // The look along the way: keyframes (a place's look at a world x), eased from one to the next: the weather and the
 // time of day pass as the cub goes (night, the subway, the train, dawn as it rides out, morning, gold, sunset).
 struct Key { double s; int stage; };
-const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {220, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
+const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {240, 3}, {316, 4}, {396, 4}, {441, 5}, {496, 6}, {542, 7}};
 constexpr int NKEYS = (int)(sizeof(KEYS) / sizeof(KEYS[0]));
 Look lookAt(double s, int* stage = nullptr, float* blend = nullptr) {
     int i = 0;
@@ -216,9 +231,9 @@ int placeOf(double s) {
     if (s < 84.0) return 1;
     if (s < XB - 0.5) return 2;
     if (s < XA + 0.5) return 3;
-    if (s < 340.0) return 4;
-    if (s < 392.0) return 5;
-    if (s < 440.0) return 6;
+    if (s < 436.0) return 4;
+    if (s < 488.0) return 5;
+    if (s < 536.0) return 6;
     return 7;
 }
 
@@ -451,8 +466,9 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 lights_.push_back(l);
             }
         }
-        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws
-        if (firstRow >= 0) {
+        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws (not once it has
+        // found its family: then it is only with them)
+        if (firstRow >= 0 && noticeT_ <= 0.f) {
             Light l;
             l.kind = lines >= 4 ? 2 : 1;
             l.a = V(rng_.range(-3.f, 3.f), layout::cellPos(0.f, (float)firstRow).y);
@@ -1116,9 +1132,12 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             static const char* tx = std::getenv("REFALL_LOSTPANDA_TRAINX");
             if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
         }
-        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
+        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end.
+        // On the train it rides along with most of the train's speed: the train edges ahead as it gathers speed and
+        // settles back as it brakes, but at speed it stays put on the screen and the world streams past
         const double cT = std::min(P_, C_END);
         const bool ridingNow = train_ == T_RIDE;
+        if (ridingNow) C_ += 0.65 * vel_ * wdt;
         C_ += (cT - C_) * (1.0 - std::exp(-(ridingNow ? 2.5 : 1.1) * wdt));
         camY_ = approach(camY_, (float)(pathY(P_) - GY0), ridingNow ? 3.f : 1.6f, wdt);
         // the walk cycle: steps follow the ground covered (not while riding)
@@ -1127,7 +1146,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         kid_.walk = approach(kid_.walk, ridingNow ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
         reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
         strength_ = approach(strength_, (float)smd(20.0, C_END - 30.0, P_), 0.5f, wdt);
-        munchT_ = std::max(0.f, munchT_ - wdt);
+        munchT_ = noticeT_ > 0.f ? 0.f : std::max(0.f, munchT_ - wdt);   // (no more eating once it sees its family)
     }
     const Look look0 = lookAt(C_);
     Look look = look0;
@@ -1210,7 +1229,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             sprite(u < 0.75f ? bgSprites_ : fgSprites_, p, l.size * (1.f - 0.35f * smoothstepf(0.8f, 1.f, u)), vec3(1.f), a, 5, ang);
             if (u > 0.92f && !l.fed) {
                 l.fed = true;
-                munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
+                if (noticeT_ <= 0.f) munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
                 joy_ = std::max(joy_, l.kind == 2 ? 0.7f : 0.3f);
                 if (l.kind == 2 && act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.4f; }
             }
@@ -1253,7 +1272,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    const float dawn = (float)smd(165.0, 290.0, P_);
+    const float dawn = (float)smd(261.0, 386.0, P_);
     auto setTrain = [&](GLuint prog, float px) {
         set1f(prog, "uTrainX", (float)trainX_);
         set1f(prog, "uDoor", smoothstepf(0.f, 1.f, door_));
