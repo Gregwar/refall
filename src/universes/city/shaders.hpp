@@ -291,10 +291,9 @@ uniform sampler2D uCellA; // 10 x 22, the board's rows (row 0 at the top: two fl
 uniform sampler2D uCellB; // r ghost, g falling
 uniform vec3 uEye, uFrame, uGlassTint, uGhostCol, uPierCol, uCrownCol, uAmb, uUpCol, uMoonCol, uMoonDir, uSnowCol, uReflCity;
 uniform vec3 uFlood;
-uniform float uFrameLight, uMull, uSpand, uRecess, uReflK, uPier, uCrown, uSnow, uRain, uTime, uChase, uRoomAmb, uGroundY;
+uniform float uFrameLight, uMull, uSpand, uRecess, uReflK, uPier, uCrown, uSnow, uRain, uTime, uRoomAmb, uGroundY;
 uniform vec4 uContact[4];  // x0, x1, y, intensity
 uniform vec3 uContactCol[4];
-uniform vec3 uChaseCol[7];
 uniform float uBridge;
 uniform vec3 uBridgeColor, uBridgeInk;
 
@@ -409,12 +408,7 @@ void main() {
         float ax = abs(P.x);
         c = uFrame * lightIn * 1.25;
         float strip = smoothstep(0.04, 0.012, abs(ax - 5.25));
-        vec3 sc = uPierCol * uPier;
-        if (uChase > 0.001) {
-            int k = int(mod(floor((P.y + 10.0) / 2.0) - uTime * 6.0, 7.0));
-            sc += uChaseCol[k] * uChase * 1.5;
-        }
-        c += sc * strip;
+        c += uPierCol * uPier * strip;
         vec2 tc = vec2(P.x < 0.0 ? 0.5 / 10.0 : 9.5 / 10.0, (12.0 - P.y) / 22.0);
         c += texture(uCellA, tc).rgb * 0.06 * smoothstep(5.5, 5.0, ax);
     } else {
@@ -639,12 +633,39 @@ uniform sampler2D uScene, uDepth, uBloom, uBloom2;
 uniform mat4 uInvVP;
 uniform vec3 uEye;
 uniform float uMul, uExposure, uBloomK;
+uniform float uFocus, uCoc;   // the facade's depth along the view; the widest blur (px)
+uniform vec4 uWell;           // the well on screen (px: x0, y0, x1, y1)
+uniform float uDim, uDimR;    // how much darker the city around it, over what distance (px)
 uniform vec4 uBeamO[4];   // origin, intensity
 uniform vec4 uBeamD[4];   // direction, width
 uniform vec3 uBeamCol[4];
+// the blur's radius (px) at a depth: none on the facade, growing toward the near corners and the far city
+float coc(float z) {
+    if (z >= 0.99999) return uCoc;
+    vec4 wp = uInvVP * vec4(0.0, 0.0, z * 2.0 - 1.0, 1.0);
+    float d = uEye.z - wp.z / wp.w;
+    return uCoc * smoothstep(0.08, 0.6, abs(1.0 - uFocus / max(d, 1e-3)));
+}
 void main() {
     vec3 c = texture(uScene, vUv).rgb;
     float z = texture(uDepth, vUv).r;
+    // the depth of field: a soft disc gathered where out of focus, each tap only from what is itself as blurred
+    // (the sharp facade never smears over the city behind it)
+    float r = coc(z);
+    if (r > 0.3) {
+        vec2 px = 1.0 / vec2(textureSize(uScene, 0));
+        vec3 acc = c;
+        float wsum = 1.0;
+        for (int i = 0; i < 16; i++) {
+            float fi = float(i) + 0.5;
+            vec2 o = vec2(cos(fi * 2.39996), sin(fi * 2.39996)) * sqrt(fi / 16.0) * r;
+            vec2 uv = vUv + o * px;
+            float w = smoothstep(length(o) - 0.5, length(o) + 0.5, coc(texture(uDepth, uv).r) + 0.5);
+            acc += texture(uScene, uv).rgb * w;
+            wsum += w;
+        }
+        c = acc / wsum;
+    }
     vec4 wp = uInvVP * vec4(vUv * 2.0 - 1.0, min(z, 0.99999) * 2.0 - 1.0, 1.0);
     vec3 P = wp.xyz / wp.w;
     vec3 rd = normalize(P - uEye);
@@ -668,6 +689,9 @@ void main() {
         c += uBeamCol[i] * k * uBeamO[i].w * vis;
     }
     c += (texture(uBloom, vUv).rgb * 0.6 + texture(uBloom2, vUv).rgb * 0.4) * uBloomK;
+    // the city a little darker away from the well, so the game stands out
+    vec2 out2 = max(max(uWell.xy - gl_FragCoord.xy, gl_FragCoord.xy - uWell.zw), 0.0);
+    c *= 1.0 - uDim * smoothstep(0.0, uDimR, length(out2));
     c *= uExposure;
     // a filmic curve: deep blacks, the lit windows rolling off without burning to white
     vec3 x = max(c, 0.0);
