@@ -796,7 +796,7 @@ void App::updateGravity(double songTime, float dt) {
     const float diff = Game::speedDifficulty(v);
     // Hyperdrop (20G, HARD only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of HARD's later
-    // stages has some, every song of the finale; free play has it from level 38 on (once the song has warmed up).
+    // stages has some, every song of the finale; free play has it from level 30 on (once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
     static const bool clip20G = std::getenv("ZEN_CLIP_20G") && std::getenv("ZEN_CLIP_20G")[0] == '1';
     const bool hard = clipVel > 0.f ? clip20G : mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_HARD : freeLevels && freeDiff_ == DIFF_HARD;
