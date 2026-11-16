@@ -3,12 +3,13 @@
 // world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
 // hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
 // cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
-// the train pulls out, gathers speed and runs on under the city through a long tunnel (the street streaming past above,
-// the tunnel's lamps, rings and niches past its windows), climbs a cutting into the dawn and brakes into a terminus in
-// the industrial district; the cub steps out, the train leaves; it walks on along the canal, past the last fences into
-// the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over a little bridge into a glade at
-// sunset. There the camera stops: its family waits on the right of the screen, it sees them, runs across behind the
-// well to them, and they hug (from the moment it sees them it eats no more snacks: it is only with them).
+// the train pulls out across the screen (the camera holds back, then catches up), gathers speed and runs on under the
+// city through a long tunnel (the street streaming past above, the tunnel's lamps, rings and niches past its
+// windows), climbs a cutting into the dawn and brakes into a terminus in the industrial district; the cub steps out,
+// the train leaves; it walks on along the canal, past the last fences into the fields (pylons, flowers, a butterfly),
+// the first bamboo, the bamboo forest, over a little bridge into a glade at sunset. There the camera stops: its family
+// waits on the right of the screen, it sees them, runs across behind the well to them, and they hug (from the moment
+// it sees them it eats no more snacks: it is only with them).
 //
 // The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
@@ -128,6 +129,16 @@ double wayOf(double lines) {
 double smd(double a, double b, double x) {
     const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
+}
+// Where the camera is on the ride (0..1 of the way over the ride's time, like rideF): it stays at the platform as the
+// train pulls out, so the train visibly leaves across the screen (up to some 15 units ahead), then catches up with it
+// within a third of the ride and rides along with it; near the end it runs a little ahead into the terminus and the
+// train glides in under it. (Never backwards: the weights only ease the camera between the platform, the train and
+// the terminus.)
+double rideCamF(double u) {
+    const double f = rideF(u);
+    const double behind = 1.0 - smd(0.06, 0.34, u), ahead = 0.25 * smd(0.7, 0.9, u);
+    return f - f * behind + (1.0 - f) * ahead;
 }
 double trackY(double x) {
     const double t = std::clamp((x - 242.0) / 112.0, 0.0, 1.0);
@@ -1008,7 +1019,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
                 trainX_ = XB - DOOR + (XA - XB) * rideF(lo);
                 P_ = trainX_ + DOOR;
             } else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
-            C_ = std::min(P_, C_END);
+            C_ = train_ == T_RIDE ? XB + (XA - XB) * rideCamF(rideT_ / rideS()) : std::min(P_, C_END);
             camY_ = (float)(pathY(P_) - GY0);
             placed_ = true;
         }
@@ -1133,11 +1144,14 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
         }
         // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end.
-        // On the train it rides along with most of the train's speed: the train edges ahead as it gathers speed and
-        // settles back as it brakes, but at speed it stays put on the screen and the world streams past
-        const double cT = std::min(P_, C_END);
+        // On the train it keeps to the ride's own course (rideCamF: the train pulls out across the screen, the camera
+        // catches up, then leads it into the terminus), moving with it and easing out any gap left from the platform
         const bool ridingNow = train_ == T_RIDE;
-        if (ridingNow) C_ += 0.65 * vel_ * wdt;
+        double cT = std::min(P_, C_END);
+        if (ridingNow) {
+            cT = XB + (XA - XB) * rideCamF(rideT_ / rideS());
+            C_ += (XA - XB) * (rideCamF(rideT_ / rideS()) - rideCamF((rideT_ - wdt) / rideS()));
+        }
         C_ += (cT - C_) * (1.0 - std::exp(-(ridingNow ? 2.5 : 1.1) * wdt));
         camY_ = approach(camY_, (float)(pathY(P_) - GY0), ridingNow ? 3.f : 1.6f, wdt);
         // the walk cycle: steps follow the ground covered (not while riding)

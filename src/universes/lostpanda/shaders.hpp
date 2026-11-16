@@ -531,10 +531,25 @@ vec3 industry(vec2 p, vec3 c, float k) {
     float cw = 9.0;
     float id = floor(u / cw);
     float dens = zInd(xFar((id + 0.5) * cw - uD * k));
-    if (dens <= 0.005) return c;
+    if (max(dens, zInd(xFar((id - 1.5) * cw - uD * k))) <= 0.005) return c;   // (no plant here or two upwind: no smoke)
     float lx = (u / cw - id) * cw - cw * 0.5;
-    vec3 sil = mix(mix(vec3(0.12, 0.09, 0.14), uFog, 0.45), uFog, 1.0 - dens);
     float base = GY0 + 2.5;
+    // the smoke: each chimney's plume leans downwind and widens as it rises, gone within two cells; summed over this
+    // cell's chimney and the two upwind of it, so that no plume is cut off at a cell's edge (each plume's own noise)
+    float smoke = 0.0;
+    for (int j = 0; j < 3; j++) {
+        float fj = float(j), idj = id - fj;
+        float dj = zInd(xFar((idj + 0.5) * cw - uD * k));
+        vec2 sp = vec2(lx + fj * cw - 1.5, p.y - base - (6.0 + 6.0 * hash1(idj + 2.0)));
+        if (dj <= 0.005 || sp.y <= 0.0 || sp.y > 16.0) continue;
+        float pl = smoothstep(0.0, 0.5, sp.y) * exp(-sq((sp.x - sp.y * 0.5) / (0.4 + sp.y * 0.22))) * exp(-sp.y * 0.14);
+        pl *= (1.0 - smoothstep(9.0, 16.0, sp.y)) * dj;
+        if (pl < 0.004) continue;
+        smoke = max(smoke, pl * fbm(vec2(sp.x * 0.5 - uTime * 0.12 + idj * 7.3, sp.y * 0.35 - uTime * 0.08)));
+    }
+    vec3 smokeC = mix(uFog, vec3(1.0, 0.85, 0.8), 0.25);
+    if (dens <= 0.005) return mix(c, smokeC, sat(smoke * 1.6) * 0.6);
+    vec3 sil = mix(mix(vec3(0.12, 0.09, 0.14), uFog, 0.45), uFog, 1.0 - dens);
     float ch = 6.0 + 6.0 * hash1(id + 2.0);
     float d = sdBox(vec2(lx - 1.5, p.y - base - ch * 0.5), vec2(0.28 - (p.y - base) * 0.01, ch * 0.5));
     if (hash1(id + 5.0) > 0.5) {
@@ -551,10 +566,7 @@ vec3 industry(vec2 p, vec3 c, float k) {
     }
     d = min(d, p.y - base - 1.0 - 0.6 * step(0.5, fract(u * 0.15)));
     c = lay(c, sil, fillA(d) * dens);
-    vec2 sp = vec2(lx - 1.5, p.y - base - ch);
-    float sm = fbm(vec2(sp.x * 0.5 - uTime * 0.12 + id, sp.y * 0.35 - uTime * 0.08));
-    float plume = smoothstep(0.0, 0.5, sp.y) * exp(-sq((sp.x - sp.y * 0.6) / (0.4 + sp.y * 0.35))) * exp(-sp.y * 0.12);
-    c = mix(c, mix(uFog, vec3(1.0, 0.85, 0.8), 0.25), sat(plume * sm * 1.6) * 0.6);
+    c = mix(c, smokeC, sat(smoke * 1.6) * 0.6);
     vec2 rl = vec2(lx - 1.5, p.y - base - ch - 0.15);
     c += vec3(1.0, 0.15, 0.1) * exp(-dot(rl, rl) / 0.03) * (0.5 + 0.5 * sin(uTime * 1.3 + id * 2.0)) * 0.8;
     return c;
