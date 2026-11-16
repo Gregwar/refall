@@ -7,14 +7,22 @@
 // waits on the platform (tiles, graffiti, vending machines, commuters) while a silver train glides in, steps in;
 // the train pulls out (the camera holds back a moment, then catches up), gathers speed hard and runs flat out under
 // the city through a tunnel over a thousand units long (the street whipping past above, the tunnel's lamps streaking
-// past its windows), climbs a cutting into the dawn and brakes into a terminus in the industrial district; the cub steps out,
-// the train leaves; it walks on along the canal, past the last fences into the fields (pylons, flowers, a butterfly),
-// the first bamboo, the bamboo forest, over a little bridge into a glade at sunset. There the camera stops: its family
+// past its windows), climbs a cutting into the dawn and brakes into a terminus in the industrial district (chimneys
+// banded red and white trailing smoke, gas holders, cranes, works and warehouses, stacked containers, a chain-link
+// fence); the cub steps out, the train leaves; it walks on along the canal (cobbles, coping stones, the sodium lamps
+// wavering in the water), past the last fences into the fields (misty mountains, rolling hills in a patchwork of
+// fields, farms, pylons, flowers, a butterfly), the first bamboo, the bamboo forest (after a reference: far culms
+// dissolving in a turquoise mist, sunlit leaf sprays, stone lanterns grown with moss, ferns, mossy rocks, big dark
+// culms framing the view), over a little bridge across a stream and its waterfall into a glade at sunset (lanterns
+// lit). The whole way is drawn like the city: inked outlines, flat shading in two tones, layers of parallax. There the
+// camera stops: its family
 // waits on the right of the screen, it sees them, runs across behind the well to them, and they hug (from the moment
 // it sees them it eats no more snacks: it is only with them).
 //
 // The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
+// The world's shader comes in three builds: the whole way, the city only, the countryside only (each leaves out the
+// layers that cannot show, picked by the camera's place).
 // The lines cleared set where the cub should be (the stages at 0, 7, 13, 19, 25, 32, 38 and 45 lines, the family at
 // 50, within a song): the stairs at about 11-12 lines, the platform's end at about 19, the terminus at 25. The
 // subway comes on its own timetable: a train glides in some 18 s into the scene and waits at the platform, its doors
@@ -61,11 +69,11 @@ using ugl::set3f;
 using ugl::set4f;
 using ugl::setMat;
 
-GLuint compile(const char* vs, const char* fs, const char* name) {
+GLuint compile(const char* vs, const char* fs, const char* name, const char* defs = "") {
     std::string f(fs);
     const size_t at = f.find("//@TRAIN");
     if (at != std::string::npos) f.replace(at, 8, shaders::TRAIN_GLSL);
-    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    f.insert(f.find('\n') + 1, std::string(defs) + shaders::COMMON_GLSL);
     std::string v(vs);
     v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
     return ugl::program(v.c_str(), f.c_str(), name);
@@ -194,7 +202,7 @@ const StageDef STAGE[STAGES] = {
      {0.46f, 0.42f, 0.52f}, {0.62f, 0.44f, 0.40f}, {0.9f, 0.55f, 0.42f}, 0.9f, 0.3f, 0.45f, 0.f, 0.f, 0.f},
     {"the fields", 0x5e9ad2, 0xf2e5c6, 0xcad6d4, 0xfff0c8, 0x162030, 14.f, 7.5f, 1.0f, 0.55f, 0.0f, 0.8f, 0.0f, 0.0f,
      {0.70f, 0.74f, 0.82f}, {0.72f, 0.68f, 0.58f}, {0.8f, 0.75f, 0.6f}, 0.6f, 0.8f, 0.66f, 0.f, 0.f, 1.f},
-    {"the bamboo forest", 0x5f8f4a, 0xe8dc8a, 0x7f9e62, 0xffe090, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
+    {"the bamboo forest", 0x5c9c94, 0xeceebc, 0x86bcab, 0xffe49a, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
      {0.58f, 0.68f, 0.52f}, {0.74f, 0.68f, 0.48f}, {0.9f, 0.8f, 0.5f}, -0.6f, 0.8f, 0.82f, 0.f, 0.45f, 0.7f},
     {"the glade", 0x584c86, 0xffb070, 0xe2a084, 0xffc068, 0x1c1018, 16.f, -2.0f, 1.7f, 1.0f, 0.15f, 0.5f, 0.0f, 0.0f,
      {0.60f, 0.50f, 0.56f}, {0.90f, 0.64f, 0.44f}, {1.0f, 0.68f, 0.38f}, 1.0f, 0.25f, 1.0f, 0.f, 1.0f, 0.5f},
@@ -269,6 +277,9 @@ enum Act { A_STAND, A_LOOK, A_LOOKUP, A_SIT, A_WIPE, A_STROLL, A_BUTTERFLY, A_HO
 
 bool LostPandaUniverse::init(int width, int height) {
     progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world");
+    // (lighter variants where only the city, or only the countryside, can show)
+    progWorldCity_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (city)", "#define ZONES\n#define CITY true\n#define COUNTRY false\n");
+    progWorldCountry_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (country)", "#define ZONES\n#define CITY false\n#define COUNTRY true\n");
     progFront_ = compile(ugl::FULLSCREEN_VS, shaders::FRONT_FS, "lostpanda front");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "lostpanda comp");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "lostpanda sprite");
@@ -352,7 +363,7 @@ void LostPandaUniverse::resize(int width, int height) {
 
 LostPandaUniverse::~LostPandaUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_})
+    for (GLuint p : {progWorld_, progWorldCity_, progWorldCountry_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_})
         glDeleteProgram(p);
     for (GLuint v : {quadVao_, spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -1329,34 +1340,39 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     {
         worldT_.bind();
         glDisable(GL_BLEND);
-        glUseProgram(progWorld_);
-        set2f(progWorld_, "uViewC", viewC_.x, viewC_.y);
-        set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
-        set1f(progWorld_, "uPxP", 2.f * viewH_.y / worldT_.h);
-        set1f(progWorld_, "uD", (float)C_ - xP_);
-        set1f(progWorld_, "uCamY", viewY_);
-        set1f(progWorld_, "uDawn", dawn);
-        set1f(progWorld_, "uSubLight", 1.f);
-        setTrain(progWorld_, 2.f * viewH_.y / worldT_.h);
-        set1f(progWorld_, "uTime", time_);
-        set1f(progWorld_, "uBeat", (float)std::fmod(beat, 4096.0));
-        set1f(progWorld_, "uPeak", wp);
-        set1f(progWorld_, "uMid", wm);
-        set1f(progWorld_, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
-        set1f(progWorld_, "uKick", kickS_);
-        set1f(progWorld_, "uRain", look.rain);
-        set1f(progWorld_, "uStars", look.stars);
-        set1f(progWorld_, "uClouds", look.clouds);
-        set1f(progWorld_, "uOver", smoothstepf(0.f, 1.f, over_));
-        set1f(progWorld_, "uWorldA", world);
-        set1f(progWorld_, "uSlow", slow_);
-        set3f(progWorld_, "uSkyTop", look.skyTop);
-        set3f(progWorld_, "uSkyHor", look.skyHor);
-        set3f(progWorld_, "uFog", look.fog);
-        set3f(progWorld_, "uSunCol", look.sunCol);
-        set4f(progWorld_, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
-        set3f(progWorld_, "uBridgeCol", bridge_.color);
-        set1f(progWorld_, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
+        // the city's layers show until its street (at half speed) leaves the screen's left edge past 1290 along the
+        // way; the countryside's from when the works' warehouses (at 0.4) reach its right edge at 1245
+        const double ud = C_ - xP_;
+        const bool city = ud + 2.0 * (viewC_.x - viewH_.x) < 1290.0, country = ud + 2.5 * (viewC_.x + viewH_.x) > 1245.0;
+        const GLuint pw = !country ? progWorldCity_ : (!city ? progWorldCountry_ : progWorld_);
+        glUseProgram(pw);
+        set2f(pw, "uViewC", viewC_.x, viewC_.y);
+        set2f(pw, "uViewH", viewH_.x, viewH_.y);
+        set1f(pw, "uPxP", 2.f * viewH_.y / worldT_.h);
+        set1f(pw, "uD", (float)C_ - xP_);
+        set1f(pw, "uCamY", viewY_);
+        set1f(pw, "uDawn", dawn);
+        set1f(pw, "uSubLight", 1.f);
+        setTrain(pw, 2.f * viewH_.y / worldT_.h);
+        set1f(pw, "uTime", time_);
+        set1f(pw, "uBeat", (float)std::fmod(beat, 4096.0));
+        set1f(pw, "uPeak", wp);
+        set1f(pw, "uMid", wm);
+        set1f(pw, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
+        set1f(pw, "uKick", kickS_);
+        set1f(pw, "uRain", look.rain);
+        set1f(pw, "uStars", look.stars);
+        set1f(pw, "uClouds", look.clouds);
+        set1f(pw, "uOver", smoothstepf(0.f, 1.f, over_));
+        set1f(pw, "uWorldA", world);
+        set1f(pw, "uSlow", slow_);
+        set3f(pw, "uSkyTop", look.skyTop);
+        set3f(pw, "uSkyHor", look.skyHor);
+        set3f(pw, "uFog", look.fog);
+        set3f(pw, "uSunCol", look.sunCol);
+        set4f(pw, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
+        set3f(pw, "uBridgeCol", bridge_.color);
+        set1f(pw, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
         ugl::drawFullscreen();
     }
 
