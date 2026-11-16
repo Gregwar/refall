@@ -1350,8 +1350,9 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
             break;
         }
         case R_CORE:
+            // (still scaled while it dissolves: never back to its full size for its last moment)
             if (bowl_ < 0.15f) target = 1.f;
-            else D = Aff::tr(p.from) * Aff::sc(V3(bowl_, bowl_, bowl_)) * Aff::tr(p.from * -1.f);
+            D = Aff::tr(p.from) * Aff::sc(V3(bowl_, bowl_, bowl_)) * Aff::tr(p.from * -1.f);
             break;
         case R_CHUNK: {
             // (where the bowl carries it, while it is still inside the pyramid)
@@ -1362,7 +1363,7 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
         }
         case R_MOUND:
             if (mound < 0.02f) target = 1.f;
-            else D = Aff::tr(p.from) * Aff::sc(V3(1.f, mound, 1.f)) * Aff::tr(p.from * -1.f);
+            D = Aff::tr(p.from) * Aff::sc(V3(1.f, std::max(mound, 0.01f), 1.f)) * Aff::tr(p.from * -1.f);
             break;
         case R_SHOW: target = shown(p) ? 0.f : 1.f; break;
         case R_GONE: {
