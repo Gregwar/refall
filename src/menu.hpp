@@ -66,7 +66,7 @@ public:
     void dropBackdrop();
     void setFreeDifficulty(int d) { freeDiff_ = d; }
     // Free play's starting level: the nearest of FREE_LEVELS; `focus` puts the free screen's focus on its row (shots).
-    static constexpr int FREE_LEVELS[] = {1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50};
+    static constexpr int FREE_LEVELS[] = {1, 5, 10, 15, 20, 25, 30, 35, 40};
     static constexpr int FREE_LEVEL_COUNT = sizeof(FREE_LEVELS) / sizeof(FREE_LEVELS[0]);
     void setFreeLevel(int level, bool focus = false);
     int freeLevel() const { return FREE_LEVELS[lvlSel_]; }

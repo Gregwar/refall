@@ -738,7 +738,7 @@ void Worlds::kalFree() {
         for (int i = 0; i < Menu::FREE_LEVEL_COUNT; i++) {
             const int lv = Menu::FREE_LEVELS[i];
             const float f = sstep(near1(m.aLvl_, i)), x = lx + (i + 0.5f) * cw;
-            const bool g20 = m.freeDiff_ == DIFF_HARD && lv >= 38;
+            const bool g20 = m.freeDiff_ == DIFF_HARD && lv >= Game::TWENTY_G;
             p.text(F::JOSEFIN, std::to_string(lv), x, ly + lh / 2 + (g20 ? 3 : 9) * u, (24 + 4 * f) * u,
                    withA(g20 ? hex(C[DIFF_HARD]) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
             if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(C[DIFF_HARD], 0.5f + 0.4f * f), 0, 0.12f);

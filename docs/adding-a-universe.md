@@ -1,8 +1,7 @@
 # Adding a universe
 
 A universe is one complete art direction: a world, a palette, materials, a HUD typography and its own way of
-staging the music. This guide covers how to design one, how to plug it in, and how to test it. The list of ideas
-waiting to be built is the [roadmap](universes.md#roadmap).
+staging the music. This guide covers how to design one, how to plug it in, and how to test it.
 
 ## Design
 
@@ -157,7 +156,7 @@ shot's bot clears (exact stills).
    explicitly (`[&]`). No VLAs or GCC extensions. Keep expensive passes (ray marching, simulations) at a reduced
    resolution.
 7. Document it: a section in [universes.md](universes.md) with a screenshot in `docs/universes/<id>.jpg`, a short
-   line in the README gallery, and ✅ on its roadmap row.
+   line in the README gallery.
 
 ## Testing
 
