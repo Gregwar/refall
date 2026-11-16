@@ -8,7 +8,8 @@
 // a pale phase halo and fine dark cilia, blurred when out of focus; PIECE_FS the pieces (each block a living cell:
 // translucent stained cytoplasm in a darker membrane, a nucleus, the cells of a piece joined into one colony with
 // thin walls between them, a phase halo around it; until a drop, livingCell: the colony one living body, its cells
-// merged as metaballs); SPECK_FS loose granules; DOWN_FS / BLUR_FS a soft blur (the
+// merged as metaballs; a cleared cell's burst: it swells round, lets go of its neighbors and breaks into droplets of
+// itself, budding off and drifting out, its contents carried along); SPECK_FS loose granules; DOWN_FS / BLUR_FS a soft blur (the
 // dark-field glow, the out-of-focus slide) and FINAL_FS the frame (the lamp, the focus).
 // Each color comes from the variant's illumination and the drop's, blended by uMix; uDark shades in dark-field
 // (light scattered on black) rather than bright-field (stains on a lit field).
@@ -469,6 +470,7 @@ float softRing(vec2 p, vec2 c, vec2 r, float w) { return 1.0 - smoothstep(w - AA
 // between the colony's cells, an irregular nucleus off center with its chromatin and nucleolus, granules streaming
 // slowly, the type's inner life (a vacuole, starch grains, a big nucleus, chloroplasts, two nuclei, dense granules,
 // a large vacuole).
+float gHalo = 1.0;   // the phase halo's strength (faint around a burst's droplets)
 vec4 livingCell(vec2 p, vec2 gp, float d, int type, float seed, vec2 ncIn, int m, float flash, vec3 field) {
     float t = uTime;
     vec3 stain = uPieceA[type];
@@ -485,7 +487,7 @@ vec4 livingCell(vec2 p, vec2 gp, float d, int type, float seed, vec2 ncIn, int m
     float edge = min(din, iw);
     float wall = exp(-pow(iw / 0.017, 2.0)) * inside;
     float mem = exp(-pow((d + 0.022) / 0.017, 2.0));
-    float halo = smoothstep(-AA, AA, d) * exp(-max(d, 0.0) / 0.04);
+    float halo = smoothstep(-AA, AA, d) * exp(-max(d, 0.0) / 0.04) * gHalo;
     // the cytoplasm: clear along the membrane, the stain dense inside, granules streaming around the cell
     float endo = smoothstep(0.03, 0.14, edge);
     float n = vnoise(gp * 7.0 + seed * 31.0 + vec2(t * 0.02, 0.0));
@@ -522,10 +524,11 @@ vec4 livingCell(vec2 p, vec2 gp, float d, int type, float seed, vec2 ncIn, int m
         }
     if (type == 5) gr = granules(sp * 11.0, seed * 3.0 + 1.0, 0.6, px * 1.22) * 0.9;
     gr *= inside;
+    nuc *= inside; nuc2 *= inside; vac *= inside; vacR *= inside;   // (a burst's droplets carry them: kept within)
     float nucAll = clamp(nuc + nuc2, 0.0, 1.0);
     float nucRim = clamp(nucAll * (1.0 - nucAll) * 4.0, 0.0, 1.0);
     float chrom = vnoise(p * 38.0 + seed * 9.0 + t * 0.02);
-    float nucl = type == 4 ? 0.0 : softBlob(p, nc + vec2(0.035, 0.02), vec2(0.04), seed + 9.0, t);
+    float nucl = type == 4 ? 0.0 : softBlob(p, nc + vec2(0.035, 0.02), vec2(0.04), seed + 9.0, t) * inside;
     vec3 nucC = mix(deep * 0.35, mix(orgCol(2), deep, 0.5) * 0.5, 0.3);
     // bright-field: the stained cell on the lit field, with real dark and light
     vec4 bf = vec4(0.0);
@@ -549,6 +552,44 @@ vec4 livingCell(vec2 p, vec2 gp, float d, int type, float seed, vec2 ncIn, int m
     vec4 df = vec4(glow, max(inside * 0.85, mem * 0.6));
     return mix(bf, df, kDark);
 }
+// A cleared cell bursting (t: 0..1): it swells round and comes apart from its neighbors, then its body breaks into
+// droplets of itself, budding off (smoothly merged, their necks thinning until they part), drifting out and
+// shrinking; the nucleus goes with the heaviest. BURST_N droplets: their centers and radii at t (q: center, radius).
+const int BURST_N = 6;
+vec3 burstDrop(int i, float t, float seed, vec2 nc) {
+    float h1 = hash12(vec2(float(i) * 7.1, seed * 91.0)), h2 = hash12(vec2(float(i) * 3.7 + 5.0, seed * 53.0));
+    float an = seed * 6.2832 + float(i) * 6.2832 / float(BURST_N) + (h1 - 0.5) * 0.7;
+    vec2 dir = vec2(cos(an), sin(an) * 0.75);
+    vec2 c0 = dir * 0.2;
+    float r0 = 0.15 + 0.08 * h2, L = 0.35 + 0.45 * h1;
+    if (i == 0) { dir = normalize(nc + vec2(0.01, 0.003)) * 0.8; c0 = dir * 0.12; r0 = 0.27; L = 0.22; }   // (the nucleus's)
+    // out fast, then drifting slowly to rest
+    float tau = clamp((t - 0.12) / 0.88, 0.0, 1.0);
+    float go = (1.0 - exp(-4.5 * tau)) / (1.0 - exp(-4.5));
+    float r = r0 * mix(1.0, 0.45 + 0.3 * h2, smoothstep(0.15, 1.0, t));
+    return vec3(c0 + dir * L * go, r);
+}
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+// the droplets' outline (their smooth union, merged less and less) and the warp carrying the cell's contents along
+float burstShape(vec2 p, float t, float seed, vec2 nc, out vec2 disp) {
+    float k = mix(0.22, 0.015, smoothstep(0.15, 0.65, t));
+    float dd = 9.0, ws = 1e-4;
+    disp = vec2(0.0);
+    for (int i = 0; i < BURST_N; i++) {
+        vec3 q = burstDrop(i, t, seed, nc);
+        vec3 q0 = burstDrop(i, 0.0, seed, nc);
+        vec2 v = p - q.xy;
+        float l = length(v);
+        // its membrane wobbles a little, like the living colony's
+        float e = l - q.z * (1.0 + 0.12 * (vnoise(v / max(l, 1e-4) * 1.4 + float(i) * 5.3 + seed * 17.0 + vec2(uTime * 0.3, 0.0)) - 0.5));
+        dd = i == 0 ? e : smin(dd, e, k);
+        float w = exp(-pow(l / (q.z * 1.2), 2.0) * 2.0);
+        disp += (q.xy - q0.xy) * w;
+        ws += w;
+    }
+    disp /= ws;
+    return dd;
+}
 void main() {
     vec2 p = vLocal;
     lightAt(vA.xy);
@@ -557,24 +598,41 @@ void main() {
     float seed = vB.y, t = vB.z;
     int m = int(vC.w + 0.5);
     bool L = (m & 1) != 0, R = (m & 2) != 0, U = (m & 4) != 0, D = (m & 8) != 0;
-    // the colony's cells draw their own squares: past a joined side is the neighbor's
-    if ((L && p.x < -0.5) || (R && p.x > 0.5) || (U && p.y > 0.5) || (D && p.y < -0.5)) discard;
+    // a burst: its quad wider than its cell (p still in cell units); its joins let go as it swells
+    bool burst = kind == 2;
+    float join = 1.0, swell = 0.0, drops = 0.0;
+    if (burst) {
+        p = vLocal * 2.0 * vA.z;
+        join = 1.0 - smoothstep(0.0, 0.11, t);
+        swell = smoothstep(0.0, 0.12, t);
+        drops = smoothstep(0.11, 0.33, t);
+    }
+    // the colony's cells draw their own squares: past a joined side is the neighbor's (a burst's, until it lets go)
+    bool past = (L && p.x < -0.5) || (R && p.x > 0.5) || (U && p.y > 0.5) || (D && p.y < -0.5);
+    if (past && (!burst || join > 0.0)) discard;
     AA = max(length(fwidth(p)) * 0.75, 1e-4);
     const float G = 0.075;
-    float RC = 0.2;
-    float sw = 1.0;
-    if (kind == 2) { RC = mix(0.2, 0.42, smoothstep(0.0, 0.5, t)); sw = 1.0 + 0.12 * smoothstep(0.0, 0.6, t); }
-    vec2 lo = vec2(L ? -0.5 - RC : -0.5 + G, D ? -0.5 - RC : -0.5 + G);
-    vec2 hi = vec2(R ? 0.5 + RC : 0.5 - G, U ? 0.5 + RC : 0.5 - G);
-    float d = (sdBox(p / sw - (lo + hi) * 0.5, (hi - lo) * 0.5 - RC) - RC) * sw;
+    const float RC = 0.2;
+    vec2 lo = vec2(L ? mix(-0.5 + G, -0.5 - RC, join) : -0.5 + G, D ? mix(-0.5 + G, -0.5 - RC, join) : -0.5 + G);
+    vec2 hi = vec2(R ? mix(0.5 - G, 0.5 + RC, join) : 0.5 - G, U ? mix(0.5 - G, 0.5 + RC, join) : 0.5 - G);
+    float d = sdBox(p - (lo + hi) * 0.5, (hi - lo) * 0.5 - RC) - RC;
     const float RN = 0.06;
-    if (L && U && (m & 16) == 0) d = max(d, -notch(vec2(-0.5 + G - p.x, p.y - 0.5 + G), RN));
-    if (R && U && (m & 32) == 0) d = max(d, -notch(vec2(p.x - 0.5 + G, p.y - 0.5 + G), RN));
-    if (L && D && (m & 64) == 0) d = max(d, -notch(vec2(-0.5 + G - p.x, -0.5 + G - p.y), RN));
-    if (R && D && (m & 128) == 0) d = max(d, -notch(vec2(p.x - 0.5 + G, -0.5 + G - p.y), RN));
+    float dn = d;
+    if (L && U && (m & 16) == 0) dn = max(dn, -notch(vec2(-0.5 + G - p.x, p.y - 0.5 + G), RN));
+    if (R && U && (m & 32) == 0) dn = max(dn, -notch(vec2(p.x - 0.5 + G, p.y - 0.5 + G), RN));
+    if (L && D && (m & 64) == 0) dn = max(dn, -notch(vec2(-0.5 + G - p.x, -0.5 + G - p.y), RN));
+    if (R && D && (m & 128) == 0) dn = max(dn, -notch(vec2(p.x - 0.5 + G, -0.5 + G - p.y), RN));
+    d = mix(d, dn, join);
     // the membrane breathes a little, the same along the whole colony
     vec2 gp = vD.xy + p;
     d += (vnoise(gp * 2.6 + vec2(uTime * 0.11, -uTime * 0.07)) - 0.5) * 0.045 * uLife;
+    // a burst: the cell swells round (turgid), then its body becomes its droplets; its contents carried along
+    vec2 disp = vec2(0.0);
+    float bd = 9.0;
+    if (burst) {
+        bd = burstShape(p, t, seed, vC.xy, disp);
+        disp *= drops;
+    }
     // ---- Until the drop, a living colony (its look below): one body, the union of its cells' rounded squares
     // smoothly merged, inset from the cells' edges, its membrane wobbling and breathing slowly (the same along the
     // colony: in its grid's noise); between pieces stays a pale gap, a cell never leaves its square.
@@ -585,7 +643,7 @@ void main() {
             if ((m & (1 << i)) == 0) continue;
             vec2 o = i == 0 ? vec2(-1, 0) : i == 1 ? vec2(1, 0) : i == 2 ? vec2(0, 1) : i == 3 ? vec2(0, -1) :
                      i == 4 ? vec2(-1, 1) : i == 5 ? vec2(1, 1) : i == 6 ? vec2(-1, -1) : vec2(1, -1);
-            f += cellField(p - o);
+            f += cellField(p - o) * join;
         }
         float gl = length(f.yz);
         dl = (MB_T - f.x) / max(gl, 0.8);   // (a distance near the membrane)
@@ -593,6 +651,18 @@ void main() {
                     (vnoise(gp * 0.4 + vec2(uTime * 0.09, 0.0)) - 0.5) * 0.03;
         dl += wob * uLife;
         if (kind == 3) dl += 0.04 + 0.2 * smoothstep(0.0, 0.7, t) - 0.03 * vnoise(p * 9.0 + seed * 7.0);   // plasmolysis
+    }
+    if (burst) {
+        // swelling: rounder and a little bigger, in either look; then the droplets
+        float rd = length(p) - 0.47;
+        d = mix(d, rd, 0.55 * swell) - 0.04 * swell;
+        if (dl < 8.0) dl = mix(dl, rd, 0.55 * swell) - 0.04 * swell;
+        d = mix(d, bd, drops);
+        if (dl < 8.0) dl = mix(dl, bd, drops);
+        p -= disp;
+        gp -= disp;
+        m = join > 0.5 ? m : 0;
+        L = L && join > 0.5; R = R && join > 0.5; U = U && join > 0.5; D = D && join > 0.5;
     }
     if (d > 0.14 && dl > 0.14) discard;
     vec3 tint = pieceCol(type);
@@ -611,6 +681,11 @@ void main() {
     float wall = (1.0 - smoothstep(0.011, 0.011 + AA * 1.5, iw)) * inside;
     float halo = smoothstep(-AA, AA, d) * exp(-d / 0.045);
     float flash = vC.z;
+    if (burst) {
+        flash = 0.6 * smoothstep(0.03, 0.14, t) * (1.0 - smoothstep(0.18, 0.45, t));   // (the membrane taut, lit)
+        gHalo = 1.0 - 0.6 * drops;   // (the droplets' halos kept faint: they cross one another)
+        halo *= gHalo;
+    }
     // the protoplast (shrinks away from its membrane as the cell dies)
     float proto = 1.0;
     if (kind == 3) {
@@ -664,6 +739,7 @@ void main() {
             gr += blob(p, c, vec2(0.06, 0.048));
         }
     if (type == 5) gr = smoothstep(0.68, 0.8, vnoise(gp * 24.0 + seed * 3.0)) * 0.6;
+    nuc *= inside; nuc2 *= inside; vacu *= inside; gr *= inside;   // (a burst's droplets carry them: kept within)
     float nucAll = clamp(nuc + nuc2, 0.0, 1.0);
     float nucRim = nucAll * (1.0 - nucAll) * 4.0;
     float chrom = vnoise(p * 40.0 + seed * 9.0);
@@ -679,7 +755,7 @@ void main() {
     } else over(bf, tint * (type == 3 ? 0.45 : 0.6), gr * 0.65 * proto * inside);
     over(bf, mix(tint * 0.32, cyto, 0.2 + 0.2 * chrom), nucAll * 0.9 * proto);
     over(bf, tint * 0.3, nucRim * 0.45 * proto);
-    over(bf, tint * 0.25, blob(p, nc + vec2(0.03, 0.02), vec2(0.035, 0.035)) * 0.6 * proto * step(nuc2, 0.01));
+    over(bf, tint * 0.25, blob(p, nc + vec2(0.03, 0.02), vec2(0.035, 0.035)) * 0.6 * proto * inside * step(nuc2, 0.01));
     over(bf, mix(tint * 0.38, field, 0.15), wall * 0.75);
     over(bf, mix(tint * 0.24, vec3(1.0), 0.4 * flash), mem);
     // dark-field: the membranes glow, the cytoplasm a soft glow, the nuclei lit
@@ -692,6 +768,7 @@ void main() {
     vec4 o = mix(bf, df, kDark);
     if (dl < 8.0) o = mix(livingCell(p, gp, dl, type, seed, nc, m, flash, field), o, kMix);
     float a = vB.w;
+    if (burst) a *= 1.0 - smoothstep(mix(0.5, 0.32, kMix), mix(1.0, 0.72, kMix), t);   // (gone as the rows above fall in)
     if (kind == 3) {
         // dying: the stain drains to grey, then the cell fades
         float Lm = lumOf(o.rgb / max(o.a, 1e-3));

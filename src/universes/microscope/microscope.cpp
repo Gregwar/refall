@@ -23,7 +23,10 @@
 // pseudopods, pennate and centric diatoms, a volvox rolling slowly. The focal plane drifts and refocuses at each new
 // section, so some of them are soft.
 //
-// A cleared row's cells burst at once: each scatters into a spray of granules of its stain, flung out and fading. The song: calm is a still, dimmer field and slow life; mid wakes the cilia on
+// A cleared row's cells burst, in either look: each swells round and taut, lets go of its colony, then its body buds
+// off into droplets of itself (the same membrane and stain, the nucleus carried by the heaviest), which part, drift
+// out and shrink to vesicles, a few loose granules spilling from them; it is gone as the rows above fall in over it.
+// The song: calm is a still, dimmer field and slow life; mid wakes the cilia on
 // the beat grid (every two beats); a peak brightens the lamp, the kicks flicking the cilia and making the paramecia
 // dart. A DROP section (music.inDrop) switches the illumination to the variant's second one (dark-field or
 // fluorescence: light on black, the membranes and nuclei glowing), eased in and out, with one swell of light, the
@@ -106,6 +109,7 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float DIE_T = 2.2f;        // game over: a cell's plasmolysis
+constexpr float BURST_T = 0.95f;     // a cleared cell's burst (the rows above wait 0.3 s, then fall in over it)
 constexpr int FREE_COLONY = 1 << 20; // the colony of cells found on the board (inherited): joined by type
 
 // The kinds of life: paramecium, amoeba, pennate diatom, centric diatom, rotifer, volvox.
@@ -463,19 +467,32 @@ void MicroscopeUniverse::onEvent(const GameEvent& ev, const Game& game) {
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
-        // the cells burst at once: each scatters into a spray of granules of its stain, flung out and fading
+        // the cells burst: each swells, comes apart from its neighbors and breaks into droplets of itself drifting
+        // out (the shader's burst), its loose granules spilling from them
+        auto clearedAt = [&](int x, int y) {
+            for (auto& c : ev.cells)
+                if (c.x == x && c.y == y) return true;
+            return false;
+        };
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             const int type = std::clamp(c.type, 0, 6);
-            for (int i = 0; i < 9; i++) {
-                const float an = rng_.range(0.f, TAU), r0 = rng_.range(0.f, 0.35f), sp = rng_.range(0.8f, 2.2f);
+            const bool known = has_[c.y][c.x] >= 0;
+            const CellLook l = known ? look_[c.y][c.x] : lookOf();
+            const int m = known ? maskOf(c.x, c.y, [&](int nx, int ny) {
+                return nx >= 0 && nx < Game::W && ny >= 0 && ny < Game::H && has_[ny][nx] >= 0 && clearedAt(nx, ny) &&
+                       look_[ny][nx].colony == l.colony;
+            }) : 0;
+            bursts_.push_back({p.x, p.y, type, l, m, (float)(c.x - l.ax), (float)(l.ay - c.y), 0.f});
+            for (int i = 0; i < 3; i++) {
+                const float an = rng_.range(0.f, TAU), r0 = rng_.range(0.05f, 0.25f), sp = rng_.range(0.35f, 0.9f);
                 Speck k;
-                k.p = vec2{p.x + std::cos(an) * r0, p.y + std::sin(an) * r0};
-                k.v = vec2{std::cos(an) * sp, std::sin(an) * sp};
-                k.t = 0.f;
-                k.life = rng_.range(0.6f, 1.1f);
-                k.r = rng_.range(0.05f, 0.11f);
+                k.p = vec2{p.x + std::cos(an) * r0, p.y + std::sin(an) * r0 * 0.7f};
+                k.v = vec2{std::cos(an) * sp, std::sin(an) * sp * 0.7f};
+                k.t = -rng_.range(0.15f, 0.35f);   // (out of the droplets as they part)
+                k.life = rng_.range(0.7f, 1.1f);
+                k.r = rng_.range(0.035f, 0.065f);
                 k.type = type;
                 specks_.push_back(k);
             }
@@ -866,6 +883,8 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
         k.v.x *= std::exp(-dt * 1.5f);
         k.v.y *= std::exp(-dt * 1.5f);
     }
+    for (Burst& b : bursts_) b.t += f.paused ? 0.f : dt / BURST_T;
+    bursts_.erase(std::remove_if(bursts_.begin(), bursts_.end(), [](const Burst& b) { return b.t >= 1.f; }), bursts_.end());
     specks_.erase(std::remove_if(specks_.begin(), specks_.end(), [](const Speck& k) { return k.t > k.life; }), specks_.end());
 
     // ---- Instances.
@@ -890,6 +909,9 @@ void MicroscopeUniverse::render(const Frame& f, GLuint fbo) {
                 const float t = saturate((overT_ - d.delay) / DIE_T);
                 if (t < 1.f) addCell(d.x, d.y, 0.5f, d.type, d.l, 3, t, 1.f, 0.f, 0, d.x, d.y);
             }
+        // the bursting cells, under the stack (the rows above fall in over them)
+        for (const Burst& b : bursts_)
+            addCell(b.x, b.y, 1.3f, b.type, b.l, 2, b.t, 1.f - bridgeK, 0.f, b.mask, b.gx, b.gy);
         buildBoard(game);
     }
     std::vector<Inst> speckInst;
