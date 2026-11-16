@@ -205,6 +205,7 @@ bool GiantTreeUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "gianttree cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "gianttree shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "gianttree post");
+    progUp_ = compile(ugl::FULLSCREEN_VS, ugl::UPSAMPLE_DEPTH_FS, "gianttree upsample");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -284,20 +285,28 @@ void GiantTreeUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution
-    const int wh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
+    // the sky at a reduced resolution (at most 720 lines), with its depth
+    const int sh = std::max(180, std::min(720, (int)(height_ * 0.66f)));
+    const int sw = std::max(320, (int)std::lround((float)sh * width_ / height_));
+    skyT_.create(sw, sh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    skyT_.attachDepthTexture();
+    // the meshes: multisampled (4x) at the full resolution, up to 1440 lines
+    const int wh = std::max(180, std::min(1440, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
-    bloomA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    bloomB_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    msT_.create(ww, wh, 4);
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    // the bloom from the sky's resolution / 4, as before
+    bloomA_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    bloomB_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 GiantTreeUniverse::~GiantTreeUniverse() {
-    for (ugl::Target* t : {&worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    for (ugl::Target* t : {&skyT_, &worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    msT_.destroy();
     for (GLuint p : {progSky_, progSea_, progBark_, progLeaf_, progGlow_, progCloud_, progComp_, progBright_, progBlur_,
-                     progSprite_, progVeil_, progCell_, progShape_, progPost_})
+                     progSprite_, progVeil_, progCell_, progShape_, progPost_, progUp_})
         glDeleteProgram(p);
     for (GLuint v : {barkVao_, leafVao_, glowVao_, cloudVao_, spriteVao_, cellVao_, shapeVao_})
         glDeleteVertexArrays(1, &v);
@@ -1150,7 +1159,8 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (the sky at a reduced resolution, the meshes
+    // multisampled at the full resolution)
     const vec3 sunDir = normalize(vec3(std::sin(pal_.sunAz) * std::cos(pal_.sunEl), std::sin(pal_.sunEl),
                                        -std::cos(pal_.sunAz) * std::cos(pal_.sunEl)));
     const float bloom = life * smoothstepf(1.f, 1.6f, flow) + 0.6f * bloomBurst_;
@@ -1185,9 +1195,10 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         set1f(p, "uFlowK", flowK_);
         set1f(p, "uBloom", bloom);
     };
-    const float minPx = 2.f * tanH_ / worldT_.h * 0.8f;
+    // (the sizes under which things are culled or held: in the reduced resolution's pixels, as they were)
+    const float minPx = 2.f * tanH_ / skyT_.h * 0.8f;
 
-    worldT_.bind();
+    skyT_.bind();
     glClearColor(0, 0, 0, 0);
     glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1204,7 +1215,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uCamR", camR_);
     set3f(progSky_, "uCamU", camU_);
     set2f(progSky_, "uTan", tanH_ * aspect_, tanH_);
-    set1f(progSky_, "uPix", 2.f * tanH_ / worldT_.h);
+    set1f(progSky_, "uPix", 2.f * tanH_ / skyT_.h);
     set1f(progSky_, "uSunSize", pal_.sunSize);
     set1f(progSky_, "uStars", pal_.stars);
     set1f(progSky_, "uHills", 1.f - smoothstepf(150.f, 2500.f, alt_));
@@ -1233,6 +1244,19 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uGalaxyDir", normalize(fwdH * 0.94f - rightH * 0.3f + vec3(0.f, 0.12f, 0.f)));
     set1f(progSky_, "uBeam", beam_ * world);
     set3f(progSky_, "uBeamPos", cc);
+    ugl::drawFullscreen();
+
+    // ---- the meshes, multisampled, over the sky upsampled with its depth
+    msT_.bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(progUp_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, skyT_.tex);
+    set1i(progUp_, "uColor", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, skyT_.depthTex);
+    set1i(progUp_, "uDepth", 1);
+    glActiveTexture(GL_TEXTURE0);
     ugl::drawFullscreen();
 
     glDepthFunc(GL_LESS);
@@ -1423,14 +1447,15 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
+    msT_.resolve(worldT_);
 
-    // ---- The bloom (quarter resolution).
+    // ---- The bloom (the sky's resolution / 4, its taps as far apart as before).
     bloomA_.bind();
     glUseProgram(progBright_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progBright_, "uSrc", 0);
-    set2f(progBright_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    set2f(progBright_, "uTexel", 1.f / skyT_.w, 1.f / skyT_.h);
     set1f(progBright_, "uThreshold", pal_.night > 0.5f ? 0.45f : 0.85f);
     ugl::drawFullscreen();
     for (int pass = 0; pass < 2; pass++) {
