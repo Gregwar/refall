@@ -116,6 +116,8 @@ private:
                 float param2 = 0.f);
     void drawSprites(const std::vector<SpriteInst>& v, bool additive);
     void drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze, bool reflect, int part);
+    void drawSheet(int which);    // the test hook REFALL_LOSTPANDA_SHEET (see render)
+    bool sheet_ = false;          // drawing it: a plain white light
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const std::vector<HudRect>& panels);

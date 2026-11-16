@@ -33,11 +33,11 @@
 // cheeks puffing), then walks on; fed, it grows stronger on the way (straighter, bouncier, a little rounder). Between
 // clears it lives: it breathes, blinks, looks around, looks back, sits, sighs, wipes a tear in the rain; later it
 // hops, follows a butterfly. Every value of its pose eases toward its target.
-// The pandas follow the owner's kawaii model sheets (drawn in shaders.hpp: a big wide head on a narrower body, round
-// ears, oval patches with big shiny eyes, ^ ^ in joy, a cat-like w of a mouth, big round blush, cream fur with a tufted
-// edge, slim black limbs and a black shoulder band, a thin dark outline; hearts by the head when waving for joy,
-// sparkles when surprised): turned toward us (the sheet's front view) when it sits, sighs, wipes a tear or hops, in profile (the
-// sheet's walk) when it walks on or runs; the pose's turn moves it between the two.
+// The pandas follow the owner's kawaii reference (drawn in shaders.hpp, measured against it: a sticker's flat fills in a
+// thick dark outline, a round head wider than the slim body, round ears apart from the head, big round patches with big
+// shiny eyes, ^ ^ in joy, an open smile, flat pink blush, black limbs and a black shoulder band, a little black tail;
+// hearts by the head when waving for joy, sparkles when surprised): turned toward us (the front view) when it sits,
+// sighs, wipes a tear or hops, in profile when it walks on or runs; the pose's turn moves it between the two.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
@@ -918,13 +918,13 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uMunch", p.munch);
     set1f(progPanda_, "uChew", p.chew);
     set1f(progPanda_, "uSurprise", p.surprise);
-    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
-    set1f(progPanda_, "uRoll", adult > 0.5f ? 0.f : kidRoll_);
+    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : (sheet_ ? 0.f : strength_));
+    set1f(progPanda_, "uRoll", adult > 0.5f || sheet_ ? 0.f : kidRoll_);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
     set2f(progPanda_, "uEars", p.earN, p.earF);
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
-    set3f(progPanda_, "uAmb", l.amb * night);
-    set3f(progPanda_, "uKey", l.key * night * (1.f + 0.25f * dropAmt_));
+    set3f(progPanda_, "uAmb", sheet_ ? vec3(1.f) : l.amb * night);
+    set3f(progPanda_, "uKey", sheet_ ? vec3(0.f) : l.key * night * (1.f + 0.25f * dropAmt_));
     set3f(progPanda_, "uRimC", l.rim * night);
     const float kl = std::sqrt(l.keyX * l.keyX + l.keyY * l.keyY) + 1e-4f;
     set2f(progPanda_, "uKeyDir", l.keyX / kl, l.keyY / kl);
@@ -935,6 +935,51 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set3f(progPanda_, "uHazeC", l.fog);
     glBindVertexArray(quadVao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+// the test hook REFALL_LOSTPANDA_SHEET: the pandas alone, big, posed
+void LostPandaUniverse::drawSheet(int which) {
+    sceneT_.bind();
+    glClearColor(0.79f, 0.745f, 0.665f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    sheet_ = true;
+    const float hx = viewH_.x, hy = viewH_.y, cx = viewC_.x, cy = viewC_.y;
+    Pose b;
+    b.mood = 1.f; b.turn = 0.f; b.lookX = 0.f; b.lookY = 0.f; b.breath = 0.f;
+    if (which == 1) {
+        // as the reference: two columns, facing us above (happy, surprised), in profile below
+        const float h = 0.86f * hy;
+        Pose p = b;
+        drawPanda(p, V(cx - 0.5f * hx, cy + 0.06f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        p.surprise = 1.f;
+        drawPanda(p, V(cx + 0.5f * hx, cy + 0.06f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        p = b; p.turn = 0.7f;
+        drawPanda(p, V(cx - 0.5f * hx, cy - 0.94f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        drawPanda(p, V(cx + 0.5f * hx, cy - 0.94f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+    } else {
+        // its other poses: sad sitting, wiping a tear, waving for joy, munching (facing, in profile), walking, the
+        // hug, a blink, the parents (sitting, waving)
+        const float h = 0.82f * hy;
+        Pose ps[10];
+        for (Pose& p : ps) p = b;
+        ps[0].mood = 0.1f; ps[0].sit = 1.f; ps[0].turn = 0.2f; ps[0].lookY = -0.6f; ps[0].tilt = -0.06f;
+        ps[1].mood = 0.1f; ps[1].wipe = 1.f; ps[1].tear = 0.7f; ps[1].turn = 0.2f;
+        ps[2].arms = 0.7f; ps[2].joyEyes = 1.f; ps[2].turn = 0.3f; ps[2].hop = 0.04f;
+        ps[3].munch = 1.f; ps[3].chew = 1.f; ps[3].joyEyes = 0.45f; ps[3].turn = 0.15f;
+        ps[4].munch = 1.f; ps[4].chew = 1.f; ps[4].joyEyes = 0.45f; ps[4].turn = 0.7f;
+        ps[5].mood = 0.5f; ps[5].walk = 1.f; ps[5].phase = 1.3f; ps[5].turn = 0.7f; ps[5].lookX = 1.f;
+        ps[6].hug = 1.f; ps[6].joyEyes = 1.f; ps[6].turn = 0.5f; ps[6].lean = 0.8f; ps[6].tilt = 0.12f;
+        ps[7].blink = 1.f; ps[7].mood = 0.6f; ps[7].turn = 0.1f;
+        ps[8].mood = 0.6f; ps[8].sit = 1.f; ps[8].turn = 0.3f;
+        ps[9].arms = 1.f; ps[9].joyEyes = 1.f; ps[9].turn = 0.5f;
+        for (int i = 0; i < 10; i++) {
+            const float x = cx + hx * (-0.8f + 0.4f * (float)(i % 5)), y = cy + (i < 5 ? 0.08f : -0.92f) * hy;
+            drawPanda(ps[i], V(x, y), i >= 8 ? h * 1.1f : h, i == 9 ? -1.f : 1.f, i >= 8 ? 1.f : 0.f, 1.f, 0.f, false, 0);
+        }
+    }
+    sheet_ = false;
 }
 
 // =====================================================================================================
@@ -1490,6 +1535,11 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(sprites_, false);
     drawHud(f.panels);
     fade_ = f.fade;
+    // Test hook: REFALL_LOSTPANDA_SHEET=1 draws, over everything, the pandas' model sheet big on a plain ground under a
+    // plain white light (the cub facing us happy and surprised, in profile; =2 its other poses, the parents), to set
+    // their drawing against the owner's reference (with REFALL_BARE=1 and --review-shot).
+    static const int sheet = std::getenv("REFALL_LOSTPANDA_SHEET") ? std::atoi(std::getenv("REFALL_LOSTPANDA_SHEET")) : 0;
+    if (sheet > 0) drawSheet(sheet);
     glDisable(GL_BLEND);
 
     // ---- Post.
