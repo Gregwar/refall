@@ -68,7 +68,7 @@ private:
         // the fleet (the boats the cleared rows launched): its place along the route, its sails
         float scale = 1.f, unfurl = 1.f, sailCode = 0.f, latN = 0.f, latOff = 0.f, appear = 1.f, sink = 0.f, launchT = 99.f;
         vec3 sailCol{1, 1, 1}, jibCol{1, 1, 1}, launchP{0, 0, 0}, prevP{0, 0, 0};
-        float prevS = -1.f;                // (the pop check, ZEN_ISLANDS_POPCHECK)
+        float prevS = -1.f;                // (the pop check, REFALL_ISLANDS_POPCHECK)
         double sb = 0.0;
         bool big = false;
     };

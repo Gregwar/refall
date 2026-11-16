@@ -207,7 +207,7 @@ void q3ContactManager::TestCollisions( void )
 
 		constraint->m_flags &= ~q3ContactConstraint::eIsland;
 
-		// Zentris change: a static body counts as asleep here (once woken it stays awake, and every sleeping body
+		// Refall change: a static body counts as asleep here (once woken it stays awake, and every sleeping body
 		// resting on it was tested again each step).
 		if( !(bodyA->IsAwake( ) && !(bodyA->GetFlags( ) & 0x020)) && !(bodyB->IsAwake( ) && !(bodyB->GetFlags( ) & 0x020)) )
 		{

@@ -889,7 +889,7 @@ int Scope::run(int argc, char** argv) {
     std::vector<std::string> paths;
     std::string shotPath, song;
     double shotAt = -1;
-    notesPath_ = (platform::dataDir() / "zentris" / "annotations.jsonl").string();
+    notesPath_ = (platform::appDataDir() / "annotations.jsonl").string();
     bool mute = false, hidden = false, shuffle = false;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];

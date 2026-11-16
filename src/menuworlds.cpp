@@ -157,7 +157,7 @@ void WorldPool::uploadSnap(const std::string& spec, const std::vector<unsigned c
 std::string WorldPool::path(const std::string& spec) const {
     std::string n;
     for (char c : spec) n += std::isalnum((unsigned char)c) ? (char)std::tolower((unsigned char)c) : '_';
-    return (platform::cacheDir() / "zentris" / "menu-worlds" / (n + "-v2.rgb")).string();
+    return (platform::appCacheDir() / "menu-worlds" / (n + "-v2.rgb")).string();
 }
 
 void WorldPool::want(const std::string& spec, float fps) {

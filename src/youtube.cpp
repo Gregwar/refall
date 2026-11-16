@@ -24,7 +24,7 @@ std::string shellQuote(const std::string& s) { return platform::quoteArg(s); }
 // default; if only node is installed, tell it to use node.
 std::string ytdlp() {
     std::string tool;
-    const char* bundled = std::getenv("ZENTRIS_YTDLP");
+    const char* bundled = std::getenv("REFALL_YTDLP");
     std::error_code ec;
     if (bundled && *bundled && fs::exists(bundled, ec)) tool = shellQuote(bundled);
     else if (std::string p = platform::findExecutable("yt-dlp"); !p.empty()) tool = shellQuote(p);
@@ -35,7 +35,7 @@ std::string ytdlp() {
 }
 
 std::string cacheDir() {
-    fs::path dir = platform::cacheDir() / "zentris" / "youtube";
+    fs::path dir = platform::appCacheDir() / "youtube";
     std::error_code ec;
     fs::create_directories(dir, ec);
     return dir.string();
@@ -100,7 +100,7 @@ static std::vector<std::string> listYoutube(const std::string& url, bool quiet, 
     return out;
 }
 
-// Cached listings: <cache>/zentris/youtube/lists/<key>.tsv, one "id<TAB>title" per line.
+// Cached listings: <cache>/refall/youtube/lists/<key>.tsv, one "id<TAB>title" per line.
 static fs::path listsDir() {
     fs::path dir = fs::path(cacheDir()) / "lists";
     std::error_code ec;
@@ -220,7 +220,7 @@ bool download(const std::string& id, const std::string& title) {
     std::string cmd = tool + " -q --no-warnings --no-playlist -f bestaudio -x --audio-format mp3 --audio-quality 2 -o " +
                       shellQuote(out);
     // ffmpeg converts the audio: the launcher points to a bundled one when the system has none.
-    if (const char* ff = std::getenv("ZENTRIS_FFMPEG"); ff && *ff) cmd += " --ffmpeg-location " + shellQuote(ff);
+    if (const char* ff = std::getenv("REFALL_FFMPEG"); ff && *ff) cmd += " --ffmpeg-location " + shellQuote(ff);
     cmd += " -- " + id;
     // The song counts as there when its file is (yt-dlp may report a passing error after it), and a failed
     // download is tried once more (YouTube refuses a first request now and then).

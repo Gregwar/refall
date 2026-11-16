@@ -106,9 +106,9 @@ share by `paceScale()` rather than inventing things. Each line carries a big ste
 song), so ease it: the growth springs smoothly to its target, and a cap on its speed keeps a quad calm (a breath
 longer, never a jolt); if a cap would stop a short song from reaching the end in time, let it rise with
 `paceScale()`, a little. Extra growth from other sources (a drop's bonus, a quad) stays proportionate: it never
-skips a stage. A `ZEN_<ID>_LINES=N` test hook (real lines; and `ZEN_GROW_RATE=R`) lets you check the stills;
-`ZEN_SCENE_LINES=N` forces the target (check 20, 50 and 100: the final stage at the target, half of it looking like
-half), `ZEN_LINES_PER_MINUTE=R` changes the pace, and `ZEN_LINES_HERE=N` holds linesHere() at N whatever the review
+skips a stage. A `REFALL_<ID>_LINES=N` test hook (real lines; and `REFALL_GROW_RATE=R`) lets you check the stills;
+`REFALL_SCENE_LINES=N` forces the target (check 20, 50 and 100: the final stage at the target, half of it looking like
+half), `REFALL_LINES_PER_MINUTE=R` changes the pace, and `REFALL_LINES_HERE=N` holds linesHere() at N whatever the review
 shot's bot clears (exact stills).
 
 **Typography.** One or two fonts that fit the world, under the SIL Open Font License, placed in
@@ -172,7 +172,7 @@ tools/universesheet.sh <id> sheet.png 2      # every variant in one contact shee
 
 - Review every variant side by side (`tools/universesheet.sh`) at calm, mid and peak.
 - Check a few transitions with a dark and a light universe, both ways (`--universe A --to B` and back).
-- `ZEN_TEST_OVER=9` before a shot command hard-drops every piece from 9 s into the shot's settle (the shot then
+- `REFALL_TEST_OVER=9` before a shot command hard-drops every piece from 9 s into the shot's settle (the shot then
   shows the game over).
-- `ZEN_WARMUP=60` before a shot or `--clip` command plays 60 s (default 12) before the picture is taken or the
+- `REFALL_WARMUP=60` before a shot or `--clip` command plays 60 s (default 12) before the picture is taken or the
   recording starts, so that a universe that accumulates (FLUO's paint) has time to build up.

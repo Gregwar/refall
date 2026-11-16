@@ -56,7 +56,7 @@ public:
     int indexOf(const std::string& path) const;       // the song whose YouTube id is in a track's path, -1 none
     // One frame: the keys and the mouse (no window: none), the tour; the actions for the app to perform.
     std::vector<Action> update(GLFWwindow* win, const Input& in, const Now& now, float dt);
-    // A command, as a key gives it (also the test hook ZEN_VIEWER_KEYS): next, prev, stage+, stage-, fwd, back, sec+,
+    // A command, as a key gives it (also the test hook REFALL_VIEWER_KEYS): next, prev, stage+, stage-, fwd, back, sec+,
     // sec-, tour, hide.
     void command(const std::string& c) { pending_.push_back(c); }
     void songStarted() { tourSeg_ = -1; } // the tour starts again with the new song

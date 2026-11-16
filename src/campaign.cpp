@@ -79,8 +79,8 @@ bool parseDifficulty(const std::string& s0, int* d, float* mul) {
 bool Campaign::load(const std::string& path) {
     std::vector<std::pair<std::string, std::string>> tries; // (source name, text)
     if (!path.empty()) tries.push_back({path, readFile(path)});
-#ifdef ZEN_SOURCE_DIR
-    else tries.push_back({std::string(ZEN_SOURCE_DIR) + "/data/campaign.tsv", readFile(fs::path(ZEN_SOURCE_DIR) / "data" / "campaign.tsv")});
+#ifdef REFALL_SOURCE_DIR
+    else tries.push_back({std::string(REFALL_SOURCE_DIR) + "/data/campaign.tsv", readFile(fs::path(REFALL_SOURCE_DIR) / "data" / "campaign.tsv")});
 #endif
     if (path.empty()) {
         tries.push_back({(platform::executableDir() / "campaign.tsv").string(), readFile(platform::executableDir() / "campaign.tsv")});
@@ -162,7 +162,7 @@ const char* const LEGACY_12x5[12][5] = {
 };
 } // namespace
 
-std::string Progress::defaultPath() { return (platform::dataDir() / "zentris" / "campaign-progress.tsv").string(); }
+std::string Progress::defaultPath() { return (platform::appDataDir() / "campaign-progress.tsv").string(); }
 
 Progress::StageRec& Progress::at(int stage) {
     if ((int)stages_.size() <= stage) stages_.resize(stage + 1);

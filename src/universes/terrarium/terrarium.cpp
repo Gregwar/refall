@@ -364,10 +364,10 @@ constexpr float CLEAR_T = 0.42f; // a cleared row shrinks away in this long (rea
 constexpr int MAX_FLIES = 32, MAX_SEEDS = 32, MAX_SPROUTS = 40, MAX_MOTES = 400;
 constexpr float JAR_IN = 0.84f;   // where things may stand (the floor's radius, less a margin)
 
-// Test hooks: ZEN_TERRARIUM_LINES=N adds N lines, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_TERRARIUM_LINES=N adds N lines, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_TERRARIUM_LINES") ? std::atoi(std::getenv("ZEN_TERRARIUM_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_TERRARIUM_LINES") ? std::atoi(std::getenv("REFALL_TERRARIUM_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -1352,8 +1352,8 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 60 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 60 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
@@ -1380,7 +1380,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
             sectionDrop = h.text == "DROP";
         }
     const bool isDrop = dropMode_ && overT_ < 0.f && (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f);
-    if (isDrop && !wasDrop_ && std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[terrarium] drop at %.1f s\n", time_);
+    if (isDrop && !wasDrop_ && std::getenv("REFALL_GPUTIME")) std::fprintf(stderr, "[terrarium] drop at %.1f s\n", time_);
     wasDrop_ = isDrop;
     // the drop: a shower outside the window (settling in over seconds), every firefly lighting at once
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.2f : 0.25f, dt);
@@ -1422,7 +1422,7 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
         if (linesShown_ < 0.f) {
             linesEased_ = lines;
             // (test hooks starting at a stage: the seedlings its clears would have left)
-            if (lines > 0.f && (extraLines(0.0) > 0 || std::getenv("ZEN_LINES_HERE"))) {
+            if (lines > 0.f && (extraLines(0.0) > 0 || std::getenv("REFALL_LINES_HERE"))) {
                 pond_ = VARIANTS[wrapV(variant_)].pondDepth > 0.f ? smoothstepf(POND_AT, POND_AT + 4.f, lines) : 0.f;
                 growth_.assign(sl.size(), 0.f);
                 for (size_t i = 0; i < sl.size(); i++)

@@ -34,14 +34,14 @@ inline float tuneDx(int t) { return (t - (4 - 1) * 0.5f) * TUNE_DX; }
 // The teeth's length (one plate: their roots on a straight line).
 inline float toothLen(int i) { (void)i; return 4.6f; }
 
-// Test hooks: ZEN_MUSICBOX_LINES=N pins N rows already (random cells: screenshots), ZEN_GROW_RATE=R clears R rows a
+// Test hooks: REFALL_MUSICBOX_LINES=N pins N rows already (random cells: screenshots), REFALL_GROW_RATE=R clears R rows a
 // second (each one like a real clear: ten cells fly from the bottom of the well to the cylinder).
 inline int startLinesHook() {
-    static const int n = std::getenv("ZEN_MUSICBOX_LINES") ? std::atoi(std::getenv("ZEN_MUSICBOX_LINES")) : 0;
+    static const int n = std::getenv("REFALL_MUSICBOX_LINES") ? std::atoi(std::getenv("REFALL_MUSICBOX_LINES")) : 0;
     return n;
 }
 inline int rateLinesHook(double t) {
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return (int)(rate * t);
 }
 

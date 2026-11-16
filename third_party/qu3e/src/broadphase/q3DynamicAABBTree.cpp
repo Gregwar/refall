@@ -33,7 +33,7 @@
 //--------------------------------------------------------------------------------------------------
 inline void FattenAABB( q3AABB& aabb )
 {
-	const r32 k_fattener = r32( 0.1 ); // Zentris change: 0.5 (too wide for boxes a unit across: every neighbour in a pile was a contact)
+	const r32 k_fattener = r32( 0.1 ); // Refall change: 0.5 (too wide for boxes a unit across: every neighbour in a pile was a contact)
 	q3Vec3 v( k_fattener, k_fattener, k_fattener );
 
 	aabb.min -= v;

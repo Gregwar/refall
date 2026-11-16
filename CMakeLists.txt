@@ -5,21 +5,21 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Release by default (stored in the cache so tools and IDEs show it). Multi-config generators
 # (Visual Studio, Xcode) choose the configuration at build time: cmake --build build --config Release.
-get_property(ZENTRIS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if(NOT ZENTRIS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
+get_property(REFALL_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(NOT REFALL_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
 endif()
-if(NOT ZENTRIS_MULTI_CONFIG)
+if(NOT REFALL_MULTI_CONFIG)
   message(STATUS "Refall build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-# GLFW: the system one by default; ZENTRIS_BUNDLE_GLFW=ON (used for Python wheels) builds it from
+# GLFW: the system one by default; REFALL_BUNDLE_GLFW=ON (used for Python wheels) builds it from
 # source and links it statically, so the binaries only need the system's OpenGL/X11 at runtime.
-option(ZENTRIS_BUNDLE_GLFW "Build GLFW from source and link it statically" OFF)
-if(NOT ZENTRIS_BUNDLE_GLFW)
+option(REFALL_BUNDLE_GLFW "Build GLFW from source and link it statically" OFF)
+if(NOT REFALL_BUNDLE_GLFW)
   find_package(glfw3 QUIET)
 endif()
-if(ZENTRIS_BUNDLE_GLFW OR NOT glfw3_FOUND)
+if(REFALL_BUNDLE_GLFW OR NOT glfw3_FOUND)
   include(FetchContent)
   set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -47,7 +47,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Audio decoding, analysis and song planning, shared by the game and the analysis viewer.
-add_library(zencore STATIC
+add_library(refallcore STATIC
   src/analysis.cpp
   src/audio.cpp
   src/samples.cpp
@@ -58,69 +58,69 @@ add_library(zencore STATIC
   src/platform.cpp
   src/third_party_impl.cpp
 )
-target_include_directories(zencore PUBLIC src third_party)
-target_link_libraries(zencore PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
+target_include_directories(refallcore PUBLIC src third_party)
+target_link_libraries(refallcore PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 if(UNIX)
-  target_link_libraries(zencore PUBLIC m)
+  target_link_libraries(refallcore PUBLIC m)
 endif()
 if(MSVC)
-  target_compile_options(zencore PUBLIC /utf-8 /bigobj)
-  target_compile_definitions(zencore PUBLIC _CRT_SECURE_NO_WARNINGS NOMINMAX _USE_MATH_DEFINES)
+  target_compile_options(refallcore PUBLIC /utf-8 /bigobj)
+  target_compile_definitions(refallcore PUBLIC _CRT_SECURE_NO_WARNINGS NOMINMAX _USE_MATH_DEFINES)
 endif()
 
 # The renderer: the host (src/renderer.*), the transitions between universes, and every universe (one folder each
 # in src/universes/, picked up automatically; the list of universes is src/universes/registry.def).
-# Universes listed in ZENTRIS_DISABLED_UNIVERSES are not built at all: their sources and assets are skipped and their
+# Universes listed in REFALL_DISABLED_UNIVERSES are not built at all: their sources and assets are skipped and their
 # line is dropped from the registry the game is compiled with (generated/universes/registry_enabled.def).
 # An existing build directory follows changes to the default list: the cached value is replaced while it still is
 # a default (the last default seen, or, in a cache from before that was recorded, any subset of the default), and
 # kept once it was set by hand (-D...).
-set(ZEN_DEFAULT_DISABLED "cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen")
-set(zen_follow_default FALSE)
-if(NOT DEFINED ZENTRIS_DISABLED_UNIVERSES)
-  set(zen_follow_default TRUE)
-elseif(DEFINED ZEN_LAST_DEFAULT_DISABLED)
-  if("${ZENTRIS_DISABLED_UNIVERSES}" STREQUAL "${ZEN_LAST_DEFAULT_DISABLED}")
-    set(zen_follow_default TRUE)
+set(REFALL_DEFAULT_DISABLED "cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen")
+set(refall_follow_default FALSE)
+if(NOT DEFINED REFALL_DISABLED_UNIVERSES)
+  set(refall_follow_default TRUE)
+elseif(DEFINED REFALL_LAST_DEFAULT_DISABLED)
+  if("${REFALL_DISABLED_UNIVERSES}" STREQUAL "${REFALL_LAST_DEFAULT_DISABLED}")
+    set(refall_follow_default TRUE)
   endif()
-elseif(ZENTRIS_DISABLED_UNIVERSES)
-  set(zen_follow_default TRUE)
-  foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
-    if(NOT id IN_LIST ZEN_DEFAULT_DISABLED)
-      set(zen_follow_default FALSE)
+elseif(REFALL_DISABLED_UNIVERSES)
+  set(refall_follow_default TRUE)
+  foreach(id ${REFALL_DISABLED_UNIVERSES})
+    if(NOT id IN_LIST REFALL_DEFAULT_DISABLED)
+      set(refall_follow_default FALSE)
     endif()
   endforeach()
 endif()
-if(zen_follow_default)
-  set(ZENTRIS_DISABLED_UNIVERSES "${ZEN_DEFAULT_DISABLED}" CACHE STRING
+if(refall_follow_default)
+  set(REFALL_DISABLED_UNIVERSES "${REFALL_DEFAULT_DISABLED}" CACHE STRING
       "Universes (folder names in src/universes/) left out of the build, separated by ;" FORCE)
 endif()
-set(ZEN_LAST_DEFAULT_DISABLED "${ZEN_DEFAULT_DISABLED}" CACHE INTERNAL "The default list of disabled universes last seen")
-file(GLOB ZEN_UNIVERSE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/*/*.cpp)
-foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
-  list(FILTER ZEN_UNIVERSE_SOURCES EXCLUDE REGEX "/src/universes/${id}/")
+set(REFALL_LAST_DEFAULT_DISABLED "${REFALL_DEFAULT_DISABLED}" CACHE INTERNAL "The default list of disabled universes last seen")
+file(GLOB REFALL_UNIVERSE_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/*/*.cpp)
+foreach(id ${REFALL_DISABLED_UNIVERSES})
+  list(FILTER REFALL_UNIVERSE_SOURCES EXCLUDE REGEX "/src/universes/${id}/")
 endforeach()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/registry.def)
-file(STRINGS ${CMAKE_SOURCE_DIR}/src/universes/registry.def ZEN_REGISTRY)
-set(ZEN_REGISTRY_OUT "// Generated from src/universes/registry.def without the disabled universes.\n")
-foreach(line IN LISTS ZEN_REGISTRY)
+file(STRINGS ${CMAKE_SOURCE_DIR}/src/universes/registry.def REFALL_REGISTRY)
+set(REFALL_REGISTRY_OUT "// Generated from src/universes/registry.def without the disabled universes.\n")
+foreach(line IN LISTS REFALL_REGISTRY)
   set(keep TRUE)
-  foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
+  foreach(id ${REFALL_DISABLED_UNIVERSES})
     if(line MATCHES "^UNIVERSE\\(${id},")
       set(keep FALSE)
     endif()
   endforeach()
   if(keep AND line MATCHES "^UNIVERSE\\(")
-    string(APPEND ZEN_REGISTRY_OUT "${line}\n")
+    string(APPEND REFALL_REGISTRY_OUT "${line}\n")
   endif()
 endforeach()
-file(WRITE ${CMAKE_BINARY_DIR}/generated/universes/registry_enabled.def.tmp "${ZEN_REGISTRY_OUT}")
+file(WRITE ${CMAKE_BINARY_DIR}/generated/universes/registry_enabled.def.tmp "${REFALL_REGISTRY_OUT}")
 configure_file(${CMAKE_BINARY_DIR}/generated/universes/registry_enabled.def.tmp
                ${CMAKE_BINARY_DIR}/generated/universes/registry_enabled.def COPYONLY)
-if(ZENTRIS_DISABLED_UNIVERSES)
-  message(STATUS "Universes left out of the build: ${ZENTRIS_DISABLED_UNIVERSES}")
+if(REFALL_DISABLED_UNIVERSES)
+  message(STATUS "Universes left out of the build: ${REFALL_DISABLED_UNIVERSES}")
 endif()
-add_library(zenrender STATIC
+add_library(refallrender STATIC
   src/renderer.cpp
   src/hud.cpp
   src/titlecard.cpp
@@ -129,20 +129,20 @@ add_library(zenrender STATIC
   src/layout.cpp
   src/ugl.cpp
   src/universes/registry.cpp
-  ${ZEN_UNIVERSE_SOURCES}
+  ${REFALL_UNIVERSE_SOURCES}
 )
-target_link_libraries(zenrender PUBLIC zencore glad PRIVATE qu3e)
-target_include_directories(zenrender PUBLIC src)
+target_link_libraries(refallrender PUBLIC refallcore glad PRIVATE qu3e)
+target_include_directories(refallrender PUBLIC src)
 
 # Universe assets: every file in src/universes/<id>/embed/ is compiled in as a byte array, included with
 # `#include "universes/<id>/<file name>.inc"` (e.g. a font: `const unsigned char TTF[] = {\n#include "..."\n};`).
-file(GLOB ZEN_UNIVERSE_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/*/embed/*)
-foreach(id ${ZENTRIS_DISABLED_UNIVERSES})
-  list(FILTER ZEN_UNIVERSE_EMBEDS EXCLUDE REGEX "/src/universes/${id}/")
+file(GLOB REFALL_UNIVERSE_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/universes/*/embed/*)
+foreach(id ${REFALL_DISABLED_UNIVERSES})
+  list(FILTER REFALL_UNIVERSE_EMBEDS EXCLUDE REGEX "/src/universes/${id}/")
 endforeach()
 # The host's own assets (src/embed/: the title card's fonts) are included as "universes/host/<file name>.inc".
-file(GLOB ZEN_HOST_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/embed/*.ttf)
-foreach(f ${ZEN_UNIVERSE_EMBEDS} ${ZEN_HOST_EMBEDS})
+file(GLOB REFALL_HOST_EMBEDS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/embed/*.ttf)
+foreach(f ${REFALL_UNIVERSE_EMBEDS} ${REFALL_HOST_EMBEDS})
   get_filename_component(dir ${f} DIRECTORY)
   get_filename_component(dir ${dir} DIRECTORY)
   get_filename_component(id ${dir} NAME)
@@ -157,20 +157,20 @@ foreach(f ${ZEN_UNIVERSE_EMBEDS} ${ZEN_HOST_EMBEDS})
   configure_file(${CMAKE_BINARY_DIR}/generated/universes/${id}/${name}.inc.tmp
                  ${CMAKE_BINARY_DIR}/generated/universes/${id}/${name}.inc COPYONLY)
 endforeach()
-target_include_directories(zenrender PRIVATE ${CMAKE_BINARY_DIR}/generated)
+target_include_directories(refallrender PRIVATE ${CMAKE_BINARY_DIR}/generated)
 # When each universe last changed (its last commit, or its files' time when it has local changes), refreshed at
 # every build: the list printed for an unknown universe shows the newest last.
-set(ZEN_UNIVERSE_DATES ${CMAKE_BINARY_DIR}/generated/universes/universe_dates.def)
+set(REFALL_UNIVERSE_DATES ${CMAKE_BINARY_DIR}/generated/universes/universe_dates.def)
 add_custom_target(universe_dates
-  COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${ZEN_UNIVERSE_DATES}
+  COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${REFALL_UNIVERSE_DATES}
           -P ${CMAKE_SOURCE_DIR}/tools/universe_dates.cmake
-  BYPRODUCTS ${ZEN_UNIVERSE_DATES}
+  BYPRODUCTS ${REFALL_UNIVERSE_DATES}
   COMMENT "Universe dates")
-add_dependencies(zenrender universe_dates)
+add_dependencies(refallrender universe_dates)
 
 # The game, and refall-voyage-viewer: the same program started on a campaign's review (its songs in their
-# universes, the computer playing, an overlay to go from song to song; ZEN_VOYAGE_VIEWER).
-set(ZEN_GAME_SOURCES
+# universes, the computer playing, an overlay to go from song to song; REFALL_VOYAGE_VIEWER).
+set(REFALL_GAME_SOURCES
   src/main.cpp
   src/game.cpp
   src/input.cpp
@@ -185,14 +185,14 @@ set(ZEN_GAME_SOURCES
   src/debrief.cpp
   src/voyageviewer.cpp
 )
-add_executable(refall ${ZEN_GAME_SOURCES})
-add_executable(refall-voyage-viewer ${ZEN_GAME_SOURCES})
-target_compile_definitions(refall-voyage-viewer PRIVATE ZEN_VOYAGE_VIEWER)
+add_executable(refall ${REFALL_GAME_SOURCES})
+add_executable(refall-voyage-viewer ${REFALL_GAME_SOURCES})
+target_compile_definitions(refall-voyage-viewer PRIVATE REFALL_VOYAGE_VIEWER)
 # The campaign (data/campaign.tsv) is built in as a byte array (the game reads the file from the sources first).
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/data/campaign.tsv)
-file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv zen_campaign_hex HEX)
-string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," zen_campaign_arr "${zen_campaign_hex}")
-file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${zen_campaign_arr}\n")
+file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv refall_campaign_hex HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," refall_campaign_arr "${refall_campaign_hex}")
+file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${refall_campaign_arr}\n")
 configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
 if(UNIX AND NOT APPLE)
@@ -202,28 +202,28 @@ foreach(t refall refall-voyage-viewer)
   target_include_directories(${t} PRIVATE ${CMAKE_BINARY_DIR}/generated)
   if(OpenGL_EGL_FOUND)
     target_link_libraries(${t} PRIVATE OpenGL::EGL)
-    target_compile_definitions(${t} PRIVATE ZEN_HAVE_EGL)
+    target_compile_definitions(${t} PRIVATE REFALL_HAVE_EGL)
   endif()
-  target_link_libraries(${t} PRIVATE zenrender zencore glfw glad)
+  target_link_libraries(${t} PRIVATE refallrender refallcore glfw glad)
   # Gamepad mappings (SDL_GameControllerDB): looked up next to the executable, then in the sources.
-  target_compile_definitions(${t} PRIVATE ZEN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+  target_compile_definitions(${t} PRIVATE REFALL_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 endforeach()
 add_custom_command(TARGET refall POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
                    ${CMAKE_SOURCE_DIR}/third_party/gamecontrollerdb.txt $<TARGET_FILE_DIR:refall>/gamecontrollerdb.txt)
 
 # refall-scope: shows what the analysis hears in a song (structure, scene levels, pulses, spectrum, beats).
 add_executable(refall-scope src/scope.cpp)
-target_link_libraries(refall-scope PRIVATE zencore glfw glad)
+target_link_libraries(refall-scope PRIVATE refallcore glfw glad)
 
-foreach(t zencore zenrender refall refall-voyage-viewer refall-scope)
+foreach(t refallcore refallrender refall refall-voyage-viewer refall-scope)
   target_compile_definitions(${t} PRIVATE GLFW_INCLUDE_NONE)
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(${t} PRIVATE -Wall -Wno-unused-function -Wno-missing-field-initializers)
   endif()
 endforeach()
 
-# Python wheel (scikit-build-core): the binaries and data go inside the zentris package.
+# Python wheel (scikit-build-core): the binaries and data go inside the refall package.
 if(SKBUILD)
-  install(TARGETS refall refall-voyage-viewer refall-scope RUNTIME DESTINATION zentris/bin)
-  install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv data/menu_music.mp3 DESTINATION zentris/bin)
+  install(TARGETS refall refall-voyage-viewer refall-scope RUNTIME DESTINATION refall/bin)
+  install(FILES third_party/gamecontrollerdb.txt data/campaign.tsv data/menu_music.mp3 DESTINATION refall/bin)
 endif()

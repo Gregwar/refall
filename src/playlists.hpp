@@ -13,7 +13,7 @@ struct PlaylistEntry {
 
 class PlaylistStore {
 public:
-    static std::string defaultPath(); // <user data>/zentris/playlists.tsv
+    static std::string defaultPath(); // <user data>/refall/playlists.tsv
     void load(const std::string& path = "");
     bool save() const;                // no-op without a path (demo lists)
     const std::vector<PlaylistEntry>& list() const { return list_; } // most recent first

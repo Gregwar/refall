@@ -47,11 +47,11 @@ __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 #endif
 
 // Linux machines with two GPUs (an integrated one driving the screen, a discrete one for offload): render on the
-// discrete one through PRIME offload, unless the user already chose (their own variables, or ZEN_GPU=integrated).
+// discrete one through PRIME offload, unless the user already chose (their own variables, or REFALL_GPU=integrated).
 // Returns whether it changed anything, so a failed window can be retried without it.
 static bool preferDiscreteGpu() {
 #if defined(__linux__)
-    const char* pref = std::getenv("ZEN_GPU");
+    const char* pref = std::getenv("REFALL_GPU");
     if (pref && std::strcmp(pref, "integrated") == 0) return false;
     if (std::getenv("__NV_PRIME_RENDER_OFFLOAD") || std::getenv("__GLX_VENDOR_LIBRARY_NAME") || std::getenv("DRI_PRIME"))
         return false;
@@ -121,14 +121,14 @@ struct Options {
     bool menuPetal = false;    // --menu-petal: shots with the hovered stage's petal open (KALEIDO)     // --menu-demo: made-up campaign progress (never saved), for shots and clips
 };
 
-// Test hook: ZEN_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
-// with no sound, the songs on a simulated clock; ZEN_TEST_TAIL=S starts each song S seconds before its end,
-// ZEN_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit, skip) at T seconds of the run,
-// ZEN_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, ZEN_TEST_QUIT=T stops the run at T seconds.
+// Test hook: REFALL_TEST_PLAY=1 runs the game as when played (the menus, breaks, game overs) without a window: on the GPU
+// with no sound, the songs on a simulated clock; REFALL_TEST_TAIL=S starts each song S seconds before its end,
+// REFALL_TEST_KEYS="T:KEY,..." presses keys (up, down, left, right, ok, back, pause, quit, skip) at T seconds of the run,
+// REFALL_TEST_SHOTS="T:FILE.png,..." saves the frame at T seconds, REFALL_TEST_QUIT=T stops the run at T seconds.
 static bool g_refresh = false; // the window must be drawn again (uncovered)
 static std::chrono::steady_clock::time_point g_startTime; // (the menu's first frame is timed from it)
 static bool testPlay() {
-    static const bool on = std::getenv("ZEN_TEST_PLAY") != nullptr;
+    static const bool on = std::getenv("REFALL_TEST_PLAY") != nullptr;
     return on;
 }
 static std::vector<std::pair<double, std::string>> testList(const char* env) {
@@ -146,9 +146,9 @@ static std::vector<std::pair<double, std::string>> testList(const char* env) {
     return out;
 }
 
-// Test hook: ZEN_WARMUP=S plays S seconds (default 12) before a shot or a clip, so that the board fills and a
+// Test hook: REFALL_WARMUP=S plays S seconds (default 12) before a shot or a clip, so that the board fills and a
 // universe that accumulates (FLUO's paint) has time to build up.
-// Test hook: ZEN_CLIP_VELOCITY / ZEN_CLIP_PACE given as "A:B" ramp from A to B over the song times of ZEN_CLIP_RAMP
+// Test hook: REFALL_CLIP_VELOCITY / REFALL_CLIP_PACE given as "A:B" ramp from A to B over the song times of REFALL_CLIP_RAMP
 // ("T0:T1"); a single number is constant. (tools/demo.py: every shot of a continuous trailer at the same values.)
 static float clipRamp(const char* var, double songTime, float none) {
     const char* v = std::getenv(var);
@@ -156,13 +156,13 @@ static float clipRamp(const char* var, double songTime, float none) {
     float a = 0.f, b = 0.f;
     if (std::sscanf(v, "%f:%f", &a, &b) != 2) return (float)std::atof(v);
     float t0 = 0.f, t1 = 1.f;
-    const char* r = std::getenv("ZEN_CLIP_RAMP");
+    const char* r = std::getenv("REFALL_CLIP_RAMP");
     if (!r || std::sscanf(r, "%f:%f", &t0, &t1) != 2 || t1 <= t0) return b;
     return a + (b - a) * saturate(((float)songTime - t0) / (t1 - t0));
 }
 
 static double warmup() {
-    static const double w = std::getenv("ZEN_WARMUP") ? std::max(0.0, std::atof(std::getenv("ZEN_WARMUP"))) : 12.0;
+    static const double w = std::getenv("REFALL_WARMUP") ? std::max(0.0, std::atof(std::getenv("REFALL_WARMUP"))) : 12.0;
     return w;
 }
 
@@ -184,7 +184,7 @@ static void usage() {
         "                       S is then no soft drop); Ctrl+Shift+Left/Right also seek in a Voyage's song\n"
         "  --mute               no sound\n"
         "  --stream             played from afar (tools/stream.py runs it): no window, in real time, each frame raw RGB\n"
-        "                       on the fd ZEN_STREAM_VIDEO_FD, the sound (16-bit stereo) on ZEN_STREAM_AUDIO_FD, a\n"
+        "                       on the fd REFALL_STREAM_VIDEO_FD, the sound (16-bit stereo) on REFALL_STREAM_AUDIO_FD, a\n"
         "                       gamepad's state per line on stdin (\"pad BUTTONS AXES\": 15 digits, 6 numbers)\n"
         "  --shots PREFIX N     render N screenshots of different scenes then exit (testing)\n"
         "  --shot-time SEC      song position used for screenshots (default 25)\n"
@@ -252,7 +252,7 @@ private:
     // not drawn again, swap() waits for a key instead (the gamepads read 30 times a second).
     float stillT_ = 0;
     bool held_ = false;
-    long statFrames_ = 0; // ZEN_FRAME_STATS
+    long statFrames_ = 0; // REFALL_FRAME_STATS
     double statUpd_ = 0, statCpu_ = 0, statGpu_ = 0, statCpuMax_ = 0, statGpuMax_ = 0;
     void hideIdleCursor(float dt) {
         double x, y;
@@ -310,7 +310,7 @@ private:
             if (input_.pressed(a)) return true;
         return false;
     }
-    std::string testShot_; // ZEN_TEST_SHOTS: a screenshot of this frame
+    std::string testShot_; // REFALL_TEST_SHOTS: a screenshot of this frame
     void beginSession(const Menu::Choice& c);
     void toMenu(Menu::Screen s, const std::string& msg = "", const std::string& sub = "", bool bad = false);
     void campaignSongStarted();
@@ -328,7 +328,7 @@ private:
     // The break between songs: a little before a song ends the game freezes and fades away with its HUD, the
     // world stays alone a moment, then fades to black; the next song starts on the black with its title and
     // universe lettered big in the middle, which then shrink into their corners as the new world fades in; the
-    // game comes back last, its falling piece back at the top. ZEN_NO_BREAK=1 goes back to the transitions.
+    // game comes back last, its falling piece back at the top. REFALL_NO_BREAK=1 goes back to the transitions.
     enum BreakStage { BREAK_OFF, BREAK_OUT, BREAK_IN } break_ = BREAK_OFF;
     float breakT_ = 0;         // seconds into the stage
     bool breakSkip_ = false;   // an outro asked by "next song": a shorter one
@@ -338,14 +338,14 @@ private:
     bool songHeld_ = false;
     bool songHasIntro() const;
     Game blank_;               // what the universes draw while the game is hidden
-    // the outro starts this long before the song's end (ZEN_OUT_LEAD=SECONDS: earlier or later, for demo videos)
+    // the outro starts this long before the song's end (REFALL_OUT_LEAD=SECONDS: earlier or later, for demo videos)
     // The outro starts on a piece landing, so the game never fades out mid-fall: from OUT_EARLY s before outLead() to
     // OUT_LATE s after it the first lock starts it, and at the window's end it starts anyway.
     // A lock clearing lines waits for the stack to settle (up to OUT_SETTLE s more at the window's end).
     static constexpr float OUT_EARLY = 2.5f, OUT_LATE = 2.f, OUT_SETTLE = 1.5f;
     bool landed_ = false; // a piece locked since the last check (or since its clear, until the stack settled)
     static float outLead() {
-        static const float lead = std::getenv("ZEN_OUT_LEAD") ? (float)std::atof(std::getenv("ZEN_OUT_LEAD")) : 7.5f;
+        static const float lead = std::getenv("REFALL_OUT_LEAD") ? (float)std::atof(std::getenv("REFALL_OUT_LEAD")) : 7.5f;
         return lead;
     }
     // A Voyage run's first song starts at this share of its velocity, reached after WARMUP_SECONDS; the next songs
@@ -383,8 +383,8 @@ private:
         if (held_) { glfwWaitEventsTimeout(1.0 / 30.0); return; }
         glfwSwapBuffers(win_);
         // Wait for the frame to be shown: otherwise the driver queues up to a few frames ahead under vsync (more
-        // through PRIME offload), and every key press waits behind them. ZEN_FRAME_QUEUE=1 lets it queue.
-        static const bool queue = std::getenv("ZEN_FRAME_QUEUE") != nullptr;
+        // through PRIME offload), and every key press waits behind them. REFALL_FRAME_QUEUE=1 lets it queue.
+        static const bool queue = std::getenv("REFALL_FRAME_QUEUE") != nullptr;
         if (!queue) glFinish();
     }
     AudioEngine audio_;
@@ -488,8 +488,8 @@ void App::startTrack(std::shared_ptr<Track> t) {
     pace_ = -1;
     lastGravityTime_ = -1;
     simSongTime_ = 0;
-    if (testPlay() && std::getenv("ZEN_TEST_TAIL"))
-        simSongTime_ = std::max(0.0, track_->duration() - std::atof(std::getenv("ZEN_TEST_TAIL")));
+    if (testPlay() && std::getenv("REFALL_TEST_TAIL"))
+        simSongTime_ = std::max(0.0, track_->duration() - std::atof(std::getenv("REFALL_TEST_TAIL")));
     std::printf("[app] now playing: %s (%s)\n", track_->title.c_str(), track_->path.c_str());
     sceneCounter_++;
     computePhases();
@@ -754,8 +754,8 @@ void App::handleEvents() {
     for (const GameEvent& ev : game_.events()) {
         if (!preroll_) R_.onEvent(ev, game_);
         // --clip: the line clears with their song time (tools/demo.py keeps the shots that show one)
-        // (ZEN_CLIP_ALL_CLEARS=1: all of them, from the song's start: tools/demo.py's seed search for a continuous game)
-        static const bool allClears = std::getenv("ZEN_CLIP_ALL_CLEARS") != nullptr;
+        // (REFALL_CLIP_ALL_CLEARS=1: all of them, from the song's start: tools/demo.py's seed search for a continuous game)
+        static const bool allClears = std::getenv("REFALL_CLIP_ALL_CLEARS") != nullptr;
         if (ev.type == GameEvent::Clear && !opt_.clipPath.empty() && clipStart_ >= 0 && (allClears || songTime_ >= clipStart_ - 2.0))
             std::printf("[clip] clear %d at %.3f\n", ev.count, songTime_);
         if (ev.type == GameEvent::Clear && ev.count >= 4) {
@@ -789,8 +789,8 @@ void App::updateGravity(double songTime, float dt) {
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
     if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
-    // Test hook: ZEN_CLIP_VELOCITY=V falls at velocity V (tools/demo.py ramps it up), with no 20G unless ZEN_CLIP_20G=1
-    const float clipVel = clipRamp("ZEN_CLIP_VELOCITY", songTime, 0.f);
+    // Test hook: REFALL_CLIP_VELOCITY=V falls at velocity V (tools/demo.py ramps it up), with no 20G unless REFALL_CLIP_20G=1
+    const float clipVel = clipRamp("REFALL_CLIP_VELOCITY", songTime, 0.f);
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     gravityV_ = v;
     const float diff = Game::speedDifficulty(v);
@@ -798,7 +798,7 @@ void App::updateGravity(double songTime, float dt) {
     // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of HARD's later
     // stages has some, every song of the finale; free play has it from level 30 on (once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
-    static const bool clip20G = std::getenv("ZEN_CLIP_20G") && std::getenv("ZEN_CLIP_20G")[0] == '1';
+    static const bool clip20G = std::getenv("REFALL_CLIP_20G") && std::getenv("REFALL_CLIP_20G")[0] == '1';
     const bool hard = clipVel > 0.f ? clip20G : mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_HARD : freeLevels && freeDiff_ == DIFF_HARD;
     hyperAble_ = hard;
     const bool twentyG = hard && gameRate_ > 0.999f &&
@@ -844,20 +844,20 @@ void App::updateGravity(double songTime, float dt) {
 }
 
 void App::autoplay(float dt) {
-    // Test hook: ZEN_TEST_TOPOUT=1 drops every piece at once (a quick game over, to check its animation).
-    static const bool topOut = std::getenv("ZEN_TEST_TOPOUT") != nullptr;
+    // Test hook: REFALL_TEST_TOPOUT=1 drops every piece at once (a quick game over, to check its animation).
+    static const bool topOut = std::getenv("REFALL_TEST_TOPOUT") != nullptr;
     if (topOut) {
         botTimer_ -= dt;
         if (game_.hasPiece() && botTimer_ <= 0) { game_.hardDrop(); botTimer_ = 0.15f; }
         return;
     }
-    static const bool noBonus = std::getenv("ZEN_TEST_BONUS") && std::getenv("ZEN_TEST_BONUS")[0] == '0';
+    static const bool noBonus = std::getenv("REFALL_TEST_BONUS") && std::getenv("REFALL_TEST_BONUS")[0] == '0';
     if (game_.bonusReady() && !viewer_ && !noBonus) game_.activateBonus(); // (the viewer keeps the song unmuffled)
     if (!game_.hasPiece()) { planned_ = false; return; }
     // Recording a clip: a calm, human pace (a moment to think, unhurried moves, the piece falls visibly).
-    // Test hook: ZEN_CLIP_PACE=K plays a clip K times faster (tools/demo.py speeds the trailer up toward its end).
+    // Test hook: REFALL_CLIP_PACE=K plays a clip K times faster (tools/demo.py speeds the trailer up toward its end).
     const bool calm = !opt_.clipPath.empty();
-    const float pace = std::max(0.2f, clipRamp("ZEN_CLIP_PACE", songTime_, 1.f));
+    const float pace = std::max(0.2f, clipRamp("REFALL_CLIP_PACE", songTime_, 1.f));
     // (and hurries as the fall gets faster: no time to think once a piece reaches the stack in a second or two)
     const float rush = smoothstepf(4.f, 22.f, gravityV_);
     const float k = (calm ? 1.f / pace : 1.f) * (1.f - 0.85f * rush);
@@ -905,18 +905,18 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
     Renderer::Break b;
     b.blank = &blank_;
     float t = breakT_;
-    // Test hook: ZEN_TEST_CARD=<seconds> holds the break's intro (the title card) at that moment, e.g. in a review
+    // Test hook: REFALL_TEST_CARD=<seconds> holds the break's intro (the title card) at that moment, e.g. in a review
     // shot (0.4 the card comes up, 1.4 .. 3.2 held big, 5.2 landed in the corners).
-    static const float testCard = std::getenv("ZEN_TEST_CARD") ? std::atof(std::getenv("ZEN_TEST_CARD")) : -1.f;
+    static const float testCard = std::getenv("REFALL_TEST_CARD") ? std::atof(std::getenv("REFALL_TEST_CARD")) : -1.f;
     const bool cardTest = testCard >= 0.f && break_ == BREAK_OFF;
     if (cardTest) t = std::min(testCard, IN_SHOW - 0.01f);
-    // Test hook: ZEN_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
-    static const bool bareTest = std::getenv("ZEN_BARE") != nullptr;
+    // Test hook: REFALL_BARE=1 shows the world alone (what a break leaves), e.g. in screenshots.
+    static const bool bareTest = std::getenv("REFALL_BARE") != nullptr;
     if (bareTest && break_ == BREAK_OFF) b.play = 0.f;
-    // Test hook: ZEN_TEST_PHASES=T plays a scene's setup then its teardown around song time T, as a break would
+    // Test hook: REFALL_TEST_PHASES=T plays a scene's setup then its teardown around song time T, as a break would
     // (from black: the world alone, then the game for two seconds, then the game away and the world to black), for
     // clips of them (--clip-at T+5.5 --clip-before 5.5 --clip-after 6).
-    static const float phasesAt = std::getenv("ZEN_TEST_PHASES") ? (float)std::atof(std::getenv("ZEN_TEST_PHASES")) : -1.f;
+    static const float phasesAt = std::getenv("REFALL_TEST_PHASES") ? (float)std::atof(std::getenv("REFALL_TEST_PHASES")) : -1.f;
     if (phasesAt >= 0.f && break_ == BREAK_OFF) {
         const float u = (float)songTime_ - phasesAt;
         if (u < 5.2f) {
@@ -1034,7 +1034,7 @@ void App::updateBreak(float dt, const std::vector<HudText>& hud) {
         }
     }
     // Paused in a break (on the title card, the black): the pause menu over the world, dimmed, the card hidden.
-    static const bool testPause = std::getenv("ZEN_TEST_PAUSE") != nullptr; // (see buildHud)
+    static const bool testPause = std::getenv("REFALL_TEST_PAUSE") != nullptr; // (see buildHud)
     if ((paused_ || testPause) && break_ != BREAK_OFF) {
         b.black = std::min(b.black, 0.55f);
         b.card[0].alpha = b.card[1].alpha = 0.f;
@@ -1204,9 +1204,9 @@ std::vector<HudText> App::buildHud(float dt) {
             hud.push_back({again, w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.75f * b, false, true, HUD_DIALOG});
         }
     }
-    // Test hook: ZEN_TEST_PAUSE=0|1|2 shows the pause menu (that choice lit) without pausing, e.g. in a review shot;
+    // Test hook: REFALL_TEST_PAUSE=0|1|2 shows the pause menu (that choice lit) without pausing, e.g. in a review shot;
     // 3 its controls page.
-    static const int testPause = std::getenv("ZEN_TEST_PAUSE") ? std::atoi(std::getenv("ZEN_TEST_PAUSE")) : -1;
+    static const int testPause = std::getenv("REFALL_TEST_PAUSE") ? std::atoi(std::getenv("REFALL_TEST_PAUSE")) : -1;
     if (testPause >= 0) {
         pauseSel_ = std::min(testPause, 2);
         pauseControls_ = testPause == 3;
@@ -1249,8 +1249,8 @@ std::vector<HudText> App::buildHud(float dt) {
 void App::startStream() {
 #ifndef _WIN32
     auto fd = [](const char* name) { const char* v = std::getenv(name); return v ? std::atoi(v) : -1; };
-    streamVideo_ = fd("ZEN_STREAM_VIDEO_FD");
-    streamAudio_ = fd("ZEN_STREAM_AUDIO_FD");
+    streamVideo_ = fd("REFALL_STREAM_VIDEO_FD");
+    streamAudio_ = fd("REFALL_STREAM_AUDIO_FD");
     if (streamAudio_ >= 0) {
         // the sound never waits: a block the server is too late for is dropped
         fcntl(streamAudio_, F_SETFL, fcntl(streamAudio_, F_GETFL) | O_NONBLOCK);
@@ -1319,10 +1319,10 @@ int App::run() {
     FILE* clipPipe = nullptr;
     std::vector<unsigned char> clipPx;
 
-    // Offline renders (clips, shots, reviews) run headless on the GPU when they can (ZEN_HEADLESS=0: a window)
+    // Offline renders (clips, shots, reviews) run headless on the GPU when they can (REFALL_HEADLESS=0: a window)
     if (testPlay()) { offline_ = true; opt_.mute = true; }
     const bool wantHeadless = (testPlay() || shotMode || reviewMode || !opt_.transitionShots.empty() || !opt_.analysisPath.empty() || !opt_.menuShot.empty() || !opt_.menuClip.empty() || !opt_.viewShot.empty()) && !opt_.fullscreen &&
-                              !(std::getenv("ZEN_HEADLESS") && std::strcmp(std::getenv("ZEN_HEADLESS"), "0") == 0);
+                              !(std::getenv("REFALL_HEADLESS") && std::strcmp(std::getenv("REFALL_HEADLESS"), "0") == 0);
     const bool streamHeadless = opt_.stream && !opt_.fullscreen;
     if ((wantHeadless || streamHeadless) && headless::init(opt_.width, opt_.height)) {
         headless_ = true;
@@ -1430,8 +1430,8 @@ int App::run() {
 
     game_.reset(runSeed_);
     blank_.makeBlank();
-    breaks_ = !std::getenv("ZEN_NO_BREAK") && (!shotMode || clipMode) && !viewer_; // (the viewer goes straight from song to song)
-    introAtStart_ = breaks_ && (!shotMode || std::getenv("ZEN_INTRO_TEST"));
+    breaks_ = !std::getenv("REFALL_NO_BREAK") && (!shotMode || clipMode) && !viewer_; // (the viewer goes straight from song to song)
+    introAtStart_ = breaks_ && (!shotMode || std::getenv("REFALL_INTRO_TEST"));
     // A universe while the first song loads (the forced one, else one picked from the run seed); the first song
     // keeps it.
     if (!opt_.universe.empty()) {
@@ -1462,9 +1462,9 @@ int App::run() {
     if (menuEnabled_) { // back where the menu was last time (the command line's difficulty wins)
         placePath_ = menuPlacePath(opt_.progressPath);
         Menu::Place pl;
-        // the game's first launch (or after --reset: no place kept), or ZEN_MENU_INTRO=1: the title's opening
+        // the game's first launch (or after --reset: no place kept), or REFALL_MENU_INTRO=1: the title's opening
         const bool known = Menu::loadPlace(placePath_, pl);
-        if ((!known && mode_ == MODE_MENU) || std::getenv("ZEN_MENU_INTRO")) menu_.startIntro();
+        if ((!known && mode_ == MODE_MENU) || std::getenv("REFALL_MENU_INTRO")) menu_.startIntro();
         if (known) {
             if (!pl.voyage.empty() && !menu_.selectVoyage(pl.voyage)) pl.stage = -1; // (a voyage deleted since)
             if (opt_.levelGiven) pl.freeLevel = -1; // (--level wins)
@@ -1496,8 +1496,8 @@ int App::run() {
         stillT_ = still ? stillT_ + dt : 0;
         held_ = stillT_ > 2.5f; // (the world's dimming settled)
         if (testPlay()) {
-            static const auto keys = testList("ZEN_TEST_KEYS"), shots = testList("ZEN_TEST_SHOTS");
-            static const double quitAt = std::getenv("ZEN_TEST_QUIT") ? std::atof(std::getenv("ZEN_TEST_QUIT")) : 1e9;
+            static const auto keys = testList("REFALL_TEST_KEYS"), shots = testList("REFALL_TEST_SHOTS");
+            static const double quitAt = std::getenv("REFALL_TEST_QUIT") ? std::atof(std::getenv("REFALL_TEST_QUIT")) : 1e9;
             input_.testFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(1)); // background loads keep up with the simulated clock
             static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
@@ -1614,7 +1614,7 @@ int App::run() {
                 startTrack(std::move(nextTrack_));
                 std::printf("[app] break: intro\n");
             }
-        } else if (mode_ == MODE_CAMPAIGN && track_ && songFinished() && !game_.over()) { // no breaks (ZEN_NO_BREAK)
+        } else if (mode_ == MODE_CAMPAIGN && track_ && songFinished() && !game_.over()) { // no breaks (REFALL_NO_BREAK)
             campaignSongSurvived();
             if (run_.finishing) { campaignEnd(); swap(); continue; }
             if (nextTrack_) startTrack(std::move(nextTrack_));
@@ -1628,22 +1628,22 @@ int App::run() {
                 const double drop = opt_.clipBreak ? track_->duration() - 9.0 : opt_.clipAt >= 0.f ? (double)opt_.clipAt : firstDropTime();
                 clipStart_ = std::max(0.0, drop - opt_.clipBefore);
                 simSongTime_ = std::max(0.0, clipStart_ - warmup()); // warm-up: the board fills, the scene settles
-                // Test hook: ZEN_CLIP_FROM_START=1 plays the game from the song's start, unseen until the warm-up, so
+                // Test hook: REFALL_CLIP_FROM_START=1 plays the game from the song's start, unseen until the warm-up, so
                 // that every clip of one song (same seed, same hooks) shows the same game at the same moment: a
                 // continuous game across the cuts of a trailer (tools/demo.py)
-                if (std::getenv("ZEN_CLIP_FROM_START")) simSongTime_ = 0.0;
-                // Test hook: ZEN_CLIP_FILL=1 starts the warm-up on a played-in stack (the review shots' filled board),
+                if (std::getenv("REFALL_CLIP_FROM_START")) simSongTime_ = 0.0;
+                // Test hook: REFALL_CLIP_FILL=1 starts the warm-up on a played-in stack (the review shots' filled board),
                 // for clips early in a song, where the warm-up is too short to fill it (tools/demo.py).
-                if (std::getenv("ZEN_CLIP_FILL") && std::getenv("ZEN_CLIP_FILL")[0] == '1') game_.debugFillBoard(runSeed_);
+                if (std::getenv("REFALL_CLIP_FILL") && std::getenv("REFALL_CLIP_FILL")[0] == '1') game_.debugFillBoard(runSeed_);
                 std::printf("[clip] moment at %.1f s: recording %.1f s .. %.1f s\n", drop, clipStart_,
                             clipStart_ + opt_.clipBefore + opt_.clipAfter);
             }
             simSongTime_ += dt; // real song time: the recorded audio is cut from the same span
             songTime_ = simSongTime_;
             preroll_ = simSongTime_ < clipStart_ - warmup();
-            // Test hook: ZEN_TEST_BONUS=1 also starts the slow-motion bonus ZEN_TEST_BONUS_AT s into a clip (default 3)
-            static const char* tbc = std::getenv("ZEN_TEST_BONUS");
-            static const double tbAt = std::getenv("ZEN_TEST_BONUS_AT") ? std::atof(std::getenv("ZEN_TEST_BONUS_AT")) : 3.0;
+            // Test hook: REFALL_TEST_BONUS=1 also starts the slow-motion bonus REFALL_TEST_BONUS_AT s into a clip (default 3)
+            static const char* tbc = std::getenv("REFALL_TEST_BONUS");
+            static const double tbAt = std::getenv("REFALL_TEST_BONUS_AT") ? std::atof(std::getenv("REFALL_TEST_BONUS_AT")) : 3.0;
             static bool tbDone = false;
             if (tbc && tbc[0] == '1' && !tbDone && simSongTime_ >= clipStart_ + tbAt) {
                 tbDone = true;
@@ -1659,9 +1659,9 @@ int App::run() {
             } else {
                 if (reviewMode && reviewPhase_ < 0) pickReviewTime();
                 if (simSongTime_ < opt_.shotTime - warmup()) simSongTime_ = std::max(0.0, opt_.shotTime - warmup());
-                // Test hook: ZEN_TEST_BONUS=1 starts the slow-motion bonus 4 s before the shot (its look settled),
-                // ZEN_TEST_BONUS=0 keeps it off (autoplay won't start it)
-                static const char* tb = std::getenv("ZEN_TEST_BONUS");
+                // Test hook: REFALL_TEST_BONUS=1 starts the slow-motion bonus 4 s before the shot (its look settled),
+                // REFALL_TEST_BONUS=0 keeps it off (autoplay won't start it)
+                static const char* tb = std::getenv("REFALL_TEST_BONUS");
                 if (tb && tb[0] == '1' && simSongTime_ >= opt_.shotTime - 4.0 && !game_.bonusActive()) {
                     game_.debugChargeBonus();
                     game_.activateBonus();
@@ -1710,8 +1710,8 @@ int App::run() {
         if (waiting && menuEnabled_ && input_.pressed(A_UI_BACK)) { toMenu(mode_ == MODE_CAMPAIGN ? Menu::CAMPAIGN : Menu::FREE); swap(); continue; }
         if (input_.pressed(A_FULLSCREEN)) toggleFullscreen();
         if (viewer_) viewerFrame(dt); // (its own keys: the game's shortcuts below are off)
-        // Test hook: ZEN_TEST_SKIP=<seconds> presses "next song" periodically.
-        static const double testSkip = std::getenv("ZEN_TEST_SKIP") ? std::atof(std::getenv("ZEN_TEST_SKIP")) : 0.0;
+        // Test hook: REFALL_TEST_SKIP=<seconds> presses "next song" periodically.
+        static const double testSkip = std::getenv("REFALL_TEST_SKIP") ? std::atof(std::getenv("REFALL_TEST_SKIP")) : 0.0;
         const bool testSkipNow = testSkip > 0 && std::fmod(runTime_, testSkip) < dt && runTime_ > dt;
         if (testSkipNow) std::printf("[test] skip pressed (next ready: %s)\n", nextTrack_ ? "yes" : "no");
         if (input_.pressed(A_NEXT_SONG) && !testSkipNow)
@@ -1754,9 +1754,9 @@ int App::run() {
         } else if (!paused_ && !waiting) {
             trackAge_ += dt;
             if (opt_.autoplay || shotMode) {
-                // Test hook: ZEN_TEST_OVER=T hard-drops every piece from T seconds into a shot's settle (a game
+                // Test hook: REFALL_TEST_OVER=T hard-drops every piece from T seconds into a shot's settle (a game
                 // over in screenshots, to check each universe's top out).
-                static const float overAt = std::getenv("ZEN_TEST_OVER") ? (float)std::atof(std::getenv("ZEN_TEST_OVER")) : -1.f;
+                static const float overAt = std::getenv("REFALL_TEST_OVER") ? (float)std::atof(std::getenv("REFALL_TEST_OVER")) : -1.f;
                 if (shotMode && overAt >= 0.f && shotSettle >= overAt && !game_.over()) {
                     if (game_.hasPiece()) game_.hardDrop();
                 } else if (!reviewFilled_) autoplay(dt); // a review's filled board is left as it is
@@ -1981,14 +1981,14 @@ int App::run() {
         if (fbw > 0 && fbh > 0) {
             std::vector<HudText> hud = buildHud(dt);
             updateBreak(dt, hud);
-            // ZEN_FRAME_STATS=1 (or slow): each frame's cost (the game's update, the drawing calls, the GPU), printed at the end
-            static const bool stats = std::getenv("ZEN_FRAME_STATS") != nullptr;
+            // REFALL_FRAME_STATS=1 (or slow): each frame's cost (the game's update, the drawing calls, the GPU), printed at the end
+            static const bool stats = std::getenv("REFALL_FRAME_STATS") != nullptr;
             static GLuint statQ = 0;
             if (stats && !statQ) glGenQueries(1, &statQ);
             const auto r0 = std::chrono::steady_clock::now();
             if (stats) glBeginQuery(GL_TIME_ELAPSED, statQ);
-            // Test hook: ZEN_TEST_SPAWN=1 draws a review's piece where it spawns (its top row in the rows above the well)
-            static const bool spawnTest = std::getenv("ZEN_TEST_SPAWN") != nullptr;
+            // Test hook: REFALL_TEST_SPAWN=1 draws a review's piece where it spawns (its top row in the rows above the well)
+            static const bool spawnTest = std::getenv("REFALL_TEST_SPAWN") != nullptr;
             if (spawnTest && reviewFilled_) game_.respawn();
             if (!preroll_ && !held_) R_.render(game_, music_, runTime_, dt, paused_ || waiting, hud, shotMode ? 1.f : fade);
             if (stats) {
@@ -1999,7 +1999,7 @@ int App::run() {
                 const double upd = std::chrono::duration<double, std::milli>(r0 - frameStart).count();
                 statFrames_++; statUpd_ += upd; statCpu_ += cpu; statGpu_ += ns / 1e6;
                 statCpuMax_ = std::max(statCpuMax_, cpu); statGpuMax_ = std::max(statGpuMax_, ns / 1e6);
-                static const bool slow = std::string(std::getenv("ZEN_FRAME_STATS")) == "slow"; // =slow: each frame over 10 ms
+                static const bool slow = std::string(std::getenv("REFALL_FRAME_STATS")) == "slow"; // =slow: each frame over 10 ms
                 if (slow && std::max(cpu, ns / 1e6) > 10.0)
                     std::printf("[stats] slow frame at %.2f s (song %.2f s): drawing calls %.1f ms, GPU %.1f ms (%s%s)\n", runTime_,
                                 songTime_, cpu, ns / 1e6, R_.label().c_str(), R_.changing() ? ", changing" : "");
@@ -2029,7 +2029,7 @@ int App::run() {
             int cw, ch;
             R_.readFrame(clipPx, cw, ch);
             if (!clipPipe) {
-                std::string ff = std::getenv("ZENTRIS_FFMPEG") ? std::getenv("ZENTRIS_FFMPEG") : platform::findExecutable("ffmpeg");
+                std::string ff = std::getenv("REFALL_FFMPEG") ? std::getenv("REFALL_FFMPEG") : platform::findExecutable("ffmpeg");
                 if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); break; }
                 char spec[160];
                 std::snprintf(spec, sizeof(spec), " -y -loglevel error -f rawvideo -pix_fmt rgb24 -s %dx%d -r 60 -i - -ss %.3f -t %.3f -i ",
@@ -2052,9 +2052,9 @@ int App::run() {
             }
         }
         if (shotMode && !clipMode && track_) {
-            // Test hook: ZEN_FX=slow:N, quad:N or drop plays that special animation ZEN_FX_AT seconds before each shot.
-            static const char* fxEnv = std::getenv("ZEN_FX");
-            static const float fxAt = std::getenv("ZEN_FX_AT") ? (float)std::atof(std::getenv("ZEN_FX_AT")) : 6.f;
+            // Test hook: REFALL_FX=slow:N, quad:N or drop plays that special animation REFALL_FX_AT seconds before each shot.
+            static const char* fxEnv = std::getenv("REFALL_FX");
+            static const float fxAt = std::getenv("REFALL_FX_AT") ? (float)std::atof(std::getenv("REFALL_FX_AT")) : 6.f;
             if (fxEnv && shotSettle < 12.f - fxAt && shotSettle + dt >= 12.f - fxAt) {
                 int idx = std::atoi(std::strchr(fxEnv, ':') ? std::strchr(fxEnv, ':') + 1 : "0") + shotsTaken;
                 if (std::strncmp(fxEnv, "drop", 4) == 0) {
@@ -2137,8 +2137,8 @@ int App::run() {
             }
         }
         swap();
-        // Debug: ZEN_FPS=1 prints the average frame time every 2 s.
-        static const bool showFps = std::getenv("ZEN_FPS") != nullptr;
+        // Debug: REFALL_FPS=1 prints the average frame time every 2 s.
+        static const bool showFps = std::getenv("REFALL_FPS") != nullptr;
         if (showFps) {
             static double acc = 0, t0 = glfwGetTime();
             static int frames = 0;
@@ -2170,8 +2170,8 @@ int App::run() {
 // The menu's music file: next to the campaign data in the sources, else next to the executable (installed builds).
 static std::string menuMusicPath() {
     std::vector<fs::path> c;
-#ifdef ZEN_SOURCE_DIR
-    c.push_back(fs::path(ZEN_SOURCE_DIR) / "data" / "menu_music.mp3");
+#ifdef REFALL_SOURCE_DIR
+    c.push_back(fs::path(REFALL_SOURCE_DIR) / "data" / "menu_music.mp3");
 #endif
     c.push_back(platform::executableDir() / "menu_music.mp3");
     c.push_back(platform::executableDir() / "data" / "menu_music.mp3");
@@ -2462,9 +2462,9 @@ bool App::viewerStart() {
 void App::viewerFrame(float dt) {
     if (!vv_) return;
     if (track_) viewShotT_ += dt;
-    // Test hook: ZEN_VIEWER_KEYS="T:COMMAND,..." gives the overlay a command (VoyageViewer::command) T seconds after the
+    // Test hook: REFALL_VIEWER_KEYS="T:COMMAND,..." gives the overlay a command (VoyageViewer::command) T seconds after the
     // first song started.
-    static const auto keys = testList("ZEN_VIEWER_KEYS");
+    static const auto keys = testList("REFALL_VIEWER_KEYS");
     for (auto& [t, k] : keys)
         if (viewShotT_ - dt < t && viewShotT_ >= t) { vv_->command(k); std::printf("[test] %.2f s: %s\n", viewShotT_, k.c_str()); }
     if (paused_) return;
@@ -2546,7 +2546,7 @@ void App::viewerSongStarted() {
 }
 
 // --menu-shot: a menu screen, rendered offline, saved, then exit. --menu-clip: a video walking through the menus (a
-// built-in key sequence, or ZEN_TEST_KEYS), then exit.
+// built-in key sequence, or REFALL_TEST_KEYS), then exit.
 int App::runMenuShot() {
     if (opt_.menuDemo || !opt_.menuClip.empty()) {
         // made-up progress, in memory only (never saved): by default stages 1 and 2 cleared, stage 3 started, the rest
@@ -2619,7 +2619,7 @@ int App::runMenuShot() {
     if (opt_.menuPetal) menu_.setPetalOpen(true);
     menu_.setPlaylists(&playlists_);
     menu_.snap();
-    if (std::getenv("ZEN_MENU_INTRO") && sc == "title") menu_.startIntro(); // (the opening, as on a first launch)
+    if (std::getenv("REFALL_MENU_INTRO") && sc == "title") menu_.startIntro(); // (the opening, as on a first launch)
     int w, h;
     fbSize(w, h);
     if (!opt_.menuClip.empty()) {
@@ -2632,14 +2632,14 @@ int App::runMenuShot() {
             {16.0, "right"}, {16.8, "right"}, {17.8, "back"}, {18.6, "up"}, {19.4, "right"}, {20.2, "left"}, {21.0, "down"},
             {21.9, "back"}, {22.35, "back"}, {22.8, "down"}, {23.5, "ok"}, {24.3, "left"}, {25.0, "down"}, {25.7, "right"}, {26.4, "right"},
             {27.1, "right"}, {27.8, "ok"}, {30.8, "enter"}, {32.6, "up"}};
-        const double END = std::getenv("ZEN_MENU_CLIP_SECONDS") ? std::atof(std::getenv("ZEN_MENU_CLIP_SECONDS")) : 34.5;
-        std::vector<std::pair<double, std::string>> keys = testList("ZEN_TEST_KEYS");
+        const double END = std::getenv("REFALL_MENU_CLIP_SECONDS") ? std::atof(std::getenv("REFALL_MENU_CLIP_SECONDS")) : 34.5;
+        std::vector<std::pair<double, std::string>> keys = testList("REFALL_TEST_KEYS");
         if (keys.empty() && sc.rfind("debrief", 0) != 0) { // (a debrief's clip: its animation, no key)
             for (auto& [t, k] : WALK) keys.push_back({t, k});
             const std::string link = "youtube.com/playlist?list=PLPWC9IDC1n_Q";
             for (size_t i = 0; i < link.size(); i++) keys.push_back({28.2 + i * 0.05, "type:" + link.substr(i, 1)});
         }
-        std::string ff = std::getenv("ZENTRIS_FFMPEG") ? std::getenv("ZENTRIS_FFMPEG") : platform::findExecutable("ffmpeg");
+        std::string ff = std::getenv("REFALL_FFMPEG") ? std::getenv("REFALL_FFMPEG") : platform::findExecutable("ffmpeg");
         if (ff.empty()) { std::fprintf(stderr, "[clip] ffmpeg not found\n"); return 1; }
         char spec[160];
         std::snprintf(spec, sizeof(spec), " -y -loglevel error -f rawvideo -pix_fmt rgb24 -s %dx%d -r 60 -i - ", w, h);
@@ -2678,7 +2678,7 @@ int App::runMenuShot() {
             menu_.render(w, h);
             glEndQuery(GL_TIME_ELAPSED);
             cpu += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c1).count();
-            if (std::getenv("ZEN_MENU_FINISH")) { // software renderers: the frame's whole cost as wall time
+            if (std::getenv("REFALL_MENU_FINISH")) { // software renderers: the frame's whole cost as wall time
                 glFinish();
                 wallSum += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - c1).count();
             }
@@ -2692,7 +2692,7 @@ int App::runMenuShot() {
             for (auto& [t, k] : keys)
                 if (t < t1) lastKey = std::max(lastKey, t);
             if (t0 - lastKey < 0.6) navMax = std::max(navMax, std::max(cpu, gpu)); // a frame right after a key: navigating
-            if (std::getenv("ZEN_MENU_SLOW") && std::max(cpu, gpu) > 30.0) std::printf("[menu] slow frame %d (%.2f s): CPU %.1f ms, GPU %.1f ms\n", f, t0, cpu, gpu);
+            if (std::getenv("REFALL_MENU_SLOW") && std::max(cpu, gpu) > 30.0) std::printf("[menu] slow frame %d (%.2f s): CPU %.1f ms, GPU %.1f ms\n", f, t0, cpu, gpu);
             std::fwrite(px.data(), 1, px.size(), pipe);
         }
         glDeleteQueries(1, &gpuQ);
@@ -2705,9 +2705,9 @@ int App::runMenuShot() {
         if (headless_) headless::shutdown();
         return rc == 0 ? 0 : 1;
     }
-    // ZEN_TEST_KEYS="T:KEY,...": keys pressed before the shot (it is taken 1.5 s after the last one)
+    // REFALL_TEST_KEYS="T:KEY,...": keys pressed before the shot (it is taken 1.5 s after the last one)
     {
-        const auto keys = testList("ZEN_TEST_KEYS");
+        const auto keys = testList("REFALL_TEST_KEYS");
         double end = 0.2;
         for (auto& [t, k] : keys) end = std::max(end, t + 1.5);
         static const std::pair<const char*, Action> NAMES[] = {{"up", A_UI_UP}, {"down", A_UI_DOWN}, {"left", A_UI_LEFT},
@@ -2800,7 +2800,7 @@ static int viewerMain(int argc, char** argv) {
 int main(int argc, char** argv) {
     g_startTime = std::chrono::steady_clock::now();
     platform::lineBufferStdout();
-#ifdef ZEN_VOYAGE_VIEWER
+#ifdef REFALL_VOYAGE_VIEWER
     return viewerMain(argc, argv);
 #endif
     Options o;

@@ -694,7 +694,7 @@ HudInk MicroscopeUniverse::hudInk(const HudText& h) {
     return k;
 }
 
-// The HUD's own lettering (ZEN_HUD=universe): Lato in spaced capitals for the names, the labels and the numbers, EB
+// The HUD's own lettering (REFALL_HUD=universe): Lato in spaced capitals for the names, the labels and the numbers, EB
 // Garamond Italic for the song and the notices, like a slide's label; the deep ink on a lit field, the pale one in
 // dark-field, on a faint halo of the field.
 void MicroscopeUniverse::hudLine(const HudText& h, text::Line& out) {

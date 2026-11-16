@@ -63,7 +63,7 @@
 namespace {
 
 // Inter (Bold: the values; Regular: the information, the labels), SIL Open Font License, see OFL-Inter.txt: the
-// HUD's own lettering when the host does not unify it (ZEN_HUD=universe).
+// HUD's own lettering when the host does not unify it (REFALL_HUD=universe).
 const unsigned char FONT_BOLD[] = {
 #include "universes/swiss/Inter-Bold.ttf.inc"
 };
@@ -933,7 +933,7 @@ HudInk SwissUniverse::hudInk(const HudText& h) {
     return k;
 }
 
-// The HUD's own lettering (ZEN_HUD=universe): Inter, labels small and spaced in capitals, values bold and set tight,
+// The HUD's own lettering (REFALL_HUD=universe): Inter, labels small and spaced in capitals, values bold and set tight,
 // in the poster's ink and accent.
 void SwissUniverse::hudLine(const HudText& h, text::Line& out) {
     const VariantDef& V = VARIANTS[variant_];

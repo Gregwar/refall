@@ -49,7 +49,7 @@ namespace hud {
 
 bool unifiedFromEnv() {
     static const bool on = [] {
-        const char* v = std::getenv("ZEN_HUD");
+        const char* v = std::getenv("REFALL_HUD");
         return !(v && std::strcmp(v, "universe") == 0);
     }();
     return on;

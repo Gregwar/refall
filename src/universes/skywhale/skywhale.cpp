@@ -203,10 +203,10 @@ vec3 orbitCenter(const vec3& p) { return vec3(0.f, -(float)R_EARTH, std::min(p.z
 // On the way out: how much it heads for the Moon (its heading, the camera's bearing).
 float legK(float kM) { return smoothstepf(0.f, 0.15f, kM); }
 
-// Test hooks: ZEN_SKYWHALE_LINES=N adds N lines to the growth, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_SKYWHALE_LINES=N adds N lines to the growth, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_SKYWHALE_LINES") ? std::atoi(std::getenv("ZEN_SKYWHALE_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_SKYWHALE_LINES") ? std::atoi(std::getenv("REFALL_SKYWHALE_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -1619,8 +1619,8 @@ void SkyWhaleUniverse::hudLine(const HudText& h, text::Line& out) {
 // =====================================================================================================
 
 void SkyWhaleUniverse::render(const Frame& f, GLuint fbo) {
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 240 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 240 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);

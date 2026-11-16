@@ -52,7 +52,7 @@ private:
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
 class Progress {
 public:
-    static std::string defaultPath(); // <user data>/zentris/campaign-progress.tsv
+    static std::string defaultPath(); // <user data>/refall/campaign-progress.tsv
     // `camp` maps the file's song ids to the campaign's stages and songs (without it, ids aren't resolved).
     void load(const std::string& path = "", const Campaign* camp = nullptr);
     bool save() const;

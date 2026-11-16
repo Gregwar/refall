@@ -376,8 +376,8 @@ void MusicBoxUniverse::render(const Frame& f, GLuint fbo) {
             sectionKnown = true;
             sectionDrop = h.text == "DROP";
         }
-    // (ZEN_FX=drop, a test hook, forces the drop whatever the section)
-    static const bool fxDrop = std::getenv("ZEN_FX") && std::strncmp(std::getenv("ZEN_FX"), "drop", 4) == 0;
+    // (REFALL_FX=drop, a test hook, forces the drop whatever the section)
+    static const bool fxDrop = std::getenv("REFALL_FX") && std::strncmp(std::getenv("REFALL_FX"), "drop", 4) == 0;
     const bool isDrop = dropMode_ && overT_ < 0.f && (fxDrop || (sectionKnown ? sectionDrop : !music.hasSong || music.speed > 1.26f));
     dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 1.0f : 0.22f, dt);
     // the dancer: up with the drop, staying a few bars after it, then down
@@ -685,7 +685,7 @@ void MusicBoxUniverse::render(const Frame& f, GLuint fbo) {
             set3f(p, "uLampP", LAMP);
             set3f(p, "uSpotC", vec3(-2.f, 0.f, 0.f));
             set1f(p, "uSpot", 40.f);
-            static const bool noShadow = std::getenv("ZEN_MB_NOSHADOW") != nullptr;
+            static const bool noShadow = std::getenv("REFALL_MB_NOSHADOW") != nullptr;
             set1f(p, "uShadowOn", noShadow ? 0.f : 1.f);
             const int n = (int)LP.size();
             set1i(p, "uNL", n);

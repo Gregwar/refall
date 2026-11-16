@@ -222,10 +222,10 @@ int placeOf(double s) {
     return 7;
 }
 
-// Test hooks: ZEN_LOSTPANDA_LINES=N adds N lines to the way, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_LOSTPANDA_LINES=N adds N lines to the way, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_LOSTPANDA_LINES") ? std::atoi(std::getenv("ZEN_LOSTPANDA_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_LOSTPANDA_LINES") ? std::atoi(std::getenv("REFALL_LOSTPANDA_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -1035,8 +1035,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
         if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
-        { // (testing: with ZEN_GROW_RATE the cub keeps up with the growing lines)
-            static const double grow = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+        { // (testing: with REFALL_GROW_RATE the cub keeps up with the growing lines)
+            static const double grow = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
             vmax += grow * 2.5;
         }
         if (!riding) {
@@ -1112,8 +1112,8 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         if (missedT_ > 12.f || P_ >= XB - 0.03) missedT_ = 0.f;
         speed = (float)std::min(vel_, 3.0);
         travelling = !riding && (lineWalk || vel_ > 0.12);
-        { // (testing: ZEN_LOSTPANDA_TRAINX=X holds the train with its rear at screen x X, both cabs in view)
-            static const char* tx = std::getenv("ZEN_LOSTPANDA_TRAINX");
+        { // (testing: REFALL_LOSTPANDA_TRAINX=X holds the train with its rear at screen x X, both cabs in view)
+            static const char* tx = std::getenv("REFALL_LOSTPANDA_TRAINX");
             if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
         }
         // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
