@@ -199,6 +199,16 @@ bool RuinsUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 4, nullptr);
     glBindVertexArray(0);
 
+    // ---- MAYA's corner stones' dissolves (see ruins::Scene::cornerTex)
+    glGenTextures(1, &cornerTex_);
+    glBindTexture(GL_TEXTURE_2D, cornerTex_);
+    {
+        const unsigned char z[ruins::Scene::CORNER_W] = {};
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, ruins::Scene::CORNER_W, 1, 0, GL_RED, GL_UNSIGNED_BYTE, z);
+    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
     // ---- the sun's shadow map
     glGenTextures(1, &shadowTex_);
     glBindTexture(GL_TEXTURE_2D, shadowTex_);
@@ -441,7 +451,7 @@ RuinsUniverse::~RuinsUniverse() {
         glDeleteProgram(p);
     for (GLuint v : {spriteVao_, cellVao_, shapeVao_, meshVao_, figVao_, folVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, meshVbo_, figVbo_, instVbo_, folVbo_}) glDeleteBuffers(1, &b);
-    for (GLuint t : {worldDepth_, auxTex_, shadowTex_}) glDeleteTextures(1, &t);
+    for (GLuint t : {worldDepth_, auxTex_, shadowTex_, cornerTex_}) glDeleteTextures(1, &t);
     for (GLuint fb : {msFbo_, shadowFbo_}) glDeleteFramebuffers(1, &fb);
     for (GLuint rb : {msColor_, msDepth_}) glDeleteRenderbuffers(1, &rb);
 }
@@ -1111,6 +1121,12 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         snapNext_ = false;
         glBindBuffer(GL_ARRAY_BUFFER, instVbo_);
         glBufferData(GL_ARRAY_BUFFER, inst_.size() * sizeof(ruins::Inst), inst_.data(), GL_STREAM_DRAW);
+        if (scene_.cornerChanged()) {
+            const auto& ct = scene_.cornerTex();
+            glBindTexture(GL_TEXTURE_2D, cornerTex_);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, ruins::Scene::CORNER_W, (int)ct.size() / ruins::Scene::CORNER_W, 0, GL_RED,
+                         GL_UNSIGNED_BYTE, ct.data());
+        }
         if (scene_.figChanged()) {
             glBindBuffer(GL_ARRAY_BUFFER, figVbo_);
             glBufferData(GL_ARRAY_BUFFER, scene_.figVerts().size() * sizeof(ruins::Vtx), scene_.figVerts().data(), GL_DYNAMIC_DRAW);
@@ -1129,7 +1145,6 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         }
         lightVp_ = mat4::ortho(mn[0], mx[0], mn[1], mx[1], -mx[2] - 5.f, -mn[2] + 5.f) * lv;
     }
-    const float corner = kind == 0 ? 1.f - smoothstepf(0.f, 0.5f, temple_) : 0.f;
     auto setScene = [&](GLuint P) {
         set3f(P, "uEye", eye_);
         set3f(P, "uFwd", fwd_);
@@ -1166,12 +1181,12 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
         set1f(P, "uBroken", broken_);
         set1f(P, "uWear", wear_);
         set1f(P, "uPrime", prime_);
-        set1f(P, "uCorner", corner);
         set4f(P, "uFocus", focusP_.x, focusP_.y, focusP_.z, focusA_);
         set1f(P, "uFocusR", focusR_);
         set3f(P, "uBridgeCol", bridge_.color);
         setMat(P, "uLightVP", lightVp_);
         set1i(P, "uShadow", 3);
+        set1i(P, "uCornerTex", 4);
         set1f(P, "uSoft", 1.7f / SHADOW_SIZE);
         set2f(P, "uNF", NEAR, FAR);
     };
@@ -1187,7 +1202,11 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     glClear(GL_DEPTH_BUFFER_BIT);
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(1.5f, 2.f);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, cornerTex_);
+    glActiveTexture(GL_TEXTURE0);
     glUseProgram(progShadow_);
+    setScene(progShadow_); // (MAYA's corner: its stones' dissolve, its bowl's clip)
     setMat(progShadow_, "uVP", lightVp_);
     drawMeshes(progShadow_);
     glDisable(GL_POLYGON_OFFSET_FILL);

@@ -263,6 +263,201 @@ const vec3 BRZ[12] = {vec3(-4.8f, 21.0f, -48.0f), vec3(4.8f, 21.0f, -48.0f), vec
 // the rotation of a tumbled piece: about y, then x, then z, each scaled by k
 Aff tumble(const vec3& r, float k) { return Aff::rotZ(r.z * k) * Aff::rotX(r.x * k) * Aff::rotY(r.y * k); }
 
+// ---------------------------------------------------------------- MAYA's collapsed corner
+// A crater bitten out of the pyramid's front right corner: an ellipsoid (flattened in y) about CC, its radius
+// lumpy with direction. The terraces' facing stones there are solids of their own (cut at the masonry's joints),
+// each gone while it lies wholly inside the crater; behind them the crater's rough core of rubble (a lumpy bowl,
+// clipped to the pyramid's inside, chunks of rubble heaped on it); at its foot a scree of fallen blocks on a slope
+// of rubble. As the corner closes (r: 1 open .. 0 closed) the stones re-form from golden dust as it passes them
+// (each its index in its vertices' pattern, its dissolve in a texture: Scene::cornerTex), the bowl shrinks toward
+// CC a moment later (in front of the face: it leaves the pyramid), the fallen blocks fly back into it. Never a
+// stone gone outside the bowl: no view into the hollow pyramid.
+const vec3 CC(16.f, 7.f, 18.5f);   // (temple space)
+const float CR = 8.f, CY = 1.3f;   // its radius, its flattening in y
+// how deep a point is inside the pyramid (temple space; < 0 outside), as the shaders' outsidePyramid
+float pyramidDepth(const vec3& q) {
+    const float k = std::min(6.f, std::max(0.f, std::floor(q.y / 3.f))), yl = q.y - 3.f * k, s = 22.f - 2.6f * k;
+    const float f = yl < 2.1f ? s - yl / 3.f : (yl < 2.82f ? s - 0.7f : s - 0.62f + 0.222f * (yl - 2.82f));
+    return std::min(f - std::max(std::fabs(q.x), std::fabs(q.z)), q.y);
+}
+// the crater's radius toward d (a unit vector in its metric): 1 .. 1.25
+float lumpK(const vec3& d) {
+    return 1.f + 0.16f * gnoise(d.x * 2.3f + d.y * 1.1f + 4.f, d.z * 2.3f - d.y * 1.7f + 1.f) +
+           0.09f * gnoise(d.x * 5.1f - d.z * 2.f + 9.f, d.y * 5.3f + d.z * 1.3f) +
+           0.05f * gnoise(d.x * 13.f + d.y * 4.f, d.z * 13.f - d.y * 9.f + 2.f);
+}
+// a point's place in the crater (temple space): < 1 inside it when fully open
+float craterRho(const vec3& p) {
+    const vec3 q((p.x - CC.x) / CR, (p.y - CC.y) * CY / CR, (p.z - CC.z) / CR);
+    const float l = length(q);
+    return l < 1e-4f ? 0.f : l / lumpK(q / l);
+}
+// how open the corner is at the temple's repair T (1 open .. 0 closed: over the temple's first half)
+float cornerOpen(float T) { return 1.f - sstep(0.f, 0.5f, T); }
+float hash1(float n) { return ghash(n, n * 0.371f + 17.13f); }
+
+// a solid from convex polygons (xz, the same count, clockwise in x, z) stacked at levels (y), its caps; each side
+// face coded (b.flag) as outer (the terrace's face: coursed masonry) or a cut (plain stone)
+void stackSolid(B& b, const std::vector<std::vector<vec2>>& P, const std::vector<float>& Y, const std::vector<char>& outer,
+                float codeOuter, float codeCut, bool topOuter) {
+    const int L = (int)P.size(), n = (int)P[0].size();
+    auto at = [&](int l, int j) { return V3(P[l][j].x, Y[l], P[l][j].y); };
+    vec3 cen(0, 0, 0);
+    for (int l = 0; l < L; l++)
+        for (int j = 0; j < n; j++) cen = cen + at(l, j) / (float)(L * n);
+    for (int l = 0; l + 1 < L; l++)
+        for (int j = 0; j < n; j++) {
+            const int k = (j + 1) % n;
+            const vec3 a = at(l, j), c = at(l, k), d = at(l + 1, k), e = at(l + 1, j);
+            vec3 u = c - a, v = e - a;
+            if (dot(u, u) < 1e-8f) u = d - e;
+            if (dot(v, v) < 1e-8f) v = d - c;
+            vec3 nn = cross(u, v);
+            if (dot(nn, nn) < 1e-10f) continue;
+            nn = normalize(nn);
+            // (a vertical-ish face: its normal away from the solid's middle; the cornice's step: down)
+            if (std::fabs(nn.y) < 0.9f) { if (dot(nn, (a + d) * 0.5f - cen) < 0.f) nn = nn * -1.f; }
+            else if (nn.y > 0.f) nn = nn * -1.f;
+            const bool out = outer[j] && outer[k];
+            b.flag = out ? codeOuter : codeCut;
+            b.ao = out ? 1.f : 0.8f;
+            b.quad(a, c, d, e, nn);
+        }
+    b.ao = 0.8f;
+    b.flag = codeCut;
+    for (int j = 1; j + 1 < n; j++) b.tri(at(0, 0), at(0, j + 1), at(0, j), vec3(0, -1, 0));
+    b.flag = topOuter ? codeOuter : codeCut;
+    b.ao = 1.f;
+    for (int j = 1; j + 1 < n; j++) b.tri(at(L - 1, 0), at(L - 1, j), at(L - 1, j + 1), vec3(0, 1, 0));
+    b.flag = 0.f;
+}
+
+// MAYA's terrace k (0..4, the ones the crater reaches): its faces as the other terraces' (a talud, the band, the
+// cornice, the ledge on top), but toward the front right corner its facing stones are solids of their own (cut
+// at the masonry's joints, a course deep, the top course as deep as the ledge)
+void mayaTerrace(B& b, int k, std::vector<float>& tiles) {
+    const float s = 22.f - k * 2.6f, y0 = 3.f * k, sp = s - 0.58f;
+    const float X0 = 6.f, Z0 = std::min(9.f, s - 3.6f);
+    struct Lv { float y, f; };
+    const Lv prof[5] = {{y0, s}, {y0 + 2.1f, s - 0.7f}, {y0 + 2.82f, s - 0.7f}, {y0 + 2.82f, s - 0.62f}, {y0 + 3.f, sp}};
+    b.flag = 0.f; b.ao = 1.f;
+    for (int i = 0; i < 4; i++) {
+        if (i == 2) continue; // (the cornice's underside, unseen)
+        const Lv a = prof[i], c = prof[i + 1];
+        const vec3 in(0.f, (a.y + c.y) * 0.5f, 0.f);
+        b.quadOut(V3(-a.f, a.y, -a.f), V3(a.f, a.y, -a.f), V3(c.f, c.y, -c.f), V3(-c.f, c.y, -c.f), in);
+        b.quadOut(V3(-a.f, a.y, -a.f), V3(-a.f, a.y, a.f), V3(-c.f, c.y, c.f), V3(-c.f, c.y, -c.f), in);
+        b.quadOut(V3(-a.f, a.y, a.f), V3(X0, a.y, a.f), V3(X0, c.y, c.f), V3(-c.f, c.y, c.f), in);
+        b.quadOut(V3(a.f, a.y, -a.f), V3(a.f, a.y, Z0), V3(c.f, c.y, Z0), V3(c.f, c.y, -c.f), in);
+    }
+    const float yt = y0 + 3.f;
+    b.quad(V3(-sp, yt, -sp), V3(X0, yt, -sp), V3(X0, yt, sp), V3(-sp, yt, sp), vec3(0, 1, 0));
+    b.quad(V3(X0, yt, -sp), V3(sp, yt, -sp), V3(sp, yt, Z0), V3(X0, yt, Z0), vec3(0, 1, 0));
+
+    auto F = [&](float y) {
+        const float yl = y - y0;
+        return yl < 2.1f ? s - yl / 3.f : (yl <= 2.82f ? s - 0.7f : s - 0.62f + 0.222f * (yl - 2.82f));
+    };
+    // the courses (0.62, as the masonry's), none thinner than 0.25
+    std::vector<float> ys = {y0};
+    for (int m = (int)std::floor(y0 / 0.62f) + 1; m * 0.62f < y0 + 3.f - 1e-3f; m++) ys.push_back(m * 0.62f);
+    ys.push_back(y0 + 3.f);
+    for (size_t i = 1; i + 1 < ys.size();) {
+        if (ys[i] - ys[i - 1] < 0.25f || ys[i + 1] - ys[i] < 0.25f) ys.erase(ys.begin() + i);
+        else i++;
+    }
+    for (size_t r = 0; r + 1 < ys.size(); r++) {
+        const float ya = ys[r], yb = ys[r + 1];
+        const bool top = r + 2 == ys.size();
+        std::vector<float> Y, Fo, Fi;
+        auto push = [&](float y, float f) { Y.push_back(y); Fo.push_back(f); Fi.push_back(top ? s - 2.6f : f - 1.f); };
+        push(ya, F(ya));
+        if (ya < y0 + 2.1f && yb > y0 + 2.1f) push(y0 + 2.1f, s - 0.7f);
+        if (ya < y0 + 2.82f && yb > y0 + 2.82f) { push(y0 + 2.82f, s - 0.7f); push(y0 + 2.82f, s - 0.62f); }
+        push(yb, F(yb));
+        float minIn = 1e9f;
+        for (float v : Fi) minIn = std::min(minIn, v);
+        const float rr = std::floor((ya + 0.01f) / 0.62f), off = hash1(rr) * 0.7f + rr * 0.5f;
+        for (int face = 0; face < 2; face++) {
+            // the joints along the face (front: the masonry's u is -x; right: z - 52)
+            std::vector<float> cuts = {face == 0 ? X0 : Z0}, js;
+            for (int c = -60; c <= 60; c++) js.push_back(face == 0 ? (off - c) * 1.25f : (c - off) * 1.25f + 52.f);
+            std::sort(js.begin(), js.end());
+            for (float j : js)
+                if (j > cuts.back() + 0.3f && j < minIn - 0.15f) cuts.push_back(j);
+            const int nt = (int)cuts.size();
+            for (int t = 0; t < nt; t++) {
+                const bool corner = t == nt - 1; // (the last one runs to the corner, mitred)
+                const float ua = cuts[t], ub = corner ? 0.f : cuts[t + 1];
+                std::vector<std::vector<vec2>> P;
+                std::vector<char> outer;
+                for (size_t l = 0; l < Y.size(); l++) {
+                    const float f = Fo[l], i = Fi[l];
+                    if (face == 0) {
+                        P.push_back(corner ? std::vector<vec2>{{ua, i}, {i, i}, {f, f}, {ua, f}}
+                                           : std::vector<vec2>{{ua, i}, {ub, i}, {ub, f}, {ua, f}});
+                        outer = {0, 0, 1, 1};
+                    } else {
+                        P.push_back(corner ? std::vector<vec2>{{i, ua}, {f, ua}, {f, f}, {i, i}}
+                                           : std::vector<vec2>{{i, ua}, {f, ua}, {f, ub}, {i, ub}});
+                        outer = {0, 1, 1, 0};
+                    }
+                }
+                float rho = 0.f;
+                for (size_t l = 0; l < Y.size(); l++)
+                    for (const vec2& q : P[l]) rho = std::max(rho, craterRho(V3(q.x, Y[l], q.y)));
+                const float h = ghash(ua * 3.1f + face * 17.f, ya * 5.7f);
+                rho = std::min(rho + 0.06f * h, 3.4f);
+                b.seed = h * 7.f;
+                // (its pattern codes its index: 16 + 2 i, its cut faces 17 + 2 i)
+                const float code = 16.f + 2.f * (float)tiles.size();
+                tiles.push_back(rho);
+                stackSolid(b, P, Y, outer, code, code + 1.f, top);
+            }
+        }
+    }
+    b.seed = 0.f; b.flag = 0.f; b.ao = 1.f;
+}
+
+// the crater's bowl (its rough core of rubble): a lumpy ellipsoid about CC, seen from inside (temple space)
+void craterBowl(B& b) {
+    const int NT = 36, NP = 64;
+    auto P = [&](int i, int j) {
+        const float th = PI * i / NT, ph = TAU * j / NP;
+        const vec3 d(std::sin(th) * std::cos(ph), std::cos(th), std::sin(th) * std::sin(ph));
+        const float k = lumpK(d) * CR;
+        return CC + V3(d.x * k, d.y * k / CY, d.z * k);
+    };
+    std::vector<vec3> gp((NT + 1) * (NP + 1)), gn(gp.size());
+    for (int i = 0; i <= NT; i++)
+        for (int j = 0; j <= NP; j++) gp[i * (NP + 1) + j] = P(i, j);
+    for (int i = 0; i <= NT; i++)
+        for (int j = 0; j <= NP; j++) {
+            const vec3 a = gp[std::max(0, i - 1) * (NP + 1) + j], c = gp[std::min(NT, i + 1) * (NP + 1) + j];
+            const vec3 d = gp[i * (NP + 1) + (j + NP - 1) % NP], e = gp[i * (NP + 1) + (j + 1) % NP];
+            vec3 n = cross(c - a, e - d);
+            if (dot(n, gp[i * (NP + 1) + j] - CC) > 0.f) n = n * -1.f; // (inward: it is seen from inside)
+            gn[i * (NP + 1) + j] = normalize(n);
+        }
+    for (int i = 0; i < NT; i++)
+        for (int j = 0; j < NP; j++) {
+            const int a = i * (NP + 1) + j, c = (i + 1) * (NP + 1) + j;
+            // (not where it is well outside the pyramid: it only moves out of it as it shrinks toward CC, outside)
+            if (std::max(std::max(pyramidDepth(gp[a]), pyramidDepth(gp[a + 1])), std::max(pyramidDepth(gp[c]), pyramidDepth(gp[c + 1]))) < -2.5f)
+                continue;
+            b.vert(gp[a], gn[a]); b.vert(gp[a + 1], gn[a + 1]); b.vert(gp[c + 1], gn[c + 1]);
+            b.vert(gp[a], gn[a]); b.vert(gp[c + 1], gn[c + 1]); b.vert(gp[c], gn[c]);
+        }
+}
+
+// the scree's slope of rubble at the corner's foot (temple space): its height
+float screeH(float x, float z) {
+    const float dx = (x - 16.5f) / 9.5f, dz = (z - 22.5f) / 8.f;
+    const float d = std::sqrt(dx * dx + dz * dz) * (0.85f + 0.3f * gnoise(x * 0.35f + 3.f, z * 0.35f));
+    const float k = sstep(1.f, 0.f, d);
+    return 4.2f * k * k * (0.8f + 0.2f * k) + 0.25f * k * gnoise(x * 1.3f, z * 1.3f);
+}
+
 } // namespace
 
 float ghash(float x, float y) {
@@ -292,6 +487,9 @@ void Scene::build(int kind) {
     verts_.reserve(520000);
     pieces_.clear();
     vis_.clear();
+    tileRho_.clear();
+    tileVis_.clear();
+    bowl_ = -1.f;
     figK_ = -1.f;
     B b{&verts_};
 
@@ -498,6 +696,10 @@ void Scene::build(int kind) {
         // ramps, the shrine with its roof comb (in blocks: its top ruined), the collapsed corner
         for (int k = 0; k < 7; k++) {
             const float s = 22.f - k * 2.6f, y0 = 3.f * k;
+            if (k <= 4) {
+                mayaTerrace(b, k, tileRho_);
+                continue;
+            }
             b.loft(square(s, s), y0, square(s - 0.7f, s - 0.7f), y0 + 2.1f, false);
             b.prism(square(s - 0.7f, s - 0.7f), y0 + 2.1f, y0 + 2.82f, false);
             b.loft(square(s - 0.62f, s - 0.62f), y0 + 2.82f, square(s - 0.58f, s - 0.58f), y0 + 3.f, true);
@@ -547,23 +749,97 @@ void Scene::build(int kind) {
                             R_SHOW, G_SHRINE, posts[i], -1.6f);
                 }
         }
-        // the collapsed corner: tumbled blocks fly back up into it, rubble at its foot
-        for (int i = 0; i < 3; i++) {
-            const float fi = (float)i;
-            const int pi = blockAt(V3(13.f + fi * 2.f - 1.f, 4.f + fi * 2.2f - 0.45f, 19.5f - fi * 0.8f - 0.7f),
-                                   V3(13.f + fi * 2.f + 1.f, 4.f + fi * 2.2f + 0.45f, 19.5f - fi * 0.8f + 0.7f), 60.f + fi, R_FLY, G_NONE);
-            Piece& p = pieces_[pi];
-            p.src = 0;
-            p.e0 = fi * 0.15f;
-            p.e1 = 0.17f + fi * 0.15f;
-            p.from = TC + V3(10.f + fi * 3.5f, 0.45f, 26.f - fi * 1.4f);
-            p.rot = V3(0.15f - fi * 0.2f, 0.6f + fi, 0.1f * fi);
-        }
-        for (int i = 0; i < 9; i++) {
-            const float h = ghash(i * 2.3f, 7.1f), h2 = ghash(i * 1.7f, 3.3f);
-            const vec3 c = V3(9.f + 9.f * h, 0.3f + 0.15f * h2, 22.f + 6.f * h2);
-            const int pi = blockAt(c - V3(0.5f, 0.3f, 0.35f), c + V3(0.5f, 0.3f, 0.35f), 70.f + i, R_GONE, G_CORNER, 0.04f + 0.045f * i);
-            pieces_[pi].rot = V3(0.3f * (h - 0.5f), h2 * 6.f, 0.4f * (h2 - 0.5f));
+        // the collapsed corner (see mayaTerrace for its stones): the crater's bowl, the scree's slope, its blocks
+        {
+            Piece p;
+            b.v = &pv;
+            p.r.first = (int)pv.size();
+            b.flag = 3.f; // (rubble, clipped to the pyramid's inside)
+            craterBowl(b);
+            p.r.count = (int)pv.size() - p.r.first;
+            p.role = R_CORE;
+            p.from = TC + CC;
+            parts.push_back(p);
+            Piece m;
+            m.r.first = (int)pv.size();
+            b.flag = 3.3f; // (rubble)
+            b.o = vec3(0, 0, 0);
+            const float x0 = 4.f, x1 = 30.f, z0 = 12.f, z1 = 34.f, st = 0.5f;
+            const int nx = (int)((x1 - x0) / st), nz = (int)((z1 - z0) / st);
+            auto H = [&](float x, float z) { return screeH(x, z); };
+            // (each point of the grid once; one cell more around for the normals)
+            const int gw = nx + 3;
+            std::vector<float> hg((nz + 3) * gw);
+            for (int k = 0; k < nz + 3; k++)
+                for (int i = 0; i < gw; i++) hg[k * gw + i] = H(x0 + (i - 1) * st, z0 + (k - 1) * st);
+            auto h = [&](int i, int k) { return hg[(k + 1) * gw + i + 1]; };
+            auto P = [&](int i, int k) {
+                const float x = x0 + i * st, z = z0 + k * st;
+                return V3(x, h(i, k) + groundH(x, z + TC.z) - 0.2f, z + TC.z);
+            };
+            auto N = [&](int i, int k) { return normalize(V3(h(i - 1, k) - h(i + 1, k), 2.f * st, h(i, k - 1) - h(i, k + 1))); };
+            for (int k = 0; k < nz; k++)
+                for (int i = 0; i < nx; i++) {
+                    if (h(i, k) < 0.05f && h(i + 1, k) < 0.05f && h(i, k + 1) < 0.05f && h(i + 1, k + 1) < 0.05f) continue;
+                    b.vert(P(i, k), N(i, k)); b.vert(P(i + 1, k), N(i + 1, k)); b.vert(P(i + 1, k + 1), N(i + 1, k + 1));
+                    b.vert(P(i, k), N(i, k)); b.vert(P(i + 1, k + 1), N(i + 1, k + 1)); b.vert(P(i, k + 1), N(i, k + 1));
+                }
+            m.r.count = (int)pv.size() - m.r.first;
+            m.role = R_MOUND;
+            m.from = V3(0.f, -0.2f, 0.f);
+            parts.push_back(m);
+            b.v = &verts_;
+            b.o = TC;
+            b.flag = 0.f;
+            // the fallen blocks, strewn down the slope: each flies back into the crater (to where its stone was) as
+            // the corner closes past it, and is gone in golden dust as it lands
+            int placed = 0;
+            for (int i = 0; placed < 110 && i < 6000; i++) {
+                const float hx = ghash(i * 1.37f, 2.1f), hz = ghash(i * 2.11f, 5.3f), hk = ghash(i * 0.73f, 8.9f);
+                const float x = x0 + 2.f + (x1 - x0 - 4.f) * hx, z = z0 + 2.f + (z1 - z0 - 2.f) * hz;
+                const float h = H(x, z);
+                if (h < 0.12f || hk > h / 1.6f + 0.15f) continue; // (more of them up the slope)
+                const float h1 = ghash(i * 3.3f, 1.7f), h2 = ghash(i * 0.9f, 4.4f), h3 = ghash(i * 5.1f, 0.3f);
+                const float big = h1 < 0.15f ? 1.5f : (h1 > 0.7f ? 0.7f : 1.f);
+                const vec3 sz = V3(0.28f + 0.45f * h2, 0.2f + 0.2f * h3, 0.24f + 0.35f * h1) * big;
+                // where it lands: in the crater, its place at rho (toward the pyramid's inside)
+                const float rho = 0.4f + 0.55f * ghash(i * 4.7f, 6.6f);
+                const vec3 dir = normalize(V3(-0.9f + 1.2f * h2, -0.6f + 1.1f * h3, -1.f + 0.7f * h1));
+                const vec3 tgt = CC + V3(dir.x, dir.y / CY, dir.z) * (CR * rho * lumpK(dir) * 0.9f);
+                const int pi = addKit(K_BLOCK, TC + tgt, sz, 90.f + i, R_FLYIN);
+                Piece& q = pieces_[pi];
+                q.from = V3(x, h + groundH(x, z + TC.z) - 0.2f + sz.y * 0.55f, z + TC.z);
+                q.b = h;
+                q.rot = V3((h3 - 0.5f) * 0.9f, h1 * 6.3f, (h2 - 0.5f) * 0.9f);
+                // (it flies as the bowl passes rho: cornerOpen(T) = rho)
+                const float y = 1.f - rho, t = 0.5f - std::sin(std::asin(1.f - 2.f * y) / 3.f);
+                q.e1 = 0.5f * t;
+                q.e0 = std::max(0.f, q.e1 - 0.04f);
+                placed++;
+            }
+            // the rubble of the core, heaped in the crater: chunks on its bowl, moving with it as it shrinks, gone in
+            // dust as it carries them to the pyramid's face
+            placed = 0;
+            for (int i = 0; placed < 130 && i < 6000; i++) {
+                const float u = ghash(i * 1.91f, 3.7f), w = ghash(i * 0.57f, 7.3f);
+                const float th = std::acos(1.f - 2.f * u), ph = TAU * w;
+                const vec3 d(std::sin(th) * std::cos(ph), std::cos(th), std::sin(th) * std::sin(ph));
+                const float lk = lumpK(d) * CR;
+                const vec3 bp = CC + V3(d.x * lk, d.y * lk / CY, d.z * lk);
+                const float h1 = ghash(i * 2.7f, 0.9f), h2 = ghash(i * 4.1f, 2.2f), h3 = ghash(i * 0.33f, 5.5f);
+                const float big = h1 < 0.2f ? 1.7f : 1.f;
+                const vec3 sz = V3(0.3f + 0.4f * h2, 0.22f + 0.25f * h3, 0.28f + 0.4f * h1) * big;
+                if (pyramidDepth(bp) < 0.4f + sz.y) continue;
+                // (sunk half into the bowl, more of them low in it: what fell from above)
+                if (d.y > 0.2f && h3 > 0.4f) continue;
+                const vec3 c = bp + (CC - bp) * (sz.y * 0.7f / length(CC - bp));
+                const int pi = addKit(K_BLOCK, TC + c, sz, 300.f + i, R_CHUNK);
+                Piece& q = pieces_[pi];
+                q.from = TC + CC;
+                q.rot = V3((h2 - 0.5f) * 1.6f, h3 * 6.3f, (h1 - 0.5f) * 1.6f);
+                q.a = 0.4f + sz.y;
+                placed++;
+            }
         }
     } else if (kind == 1) {
         // ---- KHMER: the terrace and its stairs, the gallery (blocks, balusters, the roof), the gate tower, the
@@ -959,7 +1235,6 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
             const float cut = lerpf(31.5f, 23.4f + 1.8f * gnoise(p.a * 0.8f, p.b * 0.8f) + 0.06f * p.a, ru);
             return p.c.y - TC.y < cut;
         }
-        case G_CORNER: return T < p.a;
         case G_GALLERY: {
             const float fall = 1.f - sstep(0.f, 0.33f, T);
             if (p.role == R_GONE) return fall > 1.f - p.a * 1.2f + 0.05f && fall > 0.02f;
@@ -984,7 +1259,32 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
         default: return true;
         }
     };
+    // MAYA's collapsed corner: how open (its bowl's scale), its scree's height
+    const float open = cornerOpen(T), mound = sstep(0.25f, 0.9f, open);
     const float rate = 1.2f * dt;
+    // its stones: each gone while the crater holds it, re-forming from dust as it shrinks past it; the bowl behind
+    // them follows a moment later (never in front of a stone still re-forming)
+    cornerChanged_ = false;
+    if (!tileRho_.empty()) {
+        const size_t n = tileRho_.size();
+        if (tileVis_.size() != n) {
+            tileVis_.assign(n, -1.f);
+            cornerTex_.assign(((n + CORNER_W - 1) / CORNER_W) * CORNER_W, 0);
+        }
+        for (size_t i = 0; i < n; i++) {
+            const float target = tileRho_[i] < open ? 1.f : 0.f;
+            float& v = tileVis_[i];
+            const float v0 = v;
+            if (snap || v < 0.f) v = target;
+            else v = v < target ? std::min(target, v + rate) : std::max(target, v - rate);
+            if (v != v0) {
+                cornerTex_[i] = (unsigned char)std::lround(v * 255.f);
+                cornerChanged_ = true;
+            }
+        }
+    }
+    if (snap || bowl_ < 0.f || open > bowl_) bowl_ = open;
+    else bowl_ = std::max(open, bowl_ - 0.12f * dt);
     auto emit = [&](const Piece& p, const Aff& D, float dissolve, float glow) {
         const Aff Rr = p.kit >= 0 ? Aff::tr(p.c) * Aff::sc(p.s) : Aff();
         const Aff M = D * Rr;
@@ -1041,6 +1341,29 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
             }
             break;
         }
+        case R_FLYIN: {
+            const float e = sstep(p.e0, p.e1, T);
+            const vec3 lying = p.from + V3(0.f, p.b * (mound - 1.f), 0.f);
+            const vec3 pos = lerp(lying, p.c, e) + V3(0, std::sin(PI * e) * 2.5f, 0);
+            D = Aff::tr(pos) * tumble(p.rot, 1.f - e) * Aff::tr(p.c * -1.f);
+            target = e >= 0.999f ? 1.f : 0.f;
+            break;
+        }
+        case R_CORE:
+            if (bowl_ < 0.15f) target = 1.f;
+            else D = Aff::tr(p.from) * Aff::sc(V3(bowl_, bowl_, bowl_)) * Aff::tr(p.from * -1.f);
+            break;
+        case R_CHUNK: {
+            // (where the bowl carries it, while it is still inside the pyramid)
+            const vec3 at = p.from + (p.c - p.from) * bowl_;
+            if (bowl_ < 0.15f || pyramidDepth(at - TC) < p.a) target = 1.f;
+            D = Aff::tr(at) * tumble(p.rot, 1.f) * Aff::tr(p.c * -1.f);
+            break;
+        }
+        case R_MOUND:
+            if (mound < 0.02f) target = 1.f;
+            else D = Aff::tr(p.from) * Aff::sc(V3(1.f, mound, 1.f)) * Aff::tr(p.from * -1.f);
+            break;
         case R_SHOW: target = shown(p) ? 0.f : 1.f; break;
         case R_GONE: {
             target = shown(p) ? 0.f : 1.f;
@@ -1063,7 +1386,7 @@ void Scene::animate(const State& st, float dt, bool snap, std::vector<Inst>& ins
         if (snap || v < 0.f || p.role == R_SINK || p.role == R_BRAZIER) v = target;
         else v = v < target ? std::min(target, v + rate) : std::max(target, v - rate);
         if (v >= 0.999f) continue;
-        const float glow = p.role == R_SHOW || p.role == R_GONE ? v * (1.f - v) * 4.f : 0.f;
+        const float glow = p.role == R_SHOW || p.role == R_GONE || p.role == R_FLYIN || p.role == R_CHUNK ? v * (1.f - v) * 4.f : 0.f;
         if (p.kit < 0) {
             emit(p, D, v, glow);
             draws.push_back({p.r, (int)inst.size() - 1, 1, false});

@@ -120,7 +120,7 @@ private:
     bool snapNext_ = true;
     GLuint meshVao_ = 0, meshVbo_ = 0, figVao_ = 0, figVbo_ = 0, instVbo_ = 0, folVao_ = 0, folVbo_ = 0;
     int folCount_ = 0;
-    GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
+    GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0, cornerTex_ = 0;
     int msW_ = 1, msH_ = 1, samples_ = 4;
     mat4 vp3_, lightVp_;
     void buildScene(int kind);
