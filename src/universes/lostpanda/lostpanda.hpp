@@ -45,7 +45,7 @@ public:
 private:
     // ---- The way home, one continuous world: P the cub's place along it (its world x), C the camera's (the world x
     // at the cub's spot on the screen), camY_ the camera's height (the world y at the screen's ground line - GY).
-    double P_ = 0.0, C_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
+    double P_ = 0.0, C_ = 0.0, camV_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
     float camY_ = 0.f;
     float viewY_ = 0.f; // the height drawn: camY_, raised into the sky in the setup and the teardown
     // ---- The subway train: away, arriving, waiting (doors), riding with the cub, at the terminus, leaving, gone.
