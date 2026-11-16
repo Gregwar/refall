@@ -1,11 +1,12 @@
 #pragma once
-// RUINS: time running backwards from overgrown ruins to a temple in its prime, ray marched in 3D behind the well;
-// the pieces are stone blocks carved with a glyph each (see ruins.cpp).
+// RUINS: time running backwards from overgrown ruins to a temple in its prime, in 3D behind the well (meshes, see
+// world.hpp); the pieces are stone blocks carved with a glyph each (see ruins.cpp).
 #include <string>
 #include <vector>
 
 #include "ugl.hpp"
 #include "universe.hpp"
+#include "universes/ruins/world.hpp"
 
 class RuinsUniverse : public Universe {
 public:
@@ -103,11 +104,27 @@ private:
     void drawSprites(const std::vector<SpriteInst>& list);
 
     // ---- GL.
-    GLuint progWorld_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
-           progPost_ = 0;
+    GLuint progMesh_ = 0, progShadow_ = 0, progSky_ = 0, progFol_ = 0, progVol_ = 0, progComp_ = 0, progSprite_ = 0,
+           progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
            textVbo_ = 0;
-    ugl::Target worldT_, sceneT_;
+    ugl::Target worldT_, volT_, sceneT_;
+    GLuint worldDepth_ = 0, auxTex_ = 0;
+
+    // ---- The world as meshes (world.hpp): built per variant, drawn instanced, 4x multisampled at the full
+    // resolution (up to 1440 lines), with the sun's shadow map; the mist, the shafts and the occlusion at a reduced
+    // resolution.
+    ruins::Scene scene_;
+    std::vector<ruins::Inst> inst_;
+    std::vector<ruins::Draw> draws_;
+    bool snapNext_ = true;
+    GLuint meshVao_ = 0, meshVbo_ = 0, figVao_ = 0, figVbo_ = 0, instVbo_ = 0, folVao_ = 0, folVbo_ = 0;
+    int folCount_ = 0;
+    GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, shadowFbo_ = 0, shadowTex_ = 0;
+    int msW_ = 1, msH_ = 1, samples_ = 4;
+    mat4 vp3_, lightVp_;
+    void buildScene(int kind);
+    void drawMeshes(GLuint prog);
 
     // ---- Song, variant, staging.
     int variant_ = 0;
