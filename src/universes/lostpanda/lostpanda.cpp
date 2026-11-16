@@ -313,7 +313,8 @@ void LostPandaUniverse::resize(int width, int height) {
     dadEndX_ = bandR0 + 0.77f * bandRW;
     enterX_ = 0.f;
     pEnd_ = C_END + (kidEndX_ - xP_);
-    const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
+    // the world at the full resolution (at most 1440 lines; every edge is antialiased in its shader)
+    const int wh = std::max(180, std::min(1440, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -1282,7 +1283,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     // the cub is inside the train (behind its near side) from its door to the terminus
     const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (full resolution, up to 1440 lines)
     {
         worldT_.bind();
         glDisable(GL_BLEND);
@@ -1323,7 +1324,9 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progComp_, "uWorld", 0);
-    set2f(progComp_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    // (sharpened only when upscaled: a texel of 0 leaves it as it is)
+    const bool up = worldT_.h < height_;
+    set2f(progComp_, "uTexel", up ? 1.f / worldT_.w : 0.f, up ? 1.f / worldT_.h : 0.f);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);
