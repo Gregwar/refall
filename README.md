@@ -18,39 +18,39 @@ reviewed and tested (✅ <i>ok</i>):
 
 <table>
 <tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/vector.jpg"><br><b>VECTOR</b>: phosphor beams on a dark CRT<br><sub>✅ <i>ok</i></sub></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/sumi.jpg"><br><b>SUMI</b>: ink on washi paper<br><sub>✅ <i>ok</i></sub></td>
+<td width="50%"><img src="docs/universes/vector.jpg"><br><b>VECTOR</b>: phosphor beams on a dark CRT<br><sub>✅ <i>ok</i></sub></td>
+<td width="50%"><img src="docs/universes/sumi.jpg"><br><b>SUMI</b>: ink on washi paper<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/diorama.jpg"><br><b>DIORAMA</b>: a sunlit clay island<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/abyss.jpg"><br><b>ABYSS</b>: the deep sea, lit by living things<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/diorama.jpg"><br><b>DIORAMA</b>: a sunlit clay island<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/abyss.jpg"><br><b>ABYSS</b>: the deep sea, lit by living things<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/smoke.jpg"><br><b>SMOKE</b>: a dark stage, slow smoke and one hard spotlight<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/watercolor.jpg"><br><b>WATERCOLOR</b>: transparent washes on cold-press paper<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/smoke.jpg"><br><b>SMOKE</b>: a dark stage, slow smoke and one hard spotlight<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/watercolor.jpg"><br><b>WATERCOLOR</b>: transparent washes on cold-press paper<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/polar.jpg"><br><b>POLAR NIGHT</b>: a snowfield under the aurora<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/risograph.jpg"><br><b>RISOGRAPH</b>: a two-ink risograph print<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/polar.jpg"><br><b>POLAR NIGHT</b>: a snowfield under the aurora<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/risograph.jpg"><br><b>RISOGRAPH</b>: a two-ink risograph print<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/049bab4ddf4aea7d90c768546e006132082e7ead/docs/universes/white_room.jpg"><br><b>WHITE ROOM</b>: a seamless white studio, matte blocks and soft shadows<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/kintsugi.jpg"><br><b>KINTSUGI</b>: dark polished stone, ceramic mended with gold<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/white_room.jpg"><br><b>WHITE ROOM</b>: a seamless white studio, matte blocks and soft shadows<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/kintsugi.jpg"><br><b>KINTSUGI</b>: dark polished stone, ceramic mended with gold<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/becac93004878065dbdb2eec1a5f3ea6a91e9ded/docs/universes/laser.jpg"><br><b>LASER SHOW</b>: every piece projected by its own laser<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/210013d9eb38de1166e8753be86cea34904be746/docs/universes/garden.jpg"><br><b>GARDEN</b>: tiles of earth growing pixel grass and flowers<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/laser.jpg"><br><b>LASER SHOW</b>: every piece projected by its own laser<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/garden.jpg"><br><b>GARDEN</b>: tiles of earth growing pixel grass and flowers<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/biome.jpg"><br><b>BIOME</b>: glass cubes of water or seeds bringing a 3D world to life: a sea rising over dry sand, or a jungle growing on parched clay<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/fluo.jpg"><br><b>FLUO</b>: fluorescent paint splashed on a dark wall, glowing under a blacklight on drops<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/fluo.jpg"><br><b>FLUO</b>: fluorescent paint splashed on a dark wall, glowing under a blacklight on drops<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/8d4d510ae0b93552a83ed57d0608ba5dadbda54b/docs/universes/marbles.jpg"><br><b>MARBLES</b>: glass marbles in square tiles, shot out across a dark table where they collide and stain the felt<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/412230bfad663a226675f239505670847baf2334/docs/universes/prism.jpg"><br><b>PRISM</b>: glass cubes in the dark, slow beams of light, a rainbow on the drop<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/marbles.jpg"><br><b>MARBLES</b>: glass marbles in square tiles, shot out across a dark table where they collide and stain the felt<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/prism.jpg"><br><b>PRISM</b>: glass cubes in the dark, slow beams of light, a rainbow on the drop<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="https://raw.githubusercontent.com/Gregwar/zentris/cb76251de16f7e81e5f2641e610ecb2f19a82a2e/docs/universes/lightsource.jpg"><br><b>LIGHTSOURCE</b>: a dim room lit by the falling piece, the stack casting its shadows<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/lightsource.jpg"><br><b>LIGHTSOURCE</b>: a dim room lit by the falling piece, the stack casting its shadows<br><sub>✅ <i>ok</i></sub></td>
 <td><img src="docs/universes/notepad.jpg"><br><b>NOTEPAD</b>: a squared notebook drawn by hand in stop motion, erased and redrawn<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
@@ -168,7 +168,8 @@ To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
 
 Started with no songs, the game opens on its menu, a stained-glass kaleidoscope (the game is called **Refall** for
 now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**
-or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). The game's own universes are folded into the
+or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). On the first launch (or after `--reset`) the title opens with a short, sober
+animation. The game's own universes are folded into the
 kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the most colourful of the focused stage's
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
 from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
@@ -203,7 +204,7 @@ no song previews.
   starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
   EASY, NORMAL or HARD, a multiplier on the gravity of every level (x0.6, x0.8, x1: HARD is the full speed, and
   goes 20G as the Voyage does: the drops from level 30 on, the choruses too at level 40), a **starting level** (the
-  strip at the bottom of the screen: 1, then every 5 up to 40; `--level N` on the command line, any level), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
+  strip at the bottom of the screen: 1, then every 5 up to 40; `--level N` on the command line, any level from 1 to 40), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
   own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
   small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
   playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its song count, and its
@@ -262,25 +263,25 @@ The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab
 
 ```
 # stage  song  id           universe             easy  normal  hard    title
-1        1     H_9xqc084UA  PRISM:AURORA         1.0   2.0     4.0     Small Town Kid - Shards
-15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  8.2   13.5    20.0    callah x Laura Brehm - skyline
+1        1     H_9xqc084UA  PRISM:AURORA         3.0   5.0     9.0     Small Town Kid - Shards
+15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  11.0  22.5    35.5    callah x Laura Brehm - skyline
 ```
 
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
 - `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
 - `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
 - `easy`, `normal`, `hard`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 40
-  (20 is the free play's plateau, x10 gravity; past it faster still, up to the gravity's cap); decimals are fine.
+  (20 is ten times velocity 1's gravity, 40 about twenty times); decimals are fine.
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
 else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
-ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is much faster than its first (on
-HARD, 17 levels faster on stage 1, 12 on the finale), over a base that rises across the stages (HARD goes from 5.1 to
-22.2 on stage 1 and from 38.4 to 50 on the finale, far past the free play's plateau; NORMAL tops out at 28, EASY at 13.5).
-On HARD, from velocity 30 on, the drops go 20G (a piece falls to the stack the moment it appears, with a longer lock
-delay to slide and turn it along the stack; at velocity 50 the choruses too), the rest of the song keeping a visible
-fall: in the last song of stages 10 to 12, the last two of stages 13 and 14, and every song of the finale.
+ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is faster than its first
+(HARD +5.1, NORMAL +4, EASY +2.5), over a base that rises across the stages: HARD goes from 9 to 14.1 on stage 1 and
+from 30.4 to 35.5 on the finale, NORMAL from 5 to 9 and from 18.5 to 22.5, EASY from 3 to 5.5 and from 8.5 to 11.
+On HARD, from velocity 30 on, the drops go into hyperdrop (20G: a piece falls to the stack the moment it appears, with
+a longer lock delay to slide and turn it along the stack; at velocity 40, free play's top, the choruses too), the rest
+of the song keeping a visible fall: in the last song of stage 13, the last two of stage 14 and every song of the finale.
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
 climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
 
