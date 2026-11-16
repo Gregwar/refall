@@ -40,12 +40,13 @@ public:
         float breath = 0, wind = 0.3f;
         float blinkT = 2.f, blinkAge = 9.f;
         float munch = 0, chew = 0;
+        float surprise = 0;
     };
 
 private:
     // ---- The way home, one continuous world: P the cub's place along it (its world x), C the camera's (the world x
     // at the cub's spot on the screen), camY_ the camera's height (the world y at the screen's ground line - GY).
-    double P_ = 0.0, C_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
+    double P_ = 0.0, C_ = 0.0, camV_ = 0.0, vel_ = 0.0, stroll_ = 0.0, creep_ = 0.0;
     float camY_ = 0.f;
     float viewY_ = 0.f; // the height drawn: camY_, raised into the sky in the setup and the teardown
     // ---- The subway train: away, arriving, waiting (doors), riding with the cub, at the terminus, leaving, gone.
@@ -115,6 +116,8 @@ private:
                 float param2 = 0.f);
     void drawSprites(const std::vector<SpriteInst>& v, bool additive);
     void drawPanda(const Pose& p, vec2 feet, float h, float face, float adult, float alpha, float haze, bool reflect, int part);
+    void drawSheet(int which);    // the test hook REFALL_LOSTPANDA_SHEET (see render)
+    bool sheet_ = false;          // drawing it: a plain white light
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const std::vector<HudRect>& panels);
@@ -122,8 +125,9 @@ private:
     text::Lettering lettering_[2]; // the halo at .75 (most lines), at .85 (the celebrations, the dialogs)
 
     // ---- GL.
-    GLuint progWorld_ = 0, progFront_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
-           progPost_ = 0, progPanda_ = 0;
+    GLuint progWorld_ = 0, progWorldCity_ = 0, progWorldCountry_ = 0;   // the whole way; the city only; the countryside only
+    GLuint progFront_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
+           progPost_ = 0, progPanda_ = 0, progNear_ = 0;
     GLuint quadVbo_ = 0, quadVao_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0,
            shapeVbo_ = 0;
     ugl::Target worldT_, sceneT_;

@@ -1,24 +1,43 @@
 // LOST PANDA: a journey home told in pictures behind the well, one continuous shot. A little kawaii panda cub is lost
 // in the city at night, alone under the rain. Every cleared line is a few steps further on its way home, through one
-// world the camera follows it through, never cutting: the rainy street becomes the shopping street (neon, people
-// hurrying by under umbrellas, a crossing); the cub goes down the subway's stairs (the world cut away like a
-// cross-section, the street still above); waits on the platform while a train glides in, steps in through its doors;
-// the train runs through the tunnel (the clears drive it, it creeps on between them), climbs a cutting into the dawn
-// and stops at a terminus in the industrial district; the cub steps out, the train leaves; it walks on along the
-// canal, past the last fences into the fields (pylons, flowers, a butterfly), the first bamboo, the bamboo forest, over
-// a little bridge into a glade at sunset. There the camera stops: its family waits on the right of the screen, it sees
-// them, runs across behind the well to them, and they hug.
+// world the camera follows it through, never cutting: the rainy street becomes the shopping street, a cartoon night
+// city in layers of parallax (a moon, misty skyscrapers, towers, an elevated line, brick buildings with warm windows
+// and neon signs, people hurrying by under umbrellas, black silhouettes at the front); the cub goes down the subway's
+// stairs (the world cut away like a cross-section, the street still above, pipes and cables in the earth between);
+// waits on the platform (tiles, graffiti, vending machines, commuters) while a silver train glides in, steps in;
+// the train pulls out (the camera holds back a moment, then catches up), gathers speed hard and runs flat out under
+// the city through a tunnel over a thousand units long (the street whipping past above, the tunnel's lamps streaking
+// past its windows), climbs a cutting into the dawn and brakes into a terminus in the industrial district (chimneys
+// banded red and white trailing smoke, gas holders, cranes, works and warehouses, stacked containers, a chain-link
+// fence); the cub steps out, the train leaves; it walks on along the canal (cobbles, coping stones, the sodium lamps
+// wavering in the water), past the last fences into the fields (misty mountains, rolling hills in a patchwork of
+// fields, farms, pylons, flowers, a butterfly), the first bamboo, the bamboo forest (after a reference: far culms
+// dissolving in a turquoise mist, sunlit leaf sprays, stone lanterns grown with moss, ferns, mossy rocks, big dark
+// culms framing the view), over a little bridge across a stream and its waterfall into a glade at sunset (lanterns
+// lit). The whole way is drawn like the city: inked outlines, flat shading in two tones, layers of parallax. There the
+// camera stops: its family
+// waits on the right of the screen, it sees them, runs across behind the well to them, and they hug (from the moment
+// it sees them it eats no more snacks: it is only with them).
 //
 // The world is drawn in shaders.hpp: what stands where along the way (world x) is fixed; the time of day and the
 // weather follow the cub's progress (night, dawn as it rides out, morning in the fields, gold in the forest, sunset).
+// The world's shader comes in three builds: the whole way, the city only, the countryside only (each leaves out the
+// layers that cannot show, picked by the camera's place).
 // The lines cleared set where the cub should be (the stages at 0, 7, 13, 19, 25, 32, 38 and 45 lines, the family at
 // 50, within a song): the stairs at about 11-12 lines, the platform's end at about 19, the terminus at 25. The
 // subway comes on its own timetable: a train glides in some 18 s into the scene and waits at the platform, its doors
-// open, until the cub steps in (a missed train would leave a short song without its reunion). The ride runs on the train's clock; lines cleared meanwhile are banked, and the cub
-// walks on with them from the terminus. A clear sends a few lights and a bamboo snack from the row, behind the well, to the cub: it catches the snack
-// and munches it (paws at its mouth, cheeks puffing), then walks on; fed, it grows stronger on the way (straighter,
-// bouncier, a little rounder). Between clears it lives: it breathes, blinks, looks around, looks back, sits, sighs,
-// wipes a tear in the rain; later it hops, follows a butterfly. Every value of its pose eases toward its target.
+// open, until the cub steps in (a missed train would leave a short song without its reunion). The ride runs on the
+// train's clock (30 s door to door in a 50-line scene: some 5 s gathering speed, a run flat out, some 7 s braking);
+// lines cleared meanwhile are banked, and the cub walks on with them from the terminus. A clear sends a few lights and
+// a bamboo snack from the row, behind the well, to the cub: it catches the snack and munches it (paws at its mouth,
+// cheeks puffing), then walks on; fed, it grows stronger on the way (straighter, bouncier, a little rounder). Between
+// clears it lives: it breathes, blinks, looks around, looks back, sits, sighs, wipes a tear in the rain; later it
+// hops, follows a butterfly. Every value of its pose eases toward its target.
+// The pandas follow the owner's kawaii reference (drawn in shaders.hpp, measured against it: a sticker's flat fills in a
+// thick dark outline, a round head wider than the slim body, round ears apart from the head, big round patches with big
+// shiny eyes, ^ ^ in joy, an open smile, flat pink blush, black limbs and a black shoulder band, a little black tail;
+// hearts by the head when waving for joy, sparkles when surprised): turned toward us (the front view) when it sits,
+// sighs, wipes a tear or hops, in profile when it walks on or runs; the pose's turn moves it between the two.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
@@ -55,11 +74,11 @@ using ugl::set3f;
 using ugl::set4f;
 using ugl::setMat;
 
-GLuint compile(const char* vs, const char* fs, const char* name) {
+GLuint compile(const char* vs, const char* fs, const char* name, const char* defs = "") {
     std::string f(fs);
     const size_t at = f.find("//@TRAIN");
     if (at != std::string::npos) f.replace(at, 8, shaders::TRAIN_GLSL);
-    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    f.insert(f.find('\n') + 1, std::string(defs) + shaders::COMMON_GLSL);
     std::string v(vs);
     v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
     return ugl::program(v.c_str(), f.c_str(), name);
@@ -89,17 +108,30 @@ constexpr int STAGES = 8;
 // (lines on the 50-line scale: paceLines() rescales the real lines to the song's length, 50 for a 3:20 song; the
 // subway's timetable and the ride stay on the clock)
 const int LINES_AT[STAGES + 1] = {0, 7, 13, 19, 25, 32, 38, 45, 50};
-constexpr double C_END = 462.0;                      // the camera stops here (the glade); the family is on the right
-const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 291, 345, 395, 440, C_END};
+constexpr double C_END = 1498.0;                     // the camera stops here (the glade); the family is on the right
+const double WAY_AT[STAGES + 1] = {0, 46, 104, 128, 1327, 1381, 1431, 1476, C_END};
 constexpr float GY = -7.4f;                          // the ground line on the screen (the cub's feet)
-constexpr double GY0 = -7.4, PLAT_Y = -17.4;         // the street, the subway's platform (world y, as in the shaders)
-constexpr double XB = 128.0, XA = 291.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
+constexpr double GY0 = -7.4, PLAT_Y = -20.4;         // the street, the subway's platform (world y, as in the shaders)
+constexpr double XB = 128.0, XA = 1327.0, DOOR = 30.0; // boarding, stepping out; the cub's door from the train's rear
 constexpr float CLEAR_T = 0.38f;                     // a cleared row shrinks away in this long (real time)
 // The subway's timetable (seconds): after a gap a train glides in, opens its doors and waits for the cub as long as
 // it takes, then closes them and leaves with it.
 constexpr float T_GAP = 8.f, T_ARRIVE_S = 10.f, T_DOOR_S = 1.2f, T_DWELL = 9.f, T_OUT_S = 10.f;
-constexpr float T_RIDE_S = 36.f;                     // the ride, door to door (in a 50-line scene; shorter songs ride faster)
-double rideF(double u) { u = std::clamp(u, 0.0, 1.0); return u * u * u * (u * (u * 6.0 - 15.0) + 10.0); }
+constexpr float T_RIDE_S = 30.f;                     // the ride, door to door (in a 50-line scene; shorter songs ride faster)
+// The ride's course (0..1 of the way) over its time (0..1): a real journey, a long way fast. The train pulls out of
+// the platform and gathers speed hard (the first RIDE_ACC of the time, some 5 s), runs flat out under the city (some
+// 50 units a second: the street above, the tunnel's lamps and rings whip past), and brakes up the cutting into the
+// terminus (the last RIDE_BRK); its speed eases in and out of each (a smoothstep), so it never jerks. The cruise is
+// 1 / (1 - (RIDE_ACC + RIDE_BRK) / 2) of the mean speed.
+constexpr double RIDE_ACC = 0.18, RIDE_BRK = 0.24;
+double rideF(double u) {
+    u = std::clamp(u, 0.0, 1.0);
+    const double vc = 1.0 / (1.0 - 0.5 * (RIDE_ACC + RIDE_BRK));
+    auto ramp = [](double t) { return t * t * t * (1.0 - 0.5 * t); };   // the way covered while the speed eases 0..1
+    if (u < RIDE_ACC) return vc * RIDE_ACC * ramp(u / RIDE_ACC);
+    if (u > 1.0 - RIDE_BRK) return 1.0 - vc * RIDE_BRK * ramp((1.0 - u) / RIDE_BRK);
+    return vc * (0.5 * RIDE_ACC + u - RIDE_ACC);
+}
 
 double wayOf(double lines) {
     if (lines <= 0) return 0.0;
@@ -114,11 +146,21 @@ double smd(double a, double b, double x) {
     const double t = std::clamp((x - a) / (b - a), 0.0, 1.0);
     return t * t * (3.0 - 2.0 * t);
 }
+// Where the camera is on the ride (0..1 of the way over the ride's time, like rideF): it holds at the platform for a
+// moment as the train pulls out, so the train visibly leaves ahead on the screen (some 10 units), then catches up with
+// it within a few seconds and rides along with it at speed, the world streaming past; near the end it runs a little
+// ahead into the terminus (a few units) and the train glides in under it. (Never backwards: the weights only ease the
+// camera between the platform, the train and the terminus.)
+double rideCamF(double u) {
+    const double f = rideF(u);
+    const double behind = 1.0 - smd(0.03, 0.15, u), ahead = 0.05 * smd(0.7, 0.9, u);
+    return f - f * behind + (1.0 - f) * ahead;
+}
 double trackY(double x) {
-    const double t = std::clamp((x - 146.0) / 112.0, 0.0, 1.0);
+    const double t = std::clamp((x - 1182.0) / 112.0, 0.0, 1.0);
     return PLAT_Y + (GY0 - PLAT_Y) * (0.95 * t + 0.05 * t * t * (3.0 - 2.0 * t));
 }
-constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 9.0;   // the subway's stairs (as in the shaders)
+constexpr double STAIR_X = 80.0, TREAD = 1.3, NSTEPS = 11.0;  // the subway's stairs (as in the shaders)
 // the cub's feet (world y) along the way: the street, the stairs down, the platform, a hop into the train (its floor
 // following the track up the cutting), a hop down onto the terminus's platform, the ground
 double pathY(double x) {
@@ -153,19 +195,19 @@ struct StageDef {
     float keyX, keyY, mood, reflect, fireflies, butterfly;
 };
 const StageDef STAGE[STAGES] = {
-    {"a rainy street", 0x070b16, 0x222a3c, 0x1e2536, 0xffb060, 0x070a12, 0, 0, 1, 0, 0.0f, 0, 1.0f, 1.0f,
+    {"a rainy street", 0x0e0c2a, 0x33285a, 0x2a2350, 0xffb060, 0x08081a, 0, 0, 1, 0, 0.35f, 0, 0.7f, 1.0f,
      {0.30f, 0.34f, 0.46f}, {0.42f, 0.36f, 0.30f}, {0.55f, 0.42f, 0.28f}, 0.7f, 0.6f, 0.0f, 0.55f, 0.f, 0.f},
-    {"the shopping street", 0x0d0a1c, 0x34243e, 0x2c2238, 0xff9a80, 0x0c0814, 0, 0, 1, 0, 0.0f, 0, 0.6f, 1.0f,
+    {"the shopping street", 0x110c30, 0x3d2c66, 0x33285a, 0xff9a80, 0x0c0818, 0, 0, 1, 0, 0.5f, 0, 0.4f, 1.0f,
      {0.36f, 0.34f, 0.48f}, {0.48f, 0.38f, 0.44f}, {0.6f, 0.35f, 0.5f}, 0.7f, 0.6f, 0.08f, 0.45f, 0.f, 0.f},
-    {"the subway", 0x0d0a1c, 0x34243e, 0x2c2238, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.0f, 0, 0.45f, 1.0f,
+    {"the subway", 0x110c30, 0x3d2c66, 0x33285a, 0xd8ffe8, 0x091010, 0, 0, 1, 0, 0.5f, 0, 0.3f, 1.0f,
      {0.50f, 0.56f, 0.55f}, {0.45f, 0.50f, 0.46f}, {0.45f, 0.55f, 0.5f}, 0.2f, 1.0f, 0.22f, 0.25f, 0.f, 0.f},
-    {"the night train", 0x0c1020, 0x262838, 0x2a2a36, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.1f, 0, 0.2f, 1.0f,
+    {"the night train", 0x100e30, 0x342c60, 0x302a58, 0xffe0b0, 0x0c1016, 0, 0, 1, 0, 0.55f, 0, 0.15f, 1.0f,
      {0.56f, 0.56f, 0.54f}, {0.50f, 0.50f, 0.46f}, {0.4f, 0.4f, 0.36f}, 0.0f, 1.0f, 0.34f, 0.0f, 0.f, 0.f},
     {"the industrial district", 0x18204a, 0xdf9584, 0x7a6278, 0xffa868, 0x120e1c, 9.f, -6.8f, 1.0f, 0.45f, 0.3f, 0.25f, 0.0f, 0.8f,
      {0.46f, 0.42f, 0.52f}, {0.62f, 0.44f, 0.40f}, {0.9f, 0.55f, 0.42f}, 0.9f, 0.3f, 0.45f, 0.f, 0.f, 0.f},
     {"the fields", 0x5e9ad2, 0xf2e5c6, 0xcad6d4, 0xfff0c8, 0x162030, 14.f, 7.5f, 1.0f, 0.55f, 0.0f, 0.8f, 0.0f, 0.0f,
      {0.70f, 0.74f, 0.82f}, {0.72f, 0.68f, 0.58f}, {0.8f, 0.75f, 0.6f}, 0.6f, 0.8f, 0.66f, 0.f, 0.f, 1.f},
-    {"the bamboo forest", 0x5f8f4a, 0xe8dc8a, 0x7f9e62, 0xffe090, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
+    {"the bamboo forest", 0x5c9c94, 0xeceebc, 0x86bcab, 0xffe49a, 0x10180e, 0, 0, 1, 0, 0.0f, 0.0f, 0.0f, 0.0f,
      {0.58f, 0.68f, 0.52f}, {0.74f, 0.68f, 0.48f}, {0.9f, 0.8f, 0.5f}, -0.6f, 0.8f, 0.82f, 0.f, 0.45f, 0.7f},
     {"the glade", 0x584c86, 0xffb070, 0xe2a084, 0xffc068, 0x1c1018, 16.f, -2.0f, 1.7f, 1.0f, 0.15f, 0.5f, 0.0f, 0.0f,
      {0.60f, 0.50f, 0.56f}, {0.90f, 0.64f, 0.44f}, {1.0f, 0.68f, 0.38f}, 1.0f, 0.25f, 1.0f, 0.f, 1.0f, 0.5f},
@@ -195,7 +237,7 @@ void mixLook(Look& a, const Look& b, float w) {
 // The look along the way: keyframes (a place's look at a world x), eased from one to the next: the weather and the
 // time of day pass as the cub goes (night, the subway, the train, dawn as it rides out, morning, gold, sunset).
 struct Key { double s; int stage; };
-const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {220, 4}, {300, 4}, {345, 5}, {400, 6}, {446, 7}};
+const Key KEYS[] = {{0, 0}, {40, 1}, {80, 1}, {92, 2}, {130, 3}, {1180, 3}, {1256, 4}, {1336, 4}, {1381, 5}, {1436, 6}, {1482, 7}};
 constexpr int NKEYS = (int)(sizeof(KEYS) / sizeof(KEYS[0]));
 Look lookAt(double s, int* stage = nullptr, float* blend = nullptr) {
     int i = 0;
@@ -216,9 +258,9 @@ int placeOf(double s) {
     if (s < 84.0) return 1;
     if (s < XB - 0.5) return 2;
     if (s < XA + 0.5) return 3;
-    if (s < 340.0) return 4;
-    if (s < 392.0) return 5;
-    if (s < 440.0) return 6;
+    if (s < 1376.0) return 4;
+    if (s < 1428.0) return 5;
+    if (s < 1476.0) return 6;
     return 7;
 }
 
@@ -240,6 +282,10 @@ enum Act { A_STAND, A_LOOK, A_LOOKUP, A_SIT, A_WIPE, A_STROLL, A_BUTTERFLY, A_HO
 
 bool LostPandaUniverse::init(int width, int height) {
     progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world");
+    // (lighter variants where only the city, or only the countryside, can show)
+    progWorldCity_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (city)", "#define ZONES\n#define CITY true\n#define COUNTRY false\n");
+    progWorldCountry_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda world (country)", "#define ZONES\n#define CITY false\n#define COUNTRY true\n");
+    progNear_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "lostpanda near bamboo", "#define ZONES\n#define CITY false\n#define COUNTRY true\n#define NEAR_PASS\n");
     progFront_ = compile(ugl::FULLSCREEN_VS, shaders::FRONT_FS, "lostpanda front");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "lostpanda comp");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "lostpanda sprite");
@@ -323,7 +369,7 @@ void LostPandaUniverse::resize(int width, int height) {
 
 LostPandaUniverse::~LostPandaUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_})
+    for (GLuint p : {progWorld_, progWorldCity_, progWorldCountry_, progFront_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_, progPanda_, progNear_})
         glDeleteProgram(p);
     for (GLuint v : {quadVao_, spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -451,8 +497,9 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 lights_.push_back(l);
             }
         }
-        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws
-        if (firstRow >= 0) {
+        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws (not once it has
+        // found its family: then it is only with them)
+        if (firstRow >= 0 && noticeT_ <= 0.f) {
             Light l;
             l.kind = lines >= 4 ? 2 : 1;
             l.a = V(rng_.range(-3.f, 3.f), layout::cellPos(0.f, (float)firstRow).y);
@@ -515,6 +562,7 @@ void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate)
     p.joyEyes = approach(p.joyEyes, t.joyEyes, rate * 1.2f, dt);
     p.hug = approach(p.hug, t.hug, rate * 0.7f, dt);
     p.munch = approach(p.munch, t.munch, 7.f, dt);
+    p.surprise = approach(p.surprise, t.surprise, 5.f, dt);
     p.chew += dt * 11.f * p.munch;
     p.mood = approach(p.mood, t.mood, 0.5f, dt);
     // breath, blinks, the ears on their springs
@@ -545,6 +593,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
     t.mood = mood;
     t.turn = 0.55f; t.tilt = 0.f; t.lookX = 0.6f; t.lookY = -0.3f * (1.f - mood);
     t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f; t.hop = 0.f; t.lean = 0.f; t.arms = 0.f; t.joyEyes = 0.f; t.hug = 0.f;
+    t.surprise = 0.f;
     t.wind = 0.3f + 0.5f * kid_.walk;
     actT_ += dt;
     // the lights of a clear coming: watch them (toward the well, up)
@@ -623,6 +672,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
             t.tilt = noticeT_ < 1.8f ? 0.1f : 0.f;
             t.arms = noticeT_ < 1.8f ? 0.f : 0.55f;
             t.joyEyes = noticeT_ < 1.8f ? 0.f : 0.35f;
+            t.surprise = noticeT_ < 1.8f ? 1.f : 0.f;   // there they are!
             actT_ = 0.f; act_ = A_HUG; actDur_ = 9.f;
         } else if (arriveT_ < 1.f) {
             act_ = A_HUG; actT_ = std::max(actT_, 0.7f); actDur_ = std::max(actDur_, 9.f);
@@ -868,13 +918,14 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uHug", p.hug);
     set1f(progPanda_, "uMunch", p.munch);
     set1f(progPanda_, "uChew", p.chew);
-    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
-    set1f(progPanda_, "uRoll", adult > 0.5f ? 0.f : kidRoll_);
+    set1f(progPanda_, "uSurprise", p.surprise);
+    set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : (sheet_ ? 0.f : strength_));
+    set1f(progPanda_, "uRoll", adult > 0.5f || sheet_ ? 0.f : kidRoll_);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
     set2f(progPanda_, "uEars", p.earN, p.earF);
     const float night = 1.f - 0.5f * smoothstepf(0.f, 1.f, over_);
-    set3f(progPanda_, "uAmb", l.amb * night);
-    set3f(progPanda_, "uKey", l.key * night * (1.f + 0.25f * dropAmt_));
+    set3f(progPanda_, "uAmb", sheet_ ? vec3(1.f) : l.amb * night);
+    set3f(progPanda_, "uKey", sheet_ ? vec3(0.f) : l.key * night * (1.f + 0.25f * dropAmt_));
     set3f(progPanda_, "uRimC", l.rim * night);
     const float kl = std::sqrt(l.keyX * l.keyX + l.keyY * l.keyY) + 1e-4f;
     set2f(progPanda_, "uKeyDir", l.keyX / kl, l.keyY / kl);
@@ -885,6 +936,51 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set3f(progPanda_, "uHazeC", l.fog);
     glBindVertexArray(quadVao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+// the test hook REFALL_LOSTPANDA_SHEET: the pandas alone, big, posed
+void LostPandaUniverse::drawSheet(int which) {
+    sceneT_.bind();
+    glClearColor(0.79f, 0.745f, 0.665f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    sheet_ = true;
+    const float hx = viewH_.x, hy = viewH_.y, cx = viewC_.x, cy = viewC_.y;
+    Pose b;
+    b.mood = 1.f; b.turn = 0.f; b.lookX = 0.f; b.lookY = 0.f; b.breath = 0.f;
+    if (which == 1) {
+        // as the reference: two columns, facing us above (happy, surprised), in profile below
+        const float h = 0.86f * hy;
+        Pose p = b;
+        drawPanda(p, V(cx - 0.5f * hx, cy + 0.06f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        p.surprise = 1.f;
+        drawPanda(p, V(cx + 0.5f * hx, cy + 0.06f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        p = b; p.turn = 0.7f;
+        drawPanda(p, V(cx - 0.5f * hx, cy - 0.94f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+        drawPanda(p, V(cx + 0.5f * hx, cy - 0.94f * hy), h, 1.f, 0.f, 1.f, 0.f, false, 0);
+    } else {
+        // its other poses: sad sitting, wiping a tear, waving for joy, munching (facing, in profile), walking, the
+        // hug, a blink, the parents (sitting, waving)
+        const float h = 0.82f * hy;
+        Pose ps[10];
+        for (Pose& p : ps) p = b;
+        ps[0].mood = 0.1f; ps[0].sit = 1.f; ps[0].turn = 0.2f; ps[0].lookY = -0.6f; ps[0].tilt = -0.06f;
+        ps[1].mood = 0.1f; ps[1].wipe = 1.f; ps[1].tear = 0.7f; ps[1].turn = 0.2f;
+        ps[2].arms = 0.7f; ps[2].joyEyes = 1.f; ps[2].turn = 0.3f; ps[2].hop = 0.04f;
+        ps[3].munch = 1.f; ps[3].chew = 1.f; ps[3].joyEyes = 0.45f; ps[3].turn = 0.15f;
+        ps[4].munch = 1.f; ps[4].chew = 1.f; ps[4].joyEyes = 0.45f; ps[4].turn = 0.7f;
+        ps[5].mood = 0.5f; ps[5].walk = 1.f; ps[5].phase = 1.3f; ps[5].turn = 0.7f; ps[5].lookX = 1.f;
+        ps[6].hug = 1.f; ps[6].joyEyes = 1.f; ps[6].turn = 0.5f; ps[6].lean = 0.8f; ps[6].tilt = 0.12f;
+        ps[7].blink = 1.f; ps[7].mood = 0.6f; ps[7].turn = 0.1f;
+        ps[8].mood = 0.6f; ps[8].sit = 1.f; ps[8].turn = 0.3f;
+        ps[9].arms = 1.f; ps[9].joyEyes = 1.f; ps[9].turn = 0.5f;
+        for (int i = 0; i < 10; i++) {
+            const float x = cx + hx * (-0.8f + 0.4f * (float)(i % 5)), y = cy + (i < 5 ? 0.08f : -0.92f) * hy;
+            drawPanda(ps[i], V(x, y), i >= 8 ? h * 1.1f : h, i == 9 ? -1.f : 1.f, i >= 8 ? 1.f : 0.f, 1.f, 0.f, false, 0);
+        }
+    }
+    sheet_ = false;
 }
 
 // =====================================================================================================
@@ -992,7 +1088,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
                 trainX_ = XB - DOOR + (XA - XB) * rideF(lo);
                 P_ = trainX_ + DOOR;
             } else { train_ = T_AWAY; trainX_ = XB - DOOR - 160.0; door_ = 0.f; }
-            C_ = std::min(P_, C_END);
+            C_ = train_ == T_RIDE ? XB + (XA - XB) * rideCamF(rideT_ / rideS()) : std::min(P_, C_END);
             camY_ = (float)(pathY(P_) - GY0);
             placed_ = true;
         }
@@ -1031,7 +1127,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         // the further behind its lines, the faster it goes (a brisk walk, then a trot): the way must always be
         // feasible within the song, however fast the lines come
         double vmax = lineWalk ? std::min(6.5, lerpf(1.5f, 2.4f, mood) + std::max(0.0, dist - 6.0) * 0.12) : 0.45;
-        if (P_ > 79.0 && P_ < 92.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
+        if (P_ > 79.0 && P_ < 95.0) vmax = std::min(vmax, 1.2);                 // careful on the stairs
         if (P_ > XB - 1.0 && P_ < XB + 0.1) vmax = std::min(vmax, 1.0);        // stepping in
         if (P_ > XA - 0.1 && P_ < XA + 1.0) vmax = std::min(vmax, 1.0);        // stepping out
         if (noticeT_ >= 1.8f && P_ < pEnd_) vmax = 3.4;                        // running to them
@@ -1116,10 +1212,18 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             static const char* tx = std::getenv("REFALL_LOSTPANDA_TRAINX");
             if (tx) trainX_ = (C_ - xP_) + std::atof(tx);
         }
-        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end
-        const double cT = std::min(P_, C_END);
+        // the camera follows, lagging a little (the cub moves ahead on the screen while it walks); it stops at the end.
+        // On the train it keeps to the ride's own course (rideCamF: the train pulls out across the screen, the camera
+        // catches up, then leads it into the terminus), moving with it and easing out any gap left from the platform
         const bool ridingNow = train_ == T_RIDE;
+        const double c0 = C_;
+        double cT = std::min(P_, C_END);
+        if (ridingNow) {
+            cT = XB + (XA - XB) * rideCamF(rideT_ / rideS());
+            C_ += (XA - XB) * (rideCamF(rideT_ / rideS()) - rideCamF((rideT_ - wdt) / rideS()));
+        }
         C_ += (cT - C_) * (1.0 - std::exp(-(ridingNow ? 2.5 : 1.1) * wdt));
+        if (wdt > 0.f) camV_ = (C_ - c0) / wdt;                                // (the motion blur's speed)
         camY_ = approach(camY_, (float)(pathY(P_) - GY0), ridingNow ? 3.f : 1.6f, wdt);
         // the walk cycle: steps follow the ground covered (not while riding)
         const float stride = 0.32f * kidH_;
@@ -1127,7 +1231,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         kid_.walk = approach(kid_.walk, ridingNow ? 0.f : saturate(speed / 1.1f), 5.f, wdt);
         reunion_ = smoothstepf((float)(C_END - 12.0), (float)pEnd_, (float)P_);
         strength_ = approach(strength_, (float)smd(20.0, C_END - 30.0, P_), 0.5f, wdt);
-        munchT_ = std::max(0.f, munchT_ - wdt);
+        munchT_ = noticeT_ > 0.f ? 0.f : std::max(0.f, munchT_ - wdt);   // (no more eating once it sees its family)
     }
     const Look look0 = lookAt(C_);
     Look look = look0;
@@ -1148,14 +1252,14 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             const bool seen = noticeT_ > 0.6f;
             t.mood = seen ? 1.f : 0.6f;
             t.sit = (seen && arriveT_ < 4.5f) ? 0.f : 1.f;
-            t.turn = seen ? 0.7f : 0.35f * std::sin(tt) + 0.25f;     // (their +x: toward the cub, on their left)
+            t.turn = seen ? (arrived ? 0.7f : 0.3f) : 0.35f * std::sin(tt) + 0.25f;    // (their +x: toward the cub, on their left)
             t.lookX = t.turn > 0.f ? 1.f : -1.f;
             t.lookY = 0.f;
             t.arms = (seen && !arrived) ? 0.85f : 0.f;
             t.hug = (arrived && i == 0) ? 1.f : 0.f;
             t.tilt = arrived ? 0.14f : 0.05f * std::sin(tt * 1.3f);
             t.lean = arrived ? (i == 0 ? 0.8f : 0.4f) : 0.f;
-            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : 0.f;
+            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : (seen ? 1.f : 0.f);
             t.wind = 0.2f;
             updatePose(fp, wdt, t, 1.5f);
         }
@@ -1210,7 +1314,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             sprite(u < 0.75f ? bgSprites_ : fgSprites_, p, l.size * (1.f - 0.35f * smoothstepf(0.8f, 1.f, u)), vec3(1.f), a, 5, ang);
             if (u > 0.92f && !l.fed) {
                 l.fed = true;
-                munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
+                if (noticeT_ <= 0.f) munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
                 joy_ = std::max(joy_, l.kind == 2 ? 0.7f : 0.3f);
                 if (l.kind == 2 && act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.4f; }
             }
@@ -1253,13 +1357,17 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    const float dawn = (float)smd(165.0, 290.0, P_);
+    const float dawn = (float)smd(1201.0, 1326.0, P_);
     auto setTrain = [&](GLuint prog, float px) {
         set1f(prog, "uTrainX", (float)trainX_);
         set1f(prog, "uDoor", smoothstepf(0.f, 1.f, door_));
         set1f(prog, "uTrainLit", 1.f);
         set1f(prog, "uTrainBody", 0.55f + 0.7f * dawn);
-        set1f(prog, "uSway", train_ == T_RIDE ? 1.f : 0.25f);
+        // the straps swing harder the faster it runs; the motion blur over a 1/30 s shutter (the world past the
+        // camera, the tunnel's lamps past the train)
+        set1f(prog, "uSway", train_ == T_RIDE ? 1.f + 1.5f * smoothstepf(0.f, 50.f, (float)vel_) : 0.25f);
+        set1f(prog, "uBlur", (float)std::min(3.0, std::fabs(camV_) / 30.0));
+        set1f(prog, "uRunBlur", train_ == T_RIDE ? (float)std::min(3.0, std::fabs(vel_) / 30.0) : 0.f);
         set1f(prog, "uTrainT", trainClock_);
         set1f(prog, "uDir", train_ == T_LEAVE ? -1.f : 1.f);
         set1f(prog, "uHead", (1.f - 0.8f * dawn) * (train_ == T_AWAY || train_ == T_GONE ? 0.f : 1.f));
@@ -1280,6 +1388,37 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         setTrain(progFront_, 1.f / pxPerUnit_);
         ugl::drawFullscreen();
     };
+    // the world shader's uniforms (the world pass, and the near bamboo's pass over the pandas)
+    auto setWorld = [&](GLuint pw, float pxp) {
+        glUseProgram(pw);
+        set2f(pw, "uViewC", viewC_.x, viewC_.y);
+        set2f(pw, "uViewH", viewH_.x, viewH_.y);
+        set1f(pw, "uPxP", pxp);
+        set1f(pw, "uD", (float)C_ - xP_);
+        set1f(pw, "uCamY", viewY_);
+        set1f(pw, "uDawn", dawn);
+        set1f(pw, "uSubLight", 1.f);
+        setTrain(pw, pxp);
+        set1f(pw, "uTime", time_);
+        set1f(pw, "uBeat", (float)std::fmod(beat, 4096.0));
+        set1f(pw, "uPeak", wp);
+        set1f(pw, "uMid", wm);
+        set1f(pw, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
+        set1f(pw, "uKick", kickS_);
+        set1f(pw, "uRain", look.rain);
+        set1f(pw, "uStars", look.stars);
+        set1f(pw, "uClouds", look.clouds);
+        set1f(pw, "uOver", smoothstepf(0.f, 1.f, over_));
+        set1f(pw, "uWorldA", world);
+        set1f(pw, "uSlow", slow_);
+        set3f(pw, "uSkyTop", look.skyTop);
+        set3f(pw, "uSkyHor", look.skyHor);
+        set3f(pw, "uFog", look.fog);
+        set3f(pw, "uSunCol", look.sunCol);
+        set4f(pw, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
+        set3f(pw, "uBridgeCol", bridge_.color);
+        set1f(pw, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
+    };
     // the cub is inside the train (behind its near side) from its door to the terminus
     const bool inside = (train_ == T_WAIT && P_ > XB - 0.35) || train_ == T_RIDE || (train_ == T_TERM && P_ < XA + 0.35);
 
@@ -1287,34 +1426,12 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     {
         worldT_.bind();
         glDisable(GL_BLEND);
-        glUseProgram(progWorld_);
-        set2f(progWorld_, "uViewC", viewC_.x, viewC_.y);
-        set2f(progWorld_, "uViewH", viewH_.x, viewH_.y);
-        set1f(progWorld_, "uPxP", 2.f * viewH_.y / worldT_.h);
-        set1f(progWorld_, "uD", (float)C_ - xP_);
-        set1f(progWorld_, "uCamY", viewY_);
-        set1f(progWorld_, "uDawn", dawn);
-        set1f(progWorld_, "uSubLight", 1.f);
-        setTrain(progWorld_, 2.f * viewH_.y / worldT_.h);
-        set1f(progWorld_, "uTime", time_);
-        set1f(progWorld_, "uBeat", (float)std::fmod(beat, 4096.0));
-        set1f(progWorld_, "uPeak", wp);
-        set1f(progWorld_, "uMid", wm);
-        set1f(progWorld_, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
-        set1f(progWorld_, "uKick", kickS_);
-        set1f(progWorld_, "uRain", look.rain);
-        set1f(progWorld_, "uStars", look.stars);
-        set1f(progWorld_, "uClouds", look.clouds);
-        set1f(progWorld_, "uOver", smoothstepf(0.f, 1.f, over_));
-        set1f(progWorld_, "uWorldA", world);
-        set1f(progWorld_, "uSlow", slow_);
-        set3f(progWorld_, "uSkyTop", look.skyTop);
-        set3f(progWorld_, "uSkyHor", look.skyHor);
-        set3f(progWorld_, "uFog", look.fog);
-        set3f(progWorld_, "uSunCol", look.sunCol);
-        set4f(progWorld_, "uSun", look.sunX, look.sunY - viewY_ * 0.08f, look.sunR, look.sun);
-        set3f(progWorld_, "uBridgeCol", bridge_.color);
-        set1f(progWorld_, "uLamp", look.lamp * (1.f + 0.15f * wp + 0.2f * dropAmt_));
+        // the city's layers show until its street (at half speed) leaves the screen's left edge past 1290 along the
+        // way; the countryside's from when the works' warehouses (at 0.4) reach its right edge at 1245
+        const double ud = C_ - xP_;
+        const bool city = ud + 2.0 * (viewC_.x - viewH_.x) < 1290.0, country = ud + 2.5 * (viewC_.x + viewH_.x) > 1245.0;
+        const GLuint pw = !country ? progWorldCity_ : (!city ? progWorldCountry_ : progWorld_);
+        setWorld(pw, 2.f * viewH_.y / worldT_.h);
         ugl::drawFullscreen();
     }
 
@@ -1351,11 +1468,16 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             kidRoll_ = inside ? (float)std::atan((trackY(x0 + 17.0) - trackY(x0)) / 17.0) : 0.f;
         }
         kid_.tilt += 0.035f * nod;
-        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 96.0 && P_ < XB - 0.7), 0);
+        drawPanda(kid_, V(xP_ + (float)(P_ - C_), ky), kidH_, 1.f, 0.f, alpha, 0.f, P_ < 80.0 || (P_ > 98.0 && P_ < XB - 0.7), 0);
         kid_.tilt -= 0.035f * nod;
     }
     if (inside) drawFront();
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // the near bamboo, in front of the way and of the pandas
+    if (C_ - xP_ + viewC_.x > 1380.0) {
+        setWorld(progNear_, 1.f / pxPerUnit_);
+        ugl::drawFullscreen();
+    }
     // hearts rising from the pandas when they meet (on the right of the HUD, behind nothing of the board)
     {
         const float fs = famS_;
@@ -1423,6 +1545,11 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     drawSprites(sprites_, false);
     drawHud(f.panels);
     fade_ = f.fade;
+    // Test hook: REFALL_LOSTPANDA_SHEET=1 draws, over everything, the pandas' model sheet big on a plain ground under a
+    // plain white light (the cub facing us happy and surprised, in profile; =2 its other poses, the parents), to set
+    // their drawing against the owner's reference (with REFALL_BARE=1 and --review-shot).
+    static const int sheet = std::getenv("REFALL_LOSTPANDA_SHEET") ? std::atoi(std::getenv("REFALL_LOSTPANDA_SHEET")) : 0;
+    if (sheet > 0) drawSheet(sheet);
     glDisable(GL_BLEND);
 
     // ---- Post.
