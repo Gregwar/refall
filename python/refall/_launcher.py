@@ -16,14 +16,14 @@ def _tool_env() -> dict:
     scripts = Path(sysconfig.get_path("scripts"))
     for name in ("yt-dlp", "yt-dlp.exe"):
         if (scripts / name).is_file():
-            env.setdefault("ZENTRIS_YTDLP", str(scripts / name))
+            env.setdefault("REFALL_YTDLP", str(scripts / name))
             break
     # yt-dlp needs ffmpeg to convert audio; use the bundled one when the system has none.
     if not shutil.which("ffmpeg"):
         try:
             import imageio_ffmpeg
 
-            env.setdefault("ZENTRIS_FFMPEG", imageio_ffmpeg.get_ffmpeg_exe())
+            env.setdefault("REFALL_FFMPEG", imageio_ffmpeg.get_ffmpeg_exe())
         except Exception:
             pass
     return env

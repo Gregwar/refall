@@ -114,10 +114,10 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
 
 constexpr float CLEAR_T = 0.5f; // a cleared block crumbles away in this long (real time)
 
-// Test hooks: ZEN_RUINS_LINES=N adds N lines to the rewind, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_RUINS_LINES=N adds N lines to the rewind, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_RUINS_LINES") ? std::atoi(std::getenv("ZEN_RUINS_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_RUINS_LINES") ? std::atoi(std::getenv("REFALL_RUINS_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -834,8 +834,8 @@ void RuinsUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 60 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 60 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
@@ -1368,7 +1368,7 @@ void RuinsUniverse::buildScene(int kind) {
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(float), v.data(), GL_STATIC_DRAW);
     folCount_ = (int)v.size() / 4;
     snapNext_ = true;
-    if (std::getenv("ZEN_GPUTIME"))
+    if (std::getenv("REFALL_GPUTIME"))
         std::fprintf(stderr, "[ruins] %s: %d triangles in the mesh buffer, %d drawn (with the instances), built in %.1f ms\n",
                      VARIANTS[wrapV(variant_)].name, scene_.triangles(), scene_.instancedTriangles(), buildMs);
 }

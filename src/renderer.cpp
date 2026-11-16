@@ -328,8 +328,8 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
     {
         f.setup = saturate(brk_.setup);
         f.teardown = saturate(brk_.teardown);
-        static const char* ts = std::getenv("ZEN_TEST_SETUP");
-        static const char* tt = std::getenv("ZEN_TEST_TEARDOWN");
+        static const char* ts = std::getenv("REFALL_TEST_SETUP");
+        static const char* tt = std::getenv("REFALL_TEST_TEARDOWN");
         if (ts) f.setup = saturate((float)std::atof(ts));
         if (tt) f.teardown = saturate((float)std::atof(tt));
     }
@@ -1173,8 +1173,8 @@ bool Renderer::captureLine(const Frame& f, const HudText& line, bool fromBottom,
         out.ay = fromBottom ? (float)h_ : 0.f;
         out.aMax = aMax;
         out.ok = true;
-        // Test hook: ZEN_CARD_DEBUG=DIR writes each capture (the world, the world with the lettering, the coverage).
-        if (const char* dbg = std::getenv("ZEN_CARD_DEBUG")) {
+        // Test hook: REFALL_CARD_DEBUG=DIR writes each capture (the world, the world with the lettering, the coverage).
+        if (const char* dbg = std::getenv("REFALL_CARD_DEBUG")) {
             const std::string pre = std::string(dbg) + "/card-" + std::to_string(fromBottom ? 1 : 0);
             stbi_flip_vertically_on_write(1);
             stbi_write_png((pre + "-world.png").c_str(), w_, h_, 4, world.data(), w_ * 4);

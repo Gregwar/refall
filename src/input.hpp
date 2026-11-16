@@ -48,7 +48,7 @@ public:
     Device active() const { return active_; }
     bool gamepadConnected() const { return jid_ >= 0; }
     const std::string& gamepadName() const { return padName_; }
-    // Testing without a window (ZEN_TEST_PLAY): a new frame forgets the presses, testPress presses an action.
+    // Testing without a window (REFALL_TEST_PLAY): a new frame forgets the presses, testPress presses an action.
     void testFrame() {
         for (int i = 0; i < A_COUNT; i++) { prev_[i] = down_[i]; down_[i] = false; repeat_[i] = 0; }
         typed_.clear();

@@ -65,7 +65,7 @@ private:
     vec3 slotPos(int i) const;                              // a product's place in the bag being packed (relative)
     vec3 shelfPos(int i) const;                             // a full bag's place at the counter's edge
 
-    // ---- The lines (ZEN_GROCERIES_LINES / ZEN_GROW_RATE add to them).
+    // ---- The lines (REFALL_GROCERIES_LINES / REFALL_GROW_RATE add to them).
     int lines_ = 0, linesShown_ = -1, lastExtra_ = -1;
     float gL_ = 0.f;                 // the lines shown (eased), for the things that appear
     float receipt_ = 0.f, receiptT_ = 0.f, burst_ = 0.f;

@@ -7,7 +7,7 @@ Everything beyond the [README](../README.md): command-line options, tools, how t
 YouTube playlists (or single videos) work too, through [yt-dlp](https://github.com/yt-dlp/yt-dlp)
 (install it with `pipx install "yt-dlp[default]"`; YouTube also needs a JavaScript runtime such as Deno or
 Node.js, and Node.js is picked up automatically). Songs are downloaded when queued and cached as MP3 in
-`~/.cache/zentris/youtube/`. Downloading from YouTube is against its terms of service: personal use only.
+`~/.cache/refall/youtube/`. Downloading from YouTube is against its terms of service: personal use only.
 
 ```sh
 ./build/refall "https://www.youtube.com/playlist?list=PLWHPu2N_Gb2lbZ8-7sYKSEbDlb3UiAVye"   # quote it: & is special in the shell
@@ -40,16 +40,16 @@ first drop in its universe, stitched with crossfades (`--songs N`, `--before`, `
 (shots of the game in many universes, cut on the song's bars, none shorter than `min_shot`; optional title cards on
 black, crossfades on the cuts), each showing a line clear (`--plan-only` prints the timeline, `-j N` records shots in
 parallel, cached between runs). It uses `refall --analysis OUT.json` (the song's beats, structure and scene
-levels as JSON), the test hook `ZEN_CLIP_FILL=1` (a clip's warm-up starts on a filled board) and the
+levels as JSON), the test hook `REFALL_CLIP_FILL=1` (a clip's warm-up starts on a filled board) and the
 `[clip] clear N at T` lines a clip prints.
 
-Test hook for the menus and Voyage: `ZEN_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
-overs) without a window, the songs on a simulated clock, with `ZEN_TEST_KEYS="T:KEY,..."` (up, down, left, right, ok,
-back, alt (Space), pause, quit, skip (S with `--cheat-skip`) pressed at T seconds), `ZEN_TEST_SHOTS="T:FILE.png,..."`, `ZEN_TEST_QUIT=T` and `ZEN_TEST_TAIL=S`
+Test hook for the menus and Voyage: `REFALL_TEST_PLAY=1` runs the game as when played (title screen, breaks, game
+overs) without a window, the songs on a simulated clock, with `REFALL_TEST_KEYS="T:KEY,..."` (up, down, left, right, ok,
+back, alt (Space), pause, quit, skip (S with `--cheat-skip`) pressed at T seconds), `REFALL_TEST_SHOTS="T:FILE.png,..."`, `REFALL_TEST_QUIT=T` and `REFALL_TEST_TAIL=S`
 (each song starts S seconds before its end), e.g. a stage run through with `--autoplay`. Measuring the menu:
-`--menu-clip` prints its CPU and GPU time per frame; `ZEN_MENU_FINISH=1` adds the wall time with `glFinish` (software
-renderers, whose timer queries mean nothing), `ZEN_MENU_KALEIDO_DIV=N` draws the kaleidoscope at 1/N of the resolution (it is full resolution by default),
-`ZEN_MENU_SLOW=1` lists the frames over 30 ms; the clip also prints the worst frame within 0.6 s of a key.
+`--menu-clip` prints its CPU and GPU time per frame; `REFALL_MENU_FINISH=1` adds the wall time with `glFinish` (software
+renderers, whose timer queries mean nothing), `REFALL_MENU_KALEIDO_DIV=N` draws the kaleidoscope at 1/N of the resolution (it is full resolution by default),
+`REFALL_MENU_SLOW=1` lists the frames over 30 ms; the clip also prints the worst frame within 0.6 s of a key.
 
 ## refall-scope: see what the game hears
 
@@ -70,7 +70,7 @@ click the active one again to go back to normal speed.
 
 **Notes:** press A to write a note at the playhead (e.g. "the drop should start earlier here"); Enter saves it,
 Esc cancels (the song pauses while you type). Notes go to `annotations.jsonl` in the user data folder
-(`~/.local/share/zentris/` on Linux; `--notes FILE` to change it), one JSON object per line with the song, the time,
+(`~/.local/share/refall/` on Linux; `--notes FILE` to change it), one JSON object per line with the song, the time,
 the text and what the analysis said there (the phase and section, and the whole scene plan and structure).
 They show as cyan flags on the timeline, with their text in the detail view.
 `--song ID|TITLE` starts at a song of the playlist (a YouTube id or part of its title), `--at SEC` at a time, and
@@ -86,7 +86,7 @@ velocity, the computer playing (a game over starts a new board at once, the song
 main one by default (`data/campaign.tsv`, as the game reads it), or a campaign file, or a custom voyage (its id or
 its title). An overlay (Tab or H hides it) shows:
 - the campaign's songs by stage, each card the universe in miniature (the menu's snapshots), the video's thumbnail
-  (downloaded once into `~/.cache/zentris/thumbs/`), its title, universe and velocity; the song playing is lit, and
+  (downloaded once into `~/.cache/refall/thumbs/`), its title, universe and velocity; the song playing is lit, and
   a song being downloaded or prepared says so
 - the song's timeline: its sections (intro, verse, build, chorus, drop, break, outro), the scene levels over them
   (calm, mid, peak) and the playhead
@@ -98,7 +98,7 @@ timeline seeks. Songs not downloaded yet are fetched when played, and the next o
 
 Options: `--difficulty easy|normal|hard` (the velocities played, NORMAL by default), `--stage N --song K` (start
 there), `--size WxH`, `--fullscreen`, `--mute`, and `--shot OUT.png` (saves the viewer `--shot-after SEC`, 8 by
-default, into the first song, offscreen, then exits; `ZEN_VIEWER_KEYS="T:COMMAND,..."` gives it commands on the way:
+default, into the first song, offscreen, then exits; `REFALL_VIEWER_KEYS="T:COMMAND,..."` gives it commands on the way:
 next, prev, stage+, stage-, fwd, back, sec+, sec-, tour, hide).
 
 ## Slow motion and quad rewards
@@ -135,4 +135,4 @@ Each song is decoded and analyzed in the background (under 1 s):
 `.github/workflows/wheels.yml` builds wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64) and
 Windows (x86_64) plus a source distribution on every push, and publishes them to PyPI when a `v*` tag is
 pushed (`git tag v0.1.0 && git push --tags`). Publishing uses PyPI trusted publishing: on pypi.org, add a
-publisher for project `zentris`, repository `Gregwar/zentris`, workflow `wheels.yml`, environment `pypi`.
+publisher for project `refall`, repository `Gregwar/refall`, workflow `wheels.yml`, environment `pypi`.

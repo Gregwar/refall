@@ -100,7 +100,7 @@ void q3ContactSolver::PreSolve( r32 dt )
 
 			// Precalculate bias factor
 			c->bias = -Q3_BAUMGARTE * (r32( 1.0 ) / dt) * q3Min( r32( 0.0 ), c->penetration + Q3_PENETRATION_SLOP );
-			// Zentris change: a deep overlap is pushed out at a bounded speed (it slides apart rather than pops)
+			// Refall change: a deep overlap is pushed out at a bounded speed (it slides apart rather than pops)
 			c->bias = q3Min( c->bias, Q3_MAX_CORRECTION );
 
 			// Warm start contact

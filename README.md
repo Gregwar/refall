@@ -174,7 +174,7 @@ kaleidoscope: on the title and in free play they turn in turn, on Voyage it show
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
 from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
 dimmed for a locked stage); free play takes the
-focused playlist's hue. They come from snapshots of each universe cached in `~/.cache/zentris/menu-worlds/` (640x360);
+focused playlist's hue. They come from snapshots of each universe cached in `~/.cache/refall/menu-worlds/` (640x360);
 the missing ones are made one at a time on a worker thread with its own OpenGL context, only while no key has been
 pressed for a moment (the first launch fills the cache in about a minute on the title), and until a snapshot is ready
 its place is procedural glass in the universe's colours, cross-fading to the image when it arrives. The menu remembers
@@ -226,7 +226,7 @@ no song previews.
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
   lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
   and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder
-  (`~/.local/share/zentris/` on Linux). The file keys songs by their video id and stage clears by their songs, so
+  (`~/.local/share/refall/` on Linux). The file keys songs by their video id and stage clears by their songs, so
   regrouping the Voyage keeps the songs beaten: a clear of a stage that no longer exists is dropped, and the stages it
   had opened (and every stage with a beaten song) stay open. A file from the first Voyage (12 stages of 5, keyed by
   index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`.
@@ -247,8 +247,8 @@ Songs or playlists given on the command line play free play straight away, as be
 (`--review-shot`, `--clip`, `--analysis`, ...).
 
 Without a display, `--menu-shot OUT.png [--menu-screen title|campaign|free] [--menu-hover S:SONG] [--menu-petal]`
-saves a menu screen (`--menu-petal`: the hovered stage's petal open; `ZEN_TEST_KEYS` presses keys before it) and
-`--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `ZEN_MENU_CLIP_SECONDS` changes its
+saves a menu screen (`--menu-petal`: the hovered stage's petal open; `REFALL_TEST_KEYS` presses keys before it) and
+`--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `REFALL_MENU_CLIP_SECONDS` changes its
 length), printing the menu's average CPU and GPU time per frame; both can show made-up progress and playlists
 (`--menu-demo`, always on in clips, never saved; `--menu-demo normal-done`: every stage cleared on NORMAL, the first
 five on EASY, none on HARD). `--menu-screen debrief-over` or `debrief-clear` shows the debrief that ends a Voyage
@@ -287,9 +287,9 @@ climbs to it over its first 30 seconds, each next song climbs from the previous 
 
 ## Install
 
-[![PyPI](https://img.shields.io/pypi/v/zentris)](https://pypi.org/project/zentris/)
+[![PyPI](https://img.shields.io/pypi/v/refall)](https://pypi.org/project/refall/)
 
-Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/zentris/). Run them with
+Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/refall/). Run them with
 [uv](https://docs.astral.sh/uv/) as above, or install them:
 
 ```sh
@@ -355,5 +355,5 @@ cmake -S . -B build && cmake --build build -j
 ./build/refall ~/Music
 ```
 
-`-DZENTRIS_DISABLED_UNIVERSES="cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen"` (the default) lists the universes left out of the build;
-`-DZENTRIS_DISABLED_UNIVERSES=""` builds them all.
+`-DREFALL_DISABLED_UNIVERSES="cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen"` (the default) lists the universes left out of the build;
+`-DREFALL_DISABLED_UNIVERSES=""` builds them all.

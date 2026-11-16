@@ -25,14 +25,14 @@ The pipeline, one function each:
      "crossfade" seconds centred on the cuts (each clip is recorded that much longer on both sides), then a
      two-pass x264 encode sized to --max-mb (or --crf), AAC audio; a contact sheet of the shots next to it.
 
-Game options used (added for this tool): `--analysis OUT.json` writes the song analysis and exits; ZEN_CLIP_FILL=1
+Game options used (added for this tool): `--analysis OUT.json` writes the song analysis and exits; REFALL_CLIP_FILL=1
 starts a clip's warm-up on a played-in stack (a shot early in the song has no time to fill the board); with --clip
 the game prints `[clip] clear N at SONG_TIME` for each line clear. Other hooks
-(ZEN_WARMUP, ZEN_SCENE_LINES, ZEN_<UNIVERSE>_LINES, ZEN_GROW_RATE...) come from the config's env; ZEN_TEST_BONUS=0
-keeps the slow-motion bonus out of every shot; ZEN_CLIP_PACE and ZEN_CLIP_VELOCITY speed a shot's play and fall
-up ("pace" and "velocity" in the config); with "continuous", ZEN_CLIP_FROM_START plays one game across all the shots.
+(REFALL_WARMUP, REFALL_SCENE_LINES, REFALL_<UNIVERSE>_LINES, REFALL_GROW_RATE...) come from the config's env; REFALL_TEST_BONUS=0
+keeps the slow-motion bonus out of every shot; REFALL_CLIP_PACE and REFALL_CLIP_VELOCITY speed a shot's play and fall
+up ("pace" and "velocity" in the config); with "continuous", REFALL_CLIP_FROM_START plays one game across all the shots.
 Needs a built refall (default build/refall), ffmpeg, numpy and Pillow; yt-dlp for a song not
-cached yet (ZENTRIS_YTDLP, PATH or ~/.local/bin).
+cached yet (REFALL_YTDLP, PATH or ~/.local/bin).
 """
 import argparse
 import concurrent.futures
@@ -72,7 +72,7 @@ def short_hash(*parts):
 # 1. The song and its analysis
 
 def find_ytdlp():
-    for p in (os.environ.get("ZENTRIS_YTDLP"), shutil.which("yt-dlp"), os.path.expanduser("~/.local/bin/yt-dlp")):
+    for p in (os.environ.get("REFALL_YTDLP"), shutil.which("yt-dlp"), os.path.expanduser("~/.local/bin/yt-dlp")):
         if p and os.path.exists(p):
             return p
     return None
@@ -80,14 +80,14 @@ def find_ytdlp():
 
 def resolve_song(spec, title, work):
     """The song as a file whose name is its title (the game letters the file name as the song's title)."""
-    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "zentris", "youtube")
+    cache = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "refall", "youtube")
     if spec.startswith("ytdl:"):
         vid = spec[5:]
         path = os.path.join(cache, vid + ".mp3")
         if not os.path.exists(path):
             tool = find_ytdlp()
             if not tool:
-                sys.exit(f"{spec} is not cached and yt-dlp is missing (set ZENTRIS_YTDLP)")
+                sys.exit(f"{spec} is not cached and yt-dlp is missing (set REFALL_YTDLP)")
             log(f"downloading {spec} ...")
             subprocess.run([tool, "-x", "--audio-format", "mp3", "-o", os.path.join(cache, vid + ".%(ext)s"),
                             f"https://www.youtube.com/watch?v={vid}"], check=True)
@@ -234,7 +234,7 @@ def enabled_universes(game):
     else:
         path = os.path.join(ROOT, "src", "universes", "registry.def")
         with open(os.path.join(ROOT, "CMakeLists.txt")) as f:
-            m = re.search(r'set\(ZEN_DEFAULT_DISABLED "([^"]*)"\)', f.read())
+            m = re.search(r'set\(REFALL_DEFAULT_DISABLED "([^"]*)"\)', f.read())
         disabled = set(m.group(1).split(";")) if m else set()
     out = []
     with open(path) as f:
@@ -351,7 +351,7 @@ def plan(cfg, grid, universes):
                          f"at least each (min_shot); move some to another chapter or lengthen this one")
             for i, s in enumerate(run):
                 u, _, variant = s["u"].partition(":")
-                env = {"ZEN_TEST_BONUS": "0"}  # (no slow-motion bonus in a trailer: the autoplay would start it)
+                env = {"REFALL_TEST_BONUS": "0"}  # (no slow-motion bonus in a trailer: the autoplay would start it)
                 env.update(cfg.get("env", {}))
                 env.update(cfg.get("universe_env", {}).get(u, {}))
                 env.update(s.get("env", {}))
@@ -385,7 +385,7 @@ def plan(cfg, grid, universes):
             e["c0"], e["c1"] = max(0.0, e["t0"] - half), min(grid.duration, e["t1"] + half)
     missing = [u for u in universes if u not in {e.get("u") for e in timeline}]
     # the play speeds up over the video, from the first shot to the last one (by their starts): "pace": [first, last]
-    # (the autoplay's, ZEN_CLIP_PACE) and "velocity": [first, last] (the fall's, ZEN_CLIP_VELOCITY: at 37.5 and over,
+    # (the autoplay's, REFALL_CLIP_PACE) and "velocity": [first, last] (the fall's, REFALL_CLIP_VELOCITY: at 37.5 and over,
     # 20G in the drops); a shot's own env overrides them
     shots = [e for e in timeline if e["kind"] == "shot"]
     if shots and cfg.get("continuous"):
@@ -393,11 +393,11 @@ def plan(cfg, grid, universes):
         # hooks, the ramps as functions of the song time), seen from its warm-up on, so the stack carries on across
         # the cuts; no seed search then (the clears are what the game gives)
         t0, t1 = shots[0]["t0"], max(shots[-1]["t0"], shots[0]["t0"] + 1e-3)
-        common = {"ZEN_CLIP_FROM_START": "1", "ZEN_CLIP_FILL": "0", "ZEN_CLIP_RAMP": f"{t0:.2f}:{t1:.2f}"}
+        common = {"REFALL_CLIP_FROM_START": "1", "REFALL_CLIP_FILL": "0", "REFALL_CLIP_RAMP": f"{t0:.2f}:{t1:.2f}"}
         if cfg.get("pace"):
-            common["ZEN_CLIP_PACE"] = "{}:{}".format(*cfg["pace"])
+            common["REFALL_CLIP_PACE"] = "{}:{}".format(*cfg["pace"])
         if cfg.get("velocity"):
-            common["ZEN_CLIP_VELOCITY"] = "{}:{}".format(*cfg["velocity"])
+            common["REFALL_CLIP_VELOCITY"] = "{}:{}".format(*cfg["velocity"])
         for e in shots:
             e["seed"] = seed
             e["env"] = {**e["env"], **common}
@@ -408,7 +408,7 @@ def plan(cfg, grid, universes):
         t0, t1 = shots[0]["t0"], max(shots[-1]["t0"], shots[0]["t0"] + 1e-3)
         for e in shots:
             k = min(1.0, max(0.0, (e["t0"] - t0) / (t1 - t0)))
-            for key, var, fmt in (("pace", "ZEN_CLIP_PACE", "{:.2f}"), ("velocity", "ZEN_CLIP_VELOCITY", "{:.1f}")):
+            for key, var, fmt in (("pace", "REFALL_CLIP_PACE", "{:.2f}"), ("velocity", "REFALL_CLIP_VELOCITY", "{:.1f}")):
                 r = cfg.get(key)
                 if r and var not in e["env"]:
                     e["env"] = {var: fmt.format(r[0] + (r[1] - r[0]) * k), **e["env"]}
@@ -421,7 +421,7 @@ def print_plan(timeline, grid, universes, missing):
     for e in timeline:
         what = ("card: " + e["text"]) if e["kind"] == "card" else (e["u"] + (":" + e["variant"] if e["variant"] else ""))
         extra = "" if e["kind"] == "card" else " ".join(f"{a}={b}" for a, b in e["env"].items()
-                                                         if a not in ("ZEN_SCENE_LINES", "ZEN_CLIP_FILL"))
+                                                         if a not in ("REFALL_SCENE_LINES", "REFALL_CLIP_FILL"))
         if e.get("fade_out"):
             extra += f"  [fade out {e['fade_out']:.1f} s, title at {e['title']['at']:.2f}]" if e.get("title") else ""
         log(f"{k:>3} {e['chapter']:<9} {what[:28]:<28} {e['t0']:7.2f} {e['t1']:7.2f} {e['t1'] - e['t0']:6.2f} "
@@ -544,7 +544,7 @@ def continuous_seed(timeline, cfg, game, song, size, work, jobs, grid):
         return
     base = shots[0]["seed"]
     env = {k: v for k, v in shots[0]["env"].items()}
-    env.update({"ZEN_CLIP_ALL_CLEARS": "1", "ZEN_WARMUP": "0"})
+    env.update({"REFALL_CLIP_ALL_CLEARS": "1", "REFALL_WARMUP": "0"})
     end = grid.duration - 1.0
 
     def run(k):
@@ -887,7 +887,7 @@ def main():
     ap.add_argument("-o", "--out", default="demo.mp4")
     ap.add_argument("--game", default=os.path.join(ROOT, "build", "refall"))
     ap.add_argument("--work", default=os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")),
-                                                   "zentris", "demo"), help="clip cache and intermediates")
+                                                   "refall", "demo"), help="clip cache and intermediates")
     ap.add_argument("--song", help="override the config's song (a file or ytdl:<id>)")
     ap.add_argument("--size", help="WxH (config: 1920x1080)")
     ap.add_argument("--fps", type=int, help="30 or 60 (config: 30)")

@@ -177,10 +177,10 @@ const Stage STAGES[] = {
 };
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 
-// Test hooks: ZEN_GIANTTREE_LINES=N adds N lines to the growth, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_GIANTTREE_LINES=N adds N lines to the growth, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_GIANTTREE_LINES") ? std::atoi(std::getenv("ZEN_GIANTTREE_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_GIANTTREE_LINES") ? std::atoi(std::getenv("REFALL_GIANTTREE_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 

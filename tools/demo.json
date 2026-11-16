@@ -41,27 +41,27 @@
   "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8},
 
   // The environment of every shot (the game's test hooks): progression universes on their 50-line reference
-  // scale, a short warm-up started on a played-in stack. ZEN_INTRO_TEST: the song comes in as in the game (its
+  // scale, a short warm-up started on a played-in stack. REFALL_INTRO_TEST: the song comes in as in the game (its
   // title card on the black, the scene's setup, then the game), in every shot so that the continuous game is the same.
-  "env": {"ZEN_SCENE_LINES": "50", "ZEN_WARMUP": "10", "ZEN_CLIP_FILL": "1", "ZEN_INTRO_TEST": "1"},
+  "env": {"REFALL_SCENE_LINES": "50", "REFALL_WARMUP": "10", "REFALL_CLIP_FILL": "1", "REFALL_INTRO_TEST": "1"},
   // Per universe, wherever it appears (a shot's own env overrides it): a nice stage of the progression ones.
   "universe_env": {
-    "gianttree": {"ZEN_GIANTTREE_LINES": "16"},
-    "megacity": {"ZEN_MEGACITY_LINES": "14"},
-    "orbital": {"ZEN_ORBITAL_LINES": "26"},
-    "library": {"ZEN_LIBRARY_LINES": "30"},
-    "planks": {"ZEN_PLANKS_LINES": "24"},
-    "mycelium": {"ZEN_MYCELIUM_LINES": "16"},
-    "tidepool": {"ZEN_TIDEPOOL_LINES": "16"},
-    "lostpanda": {"ZEN_LOSTPANDA_LINES": "20"},
-    "skywhale": {"ZEN_SKYWHALE_LINES": "31", "ZEN_GROW_RATE": "0.75"},
-    "bricks": {"ZEN_WARMUP": "40"},
-    "docks": {"ZEN_WARMUP": "40"},
+    "gianttree": {"REFALL_GIANTTREE_LINES": "16"},
+    "megacity": {"REFALL_MEGACITY_LINES": "14"},
+    "orbital": {"REFALL_ORBITAL_LINES": "26"},
+    "library": {"REFALL_LIBRARY_LINES": "30"},
+    "planks": {"REFALL_PLANKS_LINES": "24"},
+    "mycelium": {"REFALL_MYCELIUM_LINES": "16"},
+    "tidepool": {"REFALL_TIDEPOOL_LINES": "16"},
+    "lostpanda": {"REFALL_LOSTPANDA_LINES": "20"},
+    "skywhale": {"REFALL_SKYWHALE_LINES": "31", "REFALL_GROW_RATE": "0.75"},
+    "bricks": {"REFALL_WARMUP": "40"},
+    "docks": {"REFALL_WARMUP": "40"},
     // (no played-in stack: BIOME's world would take it as grown already; the sea just starting over the dunes)
-    "biome": {"ZEN_WARMUP": "8", "ZEN_CLIP_FILL": "0"},
-    "brutalist": {"ZEN_WARMUP": "40"},
-    "tiles": {"ZEN_WARMUP": "40"},
-    "neon": {"ZEN_WARMUP": "40"}
+    "biome": {"REFALL_WARMUP": "8", "REFALL_CLIP_FILL": "0"},
+    "brutalist": {"REFALL_WARMUP": "40"},
+    "tiles": {"REFALL_WARMUP": "40"},
+    "neon": {"REFALL_WARMUP": "40"}
   },
 
   "fonts": {
@@ -79,7 +79,7 @@
     {"id": "discover", "end": "drop:1 - 1bar",
      "card": {"text": "Discover many universes", "bars": 2, "enabled": false},
      "grid": "bar", "fill": true,
-     "shots": [{"u": "lanterns", "len": "6bars", "env": {"ZEN_CLIP_FILL": "0"},
+     "shots": [{"u": "lanterns", "len": "6bars", "env": {"REFALL_CLIP_FILL": "0"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 0.4, "tail": 0.8, "quad": false}}, {"u": "origami"}, {"u": "rainy"}, {"u": "sonar"},
                {"u": "microscope:PHASE"}]},
 
@@ -107,9 +107,9 @@
      "grid": "bar",
      "shots": [{"u": "tidepool"}, {"u": "docks"}, {"u": "skyocean"}, {"u": "crystal"},
                // the game and its HUD fade away at about 2:10, on the first piece landing from 13.7 s to 9.2 s before
-               // the song's end (ZEN_OUT_LEAD + 2.5 .. - 2), so the clear must come before it; then the whale alone
+               // the song's end (REFALL_OUT_LEAD + 2.5 .. - 2), so the clear must come before it; then the whale alone
                // under the logo
-               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"ZEN_OUT_LEAD": "11.2"},
+               {"u": "skywhale:MOONLIGHT", "start": "section:OUTRO - 4bars", "env": {"REFALL_OUT_LEAD": "11.2"},
                 "clear": {"tries": 12, "pick_of": 3, "lead": 1.0, "tail": 13.8}}],
      // the end: the logo's white contours over the whale, then the logo in color as the scene fades to black
      "outro": {"fade": "2.5bars",

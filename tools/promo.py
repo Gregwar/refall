@@ -23,9 +23,9 @@ def default_playlist_id():
 
 
 def playlist_ids(list_id):
-    """Video ids of the playlist: the listing zentris cached, else asked to yt-dlp."""
+    """Video ids of the playlist: the listing refall cached, else asked to yt-dlp."""
     cache = os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))
-    tsv = os.path.join(cache, "zentris", "youtube", "lists", f"list-{list_id}.tsv")
+    tsv = os.path.join(cache, "refall", "youtube", "lists", f"list-{list_id}.tsv")
     if os.path.exists(tsv):
         with open(tsv) as f:
             ids = [line.split("\t")[0] for line in f if line.strip()]

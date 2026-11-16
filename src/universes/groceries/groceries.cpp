@@ -140,10 +140,10 @@ void lerpPal(GroceriesUniverse::Palette& a, const GroceriesUniverse::Palette& b,
     a.wood = b.wood;
 }
 
-// Test hooks: ZEN_GROCERIES_LINES=N adds N lines, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_GROCERIES_LINES=N adds N lines, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_GROCERIES_LINES") ? std::atoi(std::getenv("ZEN_GROCERIES_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_GROCERIES_LINES") ? std::atoi(std::getenv("REFALL_GROCERIES_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -807,8 +807,8 @@ void GroceriesUniverse::buildBoard(const Game& g) {
 
 void GroceriesUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 240 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 240 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);

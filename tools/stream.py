@@ -25,7 +25,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGE = Path(__file__).resolve().parent / "stream.html"
-CACHE = Path.home() / ".cache" / "zentris" / "stream"
+CACHE = Path.home() / ".cache" / "refall" / "stream"
 HEIGHT = 720  # the game's frames are this tall, as wide as the phone's screen is in proportion
 
 
@@ -73,7 +73,7 @@ class Game:
         self.w, self.h = w, h
         vr, vw = os.pipe()
         ar, aw = os.pipe()
-        env = dict(os.environ, ZEN_STREAM_VIDEO_FD=str(vw), ZEN_STREAM_AUDIO_FD=str(aw))
+        env = dict(os.environ, REFALL_STREAM_VIDEO_FD=str(vw), REFALL_STREAM_AUDIO_FD=str(aw))
         cmd = [exe, "--stream", "--size", f"{w}x{h}", *args]
         print("[stream] start:", " ".join(cmd), flush=True)
         self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, env=env, pass_fds=(vw, aw), cwd=ROOT)

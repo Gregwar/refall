@@ -465,9 +465,9 @@ bool Game::planMove(int& bestRot, int& bestX) const {
             }
             double s = -0.51 * agg + 0.76 * cleared * cleared - 0.36 * holes * 3 - 0.18 * bump - 0.1 * wells -
                        0.05 * landing;
-            // Test hook: ZEN_TEST_QUAD=1 keeps the right column free and waits for an I to clear four lines at once
+            // Test hook: REFALL_TEST_QUAD=1 keeps the right column free and waits for an I to clear four lines at once
             // (to check a universe's quad in a clip).
-            static const bool quadTest = std::getenv("ZEN_TEST_QUAD") != nullptr;
+            static const bool quadTest = std::getenv("REFALL_TEST_QUAD") != nullptr;
             if (quadTest) {
                 bool right = false;
                 for (auto& q : c) right = right || q[0] == W - 1;

@@ -70,8 +70,8 @@ SongLook makeSongLook(const Footprint* fp, uint64_t seed) {
 }
 
 float sceneLinesFor(const SongLook& look) {
-    static const float forced = std::getenv("ZEN_SCENE_LINES") ? (float)std::atof(std::getenv("ZEN_SCENE_LINES")) : 0.f;
-    static const float perMin = std::getenv("ZEN_LINES_PER_MINUTE") ? (float)std::atof(std::getenv("ZEN_LINES_PER_MINUTE")) : 0.f;
+    static const float forced = std::getenv("REFALL_SCENE_LINES") ? (float)std::atof(std::getenv("REFALL_SCENE_LINES")) : 0.f;
+    static const float perMin = std::getenv("REFALL_LINES_PER_MINUTE") ? (float)std::atof(std::getenv("REFALL_LINES_PER_MINUTE")) : 0.f;
     if (forced > 0.f) return forced;
     const float seconds = look.remaining > 0.f ? look.remaining : look.duration;
     if (!look.hasSong || seconds <= 0.f) return SCENE_REF_LINES;

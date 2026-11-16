@@ -39,8 +39,8 @@
 
 #define Q3_BAUMGARTE r32( 0.2 )
 
-#define Q3_PENETRATION_SLOP r32( 0.01 ) // Zentris change: 0.05 (resting boxes visibly sank into each other)
+#define Q3_PENETRATION_SLOP r32( 0.01 ) // Refall change: 0.05 (resting boxes visibly sank into each other)
 
-#define Q3_MAX_CORRECTION r32( 3.0 ) // Zentris change: the most speed the position correction adds
+#define Q3_MAX_CORRECTION r32( 3.0 ) // Refall change: the most speed the position correction adds
 
 #endif // Q3SETTINGS_H

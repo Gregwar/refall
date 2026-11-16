@@ -60,7 +60,7 @@ public:
     void setDim(bool d) { dim_ = d; }
     void setPanels(std::vector<HudRect> p) { panels_ = std::move(p); }
     // The unified HUD (hud.hpp): the host letters every universe's HUD in one typographic system, each universe
-    // giving only its colors (Universe::hudInk). On by default; ZEN_HUD=universe turns it off at start.
+    // giving only its colors (Universe::hudInk). On by default; REFALL_HUD=universe turns it off at start.
     void setUnifiedHud(bool on) { unified_ = on; }
     bool unifiedHud() const { return unified_; }
     // The speed gauge (the app's HUD): a hairline (pixels, top-left origin: its left end, its width) filled to `pos`

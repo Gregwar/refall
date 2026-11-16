@@ -29,7 +29,7 @@
 // a thin line of it.
 //
 // Five palettes (SUNSHINE, APRICOT, SAGE, MIDNIGHT: a deep pastel night, RAINBOW), from the key, mode, brightness and
-// air. Cost: one fullscreen pass (the fractal: under a millisecond of GPU at 1080p; ZEN_GPUTIME=1 prints it), the
+// air. Cost: one fullscreen pass (the fractal: under a millisecond of GPU at 1080p; REFALL_GPUTIME=1 prints it), the
 // blocks as instanced quads.
 #include <algorithm>
 #include <cmath>
@@ -47,7 +47,7 @@
 namespace {
 
 // Fraunces Soft Italic (a soft, Windsor-like 70s serif) and Comfortaa Bold (rounded), SIL Open Font License, see
-// OFL-Fraunces.txt and OFL-Comfortaa.txt: the universe's own lettering (ZEN_HUD=universe).
+// OFL-Fraunces.txt and OFL-Comfortaa.txt: the universe's own lettering (REFALL_HUD=universe).
 const unsigned char FONT_DISPLAY[] = {
 #include "universes/fractal/Fraunces-SoftItalic.ttf.inc"
 };
@@ -325,7 +325,7 @@ int FractalUniverse::otherTarget() {
 // Glides from the view on screen to target t: out until both points are in view, across, and back in.
 void FractalUniverse::glideTo(int t) {
     if (gliding_) return;   // (one glide at a time: it ends where it was going)
-    if (std::getenv("ZEN_FRACTAL_LOG")) std::fprintf(stderr, "[fractal] glide to point %d\n", t);   // (ZEN_FRACTAL_LOG=1)
+    if (std::getenv("REFALL_FRACTAL_LOG")) std::fprintf(stderr, "[fractal] glide to point %d\n", t);   // (REFALL_FRACTAL_LOG=1)
     from_ = targetView(fractal().targets[target_], frac_, spin_);
     target_ = t;
     gliding_ = true;
@@ -355,8 +355,8 @@ void FractalUniverse::setSong(const SongLook& t, float seconds) {
         // the first song: straight in, at its own point
         colSet_ = false;
         target_ = rng_.irange(0, n - 1);
-        // (test hook: ZEN_FRACTAL_TARGET=i starts at point i)
-        if (const char* e = std::getenv("ZEN_FRACTAL_TARGET")) target_ = std::clamp(std::atoi(e), 0, n - 1);
+        // (test hook: REFALL_FRACTAL_TARGET=i starts at point i)
+        if (const char* e = std::getenv("REFALL_FRACTAL_TARGET")) target_ = std::clamp(std::atoi(e), 0, n - 1);
         frac_ = 0.0;
         gliding_ = false;
     } else glideTo(otherTarget()); // a new song in the same universe: off to another point
@@ -507,7 +507,7 @@ HudInk FractalUniverse::hudInk(const HudText& h) {
     return k;
 }
 
-// The universe's own lettering (ZEN_HUD=universe): the deep ink on the pastel bands (cream on MIDNIGHT), a soft
+// The universe's own lettering (REFALL_HUD=universe): the deep ink on the pastel bands (cream on MIDNIGHT), a soft
 // halo; Comfortaa for the labels and numbers, Fraunces' soft italics for the song, the notices and the toasts.
 void FractalUniverse::hudLine(const HudText& h, text::Line& out) {
     text::Font* disp = text::font(FONT_DISPLAY);
@@ -703,8 +703,8 @@ void FractalUniverse::render(const Frame& f, GLuint fbo) {
             }
             glUniform4fv(ugl::U(progBg_, "uPrev"), 4, pv);
         }
-        // ZEN_GPUTIME: the fractal's GPU time, printed every 120 frames
-        static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+        // REFALL_GPUTIME: the fractal's GPU time, printed every 120 frames
+        static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
         static GLuint query = 0;
         static int queries = 0;
         static double queryMs = 0.0;

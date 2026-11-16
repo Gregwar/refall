@@ -179,10 +179,10 @@ constexpr float RING_LINES = 7.f; // the orbital ring is built over this many li
 constexpr int STAGE_COUNT = (int)(sizeof(STAGES) / sizeof(STAGES[0]));
 const float G_MAX = std::log(2.4e7f);
 
-// Test hooks: ZEN_MEGACITY_LINES=N adds N lines to the city's growth (to look at a stage without playing to it); ZEN_GROW_RATE=R adds R more lines a second (a time-lapse).
+// Test hooks: REFALL_MEGACITY_LINES=N adds N lines to the city's growth (to look at a stage without playing to it); REFALL_GROW_RATE=R adds R more lines a second (a time-lapse).
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_MEGACITY_LINES") ? std::atoi(std::getenv("ZEN_MEGACITY_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_MEGACITY_LINES") ? std::atoi(std::getenv("REFALL_MEGACITY_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 

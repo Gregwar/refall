@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 U=${1:?universe}; OUT=${2:?output png}; L=${3:-1}; SIZE=${4:-640x360}
 SONG=${5:-}
 # a downloaded song when none is given
-DEFAULT_SONG=$(ls ~/.cache/zentris/youtube/*.mp3 2>/dev/null | head -1)
+DEFAULT_SONG=$(ls ~/.cache/refall/youtube/*.mp3 2>/dev/null | head -1)
 TMP=$(mktemp -d)
 mapfile -t VARS < <(./build/refall --list 2>/dev/null | grep -i "^  $U[^:]*:" | sed 's/^  //')
 [ ${#VARS[@]} -gt 0 ] || { echo "no variants for $U"; exit 1; }

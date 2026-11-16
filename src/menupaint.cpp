@@ -288,8 +288,8 @@ void main() {
         kalProg_ = ugl::program(ugl::FULLSCREEN_VS, KFS, "menu kaleidoscope");
         upProg_ = ugl::program(ugl::FULLSCREEN_VS, UFS, "menu kaleidoscope upscale");
     }
-    // full resolution; ZEN_MENU_KALEIDO_DIV=N draws it at 1/N and spreads it over the frame (testing, weak GPUs)
-    static const float div = std::getenv("ZEN_MENU_KALEIDO_DIV") ? std::max(1.f, (float)std::atof(std::getenv("ZEN_MENU_KALEIDO_DIV"))) : 1.f;
+    // full resolution; REFALL_MENU_KALEIDO_DIV=N draws it at 1/N and spreads it over the frame (testing, weak GPUs)
+    static const float div = std::getenv("REFALL_MENU_KALEIDO_DIV") ? std::max(1.f, (float)std::atof(std::getenv("REFALL_MENU_KALEIDO_DIV"))) : 1.f;
     const bool direct = div <= 1.f;
     const int lw = direct ? w_ : std::max(1, (int)(w_ / div)), lh = direct ? h_ : std::max(1, (int)(h_ / div));
     if (!direct && (kalTgt_.w != lw || kalTgt_.h != lh)) kalTgt_.create(lw, lh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);

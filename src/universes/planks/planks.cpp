@@ -75,15 +75,15 @@ constexpr float PW = 0.2f, PT = 1.f / 15.f; // a well plank's width and thicknes
 constexpr float BOARD_Z = -1.06f;  // the board's front face
 constexpr float SNAP = 0.35f;      // a village plank lands that far above its place and settles
 
-// Test hooks: ZEN_PLANKS_LINES=N lays N lines' planks at once (screenshots of a long game), ZEN_GROW_RATE=R adds R
+// Test hooks: REFALL_PLANKS_LINES=N lays N lines' planks at once (screenshots of a long game), REFALL_GROW_RATE=R adds R
 // lines a second, each one cleared like a real line (its planks pushed out of the bottom row and flown to the
 // village), for a time-lapse.
 int hookStart() {
-    static const int n = std::getenv("ZEN_PLANKS_LINES") ? std::atoi(std::getenv("ZEN_PLANKS_LINES")) : 0;
+    static const int n = std::getenv("REFALL_PLANKS_LINES") ? std::atoi(std::getenv("REFALL_PLANKS_LINES")) : 0;
     return n;
 }
 int hookRate(double t) {
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return (int)(rate * t);
 }
 // A cell: three thick planks laid flat, tight, one on the other (a solid block, fine seams between them).
@@ -1142,9 +1142,9 @@ void PlanksUniverse::render(const Frame& f, GLuint fbo) {
             hookLines_ = 0;
         }
         lines_ = lines;
-        // ZEN_PLANKS_QUAD_AT=T: a quad's choreography at T seconds (four rows in the well's middle, for clips:
+        // REFALL_PLANKS_QUAD_AT=T: a quad's choreography at T seconds (four rows in the well's middle, for clips:
         // the autoplay never makes one)
-        static const float quadAt = std::getenv("ZEN_PLANKS_QUAD_AT") ? (float)std::atof(std::getenv("ZEN_PLANKS_QUAD_AT")) : -1.f;
+        static const float quadAt = std::getenv("REFALL_PLANKS_QUAD_AT") ? (float)std::atof(std::getenv("REFALL_PLANKS_QUAD_AT")) : -1.f;
         if (quadAt >= 0.f && time_ >= quadAt && time_ - dt < quadAt && !bare_) {
             GameEvent ev{GameEvent::Clear};
             ev.count = 4;

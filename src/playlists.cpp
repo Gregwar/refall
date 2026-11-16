@@ -82,7 +82,7 @@ std::string youtubeTitle(const std::string& url) {
     return title;
 }
 
-std::string PlaylistStore::defaultPath() { return (platform::dataDir() / "zentris" / "playlists.tsv").string(); }
+std::string PlaylistStore::defaultPath() { return (platform::appDataDir() / "playlists.tsv").string(); }
 
 // One playlist per line: url <TAB> title <TAB> songs <TAB> last use (seconds since the epoch).
 void PlaylistStore::load(const std::string& path) {

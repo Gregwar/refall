@@ -158,11 +158,11 @@ const char* STAGE_NAME[STAGES] = {"the universe", "a galaxy", "a star", "a plane
 const double STAGE_M[STAGES + 1] = {4e26, 1e21, 2e11, 1.6e7, 1e6, 2e3, 1.0, 6e-2, 4e-3, 2.5e-4, 1.5e-5, 2e-8,
                                     3e-10, 2e-15, 1.6e-35, 1e-35};
 
-// Test hooks: ZEN_TIDEPOOL_LINES=N adds N lines to the dive, ZEN_GROW_RATE=R adds R lines a second,
-// ZEN_TIDEPOOL_DEPTH=Z holds the dive at depth Z (octaves; 4 a stage, the rock pool at 24).
+// Test hooks: REFALL_TIDEPOOL_LINES=N adds N lines to the dive, REFALL_GROW_RATE=R adds R lines a second,
+// REFALL_TIDEPOOL_DEPTH=Z holds the dive at depth Z (octaves; 4 a stage, the rock pool at 24).
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_TIDEPOOL_LINES") ? std::atoi(std::getenv("ZEN_TIDEPOOL_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_TIDEPOOL_LINES") ? std::atoi(std::getenv("REFALL_TIDEPOOL_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -180,7 +180,7 @@ bool TidePoolUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "tidepool cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "tidepool shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "tidepool post");
-    if (const char* d = std::getenv("ZEN_TIDEPOOL_DEPTH")) debugZ_ = std::atof(d);
+    if (const char* d = std::getenv("REFALL_TIDEPOOL_DEPTH")) debugZ_ = std::atof(d);
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -427,7 +427,7 @@ void TidePoolUniverse::onEvent(const GameEvent& ev, const Game& game) {
         // a quad: a plunge through a whole scale
         if (lines >= 4) {
             bonus_ += QUAD_EXTRA;
-            if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[tidepool] quad at %.1f s\n", time_);
+            if (std::getenv("REFALL_GPUTIME")) std::fprintf(stderr, "[tidepool] quad at %.1f s\n", time_);
         }
         break;
     }
@@ -673,8 +673,8 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 60 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 60 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);
@@ -705,7 +705,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     if (isDrop && !wasDrop_) {
         waveT_ = 0.f;
         waveK_ = 1.f;
-        if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[tidepool] drop at %.1f s\n", time_);
+        if (std::getenv("REFALL_GPUTIME")) std::fprintf(stderr, "[tidepool] drop at %.1f s\n", time_);
     }
     wasDrop_ = isDrop;
     waveT_ += wdt;
@@ -718,9 +718,9 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
         pal_ = basePal_;
     }
 
-    // Test hook: ZEN_TIDEPOOL_QUAD=T plays a quad's plunge (and its four rows melting) T seconds in.
+    // Test hook: REFALL_TIDEPOOL_QUAD=T plays a quad's plunge (and its four rows melting) T seconds in.
     {
-        static const float tAt = std::getenv("ZEN_TIDEPOOL_QUAD") ? (float)std::atof(std::getenv("ZEN_TIDEPOOL_QUAD")) : -1.f;
+        static const float tAt = std::getenv("REFALL_TIDEPOOL_QUAD") ? (float)std::atof(std::getenv("REFALL_TIDEPOOL_QUAD")) : -1.f;
         if (tAt >= 0.f && !f.bare && time_ >= tAt && time_ - wdt < tAt) {
             GameEvent ev{GameEvent::Clear};
             ev.count = 4;

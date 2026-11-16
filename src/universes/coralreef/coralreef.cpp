@@ -180,10 +180,10 @@ const SchoolDef SCHOOLS[] = {
 };
 constexpr float SPECIES_SPEED[reef::F_COUNT] = {1.5f, 1.45f, 1.1f, 1.2f, 0.9f, 1.0f, 0.6f};
 
-// Test hooks: ZEN_CORALREEF_LINES=N adds N lines to the reef, ZEN_GROW_RATE=R adds R lines a second.
+// Test hooks: REFALL_CORALREEF_LINES=N adds N lines to the reef, REFALL_GROW_RATE=R adds R lines a second.
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_CORALREEF_LINES") ? std::atoi(std::getenv("ZEN_CORALREEF_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_CORALREEF_LINES") ? std::atoi(std::getenv("REFALL_CORALREEF_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return n + (int)(rate * t);
 }
 
@@ -1291,8 +1291,8 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = std::min(f.dt, 0.1f);
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 120 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 120 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     static int gpuN = 0;
     static double gpuSum = 0.0;
@@ -1334,7 +1334,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             const int n = 5 + (int)(sl.size * 4.f);
             for (int i = 0; i < n; i++) spawnEgg(sl, -rng_.range(0.f, 1.2f));
         }
-        if (std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] the drop at %.1f s: %d eggs\n", time_, (int)eggs_.size());
+        if (std::getenv("REFALL_GPUTIME")) std::fprintf(stderr, "[coralreef] the drop at %.1f s: %d eggs\n", time_, (int)eggs_.size());
     }
     if (!isDrop && wasDrop_) dropOn_ = false;
     wasDrop_ = isDrop;
@@ -1397,7 +1397,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             }
             fresh++;
         }
-        if (clearPending_ && std::getenv("ZEN_GPUTIME")) std::fprintf(stderr, "[coralreef] a clear: %d new corals (lines %.2f -> %.2f)\n", fresh, before, lines_);
+        if (clearPending_ && std::getenv("REFALL_GPUTIME")) std::fprintf(stderr, "[coralreef] a clear: %d new corals (lines %.2f -> %.2f)\n", fresh, before, lines_);
         clearPending_ = false;
         clearPts_.clear();
         // the growth shown (the schools, the crusts): springs after the lines, its speed capped

@@ -205,18 +205,18 @@ const Hour EVENING[] = {
     {1.00f, -9.f, 0x704060, 0.12f, 0x060c2c, 0x262850, 0x121632, 0x1c2040, 1.f / 9000.f},
 };
 
-// Test hooks: ZEN_ISLANDS_TOD=T holds the hour (0 midday .. 1 dusk), ZEN_ISLANDS_ALT=A holds the altitude (m),
-// ZEN_ISLANDS_S=S starts the flight S meters along the route.
+// Test hooks: REFALL_ISLANDS_TOD=T holds the hour (0 midday .. 1 dusk), REFALL_ISLANDS_ALT=A holds the altitude (m),
+// REFALL_ISLANDS_S=S starts the flight S meters along the route.
 float hookTod() {
-    static const float v = std::getenv("ZEN_ISLANDS_TOD") ? (float)std::atof(std::getenv("ZEN_ISLANDS_TOD")) : -1.f;
+    static const float v = std::getenv("REFALL_ISLANDS_TOD") ? (float)std::atof(std::getenv("REFALL_ISLANDS_TOD")) : -1.f;
     return v;
 }
 float hookAlt() {
-    static const float v = std::getenv("ZEN_ISLANDS_ALT") ? (float)std::atof(std::getenv("ZEN_ISLANDS_ALT")) : -1.f;
+    static const float v = std::getenv("REFALL_ISLANDS_ALT") ? (float)std::atof(std::getenv("REFALL_ISLANDS_ALT")) : -1.f;
     return v;
 }
 float hookS() {
-    static const float v = std::getenv("ZEN_ISLANDS_S") ? (float)std::atof(std::getenv("ZEN_ISLANDS_S")) : 0.f;
+    static const float v = std::getenv("REFALL_ISLANDS_S") ? (float)std::atof(std::getenv("REFALL_ISLANDS_S")) : 0.f;
     return v;
 }
 
@@ -508,8 +508,8 @@ void IslandsUniverse::buildWorld() {
     fleet_.clear();
     pods_.clear();
     sparks_.clear();
-    // Test hook: ZEN_ISLANDS_FLEET=N starts with a fleet of N boats (as if N rows had been cleared)
-    if (const char* fl = std::getenv("ZEN_ISLANDS_FLEET")) {
+    // Test hook: REFALL_ISLANDS_FLEET=N starts with a fleet of N boats (as if N rows had been cleared)
+    if (const char* fl = std::getenv("REFALL_ISLANDS_FLEET")) {
         const int n = std::atoi(fl);
         for (int i = 0; i < n; i++) {
             std::vector<int> row;
@@ -523,7 +523,7 @@ void IslandsUniverse::buildWorld() {
         }
         flocks_.clear();
     }
-    if (std::getenv("ZEN_ISLANDS_DEBUG"))
+    if (std::getenv("REFALL_ISLANDS_DEBUG"))
         for (const isl::Hero& h : world_->heroes)
             if (h.sc < 12000.0)
                 std::fprintf(stderr, "[islands] hero at s %.0f: type %d%s%s\n", h.sc, h.isl ? h.isl->type : -1, h.orbit ? " (orbit)" : "", h.gap ? " (gap)" : "");
@@ -696,7 +696,7 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     if (!camInit_) { bank_.x = bankT; bank_.v = 0.f; }
     bank_.step(bankT, 1.f, wdt);
     camInit_ = true;
-    static const bool dbg = std::getenv("ZEN_ISLANDS_DEBUG") != nullptr;
+    static const bool dbg = std::getenv("REFALL_ISLANDS_DEBUG") != nullptr;
     static float dbgT = 0.f;
     dbgT += dt;
     if (dbg && dbgT > 1.f) {
@@ -712,8 +712,8 @@ void IslandsUniverse::fly(float dt, float wdt, const std::string& section) {
     const vec3 upW = normalize(vec3(0, 1, 0) + rightOfTravel * std::tan(bank_.x));
     right_ = normalize(cross(fwd_, upW));
     up_ = cross(right_, fwd_);
-    // Test hook: ZEN_ISLANDS_TRACE=FILE writes the camera of every frame (smoothness checks)
-    static FILE* trace = std::getenv("ZEN_ISLANDS_TRACE") ? std::fopen(std::getenv("ZEN_ISLANDS_TRACE"), "w") : nullptr;
+    // Test hook: REFALL_ISLANDS_TRACE=FILE writes the camera of every frame (smoothness checks)
+    static FILE* trace = std::getenv("REFALL_ISLANDS_TRACE") ? std::fopen(std::getenv("REFALL_ISLANDS_TRACE"), "w") : nullptr;
     if (trace && wdt > 0.f)
         std::fprintf(trace, "%.4f %.3f %.3f %.3f %.5f %.5f %.5f %.3f %.2f\n", wdt, eye_.x, eye_.y, eye_.z, yaw_, pitch_.x, bank_.x, vel_, lv_);
 }
@@ -1162,9 +1162,9 @@ void IslandsUniverse::updateFleet(float dt) {
     fleet_.erase(std::remove_if(fleet_.begin(), fleet_.end(), [](const Boat& b) { return b.sink > 2.5f; }), fleet_.end());
 }
 
-// Test hook: ZEN_ISLANDS_POPCHECK=1 reports a boat that pops (its size or place jumps in one frame) while in view.
+// Test hook: REFALL_ISLANDS_POPCHECK=1 reports a boat that pops (its size or place jumps in one frame) while in view.
 void IslandsUniverse::popCheck(std::vector<Boat>& list, const char* what, float dt) {
-    static const bool on = std::getenv("ZEN_ISLANDS_POPCHECK") != nullptr;
+    static const bool on = std::getenv("REFALL_ISLANDS_POPCHECK") != nullptr;
     for (Boat& b : list) {
         if (on && b.prevS >= 0.f && dt > 0.f) {
             const vec3 d = b.p - eye_;
@@ -1809,7 +1809,7 @@ void IslandsUniverse::drawObjects(GLuint prog) {
 
 void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);

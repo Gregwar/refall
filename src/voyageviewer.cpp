@@ -81,10 +81,10 @@ int VoyageViewer::indexOf(const std::string& path) const {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// thumbnails: https://i.ytimg.com/vi/<id>/mqdefault.jpg (320 x 180), kept in <cache>/zentris/thumbs/
+// thumbnails: https://i.ytimg.com/vi/<id>/mqdefault.jpg (320 x 180), kept in <cache>/refall/thumbs/
 
 void VoyageViewer::thumbLoop() {
-    const fs::path dir = platform::cacheDir() / "zentris" / "thumbs";
+    const fs::path dir = platform::appCacheDir() / "thumbs";
     const std::string curl = platform::findExecutable("curl");
     for (;;) {
         std::string id;

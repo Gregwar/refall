@@ -177,11 +177,11 @@ constexpr float CAM_AZ = 0.35f;      // the camera's side of the spore
 constexpr int LATHE_U = 22, LATHE_V = 40;
 const float R_E = (float)myc::R_EARTH;
 
-// Test hooks: ZEN_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot); ZEN_GROW_RATE=R
+// Test hooks: REFALL_MYCELIUM_LINES=N adds N lines to the growth (to look at a late stage in a short shot); REFALL_GROW_RATE=R
 // adds R more lines a second (a time-lapse).
 int extraLines(double t) {
-    static const int n = std::getenv("ZEN_MYCELIUM_LINES") ? std::atoi(std::getenv("ZEN_MYCELIUM_LINES")) : 0;
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const int n = std::getenv("REFALL_MYCELIUM_LINES") ? std::atoi(std::getenv("REFALL_MYCELIUM_LINES")) : 0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return std::max(0, n) + (int)(rate * t);
 }
 

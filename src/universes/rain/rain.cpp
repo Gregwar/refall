@@ -1276,8 +1276,8 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     // ---- The world steps: the solids, the rain, the piles, the drying.
     buildSolids(game);
     stepRain(dt, rdt);
-    // (test hook: ZEN_RAIN_HEAP=N throws N tiles onto the heaps 90 frames in)
-    static int heapTest = std::getenv("ZEN_RAIN_HEAP") ? std::atoi(std::getenv("ZEN_RAIN_HEAP")) : 0;
+    // (test hook: REFALL_RAIN_HEAP=N throws N tiles onto the heaps 90 frames in)
+    static int heapTest = std::getenv("REFALL_RAIN_HEAP") ? std::atoi(std::getenv("REFALL_RAIN_HEAP")) : 0;
     static int heapFrame = 0;
     if (heapTest > 0 && ++heapFrame >= 90) // (after the start's settling)
         for (; heapTest > 0; heapTest--) eject(heapTest % 2 ? 0 : Game::W - 1, Game::HIDDEN + 2 + heapTest % 6, heapTest % 7, 0.04f * heapTest);

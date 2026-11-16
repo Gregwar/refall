@@ -35,7 +35,7 @@ Commands:
   resolve KEY
       Closes an accepted (merged) or dismissed (branch dropped) suggestion: -> done.
 
-Everything lives in the user data folder (~/.local/share/zentris/scene-review/): one folder per batch (snapshots,
+Everything lives in the user data folder (~/.local/share/refall/scene-review/): one folder per batch (snapshots,
 scenes.jsonl with what reproduces each scene), threads.json (the threads and their state) and feedback.jsonl (every
 message, appended, for later processing).
 Needs a built refall (build/refall).
@@ -66,8 +66,8 @@ from urllib.parse import unquote, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GAME = os.path.join(ROOT, "build", "refall")
-DATA = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "zentris", "scene-review")
-CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "zentris", "youtube")
+DATA = os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "refall", "scene-review")
+CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache")), "refall", "youtube")
 THREADS = os.path.join(DATA, "threads.json")
 FEEDBACK = os.path.join(DATA, "feedback.jsonl")
 LEVELS = {0: "calm", 1: "mid", 2: "peak"}
@@ -494,7 +494,7 @@ def main():
     sg.add_argument("--message", required=True)
     sg.add_argument("--level", type=int, default=1, choices=[0, 1, 2])
     sg.add_argument("--size", default="1280x720")
-    sg.add_argument("--before-image", help="use this PNG as the before snapshot (e.g. a zentris shot with the HUD)")
+    sg.add_argument("--before-image", help="use this PNG as the before snapshot (e.g. a refall shot with the HUD)")
     sg.add_argument("--after-image", help="use this PNG as the after snapshot")
     sub.add_parser("suggestions", help="list the suggestions")
     rs = sub.add_parser("resolve", help="close a merged or dropped suggestion")

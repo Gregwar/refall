@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef ZEN_HAVE_EGL
+#ifdef REFALL_HAVE_EGL
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
@@ -29,8 +29,8 @@ bool init(int width, int height) {
     EGLDeviceEXT devs[16];
     EGLint n = 0;
     if (!queryDevices(16, devs, &n) || n <= 0) return false;
-    // ZEN_EGL_DEVICE=i picks a device; else the first hardware one, NVIDIA before others
-    const char* force = std::getenv("ZEN_EGL_DEVICE");
+    // REFALL_EGL_DEVICE=i picks a device; else the first hardware one, NVIDIA before others
+    const char* force = std::getenv("REFALL_EGL_DEVICE");
     int best = -1, bestScore = -1;
     for (int i = 0; i < n; i++) {
         const char* ext = queryDeviceString ? queryDeviceString(devs[i], EGL_EXTENSIONS) : nullptr;

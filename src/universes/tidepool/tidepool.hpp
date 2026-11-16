@@ -48,7 +48,7 @@ private:
     float lines_ = 0, linesShown_ = -1; // paceLines(): 50 at scene completion
     bool zSet_ = false;
     double zTarget(float lines) const;
-    double debugZ_ = -1.0;        // ZEN_TIDEPOOL_DEPTH: a fixed depth (testing)
+    double debugZ_ = -1.0;        // REFALL_TIDEPOOL_DEPTH: a fixed depth (testing)
     vec2 focus_{15.f, -0.8f};     // board units: where the zoom dives
     std::string scaleText_, stageName_;
 

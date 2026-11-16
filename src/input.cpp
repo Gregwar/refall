@@ -27,8 +27,8 @@ void Input::loadMappings() {
     namespace fs = std::filesystem;
     fs::path exe = platform::executableDir();
     std::vector<fs::path> candidates = {exe / "gamecontrollerdb.txt"};
-#ifdef ZEN_SOURCE_DIR
-    candidates.push_back(fs::path(ZEN_SOURCE_DIR) / "third_party" / "gamecontrollerdb.txt");
+#ifdef REFALL_SOURCE_DIR
+    candidates.push_back(fs::path(REFALL_SOURCE_DIR) / "third_party" / "gamecontrollerdb.txt");
 #endif
     for (const auto& p : candidates) {
         std::ifstream f(p);

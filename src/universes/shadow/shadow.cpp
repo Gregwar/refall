@@ -144,8 +144,8 @@ bool ShadowUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // test hook: ZEN_SHADOW_SPENT=N starts with N spent blocks set aside (a late still)
-    if (const char* s = std::getenv("ZEN_SHADOW_SPENT"))
+    // test hook: REFALL_SHADOW_SPENT=N starts with N spent blocks set aside (a late still)
+    if (const char* s = std::getenv("REFALL_SHADOW_SPENT"))
         for (int i = 0, n = std::atoi(s); i < n; i++) {
             const int type = (i * 3 + i / 7) % 7, dest = pileDest(type);
             pile_[dest] = std::min(dest >= 7 ? BOX_MAX : TRAY_MAX, pile_[dest] + 1);
@@ -168,7 +168,7 @@ void ShadowUniverse::resize(int width, int height) {
     sceneT_.destroy();
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     const float pxPerUnit = height_ / (2.f * hh);
-    static const float ss = std::getenv("ZEN_SHADOW_SS") ? (float)std::atof(std::getenv("ZEN_SHADOW_SS")) : 1.5f;
+    static const float ss = std::getenv("REFALL_SHADOW_SS") ? (float)std::atof(std::getenv("REFALL_SHADOW_SS")) : 1.5f;
     const int mw = std::max(8, (int)std::lround((modelRect_[2] - modelRect_[0]) * pxPerUnit * ss));
     const int mh = std::max(8, (int)std::lround((modelRect_[3] - modelRect_[1]) * pxPerUnit * ss));
     modelT_.destroy();
@@ -193,7 +193,7 @@ void ShadowUniverse::setupModelCamera() {
     const float z = dot(q, fwd_);
     const float nx = dot(q, right_) / (z * tan_.x), ny = dot(q, up_) / (z * tan_.y);
     lensScreen_ = vec2{lerpf(modelRect_[0], modelRect_[2], nx * 0.5f + 0.5f), lerpf(modelRect_[1], modelRect_[3], ny * 0.5f + 0.5f)};
-    if (std::getenv("ZEN_SHADOW_DEBUG")) std::fprintf(stderr, "[shadow] lens on screen %.2f %.2f\n", lensScreen_.x, lensScreen_.y);
+    if (std::getenv("REFALL_SHADOW_DEBUG")) std::fprintf(stderr, "[shadow] lens on screen %.2f %.2f\n", lensScreen_.x, lensScreen_.y);
 }
 
 ShadowUniverse::~ShadowUniverse() {
@@ -343,7 +343,7 @@ void ShadowUniverse::uploadBoard(const Game& g) {
             data[y][x][3] = 255;
         }
     }
-    static const bool check = std::getenv("ZEN_SHADOW_CHECK") != nullptr;
+    static const bool check = std::getenv("REFALL_SHADOW_CHECK") != nullptr;
     if (check) {
         // (test hook: every join between two cells must be one piece's: same id, same type)
         int bad = 0;

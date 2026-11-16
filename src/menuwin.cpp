@@ -31,9 +31,9 @@ std::string upper(std::string s) { for (char& c : s) c = (char)std::toupper((uns
 std::string fmt1(float v) { char b[16]; std::snprintf(b, sizeof(b), "%.1f", v); return b; }
 std::string linesStr(int n) { return n < 0 ? std::string("-") : std::to_string(n); } // lines, "-" when unknown
 // The game's start picks where the title's tour of universes begins and how the kaleidoscope is turned
-// (ZEN_MENU_SEED=N: a given one, e.g. for screenshots).
+// (REFALL_MENU_SEED=N: a given one, e.g. for screenshots).
 unsigned menuSeed() {
-    static const unsigned seed = std::getenv("ZEN_MENU_SEED") ? (unsigned)std::atoi(std::getenv("ZEN_MENU_SEED")) : std::random_device{}();
+    static const unsigned seed = std::getenv("REFALL_MENU_SEED") ? (unsigned)std::atoi(std::getenv("REFALL_MENU_SEED")) : std::random_device{}();
     return seed;
 }
 
@@ -140,7 +140,7 @@ void Menu::renderWorlds(int w, int h) {
     const float dt = (float)std::clamp(time_ - g_lastT, 0.0, 0.1);
     g_lastT = time_;
     worlds_->update(time_, dt, mu);
-    if (std::getenv("ZEN_MENU_STATS") && (worlds_->made || worlds_->snapped))
+    if (std::getenv("REFALL_MENU_STATS") && (worlds_->made || worlds_->snapped))
         std::printf("[menu] worlds: %d made (%.0f ms), %d frames (%.1f ms), %d snapshots\n", worlds_->made, worlds_->makeMs,
                     worlds_->rendered, worlds_->renderMs, worlds_->snapped);
     paint_.begin(w, h);

@@ -82,14 +82,14 @@ float wrapPi(float a) {
     return a;
 }
 
-// Test hooks: ZEN_ARCHITECT_LINES=N adds N real lines to the construction (stills of a stage), ZEN_GROW_RATE=R adds
-// R lines a second (each one a delivery, like a cleared row), ZEN_ARCH_CAM="dist,pitch,fov,yaw" moves the camera.
+// Test hooks: REFALL_ARCHITECT_LINES=N adds N real lines to the construction (stills of a stage), REFALL_GROW_RATE=R adds
+// R lines a second (each one a delivery, like a cleared row), REFALL_ARCH_CAM="dist,pitch,fov,yaw" moves the camera.
 float hookLines() {
-    static const float n = std::getenv("ZEN_ARCHITECT_LINES") ? (float)std::atof(std::getenv("ZEN_ARCHITECT_LINES")) : 0.f;
+    static const float n = std::getenv("REFALL_ARCHITECT_LINES") ? (float)std::atof(std::getenv("REFALL_ARCHITECT_LINES")) : 0.f;
     return n;
 }
 float hookRate() {
-    static const float r = std::getenv("ZEN_GROW_RATE") ? (float)std::atof(std::getenv("ZEN_GROW_RATE")) : 0.f;
+    static const float r = std::getenv("REFALL_GROW_RATE") ? (float)std::atof(std::getenv("REFALL_GROW_RATE")) : 0.f;
     return r;
 }
 
@@ -455,7 +455,7 @@ ArchitectUniverse::~ArchitectUniverse() {
 // The world's camera: a slow orbit around the site, raised a little, looking down on it.
 void ArchitectUniverse::updateCamera() {
     float dist = 50.f, pitch = 7.5f, fov = 42.f, yaw0 = 0.f;
-    if (const char* c = std::getenv("ZEN_ARCH_CAM")) std::sscanf(c, "%f,%f,%f,%f", &dist, &pitch, &fov, &yaw0);
+    if (const char* c = std::getenv("REFALL_ARCH_CAM")) std::sscanf(c, "%f,%f,%f,%f", &dist, &pitch, &fov, &yaw0);
     const vec3 target(-2.f, 4.5f, -1.f);
     dist *= 1.f + 0.7f * camRise_;
     pitch += 16.f * camRise_;
@@ -1422,8 +1422,8 @@ void ArchitectUniverse::drawInstances(GLuint prog, bool shadowPass) {
 
 void ArchitectUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
-    // ZEN_GPUTIME: the GPU time of a frame, printed every 120 frames
-    static const bool gpuTime = std::getenv("ZEN_GPUTIME") != nullptr;
+    // REFALL_GPUTIME: the GPU time of a frame, printed every 120 frames
+    static const bool gpuTime = std::getenv("REFALL_GPUTIME") != nullptr;
     static GLuint gpuQ = 0;
     if (gpuTime && !gpuQ) glGenQueries(1, &gpuQ);
     if (gpuQ) glBeginQuery(GL_TIME_ELAPSED, gpuQ);

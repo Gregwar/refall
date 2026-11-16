@@ -1,5 +1,5 @@
 #pragma once
-// The unified HUD: one typographic system for every universe (the default; ZEN_HUD=universe goes back to each
+// The unified HUD: one typographic system for every universe (the default; REFALL_HUD=universe goes back to each
 // universe's own lettering, or Renderer::setUnifiedHud).
 //
 // One family, the game's own (Josefin Sans, as in the menu), in two weights; a fixed size, weight, case, tracking
@@ -13,7 +13,7 @@
 
 namespace hud {
 
-// The unified HUD unless ZEN_HUD=universe in the environment (read once).
+// The unified HUD unless REFALL_HUD=universe in the environment (read once).
 bool unifiedFromEnv();
 
 // What is behind a line.

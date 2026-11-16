@@ -985,9 +985,9 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
 
     // ---- The game's lines -> the modules (a new game takes them back to the capsule).
     {
-        static const int testLines = std::getenv("ZEN_ORBITAL_LINES") ? std::atoi(std::getenv("ZEN_ORBITAL_LINES")) : 0;
-        // (ZEN_GROW_RATE=R adds R more lines a second: a time-lapse)
-        static const double growRate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+        static const int testLines = std::getenv("REFALL_ORBITAL_LINES") ? std::atoi(std::getenv("REFALL_ORBITAL_LINES")) : 0;
+        // (REFALL_GROW_RATE=R adds R more lines a second: a time-lapse)
+        static const double growRate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
         // (on the 50-line scale: the song's pace, paceLines; a break: the station as it was)
         const float lines = f.bare ? lines_ : paceLines(game, (float)(testLines + (int)(growRate * time_)));
         const int want = std::clamp(wantOf(lines), 1, (int)plan_.size());

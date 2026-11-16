@@ -68,6 +68,24 @@ fs::path dataDir() {
 #endif
 }
 
+// <root>/refall, taking over <root>/zentris when only that one exists
+static fs::path appDir(const fs::path& root) {
+    const fs::path dir = root / "refall", old = root / "zentris";
+    std::error_code ec;
+    if (!fs::exists(dir, ec) && fs::is_directory(old, ec)) fs::rename(old, dir, ec);
+    return dir;
+}
+
+fs::path appCacheDir() {
+    static const fs::path dir = appDir(cacheDir());
+    return dir;
+}
+
+fs::path appDataDir() {
+    static const fs::path dir = appDir(dataDir());
+    return dir;
+}
+
 std::string findExecutable(const std::string& name) {
     const char* path = std::getenv("PATH");
     if (!path) return "";

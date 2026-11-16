@@ -118,7 +118,7 @@ constexpr float SCENE_REF_LINES = 50.f;
 constexpr float SCENE_LINES_MIN = 20.f, SCENE_LINES_MAX = 100.f;
 // The lines a scene takes for the time left in the song (look.remaining, else its duration): LINES_PER_MINUTE x
 // minutes, clamped to [SCENE_LINES_MIN, SCENE_LINES_MAX]; SCENE_REF_LINES when the length is unknown (no song,
-// the viewer). Test hooks: ZEN_SCENE_LINES=N forces N, ZEN_LINES_PER_MINUTE=R changes the pace.
+// the viewer). Test hooks: REFALL_SCENE_LINES=N forces N, REFALL_LINES_PER_MINUTE=R changes the pace.
 float sceneLinesFor(const SongLook& look);
 
 // How a universe looks from afar, used by the host to color transition fronts and to bridge very different
@@ -180,7 +180,7 @@ struct Frame {
     // the whole one. A universe makes something happen in them (its scene assembling, coming to life, or settling
     // and going away) rather than standing still; they run on the break's clock (through its holds too: the world
     // alone, a song's outro), and time keeps passing in them.
-    // Test hooks: ZEN_TEST_SETUP=x / ZEN_TEST_TEARDOWN=x force them (with ZEN_BARE=1 for the world alone).
+    // Test hooks: REFALL_TEST_SETUP=x / REFALL_TEST_TEARDOWN=x force them (with REFALL_BARE=1 for the world alone).
     float setup = 1.f, teardown = 0.f;
 };
 
@@ -246,9 +246,9 @@ protected:
     int width_ = 1, height_ = 1;
     // The lines cleared since this universe came in, for the universes that grow with the play: one coming in
     // mid-game starts small and grows with the lines played in it; a new game starts it again from nothing.
-    // (Test hook: ZEN_LINES_HERE=N holds it at N whatever the game does: exact stills of a stage.)
+    // (Test hook: REFALL_LINES_HERE=N holds it at N whatever the game does: exact stills of a stage.)
     int linesHere(const Game& g) {
-        static const int forced = std::getenv("ZEN_LINES_HERE") ? std::atoi(std::getenv("ZEN_LINES_HERE")) : -1;
+        static const int forced = std::getenv("REFALL_LINES_HERE") ? std::atoi(std::getenv("REFALL_LINES_HERE")) : -1;
         if (forced >= 0) return forced;
         if (lineBase_ < 0 || g.lines() < lineBase_) lineBase_ = g.lines();
         return g.lines() - lineBase_;

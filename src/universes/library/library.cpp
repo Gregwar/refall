@@ -118,8 +118,8 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr float BOARD_EYE_Y = 4.5f;  // the board camera's height (the books' tops show)
 constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (the stack above waits 0.3 s)
 
-// Test hooks: ZEN_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
-// ZEN_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
+// Test hooks: REFALL_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
+// REFALL_GROW_RATE=R adds R lines a second (each one shelved like a real line: its books fly to their places).
 // Each cleared line brings three big books at the reference pace (so some 50 lines, one song of 3:20, fill the room),
 // launched from three of the row's cells (1, 5, 8). The pace follows the song's length (sceneLines()): a line brings
 // BOOKS_LINE x 50 / sceneLines() books on average (1.5 in a 100-line scene, 7.5 in a 20-line one; a fraction carried
@@ -133,11 +133,11 @@ bool bookCell(int x, int k) {
 }
 
 int startLines() {
-    static const int n = std::getenv("ZEN_LIBRARY_LINES") ? std::atoi(std::getenv("ZEN_LIBRARY_LINES")) : 0;
+    static const int n = std::getenv("REFALL_LIBRARY_LINES") ? std::atoi(std::getenv("REFALL_LIBRARY_LINES")) : 0;
     return n;
 }
 int rateLines(double t) {
-    static const double rate = std::getenv("ZEN_GROW_RATE") ? std::atof(std::getenv("ZEN_GROW_RATE")) : 0.0;
+    static const double rate = std::getenv("REFALL_GROW_RATE") ? std::atof(std::getenv("REFALL_GROW_RATE")) : 0.0;
     return (int)(rate * t);
 }
 
@@ -536,7 +536,7 @@ bool LibraryUniverse::place(Group& g) {
     const float askew = r.range(-0.18f, 0.18f);
     while (runIdx_ < (int)runs_.size()) {
         const Run& R = runs_[runIdx_];
-        if (runOff_ == 0.f && pileN_ == 0 && std::getenv("ZEN_LIBRARY_RUNS")) // (a test hook: where each run starts)
+        if (runOff_ == 0.f && pileN_ == 0 && std::getenv("REFALL_LIBRARY_RUNS")) // (a test hook: where each run starts)
             std::fprintf(stderr, "[library] run %d (kind %d, feature %d) starts with book %zu (line %.1f)\n", runIdx_, R.kind, R.feat,
                          groups_.size(), groups_.size() / (BOOKS_LINE * paceScale()));
         if (R.feat >= 0) featUnlocked_[R.feat] = true;
@@ -929,8 +929,8 @@ void LibraryUniverse::drawInst(GLuint vao, GLuint vbo, int mesh, const std::vect
 
 void LibraryUniverse::render(const Frame& f, GLuint fbo) {
     bare_ = f.bare;
-    // ZEN_LIBRARY_TIMING=1: the frame's cost (GPU included: glFinish around it), every 200 frames
-    static const bool timing = std::getenv("ZEN_LIBRARY_TIMING") != nullptr;
+    // REFALL_LIBRARY_TIMING=1: the frame's cost (GPU included: glFinish around it), every 200 frames
+    static const bool timing = std::getenv("REFALL_LIBRARY_TIMING") != nullptr;
     struct Timer {
         bool on;
         double t0 = 0;
