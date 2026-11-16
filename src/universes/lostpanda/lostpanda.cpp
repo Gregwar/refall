@@ -33,6 +33,11 @@
 // cheeks puffing), then walks on; fed, it grows stronger on the way (straighter, bouncier, a little rounder). Between
 // clears it lives: it breathes, blinks, looks around, looks back, sits, sighs, wipes a tear in the rain; later it
 // hops, follows a butterfly. Every value of its pose eases toward its target.
+// The pandas follow the owner's kawaii model sheets (drawn in shaders.hpp: a big wide head on a narrower body, round
+// ears, oval patches with big shiny eyes, ^ ^ in joy, a cat-like w of a mouth, big round blush, cream fur with a tufted
+// edge, slim black limbs and a black shoulder band, a thin dark outline; hearts by the head when waving for joy,
+// sparkles when surprised): turned toward us (the sheet's front view) when it sits, sighs, wipes a tear or hops, in profile (the
+// sheet's walk) when it walks on or runs; the pose's turn moves it between the two.
 //
 // The music: the scene's light holds steady per section (brighter at a peak); in a peak the cub nods along every two
 // beats and the fireflies wink on the beat grid. The drop lifts its spirits: a warm glow from the ground, lights
@@ -556,6 +561,7 @@ void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate)
     p.joyEyes = approach(p.joyEyes, t.joyEyes, rate * 1.2f, dt);
     p.hug = approach(p.hug, t.hug, rate * 0.7f, dt);
     p.munch = approach(p.munch, t.munch, 7.f, dt);
+    p.surprise = approach(p.surprise, t.surprise, 5.f, dt);
     p.chew += dt * 11.f * p.munch;
     p.mood = approach(p.mood, t.mood, 0.5f, dt);
     // breath, blinks, the ears on their springs
@@ -586,6 +592,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
     t.mood = mood;
     t.turn = 0.55f; t.tilt = 0.f; t.lookX = 0.6f; t.lookY = -0.3f * (1.f - mood);
     t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f; t.hop = 0.f; t.lean = 0.f; t.arms = 0.f; t.joyEyes = 0.f; t.hug = 0.f;
+    t.surprise = 0.f;
     t.wind = 0.3f + 0.5f * kid_.walk;
     actT_ += dt;
     // the lights of a clear coming: watch them (toward the well, up)
@@ -664,6 +671,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
             t.tilt = noticeT_ < 1.8f ? 0.1f : 0.f;
             t.arms = noticeT_ < 1.8f ? 0.f : 0.55f;
             t.joyEyes = noticeT_ < 1.8f ? 0.f : 0.35f;
+            t.surprise = noticeT_ < 1.8f ? 1.f : 0.f;   // there they are!
             actT_ = 0.f; act_ = A_HUG; actDur_ = 9.f;
         } else if (arriveT_ < 1.f) {
             act_ = A_HUG; actT_ = std::max(actT_, 0.7f); actDur_ = std::max(actDur_, 9.f);
@@ -909,6 +917,7 @@ void LostPandaUniverse::drawPanda(const Pose& p, vec2 feet, float h, float face,
     set1f(progPanda_, "uHug", p.hug);
     set1f(progPanda_, "uMunch", p.munch);
     set1f(progPanda_, "uChew", p.chew);
+    set1f(progPanda_, "uSurprise", p.surprise);
     set1f(progPanda_, "uStrength", adult > 0.5f ? 1.f : strength_);
     set1f(progPanda_, "uRoll", adult > 0.5f ? 0.f : kidRoll_);
     set2f(progPanda_, "uLook", p.lookX, p.lookY);
@@ -1197,14 +1206,14 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
             const bool seen = noticeT_ > 0.6f;
             t.mood = seen ? 1.f : 0.6f;
             t.sit = (seen && arriveT_ < 4.5f) ? 0.f : 1.f;
-            t.turn = seen ? 0.7f : 0.35f * std::sin(tt) + 0.25f;     // (their +x: toward the cub, on their left)
+            t.turn = seen ? (arrived ? 0.7f : 0.3f) : 0.35f * std::sin(tt) + 0.25f;    // (their +x: toward the cub, on their left)
             t.lookX = t.turn > 0.f ? 1.f : -1.f;
             t.lookY = 0.f;
             t.arms = (seen && !arrived) ? 0.85f : 0.f;
             t.hug = (arrived && i == 0) ? 1.f : 0.f;
             t.tilt = arrived ? 0.14f : 0.05f * std::sin(tt * 1.3f);
             t.lean = arrived ? (i == 0 ? 0.8f : 0.4f) : 0.f;
-            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : 0.f;
+            t.joyEyes = arrived ? smoothstepf(0.25f, 0.75f, 0.5f + 0.5f * std::sin(time_ * 0.31f + i * 2.1f + 1.f)) : (seen ? 1.f : 0.f);
             t.wind = 0.2f;
             updatePose(fp, wdt, t, 1.5f);
         }
