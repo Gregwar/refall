@@ -84,7 +84,7 @@ private:
     void drawPanels(float t, float wm, float wp);
     void drawElement(const manga::Element& e, float inkT, float fade, float rotA);
     void drawBurst(float amt);
-    void drawFrames(float shatter);
+    void drawFrames(float shatter, bool art); // the drawing panels' frames (art) or the HUD's and the well's
     // the setup: each drawing panel ruled in then drawn out of the blank paper in turn (0..1); the teardown: each
     // goes dark in turn (0..1), the ink coming down over it like a curtain
     float setup_ = 1.f, teardown_ = 0.f;
@@ -188,6 +188,7 @@ private:
     void drawImpact(float a, double beat);
     void drawShojo(float a, double beat);
     void drawBarrage(float a, double beat);
+    void drawBalloons(float a);
     struct Ring { V2 c; float t, life, r0, r1; };
     std::vector<Ring> rings_;
     struct Shard { V2 p, v; float rot, vr, size, t, life; int kind; };

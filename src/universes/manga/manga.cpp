@@ -1049,11 +1049,11 @@ float MangaUniverse::panelOut(int panel) const {
     return ease(saturate((teardown_ - 0.32f - 0.065f * j) / 0.3f));
 }
 
-void MangaUniverse::drawFrames(float shatter) {
+void MangaUniverse::drawFrames(float shatter, bool art) {
     const float w = 2.8f;
     for (int i = 0; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
-        if (!p.shown || (bare_ && !p.art)) continue;
+        if (!p.shown || p.art != art || (bare_ && !p.art)) continue;
         if (!p.art || shatter <= 0.001f) {
             // (the setup: a drawing panel's frame ruled in along its edges)
             const float upTo = p.art ? smoothstepf(0.f, 0.55f, panelIn(i)) : 1.f;
@@ -1789,16 +1789,6 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         drawSplash(reach, (float)(beat / 2.0), ink_);
     }
     flushInk();
-    // the sound effects on the page (under the HUD's panels)
-    for (const Sfx& s : sfx_) {
-        float a = s.life > 1e8f ? 1.f : 1.f - smoothstepf(s.life - 0.35f, s.life, s.t);
-        if (s.fx >= 0) a *= ease(fxAmt_[s.fx]);
-        drawSfx(s, a * std::min(1.f, s.t / std::max(0.05f, s.in * 0.5f)));
-    }
-    if (slow_ > 0.01f) {
-        Sfx sh{SFX_SHIIN, {16.3f, -4.2f}, 1.9f, 0.f, 1.f, 1.f, 1.f, true, SFX_THIN};
-        drawSfx(sh, ease(slow_));
-    }
 
     // the setup: the drawing panels blank but for their ground until their turn; the teardown: the ink coming down
     // over them one after the other (the darker of the page's two inks)
@@ -1817,14 +1807,29 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
         }
         flushInk();
     }
-    // the HUD's panels and the well's: plain paper, then every frame (a break: only the art panels' frames)
+    // the drawing panels' frames, then the sound effects and BARRAGE's balloons over them (a word may run across
+    // several panels, over their frames and gutters), then the HUD's panels and the well's over everything: plain paper and their frames
+    // (a break: only the art panels' frames)
+    const float shatter = std::max(aS, std::max(aP, aI));
+    drawFrames(shatter, true);
+    flushInk();
+    if (aB > 0.001f) drawBalloons(aB);
+    for (const Sfx& s : sfx_) {
+        float a = s.life > 1e8f ? 1.f : 1.f - smoothstepf(s.life - 0.35f, s.life, s.t);
+        if (s.fx >= 0) a *= ease(fxAmt_[s.fx]);
+        drawSfx(s, a * std::min(1.f, s.t / std::max(0.05f, s.in * 0.5f)));
+    }
+    if (slow_ > 0.01f) {
+        Sfx sh{SFX_SHIIN, {16.3f, -4.2f}, 1.9f, 0.f, 1.f, 1.f, 1.f, true, SFX_THIN};
+        drawSfx(sh, ease(slow_));
+    }
     for (int i = manga::P_WELL; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
         if (p.art || !p.shown || bare_) continue;
         manga::Tone tn;
         fillPoly({p.c[3], p.c[2], p.c[1], p.c[0]}, tn, 1.f, paper_, 1.f, -1);
     }
-    drawFrames(std::max(aS, std::max(aP, aI)));
+    drawFrames(shatter, false);
     flushInk();
 
     // ---- The bridge: the world gives way to the bridge's color (the stack turns to its ink).
