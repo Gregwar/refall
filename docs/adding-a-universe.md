@@ -92,9 +92,10 @@ render two or three alternatives side by side and let the player pick.
 
 **Progression universes.** A universe that grows or travels with the lines cleared in the game (`linesHere(g)`:
 GIANT TREE, MYCELIUM, MEGACITY, ORBITAL STATION, LIBRARY, SKY WHALE, TIDE POOL, LOST PANDA...) completes its scene,
-its most advanced stage, in one song of normal play, whatever the song's length: at `LINES_PER_MINUTE` (15, in
-`src/universe.hpp`) lines a minute of song, clamped to 20..100 lines (50 for a 3:20 song, the default playlist's
-average; 50 too when the length is unknown: no song, the viewer). A universe coming in mid-song paces on the time
+its most advanced stage, in one song of normal play, whatever the song's length: at `linesPerMinute()` lines a minute of
+song (`src/universe.hpp`: 15 on HARD, 12 on NORMAL, 10 on EASY, the run's difficulty in `SongLook::difficulty`), clamped
+to 20..100 lines (50 for a 3:20 song on HARD, the default playlist's average; 50 too when the length is unknown: no
+song, the viewer). A universe coming in mid-song paces on the time
 left; one following itself into the next song keeps its progress and goes on at the new song's pace. Write the tables
 for **50 lines** (`SCENE_REF_LINES`) and read the lines through `paceLines(g)`: linesHere() rescaled so that scene
 completion is always 50 (a float; `sceneLines()` is the real target, `paceScale()` the factor). Spread the stages
