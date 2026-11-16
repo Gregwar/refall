@@ -731,6 +731,10 @@ void MangaUniverse::drawBarrage(float a, double beat) {
             fillPoly({p.at + d * rin, p.at + d * 14.f + nn * half * 4.f, p.at + d * 14.f - nn * half * 4.f}, tn, 1.f, ink_, al, -1);
         }
     }
+}
+
+// BARRAGE's balloons, over the drawing panels' frames (they burst across them) and under the HUD's panels.
+void MangaUniverse::drawBalloons(float a) {
     // the older balloons shudder a little as a new one bursts in
     const V2 shake{joltDir_.x * 0.14f * jolt_, joltDir_.y * 0.14f * jolt_};
     for (const Pop& pop : pops_) {
