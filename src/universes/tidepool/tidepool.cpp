@@ -229,8 +229,9 @@ void TidePoolUniverse::resize(int width, int height) {
     // the focus of the dive: in the free band left of the HUD's left column (the world flows out from it)
     const float x0 = layout::LEFT_COLUMN[0], x1 = viewC_.x - hw;
     focus_ = V(x0 - std::max(1.2f, (x0 - x1) * 0.5f), viewC_.y + 0.5f);
-    // the world at a reduced resolution (at most 810 lines)
-    const int wh = std::max(180, std::min(810, (int)(height_ * 0.75f)));
+    // the world at the full resolution up to 1080 lines (every edge is antialiased in its shader; at 1440 lines the
+    // rock pool's stages cost 2.7 times what they did at 810)
+    const int wh = std::max(180, std::min(1080, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
     worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -818,7 +819,7 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (full resolution, up to 1080 lines)
     {
         // the focus (left of the HUD's left column) wanders a little; the two stages' frames from the depth
         const vec2 F = V(focus_.x + 0.4f * std::sin(time_ * 0.031f), focus_.y + 0.5f * std::sin(time_ * 0.023f + 1.f));
@@ -903,7 +904,9 @@ void TidePoolUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progComp_, "uWorld", 0);
-    set2f(progComp_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    // (sharpened only when upscaled: a texel of 0 leaves it as it is)
+    const bool up = worldT_.h < height_;
+    set2f(progComp_, "uTexel", up ? 1.f / worldT_.w : 0.f, up ? 1.f / worldT_.h : 0.f);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);

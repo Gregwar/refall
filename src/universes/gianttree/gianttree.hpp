@@ -144,12 +144,15 @@ private:
     // ---- GL.
     GLuint progSky_ = 0, progBark_ = 0, progLeaf_ = 0, progGlow_ = 0, progCloud_ = 0, progComp_ = 0,
            progBright_ = 0, progSea_ = 0, progBlur_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0,
-           progPost_ = 0;
+           progPost_ = 0, progUp_ = 0;
     GLuint quadVbo_ = 0, barkVao_ = 0, barkVbo_ = 0, barkIbo_ = 0, leafVao_ = 0, leafVbo_ = 0,
            glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0,
            spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLsizei barkCount_ = 0, leafCount_ = 0;
-    ugl::Target worldT_, bloomA_, bloomB_, sceneT_;
+    // the sky (ray traced) at a reduced resolution with its depth; the meshes over it multisampled at the full
+    // resolution (up to 1440 lines), resolved into worldT_
+    ugl::Target skyT_, worldT_, bloomA_, bloomB_, sceneT_;
+    ugl::MsTarget msT_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;

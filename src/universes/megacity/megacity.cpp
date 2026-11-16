@@ -204,6 +204,7 @@ bool MegaCityUniverse::init(int width, int height) {
     progCell_ = compile(shaders::CELL_VS, shaders::CELL_FS, "megacity cell");
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "megacity shape");
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "megacity post");
+    progUp_ = compile(ugl::FULLSCREEN_VS, ugl::UPSAMPLE_DEPTH_FS, "megacity upsample");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -293,20 +294,28 @@ void MegaCityUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution
-    const int wh = std::max(180, std::min(1080, height_));
+    // the sky and the ground at a reduced resolution (at most 1080 lines), with their depth
+    const int sh = std::max(180, std::min(1080, height_));
+    const int sw = std::max(320, (int)std::lround((float)sh * width_ / height_));
+    skyT_.create(sw, sh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    skyT_.attachDepthTexture();
+    // the meshes: multisampled (4x) at the full resolution, up to 1440 lines
+    const int wh = std::max(180, std::min(1440, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
-    bloomA_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    bloomB_.create(std::max(16, ww / 4), std::max(16, wh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    msT_.create(ww, wh, 4);
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    // the bloom from the sky's resolution / 4, as before
+    bloomA_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    bloomB_.create(std::max(16, sw / 4), std::max(16, sh / 4), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 MegaCityUniverse::~MegaCityUniverse() {
-    for (ugl::Target* t : {&worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    for (ugl::Target* t : {&skyT_, &worldT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    msT_.destroy();
     for (GLuint p : {progSky_, progBld_, progGlow_, progComp_, progBright_, progBlur_, progSprite_, progVeil_, progCell_,
-                     progShape_, progPost_})
+                     progShape_, progPost_, progUp_})
         glDeleteProgram(p);
     for (GLuint v : {bldVao_, glowVao_, spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, meshVbo_, bldVbo_, glowVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -995,8 +1004,9 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     const float sunUp = smoothstepf(-0.06f, 0.03f, std::sin(sunElR));
     const float lit = saturate((0.42f + 0.14f * wm + 0.16f * wp + 0.08f * life + 0.1f * swell_) * (0.75f + 0.25f * nightK)) * lightsOn;
     const float overR = std::min(over_ > 0.001f ? cityR * 1.02f * (1.f - over_) : 1e30f, lightsOn < 1.f ? cityR * 1.02f * lightsOn : 1e30f);
-    // the pixel's size at the anchor; lots smaller than a few of them are left to the ground's shader
-    const float pxM = camD_ * 2.f * tanH_ / (float)worldT_.h;
+    // the pixel's size at the anchor; lots smaller than a few of them are left to the ground's shader (in the ground's
+    // pixels, at the reduced resolution)
+    const float pxM = camD_ * 2.f * tanH_ / (float)skyT_.h;
     const float drawR0 = 2.2f * pxM / 0.07f;
 
     // ---- Lights in the air (meters).
@@ -1395,7 +1405,8 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game); // (a break: the world alone)
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (the sky and the ground at a reduced
+    // resolution, the meshes multisampled at the full resolution)
     const vec3 skyAmb = lerp(lerp(pal_.duskZenith, pal_.duskHorizon, 0.45f) * 1.1f, pal_.nightZenith * 1.8f + vec3(0.006f, 0.007f, 0.012f), nightK);
     auto setLight = [&](GLuint p) {
         set3f(p, "uEye", eye_);
@@ -1426,9 +1437,10 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
             glUniform3fv(ugl::U(p, "uSats"), mcity::SATS, sv);
         }
     };
-    const float minPx = 2.f * tanH_ / worldT_.h;
+    // (the sizes under which things are culled or held: in the reduced resolution's pixels, as they were)
+    const float minPx = 2.f * tanH_ / skyT_.h;
 
-    worldT_.bind();
+    skyT_.bind();
     glClearColor(0, 0, 0, 0);
     glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1477,6 +1489,19 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSky_, "uTraffic", traffic_ * (1.f - over_));
     set1f(progSky_, "uTrafficPhase", trafficPhase_);
     set1f(progSky_, "uBuild", (0.2f + 0.8f * spurt_) * smoothstepf(std::log(400.f), std::log(4000.f), G) * (1.f - over_));
+    ugl::drawFullscreen();
+
+    // ---- the meshes, multisampled, over the sky upsampled with its depth
+    msT_.bind();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(progUp_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, skyT_.tex);
+    set1i(progUp_, "uColor", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, skyT_.depthTex);
+    set1i(progUp_, "uDepth", 1);
+    glActiveTexture(GL_TEXTURE0);
     ugl::drawFullscreen();
 
     glDepthFunc(GL_LESS);
@@ -1536,14 +1561,15 @@ void MegaCityUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
+    msT_.resolve(worldT_);
 
-    // ---- The bloom (quarter resolution).
+    // ---- The bloom (the sky's resolution / 4, its taps as far apart as before).
     bloomA_.bind();
     glUseProgram(progBright_);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progBright_, "uSrc", 0);
-    set2f(progBright_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    set2f(progBright_, "uTexel", 1.f / skyT_.w, 1.f / skyT_.h);
     set1f(progBright_, "uThreshold", lerpf(0.75f, 0.35f, nightK));
     ugl::drawFullscreen();
     for (int pass = 0; pass < 2; pass++) {

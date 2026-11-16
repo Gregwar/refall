@@ -27,14 +27,32 @@ inline void setMat(GLuint p, const char* n, const mat4& m) { glUniformMatrix4fv(
 
 // An offscreen target: one color texture, optionally a depth (+ stencil) renderbuffer.
 struct Target {
-    GLuint fbo = 0, tex = 0, depth = 0;
+    GLuint fbo = 0, tex = 0, depth = 0, depthTex = 0;
     int w = 0, h = 0;
     // internal / format / type as for glTexImage2D (e.g. GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE).
     void create(int width, int height, GLenum internal = GL_RGBA8, GLenum format = GL_RGBA,
                 GLenum type = GL_UNSIGNED_BYTE, bool withDepth = false, GLenum filter = GL_LINEAR);
+    // a depth texture (32-bit float, nearest) attached in place of the renderbuffer, to be sampled later
+    void attachDepthTexture();
     void destroy();
     void bind() const; // binds the framebuffer and sets the viewport
 };
+
+// A multisampled target (color + 32-bit float depth renderbuffers), resolved into a Target of the same size.
+struct MsTarget {
+    GLuint fbo = 0, color = 0, depth = 0;
+    int w = 0, h = 0, samples = 0;
+    // samples: clamped to what the driver offers
+    void create(int width, int height, int samples = 4, GLenum internal = GL_RGBA16F);
+    void destroy();
+    void bind() const;
+    void resolve(const Target& dst, bool withDepth = false) const; // the color (and the depth) averaged into dst
+};
+
+// Reduced resolution under full resolution: draws a low-resolution layer (uColor, filtered) with its depth (uDepth,
+// a depth texture, taken at the nearest texel) into the current target, so that meshes drawn after are depth tested
+// against it. Fragment shader for FULLSCREEN_VS.
+extern const char* UPSAMPLE_DEPTH_FS;
 
 // sRGB <-> linear (the 2.2 gamma used everywhere in the game).
 inline vec3 toLinear(const vec3& c) { return {std::pow(c.x, 2.2f), std::pow(c.y, 2.2f), std::pow(c.z, 2.2f)}; }

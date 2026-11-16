@@ -372,9 +372,11 @@ void CoralReefUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    const int wh = std::max(180, std::min(720, (int)(height_ * 0.7f)));
+    lowH_ = std::max(180, std::min(720, (int)(height_ * 0.7f)));
+    const int wh = std::max(180, std::min(1440, height_));
     const int ww = std::max(320, (int)std::lround((float)wh * aspect_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, true);
+    msT_.create(ww, wh, 4);
+    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     refVP_ = mat4::perspective(CAM_FOV * PI / 180.f, aspect_, 0.1f, 300.f) *
@@ -385,6 +387,7 @@ void CoralReefUniverse::resize(int width, int height) {
 
 CoralReefUniverse::~CoralReefUniverse() {
     for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
+    msT_.destroy();
     for (GLuint p : {progWater_, progGround_, progCoral_, progFish_, progGlow_, progComp_, progVeil_, progCell_, progSprite_,
                      progShape_, progPost_})
         glDeleteProgram(p);
@@ -1588,7 +1591,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     sprites_.clear();
     if (!f.bare) buildBoard(game);
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (multisampled, at the full resolution)
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const vec3 sunDir = normalize(vec3(std::sin(pal_.sunAz) * std::cos(pal_.sunEl), std::sin(pal_.sunEl),
                                        std::cos(pal_.sunAz) * std::cos(pal_.sunEl) * -0.6f));
@@ -1626,7 +1629,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
         glUniform1i(ugl::U(p, "uMoundN"), moundCount_);
     };
 
-    worldT_.bind();
+    msT_.bind();
     glClearColor(0, 0, 0, 1000.f);
     glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1675,7 +1678,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     }
     glBindVertexArray(groundVao_);
     glDrawElements(GL_TRIANGLES, groundCount_, GL_UNSIGNED_INT, nullptr);
-    const float pixK = 2.f * tanH_ / (float)worldT_.h * 1.6f; // (what is under a couple of pixels is not drawn)
+    const float pixK = 2.f * tanH_ / (float)lowH_ * 1.6f; // (what is under a couple of pixels is not drawn)
     auto tiny = [&](const vec3& p, float size) { return size < length(p - eye_) * pixK; };
     // the corals
     {
@@ -1845,7 +1848,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
             setMat(progGlow_, "uVP", vp3_);
             set3f(progGlow_, "uCamR", camR_);
             set3f(progGlow_, "uCamU", camU_);
-            set1f(progGlow_, "uMinPx", 2.f * tanH_ / worldT_.h * 0.9f);
+            set1f(progGlow_, "uMinPx", 2.f * tanH_ / lowH_ * 0.9f);
             glBindVertexArray(glowVao_);
             glBindBuffer(GL_ARRAY_BUFFER, glowVbo_);
             glBufferData(GL_ARRAY_BUFFER, pinst_.size() * sizeof(float), pinst_.data(), GL_STREAM_DRAW);
@@ -1855,6 +1858,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
+    msT_.resolve(worldT_);
 
     // =========================================================== the scene (full resolution)
     sceneT_.bind();
@@ -1873,6 +1877,7 @@ void CoralReefUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progComp_, "uSat", pal_.sat);
     set1f(progComp_, "uFocus", camD_);
     set1f(progComp_, "uDof", 9.f * (1.f - smoothstepf(0.35f, 4.f, camD_)) * worldT_.h / 720.f);
+    set1f(progComp_, "uBlurPx", (float)worldT_.h / lowH_); // (the well's blur as wide as it was)
     set1f(progComp_, "uRayScale", std::clamp(camD_ / 15.6f, 0.01f, 8.f));
     {
         // the well's rectangle in uv (the world is blurred behind it)

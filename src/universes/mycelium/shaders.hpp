@@ -212,8 +212,7 @@ vec3 landColor(vec3 p, vec3 n, float t, float foot, float dist, out float water,
     vec3 ocean = mix(uOcean, uOcean * vec3(0.55, 0.75, 1.0), smoothstep(0.47, 0.3, c));
     return mix(col, ocean, water);
 }
-void main() {
-    vec3 d = rayDir(vUv);
+void skyAt(vec3 d, out vec4 fragC, out float fragD) {
     vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
     float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);
     float alt = c0 / (sqrt(c0 + R * R) + R);
@@ -348,8 +347,31 @@ void main() {
         }
     }
     col = mix(col, uBridgeCol, uBridge);
-    gl_FragDepth = depth;
-    frag = vec4(col, clamp(stars, 0.0, 1.0) * (1.0 - uBridge) * (depth < 1.0 ? 0.0 : 1.0));
+    fragD = depth;
+    fragC = vec4(col, clamp(stars, 0.0, 1.0) * (1.0 - uBridge) * (depth < 1.0 ? 0.0 : 1.0));
+}
+// The planet's limb antialiased: within half a pixel of its edge, the planet and the sky beside it, blended by the
+// pixel's coverage (the rest of the shading is per pixel, a hard edge otherwise).
+void main() {
+    vec3 d = rayDir(vUv);
+    vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
+    float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);
+    float b = dot(d, oc);
+    float disc = b * b - c0;
+    // (R - the ray's distance to the center) over a pixel's size at the limb: pixels inside the planet
+    float k = c0 > 0.0 && b < 0.0 ? disc / ((R + sqrt(max(R * R - disc, 0.0))) * sqrt(c0) * uPix) : -1.0;
+    if (abs(k) >= 0.5) {
+        skyAt(d, frag, gl_FragDepth);
+        return;
+    }
+    vec3 toC = normalize(-oc - d * dot(-oc, d));
+    vec4 ci, co;
+    float di, dout;
+    skyAt(normalize(d + toC * (max(k, 0.1) - k) * uPix), ci, di);
+    skyAt(normalize(d + toC * (min(k, -0.1) - k) * uPix), co, dout);
+    float cov = clamp(k + 0.5, 0.0, 1.0);
+    frag = mix(co, ci, cov);
+    gl_FragDepth = cov > 0.5 ? di : dout;
 }
 )";
 

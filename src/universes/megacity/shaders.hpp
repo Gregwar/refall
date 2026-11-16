@@ -482,8 +482,7 @@ vec3 landColor(vec3 p, vec3 n, vec2 q, float r, float t, float foot, out float w
     return mix(col, ocean, water);
 }
 
-void main() {
-    vec3 d = rayDir(vUv);
+void skyAt(vec3 d, out vec4 fragC, out float fragD) {
     vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
     float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);
     float alt = c0 / (sqrt(c0 + R * R) + R);
@@ -626,8 +625,31 @@ void main() {
         }
     }
     col = mix(col, uBridgeCol, uBridge);
-    gl_FragDepth = depth;
-    frag = vec4(col, clamp(stars, 0.0, 1.0) * (1.0 - uBridge) * (depth < 1.0 ? 0.0 : 1.0));
+    fragD = depth;
+    fragC = vec4(col, clamp(stars, 0.0, 1.0) * (1.0 - uBridge) * (depth < 1.0 ? 0.0 : 1.0));
+}
+// The planet's limb antialiased: within half a pixel of its edge, the planet and the sky beside it, blended by the
+// pixel's coverage (the rest of the shading is per pixel, a hard edge otherwise).
+void main() {
+    vec3 d = rayDir(vUv);
+    vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
+    float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);
+    float b = dot(d, oc);
+    float disc = b * b - c0;
+    // (R - the ray's distance to the center) over a pixel's size at the limb: pixels inside the planet
+    float k = c0 > 0.0 && b < 0.0 ? disc / ((R + sqrt(max(R * R - disc, 0.0))) * sqrt(c0) * uPix) : -1.0;
+    if (abs(k) >= 0.5) {
+        skyAt(d, frag, gl_FragDepth);
+        return;
+    }
+    vec3 toC = normalize(-oc - d * dot(-oc, d));
+    vec4 ci, co;
+    float di, dout;
+    skyAt(normalize(d + toC * (max(k, 0.1) - k) * uPix), ci, di);
+    skyAt(normalize(d + toC * (min(k, -0.1) - k) * uPix), co, dout);
+    float cov = clamp(k + 0.5, 0.0, 1.0);
+    frag = mix(co, ci, cov);
+    gl_FragDepth = cov > 0.5 ? di : dout;
 }
 )";
 
@@ -645,11 +667,13 @@ layout(location = 5) in vec4 i3;     // kind, seed, light key, base height
 layout(location = 6) in vec4 i4;     // death, twist, -, -
 uniform mat4 uVP;
 uniform float uMinPx;
-out vec3 vW;
-out vec2 vUV;          // along the face (m), up the building (m)
+// (centroid: multisampled, a sample just outside a face must not shade with its inputs extrapolated; a stray
+// overflow there would survive the resolve as one white pixel and bloom into a disc)
+centroid out vec3 vW;
+centroid out vec2 vUV;          // along the face (m), up the building (m)
 flat out vec4 vK;      // kind, seed, key, birth
 flat out vec4 vS;      // half width, half depth, height (whole, with its base), face (0 side x, 1 side z, 2 roof)
-out float vRoofY;
+centroid out float vRoofY;
 void main() {
     float birth = i0.w;
     float k = smoothstep(birth, birth * 1.06 + 1.5, uCityR) * (1.0 - smoothstep(i4.x, i4.x * 1.08, uCityR));
@@ -688,11 +712,11 @@ void main() {
 }
 )";
 inline const char* BLD_FS = R"(#version 330 core
-in vec3 vW;
-in vec2 vUV;
+centroid in vec3 vW;
+centroid in vec2 vUV;
 flat in vec4 vK;
 flat in vec4 vS;
-in float vRoofY;
+centroid in float vRoofY;
 out vec4 frag;
 uniform vec3 uWallA, uWallB, uRoofA, uRoofB, uStone, uGlassC, uArcoC, uCityGlowC, uStreetC;
 uniform float uBeat;

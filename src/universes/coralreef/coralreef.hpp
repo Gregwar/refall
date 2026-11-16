@@ -210,7 +210,11 @@ private:
     GLuint quadVbo_ = 0, groundVao_ = 0, groundVbo_ = 0, groundIbo_ = 0, glowVao_ = 0, glowVbo_ = 0,
            cellVao_ = 0, cellVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLsizei groundCount_ = 0;
+    // the world multisampled (4x) at the full resolution (up to 1440 lines), resolved into worldT_ (alpha: the
+    // distance); lowH_: the lines of the reduced resolution it had, the sizes in pixels kept from it
     ugl::Target worldT_, sceneT_;
+    ugl::MsTarget msT_;
+    int lowH_ = 720;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;

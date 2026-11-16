@@ -1,5 +1,6 @@
 #include "ugl.hpp"
 
+#include <algorithm>
 #include <cstdio>
 
 namespace ugl {
@@ -80,12 +81,83 @@ void Target::create(int width, int height, GLenum internal, GLenum format, GLenu
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void Target::attachDepthTexture() {
+    if (depth) glDeleteRenderbuffers(1, &depth);
+    depth = 0;
+    if (!depthTex) glGenTextures(1, &depthTex);
+    glBindTexture(GL_TEXTURE_2D, depthTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, w, h, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex, 0);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::fprintf(stderr, "[gl] framebuffer with a depth texture incomplete (%dx%d)\n", w, h);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void Target::destroy() {
     if (fbo) glDeleteFramebuffers(1, &fbo);
     if (tex) glDeleteTextures(1, &tex);
     if (depth) glDeleteRenderbuffers(1, &depth);
-    fbo = tex = depth = 0;
+    if (depthTex) glDeleteTextures(1, &depthTex);
+    fbo = tex = depth = depthTex = 0;
 }
+
+void MsTarget::create(int width, int height, int want, GLenum internal) {
+    destroy();
+    w = std::max(1, width);
+    h = std::max(1, height);
+    GLint maxS = 1;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxS);
+    samples = std::max(1, std::min(want, (int)maxS));
+    glGenFramebuffers(1, &fbo);
+    glGenRenderbuffers(1, &color);
+    glGenRenderbuffers(1, &depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, color);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, internal, w, h);
+    glBindRenderbuffer(GL_RENDERBUFFER, depth);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH_COMPONENT32F, w, h);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::fprintf(stderr, "[gl] multisampled framebuffer incomplete (%dx%d x%d)\n", w, h, samples);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void MsTarget::destroy() {
+    if (fbo) glDeleteFramebuffers(1, &fbo);
+    if (color) glDeleteRenderbuffers(1, &color);
+    if (depth) glDeleteRenderbuffers(1, &depth);
+    fbo = color = depth = 0;
+}
+
+void MsTarget::bind() const {
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, w, h);
+}
+
+void MsTarget::resolve(const Target& dst, bool withDepth) const {
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, dst.fbo);
+    glBlitFramebuffer(0, 0, w, h, 0, 0, dst.w, dst.h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    if (withDepth) glBlitFramebuffer(0, 0, w, h, 0, 0, dst.w, dst.h, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+const char* UPSAMPLE_DEPTH_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uColor, uDepth;
+void main() {
+    frag = texture(uColor, vUv);
+    gl_FragDepth = texture(uDepth, vUv).r;
+}
+)";
 
 void Target::bind() const {
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
