@@ -52,9 +52,20 @@ private:
     std::vector<Contact> contacts_;
     bool hardPending_ = false;
 
-    // ---- The city: boxes on a street grid far below, generated per variant.
-    struct Bldg { float cx, cz, hw, hd, y0, y1; int style; float seed, lit, crown; bool beacon, patterned; vec3 alb; float refl; };
+    // ---- The city: boxes on a street grid far below, generated per variant (buildings of five kinds, their
+    // setbacks, what stands on their roofs: plant rooms, water tanks, masts, units, a few signs).
+    struct Bldg {
+        float cx = 0.f, cz = 0.f, hw = 0.f, hd = 0.f, y0 = 0.f, y1 = 0.f;
+        int style = 0;
+        float seed = 0.f, lit = 0.f, crown = 0.f;
+        bool beacon = false, patterned = false;
+        vec3 alb{0.f};
+        float refl = 0.3f;
+        bool main = false; // a building (not a setback's upper tier, nor what stands on a roof)
+        int word = 0;      // a sign's word
+    };
     std::vector<Bldg> bldgs_;
+    int glyphs_[64] = {}; // the signs' words, 8 letters each (3 x 5 bits)
     int builtFor_ = -1;
     void buildCity(int variant);
     struct Particle { vec3 p, v; vec3 c; float t, life; float delay; };
