@@ -758,7 +758,9 @@ void main() {
             float db = max((length(vec2(q.x / wq, max(q.y, 0.0) / br)) - 1.0) * br * 0.7, abs(q.x) - wq);
             db = max(db, mouth - q.y);
             float cb = 1.0 - smoothstep(-aa, aa, db);
-            float rimL = exp(-(q.y - mouth) / (br * 0.25));
+            // the rim's light peaks at the mouth and fades up the bell; below the mouth (the edge's antialiasing,
+            // which is wide around a bell just budding) it stays at the rim's, not growing past it
+            float rimL = exp(-max(q.y - mouth, 0.0) / (br * 0.25));
             lay(e, a, cb, 0.5 + 0.4 * flare + 0.5 * rimL);
             vec2 pq = q - vec2(0.0, mouth - br * 0.25);
             float pc = 1.0 - smoothstep(-aa, aa, length(pq) - br * 0.18);
