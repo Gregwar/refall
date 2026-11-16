@@ -1600,7 +1600,7 @@ int App::run() {
                 breakSkip_ = wantSkip_ || songFinished();
                 wantSkip_ = false;
                 skipToast_ = 0;
-                std::printf("[app] break: outro\n");
+                std::printf("[app] break: outro at %.2f s\n", songTime_);
             }
             const bool outroDone = breakSkip_ ? breakT_ >= OUT_HIDE + 0.4f + 1.2f : songFinished() && breakT_ >= OUT_HIDE + 1.f;
             if (break_ == BREAK_OUT && outroDone && mode_ == MODE_CAMPAIGN && run_.finishing) {
