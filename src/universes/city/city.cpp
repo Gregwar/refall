@@ -22,8 +22,8 @@
 // windows turn to the drop's two colors in patterns and level meters (changing every two bars), the others in the
 // drop's colors, four colored searchlights, the beacons with the kicks. Nothing pulses the whole scene.
 //
-// Events: a lock leaves the piece lit (it settles from the falling brightness) with a soft glow along the ledge
-// under it; a cleared floor's rooms go dark (nothing drawn over the row), then the floors above step down one by one
+// Events: a lock leaves the piece lit (it settles from the falling brightness), a hard drop with a soft glow along
+// the ledge under it; a cleared floor's rooms go dark (nothing drawn over the row), then the floors above step down one by one
 // in smooth crossfades; a quad sends fireworks up over the city and a chase of light up the piers; slow motion is
 // a long exposure (a colder night, cold city lights, the bloom wider); game over is a blackout floor by floor from
 // the top, the city going dark with it.
@@ -593,7 +593,7 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
         // the landed piece's ghost goes at once (fading, it would take the next piece's color, which lights the ghost)
         for (auto& row : win_)
             for (Win& w : row) w.ghost = 0.f;
-        // a soft glow along the ledge under the piece (no surge, no flicker: the windows simply stay lit)
+        // a hard drop: a soft glow along the ledge under the piece (no surge, no flicker: the windows simply stay lit)
         float lowY = 1e9f, x0 = 1e9f, x1 = -1e9f;
         int type = 0;
         for (auto& c : ev.cells) {
@@ -603,14 +603,14 @@ void CityUniverse::onEvent(const GameEvent& ev, const Game& g) {
             if (y < lowY - 0.1f) { lowY = y; x0 = x1 = c.x - 4.5f; }
             else if (std::fabs(y - lowY) < 0.1f) { x0 = std::min(x0, c.x - 4.5f); x1 = std::max(x1, c.x - 4.5f); }
         }
-        if (lowY < 1e8f && lowY > -10.f) {
+        if (hardPending_ && lowY < 1e8f && lowY > -10.f) {
             Contact ct;
             ct.x0 = x0 - 0.5f;
             ct.x1 = x1 + 0.5f;
             ct.y = lowY - 0.5f;
             ct.col = pal_.piece[std::clamp(type, 0, 6)];
-            ct.power = hardPending_ ? 0.5f : 0.25f;
-            ct.life = hardPending_ ? 0.6f : 0.45f;
+            ct.power = 0.5f;
+            ct.life = 0.6f;
             contacts_.push_back(ct);
             if (contacts_.size() > 4) contacts_.erase(contacts_.begin());
         }
