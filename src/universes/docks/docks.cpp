@@ -143,8 +143,9 @@ int glyphIndex(unsigned char ch) {
 
 void lerpPal(vec3& a, const vec3& b, float k) { a = lerp(a, b, k); }
 
-// The containers' paints, the same at every hour: the seven types well apart in hue and lightness (I O T S Z J L).
-const unsigned PIECES[7] = {0x28c8f0, 0xffd21e, 0xb24ae6, 0x34c24a, 0xec2f3c, 0x2f5cf0, 0xff8a1a};
+// The containers' paints, the same at every hour: pastels on the dark hull, the seven types well apart in hue and
+// lightness (I O T S Z J L).
+const unsigned PIECES[7] = {0x8cdcf2, 0xffe48c, 0xcaa6f0, 0x9ede9a, 0xf7a0a0, 0x98aaf4, 0xffc08c};
 
 } // namespace
 

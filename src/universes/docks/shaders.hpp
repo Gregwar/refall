@@ -428,11 +428,10 @@ void main() {
     vec3 c = shade(vP, Nb, alb, spec, rough) + emit;
     if (mat == 1 && uStackA > 0.5) {
         // the stack's containers in their own paint: the hour's light sets how bright they are, not their hue, and
-        // they stand a little brighter and richer than the port's
+        // they stand a little brighter than the port's
         const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
         float lit = dot(c, LUM) / max(dot(alb, LUM), 1e-4);
-        c = mix(c, alb * lit, 0.65) * 1.18;
-        c = saturateC(c, 1.25);
+        c = mix(c, alb * lit, 0.65) * 1.12;
     }
     c = applyFog(c, vP);
     frag = vec4(c, uStackA);
