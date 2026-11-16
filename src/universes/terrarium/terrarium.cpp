@@ -8,18 +8,23 @@
 // the jar lighting at once. Clears release seeds that drift down inside the jar, behind the board, and sprout where
 // they land.
 //
-// The world is one ray-marched pass at a reduced resolution (shaders.hpp): the window, the sky and the garden behind
-// it, the sill, the jar (a revolved profile: its glass refracts a little, thicker and tinted toward its edges, a
-// fresnel reflection of the room, condensation droplets that act as small lenses, trickles running down), and the
-// world inside (the soil seen in section through the glass, the slots' plants as signed distance fields, the beetle,
-// the sprouts; each ray only evaluates the slots whose bounds it comes near). The pieces are pebbles, one clean
-// rounded cell each. Before a song the misted jar clears (its mist settling, the condensation drying off the glass)
-// as the light comes up; after it the jar mists over again and the light goes down.
+// The world is meshes at the full resolution (up to 1440 lines), 4x multisampled (world.cpp builds them on the CPU,
+// shaders.hpp shades them): the room (the window wall with the sky and the garden through its panes, the sill, the
+// shelves), each jar's contents in its own units (the soil and its section against the glass, the pond, the slots'
+// plants at their growth, rebuilt only when it changes; the sprouts, the beetle and the snail at their pose each
+// frame), lit as before with a soft sun shadow map; then the jars' glass: its far side laid over what is behind it
+// (the room's faint reflection, mist, drops, vines), the world resolved with its depth, and the front glass marching
+// its bent ray through that depth (refracting a little, thicker and tinted toward its edges, a fresnel reflection of
+// the room, condensation droplets that act as small lenses, trickles running down, the low mist integrated over the
+// way through the jar); the glass tubes over it, the lights in the air as glows at their depth. The pieces are
+// pebbles, one clean rounded cell each. Before a song the misted jar clears (its mist settling, the condensation
+// drying off the glass) as the light comes up; after it the jar mists over again and the light goes down.
 #include "universes/terrarium/terrarium.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <unordered_map>
 
 #include "layout.hpp"
 #include "universes/registry.hpp"
@@ -46,13 +51,32 @@ using ugl::set4f;
 using ugl::setMat;
 using Slot = TerrariumUniverse::Slot;
 
-GLuint compile(const char* vs, const char* fs, const char* name) {
+GLuint compile(const char* vs, const char* fs, const char* name, bool scene = false) {
     std::string f(fs);
-    f.insert(f.find('\n') + 1, shaders::COMMON_GLSL);
+    f.insert(f.find('\n') + 1, std::string(shaders::COMMON_GLSL) + (scene ? shaders::SCENE_GLSL : ""));
     std::string v(vs);
     v.insert(v.find('\n') + 1, shaders::COMMON_GLSL);
     return ugl::program(v.c_str(), f.c_str(), name);
 }
+constexpr int SHADOW_SIZE = 2048;
+constexpr float NEAR = 0.05f, FAR = 80.f;
+
+// The world's uniforms, their locations looked up once (cleared when the programs are made)
+std::unordered_map<uint64_t, GLint>& locCache() { static std::unordered_map<uint64_t, GLint> c; return c; }
+GLint UL(GLuint p, const char* n) {
+    const uint64_t k = ((uint64_t)p << 48) ^ (uint64_t)(uintptr_t)n;
+    auto it = locCache().find(k);
+    if (it != locCache().end()) return it->second;
+    const GLint l = glGetUniformLocation(p, n);
+    locCache()[k] = l;
+    return l;
+}
+void cset1f(GLuint p, const char* n, float v) { glUniform1f(UL(p, n), v); }
+void cset1i(GLuint p, const char* n, int v) { glUniform1i(UL(p, n), v); }
+void cset2f(GLuint p, const char* n, float a, float b) { glUniform2f(UL(p, n), a, b); }
+void cset3f(GLuint p, const char* n, const vec3& v) { glUniform3f(UL(p, n), v.x, v.y, v.z); }
+void cset4f(GLuint p, const char* n, float a, float b, float c, float d) { glUniform4f(UL(p, n), a, b, c, d); }
+void csetMat(GLuint p, const char* n, const mat4& m) { glUniformMatrix4fv(UL(p, n), 1, GL_FALSE, m.m); }
 
 vec2 V(float x, float y) { return vec2{x, y}; }
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
@@ -359,7 +383,13 @@ const std::vector<Slot>& TerrariumUniverse::slots() const { return SLOT_LISTS[wr
 // =====================================================================================================
 
 bool TerrariumUniverse::init(int width, int height) {
-    progWorld_ = compile(ugl::FULLSCREEN_VS, shaders::WORLD_FS, "terrarium world");
+    locCache().clear();
+    progRoom_ = compile(shaders::MESH_VS, shaders::ROOM_FS, "terrarium room", true);
+    progContent_ = compile(shaders::MESH_VS, shaders::CONTENT_FS, "terrarium content", true);
+    progShadow_ = compile(shaders::MESH_VS, shaders::SHADOW_FS, "terrarium shadow");
+    progGlass_ = compile(shaders::MESH_VS, shaders::GLASS_FS, "terrarium glass", true);
+    progTube_ = compile(shaders::MESH_VS, shaders::TUBE_FS, "terrarium tube", true);
+    progGlow_ = compile(shaders::GLOW_VS, shaders::GLOW_FS, "terrarium glow");
     progComp_ = compile(ugl::FULLSCREEN_VS, shaders::COMP_FS, "terrarium comp");
     progSprite_ = compile(shaders::SPRITE_VS, shaders::SPRITE_FS, "terrarium sprite");
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "terrarium veil");
@@ -395,7 +425,45 @@ bool TerrariumUniverse::init(int width, int height) {
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 2));
+    // the lights in the air: a quad, one instance each
+    instanced(glowVao_, glowVbo_, 1, sizeof(float) * 4);
     glBindVertexArray(0);
+
+    // ---- the fixed meshes: the room, the jar's glass (outside and cavity), its cork
+    {
+        std::vector<terra::Vtx> v;
+        terra::buildRoom(v);
+        upload(room_, v, false);
+        v.clear();
+        terra::buildGlass(v, false);
+        upload(glassOut_, v, false);
+        v.clear();
+        terra::buildGlass(v, true);
+        upload(glassIn_, v, false);
+        v.clear();
+        terra::buildCork(v);
+        upload(cork_, v, false);
+    }
+
+    // ---- the sun's shadow map
+    glGenTextures(1, &shadowTex_);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, SHADOW_SIZE, SHADOW_SIZE, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glGenFramebuffers(1, &shadowFbo_);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    GLint maxS = 4;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxS);
+    samples_ = std::max(1, std::min(4, (int)maxS));
 
     pal_ = basePal_ = paletteOf(0);
 
@@ -432,10 +500,34 @@ void TerrariumUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     pxPerUnit_ = height_ / (2.f * hh);
-    // the world at a reduced resolution (at most 620 lines)
-    const int wh = std::max(180, std::min(620, (int)(height_ * 0.575f)));
-    const int ww = std::max(320, (int)std::lround((float)wh * width_ / height_));
-    worldT_.create(ww, wh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    // the world: multisampled at the full resolution (up to 1440 lines), resolved with its depth twice: once under
+    // the jars' front glass (which reads it), once whole
+    msH_ = std::max(180, std::min(1440, height_));
+    msW_ = std::max(320, (int)std::lround((float)msH_ * width_ / height_));
+    if (!msFbo_) { glGenFramebuffers(1, &msFbo_); glGenRenderbuffers(1, &msColor_); glGenRenderbuffers(1, &msDepth_); }
+    glBindRenderbuffer(GL_RENDERBUFFER, msColor_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_RGBA16F, msW_, msH_);
+    glBindRenderbuffer(GL_RENDERBUFFER, msDepth_);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples_, GL_DEPTH_COMPONENT32F, msW_, msH_);
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, msColor_);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, msDepth_);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::fprintf(stderr, "[terrarium] multisampled framebuffer incomplete (%dx%d x%d)\n", msW_, msH_, samples_);
+    auto depthTex = [&](GLuint& t, ugl::Target& tg) {
+        tg.create(msW_, msH_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+        if (!t) glGenTextures(1, &t);
+        glBindTexture(GL_TEXTURE_2D, t);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, msW_, msH_, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindFramebuffer(GL_FRAMEBUFFER, tg.fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, t, 0);
+    };
+    depthTex(worldDepth_, worldT_);
+    depthTex(backDepth_, backT_);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     updateCamera();
@@ -472,11 +564,53 @@ vec3 TerrariumUniverse::boardRay(vec2 b) const {
 }
 
 TerrariumUniverse::~TerrariumUniverse() {
-    for (ugl::Target* t : {&worldT_, &sceneT_}) t->destroy();
-    for (GLuint p : {progWorld_, progComp_, progSprite_, progVeil_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {spriteVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
-    if (jarTex_) glDeleteTextures(1, &jarTex_);
+    for (ugl::Target* t : {&worldT_, &backT_, &sceneT_}) t->destroy();
+    for (GLuint p : {progRoom_, progContent_, progShadow_, progGlass_, progTube_, progGlow_, progComp_, progSprite_, progVeil_,
+                     progCell_, progShape_, progPost_})
+        glDeleteProgram(p);
+    for (GLuint v : {spriteVao_, cellVao_, shapeVao_, glowVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, spriteVbo_, cellVbo_, shapeVbo_, glowVbo_}) glDeleteBuffers(1, &b);
+    auto del = [](Mesh& m) {
+        if (m.vao) glDeleteVertexArrays(1, &m.vao);
+        if (m.vbo) glDeleteBuffers(1, &m.vbo);
+    };
+    for (Mesh* m : {&room_, &glassOut_, &glassIn_, &cork_, &sproutMesh_, &beetle_, &snail_}) del(*m);
+    for (Mesh& m : tubeMesh_) del(m);
+    for (JarMesh& j : jarMesh_) {
+        del(j.mesh);
+        del(j.soilMesh);
+        for (Mesh& m : j.slot) del(m);
+    }
+    for (GLuint t : {jarTex_, worldDepth_, backDepth_, shadowTex_})
+        if (t) glDeleteTextures(1, &t);
+    for (GLuint fb : {msFbo_, shadowFbo_})
+        if (fb) glDeleteFramebuffers(1, &fb);
+    for (GLuint rb : {msColor_, msDepth_})
+        if (rb) glDeleteRenderbuffers(1, &rb);
+}
+
+void TerrariumUniverse::upload(Mesh& m, const std::vector<terra::Vtx>& v, bool dynamic) {
+    if (!m.vao) {
+        glGenVertexArrays(1, &m.vao);
+        glGenBuffers(1, &m.vbo);
+        glBindVertexArray(m.vao);
+        glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+        const GLsizei st = sizeof(terra::Vtx);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, st, (void*)offsetof(terra::Vtx, p));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, st, (void*)offsetof(terra::Vtx, n));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, st, (void*)offsetof(terra::Vtx, m));
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, st, (void*)offsetof(terra::Vtx, f));
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, st, (void*)offsetof(terra::Vtx, s));
+        glBindVertexArray(0);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, m.vbo);
+    glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(terra::Vtx), v.empty() ? nullptr : v.data(), dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
+    m.count = (int)v.size();
 }
 
 // =====================================================================================================
@@ -715,9 +849,11 @@ void TerrariumUniverse::buildNetwork() {
     neck(5, 8, 0.8f);
 }
 
-// The jars' data texture: one row each (palette, pond, soil, place, slots, see shaders.hpp).
-void TerrariumUniverse::uploadJars(const std::vector<Slot>& firstSlots, float after) {
-    constexpr int W = 128, ROWS = 12;
+// Each jar as it is drawn this frame: its palette, pond, moss, vines, place and its slots at their growth (the first
+// jar's eases with its variant, the others are their biome's); and the jars' data texture (one row each, the sill
+// reads their places for their shadows).
+void TerrariumUniverse::computeJars(const std::vector<Slot>& firstSlots, float after) {
+    constexpr int W = 32, ROWS = 12;
     if (!jarTex_) {
         glGenTextures(1, &jarTex_);
         glBindTexture(GL_TEXTURE_2D, jarTex_);
@@ -728,11 +864,11 @@ void TerrariumUniverse::uploadJars(const std::vector<Slot>& firstSlots, float af
     std::vector<float> D(W * ROWS * 4, 0.f);
     const VariantDef& vd = VARIANTS[wrapV(variant_)];
     for (int k = 0; k <= NET_N && k < ROWS; k++) {
+        JarState& J = jarState_[k];
         float* row = &D[k * W * 4];
         auto put = [&](int i, float a, float b, float c, float d) { row[i * 4] = a; row[i * 4 + 1] = b; row[i * 4 + 2] = c; row[i * 4 + 3] = d; };
         const int biome = jarBiome(k);
         const VariantDef& bd = biome == 3 ? BIOME_MEADOW : (biome == 4 ? BIOME_POND : VARIANTS[biome]);
-        // the palette: the first jar's eases with its variant, the others are their biome's
         Palette pal = k == 0 ? pal_ : paletteOf(biome);
         if (biome >= 3) {
             const unsigned* src = &bd.soil;
@@ -740,29 +876,95 @@ void TerrariumUniverse::uploadJars(const std::vector<Slot>& firstSlots, float af
             for (int i = 0; i < 17; i++) dst[i] = ugl::toLinear(hex(src[i]));
         }
         const vec3* pc = &pal.soil;
-        for (int i = 0; i < 17; i++) put(i, pc[i].x, pc[i].y, pc[i].z, 0.f);
+        for (int i = 0; i < 17; i++) {
+            put(i, pc[i].x, pc[i].y, pc[i].z, 0.f);
+            J.pal[i * 3] = pc[i].x; J.pal[i * 3 + 1] = pc[i].y; J.pal[i * 3 + 2] = pc[i].z;
+        }
         const float L = jarLines(k);
         const PondDef pd = pondOf(biome, vd.pondDepth);
         const float pondFill = k == 0 ? pond_ : (pd.depth > 0.f ? smoothstepf(POND_AT, POND_AT + 4.f, L) : 0.f);
-        put(17, pd.x, pd.z, pd.r, pd.depth * smoothstepf(0.f, 1.f, saturate(pondFill * 2.f)));
-        put(18, 0.2f - 0.0084f - pd.depth * (1.f - 0.85f * pondFill) * 0.6f - 0.004f, pondFill,
-            k == 0 ? moss_ : smoothstepf(6.f, 22.f, L), (float)bd.kind);
-        const vec3 f = jarFoot(k);
-        put(19, f.x, f.y, f.z, jarAppear(k) > 0.001f ? jarScale(k) : 0.f);
+        J.pd = terra::Pond{pd.x, pd.z, pd.r, pd.depth * smoothstepf(0.f, 1.f, saturate(pondFill * 2.f))};
+        J.level = 0.2f - 0.0084f - pd.depth * (1.f - 0.85f * pondFill) * 0.6f - 0.004f;
+        J.fill = pondFill;
+        J.moss = k == 0 ? moss_ : smoothstepf(6.f, 22.f, L);
+        J.kind = bd.kind;
+        J.vine = smoothstepf(9.f, 19.f, L);
+        J.foot = jarFoot(k);
+        J.on = jarAppear(k) > 0.001f;
+        J.scale = jarScale(k);
+        put(17, J.pd.x, J.pd.z, J.pd.r, J.pd.depth);
+        put(18, J.level, pondFill, J.moss, (float)bd.kind);
+        put(19, J.foot.x, J.foot.y, J.foot.z, J.on ? J.scale : 0.f);
         const std::vector<Slot>& sl = k == 0 ? firstSlots : (biome == 3 ? SLOT_MEADOW : (biome == 4 ? SLOT_POND : SLOT_LISTS[biome]));
         const int n = std::min(24, (int)sl.size());
-        put(20, (float)n, smoothstepf(9.f, 19.f, L), jarAppear(k), 0.f);
+        J.slots.resize(n);
         for (int i = 0; i < n; i++) {
             const Slot& s = sl[i];
-            const float g = k == 0 ? std::max(0.f, growth_[i])
+            const float g = k == 0 ? std::max(0.f, i < (int)growth_.size() ? growth_[i] : 0.f)
                                    : (s.birth < 0.f ? 1.f : smoothstepf(s.birth * BIRTH_SCALE, s.birth * BIRTH_SCALE + SLOT_SPAN, L));
-            put(32 + 3 * i, s.x, soilAt(s.x, s.z, pd, pondFill), s.z, s.size * (k == 0 ? after : 1.f));
-            put(33 + 3 * i, (float)s.type, g, (float)i * 1.37f + 0.5f + (float)k * 7.1f, s.rot);
-            put(34 + 3 * i, s.param, 0.f, 0.f, 0.f);
+            terra::SlotDraw& d = J.slots[i];
+            d.type = s.type;
+            d.base = vec3(s.x, soilAt(s.x, s.z, pd, pondFill), s.z);
+            d.size = s.size * (k == 0 ? after : 1.f);
+            d.g = g;
+            d.seed = (float)i * 1.37f + 0.5f + (float)k * 7.1f;
+            d.rot = s.rot;
+            d.param = s.param;
         }
     }
     glBindTexture(GL_TEXTURE_2D, jarTex_);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, W, ROWS, GL_RGBA, GL_FLOAT, D.data());
+}
+
+// A jar's mesh: its soil, its pond and its slots, each slot rebuilt only when what it was built for changed (its
+// growth by more than a hair, its soil, its size; a rock's trickle with the pond).
+void TerrariumUniverse::updateJarMesh(int k) {
+    const JarState& J = jarState_[k];
+    JarMesh& M = jarMesh_[k];
+    bool dirty = M.dirty;
+    if (std::fabs(M.soilDepth - J.pd.depth) > 0.0004f || (M.soilDepth != J.pd.depth && (J.pd.depth == 0.f || J.fill >= 1.f)) ||
+        M.soilKind != J.kind) {
+        // (its own buffer: the soil changes only while the pond digs in)
+        std::vector<terra::Vtx> soil;
+        terra::buildSoil(soil, J.pd, J.kind);
+        upload(M.soilMesh, soil, true);
+        M.soilDepth = J.pd.depth;
+        M.soilKind = J.kind;
+    }
+    const bool pond = J.fill > 0.001f;
+    if (pond != M.hasPond || (pond && std::fabs(M.pondLevel - J.level) > 1e-5f)) {
+        M.hasPond = pond;
+        M.pondLevel = J.level;
+        dirty = true;
+    }
+    const int n = (int)J.slots.size();
+    if ((int)M.slot.size() != n) {
+        M.slot.resize(n);
+        M.built.assign(n, terra::SlotDraw{-1, vec3(0.f), 0.f, -1.f, 0.f, 0.f, 0.f});
+        M.builtPond.assign(n, -9.f);
+    }
+    const terra::PondState ps{J.pd, J.level, J.fill};
+    std::vector<terra::Vtx> v;
+    for (int i = 0; i < n; i++) {
+        const terra::SlotDraw& s = J.slots[i];
+        const terra::SlotDraw& b = M.built[i];
+        const float pondKey = s.type == S_ROCK ? (J.fill > 0.3f ? J.level : -1.f) : 0.f;
+        const bool same = b.type == s.type && std::fabs(b.g - s.g) < (s.g >= 1.f || s.g <= 0.f ? 1e-6f : 0.008f) &&
+                          std::fabs(b.base.y - s.base.y) < 2e-4f && std::fabs(b.size - s.size) < 2e-4f && b.seed == s.seed &&
+                          std::fabs(M.builtPond[i] - pondKey) < 2e-4f;
+        if (same) continue;
+        // (each slot its own buffer: a growing plant uploads only itself)
+        v.clear();
+        terra::buildSlot(v, s, ps);
+        upload(M.slot[i], v, true);
+        M.built[i] = s;
+        M.builtPond[i] = pondKey;
+    }
+    if (!dirty) return;
+    v.clear();
+    if (M.hasPond) terra::buildPond(v, J.pd, J.level);
+    upload(M.mesh, v, true);
+    M.dirty = false;
 }
 
 // The beetle's trip: at home it sometimes walks to the tube's mouth, then along the tube's floor to the next jar,
@@ -1397,186 +1599,373 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
     cells_.clear();
     if (!f.bare) buildBoard(game);
 
-    // =========================================================== the world (reduced resolution)
+    // =========================================================== the world (meshes, multisampled, full resolution)
+    const VariantDef& vd = VARIANTS[wrapV(variant_)];
+    const float timeU = std::fmod(time_, 3000.f);
+    computeJars(sl, after);
+    for (int k = 0; k <= NET_N; k++)
+        if (jarState_[k].on) updateJarMesh(k);
+    // ---- what moves every frame: the sprouts, the beetle, the snail
     {
-        worldT_.bind();
-        glDisable(GL_BLEND);
-        const GLuint P = progWorld_;
-        glUseProgram(P);
-        set3f(P, "uEye", eye_);
-        set3f(P, "uFwd", fwd_);
-        set3f(P, "uRight", right_);
-        set3f(P, "uUp", up_);
-        set1f(P, "uTanH", tanH_);
-        set1f(P, "uAspect", aspect_);
-        set1f(P, "uTime", std::fmod(time_, 3000.f));
-        set1f(P, "uPx", 2.f * tanH_ / worldT_.h);
-        const VariantDef& vd = VARIANTS[wrapV(variant_)];
-        set1i(P, "uKind", vd.kind);
-        // the slots
-        {
-            float A[24 * 4] = {}, B[24 * 4] = {}, C[24 * 4] = {};
-            const int n = std::min(24, (int)sl.size());
-            for (int i = 0; i < n; i++) {
-                const Slot& s = sl[i];
-                A[i * 4 + 0] = s.x;
-                A[i * 4 + 1] = soilHeight(s.x, s.z);
-                A[i * 4 + 2] = s.z;
-                A[i * 4 + 3] = s.size * after;
-                B[i * 4 + 0] = (float)s.type;
-                B[i * 4 + 1] = std::max(0.f, growth_[i]);
-                B[i * 4 + 2] = (float)i * 1.37f + 0.5f;
-                B[i * 4 + 3] = s.rot;
-                C[i * 4 + 0] = s.param;
-            }
-            set1i(P, "uSlots", n);
-            glUniform4fv(ugl::U(P, "uSA"), 24, A);
-            glUniform4fv(ugl::U(P, "uSB"), 24, B);
-            glUniform4fv(ugl::U(P, "uSC"), 24, C);
+        std::vector<terra::Vtx> v;
+        const terra::Pond& pd0 = jarState_[0].pd;
+        const int n = std::min(MAX_SPROUTS, (int)sprouts_.size());
+        // (rebuilt when one of them grew, appeared or went)
+        std::vector<float> key;
+        for (int i = 0; i < n; i++) {
+            const Sprout& s = sprouts_[i];
+            key.insert(key.end(), {s.x, s.z, saturate(s.age / 3.f) * (0.85f + 0.15f * smoothstepf(5.f, 30.f, s.age))});
         }
-        {
-            float S[MAX_SPROUTS * 4] = {};
-            const int n = std::min(MAX_SPROUTS, (int)sprouts_.size());
+        key.insert(key.end(), {pd0.depth, (float)vd.kind});
+        bool same = key.size() == sproutKey_.size();
+        for (size_t i = 0; same && i < key.size(); i++) same = std::fabs(key[i] - sproutKey_[i]) < 0.003f;
+        if (!same) {
             for (int i = 0; i < n; i++) {
                 const Sprout& s = sprouts_[i];
-                S[i * 4 + 0] = s.x;
-                S[i * 4 + 1] = soilHeight(s.x, s.z) - 0.004f;
-                S[i * 4 + 2] = s.z;
-                S[i * 4 + 3] = saturate(s.age / 3.f) * (0.85f + 0.15f * smoothstepf(5.f, 30.f, s.age));
+                terra::buildSprout(v, vec3(s.x, terra::soilH(s.x, s.z, pd0) - 0.004f, s.z), key[i * 3 + 2], i, vd.kind);
             }
-            set1i(P, "uSprouts", n);
-            glUniform4fv(ugl::U(P, "uSp"), MAX_SPROUTS, S);
+            upload(sproutMesh_, v, true);
+            sproutKey_ = key;
         }
-        {
-            float F[MAX_FLIES * 4] = {};
-            int n = 0;
-            std::vector<int> grownJars;
-            for (int k = 1; k <= NET_N; k++) if (jarLines(k) > 12.f) grownJars.push_back(k);
-            for (int i = 0; i < (int)flies_.size(); i++) {
-                const Fly& fl = flies_[i];
-                if (fl.glow <= 0.01f) continue;
-                const int k = (i >= 12 && !grownJars.empty()) ? grownJars[(i - 12) % grownJars.size()] : 0;
-                const vec3 w = jarFoot(k) + fl.p * jarScale(k);
-                F[n * 4 + 0] = w.x; F[n * 4 + 1] = w.y; F[n * 4 + 2] = w.z; F[n * 4 + 3] = fl.glow;
-                n++;
-            }
-            set1i(P, "uFlies", n);
-            glUniform4fv(ugl::U(P, "uFly"), MAX_FLIES, F);
-        }
-        {
-            float S[MAX_SEEDS * 4] = {};
-            int n = 0;
-            for (const Seed& s : seeds_) {
-                if (s.age < 0.f) continue;
-                const float t = saturate(s.age / s.life);
-                // out from behind the well first, then floating down to the soil
-                const float eh = 1.f - std::pow(1.f - t, 2.6f);
-                const float ev = t * t * (3.f - 2.f * t);
-                vec3 p = lerp(s.p, s.to + vec3(0.f, 0.012f, 0.f), eh);
-                p.y = lerpf(s.p.y, s.to.y + 0.012f, ev);
-                const float sw = std::sin(s.age * 1.9f + s.seed * 20.f) * 0.05f * (1.f - t);
-                p.x += sw;
-                p.z += std::cos(s.age * 1.4f + s.seed * 13.f) * 0.03f * (1.f - t);
-                const float a = smoothstepf(0.f, 0.4f, s.age) * (1.f - smoothstepf(0.85f, 1.f, t) * 0.6f);
-                S[n * 4 + 0] = p.x; S[n * 4 + 1] = p.y; S[n * 4 + 2] = p.z; S[n * 4 + 3] = a;
-                n++;
-            }
-            set1i(P, "uSeeds", n);
-            glUniform4fv(ugl::U(P, "uSeedP"), MAX_SEEDS, S);
-        }
-        if (bugMode_ == 0) set4f(P, "uBug", bug_.x, soilHeight(bug_.x, bug_.z) - 0.002f, bug_.z, bug_.head);
-        else set4f(P, "uBug", bugP_.x, bugP_.y, bugP_.z, bugHead_);
+        v.clear();
+        // the beetle: in the first jar, in the tube (world units) or in the second jar (in its units)
+        vec3 bp;
+        float bh;
+        if (bugMode_ == 0) { bp = vec3(bug_.x, terra::soilH(bug_.x, bug_.z, pd0) - 0.002f, bug_.z); bh = bug_.head; }
+        else { bp = bugP_; bh = bugHead_; }
         const float bugMv = bugMode_ == 0 ? saturate(bug_.speed / 0.03f) : saturate(bugSpeed_ / 0.03f);
-        set4f(P, "uBug2", bug_.walk, bugMv, bugMode_ == 0 ? bug_.look : 0.f, bug_.blink > 0.f ? std::sin(bug_.blink * PI) : 0.f);
-        set1f(P, "uBugMode", (float)bugMode_);
-        set1i(P, "uBugJar", 1);
-        set4f(P, "uPondP", 0.5f, 0.42f, 0.19f, vd.pondDepth * smoothstepf(0.f, 1.f, saturate(pond_ * 2.f)));
-        set1f(P, "uPondY", 0.2f - 0.0084f - vd.pondDepth * (1.f - 0.85f * pond_) * 0.6f - 0.004f);
-        set1f(P, "uPond", pond_);
-        set1f(P, "uMossCover", moss_);
-        set1f(P, "uSway", 0.35f + 0.35f * wm + 0.3f * wp);
-        set1f(P, "uSpots", vd.spots);
-        set3f(P, "uSunDir", sunDir);
-        set3f(P, "uSunCol", sunC);
-        set3f(P, "uSkyZ", skyZ);
-        set3f(P, "uSkyH", skyH);
-        set3f(P, "uAmbS", ambS);
-        set3f(P, "uAmbG", ambG);
-        set3f(P, "uFill", fill);
-        set3f(P, "uGlowSun", glowC);
-        set1f(P, "uSunDisc", disc);
-        // the sun as the window shows it (stretched elevations): low over the hills on the left
-        set2f(P, "uSunSky", 0.3f, std::clamp(elev, -0.1f, 0.9f) * 2.0f);
-        set1f(P, "uMoon", moon);
-        set1f(P, "uStars", stars * (1.f - rain_));
-        set1f(P, "uRain", rain_);
-        set1f(P, "uFog", fog_ * (0.7f + 0.3f * (1.f - wp)) + 2.f * breath);
-        set1f(P, "uCond", std::max(cond_, breath));
-        set1f(P, "uNight", night);
-        set1f(P, "uFlyAmt", flyAmt);
-        set3f(P, "uSoil", pal_.soil); set3f(P, "uSoil2", pal_.soil2); set3f(P, "uGravel", pal_.gravel);
-        set3f(P, "uStr1", pal_.strata1); set3f(P, "uStr2", pal_.strata2); set3f(P, "uMoss", pal_.moss);
-        set3f(P, "uMoss2", pal_.moss2); set3f(P, "uLeaf", pal_.leaf); set3f(P, "uLeaf2", pal_.leaf2);
-        set3f(P, "uStem", pal_.stem); set3f(P, "uCap", pal_.cap); set3f(P, "uCap2", pal_.cap2);
-        set3f(P, "uFlower", pal_.flower); set3f(P, "uFlower2", pal_.flower2); set3f(P, "uBark", pal_.bark);
-        set3f(P, "uWater", pal_.water); set3f(P, "uStone", pal_.stone); set3f(P, "uBugC", pal_.bug);
-        set3f(P, "uBugSpot", pal_.bugSpot); set3f(P, "uFlyC", pal_.fly * 1.4f); set3f(P, "uSill", pal_.sill);
-        set3f(P, "uFrame", pal_.frame); set3f(P, "uWall", pal_.wall); set3f(P, "uHill", pal_.hill);
-        set3f(P, "uHill2", pal_.hill2);
-        set3f(P, "uBridgeCol", bridge_.color);
-        set1f(P, "uWorldA", world);
-        set1f(P, "uSlow", slow_);
-        set1f(P, "uInVine", inVine_);
-        uploadJars(sl, after);
-        set1i(P, "uJarN", NET_N + 1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, jarTex_);
-        set1i(P, "uJarTex", 1);
-        glActiveTexture(GL_TEXTURE0);
-        set1i(P, "uSnailJar", jarLines(1) > 3.f ? 1 : -1);
-        {
-            float TA[48 * 4] = {}, TB[48 * 4] = {}, TC[48 * 4] = {};
-            int n = 0;
-            for (const NetTube& t : tubes_) {
-                const float g = smoothstepf(t.birth, t.birth + 2.f, linesEased_);
-                TA[n * 4 + 0] = t.a.x; TA[n * 4 + 1] = t.a.y; TA[n * 4 + 2] = t.a.z; TA[n * 4 + 3] = t.r;
-                TB[n * 4 + 0] = t.b.x; TB[n * 4 + 1] = t.b.y; TB[n * 4 + 2] = t.b.z; TB[n * 4 + 3] = g;
-                TC[n * 4 + 0] = t.c.x; TC[n * 4 + 1] = t.c.y; TC[n * 4 + 2] = t.c.z; TC[n * 4 + 3] = t.water ? 1.f : 0.f;
-                n++;
-            }
-            set1i(P, "uTubeN", n);
-            glUniform4fv(ugl::U(P, "uTubeA"), 48, TA);
-            glUniform4fv(ugl::U(P, "uTubeB"), 48, TB);
-            glUniform4fv(ugl::U(P, "uTubeC"), 48, TC);
+        terra::buildBeetle(v, bp, bh, bug_.walk, bugMv, bugMode_ == 0 ? bug_.look : 0.f, timeU);
+        beetleJar_ = bugMode_ == 2 ? 1 : 0;
+        if (beetleJar_ != 0) {
+            const vec3 f = jarState_[1].foot;
+            const float s = jarState_[1].scale;
+            for (terra::Vtx& x : v)
+                for (int c = 0; c < 3; c++) x.p[c] = (x.p[c] - (&f.x)[c]) / s;
         }
-        {
-            // fireflies along the tubes: a few by day, streams of them at night
-            float S[48 * 4] = {};
-            int n = 0;
-            std::vector<int> grown;
-            for (int i = 0; i < (int)tubes_.size(); i++)
-                if (linesEased_ > tubes_[i].birth + 2.f) grown.push_back(i);
-            const float night = smoothstepf(30.f, 46.f, linesEased_), amt = std::max(night, allLit_);
-            const int count = overT_ >= 0.f ? 0 : (int)(32.f * (0.15f + 0.85f * amt));
-            for (int i = 0; i < count && n < 48; i++) {
-                const float h = hash01(i * 7 + 3), h2 = hash01(i * 13 + 5);
-                vec3 p;
-                if (i % 3 != 2 && !grown.empty()) {
-                    const NetTube& t = tubes_[grown[i % grown.size()]];
-                    const float len = length(t.b - t.c) + length(t.c - t.a);
-                    float u = std::fmod(time_ * (0.12f + 0.1f * h) / std::max(len, 0.2f) + h2, 2.f);
-                    if (u > 1.f) u = 2.f - u;
-                    p = bezier(t.a, t.c, t.b, u) + vec3(std::sin(time_ * 1.3f + i), std::cos(time_ * 1.1f + i * 2.f), 0.f) * t.r * 0.35f;
-                } else continue;
-                const float g = (0.25f + 0.75f * amt) * (0.35f + 0.65f * smoothstepf(-0.5f, 0.9f, std::sin(time_ * (0.7f + h) + i * 2.1f)));
-                S[n * 4 + 0] = p.x; S[n * 4 + 1] = p.y; S[n * 4 + 2] = p.z; S[n * 4 + 3] = g;
-                n++;
-            }
-            set1i(P, "uSwarm", n);
-            glUniform4fv(ugl::U(P, "uSw"), 48, S);
-        }
-        ugl::drawFullscreen();
+        upload(beetle_, v, true);
+        v.clear();
+        if (jarLines(1) > 3.f && jarState_[1].on) terra::buildSnail(v, timeU, jarState_[1].pd);
+        upload(snail_, v, true);
     }
+    // ---- the tubes (built once per variant: their curves are fixed)
+    if ((int)tubeMesh_.size() != (int)tubes_.size() || tubesBuilt_ != variant_) {
+        for (Mesh& m : tubeMesh_) {
+            if (m.vao) glDeleteVertexArrays(1, &m.vao);
+            if (m.vbo) glDeleteBuffers(1, &m.vbo);
+        }
+        tubeMesh_.assign(tubes_.size(), Mesh{});
+        for (size_t i = 0; i < tubes_.size(); i++) {
+            std::vector<terra::Vtx> v;
+            terra::buildTube(v, tubes_[i].a, tubes_[i].c, tubes_[i].b, tubes_[i].r);
+            upload(tubeMesh_[i], v, false);
+        }
+        tubesBuilt_ = variant_;
+    }
+
+    // ---- the fireflies (the first jar's twelve, the rest living in the grown jars), the lights along the tubes, the
+    // seeds drifting down: their light (on the meshes) and their glows (over the world)
+    float FL[MAX_FLIES * 4] = {};
+    int nFl = 0;
+    {
+        std::vector<int> grownJars;
+        for (int k = 1; k <= NET_N; k++) if (jarLines(k) > 12.f) grownJars.push_back(k);
+        for (int i = 0; i < (int)flies_.size(); i++) {
+            const Fly& fl = flies_[i];
+            if (fl.glow <= 0.01f) continue;
+            const int k = (i >= 12 && !grownJars.empty()) ? grownJars[(i - 12) % grownJars.size()] : 0;
+            const vec3 w = jarFoot(k) + fl.p * jarScale(k);
+            FL[nFl * 4 + 0] = w.x; FL[nFl * 4 + 1] = w.y; FL[nFl * 4 + 2] = w.z; FL[nFl * 4 + 3] = fl.glow;
+            nFl++;
+        }
+    }
+    std::vector<float> SD, SW;
+    for (const Seed& s : seeds_) {
+        if (s.age < 0.f) continue;
+        const float t = saturate(s.age / s.life);
+        // out from behind the well first, then floating down to the soil
+        const float eh = 1.f - std::pow(1.f - t, 2.6f);
+        const float ev = t * t * (3.f - 2.f * t);
+        vec3 p = lerp(s.p, s.to + vec3(0.f, 0.012f, 0.f), eh);
+        p.y = lerpf(s.p.y, s.to.y + 0.012f, ev);
+        p.x += std::sin(s.age * 1.9f + s.seed * 20.f) * 0.05f * (1.f - t);
+        p.z += std::cos(s.age * 1.4f + s.seed * 13.f) * 0.03f * (1.f - t);
+        const float a = smoothstepf(0.f, 0.4f, s.age) * (1.f - smoothstepf(0.85f, 1.f, t) * 0.6f);
+        SD.insert(SD.end(), {p.x, p.y, p.z, a});
+    }
+    {
+        // fireflies along the tubes: a few by day, streams of them at night
+        std::vector<int> grown;
+        for (int i = 0; i < (int)tubes_.size(); i++)
+            if (linesEased_ > tubes_[i].birth + 2.f) grown.push_back(i);
+        const float night = smoothstepf(30.f, 46.f, linesEased_), amt = std::max(night, allLit_);
+        const int count = overT_ >= 0.f ? 0 : (int)(32.f * (0.15f + 0.85f * amt));
+        for (int i = 0; i < count && (int)SW.size() < 48 * 4; i++) {
+            const float h = hash01(i * 7 + 3), h2 = hash01(i * 13 + 5);
+            if (i % 3 == 2 || grown.empty()) continue;
+            const NetTube& t = tubes_[grown[i % grown.size()]];
+            const float len = length(t.b - t.c) + length(t.c - t.a);
+            float u = std::fmod(time_ * (0.12f + 0.1f * h) / std::max(len, 0.2f) + h2, 2.f);
+            if (u > 1.f) u = 2.f - u;
+            const vec3 p = bezier(t.a, t.c, t.b, u) + vec3(std::sin(time_ * 1.3f + i), std::cos(time_ * 1.1f + i * 2.f), 0.f) * t.r * 0.35f;
+            const float g = (0.25f + 0.75f * amt) * (0.35f + 0.65f * smoothstepf(-0.5f, 0.9f, std::sin(time_ * (0.7f + h) + i * 2.1f)));
+            SW.insert(SW.end(), {p.x, p.y, p.z, g});
+        }
+    }
+
+    vp3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, NEAR, FAR) * mat4::lookAt(eye_, eye_ + fwd_, up_);
+    {
+        // the sun's shadow map, fitted to the jars standing (their contents only cast shadows, as before)
+        vec3 mn(1e9f), mx(-1e9f);
+        for (int k = 0; k <= NET_N; k++) {
+            const JarState& J = jarState_[k];
+            if (!J.on) continue;
+            const vec3 a = J.foot - vec3(1.05f * J.scale, 0.f, 1.05f * J.scale), b = J.foot + vec3(1.05f * J.scale, 1.f * J.scale, 1.05f * J.scale);
+            mn = vec3(std::min(mn.x, a.x), std::min(mn.y, a.y), std::min(mn.z, a.z));
+            mx = vec3(std::max(mx.x, b.x), std::max(mx.y, b.y), std::max(mx.z, b.z));
+        }
+        const vec3 C = (mn + mx) * 0.5f;
+        const mat4 lv = mat4::lookAt(C + sunDir * 30.f, C, std::fabs(sunDir.y) > 0.95f ? vec3(0.f, 0.f, 1.f) : vec3(0.f, 1.f, 0.f));
+        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+        for (int i = 0; i < 8; i++) {
+            const vec4 l = lv * vec4((i & 1) ? mx.x : mn.x, (i & 2) ? mx.y : mn.y, (i & 4) ? mx.z : mn.z, 1.f);
+            const float c[3] = {l.x, l.y, l.z};
+            for (int k = 0; k < 3; k++) { lo[k] = std::min(lo[k], c[k]); hi[k] = std::max(hi[k], c[k]); }
+        }
+        lightVp_ = mat4::ortho(lo[0], hi[0], lo[1], hi[1], -hi[2] - 1.f, -lo[2] + 1.f) * lv;
+        // soft shadows: a penumbra of about a hundredth of the jar
+        shadowSoft_ = 0.011f / std::max(0.1f, 0.5f * (hi[0] - lo[0] + hi[1] - lo[1]));
+    }
+    const vec3 flyC = pal_.fly * 1.4f;
+    auto setScene = [&](GLuint P) {
+        cset3f(P, "uEye", eye_);
+        cset1f(P, "uTime", timeU);
+        cset1f(P, "uPx", 2.f * tanH_ / msH_);
+        cset1f(P, "uSway", 0.35f + 0.35f * wm + 0.3f * wp);
+        cset1f(P, "uSpots", vd.spots);
+        cset3f(P, "uSunDir", sunDir);
+        cset3f(P, "uSunCol", sunC);
+        cset3f(P, "uSkyZ", skyZ);
+        cset3f(P, "uSkyH", skyH);
+        cset3f(P, "uAmbS", ambS);
+        cset3f(P, "uAmbG", ambG);
+        cset3f(P, "uFill", fill);
+        cset3f(P, "uGlowSun", glowC);
+        cset1f(P, "uSunDisc", disc);
+        // the sun as the window shows it (stretched elevations): low over the hills on the left
+        cset2f(P, "uSunSky", 0.3f, std::clamp(elev, -0.1f, 0.9f) * 2.0f);
+        cset1f(P, "uMoon", moon);
+        cset1f(P, "uStars", stars * (1.f - rain_));
+        cset1f(P, "uRain", rain_);
+        cset1f(P, "uFog", fog_ * (0.7f + 0.3f * (1.f - wp)) + 2.f * breath);
+        cset1f(P, "uCond", std::max(cond_, breath));
+        cset1f(P, "uNight", night);
+        cset1f(P, "uFlyAmt", flyAmt);
+        cset3f(P, "uBugC", pal_.bug); cset3f(P, "uBugSpot", pal_.bugSpot); cset3f(P, "uFlyC", flyC); cset3f(P, "uSill", pal_.sill);
+        cset3f(P, "uFrame", pal_.frame); cset3f(P, "uWall", pal_.wall); cset3f(P, "uHill", pal_.hill); cset3f(P, "uHill2", pal_.hill2);
+        cset1i(P, "uFlies", nFl);
+        glUniform4fv(UL(P, "uFly"), MAX_FLIES, FL);
+        cset1i(P, "uJarN", NET_N + 1);
+        cset1i(P, "uJarTex", 1);
+        csetMat(P, "uLightVP", lightVp_);
+        cset1i(P, "uShadow", 3);
+        cset1f(P, "uSoft", std::max(shadowSoft_, 1.5f / SHADOW_SIZE));
+        csetMat(P, "uVP", vp3_);
+        cset4f(P, "uBug2", bug_.walk, 0.f, 0.f, bug_.blink > 0.f ? std::sin(bug_.blink * PI) : 0.f);
+    };
+    // a jar's own uniforms: its place, palette, pond, moss, vines, the feet of what grows in it
+    auto setJar = [&](GLuint P, int k) {
+        const JarState& J = jarState_[k];
+        cset3f(P, "uFoot", J.foot);
+        cset1f(P, "uScale", J.scale);
+        cset1i(P, "uKind", J.kind);
+        cset4f(P, "uPondP", J.pd.x, J.pd.z, J.pd.r, J.pd.depth);
+        cset1f(P, "uPondY", J.level);
+        cset1f(P, "uPond", J.fill);
+        cset1f(P, "uMossCover", J.moss);
+        cset1f(P, "uInVine", J.vine);
+        static const char* PAL[17] = {"uSoil", "uSoil2", "uGravel", "uStr1", "uStr2", "uMoss", "uMoss2", "uLeaf", "uLeaf2",
+                                      "uStem", "uCap", "uCap2", "uFlower", "uFlower2", "uBark", "uWater", "uStone"};
+        for (int i = 0; i < 17; i++) cset3f(P, PAL[i], vec3(J.pal[i * 3], J.pal[i * 3 + 1], J.pal[i * 3 + 2]));
+        float occ[24 * 4] = {};
+        int n = 0;
+        for (const terra::SlotDraw& s : J.slots) {
+            if (s.g <= 0.02f || n >= 24) continue;
+            float r;
+            switch (s.type) {
+            case S_MOSS: r = s.size * s.g * 1.1f; break;
+            case S_FERN: r = 0.06f; break;
+            case S_TWIG: r = 0.045f; break;
+            case S_MUSH: r = s.size * 0.7f; break;
+            default: r = s.size * 0.75f; break;
+            }
+            occ[n * 4] = s.base.x; occ[n * 4 + 1] = s.base.z; occ[n * 4 + 2] = r; occ[n * 4 + 3] = 0.32f * smoothstepf(0.f, 0.5f, s.g);
+            n++;
+        }
+        cset1i(P, "uOccN", n);
+        glUniform4fv(UL(P, "uOcc"), 24, occ);
+    };
+    auto draw = [](const Mesh& m) {
+        if (m.count <= 0) return;
+        glBindVertexArray(m.vao);
+        glDrawArrays(GL_TRIANGLES, 0, m.count);
+    };
+    // the jars, far to near (for the glass laid over what is behind it)
+    int order[16], nOrd = 0;
+    for (int k = 0; k <= NET_N; k++)
+        if (jarState_[k].on) order[nOrd++] = k;
+    std::sort(order, order + nOrd, [&](int a, int b) {
+        const vec3 ca = jarState_[a].foot - eye_, cb = jarState_[b].foot - eye_;
+        return dot(ca, ca) > dot(cb, cb);
+    });
+    // everything the jars hold, with the given program (the colour pass or the shadow pass)
+    auto drawContents = [&](GLuint P) {
+        for (int i = 0; i < nOrd; i++) {
+            const int k = order[i];
+            setJar(P, k);
+            draw(jarMesh_[k].soilMesh);
+            draw(jarMesh_[k].mesh);
+            for (const Mesh& m : jarMesh_[k].slot) draw(m);
+            if (k == 0) draw(sproutMesh_);
+            if (k == 1) draw(snail_);
+            if (k == beetleJar_) draw(beetle_);
+            if (P != progShadow_) draw(cork_);
+        }
+        if (bugMode_ == 1) {
+            setJar(P, 0);
+            cset1i(P, "uClip", 0);
+            draw(beetle_);
+            cset1i(P, "uClip", 1);
+        }
+    };
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, jarTex_);
+    glActiveTexture(GL_TEXTURE0);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glDisable(GL_CULL_FACE);
+    // ---- the sun's shadow map: what the jars hold
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
+    glViewport(0, 0, SHADOW_SIZE, SHADOW_SIZE);
+    glClearDepth(1.0);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(1.5f, 2.f);
+    glUseProgram(progShadow_);
+    csetMat(progShadow_, "uVP", lightVp_);
+    cset1f(progShadow_, "uTime", timeU);
+    cset1f(progShadow_, "uSway", 0.35f + 0.35f * wm + 0.3f * wp);
+    drawContents(progShadow_);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    // ---- the room, the jars' contents: multisampled
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
+    glViewport(0, 0, msW_, msH_);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, shadowTex_);
+    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(progRoom_);
+    setScene(progRoom_);
+    setJar(progRoom_, 0);
+    cset3f(progRoom_, "uFoot", vec3(0.f));
+    cset1f(progRoom_, "uScale", 1.f);
+    draw(room_);
+    glUseProgram(progContent_);
+    setScene(progContent_);
+    cset1i(progContent_, "uClip", 1);
+    drawContents(progContent_);
+    // ---- the jars' glass, its far side: laid over what is behind it (not in the depth: what lies behind the jar
+    // still shows through it)
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE);
+    glUseProgram(progGlass_);
+    setScene(progGlass_);
+    cset1i(progGlass_, "uFront", 0);
+    for (int i = 0; i < nOrd; i++) {
+        setJar(progGlass_, order[i]);
+        draw(glassIn_);
+    }
+    glDisable(GL_BLEND);
+    // ---- what the front glass sees through: the world so far, resolved with its depth
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo_);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, backT_.fbo);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
+    // ---- the front glass, far to near: refracting the world behind it
+    glDepthFunc(GL_LEQUAL);
+    cset1i(progGlass_, "uFront", 1);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, backT_.tex);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, backDepth_);
+    glActiveTexture(GL_TEXTURE0);
+    cset1i(progGlass_, "uBack", 4);
+    cset1i(progGlass_, "uBackDepth", 5);
+    cset3f(progGlass_, "uFwd", fwd_);
+    cset2f(progGlass_, "uNF", NEAR, FAR);
+    for (int i = 0; i < nOrd; i++) {
+        setJar(progGlass_, order[i]);
+        draw(glassOut_);
+    }
+    // ---- the glass tubes: a rim and the room's reflection added, the rest tinted
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_SRC1_COLOR);
+    glUseProgram(progTube_);
+    setScene(progTube_);
+    setJar(progTube_, 0);
+    cset3f(progTube_, "uFoot", vec3(0.f));
+    cset1f(progTube_, "uScale", 1.f);
+    for (size_t i = 0; i < tubes_.size() && i < tubeMesh_.size(); i++) {
+        const NetTube& t = tubes_[i];
+        const float g = smoothstepf(t.birth, t.birth + 2.f, linesEased_);
+        if (g <= 0.002f) continue;
+        cset1f(progTube_, "uGrow", g);
+        cset1f(progTube_, "uTubeWater", t.water ? 1.f : 0.f);
+        draw(tubeMesh_[i]);
+    }
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    // ---- resolved, with its depth (the opaque world's)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo_);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, worldT_.fbo);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBlitFramebuffer(0, 0, msW_, msH_, 0, 0, msW_, msH_, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    // ---- the lights in the air: glows at their depth, hidden behind what stands in front of them
+    worldT_.bind();
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    glDepthMask(GL_FALSE);
+    glUseProgram(progGlow_);
+    csetMat(progGlow_, "uVP", vp3_);
+    cset1f(progGlow_, "uTanH", tanH_);
+    cset1f(progGlow_, "uAspect", aspect_);
+    cset3f(progGlow_, "uEye", eye_);
+    cset1f(progGlow_, "uPx", 2.f * tanH_ / msH_);
+    cset1f(progGlow_, "uR", 0.35f);
+    glBindVertexArray(glowVao_);
+    auto glows = [&](const float* data, int n, const vec3& col, const vec3& ga, const vec3& gb, float pxk) {
+        if (n <= 0) return;
+        cset3f(progGlow_, "uCol", col);
+        cset3f(progGlow_, "uGA", ga);
+        cset3f(progGlow_, "uGB", gb);
+        cset1f(progGlow_, "uPxK", pxk);
+        glBindBuffer(GL_ARRAY_BUFFER, glowVbo_);
+        glBufferData(GL_ARRAY_BUFFER, n * 4 * sizeof(float), data, GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, n);
+    };
+    glows(FL, nFl, flyC, vec3(0.00007f, 0.00028f, 0.00012f), vec3(0.000025f, 0.0008f, 0.006f), 1.2f);
+    glows(SW.data(), (int)SW.size() / 4, flyC, vec3(0.00009f, 0.0004f, 0.00016f), vec3(0.00003f, 0.0012f, 0.008f), 1.3f);
+    glows(SD.data(), (int)SD.size() / 4, lerp(vec3(1.f, 0.95f, 0.82f), flyC, 0.2f), vec3(0.00005f, 0.0002f, 0.000075f),
+          vec3(0.00004f, 0.0008f, 0.004f), 1.5f);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
 
     // =========================================================== the scene (full resolution)
     sceneT_.bind();
@@ -1584,9 +1973,10 @@ void TerrariumUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, worldT_.tex);
     set1i(progComp_, "uWorld", 0);
-    set2f(progComp_, "uTexel", 1.f / worldT_.w, 1.f / worldT_.h);
+    set1f(progComp_, "uSlow", slow_);
+    set1f(progComp_, "uWorldA", world);
+    set3f(progComp_, "uBridgeCol", bridge_.color);
     ugl::drawFullscreen();
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!f.bare) {

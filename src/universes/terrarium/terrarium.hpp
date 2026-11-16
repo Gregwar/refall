@@ -7,6 +7,7 @@
 
 #include "ugl.hpp"
 #include "universe.hpp"
+#include "universes/terrarium/world.hpp"
 
 class TerrariumUniverse : public Universe {
 public:
@@ -78,8 +79,32 @@ private:
     float jarLines(int k) const;          // its own growth, on the first jar's 0..20 scale
     int jarBiome(int k) const;
     bool pickNetSpot(vec3& at);           // a seed's landing: the soil of the newest jar beside the well
-    GLuint jarTex_ = 0;                   // the jars' data (see shaders.hpp)
-    void uploadJars(const std::vector<Slot>& firstSlots, float after);
+    GLuint jarTex_ = 0;                   // the jars' data (row 19 read by the sill: the jars' shadows)
+    // ---- each jar as it is drawn this frame (see computeJars), its meshes (rebuilt only when they changed)
+    struct JarState {
+        bool on = false;
+        vec3 foot{0, 0, 0};
+        float scale = 1.f, level = 0.f, fill = 0.f, moss = 0.f, vine = 0.f;
+        int kind = 0;
+        float pal[17 * 3] = {};
+        terra::Pond pd;
+        std::vector<terra::SlotDraw> slots;
+    };
+    struct Mesh { GLuint vao = 0, vbo = 0; int count = 0; };
+    struct JarMesh {
+        Mesh mesh, soilMesh;                   // the pond; the soil
+        std::vector<Mesh> slot;                // each slot's plant
+        std::vector<terra::SlotDraw> built;    // what each slot's mesh was built for
+        std::vector<float> builtPond;          // (the trickles: the pond's level, filled or not)
+        float soilDepth = -1.f, pondLevel = -9.f;
+        int soilKind = -1;
+        bool hasPond = false, dirty = true;
+    };
+    JarState jarState_[12];
+    JarMesh jarMesh_[12];
+    void computeJars(const std::vector<Slot>& firstSlots, float after);
+    void updateJarMesh(int k);
+    void upload(Mesh& m, const std::vector<terra::Vtx>& v, bool dynamic);
     // the beetle's trips through the tube to the next jar: 0 at home, 1 in the tube, 2 in the other jar
     int bugMode_ = 0, bugPhase_ = 0;
     float bugU_ = 0.f, bugT_ = 0.f, bugCool_ = 20.f;
@@ -122,10 +147,21 @@ private:
     void drawHud(const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progWorld_ = 0, progComp_ = 0, progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
+    GLuint progRoom_ = 0, progContent_ = 0, progShadow_ = 0, progGlass_ = 0, progTube_ = 0, progGlow_ = 0, progComp_ = 0;
+    GLuint progSprite_ = 0, progVeil_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, spriteVao_ = 0, spriteVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
-    ugl::Target worldT_, sceneT_;
-    mat4 vp_;
+    GLuint glowVao_ = 0, glowVbo_ = 0;
+    Mesh room_, glassOut_, glassIn_, cork_, sproutMesh_, beetle_, snail_;
+    std::vector<Mesh> tubeMesh_;
+    int beetleJar_ = 0, tubesBuilt_ = -1;
+    float shadowSoft_ = 0.001f;
+    std::vector<float> sproutKey_;
+    // the world: multisampled at the full resolution (up to 1440 lines), resolved twice (the glass reads the world
+    // behind it), with its depth; the sun's shadow map
+    GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0, worldDepth_ = 0, backDepth_ = 0, shadowTex_ = 0, shadowFbo_ = 0;
+    int msW_ = 0, msH_ = 0, samples_ = 4;
+    ugl::Target worldT_, backT_, sceneT_;
+    mat4 vp_, vp3_, lightVp_;
     vec2 viewC_{0, 0}, viewH_{21, 11.9f};
     float pxPerUnit_ = 20.f;
 
