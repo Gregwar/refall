@@ -82,63 +82,62 @@ reviewed and tested (✅ <i>ok</i>):
 <td><img src="docs/universes/neon.jpg"><br><b>NEON</b>: glowing watercolor shapes swept in a spectrum over a painted night skyline; each piece keeps its section's colors, each cleared row paints a building into the city, the drop washes the skyline in the spectrum<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
-<td><img src="docs/universes/microscope.jpg"><br><b>MICROSCOPE</b>: a micrograph's field of view, the pieces colonies of stained living cells, a paramecium, an amoeba and diatoms wandering by; a cleared row bursts into granules, the drop swings in dark-field or fluorescence<br><sub>✅ <i>ok</i></sub></td>
 <td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a glide through a dark 3D sunken city where shapes glow up from the black as echoes return on the beat; each cleared row charts the seabed for good, the drop lights the whole world and the glide surges<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/forest.jpg"><br><b>GLOWING FOREST</b>: a night forest lit only by bioluminescence, trunks fading into the mist, a mossy rock and a still pool; glowing fungus cubes, each cleared row sows a glowing plant that stays, plants glow on the beat grid and the drop sends a slow wave of light through the forest<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/docks.jpg"><br><b>DOCKS</b>: a container port at dusk in 3D; the falling container piece hangs from a gantry on hairline cables, cleared rows are craned onto ships that fill up over the song, the drop switches the port to full light<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/bauhaus.jpg"><br><b>BAUHAUS</b>: a Bauhaus poster of circles, triangles and squares cut out of thick colored paper and laid on the sheet in relief (soft shadows, lit edges), recomposed on the bar grid; each cleared row joins the poster as a small cut-out in a growing sampler, the drop lifts the forms off the sheet into a turning kinetic sculpture under a circling spotlight, then folds them back into a new composition<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/skyocean.jpg"><br><b>CELESTIAL OCEAN</b>: a sea of clouds at night under a big moon; moonstone pieces, each cleared row rises out of the clouds as a translucent creature of light (a school of fish, jellyfish, a manta ray, a whale for a quad) swimming away through the starry sky, the drop brings a giant whale slowly across the whole sky<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/manga.jpg"><br><b>MANGA</b>: a manga color page in ink, screentones and watercolor washes, drawn in pencil, then inked and colored panel by panel as rows clear; the pieces are inked blocks of color under their screentones, the drop is a full-page splash of color, focus lines and a huge sound effect<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/brutalist.jpg"><br><b>BRUTALIST</b>: raw board-marked concrete under a hard sun in 3D; the pieces are cast blocks in a slot cut into a monument, the sun moves on with the song and its shadows sweep the plaza, each cleared row has a crane lower a module onto a growing building, the drop is the sun breaking through<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/tiles.jpg"><br><b>TILES</b>: a great wall mosaic of tesserae laid in rows following its figures (andamento), gold, glass and stone glinting under a moving lamp; the pieces are glazed azulejo-like tiles, each cleared row breaks into chips tapped one by one into the figures sketched on the bare bed, the drop sets the smalti ablaze<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/gianttree.jpg"><br><b>GIANT TREE</b>: a toon world tree shooting up absurdly with every cleared line, from a round sapling in a bright meadow through the clouds, the stratosphere and orbit until the planet is a ball under its roots and its crown passes the moon; the drop beams a rainbow up the trunk into space<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/mycelium.jpg"><br><b>MYCELIUM</b>: a glowing fungal network grows over the forest floor at night with the cleared lines, from a single spore among the moss (mushrooms bursting up into glowing caps) through a clearing, the forest, a valley with a village and a river, the clouds, a region where the threads glow under the land like veins, until the Earth seen from space on its night side is wrapped in a living web of light, the moon beside it; each clear spurts it outward with a pulse of light from the spore, the drop sends a wave of light through the whole network, up every mushroom's stem, and clouds of spores into the night<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/megacity.jpg"><br><b>MEGACITY</b>: a hut on a riverbank at dusk sprawling with every cleared line along its river, highways and bay into a village, a walled town, a long night skyline of towers and megatalls, arcologies and a space elevator, until the planet is one glowing ball of city lights under an orbital ring; the drop raises a whole district whose lights come on block by block on the beat<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/orbital.jpg"><br><b>ORBITAL STATION</b>: a space station building itself in orbit and growing absurdly, a stage an order of magnitude bigger: from a lone capsule to a habitat wheel, a forest ring, nested rings, shipyards, a space elevator, a ring round the planet, more rings and elevators, an O'Neill fleet, the Moon taken in hand, and two rings dwarfing the planet; tugs and traffic never stop; the drop spins the rings up and chases light round them on the beat<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/library.jpg"><br><b>LIBRARY</b>: the blocks are clean book-bound cells; each cleared line sends three big books, behind the board, to a cosy toon library room seen as a diorama (in the spirit of Link's Awakening: cut-away walls, round windows, a reading nook, a big plant) that fills over one song: the bookcases, a ladder, piles on the floor, a mezzanine; on the drop the books breathe on their shelves and loose pages flutter<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/skywhale.jpg"><br><b>SKY WHALE</b>: a little koi in a lily pond at dusk, growing with every cleared line, a few strokes of its tail each time: it slips down the river to the sea, breaches as a whale by a lighthouse, swims up through the clouds with seabirds and balloons in its wake, glides around the Earth trailing aurora from its fins, then heads out to the Moon and glides low over its craters; on the drop it sings, soft rings of light rippling out through the sky<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/planks.jpg"><br><b>PLANKS</b>: wooden plank blocks in a white studio, each cell a solid block of three stained planks; each cleared row's planks slip out behind the well, Jenga style, to build a plank village beside it (a tower, a temple, a train on its track, a pagoda), the train shuttles at a peak and the village topples at game over<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/tidepool.jpg"><br><b>TIDE POOL</b>: the whole universe, and every cleared line zooms deeper, one continuous dive: a galaxy at a node of the cosmic web, a star in its arm, a planet, its coast, the shore and a humble rock pool, then the floor's anemones and limpets, plankton in the water, a diatom's glass rose window, a living cell, then imagined physics (molecules, breathing orbital clouds, a boiling quantum foam, strings of light ringing with the song) until the universe opens out of them again; the pieces are sea glass<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/lostpanda.jpg"><br><b>LOST PANDA</b>: a little kawaii panda, lost in the city at night under the rain, finds its way home one cleared line at a time, in one continuous shot through a world cut away like a cross-section: the shopping street, down the stairs into the subway, a train through the tunnel and out at dawn, the industrial district, the fields, the bamboo forest; fed by bamboo snacks from each clear it grows stronger, and at the end it runs across the screen to its family; the blocks are bamboo segments<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/terrarium.jpg"><br><b>TERRARIUM</b>: a sealed glass jar on a windowsill whose little world grows with the cleared lines into a miniature jungle; then a second jar is set down beside it and comes alive in turn (a flowering meadow, a snail), then a pond jar, a desert jar and a few more, linked by glass tubes, until a small cluster of terrariums glows at night with fireflies in every jar and along the tubes; the light outside goes from day to night, a kawaii ladybird visits the next jar through its tube, the drop is a summer shower, and the blocks are polished stones<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/coralreef.jpg"><br><b>CORAL REEF</b>: a sunny reef from bare rock and white sand to a dense coral garden over one song: every cleared row bursts into bubbles and drifting seeds that plant brain corals, staghorns, sea fans, sponges and table corals behind the well, while schools of fish follow the melody; caustics pulse with the kicks, a manta glides past on the drop, slow motion turns the water deep blue; the blocks are pale sun-bleached coral<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/fractal.jpg"><br><b>FRACTAL</b>: an infinite pastel flower: a four-petal Julia set in flat cut-paper bands, zoomed for ever into a self-similar point while its contour reveals finer petals; the zoom accelerates with each line, runs steadily in a drop, and now and then glides to another point of the flower; truly flat blocks<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/architect.jpg"><br><b>ARCHITECT</b>: a modern villa built over one song on an empty green field: every cleared row is a delivery, a tower crane lowering the next room, glazing or roof into place with the load swinging softly on its cables; the pool is dug, tiled and filled, the garden planted, the cranes leave, and at dusk the rooms light up and the pool glows; the drop switches the site's floodlights on; the blocks are pigmented architectural concrete with tie holes<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/islands.jpg"><br><b>ISLANDS</b>: one continuous flight over an endless tropical archipelago, like drone footage: volcanic islands with cliffs and waterfalls, sandy cays, atolls, a lighthouse islet, bungalows on stilts, a white villa with its pool and deck, turquoise shallows, sailboats and speedboats with their wakes; calm parts fly high and wide, now and then above the clouds, peaks skim the waves; every cleared row launches a sailboat with sails in the row's colors, a fleet that grows over the song and lights its lanterns at dusk; the drop dives to the waves into a regatta of coloured spinnakers, golden light and leaping dolphins (fireworks at night); the day passes from midday to dusk; the blocks are painted driftwood boards on a translucent pane of deep water<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/rain.jpg"><br><b>RAIN</b>: rain everywhere over a colorful street at dusk (neon signs, a flower market or a monsoon's lanterns, all mirrored in the puddles); the rain pours on the stack with its own physics, splashing and running down the wet pastel glazed tiles, the falling piece sheltering the cells under it; cleared rows are thrown out to the sides where they tumble into messy heaps (rigid-body physics) under the same rain, which soaks them like cardboard until they slump and pack down; the drop is a thunderstorm<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/pinkvibe.jpg"><br><b>PINK VIBE</b>: a soft, girly pastel world in flat design: wide bands of pinks, from blush through rose and salmon to raspberry, wave slowly across the screen and breathe with the music; soft rounded pastel pink blocks, seven distinct pinks each with a tiny calm motif (pearls, a heart, a flower, a sparkle, a crescent, a bow, a bubble) on a translucent plum well; cleared rows drift away as petals and bubbles; the drop swirls the bands into one big wave in rose-gold and magenta sunset tones<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td><img src="docs/universes/shadow.jpg"><br><b>SHADOW</b>: the game is a shadow: a little wooden model of the well with glass blocks stands on a table at the bottom left, lit by a vintage spotlight, and the playfield is its shadow cast on the wall, each glass block a pool of colored light; cleared blocks are lifted out of the model and stacked on the table; the drop turns on a second colored lamp that doubles the shadows<br><sub>✅ <i>ok</i></sub></td>
-</tr>
-<tr>
 <td><img src="docs/universes/mirror.jpg"><br><b>MIRROR</b>: glowing glass cubes light a dark liminal room (an infinity cove, a step, a pillar), their colors pooling on the glossy floor; a gallery of frameless mirrors floats in the side bands, each reflecting the stack from its own angle and bouncing its light into the room; a cleared row shatters into glinting shards, the drop blooms the light and gathers the mirrors into turning kaleidoscope rings<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: time runs backwards over one song, in real 3D: overgrown ruins, broken columns in plain sight, are cleared of their jungle and repair themselves (fallen column tops flying back onto their stumps, stones re-forming from golden dust, towers regaining their tiers) until a Maya, Khmer or Greek temple stands painted in its prime, braziers lit; the blocks are pale stone carved with a glyph per piece (bars, sun, cross, spiral, waves, pyramid, eye), and the drop turns the sun to golden hour<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
+<td><img src="docs/universes/ruins.jpg"><br><b>RUINS</b>: time runs backwards over one song, in real 3D: overgrown ruins, broken columns in plain sight, are cleared of their jungle and repair themselves (fallen column tops flying back onto their stumps, stones re-forming from golden dust, towers regaining their tiers) until a Maya, Khmer or Greek temple stands painted in its prime, braziers lit; the blocks are pale stone carved with a glyph per piece (bars, sun, cross, spiral, waves, pyramid, eye), and the drop turns the sun to golden hour<br><sub>✅ <i>ok</i></sub></td>
 <td><img src="docs/universes/pixel.jpg"><br><b>PIXEL</b>: native pixel art in parallax layers, flat cushion blocks, a bare landscape in the breaks<br><sub>✅ <i>ok</i></sub></td>
+</tr>
+<tr>
 <td></td>
 </tr>
 </table>
@@ -159,7 +158,8 @@ Disabled for now (not built; their code stays in the repository):
 | STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
 | GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
 | MUSIC BOX | A cylinder music box pinned with the cleared rows; disabled, not convincing yet |
-| SPECIMEN | Lumps of living tissue on a dark bench, loupes looking into them; disabled, MICROSCOPE plays instead |
+| SPECIMEN | Lumps of living tissue on a dark bench, loupes looking into them; disabled |
+| MICROSCOPE | A micrograph's field of view, the pieces colonies of living cells; disabled, PIXEL takes its campaign song |
 
 More in [docs/universes.md](docs/universes.md): every universe and its variants and the transitions.
 To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).

@@ -75,7 +75,7 @@ endif()
 # An existing build directory follows changes to the default list: the cached value is replaced while it still is
 # a default (the last default seen, or, in a cache from before that was recorded, any subset of the default), and
 # kept once it was set by hand (-D...).
-set(REFALL_DEFAULT_DISABLED "cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen")
+set(REFALL_DEFAULT_DISABLED "cloudscape;synthwave;garden;magnets;sunprint;embroidery;sushi;ripples;starchart;stainedglass;groceries;musicbox;specimen;microscope")
 set(refall_follow_default FALSE)
 if(NOT DEFINED REFALL_DISABLED_UNIVERSES)
   set(refall_follow_default TRUE)
