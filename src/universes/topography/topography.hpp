@@ -52,19 +52,16 @@ private:
     std::vector<float> nC_, wC_;
     int woodRow_ = 0; // the ground's noise and woodland on the coarse grid
     void updateTerrain(const Game& game, float dt, float wdt, bool bare);
-    // ---- Rivers: a drainage network on a coarser grid (every other sample): each node drains to its lowest
-    // neighbour, the rain gathers downstream, a river shows where enough of it runs, and it carves its valley.
+    // ---- Rain: a drainage network on a coarser grid (every other sample): each node drains to its lowest
+    // neighbour, the rain gathers downstream and carves its valley.
     int cw_ = 0, ch_ = 0;
-    std::vector<float> nh_, fill_, acc_, rainF_, rvis_;
-    std::vector<int> down_, up_, order_;
+    std::vector<float> nh_, fill_, acc_, rainF_;
+    std::vector<int> down_, order_;
     float netT_ = 9.f;
     struct Shower { float x, y, r, t, life, amt; };
     std::vector<Shower> showers_;
     void shower(float x, float y, float r, float amt, float life = 7.f);
     void drainage(float interval);
-    struct RiverInst { float a[4], b[4]; };
-    std::vector<RiverInst> rivers_;
-    void buildRivers();
     float drizzle_ = 0.3f;
 
     // ---- The drop: peaks in the margins rising and falling with the bands (one moves every four bars), the land
@@ -101,10 +98,10 @@ private:
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
 
     // ---- GL.
-    GLuint progMap_ = 0, progRiver_ = 0, riverVao_ = 0, riverVbo_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
+    GLuint progMap_ = 0, progCell_ = 0, progShape_ = 0, progPost_ = 0;
     GLuint quadVbo_ = 0, cellVao_ = 0, cellVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint fieldTex_ = 0;
-    ugl::Target sceneT_, riverT_;
+    ugl::Target sceneT_;
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{22, 12.4f};
 
@@ -127,7 +124,7 @@ private:
     float tint_ = 0.f;          // layer tints shown
     float water_level_ = -99.f; // the lakes' level (contour intervals)
     float waterOn_ = 0.f;
-    float phase_ = 0.f, flow_ = 0.f, riverVis_ = 0.f, pond_ = 0.f;
+    float phase_ = 0.f, pond_ = 0.f;
     double lastBeat_ = -1.0;
     int beatCount_ = 0;
     float kickIn_ = 0.f;

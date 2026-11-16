@@ -7,7 +7,8 @@
 // one piece merged), the falling piece hovers over the map with a soft shadow, the ghost is a dashed border.
 //
 // The song is the weather. Calm parts drizzle: a few faint streams. Mid parts rain: the water runs downhill on the
-// actual terrain (a drainage network on a coarser grid, hollows filling into ponds), gathers into rivers that flow, and carves the land and the stack's flanks
+// actual terrain (a drainage network on a coarser grid, hollows filling into ponds) and carves the land and the stack's
+// flanks
 // (the erosion is kept for the whole song: the map keeps a record). The drop is a flood: the water rises, lakes fill
 // the valleys and ring the stack, lines parallel to the shores ripple outward with the kicks, the layer tints come
 // in, and the level swells slowly with the phrases. A cleared row sinks into the map (the cells shrink and fade; the
@@ -209,7 +210,6 @@ constexpr float PIECE_HILL = 0.8f; // the falling piece's hill, against a locked
 constexpr float FOOTHILLS = 13.f;
 constexpr float WELL_FLOOR = 0.4f; // the well's terrace
 constexpr float POND_MIN = 0.35f;   // the depth of a hollow that holds a pond in the rain
-constexpr float RIVER_THR = 55.f; // the rain gathered (in nodes of drizzle) where a river shows // the foothills' height for a full blur of stack
 
 } // namespace
 
@@ -220,7 +220,6 @@ constexpr float RIVER_THR = 55.f; // the rain gathered (in nodes of drizzle) whe
 bool TopographyUniverse::init(int width, int height) {
     progMap_ = ugl::program(ugl::FULLSCREEN_VS, shaders::MAP_FS, "topography map");
     progCell_ = ugl::program(shaders::CELL_VS, shaders::CELL_FS, "topography cell");
-    progRiver_ = ugl::program(shaders::RIVER_VS, shaders::RIVER_FS, "topography river");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "topography shape");
     progPost_ = ugl::program(ugl::FULLSCREEN_VS, shaders::POST_FS, "topography post");
 
@@ -238,18 +237,6 @@ bool TopographyUniverse::init(int width, int height) {
     for (int i = 0; i < 4; i++) {
         glEnableVertexAttribArray(1 + i);
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(CellInst), (void*)(sizeof(float) * 4 * i));
-        glVertexAttribDivisor(1 + i, 1);
-    }
-    glGenVertexArrays(1, &riverVao_);
-    glGenBuffers(1, &riverVbo_);
-    glBindVertexArray(riverVao_);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glBindBuffer(GL_ARRAY_BUFFER, riverVbo_);
-    for (int i = 0; i < 2; i++) {
-        glEnableVertexAttribArray(1 + i);
-        glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(RiverInst), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
     }
     glGenVertexArrays(1, &shapeVao_);
@@ -285,16 +272,14 @@ void TopographyUniverse::resize(int width, int height) {
     viewC_ = vec2{cam.target.x, cam.target.y};
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    riverT_.create(width_, height_, GL_R8, GL_RED, GL_UNSIGNED_BYTE);
     buildGrid();
 }
 
 TopographyUniverse::~TopographyUniverse() {
     sceneT_.destroy();
-    riverT_.destroy();
-    for (GLuint p : {progMap_, progRiver_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
-    for (GLuint v : {riverVao_, cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, riverVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint p : {progMap_, progCell_, progShape_, progPost_}) glDeleteProgram(p);
+    for (GLuint v : {cellVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, cellVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (fieldTex_) glDeleteTextures(1, &fieldTex_);
 }
 
@@ -312,8 +297,8 @@ void TopographyUniverse::buildGrid() {
     cw_ = (gw_ + 1) / 2;
     ch_ = (gh_ + 1) / 2;
     const size_t cn = (size_t)cw_ * ch_;
-    for (auto* v : {&nh_, &acc_, &rainF_, &rvis_}) v->assign(cn, 0.f);
-    for (auto* v : {&down_, &up_, &order_}) v->assign(cn, -1);
+    for (auto* v : {&nh_, &acc_, &rainF_}) v->assign(cn, 0.f);
+    for (auto* v : {&down_, &order_}) v->assign(cn, -1);
     netT_ = 9.f;
     upload_.assign(n * 4, 0.f);
     fresh_ = true;
@@ -420,7 +405,7 @@ void TopographyUniverse::shower(float x, float y, float r, float amt, float life
 }
 
 // The drainage network, from the terrain shown: every node drains to its steepest lower neighbour, the rain
-// (a drizzle everywhere, more under the showers) gathers downstream; the rivers carve their beds (stream power,
+// (a drizzle everywhere, more under the showers) gathers downstream; the runoff carves its beds (stream power,
 // kept for the whole song, gentler inside the well).
 void TopographyUniverse::drainage(float interval) {
     const int n = cw_ * ch_;
@@ -441,7 +426,7 @@ void TopographyUniverse::drainage(float interval) {
             rainF_[k] = r;
         }
     // Priority flood from the sheet's edges: the hollows fill up to their spill point, so every node drains
-    // somewhere and the rivers run long and join (instead of dying in every small hollow).
+    // somewhere and the runoff runs long and joins (instead of dying in every small hollow).
     const int di[8] = {1, -1, 0, 0, 1, 1, -1, -1}, dj[8] = {0, 0, 1, -1, 1, -1, 1, -1};
     fill_.assign(n, 0.f);
     std::vector<char> seen(n, 0);
@@ -497,13 +482,9 @@ void TopographyUniverse::drainage(float interval) {
         }
     for (int k = 0; k < n; k++) order_[k] = k;
     std::sort(order_.begin(), order_.end(), [&](int a, int b) { return fill_[a] > fill_[b]; });
-    for (int k = 0; k < n; k++) { acc_[k] = rainF_[k]; up_[k] = -1; }
+    for (int k = 0; k < n; k++) acc_[k] = rainF_[k];
     for (int k : order_)
         if (down_[k] >= 0) acc_[down_[k]] += acc_[k];
-    for (int k = 0; k < n; k++) {
-        const int d = down_[k];
-        if (d >= 0 && (up_[d] < 0 || acc_[k] > acc_[up_[d]])) up_[d] = k;
-    }
     // stream power erosion
     for (int k = 0; k < n; k++) {
         const int d = down_[k];
@@ -514,38 +495,6 @@ void TopographyUniverse::drainage(float interval) {
         const bool inWell = std::fabs(x) < 5.4f && std::fabs(y) < 10.4f;
         const float e = 0.0045f * std::sqrt(acc_[k]) * slope * interval * (inWell ? 0.2f : 1.f);
         splat(eros_, 2.f * i + 0.5f, 2.f * j + 0.5f, e);
-    }
-}
-
-// The rivers as smooth curves through the network (a quadratic from the middle of the main upstream link, through
-// the node, to the middle of the downstream link), widening downstream; drawn into a coverage target.
-void TopographyUniverse::buildRivers() {
-    rivers_.clear();
-    const float thr = RIVER_THR;
-    auto pos =[&](int k) { return vec2{gx0_ + 2 * (k % cw_) * gs_, gy0_ + 2 * (k / cw_) * gs_}; };
-    const float ws = std::max(0.75f, height_ / 1080.f * 1.25f);
-    auto width = [&](int k) { return ws * std::min(3.f, 0.8f + 0.6f * std::log2(std::max(1.f, acc_[k] / thr))); };
-    for (int k = 0; k < cw_ * ch_; k++) {
-        const float a = rvis_[k];
-        const int d = down_[k];
-        if (a < 0.01f || d < 0) continue;
-        const int u = up_[k];
-        const bool src = u < 0 || rvis_[u] < 0.01f;
-        const vec2 c = pos(k), dn = pos(d);
-        const vec2 p0 = src ? c : vec2{(pos(u).x + c.x) * 0.5f, (pos(u).y + c.y) * 0.5f};
-        const vec2 p2{(c.x + dn.x) * 0.5f, (c.y + dn.y) * 0.5f};
-        const float w0 = src ? 0.25f * width(k) : 0.5f * (width(u) + width(k)), w2 = 0.5f * (width(k) + width(d));
-        const float a2 = std::min(a, std::max(rvis_[d], 0.f) + 0.3f);
-        vec2 prev = p0;
-        float pw = w0;
-        for (int s = 1; s <= 4; s++) {
-            const float t = s / 4.f, it = 1.f - t;
-            const vec2 q{it * it * p0.x + 2 * t * it * c.x + t * t * p2.x, it * it * p0.y + 2 * t * it * c.y + t * t * p2.y};
-            const float w = lerpf(w0, w2, t);
-            rivers_.push_back({{prev.x, prev.y, q.x, q.y}, {pw, w, lerpf(a, a2, t), 0.f}});
-            prev = q;
-            pw = w;
-        }
     }
 }
 
@@ -607,7 +556,7 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt, bo
         evoSpeed_ = approach(evoSpeed_, sp, 0.3f, dt);
         evo_ += wdt * evoSpeed_;
         evolveGround();
-        // the rivers' record heals slowly as the land moves under it
+        // the erosion heals slowly as the land moves under it
         const float heal = std::exp(-dt * 0.012f);
         for (size_t k = 0; k < eros_.size(); k++) { eros_[k] *= heal; sed_[k] *= heal; }
         // the spot heights follow their hilltops
@@ -702,24 +651,13 @@ void TopographyUniverse::updateTerrain(const Game& game, float dt, float wdt, bo
         }
     }
 
-    // Water: the network is redrawn a few times a second (the rivers fade in and out where they change), the
-    // erosion stays (lightly smoothed so the valleys are round).
+    // Water: the network is redrawn a few times a second, the erosion stays (lightly smoothed so the valleys are round).
     for (auto& sh : showers_) sh.t += wdt;
     showers_.erase(std::remove_if(showers_.begin(), showers_.end(), [](const Shower& x) { return x.t > x.life; }), showers_.end());
     netT_ += wdt;
     if (netT_ > 0.25f) {
         drainage(std::min(netT_, 0.5f));
         netT_ = 0.f;
-    }
-    {
-        const float k = 1.f - std::exp(-dt * 1.3f);
-        for (int c = 0; c < cw_ * ch_; c++) {
-            const float x = gx0_ + 2 * (c % cw_) * gs_, y = gy0_ + 2 * (c / cw_) * gs_;
-            // no river runs behind the pieces: the well stays calm
-            const float inWell = std::fabs(x) < 5.4f && std::fabs(y) < 10.4f ? 0.f : 1.f;
-            const float t = smoothstepf(RIVER_THR * 0.75f, RIVER_THR * 1.4f, acc_[c]) * inWell * (nh_[c] > water_level_ + 0.1f && fill_[c] - nh_[c] < POND_MIN * 0.5f ? 1.f : 0.f);
-            rvis_[c] += (t - rvis_[c]) * k;
-        }
     }
     for (size_t k = 0; k < n; k++) eros_[k] = std::min(eros_[k], 2.2f);
     {
@@ -773,7 +711,7 @@ void TopographyUniverse::setSong(const SongLook& t, float seconds) {
     rng_ = Rng(seed_ ^ 0x70B0ull);
     if (seconds <= 0.f) palSet_ = false;
     if (old != seed_) {
-        // a new sheet: new ground, the old rivers' record washed out (the contours glide to it)
+        // a new sheet: new ground, the old erosion washed out (the contours glide to it)
         buildGround();
         std::fill(eros_.begin(), eros_.end(), 0.f);
         std::fill(sed_.begin(), sed_.end(), 0.f);
@@ -1242,7 +1180,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
             }
         }
         phase_ += wdt * (0.1f + 0.2f * wp + (1.2f + 1.6f * dropAmt_) * kick * wp * (0.4f + 0.6f * dropAmt_));
-        flow_ += wdt * (0.3f + 0.4f * wm) * (1.f + 2.f * dropAmt_) * std::clamp(music.bpm / 120.f, 0.6f, 1.6f);
     }
     // the lakes: a share of the sheet under water (none when calm, pools in mid parts, the flood at the peak,
     // swelling slowly over two bars)
@@ -1262,7 +1199,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
         water_level_ += (W - water_level_) * (1.f - std::exp(-dt * rate));
     }
     tint_ = approach(tint_, 0.1f * wm + wp * (0.3f + 0.35f * dropAmt_), 1.2f + 2.f * dropAmt_, dt);
-    riverVis_ = approach(riverVis_, 0.6f + 0.4f * wm, 1.f, dt);
     pond_ = approach(pond_, smoothstepf(0.35f, 1.f, lv_) * (overT_ < 0.f ? 1.f : 0.f), 0.25f, dt); // the hollows fill slowly
     for (auto& fd : fading_) fd.t += dt; // a clear runs in real time, even in slow motion
     fading_.erase(std::remove_if(fading_.begin(), fading_.end(), [](const Fading& x) { return x.t > 0.4f; }), fading_.end());
@@ -1276,25 +1212,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     const float drawn = saturate(f.setup / 0.9f), furnIn = smoothstepf(0.7f, 0.95f, f.setup);
     const float sea = smoothstepf(0.05f, 1.f, f.teardown);
 
-    // ---- The rivers' coverage.
-    buildRivers();
-    riverT_.bind();
-    glClearColor(0.f, 0.f, 0.f, 0.f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    if (!rivers_.empty()) {
-        glEnable(GL_BLEND);
-        glBlendEquation(GL_MAX);
-        glUseProgram(progRiver_);
-        setMat(progRiver_, "uVP", vp_);
-        set1f(progRiver_, "uPxW", 2.f * viewH_.y / height_);
-        glBindVertexArray(riverVao_);
-        glBindBuffer(GL_ARRAY_BUFFER, riverVbo_);
-        glBufferData(GL_ARRAY_BUFFER, rivers_.size() * sizeof(RiverInst), rivers_.data(), GL_STREAM_DRAW);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)rivers_.size());
-        glBlendEquation(GL_FUNC_ADD);
-        glDisable(GL_BLEND);
-    }
-
     // ---- The map.
     sceneT_.bind();
     glDisable(GL_DEPTH_TEST);
@@ -1304,10 +1221,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, fieldTex_);
     set1i(progMap_, "uField", 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, riverT_.tex);
-    set1i(progMap_, "uRivers", 1);
-    glActiveTexture(GL_TEXTURE0);
     set4f(progMap_, "uGrid", gx0_, gy0_, 1.f / gs_, 0.f);
     set4f(progMap_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set2f(progMap_, "uRes", (float)width_, (float)height_);
@@ -1333,8 +1246,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progMap_, "uPond", pond_);
     set1f(progMap_, "uPondMin", POND_MIN);
     set1f(progMap_, "uPhase", phase_);
-    set1f(progMap_, "uRiver", riverVis_ * (1.f - over_));
-    set1f(progMap_, "uFlow", flow_);
     set1f(progMap_, "uWellCalm", f.bare ? 1.f : 0.6f);
     set1f(progMap_, "uGameOn", f.bare ? 0.f : 1.f); // a break: no neat line round the well, no quiet HUD columns
     set1f(progMap_, "uSlow", slow_);
@@ -1346,7 +1257,6 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progMap_, "uHudN", (int)(hudRects_.size() / 4));
     if (!hudRects_.empty()) glUniform4fv(ugl::U(progMap_, "uHud"), (GLsizei)(hudRects_.size() / 4), hudRects_.data());
     set1f(progMap_, "uHalf", half_);
-    set1f(progMap_, "uDropFx", dropAmt_ * wp);
     set1f(progMap_, "uShoreKick", std::max(music.kick, kickIn_) * dropAmt_ * wp);
     set4f(progMap_, "uLeftCol", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
     set4f(progMap_, "uRightCol", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
@@ -1413,7 +1323,7 @@ void TopographyUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_topography() {
     static const UniverseEntry e{
-        "TOPOGRAPHY", "a contour map whose terrain is the stack, rivers in the rain, a flood on the drop",
+        "TOPOGRAPHY", "a contour map whose terrain is the stack, rain carving it, a flood on the drop",
         [] { return std::unique_ptr<Universe>(new TopographyUniverse()); },
         // Songs with a build and a drop suit the flood best; it fits most songs.
         [](const SongLook& l) { return 0.75f + 0.3f * l.dynamics + 0.15f * (1.f - l.airWeight); },
