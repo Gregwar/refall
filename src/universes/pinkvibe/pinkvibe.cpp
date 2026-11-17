@@ -1,26 +1,31 @@
-// PINK VIBE: a soft, girly, pastel pink world in flat design.
+// PINK VIBE: a soft, girly pink world of satin ribbons and pearls.
 //
-// One world, flat and without outlines. Behind everything wide, smooth bands of pinks wave diagonally across the
-// screen, from pale blush through rose and salmon-pink to a deeper raspberry band and back to blush, each band laid
-// over the next with a soft flat shade under its edge. They undulate slowly and continuously: the waves breathe with
-// the section (almost still at a calm part, rolling at a peak) and sway gently on the half-time beat grid from mid
-// on. A few sparkles, bubble rings and dots, toned to the band they cross, drift very sparsely upward in the free
-// zones (never behind the well, fading out near the HUD columns).
+// Behind everything wide ribbons of pinks wave diagonally across the screen, from pale blush through rose and
+// salmon-pink to a deep raspberry-wine band and back to blush, in soft relief lit from the top left: each ribbon lies
+// over the one below it, its lower edge a rounded lip rolling down onto it, its satin face sloping gently toward the
+// light (a faint sheen where it turns to it) and curving away under the ribbon above, which casts a soft shadow on
+// it, longer where the light comes across the ribbons. A warm light glows in the top left corner. The ribbons undulate
+// slowly and continuously: the waves breathe with the section (almost still at a calm part, rolling at a peak) and
+// sway gently on the half-time beat grid from mid on. A few soap bubbles, sparkles and glints drift very sparsely
+// upward in the free zones (never behind the well, fading out near the HUD columns).
 //
-// The well is a translucent deep plum panel without a border: the pastel blocks pop off it and the bands show
-// faintly through. The blocks are one soft rounded tile per cell, flat with a gentle lift toward the top, a thin pale
-// shine curve in their top left corner (no gloss) and one small calm motif in a paler tone: I three pearls, O a heart,
-// T a little flower, S a sparkle, Z a crescent, J a bow, L a bubble ring. The seven types are seven pinks of clearly
-// different lightness and hue (blush, peach-pink, rose, raspberry, mauve, lilac-pink, coral-pink), per variant.
+// The well is a translucent deep wine pane in a rounded rose neon frame glowing softly inside and out, the ribbons
+// faintly showing through. The blocks are pearl cubes, one per cell: a softly rounded bevel around a slightly domed
+// face lit from the top left, a milky lustre and rim, a faint lilac-to-peach nacre shifting with the slope and the
+// position, a soft highlight, and a raised gold inlay per type: I three pearls, O a four-pointed star, T a diamond,
+// S a cross, Z four dots, J a heart, L a fine frame around a dot. Every block casts a soft shadow down and to the
+// right (all shadows drawn under all blocks); the falling piece glows softly rose instead. The seven types are
+// seven pinks of clearly different lightness and hue (pearl, peach-pink, rose, raspberry, mauve, lilac, coral), per
+// variant.
 //
-// The drop is the sunset, held for the whole drop section: the bands swirl around the well into one big rolling
+// The drop is the sunset, held for the whole drop section: the ribbons swirl around the well into one big rolling
 // wave and the palette swings to the variant's deeper rose-gold / magenta tones, eased in over a second or two and
-// out over a few once the drop ends. A cleared row's tiles swell softly and vanish, each releasing petals and
-// bubbles that drift out behind the well and float up; a quad sends a soft shower of hearts and petals from both
-// sides and swells the waves; slow motion is a lavender dusk with slower waves; game over greys the stack from the
-// top. Around a song the bands are laid one after another over the blush, from the bottom left (the setup), and go
-// under a deep plum dusk the same way (the teardown). HUD: Quicksand and Nunito (rounded), deep plum on a feathered
-// blush halo.
+// out over a few once the drop ends. A landing leaves a little gold sparkle dust under the piece. A cleared row's
+// cubes swell softly and vanish, each releasing sparkle dust, then petals and bubbles that drift out behind the well
+// and float up; a quad sends a soft shower of hearts and petals from both sides and swells the waves; slow motion is
+// a lavender dusk with slower waves; game over greys the stack from the top. Around a song the ribbons are laid one
+// after another over the blush, from the bottom left (the setup), and go under a deep plum dusk the same way (the
+// teardown). HUD: Quicksand and Nunito (rounded), deep plum on a feathered blush halo.
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -55,37 +60,37 @@ using ugl::set4f;
 
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 
-// A variant: the five bands (blush .. deepest) and the drop's, the well, its rim, the HUD ink and accent, the seven
-// pieces (I O T S Z J L).
+// A variant: the five bands (blush .. deepest) and the drop's, the well and its neon frame, the rim (the HUD's halo,
+// the bubbles), the HUD ink and accent, the seven pieces (I O T S Z J L).
 struct VariantDef {
     const char* name;
     unsigned band[5], dropBand[5];
-    unsigned well, rim, ink, accent;
+    unsigned well, neon, rim, ink, accent;
     unsigned piece[7], dropPiece[7];
 };
 const VariantDef VARIANTS[] = {
     {"BLUSH",
-     {0xfde4e7, 0xf9c8d1, 0xf4a9b7, 0xee8e9e, 0xd8617f},
+     {0xf9d9df, 0xefb0c1, 0xdf819c, 0xbd4c74, 0x80234b},
      {0xf9c7b4, 0xf09aa6, 0xe0668d, 0xc23f78, 0x8a2862},
-     0x561745, 0xffe1ea, 0x5a1f45, 0xb8336a,
-     {0xffd3df, 0xffbc9e, 0xfbaed0, 0xf483b3, 0xd49ccb, 0xd8b4f7, 0xff8e8f},
+     0x4a1239, 0xff86b0, 0xffe1ea, 0x5a1f45, 0xb8336a,
+     {0xffe0e8, 0xf9bba8, 0xf6a6c4, 0xde6893, 0xc793b8, 0xdcbdf0, 0xf58c94},
      {0xffb0cc, 0xff8a5c, 0xff3d8f, 0xf2338a, 0xc24aae, 0xa874ff, 0xff4545}},
     {"ROSE",
-     {0xfde9e0, 0xf8ccbf, 0xf2ada1, 0xe78c8e, 0xc8677b},
+     {0xf9dccf, 0xefb2a3, 0xde8580, 0xbb5064, 0x7e2440},
      {0xf6c391, 0xee9c86, 0xd86d82, 0xae4870, 0x6c2954},
-     0x5a1a40, 0xffe6dc, 0x5c2234, 0xb54360,
-     {0xffdccd, 0xfbb68a, 0xf9b0b5, 0xef89a6, 0xcf98bb, 0xe6b7e0, 0xff9a80},
+     0x4c1433, 0xff8a9c, 0xffe6dc, 0x5c2234, 0xb54360,
+     {0xffe4d8, 0xf6b89c, 0xf4a7b2, 0xd9677e, 0xc58aa6, 0xe9c3dc, 0xef8c7c},
      {0xffc39e, 0xff8a3d, 0xff5470, 0xf03a6c, 0xb54f9a, 0xd77ce0, 0xff4a2e}},
     {"CANDY",
-     {0xfbe7f4, 0xf5c6e3, 0xeea4d0, 0xe081bb, 0xc35c9f},
+     {0xf7dbee, 0xecaed4, 0xd97db6, 0xb24b8f, 0x732464},
      {0xd9b6f2, 0xe58dcb, 0xd0569f, 0xa63b86, 0x6a2670},
-     0x491650, 0xffe3f3, 0x4e1a4e, 0xb02f86,
-     {0xffd8ee, 0xffb6a8, 0xffaedb, 0xf283bd, 0xc49ae0, 0xcbb0ff, 0xff86a2},
+     0x3e1145, 0xff84cc, 0xffe3f3, 0x4e1a4e, 0xb02f86,
+     {0xffdcf0, 0xffb9b0, 0xffacd9, 0xe0609f, 0xb993d6, 0xcdb8f8, 0xf8829f},
      {0xffb8e2, 0xff7f6e, 0xff3fae, 0xf22e98, 0x9a45d6, 0x9c6bff, 0xff2f6a}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-enum Kind { K_PANEL = 0, K_PETAL, K_HEART, K_BUBBLE, K_SPARKLE };
+enum Kind { K_PANEL = 0, K_PETAL, K_HEART, K_BUBBLE, K_SPARKLE, K_MOTE };
 
 constexpr float CLEAR_T = 0.36f;   // a cleared tile vanishes in this long (real time)
 
@@ -129,9 +134,12 @@ private:
     struct Pop { float x, y; int type; float t; };
     std::vector<Pop> pops_;
 
-    // Particles: the clears' petals and bubbles (behind the well), the hard drops' petals (at the contact).
-    struct Part { float x, y, vx, vy, rot, spin, size, age, life, seed; int kind; vec3 col; bool front; };
+    // Particles: the clears' petals and bubbles (behind the well), the hard drops' petals (at the contact, under the
+    // blocks), the sparkle dust of a landing or a clear (over the blocks).
+    enum Layer { L_BACK, L_UNDER, L_OVER };
+    struct Part { float x, y, vx, vy, rot, spin, size, age, life, seed; int kind; vec3 col; Layer layer; };
     std::vector<Part> parts_;
+    void dust(float x, float y, int count, float spread);
 
     // the HUD (its lettering: hudLine, the host letters it)
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
@@ -144,7 +152,7 @@ private:
 
     int variant_ = 0;
     uint64_t seed_ = 1;
-    vec3 band_[5], dropBand_[5], well_{0.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7], dropPiece_[7], shownPiece_[7];
+    vec3 band_[5], dropBand_[5], well_{0.f}, neon_{1.f}, rim_{1.f}, ink_{0.f}, accent_{1.f}, piece_[7], dropPiece_[7], shownPiece_[7];
     float night_ = 0.f;   // the drop's share in the HUD's colors and the blocks' vividness
     float fade_ = 1.f;    // the scene faded in from black (the HUD's lines with it)
     // the drop's waves of color on the blocks: pulses of vividness rolling up through the stack on the beat (the
@@ -308,7 +316,7 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
             p.seed = rng_.uniform();
             p.kind = K_PETAL;
             p.col = shownPiece_[std::clamp(type, 0, 6)];
-            p.front = true;
+            p.layer = L_UNDER;
             parts_.push_back(p);
         }
         break;
@@ -333,9 +341,10 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 q.seed = rng_.uniform();
                 q.kind = i == 0 ? K_PETAL : (rng_.chance(0.6f) ? K_BUBBLE : K_PETAL);
                 q.col = i == 0 ? shownPiece_[std::clamp(c.type, 0, 6)] : rim_;
-                q.front = false;
+                q.layer = L_BACK;
                 parts_.push_back(q);
             }
+            dust(p.x, p.y, 3, 0.45f);
         }
         if (ev.count >= 4) {
             // a quad: a soft shower of hearts and petals from both sides; the waves swell
@@ -355,14 +364,44 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 q.seed = rng_.uniform();
                 q.kind = i % 3 == 0 ? K_HEART : i % 3 == 1 ? K_PETAL : K_BUBBLE;
                 q.col = q.kind == K_BUBBLE ? rim_ : shownPiece_[rng_.irange(0, 6)];
-                q.front = false;
+                q.layer = L_BACK;
                 parts_.push_back(q);
             }
         }
         break;
     }
+    case GameEvent::Lock:
+        // a little sparkle dust where the piece lands, under its lowest cells
+        for (auto& c : ev.cells) {
+            bool lowest = true;
+            for (auto& o : ev.cells) lowest &= !(o.x == c.x && o.y == c.y + 1);
+            if (!lowest || c.y < Game::HIDDEN) continue;
+            const vec3 p = layout::cellPos((float)c.x, (float)c.y);
+            dust(p.x, p.y - 0.45f, 2, 0.4f);
+        }
+        break;
     case GameEvent::TopOut: overT_ = 0.f; break;
     default: break;
+    }
+}
+
+void PinkVibeUniverse::dust(float x, float y, int count, float spread) {
+    for (int i = 0; i < count; i++) {
+        Part q;
+        q.x = x + rng_.range(-spread, spread);
+        q.y = y + rng_.range(-0.2f, 0.2f);
+        q.vx = rng_.range(-0.35f, 0.35f);
+        q.vy = rng_.range(0.4f, 1.1f);
+        q.rot = 0.f;
+        q.spin = 0.f;
+        q.age = -rng_.range(0.f, 0.15f);
+        q.life = rng_.range(0.8f, 1.4f);
+        q.seed = rng_.uniform();
+        q.kind = rng_.chance(0.25f) ? K_SPARKLE : K_MOTE;
+        q.size = q.kind == K_SPARKLE ? rng_.range(0.1f, 0.15f) : rng_.range(0.05f, 0.09f);
+        q.col = lerp(vec3(1.f, 0.82f, 0.55f), neon_, rng_.uniform() * 0.6f);
+        q.layer = L_OVER;
+        parts_.push_back(q);
     }
 }
 
@@ -412,7 +451,7 @@ void PinkVibeUniverse::buildBoard(const Game& g) {
         for (auto& c : cs) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, 0.f, p.type, 1.f, 0, 1.f, 0.f);
+            cell(w.x, w.y, 0.5f, 0.f, p.type, 1.f, 3, 1.f, 0.f);
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -549,7 +588,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         colSet_ = true;
         auto mixc = [&](vec3& c, unsigned target) { c = lerp(c, hex(target), k); };
         for (int i = 0; i < 5; i++) { mixc(band_[i], V.band[i]); mixc(dropBand_[i], V.dropBand[i]); }
-        mixc(well_, V.well); mixc(rim_, V.rim); mixc(ink_, V.ink); mixc(accent_, V.accent);
+        mixc(well_, V.well); mixc(neon_, V.neon); mixc(rim_, V.rim); mixc(ink_, V.ink); mixc(accent_, V.accent);
         for (int i = 0; i < 7; i++) { mixc(piece_[i], V.piece[i]); mixc(dropPiece_[i], V.dropPiece[i]); }
     }
 
@@ -595,11 +634,12 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
     for (Part& p : parts_) {
         p.age += dt;
         if (p.age < 0.f) continue;
-        p.x += (p.vx + (p.front ? 0.f : 0.5f * std::sin(p.age * 1.7f + p.seed * 9.f))) * dt;
+        const bool back = p.layer == L_BACK;
+        p.x += (p.vx + (back ? 0.5f * std::sin(p.age * 1.7f + p.seed * 9.f) : 0.f)) * dt;
         p.y += p.vy * dt;
-        const float drag = std::exp(-(p.front ? 3.f : 1.3f) * dt);
+        const float drag = std::exp(-(back ? 1.3f : p.layer == L_UNDER ? 3.f : 1.f) * dt);
         p.vx *= drag;
-        p.vy = p.vy * drag + (p.front ? 0.f : 0.5f) * dt;   // the petals float up a little
+        p.vy = p.vy * drag + (back ? 0.5f : 0.f) * dt;   // the petals float up a little
         p.rot += p.spin * dt;
     }
     parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Part& p) { return p.age >= p.life; }), parts_.end());
@@ -631,6 +671,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uLaid", f.setup >= 1.f ? 99.f : lerpf(-6.f, 7.f, smoothstepf(0.05f, 0.9f, f.setup)));
         set1f(progBg_, "uDusk", f.teardown <= 0.f ? -99.f : lerpf(-6.f, 7.f, smoothstepf(0.05f, 0.95f, f.teardown)));
         set3f(progBg_, "uDuskCol", well_ * 0.6f);
+        set3f(progBg_, "uLight", lerp(vec3(1.f, 0.96f, 0.9f), dropBand_[0], 0.5f * sunset));
         set4f(progBg_, "uColL", layout::LEFT_COLUMN[0], layout::LEFT_COLUMN[1], layout::LEFT_COLUMN[2], layout::LEFT_COLUMN[3]);
         set4f(progBg_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
         ugl::drawFullscreen();
@@ -644,7 +685,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         return in(layout::LEFT_COLUMN) || in(layout::RIGHT_COLUMN);
     };
     for (const Part& p : parts_) {
-        if (p.front || p.age < 0.f) continue;
+        if (p.layer != L_BACK || p.age < 0.f) continue;
         float a = saturate(p.age / 0.15f) * (1.f - ease((p.age - p.life + 0.9f) / 0.9f));
         if (inColumn(p.x, p.y)) a *= 0.4f;
         const float r = p.size;
@@ -657,9 +698,9 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
 
     if (!f.bare) {
         // =========================================================== the well
-        sprite(K_PANEL, 0.f, 0.f, 5.15f, 10.15f, 0.f, 1.f, lerp(well_, dropBand_[4] * 0.55f, 0.25f * sunset), rim_, 0.84f);
+        sprite(K_PANEL, 0.f, 0.f, 5.15f, 10.15f, 0.f, 1.f, lerp(well_, dropBand_[4] * 0.55f, 0.25f * sunset), neon_, 0.88f);
         for (const Part& p : parts_) {
-            if (!p.front) continue;
+            if (p.layer != L_UNDER) continue;
             const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);
             sprite(K_PETAL, p.x, p.y, p.size, p.size * 0.6f, p.rot, a, p.col, lerp(p.col, vec3(1.f), 0.5f));
         }
@@ -671,7 +712,8 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
         if (!cells_.empty()) {
             glUseProgram(progCell_);
             ugl::setMat(progCell_, "uVP", vp_);
-            set3f(progCell_, "uRim", well_);
+            set3f(progCell_, "uShade", well_ * 0.35f);
+            set3f(progCell_, "uGlow", neon_);
             set1f(progCell_, "uWave", wave_);
             set1f(progCell_, "uBeat", (float)std::fmod(waveBeat_, 512.0));
             for (int i = 0; i < 7; i++) {
@@ -681,8 +723,21 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
             glBindVertexArray(cellVao_);
             glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
             glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+            // the soft shadows (the falling piece's glow) first, all of them under every block
+            for (int pass = 0; pass < 2; pass++) {
+                set1i(progCell_, "uPass", pass);
+                glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)cells_.size());
+            }
         }
+
+        // the sparkle dust of the landings and the clears, twinkling as it rises
+        for (const Part& p : parts_) {
+            if (p.layer != L_OVER || p.age < 0.f) continue;
+            const float a = saturate(p.age / 0.12f) * (1.f - ease((p.age / p.life - 0.35f) / 0.65f)) *
+                            (0.75f + 0.25f * std::sin(p.age * 14.f + p.seed * 20.f));
+            sprite(p.kind, p.x, p.y, p.size, p.size, 0.f, a, p.col, vec3(1.f, 0.98f, 0.95f));
+        }
+        flushSprites();
     }
     solid(0.f, 0.f, 0.f, 0.45f * dimT_);
     drawHud(f.hud, f.panels);
@@ -699,7 +754,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_pinkvibe() {
     static const UniverseEntry e{
-        "PINK VIBE", "a soft pastel pink world in flat design: wide waving bands of pinks, cute pastel blocks, a rose sunset on the drop",
+        "PINK VIBE", "a soft pink world of satin ribbons in relief, pearl blocks with gold inlays in a rose neon frame, a rose sunset on the drop",
         [] { return std::unique_ptr<Universe>(new PinkVibeUniverse()); },
         // Bright, sweet, airy songs suit it best.
         [](const SongLook& l) { return 0.6f + 0.35f * l.brightness + (l.minor ? 0.f : 0.15f) + 0.15f * l.airWeight - 0.1f * l.bassWeight; },
