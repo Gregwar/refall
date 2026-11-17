@@ -6,9 +6,8 @@
 // strokes of cloud left across it) and a few stars nicked where it is dark; a far glade glows low on the left between
 // the trunks; three depths of trunks stand against it, cut in vertical strokes, the farther the more carved away (the
 // forest recedes by carving, not by grey); the canopy hangs over the top in black masses whose edges are cut into fans
-// of leaves, vines at the sides; the near trunks frame the view, solid ink cut in long strokes along the bark (a broad
-// lit edge on the moon's side, the life's glow low on the side facing the well), buttress roots, glowing veins cut up
-// them. The floor is solid ink nicked with U-gouge dabs, grass tufts standing black against the light; stones with
+// of leaves, vines at the sides; the big trees frame the view (three a side), solid ink with bark cut along them, their
+// edges and bare crowns forking into twigs cut in white lines (the same strokes the drop lights in neon). The floor is solid ink nicked with U-gouge dabs, grass tufts standing black against the light; stones with
 // contour cuts, a large rock in the bottom-left corner (the HUD's corner text on its solid face) and a pool on the
 // right, its surface cut in long strokes that mirror the print above it. The well and the HUD's text sit on solid,
 // uncut ink.
@@ -30,10 +29,9 @@
 // cut in ink); mid lights the plants on the beat grid, a quarter of them every two beats (the cuts around them
 // widening, local and eased), more fireflies; a peak cuts the light wider, the pulses swell with the bass, a kick
 // lights a single plant and spores rise. The drop turns the forest to neon: on its downbeat a wave runs out from the
-// well and, element by element, the print gives way to a clean night with the forest in neon line art (the trunks'
-// edges and branches, the plants' contours, the moon's rim, the floor's specks), colored by a gradient on each side
-// from the well out, neon tubes up the well's sides; the variant's third ink takes the second glow ink's place, the
-// glow plates are knocked out of register and settle back; it stays for the whole drop and goes out after. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
+// well and the print gives way to a clean night where the same strokes (the big trees and their crowns, the moon, the
+// mushrooms, ferns and young firs) glow as neon tubes, colored by a gradient on each side, with an aura, a glow on the
+// ground, specks and drifting dots, neon tubes up the well's sides; it stays for the whole drop and goes out after. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
 // ink; game over drains the stack's ink to the paper from the top, the roller then inking it over in black. Before a
 // song the print is pulled: the key's cuts, then the glow inks, the plants cut in and lit one by one; after it the
 // light goes out plant by plant and the sheet sinks into the dark. A new song in the same forest only changes its inks.
@@ -43,6 +41,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <functional>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -137,12 +136,11 @@ const float KIND_H[9] = {1.55f, 2.0f, 4.f, 2.3f, 2.0f, 0.4f, 0.9f, 1.9f, 2.6f};
 
 vec2 operator+(const vec2& a, const vec2& b) { return {a.x + b.x, a.y + b.y}; }
 vec2 operator*(const vec2& a, float k) { return {a.x * k, a.y * k}; }
+vec2 operator-(const vec2& a, const vec2& b) { return {a.x - b.x, a.y - b.y}; }
 vec2 lerp2(const vec2& a, const vec2& b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
 
 float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
 
-// An element's tag (mirrors tagOf in the shaders): how far from the well it stands.
-float tagOf(float cx) { return (1.f + std::clamp(std::floor((std::fabs(cx) - 5.f) / 1.2f), 0.f, 15.f)) / 255.f; }
 
 // A VAO over the unit quad with `n` per-instance vec4 attributes (locations 1..n) of `stride` bytes.
 void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
@@ -184,6 +182,7 @@ bool ForestUniverse::init(int width, int height) {
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "forest blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FINAL_FS).c_str(), "forest print");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "forest shape");
+    progNeon_ = ugl::program(withCommon(shaders::NEON_VS).c_str(), withCommon(shaders::NEON_FS).c_str(), "forest neon");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -192,6 +191,7 @@ bool ForestUniverse::init(int width, int height) {
     instVao(quadVbo_, plantVao_, plantVbo_, 4, sizeof(Inst));
     instVao(quadVbo_, pieceVao_, pieceVbo_, 4, sizeof(Inst));
     instVao(quadVbo_, haloVao_, haloVbo_, 2, sizeof(Inst2));
+    for (int i = 0; i < 3; i++) instVao(quadVbo_, neonVao_[i], neonVbo_[i], 4, sizeof(Inst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -234,21 +234,7 @@ void ForestUniverse::resize(int width, int height) {
     if (std::fabs(rock_[0] + rock_[1] + rock_[2] - oldRock) > 0.05f) rebuild = true;
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     plateT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
-    {
-        if (tagTex_) glDeleteTextures(1, &tagTex_);
-        glGenTextures(1, &tagTex_);
-        glBindTexture(GL_TEXTURE_2D, tagTex_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width_, height_, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindFramebuffer(GL_FRAMEBUFFER, plateT_.fbo);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tagTex_, 0);
-        const GLenum bufs[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-        glDrawBuffers(2, bufs);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    }
+    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
     lightT_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -256,14 +242,18 @@ void ForestUniverse::resize(int width, int height) {
     if (rebuild || trunks_.empty()) {
         // a new frame size: the same forest laid out again
         buildTrunks();
-        if (forestSeed_) buildForest();
+        if (forestSeed_) {
+            buildForest();
+            buildNeon();
+        }
     }
 }
 
 ForestUniverse::~ForestUniverse() {
-    for (ugl::Target* t : {&plateT_, &lightT_, &bloomA_, &bloomB_}) t->destroy();
-    glDeleteTextures(1, &tagTex_);
-    for (GLuint p : {progBg_, progHalo_, progPlant_, progMote_, progPiece_, progDown_, progBlur_, progFinal_, progShape_})
+    for (ugl::Target* t : {&plateT_, &lightT_, &bloomA_, &bloomB_, &sceneT_}) t->destroy();
+    glDeleteVertexArrays(3, neonVao_);
+    glDeleteBuffers(3, neonVbo_);
+    for (GLuint p : {progBg_, progHalo_, progPlant_, progMote_, progPiece_, progDown_, progBlur_, progFinal_, progShape_, progNeon_})
         glDeleteProgram(p);
     for (GLuint v : {plantVao_, haloVao_, pieceVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, plantVbo_, haloVbo_, pieceVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -273,52 +263,29 @@ ForestUniverse::~ForestUniverse() {
 // The forest
 // =====================================================================================================
 
-// The near trunks: a few on each side, outside the HUD's columns (they stay for the universe's life); the moon high on
-// the right in the widest gap between them, the glade low on the left, the pool on the right floor.
+// The big trees, in the free strips beside the HUD's columns (they stay for the universe's life): on the left three
+// (the far one at the edge, a big one, a slimmer one by the column), their crowns opening outward; on the right a big
+// one by the column, a short leafy one and a leafy one at the edge, the moon high between them; the glade low on the
+// left, the pool on the right floor.
 void ForestUniverse::buildTrunks() {
     trunks_.clear();
     Rng r(trunkSeed_);
-    const float edge = viewH_.x + 0.6f;
-    for (int side = -1; side <= 1; side += 2) {
-        float ax = 13.6f + r.range(0.f, 0.7f);
-        bool first = true;
-        while (ax < edge && (int)trunks_.size() < 8) {
-            Trunk t;
-            t.x = side * ax;
-            t.hw = first ? r.range(0.9f, 1.1f) : r.range(0.45f, 0.65f);
-            t.lean = r.range(-0.015f, 0.015f);
-            t.flare = r.range(0.7f, 1.0f);
-            trunks_.push_back(t);
-            ax += side > 0 ? r.range(5.6f, 6.4f) : r.range(4.2f, 5.2f);
-            first = false;
-        }
-    }
-    // the moon, in the widest gap between the near trunks on the right
-    const float s0 = layout::RIGHT_COLUMN[2] + 0.6f, s1 = viewH_.x - 0.3f;
-    float best = 0.f, bx0 = s0, bx1 = s1;
-    {
-        std::vector<const Trunk*> right;
-        for (const Trunk& t : trunks_)
-            if (t.x > 0.f) right.push_back(&t);
-        std::sort(right.begin(), right.end(), [](const Trunk* a, const Trunk* b) { return a->x < b->x; });
-        float from = s0;
-        for (size_t i = 0; i <= right.size() && from < s1; i++) {
-            const float to = i < right.size() ? std::min(right[i]->x - right[i]->hw * 1.3f, s1) : s1;
-            if (to - from > best) { best = to - from; bx0 = from; bx1 = to; }
-            if (i < right.size()) from = right[i]->x + right[i]->hw * 1.3f;
-        }
-    }
-    if (best < 2.8f) {
-        // a narrow view: the moon in the middle of the strip, the near trunks in its way stepping out past it
-        bx0 = s0;
-        bx1 = s1;
-        best = s1 - s0;
-    }
-    moon_[2] = std::clamp(best * 0.36f, 1.1f, 2.2f);
-    moon_[0] = std::min((bx0 + bx1) * 0.5f, s1 - moon_[2]);
-    moon_[1] = viewC_.y + viewH_.y - 3.8f - moon_[2] * 0.6f;
-    for (Trunk& t : trunks_)
-        if (t.x > 0.f && std::fabs(t.x - moon_[0]) < moon_[2] + t.hw * 1.3f + 0.2f) t.x = moon_[0] + moon_[2] + t.hw * 1.3f + 0.2f;
+    const float Wv = viewH_.x, room = std::max(Wv - 11.8f, 3.f);
+    auto L = [&](float f) { return -11.8f - (1.f - f) * room; };   // the left's free strip, 0 at the edge
+    auto R = [&](float f) { return 11.8f + f * room; };              // the right's, 1 at the edge
+    auto add = [&](float x, float H, float rad, float lean, int limbs, float cx, bool leafy, float open) {
+        trunks_.push_back({x, H, rad, lean, r.range(0.f, 6.f), cx, open, limbs, leafy});
+    };
+    add(L(0.08f), 19.f, 0.3f, 0.5f, 4, -Wv, false, -1.f);
+    add(L(0.55f), 21.f, 0.46f, -0.2f, 4, L(0.62f), false, -1.f);
+    add(L(0.93f), 15.f, 0.26f, -0.6f, 4, -11.f, false, -0.4f);
+    add(R(0.16f), 21.f, 0.42f, 0.15f, 4, 11.f, false, -0.3f);
+    add(R(0.46f), 11.f, 0.26f, -0.1f, 3, R(0.5f), true, 0.3f);
+    add(R(0.97f), 19.f, 0.3f, -0.4f, 4, Wv, true, 1.f);
+    // the moon, high on the right between the big tree by the column and the one at the edge
+    moon_[2] = std::clamp(room * 0.15f, 0.9f, 1.45f);
+    moon_[0] = std::min(R(0.66f), Wv - moon_[2] - 0.4f);
+    moon_[1] = viewC_.y + viewH_.y - 4.f;
     // the glade: far between the trunks on the left, under the title and beside the left column
     {
         const float g0 = -viewH_.x, g1 = layout::LEFT_COLUMN[0] - 0.4f;
@@ -327,19 +294,20 @@ void ForestUniverse::buildTrunks() {
         glade_[2] = std::max(2.5f, (g1 - g0) * 0.62f);
         glade_[3] = 4.2f;
     }
-    // the still pool on the right floor, between the first two trunks when there is room
+    // the still pool on the right floor, between the big tree by the column and the short one when there is room
     pool_[0] = pool_[1] = 0.f;
     {
-        std::vector<const Trunk*> right;
-        for (const Trunk& t : trunks_)
-            if (t.x > 0.f) right.push_back(&t);
-        std::sort(right.begin(), right.end(), [](const Trunk* a, const Trunk* b) { return a->x < b->x; });
-        if (right.size() >= 2) {
-            const float x0 = right[0]->x + right[0]->hw + 1.1f, x1 = std::min(right[1]->x - right[1]->hw - 0.7f, viewH_.x - 0.6f);
-            if (x1 - x0 > 1.6f) { pool_[0] = x0; pool_[1] = x1; }
-        }
+        const float x0 = trunks_[3].x + trunks_[3].rad + 1.2f, x1 = std::min(trunks_[4].x - 0.9f, viewH_.x - 0.6f);
+        if (x1 - x0 > 1.6f) { pool_[0] = x0; pool_[1] = x1; }
     }
 }
+
+vec2 ForestUniverse::trunkAt(const Trunk& t, float u) const {
+    const float g = groundY(t.x, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) - 0.2f;
+    return vec2{t.x + t.lean * u * u * 1.6f + 0.22f * std::sin(u * 2.5f + t.ph) - 0.22f * std::sin(t.ph), g + u * t.H};
+}
+
+float ForestUniverse::trunkRad(const Trunk& t, float u) const { return t.rad * (1.f - 0.45f * u) * (1.f + 0.6f * std::exp(-u * 14.f)); }
 
 // The life, placed among the trunks: a row on the floor beside the well and under the HUD's columns (low there),
 // large plants out at the sides, a smaller row behind them, life on the rock's top and the pool's banks, glowworm
@@ -429,24 +397,204 @@ void ForestUniverse::buildForest() {
             x += r.range(1.1f, 1.7f) * (kind == 3 ? 1.4f : 1.f);
         }
     }
-    // the bark: bracket fungi stacked up the near trunks, high on the left (under the title), clear of the HUD
-    for (size_t ti = 0; ti < trunks_.size(); ti++) {
-        const Trunk& t = trunks_[ti];
-        const bool big = t.hw > 0.8f;
+    // the bark: bracket fungi stacked up the big trunks, clear of the HUD
+    for (const Trunk& t : trunks_) {
+        const bool big = t.rad > 0.4f;
         const int n = big ? 4 : 3;
-        const float g = groundY(t.x, groundSeed_, rock, pool_);
         for (int i = 0; i < n; i++) {
-            const float y = g + 3.f + (i + r.range(0.15f, 0.85f)) * (15.5f / n);
+            const float u = (2.5f + (i + r.range(0.15f, 0.85f)) * (12.f / n)) / t.H;
+            if (u > 0.85f) continue;
             const float side = r.chance(0.5f) ? 1.f : -1.f;
-            const float yy = y - g;
-            const float cx = t.x + t.lean * yy + 0.16f * std::sin(yy * 0.16f + ti * 2.3f) - 0.16f * std::sin(ti * 2.3f);
-            const float hw = t.hw * (1.f - 0.007f * yy);
-            const float x = cx + side * hw * 0.92f;
-            const float sc = big ? r.range(1.05f, 1.35f) : r.range(0.75f, 0.95f);
-            if (std::fabs(x) > viewH_.x - 0.4f || inHud(x, y) || inHud(x + side * sc, y) || y > 7.5f) continue;
-            add(x, y, 6, sc, side < 0.f);
+            const vec2 p = trunkAt(t, u);
+            const float x = p.x + side * trunkRad(t, u) * 0.9f;
+            const float sc = big ? r.range(0.9f, 1.15f) : r.range(0.7f, 0.9f);
+            if (std::fabs(x) > viewH_.x - 0.4f || inHud(x, p.y) || inHud(x + side * sc, p.y) || p.y > 7.5f) continue;
+            add(x, p.y, 6, sc, side < 0.f);
         }
     }
+}
+
+// The forest's strokes, laid out with the forest (they stay for the universe's life): the big trees (their trunks and
+// limbs a dark fill between two edges, their crowns forking into twigs), young trees, mushroom clusters, ferns, black
+// stumps and roots, the moon's rim and strokes of cloud, a path of steps at the far right, drifting dots. The print
+// carves them (black, their edges and lines cut), the drop lights them as neon tubes, each tree in the neon of its place
+// (on the left magenta, violet, blue; on the right cyan, green, lime). Strokes in board units.
+void ForestUniverse::buildNeon() {
+    std::vector<Inst> fill, tube, dark;
+    Rng r(forestSeed_ ^ 0x4E30ull);
+    const Rock rock{rock_[0], rock_[1], rock_[2]};
+    const float W = viewH_.x, room = std::max(W - 11.8f, 3.f);
+    auto L = [&](float f) { return -11.8f - (1.f - f) * room; };   // the left's free strip, 0 at the edge
+    auto R = [&](float f) { return 11.8f + f * room; };              // the right's, 1 at the edge
+    auto ground = [&](float x) { return groundY(x, groundSeed_, rock, pool_); };
+    auto unit = [](vec2 v) { const float l = std::max(std::sqrt(v.x * v.x + v.y * v.y), 1e-5f); return vec2{v.x / l, v.y / l}; };
+    // a stroke: kind 0 a tube, 1 a dark tinted fill, 2 a black silhouette, 3 a drifting dot; mode 0 the neon of the
+    // gradient at cx, 1 the warm neon, 2 the left's middle neon
+    // (in the print: a tree's cut edges bare paper, a plant's lines inked in a glow ink)
+    float ink = 0.f;
+    auto stroke = [&](std::vector<Inst>& v, vec2 a, vec2 b, float r0, float r1, int kind, int mode, float light, float tint,
+                      float cx, float seed) {
+        v.push_back({{a.x, a.y, b.x, b.y}, {r0, r1, (float)kind, (float)mode}, {seed, light, tint, cx}, {ink, 0.f, 0.f, 0.f}});
+    };
+    auto line = [&](vec2 a, vec2 b, float w, int mode, float cx, float light) { stroke(tube, a, b, w, w, 0, mode, light, 0.f, cx, 0.f); };
+    auto dotAt = [&](vec2 p, float w, int mode, float cx, float light) { stroke(tube, p, p, w, w, 0, mode, light, 0.f, cx, 0.f); };
+    // a limb drawn as two tubes along its edges around a dark tinted inside, or as one tube when it is thin
+    auto limb = [&](vec2 a, vec2 b, float ra, float rb, float cx) {
+        if (ra > 0.075f) {
+            const vec2 d = unit(b - a), n{-d.y, d.x};
+            stroke(fill, a, b, ra, rb, 1, 0, 1.f, 0.08f, cx, 0.f);
+            line(a + n * ra, b + n * rb, 0.034f, 0, cx, 1.f);
+            line(a + n * -ra, b + n * -rb, 0.034f, 0, cx, 1.f);
+        } else {
+            line(a, b, std::max(ra * 0.8f, 0.03f), 0, cx, 1.1f);
+        }
+    };
+    // a branch: two strokes bending a little; it forks at its end (now and then halfway too) into thinner ones,
+    // `level` times more, leaning toward `bias` (its tree's open side) and up; a leafy tree's last twigs end in sprays
+    float bias = 0.f;
+    std::function<void(vec2, float, float, float, int, float, bool)> branch = [&](vec2 p, float ang, float len, float rad, int level,
+                                                                                  float cx, bool leafy) {
+        ang = std::clamp(ang * 0.85f + bias * 0.25f, -1.1f, 1.1f);
+        const vec2 dir{std::sin(ang), std::cos(ang)}, nrm{dir.y, -dir.x};
+        const vec2 mid = p + dir * (len * 0.5f) + nrm * (r.range(-0.1f, 0.1f) * len), end = p + dir * len;
+        const float r1 = rad * 0.72f;
+        limb(p, mid, rad, (rad + r1) * 0.5f, cx);
+        limb(mid, end, (rad + r1) * 0.5f, r1, cx);
+        if (level <= 0) {
+            if (leafy)
+                for (int k = 0; k < 4; k++) {
+                    const float a2 = ang + r.range(-1.1f, 1.1f);
+                    line(end, end + vec2{std::sin(a2), std::cos(a2)} * r.range(0.18f, 0.34f), 0.015f, 0, cx, 1.f);
+                }
+            return;
+        }
+        const int n = level > 2 && r.chance(0.35f) ? 3 : 2;
+        for (int k = 0; k < n; k++)
+            branch(end, ang * 0.8f + (k - (n - 1) * 0.5f) * r.range(0.45f, 0.7f), len * r.range(0.62f, 0.76f), r1 * 0.66f, level - 1, cx, leafy);
+        if (r.chance(0.5f)) branch(mid, ang + (r.chance(0.5f) ? 1.f : -1.f) * r.range(0.6f, 0.9f), len * 0.5f, r1 * 0.5f, level - 2, cx, leafy);
+    };
+    // a tree: a trunk rising from the floor and bending a little, limbs along its upper half, its crown at the top
+    auto tree = [&](const Trunk& tr) {
+        bias = tr.open;
+        auto at = [&](float u) { return trunkAt(tr, u); };
+        auto radAt = [&](float u) { return trunkRad(tr, u); };
+        for (int i = 0; i < 8; i++) limb(at(i / 8.f), at((i + 1) / 8.f), radAt(i / 8.f), radAt((i + 1) / 8.f), tr.cx);
+        for (int k = 0; k < tr.limbs; k++) {
+            const float u = 0.38f + 0.56f * (k + r.range(0.f, 0.7f)) / tr.limbs;
+            const float side = r.chance(0.72f) ? (tr.open < 0.f ? -1.f : 1.f) : (tr.open < 0.f ? 1.f : -1.f);
+            branch(at(u), side * r.range(0.35f, 0.75f), tr.H * r.range(0.22f, 0.3f) * (1.1f - 0.45f * u), radAt(u) * 0.6f, 2, tr.cx, tr.leafy);
+        }
+        branch(at(1.f), tr.lean * 0.15f, tr.H * 0.2f, radAt(1.f), 3, tr.cx, tr.leafy);
+    };
+    // a young tree: a stem with its branches in pairs up it, like a small fir
+    auto sapling = [&](float x, float H, float cx) {
+        const float g = ground(x);
+        line({x, g}, {x, g + H}, 0.026f, 0, cx, 1.f);
+        for (int k = 0; k < 5; k++) {
+            const float y = g + H * (0.22f + 0.16f * k), l = H * (0.4f - 0.065f * k);
+            line({x, y}, {x - l, y + l * 0.85f}, 0.02f, 0, cx, 1.f);
+            line({x, y}, {x + l, y + l * 0.85f}, 0.02f, 0, cx, 1.f);
+        }
+    };
+    // a cluster of mushrooms: stems, caps (a dark tinted inside, a glowing rim, glowing spots), gills under them
+    auto mushrooms = [&](float x, int n, float sc, int mode) {
+        for (int k = 0; k < n; k++) {
+            const float mx = x + r.range(-0.9f, 0.9f) * sc, g = ground(mx), h = r.range(0.35f, 1.0f) * sc;
+            const float cr = r.range(0.22f, 0.42f) * sc;
+            line({mx, g}, {mx + 0.05f, g + h}, 0.026f, mode, mx, 0.9f);
+            const vec2 c{mx + 0.05f, g + h};
+            stroke(fill, c + vec2{-cr * 0.55f, cr * 0.18f}, c + vec2{cr * 0.55f, cr * 0.18f}, cr * 0.32f, cr * 0.32f, 1, mode, 1.f, 0.3f, mx, 0.f);
+            vec2 prev = c + vec2{-cr, 0.f};
+            for (int j = 1; j <= 8; j++) {
+                const float a = 3.14159f * (1.f - j / 8.f);
+                const vec2 q = c + vec2{std::cos(a) * cr, std::sin(a) * cr * 0.62f};
+                line(prev, q, 0.026f, mode, mx, 1.1f);
+                prev = q;
+            }
+            line(c + vec2{-cr, 0.f}, c + vec2{cr, 0.f}, 0.018f, mode, mx, 0.8f);
+            for (int j = 0; j < 3; j++) dotAt(c + vec2{r.range(-0.6f, 0.6f) * cr, r.range(0.15f, 0.45f) * cr}, 0.03f * sc, mode, mx, 1.3f);
+        }
+    };
+    // a fern: fronds fanning out and curling over, dots of spores along them
+    auto fern = [&](float x, float sc, float cx) {
+        const float g = ground(x);
+        for (int k = 0; k < 7; k++) {
+            const float ang = (k - 3) * 0.3f, len = sc * r.range(0.9f, 1.4f);
+            vec2 prev{x, g};
+            for (int j = 1; j <= 5; j++) {
+                const float t = j / 5.f, a = ang * (1.f + 1.4f * t);
+                const vec2 q{x + std::sin(a) * t * len, g + std::cos(a) * t * len * (1.f - 0.25f * t)};
+                line(prev, q, 0.015f, 0, cx, 1.f);
+                if (j > 1) dotAt(q, 0.022f, 0, cx, 1.2f);
+                prev = q;
+            }
+        }
+    };
+    // a black stump with roots clawing at the floor, in front
+    auto stump = [&](float x, float h, float w) {
+        const float g = ground(x);
+        stroke(dark, {x, g - 0.4f}, {x + r.range(-0.15f, 0.15f), g + h}, w, w * 0.75f, 2, 0, 1.f, 0.f, x, 0.f);
+        for (int s = -1; s <= 1; s += 2) stroke(dark, {x, g + h * 0.3f}, {x + s * w * 2.6f, g - 0.3f}, w * 0.55f, 0.05f, 2, 0, 1.f, 0.f, x, 0.f);
+    };
+    for (const Trunk& t : trunks_) tree(t);
+    ink = 1.f;
+    // ---- the left: mushrooms, ferns, stumps
+    mushrooms(L(0.06f), 4, 1.2f, 1);
+    mushrooms(L(0.66f), 5, 1.4f, 1);
+    mushrooms(-7.4f, 3, 1.1f, 1);
+    fern(L(0.32f), 1.5f, L(0.4f));
+    fern(-9.6f, 1.3f, -11.f);
+    stump(L(0.82f), 1.2f, 0.3f);
+    stump(-8.6f, 0.9f, 0.24f);
+    // ---- the right: young trees, mushrooms, a fern, stumps
+    sapling(9.4f, 2.6f, 11.6f);
+    sapling(R(0.38f), 2.2f, R(0.35f));
+    sapling(R(0.6f), 3.3f, R(0.55f));
+    mushrooms(7.9f, 4, 1.1f, 0);
+    mushrooms(R(0.33f), 5, 1.4f, 1);
+    mushrooms(R(0.86f), 3, 1.4f, 1);
+    fern(R(0.7f), 1.3f, R(0.7f));
+    stump(12.1f, 1.1f, 0.28f);
+    stump(R(0.27f), 1.5f, 0.3f);
+    {
+        // the moon: a ring, dark inside, strokes of cloud across it and a few lines of sky beside it
+        const float mr = moon_[2], mx = moon_[0], my = moon_[1];
+        stroke(fill, {mx, my}, {mx, my}, mr, mr, 1, 2, 1.f, 0.3f, mx, 0.f);
+        fill.back().d[1] = 1.f; // (the print has its own moon there)
+        for (int i = 0; i < 48; i++) {
+            const float a0 = TAU * i / 48.f, a1 = TAU * (i + 1) / 48.f;
+            line({mx + std::cos(a0) * mr, my + std::sin(a0) * mr}, {mx + std::cos(a1) * mr, my + std::sin(a1) * mr}, 0.08f, 2, mx, 1.4f);
+        }
+        for (int k = 0; k < 3; k++) {
+            const float y = my - mr * (0.15f + 0.28f * k), x0 = mx - mr * (0.2f - 0.25f * k), x1 = mx + mr * (0.85f - 0.1f * k);
+            line({x0, y}, {x1, y}, 0.035f, 2, mx, 1.f);
+        }
+        for (int k = 0; k < 3; k++) {
+            const float y = my - mr - 0.45f - 0.32f * k;
+            line({mx - mr * (1.9f - 0.3f * k), y}, {mx + mr * (0.2f + 0.3f * k), y}, 0.02f, 0, R(0.7f), 0.6f);
+        }
+    }
+    ink = 0.f;
+    // the path of steps at the far right
+    for (int k = 0; k < 6; k++) {
+        const float y = ground(W - 1.f) + 0.1f - 0.36f * k, x0 = R(0.74f) + 0.3f * k;
+        line({x0, y}, {W + 0.5f, y - 0.06f}, 0.02f, 0, x0, 0.7f);
+    }
+    // drifting dots of light
+    for (int k = 0; k < 26; k++) {
+        const float side = k % 2 ? 1.f : -1.f, x = side * r.range(12.f, W - 0.3f), y = r.range(-8.f, 9.f);
+        const float w = r.range(0.03f, 0.06f);
+        stroke(tube, {x, y}, {x, y}, w, w, 3, 0, 1.2f, 0.f, x, r.uniform() * 10.f);
+    }
+    const std::vector<Inst>* sets[3] = {&fill, &tube, &dark};
+    for (int i = 0; i < 3; i++) {
+        glBindBuffer(GL_ARRAY_BUFFER, neonVbo_[i]);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sets[i]->size() * sizeof(Inst)), sets[i]->data(), GL_STATIC_DRAW);
+        neonN_[i] = (int)sets[i]->size();
+    }
+    aura_[0] = L(0.2f);
+    aura_[1] = -2.f;
+    aura_[2] = room * 0.5f;
 }
 
 vec2 ForestUniverse::plantTop(const Plant& p) const {
@@ -504,6 +652,7 @@ void ForestUniverse::setSong(const SongLook& t, float seconds) {
         seedF_ = (float)((seed_ >> 20) % 1000) * 0.137f;
         groundSeed_ = (float)((seed_ >> 12) % 628) * 0.01f;
         buildForest();
+        buildNeon();
     }
 }
 
@@ -1058,8 +1207,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * quadGlow_) * awake(p.seed, wake);
         const float sc = p.scale * (1.f + 0.05f * wave);
         plantInst_.push_back({{p.x, p.y, sc, (float)p.kind}, {p.seed, grow, glow, p.flip ? 1.f : 0.f},
-                              {p.colMix, tagOf(p.x), p.kind == 0 || p.kind == 4 || p.kind == 6 ? 0.85f : 0.f, wave},
-                              {0.f, 0.f, 0.f, smoothstepf(0.f, 0.15f, grow)}});
+                              {p.colMix, 0.f, 0.f, wave}, {0.f, 0.f, 0.f, smoothstepf(0.f, 0.15f, grow)}});
         if (p.kind == 2) continue;
         const vec2 c = plantTop(p);
         const float hr = (1.3f + 0.5f * p.height) * p.scale * (1.f + 0.25f * wave + 0.15f * pulse);
@@ -1134,15 +1282,6 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1i(progBg_, "uLight", 0);
     set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set3f(progBg_, "uMoon", vec3(moon_[0], moon_[1], moon_[2]));
-    {
-        float tv[32] = {};
-        const int n = std::min(8, (int)trunks_.size());
-        for (int i = 0; i < n; i++) {
-            tv[i * 4] = trunks_[i].x; tv[i * 4 + 1] = trunks_[i].hw; tv[i * 4 + 2] = trunks_[i].lean; tv[i * 4 + 3] = trunks_[i].flare;
-        }
-        glUniform4fv(ugl::U(progBg_, "uTrunk"), 8, tv);
-        set1i(progBg_, "uTrunks", n);
-    }
     set1f(progBg_, "uGS", groundSeed_);
     set3f(progBg_, "uRock", vec3(rock_[0], rock_[1], rock_[2]));
     set4f(progBg_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
@@ -1159,6 +1298,21 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     setBoxes(progBg_);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
+    // the forest's strokes, carved: the fills black with bark cut along them, the edges and lines cut, the stumps black
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(progNeon_);
+    setMat(progNeon_, "uVP", vp_);
+    set4f(progNeon_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    set1f(progNeon_, "uTime", worldTime_);
+    set1f(progNeon_, "uAA", aaW * 0.75f);
+    set1f(progNeon_, "uPrint", 1.f);
+    set3f(progNeon_, "uMoon", vec3(moon_[0], moon_[1], moon_[2]));
+    setBoxes(progNeon_);
+    setNeon(progNeon_);
+    for (int i = 0; i < 3; i++) {
+        glBindVertexArray(neonVao_[i]);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)neonN_[i]);
+    }
     // the life, cut over it
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!plantInst_.empty()) {
@@ -1172,17 +1326,32 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         drawInst(progPlant_, plantVao_, plantVbo_, plantInst_.data(), plantInst_.size() * sizeof(Inst), plantInst_.size());
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         set1f(progPlant_, "uOut", 0.f);
-        glDisablei(GL_BLEND, 1); // (a plant's tag replaces what is behind it)
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)plantInst_.size());
-        glEnablei(GL_BLEND, 1);
     }
-    // fireflies, spores and chips: the deepest cut, the densest ink and the brightest neon win
+    // fireflies, spores and chips: the deepest cut and the densest ink win
     glBlendEquation(GL_MAX);
     glUseProgram(progMote_);
     set1f(progMote_, "uAA", aaW);
     drawInst(progMote_, haloVao_, haloVbo_, moteInst_.data(), moteInst_.size() * sizeof(Inst2), moteInst_.size());
     glBlendEquation(GL_FUNC_ADD);
     glDisable(GL_BLEND);
+
+    // ---- The drop's neon forest: the dark fills, the tubes adding their light over them, the black silhouettes.
+    if (blaze_ > 0.001f) {
+        sceneT_.bind();
+        glClearColor(0.f, 0.f, 0.f, 0.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glEnable(GL_BLEND);
+        glUseProgram(progNeon_);
+        set1f(progNeon_, "uPrint", 0.f);
+        for (int i = 0; i < 3; i++) {
+            if (i == 1) glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+            else glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+            glBindVertexArray(neonVao_[i]);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)neonN_[i]);
+        }
+        glDisable(GL_BLEND);
+    }
 
     // ---- The fluorescence.
     const float inkK = smoothstepf(0.3f, 0.8f, f.setup);
@@ -1202,10 +1371,9 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progDown_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set1f(progDown_, "uBlaze", blaze_ * (1.f - slow_));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, tagTex_);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     glActiveTexture(GL_TEXTURE0);
-    set1i(progDown_, "uTags", 1);
-    setNeon(progDown_);
+    set1i(progDown_, "uNeon", 1);
     ugl::drawFullscreen();
     glUseProgram(progBlur_);
     set1i(progBlur_, "uSrc", 0);
@@ -1255,11 +1423,11 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uBloomK", ((0.08f + 0.04f * wp) * (1.f - blaze_) + 0.4f * blaze_) * (1.f - 0.5f * slow_));
     set1f(progFinal_, "uBlaze", blaze_ * (1.f - slow_));
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, tagTex_);
+    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     glActiveTexture(GL_TEXTURE0);
-    set1i(progFinal_, "uTags", 2);
+    set1i(progFinal_, "uNeon", 2);
     setNeon(progFinal_);
-    set4f(progFinal_, "uGlade", glade_[0], glade_[1], glade_[2], glade_[3]);
+    set3f(progFinal_, "uAura", vec3(aura_[0], aura_[1], aura_[2]));
     set1f(progFinal_, "uSlow", slow_);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade) * smoothstepf(0.f, 0.35f, f.setup) * (1.f - 0.75f * smoothstepf(0.4f, 1.f, f.teardown)));

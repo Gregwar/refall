@@ -42,9 +42,16 @@ private:
     std::vector<Fade> clears_;   // cleared cells gouged away
     std::vector<Fade> outs_;     // game over: the stack inked over
 
-    // ---- The forest: near trunks, and the glowing life placed among them (it stays for the universe's life).
-    struct Trunk { float x, hw, lean, flare; };
+    // ---- The forest: its big trees, and the glowing life placed among them (it stays for the universe's life).
+    struct Trunk {
+        float x, H, rad, lean, ph;  // its foot, height, radius at the foot, lean, its bends' phase
+        float cx, open;             // the x whose neon it takes; the side its crown opens to (-1 left .. 1 right)
+        int limbs;
+        bool leafy;                 // its last twigs end in sprays of leaves
+    };
     std::vector<Trunk> trunks_;
+    vec2 trunkAt(const Trunk& t, float u) const;   // a point up its trunk (u 0 the foot .. 1 the crown)
+    float trunkRad(const Trunk& t, float u) const;
     struct Plant {
         float x = 0, y = 0, scale = 1, seed = 0;
         int kind = 0, group = 0;    // its kind; its quarter of the forest on the beat grid
@@ -56,6 +63,7 @@ private:
     std::vector<Plant> plants_;
     void buildTrunks();
     void buildForest();
+    void buildNeon();
     vec2 plantTop(const Plant& p) const;
 
     // ---- Light in the air: fireflies, spores.
@@ -91,11 +99,16 @@ private:
 
     // ---- GL.
     GLuint progBg_ = 0, progHalo_ = 0, progPlant_ = 0, progMote_ = 0, progPiece_ = 0, progDown_ = 0, progBlur_ = 0,
-           progFinal_ = 0, progShape_ = 0;
+           progFinal_ = 0, progShape_ = 0, progNeon_ = 0;
     GLuint quadVbo_ = 0, plantVao_ = 0, plantVbo_ = 0, haloVao_ = 0, haloVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0,
            shapeVao_ = 0, shapeVbo_ = 0;
     ugl::Target plateT_, lightT_, bloomA_, bloomB_;
-    GLuint tagTex_ = 0;             // the plates' second texture: each element's tag, its neon line art, warm
+    ugl::Target sceneT_;            // the drop's neon forest (its light, how much it hides of what is behind)
+    // the forest's strokes, carved in the print and lit in neon on the drop: the dark fills, the tubes, the black
+    // silhouettes
+    GLuint neonVao_[3] = {}, neonVbo_[3] = {};
+    int neonN_[3] = {};
+    float aura_[3] = {-19.f, -2.f, 4.5f};      // the violet aura behind the left's trees: center, radius
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
 
@@ -124,7 +137,7 @@ private:
     bool dropMode_ = false;
     float dropT_ = 99.f, fest_ = 0.f, waveT_ = 99.f, waveK_ = 0.f;
     float dropInkK_ = 0.f;          // the drop's third ink on the print (0..1)
-    float blaze_ = 0.f;             // the drop's blacklight: the forest in neon line art (0..1)
+    float blaze_ = 0.f;             // the drop's neon forest (0..1)
     float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
     double time_ = 0.0;

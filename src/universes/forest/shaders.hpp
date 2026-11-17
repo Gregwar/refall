@@ -82,17 +82,27 @@ float blade(vec2 p, vec2 a, vec2 b, float w) {
 }
 uniform vec4 uBox[24];  // the HUD's lines (board units: x0, y0, x1, y1)
 uniform int uBoxes;
-// The well, the HUD's columns and its text: the key stays solid there (1), the cuts thinning out toward them.
-float quietAt(vec2 w) {
-    float q = 1.0 - smoothstep(0.0, 0.8, sdBox(w - vec2(0.0, 0.6), vec2(5.3, 11.0)));
-    q = max(q, 1.0 - smoothstep(0.0, 1.6, sdBox(w - vec2(-8.6, 2.0), vec2(2.6, 8.6))));
-    q = max(q, 1.0 - smoothstep(0.0, 1.6, sdBox(w - vec2(8.6, 3.8), vec2(2.6, 6.8))));
+// The HUD's text: 1 behind a line, falling off around it.
+float textQuietAt(vec2 w) {
+    float q = 0.0;
     for (int i = 0; i < 24; i++) {
         if (i >= uBoxes) break;
         vec4 b = uBox[i];
         q = max(q, 1.0 - smoothstep(0.1, 1.0, sdBox(w - (b.xy + b.zw) * 0.5, (b.zw - b.xy) * 0.5)));
     }
     return q;
+}
+// The HUD's columns above the floor: 1 inside, falling off over half a unit.
+float columnsAt(vec2 w) {
+    return smoothstep(5.6, 6.2, abs(w.x)) * (1.0 - smoothstep(11.3, 11.9, abs(w.x)))
+         * smoothstep(w.x < 0.0 ? -7.6 : -4.4, w.x < 0.0 ? -6.6 : -3.4, w.y);
+}
+// The well, the HUD's columns and its text: the key stays solid there (1), the cuts thinning out toward them.
+float quietAt(vec2 w) {
+    float q = 1.0 - smoothstep(0.0, 0.8, sdBox(w - vec2(0.0, 0.6), vec2(5.3, 11.0)));
+    q = max(q, 1.0 - smoothstep(0.0, 1.6, sdBox(w - vec2(-8.6, 2.0), vec2(2.6, 8.6))));
+    q = max(q, 1.0 - smoothstep(0.0, 1.6, sdBox(w - vec2(8.6, 3.8), vec2(2.6, 6.8))));
+    return max(q, textQuietAt(w));
 }
 // The floor's height at x (mirrors groundY in forest.cpp): a gently rolling floor, the rock rising on the left.
 float baseY(float x) {
@@ -113,23 +123,15 @@ float groundY(float x) {
     float h = max(0.3 - abs(a - b), 0.0) / 0.3;
     return mix(max(a, b) + h * h * 0.3 * 0.25, -11.9, poolK(x));
 }
-// An element's tag (the plates' second texture, r): how far from the well it stands, so that the drop's wave reaches
-// it in turn. 0: no element.
-float tagOf(float cx) { return (1.0 + clamp(floor((abs(cx) - 5.0) / 1.2), 0.0, 15.0)) / 255.0; }
-// The drop's neon at x: a gradient on each side, from the well out to the edge (three inks a side); `warm` turns it
-// to the warm neon of the caps and bells.
+// The drop's neon at x: a gradient on each side, from the HUD's column out to the edge (three inks a side).
 uniform vec3 uNeonL[3], uNeonR[3], uNeonWarm;
-vec3 neonAt(float x, float halfW, float warm) {
-    float t = clamp((abs(x) - 5.3) / max(halfW - 5.3, 1.0), 0.0, 1.0);
-    vec3 n = x < 0.0 ? (t < 0.5 ? mix(uNeonL[0], uNeonL[1], t * 2.0) : mix(uNeonL[1], uNeonL[2], t * 2.0 - 1.0))
-                     : (t < 0.5 ? mix(uNeonR[0], uNeonR[1], t * 2.0) : mix(uNeonR[1], uNeonR[2], t * 2.0 - 1.0));
-    return mix(n, uNeonWarm, warm);
+vec3 neonAt(float x, float halfW) {
+    float t = clamp((abs(x) - 11.0) / max(halfW - 11.0, 1.0), 0.0, 1.0);
+    return x < 0.0 ? (t < 0.5 ? mix(uNeonL[0], uNeonL[1], t * 2.0) : mix(uNeonL[1], uNeonL[2], t * 2.0 - 1.0))
+                   : (t < 0.5 ? mix(uNeonR[0], uNeonR[1], t * 2.0) : mix(uNeonR[1], uNeonR[2], t * 2.0 - 1.0));
 }
-// how lit an element of tag v (0..255) is by the drop's wave, its front rollR from the well
-float neonLit(float v, float x, float rollR) {
-    float at = v > 0.5 ? (v - 1.0) * 1.2 : max(abs(x) - 5.0, 0.0);
-    return smoothstep(at, at + 2.0, rollR);
-}
+// how far the drop's neon scene has come in at w: a wave out from the well, its front rollR from it
+float neonIn(vec2 w, float rollR) { return smoothstep(max(abs(w.x) - 5.0, 0.0), max(abs(w.x) - 5.0, 0.0) + 2.5, rollR); }
 // how far the drop's third ink has rolled out from the well (rollR: its front's distance), 1 behind its front
 float dropRoll(vec2 w, float rollR) {
     return smoothstep(rollR, rollR - 3.0, max(abs(w.x) - 4.0, 0.0) + 0.1 * max(w.y + 10.0, 0.0));
@@ -144,12 +146,9 @@ float waterAt(vec2 w) {
 // ---------------------------------------------------------------- the key block and the glow inks (full screen)
 inline const char* BG_FS = R"(#version 330 core
 in vec2 vUv;
-layout(location = 0) out vec4 frag;
-layout(location = 1) out vec4 tagOut;
+out vec4 frag;
 uniform vec4 uView;
 uniform vec3 uMoon;    // the moon cut out of the sky: center, radius
-uniform vec4 uTrunk[8];
-uniform int uTrunks;
 uniform vec4 uGlade;   // a far glade glowing between the trunks on the left: center, radii
 uniform float uTime, uSeed, uMistK, uLife, uWaveR, uWaveK, uAA, uWind, uMoonK;
 uniform sampler2D uLight;  // the plants' light and inks (HALO_FS)
@@ -216,9 +215,6 @@ void main() {
     float moonL = uMoonK * exp(-max(mr - uMoon.z, 0.0) / (uMoon.z * 1.2));
     float tSky = (0.8 * moonL * smoothstep(uMoon.z * 1.12, uMoon.z * 1.3, mr) + 0.62 * (1.0 - exp(-mistL * 1.6))) * open;
     float carve = gouge(vec2(w.x, w.y + 0.05 * sin(w.x * 0.35 + uSeed)), 0.2, 7.0, tSky, 1.0, aa);
-    float tag = 0.0;
-    // the drop's neon line art (the plates' second texture, g): here a few of the sky's cuts close to the moon
-    float neon = carve * smoothstep(0.35, 0.65, moonL) * 0.5;
     // stars where the sky is dark: a few nicks of the gouge, a cross for the bright ones
     {
         vec2 g = w / 1.7 + uSeed;
@@ -236,7 +232,6 @@ void main() {
     }
     // the moon: bare paper in a ring of solid ink, two thin strokes of cloud left across it
     float moonCov = (1.0 - smoothstep(-aa, aa, mr - uMoon.z)) * open;
-    neon = max(neon, (1.0 - smoothstep(0.05, 0.05 + aa * 2.0, abs(mr - uMoon.z * 0.97))) * open);
     if (moonCov > 0.0) {
         float cl = 0.0;
         for (int k = 0; k < 2; k++) {
@@ -247,9 +242,6 @@ void main() {
             cl = max(cl, 1.0 - smoothstep(-aa, aa, blade(w, a, b, 0.035 * uMoon.z)));
         }
         carve = mix(carve, 1.0 - cl, moonCov);
-        if (moonCov > 0.5) tag = tagOf(uMoon.x);
-        // in neon: its rim and its strokes of cloud, the disc dark
-        neon = mix(neon, cl, moonCov);
         inkA *= 1.0 - moonCov;
         inkB *= 1.0 - moonCov;
     }
@@ -266,9 +258,6 @@ void main() {
         float tt = (tSky * far + rim * 0.9 * moonL) * open;
         float tc = gouge(vec2(w.y, w.x - tr.z), 0.1 + 0.025 * fl, 4.0, tt, 4.0 + fl, aa);
         carve = mix(carve, tc, tr.x);
-        if (tr.x > 0.5) tag = tagOf(tr.z);
-        // in neon: its edges, the farther the fainter
-        neon = mix(neon, smoothstep(0.6, 0.9, abs(tr.y)) * (0.15 + 0.2 * fl) * open, tr.x);
     }
     // ---- the canopy: black masses of leaves over the top, their edges cut into fans of leaves where the moon catches
     // them; vines hanging at the sides
@@ -303,8 +292,6 @@ void main() {
             float lb = blade(w, fanC + dir * fanR * 0.5, fanC + dir * fanR * 0.96, fanR * 0.08 * min(tl * 2.0, 1.0));
             float lc = (1.0 - smoothstep(-aa, aa, lb)) * step(0.4, hash12(vec2(ai, fanC.y + 7.0))) * step(0.12, tl);
             carve = mix(carve, lc, cov);
-            neon *= 1.0 - cov;
-            if (cov > 0.5) tag = tagOf(fanC.x);
         }
         float vx = w.x * 1.1 + uSeed;
         float vid = floor(vx);
@@ -328,107 +315,9 @@ void main() {
                 // a leaf's midrib cut where the moon catches it
                 float rib = 1.0 - smoothstep(-aa, aa, sdSeg(w, at + vec2(sd * 0.04, -0.02), at + vec2(sd * 0.16, -0.08)) - 0.01);
                 carve = mix(carve, rib * step(0.25, moonL) * open, vc);
-                neon *= 1.0 - vc;
-                if (vc > 0.5) tag = tagOf(cxv);
             }
         }
     }
-    // ---- the near trunks: solid ink, a few long strokes along the bark's ridges, a lit edge on the moon's side and
-    // the life's glow low on the side facing the well; glowing veins cut up them
-    float inkV = 0.0;
-    for (int i = 0; i < 8; i++) {
-        if (i >= uTrunks) break;
-        vec4 T = uTrunk[i];
-        float fi = float(i);
-        float g = groundY(T.x);
-        float y = w.y - g;
-        float cx = T.x + T.z * y + 0.16 * sin(y * 0.16 + fi * 2.3) - 0.16 * sin(fi * 2.3);
-        float hw = T.y * (1.0 - 0.007 * y) * (1.0 + 0.05 * sin(y * 0.7 + fi));
-        float dx = w.x - cx;
-        if (abs(dx) > hw * 1.8 + 6.5) continue;
-        float wob = (fbm3(vec2(w.x * 0.9, w.y * 0.3) + fi * 3.1) - 0.5) * 0.1;
-        float d = abs(dx) - hw * (1.0 + 0.45 * T.w * exp(-max(y, 0.0) / 1.2)) + wob;
-        // bare branches forking up and out of it (mostly away from the well), each with its twigs: their silhouette,
-        // their centerline
-        float brD = 9.0, brL = 9.0;
-        if (y > 5.0) {
-            for (int k = 0; k < 4; k++) {
-                float fk = float(k);
-                float hb = 6.5 + fk * 2.4 + 1.2 * hash12(vec2(fi, fk + 40.0));
-                float s = (hash12(vec2(fi, fk + 50.0)) < 0.3 ? -1.0 : 1.0) * sign(T.x);
-                float L = (2.4 + 2.2 * hash12(vec2(fi, fk + 60.0))) * (T.y > 0.8 ? 1.0 : 0.75) * (s * sign(T.x) < 0.0 ? 0.5 : 1.0);
-                float ang = s * (0.45 + 0.35 * hash12(vec2(fi, fk + 70.0)));
-                float cxb = T.x + T.z * hb + 0.16 * sin(hb * 0.16 + fi * 2.3) - 0.16 * sin(fi * 2.3);
-                vec2 b0 = vec2(cxb + s * hw * 0.4, g + hb);
-                vec2 dir = vec2(sin(ang), cos(ang));
-                vec2 b1 = b0 + dir * L;
-                vec2 m = mix(b0, b1, 0.55);
-                vec2 t0 = m + vec2(sin(ang + s * 0.55), cos(ang + s * 0.55)) * L * 0.45;
-                vec2 t1 = b1 + vec2(sin(ang + 0.45), cos(ang + 0.45)) * L * 0.35;
-                vec2 t2 = b1 + vec2(sin(ang - 0.4), cos(ang - 0.4)) * L * 0.3;
-                float h, h0, h1, h2;
-                float db = segT(w, b0, b1, h), d0 = segT(w, m, t0, h0), d1 = segT(w, b1, t1, h1), d2 = segT(w, b1, t2, h2);
-                brD = min(brD, min(db - hw * 0.3 * (1.0 - 0.7 * h), min(d0 - 0.07 * (1.0 - 0.6 * h0),
-                                   min(d1 - 0.055 * (1.0 - 0.6 * h1), d2 - 0.055 * (1.0 - 0.6 * h2)))));
-                brL = min(brL, min(min(db, d0), min(d1, d2)));
-            }
-        }
-        float dT = d;
-        // buttress roots spreading over the floor
-        float rootK = 0.0;
-        if (y < 3.2) {
-            for (int r = 0; r < 4; r++) {
-                float fr = float(r);
-                float s = r < 2 ? -1.0 : 1.0;
-                float hr = hash12(vec2(fi, fr + 20.0));
-                float reach = hw + (0.7 + 1.5 * hr) * (0.6 + 0.6 * T.w) * (r == 0 || r == 3 ? 1.0 : 0.6);
-                vec2 a = vec2(T.x + s * hw * 0.45, g + 1.5 + 1.3 * hash12(vec2(fi, fr + 30.0)));
-                vec2 cc = vec2(T.x + s * (hw + 0.1 + 0.15 * hr), g + 0.15);
-                vec2 b = vec2(T.x + s * reach, g - 0.2);
-                vec2 p1 = mix(mix(a, cc, 0.33), mix(cc, b, 0.33), 0.33), p2 = mix(mix(a, cc, 0.66), mix(cc, b, 0.66), 0.66);
-                float h1, h2, h3;
-                float d1 = segT(w, a, p1, h1) - mix(hw * 0.42, hw * 0.3, h1);
-                float d2 = segT(w, p1, p2, h2) - mix(hw * 0.3, hw * 0.16, h2);
-                float d3 = segT(w, p2, b, h3) - mix(hw * 0.16, 0.025, h3);
-                float dr = min(d1, min(d2, d3)) + wob * 0.4;
-                if (dr < d) rootK = 1.0 - smoothstep(-0.05, 0.05, dr - d);
-                d = min(d, dr);
-            }
-        }
-        d = min(d, brD);
-        float cov = 1.0 - smoothstep(-aa, aa, d);
-        if (cov <= 0.0) continue;
-        float branch = step(brD, dT);
-        float u = clamp(dx / hw, -1.0, 1.0);
-        // the strokes follow the trunk (and curve out along the roots), wandering with its ridges
-        float warp = fbm3(vec2(u * 1.4, y * 0.1) + fi * 5.0);
-        vec2 buv = vec2(y, u * hw + warp * 0.3);
-        if (rootK > 0.0) buv = mix(buv, vec2(dx, y * 1.6), rootK);
-        float moonSide = smoothstep(0.3, 1.0, u * sign(uMoon.x - T.x));
-        float wellSide = smoothstep(0.0, 1.0, -sign(T.x) * u) * exp(-max(y, 0.0) / 3.0);
-        float ridges = 0.4 * smoothstep(0.66, 0.85, vnoise(vec2(u * 3.0 + fi * 3.0, y * 0.06)));
-        float tb = (ridges + (0.3 + 0.6 * moonL) * moonSide * moonSide + mistL * 0.9 * wellSide + plantL * 0.7) * open;
-        float bc = gouge(buv, 0.13, 3.0, tb, 7.0 + fi, aa);
-        float reachY = 12.0;
-        float vl = u * 2.0 + 0.9 * fbm3(vec2(u * 1.1 + fi * 2.0, y * 0.3)) + 0.25 * sin(y * 0.9 + fi * 4.0 + u * 3.0);
-        float vn = abs(fract(vl) - 0.5) / 2.0 * hw;
-        float seg = smoothstep(0.45, 0.6, vnoise(vec2(floor(vl) * 3.1 + fi, y * 0.35)));
-        float veinW = 0.025 * (0.5 + 0.5 * uLife) * (1.0 + 1.5 * waveAt(vec2(T.x, w.y)));
-        float vein = (1.0 - smoothstep(-aa, aa, vn - veinW)) * seg * smoothstep(reachY, reachY - 2.5, y) * smoothstep(0.95, 0.6, abs(u))
-                   * open;
-        carve = mix(carve, max(bc, vein) * (1.0 - branch), cov);
-        if (cov > 0.5) tag = tagOf(T.x);
-        // in neon: its outline, a few long lines up its bark, the branches' centerlines
-        float outline = 1.0 - smoothstep(0.045, 0.045 + aa * 2.0, abs(dT + 0.07));
-        float side = sign(u);
-        float inner = (1.0 - smoothstep(0.022, 0.022 + aa * 2.0, abs(abs(dx) - hw * (0.42 + 0.2 * (warp - 0.5)))))
-                    * smoothstep(0.42, 0.58, vnoise(vec2(fi * 3.0 + side * 1.7, y * 0.12))) * step(dT, -0.1);
-        float twig = 1.0 - smoothstep(0.028, 0.028 + aa * 2.0, brL);
-        neon = mix(neon, max(max(outline * (1.0 - branch), inner * 0.8), twig * branch) * open, cov);
-        inkV = max(inkV, vein * cov);
-    }
-    inkA = max(inkA, inkV * (1.0 - roll));
-    inkB = max(inkB, inkV * roll);
     // ---- the floor: solid ink nicked with U-gouge dabs where the light falls, black grass tufts standing on its edge
     float rockK = smoothstep(0.0, 0.25, rockTop(w.x) - baseY(w.x));
     float edge = gy + ((fbm3(vec2(w.x * 1.1, 0.0) + uSeed) - 0.5) * 0.25) * (1.0 - 0.8 * rockK);
@@ -468,8 +357,6 @@ void main() {
         inkA = mix(inkA, max(inkA, patch * (1.0 - roll)), floorCov);
         inkB = mix(inkB, max(inkB, patch * roll), floorCov);
         carve = mix(carve, fc * open, floorCov);
-        neon = mix(neon, fc * open, floorCov);
-        if (floorCov > 0.5) tag = tagOf(w.x);
     }
     // ---- stones on the floor: black, contour cuts over their lit tops
     {
@@ -491,15 +378,11 @@ void main() {
             float ts = (0.2 + 0.6 * mistL) * smoothstep(0.0, 0.8, up);
             float cc = gouge(vec2(q.x * 2.0, length(q / vec2(rx, ry)) * ry), 0.07, 0.8, ts, id, aa);
             carve = mix(carve, cc * open, sc);
-            neon = mix(neon, cc * open, sc);
-            if (sc > 0.5) tag = tagOf(scx);
         }
     }
     // ---- the pool: solid ink; the print's reflection is cut into it when the print is pulled (FINAL_FS)
     carve *= 1.0 - waterAt(w);
-    neon *= 1.0 - waterAt(w);
     frag = vec4(clamp(carve, 0.0, 1.0), inkA, inkB, 1.0);
-    tagOut = vec4(tag, clamp(neon, 0.0, 1.0), 0.0, 1.0);
 }
 )";
 
@@ -537,8 +420,8 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the life (instanced quads)
-// a: base x, y, scale, kind. b: seed, grow (0..1: cut in as the print is pulled), glow, flip. c: ink B's share, its
-// tag (tagOf), its warm neon (0..1), wave. d: -, -, -, alpha.
+// a: base x, y, scale, kind. b: seed, grow (0..1: cut in as the print is pulled), glow, flip. c: ink B's share, -, -,
+// wave. d: -, -, -, alpha.
 inline const char* PLANT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -574,8 +457,7 @@ inline const char* PLANT_FS = R"(#version 330 core
 in vec2 vP;
 in vec2 vW;
 flat in vec4 vA, vB, vC, vD;
-layout(location = 0) out vec4 frag;
-layout(location = 1) out vec4 tagOut;
+out vec4 frag;
 uniform float uTime, uAAp, uWind;
 uniform float uOut;  // the outline pass: how far the shapes are grown (board units); 0: the plants themselves
 float gAA = 0.01, gOut = 0.0;
@@ -933,9 +815,6 @@ void main() {
     a *= vD.w;
     if (a <= 0.003) discard;
     // the outline pass: a margin of solid ink left around the plant, so that it stands out of the light around it
-    // in neon: its contours and its bright details, line art
-    float nl = clamp(fwidth(a) * 1.5 + fwidth(e) * 0.9 + 0.7 * smoothstep(0.95, 1.2, e), 0.0, 1.0);
-    tagOut = vec4(vC.y, nl, vC.z, 1.0);
     if (uOut > 0.0) {
         frag = vec4(0.0, 0.0, 0.0, a);
         return;
@@ -957,8 +836,7 @@ void main() {
 inline const char* MOTE_FS = R"(#version 330 core
 in vec2 vL;
 flat in vec4 vA, vB;
-layout(location = 0) out vec4 frag;
-layout(location = 1) out vec4 tagOut;
+out vec4 frag;
 uniform float uAA;
 void main() {
     float r2 = dot(vL, vL);
@@ -984,7 +862,6 @@ void main() {
     // its ink a little wider than its cut
     float ink = smoothstep(1.0, 0.4, sqrt(r2)) * vA.w;
     frag = vec4(c, ink * (1.0 - vB.x), ink * vB.x, 0.0);
-    tagOut = vec4(0.0, c, 0.0, 0.0);
 }
 )";
 
@@ -1000,9 +877,9 @@ uniform vec2 uOffA, uOffB;            // the glow inks' plates out of register (
 uniform vec3 uPaper, uKey, uInkA, uInkB, uInkC; // linear
 uniform float uC, uRollR;             // the drop's third ink: its amount, how far it has rolled out from the well
 uniform float uBloomK, uSlow, uDim, uFade, uBridge, uTime, uSeed, uAA, uInkK, uKeyK;
-uniform float uBlaze;                 // the drop's blacklight: the forest turns to neon line art
-uniform sampler2D uTags;              // each element's tag (tagOf) and its neon line art
-uniform vec4 uGlade;
+uniform float uBlaze;                 // the drop: the neon forest comes in
+uniform sampler2D uNeon;              // the drop's neon forest (NEON_FS): its light, how much it hides of what is behind
+uniform vec3 uAura;                   // the violet aura behind the left's trees: center, radius
 uniform vec3 uBridgeCol, uSlowInk;
 uniform vec4 uView;
 vec3 ink(vec3 c, vec3 k, float d) { return c * mix(vec3(1.0), k, clamp(d, 0.0, 1.0)); }
@@ -1049,21 +926,34 @@ void main() {
     float press = clamp((cx - carve) * 0.7 - (cy - carve) * 0.7, -1.0, 1.0);
     c *= 1.0 - 0.18 * max(press, 0.0) * carve;
     c = mix(c, uKey * (0.85 + 0.3 * vnoise(w * 0.6 + uSeed)), key);
-    // the drop: as the wave reaches them, the forest's elements turn to neon line art on a clean night (their contours,
-    // the trunks' edges and branches, the plants' lines, the floor's specks), each in the neon of its place on the
-    // gradient; the print gives way to a clean night; neon tubes run up the well's sides
+    // the drop: the neon forest (NEON_FS) comes in over the print with a wave out from the well, on a clean night: a
+    // violet aura behind the left's trees, a glow on the ground (warm on the left, green on the right) and a field of
+    // glowing specks on it, neon tubes up the well's sides; behind the HUD's text the neon fades
     if (uBlaze > 0.001) {
-        vec4 tg = texture(uTags, vUv);
-        float lit = smoothstep(0.0, 0.7, uBlaze) * neonLit(floor(tg.r * 255.0 + 0.5), w.x, uRollR);
-        float n = tg.g * (1.0 - quietAt(w) * step(0.5, abs(w.x) - 5.3));
-        vec3 neon = neonAt(w.x, uView.z, tg.b);
-        vec3 dc = uKey * 0.5 + vec3(0.002, 0.003, 0.012);
-        vec2 gq = (w - uGlade.xy) / (uGlade.zw * 1.6);
-        dc += uNeonL[1] * 0.035 * exp(-dot(gq, gq));
-        dc += neon * n * 1.4 + mix(neon, vec3(1.0), 0.5) * n * n * 0.35;
+        float lit = smoothstep(0.0, 0.7, uBlaze) * neonIn(w, uRollR);
+        vec4 n = texture(uNeon, vUv);
+        float gy = groundY(w.x);
+        vec3 dc = uKey * 0.4 + vec3(0.003, 0.004, 0.014);
+        vec2 aq = (w - uAura.xy) / uAura.z;
+        dc += uNeonL[1] * (0.16 * exp(-dot(aq, aq) * 2.2) + 0.08 * smoothstep(1.0, 0.85, length(aq)) * smoothstep(0.55, 0.9, length(aq)));
+        vec3 ground = w.x < 0.0 ? uNeonWarm : uNeonR[1];
+        float side = smoothstep(5.5, 7.5, abs(w.x));
+        dc += ground * 0.07 * exp(-max(w.y - gy, 0.0) / 1.4) * smoothstep(gy - 2.0, gy, w.y) * side;
+        if (w.y < gy + 0.3) {
+            vec2 g = w / 0.16;
+            vec2 id = floor(g), f = fract(g) - 0.5;
+            float h = hash12(id + 31.0);
+            vec2 o = (vec2(hash12(id + 7.0), hash12(id + 13.0)) - 0.5) * 0.6;
+            float dot_ = exp(-dot(f - o, f - o) / 0.012) * step(0.55, h) * side * smoothstep(gy + 0.3, gy - 0.4, w.y);
+            dc += mix(ground, vec3(1.0), 0.3) * dot_ * (0.5 + 0.8 * hash12(id + 3.0));
+        }
+        // (the HUD's columns stay dark above the floor, its text too)
+        float shown = 1.0 - max(textQuietAt(w), columnsAt(w));
+        dc = dc * (1.0 - n.a * shown) + n.rgb * shown;
         float tx = abs(abs(w.x) - 5.32);
-        vec3 tcol = w.x < 0.0 ? uNeonL[2] : uNeonR[0];
-        dc += tcol * ((1.0 - smoothstep(0.02, 0.02 + uAA * 1.5, tx)) * 1.2 + exp(-tx / 0.2) * 0.07) * step(-10.4, w.y);
+        vec3 tcol = w.x < 0.0 ? mix(uNeonL[1], uNeonL[2], 0.5) : uNeonR[0];
+        dc += (tcol * 1.2 + vec3(0.3)) * (1.0 - smoothstep(0.025, 0.025 + uAA * 1.5, tx)) * step(-10.4, w.y);
+        dc += tcol * exp(-tx / 0.25) * 0.08 * step(-10.4, w.y);
         c = mix(c, dc, lit);
     }
     // the fluorescence: a soft light the inks give off into the dark around them
@@ -1087,7 +977,7 @@ uniform vec2 uTexel;
 uniform vec3 uInkA, uInkB, uInkC;
 uniform float uC, uRollR, uInkK, uBlaze;
 uniform vec4 uView;
-uniform sampler2D uTags;
+uniform sampler2D uNeon;
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
     vec3 inkB = mix(uInkB, uInkC, uC * dropRoll(w, uRollR));
@@ -1099,12 +989,9 @@ void main() {
         c += (uInkA * a + inkB * b) * s.r;
     }
     c *= 0.25;
-    // the drop's neon tubes glowing
-    if (uBlaze > 0.001) {
-        vec4 tg = texture(uTags, vUv);
-        float lit = smoothstep(0.0, 0.7, uBlaze) * neonLit(floor(tg.r * 255.0 + 0.5), w.x, uRollR);
-        c = mix(c, neonAt(w.x, uView.z, tg.b) * tg.g * 2.0, lit);
-    }
+    // the drop's neon forest glowing
+    if (uBlaze > 0.001)
+        c = mix(c, texture(uNeon, vUv).rgb * 1.6 * (1.0 - columnsAt(w)), smoothstep(0.0, 0.7, uBlaze) * neonIn(w, uRollR));
     frag = vec4(c, 1.0);
 }
 )";
@@ -1118,6 +1005,95 @@ void main() {
     vec4 c = texture(uSrc, vUv) * w[0];
     for (int i = 1; i < 5; i++) c += (texture(uSrc, vUv + uDir * float(i)) + texture(uSrc, vUv - uDir * float(i))) * w[i];
     frag = c;
+}
+)";
+
+// ---------------------------------------------------------------- the drop's neon forest (instanced strokes)
+// a: from x, y, to x, y. b: radius at each end, kind (0 a neon tube, 1 a dark tinted fill, 2 a black silhouette, 3 a
+// drifting dot), color (0 the gradient at the x in c.w, 1 the warm neon, 2 the left's middle neon). c: seed, light,
+// tint, the x whose neon it takes. d: its ink in the print (0 none, 1 the glow inks), 1 if it is the drop's alone.
+inline const char* NEON_VS = R"(#version 330 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec4 aA;
+layout(location = 2) in vec4 aB;
+layout(location = 3) in vec4 aC;
+layout(location = 4) in vec4 aD;
+uniform mat4 uVP;
+uniform vec4 uView;
+uniform float uTime;
+out vec2 vW;
+flat out vec4 vA, vB, vC, vD;
+flat out vec3 vCol;
+void main() {
+    vec2 a = aA.xy, b = aA.zw;
+    int kind = int(aB.z + 0.5);
+    if (kind == 3) {
+        vec2 o = 0.18 * vec2(sin(uTime * 0.5 + aC.x * 7.0), cos(uTime * 0.37 + aC.x * 5.0));
+        a += o;
+        b += o;
+    }
+    float m = max(aB.x, aB.y) + (kind == 0 || kind == 3 ? 0.2 : 0.03);
+    vec2 d = b - a;
+    float L = length(d);
+    vec2 u = L > 1e-4 ? d / L : vec2(1.0, 0.0), n = vec2(-u.y, u.x);
+    vec2 p = mix(a - u * m, b + u * m, aPos.x * 0.5 + 0.5) + n * m * aPos.y;
+    vW = p;
+    vA = vec4(a, b);
+    vB = aB;
+    vC = aC;
+    vD = aD;
+    int mode = int(aB.w + 0.5);
+    vCol = mode == 1 ? uNeonWarm : mode == 2 ? uNeonL[1] : neonAt(aC.w, uView.z);
+    gl_Position = uVP * vec4(p, 0.0, 1.0);
+}
+)";
+// A stroke of the forest. On the drop: a neon tube (a near-white core, the saturated color around it, a glow falling
+// off beyond), a dark fill faintly tinted (a trunk's or a cap's inside), or a black silhouette in front. In the print
+// (uPrint, written to the plates): a fill is solid key with the bark cut along it, a tube a cut line (a plant's inked),
+// a silhouette solid key.
+inline const char* NEON_FS = R"(#version 330 core
+in vec2 vW;
+flat in vec4 vA, vB, vC, vD;
+flat in vec3 vCol;
+out vec4 frag;
+uniform float uAA, uPrint;
+uniform vec3 uMoon;
+void main() {
+    float h;
+    float dist = segT(vW, vA.xy, vA.zw, h);
+    float r = mix(vB.x, vB.y, h);
+    float dd = dist - r;
+    int kind = int(vB.z + 0.5);
+    if (uPrint > 0.5) {
+        if (kind == 3 || vD.y > 0.5) discard;
+        float a = 1.0 - smoothstep(-uAA, uAA, kind == 0 ? dd + 0.008 : dd);
+        if (a <= 0.002) discard;
+        float cut = 0.0, inked = 0.0;
+        if (kind == 0) { cut = 1.0; inked = vD.x; }
+        else if (kind == 1 && r > 0.1) {
+            // the bark: a few long cuts along the trunk, more on the moon's side
+            vec2 d = normalize(vA.zw - vA.xy + vec2(1e-5));
+            vec2 q = vec2(dot(vW - vA.xy, d), dot(vW - vA.xy, vec2(-d.y, d.x)));
+            float side = q.y / max(r, 1e-3) * sign(uMoon.x - vA.x);
+            cut = gouge(vec2(q.x, q.y), 0.11, 2.5, 0.25 * smoothstep(-0.2, 1.0, side) + 0.1, vC.w * 3.1, uAA);
+        }
+        // (the HUD's columns and its text stay solid ink)
+        a *= 1.0 - max(textQuietAt(vW), columnsAt(vW));
+        frag = vec4(cut, inked * 0.8, inked * 0.5, 1.0) * a;
+        return;
+    }
+    if (kind == 1 || kind == 2) {
+        float a = 1.0 - smoothstep(-uAA, uAA, dd);
+        if (a <= 0.002) discard;
+        frag = kind == 2 ? vec4(vec3(0.002, 0.002, 0.006) * a, a) : vec4(vCol * vC.z * a, a * 0.9);
+        return;
+    }
+    float core = 1.0 - smoothstep(-uAA, uAA, dd);
+    float hot = 1.0 - smoothstep(0.0, max(r * 0.6, uAA), dist);
+    float halo = exp(-max(dd, 0.0) / 0.06);
+    vec3 c = (vCol * (core * 1.2 + halo * 0.4) + vec3(0.6) * hot * core) * vC.y;
+    if (max(c.r, max(c.g, c.b)) < 0.002) discard;
+    frag = vec4(c, 0.0);
 }
 )";
 
