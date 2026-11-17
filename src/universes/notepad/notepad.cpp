@@ -20,9 +20,9 @@
 // and rubbed out after. A drop stops him: his margin becomes a dance floor under a spotlight, the other one gets a
 // boombox, a disco ball and a cheering crowd, and he breaks on the beats (toprock, footwork, windmills, headspins,
 // freezes) until the drop ends, the ambiance is rubbed out and he bows. Before a song the page's grid is ruled in
-// from the top down; after it, once the game is gone, what is left is wiped off band after band from the top: a
-// board duster dragged across the blackboard (a haze of dust left in long streaks), a pink rubber scrubbing up
-// and down across the paper (crumbs left behind); the printed grid stays.
+// from the top down; after it, once the game is gone, what is left is wiped off in three passes of broad strokes,
+// each taking away much of what is left: on the blackboard the felt drags the chalk into long streaks and leaves a
+// haze of dust, on paper the rubber takes nearly all and leaves its crumbs; the printed grid stays.
 #include "universes/notepad/notepad.hpp"
 
 #include <algorithm>
@@ -1800,11 +1800,10 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_BLEND);
     const float world = 1.f - saturate(bridge_.amount * 1.4f);
     {
-        // the teardown: once the game is gone, what is left on the page is wiped off band after band from the
-        // top, before the black (in the page's stop motion: a dozen drawings a band for the duster, two for each
-        // scrub of the rubber)
-        const float bands = 5.f, steps = V.light ? 32.f : 12.f;
-        const float e = std::floor(saturate((f.teardown - 0.3f) / 0.42f) * bands * steps) / (bands * steps);
+        // the teardown: once the game is gone, what is left on the page is wiped off in three passes before the
+        // black (in the page's stop motion: eight drawings a band)
+        const float bands = 4.f, steps = 3.f * (bands + 1.f) * 8.f;
+        const float e = std::floor(saturate((f.teardown - 0.3f) / 0.42f) * steps) / steps;
         wipe_ = vec4{e, bands, V.light ? 0.f : 1.f, (float)width_ / height_};
     }
     glUseProgram(progPaper_);
