@@ -20,7 +20,9 @@
 // and rubbed out after. A drop stops him: his margin becomes a dance floor under a spotlight, the other one gets a
 // boombox, a disco ball and a cheering crowd, and he breaks on the beats (toprock, footwork, windmills, headspins,
 // freezes) until the drop ends, the ambiance is rubbed out and he bows. Before a song the page's grid is ruled in
-// from the top down; after it the eraser rubs the page clean, up from the bottom.
+// from the top down; after it, once the game is gone, what is left is wiped off band after band from the top: a
+// board duster dragged across the blackboard (a haze of dust left in long streaks), a pink rubber scrubbing up
+// and down across the paper (crumbs left behind); the printed grid stays.
 #include "universes/notepad/notepad.hpp"
 
 #include <algorithm>
@@ -1683,6 +1685,8 @@ void NotepadUniverse::drawMarks(const std::vector<Mark>& m, bool residue, vec2 s
     set2f(progMark_, "uSmear", smear.x, smear.y);
     set1f(progMark_, "uSmearLen", residue ? len(smear) * 1.3f + 0.05f : 0.f);
     set1f(progMark_, "uWorldFade", 1.f - saturate(bridge_.amount * 1.6f));
+    set4f(progMark_, "uWipe", wipe_.x, wipe_.y, wipe_.z, wipe_.w);
+    set2f(progMark_, "uRes", (float)width_, (float)height_);
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_DST_COLOR, GL_ZERO, GL_ONE, GL_ONE);
     glBindVertexArray(markVao_);
@@ -1795,7 +1799,16 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     const float world = 1.f - saturate(bridge_.amount * 1.4f);
+    {
+        // the teardown: once the game is gone, what is left on the page is wiped off band after band from the
+        // top, before the black (in the page's stop motion: a dozen drawings a band for the duster, two for each
+        // scrub of the rubber)
+        const float bands = 5.f, steps = V.light ? 32.f : 12.f;
+        const float e = std::floor(saturate((f.teardown - 0.3f) / 0.42f) * bands * steps) / (bands * steps);
+        wipe_ = vec4{e, bands, V.light ? 0.f : 1.f, (float)width_ / height_};
+    }
     glUseProgram(progPaper_);
+    set4f(progPaper_, "uWipe", wipe_.x, wipe_.y, wipe_.z, wipe_.w);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, residueT_.tex);
     set1i(progPaper_, "uResidue", 0);
@@ -1839,12 +1852,7 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progPost_, "uFade", saturate(f.fade));
     set1f(progPost_, "uDim", pauseFade_);
     set1f(progPost_, "uBridge", smoothstepf(0.f, 1.f, bridge_.amount));
-    {
-        // the teardown: the eraser rubs the page clean, up from the bottom (in the page's stop motion: 16 steps)
-        const float e = smoothstepf(0.15f, 0.9f, f.teardown);
-        set2f(progPost_, "uErase", std::round(e * 16.f) / 16.f, std::floor(e * 16.f) * 1.7f);
-        set3f(progPost_, "uPaperCol", hexc(V.paper));
-    }
+    set4f(progPost_, "uWipe", wipe_.x, wipe_.y, wipe_.z, wipe_.w);
     set3f(progPost_, "uBridgeCol", bridge_.color);
     set3f(progPost_, "uBridgeInk", bridge_.ink);
     glBindVertexArray(emptyVao_);

@@ -131,6 +131,7 @@ private:
     GLuint progPaper_ = 0, progMark_ = 0, progPost_ = 0, progFade_ = 0;
     GLuint quadVbo_ = 0, markVao_ = 0, markVbo_ = 0, emptyVao_ = 0;
     ugl::Target residueT_, sceneT_;
+    vec4 wipe_{0.f, 5.f, 0.f, 1.f}; // the teardown's wipe (shaders.hpp: uWipe)
     // the words: lettered by the host over the page (hudLine), their eraser ghosts written into the residue here
     text::Lettering hand_, ghostHand_;
     text::Engine ghostText_;
