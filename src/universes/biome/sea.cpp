@@ -1,8 +1,9 @@
 // BIOME's sea: glass cubes of water over a rising sea, a 3D diorama.
 //
 // One world in 3D, seen by a fixed lens raised above the sea and shifted back down (so the board plane keeps the
-// layout's pixels while the world behind the well is seen from above): a sandy bed of low dunes, a beach under the
-// well sloping down to the deep far out, cut away just behind the board plane like a diorama, so its section shows
+// layout's pixels while the world behind the well is seen from above), shot like a film: a desert of golden dunes
+// (sharp crests, wind ripples, their own shadows) under a hazy sky, dust blowing over them, the sun's glare and a
+// bloom in the lens, a beach under the well sloping down to the deep far out, cut away just behind the board plane like a diorama, so its section shows
 // the sand's layers and, once the sea is up, the water's depth (an aquarium's side); the sea a real body of water over
 // it, its surface a swell under the sky (glassy at calm, a gentle swell at mid, whitecaps in a chorus, a storm on a
 // drop), reflecting the sky by Fresnel, the sun's or moon's path glittering on it; under it the light dims and turns
@@ -12,14 +13,16 @@
 //
 // The stack stays a clean, readable grid at the layout's pixels in front of it all: every cell its own small solid
 // glass cube full to the brim with the sea's water, under pressure, traced per pixel through the glass and the water
-// (render.cpp, CELL_FS), drawn over the world behind a calm veil (the well's pane).
+// (render.cpp, CELL_FS), drawn over the world behind the well's pane of frosted glass (its grid etched in it, a bright
+// rim; the held and next pieces in panels of the same glass).
 //
 // The song starts with the sea low, far out. A cleared row's cubes are thrown out of the well into the world behind
 // it: rigid bodies tumbling on all axes (real physics: gravity, contacts on the dunes, friction, bounces, collisions
 // with the cubes already lying there), landing on the sand or in the sea. Each cracks at the very point where it first
 // hits, and its water jets out of the crack under pressure, along the outward normal there (turned by the ground), as
-// 3D spray running over the sand to the sea or churning out as a plume under it; the sea rises as that water lands,
-// linearly (about sixty lines to fill it). Empty, the cube sinks into the sand (each gone three to five seconds after
+// 3D spray running over the sand to the sea or churning out as a plume under it (a fifth of it spills as the row is
+// torn out, falling to the well's foot); where it falls and runs on the sand it spreads into puddles that soak in and
+// dry, the sand dark where it was wet; the sea rises as that water lands, linearly (about sixty lines to fill it). Empty, the cube sinks into the sand (each gone three to five seconds after
 // it first hit). Everything thrown or poured stays behind the well: nothing is ever drawn over the stack.
 //
 // A drop raises a storm, eased in over about a second: big waves with whitecaps and spray, rain, dark clouds,
@@ -49,9 +52,9 @@ float hashf(float a, float b) {
 // The variants (sRGB): the sky (top, low), the sun or moon, the clouds, the storm's sky and clouds; the sea's water
 // (far, middle, near), its depths, foam, haze and storm water; the well's panel; the boats (hull, superstructure,
 // sails, accent, windows, three container colors); the HUD ink, the accent, the dusk of slow motion; the seven waters
-// (the sea's life); the sun as the stack's cubes see it (x, y, radius), moon 0/1, stars, the panel's opacity,
-// cloudiness, a light panel, night (lit windows); the 3D sun (azimuth, elevation), its strength, the sky's light,
-// the shadows' depth.
+// (the sea's life); the sand, the dust blowing over it; the sun as the stack's cubes see it (x, y, radius), moon 0/1,
+// stars, the panel's opacity, cloudiness, a light panel, night (lit windows); the 3D sun (azimuth, elevation), its
+// strength, the sky's light, the shadows' depth.
 struct VariantDef {
     const char* name;
     unsigned skyTop, skyLow, sun, cloud, stormSky, stormCloud;
@@ -59,24 +62,30 @@ struct VariantDef {
     unsigned hull, super_, sail, baccent, window, cont0, cont1, cont2;
     unsigned ink, accent, dusk;
     unsigned piece[7];
+    unsigned sand;
+    float airDust;
     float sunX, sunY, sunR, moon, stars, panelA, clouds, lightPanel, night;
     float sunAz, sunEl, lightK, ambK, shadowK;
 };
 const VariantDef VARIANTS[] = {
-    // A calm noon: a clear blue sky, a bright sea, white sails; the sun high behind the eye.
-    {"CALM NOON", 0x6aa6dc, 0xe2eef2, 0xfffbea, 0xffffff, 0x5a6472, 0x3e4652,
-     0xa2ccd8, 0x4f9fc0, 0x23709c, 0x0f3d62, 0xf6fbfb, 0xd6e8ee, 0x3a5462, 0x0a1422,
+    // A calm noon: a pale, sun-washed sky over golden dunes, dust blowing, a bright sea, white sails; the sun just out
+    // of the picture's top right corner, ahead of the eye (its glare in the lens, the dunes' crests lit, their near
+    // sides in shade).
+    {"CALM NOON", 0x86aed2, 0xece6da, 0xfff0d2, 0xffffff, 0x5a6472, 0x3e4652,
+     0xa2ccd8, 0x4f9fc0, 0x23709c, 0x0f3d62, 0xf6fbfb, 0xe4d6c0, 0x3a5462, 0x0a1422,
      0x22344a, 0xf3f1ea, 0xfbfaf4, 0xd0583c, 0x2c4458, 0xd0583c, 0x3d7fa6, 0xe0b040,
      0x1b3348, 0x1f88b8, 0x2a2f5a,
      {0x14c0cc, 0x1e56b0, 0x7a4cc8, 0x1fa676, 0x0a7a84, 0x6aa8f4, 0x8ad6a8},
-     -14.f, 8.5f, 1.0f, 0.f, 0.f, 0.3f, 0.3f, 1.f, 0.f,
-     -140.f, 52.f, 1.05f, 0.62f, 0.7f},
+     0xdcb47c, 1.f,
+     15.f, 14.f, 1.0f, 0.f, 0.f, 0.3f, 0.3f, 1.f, 0.f,
+     32.f, 17.f, 1.7f, 0.6f, 0.8f},
     // A golden hour: a low sun in an apricot haze over the sea, its path glittering to the shore.
     {"GOLDEN HOUR", 0x34446e, 0xf4b47c, 0xffe4b4, 0xf2a888, 0x3a3248, 0x2a2534,
      0xe0aa88, 0x8a7c94, 0x3a4870, 0x1a2242, 0xffe8d4, 0xf2c6a0, 0x2c3048, 0x1a2140,
      0x1d1f33, 0xf6e6d2, 0xfff1e0, 0xe0603a, 0xffd08a, 0xe0603a, 0x3d6f96, 0xe8b24a,
      0xfbeee0, 0xffb36a, 0x241a3c,
      {0x4ae0ea, 0x3c8af2, 0x8e7cf6, 0x48d69a, 0x20b2b0, 0x90caff, 0xb8f2d0},
+     0xd09a6a, 0.8f,
      15.5f, -1.0f, 1.6f, 0.f, 0.f, 0.62f, 0.35f, 0.f, 0.35f,
      21.f, -0.22f, 1.15f, 0.5f, 0.6f},
     // A grey North Sea: an overcast sky, grey-green water, red fishing hulls; soft light from above.
@@ -85,6 +94,7 @@ const VariantDef VARIANTS[] = {
      0x2a3236, 0xe8e6de, 0xd8d4c8, 0xc8452e, 0x34404a, 0xb8503a, 0x4e6e80, 0xd09a3c,
      0x232c30, 0x3c8a86, 0x2a3040,
      {0x16a2b6, 0x2a5a90, 0x5a54a6, 0x2e9a64, 0x0e6a6c, 0x5c98d0, 0x7cc496},
+     0xb4a48a, 0.35f,
      -12.f, 7.f, 0.95f, 0.f, 0.f, 0.3f, 0.75f, 1.f, 0.f,
      150.f, 42.f, 0.5f, 0.9f, 0.3f},
     // A night harbor: a deep blue night, a moon low over the sea, boats with lit windows; luminous water in the glass.
@@ -93,6 +103,7 @@ const VariantDef VARIANTS[] = {
      0x0a1020, 0x2e3c5a, 0x5c6c8c, 0x6a3a40, 0xffc870, 0x4a3040, 0x2a4058, 0x5a5030,
      0xdce6f4, 0x8ad8ff, 0x101030,
      {0x6ee6f2, 0x5c9cff, 0xac9cff, 0x6eeab0, 0x3ccaca, 0xa4ccff, 0xc4f6da},
+     0x8a7c66, 0.3f,
      13.f, 8.f, 0.8f, 1.f, 1.f, 0.55f, 0.25f, 0.f, 1.f,
      18.f, -0.55f, 0.5f, 0.42f, 0.45f},
 };
@@ -117,7 +128,7 @@ vec3 seaWater(unsigned seaHex, int type, float night) {
                                    {9.f, 0.78f, 1.2f},  {-20.f, 1.14f, 0.85f}, {20.f, 0.86f, 1.16f}};
     // at night the water is luminous: moonlit, a little toward cyan, brighter and more saturated than the dark sea
     const float hh = std::fmod(h - 22.f * night + SH[type][0] + 360.f, 360.f) / 60.f;
-    const float S = std::clamp(std::clamp(sat, 0.45f + 0.15f * night, 0.75f) * SH[type][2], 0.f, 1.f);
+    const float S = std::clamp(std::clamp(sat, 0.6f + 0.1f * night, 0.85f) * SH[type][2], 0.f, 1.f);
     const float V = std::clamp((0.82f + 0.14f * night) * SH[type][1], 0.f, 1.f);
     const float C = V * S, X = C * (1.f - std::fabs(std::fmod(hh, 2.f) - 1.f)), m = V - C;
     vec3 r;
@@ -163,6 +174,7 @@ Palette SeaWorld::palette(int v) const {
     p.ink = lin(d.ink); p.accent = lin(d.accent); p.dusk = lin(d.dusk);
     for (int i = 0; i < 7; i++) p.piece[i] = lin(d.piece[i]);
     for (int i = 0; i < 7; i++) p.cell[i] = seaWater(d.sea2, i, d.night);
+    p.sand = lin(d.sand); p.airDust = d.airDust;
     p.sunX = d.sunX; p.sunY = d.sunY; p.sunR = d.sunR; p.moon = d.moon; p.stars = d.stars; p.panelA = d.panelA;
     p.clouds = d.clouds; p.lightPanel = d.lightPanel; p.night = d.night;
     p.sunAz = d.sunAz; p.sunEl = d.sunEl; p.lightK = d.lightK; p.ambK = d.ambK; p.shadowK = d.shadowK;
@@ -207,6 +219,7 @@ void SeaWorld::setSong(const SongLook& look, float seconds, bool fresh) {
         critters_.clear();
         bodies_.clear();
         parts_.clear();
+        std::fill(pud_.begin(), pud_.end(), 0.f);
     }
 }
 
@@ -277,10 +290,7 @@ bool SeaWorld::spawnBoat(bool onScreen) {
     static const float SPEED[6] = {0.6f, 0.9f, 1.0f, 1.6f, 2.2f, 2.6f};
     float z = -ctx.rng.range(Z0[type], Z1[type]);
     // out to where it floats (over the highest dunes at that distance)
-    auto deep = [&](float zz) {
-        const float base = -9.2f - 3.6f * smoothstepf(3.f, 48.f, -zz) + FAR_RISE * farT(zz), k = 1.f - 0.4f * smoothstepf(10.f, 60.f, -zz);
-        return S - (base + 1.3f * k) > DRAFT[type];
-    };
+    auto deep = [&](float zz) { return S - sandTop(zz) > DRAFT[type]; };
     for (int i = 0; i < 6 && !deep(z); i++) z = -ctx.rng.range(Z0[type], Z1[type]);
     if (!deep(z)) return false;
     Boat b;
@@ -539,7 +549,10 @@ void SeaWorld::simulateBodies(float dt) {
                     const vec3 vc = b.v + cross(b.w, r);
                     const float vn = dot(vc, n);
                     if (vn >= 0.f) continue;
-                    if (vn < -1.f) crackAt(b, K[i]);
+                    if (vn < -1.f) {
+                        if (!b.hit) kickSand(c, std::min(1.f, -vn * 0.12f));
+                        crackAt(b, K[i]);
+                    }
                     const vec3 rn = cross(r, n);
                     const float e = vn < -2.5f ? 0.28f : 0.f;
                     const float j = -(1.f + e) * vn / (1.f + dot(rn, rn) / INERTIA);
@@ -644,6 +657,21 @@ void SeaWorld::leak(Body& b, float dt) {
     }
     const vec3 glass = ctx.pal.cell[b.type];
     const vec3 jetCol = lerp(glass * (1.f / std::max({glass.x, glass.y, glass.z, 1e-3f})), WATER, 0.25f);
+    if (since - dt < 0.06f && m.y >= surfY(m.x, m.z)) {
+        // the glass gives: a crown of spray bursting out all around the crack, bright in the light
+        for (int i = 0; i < 46 && parts_.size() < 6000; i++) {
+            Particle q{};
+            const vec3 r = normalize(n + vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(-0.2f, 1.2f), ctx.rng.range(-1.f, 1.f)));
+            q.p = m + r * 0.05f;
+            q.v = r * ctx.rng.range(1.5f, 6.5f) + b.v * 0.5f;
+            q.life = ctx.rng.range(0.5f, 1.1f);
+            q.size = ctx.rng.range(0.025f, 0.06f);
+            q.grav = 14.f; q.drag = 0.8f;
+            q.kind = P_SPLASH; q.real = true; q.seed = ctx.rng.uniform();
+            q.col = lerp(jetCol, vec3(1.f), ctx.rng.range(0.55f, 0.9f));
+            parts_.push_back(q);
+        }
+    }
     if (m.y < surfY(m.x, m.z)) {
         // under the sea: the jet churns out as a pale plume, bubbles rising from it
         waterLines_ += out;
@@ -718,18 +746,45 @@ void SeaWorld::grown() {
 // Game events
 // =====================================================================================================
 
+// A splash: a crown of drops thrown up and out, white in the light.
 void SeaWorld::splash(const vec3& p, float power, const vec3& col) {
     if (parts_.size() > 5500) return;
-    const int n = 2 + (int)(power * 4.f);
+    const int n = 3 + (int)(power * 7.f);
     for (int i = 0; i < n; i++) {
         Particle q{};
-        q.p = p + vec3(ctx.rng.range(-0.1f, 0.1f), 0.f, ctx.rng.range(-0.1f, 0.1f));
-        q.v = vec3(ctx.rng.range(-1.2f, 1.2f), ctx.rng.range(1.5f, 4.f) * power, ctx.rng.range(-1.2f, 1.2f));
-        q.life = ctx.rng.range(0.35f, 0.6f);
-        q.size = ctx.rng.range(0.03f, 0.055f);
+        const float a = ctx.rng.range(0.f, TAU), out = ctx.rng.range(0.8f, 2.2f);
+        q.p = p + vec3(std::cos(a), 0.f, std::sin(a)) * 0.08f;
+        q.v = vec3(std::cos(a) * out, ctx.rng.range(1.5f, 4.5f) * power, std::sin(a) * out);
+        q.life = ctx.rng.range(0.35f, 0.7f);
+        q.size = ctx.rng.range(0.03f, 0.06f);
         q.grav = 14.f; q.drag = 0.5f;
         q.kind = P_SPLASH; q.real = true; q.seed = ctx.rng.uniform();
-        q.col = lerp(col, ctx.pal.foam, 0.6f);
+        q.col = lerp(col, ctx.pal.foam, 0.7f);
+        parts_.push_back(q);
+    }
+}
+
+// A cube landing hard on the sand: grains thrown up, a puff of dust drifting off with the wind.
+void SeaWorld::kickSand(const vec3& p, float power) {
+    for (int i = 0; i < 4 + (int)(power * 14.f) && parts_.size() < 6000; i++) {
+        Particle q{};
+        const bool puff = i % 3 == 0;
+        const float a = ctx.rng.range(0.f, TAU), out = ctx.rng.range(0.4f, 1.6f) * (puff ? 0.5f : 1.f);
+        q.p = p + vec3(std::cos(a), 0.05f, std::sin(a)) * 0.15f;
+        q.v = vec3(std::cos(a) * out, ctx.rng.range(0.6f, 2.6f) * power * (puff ? 0.4f : 1.f), std::sin(a) * out);
+        q.real = true; q.seed = ctx.rng.uniform();
+        q.col = ctx.pal.sand * (1.f - 0.45f * ctx.pal.night);
+        if (puff) {
+            q.kind = P_DUST;
+            q.life = ctx.rng.range(1.2f, 2.2f);
+            q.size = ctx.rng.range(0.25f, 0.45f);
+            q.grav = -0.15f; q.drag = 1.8f;
+        } else {
+            q.kind = P_SAND;
+            q.life = ctx.rng.range(0.5f, 0.9f);
+            q.size = ctx.rng.range(0.018f, 0.03f);
+            q.grav = 14.f; q.drag = 0.6f;
+        }
         parts_.push_back(q);
     }
 }
@@ -768,8 +823,24 @@ void SeaWorld::onEvent(const GameEvent& ev, const Game&) {
             const vec3 v((x - p.x) / T, (ty - p.y) / T + 0.5f * GRAV * T, (z - p.z) / T);
             // tumbling on all axes
             const vec3 axis = normalize(vec3(ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f), ctx.rng.range(-1.f, 1.f)));
-            // each cube's water: a tenth of a line of sea (more for a quad)
-            throwCube(vec3(p.x, p.y, 0.f), c.type, v, axis * ctx.rng.range(3.f, 9.f), 0.f, (n >= 4 ? 1.5f : 1.f) / Game::W);
+            // each cube's water: a tenth of a line of sea (more for a quad), a fifth of it spilled as it is torn out
+            const float water = (n >= 4 ? 1.5f : 1.f) / Game::W;
+            throwCube(vec3(p.x, p.y, 0.f), c.type, v, axis * ctx.rng.range(3.f, 9.f), 0.f, water * 0.8f);
+            const vec3 col = ctx.pal.cell[c.type];
+            const vec3 spillCol = lerp(col * (1.f / std::max({col.x, col.y, col.z, 1e-3f})), WATER, 0.5f);
+            for (int k = 0; k < 9; k++) {
+                // the spill: a sheet of water bursting out of the row behind the pane, falling to the well's foot
+                Particle q{};
+                q.p = vec3(p.x + ctx.rng.range(-0.45f, 0.45f), p.y + ctx.rng.range(-0.4f, 0.4f), FRONT_Z - ctx.rng.range(0.1f, 0.5f));
+                q.v = vec3(side * ctx.rng.range(0.5f, 5.f) + dx * 0.25f, ctx.rng.range(0.5f, 4.5f), -ctx.rng.range(0.3f, 2.5f));
+                q.life = 3.f;
+                q.size = ctx.rng.range(0.05f, 0.1f);
+                q.grav = 15.f; q.drag = 0.3f;
+                q.kind = P_JET; q.real = true; q.seed = ctx.rng.uniform();
+                q.col = lerp(spillCol, vec3(1.f), ctx.rng.range(0.2f, 0.6f));
+                q.water = water * 0.2f / 9.f;
+                parts_.push_back(q);
+            }
         }
         if (ev.count >= 4) {
             // a quad: the sea answers with spray up from both sides
@@ -839,6 +910,7 @@ void SeaWorld::simulateParticles(float dt, float wdt) {
                 dh = l > 1e-4f ? dh / l : vec3(p.p.x < 0.f ? -1.f : 1.f, 0.f, 0.f);
                 p.kind = P_RUN;
                 p.age = 0.f;
+                soak(p.p.x, p.p.z, 0.012f);
                 p.life = ctx.rng.range(0.35f, 0.7f);
                 p.p.y = sand + 0.02f;
                 p.v = dh * ctx.rng.range(1.2f, 2.8f) + vec3(p.v.x * 0.25f, 0.f, p.v.z * 0.25f);
@@ -849,6 +921,7 @@ void SeaWorld::simulateParticles(float dt, float wdt) {
         }
         if (p.kind == P_RUN) {
             p.p.y = sandH(p.p.x, p.p.z) + 0.02f;
+            soak(p.p.x, p.p.z, 0.035f * pdt);
             if (p.p.y < surfY(p.p.x, p.p.z)) {
                 waterLines_ += p.water;
                 p.water = 0.f;
@@ -858,6 +931,7 @@ void SeaWorld::simulateParticles(float dt, float wdt) {
         }
         if ((p.kind == P_SPLASH || p.kind == P_SPRAY) && p.v.y < 0.f && p.p.y < surfY(p.p.x, p.p.z) - 0.05f) p.age = p.life + 1.f;
         if (p.kind == P_SAND && p.v.y < 0.f && p.p.y < sandH(p.p.x, p.p.z)) p.age = p.life + 1.f;
+        if (p.kind == P_DUST) p.v.x += dir_ * 0.8f * pdt;
     }
     for (const Particle& p : parts_)
         if (p.age > p.life) waterLines_ += p.water;
@@ -923,6 +997,52 @@ void SeaWorld::simulate(const Game& game, const MusicState& music, float dt, flo
     simulateLife(dt, wdt, world);
 
     simulateParticles(dt, wdt);
+
+    simulatePuddle(dt);
+}
+
+// Water spread on the sand at (x, z) (the grid's cells around it).
+void SeaWorld::soak(float x, float z, float amount) {
+    const float u = (x + PUD_X) / (2.f * PUD_X) * PUD_W - 0.5f, v = (z - PUD_Z0) / (PUD_Z1 - PUD_Z0) * PUD_H - 0.5f;
+    const int i = (int)std::floor(u), j = (int)std::floor(v);
+    const float fu = u - i, fv = v - j;
+    for (int b = 0; b < 2; b++)
+        for (int a = 0; a < 2; a++) {
+            const int ci = i + a, cj = j + b;
+            if (ci < 0 || cj < 0 || ci >= PUD_W || cj >= PUD_H) continue;
+            pud_[(cj * PUD_W + ci) * 2] += amount * (a ? fu : 1.f - fu) * (b ? fv : 1.f - fv);
+        }
+}
+
+// The water on the sand spreads while it is deep enough to flow (a film stops), soaks in and dries in the sun; the
+// sand stays dark where it was wet a while longer. Under the sea it is the sea's.
+void SeaWorld::simulatePuddle(float dt) {
+    const float k = std::min(0.2f, 14.f * dt);
+    const float S = seaLevel();
+    if (pudSand_.empty())
+        for (int j = 0; j < PUD_H; j++)
+            for (int i = 0; i < PUD_W; i++)
+                pudSand_.push_back(sandH(((i + 0.5f) / PUD_W * 2.f - 1.f) * PUD_X, PUD_Z0 + (j + 0.5f) / PUD_H * (PUD_Z1 - PUD_Z0)));
+    for (int j = 0; j < PUD_H; j++)
+        for (int i = 0; i < PUD_W; i++) {
+            const float w = pud_[(j * PUD_W + i) * 2];
+            float flow = 0.f;
+            const int nb[4][2] = {{i - 1, j}, {i + 1, j}, {i, j - 1}, {i, j + 1}};
+            for (const auto& n : nb) {
+                if (n[0] < 0 || n[1] < 0 || n[0] >= PUD_W || n[1] >= PUD_H) continue;
+                const float o = pud_[(n[1] * PUD_W + n[0]) * 2];
+                if (std::max(w, o) > 0.04f) flow += o - w;
+            }
+            pudNext_[j * PUD_W + i] = w + k * flow;
+        }
+    for (int j = 0; j < PUD_H; j++)
+        for (int i = 0; i < PUD_W; i++) {
+            float& w = pud_[(j * PUD_W + i) * 2];
+            float& wet = pud_[(j * PUD_W + i) * 2 + 1];
+            w = std::max(0.f, pudNext_[j * PUD_W + i] - dt * (0.008f + 0.08f * pudNext_[j * PUD_W + i]));
+            if (pudSand_[j * PUD_W + i] < S) w = 0.f;
+            wet = std::max(wet - dt / 30.f, std::min(1.f, w * 14.f));
+        }
 }
 
 // Game over: a cracked cube of the stack is thrown out behind the well, as a cleared one.

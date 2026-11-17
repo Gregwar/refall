@@ -331,7 +331,7 @@ void main() {
 }
 )";
 // kinds: 0 a soft drop (softness in a3.y), 1 a seed (an oval grain turning), 2 a glint of broken glass, 3 a bubble,
-// 5 a soft puff (dust, a plume)
+// 4 a drop of water in the light, 5 a soft puff (dust, a plume)
 inline const char* PART_FS = R"(#version 330 core
 in vec2 vQ;
 in vec3 vP;
@@ -363,6 +363,12 @@ void main() {
     } else if (kind == 3) {
         a = smoothstep(pxl * 1.5, 0.0, abs(r - 0.82)) * 0.9 + smoothstep(1.0, 0.0, r) * 0.15;
         a = max(a, smoothstep(0.3, 0.0, length(vQ - vec2(-0.35, 0.35))));
+    } else if (kind == 4) {
+        // a drop of water in the light: a clear bead, its rim darker, a bright glint and a soft white heart
+        float rim = smoothstep(0.45, 1.0, r);
+        a = smoothstep(1.0, 1.0 - max(pxl * 1.5, 0.2), r) * (0.6 + 0.4 * rim);
+        float hl = smoothstep(0.4, 0.0, length(vQ - vec2(0.28, 0.32)));
+        col = mix(col, col * 0.55, rim * 0.6) + vec3(1.0) * hl * 1.2;
     } else if (kind == 5) {
         a = exp(-r * r * 3.0) * smoothstep(1.0, 0.8, r);
     } else {
@@ -411,7 +417,7 @@ inline const char* VEIL_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform vec4 uView;
-uniform float uPx, uPanelA, uDeepY, uBridge;
+uniform float uPx, uPanelA, uEdgeA, uDeepY, uBridge;
 uniform vec3 uPanel, uEdge, uBridgeCol;
 void main() {
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
@@ -420,8 +426,8 @@ void main() {
     float inWell = smoothstep(uPx, -uPx, wellD);
     float wellE = smoothstep(uPx * 1.5, 0.0, abs(wellD + uPx));
     float k = mix(uPanelA, min(0.88, uPanelA * 1.45), smoothstep(2.0, 10.0, uDeepY - w.y));
-    float a1 = clamp(inWell * k + wellE * 0.38 * (1.0 - inWell * k), 0.0, 1.0);
-    vec3 c1 = mix(uPanel, uEdge, wellE * 0.38 / max(a1, 1e-3));
+    float a1 = clamp(inWell * k + wellE * uEdgeA * (1.0 - inWell * k), 0.0, 1.0);
+    vec3 c1 = mix(uPanel, uEdge, wellE * uEdgeA / max(a1, 1e-3));
     vec3 pre = enc(c1) * a1 * (1.0 - uBridge) + enc(uBridgeCol) * uBridge;
     frag = vec4(pre, 1.0 - (1.0 - a1) * (1.0 - uBridge));
 }

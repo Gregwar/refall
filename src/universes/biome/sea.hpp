@@ -30,15 +30,38 @@ constexpr float BOAT_LEN[6] = {1.6f, 3.2f, 4.6f, 10.f, 18.f, 22.f};
 // rising sea spreads out from the lake to the horizon instead of flooding the whole plain at once
 constexpr float FAR_RISE = 5.f;
 inline float farT(float z) { return saturate(std::log(std::max(-z, 30.f) / 30.f) / std::log(800.f / 30.f)); }
+// a dune's profile over one wavelength: a long windward slope up to a sharp crest, then a short steep lee down to the
+// next trough (0 .. 1)
+inline float duneRidge(float u) {
+    const float s = u - std::floor(u);
+    return s < 0.7f ? std::pow(s / 0.7f, 1.6f) : std::pow((1.f - s) / 0.3f, 1.6f);
+}
+// the dunes: ridges across the view, their crests winding; low ones rolling out from the beach, big ranges far off
+// (a sea at its fullest covers them all); DUNE_NEAR and DUNE_FAR are their heights at most
+constexpr float DUNE_NEAR = 1.7f, DUNE_FAR = 4.6f;
+inline float dunes(float x, float z, float lake) {
+    const float u1 = -z / 17.f + 0.9f * std::sin(x * 0.045f + 0.7f) + 0.35f * std::sin(x * 0.13f - z * 0.03f + 2.1f);
+    const float a1 = DUNE_NEAR * (0.7f + 0.3f * std::sin(x * 0.06f + z * 0.02f + 1.f)) * smoothstepf(10.f, 40.f, -z) * (1.f - 0.8f * lake);
+    const float u2 = -z / 55.f + 1.2f * std::sin(x * 0.018f + 0.3f) + 0.4f * std::sin(x * 0.05f + z * 0.01f + 4.f);
+    const float a2 = DUNE_FAR * (0.7f + 0.3f * std::sin(x * 0.021f + 2.4f)) * smoothstepf(60.f, 170.f, -z);
+    return a1 * duneRidge(u1) + a2 * duneRidge(u2);
+}
 // the sandy bed: a beach under the well sloping gently down far out, a lake's hollow just behind the well (the lowest
-// sand: the water gathers there first), low dunes over it (z <= FRONT_Z); WORLD_GLSL's sandH is the same function
+// sand: the water gathers there first), a gentle swell of sand near, dunes further out (z <= FRONT_Z); WORLD_GLSL's
+// sandH is the same function
 inline float sandH(float x, float z) {
     const float lake = std::exp(-(x * x / 576.f + (z + 15.f) * (z + 15.f) / 100.f));
     const float base = -9.2f - 1.8f * smoothstepf(3.f, 48.f, -z) - 5.2f * lake + FAR_RISE * farT(z);
     const float k = (1.f - 0.4f * smoothstepf(10.f, 60.f, -z)) * (1.f - 0.8f * lake);
     const float d = 0.55f * std::sin(x * 0.21f + 1.3f + z * 0.11f) + 0.3f * std::sin(x * 0.53f + 0.4f - z * 0.27f) +
                     0.1f * std::sin(x * 1.37f + 2.f + z * 0.61f) + 0.35f * std::sin(x * 0.07f - z * 0.19f + 0.5f);
-    return base + d * k;
+    return base + d * k + dunes(x, z, lake);
+}
+// the highest sand at a distance (its dunes' crests)
+inline float sandTop(float z) {
+    const float base = -9.2f - 1.8f * smoothstepf(3.f, 48.f, -z) + FAR_RISE * farT(z);
+    return base + 1.3f * (1.f - 0.4f * smoothstepf(10.f, 60.f, -z)) + DUNE_NEAR * smoothstepf(10.f, 40.f, -z) +
+           DUNE_FAR * smoothstepf(60.f, 170.f, -z);
 }
 inline vec3 sandN(float x, float z) {
     const float e = 0.05f;
@@ -77,6 +100,7 @@ public:
     void drawWorld() override;
     vec3 behind(float bx, float by, float ndc) const override;
     float paneDeepY() const override { return seaLevel(); }
+    bool ownPane() const override { return true; }
     float rainFloorY() const override { return seaLevel(); }
     vec3 rainColor() const override { return lerp(ctx.pal.foam, ctx.pal.skyLow, 0.5f); }
     float rainSlant() const override { return dir_; }
@@ -102,8 +126,9 @@ private:
     void crackAt(Body& b, const vec3& cornerL);
     void leak(Body& b, float dt);
 
-    // ---- Particles: the cubes' water (jets, runs on the sand), splashes, spray, bubbles, plumes, sand.
-    enum { P_JET = 0, P_RUN = 1, P_SPLASH = 2, P_SPRAY = 3, P_BUBBLE = 4, P_PLUME = 5, P_SAND = 6 };
+    // ---- Particles: the cubes' water (jets, runs on the sand, the spill of a cleared row), splashes, spray, bubbles,
+    // plumes, the sand a cube kicks up (grains, a puff of dust).
+    enum { P_JET = 0, P_RUN = 1, P_SPLASH = 2, P_SPRAY = 3, P_BUBBLE = 4, P_PLUME = 5, P_SAND = 6, P_DUST = 7 };
     struct Particle {
         vec3 p, v;
         float age, life, size, grav, drag, seed;
@@ -114,9 +139,21 @@ private:
     };
     std::vector<Particle> parts_;
     void splash(const vec3& p, float power, const vec3& col);
+    void kickSand(const vec3& p, float power);
     void sprayBurst(float x, float z, int n, float power);
     void sprayAt(float& x, float& z);
     void simulateParticles(float dt, float wdt);
+
+    // ---- The water spread on the sand: a puddle where it falls and runs (spreading, a film reflecting the sky), the
+    // sand darker where it was wet, drying slowly. A grid over the beach around the well (its film's depth, the sand's
+    // wetness), read by the sand's shader.
+    static constexpr int PUD_W = 160, PUD_H = 64;
+    static constexpr float PUD_X = 40.f, PUD_Z0 = FRONT_Z, PUD_Z1 = -26.f;
+    std::vector<float> pud_ = std::vector<float>(PUD_W * PUD_H * 2, 0.f);
+    std::vector<float> pudNext_ = std::vector<float>(PUD_W * PUD_H, 0.f);
+    std::vector<float> pudSand_;   // the sand's height at each cell
+    void soak(float x, float z, float amount);
+    void simulatePuddle(float dt);
 
     // ---- The sea: its level (rising with the cleared lines), its swell.
     float waterLines_ = 0.f;  // lines of water poured into the sea this song
@@ -159,9 +196,16 @@ private:
     void buildMeshes();
     void worldUniforms(GLuint prog);
     void drawBoats(bool depthOnly);
-    void drawBoxes();
-    GLuint progSky_ = 0, progSand_ = 0, progSurf_ = 0, progFront_ = 0, progBoat_ = 0, progDepth_ = 0, progCube_ = 0,
-           progLife_ = 0, progPart_ = 0, progCell_ = 0;
+    void drawBoxes();   // the thrown cubes as boxes: their shadows, the light through them
+    GLuint progSky_ = 0, progSand_ = 0, progSurf_ = 0, progFront_ = 0, progBoat_ = 0, progDepth_ = 0, progPass_ = 0,
+           progCube_ = 0, progLife_ = 0, progPart_ = 0, progCell_ = 0;
+    ugl::Target passT_;   // the light through the thrown cubes' water, from the sun (the shadow map's view)
+    GLuint pudTex_ = 0;   // the water on the sand
+    // the lens: the world at a quarter (blurred: what the frosted glass shows), its brightest light at an eighth (the
+    // bloom), each with a target to blur through
+    GLuint progDown_ = 0, progBlur_ = 0, progLens_ = 0;
+    ugl::Target quarterT_[2], eighthT_[2];
+    void drawLens();
     Mesh sand_, surf_, front_;
     GLuint meshVbo_ = 0, meshInstVbo_ = 0, boatVao_ = 0, boxVao_ = 0;
     int boatFirst_[6] = {}, boatCount_[6] = {}, boxFirst_ = 0, boxCount_ = 0;

@@ -1,6 +1,7 @@
 #pragma once
-// BIOME's sea, its shaders (see sea.cpp; the shared ones in shaders.hpp): the 3D world (the sky, the sandy bed, the
-// sea's surface and its cut face, the boats, the life, the thrown cubes), the water inside the glass cubes.
+// BIOME's sea, its shaders (see sea.cpp; the shared ones in shaders.hpp): the 3D world (the sky, the sandy bed and its
+// dunes, the sea's surface and its cut face, the boats, the life, the thrown cubes and the light through them), the
+// water inside the glass cubes, the lens (the bloom, the sun's glare, the frosted glass of the well and the panels).
 
 namespace sea_shaders {
 
@@ -10,16 +11,30 @@ inline const char* WORLD_GLSL = R"(
 uniform float uSea;
 uniform float uWaveT, uAmp, uSharp, uDir, uCaps;
 uniform vec3 uHaze, uWater, uDeep, uFoam, uStormSea;
+uniform float uAirDust, uWind;   // the dust blowing over the sand (how thick), the wind's way along x (-1, 1)
 
+// the dunes: ridges across the view (a long windward slope, a sharp crest, a short steep lee), low ones rolling out
+// from the beach, big ranges far off
+float duneRidge(float u) {
+    float s = fract(u);
+    return s < 0.7 ? pow(s / 0.7, 1.6) : pow((1.0 - s) / 0.3, 1.6);
+}
+float dunes(vec2 p, float lake) {
+    float u1 = -p.y / 17.0 + 0.9 * sin(p.x * 0.045 + 0.7) + 0.35 * sin(p.x * 0.13 - p.y * 0.03 + 2.1);
+    float a1 = 1.7 * (0.7 + 0.3 * sin(p.x * 0.06 + p.y * 0.02 + 1.0)) * smoothstep(10.0, 40.0, -p.y) * (1.0 - 0.8 * lake);
+    float u2 = -p.y / 55.0 + 1.2 * sin(p.x * 0.018 + 0.3) + 0.4 * sin(p.x * 0.05 + p.y * 0.01 + 4.0);
+    float a2 = 4.6 * (0.7 + 0.3 * sin(p.x * 0.021 + 2.4)) * smoothstep(60.0, 170.0, -p.y);
+    return a1 * duneRidge(u1) + a2 * duneRidge(u2);
+}
 // the sandy bed: a beach under the well sloping gently down far out, a lake's hollow just behind the well (the
-// lowest sand: the water gathers there first), low dunes over it
+// lowest sand: the water gathers there first), a gentle swell of sand near, dunes further out
 float sandH(vec2 p) {
     float lake = exp(-(p.x * p.x / 576.0 + (p.y + 15.0) * (p.y + 15.0) / 100.0));
     float base = -9.2 - 1.8 * smoothstep(3.0, 48.0, -p.y) - 5.2 * lake + 5.0 * clamp(log(max(-p.y, 30.0) / 30.0) / log(800.0 / 30.0), 0.0, 1.0);
     float k = (1.0 - 0.4 * smoothstep(10.0, 60.0, -p.y)) * (1.0 - 0.8 * lake);
     float d = 0.55 * sin(p.x * 0.21 + 1.3 + p.y * 0.11) + 0.3 * sin(p.x * 0.53 + 0.4 - p.y * 0.27) +
               0.1 * sin(p.x * 1.37 + 2.0 + p.y * 0.61) + 0.35 * sin(p.x * 0.07 - p.y * 0.19 + 0.5);
-    return base + d * k;
+    return base + d * k + dunes(p, lake);
 }
 float crestW(float s) {
     float c = s * 0.5 + 0.5;
@@ -42,17 +57,27 @@ float waveH(vec2 p) {
 float surfY(vec2 p) { return uSea + waveH(p); }
 float darkAt(float depth) { return smoothstep(0.5, 10.0, depth); }
 
-// the haze far out: the sky's own color at the horizon (over the path in the air only: under the water, the water
-// veils it already)
+// the haze far out: the sky's own color at the horizon, warmed by the dust the wind blows over the sand and lit
+// through toward the sun (over the path in the air only: under the water, the water veils it already)
 float gAir = -1.0;
+float hazeK(float L) { return 1.0 - exp(-max(L - 14.0, 0.0) * (0.003 + 0.0018 * uAirDust)); }
+vec3 hazeCol(vec3 d) {
+    vec3 h = mix(skyBase(normalize(vec3(d.x, 0.0, d.z))), uHaze, (0.2 + 0.35 * uAirDust) * (1.0 - uStorm));
+    float toSun = max(dot(normalize(d), uSunDir), 0.0);
+    h += uSunCol * (pow(toSun, 8.0) * 0.32 + pow(toSun, 40.0) * 0.3) * uAirDust * (1.0 - uStorm);
+    return mix(h, uStormCloud * 0.9, uStorm * 0.55);
+}
+// the dust drifting in plumes along the ground with the wind (0 .. 1 at a point of the ground)
+float drift(vec2 p) {
+    vec2 q = vec2(p.x * 0.035 - uTime * 0.11 * uWind, p.y * 0.07 + 0.3 * sin(p.x * 0.02));
+    return smoothstep(0.35, 0.8, fbm(q + vec2(0.0, uTime * 0.012)));
+}
 vec3 aerial(vec3 c, vec3 P) {
     vec3 d = P - uEye;
     float L = gAir >= 0.0 ? gAir : length(d);
     gAir = -1.0;
-    float k = 1.0 - exp(-max(L - 45.0, 0.0) * 0.0042);
-    vec3 h = mix(skyBase(normalize(vec3(d.x, 0.0, d.z))), uHaze, 0.2 * (1.0 - uStorm));
-    h = mix(h, uStormCloud * 0.9, uStorm * 0.55);
-    return mix(c, h, k * 0.94);
+    float k = hazeK(L) * (1.0 + 0.25 * uAirDust * (drift(P.xz) - 0.4));
+    return mix(c, hazeCol(d), clamp(k * 0.94, 0.0, 0.97));
 }
 
 // ---- the water: its color at a depth (light from above scattered in it), the depths darker and darker
@@ -122,11 +147,15 @@ void main() {
     vec3 c;
     float tf = d.z < -1e-4 ? (uFrontZ - uEye.z) / d.z : -1.0;
     if (tf > 0.0 && uEye.y + d.y * tf < uSea) c = waterCol(uSea - (uEye.y + d.y * tf));   // into the water's cut face
-    else if (d.y < 0.0) {
-        // the sea beyond the meshes, under the storm's overcast as the haze over the world is
-        c = mix(skyBase(normalize(vec3(d.x, 0.0, d.z))), uHaze, 0.2 * (1.0 - uStorm));
-        c = mix(c, uStormCloud * 0.9, uStorm * 0.55);
-    } else c = skyFull(d, true);
+    else if (d.y < 0.0) c = hazeCol(d);   // the sea beyond the meshes, as the haze over the world
+    else {
+        // the sky (its clouds' layer down to the horizon), the sun's broad glow in the dusty air, the dust's warm band
+        // low over the horizon
+        c = skyFull(normalize(vec3(d.x, max(d.y, 0.0025), d.z)), true);
+        float toSun = max(dot(d, uSunDir), 0.0);
+        c += uSunCol * (pow(toSun, 5.0) * 0.18 + pow(toSun, 48.0) * 0.45) * (0.4 + 0.6 * uAirDust) * uSunDisc.w * (1.0 - 0.7 * uSunDisc.z);
+        c = mix(c, hazeCol(d), uAirDust * 0.75 * exp(-d.y * 9.0) * (1.0 - uStorm));
+    }
     frag = vec4(enc(grade(c)), 1.0);
 }
 )";
@@ -149,32 +178,105 @@ in vec3 vP;
 in vec3 vN;
 out vec4 frag;
 uniform vec3 uSand;
+uniform vec4 uBodies[24];   // the thrown cubes lying near (center, how much of it is there): their contact shadows
+uniform int uBodyN;
+uniform sampler2D uPass;    // the light passed through the thrown cubes' water, from the sun (the shadow map's view)
+uniform sampler2D uPud;     // the water on the sand: its film's depth, the sand's wetness
+uniform vec4 uPudRect;      // its grid's corner (x, z), 1 / its extent (x, z)
+// the dunes' own shadows: a march toward the sun over the heightfield (soft: how close it passed over the sand)
+float duneShadow(vec3 P) {
+    P.y = max(P.y, sandH(P.xz) + 0.03);   // (from the true surface: the mesh's facets cut under the crests)
+    float t = 0.25, res = 1.0;
+    for (int i = 0; i < 26; i++) {
+        vec3 Q = P + uSunDir * t;
+        if (Q.y > 1.0) break;
+        float h = Q.y - sandH(Q.xz);
+        res = min(res, 7.0 * h / t);
+        if (res < 0.0) break;
+        t += max(0.3, t * 0.2);
+    }
+    return smoothstep(0.0, 1.0, res);
+}
+// wind ripples: fine ridges across the wind, winding, a gentle slope up to a steeper fall; their slope (x, z), faded
+// out where they get finer than the pixels
+const vec2 RIP = vec2(0.6, 1.0) * 1.15;
+vec2 ripples(vec2 p, float fade) {
+    float ph = 6.2832 * (dot(p, RIP) + 1.1 * vnoise(p * 0.22) + 0.4 * sin(p.x * 0.37));
+    float g = cos(ph + 0.7 * sin(ph)) * (1.0 + 0.7 * cos(ph));
+    float k = 0.034 * fade * (0.55 + 0.45 * vnoise(p * 0.11 + 3.0));
+    return RIP * 6.2832 * g * k;
+}
 void main() {
-    vec3 N = normalize(vN);
     vec3 P = vP;
     float dist = length(P - uEye);
-    if (N.z > 0.9 && P.z > uFrontZ - 0.05) {
+    vec3 Ng = normalize(vN);
+    if (Ng.z > 0.9 && P.z > uFrontZ - 0.05) {
         // the cut face: layers of packed sand, darker deeper, a lit lip along the top
         float top = sandH(vec2(P.x, uFrontZ));
         float dd = top - P.y;
         float band = vnoise(vec2(P.x * 0.5, P.y * 4.0 + 3.0 * vnoise(vec2(P.x * 0.25, 1.0))));
         vec3 alb = uSand * (0.8 - 0.25 * smoothstep(0.0, 3.0, dd)) * (0.88 + 0.22 * band);
         alb *= 0.97 + 0.06 * hash12(floor(P.xy * 40.0));
-        vec3 col = alb * (uAmb * 0.95 + uSunCol * max(dot(N, uSunDir), 0.0) * 0.8);
+        vec3 col = alb * (uAmb * 1.2 + uSand * uSunCol * 0.5 + uSunCol * max(dot(Ng, uSunDir), 0.0) * 0.8);
         col = mix(col, uSand * (uAmb + uSunCol * 0.6), smoothstep(0.07, 0.0, dd) * 0.45);
         frag = vec4(enc(grade(col)), 1.0);
         return;
     }
-    vec3 alb = uSand;
-    float near = exp(-dist / 45.0);
-    alb *= 0.95 + 0.05 * sin(P.x * 3.1 + 2.0 * sin(P.z * 1.3) + P.z * 0.8) * near + 0.08 * (vnoise(P.xz * 5.0) - 0.5) * near;
+    // the surface's own slope (sharp dune crests whatever the mesh), and the ripples on it
+    float e = max(0.04, dist * 0.0025);
+    vec3 N = normalize(vec3(sandH(P.xz - vec2(e, 0.0)) - sandH(P.xz + vec2(e, 0.0)), 2.0 * e,
+                            sandH(P.xz - vec2(0.0, e)) - sandH(P.xz + vec2(0.0, e))));
     float sY = surfY(P.xz);
     float under = sY - P.y;
-    // wet sand: darker under the water and in a band above it
-    alb *= 1.0 - 0.32 * smoothstep(-0.3, 0.0, under);
-    float sh = shadowAt(P + N * 0.04);
+    float dry = smoothstep(-0.05, -0.4, under);
+    float ru = dot(P.xz, RIP);
+    vec2 rg = ripples(P.xz, (1.0 - smoothstep(0.07, 0.22, fwidth(ru))) * (0.35 + 0.65 * dry) * smoothstep(0.55, 0.85, N.y));
+    N = normalize(N - vec3(rg.x, 0.0, rg.y));
+    // the sand: grains catching the light near, streaks of drifting sand moving over it
+    vec3 alb = uSand;
+    float near = exp(-dist / 45.0);
+    alb *= 0.94 + 0.12 * (vnoise(P.xz * 1.7) - 0.5) * near + 0.1 * (vnoise(P.xz * 0.09) - 0.5);
+    float streak = smoothstep(0.55, 0.9, vnoise(vec2(P.x * 0.12 - uTime * 1.4 * uWind, P.z * 1.5 + 2.0 * vnoise(P.xz * 0.05))));
+    alb *= 1.0 + 0.1 * streak * uAirDust * dry;
+    // wet sand: darker under the water and in a band above it, and where the cubes' water fell and ran
+    vec2 pu = (P.xz - uPudRect.xy) * uPudRect.zw;
+    vec2 pud = pu == clamp(pu, 0.0, 1.0) ? texture(uPud, pu).rg : vec2(0.0);
+    float film = smoothstep(0.04, 0.09, pud.x) * dry;
+    alb *= 1.0 - 0.32 * max(smoothstep(-0.3, 0.0, under), max(pud.y * 0.9, film) * dry);
     float ndl = max(dot(N, uSunDir), 0.0);
-    vec3 col = alb * (uAmb * (0.55 + 0.45 * N.y) + uSunCol * ndl * sh);
+    float sh = shadowAt(P + Ng * 0.04);
+    if (ndl > 0.0 && under < 0.0) sh *= duneShadow(P);
+    // the thrown cubes lying on it: a soft dark under each
+    float ao = 1.0;
+    for (int i = 0; i < uBodyN; i++) {
+        vec3 q = P - uBodies[i].xyz;
+        ao *= 1.0 - 0.55 * uBodies[i].w * exp(-dot(q.xz, q.xz) * 3.2) * smoothstep(1.3, 0.3, abs(q.y));
+    }
+    // the light: the sun (through the cubes' water: tinted), the sky, the warm light bounced off the sunlit sand
+    vec4 ls = uLightVP * vec4(P, 1.0);
+    vec3 pass = texture(uPass, ls.xy / ls.w * 0.5 + 0.5).rgb * 2.0;   // (stored at half)
+    vec3 sun = uSunCol * ndl * (sh + (1.0 - sh) * pass);
+    vec3 amb = uAmb * (0.55 + 0.45 * N.y) + uSand * uSunCol * 0.16 * (1.15 - N.y * 0.5);
+    vec3 col = alb * (amb * ao + sun * mix(1.0, ao, 0.5));
+    // a glint of a grain now and then, toward the sun
+    float gl = step(0.995, hash12(floor(P.xz * 60.0))) * pow(max(dot(reflect(normalize(P - uEye), N), uSunDir), 0.0), 6.0);
+    col += uSunCol * gl * near * dry * sh * 1.5;
+    if (film > 0.0) {
+        // a puddle: a film of clear water over the dark wet sand, rippling, the sky and the sun's glints in it, a bright
+        // rim of foam where it thins out
+        vec2 rq = P.xz * 3.0;
+        vec3 Nw = normalize(vec3(vnoise(rq + vec2(uTime * 0.9, 0.0)) - 0.5, 4.0, vnoise(rq * 1.3 - vec2(0.0, uTime * 0.8) + 7.0) - 0.5));
+        vec3 V = normalize(uEye - P);
+        float F = 0.08 + 0.92 * pow(1.0 - max(dot(Nw, V), 0.0), 5.0);
+        vec3 R = reflect(-V, Nw);
+        R.y = abs(R.y);
+        vec3 wc = col * mix(vec3(1.0), uWater, 0.35) * 0.9 + mix(uWater, vec3(1.0), 0.5) * uAmb * 0.25;
+        wc = mix(wc, skyFull(R, false), F);
+        wc += uSunCol * pow(max(dot(R, uSunDir), 0.0), 300.0) * 6.0 * sh;
+        float rim = smoothstep(0.04, 0.05, pud.x) * smoothstep(0.065, 0.05, pud.x);
+        wc = mix(wc, uFoam * (uAmb + uSunCol * 0.7), rim * 0.55);
+        col = mix(col, wc, film);
+    }
     if (under > 0.0) {
         float ca = caustic(P.xz) * smoothstep(0.0, 0.4, under) * exp(-under * 0.2);
         col += mix(uWater, vec3(1.0), 0.6) * uSunCol * ca * 0.55 * (0.4 + 0.6 * sh) * (1.0 - 0.75 * uStorm);
@@ -231,7 +333,7 @@ void main() {
     float cap = smoothstep(0.3, 0.85, hgt) * smoothstep(0.35, 0.6, fn) * uCaps;
     float streak = smoothstep(0.66, 0.85, vnoise(p * vec2(0.6, 2.2) - vec2(uWaveT * uDir * 0.8, 0.0))) * uStorm * 0.35;
     float depth = uSea - sandH(p);
-    float shore = smoothstep(0.35, 0.0, depth + 0.08 * sin(uTime * 1.3 + p.x * 0.7 + p.y * 0.4)) * 0.7;
+    float shore = smoothstep(0.16, 0.0, depth + 0.06 * sin(uTime * 1.3 + p.x * 0.7 + p.y * 0.4)) * (0.35 + 0.3 * vnoise(p * 1.7));
     float foam = clamp(cap + streak + shore, 0.0, 0.9) * calmAt(p);
     vec3 fc = uFoam * (uAmb * 0.8 + uSunCol * 0.6);
     c = mix(c, fc, foam);
@@ -242,7 +344,7 @@ void main() {
     c += uSunCol * spec;
     a = clamp(a + spec * 0.6, 0.0, 1.0);
     c = aerial(c, vP);
-    a = mix(a, 1.0, 1.0 - exp(-max(dist - 45.0, 0.0) * 0.0042));
+    a = mix(a, 1.0, hazeK(dist));
     frag = vec4(enc(grade(c)), a);
 }
 )";
@@ -336,6 +438,27 @@ void main() {
 }
 )";
 
+// The light through a thrown cube, seen from the sun: its water's color, focused to a bright heart (a lens of water)
+// with a fine moving caustic; through clear glass once it is empty.
+inline const char* PASS_FS = R"(#version 330 core
+in vec3 vP;
+in vec3 vN;
+in vec3 vL;
+flat in float vMat;
+flat in vec4 vX;
+out vec4 frag;
+uniform float uTime;
+void main() {
+    vec3 tint = vX.rgb / max(max(vX.r, vX.g), max(vX.b, 1e-3));
+    vec3 a = abs(vL) / 0.44;
+    float r = max(max(a.x, a.y), a.z) > 0.999 ? length(vL.xz + vL.y * 0.4) / 0.44 : 0.5;
+    float focus = exp(-r * r * 7.0);
+    float caus = vnoise(vL.xz * 9.0 + vec2(uTime * 0.7, vX.w * 3.0)) * vnoise(vL.zx * 11.0 - vec2(uTime * 0.5, 1.0));
+    vec3 c = tint * (0.1 + 0.9 * focus + 1.1 * smoothstep(0.25, 0.5, caus) * (0.3 + focus));
+    frag = vec4(mix(vec3(0.45), c, vX.w) * 0.5, 1.0);
+}
+)";
+
 // ---------------------------------------------------------------- the water inside the glass cubes (the stack's and
 // the thrown ones): a rounded box of water, a clear band of glass around it (GLASS_GLSL's cube, shaders.hpp)
 inline const char* WATER_GLSL = R"(
@@ -354,6 +477,14 @@ float exitIn(vec3 p, vec3 d) {
         t += max(s, 0.001);
     }
     return t;
+}
+// what is behind, seen through the clear glass and the water: the water's own hue the deeper through it (Tg, Tw: what
+// the glass and the water let through)
+vec3 waterThrough(vec3 behind, vec3 tint, float glassLen, float waterLen, out vec3 Tg, out vec3 Tw) {
+    vec3 tN = clamp(tint / max(max(tint.r, tint.g), max(tint.b, 1e-3)), vec3(0.02), vec3(1.0));
+    Tg = exp(-glassLen * vec3(0.14, 0.05, 0.08));
+    Tw = pow(tN, vec3(waterLen * 1.5));
+    return behind * Tg * Tw;
 }
 // from outside the water (in the glass), how far along d to the water (or a miss: beyond tMax)
 float minIn;   // how close a ray staying in the glass came to the water (the water's crisp outline)
@@ -421,19 +552,19 @@ vec3 fill(vec3 p1, vec3 n1, vec3 D, vec3 tint, float size, float px) {
     // caught inside at an edge: it mirrors the cube's own lit water and the sky (bright edges, not dark)
     if (tir) behind = behind * 0.3 + env(d4) * 0.3 + tint * (lightP ? 0.12 : 0.55);
     // ---- the colors along the way: clear glass, the water's own color the deeper through it
-    vec3 tN = clamp(tint / 0.75, vec3(0.02), vec3(1.0));
-    vec3 Tg = exp(-glassLen * vec3(0.14, 0.05, 0.08));
-    vec3 Tw = pow(tN, vec3(waterLen * 0.85));
-    vec3 col = behind * Tg * Tw;
-    // the water glows a little (light scattered in it); on a dark scene it is luminous, well above the night behind it
-    // (by day it carries its color too: the depths behind the well are dark)
-    if (lightP) col = col * 0.75 + tint * (0.2 + 0.3 * waterLen) * smoothstep(0.0, 0.04, waterLen);
-    else col = col * 0.7 + tint * (0.22 + 0.3 * waterLen) * (0.8 + 0.4 * uNight) * smoothstep(0.0, 0.04, waterLen);
-    // light focused through the water onto the cube's bottom: a soft moving caustic
+    vec3 Tg, Tw;
+    vec3 col = waterThrough(behind, tint, glassLen, waterLen, Tg, Tw);
+    // the water's own light, scattered in it (brighter toward the top where it comes in, the heart of the cube
+    // glowing); on a dark scene it is luminous, well above the night behind it
+    float inW = smoothstep(0.0, 0.04, waterLen);
+    float lit = (0.8 + 0.45 * smoothstep(-0.4, 0.4, p1.y)) * (1.0 - 0.25 * smoothstep(0.1, 0.42, max(abs(p1.x), abs(p1.y))));
+    if (lightP) col = col * 0.8 + tint * (0.3 + 0.6 * waterLen) * lit * inW;
+    else col = col * 0.7 + tint * (0.22 + 0.36 * waterLen) * lit * (0.8 + 0.4 * uNight) * inW;
+    // light focused through the water onto the cube's bottom: a moving caustic sparkling
     if (nBottom.y < -0.7 && waterLen > 0.0) {
         vec2 cq = pW.xz * 3.2;
         float caus = vnoise(cq + vec2(uTime * 0.3, seed)) * vnoise(cq * 1.3 - vec2(uTime * 0.25, seed * 0.7) + 5.0);
-        col += mix(tint, vec3(1.0), 0.6) * smoothstep(0.15, 0.45, caus) * 0.3 * Tw * Tg;
+        col += mix(tint, vec3(1.0), 0.65) * (smoothstep(0.15, 0.45, caus) * 0.4 + smoothstep(0.4, 0.6, caus) * 0.6) * Tw * Tg;
     }
     // the water's outline seen through the clear glass
     gInner = waterLen > 0.0 ? 0.0 : smoothstep(px * 1.6, 0.0, minIn);
@@ -562,12 +693,14 @@ vec4 shade(vec3 ro, vec3 rdW, vec2 uv0, float px, out float tHit) {
     // ---- behind: the world drawn so far, where the ray leaves the cube (a little further along it)
     vec3 behind = bgAtW(C + vR * (p * size + d4 * 1.6), uv0);
     if (tir) behind = behind * 0.3 + envW(vR * d4) * 0.3 + tint * (lightP ? 0.12 : 0.5);
-    vec3 tN = clamp(tint / 0.75, vec3(0.02), vec3(1.0));
-    vec3 Tg = exp(-glassLen * vec3(0.14, 0.05, 0.08));
-    vec3 Tw = pow(tN, vec3(waterLen * 0.85));
-    vec3 col = behind * Tg * Tw;
-    if (lightP) col += tint * waterLen * 0.03 * (uAmb + uSunCol * 0.5);
-    else col = col * 0.7 + tint * (0.2 + 0.3 * waterLen) * (0.8 + 0.4 * uNight) * smoothstep(0.0, 0.04, waterLen);
+    vec3 Tg, Tw;
+    vec3 col = waterThrough(behind, tint, glassLen, waterLen, Tg, Tw);
+    // the water's own light: the sun and the sky scattered in it, brighter toward the top
+    float inW = smoothstep(0.0, 0.04, waterLen);
+    float top = 0.75 + 0.5 * smoothstep(-0.4, 0.4, (vR * p1).y);
+    vec3 light = uAmb * 0.8 + uSunCol * 0.45;
+    if (lightP) col = col * 0.85 + tint * light * (0.22 + 0.5 * waterLen) * top * inW;
+    else col = col * 0.7 + tint * (0.2 + 0.3 * waterLen) * (0.8 + 0.4 * uNight) * top * inW;
     vec3 rc = envW(vR * refl);
     if (!lightP) rc += mix(uSkyLow, vec3(1.0), 0.6) * 0.4;
     col = mix(col, rc, F);
@@ -799,6 +932,111 @@ void main() {
     float k = cut * v2.a;
     vec3 outC = enc(col) * a + enc(grade(glow)) * g * (0.3 + 0.7 * T);
     frag = vec4(outC * k, a * k);
+}
+)";
+
+// ---------------------------------------------------------------- the lens: what the camera does with the world
+// before the stack is laid over it (SeaWorld::drawLens). The world (encoded) is taken down to a quarter (`LENS_DOWN_FS`)
+// and blurred (`BLUR_FS`: what the frosted glass shows); its brightest light is taken further down and blurred wide
+// (the bloom); then `LENS_FS` lays it all back over the world: the bloom, the sun's glare in the lens, the well's
+// frosted glass with its fine grid and bright rim, the frosted panels of the held and next pieces.
+inline const char* LENS_DOWN_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uSrc;
+uniform vec2 uTexel;     // the source's texel
+uniform float uBright;   // 0: the light as it is; 1: only the brightest (the bloom's source)
+void main() {
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+        vec2 o = vec2(i & 1, i >> 1) * 2.0 - 1.0;
+        c += pow(max(texture(uSrc, vUv + o * uTexel).rgb, vec3(0.0)), vec3(2.2));
+    }
+    c *= 0.25;
+    if (uBright > 0.5) {
+        float l = dot(c, vec3(0.3, 0.55, 0.15));
+        c *= smoothstep(1.1, 2.4, l) * min(1.0, 2.5 / max(l, 1e-3));   // (a glint's sparkle capped: no blinding blot)
+    }
+    frag = vec4(c, 1.0);
+}
+)";
+inline const char* BLUR_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uSrc;
+uniform vec2 uDir;   // a texel along the blur
+void main() {
+    const float W[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
+    vec3 c = texture(uSrc, vUv).rgb * W[0];
+    for (int i = 1; i < 5; i++) c += (texture(uSrc, vUv + uDir * float(i)).rgb + texture(uSrc, vUv - uDir * float(i)).rgb) * W[i];
+    frag = vec4(c, 1.0);
+}
+)";
+inline const char* LENS_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uScene, uFrost, uBloom;   // the world (encoded), blurred (linear), its brightest light (linear)
+uniform vec4 uView;                         // the board plane: center x, y, half extents x, y
+uniform float uPx, uAspect, uWorld, uPane;  // a pixel (board units), the picture's aspect, the world shown, the glass
+uniform float uGrid;                        // how bright the well's grid
+uniform vec2 uSunP;                         // the sun on the picture (-1 .. 1, out of it too)
+uniform vec4 uGlare;                        // the glare's strength, the bloom's, the frost's tint, the deep's veil
+uniform vec3 uGlareCol, uFrostCol, uPanel;
+uniform float uDeepY;
+float sdRound(vec2 p, vec2 b, float r) {
+    vec2 d = abs(p) - b + r;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+}
+// a pane of frosted glass (d: its signed distance, board units): the world blurred behind it, lightened (or darkened
+// over the deep water), a bright rim, a frosted band inside it
+vec3 frosted(vec3 c, vec3 fr, float d, float y, float tintK, float rimK) {
+    float inside = smoothstep(uPx, -uPx, d);
+    float deep = smoothstep(2.0, 10.0, uDeepY - y) * uGlare.w;
+    vec3 tint = mix(uFrostCol, uPanel, deep);
+    vec3 g = mix(fr, tint, mix(tintK, 0.82, deep));
+    g = mix(g, mix(tint, vec3(1.0), 0.5), 0.18 * smoothstep(-0.35, 0.0, d) * (1.0 - deep));
+    c = mix(c, g, inside);
+    float rim = smoothstep(uPx * 1.6, 0.0, abs(d + uPx * 0.8));
+    float halo = exp(-max(d, 0.0) / 0.08) * smoothstep(-uPx, uPx, d) * 0.16;
+    return c + (rim * 0.6 + halo) * rimK * mix(vec3(1.0), uGlareCol, 0.3);
+}
+void main() {
+    vec3 c = pow(max(texture(uScene, vUv).rgb, vec3(0.0)), vec3(2.2));
+    vec3 fr = texture(uFrost, vUv).rgb;
+    vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
+    // ---- the glass panes (over the world only: the stack and the previews are laid over them)
+    if (uPane > 0.0) {
+        float lift = 0.75 + 0.5 * smoothstep(-10.0, 10.0, w.y);
+        // the well, a fine grid of its cells etched in it
+        float dw = sdRound(w, vec2(5.08, 10.08), 0.25);
+        vec3 c0 = c;
+        c = frosted(c, fr, dw, w.y, uGlare.z, lift);
+        vec2 g = abs(fract(w + 0.5) - 0.5);
+        float grid = smoothstep(uPx * 1.2, 0.0, min(g.x, g.y)) * smoothstep(uPx, -uPx, dw + 0.06);
+        c = mix(c, mix(uFrostCol, vec3(1.0), 0.6), grid * uGrid);
+        // the held piece's panel, the next pieces' panel
+        float dh = sdRound(w - vec2(-8.6, 7.2), vec2(1.6, 1.35), 0.22);
+        float dn = sdRound(w - vec2(8.6, 4.1), vec2(1.6, 4.45), 0.22);
+        c = frosted(c, fr, min(dh, dn), w.y, uGlare.z * 0.75, 0.8);
+        c = mix(c0, c, uPane);
+    }
+    // ---- the light in the lens: the bloom, the sun's glare (a broad warm veil, a tighter glow, faint ghosts)
+    c += texture(uBloom, vUv).rgb * uGlare.y;
+    vec2 q = (vUv * 2.0 - 1.0) - uSunP;
+    q.x *= uAspect;
+    float r = length(q);
+    vec3 gl = uGlareCol * (exp(-r * 2.4) * 0.3 + exp(-r * 7.0) * 0.5 + exp(-r * 25.0) * 0.9);
+    vec2 axis = -uSunP;
+    for (int i = 1; i <= 3; i++) {
+        vec2 gp = uSunP + axis * (0.55 + 0.45 * float(i));
+        vec2 gq = (vUv * 2.0 - 1.0) - gp;
+        gq.x *= uAspect;
+        float gr = length(gq);
+        float sz = 0.05 + 0.04 * float(i);
+        gl += uGlareCol * vec3(0.6, 0.85, 1.0) * smoothstep(sz, sz * 0.6, gr) * 0.025 / float(i);
+    }
+    c += gl * uGlare.x * uWorld;
+    frag = vec4(enc(c), 1.0);
 }
 )";
 
