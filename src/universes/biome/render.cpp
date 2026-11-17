@@ -436,16 +436,19 @@ void BiomeUniverse::drawRain() {
     ugl::drawFullscreen();
 }
 
-// The well's pane over the world (and the bridge: the world fading to its color).
+// The well's pane over the world (and the bridge: the world fading to its color). A world drawing its own pane leaves
+// only the bridge here.
 void BiomeUniverse::drawPane() {
     const float bridge = saturate(c_.bridge.amount);
+    const float pane = w_->ownPane() ? 0.f : 1.f;
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(progVeil_);
     set4f(progVeil_, "uView", c_.viewC.x, c_.viewC.y, c_.viewH.x, c_.viewH.y);
     set1f(progVeil_, "uPx", c_.px);
-    set1f(progVeil_, "uPanelA", c_.pal.panelA * (1.f - bridge));
+    set1f(progVeil_, "uPanelA", c_.pal.panelA * (1.f - bridge) * pane);
+    set1f(progVeil_, "uEdgeA", 0.38f * pane);
     set1f(progVeil_, "uDeepY", w_->paneDeepY());
     set1f(progVeil_, "uBridge", smoothstepf(0.05f, 0.85f, bridge));
     set3f(progVeil_, "uPanel", c_.pal.panel);
