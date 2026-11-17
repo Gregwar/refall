@@ -33,6 +33,7 @@ private:
     // between neighbouring cells and into the well's walls and floor, lost to the air through the exposed faces.
     float heat_[22][10] = {};
     int ids_[22][10] = {};     // one id per locked piece (its outline is where it radiates)
+    vec2 tex_[22][10] = {};    // where each cell lies in its piece's lava (kept as the cell moves down)
     int nextId_ = 1;
     bool hardPending_ = false; // a HardDrop event came before this Lock
     float wallL_[22] = {}, wallR_[22] = {}, floor_[10] = {};
@@ -60,10 +61,10 @@ private:
     void placeBlobs();
 
     // ---- Board geometry (instanced cells written into the temperature image).
-    struct CellInst { float a[4], b[4], c[4]; };
+    struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int gx, gy, type, mask; float h, t; };
+    struct Fading { float x, y; int gx, gy, type, mask; float h, t; vec2 tex; };
     std::vector<Fading> fading_;
 
     // ---- The HUD (its lettering: hudLine, the host letters it), and the overlay's readings in the same letters.

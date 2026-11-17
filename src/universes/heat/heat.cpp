@@ -1,14 +1,18 @@
 // HEAT: the stack seen through a thermal camera.
 //
-// One world: a cold, dark room seen through an infrared camera, the well a pane a shade colder than the wall, a few
-// warm shapes far away. Every piece lands white hot and cools down through the camera's colormap (white, yellow,
-// orange, red, magenta, deep blue), so the stack shows its own history as temperature. The heat is simulated: it
-// conducts between neighbouring cells (a fresh piece warms the old ones under it) and into the well's walls and
-// floor, and leaves through the exposed faces into the air, where it rises, sways and fades: the stack glows, and
-// the air shimmers above it. The pieces are made of seven materials of different emissivity: each type settles to
-// its own band of the colormap when cold (the camera reads the material, not only the heat), and each piece radiates
-// through its outline (a cooler rim), so the pieces stay apart. The falling piece is the hottest thing on screen, the
-// ghost a cold outline.
+// One world, cinematic: a dark, smoky volcanic cave seen through an infrared camera (great rock walls in shadow,
+// their faceted faces catching a faint light from above, smoke drifting up, sparks rising, a few lava glows deep in
+// the rock), the well dark glass etched with the cells' grid in a thin frame, each preview in its own framed box.
+// The pieces are molten rock: every piece lands white hot and cools down through the camera's colormap, so the stack
+// shows its own history as temperature. Hot, a piece is liquid lava, slow swirls flowing in it (one lava over the
+// piece's cells); cooling, a dark crust of plates forms on it, cracked by fissures that glow with the heat underneath
+// (wide when warm, hairlines when cold); a molten edge glows round each piece, a dark seam parts it from the others.
+// The heat is simulated: it conducts between neighbouring cells (a fresh piece warms the old ones under it) and into
+// the well's walls and floor, and leaves through the exposed faces into the air, where it rises, sways and fades:
+// flames lick up from the hot faces (and up the outside of the warmed walls), the air shimmers above them, hot
+// things bloom. The pieces are made of seven materials of different emissivity: each type settles to its own band of
+// the colormap when cold (the camera reads the material, not only the heat). The falling piece is the hottest thing
+// on screen, the ghost a cold outline; the queue warms as it comes (the next piece already white hot).
 //
 // The song is the room's weather. Calm parts and breaks are cold and quiet (the camera's range wide, the far shapes
 // cold, the air still). Choruses are warmer (the range narrows, the far shapes warm up, the air rises faster, a
@@ -20,12 +24,14 @@
 // into focus, the far shapes warm into view and a warm draft rises off the floor, then the scale bar draws in; after
 // it the scale bar goes and the whole image cools down to the cold end of the colormap.
 //
-// The frame is one thermal image: the room, the air and the pieces are written as temperatures into a float
-// target, then mapped through the colormap; the camera's overlay (a scale bar with the range in degrees, the
-// lettering) is drawn on top.
+// The frame is one thermal image: the cave, the air and the pieces are written as temperatures into a float
+// target, then mapped through the colormap; the flames and the sparks are light beside it (in the colormap's hot
+// colors, fading to the dark rather than through its cold ones), the bloom the hot things' own colors; the camera's
+// overlay (a scale bar with the range in degrees, the lettering) is drawn on top. Every variant is its colormap, so
+// the same cave reads as lava (LAVA), ice with gold heat (ARCTIC), plain grey (WHITE HOT) or ironbow purples.
 //
 // Cost: the heat of the 10 x 22 cells and the air on a ~150 x 85 grid are simulated on the CPU (a few microseconds
-// and a semi-Lagrangian step a frame); two full-screen passes.
+// and a semi-Lagrangian step a frame); two full-screen passes and a quarter-resolution blur (~0.5 ms at 1080p).
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/heat/heat.hpp"
@@ -59,7 +65,7 @@ vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255
 
 // ---- The colormaps (sRGB stops, 0 cold .. 1 hot).
 struct Stop { float t; unsigned c; };
-struct Colormap { const char* name; Stop s[10]; int n; };
+struct Colormap { const char* name; Stop s[11]; int n; };
 const Colormap MAPS[] = {
     // 0: ironbow, the classic: black, indigo, purple, magenta, red, orange, yellow, white.
     {"IRONBOW", {{0.f, 0x000005}, {0.08f, 0x0e0e46}, {0.18f, 0x2e1084}, {0.28f, 0x5c118f}, {0.38f, 0x9a1a8a},
@@ -69,15 +75,16 @@ const Colormap MAPS[] = {
                 {0.62f, 0xa6e2e4}, {0.72f, 0xf3d27a}, {0.85f, 0xfb9b2c}, {1.f, 0xfff4dc}}, 9},
     // 2: white hot: plain grey.
     {"WHITE HOT", {{0.f, 0x030303}, {0.35f, 0x404244}, {0.7f, 0xa6a8a8}, {1.f, 0xfdfdfb}}, 4},
-    // 3: lava: blue-black, teal, wine, red, orange, yellow.
-    {"LAVA", {{0.f, 0x020509}, {0.13f, 0x052832}, {0.27f, 0x0f5458}, {0.4f, 0x5a3456}, {0.52f, 0xa8233a},
-              {0.65f, 0xe2441e}, {0.78f, 0xf8941c}, {0.9f, 0xfde06a}, {1.f, 0xfffbe6}}, 9},
+    // 3: lava: a cave's blue-greys (black, slate, teal grey), then molten rock (wine, red, orange, yellow).
+    {"LAVA", {{0.f, 0x020406}, {0.06f, 0x0b1217}, {0.12f, 0x293a41}, {0.18f, 0x2b2c31}, {0.26f, 0x48222a},
+              {0.36f, 0x7c1b1e}, {0.46f, 0xb82a18}, {0.58f, 0xe55616}, {0.72f, 0xf99424}, {0.86f, 0xffd062},
+              {1.f, 0xfffbea}}, 11},
     // 4: rainbow (high contrast): indigo, blue, cyan, green, yellow, orange, red, pink white.
     {"RAINBOW", {{0.f, 0x010004}, {0.12f, 0x0e0a40}, {0.24f, 0x1a34b0}, {0.37f, 0x00b2d6}, {0.5f, 0x1ccf5c},
                  {0.62f, 0xdce024}, {0.75f, 0xff8a12}, {0.87f, 0xf01c30}, {1.f, 0xffdcf2}}, 9},
-    // 5: glow (hot metal): black, deep red, red, orange, yellow, white.
-    {"GLOW", {{0.f, 0x030102}, {0.18f, 0x2c0306}, {0.36f, 0x7c0c0a}, {0.52f, 0xc8260a}, {0.66f, 0xf0620e},
-              {0.8f, 0xfcad2a}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 8},
+    // 5: glow (hot metal): black, smoky brown red, deep red, red, orange, yellow, white.
+    {"GLOW", {{0.f, 0x030102}, {0.1f, 0x140b0b}, {0.2f, 0x34100e}, {0.36f, 0x7c0c0a}, {0.52f, 0xc8260a}, {0.66f, 0xf0620e},
+              {0.8f, 0xfcad2a}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 9},
 };
 
 // The variants: the camera's palette, the drop's palette, the room's temperature and its grain.
@@ -94,11 +101,6 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 // camera reads emissivity), spread over the colormap's cold half.
 const float BASE[7] = {0.54f, 0.21f, 0.41f, 0.27f, 0.47f, 0.14f, 0.34f};
 
-// The displayed temperature of a cell (the shader's formula without the rim).
-float cellTemp(int type, float h, float gain) {
-    const float b = BASE[std::clamp(type, 0, 6)];
-    return b + (1.02f - b) * std::min(1.f, 0.88f * h * gain);
-}
 // The camera's reading of a temperature, in degrees.
 float degrees(float d) { return 14.f + 520.f * std::pow(std::max(0.f, d), 1.6f); }
 
@@ -113,6 +115,12 @@ float vnoise(float x, float y, uint64_t s) {
     fy = fy * fy * (3 - 2 * fy);
     const float a = hashf(xi, yi, s), b = hashf(xi + 1, yi, s), c = hashf(xi, yi + 1, s), d = hashf(xi + 1, yi + 1, s);
     return lerpf(lerpf(a, b, fx), lerpf(c, d, fx), fy);
+}
+
+// Where a cell lies in its piece's lava (texture coordinates): the piece's own place in the lava, plus the cell's
+// place in the piece (x right, y up from its top-left), so the cells of a piece join up.
+vec2 lavaAt(int id, int x, int y, int x0, int y0) {
+    return {hashf(id, 1, 0x1A7Aull) * 64.f + (x - x0), hashf(id, 2, 0x1A7Aull) * 64.f - (y - y0)};
 }
 
 } // namespace
@@ -139,7 +147,7 @@ bool HeatUniverse::init(int width, int height) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
     glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         glEnableVertexAttribArray(1 + i);
         glVertexAttribPointer(1 + i, 4, GL_FLOAT, GL_FALSE, sizeof(CellInst), (void*)(sizeof(float) * 4 * i));
         glVertexAttribDivisor(1 + i, 1);
@@ -294,6 +302,12 @@ void HeatUniverse::updateAir(const Game& g, float dt) {
             if (x > 0 && !filled(x - 1, y)) splatAir(p.x - 0.55f, p.y, 0.f, h * kSide * dt);
             if (x < Game::W - 1 && !filled(x + 1, y)) splatAir(p.x + 0.55f, p.y, 0.f, h * kSide * dt);
         }
+    // the well's warmed walls give off heat outside too (flames lick up the outside of the well beside a hot stack)
+    for (int y = Game::HIDDEN; y < Game::H; y++) {
+        const float wy = layout::cellPos(0.f, (float)y).y;
+        splatAir(-5.3f, wy, 0.f, wallL_[y] * kSide * dt);
+        splatAir(5.3f, wy, 0.f, wallR_[y] * kSide * dt);
+    }
     if (g.hasPiece() && !g.over()) {
         int cells[4][2];
         g.pieceCells(g.piece(), cells);
@@ -396,6 +410,7 @@ void HeatUniverse::syncCells(const Game& g) {
             ids_[y][x] = id;
             const float h = 0.95f * std::exp(-(y - top) / 3.f) * rng_.range(0.6f, 1.f);
             heat_[y][x] = h;
+            tex_[y][x] = lavaAt(id, x, y, x, y);
             while (sp > 0 && count < 4) {
                 sp--;
                 const int cx = stack[sp][0], cy = stack[sp][1];
@@ -407,6 +422,7 @@ void HeatUniverse::syncCells(const Game& g) {
                     if (g.cell(nx, ny).type != g.cell(x, y).type || sp >= 8 || count + sp >= 4) continue;
                     ids_[ny][nx] = id;
                     heat_[ny][nx] = h;
+                    tex_[ny][nx] = lavaAt(id, nx, ny, x, y);
                     stack[sp][0] = nx; stack[sp][1] = ny; sp++;
                 }
             }
@@ -565,10 +581,16 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
         const bool hard = hardPending_;
         hardPending_ = false;
         float cx = 0.f, minY = 99.f;
+        int x0 = Game::W, y0 = Game::H;
+        for (auto& c : ev.cells) {
+            x0 = std::min(x0, c.x);
+            y0 = std::min(y0, c.y);
+        }
         for (auto& c : ev.cells) {
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
             heat_[c.y][c.x] = hard ? 1.12f : 1.f;
+            tex_[c.y][c.x] = lavaAt(id, c.x, c.y, x0, y0);
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
             cx += p.x;
             minY = std::min(minY, p.y);
@@ -608,7 +630,7 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 if (c.y < Game::H - 1 && rows[c.y + 1] && ids_[c.y + 1][c.x] == id) m |= 4;
                 if (c.y > 0 && rows[c.y - 1] && ids_[c.y - 1][c.x] == id) m |= 8;
             }
-            fading_.push_back({p.x, p.y, c.x, c.y, std::clamp(c.type, 0, 6), m, heat_[c.y][c.x], 0.f});
+            fading_.push_back({p.x, p.y, c.x, c.y, std::clamp(c.type, 0, 6), m, heat_[c.y][c.x], 0.f, tex_[c.y][c.x]});
         }
         // the vent: each column's heat passes up into the first cell above the cleared rows (the stack warms where
         // the row was), and a plume rises from the top of the stack over each cleared row
@@ -634,15 +656,18 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
         {
             int nb[Game::H][Game::W] = {};
             float nhv[Game::H][Game::W] = {};
+            vec2 ntx[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (rows[y]) continue;
                 std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
                 std::memcpy(nhv[dst], heat_[y], sizeof(heat_[y]));
+                std::memcpy(ntx[dst], tex_[y], sizeof(tex_[y]));
                 dst--;
             }
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(heat_, nhv, sizeof(heat_));
+            std::memcpy(tex_, ntx, sizeof(tex_));
         }
         if (quadClear) {
             quadFlash_ = 1.f;
@@ -658,7 +683,7 @@ void HeatUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : ev.cells) {
             if (c.y < Game::HIDDEN || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-            fading_.push_back({p.x, p.y, c.x, c.y, std::clamp(c.type, 0, 6), 0, heat_[c.y][c.x], -100.f});
+            fading_.push_back({p.x, p.y, c.x, c.y, std::clamp(c.type, 0, 6), 0, heat_[c.y][c.x], -100.f, tex_[c.y][c.x]});
         }
         break;
     default: break;
@@ -677,9 +702,10 @@ void HeatUniverse::buildBoard(const Game& g) {
             if (same(x + dx[i], y + dy[i])) m |= 1 << i;
         return m;
     };
-    auto push = [&](float x, float y, float half, int mask, float gx, float gy, float h, float alpha, float base, int kind, float shrink) {
+    auto push = [&](float x, float y, float half, int mask, float gx, float gy, float h, float alpha, float base, int kind,
+                    float shrink, vec2 tex) {
         if (alpha <= 0.003f) return;
-        cells_.push_back({{x, y, half, (float)mask}, {gx, gy, h, alpha}, {base, (float)kind, shrink, 0.f}});
+        cells_.push_back({{x, y, half, (float)mask}, {gx, gy, h, alpha}, {base, (float)kind, shrink, 0.f}, {tex.x, tex.y, 0.f, 0.f}});
     };
     // Locked cells: their heat from the heat map.
     for (int y = Game::HIDDEN; y < Game::H; y++)
@@ -694,7 +720,8 @@ void HeatUniverse::buildBoard(const Game& g) {
                 return g.cell(nx, ny).type == c.type;
             };
             const vec3 p = layout::cellPos((float)x, y - off);
-            push(p.x, p.y, 0.5f, maskOf(x, y, same), (float)x, (float)y, 0.f, 1.f, BASE[std::clamp((int)c.type, 0, 6)], 0, 0.f);
+            push(p.x, p.y, 0.5f, maskOf(x, y, same), (float)x, (float)y, 0.f, 1.f, BASE[std::clamp((int)c.type, 0, 6)], 0, 0.f,
+                 tex_[y][x]);
         }
     // Cleared cells cooling out (real time), the topped-out stack cooling into the room from the top.
     for (const Fading& f : fading_) {
@@ -702,12 +729,12 @@ void HeatUniverse::buildBoard(const Game& g) {
             const float rowFrac = (Game::H - 1 - f.gy) / (float)(Game::H - Game::HIDDEN);
             const float k = smoothstepf(1.f - rowFrac * 0.75f - 0.25f, 1.f - rowFrac * 0.75f, over_ * 1.15f);
             const float base = lerpf(BASE[f.type], 0.06f, k);
-            push(f.x, f.y, 0.5f, 0, -1.f, 0.f, f.h * (1.f - k), 1.f - smoothstepf(0.6f, 1.f, k), base, 0, 0.f);
+            push(f.x, f.y, 0.5f, 0, -1.f, 0.f, f.h * (1.f - k), 1.f - smoothstepf(0.6f, 1.f, k), base, 0, 0.f, f.tex);
             continue;
         }
         const float k = smoothstepf(0.f, 0.32f, f.t);
         push(f.x, f.y, 0.5f, f.mask, -1.f, 0.f, f.h * (1.f - k) * 0.8f, 1.f - smoothstepf(0.08f, 0.34f, f.t),
-             lerpf(BASE[f.type], 0.06f, k), 0, 0.12f * k);
+             lerpf(BASE[f.type], 0.06f, k), 0, 0.12f * k, f.tex);
     }
     // The ghost (a cold outline) and the falling piece (the hottest thing on screen).
     if (g.hasPiece() && !g.over()) {
@@ -732,18 +759,26 @@ void HeatUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), -1.f, 0.f, 0.f, 0.9f, 0.3f, 1, 0.f);
+                push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), -1.f, 0.f, 0.f, 0.9f, 0.3f, 1, 0.f, vec2{});
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        int x0 = Game::W, y0 = Game::H;
+        for (auto& c : cells) {
+            x0 = std::min(x0, c[0]);
+            y0 = std::min(y0, c[1]);
+        }
         for (auto& c : cells) {
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), -1.f, 0.f, 1.25f, 1.f, BASE[p.type], 0, 0.f);
+            // (its lava as it will lock: the id it will get)
+            push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inPiece), -1.f, 0.f, 1.05f, 1.f, BASE[p.type], 0, 0.f,
+                 lavaAt(nextId_, c[0], c[1], x0, y0));
         }
     }
-    // Previews: each material at a little warmth, so its band shows.
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+    // Previews: the queue warms as it comes (the next piece already white hot, the last one cold: its material's
+    // band shows), the held piece kept warm.
+    auto preview = [&](int type, vec2 center, float sc, float h, float alpha) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
         int cells[4][2];
@@ -760,13 +795,16 @@ void HeatUniverse::buildBoard(const Game& g) {
         };
         for (auto& c : cells) {
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            push(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), -1.f, 0.f, 0.12f, alpha, BASE[type], 0, 0.f);
+            push(px, py, 0.5f * sc, maskOf(c[0], c[1], inPiece), -1.f, 0.f, h, alpha, BASE[type], 0, 0.f,
+                 lavaAt(-1 - type, c[0], c[1], (int)minx, (int)miny));
         }
     };
-    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
+    preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), 0.4f,
+            g.holdUsed() ? 0.4f : 1.f);
+    const float queueHeat[3] = {0.95f, 0.4f, 0.12f};
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), vec2{c.x, c.y}, layout::previewScale(i), queueHeat[i], 1.f);
     }
 }
 
@@ -1013,12 +1051,26 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", (float)(seed_ % 1000) * 0.137f);
     set1f(progBg_, "uWall", V.wall * (1.f - 0.25f * (1.f - wm)) + 0.01f * wp);
-    set1f(progBg_, "uAirGain", (0.13f + 0.09f * saturate(warm) + 0.06f * flare_ + 0.06f * quadFlash_) * (1.f - 0.5f * over_));
+    set1f(progBg_, "uAirGain", (0.06f + 0.06f * saturate(warm) + 0.06f * flare_ + 0.06f * quadFlash_) * (1.f - 0.5f * over_));
     set1f(progBg_, "uShimmer", 0.5f + 0.7f * saturate(warm));
     set1f(progBg_, "uGrain", V.grain);
     set1f(progBg_, "uWallHeat", 0.45f);
     set1f(progBg_, "uWell", bare ? 0.f : 1.f);
     set1f(progBg_, "uVig", 0.32f);
+    set1f(progBg_, "uFlame", (0.75f + 0.25f * saturate(warm) + 0.3f * flare_) * (1.f - over_));
+    set1f(progBg_, "uEmbers", (0.55f + 0.45f * saturate(warm)) * (1.f - 0.7f * over_));
+    {
+        // the previews' boxes (the hold, the three next) and the HUD columns
+        const float box[16] = {layout::HOLD_CENTER.x, layout::HOLD_CENTER.y, 1.42f, 1.31f,
+                               layout::nextCenter(0).x, layout::nextCenter(0).y, 1.42f, 1.31f,
+                               layout::nextCenter(1).x, layout::nextCenter(1).y, 1.42f, 1.31f,
+                               layout::nextCenter(2).x, layout::nextCenter(2).y, 1.42f, 1.31f};
+        glUniform4fv(ugl::U(progBg_, "uBox"), 4, box);
+        float quiet[8];
+        std::memcpy(quiet, layout::LEFT_COLUMN, sizeof(layout::LEFT_COLUMN));
+        std::memcpy(quiet + 4, layout::RIGHT_COLUMN, sizeof(layout::RIGHT_COLUMN));
+        glUniform4fv(ugl::U(progBg_, "uQuiet"), 2, quiet);
+    }
     {
         float bl[16] = {}, bt[4] = {};
         for (int i = 0; i < 4 && i < (int)blobs_.size(); i++) {
@@ -1045,6 +1097,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progCell_, "uHeat", 0);
         set1f(progCell_, "uRim", 1.f);
         set1f(progCell_, "uGain", gain + 0.0001f);
+        set1f(progCell_, "uTime", worldTime_);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
         glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);
@@ -1067,7 +1120,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         const bool h = pass % 2 == 0;
         const ugl::Target& dst = h ? glowB_ : glowA_;
         const ugl::Target& src = h ? glowA_ : glowB_;
-        const float step = pass < 2 ? 1.5f : 3.f;
+        const float step = pass < 2 ? 2.f : 4.5f;
         dst.bind();
         glBindTexture(GL_TEXTURE_2D, src.tex);
         set2f(progBlur_, "uDir", h ? step / src.w : 0.f, h ? 0.f : step / src.h);
@@ -1088,6 +1141,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, glowA_.tex);
     set1i(progMap_, "uGlow", 2);
     set1f(progMap_, "uGlowAmt", (0.55f + 0.25f * saturate(warm) + 0.3f * flare_) * (1.f - over_));
+    set1f(progMap_, "uBloom", (1.5f + 0.3f * saturate(warm)) * (1.f - over_));
     glActiveTexture(GL_TEXTURE0);
     set1f(progMap_, "uLo", lo_);
     set1f(progMap_, "uHi", hi_ - 0.08f * flare_);
