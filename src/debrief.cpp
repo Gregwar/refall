@@ -187,6 +187,7 @@ void Menu::drawDebrief(int w, int h) {
         // a soft shade down the middle, under the logo and the words
         p.rrect(X(960 - 420), Y(120), 840 * u_, 900 * u_, 300 * u_, hex(0x000000, 0.55f * d * out), 260 * u_);
     }
+    p.frostSource();
     // the logo: its contours fade in; a stage cleared, they then turn into the coloured logo
     const float cx = X(960), cy = Y(392), S = 486 * u;
     const float turned = debrief_.clear ? easeInOutSine((t - COLOR_AT) / COLOR_FOR) : 0.f;
@@ -204,11 +205,16 @@ void Menu::drawDebrief(int w, int h) {
     const Col ink = hex(0xffffff), dim = hex(0xe0e0f0, 0.65f), gold = hex(0xffd27a);
     p.text(F::JOSEFIN_LIGHT, debrief_.heading, cx, Y(748), 72 * u, withA(ink, at(0.5f)), 0, 0.16f);
     const float a2 = at(0.9f), colX = 190 * u;
+    p.setFade(a2); // the score's frosted card, a small gold gem between its two columns
+    p.glass(cx - 340 * u, Y(774), 680 * u, 132 * u, 22 * u, u, 0.f, 0.5f);
+    p.setFade(1.f);
     p.text(F::JOSEFIN, "SCORE", cx - colX, Y(812), 17 * u, withA(dim, dim.a * a2), 0, 0.35f);
     p.text(F::JOSEFIN, "LINES", cx + colX, Y(812), 17 * u, withA(dim, dim.a * a2), 0, 0.35f);
     p.text(F::JOSEFIN_LIGHT, text::thousands(debrief_.score), cx - colX, Y(874), 54 * u, withA(ink, a2), 0, 0.04f);
     p.text(F::JOSEFIN_LIGHT, std::to_string(debrief_.lines), cx + colX, Y(874), 54 * u, withA(ink, a2), 0, 0.04f);
-    p.line(cx, Y(822), cx, Y(878), 1 * u, withA(ink, 0.18f * a2));
+    p.line(cx, Y(796), cx, Y(884), 1 * u, withA(hex(0xe8c06a), 0.45f * a2));
+    p.tri(cx, Y(832), cx + 7 * u, Y(840), cx, Y(848), withA(hex(0xfff0c8), a2), withA(hex(0xe8c06a), a2), withA(hex(0x8a6a30), a2));
+    p.tri(cx, Y(832), cx, Y(848), cx - 7 * u, Y(840), withA(hex(0xfff0c8), a2), withA(hex(0x8a6a30), a2), withA(hex(0xc8a050), a2));
     const float a3 = at(1.3f);
     p.text(F::JOSEFIN, debrief_.detail, cx, Y(950), 17 * u, withA(dim, dim.a * a3), 0, 0.3f);
     if (!debrief_.note.empty())

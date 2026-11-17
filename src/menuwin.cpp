@@ -1,7 +1,7 @@
-// The menu: a kaleidoscope of the game's real universes. The focused song's live universe is folded into a slowly
-// turning stained-glass kaleidoscope; the 12 stages are glass petals in a rosette around a dark glass medallion, each
-// opening onto its 5 songs as smaller facets; focus turns the rosette to bring the chosen petal to the reading position
-// (the right).
+// The menu: a kaleidoscope of the game's real universes. The focused song's universe is folded into a slowly turning
+// crystal kaleidoscope; the stages are faceted gem petals in a jewelled rosette (a bronze star and band, orbit lines)
+// around a polished dark medallion, each opening onto its songs as smaller gems; focus turns the rosette to bring the
+// chosen petal to the reading position (the right). Panels are frosted glass (Painter::glass).
 // Live universes come from a WorldPool (menuworlds.hpp): small frames, their own frame rate, snapshots otherwise.
 #include <algorithm>
 #include <cmath>
@@ -36,6 +36,10 @@ unsigned menuSeed() {
     static const unsigned seed = std::getenv("REFALL_MENU_SEED") ? (unsigned)std::atoi(std::getenv("REFALL_MENU_SEED")) : std::random_device{}();
     return seed;
 }
+
+// The title's disc, its height: the logo (its setting reaching from about 0 to 660 for a disc at 330) and the menu
+// (680..890) centred on the screen's height together.
+constexpr float TITLE_CY = 330.f + 540.f - 0.5f * 890.f;
 
 // the kaleidoscope's crossfade between sources (one menu at a time)
 std::string g_cur, g_prev;
@@ -118,6 +122,8 @@ struct Worlds {
     void menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha = 1.f);
     void kalBackground(const std::string& cur);
     void kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC);
+    void wheel(float cx, float cy, float R, float rot, float alpha = 1.f);
+    void medallion(float cx, float cy, float R, Col hue, float alpha = 1.f, float ring = 1.f);
     void kalTitle();
     void kalFree();
     void kalVoyages();
@@ -178,8 +184,11 @@ void Worlds::draw() {
 void Worlds::tabs(F f, Col ink, Col accent, float track) {
     std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
     while (name.size() > 4 && p.width(f, name, 22 * u, track + 0.2f) > 760 * u) name.pop_back();
-    p.text(f, name, X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
     const float cx = X(1180), sp = 220 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_);
+    // a soft shade under the title and the tabs, so they read over a bright crystal
+    p.rrect(X(40), y - 40 * u, p.width(f, name, 22 * u, track + 0.2f) + 80 * u, 64 * u, 32 * u, hex(0x02040c, 0.22f), 50 * u);
+    p.rrect(cx - sp - 110 * u, y - 40 * u, 2 * sp + 220 * u, 70 * u, 35 * u, hex(0x02040c, 0.22f), 50 * u);
+    p.text(f, name, X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
     const float hx = cx + (m.aDiff_ - 1) * sp;
     p.line(hx - 56 * u, y + 16 * u, hx + 56 * u, y + 16 * u, (1.5f + 1.5f * on) * u, withA(accent, 0.6f + 0.4f * on));
     if (on > 0.05f) { p.setAdditive(true); p.glow(hx, y + 16 * u, 80 * u, withA(accent, 0.25f * on)); p.setAdditive(false); }
@@ -211,9 +220,7 @@ void Worlds::info(F head, F body, Col ink, Col dim, Col accent, int card) {
         p.rrect(x0 - 60 * u, y0 + 10 * u, w + 120 * u, h + 80 * u, 0, hex(0x000000, 0.6f), 60 * u);
         p.line(x0, y0, x0 + w, y0, 1 * u, withA(ink, 0.18f));
     } else {
-        p.rrect(x0, y0 + 10 * u, w, h, 22 * u, hex(0x000000, 0.4f), 30 * u);
-        p.rrect(x0, y0, w, h, 22 * u, hex(0x0c0c14, 0.72f));
-        p.rrectLine(x0, y0, w, h, 22 * u, 1.2f * u, hex(0xffffff, 0.22f));
+        p.glass(x0, y0, w, h, 22 * u, u, 0.f, 0.55f);
     }
     const Menu::SongView v = m.songView();
     const float lx = x0 + 44 * u, rx = x0 + w - 44 * u;
@@ -262,16 +269,14 @@ Col playlistHue(const std::string& url, bool featured) {
     return Col{f(5), f(3), f(1), 1.f};
 }
 
-// The background: on the title, the game's universes (cached snapshots) in turn; on Voyage, procedural glass in the
-// focused stage's hue (the focused song's step of it in an open petal), the same cool grey for every locked stage; in
-// free play, the focused playlist's hue. The hue and the brightness ease over ~0.7 s.
 // The background: a universe of the game folded into the kaleidoscope (its cached snapshot; until it exists, procedural
 // glass in its colours, cross-fading to the image when it arrives). The title and free play tour the voyage's
 // universes; Voyage shows the focused stage's first universe (the focused song's in an open petal), tinted by the
-// stage's hue (the song's step of it), greyed and dimmed for a locked stage. Tint and brightness ease over ~0.7 s.
+// stage's hue (the song's step of it), greyed and dimmed for a locked stage; free play takes the focused playlist's hue.
+// Tint, brightness and the kaleidoscope's centre ease over ~0.7 s.
 void Worlds::kalBackground(const std::string& cur) {
     static Col tintNow{0.6f, 0.6f, 0.7f, 1.f};
-    static float lvlNow = 0.f, satNow = 1.f, duoNow = 0.35f;
+    static float lvlNow = 0.f, satNow = 1.f, duoNow = 0.35f, cxNow = 720.f, cyNow = 440.f;
     static double lastT = -1;
     const bool first = lastT < 0;
     const float dt = first ? 1.f : (float)std::clamp(t - lastT, 0.0, 0.25);
@@ -316,6 +321,10 @@ void Worlds::kalBackground(const std::string& cur) {
     const float k = first ? 1.f : 1.f - std::exp(-dt / 0.7f);
     tintNow = mixc(tintNow, tint, k);
     lvlNow += (lvl - lvlNow) * k;
+    // its centre: the rosette's on Voyage, the title's disc, above the screen on free play and the voyages
+    const bool title = m.screen_ == Menu::TITLE, head = m.screen_ == Menu::FREE || m.screen_ == Menu::VOYAGES;
+    cxNow += ((title || head ? 960.f : 720.f) - cxNow) * k;
+    cyNow += ((title ? TITLE_CY : head ? -80.f : 440.f) - cyNow) * k;
     satNow += (sat - satNow) * k;
     duoNow += (duo - duoNow) * k;
     auto range = [&](const std::string& kk, float& lo, float& hi) {
@@ -326,25 +335,141 @@ void Worlds::kalBackground(const std::string& cur) {
     float loA, hiA, loB, hiB;
     range(g_prev.empty() ? g_cur : g_prev, loA, hiA);
     range(g_cur, loB, hiB);
-    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(720), Y(440), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
+    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
               mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, loA, hiA, loB, hiB);
 }
 
+// A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from
+// the top left), the table brightest; `lead` rims it in `leadC`, with fine lines between its facets.
 void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng, Col c, float alpha, bool lead, Col leadC) {
-    const float rm = lerpf(r0, r1, 0.45f);
-    const float ix = cx + std::cos(a) * r0, iy = cy + std::sin(a) * r0;
-    const float ox = cx + std::cos(a) * r1, oy = cy + std::sin(a) * r1;
-    const float lx = cx + std::cos(a - halfAng) * rm, ly = cy + std::sin(a - halfAng) * rm;
-    const float rx = cx + std::cos(a + halfAng) * rm, ry = cy + std::sin(a + halfAng) * rm;
-    const Col inner = withA(mixc(c, hex(0x000000), 0.45f), alpha), outer = withA(mixc(c, hex(0xffffff), 0.35f), alpha), side = withA(c, alpha);
-    p.tri(ix, iy, lx, ly, ox, oy, inner, side, outer);
-    p.tri(ix, iy, ox, oy, rx, ry, inner, outer, withA(mixc(c, hex(0x000000), 0.15f), alpha));
-    if (lead) {
-        const float w = 2.6f * u;
-        p.line(ix, iy, lx, ly, w, leadC); p.line(lx, ly, ox, oy, w, leadC);
-        p.line(ox, oy, rx, ry, w, leadC); p.line(rx, ry, ix, iy, w, leadC);
-        p.line(ix, iy, ox, oy, 1 * u, withA(leadC, leadC.a * 0.5f));
+    const float rm = lerpf(r0, r1, 0.45f), rt = lerpf(r0, r1, 0.52f);
+    const float P[4][2] = {{cx + std::cos(a) * r0, cy + std::sin(a) * r0},
+                           {cx + std::cos(a - halfAng) * rm, cy + std::sin(a - halfAng) * rm},
+                           {cx + std::cos(a) * r1, cy + std::sin(a) * r1},
+                           {cx + std::cos(a + halfAng) * rm, cy + std::sin(a + halfAng) * rm}};
+    const float tx = cx + std::cos(a) * rt, ty = cy + std::sin(a) * rt;
+    const Col table = withA(mixc(c, hex(0xffffff), 0.22f), alpha);
+    for (int e = 0; e < 4; e++) {
+        const int g = (e + 1) % 4;
+        const float dx = (P[e][0] + P[g][0]) * 0.5f - tx, dy = (P[e][1] + P[g][1]) * 0.5f - ty;
+        const float len = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+        const float lit = 0.5f + 0.5f * (dx * -0.55f + dy * -0.83f) / len; // 1: facing the light
+        const Col edge = withA(mixc(c, hex(0x04040a), 0.62f - 0.5f * lit), alpha);
+        const Col mid = withA(mixc(c, lit > 0.5f ? hex(0xffffff) : hex(0x04040a), std::fabs(lit - 0.5f) * 0.5f), alpha);
+        p.tri(tx, ty, P[e][0], P[e][1], P[g][0], P[g][1], table, e % 2 ? mid : edge, e % 2 ? edge : mid);
     }
+    if (lead) {
+        const float w = 2.4f * u;
+        for (int e = 0; e < 4; e++) p.line(P[e][0], P[e][1], P[(e + 1) % 4][0], P[(e + 1) % 4][1], w, leadC);
+        const Col fine = hex(0xffffff, 0.22f * alpha);
+        for (int e = 0; e < 4; e++) p.line(tx, ty, P[e][0], P[e][1], 0.9f * u, fine);
+    }
+}
+
+// The jewelled setting of a rosette (its petals reach to about R): an engraved bronze star behind it, a dark steel plate,
+// a bevelled bronze band with small gems on it, and orbit lines round it, blue and gold, lights running along them.
+// `rot` turns the ornaments with the rosette.
+void Worlds::wheel(float cx, float cy, float R, float rot, float alpha) {
+    const float k = R / 300.f, A = alpha; // (drawn for petals reaching to 300)
+    auto rr = [&](float v) { return v * k * u; };
+    p.circle(cx, cy, rr(400), hex(0x000000, 0.3f * A), rr(120));
+    // the star: two layers of points, bronze, darker toward the middle, its edges catching the light
+    for (int layer = 0; layer < 2; layer++) {
+        const int pts = layer == 0 ? 16 : 8;
+        const float tip = rr(layer == 0 ? 404 : 384), valley = rr(layer == 0 ? 352 : 330), off = rot * 0.25f + (layer ? TAU / 32 : 0.f);
+        for (int i = 0; i < pts; i++) {
+            const float a0 = off + i * TAU / pts, a1 = a0 + TAU / pts * 0.5f, a2 = a0 + TAU / pts;
+            const float x0 = cx + std::cos(a0) * valley, y0 = cy + std::sin(a0) * valley;
+            const float x1 = cx + std::cos(a1) * tip, y1 = cy + std::sin(a1) * tip;
+            const float x2 = cx + std::cos(a2) * valley, y2 = cy + std::sin(a2) * valley;
+            const float lit = 0.5f + 0.5f * (std::cos(a1) * -0.55f + std::sin(a1) * -0.83f);
+            const Col tipC = withA(mixc(hex(0x2a2026), hex(0x8a6a50), lit), (layer ? 0.9f : 0.7f) * A);
+            const Col inC = hex(layer ? 0x1a1620 : 0x141420, (layer ? 0.9f : 0.7f) * A);
+            p.tri(cx, cy, x0, y0, x1, y1, inC, inC, tipC);
+            p.tri(cx, cy, x1, y1, x2, y2, inC, tipC, inC);
+            const Col edge = withA(mixc(hex(0x8a6a50), hex(0xf0d0a0), lit), 0.7f * A);
+            p.line(x0, y0, x1, y1, 1.4f * u, edge);
+            p.line(x1, y1, x2, y2, 1.4f * u, edge);
+            // an engraved line inside its edges, a bead at its tip
+            const float ki = 0.9f, ex0 = cx + (x0 - cx) * ki, ey0 = cy + (y0 - cy) * ki, ex1 = cx + (x1 - cx) * (ki - 0.03f), ey1 = cy + (y1 - cy) * (ki - 0.03f);
+            const float ex2 = cx + (x2 - cx) * ki, ey2 = cy + (y2 - cy) * ki;
+            p.line(ex0, ey0, ex1, ey1, 1 * u, hex(0x0c0808, 0.45f * A));
+            p.line(ex1, ey1, ex2, ey2, 1 * u, hex(0x0c0808, 0.45f * A));
+            if (layer == 0) p.circle(ex1, ey1, 1.8f * u, withA(edge, 0.8f * A));
+        }
+    }
+    // the plate: dark steel, lit a little from the top left, fine engraved rings
+    p.circle(cx, cy, rr(336), hex(0x1c2840, 0.86f * A));
+    p.circle(cx - rr(80), cy - rr(110), rr(150), hex(0x7090c0, 0.16f * A), rr(260));
+    p.ring(cx, cy, rr(292), 1 * u, hex(0xc0d0f0, 0.22f * A));
+    p.ring(cx, cy, rr(302), 0.8f * u, hex(0xc0d0f0, 0.14f * A));
+    // the band: bronze, bevelled (a light outer edge, a dark inner one), engraved with dots, lit from the top left
+    const float band = rr(318);
+    p.ring(cx, cy, band, rr(16), hex(0x7a5c44, 0.95f * A));
+    p.ring(cx, cy, band + rr(7), 1.6f * u, hex(0xf2d6a8, 0.8f * A));
+    p.ring(cx, cy, band - rr(7), 1.6f * u, hex(0x24180e, 0.9f * A));
+    p.setAdditive(true);
+    p.arc(cx, cy, band, -2.7f, -0.9f, rr(9), hex(0xffe0b0, 0.22f * A), rr(10));
+    p.arc(cx, cy, band, 0.5f, 1.9f, rr(9), hex(0x6080c0, 0.10f * A), rr(10));
+    p.setAdditive(false);
+    for (int i = 0; i < 96; i++) {
+        const float a = rot * 0.25f + i * TAU / 96;
+        p.circle(cx + std::cos(a) * band, cy + std::sin(a) * band, 1.5f * u, hex(0x2a1c12, 0.8f * A));
+    }
+    for (int i = 0; i < 8; i++) { // small gems set in the band, blue and gold in turn
+        const float a = rot * 0.25f + (i + 0.5f) * TAU / 8;
+        p.circle(cx + std::cos(a) * band, cy + std::sin(a) * band, rr(9), hex(0x1a1208, 0.9f * A));
+        kite(cx, cy, a, band - rr(8), band + rr(8), 0.026f, i % 2 ? hex(0xe8b860) : hex(0x5aa8ff), A, true, hex(0xf2d6a8, 0.8f * A));
+    }
+    // the orbits: a glowing blue line just outside, a fainter one beyond in two arcs, gold arcs with small beads; lights
+    // running round
+    const float ob = rr(344), ob2 = rr(358), og = rr(334);
+    p.setAdditive(true);
+    p.ring(cx, cy, ob, rr(6), hex(0x3a7cff, 0.16f * A), rr(10));
+    p.setAdditive(false);
+    p.ring(cx, cy, ob, 1.4f * u, hex(0x9cc8ff, 0.75f * A));
+    const float spin = t * 0.05f;
+    for (int i = 0; i < 2; i++) p.arc(cx, cy, ob2, spin + i * PI, spin + i * PI + 1.9f, 1.1f * u, hex(0x9cc8ff, 0.45f * A));
+    for (int i = 0; i < 3; i++) {
+        const float a0 = -spin * 0.7f + i * TAU / 3;
+        p.arc(cx, cy, og, a0, a0 + 1.3f, 1.4f * u, hex(0xe8c06a, 0.7f * A));
+        for (int b = 0; b < 3; b++) {
+            const float ab = a0 + 1.42f + b * 0.045f;
+            p.circle(cx + std::cos(ab) * og, cy + std::sin(ab) * og, (2.6f - 0.5f * b) * u, hex(0xffd890, (0.9f - 0.2f * b) * A));
+        }
+    }
+    p.setAdditive(true);
+    for (int i = 0; i < 3; i++) {
+        const float a = t * 0.22f + i * TAU / 3;
+        const float lx = cx + std::cos(a) * ob, ly = cy + std::sin(a) * ob;
+        p.glow(lx, ly, rr(16), hex(0x9cd0ff, 0.6f * A));
+        p.circle(lx, ly, 2.2f * u, hex(0xffffff, 0.9f * A));
+        for (int j = 1; j < 10; j++) // its trail
+            p.circle(cx + std::cos(a - j * 0.012f) * ob, cy + std::sin(a - j * 0.012f) * ob, 1.6f * u, hex(0x9cd0ff, 0.5f * A * (1.f - j / 10.f)));
+    }
+    p.setAdditive(false);
+}
+
+// A big polished dark disc (radius R) in a gold ring: a deep glass, a faint hue of `hue` in it, a curved gloss on its top
+// left; `ring` < 1 draws only that much of the gold ring, round from the top (the title's opening).
+void Worlds::medallion(float cx, float cy, float R, Col hue, float alpha, float ring) {
+    const float A = alpha;
+    p.circle(cx, cy, R + 14 * u, hex(0x000000, 0.45f * A), 22 * u);
+    p.circle(cx, cy, R + 7 * u, hex(0x2a1e12, A));
+    p.ring(cx, cy, R + 7 * u, 1.2f * u, hex(0xf0d8a8, 0.6f * A));
+    p.circle(cx, cy, R, hex(0x06080e, A));
+    p.circle(cx, cy + R * 0.1f, R * 0.85f, withA(hue, 0.16f * A), R * 0.6f);
+    p.circle(cx - R * 0.25f, cy - R * 0.3f, R * 0.45f, hex(0x8098c0, 0.10f * A), R * 0.7f);
+    p.setAdditive(true);
+    p.arc(cx, cy, R * 0.84f, -2.75f, -1.25f, R * 0.07f, hex(0xffffff, 0.10f * A), R * 0.07f);
+    p.arc(cx, cy, R * 0.92f, -2.5f, -1.6f, R * 0.02f, hex(0xffffff, 0.22f * A), R * 0.02f);
+    p.setAdditive(false);
+    if (ring <= 0.f) return;
+    const float a0 = -PI * 0.5f, a1 = a0 + TAU * std::min(1.f, ring);
+    p.arc(cx, cy, R - 4 * u, a0, a1, 3.2f * u, hex(0xe8c06a, 0.9f * A));
+    p.setAdditive(true);
+    p.arc(cx, cy, R - 4 * u, a0, a1, 8 * u, hex(0xffc860, 0.18f * A), 10 * u);
+    p.setAdditive(false);
 }
 
 // The angle between the opened petal's song facets: wider for fewer songs (the fan spans about 0.56 rad).
@@ -361,7 +486,8 @@ void Worlds::kalCampaign() {
     auto ang = [&](float s) { return base + s * TAU / n; };
     // angular sizes were drawn for 12 petals: narrower beyond, so that 15 still breathe
     const float wk = 12.f / std::max(12, n);
-    p.circle(cx, cy, 300 * u, hex(0x000000, 0.25f), 90 * u);
+    p.frostSource();
+    wheel(cx, cy, 300, base);
     // the order of the journey: an arc from petal to petal (1 -> 12), gold as far as the stages are open
     int nextStage = -1;
     for (int s = 0; s < n && nextStage < 0; s++)
@@ -371,10 +497,10 @@ void Worlds::kalCampaign() {
         for (int s = 0; s + 1 < n; s++) {
             const bool o = open(s + 1);
             const float a0 = ang((float)s) + 0.06f * wk, a1 = ang((float)s + 1) - 0.06f * wk;
-            if (o) p.arc(cx, cy, r, r, a0, a1, 2.2f * u, hex(0xe8c06a, 0.7f));
+            if (o) p.arc(cx, cy, r, a0, a1, 2.2f * u, hex(0xe8c06a, 0.7f));
             else
                 for (int i = 0; i < 6; i += 2)
-                    p.arc(cx, cy, r, r, lerpf(a0, a1, i / 6.f), lerpf(a0, a1, (i + 1) / 6.f), 1.5f * u, hex(0xb0b0c0, 0.3f));
+                    p.arc(cx, cy, r, lerpf(a0, a1, i / 6.f), lerpf(a0, a1, (i + 1) / 6.f), 1.5f * u, hex(0xb0b0c0, 0.3f));
             // a chevron in the middle points the way
             const float am = (a0 + a1) * 0.5f, mx = cx + std::cos(am) * r, my = cy + std::sin(am) * r;
             const float tx = -std::sin(am), ty = std::cos(am), nx = std::cos(am), ny = std::sin(am), k = 7 * u;
@@ -405,7 +531,7 @@ void Worlds::kalCampaign() {
         const float ck = cl ? (cel ? sstep(std::clamp((cT - TURN) / 0.12f, 0.f, 1.f)) : 1.f) : 0.f;
         const float f = focusStage(s);
         const float op = s == fs ? ao : 0.f; // this petal's opening
-        const Col c = o ? stageCol(s) : hex(0x5a5c66);
+        const Col c = o ? stageCol(s) : hex(0x1c1e26);
         const bool focusClosed = s == fs && m.aRow_ > 0.5f && !m.petal_;
         const float pulse = 0.75f + 0.25f * std::sin(t * 2.4f);
         if (f > 0.05f) {
@@ -419,7 +545,15 @@ void Worlds::kalCampaign() {
         const Col pc = !o ? c : mixc(pcOpen, pcClear, ck);
         const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
         kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op) * wk, pc,
-             !o ? 0.6f : lerpf(0.7f, 0.95f, ck), true, focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : edgeCl);
+             !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
+             focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f));
+        if (focusClosed && f > 0.5f) { // the focused petal calls: arcs spreading from its tip
+            const float tip = (262 + 22 * f + 26 * op) * u;
+            for (int w = 0; w < 3; w++) {
+                const float k = std::fmod(t * 0.7f + w / 3.f, 1.f);
+                p.arc(cx, cy, tip + (8 + 26 * k) * u, a - 0.1f * wk, a + 0.1f * wk, 2 * u, withA(mixc(c, hex(0xffffff), 0.5f), 0.8f * std::sin(k * PI) * f));
+            }
+        }
         if (cl) { // a cleared petal glows from within
             p.setAdditive(true);
             p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, 70 * u, withA(c, 0.22f * ck));
@@ -509,21 +643,19 @@ void Worlds::kalCampaign() {
         p.setAdditive(false);
         p.ring(fx, fy, 34 * u, 2.2f * u, hex(0xffffff, 0.9f * pulse * ao));
     }
-    // the medallion: a plain dark glass disc, softly tinted by the focused stage
-    p.circle(cx, cy, 128 * u, hex(0x08080c));
-    {
-        const Col sc = open(fs) ? songCol(fs, m.petal_ ? m.song_ : 0) : hex(0x5a5c66);
-        p.circle(cx, cy, 118 * u, withA(sc, 0.16f + 0.1f * ao), 70 * u);
-    }
-    p.ring(cx, cy, 121 * u, 3 * u, hex(0xe8c06a, 0.8f));
+    // the medallion: a polished dark disc, softly tinted by the focused stage
+    medallion(cx, cy, 124 * u, open(fs) ? songCol(fs, m.petal_ ? m.song_ : 0) : hex(0x5a5c66), 1.f);
     p.text(F::JOSEFIN_LIGHT, std::to_string(fs + 1), cx, cy + 30 * u, 84 * u, hex(0xffffff, 0.9f), 0, 0.02f);
     // the focused stage, on the right
     {
         const float x = X(1240);
         const bool o = open(fs);
+        const int ns = nSongs(fs);
+        const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
+        p.glass(X(1198), Y(160), 614 * u, (350 + std::max(0, ns - 1) * rowH + 20 + 32 - 160) * u, 26 * u, u, 0.f, 0.42f);
         p.text(F::JOSEFIN_LIGHT, "STAGE " + std::to_string(fs + 1), x, Y(250), 64 * u, hex(0xffffff), -1, 0.15f);
         const char* st = !o ? "LOCKED" : cleared(fs) ? "CLEARED" : "OPEN";
-        p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0xffd27a) : hex(0xffffff, 0.9f), -1, 0.4f);
+        p.text(F::JOSEFIN, st, x, Y(292), 18 * u, !o ? hex(0xb0b0b8) : cleared(fs) ? hex(0x86e8a8) : hex(0xffffff, 0.9f), -1, 0.4f);
         // the scores and lines in two right-aligned columns (lines dimmer): the stage's on the header line
         const float colS = x + 430 * u, colL = x + 528 * u;
         if (o && cleared(fs)) {
@@ -531,15 +663,12 @@ void Worlds::kalCampaign() {
             p.text(F::JOSEFIN, linesStr(m.progress_->stageLines(fs, m.diff_)) + " L", colL, Y(292), 18 * u, hex(0xffd27a, 0.7f), 1, 0.3f);
         }
         // the list of songs, spread over the room five rows took
-        const int ns = nSongs(fs);
-        const float rowH = ns > 0 ? std::min(70.f, 350.f / ns) : 70.f;
         for (int k = 0; k < ns; k++) {
             const float y = Y(350 + k * rowH);
             const float g = m.aRow_ > 0.5f ? sstep(near1(m.aSong_, k)) * ao : 0.f;
-            // dark glass under each row, so it reads over a bright world
-            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0x0c0c14, 0.55f));
-            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xffffff, 0.1f * g));
-            p.rrectLine(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, 1.2f * u, hex(0xffffff, 0.2f + 0.6f * g));
+            // a darker pane of glass under each row, lit when focused
+            p.glass(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, u, g, 0.62f);
+            p.rrect(x - 16 * u, y - 36 * u, 560 * u, 56 * u, 12 * u, hex(0xa8d0ff, 0.08f * g));
             const Col sc = o ? songCol(fs, k) : hex(0x5a5c66);
             p.rrect(x, y - 24 * u, 32 * u, 32 * u, 4 * u, sc);
             if (o && beaten(fs, k)) p.check(x + 16 * u, y - 8 * u, 18 * u, 3 * u, hex(0xffffff));
@@ -555,7 +684,9 @@ void Worlds::kalCampaign() {
         std::string prompt;
         if (!o) prompt = "LOCKED";
         else if (!m.petal_) prompt = "SPACE  SONGS"; // the one key Enter doesn't explain: the petal's songs
-        p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.75f), -1, 0.35f);
+        if (!prompt.empty()) // (on a soft shade, as the tabs)
+            p.rrect(x - 30 * u, Y(690), p.width(F::JOSEFIN, prompt, 17 * u, 0.35f) + 60 * u, 44 * u, 22 * u, hex(0x02040c, 0.22f), 40 * u);
+        p.text(F::JOSEFIN, prompt, x, Y(720), 17 * u, hex(0xffffff, 0.85f), -1, 0.35f);
     }
     tabs(F::JOSEFIN, hex(0xffffff), hex(0xffffff), 0.35f);
     info(F::JOSEFIN_LIGHT, F::JOSEFIN, hex(0xffffff), hex(0xe0e0f0, 0.65f), hex(0xffffff), 1);
@@ -572,10 +703,10 @@ void Worlds::kalTitle() {
     const float worldA = sstep((k - 2.8f) / 2.2f), discA = sstep((k - 0.5f) / 1.f), ringA = sstep((k - 1.1f) / 1.3f);
     const float nameA = sstep((k - 1.4f) / 1.4f), menuA = sstep((k - 4.8f) / 0.9f);
     if (worldA < 1.f) p.rrect(X(-100), Y(-100), X(2020) - X(-100), Y(1180) - Y(-100), 0, hex(0x000000, 1.f - worldA));
-    // the logo (its petals from 40 to 620) and the menu (652..862) centred on the screen's height together
-    const float dy = 540.f - 0.5f * (40.f + 862.f);
-    const float cx = X(960), cy = Y(330 + dy);
-    p.circle(cx, cy, 250 * u, hex(0x000000, 0.4f * worldA), 60 * u);
+    p.frostSource();
+    const float dy = TITLE_CY - 330.f;
+    const float cx = X(960), cy = Y(TITLE_CY);
+    wheel(cx, cy, 290, t * 0.03f, sstep((k - 2.0f) / 1.6f));
     // the logo's petals: the stages' colours in rainbow order round the wheel
     std::vector<std::pair<float, Col>> hues;
     for (int k2 = 0; k2 < nStages(); k2++) {
@@ -592,8 +723,8 @@ void Worlds::kalTitle() {
         const Col c = hues.empty() ? hex(i % 2 ? 0xffffff : 0xe8c06a) : hues[i * hues.size() / 12].second;
         kite(cx, cy, a, 200 * u, lerpf(205.f, 290.f, pa) * u, 0.2f, c, (hues.empty() ? 0.18f : 0.95f) * pa, true, hex(0x08080c, 0.8f * pa));
     }
-    p.circle(cx, cy, 200 * u * lerpf(0.94f, 1.f, discA), hex(0x08080c, discA)); // a plain dark glass disc, the title inside it
-    if (ringA > 0.f) p.arc(cx, cy, 191 * u, 191 * u, -1.5708f, -1.5708f + TAU * ringA, 4 * u, hex(0xe8c06a, 0.85f)); // (drawn round)
+    // the polished disc, the title inside it (its gold ring drawn round)
+    medallion(cx, cy, 196 * u * lerpf(0.94f, 1.f, discA), hex(0x4a6ab0), discA, ringA);
     {
         const std::string title = upper(GAME_TITLE);
         float size = 76 * u;   // as large as fits inside the disc
@@ -605,8 +736,10 @@ void Worlds::kalTitle() {
         p.text(F::JOSEFIN_LIGHT, title, cx, cy + size * 0.36f, size, hex(0xffffff, nameA), 0, lerpf(0.5f, 0.22f, nameA));
     }
     if (menuA <= 0.f) return;
-    p.rrect(cx - 260 * u, Y(652 + dy), 520 * u, 210 * u, 24 * u, hex(0x0c0c14, 0.6f * menuA));
-    menuItems(F::JOSEFIN, 712 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
+    p.setFade(menuA);
+    p.glass(cx - 260 * u, Y(680 + dy), 520 * u, 210 * u, 24 * u, u, 0.f, 0.5f);
+    p.setFade(1.f);
+    menuItems(F::JOSEFIN, 740 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
 }
 
 void Worlds::kalFree() {
@@ -614,29 +747,38 @@ void Worlds::kalFree() {
     float mix;
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
-    p.rrect(X(560), Y(90), 800 * u, 130 * u, 24 * u, hex(0x0c0c14, 0.65f));
+    p.frostSource();
+    p.glass(X(560), Y(90), 800 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, "FREE PLAY", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     const bool rows = m.playlists_ != nullptr;
     const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
     static const uint32_t C[3] = {0x6fd8c0, 0x9c86ff, 0xff6f9c};
     for (int d = 0; d < DIFF_COUNT; d++) {
-        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 1) * 430.f), y = Y(420);
+        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 1) * 430.f), y = Y(405);
         const float R = (115 + 22 * f * onDiff) * u;
+        // a setting round it: a bronze ring and a blue orbit, gold when chosen
+        p.circle(x, y, R + 30 * u, hex(0x0a1020, 0.35f), 30 * u);
+        p.ring(x, y, R + 12 * u, 2.2f * u, mixc(hex(0x7a5c44, 0.8f), hex(0xe8c06a, 0.95f), f));
+        p.ring(x, y, R + 24 * u, 1.2f * u, hex(0x9cc8ff, 0.3f + 0.4f * f));
+        if (f > 0.05f) {
+            p.setAdditive(true);
+            p.ring(x, y, R + 24 * u, 6 * u, hex(0x3a7cff, 0.18f * f), 10 * u);
+            p.setAdditive(false);
+        }
         for (int i = 0; i < 4; i++)
             kite(x, y, t * 0.05f * freePlayMultiplier(d) + i * TAU / 4, 0, R, 0.55f, hex(C[d]), 0.5f + 0.45f * f, true,
                  f > 0.5f && onDiff > 0.5f ? hex(0xffffff, 0.9f) : hex(0x08080c, 0.9f));
-        p.rrect(x - 110 * u, y + R + 14 * u, 220 * u, 78 * u, 16 * u, hex(0x0c0c14, 0.7f));
-        p.text(F::JOSEFIN, difficultyName(d), x, y + R + 50 * u, (24 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
+        p.glass(x - 110 * u, y + R + 40 * u, 220 * u, 78 * u, 16 * u, u, f * onDiff, 0.5f);
+        p.text(F::JOSEFIN, difficultyName(d), x, y + R + 76 * u, (24 + 4 * f) * u, hex(0xffffff, 0.5f + 0.5f * f), 0, 0.35f);
         char b[16];
         std::snprintf(b, sizeof(b), "x%.1f", freePlayMultiplier(d));
-        p.text(F::JOSEFIN, b, x, y + R + 78 * u, 18 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
+        p.text(F::JOSEFIN, b, x, y + R + 104 * u, 18 * u, hex(0xffffff, 0.45f + 0.4f * f), 0, 0.1f);
     }
     if (rows) {
         // the playlists as glass cards: the game's own first (featured: larger, a gold rim, the stages' hues), then the
         // player's, each with a hue and a small rosette of its own (seeded from its playlist ID), then "add one"
         const float onPl = near1(m.aFreeRow_, 1);
-        p.rrect(X(120), Y(680), 1680 * u, 262 * u, 24 * u, hex(0x0c0c14, 0.72f));
-        p.rrectLine(X(120), Y(680), 1680 * u, 262 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.3f * onPl));
+        p.glass(X(120), Y(680), 1680 * u, 262 * u, 24 * u, u, 0.4f * onPl, 0.55f);
         p.text(F::JOSEFIN, "PLAYLIST", X(160), Y(714), 16 * u, hex(0xffffff, 0.55f + 0.45f * onPl), -1, 0.45f);
         if (m.editing_) {
             const float fx = X(160), fy = Y(760), fw = 1600 * u, fh = 62 * u;
@@ -682,7 +824,7 @@ void Worlds::kalFree() {
                     p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), (featured ? 0.10f : 0.f) + 0.16f * g), 26 * u);
                     p.setAdditive(false);
                 }
-                p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), 0.78f), 0.92f));
+                p.frost(x, y, w, h, 20 * u, mixc(hue, hex(0x0a0a12), 0.8f), 0.82f);
                 p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
                 p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
                             g > 0.5f ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.95f) : withA(hue, 0.55f));
@@ -729,8 +871,7 @@ void Worlds::kalFree() {
         // the starting level: a strip of coarse steps along the bottom (HARD's hyperdrop levels in its colour)
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
         const float ly = Y(962), lh = 78 * u, cw = 120 * u, lx = X(440);
-        p.rrect(X(120), ly, 1680 * u, lh, 24 * u, hex(0x0c0c14, 0.72f));
-        p.rrectLine(X(120), ly, 1680 * u, lh, 24 * u, 1.2f * u, hex(0xffffff, 0.12f + 0.3f * onLvl));
+        p.glass(X(120), ly, 1680 * u, lh, 24 * u, u, 0.4f * onLvl, 0.55f);
         p.text(F::JOSEFIN, "STARTING LEVEL", X(160), ly + lh / 2 + 6 * u, 16 * u, hex(0xffffff, 0.55f + 0.45f * onLvl), -1, 0.45f);
         const float sx = lx + (m.aLvl_ + 0.5f) * cw; // the selection, sliding under the numbers
         p.rrect(sx - cw / 2 + 8 * u, ly + 10 * u, cw - 16 * u, lh - 20 * u, 14 * u, hex(0xffffff, 0.08f + 0.08f * onLvl));
@@ -772,7 +913,8 @@ void Worlds::kalVoyages() {
     float mix;
     tourAt(11.f, cur, next, mix);
     kalBackground(mix > 0.5f ? next : cur);
-    p.rrect(X(660), Y(90), 600 * u, 130 * u, 24 * u, hex(0x0c0c14, 0.65f));
+    p.frostSource();
+    p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, "VOYAGE", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     if (!m.voyages_) return;
     const auto& vs = m.voyages_->list();
@@ -813,7 +955,7 @@ void Worlds::kalVoyages() {
             p.setAdditive(false);
         }
         p.rrect(x, y + 12 * u, w, h, 22 * u, hex(0x000000, 0.3f), 30 * u);
-        p.rrect(x, y, w, h, 20 * u, withA(mixc(hue, hex(0x0a0a12), sel ? 0.66f : 0.86f), 0.94f)); // (dark enough for its colors and text to pop)
+        p.frost(x, y, w, h, 20 * u, mixc(hue, hex(0x0a0a12), sel ? 0.66f : 0.86f), 0.88f); // (dark enough for its colors and text to pop)
         p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
         p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
                     sel ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.5f) : withA(hue, 0.35f));
@@ -878,8 +1020,7 @@ void Worlds::kalVoyages() {
         p.rrect(tx - 2 * u, ky, 4 * u, kh, 2 * u, hex(0xffffff, 0.7f));
     }
     if (making) {
-        p.rrect(X(120), Y(650), 1680 * u, 230 * u, 24 * u, hex(0x0c0c14, 0.92f));
-        p.rrectLine(X(120), Y(650), 1680 * u, 230 * u, 24 * u, 1.2f * u, hex(0xffffff, 0.4f));
+        p.glass(X(120), Y(650), 1680 * u, 230 * u, 24 * u, u, 0.5f, 0.85f);
         p.text(F::JOSEFIN, m.vStep_ == 1 ? "PLAYLIST" : "NAME", X(160), Y(686), 16 * u, hex(0xffffff), -1, 0.45f);
         textField(X(160), Y(712), 1600 * u, 62 * u, m.editText_,
                   m.vStep_ == 1 ? "Type or paste (Ctrl+V) a YouTube playlist link or ID" : nullptr);
