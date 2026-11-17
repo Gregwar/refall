@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "text.hpp"
+#include "universes/notepad/art.hpp"
 #include "ugl.hpp"
 #include "universe.hpp"
 
@@ -58,6 +59,7 @@ public:
         std::string text;
         int n = 0;          // outline: its cells (offsets in cells from x, y)
         float pts[8] = {};
+        std::vector<vec2> poly; // the drop's picture: its line, or its strokes in pairs (board units)
         bool world = false; // the world's (doodles, crumbs), not the board's
         // the hand
         float seed = 0;        // this drawing of it (redrawn: a new seed)
@@ -89,18 +91,7 @@ private:
     struct Dying { int x, y, type, mask; uint64_t key; float t, dur; };
     // A cell of the stack: which piece it belongs to (its index in it), and its type.
     struct InkCell { uint64_t id = 0; int idx = 0; int type = -1; };
-    enum { IT_CELL = 0, IT_OUTLINE = 1, IT_STROKE = 2, IT_DOODLE = 3, IT_PIE = 4, IT_TEXT = 5, IT_SCRIBBLE = 6, IT_MOVER = 7 };
-    // A drop's travelling drawings: redrawn at a new pose on every drawing, the old pose rubbed out.
-    enum { MV_CUBE = 0, MV_BALL = 1, MV_RUNNER = 2, MV_PLANE = 3, MV_ROCKET = 4, MV_COUNT = 5 };
-    struct Mover {
-        int kind = 0, side = 0;
-        vec2 start, vel;      // vel: board units per beat
-        double beat0 = 0;
-        float size = 1, ylo = 0, yhi = 0;
-        vec3 col{0.f};
-        int tool = 1;
-        uint64_t id = 0;
-    };
+    enum { IT_CELL = 0, IT_OUTLINE = 1, IT_STROKE = 2, IT_DOODLE = 3, IT_PIE = 4, IT_TEXT = 5, IT_SCRIBBLE = 6, IT_ART = 7 };
 
     // drawings
     void tick(const Frame& f, float since);
@@ -109,10 +100,13 @@ private:
     void addPiece(std::vector<Item>& out, uint64_t base, const int (*cells)[2], int count, vec2 origin, float scale,
                   int type, float alpha, bool ghost, float residue, float moveResidue, int maskCells = 4);
     void manageDoodles();
-    void manageMovers();
-    void spawnMover(int kind, int side);
-    void marginBox(int side, float& x0, float& y0, float& x1, float& y1) const;
-    void emitMover(const Item& it, std::vector<Mark>& out);
+    // the drop's picture (see art.cpp)
+    void manageArt();
+    void startArt();
+    bool artPanels(notepad_art::Panels& P, vec2 origin[2], float& scale) const;
+    void addArt(std::vector<Item>& out);
+    void emitArt(const Item& it, bool residue, std::vector<Mark>& out);
+    void drawLabels();
     void emitKind(const Item& it, int age, bool residue, std::vector<Mark>& out, std::vector<Item>* words);
     void spawnDoodle(bool burst);
     bool freeSpot(float size, vec2& out);
@@ -157,7 +151,6 @@ private:
     int stage_ = 1;          // 0 break, 1 mid, 2 chorus, 3 drop
     float stageF_ = 1.f;     // the stage the hand's style is at: up at once, down slowly when the music calms
     float markerA_ = 0.f;    // the drop's marker over the well, fading out after the drop
-    double moverOut_ = 0.0;  // when the next travelling drawing is rubbed out after the drop
     float kick_ = 0;
     bool slowOn_ = false;
     float slow_ = 0;
@@ -192,7 +185,17 @@ private:
     std::vector<Dying> dying_;
     std::vector<Transient> transients_;
     std::vector<Doodle> doodles_;
-    std::vector<Mover> movers_;
+    // the drop's picture: drawn from its start (in beats), rubbed out in bands from the top when the drop ends
+    bool artOn_ = false;
+    double artBeat0_ = 0, artErase_ = -1;
+    int artDrop_ = 0;
+    uint64_t artSeed_ = 0;
+    float artScale_ = 1;
+    vec2 artOrigin_[2];
+    std::vector<notepad_art::Elem> art_;
+    std::unordered_map<uint32_t, vec2> artWhen_; // each thing's start and duration (beats), by id
+    float artTop_ = 0, artBottom_ = 0;           // its extent (board units): the eraser's bands
+    text::Lettering labelHand_;
     double beatNow_ = 0; // the song's beat at the current drawing
     float overT_ = -1;       // game over: time since the top out
     std::vector<Item> dead_; // the stack at the top out: scribbled over, then erased
