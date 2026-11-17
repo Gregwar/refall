@@ -1,36 +1,48 @@
-// GLOWING FOREST: a night forest lit only by bioluminescence.
+// GLOWING FOREST: a night forest as a relief print with fluorescent inks.
 //
-// One world: a dark, painted night forest. Four depths of trunks fade into a luminous mist (the far ones thin and pale,
-// the nearer ones darker, with limbs), banks of mist drift between them, pale shafts of light fall through gaps in the
-// canopy with motes of dust in them, and clumps of leaves and vines hang over the top corners. At the sides stand the
-// near trunks: ridged bark, buttress roots, moss, and veins and dots of glowing fungus that climb them as the forest
-// grows. A large mossy rock fills the bottom-left corner (the HUD's corner text sits on its dark face), a still pool lies
-// on the right floor between the trunks (it mirrors the glow on its banks, glowing pads afloat on it), stones and a
-// carpet of glowing moss spread over the floor with the song. There is no moon on screen and no lamp: all the light is
-// the life's own. Glowing mushrooms (domed, conical or flat caps with gills), slender mycena, ferns unrolling from
-// fiddleheads, bell flowers, glowing reeds, cushions of moss, bracket fungi up the trunks and glowworm threads hanging
-// from the canopy grow beside and outside the well and below the HUD's columns, never behind their text; they sway in a
-// slow breeze, and each lights the mist around it with a soft halo.
+// One world: a hand-carved print of a night forest. The whole frame is a key block of black ink on paper, its detail
+// cut out with a gouge, and every carved stroke is shading: the sky is solid night cut in long horizontal strokes that
+// thicken toward a moon cut out of the block (a ring of solid ink around it, two strokes of cloud left across it) and
+// a few stars nicked where it is dark; three depths of trunks stand against it, cut in vertical strokes, the farther
+// the more carved away (the forest recedes by carving, not by grey); the canopy hangs over the top in black masses
+// whose edges are cut into fans of leaves, vines at the sides; the near trunks frame the view, solid ink cut in long strokes along the bark (a broad lit edge on the
+// moon's side, the life's glow low on the side facing the well), buttress roots, glowing veins cut up them as the
+// forest grows. The floor is solid ink nicked with U-gouge dabs, grass tufts standing black against the light; stones
+// with contour cuts, a large rock in the bottom-left corner (the HUD's corner text on its solid face) and a pool on the
+// right, its surface cut in long strokes that mirror the print above it. The well and the HUD's text sit on solid,
+// uncut ink.
 //
-// The forest grows with the lines: a new song starts with a dark forest and a few faint plants; each cleared row
-// breaks into spores that drift out of the well to an empty spot, where a new plant comes up and stays for the song
-// (a quad sows a cluster of four at once and the whole forest flares up). The spots fill in stages (the front row, then
-// the bark and the left's threads, then a back row), so the forest keeps growing to the end of a long song; once
-// every spot is taken, new lines make the old plants grow fuller.
+// Everything that glows is printed in two fluorescent spot inks rolled under the key and showing where it is carved:
+// low in the forest the cuts open onto the inks (the life's light in the air), each glowing plant is cut bare and
+// inked, shaded by cuts across its body, a margin of uncut key around it, and its light widens the cuts around it (the
+// sky's, the trunks', the floor's), printed in its ink.
+// The print is pulled with its artefacts: the glow plates a little out of register, the key's carved edges pressed into
+// the paper, its solids starved by a light roller here and there, the paper's tooth and fibres, and a fluorescent glow
+// the inks give off into the dark.
 //
-// The pieces are solid little cubes of luminous fungus flesh, one per cell with a thin gap: lit from within, darker
-// toward their sides, threaded with bright veins and a few glowing spots, a pale line of moonlight along their top edge;
-// each of the seven types in a clean color of the variant. A cleared row flares and breaks into spores in a quarter of a
-// second; a hard drop puffs a little glowing dust out from under the piece. The ghost is a thin outline.
+// The forest grows with the lines: a new song starts with a dark print and a few plants; each cleared row is carved
+// away in chips that fly out of the well to an empty spot, where a new plant is cut and inked over three seconds and
+// stays for the song (a quad cuts a cluster of four at once and the whole forest flares): glowing mushrooms (domed,
+// conical or flat caps with gills), slender mycena, ferns unrolling from fiddleheads, bell flowers, reeds with seed
+// heads, cushions of moss, bracket fungi up the trunks and glowworm threads hanging from the canopy, beside and outside
+// the well and below the HUD's columns, never behind their text. The spots fill in stages (the front row, then the bark
+// and the left's threads, then a back row), so the forest keeps growing to the end of a long song; once every spot is
+// taken, new lines make the old plants grow fuller.
 //
-// The song: calm is a still forest, its plants dim and steady, a few fireflies; mid makes the plants glow on the beat
-// grid, a quarter of them every two beats (local, eased, never the whole scene), the fireflies more numerous; a peak
-// brightens the life steadily, the pulses swell with the bass, the kicks light single plants and spores rise. The drop
-// sends one slow wave of light through the forest: from the well outward, plant after plant and the moss between them
-// flare up as it passes and settle back over the following seconds. Slow motion is the forest under a cold moon, its
-// glow paled to silver; game over puts the stack's glow out from the top, the blocks crumbling away. Before a song
-// the forest wakes in the dark: its plants light up one by one, the glow climbs the bark and the fireflies come out;
-// after it the fireflies leave, the lights go out one by one and the night deepens over the sleeping forest.
+// The blocks are printed in register from the variant's three drums: each ink alone, each overprint of two, or the bare
+// paper, cut out of the key with a hand-cut edge, each type keeping its own lines of ink across it. A cleared row is
+// taken away by the gouge in strokes; a hard drop knocks a few chips out from under the piece. The ghost is a cut
+// outline.
+//
+// The song: calm is a still print, its plants' light cut short, a few fireflies (sparks cut in ink); mid lights the
+// plants on the beat grid, a quarter of them every two beats (the cuts around them widening, local and eased), more
+// fireflies; a peak cuts the light wider all over, the pulses swell with the bass, a kick lights a single plant and
+// spores rise. The drop adds a plate: the variant's third ink rolls out over the glow from the well at a walking pace
+// (overprinting both glow inks into new colors) and stays for the whole drop, the glow plates knocked a little out of
+// register on the downbeat and settling back, plant after plant flaring as the ink reaches it. Slow motion pulls the
+// glow inks into one cold ink; game over drains the stack's ink to the paper from the top, the roller then inking it
+// over in black. Before a song the print is pulled: the paper, the glow inks, then the key; after it the light goes
+// out plant by plant and the sheet sinks into the dark.
 //
 // Layout contract: a flat orthographic view at the reference camera's scale on the board plane.
 #include "universes/forest/forest.hpp"
@@ -67,38 +79,32 @@ using ugl::setMat;
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
-// A forest (sRGB): the night (top, low), its mist and moss, the life's two glows, the moon of slow motion, and the
-// seven piece colors (I O T S Z J L).
+// A print (sRGB): its paper, the key block's ink, the three drums (a yellow, a pink, a blue), the drums inking the
+// world's two glow inks (bits 1, 2, 4: two bits print an overprint; the drum left over is the drop's ink, which takes
+// the second glow ink's place for a drop) and the one cold ink of slow motion.
 struct VariantDef {
     const char* name;
-    unsigned skyTop, skyLow, mist, moss;
-    unsigned glowA, glowB, moon;
-    unsigned pieces[7];
+    unsigned paper, key;
+    unsigned drums[3];
+    int glowA, glowB;
+    unsigned slow;
 };
 const VariantDef VARIANTS[] = {
-    // the reference: mint and cyan foxfire in a blue-green night
-    {"FOXFIRE", 0x020406, 0x07110f, 0x2a4a48, 0x3a6a4a, 0x52f0c0, 0x7ad8ff, 0xa8c8e8,
-     {0x52d8f0, 0xf0d86a, 0xa888f8, 0x78ec8a, 0xf88a78, 0x6890ff, 0xf8aa5a}},
-    // blue mushrooms and violet bells in a deep blue wood
-    {"MOONSHADE", 0x020309, 0x070a1a, 0x2a3060, 0x34406a, 0x6c94ff, 0xb68cff, 0xb8c4f0,
-     {0x8ee6ff, 0xf2dc8a, 0xc49cff, 0x7cf0c4, 0xff8cbc, 0x7890ff, 0xffae78}},
-    // honey fungus: amber caps in a warm brown dark
-    {"HONEYCAP", 0x020306, 0x080a12, 0x2c3248, 0x3a4436, 0xffb050, 0xffd878, 0xc8c8d8,
-     {0x6ad4c8, 0xffe07a, 0xb89cf0, 0xa8dc70, 0xff7a5c, 0xf0a0b8, 0xffaa48}},
-    // glowworm pinpoints: pale cyan and white in a cold dark
-    {"GLOWWORM", 0x010205, 0x03080f, 0x1c3046, 0x24404c, 0x9ef2ff, 0xd8fff0, 0xa8c0e0,
-     {0x60e4f0, 0xf0d49c, 0x9c88ff, 0xbaf070, 0xff98b8, 0x6aa8ff, 0xc8fff0}},
-    // spore bloom: pink and violet flowers in a plum night
-    {"SPOREBLOOM", 0x040306, 0x110816, 0x4a2856, 0x4a3460, 0xff70c8, 0xc480ff, 0xc8b8e8,
-     {0x6ad8f0, 0xf8d878, 0xb07cff, 0x88f0c0, 0xff78b8, 0x8ea0ff, 0xffa888}},
-    // verdigris: chartreuse and jade in a grey-green wood
-    {"VERDIGRIS", 0x030504, 0x0a120c, 0x34483a, 0x4a6a3a, 0xbcff74, 0x74ffb4, 0xc0d0c8,
-     {0x58ccd8, 0xf0e8b0, 0xa898f0, 0xbcf060, 0xf0909c, 0x7aa8f8, 0xf0b85c}},
+    // foxfire: chartreuse and cyan on black, the drop in pink
+    {"FOXFIRE", 0xf1efe9, 0x0a0b0d, {0xd2ff3a, 0xff4fa6, 0x3cc8f4}, 1, 4, 0xa8bccc},
+    // moonshade: cyan and pink on an indigo key, the drop in yellow
+    {"MOONSHADE", 0xeef0f2, 0x0b1029, {0xfff04a, 0xff62c0, 0x4aa8ff}, 4, 2, 0xb4bed8},
+    // honeycap: yellow and orange (yellow over pink) on a warm black, the drop in blue
+    {"HONEYCAP", 0xf3f0ea, 0x110d0b, {0xffe838, 0xff5a9a, 0x40b8f0}, 1, 3, 0xbcc0cc},
+    // sporebloom: pink and lemon on a plum black, the drop in cyan
+    {"SPOREBLOOM", 0xf2eff0, 0x140a19, {0xf4ff50, 0xff3d8c, 0x52d2f8}, 2, 1, 0xc4b8d4},
+    // verdigris: green (yellow over teal) and teal on a verdigris black, the drop in pink
+    {"VERDIGRIS", 0xeef0ec, 0x0b1e1b, {0xe6ff4a, 0xff4fb0, 0x30b4d0}, 5, 4, 0xb0c4c0},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float CLEAR_T = 0.24f;    // a cleared row is gone in this long (real time)
-constexpr float OUT_T = 1.5f;       // game over: a block's glow goes out and it crumbles
+constexpr float OUT_T = 1.5f;       // game over: a block's ink drains, then it is inked over
 constexpr float WAVE_SPEED = 2.6f;  // the drop's wave of light, board units a second
 constexpr float GROW_T = 2.8f;      // a new plant comes up in this long
 
@@ -165,15 +171,14 @@ bool inHud(float x, float y) {
 
 bool ForestUniverse::init(int width, int height) {
     using shaders::withCommon;
-    progBg_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::BG_FS).c_str(), "forest night");
-    progHalo_ = ugl::program(shaders::HALO_VS, shaders::HALO_FS, "forest halo");
+    progBg_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::BG_FS).c_str(), "forest key block");
+    progHalo_ = ugl::program(shaders::HALO_VS, shaders::HALO_FS, "forest light");
     progPlant_ = ugl::program(shaders::PLANT_VS, withCommon(shaders::PLANT_FS).c_str(), "forest life");
-    progVeil_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::VEIL_FS).c_str(), "forest well");
-    progMote_ = ugl::program(shaders::HALO_VS, shaders::MOTE_FS, "forest motes");
+    progMote_ = ugl::program(shaders::HALO_VS, withCommon(shaders::MOTE_FS).c_str(), "forest motes");
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "forest blocks");
-    progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "forest down");
+    progDown_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::DOWN_FS).c_str(), "forest fluorescence");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "forest blur");
-    progFinal_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FINAL_FS).c_str(), "forest final");
+    progFinal_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::FINAL_FS).c_str(), "forest print");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "forest shape");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
@@ -224,8 +229,9 @@ void ForestUniverse::resize(int width, int height) {
     }
     if (std::fabs(rock_[0] + rock_[1] + rock_[2] - oldRock) > 0.05f) rebuild = true;
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
-    sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    plateT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
     const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
+    lightT_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomB_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     if (rebuild || trunks_.empty()) {
@@ -246,8 +252,8 @@ void ForestUniverse::resize(int width, int height) {
 }
 
 ForestUniverse::~ForestUniverse() {
-    for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progBg_, progHalo_, progPlant_, progVeil_, progMote_, progPiece_, progDown_, progBlur_, progFinal_, progShape_})
+    for (ugl::Target* t : {&plateT_, &lightT_, &bloomA_, &bloomB_}) t->destroy();
+    for (GLuint p : {progBg_, progHalo_, progPlant_, progMote_, progPiece_, progDown_, progBlur_, progFinal_, progShape_})
         glDeleteProgram(p);
     for (GLuint v : {plantVao_, haloVao_, pieceVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {quadVbo_, plantVbo_, haloVbo_, pieceVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
@@ -286,6 +292,33 @@ void ForestUniverse::buildTrunks() {
         if (x1 - x0 > 1.6f) { pool_[0] = x0; pool_[1] = x1; }
         break;
     }
+    // the moon, high on the right between the HUD's column and the edge, in the widest gap between the near trunks
+    float best = 0.f, bx0 = layout::RIGHT_COLUMN[2] + 0.6f, bx1 = viewH_.x - 0.3f;
+    {
+        float from = layout::RIGHT_COLUMN[2] + 0.6f;
+        std::vector<float> stops;
+        for (const Trunk& t : trunks_)
+            if (t.x > 0.f) stops.push_back(t.x);
+        std::sort(stops.begin(), stops.end());
+        stops.push_back(viewH_.x + 99.f);
+        for (float x : stops) {
+            const Trunk* t = nullptr;
+            for (const Trunk& u : trunks_)
+                if (u.x == x) t = &u;
+            const float to = std::min(t ? x - t->hw * 1.3f : x, viewH_.x - 0.3f);
+            if (to - from > best) { best = to - from; bx0 = from; bx1 = to; }
+            if (t) from = x + t->hw * 1.3f;
+            if (from > viewH_.x - 0.3f) break;
+        }
+    }
+    if (best < 2.6f) { // a narrow view: the moon behind the near trunk, whole in the strip
+        bx0 = layout::RIGHT_COLUMN[2] + 0.6f;
+        bx1 = viewH_.x - 0.3f;
+        best = bx1 - bx0;
+    }
+    moon_[2] = std::clamp(best * 0.38f, 1.f, 2.3f);
+    moon_[0] = std::min((bx0 + bx1) * 0.5f, viewH_.x - 0.3f - moon_[2]);
+    moon_[1] = viewC_.y + viewH_.y - 3.8f - moon_[2] * 0.6f;
 }
 
 // The spots where life can grow (a new song: the old forest withers, a fresh one waits to grow), in the order
@@ -356,13 +389,14 @@ void ForestUniverse::buildForest(bool instant) {
         add(pool_[1] + 0.8f, groundY(pool_[1] + 0.8f, groundSeed_, Rock{rock_[0], rock_[1], rock_[2]}, pool_) + 0.02f, 4,
             r.range(0.85f, 1.05f), true);
     }
-    // the canopy: glowworm threads hanging on the free right side, and on the left short of the song's title
+    // the canopy: glowworm threads hanging on the free right side (clear of the moon), and on the left short of the
+    // song's title
     {
         const float top = viewC_.y + viewH_.y + 0.15f;
         lateNow = 0.f;
         float x = 11.9f + r.range(0.f, 0.6f);
         while (x < viewH_.x - 0.4f) {
-            add(x, top, 2, r.range(0.85f, 1.15f), r.chance(0.5f));
+            if (std::fabs(x - moon_[0]) > moon_[2] + 0.5f) add(x, top, 2, r.range(0.85f, 1.15f), r.chance(0.5f));
             x += r.range(1.6f, 2.8f);
         }
         lateNow = 0.45f;
@@ -420,8 +454,9 @@ void ForestUniverse::buildForest(bool instant) {
     for (Plant& p : fresh) plants_.push_back(p);
     order_.clear();
     for (auto& q : pr) order_.push_back(q.second);
-    // a few faint plants from the start
-    for (int i = 0; i < 4; i++) {
+    // a few faint plants from the start (test hook: REFALL_FOREST_LINES=N grows N more, as if N lines were cleared)
+    static const int extra = std::getenv("REFALL_FOREST_LINES") ? std::atoi(std::getenv("REFALL_FOREST_LINES")) : 0;
+    for (int i = 0; i < 4 + extra; i++) {
         const int pi = sprout(instant ? 0.f : 2.f + i * 0.7f, 0.f, false);
         if (pi >= 0 && instant) plants_[pi].grow = 1.f;
     }
@@ -477,27 +512,41 @@ void ForestUniverse::setSong(const SongLook& t, float seconds) {
     else {
         float h = std::fmod(t.hue / TAU, 1.f);
         if (h < 0) h += 1.f;
-        if (t.hasSong && t.minor && t.brightness < 0.4f) v = 3;                                   // glowworm
-        else if (t.hasSong && t.bassWeight > 0.62f && t.dynamics > 0.5f) v = 2;                    // honeycap
-        else if (t.hasSong && t.airWeight > 0.6f && t.brightness > 0.55f && !t.minor) v = 4;       // sporebloom
-        else if (t.hasSong && t.minor && t.brightness < 0.55f) v = 1;                              // moonshade
+        if (t.hasSong && t.bassWeight > 0.62f && t.dynamics > 0.5f) v = 2;                         // honeycap
+        else if (t.hasSong && t.airWeight > 0.6f && t.brightness > 0.55f && !t.minor) v = 3;       // sporebloom
+        else if (t.hasSong && t.minor && t.brightness < 0.5f) v = 1;                               // moonshade
         else v = (int)(h * VARIANT_COUNT) % VARIANT_COUNT;
         if (v == t.avoidVariant) v = (v + 1 + (int)(t.seed % 3)) % VARIANT_COUNT;
     }
     variant_ = v;
     const VariantDef& V = VARIANTS[v];
-    skyT_[0] = lin(V.skyTop);
-    skyT_[1] = lin(V.skyLow);
-    mistT_ = lin(V.mist);
-    mossT_ = lin(V.moss);
-    glowT_[0] = lin(V.glowA);
-    glowT_[1] = lin(V.glowB);
-    moonT_ = lin(V.moon);
-    for (int i = 0; i < 7; i++) pieceT_[i] = lin(V.pieces[i]);
+    // an ink of one drum or the overprint of several (multiplied), and what a block printed with it looks like
+    // an ink: the drums printed one over the other, each at its density (0: not printed)
+    auto inkOf = [&](float y, float m, float b) {
+        const float d[3] = {y, m, b};
+        vec3 c(1.f);
+        for (int i = 0; i < 3; i++) c = c * lerp(vec3(1.f), lin(V.drums[i]), d[i]);
+        return c;
+    };
+    auto glowInk = [&](int mask) { return inkOf((float)(mask & 1), (float)((mask >> 1) & 1), (float)((mask >> 2) & 1)); };
+    paperT_ = lin(V.paper);
+    keyT_ = lin(V.key);
+    glowT_[0] = glowInk(V.glowA);
+    glowT_[1] = glowInk(V.glowB);
+    dropInkT_ = glowInk(7 & ~(V.glowA | V.glowB));
+    slowInkT_ = lin(V.slow);
+    // the blocks (I O T S Z J L): the blue, the yellow, pink over a little blue (a plum), yellow over blue (a green),
+    // yellow over pink (an orange), the bare paper, the pink; the overprints a touch lighter, so that none sinks into
+    // the dark; the fluorescent inks a little brighter than the paper under them
+    const float recipe[7][3] = {{0, 0, 1}, {1, 0, 0}, {0, 1, 0.6f}, {0.9f, 0, 0.85f}, {0.85f, 0.8f, 0}, {0, 0, 0}, {0, 1, 0}};
+    for (int i = 0; i < 7; i++) {
+        const float* r = recipe[i];
+        const vec3 lift = inkOf(r[0] > 0 ? 1.f : 0.f, r[1] > 0 ? 1.f : 0.f, r[2] > 0 ? 1.f : 0.f) * 0.12f;
+        pieceT_[i] = paperT_ * inkOf(r[0], r[1], r[2]) + (r[0] + r[1] + r[2] > 0 ? lift : vec3(0.f));
+    }
     const bool instant = !colSet_ || seconds <= 0.1f;
     if (instant) {
-        sky_[0] = skyT_[0]; sky_[1] = skyT_[1];
-        mist_ = mistT_; moss_ = mossT_; moon_ = moonT_;
+        paper_ = paperT_; key_ = keyT_; dropInk_ = dropInkT_; slowInk_ = slowInkT_;
         glow_[0] = glowT_[0]; glow_[1] = glowT_[1];
         for (int i = 0; i < 7; i++) piece_[i] = pieceT_[i];
         colSet_ = true;
@@ -529,21 +578,23 @@ void ForestUniverse::setLevel(int level, float energy, float seconds, float impa
     lvDur_ = std::clamp(seconds, rising ? 1.5f : 3.f, 6.f);
 }
 
-// The drop: one slow wave of light through the forest, from the well outward.
+// The drop adds a plate: the third ink rolls out from the well, the glow plates knocked out of register on the
+// downbeat, a wave of light through the forest.
 void ForestUniverse::drop(float strength) {
     dropMode_ = true;
     dropT_ = 0.f;
     waveT_ = 0.f;
     waveK_ = 0.75f + 0.25f * strength;
+    jolt_ = 0.6f + 0.4f * strength;
 }
 
 vec2 ForestUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
 
 TransitionHints ForestUniverse::hints() const {
     TransitionHints h;
-    h.background = lerp(sky_[0], sky_[1], 0.6f);
+    h.background = key_;
     h.light = false;
-    h.ink = lerp(glow_[0], vec3(1.f), 0.2f) * 0.8f;
+    h.ink = lerp(glow_[0], paper_, 0.3f);
     h.accent = glow_[1];
     h.styles = TS_INK | TS_LUMA | TS_RIPPLE;
     return h;
@@ -593,7 +644,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::HardDrop: {
-        // a small breath of glowing dust pushed out from under the piece, at the contact
+        // a few chips of the block knocked out from under the piece, at the contact
         if (!game.hasPiece()) break;
         Piece gp = game.piece();
         gp.y = game.ghostY();
@@ -604,23 +655,24 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
         for (auto& c : cells)
             if (c[1] == low) { minX = std::min(minX, c[0]); maxX = std::max(maxX, c[0]); }
         if (low < Game::HIDDEN) break;
-        const vec3 col = pieceColor(gp.type);
-        for (int s = -1; s <= 1; s += 2) {
-            const vec3 p = layout::cellPos(s < 0 ? (float)minX - 0.3f : (float)maxX + 0.3f, (float)low + 0.42f);
-            Mote m;
-            m.kind = 3;
-            m.p = m.p0 = vec2{p.x, p.y};
-            m.target = vec2{p.x + s * 0.8f, p.y + 0.3f};
-            m.life = 0.65f;
-            m.r = 0.5f;
-            m.a = 0.22f;
-            m.col = col;
-            motes_.push_back(m);
-        }
+        for (int s = -1; s <= 1; s += 2)
+            for (int k = 0; k < 3; k++) {
+                const vec3 p = layout::cellPos(s < 0 ? (float)minX - 0.25f : (float)maxX + 0.25f, (float)low + 0.4f);
+                Mote m;
+                m.kind = 3;
+                m.p = m.p0 = vec2{p.x, p.y};
+                m.target = vec2{p.x + s * rng_.range(0.4f, 0.9f), p.y + rng_.range(0.05f, 0.45f)};
+                m.life = rng_.range(0.4f, 0.6f);
+                m.r = rng_.range(0.08f, 0.13f);
+                m.a = 0.9f;
+                m.seed = rng_.range(0.f, TAU);
+                m.inkB = (float)(k % 2);
+                motes_.push_back(m);
+            }
         break;
     }
     case GameEvent::Clear: {
-        // each row breaks into spores that drift out to an empty spot of the forest, where a plant comes up
+        // each row is carved away in chips that fly out to an empty spot of the forest, where a plant is cut
         std::vector<int> rows;
         for (auto& c : ev.cells)
             if (c.y >= Game::HIDDEN && c.y < Game::H && std::find(rows.begin(), rows.end(), c.y) == rows.end()) rows.push_back(c.y);
@@ -664,7 +716,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 m.r = rng_.range(0.12f, 0.2f);
                 m.a = 0.8f;
                 m.seed = rng_.uniform() * 10.f;
-                m.col = lerp(glow_[0], glow_[1], p.colMix);
+                m.inkB = p.colMix;
                 motes_.push_back(m);
             }
         } else {
@@ -698,7 +750,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 m.r = rng_.range(0.16f, 0.24f);
                 m.a = 0.9f;
                 m.seed = rng_.uniform() * 10.f;
-                m.col = lerp(c.type >= 0 ? pieceColor(c.type) : glow_[0], ti >= 0 ? lerp(glow_[0], glow_[1], plants_[ti].colMix) : glow_[0], 0.4f);
+                m.inkB = ti >= 0 ? plants_[ti].colMix : 0.f;
                 motes_.push_back(m);
             }
         }
@@ -723,7 +775,7 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
         break;
     }
     case GameEvent::TopOut: {
-        // the stack's glow goes out from the top, the blocks crumbling away
+        // the stack's ink drains from the top, then the roller inks it over
         overT_ = 0.f;
         outs_.clear();
         int top = Game::H;
@@ -748,10 +800,11 @@ void ForestUniverse::onEvent(const GameEvent& ev, const Game& game) {
 
 vec3 ForestUniverse::pieceColor(int type) const { return piece_[std::clamp(type, 0, 6)]; }
 
-void ForestUniverse::addCell(float x, float y, float half, int type, const CellLook& l, float alpha, int kind, float prog, float glow) {
+void ForestUniverse::addCell(float x, float y, float half, int type, const CellLook& l, float alpha, int kind, float prog) {
     if (alpha <= 0.003f) return;
     const vec3 c = pieceColor(type);
-    cells_.push_back({{x, y, half, (float)kind}, {l.nx, l.ny, l.seed, glow}, {c.x, c.y, c.z, alpha}, {prog, 0.f, 0.f, 0.f}});
+    cells_.push_back({{x, y, half, (float)kind}, {l.nx, l.ny, l.seed, (float)std::clamp(type, 0, 6)}, {c.x, c.y, c.z, alpha},
+                      {prog, 0.f, 0.f, 0.f}});
 }
 
 void ForestUniverse::buildBoard(const Game& g) {
@@ -760,7 +813,7 @@ void ForestUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) { minX = std::min(minX, cells[i][0]); minY = std::min(minY, cells[i][1]); }
         return lookOf(id, (float)(cx - minX), (float)(cy - minY));
     };
-    // the ghost: the cubes' outlines where it will land
+    // the ghost: the blocks' cut outlines where it will land
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -844,7 +897,7 @@ void ForestUniverse::flushShapes() {
 }
 
 void ForestUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels) {
-    const vec3 halo = ugl::toSrgb(sky_[1]) * 0.5f, accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
+    const vec3 halo = ugl::toSrgb(key_), accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
     if (!panels.empty() && !bare_) {
         for (const HudRect& r : panels) {
             const vec3 c = r.custom ? r.color : r.accent ? accent : halo;
@@ -858,12 +911,32 @@ void ForestUniverse::drawHud(const std::vector<HudText>& hud, const std::vector<
 }
 
 
+void ForestUniverse::readBoxes(const Frame& f) {
+    boxN_ = 0;
+    if (!f.hudBoxes) return;
+    const float sx = 2.f * viewH_.x / width_, sy = 2.f * viewH_.y / height_;
+    for (size_t i = 0; i < f.hudBoxes->size() && boxN_ < MAX_BOXES; i++) {
+        const vec4& b = (*f.hudBoxes)[i];
+        if (b.z <= b.x || (i < f.hud.size() && f.hud[i].alpha < 0.03f)) continue;
+        float* o = boxes_ + boxN_++ * 4;
+        o[0] = viewC_.x - viewH_.x + b.x * sx;
+        o[1] = viewC_.y + viewH_.y - b.w * sy;
+        o[2] = viewC_.x - viewH_.x + b.z * sx;
+        o[3] = viewC_.y + viewH_.y - b.y * sy;
+    }
+}
+
+void ForestUniverse::setBoxes(GLuint prog) const {
+    glUniform4fv(ugl::U(prog, "uBox"), MAX_BOXES, boxes_);
+    set1i(prog, "uBoxes", boxN_);
+}
+
 // The lettering, by the host (text.hpp): Cormorant Garamond Medium in spaced capitals for the names, the numbers and
-// the celebrations, EB Garamond Italic for the song and the notices; pale ink faintly tinted by the forest's glow, on
-// a soft halo of the night.
+// the celebrations, EB Garamond Italic for the song and the notices; the paper's white cut out of the key, the
+// accents in the first glow ink, on a soft halo of the key's ink.
 void ForestUniverse::hudLine(const HudText& h, text::Line& out) {
     const float s = height_ / 1080.f;
-    const vec3 ink = lerp(vec3(0.80f, 0.82f, 0.80f), ugl::toSrgb(glow_[0]), 0.08f), halo = ugl::toSrgb(sky_[1]) * 0.5f;
+    const vec3 ink = ugl::toSrgb(paper_) * 0.88f, halo = ugl::toSrgb(key_);
     const vec3 accent = lerp(ugl::toSrgb(glow_[0]), vec3(1.f), 0.2f);
     text::Font* caps = text::font(FONT_CAPS);
     text::Font* it = text::font(FONT_IT);
@@ -911,13 +984,15 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     const float dt = std::min(f.dt, 0.1f);
     bare_ = f.bare;
     if (!bare_) syncIds(game); // the world alone: the blocks' looks kept for the whole frame
+    readBoxes(f);
     // a new variant eases in
     {
         const float k = 1.f - std::exp(-dt * 1.2f);
-        for (int i = 0; i < 2; i++) { sky_[i] = lerp(sky_[i], skyT_[i], k); glow_[i] = lerp(glow_[i], glowT_[i], k); }
-        mist_ = lerp(mist_, mistT_, k);
-        moss_ = lerp(moss_, mossT_, k);
-        moon_ = lerp(moon_, moonT_, k);
+        for (int i = 0; i < 2; i++) glow_[i] = lerp(glow_[i], glowT_[i], k);
+        paper_ = lerp(paper_, paperT_, k);
+        key_ = lerp(key_, keyT_, k);
+        dropInk_ = lerp(dropInk_, dropInkT_, k);
+        slowInk_ = lerp(slowInk_, slowInkT_, k);
         for (int i = 0; i < 7; i++) piece_[i] = lerp(piece_[i], pieceT_[i], k);
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
@@ -943,25 +1018,29 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     float festT = 0.f;
     if (dropMode_) festT = smoothstepf(0.f, 2.f * spb, dropT_) * (1.f - 0.6f * smoothstepf(16.f * spb, 48.f * spb, dropT_));
     fest_ = approach(fest_, festT, festT > fest_ ? 1.2f : 0.3f, dt);
+    // the drop's third ink: in as it rolls out, lifted over a couple of seconds after the drop
+    dropInkK_ = approach(dropInkK_, dropMode_ ? 1.f : 0.f, dropMode_ ? 2.f : 0.6f, dt);
+    jolt_ *= std::exp(-dt * 1.1f);
     quadGlow_ = approach(quadGlow_, 0.f, 0.45f, dt);
     float bass = 0.f;
     for (int i = 0; i < 3; i++) bass += music.bandsFast[i];
     bass = saturate(bass / 3.f * 1.6f);
-    // the life's overall level: a steady step per section, never pulsing with the beat
-    // the setup wakes the forest, light by light; the teardown puts it to sleep the same way
+    // the setup pulls the print (the key, then the glow inks, then the plants' light one by one); the teardown puts the
+    // light out the same way
     const float wake = smoothstepf(0.05f, 0.85f, f.setup) * (1.f - smoothstepf(0.f, 0.85f, f.teardown));
     auto awake = [&](float seed) { // a plant's own turn (by its seed) to light up or go out
         const float h = seed * 0.1f;
         return smoothstepf(0.65f * h, 0.65f * h + 0.35f, wake);
     };
-    const float life = (0.55f + 0.2f * wm + 0.3f * wp + 0.25f * fest_) * (1.f - 0.35f * slow_);
+    // the life's overall level: a steady step per section, never pulsing with the beat
+    const float life = (0.55f + 0.2f * wm + 0.3f * wp + 0.25f * fest_) * (1.f - 0.3f * slow_);
     // the beat grid: a quarter of the plants glow on each two beats
     const float half = beat_ * 0.5f;
     const int halfI = (int)std::floor(half);
     const float ph = half - std::floor(half);
     const int groupNow = ((halfI % 4) + 4) % 4;
     const float env = smoothstepf(0.f, 0.16f, ph) * (1.f - smoothstepf(0.3f, 1.f, ph));
-    const float pulseK = (0.18f * wm + 0.32f * wp) * (0.65f + 0.7f * bass * wp) * (1.f - 0.7f * slow_);
+    const float pulseK = (0.2f * wm + 0.35f * wp) * (0.65f + 0.7f * bass * wp) * (1.f - 0.7f * slow_);
     // a kick at a peak lights a single plant
     if (kickIn_ > 0.3f && wp > 0.4f && !plants_.empty()) {
         for (int tries = 0; tries < 6; tries++) {
@@ -971,7 +1050,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     }
     kickIn_ = 0.f;
     if (waveT_ > 14.f) waveK_ = 0.f;
-    // how much of the forest has grown: the bark's veins, the moss carpet and the mist's tint follow it
+    // how much of the forest has grown: the bark's veins, the moss and the light low in the forest follow it
     {
         float total = 0.f, done = 0.f;
         for (const Plant& p : plants_) {
@@ -1027,10 +1106,10 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             const float ang = rng_.range(0.f, TAU);
             m.v = vec2{std::cos(ang), std::sin(ang) * 0.5f} * rng_.range(0.2f, 0.45f);
             m.life = rng_.range(7.f, 13.f);
-            m.r = rng_.range(0.28f, 0.42f);
-            m.a = rng_.range(0.5f, 0.9f);
+            m.r = rng_.range(0.26f, 0.38f);
+            m.a = rng_.range(0.7f, 1.f);
             m.seed = rng_.uniform() * 10.f;
-            m.col = lerp(glow_[1], vec3(0.9f, 1.f, 0.55f), 0.35f);
+            m.inkB = rng_.chance(0.6f) ? 1.f : 0.f;
             motes_.push_back(m);
         }
     }
@@ -1043,7 +1122,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             const float w = std::sin(m.t * 0.7f + m.seed) * 0.6f;
             m.p = m.p + vec2{m.v.x + w * m.v.y, m.v.y - w * m.v.x + 0.12f * std::sin(m.t * 1.3f + m.seed * 2.f)} * mdt;
             m.trailAcc += mdt;
-            if (m.trailAcc > 0.11f) {
+            if (m.trailAcc > 0.16f) {
                 m.trailAcc = 0.f;
                 for (int k = 7; k > 0; k--) m.trail[k] = m.trail[k - 1];
                 m.trail[0] = m.p;
@@ -1061,9 +1140,9 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         } else if (m.kind == 2) {
             m.p = m.p + vec2{m.v.x + 0.12f * std::sin(m.t * 1.1f + m.seed), m.v.y} * mdt;
         } else {
+            // a chip: knocked out, falling back
             const float s = saturate(tt / m.life);
-            const float e = 1.f - (1.f - s) * (1.f - s);
-            m.p = lerp2(m.p0, m.target, e);
+            m.p = vec2{lerpf(m.p0.x, m.target.x, 1.f - (1.f - s) * (1.f - s)), m.p0.y + (m.target.y - m.p0.y) * 4.f * s * (1.f - s)};
         }
     }
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.t > m.delay + m.life; }), motes_.end());
@@ -1081,7 +1160,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
                 m.r = rng_.range(0.1f, 0.17f);
                 m.a = 0.7f;
                 m.seed = rng_.uniform() * 10.f;
-                m.col = lerp(glow_[0], glow_[1], p.colMix);
+                m.inkB = p.colMix;
                 motes_.push_back(m);
             }
         }
@@ -1094,11 +1173,12 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     halos_.clear();
     cells_.clear();
     moteInst_.clear();
-    // the halos add up: a crowded forest lights its mist a little less per plant (light in the dark, never a haze)
+    // the light each plant gives around it; a crowded forest gives a little less per plant (light in the dark, never
+    // the whole print carved away)
     int liveN = 0;
     for (const Plant& p : plants_)
         if (p.live && p.delay <= 0.f) liveN++;
-    const float haloK = 1.f / std::sqrt(1.f + liveN / 14.f);
+    const float haloK = 1.f / std::sqrt(1.f + liveN / 30.f);
     for (const Plant& p : plants_) {
         if (!p.live || p.delay > 0.f) continue;
         const float fa = p.fade >= 0.f ? 1.f - smoothstepf(0.f, 1.f, p.fade) : 1.f;
@@ -1110,79 +1190,90 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * quadGlow_);
         // a young plant lights up as it grows
         glow *= (0.35f + 0.65f * smoothstepf(0.f, 0.8f, p.grow)) * awake(p.seed);
-        const vec3 ca = lerp(glow_[0], glow_[1], p.colMix), cb = lerp(glow_[1], glow_[0], 0.3f + 0.4f * p.colMix);
         const float sc = p.scale * (1.f + 0.05f * wave);
         plantInst_.push_back({{p.x, p.y, sc, (float)p.kind}, {p.seed, p.grow, glow, p.flip ? 1.f : 0.f},
-                              {ca.x, ca.y, ca.z, wave}, {cb.x, cb.y, cb.z, fa * smoothstepf(0.f, 0.15f, p.grow)}});
-        // the light it casts on the mist
-        const vec2 c = plantTop(p);
-        const float hr = (1.4f + 1.2f * p.height * 0.5f) * p.scale * (1.f + 0.2f * wave);
-        const float ha = 0.05f * glow * fa * smoothstepf(0.f, 1.f, p.grow) * (1.f + 1.4f * wave) * (p.kind == 5 ? 0.6f : p.kind == 2 ? 0.5f : p.kind == 6 ? 0.6f : 1.f) * haloK;
-        halos_.push_back({{c.x, c.y, hr, ha}, {ca.x, ca.y, ca.z, 0.f}});
+                              {p.colMix, 0.f, 0.f, wave}, {0.f, 0.f, 0.f, fa * smoothstepf(0.f, 0.15f, p.grow)}});
+        // the light it gives
+        // (a glowworm thread lights the air all along it)
+        const bool thread = p.kind == 2;
+        const vec2 c = thread ? vec2{p.x, p.y - 2.f * p.scale * p.grow} : plantTop(p);
+        const float hr = (thread ? 0.9f : 1.3f + 0.5f * p.height) * p.scale * (1.f + 0.25f * wave + 0.15f * pulse);
+        const float kindK = p.kind == 5 ? 0.6f : thread ? 0.28f : p.kind == 6 ? 0.7f : 1.f;
+        const float hl = 0.42f * glow * fa * smoothstepf(0.f, 1.f, p.grow) * (1.f + 0.8f * wave) * kindK * haloK;
+        halos_.push_back({{c.x, c.y, hr, hl}, {p.colMix, 0.f, 0.f, thread ? 2.6f : 1.f}});
     }
-    if (!bare_) { // the world alone: no blocks, nothing flaring or going out
+    if (!bare_) { // the world alone: no blocks, nothing cleared or inked over
         for (const Fade& c : clears_) addCell(c.x, c.y, 0.5f, c.type, c.l, 1.f, 2, saturate(c.t / CLEAR_T));
         if (overT_ >= 0.f)
             for (const Fade& o : outs_) {
                 const float t = saturate((overT_ - o.delay) / OUT_T);
-                if (t < 1.f) addCell(o.x, o.y, 0.5f, o.type, o.l, 1.f, 3, t);
+                addCell(o.x, o.y, 0.5f, o.type, o.l, 1.f, 3, t);
             }
         buildBoard(game);
     }
     for (const Mote& m : motes_) {
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
-        if (bare_ && (m.kind == 1 || m.kind == 3)) continue; // (the spores out of a cleared row, a hard drop's dust)
+        if (bare_ && (m.kind == 1 || m.kind == 3)) continue; // (the chips out of a cleared row or a hard drop)
         const float s = saturate(tt / m.life);
-        float a = m.a, r = m.r, core = 0.f;
+        float a = m.a, r = m.r, shape = 1.f, ang = 0.f;
         if (m.kind == 0) {
-            // a firefly: fades in and out over its life, glows and dims slowly (never flashing)
+            // a firefly: a spark that fades in and out over its life, brightening and dimming slowly (never flashing)
             const float blink = 0.5f + 0.5f * std::sin(m.t * (0.9f + 0.4f * std::fmod(m.seed, 1.f)) + m.seed * 3.f);
-            a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.8f, 1.f, s)) * (0.15f + 0.85f * blink * blink);
+            a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.8f, 1.f, s));
+            r *= 0.55f + 0.45f * blink;
             a *= smoothstepf(0.5f, 0.8f, wake); // (the fireflies come out last, and leave first)
-            core = 1.f;
             // never over the well or the HUD's text
             a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
-            if (inHud(m.p.x, m.p.y)) a *= 0.2f;
-            // its trail: a fading streak of light along where it flew
-            for (int k = 0; k < m.trailN; k++) {
+            if (inHud(m.p.x, m.p.y)) a = 0.f;
+            shape = 0.f;
+            ang = m.seed + 0.3f * std::sin(m.t * 0.5f);
+            // its trail: a dotted line of nicks along where it flew
+            for (int k = 1; k < m.trailN; k += 2) {
                 const vec2 q = m.trail[k];
-                float ta = a * 0.3f * (1.f - (k + 1) / 9.f);
+                float ta = a * (1.f - (k + 1) / 9.f);
                 ta *= smoothstepf(5.9f, 6.8f, std::fabs(q.x));
-                if (inHud(q.x, q.y)) ta *= 0.2f;
-                if (ta > 0.003f) moteInst_.push_back({{q.x, q.y, r * (0.42f - 0.025f * k), ta}, {m.col.x, m.col.y, m.col.z, 0.25f}});
+                if (inHud(q.x, q.y)) ta = 0.f;
+                if (ta > 0.05f) moteInst_.push_back({{q.x, q.y, m.r * (0.32f - 0.02f * k), ta}, {m.inkB, 1.f, 0.f, 0.f}});
             }
         } else if (m.kind == 1) {
             a *= smoothstepf(0.f, 0.1f, s) * (1.f - smoothstepf(0.75f, 1.f, s));
             r *= 1.f - 0.4f * s;
-            core = 0.7f;
+            shape = 2.f;
+            ang = m.seed + tt * 9.f;
         } else if (m.kind == 2) {
             a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.5f, 1.f, s));
-            core = 0.5f;
             a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
-            if (inHud(m.p.x, m.p.y)) a *= 0.3f;
+            if (inHud(m.p.x, m.p.y)) a = 0.f;
         } else {
-            a *= smoothstepf(0.f, 0.15f, s) * (1.f - s);
-            r *= 0.6f + 0.6f * s;
+            a *= 1.f - smoothstepf(0.6f, 1.f, s);
+            shape = 2.f;
+            ang = m.seed + tt * 12.f;
         }
-        if (a <= 0.003f) continue;
-        moteInst_.push_back({{m.p.x, m.p.y, r, a}, {m.col.x, m.col.y, m.col.z, core}});
+        if (a <= 0.05f) continue;
+        moteInst_.push_back({{m.p.x, m.p.y, r, a}, {m.inkB, shape, ang, 0.f}});
     }
 
-    // ---- Draw.
+    // ---- The plants' light.
     const float aaW = 2.f * viewH_.y / (float)height_;
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
-    sceneT_.bind();
+    lightT_.bind();
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    drawInst(progHalo_, haloVao_, haloVbo_, halos_.data(), halos_.size() * sizeof(Inst2), halos_.size());
+
+    // ---- The plates.
+    plateT_.bind();
     glDisable(GL_BLEND);
     glUseProgram(progBg_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, lightT_.tex);
+    set1i(progBg_, "uLight", 0);
     set4f(progBg_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-    set3f(progBg_, "uSkyTop", sky_[0]);
-    set3f(progBg_, "uSkyLow", sky_[1]);
-    set3f(progBg_, "uMist", mist_);
-    set3f(progBg_, "uMoss", moss_);
-    set3f(progBg_, "uGlowA", glow_[0]);
-    set3f(progBg_, "uGlowB", glow_[1]);
+    set3f(progBg_, "uMoon", vec3(moon_[0], moon_[1], moon_[2]));
     {
         float tv[32] = {};
         const int n = std::min(8, (int)trunks_.size());
@@ -1199,61 +1290,54 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uWind", wind_);
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", seedF_);
-    set1f(progBg_, "uMistK", (0.5f + 0.15f * wm + 0.25f * wp + 0.25f * fest_) * (1.f - 0.25f * slow_));
+    set1f(progBg_, "uMistK", (0.32f + 0.12f * wm + 0.2f * wp + 0.2f * fest_) * (1.f - 0.3f * slow_) * wake);
+    set1f(progBg_, "uMoonK", 0.85f + 0.15f * slow_);
     set1f(progBg_, "uLife", life * wake);
     set1f(progBg_, "uWaveR", waveR);
     set1f(progBg_, "uWaveK", waveK_);
     set1f(progBg_, "uAA", aaW);
-    set1f(progBg_, "uSlow", slow_);
+    setBoxes(progBg_);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE); // the scene's alpha is the stack's (for the bridge)
-    // the light of the life on the mist
-    glBlendFunc(GL_ONE, GL_ONE);
-    drawInst(progHalo_, haloVao_, haloVbo_, halos_.data(), halos_.size() * sizeof(Inst2), halos_.size());
-    // the life
+    // the life, cut over it
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     if (!plantInst_.empty()) {
         glUseProgram(progPlant_);
-        set1f(progPlant_, "uSlow", slow_);
         set1f(progPlant_, "uTime", worldTime_);
         set1f(progPlant_, "uAAp", aaW * 1.2f);
-        set3f(progPlant_, "uMoon", moon_);
-        set1f(progPlant_, "uGS", groundSeed_);
         set1f(progPlant_, "uWind", wind_);
+        // a margin of uncut key around each plant first (the inks under it kept), then the plants
+        set1f(progPlant_, "uOut", 0.07f);
+        glColorMask(GL_TRUE, GL_FALSE, GL_FALSE, GL_FALSE);
         drawInst(progPlant_, plantVao_, plantVbo_, plantInst_.data(), plantInst_.size() * sizeof(Inst), plantInst_.size());
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        set1f(progPlant_, "uOut", 0.f);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)plantInst_.size());
     }
-    // the well
-    if (!bare_) {
-        glUseProgram(progVeil_);
-        set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
-        set3f(progVeil_, "uSkyLow", sky_[1]);
-        set3f(progVeil_, "uLine", lerp(vec3(0.45f, 0.5f, 0.5f), glow_[0], 0.25f));
-        set1f(progVeil_, "uAA", aaW);
-        set1f(progVeil_, "uLineA", 0.15f);
-        ugl::drawFullscreen();
-    }
-    // fireflies and spores
-    glBlendFunc(GL_ONE, GL_ONE);
+    // fireflies, spores and chips: the deepest cut and the densest ink win
+    glBlendEquation(GL_MAX);
+    glUseProgram(progMote_);
+    set1f(progMote_, "uAA", aaW);
     drawInst(progMote_, haloVao_, haloVbo_, moteInst_.data(), moteInst_.size() * sizeof(Inst2), moteInst_.size());
-    // the blocks: the stack writes the scene's alpha
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glUseProgram(progPiece_);
-    set1f(progPiece_, "uGlow", (1.f + 0.06f * wp + 0.05f * fest_) * (1.f - 0.2f * slow_));
-    set1f(progPiece_, "uSlow", slow_);
-    set3f(progPiece_, "uMoon", moon_);
-    drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
-
-    // ---- The glow.
+    glBlendEquation(GL_FUNC_ADD);
     glDisable(GL_BLEND);
+
+    // ---- The fluorescence.
+    const float inkK = smoothstepf(0.3f, 0.8f, f.setup);
+    const float rollR = waveT_ * WAVE_SPEED * 1.3f + 1.f;
     bloomA_.bind();
     glUseProgram(progDown_);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
+    glBindTexture(GL_TEXTURE_2D, plateT_.tex);
     set1i(progDown_, "uSrc", 0);
-    set2f(progDown_, "uTexel", 1.5f / sceneT_.w, 1.5f / sceneT_.h);
-    set1f(progDown_, "uBlockCut", 0.8f);
+    set2f(progDown_, "uTexel", 1.5f / plateT_.w, 1.5f / plateT_.h);
+    set3f(progDown_, "uInkA", glow_[0]);
+    set3f(progDown_, "uInkB", glow_[1]);
+    set3f(progDown_, "uInkC", dropInk_);
+    set1f(progDown_, "uC", dropInkK_ * (1.f - slow_));
+    set1f(progDown_, "uRollR", rollR);
+    set1f(progDown_, "uInkK", inkK);
+    set4f(progDown_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     ugl::drawFullscreen();
     glUseProgram(progBlur_);
     set1i(progBlur_, "uSrc", 0);
@@ -1269,33 +1353,62 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         ugl::drawFullscreen();
     }
 
-    // ---- The frame.
+    // ---- The print.
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, width_, height_);
     glUseProgram(progFinal_);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
-    set1i(progFinal_, "uScene", 0);
+    glBindTexture(GL_TEXTURE_2D, plateT_.tex);
+    set1i(progFinal_, "uPlates", 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
-    set1f(progFinal_, "uBloomK", (0.5f + 0.12f * wp + 0.15f * fest_) * (1.f - 0.3f * slow_));
-    set1f(progFinal_, "uSlow", slow_ * 0.8f);
+    set2f(progFinal_, "uTexel", 1.f / width_, 1.f / height_);
+    {
+        // the glow plates a little out of register (their own way each print), knocked further on the drop's
+        // downbeat and settling back; in register in slow motion
+        const float px = height_ / 1080.f * (1.f - 0.8f * slow_);
+        const float a0 = seedF_ * 2.1f, a1 = a0 + 2.4f;
+        const float ra = (1.4f + 5.f * jolt_) * px, rb = (1.1f + 4.f * jolt_) * px;
+        set2f(progFinal_, "uOffA", std::cos(a0) * ra / width_, std::sin(a0) * ra / height_);
+        set2f(progFinal_, "uOffB", std::cos(a1) * rb / width_, std::sin(a1) * rb / height_);
+    }
+    set3f(progFinal_, "uPaper", paper_);
+    set3f(progFinal_, "uKey", key_);
+    set3f(progFinal_, "uInkA", glow_[0]);
+    set3f(progFinal_, "uInkB", glow_[1]);
+    set3f(progFinal_, "uInkC", dropInk_);
+    set3f(progFinal_, "uSlowInk", slowInk_);
+    set1f(progFinal_, "uC", dropInkK_ * (1.f - slow_));
+    set1f(progFinal_, "uRollR", rollR);
+    set1f(progFinal_, "uInkK", inkK);
+    set1f(progFinal_, "uKeyK", 0.9f + 0.1f * smoothstepf(0.f, 0.4f, f.setup));
+    set1f(progFinal_, "uBloomK", (0.12f + 0.05f * wp + 0.08f * fest_) * (1.f - 0.5f * slow_));
+    set1f(progFinal_, "uSlow", slow_);
     set1f(progFinal_, "uDim", dimT_);
-    set1f(progFinal_, "uFade", saturate(f.fade) * (1.f - 0.7f * smoothstepf(0.4f, 1.f, f.teardown))); // (the night deepens)
+    set1f(progFinal_, "uFade", saturate(f.fade) * smoothstepf(0.f, 0.35f, f.setup) * (1.f - 0.75f * smoothstepf(0.4f, 1.f, f.teardown)));
     set1f(progFinal_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
     set3f(progFinal_, "uBridgeCol", bridge_.color);
-    set3f(progFinal_, "uBridgeInk", bridge_.ink);
-    set3f(progFinal_, "uMoon", moon_);
     set4f(progFinal_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
     set1f(progFinal_, "uTime", worldTime_);
+    set1f(progFinal_, "uSeed", seedF_);
+    set1f(progFinal_, "uAA", aaW);
     set1f(progFinal_, "uGS", groundSeed_);
     set3f(progFinal_, "uRock", vec3(rock_[0], rock_[1], rock_[2]));
     set4f(progFinal_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
+    setBoxes(progFinal_);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // the blocks, printed in register over it
+    glUseProgram(progPiece_);
+    set3f(progPiece_, "uKey", key_);
+    set3f(progPiece_, "uBridgeInk", bridge_.ink);
+    set1f(progPiece_, "uBridge", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
+    set1f(progPiece_, "uFade", saturate(f.fade));
+    set1f(progPiece_, "uDim", dimT_);
+    drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
     drawHud(f.hud, f.panels);
     glDisable(GL_BLEND);
 }
@@ -1306,7 +1419,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_forest() {
     static const UniverseEntry e{
-        "GLOWING FOREST", "a night forest lit by bioluminescent life; each cleared row sows a glowing plant, the drop sends a wave of light through it",
+        "GLOWING FOREST", "a night forest as a relief print in black ink and fluorescent inks; each cleared row cuts a glowing plant, the drop rolls a new ink through it",
         [] { return std::unique_ptr<Universe>(new ForestUniverse()); },
         // A night world: fits most songs, a little more the slower, airy ones.
         [](const SongLook& l) { return 0.75f + 0.2f * l.airWeight + 0.15f * (1.f - l.density); },
