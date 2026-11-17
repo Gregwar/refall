@@ -117,7 +117,7 @@ private:
     // linear: the paper, the key block's ink, the world's two glow inks, the drop's third ink, slow motion's ink, the
     // seven blocks
     vec3 paper_, paperT_, key_, keyT_, glow_[2], glowT_[2], dropInk_, dropInkT_, slowInk_, slowInkT_, piece_[7], pieceT_[7];
-    vec3 neon_[7], neonT_[7];       // the drop's neons: the left's gradient (from the well out), the right's, the warm one
+    vec3 neon_[8], neonT_[8];       // the drop's neons: the left's gradient (from the column out), the right's, warm, moon
     void setNeon(GLuint prog) const;
     bool colSet_ = false;
     uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull, forestSeed_ = 0;

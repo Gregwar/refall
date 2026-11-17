@@ -75,7 +75,7 @@ vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 // A print (sRGB): its paper, the key block's ink, the three drums (a yellow, a pink, a blue), the drums inking the
 // world's two glow inks (bits 1, 2, 4: two bits print an overprint; the drum left over is the drop's ink, which takes
 // the second glow ink's place for a drop), the one cold ink of slow motion, the seven blocks' inks (I O T S Z J L;
-// J white) and the drop's neons (a gradient on each side from the well out, and the caps' warm neon).
+// J white) and the drop's neons (a gradient on each side from the HUD's column out, the caps' warm neon, the moon's).
 struct VariantDef {
     const char* name;
     unsigned paper, key;
@@ -83,24 +83,24 @@ struct VariantDef {
     int glowA, glowB;
     unsigned slow;
     unsigned pieces[7];
-    unsigned neon[7];
+    unsigned neon[8];
 };
 const VariantDef VARIANTS[] = {
     // foxfire: chartreuse and cyan on black, the drop in pink
     {"FOXFIRE", 0xf1efe9, 0x0a0b0d, {0xd2ff3a, 0xff4fa6, 0x3cc8f4}, 1, 4, 0xa8bccc,
-     {0x3cc8f4, 0xd8ff3a, 0xa274f4, 0x58d86c, 0xff5a5e, 0xf1efe9, 0xff9a3c}, {0x2ad8ff, 0x2cff9a, 0xd8ff2a, 0xffb01e, 0xff3f8c, 0xb84cff, 0xff6a3a}},
+     {0x3cc8f4, 0xd8ff3a, 0xa274f4, 0x58d86c, 0xff5a5e, 0xf1efe9, 0xff9a3c}, {0x2ad8ff, 0x2cff9a, 0xd8ff2a, 0xffb01e, 0xff3f8c, 0xb84cff, 0xff6a3a, 0x4a7cff}},
     // moonshade: cyan and pink on an indigo key, the drop in yellow
     {"MOONSHADE", 0xeef0f2, 0x0b1029, {0xfff04a, 0xff62c0, 0x4aa8ff}, 4, 2, 0xb4bed8,
-     {0x4aa8ff, 0xfff04a, 0xb07cff, 0x64e0a4, 0xff5c7c, 0xeef0f2, 0xffa244}, {0x5a6bff, 0x2ad8ff, 0x3cffd2, 0xb44cff, 0xff3fd2, 0xff6a8a, 0xffb02a}},
+     {0x4aa8ff, 0xfff04a, 0xb07cff, 0x64e0a4, 0xff5c7c, 0xeef0f2, 0xffa244}, {0x5a6bff, 0x2ad8ff, 0x3cffd2, 0xb44cff, 0xff3fd2, 0xff6a8a, 0xffb02a, 0x3cd8ff}},
     // honeycap: yellow and orange (yellow over pink) on a warm black, the drop in blue
     {"HONEYCAP", 0xf3f0ea, 0x110d0b, {0xffe838, 0xff5a9a, 0x40b8f0}, 1, 3, 0xbcc0cc,
-     {0x40b8f0, 0xffe838, 0xb07ae8, 0x8cd850, 0xff4f5a, 0xf3f0ea, 0xff962a}, {0x3a6bff, 0x9a4cff, 0xff2fb4, 0x1ee8ff, 0x2cff7a, 0xd8ff2a, 0xff7a3a}},
+     {0x40b8f0, 0xffe838, 0xb07ae8, 0x8cd850, 0xff4f5a, 0xf3f0ea, 0xff962a}, {0x3a6bff, 0x9a4cff, 0xff2fb4, 0x1ee8ff, 0x2cff7a, 0xd8ff2a, 0xff7a3a, 0x9a5cff}},
     // sporebloom: pink and lemon on a plum black, the drop in cyan
     {"SPOREBLOOM", 0xf2eff0, 0x140a19, {0xf4ff50, 0xff3d8c, 0x52d2f8}, 2, 1, 0xc4b8d4,
-     {0x52d2f8, 0xf4ff50, 0xb46cff, 0x7ce870, 0xff3d6c, 0xf2eff0, 0xffa050}, {0xff3fd2, 0xff6a4a, 0xffd22a, 0xb44cff, 0x5a6bff, 0x2ad8ff, 0xff8a3a}},
+     {0x52d2f8, 0xf4ff50, 0xb46cff, 0x7ce870, 0xff3d6c, 0xf2eff0, 0xffa050}, {0xff3fd2, 0xff6a4a, 0xffd22a, 0xb44cff, 0x5a6bff, 0x2ad8ff, 0xff8a3a, 0xff5ad2}},
     // verdigris: green (yellow over teal) and teal on a verdigris black, the drop in pink
     {"VERDIGRIS", 0xeef0ec, 0x0b1e1b, {0xe6ff4a, 0xff4fb0, 0x30b4d0}, 5, 4, 0xb0c4c0,
-     {0x30c4cc, 0xe6ff4a, 0x9c7cf4, 0x6ce070, 0xff5c6a, 0xeef0ec, 0xffa848}, {0x1ef0e0, 0x2cff7a, 0xc8ff2a, 0x3a8bff, 0x9a4cff, 0xff3fb0, 0xff7a4a}},
+     {0x30c4cc, 0xe6ff4a, 0x9c7cf4, 0x6ce070, 0xff5c6a, 0xeef0ec, 0xffa848}, {0x1ef0e0, 0x2cff7a, 0xc8ff2a, 0x3a8bff, 0x9a4cff, 0xff3fb0, 0xff7a4a, 0x3cffc8}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -415,21 +415,24 @@ void ForestUniverse::buildForest() {
 }
 
 // The forest's strokes, laid out with the forest (they stay for the universe's life): the big trees (their trunks and
-// limbs a dark fill between two edges, their crowns forking into twigs), young trees, mushroom clusters, ferns, black
-// stumps and roots, the moon's rim and strokes of cloud, a path of steps at the far right, drifting dots. The print
-// carves them (black, their edges and lines cut), the drop lights them as neon tubes, each tree in the neon of its place
-// (on the left magenta, violet, blue; on the right cyan, green, lime). Strokes in board units.
+// limbs a tinted fill between two bright edges, their limbs curving up and forking into ever thinner twigs, most of
+// them in the crown), young trees, a dense floor (mushroom clusters, coral bushes, ferns, black stumps), the moon's rim
+// and strokes of cloud, a path of steps at the far right, drifting dots. The print carves them (black, their edges and
+// lines cut), the drop lights them as neon tubes, each tree in the neon of its place (on the left magenta, violet,
+// blue; on the right cyan, green, lime). Strokes in board units.
 void ForestUniverse::buildNeon() {
     std::vector<Inst> fill, tube, dark;
     Rng r(forestSeed_ ^ 0x4E30ull);
     const Rock rock{rock_[0], rock_[1], rock_[2]};
-    const float W = viewH_.x, room = std::max(W - 11.8f, 3.f);
-    auto L = [&](float f) { return -11.8f - (1.f - f) * room; };   // the left's free strip, 0 at the edge
-    auto R = [&](float f) { return 11.8f + f * room; };              // the right's, 1 at the edge
+    const float W = viewH_.x, room = std::max(W - 11.8f, 3.f), top = viewC_.y + viewH_.y;
+    auto R = [&](float f) { return 11.8f + f * room; };   // the right's free strip, 1 at the edge
     auto ground = [&](float x) { return groundY(x, groundSeed_, rock, pool_); };
     auto unit = [](vec2 v) { const float l = std::max(std::sqrt(v.x * v.x + v.y * v.y), 1e-5f); return vec2{v.x / l, v.y / l}; };
-    // a stroke: kind 0 a tube, 1 a dark tinted fill, 2 a black silhouette, 3 a drifting dot; mode 0 the neon of the
-    // gradient at cx, 1 the warm neon, 2 the left's middle neon
+    auto heading = [](float a) { return vec2{std::sin(a), std::cos(a)}; };
+    // the song's title, top left: kept clear
+    auto inTitle = [&](vec2 p) { return p.x < -W + 7.5f && p.y > top - 2.8f; };
+    // a stroke: kind 0 a tube, 1 a tinted fill, 2 a black silhouette, 3 a drifting dot; mode 0 the neon of the gradient
+    // at cx, 1 the warm neon, 2 the moon's, 3 a coral
     // (in the print: a tree's cut edges bare paper, a plant's lines inked in a glow ink)
     float ink = 0.f;
     auto stroke = [&](std::vector<Inst>& v, vec2 a, vec2 b, float r0, float r1, int kind, int mode, float light, float tint,
@@ -438,81 +441,112 @@ void ForestUniverse::buildNeon() {
     };
     auto line = [&](vec2 a, vec2 b, float w, int mode, float cx, float light) { stroke(tube, a, b, w, w, 0, mode, light, 0.f, cx, 0.f); };
     auto dotAt = [&](vec2 p, float w, int mode, float cx, float light) { stroke(tube, p, p, w, w, 0, mode, light, 0.f, cx, 0.f); };
-    // a limb drawn as two tubes along its edges around a dark tinted inside, or as one tube when it is thin
+    // a limb: a tinted fill between two bright edges, or a single tube once it is thin
     auto limb = [&](vec2 a, vec2 b, float ra, float rb, float cx) {
-        if (ra > 0.075f) {
+        if (ra > 0.09f) {
             const vec2 d = unit(b - a), n{-d.y, d.x};
-            stroke(fill, a, b, ra, rb, 1, 0, 1.f, 0.08f, cx, 0.f);
-            line(a + n * ra, b + n * rb, 0.034f, 0, cx, 1.f);
-            line(a + n * -ra, b + n * -rb, 0.034f, 0, cx, 1.f);
+            stroke(fill, a, b, ra, rb, 1, 0, 1.f, 0.3f, cx, 0.f);
+            line(a + n * ra, b + n * rb, 0.045f, 0, cx, 1.f);
+            line(a + n * -ra, b + n * -rb, 0.045f, 0, cx, 1.f);
         } else {
-            line(a, b, std::max(ra * 0.8f, 0.03f), 0, cx, 1.1f);
+            line(a, b, std::max(ra * 0.75f, 0.022f), 0, cx, 1.1f);
         }
     };
-    // a branch: two strokes bending a little; it forks at its end (now and then halfway too) into thinner ones,
-    // `level` times more, leaning toward `bias` (its tree's open side) and up; a leafy tree's last twigs end in sprays
-    float bias = 0.f;
+    // a branch: a curve bending upward from its heading, tapering; it forks at its end into two or three thinner ones,
+    // `level` times more, kept inside its tree's strip [x0, x1]; a leafy tree's last twigs end in sprays of leaves
+    float x0 = 0.f, x1 = 0.f;
     std::function<void(vec2, float, float, float, int, float, bool)> branch = [&](vec2 p, float ang, float len, float rad, int level,
                                                                                   float cx, bool leafy) {
-        ang = std::clamp(ang * 0.85f + bias * 0.25f, -1.1f, 1.1f);
-        const vec2 dir{std::sin(ang), std::cos(ang)}, nrm{dir.y, -dir.x};
-        const vec2 mid = p + dir * (len * 0.5f) + nrm * (r.range(-0.1f, 0.1f) * len), end = p + dir * len;
-        const float r1 = rad * 0.72f;
-        limb(p, mid, rad, (rad + r1) * 0.5f, cx);
-        limb(mid, end, (rad + r1) * 0.5f, r1, cx);
+        ang = std::clamp(ang, -1.15f, 1.15f);
+        const int N = 6;
+        float a = ang;
+        vec2 q = p;
+        for (int i = 1; i <= N; i++) {
+            const float t = i / (float)N;
+            a = ang * (1.f - 0.45f * t);
+            const vec2 q2 = q + heading(a) * (len / N);
+            if (inTitle(q2)) return;
+            limb(q, q2, rad * (1.f - 0.3f * (t - 1.f / N)), rad * (1.f - 0.3f * t), cx);
+            q = q2;
+        }
         if (level <= 0) {
             if (leafy)
-                for (int k = 0; k < 4; k++) {
-                    const float a2 = ang + r.range(-1.1f, 1.1f);
-                    line(end, end + vec2{std::sin(a2), std::cos(a2)} * r.range(0.18f, 0.34f), 0.015f, 0, cx, 1.f);
+                for (int k = 0; k < 5; k++) {
+                    const float la = a + r.range(-1.2f, 1.2f);
+                    const vec2 b = q + heading(la) * r.range(0.06f, 0.22f);
+                    line(b, b + heading(la + r.range(-0.4f, 0.4f)) * 0.13f, 0.03f, 0, cx, 1.2f);
                 }
             return;
         }
-        const int n = level > 2 && r.chance(0.35f) ? 3 : 2;
-        for (int k = 0; k < n; k++)
-            branch(end, ang * 0.8f + (k - (n - 1) * 0.5f) * r.range(0.45f, 0.7f), len * r.range(0.62f, 0.76f), r1 * 0.66f, level - 1, cx, leafy);
-        if (r.chance(0.5f)) branch(mid, ang + (r.chance(0.5f) ? 1.f : -1.f) * r.range(0.6f, 0.9f), len * 0.5f, r1 * 0.5f, level - 2, cx, leafy);
+        // the children fan out around the branch's own start heading (so that the crown spreads, never closing up)
+        const int n = level > 1 && r.chance(0.35f) ? 3 : 2;
+        const float spread = r.range(0.45f, 0.65f) + (level == 1 ? 0.25f : 0.f);
+        for (int k = 0; k < n; k++) {
+            float ca = ang * 0.8f + (k - (n - 1) * 0.5f) * spread + r.range(-0.1f, 0.1f);
+            const float cl = len * r.range(0.62f, 0.74f);
+            const float ex = q.x + std::sin(ca) * cl;
+            if (ex < x0 || ex > x1) ca *= 0.35f;
+            branch(q, ca, cl, rad * 0.62f, level - 1, cx, leafy);
+        }
     };
-    // a tree: a trunk rising from the floor and bending a little, limbs along its upper half, its crown at the top
+    // a tree: a trunk rising from the floor and bending a little, a few long limbs low, most of them in the crown
     auto tree = [&](const Trunk& tr) {
-        bias = tr.open;
         auto at = [&](float u) { return trunkAt(tr, u); };
         auto radAt = [&](float u) { return trunkRad(tr, u); };
-        for (int i = 0; i < 8; i++) limb(at(i / 8.f), at((i + 1) / 8.f), radAt(i / 8.f), radAt((i + 1) / 8.f), tr.cx);
-        for (int k = 0; k < tr.limbs; k++) {
-            const float u = 0.38f + 0.56f * (k + r.range(0.f, 0.7f)) / tr.limbs;
-            const float side = r.chance(0.72f) ? (tr.open < 0.f ? -1.f : 1.f) : (tr.open < 0.f ? 1.f : -1.f);
-            branch(at(u), side * r.range(0.35f, 0.75f), tr.H * r.range(0.22f, 0.3f) * (1.1f - 0.45f * u), radAt(u) * 0.6f, 2, tr.cx, tr.leafy);
+        for (int i = 0; i < 10; i++) limb(at(i / 10.f), at((i + 1) / 10.f), radAt(i / 10.f), radAt((i + 1) / 10.f), tr.cx);
+        const float open = tr.open < 0.f ? -1.f : 1.f;
+        for (int k = 0; k < tr.limbs + 2; k++) {
+            const bool low = k < 2;
+            const float u = low ? r.range(0.38f, 0.55f) : 0.62f + 0.34f * (k - 2 + r.range(0.f, 0.8f)) / tr.limbs;
+            const float side = r.chance(0.55f + 0.35f * std::fabs(tr.open)) ? open : -open;
+            const float len = tr.H * (low ? r.range(0.13f, 0.17f) : r.range(0.09f, 0.13f));
+            branch(at(u), side * r.range(0.6f, 0.95f), len, radAt(u) * 0.55f, 3, tr.cx, tr.leafy);
         }
-        branch(at(1.f), tr.lean * 0.15f, tr.H * 0.2f, radAt(1.f), 3, tr.cx, tr.leafy);
+        branch(at(1.f), tr.lean * 0.2f, tr.H * 0.11f, radAt(1.f), 3, tr.cx, tr.leafy);
     };
     // a young tree: a stem with its branches in pairs up it, like a small fir
     auto sapling = [&](float x, float H, float cx) {
         const float g = ground(x);
-        line({x, g}, {x, g + H}, 0.026f, 0, cx, 1.f);
+        line({x, g}, {x, g + H}, 0.03f, 0, cx, 1.f);
         for (int k = 0; k < 5; k++) {
             const float y = g + H * (0.22f + 0.16f * k), l = H * (0.4f - 0.065f * k);
-            line({x, y}, {x - l, y + l * 0.85f}, 0.02f, 0, cx, 1.f);
-            line({x, y}, {x + l, y + l * 0.85f}, 0.02f, 0, cx, 1.f);
+            line({x, y}, {x - l, y + l * 0.85f}, 0.022f, 0, cx, 1.f);
+            line({x, y}, {x + l, y + l * 0.85f}, 0.022f, 0, cx, 1.f);
         }
     };
-    // a cluster of mushrooms: stems, caps (a dark tinted inside, a glowing rim, glowing spots), gills under them
-    auto mushrooms = [&](float x, int n, float sc, int mode) {
+    // a cluster of mushrooms of varied sizes: stems, caps (a tinted inside, a glowing rim, glowing spots), gills
+    auto mushrooms = [&](float x, int n, float sc) {
         for (int k = 0; k < n; k++) {
-            const float mx = x + r.range(-0.9f, 0.9f) * sc, g = ground(mx), h = r.range(0.35f, 1.0f) * sc;
-            const float cr = r.range(0.22f, 0.42f) * sc;
-            line({mx, g}, {mx + 0.05f, g + h}, 0.026f, mode, mx, 0.9f);
-            const vec2 c{mx + 0.05f, g + h};
-            stroke(fill, c + vec2{-cr * 0.55f, cr * 0.18f}, c + vec2{cr * 0.55f, cr * 0.18f}, cr * 0.32f, cr * 0.32f, 1, mode, 1.f, 0.3f, mx, 0.f);
+            const int mode = r.chance(0.55f) ? 1 : 3;
+            const float s = sc * r.range(0.45f, 1.1f);
+            const float mx = x + r.range(-0.6f, 0.6f) * sc, g = ground(mx), h = r.range(0.35f, 0.9f) * s;
+            const float cr = r.range(0.2f, 0.36f) * s;
+            line({mx, g}, {mx + 0.04f, g + h}, 0.026f, mode, mx, 0.9f);
+            const vec2 c{mx + 0.04f, g + h};
+            stroke(fill, c + vec2{-cr * 0.55f, cr * 0.18f}, c + vec2{cr * 0.55f, cr * 0.18f}, cr * 0.32f, cr * 0.32f, 1, mode, 1.f, 0.35f, mx, 0.f);
             vec2 prev = c + vec2{-cr, 0.f};
             for (int j = 1; j <= 8; j++) {
                 const float a = 3.14159f * (1.f - j / 8.f);
                 const vec2 q = c + vec2{std::cos(a) * cr, std::sin(a) * cr * 0.62f};
-                line(prev, q, 0.026f, mode, mx, 1.1f);
+                line(prev, q, 0.026f, mode, mx, 1.15f);
                 prev = q;
             }
             line(c + vec2{-cr, 0.f}, c + vec2{cr, 0.f}, 0.018f, mode, mx, 0.8f);
-            for (int j = 0; j < 3; j++) dotAt(c + vec2{r.range(-0.6f, 0.6f) * cr, r.range(0.15f, 0.45f) * cr}, 0.03f * sc, mode, mx, 1.3f);
+            for (int j = 0; j < 4; j++) dotAt(c + vec2{r.range(-0.6f, 0.6f) * cr, r.range(0.12f, 0.45f) * cr}, 0.026f * s, mode, mx, 1.4f);
+        }
+    };
+    // a coral bush: stems branching twice out of the floor, a bead of light at each tip
+    auto coral = [&](float x, float sc) {
+        const float g = ground(x);
+        for (int k = 0; k < 6; k++) {
+            const float a = (k - 2.5f) * 0.28f + r.range(-0.1f, 0.1f), l = sc * r.range(0.5f, 0.85f);
+            const vec2 p{x + r.range(-0.1f, 0.1f), g}, m = p + heading(a) * l;
+            line(p, m, 0.02f, 3, x, 1.f);
+            for (int j = -1; j <= 1; j += 2) {
+                const vec2 e = m + heading(a + j * 0.45f) * l * 0.55f;
+                line(m, e, 0.016f, 3, x, 1.f);
+                dotAt(e, 0.04f, 1, x, 1.4f);
+            }
         }
     };
     // a fern: fronds fanning out and curling over, dots of spores along them
@@ -524,8 +558,8 @@ void ForestUniverse::buildNeon() {
             for (int j = 1; j <= 5; j++) {
                 const float t = j / 5.f, a = ang * (1.f + 1.4f * t);
                 const vec2 q{x + std::sin(a) * t * len, g + std::cos(a) * t * len * (1.f - 0.25f * t)};
-                line(prev, q, 0.015f, 0, cx, 1.f);
-                if (j > 1) dotAt(q, 0.022f, 0, cx, 1.2f);
+                line(prev, q, 0.017f, 0, cx, 1.f);
+                if (j > 1) dotAt(q, 0.024f, 0, cx, 1.2f);
                 prev = q;
             }
         }
@@ -536,26 +570,35 @@ void ForestUniverse::buildNeon() {
         stroke(dark, {x, g - 0.4f}, {x + r.range(-0.15f, 0.15f), g + h}, w, w * 0.75f, 2, 0, 1.f, 0.f, x, 0.f);
         for (int s = -1; s <= 1; s += 2) stroke(dark, {x, g + h * 0.3f}, {x + s * w * 2.6f, g - 0.3f}, w * 0.55f, 0.05f, 2, 0, 1.f, 0.f, x, 0.f);
     };
-    for (const Trunk& t : trunks_) tree(t);
+    // ---- the big trees, each kept within its strip (out to its neighbours' trunks)
+    for (size_t i = 0; i < trunks_.size(); i++) {
+        const Trunk& t = trunks_[i];
+        x0 = t.x < 0.f ? -W - 0.5f : 11.6f;
+        x1 = t.x < 0.f ? -11.6f : W + 0.5f;
+        for (const Trunk& o : trunks_) {
+            if ((o.x < 0.f) != (t.x < 0.f) || &o == &t) continue;
+            if (o.x < t.x) x0 = std::max(x0, o.x - 0.8f);
+            else x1 = std::min(x1, o.x + 0.8f);
+        }
+        tree(t);
+    }
     ink = 1.f;
-    // ---- the left: mushrooms, ferns, stumps
-    mushrooms(L(0.06f), 4, 1.2f, 1);
-    mushrooms(L(0.66f), 5, 1.4f, 1);
-    mushrooms(-7.4f, 3, 1.1f, 1);
-    fern(L(0.32f), 1.5f, L(0.4f));
-    fern(-9.6f, 1.3f, -11.f);
-    stump(L(0.82f), 1.2f, 0.3f);
-    stump(-8.6f, 0.9f, 0.24f);
-    // ---- the right: young trees, mushrooms, a fern, stumps
+    // ---- the floor: a dense band of life across both strips and under the HUD's columns
+    for (int side = -1; side <= 1; side += 2) {
+        float ax = 6.3f + r.range(0.f, 0.3f);
+        while (ax < W - 0.3f) {
+            const float x = side * ax, k = r.uniform();
+            if (k < 0.42f) mushrooms(x, r.irange(3, 6), r.range(0.9f, 1.4f));
+            else if (k < 0.66f) coral(x, r.range(0.8f, 1.2f));
+            else if (k < 0.86f) fern(x, r.range(0.9f, 1.4f), x);
+            else stump(x, r.range(0.8f, 1.5f), r.range(0.2f, 0.3f));
+            ax += r.range(0.8f, 1.3f);
+        }
+    }
     sapling(9.4f, 2.6f, 11.6f);
-    sapling(R(0.38f), 2.2f, R(0.35f));
+    sapling(R(0.38f), 2.4f, R(0.35f));
     sapling(R(0.6f), 3.3f, R(0.55f));
-    mushrooms(7.9f, 4, 1.1f, 0);
-    mushrooms(R(0.33f), 5, 1.4f, 1);
-    mushrooms(R(0.86f), 3, 1.4f, 1);
-    fern(R(0.7f), 1.3f, R(0.7f));
-    stump(12.1f, 1.1f, 0.28f);
-    stump(R(0.27f), 1.5f, 0.3f);
+    sapling(-8.f, 2.f, -11.6f);
     {
         // the moon: a ring, dark inside, strokes of cloud across it and a few lines of sky beside it
         const float mr = moon_[2], mx = moon_[0], my = moon_[1];
@@ -565,26 +608,27 @@ void ForestUniverse::buildNeon() {
             const float a0 = TAU * i / 48.f, a1 = TAU * (i + 1) / 48.f;
             line({mx + std::cos(a0) * mr, my + std::sin(a0) * mr}, {mx + std::cos(a1) * mr, my + std::sin(a1) * mr}, 0.08f, 2, mx, 1.4f);
         }
-        for (int k = 0; k < 3; k++) {
-            const float y = my - mr * (0.15f + 0.28f * k), x0 = mx - mr * (0.2f - 0.25f * k), x1 = mx + mr * (0.85f - 0.1f * k);
-            line({x0, y}, {x1, y}, 0.035f, 2, mx, 1.f);
+        for (int k = 0; k < 4; k++) {
+            const float y = my - mr * (0.05f + 0.22f * k), xa = mx - mr * (0.25f - 0.2f * k), xb = mx + mr * (0.85f - 0.08f * k);
+            line({xa, y}, {xb, y}, 0.035f, 2, mx, 1.f);
         }
         for (int k = 0; k < 3; k++) {
             const float y = my - mr - 0.45f - 0.32f * k;
-            line({mx - mr * (1.9f - 0.3f * k), y}, {mx + mr * (0.2f + 0.3f * k), y}, 0.02f, 0, R(0.7f), 0.6f);
+            line({mx - mr * (1.9f - 0.3f * k), y}, {mx + mr * (0.2f + 0.3f * k), y}, 0.02f, 2, mx, 0.6f);
         }
     }
     ink = 0.f;
-    // the path of steps at the far right
-    for (int k = 0; k < 6; k++) {
-        const float y = ground(W - 1.f) + 0.1f - 0.36f * k, x0 = R(0.74f) + 0.3f * k;
-        line({x0, y}, {W + 0.5f, y - 0.06f}, 0.02f, 0, x0, 0.7f);
+    // the path of steps at the far right, climbing into the trees
+    for (int k = 0; k < 8; k++) {
+        const float y = ground(W - 1.f) - 0.6f + 0.42f * k, xa = W - room * 0.32f + 0.32f * k;
+        line({xa, y}, {W + 0.5f, y + 0.05f}, 0.025f, 0, W, 0.9f);
+        line({xa, y}, {xa, y - 0.42f}, 0.02f, 0, W, 0.7f);
     }
     // drifting dots of light
-    for (int k = 0; k < 26; k++) {
+    for (int k = 0; k < 30; k++) {
         const float side = k % 2 ? 1.f : -1.f, x = side * r.range(12.f, W - 0.3f), y = r.range(-8.f, 9.f);
         const float w = r.range(0.03f, 0.06f);
-        stroke(tube, {x, y}, {x, y}, w, w, 3, 0, 1.2f, 0.f, x, r.uniform() * 10.f);
+        if (!inTitle({x, y})) stroke(tube, {x, y}, {x, y}, w, w, 3, 0, 1.2f, 0.f, x, r.uniform() * 10.f);
     }
     const std::vector<Inst>* sets[3] = {&fill, &tube, &dark};
     for (int i = 0; i < 3; i++) {
@@ -592,7 +636,7 @@ void ForestUniverse::buildNeon() {
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sets[i]->size() * sizeof(Inst)), sets[i]->data(), GL_STATIC_DRAW);
         neonN_[i] = (int)sets[i]->size();
     }
-    aura_[0] = L(0.2f);
+    aura_[0] = -11.8f - room * 0.8f;
     aura_[1] = -2.f;
     aura_[2] = room * 0.5f;
 }
@@ -635,13 +679,13 @@ void ForestUniverse::setSong(const SongLook& t, float seconds) {
     dropInkT_ = glowInk(7 & ~(V.glowA | V.glowB));
     slowInkT_ = lin(V.slow);
     for (int i = 0; i < 7; i++) pieceT_[i] = lin(V.pieces[i]);
-    for (int i = 0; i < 7; i++) neonT_[i] = lin(V.neon[i]);
+    for (int i = 0; i < 8; i++) neonT_[i] = lin(V.neon[i]);
     const bool instant = !colSet_ || seconds <= 0.1f;
     if (instant) {
         paper_ = paperT_; key_ = keyT_; dropInk_ = dropInkT_; slowInk_ = slowInkT_;
         glow_[0] = glowT_[0]; glow_[1] = glowT_[1];
         for (int i = 0; i < 7; i++) piece_[i] = pieceT_[i];
-        for (int i = 0; i < 7; i++) neon_[i] = neonT_[i];
+        for (int i = 0; i < 8; i++) neon_[i] = neonT_[i];
         colSet_ = true;
     }
     seed_ = t.seed ? t.seed : 1;
@@ -973,11 +1017,12 @@ void ForestUniverse::readBoxes(const Frame& f) {
 }
 
 void ForestUniverse::setNeon(GLuint prog) const {
-    float nv[21];
-    for (int i = 0; i < 7; i++) { nv[i * 3] = neon_[i].x; nv[i * 3 + 1] = neon_[i].y; nv[i * 3 + 2] = neon_[i].z; }
+    float nv[24];
+    for (int i = 0; i < 8; i++) { nv[i * 3] = neon_[i].x; nv[i * 3 + 1] = neon_[i].y; nv[i * 3 + 2] = neon_[i].z; }
     glUniform3fv(ugl::U(prog, "uNeonL"), 3, nv);
     glUniform3fv(ugl::U(prog, "uNeonR"), 3, nv + 9);
     glUniform3fv(ugl::U(prog, "uNeonWarm"), 1, nv + 18);
+    glUniform3fv(ugl::U(prog, "uNeonMoon"), 1, nv + 21);
 }
 
 void ForestUniverse::setBoxes(GLuint prog) const {
@@ -1048,7 +1093,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         dropInk_ = lerp(dropInk_, dropInkT_, k);
         slowInk_ = lerp(slowInk_, slowInkT_, k);
         for (int i = 0; i < 7; i++) piece_[i] = lerp(piece_[i], pieceT_[i], k);
-        for (int i = 0; i < 7; i++) neon_[i] = lerp(neon_[i], neonT_[i], k);
+        for (int i = 0; i < 8; i++) neon_[i] = lerp(neon_[i], neonT_[i], k);
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
@@ -1420,7 +1465,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uRollR", rollR);
     set1f(progFinal_, "uInkK", inkK);
     set1f(progFinal_, "uKeyK", 0.9f + 0.1f * smoothstepf(0.f, 0.4f, f.setup));
-    set1f(progFinal_, "uBloomK", ((0.08f + 0.04f * wp) * (1.f - blaze_) + 0.4f * blaze_) * (1.f - 0.5f * slow_));
+    set1f(progFinal_, "uBloomK", ((0.08f + 0.04f * wp) * (1.f - blaze_) + 0.22f * blaze_) * (1.f - 0.5f * slow_));
     set1f(progFinal_, "uBlaze", blaze_ * (1.f - slow_));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);

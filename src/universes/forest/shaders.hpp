@@ -124,7 +124,7 @@ float groundY(float x) {
     return mix(max(a, b) + h * h * 0.3 * 0.25, -11.9, poolK(x));
 }
 // The drop's neon at x: a gradient on each side, from the HUD's column out to the edge (three inks a side).
-uniform vec3 uNeonL[3], uNeonR[3], uNeonWarm;
+uniform vec3 uNeonL[3], uNeonR[3], uNeonWarm, uNeonMoon;
 vec3 neonAt(float x, float halfW) {
     float t = clamp((abs(x) - 11.0) / max(halfW - 11.0, 1.0), 0.0, 1.0);
     return x < 0.0 ? (t < 0.5 ? mix(uNeonL[0], uNeonL[1], t * 2.0) : mix(uNeonL[1], uNeonL[2], t * 2.0 - 1.0))
@@ -939,12 +939,12 @@ void main() {
         vec3 ground = w.x < 0.0 ? uNeonWarm : uNeonR[1];
         float side = smoothstep(5.5, 7.5, abs(w.x));
         dc += ground * 0.07 * exp(-max(w.y - gy, 0.0) / 1.4) * smoothstep(gy - 2.0, gy, w.y) * side;
-        if (w.y < gy + 0.3) {
+        if (w.y < gy + 0.6) {
             vec2 g = w / 0.16;
             vec2 id = floor(g), f = fract(g) - 0.5;
             float h = hash12(id + 31.0);
             vec2 o = (vec2(hash12(id + 7.0), hash12(id + 13.0)) - 0.5) * 0.6;
-            float dot_ = exp(-dot(f - o, f - o) / 0.012) * step(0.55, h) * side * smoothstep(gy + 0.3, gy - 0.4, w.y);
+            float dot_ = exp(-dot(f - o, f - o) / 0.012) * step(0.4, h) * side * smoothstep(gy + 0.6, gy - 0.2, w.y);
             dc += mix(ground, vec3(1.0), 0.3) * dot_ * (0.5 + 0.8 * hash12(id + 3.0));
         }
         // (the HUD's columns stay dark above the floor, its text too)
@@ -991,7 +991,7 @@ void main() {
     c *= 0.25;
     // the drop's neon forest glowing
     if (uBlaze > 0.001)
-        c = mix(c, texture(uNeon, vUv).rgb * 1.6 * (1.0 - columnsAt(w)), smoothstep(0.0, 0.7, uBlaze) * neonIn(w, uRollR));
+        c = mix(c, texture(uNeon, vUv).rgb * 0.9 * (1.0 - columnsAt(w)), smoothstep(0.0, 0.7, uBlaze) * neonIn(w, uRollR));
     frag = vec4(c, 1.0);
 }
 )";
@@ -1010,7 +1010,7 @@ void main() {
 
 // ---------------------------------------------------------------- the drop's neon forest (instanced strokes)
 // a: from x, y, to x, y. b: radius at each end, kind (0 a neon tube, 1 a dark tinted fill, 2 a black silhouette, 3 a
-// drifting dot), color (0 the gradient at the x in c.w, 1 the warm neon, 2 the left's middle neon). c: seed, light,
+// drifting dot), color (0 the gradient at the x in c.w, 1 the warm neon, 2 the moon's, 3 a coral). c: seed, light,
 // tint, the x whose neon it takes. d: its ink in the print (0 none, 1 the glow inks), 1 if it is the drop's alone.
 inline const char* NEON_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
@@ -1043,7 +1043,7 @@ void main() {
     vC = aC;
     vD = aD;
     int mode = int(aB.w + 0.5);
-    vCol = mode == 1 ? uNeonWarm : mode == 2 ? uNeonL[1] : neonAt(aC.w, uView.z);
+    vCol = mode == 1 ? uNeonWarm : mode == 2 ? uNeonMoon : mode == 3 ? mix(uNeonWarm, vec3(1.0, 0.1, 0.32), 0.55) : neonAt(aC.w, uView.z);
     gl_Position = uVP * vec4(p, 0.0, 1.0);
 }
 )";
