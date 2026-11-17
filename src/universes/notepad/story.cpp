@@ -2,15 +2,25 @@
 // tools, like a flip-book drawn in the corner of an exercise book. His adventures follow one another, each from
 // where the last one left him:
 //
-//  - he walks (in a break) or runs (from the verse on) along the ground, a step on each beat, and turns back;
+//  - he walks (in a break) or runs (from the verse on) along the ground, a step on each beat, and turns back; or
+//    skips, moonwalks, tiptoes;
 //  - he hops from platform to platform up into the margin (each drawn in just before he needs it) and back down;
 //  - a ladder is drawn, he climbs it rung by rung to a ledge;
 //  - from a ledge he jumps off and his parachute opens, he sways down and lands; or he dives off with a somersault;
 //  - something falls on him from the top of the page (an anvil, a piano, a flower pot, a safe): a "!", its shadow
 //    growing, he leaps back just in time, it crashes where he stood;
 //  - acrobatics on the bars: cartwheels, a backflip, a handstand and a walkover, a star jump;
-//  - he crosses to the other margin through a hole drawn on the ground (out of another one over there);
-//  - in a break he sits down and taps his foot, or lies down and sleeps (Zzz); a wave now and then.
+//  - gags: a skateboard (an ollie, a kickflip), a pogo stick, a bike (a wheelie) or a unicycle, a skipping rope, a
+//    trampoline (flips), a football to a goal (or the post), a basketball (a shot, a dunk), a swarm of bees after
+//    him, a banana peel, an umbrella in the rain (then a sun, a rainbow), a kite, fishing (a fish, a boot, a can),
+//    juggling (balls, clubs, rings), a guitar or the drums, yoga, a telescope and a shooting star, painting at an
+//    easel, a dog fetching a stick;
+//  - he crosses to the other margin: through a hole drawn on the ground (out of another one over there), out of a
+//    cannon, on a paper plane, under balloons, with a rocket pack (off out of sight, in from the top over there);
+//  - in a break he sits down and taps his foot, reads, or lies down and sleeps (Zzz); a wave now and then.
+//
+// They are dealt like a deck: what he has done least this song comes first (the section choosing among it), each
+// one's variants the same way, so that a song shows most of them before any comes back.
 //
 // What he needs is drawn in before (a line growing along its length, the colouring stroke after stroke) and rubbed
 // out once he is done with it, so the margins never fill up. The guy himself is drawn anew on every drawing, each
@@ -30,6 +40,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 namespace notepad_story {
 namespace {
@@ -461,11 +473,30 @@ Ang lookUp() {
 Skel standing() { Skel S = fk(Ang{}); onFeet(S); return S; }
 
 // ---------------------------------------------------------------- the episodes
-enum { K_WAVE, K_RUN, K_HOP, K_LADDER, K_CHUTE, K_DIVE, K_DODGE, K_ACRO, K_CROSS, K_REST, K_COUNT };
+enum {
+    K_WAVE, K_RUN, K_HOP, K_LADDER, K_CHUTE, K_DIVE, K_DODGE, K_ACRO, K_CROSS, K_REST,
+    K_SKATE, K_POGO, K_BIKE, K_ROPE, K_TRAMP, K_FOOTBALL, K_BASKET, K_BEES, K_BANANA, K_UMBRELLA,
+    K_KITE, K_FISH, K_JUGGLE, K_MUSIC, K_YOGA, K_STARS, K_PAINT, K_DOG, K_COUNT
+};
+const char* const KIND_NAMES[K_COUNT] = {"wave", "run", "hop", "ladder", "chute", "dive", "dodge", "acro", "cross", "rest",
+                                         "skate", "pogo", "bike", "rope", "trampoline", "football", "basket", "bees", "banana", "umbrella",
+                                         "kite", "fish", "juggle", "music", "yoga", "stars", "paint", "dog"};
+// each one's variants (what the log calls them; the scheduler takes the least seen)
+const char* const VARIANTS[K_COUNT][6] = {
+    {"hello"}, {"run", "skip", "moonwalk", "sneak"}, {"up"}, {"climb"}, {"red", "blue"}, {"somersault"},
+    {"anvil", "piano", "pot", "safe"}, {"tricks"}, {"hole", "cannon", "plane", "balloons", "rocket"}, {"sit", "sleep", "read"},
+    {"ollie", "kickflip"}, {"bounce", "early"}, {"bike", "wheelie", "unicycle"}, {"steady", "double"}, {"star", "backflip"},
+    {"goal", "post"}, {"shot", "dunk"}, {"swarm"}, {"slip"}, {"sun", "rainbow"},
+    {"diamond"}, {"fish", "boot", "can"}, {"balls", "clubs", "rings"}, {"guitar", "drums"}, {"tree", "warrior"},
+    {"moon", "planet"}, {"house", "flower", "heart", "self", "boat", "cat"}, {"brown", "grey", "ginger"}};
+const int NVAR[K_COUNT] = {1, 4, 1, 1, 2, 1, 4, 1, 5, 3, 2, 2, 3, 2, 2, 2, 2, 1, 1, 2, 1, 3, 3, 2, 2, 2, 6, 3};
+enum { CR_HOLE, CR_CANNON, CR_PLANE, CR_BALLOONS, CR_ROCKET };
+enum { RU_RUN, RU_SKIP, RU_MOONWALK, RU_SNEAK };
 enum { TR_CARTWHEEL, TR_BACKFLIP, TR_HANDSTAND, TR_STARJUMP, TR_COUNT };
 const float TRICK_MOVE[TR_COUNT] = {3.0f, -0.6f, 0.f, 0.f}; // how far a trick takes him (his units, forward)
 enum { OB_ANVIL, OB_PIANO, OB_POT, OB_SAFE, OB_COUNT };
-enum { PR_GROUND, PR_LEDGE, PR_LADDER, PR_HOLE };
+enum { PR_GROUND, PR_LEDGE, PR_LADDER, PR_HOLE, PR_TRAMP, PR_GOAL, PR_HOOP, PR_POND, PR_PEEL, PR_CLOUD, PR_SKY, PR_SCOPE, PR_EASEL,
+       PR_PICTURE, PR_CANNON };
 const float RUNG = 0.42f; // the ladder's rungs (his units)
 
 // Where the guy is and how he stands, in his margin's coordinates (board units from its bottom middle).
@@ -478,8 +509,10 @@ struct Fig {
     bool shown = true;
     float turn = 0.f;   // swaying (a parachute): about `pivot`
     vec2 pivot;
+    float k = 1.f;      // his size (flying off out of sight, small, far away)
 };
 vec2 jointAt(const Fig& f, int j, float s) {
+    s *= f.k;
     const vec2 p = f.at + V(f.S.j[j].x * s * (float)f.dir, f.S.j[j].y * s);
     return f.turn != 0.f ? f.pivot + rot(p - f.pivot, f.turn) : p;
 }
@@ -579,14 +612,1473 @@ void canopy(Pen& pen, vec2 c, float rx, float ry, vec2 hands, uint32_t ca, uint3
 }
 
 struct Ctx {
-    float s;   // the guy's size
-    float top; // his margin's height (where things fall from)
+    float s;      // the guy's size
+    float hw[2];  // the margins' half widths
+    float top[2]; // their heights (where things fall from)
 };
 
 float trickX(const Story::Ep& e, int upto, float s) {
     float x = e.p0.x;
     for (int i = 0; i < upto && i < (int)e.seq.size(); i++) x += e.dir * TRICK_MOVE[e.seq[i]] * s;
     return x;
+}
+
+// ---------------------------------------------------------------- the gags
+// (each gag: where the guy is at `t` beats in and how he stands, and what moves with him, drawn with `pen`)
+
+Skel posed(const Ang& a) { Skel S = fk(a); onFeet(S); return S; }
+float jumpY(float u, float h) { return h * 4.f * u * (1.f - u); } // a jump's height, `u` from take-off to landing
+uint32_t hue(const Pal& P, int i) {
+    const uint32_t c[6] = {P.red, P.blue, P.green, P.orange, P.purple, P.yellow};
+    return c[((i % 6) + 6) % 6];
+}
+int wellSide(int side) { return side == 0 ? 1 : -1; } // which way the well is from a margin
+// A thing in the guy's frame (his units, x forward, from `at`, turned by `ang`) out in the margin.
+vec2 his(vec2 q, vec2 at, float s, int dir, float ang = 0.f) {
+    q = rot(q, ang);
+    return at + V(q.x * s * (float)dir, q.y * s);
+}
+Poly his(Poly p, vec2 at, float s, int dir, float ang = 0.f) {
+    for (vec2& q : p) q = his(q, at, s, dir, ang);
+    return p;
+}
+// A music note (an eighth), `sz` tall.
+void note(Pen& pen, vec2 at, float sz, uint32_t col, bool two) {
+    const Poly head = ellipse(at, 0.17f * sz, 0.12f * sz);
+    pen.shape(head, 0.7f, col);
+    pen.colour(head, col, 0.4f, 0.35f);
+    pen.line({at + V(0.15f * sz, 0.03f * sz), at + V(0.15f * sz, 0.8f * sz)}, 0.7f, col);
+    if (two) {
+        const vec2 b = at + V(0.5f * sz, 0.1f * sz);
+        const Poly h2 = ellipse(b, 0.17f * sz, 0.12f * sz);
+        pen.shape(h2, 0.7f, col);
+        pen.colour(h2, col, 0.4f, 0.35f);
+        pen.line({b + V(0.15f * sz, 0.03f * sz), b + V(0.15f * sz, 0.9f * sz)}, 0.7f, col);
+        pen.line({at + V(0.15f * sz, 0.8f * sz), b + V(0.15f * sz, 0.9f * sz)}, 1.1f, col);
+    } else {
+        pen.line({at + V(0.15f * sz, 0.8f * sz), at + V(0.38f * sz, 0.55f * sz), at + V(0.36f * sz, 0.35f * sz)}, 0.7f, col);
+    }
+}
+
+Poly quad(vec2 a, vec2 c, vec2 b, int n = 10) { // a curve from a to b pulled toward c
+    Poly p;
+    for (int i = 0; i <= n; i++) {
+        const float u = i / (float)n;
+        p.push_back(a * ((1 - u) * (1 - u)) + c * (2 * u * (1 - u)) + b * (u * u));
+    }
+    return p;
+}
+vec2 bez(vec2 a, vec2 b, vec2 c, vec2 d, float u) {
+    const float v = 1.f - u;
+    return a * (v * v * v) + b * (3 * v * v * u) + c * (3 * v * u * u) + d * (u * u * u);
+}
+// A limb reaching for `to` (his units) from its root: two segments, the middle joint bent to `bend` (+1 forward,
+// knees; -1 back, elbows).
+void reach(Skel& S, int root, int mid, int end, vec2 to, float bend, float l1, float l2) {
+    const vec2 a = S.j[root], u = unit(to - a);
+    const float L = std::clamp(len(to - a), std::fabs(l1 - l2) + 1e-3f, l1 + l2 - 1e-4f);
+    const float x = (l1 * l1 - l2 * l2 + L * L) / (2.f * L), y = std::sqrt(std::max(0.f, l1 * l1 - x * x));
+    S.j[mid] = a + u * x + V(-u.y, u.x) * (y * bend);
+    S.j[end] = a + u * L;
+}
+void feetAt(Skel& S, vec2 f0, vec2 f1) {
+    reach(S, HIP, KN0, FT0, f0, 1.f, THIGH, SHIN);
+    reach(S, HIP, KN1, FT1, f1, 1.f, THIGH, SHIN);
+}
+void handsAt(Skel& S, vec2 h0, vec2 h1) {
+    reach(S, NECK, EL0, HA0, h0, -1.f, UARM, FARM);
+    reach(S, NECK, EL1, HA1, h1, -1.f, UARM, FARM);
+}
+Ang hipAt(Ang a, float y) { a.hip = V(0.f, y); return a; }
+// a little star (a sparkle, what he sees after a fall), a puff of smoke, a ball
+void starShape(Pen& pen, vec2 c, float r, uint32_t col, float a0 = 0.f) {
+    Poly p;
+    for (int i = 0; i <= 10; i++) {
+        const float a = a0 + PI * 0.5f + i * PI / 5.f, rr = (i & 1) ? r * 0.45f : r;
+        p.push_back(c + V(std::cos(a), std::sin(a)) * rr);
+    }
+    pen.line(p, 0.7f, col);
+}
+void sparkle(Pen& pen, vec2 c, float r, uint32_t col) {
+    pen.line({c + V(-r, 0.f), c + V(r, 0.f)}, 0.7f, col);
+    pen.line({c + V(0.f, -r), c + V(0.f, r)}, 0.7f, col);
+    pen.line({c + V(-0.5f * r, -0.5f * r), c + V(0.5f * r, 0.5f * r)}, 0.5f, col);
+    pen.line({c + V(-0.5f * r, 0.5f * r), c + V(0.5f * r, -0.5f * r)}, 0.5f, col);
+}
+void smoke(Pen& pen, vec2 c, float r, float a = 0.8f) {
+    Poly p;
+    for (int i = 0; i <= 24; i++) {
+        const float u = i / 24.f * TAU;
+        p.push_back(c + V(std::cos(u), std::sin(u)) * (r * (1.f + 0.18f * std::cos(u * 5.f))));
+    }
+    pen.line(p, 0.7f, pen.P.grey, a);
+}
+void ballShape(Pen& pen, vec2 c, float r, uint32_t col, float spin = 0.f) {
+    const Poly b = ellipse(c, r, r);
+    pen.shape(b, 0.7f);
+    pen.colour(b, col, 0.5f + spin, std::max(0.25f, r * 1.6f));
+}
+// the curve of a string from a to b, sagging
+Poly sag(vec2 a, vec2 b, float d) { return quad(a, (a + b) * 0.5f + V(0.f, -d), b, 10); }
+
+// ---- on wheels and springs
+Ang balance() { // arms out
+    Ang a;
+    a.spine = 0.1f;
+    a.ua[0] = 1.35f; a.fa[0] = 1.7f;
+    a.ua[1] = -1.25f; a.fa[1] = -1.55f;
+    return a;
+}
+void skateboard(Pen& pen, vec2 at, float s, int dir, float tilt, float flip, uint32_t col) {
+    const float wy = 0.16f - 0.09f * std::cos(flip);
+    const Poly deck = his({V(-0.64f, 0.26f), V(-0.5f, 0.16f), V(0.5f, 0.16f), V(0.64f, 0.26f)}, at, s, dir, tilt);
+    pen.line(deck, 2.4f, col, 0.9f);
+    pen.line(deck, 0.8f);
+    for (int k = -1; k <= 1; k += 2) pen.shape(ellipse(his(V(0.36f * k, wy), at, s, dir, tilt), 0.07f * s, 0.07f * s), 0.7f);
+}
+void epSkate(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const bool kickflip = e.seq[0] == 1;
+    const float u = saturate((t - 1.f) / (dur - 2.f));
+    const float prog = u < 0.3f ? 0.18f * (u / 0.3f) * (u / 0.3f) : 0.18f + 0.82f * (u - 0.3f) / 0.7f;
+    const float end = e.p1.x - e.dir * 0.75f * s, bx = lerpf(e.p0.x, end, prog);
+    float air = 0.f, tilt = 0.f, flip = 0.f;
+    const float tt = std::floor(dur * 0.5f); // the trick, on the bar's middle
+    if (t >= tt && t < tt + 1.f) {
+        const float v = t - tt;
+        air = jumpY(v, 1.f);
+        if (kickflip) flip = TAU * ease(v * 1.3f);
+        tilt = (kickflip ? 0.15f : 0.45f) * std::sin(v * TAU) * (1.f - 0.5f * v);
+    }
+    const float deck = 0.16f;
+    Ang a = balance();
+    if (t < 1.f) { // stepping on
+        f.at = V(bx, 0.f);
+        Skel on = fk(hipAt(a, deck + 0.74f));
+        feetAt(on, V(0.3f, deck), V(-0.3f, deck));
+        f.S = mixS(standing(), on, ease(t));
+    } else if (t < dur - 1.f) {
+        f.at = V(bx, air * s);
+        if (t < 3.f) { // two kicks along the ground
+            const float ph = frac(t - 1.f);
+            const vec2 kick = ph < 0.6f ? V(lerpf(0.05f, -0.5f, ph / 0.6f), 0.01f)
+                                        : V(lerpf(-0.5f, 0.05f, (ph - 0.6f) / 0.4f), 0.2f * std::sin((ph - 0.6f) / 0.4f * PI));
+            a.spine = 0.25f;
+            a.ua[0] = 0.6f - 0.5f * std::sin(ph * TAU); a.fa[0] = a.ua[0] + 0.6f;
+            f.S = fk(hipAt(a, deck + 0.62f));
+            feetAt(f.S, V(0.18f, deck), kick);
+        } else {
+            const float k = air > 0.f ? std::sin((t - tt) * PI) : 0.f;
+            if (k > 0.f) { a.ua[0] = 2.2f; a.fa[0] = 2.5f; a.ua[1] = -1.9f; a.fa[1] = -1.5f; }
+            a.ua[0] += 0.12f * std::sin(t * PI);
+            f.S = fk(hipAt(a, deck + 0.72f - 0.25f * k));
+            feetAt(f.S, rot(V(0.3f, deck + 0.02f * k), tilt), rot(V(-0.3f, deck + 0.04f * k), tilt));
+        }
+    } else { // off, the board left behind
+        const float v = t - (dur - 1.f);
+        f.at = V(lerpf(end, e.p1.x, ease(v)), 0.f);
+        Skel on = fk(hipAt(a, deck + 0.72f));
+        feetAt(on, V(0.3f, deck), V(-0.3f, deck));
+        f.S = v < 0.5f ? mixS(on, standing(), ease(v * 2.f)) : mixS(standing(), posed(tada()), ease((v - 0.5f) * 3.f));
+    }
+    if (pen) skateboard(*pen, V(bx, air * s), s, e.dir, tilt, flip, hue(pen->P, e.seq[1]));
+    if (pen && air > 0.3f) pen->text(f.at + V(-e.dir * 0.9f * s, 2.4f * s), kickflip ? "Flip!" : "Ollie!", pen->P.red, 0.5f * s);
+}
+
+void epPogo(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    // a hop a beat (a big one each bar), moving along, then off it, the stick falling over
+    const int i = (int)std::floor(t);
+    const float v = frac(t);
+    const bool big = i > 0 && (i % 4) == (e.seq[0] == 1 ? 1 : 3) && i < (int)dur - 1;
+    const float end = e.p1.x - e.dir * 0.8f * s, x = lerpf(e.p0.x, end, saturate(t / (dur - 1.f)));
+    const float cmp = 1.f - saturate(std::min(v, 1.f - v) / 0.18f); // the spring squashed
+    const float pegs = 0.45f - 0.15f * cmp, bar = pegs + 0.95f;
+    const float lean = -0.1f;
+    const uint32_t col = pen ? hue(pen->P, e.seq[1]) : 0;
+    if (t < dur - 1.f) {
+        f.at = V(x, jumpY(v, big ? 1.9f : 0.6f) * s);
+        Ang a;
+        a.spine = 0.05f;
+        f.S = fk(hipAt(a, pegs + 0.74f - 0.12f * cmp));
+        feetAt(f.S, V(0.1f, pegs), V(-0.05f, pegs));
+        handsAt(f.S, V(0.22f, bar), V(0.14f, bar - 0.02f));
+        if (big && v > 0.3f && v < 0.7f) { // a hand off at the top
+            reach(f.S, NECK, EL1, HA1, f.S.j[NECK] + V(-0.3f, 0.45f), -1.f, UARM, FARM);
+        }
+        turnS(f.S, V(0.f, 0.f), lean);
+        if (pen) {
+            auto X = [&](Poly p) { return his(std::move(p), f.at, s, e.dir, lean); };
+            Poly spring;
+            for (int k = 0; k <= 8; k++) spring.push_back(V((k & 1) ? 0.07f : -0.07f, 0.08f + (pegs - 0.12f) * k / 8.f));
+            pen->line(X({V(0.f, 0.f), V(0.f, 0.1f)}), 0.9f);
+            pen->line(X(spring), 0.6f);
+            pen->line(X({V(0.f, pegs - 0.06f), V(0.f, bar)}), 1.6f, col);
+            pen->line(X({V(-0.22f, bar), V(0.22f, bar)}), 1.1f);
+            pen->line(X({V(-0.14f, pegs), V(0.14f, pegs)}), 0.9f);
+            if (big && v > 0.15f && v < 0.6f) pen->text(f.at + V(e.dir * 1.0f * s, 1.f * s), "Boing!", pen->P.red, 0.5f * s);
+        }
+    } else {
+        const float w = t - (dur - 1.f);
+        f.at = V(lerpf(end, e.p1.x, w), jumpY(w, 0.6f) * s);
+        f.S = w < 0.6f ? posed(leap()) : mixS(posed(leap()), posed(tada()), ease((w - 0.6f) / 0.3f));
+        if (pen) { // the stick tipping over behind him
+            const float fall = -PI * 0.5f * ease(w * 1.5f) - 0.1f;
+            auto X = [&](Poly p) { return his(std::move(p), V(end, 0.f), s, -e.dir, -fall); };
+            pen->line(X({V(0.f, 0.f), V(0.f, 1.4f)}), 1.6f, col);
+            pen->line(X({V(-0.22f, 1.4f), V(0.22f, 1.4f)}), 1.1f);
+        }
+    }
+}
+
+void epBike(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const int kind = e.seq[0]; // 0 a bike, 1 a bike and a wheelie, 2 a unicycle
+    const bool uni = kind == 2;
+    const float prog = ease(saturate(t / dur) * 1.1f - 0.05f);
+    f.at = V(lerpf(e.p0.x, e.p1.x, prog), 0.f);
+    const float r = uni ? 0.42f : 0.34f;
+    const float roll = -std::fabs(e.p1.x - e.p0.x) * prog / s / r;
+    const vec2 crankC = uni ? V(0.f, r) : V(0.f, 0.3f);
+    const float crank = uni ? roll : -t * PI, cr = uni ? 0.15f : 0.16f;
+    const vec2 ped0 = crankC + V(std::cos(crank), std::sin(crank)) * cr, ped1 = crankC - V(std::cos(crank), std::sin(crank)) * cr;
+    Ang a;
+    if (uni) { // arms out, wobbling for balance
+        a.ua[0] = 1.5f + 0.35f * std::sin(t * TAU); a.fa[0] = a.ua[0] + 0.4f;
+        a.ua[1] = -1.5f + 0.35f * std::sin(t * TAU + 1.3f); a.fa[1] = a.ua[1] - 0.4f;
+        a.spine = 0.04f;
+    } else a.spine = 0.45f;
+    const vec2 seat = uni ? V(0.f, 1.06f) : V(-0.2f, 0.98f);
+    a.hip = seat + V(0.f, 0.03f);
+    Skel S = fk(a);
+    feetAt(S, ped0, ped1);
+    const vec2 bar = V(0.43f, 1.12f);
+    if (!uni) handsAt(S, bar, bar + V(-0.04f, 0.f));
+    // the whole thing tilts: a wheelie (about the back wheel), a unicycle's sway
+    vec2 piv = V(uni ? 0.f : -0.62f, 0.f);
+    float ang = 0.f;
+    if (uni) ang = 0.08f * std::sin(t * PI);
+    else if (kind == 1) ang = 0.42f * ease(saturate(std::min(t - 2.f, dur - 2.f - t) / 0.8f));
+    turnS(S, piv, ang);
+    f.S = S;
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const uint32_t col = hue(P, e.seq[1]);
+    auto X = [&](Poly p) {
+        for (vec2& q : p) q = his(piv + rot(q - piv, ang), f.at, s, e.dir);
+        return p;
+    };
+    auto wheel = [&](vec2 hub) {
+        pen->shape(X(ellipse(hub, r, r)), 0.9f);
+        for (int k = 0; k < 2; k++) {
+            const vec2 d = V(std::cos(roll + k * PI * 0.5f), std::sin(roll + k * PI * 0.5f)) * (r * 0.9f);
+            pen->line(X({hub - d, hub + d}), 0.4f, P.grey);
+        }
+    };
+    if (uni) {
+        wheel(V(0.f, r));
+        pen->line(X({V(0.f, r), seat}), 1.4f, col);
+        pen->line(X({seat + V(-0.14f, 0.f), seat + V(0.14f, 0.02f)}), 1.3f);
+    } else {
+        const vec2 R = V(-0.62f, r), F = V(0.62f, r), hd = V(0.45f, 0.86f);
+        wheel(R);
+        wheel(F);
+        pen->line(X({R, crankC, seat, R}), 1.3f, col);
+        pen->line(X({seat, hd, crankC}), 1.3f, col);
+        pen->line(X({F, hd, bar, bar + V(-0.12f, 0.06f)}), 0.9f);
+        pen->line(X({seat + V(-0.13f, 0.02f), seat + V(0.1f, 0.02f)}), 1.3f);
+        pen->shape(X(ellipse(crankC, 0.07f, 0.07f)), 0.6f);
+    }
+    pen->line(X({ped0, crankC, ped1}), 0.7f);
+    if (kind == 1 && ang > 0.3f) pen->text(f.at + V(-e.dir * 0.4f * s, 2.9f * s), "Wheelie!", P.red, 0.5f * s);
+}
+
+// ---- in place, to the beat
+void epRope(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    // a hop each beat, the rope under him on the off-beat; once a big hop, the rope round twice
+    const bool big = e.seq[0] == 1 && t >= 4.f && t < 6.f;
+    float hop = 0.f, psi = TAU * t;
+    if (big) { hop = jumpY((t - 4.f) / 2.f, 1.3f); psi = TAU * (4.f + 2.f * (t - 4.f)); }
+    else if (t >= 1.f && t < dur - 1.f) hop = jumpY(frac(t), 0.45f);
+    Ang a;
+    a.ua[0] = 0.55f; a.fa[0] = 1.25f;
+    a.ua[1] = -0.55f; a.fa[1] = -1.25f;
+    const float air = saturate(hop / 0.2f);
+    a.th[0] = 0.1f * air; a.sh[0] = a.th[0] - 0.5f * air;
+    a.th[1] = -0.1f * air; a.sh[1] = a.th[1] - 0.5f * air;
+    if (big) { a.th[0] = a.th[1] = 1.2f * air; a.sh[0] = a.sh[1] = -0.3f * air; }
+    f.S = posed(a);
+    if (t >= dur - 1.f) { f.S = mixS(f.S, posed(tada()), ease((t - dur + 1.f) * 2.f)); psi = PI; }
+    f.at = V(e.p0.x, hop * s);
+    if (!pen) return;
+    const vec2 h0 = jointAt(f, HA0, s), h1 = jointAt(f, HA1, s);
+    const vec2 m = V((h0.x + h1.x) * 0.5f, (h0.y + h1.y) * 0.5f + 1.05f * s * std::cos(psi));
+    pen->line(quad(h0, m * 2.f - (h0 + h1) * 0.5f, h1, 12), 1.f, hue(pen->P, e.seq[1]));
+    if (big && t < 5.5f) pen->text(f.at + V(0.f, 3.f * s), "x2!", pen->P.red, 0.55f * s);
+}
+
+void epTramp(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s;
+    const float cx = e.ea, mat = 0.55f * s, edge = cx - e.dir * 1.35f * s, off = cx + e.dir * 1.7f * s;
+    // on, bounces (1, 1.6, a flip, a trick), a small one, off
+    struct B { float t0, t1, h; };
+    const B bs[5] = {{2, 3, 1.f}, {3, 4, 1.7f}, {4, 6, 2.8f}, {6, 8, 2.8f}, {8, 9, 1.2f}};
+    Skel st = standing(), cr = posed(crouch());
+    float dip = 0.f;
+    if (t < 1.f) {
+        f.at = V(lerpf(e.p0.x, edge, t), 0.f);
+        f.S = posed(gait(t * TAU, 0.6f));
+    } else if (t < 2.f) {
+        const float u = t - 1.f;
+        f.at = V(lerpf(edge, cx, u), lerpf(0.f, mat, u) + jumpY(u, 1.f * s));
+        f.S = posed(leap());
+        if (u > 0.85f) dip = (u - 0.85f) / 0.15f;
+    } else if (t < 9.f) {
+        int i = 0;
+        while (i < 4 && t >= bs[i].t1) i++;
+        const float u = (t - bs[i].t0) / (bs[i].t1 - bs[i].t0);
+        const float h = jumpY(u, bs[i].h) * s;
+        f.at = V(cx, mat + h);
+        const float nearMat = 1.f - saturate(h / (0.3f * s));
+        dip = nearMat;
+        f.S = mixS(standing(), cr, nearMat);
+        if (i == 2) { // a front flip
+            f.S = mixS(st, fk(tuck()), ease(std::min(u, 1.f - u) * 4.f));
+            shiftS(f.S, V(0.f, 0.86f - f.S.j[HIP].y));
+            turnS(f.S, f.S.j[HIP], -TAU * ease((u - 0.1f) / 0.8f));
+        } else if (i == 3) {
+            if (e.seq[0] == 0) { // a star at the top
+                Skel sr = posed(star());
+                f.S = mixS(f.S, sr, ease(std::min(u, 1.f - u) * 4.f));
+            } else { // a backflip
+                f.S = mixS(st, fk(tuck()), ease(std::min(u, 1.f - u) * 4.f));
+                shiftS(f.S, V(0.f, 0.86f - f.S.j[HIP].y));
+                turnS(f.S, f.S.j[HIP], TAU * ease((u - 0.1f) / 0.8f));
+            }
+        }
+    } else if (t < 10.5f) {
+        const float u = (t - 9.f) / 1.5f;
+        f.at = V(lerpf(cx, off, u), lerpf(mat, 0.f, u) + jumpY(u, 1.6f * s));
+        f.S = mixS(posed(leap()), cr, saturate((u - 0.8f) / 0.2f));
+        if (u < 0.12f) dip = 1.f - u / 0.12f;
+    } else {
+        f.at = V(off, 0.f);
+        f.S = mixS(cr, posed(tada()), ease((t - 10.5f) / 0.4f));
+    }
+    if (pen) {
+        const float hw = 1.15f * s;
+        const float dx = std::clamp(f.at.x - cx, -hw * 0.8f, hw * 0.8f);
+        pen->line(quad(V(cx - hw, mat), V(cx + dx, mat - 0.7f * s * dip), V(cx + hw, mat), 8), 1.1f);
+        if (t >= 4.2f && t < 5.4f) pen->text(V(cx, mat + 4.f * s), "Whee!", pen->P.red, 0.55f * s);
+    }
+}
+
+// ---- ball games
+void football(Pen& pen, vec2 c, float r, float spin) {
+    pen.shape(ellipse(c, r, r), 0.8f);
+    Poly patch;
+    for (int i = 0; i <= 5; i++) patch.push_back(c + rot(V(0.f, 0.42f * r), spin + i * TAU / 5.f));
+    pen.shape(patch, 0.5f);
+    pen.dark(patch, 0.3f, 0.3f);
+}
+void epFootball(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, d = (float)e.dir;
+    const bool goal = e.seq[0] == 0;
+    const float gx = e.ea, ks = e.eb, r = 0.17f * s;
+    const float bx0 = ks + d * 0.45f * s; // where the ball waits for the kick
+    const vec2 target = goal ? V(gx + d * 0.25f * s, 0.6f * s) : V(gx, 1.25f * s);
+    vec2 ball;
+    float spin = 0.f;
+    if (t < 4.f) { // dribbling up, a touch on each beat
+        f.at = V(lerpf(e.p0.x, ks, t / 4.f), 0.f);
+        f.S = posed(gait(t * TAU, 0.75f));
+        const float lead = (0.35f + 0.35f * (1.f - frac(t))) * std::min(1.f, 4.f - t);
+        ball = V(f.at.x + d * (lead * s + 0.1f * s), r);
+        if (t > 3.6f) ball.x = lerpf(ball.x, bx0, (t - 3.6f) / 0.4f);
+    } else if (t < 5.f) { // a step back, a run-up, the kick
+        ball = V(bx0, r);
+        if (t < 4.5f) {
+            f.at = V(lerpf(ks, ks - d * 0.6f * s, ease((t - 4.f) * 2.f)), 0.f);
+            f.S = standing();
+        } else {
+            const float u = (t - 4.5f) * 2.f;
+            f.at = V(lerpf(ks - d * 0.6f * s, bx0 - d * 0.5f * s, u), 0.f);
+            f.S = posed(gait(u * TAU, 0.9f));
+        }
+    } else {
+        f.at = V(bx0 - d * 0.5f * s, 0.f);
+        if (t < 5.6f) { // the kick: the leg through, the arms out
+            Ang a;
+            const float k = ease((t - 5.f) / 0.3f);
+            a.spine = -0.25f * k;
+            a.th[1] = lerpf(-0.5f, 1.4f, k); a.sh[1] = a.th[1] - 0.3f * (1.f - k);
+            a.th[0] = -0.1f; a.sh[0] = -0.1f;
+            a.ua[0] = -1.2f; a.fa[0] = -0.9f;
+            a.ua[1] = 1.4f; a.fa[1] = 1.7f;
+            f.S = posed(a);
+        } else if (goal) { // jumping for joy on the beats
+            f.at.y = t > 6.f && t < 9.f ? jumpY(frac(t), 0.6f) * s : 0.f;
+            f.S = posed(t > 6.f ? tada() : Ang{});
+        } else { // his head in his hands
+            Ang a;
+            a.head = 0.3f;
+            a.ua[0] = 2.6f; a.fa[0] = -2.3f;
+            a.ua[1] = -2.6f; a.fa[1] = 2.3f;
+            f.S = mixS(standing(), posed(a), ease((t - 6.f) * 2.f));
+        }
+        const float u = saturate((t - 5.15f) / 0.85f);
+        ball = mixv(V(bx0, r), target, u) + V(0.f, jumpY(u, goal ? 1.4f * s : 1.1f * s));
+        spin = -u * 9.f * d;
+        if (u >= 1.f) {
+            if (goal) ball = V(gx + d * 0.32f * s, r);
+            else { // off the post, back to his feet
+                const float w = saturate((t - 6.f) / 1.2f);
+                ball = mixv(target, V(f.at.x + d * 0.4f * s, r), w) + V(0.f, jumpY(w, 0.8f * s));
+                spin = w * 7.f * d;
+            }
+        }
+    }
+    if (!pen) return;
+    football(*pen, ball, r, spin + ball.x * (-d) / r * 0.5f);
+    if (goal && t >= 6.f) {
+        pen->line(quad(V(gx + d * 0.1f * s, 1.15f * s), V(gx + d * (0.95f - 0.25f * saturate(t - 6.5f)) * s, 0.6f * s), V(gx + d * 0.1f * s, 0.02f * s), 8), 0.5f, pen->P.grey);
+        if (t < 8.5f) pen->text(V(gx - d * 1.3f * s, 3.2f * s), "GOAL!", pen->P.red, 0.8f * s);
+    }
+    if (!goal && t >= 5.9f && t < 7.f) pen->text(target + V(-d * 0.4f * s, 0.9f * s), "Doink!", pen->P.red, 0.55f * s);
+}
+
+void epBasket(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, d = (float)e.dir;
+    const bool dunk = e.seq[0] == 1;
+    const float hx = e.ea, r = 0.19f * s;
+    const vec2 rim = V(hx - d * 0.55f * s, 2.6f * s);
+    const float spot = dunk ? hx - d * 1.5f * s : e.eb;
+    const float tDrib = dunk ? 3.5f : 4.f;
+    vec2 ball;
+    if (t < tDrib) { // dribbling, a bounce a beat
+        f.at = V(lerpf(e.p0.x, spot, t / tDrib), 0.f);
+        f.S = posed(gait(t * TAU, dunk ? 0.85f : 0.55f));
+        const float by = 0.15f + 0.75f * std::fabs(std::cos(t * PI));
+        ball = f.at + V(d * 0.45f * s, by * s);
+        reach(f.S, NECK, EL0, HA0, V(0.45f, std::max(0.75f, by + 0.15f)), -1.f, UARM, FARM);
+    } else if (!dunk) {
+        f.at = V(spot, 0.f);
+        Ang up = armsUp();
+        up.ua[0] = up.ua[1] = 2.7f; up.fa[0] = up.fa[1] = 2.9f;
+        if (t < 5.f) {
+            f.S = mixS(standing(), posed(crouch()), ease(t - 4.f));
+            ball = f.at + V(d * 0.3f * s, 1.f * s);
+        } else if (t < 6.f) {
+            const float u = t - 5.f;
+            f.at.y = jumpY(u, 0.7f * s);
+            f.S = mixS(posed(crouch()), posed(up), ease(u * 3.f));
+        } else if (t < 7.5f) {
+            f.S = mixS(posed(up), standing(), ease(t - 6.f));
+        } else { // a fist pumped
+            Ang a;
+            a.ua[0] = 2.3f + 0.25f * std::sin(t * TAU); a.fa[0] = 3.1f;
+            f.S = posed(a);
+        }
+        const vec2 from = f.at + V(d * 0.15f * s, 2.25f * s);
+        if (t >= 5.3f && t < 6.4f) {
+            const float u = (t - 5.3f) / 1.1f;
+            ball = mixv(V(spot + d * 0.15f * s, 2.4f * s), rim + V(0.f, 0.2f * s), u) + V(0.f, jumpY(u, 1.6f * s));
+        } else if (t >= 5.f && t < 5.3f) ball = from;
+        else if (t >= 6.4f) {
+            const float w = t - 6.4f;
+            const float y = w < 0.5f ? lerpf(rim.y + 0.2f * s, r, ease(w * 2.f)) : r + jumpY(saturate((w - 0.5f) / 0.8f), 0.9f * s);
+            ball = V(rim.x - d * 0.4f * s * saturate(w - 0.5f), y);
+        }
+    } else { // a run, a leap, the dunk, hanging on the rim
+        const vec2 grip = V(rim.x - d * 0.25f * s, rim.y - 2.05f * s);
+        if (t < 4.f) {
+            f.at = V(spot, 0.f);
+            f.S = posed(crouch());
+            ball = f.at + V(d * 0.3f * s, 0.9f * s);
+        } else if (t < 5.f) {
+            const float u = t - 4.f;
+            f.at = mixv(V(spot, 0.f), grip, u) + V(0.f, jumpY(u, 0.9f * s));
+            f.S = posed(armsUp());
+            ball = jointAt(f, HA0, s) + V(0.f, 0.15f * s);
+        } else if (t < 6.6f) {
+            f.at = grip;
+            f.S = fk(hang(t));
+            shiftS(f.S, V(0.f, -std::min(f.S.j[FT0].y, f.S.j[FT1].y)));
+            turnS(f.S, V(0.f, 2.05f), 0.15f * std::sin((t - 5.f) * PI));
+            ball = rim + V(0.f, lerpf(0.f, -2.3f * s, saturate((t - 5.f) / 0.5f)));
+            if (t > 5.5f) ball = V(rim.x - d * 0.6f * s * (t - 5.5f), r + jumpY(saturate((t - 5.5f) / 0.8f), 0.8f * s));
+        } else {
+            const float u = saturate((t - 6.6f) / 0.4f);
+            f.at = V(grip.x, grip.y * (1.f - u * u));
+            f.S = u < 1.f ? posed(armsUp()) : mixS(posed(crouch()), posed(tada()), ease((t - 7.f) / 0.5f));
+            ball = V(rim.x - d * 0.6f * s * 1.1f - d * 0.3f * s * saturate(t - 6.6f), r);
+        }
+    }
+    if (!pen) return;
+    const Poly b = ellipse(ball, r, r);
+    pen->shape(b, 0.8f);
+    pen->colour(b, pen->P.orange, 0.4f, 0.3f);
+    pen->line({ball + V(-r, 0.f), ball + V(r, 0.f)}, 0.4f);
+    pen->line(arc(ball + V(-r * 1.3f, 0.f), r, r * 1.05f, -0.9f, 0.9f, 6), 0.4f);
+    const bool scored = dunk ? (t >= 5.1f && t < 6.6f) : (t >= 6.2f && t < 7.6f);
+    if (scored) pen->text(rim + V(-d * 1.4f * s, 0.9f * s), dunk ? "Slam!" : "Swish!", pen->P.red, 0.6f * s);
+}
+
+// ---- trouble
+void epBees(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s;
+    const float A = e.p0.x, B = e.ea, C = e.p1.x;
+    auto path = [&](float tau) {
+        if (tau < 1.6f) return A;
+        if (tau < 4.6f) return lerpf(A, B, (tau - 1.6f) / 3.f);
+        return lerpf(B, C, saturate((tau - 4.6f) / 3.4f));
+    };
+    const float out = -(float)wellSide(e.side);
+    const vec2 nest = V(out * (c.hw[e.side] - 0.6f * s), std::min(c.top[e.side] - 1.f * s, 6.5f * s));
+    if (t < 1.6f) {
+        f.at = V(A, 0.f);
+        f.S = mixS(standing(), posed(lookUp()), ease(t - 0.6f));
+        f.dir = nest.x > A ? 1 : -1;
+    } else if (t < 8.f) {
+        f.at = V(path(t), 0.f);
+        f.dir = t < 4.6f ? (B > A ? 1 : -1) : (C > B ? 1 : -1);
+        Ang a = gait(t * TAU * 1.2f, 1.f);
+        a.ua[0] = 2.6f + 0.4f * std::sin(t * 20.f); a.fa[0] = a.ua[0] + 0.5f;
+        a.ua[1] = 2.3f + 0.4f * std::sin(t * 20.f + 2.f); a.fa[1] = a.ua[1] + 0.5f;
+        a.head = -0.3f;
+        f.S = posed(a);
+    } else { // ducking, hands over his head
+        f.at = V(C, 0.f);
+        Ang a = crouch();
+        a.ua[0] = 2.3f; a.fa[0] = -2.6f;
+        a.ua[1] = -2.2f; a.fa[1] = 2.7f;
+        a.head = 0.4f;
+        f.S = mixS(posed(crouch()), posed(a), ease((t - 8.f) * 3.f));
+        if (t > 9.f) f.S = mixS(f.S, standing(), ease(t - 9.f));
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const int n = 4 + e.seq[0];
+    for (int k = 0; k < n; k++) {
+        const float lag = 0.45f + 0.13f * k;
+        const vec2 jit = V(0.3f * std::cos(t * 6.f + k * 2.3f), 0.25f * std::sin(t * 7.3f + k * 1.7f)) * s;
+        const vec2 chase = V(path(std::max(1.6f, std::min(t, 8.f) - lag)), (1.9f + 0.25f * (k % 3)) * s) + jit;
+        vec2 b;
+        float k1 = 1.f;
+        if (t < 2.f) b = mixv(nest + jit, chase, ease(saturate((t - 0.1f * k) / 1.6f)));
+        else if (t < 8.f) b = chase;
+        else { const float u = ease(saturate((t - 8.3f - 0.1f * k) / 1.5f)); b = mixv(chase, nest + jit, u); k1 = 1.f - 0.5f * u; }
+        const float fl = ((int)std::floor(t * 8.f + k) & 1) ? 1.f : 0.6f;
+        const Poly body = ellipse(b, 0.11f * s * k1, 0.075f * s * k1);
+        pen->shape(body, 0.6f);
+        pen->colour(body, P.yellow, 0.f, 0.25f);
+        pen->line({b + V(0.f, -0.07f * s * k1), b + V(0.f, 0.07f * s * k1)}, 0.5f);
+        pen->line(ellipse(b + V(-0.03f * s, 0.1f * s * fl) * k1, 0.05f * s * k1, 0.07f * s * fl * k1), 0.4f, 0, 0.7f);
+    }
+    if (t < 2.f) pen->text(nest + V(-out * 0.6f * s, 0.6f * s), "Bzz", P.ink, 0.5f * s);
+    if (t >= 1.f && t < 1.8f) pen->text(f.at + V(0.f, 2.55f * s), "!", P.red, 0.9f * s);
+    if (t >= 2.f && t < 4.f) pen->text(f.at + V(0.f, 2.9f * s), "Aaah!", P.red, 0.55f * s);
+}
+
+void epBanana(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, d = (float)e.dir;
+    const float px = e.ea;
+    const float slip = 3.f;
+    if (t < slip) { // strolling along, whistling
+        f.at = V(lerpf(e.p0.x, px - d * 0.25f * s, t / slip), 0.f);
+        f.S = posed(gait(t * PI * 1.5f, 0.5f));
+    } else if (t < 4.f) { // whoops: the feet out from under him, up in the air, down on his back
+        const float u = t - slip;
+        Ang a = leap();
+        a.th[0] = a.th[1] = 1.6f; a.sh[0] = a.sh[1] = 1.4f;
+        a.ua[0] = 2.6f; a.ua[1] = -2.4f;
+        f.S = fk(a);
+        turnS(f.S, f.S.j[HIP], 1.35f * ease(u * 1.5f));
+        onGround(f.S);
+        f.at = V(px + d * 0.3f * s * u, jumpY(u, 1.1f * s));
+    } else if (t < 6.5f) { // flat on his back, seeing stars
+        f.at = V(px + d * 0.3f * s, 0.f);
+        f.S = sleeping(0.f);
+    } else if (t < 7.3f) {
+        f.at = V(px + d * 0.3f * s, 0.f);
+        f.S = mixS(sleeping(0.f), posed(crouch()), ease((t - 6.5f) / 0.8f));
+    } else {
+        f.at = V(px + d * 0.3f * s, 0.f);
+        Ang a; // a shrug
+        a.ua[0] = 0.9f; a.fa[0] = 2.2f; a.ua[1] = -0.9f; a.fa[1] = -2.2f;
+        a.head = 0.2f;
+        f.S = mixS(posed(crouch()), posed(a), ease((t - 7.3f) / 0.4f));
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    if (t < slip) {
+        const int k = (int)std::floor(t);
+        const float a = frac(t);
+        note(*pen, jointAt(f, HEAD, s) + V(d * (0.35f + 0.3f * a) * s, (0.2f + 0.6f * a) * s), 0.45f * s, P.blue, k & 1);
+    } else if (t < 5.f) { // the peel flying off
+        const float u = saturate((t - slip) / 1.3f);
+        const vec2 at = V(px + d * 2.f * s * u, jumpY(u, 2.f * s));
+        const float sp = u * 9.f;
+        pen->line({at + rot(V(-0.25f, 0.f), sp) * s, at, at + rot(V(0.25f, 0.f), sp) * s}, 1.5f, P.yellow);
+        if (t < 4.2f) pen->text(V(px, 2.9f * s), "Whoa!", P.red, 0.6f * s);
+    }
+    if (t >= 4.f && t < 6.8f) { // stars round his head
+        const vec2 h = jointAt(f, HEAD, s) + V(0.f, 0.45f * s);
+        for (int k = 0; k < 3; k++) {
+            const float a = t * PI * 1.5f + k * TAU / 3.f;
+            starShape(*pen, h + V(0.45f * s * std::cos(a), 0.12f * s * std::sin(a)), 0.12f * s, P.yellow);
+        }
+    }
+}
+
+void epUmbrella(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const float cloudY = e.h;
+    const float tOpen = 2.f, tStop = dur - 3.f, tClose = dur - 2.f;
+    const float open = t < tOpen ? 0.f : t < tClose ? ease((t - tOpen) * 2.5f) : 1.f - ease((t - tClose) * 2.f);
+    f.at = e.p0;
+    Ang a;
+    a.ua[0] = lerpf(0.4f, 2.2f, ease(saturate(t - 1.5f))); a.fa[0] = a.ua[0] + 0.5f;
+    if (t < tOpen) { a.head = -0.4f * ease(t); a.ua[0] = 0.2f; a.fa[0] = 0.4f; }
+    if (t >= tOpen + 0.5f && t < tStop) { // a little dance under it: a step, a kick on the bar
+        const int b = (int)std::floor(t);
+        const float u = frac(t);
+        a.th[0] = (b & 1) ? 0.35f * std::sin(u * PI) : 0.f;
+        a.sh[0] = a.th[0] - ((b & 3) == 3 ? 0.f : 0.4f * std::sin(u * PI));
+        a.th[1] = (b & 1) ? 0.f : -0.25f * std::sin(u * PI);
+        a.sh[1] = a.th[1] - 0.6f * std::sin(u * PI) * ((b & 1) ? 0.f : 1.f);
+        a.spine = 0.08f * std::sin(t * PI);
+        f.at.x = e.p0.x + e.dir * 0.25f * s * std::sin(t * PI * 0.5f);
+    }
+    if (t >= tClose) { a = mixA(a, tada(), ease((t - tClose - 0.5f) * 2.f)); }
+    f.S = posed(a);
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const uint32_t col = hue(P, e.seq[1]);
+    const vec2 hand = jointAt(f, HA0, s);
+    const vec2 tip = hand + V(e.dir * 0.05f * s, 0.85f * s);
+    // the umbrella: its handle, its canopy opening
+    pen->line({hand + V(-e.dir * 0.12f * s, -0.05f * s), hand + V(-e.dir * 0.1f * s, -0.15f * s), hand, tip + V(0.f, 0.15f * s)}, 0.8f);
+    const float rx = lerpf(0.12f, 0.95f, open) * s, ry = lerpf(0.5f, 0.55f, open) * s;
+    Poly can = arc(tip, rx, ry, 0.f, PI, 12);
+    for (int k = 0; k < 4; k++) can.push_back(tip + V(-rx + rx * 0.5f * (k + 1), (open > 0.3f ? -0.08f : 0.f) * s * std::sin((k + 1) * PI * 0.5f)));
+    pen->shape(can, 0.9f);
+    pen->colour(can, col, 0.7f, 0.6f);
+    // the rain, but not under the umbrella; then the sun (or a rainbow)
+    if (t >= 0.8f && t < tStop) {
+        const float shade0 = tip.x - rx, shade1 = tip.x + rx;
+        for (int k = 0; k < 14; k++) {
+            Rng r(mixk(e.id, (uint64_t)k));
+            const float x = e.p0.x + r.range(-1.5f, 1.5f) * s;
+            const float y = cloudY - 0.3f * s - frac(t * 1.3f + r.uniform()) * cloudY;
+            const float stop = (open > 0.5f && x > shade0 && x < shade1) ? tip.y + 0.1f * s : 0.f;
+            if (y < stop || y - 0.25f * s < 0.f) continue;
+            pen->line({V(x, y), V(x - 0.04f * s, y - 0.25f * s)}, 0.5f, P.blue, 0.85f);
+        }
+        const Poly pud = ellipse(V(e.p0.x, 0.02f * s), 1.1f * s * saturate((t - 2.f) / 3.f) + 0.01f, 0.1f * s);
+        if (t > 2.f) pen->colour(pud, P.blue, 0.f, 0.4f, 0.7f);
+    }
+    if (t >= tStop) {
+        const float u = ease(saturate((t - tStop) / 0.6f));
+        if (e.seq[0] == 0) {
+            const vec2 sun = V(e.p0.x - e.dir * 1.2f * s, cloudY);
+            pen->shape(ellipse(sun, 0.4f * s * u, 0.4f * s * u), 0.8f, P.orange);
+            pen->colour(ellipse(sun, 0.4f * s * u, 0.4f * s * u), P.yellow, 0.3f, 0.35f);
+            for (int k = 0; k < 8; k++) {
+                const vec2 v = V(std::cos(k * TAU / 8.f + t), std::sin(k * TAU / 8.f + t));
+                pen->line({sun + v * (0.55f * s * u), sun + v * (0.8f * s * u)}, 0.7f, P.orange);
+            }
+        } else {
+            const uint32_t bands[4] = {P.red, P.orange, P.yellow, P.green};
+            for (int k = 0; k < 4; k++)
+                pen->line(arc(V(e.p0.x, 0.f), (2.6f - 0.18f * k) * s, (2.6f - 0.18f * k) * s * 1.3f, PI * (1.f - u), PI, 16), 1.6f, bands[k], 0.8f);
+        }
+    }
+}
+
+// ---- quiet things
+void epKite(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    f.at = e.p0;
+    Ang a;
+    a.ua[0] = 2.05f; a.fa[0] = 2.35f; // the string held up
+    a.ua[1] = -0.6f; a.fa[1] = 0.6f;  // a hand on his hip
+    a.head = -0.35f;
+    a.spine = -0.08f + 0.05f * std::sin(t * PI * 0.5f);
+    const int stepB = (int)std::floor(t);
+    a.th[0] = (stepB & 1) ? 0.1f : -0.05f; a.sh[0] = a.th[0] - 0.05f;
+    f.S = mixS(standing(), posed(a), ease(t * 2.f));
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const vec2 hand = jointAt(f, HA0, s);
+    const vec2 K = e.pts[0] + V(0.6f * s * std::sin(t * PI * 0.5f), 0.35f * s * std::sin(t * PI * 0.5f + 1.f));
+    const float up = ease(saturate(t / 3.f)) * (1.f - ease(saturate((t - dur + 2.f) / 2.f)));
+    const vec2 k = mixv(hand + V(0.f, 0.3f * s), K, up);
+    const float tilt = 0.3f * std::sin(t * PI * 0.5f) * up - 0.2f * (float)e.dir;
+    auto X = [&](Poly p) { return his(std::move(p), k, s, 1, tilt); };
+    const Poly L = X({V(0.f, 0.45f), V(-0.32f, 0.1f), V(0.f, -0.45f), V(0.f, 0.45f)});
+    const Poly R = X({V(0.f, 0.45f), V(0.32f, 0.1f), V(0.f, -0.45f), V(0.f, 0.45f)});
+    pen->shape(X({V(0.f, 0.45f), V(0.32f, 0.1f), V(0.f, -0.45f), V(-0.32f, 0.1f), V(0.f, 0.45f)}), 0.9f);
+    pen->colour(L, hue(P, e.seq[1]), 0.6f, 0.4f);
+    pen->colour(R, hue(P, e.seq[1] + 2), -0.6f, 0.4f);
+    pen->line(X({V(-0.32f, 0.1f), V(0.32f, 0.1f)}), 0.5f);
+    const vec2 bottom = his(V(0.f, -0.45f), k, s, 1, tilt);
+    Poly tail;
+    for (int i = 0; i <= 8; i++) {
+        const float u = i / 8.f;
+        tail.push_back(bottom + V((-0.35f * (float)e.dir * u + 0.12f * std::sin(t * TAU * 0.5f + u * 5.f)) * s, -1.3f * s * u));
+    }
+    pen->line(tail, 0.6f);
+    for (int i = 3; i <= 8; i += 3) {
+        const vec2 b = tail[i];
+        pen->shape({b, b + V(-0.12f * s, 0.07f * s), b + V(-0.12f * s, -0.07f * s), b, b + V(0.12f * s, 0.07f * s), b + V(0.12f * s, -0.07f * s), b}, 0.5f, hue(P, e.seq[1] + i));
+    }
+    pen->line(sag(hand, his(V(0.f, -0.1f), k, s, 1, tilt), 0.5f * s * up), 0.45f, 0, 0.8f, 0.3f);
+    // wind
+    for (int i = 0; i < 2; i++) {
+        const float u = frac(t * 0.5f + i * 0.5f);
+        const vec2 w = K + V((-1.5f + 2.6f * u) * s, (-1.3f - 0.8f * i) * s);
+        pen->line({w, w + V(0.2f * s, 0.06f * s), w + V(0.4f * s, 0.f), w + V(0.6f * s, 0.06f * s)}, 0.5f, P.grey, 0.8f * (1.f - std::fabs(u * 2.f - 1.f)));
+    }
+}
+
+void epFish(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0), d = (float)e.dir;
+    const float px = e.ea, sx = e.p1.x;
+    const float bite = dur - 5.f, yank = dur - 4.f, land = dur - 2.8f;
+    Ang seat = sit(t);
+    seat.ua[0] = 1.25f; seat.fa[0] = 1.75f;
+    seat.ua[1] = 1.0f; seat.fa[1] = 1.55f;
+    if (t >= yank && t < land) { seat.ua[0] = seat.ua[1] = 2.4f; seat.fa[0] = seat.fa[1] = 2.9f; seat.spine = -0.45f; }
+    Skel sat = fk(seat);
+    onGround(sat);
+    if (t < 1.f) {
+        f.at = V(lerpf(e.p0.x, sx, t), 0.f);
+        f.S = posed(gait(t * TAU, 0.5f));
+    } else if (t < 2.f) {
+        f.at = V(sx, 0.f);
+        f.S = mixS(standing(), sat, ease(t - 1.f));
+    } else if (t < land) {
+        f.at = V(sx, 0.f);
+        f.S = sat;
+    } else {
+        f.at = V(sx, 0.f);
+        const int what = e.seq[0];
+        Ang a = what == 0 ? tada() : relief(t);
+        if (what == 2) { a = Ang{}; a.ua[0] = 0.9f; a.fa[0] = 2.2f; a.ua[1] = -0.9f; a.fa[1] = -2.2f; }
+        f.S = t < land + 0.8f ? mixS(sat, posed(a), ease(t - land)) : posed(a);
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const float rodK = t < 2.f ? ease(t - 1.f) : 1.f;
+    if (rodK <= 0.f) return;
+    const vec2 hand = jointAt(f, HA0, s);
+    const float rodA = t >= yank ? 0.9f * ease((t - yank) * 3.f) : 0.f;
+    const vec2 tip = hand + V(d * std::cos(0.75f + rodA), std::sin(0.75f + rodA)) * (1.6f * s * rodK);
+    if (t < land) pen->line({hand - V(d * 0.25f * s, 0.15f * s), tip}, 0.9f);
+    const vec2 fl = V(px - d * 0.2f * s, (0.03f - 0.05f * std::pow(std::sin(t * PI), 2.f) - (t >= bite && t < yank ? 0.08f : 0.f)) * s);
+    if (t < yank) {
+        pen->line(sag(tip, fl, 0.2f * s), 0.4f, 0, 0.8f, 0.2f);
+        pen->shape(ellipse(fl + V(0.f, 0.06f * s), 0.07f * s, 0.07f * s), 0.6f, P.red);
+        const float rr = frac(t);
+        pen->line(arc(V(fl.x, 0.03f * s), (0.12f + 0.3f * rr) * s, (0.04f + 0.06f * rr) * s, PI, TAU, 8), 0.5f, P.blue, 1.f - rr);
+        if (t >= bite) pen->text(f.at + V(0.f, 2.f * s), "!", P.red, 0.9f * s);
+        return;
+    }
+    // the catch: out of the water on the line, landing by him (a fish flapping, a boot, a can)
+    const float u = saturate((t - yank) / (land - yank));
+    const vec2 cpos = mixv(V(px, 0.f), V(sx - d * 0.9f * s, 0.f), u) + V(0.f, jumpY(u, 2.4f * s) + 0.15f * s);
+    if (t < land) pen->line({tip, cpos + V(0.f, 0.15f * s)}, 0.4f, 0, 0.8f, 0.2f);
+    const float spin = u < 1.f ? u * 6.f : (e.seq[0] == 0 ? 0.35f * std::sin(t * 14.f) : 0.f);
+    auto X = [&](Poly p) { return his(std::move(p), cpos, s, e.dir, spin); };
+    static const char* SAYS[3] = {"Yay!", "?", "Meh."};
+    if (e.seq[0] == 0) {
+        const Poly body = X(ellipse(V(0.f, 0.f), 0.3f, 0.13f));
+        pen->shape(body, 0.8f);
+        pen->colour(body, hue(P, e.seq[1]), 0.3f, 0.3f);
+        pen->shape(X({V(-0.28f, 0.f), V(-0.48f, 0.14f), V(-0.48f, -0.14f), V(-0.28f, 0.f)}), 0.7f);
+        pen->shape(X(ellipse(V(0.17f, 0.03f), 0.025f, 0.025f)), 0.6f);
+    } else if (e.seq[0] == 1) {
+        const Poly boot = X({V(-0.12f, 0.3f), V(0.08f, 0.3f), V(0.08f, 0.02f), V(0.3f, -0.02f), V(0.3f, -0.15f), V(-0.12f, -0.15f), V(-0.12f, 0.3f)});
+        pen->shape(boot, 0.8f);
+        pen->colour(boot, P.card, 0.5f, 0.3f);
+    } else {
+        const Poly can = X(rect(-0.13f, -0.18f, 0.13f, 0.18f));
+        pen->shape(can, 0.8f);
+        pen->colour(can, P.grey, 0.2f, 0.3f);
+    }
+    if (u < 1.f)
+        for (int k = 0; k < 3; k++) // splashes
+            pen->line({V(px + (k - 1) * 0.3f * s, 0.05f * s), V(px + (k - 1) * 0.5f * s, (0.35f - 0.1f * std::abs(k - 1)) * s * (1.f - u))}, 0.5f, P.blue);
+    else pen->text(f.at + V(0.f, 2.6f * s), SAYS[e.seq[0]], P.red, 0.6f * s);
+}
+
+void epJuggle(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    // a cascade: a throw each half beat, from one hand to the other, each thing a beat up in the air
+    const float T = std::min(t, dur - 1.f);
+    auto handPos = [&](int k, float tt) {
+        const float side = k == 0 ? 1.f : -1.f;
+        const float ph = frac(tt - k * 0.5f);
+        if (ph < 0.5f) return V(side * lerpf(0.12f, 0.42f, ph * 2.f), 0.95f + 0.1f * std::sin(ph * TAU));
+        return V(side * lerpf(0.42f, 0.12f, (ph - 0.5f) * 2.f), 0.95f - 0.12f * std::sin((ph - 0.5f) * TAU));
+    };
+    Ang a;
+    a.head = -0.2f;
+    Skel S = posed(a);
+    const vec2 h0 = handPos(0, T), h1 = handPos(1, T);
+    S.j[EL0] = V(0.24f, 1.18f); S.j[HA0] = h0;
+    S.j[EL1] = V(-0.24f, 1.18f); S.j[HA1] = h1;
+    f.S = S;
+    f.at = e.p0;
+    if (t >= dur - 1.f) f.S = mixS(S, posed(tada()), ease((t - dur + 1.f) * 2.5f));
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const int kind = e.seq[0]; // balls, clubs, rings
+    for (int i = 0; i < 3; i++) {
+        vec2 q;
+        float spin = 0.f;
+        if (t < dur - 1.f) {
+            const int m = i + 3 * (int)std::floor((T * 2.f - i) / 3.f);
+            const float tau = T - m * 0.5f;
+            const int from = ((m % 2) + 2) % 2, to = 1 - from;
+            const float tm = m * 0.5f;
+            if (tau < 1.f) {
+                const vec2 a0 = handPos(from, tm), b0 = handPos(to, tm + 1.f);
+                q = mixv(a0, b0, tau) + V(0.f, jumpY(tau, 1.2f));
+                spin = tau * TAU;
+            } else q = handPos(to, T);
+        } else q = i < 2 ? f.S.j[HA0 + 2 * i] : f.S.j[HEAD] + V(0.f, HEADR + 0.11f); // two caught, one on his head
+        const vec2 at = f.at + V(q.x * s * (float)e.dir, q.y * s);
+        const uint32_t col = hue(P, e.seq[1] + i * 2);
+        if (kind == 0) ballShape(*pen, at, 0.11f * s, col);
+        else if (kind == 1) {
+            const vec2 dd = rot(V(0.f, 1.f), spin + i);
+            pen->line({at - dd * (0.18f * s), at + dd * (0.06f * s)}, 0.7f);
+            const Poly bulb = ellipse(at + dd * (0.14f * s), 0.06f * s, 0.06f * s);
+            pen->shape(bulb, 0.7f, col);
+            pen->colour(bulb, col, 0.f, 0.25f);
+        } else pen->shape(ellipse(at, 0.15f * s, 0.15f * s * (0.35f + 0.65f * std::fabs(std::cos(spin)))), 1.1f, col);
+    }
+}
+
+void epMusic(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const bool drums = e.seq[0] == 1;
+    const float in = ease(saturate(t)), outK = ease(saturate(t - (dur - 1.f)));
+    f.at = e.p0;
+    if (!drums) { // sitting with a guitar, strumming on the beats
+        Ang a = sit(t);
+        a.ua[1] = 1.05f; a.fa[1] = 2.0f;
+        const float strum = std::sin(frac(t) * PI);
+        a.ua[0] = 0.55f + 0.2f * strum; a.fa[0] = 1.75f - 0.6f * strum;
+        Skel S = fk(a);
+        onGround(S);
+        f.S = mixS(mixS(standing(), S, in), standing(), outK);
+    } else { // on a stool behind his drum kit
+        Ang a;
+        a.hip = V(0.f, 0.62f);
+        a.th[0] = 1.45f; a.sh[0] = 0.05f + 0.25f * std::max(0.f, std::sin(t * TAU));
+        a.th[1] = 1.3f; a.sh[1] = -0.05f;
+        a.spine = 0.15f + 0.05f * std::sin(t * TAU);
+        a.head = 0.2f * std::fabs(std::sin(t * PI));
+        const int b = (int)std::floor(t * 2.f);
+        const float hit = std::sin(frac(t * 2.f) * PI);
+        a.ua[0] = 0.9f + ((b & 1) ? 0.6f * hit : 0.f); a.fa[0] = a.ua[0] + 0.9f;
+        a.ua[1] = 0.8f + ((b & 1) ? 0.f : 0.6f * hit); a.fa[1] = a.ua[1] + 0.8f;
+        if (t > dur - 2.f) { a.ua[0] = 1.9f; a.fa[0] = 1.9f; } // the cymbal, at the end
+        Skel S = fk(a);
+        f.S = mixS(mixS(standing(), S, in), standing(), outK);
+    }
+    if (!pen || outK >= 1.f) return;
+    const Pal& P = pen->P;
+    const uint32_t col = hue(P, e.seq[1]);
+    if (!drums) {
+        const vec2 lap = jointAt(f, HIP, s) + V((float)e.dir * 0.32f * s, 0.32f * s);
+        const float ang = 0.5f;
+        auto X = [&](Poly p) { return his(std::move(p), lap, s, e.dir, ang); };
+        const Poly lo = X(ellipse(V(-0.05f, 0.f), 0.24f, 0.2f)), hi = X(ellipse(V(0.27f, 0.f), 0.17f, 0.15f));
+        pen->shape(lo, 0.8f);
+        pen->shape(hi, 0.8f);
+        pen->colour(lo, col, 0.5f, 0.35f);
+        pen->colour(hi, col, 0.5f, 0.35f);
+        pen->shape(X(ellipse(V(0.12f, 0.f), 0.06f, 0.06f)), 0.5f);
+        pen->line(X({V(0.42f, 0.f), V(1.05f, 0.f)}), 1.1f);
+        pen->line(X({V(1.05f, -0.04f), V(1.22f, 0.04f)}), 1.6f);
+    } else {
+        const float d = (float)e.dir;
+        const vec2 kick = V(e.p0.x + d * 0.75f * s, 0.38f * s);
+        pen->shape(ellipse(kick, 0.36f * s, 0.36f * s), 0.9f);
+        pen->colour(ellipse(kick, 0.36f * s, 0.36f * s), col, 0.4f, 0.4f);
+        pen->shape(ellipse(kick, 0.14f * s, 0.14f * s), 0.5f);
+        const vec2 snare = V(e.p0.x + d * 0.6f * s, 0.95f * s);
+        pen->shape(rect(snare.x - 0.25f * s, snare.y - 0.08f * s, snare.x + 0.25f * s, snare.y + 0.08f * s), 0.8f);
+        pen->line({V(snare.x, snare.y - 0.08f * s), V(snare.x - d * 0.1f * s, 0.f)}, 0.6f);
+        const float tilt = t > dur - 2.f ? 0.25f * std::sin(t * 20.f) : 0.f;
+        const vec2 cym = V(e.p0.x + d * 1.25f * s, 1.55f * s);
+        pen->line({V(cym.x, 0.f), cym}, 0.6f);
+        pen->line({cym + rot(V(-0.35f * s, 0.f), tilt), cym + rot(V(0.35f * s, 0.f), tilt)}, 1.4f, P.yellow);
+        pen->line({jointAt(f, HA0, s), jointAt(f, HA0, s) + V(d * 0.35f * s, -0.1f * s)}, 0.7f);
+        pen->line({jointAt(f, HA1, s), jointAt(f, HA1, s) + V(d * 0.35f * s, -0.15f * s)}, 0.7f);
+        if (t > dur - 2.f) pen->text(V(e.p0.x, 3.f * s), "Ba-dum tss!", P.red, 0.5f * s);
+    }
+    // a note out each beat, rising
+    for (int k = 0; k < 2; k++) {
+        const int nb = (int)std::floor(t) - k;
+        if (nb < 1) continue;
+        const float u = frac(t) + k;
+        const vec2 from = drums ? V(e.p0.x + (float)e.dir * 0.8f * s, 1.3f * s) : jointAt(f, HIP, s) + V((float)e.dir * 0.4f * s, 0.6f * s);
+        note(*pen, from + V((0.3f * std::sin(nb * 2.1f) + 0.3f * u * (float)e.dir) * s, 0.7f * u * s), 0.5f * s, hue(P, nb), nb % 3 == 0);
+    }
+}
+
+Ang lotus(float lift) {
+    Ang a;
+    a.hip = V(0.f, 0.32f + lift);
+    a.th[0] = 1.35f; a.sh[0] = -1.15f;
+    a.th[1] = -1.35f; a.sh[1] = 1.15f;
+    a.ua[0] = 0.45f; a.fa[0] = 1.4f;
+    a.ua[1] = -0.45f; a.fa[1] = -1.4f;
+    return a;
+}
+void epYoga(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    f.at = e.p0;
+    // sitting up in the air ("Om"), then a tree and a warrior (in either order), and a bow
+    Ang tree;
+    tree.ua[0] = 2.85f; tree.fa[0] = 3.1f; tree.ua[1] = -2.85f; tree.fa[1] = -3.1f;
+    tree.th[1] = -1.2f; tree.sh[1] = 0.6f;
+    Ang war;
+    war.hip = V(0.f, 0.7f);
+    war.th[0] = 1.f; war.sh[0] = 0.05f; war.th[1] = -0.75f; war.sh[1] = -0.75f;
+    war.ua[0] = 1.57f; war.fa[0] = 1.57f; war.ua[1] = -1.57f; war.fa[1] = -1.57f;
+    war.head = -0.1f;
+    const bool swap = e.seq[0] == 1;
+    const Ang& p1 = swap ? war : tree;
+    const Ang& p2 = swap ? tree : war;
+    const float lift = 0.35f * ease(saturate((t - 1.5f) / 1.5f)) * (1.f - ease(saturate(t - 5.f))) + 0.04f * std::sin(t * PI * 0.5f);
+    auto P = [&](const Ang& a, bool ground) { Skel S = fk(a); if (ground) onFeet(S); return S; };
+    Skel lot = fk(lotus(lift));
+    if (t < 1.f) f.S = mixS(standing(), lot, ease(t));
+    else if (t < 5.f) f.S = lot;
+    else if (t < 6.f) f.S = mixS(lot, P(p1, true), ease(t - 5.f));
+    else if (t < 8.5f) f.S = P(p1, true);
+    else if (t < 9.f) f.S = mixS(P(p1, true), P(p2, true), ease((t - 8.5f) * 2.f));
+    else if (t < dur - 1.5f) f.S = P(p2, true);
+    else {
+        Ang nm; // hands together, a bow
+        nm.ua[0] = 0.6f; nm.fa[0] = 2.5f; nm.ua[1] = 0.6f; nm.fa[1] = 2.5f;
+        nm.spine = 0.35f * std::sin(saturate(t - dur + 1.5f) * PI);
+        f.S = mixS(P(p2, true), P(nm, true), ease((t - dur + 1.5f) * 2.f));
+    }
+    if (!pen) return;
+    const Pal& Pl = pen->P;
+    const Poly mat = rect(e.p0.x - 1.1f * s, -0.03f * s, e.p0.x + 1.1f * s, 0.07f * s);
+    pen->shape(mat, 0.6f);
+    pen->colour(mat, hue(Pl, e.seq[1]), 0.f, 0.3f);
+    if (t >= 2.f && t < 5.f)
+        for (int k = 0; k < 2; k++) {
+            const float u = frac((t - 2.f) / 2.f + k * 0.5f);
+            pen->text(jointAt(f, HEAD, s) + V((0.5f + 0.4f * u) * s * (k ? -1.f : 1.f), (0.4f + 0.8f * u) * s), "Om", Pl.purple, 0.45f * s, 1.f - u);
+        }
+}
+
+void epStars(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0), d = (float)e.dir;
+    const float ex = e.ea; // the eyepiece
+    const float wish = std::floor(dur * 0.5f);
+    if (t < 1.f) {
+        f.at = V(lerpf(e.p0.x, ex - d * 0.15f * s, t), 0.f);
+        f.S = posed(gait(t * TAU, 0.5f));
+    } else {
+        f.at = V(ex - d * 0.15f * s, 0.f);
+        Ang look;
+        look.spine = 0.45f; look.head = 0.2f;
+        look.hip = V(-0.05f, 0.8f);
+        look.th[0] = 0.25f; look.sh[0] = 0.f; look.th[1] = -0.15f; look.sh[1] = -0.2f;
+        look.ua[0] = 1.2f; look.fa[0] = 1.9f; look.ua[1] = 0.9f; look.fa[1] = 1.5f;
+        Ang point = lookUp();
+        point.ua[0] = 2.4f; point.fa[0] = 2.6f;
+        if (t < wish + 1.f) f.S = mixS(standing(), posed(look), ease(t - 1.f));
+        else if (t < dur - 2.f) f.S = mixS(posed(look), posed(point), ease((t - wish - 1.f) * 3.f));
+        else f.S = mixS(posed(point), posed(wave(t)), ease(t - dur + 2.f));
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    // a shooting star across the sky
+    if (t >= wish && t < wish + 1.6f) {
+        const float u = (t - wish) / 1.6f;
+        const vec2 a0 = V(-d * 1.8f * s, e.h + 1.5f * s), a1 = V(d * 2.2f * s, e.h - 0.5f * s);
+        const vec2 p = mixv(a0, a1, u) + V(e.p0.x * 0.f + ex, 0.f);
+        starShape(*pen, p, 0.2f * s, P.yellow, t);
+        pen->line({p - (a1 - a0) * 0.05f, p - (a1 - a0) * 0.3f}, 0.6f, P.yellow, 0.8f);
+        pen->line({p - (a1 - a0) * 0.06f + V(0.f, 0.08f * s), p - (a1 - a0) * 0.22f + V(0.f, 0.08f * s)}, 0.4f, P.orange, 0.6f);
+    }
+    if (t >= wish + 1.2f && t < wish + 2.8f) pen->text(f.at + V(-d * 0.5f * s, 2.6f * s), "Wow!", P.red, 0.55f * s);
+}
+
+void epPaint(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0), d = (float)e.dir;
+    const float stand = e.ea - d * 0.95f * s;
+    if (t < 1.f) {
+        f.at = V(lerpf(e.p0.x, stand, t), 0.f);
+        f.S = posed(gait(t * TAU, 0.5f));
+    } else if (t < dur - 3.f) { // painting
+        f.at = V(stand, 0.f);
+        Ang a;
+        a.ua[0] = 1.45f + 0.25f * std::sin(t * TAU * 1.5f); a.fa[0] = 1.7f + 0.3f * std::sin(t * TAU * 1.5f + 1.f);
+        a.ua[1] = 0.4f; a.fa[1] = 1.4f; // the palette
+        a.head = 0.1f * std::sin(t * PI);
+        f.S = posed(a);
+    } else if (t < dur - 1.5f) { // a step back, a hand on his chin
+        f.at = V(stand - d * 0.5f * s * ease((t - dur + 3.f) * 2.f), 0.f);
+        Ang a;
+        a.ua[0] = 0.5f; a.fa[0] = 2.8f; a.ua[1] = 0.3f; a.fa[1] = 1.4f;
+        a.head = 0.15f; a.spine = -0.1f;
+        f.S = posed(a);
+    } else { // ta-da
+        f.at = V(stand - d * 0.5f * s, 0.f);
+        Ang a;
+        a.ua[0] = 1.9f; a.fa[0] = 1.9f; a.ua[1] = -2.4f; a.fa[1] = -2.6f;
+        f.S = mixS(standing(), posed(a), ease((t - dur + 1.5f) * 3.f));
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    // a beret, a brush, the palette
+    const vec2 h = jointAt(f, HEAD, s);
+    const Poly beret = {h + V(-0.24f * s, 0.12f * s), h + V(-0.05f * s, 0.27f * s), h + V(0.2f * s, 0.2f * s), h + V(0.25f * s, 0.1f * s), h + V(-0.24f * s, 0.12f * s)};
+    pen->shape(beret, 0.7f);
+    pen->colour(beret, P.red, 0.4f, 0.25f);
+    if (t >= 1.f && t < dur - 1.5f) {
+        const vec2 hd = jointAt(f, HA0, s);
+        pen->line({hd, hd + V(d * 0.3f * s, 0.12f * s)}, 0.7f);
+        pen->shape(ellipse(hd + V(d * 0.33f * s, 0.13f * s), 0.04f * s, 0.04f * s), 0.6f, hue(P, (int)std::floor(t)));
+        const vec2 pl = jointAt(f, HA1, s);
+        const Poly pal = ellipse(pl + V(0.f, 0.03f * s), 0.22f * s, 0.1f * s);
+        pen->shape(pal, 0.6f);
+        pen->colour(pal, P.card, 0.f, 0.25f);
+        for (int k = 0; k < 3; k++) pen->shape(ellipse(pl + V((k - 1) * 0.11f * s, 0.05f * s), 0.03f * s, 0.03f * s), 0.6f, hue(P, k));
+    }
+}
+
+void dog(Pen& pen, vec2 at, float s, int dir, float run, float wag, uint32_t col, bool stick) {
+    const Pal& P = pen.P;
+    auto X = [&](Poly p) { return his(std::move(p), at, s, dir); };
+    const Poly body = X(ellipse(V(0.f, 0.42f), 0.36f, 0.15f));
+    pen.shape(body, 0.8f);
+    pen.colour(body, col, 0.3f, 0.3f);
+    const Poly head = X(ellipse(V(0.42f, 0.64f), 0.15f, 0.13f));
+    pen.shape(head, 0.8f);
+    pen.colour(head, col, 0.3f, 0.25f);
+    pen.line(X({V(0.52f, 0.6f), V(0.66f, 0.57f), V(0.64f, 0.5f), V(0.5f, 0.52f)}), 0.7f);
+    pen.line(X({V(0.36f, 0.74f), V(0.28f, 0.6f), V(0.34f, 0.5f)}), 0.8f, P.ink);
+    pen.shape(X(ellipse(V(0.47f, 0.67f), 0.015f, 0.015f)), 0.8f);
+    for (int k = 0; k < 4; k++) {
+        const float x = k < 2 ? 0.24f : -0.24f, sw = 0.3f * std::sin(run + k * PI * 0.5f + (k & 1) * PI);
+        pen.line(X({V(x + (k & 1) * 0.04f, 0.32f), V(x + sw * 0.4f + (k & 1) * 0.04f, 0.f)}), 0.8f);
+    }
+    pen.line(X({V(-0.34f, 0.48f), V(-0.48f, 0.6f + 0.08f * wag), V(-0.55f, 0.72f + 0.12f * wag)}), 0.8f);
+    if (stick) pen.line(X({V(0.5f, 0.53f), V(0.85f, 0.56f)}), 1.3f, P.card);
+}
+void epDog(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, d = (float)e.dir, dur = (float)(e.b1 - e.b0);
+    // a dog comes running, he throws a stick, the dog brings it back, he pats it, it runs off
+    const float x = e.p0.x, far = e.ea, edge = e.eb;
+    const float tThrow = 3.f, tLand = 4.f, tBack = 7.5f;
+    f.at = V(x, 0.f);
+    if (t < 2.5f) f.S = mixS(standing(), posed(wave(t)), ease(t - 0.5f) * (1.f - ease(t - 2.f)));
+    else if (t < tThrow + 0.5f) { // the throw, overhand
+        Ang a;
+        const float u = ease((t - 2.5f) / 0.8f);
+        a.ua[0] = lerpf(-2.4f, 2.2f, u); a.fa[0] = a.ua[0] + 0.4f;
+        a.spine = lerpf(-0.2f, 0.25f, u);
+        a.th[0] = 0.3f; a.sh[0] = 0.2f; a.th[1] = -0.3f; a.sh[1] = -0.35f;
+        f.S = posed(a);
+    } else if (t < tBack + 0.3f) f.S = posed(Ang{});
+    else if (t < dur - 2.f) { // a pat
+        Ang a = crouch();
+        a.ua[0] = 1.3f + 0.15f * std::sin(t * TAU * 2.f); a.fa[0] = 1.7f;
+        f.S = mixS(standing(), posed(a), ease((t - tBack - 0.3f) * 3.f));
+    } else f.S = mixS(posed(crouch()), posed(wave(t)), ease((t - dur + 2.f) * 3.f));
+    if (!pen) return;
+    const Pal& P = pen->P;
+    const uint32_t col = e.seq[0] == 0 ? P.card : e.seq[0] == 1 ? P.grey : P.orange;
+    // where the dog is
+    const float meet = x + d * 0.9f * s;
+    vec2 at;
+    int dd = (int)d;
+    float run = 0.f;
+    bool stick = false;
+    if (t < 2.f) { at = V(lerpf(edge, meet, ease(t / 2.f)), 0.f); dd = meet > edge ? 1 : -1; run = t * 9.f; }
+    else if (t < tThrow + 0.3f) at = V(meet, 0.f);
+    else if (t < 5.f) { at = V(lerpf(meet, far, ease((t - tThrow - 0.3f) / 1.7f)), jumpY(saturate((t - 4.2f) / 0.6f), 0.4f * s)); run = t * 10.f; }
+    else if (t < tBack) { at = V(lerpf(far, meet, ease((t - 5.f) / 2.5f)), 0.f); dd = -(int)d; run = t * 10.f; stick = true; }
+    else if (t < dur - 1.5f) at = V(meet, 0.f);
+    else { const float u = (t - dur + 1.5f) / 1.5f; at = V(lerpf(meet, edge, ease(u)), 0.f); dd = edge > meet ? 1 : -1; run = t * 10.f; }
+    if (t >= tBack && t < dur - 1.5f) dd = -(int)d;
+    const float k = t > dur - 1.5f ? 1.f - 0.5f * ease((t - dur + 1.5f) / 1.5f) : 1.f;
+    dog(*pen, at, s * k, dd, run, std::sin(t * 18.f), col, stick);
+    // the stick: in his hand, flying, on the ground, at his feet
+    if (t >= 2.5f && t < tThrow + 0.2f) {
+        const vec2 hd = jointAt(f, HA0, s);
+        pen->line({hd + V(-0.2f * s, -0.05f * s), hd + V(0.2f * s, 0.05f * s)}, 1.3f, P.card);
+    } else if (t >= tThrow + 0.2f && t < 5.f) {
+        const float u = saturate((t - tThrow - 0.2f) / (tLand - tThrow - 0.2f));
+        const vec2 p = mixv(V(x + d * 0.3f * s, 2.2f * s), V(far + d * 0.6f * s, 0.05f * s), u) + V(0.f, jumpY(u, 1.5f * s));
+        const vec2 q = rot(V(0.22f * s, 0.f), u * 12.f);
+        pen->line({p - q, p + q}, 1.3f, P.card);
+    } else if (t >= tBack && t < dur) {
+        pen->line({V(meet - d * 0.6f * s, 0.04f * s), V(meet - d * 0.2f * s, 0.06f * s)}, 1.3f, P.card);
+    }
+    if (t >= tBack + 0.5f && t < dur - 1.5f) pen->text(V(meet, 2.2f * s), "Good boy!", P.red, 0.5f * s);
+    if (t < 1.f) pen->text(V(edge, 1.3f * s), "Woof!", P.ink, 0.5f * s);
+}
+
+// ---- over to the other margin: off out of sight (shrinking away, a twinkle) and in over there (growing)
+// The way out, toward the top of the margin on the well's side, and the way in, from there in the other margin.
+vec2 awayPoint(const Ctx& c, int side) {
+    return V((float)wellSide(side) * (c.hw[side] - 0.7f * c.s), c.top[side] - 1.2f * c.s);
+}
+void vanish(Pen& pen, const Fig& f, float u, float s) { // the twinkle where he went
+    if (u <= 0.f || u >= 1.f) return;
+    sparkle(pen, f.at + V(0.f, 0.4f * s), 0.35f * s * std::sin(u * PI), pen.P.yellow);
+}
+void epCannon(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, d = (float)e.dir;
+    const float cx = e.ea, ang = 0.85f;
+    const vec2 piv = V(cx, 0.5f * s), mouth = piv + V(d * std::cos(ang), std::sin(ang)) * (1.35f * s);
+    const float tBoom = 4.f, tGone = 5.4f;
+    const int o = 1 - e.side;
+    if (t < 1.f) {
+        f.at = V(lerpf(e.p0.x, mouth.x - d * 0.6f * s, t), 0.f);
+        f.S = posed(gait(t * TAU, 0.6f));
+    } else if (t < 2.f) { // in, feet first
+        const float u = t - 1.f;
+        f.at = mixv(V(mouth.x - d * 0.6f * s, 0.f), mouth + V(0.f, -0.3f * s), u) + V(0.f, jumpY(u, 1.2f * s));
+        f.S = posed(leap());
+        f.clip = u > 0.6f ? mouth.y - 0.1f * s : -1e9f;
+        if (u > 0.6f) f.at.y -= (u - 0.6f) * 4.f * s;
+    } else if (t < tBoom) {
+        f.shown = false;
+    } else if (t < tGone) { // out, flying off, getting small
+        const float u = (t - tBoom) / (tGone - tBoom);
+        const vec2 away = awayPoint(c, e.side);
+        f.at = bez(mouth, mouth + V(d * std::cos(ang), std::sin(ang)) * (3.f * s), away + V(0.f, 1.5f * s), away, u);
+        f.dir = away.x > mouth.x ? 1 : -1;
+        f.k = 1.f - 0.82f * ease(u);
+        Ang a = armsUp();
+        f.S = fk(a);
+        turnS(f.S, f.S.j[HIP], -ang + PI * 0.5f - 0.5f * u);
+    } else if (t < e.flip) {
+        f.shown = false;
+        f.at = awayPoint(c, e.side);
+    } else { // in from the top over there, a tumble, a landing
+        f.side = o;
+        const float u = saturate((t - e.flip) / 1.5f);
+        const vec2 from = awayPoint(c, o);
+        f.at = bez(from, from + V(-(float)wellSide(o) * 0.5f * s, 1.f * s), V(e.p1.x, 3.f * s), V(e.p1.x, 0.f), u);
+        f.k = 0.2f + 0.8f * ease(u);
+        if (u < 1.f) {
+            f.S = fk(flail(t));
+            turnS(f.S, f.S.j[HIP], -TAU * 1.5f * ease(u));
+        } else f.S = mixS(posed(crouch()), posed(tada()), ease((t - e.flip - 1.5f) / 0.8f));
+    }
+    if (!pen) return;
+    const Pal& P = pen->P;
+    if (t >= tBoom && t < tBoom + 1.2f && f.side == e.side) {
+        const float u = (t - tBoom) / 1.2f;
+        for (int k = 0; k < 3; k++) smoke(*pen, mouth + V(d * (0.2f + 0.4f * k) * s * u, (0.2f + 0.3f * k) * s * u), (0.25f + 0.2f * k) * s * (0.5f + u), 1.f - u);
+        pen->text(mouth + V(d * 0.6f * s, 1.2f * s), "Boom!", P.red, 0.75f * s);
+    }
+    if (t >= 2.f && t < tBoom) { // the fuse burning down
+        const float u = (t - 2.f) / (tBoom - 2.f);
+        const vec2 back = piv - V(d * std::cos(ang), std::sin(ang)) * (0.55f * s);
+        const vec2 end = back + V(-d * 0.5f * s * (1.f - u), -0.1f * s);
+        pen->line({back, end}, 0.6f);
+        sparkle(*pen, end, 0.15f * s, P.orange);
+        if (t >= 2.5f) pen->text(back + V(-d * 0.6f * s, 0.6f * s), "Tsss", P.ink, 0.4f * s);
+    }
+    if (f.side == e.side) vanish(*pen, f, (t - tGone) / 0.6f, s);
+}
+
+void plane(Pen& pen, vec2 at, float s, int dir, float ang, uint32_t col) {
+    auto X = [&](Poly p) { return his(std::move(p), at, s, dir, ang); };
+    const Poly body = X({V(0.95f, 0.15f), V(-0.8f, 0.5f), V(-0.62f, 0.15f), V(-0.75f, -0.05f), V(0.95f, 0.15f)});
+    pen.shape(body, 0.9f);
+    pen.line(X({V(0.95f, 0.15f), V(-0.62f, 0.15f)}), 0.6f);
+    pen.colour(X({V(0.95f, 0.15f), V(-0.8f, 0.5f), V(-0.62f, 0.15f), V(0.95f, 0.15f)}), col, 0.2f, 0.4f, 0.8f);
+}
+void epPlane(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const int o = 1 - e.side;
+    const float tOff = 2.f, tGone = 5.f;
+    vec2 pa = e.p0;
+    float pang = 0.f, k = 1.f;
+    int pd = wellSide(e.side);
+    bool on = false;
+    Skel seat = fk(sit(t));
+    onGround(seat);
+    if (t < 1.f) {
+        f.at = e.p0;
+        f.S = mixS(standing(), posed(crouch()), ease(t));
+        pa = e.p0 + V((float)pd * 1.2f * s, 0.f);
+    } else if (t < tOff) { // he hops on
+        const float u = t - 1.f;
+        pa = e.p0 + V((float)pd * 1.2f * s, 0.f);
+        f.at = mixv(e.p0, pa + V(0.f, 0.3f * s), u) + V(0.f, jumpY(u, 0.8f * s));
+        f.S = u < 0.7f ? posed(leap()) : mixS(posed(leap()), seat, (u - 0.7f) / 0.3f);
+        f.dir = pd;
+    } else if (t < tGone) { // off: along the ground, up, away
+        const float u = (t - tOff) / (tGone - tOff);
+        const vec2 a0 = e.p0 + V((float)pd * 1.2f * s, 0.f), away = awayPoint(c, e.side);
+        const vec2 c1 = a0 + V((float)pd * 2.5f * s, 0.f), c2 = V(away.x - (float)pd * 2.f * s, away.y - 2.f * s);
+        pa = bez(a0, c1, c2, away, u);
+        const vec2 tg = bez(a0, c1, c2, away, std::min(1.f, u + 0.02f)) - bez(a0, c1, c2, away, std::max(0.f, u - 0.02f));
+        pang = std::atan2(tg.y, std::fabs(tg.x));
+        k = 1.f - 0.8f * ease(saturate((u - 0.3f) / 0.7f));
+        on = true;
+    } else if (t < e.flip) {
+        f.shown = false;
+        f.at = awayPoint(c, e.side);
+        k = 0.f;
+    } else if (t < dur - 1.5f) { // in, gliding down, landing
+        f.side = o;
+        pd = -wellSide(o);
+        const float u = saturate((t - e.flip) / (dur - 1.5f - e.flip));
+        const vec2 a0 = awayPoint(c, o), a1 = V(e.p1.x - (float)pd * 1.2f * s, 0.f);
+        const vec2 c1 = a0 + V((float)pd * 2.f * s, -0.5f * s), c2 = a1 + V(-(float)pd * 2.5f * s, 0.f);
+        pa = bez(a0, c1, c2, a1, u);
+        const vec2 tg = bez(a0, c1, c2, a1, std::min(1.f, u + 0.02f)) - bez(a0, c1, c2, a1, std::max(0.f, u - 0.02f));
+        pang = std::atan2(tg.y, std::fabs(tg.x));
+        k = 0.2f + 0.8f * ease(u);
+        on = true;
+    } else { // off it
+        f.side = o;
+        pd = -wellSide(o);
+        pa = V(e.p1.x - (float)pd * 1.2f * s, 0.f);
+        const float u = saturate((t - dur + 1.5f) / 0.8f);
+        f.at = mixv(pa + V(0.f, 0.3f * s), V(e.p1.x, 0.f), u) + V(0.f, jumpY(u, 0.8f * s));
+        f.dir = pd;
+        f.S = u < 1.f ? posed(leap()) : mixS(posed(crouch()), posed(tada()), ease((t - dur + 0.7f) * 2.f));
+    }
+    if (on) { // riding it: sitting on its back, turned with it
+        f.dir = pd;
+        f.k = k;
+        f.S = seat;
+        turnS(f.S, V(0.f, 0.f), pang);
+        f.at = his(V(-0.15f, 0.3f), pa, s * k, pd, pang);
+    }
+    if (!pen || k <= 0.f) {
+        if (pen) vanish(*pen, f, (t - tGone) / 0.6f, s);
+        return;
+    }
+    plane(*pen, pa, s * k, pd, pang, hue(pen->P, e.seq[1]));
+}
+
+void epBalloons(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const int o = 1 - e.side;
+    const float tUp = 1.5f, tGone = 6.f, tLand = dur - 1.5f;
+    Ang hold = hang(t);
+    hold.ua[1] = -0.3f; hold.fa[1] = -0.1f; // one hand up holding the strings
+    const float sway = std::sin(t * PI * 0.5f);
+    float k = 1.f;
+    if (t < tUp) {
+        f.at = e.p0;
+        f.S = mixS(standing(), posed(hold), ease(t));
+    } else if (t < tGone) {
+        const float u = (t - tUp) / (tGone - tUp);
+        const vec2 away = awayPoint(c, e.side);
+        f.at = bez(e.p0, e.p0 + V(0.f, 3.f * s), away - V((float)wellSide(e.side) * 1.f * s, 2.f * s), away, ease(u)) + V(0.4f * s * sway, 0.f);
+        k = 1.f - 0.82f * ease(saturate((u - 0.35f) / 0.65f));
+        f.S = fk(hold);
+        onFeet(f.S);
+    } else if (t < e.flip) {
+        f.shown = false;
+        f.at = awayPoint(c, e.side);
+        k = 0.f;
+    } else if (t < tLand) {
+        f.side = o;
+        const float u = (t - e.flip) / (tLand - e.flip);
+        const vec2 from = awayPoint(c, o);
+        f.at = bez(from, from + V(-(float)wellSide(o) * 1.f * s, -1.f * s), V(e.p1.x, 3.f * s), V(e.p1.x, 0.f), ease(u)) + V(0.3f * s * sway * (1.f - u), 0.f);
+        k = 0.18f + 0.82f * ease(saturate(u / 0.7f));
+        f.S = fk(hold);
+        onFeet(f.S);
+    } else {
+        f.side = o;
+        f.at = V(e.p1.x, 0.f);
+        f.S = mixS(posed(hold), posed(tada()), ease((t - tLand) * 2.f));
+    }
+    f.k = k;
+    if (!pen || !f.shown) {
+        if (pen && t >= tGone) vanish(*pen, f, (t - tGone) / 0.6f, s);
+        return;
+    }
+    const Pal& P = pen->P;
+    const vec2 hand = jointAt(f, HA0, s);
+    const float sk = s * k;
+    const int n = t >= tLand ? 2 : 3;
+    const float grow = ease(saturate(t * 1.5f));
+    for (int i = 0; i < n; i++) {
+        const float a = (i - 1) * 0.45f + 0.1f * std::sin(t * PI + i);
+        const vec2 b = hand + V(std::sin(a), std::cos(a)) * (1.3f * sk) + V(0.f, 0.15f * sk * (i == 1)) + (t >= tLand ? V(0.f, (t - tLand) * 2.f * s) : V(0.f, 0.f));
+        const Poly bl = ellipse(b, 0.3f * sk * grow, 0.37f * sk * grow);
+        pen->shape(bl, 0.8f);
+        pen->colour(bl, hue(P, e.seq[1] + i * 2), 0.5f, 0.4f);
+        pen->line({hand, b - V(0.f, 0.37f * sk * grow)}, 0.4f, 0, 0.8f, 0.3f);
+    }
+    if (t >= tLand - 0.3f && t < tLand + 0.8f) {
+        const vec2 b = hand + V(0.45f, 1.3f) * sk;
+        sparkle(*pen, b, 0.35f * s, P.red);
+        pen->text(b + V(0.5f * s, 0.3f * s), "Pop!", P.red, 0.55f * s);
+    }
+}
+
+void epRocket(Fig& f, const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
+    const float s = c.s, dur = (float)(e.b1 - e.b0);
+    const int o = 1 - e.side;
+    const float tLift = 4.f, tGone = 5.6f, tLand = dur - 1.5f;
+    Ang arms; // arms down by his sides, then a fist up
+    arms.ua[0] = -0.25f; arms.fa[0] = -0.15f; arms.ua[1] = -0.35f; arms.fa[1] = -0.2f;
+    Ang fly = armsUp();
+    fly.ua[1] = -0.3f; fly.fa[1] = -0.2f;
+    bool flames = false;
+    float k = 1.f;
+    if (t < tLift) {
+        f.at = e.p0;
+        f.S = posed(t < 3.f ? arms : mixA(arms, crouch(), ease((t - 3.f) * 2.f)));
+        flames = t > 3.5f;
+    } else if (t < tGone) {
+        const float u = (t - tLift) / (tGone - tLift);
+        const vec2 away = awayPoint(c, e.side);
+        f.at = bez(e.p0, e.p0 + V(0.f, 4.f * s), away - V(0.f, 2.f * s), away, u * u);
+        k = 1.f - 0.82f * ease(saturate((u - 0.3f) / 0.7f));
+        f.S = posed(fly);
+        flames = true;
+    } else if (t < e.flip) {
+        f.shown = false;
+        f.at = awayPoint(c, e.side);
+        k = 0.f;
+    } else if (t < tLand) { // down feet first over there, the flames braking
+        f.side = o;
+        const float u = (t - e.flip) / (tLand - e.flip);
+        const vec2 from = awayPoint(c, o);
+        f.at = bez(from, from + V(-(float)wellSide(o) * 1.f * s, 0.f), V(e.p1.x, 2.f * s), V(e.p1.x, 0.f), 1.f - (1.f - u) * (1.f - u));
+        k = 0.18f + 0.82f * ease(saturate(u / 0.7f));
+        f.S = posed(arms);
+        flames = true;
+    } else {
+        f.side = o;
+        f.at = V(e.p1.x, 0.f);
+        f.S = mixS(posed(crouch()), posed(tada()), ease((t - tLand) * 2.f));
+    }
+    f.k = k;
+    if (!pen) return;
+    const Pal& P = pen->P;
+    if (!f.shown) { vanish(*pen, f, (t - tGone) / 0.6f, s); return; }
+    // the jetpack on his back, its flames
+    const float sk = s * k;
+    const vec2 back = jointAt(f, HIP, s) * 0.45f + jointAt(f, NECK, s) * 0.55f - V((float)f.dir * 0.2f * sk, 0.f);
+    const Poly pack = rect(back.x - 0.13f * sk, back.y - 0.3f * sk, back.x + 0.13f * sk, back.y + 0.25f * sk);
+    pen->shape(pack, 0.8f);
+    pen->colour(pack, hue(P, e.seq[1]), 0.5f, 0.3f);
+    if (flames) {
+        const float fl = (0.35f + 0.15f * std::sin(t * 30.f)) * sk;
+        const vec2 n0 = V(back.x, back.y - 0.3f * sk);
+        pen->line({n0 + V(-0.1f * sk, 0.f), n0 + V(0.f, -fl), n0 + V(0.1f * sk, 0.f)}, 0.8f, P.orange);
+        pen->line({n0 + V(-0.05f * sk, 0.f), n0 + V(0.f, -fl * 0.6f), n0 + V(0.05f * sk, 0.f)}, 0.7f, P.red);
+    }
+    if (t < tLift && t >= 1.f) {
+        static const char* COUNT[3] = {"3", "2", "1"};
+        pen->text(f.at + V(0.f, 2.6f * s), COUNT[std::min(2, (int)std::floor(t - 1.f))], P.red, 0.7f * s);
+    }
+    if (t >= tLift && t < tLift + 1.2f) {
+        const float u = t - tLift;
+        for (int i = 0; i < 3; i++) smoke(*pen, e.p0 + V((i - 1) * 0.5f * s * (0.5f + u), 0.25f * s), (0.25f + 0.15f * u) * s, 1.f - u / 1.2f);
+        pen->text(e.p0 + V(0.f, 2.6f * s), "Whoosh!", P.red, 0.6f * s);
+    }
+}
+
+// What he paints on the easel (about 1.2 x 1, centred on `c`): a house in the sun, a flower, a heart, himself,
+// a boat on the waves, a cat.
+const int PICTURES = 6;
+void picture(Pen& pen, int var, vec2 c, float s) {
+    const Pal& P = pen.P;
+    auto X = [&](Poly p) { return xform(std::move(p), c, s); };
+    auto E = [&](float x, float y, float rx, float ry) { return X(ellipse(V(x, y), rx, ry)); };
+    switch (var % PICTURES) {
+    case 0: {
+        const Poly wall = X(rect(-0.4f, -0.45f, 0.15f, -0.02f)), roof = X({V(-0.48f, -0.02f), V(-0.12f, 0.3f), V(0.23f, -0.02f), V(-0.48f, -0.02f)});
+        pen.shape(wall, 0.7f);
+        pen.colour(wall, P.yellow, 0.3f, 0.3f);
+        pen.shape(roof, 0.7f);
+        pen.colour(roof, P.red, 0.6f, 0.3f);
+        pen.shape(X(rect(-0.2f, -0.45f, -0.06f, -0.2f)), 0.6f);
+        pen.shape(E(0.35f, 0.3f, 0.13f, 0.13f), 0.6f, P.orange);
+        pen.colour(E(0.35f, 0.3f, 0.13f, 0.13f), P.yellow, 0.f, 0.25f);
+        pen.line(X({V(-0.55f, -0.45f), V(0.55f, -0.45f)}), 0.6f, P.green);
+        break;
+    }
+    case 1: {
+        pen.line(X({V(0.f, -0.48f), V(0.02f, -0.1f), V(0.f, 0.1f)}), 0.8f, P.green);
+        pen.shape(X({V(0.01f, -0.3f), V(0.2f, -0.2f), V(0.28f, -0.25f), V(0.12f, -0.33f), V(0.01f, -0.3f)}), 0.6f, P.green);
+        for (int k = 0; k < 6; k++) {
+            const vec2 q = V(0.f, 0.22f) + V(std::cos(k * TAU / 6.f), std::sin(k * TAU / 6.f)) * 0.17f;
+            pen.shape(E(q.x, q.y, 0.09f, 0.09f), 0.6f, P.purple);
+            pen.colour(E(q.x, q.y, 0.09f, 0.09f), P.purple, 0.5f, 0.2f, 0.7f);
+        }
+        pen.colour(E(0.f, 0.22f, 0.08f, 0.08f), P.yellow, 0.f, 0.2f);
+        break;
+    }
+    case 2: {
+        Poly h;
+        for (int i = 0; i <= 30; i++) {
+            const float a = i / 30.f * TAU;
+            h.push_back(V(0.32f * std::pow(std::sin(a), 3.f), 0.26f * std::cos(a) - 0.1f * std::cos(2 * a) - 0.04f * std::cos(3 * a)));
+        }
+        pen.shape(X(h), 0.8f, P.red);
+        pen.colour(X(h), P.red, 0.6f, 0.3f);
+        break;
+    }
+    case 3: { // himself, with his scarf
+        pen.shape(E(0.f, 0.25f, 0.1f, 0.1f), 0.6f);
+        pen.line(X({V(0.f, 0.15f), V(0.f, -0.15f)}), 0.6f);
+        pen.line(X({V(-0.22f, 0.15f), V(0.f, 0.08f), V(0.22f, 0.22f)}), 0.6f);
+        pen.line(X({V(-0.14f, -0.45f), V(0.f, -0.15f), V(0.14f, -0.45f)}), 0.6f);
+        pen.line(X({V(0.f, 0.12f), V(-0.18f, 0.06f), V(-0.28f, 0.1f)}), 1.4f, P.red);
+        pen.line(X({V(-0.4f, -0.47f), V(0.4f, -0.47f)}), 0.5f, P.green);
+        break;
+    }
+    case 4: { // a boat on the waves
+        const Poly hull = X({V(-0.35f, -0.15f), V(0.35f, -0.15f), V(0.25f, -0.3f), V(-0.25f, -0.3f), V(-0.35f, -0.15f)});
+        pen.shape(hull, 0.7f);
+        pen.colour(hull, P.card, 0.2f, 0.25f);
+        pen.line(X({V(0.f, -0.15f), V(0.f, 0.35f)}), 0.6f);
+        const Poly sail = X({V(0.02f, 0.33f), V(0.28f, -0.1f), V(0.02f, -0.1f), V(0.02f, 0.33f)});
+        pen.shape(sail, 0.6f);
+        pen.colour(sail, P.red, 0.5f, 0.2f);
+        Poly w;
+        for (int i = 0; i <= 16; i++) w.push_back(V(-0.55f + 1.1f * i / 16.f, -0.32f + 0.04f * std::sin(i * 1.6f)));
+        pen.line(X(w), 0.7f, P.blue);
+        break;
+    }
+    default: { // a cat
+        const Poly head = X({V(-0.3f, 0.05f), V(-0.28f, 0.35f), V(-0.12f, 0.18f), V(0.12f, 0.18f), V(0.28f, 0.35f), V(0.3f, 0.05f), V(0.2f, -0.2f),
+                             V(0.f, -0.27f), V(-0.2f, -0.2f), V(-0.3f, 0.05f)});
+        pen.shape(head, 0.8f);
+        pen.colour(head, P.orange, 0.4f, 0.3f);
+        pen.shape(E(-0.11f, 0.03f, 0.04f, 0.05f), 0.6f);
+        pen.shape(E(0.11f, 0.03f, 0.04f, 0.05f), 0.6f);
+        pen.line(X({V(-0.05f, -0.1f), V(0.f, -0.13f), V(0.05f, -0.1f)}), 0.6f);
+        for (int k = -1; k <= 1; k += 2) {
+            pen.line(X({V(0.1f * k, -0.1f), V(0.42f * k, -0.05f)}), 0.4f);
+            pen.line(X({V(0.1f * k, -0.13f), V(0.42f * k, -0.17f)}), 0.4f);
+        }
+        break;
+    }
+    }
 }
 
 // The guy at `t` beats into an episode, and what moves with him (drawn with `pen`, when given, in his margin's
@@ -606,12 +2098,34 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
         break;
     }
     case K_RUN: {
+        const int style = e.seq.empty() ? RU_RUN : e.seq[0];
         const float u = saturate(t / dur);
         f.at = mixv(e.p0, e.p1, u);
         const float ph = std::min(t, dur) * e.rate * PI;
-        f.S = fk(gait(ph, e.h));
+        Ang a = gait(ph, e.h);
+        if (style == RU_MOONWALK) { // facing back, gliding backwards
+            a = gait(-ph, 0.45f);
+            a.spine = -0.05f;
+            f.dir = -e.dir;
+        } else if (style == RU_SNEAK) { // on tiptoe, bent over, the hands up
+            a = gait(ph, 0.55f);
+            a.hip = V(0.f, 0.76f);
+            a.spine = 0.5f; a.head = -0.45f;
+            a.ua[0] = 1.1f; a.fa[0] = 2.6f; a.ua[1] = 0.7f; a.fa[1] = 2.3f;
+        } else if (style == RU_SKIP) { // a skip a beat, a knee up
+            const int k = (int)std::floor(t) & 1;
+            const float v = std::sin(frac(t) * PI);
+            a = Ang{};
+            a.th[k] = 1.35f * v; a.sh[k] = a.th[k] - 1.5f * v;
+            a.th[1 - k] = -0.25f * v; a.sh[1 - k] = -0.3f * v;
+            a.ua[k] = -0.7f * v; a.fa[k] = a.ua[k] + 0.6f;
+            a.ua[1 - k] = 1.3f * v; a.fa[1 - k] = a.ua[1 - k] + 0.8f;
+            f.at.y = jumpY(frac(t), 0.4f * s);
+        }
+        f.S = fk(a);
         onFeet(f.S);
-        if (e.h > 0.8f) shiftS(f.S, V(0.f, 0.08f * std::max(0.f, std::cos(2.f * ph))));
+        if (style == RU_RUN && e.h > 0.8f) shiftS(f.S, V(0.f, 0.08f * std::max(0.f, std::cos(2.f * ph))));
+        if (pen && style == RU_SNEAK && t > 0.5f && t < dur - 0.5f) pen->text(f.at + V(-(float)e.dir * 0.5f * s, 2.4f * s), "Shh...", pen->P.ink, 0.45f * s);
         // the last step: back to standing
         if (t > dur - 0.25f) f.S = mixS(f.S, standing(), saturate((t - dur + 0.25f) / 0.25f));
         break;
@@ -776,11 +2290,11 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
             if (tb >= tFall && tb < tHit) {
                 const float u = (tb - tFall) / (tHit - tFall);
                 pen->shape(ellipse(V(xo, 0.f), (0.2f + 0.5f * u) * s, 0.09f * s), 0.6f, 0, 0.55f);
-                fallingThing(*pen, kind, V(xo, lerpf(c.top - 1.6f * s, 0.f, u * u)), s);
-                pen->line({V(xo - 0.35f * s, lerpf(c.top - 1.6f * s, 0.f, u * u) + 1.5f * s),
-                           V(xo - 0.35f * s, lerpf(c.top - 1.6f * s, 0.f, u * u) + 2.3f * s)}, 0.5f, 0, 0.6f);
-                pen->line({V(xo + 0.35f * s, lerpf(c.top - 1.6f * s, 0.f, u * u) + 1.5f * s),
-                           V(xo + 0.35f * s, lerpf(c.top - 1.6f * s, 0.f, u * u) + 2.3f * s)}, 0.5f, 0, 0.6f);
+                fallingThing(*pen, kind, V(xo, lerpf(c.top[e.side] - 1.6f * s, 0.f, u * u)), s);
+                pen->line({V(xo - 0.35f * s, lerpf(c.top[e.side] - 1.6f * s, 0.f, u * u) + 1.5f * s),
+                           V(xo - 0.35f * s, lerpf(c.top[e.side] - 1.6f * s, 0.f, u * u) + 2.3f * s)}, 0.5f, 0, 0.6f);
+                pen->line({V(xo + 0.35f * s, lerpf(c.top[e.side] - 1.6f * s, 0.f, u * u) + 1.5f * s),
+                           V(xo + 0.35f * s, lerpf(c.top[e.side] - 1.6f * s, 0.f, u * u) + 2.3f * s)}, 0.5f, 0, 0.6f);
             } else if (tb >= tHit && tb < 5.6f) {
                 fallingThing(*pen, kind, V(xo, 0.f), s);
                 if (tb < tHit + 1.f) { // the crash: lines flying out, dust, a word
@@ -873,6 +2387,11 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
         break;
     }
     case K_CROSS: {
+        const int how = e.seq.empty() ? CR_HOLE : e.seq[0];
+        if (how == CR_CANNON) { epCannon(f, e, t, c, pen); break; }
+        if (how == CR_PLANE) { epPlane(f, e, t, c, pen); break; }
+        if (how == CR_BALLOONS) { epBalloons(f, e, t, c, pen); break; }
+        if (how == CR_ROCKET) { epRocket(f, e, t, c, pen); break; }
         const float hx = e.ea;
         Skel up = fk(tada());
         onFeet(up);
@@ -916,13 +2435,32 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
         break;
     }
     case K_REST: {
-        const bool sleep = !e.seq.empty() && e.seq[0] == 1;
+        const int how = e.seq.empty() ? 0 : e.seq[0];
+        const bool sleep = how == 1;
         Skel rest;
         if (sleep) rest = sleeping(t);
-        else { rest = fk(sit(t)); onGround(rest); }
+        else {
+            Ang a = sit(t);
+            if (how == 2) { // a book up in front of him
+                a.ua[0] = 0.75f; a.fa[0] = 2.1f; a.ua[1] = 0.55f; a.fa[1] = 1.95f;
+                a.head = 0.35f;
+            }
+            rest = fk(a);
+            onGround(rest);
+        }
         if (t < 1.f) f.S = mixS(standing(), rest, ease(t));
         else if (t < dur - 1.f) f.S = rest;
         else f.S = mixS(rest, standing(), ease(t - (dur - 1.f)));
+        if (pen && how == 2 && t >= 1.f && t < dur - 1.f) { // the book open, a page turned each bar
+            const vec2 b = (jointAt(f, HA0, s) + jointAt(f, HA1, s)) * 0.5f + V((float)e.dir * 0.05f * s, 0.12f * s);
+            const float d = (float)e.dir;
+            const Poly cover = {b + V(-d * 0.05f * s, -0.22f * s), b + V(d * 0.25f * s, -0.12f * s), b + V(d * 0.25f * s, 0.22f * s),
+                                b + V(-d * 0.05f * s, 0.12f * s), b + V(-d * 0.05f * s, -0.22f * s)};
+            pen->shape(cover, 0.7f);
+            pen->colour(cover, hue(pen->P, (int)(e.id % 6)), 0.5f, 0.25f);
+            const float u = frac((t - 1.f) / 4.f) * 4.f;
+            if (u < 1.f) pen->line(quad(b + V(-d * 0.05f * s, 0.12f * s), b + V(d * lerpf(0.2f, -0.2f, u) * s, (0.2f + 0.15f * std::sin(u * PI)) * s), b + V(d * lerpf(0.25f, -0.3f, u) * s, 0.22f * s), 6), 0.5f);
+        }
         if (pen && sleep && t >= 1.5f && t < dur - 1.f) {
             const vec2 head = jointAt(f, HEAD, s);
             for (int k = 0; k < 3; k++) {
@@ -933,6 +2471,24 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
         }
         break;
     }
+    case K_SKATE: epSkate(f, e, t, c, pen); break;
+    case K_POGO: epPogo(f, e, t, c, pen); break;
+    case K_BIKE: epBike(f, e, t, c, pen); break;
+    case K_ROPE: epRope(f, e, t, c, pen); break;
+    case K_TRAMP: epTramp(f, e, t, c, pen); break;
+    case K_FOOTBALL: epFootball(f, e, t, c, pen); break;
+    case K_BASKET: epBasket(f, e, t, c, pen); break;
+    case K_BEES: epBees(f, e, t, c, pen); break;
+    case K_BANANA: epBanana(f, e, t, c, pen); break;
+    case K_UMBRELLA: epUmbrella(f, e, t, c, pen); break;
+    case K_KITE: epKite(f, e, t, c, pen); break;
+    case K_FISH: epFish(f, e, t, c, pen); break;
+    case K_JUGGLE: epJuggle(f, e, t, c, pen); break;
+    case K_MUSIC: epMusic(f, e, t, c, pen); break;
+    case K_YOGA: epYoga(f, e, t, c, pen); break;
+    case K_STARS: epStars(f, e, t, c, pen); break;
+    case K_PAINT: epPaint(f, e, t, c, pen); break;
+    case K_DOG: epDog(f, e, t, c, pen); break;
     default: break;
     }
     return f;
@@ -940,10 +2496,12 @@ Fig figure(const Story::Ep& e, float t, const Ctx& c, Pen* pen) {
 
 // The guy drawn: his head, his body, his arms and legs, his scarf trailing behind him (`vel`: how his neck moves,
 // board units a beat).
-void drawGuy(Pen& pen, const Fig& f, float s, vec2 vel, float flutter, float wk) {
+void drawGuy(Pen& pen, const Fig& f, float s0, vec2 vel, float flutter, float wk) {
     if (!f.shown) return;
     const Pal& P = pen.P;
-    auto W = [&](int j) { return jointAt(f, j, s); };
+    auto W = [&](int j) { return jointAt(f, j, s0); };
+    const float s = s0 * f.k;
+    wk *= 0.4f + 0.6f * f.k;
     auto put = [&](const Poly& p, float k) {
         for (const Poly& run : above(p, f.clip)) pen.line(run, k, 0, 1.f, 0.6f);
     };
@@ -1012,6 +2570,152 @@ void drawProp(Pen& pen, const Story::Prop& p, float hw, float s) {
         pen.line({V(x - hwid, 0.f), V(x - hwid, p.h + 0.55f * s)}, 0.9f, 0, 1.f, 0.6f);
         pen.line({V(x + hwid, 0.f), V(x + hwid, p.h + 0.55f * s)}, 0.9f, 0, 1.f, 0.6f);
         for (float y = 0.3f * s; y < p.h + 0.3f * s; y += RUNG * s) pen.line({V(x - hwid, y), V(x + hwid, y)}, 0.7f, 0, 1.f, 0.3f);
+        break;
+    }
+    case PR_TRAMP: {
+        pen.begin(p.id, (float)p.t0, 12.f, 0.3f);
+        const float x = p.xa, hw = 1.15f * s, y = 0.55f * s;
+        pen.line({V(x - hw, y), V(x - hw * 0.85f, 0.f)}, 0.9f);
+        pen.line({V(x + hw, y), V(x + hw * 0.85f, 0.f)}, 0.9f);
+        pen.line({V(x - 0.2f * s, y - 0.12f * s), V(x - 0.3f * s, 0.f)}, 0.7f);
+        pen.line({V(x + 0.2f * s, y - 0.12f * s), V(x + 0.3f * s, 0.f)}, 0.7f);
+        const Poly rim = rect(x - hw - 0.08f * s, y - 0.12f * s, x + hw + 0.08f * s, y);
+        pen.shape(rim, 0.8f);
+        pen.colour(rim, hue(P, p.var), 0.f, 0.5f * s);
+        break;
+    }
+    case PR_GOAL: { // side on: the posts, the bar, the net behind
+        pen.begin(p.id, (float)p.t0, 14.f, 0.3f);
+        const float x = p.xa, d = (float)p.dir, h = 1.25f * s, back = x + d * 0.75f * s;
+        pen.line({V(x, 0.f), V(x, h), V(back, h * 0.85f), V(back, 0.f)}, 1.1f);
+        for (int k = 1; k < 5; k++) {
+            const float u = k / 5.f;
+            pen.line({V(x, h * u), V(back, h * 0.85f * u)}, 0.4f, P.grey);
+            pen.line({V(lerpf(x, back, u), 0.f), V(lerpf(x, back, u), h * (1.f - 0.15f * u))}, 0.4f, P.grey);
+        }
+        break;
+    }
+    case PR_HOOP: { // a post, a board, the rim and its net
+        pen.begin(p.id, (float)p.t0, 14.f, 0.3f);
+        const float x = p.xa, d = (float)p.dir;
+        pen.line({V(x, 0.f), V(x, 2.9f * s), V(x - d * 0.2f * s, 3.05f * s)}, 1.2f);
+        const Poly board = rect(std::min(x - d * 0.2f * s, x - d * 0.28f * s), 2.45f * s, std::max(x - d * 0.2f * s, x - d * 0.28f * s), 3.5f * s);
+        pen.shape(board, 0.8f);
+        const vec2 rim = V(x - d * 0.55f * s, 2.6f * s);
+        pen.shape(ellipse(rim, 0.3f * s, 0.07f * s), 1.1f, P.orange);
+        for (int k = 0; k <= 4; k++) {
+            const float u = k / 4.f;
+            pen.line({rim + V((-0.3f + 0.6f * u) * s, 0.f), rim + V((-0.18f + 0.36f * u) * s, -0.45f * s)}, 0.4f, P.grey);
+        }
+        pen.line({rim + V(-0.24f * s, -0.22f * s), rim + V(0.24f * s, -0.22f * s)}, 0.4f, P.grey);
+        break;
+    }
+    case PR_POND: {
+        pen.begin(p.id, (float)p.t0, 12.f, 0.3f);
+        const Poly w = ellipse(V(p.xa, 0.f), 1.05f * s, 0.24f * s);
+        pen.shape(w, 0.8f);
+        pen.colour(w, P.blue, 0.1f, 0.6f * s);
+        for (int k = 0; k < 3; k++) { // reeds
+            const float x = p.xa + (float)p.dir * (0.85f + 0.12f * k) * s;
+            pen.line({V(x, 0.f), V(x + 0.05f * s, (0.7f + 0.15f * k) * s)}, 0.6f, P.green);
+        }
+        break;
+    }
+    case PR_PEEL: {
+        pen.begin(p.id, (float)p.t0, 8.f, 0.3f);
+        const float x = p.xa;
+        const Poly peel = {V(x - 0.3f * s, 0.f), V(x - 0.18f * s, 0.12f * s), V(x, 0.08f * s), V(x + 0.18f * s, 0.12f * s), V(x + 0.3f * s, 0.f), V(x - 0.3f * s, 0.f)};
+        pen.shape(peel, 0.8f);
+        pen.colour(peel, P.yellow, 0.3f, 0.3f);
+        pen.line({V(x, 0.08f * s), V(x + 0.05f * s, 0.2f * s)}, 0.7f);
+        break;
+    }
+    case PR_CLOUD: {
+        pen.begin(p.id, (float)p.t0, 12.f, 0.3f);
+        Poly cl;
+        const float x = p.xa, y = p.h;
+        for (int i = 0; i <= 40; i++) {
+            const float a = i / 40.f * TAU;
+            const float bump = 1.f + 0.22f * std::fabs(std::sin(a * 3.f));
+            cl.push_back(V(x + std::cos(a) * 1.5f * s * bump, y + std::sin(a) * 0.5f * s * bump));
+        }
+        pen.shape(cl, 0.9f);
+        pen.colour(cl, P.grey, 0.3f, 0.6f * s, 0.6f);
+        break;
+    }
+    case PR_SKY: { // the moon (or a ringed planet) and a few stars, slowly
+        pen.begin(p.id, (float)p.t0, 4.f, 0.3f);
+        const float x = p.xa, y = p.h;
+        if (p.var == 0) {
+            const Poly moon = {V(x, y + 0.5f * s), V(x - 0.35f * s, y + 0.3f * s), V(x - 0.45f * s, y), V(x - 0.35f * s, y - 0.3f * s),
+                               V(x, y - 0.5f * s), V(x - 0.15f * s, y - 0.25f * s), V(x - 0.2f * s, y), V(x - 0.15f * s, y + 0.25f * s), V(x, y + 0.5f * s)};
+            pen.shape(moon, 0.8f);
+            pen.colour(moon, P.yellow, 0.4f, 0.3f);
+        } else {
+            const Poly pl = ellipse(V(x, y), 0.35f * s, 0.35f * s);
+            pen.shape(pl, 0.8f);
+            pen.colour(pl, P.orange, 0.4f, 0.4f);
+            pen.line(arc(V(x, y), 0.65f * s, 0.15f * s, PI * 0.95f, TAU + PI * 0.05f, 16), 0.8f);
+        }
+        Rng r(mixk(p.id, 5));
+        for (int k = 0; k < 5; k++)
+            starShape(pen, V(x + r.range(-2.2f, 2.2f) * s * (k & 1 ? 1.f : -0.6f), y + r.range(-1.5f, 1.f) * s), r.range(0.1f, 0.18f) * s, P.yellow, r.range(0.f, 1.f));
+        break;
+    }
+    case PR_SCOPE: { // a telescope on its tripod, pointing up
+        pen.begin(p.id, (float)p.t0, 12.f, 0.3f);
+        const float x = p.xa, d = (float)p.dir;
+        const vec2 top = V(x, 1.15f * s);
+        pen.line({top, V(x - 0.35f * s, 0.f)}, 0.8f);
+        pen.line({top, V(x + 0.35f * s, 0.f)}, 0.8f);
+        pen.line({top, V(x + 0.05f * s, 0.f)}, 0.6f);
+        const vec2 ax = V(d * std::cos(0.75f), std::sin(0.75f)), nx = V(-ax.y, ax.x);
+        const vec2 a = top - ax * (0.45f * s), b = top + ax * (0.8f * s);
+        const Poly tube = {a + nx * (0.08f * s), b + nx * (0.13f * s), b - nx * (0.13f * s), a - nx * (0.08f * s), a + nx * (0.08f * s)};
+        pen.shape(tube, 0.9f);
+        pen.colour(tube, hue(P, p.var), 0.75f * d, 0.4f);
+        break;
+    }
+    case PR_EASEL: { // three legs and a canvas
+        pen.begin(p.id, (float)p.t0, 14.f, 0.3f);
+        const float x = p.xa;
+        pen.line({V(x - 0.45f * s, 0.f), V(x, 2.1f * s)}, 0.9f);
+        pen.line({V(x + 0.45f * s, 0.f), V(x, 2.1f * s)}, 0.9f);
+        pen.line({V(x + 0.1f * s, 0.f), V(x, 1.9f * s)}, 0.6f);
+        pen.shape(rect(x - 0.65f * s, 0.85f * s, x + 0.65f * s, 1.95f * s), 0.9f);
+        pen.line({V(x - 0.7f * s, 0.82f * s), V(x + 0.7f * s, 0.82f * s)}, 0.9f);
+        break;
+    }
+    case PR_PICTURE: { // what he paints, slowly, then held up a while
+        pen.begin(p.id, (float)p.t0, 1.f, 0.3f);
+        const size_t from = pen.out.size();
+        picture(pen, p.var, V(p.xa, 1.4f * s), s);
+        // (its strokes spread over the time he paints)
+        float t1 = (float)p.t0;
+        for (size_t i = from; i < pen.out.size(); i++) t1 = std::max(t1, pen.out[i].t0 + pen.out[i].dur);
+        const float k = p.h / std::max(0.1f, t1 - (float)p.t0);
+        for (size_t i = from; i < pen.out.size(); i++) {
+            pen.out[i].t0 = (float)p.t0 + (pen.out[i].t0 - (float)p.t0) * k;
+            pen.out[i].dur *= k;
+        }
+        break;
+    }
+    case PR_CANNON: {
+        pen.begin(p.id, (float)p.t0, 12.f, 0.3f);
+        const float d = (float)p.dir, ang = 0.85f;
+        const vec2 piv = V(p.xa, 0.5f * s), ax = V(d * std::cos(ang), std::sin(ang)), nx = V(-ax.y, ax.x);
+        const vec2 a = piv - ax * (0.55f * s), b = piv + ax * (1.35f * s);
+        const Poly barrel = {a + nx * (0.3f * s), b + nx * (0.25f * s), b - nx * (0.25f * s), a - nx * (0.3f * s), a + nx * (0.3f * s)};
+        pen.shape(barrel, 1.f);
+        pen.dark(barrel, 0.4f, 0.6f * s);
+        pen.shape(ellipse(b, 0.1f * s, 0.27f * s), 0.7f);
+        const Poly wheel = ellipse(piv + V(0.f, -0.12f * s), 0.38f * s, 0.38f * s);
+        pen.shape(wheel, 0.9f);
+        pen.colour(wheel, P.card, 0.f, 0.4f);
+        for (int k = 0; k < 3; k++) {
+            const vec2 dd = rot(V(0.36f * s, 0.f), k * PI / 3.f);
+            pen.line({piv + V(0.f, -0.12f * s) - dd, piv + V(0.f, -0.12f * s) + dd}, 0.5f);
+        }
         break;
     }
     default: { // a hole
@@ -1215,24 +2919,6 @@ void cheer(Pen& pen, vec2 at, float s, int i, double beat) {
     pen.line({W(HA0), W(EL0), W(NECK), W(EL1), W(HA1)}, 0.8f, 0, 1.f, 0.4f);
 }
 
-// A music note (an eighth), `sz` tall.
-void note(Pen& pen, vec2 at, float sz, uint32_t col, bool two) {
-    const Poly head = ellipse(at, 0.17f * sz, 0.12f * sz);
-    pen.shape(head, 0.7f, col);
-    pen.colour(head, col, 0.4f, 0.35f);
-    pen.line({at + V(0.15f * sz, 0.03f * sz), at + V(0.15f * sz, 0.8f * sz)}, 0.7f, col);
-    if (two) {
-        const vec2 b = at + V(0.5f * sz, 0.1f * sz);
-        const Poly h2 = ellipse(b, 0.17f * sz, 0.12f * sz);
-        pen.shape(h2, 0.7f, col);
-        pen.colour(h2, col, 0.4f, 0.35f);
-        pen.line({b + V(0.15f * sz, 0.03f * sz), b + V(0.15f * sz, 0.9f * sz)}, 0.7f, col);
-        pen.line({at + V(0.15f * sz, 0.8f * sz), b + V(0.15f * sz, 0.9f * sz)}, 1.1f, col);
-    } else {
-        pen.line({at + V(0.15f * sz, 0.8f * sz), at + V(0.38f * sz, 0.55f * sz), at + V(0.36f * sz, 0.35f * sz)}, 0.7f, col);
-    }
-}
-
 // ids of the dance's things (out of the props' range)
 const uint32_t ID_GUY = 0x3F0000u, ID_DANCE = 0x3F1000u;
 
@@ -1252,6 +2938,80 @@ void Story::reset(uint64_t seed) {
     dancing_ = false;
     danceEnd_ = -1;
     danceNo_ = 0;
+    used_.assign(K_COUNT, 0);
+    varUsed_.assign(K_COUNT * 8, 0);
+    logged_ = 0;
+    // (test hook: REFALL_NOTEPAD_EPISODES="kite,cross:cannon,..." shows these first, each as soon as it can be)
+    forced_.clear();
+    if (const char* v = std::getenv("REFALL_NOTEPAD_EPISODES")) {
+        std::string all = v;
+        for (size_t a = 0; a < all.size();) {
+            size_t b = all.find(',', a);
+            if (b == std::string::npos) b = all.size();
+            const std::string item = all.substr(a, b - a), kind = item.substr(0, item.find(':'));
+            const std::string var = item.find(':') == std::string::npos ? "" : item.substr(item.find(':') + 1);
+            for (int k = 0; k < K_COUNT; k++) {
+                if (kind != KIND_NAMES[k]) continue;
+                int vi = 15;
+                for (int i = 0; i < NVAR[k]; i++) if (var == VARIANTS[k][i]) vi = i;
+                forced_.push_back(k * 16 + vi);
+            }
+            a = b + 1;
+        }
+    }
+}
+
+// What he does next, out of what he can do from here (`w`, how well each fits the music; the crossing's is the
+// chance he crosses now): what he has done least this song first, so that nothing comes back before the rest
+// has had its turn (a deck of gags, refilled as it runs out, the music choosing among what is left); seldom
+// what he did lately, never the same twice running. Walks and waves fill in between, as they come.
+int Story::choose(const float w[]) {
+    for (size_t i = 0; i < forced_.size(); i++) // (the test hook's first one that can be, to the front)
+        if (w[forced_[i] / 16] > 0.f) {
+            std::rotate(forced_.begin(), forced_.begin() + (long)i, forced_.begin() + (long)i + 1);
+            return forced_.front() / 16;
+        }
+    auto dealt = [](int k) { return k != K_RUN && k != K_WAVE && k != K_CROSS; };
+    int least = 1 << 30;
+    for (int k = 0; k < K_COUNT; k++)
+        if (dealt(k) && w[k] > 0.f) least = std::min(least, used_[k]);
+    float v[K_COUNT];
+    for (int k = 0; k < K_COUNT; k++) {
+        v[k] = k == K_CROSS ? 0.f : w[k];
+        if (dealt(k) && used_[k] > least) v[k] *= std::pow(0.02f, (float)(used_[k] - least));
+    }
+    for (int i = 1; i < 4; i++)
+        if (at_.recent[i] >= 0) v[at_.recent[i]] *= 0.3f;
+    if (at_.recent[0] >= 0) v[at_.recent[0]] = 0.f;
+    float sum = 0.f;
+    for (int k = 0; k < K_COUNT; k++) sum += v[k];
+    if (w[K_CROSS] > 0.f) v[K_CROSS] = std::max(sum, 1.f) * w[K_CROSS] / (1.f - w[K_CROSS]);
+    if (sum <= 0.f && v[K_CROSS] <= 0.f) return K_WAVE;
+    return rng_.weighted(v);
+}
+
+// Its variant, the same way: the one seen least (`w`: which can be, and how likely).
+int Story::variant(int kind, const float w[], int n) {
+    int least = 1 << 30;
+    for (int i = 0; i < n; i++) if (w[i] > 0.f) least = std::min(least, varUsed_[kind * 8 + i]);
+    if (least == 1 << 30) return 0;
+    float v[8] = {};
+    for (int i = 0; i < n; i++) v[i] = w[i] > 0.f && varUsed_[kind * 8 + i] == least ? w[i] : 0.f;
+    const int r = rng_.weighted(v);
+    varUsed_[kind * 8 + r]++;
+    return r;
+}
+
+void Story::log(double beat) {
+    static const bool on = std::getenv("REFALL_NOTEPAD_STORY_LOG") != nullptr;
+    if (!on) return;
+    for (const Ep& e : eps_) {
+        if (beat < e.b0 || beat >= e.b1 || e.id == logged_) continue;
+        logged_ = e.id;
+        const int v = e.seq.empty() ? 0 : std::clamp(e.seq[0], 0, NVAR[e.kind] - 1);
+        std::fprintf(stderr, "[story] beat %.1f  %s:%s  (%.0f beats, margin %d)\n", e.b0, KIND_NAMES[e.kind],
+                     VARIANTS[e.kind][e.kind == K_ACRO ? 0 : v], e.b1 - e.b0, e.side);
+    }
 }
 
 Story::Prop* Story::prop(uint32_t id) {
@@ -1309,7 +3069,7 @@ void Story::extend(double until, int stage, const Panel P[2]) {
         e.id = serial_++;
         const float x = e.p0.x, y = e.p0.y;
         auto fits = [&](float v) { return v >= lo && v <= hi; };
-        // what he can do from here
+        // what he can do from here, and how well it fits the music (in a break, the verse, the chorus)
         float w[K_COUNT] = {};
         if (ledge) {
             w[K_CHUTE] = 3.f;
@@ -1317,24 +3077,81 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             w[K_HOP] = 2.f;
             if (!fits(at_.lb + 2.4f * s) && !fits(at_.la - 2.4f * s)) w[K_DIVE] = 0.f;
         } else {
-            w[K_RUN] = hi - lo > 2.5f * s ? 3.f : 0.f;
-            w[K_HOP] = H > 8.f * s ? 2.f : 0.f;
-            w[K_LADDER] = H > 9.f * s && hi - lo > 2.8f * s ? 2.f : 0.f;
-            w[K_DODGE] = hi - lo > 2.8f * s ? (stage >= 1 ? 2.f : 1.f) : 0.f;
-            w[K_ACRO] = stage >= 2 ? 3.f : stage == 1 ? 2.f : 0.6f;
-            w[K_CROSS] = at_.sinceCross >= 3 ? 1.8f : 0.f;
-            w[K_REST] = stage == 0 ? 3.f : 0.3f;
-            w[K_WAVE] = 0.4f;
+            static const float FIT[K_COUNT][3] = {
+                {0.3f, 0.3f, 0.3f}, {0.8f, 0.8f, 0.8f}, {1.f, 1.5f, 1.5f}, {1.f, 1.5f, 1.5f}, // wave, run, hop, ladder
+                {0.f, 0.f, 0.f}, {0.f, 0.f, 0.f}, {0.6f, 2.f, 2.f}, {0.4f, 1.5f, 2.5f},      // chute, dive, dodge, acro
+                {0.f, 0.f, 0.f}, {3.f, 0.2f, 0.f},                                         // cross (below), rest
+                {0.3f, 2.f, 2.5f}, {0.3f, 1.5f, 2.5f}, {0.8f, 2.f, 2.f}, {0.2f, 1.5f, 2.5f},  // skate, pogo, bike, rope
+                {0.3f, 1.5f, 2.5f}, {0.5f, 2.f, 2.f}, {0.5f, 2.f, 2.f}, {0.2f, 1.5f, 2.5f},   // trampoline, football, basket, bees
+                {1.5f, 1.5f, 1.f}, {2.f, 1.2f, 0.4f}, {2.5f, 1.f, 0.3f}, {3.f, 0.6f, 0.f},    // banana, umbrella, kite, fish
+                {1.5f, 2.f, 1.f}, {2.5f, 1.5f, 0.6f}, {3.f, 0.3f, 0.f}, {3.f, 0.3f, 0.f},     // juggle, music, yoga, stars
+                {2.5f, 1.f, 0.2f}, {1.5f, 2.f, 1.f},                                       // paint, dog
+            };
+            const float span = hi - lo, room = std::max(hi - x, x - lo);
+            for (int k = 0; k < K_COUNT; k++) w[k] = FIT[k][std::min(stage, 2)];
+            auto need = [&](int k, bool ok) { if (!ok) w[k] = 0.f; };
+            // (what wants more room than he has on either side here: a walk to the end of the margin first)
+            float blocked = 0.f;
+            auto roomFor = [&](int k, float r) {
+                if (room > r * s) return;
+                blocked += w[k] * (used_[k] == 0 ? 1.f : 0.2f);
+                w[k] = 0.f;
+            };
+            need(K_RUN, span > 2.5f * s);
+            need(K_HOP, H > 8.f * s);
+            need(K_LADDER, H > 9.f * s && span > 2.8f * s);
+            need(K_DODGE, span > 2.8f * s);
+            need(K_TRAMP, H > 8.f * s);
+            need(K_BASKET, H > 6.f * s);
+            need(K_BEES, span > 3.f * s);
+            need(K_UMBRELLA, H > 7.f * s);
+            need(K_KITE, H > 8.f * s);
+            need(K_STARS, H > 8.f * s);
+            need(K_DOG, span > 3.5f * s);
+            roomFor(K_SKATE, 3.4f);
+            roomFor(K_POGO, 3.f);
+            roomFor(K_BIKE, 3.4f);
+            roomFor(K_TRAMP, 3.3f);
+            roomFor(K_FOOTBALL, 2.8f);
+            roomFor(K_BASKET, 2.6f);
+            roomFor(K_BANANA, 2.6f);
+            roomFor(K_FISH, 3.1f);
+            roomFor(K_STARS, 1.4f);
+            roomFor(K_PAINT, 1.6f);
+            if (w[K_RUN] > 0.f) w[K_RUN] += 0.4f * blocked;
+            // over to the other margin: the more likely the longer he has been in this one
+            static const float CROSS[6] = {0.f, 0.f, 0.2f, 0.35f, 0.55f, 0.8f};
+            w[K_CROSS] = CROSS[std::clamp(at_.sinceCross, 0, 5)];
         }
-        // not what he just did, and seldom what he did lately
-        for (int i = 1; i < 4; i++)
-            if (at_.recent[i] >= 0) w[at_.recent[i]] *= 0.25f;
-        if (at_.recent[0] >= 0) {
-            float rest = 0.f;
-            for (int k = 0; k < K_COUNT; k++) if (k != at_.recent[0]) rest += w[k];
-            if (rest > 0.f) w[at_.recent[0]] = 0.f;
+        e.kind = choose(w);
+        int forcedVar = -1;
+        if (!forced_.empty() && forced_.front() / 16 == e.kind) {
+            forcedVar = forced_.front() % 16;
+            forced_.erase(forced_.begin());
         }
-        e.kind = rng_.weighted(w);
+        auto pick = [&](std::initializer_list<float> wv) {
+            float v[8] = {};
+            int n = 0;
+            for (float x : wv) v[n++] = x;
+            if (forcedVar >= 0 && forcedVar < n && v[forcedVar] > 0.f) { varUsed_[e.kind * 8 + forcedVar]++; return forcedVar; }
+            return variant(e.kind, v, n);
+        };
+        // which way has more room
+        const int roomy = (hi - x) >= (x - lo) ? 1 : -1;
+        auto propAt = [&](int kind, float xa, double t0, double t1, int dir, int var, float h = 0.f) {
+            Prop p;
+            p.kind = kind;
+            p.side = side;
+            p.xa = xa;
+            p.h = h;
+            p.t0 = t0;
+            p.t1 = t1;
+            p.dir = dir;
+            p.var = var;
+            p.id = serial_++;
+            props_.push_back(p);
+        };
+        auto colour = [&]() { return rng_.irange(0, 5); };
         const float stepBeat = stage >= 1 ? 2.f : 1.f;
         auto ledgeOf = [&](float px, float py, double t0, uint32_t* id) {
             Prop p;
@@ -1350,15 +3167,17 @@ void Story::extend(double until, int stage, const Panel P[2]) {
         };
         switch (e.kind) {
         case K_RUN: {
+            e.seq.push_back(pick({1.f, stage >= 1 ? 1.f : 0.3f, 0.8f, stage >= 2 ? 0.f : 0.8f}));
             float tx = x < 0.f ? rng_.range(std::max(lo, hi * 0.3f), hi) : rng_.range(lo, std::min(hi, lo * 0.3f));
             if (std::fabs(tx - x) < 1.5f * s) tx = x < 0.f ? hi : lo;
             const float dist = std::fabs(tx - x);
-            const float stepLen = (stage >= 1 ? 1.1f : 0.7f) * s;
-            const float d = std::max(2.f, std::round(dist / (stepLen * stepBeat)));
+            const float stepLen = (e.seq[0] == RU_RUN && stage >= 1 ? 1.1f : 0.7f) * s;
+            const float rate = e.seq[0] == RU_SKIP ? 1.f : stepBeat;
+            const float d = std::max(2.f, std::round(dist / (stepLen * rate)));
             e.dir = tx >= x ? 1 : -1;
             e.p1 = V(tx, 0.f);
-            e.rate = stepBeat;
-            e.h = std::clamp(dist / (d * stepBeat) / (1.15f * s), 0.4f, 1.1f);
+            e.rate = rate;
+            e.h = std::clamp(dist / (d * rate) / (1.15f * s), 0.4f, 1.1f);
             e.b1 = e.b0 + d;
             break;
         }
@@ -1404,7 +3223,7 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             break;
         }
         case K_LADDER: {
-            const float maxH = std::min(H - 4.5f * s, 6.5f * s);
+            const float maxH = std::min(H - 4.5f * s, (stage == 0 ? 4.6f : 6.5f) * s);
             float h = rng_.range(4.f * s, std::max(4.1f * s, maxH));
             h = std::max(2.f, std::round(h / (RUNG * s))) * RUNG * s;
             int d = e.dir;
@@ -1414,7 +3233,7 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             e.dir = d;
             e.ea = lx;
             e.h = h;
-            e.rate = stage >= 1 ? 2.f : 1.f;
+            e.rate = 2.f;
             const float climbT = h / (e.rate * RUNG * s);
             e.b1 = e.b0 + std::ceil(2.f + climbT);
             e.p1 = V(lx + d * 1.1f * s, h);
@@ -1457,9 +3276,9 @@ void Story::extend(double until, int stage, const Panel P[2]) {
                 e.b1 = e.b0 + 5.0;
             } else {
                 e.p1 = V(std::clamp(edge + d * rng_.range(0.8f, 2.5f) * s, lo, hi), 0.f);
-                const float D = std::max(3.f, std::ceil((y - 1.f * s) / (1.15f * s)));
+                const float D = std::clamp(std::ceil((y - 1.f * s) / (1.15f * s)), 3.f, stage == 0 ? 4.f : 6.f);
                 e.b1 = e.b0 + 4.0 + D;
-                e.seq.push_back(rng_.irange(0, 1));
+                e.seq.push_back(pick({1.f, 1.f}));
             }
             at_.y = 0.f;
             break;
@@ -1471,7 +3290,7 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             if (!fits(x + d * need)) d = -d;
             if (!fits(x + d * need)) { e.kind = K_WAVE; e.b1 = e.b0 + 2.0; e.p1 = e.p0; break; }
             e.dir = d;
-            const int first = rng_.irange(0, OB_COUNT - 1);
+            const int first = pick({1.f, 1.f, 1.f, 1.f});
             for (int k = 0; k < n; k++) e.seq.push_back((first + k * rng_.irange(1, OB_COUNT - 1)) % OB_COUNT);
             e.p1 = V(x + d * 0.3f * s * n, 0.f);
             e.b1 = e.b0 + 6.0 * n;
@@ -1496,34 +3315,40 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             break;
         }
         case K_CROSS: {
-            int d = e.dir;
-            if (!fits(x + d * 1.1f * s)) d = -d;
-            e.dir = d;
-            e.ea = x + d * 1.1f * s;
-            const int other = 1 - side;
+            const int other = 1 - side, ws = side == 0 ? 1 : -1; // (toward the well)
             const float hw2 = 0.5f * (P[other].x1 - P[other].x0);
+            const int how = pick({1.f, stage >= 1 ? 1.5f : 0.4f, fits(x + ws * 1.4f * s) ? 1.f : 0.f,
+                                  H > 9.f * s ? (stage == 0 ? 2.f : 0.5f) : 0.f, stage >= 1 ? 1.5f : 0.4f});
+            static const float FLIP[5] = {3.f, 6.f, 5.6f, 6.6f, 6.2f}, DUR[5] = {6.f, 10.f, 10.f, 12.f, 10.f};
+            e.seq = {how, colour()};
+            e.flip = FLIP[how];
+            e.b1 = e.b0 + DUR[how];
             e.p1 = V(rng_.range(-0.45f, 0.45f) * std::max(0.f, hw2 - m), 0.f);
-            e.b1 = e.b0 + 6.0;
-            Prop a;
-            a.kind = PR_HOLE;
-            a.side = side;
-            a.xa = e.ea;
-            a.t0 = e.b0 + 0.3;
-            a.t1 = e.b0 + 3.5;
-            a.id = serial_++;
-            props_.push_back(a);
-            Prop b = a;
-            b.side = other;
-            b.xa = e.p1.x;
-            b.t0 = e.b0 + 2.6;
-            b.t1 = e.b0 + 6.8;
-            b.id = serial_++;
-            props_.push_back(b);
-            if (Prop* g = prop(ground_)) g->t1 = e.b0 + 4.0;
+            if (how == CR_HOLE) { // a hole thrown down in front of him, another one over there
+                int d = e.dir;
+                if (!fits(x + d * 1.1f * s)) d = -d;
+                e.dir = d;
+                e.ea = x + d * 1.1f * s;
+                propAt(PR_HOLE, e.ea, e.b0 + 0.3, e.b0 + 3.5, d, 0);
+                Prop b = props_.back();
+                b.side = other;
+                b.xa = e.p1.x;
+                b.t0 = e.b0 + 2.6;
+                b.t1 = e.b0 + 6.8;
+                b.id = serial_++;
+                props_.push_back(b);
+            } else {
+                e.dir = ws;
+                if (how == CR_CANNON) {
+                    e.ea = std::clamp(x + ws * 0.3f * s, -hw + 1.5f * s, hw - 1.5f * s);
+                    propAt(PR_CANNON, e.ea, e.b0 - 1.0, e.b0 + 6.5, ws, 0);
+                }
+            }
+            if (Prop* g = prop(ground_)) g->t1 = e.b0 + e.flip + 1.0;
             Prop g;
             g.kind = PR_GROUND;
             g.side = other;
-            g.t0 = e.b0 + 2.0;
+            g.t0 = e.b0 + e.flip - 1.0;
             g.id = serial_++;
             ground_ = g.id;
             props_.push_back(g);
@@ -1532,9 +3357,155 @@ void Story::extend(double until, int stage, const Panel P[2]) {
             break;
         }
         case K_REST: {
-            e.seq.push_back(stage == 0 && rng_.chance(0.6f) ? 1 : 0);
+            e.seq.push_back(pick({1.f, stage == 0 ? 1.5f : 0.f, 1.f}));
             e.p1 = e.p0;
             e.b1 = e.b0 + 8.0;
+            break;
+        }
+        case K_SKATE:
+        case K_BIKE:
+        case K_POGO: { // across the margin, the way there is room
+            const int d = roomy;
+            const float far = d > 0 ? hi : lo;
+            const float len = std::min(std::fabs(far - x), rng_.range(3.2f, 5.5f) * s);
+            e.dir = d;
+            e.p1 = V(x + d * len, 0.f);
+            if (e.kind == K_SKATE) e.seq = {pick({1.f, 1.f}), colour()};
+            else if (e.kind == K_BIKE) e.seq = {pick({1.f, stage >= 1 ? 1.f : 0.5f, 1.f}), colour()};
+            else e.seq = {pick({1.f, 1.f}), colour()};
+            e.b1 = e.b0 + 8.0;
+            break;
+        }
+        case K_ROPE:
+        case K_JUGGLE:
+        case K_YOGA: { // where he is
+            e.p1 = e.p0;
+            if (e.kind == K_ROPE) e.seq = {pick({1.f, 1.f}), colour()};
+            else if (e.kind == K_JUGGLE) e.seq = {pick({1.f, 1.f, 1.f}), colour()};
+            else e.seq = {pick({1.f, 1.f}), colour()};
+            e.b1 = e.b0 + (e.kind == K_YOGA ? 12.0 : 8.0);
+            break;
+        }
+        case K_MUSIC: {
+            const bool kit = fits(x + roomy * 1.6f * s);
+            e.dir = roomy;
+            e.seq = {pick({1.f, kit && stage >= 1 ? 1.5f : kit ? 0.5f : 0.f}), colour()};
+            e.p1 = e.p0;
+            e.b1 = e.b0 + (stage >= 1 ? 8.0 : 12.0);
+            break;
+        }
+        case K_TRAMP: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = x + d * 1.6f * s;
+            e.p1 = V(e.ea + d * 1.7f * s, 0.f);
+            e.seq = {pick({1.f, 1.f})};
+            e.b1 = e.b0 + 12.0;
+            propAt(PR_TRAMP, e.ea, e.b0 - 1.0, e.b1 + 0.3, d, colour());
+            break;
+        }
+        case K_FOOTBALL: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = d > 0 ? hi : lo;         // the goal
+            e.eb = e.ea - d * 2.3f * s;    // where he kicks from
+            if (d * (e.eb - x) < 0.f) e.eb = x;
+            e.p1 = V(e.eb - d * 0.05f * s, 0.f);
+            e.seq = {pick({2.f, 1.f})};
+            e.b1 = e.b0 + 10.0;
+            propAt(PR_GOAL, e.ea, e.b0 - 1.5, e.b1 + 0.3, d, 0);
+            break;
+        }
+        case K_BASKET: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = (d > 0 ? hi : lo) + d * 0.2f * s; // the post
+            e.eb = e.ea - d * 2.3f * s;               // where he shoots from
+            if (d * (e.eb - x) < 0.f) e.eb = x;
+            e.seq = {pick({1.f, stage >= 1 ? 1.f : 0.4f})};
+            e.p1 = V(e.seq[0] == 1 ? e.ea - d * 0.8f * s : e.eb, 0.f);
+            e.b1 = e.b0 + 10.0;
+            propAt(PR_HOOP, e.ea, e.b0 - 1.5, e.b1 + 0.3, d, 0);
+            break;
+        }
+        case K_BEES: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = d > 0 ? hi : lo;
+            e.p1 = V(lerpf(e.ea, d > 0 ? lo : hi, rng_.range(0.6f, 0.9f)), 0.f);
+            e.seq = {rng_.irange(0, 3)};
+            e.b1 = e.b0 + 10.0;
+            break;
+        }
+        case K_BANANA: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = x + d * 2.2f * s;
+            e.p1 = V(e.ea + d * 0.3f * s, 0.f);
+            e.b1 = e.b0 + 8.0;
+            propAt(PR_PEEL, e.ea, e.b0 - 0.5, e.b0 + 3.0, d, 0);
+            break;
+        }
+        case K_UMBRELLA: {
+            e.h = std::min(H - 1.2f * s, 4.4f * s);
+            e.seq = {pick({1.f, 1.f}), colour()};
+            e.p1 = e.p0;
+            e.b1 = e.b0 + 12.0;
+            propAt(PR_CLOUD, x, e.b0 - 0.3, e.b1 - 2.8, e.dir, 0, e.h);
+            break;
+        }
+        case K_KITE: {
+            const int d = x > 0.f ? -1 : 1; // the kite over the middle of the margin
+            e.dir = d;
+            e.pts = {V(std::clamp(x + d * 1.6f * s, -hw + 1.f * s, hw - 1.f * s), std::min(H - 2.f * s, 6.5f * s))};
+            e.seq = {0, colour()};
+            e.p1 = e.p0;
+            e.b1 = e.b0 + 12.0;
+            break;
+        }
+        case K_FISH: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = x + d * 2.25f * s;
+            e.p1 = V(e.ea - d * 1.25f * s, 0.f);
+            e.seq = {pick({1.5f, 1.f, 1.f}), colour()};
+            e.b1 = e.b0 + 12.0;
+            propAt(PR_POND, e.ea, e.b0 - 1.0, e.b1 + 0.3, d, 0);
+            break;
+        }
+        case K_STARS: {
+            const int d = roomy;
+            e.dir = d;
+            const float sx = x + d * 0.95f * s;
+            e.ea = sx - d * 0.33f * s;
+            e.p1 = V(e.ea - d * 0.15f * s, 0.f);
+            e.h = std::min(H - 1.6f * s, 6.f * s);
+            const int what = pick({1.f, 1.f});
+            e.seq = {what};
+            e.b1 = e.b0 + 12.0;
+            propAt(PR_SCOPE, sx, e.b0 - 1.0, e.b1 + 0.3, d, colour());
+            propAt(PR_SKY, std::clamp(sx + d * 0.5f * s, -hw + 1.f * s, hw - 1.f * s), e.b0, e.b1 + 0.3, d, what, e.h);
+            break;
+        }
+        case K_PAINT: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = x + d * 1.2f * s;
+            e.p1 = V(e.ea - d * 1.45f * s, 0.f);
+            e.seq = {pick({1.f, 1.f, 1.f, 1.f, 1.f, 1.f})};
+            e.b1 = e.b0 + 12.0;
+            propAt(PR_EASEL, e.ea, e.b0 - 1.0, e.b1 + 0.5, d, 0);
+            propAt(PR_PICTURE, e.ea, e.b0 + 1.5, e.b1 + 0.5, d, e.seq[0], (float)(e.b1 - e.b0) - 5.f);
+            break;
+        }
+        case K_DOG: {
+            const int d = roomy;
+            e.dir = d;
+            e.ea = x + d * std::min(std::fabs((d > 0 ? hi : lo) - x), 3.2f * s); // where the stick lands
+            e.eb = d > 0 ? -hw + 0.5f * s : hw - 0.5f * s;                         // where the dog comes from
+            e.seq = {pick({1.f, 1.f, 1.f})};
+            e.p1 = e.p0;
+            e.b1 = e.b0 + 12.0;
             break;
         }
         default: { // a wave
@@ -1549,6 +3520,7 @@ void Story::extend(double until, int stage, const Panel P[2]) {
         for (int i = 3; i > 0; i--) at_.recent[i] = at_.recent[i - 1];
         at_.recent[0] = e.kind;
         at_.sinceCross++;
+        used_[e.kind]++;
         eps_.push_back(e);
     }
 }
@@ -1561,7 +3533,7 @@ void Story::update(double beat, int stage, const Panel P[2], float danceAt) {
         if (!dancing_ || danceEnd_ >= 0.0) {
             int side = at_.side;
             for (const Ep& e : eps_)
-                if (beat >= e.b0 && beat < e.b1) side = (e.kind == K_CROSS && beat >= e.b0 + 3.0) ? 1 - e.side : e.side;
+                if (beat >= e.b0 && beat < e.b1) side = (e.kind == K_CROSS && beat >= e.b0 + e.flip) ? 1 - e.side : e.side;
             dancing_ = true;
             danceEnd_ = -1;
             dance0_ = beat - danceAt;
@@ -1584,6 +3556,7 @@ void Story::update(double beat, int stage, const Panel P[2], float danceAt) {
     if (eps_.empty() || beat < chain0_ - 0.5 || beat > eps_.back().b1 + 8.0)
         restart(beat, chain0_ < 0 ? (int)(seed_ & 1) : at_.side, 0.f);
     extend(beat + 16.0, stage, P);
+    log(beat);
     while (eps_.size() > 1 && eps_.front().b1 < beat - 1.0) eps_.erase(eps_.begin());
     props_.erase(std::remove_if(props_.begin(), props_.end(), [&](const Prop& p) { return p.t1 < beat - 1.0; }), props_.end());
 }
@@ -1758,7 +3731,7 @@ void Story::build(int variant, double beat, const Panel P[2], std::vector<Elem>&
         }
         place(from, O);
     } else {
-        const Ctx c{s, 0.f};
+        const Ctx c{s, {hw[0], hw[1]}, {H[0], H[1]}};
         // ---- the props
         for (const Prop& p : props_) {
             if (beat < p.t0 || beat >= p.t1) continue;
@@ -1770,14 +3743,12 @@ void Story::build(int variant, double beat, const Panel P[2], std::vector<Elem>&
         for (const Ep& e : eps_) {
             if (beat < e.b0 || beat >= e.b1) continue;
             const float t = (float)(beat - e.b0);
-            Ctx cc = c;
-            cc.top = H[e.side];
             const size_t from = out.size();
             pen.begin(ID_GUY + 1 + (e.id % 4096), -1e6f, 0.f, chalky * 0.03f);
-            const Fig f = figure(e, t, cc, &pen);
-            const Fig g = figure(e, std::max(0.f, t - 0.12f), cc, nullptr);
+            const Fig f = figure(e, t, c, &pen);
+            const Fig g = figure(e, std::max(0.f, t - 0.12f), c, nullptr);
             const vec2 vel = g.side == f.side ? (jointAt(f, NECK, s) - jointAt(g, NECK, s)) * (1.f / 0.12f) : V(0.f, 0.f);
-            place(from, e.side);
+            place(from, f.side);
             const size_t from2 = out.size();
             pen.begin(ID_GUY, -1e6f, 0.f, chalky * 0.08f);
             drawGuy(pen, f, s, vel, fb * 7.f, 1.f);
