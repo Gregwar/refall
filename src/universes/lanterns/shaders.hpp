@@ -40,7 +40,6 @@ uniform float uWater, uTime, uRipple, uStars, uMoon, uPxAng, uGlitter;
 uniform float uStarsOn; // the scene's setup and teardown: the share of the stars out (they come out one by one)
 uniform vec3 uSkyTop, uSkyHor, uLake, uShore, uGlow;
 uniform vec4 uColL, uColR, uCorner;   // HUD rectangles (board plane x0, y0, x1, y1): no stars behind them
-uniform vec4 uCornerLow;              // the lower corner's lettering: no glitter behind it
 uniform sampler2D uRefl;
 float inRect(vec2 w, vec4 r) {
     vec2 d = max(vec2(r.x, r.y) - w, w - vec2(r.z, r.w));
@@ -144,8 +143,7 @@ void main() {
         float sp = vnoise(P.xz * vec2(2.6, 6.0) + n.xz * 30.0 + vec2(tt * 0.6, 0.0)) *
                    vnoise(P.xz * vec2(4.1, 9.0) - vec2(0.0, tt * 0.8));
         float sparkle = mix(0.12, smoothstep(0.3, 0.6, sp) * 1.4, clamp(50.0 / t, 0.0, 1.0));
-        float lowClear = inRect(bw, uCornerLow);
-        c += vec3(0.62, 0.68, 0.82) * sparkle * (path + 0.03 * near) * uGlitter * lowClear;
+        c += vec3(0.62, 0.68, 0.82) * sparkle * (path + 0.03 * near) * uGlitter;
         // haze toward the far shore
         c = mix(c, mix(uSkyHor, uShore, 0.5) * 0.9, smoothstep(250.0, 1400.0, t) * 0.8);
     }

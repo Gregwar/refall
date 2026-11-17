@@ -1234,7 +1234,6 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progEnv_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     }
     set4f(progEnv_, "uCorner", -23.f, 8.3f, -12.f, 13.f);
-    set4f(progEnv_, "uCornerLow", -23.f, -13.f, -8.2f, -7.3f);
     set1f(progEnv_, "uGlitter", V.glitter * (1.f - 0.5f * slow_));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, reflT_.tex);
