@@ -121,19 +121,19 @@ void main() {
         float glint = smoothstep(0.6, 0.85, vnoise(P.xz * vec2(1.4, 4.0) + vec2(0.0, uTime * 0.4))) * clamp(30.0 / t, 0.2, 1.0);
         vec3 sr = sky(normalize(r), false, 1.0, glint);
         c = mix(uLake, sr, fres);
-        // the scene mirrored in the water, distorted by the same ripples and drawn out into long wobbly streaks
-        // toward the eye (a lantern's reflection a column of light)
+        // the scene mirrored in the water, distorted by the same ripples and drawn out into short wobbly streaks
+        // toward the eye (a lantern's reflection a soft shimmer under it)
         float reach = clamp(6.0 / t, 0.05, 0.35);
         vec2 uv = vUv + n.xz * vec2(0.6, 0.9) * reach;
         vec4 rs = vec4(0.0);
-        float st = 0.002 + 0.012 * reach;
+        float st = 0.0015 + 0.006 * reach;
         for (int i = -3; i <= 4; i++) {
             float fi = float(i);
             vec2 o = vec2(n.x * 0.04 * reach * sin(fi * 2.1 + P.z * 1.7), -fi * st);
             rs += texture(uRefl, uv + o) * exp(-fi * fi * 0.12);
         }
         rs *= 1.0 / 4.6;
-        rs.rgb *= 1.35;
+        rs.rgb *= 0.7; // a gentle shimmer under each lantern, not a bar of light
         float k = 0.35 + 0.55 * fres;
         c = c * (1.0 - min(rs.a * k, 1.0)) + rs.rgb * k;
         // the low moon off the left of the frame: its path of glitter on the small waves, fanning out toward the eye,

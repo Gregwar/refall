@@ -1056,7 +1056,7 @@ void LanternsUniverse::hudLine(const HudText& h, text::Line& out) {
 // =====================================================================================================
 
 // How strongly the stack shows in the water under the well (its color and coverage in the mirrored render).
-constexpr float STACK_REFLECTION = 0.75f;
+constexpr float STACK_REFLECTION = 0.45f;
 
 void LanternsUniverse::drawBoxes(const std::vector<BoxInst>& v, const mat4& vp, bool mirror, float stackA) {
     if (v.empty()) return;
