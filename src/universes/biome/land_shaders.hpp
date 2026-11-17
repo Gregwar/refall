@@ -34,10 +34,20 @@ vec3 aerial(vec3 c, vec3 P) {
     float L = length(d);
     float dens = 0.0042 + 0.003 * (1.0 - uLife) + 0.004 * uStorm;
     float k = 1.0 - exp(-max(L - 28.0, 0.0) * dens);
-    // the mist: low over the land, far out, in a living land and in the rain
-    float hf = exp(-max(P.y + 9.0, 0.0) / 3.5);
-    float mist = (0.55 * smoothstep(0.35, 1.0, uLife) + 0.5 * uStorm) * hf * (1.0 - exp(-max(L - 20.0, 0.0) * 0.02));
-    return mix(c, hazeCol(d), clamp(k * 0.94 + mist * 0.7, 0.0, 0.96));
+    // the mist: low over the land, far out, in a living land and in the rain; in banks drifting slowly between the
+    // trees (each row of the forest a paler layer than the one before it), lit a little brighter than the haze
+    float bank = 0.6 + 0.8 * vnoise(vec2(P.x * 0.045 + uTime * 0.02, P.z * 0.08));
+    float hf = exp(-max(P.y + 9.0, 0.0) / (2.5 + 2.5 * bank));
+    float mist = (0.6 * smoothstep(0.35, 1.0, uLife) + 0.5 * uStorm) * hf * (1.0 - exp(-max(L - 14.0, 0.0) * 0.028));
+    vec3 h = mix(hazeCol(d), uMist * 1.08 + uSunCol * 0.04, clamp(mist, 0.0, 1.0) * 0.5);
+    return mix(c, h, clamp(k * 0.94 + mist * 0.75, 0.0, 0.96));
+}
+// the near land's own grade before the air veils it: deeper shadows, richer greens (the shadows sink, the colors
+// are pushed away from their grey)
+vec3 rich(vec3 c) {
+    float l = dot(c, vec3(0.3, 0.5, 0.2));
+    c = mix(vec3(l), c, 1.28);
+    return max(c, 0.0) * mix(0.62, 1.0, smoothstep(0.0, 0.16, l));
 }
 // a particle in the world: through the air
 vec3 partFog(vec3 c, vec3 P) { return aerial(c, P); }
