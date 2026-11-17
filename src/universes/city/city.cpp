@@ -7,9 +7,10 @@
 // perspective) over a stone sill, a casement frame, glass reflecting the night (each pane at its own tilt), and
 // behind it a real room traced per pixel (back wall, side walls, floor, ceiling). The tower is mixed-use, in bands of
 // three floors (each night its own stack): offices (venetian or vertical blinds, strip lights, desks, screens), flats
-// (curtains drawn or drawn to the sides, sheers, blinds, roller shutters part way or all the way down with their
-// slits open, window boxes; a sofa, a picture, shelves, a floor lamp), flats with balconies (French windows, a slab
-// and a railing traced in front of the facade) and a hotel (sheers and drapes, a bed head, bedside lamps). All of it
+// (curtains drawn or drawn to the sides, sheers, blinds, roller shutters a little way down, window boxes; a sofa, a
+// picture, shelves, a floor lamp), flats with balconies (French windows, a slab and a railing traced in front of the
+// facade) and a hotel (sheers and drapes, a bed head, bedside lamps); a lit window still reads as a square of its
+// lamp's color (the furniture a soft shade in it, the frame, blinds and railings catching its light). All of it
 // belongs to the cell, whatever piece lands in it. A block is a lit window: its room lit by the piece's light (the
 // seven pieces told apart by their light's color only, kept pure through the fabrics); an empty cell is a dark home
 // at night, its frame, curtains, blinds or shutter faintly lit by the night. The falling piece is four rooms lighting

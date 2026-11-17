@@ -731,7 +731,7 @@ void main() {
             vec3 Q = P + r * (rd / -r.z);
             vec2 ql = Q.xy - ctr - oc;
             if (abs(ql.x) > oh.x || abs(ql.y) > oh.y) {
-                vec3 rv = uFrame * lightIn * 0.6 + A * 0.22 * (0.4 + 0.6 * smoothstep(-oh.y, oh.y, ql.y));
+                vec3 rv = uFrame * lightIn * 0.6 + A * 0.4 * (0.5 + 0.5 * smoothstep(-oh.y, oh.y, ql.y));
                 if (ql.y > oh.y) rv *= 0.5; // the head of the opening, in its own shadow
                 g = rv;
             } else {
@@ -758,6 +758,8 @@ void main() {
                 if (kind == 3) fabT = bs < 0.5 ? vec3(1.0, 0.92, 0.78) : vec3(0.85, 0.85, 0.9); // a hotel's own
                 // (the night's light on it only shows on a dark window: on a lit one the lamp's color stays pure)
                 vec3 front = outL * fa * fabT * 1.3 * smoothstep(0.06, 0.0, lumv(Lt));
+                // a lit window reads first as a pane of its lamp's color: the room's furniture only a soft shade in it
+                if (on) room = mix(room, max(room, back), 0.55);
                 // 0 nothing, 1 drapes drawn to the sides, 2 curtains drawn (a chink of light between them), 3 a
                 // sheer, 4 drapes and a sheer, 5 venetian blinds lowered to cov, 6 vertical blinds
                 int tr = 0;
@@ -783,12 +785,12 @@ void main() {
                     float sy = fract(qu.y / 0.07);
                     float sl = smoothstep(0.0, 0.2, sy) * smoothstep(1.0, 0.75, sy); // a slat, a gap
                     float down = smoothstep(1.0 - cov - 0.01, 1.0 - cov + 0.01, uv.y);
-                    room = mix(room, mix(room * 0.3, back * 1.05 + front * 1.2, sl), down);
-                    room *= 1.0 - 0.7 * smoothstep(0.025, 0.0, abs(uv.y - (1.0 - cov))); // the bottom rail
+                    room = mix(room, mix(room * 0.85, back * 1.05 + front * 1.2, sl), down);
+                    room *= 1.0 - 0.3 * smoothstep(0.025, 0.0, abs(uv.y - (1.0 - cov))); // the bottom rail
                 } else if (tr == 6) {
                     float sx = fract(qu.x / 0.085);
                     float sl = smoothstep(0.0, 0.2, sx) * smoothstep(1.0, 0.75, sx);
-                    room = mix(room, mix(room * 0.35, back + front * 1.1, sl), 0.85);
+                    room = mix(room, mix(room * 0.85, back + front * 1.1, sl), 0.85);
                 }
                 // a plant on the sill (homes), a silhouette against the room
                 if (kind == 1 && s2 > 0.8) {
@@ -816,32 +818,30 @@ void main() {
                 if (kind == 1 && s2 > 0.35) fm = max(fm, smoothstep(hb, hb - px, abs(uv.y - 0.76) * 2.0 * oh.y)); // a fanlight
                 if (kind == 0) fm = max(fm, smoothstep(hb, hb - px, abs(uv.y - 0.82) * 2.0 * oh.y)); // a transom
                 vec3 wfA = kind == 0 ? uFrame * 3.0 + 0.06 : vec3(0.75, 0.74, 0.7);
-                vec3 wf = wfA * outL * 1.3 + Lt * 0.05;
+                vec3 wf = wfA * outL * 1.3 + Lt * 0.3;
                 g = mix(g, wf, fm);
             }
             // a roller shutter (flats): outside, just in front of the glass, its box at the head of the opening;
-            // rolled part way down, or all the way with its slits open (the room's light through them)
+            // rolled a little way down (never shut: a lit window stays a window of light), lit by the room on a lit one
             bool sh = (kind == 1 && s2 < 0.4) || (kind == 2 && s2 < 0.2);
             if (sh) {
                 float rs = rd * 0.3;
                 vec3 Qs = P + r * (rs / -r.z);
                 vec2 qs = Qs.xy - ctr - oc;
-                bool full = kind == 1 && s2 < 0.09;
-                float shCov = full ? 0.9 : 0.16 + 0.42 * fract(s2 * 17.0);
+                float shCov = 0.14 + 0.2 * fract(s2 * 17.0);
                 float ys = qs.y / (2.0 * oh.y) + 0.5; // 0 at the sill, 1 at the head
                 if (abs(qs.x) < oh.x && ys < 1.0) {
                     float bot = 1.0 - shCov;
                     float m = smoothstep(bot - px, bot + px * 0.2, ys);
                     float sy = fract((oh.y - qs.y) / 0.064); // the slats, from the head down
                     float prof = mix(1.15, 0.55, smoothstep(0.1, 0.95, sy)); // each slat lit from above
-                    float slit = smoothstep(0.62, 0.72, sy) * smoothstep(1.0, 0.92, sy);
                     vec3 shA = vec3(0.3 + 0.25 * fract(s2 * 7.0)) * vec3(1.0, 0.98, 0.94);
                     vec3 scol = shA * outL * 2.2 * prof;
-                    if (full) scol = mix(scol, Lt * 0.8, slit * smoothstep(0.75, 0.35, ys)); // the slits open low down
+                    scol += Lt * 0.55 * prof; // the room's light on it
                     scol *= 1.0 - 0.5 * smoothstep(bot + 0.04, bot, ys) * (1.0 - step(ys, bot)); // the bottom bar
                     // the box at the head
                     float box = smoothstep(0.93, 0.935, ys);
-                    scol = mix(scol, shA * outL * 1.6, box);
+                    scol = mix(scol, shA * outL * 1.6 + Lt * 0.4, box);
                     g = mix(g, scol, max(m, box));
                 }
             }
@@ -870,7 +870,7 @@ void main() {
                     vec3 Ar = texelFetch(uCellA, ivec2(sc, sr), 0).rgb;
                     vec3 Ab = sr < 21 ? texelFetch(uCellA, ivec2(sc, sr + 1), 0).rgb : vec3(0.0);
                     float near = exp(-z * 5.0);
-                    if (r.y < 0.0) slabC = outL * 0.3 + Ar * 0.22 * near;                  // its top, the room's light on it
+                    if (r.y < 0.0) slabC = outL * 0.3 + Ar * 0.5 * near;                  // its top, the room's light on it
                     else slabC = uFlood * 0.1 + outL * 0.1 + Ab * 0.12 * near;             // under it: the floodlights, the room below
                     if (uSnow > 0.0 && r.y < 0.0) slabC = mix(slabC, uSnowCol * lightIn * 2.0, uSnow * 0.8);
                 }
@@ -907,7 +907,7 @@ void main() {
                 if (abs(xl) < HW && yl < RH) {
                     vec3 Ar = texelFetch(uCellA, ivec2(rc, rr), 0).rgb;
                     float rbs = hash12(vec2(float(bandOf(rr)) * 2.3 + uTowerSeed * 1.7, 7.7));
-                    vec3 metal = outL * 0.35 + Ar * 0.03;
+                    vec3 metal = outL * 0.35 + Ar * 0.3; // (lit by the room behind it: no black bars over a lit window)
                     float rail = smoothstep(RH - 0.035 - px * 0.5, RH - 0.035 + px * 0.5, yl);
                     float post = smoothstep(0.03 + px * 0.5, 0.03 - px * 0.5, HW - abs(xl));
                     if (rbs < 0.5) {
@@ -918,7 +918,7 @@ void main() {
                         c = mix(c, metal, max(max(bar, low), post));
                     } else {
                         // frosted glass: the room's light through it, the night on its face
-                        vec3 panel = c * 0.55 + outL * 0.12 + Ar * 0.08;
+                        vec3 panel = c * 0.8 + outL * 0.12 + Ar * 0.15;
                         c = mix(c, panel, 1.0 - post);
                         c = mix(c, metal, post);
                     }
