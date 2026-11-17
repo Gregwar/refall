@@ -733,12 +733,12 @@ void SeaWorld::drawLens() {
     const bool ahead = sp.w > 1e-3f && L.y > -0.02f;
     set2f(p, "uSunP", ahead ? sp.x / sp.w : 0.f, ahead ? sp.y / sp.w : 0.f);
     const float glare = ahead ? (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) : 0.f;
-    const bool light = pal.lightPanel > 0.5f;
-    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, light ? 0.2f : std::min(0.8f, pal.panelA * 1.2f), 1.f);
-    set1f(p, "uGrid", light ? 0.38f : 0.2f);
+    // the glass: smoky, dark in every light (the variant's panel toward its deep sea), the world faint through it
+    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, 0.93f, 1.f);
+    set1f(p, "uGrid", 0.24f);
     set3f(p, "uGlareCol", pal.sun * pal.lightK);
-    set3f(p, "uFrostCol", light ? lerp(pal.haze, vec3(1.f), 0.45f) : pal.panel);
-    set3f(p, "uPanel", pal.panel);
+    set3f(p, "uFrostCol", lerp(pal.panel, pal.deep, 0.55f));
+    set3f(p, "uPanel", pal.panel * 0.7f);
     ugl::drawFullscreen();
     glEnable(GL_DEPTH_TEST);
 }
@@ -761,13 +761,13 @@ vec3 SeaWorld::behind(float bx, float by, float ndc) const {
     return c;
 }
 
-// The stack's cubes: full of the sea's water, under pressure.
+// The stack's cubes: full of the sea's water, under pressure, always over the dark glass of the well and the panels
+// (their water luminous, a bright reflection), whatever the light outside.
 void SeaWorld::cellUniforms(GLuint p) const {
     set1f(p, "uBulge", 0.012f);
     set1f(p, "uTiltY", 0.27f);
-    // the surface: a brighter reflection on the dark seas, a stronger highlight on the light ones
-    const bool lightP = ctx.pal.lightPanel > 0.5f;
-    set4f(p, "uSurf", lightP ? 0.f : 0.6f, 1.f, lightP ? 1.6f : 1.1f, lightP ? 0.55f : 0.6f);
+    set1f(p, "uLightPanel", 0.f);
+    set4f(p, "uSurf", 0.6f, 1.f, 1.1f, 0.6f);
 }
 
 } // namespace biome

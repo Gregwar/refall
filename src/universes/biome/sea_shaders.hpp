@@ -559,7 +559,7 @@ vec3 fill(vec3 p1, vec3 n1, vec3 D, vec3 tint, float size, float px) {
     float inW = smoothstep(0.0, 0.04, waterLen);
     float lit = (0.8 + 0.45 * smoothstep(-0.4, 0.4, p1.y)) * (1.0 - 0.25 * smoothstep(0.1, 0.42, max(abs(p1.x), abs(p1.y))));
     if (lightP) col = col * 0.8 + tint * (0.3 + 0.6 * waterLen) * lit * inW;
-    else col = col * 0.7 + tint * (0.22 + 0.36 * waterLen) * lit * (0.8 + 0.4 * uNight) * inW;
+    else col = col * 0.7 + tint * (0.3 + 0.5 * waterLen) * lit * (1.0 + 0.2 * uNight) * inW;
     // light focused through the water onto the cube's bottom: a moving caustic sparkling
     if (nBottom.y < -0.7 && waterLen > 0.0) {
         vec2 cq = pW.xz * 3.2;
@@ -939,7 +939,7 @@ void main() {
 // before the stack is laid over it (SeaWorld::drawLens). The world (encoded) is taken down to a quarter (`LENS_DOWN_FS`)
 // and blurred (`BLUR_FS`: what the frosted glass shows); its brightest light is taken further down and blurred wide
 // (the bloom); then `LENS_FS` lays it all back over the world: the bloom, the sun's glare in the lens, the well's
-// frosted glass with its fine grid and bright rim, the frosted panels of the held and next pieces.
+// smoky glass with its fine grid and bright rim, the panels of the held and next pieces in the same glass.
 inline const char* LENS_DOWN_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
@@ -980,21 +980,23 @@ uniform vec4 uView;                         // the board plane: center x, y, hal
 uniform float uPx, uAspect, uWorld, uPane;  // a pixel (board units), the picture's aspect, the world shown, the glass
 uniform float uGrid;                        // how bright the well's grid
 uniform vec2 uSunP;                         // the sun on the picture (-1 .. 1, out of it too)
-uniform vec4 uGlare;                        // the glare's strength, the bloom's, the frost's tint, the deep's veil
+uniform vec4 uGlare;                        // the glare's strength, the bloom's, the glass's tint, the deep's veil
 uniform vec3 uGlareCol, uFrostCol, uPanel;
 uniform float uDeepY;
 float sdRound(vec2 p, vec2 b, float r) {
     vec2 d = abs(p) - b + r;
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
 }
-// a pane of frosted glass (d: its signed distance, board units): the world blurred behind it, lightened (or darkened
-// over the deep water), a bright rim, a frosted band inside it
+// a pane of smoky glass (d: its signed distance, board units): dark whatever is behind it (the world only faintly
+// seen through it, blurred, darker still over the deep water), a bright rim, a lighter frosted band inside it
 vec3 frosted(vec3 c, vec3 fr, float d, float y, float tintK, float rimK) {
     float inside = smoothstep(uPx, -uPx, d);
     float deep = smoothstep(2.0, 10.0, uDeepY - y) * uGlare.w;
     vec3 tint = mix(uFrostCol, uPanel, deep);
-    vec3 g = mix(fr, tint, mix(tintK, 0.82, deep));
-    g = mix(g, mix(tint, vec3(1.0), 0.5), 0.18 * smoothstep(-0.35, 0.0, d) * (1.0 - deep));
+    // what shows through: the world's light held down, so that a white sky or the sun's glint stays dim
+    vec3 seen = fr / (1.0 + dot(fr, vec3(0.3, 0.55, 0.15)) * 3.0);
+    vec3 g = mix(seen, tint, mix(tintK, min(tintK + 0.08, 0.95), deep));
+    g = mix(g, mix(tint, vec3(1.0), 0.5), 0.1 * smoothstep(-0.3, 0.0, d));
     c = mix(c, g, inside);
     float rim = smoothstep(uPx * 1.6, 0.0, abs(d + uPx * 0.8));
     float halo = exp(-max(d, 0.0) / 0.08) * smoothstep(-uPx, uPx, d) * 0.16;
@@ -1004,6 +1006,7 @@ void main() {
     vec3 c = pow(max(texture(uScene, vUv).rgb, vec3(0.0)), vec3(2.2));
     vec3 fr = texture(uFrost, vUv).rgb;
     vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
+    float glass = 0.0;
     // ---- the glass panes (over the world only: the stack and the previews are laid over them)
     if (uPane > 0.0) {
         float lift = 0.75 + 0.5 * smoothstep(-10.0, 10.0, w.y);
@@ -1017,11 +1020,14 @@ void main() {
         // the held piece's panel, the next pieces' panel
         float dh = sdRound(w - vec2(-8.6, 7.2), vec2(1.6, 1.35), 0.22);
         float dn = sdRound(w - vec2(8.6, 4.1), vec2(1.6, 4.45), 0.22);
-        c = frosted(c, fr, min(dh, dn), w.y, uGlare.z * 0.75, 0.8);
+        c = frosted(c, fr, min(dh, dn), w.y, uGlare.z, 0.8);
         c = mix(c0, c, uPane);
+        glass = smoothstep(uPx, -uPx, min(dw, min(dh, dn))) * uPane;
     }
-    // ---- the light in the lens: the bloom, the sun's glare (a broad warm veil, a tighter glow, faint ghosts)
-    c += texture(uBloom, vUv).rgb * uGlare.y;
+    // ---- the light in the lens: the bloom, the sun's glare (a broad warm veil, a tighter glow, faint ghosts); held
+    // down over the glass (the cubes keep their dark ground)
+    float veil = 1.0 - 0.85 * glass;
+    c += texture(uBloom, vUv).rgb * uGlare.y * veil;
     vec2 q = (vUv * 2.0 - 1.0) - uSunP;
     q.x *= uAspect;
     float r = length(q);
@@ -1035,7 +1041,7 @@ void main() {
         float sz = 0.05 + 0.04 * float(i);
         gl += uGlareCol * vec3(0.6, 0.85, 1.0) * smoothstep(sz, sz * 0.6, gr) * 0.025 / float(i);
     }
-    c += gl * uGlare.x * uWorld;
+    c += gl * uGlare.x * uWorld * veil;
     frag = vec4(enc(c), 1.0);
 }
 )";
