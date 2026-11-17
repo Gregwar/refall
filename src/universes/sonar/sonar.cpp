@@ -1,6 +1,9 @@
 // SONAR: a dark sea where shapes surface from the black when an echo returns from them.
 //
-// One world: deep water, near black, and nothing to see in it until an echo comes back. It is a true 3D scene
+// One world: a teal murk over sunken temple ruins (weathered stone in the water's own light, shafts from the
+// surface, motes, streams of bubbles, small schools of fish crossing the glide), where each echo paints what it
+// finds as a ragged patch of dense glowing dots with a bright rim. The well is a pane of dark glass; the pieces are
+// cubes of colored glass with bubbles rising inside; a wireframe submarine sits above the corner lettering. It is a true 3D scene
 // (scene.cpp: a seabed of long dunes, rocks, a wreck and a sunken city, one static mesh drawn in perspective with a
 // depth buffer) and the camera glides through it, behind the well, along a closed loop: down a colonnade, under two
 // arches, past a tower, a dome, a stepped pyramid, a street of towers and a round temple, over the wreck. The pings
@@ -63,24 +66,25 @@ using ugl::setMat;
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
-// A sea (sRGB): the water (top, low), the echo (seabed, city), the drop's echo, the seven pieces (I O T S Z J L).
+// A sea (sRGB): the water (top, low), the stone in its light, the echo (seabed, city), the drop's echo, the seven
+// pieces (I O T S Z J L). The water is always a teal murk, leaning toward the sea's own hue.
 struct VariantDef {
     const char* name;
-    unsigned waterTop, waterLow, echo, echoCity, dropEcho;
+    unsigned waterTop, waterLow, stone, echo, echoCity, dropEcho;
     unsigned pieces[7];
 };
 const VariantDef VARIANTS[] = {
-    {"TRENCH", 0x050b10, 0x010204, 0x3ed6c6, 0x4aa2e6, 0xa08cff,
+    {"TRENCH", 0x0e2c3c, 0x040b12, 0x34525e, 0x3ed6c6, 0x4aa2e6, 0xa08cff,
      {0x4fe0f0, 0xf2d36b, 0xa995ff, 0x5fe39a, 0xff7070, 0x4f8dff, 0xff9d4f}},
-    {"AMBER", 0x0b0806, 0x030202, 0xffb25a, 0xe88a52, 0xff7466,
+    {"AMBER", 0x12353a, 0x051113, 0x3a5856, 0xffb25a, 0xe88a52, 0xff7466,
      {0x9fe3e0, 0xffe7a6, 0xe08fbe, 0xc9d97a, 0xff6a4a, 0x8f9cf0, 0xffb347}},
-    {"ICE", 0x060a10, 0x010205, 0xbfe2ff, 0x90b6ff, 0x9ef0d6,
+    {"ICE", 0x15323f, 0x060f16, 0x405c66, 0xbfe2ff, 0x90b6ff, 0x9ef0d6,
      {0x8ef0ff, 0xfff0a0, 0xd6b0ff, 0xa8f0c0, 0xffa0b2, 0x92b0ff, 0xffc492}},
-    {"VIOLET", 0x08060e, 0x020104, 0xa88cff, 0xd07ae8, 0x5ae0d0,
+    {"VIOLET", 0x14223c, 0x060812, 0x3c4660, 0xa88cff, 0xd07ae8, 0x5ae0d0,
      {0x3fd0ff, 0xffc94a, 0xff5fd8, 0x4fe0a8, 0xff4f6f, 0x7a6bff, 0xff8f4a}},
-    {"JADE", 0x040b08, 0x010302, 0x6ef0a2, 0x40cfc0, 0xf0e070,
+    {"JADE", 0x0f3532, 0x04110e, 0x355a52, 0x6ef0a2, 0x40cfc0, 0xf0e070,
      {0x7ff0e0, 0xf5f0b0, 0xc6a0ff, 0x9ff060, 0xff7a8a, 0x60a8ff, 0xffc060}},
-    {"CORAL", 0x0c0608, 0x030102, 0xff8c8c, 0xff9ac6, 0xffd282,
+    {"CORAL", 0x123236, 0x061012, 0x3e5856, 0xff8c8c, 0xff9ac6, 0xffd282,
      {0x6fe0e6, 0xffe0a0, 0xc8a8ff, 0xa4e6a8, 0xff5070, 0x8aa4ff, 0xff9a78}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
@@ -88,6 +92,8 @@ constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 constexpr float FOV_Y = 52.f;      // the world camera's vertical field of view (degrees)
 constexpr float CAM_AHEAD = 9.f;   // it looks at the loop this far ahead, a little down
 constexpr int SNOW_N = 1600;       // particles in the water
+constexpr int BUBBLE_N = 420;      // of which drawn again as bubbles rising in streams
+constexpr int SCHOOLS = 4;         // schools of fish about
 
 constexpr float SINK_T = 0.4f;     // a cleared row's blocks are gone in this long
 constexpr float OVER_T = 1.1f;     // game over: each block sinking
@@ -120,13 +126,14 @@ bool SonarUniverse::init(int width, int height) {
     progWater_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::WATER_FS, true).c_str(), "sonar water");
     progMesh_ = ugl::program(shaders::MESH_VS, withCommon(shaders::MESH_FS, true).c_str(), "sonar world");
     progSnow_ = ugl::program(withCommon(shaders::SNOW_VS, true).c_str(), withCommon(shaders::SNOW_FS, true).c_str(), "sonar snow");
-    progWell_ = ugl::program(ugl::FULLSCREEN_VS, shaders::WELL_FS, "sonar well");
+    progWell_ = ugl::program(ugl::FULLSCREEN_VS, withCommon(shaders::WELL_FS).c_str(), "sonar well");
     progPiece_ = ugl::program(shaders::PIECE_VS, withCommon(shaders::PIECE_FS).c_str(), "sonar blocks");
     progMote_ = ugl::program(shaders::MOTE_VS, shaders::MOTE_FS, "sonar motes");
     progDown_ = ugl::program(ugl::FULLSCREEN_VS, shaders::DOWN_FS, "sonar down");
     progBlur_ = ugl::program(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "sonar blur");
     progFinal_ = ugl::program(ugl::FULLSCREEN_VS, shaders::FINAL_FS, "sonar final");
     progShape_ = ugl::program(shaders::SHAPE_VS, shaders::SHAPE_FS, "sonar shape");
+    progFish_ = ugl::program(withCommon(shaders::FISH_VS, true).c_str(), withCommon(shaders::FISH_FS, true).c_str(), "sonar fish");
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &quadVbo_);
@@ -134,6 +141,7 @@ bool SonarUniverse::init(int width, int height) {
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
     instVao(quadVbo_, pieceVao_, pieceVbo_, 3, sizeof(Inst));
     instVao(quadVbo_, moteVao_, moteVbo_, 2, sizeof(MoteInst));
+    instVao(quadVbo_, fishVao_, fishVbo_, 2, sizeof(Inst));
     glGenVertexArrays(1, &shapeVao_);
     glGenBuffers(1, &shapeVbo_);
     glBindVertexArray(shapeVao_);
@@ -206,10 +214,10 @@ void SonarUniverse::resize(int width, int height) {
 
 SonarUniverse::~SonarUniverse() {
     for (ugl::Target* t : {&sceneT_, &bloomA_, &bloomB_}) t->destroy();
-    for (GLuint p : {progWater_, progMesh_, progSnow_, progWell_, progPiece_, progMote_, progDown_, progBlur_, progFinal_, progShape_})
+    for (GLuint p : {progWater_, progMesh_, progSnow_, progWell_, progPiece_, progMote_, progDown_, progBlur_, progFinal_, progShape_, progFish_})
         glDeleteProgram(p);
-    for (GLuint v : {pieceVao_, moteVao_, shapeVao_, meshVao_, snowVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, pieceVbo_, moteVbo_, shapeVbo_, meshVbo_, meshIbo_, snowVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint v : {pieceVao_, moteVao_, shapeVao_, meshVao_, snowVao_, fishVao_}) glDeleteVertexArrays(1, &v);
+    for (GLuint b : {quadVbo_, pieceVbo_, moteVbo_, shapeVbo_, meshVbo_, meshIbo_, snowVbo_, fishVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -373,6 +381,76 @@ int SonarUniverse::chartSpot(int side, float delay) {
     return (int)charts_.size() - 1;
 }
 
+// Schools of fish: each is born ahead along the loop, off to one side, a few units above the seabed, and swims
+// across the glide's path at its own slow pace, turning gently; its fish keep loose places around it, each with
+// its own slow sway and tail beat. A school the camera has passed (or that has lived its time) leaves, another is
+// born ahead.
+void SonarUniverse::updateFish(float wdt) {
+    for (School& sc : schools_) {
+        sc.age += wdt;
+        sc.turn += wdt * 0.35f;
+        const float yaw = 0.18f * std::sin(sc.turn) * wdt;
+        const float cy = std::cos(yaw), sy = std::sin(yaw);
+        sc.v = vec3(sc.v.x * cy - sc.v.z * sy, sc.v.y, sc.v.x * sy + sc.v.z * cy);
+        sc.c = sc.c + sc.v * wdt;
+        const float floorY = scene_.height(sc.c.x, sc.c.z) + 1.2f;
+        if (sc.c.y < floorY) sc.c.y += (floorY - sc.c.y) * std::min(1.f, wdt * 1.5f);
+    }
+    schools_.erase(std::remove_if(schools_.begin(), schools_.end(),
+                                  [&](const School& sc) {
+                                      const vec3 r = sc.c - camPos_;
+                                      return sc.age > sc.life || (sc.age > 3.f && dot(r, camF_) < -4.f) || length(r) > 70.f;
+                                  }),
+                   schools_.end());
+    schoolClock_ -= wdt;
+    if ((int)schools_.size() < SCHOOLS && schoolClock_ <= 0.f) {
+        schoolClock_ = rng_.range(2.f, 6.f);
+        School sc;
+        const float ahead = rng_.range(14.f, 30.f);
+        const vec3 a = scene_.path(pathS_ + ahead), b = scene_.path(pathS_ + ahead + 1.f);
+        vec3 t = b - a;
+        t.y = 0.f;
+        t = normalize(t);
+        const vec3 side(t.z, 0.f, -t.x);
+        const float sd = rng_.chance(0.5f) ? 1.f : -1.f;
+        sc.c = a + side * (sd * rng_.range(3.f, 11.f));
+        sc.c.y = scene_.height(sc.c.x, sc.c.z) + rng_.range(2.f, 5.5f);
+        // across the path, toward the other side, a little along it
+        const float sp = rng_.range(0.6f, 1.2f);
+        sc.v = normalize(side * (-sd) + t * rng_.range(-0.5f, 0.5f)) * sp;
+        sc.life = rng_.range(30.f, 50.f);
+        sc.turn = rng_.range(0.f, 6.f);
+        const int n = rng_.irange(6, 12);
+        const float big = rng_.range(0.11f, 0.19f);
+        for (int i = 0; i < n; i++) {
+            Fish fh;
+            fh.off = vec3(rng_.range(-1.6f, 1.6f), rng_.range(-0.6f, 0.6f), rng_.range(-1.4f, 1.4f));
+            fh.wob = vec3(rng_.range(0.f, 6.f), rng_.range(0.f, 6.f), rng_.range(0.25f, 0.45f));
+            fh.ph = rng_.range(0.f, 6.f);
+            fh.rate = rng_.range(0.8f, 1.3f);
+            fh.size = big * rng_.range(0.75f, 1.15f);
+            fh.tail = rng_.range(0.f, 6.f);
+            sc.fish.push_back(fh);
+        }
+        schools_.push_back(sc);
+    }
+    fishInst_.clear();
+    for (School& sc : schools_) {
+        const float in = smoothstepf(0.f, 3.f, sc.age) * (1.f - smoothstepf(sc.life - 4.f, sc.life, sc.age));
+        const float sp = length(sc.v);
+        for (Fish& fh : sc.fish) {
+            fh.ph += wdt * fh.rate * 0.6f;
+            fh.tail += wdt * (6.f + 5.f * sp) * fh.rate;
+            const float A = fh.wob.z;
+            const vec3 sway(A * std::sin(fh.ph + fh.wob.x), 0.4f * A * std::sin(fh.ph * 1.3f + fh.wob.y), A * std::cos(fh.ph * 0.8f + fh.wob.x));
+            const vec3 swayV(A * std::cos(fh.ph + fh.wob.x), 0.52f * A * std::cos(fh.ph * 1.3f + fh.wob.y), -0.8f * A * std::sin(fh.ph * 0.8f + fh.wob.x));
+            const vec3 p = sc.c + fh.off + sway;
+            const vec3 h = sc.v + swayV * (fh.rate * 0.6f);
+            fishInst_.push_back({{p.x, p.y, p.z, fh.size * in}, {h.x, h.y, h.z, fh.tail}, {0, 0, 0, 0}});
+        }
+    }
+}
+
 // =====================================================================================================
 // Song, level
 // =====================================================================================================
@@ -395,6 +473,7 @@ void SonarUniverse::setSong(const SongLook& t, float seconds) {
     const VariantDef& V = VARIANTS[v];
     waterTopT_ = lin(V.waterTop);
     waterLowT_ = lin(V.waterLow);
+    stoneT_ = lin(V.stone);
     echoT_ = lin(V.echo);
     echoCityT_ = lin(V.echoCity);
     dropEchoT_ = lin(V.dropEcho);
@@ -403,6 +482,7 @@ void SonarUniverse::setSong(const SongLook& t, float seconds) {
     if (instant) {
         waterTop_ = waterTopT_;
         waterLow_ = waterLowT_;
+        stone_ = stoneT_;
         echo_ = echoT_;
         echoCity_ = echoCityT_;
         dropEcho_ = dropEchoT_;
@@ -419,6 +499,7 @@ void SonarUniverse::setSong(const SongLook& t, float seconds) {
         pathS_ = r.range(0.f, scene_.loopLength());
         speed_ = 0.85f;
         speedV_ = 0.f;
+        schools_.clear();
     } else
         for (Chart& c : charts_) c.fading = true;
     chartCount_ = 0;
@@ -557,9 +638,9 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
 // Geometry
 // =====================================================================================================
 
-void SonarUniverse::addCell(float x, float y, float half, int kind, const vec3& col, float alpha, float flash, float prog) {
+void SonarUniverse::addCell(float x, float y, float half, int kind, const vec3& col, float alpha, float flash, float prog, float seed) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, (float)kind}, {col.x, col.y, col.z, alpha}, {flash, prog, 1.f, 0.f}});
+    cells_.push_back({{x, y, half, (float)kind}, {col.x, col.y, col.z, alpha}, {flash, prog, 1.f, seed}});
 }
 
 void SonarUniverse::buildBoard(const Game& g) {
@@ -585,7 +666,7 @@ void SonarUniverse::buildBoard(const Game& g) {
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             const float fl = std::pow(saturate(c.flash), 8.f);
-            addCell(p.x, p.y, 0.5f, 0, pieceCol_[c.type], 1.f, fl, 0.f);
+            addCell(p.x, p.y, 0.5f, 0, pieceCol_[c.type], 1.f, fl, 0.f, (float)(x * 7 + y * 13 + c.type * 3) + 0.5f);
         }
     // the falling piece: exactly a locked block at its place
     if (g.hasPiece() && !g.over()) {
@@ -593,9 +674,10 @@ void SonarUniverse::buildBoard(const Game& g) {
         int cells[4][2];
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        int k = 0;
         for (auto& c : cells) {
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy); // (whole above the well too: it spawns there)
-            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], 1.f, 0.f, 0.f);
+            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], 1.f, 0.f, 0.f, (float)(p.type * 4 + k++) + 100.5f);
         }
     }
     // the previews
@@ -611,7 +693,7 @@ void SonarUniverse::buildBoard(const Game& g) {
         }
         for (auto& c : cells) {
             const float ox = c[0] - (minx + maxx) * 0.5f, oy = c[1] - (miny + maxy) * 0.5f;
-            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, 0, pieceCol_[type], alpha, 0.f, 0.f);
+            addCell(center.x + ox * sc, center.y - oy * sc, 0.5f * sc, 0, pieceCol_[type], alpha, 0.f, 0.f, (float)(type * 5 + c[0] * 2 + c[1]) + 200.5f);
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
@@ -660,6 +742,131 @@ void SonarUniverse::drawHud(const std::vector<HudRect>& panels) {
         }
         flushShapes();
     }
+}
+
+
+// A fine line in pixels (top-left origin), feathered by a pixel on both sides.
+void SonarUniverse::line(float x0, float y0, float x1, float y1, float w, const vec3& c, float a) {
+    float dx = x1 - x0, dy = y1 - y0;
+    const float l = std::sqrt(dx * dx + dy * dy);
+    if (l < 1e-3f || a <= 0.002f) return;
+    dx /= l;
+    dy /= l;
+    const float nx = -dy, ny = dx;
+    const float h = 0.5f * w, f = h + 1.f;
+    auto v = [&](float x, float y, float al) { const float q[6] = {x, y, c.x, c.y, c.z, al}; shapes_.insert(shapes_.end(), q, q + 6); };
+    auto band = [&](float o0, float a0, float o1, float a1) {
+        v(x0 + nx * o0, y0 + ny * o0, a0); v(x1 + nx * o0, y1 + ny * o0, a0); v(x1 + nx * o1, y1 + ny * o1, a1);
+        v(x0 + nx * o0, y0 + ny * o0, a0); v(x1 + nx * o1, y1 + ny * o1, a1); v(x0 + nx * o1, y0 + ny * o1, a1);
+    };
+    band(-f, 0.f, -h, a);
+    band(-h, a, h, a);
+    band(h, a, f, 0.f);
+}
+
+// The wireframe submarine above the corner lettering: a side view of a long hull (blunt bow to the right, the
+// stern tapering to its cruciform fins and screw), its sail and masts, its longitudinal lines and ribs in a fine
+// pale ink. A sonar sweep runs along it on the beat grid, in the echo's color.
+void SonarUniverse::drawSub(const Frame& f) {
+    const float H = (float)height_;
+    float bottom = 0.885f * H, left = 0.031f * H;
+    if (f.hudBoxes && f.hudBoxes->size() == f.hud.size()) {
+        float top = 1e9f;
+        for (size_t i = 0; i < f.hud.size(); i++) {
+            const HudText& t = f.hud[i];
+            if ((t.role == HUD_SECTION || t.role == HUD_UNIVERSE) && t.x >= 0.f && t.y > 0.55f * H) {
+                top = std::min(top, (*f.hudBoxes)[i].y);
+                left = (*f.hudBoxes)[i].x;
+            }
+        }
+        if (top < 1e8f) bottom = top - 0.022f * H;
+    }
+    const float L = 0.245f * H, s = H / 1080.f;
+    const float R = 0.068f;      // hull radius (in hull lengths)
+    const float cy = bottom - (R + 0.006f) * L;
+    auto rad = [&](float u) {
+        if (u > 0.86f) { const float k = (u - 0.86f) / 0.14f; return R * std::sqrt(std::max(0.f, 1.f - k * k)); }
+        if (u < 0.3f) { const float k = std::max(0.f, (u - 0.04f) / 0.26f); return R * (0.16f + 0.84f * std::sqrt(k * (2.f - k))); }
+        return R;
+    };
+    const vec3 ink(0.78f, 0.82f, 0.85f);
+    const vec3 ec = lerp(ugl::toSrgb(lerp(echo_, dropEcho_, fest_ * 0.8f)), vec3(1.f), 0.15f);
+    const float scan = (float)std::fmod(beat_ / 4.0, 1.0) * 1.5f - 0.25f; // the sweep's position along the hull
+    const float A = (1.f - smoothstepf(0.3f, 0.8f, bridge_.amount)) * (bare_ ? 0.6f : 1.f) * (1.f - 0.5f * dimT_);
+    auto colAt = [&](float u, float& a) {
+        const float k = std::exp(-std::pow((u - scan) / 0.06f, 2.f));
+        a *= 1.f + 1.2f * k;
+        return lerp(ink, ec, k);
+    };
+    auto X = [&](float u) { return left + u * L; };
+    auto Y = [&](float v) { return cy - v * L; };
+    const int N = 40;
+    // the hull's lines: the outline, then the latitudes (an ellipse's sections seen from the side)
+    const float lat[] = {1.f, 0.866f, 0.5f, 0.f, -0.5f, -0.866f, -1.f};
+    for (float k : lat) {
+        const bool out = std::fabs(k) > 0.99f;
+        const float w = (out ? 1.25f : 0.8f) * s, a0 = out ? 0.62f : 0.26f;
+        for (int i = 0; i < N; i++) {
+            const float u0 = 0.04f + 0.96f * i / N, u1 = 0.04f + 0.96f * (i + 1) / N;
+            float a = a0 * A;
+            const vec3 c = colAt(0.5f * (u0 + u1), a);
+            line(X(u0), Y(k * rad(u0)), X(u1), Y(k * rad(u1)), w, c, a);
+        }
+    }
+    // the ribs
+    for (int i = 0; i <= 22; i++) {
+        const float u = 0.07f + 0.86f * i / 22.f;
+        float a = 0.22f * A;
+        const vec3 c = colAt(u, a);
+        const float r = rad(u);
+        line(X(u), Y(r), X(u), Y(-r), 0.8f * s, c, a);
+    }
+    // the sail, its masts and the planes on it
+    {
+        const float u0 = 0.53f, u1 = 0.66f, top = R + 0.062f, base = R * 0.95f;
+        float a = 0.6f * A;
+        const vec3 c = colAt(0.6f, a);
+        line(X(u0), Y(base), X(u0 + 0.018f), Y(top), 1.2f * s, c, a);
+        line(X(u0 + 0.018f), Y(top), X(u1 - 0.008f), Y(top), 1.2f * s, c, a);
+        line(X(u1 - 0.008f), Y(top), X(u1), Y(base), 1.2f * s, c, a);
+        for (int j = 1; j < 4; j++) {
+            const float v = base + (top - base) * j / 4.f;
+            line(X(u0 + 0.018f * j / 4.f), Y(v), X(u1 - 0.008f * j / 4.f), Y(v), 0.8f * s, c, a * 0.45f);
+        }
+        line(X(0.57f), Y(top), X(0.57f), Y(top + 0.035f), 1.f * s, c, a);
+        line(X(0.6f), Y(top), X(0.6f), Y(top + 0.05f), 1.f * s, c, a);
+        line(X(0.595f), Y(top + 0.05f), X(0.607f), Y(top + 0.05f), 1.f * s, c, a);
+        line(X(0.555f), Y(top - 0.018f), X(0.535f), Y(top - 0.018f), 1.f * s, c, a * 0.8f);
+        line(X(0.655f), Y(top - 0.018f), X(0.675f), Y(top - 0.018f), 1.f * s, c, a * 0.8f);
+    }
+    // the stern: cruciform fins, the screw
+    {
+        float a = 0.6f * A;
+        const vec3 c = colAt(0.08f, a);
+        const float r0 = rad(0.08f);
+        line(X(0.13f), Y(r0 * 0.8f), X(0.07f), Y(R * 1.25f), 1.1f * s, c, a);
+        line(X(0.07f), Y(R * 1.25f), X(0.045f), Y(R * 1.25f), 1.1f * s, c, a);
+        line(X(0.045f), Y(R * 1.25f), X(0.05f), Y(rad(0.05f)), 1.1f * s, c, a);
+        line(X(0.13f), Y(-r0 * 0.8f), X(0.07f), Y(-R * 1.25f), 1.1f * s, c, a);
+        line(X(0.07f), Y(-R * 1.25f), X(0.045f), Y(-R * 1.25f), 1.1f * s, c, a);
+        line(X(0.045f), Y(-R * 1.25f), X(0.05f), Y(-rad(0.05f)), 1.1f * s, c, a);
+        line(X(0.12f), Y(0.f), X(0.045f), Y(0.f), 1.f * s, c, a * 0.7f);
+        line(X(0.04f), Y(rad(0.04f)), X(0.022f), Y(0.f), 1.f * s, c, a);
+        line(X(0.04f), Y(-rad(0.04f)), X(0.022f), Y(0.f), 1.f * s, c, a);
+        line(X(0.03f), Y(R * 0.55f), X(0.03f), Y(-R * 0.55f), 1.1f * s, c, a);
+        line(X(0.022f), Y(0.f), X(0.0f), Y(0.f), 1.f * s, c, a * 0.7f);
+    }
+    // the bow's planes, the hull's hatches
+    {
+        float a = 0.45f * A;
+        const vec3 c = colAt(0.85f, a);
+        line(X(0.82f), Y(R * 0.35f), X(0.86f), Y(R * 0.35f), 1.f * s, c, a);
+        line(X(0.36f), Y(R * 0.2f), X(0.4f), Y(R * 0.2f), 0.9f * s, c, a * 0.7f);
+        line(X(0.36f), Y(-R * 0.2f), X(0.4f), Y(-R * 0.2f), 0.9f * s, c, a * 0.7f);
+        line(X(0.36f), Y(R * 0.2f), X(0.36f), Y(-R * 0.2f), 0.9f * s, c, a * 0.7f);
+        line(X(0.4f), Y(R * 0.2f), X(0.4f), Y(-R * 0.2f), 0.9f * s, c, a * 0.7f);
+    }
+    flushShapes();
 }
 
 
@@ -742,6 +949,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
         const float k = 1.f - std::exp(-dt * 1.2f);
         waterTop_ = lerp(waterTop_, waterTopT_, k);
         waterLow_ = lerp(waterLow_, waterLowT_, k);
+        stone_ = lerp(stone_, stoneT_, k);
         echo_ = lerp(echo_, echoT_, k);
         echoCity_ = lerp(echoCity_, echoCityT_, k);
         dropEcho_ = lerp(dropEcho_, dropEchoT_, k);
@@ -783,6 +991,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
         // the setup sinks the camera down into its glide, the teardown lets it rise away into the dark
         rise_ = 16.f * (1.f - smoothstepf(0.f, 0.9f, f.setup)) + 16.f * smoothstepf(0.1f, 1.f, f.teardown);
         updateCamera(wdt, target, f.paused ? 0.f : dt);
+        updateFish(wdt);
     }
 
     // ---- The pings, on the beat grid: every four beats in calm parts, every two from mid on, both sides at a peak.
@@ -838,7 +1047,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     for (const Sink& s : sinks_) {
         if (bare_) break; // the world alone: no blocks, no light sinking out of them
         const float t = saturate((s.t - s.delay) / s.dur);
-        addCell(s.x, s.y, 0.5f, s.kind, s.col, 1.f, 0.f, t);
+        addCell(s.x, s.y, 0.5f, s.kind, s.col, 1.f, 0.f, t, s.x * 3.f + s.y);
     }
     if (!bare_) buildBoard(game);
     for (const Mote& m : motes_) {
@@ -890,6 +1099,9 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     }
     set3f(progMesh_, "uEcho", ech);
     set3f(progMesh_, "uEchoCity", echC);
+    set3f(progMesh_, "uStone", stone_);
+    set1f(progMesh_, "uAmb", (1.f - 0.25f * fest_) * (1.f - 0.35f * slow_));
+    set1f(progMesh_, "uPaths", fest_);
     // (the setup: the seabed's contours glowing up softly as the camera sinks to them, then settling; the teardown:
     // the chart fading into the dark)
     const float sink = smoothstepf(0.15f, 0.55f, f.setup) * (1.f - smoothstepf(0.6f, 1.f, f.setup));
@@ -913,10 +1125,32 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progSnow_, "uBase", (0.05f + 0.03f * wm + 0.05f * fest_) * quietSlow);
     set1f(progSnow_, "uFocal", height_ * 0.5f / wTan_);
     set3f(progSnow_, "uEcho", lerp(ech, vec3(1.f), 0.3f));
+    set3f(progSnow_, "uMote", lerp(waterTop_, vec3(1.f), 0.35f) * 4.f);
     set1f(progSnow_, "uFade", 1.f - bridgeK);
+    set1f(progSnow_, "uBubbles", 0.f);
     glBindVertexArray(snowVao_);
     glDrawArrays(GL_POINTS, 0, snowCount_);
+    // bubbles rising in thin streams
+    set1f(progSnow_, "uBubbles", 1.f);
+    set1f(progSnow_, "uBase", 0.32f * quietSlow);
+    glDrawArrays(GL_POINTS, 0, BUBBLE_N);
     glDisable(GL_PROGRAM_POINT_SIZE);
+    // the fish
+    if (!fishInst_.empty()) {
+        glUseProgram(progFish_);
+        setWorldUniforms(progFish_);
+        setMat(progFish_, "uWVP", wvp_);
+        set3f(progFish_, "uFR", camR_);
+        set3f(progFish_, "uFU", camU_);
+        set3f(progFish_, "uCam", camPos_);
+        set3f(progFish_, "uFishCol", lerp(waterTop_, vec3(0.8f, 0.9f, 0.95f), 0.18f) * 0.8f * quietSlow);
+        set3f(progFish_, "uEcho", ech);
+        set1f(progFish_, "uFade", 1.f - bridgeK);
+        glBindVertexArray(fishVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, fishVbo_);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(fishInst_.size() * sizeof(Inst)), fishInst_.data(), GL_STREAM_DRAW);
+        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)fishInst_.size());
+    }
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
 
@@ -952,8 +1186,10 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progWell_);
         set4f(progWell_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set3f(progWell_, "uLine", lerp(echo_, vec3(0.6f), 0.5f));
+        set3f(progWell_, "uPane", waterLow_ * 0.35f);
         set1f(progWell_, "uAA", aaW);
-        set1f(progWell_, "uLineA", 0.14f);
+        set1f(progWell_, "uLineA", 0.2f);
+        set1f(progWell_, "uPaneA", 0.7f);
         ugl::drawFullscreen();
     }
     // the light sinking, behind the stack
@@ -961,6 +1197,7 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     // the blocks: the stack writes the scene's alpha
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glUseProgram(progPiece_);
+    set1f(progPiece_, "uTime", (float)time_);
     set1f(progPiece_, "uGlow", (1.f + 0.04f * wp + 0.04f * fest_) * (1.f - 0.2f * slow_));
     drawInst(progPiece_, pieceVao_, pieceVbo_, cells_.data(), cells_.size() * sizeof(Inst), cells_.size());
     glDisable(GL_BLEND);
@@ -982,12 +1219,15 @@ void SonarUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade));
     set1f(progFinal_, "uBridge", bridgeK);
+    set4f(progFinal_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+    set1f(progFinal_, "uPaneA", bare_ ? 0.f : 0.7f);
     set3f(progFinal_, "uBridgeCol", bridge_.color);
     set3f(progFinal_, "uBridgeInk", bridge_.ink);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     drawHud(f.panels);
+    drawSub(f);
     glDisable(GL_BLEND);
 }
 
