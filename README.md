@@ -83,7 +83,7 @@ reviewed and tested (✅ <i>ok</i>):
 </tr>
 <tr>
 <td><img src="docs/universes/sonar.jpg"><br><b>SONAR</b>: a glide through a dark 3D sunken city where shapes glow up from the black as echoes return on the beat; each cleared row charts the seabed for good, the drop lights the whole world and the glide surges<br><sub>✅ <i>ok</i></sub></td>
-<td><img src="docs/universes/forest.jpg"><br><b>GLOWING FOREST</b>: a night forest as a hand-carved relief print, a black key block cut with a gouge (the cuts widening toward the moon and around every glowing plant) and two fluorescent inks for everything that glows, a little out of register; carved blocks printed from three drums, each cleared row cuts a new glowing plant into the forest, and the drop rolls a third ink out from the well<br><sub>✅ <i>ok</i></sub></td>
+<td><img src="docs/universes/forest.jpg"><br><b>GLOWING FOREST</b>: a night forest as a hand-carved relief print, a black key block cut with a gouge (the cuts widening toward the moon and around every glowing plant) and two fluorescent inks for everything that glows, a little out of register; carved blocks, and the drop is a blacklight: the paper sinks to violet, the inks blaze and a third ink rolls out from the well<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
 <td><img src="docs/universes/docks.jpg"><br><b>DOCKS</b>: a container port at dusk in 3D; the falling container piece hangs from a gantry on hairline cables, cleared rows are craned onto ships that fill up over the song, the drop switches the port to full light<br><sub>✅ <i>ok</i></sub></td>

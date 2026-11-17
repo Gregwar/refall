@@ -1,6 +1,6 @@
 #pragma once
 // GLOWING FOREST: a night forest as a relief print (a black key block carved with a gouge, fluorescent inks for
-// everything that glows), growing with the cleared lines (see forest.cpp).
+// everything that glows, blazing under a blacklight on the drop; see forest.cpp).
 #include <string>
 #include <vector>
 
@@ -39,35 +39,30 @@ private:
     CellLook lookOf(int id, float relX, float relY) const;
     void syncIds(const Game& g);
     struct Fade { float x, y; int type; CellLook l; float t, delay; };
-    std::vector<Fade> clears_;   // cleared cells taken away by the gouge
+    std::vector<Fade> clears_;   // cleared cells gouged away
     std::vector<Fade> outs_;     // game over: the stack inked over
 
-    // ---- The forest: near trunks, and slots where life can grow, filled as lines clear.
+    // ---- The forest: near trunks, and the glowing life placed among them (it stays for the universe's life).
     struct Trunk { float x, hw, lean, flare; };
     std::vector<Trunk> trunks_;
     struct Plant {
         float x = 0, y = 0, scale = 1, seed = 0;
-        int kind = 0, group = 0;
+        int kind = 0, group = 0;    // its kind; its quarter of the forest on the beat grid
         bool flip = false;
         float colMix = 0;           // 0 the variant's first glow ink .. 1 its second
-        bool live = false;
-        float grow = 0, delay = 0, growDur = 3.f;
-        float fade = -1.f;          // withering (a new song), 0..1
         float kickGlow = 0;
         float height = 2.f;         // its top, in plant units
     };
     std::vector<Plant> plants_;
-    std::vector<int> order_;        // the slots still empty, in the order they fill
     void buildTrunks();
-    void buildForest(bool instant);
-    int sprout(float delay, float nearX, bool fast);
+    void buildForest();
     vec2 plantTop(const Plant& p) const;
 
     // ---- Light in the air: fireflies, spores.
     struct Mote {
         vec2 p, v, p0, target;
         float t = 0, life = 8.f, delay = 0, r = 0.3f, a = 1.f, seed = 0;
-        int kind = 0;               // 0 firefly, 1 spore flying to a plant, 2 spore rising, 3 a chip at a hard drop
+        int kind = 0;               // 0 firefly, 1 spore rising, 2 a chip at a hard drop
         float inkB = 0.f;           // its glow ink: 0 the first .. 1 the second
         vec2 trail[8];              // a firefly's recent places (its fading trail)
         int trailN = 0;
@@ -109,13 +104,13 @@ private:
     // seven blocks
     vec3 paper_, paperT_, key_, keyT_, glow_[2], glowT_[2], dropInk_, dropInkT_, slowInk_, slowInkT_, piece_[7], pieceT_[7];
     bool colSet_ = false;
-    uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull;
+    uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull, forestSeed_ = 0;
     float seedF_ = 0.f, groundSeed_ = 0.f;
     float rock_[3] = {-17.4f, 7.4f, 2.7f};  // the mossy rock (the bottom-left corner): center, half width, height
     float cornerRight_ = -12.8f;    // the right end of the corner's text (board units)
     float pool_[3] = {0.f, 0.f, -10.66f};  // the still pool on the right floor: x0, x1 (none when equal), water level
     float moon_[3] = {16.f, 7.f, 2.5f};     // the moon cut out of the sky: center, radius
-    float grow_ = 0.f;              // how much of the forest has grown (0..1, eased)
+    float glade_[4] = {-16.f, -1.f, 4.f, 3.f};  // a far glade glowing between the trunks on the left: center, radii
     float wind_ = 0.4f;             // the breeze in the plants and vines
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
@@ -126,6 +121,7 @@ private:
     bool dropMode_ = false;
     float dropT_ = 99.f, fest_ = 0.f, waveT_ = 99.f, waveK_ = 0.f;
     float dropInkK_ = 0.f;          // the drop's third ink on the print (0..1)
+    float blaze_ = 0.f;             // the drop's blacklight: the fluorescent inks blazing (0..1)
     float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
     double time_ = 0.0;
@@ -133,7 +129,6 @@ private:
     int lastHalf_ = -1;
     float quadGlow_ = 0.f;
     float fireflyAcc_ = 0.f;
-    int sideFlip_ = 0;
 
     bool slowOn_ = false;
     float slow_ = 0.f;

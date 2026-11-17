@@ -5,7 +5,7 @@
 // much of the key block is carved away there (r: 0 solid black ink .. 1 bare paper) and the density of the two glow
 // inks rolled under it (g, b): an ink shows only where the key is carved. HALO_FS first gathers the light the plants
 // give (a quarter-resolution field); BG_FS carves the key block, every cut as wide as the light there (the night sky's
-// horizontal cuts thickening toward the moon and around each plant, the moon cut out of it, stars, three depths of
+// horizontal cuts thickening toward the moon and around each plant, the moon cut out of it, stars, the far glade, three depths of
 // trunks cut lighter the farther they stand, the canopy and its fan-cut leaves, the near trunks' long bark strokes, the
 // floor's stipples and grass tufts, the stones and the rock) and rolls the glow inks low over the floor and around the
 // plants; PLANT_FS cuts the life itself (each plant a small SDF, a margin of uncut key around it, its body shaded by
@@ -131,7 +131,8 @@ uniform vec4 uView;
 uniform vec3 uMoon;    // the moon cut out of the sky: center, radius
 uniform vec4 uTrunk[8];
 uniform int uTrunks;
-uniform float uTime, uSeed, uMistK, uLife, uWaveR, uWaveK, uAA, uGrow, uWind, uMoonK;
+uniform vec4 uGlade;   // a far glade glowing between the trunks on the left: center, radii
+uniform float uTime, uSeed, uMistK, uLife, uWaveR, uWaveK, uAA, uWind, uMoonK;
 uniform sampler2D uLight;  // the plants' light and inks (HALO_FS)
 // the drop's wave of light where it passes
 float waveAt(vec2 w) {
@@ -178,12 +179,18 @@ void main() {
     float inkK = exp(-above / 6.0);
     vec4 lt = texture(uLight, vUv);
     float inkA = clamp(inkK * (1.0 - roll) + lt.g, 0.0, 1.0), inkB = clamp(inkK * roll + lt.b, 0.0, 1.0);
-    // the light low in the forest: the life's glow in the air, in long banks, rising with the song and as the forest
+    // the light low in the forest, in long banks: the life's glow in the air, which
     float bank = 0.45 + 0.8 * fbm3(vec2(w.x * 0.08 - uTime * 0.012, w.y * 0.22) + uSeed);
-    // grows; the drop's wave lighting it as it passes; and the light of each plant around it
+    // rises with the song (and blazes under the drop's blacklight); the drop's wave lighting it as it passes; and the
+    // light of each plant around it
     float plantL = lt.r;
-    float mistL = uMistK * exp(-above / (1.6 + 1.6 * uGrow)) * bank * (0.5 + 0.5 * uLife) + 0.35 * waveAt(w) * exp(-above / 3.0)
-                + plantL;
+    float mistL = uMistK * exp(-above / 3.2) * bank * (0.5 + 0.5 * uLife) + 0.35 * waveAt(w) * exp(-above / 3.0) + plantL;
+    // the glade far away on the left: a bank of the life's light seen between the trunks
+    vec2 gq = (w - uGlade.xy) / uGlade.zw;
+    float glade = exp(-dot(gq, gq) * 1.7) * (0.6 + 0.5 * bank);
+    mistL += uMistK * 1.5 * glade * (0.6 + 0.4 * uLife);
+    inkA = max(inkA, smoothstep(0.0, 0.5, glade) * (1.0 - roll));
+    inkB = max(inkB, smoothstep(0.0, 0.5, glade) * roll);
     // ---- the sky: solid night, cut in long horizontal strokes where the moon lights it and low in the forest
     vec2 mq = w - uMoon.xy;
     float mr = length(mq);
@@ -294,7 +301,7 @@ void main() {
         }
     }
     // ---- the near trunks: solid ink, a few long strokes along the bark's ridges, a lit edge on the moon's side and
-    // the life's glow low on the side facing the well; glowing veins cut up them as the forest grows
+    // the life's glow low on the side facing the well; glowing veins cut up them
     float inkV = 0.0;
     for (int i = 0; i < 8; i++) {
         if (i >= uTrunks) break;
@@ -341,7 +348,7 @@ void main() {
         float ridges = 0.4 * smoothstep(0.66, 0.85, vnoise(vec2(u * 3.0 + fi * 3.0, y * 0.06)));
         float tb = (ridges + (0.3 + 0.6 * moonL) * moonSide * moonSide + mistL * 0.9 * wellSide + plantL * 0.7) * open;
         float bc = gouge(buv, 0.13, 3.0, tb, 7.0 + fi, aa);
-        float reachY = 2.0 + 13.0 * uGrow;
+        float reachY = 12.0;
         float vl = u * 2.0 + 0.9 * fbm3(vec2(u * 1.1 + fi * 2.0, y * 0.3)) + 0.25 * sin(y * 0.9 + fi * 4.0 + u * 3.0);
         float vn = abs(fract(vl) - 0.5) / 2.0 * hw;
         float seg = smoothstep(0.45, 0.6, vnoise(vec2(floor(vl) * 3.1 + fi, y * 0.35)));
@@ -384,9 +391,9 @@ void main() {
             float rc = gouge(vec2(w.x * 0.5 + w.y * (facet - 1.5) * 0.4, w.y + w.x * (facet - 1.5) * 0.3), 0.12, 1.2, tr, 13.0 + facet, aa);
             fc = mix(fc, rc, rockK);
         }
-        // the glowing moss: specks cut and inked, spreading over the floor as the forest grows
+        // the glowing moss: specks cut and inked in patches over the floor
         float pn = fbm3(vec2(w.x * 0.3, 0.0) + uSeed * 2.0);
-        float patch = smoothstep(1.0 - uGrow * 0.8, 1.2 - uGrow * 0.8, pn) * near * exp(-depth / 0.6);
+        float patch = smoothstep(0.3, 0.5, pn) * near * exp(-depth / 0.6);
         float sp = stipple(w + 3.7, 0.16, (0.15 + 0.35 * uLife) * patch * (1.0 + 1.5 * waveAt(w)), 17.0, aa);
         fc = max(fc, sp);
         inkA = mix(inkA, max(inkA, patch * (1.0 - roll)), floorCov);
@@ -455,7 +462,7 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the life (instanced quads)
-// a: base x, y, scale, kind. b: seed, grow (0..1), glow, flip. c: ink B's share, -, -, wave. d: -, -, -, alpha.
+// a: base x, y, scale, kind. b: seed, grow (0..1: cut in as the print is pulled), glow, flip. c: ink B's share, -, -, wave. d: -, -, -, alpha.
 inline const char* PLANT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -683,7 +690,7 @@ void main() {
         }
     } else if (kind == 3) {
         // a fern: fronds in layers, each arching from the crown with a cut midrib and leaflets cut along their edges;
-        // growing, each frond unrolls from a fiddlehead coil; a young coil at the crown
+        // cut in, each frond unrolls from a fiddlehead coil; a young coil at the crown
         for (int j = 0; j < 5; j++) {
             float fj = float(j);
             float gj = smoothstep(fj * 0.1, 0.6 + fj * 0.1, grow);
@@ -838,7 +845,7 @@ void main() {
     // the light it gives: its bright parts carved bare, its body shaded by cuts across it (in world space, so every
     // plant is cut with the same gouge), its shadows left in ink
     float wave = vC.w;
-    float tone = smoothstep(0.3, 1.0, e * (0.55 + 0.6 * glow) * (1.0 + 0.6 * wave));
+    float tone = smoothstep(0.15, 0.85, e * (0.65 + 0.5 * glow) * (1.0 + 0.6 * wave));
     float cut = max(gouge(vec2(vW.x, vW.y), 0.11, 0.5, tone, seed, uAAp * 0.6), smoothstep(0.6, 0.85, tone));
     // the two glow inks: the plant's own, the other creeping into its tips
     float tip = clamp((kind == 2 ? -p.y * 0.5 : kind == 6 ? p.x * 1.2 : p.y) / 2.6, 0.0, 1.0) * 0.6;
@@ -893,6 +900,7 @@ uniform vec2 uOffA, uOffB;            // the glow inks' plates out of register (
 uniform vec3 uPaper, uKey, uInkA, uInkB, uInkC; // linear
 uniform float uC, uRollR;             // the drop's third ink: its amount, how far it has rolled out from the well
 uniform float uBloomK, uSlow, uDim, uFade, uBridge, uTime, uSeed, uAA, uInkK, uKeyK;
+uniform float uBlaze;                 // the drop's blacklight: the paper sinks to a violet dusk, the inks blaze
 uniform vec3 uBridgeCol, uSlowInk;
 uniform vec4 uView;
 vec3 ink(vec3 c, vec3 k, float d) { return c * mix(vec3(1.0), k, clamp(d, 0.0, 1.0)); }
@@ -923,10 +931,13 @@ void main() {
     b *= uInkK;
     vec3 inkA = mix(uInkA, uSlowInk, uSlow);
     vec3 inkB = mix(mix(uInkB, uInkC, uC * dropRoll(w, uRollR)), uSlowInk, uSlow);
+    // under the drop's blacklight the bare paper sinks to a dim violet while the inks on it fluoresce
+    float inked = clamp(a + b, 0.0, 1.0);
+    c *= mix(vec3(1.0), vec3(0.2, 0.16, 0.36), uBlaze * (1.0 - inked));
     c = ink(c, inkA, a);
     c = ink(c, inkB, b);
-    // fluorescent inks are brighter than the paper under them
-    c += (inkA * a + inkB * b) * 0.18 * (1.0 - 0.6 * uSlow) * carve;
+    // fluorescent inks are brighter than the paper under them (and blaze under the blacklight)
+    c += (inkA * a + inkB * b) * (0.1 + 1.0 * uBlaze) * (1.0 - 0.6 * uSlow) * carve;
     // the key block over all: its ink starved where the roller was light (paper speckling through a solid, open areas
     // only), its carved edges pressed into the paper (a shadow on one side of every cut)
     float open = 1.0 - quietAt(w);
