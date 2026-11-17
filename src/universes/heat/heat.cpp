@@ -9,7 +9,7 @@
 // (wide when warm, hairlines when cold); a molten edge glows round each piece, a dark seam parts it from the others.
 // The heat is simulated: it conducts between neighbouring cells (a fresh piece warms the old ones under it) and into
 // the well's walls and floor, and leaves through the exposed faces into the air, where it rises, sways and fades:
-// flames lick up from the hot faces (and up the outside of the warmed walls), the air shimmers above them, hot
+// a faint haze of flame tongues rises just above the hottest faces (up the outside of very hot walls), the air shimmers above them, hot
 // things bloom. The pieces are made of seven materials of different emissivity: each type settles to its own band of
 // the colormap when cold (the camera reads the material, not only the heat). The falling piece is the hottest thing
 // on screen, the ghost a crisp contour at a mid-hot temperature over a faint fill; the queue warms as it comes (the next piece already white hot).
@@ -100,8 +100,9 @@ const VariantDef VARIANTS[] = {
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 // The seven materials (I O T S Z J L): the temperature each settles to when the stack's heat has left it (the
-// camera reads emissivity), spread over the colormap's cold half.
-const float BASE[7] = {0.54f, 0.21f, 0.41f, 0.27f, 0.47f, 0.14f, 0.34f};
+// camera reads emissivity), spread over the colormap's middle, well above the cave and the glass: a cooled piece
+// keeps a clear body (in LAVA a maroon to red crust, its fissures still faintly lit).
+const float BASE[7] = {0.5f, 0.355f, 0.445f, 0.38f, 0.47f, 0.32f, 0.41f};
 
 // The camera's reading of a temperature, in degrees.
 float degrees(float d) { return 14.f + 520.f * std::pow(std::max(0.f, d), 1.6f); }
@@ -304,11 +305,11 @@ void HeatUniverse::updateAir(const Game& g, float dt) {
             if (x > 0 && !filled(x - 1, y)) splatAir(p.x - 0.55f, p.y, 0.f, h * kSide * dt);
             if (x < Game::W - 1 && !filled(x + 1, y)) splatAir(p.x + 0.55f, p.y, 0.f, h * kSide * dt);
         }
-    // the well's warmed walls give off heat outside too (flames lick up the outside of the well beside a hot stack)
+    // the well's walls give off heat outside too, once very hot
     for (int y = Game::HIDDEN; y < Game::H; y++) {
         const float wy = layout::cellPos(0.f, (float)y).y;
-        splatAir(-5.3f, wy, 0.f, wallL_[y] * kSide * dt);
-        splatAir(5.3f, wy, 0.f, wallR_[y] * kSide * dt);
+        splatAir(-5.3f, wy, 0.f, std::max(0.f, wallL_[y] - 0.5f) * kSide * dt);
+        splatAir(5.3f, wy, 0.f, std::max(0.f, wallR_[y] - 0.5f) * kSide * dt);
     }
     if (g.hasPiece() && !g.over()) {
         int cells[4][2];
@@ -1053,13 +1054,13 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uTime", worldTime_);
     set1f(progBg_, "uSeed", (float)(seed_ % 1000) * 0.137f);
     set1f(progBg_, "uWall", V.wall * (1.f - 0.25f * (1.f - wm)) + 0.01f * wp);
-    set1f(progBg_, "uAirGain", (0.06f + 0.06f * saturate(warm) + 0.06f * flare_ + 0.06f * quadFlash_) * (1.f - 0.5f * over_));
+    set1f(progBg_, "uAirGain", (0.03f + 0.03f * saturate(warm) + 0.06f * flare_ + 0.06f * quadFlash_) * (1.f - 0.5f * over_));
     set1f(progBg_, "uShimmer", 0.5f + 0.7f * saturate(warm));
     set1f(progBg_, "uGrain", V.grain);
     set1f(progBg_, "uWallHeat", 0.45f);
     set1f(progBg_, "uWell", bare ? 0.f : 1.f);
     set1f(progBg_, "uVig", 0.32f);
-    set1f(progBg_, "uFlame", (0.38f + 0.12f * saturate(warm) + 0.15f * flare_) * (1.f - over_));
+    set1f(progBg_, "uFlame", (0.16f + 0.05f * saturate(warm) + 0.06f * flare_) * (1.f - over_));
     set1f(progBg_, "uEmbers", (0.55f + 0.45f * saturate(warm) + 0.8f * dropAmt_ * wp) * (1.f - 0.7f * over_));
     set1f(progBg_, "uLava", dropAmt_ * wp * (1.f - over_));
     {

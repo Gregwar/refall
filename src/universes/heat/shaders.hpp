@@ -169,7 +169,7 @@ void main() {
     // (light, not temperature: they glow in the camera's hot colors and fade to the dark, see MAP_FS)
     vec2 fp = vec2(ws.x * 1.4, ws.y * 0.4 - uTime * 1.4);
     float tongue = fbm(fp + vec2(0.9 * fbm(fp * 0.7 + vec2(0.0, uTime * 0.3)), 0.0));
-    float fire = smoothstep(0.3, 1.0, (1.0 - exp(-a * 8.0)) * (0.1 + 1.3 * tongue));
+    float fire = smoothstep(0.55, 1.05, (1.0 - exp(-a * 6.0)) * (0.1 + 1.3 * tongue));
     float light = uFlame * fire * (0.6 + 0.6 * fire);
     // the drop wakes the cave: lava glows in the cracks between the rock's facets, slowly breathing, and the smoke
     // is lit warm from below
@@ -342,7 +342,7 @@ void main() {
     vec3 c = mix(lut(t, 0.25), lut(t, 0.75), uMix);
     // the lens's bloom: hot things bleed their own color around them
     float tg = clamp((G.r / max(G.g, 1e-3) - uLo) / max(uHi - uLo, 1e-3), 0.0, 1.0) * (1.0 - uCool);
-    float bloom = G.g * smoothstep(0.1, 0.8, tg) * uBloom * (1.0 - 0.85 * clamp(T.g, 0.0, 1.0));
+    float bloom = G.g * smoothstep(0.45, 0.9, tg) * uBloom * (1.0 - 0.85 * clamp(T.g, 0.0, 1.0));
     bloom *= 1.0 - 0.7 * smoothstep(0.55, 0.95, G.g); // (inside the stack the seams between pieces stay dark)
     c += mix(lut(tg, 0.25), lut(tg, 0.75), uMix) * bloom;
     // the flames and the sparks: light in the hot colors, the brightest the hottest
