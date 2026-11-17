@@ -12,12 +12,14 @@
 // flames lick up from the hot faces (and up the outside of the warmed walls), the air shimmers above them, hot
 // things bloom. The pieces are made of seven materials of different emissivity: each type settles to its own band of
 // the colormap when cold (the camera reads the material, not only the heat). The falling piece is the hottest thing
-// on screen, the ghost a cold outline; the queue warms as it comes (the next piece already white hot).
+// on screen, the ghost a crisp contour at a mid-hot temperature over a faint fill; the queue warms as it comes (the next piece already white hot).
 //
 // The song is the room's weather. Calm parts and breaks are cold and quiet (the camera's range wide, the far shapes
 // cold, the air still). Choruses are warmer (the range narrows, the far shapes warm up, the air rises faster, a
 // bubble of hot air leaves the stack with the kicks). The drop flares: the whole stack flashes hot and cools over
-// seconds, the camera switches to another colormap, the far shapes swell with the bars. A cleared row vents its heat:
+// seconds, the camera switches to another colormap, the far shapes swell with the bars; its highlights are compressed
+// (the stack tops out bright orange-yellow, its texture and seams still showing) and the cave takes the energy: lava
+// glows in the cracks of the rock, the smoke is lit warm, the sparks thicken. A cleared row vents its heat:
 // its blocks fade out as they cool, the cells above it are warmed by the passing heat and a plume of hot air rises
 // out of the stack. A quad is an updraft. Slow motion is the camera's isotherm mode (grey but the hottest band),
 // game over the stack cooling into the room from the top down. Before a song the camera comes on: the image pulls
@@ -83,7 +85,7 @@ const Colormap MAPS[] = {
     {"RAINBOW", {{0.f, 0x010004}, {0.12f, 0x0e0a40}, {0.24f, 0x1a34b0}, {0.37f, 0x00b2d6}, {0.5f, 0x1ccf5c},
                  {0.62f, 0xdce024}, {0.75f, 0xff8a12}, {0.87f, 0xf01c30}, {1.f, 0xffdcf2}}, 9},
     // 5: glow (hot metal): black, smoky brown red, deep red, red, orange, yellow, white.
-    {"GLOW", {{0.f, 0x030102}, {0.1f, 0x140b0b}, {0.2f, 0x34100e}, {0.36f, 0x7c0c0a}, {0.52f, 0xc8260a}, {0.66f, 0xf0620e},
+    {"GLOW", {{0.f, 0x030102}, {0.1f, 0x1c1416}, {0.2f, 0x3e1a14}, {0.36f, 0x7c0c0a}, {0.52f, 0xc8260a}, {0.66f, 0xf0620e},
               {0.8f, 0xfcad2a}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 9},
 };
 
@@ -531,7 +533,7 @@ void HeatUniverse::drop(float strength) {
     flare_ = std::max(flare_, 0.6f + 0.4f * strength);
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
-            if (ids_[y][x]) heat_[y][x] = std::min(1.3f, heat_[y][x] + (0.5f + 0.35f * strength) * (0.6f + 0.4f * rng_.uniform()));
+            if (ids_[y][x]) heat_[y][x] = std::min(1.3f, heat_[y][x] + (0.3f + 0.2f * strength) * (0.6f + 0.4f * rng_.uniform()));
     // the far shapes swell
     for (auto& b : blobs_) b.temp = std::max(b.temp, 0.16f);
     // a sheet of hot air over the stack's top
@@ -736,7 +738,7 @@ void HeatUniverse::buildBoard(const Game& g) {
         push(f.x, f.y, 0.5f, f.mask, -1.f, 0.f, f.h * (1.f - k) * 0.8f, 1.f - smoothstepf(0.08f, 0.34f, f.t),
              lerpf(BASE[f.type], 0.06f, k), 0, 0.12f * k, f.tex);
     }
-    // The ghost (a cold outline) and the falling piece (the hottest thing on screen).
+    // The ghost (a crisp mid-hot contour, a faint fill) and the falling piece (the hottest thing on screen).
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -759,7 +761,7 @@ void HeatUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), -1.f, 0.f, 0.f, 0.9f, 0.3f, 1, 0.f, vec2{});
+                push(w.x, w.y, 0.5f, maskOf(c[0], c[1], inGhost), -1.f, 0.f, 0.f, 1.f, 0.8f, 1, 0.f, vec2{});
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
@@ -996,7 +998,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
             splatAir(x + 0.6f * std::sin(x * 1.7f + worldTime_), viewC_.y - viewH_.y + 0.5f, 0.7f,
                      waking * 5.f * (0.6f + 0.4f * std::sin(x * 0.9f + worldTime_ * 0.8f)) * wdt);
     updateAir(game, wdt);
-    const float gain = (0.92f + 0.12f * saturate(warm) + 0.25f * flare_) * (1.f - over_);
+    const float gain = (0.92f + 0.12f * saturate(warm) + 0.1f * flare_) * (1.f - over_);
 
     // ---- Upload the heat map (12 x 23: the walls left and right, the floor below; empty cells take their
     // neighbours' heat so the pieces' edges sample cleanly) and the air.
@@ -1057,8 +1059,9 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uWallHeat", 0.45f);
     set1f(progBg_, "uWell", bare ? 0.f : 1.f);
     set1f(progBg_, "uVig", 0.32f);
-    set1f(progBg_, "uFlame", (0.75f + 0.25f * saturate(warm) + 0.3f * flare_) * (1.f - over_));
-    set1f(progBg_, "uEmbers", (0.55f + 0.45f * saturate(warm)) * (1.f - 0.7f * over_));
+    set1f(progBg_, "uFlame", (0.38f + 0.12f * saturate(warm) + 0.15f * flare_) * (1.f - over_));
+    set1f(progBg_, "uEmbers", (0.55f + 0.45f * saturate(warm) + 0.8f * dropAmt_ * wp) * (1.f - 0.7f * over_));
+    set1f(progBg_, "uLava", dropAmt_ * wp * (1.f - over_));
     {
         // the previews' boxes (the hold, the three next) and the HUD columns
         const float box[16] = {layout::HOLD_CENTER.x, layout::HOLD_CENTER.y, 1.42f, 1.31f,
@@ -1097,6 +1100,9 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progCell_, "uHeat", 0);
         set1f(progCell_, "uRim", 1.f);
         set1f(progCell_, "uGain", gain + 0.0001f);
+        // the drop: the stack's highlights compressed to the colormap's bright orange-yellow (no white-out)
+        const float hiShown = hi_ - 0.08f * flare_;
+        set1f(progCell_, "uCap", lerpf(1.6f, lo_ + 0.82f * (hiShown - lo_), smoothstepf(0.f, 1.f, dropAmt_)));
         set1f(progCell_, "uTime", worldTime_);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
@@ -1140,7 +1146,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, glowA_.tex);
     set1i(progMap_, "uGlow", 2);
-    set1f(progMap_, "uGlowAmt", (0.55f + 0.25f * saturate(warm) + 0.3f * flare_) * (1.f - over_));
+    set1f(progMap_, "uGlowAmt", (0.55f + 0.25f * saturate(warm)) * (1.f - over_));
     set1f(progMap_, "uBloom", (1.5f + 0.3f * saturate(warm)) * (1.f - over_));
     glActiveTexture(GL_TEXTURE0);
     set1f(progMap_, "uLo", lo_);

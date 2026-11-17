@@ -19,6 +19,7 @@ uniform vec4 uView;      // center, half extents (board units)
 uniform vec2 uRes;
 uniform float uTime, uWall, uAirGain, uShimmer, uGrain, uWallHeat, uVig, uWell;
 uniform float uFlame, uEmbers; // the flames over the hot stack, the sparks in the air (0 .. 1)
+uniform float uLava;           // the drop: lava light in the rock (0 .. 1)
 uniform vec4 uBlob[4];   // x, y, rx, ry
 uniform vec4 uBlobT;     // their temperatures
 uniform vec4 uBox[4];    // the preview boxes: center, half extents
@@ -130,9 +131,11 @@ void main() {
     float smoke = fbm(sp + 1.4 * vec2(fbm(sp * 0.8 + 4.0 + uTime * 0.01), fbm(sp * 0.8 - uTime * 0.015)));
     d += 0.028 * smoothstep(0.45, 0.85, smoke) * (0.3 + 0.7 * smoothstep(12.0, -12.0, ws.y));
     // the HUD columns stay quiet
+    float quiet = 0.0;
     for (int i = 0; i < 2; i++) {
         vec2 q = max(uQuiet[i].xy - ws, ws - uQuiet[i].zw);
         float inCol = 1.0 - smoothstep(-1.5, 1.0, max(q.x, q.y));
+        quiet = max(quiet, inCol);
         d = mix(d, min(d, uWall * 0.8 + 0.035), inCol * 0.7);
     }
     // far shapes: lava glowing deep in the rock
@@ -168,6 +171,13 @@ void main() {
     float tongue = fbm(fp + vec2(0.9 * fbm(fp * 0.7 + vec2(0.0, uTime * 0.3)), 0.0));
     float fire = smoothstep(0.3, 1.0, (1.0 - exp(-a * 8.0)) * (0.1 + 1.3 * tongue));
     float light = uFlame * fire * (0.6 + 0.6 * fire);
+    // the drop wakes the cave: lava glows in the cracks between the rock's facets, slowly breathing, and the smoke
+    // is lit warm from below
+    float vein = (1.0 - smoothstep(0.0, 0.05, f2 - f1)) * rock * smoothstep(0.48, 0.62, mass)
+               * smoothstep(0.45, 0.65, fbm(ws * 0.12 + 11.0));
+    float breath = 0.6 + 0.4 * sin(uTime * 0.7 + 3.0 * fbm(ws * 0.1));
+    light += uLava * (0.3 * vein * breath + 0.14 * smoothstep(0.45, 0.85, smoke) * smoothstep(12.0, -10.0, ws.y))
+           * (1.0 - inWell) * (1.0 - 0.8 * quiet);
     // sparks
     light += sparks(w, px) * 1.3;
     // the lens: colder corners, a fine still grain
@@ -183,7 +193,7 @@ inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
 layout(location = 2) in vec4 aB; // game x, game y (heat lookup; x < 0: use heat), heat, alpha
-layout(location = 3) in vec4 aC; // base temperature, kind, shrink, pad
+layout(location = 3) in vec4 aC; // base temperature (the ghost: its contour's light), kind, shrink, pad
 layout(location = 4) in vec4 aD; // the cell's place in its piece's lava (xy), pad
 uniform mat4 uVP;
 out vec2 vLocal;
@@ -207,7 +217,7 @@ flat in vec4 vC;
 flat in vec2 vTex;
 out vec4 frag;
 uniform sampler2D uHeat;
-uniform float uRim, uGain, uTime;
+uniform float uRim, uGain, uTime, uCap;
 
 bool has(int m, int b) { return ((m >> b) & 1) != 0; }
 // Signed distance (cell units) to the outline of the piece the cell belongs to (mask bits: left right down up,
@@ -255,13 +265,13 @@ void main() {
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float sd = shapeSdf(vLocal, int(vA.w + 0.5)) + vC.z;
     if (kind == 1) {
-        // the ghost: a cold outline, the piece's imprint a shade colder than the room
-        float line = 1.0 - smoothstep(0.6 * aa, 1.6 * aa, abs(sd + 0.05));
+        // the ghost: a crisp contour of the piece's outline drawn in light (the colormap's warm color, vC.x its
+        // strength, so the thin line never greys out as a temperature would), over a very faint fill
+        float line = 1.0 - smoothstep(0.9 * aa, 2.0 * aa, abs(sd + 0.05));
         vec2 own = abs(vLocal) - 0.5;
         float inside = (1.0 - smoothstep(-aa, aa, sd)) * step(max(own.x, own.y), 0.0);
-        float a = max(line, inside * 0.55) * vB.w;
-        float d = mix(0.0, vC.x, line);
-        frag = vec4(d * a, a, 0.0, a);
+        float a = inside * 0.3 * vB.w;
+        frag = vec4(0.14 * a, a, line * vC.x * vB.w, a);
         return;
     }
     // the heat: from the stack's heat map (smooth across the piece's cells) or given
@@ -294,6 +304,10 @@ void main() {
     float rim = (1.0 - smoothstep(0.03, 0.14, depth)) * uRim;
     d = mix(d, max(d, base + (1.02 - base) * min(1.0, 0.22 + 1.2 * hv)), rim * 0.85);
     d *= 1.0 - 0.35 * uRim * (1.0 - smoothstep(0.0, 0.022, depth));
+    // the camera's highlight compression (the drop): above a knee the heat rolls off softly to the cap, so the
+    // hottest lava tops out bright orange-yellow with its swirls and fissures still showing
+    float knee = uCap - 0.14;
+    if (d > knee) d = knee + 0.14 * (1.0 - exp(-(d - knee) / 0.14));
     float a = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd)) * vB.w;
     frag = vec4(d * a, a, 0.0, a);
 }
