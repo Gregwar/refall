@@ -54,12 +54,14 @@ public:
         float h = 0.f;         // a height (the ladder's, the ledge's)
         float ea = 0, eb = 0;  // the ledge he starts on (its ends)
         std::vector<vec2> pts; // the hops' landings
-        std::vector<int> seq;  // the tricks, the falling things
+        std::vector<int> seq;  // the tricks, the falling things; a gag's variant and colours
+        float flip = -1.f;     // a crossing: beats in, when he is over in the other margin
         uint32_t id = 0;
     };
     // Something he needs, drawn in before and rubbed out after (panel coordinates).
     struct Prop {
         int kind = 0, side = 0;
+        int dir = 1, var = 0; // which way it faces, its variant (a colour, a picture)
         float xa = 0, xb = 0, h = 0;
         double t0 = 0, t1 = 1e9;
         uint32_t id = 0;
@@ -70,6 +72,9 @@ private:
     void extend(double until, int stage, const Panel P[2]);
     Prop* prop(uint32_t id);
     void leave(double when); // the ledge he is on (and its ladder) rubbed out after he left it
+    int choose(const float w[]);            // the next episode: what he has done least, as the music fits it
+    int variant(int kind, const float w[], int n); // its variant, the same way
+    void log(double beat);                  // REFALL_NOTEPAD_STORY_LOG: the episode on show, when it changes
 
     uint64_t seed_ = 1;
     Rng rng_{1};
@@ -80,6 +85,10 @@ private:
     // where the last episode leaves him
     struct At { int side = 0, dir = 1; float x = 0, y = 0; float la = 0, lb = 0; int recent[4] = {-1, -1, -1, -1}; int sinceCross = 0; };
     At at_;
+    // what he did so far this song (each gag, each way to cross), so that nothing comes back before the rest has
+    std::vector<int> used_, varUsed_;
+    std::vector<int> forced_; // REFALL_NOTEPAD_EPISODES: the episodes to show first, in this order (kind * 16 + variant)
+    uint32_t logged_ = 0;
     std::vector<uint32_t> holding_; // what he stands on (and climbed up by)
     uint32_t ground_ = 0;           // the ground line of his margin
     double chain0_ = -1;
