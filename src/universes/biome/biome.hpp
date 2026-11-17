@@ -93,6 +93,20 @@ struct Ctx {
     void skyUniforms(GLuint p, float sunK, float cloudCov, vec2 cloudBand, float skyH, float dustK) const;
     // the particles (PART_VS / PART_FS, 16 floats each), the program in use with its world uniforms
     void drawParts(GLuint p, const std::vector<float>& v) const;
+
+    // ---- The lens (LENS_FS), a world's last pass over what it drew, before the shell's rain and the stack: the bloom,
+    // the sun's glare, the dark smoky glass of the well (a fine grid, a bright rim) and of the previews' panels.
+    struct Lens {
+        float deepY = -1e4f;               // under it the glass darkens toward `panel` (the sea's depths)
+        float glare = 0.f, bloom = 0.25f;  // the sun's glare, the bloom
+        float tint = 0.82f, deepVeil = 1.f; // how much of the glass is its own tint, the depths' share of it
+        float grid = 0.24f;                // how bright the well's grid
+        bool panels = true;                // the previews' panels of glass
+        vec3 glareCol, frostCol, panel;    // the glare's light, the glass's tint, its tint over the depths
+    };
+    void drawLens(const Lens& l);
+    GLuint progLensDown = 0, progLensBlur = 0, progLens = 0;
+    ugl::Target quarterT[2], eighthT[2];   // the world at a quarter (the frosted glass), its brightest at an eighth
 };
 
 // A world: its ground and its life, what the clears do to it, its variants.

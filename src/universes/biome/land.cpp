@@ -52,43 +52,43 @@ const VariantDef VARIANTS[] = {
      0xcaa984, 0x4e3828, 0x8a6446, 0x6e4e36, 0xc8b27a, 0x5c8c2c, 0x3c7026, 0x74a036, 0x4c6c3c, 0x5a4636, 0xb8a890,
      0xf2563a, 0xffd23a, 0x2a2622, 0x1a130c, 0x2a1e14, 0xe8762a, 0x2a2048,
      {0x2f9ef5, 0xff7a1c, 0xe8264a, 0xffd21f, 0x22c27e, 0x9a4ae0, 0xff6fb8},
-     -140.f, 55.f, 0.9f, 0.f, 0.f, 0.f, 1.15f, 0.55f, 0.7f, 0.64f, 0.15f},
+     -140.f, 55.f, 0.9f, 0.f, 0.f, 0.f, 1.15f, 0.55f, 0.7f, 0.82f, 0.15f},
     // Red earth at dusk: laterite soil, a low sun in an apricot haze, a violet sky; pale luminous seeds.
     {"RED EARTH DUSK", 0x2e3466, 0xf2a070, 0xffd6a0, 0xe89a84, 0xe8a47c, 0xc8a8a8, 0x3a2c3c, 0x2a2030,
      0xb0582e, 0x3e180e, 0x7a3418, 0x5a2410, 0xc08a50, 0x4a7a2a, 0x2c5826, 0x5c8a2e, 0x3c4a3c, 0x3e2a22, 0x9a7a6a,
      0xffd04a, 0xff6a8a, 0x1e1620, 0x160c10, 0xfbeee0, 0xffb36a, 0x241a3c,
      {0x8ee8ff, 0xffe27a, 0xff9a6a, 0xb8ff7a, 0xffa8d8, 0xd0b8ff, 0x7affd8},
-     20.f, -0.25f, 1.5f, 0.f, 0.f, 0.15f, 1.1f, 0.5f, 0.6f, 0.62f, 0.35f},
+     20.f, -0.25f, 1.5f, 0.f, 0.f, 0.15f, 1.1f, 0.5f, 0.6f, 0.82f, 0.35f},
     // A misty morning: grey-brown clay, a soft sun in a pale haze, the distance lost in mist; jewel seeds.
     {"MISTY MORNING", 0x9fb2c2, 0xe6e8e4, 0xfff4e4, 0xf4f4f0, 0xd8d8d2, 0xe2e6e2, 0x5a6268, 0x424a50,
      0xa49582, 0x3e352e, 0x6e6052, 0x5c5044, 0xb4ab84, 0x588a48, 0x32623a, 0x689450, 0x6e8478, 0x4a4038, 0x9c958a,
      0xf07aa0, 0xf4f0e0, 0x30343a, 0x10161a, 0x24302c, 0x2f8a78, 0x2a3048,
      {0x2ec0d8, 0x2266d0, 0xf0a818, 0xe0402f, 0x10a07a, 0x7a34b4, 0xe04c96},
-     30.f, -0.5f, 1.1f, 0.f, 0.f, 0.f, 0.8f, 0.75f, 0.45f, 0.62f, 0.3f},
+     30.f, -0.5f, 1.1f, 0.f, 0.f, 0.f, 0.8f, 0.75f, 0.45f, 0.82f, 0.3f},
     // Moonlit clay: a deep blue night, a moon over the plain, the land grey-violet; pastel seeds, fireflies.
     {"MOONLIT CLAY", 0x060a1c, 0x1e2848, 0xdfe6f4, 0x283458, 0x2a3048, 0x3a4664, 0x0a0e1a, 0x161c2c,
      0x6a6070, 0x1c1822, 0x3a3242, 0x2a2432, 0x5a5a5a, 0x2e4a3a, 0x1e3a30, 0x2e5440, 0x1c2a34, 0x2a2228, 0x5a5664,
      0xc8a8ff, 0xa8f0ff, 0x0c0e18, 0x0a0c1c, 0xdce6f4, 0x8ad8ff, 0x101030,
      {0x88f0e8, 0x8ed4ff, 0xffc890, 0xfff090, 0x9effc0, 0xc4a8ff, 0xff98b8},
-     18.f, -0.55f, 0.8f, 1.f, 1.f, 1.f, 0.55f, 0.5f, 0.5f, 0.56f, 0.2f},
+     18.f, -0.55f, 0.8f, 1.f, 1.f, 1.f, 0.55f, 0.5f, 0.5f, 0.82f, 0.2f},
     // An ochre haze: a dusty amber afternoon, the sun from the side; cool, deep seeds.
     {"OCHRE HAZE", 0xb49a78, 0xecd6ae, 0xfff0d0, 0xf2e2c4, 0xe6cfa2, 0xd6dcc4, 0x5e5a50, 0x46423a,
      0xc89c62, 0x4a3622, 0x8a6038, 0x6a4a2a, 0xccb070, 0x668a2a, 0x3c6a22, 0x82a032, 0x6a7442, 0x54402c, 0xc0a888,
      0xe04a2a, 0xf8f0d8, 0x2e261c, 0x16100a, 0x2a1c10, 0xc8542a, 0x2a1e40,
      {0x10a8a8, 0x2a62e8, 0xf2ece0, 0xd8302a, 0x2fb04a, 0x7a3cc8, 0xf04c8c},
-     70.f, 28.f, 1.0f, 0.f, 0.f, 0.f, 1.0f, 0.6f, 0.6f, 0.64f, 0.1f},
+     70.f, 28.f, 1.0f, 0.f, 0.f, 0.f, 1.0f, 0.6f, 0.6f, 0.82f, 0.1f},
     // A grey monsoon: an overcast sky, soft light without shadows, cool green when it grows; vivid seeds.
     {"GREY MONSOON", 0x76848a, 0xc8ccc4, 0xf0f0e8, 0xd0d4d0, 0xc6c6bc, 0xc4ccc6, 0x4a5256, 0x343c40,
      0x8e7c68, 0x342a22, 0x5e5040, 0x4e4234, 0xa0986e, 0x4c7e3e, 0x2a5830, 0x588842, 0x56685c, 0x40362e, 0x8a8478,
      0xff7a3a, 0xf0e040, 0x262a2c, 0x0e1214, 0x1e2628, 0x3aa07a, 0x2a3040,
      {0x22c4dc, 0x9a78ff, 0xff8a1c, 0xffd43c, 0x3ad48a, 0xc4e436, 0xff4a6a},
-     150.f, 45.f, 1.0f, 0.f, 0.f, 0.f, 0.55f, 0.9f, 0.3f, 0.62f, 0.7f},
+     150.f, 45.f, 1.0f, 0.f, 0.f, 0.f, 0.55f, 0.9f, 0.3f, 0.82f, 0.7f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 // How fast each kind grows (seconds to full size at the base pace) and how wide it greens the soil.
-constexpr float GROW_S[LandWorld::K_COUNT] = {7.f, 11.f, 18.f, 26.f, 95.f, 150.f, 80.f, 1.f, 1.f, 1.f};
-constexpr float COVER_R[LandWorld::K_COUNT] = {1.6f, 1.3f, 2.f, 2.6f, 4.5f, 6.f, 3.5f, 0.f, 0.f, 0.f};
+constexpr float GROW_S[LandWorld::K_COUNT] = {7.f, 11.f, 18.f, 26.f, 95.f, 150.f, 80.f, 1.f, 1.f, 1.f, 20.f};
+constexpr float COVER_R[LandWorld::K_COUNT] = {1.6f, 1.3f, 2.f, 2.6f, 4.5f, 6.f, 3.5f, 0.f, 0.f, 0.f, 2.f};
 
 } // namespace
 
@@ -218,21 +218,23 @@ void LandWorld::plantStumps() {
     }
 }
 
-// What a seed grows into: grass most often, flowers in the seed's own color, ferns, bushes, and trees (more of them
-// as the land comes alive: a jungle); only low plants right behind the HUD's columns.
+// What a seed grows into: grass, flowers in the seed's own color, ferns, broad-leaved plants, bushes (a thick
+// undergrowth), and trees (more of them as the land comes alive: a jungle); only low plants right behind the HUD's
+// columns.
 int LandWorld::pickKind(float x, float z, int type) {
     (void)type;
     // the HUD's columns as seen from the eye (x scaled back to the board plane): only low plants there, near
     const float xs = std::fabs(x) * ctx.camDist / (ctx.camDist - z);
     const bool hud = z > -45.f && xs > 4.9f && xs < 12.6f;
     const float L = life_;
-    float w[K_COUNT] = {0.40f, 0.20f, 0.10f, 0.12f, 0.10f + 0.08f * L, z < -14.f ? 0.02f + 0.04f * L : 0.f, 0.04f + 0.03f * L, 0.f};
+    float w[K_COUNT] = {0.24f, 0.16f, 0.18f, 0.1f, 0.10f + 0.08f * L, z < -14.f ? 0.02f + 0.04f * L : 0.f, 0.04f + 0.03f * L, 0.f};
+    w[K_BROADLEAF] = 0.14f;
     if (hud) w[K_BUSH] = w[K_TREE] = w[K_EMERGENT] = w[K_PALM] = 0.f;
     // not too many trees near: they need room
     if (plantCount_[K_TREE] + plantCount_[K_PALM] + plantCount_[K_EMERGENT] > 420) w[K_TREE] = w[K_PALM] = w[K_EMERGENT] = 0.f;
     int k = ctx.rng.weighted(w);
     if (k >= K_BUSH && k != K_DEAD) {
-        const float room = k == K_BUSH ? 1.4f : k == K_EMERGENT ? 4.f : 2.6f;
+        const float room = k == K_BROADLEAF ? 1.f : k == K_BUSH ? 1.4f : k == K_EMERGENT ? 4.f : 2.6f;
         for (const Plant& p : plants_) {
             if (p.kind < K_BUSH || p.wild) continue;
             const float dx = p.p.x - x, dz = p.p.z - z;
@@ -314,7 +316,8 @@ void LandWorld::growPlants(float wdt) {
             switch (p.kind) {
             case K_GRASS: stamp(p.p.x, p.p.z, R, 0.5f * d, 0.25f * d, 0.f); break;
             case K_FLOWER: stamp(p.p.x, p.p.z, R, 0.35f * d, 0.2f * d, 0.6f * d); break;
-            case K_FERN: stamp(p.p.x, p.p.z, R, 0.45f * d, 0.4f * d, 0.f); break;
+            case K_FERN:
+            case K_BROADLEAF: stamp(p.p.x, p.p.z, R, 0.45f * d, 0.4f * d, 0.f); break;
             case K_BUSH: stamp(p.p.x, p.p.z, R, 0.4f * d, 0.5f * d, 0.1f * d); break;
             default: stamp(p.p.x, p.p.z, R, 0.55f * d, 0.8f * d, 0.05f * d); break;
             }
@@ -515,6 +518,12 @@ void LandWorld::simulateBirds(float dt, float wdt, float world) {
 void LandWorld::breakCube(const vec3& p, int type, float power, float seeds, int heroes, float pause) {
     type = std::clamp(type, 0, 6);
     const int n = std::max(heroes, (int)seeds + (ctx.rng.uniform() < seeds - std::floor(seeds) ? 1 : 0));
+    // the life in it set free: green sparks (a few of the seed's own color) rising out of where it was
+    const vec3 glow = glowColor();
+    for (int i = 0; i < (int)(7.f * power); i++)
+        spark(p + vec3(ctx.rng.range(-0.4f, 0.4f), ctx.rng.range(-0.4f, 0.4f), ctx.rng.range(-0.3f, 0.f)),
+              vec3(ctx.rng.range(-1.6f, 1.6f), ctx.rng.range(0.6f, 3.2f), ctx.rng.range(-1.2f, 0.f)), ctx.rng.range(1.f, 2.2f),
+              ctx.rng.range(0.06f, 0.11f), ctx.rng.chance(0.2f) ? lerp(ctx.pal.piece[type], vec3(1.f, 0.8f, 0.4f), 0.4f) * 1.6f : glow);
     for (int i = 0; i < n && parts_.size() < 7000; i++) {
         Particle q{};
         q.hero = i < heroes;
@@ -565,6 +574,24 @@ void LandWorld::dustPuff(const vec3& p, int n, float power) {
     }
 }
 
+// A green spark of life, glowing (drawn over the well's glass, behind the stack).
+void LandWorld::spark(const vec3& p, const vec3& v, float life, float size, const vec3& col) {
+    if (parts_.size() >= 7000) return;
+    Particle q{};
+    q.p = p;
+    q.v = v;
+    q.life = life;
+    q.size = size;
+    q.grav = -0.5f;   // rising
+    q.drag = 1.1f;
+    q.kind = P_SPARK; q.real = true; q.seed = ctx.rng.uniform();
+    q.col = col;
+    parts_.push_back(q);
+}
+
+// Life's glow: a bioluminescent green, brighter at night (bright enough for the lens to bloom it).
+vec3 LandWorld::glowColor() const { return lerp(ctx.pal.grassLush, vec3(0.5f, 1.f, 0.32f), 0.75f) * (1.7f + 0.8f * ctx.pal.night); }
+
 int LandWorld::heroes() const {
     int n = 0;
     for (const Sow& s : sows_) n += s.hero;
@@ -595,8 +622,15 @@ void LandWorld::settle(const Particle& s) {
 // near, after its pause, a sprout pushes out of the mound and opens (1.8 s), the plant grows out of it, the sprout's
 // seed leaves wither away and the mound settles flat. Far out, the plant just comes up after its pause.
 void LandWorld::simulateSows(float dt) {
+    const vec3 glow = glowColor();
     for (Sow& s : sows_) {
         s.t += dt;
+        // a sprout coming up near: green sparks rising around it
+        const float a = sproutAt(s);
+        if (s.hero && a > 0.f && a < 4.f && ctx.rng.uniform() < dt * 7.f)
+            spark(s.p + vec3(ctx.rng.range(-0.35f, 0.35f), ctx.rng.range(0.1f, 0.5f), ctx.rng.range(-0.35f, 0.35f)),
+                  vec3(ctx.rng.range(-0.25f, 0.25f), ctx.rng.range(0.4f, 1.f), ctx.rng.range(-0.25f, 0.25f)), ctx.rng.range(1.4f, 2.6f),
+                  ctx.rng.range(0.035f, 0.06f), glow);
         if (!s.hero) {
             if (!s.planted && s.t >= 0.95f + s.pause) {
                 s.planted = true;
@@ -759,8 +793,21 @@ void LandWorld::simulateParticles(float dt, float wdt) {
 }
 
 void LandWorld::simulate(const Game& game, const MusicState& music, float dt, float wdt) {
-    (void)game;
     (void)music;
+    // the falling piece, as the shell draws it (its glow on the glass)
+    fallN_ = 0;
+    if (game.hasPiece() && !game.over()) {
+        const Piece& p = game.piece();
+        int cells[4][2];
+        game.pieceCells(p, cells);
+        const float dx = game.pieceVisualX() - p.x, dy = game.pieceVisualY() - p.y;
+        fallType_ = std::clamp(p.type, 0, 6);
+        for (auto& c : cells) {
+            if (c[1] < Game::HIDDEN) continue;
+            const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
+            fall_[fallN_++] = v2(w.x, w.y);
+        }
+    }
     if (!started_) resetLand();
     const float wm = ctx.wm(), wp = ctx.wp(), world = ctx.world();
 

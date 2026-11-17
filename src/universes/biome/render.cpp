@@ -113,6 +113,82 @@ void Ctx::drawParts(GLuint p, const std::vector<float>& v) const {
     glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)(v.size() / 16));
 }
 
+// The lens, over the world drawn so far (before the shell's rain and the stack): the world taken down and blurred (what
+// the frosted glass shows) and its brightest light blurred wide (the bloom); then laid back over it with the sun's
+// glare and the dark frosted glass: the well's pane (a fine grid of its cells etched in it, a bright rim) and the panels
+// of the held and next pieces. The stack, the previews and the HUD are laid over it after: none of it touches them.
+void Ctx::drawLens(const Lens& l) {
+    const int qw = std::max(1, width / 4), qh = std::max(1, height / 4);
+    if (quarterT[0].w != qw || quarterT[0].h != qh) {
+        for (ugl::Target& t : quarterT) t.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+        for (ugl::Target& t : eighthT) t.create(std::max(1, qw / 2), std::max(1, qh / 2), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    }
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, msFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, bgT.fbo);
+    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glActiveTexture(GL_TEXTURE0);
+    auto down = [&](const ugl::Target& src, const ugl::Target& dst, bool bright) {
+        dst.bind();
+        glUseProgram(progLensDown);
+        glBindTexture(GL_TEXTURE_2D, src.tex);
+        set1i(progLensDown, "uSrc", 0);
+        set2f(progLensDown, "uTexel", 1.f / src.w, 1.f / src.h);
+        set1f(progLensDown, "uBright", bright ? 1.f : 0.f);
+        ugl::drawFullscreen();
+    };
+    auto blur = [&](ugl::Target* t, float spread) {
+        glUseProgram(progLensBlur);
+        set1i(progLensBlur, "uSrc", 0);
+        for (int pass = 0; pass < 2; pass++) {
+            t[1 - pass].bind();
+            glBindTexture(GL_TEXTURE_2D, t[pass].tex);
+            set2f(progLensBlur, "uDir", pass == 0 ? spread / t[0].w : 0.f, pass == 0 ? 0.f : spread / t[0].h);
+            ugl::drawFullscreen();
+        }
+    };
+    down(bgT, quarterT[0], false);
+    blur(quarterT, 0.6f);
+    down(quarterT[0], eighthT[0], true);
+    blur(eighthT, 2.f);
+    blur(eighthT, 2.f);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, msFbo);
+    glViewport(0, 0, width, height);
+    const GLuint p = progLens;
+    glUseProgram(p);
+    glBindTexture(GL_TEXTURE_2D, bgT.tex);
+    set1i(p, "uScene", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, quarterT[0].tex);
+    set1i(p, "uFrost", 1);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, eighthT[0].tex);
+    set1i(p, "uBloom", 2);
+    glActiveTexture(GL_TEXTURE0);
+    set4f(p, "uView", viewC.x, viewC.y, viewH.x, viewH.y);
+    set1f(p, "uPx", px);
+    set1f(p, "uAspect", (float)width / height);
+    set1f(p, "uWorld", world());
+    set1f(p, "uPane", bare ? 0.f : 1.f - smoothstepf(0.f, 0.6f, saturate(bridge.amount)));
+    set1f(p, "uDeepY", l.deepY);
+    // the sun on the picture (no glare when it is behind the eye)
+    const vec3 L = sunDir();
+    const vec4 sp = vp * vec4(eye + L * 600.f, 1.f);
+    const bool ahead = sp.w > 1e-3f && L.y > -0.02f;
+    set2f(p, "uSunP", ahead ? sp.x / sp.w : 0.f, ahead ? sp.y / sp.w : 0.f);
+    set4f(p, "uGlare", ahead ? l.glare : 0.f, l.bloom, l.tint, l.deepVeil);
+    set1f(p, "uGrid", l.grid);
+    set1f(p, "uPanels", l.panels ? 1.f : 0.f);
+    set3f(p, "uGlareCol", l.glareCol);
+    set3f(p, "uFrostCol", l.frostCol);
+    set3f(p, "uPanel", l.panel);
+    ugl::drawFullscreen();
+    glEnable(GL_DEPTH_TEST);
+}
+
 // =====================================================================================================
 // Setup
 // =====================================================================================================
@@ -122,6 +198,9 @@ bool BiomeUniverse::init(int width, int height) {
     progVeil_ = compile(ugl::FULLSCREEN_VS, shaders::VEIL_FS, "biome pane", {});
     progShape_ = compile(shaders::SHAPE_VS, shaders::SHAPE_FS, "biome shape", {});
     progPost_ = compile(ugl::FULLSCREEN_VS, shaders::POST_FS, "biome post", {});
+    c_.progLensDown = compile(ugl::FULLSCREEN_VS, shaders::LENS_DOWN_FS, "biome lens down", {});
+    c_.progLensBlur = compile(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "biome lens blur", {});
+    c_.progLens = compile(ugl::FULLSCREEN_VS, shaders::LENS_FS, "biome lens", {});
 
     const float quad[8] = {-1, -1, 1, -1, -1, 1, 1, 1};
     glGenBuffers(1, &c_.quadVbo);
@@ -202,7 +281,8 @@ BiomeUniverse::~BiomeUniverse() {
     for (auto& w : worlds_) w.reset();
     c_.sceneT.destroy();
     c_.bgT.destroy();
-    for (GLuint p : {progVeil_, progRain_, progShape_, progPost_}) glDeleteProgram(p);
+    for (ugl::Target* t : {&c_.quarterT[0], &c_.quarterT[1], &c_.eighthT[0], &c_.eighthT[1]}) t->destroy();
+    for (GLuint p : {progVeil_, progRain_, progShape_, progPost_, c_.progLensDown, c_.progLensBlur, c_.progLens}) glDeleteProgram(p);
     for (GLuint v : {cellVao_, c_.partVao, shapeVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {c_.quadVbo, cellVbo_, c_.partVbo, shapeVbo_}) glDeleteBuffers(1, &b);
     glDeleteFramebuffers(1, &c_.msFbo);
