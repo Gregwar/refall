@@ -987,14 +987,14 @@ float sdRound(vec2 p, vec2 b, float r) {
     vec2 d = abs(p) - b + r;
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
 }
-// a pane of smoky glass (d: its signed distance, board units): dark whatever is behind it (the world only faintly
+// a pane of smoky glass (d: its signed distance, board units): darker than whatever is behind it (the world half
 // seen through it, blurred, darker still over the deep water), a bright rim, a lighter frosted band inside it
 vec3 frosted(vec3 c, vec3 fr, float d, float y, float tintK, float rimK) {
     float inside = smoothstep(uPx, -uPx, d);
     float deep = smoothstep(2.0, 10.0, uDeepY - y) * uGlare.w;
     vec3 tint = mix(uFrostCol, uPanel, deep);
     // what shows through: the world's light held down, so that a white sky or the sun's glint stays dim
-    vec3 seen = fr / (1.0 + dot(fr, vec3(0.3, 0.55, 0.15)) * 3.0);
+    vec3 seen = fr / (1.0 + dot(fr, vec3(0.3, 0.55, 0.15)) * 1.6);
     vec3 g = mix(seen, tint, mix(tintK, min(tintK + 0.08, 0.95), deep));
     g = mix(g, mix(tint, vec3(1.0), 0.5), 0.1 * smoothstep(-0.3, 0.0, d));
     c = mix(c, g, inside);
