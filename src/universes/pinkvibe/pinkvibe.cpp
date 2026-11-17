@@ -10,19 +10,19 @@
 // upward in the free zones (never behind the well, fading out near the HUD columns).
 //
 // The well is a translucent deep wine pane in a rounded rose neon frame glowing softly inside and out, the ribbons
-// faintly showing through. The blocks are pearl cubes, one per cell: a softly rounded bevel around a slightly domed
-// face lit from the top left, a milky lustre and rim, a faint lilac-to-peach nacre shifting with the slope and the
-// position, a soft highlight, and a raised gold inlay per type: I three pearls, O a four-pointed star, T a diamond,
-// S a cross, Z four dots, J a heart, L a fine frame around a dot. Every block casts a soft shadow down and to the
-// right (all shadows drawn under all blocks); the falling piece glows softly rose instead. The seven types are
-// seven pinks of clearly different lightness and hue (pearl, peach-pink, rose, raspberry, mauve, lilac, coral), per
-// variant.
+// faintly showing through. The blocks are candy cubes facing us like dice, one per cell: a flat opaque creamy
+// fondant face, an even soft rounded bevel (lit top left, shaded bottom right), the very edge a little translucent
+// and glowing like sugared gummy candy, a faint sugar grain with pearly micro sparkles, and a nearly flat gold foil
+// stamp on the face: a quiet fine frame and a motif per type (I three pearls, O a four-pointed star, T a diamond,
+// S an X, Z four dots, J a heart, L a ring). Every block pools a soft shadow under it (all shadows drawn under all
+// blocks); the falling piece glows softly rose instead. The seven types are seven pinks of clearly different
+// lightness and hue (ivory, peach, rose, deep raspberry, hot pink, lilac, coral), per variant.
 //
 // The drop is the sunset, held for the whole drop section: the ribbons swirl around the well into one big rolling
 // wave and the palette swings to the variant's deeper rose-gold / magenta tones, eased in over a second or two and
 // out over a few once the drop ends. A landing leaves a little gold sparkle dust under the piece. A cleared row's
-// cubes swell softly and vanish, each releasing sparkle dust, then petals and bubbles that drift out behind the well
-// and float up; a quad sends a soft shower of hearts and petals from both sides and swells the waves; slow motion is
+// cubes swell softly and vanish, each releasing sparkle dust and bokeh motes rising high, then petals and bubbles
+// that drift out behind the well and float up; a quad sends a soft shower of hearts and petals from both sides and swells the waves; slow motion is
 // a lavender dusk with slower waves; game over greys the stack from the top. Around a song the ribbons are laid one
 // after another over the blush, from the bottom left (the setup), and go under a deep plum dusk the same way (the
 // teardown). HUD: Quicksand and Nunito (rounded), deep plum on a feathered blush halo.
@@ -73,19 +73,19 @@ const VariantDef VARIANTS[] = {
      {0xf9d9df, 0xefb0c1, 0xdf819c, 0xbd4c74, 0x80234b},
      {0xf9c7b4, 0xf09aa6, 0xe0668d, 0xc23f78, 0x8a2862},
      0x4a1239, 0xff86b0, 0xffe1ea, 0x5a1f45, 0xb8336a,
-     {0xffe0e8, 0xf9bba8, 0xf6a6c4, 0xde6893, 0xc793b8, 0xdcbdf0, 0xf58c94},
+     {0xffe0e8, 0xf9bba8, 0xfaa8c6, 0xbc426f, 0xec62a0, 0xdcbdf0, 0xf58c94},
      {0xffb0cc, 0xff8a5c, 0xff3d8f, 0xf2338a, 0xc24aae, 0xa874ff, 0xff4545}},
     {"ROSE",
      {0xf9dccf, 0xefb2a3, 0xde8580, 0xbb5064, 0x7e2440},
      {0xf6c391, 0xee9c86, 0xd86d82, 0xae4870, 0x6c2954},
      0x4c1433, 0xff8a9c, 0xffe6dc, 0x5c2234, 0xb54360,
-     {0xffe4d8, 0xf6b89c, 0xf4a7b2, 0xd9677e, 0xc58aa6, 0xe9c3dc, 0xef8c7c},
+     {0xffe4d8, 0xf6b89c, 0xf8a8b8, 0xb8445f, 0xea6896, 0xe9c3dc, 0xef8c7c},
      {0xffc39e, 0xff8a3d, 0xff5470, 0xf03a6c, 0xb54f9a, 0xd77ce0, 0xff4a2e}},
     {"CANDY",
      {0xf7dbee, 0xecaed4, 0xd97db6, 0xb24b8f, 0x732464},
      {0xd9b6f2, 0xe58dcb, 0xd0569f, 0xa63b86, 0x6a2670},
      0x3e1145, 0xff84cc, 0xffe3f3, 0x4e1a4e, 0xb02f86,
-     {0xffdcf0, 0xffb9b0, 0xffacd9, 0xe0609f, 0xb993d6, 0xcdb8f8, 0xf8829f},
+     {0xffdcf0, 0xffb9b0, 0xffacd9, 0xb43a80, 0xee5fb0, 0xcdb8f8, 0xf8829f},
      {0xffb8e2, 0xff7f6e, 0xff3fae, 0xf22e98, 0x9a45d6, 0x9c6bff, 0xff2f6a}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
@@ -345,6 +345,23 @@ void PinkVibeUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 parts_.push_back(q);
             }
             dust(p.x, p.y, 3, 0.45f);
+            // and a few slower bokeh motes rising high above the stack
+            for (int i = 0; i < 2; i++) {
+                Part q;
+                q.x = p.x + rng_.range(-0.45f, 0.45f);
+                q.y = p.y + rng_.range(-0.3f, 0.3f);
+                q.vx = rng_.range(-0.25f, 0.25f);
+                q.vy = rng_.range(1.4f, 2.6f);
+                q.rot = q.spin = 0.f;
+                q.age = -rng_.range(0.f, 0.35f);
+                q.life = rng_.range(1.8f, 2.8f);
+                q.seed = rng_.uniform();
+                q.kind = rng_.chance(0.2f) ? K_SPARKLE : K_MOTE;
+                q.size = q.kind == K_SPARKLE ? rng_.range(0.12f, 0.18f) : rng_.range(0.1f, 0.2f);
+                q.col = lerp(vec3(1.f, 0.85f, 0.62f), neon_, rng_.uniform() * 0.7f);
+                q.layer = L_OVER;
+                parts_.push_back(q);
+            }
         }
         if (ev.count >= 4) {
             // a quad: a soft shower of hearts and petals from both sides; the waves swell
@@ -698,7 +715,7 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
 
     if (!f.bare) {
         // =========================================================== the well
-        sprite(K_PANEL, 0.f, 0.f, 5.15f, 10.15f, 0.f, 1.f, lerp(well_, dropBand_[4] * 0.55f, 0.25f * sunset), neon_, 0.88f);
+        sprite(K_PANEL, 0.f, 0.f, 5.15f, 10.15f, 0.f, 1.f, lerp(well_, dropBand_[4] * 0.55f, 0.25f * sunset), neon_, 0.92f);
         for (const Part& p : parts_) {
             if (p.layer != L_UNDER) continue;
             const float a = 1.f - ease((p.age / p.life - 0.4f) / 0.6f);

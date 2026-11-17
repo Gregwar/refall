@@ -1,8 +1,8 @@
 #pragma once
 // PINK VIBE's shaders, in display (sRGB) colors, every shape a signed distance field: the satin ribbons behind
 // everything (their relief lit from the top left, with their sparse sparkles and bubbles), the sprites (the well's
-// pane and its neon frame, petals, hearts, bubbles, sparkle dust), the blocks (one pearl cube per cell with a gold
-// inlay per piece type, their soft shadows) and the lettering on a feathered blush halo.
+// pane and its neon frame, petals, hearts, bubbles, sparkle dust), the blocks (one candy cube per cell facing us, flat
+// creamy fondant with a soft bevel, a sugar grain and a gold foil stamp per piece type, their soft shadows) and the lettering on a feathered blush halo.
 
 namespace pinkvibe_shaders {
 
@@ -210,7 +210,7 @@ void main() {
         AA = max(fwidth(l.x), 1e-4) * 0.7;
         float d = dBox(l, vA.zw, 0.6);
         float g = clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0);
-        vec3 pane = mix(A * 0.72, A * 1.1, g);
+        vec3 pane = mix(A * 0.62, A * 1.02, g);
         float sd = dot(l, vec2(0.45, 0.89));
         pane = mix(pane, B, 0.035 * exp(-dot2(vec2(sd - 2.5, 0.0)) / 6.0) + 0.16 * exp(d / 0.3));
         float inside = 1.0 - smoothstep(-AA, AA, d);
@@ -277,33 +277,46 @@ uniform int uPass;            // 0: the soft shadows (and the falling piece's gl
 uniform vec3 uShade, uGlow;   // the shadows' deep tint, the falling piece's glow
 uniform vec3 uVivid[7];
 uniform float uWave, uBeat;
-const vec3 LIGHT = vec3(-0.45, 0.6, 0.66);   // from the top left, like the ribbons' light
-const float HALF = 0.46, ROUND = 0.17, BEVEL = 0.19;
-const vec3 GOLD = vec3(1.0, 0.86, 0.6), GOLD_DEEP = vec3(0.64, 0.42, 0.22);
-// The gold inlay, one small motif per type (its distance, cell units, from the cell's center).
+// Each block is a candy cube facing us: a flat creamy face of fondant, an even soft rounded bevel all around it (lit
+// top left, shaded bottom right, a little translucent and glowing at the very edge, like sugared gummy candy), a
+// fine sugar grain with a few pearly micro sparkles, and a gold foil stamp on the face.
+const float FOOT = 0.475, FOOT_R = 0.2;    // the cube's outline (cell units): narrow gaps
+const float BEVEL = 0.165;                 // the rounded bevel's width
+const vec3 LIGHT = vec3(-0.5, 0.62, 0.6);  // from the top left
+const vec3 GOLD = vec3(0.95, 0.8, 0.54), GOLD_DEEP = vec3(0.62, 0.43, 0.24);
+const vec3 MILK = vec3(1.0, 0.97, 0.95);
+// The gold stamp on the face (cell units): one small motif per type in its middle, and a fine frame set in from
+// the bevel.
 float motif(int type, vec2 u) {
     if (type == 0) {           // I: three pearls in a row
         vec2 q = vec2(abs(u.x), u.y);
-        return min(length(q), length(q - vec2(0.17, 0.0))) - 0.045;
+        return min(length(q), length(q - vec2(0.16, 0.0))) - 0.048;
     }
-    if (type == 1) return dSparkle(u / 0.27) * 0.27;                      // O: a four-pointed star
-    if (type == 2) return abs(abs(u.x) + abs(u.y) - 0.18) * 0.7071 - 0.026; // T: a diamond
-    if (type == 3) return dSeg(abs(u), vec2(0.0), vec2(0.135)) - 0.028;     // S: a cross
-    if (type == 4) return length(abs(u) - vec2(0.12)) - 0.045;             // Z: four dots
-    if (type == 5) return dHeart(u / 0.18) * 0.18;                         // J: a heart
-    return min(abs(dBox(u, vec2(0.25), 0.08)) - 0.02, length(u) - 0.05);   // L: a fine frame around a dot
+    if (type == 1) return dSparkle(u / 0.25) * 0.25;                        // O: a four-pointed star
+    if (type == 2) return abs(abs(u.x) + abs(u.y) - 0.15) * 0.7071 - 0.027; // T: a diamond
+    if (type == 3) return dSeg(abs(u), vec2(0.0), vec2(0.13)) - 0.03;       // S: an X
+    if (type == 4) return length(abs(u) - vec2(0.11)) - 0.047;              // Z: four dots
+    if (type == 5) return dHeart(u / 0.17) * 0.17;                          // J: a heart
+    return abs(length(u) - 0.12) - 0.029;                                   // L: a ring
+}
+float frameD(vec2 u) { return abs(dBox(u, vec2(0.3), 0.08)) - 0.016; }
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + 1.0), f.x), f.y);
 }
 void main() {
     vec2 u = vU;
     AA = max(fwidth(u.x), 1e-4) * 0.75;
     int type = int(vB.x + 0.5), mode = int(vB.z + 0.5);
-    float d = dBox(u, vec2(HALF), ROUND);
+    float d = dBox(u, vec2(FOOT), FOOT_R);
     if (uPass == 0) {
-        // under each block a soft shadow cast down and to the right; under the falling piece a soft rose glow
+        // a soft shadow pooled just under and around each cube (darkest in the gaps); under the falling piece a soft
+        // rose glow
         if (mode == 1) discard;
         vec4 o;
         if (mode == 3) o = vec4(uGlow, 0.5 * exp(-max(d, 0.0) * max(d, 0.0) / 0.006));
-        else o = vec4(uShade, 0.55 * (1.0 - smoothstep(-0.07, 0.1, dBox(u - vec2(0.035, -0.065), vec2(HALF - 0.02), ROUND))));
+        else o = vec4(uShade, 0.6 * (1.0 - smoothstep(-0.06, 0.1, dBox(u - vec2(0.012, -0.035), vec2(FOOT), FOOT_R))));
         float al = o.a * vB.y;
         frag = vec4(o.rgb * al, al);
         return;
@@ -317,46 +330,79 @@ void main() {
         float band = smoothstep(0.0, 0.06, s) * (1.0 - smoothstep(0.06, 0.55, s));
         col = mix(col, uVivid[type], uWave * (0.12 + 0.88 * band));
     }
-    vec4 acc = vec4(0.0);
     if (mode == 1) {
         // the ghost: a soft fill and a clear line of the piece's color, lightened so it reads on the deep well
-        vec3 lc = mix(col, vec3(1.0), 0.35);
-        layerA(acc, d, col, 0.22);
+        vec4 acc = vec4(0.0);
+        vec3 lc = mix(col, vec3(1.0), 0.4);
+        layerA(acc, d, col, 0.2);
         layerA(acc, abs(d + 0.035) - 0.03, lc, 0.9);
         frag = vec4(acc.rgb * acc.a * vB.y, acc.a * vB.y);
         return;
     }
-    // a pearl cube: a softly rounded bevel all around a slightly domed face
-    vec2 q = abs(u) - HALF + ROUND;
+    // the bevel: a quarter round from the flat face (x 0) to the outline (x 1)
+    vec2 q = abs(u) - FOOT + FOOT_R;
     vec2 gd = sign(u) * normalize(max(q, 1e-4));
-    float x = (1.0 - clamp(-d / BEVEL, 0.0, 1.0)) * 0.92;
-    vec3 n = normalize(vec3(gd * x + u * 0.3, sqrt(1.0 - x * x)));
-    float lit = max(dot(n, LIGHT), 0.0) / LIGHT.z;                       // 1 on the flat face
-    vec3 c = col * (0.64 + 0.36 * lit);
-    // nacre: a faint play between a lilac and a peach sheen, shifting with the slope and the position
-    float ph = 0.5 + 0.5 * cos(TAU * (dot(n.xy, vec2(1.2, 0.8)) + dot(vW, vec2(0.08, 0.05))));
-    c *= mix(vec3(0.98, 0.95, 1.04), vec3(1.04, 0.99, 0.95), ph);
-    // a milky lustre over the face, brighter toward the light, a milky rim on the lit edges and a soft highlight
-    const vec3 MILK = vec3(1.0, 0.96, 0.97);
-    c = mix(c, MILK, 0.2 * smoothstep(0.5, -0.4, dot(u, vec2(0.7, -0.7)) / HALF) * n.z);
-    float edge = 1.0 - n.z;
-    c = mix(c, MILK, 0.5 * edge * smoothstep(-0.3, 0.7, dot(normalize(n.xy + 1e-5), normalize(LIGHT.xy))));
-    float sp = max(dot(n, normalize(LIGHT + vec3(0.0, 0.0, 1.0))), 0.0);
-    c += MILK * (0.32 * pow(sp, 40.0) + 0.06 * pow(sp, 6.0));
-    // the gold inlay, raised a hair: its shadow, then the gold, warmer toward the light, with a glint
-    float dm = motif(type, u);
-    float ds = motif(type, u - vec2(0.014, -0.016));
-    c = mix(c, c * 0.72, 0.6 * (1.0 - smoothstep(-AA, AA, ds)));
-    vec3 gold = mix(GOLD_DEEP, GOLD, clamp(0.55 + 2.4 * dot(u, vec2(-0.6, 0.8)), 0.0, 1.0));
-    gold += 0.3 * (1.0 - smoothstep(0.0, 0.06, length(u - vec2(-0.07, 0.08))));
-    c = mix(c, gold, 1.0 - smoothstep(-AA, AA, dm));
-    if (mode == 3) c = mix(c, vec3(1.0, 0.95, 0.96), 0.08);             // the falling piece, a little aglow
+    float x = clamp(1.0 + d / BEVEL, 0.0, 1.0);
+    float sx = 1.0 - sqrt(max(1.0 - x * x, 0.0));       // (the round's slope grows toward the edge)
+    vec3 n = normalize(vec3(gd * sx * 1.3, 1.0));
+    vec3 L = normalize(LIGHT);
+    float shade = dot(n, L) - L.z;                       // 0 on the flat face, > 0 lit, < 0 in the shade
+    // the flat creamy body
+    vec3 c = mix(col, MILK, 0.06);
+    // fondant: a fine sugar grain and a softer mottle, both very faint
+    float texK = 1.0 - smoothstep(0.018, 0.035, AA / 0.75);
+    // (in the cube's own frame, so the sugar travels with the falling piece)
+    float seed = float(type) * 7.31;
+    vec2 tp = u * 34.0 + seed;
+    float grain = hash12(floor(u * 70.0) + seed * 13.0) - 0.5;
+    float mottle = vnoise(tp) - 0.5;
+    c *= 1.0 + texK * (0.05 * grain + 0.05 * mottle);
+    // the bevel's light: highlight top left, soft shade bottom right
+    c *= 1.0 + 0.65 * min(shade, 0.0);
+    c = mix(c, MILK, clamp(shade, 0.0, 1.0) * 0.6);
+    // the candy's edge a little translucent: lighter and richer toward the outline, glowing from within
+    vec3 glow = clamp(col * 1.12 + vec3(0.06, 0.02, 0.03), 0.0, 1.0);
+    c = mix(c, glow, 0.35 * smoothstep(0.3, 1.0, x) * (0.5 + 0.5 * clamp(1.0 + shade * 3.0, 0.0, 1.0)));
+    // a soft gloss on the lit bevel
+    vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+    c += MILK * 0.22 * pow(max(dot(n, H), 0.0), 14.0) * smoothstep(0.05, 0.3, x);
+    // pearly micro sparkles in the sugar
+    vec2 sc = u * 18.0 + seed * 3.0;
+    vec2 si = floor(sc);
+    float sh = hash12(si + 3.7);
+    if (sh > 0.86) {
+        vec2 so = vec2(hash12(si + 1.3), hash12(si + 8.1)) * 0.6 + 0.2;
+        float tw = 0.5 + 0.5 * sin(uBeat * 1.6 + sh * 60.0);
+        float sp = exp(-dot2(fract(sc) - so) * 90.0);
+        c = mix(c, MILK, texK * sp * (0.35 + 0.4 * tw) * (1.0 - x));
+    }
+    // the gold foil stamp: nearly flat, its edges catching the light a little, set on a faint pressed shadow
+    float face = 1.0 - smoothstep(0.0, 0.35, x);
+    if (face > 0.0) {
+        float frameK = 1.0 - smoothstep(0.03, 0.05, AA / 0.75);
+        float dm = motif(type, u), df = frameD(u);
+        float ds = min(motif(type, u - vec2(0.008, -0.012)), mix(1.0, frameD(u - vec2(0.008, -0.012)), frameK));
+        c *= 1.0 - 0.22 * face * (1.0 - smoothstep(-0.005, 0.015, ds));
+        float e = 0.004;
+        float dd = min(dm, mix(1.0, df, frameK));
+        vec2 g = vec2(min(motif(type, u + vec2(e, 0.0)), mix(1.0, frameD(u + vec2(e, 0.0)), frameK)) - dd,
+                      min(motif(type, u + vec2(0.0, e)), mix(1.0, frameD(u + vec2(0.0, e)), frameK)) - dd) / e;
+        float rim = 1.0 - smoothstep(0.0, 0.012, -dd);   // the foil's edge
+        float gl = clamp(dot(-g, normalize(L.xy)) * rim, -1.0, 1.0);
+        float foil = 0.5 + 0.5 * vnoise(u * 60.0);
+        vec3 gold = mix(GOLD_DEEP, GOLD, 0.7 + 0.3 * gl - 0.12 * rim * (1.0 - abs(gl)) + texK * 0.08 * (foil - 0.5));
+        gold += vec3(1.0, 0.95, 0.82) * 0.35 * max(gl, 0.0);
+        float ga = max(1.0 - smoothstep(-AA, AA, dm), 0.7 * frameK * (1.0 - smoothstep(-AA, AA, df))) * face;
+        c = mix(c, gold, ga);
+    }
+    if (mode == 3) c = mix(c, vec3(1.0, 0.95, 0.96), 0.06);             // the falling piece, a little aglow
     if (vC.w < 0.0) c = mix(c, vec3(1.0, 0.96, 0.97), -vC.w);
     else {
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(c, vec3(l) * vec3(0.7, 0.6, 0.68), vC.w);
     }
-    float al = (1.0 - smoothstep(-AA, AA, d)) * vB.y;
+    // the outermost edge of the candy a touch translucent
+    float al = (1.0 - smoothstep(-AA, AA, d)) * mix(1.0, 0.82, smoothstep(0.75, 1.0, x)) * vB.y;
     frag = vec4(c * al, al);
 }
 )";
