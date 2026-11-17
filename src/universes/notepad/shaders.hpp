@@ -18,6 +18,51 @@ float vnoise(vec2 p) {
 }
 float vnoise1(float x) { float i = floor(x), f = fract(x); float u = f * f * (3.0 - 2.0 * f); return mix(hash11(i), hash11(i + 1.0), u); }
 float fbm(vec2 p) { return (0.5 * vnoise(p) + 0.25 * vnoise(p * 2.03 + 7.1) + 0.125 * vnoise(p * 4.01 + 3.3)) / 0.875; }
+
+// The teardown's wipe: the page cleaned band after band from the top, by a board duster dragged across the
+// blackboard (long streaks of dust left behind) or a rubber eraser scrubbing up and down across the paper.
+uniform vec4 uWipe; // progress (0: none, 1: done), bands, blackboard (1) or paper (0), aspect
+float wipeHalfL() { return uWipe.z > 0.5 ? 0.16 : 0.075; }
+float wipeTravel() { return uWipe.w + 2.0 * wipeHalfL() + 0.1; }
+float wipeBandY(float r, float x) { return 1.0 - (r + 0.5) / uWipe.y + 0.014 * sin(x * 2.3 + r * 1.9); }
+// the tool: its centre (x across the aspect, y up, the height 1) and its angle
+vec3 wipeTool() {
+    float e = uWipe.x * uWipe.y;
+    float r = min(floor(e), uWipe.y - 1.0), s = e - r;
+    float x = -wipeHalfL() - 0.05 + s * wipeTravel();
+    if (mod(r, 2.0) > 0.5) x = uWipe.w - x;
+    float y = wipeBandY(r, x), a;
+    if (uWipe.z > 0.5) {
+        y += 0.02 * sin(s * 17.0 + r * 2.0);
+        a = 0.07 * sin(s * 6.0 + r) + (mod(r, 2.0) > 0.5 ? 0.05 : -0.05);
+    } else {
+        float z = cos(s * 6.2832 * 16.0); // scrubbing: up and down, a stroke each drawing
+        y += 0.07 * z;
+        a = 0.5 + 0.15 * z;
+    }
+    return vec3(x, y, a);
+}
+// at q: how much of the drawing is left (1: untouched) and how far the tool has been over it
+vec2 wipeAt(vec2 q) {
+    if (uWipe.x <= 0.0) return vec2(1.0, 0.0);
+    float L = wipeHalfL(), T = wipeTravel(), hh = 0.62 / uWipe.y;
+    float left = 1.0, swept = 0.0;
+    for (int i = 0; i < 8; i++) {
+        float r = float(i);
+        if (r >= uWipe.y) break;
+        float d = abs(q.y - wipeBandY(r, q.x)) + 0.014 * (vnoise(vec2(q.x * 9.0, r * 3.1)) - 0.5);
+        float inside = 1.0 - smoothstep(hh - 0.025, hh, d);
+        if (inside <= 0.0) continue;
+        float x = mod(r, 2.0) > 0.5 ? uWipe.w - q.x : q.x;
+        float tp = (r + (x + L + 0.05) / T) / uWipe.y; // when the tool's centre is over q
+        float k = clamp((uWipe.x - tp) * uWipe.y * T / (2.0 * L) + 0.5, 0.0, 1.0);
+        // the felt drags the chalk into long streaks; the rubber takes nearly everything
+        float n = uWipe.z > 0.5 ? 0.88 + 0.12 * vnoise(vec2(q.x * 3.0, q.y * 140.0)) : 0.95 + 0.05 * vnoise(q * 60.0);
+        left *= 1.0 - inside * k * n;
+        swept = max(swept, inside * k);
+    }
+    return vec2(left, swept);
+}
 )";
 
 inline const char* FULLSCREEN_VS = R"(#version 330 core
@@ -83,6 +128,13 @@ void main() {
     } else {
         c = mix(c, vec3(0.82, 0.85, 0.82), (0.022 * fine + 0.03 * speck) * uWorld);
     }
+    // where the wipe went: a haze of chalk dust dragged across the slate, a faint grey smudge on the paper
+    vec2 wq = vec2(vUv.x * uAspect, vUv.y);
+    float sw = wipeAt(wq).y;
+    if (sw > 0.0) {
+        if (uLight > 0.5) c *= 1.0 - 0.025 * sw * (0.3 + 0.7 * vnoise(wq * vec2(5.0, 30.0)));
+        else c = mix(c, vec3(0.8, 0.83, 0.8), sw * (0.003 + 0.01 * vnoise(vec2(wq.x * 2.5, wq.y * 90.0))) * (0.5 + 0.5 * vnoise(wq * 4.0)));
+    }
     // paper tooth
     float gr = 0.6 * vnoise(p * 23.0) + 0.4 * vnoise(p * 61.0 + 9.0);
     c *= 1.0 - uGrain * (gr - 0.5);
@@ -142,6 +194,7 @@ uniform float uPx;
 uniform float uResidue;   // 1: a ghost written into the residue
 uniform vec2 uSmear;      // the eraser's drag (board units)
 uniform float uWorldFade; // the world's marks fade during a bridge
+uniform vec2 uRes;        // the target's size (pixels)
 
 float tooth(vec2 p) { return 0.55 * vnoise(p * 29.0) + 0.3 * vnoise(p * 71.0 + 11.0) + 0.15 * hash21(floor(p / uPx)); }
 
@@ -321,6 +374,7 @@ void main() {
     }
     float A = clamp(cov * vHead.w, 0.0, 1.0);
     if (world) A *= uWorldFade;
+    A *= wipeAt(vec2(gl_FragCoord.x / uRes.x * uWipe.w, gl_FragCoord.y / uRes.y)).x;
     if (A <= 0.002) discard;
     frag = vec4(mix(vec3(1.0), vC.rgb, A), world ? 0.0 : A);
 }
@@ -346,19 +400,57 @@ out vec4 frag;
 uniform sampler2D uScene;
 uniform float uLight, uFade, uDim, uBridge;
 uniform vec3 uBridgeCol, uBridgeInk;
-uniform vec2 uErase;    // the teardown: the eraser's reach (0 .. 1, rubbing up from the bottom) and its wobble
-uniform vec3 uPaperCol; // the bare page
 void main() {
     vec4 s = texture(uScene, vUv);
     vec3 c = uLight > 0.5 ? s.rgb : 1.0 - s.rgb;
     float cov = clamp(s.a, 0.0, 1.0);
-    if (uErase.x > 0.0) {
-        // the eraser rubs the page clean, up from the bottom in the page's stop motion: a ragged, smudged front
-        float y = vUv.y + 0.03 * sin(vUv.x * 23.0 + uErase.y) + 0.02 * sin(vUv.x * 61.0 - uErase.y * 1.7);
-        float front = 1.0 - smoothstep(uErase.x * 1.12 - 0.06, uErase.x * 1.12, y);
-        vec3 smudge = uPaperCol * (0.93 + 0.04 * sin(vUv.x * 140.0 + vUv.y * 37.0));
-        c = mix(c, uPaperCol, front);
-        c = mix(c, smudge, front * (1.0 - smoothstep(0.0, 0.08, uErase.x * 1.12 - y)));
+    if (uWipe.x > 0.0) {
+        vec2 q = vec2(vUv.x * uWipe.w, vUv.y);
+        bool board = uWipe.z > 0.5;
+        // the rubber's crumbs, left where it scrubbed
+        if (!board) {
+            vec2 cell = floor(q / 0.008);
+            float h = hash21(cell + 17.0);
+            if (h < 0.035 && wipeAt((cell + 0.5) * 0.008).y > 0.9) {
+                vec2 o = (cell + 0.25 + 0.5 * hash22(cell)) * 0.008;
+                float m = 1.0 - smoothstep(0.0018, 0.0028, length(q - o));
+                c = mix(c, mix(vec3(0.62, 0.42, 0.45), vec3(0.35), h * 20.0), 0.75 * m);
+            }
+        }
+        // the tool, with its soft shadow
+        vec3 t = wipeTool();
+        vec2 hs = board ? vec2(wipeHalfL(), 0.075) : vec2(wipeHalfL(), 0.04);
+        float rad = board ? 0.012 : 0.01;
+        float ca = cos(t.z), sa = sin(t.z);
+        vec2 d = q - t.xy, l = vec2(ca * d.x + sa * d.y, -sa * d.x + ca * d.y);
+        vec2 ds = d - vec2(0.008, -0.012), ls = vec2(ca * ds.x + sa * ds.y, -sa * ds.x + ca * ds.y);
+        vec2 b = abs(ls) - hs + rad;
+        float sh = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - rad;
+        c *= 1.0 - 0.45 * (1.0 - smoothstep(-0.004, 0.022, sh));
+        b = abs(l) - hs + rad;
+        float sd = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - rad;
+        float inside = 1.0 - smoothstep(-0.0012, 0.0012, sd);
+        if (inside > 0.0) {
+            vec3 tc;
+            float rim = 1.0 - smoothstep(0.0, 0.006, -sd);
+            if (board) {
+                // a wooden back, its grain along it, over a strip of grey felt white with chalk
+                float grain = vnoise(vec2(l.x * 7.0, l.y * 90.0)) * 0.6 + vnoise(vec2(l.x * 2.0, l.y * 25.0)) * 0.4;
+                tc = mix(vec3(0.20, 0.09, 0.035), vec3(0.42, 0.22, 0.09), grain);
+                tc *= 1.0 + 0.35 * smoothstep(0.0, hs.y, l.y) * (1.0 - smoothstep(hs.y - 0.012, hs.y, l.y));
+                float felt = 1.0 - smoothstep(-hs.y + 0.016, -hs.y + 0.02, l.y);
+                vec3 fc = mix(vec3(0.16), vec3(0.62, 0.64, 0.6), 0.5 + 0.5 * vnoise(l * vec2(60.0, 300.0)));
+                tc = mix(tc, fc, felt);
+                tc *= 1.0 - 0.35 * rim;
+            } else {
+                // a pink rubber, its corners worn, greyed where it rubs
+                tc = vec3(0.86, 0.42, 0.46) * (0.92 + 0.08 * vnoise(l * 200.0));
+                tc *= 1.0 + 0.18 * smoothstep(-hs.y, hs.y, l.y);
+                tc = mix(tc, vec3(0.42, 0.36, 0.38), 0.6 * (1.0 - smoothstep(-hs.x, -hs.x + 0.03, l.x)));
+                tc *= 1.0 - 0.25 * rim;
+            }
+            c = mix(c, tc, inside);
+        }
     }
     c = mix(c, mix(uBridgeCol, uBridgeInk, cov), uBridge);
     c *= 1.0 - 0.45 * uDim;
