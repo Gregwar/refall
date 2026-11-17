@@ -182,7 +182,6 @@ void Ctx::drawLens(const Lens& l) {
     set2f(p, "uSunP", ahead ? sp.x / sp.w : 0.f, ahead ? sp.y / sp.w : 0.f);
     set4f(p, "uGlare", ahead ? l.glare : 0.f, l.bloom, l.tint, l.deepVeil);
     set1f(p, "uGrid", l.grid);
-    set1f(p, "uPanels", l.panels ? 1.f : 0.f);
     set3f(p, "uGlareCol", l.glareCol);
     set3f(p, "uFrostCol", l.frostCol);
     set3f(p, "uPanel", l.panel);

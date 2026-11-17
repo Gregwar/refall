@@ -476,7 +476,7 @@ out vec4 frag;
 uniform sampler2D uScene, uFrost, uBloom;   // the world (encoded), blurred (linear), its brightest light (linear)
 uniform vec4 uView;                         // the board plane: center x, y, half extents x, y
 uniform float uPx, uAspect, uWorld, uPane;  // a pixel (board units), the picture's aspect, the world shown, the glass
-uniform float uGrid, uPanels;               // how bright the well's grid; the previews' panels (0: none)
+uniform float uGrid;                        // how bright the well's grid
 uniform vec2 uSunP;                         // the sun on the picture (-1 .. 1, out of it too)
 uniform vec4 uGlare;                        // the glare's strength, the bloom's, the glass's tint, the deep's veil
 uniform vec3 uGlareCol, uFrostCol, uPanel;
@@ -518,10 +518,9 @@ void main() {
         // the held piece's panel, the next pieces' panel
         float dh = sdRound(w - vec2(-8.6, 7.2), vec2(1.6, 1.35), 0.22);
         float dn = sdRound(w - vec2(8.6, 4.1), vec2(1.6, 4.45), 0.22);
-        float dp = uPanels > 0.5 ? min(dh, dn) : 1e3;
-        c = frosted(c, fr, dp, w.y, uGlare.z, 0.8);
+        c = frosted(c, fr, min(dh, dn), w.y, uGlare.z, 0.8);
         c = mix(c0, c, uPane);
-        glass = smoothstep(uPx, -uPx, min(dw, dp)) * uPane;
+        glass = smoothstep(uPx, -uPx, min(dw, min(dh, dn))) * uPane;
     }
     // ---- the light in the lens: the bloom, the sun's glare (a broad warm veil, a tighter glow, faint ghosts); held
     // down over the glass (the cubes keep their dark ground)

@@ -105,7 +105,7 @@ const float CANOPY_Y = -3.0, CLOUD_Y = 40.0;
 float lit(vec3 P) {
     // the breaks in the clouds: a few broad beams
     vec2 b = (P + uShaftDir * ((CLOUD_Y - P.y) / uShaftDir.y)).xz;
-    float sky = mix(0.25, 1.0, smoothstep(0.5, 0.7, vnoise(b * vec2(0.035, 0.006) + vec2(1.7, uTime * 0.002))));
+    float sky = mix(0.12, 0.85, smoothstep(0.5, 0.7, vnoise(b * vec2(0.035, 0.006) + vec2(1.7, uTime * 0.002))));
     if (P.y > CANOPY_Y) return sky;
     vec2 c = (P + uShaftDir * ((CANOPY_Y - P.y) / uShaftDir.y)).xz;
     float n = vnoise(c * vec2(0.2, 0.012) + vec2(3.1, uTime * 0.004)) * 0.8 + vnoise(c * vec2(0.6, 0.05) + 7.7) * 0.2;

@@ -709,9 +709,9 @@ void LandWorld::drawWorld() {
     // the lens: the bloom, the sun's glare, the well's dark smoky glass (the world dim behind the stack in every light)
     Ctx::Lens l;
     l.glare = (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) * (1.f - 0.6f * ctx.slow);
-    l.bloom = 0.3f;
+    l.bloom = 0.2f;
     l.grid = 0.14f;
-    l.panels = false;
+    l.tint = 0.9f;   // darker than the sea's: the land behind it is often a bright, hazy day
     l.glareCol = pal.sun * pal.lightK;
     l.frostCol = lerp(pal.panel, pal.leafFar * 0.3f, 0.3f);
     l.panel = pal.panel * 0.7f;
@@ -723,7 +723,7 @@ void LandWorld::drawWorld() {
 void LandWorld::drawShafts() {
     const Palette& pal = ctx.pal;
     const float canopy = smoothstepf(0.12f, 0.7f, life_);
-    const float k = (0.25f + 0.75f * canopy) * (1.f - 0.45f * ctx.storm) * ctx.world();
+    const float k = (0.2f + 0.6f * canopy) * (1.f - 0.25f * ctx.storm) * ctx.world();
     if (k <= 0.01f) return;
     if (depthW_ != ctx.width || depthH_ != ctx.height) {
         depthW_ = ctx.width;

@@ -101,7 +101,6 @@ struct Ctx {
         float glare = 0.f, bloom = 0.25f;  // the sun's glare, the bloom
         float tint = 0.82f, deepVeil = 1.f; // how much of the glass is its own tint, the depths' share of it
         float grid = 0.24f;                // how bright the well's grid
-        bool panels = true;                // the previews' panels of glass
         vec3 glareCol, frostCol, panel;    // the glare's light, the glass's tint, its tint over the depths
     };
     void drawLens(const Lens& l);
