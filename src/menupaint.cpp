@@ -8,6 +8,7 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_STATIC
 #include "stb_truetype.h"
+#include "mathutil.hpp"
 #include "ugl.hpp"
 
 namespace {
@@ -43,31 +44,61 @@ in vec4 vCol;
 in vec4 vPrm;
 out vec4 o;
 uniform sampler2D uTex;
+uniform sampler2D uFrost; // the frame drawn so far, blurred (Painter::frostSource)
+uniform vec2 uRes;
 void main() {
     float a;
-    if (vPrm.w > 2.5) { // flat
+    if (vPrm.w > 2.5 && vPrm.w < 3.5) { // flat
         a = vCol.a;
         o = vec4(vCol.rgb * a, a);
         return;
     }
-    if (vPrm.w > 1.5) { // an image (premultiplied), tinted
+    if (vPrm.w > 1.5 && vPrm.w < 2.5) { // an image (premultiplied), tinted
         vec4 t = texture(uTex, vLocal);
         o = vec4(t.rgb * vCol.rgb, t.a) * vCol.a;
         return;
     }
-    if (vPrm.w > 0.5) {
+    if (vPrm.w > 0.5 && vPrm.w < 1.5) {
         a = texture(uTex, vLocal).r;
+    } else if (vPrm.w > 4.5) { // an arc: radius vPrm.x, width vPrm.z, centred on the angle vHalf.x, vHalf.y either side
+        float d = mod(atan(vLocal.y, vLocal.x) - vHalf.x + 3.14159265, 6.2831853) - 3.14159265;
+        float dist = abs(d) <= vHalf.y ? abs(length(vLocal) - vPrm.x)
+                                       : length(vLocal - vPrm.x * vec2(cos(vHalf.x + sign(d) * vHalf.y), sin(vHalf.x + sign(d) * vHalf.y)));
+        float s = max(vPrm.y, 0.5);
+        a = 1.0 - smoothstep(-s * 0.5, s * 0.5, dist - vPrm.z * 0.5);
+        if (s > 2.0) a = a * a * (3.0 - 2.0 * a);
     } else {
         float r = min(vPrm.x, min(vHalf.x, vHalf.y));
         vec2 q = abs(vLocal) - vHalf + r;
         float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-        if (vPrm.z > 0.0) d = abs(d + vPrm.z * 0.5) - vPrm.z * 0.5;
+        if (vPrm.z > 0.0 && vPrm.w < 3.5) d = abs(d + vPrm.z * 0.5) - vPrm.z * 0.5;
         float s = max(vPrm.y, 0.5);
         a = 1.0 - smoothstep(-s * 0.5, s * 0.5, d);
         if (s > 2.0) a = a * a * (3.0 - 2.0 * a); // glows fade smoothly
     }
     a *= vCol.a;
+    if (vPrm.w > 3.5 && vPrm.w < 4.5) { // frosted glass: what lies behind, blurred and a little lifted, tinted (vPrm.z: how much)
+        vec3 b = texture(uFrost, gl_FragCoord.xy / uRes).rgb;
+        float g = fract(sin(dot(floor(gl_FragCoord.xy), vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+        o = vec4((mix(b * 1.08 + 0.015, vCol.rgb, vPrm.z) + g * 0.012) * a, a);
+        return;
+    }
     o = vec4(vCol.rgb * a, a);
+}
+)";
+
+// the frost's blur: a 9-tap gaussian along uDir (texels), on a quarter of the frame
+const char* BLUR_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 o;
+uniform sampler2D uT;
+uniform vec2 uDir;
+void main() {
+    const float W[5] = float[](0.227, 0.194, 0.122, 0.054, 0.016);
+    vec3 c = texture(uT, vUv).rgb * W[0];
+    for (int i = 1; i < 5; i++)
+        c += (texture(uT, vUv + uDir * float(i) * 1.5).rgb + texture(uT, vUv - uDir * float(i) * 1.5).rgb) * W[i];
+    o = vec4(c, 1.0);
 }
 )";
 
@@ -78,7 +109,10 @@ Painter::~Painter() {
     if (prog_) glDeleteProgram(prog_);
     if (vbo_) glDeleteBuffers(1, &vbo_);
     if (upProg_) glDeleteProgram(upProg_);
+    if (blurProg_) glDeleteProgram(blurProg_);
     kalTgt_.destroy();
+    frostA_.destroy();
+    frostB_.destroy();
     if (vao_) glDeleteVertexArrays(1, &vao_);
     for (auto& f : fonts_)
         if (f.tex) glDeleteTextures(1, &f.tex);
@@ -153,11 +187,69 @@ void Painter::flush() {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, curTex_);
     ugl::set1i(prog_, "uTex", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, frostA_.tex);
+    glActiveTexture(GL_TEXTURE0);
+    ugl::set1i(prog_, "uFrost", 1);
     glBindVertexArray(vao_);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
     glBufferData(GL_ARRAY_BUFFER, verts_.size() * sizeof(V), verts_.data(), GL_STREAM_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)verts_.size());
     verts_.clear();
+}
+
+void Painter::frostSource() {
+    flush();
+    const int fw = std::max(1, w_ / 4), fh = std::max(1, h_ / 4);
+    if (frostA_.w != fw || frostA_.h != fh) {
+        frostA_.create(fw, fh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
+        frostB_.create(fw, fh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
+    }
+    if (!blurProg_) blurProg_ = ugl::program(ugl::FULLSCREEN_VS, BLUR_FS, "menu frost blur");
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, frostB_.fbo);
+    glBlitFramebuffer(0, 0, w_, h_, 0, 0, fw, fh, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glDisable(GL_BLEND);
+    glUseProgram(blurProg_);
+    glActiveTexture(GL_TEXTURE0);
+    ugl::set1i(blurProg_, "uT", 0);
+    for (int pass = 0; pass < 2; pass++) { // B -> A across, A -> B down, B -> A across again: a wide, soft blur
+        const ugl::Target& src = pass == 0 ? frostB_ : frostA_;
+        const ugl::Target& dst = pass == 0 ? frostA_ : frostB_;
+        dst.bind();
+        glBindTexture(GL_TEXTURE_2D, src.tex);
+        ugl::set2f(blurProg_, "uDir", pass == 0 ? 1.f / fw : 0.f, pass == 0 ? 0.f : 1.f / fh);
+        ugl::drawFullscreen();
+    }
+    frostA_.bind();
+    glBindTexture(GL_TEXTURE_2D, frostB_.tex);
+    ugl::set2f(blurProg_, "uDir", 0.7f / fw, 0.7f / fh);
+    ugl::drawFullscreen();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, w_, h_);
+    glEnable(GL_BLEND);
+    curTex_ = 0;
+}
+
+void Painter::frost(float x, float y, float w, float h, float r, Col tint, float amount) {
+    if (fade_ <= 0.f || w <= 0 || h <= 0) return;
+    if (!frostA_.tex) { rrect(x, y, w, h, r, withA(tint, 0.85f)); return; } // (no frame grabbed yet)
+    const float e = 2.f, hx = w * 0.5f, hy = h * 0.5f, cx = x + hx, cy = y + hy;
+    const float px[4][2] = {{cx - hx - e, cy - hy - e}, {cx + hx + e, cy - hy - e}, {cx + hx + e, cy + hy + e}, {cx - hx - e, cy + hy + e}};
+    const float lc[4][2] = {{-hx - e, -hy - e}, {hx + e, -hy - e}, {hx + e, hy + e}, {-hx - e, hy + e}};
+    quad(px, lc, hx, hy, withA(tint, 1.f), r, 1.f, std::clamp(amount, 0.f, 1.f), 4.f);
+}
+
+void Painter::glass(float x, float y, float w, float h, float r, float px, float lit, float tint) {
+    rrect(x, y + 10 * px, w, h, r, hex(0x000000, 0.28f), 28 * px);
+    frost(x, y, w, h, r, hex(0x0a1230), tint);
+    line(x + r, y + 1.5f * px, x + w - r, y + 1.5f * px, 1.2f * px, hex(0xffffff, 0.16f + 0.2f * lit), 1.5f * px);
+    if (lit > 0.02f) {
+        setAdditive(true);
+        rrect(x - 4 * px, y - 4 * px, w + 8 * px, h + 8 * px, r + 4 * px, hex(0x8fc4ff, 0.14f * lit), 18 * px);
+        setAdditive(false);
+    }
+    rrectLine(x, y, w, h, r, (1.2f + 0.6f * lit) * px, mixc(hex(0xc8d8ff, 0.2f), hex(0xd8ecff, 0.85f), lit));
 }
 
 void Painter::setAdditive(bool on) {
@@ -232,6 +324,25 @@ vec3 grade(vec3 c, vec2 range, vec2 uv) {
     return mix(own, duo, uDuo);
 }
 vec3 src(sampler2D t, int isProc, vec2 uv, vec2 range) { return grade(isProc == 1 ? proc(uv) : texture(t, uv).rgb, isProc == 1 ? vec2(0.05, 0.7) : range, uv); }
+// A triangle grid: the facet a point falls in (`cell`), where in it (`f`), and its distance to the nearest edge (in grid
+// units) and which edge that is (0..2).
+void facet(vec2 g, out vec2 cell, out vec2 f, out float edge, out float side) {
+    vec2 tri = vec2(g.x - g.y * 0.57735, g.y * 1.1547);
+    vec2 id = floor(tri);
+    f = fract(tri);
+    float up = step(1.0, f.x + f.y);
+    cell = id * 2.0 + up;
+    vec3 e = up > 0.5 ? vec3(1.0 - f.x, 1.0 - f.y, f.x + f.y - 1.0) : vec3(f.x, f.y, 1.0 - f.x - f.y);
+    edge = min(e.x, min(e.y, e.z));
+    side = edge == e.x ? 0.0 : edge == e.y ? 1.0 : 2.0;
+}
+// the crystal's colours: a sapphire ramp, its lights taking the tint (mixed in the darks, a blue and a gold would grey)
+vec3 gem(float l) {
+    vec3 deep = vec3(0.012, 0.025, 0.11);
+    vec3 mid = mix(vec3(0.11, 0.17, 0.62), uTint * 0.6, 0.18);
+    vec3 hi = mix(vec3(0.62, 0.78, 1.0), mix(uTint, vec3(1.0), 0.35), 0.55);
+    return l < 0.5 ? mix(deep, mid, smoothstep(0.0, 0.5, l)) : mix(mid, hi, smoothstep(0.5, 1.0, l));
+}
 void main() {
     vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
     vec2 p = (fc - uC) / uRes.y;
@@ -241,32 +352,61 @@ void main() {
     float k = mod(an, seg);
     float m = abs(k - seg * 0.5);               // mirrored inside each segment
     vec2 q = vec2(cos(m), sin(m)) * r;
-    // glass facets: a triangle grid in the folded space, each facet its own shade (no lead: only the coloured cells)
-    vec2 g = q * 7.0;
-    vec2 tri = vec2(g.x - g.y * 0.57735, g.y * 1.1547);
-    vec2 id = floor(tri);
-    vec2 f = fract(tri);
-    float up = step(1.0, f.x + f.y);
-    vec2 cell = id * 2.0 + up;
-    float edge = min(min(f.x, f.y), abs(1.0 - f.x - f.y));
+    // small facets: each refracts the world a little differently and has its own shade
+    vec2 cell, f;
+    float edge, side;
+    facet(q * 7.0, cell, f, edge, side);
     vec2 uv = q * 0.85 + vec2(0.5 + 0.06 * sin(uTime * 0.05), 0.5 + 0.06 * cos(uTime * 0.04));
-    uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;   // each facet refracts a little differently
+    uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
     vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv, uRangeA) : uMix >= 1.0 ? src(uB, uProcB, uv, uRangeB)
                           : mix(src(uA, uProcA, uv, uRangeA), src(uB, uProcB, uv, uRangeB), uMix);
-    c = mix(c, c * uTint * 1.5, 0.22);
+    // large shards over the small facets, slightly turned, each lit from its own side
+    vec2 sc, sf;
+    float se, ss;
+    vec2 g2 = mat2(0.921, -0.389, 0.389, 0.921) * q * 4.8 + vec2(0.37, 0.11);
+    facet(g2, sc, sf, se, ss);
+    float hs = h21(sc + 9.7);
+    vec2 L = vec2(cos(hs * 6.283), sin(hs * 6.283));
+    float lit = clamp(0.5 + dot(sf - 0.4, L) * 1.2, 0.0, 1.0) * (0.55 + 0.6 * h21(sc + 2.2));
+    // cut into gem: the world's light and the facets' read through the crystal's ramp, a little of its colour kept
     float l = dot(c, vec3(0.299, 0.587, 0.114));
-    c = max(mix(vec3(l), c, 1.35), 0.0);                    // art glass: richer colour
-    c = c * 1.25 + 0.04 + uTint * (0.10 + 0.14 * h21(cell + 5.3)); // lit from behind, tinted glass even over a dark world
+    float gl = clamp(l * 0.45 + lit * 0.55 + (h21(cell + 9.1) - 0.5) * 0.3, 0.0, 1.0);
+    c = mix(gem(gl), c * (0.5 + 0.5 * uTint) * (0.4 + lit), 0.22);
+    c *= 0.92 + 0.16 * smoothstep(0.5, 0.0, edge);
+    c *= 0.92 + 0.16 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
+    // some shards cut with a prism's rainbow
+    if (h21(sc + 4.4) > 0.7) {
+        float x = dot(sf, vec2(-L.y, L.x)) * 2.2 + uTime * 0.025 + hs * 3.0;
+        float band = smoothstep(0.55, 0.0, abs(fract(x * 0.5) - 0.5) * 2.0);
+        c += (0.5 + 0.5 * cos(6.2831853 * (x + vec3(0.0, 0.33, 0.67)))) * band * 0.14;
+    }
     c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
-    c *= min(1.0, 0.42 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
-    // each facet its own shade and a slightly different hue, brighter toward its middle (after the cap, so even a flat
-    // world shows its cells)
-    c *= (0.72 + 0.42 * h21(cell + 9.1)) * (0.88 + 0.24 * smoothstep(0.85, 0.0, edge));
-    c *= 0.86 + 0.28 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
+    c *= min(1.0, 0.45 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
+    // the shards' cut edges: thin bright ridges and dark creases (their width in pixels from the grid's slope)
+    float px = se / max(fwidth(g2.x - g2.y * 0.57735) + fwidth(g2.y * 1.1547), 1e-4) * 1.5;
+    float he = h21(sc + ss * 1.7 + 0.3);
+    if (he > 0.45) c += mix(vec3(0.55, 0.7, 1.0), vec3(1.0), he - 0.45) * exp(-px / 1.2) * (0.25 + 0.5 * he) * (0.6 + 0.4 * uSat);
+    else c *= 1.0 - 0.45 * exp(-px / 1.6);
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
+    // light on the glass, in the frame's own space (it doesn't turn): a soft flare in the top right corner, and glints
+    // twinkling here and there
+    vec2 fp = (fc - vec2(uRes.x - 0.04 * uRes.y, 0.04 * uRes.y)) / uRes.y;
+    float fd = length(fp), fa = atan(fp.y, fp.x);
+    float rays = pow(abs(cos(fa * 5.0 + 0.4)), 10.0) + 0.6 * pow(abs(cos(fa * 3.0 - uTime * 0.02)), 14.0);
+    c += vec3(0.72, 0.84, 1.0) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
+    vec2 gp = fc / uRes.y * 24.0, gi = floor(gp);
+    float gh = h21(gi + 17.0);
+    if (gh > 0.86) {
+        vec2 d = (fract(gp) - 0.5 - (vec2(h21(gi + 3.1), h21(gi + 5.9)) - 0.5) * 0.3) * (uRes.y / 24.0) * (1080.0 / uRes.y);
+        float R = 2.5 + 4.0 * h21(gi + 2.0);
+        float tw = pow(0.5 + 0.5 * sin(uTime * (0.8 + 1.6 * h21(gi + 8.0)) + gh * 40.0), 6.0);
+        float star = exp(-dot(d, d) / (R * R * 0.12)) +
+                     0.7 * (exp(-abs(d.y) / 0.6) * max(0.0, 1.0 - abs(d.x) / (R * 2.2)) + exp(-abs(d.x) / 0.6) * max(0.0, 1.0 - abs(d.y) / (R * 2.2)));
+        c += vec3(0.85, 0.92, 1.0) * star * tw * (0.6 + 0.4 * uSat);
+    }
     o = vec4(c, 1.0);
 }
 )";
@@ -333,12 +473,21 @@ void main() {
     curTex_ = 0;
 }
 
-void Painter::arc(float cx, float cy, float rx, float ry, float a0, float a1, float width, Col c, float soft) {
-    const int n = std::max(4, (int)(std::fabs(a1 - a0) * std::max(rx, ry) / 6.f));
-    for (int i = 0; i < n; i++) {
-        const float t0 = a0 + (a1 - a0) * i / n, t1 = a0 + (a1 - a0) * (i + 1) / n;
-        line(cx + rx * std::cos(t0), cy + ry * std::sin(t0), cx + rx * std::cos(t1), cy + ry * std::sin(t1), width, c, soft);
+void Painter::arc(float cx, float cy, float r, float a0, float a1, float width, Col c, float soft) {
+    if (c.a <= 0.f || r <= 0.f) return;
+    if (a1 < a0) std::swap(a0, a1);
+    const float span = std::min(a1 - a0, TAU), mid = a0 + span * 0.5f, e = width * 0.5f + soft + 1.f;
+    // the quad: the arc's bounding box (its ends, and the circle's extremes it passes)
+    float x0 = std::min(std::cos(a0), std::cos(a0 + span)), x1 = std::max(std::cos(a0), std::cos(a0 + span));
+    float y0 = std::min(std::sin(a0), std::sin(a0 + span)), y1 = std::max(std::sin(a0), std::sin(a0 + span));
+    for (int q = (int)std::ceil(a0 / (PI * 0.5f)); q * PI * 0.5f <= a0 + span; q++) {
+        const int k = ((q % 4) + 4) % 4;
+        if (k == 0) x1 = 1.f; else if (k == 1) y1 = 1.f; else if (k == 2) x0 = -1.f; else y0 = -1.f;
     }
+    const float l[4] = {x0 * r - e, y0 * r - e, x1 * r + e, y1 * r + e};
+    const float px[4][2] = {{cx + l[0], cy + l[1]}, {cx + l[2], cy + l[1]}, {cx + l[2], cy + l[3]}, {cx + l[0], cy + l[3]}};
+    const float lc[4][2] = {{l[0], l[1]}, {l[2], l[1]}, {l[2], l[3]}, {l[0], l[3]}};
+    quad(px, lc, mid, span * 0.5f, c, r, soft, width, 5.f);
 }
 
 void Painter::rrect(float x, float y, float w, float h, float r, Col c, float soft) {

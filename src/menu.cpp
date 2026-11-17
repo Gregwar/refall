@@ -601,18 +601,19 @@ void Menu::render(int w, int h) {
     paint_.end();
 }
 
-// The message over a screen (GAME OVER, STAGE CLEAR): a dark glass card.
+// The message over a screen (GAME OVER, STAGE CLEAR): a frosted glass card.
 void Menu::drawMessage() {
     if (msgT_ <= 0 || msg_.empty()) return;
     using F = Painter::Font;
     Painter& p = paint_;
     const float a = sstep(std::min(msgT_, 5.f - msgT_) * 3.f);
     const float cx = X(960), cy = Y(520);
-    const Col ink = hex(0xffffff), sub = hex(0xd8dcf0), card = hex(0x0c0c14, 0.9f), edge = msgBad_ ? hex(0xff8a9a) : hex(0xe8c06a);
+    const Col ink = hex(0xffffff), sub = hex(0xd8dcf0), edge = msgBad_ ? hex(0xff8a9a) : hex(0xe8c06a);
     const float tw = std::max(p.width(F::JOSEFIN_LIGHT, msg_, 110 * u_, 0.05f), p.width(F::JOSEFIN, msgSub_, 26 * u_, 0.1f));
     const float bw = tw + 140 * u_, bh = 250 * u_;
-    p.rrect(cx - bw / 2, cy - bh / 2 + 14 * u_, bw, bh, 26 * u_, hex(0x000000, 0.35f * a), 40 * u_);
-    p.rrect(cx - bw / 2, cy - bh / 2, bw, bh, 24 * u_, withA(card, card.a * a));
+    p.setFade(a);
+    p.glass(cx - bw / 2, cy - bh / 2, bw, bh, 24 * u_, u_, 0.f, 0.8f);
+    p.setFade(1.f);
     p.rrectLine(cx - bw / 2, cy - bh / 2, bw, bh, 24 * u_, 2 * u_, withA(edge, edge.a * a));
     p.text(F::JOSEFIN_LIGHT, msg_, cx, cy + 20 * u_, 110 * u_, withA(ink, a), 0, 0.05f);
     p.text(F::JOSEFIN, msgSub_, cx, cy + 85 * u_, 26 * u_, withA(sub, sub.a * a), 0, 0.1f);

@@ -166,7 +166,7 @@ To make a new one, see [docs/adding-a-universe.md](docs/adding-a-universe.md).
 
 ## Modes
 
-Started with no songs, the game opens on its menu, a stained-glass kaleidoscope (the game is called **Refall** for
+Started with no songs, the game opens on its menu, a blue crystal kaleidoscope (the game is called **Refall** for
 now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**
 or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). On the first launch (or after `--reset`) the title opens with a short, sober
 animation. The game's own universes are folded into the
@@ -174,7 +174,12 @@ kaleidoscope: on the title and in free play they turn in turn, on Voyage it show
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
 from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
 dimmed for a locked stage); free play takes the
-focused playlist's hue. They come from snapshots of each universe cached in `~/.cache/refall/menu-worlds/` (640x360);
+focused playlist's hue. The world is then cut into gem: read through a sapphire ramp whose lights take that hue, small
+facets and larger shards each lit from its own side, bright ridges along their cuts, a prism's rainbow on some, glints
+twinkling and a soft light flare in the top right corner. The rosettes (the title's, Voyage's stages) sit in a jewelled
+setting: an engraved bronze star, a steel plate, a bronze band set with small gems, glowing blue and gold orbits, a
+polished dark disc in a gold ring at the middle; petals are faceted gems (dark ones with padlocks while locked), and
+the panels are frosted glass over the kaleidoscope. They come from snapshots of each universe cached in `~/.cache/refall/menu-worlds/` (640x360);
 the missing ones are made one at a time on a worker thread with its own OpenGL context, only while no key has been
 pressed for a moment (the first launch fills the cache in about a minute on the title), and until a snapshot is ready
 its place is procedural glass in the universe's colours, cross-fading to the image when it arrives. The menu remembers
