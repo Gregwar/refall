@@ -13,15 +13,17 @@
 // shades of their colors.
 //
 // The page is drawn as the song goes on: it starts as a pencil draft in non-photo blue over the colorist's faint
-// flats (each panel's ground), inside inked panel frames; every cleared row inks the next element of the drawings
+// flats (each panel's ground), inside panel frames inked by hand (each edge one brush stroke: its width swelling and
+// thinning, a slight bow and wobble, running past the corners into a dry-brush flick, now and then a blot of ink
+// where the brush came down; seeded, so they hold still); every cleared row inks the next element of the drawings
 // (its lines drawn along their length, then its tones laid down as their dots grow), then its washes flood in under
 // the ink through a noise with a wet edge, like a colorist working after the inker, panel by panel, so the page fills
 // up over the song and keeps it.
 //
-// The pieces are inked blocks of color: one bold outline around each piece, fine lines between its cells, each of
-// the seven types its own clean color with its own screentone printed over it in a darker shade (fine dots, plain
-// with a gloss, dots, a diagonal line tone, crosshatch, a gradient of dots, bold stripes). The falling piece is a
-// locked one, its tone traveling with it; the ghost is its pencil sketch. A hard drop draws a few short impact lines
+// The pieces are plain, flat blocks of color, each of the seven types its own clean color: faint seams between its
+// cells and one bold line of the same brush around each piece (a stroke per straight run of its outline, seeded by
+// its place in the piece's shape, so it holds as the piece falls and locks). The falling piece is a locked one; the
+// ghost is its pencil sketch, a faint flat under a light line of the same hand. A hard drop draws a few short impact lines
 // at the piece's feet. A cleared row breaks up into its color's dots, which burst out of the well sideways and fade
 // (0.5 s, real time even in slow motion).
 //
@@ -619,6 +621,102 @@ void MangaUniverse::discPx(float cx, float cy, float r, const vec3& c, float a, 
 }
 
 namespace {
+// A smooth noise along a line, -1..1 (values on integer knots, eased between them).
+float wave(uint64_t seed, float x) {
+    const float i = std::floor(x), f = x - i;
+    auto knot = [&](float k) { return (float)(splitmix64(seed ^ (uint64_t)(int64_t)k * 0x9E3779B97F4A7C15ull) >> 40) / 8388608.f - 1.f; };
+    return lerpf(knot(i), knot(i + 1.f), f * f * (3.f - 2.f * f));
+}
+} // namespace
+
+// A hand-inked line: the brush pressed in a little before a (now and then pooling into a blot), its width swelling
+// and thinning along the line, a slight bow and wobble, running on past b and lifting off in a dry-brush flick (three
+// strands, each thinning out on its own). Its shape is the seed's and its noise runs along the line in pixels, so it
+// holds still from frame to frame, and a part of it (from, to: 0..1 along a to b, the run-ups past the ends included
+// at 0 and 1) lies exactly on the whole. loose: how freely it is drawn (1: a panel's frame; the pieces' outlines
+// keep closer to their edges).
+void MangaUniverse::brushPx(vec2 a, vec2 b, float widthPx, uint64_t seed, float from, float to, float loose, const vec3& col, float alpha,
+                            int clip) {
+    const float len = std::hypot(b.x - a.x, b.y - a.y);
+    if (alpha <= 0.002f || to <= from || len < 0.5f) return;
+    const V2 d{(b.x - a.x) / len, (b.y - a.y) / len}, nrm{-d.y, d.x};
+    const float w = std::max(1.f, widthPx * s_);
+    Rng r(seed);
+    // the run-ups past the ends cover the corners, where the next edge's stroke starts
+    const float o0 = w * (0.5f + 0.8f * loose * r.uniform()), o1 = w * (0.6f + 2.6f * loose * r.uniform());
+    // a slight bow and tilt off the straight line, a slow wobble and a faster tremor of the hand along it
+    const float bow = r.range(-1.f, 1.f) * loose * std::min(3.f * s_, len * 0.004f);
+    const float tilt = r.range(-1.f, 1.f) * loose * 1.6f * s_;
+    const bool blot = r.chance(0.3f * loose * loose);
+    float lift[3];
+    for (float& l : lift) l = r.range(0.3f, 0.9f);
+    lift[1] = 1.f;
+    const uint64_t ws = r.next();
+    const float s0 = from <= 0.f ? -o0 : from * len, s1 = to >= 1.f ? len + o1 : to * len;
+    auto at = [&](float s, float side) {
+        const float u = s / len;
+        const float off = bow * std::sin(PI * saturate(u)) + tilt * (u - 0.5f) + 0.6f * s_ * wave(ws, s / (60.f * s_)) +
+                          0.3f * s_ * wave(ws + 3, s / (24.f * s_)) + side;
+        return V2{a.x + d.x * s + nrm.x * off, a.y + d.y * s + nrm.y * off};
+    };
+    // its width: the pressure swelling and easing along it, the bristles' grain; lighter as the brush comes down
+    auto width = [&](float s) {
+        const float k = w * (0.8f + 0.28f * wave(ws + 1, s / (40.f * s_))) * (1.f + 0.14f * loose * wave(ws + 2, s / (22.f * s_)));
+        return s < 0.f ? k * lerpf(0.7f, 1.f, (s + o0) / o0) : k;
+    };
+    const ToneP t{manga::TONE_SOLID, 4.f, 0.f, {0, 0}, clip};
+    // a run of the line [u0, u1], `side` off its middle, its width wf(s)
+    auto ribbon = [&](float u0, float u1, auto side, auto wf) {
+        const int n = std::max(3, (int)std::ceil((u1 - u0) / (10.f * s_)));
+        V2 p0 = at(u0, side(u0));
+        float w0 = 0.5f * wf(u0);
+        for (int i = 1; i <= n; i++) {
+            const float u = lerpf(u0, u1, i / (float)n);
+            const V2 p1 = at(u, side(u));
+            const float w1 = 0.5f * wf(u);
+            tri(p0 + nrm * w0, p1 + nrm * w1, p1 - nrm * w1, t, 1, 1, 1, col, alpha);
+            tri(p0 + nrm * w0, p1 - nrm * w1, p0 - nrm * w0, t, 1, 1, 1, col, alpha);
+            p0 = p1;
+            w0 = w1;
+        }
+    };
+    // the body, up to b
+    if (std::min(s1, len) > s0) ribbon(s0, std::min(s1, len), [](float) { return 0.f; }, width);
+    // the flick past b: three strands side by side, splaying a little, each lifting off on its own
+    if (s1 > len) {
+        const float wb = width(len);
+        for (int k = 0; k < 3; k++) {
+            const float end = len + o1 * lift[k];
+            if (std::min(s1, end) <= len) continue;
+            auto q = [&](float s) { return (s - len) / (end - len); };
+            ribbon(len, std::min(s1, end), [&](float s) { return (k - 1) * wb / 3.f * (1.f + 0.7f * q(s)); },
+                   [&](float s) { return wb * 0.38f * (1.f - q(s)); });
+        }
+    }
+    // the ink pooled where the brush came down
+    if (blot && from <= 0.f) {
+        const V2 c = at(-0.4f * o0, 0.f);
+        const float rb = w * 0.62f;
+        for (int i = 0; i < 10; i++) {
+            const float a0 = i / 10.f * TAU, a1 = (i + 1) / 10.f * TAU;
+            tri(c, c + V2{std::cos(a0), std::sin(a0)} * rb, c + V2{std::cos(a1), std::sin(a1)} * rb, t, 1, 1, 1, col, alpha);
+        }
+    }
+}
+
+void MangaUniverse::inkQuad(const V2* q, float widthPx, uint64_t seed, float upTo, const vec3& col, float a) {
+    for (int e = 0; e < 4; e++) {
+        const float k = saturate(upTo * 4.f - e);
+        if (k <= 0.f) break;
+        // each edge drawn one way or the other, so the flicks fall on different corners
+        const uint64_t es = splitmix64(seed * 4 + e);
+        vec2 A = px(q[e]), B = px(q[(e + 1) % 4]);
+        if (es & 1) std::swap(A, B);
+        brushPx(A, B, widthPx, es, 0.f, k, 1.f, col, a, -1);
+    }
+}
+
+namespace {
 V2 turn(const V2& p, const V2* pivot, float a) {
     if (!pivot || a == 0.f) return p;
     const float c = std::cos(a), s = std::sin(a);
@@ -1049,34 +1147,43 @@ float MangaUniverse::panelOut(int panel) const {
     return ease(saturate((teardown_ - 0.32f - 0.065f * j) / 0.3f));
 }
 
+// The frames, inked by hand: each edge a brush stroke (the well's the boldest) running on past the corners.
 void MangaUniverse::drawFrames(float shatter, bool art) {
-    const float w = 2.8f;
     for (int i = 0; i < manga::P_COUNT; i++) {
         const manga::Panel& p = page_.panels[i];
         if (!p.shown || p.art != art || (bare_ && !p.art)) continue;
+        const float w = i == manga::P_WELL ? 4.4f : 3.4f;
+        const uint64_t seed = 0xF4A3E + (uint64_t)i;
         if (!p.art || shatter <= 0.001f) {
             // (the setup: a drawing panel's frame ruled in along its edges)
             const float upTo = p.art ? smoothstepf(0.f, 0.55f, panelIn(i)) : 1.f;
-            if (upTo > 0.f) strokeLine({p.c[0], p.c[1], p.c[2], p.c[3]}, w, 0.f, true, upTo, ink_, 1.f, -1);
+            if (upTo > 0.f) inkQuad(p.c, w, seed, upTo, ink_, 1.f);
             continue;
         }
         if (shatter >= 0.999f) continue;
-        // the edges in shards
+        // the edges in shards: pieces of the same strokes drifting apart
         Rng r(1000 + i);
         for (int e = 0; e < 4; e++) {
+            const uint64_t es = splitmix64(seed * 4 + e);
             const V2 a = p.c[e], b = p.c[(e + 1) % 4];
             const float len = std::hypot(b.x - a.x, b.y - a.y);
             const int n = std::max(1, (int)(len / 1.3f));
             for (int k = 0; k < n; k++) {
                 const float t0 = k / (float)n, t1 = (k + 1) / (float)n;
-                const V2 s0 = a + (b - a) * t0, s1 = a + (b - a) * t1;
-                const V2 m = (s0 + s1) * 0.5f;
+                const V2 m = a + (b - a) * ((t0 + t1) * 0.5f);
                 const float dist = r.range(0.4f, 1.4f) * shatter;
                 const float sx = m.x < 0.f ? -1.f : 1.f;
                 const V2 off{sx * dist, r.range(-0.5f, 0.5f) * shatter};
                 const float rot = r.range(-0.5f, 0.5f) * shatter;
-                const V2 pv = m;
-                strokeLine({s0 + off, s1 + off}, w, 0.f, false, 1.f, ink_, 1.f - ease(shatter), -1, &pv, rot);
+                // the shard's part of its edge's stroke, the whole stroke moved with it
+                vec2 A = px(turn(a + off, &m, rot)), B = px(turn(b + off, &m, rot));
+                float u0 = t0, u1 = t1;
+                if (es & 1) {
+                    std::swap(A, B);
+                    u0 = 1.f - t1;
+                    u1 = 1.f - t0;
+                }
+                brushPx(A, B, w, es, u0, u1, 1.f, ink_, 1.f - ease(shatter), -1);
             }
         }
     }
@@ -1148,89 +1255,85 @@ void MangaUniverse::drawSplash(float reach, float t, const vec3& color) {
 // The board
 // =====================================================================================================
 
-namespace {
-// Each type's screentone, printed in a darker shade over its color (its density may run from top to bottom).
-manga::Tone pieceTone(int type) {
-    manga::Tone t;
-    t.g0 = {0, 0.5f};
-    t.g1 = {0, -0.5f};
-    switch (type) {
-    case I: t.kind = manga::TONE_DOTS; t.d0 = t.d1 = 0.2f; t.cell = 0.115f; break;
-    case O: t.kind = manga::TONE_SOLID; break;
-    case T: t.kind = manga::TONE_DOTS; t.d0 = t.d1 = 0.36f; t.cell = 0.15f; break;
-    case S: t.kind = manga::TONE_LINES; t.d0 = t.d1 = 0.34f; t.cell = 0.12f; t.angle = PI * 0.25f; break;
-    case Z: t.kind = manga::TONE_CROSS; t.d0 = t.d1 = 0.24f; t.cell = 0.15f; t.angle = PI * 0.25f; break;
-    case J: t.kind = manga::TONE_DOTS; t.d0 = 0.f; t.d1 = 0.55f; t.cell = 0.13f; break;
-    default: t.kind = manga::TONE_LINES; t.d0 = t.d1 = 0.4f; t.cell = 0.2f; t.angle = 0.f; break;
+// The outline: one brush stroke along each straight run of the piece's edge, on the edge (a stroke shared by two
+// touching pieces is inked twice, one bold line). Each stroke's seed is its place in the piece's shape, so the outline
+// holds as the piece falls and locks.
+void MangaUniverse::inkOutline(const int cells[][2], int n, int minRow, float dx, float dy, float widthPx, uint64_t seed, float loose,
+                               const vec3& col, float a) {
+    auto in = [&](int x, int y) {
+        for (int i = 0; i < n; i++)
+            if (cells[i][0] == x && cells[i][1] == y) return y >= minRow;
+        return false;
+    };
+    int mx = 99, my = 99;
+    for (int i = 0; i < n; i++) {
+        mx = std::min(mx, cells[i][0]);
+        my = std::min(my, cells[i][1]);
     }
-    return t;
+    // sides: above, below (runs along x), left, right (runs down, game y growing downward)
+    const int NX[4] = {0, 0, -1, 1}, NY[4] = {-1, 1, 0, 0};
+    for (int i = 0; i < n; i++) {
+        const int cx = cells[i][0], cy = cells[i][1];
+        if (cy < minRow) continue;
+        for (int side = 0; side < 4; side++) {
+            const int nx = NX[side], ny = NY[side];
+            if (in(cx + nx, cy + ny)) continue;
+            const int rx = side < 2 ? 1 : 0, ry = side < 2 ? 0 : 1; // along the run
+            // only from a run's first cell
+            if (in(cx - rx, cy - ry) && !in(cx - rx + nx, cy - ry + ny)) continue;
+            int len = 1;
+            while (in(cx + rx * len, cy + ry * len) && !in(cx + rx * len + nx, cy + ry * len + ny)) len++;
+            const vec3 p0 = layout::cellPos(cx + dx, cy + dy), p1 = layout::cellPos(cx + rx * (len - 1) + dx, cy + ry * (len - 1) + dy);
+            V2 A, B;
+            if (side < 2) {
+                const float y = p0.y - 0.5f * ny;
+                A = {p0.x - 0.5f, y};
+                B = {p1.x + 0.5f, y};
+            } else {
+                const float x = p0.x + 0.5f * nx;
+                A = {x, p0.y + 0.5f};
+                B = {x, p1.y - 0.5f};
+            }
+            const uint64_t ss = splitmix64(seed * 7919 + (uint64_t)(side * 131 + (cx - mx) * 17 + (cy - my) * 1031 + len * 31));
+            vec2 pa = px(A), pb = px(B);
+            if (ss & 1) std::swap(pa, pb);
+            brushPx(pa, pb, widthPx, ss, 0.f, 1.f, loose, col, a, -1);
+        }
+    }
 }
-} // namespace
 
-// A piece: its cells in its color under its screentone, fine lines between them, one bold outline around the
-// whole piece.
-void MangaUniverse::drawPiece(const int cells[][2], int n, int type, float dx, float dy, float alpha, float inkK) {
+// A piece, flat and plain: its cells in its color, faint seams between them, one bold brush outline around it.
+void MangaUniverse::drawPiece(const int cells[][2], int n, int type, float dx, float dy, float alpha, float inkK, int parts) {
     if (alpha <= 0.002f) return;
     const float br = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const vec3 bInk = ugl::toSrgb(bridge_.ink);
     auto tone = [&](const vec3& c) { return lerp(c, bInk, br); };
+    if (parts & PIECE_FILL) {
+        const vec3 fc = tone(lerp(paper_, pieceColor(type), inkK));
+        for (int i = 0; i < n; i++) {
+            if (cells[i][1] < 0) continue;
+            const vec3 p = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
+            fillPoly({{p.x - 0.5f, p.y - 0.5f}, {p.x + 0.5f, p.y - 0.5f}, {p.x + 0.5f, p.y + 0.5f}, {p.x - 0.5f, p.y + 0.5f}}, manga::Tone(), 1.f, fc,
+                     alpha, -1);
+        }
+    }
+    if (!(parts & PIECE_INK)) return;
     auto in = [&](int x, int y) {
         for (int i = 0; i < n; i++)
             if (cells[i][0] == x && cells[i][1] == y) return true;
         return false;
     };
-    manga::Tone tn = pieceTone(type);
-    const vec3 pc = pieceColor(type);
-    // the tone travels with the piece
-    const V2 shift{dx, -dy};
-    for (int i = 0; i < n; i++) {
-        if (cells[i][1] < 0) continue;
-        const vec3 p = layout::cellPos(cells[i][0] + dx, cells[i][1] + dy);
-        manga::Tone t = tn;
-        t.g0 = {0, p.y + 0.5f};
-        t.g1 = {0, p.y - 0.5f};
-        const std::vector<V2> q = {{p.x - 0.5f, p.y - 0.5f}, {p.x + 0.5f, p.y - 0.5f}, {p.x + 0.5f, p.y + 0.5f}, {p.x - 0.5f, p.y + 0.5f}};
-        fillPoly(q, manga::Tone(), 1.f, tone(lerp(paper_, pc, inkK)), alpha, -1);        // the pattern's origin follows the piece (the fill's origin is the board's; shift it by the piece's offset)
-        const size_t before = verts_.size();
-        if (t.kind != manga::TONE_SOLID) fillPoly(q, t, inkK, tone(shadeOf(pc)), alpha, -1);
-        const vec2 o = px({shift.x, shift.y});
-        for (size_t v = before; v < verts_.size(); v += 14) {
-            verts_[v + 6] = o.x;
-            verts_[v + 7] = o.y;
-        }
-        // a gloss on the plain color
-        if (type == O)
-            strokeLine({{p.x - 0.32f, p.y + 0.02f}, {p.x - 0.02f, p.y + 0.32f}}, 2.4f, 0.4f, false, 1.f, tone(lerp(pc, vec3(1.f), 0.75f)), alpha * 0.9f * inkK, -1);
-    }
-    // the lines: fine between cells of the piece, bold around it
-    const float wOut = 2.6f * s_, wIn = std::max(1.f, 1.1f * s_);
+    const vec3 ic = tone(ink_);
+    const float wIn = std::max(1.f, 0.9f * s_);
     for (int i = 0; i < n; i++) {
         if (cells[i][1] < 0) continue;
         const int cx = cells[i][0], cy = cells[i][1];
         const vec3 p = layout::cellPos(cx + dx, cy + dy);
         const vec2 a = px({p.x - 0.5f, p.y + 0.5f}), b = px({p.x + 0.5f, p.y - 0.5f}); // top-left, bottom-right
-        const vec3 ic = tone(ink_);
-        // game y grows downward: (0, -1) is above
-        // the outline lies inside the piece; a concave corner gets its square. Against another locked piece each
-        // draws half of it, so the shared edge is one line as bold as the outer ones, not two side by side.
-        auto edge = [&](int nx, int ny) {
-            if (!stack_ || nx < 0 || nx >= Game::W || ny < Game::HIDDEN || ny >= Game::H) return wOut;
-            if (stack_->cell(nx, ny).type < 0 || std::fabs(stack_->rowOffset(ny) - stack_->rowOffset(cy)) > 0.02f) return wOut;
-            return wOut * 0.5f;
-        };
-        if (!in(cx - 1, cy)) rectPx(a.x, a.y, a.x + edge(cx - 1, cy), b.y, ic, alpha);
-        if (!in(cx + 1, cy)) rectPx(b.x - edge(cx + 1, cy), a.y, b.x, b.y, ic, alpha);
-        if (!in(cx, cy - 1)) rectPx(a.x, a.y, b.x, a.y + edge(cx, cy - 1), ic, alpha);
-        if (!in(cx, cy + 1)) rectPx(a.x, b.y - edge(cx, cy + 1), b.x, b.y, ic, alpha);
-        for (int dxy = 0; dxy < 4; dxy++) {
-            const int ox = dxy & 1 ? 1 : -1, oy = dxy & 2 ? 1 : -1;
-            if (!in(cx + ox, cy) || !in(cx, cy + oy) || in(cx + ox, cy + oy)) continue;
-            const float X0 = ox < 0 ? a.x : b.x - wOut, Y0 = oy < 0 ? a.y : b.y - wOut;
-            rectPx(X0, Y0, X0 + wOut, Y0 + wOut, ic, alpha);
-        }
-        if (in(cx + 1, cy)) rectPx(b.x - wIn * 0.5f, a.y, b.x + wIn * 0.5f, b.y, ic, alpha);
-        if (in(cx, cy + 1)) rectPx(a.x, b.y - wIn * 0.5f, b.x, b.y + wIn * 0.5f, ic, alpha);
+        if (in(cx + 1, cy)) rectPx(b.x - wIn * 0.5f, a.y, b.x + wIn * 0.5f, b.y, ic, 0.45f * alpha);
+        if (in(cx, cy + 1)) rectPx(a.x, b.y - wIn * 0.5f, b.x, b.y + wIn * 0.5f, ic, 0.45f * alpha);
     }
+    inkOutline(cells, n, 0, dx, dy, 4.4f, (uint64_t)type + 1, 0.4f, ic, alpha);
 }
 
 void MangaUniverse::drawBoard(const Game& g, float t) {
@@ -1242,10 +1345,10 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
     // the well's floor
     {
         const vec2 a = px({-5.f, -10.f}), b = px({5.f, -10.f});
-        rectPx(a.x - 2.f * s_, a.y, b.x + 2.f * s_, a.y + 2.6f * s_, tone(ink_), 0.9f);
+        brushPx({a.x - 2.f * s_, a.y + 1.3f * s_}, {b.x + 2.f * s_, a.y + 1.3f * s_}, 2.6f, 0xF1009, 0.f, 1.f, 0.5f, tone(ink_), 0.9f, -1);
     }
 
-    // the ghost: the piece's pencil sketch
+    // the ghost: the piece's pencil sketch, a faint flat under a light outline of the same hand
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -1253,53 +1356,46 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
-            auto in = [&](int x, int y) {
-                for (auto& c : gc)
-                    if (c[0] == x && c[1] == y) return true;
-                return false;
-            };
             const vec3 c = tone(pencil_);
-            const float th = std::max(1.f, 1.6f * s_);
             for (auto& cc : gc) {
                 if (cc[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
                 const vec2 a = px({w.x - 0.5f, w.y + 0.5f}), b = px({w.x + 0.5f, w.y - 0.5f});
                 rectPx(a.x, a.y, b.x, b.y, c, 0.14f);
-                if (!in(cc[0] - 1, cc[1])) rectPx(a.x, a.y, a.x + th, b.y, c, 0.95f);
-                if (!in(cc[0] + 1, cc[1])) rectPx(b.x - th, a.y, b.x, b.y, c, 0.95f);
-                if (!in(cc[0], cc[1] - 1)) rectPx(a.x, a.y, b.x, a.y + th, c, 0.95f);
-                if (!in(cc[0], cc[1] + 1)) rectPx(a.x, b.y - th, b.x, b.y, c, 0.95f);
             }
+            inkOutline(gc, 4, Game::HIDDEN, 0.f, 0.f, 2.f, (uint64_t)p.type + 1, 0.4f, c, 0.95f);
         }
     }
 
-    // locked pieces, grouped by id
+    // locked pieces, grouped by id: all their colors, then all their ink
     {
+        struct Group { int cells[8][2]; int n, type; float off; };
+        std::vector<Group> groups;
         bool done[Game::H][Game::W] = {};
         for (int y = Game::HIDDEN; y < Game::H; y++)
             for (int x = 0; x < Game::W; x++) {
                 const Cell& c = g.cell(x, y);
                 if (c.type < 0 || done[y][x]) continue;
-                int cells[8][2], n = 0;
+                Group gr{{}, 0, c.type, g.rowOffset(y)};
                 const int id = ids_[y][x];
-                const float off = g.rowOffset(y);
-                for (int yy = Game::HIDDEN; yy < Game::H && n < 8; yy++)
-                    for (int xx = 0; xx < Game::W && n < 8; xx++) {
+                for (int yy = Game::HIDDEN; yy < Game::H && gr.n < 8; yy++)
+                    for (int xx = 0; xx < Game::W && gr.n < 8; xx++) {
                         if (done[yy][xx] || g.cell(xx, yy).type < 0) continue;
-                        const bool same = (xx == x && yy == y) || (id && ids_[yy][xx] == id && std::fabs(g.rowOffset(yy) - off) < 0.02f);
+                        const bool same = (xx == x && yy == y) || (id && ids_[yy][xx] == id && std::fabs(g.rowOffset(yy) - gr.off) < 0.02f);
                         if (!same) continue;
-                        cells[n][0] = xx;
-                        cells[n][1] = yy;
-                        n++;
+                        gr.cells[gr.n][0] = xx;
+                        gr.cells[gr.n][1] = yy;
+                        gr.n++;
                         done[yy][xx] = true;
                     }
-                stack_ = &g;
-                drawPiece(cells, n, c.type, 0.f, -off, 1.f, 1.f);
-                stack_ = nullptr;
+                groups.push_back(gr);
             }
+        for (const Group& gr : groups) drawPiece(gr.cells, gr.n, gr.type, 0.f, -gr.off, 1.f, 1.f, PIECE_FILL);
+        for (const Group& gr : groups) drawPiece(gr.cells, gr.n, gr.type, 0.f, -gr.off, 1.f, 1.f, PIECE_INK);
     }
 
-    // cleared cells breaking up: the tone thins out, the outline goes; the stack's end turns to pencil first
+    // cleared cells breaking up into dots of their color that thin out, the outline going; the stack's end turns to
+    // pencil first
     for (const Fade& f : fades_) {
         if (f.t < 0.f) {
             const int cells[1][2] = {{f.x, f.y}};
@@ -1325,12 +1421,11 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
         }
         const float k = f.t / FADE_S;
         const float al = 1.f - ease(k);
-        manga::Tone tn = pieceTone(f.type);
-        tn.g0 = {0, p.y + 0.5f};
-        tn.g1 = {0, p.y - 0.5f};
-        if (tn.kind == manga::TONE_SOLID) { tn.kind = manga::TONE_DOTS; tn.d0 = tn.d1 = 0.85f; tn.cell = 0.16f; }
+        manga::Tone tn;
+        tn.kind = manga::TONE_DOTS;
+        tn.d0 = tn.d1 = 0.85f;
+        tn.cell = 0.16f;
         const float sh = 0.5f - 0.12f * ease(k);
-        if (tn.kind == manga::TONE_DOTS && tn.d0 < 0.3f) tn.d0 = tn.d1 = 0.5f;
         fillPoly({{p.x - sh, p.y - sh}, {p.x + sh, p.y - sh}, {p.x + sh, p.y + sh}, {p.x - sh, p.y + sh}}, tn, 1.f - 0.7f * ease(k),
                  tone(pieceColor(f.type)), al, -1);
         const float th = std::max(1.f, 2.f * s_ * (1.f - k));
@@ -1347,7 +1442,7 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
         discPx(p.x, p.y, c.r * unitPx_ * (1.f - 0.5f * k), tone(cc), 1.f - k * k);
     }
 
-    // the falling piece: exactly a locked one, its tone traveling with it
+    // the falling piece: exactly a locked one
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1443,11 +1538,9 @@ void MangaUniverse::drawHud(const Game& g, const std::vector<HudText>& hud, cons
         if (x1 > x0 && vis > 0.01f && !bare_) {
             const float pad = 9.f * s;
             rectPx(x0 - pad, y0 - pad, x1 + pad, y1 + pad, paper, a * vis);
-            const float th = std::max(1.f, 1.8f * s);
-            rectPx(x0 - pad, y0 - pad, x1 + pad, y0 - pad + th, ink, a * vis);
-            rectPx(x0 - pad, y1 + pad - th, x1 + pad, y1 + pad, ink, a * vis);
-            rectPx(x0 - pad, y0 - pad, x0 - pad + th, y1 + pad, ink, a * vis);
-            rectPx(x1 + pad - th, y0 - pad, x1 + pad, y1 + pad, ink, a * vis);
+            // its frame inked by hand like the panels'
+            const vec2 c[4] = {{x0 - pad, y0 - pad}, {x1 + pad, y0 - pad}, {x1 + pad, y1 + pad}, {x0 - pad, y1 + pad}};
+            for (int e = 0; e < 4; e++) brushPx(c[e], c[(e + 1) % 4], 2.2f, 0xCA9710 + (uint64_t)e, 0.f, 1.f, 0.6f, ink, a * vis, -1);
             flushInk();
         }
     }

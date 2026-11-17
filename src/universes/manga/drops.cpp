@@ -447,6 +447,7 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
         }
         const float g = 0.24f;
         auto cutY = [&](int i, float x) { return yc[i] + sl[i] * (x - xm); };
+        V2 frames[3][4];
         for (int j = 0; j < 3; j++) {
             auto yTop = [&](float x) { return j == 0 ? TOP : cutY(j - 1, x) - g; };
             auto yBot = [&](float x) { return j == 2 ? BOT : cutY(j, x) + g; };
@@ -514,8 +515,10 @@ void MangaUniverse::drawPanelBreak(float a, double beat) {
                 tn.angle = 0.785f;
                 fillPoly({q[3], q[2], q[1], q[0]}, tn, 1.f, ink_, a, slot);
             }
-            strokeLine({q[0], q[1], q[2], q[3]}, 3.2f, 0.f, true, 1.f, ink_, a, -1);
+            for (int c = 0; c < 4; c++) frames[j][c] = q[c];
         }
+        // their frames over all three (a close-up's ground may reach past its panel, inside its scissor)
+        for (int j = 0; j < 3; j++) inkQuad(frames[j], 3.4f, 0xB4EA0 + (uint64_t)(side * 3 + j), 1.f, ink_, a);
     }
     // the small panels between the HUD's: the burst's colors under a dot tone, so the page reads full
     for (const int i : {(int)manga::P_C, (int)manga::P_D}) {

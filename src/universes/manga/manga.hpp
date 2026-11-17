@@ -46,6 +46,10 @@ private:
     void strokeLine(const std::vector<V2>& pts, float widthPx, float taper, bool closed, float upTo, const vec3& col, float a,
                     int clip, const V2* pivot = nullptr, float rotA = 0.f);
     void rectPx(float x0, float y0, float x1, float y1, const vec3& c, float a);
+    // A hand-inked line from a to b (pixels): a brush stroke, its shape the seed's (see manga.cpp).
+    void brushPx(vec2 a, vec2 b, float widthPx, uint64_t seed, float from, float to, float loose, const vec3& col, float alpha, int clip);
+    // A panel's frame (board units, its corners clockwise): each edge a brush stroke, ruled in along them (upTo 0..1).
+    void inkQuad(const V2* q, float widthPx, uint64_t seed, float upTo, const vec3& col, float a);
     void discPx(float cx, float cy, float r, const vec3& c, float a, int clip = -1);
     void flushInk();
     vec2 px(const V2& b) const; // board -> pixels
@@ -102,8 +106,13 @@ private:
     int nextId_ = 1;
     void syncIds(const Game& g);
     void drawBoard(const Game& g, float t);
-    void drawPiece(const int cells[][2], int n, int type, float dx, float dy, float alpha, float inkK);
-    const Game* stack_ = nullptr; // while drawing the locked pieces: the board, so touching pieces share one outline
+    // its flat color, its ink (seams and outline), or both (the stack's colors all go down before its ink, so a
+    // piece's outline is never covered by its neighbor's color)
+    enum { PIECE_FILL = 1, PIECE_INK = 2, PIECE_ALL = 3 };
+    void drawPiece(const int cells[][2], int n, int type, float dx, float dy, float alpha, float inkK, int parts = PIECE_ALL);
+    // brush strokes along a piece's outline, one per straight run of it (cells in rows below minRow left out)
+    void inkOutline(const int cells[][2], int n, int minRow, float dx, float dy, float widthPx, uint64_t seed, float loose,
+                    const vec3& col, float a);
     struct Crumb { V2 p, v; float r, t, life; int type; };
     std::vector<Crumb> crumbs_;
     struct Fade { int x, y, type; float t; int mask; };
