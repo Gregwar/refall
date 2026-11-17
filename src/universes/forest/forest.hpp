@@ -1,5 +1,6 @@
 #pragma once
-// GLOWING FOREST: a night forest lit only by bioluminescence, growing with the cleared lines (see forest.cpp).
+// GLOWING FOREST: a night forest as a relief print (a black key block carved with a gouge, fluorescent inks for
+// everything that glows, blazing under a blacklight on the drop; see forest.cpp).
 #include <string>
 #include <vector>
 
@@ -38,36 +39,39 @@ private:
     CellLook lookOf(int id, float relX, float relY) const;
     void syncIds(const Game& g);
     struct Fade { float x, y; int type; CellLook l; float t, delay; };
-    std::vector<Fade> clears_;   // cleared cells breaking into spores
-    std::vector<Fade> outs_;     // game over: the stack's glow going out
+    std::vector<Fade> clears_;   // cleared cells gouged away
+    std::vector<Fade> outs_;     // game over: the stack inked over
 
-    // ---- The forest: near trunks, and slots where life can grow, filled as lines clear.
-    struct Trunk { float x, hw, lean, flare; };
+    // ---- The forest: its big trees, and the glowing life placed among them (it stays for the universe's life).
+    struct Trunk {
+        float x, H, rad, lean, ph;  // its foot, height, radius at the foot, lean, its bends' phase
+        float cx, open;             // the x whose neon it takes; the side its crown opens to (-1 left .. 1 right)
+        int limbs;
+        bool leafy;                 // its last twigs end in sprays of leaves
+    };
     std::vector<Trunk> trunks_;
+    vec2 trunkAt(const Trunk& t, float u) const;   // a point up its trunk (u 0 the foot .. 1 the crown)
+    float trunkRad(const Trunk& t, float u) const;
     struct Plant {
         float x = 0, y = 0, scale = 1, seed = 0;
-        int kind = 0, group = 0;
+        int kind = 0, group = 0;    // its kind; its quarter of the forest on the beat grid
         bool flip = false;
-        float colMix = 0;           // 0 the variant's first glow .. 1 its second
-        bool live = false;
-        float grow = 0, delay = 0, growDur = 3.f;
-        float fade = -1.f;          // withering (a new song), 0..1
+        float colMix = 0;           // 0 the variant's first glow ink .. 1 its second
         float kickGlow = 0;
         float height = 2.f;         // its top, in plant units
     };
     std::vector<Plant> plants_;
-    std::vector<int> order_;        // the slots still empty, in the order they fill
     void buildTrunks();
-    void buildForest(bool instant);
-    int sprout(float delay, float nearX, bool fast);
+    void buildForest();
+    void buildNeon();
     vec2 plantTop(const Plant& p) const;
 
     // ---- Light in the air: fireflies, spores.
     struct Mote {
         vec2 p, v, p0, target;
         float t = 0, life = 8.f, delay = 0, r = 0.3f, a = 1.f, seed = 0;
-        int kind = 0;               // 0 firefly, 1 spore flying to a plant, 2 spore rising, 3 a puff at a hard drop
-        vec3 col{1.f};
+        int kind = 0;               // 0 firefly, 1 spore rising, 2 a chip at a hard drop
+        float inkB = 0.f;           // its glow ink: 0 the first .. 1 the second
         vec2 trail[8];              // a firefly's recent places (its fading trail)
         int trailN = 0;
         float trailAcc = 0.f;
@@ -78,34 +82,51 @@ private:
     std::vector<Inst> plantInst_, cells_;
     std::vector<Inst2> halos_, moteInst_;
     void buildBoard(const Game& g);
-    void addCell(float x, float y, float half, int type, const CellLook& l, float alpha, int kind, float prog, float glow = 1.f);
+    void addCell(float x, float y, float half, int type, const CellLook& l, float alpha, int kind, float prog);
     void drawInst(GLuint prog, GLuint vao, GLuint vbo, const void* data, size_t bytes, size_t count);
     vec3 pieceColor(int type) const;
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const std::vector<HudText>& hud, const std::vector<HudRect>& panels);
+    // the HUD's lines in board units (x0, y0, x1, y1), kept uncut
+    static constexpr int MAX_BOXES = 24;
+    float boxes_[MAX_BOXES * 4] = {};
+    int boxN_ = 0;
+    void readBoxes(const Frame& f);
+    void setBoxes(GLuint prog) const;
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
-    GLuint progBg_ = 0, progHalo_ = 0, progPlant_ = 0, progVeil_ = 0, progMote_ = 0, progPiece_ = 0, progDown_ = 0,
-           progBlur_ = 0, progFinal_ = 0, progShape_ = 0;
+    GLuint progBg_ = 0, progHalo_ = 0, progPlant_ = 0, progMote_ = 0, progPiece_ = 0, progDown_ = 0, progBlur_ = 0,
+           progFinal_ = 0, progShape_ = 0, progNeon_ = 0;
     GLuint quadVbo_ = 0, plantVao_ = 0, plantVbo_ = 0, haloVao_ = 0, haloVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0,
            shapeVao_ = 0, shapeVbo_ = 0;
-    ugl::Target sceneT_, bloomA_, bloomB_;
+    ugl::Target plateT_, lightT_, bloomA_, bloomB_;
+    ugl::Target sceneT_;            // the drop's neon forest (its light, how much it hides of what is behind)
+    // the forest's strokes, carved in the print and lit in neon on the drop: the dark fills, the tubes, the black
+    // silhouettes
+    GLuint neonVao_[3] = {}, neonVbo_[3] = {};
+    int neonN_[3] = {};
+    float aura_[3] = {-19.f, -2.f, 4.5f};      // the violet aura behind the left's trees: center, radius
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
 
     // ---- Song, variant.
     int variant_ = 0;
-    vec3 sky_[2], skyT_[2], mist_, mistT_, moss_, mossT_, glow_[2], glowT_[2], piece_[7], pieceT_[7], moon_, moonT_;
+    // linear: the paper, the key block's ink, the world's two glow inks, the drop's third ink, slow motion's ink, the
+    // seven blocks
+    vec3 paper_, paperT_, key_, keyT_, glow_[2], glowT_[2], dropInk_, dropInkT_, slowInk_, slowInkT_, piece_[7], pieceT_[7];
+    vec3 neon_[8], neonT_[8];       // the drop's neons: the left's gradient (from the column out), the right's, warm, moon
+    void setNeon(GLuint prog) const;
     bool colSet_ = false;
-    uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull;
+    uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull, forestSeed_ = 0;
     float seedF_ = 0.f, groundSeed_ = 0.f;
     float rock_[3] = {-17.4f, 7.4f, 2.7f};  // the mossy rock (the bottom-left corner): center, half width, height
     float cornerRight_ = -12.8f;    // the right end of the corner's text (board units)
     float pool_[3] = {0.f, 0.f, -10.66f};  // the still pool on the right floor: x0, x1 (none when equal), water level
-    float grow_ = 0.f;              // how much of the forest has grown (0..1, eased)
+    float moon_[3] = {16.f, 7.f, 2.5f};     // the moon cut out of the sky: center, radius
+    float glade_[4] = {-16.f, -1.f, 4.f, 3.f};  // a far glade glowing between the trunks on the left: center, radii
     float wind_ = 0.4f;             // the breeze in the plants and vines
 
     // ---- Staging: continuous level 0 calm .. 2 peak.
@@ -115,13 +136,15 @@ private:
     float energy_ = 0.5f;
     bool dropMode_ = false;
     float dropT_ = 99.f, fest_ = 0.f, waveT_ = 99.f, waveK_ = 0.f;
+    float dropInkK_ = 0.f;          // the drop's third ink on the print (0..1)
+    float blaze_ = 0.f;             // the drop's neon forest (0..1)
+    float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
     double time_ = 0.0;
     float worldTime_ = 0.f, beat_ = 0.f;
     int lastHalf_ = -1;
     float quadGlow_ = 0.f;
     float fireflyAcc_ = 0.f;
-    int sideFlip_ = 0;
 
     bool slowOn_ = false;
     float slow_ = 0.f;
