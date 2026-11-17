@@ -170,7 +170,7 @@ void main() {
     vec2 fp = vec2(ws.x * 1.4, ws.y * 0.4 - uTime * 1.4);
     float tongue = fbm(fp + vec2(0.9 * fbm(fp * 0.7 + vec2(0.0, uTime * 0.3)), 0.0));
     float fire = smoothstep(0.55, 1.05, (1.0 - exp(-a * 6.0)) * (0.1 + 1.3 * tongue));
-    float light = uFlame * fire * (0.6 + 0.6 * fire);
+    float light = min(uFlame * fire * (0.6 + 0.6 * fire), 0.2); // (capped: a sudden plume never flares)
     // the drop wakes the cave: lava glows in the cracks between the rock's facets, slowly breathing, and the smoke
     // is lit warm from below
     float vein = (1.0 - smoothstep(0.0, 0.05, f2 - f1)) * rock * smoothstep(0.48, 0.62, mass)
@@ -305,9 +305,9 @@ void main() {
     d = mix(d, max(d, base + (1.02 - base) * min(1.0, 0.22 + 1.2 * hv)), rim * 0.85);
     d *= 1.0 - 0.35 * uRim * (1.0 - smoothstep(0.0, 0.022, depth));
     // the camera's highlight compression (the drop): above a knee the heat rolls off softly to the cap, so the
-    // hottest lava tops out bright orange-yellow with its swirls and fissures still showing
-    float knee = uCap - 0.14;
-    if (d > knee) d = knee + 0.14 * (1.0 - exp(-(d - knee) / 0.14));
+    // hottest lava tops out bright orange with its swirls and fissures still showing
+    float knee = uCap - 0.25;
+    if (d > knee) d = knee + 0.25 * (1.0 - exp(-(d - knee) / 0.25));
     float a = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd)) * vB.w;
     frag = vec4(d * a, a, 0.0, a);
 }

@@ -18,7 +18,7 @@
 // cold, the air still). Choruses are warmer (the range narrows, the far shapes warm up, the air rises faster, a
 // bubble of hot air leaves the stack with the kicks). The drop flares: the whole stack flashes hot and cools over
 // seconds, the camera switches to another colormap, the far shapes swell with the bars; its highlights are compressed
-// (the stack tops out bright orange-yellow, its texture and seams still showing) and the cave takes the energy: lava
+// (the stack tops out bright orange, its texture and seams still showing) and the cave takes the energy: lava
 // glows in the cracks of the rock, the smoke is lit warm, the sparks thicken. A cleared row vents its heat:
 // its blocks fade out as they cool, the cells above it are warmed by the passing heat and a plume of hot air rises
 // out of the stack. A quad is an updraft. Slow motion is the camera's isotherm mode (grey but the hottest band),
@@ -81,12 +81,12 @@ const Colormap MAPS[] = {
     {"LAVA", {{0.f, 0x020406}, {0.06f, 0x0b1217}, {0.12f, 0x293a41}, {0.18f, 0x2b2c31}, {0.26f, 0x48222a},
               {0.36f, 0x7c1b1e}, {0.46f, 0xb82a18}, {0.58f, 0xe55616}, {0.72f, 0xf99424}, {0.86f, 0xffd062},
               {1.f, 0xfffbea}}, 11},
-    // 4: rainbow (high contrast): indigo, blue, cyan, green, yellow, orange, red, pink white.
-    {"RAINBOW", {{0.f, 0x010004}, {0.12f, 0x0e0a40}, {0.24f, 0x1a34b0}, {0.37f, 0x00b2d6}, {0.5f, 0x1ccf5c},
-                 {0.62f, 0xdce024}, {0.75f, 0xff8a12}, {0.87f, 0xf01c30}, {1.f, 0xffdcf2}}, 9},
+    // 4: blaze: ironbow burning, its cold end lifted into glowing violet and magenta (the cave lit by the heat).
+    {"BLAZE", {{0.f, 0x14061f}, {0.08f, 0x2c0c4e}, {0.18f, 0x561478}, {0.3f, 0x8c1d82}, {0.42f, 0xc4305e},
+               {0.55f, 0xe8602a}, {0.7f, 0xf7981c}, {0.85f, 0xfdd050}, {1.f, 0xfffbea}}, 9},
     // 5: glow (hot metal): black, smoky brown red, deep red, red, orange, yellow, white.
-    {"GLOW", {{0.f, 0x030102}, {0.1f, 0x1c1416}, {0.2f, 0x3e1a14}, {0.36f, 0x7c0c0a}, {0.52f, 0xc8260a}, {0.66f, 0xf0620e},
-              {0.8f, 0xfcad2a}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 9},
+    {"GLOW", {{0.f, 0x030102}, {0.1f, 0x1c1416}, {0.2f, 0x4a1c16}, {0.3f, 0x7a1a14}, {0.42f, 0xb02a12}, {0.55f, 0xdc4a10},
+              {0.68f, 0xf47c18}, {0.8f, 0xfcb030}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 10},
 };
 
 // The variants: the camera's palette, the drop's palette, the room's temperature and its grain.
@@ -1060,7 +1060,8 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uWallHeat", 0.45f);
     set1f(progBg_, "uWell", bare ? 0.f : 1.f);
     set1f(progBg_, "uVig", 0.32f);
-    set1f(progBg_, "uFlame", (0.16f + 0.05f * saturate(warm) + 0.06f * flare_) * (1.f - over_));
+    // (no stronger in a drop: the drop's extra hot air is offset, the drop burns in the cave instead)
+    set1f(progBg_, "uFlame", (0.16f + 0.05f * saturate(warm)) * (1.f - 0.5f * dropAmt_ * wp) * (1.f - over_));
     set1f(progBg_, "uEmbers", (0.55f + 0.45f * saturate(warm) + 0.8f * dropAmt_ * wp) * (1.f - 0.7f * over_));
     set1f(progBg_, "uLava", dropAmt_ * wp * (1.f - over_));
     {
@@ -1101,9 +1102,9 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progCell_, "uHeat", 0);
         set1f(progCell_, "uRim", 1.f);
         set1f(progCell_, "uGain", gain + 0.0001f);
-        // the drop: the stack's highlights compressed to the colormap's bright orange-yellow (no white-out)
+        // the drop: the stack's highlights compressed to the colormap's bright orange (no white-out)
         const float hiShown = hi_ - 0.08f * flare_;
-        set1f(progCell_, "uCap", lerpf(1.6f, lo_ + 0.82f * (hiShown - lo_), smoothstepf(0.f, 1.f, dropAmt_)));
+        set1f(progCell_, "uCap", lerpf(1.6f, lo_ + 0.74f * (hiShown - lo_), smoothstepf(0.f, 1.f, dropAmt_)));
         set1f(progCell_, "uTime", worldTime_);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
@@ -1148,7 +1149,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, glowA_.tex);
     set1i(progMap_, "uGlow", 2);
     set1f(progMap_, "uGlowAmt", (0.55f + 0.25f * saturate(warm)) * (1.f - over_));
-    set1f(progMap_, "uBloom", (1.5f + 0.3f * saturate(warm)) * (1.f - over_));
+    set1f(progMap_, "uBloom", (1.5f + 0.3f * saturate(warm)) * (1.f - 0.45f * dropAmt_ * wp) * (1.f - over_));
     glActiveTexture(GL_TEXTURE0);
     set1f(progMap_, "uLo", lo_);
     set1f(progMap_, "uHi", hi_ - 0.08f * flare_);
