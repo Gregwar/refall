@@ -1,8 +1,9 @@
 // BIOME's frame (see biome.cpp): the shared GL resources, the camera, the passes around the world's own, the stack's
 // glass cubes and the HUD.
 //
-// The frame: the sun's shadow map (the world's casters); then the world, multisampled, with depth (the world's passes);
-// the rain; the well's pane (and the bridge); what the world draws over the pane; resolved, a copy of it (what the
+// The frame: the sun's shadow map (the world's casters); then the world, multisampled, with depth (the world's passes,
+// ending with the shared lens: the bloom, the glare, the well's smoky glass); the rain; the bridge (and the well's
+// pane for a world without the lens); what the world draws over the pane; resolved, a copy of it (what the
 // stack's glass shows behind it); the ghost, the stack, the falling piece, the previews (glass cubes with the world's
 // fill); what the world draws over the stack; the HUD; the final pass.
 #include <algorithm>

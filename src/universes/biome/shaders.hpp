@@ -1,6 +1,6 @@
 #pragma once
 // BIOME's shared shaders (see biome.hpp): the helpers, the sky and its light, the sun's shadow map, the glass cube
-// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the
+// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the lens, the
 // HUD's letters and the final pass. Each world adds its own (sea_shaders.hpp, land_shaders.hpp): its WORLD_GLSL (its
 // ground, its haze, `partFog`), its sky's main, its meshes, its cells' fill.
 

@@ -19,6 +19,10 @@
 // A drop brings the rain (the shell's storm): the soil soaks dark and puddles form, everything grows several times
 // faster, flowers open, a flock lifts from the trees. It eases back after the drop, the growth stays. A chorus is a
 // bright, breezy bloom; a break a still, hazy land. Slow motion is a blue dusk with fireflies.
+//
+// Shot like a film (land_render.cpp): light shafts through the canopy into a layered mist, wet glossy leaves and soil,
+// a thick undergrowth (ferns, broad-leaved plants); a cleared row sets green sparks of life free, the sprouts near
+// glow as they come up, the falling piece warms the well's dark glass.
 #include "universes/biome/land.hpp"
 
 #include <algorithm>

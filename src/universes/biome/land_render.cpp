@@ -2,9 +2,10 @@
 // plants, the sown seeds' mounds and sprouts), its passes.
 //
 // The shadow map: the plants near the well. The world, multisampled, with depth: the sky, the land, the plants (and
-// the mounds and sprouts), the birds, the seeds in flight and at rest, the dust, the splashes and
-// the pollen. The shell then adds the rain, the well's pane (the seeds still in the well are seen through it) and the
-// stack; the puffs of dust under a lock come after the stack.
+// the mounds and sprouts), the birds, the seeds in flight and at rest, the dust, the splashes and the pollen, the
+// sprouts' glow; the light shafts through the air (marched up to the world's depth); the shell's lens (the bloom, the
+// glare, the well's smoky glass). The shell then adds the rain; over the glass, behind the stack, the falling piece's
+// warm glow and the green sparks of life; then the stack; the puffs of dust under a lock come after the stack.
 #include <algorithm>
 #include <cstdio>
 
