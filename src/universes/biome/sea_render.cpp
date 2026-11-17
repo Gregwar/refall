@@ -1,10 +1,11 @@
 // BIOME's sea, its drawing (see sea.cpp): the GL resources, the world's meshes (the sandy bed and its cut face, the
 // sea's surface, the boats), its passes.
 //
-// The shadow map: the thrown cubes, the boats. The world, multisampled, with depth: the sky, the sand, the boats, the
-// life in the water; a copy of it (what the thrown cubes refract); the thrown cubes (ray traced, writing their depth),
-// the particles under the water, the sea's surface, the water's cut face, the particles above it. The shell then adds
-// the rain, the well's pane and the stack.
+// The shadow map: the thrown cubes, the boats; from the same view, the light through the cubes' water (their colored
+// shadows). The world, multisampled, with depth: the sky, the sand (its puddles), the boats, the life in the water; a
+// copy of it (what the thrown cubes refract); the thrown cubes (ray traced, writing their depth), the particles under
+// the water, the sea's surface, the water's cut face, the particles above it; the lens (the bloom, the sun's glare,
+// the well's dark glass pane and the panels). The shell then adds the rain, the bridge and the stack.
 #include <algorithm>
 #include <cstdio>
 
@@ -99,6 +100,18 @@ bool SeaWorld::init() {
     progFront_ = compile(shaders::FRONT_VS, shaders::FRONT_FS, "sea front", {W, shaders::WORLD_GLSL});
     progBoat_ = compile(shaders::MESH_VS, shaders::BOAT_FS, "sea boat", {W, shaders::WORLD_GLSL, S});
     progDepth_ = compile(shaders::MESH_VS, common::DEPTH_FS, "sea depth", {});
+    progPass_ = compile(shaders::MESH_VS, shaders::PASS_FS, "sea light through the cubes", {});
+    passT_.create(1024, 1024, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, true);
+    glGenTextures(1, &pudTex_);
+    glBindTexture(GL_TEXTURE_2D, pudTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, PUD_W, PUD_H, 0, GL_RG, GL_FLOAT, pud_.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    progDown_ = compile(ugl::FULLSCREEN_VS, shaders::LENS_DOWN_FS, "sea lens down", {});
+    progBlur_ = compile(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "sea lens blur", {});
+    progLens_ = compile(ugl::FULLSCREEN_VS, shaders::LENS_FS, "sea lens", {});
     progCube_ = compile(shaders::CUBE_VS, shaders::CUBE_FS, "sea thrown cube", {W, shaders::WORLD_GLSL, G, shaders::WATER_GLSL});
     progLife_ = compile(shaders::LIFE_VS, shaders::LIFE_FS, "sea life", {W, shaders::WORLD_GLSL});
     progPart_ = compile(common::PART_VS, common::PART_FS, "sea particle", {W, shaders::WORLD_GLSL});
@@ -148,7 +161,7 @@ void SeaWorld::buildMeshes() {
         // widening with the distance; then the cut face
         std::vector<float> v;
         std::vector<unsigned> idx;
-        const int C = 180, R = 180;
+        const int C = 256, R = 256;
         for (int j = 0; j <= R; j++) {
             const float t = (float)j / R;
             const float z = FRONT_Z - 800.f * std::pow(t, 2.5f);
@@ -305,8 +318,12 @@ void SeaWorld::buildMeshes() {
 }
 
 SeaWorld::~SeaWorld() {
-    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progCube_, progLife_, progPart_, progCell_})
+    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progPass_, progCube_, progLife_, progPart_, progCell_,
+                    progDown_, progBlur_, progLens_})
         glDeleteProgram(p);
+    passT_.destroy();
+    glDeleteTextures(1, &pudTex_);
+    for (ugl::Target* t : {&quarterT_[0], &quarterT_[1], &eighthT_[0], &eighthT_[1]}) t->destroy();
     for (Mesh* m : {&sand_, &surf_, &front_}) {
         glDeleteVertexArrays(1, &m->vao);
         glDeleteBuffers(1, &m->vbo);
@@ -336,6 +353,8 @@ void SeaWorld::worldUniforms(GLuint p) {
     set3f(p, "uDeep", ctx.pal.deep);
     set3f(p, "uFoam", ctx.pal.foam);
     set3f(p, "uStormSea", ctx.pal.stormSea);
+    set1f(p, "uAirDust", ctx.pal.airDust);
+    set1f(p, "uWind", dir_);
 }
 
 // The boats, one instanced draw per type (depthOnly: into the shadow map).
@@ -372,14 +391,15 @@ void SeaWorld::drawBoats(bool depthOnly) {
     }
 }
 
-// The thrown cubes as boxes (their shadows).
+// The thrown cubes as boxes (their shadows), each with the color of the light its water lets through, its fill.
 void SeaWorld::drawBoxes() {
     std::vector<float> inst;
     for (const Body& b : bodies_) {
         if (b.age < b.delay || b.fade > 0.6f || ctx.bare) continue;
         const mat4 m = model(b.p, qRot(b.q, vec3(1, 0, 0)), qRot(b.q, vec3(0, 1, 0)), qRot(b.q, vec3(0, 0, 1)), 1.f);
+        const vec3 c = ctx.pal.cell[b.type];
         inst.insert(inst.end(), m.m, m.m + 16);
-        inst.insert(inst.end(), {1.f, 0.f, 0.f, 0.f});
+        inst.insert(inst.end(), {c.x, c.y, c.z, b.fill});
     }
     if (inst.empty()) return;
     glBindVertexArray(boxVao_);
@@ -392,7 +412,8 @@ void SeaWorld::drawBoxes() {
 // Passes
 // =====================================================================================================
 
-// The sun's shadow map: the thrown cubes and the near boats on the sand around the well.
+// The sun's shadow map: the thrown cubes and the near boats on the sand around the well. Then, from the same view, the
+// light the cubes' water lets through (their colored shadows, brighter where it is focused; nothing through a boat).
 void SeaWorld::shadowPass() {
     const vec3 L = ctx.sunDir();
     const vec3 c(0.f, -9.f, -14.f);
@@ -402,6 +423,21 @@ void SeaWorld::shadowPass() {
     setMat(progDepth_, "uVP", ctx.lightVP);
     drawBoxes();
     drawBoats(true);
+
+    GLint shadowFbo = 0, vp[4];
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &shadowFbo);
+    glGetIntegerv(GL_VIEWPORT, vp);
+    passT_.bind();
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(progPass_);
+    setMat(progPass_, "uVP", ctx.lightVP);
+    set1f(progPass_, "uTime", ctx.time);
+    drawBoxes();
+    glUseProgram(progDepth_);
+    drawBoats(true);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)shadowFbo);
+    glViewport(vp[0], vp[1], vp[2], vp[3]);
 }
 
 void SeaWorld::drawWorld() {
@@ -424,7 +460,32 @@ void SeaWorld::drawWorld() {
     glUseProgram(progSand_);
     worldUniforms(progSand_);
     shadowUniforms(progSand_);
-    set3f(progSand_, "uSand", lerp(vec3(0.62f, 0.47f, 0.29f), ctx.pal.haze, 0.15f) * (1.f - 0.45f * ctx.pal.night));
+    set3f(progSand_, "uSand", ctx.pal.sand);
+    {
+        // the cubes lying on the sand (or about to), nearest the eye first: their contact shadows
+        std::vector<const Body*> near;
+        for (const Body& b : bodies_)
+            if (b.age >= b.delay && b.fade < 1.f && !ctx.bare && b.p.y - sandH(b.p.x, b.p.z) < 1.4f) near.push_back(&b);
+        std::sort(near.begin(), near.end(), [](const Body* a, const Body* b) { return a->p.z > b->p.z; });
+        float bv[24 * 4];
+        const int n = std::min((int)near.size(), 24);
+        for (int i = 0; i < n; i++) {
+            const Body& b = *near[i];
+            const float v[4] = {b.p.x, b.p.y, b.p.z, (1.f - smoothstepf(0.f, 1.f, b.fade)) * world};
+            std::copy(v, v + 4, bv + i * 4);
+        }
+        if (n > 0) glUniform4fv(ugl::U(progSand_, "uBodies"), n, bv);
+        set1i(progSand_, "uBodyN", n);
+    }
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, passT_.tex);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, pudTex_);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, PUD_W, PUD_H, GL_RG, GL_FLOAT, pud_.data());
+    glActiveTexture(GL_TEXTURE0);
+    set1i(progSand_, "uPass", 6);
+    set1i(progSand_, "uPud", 7);
+    set4f(progSand_, "uPudRect", -PUD_X, PUD_Z0, 1.f / (2.f * PUD_X), 1.f / (PUD_Z1 - PUD_Z0));
     glBindVertexArray(sand_.vao);
     glDrawElements(GL_TRIANGLES, sand_.count, GL_UNSIGNED_INT, nullptr);
     // the boats
@@ -546,6 +607,9 @@ void SeaWorld::drawWorld() {
     }
     // the particles: those under the water before the surface, those above it after
     std::vector<float> under, above;
+    // what lights them in the air (the sun, the sky)
+    const vec3 lit = ctx.pal.sun * (0.55f * ctx.pal.lightK * (1.f - 0.6f * ctx.storm)) +
+                     lerp(ctx.pal.skyTop, ctx.pal.skyLow, 0.5f) * ctx.pal.ambK * 0.9f;
     for (const Particle& p : parts_) {
         if (p.age < 0.f) continue;
         const float t = p.age / p.life;
@@ -559,12 +623,13 @@ void SeaWorld::drawWorld() {
         };
         switch (p.kind) {
         case P_JET:
-            // one soft body for the whole jet (it reads over a pale sky as over the sand), its bright core over it
-            put(p.size * 1.4f, 0, lerp(WATER, ctx.pal.sea2, 0.65f), 0.4f * world, 0.18f, 0.7f);
-            put(p.size, 0, p.col, 0.82f * world, 0.18f, 0.7f);
+            // one soft body for the whole jet (it reads over a pale sky as over the sand), its drops bright over it
+            put(p.size * 1.5f, 0, lerp(WATER, ctx.pal.sea2, 0.5f) * lit, 0.3f * world, 0.18f, 0.8f);
+            put(p.size, 0, lerp(p.col, vec3(1.f), 0.35f) * lit, 0.85f * world, 0.18f, 0.6f);
             break;
-        case P_RUN: put(p.size * 1.1f, 0, p.col, 0.75f * (1.f - t) * world, 0.5f, 0.6f); break;
-        case P_SPLASH: put(p.size, 0, p.col, a * 0.85f, 0.f, 0.5f); break;
+        case P_RUN: put(p.size * 1.1f, 0, p.col, 0.6f * (1.f - t) * world, 0.5f, 0.6f); break;
+        case P_SPLASH: put(p.size, 4, p.col * lit, a * 0.95f, 0.1f, 0.f); break;
+        case P_DUST: put(p.size * (1.f + 2.f * t), 5, p.col * lit, 0.35f * (1.f - t) * world, 0.f, 0.f); break;
         case P_SPRAY: put(p.size, 0, p.col, a * 0.7f, 0.12f, 0.7f); break;
         case P_BUBBLE: put(p.size, 3, p.col, a * 0.9f, 0.f, 0.f); break;
         case P_PLUME: put(p.size * (1.f + 1.6f * t), 5, p.col, 0.5f * (1.f - t) * world, 0.f, 0.f); break;
@@ -595,6 +660,87 @@ void SeaWorld::drawWorld() {
     glBindVertexArray(front_.vao);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, front_.count);
     drawParts(above);
+    drawLens();
+}
+
+// The lens, over the world drawn so far (before the shell's rain and the stack): the world taken down and blurred (what
+// the frosted glass shows) and its brightest light blurred wide (the bloom); then laid back over it with the sun's
+// glare and the dark frosted glass: the well's pane (a fine grid of its cells etched in it, a bright rim) and the panels
+// of the held and next pieces. The stack, the previews and the HUD are laid over it after: none of it touches them.
+void SeaWorld::drawLens() {
+    const int qw = std::max(1, ctx.width / 4), qh = std::max(1, ctx.height / 4);
+    if (quarterT_[0].w != qw || quarterT_[0].h != qh) {
+        for (ugl::Target& t : quarterT_) t.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+        for (ugl::Target& t : eighthT_) t.create(std::max(1, qw / 2), std::max(1, qh / 2), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
+    }
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glDisable(GL_BLEND);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, ctx.msFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, ctx.bgT.fbo);
+    glBlitFramebuffer(0, 0, ctx.width, ctx.height, 0, 0, ctx.width, ctx.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glActiveTexture(GL_TEXTURE0);
+    auto down = [&](const ugl::Target& src, const ugl::Target& dst, bool bright) {
+        dst.bind();
+        glUseProgram(progDown_);
+        glBindTexture(GL_TEXTURE_2D, src.tex);
+        set1i(progDown_, "uSrc", 0);
+        set2f(progDown_, "uTexel", 1.f / src.w, 1.f / src.h);
+        set1f(progDown_, "uBright", bright ? 1.f : 0.f);
+        ugl::drawFullscreen();
+    };
+    auto blur = [&](ugl::Target* t, float spread) {
+        glUseProgram(progBlur_);
+        set1i(progBlur_, "uSrc", 0);
+        for (int pass = 0; pass < 2; pass++) {
+            t[1 - pass].bind();
+            glBindTexture(GL_TEXTURE_2D, t[pass].tex);
+            set2f(progBlur_, "uDir", pass == 0 ? spread / t[0].w : 0.f, pass == 0 ? 0.f : spread / t[0].h);
+            ugl::drawFullscreen();
+        }
+    };
+    down(ctx.bgT, quarterT_[0], false);
+    blur(quarterT_, 0.6f);
+    down(quarterT_[0], eighthT_[0], true);
+    blur(eighthT_, 2.f);
+    blur(eighthT_, 2.f);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, ctx.msFbo);
+    glViewport(0, 0, ctx.width, ctx.height);
+    const GLuint p = progLens_;
+    glUseProgram(p);
+    glBindTexture(GL_TEXTURE_2D, ctx.bgT.tex);
+    set1i(p, "uScene", 0);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, quarterT_[0].tex);
+    set1i(p, "uFrost", 1);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, eighthT_[0].tex);
+    set1i(p, "uBloom", 2);
+    glActiveTexture(GL_TEXTURE0);
+    const Palette& pal = ctx.pal;
+    const float world = ctx.world();
+    set4f(p, "uView", ctx.viewC.x, ctx.viewC.y, ctx.viewH.x, ctx.viewH.y);
+    set1f(p, "uPx", ctx.px);
+    set1f(p, "uAspect", (float)ctx.width / ctx.height);
+    set1f(p, "uWorld", world);
+    set1f(p, "uPane", ctx.bare ? 0.f : 1.f - smoothstepf(0.f, 0.6f, saturate(ctx.bridge.amount)));
+    set1f(p, "uDeepY", seaLevel());
+    // the sun on the picture (its glare: none when it is behind the eye or hidden by the storm, faint for the moon and
+    // under an overcast)
+    const vec3 L = ctx.sunDir();
+    const vec4 sp = ctx.vp * vec4(ctx.eye + L * 600.f, 1.f);
+    const bool ahead = sp.w > 1e-3f && L.y > -0.02f;
+    set2f(p, "uSunP", ahead ? sp.x / sp.w : 0.f, ahead ? sp.y / sp.w : 0.f);
+    const float glare = ahead ? (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) : 0.f;
+    // the glass: smoky, dark in every light (the variant's panel toward its deep sea), the world faint through it
+    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, 0.93f, 1.f);
+    set1f(p, "uGrid", 0.24f);
+    set3f(p, "uGlareCol", pal.sun * pal.lightK);
+    set3f(p, "uFrostCol", lerp(pal.panel, pal.deep, 0.55f));
+    set3f(p, "uPanel", pal.panel * 0.7f);
+    ugl::drawFullscreen();
+    glEnable(GL_DEPTH_TEST);
 }
 
 // How the world looks behind a point of the board plane (the HUD's ink): the sky above the horizon, the water's cut face
@@ -615,13 +761,13 @@ vec3 SeaWorld::behind(float bx, float by, float ndc) const {
     return c;
 }
 
-// The stack's cubes: full of the sea's water, under pressure.
+// The stack's cubes: full of the sea's water, under pressure, always over the dark glass of the well and the panels
+// (their water luminous, a bright reflection), whatever the light outside.
 void SeaWorld::cellUniforms(GLuint p) const {
     set1f(p, "uBulge", 0.012f);
     set1f(p, "uTiltY", 0.27f);
-    // the surface: a brighter reflection on the dark seas, a stronger highlight on the light ones
-    const bool lightP = ctx.pal.lightPanel > 0.5f;
-    set4f(p, "uSurf", lightP ? 0.f : 0.6f, 1.f, lightP ? 1.6f : 1.1f, lightP ? 0.55f : 0.6f);
+    set1f(p, "uLightPanel", 0.f);
+    set4f(p, "uSurf", 0.6f, 1.f, 1.1f, 0.6f);
 }
 
 } // namespace biome

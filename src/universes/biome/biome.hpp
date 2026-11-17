@@ -26,8 +26,9 @@ struct Palette {
     // the stack's cubes: what fills each piece type's cube, the world's own color per piece (the sea's life, the
     // seeds' flowers), what the glass reflects under the horizon
     vec3 cell[7], piece[7], envLow;
-    // the sea
-    vec3 sea0, sea1, sea2, deep, foam, stormSea, hull, super_, sail, baccent, window, cont0, cont1, cont2;
+    // the sea (and its sand, the dust blowing over it: how thick)
+    vec3 sea0, sea1, sea2, deep, foam, stormSea, hull, super_, sail, baccent, window, cont0, cont1, cont2, sand;
+    float airDust;
     // the land
     vec3 dust, mist, soilDry, soilWet, soilCut, crack, grassDry, grassLush, leafA, leafB, leafFar, bark, dead;
     vec3 flowerA, flowerB, bird;
@@ -124,6 +125,7 @@ public:
     // the world's color behind a point of the board plane (the HUD's ink), above the horizon from `ndc` up
     virtual vec3 behind(float bx, float by, float ndc) const = 0;
     virtual float paneDeepY() const { return -1e4f; }   // under it the pane darkens (the sea's depths)
+    virtual bool ownPane() const { return false; }      // it draws the well's pane itself (the shell: only the bridge)
     virtual float rainFloorY() const { return -1e4f; }  // no rain under it (the sea's cut face)
     virtual vec3 rainColor() const = 0;
     virtual float rainSlant() const { return 1.f; }
