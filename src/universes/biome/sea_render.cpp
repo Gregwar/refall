@@ -735,7 +735,7 @@ void SeaWorld::drawLens() {
     const float glare = ahead ? (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) : 0.f;
     // the glass: smoky, darker than the world in every light (the variant's panel toward its deep sea), the world
     // half seen through it
-    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, 0.55f, 1.f);
+    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, 0.75f, 1.f);
     set1f(p, "uGrid", 0.24f);
     set3f(p, "uGlareCol", pal.sun * pal.lightK);
     set3f(p, "uFrostCol", lerp(pal.panel, pal.deep, 0.55f));
