@@ -2,9 +2,10 @@
 // plants, the sown seeds' mounds and sprouts), its passes.
 //
 // The shadow map: the plants near the well. The world, multisampled, with depth: the sky, the land, the plants (and
-// the mounds and sprouts), the birds, the seeds in flight and at rest, the dust, the splashes and
-// the pollen. The shell then adds the rain, the well's pane (the seeds still in the well are seen through it) and the
-// stack; the puffs of dust under a lock come after the stack.
+// the mounds and sprouts), the birds, the seeds in flight and at rest, the dust, the splashes and the pollen, the
+// sprouts' glow; the light shafts through the air (marched up to the world's depth); the shell's lens (the bloom, the
+// glare, the well's smoky glass). The shell then adds the rain; over the glass, behind the stack, the falling piece's
+// warm glow and the green sparks of life; then the stack; the puffs of dust under a lock come after the stack.
 #include <algorithm>
 #include <cstdio>
 
@@ -30,7 +31,7 @@ namespace {
 
 // Low-poly plant meshes: position, normal, anchor (a leaf clump's or a flower's center, a vine's top), material
 // (0 bark, 1 leaves, 2 lighter leaves, 3 grass, 4 petals, 5 a flower's heart, 6 vines, 7 dead wood, 8 fronds, 9 soil,
-// 10 a sprout's stem, 11 its seed leaves), sway
+// 10 a sprout's stem, 11 its seed leaves, 12 broad leaves), sway
 // weight (0 at the foot .. 1 at the top).
 struct PlantBuilder {
     std::vector<float>& v;
@@ -102,6 +103,35 @@ struct PlantBuilder {
             quad(p0 - side * w0, p0 + side * w0, p1 + side * w1, p1 - side * w1, ctr, m);
         }
     }
+    // a fern's frond from `a` to `tip` arching: a thin stalk, its leaflets in pairs along it, smaller toward the tip
+    void frond(const vec3& a, const vec3& tip, float rise, int pairs, int m) {
+        blade(a, tip, rise, 0.025f, m, vec3(0.f), 4);
+        const vec3 side = normalize(cross(tip - a, vec3(0, 1, 0)));
+        auto at = [&](float t) { return a + (tip - a) * t + vec3(0.f, rise * 4.f * t * (1.f - t), 0.f); };
+        for (int i = 1; i <= pairs; i++) {
+            const float t = (float)i / (pairs + 1);
+            const vec3 p = at(t), fwd = normalize(at(t + 0.04f) - p);
+            const float len = 0.24f * (1.f - t) + 0.05f;
+            for (int sd = -1; sd <= 1; sd += 2) {
+                const vec3 out = p + side * (len * (float)sd) + fwd * (len * 0.35f) - vec3(0.f, len * 0.3f, 0.f);
+                tri(p - fwd * 0.03f, out, p + fwd * 0.07f, vec3(0.f), m);
+            }
+        }
+    }
+    // a broad leaf from `a` along `dir` (horizontal, unit), `len` long: rising, then drooping at its tip, widest past
+    // its middle, folded a little along its midrib
+    void leaf(const vec3& a, const vec3& dir, float len, float width, float rise, int segs, int m) {
+        const vec3 side = normalize(cross(dir, vec3(0, 1, 0)));
+        auto at = [&](float t) { return a + dir * (len * t) + vec3(0.f, rise * std::sin(t * 2.4f) - len * 0.35f * t * t, 0.f); };
+        auto half = [&](float t) { return width * std::pow(std::sin(PI * std::min(1.f, t * 1.05f)), 0.8f) * (1.f - 0.15f * t); };
+        for (int i = 0; i < segs; i++) {
+            const float t0 = (float)i / segs, t1 = (float)(i + 1) / segs;
+            const vec3 m0 = at(t0), m1 = at(t1);
+            const vec3 lift0(0.f, half(t0) * 0.25f, 0.f), lift1(0.f, half(t1) * 0.25f, 0.f);
+            quad(m0 - side * half(t0), m0 + lift0, m1 + lift1, m1 - side * half(t1), a, m);
+            quad(m0 + lift0, m0 + side * half(t0), m1 + side * half(t1), m1 + lift1, a, m);
+        }
+    }
     // a vine hanging from `top`, `len` down, waving a little: two crossed strips
     void vine(const vec3& top, float len, int m) {
         for (int k = 0; k < 2; k++) {
@@ -133,6 +163,7 @@ bool LandWorld::init() {
     progDepth_ = compile(shaders::PLANT_VS, common::DEPTH_FS, "land depth", {});
     progBird_ = compile(shaders::BIRD_VS, shaders::BIRD_FS, "land bird", {W, shaders::WORLD_GLSL});
     progPart_ = compile(common::PART_VS, common::PART_FS, "land particle", {W, shaders::WORLD_GLSL});
+    progShaft_ = compile(ugl::FULLSCREEN_VS, shaders::SHAFT_FS, "land shafts", {W});
     progCell_ = compile(common::CELL_VS, std::string(common::CELL_HEAD) + shaders::CELL_FILL + common::CELL_MAIN, "land cube",
                         {common::GLASS_GLSL});
     ctx.instanced(birdVao_, birdVbo_, 4);
@@ -247,9 +278,26 @@ void LandWorld::buildMeshes() {
         for (int i = 0; i < (nearM ? 9 : 5); i++) {
             const float a = TAU * i / (nearM ? 9 : 5) + b.r.range(-0.2f, 0.2f);
             const vec3 d(std::cos(a), 0.f, std::sin(a));
-            b.blade(vec3(0.f), d * b.r.range(0.9f, 1.3f) + vec3(0.f, 0.15f, 0.f), 0.75f, 0.17f, 8, vec3(0.f), 4);
+            const vec3 tip = d * b.r.range(0.9f, 1.3f) + vec3(0.f, 0.15f, 0.f);
+            if (nearM) b.frond(vec3(0.f), tip, 0.75f, 7, 8);
+            else b.blade(vec3(0.f), tip, 0.75f, 0.17f, 8, vec3(0.f), 4);
         }
         done(K_FERN, lod);
+        // a broad-leaved plant of the undergrowth: big leaves on short stalks, rising and drooping all around
+        mark(K_BROADLEAF, lod);
+        b.swayH = 1.4f; b.swayK = 0.45f;
+        {
+            const int n = nearM ? 7 : 4;
+            for (int i = 0; i < n; i++) {
+                const float a = TAU * i / n + b.r.range(-0.25f, 0.25f);
+                const vec3 d(std::cos(a), 0.f, std::sin(a));
+                const float h = b.r.range(0.25f, 0.6f);
+                const vec3 base = d * 0.12f + vec3(0.f, h, 0.f);
+                b.blade(vec3(0.f), base, 0.f, 0.03f, 3, vec3(0.f), 1);
+                b.leaf(base, d, b.r.range(0.85f, 1.25f), b.r.range(0.26f, 0.36f), 0.35f, nearM ? 5 : 3, 12);
+            }
+        }
+        done(K_BROADLEAF, lod);
         // a bush: a few round clumps of leaves
         mark(K_BUSH, lod);
         b.swayH = 1.6f; b.swayK = 0.3f;
@@ -394,7 +442,9 @@ void LandWorld::buildMeshes() {
 }
 
 LandWorld::~LandWorld() {
-    for (GLuint p : {progSky_, progGround_, progPlant_, progDepth_, progBird_, progPart_, progCell_}) glDeleteProgram(p);
+    for (GLuint p : {progSky_, progGround_, progPlant_, progDepth_, progBird_, progPart_, progCell_, progShaft_}) glDeleteProgram(p);
+    glDeleteFramebuffers(1, &depthFbo_);
+    glDeleteTextures(1, &depthTex_);
     glDeleteVertexArrays(1, &ground_.vao);
     glDeleteBuffers(1, &ground_.vbo);
     glDeleteBuffers(1, &ground_.ibo);
@@ -444,8 +494,11 @@ void LandWorld::drawPlants(bool shadow) {
         const float reach = 6.f * p.scale + 2.f;
         if (std::fabs(p.p.x) > ctx.hwAt(p.p.z) + reach) continue;
         const int lod = p.p.z < -45.f ? 1 : 0;
+        // a young plant of the undergrowth sown near glows as it comes up
+        const bool low = p.kind <= K_BUSH || p.kind == K_BROADLEAF;
+        const float glow = !shadow && !p.wild && low && p.p.z > -16.f && p.wither <= 0.f ? 1.f - smoothstepf(0.f, 0.7f, p.g) : 0.f;
         const float v[12] = {p.p.x, p.p.y, p.p.z, p.scale, p.rot, p.g, p.seed, p.vines,
-                             p.tint, p.wither > 0.f ? std::min(1.f, p.wither * 0.6f) : 0.f, (float)p.kind, 0.f};
+                             p.tint, p.wither > 0.f ? std::min(1.f, p.wither * 0.6f) : 0.f, (float)p.kind, glow};
         inst[p.kind][lod].insert(inst[p.kind][lod].end(), v, v + 12);
     }
     for (const Sow& s : sows_) {
@@ -461,7 +514,7 @@ void LandWorld::drawPlants(bool shadow) {
         // the sprout: out of the mound and opening over 1.8 s, then its seed leaves wither as the plant takes over
         if (a > 0.f && gone < 1.f) {
             const float g = saturate(a / 1.8f);
-            const float v[12] = {s.p.x, s.p.y + 0.03f, s.p.z, s.scale * 1.55f * (1.f - gone), s.rot, g, s.seed, 0.f, 0.f, 0.f, (float)K_SPROUT, 0.f};
+            const float v[12] = {s.p.x, s.p.y + 0.03f, s.p.z, s.scale * 2.f * (1.f - gone), s.rot, g, s.seed, 0.f, 0.f, 0.f, (float)K_SPROUT, 1.f};
             inst[K_SPROUT][0].insert(inst[K_SPROUT][0].end(), v, v + 12);
         }
     }
@@ -560,6 +613,7 @@ void LandWorld::drawWorld() {
         set3f(progPlant_, "uDead", pal.dead);
         set3f(progPlant_, "uFlowerC", lerp(pal.flowerB, vec3(1.f, 0.85f, 0.3f), 0.5f));
         set3f(progPlant_, "uLeafFar", pal.leafFar);
+        set3f(progPlant_, "uGlow", glowColor() * ctx.world());
         // the turned soil: darker and damper than the dry crust around it
         set3f(progPlant_, "uSoil", lerp(lerp(pal.soilDry, pal.soilWet, 0.62f), pal.soilWet, wet_ * 0.6f));
         float pc[21];
@@ -633,7 +687,118 @@ void LandWorld::drawWorld() {
         set1f(progPart_, "uAerial", 1.f);
         ctx.drawParts(progPart_, v);
     }
+    // a soft green light around each sprout coming up near (added: the lens blooms it)
+    v.clear();
+    const vec3 glow = glowColor();
+    for (const Sow& s : sows_) {
+        if (!s.hero) continue;
+        const float a = sproutAt(s);
+        const float k = smoothstepf(-0.3f, 0.5f, a) * (1.f - smoothstepf(3.f, 6.5f, a));
+        put(s.p + vec3(0.f, 0.4f, 0.f), vec3(0.f), 1.6f, 5, glow, 0.4f * k, 0.f, 0.f, s.seed, 0.f);
+    }
+    if (!v.empty()) {
+        glUseProgram(progPart_);
+        worldUniforms(progPart_);
+        set1f(progPart_, "uAerial", 1.f);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+        ctx.drawParts(progPart_, v);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
     glDepthMask(GL_TRUE);
+    drawShafts();
+    // the lens: the bloom, the sun's glare, the well's dark smoky glass (the world dim behind the stack in every light)
+    Ctx::Lens l;
+    l.glare = (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) * (1.f - 0.6f * ctx.slow);
+    l.bloom = 0.2f;
+    l.grid = 0.14f;
+    l.tint = 0.9f;   // darker than the sea's: the land behind it is often a bright, hazy day
+    l.glareCol = pal.sun * pal.lightK;
+    l.frostCol = lerp(pal.panel, pal.leafFar * 0.3f, 0.3f);
+    l.panel = pal.panel * 0.7f;
+    ctx.drawLens(l);
+}
+
+// The light shafts (SHAFT_FS) through the canopy into the mist, added over the world: stronger as the forest closes
+// over the land (its gaps), dimmed by the rain's overcast but never gone (the light breaking through).
+void LandWorld::drawShafts() {
+    const Palette& pal = ctx.pal;
+    const float canopy = smoothstepf(0.12f, 0.7f, life_);
+    const float k = (0.2f + 0.6f * canopy) * (1.f - 0.25f * ctx.storm) * ctx.world();
+    if (k <= 0.01f) return;
+    if (depthW_ != ctx.width || depthH_ != ctx.height) {
+        depthW_ = ctx.width;
+        depthH_ = ctx.height;
+        if (!depthTex_) glGenTextures(1, &depthTex_);
+        glBindTexture(GL_TEXTURE_2D, depthTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, depthW_, depthH_, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        if (!depthFbo_) glGenFramebuffers(1, &depthFbo_);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthFbo_);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthTex_, 0);
+        glDrawBuffer(GL_NONE);
+        glReadBuffer(GL_NONE);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) std::fprintf(stderr, "[gl] land depth FBO incomplete\n");
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, ctx.msFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, depthFbo_);
+    glBlitFramebuffer(0, 0, ctx.width, ctx.height, 0, 0, ctx.width, ctx.height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, ctx.msFbo);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    const GLuint p = progShaft_;
+    glUseProgram(p);
+    set3f(p, "uEye", ctx.eye);
+    set1f(p, "uFrontZ", FRONT_Z);
+    set1f(p, "uTime", ctx.time);
+    setMat(p, "uInvVP", ctx.invVP);
+    glActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_2D, depthTex_);
+    glActiveTexture(GL_TEXTURE0);
+    set1i(p, "uDepth", 7);
+    const vec3 L = ctx.sunDir();
+    set3f(p, "uShaftDir", normalize(vec3(L.x < 0.f ? -0.55f : 0.55f, 1.f, -0.3f)));
+    set3f(p, "uShaftCol", lerp(pal.sun, pal.mist, 0.3f) * (pal.lightK * k * 1.f));
+    set1f(p, "uGaps", 1.f - canopy);
+    ugl::drawFullscreen();
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+// Over the well's glass, behind the stack: the falling piece's warm glow on the glass, and the green sparks of life
+// (out of a cleared row, rising around the sprouts), added, behind what stands in front of them in the world.
+void LandWorld::drawAfterPane() {
+    if (ctx.bare) return;
+    const float world = ctx.world();
+    std::vector<float> v;
+    auto put = [&v, world](const vec3& p, const vec3& vel, float size, int kind, const vec3& col, float alpha, float stretch, float soft) {
+        if (alpha * world <= 0.003f) return;
+        const float q[16] = {p.x, p.y, p.z, size, vel.x, vel.y, vel.z, (float)kind, col.x, col.y, col.z, alpha * world, stretch, soft, 0.f, 0.f};
+        v.insert(v.end(), q, q + 16);
+    };
+    const vec3 warm = lerp(ctx.pal.piece[fallType_], vec3(1.f, 0.6f, 0.25f), 0.5f);
+    for (int i = 0; i < fallN_; i++) put(vec3(fall_[i].x, fall_[i].y, -0.05f), vec3(0.f), 1.3f, 5, warm, 0.2f, 0.f, 0.f);
+    for (const Particle& p : parts_) {
+        if (p.kind != P_SPARK || p.age < 0.f) continue;
+        const float t = p.age / p.life;
+        const float a = smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.5f, 1.f, t)) * (0.75f + 0.25f * std::sin(p.age * 9.f + p.seed * 40.f));
+        put(p.p, p.v, p.size, 0, p.col, a, 0.25f, 0.9f);
+        put(p.p, vec3(0.f), p.size * 4.f, 5, p.col, a * 0.18f, 0.f, 0.f);
+    }
+    if (v.empty()) return;
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glUseProgram(progPart_);
+    worldUniforms(progPart_);
+    set1f(progPart_, "uAerial", 1.f);
+    ctx.drawParts(progPart_, v);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
 }
 
 // The puffs of dust under a lock (at the contact, small), over the stack.
@@ -672,11 +837,11 @@ vec3 LandWorld::behind(float bx, float by, float ndc) const {
     return c;
 }
 
-// The seeds' cubes: no bulge, seen a little more from above; a soft reflection.
+// The seeds' cubes: no bulge, seen a little more from above; a glossy reflection, a sharp highlight, bright edges.
 void LandWorld::cellUniforms(GLuint p) const {
     set1f(p, "uBulge", 0.f);
     set1f(p, "uTiltY", 0.3f);
-    set4f(p, "uSurf", 0.4f, 0.8f, 1.1f, 0.6f);
+    set4f(p, "uSurf", 0.35f, 0.9f, 1.8f, 0.8f);
 }
 
 } // namespace biome

@@ -1,6 +1,6 @@
 #pragma once
 // BIOME's shared shaders (see biome.hpp): the helpers, the sky and its light, the sun's shadow map, the glass cube
-// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the
+// (the stack's cells, with each world's fill inside), the particles, the rain, the well's pane, the lens, the
 // HUD's letters and the final pass. Each world adds its own (sea_shaders.hpp, land_shaders.hpp): its WORLD_GLSL (its
 // ground, its haze, `partFog`), its sky's main, its meshes, its cells' fill.
 
@@ -430,6 +430,117 @@ void main() {
     vec3 c1 = mix(uPanel, uEdge, wellE * uEdgeA / max(a1, 1e-3));
     vec3 pre = enc(c1) * a1 * (1.0 - uBridge) + enc(uBridgeCol) * uBridge;
     frag = vec4(pre, 1.0 - (1.0 - a1) * (1.0 - uBridge));
+}
+)";
+
+// ---------------------------------------------------------------- the lens: what the camera does with the world
+// before the stack is laid over it (Ctx::drawLens, called by a world at the end of its drawing). The world (encoded) is taken down to a quarter (`LENS_DOWN_FS`)
+// and blurred (`BLUR_FS`: what the frosted glass shows); its brightest light is taken further down and blurred wide
+// (the bloom); then `LENS_FS` lays it all back over the world: the bloom, the sun's glare in the lens, the well's
+// smoky glass with its fine grid and bright rim, the panels of the held and next pieces in the same glass.
+inline const char* LENS_DOWN_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uSrc;
+uniform vec2 uTexel;     // the source's texel
+uniform float uBright;   // 0: the light as it is; 1: only the brightest (the bloom's source)
+void main() {
+    vec3 c = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+        vec2 o = vec2(i & 1, i >> 1) * 2.0 - 1.0;
+        c += pow(max(texture(uSrc, vUv + o * uTexel).rgb, vec3(0.0)), vec3(2.2));
+    }
+    c *= 0.25;
+    if (uBright > 0.5) {
+        float l = dot(c, vec3(0.3, 0.55, 0.15));
+        c *= smoothstep(1.1, 2.4, l) * min(1.0, 2.5 / max(l, 1e-3));   // (a glint's sparkle capped: no blinding blot)
+    }
+    frag = vec4(c, 1.0);
+}
+)";
+inline const char* BLUR_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uSrc;
+uniform vec2 uDir;   // a texel along the blur
+void main() {
+    const float W[5] = float[5](0.227, 0.194, 0.122, 0.054, 0.016);
+    vec3 c = texture(uSrc, vUv).rgb * W[0];
+    for (int i = 1; i < 5; i++) c += (texture(uSrc, vUv + uDir * float(i)).rgb + texture(uSrc, vUv - uDir * float(i)).rgb) * W[i];
+    frag = vec4(c, 1.0);
+}
+)";
+inline const char* LENS_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform sampler2D uScene, uFrost, uBloom;   // the world (encoded), blurred (linear), its brightest light (linear)
+uniform vec4 uView;                         // the board plane: center x, y, half extents x, y
+uniform float uPx, uAspect, uWorld, uPane;  // a pixel (board units), the picture's aspect, the world shown, the glass
+uniform float uGrid;                        // how bright the well's grid
+uniform vec2 uSunP;                         // the sun on the picture (-1 .. 1, out of it too)
+uniform vec4 uGlare;                        // the glare's strength, the bloom's, the glass's tint, the deep's veil
+uniform vec3 uGlareCol, uFrostCol, uPanel;
+uniform float uDeepY;
+float sdRound(vec2 p, vec2 b, float r) {
+    vec2 d = abs(p) - b + r;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+}
+// a pane of smoky glass (d: its signed distance, board units): darker than whatever is behind it (the world half
+// seen through it, blurred, darker still over the deep water), a bright rim, a lighter frosted band inside it
+vec3 frosted(vec3 c, vec3 fr, float d, float y, float tintK, float rimK) {
+    float inside = smoothstep(uPx, -uPx, d);
+    float deep = smoothstep(2.0, 10.0, uDeepY - y) * uGlare.w;
+    vec3 tint = mix(uFrostCol, uPanel, deep);
+    // what shows through: the world's light held down, so that a white sky or the sun's glint stays dim
+    vec3 seen = fr / (1.0 + dot(fr, vec3(0.3, 0.55, 0.15)) * 1.6);
+    vec3 g = mix(seen, tint, mix(tintK, min(tintK + 0.08, 0.95), deep));
+    g = mix(g, mix(tint, vec3(1.0), 0.5), 0.1 * smoothstep(-0.3, 0.0, d));
+    c = mix(c, g, inside);
+    float rim = smoothstep(uPx * 1.6, 0.0, abs(d + uPx * 0.8));
+    float halo = exp(-max(d, 0.0) / 0.08) * smoothstep(-uPx, uPx, d) * 0.16;
+    return c + (rim * 0.6 + halo) * rimK * mix(vec3(1.0), uGlareCol, 0.3);
+}
+void main() {
+    vec3 c = pow(max(texture(uScene, vUv).rgb, vec3(0.0)), vec3(2.2));
+    vec3 fr = texture(uFrost, vUv).rgb;
+    vec2 w = uView.xy + (vUv * 2.0 - 1.0) * uView.zw;
+    float glass = 0.0;
+    // ---- the glass panes (over the world only: the stack and the previews are laid over them)
+    if (uPane > 0.0) {
+        float lift = 0.75 + 0.5 * smoothstep(-10.0, 10.0, w.y);
+        // the well, a fine grid of its cells etched in it
+        float dw = sdRound(w, vec2(5.08, 10.08), 0.25);
+        vec3 c0 = c;
+        c = frosted(c, fr, dw, w.y, uGlare.z, lift);
+        vec2 g = abs(fract(w + 0.5) - 0.5);
+        float grid = smoothstep(uPx * 1.2, 0.0, min(g.x, g.y)) * smoothstep(uPx, -uPx, dw + 0.06);
+        c = mix(c, mix(uFrostCol, vec3(1.0), 0.6), grid * uGrid);
+        // the held piece's panel, the next pieces' panel
+        float dh = sdRound(w - vec2(-8.6, 7.2), vec2(1.6, 1.35), 0.22);
+        float dn = sdRound(w - vec2(8.6, 4.1), vec2(1.6, 4.45), 0.22);
+        c = frosted(c, fr, min(dh, dn), w.y, uGlare.z, 0.8);
+        c = mix(c0, c, uPane);
+        glass = smoothstep(uPx, -uPx, min(dw, min(dh, dn))) * uPane;
+    }
+    // ---- the light in the lens: the bloom, the sun's glare (a broad warm veil, a tighter glow, faint ghosts); held
+    // down over the glass (the cubes keep their dark ground)
+    float veil = 1.0 - 0.85 * glass;
+    c += texture(uBloom, vUv).rgb * uGlare.y * veil;
+    vec2 q = (vUv * 2.0 - 1.0) - uSunP;
+    q.x *= uAspect;
+    float r = length(q);
+    vec3 gl = uGlareCol * (exp(-r * 2.4) * 0.3 + exp(-r * 7.0) * 0.5 + exp(-r * 25.0) * 0.9);
+    vec2 axis = -uSunP;
+    for (int i = 1; i <= 3; i++) {
+        vec2 gp = uSunP + axis * (0.55 + 0.45 * float(i));
+        vec2 gq = (vUv * 2.0 - 1.0) - gp;
+        gq.x *= uAspect;
+        float gr = length(gq);
+        float sz = 0.05 + 0.04 * float(i);
+        gl += uGlareCol * vec3(0.6, 0.85, 1.0) * smoothstep(sz, sz * 0.6, gr) * 0.025 / float(i);
+    }
+    c += gl * uGlare.x * uWorld * veil;
+    frag = vec4(enc(c), 1.0);
 }
 )";
 

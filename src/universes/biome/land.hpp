@@ -73,20 +73,23 @@ public:
     float cloudDrift() const override { return 0.03f; }
     void shadowPass() override;
     void drawWorld() override;
+    void drawAfterPane() override;
     void drawAfterStack() override;
+    bool ownPane() const override { return true; }
     vec3 behind(float bx, float by, float ndc) const override;
     vec3 rainColor() const override { return lerp(ctx.pal.mist, vec3(1.f), 0.4f); }
     GLuint cellProgram() const override { return progCell_; }
     void cellUniforms(GLuint p) const override;
     vec3 background(const Palette& p) const override { return lerp(p.skyLow, p.soilDry, 0.45f); }
 
-    // The plants' kinds (their meshes); the last two are a sown seed's soil mound and its sprout.
-    enum { K_GRASS = 0, K_FLOWER, K_FERN, K_BUSH, K_TREE, K_EMERGENT, K_PALM, K_DEAD, K_MOUND, K_SPROUT, K_COUNT };
+    // The plants' kinds (their meshes); a sown seed's soil mound and its sprout among them; a broad-leaved plant of
+    // the undergrowth.
+    enum { K_GRASS = 0, K_FLOWER, K_FERN, K_BUSH, K_TREE, K_EMERGENT, K_PALM, K_DEAD, K_MOUND, K_SPROUT, K_BROADLEAF, K_COUNT };
 
 private:
     // ---- Seeds flying out of a broken cube on their arc into the land (their trail behind them), dust,
-    // rain splashes, pollen.
-    enum { P_SEED = 0, P_DUST, P_SPLASH, P_MOTE, P_PETAL, P_TRAIL };
+    // rain splashes, pollen; the glowing green sparks of life (out of a cleared row, rising around a sprout).
+    enum { P_SEED = 0, P_DUST, P_SPLASH, P_MOTE, P_PETAL, P_TRAIL, P_SPARK };
     struct Particle {
         vec3 p, v;
         float age, life, size, grav, drag, seed, spin;
@@ -102,6 +105,8 @@ private:
     // after `pause` seconds and more)
     void breakCube(const vec3& p, int type, float power, float seeds, int heroes, float pause);
     void dustPuff(const vec3& p, int n, float power);
+    void spark(const vec3& p, const vec3& v, float life, float size, const vec3& col);
+    vec3 glowColor() const;   // life's glow (sparks, sprouts)
     void simulateParticles(float dt, float wdt);
     // A lock: a small puff of dust pushed out from under the piece (board plane, drawn after the stack).
     struct Puff { vec2 p, v; float age, life, size; };
@@ -169,13 +174,21 @@ private:
     void spawnBird(int kind, bool onScreen, bool flock);
     void simulateBirds(float dt, float wdt, float world);
 
+    // ---- The falling piece (its cells on the board plane, as drawn): it glows warm on the glass behind it.
+    vec2 fall_[4];
+    int fallN_ = 0, fallType_ = 0;
+
     // ---- GL.
     struct Mesh { GLuint vao = 0, vbo = 0, ibo = 0; int count = 0; };
     void buildMeshes();
     void worldUniforms(GLuint prog);
     void plantUniforms(GLuint prog);
     void drawPlants(bool shadow);
-    GLuint progSky_ = 0, progGround_ = 0, progPlant_ = 0, progDepth_ = 0, progBird_ = 0, progPart_ = 0, progCell_ = 0;
+    GLuint progSky_ = 0, progGround_ = 0, progPlant_ = 0, progDepth_ = 0, progBird_ = 0, progPart_ = 0, progCell_ = 0, progShaft_ = 0;
+    // the light shafts: the world's depth (resolved from the multisampled target) to march the air up to
+    GLuint depthFbo_ = 0, depthTex_ = 0;
+    int depthW_ = 0, depthH_ = 0;
+    void drawShafts();
     Mesh ground_;
     // the plants' meshes: one per kind, near (detailed) and far (simple)
     GLuint plantVao_ = 0, plantVbo_ = 0, plantInstVbo_ = 0;

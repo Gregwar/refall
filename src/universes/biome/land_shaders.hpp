@@ -27,17 +27,28 @@ vec3 skySeen(vec3 d, bool stars) {
 // the haze far out: a dusty haze over the dry land, a humid mist settling in the hollows of the living one
 vec3 hazeCol(vec3 d) {
     vec3 h = mix(skyBase(normalize(vec3(d.x, 0.0, d.z))), mix(uDust, uMist, smoothstep(0.1, 0.8, uLife)), 0.45);
-    return mix(h, uStormCloud * 1.05, uStorm * 0.5);
+    // a living land's humid air holds the light down (the forest's depth reads through it)
+    return mix(h, uStormCloud * 1.05, uStorm * 0.5) * (1.0 - 0.18 * smoothstep(0.3, 1.0, uLife));
 }
 vec3 aerial(vec3 c, vec3 P) {
     vec3 d = P - uEye;
     float L = length(d);
-    float dens = 0.0042 + 0.003 * (1.0 - uLife) + 0.004 * uStorm;
+    float dens = 0.0042 + 0.003 * (1.0 - uLife) + 0.002 * uStorm;
     float k = 1.0 - exp(-max(L - 28.0, 0.0) * dens);
-    // the mist: low over the land, far out, in a living land and in the rain
-    float hf = exp(-max(P.y + 9.0, 0.0) / 3.5);
-    float mist = (0.55 * smoothstep(0.35, 1.0, uLife) + 0.5 * uStorm) * hf * (1.0 - exp(-max(L - 20.0, 0.0) * 0.02));
-    return mix(c, hazeCol(d), clamp(k * 0.94 + mist * 0.7, 0.0, 0.96));
+    // the mist: low over the land, far out, in a living land and in the rain; in banks drifting slowly between the
+    // trees (each row of the forest a paler layer than the one before it), lit a little brighter than the haze
+    float bank = 0.6 + 0.8 * vnoise(vec2(P.x * 0.045 + uTime * 0.02, P.z * 0.08));
+    float hf = exp(-max(P.y + 9.0, 0.0) / (2.5 + 2.5 * bank));
+    float mist = (0.6 * smoothstep(0.35, 1.0, uLife) + 0.5 * uStorm) * hf * (1.0 - exp(-max(uFrontZ - P.z - 5.0, 0.0) * 0.03));
+    vec3 h = mix(hazeCol(d), uMist * 0.9 + uSunCol * 0.03, clamp(mist, 0.0, 1.0) * 0.5);
+    return mix(c, h, clamp(k * 0.94 + mist * 0.65, 0.0, 0.96));
+}
+// the near land's own grade before the air veils it: deeper shadows, richer greens (the shadows sink, the colors
+// are pushed away from their grey)
+vec3 rich(vec3 c) {
+    float l = dot(c, vec3(0.3, 0.5, 0.2));
+    c = mix(vec3(l), c, 1.28);
+    return max(c, 0.0) * mix(0.62, 1.0, smoothstep(0.0, 0.16, l));
 }
 // a particle in the world: through the air
 vec3 partFog(vec3 c, vec3 P) { return aerial(c, P); }
@@ -71,7 +82,58 @@ void main() {
     vec4 a = uInvVP * vec4(n, -1.0, 1.0), b = uInvVP * vec4(n, 1.0, 1.0);
     vec3 d = normalize(b.xyz / b.w - a.xyz / a.w);
     vec3 c = d.y < 0.0 ? hazeCol(d) : skySeen(d, true);
+    // the rain's clouds heavy and dark high up
+    c *= 1.0 - 0.35 * uStorm * smoothstep(0.05, 0.4, d.y);
     frag = vec4(enc(grade(c)), 1.0);
+}
+)";
+
+// ---------------------------------------------------------------- the light shafts: the light falling through the
+// gaps of the canopy into the misty air, over the world drawn so far (added). Each pixel's ray is marched through the
+// air from the diorama's cut up to what it meets (the world's depth); under the crowns a point of it is lit if the
+// light reaches it through a break in the clouds (a few broad beams) and a gap of the canopy (followed up along the light to the crowns' height: a pattern of gaps
+// long in depth, so that a shaft stays one across the forest and reads, drifting very slowly), above them always; the mist is denser low. The light comes down slanting from the sun's
+// side, a little toward the eye, so that its shafts are seen across the picture.
+inline const char* SHAFT_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform mat4 uInvVP;
+uniform sampler2D uDepth;
+uniform vec3 uShaftDir, uShaftCol;   // toward the light, the light in the air
+uniform float uGaps;                 // how open the canopy (1: an open sky)
+const float CANOPY_Y = -3.0, CLOUD_Y = 40.0;
+float lit(vec3 P) {
+    // the breaks in the clouds: a few broad beams
+    vec2 b = (P + uShaftDir * ((CLOUD_Y - P.y) / uShaftDir.y)).xz;
+    float sky = mix(0.12, 0.85, smoothstep(0.5, 0.7, vnoise(b * vec2(0.035, 0.006) + vec2(1.7, uTime * 0.002))));
+    if (P.y > CANOPY_Y) return sky;
+    vec2 c = (P + uShaftDir * ((CANOPY_Y - P.y) / uShaftDir.y)).xz;
+    float n = vnoise(c * vec2(0.2, 0.012) + vec2(3.1, uTime * 0.004)) * 0.8 + vnoise(c * vec2(0.6, 0.05) + 7.7) * 0.2;
+    return sky * smoothstep(0.62 - 0.3 * uGaps, 0.74 - 0.2 * uGaps, n);
+}
+void main() {
+    vec2 n = vUv * 2.0 - 1.0;
+    float z = texture(uDepth, vUv).r;
+    vec4 b = uInvVP * vec4(n, z * 2.0 - 1.0, 1.0);
+    vec3 d = b.xyz / b.w - uEye;
+    float far = min(length(d), 130.0);
+    d = normalize(d);
+    float t0 = d.z < -1e-3 ? (uEye.z - uFrontZ) / -d.z : 0.0;
+    if (far <= t0) discard;
+    // interleaved gradient noise: each pixel's steps a little apart (no banding)
+    float j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    const int N = 20;
+    float T = 1.0, acc = 0.0, prev = t0;
+    for (int i = 0; i < N; i++) {
+        float t = t0 + (far - t0) * pow((float(i) + j) / float(N), 1.4);
+        float dt = t - prev;
+        prev = t;
+        vec3 P = uEye + d * t;
+        float dens = 0.04 * exp(-max(P.y + 9.0, 0.0) / 14.0);
+        acc += T * lit(P) * dens * dt;
+        T *= exp(-dens * dt);
+    }
+    frag = vec4(uShaftCol * acc, 0.0);
 }
 )";
 
@@ -130,10 +192,12 @@ void main() {
         float root = smoothstep(0.12, 0.0, abs(fract(rx) - 0.5) - 0.02) * step(hash12(vec2(rid, 9.0)), 0.45 + 0.4 * green) *
                      smoothstep(rlen, rlen * 0.6, dd);
         alb = mix(alb, uSoilWet * 0.6, root * 0.7);
+        alb *= 1.0 - 0.35 * uWet;
         vec3 col = alb * (uAmb * 0.95 + uSunCol * max(dot(N, uSunDir), 0.0) * 0.7);
         // the lip of the cut: a lit edge, green once the grass reaches it
         float lip = smoothstep(0.09, 0.0, dd);
         col = mix(col, mix(uSoilDry, uGrassLush, green) * (uAmb + uSunCol * 0.6), lip * 0.6);
+        col = rich(col);
         frag = vec4(enc(grade(col)), 1.0);
         return;
     }
@@ -171,14 +235,18 @@ void main() {
     float pud = 0.0;
     if (uWet > 0.01) {
         float hol = vnoise(P.xz * 0.11 + 5.0) * 0.7 + vnoise(P.xz * 0.37) * 0.3;
-        pud = smoothstep(0.62, 0.66, hol + 0.32 * uWet - 0.28) * near * (1.0 - gcov * 0.7);
+        pud = smoothstep(0.6, 0.64, hol + 0.4 * uWet - 0.28) * near * (1.0 - gcov * 0.6);
     }
     float sh = shadowAt(P + N * 0.05);
     float ndl = max(dot(N, uSunDir), 0.0);
-    vec3 col = alb * (uAmb * (0.55 + 0.45 * N.y) + uSunCol * ndl * sh);
-    // wet soil glistens a little
+    // the shade under what grows (the damp soil is where the plants stand)
+    float ao = 1.0 - 0.45 * clamp(life.g * 1.2 + forest * 0.5, 0.0, 1.0);
+    vec3 col = alb * (uAmb * (0.55 + 0.45 * N.y) * ao + uSunCol * ndl * sh * mix(1.0, ao, 0.4));
+    // wet soil glistens: the sun, and the sky at grazing angles
     vec3 V = normalize(uEye - P);
     col += uSunCol * pow(max(dot(reflect(-uSunDir, N), V), 0.0), 40.0) * 0.12 * uWet * (1.0 - gcov) * sh;
+    col = mix(col, skyFull(reflect(-V, N), false) * 0.6, (0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0)) * uWet * 0.6 * (1.0 - gcov * 0.8));
+    col = rich(col);
     if (pud > 0.0) {
         vec3 Np = vec3(0.0, 1.0, 0.0);
         // rain rings
@@ -207,11 +275,13 @@ layout(location = 2) in vec3 aCtr;   // the leaf clump's / flower's / vine's anc
 layout(location = 3) in vec2 aMS;    // material, sway weight
 layout(location = 4) in vec4 i0;     // x, y, z, scale
 layout(location = 5) in vec4 i1;     // rotation, growth (a mound: its height), seed, vines (dead trees: their revival)
-layout(location = 6) in vec4 i2;     // type + shade, wither, kind, -
+layout(location = 6) in vec4 i2;     // type + shade, wither, kind, glow (a young plant's, a sprout's)
 uniform mat4 uVP;
 uniform float uSwayT, uWind, uGust, uBloom;
 out vec3 vP;
 out vec3 vN;
+out vec3 vL;      // the mesh's own point (a wet leaf's glints stay on it)
+out float vAO;    // the light the plant leaves to its own inside (a crown's underside, the trunk under it)
 flat out float vMat;
 flat out vec4 vI1, vI2;
 void main() {
@@ -274,6 +344,10 @@ void main() {
     vec3 w = i0.xyz + p * s;
     vP = w;
     vN = n;
+    vL = aPos;
+    if (m == 1 || m == 2 || m == 8 || m == 12) vAO = 0.4 + 0.6 * smoothstep(-0.8, 0.7, normalize(aPos - aCtr + vec3(0.0, 1e-4, 0.0)).y);
+    else if (m == 0) vAO = 0.55 + 0.25 * aMS.y;
+    else vAO = 1.0;
     vMat = aMS.x;
     vI1 = i1;
     vI2 = i2;
@@ -283,10 +357,12 @@ void main() {
 inline const char* PLANT_FS = R"(#version 330 core
 in vec3 vP;
 in vec3 vN;
+in vec3 vL;
+in float vAO;
 flat in float vMat;
 flat in vec4 vI1, vI2;
 out vec4 frag;
-uniform vec3 uBark, uLeafA, uLeafB, uGrassDry, uGrassLush, uDead, uFlowerC, uLeafFar, uSoil;
+uniform vec3 uBark, uLeafA, uLeafB, uGrassDry, uGrassLush, uDead, uFlowerC, uLeafFar, uSoil, uGlow;
 uniform vec3 uPieces[7];
 void main() {
     int m = int(vMat + 0.5);
@@ -300,7 +376,7 @@ void main() {
     vec3 leaf = mix(uLeafA, uLeafB, h1) * (0.85 + 0.3 * h2);
     vec3 alb;
     bool foliage = false;
-    if (m == 0) alb = uBark * (0.85 + 0.3 * h2);
+    if (m == 0) alb = uBark * (0.6 + 0.2 * h2);
     else if (m == 1) { alb = leaf; foliage = true; }
     else if (m == 2) { alb = mix(leaf, uLeafB, 0.5) * 1.1; foliage = true; }
     else if (m == 3) { alb = mix(uGrassLush, mix(uGrassLush, uGrassDry, 0.4), h1) * (0.85 + 0.3 * h2); foliage = true; }
@@ -311,19 +387,33 @@ void main() {
     else if (m == 9) alb = uSoil * (0.9 + 0.2 * hash13(floor(vP * 14.0)));                   // freshly turned soil
     else if (m == 10) { alb = mix(uGrassLush, vec3(0.85, 0.9, 0.55), 0.45); foliage = true; } // a pale young stem
     else if (m == 11) { alb = mix(uGrassLush, uLeafB, 0.35) * 1.25; foliage = true; }        // fresh seed leaves
+    else if (m == 12) { alb = mix(leaf, uGrassLush, 0.55) * 1.1; foliage = true; }           // broad leaves
     else { alb = mix(leaf, uGrassLush, 0.3); foliage = true; }
     // a facet's own small shade (low-poly crowns)
     alb *= 0.92 + 0.16 * hash13(floor(vP * 3.0));
     // withering (a dry season between songs): straw-colored
     alb = mix(alb, uGrassDry * 0.85, clamp(vI2.y * 2.0, 0.0, 1.0) * (foliage ? 1.0 : 0.3));
-    // wet after the rain: darker, a sheen
-    alb *= 1.0 - 0.18 * uWet;
+    // wet after the rain: darker
+    alb *= 1.0 - 0.22 * uWet;
     float sh = shadowAt(vP + N * 0.08);
     float ndl = max(dot(N, uSunDir), 0.0);
-    vec3 col = alb * (uAmb * (0.55 + 0.45 * max(N.y, 0.0)) + uSunCol * ndl * sh);
-    // leaves lit from behind glow through
-    if (foliage) col += alb * uSunCol * max(dot(-V, uSunDir), 0.0) * 0.35 * sh;
+    float ao = vAO;
+    vec3 col = alb * (uAmb * (0.5 + 0.5 * max(N.y, 0.0)) * ao + uSunCol * ndl * sh * mix(1.0, ao, 0.5));
+    // leaves glow through: lit from behind, and a little everywhere (the light passing through the crown)
+    if (foliage) col += alb * uSunCol * (pow(max(dot(-V, uSunDir), 0.0), 2.0) * 0.5 + 0.08) * sh * ao;
     col += uSunCol * pow(max(dot(reflect(-uSunDir, N), V), 0.0), 30.0) * (0.04 + 0.2 * uWet) * sh;
+    // wet: the sky in the leaves and the bark at grazing angles, and the drops on the leaves' tops glinting
+    if (uWet > 0.01 && m != 4 && m != 5 && m != 9) {
+        float F = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+        col = mix(col, skyFull(reflect(-V, N), false) * 0.75, F * uWet * 0.55);
+        if (foliage) {
+            float drop = step(0.95, hash13(floor(vL * 26.0) + seed)) * smoothstep(0.1, 0.7, N.y);
+            col += (uAmb * 1.6 + uSunCol * 0.5) * drop * uWet * 0.45 * ao;
+        }
+    }
+    col = rich(col);
+    // a young plant glowing as it comes up (a sprout most of all)
+    col += uGlow * vI2.w * (m == 10 || m == 11 ? 1.0 : foliage ? 0.45 : 0.15);
     col = aerial(col, vP);
     frag = vec4(enc(grade(col)), 1.0);
 }
@@ -519,11 +609,13 @@ vec3 fill(vec3 p1, vec3 n1, vec3 D, vec3 tint, float size, float px) {
         // a soft rim: grains read one by one
         col += tint * pow(1.0 - max(dot(n, -D), 0.0), 3.0) * 0.18 * ao;
         if (uNight > 0.5) col += tint * 0.12;
+        // the inner glow: the light caught in the bed, brightest near its top
+        col += tint * (0.08 + 0.22 * exp(-max(depth, 0.0) * 9.0)) * ao;
         col *= vec3(0.96, 0.98, 0.97);   // through the glass
     } else {
-        // the air above the seeds: the world through the glass, a little darkened and bent
-        vec2 off = (d.xy - D.xy) * 0.6;
-        col = bgAt(off * size) * 0.82 + tint * 0.04;
+        // the air above the seeds: the world through the glass, darkened and bent, the seeds' glow rising in it
+        vec2 off = (d.xy - D.xy) * 1.4;
+        col = bgAt(off * size) * 0.75 + tint * (0.05 + 0.1 * smoothstep(HI, gTop, p1.y));
     }
     return col;
 }

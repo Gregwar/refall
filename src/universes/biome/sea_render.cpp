@@ -109,9 +109,6 @@ bool SeaWorld::init() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    progDown_ = compile(ugl::FULLSCREEN_VS, shaders::LENS_DOWN_FS, "sea lens down", {});
-    progBlur_ = compile(ugl::FULLSCREEN_VS, shaders::BLUR_FS, "sea lens blur", {});
-    progLens_ = compile(ugl::FULLSCREEN_VS, shaders::LENS_FS, "sea lens", {});
     progCube_ = compile(shaders::CUBE_VS, shaders::CUBE_FS, "sea thrown cube", {W, shaders::WORLD_GLSL, G, shaders::WATER_GLSL});
     progLife_ = compile(shaders::LIFE_VS, shaders::LIFE_FS, "sea life", {W, shaders::WORLD_GLSL});
     progPart_ = compile(common::PART_VS, common::PART_FS, "sea particle", {W, shaders::WORLD_GLSL});
@@ -318,12 +315,10 @@ void SeaWorld::buildMeshes() {
 }
 
 SeaWorld::~SeaWorld() {
-    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progPass_, progCube_, progLife_, progPart_, progCell_,
-                    progDown_, progBlur_, progLens_})
+    for (GLuint p : {progSky_, progSand_, progSurf_, progFront_, progBoat_, progDepth_, progPass_, progCube_, progLife_, progPart_, progCell_})
         glDeleteProgram(p);
     passT_.destroy();
     glDeleteTextures(1, &pudTex_);
-    for (ugl::Target* t : {&quarterT_[0], &quarterT_[1], &eighthT_[0], &eighthT_[1]}) t->destroy();
     for (Mesh* m : {&sand_, &surf_, &front_}) {
         glDeleteVertexArrays(1, &m->vao);
         glDeleteBuffers(1, &m->vbo);
@@ -663,85 +658,18 @@ void SeaWorld::drawWorld() {
     drawLens();
 }
 
-// The lens, over the world drawn so far (before the shell's rain and the stack): the world taken down and blurred (what
-// the frosted glass shows) and its brightest light blurred wide (the bloom); then laid back over it with the sun's
-// glare and the dark frosted glass: the well's pane (a fine grid of its cells etched in it, a bright rim) and the panels
-// of the held and next pieces. The stack, the previews and the HUD are laid over it after: none of it touches them.
+// The lens in the sea's glass: smoky, darker than the world in every light (the variant's panel toward its deep sea),
+// the world half seen through it, darker still over the deep water; the sun's glare (faint for the moon and under an
+// overcast, none in the storm).
 void SeaWorld::drawLens() {
-    const int qw = std::max(1, ctx.width / 4), qh = std::max(1, ctx.height / 4);
-    if (quarterT_[0].w != qw || quarterT_[0].h != qh) {
-        for (ugl::Target& t : quarterT_) t.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-        for (ugl::Target& t : eighthT_) t.create(std::max(1, qw / 2), std::max(1, qh / 2), GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
-    }
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, ctx.msFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, ctx.bgT.fbo);
-    glBlitFramebuffer(0, 0, ctx.width, ctx.height, 0, 0, ctx.width, ctx.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glActiveTexture(GL_TEXTURE0);
-    auto down = [&](const ugl::Target& src, const ugl::Target& dst, bool bright) {
-        dst.bind();
-        glUseProgram(progDown_);
-        glBindTexture(GL_TEXTURE_2D, src.tex);
-        set1i(progDown_, "uSrc", 0);
-        set2f(progDown_, "uTexel", 1.f / src.w, 1.f / src.h);
-        set1f(progDown_, "uBright", bright ? 1.f : 0.f);
-        ugl::drawFullscreen();
-    };
-    auto blur = [&](ugl::Target* t, float spread) {
-        glUseProgram(progBlur_);
-        set1i(progBlur_, "uSrc", 0);
-        for (int pass = 0; pass < 2; pass++) {
-            t[1 - pass].bind();
-            glBindTexture(GL_TEXTURE_2D, t[pass].tex);
-            set2f(progBlur_, "uDir", pass == 0 ? spread / t[0].w : 0.f, pass == 0 ? 0.f : spread / t[0].h);
-            ugl::drawFullscreen();
-        }
-    };
-    down(ctx.bgT, quarterT_[0], false);
-    blur(quarterT_, 0.6f);
-    down(quarterT_[0], eighthT_[0], true);
-    blur(eighthT_, 2.f);
-    blur(eighthT_, 2.f);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, ctx.msFbo);
-    glViewport(0, 0, ctx.width, ctx.height);
-    const GLuint p = progLens_;
-    glUseProgram(p);
-    glBindTexture(GL_TEXTURE_2D, ctx.bgT.tex);
-    set1i(p, "uScene", 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, quarterT_[0].tex);
-    set1i(p, "uFrost", 1);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, eighthT_[0].tex);
-    set1i(p, "uBloom", 2);
-    glActiveTexture(GL_TEXTURE0);
     const Palette& pal = ctx.pal;
-    const float world = ctx.world();
-    set4f(p, "uView", ctx.viewC.x, ctx.viewC.y, ctx.viewH.x, ctx.viewH.y);
-    set1f(p, "uPx", ctx.px);
-    set1f(p, "uAspect", (float)ctx.width / ctx.height);
-    set1f(p, "uWorld", world);
-    set1f(p, "uPane", ctx.bare ? 0.f : 1.f - smoothstepf(0.f, 0.6f, saturate(ctx.bridge.amount)));
-    set1f(p, "uDeepY", seaLevel());
-    // the sun on the picture (its glare: none when it is behind the eye or hidden by the storm, faint for the moon and
-    // under an overcast)
-    const vec3 L = ctx.sunDir();
-    const vec4 sp = ctx.vp * vec4(ctx.eye + L * 600.f, 1.f);
-    const bool ahead = sp.w > 1e-3f && L.y > -0.02f;
-    set2f(p, "uSunP", ahead ? sp.x / sp.w : 0.f, ahead ? sp.y / sp.w : 0.f);
-    const float glare = ahead ? (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) : 0.f;
-    // the glass: smoky, darker than the world in every light (the variant's panel toward its deep sea), the world
-    // half seen through it
-    set4f(p, "uGlare", glare * (1.f - 0.6f * ctx.slow), 0.25f, 0.82f, 1.f);
-    set1f(p, "uGrid", 0.24f);
-    set3f(p, "uGlareCol", pal.sun * pal.lightK);
-    set3f(p, "uFrostCol", lerp(pal.panel, pal.deep, 0.55f));
-    set3f(p, "uPanel", pal.panel * 0.7f);
-    ugl::drawFullscreen();
-    glEnable(GL_DEPTH_TEST);
+    Ctx::Lens l;
+    l.deepY = seaLevel();
+    l.glare = (1.f - ctx.storm) * lerpf(1.f, 0.3f, pal.moon) * (1.f - 0.75f * smoothstepf(0.4f, 0.8f, pal.clouds)) * (1.f - 0.6f * ctx.slow);
+    l.glareCol = pal.sun * pal.lightK;
+    l.frostCol = lerp(pal.panel, pal.deep, 0.55f);
+    l.panel = pal.panel * 0.7f;
+    ctx.drawLens(l);
 }
 
 // How the world looks behind a point of the board plane (the HUD's ink): the sky above the horizon, the water's cut face

@@ -201,11 +201,7 @@ private:
            progCube_ = 0, progLife_ = 0, progPart_ = 0, progCell_ = 0;
     ugl::Target passT_;   // the light through the thrown cubes' water, from the sun (the shadow map's view)
     GLuint pudTex_ = 0;   // the water on the sand
-    // the lens: the world at a quarter (blurred: what the frosted glass shows), its brightest light at an eighth (the
-    // bloom), each with a target to blur through
-    GLuint progDown_ = 0, progBlur_ = 0, progLens_ = 0;
-    ugl::Target quarterT_[2], eighthT_[2];
-    void drawLens();
+    void drawLens();   // the shell's lens (Ctx::drawLens) in the sea's glass
     Mesh sand_, surf_, front_;
     GLuint meshVbo_ = 0, meshInstVbo_ = 0, boatVao_ = 0, boxVao_ = 0;
     int boatFirst_[6] = {}, boatCount_[6] = {}, boxFirst_ = 0, boxCount_ = 0;
