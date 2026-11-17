@@ -1,7 +1,7 @@
 #pragma once
 // BIOME's sea, its shaders (see sea.cpp; the shared ones in shaders.hpp): the 3D world (the sky, the sandy bed and its
 // dunes, the sea's surface and its cut face, the boats, the life, the thrown cubes and the light through them), the
-// water inside the glass cubes, the lens (the bloom, the sun's glare, the frosted glass of the well and the panels).
+// water inside the glass cubes, the lens (the bloom, the sun's glare, the dark glass of the well and the panels).
 
 namespace sea_shaders {
 

@@ -13,7 +13,7 @@
 //
 // The stack stays a clean, readable grid at the layout's pixels in front of it all: every cell its own small solid
 // glass cube full to the brim with the sea's water, under pressure, traced per pixel through the glass and the water
-// (render.cpp, CELL_FS), drawn over the world behind the well's pane of frosted glass (its grid etched in it, a bright
+// (render.cpp, CELL_FS), drawn over the world behind the well's pane of dark smoky glass (its grid etched in it, a bright
 // rim; the held and next pieces in panels of the same glass).
 //
 // The song starts with the sea low, far out. A cleared row's cubes are thrown out of the well into the world behind

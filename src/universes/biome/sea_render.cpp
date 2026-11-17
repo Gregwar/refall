@@ -5,7 +5,7 @@
 // shadows). The world, multisampled, with depth: the sky, the sand (its puddles), the boats, the life in the water; a
 // copy of it (what the thrown cubes refract); the thrown cubes (ray traced, writing their depth), the particles under
 // the water, the sea's surface, the water's cut face, the particles above it; the lens (the bloom, the sun's glare,
-// the well's frosted pane and the panels). The shell then adds the rain, the bridge and the stack.
+// the well's dark glass pane and the panels). The shell then adds the rain, the bridge and the stack.
 #include <algorithm>
 #include <cstdio>
 
@@ -665,7 +665,7 @@ void SeaWorld::drawWorld() {
 
 // The lens, over the world drawn so far (before the shell's rain and the stack): the world taken down and blurred (what
 // the frosted glass shows) and its brightest light blurred wide (the bloom); then laid back over it with the sun's
-// glare and the frosted glass: the well's pane (a fine grid of its cells etched in it, a bright rim) and the panels
+// glare and the dark frosted glass: the well's pane (a fine grid of its cells etched in it, a bright rim) and the panels
 // of the held and next pieces. The stack, the previews and the HUD are laid over it after: none of it touches them.
 void SeaWorld::drawLens() {
     const int qw = std::max(1, ctx.width / 4), qh = std::max(1, ctx.height / 4);
