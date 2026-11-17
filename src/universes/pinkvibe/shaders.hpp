@@ -1,8 +1,8 @@
 #pragma once
 // PINK VIBE's shaders, in display (sRGB) colors, every shape a signed distance field: the satin ribbons behind
 // everything (their relief lit from the top left, with their sparse sparkles and bubbles), the sprites (the well's
-// pane and its neon frame, petals, hearts, bubbles, sparkle dust), the blocks (one pearl cube per cell with a gold
-// inlay per piece type, their soft shadows) and the lettering on a feathered blush halo.
+// pane and its neon frame, petals, hearts, bubbles, sparkle dust), the blocks (one chunky pearl cube per cell, traced
+// a little from above, with an embossed gold inlay per piece type, their soft shadows) and the lettering on a feathered blush halo.
 
 namespace pinkvibe_shaders {
 
@@ -210,7 +210,7 @@ void main() {
         AA = max(fwidth(l.x), 1e-4) * 0.7;
         float d = dBox(l, vA.zw, 0.6);
         float g = clamp(l.y / vA.w * 0.5 + 0.5, 0.0, 1.0);
-        vec3 pane = mix(A * 0.72, A * 1.1, g);
+        vec3 pane = mix(A * 0.62, A * 1.02, g);
         float sd = dot(l, vec2(0.45, 0.89));
         pane = mix(pane, B, 0.035 * exp(-dot2(vec2(sd - 2.5, 0.0)) / 6.0) + 0.16 * exp(d / 0.3));
         float inside = 1.0 - smoothstep(-AA, AA, d);
@@ -277,33 +277,60 @@ uniform int uPass;            // 0: the soft shadows (and the falling piece's gl
 uniform vec3 uShade, uGlow;   // the shadows' deep tint, the falling piece's glow
 uniform vec3 uVivid[7];
 uniform float uWave, uBeat;
-const vec3 LIGHT = vec3(-0.45, 0.6, 0.66);   // from the top left, like the ribbons' light
-const float HALF = 0.46, ROUND = 0.17, BEVEL = 0.19;
-const vec3 GOLD = vec3(1.0, 0.86, 0.6), GOLD_DEEP = vec3(0.64, 0.42, 0.22);
-// The gold inlay, one small motif per type (its distance, cell units, from the cell's center).
+uniform int uGlass;           // the type cast in rose glass (-1: none)
+// Each block is a chunky sugar cube seen a little from above: a rounded box (cell units) whose front face fills
+// most of the cell and whose lit top face shows as a thick rounded lip above it. The view is tilted down by TILT.
+const float TILT_S = 0.407, TILT_C = 0.9135;           // 24 degrees
+const vec3 BOX = vec3(0.474, 0.421, 0.22);              // half extents: 0.95 wide, 0.95 tall on screen
+const float RAD = 0.19;                                // the edges' rounding (a thick soft bevel)
+const float FOOT = 0.474, FOOT_R = 0.19;               // the screen footprint (the ghost, the shadows)
+const vec3 LIGHT = vec3(-0.42, 0.72, 0.55);            // from the top left, above and in front
+const vec3 GOLD = vec3(1.0, 0.87, 0.58), GOLD_DEEP = vec3(0.56, 0.36, 0.17);
+const vec3 MILK = vec3(1.0, 0.96, 0.95);
+float dRBox(vec3 p) {
+    vec3 q = abs(p) - BOX + RAD;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - RAD;
+}
+vec3 nRBox(vec3 p) {
+    vec3 q = abs(p) - BOX + RAD;
+    vec3 m = max(q, 0.0);
+    if (dot(m, m) > 1e-9) return normalize(m) * sign(p);
+    return q.x > q.y && q.x > q.z ? vec3(sign(p.x), 0.0, 0.0) : q.y > q.z ? vec3(0.0, sign(p.y), 0.0) : vec3(0.0, 0.0, sign(p.z));
+}
+// The gold inlay on the front face (face coordinates, cell units): a fine frame set in from the edge, and one
+// small motif per type in its middle.
 float motif(int type, vec2 u) {
     if (type == 0) {           // I: three pearls in a row
         vec2 q = vec2(abs(u.x), u.y);
-        return min(length(q), length(q - vec2(0.17, 0.0))) - 0.045;
+        return min(length(q), length(q - vec2(0.16, 0.0))) - 0.048;
     }
-    if (type == 1) return dSparkle(u / 0.27) * 0.27;                      // O: a four-pointed star
-    if (type == 2) return abs(abs(u.x) + abs(u.y) - 0.18) * 0.7071 - 0.026; // T: a diamond
-    if (type == 3) return dSeg(abs(u), vec2(0.0), vec2(0.135)) - 0.028;     // S: a cross
-    if (type == 4) return length(abs(u) - vec2(0.12)) - 0.045;             // Z: four dots
-    if (type == 5) return dHeart(u / 0.18) * 0.18;                         // J: a heart
-    return min(abs(dBox(u, vec2(0.25), 0.08)) - 0.02, length(u) - 0.05);   // L: a fine frame around a dot
+    if (type == 1) return dSparkle(u / 0.24) * 0.24;                        // O: a four-pointed star
+    if (type == 2) return abs(abs(u.x) + abs(u.y) - 0.15) * 0.7071 - 0.026; // T: a diamond
+    if (type == 3) return dSeg(abs(u), vec2(0.0), vec2(0.13)) - 0.03;     // S: an X
+    if (type == 4) return length(abs(u) - vec2(0.11)) - 0.045;               // Z: four dots
+    if (type == 5) return dHeart(u / 0.17) * 0.17;                         // J: a heart
+    return abs(length(u) - 0.12) - 0.028;                                  // L: a ring
+}
+float inlay(int type, vec2 f, float frameK) {
+    float d = motif(type, f);
+    float fr = abs(dBox(f, vec2(0.275, 0.26), 0.07)) - 0.017;
+    return min(d, mix(1.0, fr, frameK));
 }
 void main() {
     vec2 u = vU;
     AA = max(fwidth(u.x), 1e-4) * 0.75;
     int type = int(vB.x + 0.5), mode = int(vB.z + 0.5);
-    float d = dBox(u, vec2(HALF), ROUND);
+    float dFoot = dBox(u, vec2(FOOT), FOOT_R);
     if (uPass == 0) {
-        // under each block a soft shadow cast down and to the right; under the falling piece a soft rose glow
+        // a soft ambient shadow pooled under each cube (darker just below it, in the gaps); under the falling piece
+        // a soft rose glow
         if (mode == 1) discard;
         vec4 o;
-        if (mode == 3) o = vec4(uGlow, 0.5 * exp(-max(d, 0.0) * max(d, 0.0) / 0.006));
-        else o = vec4(uShade, 0.55 * (1.0 - smoothstep(-0.07, 0.1, dBox(u - vec2(0.035, -0.065), vec2(HALF - 0.02), ROUND))));
+        if (mode == 3) o = vec4(uGlow, 0.5 * exp(-max(dFoot, 0.0) * max(dFoot, 0.0) / 0.006));
+        else {
+            float ds = dBox(u - vec2(0.02, -0.06), vec2(FOOT - 0.01), FOOT_R);
+            o = vec4(uShade, (type == uGlass ? 0.35 : 0.7) * (1.0 - smoothstep(-0.1, 0.12, ds)));
+        }
         float al = o.a * vB.y;
         frag = vec4(o.rgb * al, al);
         return;
@@ -317,46 +344,100 @@ void main() {
         float band = smoothstep(0.0, 0.06, s) * (1.0 - smoothstep(0.06, 0.55, s));
         col = mix(col, uVivid[type], uWave * (0.12 + 0.88 * band));
     }
-    vec4 acc = vec4(0.0);
     if (mode == 1) {
         // the ghost: a soft fill and a clear line of the piece's color, lightened so it reads on the deep well
-        vec3 lc = mix(col, vec3(1.0), 0.35);
-        layerA(acc, d, col, 0.22);
-        layerA(acc, abs(d + 0.035) - 0.03, lc, 0.9);
+        vec4 acc = vec4(0.0);
+        vec3 lc = mix(col, vec3(1.0), 0.4);
+        layerA(acc, dFoot, col, 0.2);
+        layerA(acc, abs(dFoot + 0.035) - 0.03, lc, 0.9);
         frag = vec4(acc.rgb * acc.a * vB.y, acc.a * vB.y);
         return;
     }
-    // a pearl cube: a softly rounded bevel all around a slightly domed face
-    vec2 q = abs(u) - HALF + ROUND;
-    vec2 gd = sign(u) * normalize(max(q, 1e-4));
-    float x = (1.0 - clamp(-d / BEVEL, 0.0, 1.0)) * 0.92;
-    vec3 n = normalize(vec3(gd * x + u * 0.3, sqrt(1.0 - x * x)));
-    float lit = max(dot(n, LIGHT), 0.0) / LIGHT.z;                       // 1 on the flat face
-    vec3 c = col * (0.64 + 0.36 * lit);
+    // trace the cube: an orthographic ray from the front, tilted down
+    vec3 rd = vec3(0.0, -TILT_S, -TILT_C);
+    vec3 up = vec3(0.0, TILT_C, -TILT_S);
+    vec3 ro = vec3(u.x, 0.0, 0.0) + u.y * up - rd * 1.0;
+    float t = 0.0, dmin = 1e3, d = 1.0;
+    for (int i = 0; i < 28; i++) {
+        d = dRBox(ro + rd * t);
+        dmin = min(dmin, d);
+        if (d < 1e-4) break;
+        t += d;
+        if (t > 2.0) break;
+    }
+    float cover = 1.0 - smoothstep(-AA, AA, dmin - AA * 0.5);
+    if (cover <= 0.0) discard;
+    vec3 p = ro + rd * t;
+    vec3 n = nRBox(p);
+    // the front face is softly cushioned (a hair domed), the top face too
+    n = normalize(n + vec3(p.xy * 0.35, 0.0) * smoothstep(0.6, 1.0, n.z) + vec3(p.x * 0.3, 0.0, p.z * 0.3) * smoothstep(0.6, 1.0, n.y));
+    bool glass = type == uGlass;
+    vec3 V = -rd, L = normalize(LIGHT), H = normalize(L + V);
+    float ndl = dot(n, L);
+    // satin: soft wrapped light, the top face brighter, the bottom of the front face a little in the shade of the
+    // cube below's bevel (ambient occlusion), warm bounce light in the bottom bevel
+    float wrap = clamp(ndl * 0.5 + 0.5, 0.0, 1.0);
+    float ao = mix(0.8, 1.0, smoothstep(-BOX.y, BOX.y * 0.6, p.y));
+    vec3 c = col * (0.66 + 0.5 * wrap) * ao;
+    c = mix(c, MILK, 0.22 * smoothstep(0.45, 1.0, n.y));
+    // a soft satin lustre across the front face, brighter toward its top left
+    c = mix(c, MILK, 0.14 * smoothstep(0.35, -0.45, dot(p.xy, vec2(0.7, -0.7)) / BOX.x) * smoothstep(0.6, 1.0, n.z));
+    c += col * vec3(1.0, 0.75, 0.75) * 0.12 * smoothstep(-0.2, -0.8, n.y);
     // nacre: a faint play between a lilac and a peach sheen, shifting with the slope and the position
-    float ph = 0.5 + 0.5 * cos(TAU * (dot(n.xy, vec2(1.2, 0.8)) + dot(vW, vec2(0.08, 0.05))));
-    c *= mix(vec3(0.98, 0.95, 1.04), vec3(1.04, 0.99, 0.95), ph);
-    // a milky lustre over the face, brighter toward the light, a milky rim on the lit edges and a soft highlight
-    const vec3 MILK = vec3(1.0, 0.96, 0.97);
-    c = mix(c, MILK, 0.2 * smoothstep(0.5, -0.4, dot(u, vec2(0.7, -0.7)) / HALF) * n.z);
-    float edge = 1.0 - n.z;
-    c = mix(c, MILK, 0.5 * edge * smoothstep(-0.3, 0.7, dot(normalize(n.xy + 1e-5), normalize(LIGHT.xy))));
-    float sp = max(dot(n, normalize(LIGHT + vec3(0.0, 0.0, 1.0))), 0.0);
-    c += MILK * (0.32 * pow(sp, 40.0) + 0.06 * pow(sp, 6.0));
-    // the gold inlay, raised a hair: its shadow, then the gold, warmer toward the light, with a glint
-    float dm = motif(type, u);
-    float ds = motif(type, u - vec2(0.014, -0.016));
-    c = mix(c, c * 0.72, 0.6 * (1.0 - smoothstep(-AA, AA, ds)));
-    vec3 gold = mix(GOLD_DEEP, GOLD, clamp(0.55 + 2.4 * dot(u, vec2(-0.6, 0.8)), 0.0, 1.0));
-    gold += 0.3 * (1.0 - smoothstep(0.0, 0.06, length(u - vec2(-0.07, 0.08))));
-    c = mix(c, gold, 1.0 - smoothstep(-AA, AA, dm));
-    if (mode == 3) c = mix(c, vec3(1.0, 0.95, 0.96), 0.08);             // the falling piece, a little aglow
+    float ph = 0.5 + 0.5 * cos(TAU * (dot(n, vec3(1.1, 0.7, 0.4)) + dot(vW, vec2(0.08, 0.05))));
+    c *= mix(vec3(0.97, 0.94, 1.05), vec3(1.05, 0.99, 0.94), ph);
+    // a milky pearl lustre on the edges turned away from the eye (fresnel), stronger toward the light
+    float fres = pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 2.5);
+    c = mix(c, MILK, fres * (0.25 + 0.35 * wrap));
+    // the glossy highlight: a tight bright one on the lit bevel and a broad satin one
+    float nh = max(dot(n, H), 0.0);
+    float gloss = pow(nh, 70.0) * 0.75 + pow(nh, 9.0) * 0.1;
+    // the gold inlay, raised: a soft shadow under it, then the gold bumped by its own slope, warm, with a glint
+    float onFace = smoothstep(0.75, 0.95, n.z), gA = 0.0;
+    if (onFace > 0.0) {
+        vec2 fp = p.xy - vec2(0.0, 0.01);
+        float frameK = 1.0 - smoothstep(0.03, 0.05, AA / 0.75);
+        float dm = inlay(type, fp, frameK);
+        float ds = inlay(type, fp - vec2(0.012, -0.02), frameK);
+        c *= 1.0 - 0.32 * onFace * (1.0 - smoothstep(-0.01, 0.02, ds));
+        float e = 0.004;
+        vec2 g = vec2(inlay(type, fp + vec2(e, 0.0), frameK) - inlay(type, fp - vec2(e, 0.0), frameK),
+                      inlay(type, fp + vec2(0.0, e), frameK) - inlay(type, fp - vec2(0.0, e), frameK)) / (2.0 * e);
+        float w = 0.022;
+        float k = clamp(-dm / w, 0.0, 1.0);
+        vec3 gn = normalize(vec3(g * (1.0 - k) * 1.6, 1.0));
+        gn = normalize(gn + n - vec3(0.0, 0.0, 1.0));
+        float gd = clamp(dot(gn, L) * 0.6 + 0.45, 0.0, 1.0);
+        vec3 gold = mix(GOLD_DEEP, GOLD, gd);
+        gold += vec3(1.0, 0.95, 0.8) * (pow(max(dot(gn, H), 0.0), 40.0) * 0.9);
+        // (the frame a quieter line than the motif, so the motifs tell the pieces apart)
+        float dfr = abs(dBox(fp, vec2(0.275, 0.26), 0.07)) - 0.017;
+        float dmo = motif(type, fp);
+        // a fine dark bed around the motif, so the gold reads on the palest cubes too
+        c = mix(c, GOLD_DEEP * 0.7, 0.45 * onFace * (1.0 - smoothstep(0.0, max(0.016, AA * 1.5), dmo)));
+        float ga = max(1.0 - smoothstep(-AA, AA, dmo), 0.55 * frameK * (1.0 - smoothstep(-AA, AA, dfr))) * onFace;
+        c = mix(c, gold, ga);
+        gloss *= 1.0 - ga;
+        gA = ga;
+    }
+    float alpha = 1.0;
+    if (glass) {
+        // rose glass: the well shows through the face, the edges denser and brighter, a bright inner rim
+        float thick = 1.0 - pow(clamp(dot(n, V), 0.0, 1.0), 3.0);
+        alpha = mix(0.8, 0.97, thick);
+        c = mix(c, mix(col, MILK, 0.3) * 1.08, 0.5 * (1.0 - thick)) + col * 0.08;
+        c += col * 0.3 * smoothstep(-0.05, -0.38, p.y) * onFace;        // light gathered in the bottom of the glass
+        gloss *= 1.4;
+        alpha = max(alpha, gA);
+    }
+    c += MILK * gloss;
+    if (mode == 3) c = mix(c, vec3(1.0, 0.95, 0.96), 0.06);             // the falling piece, a little aglow
     if (vC.w < 0.0) c = mix(c, vec3(1.0, 0.96, 0.97), -vC.w);
     else {
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(c, vec3(l) * vec3(0.7, 0.6, 0.68), vC.w);
     }
-    float al = (1.0 - smoothstep(-AA, AA, d)) * vB.y;
+    float al = cover * alpha * vB.y;
     frag = vec4(c * al, al);
 }
 )";
