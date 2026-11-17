@@ -1,5 +1,6 @@
 #pragma once
-// LANTERNS: paper lanterns floating on a dark lake, the pieces lit from inside (see lanterns.cpp).
+// LANTERNS: paper lanterns floating on a dark lake, the pieces lit from inside, the well a frame of light (see
+// lanterns.cpp).
 #include <string>
 #include <vector>
 
@@ -29,15 +30,18 @@ public:
     void hudLine(const HudText& h, text::Line& out) override;
 
 private:
-    // ---- Boxes (world units, the board's cells on z = 0, the water at y = WATER): pieces, lanterns, poles.
-    struct BoxInst { float a[4], b[4], c[4], d[4], e[4]; }; // center, mask | size, kind | paper, alpha | light, cap, seed | candle, r
-    std::vector<BoxInst> stack_, lamps_, poles_, ghost_;
+    // ---- Boxes (world units, the board's cells on z = 0, the water at y = WATER): pieces, lanterns, the frames of
+    // light (the well's, mirrored in the water; the hold box's), the well's glass and its grid.
+    // center, mask | size, kind | paper, alpha | light, cap, seed, flame | candle (round for a lantern), r
+    struct BoxInst { float a[4], b[4], c[4], d[4], e[4]; };
+    std::vector<BoxInst> stack_, lamps_, frame_, holdFrame_, glass_, ghost_;
     int ids_[22][10] = {};
     float flare_[22][10] = {};    // a piece's candle catching (lock, kick)
+    float flame_[22][10] = {};    // the small flames standing in some cells (0: none, else its flicker's phase)
     int nextId_ = 1;
     void syncIds(const Game& g);
     void buildBoard(const Game& g);
-    struct OverCell { float x, y; int row, type, mask; float cx, cy, r, seed; }; // the stack at game over
+    struct OverCell { float x, y; int row, type, mask; float cx, cy, r, seed, flame; }; // the stack at game over
     std::vector<OverCell> overCells_;
 
     // ---- The lanterns: the runs of a cleared row leaving the well and landing on the water, the lake's lanterns,
@@ -54,7 +58,7 @@ private:
         float cap = 1.f;                    // 0: still the piece's paper .. 1: a lantern (cap and base)
         float vy = 0, phase = 0, flick = 0, seed = 0, alpha = 1.f, fade = 0.f;
         bool dying = false, pendingLift = false;
-        int slot = 0;                       // its order on its side when leaving the row (0: nearest the pole)
+        int slot = 0;                       // its order on its side when leaving the row (0: nearest the frame)
     };
     std::vector<Lantern> lanterns_;
     struct Ember { float x, y, z, vx, vy, t, life; int type; };

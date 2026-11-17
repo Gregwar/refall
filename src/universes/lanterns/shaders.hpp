@@ -3,9 +3,11 @@
 //
 // ENV_FS draws the night per pixel from the camera's ray: the sky (a gradient, a few stars, the far shore's hills, the
 // moon in slow motion) and the lake, a true horizontal plane at the well's floor: rippled normals reflect the sky and
-// distort the planar reflection of the scene (a mirrored render, sampled in screen space). BOX_FS shades every box:
-// the pieces (paper volumes lit from inside, a thin frame along the piece's edges), the lanterns (paper boxes with a
-// dark cap and base), the well's bamboo poles; SPRITE_FS the points of light (far lanterns, embers); BRIGHT_FS /
+// distort the planar reflection of the scene (a mirrored render, sampled in screen space, drawn out into wobbly
+// streaks), a finer chop near, a low moon's path of glitter off the left of the frame. BOX_FS shades every box: the
+// pieces (paper volumes lit from inside, each cell glowing at its core, a small candle flame in some cells, a thin
+// frame along the piece's edges), the lanterns (paper boxes with a dark cap and base, rounding into sky lanterns as
+// they rise), the frames of light (the well's, the hold box's), the well's glass and its grid; SPRITE_FS the points of light (far lanterns, embers); BRIGHT_FS /
 // BLUR_FS the glow; FINAL_FS composes and encodes the frame.
 #include <string>
 
@@ -34,16 +36,22 @@ out vec4 frag;
 uniform vec4 uView;          // the board plane on screen: center, half extents (board units)
 uniform vec3 uEye;
 uniform float uFocal, uAspect, uShift; // the camera: 1 / tan(half fov), aspect, lens shift (NDC)
-uniform float uWater, uTime, uRipple, uStars, uMoon, uPxAng;
+uniform float uWater, uTime, uRipple, uStars, uMoon, uPxAng, uGlitter;
 uniform float uStarsOn; // the scene's setup and teardown: the share of the stars out (they come out one by one)
 uniform vec3 uSkyTop, uSkyHor, uLake, uShore, uGlow;
 uniform vec4 uColL, uColR, uCorner;   // HUD rectangles (board plane x0, y0, x1, y1): no stars behind them
+uniform vec4 uCornerLow;              // the lower corner's lettering: no glitter behind it
 uniform sampler2D uRefl;
 float inRect(vec2 w, vec4 r) {
     vec2 d = max(vec2(r.x, r.y) - w, w - vec2(r.z, r.w));
     return smoothstep(-0.6, 0.4, max(d.x, d.y));
 }
 vec3 moonDir() { return normalize(vec3(0.43, 0.12 + 0.1 * uMoon, -1.0)); }
+// The water's height: slow swells and, near (by `near`), a finer chop.
+float waves(vec2 q, float tt, float near) {
+    return vnoise(q + vec2(tt, -tt * 0.7)) + 0.5 * vnoise(q * 2.3 - vec2(tt * 1.3, tt)) +
+           near * 0.35 * vnoise(q * 6.1 + vec2(tt * 2.1, -tt * 1.4));
+}
 // The sky in a direction (dir normalized), the far shore and the moon included.
 vec3 sky(vec3 dir, bool stars, float hudClear, float glint) {
     float e = dir.y;
@@ -97,26 +105,47 @@ void main() {
     } else {
         float t = (uWater - uEye.y) / dir.y;
         vec3 P = uEye + dir * t;
-        // the water's ripples: a slow height field, fading out with the distance (no shimmer far away)
-        float fade = clamp(25.0 / t, 0.05, 1.0);
-        float amp = (0.012 + 0.05 * uRipple) * fade;
+        // the water's ripples: a slow height field, its finer chop near, fading out with the distance (no shimmer
+        // far away)
+        float fade = clamp(25.0 / t, 0.05, 1.0), near = clamp(40.0 / t - 0.3, 0.0, 1.0);
+        float amp = (0.016 + 0.05 * uRipple) * fade;
         vec2 q = P.xz * vec2(0.35, 0.8);
         float tt = uTime * (0.25 + 0.35 * uRipple);
-        float h0 = vnoise(q + vec2(tt, -tt * 0.7)) + 0.5 * vnoise(q * 2.3 - vec2(tt * 1.3, tt));
-        float hx = vnoise(q + vec2(0.05, 0.0) + vec2(tt, -tt * 0.7)) + 0.5 * vnoise((q + vec2(0.05, 0.0)) * 2.3 - vec2(tt * 1.3, tt));
-        float hz = vnoise(q + vec2(0.0, 0.05) + vec2(tt, -tt * 0.7)) + 0.5 * vnoise((q + vec2(0.0, 0.05)) * 2.3 - vec2(tt * 1.3, tt));
-        vec3 n = normalize(vec3(-(hx - h0) / 0.05 * amp * 0.55, 1.0, -(hz - h0) / 0.05 * amp * 1.1));
+        float h0 = waves(q, tt, near);
+        float hx = waves(q + vec2(0.04, 0.0), tt, near);
+        float hz = waves(q + vec2(0.0, 0.04), tt, near);
+        vec3 n = normalize(vec3(-(hx - h0) / 0.04 * amp * 0.55, 1.0, -(hz - h0) / 0.04 * amp * 1.1));
         vec3 r = reflect(dir, n);
         r.y = abs(r.y);
         float fres = 0.03 + 0.97 * pow(1.0 - max(dot(-dir, n), 0.0), 5.0);
         float glint = smoothstep(0.6, 0.85, vnoise(P.xz * vec2(1.4, 4.0) + vec2(0.0, uTime * 0.4))) * clamp(30.0 / t, 0.2, 1.0);
         vec3 sr = sky(normalize(r), false, 1.0, glint);
         c = mix(uLake, sr, fres);
-        // the scene mirrored in the water, distorted by the same ripples
-        vec2 uv = vUv + n.xz * vec2(0.6, 0.9) * clamp(6.0 / t, 0.05, 0.35);
-        vec4 rs = texture(uRefl, uv);
+        // the scene mirrored in the water, distorted by the same ripples and drawn out into long wobbly streaks
+        // toward the eye (a lantern's reflection a column of light)
+        float reach = clamp(6.0 / t, 0.05, 0.35);
+        vec2 uv = vUv + n.xz * vec2(0.6, 0.9) * reach;
+        vec4 rs = vec4(0.0);
+        float st = 0.002 + 0.012 * reach;
+        for (int i = -3; i <= 4; i++) {
+            float fi = float(i);
+            vec2 o = vec2(n.x * 0.04 * reach * sin(fi * 2.1 + P.z * 1.7), -fi * st);
+            rs += texture(uRefl, uv + o) * exp(-fi * fi * 0.12);
+        }
+        rs *= 1.0 / 4.6;
+        rs.rgb *= 1.35;
         float k = 0.35 + 0.55 * fres;
-        c = c * (1.0 - rs.a * k) + rs.rgb * k;
+        c = c * (1.0 - min(rs.a * k, 1.0)) + rs.rgb * k;
+        // the low moon off the left of the frame: its path of glitter on the small waves, fanning out toward the eye,
+        // and a few glints across the whole lake (far away, a soft sheen: no sparkle finer than a pixel)
+        float az = atan(dir.x, -dir.z) + atan(0.86 * uAspect / uFocal); // (near the left edge, whatever the aspect)
+        float wpath = 0.035 + 0.05 * near;
+        float path = exp(-az * az / (wpath * wpath)) * smoothstep(-0.002, -0.03, dir.y);
+        float sp = vnoise(P.xz * vec2(2.6, 6.0) + n.xz * 30.0 + vec2(tt * 0.6, 0.0)) *
+                   vnoise(P.xz * vec2(4.1, 9.0) - vec2(0.0, tt * 0.8));
+        float sparkle = mix(0.12, smoothstep(0.3, 0.6, sp) * 1.4, clamp(50.0 / t, 0.0, 1.0));
+        float lowClear = inRect(bw, uCornerLow);
+        c += vec3(0.62, 0.68, 0.82) * sparkle * (path + 0.03 * near) * uGlitter * lowClear;
         // haze toward the far shore
         c = mix(c, mix(uSkyHor, uShore, 0.5) * 0.9, smoothstep(250.0, 1400.0, t) * 0.8);
     }
@@ -124,15 +153,15 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- boxes: pieces, lanterns, poles
+// ---------------------------------------------------------------- boxes: pieces, lanterns, frames, glass
 inline const char* BOX_VS = R"(#version 330 core
 layout(location = 0) in vec3 aPos;    // unit cube, -0.5 .. 0.5
 layout(location = 1) in vec3 aNrm;
 layout(location = 2) in vec4 aA;      // center x, y, z, mask
 layout(location = 3) in vec4 aB;      // size x, y, z, kind
 layout(location = 4) in vec4 aC;      // paper (linear), alpha
-layout(location = 5) in vec4 aD;      // light, progress (cap), seed, -
-layout(location = 6) in vec4 aE;      // candle x, y, z, radius
+layout(location = 5) in vec4 aD;      // light, progress (cap; a rod: its middle's glow), seed, flame (0: none, else its phase)
+layout(location = 6) in vec4 aE;      // candle x, y, z, radius (a lantern: x its rounding into a sky lantern)
 uniform mat4 uVP;
 out vec3 vW;
 out vec3 vL;
@@ -159,7 +188,7 @@ flat in vec4 vC;
 flat in vec4 vD;
 flat in vec4 vE;
 out vec4 frag;
-uniform float uMirror, uWater, uStackA;
+uniform float uMirror, uWater, uStackA, uTime;
 uniform vec3 uFlame, uWood;
 bool has(int m, int b) { return ((m >> b) & 1) != 0; }
 void main() {
@@ -179,10 +208,29 @@ void main() {
     else { q = vec2(vL.x, -vL.z); qs = vB.xz; fc = vec2(vW.x, vW.z * 1.3); }
 
     if (kind == 3) {
-        // a bamboo pole: dark wood, its nodes, lit a little from the stack's side
-        float node = 1.0 - smoothstep(0.0, 0.06, abs(fract((vW.y + 10.0) / 2.5) - 0.5) * 2.5);
-        float sh = face == 0 ? 0.8 : face == 4 ? 1.0 : 0.55;
-        frag = vec4(uWood * sh * (0.85 + 0.35 * node), uMirror);
+        // a rod of a frame of light (the well's, the hold box's): a thread of light, brightest along its middle line,
+        // frosted (a fine glitter along it), brighter toward its middle by vD.y
+        bool vert = qs.y > qs.x;
+        float across = vert ? q.x : q.y, along = vert ? q.y : q.x;
+        float core = exp(-across * across * 14.0);
+        float frost = 0.8 + 0.6 * smoothstep(0.6, 0.95, vnoise(vW.xy * 21.0 + vD.z));
+        float mid = vD.y * exp(-along * along * 30.0);
+        float sh = face == 0 ? 1.0 : 0.45;
+        frag = vec4(vC.rgb * (0.5 + 1.7 * core) * frost * (1.0 + mid) * sh * vD.x, uMirror);
+        return;
+    }
+    if (kind == 4) {
+        // the well's glass: the fine grid of the cells' lines etched in it, light threads frosted here and there with
+        // a glint, over a faint haze dimming the night behind it a little
+        if (face != 0) discard;
+        vec2 gd = abs(fract(vW.xy) - 0.5);
+        gd = 0.5 - gd; // the distance to the nearest cell line
+        float line = 1.0 - smoothstep(0.3 * uPx, 1.3 * uPx, min(gd.x, gd.y));
+        float frost = 0.5 + 0.8 * vnoise(vW.xy * vec2(23.0, 19.0));
+        float glint = smoothstep(0.8, 0.97, vnoise(vW.xy * 47.0 + 5.0));
+        float grain = vnoise(vW.xy * 80.0);
+        vec3 c = vC.rgb * (line * (frost + 2.0 * glint) * 0.12 + 0.004 * grain);
+        frag = vec4(c, 0.12) * vC.w;
         return;
     }
     if (kind == 0 || kind == 1) {
@@ -241,10 +289,12 @@ void main() {
         if (eR) g *= smoothstep(ft, ft + 0.45, e1.x);
         if (eB) g *= smoothstep(ft, ft + 0.45, e0.y);
         if (eT) g *= smoothstep(ft, ft + 0.45, e1.y);
-        // paper lit from inside: darker toward the frame, a soft warmth at the candle in the piece's heart
+        // paper lit from inside: darker toward the frame, each cell glowing at its core, a soft warmth at the candle
+        // in the piece's heart
         float hd = length(vW.xy - vE.xy) / max(vE.w, 0.1);
         float hot = exp(-hd * hd * 1.2);
-        float paper = 0.22 + 0.5 * pow(g, 0.7) + 0.2 * hot * g;
+        float core = exp(-dot(q, q) * 5.0);
+        float paper = 0.26 + 0.56 * pow(g, 0.7) + 0.2 * hot * g + 0.4 * core * g;
         // the ribs seen through the paper (between the cells' junctions, never on them), a fine fiber
         float rib = abs(fract(vW.y * 2.0 + 0.5) - 0.5) * 0.5;
         paper *= 1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.025 + uPx, rib));
@@ -265,13 +315,32 @@ void main() {
         c *= 1.0 - 0.28 * (1.0 - smoothstep(0.02, 0.16, ds));
         c = mix(c, wood, (1.0 - smoothstep(0.016 - uPx, 0.016 + uPx, ds)) * 0.9);
         c = mix(c, wood, frame);
+        if (vD.w > 0.0) {
+            // the small flame of a candle standing in this cell: a teardrop of light, swaying a little, its glow
+            // warming the paper around it
+            float ph = vD.w * 40.0;
+            float sway = 0.012 * sin(uTime * 5.3 + ph) + 0.006 * sin(uTime * 13.1 + ph * 1.7);
+            float fh = 0.19 * (0.92 + 0.08 * sin(uTime * 9.7 + ph * 2.3));
+            vec2 fp = q - vec2(sway * (q.y + 0.2) / 0.3, -0.12);
+            float fw = 0.055 * (1.0 - 0.75 * smoothstep(-0.2, 1.0, fp.y / fh));
+            float fd = length(vec2(fp.x / fw, fp.y / fh));
+            float flame = 1.0 - smoothstep(0.75, 1.15, fd);
+            float glow = exp(-dot(fp, fp) * 26.0);
+            c += (uFlame * vec3(1.0, 0.82, 0.45) * flame * 1.8 + mix(tint, uFlame, 0.6) * glow * 0.4) * light;
+        }
         if (uMirror > 0.5) c *= uStackA; // the stack's reflection: faint
         frag = vec4(c, uStackA * vC.w);
         return;
     }
-    // kind 2: a paper lantern (and a run of a cleared row on its way to becoming one: cap 0 .. 1)
+    // kind 2: a paper lantern (and a run of a cleared row on its way to becoming one: cap 0 .. 1), rounding into a sky
+    // lantern as it rises (vE.x 0 .. 1: only its front face then, a paper balloon wider at its top)
     float cap = vD.y;
     float a = vC.w;
+    float round = vE.x;
+    if (face != 0) {
+        a *= 1.0 - smoothstep(0.0, 0.5, round);
+        if (a < 0.003) discard;
+    }
     if (face == 4 || face == 5) {
         // the lid and the base: dark wood once it is a lantern, paper before
         vec3 c = mix(tint * light * 0.55, uWood * (face == 4 ? 0.9 : 0.4) + tint * 0.04 * light, cap);
@@ -289,10 +358,27 @@ void main() {
     shade *= 1.0 - 0.15 * (1.0 - smoothstep(0.0, 0.02 + uPx, rib)) * cap;
     float hot = exp(-(q.x * q.x * 7.0 + (q.y + 0.1) * (q.y + 0.1) * 6.0));
     float fsh = face == 0 ? 1.0 : 0.72;
-    vec3 col = mix(tint, uFlame, 0.3 * hot) * (0.42 + 0.42 * shade + 0.5 * hot) * light * fsh;
+    vec3 col = mix(tint, uFlame, 0.3 * hot) * (0.5 + 0.5 * shade + 0.8 * hot) * light * fsh;
     col = max(col, tint * 0.04);
     vec3 wood = uWood * 0.6 + tint * 0.04 * light;
     vec3 c = mix(col, wood, max(frame, max(capT, capB)));
+    if (round > 0.0) {
+        // the sky lantern: the box's outline rounding into a balloon, wider at its rounded top, its base a dark ring
+        // around the flame's glow
+        float px = uPx / qs.x;
+        float w = mix(0.5, mix(0.31, 0.47, smoothstep(-0.5, 0.25, q.y)), round);
+        float ty = mix(0.5, 0.16, round), r = 0.48 - ty;
+        float dt = q.y > ty ? length(vec2(q.x, (q.y - ty) * w / max(r, 1e-3))) - w : abs(q.x) - w;
+        float cov = 1.0 - smoothstep(-px, px, max(dt, -mix(0.5, 0.46, round) - q.y));
+        float sx = q.x / w;
+        float glow = exp(-(sx * sx * 1.6 + (q.y + 0.36) * (q.y + 0.36) * 8.0));
+        float ribs = 1.0 - 0.1 * (1.0 - smoothstep(0.0, 0.08 + px * 3.0, abs(fract(sx * 1.5 + 0.5) - 0.5)));
+        float body = (0.4 + 0.4 * (1.0 - sx * sx)) * (0.7 + 0.3 * smoothstep(0.45, -0.3, q.y));
+        vec3 sky = mix(tint, uFlame, 0.3 * glow) * (body + 0.9 * glow) * ribs * light;
+        sky = mix(sky, uWood * 0.6 + uFlame * 0.5 * light, (1.0 - smoothstep(-0.44, -0.4, q.y)) * 0.6);
+        c = mix(c, sky, round);
+        a *= cov;
+    }
     frag = vec4(c * a, a);
 }
 )";

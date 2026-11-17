@@ -3,14 +3,17 @@
 // One world, in real 3D: a calm lake at night seen through the layout's camera raised to a low eye height (a lens
 // shift keeps the board's plane on its pixels), the lake a true plane at the well's floor receding to a far shore of
 // low hills, a few faint stars. The water reflects the sky through rippled normals and a planar reflection of the
-// scene (rendered mirrored). The well is two bamboo poles standing in the water, and the stack floats on the lake.
-// The pieces are paper lanterns: every cell a thin opaque box, the faces inside a piece removed, so each piece is
-// one volume of lit paper, a fine seam of the frame between its cells (darker toward its thin wooden frame, ribs and fibers seen through the paper, its candle at
-// the piece's heart), each of the seven types its own paper. The cleared row becomes lanterns: each run of one piece
+// scene (rendered mirrored, drawn out into wobbly streaks), a finer chop near, and the glitter path of a low moon off
+// the left of the frame. The well is a frame of light standing in the water (two uprights and a lintel, frosted
+// threads of light) around a glass etched with the fine grid of the cells, and the stack floats on the lake; the hold
+// box has a thin warm frame. The pieces are paper lanterns: every cell a thin opaque box, the faces inside a piece
+// removed, so each piece is one volume of lit paper, a fine seam of the frame between its cells (each cell glowing
+// at its core, darker toward its thin wooden frame, ribs and fibers seen through the paper, a warmth at the piece's
+// heart, a small candle flame standing in some cells), each of the seven types its own paper. The cleared row becomes lanterns: each run of one piece
 // in it slides out of the well to its side as a box of its paper (in the 0.3 s the row stays empty), folds into a box
 // lantern as it floats down beside the well onto the water behind it, and drifts to a free place on the lake, where
 // it stays lit for the whole song. So the lake fills up with the play. The drop lifts every lantern off the water
-// into the sky, slowly, and sends more up from the whole lake for as long as it lasts: a sky full of lights; after it
+// into the sky, slowly, each rounding into a sky lantern (a paper balloon) as it rises, and sends more up from the whole lake for as long as it lasts: a sky full of lights; after it
 // they go out as they rise away, and new ones gather again.
 //
 // The song is the water: a calm part is a mirror (still reflections, more stars); mid parts ripple the reflections on
@@ -63,38 +66,50 @@ constexpr float FLOAT_Y = 0.42f; // a floating lantern's center above the water
 constexpr float CELL_D = 0.35f;  // a cell's depth behind the board's plane (cells: thin lantern panels)
 constexpr int MAX_LAKE = 90;     // lanterns floating at once
 
-// The nights: the sky (top, horizon), the near water, the far shore, the poles, the seven papers, the accent, and
-// the drop's sky (its top, the glow the lanterns throw on the horizon).
+// The nights: the sky (top, horizon), the near water, the far shore, the wood (the frames of the pieces and of the
+// lanterns), the seven papers, the accent, the drop's sky (its top, the glow the lanterns throw on the horizon), and
+// how bright the low moon's path of glitter is on the water (off the left of the frame).
 struct VariantDef {
     const char* name;
-    unsigned skyTop, skyHor, lake, shore, pole;
+    unsigned skyTop, skyHor, lake, shore, wood;
     unsigned paper[7]; // I O T S Z J L
     unsigned accent, dropTop, dropGlow;
+    float glitter;
 };
 const VariantDef VARIANTS[] = {
     // a deep blue night, the classic papers
     {"MIDNIGHT", 0x060a17, 0x18223d, 0x03050c, 0x070a14, 0x3a3a40,
-     {0xffb347, 0xfff0d2, 0xb68cff, 0x7fe0a0, 0xff5a3c, 0x6fa8ff, 0xff8fb8}, 0xffc46b, 0x150f2c, 0xff8a3d},
+     {0xffb347, 0xfff0d2, 0xb68cff, 0x7fe0a0, 0xff5a3c, 0x6fa8ff, 0xff8fb8}, 0xffc46b, 0x150f2c, 0xff8a3d, 1.f},
     // a teal night over a lotus pond, pastel papers
     {"LOTUS POND", 0x041113, 0x0f3436, 0x02090a, 0x041012, 0x34403e,
-     {0xffc39a, 0xfff6e0, 0xd8a6ff, 0xa6f0c0, 0xff7c8c, 0x8fcfff, 0xffe27a}, 0xff9fb0, 0x16122a, 0xff9a86},
+     {0xffc39a, 0xfff6e0, 0xd8a6ff, 0xa6f0c0, 0xff7c8c, 0x8fcfff, 0xffe27a}, 0xff9fb0, 0x16122a, 0xff9a86, 0.8f},
     // a moonless night, black water, jewel papers
     {"MOONLESS", 0x040405, 0x131418, 0x020203, 0x060607, 0x2f2f33,
-     {0xffa01a, 0xffe14d, 0xc24dff, 0x3ddc84, 0xff2d55, 0x3f7fff, 0xff6ec7}, 0xffe14d, 0x1a0b0c, 0xff6a1a},
+     {0xffa01a, 0xffe14d, 0xc24dff, 0x3ddc84, 0xff2d55, 0x3f7fff, 0xff6ec7}, 0xffe14d, 0x1a0b0c, 0xff6a1a, 0.3f},
     // dusk: a plum sky, the last light low on the water, warm papers
     {"DUSK", 0x0d0a21, 0x3a1e3c, 0x070519, 0x0b0819, 0x45384a,
-     {0xffb070, 0xffeec8, 0xa6a0ff, 0x9fe8b8, 0xff6a5a, 0x7cc4ff, 0xffc24d}, 0xffb070, 0x2a1438, 0xffaa4a},
+     {0xffb070, 0xffeec8, 0xa6a0ff, 0x9fe8b8, 0xff6a5a, 0x7cc4ff, 0xffc24d}, 0xffb070, 0x2a1438, 0xffaa4a, 0.7f},
     // a winter night, ice papers and one warm one
     {"FROST", 0x060b12, 0x22303f, 0x04070c, 0x080c13, 0x48505c,
-     {0x86d4ff, 0xf4f8ff, 0xc8b6ff, 0x96eed8, 0xff9a8a, 0x6c98ff, 0xffd58a}, 0xbfe6ff, 0x101a30, 0xffc890},
+     {0x86d4ff, 0xf4f8ff, 0xc8b6ff, 0x96eed8, 0xff9a8a, 0x6c98ff, 0xffd58a}, 0xbfe6ff, 0x101a30, 0xffc890, 1.f},
     // a festival on the river: indigo night, red and gold papers
     {"FESTIVAL", 0x09081f, 0x281a46, 0x05041a, 0x08061a, 0x463a52,
-     {0xff3b30, 0xffd04a, 0xff7ab0, 0x5fe0a0, 0xff9a2a, 0x5aa0ff, 0xfff0c8}, 0xffd04a, 0x2a1030, 0xff6040},
+     {0xff3b30, 0xffd04a, 0xff7ab0, 0x5fe0a0, 0xff9a2a, 0x5aa0ff, 0xfff0c8}, 0xffd04a, 0x2a1030, 0xff6040, 0.6f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 // Mixes two display colors by an amount in display space (a blend toward a dark color stays rich, not grey).
 vec3 mixDisplay(const vec3& a, const vec3& b, float t) { return ugl::toLinear(lerp(ugl::toSrgb(a), ugl::toSrgb(b), t)); }
+
+// The small flame standing in the i-th cell of a piece (its id, or a fixed key for a preview): 0 none, else its
+// flicker's phase. Some cells of a piece have one, the same ones for the piece's whole life.
+float flameOf(int key, int i) {
+    uint32_t h = (uint32_t)key * 2654435761u ^ (uint32_t)(i + 1) * 40503u;
+    h ^= h >> 15;
+    h *= 2246822519u;
+    h ^= h >> 13;
+    return (h & 1023u) < 440u ? 0.5f + ((h >> 10) & 1023u) / 1023.f : 0.f;
+}
 
 } // namespace
 
@@ -369,10 +384,12 @@ void LanternsUniverse::spawnSky(int side, bool far) {
     Lantern L;
     L.sky = true;
     L.state = L_RISE;
+    L.sx = L.sz = 0.8f;
+    L.sy = 0.9f;
     L.type = rng_.irange(0, 6);
     L.phase = rng_.range(0.f, TAU);
     L.seed = rng_.uniform();
-    L.z = far ? -70.f - rng_.range(0.f, 260.f) : -14.f - rng_.range(0.f, 40.f);
+    L.z = far ? -40.f - rng_.range(0.f, 130.f) : -14.f - rng_.range(0.f, 30.f);
     const float f = dist_ / (dist_ - L.z);
     const float lo = rng_.chance(0.9f) ? 12.2f : 7.f;
     const float xs = rng_.range(lo, std::max(lo + 0.5f, xmax - 0.5f * f));
@@ -521,16 +538,18 @@ void LanternsUniverse::buildLamps() {
         // the runs leaving the well keep the stack's light (the link must read); elsewhere, dimmed behind the HUD
         const float dim = (L.state == L_LEAVE || L.state == L_DESCEND) ? 1.f : hudDim(vec3(L.x, L.y, L.z));
         const float l = light_ * (1.f + 0.35f * L.flick) * dim;
-        lamps_.push_back({{L.x, L.y, L.z, 0.f}, {L.sx, L.sy, L.sz, 2.f}, {c.x, c.y, c.z, a * (0.4f + 0.6f * dim)},
-                          {l, L.cap, L.seed * 17.f, 0.f},
-                          {0.f, 0.f, 0.f, 1.f}});
+        // a lantern lifted off the lake becomes a sky lantern as it rises: its paper rounds and swells a little
+        const float round = L.sky ? 1.f : L.state == L_RISE ? smoothstepf(0.f, 1.5f, L.t) : 0.f;
+        const float grow = 1.f + 0.3f * round;
+        lamps_.push_back({{L.x, L.y, L.z, 0.f}, {L.sx * grow, L.sy * (grow + 0.15f * round), L.sz * grow, 2.f},
+                          {c.x, c.y, c.z, a * (0.4f + 0.6f * dim)}, {l, L.cap, L.seed * 17.f, 0.f}, {round, 0.f, 0.f, 1.f}});
     }
-    // far lanterns along the opposite shore: more of them as the song rises
+    // far lanterns along the opposite shore: a few always, more of them as the song rises
     {
-        const float amount = 0.5f * wm + 0.5f * wp + 0.25f * dev_;
+        const float amount = 0.2f + 0.4f * wm + 0.4f * wp + 0.25f * dev_;
         const float xmax = viewC_.x + viewH_.x - 0.4f;
         Rng r(seed_ ^ 0xFA11ull);
-        for (int i = 0; i < 30; i++) {
+        for (int i = 0; i < 60; i++) {
             const int side = i % 2 ? 1 : -1;
             const float z = -500.f - r.range(0.f, 500.f);
             const float f = dist_ / (dist_ - z);
@@ -580,14 +599,15 @@ void LanternsUniverse::syncIds(const Game& g) {
     if (!wrong) return;
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
-            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; flare_[y][x] = 0.f; }
+            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; flare_[y][x] = 0.f; flame_[y][x] = 0.f; }
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             if (g.cell(x, y).type < 0 || ids_[y][x]) continue;
             const int id = nextId_++;
-            int stack[8][2], sp = 0, count = 0;
+            int stack[8][2], sp = 0, count = 0, given = 0;
             stack[sp][0] = x; stack[sp][1] = y; sp++;
             ids_[y][x] = id;
+            flame_[y][x] = flameOf(id, given++);
             while (sp > 0 && count < 4) {
                 sp--;
                 const int cx = stack[sp][0], cy = stack[sp][1];
@@ -598,6 +618,7 @@ void LanternsUniverse::syncIds(const Game& g) {
                     if (nx < 0 || ny < 0 || nx >= Game::W || ny >= Game::H || ids_[ny][nx]) continue;
                     if (g.cell(nx, ny).type != g.cell(x, y).type || sp >= 8 || count + sp >= 4) continue;
                     ids_[ny][nx] = id;
+                    flame_[ny][nx] = flameOf(id, given++);
                     stack[sp][0] = nx; stack[sp][1] = ny; sp++;
                 }
             }
@@ -609,11 +630,14 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
     case GameEvent::Lock: {
+        // (the cells in the falling piece's order: each keeps its flame)
         const int id = nextId_++;
-        for (auto& c : ev.cells) {
+        for (size_t i = 0; i < ev.cells.size(); i++) {
+            const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             ids_[c.y][c.x] = id;
             flare_[c.y][c.x] = 0.3f; // the candle catching
+            flame_[c.y][c.x] = flameOf(id, (int)i);
         }
         break;
     }
@@ -670,7 +694,7 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 runs.push_back({x, x1 - 1, type});
                 x = x1;
             }
-            // each side slides as one block: its innermost edge passes the pole
+            // each side slides as one block: its innermost edge passes the frame
             float edgeL = -99.f, edgeR = 99.f;
             for (const Run& r : runs) {
                 const float c = layout::cellPos(0.5f * (r.x0 + r.x1), (float)y).x;
@@ -685,7 +709,7 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 const vec3 p = layout::cellPos(0.5f * (r.x0 + r.x1), (float)y);
                 const int side = p.x < 0.f ? -1 : 1;
                 Lantern L;
-                // its order on its side, nearest the pole first (several rows: the next row's after)
+                // its order on its side, nearest the frame first (several rows: the next row's after)
                 L.slot = std::min(9, (side < 0 ? iLeft++ : nRight - 1 - iRight++) + 2 * rowK);
                 L.type = r.type;
                 L.state = L_LEAVE;
@@ -706,16 +730,18 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         }
         {
             int nb[Game::H][Game::W] = {};
-            float nf[Game::H][Game::W] = {};
+            float nf[Game::H][Game::W] = {}, nl[Game::H][Game::W] = {};
             int dst = Game::H - 1;
             for (int y = Game::H - 1; y >= 0; y--) {
                 if (rows[y]) continue;
                 std::memcpy(nb[dst], ids_[y], sizeof(ids_[y]));
                 std::memcpy(nf[dst], flare_[y], sizeof(flare_[y]));
+                std::memcpy(nl[dst], flame_[y], sizeof(flame_[y]));
                 dst--;
             }
             std::memcpy(ids_, nb, sizeof(ids_));
             std::memcpy(flare_, nf, sizeof(flare_));
+            std::memcpy(flame_, nl, sizeof(flame_));
         }
         // too many on the lake: the oldest ones floating go out
         int floating = 0;
@@ -761,6 +787,7 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             oc.x = p.x; oc.y = p.y; oc.row = c.y; oc.type = std::clamp(c.type, 0, 6); oc.mask = m;
             oc.cx = n ? sx / n : p.x; oc.cy = n ? sy / n : p.y; oc.r = 0.75f + 0.18f * std::max(n, 1);
             oc.seed = (float)(id % 97);
+            oc.flame = flame_[c.y][c.x];
             overCells_.push_back(oc);
         }
         break;
@@ -776,7 +803,9 @@ void LanternsUniverse::onEvent(const GameEvent& ev, const Game& game) {
 void LanternsUniverse::buildBoard(const Game& g) {
     stack_.clear();
     ghost_.clear();
-    poles_.clear();
+    frame_.clear();
+    holdFrame_.clear();
+    glass_.clear();
     const float light = light_;
     auto maskOf = [&](int x, int y, auto same) {
         const int dx[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, dy[8] = {0, 0, 1, -1, -1, -1, 1, 1}; // sides, then corners
@@ -787,15 +816,33 @@ void LanternsUniverse::buildBoard(const Game& g) {
     };
     // a cell: a box one cell deep behind the board's plane
     auto push = [&](std::vector<BoxInst>& v, float x, float y, float s, int mask, const vec3& c, float alpha, int kind,
-                    float l, float seed, float cx, float cy, float r) {
+                    float l, float seed, float cx, float cy, float r, float flame) {
         if (alpha <= 0.003f) return;
-        v.push_back({{x, y, -0.5f * CELL_D * s, (float)mask}, {s, s, CELL_D * s, (float)kind}, {c.x, c.y, c.z, alpha}, {l, 0.f, seed, 0.f},
+        v.push_back({{x, y, -0.5f * CELL_D * s, (float)mask}, {s, s, CELL_D * s, (float)kind}, {c.x, c.y, c.z, alpha}, {l, 0.f, seed, flame},
                      {cx, cy, -0.5f * CELL_D * s, r}});
     };
-    // the well's poles, standing in the water
-    for (int side = -1; side <= 1; side += 2) {
-        const float y0 = WATER - 0.8f, y1 = 10.25f;
-        poles_.push_back({{side * 5.12f, 0.5f * (y0 + y1), -0.5f, 0.f}, {0.13f, y1 - y0, 0.13f, 3.f}, {0, 0, 0, 1}, {0, 0, 0, 0}, {0, 0, 0, 1}});
+    // a rod of a frame of light (center, size), brighter toward its middle by `mid`
+    auto rod = [&](std::vector<BoxInst>& v, float x, float y, float w, float h, const vec3& c, float mid) {
+        v.push_back({{x, y, -0.5f * CELL_D, 0.f}, {w, h, 0.08f, 3.f}, {c.x, c.y, c.z, 1.f}, {1.f, mid, x + y, 0.f}, {0, 0, 0, 1}});
+    };
+    // the well's frame of light: its two uprights standing in the water and the lintel over them; the glass behind
+    // the cells, the fine grid of the cells' lines etched in it
+    {
+        const vec3 rim = lin(0xc8e6ff);
+        const float top = 0.5f * layout::BOARD_H + 0.06f, x = 0.5f * layout::BOARD_W + 0.06f;
+        for (int side = -1; side <= 1; side += 2) rod(frame_, side * x, 0.5f * (WATER + top), 0.08f, top - WATER, rim, 0.f);
+        rod(frame_, 0.f, top, 2.f * x + 0.08f, 0.08f, rim, 0.f);
+        glass_.push_back({{0.f, 0.f, -CELL_D - 0.02f, 0.f}, {layout::BOARD_W, layout::BOARD_H, 0.01f, 4.f}, {rim.x, rim.y, rim.z, 1.f},
+                          {1.f, 0.f, 0.f, 0.f}, {0, 0, 0, 1}});
+    }
+    // the hold box's thin warm frame, glowing at the middle of its top and its bottom
+    {
+        const vec3 warm = lin(0xffd9a0) * 0.5f, c = layout::HOLD_CENTER;
+        const float hx = 1.4f, hy = 1.3f, cy = c.y + 0.05f, w = 0.035f;
+        for (int side = -1; side <= 1; side += 2) {
+            rod(holdFrame_, c.x, cy + side * hy, 2.f * hx + w, w, warm, 1.6f);
+            rod(holdFrame_, c.x + side * hx, cy, w, 2.f * hy + w, warm, 0.f);
+        }
     }
     // the candles' centers of the stack's pieces
     struct Ctr { int id; float sx, sy; int n; };
@@ -819,7 +866,7 @@ void LanternsUniverse::buildBoard(const Game& g) {
     // The stack at game over, its candles going out.
     if (overT_ >= 0.f)
         for (const OverCell& o : overCells_)
-            push(stack_, o.x, o.y, 1.f, o.mask, tint(o.type), 1.f, 0, light * litOf(o.row), o.seed, o.cx, o.cy, o.r);
+            push(stack_, o.x, o.y, 1.f, o.mask, tint(o.type), 1.f, 0, light * litOf(o.row), o.seed, o.cx, o.cy, o.r, o.flame);
     // The ghost.
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
@@ -836,7 +883,7 @@ void LanternsUniverse::buildBoard(const Game& g) {
             for (auto& c : gc) {
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                push(ghost_, w.x, w.y, 1.f, maskOf(c[0], c[1], inGhost), tint(p.type), 0.8f, 1, 1.f, 0.f, w.x, w.y, 1.f);
+                push(ghost_, w.x, w.y, 1.f, maskOf(c[0], c[1], inGhost), tint(p.type), 0.8f, 1, 1.f, 0.f, w.x, w.y, 1.f, 0.f);
             }
         }
     }
@@ -859,7 +906,8 @@ void LanternsUniverse::buildBoard(const Game& g) {
                 for (const Ctr& q : ctr)
                     if (q.id == ids_[y][x]) { cx = q.sx / q.n; cy = q.sy / q.n; r = 0.75f + 0.18f * q.n; break; }
                 const float l = light * (1.f + flare_[y][x]) * litOf(y);
-                push(stack_, p.x, p.y, 1.f, maskOf(x, y, same), tint(c.type), 1.f, 0, l, (float)(ids_[y][x] % 97), cx, cy, r);
+                push(stack_, p.x, p.y, 1.f, maskOf(x, y, same), tint(c.type), 1.f, 0, l, (float)(ids_[y][x] % 97), cx, cy, r,
+                     flame_[y][x]);
             }
     // The falling piece.
     if (g.hasPiece() && !g.over()) {
@@ -878,10 +926,13 @@ void LanternsUniverse::buildBoard(const Game& g) {
             cx += w.x * 0.25f;
             cy += w.y * 0.25f;
         }
-        for (auto& c : cells) {
+        // (its flames: the ones it keeps once locked, under the id it will take)
+        for (int i = 0; i < 4; i++) {
+            const int* c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            push(stack_, w.x, w.y, 1.f, maskOf(c[0], c[1], inPiece), tint(p.type), 1.f, 0, light * 1.05f, 7.f, cx, cy, 1.5f);
+            push(stack_, w.x, w.y, 1.f, maskOf(c[0], c[1], inPiece), tint(p.type), 1.f, 0, light * 1.05f, 7.f, cx, cy, 1.5f,
+                 flameOf(nextId_, i));
         }
     }
     // Previews.
@@ -900,10 +951,11 @@ void LanternsUniverse::buildBoard(const Game& g) {
                 if (c[0] == x && c[1] == y) return true;
             return false;
         };
-        for (auto& c : cells) {
+        for (int i = 0; i < 4; i++) {
+            const int* c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
             push(stack_, px, py, sc, maskOf(c[0], c[1], inPiece), tint(type), 1.f, 0, light * alpha, 3.f, center.x, center.y,
-                 1.4f * sc);
+                 1.4f * sc, flameOf(1000 + type, i));
             // a preview is a thin panel (seen off axis in the margins, a deep box would show a slab of its side)
             BoxInst& b = stack_.back();
             b.b[2] = 0.3f * sc;
@@ -1004,7 +1056,7 @@ void LanternsUniverse::hudLine(const HudText& h, text::Line& out) {
 // =====================================================================================================
 
 // How strongly the stack shows in the water under the well (its color and coverage in the mirrored render).
-constexpr float STACK_REFLECTION = 0.4f;
+constexpr float STACK_REFLECTION = 0.75f;
 
 void LanternsUniverse::drawBoxes(const std::vector<BoxInst>& v, const mat4& vp, bool mirror, float stackA) {
     if (v.empty()) return;
@@ -1015,7 +1067,8 @@ void LanternsUniverse::drawBoxes(const std::vector<BoxInst>& v, const mat4& vp, 
     set1f(progBox_, "uStackA", stackA);
     set1f(progBox_, "uSeed", (float)(seed_ % 1000) * 0.137f);
     set3f(progBox_, "uFlame", lin(0xfff1c8));
-    set3f(progBox_, "uWood", lin(VARIANTS[variant_].pole) * 0.35f);
+    set3f(progBox_, "uWood", lin(VARIANTS[variant_].wood) * 0.35f);
+    set1f(progBox_, "uTime", worldTime_);
     glBindVertexArray(boxVao_);
     glBindBuffer(GL_ARRAY_BUFFER, boxVbo_);
     glBufferData(GL_ARRAY_BUFFER, v.size() * sizeof(BoxInst), v.data(), GL_STREAM_DRAW);
@@ -1039,7 +1092,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
     const float dt = f.dt;
-    // a break: the lake, its lanterns and the far lights alone (no poles, stack, ghost nor previews; the
+    // a break: the lake, its lanterns and the far lights alone (no frames, glass, stack, ghost nor previews; the
     // blank board leaves the pieces' ids as they are)
     bare_ = f.bare;
     if (!bare_) syncIds(game);
@@ -1119,7 +1172,9 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     if (bare_) {
         stack_.clear();
         ghost_.clear();
-        poles_.clear();
+        frame_.clear();
+        holdFrame_.clear();
+        glass_.clear();
     } else buildBoard(game);
     buildLamps();
 
@@ -1128,7 +1183,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     const vec3 glowCol = lin(V.dropGlow) * (0.012f + 0.02f * wp + 0.09f * dev_ + 0.07f * swell_);
     glDisable(GL_CULL_FACE);
 
-    // ---- The scene mirrored under the water (the stack, the poles, the lanterns, the lights).
+    // ---- The scene mirrored under the water (the stack, the well's frame, the lanterns, the lights).
     reflT_.bind();
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClearDepth(1.0);
@@ -1137,7 +1192,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    drawBoxes(poles_, mirrorVp_, true, 1.f);
+    drawBoxes(frame_, mirrorVp_, true, 1.f);
     drawBoxes(stack_, mirrorVp_, true, STACK_REFLECTION); // the stack mirrored faintly under the well
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -1179,20 +1234,25 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progEnv_, "uColR", layout::RIGHT_COLUMN[0], layout::RIGHT_COLUMN[1], layout::RIGHT_COLUMN[2], layout::RIGHT_COLUMN[3]);
     }
     set4f(progEnv_, "uCorner", -23.f, 8.3f, -12.f, 13.f);
+    set4f(progEnv_, "uCornerLow", -23.f, -13.f, -8.2f, -7.3f);
+    set1f(progEnv_, "uGlitter", V.glitter * (1.f - 0.5f * slow_));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, reflT_.tex);
     set1i(progEnv_, "uRefl", 0);
     ugl::drawFullscreen();
 
-    // ---- The poles, the stack (opaque, the stack's mask in alpha), the lanterns, the lights, the ghost.
+    // ---- The frames, the stack (opaque, the stack's mask in alpha), the lanterns, the lights, the well's glass (behind
+    // the cells), the ghost.
     glEnable(GL_DEPTH_TEST);
-    drawBoxes(poles_, vp_, false, 0.f);
+    drawBoxes(frame_, vp_, false, 0.f);
+    drawBoxes(holdFrame_, vp_, false, 0.f);
     drawBoxes(stack_, vp_, false, 1.f);
     glEnable(GL_BLEND);
     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
     drawBoxes(lamps_, vp_, false, 0.f);
     glDepthMask(GL_FALSE);
     drawSprites(vp_, false);
+    drawBoxes(glass_, vp_, false, 0.f);
     drawBoxes(ghost_, vp_, false, 0.f);
     glDepthMask(GL_TRUE);
     glDisable(GL_DEPTH_TEST);
