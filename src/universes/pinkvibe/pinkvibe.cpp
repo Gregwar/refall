@@ -10,14 +10,13 @@
 // upward in the free zones (never behind the well, fading out near the HUD columns).
 //
 // The well is a translucent deep wine pane in a rounded rose neon frame glowing softly inside and out, the ribbons
-// faintly showing through. The blocks are chunky pearl sugar cubes, one per cell, seen a little from above (a rounded
-// box traced per cell): a front face filling most of the cell under a thick lit rounded lip (the top face), thick
-// soft bevels, satin light from the top left, a faint lilac-to-peach nacre, a milky lustre, a glossy highlight, and an
-// embossed gold inlay on the face: a quiet fine frame and a raised motif per type (I three pearls, O a four-pointed
-// star, T a diamond, S an X, Z four dots, J a heart, L a ring). The T cubes are rose glass, a little see-through.
-// Every block pools a soft ambient shadow under it (all shadows drawn under all blocks); the falling piece glows
-// softly rose instead. The seven types are seven pinks of clearly different lightness and hue (ivory, peach, rose
-// glass, deep raspberry, hot pink, lilac, coral), per variant.
+// faintly showing through. The blocks are candy cubes facing us like dice, one per cell: a flat opaque creamy
+// fondant face, an even soft rounded bevel (lit top left, shaded bottom right), the very edge a little translucent
+// and glowing like sugared gummy candy, a faint sugar grain with pearly micro sparkles, and a nearly flat gold foil
+// stamp on the face: a quiet fine frame and a motif per type (I three pearls, O a four-pointed star, T a diamond,
+// S an X, Z four dots, J a heart, L a ring). Every block pools a soft shadow under it (all shadows drawn under all
+// blocks); the falling piece glows softly rose instead. The seven types are seven pinks of clearly different
+// lightness and hue (ivory, peach, rose, deep raspberry, hot pink, lilac, coral), per variant.
 //
 // The drop is the sunset, held for the whole drop section: the ribbons swirl around the well into one big rolling
 // wave and the palette swings to the variant's deeper rose-gold / magenta tones, eased in over a second or two and
@@ -733,7 +732,6 @@ void PinkVibeUniverse::render(const Frame& f, GLuint fbo) {
             set3f(progCell_, "uShade", well_ * 0.35f);
             set3f(progCell_, "uGlow", neon_);
             set1f(progCell_, "uWave", wave_);
-            set1i(progCell_, "uGlass", 2);
             set1f(progCell_, "uBeat", (float)std::fmod(waveBeat_, 512.0));
             for (int i = 0; i < 7; i++) {
                 const std::string n = "uVivid[" + std::to_string(i) + "]";
