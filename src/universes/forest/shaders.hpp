@@ -11,8 +11,8 @@
 // plants; PLANT_FS cuts the life itself (each plant a small SDF, a margin of uncut key around it, its body shaded by
 // cuts and inked); MOTE_FS cuts fireflies, spores and chips. FINAL_FS pulls the print: the paper, the glow inks a
 // little out of register (the drop's third ink in the second's place), the black key over them (its carved edges
-// pressed into the paper, its ink starved here and there), a fluorescent glow (DOWN_FS / BLUR_FS) and the pool's
-// reflection. PIECE_FS then prints the blocks in register over it.
+// pressed into the paper, its ink starved here and there), a fluorescent glow (DOWN_FS / BLUR_FS), the pool's
+// reflection, and on the drop each element's cuts in its neon (from the tags BG_FS and PLANT_FS write). PIECE_FS then prints the blocks in register over it.
 #include <string>
 
 namespace forest_shaders {
@@ -112,6 +112,13 @@ float groundY(float x) {
     float h = max(0.3 - abs(a - b), 0.0) / 0.3;
     return mix(max(a, b) + h * h * 0.3 * 0.25, -11.9, poolK(x));
 }
+// An element's tag (written to the plates' second texture): which of the drop's four neon inks it lights up in
+// (pal), how far from the well it stands (the drop's wave reaches it in turn) and whether it is a quiet part of the
+// print (dim: the sky's cuts). 0: no element.
+float tagOf(float pal, float cx, float dim) {
+    float b = clamp(floor((abs(cx) - 5.0) / 1.2), 0.0, 15.0);
+    return (1.0 + mod(floor(pal), 4.0) + 4.0 * b + 64.0 * dim) / 255.0;
+}
 // how far the drop's third ink has rolled out from the well (rollR: its front's distance), 1 behind its front
 float dropRoll(vec2 w, float rollR) {
     return smoothstep(rollR, rollR - 3.0, max(abs(w.x) - 4.0, 0.0) + 0.1 * max(w.y + 10.0, 0.0));
@@ -126,7 +133,8 @@ float waterAt(vec2 w) {
 // ---------------------------------------------------------------- the key block and the glow inks (full screen)
 inline const char* BG_FS = R"(#version 330 core
 in vec2 vUv;
-out vec4 frag;
+layout(location = 0) out vec4 frag;
+layout(location = 1) out vec4 tagOut;
 uniform vec4 uView;
 uniform vec3 uMoon;    // the moon cut out of the sky: center, radius
 uniform vec4 uTrunk[8];
@@ -197,6 +205,7 @@ void main() {
     float moonL = uMoonK * exp(-max(mr - uMoon.z, 0.0) / (uMoon.z * 1.2));
     float tSky = (0.8 * moonL * smoothstep(uMoon.z * 1.12, uMoon.z * 1.3, mr) + 0.62 * (1.0 - exp(-mistL * 1.6))) * open;
     float carve = gouge(vec2(w.x, w.y + 0.05 * sin(w.x * 0.35 + uSeed)), 0.2, 7.0, tSky, 1.0, aa);
+    float tag = tagOf(2.0, w.x, 1.0);
     // stars where the sky is dark: a few nicks of the gouge, a cross for the bright ones
     {
         vec2 g = w / 1.7 + uSeed;
@@ -224,6 +233,7 @@ void main() {
             cl = max(cl, 1.0 - smoothstep(-aa, aa, blade(w, a, b, 0.035 * uMoon.z)));
         }
         carve = mix(carve, 1.0 - cl, moonCov);
+        if (moonCov > 0.5) tag = tagOf(0.0, uMoon.x, 0.0);
         inkA *= 1.0 - moonCov;
         inkB *= 1.0 - moonCov;
     }
@@ -240,6 +250,7 @@ void main() {
         float tt = (tSky * far + rim * 0.9 * moonL) * open;
         float tc = gouge(vec2(w.y, w.x - tr.z), 0.1 + 0.025 * fl, 4.0, tt, 4.0 + fl, aa);
         carve = mix(carve, tc, tr.x);
+        if (tr.x > 0.5) tag = tagOf(hash12(vec2(tr.z, fl)) * 4.0, tr.z, fl < 0.5 ? 1.0 : 0.0);
     }
     // ---- the canopy: black masses of leaves over the top, their edges cut into fans of leaves where the moon catches
     // them; vines hanging at the sides
@@ -274,6 +285,7 @@ void main() {
             float lb = blade(w, fanC + dir * fanR * 0.5, fanC + dir * fanR * 0.96, fanR * 0.08 * min(tl * 2.0, 1.0));
             float lc = (1.0 - smoothstep(-aa, aa, lb)) * step(0.4, hash12(vec2(ai, fanC.y + 7.0))) * step(0.12, tl);
             carve = mix(carve, lc, cov);
+            if (cov > 0.5) tag = tagOf(hash12(fanC) * 4.0, fanC.x, 0.0);
         }
         float vx = w.x * 1.1 + uSeed;
         float vid = floor(vx);
@@ -297,6 +309,7 @@ void main() {
                 // a leaf's midrib cut where the moon catches it
                 float rib = 1.0 - smoothstep(-aa, aa, sdSeg(w, at + vec2(sd * 0.04, -0.02), at + vec2(sd * 0.16, -0.08)) - 0.01);
                 carve = mix(carve, rib * step(0.25, moonL) * open, vc);
+                if (vc > 0.5) tag = tagOf(hash12(vec2(vid, 3.0)) * 4.0, cxv, 0.0);
             }
         }
     }
@@ -356,6 +369,7 @@ void main() {
         float vein = (1.0 - smoothstep(-aa, aa, vn - veinW)) * seg * smoothstep(reachY, reachY - 2.5, y) * smoothstep(0.95, 0.6, abs(u))
                    * open;
         carve = mix(carve, max(bc, vein), cov);
+        if (cov > 0.5) tag = tagOf(fi + 1.0, T.x, 0.0);
         inkV = max(inkV, vein * cov);
     }
     inkA = max(inkA, inkV * (1.0 - roll));
@@ -399,6 +413,7 @@ void main() {
         inkA = mix(inkA, max(inkA, patch * (1.0 - roll)), floorCov);
         inkB = mix(inkB, max(inkB, patch * roll), floorCov);
         carve = mix(carve, fc * open, floorCov);
+        if (floorCov > 0.5) tag = tagOf(hash12(vec2(floor(w.x / 2.3), 5.0)) * 4.0, w.x, 0.0);
     }
     // ---- stones on the floor: black, contour cuts over their lit tops
     {
@@ -420,11 +435,13 @@ void main() {
             float ts = (0.2 + 0.6 * mistL) * smoothstep(0.0, 0.8, up);
             float cc = gouge(vec2(q.x * 2.0, length(q / vec2(rx, ry)) * ry), 0.07, 0.8, ts, id, aa);
             carve = mix(carve, cc * open, sc);
+            if (sc > 0.5) tag = tagOf(hash12(vec2(id, 7.0)) * 4.0, scx, 0.0);
         }
     }
     // ---- the pool: solid ink; the print's reflection is cut into it when the print is pulled (FINAL_FS)
     carve *= 1.0 - waterAt(w);
     frag = vec4(clamp(carve, 0.0, 1.0), inkA, inkB, 1.0);
+    tagOut = vec4(tag, 0.0, 0.0, 1.0);
 }
 )";
 
@@ -462,7 +479,8 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the life (instanced quads)
-// a: base x, y, scale, kind. b: seed, grow (0..1: cut in as the print is pulled), glow, flip. c: ink B's share, -, -, wave. d: -, -, -, alpha.
+// a: base x, y, scale, kind. b: seed, grow (0..1: cut in as the print is pulled), glow, flip. c: ink B's share, its
+// tag (tagOf), -, wave. d: -, -, -, alpha.
 inline const char* PLANT_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA;
@@ -497,7 +515,8 @@ inline const char* PLANT_FS = R"(#version 330 core
 in vec2 vP;
 in vec2 vW;
 flat in vec4 vA, vB, vC, vD;
-out vec4 frag;
+layout(location = 0) out vec4 frag;
+layout(location = 1) out vec4 tagOut;
 uniform float uTime, uAAp, uWind;
 uniform float uOut;  // the outline pass: how far the shapes are grown (board units); 0: the plants themselves
 float gAA = 0.01, gOut = 0.0;
@@ -838,6 +857,7 @@ void main() {
     a *= vD.w;
     if (a <= 0.003) discard;
     // the outline pass: a margin of solid ink left around the plant, so that it stands out of the light around it
+    tagOut = vec4(vC.y, 0.0, 0.0, 1.0);
     if (uOut > 0.0) {
         frag = vec4(0.0, 0.0, 0.0, a);
         return;
@@ -900,7 +920,9 @@ uniform vec2 uOffA, uOffB;            // the glow inks' plates out of register (
 uniform vec3 uPaper, uKey, uInkA, uInkB, uInkC; // linear
 uniform float uC, uRollR;             // the drop's third ink: its amount, how far it has rolled out from the well
 uniform float uBloomK, uSlow, uDim, uFade, uBridge, uTime, uSeed, uAA, uInkK, uKeyK;
-uniform float uBlaze;                 // the drop's blacklight: the paper sinks to a violet dusk, the inks blaze
+uniform float uBlaze;                 // the drop's blacklight: the paper sinks to a violet dusk, the cuts light up in neon
+uniform sampler2D uTags;              // each element's tag (tagOf)
+uniform vec3 uNeon[4];                // the drop's neon inks (linear)
 uniform vec3 uBridgeCol, uSlowInk;
 uniform vec4 uView;
 vec3 ink(vec3 c, vec3 k, float d) { return c * mix(vec3(1.0), k, clamp(d, 0.0, 1.0)); }
@@ -931,13 +953,13 @@ void main() {
     b *= uInkK;
     vec3 inkA = mix(uInkA, uSlowInk, uSlow);
     vec3 inkB = mix(mix(uInkB, uInkC, uC * dropRoll(w, uRollR)), uSlowInk, uSlow);
-    // under the drop's blacklight the bare paper sinks to a dim violet while the inks on it fluoresce
+    // under the drop's blacklight the bare paper sinks to a dim violet
     float inked = clamp(a + b, 0.0, 1.0);
     c *= mix(vec3(1.0), vec3(0.2, 0.16, 0.36), uBlaze * (1.0 - inked));
     c = ink(c, inkA, a);
     c = ink(c, inkB, b);
-    // fluorescent inks are brighter than the paper under them (and blaze under the blacklight)
-    c += (inkA * a + inkB * b) * (0.1 + 1.0 * uBlaze) * (1.0 - 0.6 * uSlow) * carve;
+    // fluorescent inks are a little brighter than the paper under them
+    c += (inkA * a + inkB * b) * 0.1 * (1.0 - 0.6 * uSlow) * carve;
     // the key block over all: its ink starved where the roller was light (paper speckling through a solid, open areas
     // only), its carved edges pressed into the paper (a shadow on one side of every cut)
     float open = 1.0 - quietAt(w);
@@ -947,6 +969,25 @@ void main() {
     float press = clamp((cx - carve) * 0.7 - (cy - carve) * 0.7, -1.0, 1.0);
     c *= 1.0 - 0.18 * max(press, 0.0) * carve;
     c = mix(c, uKey * (0.85 + 0.3 * vnoise(w * 0.6 + uSeed)), key);
+    // the drop: each element's cuts light up in its own neon as the wave reaches it, crisp, a tight glow hugging them
+    if (uBlaze > 0.001) {
+        float v = floor(texture(uTags, vUv).r * 255.0 + 0.5);
+        if (v > 0.5) {
+            float k = v - 1.0;
+            float dim = step(64.0, k);
+            k -= 64.0 * dim;
+            float pal = mod(k, 4.0), at = floor(k / 4.0) * 1.2;
+            float lit = uBlaze * smoothstep(at, at + 1.5, uRollR) * (1.0 - 0.6 * dim);
+            vec3 neon = pal < 0.5 ? uNeon[0] : pal < 1.5 ? uNeon[1] : pal < 2.5 ? uNeon[2] : uNeon[3];
+            float near = 0.0;
+            for (int i = 0; i < 4; i++) {
+                vec2 o = vec2(i == 0 ? 2.5 : i == 1 ? -2.5 : 0.0, i == 2 ? 2.5 : i == 3 ? -2.5 : 0.0) * uTexel;
+                near += texture(uPlates, vUv + o).r;
+            }
+            c = mix(c, neon * 1.2, carve * (1.0 - starve) * lit);
+            c += neon * near * 0.12 * (1.0 - carve) * lit;
+        }
+    }
     // the fluorescence: a soft light the inks give off into the dark around them
     c += texture(uBloom, vUv).rgb * uBloomK;
     c = c / (1.0 + 0.25 * max(max(c.r, c.g), c.b));

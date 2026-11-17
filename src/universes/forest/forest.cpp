@@ -29,11 +29,11 @@
 // The song: calm is a still print, the plants' light short and the fluorescence restrained, a few fireflies (sparks
 // cut in ink); mid lights the plants on the beat grid, a quarter of them every two beats (the cuts around them
 // widening, local and eased), more fireflies; a peak cuts the light wider, the pulses swell with the bass, a kick
-// lights a single plant and spores rise. The drop is the blacklight: on its downbeat the bare paper sinks to a violet
-// dusk and the inks blaze in the cuts with a fluorescent glow, the light cut wider all over, the variant's third ink
-// rolls out from the well in the second glow ink's place, the glow plates are knocked out of register and settle back,
-// and plant after plant flares as the wave reaches it; it stays for the whole drop and goes out over a few seconds
-// after. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
+// lights a single plant and spores rise. The drop is the blacklight: on its downbeat a wave runs out from the well
+// and, element by element, the forest's cut shapes (each trunk's strokes, each plant, the canopy's leaves, the stones,
+// the moon...) switch to crisp neon inks, each element its own of the variant's four; the bare paper sinks to a violet
+// dusk, the light is cut wider, the variant's third ink takes the second glow ink's place, the glow plates are knocked
+// out of register and settle back; it stays for the whole drop and goes out over a few seconds after. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
 // ink; game over drains the stack's ink to the paper from the top, the roller then inking it over in black. Before a
 // song the print is pulled: the key's cuts, then the glow inks, the plants cut in and lit one by one; after it the
 // light goes out plant by plant and the sheet sinks into the dark. A new song in the same forest only changes its inks.
@@ -75,8 +75,8 @@ vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 
 // A print (sRGB): its paper, the key block's ink, the three drums (a yellow, a pink, a blue), the drums inking the
 // world's two glow inks (bits 1, 2, 4: two bits print an overprint; the drum left over is the drop's ink, which takes
-// the second glow ink's place for a drop), the one cold ink of slow motion, and the seven blocks' inks (I O T S Z J L;
-// J the bare paper).
+// the second glow ink's place for a drop), the one cold ink of slow motion, the seven blocks' inks (I O T S Z J L;
+// J the bare paper) and the drop's four neon inks (the cuts of each element of the forest light up in one of them).
 struct VariantDef {
     const char* name;
     unsigned paper, key;
@@ -84,23 +84,24 @@ struct VariantDef {
     int glowA, glowB;
     unsigned slow;
     unsigned pieces[7];
+    unsigned neon[4];
 };
 const VariantDef VARIANTS[] = {
     // foxfire: chartreuse and cyan on black, the drop in pink
     {"FOXFIRE", 0xf1efe9, 0x0a0b0d, {0xd2ff3a, 0xff4fa6, 0x3cc8f4}, 1, 4, 0xa8bccc,
-     {0x3cc8f4, 0xd8ff3a, 0xa274f4, 0x58d86c, 0xff5a5e, 0xf1efe9, 0xff9a3c}},
+     {0x3cc8f4, 0xd8ff3a, 0xa274f4, 0x58d86c, 0xff5a5e, 0xf1efe9, 0xff9a3c}, {0xff2fa8, 0xb8ff1e, 0x1ee8ff, 0xff8a14}},
     // moonshade: cyan and pink on an indigo key, the drop in yellow
     {"MOONSHADE", 0xeef0f2, 0x0b1029, {0xfff04a, 0xff62c0, 0x4aa8ff}, 4, 2, 0xb4bed8,
-     {0x4aa8ff, 0xfff04a, 0xb07cff, 0x64e0a4, 0xff5c7c, 0xeef0f2, 0xffa244}},
+     {0x4aa8ff, 0xfff04a, 0xb07cff, 0x64e0a4, 0xff5c7c, 0xeef0f2, 0xffa244}, {0xff3fd2, 0xfff23a, 0x3cf0ff, 0x9a72ff}},
     // honeycap: yellow and orange (yellow over pink) on a warm black, the drop in blue
     {"HONEYCAP", 0xf3f0ea, 0x110d0b, {0xffe838, 0xff5a9a, 0x40b8f0}, 1, 3, 0xbcc0cc,
-     {0x40b8f0, 0xffe838, 0xb07ae8, 0x8cd850, 0xff4f5a, 0xf3f0ea, 0xff962a}},
+     {0x40b8f0, 0xffe838, 0xb07ae8, 0x8cd850, 0xff4f5a, 0xf3f0ea, 0xff962a}, {0xffdc14, 0xff4f1e, 0x1ef0d2, 0xff3fa0}},
     // sporebloom: pink and lemon on a plum black, the drop in cyan
     {"SPOREBLOOM", 0xf2eff0, 0x140a19, {0xf4ff50, 0xff3d8c, 0x52d2f8}, 2, 1, 0xc4b8d4,
-     {0x52d2f8, 0xf4ff50, 0xb46cff, 0x7ce870, 0xff3d6c, 0xf2eff0, 0xffa050}},
+     {0x52d2f8, 0xf4ff50, 0xb46cff, 0x7ce870, 0xff3d6c, 0xf2eff0, 0xffa050}, {0xff2f8c, 0xe4ff2a, 0x2ad8ff, 0xb45cff}},
     // verdigris: green (yellow over teal) and teal on a verdigris black, the drop in pink
     {"VERDIGRIS", 0xeef0ec, 0x0b1e1b, {0xe6ff4a, 0xff4fb0, 0x30b4d0}, 5, 4, 0xb0c4c0,
-     {0x30c4cc, 0xe6ff4a, 0x9c7cf4, 0x6ce070, 0xff5c6a, 0xeef0ec, 0xffa848}},
+     {0x30c4cc, 0xe6ff4a, 0x9c7cf4, 0x6ce070, 0xff5c6a, 0xeef0ec, 0xffa848}, {0xff3fb0, 0x7cff3a, 0x1ef0e0, 0xffd21e}},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -139,6 +140,12 @@ vec2 operator*(const vec2& a, float k) { return {a.x * k, a.y * k}; }
 vec2 lerp2(const vec2& a, const vec2& b, float t) { return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t}; }
 
 float hashf(uint64_t x) { return (splitmix64(x) >> 40) * (1.0f / 16777216.0f); }
+
+// An element's tag (mirrors tagOf in the shaders): its neon, how far from the well it stands.
+float tagOf(int pal, float cx) {
+    const float b = std::clamp(std::floor((std::fabs(cx) - 5.f) / 1.2f), 0.f, 15.f);
+    return (1.f + (float)(pal & 3) + 4.f * b) / 255.f;
+}
 
 // A VAO over the unit quad with `n` per-instance vec4 attributes (locations 1..n) of `stride` bytes.
 void instVao(GLuint quad, GLuint& vao, GLuint& vbo, int n, size_t stride) {
@@ -230,6 +237,21 @@ void ForestUniverse::resize(int width, int height) {
     if (std::fabs(rock_[0] + rock_[1] + rock_[2] - oldRock) > 0.05f) rebuild = true;
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     plateT_.create(width_, height_, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    {
+        if (tagTex_) glDeleteTextures(1, &tagTex_);
+        glGenTextures(1, &tagTex_);
+        glBindTexture(GL_TEXTURE_2D, tagTex_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width_, height_, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindFramebuffer(GL_FRAMEBUFFER, plateT_.fbo);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, tagTex_, 0);
+        const GLenum bufs[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(2, bufs);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
     const int qw = std::max(1, width_ / 4), qh = std::max(1, height_ / 4);
     lightT_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
     bloomA_.create(qw, qh, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT);
@@ -243,6 +265,7 @@ void ForestUniverse::resize(int width, int height) {
 
 ForestUniverse::~ForestUniverse() {
     for (ugl::Target* t : {&plateT_, &lightT_, &bloomA_, &bloomB_}) t->destroy();
+    glDeleteTextures(1, &tagTex_);
     for (GLuint p : {progBg_, progHalo_, progPlant_, progMote_, progPiece_, progDown_, progBlur_, progFinal_, progShape_})
         glDeleteProgram(p);
     for (GLuint v : {plantVao_, haloVao_, pieceVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
@@ -467,11 +490,13 @@ void ForestUniverse::setSong(const SongLook& t, float seconds) {
     dropInkT_ = glowInk(7 & ~(V.glowA | V.glowB));
     slowInkT_ = lin(V.slow);
     for (int i = 0; i < 7; i++) pieceT_[i] = lin(V.pieces[i]);
+    for (int i = 0; i < 4; i++) neonT_[i] = lin(V.neon[i]);
     const bool instant = !colSet_ || seconds <= 0.1f;
     if (instant) {
         paper_ = paperT_; key_ = keyT_; dropInk_ = dropInkT_; slowInk_ = slowInkT_;
         glow_[0] = glowT_[0]; glow_[1] = glowT_[1];
         for (int i = 0; i < 7; i++) piece_[i] = pieceT_[i];
+        for (int i = 0; i < 4; i++) neon_[i] = neonT_[i];
         colSet_ = true;
     }
     seed_ = t.seed ? t.seed : 1;
@@ -869,6 +894,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         dropInk_ = lerp(dropInk_, dropInkT_, k);
         slowInk_ = lerp(slowInk_, slowInkT_, k);
         for (int i = 0; i < 7; i++) piece_[i] = lerp(piece_[i], pieceT_[i], k);
+        for (int i = 0; i < 4; i++) neon_[i] = lerp(neon_[i], neonT_[i], k);
     }
     slow_ = approach(slow_, slowOn_ ? 1.f : 0.f, 1.0f, dt);
     dimT_ = approach(dimT_, f.paused ? 1.f : (f.dim ? 0.5f : 0.f), 3.f, dt);
@@ -1027,7 +1053,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float glow = life * (1.f + pulse + 0.6f * p.kickGlow + 0.5f * quadGlow_) * awake(p.seed, wake);
         const float sc = p.scale * (1.f + 0.05f * wave);
         plantInst_.push_back({{p.x, p.y, sc, (float)p.kind}, {p.seed, grow, glow, p.flip ? 1.f : 0.f},
-                              {p.colMix, 0.f, 0.f, wave}, {0.f, 0.f, 0.f, smoothstepf(0.f, 0.15f, grow)}});
+                              {p.colMix, tagOf((int)(p.seed * 7.f), p.x), 0.f, wave}, {0.f, 0.f, 0.f, smoothstepf(0.f, 0.15f, grow)}});
         if (p.kind == 2) continue;
         const vec2 c = plantTop(p);
         const float hr = (1.3f + 0.5f * p.height) * p.scale * (1.f + 0.25f * wave + 0.15f * pulse);
@@ -1140,13 +1166,20 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         drawInst(progPlant_, plantVao_, plantVbo_, plantInst_.data(), plantInst_.size() * sizeof(Inst), plantInst_.size());
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         set1f(progPlant_, "uOut", 0.f);
+        glDisablei(GL_BLEND, 1); // (a plant's tag replaces what is behind it)
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)plantInst_.size());
+        glEnablei(GL_BLEND, 1);
     }
-    // fireflies, spores and chips: the deepest cut and the densest ink win
+    // fireflies, spores and chips: the deepest cut and the densest ink win (the tags left as they are)
     glBlendEquation(GL_MAX);
     glUseProgram(progMote_);
     set1f(progMote_, "uAA", aaW);
-    drawInst(progMote_, haloVao_, haloVbo_, moteInst_.data(), moteInst_.size() * sizeof(Inst2), moteInst_.size());
+    {
+        const GLenum one = GL_COLOR_ATTACHMENT0, both[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(1, &one);
+        drawInst(progMote_, haloVao_, haloVbo_, moteInst_.data(), moteInst_.size() * sizeof(Inst2), moteInst_.size());
+        glDrawBuffers(2, both);
+    }
     glBlendEquation(GL_FUNC_ADD);
     glDisable(GL_BLEND);
 
@@ -1212,8 +1245,17 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uRollR", rollR);
     set1f(progFinal_, "uInkK", inkK);
     set1f(progFinal_, "uKeyK", 0.9f + 0.1f * smoothstepf(0.f, 0.4f, f.setup));
-    set1f(progFinal_, "uBloomK", (0.08f + 0.04f * wp + 0.5f * blaze_) * (1.f - 0.5f * slow_));
+    set1f(progFinal_, "uBloomK", (0.08f + 0.04f * wp) * (1.f - 0.6f * blaze_) * (1.f - 0.5f * slow_));
     set1f(progFinal_, "uBlaze", blaze_ * (1.f - slow_));
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, tagTex_);
+    glActiveTexture(GL_TEXTURE0);
+    set1i(progFinal_, "uTags", 2);
+    {
+        float nv[12];
+        for (int i = 0; i < 4; i++) { nv[i * 3] = neon_[i].x; nv[i * 3 + 1] = neon_[i].y; nv[i * 3 + 2] = neon_[i].z; }
+        glUniform3fv(ugl::U(progFinal_, "uNeon"), 4, nv);
+    }
     set1f(progFinal_, "uSlow", slow_);
     set1f(progFinal_, "uDim", dimT_);
     set1f(progFinal_, "uFade", saturate(f.fade) * smoothstepf(0.f, 0.35f, f.setup) * (1.f - 0.75f * smoothstepf(0.4f, 1.f, f.teardown)));
@@ -1248,7 +1290,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_forest() {
     static const UniverseEntry e{
-        "GLOWING FOREST", "a night forest as a relief print in black ink and fluorescent inks; the drop is a blacklight, the inks blazing",
+        "GLOWING FOREST", "a night forest as a relief print in black ink and fluorescent inks; on the drop its carved shapes light up in neon",
         [] { return std::unique_ptr<Universe>(new ForestUniverse()); },
         // A night world: fits most songs, a little more the slower, airy ones.
         [](const SongLook& l) { return 0.75f + 0.2f * l.airWeight + 0.15f * (1.f - l.density); },

@@ -94,7 +94,8 @@ private:
            progFinal_ = 0, progShape_ = 0;
     GLuint quadVbo_ = 0, plantVao_ = 0, plantVbo_ = 0, haloVao_ = 0, haloVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0,
            shapeVao_ = 0, shapeVbo_ = 0;
-    ugl::Target plateT_, lightT_, bloomA_, bloomB_;  // the plates (carved, ink A, ink B), the plants' light, the fluorescence
+    ugl::Target plateT_, lightT_, bloomA_, bloomB_;
+    GLuint tagTex_ = 0;             // the plates' second texture: each element's tag (its neon on the drop)  // the plates (carved, ink A, ink B), the plants' light, the fluorescence
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
 
@@ -103,6 +104,7 @@ private:
     // linear: the paper, the key block's ink, the world's two glow inks, the drop's third ink, slow motion's ink, the
     // seven blocks
     vec3 paper_, paperT_, key_, keyT_, glow_[2], glowT_[2], dropInk_, dropInkT_, slowInk_, slowInkT_, piece_[7], pieceT_[7];
+    vec3 neon_[4], neonT_[4];       // the drop's neon inks
     bool colSet_ = false;
     uint64_t seed_ = 1, trunkSeed_ = 0x7F0E57ull, forestSeed_ = 0;
     float seedF_ = 0.f, groundSeed_ = 0.f;
@@ -121,7 +123,7 @@ private:
     bool dropMode_ = false;
     float dropT_ = 99.f, fest_ = 0.f, waveT_ = 99.f, waveK_ = 0.f;
     float dropInkK_ = 0.f;          // the drop's third ink on the print (0..1)
-    float blaze_ = 0.f;             // the drop's blacklight: the fluorescent inks blazing (0..1)
+    float blaze_ = 0.f;             // the drop's blacklight: the forest's cuts lit in neon (0..1)
     float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
     double time_ = 0.0;
