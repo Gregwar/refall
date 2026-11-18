@@ -10,6 +10,25 @@ brightness, density...) and the run's seed, never one of the last 10 played (whi
 moves on to the next. Every universe ships a few curated **variants**, picked per song or forced
 (`--universe VECTOR:AMBER`, `--universe SUMI:AIZOME`); the bottom-left corner shows `UNIVERSE · VARIANT`.
 
+Disabled for now (not built; their code stays in the repository):
+
+| Universe | Status |
+|---|---|
+| SYNTHWAVE | To be redesigned (minimal neon) |
+| CLOUDSCAPE | To be reworked (nights only) |
+| MAGNETS | Iron filings on paper; not convincing yet, waiting for a better idea |
+| GARDEN (smooth) | Replaced by its 16-bit version, now GARDEN (`src/universes/garden16/`) |
+| SUNPRINT | A sheet turning between two tints, keeping the old one under the stack; to be judged later |
+| EMBROIDERY | Cross-stitch on aida; to be judged later |
+| SUSHI | Maki in a bento box fed to kawaii cats; on hold |
+| RIPPLES | Cut stone blocks in still water seen from above, rippled by every move; on hold |
+| STAR CHART | An engraved celestial map filling with constellations; replaced by CELESTIAL OCEAN |
+| STAINED GLASS | A cathedral window glazed by molten glass from the cleared rows; disabled |
+| GROCERIES | A checkout counter seen from above, cleared rows packed into bags; disabled |
+| MUSIC BOX | A cylinder music box pinned with the cleared rows; disabled, not convincing yet |
+| SPECIMEN | Lumps of living tissue on a dark bench, loupes looking into them; disabled |
+| MICROSCOPE | A micrograph's field of view, the pieces colonies of living cells; disabled, PIXEL takes its campaign song |
+
 ## VECTOR
 
 ![VECTOR](universes/vector.jpg)
