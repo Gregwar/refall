@@ -8,6 +8,10 @@ playlists.
 uvx refall
 ```
 
+On Windows, you can also just download and run the standalone
+[Refall-windows-x64.exe](https://github.com/Gregwar/refall/releases/latest/download/Refall-windows-x64.exe):
+one file, nothing to install.
+
 ## Universes
 
 Each song plays in one of them, in one of its variants.
