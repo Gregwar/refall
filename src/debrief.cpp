@@ -17,7 +17,7 @@ float easeInOutSine(float t) { t = std::clamp(t, 0.f, 1.f); return 0.5f - 0.5f *
 constexpr float INPUT_AFTER = 1.5f;  // keys are ignored this long (a key held from the game)
 constexpr float LEAVE = 0.6f;        // the debrief fades to black...
 constexpr float ENTER = 0.7f;        // ...then the Voyage's screen fades in
-constexpr float COLOR_AT = 1.4f, COLOR_FOR = 2.5f; // a stage cleared: the logo takes its colours
+constexpr float COLOR_AT = 0.6f, COLOR_FOR = 1.2f; // a stage cleared: the logo takes its colours
 
 } // namespace
 
