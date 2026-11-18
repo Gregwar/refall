@@ -579,7 +579,31 @@ void SonarUniverse::onEvent(const GameEvent& ev, const Game& game) {
         motes_.push_back(m);
         break;
     }
+    case GameEvent::Lock: {
+        // the locked blocks keep the bubbles they had while falling
+        for (auto& c : ev.cells) {
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            for (int i = 0; i < fallN_; i++)
+                if (fall_[i].x == c.x && fall_[i].y == c.y) seeds_[c.y][c.x] = fall_[i].seed;
+        }
+        fallN_ = 0;
+        break;
+    }
     case GameEvent::Clear: {
+        // the blocks' seeds move down with their rows, like the game's
+        {
+            bool cleared[Game::H] = {};
+            for (auto& c : ev.cells)
+                if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
+            float nb[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (cleared[y]) continue;
+                std::memcpy(nb[dst], seeds_[y], sizeof(seeds_[y]));
+                dst--;
+            }
+            std::memcpy(seeds_, nb, sizeof(seeds_));
+        }
         // the row's blocks sink into the dark; its light sinks on to a spot of the seabed, which stays charted
         std::vector<int> rows;
         for (auto& c : ev.cells)
@@ -666,19 +690,30 @@ void SonarUniverse::buildBoard(const Game& g) {
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             const float fl = std::pow(saturate(c.flash), 8.f);
-            addCell(p.x, p.y, 0.5f, 0, pieceCol_[c.type], 1.f, fl, 0.f, (float)(x * 7 + y * 13 + c.type * 3) + 0.5f);
+            if (seeds_[y][x] == 0.f) seeds_[y][x] = (float)(x * 7 + y * 13 + c.type * 3) + 0.5f;
+            addCell(p.x, p.y, 0.5f, 0, pieceCol_[c.type], 1.f, fl, 0.f, seeds_[y][x]);
         }
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (g.cell(x, y).type < 0) seeds_[y][x] = 0.f;
     // the falling piece: exactly a locked block at its place
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        // (a new piece: new seeds, kept by its blocks once it locks)
+        if (fallN_ == 0 || fallType_ != p.type) pieceSeed_ += 4.f;
+        fallType_ = p.type;
         int k = 0;
         for (auto& c : cells) {
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy); // (whole above the well too: it spawns there)
-            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], 1.f, 0.f, 0.f, (float)(p.type * 4 + k++) + 100.5f);
+            const float sd = pieceSeed_ + (float)k;
+            fall_[k] = {c[0], c[1], sd};
+            addCell(w.x, w.y, 0.5f, 0, pieceCol_[p.type], 1.f, 0.f, 0.f, sd);
+            k++;
         }
+        fallN_ = 4;
     }
     // the previews
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
