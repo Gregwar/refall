@@ -73,11 +73,11 @@ StructureProfile structureProfile(const Analysis& an, double t) {
     return p;
 }
 
-float gravityPace(const Analysis& an, double t) {
+float gravityPace(const Analysis& an, double t, bool expert) {
     if (an.segments.empty()) return 0.8f;
     switch (an.segments[an.segmentAt(t)].kind) {
-    case SEG_BREAK: return 0.4f;
-    case SEG_INTRO: case SEG_OUTRO: return 0.5f;
+    case SEG_BREAK: return expert ? 1.f : 0.4f; // (EXPERT: no breather, the calm parts at x1)
+    case SEG_INTRO: case SEG_OUTRO: return expert ? 1.f : 0.5f;
     case SEG_VERSE: return 0.8f;
     case SEG_BUILD: return 1.f;
     case SEG_CHORUS: return 1.2f;
