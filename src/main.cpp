@@ -353,8 +353,13 @@ private:
     // A Voyage run's first song starts at this share of its velocity, reached after WARMUP_SECONDS; the next songs
     // climb from the previous one's over NEXT_SONG_RAMP_SECONDS.
     static constexpr float WARMUP_VELOCITY = 0.35f, WARMUP_SECONDS = 30.f, NEXT_SONG_RAMP_SECONDS = 20.f;
+    // EXPERT's warm-ups are short: little time to settle in.
+    static constexpr float WARMUP_VELOCITY_EXPERT = 0.7f, WARMUP_SECONDS_EXPERT = 10.f, NEXT_SONG_RAMP_SECONDS_EXPERT = 8.f;
     // Free play: every song starts at this share of the level's velocity and climbs to it over its first seconds.
     static constexpr float FREE_WARMUP_VELOCITY = 0.5f, FREE_WARMUP_SECONDS = 20.f;
+    static constexpr float FREE_WARMUP_VELOCITY_EXPERT = 0.8f, FREE_WARMUP_SECONDS_EXPERT = 8.f;
+    // A song's section pace is at most x1 over its first seconds (EXPERT: fewer).
+    static constexpr float CALM_START_SECONDS = 20.f, CALM_START_SECONDS_EXPERT = 8.f;
     static constexpr float OUT_HIDE = 1.6f;  // the game fades away
     static constexpr float OUT_DARK = 2.0f;  // the world fades to black, ending with the song
     static constexpr float IN_CARD = 0.4f, IN_HOLD = 1.4f, IN_SHRINK = 3.2f, IN_WORLD = 5.2f, IN_SHOW = 6.8f, IN_END = 8.4f;
@@ -792,7 +797,10 @@ void App::updateGravity(double songTime, float dt) {
     // Free play (levels rising with the lines): each song warms up, from a share of the level's velocity to all of it.
     const bool freeLevels = mode_ == MODE_FREE && game_.fixedLevel() <= 0.f && !viewer_;
     float v = game_.velocity();
-    if (freeLevels) v = std::max(1.f, v * lerpf(FREE_WARMUP_VELOCITY, 1.f, smoothstepf(0.f, FREE_WARMUP_SECONDS, (float)songTime)));
+    const bool expert = game_.runDifficulty() == DIFF_EXPERT;
+    if (freeLevels)
+        v = std::max(1.f, v * lerpf(expert ? FREE_WARMUP_VELOCITY_EXPERT : FREE_WARMUP_VELOCITY, 1.f,
+                                    smoothstepf(0.f, expert ? FREE_WARMUP_SECONDS_EXPERT : FREE_WARMUP_SECONDS, (float)songTime)));
     // Test hook: REFALL_CLIP_VELOCITY=V falls at velocity V (tools/demo.py ramps it up), with no 20G unless REFALL_CLIP_20G=1
     const float clipVel = clipRamp("REFALL_CLIP_VELOCITY", songTime, 0.f);
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
@@ -802,7 +810,6 @@ void App::updateGravity(double songTime, float dt) {
     // top velocity, in a chorus too), a piece falls to the stack the moment it appears; the rest of the song keeps a
     // visible fall. The last song of HARD's later stages has some, every song of the finale; free play has it from
     // level 30 on (EXPERT 24, once the song has warmed up).
-    const bool expert = game_.runDifficulty() == DIFF_EXPERT;
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime, expert) : 0.f;
     static const bool clip20G = std::getenv("REFALL_CLIP_20G") && std::getenv("REFALL_CLIP_20G")[0] == '1';
     const float from = clipVel > 0.f ? (clip20G ? Game::TWENTY_G : -1.f)
@@ -830,9 +837,10 @@ void App::updateGravity(double songTime, float dt) {
     }
     const Analysis& an = track_->analysis;
     // Section pace, in rows per beat (gravityPace: one constant per section, x0.4 in a break .. x1.3 in a
-    // drop; EXPERT has no slower part than x1 but the verses' x0.8). Eased over ~0.25 s; at most x1 in the first 20 s of a song.
+    // drop; EXPERT has no slower part than x1 but the verses' x0.8). Eased over ~0.25 s; at most x1 in the first 20 s of a song
+    // (8 s on EXPERT).
     float want = gravityPace(an, songTime + 0.25, expert);
-    if (trackAge_ < 20.f) want = std::min(want, 1.f);
+    if (trackAge_ < (expert ? CALM_START_SECONDS_EXPERT : CALM_START_SECONDS)) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
     // Velocity scaling: x10 at 20, x19.5 at 40 (the top velocity), capped at 60 rows per second.
     const float MAX_ROWS_PER_SEC = 60.f;
@@ -2374,12 +2382,13 @@ void App::campaignSongStarted() {
     run_.songStartLines = game_.lines();
     const CampaignSong& s = st->songs[k];
     run_.velTo = s.level[run_.diff];
+    const bool expert = run_.diff == DIFF_EXPERT;
     if (k == run_.from) { // the run's first song: a chill warm-up first
-        run_.velFrom = std::max(1.f, run_.velTo * WARMUP_VELOCITY);
-        run_.velRamp = WARMUP_SECONDS;
+        run_.velFrom = std::max(1.f, run_.velTo * (expert ? WARMUP_VELOCITY_EXPERT : WARMUP_VELOCITY));
+        run_.velRamp = expert ? WARMUP_SECONDS_EXPERT : WARMUP_SECONDS;
     } else {
         run_.velFrom = std::min(run_.velTo, st->songs[k - 1].level[run_.diff]);
-        run_.velRamp = NEXT_SONG_RAMP_SECONDS;
+        run_.velRamp = expert ? NEXT_SONG_RAMP_SECONDS_EXPERT : NEXT_SONG_RAMP_SECONDS;
     }
     game_.setFixedLevel(run_.velFrom);
     lastLevel_ = game_.level();
