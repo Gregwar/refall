@@ -14,8 +14,7 @@ drop...): pieces fall on the beat and the pace follows the song's energy. Play t
 like**: your own folders, YouTube playlists, or a Voyage of your own written as a simple file.
 
 ```sh
-uvx refall            # the title screen: VOYAGE or FREE PLAY
-uvx refall ~/Music    # free play on any folders, files and YouTube URLs
+uvx refall
 ```
 
 ## Universes
@@ -59,11 +58,10 @@ Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/ref
 
 ```sh
 pipx install refall        # or: uv tool install refall
-refall ~/Music     # with no argument it plays the default YouTube playlist
+refall
 ```
 
-Quote YouTube URLs (`&` is special in the shell). YouTube also needs a JavaScript runtime
-([Deno](https://deno.com) or Node.js) on your system.
+YouTube needs a JavaScript runtime ([Deno](https://deno.com) or Node.js) on your system.
 
 ## Controls
 
@@ -96,7 +94,7 @@ Both ship with the package (`uvx --from refall refall-scope`). Every option and 
 ```sh
 sudo apt install cmake g++ libglfw3-dev libglew-dev    # Debian/Ubuntu
 cmake -S . -B build && cmake --build build -j
-./build/refall ~/Music
+./build/refall
 ```
 
 `-DREFALL_DISABLED_UNIVERSES=""` also builds the universes left out by default (see [docs/universes.md](docs/universes.md)).
