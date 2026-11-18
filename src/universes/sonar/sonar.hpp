@@ -67,23 +67,33 @@ private:
     struct Sink { float x, y; vec3 col; float t, dur, delay; int kind; };
     std::vector<Sink> sinks_;
 
+    // ---- Fish: small schools crossing the glide's path, passed by as the camera glides on.
+    struct Fish { vec3 off, wob; float ph, rate, size, tail; };
+    struct School { vec3 c, v; float age = 0, life = 30.f, turn = 0; std::vector<Fish> fish; };
+    std::vector<School> schools_;
+    std::vector<Inst> fishInst_;
+    float schoolClock_ = 0.f;
+    void updateFish(float wdt);
+
     // ---- Drawing.
     std::vector<Inst> cells_;
     std::vector<MoteInst> moteInst_;
     void buildBoard(const Game& g);
-    void addCell(float x, float y, float half, int kind, const vec3& col, float alpha, float flash, float prog);
+    void addCell(float x, float y, float half, int kind, const vec3& col, float alpha, float flash, float prog, float seed = 0.f);
     void drawInst(GLuint prog, GLuint vao, GLuint vbo, const void* data, size_t bytes, size_t count);
 
     // ---- The HUD (its lettering: hudLine, the host letters it).
     void drawHud(const std::vector<HudRect>& panels);
+    void drawSub(const Frame& f);    // the wireframe submarine above the corner lettering
+    void line(float x0, float y0, float x1, float y1, float w, const vec3& c, float a);
     std::vector<float> shapes_;
     void flushShapes();
 
     // ---- GL.
     GLuint progWater_ = 0, progMesh_ = 0, progSnow_ = 0, progWell_ = 0, progPiece_ = 0, progMote_ = 0, progDown_ = 0, progBlur_ = 0, progFinal_ = 0,
-           progShape_ = 0;
+           progShape_ = 0, progFish_ = 0;
     GLuint quadVbo_ = 0, pieceVao_ = 0, pieceVbo_ = 0, moteVao_ = 0, moteVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0,
-           meshVao_ = 0, meshVbo_ = 0, meshIbo_ = 0, snowVao_ = 0, snowVbo_ = 0;
+           meshVao_ = 0, meshVbo_ = 0, meshIbo_ = 0, snowVao_ = 0, snowVbo_ = 0, fishVao_ = 0, fishVbo_ = 0;
     GLsizei meshCount_ = 0, snowCount_ = 0;
     void setWorldUniforms(GLuint prog);
     ugl::Target sceneT_, bloomA_, bloomB_;
@@ -92,8 +102,8 @@ private:
 
     // ---- Song, variant.
     int variant_ = 0;
-    vec3 waterTop_, waterLow_, echo_, echoCity_, dropEcho_;
-    vec3 waterTopT_, waterLowT_, echoT_, echoCityT_, dropEchoT_;
+    vec3 waterTop_, waterLow_, echo_, echoCity_, dropEcho_, stone_;
+    vec3 waterTopT_, waterLowT_, echoT_, echoCityT_, dropEchoT_, stoneT_;
     vec3 pieceCol_[7], pieceColT_[7];
     bool colSet_ = false;
     uint64_t seed_ = 1;
