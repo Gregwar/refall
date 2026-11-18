@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""The REFALL logo drawn at any size: a dark disc in a gold ring at the heart of a rosette of 12 glass kites, the
-stages' colours in rainbow order round the wheel as on the title menu, the word letter-spaced inside (the window icon,
-data/icon.png, is this drawing). Two looks: "color" (the logo) and "outline" (its white contours only, to lay over a
-picture).
+"""The REFALL logo drawn at any size, as the game draws it (Menu::drawOrbitLogo, src/menuwin.cpp): a banded blue
+planet lit from the top left, a tilted gold ring round it (its far half behind the planet, its near half in front),
+pieces of the game riding the ring, the word letter-spaced under it. Two looks: "color" (the logo) and "outline" (its
+white contours only, to lay over a picture). The window icon is the planet and its ring alone, steeper, to fill the
+square (one piece from 64 px; none below, too small to read).
 
 usage: tools/logo.py OUT.png [--size PX] [--outline]
-       tools/logo.py --inc src/logo.inc [--size PX]   (the debrief screens' two images, embedded in the game)
        tools/logo.py --icon                           (the window icon: data/icon.png and src/icon.inc)
 """
 import argparse
@@ -13,145 +13,175 @@ import math
 import os
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.path.join(ROOT, "src", "embed", "JosefinSans-Light.ttf")
-# the stages' colours (STAGE_COL, src/menu.cpp)
-STAGE_COL = [(72, 164, 254), (250, 150, 24), (174, 90, 253), (144, 222, 54), (232, 84, 242), (39, 226, 147),
-             (252, 80, 127), (0, 178, 160), (250, 78, 185), (22, 191, 244), (204, 203, 20), (92, 60, 255),
-             (240, 176, 16), (120, 232, 245), (252, 114, 64)]
-GOLD = (232, 192, 106)
 ICON_SIZES = (16, 32, 48, 64, 128)
+SS = 2  # supersampling
+
+# the ring's bands (inner and outer radius, as a fraction of the ring's ellipse; opacity; colour)
+BANDS = [(0.76, 0.80, 0.22, 0xb08850), (0.81, 0.90, 0.42, 0xc89a58), (0.905, 0.955, 0.8, 0xe8c06a),
+         (0.975, 0.99, 0.9, 0xf6dca0)]
+# the pieces on the ring: their cells, colour, place on the ring (radians: > 0..pi the near half) and turn
+PIECES = [([(-1, 0), (0, 0), (1, 0), (0, -1)], 0xe854f2, 3.6, 1.7),        # T
+          ([(-1, 0), (0, 0), (1, 0), (1, -1)], 0xfa9618, 2.35, 1.7),       # L
+          ([(-1, 0), (0, 0), (0, -1), (1, -1)], 0xae5afd, 5.6, 0.4),       # S
+          ([(-0.5, -0.5), (0.5, -0.5), (-0.5, 0.5), (0.5, 0.5)], 0x48a4fe, 0.55, 0.4)]  # O
+ICON_PIECE = [([(-1, 0), (0, 0), (1, 0), (1, -1)], 0xfa9618, 1.0, -0.62)]
 
 
-def _hue(c):
-    mx, d = max(c), max(c) - min(c)
-    r, g, b = c
-    if d == 0:
-        return 0.0
-    return ((g - b) / d + 6) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4
+def _c(h):
+    return np.array([(h >> 16) & 255, (h >> 8) & 255, h & 255], np.float32)
 
 
-# the petals as on the title menu (Worlds::kalTitle): the stages' colours sorted by hue, 12 picked evenly round the wheel
-_RAINBOW = sorted(STAGE_COL, key=_hue)
-PETALS = [_RAINBOW[i * len(_RAINBOW) // 12] for i in range(12)]
+class _Canvas:
+    """S x S premultiplied RGBA (float, 0..255 for colour, 0..1 for alpha), painted back to front."""
+
+    def __init__(self, S):
+        self.S = S
+        self.y, self.x = np.mgrid[0:S, 0:S].astype(np.float32) + 0.5
+        self.rgb = np.zeros((S, S, 3), np.float32)
+        self.a = np.zeros((S, S), np.float32)
+
+    def over(self, rgb, a):
+        a = np.clip(a, 0, 1)
+        self.rgb = self.rgb * (1 - a[..., None]) + np.asarray(rgb, np.float32) * a[..., None]
+        self.a = self.a * (1 - a) + a
+
+    def image(self, N):
+        if self.S == N:
+            rgb = self.rgb / np.maximum(self.a, 1e-6)[..., None]
+            return Image.fromarray(np.dstack([np.clip(rgb, 0, 255), np.clip(self.a * 255, 0, 255)]).astype(np.uint8), "RGBA")
+        rgb = self.rgb / np.maximum(self.a, 1e-6)[..., None]
+        im = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), np.clip(self.a * 255, 0, 255)]).astype(np.uint8), "RGBA")
+        return im.resize((N, N), Image.LANCZOS)
 
 
-def _mix(c, d, k):
-    return tuple(a + (b - a) * k for a, b in zip(c, d))
+def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
+    """`t`: seconds into its motion (the planet turning, the pieces riding round, a light running on the ring)."""
+    S = N * ss
+    cv = _Canvas(S)
+    x, y = cv.x, cv.y
+    if icon:
+        cx, cy, R, tilt, ra, rb, pieces, cs0 = S / 2, S / 2, 0.31 * S, -0.62, 0.495 * S, 0.17 * S, ICON_PIECE, 0.058 * S
+        pieces = pieces if N >= 64 else []
+    else:
+        cx, cy, R, tilt, ra, rb, pieces, cs0 = S / 2, 0.40 * S, 0.165 * S, -0.24, 0.40 * S, 0.087 * S, PIECES, 0.017 * S
+    ct, st = math.cos(tilt), math.sin(tilt)
+    dx, dy = x - cx, y - cy
+    ux, uy = dx * ct + dy * st, -dx * st + dy * ct
+    rr = np.sqrt((ux / ra) ** 2 + (uy / rb) ** 2)
+    near = uy > 0
+    d = np.sqrt(dx * dx + dy * dy) / R  # the planet: < 1 inside
+    line = max(1.0, 0.0032 * S)  # an outline's width
+    white = _c(0xffffff)
+
+    def band_edge(v, lo, hi):  # antialiased inside [lo, hi] along the ring's radius (in pixels at its widest)
+        return np.clip(np.minimum(v - lo, hi - v) * ra / 1.2, 0, 1)
+
+    def ring(front):
+        sel = near if front else ~near
+        if outline:
+            for edge in (0.76, 0.99):
+                m = np.clip(1 - np.abs(rr - edge) * ra / line, 0, 1) * sel
+                if not front:
+                    m = m * (d > 1)
+                cv.over(white, m)
+            return
+        lit = 1.0 if front else 0.55
+        for lo, hi, al, c in BANDS:
+            cv.over(_c(c) * lit, band_edge(rr, lo, hi) * sel * al)
+        if t > 0:  # a light running round it
+            th = (0.35 * t) % (2 * math.pi)
+            if (th < math.pi) == front:
+                ex, ey = ra * 0.93 * math.cos(th), rb * 0.93 * math.sin(th)
+                gx, gy = cx + ex * ct - ey * st, cy + ex * st + ey * ct
+                g = np.exp(-((x - gx) ** 2 + (y - gy) ** 2) / (2 * (0.03 * S) ** 2)) * 0.35
+                cv.rgb += _c(0xffd890) * g[..., None] * cv.a[..., None]
+
+    def planet():
+        if outline:
+            cv.over(white, np.clip(1 - np.abs(d - 1) * R / line, 0, 1))
+            return
+        edge = np.clip((1 - d) * R / 1.2, 0, 1)
+        nx, ny = dx / R, dy / R
+        nz = np.sqrt(np.clip(1 - nx * nx - ny * ny, 0, 1))
+        py, px = -nx * st + ny * ct, nx * ct + ny * st
+        lon = np.arctan2(px, nz) + 0.12 * t
+        band = 0.5 + 0.5 * np.sin(py * 10 + 0.7 * np.sin(lon * 2 + py * 3))
+        fine = (0.5 + 0.5 * np.sin(py * 31 + 0.4 * np.sin(lon * 3))) ** 8
+        base = _c(0x2032a8) + (_c(0x6a80ff) - _c(0x2032a8)) * band[..., None]
+        base = base + (_c(0xb8c8ff) - base) * (0.35 * fine)[..., None]
+        base = base + (_c(0x7a4ad0) - base) * (0.35 * np.abs(py) ** 2)[..., None]
+        lam = np.clip(nx * -0.52 + ny * -0.62 + nz * 0.59, 0, 1)
+        rim = (1 - nz) ** 3
+        col = base * ((0.24 if icon else 0.14) + 0.9 * lam)[..., None]
+        col = col + (_c(0x8cc4ff) - col) * (rim * (0.25 + 0.6 * lam))[..., None]
+        cv.over(col, edge)
+
+    def piece(cells, colour, th, rot):
+        ex, ey = ra * 0.93 * math.cos(th), rb * 0.93 * math.sin(th)
+        px0, py0 = cx + ex * ct - ey * st, cy + ex * st + ey * ct
+        depth = math.sin(th)
+        cs = cs0 * (1 + 0.25 * depth)
+        c = _c(colour) * (0.7 + 0.15 * (depth + 1))
+        cr, sr = math.cos(rot), math.sin(rot)
+        for a, b in cells:
+            qx = px0 + (a * cr - b * sr) * cs * 1.1
+            qy = py0 - 0.25 * cs + (a * sr + b * cr) * cs * 1.1
+            lx, ly = (x - qx) * cr + (y - qy) * sr, -(x - qx) * sr + (y - qy) * cr
+            inner = np.minimum(cs / 2 - np.abs(lx), cs / 2 - np.abs(ly))
+            if outline:
+                cv.over(white, np.clip(1 - np.abs(inner) / (line * 0.7), 0, 1))
+            else:
+                shade = np.clip(0.5 - (lx * 0.6 + ly * 0.8) / cs, 0, 1)[..., None]
+                cv.over(np.clip(c * (0.75 + 0.45 * shade), 0, 255), np.clip(inner / 1.2, 0, 1))
+
+    pieces = [(cells, col, (th + 0.12 * t) % (2 * math.pi), rot + 0.4 * t * (1 if k % 2 else -1)) for k, (cells, col, th, rot) in enumerate(pieces)]
+    behind = [p for p in pieces if math.sin(p[2]) < 0]
+    front = [p for p in pieces if math.sin(p[2]) >= 0]
+    ring(False)
+    for p in behind:
+        if not outline:  # (their contours would show through the planet's)
+            piece(*p)
+    planet()
+    ring(True)
+    for p in front:
+        piece(*p)
+    im = cv.image(N)
+    if word:
+        _word(im, N, word, ss=ss)
+    return im
 
 
-def _tri(acc, pts, cols):
-    """A triangle into acc (S x S x 4, float), its colours (RGB, 0..255) interpolated between its corners, opaque."""
-    (x0, y0), (x1, y1), (x2, y2) = pts
-    xa, xb = int(max(0, min(x0, x1, x2))), int(min(acc.shape[1] - 1, max(x0, x1, x2))) + 1
-    ya, yb = int(max(0, min(y0, y1, y2))), int(min(acc.shape[0] - 1, max(y0, y1, y2))) + 1
-    y, x = np.mgrid[ya:yb, xa:xb].astype(np.float32) + 0.5
-    den = (y1 - y2) * (x0 - x2) + (x2 - x1) * (y0 - y2)
-    w0 = ((y1 - y2) * (x - x2) + (x2 - x1) * (y - y2)) / den
-    w1 = ((y2 - y0) * (x - x2) + (x0 - x2) * (y - y2)) / den
-    w2 = 1 - w0 - w1
-    inside = (w0 >= 0) & (w1 >= 0) & (w2 >= 0)
-    c = np.asarray(cols, np.float32)
-    rgb = w0[..., None] * c[0] + w1[..., None] * c[1] + w2[..., None] * c[2]
-    r = acc[ya:yb, xa:xb]
-    r[inside, :3] = rgb[inside]
-    r[inside, 3] = 255
+def _word(im, N, word, ink=(255, 255, 255, 255), ss=SS):
+    """The word letter-spaced, centred under the planet."""
+    big = Image.new("RGBA", (N * ss, N * ss), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    font = ImageFont.truetype(FONT, int(0.095 * N * ss))
+    sp = 0.05 * N * ss
+    ws = [d.textlength(ch, font=font) for ch in word]
+    xx = (N * ss - sum(ws) - sp * (len(word) - 1)) / 2
+    for ch, w in zip(word, ws):
+        d.text((xx, 0.80 * N * ss), ch, font=font, fill=ink, anchor="ls")
+        xx += w + sp
+    im.alpha_composite(big.resize((N, N), Image.LANCZOS))
 
 
-def _glass(acc, pts, c):
-    """A kite shaded as the menu's (Worlds::kite): darker at the heart, lighter at the tip, its right half a little
-    darker than its left."""
-    ix, lx, ox, rx = pts
-    inner, outer = _mix(c, (0, 0, 0), 0.45), _mix(c, (255, 255, 255), 0.35)
-    _tri(acc, [ix, lx, ox], [inner, c, outer])
-    _tri(acc, [ix, ox, rx], [inner, outer, _mix(c, (0, 0, 0), 0.15)])
+def color(N, word="REFALL", t=0.0, ss=SS):
+    """The logo, N x N RGBA on a transparent ground (`t`: seconds into its motion)."""
+    return _draw(N, word, False, t=t, ss=ss)
 
 
-def _kites(S):
-    c = S / 2
-    r0, r1, h = 0.30 * S, 0.50 * S, 0.21
-    for i in range(12):
-        a = -math.pi / 2 + i * 2 * math.pi / 12
-        m = (r0 + r1) / 2
-        yield i, [(c + math.cos(a) * r0, c + math.sin(a) * r0), (c + math.cos(a - h) * m, c + math.sin(a - h) * m),
-                  (c + math.cos(a) * r1, c + math.sin(a) * r1), (c + math.cos(a + h) * m, c + math.sin(a + h) * m)]
+def outline(N, t=0.0, ss=SS):
+    """Its white contours alone (the planet, the ring's edges, the pieces, the word), as an L image."""
+    return _draw(N, "REFALL", True, t=t, ss=ss).getchannel("A")
 
 
-def _word(d, S, word="REFALL"):
-    """The word's font, letters and their x, its baseline: letter-spaced, fitted inside the disc, capitals centred (a
-    single letter, the small icons' R, larger: about half the disc, centred on its own ink)."""
-    c, R = S / 2, 0.34 * S
-    if len(word) == 1:
-        f = ImageFont.truetype(FONT, int(S * 0.46))
-        bb = d.textbbox((0, 0), word, font=f, anchor="ls")
-        return f, [(word, c - (bb[0] + bb[2]) / 2)], c - (bb[1] + bb[3]) / 2
-    size = int(S * 0.14)
-    f = ImageFont.truetype(FONT, size)
-    tr = size * 0.18
-    ws = [d.textlength(ch, font=f) for ch in word]
-    tw = sum(ws) + tr * (len(word) - 1)
-    k = min(1.0, 1.6 * R / tw)
-    if k < 1:
-        size = int(size * k)
-        f = ImageFont.truetype(FONT, size)
-        tr *= k
-        ws = [d.textlength(ch, font=f) for ch in word]
-        tw = sum(ws) + tr * (len(word) - 1)
-    bb = d.textbbox((0, 0), word, font=f, anchor="ls")
-    y = c - (bb[1] + bb[3]) / 2
-    xs, x = [], c - tw / 2
-    for w in ws:
-        xs.append(x)
-        x += w + tr
-    return f, list(zip(word, xs)), y
-
-
-def color(N, word="REFALL"):
-    """The logo, RGBA, N x N."""
-    S = 4 * N
-    acc = np.zeros((S, S, 4), np.float32)
-    for i, pts in _kites(S):
-        _glass(acc, pts, PETALS[i])
-    im = Image.fromarray((acc + 0.5).astype(np.uint8), "RGBA")
-    d = ImageDraw.Draw(im)
-    c, R = S / 2, 0.34 * S
-    for _, pts in _kites(S):
-        d.line(pts + [pts[0]], fill=(10, 10, 16, 255), width=max(2, S // 110), joint="curve")
-    d.ellipse([c - R, c - R, c + R, c + R], fill=(10, 10, 14, 255))
-    g = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    ImageDraw.Draw(g).ellipse([c - R * 0.8, c - R * 0.8, c + R * 0.8, c + R * 0.8], fill=GOLD + (60,))
-    im = Image.alpha_composite(im, g.filter(ImageFilter.GaussianBlur(S / 18)))
-    d = ImageDraw.Draw(im)
-    d.ellipse([c - R, c - R, c + R, c + R], outline=GOLD + (255,), width=max(3, int(S * 0.022)))
-    f, letters, y = _word(d, S, word)
-    for ch, x in letters:
-        d.text((x, y), ch, font=f, fill=(255, 255, 255, 255), anchor="ls")
-    return im.resize((N, N), Image.LANCZOS)
-
-
-def outline(N):
-    """The logo's contours in white (alpha only matters: L, N x N): the kites, the ring, the letters' edges."""
-    S = 4 * N
-    lw = max(2, int(S * 0.006))
-    m = Image.new("L", (S, S), 0)
-    d = ImageDraw.Draw(m)
-    c, R = S / 2, 0.34 * S
-    for _, pts in _kites(S):
-        d.line(pts + [pts[0]], fill=255, width=lw, joint="curve")
-    # the disc hides the kites' inner tips, as in the logo
-    d.ellipse([c - R, c - R, c + R, c + R], fill=0)
-    d.ellipse([c - R, c - R, c + R, c + R], outline=255, width=int(lw * 1.5))
-    # the letters hollow: their ink, minus itself shrunk by a line's width
-    t = Image.new("L", (S, S), 0)
-    td = ImageDraw.Draw(t)
-    f, letters, y = _word(td, S)
-    for ch, x in letters:
-        td.text((x, y), ch, font=f, fill=255, anchor="ls")
-    inner = t.filter(ImageFilter.MinFilter(2 * (lw // 2) + 1))
-    m = ImageChops.lighter(m, ImageChops.subtract(t, inner))
-    return m.resize((N, N), Image.LANCZOS)
+def icon(N):
+    """The window icon: the planet and its ring filling the square."""
+    return _draw(N, None, False, icon=True)
 
 
 def as_arrays(N):
@@ -161,55 +191,14 @@ def as_arrays(N):
     return col[..., :3] * a[..., None], a, np.asarray(outline(N), np.float32) / 255.0
 
 
-def _packbits(b):
-    """Bytes run-length coded: a byte h then, h < 128, h + 1 literal bytes; h >= 128, one byte repeated h - 126 times."""
-    b = np.asarray(b, np.uint8).reshape(-1)
-    out, i, n = bytearray(), 0, len(b)
-    while i < n:
-        j = i
-        while j + 1 < n and b[j + 1] == b[i] and j + 1 - i < 129:
-            j += 1
-        if j > i:
-            out += bytes((128 + (j - i + 1) - 2, int(b[i])))
-            i = j + 1
-        else:
-            s = i
-            while i < n and i - s < 128 and not (i + 1 < n and b[i + 1] == b[i]):
-                i += 1
-            out.append(i - s - 1)
-            out += b[s:i].tobytes()
-    return bytes(out)
-
-
-def write_inc(path, N):
-    """The debrief screens' images as C arrays (src/logo.inc): the colour logo (premultiplied RGBA, its 4 planes one
-    after the other) and the contours' alpha (one plane: the game adds their glow), N x N, run-length coded."""
-    col = np.asarray(color(N), np.float32) / 255.0
-    col[..., :3] *= col[..., 3:]
-    col = (col * 255 + 0.5).astype(np.uint8)
-    parts = [("LOGO_COLOR_RLE", b"".join(_packbits(col[..., c]) for c in range(4))),
-             ("LOGO_CONTOURS_RLE", _packbits(np.asarray(outline(N), np.uint8)))]
-    with open(path, "w") as f:
-        f.write(f"// Generated by tools/logo.py --inc src/logo.inc --size {N}: the REFALL logo for the debrief screens. The\n"
-                "// colour logo (premultiplied RGBA, plane after plane) and its white contours (alpha), N x N, run-length coded:\n"
-                "// a byte h, then h + 1 literal bytes when h < 128, else one byte repeated h - 126 times.\n"
-                f"#pragma once\n#include <cstdint>\n\nstatic const int LOGO_SIZE = {N};\n")
-        for name, data in parts:
-            f.write(f"\nstatic const uint8_t {name}[{len(data)}] = {{\n")
-            for k in range(0, len(data), 40):
-                f.write(",".join(str(v) for v in data[k:k + 40]) + ",\n")
-            f.write("};\n")
-
-
 def write_icon(png, inc):
-    """The window icon: the logo at 256 px (png) and embedded at 16 to 128 px (inc, RGBA), the sizes up to 64 with
-    an R in place of the word (too small to read)."""
-    color(256).save(png)
+    """The window icon: at 256 px (png) and embedded at 16 to 128 px (inc, RGBA)."""
+    icon(256).save(png)
     with open(inc, "w") as f:
-        f.write("// Generated by tools/logo.py --icon (the REFALL logo, as data/icon.png): the window icon at a few sizes,\n"
-                "// RGBA, an R in place of the word up to 64 px.\n#pragma once\n#include <cstdint>\n")
+        f.write("// Generated by tools/logo.py --icon (the REFALL planet, as data/icon.png): the window icon at a few sizes,\n"
+                "// RGBA.\n#pragma once\n#include <cstdint>\n")
         for n in ICON_SIZES:
-            data = np.asarray(color(n, "R" if n <= 64 else "REFALL"), np.uint8).reshape(-1)
+            data = np.asarray(icon(n), np.uint8).reshape(-1)
             f.write(f"\nstatic const uint8_t ICON_{n}[{len(data)}] = {{\n")
             for k in range(0, len(data), 32):
                 f.write(",".join(str(v) for v in data[k:k + 32]) + ",\n")
@@ -223,14 +212,11 @@ if __name__ == "__main__":
     ap.add_argument("out", nargs="?")
     ap.add_argument("--size", type=int)
     ap.add_argument("--outline", action="store_true")
-    ap.add_argument("--inc", help="write the debrief screens' embedded images (src/logo.inc)")
     ap.add_argument("--icon", action="store_true", help="write the window icon (data/icon.png and src/icon.inc)")
     args = ap.parse_args()
     if args.icon:
         write_icon(os.path.join(ROOT, "data", "icon.png"), os.path.join(ROOT, "src", "icon.inc"))
-    elif args.inc:
-        write_inc(args.inc, args.size or 640)
     elif args.out:
         (outline(args.size or 1024) if args.outline else color(args.size or 1024)).save(args.out)
     else:
-        ap.error("an output: OUT.png, --inc FILE or --icon")
+        ap.error("an output: OUT.png or --icon")
