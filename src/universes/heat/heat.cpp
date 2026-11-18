@@ -79,14 +79,14 @@ const Colormap MAPS[] = {
     {"WHITE HOT", {{0.f, 0x030303}, {0.35f, 0x404244}, {0.7f, 0xa6a8a8}, {1.f, 0xfdfdfb}}, 4},
     // 3: lava: a cave's blue-greys (black, slate, teal grey), then molten rock (wine, red, orange, yellow).
     {"LAVA", {{0.f, 0x020406}, {0.06f, 0x0b1217}, {0.12f, 0x293a41}, {0.18f, 0x2b2c31}, {0.26f, 0x48222a},
-              {0.36f, 0x7c1b1e}, {0.46f, 0xb82a18}, {0.58f, 0xe55616}, {0.72f, 0xf99424}, {0.86f, 0xffd062},
-              {1.f, 0xfffbea}}, 11},
+              {0.36f, 0x7c1b1e}, {0.46f, 0xb82a18}, {0.58f, 0xe55616}, {0.72f, 0xf28e22}, {0.86f, 0xf6bc52},
+              {1.f, 0xfbe0a4}}, 11},
     // 4: blaze: ironbow burning, its cold end lifted into glowing violet and magenta (the cave lit by the heat).
     {"BLAZE", {{0.f, 0x14061f}, {0.08f, 0x2c0c4e}, {0.18f, 0x561478}, {0.3f, 0x8c1d82}, {0.42f, 0xc4305e},
                {0.55f, 0xe8602a}, {0.7f, 0xf7981c}, {0.85f, 0xfdd050}, {1.f, 0xfffbea}}, 9},
     // 5: glow (hot metal): black, smoky brown red, deep red, red, orange, yellow, white.
     {"GLOW", {{0.f, 0x030102}, {0.1f, 0x1c1416}, {0.2f, 0x4a1c16}, {0.3f, 0x7a1a14}, {0.42f, 0xb02a12}, {0.55f, 0xdc4a10},
-              {0.68f, 0xf47c18}, {0.8f, 0xfcb030}, {0.92f, 0xfee88a}, {1.f, 0xfffdf4}}, 10},
+              {0.68f, 0xf07818}, {0.8f, 0xf4a42c}, {0.92f, 0xf8d27a}, {1.f, 0xfbe6b4}}, 10},
 };
 
 // The variants: the camera's palette, the drop's palette, the room's temperature and its grain.
