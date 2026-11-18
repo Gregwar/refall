@@ -1,8 +1,9 @@
 #pragma once
 // RAIN shaders: the rainy street at dusk behind everything (a procedural, rain-blurred city with its neon or
-// lanterns, the far rain, the wet street mirroring it in puddles rippled by the drops, the well's dark backing),
-// instanced flat shapes (the near rain's streaks, splashes, drips, the ghost and the HUD's marks), the wet glazed
-// tiles, and SDF type.
+// lanterns, haze and bokeh, a cold light shaft, the far rain lit by the lights it falls through, the wet street
+// mirroring it in puddles rippled by the drops, the well's dark slate glass with its faint grid, a vignette),
+// instanced flat shapes (the near rain's streaks, splashes, drips, the glass case's edges and beads, the ghost and the
+// HUD's marks), the porous sugar cubes (flat on the board, cubes seen up close in the foreground), and SDF type.
 
 namespace rain_shaders {
 
@@ -70,7 +71,7 @@ vec3 city(vec2 p, float blur) {
         float id = floor((p.x + 200.0) / w), fx = fract((p.x + 200.0) / w);
         float top = H + 9.0 + 9.0 * h11(id + 3.0);
         float m = smoothstep(blur + 0.12, -blur - 0.12, p.y - top) * smoothstep(-0.05, 0.2, fx) * smoothstep(1.0, 0.85, fx);
-        vec3 b = mix(col, uFar, 0.78);
+        vec3 b = mix(col, mix(uFar, uMist, 0.35), 0.62);
         vec2 g = vec2(0.62, 0.9);
         vec2 wid = floor(p / g), wf = fract(p / g) - 0.5;
         float lit = step(0.66, h21(wid + id * 1.7)) * step(p.y, top - 0.6) * step(h21(wid + id * 2.3 + 31.0), uLights);
@@ -115,6 +116,7 @@ vec3 city(vec2 p, float blur) {
             float on = uNeonGain * step(h11(id + 23.0), uLights);
             b += uNeon[k] * (core * 1.3 + letters * 0.8 + 0.5 * exp(-max(sd, 0.0) * 1.2)) * uGlow * on;
             col += uNeon[k] * 0.15 * exp(-max(sd, 0.0) * 0.7) * uGlow * (1.0 - m) * step(h11(id + 23.0), uLights);
+            b += uNeon[k] * 0.1 * exp(-max(sd, 0.0) * 0.35) * uGlow * on;
         } else if (uStyle == 2 && hs > 0.3) {
             // monsoon: strings of paper lanterns across the facades
             float ly = shopTop + 1.5 + 4.0 * h11(id + 4.0);
@@ -204,7 +206,7 @@ vec3 city(vec2 p, float blur) {
         float core = smoothstep(0.08 + blur, 0.0, abs(sd + 0.12) - 0.05);
         float letters = step(0.3, fract((p.y - uSignPos[i].y) * 0.9)) * smoothstep(0.0, -0.06, sd + 0.2) * step(abs(p.x - uSignPos[i].x), 0.18);
         col = mix(col, c * 0.25 + uNear * 0.3, smoothstep(0.03, -0.03, sd));
-        col += c * (core * 1.4 + letters * 1.1) * uGlow + c * 0.45 * exp(-max(sd, 0.0) * 0.6) * uGlow;
+        col += c * (core * 1.4 + letters * 1.1) * uGlow + c * 0.45 * exp(-max(sd, 0.0) * 0.6) * uGlow + c * 0.14 * exp(-max(sd, 0.0) * 0.18) * uGlow;
     }
     // bokeh: lights out of focus, drifting a little
     {
@@ -217,6 +219,20 @@ vec3 city(vec2 p, float blur) {
         float on = step(0.62, h21(id + 11.0)) * smoothstep(H + 1.0, H + 4.0, p.y);
         col += uNeon[int(h21(id + 5.0) * 3.99)] * on * 0.12 * smoothstep(r, r * 0.75, d) * uGlow;
     }
+    if (blur < 0.2) {
+        vec2 g = vec2(5.3, 4.6);
+        vec2 bp = p + vec2(-uTime * 0.08, uTime * 0.02);
+        vec2 id = floor(bp / g), f = fract(bp / g) - 0.5;
+        vec2 o = vec2(h21(id + 2.3), h21(id + 8.1)) - 0.5;
+        float r = 0.55 + 0.6 * h21(id + 4.9);
+        float d = length((f - o * 0.5) * g);
+        float on = step(0.55, h21(id + 13.0)) * smoothstep(H + 2.0, H + 6.0, p.y);
+        float disc = smoothstep(r, r * 0.88, d) * (0.6 + 0.4 * smoothstep(r * 0.5, r * 0.95, d));
+        col += mix(uNeon[int(h21(id + 6.0) * 3.99)], uWin, 0.25) * on * 0.07 * disc * uGlow;
+    }
+    // haze: the air thick with rain, glowing with the street's lights low down, softer in the distance
+    col = mix(col, mix(uMist, uSkyLow, 0.35) * 1.1, (uStyle == 1 ? 0.5 : 1.0) * (0.12 + 0.1 * smoothstep(H + 4.0, H + 16.0, p.y)));
+    col += mix(uMist, uWin, 0.3) * 0.08 * uGlow * exp(-abs(p.y - (H + 3.0)) * 0.35);
     // mist over the street
     col = mix(col, uMist, (uStyle == 2 ? 0.32 : uStyle == 1 ? 0.1 : 0.18) * exp(-(p.y - H) * 0.25));
     return col;
@@ -276,8 +292,18 @@ void main() {
     float r = rainLayer(p, 0.33, 2.6, 21.0, 0.25 + 0.55 * uRain, wpx) * 0.55 + rainLayer(p + 13.0, 0.21, 1.9, 15.0, 0.15 + 0.5 * uRain, wpx) * 0.35;
     // the storm: sheets of rain sweeping across in gusts
     float gust = mix(1.0, 0.35 + 1.6 * smoothstep(-0.2, 0.9, sin(p.x * 0.11 + p.y * 0.04 + uRainT * 1.7) * 0.7 + sin(p.x * 0.05 - uRainT * 0.6) * 0.3), uGust);
-    col += mix(uMist, vec3(0.9), 0.5) * r * (0.35 + 0.4 * uRain) * gust;
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col += mix(uMist, vec3(0.9), 0.5) * r * (0.35 + 0.4 * uRain) * gust * (0.6 + 2.2 * lum) + col * r * 0.6 * lum;
     col += mix(uMist, vec3(0.8), 0.4) * 0.07 * uGust * smoothstep(0.6, 1.4, gust); // the veil of a passing sheet
+    // a cold light from high above the well, a shaft through the rain (the rain lit in it)
+    {
+        float top = uViewC.y + 13.0;
+        float dd = top - p.y;
+        float w = 2.2 + dd * 0.32;
+        float shaft = exp(-pow(p.x / w, 2.0)) * smoothstep(26.0, 2.0, dd);
+        vec3 cool = mix(vec3(0.55, 0.7, 1.0), uMist, 0.3);
+        col += cool * shaft * (0.1 + 0.25 * r) * uGlow * (1.0 - 0.5 * uStorm);
+    }
     if (uWell > 0.5) {
         // the HUD columns veiled a little, the well's backing dark glass
         vec2 lc = vec2(-8.6, 1.8), rc = vec2(8.6, 3.4);
@@ -287,8 +313,19 @@ void main() {
         float soft = box(p, vec2(0.0, 0.0), vec2(5.3, 10.3), 0.6);
         col *= 1.0 - 0.35 * soft;
         float gy = clamp((p.y + 10.0) / 20.0, 0.0, 1.0);
-        vec3 panel = uPanel * mix(0.8, 1.15, gy) + uNeon[0] * 0.025 * smoothstep(-10.0, -4.0, -p.y);
-        col = mix(col, panel + col * 0.015, pan);
+        vec3 slate = mix(uMist, vec3(0.45, 0.52, 0.66), 0.6);
+        vec3 panel = uPanel * mix(0.8, 1.15, gy) + uNeon[0] * 0.025 * smoothstep(-10.0, -4.0, -p.y) + slate * mix(0.07, 0.13, gy);
+        // a faint grid etched in the glass, a soft reflection sweeping across it
+        vec2 gc = abs(fract(p + vec2(0.0, 0.0)) - 0.5);
+        float grid = smoothstep(0.5 - 1.3 / uUnitPx, 0.5 - 0.2 / uUnitPx, max(gc.x, gc.y)) * step(abs(p.x), 4.98) * step(abs(p.y), 9.98);
+        panel += vec3(0.6, 0.66, 0.82) * 0.055 * grid;
+        panel += mix(uNeon[1], vec3(1.0), 0.5) * 0.018 * smoothstep(1.2, 0.0, abs(p.x * 0.8 + p.y * 0.35 - 2.0));
+        col = mix(col, panel + col * 0.04, pan);
+    }
+    // the lens: a soft vignette
+    {
+        vec2 v = (vUv - 0.5) * vec2(1.0, 0.85);
+        col *= 1.0 - 0.38 * smoothstep(0.32, 0.75, length(v));
     }
     col = mix(col, uBridge, uBridgeK);
     col *= 1.0 - uDim;
@@ -354,21 +391,24 @@ void main() {
 }
 )";
 
-// Wet glazed ceramic tiles: one rounded tile per cell, a deep glaze in the piece's color, the light pooling at
-// the rim, the street's neon caught in a soft sheen, a film of water along the top edge, beads of water and a
-// rivulet sliding down the face (both with the tile's wetness).
+// Soft porous sugar cubes: one rounded tile per cell, a matte grainy body in the piece's color (pores, a few
+// glinting crystals), soft bevelled edges lit from above, the street's neon caught faintly, a film of water along the
+// top edge, beads of water and a rivulet sliding down the face (both with the tile's wetness). A foreground tile is a
+// cube seen from close: the faces its depth reveals toward the vanishing point, and as it melts it sags, crumbles
+// (holes eaten into it from the top and the edges, a dark wet rim around them) and slumps.
 inline const char* TILE_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 aGeom;   // center x, y (pixels), half size x, y (pixels)
-layout(location = 2) in vec4 aCol;    // sRGB glaze, alpha
+layout(location = 2) in vec4 aCol;    // sRGB body color, alpha
 layout(location = 3) in vec4 aP;      // seed, wetness, plain (preview: no water), angle (radians, counterclockwise)
-layout(location = 4) in vec4 aE;      // (unused)
+layout(location = 4) in vec4 aE;      // the cube's depth (pixels, toward the vanishing point), melt (0..1), foreground (1)
 layout(location = 5) in vec4 aF;      // -, outside (1: a heaped tile, lit by the street), soggy (0 firm .. 1 pulp)
 uniform vec2 uRes;
 out vec2 vPix;
 flat out vec4 vGeom, vCol, vP, vE, vF;
 void main() {
-    vec2 p = aGeom.xy + aCorner * (max(aGeom.z, aGeom.w) * 1.42 + 1.0);
+    float ext = max(aGeom.z, aGeom.w) * (aE.w > 0.5 ? 1.75 : 1.42) + length(aE.xy) + 1.5;
+    vec2 p = aGeom.xy + 0.5 * aE.xy + aCorner * ext;
     vPix = p;
     vGeom = aGeom; vCol = aCol; vP = aP; vE = aE; vF = aF;
     gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
@@ -384,7 +424,7 @@ uniform vec3 uLightCol[2];
 uniform float uLightR;     // their reach (pixels)
 uniform float uGroundPx;   // the street (pixels): the heaps darken toward it
 uniform vec3 uFlashRim;    // a lightning strike: a rim of cold light on the tiles' upper edges
-uniform vec3 uSheen;   // the street's light caught in the glaze
+uniform vec3 uSheen;   // the street's light caught on the body
 uniform vec3 uSheen2;
 uniform float uGlow;
 float h(float x) { return fract(sin(x * 91.3458) * 47453.5453); }
@@ -394,58 +434,130 @@ float vnoise(vec2 p) {
     f = f * f * (3.0 - 2.0 * f);
     return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
 }
+float ca, sa;
+vec2 toLocal(vec2 v) { return vec2(ca * v.x - sa * v.y, sa * v.x + ca * v.y); }
+vec2 toScreen(vec2 v) { return vec2(ca * v.x + sa * v.y, -sa * v.x + ca * v.y); }
+float sdR(vec2 l, vec2 hs, float r) {
+    vec2 b = abs(l) - hs + r;
+    return length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - r;
+}
 void main() {
     vec2 hs = vGeom.zw;
     vec2 d0 = vPix - vGeom.xy;
-    float ca = cos(vP.w), sa = sin(vP.w);
-    vec2 d = vec2(ca * d0.x - sa * d0.y, sa * d0.x + ca * d0.y); // into the tile's frame (a heaped tile is turned)
+    ca = cos(vP.w); sa = sin(vP.w);
+    bool fore = vE.w > 0.5;
+    float melt = vE.z;
+    vec2 o = vE.xy;
     float soak = vF.z;
-    if (soak > 0.0) {
-        // soggy cardboard: the top sags in the middle, the sides bulge, the edges go soft and uneven
-        vec2 qn = clamp(d / hs, -1.0, 1.0);
-        d.x /= 1.0 + 0.12 * soak * (1.0 - qn.y * qn.y);
-        d.y -= soak * 0.3 * hs.y * (1.0 - qn.x * qn.x) * smoothstep(0.4, -1.0, qn.y);
-        d += soak * 0.05 * hs * (vec2(vnoise(qn * 3.0 + vP.x * 9.0), vnoise(qn * 3.0 - vP.x * 7.0)) - 0.5);
-    }
-    vec2 q = d / hs;                         // -1..1, y down
+    vec2 qs = d0 / hs;                       // screen frame: the paint runs down the screen whatever the tile's turn
+    vec2 d;
+    float sd, tDepth = 0.0;
+    int face = 0;                            // 0 the front face, 1 a face its depth reveals
+    vec2 nFace = vec2(0.0);                  // that face's normal (screen, y down)
     float r = (0.2 + 0.3 * soak) * min(hs.x, hs.y);
-    vec2 b = abs(d) - hs + r;
-    float sd = length(max(b, 0.0)) + min(max(b.x, b.y), 0.0) - r;
+    if (fore) {
+        // the mush sags toward the ground (screen space): the top caves in, the base spreads, the edges go uneven
+        if (soak > 0.0) {
+            vec2 qn = clamp(qs, -1.0, 1.0);
+            d0.x /= 1.0 + 0.16 * soak * (0.5 + 0.5 * qn.y);
+            d0.y -= soak * 0.3 * hs.y * (1.0 - qn.x * qn.x) * smoothstep(0.4, -1.0, qn.y);
+            d0 += soak * 0.08 * hs * (vec2(vnoise(qn * 3.0 + vP.x * 9.0), vnoise(qn * 3.0 - vP.x * 7.0)) - 0.5);
+        }
+        // the cube: the front face swept toward the vanishing point (its distance: the nearest point of the sweep)
+        float lo = 0.0, hi = 1.0;
+        for (int i = 0; i < 9; i++) {
+            float m1 = mix(lo, hi, 0.382), m2 = mix(lo, hi, 0.618);
+            if (sdR(toLocal(d0 - m1 * o), hs, r) < sdR(toLocal(d0 - m2 * o), hs, r)) hi = m2; else lo = m1;
+        }
+        sd = sdR(toLocal(d0 - 0.5 * (lo + hi) * o), hs, r);
+        d = toLocal(d0);
+        if (sdR(d, hs, r) > 0.0 && length(o) > 0.5) {
+            // where the line of sight enters the front face's box going back: the face it sees
+            vec2 L0 = d, D = -toLocal(o);
+            float tE = -1e9, tX = 1e9;
+            int ax = 0;
+            for (int i = 0; i < 2; i++) {
+                float di = D[i];
+                if (abs(di) < 1e-4) { if (abs(L0[i]) > hs[i]) tE = 1e9; continue; }
+                float t1 = (-hs[i] - L0[i]) / di, t2 = (hs[i] - L0[i]) / di;
+                float tn = min(t1, t2), tf = max(t1, t2);
+                if (tn > tE) { tE = tn; ax = i; }
+                tX = min(tX, tf);
+            }
+            if (tE <= tX && tE > -0.05 && tE < 1.05) {
+                face = 1;
+                tDepth = clamp(tE, 0.0, 1.0);
+                vec2 n = vec2(0.0);
+                n[ax] = -sign(D[ax]);
+                nFace = toScreen(n);
+                vec2 lp = L0 + tE * D;
+                // the face's own coordinates: across its edge, and its depth
+                d = ax == 0 ? vec2(tDepth * 2.0 - 1.0, lp.y / hs.y) * hs : vec2(lp.x / hs.x, tDepth * 2.0 - 1.0) * hs;
+            }
+        }
+    } else {
+        d = toLocal(d0); // into the tile's frame (a heaped tile is turned)
+        if (soak > 0.0) {
+            // soggy: the top sags in the middle, the sides bulge, the edges go soft and uneven
+            vec2 qn = clamp(d / hs, -1.0, 1.0);
+            d.x /= 1.0 + 0.12 * soak * (1.0 - qn.y * qn.y);
+            d.y -= soak * 0.3 * hs.y * (1.0 - qn.x * qn.x) * smoothstep(0.4, -1.0, qn.y);
+            d += soak * 0.05 * hs * (vec2(vnoise(qn * 3.0 + vP.x * 9.0), vnoise(qn * 3.0 - vP.x * 7.0)) - 0.5);
+        }
+        sd = sdR(d, hs, r);
+    }
     float cov = clamp(0.5 - sd, 0.0, 1.0);
     if (cov <= 0.0) discard;
+    vec2 q = d / hs;                         // -1..1 on its face, y down
+    float sdF = face == 0 ? sdR(d, hs, r) : -min(hs.x, hs.y);
     vec3 base = vCol.rgb;
     bool outside = vF.y > 0.5;
-    vec2 qs = d0 / hs;                       // screen frame: the paint runs down the screen whatever the tile's turn
-    if (outside) {
-        // The rain soaks it like cardboard: dark water stains spread down from the top with a tide line at their
-        // edge, and the soggy part goes dark and dull
-        float sd0 = vP.x;
-        float n = vnoise(qs * 2.3 + sd0) * 0.65 + vnoise(qs * 5.1 - sd0) * 0.35;
-        float st = soak * 2.4 - (qs.y + 1.0) * 0.6 - n * 0.8;
+    float s = vP.x;
+    if (outside || fore) {
+        // the rain soaks it: dark water stains spread down from the top with a tide line at their edge, and the soggy
+        // part goes dark and dull
+        float n = vnoise(qs * 2.3 + s) * 0.65 + vnoise(qs * 5.1 - s) * 0.35;
+        float st = soak * 2.4 - (qs.y + 1.0) * 0.6 - n * (fore ? 0.3 : 0.8);
         float stain = smoothstep(-0.05, 0.08, st);
         float tide = smoothstep(0.1, 0.0, abs(st + 0.03)) * step(0.02, soak) * (1.0 - smoothstep(0.85, 1.0, soak));
-        vec3 dull = mix(vec3(dot(base, vec3(0.299, 0.587, 0.114))), base, 0.85) * 0.8;
-        base = mix(base, dull, stain);
+        vec3 dull = mix(vec3(dot(base, vec3(0.299, 0.587, 0.114))), base, fore ? 1.05 : 0.85) * (fore ? 0.78 : 0.8);
+        base = mix(base, dull, stain * (fore ? 0.6 : 1.0));
         base *= 1.0 - 0.25 * tide;
     }
-    float rim = smoothstep(-0.16 * hs.x, 0.0, sd);           // the glaze pooling darker at the rim
-    vec3 c = base * mix(1.1, 0.82, (q.y + 1.0) * 0.5);
-    c *= 1.0 - 0.32 * rim;
-    // a thin bright bevel just inside the rim, top-left
-    float bev = smoothstep(-0.14 * hs.x, -0.06 * hs.x, sd) * (1.0 - smoothstep(-0.06 * hs.x, 0.0, sd));
-    c += vec3(1.0) * bev * 0.22 * (1.0 - soak) * clamp(-(q.x + q.y) * 0.6 + 0.4, 0.0, 1.0);
-    // the sheen: a soft diagonal band of the street's neon
+    // the light from above: the body darker low on the face, soft bevelled edges (lit on top, shaded below)
+    vec3 c = base * mix(1.08, 0.86, (q.y + 1.0) * 0.5);
+    vec2 L = normalize(vec2(-0.4, -1.0));
+    if (face == 0) {
+        float bw = 0.24 * min(hs.x, hs.y);
+        float e = smoothstep(-bw, 0.0, sdF);
+        vec2 nb = normalize(sign(q) * pow(abs(q) + 1e-3, vec2(6.0)) + vec2(1e-5));
+        c *= 1.0 + e * (0.34 * dot(nb, L) - 0.06) * (1.0 - 0.6 * soak);
+    } else {
+        // a face its depth reveals: the top one in the light, the sides in the shade, darker going back
+        c *= (0.62 + 0.42 * max(dot(nFace, L), 0.0)) * (1.0 - 0.22 * tDepth);
+        c += (uSheen * 0.06 * uGlow) * max(-nFace.y, 0.0);
+    }
+    // the porous body: a grain, pores, a few glinting sugar crystals (the grain grows with the tile: coarser up close)
+    {
+        vec2 g = q + vec2(float(face) * 3.7, s * 0.37);
+        float grain = vnoise(g * 4.0 + s) * 0.55 + vnoise(g * 9.0 - s) * 0.45;
+        float pore = smoothstep(0.8, 0.88, vnoise(g * 10.0 + s * 2.3)) + 0.7 * smoothstep(0.84, 0.92, vnoise(g * 17.0 - s * 1.3));
+        c *= 0.95 + 0.1 * grain;
+        c *= 1.0 - 0.14 * min(pore, 1.0);
+        float glint = step(0.975, h2(floor(g * 11.0 + s))) * smoothstep(0.5, 0.2, length(fract(g * 11.0 + s) - 0.5));
+        c += vec3(1.0) * glint * 0.18 * (1.0 - soak);
+    }
+    // the sheen: a faint diagonal band of the street's neon (the body is matte)
     float band = exp(-pow((q.x * 0.55 + q.y * 0.85 + 0.45) * 2.6, 2.0));
     float band2 = exp(-pow((q.x * 0.7 - q.y * 0.4 - 0.6) * 4.0, 2.0));
     float wet = vP.y;
-    float gloss = 1.0 - 0.8 * soak;          // a soggy tile is matte
-    c += (uSheen * band * (0.16 + 0.2 * wet) * uGlow + uSheen2 * band2 * 0.08 * uGlow) * gloss;
+    float gloss = 1.0 - 0.8 * soak;          // a soggy tile has no shine left
+    if (face == 0) c += (uSheen * band * (0.08 + 0.12 * wet) * uGlow + uSheen2 * band2 * 0.05 * uGlow) * gloss;
     wet *= gloss;
-    if (vP.z < 0.5) {
-        float s = vP.x;
+    if (vP.z < 0.5 && face == 0) {
         // the water film along the top edge
         float film = smoothstep(-0.98, -0.86, q.y) * smoothstep(-0.7, -0.84, q.y) * (1.0 - smoothstep(0.75, 0.95, abs(q.x)));
-        c += vec3(1.0) * film * (0.1 + 0.3 * wet);
+        c += vec3(1.0) * film * (0.08 + 0.26 * wet);
         // beads of water: a darker lens with a bright point
         for (int i = 0; i < 3; i++) {
             float fi = float(i);
@@ -471,6 +583,20 @@ void main() {
         float up = smoothstep(-0.55, -0.95, qs.y) + 0.5 * smoothstep(-0.5, -0.95, qs.x) * smoothstep(0.2, -0.6, qs.y);
         c += uFlashRim * (0.25 + 0.75 * smoothstep(-0.2 * hs.x, 0.0, sd)) * up * 0.9;
     }
+    float a = vCol.a * cov;
+    if (fore && melt > 0.0) {
+        // melting: holes eaten in from the top and the edges, a dark wet rim around them, the body going to mush
+        vec2 qu = d / hs;
+        float ero = vnoise(qu * 2.1 + s * 5.0) * 0.7 + vnoise(qu * 4.6 - s * 3.0) * 0.3;
+        float edgeF = max(abs(qu.x), abs(qu.y));
+        edgeF *= edgeF * edgeF;
+        float topF = smoothstep(0.2, -1.0, qs.y);
+        float thr = (melt - 0.25) * 1.5 * (0.25 + 0.75 * edgeF + 0.5 * topF);
+        a *= smoothstep(thr - 0.035, thr + 0.035, ero);
+        c *= 1.0 - 0.5 * smoothstep(thr + 0.16, thr, ero) * step(0.0, thr);
+        c = mix(c, c * 0.8, smoothstep(0.15, 0.7, melt));
+        c += vec3(1.0) * 0.06 * smoothstep(0.3, 0.9, melt) * smoothstep(0.7, 0.9, vnoise(qu * 10.0 + uTime * 0.3)); // wet glints on the mush
+    }
     if (outside) {
         // lit by the street: darker in the shade of the heap, the blade signs' light spilling on it, a rim on the
         // side facing each sign
@@ -486,7 +612,6 @@ void main() {
         float shade = mix(0.55, 1.0, clamp((uGroundPx - vPix.y) / (8.0 * hs.y), 0.0, 1.0));
         c = c * shade * 0.62 + c * lit * 0.5 + lit * 0.08;
     }
-    float a = vCol.a * cov;
     frag = vec4(c * a, a);
 }
 )";

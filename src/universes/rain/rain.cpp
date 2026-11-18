@@ -12,15 +12,19 @@
 // edge some of the water runs down the face as a thin drip and falls off the bottom of the face, splashing again
 // below. The rain never crosses a cell: it stops on it.
 //
-// The pieces are wet glazed ceramic tiles in pastel glazes, one tile per cell: the glaze deepens at the rim, the
-// street's neon is caught in a soft sheen, a film of water lies along the top edge, beads of water sit on the face and
-// now and then a rivulet slides down it (with the cell's wetness: a sheltered cell slowly dries). The previews are the
-// same tiles, dry and plain.
+// The pieces are soft porous sugar cubes in pastel colors, one per cell: a matte grainy body (pores, a few glinting
+// crystals), soft bevelled edges lit from above, the street's neon caught faintly, a film of water along the top edge,
+// beads of water on the face and now and then a rivulet sliding down it (with the cell's wetness: a sheltered cell
+// slowly dries). The previews are the same cubes, dry and plain. The well is a wet glass case: dark slate glass with a
+// faint grid behind the stack, thick glass edges with beads of water on them and drips hanging from the top edge.
 //
 // A cleared row's tiles are thrown out of the well, half to each side, on a scripted arc (behind the stack and the
 // HUD) to a release over the side bands, then become rigid boxes in a small 2D solver (sequential impulses, friction,
 // sleeping): they tumble and settle into messy heaps on the street, where the rain falls on their tilted faces and
-// slides off the lower corners. The rain soaks them like cardboard: dark water stains creep down from their tops, they
+// slides off the lower corners. The tiles nearest the walls come out toward the camera instead (the foreground): they
+// fall along the well's outer wall clear of the HUD, grow as they come closer, land with a big splash at the bottom of
+// the picture beside the well and melt there in the rain (soaking, sagging, crumbling to mush in a puddle) until
+// nothing is left, so they never pile up. The rain soaks the heaped ones like cardboard: dark water stains creep down from their tops, they
 // go matte and limp (sagging in the middle, bulging, their turn relaxing toward lying flat) and are crushed thinner, so
 // the heaps slump and pack down little by little over the song. Each heap is capped (the oldest fades away). A new song washes them away; game over
 // throws the whole stack out, row by row from the top.
@@ -184,6 +188,8 @@ void RainUniverse::setSong(const SongLook& t, float seconds) {
     if (seconds > 0.f)
         for (Body& b : bodies_)
             if (!b.fading) { b.fading = true; b.fadeRate = 0.5f; }
+    if (seconds > 0.f)
+        for (Fore& f : fores_) f.rate = std::max(f.rate, 0.6f);
 }
 
 void RainUniverse::setLevel(int level, float energy, float seconds, float impact) {
@@ -266,7 +272,14 @@ void RainUniverse::onEvent(const GameEvent& ev, const Game& game) {
             rank++;
         }
         std::stable_sort(order.begin(), order.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-        for (auto& o : order) eject(o.second.x, o.second.y, o.second.type, o.first);
+        // the tiles nearest the walls come out toward the camera (the foreground, while it has room), the others
+        // fly to the heaps
+        for (auto& o : order) {
+            const auto& c = o.second;
+            const int fromWall = c.x < Game::W / 2 ? c.x : Game::W - 1 - c.x;
+            if (fromWall <= 1 && !bare_ && foreTake(c.x < Game::W / 2 ? 0 : 1)) ejectFore(c.x, c.y, c.type, o.first);
+            else eject(c.x, c.y, c.type, o.first);
+        }
         // compact the wetness and the beads like the game did
         float nw[Game::H][Game::W] = {}, ns[Game::H][Game::W] = {};
         int dst = Game::H - 1;
@@ -968,6 +981,386 @@ void RainUniverse::drawHeaps() {
 }
 
 // =====================================================================================================
+// The foreground: tiles thrown toward the camera, melting in the rain beside the well
+// =====================================================================================================
+
+namespace {
+constexpr int FORE_CAP = 5;          // per side, at once (the oldest melts faster beyond it)
+constexpr float FORE_WELL = 5.3f;    // the glass case's outer edge (board units): the foreground stays out of it
+constexpr float FORE_OUT = 14.5f;    // the foreground's outer limit (in front of the heaps)
+constexpr float FORE_DEPTH = 0.34f;  // the cube's visible depth (of its half size)
+} // namespace
+
+bool RainUniverse::foreTake(int side) {
+    int n = 0;
+    for (const Fore& f : fores_)
+        if (f.side == side && f.melt < 0.7f) n++;
+    return n < FORE_CAP;
+}
+
+void RainUniverse::ejectFore(int x, int y, int type, float delay) {
+    Fore f{};
+    f.type = type;
+    f.side = x < Game::W / 2 ? 0 : 1;
+    f.seed = seeds_[std::clamp(y, 0, Game::H - 1)][std::clamp(x, 0, Game::W - 1)];
+    f.half = 0.5f - GAP;
+    const vec3 p = layout::cellPos((float)x, (float)y);
+    f.x = f.x0 = p.x;
+    f.y = f.y0 = p.y;
+    f.s = 1.f;
+    f.sMax = rng_.range(1.3f, 1.5f);
+    f.delay = delay;
+    f.wet = 0.7f;
+    f.rate = 1.f / rng_.range(8.5f, 11.f);
+    fores_.push_back(f);
+}
+
+// Half the tile's width as drawn at scale s (its turn, the cube's depth toward the vanishing point included).
+float RainUniverse::foreExt(const Fore& f, float s) const {
+    const float h = f.half * s;
+    return h * (std::fabs(std::cos(f.a)) + std::fabs(std::sin(f.a))) + FORE_DEPTH * h;
+}
+
+// Keeps a foreground tile (its center x, its half extent) out of the glass case and clear of the HUD: the lettering
+// beside it, and above the columns' bottoms the previews and the bonus ring.
+float RainUniverse::foreClampX(int side, float x, float y, float ext) const {
+    const float dir = side == 0 ? -1.f : 1.f;
+    const float lo = y - ext < 10.4f && y + ext > -10.35f ? FORE_WELL + ext : 0.f;
+    float hi = FORE_OUT - ext;
+    const float colBottom = side == 0 ? layout::LEFT_COLUMN[1] : layout::RIGHT_COLUMN[1];
+    if (y + ext > colBottom - 0.2f) hi = std::min(hi, 7.25f - ext);
+    for (const vec4& r : hudRects_) {
+        if (dir * (r.x + r.z) < 0.f) continue;                     // the other side
+        if (r.y > y + ext + 0.2f || r.w < y - ext - 0.2f) continue; // not at this height
+        const float inner = side == 0 ? -r.z : r.x;
+        hi = std::min(hi, inner - 0.2f - ext);
+    }
+    float ax = dir * x;
+    ax = std::min(ax, hi);
+    ax = std::max(ax, lo); // (the well wins)
+    return dir * ax;
+}
+
+void RainUniverse::foreSplash(float x, float y, float s, float strength, const vec3& col) {
+    (void)col;
+    const int n = (int)(14 + 40 * strength);
+    for (int i = 0; i < n && fsparks_.size() < 900; i++) {
+        const float a = rng_.range(0.15f, PI - 0.15f);
+        const float sp = rng_.range(3.f, 9.f) * (0.45f + 0.7f * strength) * std::sqrt(s);
+        fsparks_.push_back({x + rng_.range(-0.6f, 0.6f) * s * 0.5f, y + 0.05f, std::cos(a) * sp * 0.7f, std::sin(a) * sp,
+                            0.f, rng_.range(0.35f, 0.75f), rng_.range(0.03f, 0.07f) * s});
+    }
+    // the crown: a ring of big drops thrown up and out around the impact
+    const int nc = (int)(8 + 14 * strength);
+    for (int i = 0; i < nc && fsparks_.size() < 900; i++) {
+        const float side = i & 1 ? 1.f : -1.f;
+        const float sp = rng_.range(4.f, 8.f) * (0.5f + 0.6f * strength) * std::sqrt(s);
+        fsparks_.push_back({x + side * s * rng_.range(0.3f, 0.55f), y + 0.05f, side * sp * rng_.range(0.25f, 0.6f), sp, 0.f,
+                            rng_.range(0.5f, 0.8f), rng_.range(0.07f, 0.12f) * s});
+    }
+    fcrowns_.push_back({x, y, 0.f, (0.9f + 0.8f * strength) * s});
+    fcrowns_.push_back({x, y - 0.05f, -0.06f, (1.4f + 1.f * strength) * s});
+}
+
+void RainUniverse::stepFore(float dt, float rdt) {
+    const float g = 22.f;
+    foreGround_ = viewC_.y - viewH_.y + 0.5f;
+    // the cap: beyond it the oldest on that side melts away fast
+    int count[2] = {0, 0};
+    for (int i = (int)fores_.size() - 1; i >= 0; i--) {
+        Fore& f = fores_[i];
+        if (f.melt >= 1.f) continue;
+        if (++count[f.side] > FORE_CAP) f.rate = std::max(f.rate, 0.45f);
+    }
+    for (Fore& f : fores_) {
+        const float dir = f.side == 0 ? -1.f : 1.f;
+        f.t += dt;
+        switch (f.stage) {
+        case 0:
+            if (f.t >= f.delay) {
+                f.stage = 1;
+                f.t = 0.f;
+                f.xOut = dir * (FORE_WELL + foreExt(f, 1.f) + 0.05f);
+            }
+            break;
+        case 1: {
+            // out through the glass, a little hop
+            const float e = std::min(1.f, f.t / 0.12f);
+            f.x = lerpf(f.x0, f.xOut, e);
+            f.y = f.y0 + 0.3f * std::sin(PI * e);
+            if (e >= 1.f) {
+                f.stage = 2;
+                f.t = 0.f;
+                f.vx = dir * rng_.range(0.5f, 1.3f);
+                f.vy = rng_.range(1.f, 3.f);
+                f.w = -dir * rng_.range(1.f, 2.4f);
+            }
+            break;
+        }
+        case 2: {
+            // falling along the well's outer wall, coming closer (larger) as it comes down
+            f.vy -= g * dt;
+            f.x += f.vx * dt;
+            f.y += f.vy * dt;
+            f.a += f.w * dt;
+            const float colBottom = f.side == 0 ? layout::LEFT_COLUMN[1] : layout::RIGHT_COLUMN[1];
+            const float target = lerpf(1.f, f.sMax, smoothstepf(colBottom + 0.5f, foreGround_ + 2.2f, f.y));
+            if (target > f.s) f.s += (target - f.s) * std::min(1.f, dt * 10.f);
+            const float ext = foreExt(f, f.s);
+            const float nx = foreClampX(f.side, f.x, f.y, ext);
+            if (nx != f.x) { f.x = nx; f.vx *= 0.5f; }
+            const float ey = f.half * f.s * (std::fabs(std::cos(f.a)) + std::fabs(std::sin(f.a)));
+            if (f.vy < 0.f && f.y - ey <= foreGround_) {
+                f.y = foreGround_ + ey;
+                foreSplash(f.x, foreGround_, f.s, std::min(1.f, -f.vy / 14.f), pieceColor(f.type));
+                // the bounce: out to its own spot, landing flat (or nearly)
+                const float extF = f.half * f.sMax * 1.15f + FORE_DEPTH * f.half * f.sMax;
+                float best = -1.f, tx = f.x;
+                for (int k = 0; k < 10; k++) {
+                    float cand = dir * rng_.range(FORE_WELL + extF, FORE_OUT - extF);
+                    cand = foreClampX(f.side, cand, foreGround_ + extF * 0.9f, extF);
+                    float sc = 9.f;
+                    for (const Fore& o : fores_)
+                        if (&o != &f && o.side == f.side && o.stage >= 3 && o.melt < 0.9f) sc = std::min(sc, std::fabs(cand - o.tx));
+                    sc += rng_.range(0.f, 0.4f);
+                    if (sc > best) { best = sc; tx = cand; }
+                }
+                const float vy = std::clamp(-f.vy * 0.32f, 2.6f, 6.f);
+                f.T = 2.f * vy / g;
+                f.vy = vy;
+                f.x0 = f.x;
+                f.y0 = f.y;
+                f.a0 = f.a;
+                f.tx = tx;
+                const float a1 = f.a + f.w * f.T * 1.5f;
+                f.aT = std::round(a1 / (PI * 0.5f)) * (PI * 0.5f) + rng_.range(-0.13f, 0.13f);
+                f.stage = 3;
+                f.t = 0.f;
+            }
+            break;
+        }
+        case 3: {
+            const float u = std::min(1.f, f.t / f.T);
+            const float tilt = f.aT - std::round(f.aT / (PI * 0.5f)) * (PI * 0.5f);
+            const float yRest = foreGround_ + f.half * f.sMax * (std::cos(tilt) + std::fabs(std::sin(tilt)));
+            f.s += (f.sMax - f.s) * std::min(1.f, dt * 8.f);
+            f.x = lerpf(f.x0, f.tx, u);
+            f.y = u < 1.f ? lerpf(f.y0, yRest, u) + f.vy * f.t - 0.5f * g * f.t * f.t : yRest;
+            f.a = lerpf(f.a0, f.aT, ease(u));
+            f.x = foreClampX(f.side, f.x, f.y, foreExt(f, f.s));
+            if (u >= 1.f) {
+                f.stage = 4;
+                f.t = 0.f;
+                f.wob = 1.f;
+                f.s = f.sMax;
+                foreSplash(f.x, foreGround_, f.s, 0.35f, pieceColor(f.type));
+            }
+            break;
+        }
+        default: {
+            // melting in the rain
+            f.wob = approach(f.wob, 0.f, 4.f, dt);
+            if (f.melt < 1.f) {
+                f.melt = std::min(1.f, f.melt + f.rate * dt * (0.7f + 0.6f * rain_));
+                f.wet = std::min(1.f, f.wet + dt * 0.2f);
+            } else f.gone += dt * 0.7f;
+            // the rain hits its top: little splashes, bigger than the far ones (it is closer)
+            const float m = f.melt;
+            const float hx = f.half * f.s * (1.f + 0.35f * smoothstepf(0.3f, 1.f, m));
+            const float hy = f.half * f.s * (1.f - 0.72f * smoothstepf(0.3f, 1.f, m));
+            if (m < 0.97f) {
+                f.rainAcc += rdt * (2.f + 9.f * rain_) * f.s * shower_;
+                while (f.rainAcc >= 1.f && fsparks_.size() < 900) {
+                    f.rainAcc -= 1.f;
+                    const float x = f.x + rng_.range(-0.9f, 0.9f) * hx, y = foreGround_ + 2.f * hy - 0.02f;
+                    for (int i = 0; i < 2; i++)
+                        fsparks_.push_back({x, y, rng_.range(-1.5f, 1.5f), rng_.range(1.f, 3.f), 0.f, rng_.range(0.2f, 0.35f), 0.022f * f.s});
+                    if (rng_.chance(0.4f)) fcrowns_.push_back({x, y, 0.2f, 0.16f * f.s}); // (a short one)
+                }
+            }
+            // crumbs falling off its soft edges
+            if (m > 0.22f && m < 0.93f && crumbs_.size() < 260) {
+                f.crumbAcc += dt * (2.f + 9.f * smoothstepf(0.22f, 0.6f, m));
+                while (f.crumbAcc >= 1.f) {
+                    f.crumbAcc -= 1.f;
+                    const float sx = rng_.chance(0.5f) ? -1.f : 1.f;
+                    Crumb c{};
+                    c.x = f.x + sx * hx * rng_.range(0.75f, 1.f);
+                    c.y = foreGround_ + hy * rng_.range(0.6f, 1.9f);
+                    c.vx = sx * rng_.range(0.3f, 1.4f);
+                    c.vy = rng_.range(-0.5f, 1.2f);
+                    c.w = rng_.range(-6.f, 6.f);
+                    c.r = f.half * f.s * rng_.range(0.1f, 0.22f);
+                    c.life = rng_.range(1.6f, 3.f);
+                    c.type = f.type;
+                    c.seed = rng_.range(0.f, 100.f);
+                    crumbs_.push_back(c);
+                }
+            }
+            break;
+        }
+        }
+    }
+    fores_.erase(std::remove_if(fores_.begin(), fores_.end(), [](const Fore& f) { return f.gone >= 1.f; }), fores_.end());
+    for (size_t i = 0; i < crumbs_.size();) {
+        Crumb& c = crumbs_[i];
+        c.t += dt;
+        if (!c.rest) {
+            c.vy -= g * dt;
+            c.x += c.vx * dt;
+            c.y += c.vy * dt;
+            c.a += c.w * dt;
+            if (c.y - c.r < foreGround_) {
+                c.y = foreGround_ + c.r * 0.7f;
+                if (std::fabs(c.vy) > 2.f && fsparks_.size() < 900)
+                    for (int k = 0; k < 3; k++)
+                        fsparks_.push_back({c.x, foreGround_, rng_.range(-1.5f, 1.5f), rng_.range(1.f, 2.5f), 0.f, 0.3f, 0.2f * c.r});
+                c.rest = true;
+            }
+        }
+        if (c.t > c.life) { crumbs_[i] = crumbs_.back(); crumbs_.pop_back(); continue; }
+        i++;
+    }
+    auto inWell = [](float x, float y) { return std::fabs(x) < FORE_WELL && y > -10.3f && y < 10.4f; };
+    for (size_t i = 0; i < fsparks_.size();) {
+        Spark& s = fsparks_[i];
+        s.t += dt;
+        s.vy -= g * dt;
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        if (s.t > s.life || inWell(s.x, s.y) || (s.y < foreGround_ - 0.1f && s.vy < 0.f)) { fsparks_[i] = fsparks_.back(); fsparks_.pop_back(); continue; }
+        i++;
+    }
+    for (size_t i = 0; i < fcrowns_.size();) {
+        fcrowns_[i].t += dt;
+        if (fcrowns_[i].t > 0.4f) { fcrowns_[i] = fcrowns_.back(); fcrowns_.pop_back(); continue; }
+        i++;
+    }
+    // the near rain: a few big streaks right in front of the lens, out of focus
+    {
+        const int want = (int)((6.f + 26.f * rain_) * shower_ * (1.f - bridge_.amount));
+        while ((int)nearRain_.size() < want)
+            nearRain_.push_back({rng_.range(-viewH_.x, viewH_.x), viewC_.y + viewH_.y + rng_.range(0.f, 25.f), rng_.range(38.f, 52.f),
+                                 rng_.range(2.5f, 4.5f), rng_.range(3.f, 6.f), rng_.range(0.04f, 0.09f)});
+        if ((int)nearRain_.size() > want) nearRain_.resize(std::max(0, want));
+        const float slant = VARIANTS[variant_].slant + 0.22f * storm_;
+        for (Streak& s : nearRain_) {
+            s.y -= s.v * rdt;
+            s.x -= slant * s.v * rdt;
+            if (s.y + s.len < viewC_.y - viewH_.y) {
+                s.y = viewC_.y + viewH_.y + rng_.range(0.f, 6.f);
+                s.x = rng_.range(-viewH_.x, viewH_.x + slant * 26.f);
+            }
+        }
+    }
+}
+
+void RainUniverse::drawFore() {
+    const VariantDef& V = VARIANTS[variant_];
+    const vec3 bInk = ugl::toSrgb(bridge_.ink);
+    const float bk = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
+    const float vis = 1.f - smoothstepf(0.f, 0.6f, bridge_.amount);
+    const float s1080 = height_ / 1080.f;
+    const vec2 vp = px(0.f, 1.5f); // the vanishing point: the cubes' depth recedes toward it
+    auto shape = [&](const Fore& f, float& hx, float& hy, float& cx, float& cy, float& ang) {
+        const float m = f.melt;
+        hx = f.half * f.s * (1.f + 0.35f * smoothstepf(0.3f, 1.f, m));
+        hy = f.half * f.s * (1.f - 0.72f * smoothstepf(0.3f, 1.f, m));
+        cx = f.x;
+        cy = f.y;
+        ang = f.a;
+        if (f.stage == 4) {
+            const float flat = std::round(f.aT / (PI * 0.5f)) * (PI * 0.5f);
+            const float tilt = (f.aT - flat) * (1.f - smoothstepf(0.2f, 0.75f, m)) + f.wob * 0.12f * std::sin(f.t * 22.f);
+            ang = flat + tilt;
+            cy = foreGround_ + hy * std::cos(tilt) + hx * std::fabs(std::sin(tilt)) - 0.04f * f.s * smoothstepf(0.5f, 1.f, m);
+        }
+    };
+    // the puddles of melted sugar, the contact shadows
+    for (const Fore& f : fores_) {
+        if (f.stage < 2) continue;
+        float hx, hy, cx, cy, ang;
+        shape(f, hx, hy, cx, cy, ang);
+        const vec3 col = lerp(pieceColor(f.type), bInk, bk);
+        const float lift = saturate((cy - hy - foreGround_) / 4.f);
+        const vec2 g = px(cx, foreGround_ - 0.04f);
+        const float sw = f.half * f.s * 1.3f * unitPx_;
+        disc(g.x, g.y, sw * (1.f + lift), sw * 0.2f * (1.f + lift), vec3(0.f), 0.5f * (1.f - lift) * vis * (1.f - f.gone), 0.8f);
+        if (f.stage == 4) {
+            const float m = f.melt;
+            const float rx = f.half * f.s * (1.f + 1.8f * smoothstepf(0.05f, 0.95f, m)) * unitPx_;
+            const float a = smoothstepf(0.03f, 0.25f, m) * (1.f - f.gone) * vis;
+            const vec3 mush = lerp(hex(V.street), col * 0.75f, 0.7f);
+            disc(g.x, g.y + 0.04f * unitPx_, rx, rx * 0.2f, mush, 0.75f * a, 0.35f);
+            disc(g.x, g.y - 0.02f * unitPx_, rx * 0.7f, rx * 0.08f, lerp(col, vec3(1.f), 0.6f), 0.18f * a, 1.f);
+        }
+    }
+    flushShapes();
+    // the crumbs, the tiles
+    for (const Crumb& c : crumbs_) {
+        const vec3 col = lerp(pieceColor(c.type), bInk, bk);
+        const float k = c.t / c.life;
+        const vec2 p = px(c.x, c.y);
+        const float r = c.r * unitPx_ * (1.f - 0.3f * k);
+        tiles_.push_back({{p.x, p.y, r, r * (c.rest ? 1.f - 0.5f * k : 1.f)}, {col.x, col.y, col.z, vis * (1.f - smoothstepf(0.7f, 1.f, k))},
+                          {c.seed, 0.9f, 0.f, c.a}, {0.f, 0.f, 0.45f + 0.5f * k, 1.f}, {0.f, 0.f, 0.6f, 0.f}});
+    }
+    for (const Fore& f : fores_) {
+        if (f.melt >= 1.f) continue;
+        float hx, hy, cx, cy, ang;
+        shape(f, hx, hy, cx, cy, ang);
+        const vec3 col = lerp(pieceColor(f.type), bInk, bk);
+        const vec2 p = px(cx, cy);
+        const float depth = f.stage == 0 ? 0.f : f.stage == 1 ? std::min(1.f, f.t / 0.12f) : 1.f;
+        vec2 o{vp.x - p.x, vp.y - p.y};
+        const float ol = std::max(1.f, std::sqrt(o.x * o.x + o.y * o.y));
+        const float k = FORE_DEPTH * f.half * f.s * unitPx_ * depth * (1.f - 0.4f * f.melt);
+        o = vec2{o.x / ol * k, o.y / ol * k};
+        const float a = vis * (1.f - smoothstepf(0.86f, 1.f, f.melt));
+        tiles_.push_back({{p.x, p.y, hx * unitPx_, hy * unitPx_}, {col.x, col.y, col.z, a}, {f.seed, f.wet, 0.f, ang},
+                          {o.x, o.y, f.melt, 1.f}, {0.f, 0.f, std::min(1.f, f.melt * 1.4f), 0.f}});
+    }
+    flushTiles();
+    // the splashes, in front of everything
+    const vec3 tint = lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.7f), vec3(0.85f, 0.92f, 1.f), flash_);
+    for (const Spark& s : fsparks_) {
+        const float k = 1.f - s.t / s.life;
+        const vec2 a = px(s.x, s.y), b = px(s.x - s.vx * 0.05f, s.y - s.vy * 0.05f);
+        seg(a.x, a.y, b.x, b.y, std::max(1.f, s.r * unitPx_ * 1.5f), tint, 0.85f * k * vis, 0.15f);
+        disc(a.x, a.y, s.r * unitPx_ * 0.8f, s.r * unitPx_ * 0.8f, vec3(1.f), 0.6f * k * vis);
+    }
+    for (const Crown& c : fcrowns_) {
+        if (c.t < 0.f) continue;
+        const vec2 a = px(c.x, c.y);
+        const float k = saturate(c.t / 0.4f);
+        const float rx = (0.25f + 0.75f * std::sqrt(k)) * c.w * unitPx_, ry = std::max(1.f, rx * 0.2f);
+        box(a.x, a.y - ry, rx, ry, tint, 0.55f * (1.f - k) * vis, ry, std::max(1.f, 1.6f * s1080));
+        if (c.w > 0.75f && c.t < 0.32f) {
+            // a big impact: a sheet of water thrown up around the cube, a fan of streams breaking into drops
+            const float k2 = c.t / 0.32f;
+            const float H = c.w * 0.8f * std::sin(PI * std::min(1.f, k2 * 1.25f));
+            for (int j = 0; j < 12; j++) {
+                const float u = j / 11.f * 2.f - 1.f;
+                const float wob = std::sin(j * 7.3f + c.x * 3.f) * 0.12f;
+                const vec2 b0 = px(c.x + u * c.w * 0.42f, c.y), b1 = px(c.x + (u + wob) * c.w * (0.6f + 0.4f * k2), c.y + H * (1.f - 0.55f * u * u));
+                seg(b1.x, b1.y, b0.x, b0.y, std::max(1.5f, 3.2f * s1080 * (1.f - 0.5f * k2)), tint, 0.4f * (1.f - k2) * vis, 0.25f);
+                disc(b1.x, b1.y, 2.6f * s1080, 2.6f * s1080, vec3(1.f), 0.5f * (1.f - k2) * vis);
+            }
+        }
+    }
+    // the near rain (never over the well or the HUD's columns)
+    const float slant = V.slant + 0.22f * storm_;
+    for (const Streak& s : nearRain_) {
+        const float off = smoothstepf(FORE_WELL + 0.2f, FORE_WELL + 1.2f, std::fabs(s.x));
+        const float a = s.a * off * (1.f - 0.8f * hudCover(s.x, s.y)) * vis * (1.f + 1.5f * flash_);
+        if (a <= 0.003f) continue;
+        const vec2 p0 = px(s.x, s.y), p1 = px(s.x + slant * s.len, s.y + s.len);
+        seg(p0.x, p0.y, p1.x, p1.y, s.w * s1080, tint, a, 0.f);
+    }
+    flushShapes();
+}
+
+// =====================================================================================================
 // Drawing primitives
 // =====================================================================================================
 
@@ -1049,15 +1442,62 @@ void RainUniverse::drawBoard(const Game& g) {
     const float s = height_ / 1080.f;
     const VariantDef& V = VARIANTS[variant_];
 
-    // the well: a hairline of wet metal on its sides and floor, catching the neon
+    // the well: a wet glass case, its thick glass edges catching the neon, beads of water on them (some sliding down
+    // slowly), drips hanging from the top edge and the floor's lip
     {
-        const float th = std::max(1.f, std::round(1.5f * s));
+        const float th = std::max(1.f, std::round(1.4f * s));
+        const float ft = 0.2f * unitPx_;                  // the glass edge's thickness (pixels)
         const vec2 a = px(-5.f, 10.f), b = px(5.f, -10.f);
-        const vec3 c = lerp(vec3(0.75f, 0.78f, 0.85f), hex(V.neon[1]), 0.25f);
-        const float al = 0.5f * (1.f - br);
-        box(a.x - 2.f * th, 0.5f * (a.y + b.y), th * 0.5f, 0.5f * (b.y - a.y), c, al);
-        box(b.x + 2.f * th, 0.5f * (a.y + b.y), th * 0.5f, 0.5f * (b.y - a.y), c, al);
-        box(0.5f * (a.x + b.x), b.y + 2.f * th, 0.5f * (b.x - a.x) + 2.5f * th, th * 0.5f, c, al);
+        const vec3 c = lerp(vec3(0.78f, 0.82f, 0.9f), hex(V.neon[1]), 0.25f);
+        const float al = 1.f - br;
+        const float cy = 0.5f * (a.y + b.y), hy = 0.5f * (b.y - a.y) + ft;
+        for (int side = 0; side < 2; side++) {
+            const float x = side == 0 ? a.x - 0.5f * ft : b.x + 0.5f * ft;
+            box(x, cy, 0.5f * ft, hy, c, 0.1f * al);                                  // the glass
+            box(side == 0 ? a.x - th : b.x + th, cy, th * 0.5f, hy, c, 0.5f * al);   // its inner face
+            box(side == 0 ? a.x - ft : b.x + ft, cy, th * 0.5f, hy, c, 0.28f * al);  // its outer face
+        }
+        box(0.5f * (a.x + b.x), b.y + 0.5f * ft, 0.5f * (b.x - a.x) + ft, 0.5f * ft, c, 0.12f * al);
+        box(0.5f * (a.x + b.x), b.y + th, 0.5f * (b.x - a.x), th * 0.5f, c, 0.5f * al);
+        box(0.5f * (a.x + b.x), b.y + ft, 0.5f * (b.x - a.x) + ft, th * 0.5f, c, 0.3f * al);
+        box(0.5f * (a.x + b.x), a.y - 0.5f * ft, 0.5f * (b.x - a.x) + ft, 0.5f * ft, c, 0.07f * al);
+        box(0.5f * (a.x + b.x), a.y - ft, 0.5f * (b.x - a.x) + ft, th * 0.5f, c, 0.22f * al);
+        // a highlight running down the left edge, the neon on the right one
+        box(a.x - 0.5f * ft, cy - 0.25f * hy, th * 0.7f, hy * 0.55f, vec3(1.f), 0.22f * al);
+        box(b.x + 0.5f * ft, cy + 0.3f * hy, th * 0.7f, hy * 0.4f, lerp(hex(V.neon[0]), vec3(1.f), 0.4f), 0.2f * al);
+        // the beads on the glass edges
+        const vec3 water = lerp(hex(V.mist), vec3(0.9f, 0.95f, 1.f), 0.6f);
+        for (int i = 0; i < 64; i++) {
+            const float h1 = std::fmod(std::sin(i * 12.9898f) * 43758.5453f, 1.f), h2 = std::fmod(std::sin(i * 78.233f) * 12543.31f, 1.f);
+            const float u = std::fabs(h1), v = std::fabs(h2);
+            float bx, by;
+            const float r = (0.03f + 0.06f * v * v) * unitPx_;
+            if (i < 44) { // the sides, a third sliding down slowly
+                const int side = i & 1;
+                bx = (side == 0 ? a.x - 0.5f * ft : b.x + 0.5f * ft) + (v - 0.5f) * ft * 0.6f;
+                float yy = u;
+                if (i % 3 == 0) yy = std::fmod(u + time_ * (0.004f + 0.01f * v), 1.f);
+                by = a.y - ft + yy * (b.y - a.y + 2.f * ft);
+            } else { // the top edge and the floor's lip
+                bx = a.x - ft + u * (b.x - a.x + 2.f * ft);
+                by = i < 56 ? a.y - 0.5f * ft : b.y + 0.5f * ft;
+            }
+            disc(bx, by, r, r * 1.1f, water * 0.5f, 0.3f * al);
+            disc(bx - 0.3f * r, by - 0.35f * r, r * 0.35f, r * 0.35f, vec3(1.f), 0.6f * al);
+        }
+        // drips hanging from the top edge and the floor's lip: they swell, stretch and let go
+        for (int i = 0; i < 9; i++) {
+            const float u = std::fabs(std::fmod(std::sin(i * 31.7f + 4.f) * 9123.7f, 1.f));
+            const float per = 2.5f + 3.f * u;
+            const float ph = std::fmod(rainT_ / per + u * 7.f, 1.f);
+            const bool top = i < 5;
+            const float x = a.x + (0.06f + 0.88f * std::fabs(std::fmod(u * 13.1f, 1.f))) * (b.x - a.x);
+            const float y0 = top ? a.y : b.y + ft;
+            const float L = (top ? 0.28f : 0.4f) * unitPx_ * ph * ph;
+            seg(x, y0, x, y0 + L, std::max(1.f, 2.2f * s), water, 0.4f * al, 0.6f);
+            disc(x, y0 + L, (0.035f + 0.03f * ph) * unitPx_, (0.04f + 0.035f * ph) * unitPx_, water * 0.6f, 0.45f * al);
+            disc(x - 0.01f * unitPx_, y0 + L - 0.012f * unitPx_, 0.012f * unitPx_, 0.012f * unitPx_, vec3(1.f), 0.7f * al);
+        }
     }
     // the ghost: the piece's tiles as fine outlines
     if (g.hasPiece() && !g.over()) {
@@ -1252,6 +1692,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     // the HUD's bottom corner lines: the heaps dim under them
     if (!bare_) {
         textRects_.clear();
+        hudRects_.clear();
         for (size_t i = 0; f.hudBoxes && i < f.hud.size() && i < f.hudBoxes->size(); i++) {
             const HudText& h = f.hud[i];
             if (h.text.empty() || h.role == HUD_TOAST || h.role == HUD_TOAST_SUB || h.role == HUD_DIALOG) continue;
@@ -1259,6 +1700,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
             const vec4& bx = (*f.hudBoxes)[i]; // the line as lettered
             const float x0 = viewC_.x + (bx.x - 6.f - width_ * 0.5f) / unitPx_, x1 = viewC_.x + (bx.z + 6.f - width_ * 0.5f) / unitPx_;
             const float y0 = viewC_.y + (height_ * 0.5f - std::max(bx.w, h.y + base * 0.9f)) / unitPx_, y1 = viewC_.y + (height_ * 0.5f - h.y + 4.f) / unitPx_;
+            if (std::fabs(0.5f * (x0 + x1)) > 5.5f) hudRects_.push_back({x0, y0, x1, y1});
             if (y0 > -3.f || std::fabs(0.5f * (x0 + x1)) < bandIn_) continue;
             textRects_.push_back({x0, y0, x1, y1});
         }
@@ -1282,6 +1724,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     if (heapTest > 0 && ++heapFrame >= 90) // (after the start's settling)
         for (; heapTest > 0; heapTest--) eject(heapTest % 2 ? 0 : Game::W - 1, Game::HIDDEN + 2 + heapTest % 6, heapTest % 7, 0.04f * heapTest);
     stepHeaps(dt);
+    stepFore(dt, rdt);
     for (auto& row : wet_)
         for (float& w : row) w = std::max(0.12f, w - dt * 0.1f);
 
@@ -1349,6 +1792,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
     if (!bare_) drawBoard(game);
     drawRain(true);
     if (!bare_) drawPreviews(game);
+    drawFore();
 
     // ---- Dim (pause, game over screen) and the startup fade.
     {
@@ -1367,7 +1811,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_rain() {
     static const UniverseEntry e{
-        "RAIN", "rain everywhere over a colorful street at dusk: it pours on wet pastel glazed tiles (the falling piece shelters the cells under it), cleared rows are thrown out and tumble into heaps on the sides, the drop is a thunderstorm",
+        "RAIN", "rain everywhere over a colorful street at dusk: it pours on soft pastel sugar cubes in a wet glass case (the falling piece shelters the cells under it), cleared rows are thrown out to heaps on the sides and toward the camera, where they melt in the rain, the drop is a thunderstorm",
         [] { return std::unique_ptr<Universe>(new RainUniverse()); },
         // An atmosphere for most songs, moody and mid-tempo ones best.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.brightness) + 0.1f * l.dynamics; },
