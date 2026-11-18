@@ -94,7 +94,7 @@ std::string makeVoyageCampaign(const std::string& title, const std::vector<std::
     };
     std::ostringstream o;
     o << "# Refall custom voyage: " << clean(title) << "\n"
-      << "# stage, song, video id, universe, velocity on EASY, NORMAL, HARD, title (as data/campaign.tsv)\n";
+      << "# stage, song, video id, universe, velocity on EASY, NORMAL, HARD, EXPERT, title (as data/campaign.tsv)\n";
     int i = 0;
     for (int s = 0; s < S; s++) {
         // stages of 4, the first ones taking one more when the songs don't divide evenly
@@ -113,10 +113,10 @@ std::string makeVoyageCampaign(const std::string& title, const std::vector<std::
             const float cs = S > 1 ? (float)s * (float)(curve.size() - 1) / (float)(S - 1) : 0.f;
             const float ck = ns > 1 ? (float)k / (float)(ns - 1) : 0.f;
             char lv[64];
-            float L[DIFF_COUNT] = {1, 1, 1};
+            float L[DIFF_COUNT] = {1, 1, 1, 1};
             if (curve.size() > 0)
                 for (int d = 0; d < DIFF_COUNT; d++) L[d] = curveLevel(curve, cs, ck, d);
-            std::snprintf(lv, sizeof(lv), "%.1f\t%.1f\t%.1f", L[0], L[1], L[2]);
+            std::snprintf(lv, sizeof(lv), "%.1f\t%.1f\t%.1f\t%.1f", L[0], L[1], L[2], L[3]);
             o << s + 1 << '\t' << k + 1 << '\t' << id << '\t' << spec << '\t' << lv << '\t' << clean(name) << '\n';
         }
     }

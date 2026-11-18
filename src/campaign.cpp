@@ -41,15 +41,22 @@ std::vector<std::string> splitTabs(const std::string& line) {
     }
     return out;
 }
+bool isNumber(const std::string& s) {
+    char* end = nullptr;
+    std::strtof(s.c_str(), &end);
+    return !s.empty() && end && !*end;
+}
 } // namespace
 
+float expertVelocity(float hard) { return std::min(Game::MAX_VELOCITY, std::round((hard + 7.f) * 10.f) / 10.f); }
+
 const char* difficultyName(int d) {
-    static const char* N[] = {"EASY", "NORMAL", "HARD"};
+    static const char* N[] = {"EASY", "NORMAL", "HARD", "EXPERT"};
     return N[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 
 float freePlayMultiplier(int d) {
-    static const float M[] = {0.6f, 0.8f, 1.f};
+    static const float M[] = {0.6f, 0.8f, 1.f, 1.4f};
     return M[std::clamp(d, 0, DIFF_COUNT - 1)];
 }
 
@@ -59,7 +66,7 @@ bool parseDifficulty(const std::string& s0, int* d, float* mul) {
     for (int k = 0; k < DIFF_COUNT; k++) {
         std::string n = difficultyName(k);
         for (char& c : n) c = (char)std::tolower((unsigned char)c);
-        if (s == n || (s.size() == 1 && s[0] == "enh"[k]) || (k == DIFF_HARD && (s == "expert" || s == "x"))) {
+        if (s == n || (s.size() == 1 && s[0] == "enhx"[k])) {
             *d = k;
             *mul = freePlayMultiplier(k);
             return true;
@@ -110,7 +117,7 @@ bool Campaign::parse(const std::string& text) {
         if (line.empty() || line[0] == '#') continue;
         std::vector<std::string> c = splitTabs(line);
         if (c.size() < 7) {
-            std::fprintf(stderr, "[campaign] line %d: expected stage, song, id, universe, easy, normal, hard, title\n", n);
+            std::fprintf(stderr, "[campaign] line %d: expected stage, song, id, universe, easy, normal, hard, expert, title\n", n);
             continue;
         }
         const int stage = std::atoi(c[0].c_str()), song = std::atoi(c[1].c_str());
@@ -121,8 +128,14 @@ bool Campaign::parse(const std::string& text) {
         CampaignSong s;
         s.id = c[2];
         s.universe = c[3];
-        for (int d = 0; d < DIFF_COUNT; d++) s.level[d] = std::clamp((float)std::atof(c[4 + d].c_str()), 1.f, Game::MAX_VELOCITY);
-        s.title = c.size() > 7 ? c[7] : s.id;
+        for (int d = 0; d <= DIFF_HARD; d++) s.level[d] = std::clamp((float)std::atof(c[4 + d].c_str()), 1.f, Game::MAX_VELOCITY);
+        // EXPERT's column (after HARD's) may be missing in older or custom files: HARD + 7 then. It is there when the
+        // eighth column is a number followed by a title.
+        const bool expert = c.size() > 8 && isNumber(c[7]);
+        s.level[DIFF_EXPERT] = expert ? std::clamp((float)std::atof(c[7].c_str()), 1.f, Game::MAX_VELOCITY)
+                                      : expertVelocity(s.level[DIFF_HARD]);
+        const size_t t = expert ? 8 : 7;
+        s.title = c.size() > t ? c[t] : s.id;
         int v = -1;
         if (!s.universe.empty() && universes::parse(s.universe, &v) < 0) {
             std::fprintf(stderr, "[campaign] line %d: unknown universe '%s' (one is picked for the song)\n", n, s.universe.c_str());
@@ -160,6 +173,11 @@ const char* const LEGACY_12x5[12][5] = {
     {"n1ToxNTIyZc", "VUzg5liIjcs", "qdjmd9J6cr0", "dP7KuXdb-wE", "BSVOAD-Nyfc"},
     {"4V3exJW1-Ig", "jmnBSB7DCTI", "MHWLaNbUx7M", "a0W9bS7qZSk", "9Sh9ZSecyFU"},
 };
+} // namespace
+
+namespace {
+// A difficulty in the progress file: its name, but EXPERT2 for EXPERT (see load()).
+const char* fileName(int d) { return d == DIFF_EXPERT ? "EXPERT2" : difficultyName(d); }
 } // namespace
 
 std::string Progress::defaultPath() { return (platform::appDataDir() / "campaign-progress.tsv").string(); }
@@ -232,9 +250,10 @@ std::string Progress::stageKey(int stage) const {
 // The file, one record per line (tabs):
 //   unlock	all
 //   reach	<stage 1..>	(stages up to it open)
-//   stage	<stage 1..>	<EASY|NORMAL|HARD>	<best run score>	<its lines>	<its songs' ids, comma separated>
-//   songid	<video id>	<EASY|NORMAL|HARD>	<best score>	<its lines>	<most lines>
-// Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
+//   stage	<stage 1..>	<DIFF>	<best run score>	<its lines>	<its songs' ids, comma separated>
+//   songid	<video id>	<DIFF>	<best score>	<its lines>	<most lines>
+// DIFF is EASY, NORMAL, HARD or EXPERT2 (EXPERT: a bare EXPERT is HARD's former name, read as HARD, so that files
+// written before EXPERT existed keep their HARD results). Lines are -1 when unknown. Older files: "song <stage> <song> <diff> <best> [<lines> <most>]" and stage lines
 // without the ids (the 12 x 5 layout), migrated on load.
 void Progress::load(const std::string& path, const Campaign* camp) {
     path_ = path.empty() ? defaultPath() : path;
@@ -253,7 +272,7 @@ void Progress::load(const std::string& path, const Campaign* camp) {
     std::string line;
     auto diffOf = [](const std::string& s) {
         for (int d = 0; d < DIFF_COUNT; d++)
-            if (s == difficultyName(d)) return d;
+            if (s == fileName(d)) return d;
         return s == "EXPERT" ? (int)DIFF_HARD : -1;   // (HARD's former name, in older progress files)
     };
     auto num = [](const std::vector<std::string>& c, size_t i) { return c.size() > i && !c[i].empty() ? std::atoi(c[i].c_str()) : -1; };
@@ -334,15 +353,15 @@ bool Progress::save() const {
     for (int s = 0; s < (int)stages_.size(); s++)
         for (int d = 0; d < DIFF_COUNT; d++) {
             if (stages_[s].cleared[d])
-                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\t%s\n", s + 1, difficultyName(d), stages_[s].best[d], stages_[s].lines[d],
+                std::fprintf(f, "stage\t%d\t%s\t%d\t%d\t%s\n", s + 1, fileName(d), stages_[s].best[d], stages_[s].lines[d],
                              stageKey(s).c_str());
             for (int k = 0; k < (int)stages_[s].songs[d].size(); k++) {
                 const SongRec& r = stages_[s].songs[d][k];
                 if (!r.beaten) continue;
                 if (camp_ && s < camp_->size() && k < (int)camp_->stages()[s].songs.size())
-                    std::fprintf(f, "songid\t%s\t%s\t%d\t%d\t%d\n", camp_->stages()[s].songs[k].id.c_str(), difficultyName(d), r.best,
+                    std::fprintf(f, "songid\t%s\t%s\t%d\t%d\t%d\n", camp_->stages()[s].songs[k].id.c_str(), fileName(d), r.best,
                                  r.lines, r.mostLines);
-                else std::fprintf(f, "song\t%d\t%d\t%s\t%d\t%d\t%d\n", s + 1, k + 1, difficultyName(d), r.best, r.lines, r.mostLines);
+                else std::fprintf(f, "song\t%d\t%d\t%s\t%d\t%d\t%d\n", s + 1, k + 1, fileName(d), r.best, r.lines, r.mostLines);
             }
         }
     for (auto& l : keep_) std::fprintf(f, "%s\n", l.c_str());

@@ -203,8 +203,8 @@ static void usage() {
         "                       drop) as JSON, then exit (tools/demo.py cuts on it)\n"
         "modes (with no songs and no option above, the game opens on its title screen: VOYAGE, FREE PLAY):\n"
         "  --free               free play straight away, without the menu (also when songs are given)\n"
-        "  --difficulty D       easy, normal or hard (default), or a gravity multiplier (e.g. 0.7): free play's\n"
-        "                       speed (EASY x0.6, NORMAL x0.8, HARD x1), the voyage's difficulty\n"
+        "  --difficulty D       easy, normal, hard (default) or expert (e/n/h/x), or a gravity multiplier (e.g. 0.7):\n"
+        "                       free play's speed (EASY x0.6, NORMAL x0.8, HARD x1, EXPERT x1.4), the voyage's difficulty\n"
         "  --level N            free play's starting level (1..50, default 1; the menu picks the nearest of its steps)\n"
         "  --stage S[:SONG]     a voyage run straight away: stage S (1..15) from its song SONG (default 1)\n"
         "  --unlock             unlock every voyage stage (saved)\n"
@@ -279,7 +279,7 @@ private:
     PlaylistStore playlists_;
     Menu menu_;
     float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
-    int freeDiff_ = DIFF_HARD; // free play: the difficulty (20G is HARD's)
+    int freeDiff_ = DIFF_HARD; // free play: the difficulty (20G is HARD's and EXPERT's)
     // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
     struct Run {
         int stage = 0, from = 0, diff = DIFF_NORMAL, current = -1;
@@ -439,7 +439,8 @@ private:
     static constexpr float GRAVITY_BPM = 130.f; // the tempo gravity counts its beats in, whatever the song's
     float gameRate_ = 1.f; // gravity speed in real time (eased)
     float gravityV_ = 1.f; // the velocity gravity runs at (the autoplay hurries as it rises)
-    bool hyperAble_ = false; // hyperdrop (20G) can happen in this game (HARD)
+    bool hyperAble_ = false; // hyperdrop (20G) can happen in this game (HARD, EXPERT)
+    float hyperFrom_ = Game::TWENTY_G; // the velocity it can happen from (Game::hyperdropFrom)
     float speedPos_ = -1.f, speedHot_ = 0.f; // the speed gauge as shown (eased): its fill, hyperdrop on
     bool preroll_ = false; // a clip played from the song's start: the game alone until its warm-up (nothing drawn)
     float bonusFall_ = 0.f; // how much the bonus's stillness has taken over the fall (eased)
@@ -795,15 +796,20 @@ void App::updateGravity(double songTime, float dt) {
     if (clipVel > 0.f) v = std::clamp(clipVel, 1.f, Game::MAX_VELOCITY);
     gravityV_ = v;
     const float diff = Game::speedDifficulty(v);
-    // Hyperdrop (20G, HARD only): from velocity TWENTY_G on, in a drop (and at the top velocity, in a chorus too), a piece falls
-    // to the stack the moment it appears; the rest of the song keeps a visible fall. The last song of HARD's later
-    // stages has some, every song of the finale; free play has it from level 30 on (once the song has warmed up).
+    // Hyperdrop (20G, HARD and EXPERT only): from velocity TWENTY_G on (EXPERT: TWENTY_G_EXPERT), in a drop (and at the
+    // top velocity, in a chorus too), a piece falls to the stack the moment it appears; the rest of the song keeps a
+    // visible fall. The last song of HARD's later stages has some, every song of the finale; free play has it from
+    // level 30 on (EXPERT 24, once the song has warmed up).
     const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
     static const bool clip20G = std::getenv("REFALL_CLIP_20G") && std::getenv("REFALL_CLIP_20G")[0] == '1';
-    const bool hard = clipVel > 0.f ? clip20G : mode_ == MODE_CAMPAIGN ? run_.diff == DIFF_HARD : freeLevels && freeDiff_ == DIFF_HARD;
+    const float from = clipVel > 0.f ? (clip20G ? Game::TWENTY_G : -1.f)
+                     : mode_ == MODE_CAMPAIGN ? Game::hyperdropFrom(run_.diff)
+                     : freeLevels ? Game::hyperdropFrom(freeDiff_) : -1.f;
+    const bool hard = from > 0.f;
     hyperAble_ = hard;
+    if (hard) hyperFrom_ = from;
     const bool twentyG = hard && gameRate_ > 0.999f &&
-                         v >= Game::TWENTY_G - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
+                         v >= from - 0.05f && (pace >= 1.29f || (pace >= 1.19f && v >= Game::MAX_VELOCITY - 0.05f));
     if (twentyG != game_.twentyG()) {
         game_.setTwentyG(twentyG);
         std::printf("[game] hyperdrop %s at %.1f s\n", twentyG ? "on" : "off", songTime);
@@ -1099,7 +1105,7 @@ std::vector<HudText> App::buildHud(float dt) {
         hud.push_back({text::thousands(game_.best()), sc.x, sc.y + 204 * s, 2.f * s, 0.6f, false, true, HUD_VALUE});
     }
     // The speed gauge under the panel: the velocity on a log scale (level 1 .. MAX_VELOCITY, so the slow ones still
-    // fill some of it), the hyperdrop's zone from TWENTY_G on where it can happen (HARD), "SPEED" under it and
+    // fill some of it), the hyperdrop's zone from where it can happen on (HARD 30, EXPERT 24), "SPEED" under it and
     // "HYPERDROP" in the accent while it is on.
     {
         const float lnMax = std::log(Game::MAX_VELOCITY);
@@ -1112,7 +1118,7 @@ std::vector<HudText> App::buildHud(float dt) {
         sp.y = by;
         sp.w = bw;
         sp.pos = speedPos_;
-        sp.zone = hyperAble_ ? std::log(Game::TWENTY_G) / lnMax : -1.f;
+        sp.zone = hyperAble_ ? std::log(hyperFrom_) / lnMax : -1.f;
         sp.hot = speedHot_;
         sp.alpha = 1.f;
         R_.setSpeed(sp);
@@ -1408,6 +1414,7 @@ int App::run() {
     mode_ = opt_.menu ? MODE_MENU : MODE_FREE;
     speedMul_ = opt_.speedMul;
     freeDiff_ = opt_.difficulty;
+    game_.setRunDifficulty(opt_.difficulty);
     game_.setStartLevel(opt_.level);
     lastLevel_ = game_.level();
 
@@ -2285,6 +2292,7 @@ void App::beginSession(const Menu::Choice& c) {
     track_.reset();
     nextTrack_.reset();
     game_.setStartLevel(camp ? 1 : c.level);
+    game_.setRunDifficulty(c.difficulty);
     game_.reset(runSeed_ ^ splitmix64(sceneCounter_));
     game_.setFixedLevel(fixed);
     lastLevel_ = game_.level();
@@ -2740,7 +2748,7 @@ static void viewerUsage() {
         "  a campaign reviewed: its songs in their universes, the computer playing; the overlay (Tab / H) shows\n"
         "  the songs by stage and the song's sections, and its tour plays each section a few seconds (Space)\n"
         "  campaign             a campaign .tsv, or a custom voyage (its id or title); default: the main campaign\n"
-        "  --difficulty D       the velocities played: easy, normal (default) or hard\n"
+        "  --difficulty D       the velocities played: easy, normal (default), hard or expert\n"
         "  --stage N --song K   start on that song (default 1, 1)\n"
         "  --size WxH           window size (default 1600x900)\n"
         "  --fullscreen         start fullscreen\n"
@@ -2761,7 +2769,7 @@ static int viewerMain(int argc, char** argv) {
         if (a == "-h" || a == "--help") { viewerUsage(); return 0; }
         else if (a == "--difficulty" && i + 1 < argc) {
             if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
-                std::fprintf(stderr, "unknown difficulty '%s': easy, normal or hard\n", argv[i]);
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard or expert\n", argv[i]);
                 return 1;
             }
         }
@@ -2851,7 +2859,7 @@ int main(int argc, char** argv) {
         else if (a == "--free") freePlay = true;
         else if (a == "--difficulty" && i + 1 < argc) {
             if (!parseDifficulty(argv[++i], &o.difficulty, &o.speedMul)) {
-                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard or a multiplier (e.g. 0.7)\n", argv[i]);
+                std::fprintf(stderr, "unknown difficulty '%s': easy, normal, hard, expert or a multiplier (e.g. 0.7)\n", argv[i]);
                 return 1;
             }
             o.difficultyGiven = true;

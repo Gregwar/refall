@@ -1,5 +1,5 @@
 #pragma once
-// Game modes beyond the music: the difficulty (EASY, NORMAL, HARD), the campaign (stages of songs played in a
+// Game modes beyond the music: the difficulty (EASY, NORMAL, HARD, EXPERT), the campaign (stages of songs played in a
 // row, each song at a velocity fixed by the campaign data, data/campaign.tsv) and the player's campaign progress
 // (stages cleared and best scores, per difficulty, saved in the user data folder).
 #include <map>
@@ -7,19 +7,24 @@
 #include <string>
 #include <vector>
 
-enum Difficulty { DIFF_EASY = 0, DIFF_NORMAL, DIFF_HARD, DIFF_COUNT };
-const char* difficultyName(int d); // "EASY", "NORMAL", "HARD"
-// Free play: the gravity multiplier of each difficulty (on every level's speed); HARD is the game as it was.
+#include "difficulty.hpp"
+
+const char* difficultyName(int d); // "EASY", "NORMAL", "HARD", "EXPERT"
+// Free play: the gravity multiplier of each difficulty (on every level's speed); HARD is the game as it was, EXPERT
+// 1.4 times it.
 float freePlayMultiplier(int d);
-// "easy" / "normal" / "hard" (any case, or e/n/h; "expert" / "x", its former name, too) or a number (the multiplier itself, e.g. 0.7): false if neither.
+// "easy" / "normal" / "hard" / "expert" (any case, or e/n/h/x) or a number (the multiplier itself, e.g. 0.7): false if
+// neither.
 // A number sets *mul and *d to the nearest difficulty; a name sets *d and its multiplier.
 bool parseDifficulty(const std::string& s, int* d, float* mul);
+// A Voyage song's EXPERT velocity when its line doesn't give one: HARD's + 7 (one decimal), at most Game::MAX_VELOCITY.
+float expertVelocity(float hard);
 
 struct CampaignSong {
     std::string id;       // YouTube video id
     std::string title;
     std::string universe; // "NAME" or "NAME:VARIANT" (as --universe takes it)
-    float level[DIFF_COUNT] = {1, 1, 1}; // the velocity (1 .. Game::MAX_VELOCITY, may be fractional)
+    float level[DIFF_COUNT] = {1, 1, 1, 1}; // the velocity (1 .. Game::MAX_VELOCITY, may be fractional)
     std::string entry() const { return "ytdl:" + id + "\t" + title; } // a library entry
 };
 struct CampaignStage {
@@ -47,9 +52,12 @@ private:
 // its songs were all survived in one run started from its first song. Stage N + 1 is unlocked on a difficulty once
 // stage N is cleared on it or on a harder one, or once its songs are all beaten there, in any runs (stage 1 always is;
 // reaching a stage on HARD opens it on NORMAL and EASY too, not done there but playable), or everything with --unlock.
+// On EXPERT a stage also opens once it is itself cleared (or its songs all beaten) on HARD.
 // The file keys songs by video id and stage clears by their songs, so that regrouping the campaign keeps the songs
 // beaten (a clear whose stage no longer exists is dropped, and the stages it had opened stay open). A file of the
 // first layout (12 stages of 5, keyed by index) is migrated on load, its old copy kept as <file>.bak.
+// Difficulties are written by name; EXPERT is written "EXPERT2" because files of before it say "EXPERT" for HARD (its
+// former name), which they still read as HARD.
 class Progress {
 public:
     static std::string defaultPath(); // <user data>/refall/campaign-progress.tsv
@@ -65,6 +73,8 @@ public:
         if (unlockAll_ || stage <= reach_) return true;
         for (int d = std::max(0, diff); d < DIFF_COUNT; d++)
             if (cleared(stage - 1, d) || allBeaten(stage - 1, d)) return true;
+        // EXPERT: a stage done on HARD opens there too
+        if (diff == DIFF_EXPERT && (cleared(stage, DIFF_HARD) || allBeaten(stage, DIFF_HARD))) return true;
         return false;
     }
     bool cleared(int stage, int diff) const;
@@ -86,7 +96,7 @@ private:
     struct SongRec { bool beaten = false; int best = 0, lines = -1, mostLines = -1; };
     struct StageRec {
         bool cleared[DIFF_COUNT] = {};
-        int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1};
+        int best[DIFF_COUNT] = {}, lines[DIFF_COUNT] = {-1, -1, -1, -1};
         std::vector<SongRec> songs[DIFF_COUNT];
     };
     StageRec& at(int stage);

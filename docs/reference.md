@@ -45,8 +45,9 @@ no song previews.
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines (one per 20 lines, up to level 40: the Voyage's velocities, on the same scale). Each song
   starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
-  EASY, NORMAL or HARD, a multiplier on the gravity of every level (x0.6, x0.8, x1: HARD is the full speed, and
-  goes 20G as the Voyage does: the drops from level 30 on, the choruses too at level 40), a **starting level** (the
+  EASY, NORMAL, HARD or EXPERT, a multiplier on the gravity of every level (x0.6, x0.8, x1, x1.4: HARD is the full
+  speed, and goes 20G as the Voyage does: the drops from level 30 on, the choruses too at level 40; EXPERT falls 1.4
+  times as fast, goes 20G from level 24 on and has a shorter lock delay, see below), a **starting level** (the
   strip at the bottom of the screen: 1, then every 5 up to 40; `--level N` on the command line, any level from 1 to 40), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
   own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
   small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
@@ -56,14 +57,15 @@ no song previews.
   is pressed, then goes back to the menu.
 - **Voyage** (the campaign) is 15 stages of 4 songs played in a row. There are no levels: each song has its velocity
   (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
-  with the difficulty (EASY, NORMAL, HARD, chosen at the top of the Voyage screen). The stages are 15 glass petals in
+  with the difficulty (EASY, NORMAL, HARD, EXPERT, chosen at the top of the Voyage screen). The stages are 15 glass petals in
   a rosette, numbered 1 to 15, each in its own hue, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
   right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
   reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
   the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
   one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
   started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
-  a stage reached on HARD is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
+  a stage reached on HARD is playable on NORMAL and EASY too, not done there). On EXPERT a stage also opens once it
+  is cleared (or its songs all beaten) on HARD. A run started from a later song is fine for practice: the songs it survives count as beaten (with their
   best score) but the stage isn't cleared; once all of a stage's songs are beaten, in any runs, the next stage opens
   too (quietly: only a clear turns the petal and celebrates). A game over ends the run; a key goes back to the stages. The game remembers,
   per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
@@ -72,7 +74,9 @@ no song previews.
   (`~/.local/share/refall/` on Linux). The file keys songs by their video id and stage clears by their songs, so
   regrouping the Voyage keeps the songs beaten: a clear of a stage that no longer exists is dropped, and the stages it
   had opened (and every stage with a beaten song) stay open. A file from the first Voyage (12 stages of 5, keyed by
-  index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`.
+  index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`. Records name their
+  difficulty `EASY`, `NORMAL`, `HARD` or `EXPERT2`: EXPERT is written `EXPERT2` because a bare `EXPERT` is HARD's
+  former name, which files written before it still use and which is read as HARD.
 
 A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
 to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays
@@ -81,7 +85,7 @@ again).
 | Option | |
 |---|---|
 | `--free` | free play straight away, without the menu |
-| `--difficulty easy\|normal\|hard` | free play's difficulty (default: hard), or a gravity multiplier such as `0.7`; also Voyage's |
+| `--difficulty easy\|normal\|hard\|expert` | free play's difficulty (default: hard; or `e`, `n`, `h`, `x`), or a gravity multiplier such as `0.7`; also Voyage's |
 | `--stage S[:SONG]` | a Voyage run straight away (stage S, from its song SONG) |
 | `--unlock` | unlock every Voyage stage (saved) |
 | `--reset` | forget the Voyage progress (prints what was forgotten) |
@@ -105,16 +109,18 @@ with its licence.
 The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
 
 ```
-# stage  song  id           universe             easy  normal  hard    title
-1        1     H_9xqc084UA  PRISM:AURORA         3.0   5.0     9.0     Small Town Kid - Shards
-15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  11.0  22.5    35.5    callah x Laura Brehm - skyline
+# stage  song  id           universe             easy  normal  hard  expert  title
+1        1     H_9xqc084UA  PRISM:AURORA         3.0   5.0     9.0   16.0    Small Town Kid - Shards
+15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  11.0  22.5    35.5  40.0    callah x Laura Brehm - skyline
 ```
 
 - `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
 - `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
 - `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
-- `easy`, `normal`, `hard`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 40
-  (20 is ten times velocity 1's gravity, 40 about twenty times); decimals are fine.
+- `easy`, `normal`, `hard`, `expert`: the song's velocity on each difficulty, as a game level from 1 (the first level)
+  to 40 (20 is ten times velocity 1's gravity, 40 about twenty times); decimals are fine. `expert` may be left out
+  (a line of seven columns and the title, as files written before EXPERT): it is then HARD's + 7, at most 40, which
+  is also how the shipped Voyage sets it.
 - `title`: shown in the menu and the title card.
 
 The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
@@ -125,6 +131,10 @@ from 30.4 to 35.5 on the finale, NORMAL from 5 to 9 and from 18.5 to 22.5, EASY 
 On HARD, from velocity 30 on, the drops go into hyperdrop (20G: a piece falls to the stack the moment it appears, with
 a longer lock delay to slide and turn it along the stack; at velocity 40, free play's top, the choruses too), the rest
 of the song keeping a visible fall: in the last song of stage 13, the last two of stage 14 and every song of the finale.
+On EXPERT (HARD + 7: 16 to 21.1 on stage 1, 37.4 to 40 on the finale) hyperdrop comes from velocity 24 on, under the
+same rules (drops, and choruses too at 40), from the last song of stage 6 on; its lock delay is shorter, 0.45 s at velocity 1
+down to 0.12 s from velocity 20 on, and 0.35 s in hyperdrop (EASY, NORMAL and HARD: 0.55 s down to 0.35 s, 0.5 s in
+hyperdrop).
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
 climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
 
@@ -253,7 +263,7 @@ Taking over pauses it: Left/Right seek 10 s, `[` / `]` go to the previous / next
 next song, Page Up/Down to the previous / next stage; a click on a card plays its song, a click (or a drag) on the
 timeline seeks. Songs not downloaded yet are fetched when played, and the next one is prepared in the background.
 
-Options: `--difficulty easy|normal|hard` (the velocities played, NORMAL by default), `--stage N --song K` (start
+Options: `--difficulty easy|normal|hard|expert` (the velocities played, NORMAL by default), `--stage N --song K` (start
 there), `--size WxH`, `--fullscreen`, `--mute`, and `--shot OUT.png` (saves the viewer `--shot-after SEC`, 8 by
 default, into the first song, offscreen, then exits; `REFALL_VIEWER_KEYS="T:COMMAND,..."` gives it commands on the way:
 next, prev, stage+, stage-, fwd, back, sec+, sec-, tour, hide).
@@ -279,7 +289,7 @@ and beam overdrive).
 Each song is decoded and analyzed in the background (under 1 s):
 
 - **Song sections**: gravity counts beats of a fixed 130 BPM (not the song's tempo: the same velocity falls as fast in every song), at a pace set by the current section, in rows per beat: break ×0.4, intro ×0.5, outro ×0.5, verse ×0.8, build ×1, chorus ×1.2, drop ×1.3 (at most ×1 in a song's first 20 s). During a change of universe gravity eases down to ×0.25 (the stack can be hard to read while two worlds blend) and back up over about a second once the new one is in.
-- **Levels**: one level per 20 lines, up to level 50 (980 lines). Each level speeds up the beat-locked gravity (the levels spread over the velocity 1 .. 40: ×10 at velocity 20, ×19.5 at 40, capped at 60 rows/s) and, up to level 20, shortens the lock delay (0.55 s → 0.35 s). Every song starts with a warm-up (half the level's velocity, all of it after 20 s). On HARD, from level 38 on (velocity 30), the drops go 20G (at level 50 the choruses too), as in the Voyage. Game over resets the level.
+- **Levels**: one level per 20 lines, up to level 50 (980 lines). Each level speeds up the beat-locked gravity (the levels spread over the velocity 1 .. 40: ×10 at velocity 20, ×19.5 at 40, capped at 60 rows/s) and, up to level 20, shortens the lock delay (0.55 s → 0.35 s; on EXPERT 0.45 s → 0.12 s). Every song starts with a warm-up (half the level's velocity, all of it after 20 s). On HARD, from level 38 on (velocity 30), the drops go 20G (at level 50 the choruses too), as in the Voyage; on EXPERT from velocity 24 on. Game over resets the level.
 - **Key**: the song's hue follows the circle of fifths; universes may pick their variant from it (VECTOR's phosphor).
 - **Tempo, brightness, bass/air balance, dynamics, density**: weigh which universe suits the song.
 - **Song structure**: the song is split at bar lines into labelled segments (intro, verse, build, chorus, drop, break, outro), and segments that sound alike are grouped. A section that gets louder starts where it lands, on the first beat where its bass and loudness are back (after the gap, bass cut or riser before a drop), and a drop is the song's most intense material entered by a rise. That rise is measured against the section before it, or, when the section starts on a bass return, against how the one before it ended (a loud section that thins out into a breakdown keeps a high mean: the drop after it is no louder than it on average, only than its end). A drop is heard where the full bass comes back after a cut, so a bass return (a beat whose bass reaches the next two bars' level after a bar or more of clearly lower bass, into loud material) places a section boundary on that beat; a cut of a bar or so inside a section that already had the full bass is a fill and is ignored. A drop can also come out of a loud chorus without getting louder on average: after a gap of a beat or two, its hits land clearly harder (bass and loudness peaks above those of the steady full-bass bars before it, as in a pumping, sidechained drop); that landing starts a drop too. The gap may be shallower (a beat or two at 60% rather than cut) between two stretches of steady full bass: a pre-drop that already has the bass, then the drop itself. When two loud sections follow each other and the second is clearly fuller, the first is its build and the second the drop; a section's energy leaves out the fade at its tail (the song ending), so a final drop still counts. Each segment eases the scene's density, speed, glow and saturation (builds ramp up, breaks thin out).

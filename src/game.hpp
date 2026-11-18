@@ -6,6 +6,7 @@
 #include <deque>
 #include <vector>
 
+#include "difficulty.hpp"
 #include "mathutil.hpp"
 
 enum PieceType { I = 0, O, T, S, Z, J, L, PIECE_COUNT };
@@ -114,6 +115,9 @@ public:
     // The velocity: the fixed one, or the level reached with the lines (level 1 .. MAX_LEVEL is velocity 1 .. MAX_VELOCITY:
     // the same scale).
     static constexpr float MAX_VELOCITY = 40.f, TWENTY_G = 30.f; // (20G: see the app's gravity)
+    static constexpr float TWENTY_G_EXPERT = 24.f;                 // (EXPERT's: from 24)
+    // The velocity from which hyperdrop can happen on a difficulty: HARD TWENTY_G, EXPERT TWENTY_G_EXPERT; -1: never.
+    static float hyperdropFrom(int diff) { return diff == DIFF_HARD ? TWENTY_G : diff == DIFF_EXPERT ? TWENTY_G_EXPERT : -1.f; }
     float velocity() const {
         return fixedLevel_ > 0.f ? std::clamp(fixedLevel_, 1.f, MAX_VELOCITY)
                                  : 1.f + (level() - 1) * (MAX_VELOCITY - 1.f) / float(MAX_LEVEL - 1);
@@ -127,6 +131,9 @@ public:
     void setFixedLevel(float level) { fixedLevel_ = level; }
     // 20G (the game calls it hyperdrop): the app drops each piece to the stack at once; the lock delay is then a little longer
     void setTwentyG(bool on) { twentyG_ = on; }
+    // The run's difficulty (DIFF_EASY .. DIFF_EXPERT; kept by reset()): EXPERT has its own, shorter lock delay.
+    void setRunDifficulty(int d) { runDiff_ = d; }
+    int runDifficulty() const { return runDiff_; }
     bool twentyG() const { return twentyG_; }
     float fixedLevel() const { return fixedLevel_; }
     int best() const { return best_; }
@@ -158,10 +165,13 @@ public:
     bool planMove(int& rot, int& x) const;
 
 private:
-    // Lock delay shortens with the level (0.55 s at level 1, 0.35 s at the plateau, level 20).
-    // 20G (the pieces fall to the stack at once, see setTwentyG): the lock delay is a little longer, the time to slide
-    // and turn a piece along the stack.
-    float lockDelay() const { return twentyG_ ? 0.5f : 0.55f - 0.2f * difficulty(); }
+    // Lock delay shortens with the level (0.55 s at level 1, 0.35 s at the plateau, level 20; on EXPERT 0.45 s down to
+    // 0.12 s). 20G (the pieces fall to the stack at once, see setTwentyG): the lock delay is a little longer, the time
+    // to slide and turn a piece along the stack (0.5 s, on EXPERT 0.35 s).
+    float lockDelay() const {
+        if (runDiff_ == DIFF_EXPERT) return twentyG_ ? 0.35f : 0.45f - 0.33f * difficulty();
+        return twentyG_ ? 0.5f : 0.55f - 0.2f * difficulty();
+    }
 
     static constexpr int MAX_RESETS = 15;
 
@@ -183,6 +193,7 @@ private:
     int lockResets_ = 0;
     bool grounded_ = false;
     bool twentyG_ = false;
+    int runDiff_ = DIFF_HARD;
     int heldShift_ = 0;
     float spawnDelay_ = 0;
     float rowOffset_[H] = {};

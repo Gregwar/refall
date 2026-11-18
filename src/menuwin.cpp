@@ -191,17 +191,18 @@ void Worlds::draw() {
 
 void Worlds::tabs(F f, Col ink, Col accent, float track) {
     std::string name = m.voyageTitle_.empty() ? std::string("VOYAGE") : upper(asciiFold(m.voyageTitle_));
-    while (name.size() > 4 && p.width(f, name, 22 * u, track + 0.2f) > 760 * u) name.pop_back();
-    const float cx = X(1180), sp = 220 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_);
+    while (name.size() > 4 && p.width(f, name, 22 * u, track + 0.2f) > 700 * u) name.pop_back();
+    // the difficulties, centred on cx (four of them, EASY .. EXPERT)
+    const float cx = X(1250), sp = 195 * u, y = Y(90), on = 1.f - std::min(1.f, m.aRow_), mid = 0.5f * (DIFF_COUNT - 1);
     // a soft shade under the title and the tabs, so they read over a bright crystal
     p.rrect(X(40), y - 40 * u, p.width(f, name, 22 * u, track + 0.2f) + 80 * u, 64 * u, 32 * u, hex(0x02040c, 0.22f), 50 * u);
-    p.rrect(cx - sp - 110 * u, y - 40 * u, 2 * sp + 220 * u, 70 * u, 35 * u, hex(0x02040c, 0.22f), 50 * u);
+    p.rrect(cx - mid * sp - 110 * u, y - 40 * u, 2 * mid * sp + 220 * u, 70 * u, 35 * u, hex(0x02040c, 0.22f), 50 * u);
     p.text(f, name, X(80), Y(92), 22 * u, withA(ink, 0.8f), -1, track + 0.2f);
-    const float hx = cx + (m.aDiff_ - 1) * sp;
+    const float hx = cx + (m.aDiff_ - mid) * sp;
     p.line(hx - 56 * u, y + 16 * u, hx + 56 * u, y + 16 * u, (1.5f + 1.5f * on) * u, withA(accent, 0.6f + 0.4f * on));
     if (on > 0.05f) { p.setAdditive(true); p.glow(hx, y + 16 * u, 80 * u, withA(accent, 0.25f * on)); p.setAdditive(false); }
     for (int d = 0; d < DIFF_COUNT; d++)
-        p.text(f, difficultyName(d), cx + (d - 1) * sp, y, 21 * u, withA(ink, 0.45f + 0.55f * near1(m.aDiff_, d)), 0, track);
+        p.text(f, difficultyName(d), cx + (d - mid) * sp, y, 21 * u, withA(ink, 0.45f + 0.55f * near1(m.aDiff_, d)), 0, track);
 }
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
@@ -677,10 +678,11 @@ void Worlds::kalFree() {
     p.text(F::JOSEFIN_LIGHT, "FREE PLAY", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     const bool rows = m.playlists_ != nullptr;
     const float onDiff = rows ? 1.f - std::min(1.f, m.aFreeRow_) : 1.f;
-    static const uint32_t C[3] = {0x6fd8c0, 0x9c86ff, 0xff6f9c};
+    // the difficulties' gems: teal, violet, rose, and EXPERT an ember orange
+    static const uint32_t C[DIFF_COUNT] = {0x6fd8c0, 0x9c86ff, 0xff6f9c, 0xff8a3d};
     for (int d = 0; d < DIFF_COUNT; d++) {
-        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 1) * 430.f), y = Y(405);
-        const float R = (115 + 22 * f * onDiff) * u;
+        const float f = sstep(near1(m.aFree_, d)), x = X(960 + (d - 0.5f * (DIFF_COUNT - 1)) * 400.f), y = Y(405);
+        const float R = (108 + 20 * f * onDiff) * u;
         // a setting round it: a bronze ring and a blue orbit, gold when chosen
         p.circle(x, y, R + 30 * u, hex(0x0a1020, 0.35f), 30 * u);
         p.ring(x, y, R + 12 * u, 2.2f * u, mixc(hex(0x7a5c44, 0.8f), hex(0xe8c06a, 0.95f), f));
@@ -793,7 +795,7 @@ void Worlds::kalFree() {
         }
         if (!m.plMsg_.empty())
             p.text(F::JOSEFIN, upper(m.plMsg_), X(160), Y(930), 16 * u, m.plMsgBad_ ? hex(0xff9a9a) : hex(0xffe0a0), -1, 0.3f);
-        // the starting level: a strip of coarse steps along the bottom (HARD's hyperdrop levels in its colour)
+        // the starting level: a strip of coarse steps along the bottom (HARD's and EXPERT's hyperdrop levels in its colour)
         const float onLvl = std::clamp(m.aFreeRow_ - 1.f, 0.f, 1.f);
         const float ly = Y(962), lh = 78 * u, cw = 120 * u, lx = X(440);
         p.glass(X(120), ly, 1680 * u, lh, 24 * u, u, 0.4f * onLvl, 0.55f);
@@ -804,10 +806,12 @@ void Worlds::kalFree() {
         for (int i = 0; i < Menu::FREE_LEVEL_COUNT; i++) {
             const int lv = Menu::FREE_LEVELS[i];
             const float f = sstep(near1(m.aLvl_, i)), x = lx + (i + 0.5f) * cw;
-            const bool g20 = m.freeDiff_ == DIFF_HARD && lv >= Game::TWENTY_G;
+            const float from = Game::hyperdropFrom(m.freeDiff_);
+            const bool g20 = from > 0.f && lv >= from;
+            const uint32_t gc = C[std::clamp(m.freeDiff_, 0, DIFF_COUNT - 1)];
             p.text(F::JOSEFIN, std::to_string(lv), x, ly + lh / 2 + (g20 ? 3 : 9) * u, (24 + 4 * f) * u,
-                   withA(g20 ? hex(C[DIFF_HARD]) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
-            if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(C[DIFF_HARD], 0.5f + 0.4f * f), 0, 0.12f);
+                   withA(g20 ? hex(gc) : hex(0xffffff), 0.45f + 0.55f * f), 0, 0.1f);
+            if (g20) p.text(F::JOSEFIN, "HYPERDROP", x, ly + lh / 2 + 21 * u, 10 * u, hex(gc, 0.5f + 0.4f * f), 0, 0.12f);
         }
     }
     // only the keys a player wouldn't guess (paste, remove); the arrows, Enter and Esc go without saying
