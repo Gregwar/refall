@@ -1340,6 +1340,8 @@ int App::run() {
     if (wantHeadless) std::fprintf(stderr, "[gl] no headless GPU context, using a window\n");
     // on the discrete GPU when there are two; if that fails, again on the default one
     bool discrete = preferDiscreteGpu();
+    // (GLFW's own reason when it fails: no display, a missing library...)
+    glfwSetErrorCallback([](int code, const char* what) { std::fprintf(stderr, "[glfw] error %d: %s\n", code, what); });
     for (;;) {
         if (!glfwInit()) {
             if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
