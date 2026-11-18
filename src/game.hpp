@@ -165,10 +165,14 @@ public:
     bool planMove(int& rot, int& x) const;
 
 private:
-    // Lock delay, the same on every difficulty: 0.55 s at level 1 down to 0.5 s at the plateau (level 20), and 0.5 s in
-    // 20G (the pieces fall to the stack at once, see setTwentyG): a fast fall never leaves less time to slide and turn
-    // a piece than 20G does. Its clock only runs once the piece is seen to rest (see update).
-    float lockDelay() const { return twentyG_ ? 0.5f : 0.55f - 0.05f * difficulty(); }
+    // Lock delay: 0.55 s at level 1 down to 0.5 s at the plateau (level 20), and 0.5 s in 20G (the pieces fall to the
+    // stack at once, see setTwentyG): a fast fall never leaves less time to slide and turn a piece than 20G does.
+    // EXPERT: 0.4 s throughout. Its clock only runs once the piece is seen to rest (see update).
+    float lockDelay() const {
+        if (runDiff_ == DIFF_EXPERT) return EXPERT_LOCK_DELAY;
+        return twentyG_ ? 0.5f : 0.55f - 0.05f * difficulty();
+    }
+    static constexpr float EXPERT_LOCK_DELAY = 0.4f;
 
     static constexpr int MAX_RESETS = 15;
 
