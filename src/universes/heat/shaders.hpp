@@ -306,8 +306,8 @@ void main() {
     d *= 1.0 - 0.35 * uRim * (1.0 - smoothstep(0.0, 0.022, depth));
     // the camera's highlight compression (the drop): above a knee the heat rolls off softly to the cap, so the
     // hottest lava tops out bright orange with its swirls and fissures still showing
-    float knee = uCap - 0.25;
-    if (d > knee) d = knee + 0.25 * (1.0 - exp(-(d - knee) / 0.25));
+    float knee = uCap - 0.18;
+    if (d > knee) d = knee + 0.18 * (1.0 - exp(-(d - knee) / 0.18));
     float a = (1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd)) * vB.w;
     frag = vec4(d * a, a, 0.0, a);
 }
