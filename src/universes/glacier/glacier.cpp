@@ -16,13 +16,15 @@
 // lines, then barely more), eased, a surge running out from the well with every clear; a new game drains it.
 //
 // The well is a clear glass case (a dark blue back with a fine grid, a thick rim of clear glass), the previews sit in
-// frosted ice frames. The pieces are ice cubes, one per cell: a frosted bevel lit from the top left round a clear face,
-// the piece's icy tint deepening inside, a cloudy core, cracks and bubbles of its own that go with it as rows fall, a
-// sharp highlight; seven tints that stay apart (aqua, frost white, azure, mint, lilac, deep teal, periwinkle in ICE).
-// The falling piece trails faint streaks of cold light and a few frost motes; the ghost is a frosted outline. A lock
-// frosts the cubes white for a moment; a hard drop breathes a little mist out at the contact. A cleared row melts in
-// under half a second: its cubes slump from the top into glossy drops and are gone, drips falling into the water
-// where they ring; the water rises a little.
+// frosted ice frames. The pieces are thick cubes of clear ice, one per cell, seen a little from the front: rounded
+// edges frosted almost white, a band of rime on the top face, a glossy translucent body (the colour deepening toward
+// the centre, cloudy refracting ice, four back facets, fracture planes, trapped bubbles, caustics) with fractures and
+// bubbles of its own that go with it as rows fall, a soft highlight; under the water a deeper, saturated teal; seven
+// icy tints that stay apart (aqua, frost white, pale blue, mint, deep blue, sea green, ocean blue in ICE). The falling
+// piece trails faint streaks of cold light and a few frost motes; the ghost is a frosted outline. A lock frosts the
+// cubes white for a moment; a hard drop breathes a little mist out at the contact. A cleared row melts in 0.8 s, with a
+// stagger from the middle out: clear and glossy, rounded off, down into a thin film that fades, kept under the rows
+// settling above it; clean drops fall from the films into the water and ring; the water rises a little.
 //
 // The music: the cave's light breathes slowly with the energy (never with the beats), the water's swell grows with the
 // level, a ripple spreads every two beats at mid and peak, and at a peak the kicks shake frost loose from the icicles
@@ -91,19 +93,19 @@ const VariantDef VARIANTS[] = {
     // Daylight through turquoise ice, a white opening; the drop is the sun through the ice.
     {"ICE", 0x0f6a80, 0x98ecf4, 0xa8e8f0, 0xf2ffff, 0xcfe6ec, 0x06121f, 0x3f8aa0, 0xd8fbff, 0xffd690, 0x7cecff,
      0x0c1a30, 0x5f90b8, 0xc8f2ff, 0xf2fbff, 0xbff4ff, 0x06202c,
-     {0x56d6e6, 0xe4f2f6, 0x4c98ee, 0x78e0aa, 0xc6a6f0, 0x2aa596, 0x9cc0ff}, 0.f, 0.f},
+     {0x5ad4e6, 0xe6f4f8, 0x9ccaf2, 0x82e4ae, 0x3f78dc, 0x22a88c, 0x2a9ccc}, 0.f, 0.f},
     // A glacier at night: sapphire ice, moonlight at the opening; the drop is the glacier's cold heart lighting up.
     {"DEEP", 0x0a1a48, 0x4f86d8, 0x24427e, 0x9cc4ff, 0x3a5288, 0x040a1a, 0x23447a, 0x9cc4ff, 0xc8ecff, 0x4aa8ff,
      0x060c20, 0x3a5a96, 0x8fb8ff, 0xe6f0ff, 0x9fd0ff, 0x030818,
-     {0x52d2f2, 0xe2ecff, 0x5e86f2, 0x64e0b8, 0xb890f2, 0x30a8a0, 0xf2b8d8}, 1.f, 0.f},
+     {0x52cdf0, 0xe0ecff, 0x92b8f6, 0x6edcc0, 0x3a62d8, 0x1f9c98, 0x2a86d0}, 1.f, 0.f},
     // Dark green-teal ice under the polar night; the drop pours aurora curtains through the walls.
     {"AURORA", 0x0a3434, 0x5cc8b4, 0x1c5258, 0x9ff0dc, 0x3a666c, 0x041414, 0x1f5654, 0xa8ffe6, 0x5cff9a, 0xc860ff,
      0x061618, 0x3a7a78, 0x9ff0e0, 0xeafff8, 0x9affd8, 0x031010,
-     {0x58e0e8, 0xe4f8f4, 0x6aa0f4, 0x86ec9a, 0xd6a0f4, 0x2ab8a0, 0xf4d890}, 0.7f, 1.f},
+     {0x56dce4, 0xe4f8f4, 0x98d0f0, 0x86eca0, 0x3c80d8, 0x22b090, 0x28a4c4}, 0.7f, 1.f},
     // Ice lit by a low sun: lilac walls, rose edges, a peach opening; the drop sets the ice ablaze in amber and rose.
     {"SUNSET", 0x2e2a5c, 0xd898c0, 0xdcaabc, 0xfff0d8, 0xe2ccd8, 0x140e26, 0x6a4c7c, 0xffe0c0, 0xffb060, 0xff78a8,
      0x120e26, 0x8a6aa4, 0xffe0ec, 0xfff6f0, 0xffd4b4, 0x140a1c,
-     {0x6ad4e8, 0xf6eef4, 0x7a9af0, 0x8adcb8, 0xe6a6d8, 0x40b0b0, 0xf6c890}, 0.f, 0.f},
+     {0x66d2e8, 0xf4f2f6, 0xa6c8f4, 0x8ee0b8, 0x4a7ce0, 0x2aa898, 0x34a0cc}, 0.f, 0.f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
@@ -130,7 +132,9 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
-constexpr float CLEAR_T = 0.45f;   // a cleared cube melts in this long (real time)
+// A cleared cube melts in MELT_T (real time): MELT_U of its own after a stagger from the middle out (MELT_STAGGER a
+// column).
+constexpr float MELT_T = 0.82f, MELT_U = 0.66f, MELT_STAGGER = 0.035f;
 constexpr int MAX_MOTES = 700;
 constexpr int MAX_RIPPLES = 16;
 // The previews' frosted frames (board units: center, half size).
@@ -383,20 +387,24 @@ void GlacierUniverse::onEvent(const GameEvent& ev, const Game& game) {
             if (cl.y < Game::HIDDEN || cl.y >= Game::H || cl.x < 0 || cl.x >= Game::W) continue;
             const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
             const int id = ids_[cl.y][cl.x] ? ids_[cl.y][cl.x] : nextId_++;
-            melting_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), (float)(id % 997) * 0.731f, 0.f});
-            // a drip or two falling into the water
-            const int nd = rng_.uniform() < 0.6f ? 1 : 0;
+            int low = cl.y;
+            while (low + 1 < Game::H && rows[low + 1]) low++;
+            const float delay = MELT_STAGGER * std::fabs(cl.x - 4.5f);
+            melting_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), (float)(id % 997) * 0.731f, 0.f, delay, cl.y, low});
+            // one cube in two of the clear's lowest row lets a clean drop fall from its film into the water
+            const int nd = (cl.x + cl.y) % 2 == 0 && cl.y == low ? 1 : 0;
             for (int i = 0; i < nd && (int)motes_.size() < MAX_MOTES; i++) {
                 Mote d;
                 d.kind = 1;
-                d.p = V(p.x + rng_.range(-0.3f, 0.3f), p.y - 0.35f);
-                d.v = V(rng_.range(-0.25f, 0.25f), rng_.range(-1.5f, -0.5f));
-                d.age = -rng_.range(0.12f, 0.35f);
+                d.p = V(p.x, p.y - 0.47f);
+                d.v = V(0.f, -0.4f);
+                d.age = -(delay + MELT_U * 0.62f);
                 d.life = 3.f;
-                d.size = rng_.range(0.07f, 0.11f);
-                d.col = lerp(pal_.piece[std::clamp(cl.type, 0, 6)], pal_.open, 0.5f);
-                d.alpha = 0.9f;
-                d.seed = (float)(n++ % 3); // one in three rings the water where it falls
+                d.size = 0.085f;
+                d.col = lerp(pal_.piece[std::clamp(cl.type, 0, 6)], pal_.open, 0.45f);
+                d.alpha = 0.95f;
+                d.seed = 0.f; // rings the water where it falls
+                n++;
                 motes_.push_back(d);
             }
         }
@@ -442,6 +450,12 @@ void GlacierUniverse::cube(float x, float y, float half, float seed, const vec3&
 
 void GlacierUniverse::buildBoard(const Game& g) {
     auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
+    // the melting cubes first (the rows falling into their room cover their films), each kept under the rows above
+    for (const Melting& m : melting_) {
+        const float u = saturate((m.t - m.delay) / MELT_U);
+        const float room = std::clamp(m.row - m.low + g.rowOffset(m.low), 0.f, 1.f);
+        cube(m.x, m.y, 0.5f, m.seed, tintOf(m.type), 1.f, 2, u, room, 0.f);
+    }
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
@@ -455,7 +469,6 @@ void GlacierUniverse::buildBoard(const Game& g) {
             const float rowFrac = (o.row - Game::HIDDEN) / (float)(Game::H - Game::HIDDEN);
             cube(o.x, o.y, 0.5f, o.seed, tintOf(o.type), 1.f, 0, 0.f, 0.f, smoothstepf(rowFrac * 0.6f, rowFrac * 0.6f + 0.35f, over_));
         }
-    for (const Melting& m : melting_) cube(m.x, m.y, 0.5f, m.seed, tintOf(m.type), 1.f, 0, saturate(m.t / CLEAR_T), 0.f, 0.f);
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -587,7 +600,7 @@ HudInk GlacierUniverse::hudInk(const HudText& h) {
     const float br = smoothstepf(0.3f, 0.95f, bridge_.amount);
     HudInk k;
     k.pale = ugl::toSrgb(lerp(pal_.ink, bridge_.ink, br));
-    k.deep = ugl::toSrgb(lerp(lerp(pal_.veil, pal_.deep, 0.35f), bridge_.ink, br));
+    k.deep = k.pale; // (white over the bright ice too: the host's veil keeps it legible)
     k.accent = ugl::toSrgb(lerp(pal_.accent, bridge_.ink, br));
     return k;
 }
@@ -738,7 +751,7 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
             m.v.y -= 16.f * mdt;
             m.p = vec2{m.p.x + m.v.x * mdt, m.p.y + m.v.y * mdt};
             if (m.p.y < surface(m.p.x)) {
-                if (m.seed < 0.5f) ripple(m.p.x, 0.02f, 0.3f);
+                if (m.seed < 0.5f) ripple(m.p.x, 0.016f, 0.28f);
                 m.age = m.life; // gone into the water
             }
             continue;
@@ -751,7 +764,7 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
     }
     motes_.erase(std::remove_if(motes_.begin(), motes_.end(), [](const Mote& m) { return m.age >= m.life; }), motes_.end());
     for (auto& md : melting_) md.t += dt;
-    melting_.erase(std::remove_if(melting_.begin(), melting_.end(), [](const Melting& x) { return x.t > CLEAR_T; }), melting_.end());
+    melting_.erase(std::remove_if(melting_.begin(), melting_.end(), [](const Melting& x) { return x.t > MELT_T; }), melting_.end());
     for (auto& row : flash_)
         for (float& v : row) v = approach(v, 0.f, 5.f, dt);
 
@@ -899,6 +912,13 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progCell_, "uTime", time_);
         set1f(progCell_, "uDrop", dropAmt_);
         set3f(progCell_, "uGlow", lerp(pal_.glowB, pal_.glowA, 0.5f));
+        set1f(progCell_, "uLevel", level_);
+        set1f(progCell_, "uWaterA", world);
+        {
+            const vec3 hi = pal_.waterHi;
+            const float mx = std::max(1e-3f, std::max(hi.x, std::max(hi.y, hi.z)));
+            set3f(progCell_, "uDeepTint", lerp(vec3(1.f), hi * (1.f / mx), 0.45f) * 0.95f);
+        }
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(cellVao_);
@@ -910,6 +930,7 @@ void GlacierUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progSprite_);
         setMat(progSprite_, "uVP", vp_);
         set1f(progSprite_, "uTime", time_);
+        set1f(progSprite_, "uPxPerUnit", pxPerUnit_);
         glBindVertexArray(spriteVao_);
         glBindBuffer(GL_ARRAY_BUFFER, spriteVbo_);
         glBufferData(GL_ARRAY_BUFFER, sprites_.size() * sizeof(SpriteInst), sprites_.data(), GL_STREAM_DRAW);

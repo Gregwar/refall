@@ -71,7 +71,9 @@ private:
     void syncIds(const Game& g);
     void cube(float x, float y, float half, float seed, const vec3& tint, float alpha, int mode, float erase, float flash, float frost);
     void buildBoard(const Game& g);
-    struct Melting { float x, y; int type; float seed, t; };
+    // a melting cube: where, its type and seed, its time, its stagger, its row and the lowest row of its clear (the
+    // rows above fall into the room it leaves)
+    struct Melting { float x, y; int type; float seed, t, delay; int row, low; };
     std::vector<Melting> melting_;
     struct OverCell { float x, y; int type; float seed, row; };
     std::vector<OverCell> overCells_; // the stack at the top out (the board is emptied)

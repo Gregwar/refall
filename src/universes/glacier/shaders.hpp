@@ -478,16 +478,20 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the ice cubes
-// One cube per cell, seen face on: a frosted bevel lit from the top left round a clear face, the piece's icy tint
-// deepening inside, a cloudy core, cracks and bubbles of its own (its seed), a sharp highlight and a gloss. The ghost is
-// a frosted outline; a cleared cube melts (it slumps from the top into a glossy drop of water and is gone).
+// One thick cube of clear ice per cell, seen a little from the front: rounded edges and corners frosted almost white
+// (a cap of rime along the top), a glossy translucent body that lets the eye in deep: the colour deepening toward the
+// centre, the cube's back faces refracted into four facets meeting near its middle, a few fracture planes, tiny
+// trapped bubbles, caustic filaments of focused light, a soft highlight at the top left. Under the water a cube goes a
+// deeper, more saturated teal. The ghost is a frosted outline. A cleared cube melts (mode 2, its progress 0..1 and the
+// height left free above it): it turns clear and glossy, rounds off, and shrinks down into a thin film that fades.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, seed
 layout(location = 2) in vec4 aB; // tint rgb, alpha
-layout(location = 3) in vec4 aC; // mode (0 cube, 1 ghost), melt 0..1, flash, frost
+layout(location = 3) in vec4 aC; // mode (0 cube, 1 ghost, 2 melting), melt progress, flash (melting: the room above), frost
 uniform mat4 uVP;
 out vec2 vLocal;
+out vec2 vWorld;
 flat out vec4 vA;
 flat out vec4 vB;
 flat out vec4 vC;
@@ -495,101 +499,122 @@ void main() {
     float ext = aA.z * 1.04;
     vec2 wp = aA.xy + aPos * ext;
     vLocal = aPos * ext / (2.0 * aA.z);
+    vWorld = wp;
     vA = aA; vB = aB; vC = aC;
     gl_Position = uVP * vec4(wp, 0.0, 1.0);
 }
 )";
 inline const char* CELL_FS = R"(#version 330 core
 in vec2 vLocal;
+in vec2 vWorld;
 flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
-uniform float uTime, uBridge, uDrop;
-uniform vec3 uBridgeInk, uGlow;
+uniform float uTime, uBridge, uDrop, uLevel, uWaterA;
+uniform vec3 uBridgeInk, uGlow, uDeepTint;
 void main() {
     int mode = int(vC.x + 0.5);
     vec2 p = vLocal;
     float aa = max(length(fwidth(p)) * 0.7071, 1e-4);
-    float melt = vC.y;
-    float m = smoothstep(0.0, 1.0, melt);
-    vec2 hs = vec2(0.465 + 0.06 * m, max(0.465 * (1.0 - 0.8 * m), 0.04));
-    vec2 c = vec2(0.0, -0.465 + hs.y);
-    vec2 q = p - c;
-    float r = min(0.085 + 0.35 * m, hs.y);
+    float seed = vA.w;
+    vec3 tint = vB.rgb;
+    // the melt: clear and glossy first, then down into a film, then gone (smooth eases, crisp shapes)
+    float u = mode == 2 ? vC.y : 0.0;
+    float gloss = smoothstep(0.0, 0.3, u);
+    float s = smoothstep(0.18, 0.75, u);
+    float hgt = mode == 2 ? min(mix(1.0, 0.11, s), max(vC.z, 0.11)) : 1.0;
+    vec2 hs = vec2(mix(0.47, 0.44, s), 0.47 * hgt);
+    vec2 q = p - vec2(0.0, -0.47 + hs.y);
+    float r = min(mix(0.15, 0.24, gloss), hs.y);
     float sd = rbox(q, hs, r);
     float inside = 1.0 - smoothstep(-aa, aa, sd);
     if (inside <= 0.0) discard;
     float e = -sd;
-    vec3 tint = vB.rgb;
-    float seed = vA.w;
+    vec3 light = mix(tint, vec3(1.0), 0.3);
     if (mode == 1) {
         // the ghost: a frosted outline and a faint fill
         float rim = smoothstep(0.075 + aa, 0.05 - aa, e);
         float fr = 0.75 + 0.25 * vnoise(p * 30.0 + seed);
-        vec3 col = mix(tint, vec3(1.0), 0.55) * fr;
         float a = (rim * 0.75 + 0.08) * inside * vB.a;
-        col = mix(col, uBridgeInk, uBridge);
+        vec3 col = mix(mix(light, vec3(1.0), 0.3) * fr, uBridgeInk, uBridge);
         frag = vec4(col * a, a);
         return;
     }
-    // the bevel: frosted, lit from the top left
-    float bevW = 0.13;
-    float bev = 1.0 - smoothstep(bevW - aa, bevW + aa, e);
-    // (the bevel's normal turns smoothly round the rounded corners: a worn cube, not a mitred frame)
-    vec2 kq = abs(q) - (hs - 0.2);
-    vec2 nb = kq.x > 0.0 && kq.y > 0.0 ? normalize(kq) * sign(q) : (kq.x > kq.y ? vec2(sign(q.x), 0.0) : vec2(0.0, sign(q.y)));
-    float litB = dot(nb, vec2(-0.6, 0.8));
-    float fr = vnoise(q * 26.0 + seed * 9.0) * 0.55 + vnoise(q * 9.0 + seed) * 0.45;
-    float speck = smoothstep(0.6, 0.85, vnoise(q * 22.0 + seed * 4.0));
-    // the bevel: rounded, frosted, whitest on the lit edges, the tint showing on the shaded ones
-    float prof = sin(sat(e / bevW) * 3.14159);
-    vec3 bevC = mix(tint * 1.05, vec3(1.0), sat(0.18 + 0.3 * litB + 0.2 * fr + 0.15 * prof * litB + 0.25 * speck)) * (0.84 + 0.3 * litB * (0.6 + 0.4 * prof));
-    // the face: the tint, lighter to the top left (refraction), the light coming back in along its inner edges,
-    // a cloudy white core
-    vec3 face = tint * (0.62 + 0.45 * sat(0.5 - q.x + q.y));
-    // thick glass just inside the bevel: a deeper band, then the light coming back in
-    face *= 1.0 - 0.22 * exp(-(e - bevW) / 0.04);
-    face += mix(tint, vec3(1.0), 0.3) * exp(-sq((e - bevW - 0.07) / 0.035)) * 0.12;
-    // the cube's back edges seen through it, a faint bright square
-    float back = abs(rbox(q - vec2(0.05, -0.05), hs - 0.2, 0.06));
-    face += mix(tint, vec3(1.0), 0.5) * exp(-back / 0.012) * 0.12 * smoothstep(0.0, 0.1, q.x - q.y + 0.1);
-    float core = smoothstep(0.3, 0.0, length(q * vec2(1.0, 1.2)) + (fbm3(q * 5.0 + seed * 3.0) - 0.5) * 0.35);
-    face = mix(face, mix(tint, vec3(1.0), 0.7), core * 0.4);
-    // a crack: one fine bright plane inside, the cube's own (not in every cube)
-    vec2 cd = normalize(hash2(vec2(seed * 3.7, 1.3)) - 0.5);
-    vec2 co = (hash2(vec2(seed * 5.9, 2.1)) - 0.5) * 0.3;
-    float cl = abs(dot(q - co, cd) + 0.012 * sin(dot(q, cd.yx * vec2(1.0, -1.0)) * 9.0 + seed));
-    float crack = (exp(-cl / 0.008) + 0.35 * exp(-cl / 0.05)) * step(0.4, hash(vec2(seed, 9.1))) * smoothstep(0.3, 0.05, length(q - co));
-    face += vec3(0.88, 0.96, 1.0) * crack * 0.26 * smoothstep(0.12, 0.2, e);
-    // bubbles
-    for (int i = 0; i < 3; i++) {
-        vec2 h = hash2(vec2(seed * 13.7, float(i) * 3.3));
-        if (h.x < 0.35) continue;
-        vec2 bc = (hash2(vec2(float(i) * 1.7, seed * 5.1)) - 0.5) * 0.5;
-        float br = 0.012 + 0.02 * h.y;
-        float bd = length(q - bc);
-        float ring = smoothstep(br + aa, br, bd) * (0.35 + 0.65 * smoothstep(br * 0.4, br, bd));
-        face += vec3(0.9, 0.97, 1.0) * ring * 0.35 * smoothstep(0.12, 0.2, e);
+    vec2 n = q / hs; // -1..1 over the cube, whatever its height
+    // the body: bright and clear near the faces, the colour deepening toward the centre
+    float depth = smoothstep(0.0, 0.3, e);
+    float centre = 1.0 - smoothstep(0.0, 1.0, length(n));
+    vec3 col = mix(mix(tint, vec3(1.0), 0.14) * 1.1, tint * 0.8, depth * 0.38 + centre * 0.26);
+    // the ice's inside: cloudy, warped, lighter frosty clouds and deeper refractions
+    vec2 w = n * 1.25 + seed * 2.13;
+    float cloud = fbm3(w + 1.4 * vec2(fbm3(w * 1.7 + 3.1), fbm3(w * 1.7 + 7.3)));
+    col *= mix(1.0, 0.74 + 0.5 * cloud, depth * (1.0 - 0.7 * gloss));
+    col += vec3(0.9, 0.97, 1.0) * smoothstep(0.55, 0.82, cloud) * 0.16 * depth * (1.0 - gloss);
+    // the back faces refracted: four facets meeting near the middle, the top and left ones lit
+    vec2 m = n - (hash2(vec2(seed, 2.7)) - 0.5) * 0.3;
+    float facet = abs(m.x) > abs(m.y) ? (m.x < 0.0 ? 0.1 : -0.12) : (m.y > 0.0 ? 0.14 : -0.16);
+    float inner = smoothstep(0.95, 0.72, max(abs(n.x), abs(n.y)));
+    col *= 1.0 + facet * inner * (1.0 - gloss * 0.6);
+    float diag = abs(abs(m.x) - abs(m.y));
+    col += light * exp(-diag / 0.05) * 0.1 * inner * (1.0 - 0.6 * centre) * (1.0 - gloss);
+    col += light * exp(-abs(max(abs(n.x), abs(n.y)) - 0.66) / 0.025) * 0.09 * (1.0 - gloss);
+    // fracture planes: one or two thin bright sheets inside (not in every cube)
+    for (int i = 0; i < 2; i++) {
+        vec2 cd = normalize(hash2(vec2(seed * 3.7, 1.3 + float(i) * 5.1)) - 0.5);
+        vec2 co = (hash2(vec2(seed * 5.9, 2.1 + float(i) * 3.3)) - 0.5) * 0.7;
+        float cl = abs(dot(n - co, cd));
+        float k = step(0.35 + 0.3 * float(i), hash(vec2(seed, 9.1 + float(i)))) * smoothstep(0.6, 0.1, length(n - co));
+        col += vec3(0.9, 0.97, 1.0) * (exp(-cl / 0.035) * 0.16 + exp(-cl / 0.16) * 0.07) * k * depth * (1.0 - gloss);
     }
-    vec3 col = mix(face, bevC, bev);
-    // the outer rim: a thin frosty line; the inner edge of the bevel: a seam
-    col += vec3(0.9, 0.97, 1.0) * smoothstep(0.03, 0.0, e) * 0.3;
-    col *= 1.0 - 0.14 * exp(-sq((e - bevW) / 0.016));
-    // a sharp highlight and a gloss across the face
-    col += vec3(1.0) * exp(-dot(q - vec2(-0.19, 0.2), q - vec2(-0.19, 0.2)) / 0.0022) * 0.5 * (1.0 - bev);
-    col += vec3(0.85, 0.95, 1.0) * exp(-sq((q.x + q.y * 0.9 - 0.1) / 0.045)) * 0.1 * (1.0 - bev);
+    // caustics: filaments of light focused through the ice, drifting slowly
+    float ca = exp(-vorEdge(n * 1.4 + seed * 3.1 + vec2(0.0, uTime * 0.04)) / 0.06) * smoothstep(0.35, 0.75, vnoise(n * 1.7 + seed * 1.3));
+    col += mix(light, vec3(1.0), 0.5) * ca * 0.2 * depth;
+    // tiny trapped bubbles
+    for (int i = 0; i < 4; i++) {
+        vec2 h = hash2(vec2(seed * 13.7, float(i) * 3.3));
+        if (h.x < 0.3) continue;
+        vec2 bc = (hash2(vec2(float(i) * 1.7, seed * 5.1)) - 0.5) * 1.1;
+        float br = (0.014 + 0.014 * h.y) / hs.x;
+        float bd = length((n - bc) * hs / 0.47);
+        float ring = smoothstep(br + aa * 2.0, br, bd) * (0.4 + 0.6 * smoothstep(br * 0.3, br, bd));
+        col += vec3(0.92, 0.98, 1.0) * ring * 0.35 * depth;
+    }
+    // the rounded edges, frosted almost white, a cap of rime along the top, lit from the top left
+    vec2 kq = abs(q) - (hs - r);
+    vec2 nb = kq.x > 0.0 && kq.y > 0.0 ? normalize(kq) * sign(q) : (kq.x > kq.y ? vec2(sign(q.x), 0.0) : vec2(0.0, sign(q.y)));
+    float lit = dot(nb, vec2(-0.6, 0.8));
+    float frost = vnoise(q * 28.0 + seed * 7.0) * 0.5 + vnoise(q * 10.0 + seed) * 0.5;
+    float rimW = 0.07 + 0.05 * max(nb.y, 0.0);
+    float rim = exp(-e / rimW);
+    vec3 rimC = mix(light, vec3(1.0), 0.62 + 0.25 * frost + 0.12 * lit) * (0.95 + 0.15 * lit);
+    col = mix(col, rimC, sat(rim * (0.85 + 0.35 * frost)) * (1.0 - 0.75 * gloss));
+    // seen a little from the front: the top face shows as a frosted band, rime grains on it
+    float topFace = smoothstep(0.62, 0.82, n.y) * smoothstep(1.02, 0.9, abs(n.x));
+    col = mix(col, mix(light, vec3(1.0), 0.7 + 0.2 * frost), topFace * 0.55 * (1.0 - 0.8 * gloss));
+    float speck = smoothstep(0.66, 0.86, vnoise(q * 26.0 + seed * 5.0));
+    col += vec3(1.0) * speck * sat(rim * 1.2) * (0.3 + 0.7 * max(nb.y, 0.0)) * 0.2 * (1.0 - gloss);
+    col += vec3(0.9, 0.97, 1.0) * smoothstep(0.02, 0.0, e) * 0.2 * (1.0 - gloss);
+    // a soft highlight at the top left, sharper and brighter as the cube melts into gloss
+    vec2 hp = n - vec2(-0.42, 0.48);
+    col += vec3(1.0) * exp(-dot(hp, hp) / mix(0.06, 0.02, gloss)) * mix(0.28, 0.45, gloss);
+    col += vec3(0.9, 0.97, 1.0) * exp(-sq((n.x + n.y * 0.8 - 0.25) / 0.12)) * 0.05 * (1.0 - centre);
     // the drop: a cold light caught inside
-    col += uGlow * uDrop * (0.06 + 0.12 * core + 0.2 * crack);
-    // a fresh lock frosts it white for a moment
-    col = mix(col, mix(tint, vec3(1.0), 0.75), vC.z * 0.45);
-    // game over: rime creeps over it
-    col = mix(col, vec3(0.85, 0.9, 0.95) * (0.75 + 0.25 * fr), vC.w * 0.8);
-    // melting: glossy and clear, a bright film over it
-    col = mix(col, mix(tint, vec3(1.0), 0.35) * 1.15, m * 0.55);
-    col += vec3(1.0) * m * exp(-sq((q.y - hs.y * 0.6) / 0.05)) * 0.25 * (1.0 - smoothstep(0.7, 1.0, melt));
+    col += uGlow * uDrop * (0.05 + 0.12 * centre + 0.15 * ca);
+    // a fresh lock frosts it white for a moment; game over: rime creeps over it
+    col = mix(col, mix(tint, vec3(1.0), 0.75), (mode == 2 ? 0.0 : vC.z) * 0.4);
+    col = mix(col, vec3(0.86, 0.91, 0.95) * (0.78 + 0.22 * frost), vC.w * 0.8);
+    // melting: clear water, a bright meniscus along the film's top
+    col = mix(col, mix(tint, vec3(1.0), 0.3) * 1.05, gloss * 0.45);
+    col += vec3(1.0) * exp(-sq((n.y - 0.7) / 0.12)) * 0.22 * gloss * smoothstep(0.0, 0.03, e);
+    // under the water: a deeper, more saturated teal
+    float under = smoothstep(uLevel + 0.04, uLevel - 0.04, vWorld.y) * uWaterA;
+    float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    vec3 sat2 = max(mix(vec3(l), col, 1.45), 0.0) * uDeepTint * 1.12;
+    col = mix(col, sat2, under * 0.75);
     col = mix(col, uBridgeInk, uBridge);
-    float a = inside * vB.a * (0.97 - 0.35 * m) * (1.0 - smoothstep(0.7, 1.0, melt));
+    // translucent: the well's grid shows faintly through the clear middle
+    float a = inside * vB.a * (0.86 + 0.12 * sat(rim + topFace) - 0.2 * gloss) * (1.0 - smoothstep(0.78, 1.0, u));
     frag = vec4(col * a, a);
 }
 )";
@@ -619,7 +644,7 @@ flat in vec4 vA;
 flat in vec4 vB;
 flat in vec4 vC;
 out vec4 frag;
-uniform float uTime;
+uniform float uTime, uPxPerUnit;
 void main() {
     int mode = int(vA.w + 0.5);
     vec2 q = vLocal;
@@ -628,14 +653,15 @@ void main() {
     float v;
     if (mode == 1) {
         // a drip: a little glossy drop of water, a bright point
-        float d = length(q - vec2(0.0, -0.25)) - 0.55;
-        float tip = abs(q.x) - 0.5 * (1.0 - (q.y + 0.25) / 1.0);
-        float sd = q.y > -0.25 ? max(tip, -q.y - 0.25 + 0.0) : d;
-        sd = min(d, max(tip, q.y - 0.75));
-        float inside = 1.0 - smoothstep(-0.12, 0.08, sd);
-        float hi = exp(-dot(q - vec2(-0.18, -0.1), q - vec2(-0.18, -0.1)) * 30.0);
+        float px = 2.0 / max(vA.z * uPxPerUnit, 1e-3);
+        float d = length(q - vec2(0.0, -0.3)) - 0.5;
+        float cone = max(abs(q.x) - 0.5 * (0.85 - q.y) / 1.15, q.y - 0.85);
+        float sd = min(d, max(cone, -0.3 - q.y));
+        float inside = 1.0 - smoothstep(-px, px, sd);
+        float hi = exp(-dot(q - vec2(-0.18, -0.25), q - vec2(-0.18, -0.25)) * 25.0);
+        float rim = exp(-abs(sd) / (px * 2.0)) * inside;
         v = inside;
-        frag = vec4((c * 0.6 + hi * 0.8) * v * vB.a, v * vB.a * 0.8);
+        frag = vec4((c * 0.55 + rim * 0.35 + hi * 0.8) * v * vB.a, v * vB.a * 0.85);
         return;
     }
     if (mode == 2) {
@@ -703,7 +729,7 @@ void main() {
     float bend = depth > 0.0 ? sin(p.x * 3.0 + uWaveT * 1.4 + p.y * 2.0) * exp(-depth * 1.5) * 0.6 * uWaterA : 0.0;
     vec3 c = texture(uScene, vUv + vec2(bend / uRes.x, 0.0)).rgb;
     float under = smoothstep(-px, px, depth) * uWaterA;
-    c = mix(c, c * uTint, under * (0.5 + 0.2 * sat(depth * 0.15)));
+    c = mix(c, c * uTint, under * (0.3 + 0.15 * sat(depth * 0.15)));
     // the surface line, hidden behind the HUD's text
     vec2 fc = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
     float hide = 0.0;
