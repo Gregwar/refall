@@ -107,15 +107,15 @@ struct SongLook {
     int avoidVariant = -1;  // a variant not to pick (the one on screen when a universe follows itself), -1: none
     float duration = 0;     // the song's length in seconds (0: unknown)
     float remaining = 0;    // seconds of the song left when this look is handed over (a universe coming in mid-song)
-    int difficulty = 2;     // the run's difficulty (DIFF_EASY 0, DIFF_NORMAL 1, DIFF_HARD 2): the progression's pace
+    int difficulty = 2;     // the run's difficulty (DIFF_EASY 0, DIFF_NORMAL 1, DIFF_HARD 2, DIFF_EXPERT 3): the progression's pace
 };
 SongLook makeSongLook(const Footprint* fp, uint64_t seed); // fp null: no song (loading)
 
 // The pace of the progression universes (GIANT TREE, MEGACITY, LIBRARY...): they complete their scene in
 // linesPerMinute() lines per minute of song, so one song of normal play sees the whole journey whatever its length;
-// fewer on the easier difficulties (EASY, NORMAL, HARD), whose players clear fewer lines.
-constexpr float LINES_PER_MINUTE[3] = {10.f, 12.f, 15.f};
-inline float linesPerMinute(int difficulty) { return LINES_PER_MINUTE[difficulty < 0 ? 0 : difficulty > 2 ? 2 : difficulty]; }
+// fewer on the easier difficulties (EASY, NORMAL, HARD, EXPERT), whose players clear fewer lines.
+constexpr float LINES_PER_MINUTE[4] = {10.f, 12.f, 15.f, 17.f};
+inline float linesPerMinute(int difficulty) { return LINES_PER_MINUTE[difficulty < 0 ? 0 : difficulty > 3 ? 3 : difficulty]; }
 // Their tables are tuned on this many lines (a 3:20 song); a universe scales its lines by SCENE_REF_LINES / sceneLines().
 constexpr float SCENE_REF_LINES = 50.f;
 constexpr float SCENE_LINES_MIN = 20.f, SCENE_LINES_MAX = 100.f;

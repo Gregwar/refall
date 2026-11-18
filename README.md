@@ -36,7 +36,7 @@ Every universe, its variants and the transitions: [docs/universes.md](docs/unive
 
 ## Modes
 
-- **Voyage**: a campaign of 15 stages, each a few songs in chosen universes, faster and faster, on EASY, NORMAL or HARD.
+- **Voyage**: a campaign of 15 stages, each a few songs in chosen universes, faster and faster, on EASY, NORMAL, HARD or EXPERT.
 - **Free play**: any folders, files or YouTube playlists, at the difficulty and starting level you pick.
 
 Menu details and the Voyage file format: [docs/reference.md](docs/reference.md#menu-and-modes).
