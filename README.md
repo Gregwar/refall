@@ -1,9 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
-    <img src="docs/logo-light.png" alt="Refall" width="420">
-  </picture>
-</p>
+<p align="center"><img src="docs/logo.png" alt="Refall" width="420"></p>
 
 A falling-block puzzle game across **61 hand-directed universes**, each staged by the music: pieces fall on the
 beat and the pace follows the song. Play the game's Voyage, or **any music you like**: your own folders or YouTube
