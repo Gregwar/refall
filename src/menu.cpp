@@ -161,7 +161,8 @@ Menu::Place Menu::place() const {
 }
 
 void Menu::restore(const Place& p, bool difficulties) {
-    if (p.titleItem >= 0 && p.titleItem < TITLE_ITEMS) titleItem_ = p.titleItem;
+    // (QUIT, the last item, is never where the title opens: the game was just started, it opens on what to play)
+    if (p.titleItem >= 0 && p.titleItem < TITLE_ITEMS - 1) titleItem_ = p.titleItem;
     if (difficulties && p.voyageDiff >= 0 && p.voyageDiff < DIFF_COUNT) diff_ = p.voyageDiff;
     if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
     if (p.freeLevel >= 1) setFreeLevel(p.freeLevel);
