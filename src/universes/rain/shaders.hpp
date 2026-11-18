@@ -38,6 +38,16 @@ uniform float uFlood;        // the storm: the street flooding (more water, stro
 uniform float uGust;         // the storm: sheets of rain sweeping across in gusts
 uniform vec2 uSignPos[2];    // the two big blade signs over the heaps (board units): their light falls on the tiles
 uniform vec3 uSignCol[2];
+// the drop's grade: the whole street swung to another colour mood (a hue rotation in YIQ, which keeps the luminance,
+// a saturation gain, a duotone wash from a shadow to a highlight colour, an exposure); identity outside the drop
+uniform vec2 uGradeRot;      // cos, sin of the hue rotation
+uniform float uGradeSat;
+uniform vec3 uDuoLo, uDuoHi;
+uniform float uDuoK;
+uniform float uGradeExpo;
+// the HUD's lines beside the well (board units): the lightning never lights the sky behind them
+uniform vec4 uHudRect[24];
+uniform int uHudN;
 const float H = -8.2;        // the street's far edge (the sidewalk's line, the horizon of the reflections)
 
 float h11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
@@ -57,6 +67,27 @@ float sdBox(vec2 p, vec2 c, vec2 hs) {
 // grids lit in many colors, ledges, the variant's signs), the shop fronts at street level (a lit shop window with its
 // shelves, a door, an awning, a sign board), the passers-by under their umbrellas, the two big blade signs over the
 // heaps, bokeh, mist.
+float hudShield(vec2 p) {
+    float m = 0.0;
+    if (dot(uFlash, uFlash) <= 0.0) return 1.0;
+    for (int i = 0; i < uHudN; i++) {
+        vec4 r = uHudRect[i];
+        vec2 d = max(r.xy - p, p - r.zw);
+        m = max(m, 1.0 - smoothstep(-0.5, 4.0, max(d.x, d.y)));
+    }
+    return 1.0 - 0.8 * m;
+}
+vec3 grade(vec3 c) {
+    const mat3 toYiq = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
+    const mat3 toRgb = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
+    vec3 y = toYiq * c;
+    y.yz = vec2(uGradeRot.x * y.y - uGradeRot.y * y.z, uGradeRot.y * y.y + uGradeRot.x * y.z) * uGradeSat;
+    c = max(toRgb * y, 0.0);
+    float l = y.x;
+    vec3 m = mix(uDuoLo, uDuoHi, smoothstep(0.02, 0.45, l));
+    vec3 duo = m * (l / max(dot(m, vec3(0.299, 0.587, 0.114)), 0.02));
+    return mix(c, duo, uDuoK) * uGradeExpo;
+}
 vec3 city(vec2 p, float blur) {
     float t = clamp((p.y - H) / 24.0, 0.0, 1.0);
     vec3 col = mix(uSkyLow, uSkyTop, pow(t, 0.6));
@@ -64,7 +95,7 @@ vec3 city(vec2 p, float blur) {
     col += uSkyLow * 0.22 * cl * smoothstep(22.0, 6.0, p.y - H);
     // lightning: a wide soft glow inside the clouds, brightest where it struck (the skyline stands out against it)
     vec3 fl = uFlash * (0.55 + exp(-abs(p.x - uFlashPos.x) * 0.05) * 0.8 + 0.8 * exp(-length((p - uFlashPos) * vec2(0.09, 0.12)))) * (0.6 + 0.4 * cl);
-    col += fl * smoothstep(H + 2.0, H + 12.0, p.y);
+    col += fl * smoothstep(H + 2.0, H + 12.0, p.y) * hudShield(p);
     // the far skyline
     {
         float w = 2.3;
@@ -283,7 +314,7 @@ void main() {
     }
     // the storm: dark and moody between the strikes; a strike lights the whole street from the sky
     col *= 1.0 - 0.28 * uStorm;
-    col += uFlash * 0.12 * (0.5 + 0.5 * clamp((p.y - H) / 20.0, 0.0, 1.0));
+    col += uFlash * 0.12 * (0.5 + 0.5 * clamp((p.y - H) / 20.0, 0.0, 1.0)) * hudShield(p);
     // saturation boost (the drop)
     float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = max(mix(vec3(l), col, uSat), 0.0);
@@ -304,6 +335,8 @@ void main() {
         vec3 cool = mix(vec3(0.55, 0.7, 1.0), uMist, 0.3);
         col += cool * shaft * (0.1 + 0.25 * r) * uGlow * (1.0 - 0.5 * uStorm);
     }
+    // the drop: the whole street swung to its colour mood (before the well's glass and the HUD's veil)
+    col = grade(col);
     if (uWell > 0.5) {
         // the HUD columns veiled a little, the well's backing dark glass
         vec2 lc = vec2(-8.6, 1.8), rc = vec2(8.6, 3.4);

@@ -30,9 +30,12 @@
 // throws the whole stack out, row by row from the top.
 //
 // The music sets the rain: a drizzle when calm, steady rain at mid, a downpour at a peak (with a gust on the kicks).
-// The drop is a thunderstorm for the whole drop section: the heaviest rain, a steeper slant, the city's colors and
-// lights intensified, soft lightning glowing in the clouds now and then on a bar line (a tinted glow, never a white
-// flash); after the drop it eases back over a few seconds. Slow motion slows the rain until it hangs in the air.
+// The drop swings the whole street to another colour mood for the whole drop section: a grade at the end of the
+// backdrop pass (a YIQ hue rotation, saturation, a duotone wash, an exposure; the well's glass, the pieces and the HUD
+// untouched), on the downbeat in well under a second, then gliding between the variant's two moods every 8 bars;
+// with it a thunderstorm: the heaviest rain, a steeper slant, the flooding street, soft lightning glowing in the clouds
+// now and then on a bar line (a tinted glow, held back around the HUD's lines, never a white flash); after the drop it
+// all eases back over a few seconds. Slow motion slows the rain until it hangs in the air.
 // Around a song the street's lights come on one by one (windows, shops, signs) as the rain sets in, and go out one by
 // one after it, the rain thinning.
 //
@@ -92,6 +95,18 @@ const VariantDef VARIANTS[] = {
      {0xff6a3a, 0xffb03a, 0xff4f6a, 0xffd86a}, 0.16f,
      {0x8fe8de, 0xfcdc8a, 0xeea5cb, 0xa3e5b5, 0xf9ad96, 0x9faaf6, 0xc6a9f5}},
 };
+// The drop's colour moods, two per variant (A on the downbeat, then B 8 bars later, alternating, gliding): a hue
+// rotation (degrees of hue), a saturation gain, a duotone wash from a shadow to a highlight colour, an exposure.
+struct Mood { float hue, sat; unsigned lo, hi; float duo, expo; };
+const Mood MOODS[][2] = {
+    // NEON STREET: from its purple / cyan / magenta night to a hot red-orange inferno, then an acid green-teal
+    {{60.f, 1.5f, 0x500010, 0xff5020, 0.5f, 1.1f}, {-100.f, 1.4f, 0x012624, 0xb4ff3a, 0.4f, 1.06f}},
+    // FLOWER MARKET: from its blue dusk and orange awnings to an ultraviolet-pink bloom, then a chartreuse spring
+    {{-30.f, 1.5f, 0x2a0650, 0xff50d0, 0.5f, 1.08f}, {-80.f, 1.5f, 0x062a14, 0xdcff4a, 0.42f, 1.06f}},
+    // MONSOON: from its teal night and orange lanterns to a crimson storm, then an ultramarine night with gold lanterns
+    {{180.f, 1.4f, 0x400412, 0xff4050, 0.45f, 1.08f}, {40.f, 1.4f, 0x060c50, 0xffc83a, 0.45f, 1.08f}},
+};
+
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
 constexpr float GAP = 0.07f;         // between tiles, each side (board units)
@@ -523,7 +538,7 @@ void RainUniverse::drawRain(bool) {
     const float s = height_ / 1080.f;
     const float vis = 1.f - smoothstepf(0.f, 0.7f, bridge_.amount);
     if (vis <= 0.01f) return;
-    const vec3 tint = lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.65f), vec3(0.85f, 0.92f, 1.f), flash_);
+    const vec3 tint = graded(lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.65f), vec3(0.85f, 0.92f, 1.f), flash_));
     const float w = std::max(1.f, 1.3f * s);
     const float slowLen = lerpf(1.f, 0.35f, slow_);
     for (const Drop& d : drops_) {
@@ -532,7 +547,7 @@ void RainUniverse::drawRain(bool) {
         const float tx = d.x - d.vx / sp * L, ty = d.y - d.vy / sp * L;
         const vec2 a = px(d.x, d.y), b = px(tx, ty);
         const bool inWell = std::fabs(d.x) < 5.f && d.y < 10.f;
-        float al = d.a * (inWell ? 0.32f : 0.42f) * (0.7f + 0.3f * rain_) * (1.f + 1.4f * flash_);
+        float al = d.a * (inWell ? 0.32f : 0.42f) * (0.7f + 0.3f * rain_) * (1.f + 0.8f * flash_);
         al *= 1.f - 0.55f * hudCover(d.x, d.y);
         seg(a.x, a.y, b.x, b.y, d.drip ? w * 1.4f : w, tint, al * vis, 0.f);
     }
@@ -1322,7 +1337,7 @@ void RainUniverse::drawFore() {
     }
     flushTiles();
     // the splashes, in front of everything
-    const vec3 tint = lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.7f), vec3(0.85f, 0.92f, 1.f), flash_);
+    const vec3 tint = graded(lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.7f), vec3(0.85f, 0.92f, 1.f), flash_));
     for (const Spark& s : fsparks_) {
         const float k = 1.f - s.t / s.life;
         const vec2 a = px(s.x, s.y), b = px(s.x - s.vx * 0.05f, s.y - s.vy * 0.05f);
@@ -1409,15 +1424,15 @@ void RainUniverse::flushTiles() {
     glUseProgram(progTile_);
     set2f(progTile_, "uRes", (float)width_, (float)height_);
     set1f(progTile_, "uTime", rainT_);
-    set3f(progTile_, "uSheen", hex(V.neon[0]) * (1.f - bridge_.amount));
-    set3f(progTile_, "uSheen2", hex(V.neon[1]) * (1.f - bridge_.amount));
+    set3f(progTile_, "uSheen", graded(hex(V.neon[0])) * (1.f - bridge_.amount));
+    set3f(progTile_, "uSheen2", graded(hex(V.neon[1])) * (1.f - bridge_.amount));
     set1f(progTile_, "uGlow", glow_);
     {
         const vec2 a = px(signPos_[0].x, signPos_[0].y), b = px(signPos_[1].x, signPos_[1].y);
         const float lp[4] = {a.x, a.y, b.x, b.y};
         glUniform2fv(ugl::U(progTile_, "uLightPx"), 2, lp);
-        const vec3 c0 = hex(V.neon[1]) * glow_ * neonGain_, c1 = hex(V.neon[0]) * glow_ * neonGain_;
-        set3f(progTile_, "uFlashRim", vec3(0.75f, 0.83f, 1.f) * flash_);
+        const vec3 c0 = graded(hex(V.neon[1])) * glow_ * neonGain_, c1 = graded(hex(V.neon[0])) * glow_ * neonGain_;
+        set3f(progTile_, "uFlashRim", graded(vec3(0.75f, 0.83f, 1.f)) * flash_);
         const float lc[6] = {c0.x, c0.y, c0.z, c1.x, c1.y, c1.z};
         glUniform3fv(ugl::U(progTile_, "uLightCol"), 2, lc);
         set1f(progTile_, "uLightR", 6.f * unitPx_);
@@ -1630,6 +1645,19 @@ void RainUniverse::hudLine(const HudText& h, text::Line& out) {
 // Frame
 // =====================================================================================================
 
+// The drop's grade on the CPU, as BG_FS's grade(): a YIQ hue rotation, saturation, the duotone wash, the exposure.
+vec3 RainUniverse::graded(const vec3& c) const {
+    const Grade& g = grade_;
+    const float y = 0.299f * c.x + 0.587f * c.y + 0.114f * c.z;
+    float i = 0.596f * c.x - 0.274f * c.y - 0.322f * c.z, q = 0.211f * c.x - 0.523f * c.y + 0.312f * c.z;
+    const float i2 = (g.c * i - g.s * q) * g.sat, q2 = (g.s * i + g.c * q) * g.sat;
+    i = i2; q = q2;
+    vec3 r{std::max(0.f, y + 0.956f * i + 0.621f * q), std::max(0.f, y - 0.272f * i - 0.647f * q), std::max(0.f, y - 1.106f * i + 1.703f * q)};
+    const vec3 m = lerp(g.lo, g.hi, smoothstepf(0.02f, 0.45f, y));
+    const vec3 duo = m * (y / std::max(dot(m, vec3(0.299f, 0.587f, 0.114f)), 0.02f));
+    return lerp(r, duo, g.duo) * g.expo;
+}
+
 void RainUniverse::render(const Frame& f, GLuint fbo) {
     const Game& game = f.game;
     const MusicState& music = f.music;
@@ -1681,13 +1709,36 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
             const float pulse = std::exp(-t * 7.f) + (t > 0.12f ? 0.65f * std::exp(-(t - 0.12f) * 9.f) : 0.f);
             flash_ = strikeAmp_ * std::min(1.f, pulse) * smoothstepf(0.f, 0.02f, t) * smoothstepf(0.3f, 0.7f, storm_);
         }
-        // the neon surging on the beats, flickering now and then; the light sweeping across the street
-        const long bt = (long)std::floor(beat);
-        if (bt != surgeBeat_) { surgeBeat_ = bt; if (storm_ > 0.5f) surge_ = 1.f; }
-        surge_ = approach(surge_, 0.f, 5.f, dt);
-        const float flicker = storm_ > 0.5f && std::fmod(time_ * 7.3f, 3.1f) < 0.12f ? 0.35f : 1.f;
-        neonGain_ = lerpf(1.f, (0.75f + 0.8f * surge_) * flicker, ease(storm_));
+        // the neon brighter in the storm, breathing slowly (no beat-by-beat surge, no flicker); the light sweeping
+        // across the street
+        neonGain_ = lerpf(1.f, 1.2f + 0.12f * std::sin(time_ * 0.7f), ease(storm_));
         sweepX_ = (float)std::sin(beat * PI / 8.0) * viewH_.x;
+
+        // the drop's colour mood: on the downbeat the whole street swings to the variant's mood A (well under a
+        // second), glides to mood B 8 bars later and back every 8 bars (a few seconds each, the hue drifting slowly
+        // meanwhile), and eases back to the street's own colours over a few seconds after the drop
+        if (isDrop && !wasDrop_) {
+            dropBeat0_ = beat;
+            if (gradeK_ < 0.05f) gradeAB_ = 0.f;
+        }
+        wasDrop_ = isDrop;
+        gradeK_ = approach(gradeK_, isDrop ? 1.f : 0.f, isDrop ? 5.f : 1.1f, dt);
+        if (isDrop) {
+            const long seg = (long)std::floor((beat - dropBeat0_ + 0.5) / 32.0);
+            gradeAB_ = approach(gradeAB_, (seg & 1) ? 1.f : 0.f, 1.1f, dt);
+        }
+        const Mood& A = MOODS[variant_][0];
+        const Mood& B = MOODS[variant_][1];
+        const float ab = ease(gradeAB_), k = ease(gradeK_);
+        const float hue = (lerpf(A.hue, B.hue, ab) + 12.f * (float)std::sin((beat - dropBeat0_) * PI / 32.0)) * k;
+        const float th = -hue * PI / 180.f; // (in YIQ, a positive angle goes down the hue wheel: roughly -hue)
+        grade_.c = std::cos(th);
+        grade_.s = std::sin(th);
+        grade_.sat = 1.f + k * (lerpf(A.sat, B.sat, ab) - 1.f);
+        grade_.duo = k * lerpf(A.duo, B.duo, ab);
+        grade_.expo = 1.f + k * (lerpf(A.expo, B.expo, ab) - 1.f);
+        grade_.lo = lerp(hex(A.lo), hex(B.lo), ab);
+        grade_.hi = lerp(hex(A.hi), hex(B.hi), ab);
     }
     // the HUD's bottom corner lines: the heaps dim under them
     if (!bare_) {
@@ -1761,7 +1812,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set1i(progBg_, "uStyle", V.style);
         set1f(progBg_, "uSat", 1.f + 0.4f * storm_);
         set1f(progBg_, "uGlow", glow_ * lerpf(1.f, 0.8f, sn));
-        set3f(progBg_, "uFlash", vec3(0.72f, 0.8f, 1.f) * (1.6f * flash_));
+        set3f(progBg_, "uFlash", vec3(0.72f, 0.8f, 1.f) * (0.6f * flash_));
         set1f(progBg_, "uStorm", ease(storm_));
         set1f(progBg_, "uNeonGain", neonGain_);
         set1f(progBg_, "uLights", lights_ * 1.001f);
@@ -1774,10 +1825,26 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progBg_, "uGust", storm_);
         const float sp[4] = {signPos_[0].x, signPos_[0].y, signPos_[1].x, signPos_[1].y};
         glUniform2fv(ugl::U(progBg_, "uSignPos"), 2, sp);
-        const vec3 s0 = hex(V.neon[1]) * neonGain_, s1 = hex(V.neon[0]) * neonGain_;
+        const vec3 s0 = graded(hex(V.neon[1])) * neonGain_, s1 = graded(hex(V.neon[0])) * neonGain_;
         const float sc[6] = {s0.x, s0.y, s0.z, s1.x, s1.y, s1.z};
         glUniform3fv(ugl::U(progBg_, "uSignCol"), 2, sc);
         set1f(progBg_, "uRainT", rainT_);
+        set2f(progBg_, "uGradeRot", grade_.c, grade_.s);
+        set1f(progBg_, "uGradeSat", grade_.sat);
+        set3f(progBg_, "uDuoLo", grade_.lo);
+        set3f(progBg_, "uDuoHi", grade_.hi);
+        set1f(progBg_, "uDuoK", grade_.duo);
+        set1f(progBg_, "uGradeExpo", grade_.expo);
+        {
+            float r[24 * 4];
+            int n = 0;
+            for (size_t i = 0; i < hudRects_.size() && n < 24; i++, n++) {
+                r[n * 4] = hudRects_[i].x; r[n * 4 + 1] = hudRects_[i].y; r[n * 4 + 2] = hudRects_[i].z; r[n * 4 + 3] = hudRects_[i].w;
+            }
+            if (bare_) n = 0;
+            if (n) glUniform4fv(ugl::U(progBg_, "uHudRect"), n, r);
+            set1i(progBg_, "uHudN", n);
+        }
         set1f(progBg_, "uWell", bare_ ? 0.f : 1.f - smoothstepf(0.f, 0.8f, bridge_.amount));
         set3f(progBg_, "uBridge", ugl::toSrgb(bridge_.color));
         set1f(progBg_, "uBridgeK", smoothstepf(0.f, 1.f, saturate(bridge_.amount)));
@@ -1811,7 +1878,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_rain() {
     static const UniverseEntry e{
-        "RAIN", "rain everywhere over a colorful street at dusk: it pours on soft pastel sugar cubes in a wet glass case (the falling piece shelters the cells under it), cleared rows are thrown out to heaps on the sides and toward the camera, where they melt in the rain, the drop is a thunderstorm",
+        "RAIN", "rain everywhere over a colorful street at dusk: it pours on soft pastel sugar cubes in a wet glass case (the falling piece shelters the cells under it), cleared rows are thrown out to heaps on the sides and toward the camera, where they melt in the rain, the drop swings the whole street to another colour mood in a thunderstorm",
         [] { return std::unique_ptr<Universe>(new RainUniverse()); },
         // An atmosphere for most songs, moody and mid-tempo ones best.
         [](const SongLook& l) { return 0.85f + 0.15f * (1.f - l.brightness) + 0.1f * l.dynamics; },

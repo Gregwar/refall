@@ -161,8 +161,14 @@ private:
     long flashBar_ = -1000;
     float strikeT_ = 9.f;    // seconds since the last lightning strike (a double pulse)
     float strikeAmp_ = 0.f;
-    long surgeBeat_ = -1000;
-    float surge_ = 0.f;      // the drop's neon surging on the beats (and flickering)
+    // the drop's colour mood: a grade of the whole street (not the board, the pieces, the HUD), see render()
+    struct Grade { float c = 1.f, s = 0.f, sat = 1.f, duo = 0.f, expo = 1.f; vec3 lo{0, 0, 0}, hi{1, 1, 1}; };
+    Grade grade_;
+    float gradeK_ = 0.f;     // how far into the drop's mood (0 the street's own colours .. 1 the mood)
+    float gradeAB_ = 0.f;    // which of the variant's two moods (they alternate every 8 bars, gliding)
+    double dropBeat0_ = 0.0; // the beat the drop started on
+    bool wasDrop_ = false;
+    vec3 graded(const vec3& c) const; // the grade on the CPU (the rain's tint, the lights caught on the tiles)
     float neonGain_ = 1.f;
     float sweepX_ = 0.f;     // the colored light sweeping across the wet street
     float kickIn_ = 0.f;
