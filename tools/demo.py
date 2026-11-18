@@ -688,22 +688,16 @@ HUD_HIDE = 1.6  # the game's OUT_HIDE: the HUD's fade away at the outro (src/mai
 
 
 class LogoOutro:
-    """The REFALL logo at the end: its white contours appear over the last scene, then as the scene fades to black
-    the logo takes its colors, alone on black at the very end."""
+    """The REFALL logo at the end, in motion (the planet turning, the pieces riding its ring): its white contours
+    appear over the last scene, then as the scene fades to black the logo takes its colors, alone on black at the very
+    end."""
 
     def __init__(self, spec, width, height):
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import logo
-        n = int(height * float(spec.get("size", 0.66))) // 2 * 2
-        self.rgb, self.a, line = logo.as_arrays(n)
-        # the contours with a soft glow, and a faint dark halo under them (readable over a bright sky)
-        im = Image.fromarray((line * 255).astype(np.uint8))
-        glow = np.asarray(im.filter(ImageFilter.GaussianBlur(n * 0.008)), np.float32) / 255.0
-        shade = np.asarray(im.filter(ImageFilter.GaussianBlur(n * 0.02)), np.float32) / 255.0
-        self.line = np.clip(line + 0.6 * glow, 0, 1)
-        self.shade = np.clip(shade * 1.5, 0, 1) * 0.3
+        self.logo = logo
+        self.n = n = int(height * float(spec.get("size", 0.66))) // 2 * 2
         self.x0, self.y0 = (width - n) // 2, (height - n) // 2
-        self.n = n
         self.fade = float(spec.get("fade_in", 4.0))
 
     def draw(self, frame, t, t_at, t_color, t_done):
@@ -713,14 +707,23 @@ class LogoOutro:
         c = smooth(t_color, t_done, t)
         k = smooth(t_at, t_at + self.fade, t) * (1 - c)
         r = frame[self.y0:self.y0 + self.n, self.x0:self.x0 + self.n]
+        m = 4.0 + t - t_at  # its motion (a little way in already as it appears)
         if k > 0:
-            r *= (1 - self.shade * k)[..., None]
-            lk = self.line * k
+            # the contours with a soft glow, and a faint dark halo under them (readable over a bright sky)
+            im = self.logo.outline(self.n, t=m, ss=1)
+            line = np.asarray(im, np.float32) / 255.0
+            glow = np.asarray(im.filter(ImageFilter.GaussianBlur(self.n * 0.008)), np.float32) / 255.0
+            shade = np.clip(np.asarray(im.filter(ImageFilter.GaussianBlur(self.n * 0.02)), np.float32) / 255.0 * 1.5, 0, 1) * 0.3
+            line = np.clip(line + 0.6 * glow, 0, 1)
+            r *= (1 - shade * k)[..., None]
+            lk = line * k
             r *= (1 - lk)[..., None]
             r += lk[..., None]
         if c > 0:
-            r *= (1 - self.a * c)[..., None]
-            r += self.rgb * c
+            col = np.asarray(self.logo.color(self.n, t=m, ss=1), np.float32) / 255.0
+            a = col[..., 3]
+            r *= (1 - a * c)[..., None]
+            r += col[..., :3] * a[..., None] * c
 
 
 def make_card(spec, cfg, width, height):
