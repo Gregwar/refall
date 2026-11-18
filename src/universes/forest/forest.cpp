@@ -32,9 +32,9 @@
 // lights a single plant and spores rise. The drop turns the forest to neon: on its downbeat a wave runs out from the
 // well and the print gives way to a clean night where the same strokes (the big trees and their crowns, the moon, the
 // mushrooms, ferns and young firs) glow as neon tubes, colored by a gradient on each side, with an aura, a glow on the
-// ground, specks and drifting dots, neon tubes up the well's sides; for the whole drop it plays with the music (each beat swells the tubes and lights
+// ground, specks and drifting dots, neon tubes up the well's sides; for the whole drop it plays with the music (each beat lights
 // the next band of the floor's life out from the well, each kick sends a wave of light out from the well's foot and up
-// the trees and bursts spores out of the plants, the snare flickers a few tubes, the palette cycles), then goes out. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
+// the trees and bursts spores out of the plants, the palette cycles; never a swell of the whole forest), then goes out. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
 // ink; game over drains the stack's ink to the paper from the top, the roller then inking it over in black. Before a
 // song the print is pulled: the key's cuts, then the glow inks, the plants cut in and lit one by one; after it the
 // light goes out plant by plant and the sheet sinks into the dark. A new song in the same forest only changes its inks.
@@ -1140,7 +1140,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     };
     const float cutIn = smoothstepf(0.25f, 0.9f, f.setup);
     // ---- The beat: the drop's pulse (and, outside it, the light breathing slowly with the song).
-    // Each beat swells the neon and lights the next band of the floor's life out from the well; each kick (every two
+    // Each beat lights the next band of the floor's life out from the well (no swell of the whole forest); each kick (every two
     // beats) starts a wave of light out from the well's foot and up the trees (the bar's downbeat the strongest) and
     // bursts spores out of the plants; the backbeat (the snare) makes a few of the tubes flicker; the palette cycles slowly through the drop.
     const float dropK = smoothstepf(0.2f, 0.75f, blaze_) * (1.f - slow_);
@@ -1161,7 +1161,8 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
                 }
                 seqStep_ = beatI & 3;
                 seqEnv_ = 1.f;
-                if (!kickBeat) {
+                // (now and then only, a single object or two, faint: never a beat-locked dip)
+                if (!kickBeat && rng_.chance(0.35f)) {
                     flick_ = 0.55f + 0.45f * saturate(music.audio.high * 1.5f);
                     flickSeed_ = rng_.uniform() * 97.f;
                 }
@@ -1191,13 +1192,10 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
                 }
             }
         }
-        // the neon's swell: on each beat, the kicks the strongest, eased in (never a hard flash) and out
-        const float hit = std::exp(-bph * spb * 5.f) * (0.45f + 0.55f * saturate(std::max(kickNow, music.beatPulse)));
-        beatEnv_ = hit > beatEnv_ ? approach(beatEnv_, hit, 40.f, dt) : hit;
         flick_ = approach(flick_, 0.f, 5.f, dt);
         seqEnv_ = approach(seqEnv_, 0.f, 2.2f, dt);
-        // the palette's cycle: once around in sixteen beats on the drop, with a little push on each beat
-        cycle_ += wdt / spb / 16.f * (0.6f + 0.8f * beatEnv_) * dropK;
+        // the palette's cycle: once around in sixteen beats on the drop, steady
+        cycle_ += wdt / spb / 16.f * dropK;
         if (cycle_ > 1000.f) cycle_ -= 1000.f;
         // outside the drop: the light breathes slowly with the song's energy and its bass (a bar-long swell)
         const float want = music.hasSong ? 0.5f * saturate(music.energy) + 0.5f * bass : 0.3f;
@@ -1503,7 +1501,6 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set4f(progNeon_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
     set1f(progNeon_, "uCycle", cycle_);
     set1f(progNeon_, "uDropK", dropK);
-    set1f(progNeon_, "uPulse", beatEnv_);
     set4f(progNeon_, "uWaveAge", waveAge_[0], waveAge_[1], waveAge_[2], waveAge_[3]);
     set4f(progNeon_, "uWaveAmp", waveAmp_[0], waveAmp_[1], waveAmp_[2], waveAmp_[3]);
     set1f(progNeon_, "uFlick", flick_);
@@ -1647,7 +1644,6 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uBloomK", ((0.08f + 0.04f * wp) * (1.f - blaze_) + 0.22f * blaze_) * (1.f - 0.5f * slow_));
     set1f(progFinal_, "uBlaze", blaze_ * (1.f - slow_));
     set1f(progFinal_, "uDropK", dropK);
-    set1f(progFinal_, "uPulse", beatEnv_);
     set4f(progFinal_, "uWaveAge", waveAge_[0], waveAge_[1], waveAge_[2], waveAge_[3]);
     set4f(progFinal_, "uWaveAmp", waveAmp_[0], waveAmp_[1], waveAmp_[2], waveAmp_[3]);
     glActiveTexture(GL_TEXTURE2);

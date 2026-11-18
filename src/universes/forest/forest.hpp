@@ -147,9 +147,9 @@ private:
     float blaze_ = 0.f;             // the drop's neon forest (0..1)
     float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
-    // the drop's pulse: the beat's envelope (kick-weighted), waves of light out from the well (their ages and
+    // the drop's light: waves of light out from the well (their ages and
     // strengths, one per beat), a flicker on the backbeat (the snare), the palette's cycle, the light's slow breath
-    float beatEnv_ = 0.f, flick_ = 0.f, flickSeed_ = 0.f, cycle_ = 0.f, breath_ = 0.f, seqEnv_ = 0.f;
+    float flick_ = 0.f, flickSeed_ = 0.f, cycle_ = 0.f, breath_ = 0.f, seqEnv_ = 0.f;
     float waveAge_[4] = {99.f, 99.f, 99.f, 99.f}, waveAmp_[4] = {};
     int lastBeatI_ = -1 << 30, seqStep_ = 0;
     float mothAcc_ = 0.f, pollenAcc_ = 0.f;

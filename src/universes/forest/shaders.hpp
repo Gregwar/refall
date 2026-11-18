@@ -136,10 +136,9 @@ float neonIn(vec2 w, float rollR) { return smoothstep(max(abs(w.x) - 5.0, 0.0), 
 float dropRoll(vec2 w, float rollR) {
     return smoothstep(rollR, rollR - 3.0, max(abs(w.x) - 4.0, 0.0) + 0.1 * max(w.y + 10.0, 0.0));
 }
-// The drop's pulse: uPulse the beat's swell (the kicks the strongest), uDropK how far the drop's neon is in; each
-// beat sends a wave of light out from the well's foot, outward and up the trees (uWaveAge its age in seconds,
-// uWaveAmp its strength, the four latest).
-uniform float uPulse, uDropK;
+// The drop's light: uDropK how far the drop's neon is in; each kick sends a wave of light out from the well's foot,
+// outward and up the trees (uWaveAge its age in seconds, uWaveAmp its strength, the four latest).
+uniform float uDropK;
 uniform vec4 uWaveAge, uWaveAmp;
 float dropWave(vec2 p) {
     float d = max(abs(p.x) - 5.5, 0.0) * 0.8 + max(p.y + 11.0, 0.0) * 0.7;
@@ -973,7 +972,7 @@ void main() {
         float side = smoothstep(5.5, 7.5, abs(w.x));
         // the ground breathes with the beat, the waves running over it
         float gw = dropWave(w);
-        float gl = 1.0 + uDropK * (0.45 * uPulse - 0.15 + 1.2 * gw);
+        float gl = 1.0 + uDropK * 1.2 * gw;
         dc += ground * 0.07 * gl * exp(-max(w.y - gy, 0.0) / 1.4) * smoothstep(gy - 2.0, gy, w.y) * side;
         if (w.y < gy + 0.6) {
             vec2 g = w / 0.16;
@@ -990,10 +989,8 @@ void main() {
         dc = dc * (1.0 - n.a * shown) + n.rgb * shown;
         float tx = abs(abs(w.x) - 5.32);
         vec3 tcol = w.x < 0.0 ? mix(uNeonL[1], uNeonL[2], 0.5) : uNeonR[0];
-        // (the well's tubes pulse a little, a wave climbing them: never enough to wash the board out)
-        float tl = 1.0 + uDropK * (0.18 * uPulse - 0.08 + 0.5 * exp(-pow(w.y + 11.0 - uWaveAge.x * 10.0, 2.0) / 4.0) * uWaveAmp.x * exp(-uWaveAge.x * 0.8));
-        dc += (tcol * 1.2 + vec3(0.3)) * tl * (1.0 - smoothstep(0.025, 0.025 + uAA * 1.5, tx)) * step(-10.4, w.y);
-        dc += tcol * tl * exp(-tx / 0.25) * 0.08 * step(-10.4, w.y);
+        dc += (tcol * 1.2 + vec3(0.3)) * (1.0 - smoothstep(0.025, 0.025 + uAA * 1.5, tx)) * step(-10.4, w.y);
+        dc += tcol * exp(-tx / 0.25) * 0.08 * step(-10.4, w.y);
         c = mix(c, dc, lit);
     }
     // the fluorescence: a soft light the inks give off into the dark around them
@@ -1112,7 +1109,7 @@ void main() {
 }
 )";
 // A stroke of the forest. On the drop: a neon tube (a near-white core, the saturated color around it, a glow falling
-// off beyond) or a dark fill faintly tinted (a trunk's or a cap's inside), both pulsing with the music. In the print
+// off beyond) or a dark fill faintly tinted (a trunk's or a cap's inside), both lit by the music's waves. In the print
 // (uPrint, written to the plates): a fill is solid key with the bark cut along it, a tube a cut line (a plant's inked).
 inline const char* NEON_FS = R"(#version 330 core
 in vec2 vW;
@@ -1125,15 +1122,15 @@ uniform float uFlick, uFlickSeed;   // the backbeat: a few of the tubes flicker
 uniform float uSeq, uSeqEnv;        // the floor's life lit band by band out from the well, one band a beat
 uniform float uTime;
 uniform vec4 uView;
-// how bright the drop's neon is here: a swell on each beat, the waves of light passing, the floor's life lit in turn,
-// a few objects flickering on the snare
+// how bright the drop's neon is here: the waves of light passing, the floor's life lit in turn, a few objects
+// flickering on the snare (no swell of the whole forest on the beat)
 float dropLight(vec2 p, float cx, float ink) {
     float wv = dropWave(p);
     float band = clamp(floor((abs(cx) - 6.0) / max(uView.z - 6.0, 1.0) * 4.0), 0.0, 3.0);
     float seq = ink > 0.5 && abs(band - uSeq) < 0.5 ? uSeqEnv : 0.0;
     float hf = hash12(vec2(floor(cx * 2.0) + 0.5, uFlickSeed));
-    float fl = hf < 0.22 ? uFlick * (0.55 + 0.45 * sin(uTime * 63.0 + hf * 40.0)) : 0.0;
-    float k = (0.74 + 0.5 * uPulse + 1.0 * wv + 0.8 * seq) * (1.0 - 0.65 * fl);
+    float fl = hf < 0.1 ? uFlick * (0.55 + 0.45 * sin(uTime * 63.0 + hf * 40.0)) : 0.0;
+    float k = (0.9 + 1.0 * wv + 0.8 * seq) * (1.0 - 0.3 * fl);
     return mix(1.0, k, uDropK);
 }
 void main() {
@@ -1166,7 +1163,7 @@ void main() {
         float a = (1.0 - smoothstep(-uAA, uAA, dd)) * foot;
         if (a <= 0.002) discard;
         // a trunk's inside lights up as the waves climb it
-        float lit = 1.0 + uDropK * (0.25 * uPulse + 1.4 * dropWave(vW));
+        float lit = 1.0 + uDropK * 1.4 * dropWave(vW);
         frag = vec4(vCol * vC.z * lit * a, a * 0.9);
         return;
     }
