@@ -524,7 +524,7 @@ void LandWorld::breakCube(const vec3& p, int type, float power, float seeds, int
     const int n = std::max(heroes, (int)seeds + (ctx.rng.uniform() < seeds - std::floor(seeds) ? 1 : 0));
     // the life in it set free: green sparks (a few of the seed's own color) rising out of where it was
     const vec3 glow = glowColor();
-    for (int i = 0; i < (int)(7.f * power); i++)
+    for (int i = 0; i < (int)(4.f * power); i++)
         spark(p + vec3(ctx.rng.range(-0.4f, 0.4f), ctx.rng.range(-0.4f, 0.4f), ctx.rng.range(-0.3f, 0.f)),
               vec3(ctx.rng.range(-1.6f, 1.6f), ctx.rng.range(0.6f, 3.2f), ctx.rng.range(-1.2f, 0.f)), ctx.rng.range(1.f, 2.2f),
               ctx.rng.range(0.06f, 0.11f), ctx.rng.chance(0.2f) ? lerp(ctx.pal.piece[type], vec3(1.f, 0.8f, 0.4f), 0.4f) * 1.6f : glow);
