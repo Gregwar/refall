@@ -1,0 +1,2 @@
+// The Windows .exe's icon (the standalone build): data/refall.ico, made by tools/logo.py --icon
+IDI_ICON1 ICON "refall.ico"

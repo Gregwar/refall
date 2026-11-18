@@ -1,6 +1,7 @@
 # Release: push a tag vX.Y.Z (the version in pyproject.toml) and this builds the wheels for every platform and the
 # sdist, publishes them to PyPI as `refall` (so `uvx refall` runs the game) and makes a GitHub
-# release with the same files. Run it by hand (Actions > Release > Run workflow) to build without publishing.
+# release with the same files, plus the standalone Windows game (Refall-windows-x64.exe: one file, no Python).
+# Run it by hand (Actions > Release > Run workflow) to build without publishing (the files are the run's artifacts).
 #
 # PyPI publishes through trusted publishing: on pypi.org, add a (pending) trusted publisher for the project
 # `refall`: the owner and repository of https://github.com/Gregwar/refall, workflow wheels.yml, environment pypi.
@@ -53,6 +54,27 @@ jobs:
           name: wheels-${{ matrix.os }}
           path: wheelhouse/*.whl
 
+  windows-exe:
+    name: Windows .exe (standalone)
+    needs: check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DREFALL_STANDALONE=ON -DREFALL_BUNDLE_GLFW=ON
+          cmake --build build --config Release --target refall --parallel
+          Copy-Item build/Release/refall.exe Refall-windows-x64.exe
+      - name: Check that it starts
+        run: |
+          $p = Start-Process -FilePath .\Refall-windows-x64.exe -ArgumentList "--help" -Wait -PassThru
+          Get-Content "$env:LOCALAPPDATA\refall\refall.log" | Select-Object -First 5
+          if ($p.ExitCode -ne 0) { throw "Refall-windows-x64.exe --help exited with $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: Refall-windows-x64.exe
+
   sdist:
     name: Source distribution
     needs: check
@@ -81,12 +103,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Only the Python packages go to PyPI
+        run: rm -f dist/*.exe
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: publish
+    needs: [publish, windows-exe]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -100,4 +124,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Refall $GITHUB_REF_NAME" \
-            --notes "Run it with \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"
+            --notes "Windows: download Refall-windows-x64.exe and run it (no install needed). Everywhere: \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"

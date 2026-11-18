@@ -13,6 +13,16 @@ if(NOT REFALL_MULTI_CONFIG)
   message(STATUS "Refall build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
+# A standalone build (REFALL_STANDALONE=ON: the Windows .exe of the releases) is one file with nothing beside it:
+# the menu's music and the gamepad mappings built in, the C/C++ runtime linked statically, no console window, and
+# yt-dlp, ffmpeg and deno fetched on first use (platform::ensureTools, src/platform.cpp).
+option(REFALL_STANDALONE "One self-contained executable (the Windows release)" OFF)
+if(REFALL_STANDALONE)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+  set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE) # (GLFW's own switch)
+  add_compile_definitions(REFALL_STANDALONE)
+endif()
+
 # GLFW: the system one by default; REFALL_BUNDLE_GLFW=ON (used for Python wheels) builds it from
 # source and links it statically, so the binaries only need the system's OpenGL/X11 at runtime.
 option(REFALL_BUNDLE_GLFW "Build GLFW from source and link it statically" OFF)
@@ -194,6 +204,27 @@ file(READ ${CMAKE_SOURCE_DIR}/data/campaign.tsv refall_campaign_hex HEX)
 string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," refall_campaign_arr "${refall_campaign_hex}")
 file(WRITE ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp "${refall_campaign_arr}\n")
 configure_file(${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc.tmp ${CMAKE_BINARY_DIR}/generated/campaign.tsv.inc COPYONLY)
+# The standalone build: the menu's music and the gamepad mappings built in too; on Windows the game's icon, and no
+# console window.
+if(REFALL_STANDALONE)
+  foreach(f data/menu_music.mp3 third_party/gamecontrollerdb.txt)
+    get_filename_component(name ${f} NAME)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/${f})
+    file(READ ${CMAKE_SOURCE_DIR}/${f} hex HEX)
+    string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," arr "${hex}")
+    file(WRITE ${CMAKE_BINARY_DIR}/generated/standalone/${name}.inc.tmp "${arr}\n")
+    configure_file(${CMAKE_BINARY_DIR}/generated/standalone/${name}.inc.tmp
+                   ${CMAKE_BINARY_DIR}/generated/standalone/${name}.inc COPYONLY)
+  endforeach()
+  if(WIN32)
+    target_sources(refall PRIVATE data/refall.rc)
+    if(MSVC)
+      target_link_options(refall PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+    else() # (MinGW, clang, zig cc)
+      target_link_options(refall PRIVATE -Wl,--subsystem,windows)
+    endif()
+  endif()
+endif()
 # Offline renders run headless on the GPU through EGL where it exists (Linux).
 if(UNIX AND NOT APPLE)
   find_package(OpenGL QUIET COMPONENTS EGL)

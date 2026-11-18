@@ -23,6 +23,7 @@ std::string shellQuote(const std::string& s) { return platform::quoteArg(s); }
 // pipx/pip user location. YouTube extraction needs a JavaScript runtime: yt-dlp uses deno by
 // default; if only node is installed, tell it to use node.
 std::string ytdlp() {
+    platform::ensureTools(); // (the standalone build fetches it on first use)
     std::string tool;
     const char* bundled = std::getenv("REFALL_YTDLP");
     std::error_code ec;

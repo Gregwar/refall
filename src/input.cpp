@@ -30,6 +30,7 @@ void Input::loadMappings() {
 #ifdef REFALL_SOURCE_DIR
     candidates.push_back(fs::path(REFALL_SOURCE_DIR) / "third_party" / "gamecontrollerdb.txt");
 #endif
+    bool loaded = false;
     for (const auto& p : candidates) {
         std::ifstream f(p);
         if (!f) continue;
@@ -37,9 +38,21 @@ void Input::loadMappings() {
         ss << f.rdbuf();
         if (glfwUpdateGamepadMappings(ss.str().c_str())) {
             std::printf("[input] gamepad mappings loaded from %s\n", p.string().c_str());
+            loaded = true;
             break;
         }
     }
+#ifdef REFALL_STANDALONE
+    if (!loaded) { // the standalone build carries them
+        static const unsigned char DB[] = {
+#include "standalone/gamecontrollerdb.txt.inc"
+        };
+        if (glfwUpdateGamepadMappings(std::string((const char*)DB, sizeof(DB)).c_str()))
+            std::printf("[input] gamepad mappings (built in) loaded\n");
+    }
+#else
+    (void)loaded;
+#endif
     // User additions, SDL style.
     if (const char* extra = std::getenv("SDL_GAMECONTROLLERCONFIG")) glfwUpdateGamepadMappings(extra);
 }
