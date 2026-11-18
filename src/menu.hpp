@@ -108,7 +108,7 @@ public:
     bool selectVoyage(const std::string& id);
     const std::string& voyage() const { return voyageId_; }
     bool editing() const { return editing_; }
-    // whether the screen holds still: a run's debrief, once its words and logo are in
+    // whether the screen holds still: a game over's debrief, once its words and logo are in (a clear's keeps turning)
     bool still() const;
                                                 // (typing a playlist: letters are text, not shortcuts)
     bool fetching() const { return fetch_.valid() || vFetch_.valid(); }
