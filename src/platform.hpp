@@ -32,4 +32,11 @@ FILE* openWrite(const std::string& cmd);
 // Makes stdout line-buffered where supported (safe on every platform).
 void lineBufferStdout();
 
+// The standalone build (REFALL_STANDALONE, the Windows release: one .exe, no Python beside it); both do nothing in
+// other builds. standaloneStart: no console window (a hidden one, which the tools it runs share), stdout and stderr
+// to <cache>/refall/refall.log. ensureTools: yt-dlp, ffmpeg and deno fetched into <cache>/refall/tools when missing,
+// that folder put first in PATH (once; the first caller waits while they download, a few minutes at most).
+void standaloneStart();
+void ensureTools();
+
 } // namespace platform

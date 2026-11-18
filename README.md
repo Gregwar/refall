@@ -44,6 +44,10 @@ Menu details and the Voyage file format: [docs/reference.md](docs/reference.md#m
 
 [![PyPI](https://img.shields.io/pypi/v/refall)](https://pypi.org/project/refall/)
 
+**Windows:** download [Refall-windows-x64.exe](https://github.com/Gregwar/refall/releases/latest/download/Refall-windows-x64.exe)
+and run it: one file, nothing to install (the first YouTube song fetches yt-dlp, ffmpeg and Deno, about 100 MB, into
+the game's cache).
+
 Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/refall/). Run them with
 [uv](https://docs.astral.sh/uv/) as above, or install them:
 

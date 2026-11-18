@@ -62,6 +62,7 @@ std::string playlistIdOf(const std::string& url) {
 }
 
 std::string youtubeTitle(const std::string& url) {
+    platform::ensureTools();
     std::string tool = platform::findExecutable("yt-dlp");
     if (tool.empty()) {
         std::error_code ec;

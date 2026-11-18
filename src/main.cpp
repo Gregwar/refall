@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <random>
 #include <string>
 #include <thread>
@@ -2186,6 +2187,19 @@ static std::string menuMusicPath() {
     std::error_code ec;
     for (const fs::path& p : c)
         if (fs::exists(p, ec)) return p.string();
+#ifdef REFALL_STANDALONE
+    { // the standalone build carries it: written out once into the cache, where the decoder reads it
+        static const unsigned char MP3[] = {
+#include "standalone/menu_music.mp3.inc"
+        };
+        const fs::path p = platform::appCacheDir() / "menu_music.mp3";
+        if (!fs::exists(p, ec) || fs::file_size(p, ec) != sizeof(MP3)) {
+            fs::create_directories(p.parent_path(), ec);
+            std::ofstream(p, std::ios::binary).write((const char*)MP3, sizeof(MP3));
+        }
+        if (fs::exists(p, ec)) return p.string();
+    }
+#endif
     return "";
 }
 
@@ -2808,6 +2822,7 @@ static int viewerMain(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     g_startTime = std::chrono::steady_clock::now();
+    platform::standaloneStart();
     platform::lineBufferStdout();
 #ifdef REFALL_VOYAGE_VIEWER
     return viewerMain(argc, argv);
