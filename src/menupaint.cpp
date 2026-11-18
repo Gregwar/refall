@@ -336,11 +336,18 @@ void facet(vec2 g, out vec2 cell, out vec2 f, out float edge, out float side) {
     edge = min(e.x, min(e.y, e.z));
     side = edge == e.x ? 0.0 : edge == e.y ? 1.0 : 2.0;
 }
-// the crystal's colours: a sapphire ramp, its lights taking the tint (mixed in the darks, a blue and a gold would grey)
-vec3 gem(float l) {
-    vec3 deep = vec3(0.012, 0.025, 0.11);
-    vec3 mid = mix(vec3(0.11, 0.17, 0.62), uTint * 0.6, 0.18);
-    vec3 hi = mix(vec3(0.62, 0.78, 1.0), mix(uTint, vec3(1.0), 0.35), 0.55);
+// a colour at full strength (its largest channel at 1), more saturated by `sat`
+vec3 vivid(vec3 c, float sat) {
+    float l = dot(c, vec3(0.299, 0.587, 0.114));
+    c = max(mix(vec3(l), c, sat), 0.0);
+    return c / max(max(c.r, max(c.g, c.b)), 1e-3);
+}
+// the crystal's colours: a ramp in `hue` (the universe's tint, a little of the world's own colour), from a near black
+// of that hue through its full colour to a pale light of it
+vec3 gem(float l, vec3 hue) {
+    vec3 deep = hue * vec3(0.05, 0.05, 0.06) + vec3(0.006, 0.008, 0.02);
+    vec3 mid = hue * 0.46;
+    vec3 hi = mix(hue, vec3(1.0), 0.42);
     return l < 0.5 ? mix(deep, mid, smoothstep(0.0, 0.5, l)) : mix(mid, hi, smoothstep(0.5, 1.0, l));
 }
 void main() {
@@ -372,7 +379,14 @@ void main() {
     // cut into gem: the world's light and the facets' read through the crystal's ramp, a little of its colour kept
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     float gl = clamp(l * 0.45 + lit * 0.55 + (h21(cell + 9.1) - 0.5) * 0.3, 0.0, 1.0);
-    c = mix(gem(gl), c * (0.5 + 0.5 * uTint) * (0.4 + lit), 0.22);
+    // the ramp's hue: the tint's, drawn toward the world's own colour where it has one, each shard leaning a little to
+    // one side of the hue wheel (a neighbouring hue), so a universe of one colour still shows a few
+    vec3 tv = vivid(uTint, 1.6);
+    float cmax = max(c.r, max(c.g, c.b)), wsat = clamp((cmax - min(c.r, min(c.g, c.b))) / max(cmax, 0.05), 0.0, 1.0);
+    vec3 hue = mix(tv, vivid(c, 1.3), 0.4 * wsat);
+    float lean = h21(sc + 6.6) - 0.5;
+    hue = vivid(mix(hue, lean > 0.0 ? hue.brg : hue.gbr, abs(lean) * 0.45), 1.15);
+    c = mix(gem(gl, hue), c * (0.5 + 0.5 * uTint) * (0.4 + lit), 0.22);
     c *= 0.92 + 0.16 * smoothstep(0.5, 0.0, edge);
     c *= 0.92 + 0.16 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
     // some shards cut with a prism's rainbow
@@ -388,7 +402,7 @@ void main() {
     // the shards' cut edges: thin bright ridges and dark creases (their width in pixels from the grid's slope)
     float px = se / max(fwidth(g2.x - g2.y * 0.57735) + fwidth(g2.y * 1.1547), 1e-4) * 1.5;
     float he = h21(sc + ss * 1.7 + 0.3);
-    if (he > 0.45) c += mix(vec3(0.55, 0.7, 1.0), vec3(1.0), he - 0.45) * exp(-px / 1.2) * (0.25 + 0.5 * he) * (0.6 + 0.4 * uSat);
+    if (he > 0.45) c += mix(mix(tv, vec3(1.0), 0.55), vec3(1.0), he - 0.45) * exp(-px / 1.2) * (0.25 + 0.5 * he) * (0.6 + 0.4 * uSat);
     else c *= 1.0 - 0.45 * exp(-px / 1.6);
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     // light on the glass, in the frame's own space (it doesn't turn): a soft flare in the top right corner, and glints
@@ -396,7 +410,7 @@ void main() {
     vec2 fp = (fc - vec2(uRes.x - 0.04 * uRes.y, 0.04 * uRes.y)) / uRes.y;
     float fd = length(fp), fa = atan(fp.y, fp.x);
     float rays = pow(abs(cos(fa * 5.0 + 0.4)), 10.0) + 0.6 * pow(abs(cos(fa * 3.0 - uTime * 0.02)), 14.0);
-    c += vec3(0.72, 0.84, 1.0) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
+    c += mix(tv, vec3(1.0), 0.65) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
     vec2 gp = fc / uRes.y * 24.0, gi = floor(gp);
     float gh = h21(gi + 17.0);
     if (gh > 0.86) {

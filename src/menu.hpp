@@ -1,7 +1,7 @@
 #pragma once
 // The menus, over a crystal kaleidoscope with frosted glass panels (menuwin.cpp): the title screen (VOYAGE, FREE
 // PLAY, QUIT), the voyages to choose from (the game's own, and those made from the player's YouTube playlists), free
-// play's difficulty, playlist and starting level, and the campaign's stages (gem petals in a jewelled rosette, opening
+// play's difficulty, playlist and starting level, and the campaign's stages (gem petals in a quiet rosette, opening
 // onto their songs), with an audio preview of the song under the cursor.
 #include <functional>
 #include <future>

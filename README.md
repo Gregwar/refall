@@ -174,10 +174,10 @@ kaleidoscope: on the title and in free play they turn in turn, on Voyage it show
 universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
 from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
 dimmed for a locked stage); free play takes the
-focused playlist's hue. The world is then cut into gem: read through a sapphire ramp whose lights take that hue, small
+focused playlist's hue. The world is then cut into gem: read through a ramp in that hue (from a near black of it to a pale light, drawn toward the world's own colours, each shard leaning to a neighbouring hue: magenta, amber, green, teal, violet... as the universes and stages change), small
 facets and larger shards each lit from its own side, bright ridges along their cuts, a prism's rainbow on some, glints
-twinkling and a soft light flare in the top right corner. The rosettes (the title's, Voyage's stages) sit in a jewelled
-setting: an engraved bronze star, a steel plate, a bronze band set with small gems, glowing blue and gold orbits, a
+twinkling and a soft light flare in the top right corner. The rosettes (the title's, Voyage's stages) are kept quiet:
+a soft shade and one fine ring round the petals, a
 polished dark disc in a gold ring at the middle; petals are faceted gems (dark ones with padlocks while locked), and
 the panels are frosted glass over the kaleidoscope. They come from snapshots of each universe cached in `~/.cache/refall/menu-worlds/` (640x360);
 the missing ones are made one at a time on a worker thread with its own OpenGL context, only while no key has been
