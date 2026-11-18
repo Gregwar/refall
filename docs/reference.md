@@ -44,7 +44,7 @@ no song previews.
   `<id>-progress.tsv` (the code: `src/voyages.cpp`).
 - **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
   rising with the lines (one per 20 lines, up to level 40: the Voyage's velocities, on the same scale). Each song
-  starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
+  starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds (EXPERT: from 80%, over 8 s). Choose a difficulty:
   EASY, NORMAL, HARD or EXPERT, a multiplier on the gravity of every level (x0.6, x0.8, x1, x1.4: HARD is the full
   speed, and goes 20G as the Voyage does: the drops from level 30 on, the choruses too at level 40; EXPERT falls 1.4
   times as fast, goes 20G from level 24 on and has a shorter lock delay, see below), a **starting level** (the
@@ -138,7 +138,9 @@ hyperdrop (a fast fall never leaves less time to slide a piece than hyperdrop); 
 15 slides or turns of a resting piece restart it (10 on EXPERT). The
 lock delay's clock starts once the piece is seen to rest (the drawn piece trails the real one a little in a fast fall).
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
-climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
+climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20. EXPERT's
+warm-ups are short: the first song from 70% over 10 s, the next ones over 8 s. Over a song's first 20 s (EXPERT: 8)
+the fall's pace stays at most that of a build, even if the song opens on a chorus or a drop.
 
 
 ## Controls in detail
@@ -291,7 +293,7 @@ and beam overdrive).
 Each song is decoded and analyzed in the background (under 1 s):
 
 - **Song sections**: gravity counts beats of a fixed 130 BPM (not the song's tempo: the same velocity falls as fast in every song), at a pace set by the current section, in rows per beat: break ×0.4, intro ×0.5, outro ×0.5, verse ×0.8, build ×1, chorus ×1.2, drop ×1.3 (at most ×1 in a song's first 20 s). During a change of universe gravity eases down to ×0.25 (the stack can be hard to read while two worlds blend) and back up over about a second once the new one is in.
-- **Levels**: one level per 20 lines, up to level 50 (980 lines). Each level speeds up the beat-locked gravity (the levels spread over the velocity 1 .. 40: ×10 at velocity 20, ×19.5 at 40, capped at 60 rows/s) and, up to level 20, shortens the lock delay (0.55 s → 0.5 s; EXPERT: 0.4 s throughout). Every song starts with a warm-up (half the level's velocity, all of it after 20 s). On HARD, from level 38 on (velocity 30), the drops go 20G (at level 50 the choruses too), as in the Voyage; on EXPERT from velocity 24 on. Game over resets the level.
+- **Levels**: one level per 20 lines, up to level 50 (980 lines). Each level speeds up the beat-locked gravity (the levels spread over the velocity 1 .. 40: ×10 at velocity 20, ×19.5 at 40, capped at 60 rows/s) and, up to level 20, shortens the lock delay (0.55 s → 0.5 s; EXPERT: 0.4 s throughout). Every song starts with a warm-up (half the level's velocity, all of it after 20 s; EXPERT: 80%, after 8 s). On HARD, from level 38 on (velocity 30), the drops go 20G (at level 50 the choruses too), as in the Voyage; on EXPERT from velocity 24 on. Game over resets the level.
 - **Key**: the song's hue follows the circle of fifths; universes may pick their variant from it (VECTOR's phosphor).
 - **Tempo, brightness, bass/air balance, dynamics, density**: weigh which universe suits the song.
 - **Song structure**: the song is split at bar lines into labelled segments (intro, verse, build, chorus, drop, break, outro), and segments that sound alike are grouped. A section that gets louder starts where it lands, on the first beat where its bass and loudness are back (after the gap, bass cut or riser before a drop), and a drop is the song's most intense material entered by a rise. That rise is measured against the section before it, or, when the section starts on a bass return, against how the one before it ended (a loud section that thins out into a breakdown keeps a high mean: the drop after it is no louder than it on average, only than its end). A drop is heard where the full bass comes back after a cut, so a bass return (a beat whose bass reaches the next two bars' level after a bar or more of clearly lower bass, into loud material) places a section boundary on that beat; a cut of a bar or so inside a section that already had the full bass is a fill and is ignored. A drop can also come out of a loud chorus without getting louder on average: after a gap of a beat or two, its hits land clearly harder (bass and loudness peaks above those of the steady full-bass bars before it, as in a pumping, sidechained drop); that landing starts a drop too. The gap may be shallower (a beat or two at 60% rather than cut) between two stretches of steady full bass: a pre-drop that already has the bass, then the drop itself. When two loud sections follow each other and the second is clearly fuller, the first is its build and the second the drop; a section's energy leaves out the fade at its tail (the song ending), so a final drop still counts. Each segment eases the scene's density, speed, glow and saturation (builds ramp up, breaks thin out).
