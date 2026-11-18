@@ -35,7 +35,7 @@ out vec4 frag;
 uniform vec4 uView;          // center x, y, half width, half height (board units)
 uniform sampler2D uLight, uStain;
 uniform vec3 uFelt, uFiber, uNight, uBridgeCol;
-uniform float uKind, uGrain, uDye, uSlow, uBridge, uTime, uSeed, uLightK, uSheen, uAmb;
+uniform float uKind, uGrain, uDye, uSlow, uBridge, uTime, uSeed, uLightK, uSheen, uAmb, uDyeGlow;
 uniform vec4 uColL, uColR;
 float grainAt(vec2 p, out float sheen) {
     float g;
@@ -49,7 +49,8 @@ float grainAt(vec2 p, out float sheen) {
         vec2 q = vec2(p.x * 0.94 + p.y * 0.34, p.y * 0.94 - p.x * 0.34);
         float layers = fbm(vec2(q.x * 0.18, q.y * 2.2) + uSeed);
         float vein = smoothstep(0.02, 0.0, abs(fbm(q * 0.22 + uSeed * 1.7) - 0.5)) * 0.12;
-        g = 0.55 * layers + 0.25 * vnoise(p * 57.0) + 0.2 * fbm(p * 0.6) + vein;
+        float cleft = smoothstep(0.06, 0.0, abs(fbm(q * vec2(0.35, 1.1) + uSeed * 2.3) - 0.48)) * 0.1;
+        g = 0.55 * layers + 0.25 * vnoise(p * 57.0) + 0.2 * fbm(p * 0.6) + vein - cleft + 0.12 * (fbm(p * 2.4 + 9.0) - 0.5);
         sheen = 0.5 + layers;
     } else {
         // brushed metal: long fine strokes along x, a slow unevenness
@@ -69,15 +70,29 @@ void main() {
     float sheen;
     float g = grainAt(p, sheen);
     vec3 alb = mix(uFelt, uFiber, clamp((g - 0.5) * uGrain + 0.5, 0.0, 1.0));
+    // its relief, lit by the overhead light up left (strongest on the slate, a whisper on felt, none on brushed metal)
+    float rk = uKind < 0.5 ? 0.25 : (uKind < 1.5 ? 1.0 : 0.0);
+    if (rk > 0.0) {
+        vec2 rp = p * 1.7 + uSeed;
+        float h0 = fbm(rp), hx = fbm(rp + vec2(0.06, 0.0)), hy = fbm(rp + vec2(0.0, 0.06));
+        float shade = dot(vec2(hx - h0, hy - h0) / 0.06, vec2(-0.6, 0.8));
+        alb *= 1.0 + rk * clamp(shade * 0.35, -0.45, 0.45);
+    }
     // the dye, soaked into the surface: deeper in the grain's hollows, paler on its ridges
-    vec4 st = texture(uStain, vUv);
+    // (softened: a blurred mip of it under the sharp one, so the dye reads as soft pools of colored light)
+    vec4 st = mix(textureLod(uStain, vUv, 0.0), textureLod(uStain, vUv, 2.5), 0.55);
     float hud = 1.0 - 0.45 * max(box(p, uColL), box(p, uColR));
     alb = alb * (1.0 - 0.6 * st.a) + st.rgb * uDye * (0.7 + 0.6 * g) * hud;
+    // the overhead light: a soft pool over the middle of the table, the corners sinking into the dark
+    vec2 vq = (vUv - vec2(0.5, 0.56)) * vec2(1.25, 1.0);
+    float pool = exp(-dot(vq, vq) * 2.6);
     // the light on it (the beams, a little scattered light)
     vec3 L = light(vUv, 0.0) + 0.12 * light(vUv, 4.0) + 0.08 * light(vUv, 5.5);
     L *= 1.0 - 0.6 * max(box(p, uColL), box(p, uColR));
     L = L / (1.0 + max(max(L.r, L.g), L.b) * 0.5);
-    vec3 col = alb * (uAmb + L * uLightK) + L * uSheen * sheen;
+    vec3 col = alb * ((uAmb + L * uLightK) * (0.5 + 0.95 * pool)) + L * uSheen * sheen;
+    // the dye glows a little, like light passed through colored glass
+    col += st.rgb * uDye * uDyeGlow * hud * (0.6 + 0.4 * pool);
     // the night of slow motion
     col = mix(col, uNight * (0.8 + 0.4 * g) + st.rgb * uDye * 0.3, uSlow * 0.75);
     col = mix(col, uBridgeCol, uBridge);
@@ -154,8 +169,8 @@ flat out vec4 v0, v1, v2, v3, v4;
 void main() {
     int kind = int(a2.w + 0.5);
     vec2 ext;
-    if (kind == 0) ext = vec2(a0.w * (a3.w > 0.5 ? 1.08 : 1.6));
-    else if (kind == 4) ext = vec2(a0.z, a0.w) + 0.05;
+    if (kind == 0) ext = vec2(a0.w * (a3.w > 0.5 ? 1.08 : 1.6)) + abs(a3.xy);   // (a3.xy: its motion blur)
+    else if (kind == 4) ext = vec2(a0.z, a0.w) + a3.x + 0.05;                    // (a3.x: the rim's width)
     else ext = vec2(a0.z + 0.12);
     vP = aQ * ext;
     v0 = a0; v1 = a1; v2 = a2; v3 = a3; v4 = a4;
@@ -168,7 +183,7 @@ flat in vec4 v0, v1, v2, v3, v4;
 out vec4 frag;
 uniform vec4 uKey;             // the key light (the beams' source): the direction it travels xy, its strength, -
 uniform vec3 uKeyCol;
-uniform float uPx, uTileTint, uTileAlpha, uBridge, uLightGround, uSat, uCore;
+uniform float uPx, uTileTint, uTileAlpha, uBridge, uLightGround, uSat, uCore, uWorldK, uGloss;
 uniform vec3 uTileCol, uLightCol, uHazeCol, uBridgeInk, uPanelEdge;
 uniform vec4 uPanel;           // the well's pane: rgb, opacity (what a marble in a tile sees behind it)
 uniform vec4 uView;            // board center x, y, half width, half height (to sample the background)
@@ -234,7 +249,7 @@ vec3 glassMarble(vec2 q, vec2 center, float R, vec3 col, float rot, float seed, 
     // colored glass: what is seen through it takes its color, and the glass itself holds a little light in its color
     // (thickest in the middle), so that over a dark table it still reads as its color, not as a gray bead
     vec3 tint = mix(vec3(1.0), c0, 0.85);
-    vec3 m = env * tint * (0.35 + 0.6 * z) + c0 * (0.035 + 0.085 * z);
+    vec3 m = env * tint * (0.35 + 0.6 * z) + c0 * (0.035 + 0.085 * z) * (1.0 + 0.6 * uGloss);
     // the core, inside: magnified by the front of the glass; the far layer deeper (shifted toward the light, dimmer)
     float cr = cos(rot), sr = sin(rot);
     mat2 rm = mat2(cr, sr, -sr, cr);
@@ -268,9 +283,17 @@ vec3 glassMarble(vec2 q, vec2 center, float R, vec3 col, float rot, float seed, 
     m += mix(Lc, c0 * Ll, 0.3) * pow(fres, 0.7) * facing * 0.9;
     vec2 hp = -ld * vec2(0.42, 0.46);
     vec2 dh = (q - hp) * vec2(1.0, 1.4);
-    float hs = 0.75 + 2.0 * min(Ll, 1.2);
+    float hs = mix(0.75 + 2.0 * min(Ll, 1.2), 1.6 * max(Ll - 0.35, 0.0), uGloss);   // (the overhead window takes over)
     m += uLightCol * exp(-dot(dh, dh) * 110.0) * (hs + 3.0 * flare);
     m += uLightCol * exp(-dot(dh, dh) * 7.0) * (0.04 + 0.1 * min(Ll, 1.0) + 0.25 * flare);
+    // the room's soft overhead light: a crisp window up left on the glass, a soft sheen around it, and the light it
+    // focuses glowing inside on the far side (low right), so that every marble reads as a glossy ball
+    vec2 wq = (q - vec2(-0.34, 0.4)) * vec2(1.0, 1.25);
+    m += uLightCol * (exp(-dot(wq, wq) * 90.0) * 1.6 + exp(-dot(wq, wq) * 9.0) * 0.07) * uGloss;
+    vec2 gq = (q - vec2(0.3, -0.36)) * vec2(1.0, 1.15);
+    m += (c0 * 0.9 + 0.05) * exp(-dot(gq, gq) * 3.0) * 0.42 * uGloss * (0.6 + 0.4 * z);
+    // a thin dark line at the very edge: the ball's silhouette
+    m *= 1.0 - 0.45 * smoothstep(0.86, 1.0, rl) * uGloss;
 
     // tiny bubbles trapped in the glass
     for (int k = 0; k < 3; k++) {
@@ -292,17 +315,50 @@ void main() {
     vec2 p = vP;
     float px = uPx;
     if (kind == 4) {
-        // the well's pane: one even tone, a hairline at its edge
-        float d = sdRoundBox(p, v0.zw, 0.06);
-        float a = smoothstep(px, -px, d);
-        float edge = smoothstep(px * 1.6, 0.0, abs(d + px * 0.8));
-        vec3 c = mix(col, uPanelEdge, edge * 0.8);
-        frag = vec4(c, a * mix(alpha, 1.0, edge * 0.5));
+        // a clear glass box (the well; v3.y > 0.5: its fine grid of cells) or a thin glass frame (the previews): its
+        // floor an even tone of dark glass over the table, its walls a thick bevelled rim (v3.x wide) catching the
+        // overhead light up left: a bright hairline along both edges of the bevel, the facing slopes lit, the others dim
+        float rim = v3.x;
+        float din = sdRoundBox(p, v0.zw, 0.06);
+        float dout = sdRoundBox(p, v0.zw + rim, 0.06 + rim);
+        float aIn = smoothstep(px, -px, din);
+        float aOut = smoothstep(px, -px, dout);
+        vec3 c = col;
+        float a = alpha * aIn;
+        if (v3.y > 0.5) {
+            // the grid: fine lines between the cells, a faint reflection of the room sliding across the glass
+            vec2 gp = abs(fract(p + 0.5) - 0.5);
+            float ln = smoothstep(px * 1.3, px * 0.2, min(gp.x, gp.y)) * aIn;
+            c += uPanelEdge * ln * v3.z;
+            float sd = -p.x * 0.6 + p.y * 0.8 + 2.0;
+            float sheet = smoothstep(0.0, 4.0, sd) * smoothstep(9.0, 4.0, sd);
+            c += uLightCol * 0.022 * sheet * aIn;
+        }
+        // the rim's bevel: t 0 at the inner edge .. 1 at the outer one, its slope facing out
+        float t = clamp(din / max(rim, 1e-3), 0.0, 1.0);
+        float onRim = aOut * (1.0 - aIn);
+        if (onRim > 0.0) {
+            vec2 qq = abs(p) - v0.zw;
+            vec2 n = qq.x > qq.y ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y));
+            float face = dot(n, vec2(-0.6, 0.8));                    // the overhead light up left
+            float lit = 0.5 + 0.5 * face;
+            float bevel = 1.0 - abs(t * 2.0 - 1.0);                  // the middle of the slope
+            vec3 glassC = mix(col * 1.4, uPanelEdge, 0.55) * (0.55 + 0.9 * lit) + uLightCol * (0.025 + 0.07 * lit * lit);
+            float edges = smoothstep(px * 1.8, 0.0, abs(din - px)) + smoothstep(px * 1.8, 0.0, abs(dout + px));
+            vec3 rc = glassC + uLightCol * (edges * (0.12 + 0.35 * lit) + bevel * bevel * 0.07 * lit);
+            // a long streak of the window along the lit top-left walls
+            float st = (t - 0.35) / 0.12;
+            float streak = exp(-st * st) * smoothstep(0.2, 0.9, face) * (0.5 + 0.5 * sin(p.x * 0.7 - p.y * 0.4 + 1.3));
+            rc += uLightCol * streak * 0.22;
+            c = mix(c, rc, onRim);
+            a = mix(a, 0.62 + 0.35 * edges + 0.3 * streak, onRim);
+        }
+        frag = vec4(c, clamp(a, 0.0, 1.0));
         return;
     }
     float h = v0.z, R = v0.w;
     vec4 outc = vec4(0.0);
-    vec2 mo = v3.xy;
+    vec2 mo = kind == 0 ? vec2(0.0) : v3.xy;   // (on the table, v3.xy is its motion blur)
     float bb = uBridge;
     vec3 c0 = saturateCol(col, uSat);
     vec3 tileEnv = vec3(0.0);
@@ -329,7 +385,7 @@ void main() {
         vec2 sp = (p - mo - ld * 0.11) / R;
         float sh = exp(-dot(sp, sp) * 1.6);
         base *= 1.0 - 0.5 * sh * (1.0 - uLightGround * 0.3);
-        ta = mix(ta, max(ta, 0.075), sh * 0.5);
+        ta = mix(ta, max(ta, 0.04), sh * 0.5);
         vec2 cq = (p - mo - ld * 0.35) / R;
         float caus = exp(-dot(cq, cq) * 6.0);
         base += (c0 * 0.8 + 0.1) * caus * (0.35 + 0.9 * dot(Lc, vec3(0.3, 0.5, 0.2)));
@@ -338,7 +394,7 @@ void main() {
         float rim = smoothstep(px * 1.3, px * 0.15, abs(d + px * 1.0));
         float lit = clamp(dot(normalize(p + 1e-4), vec2(-0.7071, 0.7071)) * 0.5 + 0.5, 0.0, 1.0);
         base = mix(base, mix(mix(c0, vec3(1.0), 0.6), c0 * 0.75, uLightGround), rim * (0.25 + 0.5 * mix(lit, 1.0 - lit * 0.5, uLightGround)));
-        ta = max(ta, rim * (0.045 + 0.055 * lit));
+        ta = max(ta, rim * (0.012 + 0.02 * lit));
         // the bridge: plain squares of ink
         base = mix(base, uBridgeInk, bb);
         ta = mix(ta, 0.95, bb);
@@ -351,12 +407,33 @@ void main() {
     float ma = smoothstep(1.0, 1.0 - px / R * 1.6, rl) * (1.0 - bb);
     if (kind == 0 && v3.w < 0.5) {
         // on the table: its shadow, cast away from the light, and a contact shadow right under it
-        float dsh = length(q - ld * 0.32);
-        float sh = 0.55 * smoothstep(1.5, 0.7, dsh) + 0.3 * smoothstep(1.25, 0.9, rl);
+        float dsh = length(q - normalize(ld + vec2(0.6, -0.8)) * 0.34);
+        float sh = 0.6 * smoothstep(1.55, 0.6, dsh) + 0.35 * smoothstep(1.2, 0.92, rl);
         outc = vec4(0.0, 0.0, 0.0, min(sh, 0.75) * (1.0 - bb));
     }
-    if (ma > 0.0) {
+    vec2 blur = kind == 0 ? v3.xy : vec2(0.0);
+    float bl = length(blur);
+    if (bl > R * 0.15) {
+        // rolling fast: smeared along its way (a few positions over the shutter), the shadow thinned under the smear
+        vec3 acc = vec3(0.0);
+        float cov = 0.0;
+        const int N = 8;
+        for (int i = 0; i < N; i++) {
+            float s = float(i) / float(N - 1);
+            vec2 qs = (p + blur * s) / R;
+            float ms = smoothstep(1.0, 1.0 - px / R * 1.6, length(qs));
+            if (ms <= 0.0) continue;
+            acc += glassMarble(qs, v0.xy - blur * s, R, col, v2.x, v2.z, v2.y, 0.0, false, tileEnv, Lc, ld) * ms;
+            cov += ms;
+        }
+        float ca = cov / float(N) * (1.0 - bb);
+        vec3 c = acc / max(cov, 1e-4) * uWorldK;
+        float sa = outc.a * 0.5;
+        float a = ca + sa * (1.0 - ca);
+        outc = vec4((c * ca + outc.rgb * sa * (1.0 - ca)) / max(a, 1e-4), a);
+    } else if (ma > 0.0) {
         vec3 m = glassMarble(q, v0.xy + mo, R, col, v2.x, v2.z, v2.y, v3.z, kind >= 1, tileEnv, Lc, ld);
+        if (kind == 0) m *= uWorldK;
         float a = ma + outc.a * (1.0 - ma);
         vec3 c = (m * ma + outc.rgb * outc.a * (1.0 - ma)) / max(a, 1e-4);
         outc = vec4(c, a);
@@ -419,13 +496,13 @@ inline const char* FX_VS = R"(#version 330 core
 layout(location = 0) in vec2 aQ;
 layout(location = 1) in vec4 a0;   // x, y, size, rotation
 layout(location = 2) in vec4 a1;   // linear rgb, alpha
-layout(location = 3) in vec4 a2;   // kind (0 halo, 1 glint, 2 soft dot), -, -, -
+layout(location = 3) in vec4 a2;   // kind (0 halo, 1 glint, 2 spark, 3 trail), aspect (y over x size), -, -
 uniform mat4 uVP;
 out vec2 vQ;
 flat out vec4 v1, v2;
 void main() {
     float c = cos(a0.w), s = sin(a0.w);
-    vec2 l = aQ * a0.z;
+    vec2 l = aQ * a0.z * vec2(1.0, a2.y > 0.0 ? a2.y : 1.0);
     vQ = aQ;
     v1 = a1; v2 = a2;
     gl_Position = uVP * vec4(a0.xy + vec2(c * l.x - s * l.y, s * l.x + c * l.y), 0.0, 1.0);
@@ -440,7 +517,15 @@ void main() {
     float r = length(vQ);
     float a;
     if (kind == 0) a = exp(-r * r * 5.0) * smoothstep(1.0, 0.6, r);
-    else {
+    else if (kind == 2) {
+        // a spark: a thin hot streak along x, its head at +1
+        float along = vQ.x * 0.5 + 0.5;
+        a = exp(-vQ.y * vQ.y * 9.0) * along * along * smoothstep(1.0, 0.8, vQ.x);
+    } else if (kind == 3) {
+        // a trail of light: a soft band along y, bright at its foot (-1), fading out toward +1
+        float foot = vQ.y * 0.5 + 0.5;
+        a = exp(-vQ.x * vQ.x * 5.0) * pow(1.0 - foot, 2.0) * smoothstep(0.0, 0.1, foot + 0.02);
+    } else {
         // a four-pointed glint: two thin rays and a hot point
         float rays = exp(-abs(vQ.y) * 40.0) * pow(max(1.0 - abs(vQ.x), 0.0), 2.0) + exp(-abs(vQ.x) * 40.0) * pow(max(1.0 - abs(vQ.y), 0.0), 2.0);
         a = rays * 0.8 + exp(-r * r * 60.0);
@@ -477,7 +562,7 @@ void main() {
     float mx = max(max(c.r, c.g), c.b);
     if (mx > 0.85) c *= (0.85 + 0.4 * (1.0 - exp(-(mx - 0.85) * 2.5))) / mx;
     vec2 q = vUv - 0.5;
-    c *= 1.0 - 0.16 * dot(q, q) * 2.0;
+    c *= 1.0 - 0.42 * smoothstep(0.05, 0.55, dot(q * vec2(1.0, 1.25), q * vec2(1.0, 1.25)));
     c *= 1.0 - uDim * 0.5;
     c *= uFade;
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
