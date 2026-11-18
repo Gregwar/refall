@@ -67,6 +67,14 @@ private:
     struct Sink { float x, y; vec3 col; float t, dur, delay; int kind; };
     std::vector<Sink> sinks_;
 
+    // ---- Each block's bubbles keep their own seed for its whole life: handed over from the falling piece when it
+    // locks, moved down with the rows a clear drops (0: not known yet).
+    float seeds_[Game::H][Game::W] = {};
+    struct FallCell { int x, y; float seed; };
+    FallCell fall_[4] = {};
+    int fallN_ = 0, fallType_ = -1;
+    float pieceSeed_ = 1000.5f;
+
     // ---- Fish: small schools crossing the glide's path, passed by as the camera glides on.
     struct Fish { vec3 off, wob; float ph, rate, size, tail; };
     struct School { vec3 c, v; float age = 0, life = 30.f, turn = 0; std::vector<Fish> fish; };
