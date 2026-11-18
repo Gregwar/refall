@@ -16,6 +16,9 @@
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
+#if !defined(_WIN32)
+#include <unistd.h> // isatty, setenv
+#endif
 
 namespace fs = std::filesystem;
 
@@ -183,13 +186,84 @@ void standaloneStart() {
     const std::wstring log = (appCacheDir() / "refall.log").wstring();
     _wfreopen(log.c_str(), L"w", stdout);
     _wfreopen(log.c_str(), L"a", stderr);
+    std::setvbuf(stderr, nullptr, _IONBF, 0); // (the game ends with _Exit, which flushes nothing)
 }
+#elif defined(REFALL_STANDALONE)
+void standaloneStart() {
+    // Started from a desktop (the AppImage, the macOS app) there is no terminal to print to: the log goes to
+    // <cache>/refall/refall.log instead. Started from a terminal, it stays there.
+    std::error_code ec;
+    fs::create_directories(appCacheDir(), ec);
+    if (!isatty(1) && !isatty(2)) {
+        const std::string log = (appCacheDir() / "refall.log").string();
+        if (std::freopen(log.c_str(), "w", stdout) && std::freopen(log.c_str(), "a", stderr))
+            std::setvbuf(stderr, nullptr, _IONBF, 0); // (the game ends with _Exit, which flushes nothing)
+    }
+}
+#endif
 
+#if defined(REFALL_STANDALONE)
 namespace {
+#if defined(_WIN32)
 // Windows 10 and later ship curl and tar (bsdtar, which also reads zip files).
 std::string systemTool(const char* name) {
     const char* root = std::getenv("SystemRoot");
     return quoteArg((fs::path(root ? root : "C:\\Windows") / "System32" / name).string());
+}
+const char PATH_SEP = ';';
+const char* EXE = ".exe";
+#else
+const char PATH_SEP = ':';
+const char* EXE = "";
+#endif
+
+// What to download on this system: yt-dlp's own single-file build, the ffmpeg of the imageio-ffmpeg package (the one
+// the Python package uses too, a fixed version: PyPI's files never change) and deno.
+struct Downloads {
+    const char* ytdlp;
+    const char* ffmpegWheel;
+    const char* ffmpegMember;
+    const char* deno;
+};
+#define PYPI "https://files.pythonhosted.org/packages/"
+#define YTDLP "https://github.com/yt-dlp/yt-dlp/releases/latest/download/"
+#define DENO "https://github.com/denoland/deno/releases/latest/download/"
+const Downloads DOWNLOADS = {
+#if defined(_WIN32)
+    YTDLP "yt-dlp.exe",
+    PYPI "82/0c/a1d49f3dd2688bd750b4986f8e271ad11f8e729a896070ea25f587b44da8/imageio_ffmpeg-0.8.1-py3-none-win_amd64.whl",
+    "imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v9.0.2.exe",
+    DENO "deno-x86_64-pc-windows-msvc.zip",
+#elif defined(__APPLE__) && defined(__aarch64__)
+    YTDLP "yt-dlp_macos",
+    PYPI "2b/47/9f9b654f853598bae0850fa22bba168103e45d31b5a2a893ed474f28d54a/imageio_ffmpeg-0.8.1-py3-none-macosx_12_0_arm64.whl",
+    "imageio_ffmpeg/binaries/ffmpeg-macos-aarch64-v9.0",
+    DENO "deno-aarch64-apple-darwin.zip",
+#elif defined(__APPLE__)
+    YTDLP "yt-dlp_macos",
+    PYPI "da/24/2c3a7c69453bfb8374ddbbb5007346bad4a4247bc86882f3521cd615f929/imageio_ffmpeg-0.8.1-py3-none-macosx_10_13_x86_64.whl",
+    "imageio_ffmpeg/binaries/ffmpeg-macos-x86_64-v9.0.2",
+    DENO "deno-x86_64-apple-darwin.zip",
+#elif defined(__aarch64__)
+    YTDLP "yt-dlp_linux_aarch64",
+    PYPI "53/02/e139e53a71f33f728cb2ce6c1124edc29e4c008427923f01a4d37f9a1867/imageio_ffmpeg-0.8.1-py3-none-manylinux_2_28_aarch64.whl",
+    "imageio_ffmpeg/binaries/ffmpeg-linux-aarch64-v9.0.2",
+    DENO "deno-aarch64-unknown-linux-gnu.zip",
+#else
+    YTDLP "yt-dlp_linux",
+    PYPI "de/0f/49292fbef69ee10ebcf97bb741602521caafcc6966d5fa1a2b868cc15655/imageio_ffmpeg-0.8.1-py3-none-manylinux_2_28_x86_64.whl",
+    "imageio_ffmpeg/binaries/ffmpeg-linux-x86_64-v9.0.2",
+    DENO "deno-x86_64-unknown-linux-gnu.zip",
+#endif
+};
+
+void makeExecutable(const fs::path& p) {
+#if !defined(_WIN32)
+    std::error_code ec;
+    fs::permissions(p, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+#else
+    (void)p;
+#endif
 }
 
 bool fetch(const std::string& url, const fs::path& to) {
@@ -198,7 +272,14 @@ bool fetch(const std::string& url, const fs::path& to) {
     std::error_code ec;
     const fs::path part = to.string() + ".part";
     fs::remove(part, ec);
-    const int rc = run(systemTool("curl.exe") + " -L --fail --retry 2 -s -o " + quoteArg(part.string()) + " " + quoteArg(url));
+#if defined(_WIN32)
+    const std::string cmd = systemTool("curl.exe") + " -L --fail --retry 2 -s -o " + quoteArg(part.string()) + " " + quoteArg(url);
+#else
+    const std::string cmd = !findExecutable("curl").empty()
+        ? "curl -L --fail --retry 2 -s -o " + quoteArg(part.string()) + " " + quoteArg(url)
+        : "wget -q -O " + quoteArg(part.string()) + " " + quoteArg(url);
+#endif
+    const int rc = run(cmd);
     if (rc != 0 || !fs::exists(part, ec)) {
         std::printf("[tools] download failed (%d): %s\n", rc, url.c_str());
         fs::remove(part, ec);
@@ -210,12 +291,26 @@ bool fetch(const std::string& url, const fs::path& to) {
 
 // One file out of a zip (or the whole zip when `member` is empty) into `dir`.
 bool unzip(const fs::path& zip, const fs::path& dir, const std::string& member = "") {
-    const int rc = run(systemTool("tar.exe") + " -xf " + quoteArg(zip.string()) + " -C " + quoteArg(dir.string()) +
-                       (member.empty() ? "" : " " + quoteArg(member)));
+    const std::string z = quoteArg(zip.string()), d = quoteArg(dir.string()), m = member.empty() ? "" : " " + quoteArg(member);
+#if defined(_WIN32)
+    const int rc = run(systemTool("tar.exe") + " -xf " + z + " -C " + d + m);
+#elif defined(__APPLE__)
+    const int rc = run("tar -xf " + z + " -C " + d + m); // (bsdtar reads zip files)
+#else
+    // GNU tar does not read zip files: unzip, else bsdtar, else Python's zipfile
+    int rc = -1;
+    if (!findExecutable("unzip").empty()) rc = run("unzip -o -q " + z + m + " -d " + d);
+    else if (!findExecutable("bsdtar").empty()) rc = run("bsdtar -xf " + z + " -C " + d + m);
+    else if (!findExecutable("python3").empty())
+        rc = run("python3 -c \"import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); "
+                 "z.extract(sys.argv[3], sys.argv[2]) if len(sys.argv) > 3 else z.extractall(sys.argv[2])\" " + z + " " + d + m);
+    else std::printf("[tools] cannot open %s: no unzip, bsdtar or python3\n", zip.string().c_str());
+#endif
     std::error_code ec;
     fs::remove(zip, ec);
     return rc == 0;
 }
+
 } // namespace
 
 void ensureTools() {
@@ -225,12 +320,16 @@ void ensureTools() {
         std::error_code ec;
         fs::create_directories(dir, ec);
         const char* path = std::getenv("PATH");
-        const std::string newPath = dir.string() + ";" + (path ? path : "");
+        const std::string newPath = dir.string() + PATH_SEP + (path ? path : "");
+#if defined(_WIN32)
         _putenv_s("PATH", newPath.c_str());
-        // yt-dlp: its own release (one .exe); YouTube changes often, so it updates itself once a week
-        const fs::path ytdlp = dir / "yt-dlp.exe";
+#else
+        setenv("PATH", newPath.c_str(), 1);
+#endif
+        // yt-dlp: its own release (one file); YouTube changes often, so it updates itself once a week
+        const fs::path ytdlp = dir / (std::string("yt-dlp") + EXE);
         if (findExecutable("yt-dlp").empty()) {
-            fetch("https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe", ytdlp);
+            if (fetch(DOWNLOADS.ytdlp, ytdlp)) makeExecutable(ytdlp);
         } else if (fs::exists(ytdlp, ec)) {
             const auto age = fs::file_time_type::clock::now() - fs::last_write_time(ytdlp, ec);
             if (!ec && age > std::chrono::hours(24 * 7)) {
@@ -239,22 +338,19 @@ void ensureTools() {
                 fs::last_write_time(ytdlp, fs::file_time_type::clock::now(), ec);
             }
         }
-        // ffmpeg (yt-dlp converts the songs with it): the single-file build of the imageio-ffmpeg package, which the
-        // Python package uses too (a fixed version: PyPI's files never change)
+        // ffmpeg (yt-dlp converts the songs with it)
         if (findExecutable("ffmpeg").empty()) {
             const fs::path whl = dir / "ffmpeg.whl";
-            const std::string member = "imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v9.0.2.exe";
-            if (fetch("https://files.pythonhosted.org/packages/82/0c/a1d49f3dd2688bd750b4986f8e271ad11f8e729a896070ea25f587b44da8/"
-                      "imageio_ffmpeg-0.8.1-py3-none-win_amd64.whl", whl) && unzip(whl, dir, member)) {
-                fs::rename(dir / member, dir / "ffmpeg.exe", ec);
+            if (fetch(DOWNLOADS.ffmpegWheel, whl) && unzip(whl, dir, DOWNLOADS.ffmpegMember)) {
+                fs::rename(dir / DOWNLOADS.ffmpegMember, dir / (std::string("ffmpeg") + EXE), ec);
+                makeExecutable(dir / (std::string("ffmpeg") + EXE));
                 fs::remove_all(dir / "imageio_ffmpeg", ec);
             }
         }
         // deno: the JavaScript runtime yt-dlp needs for YouTube (unless node is there)
         if (findExecutable("deno").empty() && findExecutable("node").empty()) {
             const fs::path zip = dir / "deno.zip";
-            if (fetch("https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip", zip))
-                unzip(zip, dir);
+            if (fetch(DOWNLOADS.deno, zip) && unzip(zip, dir)) makeExecutable(dir / (std::string("deno") + EXE));
         }
         std::printf("[tools] yt-dlp %s, ffmpeg %s, deno %s\n", findExecutable("yt-dlp").empty() ? "missing" : "ready",
                     findExecutable("ffmpeg").empty() ? "missing" : "ready",

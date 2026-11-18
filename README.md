@@ -8,9 +8,11 @@ playlists.
 uvx refall
 ```
 
-On Windows, you can also just download and run the standalone
-[Refall-windows-x64.exe](https://github.com/Gregwar/refall/releases/latest/download/Refall-windows-x64.exe):
-one file, nothing to install.
+Or download the game itself, nothing to install: the
+[Windows .exe](https://github.com/Gregwar/refall/releases/latest/download/Refall-windows-x64.exe), the
+[Linux AppImage](https://github.com/Gregwar/refall/releases/latest/download/Refall-linux-x86_64.AppImage) or the
+[macOS app](https://github.com/Gregwar/refall/releases/latest/download/Refall-macos-arm64.dmg) (Apple silicon;
+[Intel](https://github.com/Gregwar/refall/releases/latest/download/Refall-macos-x64.dmg)).
 
 ## Universes
 
@@ -49,8 +51,18 @@ Menu details and the Voyage file format: [docs/reference.md](https://github.com/
 [![PyPI](https://img.shields.io/pypi/v/refall)](https://pypi.org/project/refall/)
 
 **Windows:** download [Refall-windows-x64.exe](https://github.com/Gregwar/refall/releases/latest/download/Refall-windows-x64.exe)
-and run it: one file, nothing to install (the first YouTube song fetches yt-dlp, ffmpeg and Deno, about 100 MB, into
-the game's cache).
+and run it: one file, nothing to install.
+
+**Linux:** download [Refall-linux-x86_64.AppImage](https://github.com/Gregwar/refall/releases/latest/download/Refall-linux-x86_64.AppImage)
+([aarch64](https://github.com/Gregwar/refall/releases/latest/download/Refall-linux-aarch64.AppImage)), make it
+executable (`chmod +x Refall-linux-x86_64.AppImage`) and run it.
+
+**macOS:** open [Refall-macos-arm64.dmg](https://github.com/Gregwar/refall/releases/latest/download/Refall-macos-arm64.dmg)
+(Apple silicon; [Intel](https://github.com/Gregwar/refall/releases/latest/download/Refall-macos-x64.dmg)) and drag
+Refall to Applications. It is not signed by an Apple developer: the first time, right-click it and choose Open (or
+System Settings > Privacy & Security > Open Anyway).
+
+These three fetch yt-dlp, ffmpeg and Deno (about 100 MB, into the game's cache) at the first YouTube song.
 
 Packages for Linux, macOS and Windows are on [PyPI](https://pypi.org/project/refall/). Run them with
 [uv](https://docs.astral.sh/uv/) as above, or install them:
