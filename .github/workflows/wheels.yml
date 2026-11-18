@@ -1,6 +1,7 @@
 # Release: push a tag vX.Y.Z (the version in pyproject.toml) and this builds the wheels for every platform and the
 # sdist, publishes them to PyPI as `refall` (so `uvx refall` runs the game) and makes a GitHub
-# release with the same files, plus the standalone Windows game (Refall-windows-x64.exe: one file, no Python).
+# release with the same files, plus the standalone games that need no Python: Refall-windows-x64.exe (one file), the
+# Linux AppImages (x86_64, aarch64) and the macOS disk images (arm64, x64).
 # Run it by hand (Actions > Release > Run workflow) to build without publishing (the files are the run's artifacts).
 #
 # PyPI publishes through trusted publishing: on pypi.org, add a (pending) trusted publisher for the project
@@ -76,6 +77,70 @@ jobs:
           name: windows-exe
           path: Refall-windows-x64.exe
 
+  linux-appimage:
+    name: Linux AppImage (${{ matrix.arch }})
+    needs: check
+    runs-on: ${{ matrix.os }}
+    # built on an old glibc (2.28), so the AppImage runs on every distribution since about 2019
+    container: quay.io/pypa/manylinux_2_28_${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, arch: x86_64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64 }
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1" # (no FUSE in a container)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          dnf install -y libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel mesa-libEGL-devel
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DREFALL_STANDALONE=ON -DREFALL_BUNDLE_GLFW=ON \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+          cmake --build build --target refall --parallel
+          tools/appimage.sh build Refall-linux-${{ matrix.arch }}.AppImage
+      - name: Check that it starts
+        run: ./Refall-linux-${{ matrix.arch }}.AppImage --help
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage-${{ matrix.arch }}
+          path: Refall-linux-${{ matrix.arch }}.AppImage
+
+  macos-app:
+    name: macOS app (${{ matrix.arch }})
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-15, arch: arm64 }
+          - { os: macos-15-intel, arch: x64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install numpy pillow
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DREFALL_STANDALONE=ON -DREFALL_BUNDLE_GLFW=ON \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          cmake --build build --target refall --parallel
+          version=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          tools/macapp.sh build Refall-macos-${{ matrix.arch }}.dmg "$version"
+      - name: Check that it starts
+        run: |
+          hdiutil attach -nobrowse -mountpoint /tmp/refall-dmg Refall-macos-${{ matrix.arch }}.dmg
+          /tmp/refall-dmg/Refall.app/Contents/MacOS/refall --help
+          codesign --verify /tmp/refall-dmg/Refall.app
+          hdiutil detach /tmp/refall-dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-${{ matrix.arch }}
+          path: Refall-macos-${{ matrix.arch }}.dmg
+
   sdist:
     name: Source distribution
     needs: check
@@ -105,13 +170,13 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Only the Python packages go to PyPI
-        run: rm -f dist/*.exe
+        run: rm -f dist/*.exe dist/*.AppImage dist/*.dmg
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [publish, windows-exe]
+    needs: [publish, windows-exe, linux-appimage, macos-app]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -125,4 +190,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "Refall $GITHUB_REF_NAME" \
-            --notes "Windows: download Refall-windows-x64.exe and run it (no install needed). Everywhere: \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"
+            --notes "Windows: download Refall-windows-x64.exe and run it (no install needed). Linux: download the AppImage for your machine (x86_64 or aarch64), make it executable (\`chmod +x\`) and run it. macOS: open the .dmg for your Mac (arm64: Apple silicon, x64: Intel) and drag Refall to Applications; the first time, right-click it and choose Open (it is not signed by an Apple developer). Everywhere: \`uvx refall\` (or \`pipx install refall\`). https://pypi.org/project/refall/"

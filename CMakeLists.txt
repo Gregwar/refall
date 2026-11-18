@@ -13,10 +13,11 @@ if(NOT REFALL_MULTI_CONFIG)
   message(STATUS "Refall build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-# A standalone build (REFALL_STANDALONE=ON: the Windows .exe of the releases) is one file with nothing beside it:
+# A standalone build (REFALL_STANDALONE=ON: the Windows .exe, the Linux AppImage and the macOS app of the releases) is
+# one program with nothing beside it:
 # the menu's music and the gamepad mappings built in, the C/C++ runtime linked statically, no console window, and
 # yt-dlp, ffmpeg and deno fetched on first use (platform::ensureTools, src/platform.cpp).
-option(REFALL_STANDALONE "One self-contained executable (the Windows release)" OFF)
+option(REFALL_STANDALONE "One self-contained program (the Windows .exe, the AppImage, the macOS app)" OFF)
 if(REFALL_STANDALONE)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
   set(USE_MSVC_RUNTIME_LIBRARY_DLL OFF CACHE BOOL "" FORCE) # (GLFW's own switch)
