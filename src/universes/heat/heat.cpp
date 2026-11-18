@@ -534,7 +534,7 @@ void HeatUniverse::drop(float strength) {
     flare_ = std::max(flare_, 0.6f + 0.4f * strength);
     for (int y = 0; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++)
-            if (ids_[y][x]) heat_[y][x] = std::min(1.3f, heat_[y][x] + (0.3f + 0.2f * strength) * (0.6f + 0.4f * rng_.uniform()));
+            if (ids_[y][x]) heat_[y][x] = std::min(1.3f, heat_[y][x] + (0.1f + 0.08f * strength) * (0.6f + 0.4f * rng_.uniform()));
     // the far shapes swell
     for (auto& b : blobs_) b.temp = std::max(b.temp, 0.16f);
     // a sheet of hot air over the stack's top
@@ -1104,7 +1104,7 @@ void HeatUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progCell_, "uGain", gain + 0.0001f);
         // the drop: the stack's highlights compressed to the colormap's bright orange (no white-out)
         const float hiShown = hi_ - 0.08f * flare_;
-        set1f(progCell_, "uCap", lerpf(1.6f, lo_ + 0.74f * (hiShown - lo_), smoothstepf(0.f, 1.f, dropAmt_)));
+        set1f(progCell_, "uCap", lerpf(1.6f, lo_ + 0.84f * (hiShown - lo_), smoothstepf(0.f, 1.f, dropAmt_)));
         set1f(progCell_, "uTime", worldTime_);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
