@@ -136,6 +136,16 @@ float neonIn(vec2 w, float rollR) { return smoothstep(max(abs(w.x) - 5.0, 0.0), 
 float dropRoll(vec2 w, float rollR) {
     return smoothstep(rollR, rollR - 3.0, max(abs(w.x) - 4.0, 0.0) + 0.1 * max(w.y + 10.0, 0.0));
 }
+// The drop's light: uDropK how far the drop's neon is in; each kick sends a wave of light out from the well's foot,
+// outward and up the trees (uWaveAge its age in seconds, uWaveAmp its strength, the four latest).
+uniform float uDropK;
+uniform vec4 uWaveAge, uWaveAmp;
+float dropWave(vec2 p) {
+    float d = max(abs(p.x) - 5.5, 0.0) * 0.8 + max(p.y + 11.0, 0.0) * 0.7;
+    vec4 r = uWaveAge * 10.0, e = d - r;
+    vec4 k = uWaveAmp * exp(-e * e / 5.0) * exp(-uWaveAge * 0.8);
+    return k.x + k.y + k.z + k.w;
+}
 // how much of the pool's water is at w (0 none)
 float waterAt(vec2 w) {
     if (poolK(w.x) <= 0.0) return 0.0;
@@ -151,6 +161,7 @@ uniform vec4 uView;
 uniform vec3 uMoon;    // the moon cut out of the sky: center, radius
 uniform vec4 uGlade;   // a far glade glowing between the trunks on the left: center, radii
 uniform float uTime, uSeed, uMistK, uLife, uWaveR, uWaveK, uAA, uWind, uMoonK;
+uniform float uShaftK;  // the moonlight's shafts through the trees
 uniform sampler2D uLight;  // the plants' light and inks (HALO_FS)
 // the drop's wave of light where it passes
 float waveAt(vec2 w) {
@@ -198,7 +209,7 @@ void main() {
     vec4 lt = texture(uLight, vUv);
     float inkA = clamp(inkK * (1.0 - roll) + lt.g, 0.0, 1.0), inkB = clamp(inkK * roll + lt.b, 0.0, 1.0);
     // the light low in the forest, in long banks: the life's glow in the air, which
-    float bank = 0.45 + 0.8 * fbm3(vec2(w.x * 0.08 - uTime * 0.012, w.y * 0.22) + uSeed);
+    float bank = 0.45 + 0.8 * fbm3(vec2(w.x * 0.08 - uTime * 0.03, w.y * 0.22 + 0.15 * sin(uTime * 0.05)) + uSeed);
     // rises with the song (and blazes under the drop's blacklight); the drop's wave lighting it as it passes; and the
     // light of each plant around it
     float plantL = lt.r;
@@ -207,6 +218,16 @@ void main() {
     vec2 gq = (w - uGlade.xy) / uGlade.zw;
     float glade = exp(-dot(gq, gq) * 1.7) * (0.6 + 0.5 * bank);
     mistL += uMistK * 1.5 * glade * (0.6 + 0.4 * uLife);
+    // moonlight falling in a few slow shafts from the moon down through the trees, shifting as the canopy sways
+    {
+        vec2 sd = w - uMoon.xy;
+        float sl = length(sd);
+        float sa = atan(sd.x, -sd.y);
+        float beam = vnoise(vec2(sa * 7.0 + 0.35 * sin(uTime * 0.07 + uSeed), uTime * 0.025 + uSeed * 3.0));
+        float shaft = smoothstep(0.58, 0.85, beam) * exp(-sl / 16.0) * smoothstep(uMoon.z * 1.4, uMoon.z * 3.0, sl)
+                    * step(w.y, uMoon.y) * (0.75 + 0.25 * sin(uTime * 0.3 + sa * 5.0));
+        mistL += uShaftK * 1.1 * shaft;
+    }
     inkA = max(inkA, smoothstep(0.0, 0.5, glade) * (1.0 - roll));
     inkB = max(inkB, smoothstep(0.0, 0.5, glade) * roll);
     // ---- the sky: solid night, cut in long horizontal strokes where the moon lights it and low in the forest
@@ -853,6 +874,17 @@ void main() {
         d = min(d, length(q) - R * 0.2);
     } else if (vB.y < 1.5) {
         d = length(q) - vA.z * 0.55;
+    } else if (vB.y > 2.5) {
+        // a moth: a slim body, two pairs of wings beating (vB.w: their beat, -1..1)
+        vec2 u = vec2(cos(vB.z), sin(vB.z)), v = vec2(-u.y, u.x);
+        float R = vA.z;
+        float open = 0.25 + 0.75 * abs(vB.w);
+        vec2 l = vec2(dot(q, u), dot(q, v));
+        d = blade(q, -u * R * 0.35, u * R * 0.3, R * 0.07);
+        vec2 fw = vec2(l.x - R * 0.08, abs(l.y) - R * 0.42 * open) / vec2(R * 0.3, R * 0.42 * open + 0.02 * R);
+        vec2 hw = vec2(l.x + R * 0.22, abs(l.y) - R * 0.26 * open) / vec2(R * 0.2, R * 0.28 * open + 0.02 * R);
+        d = min(d, (length(fw) - 1.0) * R * 0.3);
+        d = min(d, (length(hw) - 1.0) * R * 0.2);
     } else {
         // a chip of the block, curled
         vec2 u = vec2(cos(vB.z), sin(vB.z));
@@ -938,14 +970,19 @@ void main() {
         dc += uNeonL[1] * (0.16 * exp(-dot(aq, aq) * 2.2) + 0.08 * smoothstep(1.0, 0.85, length(aq)) * smoothstep(0.55, 0.9, length(aq)));
         vec3 ground = w.x < 0.0 ? uNeonWarm : uNeonR[1];
         float side = smoothstep(5.5, 7.5, abs(w.x));
-        dc += ground * 0.07 * exp(-max(w.y - gy, 0.0) / 1.4) * smoothstep(gy - 2.0, gy, w.y) * side;
+        // the ground breathes with the beat, the waves running over it
+        float gw = dropWave(w);
+        float gl = 1.0 + uDropK * 1.2 * gw;
+        dc += ground * 0.07 * gl * exp(-max(w.y - gy, 0.0) / 1.4) * smoothstep(gy - 2.0, gy, w.y) * side;
         if (w.y < gy + 0.6) {
             vec2 g = w / 0.16;
             vec2 id = floor(g), f = fract(g) - 0.5;
             float h = hash12(id + 31.0);
             vec2 o = (vec2(hash12(id + 7.0), hash12(id + 13.0)) - 0.5) * 0.6;
             float dot_ = exp(-dot(f - o, f - o) / 0.012) * step(0.4, h) * side * smoothstep(gy + 0.6, gy - 0.2, w.y);
-            dc += mix(ground, vec3(1.0), 0.3) * dot_ * (0.5 + 0.8 * hash12(id + 3.0));
+            // each speck twinkles slowly, and flares as a wave passes
+            float tw = 0.65 + 0.35 * sin(uTime * (1.3 + 2.0 * hash12(id + 5.0)) + h * 40.0);
+            dc += mix(ground, vec3(1.0), 0.3 + 0.3 * gw) * dot_ * (0.5 + 0.8 * hash12(id + 3.0)) * mix(1.0, tw * (0.85 + 1.6 * gw), uDropK);
         }
         // (the HUD's columns stay dark above the floor, its text too)
         float shown = 1.0 - max(textQuietAt(w), columnsAt(w));
@@ -1009,8 +1046,7 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- the drop's neon forest (instanced strokes)
-// a: from x, y, to x, y. b: radius at each end, kind (0 a neon tube, 1 a dark tinted fill, 2 a black silhouette, 3 a
-// drifting dot), color (0 the gradient at the x in c.w, 1 the warm neon, 2 the moon's, 3 a coral). c: seed, light,
+// a: from x, y, to x, y. b: radius at each end, kind (0 a neon tube, 1 a dark tinted fill, 3 a drifting dot), color (0 the gradient at the x in c.w, 1 the warm neon, 2 the moon's, 3 a coral). c: seed, light,
 // tint, the x whose neon it takes. d: its ink in the print (0 none, 1 the glow inks), 1 if it is the drop's alone.
 inline const char* NEON_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
@@ -1021,16 +1057,33 @@ layout(location = 4) in vec4 aD;
 uniform mat4 uVP;
 uniform vec4 uView;
 uniform float uTime;
+uniform float uSway;   // the breeze in the trees
+uniform float uCycle;  // the drop's palette cycling (0 the forest's own gradient)
 out vec2 vW;
 flat out vec4 vA, vB, vC, vD;
 flat out vec3 vCol;
+// the breeze: a tree bends more the higher up it is (its crown swaying slowly), the floor's life rocks a little
+vec2 sway(vec2 p, float cx, float ink) {
+    float h = max(p.y - groundY(p.x), 0.0);
+    if (ink < 0.5) return vec2(uSway * h * h * 0.0011 * (sin(uTime * 0.55 + cx * 0.37) + 0.35 * sin(uTime * 1.37 + cx + p.y * 0.2)), 0.0);
+    return vec2(uSway * min(h, 2.0) * 0.06 * sin(uTime * 0.9 + cx * 1.3 + p.y * 0.8), 0.0);
+}
+// the drop's gradient at its own place t (0 the HUD's column .. 1 the edge)
+vec3 neonT(float x, float t) {
+    return x < 0.0 ? (t < 0.5 ? mix(uNeonL[0], uNeonL[1], t * 2.0) : mix(uNeonL[1], uNeonL[2], t * 2.0 - 1.0))
+                   : (t < 0.5 ? mix(uNeonR[0], uNeonR[1], t * 2.0) : mix(uNeonR[1], uNeonR[2], t * 2.0 - 1.0));
+}
 void main() {
     vec2 a = aA.xy, b = aA.zw;
     int kind = int(aB.z + 0.5);
+    int mode = int(aB.w + 0.5);
     if (kind == 3) {
         vec2 o = 0.18 * vec2(sin(uTime * 0.5 + aC.x * 7.0), cos(uTime * 0.37 + aC.x * 5.0));
         a += o;
         b += o;
+    } else if (mode != 2 && aD.y < 0.5) {
+        a += sway(a, aC.w, aD.x);
+        b += sway(b, aC.w, aD.x);
     }
     float m = max(aB.x, aB.y) + (kind == 0 || kind == 3 ? 0.2 : 0.03);
     vec2 d = b - a;
@@ -1042,15 +1095,22 @@ void main() {
     vB = aB;
     vC = aC;
     vD = aD;
-    int mode = int(aB.w + 0.5);
-    vCol = mode == 1 ? uNeonWarm : mode == 2 ? uNeonMoon : mode == 3 ? mix(uNeonWarm, vec3(1.0, 0.1, 0.32), 0.55) : neonAt(aC.w, uView.z);
+    // the colors cycle through the drop's palette: each tree's neon slides along its side's gradient (back and forth),
+    // the warm life swaps between its warm and its coral
+    vec3 coral = mix(uNeonWarm, vec3(1.0, 0.1, 0.32), 0.55);
+    float sw = 0.5 + 0.5 * sin(uCycle * 12.566 + aC.w * 0.9);
+    float t0 = clamp((abs(aC.w) - 11.0) / max(uView.z - 11.0, 1.0), 0.0, 1.0);
+    float t = 1.0 - abs(fract((t0 + uCycle * 2.0) * 0.5) * 2.0 - 1.0);
+    vCol = mode == 1 ? mix(uNeonWarm, coral, 0.7 * sw * step(0.001, uCycle))
+         : mode == 2 ? uNeonMoon
+         : mode == 3 ? mix(coral, uNeonWarm, 0.7 * sw * step(0.001, uCycle))
+         : neonT(aC.w, t);
     gl_Position = uVP * vec4(p, 0.0, 1.0);
 }
 )";
 // A stroke of the forest. On the drop: a neon tube (a near-white core, the saturated color around it, a glow falling
-// off beyond), a dark fill faintly tinted (a trunk's or a cap's inside), or a black silhouette in front. In the print
-// (uPrint, written to the plates): a fill is solid key with the bark cut along it, a tube a cut line (a plant's inked),
-// a silhouette solid key.
+// off beyond) or a dark fill faintly tinted (a trunk's or a cap's inside), both lit by the music's waves. In the print
+// (uPrint, written to the plates): a fill is solid key with the bark cut along it, a tube a cut line (a plant's inked).
 inline const char* NEON_FS = R"(#version 330 core
 in vec2 vW;
 flat in vec4 vA, vB, vC, vD;
@@ -1058,6 +1118,21 @@ flat in vec3 vCol;
 out vec4 frag;
 uniform float uAA, uPrint;
 uniform vec3 uMoon;
+uniform float uFlick, uFlickSeed;   // the backbeat: a few of the tubes flicker
+uniform float uSeq, uSeqEnv;        // the floor's life lit band by band out from the well, one band a beat
+uniform float uTime;
+uniform vec4 uView;
+// how bright the drop's neon is here: the waves of light passing, the floor's life lit in turn, a few objects
+// flickering on the snare (no swell of the whole forest on the beat)
+float dropLight(vec2 p, float cx, float ink) {
+    float wv = dropWave(p);
+    float band = clamp(floor((abs(cx) - 6.0) / max(uView.z - 6.0, 1.0) * 4.0), 0.0, 3.0);
+    float seq = ink > 0.5 && abs(band - uSeq) < 0.5 ? uSeqEnv : 0.0;
+    float hf = hash12(vec2(floor(cx * 2.0) + 0.5, uFlickSeed));
+    float fl = hf < 0.1 ? uFlick * (0.55 + 0.45 * sin(uTime * 63.0 + hf * 40.0)) : 0.0;
+    float k = (0.9 + 1.0 * wv + 0.8 * seq) * (1.0 - 0.3 * fl);
+    return mix(1.0, k, uDropK);
+}
 void main() {
     float h;
     float dist = segT(vW, vA.xy, vA.zw, h);
@@ -1082,16 +1157,23 @@ void main() {
         frag = vec4(cut, inked * 0.8, inked * 0.5, 1.0) * a;
         return;
     }
-    if (kind == 1 || kind == 2) {
-        float a = 1.0 - smoothstep(-uAA, uAA, dd);
+    // (the trees stand on the ground: what of their feet reaches under it fades into the floor's glow)
+    float foot = vD.x < 0.5 ? smoothstep(-0.45, 0.05, vW.y - groundY(vW.x)) : 1.0;
+    if (kind == 1) {
+        float a = (1.0 - smoothstep(-uAA, uAA, dd)) * foot;
         if (a <= 0.002) discard;
-        frag = kind == 2 ? vec4(vec3(0.002, 0.002, 0.006) * a, a) : vec4(vCol * vC.z * a, a * 0.9);
+        // a trunk's inside lights up as the waves climb it
+        float lit = 1.0 + uDropK * 1.4 * dropWave(vW);
+        frag = vec4(vCol * vC.z * lit * a, a * 0.9);
         return;
     }
     float core = 1.0 - smoothstep(-uAA, uAA, dd);
     float hot = 1.0 - smoothstep(0.0, max(r * 0.6, uAA), dist);
     float halo = exp(-max(dd, 0.0) / 0.06);
-    vec3 c = (vCol * (core * 1.2 + halo * 0.4) + vec3(0.6) * hot * core) * vC.y;
+    float L = dropLight(vW, vC.w, vD.x);
+    // (the halo widens a little with the light)
+    halo = exp(-max(dd, 0.0) / (0.06 * (0.8 + 0.4 * L)));
+    vec3 c = (vCol * (core * 1.2 + halo * 0.4) + vec3(0.6) * hot * core) * vC.y * L * foot;
     if (max(c.r, max(c.g, c.b)) < 0.002) discard;
     frag = vec4(c, 0.0);
 }

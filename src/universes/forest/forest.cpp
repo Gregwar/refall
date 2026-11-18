@@ -25,13 +25,16 @@
 // lines. A cleared row is gouged away in strokes where it
 // stands; a hard drop knocks a few chips out from under the piece. The ghost is a cut outline.
 //
-// The song: calm is a still print, the plants' light short and the fluorescence restrained, a few fireflies (sparks
-// cut in ink); mid lights the plants on the beat grid, a quarter of them every two beats (the cuts around them
+// The song: calm is a quiet, living print, the plants' light short and breathing slowly with the song, the trees
+// swaying, mist drifting, moonlight shafts shifting, pollen, moths circling the plants, a few fireflies (sparks cut
+// in ink); mid lights the plants on the beat grid, a quarter of them every two beats (the cuts around them
 // widening, local and eased), more fireflies; a peak cuts the light wider, the pulses swell with the bass, a kick
 // lights a single plant and spores rise. The drop turns the forest to neon: on its downbeat a wave runs out from the
 // well and the print gives way to a clean night where the same strokes (the big trees and their crowns, the moon, the
 // mushrooms, ferns and young firs) glow as neon tubes, colored by a gradient on each side, with an aura, a glow on the
-// ground, specks and drifting dots, neon tubes up the well's sides; it stays for the whole drop and goes out after. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
+// ground, specks and drifting dots, neon tubes up the well's sides; for the whole drop it plays with the music (each beat lights
+// the next band of the floor's life out from the well, each kick sends a wave of light out from the well's foot and up
+// the trees and bursts spores out of the plants, the palette cycles; never a swell of the whole forest), then goes out. A quad makes the whole forest flare and breathe out spores. Slow motion pulls the glow inks into one cold
 // ink; game over drains the stack's ink to the paper from the top, the roller then inking it over in black. Before a
 // song the print is pulled: the key's cuts, then the glow inks, the plants cut in and lit one by one; after it the
 // light goes out plant by plant and the sheet sinks into the dark. A new song in the same forest only changes its inks.
@@ -416,12 +419,13 @@ void ForestUniverse::buildForest() {
 
 // The forest's strokes, laid out with the forest (they stay for the universe's life): the big trees (their trunks and
 // limbs a tinted fill between two bright edges, their limbs curving up and forking into ever thinner twigs, most of
-// them in the crown), young trees, a dense floor (mushroom clusters, coral bushes, ferns, black stumps), the moon's rim
+// them in the crown), young trees, a dense floor (mushroom clusters, coral bushes, ferns), the moon's rim
 // and strokes of cloud, a path of steps at the far right, drifting dots. The print carves them (black, their edges and
 // lines cut), the drop lights them as neon tubes, each tree in the neon of its place (on the left magenta, violet,
 // blue; on the right cyan, green, lime). Strokes in board units.
 void ForestUniverse::buildNeon() {
-    std::vector<Inst> fill, tube, dark;
+    std::vector<Inst> fill, tube;
+    sporeSrc_.clear();
     Rng r(forestSeed_ ^ 0x4E30ull);
     const Rock rock{rock_[0], rock_[1], rock_[2]};
     const float W = viewH_.x, room = std::max(W - 11.8f, 3.f), top = viewC_.y + viewH_.y;
@@ -431,7 +435,7 @@ void ForestUniverse::buildNeon() {
     auto heading = [](float a) { return vec2{std::sin(a), std::cos(a)}; };
     // the song's title, top left: kept clear
     auto inTitle = [&](vec2 p) { return p.x < -W + 7.5f && p.y > top - 2.8f; };
-    // a stroke: kind 0 a tube, 1 a tinted fill, 2 a black silhouette, 3 a drifting dot; mode 0 the neon of the gradient
+    // a stroke: kind 0 a tube, 1 a tinted fill, 3 a drifting dot; mode 0 the neon of the gradient
     // at cx, 1 the warm neon, 2 the moon's, 3 a coral
     // (in the print: a tree's cut edges bare paper, a plant's lines inked in a glow ink)
     float ink = 0.f;
@@ -533,6 +537,7 @@ void ForestUniverse::buildNeon() {
             }
             line(c + vec2{-cr, 0.f}, c + vec2{cr, 0.f}, 0.018f, mode, mx, 0.8f);
             for (int j = 0; j < 4; j++) dotAt(c + vec2{r.range(-0.6f, 0.6f) * cr, r.range(0.12f, 0.45f) * cr}, 0.026f * s, mode, mx, 1.4f);
+            sporeSrc_.push_back({c.x, c.y + cr * 0.5f, mx, (float)mode});
         }
     };
     // a coral bush: stems branching twice out of the floor, a bead of light at each tip
@@ -548,6 +553,7 @@ void ForestUniverse::buildNeon() {
                 dotAt(e, 0.04f, 1, x, 1.4f);
             }
         }
+        sporeSrc_.push_back({x, g + sc * 0.9f, x, 3.f});
     };
     // a fern: fronds fanning out and curling over, dots of spores along them
     auto fern = [&](float x, float sc, float cx) {
@@ -563,12 +569,7 @@ void ForestUniverse::buildNeon() {
                 prev = q;
             }
         }
-    };
-    // a black stump with roots clawing at the floor, in front
-    auto stump = [&](float x, float h, float w) {
-        const float g = ground(x);
-        stroke(dark, {x, g - 0.4f}, {x + r.range(-0.15f, 0.15f), g + h}, w, w * 0.75f, 2, 0, 1.f, 0.f, x, 0.f);
-        for (int s = -1; s <= 1; s += 2) stroke(dark, {x, g + h * 0.3f}, {x + s * w * 2.6f, g - 0.3f}, w * 0.55f, 0.05f, 2, 0, 1.f, 0.f, x, 0.f);
+        sporeSrc_.push_back({x, g + sc * 0.8f, cx, 0.f});
     };
     // ---- the big trees, each kept within its strip (out to its neighbours' trunks)
     for (size_t i = 0; i < trunks_.size(); i++) {
@@ -588,10 +589,9 @@ void ForestUniverse::buildNeon() {
         float ax = 6.3f + r.range(0.f, 0.3f);
         while (ax < W - 0.3f) {
             const float x = side * ax, k = r.uniform();
-            if (k < 0.42f) mushrooms(x, r.irange(3, 6), r.range(0.9f, 1.4f));
-            else if (k < 0.66f) coral(x, r.range(0.8f, 1.2f));
-            else if (k < 0.86f) fern(x, r.range(0.9f, 1.4f), x);
-            else stump(x, r.range(0.8f, 1.5f), r.range(0.2f, 0.3f));
+            if (k < 0.46f) mushrooms(x, r.irange(3, 6), r.range(0.9f, 1.4f));
+            else if (k < 0.72f) coral(x, r.range(0.8f, 1.2f));
+            else fern(x, r.range(0.9f, 1.4f), x);
             ax += r.range(0.8f, 1.3f);
         }
     }
@@ -630,8 +630,8 @@ void ForestUniverse::buildNeon() {
         const float w = r.range(0.03f, 0.06f);
         if (!inTitle({x, y})) stroke(tube, {x, y}, {x, y}, w, w, 3, 0, 1.2f, 0.f, x, r.uniform() * 10.f);
     }
-    const std::vector<Inst>* sets[3] = {&fill, &tube, &dark};
-    for (int i = 0; i < 3; i++) {
+    const std::vector<Inst>* sets[2] = {&fill, &tube};
+    for (int i = 0; i < 2; i++) {
         glBindBuffer(GL_ARRAY_BUFFER, neonVbo_[i]);
         glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sets[i]->size() * sizeof(Inst)), sets[i]->data(), GL_STATIC_DRAW);
         neonN_[i] = (int)sets[i]->size();
@@ -728,6 +728,7 @@ void ForestUniverse::drop(float strength) {
     waveT_ = 0.f;
     waveK_ = 0.75f + 0.25f * strength;
     jolt_ = 0.6f + 0.4f * strength;
+    cycle_ = 0.f; // (the drop's downbeat shows the forest's own gradient, then the palette cycles)
 }
 
 vec2 ForestUniverse::project(const vec3& p) const { return layout::project(vp_, p, width_, height_); }
@@ -1138,8 +1139,72 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         return smoothstepf(0.65f * h, 0.65f * h + 0.35f, w);
     };
     const float cutIn = smoothstepf(0.25f, 0.9f, f.setup);
-    // the life's overall level: a steady step per section, never pulsing with the beat
-    const float life = (0.55f + 0.2f * wm + 0.3f * wp + 0.25f * fest_ + 0.4f * blaze_) * (1.f - 0.3f * slow_);
+    // ---- The beat: the drop's pulse (and, outside it, the light breathing slowly with the song).
+    // Each beat lights the next band of the floor's life out from the well (no swell of the whole forest); each kick (every two
+    // beats) starts a wave of light out from the well's foot and up the trees (the bar's downbeat the strongest) and
+    // bursts spores out of the plants; the backbeat (the snare) makes a few of the tubes flicker; the palette cycles slowly through the drop.
+    const float dropK = smoothstepf(0.2f, 0.75f, blaze_) * (1.f - slow_);
+    const float kickNow = music.hasSong ? music.kick : 0.f;
+    {
+        const float bph = beat_ - std::floor(beat_);
+        const int beatI = (int)std::floor(beat_);
+        for (int k = 0; k < 4; k++) waveAge_[k] += wdt;
+        if (beatI != lastBeatI_) {
+            const bool fresh = lastBeatI_ != (-1 << 30) && beatI > lastBeatI_ && beatI - lastBeatI_ < 3;
+            lastBeatI_ = beatI;
+            if (fresh && !f.paused) {
+                const bool down = (beatI & 3) == 0, kickBeat = (beatI & 1) == 0;
+                if (kickBeat) {
+                    for (int k = 3; k > 0; k--) { waveAge_[k] = waveAge_[k - 1]; waveAmp_[k] = waveAmp_[k - 1]; }
+                    waveAge_[0] = bph * spb;
+                    waveAmp_[0] = (down ? 1.f : 0.6f) * (0.75f + 0.25f * bass);
+                }
+                seqStep_ = beatI & 3;
+                seqEnv_ = 1.f;
+                // (now and then only, a single object or two, faint: never a beat-locked dip)
+                if (!kickBeat && rng_.chance(0.35f)) {
+                    flick_ = 0.55f + 0.45f * saturate(music.audio.high * 1.5f);
+                    flickSeed_ = rng_.uniform() * 97.f;
+                }
+                // a kick at a peak lights a single plant of the print
+                if (kickBeat && music.hasSong) kickIn_ = std::max(kickIn_, 0.4f + 0.6f * std::max(kickNow, bass));
+                // the kick bursts spores out of a few of the neon forest's plants
+                if (kickBeat && dropK > 0.3f && !sporeSrc_.empty()) {
+                    const int bursts = down ? 4 : 2;
+                    for (int b = 0; b < bursts; b++) {
+                        const SporeSrc& s = sporeSrc_[rng_.irange(0, (int)sporeSrc_.size() - 1)];
+                        const int n = rng_.irange(5, 8);
+                        for (int k = 0; k < n; k++) {
+                            Mote m;
+                            m.kind = 5;
+                            m.p = m.p0 = vec2{s.x + rng_.range(-0.2f, 0.2f), s.y + rng_.range(-0.1f, 0.2f)};
+                            const float a = rng_.range(-1.1f, 1.1f);
+                            m.v = vec2{std::sin(a), std::cos(a)} * rng_.range(1.2f, 2.6f);
+                            m.life = rng_.range(1.2f, 2.2f);
+                            m.r = rng_.range(0.04f, 0.07f);
+                            m.a = 1.f;
+                            m.seed = rng_.uniform() * 10.f;
+                            m.mode = (int)s.mode;
+                            m.cx = s.cx;
+                            motes_.push_back(m);
+                        }
+                    }
+                }
+            }
+        }
+        flick_ = approach(flick_, 0.f, 5.f, dt);
+        seqEnv_ = approach(seqEnv_, 0.f, 2.2f, dt);
+        // the palette's cycle: once around in sixteen beats on the drop, steady
+        cycle_ += wdt / spb / 16.f * dropK;
+        if (cycle_ > 1000.f) cycle_ -= 1000.f;
+        // outside the drop: the light breathes slowly with the song's energy and its bass (a bar-long swell)
+        const float want = music.hasSong ? 0.5f * saturate(music.energy) + 0.5f * bass : 0.3f;
+        breath_ = approach(breath_, want, 1.2f, dt);
+    }
+    // the life's overall level: a steady step per section, breathing slowly with the music (never pulsing on the beat)
+    const float barPh = std::sin((beat_ / 8.f) * TAU) * 0.5f + 0.5f;
+    const float life = (0.55f + 0.2f * wm + 0.3f * wp + 0.25f * fest_ + 0.4f * blaze_) * (1.f - 0.3f * slow_) *
+                       (0.9f + 0.12f * breath_ + 0.06f * barPh);
     // the beat grid: a quarter of the plants glow on each two beats
     const float half = beat_ * 0.5f;
     const int halfI = (int)std::floor(half);
@@ -1167,7 +1232,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         int fireflies = 0;
         for (const Mote& m : motes_)
             if (m.kind == 0) fireflies++;
-        const float want = (3.f + 7.f * wm + 8.f * wp + 4.f * fest_) * (1.f - 0.3f * slow_);
+        const float want = (5.f + 6.f * wm + 7.f * wp + 4.f * fest_) * (1.f - 0.3f * slow_);
         fireflyAcc_ += wdt * 0.8f;
         if (fireflies < want && fireflyAcc_ > 0.f) {
             fireflyAcc_ = -rng_.range(0.2f, 0.8f);
@@ -1190,8 +1255,55 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             motes_.push_back(m);
         }
     }
+    // a moth or two fluttering around the glowing plants, more at calm (the drop's light scares them off)
+    if (!plants_.empty()) {
+        int moths = 0;
+        for (const Mote& m : motes_)
+            if (m.kind == 3) moths++;
+        const float want = (2.5f - 0.8f * wp) * (1.f - blaze_) * smoothstepf(0.5f, 0.9f, wake);
+        mothAcc_ += wdt;
+        if (moths < want && mothAcc_ > 0.f) {
+            mothAcc_ = -rng_.range(1.5f, 4.f);
+            for (int tries = 0; tries < 8; tries++) {
+                const Plant& p = plants_[rng_.irange(0, (int)plants_.size() - 1)];
+                const vec2 c = plantTop(p);
+                if (p.kind == 2 || std::fabs(c.x) < 7.f || inHud(c.x, c.y + 0.8f)) continue;
+                Mote m;
+                m.kind = 3;
+                m.target = c + vec2{0.f, 0.9f};
+                m.p = m.p0 = m.target + vec2{rng_.chance(0.5f) ? -3.f : 3.f, rng_.range(1.f, 3.f)};
+                m.life = rng_.range(10.f, 18.f);
+                m.r = rng_.range(0.34f, 0.44f);
+                m.a = 0.95f;
+                m.seed = rng_.uniform() * 10.f;
+                m.inkB = p.colMix;
+                motes_.push_back(m);
+                break;
+            }
+        }
+    }
+    // pollen drifting in the light low in the forest, slowly, a little more as the song lifts
+    {
+        pollenAcc_ += wdt * (3.f + 2.f * wm) * (1.f - 0.7f * blaze_) * smoothstepf(0.4f, 0.8f, wake);
+        while (pollenAcc_ > 1.f) {
+            pollenAcc_ -= 1.f;
+            const float side = rng_.chance(0.5f) ? -1.f : 1.f;
+            const vec2 p{side * rng_.range(6.8f, viewH_.x), rng_.range(-11.f, -2.f)};
+            if (inHud(p.x, p.y)) continue;
+            Mote m;
+            m.kind = 4;
+            m.p = m.p0 = p;
+            m.v = vec2{rng_.range(0.12f, 0.3f) * (rng_.chance(0.7f) ? 1.f : -1.f), rng_.range(-0.05f, 0.12f)};
+            m.life = rng_.range(6.f, 11.f);
+            m.r = rng_.range(0.07f, 0.11f);
+            m.a = rng_.range(0.5f, 0.85f);
+            m.seed = rng_.uniform() * 10.f;
+            m.inkB = rng_.chance(0.5f) ? 1.f : 0.f;
+            motes_.push_back(m);
+        }
+    }
     for (Mote& m : motes_) {
-        const float mdt = m.kind == 2 ? dt : wdt;
+        const float mdt = m.kind == 2 || m.kind == 5 ? dt : wdt;
         m.t += mdt;
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
@@ -1207,6 +1319,25 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
             }
         } else if (m.kind == 1) {
             m.p = m.p + vec2{m.v.x + 0.12f * std::sin(m.t * 1.1f + m.seed), m.v.y} * mdt;
+        } else if (m.kind == 3) {
+            // a moth: drawn to its plant's light, circling it in loops, darting now and then
+            const float t = m.t;
+            const vec2 orbit{std::cos(t * 1.3f + m.seed) * (0.7f + 0.3f * std::sin(t * 0.4f + m.seed)),
+                             0.45f * std::sin(t * 2.1f + m.seed * 2.f) + 0.2f * std::sin(t * 0.7f)};
+            const float pull = smoothstepf(0.f, 3.f, tt) * (1.f - smoothstepf(0.8f, 1.f, tt / m.life));
+            const vec2 away = m.target + vec2{(m.seed < 5.f ? -1.f : 1.f) * 4.f, 3.f};
+            const vec2 goal = lerp2(away, m.target + orbit, pull);
+            const vec2 prev = m.p;
+            m.p = m.p + (goal - m.p) * std::min(1.f, mdt * 2.2f);
+            m.p = m.p + vec2{0.05f * std::sin(t * 13.f + m.seed), 0.05f * std::cos(t * 11.f + m.seed)};
+            m.v = (m.p - prev) * (1.f / std::max(mdt, 1e-4f));
+        } else if (m.kind == 4) {
+            // a grain of pollen, swaying on the air
+            m.p = m.p + vec2{m.v.x + 0.08f * std::sin(m.t * 0.9f + m.seed), m.v.y + 0.06f * std::sin(m.t * 0.6f + m.seed * 2.f)} * mdt;
+        } else if (m.kind == 5) {
+            // a neon spore burst out of a plant: thrown out, slowed by the air, then drifting up
+            m.p = m.p + m.v * mdt;
+            m.v = m.v * std::exp(-mdt * 2.4f) + vec2{0.15f * std::sin(m.t * 3.f + m.seed), 0.5f} * mdt;
         } else {
             // a chip: knocked out, falling back
             const float s = saturate(tt / m.life);
@@ -1273,6 +1404,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
         const float tt = m.t - m.delay;
         if (tt <= 0.f) continue;
         if (bare_ && m.kind == 2) continue; // (a hard drop's chips)
+        if (m.kind == 5) continue;           // (the drop's spores are lit in the neon forest)
         const float s = saturate(tt / m.life);
         float a = m.a, r = m.r, shape = 1.f, ang = 0.f;
         if (m.kind == 0) {
@@ -1294,10 +1426,20 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
                 if (inHud(q.x, q.y)) ta = 0.f;
                 if (ta > 0.05f) moteInst_.push_back({{q.x, q.y, m.r * (0.32f - 0.02f * k), ta}, {m.inkB, 1.f, 0.f, 0.f}});
             }
-        } else if (m.kind == 1) {
-            a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.5f, 1.f, s));
+        } else if (m.kind == 1 || m.kind == 4) {
+            a *= smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(m.kind == 4 ? 0.7f : 0.5f, 1.f, s));
             a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
+            if (m.kind == 4) a *= smoothstepf(0.4f, 0.8f, wake);
             if (inHud(m.p.x, m.p.y)) a = 0.f;
+        } else if (m.kind == 3) {
+            // a moth: two pairs of wings beating fast, its heading where it flies
+            a *= smoothstepf(0.f, 0.08f, s) * (1.f - smoothstepf(0.9f, 1.f, s));
+            a *= smoothstepf(6.2f, 7.f, std::fabs(m.p.x));
+            if (inHud(m.p.x, m.p.y)) a = 0.f;
+            shape = 3.f;
+            ang = std::atan2(m.v.y, m.v.x);
+            if (a > 0.05f) moteInst_.push_back({{m.p.x, m.p.y, r, a}, {m.inkB, shape, ang, std::sin(m.t * 38.f + m.seed)}});
+            continue;
         } else {
             a *= 1.f - smoothstepf(0.6f, 1.f, s);
             shape = 2.f;
@@ -1336,6 +1478,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progBg_, "uSeed", seedF_);
     set1f(progBg_, "uMistK", (0.3f + 0.1f * wm + 0.14f * wp + 0.1f * fest_ + 0.16f * blaze_) * (1.f - 0.3f * slow_) * wake);
     set1f(progBg_, "uMoonK", 0.85f + 0.15f * slow_);
+    set1f(progBg_, "uShaftK", (0.55f + 0.35f * breath_ + 0.2f * wm) * (1.f - blaze_) * wake);
     set1f(progBg_, "uLife", life * wake);
     set1f(progBg_, "uWaveR", waveR);
     set1f(progBg_, "uWaveK", waveK_);
@@ -1343,7 +1486,7 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     setBoxes(progBg_);
     ugl::drawFullscreen();
     glEnable(GL_BLEND);
-    // the forest's strokes, carved: the fills black with bark cut along them, the edges and lines cut, the stumps black
+    // the forest's strokes, carved: the fills black with bark cut along them, the edges and lines cut (swaying)
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(progNeon_);
     setMat(progNeon_, "uVP", vp_);
@@ -1352,9 +1495,21 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progNeon_, "uAA", aaW * 0.75f);
     set1f(progNeon_, "uPrint", 1.f);
     set3f(progNeon_, "uMoon", vec3(moon_[0], moon_[1], moon_[2]));
+    set1f(progNeon_, "uSway", std::min(wind_, 0.9f));
+    set1f(progNeon_, "uGS", groundSeed_);
+    set3f(progNeon_, "uRock", vec3(rock_[0], rock_[1], rock_[2]));
+    set4f(progNeon_, "uPool", pool_[0], pool_[1], pool_[2], 0.f);
+    set1f(progNeon_, "uCycle", cycle_);
+    set1f(progNeon_, "uDropK", dropK);
+    set4f(progNeon_, "uWaveAge", waveAge_[0], waveAge_[1], waveAge_[2], waveAge_[3]);
+    set4f(progNeon_, "uWaveAmp", waveAmp_[0], waveAmp_[1], waveAmp_[2], waveAmp_[3]);
+    set1f(progNeon_, "uFlick", flick_);
+    set1f(progNeon_, "uFlickSeed", flickSeed_);
+    set1f(progNeon_, "uSeq", (float)seqStep_);
+    set1f(progNeon_, "uSeqEnv", seqEnv_);
     setBoxes(progNeon_);
     setNeon(progNeon_);
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
         glBindVertexArray(neonVao_[i]);
         glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)neonN_[i]);
     }
@@ -1381,19 +1536,40 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     glBlendEquation(GL_FUNC_ADD);
     glDisable(GL_BLEND);
 
-    // ---- The drop's neon forest: the dark fills, the tubes adding their light over them, the black silhouettes.
+    // ---- The drop's neon forest: the dark fills, the tubes adding their light over them, then its moving lights
+    // (the spores the kicks burst out of the plants, the fireflies), all pulsing with the music.
     if (blaze_ > 0.001f) {
+        neonDyn_.clear();
+        for (const Mote& m : motes_) {
+            const float tt = m.t - m.delay;
+            if (tt <= 0.f || (m.kind != 5 && m.kind != 0)) continue;
+            const float s = saturate(tt / m.life);
+            float a = m.kind == 5 ? (1.f - smoothstepf(0.35f, 1.f, s)) * smoothstepf(0.f, 0.05f, s)
+                                  : smoothstepf(0.f, 0.15f, s) * (1.f - smoothstepf(0.8f, 1.f, s)) * (0.6f + 0.4f * std::sin(m.t * 1.1f + m.seed));
+            a *= smoothstepf(5.9f, 6.8f, std::fabs(m.p.x));
+            if (inHud(m.p.x, m.p.y) || a < 0.03f) continue;
+            const float r = m.kind == 5 ? m.r : 0.05f;
+            const float cx = m.kind == 5 ? m.cx : m.p.x;
+            const float mode = m.kind == 5 ? (float)m.mode : 0.f;
+            neonDyn_.push_back({{m.p.x, m.p.y, m.p.x, m.p.y}, {r, r, 0.f, mode}, {m.seed, 1.5f * a, 0.f, cx}, {1.f, 1.f, 0.f, 0.f}});
+        }
         sceneT_.bind();
         glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT);
         glEnable(GL_BLEND);
         glUseProgram(progNeon_);
         set1f(progNeon_, "uPrint", 0.f);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 2; i++) {
             if (i == 1) glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
             else glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             glBindVertexArray(neonVao_[i]);
             glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)neonN_[i]);
+        }
+        if (!neonDyn_.empty()) {
+            glBindVertexArray(neonVao_[2]);
+            glBindBuffer(GL_ARRAY_BUFFER, neonVbo_[2]);
+            glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(neonDyn_.size() * sizeof(Inst)), neonDyn_.data(), GL_STREAM_DRAW);
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, (GLsizei)neonDyn_.size());
         }
         glDisable(GL_BLEND);
     }
@@ -1467,6 +1643,9 @@ void ForestUniverse::render(const Frame& f, GLuint fbo) {
     set1f(progFinal_, "uKeyK", 0.9f + 0.1f * smoothstepf(0.f, 0.4f, f.setup));
     set1f(progFinal_, "uBloomK", ((0.08f + 0.04f * wp) * (1.f - blaze_) + 0.22f * blaze_) * (1.f - 0.5f * slow_));
     set1f(progFinal_, "uBlaze", blaze_ * (1.f - slow_));
+    set1f(progFinal_, "uDropK", dropK);
+    set4f(progFinal_, "uWaveAge", waveAge_[0], waveAge_[1], waveAge_[2], waveAge_[3]);
+    set4f(progFinal_, "uWaveAmp", waveAmp_[0], waveAmp_[1], waveAmp_[2], waveAmp_[3]);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     glActiveTexture(GL_TEXTURE0);
