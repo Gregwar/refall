@@ -88,6 +88,7 @@ private:
     // ---- The camera (world: meters, the tree's foot at the origin, y up; drawn relative to the eye).
     vec3 eye_{0, 1, 10}, look_{0, 0, -1}, camR_{1, 0, 0}, camU_{0, 1, 0};
     float tanH_ = 0.5f, aspect_ = 1.78f;
+    float camEnd_ = 0.f;  // the teardown: the camera swings round and back to show the whole tree, down to the earth
     float camBack_ = 0.f, camSwing_ = 0.f; // the setup / teardown: the camera further back (x its distance), turned (rad)
     mat4 proj3_, vp3_;
     float gc_ = -99.f, gcVel_ = 0.f;   // the growth the camera frames (lagging behind: the tree shoots up first)

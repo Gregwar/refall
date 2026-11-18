@@ -428,6 +428,20 @@ void GiantTreeUniverse::updateCamera(float dt) {
     const float D = F / tanH_ * (1.f + camBack_);
     vec3 eye = anchor - dirA * D;
     eye.y = std::max(eye.y, 0.25f + 0.2f * std::min(T, 4.f));
+    // the end of the song: the camera stays where it is and turns down along the tree until its base is in view too,
+    // the meadow under a young tree, the earth itself under one grown into space (the crown kept in the frame)
+    // (aimed between the crown and the roots, the lens widening as far as both need, the tree kept right of the well)
+    if (camEnd_ > 0.f) {
+        const float e = smoothstepf(0.f, 1.f, camEnd_);
+        const vec3 toCrown = normalize(cc + vec3(0.f, 0.5f * W, 0.f) - eye), toRoot = normalize(vec3(0.f) - eye);
+        const vec3 mid = normalize(toCrown + toRoot);
+        const float half = 0.5f * std::acos(std::clamp(dot(toCrown, toRoot), -1.f, 1.f));
+        const float tanEnd = std::max(tanH_, std::tan(std::min(62.f * PI / 180.f, half * 1.12f + 4.f * PI / 180.f)));
+        tanH_ = lerpf(tanH_, tanEnd, e);
+        const vec3 mr = normalize(cross(mid, vec3(0, 1, 0)));
+        const vec3 target = normalize(mid - mr * (0.6f * tanH_ * aspect_));
+        fwd = normalize(lerp(fwd, target, e));
+    }
     eye_ = eye;
     look_ = fwd;
     camR_ = normalize(cross(fwd, vec3(0, 1, 0)));
@@ -1019,8 +1033,10 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     // the setup: the camera eases in to the tree, turning a little around it; the teardown: it drifts back, away
     {
         const float in = 1.f - smoothstepf(0.f, 0.9f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
-        camBack_ = 0.7f * in * in + 0.9f * out * out;
+        camBack_ = 0.7f * in * in;
         camSwing_ = -0.3f * in * in + 0.2f * out;
+        camEnd_ = out;
+        if (std::getenv("REFALL_GIANTTREE_END")) camEnd_ = (float)std::atof(std::getenv("REFALL_GIANTTREE_END")); // test hook: the closing turn held
     }
     updateCamera(dt);
     const float W = gtree::crownW(g_);
