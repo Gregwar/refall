@@ -70,7 +70,10 @@ private:
     struct Mote {
         vec2 p, v, p0, target;
         float t = 0, life = 8.f, delay = 0, r = 0.3f, a = 1.f, seed = 0;
-        int kind = 0;               // 0 firefly, 1 spore rising, 2 a chip at a hard drop
+        int kind = 0;               // 0 firefly, 1 spore rising, 2 a chip at a hard drop, 3 a moth, 4 a pollen grain,
+                                    // 5 a neon spore burst on the drop (drawn in the neon forest only)
+        int mode = 0;               // a neon spore's neon (the strokes' modes)
+        float cx = 0.f;             // a neon spore's x on the gradient
         float inkB = 0.f;           // its glow ink: 0 the first .. 1 the second
         vec2 trail[8];              // a firefly's recent places (its fading trail)
         int trailN = 0;
@@ -104,10 +107,14 @@ private:
            shapeVao_ = 0, shapeVbo_ = 0;
     ugl::Target plateT_, lightT_, bloomA_, bloomB_;
     ugl::Target sceneT_;            // the drop's neon forest (its light, how much it hides of what is behind)
-    // the forest's strokes, carved in the print and lit in neon on the drop: the dark fills, the tubes, the black
-    // silhouettes
+    // the forest's strokes, carved in the print and lit in neon on the drop: the dark fills, the tubes; then the drop's
+    // moving lights (spores burst on the kicks, the fireflies), rebuilt each frame
     GLuint neonVao_[3] = {}, neonVbo_[3] = {};
     int neonN_[3] = {};
+    std::vector<Inst> neonDyn_;
+    // the floor's life on the drop, where its spores burst from: x, y, its x on the gradient, its neon mode
+    struct SporeSrc { float x, y, cx, mode; };
+    std::vector<SporeSrc> sporeSrc_;
     float aura_[3] = {-19.f, -2.f, 4.5f};      // the violet aura behind the left's trees: center, radius
     mat4 vp_;
     vec2 viewC_{0, 0}, viewH_{21, 12};
@@ -140,6 +147,12 @@ private:
     float blaze_ = 0.f;             // the drop's neon forest (0..1)
     float jolt_ = 0.f;              // the glow plates knocked out of register on the drop, settling back
     float kickIn_ = 0.f;
+    // the drop's pulse: the beat's envelope (kick-weighted), waves of light out from the well (their ages and
+    // strengths, one per beat), a flicker on the backbeat (the snare), the palette's cycle, the light's slow breath
+    float beatEnv_ = 0.f, flick_ = 0.f, flickSeed_ = 0.f, cycle_ = 0.f, breath_ = 0.f, seqEnv_ = 0.f;
+    float waveAge_[4] = {99.f, 99.f, 99.f, 99.f}, waveAmp_[4] = {};
+    int lastBeatI_ = -1 << 30, seqStep_ = 0;
+    float mothAcc_ = 0.f, pollenAcc_ = 0.f;
     double time_ = 0.0;
     float worldTime_ = 0.f, beat_ = 0.f;
     int lastHalf_ = -1;
