@@ -91,3 +91,10 @@ cmake -S . -B build && cmake --build build -j
 ```
 
 `-DREFALL_DISABLED_UNIVERSES=""` also builds the universes left out by default (see [docs/universes.md](docs/universes.md)).
+
+## License
+
+Refall is free for any noncommercial use (personal, education, research, non-profit) under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). For commercial use, contact the author. Fonts and bundled libraries
+keep their own licenses (see [LICENSE](LICENSE)). Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
