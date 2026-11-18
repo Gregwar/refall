@@ -2892,8 +2892,12 @@ int main(int argc, char** argv) {
         else o.paths.push_back(a);
     }
     if (reset || unlock) {
+        // (with the campaign: the stage clears are keyed by the stage's songs, and saved without them they'd be dropped
+        // on the next launch)
+        Campaign camp;
+        camp.load(o.campaignPath);
         Progress p;
-        p.load(o.progressPath);
+        p.load(o.progressPath, &camp);
         if (reset) {
             p.reset();
             const std::string place = menuPlacePath(o.progressPath);
