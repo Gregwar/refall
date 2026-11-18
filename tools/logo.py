@@ -74,7 +74,7 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
     rr = np.sqrt((ux / ra) ** 2 + (uy / rb) ** 2)
     near = uy > 0
     d = np.sqrt(dx * dx + dy * dy) / R  # the planet: < 1 inside
-    line = max(1.0, 0.0032 * S)  # an outline's width
+    line = max(1.5, 0.0058 * S)  # an outline's width
     white = _c(0xffffff)
 
     def band_edge(v, lo, hi):  # antialiased inside [lo, hi] along the ring's radius (in pixels at its widest)
@@ -83,8 +83,11 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
     def ring(front):
         sel = near if front else ~near
         if outline:
+            # (the distance to the edge in pixels: its gap in rr over rr's slope, which is steep where the ring is
+            # seen edge-on)
+            slope = np.sqrt((ux / ra ** 2) ** 2 + (uy / rb ** 2) ** 2) / np.maximum(rr, 1e-6)
             for edge in (0.76, 0.99):
-                m = np.clip(1 - np.abs(rr - edge) * ra / line, 0, 1) * sel
+                m = np.clip(1 - np.abs(rr - edge) / slope / line, 0, 1) * sel
                 if not front:
                     m = m * (d > 1)
                 cv.over(white, m)
@@ -120,7 +123,8 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
         col = col + (_c(0x8cc4ff) - col) * (rim * (0.25 + 0.6 * lam))[..., None]
         cv.over(col, edge)
 
-    def piece(cells, colour, th, rot):
+    def piece(cells, colour, th, rot, hidden=None):
+        """`hidden`: where the planet covers it (a piece behind the planet, drawn as contours)."""
         ex, ey = ra * 0.93 * math.cos(th), rb * 0.93 * math.sin(th)
         px0, py0 = cx + ex * ct - ey * st, cy + ex * st + ey * ct
         depth = math.sin(th)
@@ -133,7 +137,8 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
             lx, ly = (x - qx) * cr + (y - qy) * sr, -(x - qx) * sr + (y - qy) * cr
             inner = np.minimum(cs / 2 - np.abs(lx), cs / 2 - np.abs(ly))
             if outline:
-                cv.over(white, np.clip(1 - np.abs(inner) / (line * 0.7), 0, 1))
+                m = np.clip(1 - np.abs(inner) / (line * 0.8), 0, 1)
+                cv.over(white, m if hidden is None else m * (1 - hidden))
             else:
                 shade = np.clip(0.5 - (lx * 0.6 + ly * 0.8) / cs, 0, 1)[..., None]
                 cv.over(np.clip(c * (0.75 + 0.45 * shade), 0, 255), np.clip(inner / 1.2, 0, 1))
@@ -142,9 +147,8 @@ def _draw(N, word, outline, icon=False, t=0.0, ss=SS):
     behind = [p for p in pieces if math.sin(p[2]) < 0]
     front = [p for p in pieces if math.sin(p[2]) >= 0]
     ring(False)
-    for p in behind:
-        if not outline:  # (their contours would show through the planet's)
-            piece(*p)
+    for p in behind:  # (as contours: only where the planet doesn't cover them)
+        piece(*p, hidden=np.clip((1 - d) * R / 1.2, 0, 1) if outline else None)
     planet()
     ring(True)
     for p in front:
