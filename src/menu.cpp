@@ -417,7 +417,13 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                 if (dy > 0 || ok) row_ = 1;
                 else if (back) open(voyages_ ? VOYAGES : TITLE);
             } else if (!petal_) {
-                stage_ = std::clamp(stage_ + dx, 0, n - 1);
+                // round the wheel: past the last stage comes the first again, and back (the animated position
+                // jumps a whole turn with it, so the wheel takes the short way round)
+                if (dx) {
+                    const int to = ((stage_ + dx) % n + n) % n;
+                    if (to - stage_ != dx) { aStage_ += (float)(to - stage_ - dx); aStageTurns_ -= (float)(to - stage_ - dx); }
+                    stage_ = to;
+                }
                 if (dy < 0) row_ = 0;
                 const bool unlocked = progress_ && progress_->unlocked(stage_, diff_);
                 if (ok && unlocked) { // the whole stage, from its first song: a real run

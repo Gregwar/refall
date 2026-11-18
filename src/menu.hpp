@@ -157,6 +157,7 @@ private:
 
     // eased focus (indices as floats) for the animated transitions
     float aTitle_ = 0, aFree_ = DIFF_HARD, aDiff_ = DIFF_NORMAL, aStage_ = 0, aSong_ = 0, aRow_ = 1;
+    float aStageTurns_ = 0; // whole turns taken round the Voyage's wheel (keeps the kaleidoscope's spin continuous)
     // the opened petal (its songs fanned out), eased
     bool petal_ = false;
     float aOpen_ = 0;

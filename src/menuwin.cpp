@@ -94,8 +94,16 @@ struct Worlds {
         }
     }
     Col stageCol(int s) const { unsigned char c[3]; m.stageColor(s, c); return rgb8(c); }
-    float focusStage(int s) const { return m.aRow_ > 0.5f ? sstep(near1(m.aStage_, s)) * std::min(1.f, m.aRow_) : 0.f; }
-    int focusedStage() const { return std::clamp((int)std::lround(m.aStage_), 0, std::max(0, nStages() - 1)); }
+    // (round the wheel: the animated position may stand a little before the first stage or past the last)
+    float focusStage(int s) const {
+        const int n = std::max(1, nStages());
+        const float d = std::fabs(std::remainder(m.aStage_ - (float)s, (float)n));
+        return m.aRow_ > 0.5f ? sstep(std::max(0.f, 1.f - d)) * std::min(1.f, m.aRow_) : 0.f;
+    }
+    int focusedStage() const {
+        const int n = std::max(1, nStages());
+        return (((int)std::lround(m.aStage_) % n) + n) % n;
+    }
     // all the campaign's universes, in order (the title's slow tour), from one picked at random when the game starts
     std::vector<std::string> tour() const {
         std::vector<std::string> v;
@@ -335,7 +343,7 @@ void Worlds::kalBackground(const std::string& cur) {
     float loA, hiA, loB, hiB;
     range(g_prev.empty() ? g_cur : g_prev, loA, hiA);
     range(g_cur, loB, hiB);
-    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + m.aStage_ * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
+    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
               mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, loA, hiA, loB, hiB);
 }
 
@@ -424,12 +432,6 @@ void Worlds::kalCampaign() {
             else
                 for (int i = 0; i < 6; i += 2)
                     p.arc(cx, cy, r, lerpf(a0, a1, i / 6.f), lerpf(a0, a1, (i + 1) / 6.f), 1.5f * u, hex(0xb0b0c0, 0.3f));
-            // a chevron in the middle points the way
-            const float am = (a0 + a1) * 0.5f, mx = cx + std::cos(am) * r, my = cy + std::sin(am) * r;
-            const float tx = -std::sin(am), ty = std::cos(am), nx = std::cos(am), ny = std::sin(am), k = 7 * u;
-            const Col cc = o ? hex(0xffe0a0, 0.95f) : hex(0xb0b0c0, 0.35f);
-            p.line(mx - tx * k + nx * k, my - ty * k + ny * k, mx + tx * k * 0.6f, my + ty * k * 0.6f, 2.2f * u, cc);
-            p.line(mx - tx * k - nx * k, my - ty * k - ny * k, mx + tx * k * 0.6f, my + ty * k * 0.6f, 2.2f * u, cc);
         }
     }
     // A stage just cleared (see Menu::celebrateClear) is drawn last, over a shade on everything else: it shakes,
