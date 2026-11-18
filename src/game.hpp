@@ -176,7 +176,9 @@ private:
     }
     static constexpr float EXPERT_LOCK_DELAY = 0.4f;
 
-    static constexpr int MAX_RESETS = 15;
+    // Move resets: how many slides or turns of a resting piece restart its lock delay (EXPERT: fewer).
+    static constexpr int MAX_RESETS = 15, MAX_RESETS_EXPERT = 10;
+    int maxResets() const { return runDiff_ == DIFF_EXPERT ? MAX_RESETS_EXPERT : MAX_RESETS; }
 
     void spawn(int type);
     void lockPiece(bool dropped = false);
