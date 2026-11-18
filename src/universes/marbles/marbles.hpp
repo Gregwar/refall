@@ -130,9 +130,6 @@ private:
     struct Spark { vec2 p, v; float t, life; vec3 col; };
     std::vector<Spark> sparks_;
     void spark(vec2 p, vec2 dir, int n, float speed, const vec3& tint, float spread = 0.9f);
-    // A hard drop's streak of light down the columns its piece fell through (fading in a moment).
-    struct Streak { float x, y0, y1, t; int type; };
-    std::vector<Streak> streaks_;
     struct Glint { vec2 p; float t, life, size; vec3 col; };
     std::vector<Glint> glints_;
     void glint(vec2 p, float size, const vec3& col);

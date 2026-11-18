@@ -392,15 +392,6 @@ void MarblesUniverse::onEvent(const GameEvent& ev, const Game& game) {
             s.bounceT = 0.f;
         }
         if (hard) {
-            // a streak of light down each column the piece fell through, from where it was
-            for (const auto& c : ev.cells) {
-                const bool top = std::none_of(ev.cells.begin(), ev.cells.end(), [&](const GameEvent::CellInfo& o) {
-                    return o.x == c.x && o.y == c.y - 1;
-                });
-                if (!top || c.y < Game::HIDDEN) continue;
-                const vec3 p = layout::cellPos((float)c.x, (float)c.y);
-                streaks_.push_back({p.x, p.y + 0.45f, std::min(p.y + 0.45f + (float)lastDrop_, 10.f), 0.f, std::clamp(c.type, 0, 6)});
-            }
             // the hit carries a little into the stack under it, and the glass of the bottom marbles flashes
             for (const auto& c : ev.cells) {
                 const bool bottom = std::none_of(ev.cells.begin(), ev.cells.end(), [&](const GameEvent::CellInfo& o) {
@@ -946,8 +937,6 @@ void MarblesUniverse::simulate(const Game& game, const MusicState& music, float 
         k.v = k.v * std::exp(-dt * 6.f);
     }
     sparks_.erase(std::remove_if(sparks_.begin(), sparks_.end(), [](const Spark& k) { return k.t > k.life; }), sparks_.end());
-    for (Streak& k : streaks_) k.t += dt;
-    streaks_.erase(std::remove_if(streaks_.begin(), streaks_.end(), [](const Streak& k) { return k.t > 0.3f; }), streaks_.end());
     for (Glint& g : glints_) g.t += dt;
     glints_.erase(std::remove_if(glints_.begin(), glints_.end(), [](const Glint& g) { return g.t > g.life; }), glints_.end());
 
@@ -1397,11 +1386,6 @@ void MarblesUniverse::drawBoard(const Game& g, float world) {
                 if (hl > 0.05f) putFx(w.x, y0 + hl, 0.34f, 0.f, c, 0.34f * (1.f - bb), 3, hl / 0.34f);
             }
         }
-    }
-    // a hard drop's streaks of light, down the columns it fell through
-    for (const Streak& k : streaks_) {
-        const float u = k.t / 0.3f, hl = 0.5f * (k.y1 - k.y0);
-        if (hl > 0.05f) putFx(k.x, k.y0 + hl, 0.4f, 0.f, pal_.piece[k.type], 0.55f * (1.f - u) * (1.f - u) * (1.f - bb), 3, hl / 0.4f);
     }
     (void)world;
 }
