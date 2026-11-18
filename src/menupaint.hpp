@@ -28,7 +28,7 @@ public:
     void tri(float x0, float y0, float x1, float y1, float x2, float y2, Col c0, Col c1, Col c2);
     // A full-screen kaleidoscope folding two frames (mixed by `mixAB`) around (cx, cy) pixels into `segs` mirrored
     // segments, turned by `rot`, cut into crystal: small facets and larger shards, each lit from its own side, read
-    // through a sapphire ramp whose lights take `tint`, bright ridges along the cuts, a prism's rainbow on some shards,
+    // through a ramp in the hue of `tint` (drawn toward the frame's own colours, each shard leaning to a neighbouring hue), bright ridges along the cuts, a prism's rainbow on some shards,
     // twinkling glints and a light flare in the top right corner; a null frame is replaced by a procedural pane of glass
     // in the tint's hues; `saturation` < 1 greys the frames (a locked stage).
     void kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,

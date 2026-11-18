@@ -1,5 +1,5 @@
 // The menu: a kaleidoscope of the game's real universes. The focused song's universe is folded into a slowly turning
-// crystal kaleidoscope; the stages are faceted gem petals in a jewelled rosette (a bronze star and band, orbit lines)
+// crystal kaleidoscope; the stages are faceted gem petals in a quiet rosette (one fine ring, no ornament)
 // around a polished dark medallion, each opening onto its songs as smaller gems; focus turns the rosette to bring the
 // chosen petal to the reading position (the right). Panels are frosted glass (Painter::glass).
 // Live universes come from a WorldPool (menuworlds.hpp): small frames, their own frame rate, snapshots otherwise.
@@ -37,9 +37,9 @@ unsigned menuSeed() {
     return seed;
 }
 
-// The title's disc, its height: the logo (its setting reaching from about 0 to 660 for a disc at 330) and the menu
-// (680..890) centred on the screen's height together.
-constexpr float TITLE_CY = 330.f + 540.f - 0.5f * 890.f;
+// The title's disc, its height: the logo (its petals and fine ring reaching from about 20 to 640 for a disc at 330) and the
+// menu (680..890) centred on the screen's height together.
+constexpr float TITLE_CY = 330.f + 540.f - 0.5f * (20.f + 890.f);
 
 // the kaleidoscope's crossfade between sources (one menu at a time)
 std::string g_cur, g_prev;
@@ -366,97 +366,20 @@ void Worlds::kite(float cx, float cy, float a, float r0, float r1, float halfAng
     }
 }
 
-// The jewelled setting of a rosette (its petals reach to about R): an engraved bronze star behind it, a dark steel plate,
-// a bevelled bronze band with small gems on it, and orbit lines round it, blue and gold, lights running along them.
-// `rot` turns the ornaments with the rosette.
+// The quiet setting of a rosette (its petals reach to about R): a soft shade under it, so the petals read over a bright
+// crystal, and one fine ring just beyond their tips. (`rot` is kept for the callers; nothing on it turns.)
 void Worlds::wheel(float cx, float cy, float R, float rot, float alpha) {
+    (void)rot;
     const float k = R / 300.f, A = alpha; // (drawn for petals reaching to 300)
-    auto rr = [&](float v) { return v * k * u; };
-    p.circle(cx, cy, rr(400), hex(0x000000, 0.3f * A), rr(120));
-    // the star: two layers of points, bronze, darker toward the middle, its edges catching the light
-    for (int layer = 0; layer < 2; layer++) {
-        const int pts = layer == 0 ? 16 : 8;
-        const float tip = rr(layer == 0 ? 404 : 384), valley = rr(layer == 0 ? 352 : 330), off = rot * 0.25f + (layer ? TAU / 32 : 0.f);
-        for (int i = 0; i < pts; i++) {
-            const float a0 = off + i * TAU / pts, a1 = a0 + TAU / pts * 0.5f, a2 = a0 + TAU / pts;
-            const float x0 = cx + std::cos(a0) * valley, y0 = cy + std::sin(a0) * valley;
-            const float x1 = cx + std::cos(a1) * tip, y1 = cy + std::sin(a1) * tip;
-            const float x2 = cx + std::cos(a2) * valley, y2 = cy + std::sin(a2) * valley;
-            const float lit = 0.5f + 0.5f * (std::cos(a1) * -0.55f + std::sin(a1) * -0.83f);
-            const Col tipC = withA(mixc(hex(0x2a2026), hex(0x8a6a50), lit), (layer ? 0.9f : 0.7f) * A);
-            const Col inC = hex(layer ? 0x1a1620 : 0x141420, (layer ? 0.9f : 0.7f) * A);
-            p.tri(cx, cy, x0, y0, x1, y1, inC, inC, tipC);
-            p.tri(cx, cy, x1, y1, x2, y2, inC, tipC, inC);
-            const Col edge = withA(mixc(hex(0x8a6a50), hex(0xf0d0a0), lit), 0.7f * A);
-            p.line(x0, y0, x1, y1, 1.4f * u, edge);
-            p.line(x1, y1, x2, y2, 1.4f * u, edge);
-            // an engraved line inside its edges, a bead at its tip
-            const float ki = 0.9f, ex0 = cx + (x0 - cx) * ki, ey0 = cy + (y0 - cy) * ki, ex1 = cx + (x1 - cx) * (ki - 0.03f), ey1 = cy + (y1 - cy) * (ki - 0.03f);
-            const float ex2 = cx + (x2 - cx) * ki, ey2 = cy + (y2 - cy) * ki;
-            p.line(ex0, ey0, ex1, ey1, 1 * u, hex(0x0c0808, 0.45f * A));
-            p.line(ex1, ey1, ex2, ey2, 1 * u, hex(0x0c0808, 0.45f * A));
-            if (layer == 0) p.circle(ex1, ey1, 1.8f * u, withA(edge, 0.8f * A));
-        }
-    }
-    // the plate: dark steel, lit a little from the top left, fine engraved rings
-    p.circle(cx, cy, rr(336), hex(0x1c2840, 0.86f * A));
-    p.circle(cx - rr(80), cy - rr(110), rr(150), hex(0x7090c0, 0.16f * A), rr(260));
-    p.ring(cx, cy, rr(292), 1 * u, hex(0xc0d0f0, 0.22f * A));
-    p.ring(cx, cy, rr(302), 0.8f * u, hex(0xc0d0f0, 0.14f * A));
-    // the band: bronze, bevelled (a light outer edge, a dark inner one), engraved with dots, lit from the top left
-    const float band = rr(318);
-    p.ring(cx, cy, band, rr(16), hex(0x7a5c44, 0.95f * A));
-    p.ring(cx, cy, band + rr(7), 1.6f * u, hex(0xf2d6a8, 0.8f * A));
-    p.ring(cx, cy, band - rr(7), 1.6f * u, hex(0x24180e, 0.9f * A));
-    p.setAdditive(true);
-    p.arc(cx, cy, band, -2.7f, -0.9f, rr(9), hex(0xffe0b0, 0.22f * A), rr(10));
-    p.arc(cx, cy, band, 0.5f, 1.9f, rr(9), hex(0x6080c0, 0.10f * A), rr(10));
-    p.setAdditive(false);
-    for (int i = 0; i < 96; i++) {
-        const float a = rot * 0.25f + i * TAU / 96;
-        p.circle(cx + std::cos(a) * band, cy + std::sin(a) * band, 1.5f * u, hex(0x2a1c12, 0.8f * A));
-    }
-    for (int i = 0; i < 8; i++) { // small gems set in the band, blue and gold in turn
-        const float a = rot * 0.25f + (i + 0.5f) * TAU / 8;
-        p.circle(cx + std::cos(a) * band, cy + std::sin(a) * band, rr(9), hex(0x1a1208, 0.9f * A));
-        kite(cx, cy, a, band - rr(8), band + rr(8), 0.026f, i % 2 ? hex(0xe8b860) : hex(0x5aa8ff), A, true, hex(0xf2d6a8, 0.8f * A));
-    }
-    // the orbits: a glowing blue line just outside, a fainter one beyond in two arcs, gold arcs with small beads; lights
-    // running round
-    const float ob = rr(344), ob2 = rr(358), og = rr(334);
-    p.setAdditive(true);
-    p.ring(cx, cy, ob, rr(6), hex(0x3a7cff, 0.16f * A), rr(10));
-    p.setAdditive(false);
-    p.ring(cx, cy, ob, 1.4f * u, hex(0x9cc8ff, 0.75f * A));
-    const float spin = t * 0.05f;
-    for (int i = 0; i < 2; i++) p.arc(cx, cy, ob2, spin + i * PI, spin + i * PI + 1.9f, 1.1f * u, hex(0x9cc8ff, 0.45f * A));
-    for (int i = 0; i < 3; i++) {
-        const float a0 = -spin * 0.7f + i * TAU / 3;
-        p.arc(cx, cy, og, a0, a0 + 1.3f, 1.4f * u, hex(0xe8c06a, 0.7f * A));
-        for (int b = 0; b < 3; b++) {
-            const float ab = a0 + 1.42f + b * 0.045f;
-            p.circle(cx + std::cos(ab) * og, cy + std::sin(ab) * og, (2.6f - 0.5f * b) * u, hex(0xffd890, (0.9f - 0.2f * b) * A));
-        }
-    }
-    p.setAdditive(true);
-    for (int i = 0; i < 3; i++) {
-        const float a = t * 0.22f + i * TAU / 3;
-        const float lx = cx + std::cos(a) * ob, ly = cy + std::sin(a) * ob;
-        p.glow(lx, ly, rr(16), hex(0x9cd0ff, 0.6f * A));
-        p.circle(lx, ly, 2.2f * u, hex(0xffffff, 0.9f * A));
-        for (int j = 1; j < 10; j++) // its trail
-            p.circle(cx + std::cos(a - j * 0.012f) * ob, cy + std::sin(a - j * 0.012f) * ob, 1.6f * u, hex(0x9cd0ff, 0.5f * A * (1.f - j / 10.f)));
-    }
-    p.setAdditive(false);
+    p.circle(cx, cy, 330 * k * u, hex(0x02040a, 0.32f * A), 110 * k * u);
+    p.ring(cx, cy, 318 * k * u, 1.f * u, hex(0xf0dcb0, 0.35f * A));
 }
 
 // A big polished dark disc (radius R) in a gold ring: a deep glass, a faint hue of `hue` in it, a curved gloss on its top
 // left; `ring` < 1 draws only that much of the gold ring, round from the top (the title's opening).
 void Worlds::medallion(float cx, float cy, float R, Col hue, float alpha, float ring) {
     const float A = alpha;
-    p.circle(cx, cy, R + 14 * u, hex(0x000000, 0.45f * A), 22 * u);
-    p.circle(cx, cy, R + 7 * u, hex(0x2a1e12, A));
-    p.ring(cx, cy, R + 7 * u, 1.2f * u, hex(0xf0d8a8, 0.6f * A));
+    p.circle(cx, cy, R + 10 * u, hex(0x000000, 0.4f * A), 22 * u);
     p.circle(cx, cy, R, hex(0x06080e, A));
     p.circle(cx, cy + R * 0.1f, R * 0.85f, withA(hue, 0.16f * A), R * 0.6f);
     p.circle(cx - R * 0.25f, cy - R * 0.3f, R * 0.45f, hex(0x8098c0, 0.10f * A), R * 0.7f);
@@ -466,9 +389,9 @@ void Worlds::medallion(float cx, float cy, float R, Col hue, float alpha, float 
     p.setAdditive(false);
     if (ring <= 0.f) return;
     const float a0 = -PI * 0.5f, a1 = a0 + TAU * std::min(1.f, ring);
-    p.arc(cx, cy, R - 4 * u, a0, a1, 3.2f * u, hex(0xe8c06a, 0.9f * A));
+    p.arc(cx, cy, R - 3 * u, a0, a1, 2.2f * u, hex(0xe8c06a, 0.9f * A));
     p.setAdditive(true);
-    p.arc(cx, cy, R - 4 * u, a0, a1, 8 * u, hex(0xffc860, 0.18f * A), 10 * u);
+    p.arc(cx, cy, R - 3 * u, a0, a1, 6 * u, hex(0xffc860, 0.12f * A), 8 * u);
     p.setAdditive(false);
 }
 
