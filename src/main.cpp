@@ -279,7 +279,8 @@ private:
     bool openVoyage(const std::string& id);
     PlaylistStore playlists_;
     Menu menu_;
-    float speedMul_ = 1.f;     // free play: gravity multiplier of the difficulty
+    float speedMul_ = 1.f;     // gravity multiplier: free play's difficulty, the Voyage's EXPERT
+    static constexpr float EXPERT_VOYAGE_SPEED = 1.15f;
     int freeDiff_ = DIFF_HARD; // free play: the difficulty (20G is HARD's and EXPERT's)
     // The campaign run: a stage, played from song `from` to its last one; `current` is the song playing.
     struct Run {
@@ -837,7 +838,7 @@ void App::updateGravity(double songTime, float dt) {
     // The fall doesn't follow the song's tempo: a beat is always that of a 130 BPM song (the same velocity falls as
     // fast in every song).
     const float beatsPerSec = GRAVITY_BPM / 60.f;
-    // Free play's difficulty scales every level's speed (HARD x1); a campaign song's level is set by the data.
+    // Free play's difficulty scales every level's speed (HARD x1); a campaign song's level is set by the data (EXPERT x1.15).
     const float rowsPerBeat = std::min(pace_ * (1.f + 9.f * diff) * speedMul_, MAX_ROWS_PER_SEC / beatsPerSec);
     // Rows accumulate with the song's time (scaled during the bonus so gravity runs at gameRate_ in real time).
     double dBeat = 0;
@@ -2289,7 +2290,8 @@ void App::beginSession(const Menu::Choice& c) {
         run_.diff = c.difficulty;
         for (int k = c.song; k < (int)st.songs.size(); k++) paths.push_back(st.songs[k].entry());
         fixed = st.songs[c.song].level[c.difficulty];
-        speedMul_ = 1.f;
+        // EXPERT's fall is a little faster again on top of its velocities (which stop at the top, 40)
+        speedMul_ = c.difficulty == DIFF_EXPERT ? EXPERT_VOYAGE_SPEED : 1.f;
         if (opt_.universe.empty() && !st.songs[c.song].universe.empty())
             forcedUniverse_ = universes::parse(st.songs[c.song].universe, &forcedVariant_);
         std::printf("[campaign] stage %d from song %d on %s\n", c.stage + 1, c.song + 1, difficultyName(c.difficulty));
