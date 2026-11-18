@@ -11,7 +11,7 @@ uvx refall ~/Music    # free play on any folders, files and YouTube URLs
 
 ## Universes
 
-60 hand-directed worlds, each with its own look and its own way of staging the music; each song gets one, in one of its variants.
+61 hand-directed worlds, each with its own look and its own way of staging the music; each song gets one, in one of its variants.
 
 <table>
 <tr><td width="25%"><img src="docs/universes/vector.jpg"><br><b>VECTOR</b><br><sub>phosphor beams on a dark CRT</sub></td><td width="25%"><img src="docs/universes/sumi.jpg"><br><b>SUMI</b><br><sub>ink on washi paper</sub></td><td width="25%"><img src="docs/universes/diorama.jpg"><br><b>DIORAMA</b><br><sub>a sunlit clay miniature on an island</sub></td><td width="25%"><img src="docs/universes/abyss.jpg"><br><b>ABYSS</b><br><sub>the deep sea, lit only by living things</sub></td></tr>
@@ -29,6 +29,7 @@ uvx refall ~/Music    # free play on any folders, files and YouTube URLs
 <tr><td width="25%"><img src="docs/universes/lostpanda.jpg"><br><b>LOST PANDA</b><br><sub>a little panda lost in the city at night</sub></td><td width="25%"><img src="docs/universes/terrarium.jpg"><br><b>TERRARIUM</b><br><sub>a sealed glass jar on a windowsill</sub></td><td width="25%"><img src="docs/universes/coralreef.jpg"><br><b>CORAL REEF</b><br><sub>a sunny shallow reef that grows with every cleared line</sub></td><td width="25%"><img src="docs/universes/fractal.jpg"><br><b>FRACTAL</b><br><sub>an infinite pastel flower</sub></td></tr>
 <tr><td width="25%"><img src="docs/universes/architect.jpg"><br><b>ARCHITECT</b><br><sub>a modern villa built over the song by two tower cranes</sub></td><td width="25%"><img src="docs/universes/islands.jpg"><br><b>ISLANDS</b><br><sub>a flight over an endless tropical archipelago, like drone footage</sub></td><td width="25%"><img src="docs/universes/rain.jpg"><br><b>RAIN</b><br><sub>rain everywhere over a colorful street at dusk</sub></td><td width="25%"><img src="docs/universes/pinkvibe.jpg"><br><b>PINK VIBE</b><br><sub>a soft pink world of satin ribbons in relief</sub></td></tr>
 <tr><td width="25%"><img src="docs/universes/shadow.jpg"><br><b>SHADOW</b><br><sub>a little model of the game on a table, lit by a projector</sub></td><td width="25%"><img src="docs/universes/mirror.jpg"><br><b>MIRROR</b><br><sub>glass cubes in a liminal room, softly lit</sub></td><td width="25%"><img src="docs/universes/ruins.jpg"><br><b>RUINS</b><br><sub>time runs backwards over the song</sub></td><td width="25%"><img src="docs/universes/pixel.jpg"><br><b>PIXEL</b><br><sub>native low-resolution pixel art, sixteen colors, dithered skies</sub></td></tr>
+<tr><td width="25%"><img src="docs/universes/glacier.jpg"><br><b>GLACIER</b><br><sub>ice cubes melting into a rising pool in an ice cave</sub></td></tr>
 </table>
 
 Every universe, its variants and the transitions: [docs/universes.md](docs/universes.md). To make one: [docs/adding-a-universe.md](docs/adding-a-universe.md).
