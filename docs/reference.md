@@ -271,8 +271,8 @@ next, prev, stage+, stage-, fwd, back, sec+, sec-, tour, hide).
 
 ## Slow motion and quad rewards
 
-Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it; a
-quad charges 5). Once it's full, the slow-motion button starts the bonus: for 10 s the gauge drains, the
+Each cleared line charges one step of the bonus gauge, a ring below the next pieces (12 steps to fill it, 20 on
+EXPERT; a quad charges 5). Once it's full, the slow-motion button starts the bonus: for 10 s (5 s on EXPERT) the gauge drains, the
 pieces don't fall at all (whatever the velocity, 20G included), and a piece resting on the stack doesn't lock by itself: only a
 hard drop sets it down, so starting the bonus as a piece is about to lock gives all of it to think, or to hold; when it ends, a
 resting piece gets a fresh lock delay. The song keeps playing normally: only a very

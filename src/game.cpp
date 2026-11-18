@@ -304,8 +304,8 @@ void Game::lockPiece(bool dropped) {
         score_ += ev.points;
         lines_ += (int)full.size();
         const int steps = (int)full.size() + (quadClear ? QUAD_EXTRA_STEPS : 0);
-        const bool charged = !bonusActive_ && bonusLines_ < BONUS_LINES && bonusLines_ + steps >= BONUS_LINES;
-        if (!bonusActive_) bonusLines_ = std::min(BONUS_LINES, bonusLines_ + steps);
+        const bool charged = !bonusActive_ && bonusLines_ < bonusLines() && bonusLines_ + steps >= bonusLines();
+        if (!bonusActive_) bonusLines_ = std::min(bonusLines(), bonusLines_ + steps);
         best_ = std::max(best_, score_);
         events_.push_back(ev);
         if (charged) events_.push_back({GameEvent::BonusReady});
@@ -359,7 +359,7 @@ void Game::debugFillBoard(uint64_t seed) {
 bool Game::activateBonus() {
     if (!bonusReady()) return false;
     bonusActive_ = true;
-    bonusLeft_ = BONUS_SECONDS;
+    bonusLeft_ = bonusSeconds();
     bonusLines_ = 0;
     lockTimer_ = 0; // (a piece about to lock gets all the bonus to think)
     events_.push_back({GameEvent::BonusStart});

@@ -802,7 +802,8 @@ void App::updateGravity(double songTime, float dt) {
     // top velocity, in a chorus too), a piece falls to the stack the moment it appears; the rest of the song keeps a
     // visible fall. The last song of HARD's later stages has some, every song of the finale; free play has it from
     // level 30 on (EXPERT 24, once the song has warmed up).
-    const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime) : 0.f;
+    const bool expert = game_.runDifficulty() == DIFF_EXPERT;
+    const float pace = track_ && !track_->analysis.segments.empty() ? gravityPace(track_->analysis, songTime, expert) : 0.f;
     static const bool clip20G = std::getenv("REFALL_CLIP_20G") && std::getenv("REFALL_CLIP_20G")[0] == '1';
     const float from = clipVel > 0.f ? (clip20G ? Game::TWENTY_G : -1.f)
                      : mode_ == MODE_CAMPAIGN ? Game::hyperdropFrom(run_.diff)
@@ -829,8 +830,8 @@ void App::updateGravity(double songTime, float dt) {
     }
     const Analysis& an = track_->analysis;
     // Section pace, in rows per beat (gravityPace: one constant per section, x0.4 in a break .. x1.3 in a
-    // drop). Eased over ~0.25 s; at most x1 in the first 20 s of a song.
-    float want = gravityPace(an, songTime + 0.25);
+    // drop; EXPERT has no slower part than x1 but the verses' x0.8). Eased over ~0.25 s; at most x1 in the first 20 s of a song.
+    float want = gravityPace(an, songTime + 0.25, expert);
     if (trackAge_ < 20.f) want = std::min(want, 1.f);
     pace_ = pace_ < 0 ? want : approach(pace_, want, 4.f, dt);
     // Velocity scaling: x10 at 20, x19.5 at 40 (the top velocity), capped at 60 rows per second.

@@ -334,7 +334,7 @@ void Renderer::render(const Game& game, const MusicState& music, double time, fl
         if (tt) f.teardown = saturate((float)std::atof(tt));
     }
     bonusK_ = std::clamp(bonusK_ + (game.bonusActive() && !game.over() ? dt / 0.5f : -dt / 0.9f), 0.f, 1.f);
-    ringShown_ = approach(ringShown_, game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : game.bonusGauge(), game.bonusActive() ? 12.f : 3.f, dt);
+    ringShown_ = approach(ringShown_, game.bonusActive() ? saturate(game.bonusLeft() / game.bonusSeconds()) : game.bonusGauge(), game.bonusActive() ? 12.f : 3.f, dt);
     ringHot_ = approach(ringHot_, game.bonusReady() || game.bonusActive() ? 1.f : 0.f, 4.f, dt);
     const float bpm = music.hasSong ? std::clamp(music.bpm, 40.f, 220.f) : 120.f;
     hudDt_ = dt;
@@ -595,7 +595,7 @@ void Renderer::bonusLook(const Game& game, double time) {
     ugl::set4f(bonusProg_, "uWell", well[0], well[1], well[2], well[3]);
     const vec2 gc = project(layout::GAUGE_CENTER), ge = project(layout::GAUGE_CENTER + vec3(0.f, layout::GAUGE_R, 0.f));
     ugl::set3f(bonusProg_, "uGauge", vec3(gc.x / w_, 1.f - gc.y / h_, std::fabs(ge.y - gc.y) / h_));
-    ugl::set1f(bonusProg_, "uLeft", game.bonusActive() ? saturate(game.bonusLeft() / Game::BONUS_SECONDS) : 0.f);
+    ugl::set1f(bonusProg_, "uLeft", game.bonusActive() ? saturate(game.bonusLeft() / game.bonusSeconds()) : 0.f);
     ugl::drawFullscreen();
 }
 

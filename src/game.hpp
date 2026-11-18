@@ -63,8 +63,8 @@ public:
     void makeBlank();
     // Testing (B key): fill the bonus gauge.
     void debugChargeBonus() {
-        if (bonusActive_ || over_ || bonusLines_ >= BONUS_LINES) return;
-        bonusLines_ = BONUS_LINES;
+        if (bonusActive_ || over_ || bonusLines_ >= bonusLines()) return;
+        bonusLines_ = bonusLines();
         events_.push_back({GameEvent::BonusReady});
     }
     // Testing (scene reviews): replaces the board with a mid-game stack that uses every piece color, with a
@@ -139,19 +139,21 @@ public:
     int best() const { return best_; }
     int combo() const { return combo_; }
 
-    // Slow-motion bonus: each cleared line charges one step of a gauge (BONUS_LINES steps to fill it; a
+    // Slow-motion bonus: each cleared line charges one step of a gauge (bonusLines() steps to fill it; a
     // quad charges one extra step, so 5). Once full, activateBonus()
-    // starts it: the gauge drains over BONUS_SECONDS. Meanwhile nothing falls (the app stops gravity, the song keeps
+    // starts it: the gauge drains over bonusSeconds(). Meanwhile nothing falls (the app stops gravity, the song keeps
     // its speed) and a piece resting on the stack never locks by itself (only a hard drop sets it down): time to think
     // or hold; when it ends, a resting piece gets a fresh lock delay.
-    // Lines cleared during the bonus don't charge it.
-    static constexpr int BONUS_LINES = 12;
-    static constexpr float BONUS_SECONDS = 10.f;
+    // Lines cleared during the bonus don't charge it. EXPERT's is weaker: more lines to charge it, shorter.
+    static constexpr int BONUS_LINES = 12, BONUS_LINES_EXPERT = 20;
+    static constexpr float BONUS_SECONDS = 10.f, BONUS_SECONDS_EXPERT = 5.f;
+    int bonusLines() const { return runDiff_ == DIFF_EXPERT ? BONUS_LINES_EXPERT : BONUS_LINES; }
+    float bonusSeconds() const { return runDiff_ == DIFF_EXPERT ? BONUS_SECONDS_EXPERT : BONUS_SECONDS; }
     // Gauge level 0..1 (while active: the time left).
     float bonusGauge() const {
-        return bonusActive_ ? bonusLeft_ / BONUS_SECONDS : std::min(1.f, bonusLines_ / (float)BONUS_LINES);
+        return bonusActive_ ? bonusLeft_ / bonusSeconds() : std::min(1.f, bonusLines_ / (float)bonusLines());
     }
-    bool bonusReady() const { return !bonusActive_ && !over_ && bonusLines_ >= BONUS_LINES; }
+    bool bonusReady() const { return !bonusActive_ && !over_ && bonusLines_ >= bonusLines(); }
     bool bonusActive() const { return bonusActive_; }
     float bonusLeft() const { return bonusActive_ ? bonusLeft_ : 0.f; }
     bool activateBonus();
