@@ -403,7 +403,10 @@ void Game::update(float dt) {
     below.y++;
     grounded_ = collides(below);
     if (grounded_) {
-        if (!bonusActive_) lockTimer_ += dt; // (the bonus: a resting piece waits for a hard drop)
+        // (the bonus: a resting piece waits for a hard drop; and the clock waits until the piece drawn on screen,
+        // which trails the real one a little in a fast fall, has come to rest too)
+        const bool seen = visY_ > (float)cur_.y - 0.2f;
+        if (!bonusActive_ && seen) lockTimer_ += dt;
         if (lockTimer_ >= lockDelay()) lockPiece();
     } else {
         lockTimer_ = 0;
