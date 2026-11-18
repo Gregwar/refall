@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 // LOST PANDA's shaders: the world (one continuous world along the way home, in a side view cut away like a
 // cross-section where it goes underground), the train, the pandas (kawaii stickers), the bamboo cells, the lights
 // and the snacks, the lettering.
@@ -222,7 +223,8 @@ vec4 trainInside(vec2 w, vec3 behind) {
         }
         // the floor, the roof, the ends: the cut, outlined (not under the cabs, which are one shape of their own)
         bool cabSide = (ci == 1 && l.x > CAR - 3.15) || (ci == 0 && l.x < 3.15);
-        float sh = cabSide ? 1e3 : min(sdBox(l - vec2(CAR * 0.5, 0.5), vec2(CAR * 0.5, 0.3)), sdBox(l - vec2(CAR * 0.5, 6.95), vec2(CAR * 0.5, 0.35)));
+)"
+R"(        float sh = cabSide ? 1e3 : min(sdBox(l - vec2(CAR * 0.5, 0.5), vec2(CAR * 0.5, 0.3)), sdBox(l - vec2(CAR * 0.5, 6.95), vec2(CAR * 0.5, 0.35)));
         sh = min(sh, min(sdBox(l - vec2(0.15, 3.75), vec2(0.15, 3.55)), sdBox(l - vec2(CAR - 0.15, 3.75), vec2(0.15, 3.55))));
         float so = fillA(sh - gPx * 1.5), sa = fillA(sh);
         col = mix(col, vec3(0.02), so);
@@ -271,7 +273,7 @@ vec4 trainFront(vec2 w) {
 // ground and the earth's cut) moves with the world. Where each kind of scenery stands is a density along the way,
 // evaluated at the object's own place (no popping): the city thins out into the industrial district, then the fields,
 // the bamboo, the glade.
-inline const char* WORLD_FS = R"(#version 330 core
+inline const std::string WORLD_FS_SRC = std::string(R"(#version 330 core
 // the parts of the way the world draws (a variant leaves out the city or the countryside where neither shows)
 #ifndef ZONES
 #define CITY true
@@ -507,7 +509,8 @@ float lettering(vec2 q, vec2 hs, float n, float seed, bool vert) {
 }
 
 // far skyscrapers (layer k): misty silhouettes, setbacks, spires and antennas with red lights, sparse windows, a few
-// cyan neon strips; two rows, the back one mistier
+)") +
+R"(// cyan neon strips; two rows, the back one mistier
 vec3 cityFar(vec2 p, vec3 c, float k) {
     vec3 mist = mix(uFog, vec3(0.1, 0.05, 0.2), 0.4) * (1.0 + 0.5 * uDawn);
     for (int r = 0; r < 2; r++) {
@@ -705,7 +708,8 @@ vec3 cityStreet(vec2 p, vec3 c, float k) {
                     // an awning (striped), or a neon shop sign across the front
                     if (hash1(id + 10.0) < 0.45) {
                         vec2 aq = q - vec2(0.35 + fw * 0.5, 1.98);
-                        float aw = sdBox(vec2(aq.x, aq.y), vec2(fw * 0.5 + 0.2 - aq.y * 0.3, 0.17));
+)" +
+R"(                        float aw = sdBox(vec2(aq.x, aq.y), vec2(fw * 0.5 + 0.2 - aq.y * 0.3, 0.17));
                         vec3 ac = neonCol(hash1(id + 11.0)) * 0.45;
                         ac = mix(ac, vec3(0.85), 0.5 * step(0.5, fract(aq.x * 1.4)));
                         b = mix(b, INK, fillA(aw - 0.05));
@@ -910,7 +914,8 @@ vec3 mountains(vec2 p, vec3 c) {
         vec2 q = layerP(p, k);
         float u = q.x + uD * k + fi * 61.0;
         float base = GY0 + 1.6 - 0.5 * fi;
-        float amp = (11.0 - 3.5 * fi) * dens;
+)" +
+R"(        float amp = (11.0 - 3.5 * fi) * dens;
         float f = 0.045 + 0.03 * fi;
         float r0 = ridgeN(u * f + fi * 7.0);
         float d = q.y - (base + amp * (0.68 * r0 + 0.32 * ridgeN(u * f * 2.3 + 5.0 + fi)));
@@ -1112,7 +1117,8 @@ vec3 factories(vec2 p, vec3 c, float k) {
     float sx = hw * (hash1(id + 6.0) < 0.5 ? -0.65 : 0.65);
     float sh = hh + 2.4 + 2.0 * hash1(id + 7.0);
     float st = stack ? sdBox(vec2(q.x - sx, q.y - sh * 0.5), vec2(0.24 - q.y * 0.008, sh * 0.5)) : 1e3;
-    // vents on a flat roof
+)" +
+R"(    // vents on a flat roof
     float vent = rt >= 0.72 ? min(sdBox(q - vec2(-hw * 0.4, hh + 0.25), vec2(0.3, 0.25)), sdBox(q - vec2(hw * 0.2, hh + 0.18), vec2(0.45, 0.18))) : 1e3;
     float sil = min(min(hall, st), vent);
     if (fillA(sil - 0.03) > 0.0) {
@@ -1325,7 +1331,8 @@ vec3 nearBamboo(vec2 p, vec3 c, inout float a) {
         float id = id0 + float(o);
         float xe = ((id + 0.5) * cw) / k;
         float dens = zBamboo(xe) * (1.0 - zGlade(xe));
-        if (dens <= 0.0 || hash1(id + 0.5) > 0.6 * dens) continue;
+)" +
+R"(        if (dens <= 0.0 || hash1(id + 0.5) > 0.6 * dens) continue;
         float x0 = (id + 0.2 + 0.6 * hash1(id + 1.0)) * cw;
         float wd = 0.5 + 0.3 * hash1(id + 2.0);
         float lean = (hash1(id + 3.0) - 0.5) * 0.1;
@@ -1540,7 +1547,8 @@ vec3 airScene(vec2 p, vec2 w) {
                 wc *= 0.85 + 0.25 * step(0.62, vnoise(vec2(w.x * 2.0, w.y * 14.0 + uTime * 1.5)));
                 c = drawn(c, sd, dayLit(wc), dayLit(vec3(0.16, 0.26, 0.1)), 0.035, nat);
             }
-            vec2 fq = vec2(w.x / 0.55, (w.y - GY0) / 0.5);
+)" +
+R"(            vec2 fq = vec2(w.x / 0.55, (w.y - GY0) / 0.5);
             vec2 fi = floor(fq), ff = fract(fq) - 0.5;
             vec2 fo = (hash2(fi) - 0.5) * 0.6;
             float on = step(0.72, hash(fi + 2.0)) * step(w.y, top - 0.1) * nat * (1.0 - 0.7 * zBamboo(w.x)) * step(5.0, abs(w.x - 1482.5));
@@ -1719,7 +1727,8 @@ vec3 pipeAt(vec2 w, vec3 c, float y, float r, vec3 col, float fl) {
     return mix(c, col * 1.2, fillA(fd) * 0.8);
 }
 // the services in the earth under the street (as far as the tunnel runs): a big water main with its flanges, a bundle
-// of conduits, cables sagging between their hangers, a sewer pipe below (glowing green through its cracks here and
+)" +
+R"(// of conduits, cables sagging between their hangers, a sewer pipe below (glowing green through its cracks here and
 // there), pipes dropping from the street now and then
 vec3 services(vec2 w, vec3 c) {
     if (w.x > 1186.0 || w.y > GY0 - 2.3 || w.y < PLAT_Y + 7.6) return c;
@@ -1918,7 +1927,8 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
     }
     // tunnels: dark concrete in rings (a joint every 3), a lamp every 9 and its pool of light on the wall, two cables
     // on brackets, now and then a refuge niche or a signal: the rhythm that streams past the train as it runs. At
-    // speed the camera's motion blurs it (uBlur: the way the camera covers in a shutter's time): the joints, the
+)" +
+R"(    // speed the camera's motion blurs it (uBlur: the way the camera covers in a shutter's time): the joints, the
     // brackets and the niches' edges smear (their contrast spread over the blur, never strobing), the lamps and the
     // signals draw streaks behind them
     float yy = w.y - fl;
@@ -2116,7 +2126,8 @@ void main() {
         c = airScene(p, w);
         air = true;
     } else if (w.y >= GY0 - 1.8) {
-        bandC = surfaceBand(w, p);
+)" +
+R"(        bandC = surfaceBand(w, p);
         bandA = 1.0;
         c = bandC;
         air = true; // (rain falls on it)
@@ -2183,6 +2194,7 @@ void main() {
     frag = vec4(max(c, 0.0), 1.0);
 }
 )";
+inline const char* WORLD_FS = WORLD_FS_SRC.c_str();
 
 // ------------------------------------------------------------------------------------------------ the train's near side
 // The train's low near-side wall and its doors, drawn over the cub (who stands inside, behind it); full resolution.
@@ -2438,7 +2450,8 @@ vec4 panda(vec2 q) {
     float esz = k * mix(0.94, 1.0, mood) * (1.0 + 0.04 * uSurprise);
     float joy = smoothstep(0.2, 0.4, uJoyEyes);   // (a little joy is enough for the happy ^ ^)
     vec2 look = vec2(uLook.x * gS * 0.007, uLook.y * 0.006) * k;
-    for (int i = 0; i < 2; i++) {
+)"
+R"(    for (int i = 0; i < 2; i++) {
         float vis = i == 0 ? 1.0 : wF;
         if (vis < 0.02) continue;
         float inner = i == 0 ? 1.0 : -1.0;

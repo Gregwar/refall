@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 // TIDE POOL's shaders: the world (one continuous zoom through fifteen scales, from the cosmic web to strings, each a
 // whole world drawn procedurally in its own frame), the veil behind the well, the sea-glass pieces, bubbles, lettering.
 //
@@ -34,7 +35,7 @@ vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(fract(h + vec3(0.0, 2.0
 )";
 
 // ------------------------------------------------------------------------------------------------ the world
-inline const char* WORLD_FS = R"(#version 330 core
+inline const std::string WORLD_FS_SRC = std::string(R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform vec2 uViewC, uViewH, uFocus;
@@ -266,7 +267,8 @@ vec4 copepod(vec2 d, float pw, float hop, float seed) {
         float sd = s == 0 ? 1.0 : -1.0;
         vec2 a = vec2(0.28, 0.04 * sd);
         vec2 b = vec2(0.22 - 0.25 * sw, 0.45 * sd);
-        vec2 c = vec2(0.05 - 0.5 * sw, 0.92 * sd);
+)") +
+R"(        vec2 c = vec2(0.05 - 0.5 * sw, 0.92 * sd);
         float h1, h2;
         float da = min(sdSegT(d, a, b, h1), sdSegT(d, b, c, h2));
         float ant = fillA(da - 0.011, pw);
@@ -495,7 +497,8 @@ World stageFloor(vec2 q, float px) {
         vec4 o = anemone(q, c, R, h2.x * 9.0 + id.x, px, t);
         acc = over(vec4(waterOver(o.rgb / max(o.a, 1e-3) * (0.8 + 0.5 * caus), 0.1) * o.a, o.a), acc);
     END_SCATTER
-    // a crab or two, walking slowly round their cells
+)" +
+R"(    // a crab or two, walking slowly round their cells
     SCATTER(3.0, 41.0, 0.55)
         float cw = t * (0.04 + 0.03 * h2.x) + h2.y * 6.0;
         vec2 cp = c + vec2(cos(cw), sin(cw * 0.7)) * 0.6;
@@ -725,7 +728,8 @@ World stageMolecules(vec2 q, float px) {
         vec4 m = layerC(mix(uLight, uGlow, 0.3), bond * 0.75);
         m = over(orb(q, cc, R, mix(uWarm, uSand, 0.25), px), m);
         m = over(orb(q, h1p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
-        m = over(orb(q, h2p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
+)" +
+R"(        m = over(orb(q, h2p, R * 0.6, mix(uCool, uLight, 0.3), px), m);
         acc = over(m, acc);
     END_SCATTER
     // the molecule at the focus: two hydrogens bonded to the atom we dive into
@@ -966,7 +970,8 @@ vec2 webNode() {
     return vec2(a * (s2.y - s3.y) + b * (s3.y - s1.y) + c * (s1.y - s2.y),
                 a * (s3.x - s2.x) + b * (s1.x - s3.x) + c * (s2.x - s1.x)) / D;
 }
-// the coarse density (where the galaxies gather): filaments, nodes, the cluster at the focus
+)" +
+R"(// the coarse density (where the galaxies gather): filaments, nodes, the cluster at the focus
 float webDens(vec2 q, out vec2 e) {
     e = vweb(webP(q) + gWebO);
     return exp(-e.x / 0.045) + 1.6 * exp(-e.y / 0.06) + 2.2 * exp(-dot(q, q) / 0.003);
@@ -1189,7 +1194,8 @@ float cloudCover(vec2 g, float pg, float t) {
 vec3 shoreRock(vec2 g, float pg, float h, float tex) {
     vec2 id;
     vec3 v = voronoi(g * 3000.0 + 0.4 * vec2(vnoise(g * 5000.0), vnoise(g * 5000.0 + 3.0)), 0.8, 0.0, id);
-    float k = lod(1.0 / 3000.0, pg);
+)" +
+R"(    float k = lod(1.0 / 3000.0, pg);
     float fis = exp(-v.y / max(0.05, pg * 3000.0 * 1.5)) * k;
     vec3 rc = uRock * (0.62 + 0.4 * hash(id) * k + 0.25 * tex) * (1.0 - 0.5 * fis);
     float wet = 1.0 - smoothstep(0.0005, 0.003, h);
@@ -1429,7 +1435,8 @@ void main() {
     float hud = 1.0 - smoothstep(-1.0, 2.5, length(max(qw, 0.0)) + min(max(qw.x, qw.y), 0.0));
     // and behind the HUD's columns (the score, the next pieces)
     for (int i = 0; i < 2; i++) {
-        vec4 cr = i == 0 ? vec4(-11.2, -6.8, -6.0, 10.4) : vec4(6.0, -3.6, 11.2, 10.4);
+)" +
+R"(        vec4 cr = i == 0 ? vec4(-11.2, -6.8, -6.0, 10.4) : vec4(6.0, -3.6, 11.2, 10.4);
         vec2 qc = abs(b - (cr.xy + cr.zw) * 0.5) - (cr.zw - cr.xy) * 0.5;
         hud = max(hud, 0.8 * (1.0 - smoothstep(-0.5, 2.0, length(max(qc, 0.0)) + min(max(qc.x, qc.y), 0.0))));
     }
@@ -1463,6 +1470,7 @@ void main() {
     frag = vec4(c, 1.0);
 }
 )";
+inline const char* WORLD_FS = WORLD_FS_SRC.c_str();
 
 // ------------------------------------------------------------------------------------------------ composite
 inline const char* COMP_FS = R"(#version 330 core

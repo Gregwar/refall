@@ -281,7 +281,8 @@ void main() {
                     float lon = atan(s.z, s.x);
                     float wave = 0.05 * sin(lon * 4.0 + uTime * 0.05) + 0.025 * sin(lon * 11.0 - uTime * 0.09);
                     float oval = exp(-sq((colat - 0.42 - wave) / 0.022)) + 0.5 * exp(-sq((colat - 0.47 - wave * 1.3) / 0.012));
-                    float rays = pow(vnoise(vec2(lon * 160.0, uTime * 0.2)), 2.0) * 0.8 + 0.2 * vnoise(vec2(lon * 40.0, uTime * 0.1));
+)"
+R"(                    float rays = pow(vnoise(vec2(lon * 160.0, uTime * 0.2)), 2.0) * 0.8 + 0.2 * vnoise(vec2(lon * 40.0, uTime * 0.1));
                     float prof = smoothstep(90000.0, 110000.0, h) * exp(-(h - 110000.0) / 70000.0);
                     float nightP = 1.0 - smoothstep(-0.1, 0.1, dot(P / r, uSunDir));
                     vec3 ac = mix(uAurora1, uAurora2, smoothstep(120000.0, 260000.0, h));
@@ -837,7 +838,8 @@ void main() {
         gloss = 8.0;
         float work = vExt.x;
         float lon = atan(q.z, q.x), lat = asin(clamp(q.y, -1.0, 1.0));
-        vec2 g = vec2(lon * 18.0 / TAU, lat * 12.0 / PI);
+)"
+R"(        vec2 g = vec2(lon * 18.0 / TAU, lat * 12.0 / PI);
         vec2 gw = fwidth(g) + 1e-4;
         vec2 gd = abs(fract(g) - 0.5);
         float seam = max(smoothstep(0.5 - gw.x * 1.5 - 0.008, 0.5, gd.x), smoothstep(0.5 - gw.y * 1.5 - 0.008, 0.5, gd.y));

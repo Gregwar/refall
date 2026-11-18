@@ -364,7 +364,8 @@ void main() {
         float tf = mistL * exp(-depth / 0.5) * near;
         float fc = stipple(w * vec2(1.0, 1.6), 0.22, tf, 11.0, aa);
         // the rock: broad facets cut in strokes on its lit top only; its face stays solid (the HUD's corner)
-        if (rockK > 0.0) {
+)"
+R"(        if (rockK > 0.0) {
             float facet = floor(fbm3(w * vec2(0.6, 0.9) + 4.0) * 4.0);
             float tr = (0.45 * exp(-depth / 0.3) + 0.3 * mistL) * (1.0 - smoothstep(0.5, 0.9, depth));
             float rc = gouge(vec2(w.x * 0.5 + w.y * (facet - 1.5) * 0.4, w.y + w.x * (facet - 1.5) * 0.3), 0.12, 1.2, tr, 13.0 + facet, aa);
@@ -709,7 +710,8 @@ void main() {
         if (gy0 > 0.0) {
             float sx = (h1(seed, 11.0) - 0.5) * 0.5;
             vec2 b0 = vec2(sx, 0.0), b1 = vec2(sx + 0.05, 0.55 * gy0);
-            lit(e, a, cov(sdSeg(p, b0, b1) - 0.022), 0.6);
+)"
+R"(            lit(e, a, cov(sdSeg(p, b0, b1) - 0.022), 0.6);
             float dc = coil(p, b1 + vec2(0.09, 0.0), 0.1, 1.6, 3.1416) - 0.026;
             lit(e, a, cov(dc), 1.0);
         }

@@ -320,7 +320,8 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
             float cr = fbm3(mn * 3.0 + 2.0);
             float crater = 0.0;
             for (int i = 0; i < 3; i++) {
-                vec3 cp = mn * (4.0 + 5.0 * float(i));
+)"
+R"(                vec3 cp = mn * (4.0 + 5.0 * float(i));
                 vec3 ci = floor(cp);
                 vec3 cf = fract(cp) - 0.5 - (vec3(hash3(ci), hash3(ci + 3.1), hash3(ci + 7.7)) - 0.5) * 0.5;
                 float rr = length(cf);

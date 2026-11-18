@@ -387,7 +387,8 @@ void main() {
         vec3 wallA = alb * (0.85 + 0.3 * big);
         vec3 stone = mix(alb, vec3(0.42, 0.4, 0.36), 0.6); // sills, lintels, copings
         if (st == 1 && detB > 0.0) {
-            // brick courses (half a brick offset), each brick its own tone, the mortar paler
+)"
+R"(            // brick courses (half a brick offset), each brick its own tone, the mortar paler
             float cy = v * 12.0;
             float cxx = u * 5.0 + 0.5 * floor(cy);
             float mort = max(smoothstep(0.16, 0.04, fract(cy)), smoothstep(0.08, 0.02, fract(cxx)));
@@ -733,7 +734,8 @@ void main() {
             if (abs(ql.x) > oh.x || abs(ql.y) > oh.y) {
                 vec3 rv = uFrame * lightIn * 0.6 + A * 0.4 * (0.5 + 0.5 * smoothstep(-oh.y, oh.y, ql.y));
                 if (ql.y > oh.y) rv *= 0.5; // the head of the opening, in its own shadow
-                g = rv;
+)"
+R"(                g = rv;
             } else {
                 vec2 uv = ql / (2.0 * oh) + 0.5;
                 vec2 qu = ql + oh; // units from the opening's lower left corner
@@ -917,7 +919,8 @@ void main() {
                         float low = smoothstep(0.035 + px * 0.5, 0.035 - px * 0.5, abs(yl - 0.03));
                         c = mix(c, metal, max(max(bar, low), post));
                     } else {
-                        // frosted glass: the room's light through it, the night on its face
+)"
+R"(                        // frosted glass: the room's light through it, the night on its face
                         vec3 panel = c * 0.8 + outL * 0.12 + Ar * 0.15;
                         c = mix(c, panel, 1.0 - post);
                         c = mix(c, metal, post);

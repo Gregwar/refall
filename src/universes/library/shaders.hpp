@@ -406,7 +406,8 @@ void main() {
             float col = floor((g.y + off) / 2.4);
             float id = hash12(vec2(row, col));
             vec2 pl = vec2(fract(g.x / w), fract((g.y + off) / 2.4));
-            float seam = smoothstep(0.0, 0.04 + px / w, min(pl.x, 1.0 - pl.x)) * smoothstep(0.0, 0.006 + px / 2.4, min(pl.y, 1.0 - pl.y));
+)"
+R"(            float seam = smoothstep(0.0, 0.04 + px / w, min(pl.x, 1.0 - pl.x)) * smoothstep(0.0, 0.006 + px / 2.4, min(pl.y, 1.0 - pl.y));
             alb = mix(alb, uFloorB, step(0.62, id) * 0.6);
             alb *= 0.65 + 0.35 * seam;
         } else {

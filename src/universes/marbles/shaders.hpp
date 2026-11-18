@@ -381,7 +381,8 @@ void main() {
         // what the marble sees behind it: the tile over the pane over the world
         vec3 behind = mix(bgAt(v0.xy), uPanel.rgb, uPanel.a);
         tileEnv = mix(behind, base, clamp(ta * 2.0, 0.0, 1.0)) * 0.95 + 0.015;
-        // the marble's shadow on the tile, and the light it focuses there
+)"
+R"(        // the marble's shadow on the tile, and the light it focuses there
         vec2 sp = (p - mo - ld * 0.11) / R;
         float sh = exp(-dot(sp, sp) * 1.6);
         base *= 1.0 - 0.5 * sh * (1.0 - uLightGround * 0.3);

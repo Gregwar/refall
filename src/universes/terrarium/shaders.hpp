@@ -269,7 +269,8 @@ vec4 drops(vec2 uv, float cov) {
     float trail = 0.0;
     for (int k = 0; k < 5; k++) {
         float fk = float(k);
-        float lane = -2.6 + fk * 1.25 + 0.3 * hash1(fk * 3.0);
+)"
+R"(        float lane = -2.6 + fk * 1.25 + 0.3 * hash1(fk * 3.0);
         float speed = 0.012 + 0.008 * hash1(fk + 5.0);
         float yh = 1.0 - mod(uTime * speed + hash1(fk) * 2.0, 1.3);
         float du = uv.x - lane - 0.004 * sin(uv.y * 40.0 + fk);
@@ -682,7 +683,8 @@ void main() {
     else if (m < 16.5) { alb = vec3(0.07, 0.065, 0.09); spec = 0.6; }
     else if (m < 17.5) {
         // the face: kawaii, a pale face, two big glossy black eyes with their shines, a blush, a tiny smile
-        vec3 hq = inf.xyz;
+)"
+R"(        vec3 hq = inf.xyz;
         vec3 dir = normalize(hq / vec3(0.031, 0.027, 0.025));
         alb = vec3(0.09, 0.08, 0.11);
         float face = smoothstep(0.05, 0.2, dir.z) * smoothstep(0.75, 0.5, dir.y);

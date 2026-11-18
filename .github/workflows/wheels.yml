@@ -64,6 +64,7 @@ jobs:
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DREFALL_STANDALONE=ON -DREFALL_BUNDLE_GLFW=ON
           cmake --build build --config Release --target refall --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Copy-Item build/Release/refall.exe Refall-windows-x64.exe
       - name: Check that it starts
         run: |
