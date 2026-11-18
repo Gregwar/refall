@@ -2,6 +2,163 @@
 
 Everything beyond the [README](../README.md): command-line options, tools, how the game reads the music.
 
+## Menu and modes
+
+Started with no songs, the game opens on its menu, a crystal kaleidoscope (the game is called **Refall** for
+now: `GAME_TITLE` in `src/menu.hpp`, shown on the title screen and as the window title): **VOYAGE**, **FREE PLAY**
+or QUIT (arrows or D-pad, Enter / A to choose, Esc / B to go back). On the first launch (or after `--reset`) the title opens with a short, sober
+animation. The game's own universes are folded into the
+kaleidoscope: on the title and in free play they turn in turn, on Voyage it shows the most colourful of the focused stage's
+universes (the focused song's in an open petal), graded toward the stage's hue: a saturation boost, a contrast stretch
+from the snapshot's own luminance range and a duotone between a deep and a bright shade of the stage colour (greyed and
+dimmed for a locked stage); free play takes the
+focused playlist's hue. The world is then cut into gem: read through a ramp in that hue (from a near black of it to a pale light, drawn toward the world's own colours, each shard leaning to a neighbouring hue: magenta, amber, green, teal, violet... as the universes and stages change), small
+facets and larger shards each lit from its own side and meeting edge to edge (no lead lines), a prism's rainbow on some, glints
+twinkling and a soft light flare in the top right corner. The rosettes (the title's, Voyage's stages) are kept quiet:
+a soft shade and one fine ring round the petals, a
+polished dark disc in a gold ring at the middle; petals are faceted gems (dark ones with padlocks while locked), and
+the panels are frosted glass over the kaleidoscope. They come from snapshots of each universe cached in `~/.cache/refall/menu-worlds/` (640x360);
+the missing ones are made one at a time on a worker thread with its own OpenGL context, only while no key has been
+pressed for a moment (the first launch fills the cache in about a minute on the title), and until a snapshot is ready
+its place is procedural glass in the universe's colours, cross-fading to the image when it arrives. The menu remembers
+where it was (`menu-state.tsv` next to the progress: the title entry, Voyage's difficulty, the voyage open and its focused stage, free
+play's difficulty and playlist) and opens there on the next launch (`--reset` forgets it). The menu has its own music,
+[`data/menu_music.mp3`](data/menu_music.mp3), looping seamlessly (a 1 s crossfade at its loop point) at about 70% of a
+game song's level: it fades in when the menu appears, fades out (0.8 s) when a game starts and starts over from the top
+back on the menu (`--no-menu-music` keeps the menu silent; `--mute` silences everything; offline renders never play it).
+The file is found in the sources' `data/`, else next to the executable (installed builds ship it there). The menu plays
+no song previews.
+
+- **Voyage** first shows the voyages as free play shows its playlists: glass cards of one size, two per row (the grid
+  scrolls to the focused row, three rows in view), the game's own first (**Refall**, featured: a gold rim), then the ones made from the player's playlists (the last played first), then
+  **+ ADD A PLAYLIST**: paste a YouTube playlist link or a bare playlist ID (`PL...`), Enter reads it, then its name
+  (the playlist's title to start with, editable), Enter registers the voyage and opens it. Each card has a small
+  rosette, a kite per stage, the cleared ones lit, and how far the voyage went (its songs beaten on any difficulty,
+  in %); Delete twice deletes a player's voyage with its progress. A voyage
+  made from a playlist takes up to 60 of its songs (60 drawn at random, in the playlist's order, from a longer one) in
+  stages of 4, each in a universe of the main campaign dealt at random (each once before any comes back, never twice in
+  a stage) with a random variant, at the velocity the main campaign has at the same point of its journey: the same curve
+  for 60 songs, its 15 stages compressed onto fewer for a shorter playlist. It plays like the main one (stages cleared
+  in a row, unlocks, scores, the debriefs) with its own progress, in `voyages/` next to the campaign progress:
+  `voyages.tsv` (the index), and per voyage `<id>.tsv` (`data/campaign.tsv`'s format, editable) and
+  `<id>-progress.tsv` (the code: `src/voyages.cpp`).
+- **Free play** is the game as it always was: the playlist in a random order, a universe picked for each song, levels
+  rising with the lines (one per 20 lines, up to level 40: the Voyage's velocities, on the same scale). Each song
+  starts with a warm-up: half the level's velocity, back to all of it over its first 20 seconds. Choose a difficulty:
+  EASY, NORMAL or HARD, a multiplier on the gravity of every level (x0.6, x0.8, x1: HARD is the full speed, and
+  goes 20G as the Voyage does: the drops from level 30 on, the choruses too at level 40), a **starting level** (the
+  strip at the bottom of the screen: 1, then every 5 up to 40; `--level N` on the command line, any level from 1 to 40), and a **playlist**: down to the PLAYLIST row of glass cards, the game's
+  own first (featured: larger, a gold rim), then the ones used before (most recent first), each with its own hue and
+  small rosette drawn from its playlist ID; **+ ADD A PLAYLIST** opens a field where a YouTube playlist link, a bare
+  playlist ID (`PL...`) or a single video link is typed or pasted (Ctrl+V); Enter reads it (its song count, and its
+  title through yt-dlp) and keeps it. Delete forgets the selected one. They are remembered in `playlists.tsv` in the
+  user data folder (url, title, songs, last use; `--playlists FILE` for another file). A game over holds until a key
+  is pressed, then goes back to the menu.
+- **Voyage** (the campaign) is 15 stages of 4 songs played in a row. There are no levels: each song has its velocity
+  (a game level, fixed for the whole song) and its universe set by the voyage, higher with each stage and song, and
+  with the difficulty (EASY, NORMAL, HARD, chosen at the top of the Voyage screen). The stages are 15 glass petals in
+  a rosette, numbered 1 to 15, each in its own hue, a gold arc with arrows showing the order and the next stage to clear glowing. Left /
+  right moves between the petals (the rosette turns the focused one to the right, where its songs are listed), up
+  reaches the difficulty. **Enter plays the whole stage** from its first song; **Space** (or Tab, gamepad X / Y) opens
+  the petal, fanning out its songs: left / right chooses one, Enter plays the stage from that song to its last
+  one, Esc or Space closes the petal. A locked petal can be focused, not played. Surviving all the songs of a run
+  started from the first one **clears** the stage and unlocks the next one (on that difficulty and every easier one:
+  a stage reached on HARD is playable on NORMAL and EASY too, not done there). A run started from a later song is fine for practice: the songs it survives count as beaten (with their
+  best score) but the stage isn't cleared; once all of a stage's songs are beaten, in any runs, the next stage opens
+  too (quietly: only a clear turns the petal and celebrates). A game over ends the run; a key goes back to the stages. The game remembers,
+  per difficulty, the stages cleared (with the run's score and lines) and the songs beaten (with the points scored and
+  lines cleared during each, and the most lines ever cleared during it), shown in the Voyage's song list, stage header
+  and info panel (`-` for lines recorded before they were kept), in `campaign-progress.tsv` in the user data folder
+  (`~/.local/share/refall/` on Linux). The file keys songs by their video id and stage clears by their songs, so
+  regrouping the Voyage keeps the songs beaten: a clear of a stage that no longer exists is dropped, and the stages it
+  had opened (and every stage with a beaten song) stay open. A file from the first Voyage (12 stages of 5, keyed by
+  index) is migrated the same way on load, the old file kept as `campaign-progress.tsv.bak`.
+
+A game over muffles the song like the slow-motion bonus does (a low-pass filter) and lowers its volume, then fades it out
+to silence; the game over holds until the player presses a key (with songs given on the command line, a key plays
+again).
+
+| Option | |
+|---|---|
+| `--free` | free play straight away, without the menu |
+| `--difficulty easy\|normal\|hard` | free play's difficulty (default: hard), or a gravity multiplier such as `0.7`; also Voyage's |
+| `--stage S[:SONG]` | a Voyage run straight away (stage S, from its song SONG) |
+| `--unlock` | unlock every Voyage stage (saved) |
+| `--reset` | forget the Voyage progress (prints what was forgotten) |
+
+Songs or playlists given on the command line play free play straight away, as before; so do the offline renders
+(`--review-shot`, `--clip`, `--analysis`, ...).
+
+Without a display, `--menu-shot OUT.png [--menu-screen title|campaign|free] [--menu-hover S:SONG] [--menu-petal]`
+saves a menu screen (`--menu-petal`: the hovered stage's petal open; `REFALL_TEST_KEYS` presses keys before it) and
+`--menu-clip OUT.mp4` records a 34 s walk through the menu (needs ffmpeg; `REFALL_MENU_CLIP_SECONDS` changes its
+length), printing the menu's average CPU and GPU time per frame; both can show made-up progress and playlists
+(`--menu-demo`, always on in clips, never saved; `--menu-demo normal-done`: every stage cleared on NORMAL, the first
+five on EASY, none on HARD). `--menu-screen debrief-over` or `debrief-clear` shows the debrief that ends a Voyage
+run (a game over, a stage cleared: the logo, the score and lines) for a made-up run, `--menu-time S` taking the shot S
+seconds into it (with `--menu-clip`, the clip is its animation, no key pressed). Its two logo images are
+`src/logo.inc`, made by `tools/logo.py --inc src/logo.inc`. The menu's font, Josefin Sans, is OFL, in `src/embed/`
+with its licence.
+
+### The Voyage file
+
+The campaign is [`data/campaign.tsv`](data/campaign.tsv), one song per line, tab-separated (`#` starts a comment):
+
+```
+# stage  song  id           universe             easy  normal  hard    title
+1        1     H_9xqc084UA  PRISM:AURORA         3.0   5.0     9.0     Small Town Kid - Shards
+15       4     9Sh9ZSecyFU  SKY WHALE:MOONLIGHT  11.0  22.5    35.5    callah x Laura Brehm - skyline
+```
+
+- `stage`, `song`: the stage (1..) and the song's place in it (1..); any number of stages and songs works.
+- `id`: the YouTube video id (songs are downloaded and cached like the playlist's).
+- `universe`: `NAME` or `NAME:VARIANT` as `--universe` takes it (empty: picked for the song as in free play).
+- `easy`, `normal`, `hard`: the song's velocity on each difficulty, as a game level from 1 (the first level) to 40
+  (20 is ten times velocity 1's gravity, 40 about twenty times); decimals are fine.
+- `title`: shown in the menu and the title card.
+
+The game reads the file from the sources when it starts (or `--campaign FILE`), else from next to the executable,
+else the copy built into it. The shipped Voyage tours 60 universes once each (SKY WHALE in its MOONLIGHT variant
+ends stage 15) on songs of the default playlist. Each stage builds to a climax: its last song is faster than its first
+(HARD +5.1, NORMAL +4, EASY +2.5), over a base that rises across the stages: HARD goes from 9 to 14.1 on stage 1 and
+from 30.4 to 35.5 on the finale, NORMAL from 5 to 9 and from 18.5 to 22.5, EASY from 3 to 5.5 and from 8.5 to 11.
+On HARD, from velocity 30 on, the drops go into hyperdrop (20G: a piece falls to the stack the moment it appears, with
+a longer lock delay to slide and turn it along the stack; at velocity 40, free play's top, the choruses too), the rest
+of the song keeping a visible fall: in the last song of stage 13, the last two of stage 14 and every song of the finale.
+A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
+climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
+
+
+## Controls in detail
+
+Keyboard and gamepad both work at the same time. A gamepad is detected at startup and on hot-plug,
+and the controls page in the pause menu follows whichever device you used last.
+Controllers are recognised through the bundled [SDL_GameControllerDB](https://github.com/mdqinc/SDL_GameControllerDB)
+(`third_party/gamecontrollerdb.txt`; extra mappings can be given in `SDL_GAMECONTROLLERCONFIG`). A controller
+missing from it still works with a generic layout.
+
+Testing and debugging keys:
+
+| Action | Keyboard | Gamepad |
+|---|---|---|
+| Seek ±10 s in the song (testing; in the Voyage only with `--cheat-skip`) | Ctrl+Shift+Left/Right | |
+| Next level (debugging) | L | |
+| Fill the bonus gauge (testing) | B | |
+| Complete the song; on the Voyage's screen, clear the focused stage (testing, with `--cheat-skip`; S is then no soft drop) | S | |
+
+### Playing from a phone
+
+`python3 tools/stream.py` (from the sources, after a build; needs `aiohttp` and `Pillow`) runs the game here, without a
+window, and streams it to a phone's browser on the same Wi-Fi: open the address it prints and accept its self-signed
+certificate (the browser's Gamepad API needs HTTPS). A controller paired with the phone plays as a gamepad; without
+one, the page shows touch buttons (the gamepad's D-pad, A, B, LB, Back and Start). The frames go as JPEG at 60 fps
+(about 3 MB/s) at the phone's aspect ratio, the sound with them. Arguments after `--` go to the game.
+
+
+The window carries the REFALL logo ([`data/icon.png`](data/icon.png)). On Linux desktops that take icons from desktop
+entries (Wayland, the app grid), `tools/install-desktop.sh [path/to/refall]` installs a `refall.desktop` entry and the
+icon for the current user, so the taskbar and Alt+Tab show it.
+
 ## Command-line options
 
 YouTube playlists (or single videos) work too, through [yt-dlp](https://github.com/yt-dlp/yt-dlp)
