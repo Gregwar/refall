@@ -1008,7 +1008,7 @@ void RainUniverse::ejectFore(int x, int y, int type, float delay) {
     f.x = f.x0 = p.x;
     f.y = f.y0 = p.y;
     f.s = 1.f;
-    f.sMax = rng_.range(2.25f, 2.75f);
+    f.sMax = rng_.range(1.3f, 1.5f);
     f.delay = delay;
     f.wet = 0.7f;
     f.rate = 1.f / rng_.range(8.5f, 11.f);
@@ -1048,7 +1048,7 @@ void RainUniverse::foreSplash(float x, float y, float s, float strength, const v
         const float a = rng_.range(0.15f, PI - 0.15f);
         const float sp = rng_.range(3.f, 9.f) * (0.45f + 0.7f * strength) * std::sqrt(s);
         fsparks_.push_back({x + rng_.range(-0.6f, 0.6f) * s * 0.5f, y + 0.05f, std::cos(a) * sp * 0.7f, std::sin(a) * sp,
-                            0.f, rng_.range(0.35f, 0.75f), rng_.range(0.025f, 0.06f) * s});
+                            0.f, rng_.range(0.35f, 0.75f), rng_.range(0.03f, 0.07f) * s});
     }
     // the crown: a ring of big drops thrown up and out around the impact
     const int nc = (int)(8 + 14 * strength);
@@ -1056,15 +1056,15 @@ void RainUniverse::foreSplash(float x, float y, float s, float strength, const v
         const float side = i & 1 ? 1.f : -1.f;
         const float sp = rng_.range(4.f, 8.f) * (0.5f + 0.6f * strength) * std::sqrt(s);
         fsparks_.push_back({x + side * s * rng_.range(0.3f, 0.55f), y + 0.05f, side * sp * rng_.range(0.25f, 0.6f), sp, 0.f,
-                            rng_.range(0.5f, 0.8f), rng_.range(0.06f, 0.1f) * s});
+                            rng_.range(0.5f, 0.8f), rng_.range(0.07f, 0.12f) * s});
     }
-    fcrowns_.push_back({x, y, 0.f, (0.7f + 0.6f * strength) * s});
-    fcrowns_.push_back({x, y - 0.05f, -0.06f, (1.1f + 0.8f * strength) * s});
+    fcrowns_.push_back({x, y, 0.f, (0.9f + 0.8f * strength) * s});
+    fcrowns_.push_back({x, y - 0.05f, -0.06f, (1.4f + 1.f * strength) * s});
 }
 
 void RainUniverse::stepFore(float dt, float rdt) {
     const float g = 22.f;
-    foreGround_ = viewC_.y - viewH_.y + 0.6f;
+    foreGround_ = viewC_.y - viewH_.y + 0.5f;
     // the cap: beyond it the oldest on that side melts away fast
     int count[2] = {0, 0};
     for (int i = (int)fores_.size() - 1; i >= 0; i--) {
@@ -1288,7 +1288,7 @@ void RainUniverse::drawFore() {
         disc(g.x, g.y, sw * (1.f + lift), sw * 0.2f * (1.f + lift), vec3(0.f), 0.5f * (1.f - lift) * vis * (1.f - f.gone), 0.8f);
         if (f.stage == 4) {
             const float m = f.melt;
-            const float rx = f.half * f.s * (0.8f + 1.6f * smoothstepf(0.05f, 0.95f, m)) * unitPx_;
+            const float rx = f.half * f.s * (1.f + 1.8f * smoothstepf(0.05f, 0.95f, m)) * unitPx_;
             const float a = smoothstepf(0.03f, 0.25f, m) * (1.f - f.gone) * vis;
             const vec3 mush = lerp(hex(V.street), col * 0.75f, 0.7f);
             disc(g.x, g.y + 0.04f * unitPx_, rx, rx * 0.2f, mush, 0.75f * a, 0.35f);
@@ -1335,10 +1335,10 @@ void RainUniverse::drawFore() {
         const float k = saturate(c.t / 0.4f);
         const float rx = (0.25f + 0.75f * std::sqrt(k)) * c.w * unitPx_, ry = std::max(1.f, rx * 0.2f);
         box(a.x, a.y - ry, rx, ry, tint, 0.55f * (1.f - k) * vis, ry, std::max(1.f, 1.6f * s1080));
-        if (c.w > 1.f && c.t < 0.32f) {
+        if (c.w > 0.75f && c.t < 0.32f) {
             // a big impact: a sheet of water thrown up around the cube, a fan of streams breaking into drops
             const float k2 = c.t / 0.32f;
-            const float H = c.w * 0.6f * std::sin(PI * std::min(1.f, k2 * 1.25f));
+            const float H = c.w * 0.8f * std::sin(PI * std::min(1.f, k2 * 1.25f));
             for (int j = 0; j < 12; j++) {
                 const float u = j / 11.f * 2.f - 1.f;
                 const float wob = std::sin(j * 7.3f + c.x * 3.f) * 0.12f;
