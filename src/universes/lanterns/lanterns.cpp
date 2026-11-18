@@ -1167,7 +1167,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     else if (f.teardown <= 0.f) liftedAway_ = false;
 
     ripple_ = (0.1f + 0.5f * wm + 0.4f * wp + 0.5f * pulse_ * (0.3f + 0.7f * wm)) * (1.f - 0.85f * slow_);
-    light_ = (0.92f + 0.05f * wm + 0.06f * wp + 0.05f * swell_) * (1.f - 0.1f * slow_);
+    light_ = (0.92f + 0.05f * wm + 0.05f * wp + 0.03f * swell_) * (1.f - 0.1f * slow_);
     updateLanterns(dt, wdt);
     if (bare_) {
         stack_.clear();
@@ -1289,7 +1289,7 @@ void LanternsUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, bloomA_.tex);
     set1i(progFinal_, "uBloom", 1);
     glActiveTexture(GL_TEXTURE0);
-    set1f(progFinal_, "uBloomK", (0.45f + 0.1f * wp + 0.15f * swell_ + 0.3f * slow_) * (1.f - saturate(bridge_.amount)));
+    set1f(progFinal_, "uBloomK", (0.45f + 0.08f * wp + 0.1f * swell_ + 0.3f * slow_) * (1.f - saturate(bridge_.amount)));
     set1f(progFinal_, "uSlow", slow_ * 0.9f);
     set1f(progFinal_, "uHorizonV", (EYE_Y - (viewC_.y - viewH_.y)) / (2.f * viewH_.y));
     set3f(progFinal_, "uMist", lin(0x6a7a96) * 0.09f);
