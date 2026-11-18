@@ -47,7 +47,7 @@ private:
     void put(float x, float y, float half, float radius, const vec3& col, float alpha, float rot, float glow, float seed,
              int kind, float mx = 0.f, float my = 0.f, float flare = 0.f, float haze = 0.f, const vec3* lit = nullptr,
              float lightAngle = -9.f);
-    void putFx(float x, float y, float size, float rot, const vec3& col, float alpha, int kind);
+    void putFx(float x, float y, float size, float rot, const vec3& col, float alpha, int kind, float aspect = 0.f);
     void flush();
     void flushFx();
 
@@ -95,6 +95,7 @@ private:
     void seedMarbles(int n);
     void buildGrid();
     std::vector<int> gridHead_, gridNext_;
+    float crowdT_ = 0.f;
     int gridW_ = 1, gridH_ = 1;
     float gridX0_ = -24.f, gridY0_ = -14.f;
     static constexpr float GRID = 0.9f;
@@ -125,6 +126,13 @@ private:
     std::vector<Wave> waves_;
     void startWave(int shape, float gain, int bands);
     float waveCoord(const Wave& w, vec2 p) const;
+    // Sparks where marbles knock hard into each other or out of the well's glass walls (short hot streaks).
+    struct Spark { vec2 p, v; float t, life; vec3 col; };
+    std::vector<Spark> sparks_;
+    void spark(vec2 p, vec2 dir, int n, float speed, const vec3& tint, float spread = 0.9f);
+    // A hard drop's streak of light down the columns its piece fell through (fading in a moment).
+    struct Streak { float x, y0, y1, t; int type; };
+    std::vector<Streak> streaks_;
     struct Glint { vec2 p; float t, life, size; vec3 col; };
     std::vector<Glint> glints_;
     void glint(vec2 p, float size, const vec3& col);
