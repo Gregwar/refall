@@ -5,13 +5,9 @@
   </picture>
 </p>
 
-A falling-block puzzle game across **61 hand-directed universes**: ink on washi paper, the deep sea lit by living
-things, a laser show in the haze, a sunlit clay diorama, a frozen cave... each with its own look, its own way of
-clearing lines, and its variants.
-
-Every universe is staged by the music. Each song is analysed ahead of time (tempo, key, intro, build, chorus,
-drop...): pieces fall on the beat and the pace follows the song's energy. Play the game's Voyage, or **any music you
-like**: your own folders, YouTube playlists, or a Voyage of your own written as a simple file.
+A falling-block puzzle game across **61 hand-directed universes**, each staged by the music: pieces fall on the
+beat and the pace follows the song. Play the game's Voyage, or **any music you like**: your own folders or YouTube
+playlists.
 
 ```sh
 uvx refall
