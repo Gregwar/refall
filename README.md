@@ -1,4 +1,9 @@
-# Refall
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.png">
+    <img src="docs/logo-light.png" alt="Refall" width="420">
+  </picture>
+</p>
 
 A music-reactive falling-block puzzle game that plays **any music you like**: your own folder or a YouTube
 playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, chorus, drop...) and the game stages

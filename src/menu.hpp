@@ -131,9 +131,11 @@ private:
     // the debrief (debrief.cpp)
     Debrief debrief_;
     float debT_ = 0, leaveT_ = -1, enterT_ = 1e9f; // seconds into it; since a key ended it; since the menu came back
-    GLuint backdrop_ = 0, logoColor_ = 0, logoLines_ = 0;
+    GLuint backdrop_ = 0;
     int backW_ = 0, backH_ = 0;
-    void loadLogo();
+    // the game's logo, the ringed planet (menuwin.cpp): its opening `k` seconds in (99: open), its colours from silver
+    // (0, a game over) to full (1)
+    void drawOrbitLogo(float cx, float cy, float k, float color);
     int debSel_ = 0;                               // the game over's choice: 0 RETRY, 1 MENU
     bool debRetry_ = false;                        // RETRY chosen: the debrief fades out, then the run starts again
     bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
