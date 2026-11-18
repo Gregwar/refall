@@ -37,6 +37,16 @@ def _run(name: str) -> None:
         code = subprocess.call([str(exe), *sys.argv[1:]], env=_tool_env())
     except KeyboardInterrupt:
         code = 130
+    if code < 0:  # killed by a signal: say so (the shell would, had it run the binary itself)
+        import signal
+
+        try:
+            what = signal.Signals(-code).name
+        except ValueError:
+            what = f"signal {-code}"
+        hint = " (LD_PRELOAD is set: try without it)" if os.environ.get("LD_PRELOAD") else ""
+        print(f"{name}: crashed ({what}){hint}", file=sys.stderr)
+        code = 128 - code
     sys.exit(code)
 
 

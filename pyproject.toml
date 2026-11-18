@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "refall"
-version = "1.0.0"
+version = "1.0.1"
 description = "A falling-block puzzle game across 61 hand-directed universes, staged by any music you like (local files or YouTube)"
 readme = "README.md"
 license = "PolyForm-Noncommercial-1.0.0"
@@ -52,6 +52,9 @@ build-verbosity = 1
 manylinux-x86_64-image = "manylinux_2_28"
 manylinux-aarch64-image = "manylinux_2_28"
 before-all = "dnf install -y libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel"
+# The OpenGL libraries (libglvnd's dispatch, EGL, GLX) come from the system, never bundled: a bundled second copy of
+# libGLdispatch crashes the game when the system's is loaded too (e.g. through an LD_PRELOAD).
+repair-wheel-command = "auditwheel repair --exclude libEGL.so.1 --exclude libOpenGL.so.0 --exclude libGLdispatch.so.0 --exclude libGLX.so.0 --exclude libGL.so.1 -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
 environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
