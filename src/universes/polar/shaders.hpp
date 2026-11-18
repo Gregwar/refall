@@ -623,7 +623,8 @@ void main() {
             float w0 = (layer == 0 ? 0.18 + 0.17 * hash12(hk + 1.9) : 0.12 + 0.12 * hash12(hk + 1.9)) / N;
             float cx = (slot + 0.5 + (hash12(hk + 3.7) - 0.5) * 0.5) / N;
             float tq = clamp(dy / max(L, 1e-3), 0.0, 1.0);
-            // a slight bend, and bumps of refrozen drips along it
+)"
+R"(            // a slight bend, and bumps of refrozen drips along it
             cx += (hash12(hk + 6.6) - 0.5) * 0.08 * tq * tq;
             float hwid = w0 * pow(1.0 - tq, 1.1 + 0.8 * hash12(hk + 2.2)) * (1.0 + 0.2 * sin(dy * (25.0 + 30.0 * h) + h * 6.0));
             float d = abs(uu - cx * 1.0) ;

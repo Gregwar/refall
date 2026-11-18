@@ -312,7 +312,8 @@ float windowLight(vec2 p) {
     return band * blinds;
 }
 
-vec3 shade(vec3 P, vec3 N, vec3 alb, float spec, float rough) {
+)"
+R"(vec3 shade(vec3 P, vec3 N, vec3 alb, float spec, float rough) {
     vec3 V = normalize(uEye - P);
     vec3 c = alb * mix(uAmbBot, uAmbTop, 0.5 + 0.5 * N.z);
     float win = uPatch > 0.0 ? windowLight(P.xy + P.z * vec2(0.5, 0.3)) : 0.0;

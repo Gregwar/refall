@@ -283,7 +283,8 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
         vec3 sh = normalize(uSunDir - up * dot(uSunDir, up) + 1e-5);
         float dusk = (0.35 + 0.65 * pow(max(dot(hz, sh), 0.0), 2.0)) * exp(-max(el, 0.0) * 9.0);
         sky += uDusk * dusk * (1.0 - smoothstep(5000.0, 40000.0, alt));
-        float a = clamp(pow(air, 0.55) * 1.15, 0.0, 1.0);
+)"
+R"(        float a = clamp(pow(air, 0.55) * 1.15, 0.0, 1.0);
         vec3 sp = uSpaceC;
         float nb = fbm3(d * 2.2 + 4.0);
         float neb = smoothstep(0.45, 0.8, nb) * (0.35 + 0.65 * smoothstep(0.3, 0.9, fbm3(d * 5.0 + 1.0)));

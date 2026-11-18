@@ -273,7 +273,8 @@ void church(vec2 q, float s, float hs, inout vec3 col) {
 // A fir: three stacked tiers, the sunny half lighter; its top sways with the wind.
 void fir(vec2 q, float s, vec3 dk, vec3 lit, float ph, inout vec3 col) {
     q /= s;
-    q.x -= uWind * sin(uTime * 1.1 + ph) * q.y * q.y * 0.04;
+)"
+R"(    q.x -= uWind * sin(uTime * 1.1 + ph) * q.y * q.y * 0.04;
     paint(col, uTimber, cov(sdBox(q, vec2(-0.05, -0.05), vec2(0.05, 0.3)) * s));
     float d = 1e4;
     for (int i = 0; i < 3; i++) {
@@ -514,7 +515,8 @@ void main() {
             float on = step(H(seg * 1.3 + r * 7.1), 0.32 + 0.6 * sunNear);
             float g = abs(fract(p.y * rows) - 0.5) * 2.0;
             float glint = on * step(0.15, fract(u)) * step(fract(u), 0.85) * fill((0.25 - g) * 3.0);
-            vec3 w = mix(uLake, uLakeLit, glint * 0.9);
+)"
+R"(            vec3 w = mix(uLake, uLakeLit, glint * 0.9);
             w = mix(w, mix(uLake, uSkyBot, 0.35), smoothstep(ly - 0.25, ly, p.y));
             paint(col, w, fill(ly - p.y) * lk);
         }

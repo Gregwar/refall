@@ -23,6 +23,7 @@
 // plane keeps its pixels, the books' tops show); the room has its own camera behind it.
 #include "universes/library/library.hpp"
 
+#include <chrono>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -939,9 +940,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             if (on) { glFinish(); t0 = now(); }
         }
         static double now() {
-            timespec ts;
-            clock_gettime(CLOCK_MONOTONIC, &ts);
-            return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+            return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
         }
         ~Timer() {
             if (!on) return;

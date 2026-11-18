@@ -366,7 +366,8 @@ vec3 cityGround(vec2 q, vec3 n, float r, float foot, vec3 base, float D, inout v
         float am = along * s;                       // meters along the street
         float swm = sw * s;
         // parked cars along both kerbs
-        float kc = 1.0 - smoothstep(0.35, 1.0, foot);
+)"
+R"(        float kc = 1.0 - smoothstep(0.35, 1.0, foot);
         if (kc > 0.0 && swm > 4.0) {
             float ci = floor(am / 5.2);
             float cf = fract(am / 5.2);
@@ -577,7 +578,8 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
                 float base = 0.18 + 0.1 * fi + 0.06 * sin(az * 2.0 + uTime * 0.03 + fi * 2.0) + 0.04 * fbm(vec2(az * 3.0 + fi * 7.0, uTime * 0.02));
                 float rays = 0.55 + 0.45 * vnoise(vec2(az * 60.0 + fi * 13.0, uTime * 0.08));
                 float band = smoothstep(base - 0.02, base + 0.02, h) * exp(-max(h - base, 0.0) * (5.0 - fi * 1.5));
-                curtain += band * rays * smoothstep(0.3, 0.7, fbm(vec2(az * 1.7 + fi * 3.0 + uTime * 0.01, 2.0)));
+)"
+R"(                curtain += band * rays * smoothstep(0.3, 0.7, fbm(vec2(az * 1.7 + fi * 3.0 + uTime * 0.01, 2.0)));
             }
             vec3 ac = mix(vec3(0.15, 1.0, 0.6), vec3(0.75, 0.3, 1.0), smoothstep(0.25, 0.5, h));
             col += ac * curtain * uAurora * uNightK * a * 0.55;
@@ -897,7 +899,8 @@ void main() {
         if (seed > 0.94) {
             alb = uGlassC * 1.5 + 0.1; gloss = 0.6;   // a dome
             alb *= 1.0 - 0.3 * gridLine(vUV.x / 2.5, 0.05);
-        } else if (!roofFace) {
+)"
+R"(        } else if (!roofFace) {
             float pil = gridLine(vUV.x / 5.6 + 0.5, 0.05);
             float course = gridLine(hy / 3.6, 0.03) * step(4.6, hy);
             float cornice = smoothstep(vS.z - 1.4, vS.z - 1.2, hy);

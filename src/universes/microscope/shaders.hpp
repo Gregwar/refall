@@ -615,7 +615,8 @@ void main() {
     const float RC = 0.2;
     vec2 lo = vec2(L ? mix(-0.5 + G, -0.5 - RC, join) : -0.5 + G, D ? mix(-0.5 + G, -0.5 - RC, join) : -0.5 + G);
     vec2 hi = vec2(R ? mix(0.5 - G, 0.5 + RC, join) : 0.5 - G, U ? mix(0.5 - G, 0.5 + RC, join) : 0.5 - G);
-    float d = sdBox(p - (lo + hi) * 0.5, (hi - lo) * 0.5 - RC) - RC;
+)"
+R"(    float d = sdBox(p - (lo + hi) * 0.5, (hi - lo) * 0.5 - RC) - RC;
     const float RN = 0.06;
     float dn = d;
     if (L && U && (m & 16) == 0) dn = max(dn, -notch(vec2(-0.5 + G - p.x, p.y - 0.5 + G), RN));

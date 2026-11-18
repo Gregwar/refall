@@ -344,7 +344,8 @@ void main() {
     }
     // turning: its face leans away from the eye and darkens as it stands on its edge
     if (uShow > 0.5) nxy += turnDir * turnS / max(abs(turnC), 0.3) * sign(turnC) * 0.9;
-    // the drop: the gold smalti ablaze, each one shimmering on its own as its tilt wavers
+)"
+R"(    // the drop: the gold smalti ablaze, each one shimmering on its own as its tilt wavers
     float ign = uDrop * smoothstep(uIgnite, uIgnite - 4.0, length(w * vec2(0.8, 1.0))) * (1.0 - 0.9 * quiet);
     if (mat > 0.5) nxy += ign * (mat > 1.5 ? 0.2 : 0.14) * vec2(sin(uTime * (1.3 + rnd * 2.6) + rnd * 40.0), cos(uTime * (1.6 + rnd * 1.9) + rnd * 17.0));
     // a ripple lifting the tesserae as it passes

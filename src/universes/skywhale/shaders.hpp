@@ -339,7 +339,8 @@ vec3 skyColor(vec3 d, float b, float disc, float alt, vec3 up, inout float stars
 void main() {
     vec3 d = rayDir(vUv);
     vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
-    float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);   // |oc|^2 - R^2, without cancellation
+)"
+R"(    float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);   // |oc|^2 - R^2, without cancellation
     float alt = c0 / (sqrt(c0 + R * R) + R);
     vec3 up = normalize(oc);
     float b = dot(d, oc);

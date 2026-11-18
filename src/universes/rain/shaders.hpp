@@ -210,7 +210,8 @@ vec3 city(vec2 p, float blur) {
         // flower buckets in front of the market stalls
         if (uStyle == 1) {
             vec2 fc = vec2(fract(p.x * 2.4) - 0.5, p.y - (H + 0.45 + 0.2 * h11(floor(p.x * 2.4))));
-            float fl = smoothstep(0.3 + blur, 0.12, length(fc * vec2(1.0, 1.3)));
+)"
+R"(            float fl = smoothstep(0.3 + blur, 0.12, length(fc * vec2(1.0, 1.3)));
             b = mix(b, uNeon[int(h11(floor(p.x * 2.4) + 3.0) * 3.99)] * (0.8 + 0.3 * uGlow), fl * step(lx, 2.6));
         }
         float m = step(p.y, shopTop) * smoothstep(-0.02, 0.02, shopTop - p.y);

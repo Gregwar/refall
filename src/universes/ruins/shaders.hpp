@@ -394,7 +394,8 @@ void main() {
                         lit = smoothstep(0.03, -0.03, max(abs(ex.x) - half.x, abs(ex.y) - half.y));
                     }
                     float deep = sat(hp.z / D);
-                    vec3 ha = mix(mix(uStone2, uStone, 0.55), uMoss2, 0.3 * uWear) * (0.8 + 0.3 * vnoise(hp.xy * 3.0 + hp.z * 2.0));
+)"
+R"(                    vec3 ha = mix(mix(uStone2, uStone, 0.55), uMoss2, 0.3 * uWear) * (0.8 + 0.3 * vnoise(hp.xy * 3.0 + hp.z * 2.0));
                     vec3 wnW = normalize(Dl * wn);
                     // (the sun through the opening, the sky, the light bounced off the hole's lit floor)
                     holeCol = ha * (uSunCol * max(dot(wnW, L), 0.0) * lit * sh * through + uAmb * (1.0 - 0.45 * deep) * (0.65 + 0.35 * wnW.y) +

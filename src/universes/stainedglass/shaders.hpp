@@ -302,7 +302,8 @@ void main() {
     if (wellGlass > 0.5) {
         vec2 dq = vec2(w.x + w.y * 0.5, w.x - w.y * 0.5) * 0.7071;
         vec2 fq = abs(fract(dq) - 0.5);
-        float ql = paintLine(min(fq.x, fq.y), 0.02, px);
+)"
+R"(        float ql = paintLine(min(fq.x, fq.y), 0.02, px);
         float bar = abs(fract((w.y + 10.0) / 5.0 + 0.5) - 0.5) * 5.0;
         // (so dim that one ripple of the glass is enough)
         vec3 g = uWellGlass * (0.75 + 0.5 * vnoise(w * vec2(1.1, 0.5) + 7.0)) * uWellLight;
