@@ -54,8 +54,6 @@ Menu::Menu() = default;
 
 Menu::~Menu() {
     dropBackdrop();
-    if (logoColor_) glDeleteTextures(1, &logoColor_);
-    if (logoLines_) glDeleteTextures(1, &logoLines_);
 }
 
 void Menu::init(const Campaign* c, Progress* p) {

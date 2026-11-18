@@ -1,13 +1,11 @@
 // The debrief at the end of a Voyage run, in place of a message over the menu: the REFALL logo a little above the middle
-// (white contours after a game over, over the frozen and darkened game; turning from its contours into its colours on
-// the black for a stage cleared, as the demo video ends), the heading, the score and the lines, a small line of details.
+// (in silver after a game over, over the frozen and darkened game; turning from silver into its colours on the black
+// for a stage cleared), the heading, the score and the lines, a small line of details.
 // A key, after a moment (a key held from the game must not skip it), fades it out and the Voyage's screen fades in.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <vector>
 
-#include "logo.inc"
 #include "menu.hpp"
 
 namespace {
@@ -21,83 +19,7 @@ constexpr float LEAVE = 0.6f;        // the debrief fades to black...
 constexpr float ENTER = 0.7f;        // ...then the Voyage's screen fades in
 constexpr float COLOR_AT = 1.4f, COLOR_FOR = 2.5f; // a stage cleared: the logo takes its colours
 
-// tools/logo.py's run-length code: a byte h, then h + 1 literal bytes when h < 128, else one byte repeated h - 126 times
-std::vector<unsigned char> unpack(const uint8_t* p, size_t n, size_t want) {
-    std::vector<unsigned char> out;
-    out.reserve(want);
-    for (size_t i = 0; i < n && out.size() < want;) {
-        const int h = p[i++];
-        if (h < 128) {
-            for (int k = 0; k <= h && i < n; k++) out.push_back(p[i++]);
-        } else if (i < n) {
-            out.insert(out.end(), (size_t)(h - 126), p[i++]);
-        }
-    }
-    out.resize(want, 0);
-    return out;
-}
-
-// a separable gaussian blur of an N x N plane
-std::vector<float> blur(const std::vector<float>& in, int N, float sigma) {
-    const int r = (int)std::ceil(sigma * 3.f);
-    std::vector<float> k(2 * r + 1);
-    float sum = 0;
-    for (int i = -r; i <= r; i++) sum += k[i + r] = std::exp(-0.5f * i * i / (sigma * sigma));
-    for (float& v : k) v /= sum;
-    std::vector<float> tmp(in.size()), out(in.size());
-    for (int y = 0; y < N; y++)
-        for (int x = 0; x < N; x++) {
-            float s = 0;
-            for (int i = -r; i <= r; i++) s += k[i + r] * in[(size_t)y * N + std::clamp(x + i, 0, N - 1)];
-            tmp[(size_t)y * N + x] = s;
-        }
-    for (int y = 0; y < N; y++)
-        for (int x = 0; x < N; x++) {
-            float s = 0;
-            for (int i = -r; i <= r; i++) s += k[i + r] * tmp[(size_t)std::clamp(y + i, 0, N - 1) * N + x];
-            out[(size_t)y * N + x] = s;
-        }
-    return out;
-}
-
-GLuint texture(const std::vector<unsigned char>& rgba, int N) {
-    GLuint t = 0;
-    glGenTextures(1, &t);
-    glBindTexture(GL_TEXTURE_2D, t);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, N, N, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    return t;
-}
 } // namespace
-
-void Menu::loadLogo() {
-    if (logoColor_) return;
-    const int N = LOGO_SIZE;
-    const size_t px = (size_t)N * N;
-    // the colour logo: its planes interleaved
-    const std::vector<unsigned char> planes = unpack(LOGO_COLOR_RLE, sizeof(LOGO_COLOR_RLE), px * 4);
-    std::vector<unsigned char> rgba(px * 4);
-    for (size_t i = 0; i < px; i++)
-        for (int c = 0; c < 4; c++) rgba[i * 4 + c] = planes[c * px + i];
-    logoColor_ = texture(rgba, N);
-    // the contours: white lines with a soft glow over a faint dark halo, as tools/demo.py's ending draws them
-    const std::vector<unsigned char> l8 = unpack(LOGO_CONTOURS_RLE, sizeof(LOGO_CONTOURS_RLE), px);
-    std::vector<float> line(px);
-    for (size_t i = 0; i < px; i++) line[i] = l8[i] / 255.f;
-    const std::vector<float> glow = blur(line, N, N * 0.008f), shade = blur(line, N, N * 0.02f);
-    for (size_t i = 0; i < px; i++) {
-        const float l = std::min(1.f, line[i] + 0.6f * glow[i]), s = std::min(1.f, shade[i] * 1.5f) * 0.3f;
-        const float a = l + s * (1.f - l);
-        rgba[i * 4 + 0] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = (unsigned char)(l * 255.f + 0.5f);
-        rgba[i * 4 + 3] = (unsigned char)(a * 255.f + 0.5f);
-    }
-    logoLines_ = texture(rgba, N);
-}
 
 void Menu::openDebrief(const Debrief& d) {
     screen_ = DEBRIEF;
@@ -108,7 +30,6 @@ void Menu::openDebrief(const Debrief& d) {
     debRetry_ = false;
     msgT_ = 0;
     msg_.clear();
-    loadLogo();
 }
 
 void Menu::captureBackdrop(int w, int h) {
@@ -188,18 +109,17 @@ void Menu::drawDebrief(int w, int h) {
         p.rrect(X(960 - 420), Y(120), 840 * u_, 900 * u_, 300 * u_, hex(0x000000, 0.55f * d * out), 260 * u_);
     }
     p.frostSource();
-    // the logo: its contours fade in; a stage cleared, they then turn into the coloured logo
-    const float cx = X(960), cy = Y(392), S = 486 * u;
+    // the logo: it fades in in silver; a stage cleared, it then takes its colours
+    const float cx = X(960), cy = Y(370);
     const float turned = debrief_.clear ? easeInOutSine((t - COLOR_AT) / COLOR_FOR) : 0.f;
-    // (the colours come over the contours, which fade a little later: the logo never dims between the two)
-    const float lines = sstep(t / 1.2f) * (1.f - turned * turned) * out, color = turned * out;
-    if (color > 0.f) { // a faint warm light behind it as it takes its colours
+    if (turned > 0.f) { // a faint warm light behind it as it takes its colours
         p.setAdditive(true);
-        p.glow(cx, cy, 300 * u, hex(0xe8c06a, 0.07f * color));
+        p.glow(cx, cy, 300 * u, hex(0xe8c06a, 0.07f * turned * out));
         p.setAdditive(false);
     }
-    p.image(logoLines_, cx - S / 2, cy - S / 2, S, S, Col{1, 1, 1, lines});
-    p.image(logoColor_, cx - S / 2, cy - S / 2, S, S, Col{1, 1, 1, color});
+    p.setFade(sstep(t / 1.2f) * out);
+    drawOrbitLogo(cx, cy, 99.f, turned);
+    p.setFade(1.f);
     // the words, one after the other
     auto at = [&](float t0) { return sstep((t - t0) / 0.9f) * out; };
     const Col ink = hex(0xffffff), dim = hex(0xe0e0f0, 0.65f), gold = hex(0xffd27a);

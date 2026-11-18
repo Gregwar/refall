@@ -133,7 +133,6 @@ struct Worlds {
     void wheel(float cx, float cy, float R, float rot, float alpha = 1.f);
     void medallion(float cx, float cy, float R, Col hue, float alpha = 1.f, float ring = 1.f);
     void kalTitle();
-    void orbitLogo(float cx, float cy, float k);
     void kalFree();
     void kalVoyages();
     void kalCampaign();
@@ -632,166 +631,12 @@ void Worlds::kalTitle() {
     p.frostSource();
     const float dy = TITLE_CY - 330.f;
     const float cx = X(960), cy = Y(TITLE_CY);
-    orbitLogo(cx, cy, k);
+    m.drawOrbitLogo(cx, cy, k, 1.f);
     if (menuA <= 0.f) return;
     p.setFade(menuA);
     p.glass(cx - 260 * u, Y(680 + dy), 520 * u, 210 * u, 24 * u, u, 0.f, 0.5f);
     p.setFade(1.f);
     menuItems(F::JOSEFIN, 740 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
-}
-
-// The title's logo: a planet turning slowly under a light from the top left, banded in blues and violets, a thin sky
-// on its rim; a tilted gold ring round it (its far half behind the planet, its near half in front), small pieces of
-// the game riding it, passing behind and in front, a few glints twinkling about; the name under it. `k`: the time
-// since the opening began (Menu::startIntro).
-void Worlds::orbitLogo(float cx, float cy, float k) {
-    const float planetA = sstep((k - 0.5f) / 1.2f), ringA = sstep((k - 1.1f) / 1.6f), nameA = sstep((k - 1.6f) / 1.4f);
-    const float R = 138 * u * lerpf(0.9f, 1.f, planetA), pcy = cy - 40 * u;
-    const float tilt = -0.24f, ct = std::cos(tilt), st = std::sin(tilt);
-    const float ra = 320 * u, rb = 70 * u; // the ring's ellipse, before its tilt
-    auto onRing = [&](float th, float sc, float& x, float& y) {
-        const float ex = ra * sc * std::cos(th), ey = rb * sc * std::sin(th);
-        x = cx + ex * ct - ey * st;
-        y = pcy + ex * st + ey * ct;
-    };
-    // a soft shade under it all, so it reads over a bright crystal
-    p.circle(cx, pcy + 30 * u, 300 * u, hex(0x02040a, 0.34f * planetA), 160 * u);
-    // the glints
-    for (int i = 0; i < 14; i++) {
-        const float gx = cx + (std::fmod(i * 397.f, 760.f) - 380.f) * u, gy = pcy + (std::fmod(i * 241.f, 400.f) - 220.f) * u;
-        const float tw = std::pow(0.5f + 0.5f * std::sin(t * (0.6f + 0.13f * i) + i * 1.7f), 6.f);
-        if (std::hypot(gx - cx, gy - pcy) < R * 1.3f) continue;
-        p.setAdditive(true);
-        p.glow(gx, gy, (6 + 5 * tw) * u, hex(0xfff2d8, 0.5f * tw * ringA));
-        p.setAdditive(false);
-    }
-    // the ring: a few bands of gold, flat (thin where it is seen edge-on, at its near and far sides); `front` draws its
-    // near half
-    struct Band { float sc0, sc1, a; uint32_t c; };
-    static const Band BANDS[] = {{0.76f, 0.80f, 0.22f, 0xb08850}, {0.81f, 0.90f, 0.42f, 0xc89a58}, {0.905f, 0.955f, 0.8f, 0xe8c06a},
-                                 {0.975f, 0.99f, 0.9f, 0xf6dca0}};
-    auto ringHalf = [&](bool front) {
-        if (ringA <= 0.f) return;
-        const int N = 90;
-        for (const Band& b : BANDS)
-            for (int i = 0; i < N; i++) {
-                const float t0 = (front ? 0.f : PI) + PI * i / N, t1 = t0 + PI / N;
-                // the opening: it sweeps round from the left
-                if (std::fmod(t0 - PI + TAU, TAU) / TAU > ringA) continue;
-                float xa, ya, xb, yb, xc, yc, xd, yd;
-                onRing(t0, b.sc0, xa, ya);
-                onRing(t1, b.sc0, xb, yb);
-                onRing(t1, b.sc1, xc, yc);
-                onRing(t0, b.sc1, xd, yd);
-                // lit from the top left; the far half in the planet's shade
-                const float lit = (front ? 1.f : 0.55f) * (0.75f + 0.25f * std::cos(t0 + 2.2f));
-                const Col c = hex(b.c, b.a * lit * ringA);
-                p.tri(xa, ya, xb, yb, xc, yc, c, c, c);
-                p.tri(xa, ya, xc, yc, xd, yd, c, c, c);
-            }
-        // a light running round it
-        const float th = std::fmod(t * 0.35f, TAU);
-        if ((th < PI) == front) {
-            float x, y;
-            onRing(th, 0.93f, x, y);
-            p.setAdditive(true);
-            p.glow(x, y, 26 * u, hex(0xffd890, 0.22f * ringA));
-            p.setAdditive(false);
-        }
-    };
-    // the pieces on the ring: one shape each, tumbling slowly; drawn by halves (behind the planet, then in front)
-    struct Piece { float cells[4][2]; int col; float th0, spin; };
-    static const Piece PIECES[] = {
-        {{{-1, 0}, {0, 0}, {1, 0}, {0, -1}}, 0, 0.3f, 0.5f},         // T
-        {{{-1, 0}, {0, 0}, {1, 0}, {1, -1}}, 1, 1.55f, -0.4f},       // L
-        {{{-1, 0}, {0, 0}, {0, -1}, {1, -1}}, 4, 2.8f, 0.35f},       // S
-        {{{-1.5f, 0}, {-0.5f, 0}, {0.5f, 0}, {1.5f, 0}}, 5, 4.1f, -0.3f}, // I
-        {{{-0.5f, -0.5f}, {0.5f, -0.5f}, {-0.5f, 0.5f}, {0.5f, 0.5f}}, 2, 5.3f, 0.45f}}; // O
-    auto pieces = [&](bool front) {
-        int i = 0;
-        for (const Piece& pc : PIECES) {
-            const float a = sstep((k - 2.3f - 0.25f * i) / 0.7f);
-            const float th = std::fmod(pc.th0 + t * 0.09f + TAU * 4, TAU);
-            const float depth = std::sin(th); // > 0: the near side
-            i++;
-            if (a <= 0.f || (depth >= 0.f) != front) continue;
-            float x, y;
-            onRing(th, 0.93f, x, y);
-            const float cs = (16.f + 4.f * depth) * u, rot = t * pc.spin + i;
-            const float cr = std::cos(rot), sr = std::sin(rot);
-            const Col c = mixc(stageCol(pc.col % std::max(1, nStages())), hex(0x05060c), 0.3f - 0.3f * depth);
-            for (const auto& ce : pc.cells) {
-                const float lx = ce[0] * cs * 1.1f, ly = ce[1] * cs * 1.1f;
-                const float qx = x + lx * cr - ly * sr, qy = y - 4 * u + lx * sr + ly * cr;
-                const float h = cs * 0.5f;
-                float P[4][2];
-                const float corner[4][2] = {{-h, -h}, {h, -h}, {h, h}, {-h, h}};
-                for (int e = 0; e < 4; e++) {
-                    P[e][0] = qx + corner[e][0] * cr - corner[e][1] * sr;
-                    P[e][1] = qy + corner[e][0] * sr + corner[e][1] * cr;
-                }
-                // lit from the top left: each corner by how it faces the light
-                Col cc[4];
-                for (int e = 0; e < 4; e++) {
-                    const float lit = ((P[e][0] - qx) * -0.6f + (P[e][1] - qy) * -0.8f) / (h * 1.41f);
-                    cc[e] = withA(mixc(c, lit > 0 ? hex(0xffffff) : hex(0x05060c), std::fabs(lit) * 0.35f), a);
-                }
-                p.tri(P[0][0], P[0][1], P[1][0], P[1][1], P[2][0], P[2][1], cc[0], cc[1], cc[2]);
-                p.tri(P[0][0], P[0][1], P[2][0], P[2][1], P[3][0], P[3][1], cc[0], cc[2], cc[3]);
-            }
-        }
-    };
-    ringHalf(false);
-    pieces(false);
-    // the planet: a sphere of small facets, each corner lit by its normal; its bands follow its own axis (the ring's)
-    if (planetA > 0.f) {
-        const int NR = 12, NS = 56;
-        const float L[3] = {-0.52f, -0.62f, 0.59f};
-        auto shade = [&](float r, float phi, float& x, float& y) {
-            const float nx = r * std::cos(phi), ny = r * std::sin(phi), nz = std::sqrt(std::max(0.f, 1.f - r * r));
-            x = cx + nx * R;
-            y = pcy + ny * R;
-            // in the planet's frame (its axis tilted as the ring)
-            const float py = -nx * st + ny * ct, px = nx * ct + ny * st;
-            const float lon = std::atan2(px, nz) + t * 0.12f;
-            const float band = 0.5f + 0.5f * std::sin(py * 10.f + 0.7f * std::sin(lon * 2.f + py * 3.f));
-            const float fine = std::pow(0.5f + 0.5f * std::sin(py * 31.f + 0.4f * std::sin(lon * 3.f)), 8.f);
-            Col base = mixc(hex(0x2032a8), hex(0x6a80ff), band);
-            base = mixc(base, hex(0xb8c8ff), 0.35f * fine);
-            base = mixc(base, hex(0x7a4ad0), 0.35f * std::pow(std::fabs(py), 2.f));
-            const float lam = std::max(0.f, nx * L[0] + ny * L[1] + nz * L[2]);
-            const float rim = std::pow(1.f - nz, 3.f);
-            Col c{base.r * (0.1f + 0.95f * lam), base.g * (0.1f + 0.95f * lam), base.b * (0.12f + 0.95f * lam), planetA};
-            c = mixc(c, hex(0x8cc4ff, planetA), rim * (0.25f + 0.6f * lam));
-            return c;
-        };
-        for (int ri = 0; ri < NR; ri++) {
-            const float r0 = (float)ri / NR, r1 = (float)(ri + 1) / NR;
-            for (int si = 0; si < NS; si++) {
-                const float f0 = TAU * si / NS, f1 = TAU * (si + 1) / NS;
-                float x00, y00, x01, y01, x10, y10, x11, y11;
-                const Col c00 = shade(r0, f0, x00, y00), c01 = shade(r0, f1, x01, y01);
-                const Col c10 = shade(r1, f0, x10, y10), c11 = shade(r1, f1, x11, y11);
-                if (ri > 0) p.tri(x00, y00, x01, y01, x11, y11, c00, c01, c11);
-                p.tri(x00, y00, x11, y11, x10, y10, c00, c11, c10);
-            }
-        }
-        // its sky: a thin light on the rim, brighter toward the sun; a soft sheen where the light falls
-        p.setAdditive(true);
-        p.glow(cx - 0.42f * R, pcy - 0.5f * R, 0.5f * R, hex(0xc8d8ff, 0.12f * planetA));
-        p.ring(cx, pcy, R, 2.5f * u, hex(0x9cd0ff, 0.35f * planetA), 3 * u);
-        p.arc(cx, pcy, R + 2 * u, -2.9f, -0.9f, 5 * u, hex(0x9cd0ff, 0.18f * planetA), 10 * u);
-        p.setAdditive(false);
-    }
-    ringHalf(true);
-    pieces(true);
-    // the name
-    const std::string title = upper(GAME_TITLE);
-    const float size = 60 * u;
-    p.setAdditive(true);
-    p.glow(cx, pcy + 236 * u, 120 * u, hex(0xe8c06a, (0.05f + 0.02f * std::sin(t * 0.8f)) * nameA));
-    p.setAdditive(false);
-    p.text(F::JOSEFIN_LIGHT, title, cx, pcy + 236 * u + size * 0.36f, size, hex(0xffffff, nameA), 0, lerpf(0.8f, 0.5f, nameA));
 }
 
 void Worlds::kalFree() {
@@ -1086,4 +931,168 @@ void Worlds::kalVoyages() {
     // only the keys a player wouldn't guess (paste, delete)
     const char* hint = m.vStep_ == 1 ? "CTRL+V  PASTE" : !making && m.vSel_ >= 1 && m.vSel_ <= (int)vs.size() ? "DEL  DELETE" : "";
     if (*hint) p.text(F::JOSEFIN, hint, X(960), Y(1050), 15 * u, hex(0xffffff, 0.55f), 0, 0.3f);
+}
+
+// The game's logo (the title, the debriefs): a planet turning slowly under a light from the top left, banded in blues and violets, a thin sky
+// on its rim; a tilted gold ring round it (its far half behind the planet, its near half in front), small pieces of
+// the game riding it, passing behind and in front, a few glints twinkling about; the name under it. `k`: the time
+// since the opening began (Menu::startIntro); `color` < 1 greys it toward silver (a game over).
+void Menu::drawOrbitLogo(float cx, float cy, float k, float color) {
+    Painter& p = paint_;
+    const float u = u_, t = time_;
+    const int nStages = camp_ ? camp_->size() : 0;
+    // silver: each colour toward a light grey of its own brightness
+    auto tone = [&](Col c) {
+        const float g = std::min(1.f, 0.25f + 0.85f * (0.3f * c.r + 0.59f * c.g + 0.11f * c.b));
+        return mixc(Col{g, g, g * 1.04f, c.a}, c, color);
+    };
+    auto H = [&](uint32_t x, float a = 1.f) { return tone(hex(x, a)); };
+    auto stageCol = [&](int s) { unsigned char c3[3]; stageColor(s, c3); return rgb8(c3); };
+    const float planetA = sstep((k - 0.5f) / 1.2f), ringA = sstep((k - 1.1f) / 1.6f), nameA = sstep((k - 1.6f) / 1.4f);
+    const float R = 138 * u * lerpf(0.9f, 1.f, planetA), pcy = cy - 40 * u;
+    const float tilt = -0.24f, ct = std::cos(tilt), st = std::sin(tilt);
+    const float ra = 320 * u, rb = 70 * u; // the ring's ellipse, before its tilt
+    auto onRing = [&](float th, float sc, float& x, float& y) {
+        const float ex = ra * sc * std::cos(th), ey = rb * sc * std::sin(th);
+        x = cx + ex * ct - ey * st;
+        y = pcy + ex * st + ey * ct;
+    };
+    // a soft shade under it all, so it reads over a bright crystal
+    p.circle(cx, pcy + 30 * u, 300 * u, hex(0x02040a, 0.34f * planetA), 160 * u); // (never silvered)
+    // the glints
+    for (int i = 0; i < 14; i++) {
+        const float gx = cx + (std::fmod(i * 397.f, 760.f) - 380.f) * u, gy = pcy + (std::fmod(i * 241.f, 400.f) - 220.f) * u;
+        const float tw = std::pow(0.5f + 0.5f * std::sin(t * (0.6f + 0.13f * i) + i * 1.7f), 6.f);
+        if (std::hypot(gx - cx, gy - pcy) < R * 1.3f) continue;
+        p.setAdditive(true);
+        p.glow(gx, gy, (6 + 5 * tw) * u, H(0xfff2d8, 0.5f * tw * ringA));
+        p.setAdditive(false);
+    }
+    // the ring: a few bands of gold, flat (thin where it is seen edge-on, at its near and far sides); `front` draws its
+    // near half
+    struct Band { float sc0, sc1, a; uint32_t c; };
+    static const Band BANDS[] = {{0.76f, 0.80f, 0.22f, 0xb08850}, {0.81f, 0.90f, 0.42f, 0xc89a58}, {0.905f, 0.955f, 0.8f, 0xe8c06a},
+                                 {0.975f, 0.99f, 0.9f, 0xf6dca0}};
+    auto ringHalf = [&](bool front) {
+        if (ringA <= 0.f) return;
+        const int N = 90;
+        for (const Band& b : BANDS)
+            for (int i = 0; i < N; i++) {
+                const float t0 = (front ? 0.f : PI) + PI * i / N, t1 = t0 + PI / N;
+                // the opening: it sweeps round from the left
+                if (std::fmod(t0 - PI + TAU, TAU) / TAU > ringA) continue;
+                float xa, ya, xb, yb, xc, yc, xd, yd;
+                onRing(t0, b.sc0, xa, ya);
+                onRing(t1, b.sc0, xb, yb);
+                onRing(t1, b.sc1, xc, yc);
+                onRing(t0, b.sc1, xd, yd);
+                // lit from the top left; the far half in the planet's shade
+                const float lit = (front ? 1.f : 0.55f) * (0.75f + 0.25f * std::cos(t0 + 2.2f));
+                const Col c = H(b.c, b.a * lit * ringA);
+                p.tri(xa, ya, xb, yb, xc, yc, c, c, c);
+                p.tri(xa, ya, xc, yc, xd, yd, c, c, c);
+            }
+        // a light running round it
+        const float th = std::fmod(t * 0.35f, TAU);
+        if ((th < PI) == front) {
+            float x, y;
+            onRing(th, 0.93f, x, y);
+            p.setAdditive(true);
+            p.glow(x, y, 26 * u, H(0xffd890, 0.22f * ringA));
+            p.setAdditive(false);
+        }
+    };
+    // the pieces on the ring: one shape each, tumbling slowly; drawn by halves (behind the planet, then in front)
+    struct Piece { float cells[4][2]; int col; float th0, spin; };
+    static const Piece PIECES[] = {
+        {{{-1, 0}, {0, 0}, {1, 0}, {0, -1}}, 0, 0.3f, 0.5f},         // T
+        {{{-1, 0}, {0, 0}, {1, 0}, {1, -1}}, 1, 1.55f, -0.4f},       // L
+        {{{-1, 0}, {0, 0}, {0, -1}, {1, -1}}, 4, 2.8f, 0.35f},       // S
+        {{{-1.5f, 0}, {-0.5f, 0}, {0.5f, 0}, {1.5f, 0}}, 5, 4.1f, -0.3f}, // I
+        {{{-0.5f, -0.5f}, {0.5f, -0.5f}, {-0.5f, 0.5f}, {0.5f, 0.5f}}, 2, 5.3f, 0.45f}}; // O
+    auto pieces = [&](bool front) {
+        int i = 0;
+        for (const Piece& pc : PIECES) {
+            const float a = sstep((k - 2.3f - 0.25f * i) / 0.7f);
+            const float th = std::fmod(pc.th0 + t * 0.09f + TAU * 4, TAU);
+            const float depth = std::sin(th); // > 0: the near side
+            i++;
+            if (a <= 0.f || (depth >= 0.f) != front) continue;
+            float x, y;
+            onRing(th, 0.93f, x, y);
+            const float cs = (16.f + 4.f * depth) * u, rot = t * pc.spin + i;
+            const float cr = std::cos(rot), sr = std::sin(rot);
+            const Col c = mixc(tone(stageCol(pc.col % std::max(1, nStages))), H(0x05060c), 0.3f - 0.3f * depth);
+            for (const auto& ce : pc.cells) {
+                const float lx = ce[0] * cs * 1.1f, ly = ce[1] * cs * 1.1f;
+                const float qx = x + lx * cr - ly * sr, qy = y - 4 * u + lx * sr + ly * cr;
+                const float h = cs * 0.5f;
+                float P[4][2];
+                const float corner[4][2] = {{-h, -h}, {h, -h}, {h, h}, {-h, h}};
+                for (int e = 0; e < 4; e++) {
+                    P[e][0] = qx + corner[e][0] * cr - corner[e][1] * sr;
+                    P[e][1] = qy + corner[e][0] * sr + corner[e][1] * cr;
+                }
+                // lit from the top left: each corner by how it faces the light
+                Col cc[4];
+                for (int e = 0; e < 4; e++) {
+                    const float lit = ((P[e][0] - qx) * -0.6f + (P[e][1] - qy) * -0.8f) / (h * 1.41f);
+                    cc[e] = withA(mixc(c, lit > 0 ? H(0xffffff) : H(0x05060c), std::fabs(lit) * 0.35f), a);
+                }
+                p.tri(P[0][0], P[0][1], P[1][0], P[1][1], P[2][0], P[2][1], cc[0], cc[1], cc[2]);
+                p.tri(P[0][0], P[0][1], P[2][0], P[2][1], P[3][0], P[3][1], cc[0], cc[2], cc[3]);
+            }
+        }
+    };
+    ringHalf(false);
+    pieces(false);
+    // the planet: a sphere of small facets, each corner lit by its normal; its bands follow its own axis (the ring's)
+    if (planetA > 0.f) {
+        const int NR = 12, NS = 56;
+        const float L[3] = {-0.52f, -0.62f, 0.59f};
+        auto shade = [&](float r, float phi, float& x, float& y) {
+            const float nx = r * std::cos(phi), ny = r * std::sin(phi), nz = std::sqrt(std::max(0.f, 1.f - r * r));
+            x = cx + nx * R;
+            y = pcy + ny * R;
+            // in the planet's frame (its axis tilted as the ring)
+            const float py = -nx * st + ny * ct, px = nx * ct + ny * st;
+            const float lon = std::atan2(px, nz) + t * 0.12f;
+            const float band = 0.5f + 0.5f * std::sin(py * 10.f + 0.7f * std::sin(lon * 2.f + py * 3.f));
+            const float fine = std::pow(0.5f + 0.5f * std::sin(py * 31.f + 0.4f * std::sin(lon * 3.f)), 8.f);
+            Col base = mixc(H(0x2032a8), H(0x6a80ff), band);
+            base = mixc(base, H(0xb8c8ff), 0.35f * fine);
+            base = mixc(base, H(0x7a4ad0), 0.35f * std::pow(std::fabs(py), 2.f));
+            const float lam = std::max(0.f, nx * L[0] + ny * L[1] + nz * L[2]);
+            const float rim = std::pow(1.f - nz, 3.f);
+            Col c{base.r * (0.1f + 0.95f * lam), base.g * (0.1f + 0.95f * lam), base.b * (0.12f + 0.95f * lam), planetA};
+            c = mixc(c, H(0x8cc4ff, planetA), rim * (0.25f + 0.6f * lam));
+            return c;
+        };
+        for (int ri = 0; ri < NR; ri++) {
+            const float r0 = (float)ri / NR, r1 = (float)(ri + 1) / NR;
+            for (int si = 0; si < NS; si++) {
+                const float f0 = TAU * si / NS, f1 = TAU * (si + 1) / NS;
+                float x00, y00, x01, y01, x10, y10, x11, y11;
+                const Col c00 = shade(r0, f0, x00, y00), c01 = shade(r0, f1, x01, y01);
+                const Col c10 = shade(r1, f0, x10, y10), c11 = shade(r1, f1, x11, y11);
+                if (ri > 0) p.tri(x00, y00, x01, y01, x11, y11, c00, c01, c11);
+                p.tri(x00, y00, x11, y11, x10, y10, c00, c11, c10);
+            }
+        }
+        // its sky: a thin light on the rim, brighter toward the sun; a soft sheen where the light falls
+        p.setAdditive(true);
+        p.glow(cx - 0.42f * R, pcy - 0.5f * R, 0.5f * R, H(0xc8d8ff, 0.12f * planetA));
+        p.ring(cx, pcy, R, 2.5f * u, H(0x9cd0ff, 0.35f * planetA), 3 * u);
+        p.arc(cx, pcy, R + 2 * u, -2.9f, -0.9f, 5 * u, H(0x9cd0ff, 0.18f * planetA), 10 * u);
+        p.setAdditive(false);
+    }
+    ringHalf(true);
+    pieces(true);
+    // the name
+    const std::string title = upper(GAME_TITLE);
+    const float size = 60 * u;
+    p.setAdditive(true);
+    p.glow(cx, pcy + 236 * u, 120 * u, H(0xe8c06a, (0.05f + 0.02f * std::sin(t * 0.8f)) * nameA));
+    p.setAdditive(false);
+    p.text(F::JOSEFIN_LIGHT, title, cx, pcy + 236 * u + size * 0.36f, size, H(0xffffff, nameA), 0, lerpf(0.8f, 0.5f, nameA));
 }
