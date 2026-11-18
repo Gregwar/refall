@@ -103,6 +103,7 @@ private:
     float bodyTop(const Body& b, float x, float* slope) const; // where a vertical line at x enters the box from above (-1e9: misses)
     bool bodyInside(const Body& b, float x, float y) const;
     float textCover(float x, float y) const;
+    float textNear(float x, float y) const;
 
     // ---- The foreground: some of a clear's tiles (the ones nearest the walls) come out through the glass toward the
     // camera: they fall along the well's outer wall (clear of the HUD's lettering), grow as they come closer, land

@@ -48,6 +48,7 @@ uniform float uGradeExpo;
 // the HUD's lines beside the well (board units): the lightning never lights the sky behind them
 uniform vec4 uHudRect[24];
 uniform int uHudN;
+uniform float uRainPop;      // the drop: the far rain lifted out of the graded street (lighter, whiter)
 const float H = -8.2;        // the street's far edge (the sidewalk's line, the horizon of the reflections)
 
 float h11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
@@ -76,6 +77,15 @@ float hudShield(vec2 p) {
         m = max(m, 1.0 - smoothstep(-0.5, 4.0, max(d.x, d.y)));
     }
     return 1.0 - 0.8 * m;
+}
+float hudNear(vec2 p) {
+    float m = 0.0;
+    for (int i = 0; i < uHudN; i++) {
+        vec4 r = uHudRect[i];
+        vec2 d = max(r.xy - p, p - r.zw);
+        m = max(m, 1.0 - smoothstep(-0.3, 1.2, max(d.x, d.y)));
+    }
+    return m;
 }
 vec3 grade(vec3 c) {
     const mat3 toYiq = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
@@ -321,6 +331,7 @@ void main() {
     // the far rain
     float wpx = 1.1;
     float r = rainLayer(p, 0.33, 2.6, 21.0, 0.25 + 0.55 * uRain, wpx) * 0.55 + rainLayer(p + 13.0, 0.21, 1.9, 15.0, 0.15 + 0.5 * uRain, wpx) * 0.35;
+    r *= 1.0 - 0.8 * hudNear(p); // (never through the HUD's lettering)
     // the storm: sheets of rain sweeping across in gusts
     float gust = mix(1.0, 0.35 + 1.6 * smoothstep(-0.2, 0.9, sin(p.x * 0.11 + p.y * 0.04 + uRainT * 1.7) * 0.7 + sin(p.x * 0.05 - uRainT * 0.6) * 0.3), uGust);
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
@@ -337,6 +348,14 @@ void main() {
     }
     // the drop: the whole street swung to its colour mood (before the well's glass and the HUD's veil)
     col = grade(col);
+    // the drop: the far rain lifted out of the mood (a pale, nearly white light, brighter where it crosses the lit
+    // street), kept off the HUD's columns
+    if (uRainPop > 0.001) {
+        float lumG = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        float veilR = max(box(p, vec2(-8.6, 1.8), vec2(2.8, 8.8), 1.2), box(p, vec2(8.6, 3.4), vec2(2.8, 7.2), 1.2));
+        vec3 pale = mix(col / max(lumG, 0.05) * 0.3, vec3(0.9, 0.93, 1.0), 0.75);
+        col += pale * r * gust * uRainPop * (0.22 + 0.5 * lumG) * (1.0 - 0.9 * veilR * uWell);
+    }
     if (uWell > 0.5) {
         // the HUD columns veiled a little, the well's backing dark glass
         vec2 lc = vec2(-8.6, 1.8), rc = vec2(8.6, 3.4);

@@ -539,6 +539,8 @@ void RainUniverse::drawRain(bool) {
     const float vis = 1.f - smoothstepf(0.f, 0.7f, bridge_.amount);
     if (vis <= 0.01f) return;
     const vec3 tint = graded(lerp(lerp(hex(V.mist), vec3(0.95f, 0.97f, 1.f), 0.65f), vec3(0.85f, 0.92f, 1.f), flash_));
+    const float pop = ease(gradeK_);
+    const vec3 streakTint = lerp(tint, lerp(tint, vec3(0.92f, 0.95f, 1.f), 0.6f) * 1.1f, pop);
     const float w = std::max(1.f, 1.3f * s);
     const float slowLen = lerpf(1.f, 0.35f, slow_);
     for (const Drop& d : drops_) {
@@ -548,8 +550,12 @@ void RainUniverse::drawRain(bool) {
         const vec2 a = px(d.x, d.y), b = px(tx, ty);
         const bool inWell = std::fabs(d.x) < 5.f && d.y < 10.f;
         float al = d.a * (inWell ? 0.32f : 0.42f) * (0.7f + 0.3f * rain_) * (1.f + 0.8f * flash_);
-        al *= 1.f - 0.55f * hudCover(d.x, d.y);
-        seg(a.x, a.y, b.x, b.y, d.drip ? w * 1.4f : w, tint, al * vis, 0.f);
+        // the drop: the streaks a little brighter and longer, paler than the mood (gently in the well, never more
+        // over the HUD's columns)
+        const float hc = bare_ ? 0.f : std::max(hudCover(d.x, d.y), textNear(d.x, d.y));
+        al *= (1.f + pop * (inWell ? 0.2f : 0.6f) * (1.f - hc)) * (1.f - (0.55f + 0.3f * pop) * hc);
+        const vec2 bb = d.drip ? b : px(d.x - d.vx / sp * L * (1.f + 0.3f * pop), d.y - d.vy / sp * L * (1.f + 0.3f * pop));
+        seg(a.x, a.y, bb.x, bb.y, d.drip ? w * 1.4f : w, d.drip ? tint : streakTint, al * vis, 0.f);
     }
     for (const Spark& p : sparks_) {
         const vec2 a = px(p.x, p.y);
@@ -614,6 +620,16 @@ float RainUniverse::bodyTop(const Body& b, float x, float* slope) const {
         if (y > best) { best = y; if (slope) *slope = k; }
     }
     return best;
+}
+
+// How close (x, y) is to any HUD line beside the well (0 clear .. 1 on it, board units, a soft margin).
+float RainUniverse::textNear(float x, float y) const {
+    float m = 0.f;
+    for (const vec4& r : hudRects_) {
+        const float d = std::max(std::max(r.x - x, x - r.z), std::max(r.y - y, y - r.w));
+        m = std::max(m, 1.f - smoothstepf(-0.3f, 1.2f, d));
+    }
+    return m;
 }
 
 float RainUniverse::textCover(float x, float y) const {
@@ -1363,14 +1379,16 @@ void RainUniverse::drawFore() {
             }
         }
     }
-    // the near rain (never over the well or the HUD's columns)
+    // the near rain (never over the well or the HUD's columns); the drop: paler than the mood, a little brighter
     const float slant = V.slant + 0.22f * storm_;
+    const float pop = ease(gradeK_);
+    const vec3 nearTint = lerp(tint, vec3(0.92f, 0.95f, 1.f), 0.5f * pop);
     for (const Streak& s : nearRain_) {
         const float off = smoothstepf(FORE_WELL + 0.2f, FORE_WELL + 1.2f, std::fabs(s.x));
-        const float a = s.a * off * (1.f - 0.8f * hudCover(s.x, s.y)) * vis * (1.f + 1.5f * flash_);
+        const float a = s.a * off * (1.f - 0.8f * hudCover(s.x, s.y)) * vis * (1.f + 1.5f * flash_) * (1.f + 0.35f * pop);
         if (a <= 0.003f) continue;
         const vec2 p0 = px(s.x, s.y), p1 = px(s.x + slant * s.len, s.y + s.len);
-        seg(p0.x, p0.y, p1.x, p1.y, s.w * s1080, tint, a, 0.f);
+        seg(p0.x, p0.y, p1.x, p1.y, s.w * s1080, nearTint, a, 0.f);
     }
     flushShapes();
 }
@@ -1844,6 +1862,7 @@ void RainUniverse::render(const Frame& f, GLuint fbo) {
             if (bare_) n = 0;
             if (n) glUniform4fv(ugl::U(progBg_, "uHudRect"), n, r);
             set1i(progBg_, "uHudN", n);
+        set1f(progBg_, "uRainPop", ease(gradeK_));
         }
         set1f(progBg_, "uWell", bare_ ? 0.f : 1.f - smoothstepf(0.f, 0.8f, bridge_.amount));
         set3f(progBg_, "uBridge", ugl::toSrgb(bridge_.color));
