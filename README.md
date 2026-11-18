@@ -4,6 +4,8 @@ A falling-block puzzle game across **61 hand-directed universes**, each staged b
 beat and the pace follows the song. Play the game's Voyage, or **any music you like**: your own folders or YouTube
 playlists.
 
+[![Watch the trailer](https://img.youtube.com/vi/RY9UekAFT1c/maxresdefault.jpg)](https://www.youtube.com/watch?v=RY9UekAFT1c)
+
 ```sh
 uvx refall
 ```
