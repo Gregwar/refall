@@ -399,11 +399,7 @@ void main() {
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c *= min(1.0, 0.45 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
-    // the shards' cut edges: thin bright ridges and dark creases (their width in pixels from the grid's slope)
-    float px = se / max(fwidth(g2.x - g2.y * 0.57735) + fwidth(g2.y * 1.1547), 1e-4) * 1.5;
-    float he = h21(sc + ss * 1.7 + 0.3);
-    if (he > 0.45) c += mix(mix(tv, vec3(1.0), 0.55), vec3(1.0), he - 0.45) * exp(-px / 1.2) * (0.25 + 0.5 * he) * (0.6 + 0.4 * uSat);
-    else c *= 1.0 - 0.45 * exp(-px / 1.6);
+    // (no lead: the shards meet edge to edge, told apart by their own light and hue alone)
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     // light on the glass, in the frame's own space (it doesn't turn): a soft flare in the top right corner, and glints
     // twinkling here and there
