@@ -1057,43 +1057,88 @@ void BricksUniverse::buildBoard(const Game& g) {
             pushBox(vec3(w.x, w.y, -0.5f + HOLD_Z), vec3(1.f, 1.f, 1.f), col, id, maskOf(c[0], c[1], inPiece), 0.f, 1.f, 0.f, bev);
             if (!inPiece(0, 0, c[0], c[1] - 1)) pushStud(vec3(w.x, w.y + 0.5f, -0.5f + HOLD_Z), 0.3f, 0.17f, col, id, 1.f);
         }
-        // The ghost: a fine outline on the board where it will land.
+        // The ghost: the piece's bricks drawn in fine lines where it will land, as a wireframe in depth: its outer contour
+        // at the bricks' front and back faces, joined at each corner, and the studs on its top ringed in.
         Piece gp = pc;
         gp.y = g.ghostY();
         if (gp.y > pc.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
             auto inG = [&](int x, int y) {
+                if (y < Game::HIDDEN) return false; // (the hidden rows: not drawn)
                 for (auto& c : gc)
                     if (c[0] == x && c[1] == y) return true;
                 return false;
             };
             const bool lightBoard = ugl::luma(boardCol) > 0.2f;
             const vec3 ink = lightBoard ? mixDisplay(boardCol, lin(0x1a1a1e), 0.55f) : mixDisplay(boardCol, lin(0xffffff), 0.5f);
-            const float a = 0.8f, wdt = 0.055f, in = 0.07f;
-            auto seg = [&](float x0, float y0, float x1, float y1) {
-                // a thin quad along the segment (in the board's plane, just in front of it)
-                const float ex = (x1 - x0), ey = (y1 - y0);
-                const float l = std::sqrt(ex * ex + ey * ey);
-                const float nx = -ey / l * wdt * 0.5f, ny = ex / l * wdt * 0.5f;
-                const float zz = -0.99f;
-                const float v[6][3] = {{x0 - nx, y0 - ny, zz}, {x1 - nx, y1 - ny, zz}, {x1 + nx, y1 + ny, zz},
-                                       {x0 - nx, y0 - ny, zz}, {x1 + nx, y1 + ny, zz}, {x0 + nx, y0 + ny, zz}};
-                for (auto& q : v) {
-                    const float vv[7] = {q[0], q[1], q[2], ink.x, ink.y, ink.z, a};
-                    flat_.insert(flat_.end(), vv, vv + 7);
+            const float a = 0.85f, wdt = 0.05f;
+            const float zBack = -0.985f, zFront = -0.015f; // (the bricks span z -1 .. 0; just inside, off the board)
+            // a line: two thin ribbons crossed along it, so it reads from any side
+            auto line = [&](vec3 p0, vec3 p1) {
+                const vec3 d = p1 - p0;
+                const float l = std::sqrt(d.x * d.x + d.y * d.y + d.z * d.z);
+                if (l < 1e-5f) return;
+                const vec3 t = d * (1.f / l);
+                vec3 u = std::fabs(t.z) < 0.9f ? vec3(-t.y, t.x, 0.f) : vec3(1.f, 0.f, 0.f); // across, in the board's plane
+                const float ul = std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+                u = u * (wdt * 0.5f / ul);
+                const vec3 w = vec3(t.y * u.z - t.z * u.y, t.z * u.x - t.x * u.z, t.x * u.y - t.y * u.x); // across, the other way
+                for (const vec3& o : {u, w}) {
+                    const vec3 q[6] = {p0 - o, p1 - o, p1 + o, p0 - o, p1 + o, p0 + o};
+                    for (const vec3& v : q) {
+                        const float vv[7] = {v.x, v.y, v.z, ink.x, ink.y, ink.z, a};
+                        flat_.insert(flat_.end(), vv, vv + 7);
+                    }
                 }
             };
+            // the contour: every cell side between a ghost cell and an empty one, front and back; a depth line at each
+            // lattice point where the contour turns
+            auto corner = [&](int x, int y) { // the cell (x, y)'s top-left point, in the world
+                const vec3 w = layout::cellPos((float)x, (float)y);
+                return vec2{w.x - 0.5f, w.y + 0.5f};
+            };
+            std::vector<std::pair<int, int>> points; // lattice points (x, y) on the contour, with the sides that meet there
+            auto side = [&](int x0, int y0, int x1, int y1) {
+                const vec2 A = corner(x0, y0), B = corner(x1, y1);
+                line(vec3(A.x, A.y, zFront), vec3(B.x, B.y, zFront));
+                line(vec3(A.x, A.y, zBack), vec3(B.x, B.y, zBack));
+            };
             for (auto& c : gc) {
-                if (c[1] < Game::HIDDEN) continue;
+                const int x = c[0], y = c[1];
+                if (!inG(x, y)) continue;
+                if (!inG(x - 1, y)) side(x, y, x, y + 1);
+                if (!inG(x + 1, y)) side(x + 1, y, x + 1, y + 1);
+                if (!inG(x, y - 1)) side(x, y, x + 1, y);
+                if (!inG(x, y + 1)) side(x, y + 1, x + 1, y + 1);
+            }
+            // depth lines: at a lattice point where a horizontal and a vertical contour side meet
+            for (auto& c : gc)
+                for (int k = 0; k < 4; k++) {
+                    const int px = c[0] + (k & 1), py = c[1] + (k >> 1);
+                    if (std::find(points.begin(), points.end(), std::make_pair(px, py)) != points.end()) continue;
+                    points.push_back({px, py});
+                    // the four cells round the point: the contour turns there unless they make a straight edge
+                    const bool tl = inG(px - 1, py - 1), tr = inG(px, py - 1), bl = inG(px - 1, py), br = inG(px, py);
+                    const int nIn = tl + tr + bl + br;
+                    const bool straight = (tl == tr && bl == br) || (tl == bl && tr == br);
+                    if (nIn == 0 || nIn == 4 || straight) continue;
+                    const vec2 P = corner(px, py);
+                    line(vec3(P.x, P.y, zBack), vec3(P.x, P.y, zFront));
+                }
+            // the studs on its top: a ring at the stud's base and one at its top
+            const int SEG = 20;
+            for (auto& c : gc) {
+                if (!inG(c[0], c[1]) || inG(c[0], c[1] - 1)) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                const float l = w.x - 0.5f + in, r = w.x + 0.5f - in, t = w.y + 0.5f - in, b = w.y - 0.5f + in;
-                const bool L = inG(c[0] - 1, c[1]), R = inG(c[0] + 1, c[1]), U = inG(c[0], c[1] - 1), D = inG(c[0], c[1] + 1);
-                const float l2 = L ? w.x - 0.5f : l, r2 = R ? w.x + 0.5f : r, t2 = U ? w.y + 0.5f : t, b2 = D ? w.y - 0.5f : b;
-                if (!L) seg(l, b2, l, t2);
-                if (!R) seg(r, b2, r, t2);
-                if (!U) seg(l2, t, r2, t);
-                if (!D) seg(l2, b, r2, b);
+                for (float yy : {w.y + 0.5f, w.y + 0.5f + 0.17f})
+                    for (int k = 0; k < SEG; k++) {
+                        const float a0 = 6.2831853f * k / SEG, a1 = 6.2831853f * (k + 1) / SEG;
+                        line(vec3(w.x + 0.3f * std::cos(a0), yy, -0.5f + 0.3f * std::sin(a0)),
+                             vec3(w.x + 0.3f * std::cos(a1), yy, -0.5f + 0.3f * std::sin(a1)));
+                    }
+                // its sides, where the rings' silhouette is (left and right)
+                for (float sx : {-0.3f, 0.3f}) line(vec3(w.x + sx, w.y + 0.5f, -0.5f), vec3(w.x + sx, w.y + 0.67f, -0.5f));
             }
         }
     }
