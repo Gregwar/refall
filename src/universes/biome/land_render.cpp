@@ -785,8 +785,8 @@ void LandWorld::drawAfterPane() {
         if (p.kind != P_SPARK || p.age < 0.f) continue;
         const float t = p.age / p.life;
         const float a = smoothstepf(0.f, 0.1f, t) * (1.f - smoothstepf(0.5f, 1.f, t)) * (0.75f + 0.25f * std::sin(p.age * 9.f + p.seed * 40.f));
-        put(p.p, p.v, p.size, 0, p.col, a, 0.25f, 0.9f);
-        put(p.p, vec3(0.f), p.size * 4.f, 5, p.col, a * 0.18f, 0.f, 0.f);
+        put(p.p, p.v, p.size, 0, p.col, a * 0.6f, 0.25f, 0.9f);
+        put(p.p, vec3(0.f), p.size * 3.f, 5, p.col, a * 0.08f, 0.f, 0.f);
     }
     if (v.empty()) return;
     glEnable(GL_DEPTH_TEST);
