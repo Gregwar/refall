@@ -88,6 +88,11 @@ private:
     // ---- The camera (world: meters, the tree's foot at the origin, y up; drawn relative to the eye).
     vec3 eye_{0, 1, 10}, look_{0, 0, -1}, camR_{1, 0, 0}, camU_{0, 1, 0};
     float tanH_ = 0.5f, aspect_ = 1.78f;
+    float camEnd_ = 0.f;  // the closing scene: the camera turns (0..1) to show the whole tree, down to the earth
+    float endT_ = 0.f;    // seconds into the teardown
+    float endQ_[4] = {};  // the closing framing solved (heading, pitch, lens, bank), the next frame's start
+    bool endQOk_ = false;
+    float planetR_ = 6.371e6f; // the planet's radius as drawn (the closing shot makes the earth a visible dot)
     float camBack_ = 0.f, camSwing_ = 0.f; // the setup / teardown: the camera further back (x its distance), turned (rad)
     mat4 proj3_, vp3_;
     float gc_ = -99.f, gcVel_ = 0.f;   // the growth the camera frames (lagging behind: the tree shoots up first)

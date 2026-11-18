@@ -117,7 +117,9 @@ uniform vec4 uCrownW;             // the crown's center and radius (meters): its
 uniform vec3 uPlanetDir, uGalaxyDir;
 uniform float uBeam;              // the drop's light rushing up into space
 uniform vec3 uBeamPos;
-const float R = 6.371e6;
+uniform float uPlanetR;           // the planet's radius as drawn (the closing shot swells it into a visible dot)
+uniform float uDot;               // 0..1: how far it is swollen (its atmosphere's halo, its day side kept lit)
+#define R uPlanetR
 vec3 rayDir(vec2 uv) { return normalize(uLook + uCamR * (uv.x * 2.0 - 1.0) * uTan.x + uCamU * (uv.y * 2.0 - 1.0) * uTan.y); }
 void basis(vec3 a, out vec3 x, out vec3 y) {
     x = normalize(cross(a, abs(a.y) < 0.95 ? vec3(0, 1, 0) : vec3(1, 0, 0)));
@@ -202,6 +204,16 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
             float city = step(0.78, vnoise3(cn)) * step(0.6, vnoise3(cn * 3.1 + 5.0)) * (1.0 - water);
             col += vec3(1.0, 0.8, 0.45) * city * night * smoothstep(1e5, 6e5, alt) * 0.9;
         }
+        // the closing shot's pale blue dot: its day side wide, swirls of cloud, the limb glowing blue
+        if (uDot > 0.0) {
+            vec3 dotC = mix(alb, vec3(0.97, 0.98, 1.0), smoothstep(0.5, 0.68, fbm3(n * 5.0 + 21.0)) * 0.85);
+            float dl = dot(n, normalize(uSunDir - d * 2.5));   // lit from the sun's side, mostly facing us: a gibbous earth
+            dotC *= mix(uShadowC * 0.6 + 0.08, uSunC * 1.15, smoothstep(-0.15, 0.25, dl));
+            dotC = mix(dotC, vec3(0.42, 0.62, 1.0) * dot(dotC, vec3(0.5, 0.8, 0.4)), 0.3);   // a blue veil of air
+            float rim = pow(1.0 - clamp(-dot(d, n), 0.0, 1.0), 2.0);
+            dotC = mix(dotC, vec3(0.55, 0.8, 1.0) * 1.3, rim * 0.7);
+            col = mix(col, dotC, uDot);
+        }
         // the air between: the aerial perspective, the limb's glow
         float od = 1.0e-5 * t * airDensity(alt, 0.0);
         vec3 hc = mix(mix(uHazeC, uZenithC, 0.3), sunGlowCol, pow(max(sd, 0.0), 6.0) * 0.5);
@@ -271,6 +283,8 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
         // the limb, glowing (seen from high up)
         float limb = exp(-hc / 6000.0) * smoothstep(3000.0, 60000.0, alt) * step(0.0, -b + 0.0);
         col += uHorizonC * limb * 0.7;
+        // the closing shot's dot: its atmosphere's halo in the black
+        if (uDot > 0.0 && b < 0.0) col += vec3(0.4, 0.68, 1.0) * (exp(-hc / (0.06 * R)) * 0.9 + exp(-hc / (0.35 * R)) * 0.35) * uDot;
         stars += (uStars + (1.0 - a)) * (1.0 - a * 0.85);
         // far hills along the horizon (seen from near the ground)
         if (uHills > 0.0) {
@@ -315,7 +329,7 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
             }
             vec3 alb = mix(vec3(0.93, 0.92, 1.0), vec3(0.62, 0.62, 0.78), smoothstep(0.5, 0.62, cr)) * (1.0 - crater * 0.6);
             float ml = smoothstep(-0.03, 0.03, dot(mn, uSunDir));
-            vec3 mc = alb * mix(vec3(0.12, 0.13, 0.25), vec3(1.15, 1.12, 1.05), ml);
+            vec3 mc = alb * mix(mix(vec3(0.12, 0.13, 0.25), vec3(0.42, 0.42, 0.48), uDot), vec3(1.15, 1.12, 1.05), ml);   // (the closing shot: earthshine)
             float edge = smoothstep(0.0, 0.08, -dot(mn, d));
             float a = clamp(pow(exp(-alt / 9000.0), 0.55), 0.0, 1.0);
             col = mix(col, mc + col * 0.35 * a, edge * (1.0 - 0.55 * a));
@@ -341,8 +355,28 @@ void skyAt(vec3 d, out vec4 fragC, out float fragD) {
 }
 // The planet's limb antialiased: within half a pixel of its edge, the planet and the sky beside it, blended by the
 // pixel's coverage (the rest of the shading is per pixel, a hard edge otherwise).
+// The closing shot's dot seen near the frame's edge: the wide lens would stretch it into an oval (radially, by
+// 1/cos of its angle off the axis); its neighbourhood is sampled squeezed back so that it stays round.
+vec3 roundDot(vec3 d) {
+    vec3 pc = normalize(vec3(0.0, -R, 0.0) - uEye);
+    float cf = dot(pc, uLook), df = dot(d, uLook);
+    if (cf < 0.2 || df < 0.05) return d;
+    vec2 c = vec2(dot(pc, uCamR), dot(pc, uCamU)) / cf, q = vec2(dot(d, uCamR), dot(d, uCamU)) / df;
+    vec2 o = q - c;
+    float lc = length(c);
+    if (lc < 1e-4) return d;
+    vec2 er = c / lc;
+    // the dot's radius on the image plane (tangentially), the squeeze fading out over a few of them
+    float a = (R / length(vec3(0.0, -R, 0.0) - uEye)) / cf;
+    float k = mix(cf, 1.0, smoothstep(3.0 * a, 7.0 * a, length(o))) ;
+    float orr = dot(o, er);
+    vec2 os = o + er * orr * (1.0 / k - 1.0);
+    vec2 qs = c + os;
+    return normalize(uLook + uCamR * qs.x + uCamU * qs.y);
+}
 void main() {
     vec3 d = rayDir(vUv);
+    if (uDot > 0.0) d = normalize(mix(d, roundDot(d), uDot));
     vec3 oc = vec3(uEye.x, uEye.y + R, uEye.z);
     float c0 = dot(uEye.xz, uEye.xz) + uEye.y * (uEye.y + 2.0 * R);
     float b = dot(d, oc);
@@ -370,6 +404,7 @@ void main() {
 // crown); the meadow's trees stand in meters. Toon: two bands of light, a cool shade, a warm rim, grooves winding
 // up the wood, the drop's light running up it in rainbow colors.
 inline const char* BARK_VS = R"(#version 330 core
+uniform float uBarkMinPx;   // the closing shot: the trunk's least radius (radians: a pixel's angle times some)
 layout(location = 0) in vec4 a0; // center, radius
 layout(location = 1) in vec4 a1; // radial normal, u along the branch
 layout(location = 2) in vec4 a2; // branch base, space (0 trunk, 1 crown, 2 world)
@@ -391,7 +426,10 @@ void main() {
         float y = a0.y;
         float yy = min(y, T);
         float r = y >= T ? 0.0 : trunkRadius(y);
-        p = trunkCenter(yy) + swayAt(clamp(yy / T, 0.0, 1.0)) + n * r;
+        vec3 axis = trunkCenter(yy) + swayAt(clamp(yy / T, 0.0, 1.0));
+        // the closing shot: the trunk kept a few pixels wide all the way down to the earth
+        if (y < T) r = max(r, length(axis - uEye) * uBarkMinPx * sqrt(clamp((T - y) / (0.2 * crownW(uG)), 0.0, 1.0)));
+        p = axis + n * r;
         vBark = vec2(a4.x, log(max(y, 0.0) + 0.3) * 2.2);
         vPath = trunkPath(yy);
         vC = vec3(0.0, (yy - T) / crownW(uG), 0.0);

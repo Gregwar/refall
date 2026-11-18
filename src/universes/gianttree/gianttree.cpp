@@ -428,17 +428,132 @@ void GiantTreeUniverse::updateCamera(float dt) {
     const float D = F / tanH_ * (1.f + camBack_);
     vec3 eye = anchor - dirA * D;
     eye.y = std::max(eye.y, 0.25f + 0.2f * std::min(T, 4.f));
+    // The end of the song: the camera stays where it is and turns, banking, the lens widening, until the whole tree is
+    // in the frame: the crown high on the right, the trunk plunging down in perspective to its base low on the right,
+    // the meadow under a young tree, the earth itself under one grown into space (a blue ball made big enough to be
+    // seen, its moon beside it: see planetR_). The end framing is solved for (heading, pitch, bank and lens putting the
+    // crown and the roots on their marks), then eased into from the play camera.
+    planetR_ = gtree::R_EARTH;
+    float roll = 0.f;
+    if (camEnd_ <= 0.f) endQOk_ = false;
+    if (camEnd_ > 0.f) {
+        const float e = smoothstepf(0.f, 1.f, smoothstepf(0.f, 1.f, camEnd_));
+        // the earth, too small to see from a tree millions of km high, swells into a dot some 8 degrees wide (early
+        // in the turn, while it is still out of the frame)
+        const float rDot = 0.1f * length(eye);
+        planetR_ = lerpf(gtree::R_EARTH, std::sqrt(gtree::R_EARTH * gtree::R_EARTH + rDot * rDot), smoothstepf(0.f, 0.4f, camEnd_));
+        const vec3 toCrown = normalize(crownCenter(g_) + vec3(0.f, 0.2f * gtree::crownW(g_), 0.f) - eye), toRoot = normalize(vec3(0.f) - eye);
+        // the marks (NDC): the crown up on the right, the roots low, a little right of the middle
+        const float Xc = 0.28f, Yc = 0.6f, Xr = 0.06f, Yr = -0.52f;
+        const float rollW = lerpf(0.4f, 0.03f, smoothstepf(12.f, 17.f, G));
+        auto basisOf = [](const float* q, vec3& F, vec3& Rr, vec3& U) {
+            F = vec3(-std::sin(q[0]) * std::cos(q[1]), std::sin(q[1]), -std::cos(q[0]) * std::cos(q[1]));
+            const vec3 r0(std::cos(q[0]), 0.f, -std::sin(q[0])), u0 = cross(r0, F);
+            Rr = r0 * std::cos(q[3]) + u0 * std::sin(q[3]);
+            U = u0 * std::cos(q[3]) - r0 * std::sin(q[3]);
+        };
+        auto resid = [&](const float* q, float* r) {
+            vec3 F, Rr, U;
+            basisOf(q, F, Rr, U);
+            const float fc = std::max(dot(toCrown, F), 0.05f), fr = std::max(dot(toRoot, F), 0.05f);
+            r[0] = 1.5f * (dot(toCrown, Rr) / (fc * q[2] * aspect_) - Xc);
+            r[1] = 1.5f * (dot(toCrown, U) / (fc * q[2]) - Yc);
+            r[2] = dot(toRoot, Rr) / (fr * q[2] * aspect_) - Xr;
+            r[3] = dot(toRoot, U) / (fr * q[2]) - Yr;
+            // a bank, no more than it takes: free in space (no horizon to tilt), gentle over the land
+            r[4] = rollW * q[3];
+            return r[0] * r[0] + r[1] * r[1] + r[2] * r[2] + r[3] * r[3] + r[4] * r[4];
+        };
+        // Levenberg-Marquardt on (heading, pitch, lens, bank), from the last frame's (first: the best of a few starts
+        // about the bisector of the crown and the roots)
+        const float tan0 = tanH_, tanMax = std::tan(62.f * PI / 180.f), rollMax = 0.75f;
+        float q[4] = {}, r[5] = {}, cost;
+        if (endQOk_) {
+            std::copy(endQ_, endQ_ + 4, q);
+            cost = resid(q, r);
+        } else {
+            const vec3 mid = normalize(toCrown + toRoot);
+            cost = 1e30f;
+            for (int k = 0; k < 5; k++) {
+                const float qk[4] = {std::atan2(-mid.x, -mid.z), std::asin(std::clamp(mid.y, -0.99f, 0.99f)),
+                                     std::clamp(std::tan(0.5f * std::acos(std::clamp(dot(toCrown, toRoot), -1.f, 1.f))) * 1.6f, tan0, tanMax),
+                                     (k - 2) * 0.3f};
+                float rk[5];
+                const float ck = resid(qk, rk);
+                if (ck < cost) { std::copy(qk, qk + 4, q); std::copy(rk, rk + 5, r); cost = ck; }
+            }
+        }
+        float lam = 1e-3f;
+        for (int it = 0; it < (endQOk_ ? 12 : 60); it++) {
+            double A[4][5] = {};
+            float J[5][4];
+            for (int j = 0; j < 4; j++) {
+                float qq[4] = {q[0], q[1], q[2], q[3]}, r1[5];
+                const float h = 1e-3f * (j == 2 ? q[2] : 1.f);
+                qq[j] += h;
+                resid(qq, r1);
+                for (int i = 0; i < 5; i++) J[i][j] = (r1[i] - r[i]) / h;
+            }
+            for (int a2 = 0; a2 < 4; a2++) {
+                for (int b2 = 0; b2 < 4; b2++)
+                    for (int i = 0; i < 5; i++) A[a2][b2] += (double)J[i][a2] * J[i][b2];
+                for (int i = 0; i < 5; i++) A[a2][4] -= (double)J[i][a2] * r[i];
+                A[a2][a2] = A[a2][a2] * (1.0 + lam) + 1e-9;
+            }
+            // Gaussian elimination with partial pivoting
+            bool ok = true;
+            for (int c = 0; c < 4 && ok; c++) {
+                int pv = c;
+                for (int i = c + 1; i < 4; i++)
+                    if (std::fabs(A[i][c]) > std::fabs(A[pv][c])) pv = i;
+                if (std::fabs(A[pv][c]) < 1e-14) { ok = false; break; }
+                for (int k = 0; k < 5; k++) std::swap(A[c][k], A[pv][k]);
+                for (int i = 0; i < 4; i++) {
+                    if (i == c) continue;
+                    const double m = A[i][c] / A[c][c];
+                    for (int k = c; k < 5; k++) A[i][k] -= m * A[c][k];
+                }
+            }
+            if (!ok) break;
+            float qn[4];
+            for (int j = 0; j < 4; j++) qn[j] = q[j] + (float)(A[j][4] / A[j][j]);
+            qn[1] = std::clamp(qn[1], -1.45f, 1.2f);
+            qn[2] = std::clamp(qn[2], tan0, tanMax);
+            qn[3] = std::clamp(qn[3], -rollMax, rollMax);
+            float rn[5];
+            const float cn = resid(qn, rn);
+            if (cn < cost) {
+                std::copy(qn, qn + 4, q);
+                std::copy(rn, rn + 5, r);
+                cost = cn;
+                lam = std::max(lam * 0.3f, 1e-7f);
+            } else if ((lam *= 10.f) > 1e6f) {
+                break;
+            }
+        }
+        std::copy(q, q + 4, endQ_);
+        endQOk_ = true;
+        vec3 fE, rE, uE;
+        basisOf(q, fE, rE, uE);
+        tanH_ = lerpf(tanH_, q[2], e);
+        fwd = normalize(lerp(fwd, fE, e));
+        roll = q[3] * e;
+    }
     eye_ = eye;
     look_ = fwd;
-    camR_ = normalize(cross(fwd, vec3(0, 1, 0)));
-    camU_ = cross(camR_, fwd);
+    {
+        // the closing turn's bank (none otherwise)
+        const vec3 r0 = normalize(cross(fwd, vec3(0, 1, 0))), u0 = cross(r0, fwd);
+        camR_ = r0 * std::cos(roll) + u0 * std::sin(roll);
+        camU_ = u0 * std::cos(roll) - r0 * std::sin(roll);
+    }
     {
         const vec3 oc(eye.x, eye.y + gtree::R_EARTH, eye.z);
         alt_ = std::max(0.f, length(oc) - gtree::R_EARTH);
         if (length(oc) < 1e7f) alt_ = std::max(0.f, eye.y + (eye.x * eye.x + eye.z * eye.z) / (2.f * gtree::R_EARTH));
     }
     const float zn = std::max(0.02f, D * 0.02f), zf = std::max({1.6e5f, D * 80.f, T * 3.f});
-    const mat4 view3 = mat4::lookAt(vec3(0.f), fwd, vec3(0, 1, 0));
+    const mat4 view3 = mat4::lookAt(vec3(0.f), fwd, camU_);
     proj3_ = mat4::perspective(2.f * std::atan(tanH_), aspect_, zn, zf);
     vp3_ = proj3_ * view3;
 }
@@ -1016,11 +1131,24 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     const float wind = 0.35f + 0.45f * wm + 0.7f * wp + 0.3f * life;
     windPhase_ += wdt * (0.7f + 0.3f * wm + 0.35f * wp);
 
-    // the setup: the camera eases in to the tree, turning a little around it; the teardown: it drifts back, away
+    // the setup: the camera eases in to the tree, turning a little around it; the teardown: it turns to show the whole
+    // tree, down to its base (updateCamera)
     {
         const float in = 1.f - smoothstepf(0.f, 0.9f, f.setup), out = smoothstepf(0.f, 1.f, f.teardown);
-        camBack_ = 0.7f * in * in + 0.9f * out * out;
+        camBack_ = 0.7f * in * in;
         camSwing_ = -0.3f * in * in + 0.2f * out;
+        // the closing turn: over some 6 s from the song's last frame, done before the black whatever the outro's length
+        // (the teardown runs linearly to the end of the black: its pace tells how long is left)
+        if (f.teardown > 0.f) {
+            endT_ += f.dt;
+            const float total = endT_ / std::max(f.teardown, 1e-3f);
+            const float dur = std::clamp(total - 2.2f, 1.2f, 6.f);
+            camEnd_ = std::max(camEnd_, saturate(endT_ / dur));
+        } else {
+            endT_ = 0.f;
+            camEnd_ = 0.f;
+        }
+        if (std::getenv("REFALL_GIANTTREE_END")) camEnd_ = (float)std::atof(std::getenv("REFALL_GIANTTREE_END")); // test hook: the closing turn held
     }
     updateCamera(dt);
     const float W = gtree::crownW(g_);
@@ -1236,9 +1364,15 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
     set3f(progSky_, "uDesertC", pal_.desert);
     set3f(progSky_, "uFlowerC", pal_.flower);
     {
-        const vec3 moon = (fwdH * 0.25f - rightH * 0.97f) * 2.2e8f + vec3(0.f, 2.2e8f, 0.f);
-        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, 2.2e7f);
+        vec3 moon = (fwdH * 0.25f - rightH * 0.97f) * 2.2e8f + vec3(0.f, 2.2e8f, 0.f);
+        // the closing shot's swollen earth keeps its moon in proportion: as big as ours to it, and clear of it
+        const vec3 earthC(0.f, -planetR_, 0.f);
+        const float md = length(moon - earthC);
+        if (md < 4.f * planetR_) moon = earthC + (moon - earthC) * (4.f * planetR_ / md);
+        set4f(progSky_, "uMoon", moon.x, moon.y, moon.z, std::max(2.2e7f, 0.27f * planetR_));
     }
+    set1f(progSky_, "uPlanetR", planetR_);
+    set1f(progSky_, "uDot", smoothstepf(1.5f, 6.f, planetR_ / gtree::R_EARTH));
     set4f(progSky_, "uCrownW", cc.x, cc.y, cc.z, Rc);
     set3f(progSky_, "uPlanetDir", normalize(fwdH * 0.35f - rightH * 0.94f + vec3(0.f, -0.02f, 0.f)));
     set3f(progSky_, "uGalaxyDir", normalize(fwdH * 0.94f - rightH * 0.3f + vec3(0.f, 0.12f, 0.f)));
@@ -1269,6 +1403,7 @@ void GiantTreeUniverse::render(const Frame& f, GLuint fbo) {
         setMat(progBark_, "uVP", vp3_);
         set3f(progBark_, "uBarkC", pal_.bark);
         set3f(progBark_, "uBarkDark", pal_.barkDark);
+        set1f(progBark_, "uBarkMinPx", smoothstepf(0.f, 0.5f, camEnd_) * 2.f * tanH_ / (float)skyT_.h * 1.6f);
         glBindVertexArray(barkVao_);
         glDrawElements(GL_TRIANGLES, barkCount_, GL_UNSIGNED_INT, nullptr);
     }
