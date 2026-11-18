@@ -5,9 +5,13 @@
   </picture>
 </p>
 
-A music-reactive falling-block puzzle game that plays **any music you like**: your own folder or a YouTube
-playlist. Each song is analysed ahead of time (tempo, key, intro, verse, build, chorus, drop...) and the game stages
-it: pieces fall on the beat, the pace follows the song's energy, and each song plays in its own **universe**.
+A falling-block puzzle game across **61 hand-directed universes**: ink on washi paper, the deep sea lit by living
+things, a laser show in the haze, a sunlit clay diorama, a frozen cave... each with its own look, its own way of
+clearing lines, and its variants.
+
+Every universe is staged by the music. Each song is analysed ahead of time (tempo, key, intro, build, chorus,
+drop...): pieces fall on the beat and the pace follows the song's energy. Play the game's Voyage, or **any music you
+like**: your own folders, YouTube playlists, or a Voyage of your own written as a simple file.
 
 ```sh
 uvx refall            # the title screen: VOYAGE or FREE PLAY
@@ -16,7 +20,7 @@ uvx refall ~/Music    # free play on any folders, files and YouTube URLs
 
 ## Universes
 
-61 hand-directed worlds, each with its own look and its own way of staging the music; each song gets one, in one of its variants.
+Each song plays in one of them, in one of its variants.
 
 <table>
 <tr><td width="25%"><img src="docs/universes/vector.jpg"><br><b>VECTOR</b><br><sub>phosphor beams on a dark CRT</sub></td><td width="25%"><img src="docs/universes/sumi.jpg"><br><b>SUMI</b><br><sub>ink on washi paper</sub></td><td width="25%"><img src="docs/universes/diorama.jpg"><br><b>DIORAMA</b><br><sub>a sunlit clay miniature on an island</sub></td><td width="25%"><img src="docs/universes/abyss.jpg"><br><b>ABYSS</b><br><sub>the deep sea, lit only by living things</sub></td></tr>

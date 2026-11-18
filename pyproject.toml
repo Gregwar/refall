@@ -5,7 +5,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "refall"
 version = "1.24.0"
-description = "A music-reactive falling-block puzzle game that plays any playlist (local music or YouTube)"
+description = "A falling-block puzzle game across 61 hand-directed universes, staged by any music you like (local files or YouTube)"
 readme = "README.md"
 license = "PolyForm-Noncommercial-1.0.0"
 license-files = ["LICENSE"]
