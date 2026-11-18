@@ -87,7 +87,8 @@ bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
     return true;
 }
 
-bool Menu::still() const { return screen_ == DEBRIEF && leaveT_ < 0 && debT_ > COLOR_AT + COLOR_FOR + 0.2f; }
+// (a stage cleared never holds still: its logo's pieces go on riding the ring until a key leaves)
+bool Menu::still() const { return screen_ == DEBRIEF && !debrief_.clear && leaveT_ < 0 && debT_ > COLOR_AT + COLOR_FOR + 0.2f; }
 
 void Menu::drawEnterFade() {
     if (enterT_ >= ENTER) return;
