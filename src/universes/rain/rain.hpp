@@ -104,6 +104,36 @@ private:
     bool bodyInside(const Body& b, float x, float y) const;
     float textCover(float x, float y) const;
 
+    // ---- The foreground: some of a clear's tiles (the ones nearest the walls) come out through the glass toward the
+    // camera: they fall along the well's outer wall (clear of the HUD's lettering), grow as they come closer, land
+    // with a big splash at the bottom of the picture beside the well, and melt there in the rain (soaking, sagging,
+    // crumbling, slumping to mush in a puddle of their color) until nothing is left: they never pile up.
+    struct Fore {
+        int type, side;
+        float seed, half;              // half size at scale 1 (board units)
+        float x, y, vx, vy, a, w, s;   // center (board units), velocity, angle, angular velocity, scale (closer: larger)
+        float sMax, t, delay, x0, y0, a0, xOut, tx, aT, T;
+        int stage;                     // 0 waiting in its cell, 1 out through the glass, 2 falling, 3 bouncing, 4 melting
+        float melt, rate, wet, gone;   // melt 0 firm .. 1 dissolved; gone: the puddle's fading after
+        float crumbAcc, rainAcc, wob;
+    };
+    struct Crumb { float x, y, vx, vy, a, w, r, t, life; int type; float seed; bool rest; };
+    std::vector<Fore> fores_;
+    std::vector<Crumb> crumbs_;
+    std::vector<Spark> fsparks_;      // the foreground's splashes (in front of everything)
+    std::vector<Crown> fcrowns_;
+    std::vector<vec4> hudRects_;      // every HUD line beside the well (board units): the foreground keeps clear of them
+    float foreGround_ = -11.2f;
+    struct Streak { float x, y, v, len, w, a; };
+    std::vector<Streak> nearRain_;    // a few big out-of-focus streaks right in front of the camera
+    bool foreTake(int side);
+    void ejectFore(int x, int y, int type, float delay);
+    float foreExt(const Fore& f, float s) const;
+    float foreClampX(int side, float x, float y, float ext) const;
+    void foreSplash(float x, float y, float s, float strength, const vec3& col);
+    void stepFore(float dt, float rdt);
+    void drawFore();
+
     // ---- The board.
     float wet_[Game::H][Game::W] = {};
     float seeds_[Game::H][Game::W] = {};
