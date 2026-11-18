@@ -168,6 +168,8 @@ private:
     // the stop-motion clock
     double clock_ = 0;
     double lastTick_ = -1;
+    int framesSinceTick_ = 0;    // display frames since the last drawing
+    float frameDt_ = 1.f / 60.f; // the display's frame time (smoothed): a falling piece is drawn every few frames
     long beatSlot_ = -1;
     long lastBeatI_ = -1;
     int beatsSeen_ = 0, lastDoodleBeat_ = 0;

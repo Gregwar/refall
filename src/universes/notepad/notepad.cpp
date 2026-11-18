@@ -933,13 +933,14 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             int all[4][2], m = 0;
             for (int i = 0; i < 4; i++)
                 if (cells[i][1] >= 0) { all[m][0] = cells[i][0]; all[m][1] = cells[i][1]; m++; }
-            // (it falls by half cells: whole cells read as jerks; the hand redraws it every half cell). At most half a cell
-            // behind the real piece: the smoothed one trails it by rows in a fast fall and eases into the stack, which a
-            // few drawings a second show as the piece hanging above the stack, then dropping (and the fall's speed lost)
-            const float vis = std::max(g.pieceVisualY(), (float)p.y - 0.5f);
-            // resting on the stack: drawn where it lies (else its last drawing could hang half a cell above it until the
-            // hand's next drawing, the game no longer changing)
-            const float dy = g.ghostY() == p.y ? 0.f : std::round((vis - (float)p.y) * 2.f) * 0.5f;
+            // (it falls by quarter cells: whole or half cells read as jerks, worse in a fast fall). At most a cell behind
+            // the real piece, whose whole-row steps (two rows, then three...) the smoothed one evens out: the smoothed one
+            // alone trails it by rows in a fast fall and eases into the stack, which a few drawings a second show as the
+            // piece hanging above the stack, then dropping (and the fall's speed lost)
+            const float vis = std::max(g.pieceVisualY(), (float)p.y - 1.f);
+            // resting on the stack: drawn where it lies (else its last drawing could hang above it until the hand's next
+            // drawing, the game no longer changing)
+            const float dy = g.ghostY() == p.y ? 0.f : std::round((vis - (float)p.y) * 4.f) * 0.25f;
             const vec3 oh = cellPos(0.f, dy);
             addPiece(out, mix(activeId_, 0x5C21), all, m, v2(oh.x, oh.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
         }
@@ -1573,6 +1574,7 @@ bool movedItem(const NotepadUniverse::Item& a, const NotepadUniverse::Item& b) {
 void NotepadUniverse::tick(const Frame& f, float since) {
     drawing_++;
     lastTick_ = clock_;
+    framesSinceTick_ = 0;
     dirty_ = false;
     boilSeedNow = 0;
     style(f.music);
@@ -1793,6 +1795,14 @@ void NotepadUniverse::render(const Frame& f, GLuint fbo) {
         if (dirty_ && since >= 1.0 / 24.0) due = true;
         if (!dying_.empty() && since >= 1.0 / 16.0) due = true;
         if (bridge_.amount > 0.f && since >= 1.0 / 12.0) due = true;
+        // a piece in the air: drawn on a steady beat of display frames (about 24 drawings a second: every 3 frames at
+        // 60 Hz, 5 at 120, 6 at 144), nothing else in between: drawings a frame early or late move a fast piece by half a row
+        // more or less, and the fall wobbles
+        framesSinceTick_++;
+        frameDt_ += (std::min(dt, 0.1f) - frameDt_) * 0.05f;
+        const bool falling = game.hasPiece() && !game.over() && game.ghostY() > game.piece().y;
+        // (rounded up, steadily: never more than 24 a second, and no flicker between two counts at 60 Hz's 2.5)
+        if (falling && lastTick_ >= 0) due = framesSinceTick_ >= std::max(1, (int)std::ceil(1.0 / 24.0 / std::max(1e-3f, frameDt_) - 0.05));
         if (due) tick(f, (float)std::min(since, 0.5));
     } else if (lastTick_ < 0 && !f.bare) {
         tick(f, 0.f);
