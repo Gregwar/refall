@@ -138,6 +138,7 @@ reviewed and tested (✅ <i>ok</i>):
 <td><img src="docs/universes/pixel.jpg"><br><b>PIXEL</b>: native pixel art in parallax layers, flat cushion blocks, a bare landscape in the breaks<br><sub>✅ <i>ok</i></sub></td>
 </tr>
 <tr>
+<td><img src="docs/universes/glacier.jpg"><br><b>GLACIER</b>: a frozen cave seen from inside, translucent ice arches and icicles round a bright opening; the blocks are ice cubes (frosted bevels, cloudy cores, cracks and bubbles), cleared rows melt into the water that rises in the cave over the run, the surface line running through the well, and the drop lights the ice from within (the sun, the glacier's cold heart, aurora curtains or a low sun)<br><sub>✅ <i>ok</i></sub></td>
 <td></td>
 </tr>
 </table>
