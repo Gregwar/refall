@@ -937,7 +937,9 @@ void NotepadUniverse::buildDrawing(const Frame& f, std::vector<Item>& out) {
             // behind the real piece: the smoothed one trails it by rows in a fast fall and eases into the stack, which a
             // few drawings a second show as the piece hanging above the stack, then dropping (and the fall's speed lost)
             const float vis = std::max(g.pieceVisualY(), (float)p.y - 0.5f);
-            const float dy = std::round((vis - (float)p.y) * 2.f) * 0.5f;
+            // resting on the stack: drawn where it lies (else its last drawing could hang half a cell above it until the
+            // hand's next drawing, the game no longer changing)
+            const float dy = g.ghostY() == p.y ? 0.f : std::round((vis - (float)p.y) * 2.f) * 0.5f;
             const vec3 oh = cellPos(0.f, dy);
             addPiece(out, mix(activeId_, 0x5C21), all, m, v2(oh.x, oh.y), 1.f, p.type, 1.f, false, 0.36f, 0.26f);
         }
