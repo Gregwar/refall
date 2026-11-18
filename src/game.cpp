@@ -149,7 +149,7 @@ void Game::onMoved() {
     Piece below = cur_;
     below.y++;
     bool g = collides(below);
-    if (g && lockResets_ < MAX_RESETS) {
+    if (g && lockResets_ < maxResets()) {
         lockTimer_ = 0;
         if (grounded_) lockResets_++;
     }

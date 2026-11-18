@@ -134,7 +134,8 @@ of the song keeping a visible fall: in the last song of stage 13, the last two o
 On EXPERT (HARD + 7: 16 to 21.1 on stage 1, 37.4 to 40 on the finale) hyperdrop comes from velocity 24 on, under the
 same rules (drops, and choruses too at 40), from the last song of stage 6 on; its fall is also 1.15 times as fast as its
 velocity says (beyond 40 on the finale, under the 60 rows/s cap). The lock delay is 0.55 s down to 0.5 s, and 0.5 s in
-hyperdrop (a fast fall never leaves less time to slide a piece than hyperdrop); on EXPERT it is 0.4 s throughout. The
+hyperdrop (a fast fall never leaves less time to slide a piece than hyperdrop); on EXPERT it is 0.4 s throughout. Up to
+15 slides or turns of a resting piece restart it (10 on EXPERT). The
 lock delay's clock starts once the piece is seen to rest (the drawn piece trails the real one a little in a fast fall).
 A song's velocity is not a constant: the run's first song starts as a chill warm-up (a third of its velocity) and
 climbs to it over its first 30 seconds, each next song climbs from the previous one's over its first 20.
