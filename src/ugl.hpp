@@ -16,6 +16,14 @@ void drawFullscreen();
 
 // Compiles and links a program; errors go to stderr, prefixed by `name`.
 GLuint program(const char* vs, const char* fs, const char* name);
+// glShaderSource for one string, which every shader goes through: the web build turns the game's GLSL 3.30 into
+// GLSL ES 3.00 there (its #version, default precisions, the extensions it needs). REFALL_GLSL_DUMP=<folder> writes
+// each shader as given to a file there (to check them all against GLSL ES offline).
+void shaderSource(GLuint shader, GLenum type, const char* src);
+// The web build: whether the browser gave the WebGL extensions behind dual-source blending and clip distances
+// (set at start-up; without the second, clip distances are ignored).
+void setWebExtensions(bool blendFuncExtended, bool clipDistance);
+std::string toGlslEs(const char* src, GLenum type); // (the conversion itself)
 
 inline GLint U(GLuint p, const char* n) { return glGetUniformLocation(p, n); }
 inline void set1f(GLuint p, const char* n, float v) { glUniform1f(U(p, n), v); }

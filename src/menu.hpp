@@ -194,7 +194,11 @@ private:
     Progress* progress_ = nullptr;
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_HARD, diff_ = DIFF_NORMAL;
+#ifdef REFALL_WEB
+    static constexpr int TITLE_ITEMS = 1; // the web build: the campaign only
+#else
     static constexpr int TITLE_ITEMS = 3;
+#endif
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage

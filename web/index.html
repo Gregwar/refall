@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Refall</title>
+<link rel="icon" href="icon.png">
+<!-- threads need a cross-origin isolated page: this service worker adds the headers on hosts that can't (GitHub Pages) -->
+<script src="coi-serviceworker.min.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; position: fixed; inset: 0; width: 100vw; height: 100vh; outline: none; }
+  #cover { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           gap: 28px; color: #fff; font: 15px/1.5 system-ui, sans-serif; background: #000; cursor: pointer; text-align: center; }
+  #cover img { width: 128px; }
+  #cover .title { font-size: 44px; letter-spacing: .35em; font-weight: 300; margin: -12px 0 8px .35em; }
+  #cover .go { letter-spacing: .3em; font-size: 18px; }
+  #cover .note { opacity: .55; max-width: 560px; padding: 0 16px; }
+  #cover.loading { cursor: progress; }
+  #cover.hidden { display: none; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="0" oncontextmenu="event.preventDefault()"></canvas>
+<div id="cover">
+  <img src="icon.png" alt=""><div class="title">REFALL</div>
+  <div class="go" id="status">LOADING...</div>
+  <div class="note">The Voyage, in your browser. Keyboard or gamepad; F for full screen.<br>
+  Best in Chrome or Edge on a desktop.</div>
+</div>
+<script>
+  const cover = document.getElementById("cover"), status = document.getElementById("status");
+  const canvas = document.getElementById("canvas");
+  let ready = false, started = false;
+  // the browser lets a page play sound only after a click or a key: the game starts on one
+  function start() {
+    if (!ready || started) return;
+    started = true;
+    cover.classList.add("hidden");
+    canvas.focus();
+    // (?args=...: the game's command line, for testing, e.g. ?args=--stage 2:1 --universe NOTEPAD)
+    const args = new URLSearchParams(location.search).get("args");
+    Module.callMain(args ? args.split(" ").filter((a) => a) : []);
+  }
+  cover.addEventListener("click", start);
+  addEventListener("keydown", (e) => { if (!started) { e.preventDefault(); start(); } });
+  var Module = {
+    canvas,
+    noInitialRun: true,
+    print: (t) => console.log(t),
+    printErr: (t) => console.warn(t),
+    setStatus: (t) => { if (!ready && t) status.textContent = t.replace(/\(.*\)/, "").toUpperCase() || "LOADING..."; },
+    onRuntimeInitialized: () => { ready = true; cover.classList.remove("loading"); status.textContent = "CLICK OR PRESS A KEY TO START"; },
+  };
+  if (!crossOriginIsolated && !navigator.serviceWorker)
+    status.textContent = "THIS BROWSER CAN'T RUN IT HERE (NO SHAREDARRAYBUFFER)";
+  cover.classList.add("loading");
+</script>
+<script async src="refall.js"></script>
+</body>
+</html>

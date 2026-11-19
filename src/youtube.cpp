@@ -4,6 +4,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <algorithm>
 #include <condition_variable>
@@ -12,6 +13,10 @@
 #include <mutex>
 #include <set>
 #include <thread>
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten/fetch.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -74,6 +79,11 @@ static std::string playlistUrl(const std::string& url) {
 static std::vector<std::string> listYoutube(const std::string& url, bool quiet, bool& ok) {
     std::vector<std::string> out;
     ok = false;
+#ifdef __EMSCRIPTEN__
+    // (the web build plays the campaign's songs only, served with the page: no yt-dlp)
+    if (!quiet) std::fprintf(stderr, "[youtube] the web version plays the campaign only (%s)\n", url.c_str());
+    return out;
+#endif
     std::string tool = ytdlp();
     if (tool.empty()) {
         if (!quiet)
@@ -212,6 +222,38 @@ std::set<std::string> inProgress;
 std::deque<std::string> backgroundQueue;
 bool workerRunning = false;
 
+#ifdef __EMSCRIPTEN__
+// The web build: the song comes from the page's own server, songs/<id>.mp3 next to it (tools/web.sh puts the
+// campaign's songs there), fetched synchronously (only ever on a loader thread, never the browser's main thread).
+bool download(const std::string& id, const std::string& title) {
+    std::printf("[web] fetching %s ...\n", title.c_str());
+    std::fflush(stdout);
+    const std::string url = "songs/" + id + ".mp3";
+    emscripten_fetch_attr_t attr;
+    emscripten_fetch_attr_init(&attr);
+    std::strcpy(attr.requestMethod, "GET");
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_SYNCHRONOUS;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        emscripten_fetch_t* f = emscripten_fetch(&attr, url.c_str());
+        const bool ok = f && f->status == 200 && f->numBytes > 0;
+        if (ok) {
+            const fs::path file = fs::path(cacheDir()) / (id + ".mp3"), tmp = fs::path(cacheDir()) / (id + ".part");
+            FILE* out = std::fopen(tmp.string().c_str(), "wb");
+            bool written = out && std::fwrite(f->data, 1, (size_t)f->numBytes, out) == (size_t)f->numBytes;
+            if (out) std::fclose(out);
+            emscripten_fetch_close(f);
+            std::error_code ec;
+            if (written) fs::rename(tmp, file, ec);
+            if (written && !ec) return true;
+        } else {
+            std::fprintf(stderr, "[web] %s: HTTP %d%s\n", url.c_str(), f ? (int)f->status : -1, attempt == 0 ? ", trying again" : "");
+            if (f) emscripten_fetch_close(f);
+        }
+    }
+    std::fprintf(stderr, "[web] could not fetch %s (%s)\n", title.c_str(), id.c_str());
+    return false;
+}
+#else
 bool download(const std::string& id, const std::string& title) {
     std::string tool = ytdlp();
     if (tool.empty()) return false;
@@ -238,6 +280,7 @@ bool download(const std::string& id, const std::string& title) {
     std::fprintf(stderr, "[youtube] could not download %s (%s)\n", title.c_str(), id.c_str());
     return false;
 }
+#endif
 } // namespace
 
 std::string fetchYoutubeAudio(const std::string& entry) {

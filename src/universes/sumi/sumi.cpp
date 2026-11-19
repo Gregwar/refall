@@ -41,7 +41,7 @@ using ugl::setMat;
 
 GLuint compileStage(GLenum type, const char* src, const char* name) {
     GLuint s = glCreateShader(type);
-    glShaderSource(s, 1, &src, nullptr);
+    ugl::shaderSource(s, type, src);
     glCompileShader(s);
     GLint ok = 0;
     glGetShaderiv(s, GL_COMPILE_STATUS, &ok);

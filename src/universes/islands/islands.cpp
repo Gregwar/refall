@@ -336,6 +336,12 @@ bool IslandsUniverse::init(int width, int height) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    glGenTextures(1, &shadowDummy_);
+    glBindTexture(GL_TEXTURE_2D, shadowDummy_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, 1, 1, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glGenFramebuffers(1, &shadowFbo_);
     glBindFramebuffer(GL_FRAMEBUFFER, shadowFbo_);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTex_, 0);
@@ -403,6 +409,7 @@ IslandsUniverse::~IslandsUniverse() {
     if (msDepth_) glDeleteRenderbuffers(1, &msDepth_);
     if (shadowFbo_) glDeleteFramebuffers(1, &shadowFbo_);
     if (shadowTex_) glDeleteTextures(1, &shadowTex_);
+    if (shadowDummy_) glDeleteTextures(1, &shadowDummy_);
     for (GLuint p : {progSky_, progTerrain_, progObj_, progWater_, progCloud_, progGlow_, progFlat_, progGlass_, progFinal_, progShape_})
         glDeleteProgram(p);
     for (int m = 0; m < isl::M_COUNT; m++) {
@@ -2144,11 +2151,16 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glClear(GL_DEPTH_BUFFER_BIT);
         glEnable(GL_POLYGON_OFFSET_FILL);
         glPolygonOffset(1.5f, 2.f);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, shadowDummy_);
+        glActiveTexture(GL_TEXTURE0);
         glUseProgram(progTerrain_);
+        set1i(progTerrain_, "uShadow", 7);
         setMat(progTerrain_, "uVP", lightVp_);
         set1f(progTerrain_, "uCurv", curv_);
         drawTerrain(progTerrain_, 3, true);
         glUseProgram(progObj_);
+        set1i(progObj_, "uShadow", 7);
         setMat(progObj_, "uVP", lightVp_);
         set3f(progObj_, "uEye", eye_);
         set1f(progObj_, "uCurv", curv_);

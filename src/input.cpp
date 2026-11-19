@@ -24,6 +24,9 @@ constexpr float DAS = 0.13f, ARR = 0.033f, SOFT_RATE = 0.033f;
 } // namespace
 
 void Input::loadMappings() {
+#ifdef REFALL_WEB
+    return; // (the browser maps the gamepads itself: its standard layout)
+#endif
     namespace fs = std::filesystem;
     fs::path exe = platform::executableDir();
     std::vector<fs::path> candidates = {exe / "gamecontrollerdb.txt"};

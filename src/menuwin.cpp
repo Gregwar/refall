@@ -206,7 +206,11 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 }
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
+#ifdef REFALL_WEB
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE"};
+#else
     static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "QUIT"};
+#endif
     const float cx = X(960);
     // the focused entry's inked edges (eased between entries): the underline spans them
     float inkL = 0, inkR = 0;
