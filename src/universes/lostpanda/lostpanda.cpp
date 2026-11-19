@@ -550,8 +550,12 @@ void LostPandaUniverse::chooseAct(float mood, int stage, bool home) {
 
 void LostPandaUniverse::updatePose(Pose& p, float dt, const Pose& t, float rate) {
     const float turned = p.turn;
-    p.turn = approach(p.turn, t.turn, rate * 0.7f, dt);
-    // turning through the front view, the drawing mirrors: the near ear becomes the far one, so each keeps its spring
+    // facing the other way: at once, mirrored (never turning round through the front view); a slight turn the other
+    // way goes only as far as facing us
+    const float side = p.turn < 0.f ? -1.f : 1.f;
+    if (t.turn * side < -0.2f) p.turn = -p.turn;
+    p.turn = approach(p.turn, t.turn * (p.turn < 0.f ? -1.f : 1.f) < 0.f ? 0.f : t.turn, rate * 0.7f, dt);
+    // mirrored, the near ear becomes the far one: each keeps its spring
     if ((turned < 0.f) != (p.turn < 0.f)) {
         std::swap(p.earN, p.earF);
         std::swap(p.earVN, p.earVF);

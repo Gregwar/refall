@@ -2329,10 +2329,7 @@ vec4 panda(vec2 q) {
     q.x *= gS;
     q.y -= uHop;
     // the walk: facing us a waddle (rocking from foot to foot), in profile a bob; a little bounce
-    // (what leans to one side is drawn mirrored with the rest: it eases to nothing as the cub faces us, so turning
-    // through the front view it passes from one side to the other instead of jumping there)
-    float sided = min(1.0, t / 0.25);
-    float rock = (sin(ph) * 0.08 * walk * (1.0 - 0.75 * ts) - uLean * 0.06) * sided + uRoll * gS;   // (leaning: forward)
+    float rock = sin(ph) * 0.08 * walk * (1.0 - 0.75 * ts) - uLean * 0.06 + uRoll * gS;   // (leaning: forward)
     vec2 qr = rot(-rock) * q;
     qr.y -= walk * 0.03 * (1.0 + 0.8 * uStrength) * abs(cos(ph)) + 0.005 * sin(uBreath);
     // Proportions measured on the owner's reference (of the height, ears to feet, facing us -> in profile): the head
@@ -2346,7 +2343,7 @@ vec4 panda(vec2 q) {
     vec2 Hc = vec2(-0.0125 * ts, Tc.y + mix(0.385, 0.41, ts) + 0.02 * A - sad * 0.02);
     vec3 Hr = k * vec3(mix(0.313, 0.27, ts), mix(0.312, 0.256, ts), mix(0.237, 0.23, ts));   // half width, above, below
     Hc.y += Hr.z - mix(0.237, 0.23, ts);   // (a smaller head on the same neck)
-    float tilt = (uTilt - sad * 0.04) * sided;
+    float tilt = uTilt - sad * 0.04;
     mat2 toHead = rot(-tilt), fromHead = rot(tilt);
     vec2 qh = toHead * (qr - Hc);
 
