@@ -654,8 +654,8 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
         case A_SIGH:
             t.tilt = -0.2f * in; t.lookY = -1.f; t.turn = 0.2f; t.lean = -0.3f * in;
             break;
-        case A_LOOKBACK:
-            t.turn = -0.85f * in + 0.55f * (1.f - in); t.lookX = -1.f; t.tilt = 0.05f;
+        case A_LOOKBACK: // (facing us, its eyes back the way it came: it never turns its back on where it goes)
+            t.turn = 0.55f * (1.f - in); t.lookX = -1.f; t.tilt = 0.05f;
             break;
         case A_HUG: {
             t.joyEyes = in; t.turn = 0.5f; t.tilt = 0.12f * in; t.lean = 0.8f * in;   // leaning into its mother
@@ -669,7 +669,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
     if (flyA_ > 0.3f && (act_ == A_BUTTERFLY || act_ == A_LOOK || act_ == A_STAND) && !travelling && overT_ < 0.f) {
         const vec2 head = V(xP_ + (float)(P_ - C_), GY + kidH_ * 0.75f);
         const float dx = fly_.x - head.x, dy = fly_.y - head.y;
-        t.turn = std::clamp(dx * 0.6f, -0.9f, 0.9f);
+        t.turn = std::clamp(dx * 0.6f, 0.f, 0.9f); // (on its left: watched facing us)
         t.lookX = dx > 0.f ? 1.f : -1.f;
         t.lookY = std::clamp(dy * 0.8f, -1.f, 1.f);
         t.tilt = std::clamp(dy * 0.08f, -0.1f, 0.25f);
@@ -709,6 +709,7 @@ void LostPandaUniverse::updateKid(float dt, float stageMood, int stage, bool tra
         t.lookY = 0.7f;
         t.sit = 0.f; t.wipe = 0.f; t.tear = 0.f;
     }
+    t.turn = std::max(t.turn, 0.f); // the cub always faces us or the way home, never back
     updatePose(kid_, dt, t, 3.f);
 }
 
