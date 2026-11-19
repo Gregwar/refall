@@ -416,7 +416,7 @@ void main() {
     // drifting by, tumbling. The sky slides a little as the stages turn.
     vec3 tv = vivid(uTint, 1.6);
     // a space palette (deep violet blue, magenta pink, a touch of cyan, gold), the stage's hue blended into it
-    vec3 base = mix(vec3(0.32, 0.3, 0.95), tv, 0.3), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.25);
+    vec3 base = mix(vec3(0.45, 0.3, 1.0), tv, 0.25), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.25);
     vec3 n3 = vec3(0.3, 0.85, 1.0), warm = vec3(1.0, 0.7, 0.36);
     float asp = uRes.x / uRes.y;
     vec2 sp = fc / uRes.y;
@@ -443,12 +443,13 @@ void main() {
     float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
     // its colours: cool on the left (the tint, a neighbour, cyan where it is thinnest), warm on the right
     float warmth = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (fb - 0.5));
-    vec3 cool = mix(base, n2, smoothstep(0.45, 0.8, q2.x));
+    vec3 cool = mix(base, n2, smoothstep(0.38, 0.62, vn(nw * 0.7 + 2.0 + q1 * 0.8)));
     cool = mix(cool, n3, smoothstep(0.6, 0.9, q1.y) * 0.5);
     vec3 gc = mix(cool, warm, warmth);
     vec3 col = vec3(0.006, 0.006, 0.022) + base * 0.04 * dens;
     col += gc * gas * 0.5;
     col += mix(gc, vec3(1.0), 0.35) * wisp * 0.45;
+    col += mix(gc, vec3(1.0), 0.25) * pow(gas, 3.0) * 0.35;   // (the clouds' glowing cores)
     col *= 0.45 + 0.55 * mix(1.0, dust, smoothstep(0.1, 0.5, dens));
     vec3 space = vec3(0.0); // (added after the brightness cap: the stars)
     for (int i = 0; i < 4; i++) {
@@ -500,7 +501,7 @@ void main() {
     vec2 fp = (fc - vec2(uRes.x - 0.04 * uRes.y, 0.04 * uRes.y)) / uRes.y;
     float fd = length(fp), fa = atan(fp.y, fp.x);
     float rays = pow(abs(cos(fa * 5.0 + 0.4)), 10.0) + 0.6 * pow(abs(cos(fa * 3.0 - uTime * 0.02)), 14.0);
-    c += mix(tv, vec3(1.0), 0.65) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
+    c += vec3(1.0, 0.86, 0.66) * (0.45 * exp(-fd * 8.0) + 0.14 * exp(-fd * 2.4) + 0.07 * rays * exp(-fd * 3.5)) * (0.5 + 0.5 * uSat);
     vec2 gp = fc / uRes.y * 24.0, gi = floor(gp);
     float gh = h21(gi + 17.0);
     if (gh > 0.86) {
