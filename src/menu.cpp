@@ -67,6 +67,7 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgBad_ = bad;
     msgT_ = message.empty() ? 0.f : 5.f;
     if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
+    if (s == OPTIONS && message.empty()) { optSel_ = 0; aOpt_ = 0; optConfirm_ = false; }
     if (s == VOYAGES) {
         editing_ = false;
         vStep_ = 0;
@@ -158,8 +159,8 @@ Menu::Place Menu::place() const {
 }
 
 void Menu::restore(const Place& p, bool difficulties) {
-    // (QUIT, the last item, is never where the title opens: the game was just started, it opens on what to play)
-    if (p.titleItem >= 0 && p.titleItem < TITLE_ITEMS - 1) titleItem_ = p.titleItem;
+    // (the title opens on what to play, never on OPTIONS or QUIT: the game was just started)
+    if (p.titleItem == TI_VOYAGE || (p.titleItem == TI_FREE && TI_FREE >= 0)) titleItem_ = p.titleItem;
     if (difficulties && p.voyageDiff >= 0 && p.voyageDiff < DIFF_COUNT) diff_ = p.voyageDiff;
     if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
     if (p.freeLevel >= 1) setFreeLevel(p.freeLevel);
@@ -223,6 +224,18 @@ void Menu::setFreeLevel(int level, bool focus) {
     if (focus) freeRow_ = 2;
 }
 
+void Menu::resetPlace() {
+    titleItem_ = TI_VOYAGE;
+    freeDiff_ = DIFF_HARD;
+    diff_ = DIFF_NORMAL;
+    stage_ = song_ = 0;
+    row_ = 1;
+    petal_ = false;
+    freeRow_ = plSel_ = lvlSel_ = 0;
+    voyageStage_.clear();
+    snap();
+}
+
 void Menu::snap() {
     aTitle_ = (float)titleItem_;
     aFree_ = (float)freeDiff_;
@@ -241,6 +254,8 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     {
         const float k = 1.f - std::exp(-dt * 11.f);
         aTitle_ += (titleItem_ - aTitle_) * k;
+        aOpt_ += (optSel_ - aOpt_) * k;
+        aYes_ += (optYes_ - aYes_) * k;
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
         aStage_ += (stage_ - aStage_) * k;
@@ -322,11 +337,23 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     case TITLE:
         titleItem_ = (titleItem_ + dy + TITLE_ITEMS * 8) % TITLE_ITEMS;
         if (ok) {
-            if (titleItem_ == 0) open(voyages_ ? VOYAGES : CAMPAIGN);
-            else if (titleItem_ == 1) open(FREE);
+            if (titleItem_ == TI_VOYAGE) open(voyages_ ? VOYAGES : CAMPAIGN);
+            else if (titleItem_ == TI_FREE) open(FREE);
+            else if (titleItem_ == TI_OPTIONS) open(OPTIONS);
             else ch.kind = Choice::QUIT;
         }
         if (back) ch.kind = Choice::QUIT;
+        break;
+    case OPTIONS:
+        if (optConfirm_) { // are you sure? YES / NO
+            if (dx || dy) optYes_ = 1 - optYes_;
+            if (ok && optYes_) ch.kind = optSel_ == 0 ? Choice::UNLOCK_ALL : Choice::RESET_ALL;
+            if (ok || back) optConfirm_ = false;
+            break;
+        }
+        optSel_ = (optSel_ + dy + OPTION_ITEMS * 8) % OPTION_ITEMS;
+        if (ok) { optConfirm_ = true; optYes_ = 0; aYes_ = 0; }
+        if (back) open(TITLE);
         break;
     case FREE: {
         if (!playlists_) { // no playlist store: a difficulty only

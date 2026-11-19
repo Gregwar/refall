@@ -138,6 +138,7 @@ struct Worlds {
     void kalTitle();
     void kalFree();
     void kalVoyages();
+    void kalOptions();
     void kalCampaign();
     void textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder);
 };
@@ -154,6 +155,7 @@ void Worlds::draw() {
     if (m.screen_ == Menu::TITLE) kalTitle();
     else if (m.screen_ == Menu::FREE) kalFree();
     else if (m.screen_ == Menu::VOYAGES) kalVoyages();
+    else if (m.screen_ == Menu::OPTIONS) kalOptions();
     else kalCampaign();
 }
 
@@ -178,9 +180,9 @@ void Worlds::tabs(F f, Col ink, Col accent, float track) {
 
 void Worlds::menuItems(F f, float y0, float step, float size, Col ink, Col accent, float track, float alpha) {
 #ifdef REFALL_WEB
-    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE"};
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "OPTIONS"};
 #else
-    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "QUIT"};
+    static const char* ITEMS[Menu::TITLE_ITEMS] = {"VOYAGE", "FREE PLAY", "OPTIONS", "QUIT"};
 #endif
     const float cx = X(960);
     // the focused entry's inked edges (eased between entries): the underline spans them
@@ -308,7 +310,7 @@ void Worlds::kalBackground(const std::string& cur) {
     tintNow = mixc(tintNow, tint, k);
     lvlNow += (lvl - lvlNow) * k;
     // its centre: the rosette's on Voyage, the title's disc, above the screen on free play and the voyages
-    const bool title = m.screen_ == Menu::TITLE, head = m.screen_ == Menu::FREE || m.screen_ == Menu::VOYAGES;
+    const bool title = m.screen_ == Menu::TITLE, head = m.screen_ == Menu::FREE || m.screen_ == Menu::VOYAGES || m.screen_ == Menu::OPTIONS;
     cxNow += ((title || head ? 960.f : 720.f) - cxNow) * k;
     cyNow += ((title ? TITLE_CY : head ? -80.f : 440.f) - cyNow) * k;
     satNow += (sat - satNow) * k;
@@ -608,6 +610,58 @@ void Worlds::kalTitle() {
     p.glass(cx - 260 * u, Y(680 + dy + less * 0.5f), 520 * u, (210 - less) * u, 24 * u, u, 0.f, 0.5f);
     p.setFade(1.f);
     menuItems(F::JOSEFIN, 740 + dy + less * 0.5f, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
+}
+
+// The options: unlocking every stage (as --unlock) and forgetting the saved data (as --reset), each a glass row with
+// what it does beneath; either asks "are you sure?" on a card over them, YES / NO.
+void Worlds::kalOptions() {
+    std::string cur, next;
+    float mix;
+    tourAt(11.f, cur, next, mix);
+    kalBackground(mix > 0.5f ? next : cur);
+    p.frostSource();
+    p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
+    p.text(F::JOSEFIN_LIGHT, "OPTIONS", X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
+    const bool unlocked = m.progress_ && m.progress_->allUnlocked();
+    const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK EVERY STAGE", "RESET THE SAVED DATA"};
+    const char* WHAT[Menu::OPTION_ITEMS] = {unlocked ? "every stage of the main voyage is already open" : "opens every stage of the main voyage",
+                                            "forgets the cleared stages, the best scores and the menu's place"};
+    const float y0 = 420, step = 170, size = 30, track = 0.35f;
+    p.glass(X(510), Y(y0 - 90), 900 * u, (step * Menu::OPTION_ITEMS + 20) * u, 24 * u, u, 0.f, 0.5f);
+    for (int i = 0; i < Menu::OPTION_ITEMS; i++) {
+        const float f = near1(m.aOpt_, i), y = y0 + i * step;
+        p.text(F::JOSEFIN, LABEL[i], X(960), Y(y), size * u, hex(0xffffff, 0.45f + 0.55f * f), 0, track);
+        p.text(F::JOSEFIN_LIGHT, WHAT[i], X(960), Y(y + 50), 22 * u, hex(0xe0e0f0, 0.45f + 0.3f * f), 0, 0.12f);
+    }
+    // the focus: an underline under the entry (eased between them)
+    float inkL = 0, inkR = 0;
+    for (int i = 0; i < Menu::OPTION_ITEMS; i++) {
+        float l, r;
+        p.inkExtent(F::JOSEFIN, LABEL[i], size * u, track, l, r);
+        const float start = X(960) - p.width(F::JOSEFIN, LABEL[i], size * u, track) * 0.5f;
+        inkL += near1(m.aOpt_, i) * (start + l);
+        inkR += near1(m.aOpt_, i) * (start + r);
+    }
+    const float ys = Y(y0 + m.aOpt_ * step) + 14 * u;
+    p.line(inkL, ys, inkR, ys, 1.6f * u, hex(0xffffff, 0.9f));
+    if (!m.optConfirm_) return;
+    // are you sure?
+    p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, 0.45f));
+    p.frostSource();
+    p.glass(X(560), Y(380), 800 * u, 320 * u, 24 * u, u, 0.f, 0.55f);
+    p.text(F::JOSEFIN_LIGHT, "ARE YOU SURE?", X(960), Y(470), 52 * u, hex(0xffffff), 0, 0.2f);
+    p.text(F::JOSEFIN_LIGHT, m.optSel_ == 0 ? "every stage of the main voyage will be open" : "the progress and the menu's place will be lost",
+           X(960), Y(535), 22 * u, hex(0xe0e0f0, 0.75f), 0, 0.12f);
+    const char* ANS[2] = {"NO", "YES"}; // (optYes_: 0 NO, 1 YES; YES on the left)
+    const float ax[2] = {1110, 810};
+    for (int i = 0; i < 2; i++)
+        p.text(F::JOSEFIN, ANS[i], X(ax[i]), Y(630), 30 * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aYes_, i)), 0, track);
+    float l0, r0, l1, r1;
+    p.inkExtent(F::JOSEFIN, ANS[0], 30 * u, track, l0, r0);
+    p.inkExtent(F::JOSEFIN, ANS[1], 30 * u, track, l1, r1);
+    const float s0 = X(ax[0]) - p.width(F::JOSEFIN, ANS[0], 30 * u, track) * 0.5f, s1 = X(ax[1]) - p.width(F::JOSEFIN, ANS[1], 30 * u, track) * 0.5f;
+    const float k = std::clamp(m.aYes_, 0.f, 1.f);
+    p.line(s0 + l0 + (s1 + l1 - s0 - l0) * k, Y(630) + 14 * u, s0 + r0 + (s1 + r1 - s0 - r0) * k, Y(630) + 14 * u, 1.6f * u, hex(0xffffff, 0.9f));
 }
 
 void Worlds::kalFree() {

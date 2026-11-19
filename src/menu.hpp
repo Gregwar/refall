@@ -35,9 +35,10 @@ public:
     // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
     // VOYAGES: the voyages (the game's own first, then the player's) and the making of one from a playlist; the one
     // chosen then shows as CAMPAIGN.
-    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES };
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES, OPTIONS };
     struct Choice {
-        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN } kind = NONE;
+        // UNLOCK_ALL, RESET_ALL: the options' (as --unlock and --reset), the menu stays
+        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, UNLOCK_ALL, RESET_ALL } kind = NONE;
         int difficulty = DIFF_HARD;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
         std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
@@ -91,6 +92,9 @@ public:
     Place place() const;
     // Back to a saved place (the stage clamped to the last unlocked one); the difficulties only when `difficulties`.
     void restore(const Place& p, bool difficulties);
+    // Everything as on the game's first launch: the title's first entry, the main voyage's first stage, the default
+    // difficulties and playlist (after a reset of the saved data).
+    void resetPlace();
     // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
     // petals open round it, then the world and the menu; a key hurries it to its end.
     static constexpr float INTRO_END = 6.f;
@@ -193,10 +197,18 @@ private:
     Screen screen_ = TITLE;
     int titleItem_ = 0, freeDiff_ = DIFF_HARD, diff_ = DIFF_NORMAL;
 #ifdef REFALL_WEB
-    static constexpr int TITLE_ITEMS = 1; // the web build: the campaign only
+    static constexpr int TITLE_ITEMS = 2; // the web build: the campaign only
+    static constexpr int TI_VOYAGE = 0, TI_FREE = -1, TI_OPTIONS = 1, TI_QUIT = -1;
 #else
-    static constexpr int TITLE_ITEMS = 3;
+    static constexpr int TITLE_ITEMS = 4;
+    static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_OPTIONS = 2, TI_QUIT = 3;
 #endif
+    // the options: 0 unlock every stage, 1 reset the saved data; either asks "are you sure?" first (YES / NO, NO
+    // focused)
+    static constexpr int OPTION_ITEMS = 2;
+    int optSel_ = 0, optYes_ = 0;
+    float aOpt_ = 0, aYes_ = 0;
+    bool optConfirm_ = false;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage

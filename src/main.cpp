@@ -299,6 +299,7 @@ private:
     Menu::Place savedPlace_, lastPlace_;
     float placeChangedAt_ = -1;
     void keepPlace(bool now);
+    void applyOption(const Menu::Choice& c);
     // The menu's music (data/menu_music.mp3): decoded in the background, a looping bed under the menu's screens, ducked
     // under the song previews, faded out when a game starts and back in on the menu (where it left off).
     std::future<std::shared_ptr<std::vector<int16_t>>> musicLoad_;
@@ -1590,7 +1591,8 @@ int App::run() {
             fbSize(fbw, fbh);
             // (a choice leaves the menu at once: its screen may already have moved on, e.g. RETRY back on the Voyage's,
             // so this last frame is black, as the leaving screen faded to, rather than a flash of the menu)
-            if (c.kind != Menu::Choice::NONE && c.kind != Menu::Choice::QUIT) {
+            const bool plays = c.kind == Menu::Choice::PLAY_FREE || c.kind == Menu::Choice::PLAY_CAMPAIGN;
+            if (plays) {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glViewport(0, 0, fbw, fbh);
                 glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -1609,7 +1611,8 @@ int App::run() {
 #ifndef REFALL_WEB // (a page isn't quit)
                 quit_ = true;
 #endif
-            } else if (c.kind != Menu::Choice::NONE) beginSession(c);
+            } else if (plays) beginSession(c);
+            else if (c.kind != Menu::Choice::NONE) applyOption(c);
             continue;
         }
 
@@ -2302,6 +2305,44 @@ bool App::openVoyage(const std::string& id) {
     voyage_ = id;
     std::printf("[voyages] %s\n", id.empty() ? "the main voyage" : voyages_.find(id)->title.c_str());
     return true;
+}
+
+// The options: every stage of the main voyage unlocked (as --unlock), or the saved data forgotten (as --reset: the
+// main voyage's progress and the menu's place), the game then opening as on its first launch, music from the top.
+void App::applyOption(const Menu::Choice& c) {
+    if (c.kind == Menu::Choice::UNLOCK_ALL) {
+        if (voyage_.empty()) {
+            progress_.unlockAll();
+            progress_.save();
+        } else { // (a custom voyage open: the main one's file)
+            Campaign camp;
+            camp.load(opt_.campaignPath);
+            Progress p;
+            p.load(opt_.progressPath, &camp);
+            p.unlockAll();
+            p.save();
+        }
+        std::printf("[campaign] every stage unlocked\n");
+        menu_.open(Menu::OPTIONS, "EVERY STAGE UNLOCKED", "the whole main voyage is open");
+    } else if (c.kind == Menu::Choice::RESET_ALL) {
+        menu_.selectVoyage("");
+        progress_.reset();
+        progress_.save();
+        std::error_code ec;
+        if (!placePath_.empty() && fs::remove(placePath_, ec)) std::printf("[menu] forgot where the menu was (%s)\n", placePath_.c_str());
+        menu_.resetPlace();
+        menu_.open(Menu::TITLE);
+        menu_.startIntro();
+        savedPlace_ = lastPlace_ = menu_.place();
+        if (musicReady_) { // (silenced at once, from the top: it fades in again)
+            audio_.setBedGain(0.f, 0.f);
+            audio_.rewindBed();
+            musicState_ = 0;
+        }
+    }
+#ifdef REFALL_WEB
+    web::persist(runTime_, true);
+#endif
 }
 
 // Saves where the menu is, 1.5 s after it last changed (or at once when leaving the menu).
