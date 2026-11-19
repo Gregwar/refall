@@ -603,9 +603,11 @@ void Worlds::kalTitle() {
     m.drawOrbitLogo(cx, cy, k, 1.f);
     if (menuA <= 0.f) return;
     p.setFade(menuA);
-    p.glass(cx - 260 * u, Y(680 + dy), 520 * u, 210 * u, 24 * u, u, 0.f, 0.5f);
+    // (fewer entries, the web build's one: a shorter panel, round the same middle)
+    const float less = (3 - Menu::TITLE_ITEMS) * 62.f;
+    p.glass(cx - 260 * u, Y(680 + dy + less * 0.5f), 520 * u, (210 - less) * u, 24 * u, u, 0.f, 0.5f);
     p.setFade(1.f);
-    menuItems(F::JOSEFIN, 740 + dy, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
+    menuItems(F::JOSEFIN, 740 + dy + less * 0.5f, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
 }
 
 void Worlds::kalFree() {
