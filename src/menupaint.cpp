@@ -411,16 +411,16 @@ void main() {
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
     vec3 c = uMix <= 0.0 ? src(uSeedA, uv) : uMix >= 1.0 ? src(uSeedB, uv) : mix(src(uSeedA, uv), src(uSeedB, uv), uMix);
     // SPACE: no glass, deep space on the whole screen (unmirrored): nebulae glowing in the stage's hue and two
-    // neighbours, crossed by dark dust; stars at three depths; a black hole up on the left, its accretion disk swirling,
+    // neighbours, crossed by dark dust; stars at three depths; a black hole on the left edge, its accretion disk swirling,
     // bending the sky behind it; asteroids drifting by, tumbling. The sky slides a little as the stages turn.
     vec3 tv = vivid(uTint, 1.6);
     vec3 n2 = vivid(tv.gbr * 0.6 + tv * 0.4, 1.2), n3 = vivid(tv.brg * 0.6 + tv * 0.4, 1.2);
     float asp = uRes.x / uRes.y;
     vec2 sp = fc / uRes.y;
     vec2 drift = vec2(uRot * 0.04 + uTime * 0.004, uTime * 0.0015);
-    vec2 bh = vec2(0.19 * asp, 0.26);
+    vec2 bh = vec2(0.115 * asp, 0.5);
     vec2 db = sp - bh;
-    float rb = length(db), rs = 0.045;
+    float rb = length(db), rs = 0.04;
     vec2 lens = db / max(rb, 1e-3) * (rs * rs * 2.2) / max(rb, rs * 0.8);
     vec2 w = sp - lens + drift;
     vec2 nw = w * 1.6 + vec2(mix(h21(vec2(uSeedA, 1.0)), h21(vec2(uSeedB, 1.0)), uMix) * 40.0, 0.0);
