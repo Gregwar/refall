@@ -68,6 +68,7 @@ void Menu::open(Screen s, const std::string& message, const std::string& sub, bo
     msgT_ = message.empty() ? 0.f : 5.f;
     if (s == FREE) { freeRow_ = 0; editing_ = false; plMsg_.clear(); }
     if (s == OPTIONS && message.empty()) { optSel_ = 0; aOpt_ = 0; optConfirm_ = false; }
+    if (s == GAMEPAD && message.empty()) { padSel_ = 0; aPad_ = 0; }
     if (s == VOYAGES) {
         editing_ = false;
         vStep_ = 0;
@@ -255,6 +256,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         const float k = 1.f - std::exp(-dt * 11.f);
         aTitle_ += (titleItem_ - aTitle_) * k;
         aOpt_ += (optSel_ - aOpt_) * k;
+        aPad_ += (padSel_ - aPad_) * k;
         aYes_ += (optYes_ - aYes_) * k;
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
@@ -352,8 +354,15 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             break;
         }
         optSel_ = (optSel_ + dy + OPTION_ITEMS * 8) % OPTION_ITEMS;
-        if (ok) { optConfirm_ = true; optYes_ = 0; aYes_ = 0; }
+        if (ok && optSel_ == 2) open(GAMEPAD);
+        else if (ok) { optConfirm_ = true; optYes_ = 0; aYes_ = 0; }
         if (back) open(TITLE);
+        break;
+    case GAMEPAD:
+        if (input_ && input_->remapping()) break; // (its keys are the app's: Esc cancels, Space skips)
+        padSel_ = (padSel_ + dy + PAD_ITEMS * 8) % PAD_ITEMS;
+        if (ok) ch.kind = padSel_ == 0 ? Choice::PAD_REMAP : Choice::PAD_DEFAULT;
+        if (back) { open(OPTIONS); optSel_ = 2; aOpt_ = 2; }
         break;
     case FREE: {
         if (!playlists_) { // no playlist store: a difficulty only

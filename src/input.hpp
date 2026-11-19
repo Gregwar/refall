@@ -3,8 +3,10 @@
 // Unified keyboard / gamepad input. Both always work; the "active" device (the one used last)
 // decides which control hints are shown. Gamepads are detected at startup and hot-plugged.
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 struct GLFWwindow;
 
@@ -67,8 +69,43 @@ public:
     // Set briefly when the device changes, for a HUD toast.
     float deviceChangedTimer() const { return changedTimer_; }
 
+    // Remapping the gamepad, control by control: the player presses, for each control of the standard layout in turn
+    // (the D-pad, A B X Y, the bumpers and triggers, BACK and START), the one of theirs that should act as it, read raw
+    // (past the controller's own mapping, which may be wrong). Saved per controller (its GUID) in `path`, read at once.
+    static constexpr int REMAP_COUNT = 14;
+    static const char* remapName(int step); // "D-PAD UP", "A", ...
+    static const char* remapUse(int step);  // what it does: "HARD DROP", "ROTATE, OK", ...
+    void setMappingFile(const std::string& path);
+    void startRemap();
+    void skipRemap();   // the control asked for left as it was
+    void cancelRemap(); // the mapping as it was before
+    bool remapping() const { return remapStep_ >= 0; }
+    int remapStep() const { return remapStep_; }
+    // true once, the frame a remap was finished and saved
+    bool remapDone() { const bool d = remapDone_; remapDone_ = false; return d; }
+    // the connected controller's mapping back to its own (the custom one forgotten)
+    void resetMapping();
+    bool customMapping() const;
+
 private:
     void detectGamepad();
+    // a control of the player's controller, read raw: a button, a hat's direction, or an axis pushed one way from rest
+    struct Source {
+        char kind = 0; // 'b', 'h', 'a' (0: none)
+        int index = 0, dir = 0; // the hat's direction bits, the axis's side (+1 / -1)
+        float rest = 0;
+    };
+    std::map<std::string, std::vector<Source>> maps_; // per controller GUID: the 14 controls' sources
+    std::string mapPath_;
+    int remapStep_ = -1, remapJid_ = -1;
+    float remapCalm_ = 0;
+    bool remapDone_ = false, padHold_ = false; // padHold_: after a remap, the pad ignored until all is let go
+    std::vector<Source> remapNew_;
+    std::vector<float> remapRest_[16]; // the axes at rest, per joystick, when the remap began
+    std::string guidOf(int jid) const;
+    void saveMappings() const;
+    void remapRead(float dt);
+    bool sourceOn(int jid, const Source& s) const;
     GLFWwindow* win_ = nullptr;
     bool down_[A_COUNT] = {}, prev_[A_COUNT] = {};
     bool cheatSkip_ = false;

@@ -35,10 +35,11 @@ public:
     // DEBRIEF: the end of a Voyage run (a game over or a stage cleared), before the Voyage's screen comes back.
     // VOYAGES: the voyages (the game's own first, then the player's) and the making of one from a playlist; the one
     // chosen then shows as CAMPAIGN.
-    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES, OPTIONS };
+    enum Screen { TITLE, FREE, CAMPAIGN, DEBRIEF, VOYAGES, OPTIONS, GAMEPAD };
     struct Choice {
-        // UNLOCK_ALL, RESET_ALL: the options' (as --unlock and --reset), the menu stays
-        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, UNLOCK_ALL, RESET_ALL } kind = NONE;
+        // UNLOCK_ALL, RESET_ALL: the options' (as --unlock and --reset); PAD_REMAP, PAD_DEFAULT: the gamepad's (a remap
+        // started, its own mapping back); the menu stays
+        enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, UNLOCK_ALL, RESET_ALL, PAD_REMAP, PAD_DEFAULT } kind = NONE;
         int difficulty = DIFF_HARD;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
         std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
@@ -95,6 +96,7 @@ public:
     // Everything as on the game's first launch: the title's first entry, the main voyage's first stage, the default
     // difficulties and playlist (after a reset of the saved data).
     void resetPlace();
+    void setInput(const Input* in) { input_ = in; } // (the gamepad page shows its remap)
     // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
     // petals open round it, then the world and the menu; a key hurries it to its end.
     static constexpr float INTRO_END = 6.f;
@@ -203,12 +205,18 @@ private:
     static constexpr int TITLE_ITEMS = 4;
     static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_OPTIONS = 2, TI_QUIT = 3;
 #endif
-    // the options: 0 unlock every stage, 1 reset the saved data; either asks "are you sure?" first (YES / NO, NO
-    // focused)
-    static constexpr int OPTION_ITEMS = 2;
+    // the options: 0 unlock every stage, 1 reset the saved data (either asks "are you sure?" first: YES / NO, NO
+    // focused), 2 the gamepad's page
+    static constexpr int OPTION_ITEMS = 3;
     int optSel_ = 0, optYes_ = 0;
     float aOpt_ = 0, aYes_ = 0;
     bool optConfirm_ = false;
+    // the gamepad's page: 0 remap it control by control, 1 its default mapping back; while a remap runs (`input_`
+    // tells), the control asked for
+    static constexpr int PAD_ITEMS = 2;
+    int padSel_ = 0;
+    float aPad_ = 0;
+    const Input* input_ = nullptr;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage

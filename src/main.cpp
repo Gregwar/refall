@@ -300,6 +300,7 @@ private:
     float placeChangedAt_ = -1;
     void keepPlace(bool now);
     void applyOption(const Menu::Choice& c);
+    bool remapKeys();
     // The menu's music (data/menu_music.mp3): decoded in the background, a looping bed under the menu's screens, ducked
     // under the song previews, faded out when a game starts and back in on the menu (where it left off).
     std::future<std::shared_ptr<std::vector<int16_t>>> musicLoad_;
@@ -435,6 +436,9 @@ private:
     bool paused_ = false, wantSkip_ = false, pauseControls_ = false; // (the pause menu's controls page)
     std::atomic<bool> quit_{false}; // (also set by --stream's input thread)
     int pauseSel_ = 0; // the pause menu's choice: 0 continue, 1 controls, 2 quit (to the menu)
+    int ctrlSel_ = 2;  // the controls page's: 0 remap the gamepad, 1 its default back, 2 back
+    std::string ctrlNote_; // what the controls page just did ("GAMEPAD REMAPPED"), for a few seconds
+    float ctrlNoteT_ = 0;
     double songTime_ = 0, simSongTime_ = 0;
     bool offline_ = false; // shots and clips: the song runs on simSongTime_, not on the audio's clock
     // The song reached its end: by the audio's clock when playing, by the simulated song time offline (a slow
@@ -1239,7 +1243,17 @@ std::vector<HudText> App::buildHud(float dt) {
         pauseSel_ = std::min(testPause, 2);
         pauseControls_ = testPause == 3;
     }
-    if ((paused_ || testPause >= 0) && pauseControls_) {
+    if ((paused_ || testPause >= 0) && pauseControls_ && input_.remapping()) {
+        // the gamepad remapped: the control asked for
+        const int st = input_.remapStep();
+        hud.push_back({"PRESS", w * 0.5f, h * 0.5f - 110 * s, 1.8f * s, 0.75f, false, true, HUD_DIALOG});
+        hud.push_back({Input::remapName(st), w * 0.5f, h * 0.5f - 40 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
+        hud.push_back({Input::remapUse(st), w * 0.5f, h * 0.5f + 20 * s, 2.f * s, 0.8f, false, true, HUD_DIALOG});
+        hud.push_back({std::to_string(st + 1) + " / " + std::to_string(Input::REMAP_COUNT), w * 0.5f, h * 0.5f + 70 * s, 1.8f * s, 0.6f,
+                       false, true, HUD_DIALOG});
+        hud.push_back({input_.gamepadConnected() ? "SPACE SKIPS   ESC CANCELS" : "CONNECT A GAMEPAD   ESC CANCELS", w * 0.5f,
+                       h * 0.5f + 120 * s, 1.6f * s, 0.5f, false, true, HUD_DIALOG});
+    } else if ((paused_ || testPause >= 0) && pauseControls_) {
         // the controls, one per line: the action, then its keys (or buttons)
         std::vector<std::pair<const char*, const char*>> lines;
         if (input_.active() == Input::Gamepad)
@@ -1252,12 +1266,18 @@ std::vector<HudText> App::buildHud(float dt) {
             lines.erase(std::remove_if(lines.begin(), lines.end(), [](const std::pair<const char*, const char*>& l) {
                 const std::string a = l.first;
                 return a == "NEXT SONG" || a == "SEEK" || a == "NEW SCENE"; }), lines.end());
-        const float lineH = 30.f * s, top = h * 0.5f - (lines.size() - 1) * lineH * 0.5f;
+        const float lineH = 30.f * s, top = h * 0.5f - (lines.size() - 1) * lineH * 0.5f - 60 * s;
         hud.push_back({"CONTROLS", w * 0.5f, top - 80 * s, 4.f * s, 0.95f, true, true, HUD_DIALOG});
         for (size_t i = 0; i < lines.size(); i++)
             hud.push_back({std::string(lines[i].first) + "   " + lines[i].second, w * 0.5f, top + i * lineH, 1.8f * s, 0.8f,
                            false, true, HUD_DIALOG});
-        hud.push_back({"BACK", w * 0.5f, top + (lines.size() - 1) * lineH + 60 * s, 2.4f * s, 0.95f, true, true, HUD_DIALOG});
+        // then its choices: the gamepad remapped button by button, or its default back, and BACK (lit in the accent)
+        const char* items[3] = {"REMAP GAMEPAD", "DEFAULT GAMEPAD", "BACK"};
+        const float y0 = top + (lines.size() - 1) * lineH + 60 * s;
+        for (int i = 0; i < 3; i++)
+            hud.push_back({items[i], w * 0.5f, y0 + 40.f * i * s, 2.f * s, ctrlSel_ == i ? 0.95f : 0.4f, ctrlSel_ == i, true, HUD_DIALOG});
+        if (ctrlNoteT_ > 0)
+            hud.push_back({ctrlNote_, w * 0.5f, y0 + 140 * s, 1.6f * s, 0.8f * std::min(1.f, ctrlNoteT_), false, true, HUD_DIALOG});
     } else if (paused_ || testPause >= 0) {
         hud.push_back({"PAUSED", w * 0.5f, h * 0.5f - 60 * s, 5.f * s, 0.95f, true, true, HUD_DIALOG});
         // the menu: the choice lit in the accent, the others dimmed
@@ -1466,6 +1486,9 @@ int App::run() {
     if (!R_.init(fbw, fbh)) std::fprintf(stderr, "[gl] warning: renderer init reported a GL error\n");
     if (win_) input_.init(win_);
     input_.setCheatSkip(opt_.cheatSkip);
+    // the player's gamepad remaps, next to the progress
+    input_.setMappingFile((fs::path(menuPlacePath(opt_.progressPath)).parent_path() / "gamepad-mapping.tsv").string());
+    menu_.setInput(&input_);
 
     if (opt_.stream) startStream();
     if (!audio_.init(opt_.stream)) std::fprintf(stderr, "[audio] continuing without sound\n");
@@ -1588,7 +1611,9 @@ int App::run() {
                     continue;
                 }
             }
-            const Menu::Choice c = menu_.update(input_, dt);
+            const bool remapped = remapKeys(); // (a remap takes the keys)
+            if (input_.remapDone()) menu_.open(Menu::GAMEPAD, "GAMEPAD REMAPPED", "saved for " + input_.gamepadName());
+            const Menu::Choice c = remapped ? Menu::Choice{} : menu_.update(input_, dt);
             fbSize(fbw, fbh);
             // (a choice leaves the menu at once: its screen may already have moved on, e.g. RETRY back on the Voyage's,
             // so this last frame is black, as the leaving screen faded to, rather than a flash of the menu)
@@ -1742,8 +1767,19 @@ int App::run() {
         // Pause: a menu (continue / controls / quit), with the arrows or the gamepad; Esc / Start / B resume (back
         // from the controls page), Q quits at once.
         bool quitNow = false;
+        ctrlNoteT_ = std::max(0.f, ctrlNoteT_ - dt);
         if (paused_ && pauseControls_) {
-            if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK) || input_.pressed(A_UI_OK)) pauseControls_ = false;
+            if (input_.remapDone()) { ctrlNote_ = "GAMEPAD REMAPPED"; ctrlNoteT_ = 4.f; }
+            if (!remapKeys()) { // (a remap takes the keys)
+                if (input_.pressed(A_UI_UP)) ctrlSel_ = (ctrlSel_ + 2) % 3;
+                if (input_.pressed(A_UI_DOWN)) ctrlSel_ = (ctrlSel_ + 1) % 3;
+                if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK)) pauseControls_ = false;
+                else if (input_.pressed(A_UI_OK)) {
+                    if (ctrlSel_ == 0) input_.startRemap();
+                    else if (ctrlSel_ == 1) { input_.resetMapping(); ctrlNote_ = "GAMEPAD RESTORED"; ctrlNoteT_ = 4.f; }
+                    else pauseControls_ = false;
+                }
+            }
         } else if (paused_) {
             if (input_.pressed(A_UI_UP)) pauseSel_ = (pauseSel_ + 2) % 3;
             if (input_.pressed(A_UI_DOWN)) pauseSel_ = (pauseSel_ + 1) % 3;
@@ -1751,7 +1787,7 @@ int App::run() {
                 paused_ = false;
             } else if (input_.pressed(A_UI_OK)) {
                 if (pauseSel_ == 0) paused_ = false;
-                else if (pauseSel_ == 1) pauseControls_ = true;
+                else if (pauseSel_ == 1) { pauseControls_ = true; ctrlSel_ = 2; ctrlNoteT_ = 0; }
                 else quitNow = true;
             }
             if (input_.pressed(A_QUIT)) quitNow = true;
@@ -2325,6 +2361,12 @@ void App::applyOption(const Menu::Choice& c) {
         }
         std::printf("[campaign] every stage unlocked\n");
         menu_.open(Menu::OPTIONS, "EVERY STAGE UNLOCKED", "the whole main voyage is open");
+    } else if (c.kind == Menu::Choice::PAD_REMAP) {
+        input_.startRemap();
+        return;
+    } else if (c.kind == Menu::Choice::PAD_DEFAULT) {
+        input_.resetMapping();
+        menu_.open(Menu::GAMEPAD, "GAMEPAD RESTORED", "its own mapping again");
     } else if (c.kind == Menu::Choice::RESET_ALL) {
         menu_.selectVoyage("");
         progress_.reset();
@@ -2344,6 +2386,18 @@ void App::applyOption(const Menu::Choice& c) {
 #ifdef REFALL_WEB
     web::persist(runTime_, true);
 #endif
+}
+
+// While the gamepad is remapped (its presses are the remap's): Esc cancels, Space skips the control asked for. True
+// while a remap runs (the frame's keys are its own).
+bool App::remapKeys() {
+    if (!input_.remapping()) return false;
+    if (input_.pressed(A_PAUSE)) input_.cancelRemap();
+    else if (input_.pressed(A_UI_ALT)) input_.skipRemap();
+#ifdef REFALL_WEB
+    if (!input_.remapping()) web::persist(runTime_, true);
+#endif
+    return true;
 }
 
 // Saves where the menu is, 1.5 s after it last changed (or at once when leaving the menu).

@@ -21,7 +21,176 @@ void charCallback(GLFWwindow*, unsigned int cp) { if (g_input) g_input->onChar(c
 
 // Auto-repeat: delay before repeating, then the repeat interval (close to modern guideline handling).
 constexpr float DAS = 0.13f, ARR = 0.033f, SOFT_RATE = 0.033f;
+
+// The remap's controls, in the order they are asked for: what each sets in the gamepad state (a button, or 100 + a
+// trigger's axis), its name and what it does.
+const int REMAP_TARGET[Input::REMAP_COUNT] = {
+    GLFW_GAMEPAD_BUTTON_DPAD_UP, GLFW_GAMEPAD_BUTTON_DPAD_DOWN, GLFW_GAMEPAD_BUTTON_DPAD_LEFT, GLFW_GAMEPAD_BUTTON_DPAD_RIGHT,
+    GLFW_GAMEPAD_BUTTON_A, GLFW_GAMEPAD_BUTTON_B, GLFW_GAMEPAD_BUTTON_X, GLFW_GAMEPAD_BUTTON_Y,
+    GLFW_GAMEPAD_BUTTON_LEFT_BUMPER, GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER, 100 + GLFW_GAMEPAD_AXIS_LEFT_TRIGGER,
+    100 + GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER, GLFW_GAMEPAD_BUTTON_BACK, GLFW_GAMEPAD_BUTTON_START};
+const char* REMAP_NAME[Input::REMAP_COUNT] = {"D-PAD UP", "D-PAD DOWN", "D-PAD LEFT", "D-PAD RIGHT", "A", "B", "X", "Y",
+                                              "LB", "RB", "LT", "RT", "BACK", "START"};
+const char* REMAP_USE[Input::REMAP_COUNT] = {"HARD DROP", "SOFT DROP", "MOVE LEFT", "MOVE RIGHT", "ROTATE / OK",
+                                             "ROTATE LEFT / BACK", "ROTATE LEFT", "NEW SCENE", "HOLD", "HOLD",
+                                             "SLOW MOTION", "SLOW MOTION", "NEXT SONG", "PAUSE"};
 } // namespace
+
+const char* Input::remapName(int step) { return step >= 0 && step < REMAP_COUNT ? REMAP_NAME[step] : ""; }
+const char* Input::remapUse(int step) { return step >= 0 && step < REMAP_COUNT ? REMAP_USE[step] : ""; }
+
+std::string Input::guidOf(int jid) const {
+    const char* g = glfwGetJoystickGUID(jid);
+    if (g && g[0]) return g;
+    const char* n = glfwGetJoystickName(jid);
+    return n ? n : "joystick";
+}
+
+// One line per controller: its GUID, then each control's source ("-" none, b<button>, h<hat>:<bits>,
+// a<axis>:<side>:<rest>).
+void Input::setMappingFile(const std::string& path) {
+    mapPath_ = path;
+    maps_.clear();
+    std::ifstream f(path);
+    std::string line;
+    while (std::getline(f, line)) {
+        std::istringstream ls(line);
+        std::string guid, tok;
+        if (!std::getline(ls, guid, '\t') || guid.empty()) continue;
+        std::vector<Source> v;
+        while (std::getline(ls, tok, '\t') && (int)v.size() < REMAP_COUNT) {
+            Source s;
+            if (tok.size() > 1 && tok[0] == 'b') { s.kind = 'b'; s.index = std::atoi(tok.c_str() + 1); }
+            else if (tok.size() > 1 && tok[0] == 'h') { s.kind = 'h'; std::sscanf(tok.c_str() + 1, "%d:%d", &s.index, &s.dir); }
+            else if (tok.size() > 1 && tok[0] == 'a') { s.kind = 'a'; std::sscanf(tok.c_str() + 1, "%d:%d:%f", &s.index, &s.dir, &s.rest); }
+            v.push_back(s);
+        }
+        v.resize(REMAP_COUNT);
+        maps_[guid] = v;
+    }
+    if (!maps_.empty()) std::printf("[input] %d remapped gamepad(s) (%s)\n", (int)maps_.size(), path.c_str());
+}
+
+void Input::saveMappings() const {
+    if (mapPath_.empty()) return;
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(mapPath_).parent_path(), ec);
+    if (maps_.empty()) { std::filesystem::remove(mapPath_, ec); return; }
+    std::ofstream f(mapPath_);
+    for (const auto& [guid, v] : maps_) {
+        f << guid;
+        for (const Source& s : v) {
+            char b[48] = "-";
+            if (s.kind == 'b') std::snprintf(b, sizeof(b), "b%d", s.index);
+            else if (s.kind == 'h') std::snprintf(b, sizeof(b), "h%d:%d", s.index, s.dir);
+            else if (s.kind == 'a') std::snprintf(b, sizeof(b), "a%d:%d:%.2f", s.index, s.dir, s.rest);
+            f << '\t' << b;
+        }
+        f << '\n';
+    }
+}
+
+void Input::startRemap() {
+    remapNew_.assign(REMAP_COUNT, Source{});
+    remapStep_ = 0;
+    remapJid_ = -1;
+    remapCalm_ = 0;
+    for (int j = GLFW_JOYSTICK_1; j <= GLFW_JOYSTICK_LAST; j++) { // the axes at rest (a trigger's is -1, or 0)
+        remapRest_[j].clear();
+        int na = 0;
+        const float* ax = glfwJoystickPresent(j) ? glfwGetJoystickAxes(j, &na) : nullptr;
+        for (int i = 0; ax && i < na; i++) remapRest_[j].push_back(ax[i]);
+    }
+    std::printf("[input] remapping the gamepad\n");
+}
+
+void Input::skipRemap() {
+    if (remapStep_ < 0) return;
+    remapNew_[remapStep_] = Source{};
+    remapCalm_ = 0;
+    if (++remapStep_ < REMAP_COUNT) return;
+    if (remapJid_ >= 0) {
+        maps_[guidOf(remapJid_)] = remapNew_;
+        saveMappings();
+        std::printf("[input] gamepad remapped\n");
+        remapDone_ = true;
+    }
+    remapStep_ = -1;
+    padHold_ = true;
+}
+
+void Input::cancelRemap() {
+    if (remapStep_ >= 0) std::printf("[input] remap cancelled\n");
+    remapStep_ = -1;
+    padHold_ = true;
+}
+
+void Input::resetMapping() {
+    bool any = false;
+    for (int j = GLFW_JOYSTICK_1; j <= GLFW_JOYSTICK_LAST; j++)
+        if (glfwJoystickPresent(j)) any |= maps_.erase(guidOf(j)) > 0;
+    if (any) std::printf("[input] gamepad mapping back to its default\n");
+    saveMappings();
+}
+
+bool Input::customMapping() const {
+    for (int j = GLFW_JOYSTICK_1; j <= GLFW_JOYSTICK_LAST; j++)
+        if (glfwJoystickPresent(j) && maps_.count(guidOf(j))) return true;
+    return false;
+}
+
+bool Input::sourceOn(int jid, const Source& s) const {
+    int n = 0;
+    if (s.kind == 'b') { const unsigned char* b = glfwGetJoystickButtons(jid, &n); return b && s.index < n && b[s.index] == GLFW_PRESS; }
+    if (s.kind == 'h') { const unsigned char* h = glfwGetJoystickHats(jid, &n); return h && s.index < n && (h[s.index] & s.dir); }
+    if (s.kind == 'a') { const float* a = glfwGetJoystickAxes(jid, &n); return a && s.index < n && (a[s.index] - s.rest) * s.dir > 0.5f; }
+    return false;
+}
+
+// One step of a remap: once every control of the controllers is back at rest (0.15 s), the first one pressed is the
+// step's (a button first, then a hat, then an axis pushed past half its range); then the next step, from the same
+// controller.
+void Input::remapRead(float dt) {
+    bool calm = true;
+    Source hit;
+    int hitJid = -1;
+    for (int j = GLFW_JOYSTICK_1; j <= GLFW_JOYSTICK_LAST; j++) {
+        if (!glfwJoystickPresent(j) || (remapJid_ >= 0 && j != remapJid_)) continue;
+        int nb = 0, nh = 0, na = 0;
+        const unsigned char* bt = glfwGetJoystickButtons(j, &nb);
+        const unsigned char* ht = glfwGetJoystickHats(j, &nh);
+        const float* ax = glfwGetJoystickAxes(j, &na);
+        Source s;
+        for (int i = 0; bt && i < nb && !s.kind; i++)
+            if (bt[i] == GLFW_PRESS) { s.kind = 'b'; s.index = i; }
+        for (int i = 0; ht && i < nh && !s.kind; i++)
+            if (ht[i]) { s.kind = 'h'; s.index = i; s.dir = ht[i] & -ht[i]; }
+        for (int i = 0; ax && i < na && !s.kind; i++) {
+            const float rest = i < (int)remapRest_[j].size() ? remapRest_[j][i] : 0.f, d = ax[i] - rest;
+            if (std::fabs(d) > 0.5f) { s.kind = 'a'; s.index = i; s.dir = d > 0 ? 1 : -1; s.rest = rest; }
+        }
+        if (s.kind) {
+            calm = false;
+            if (!hit.kind) { hit = s; hitJid = j; }
+        }
+    }
+    if (hit.kind && remapCalm_ >= 0.15f) {
+        remapJid_ = hitJid;
+        remapNew_[remapStep_] = hit;
+        std::printf("[input] %s: %c%d\n", REMAP_NAME[remapStep_], hit.kind, hit.index);
+        remapCalm_ = 0;
+        if (++remapStep_ == REMAP_COUNT) {
+            maps_[guidOf(remapJid_)] = remapNew_;
+            saveMappings();
+            std::printf("[input] gamepad remapped\n");
+            remapDone_ = true;
+            remapStep_ = -1;
+            padHold_ = true;
+        }
+        return;
+    }
+    remapCalm_ = calm ? remapCalm_ + dt : 0.f;
+}
 
 void Input::loadMappings() {
 #ifdef REFALL_WEB
@@ -169,7 +338,10 @@ void Input::update(float dt) {
 
     // Every connected controller is read and their presses combined: a Bluetooth controller that reconnected
     // can leave a stale duplicate device behind (listed first, sending nothing), which hid the live one.
+    // (While the gamepad is remapped, its presses are the remap's only.)
     bool pad[A_COUNT] = {};
+    const bool remap = remapStep_ >= 0;
+    if (remap) remapRead(dt);
     auto readPad = [&](const GLFWgamepadstate& st, bool& live) {
         auto b = [&](int i) { return st.buttons[i] == GLFW_PRESS; };
         float ax = st.axes[GLFW_GAMEPAD_AXIS_LEFT_X], ay = st.axes[GLFW_GAMEPAD_AXIS_LEFT_Y];
@@ -203,14 +375,14 @@ void Input::update(float dt) {
     };
     {
         std::lock_guard<std::mutex> lock(remoteMutex_);
-        if (remote_) {
+        if (remote_ && !remap) {
             GLFWgamepadstate st;
             std::memcpy(st.buttons, remoteButtons_, sizeof(st.buttons));
             std::memcpy(st.axes, remoteAxes_, sizeof(st.axes));
             readPad(st, remoteLive_);
         }
     }
-    for (int jid = GLFW_JOYSTICK_1; win_ && jid_ >= 0 && jid <= GLFW_JOYSTICK_LAST; jid++) {
+    for (int jid = GLFW_JOYSTICK_1; win_ && jid_ >= 0 && !remap && jid <= GLFW_JOYSTICK_LAST; jid++) {
         if (!glfwJoystickPresent(jid)) continue;
         const bool mapped = glfwJoystickIsGamepad(jid);
         GLFWgamepadstate st;
@@ -245,9 +417,27 @@ void Input::update(float dt) {
                 ok = true;
             }
         }
+        // the player's own mapping over it, for the controls they set
+        auto custom = maps_.find(guidOf(jid));
+        if (custom != maps_.end()) {
+            if (!ok) { std::memset(&st, 0, sizeof(st)); st.axes[4] = st.axes[5] = -1.f; ok = true; }
+            for (int k = 0; k < REMAP_COUNT; k++) {
+                const Source& s = custom->second[k];
+                if (!s.kind) continue;
+                const bool on = sourceOn(jid, s);
+                if (REMAP_TARGET[k] >= 100) st.axes[REMAP_TARGET[k] - 100] = on ? 1.f : -1.f;
+                else st.buttons[REMAP_TARGET[k]] = on ? GLFW_PRESS : GLFW_RELEASE;
+            }
+        }
         if (ok) readPad(st, stickLive_[jid]);
     }
 
+    if (padHold_) { // (the remap's last press doesn't act)
+        bool any = false;
+        for (int i = 0; i < A_COUNT; i++) any |= pad[i];
+        if (any) std::memset(pad, 0, sizeof(pad));
+        else padHold_ = false;
+    }
     bool padAny = false, keyAny = false;
     for (int i = 0; i < A_COUNT; i++) {
         padAny |= pad[i];
