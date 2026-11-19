@@ -128,6 +128,38 @@ void main() {
 }
 )";
 
+// ---------------------------------------------------------------- the paper
+// The page's paper, laid over the whole frame (multiplied, around 1): a fine tooth, a slow mottle and a few fibres,
+// fixed on the screen as the sheet is. Blended as dst * src * 2, so 0.5 leaves the frame as it is.
+inline const char* PAPER_FS = R"(#version 330 core
+in vec2 vUv;
+out vec4 frag;
+uniform vec2 uRes;
+uniform float uScale;   // pixels per 1080p pixel
+uniform float uAmt;     // how much of it shows
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, s, -s, c); }
+
+void main() {
+    vec2 p = vUv * uRes / uScale;
+    float tooth = (hash(floor(p * 0.8)) - 0.5) * 0.6 + (vnoise(p / 2.4) - 0.5) * 0.8;
+    float mottle = vnoise(p / 190.0) * 0.6 + vnoise(p / 55.0) * 0.4 - 0.5;
+    // fibres: long thin streaks at a few angles, a little darker
+    float f1 = vnoise(rot(0.35) * p * vec2(0.03, 0.55));
+    float f2 = vnoise(rot(-1.15) * p * vec2(0.025, 0.45) + 17.0);
+    float f3 = vnoise(rot(2.2) * p * vec2(0.035, 0.6) + 41.0);
+    float fib = smoothstep(0.88, 0.99, f1) + smoothstep(0.9, 0.99, f2) * 0.8 + smoothstep(0.9, 0.99, f3) * 0.6;
+    float v = 0.5 + uAmt * (0.016 * tooth + 0.022 * mottle - 0.012 * fib);
+    frag = vec4(vec3(v), 1.0);
+}
+)";
+
 // ---------------------------------------------------------------- lettering
 // SDF type with an outline and a halo around it (sound effects: a white letter, a black line, a white margin).
 inline const char* TEXT_VS = R"(#version 330 core
