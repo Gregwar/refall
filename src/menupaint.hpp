@@ -66,7 +66,11 @@ public:
     // A frosted glass panel: frost() drawn toward a deep blue by `tint`, a soft shadow under it, a fine light along its
     // top edge and a thin rim, brighter and glowing when `lit` (0..1); `px` is a layout pixel's size.
     void glass(float x, float y, float w, float h, float r, float px, float lit = 0.f, float tint = 0.5f);
-    void setAdditive(bool on);
+    void setAdditive(bool on, bool force = false);
+    // A layer: what is drawn until endLayer() goes to a texture at `ss` times the resolution, laid down at (x, y, w, h)
+    // filtered on endLayer(): anti-aliased edges for what has none (flat triangles: the logo's ring and pieces).
+    void beginLayer(float x, float y, float w, float h, int ss = 2);
+    void endLayer();
     // An opacity on everything drawn from now on (1: as given), e.g. a scrolled list fading at its edges.
     void setFade(float f) { fade_ = f; }
 
@@ -74,6 +78,10 @@ private:
     struct V { float x, y, lx, ly, hx, hy, r, g, b, a, rad, soft, lw, mode; };
     std::vector<V> verts_;
     ugl::Target kalTgt_; // the kaleidoscope's low-resolution frame
+    ugl::Target layerTgt_;
+    bool layer_ = false;
+    float layerX_ = 0, layerY_ = 0, layerW_ = 0, layerH_ = 0, layerS_ = 1;
+    GLint layerPrevFbo_ = 0;
     ugl::Target frostA_, frostB_; // the frost: the frame at a quarter of its size, blurred (A), and a pass's scratch (B)
     GLuint upProg_ = 0, blurProg_ = 0;
     GLuint prog_ = 0, kalProg_ = 0, vao_ = 0, vbo_ = 0, curTex_ = 0;

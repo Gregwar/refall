@@ -28,13 +28,15 @@ layout(location = 2) in vec2 aHalf;
 layout(location = 3) in vec4 aCol;
 layout(location = 4) in vec4 aPrm; // radius, soft, line width, mode
 uniform vec2 uRes;
+uniform vec3 uView; // a layer's origin (pixels) and scale (1: none)
 out vec2 vLocal;
 out vec2 vHalf;
 out vec4 vCol;
 out vec4 vPrm;
 void main() {
     vLocal = aLocal; vHalf = aHalf; vCol = aCol; vPrm = aPrm;
-    gl_Position = vec4(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0, 0.0, 1.0);
+    vec2 p = (aPos - uView.xy) * uView.z; // (the shapes' own distances stay in the frame's pixels)
+    gl_Position = vec4(p.x / uRes.x * 2.0 - 1.0, 1.0 - p.y / uRes.y * 2.0, 0.0, 1.0);
 }
 )";
 const char* FS = R"(#version 330 core
@@ -183,7 +185,13 @@ void Painter::end() {
 void Painter::flush() {
     if (verts_.empty()) return;
     glUseProgram(prog_);
-    ugl::set2f(prog_, "uRes", (float)w_, (float)h_);
+    if (layer_) {
+        ugl::set2f(prog_, "uRes", (float)layerTgt_.w, (float)layerTgt_.h);
+        ugl::set3f(prog_, "uView", vec3(layerX_, layerY_, layerS_));
+    } else {
+        ugl::set2f(prog_, "uRes", (float)w_, (float)h_);
+        ugl::set3f(prog_, "uView", vec3(0.f, 0.f, 1.f));
+    }
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, curTex_);
     ugl::set1i(prog_, "uTex", 0);
@@ -252,11 +260,44 @@ void Painter::glass(float x, float y, float w, float h, float r, float px, float
     rrectLine(x, y, w, h, r, (1.2f + 0.6f * lit) * px, mixc(hex(0xc8d8ff, 0.2f), hex(0xd8ecff, 0.85f), lit));
 }
 
-void Painter::setAdditive(bool on) {
-    if (on == additive_) return;
+void Painter::beginLayer(float x, float y, float w, float h, int ss) {
+    flush();
+    layerX_ = std::floor(x);
+    layerY_ = std::floor(y);
+    layerW_ = std::ceil(x + w) - layerX_;
+    layerH_ = std::ceil(y + h) - layerY_;
+    layerS_ = (float)std::max(1, ss);
+    const int lw = std::max(1, (int)(layerW_ * layerS_)), lh = std::max(1, (int)(layerH_ * layerS_));
+    if (layerTgt_.w != lw || layerTgt_.h != lh) layerTgt_.create(lw, lh, GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, GL_LINEAR);
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &layerPrevFbo_);
+    layerTgt_.bind();
+    glClearColor(0.f, 0.f, 0.f, 0.f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    layer_ = true;
+    setAdditive(additive_, true);
+}
+
+void Painter::endLayer() {
+    if (!layer_) return;
+    flush();
+    layer_ = false;
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)layerPrevFbo_);
+    glViewport(0, 0, w_, h_);
+    setAdditive(additive_, true);
+    const float f = fade_;
+    fade_ = 1.f;
+    image(layerTgt_.tex, layerX_, layerY_, layerW_, layerH_, Col{1, 1, 1, 1}, true);
+    fade_ = f;
+    flush();
+}
+
+void Painter::setAdditive(bool on, bool force) {
+    if (on == additive_ && !force) return;
     flush();
     additive_ = on;
-    glBlendFunc(GL_ONE, on ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
+    // (in a layer, light adds to the colour only: laid down premultiplied, it then adds to what lies below)
+    if (layer_ && on) glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+    else glBlendFunc(GL_ONE, on ? GL_ONE : GL_ONE_MINUS_SRC_ALPHA);
 }
 
 void Painter::quad(const float px[4][2], const float lc[4][2], float hx, float hy, Col c, float rad, float soft, float lw, float mode,

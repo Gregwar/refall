@@ -1114,6 +1114,9 @@ void Menu::drawOrbitLogo(float cx, float cy, float k, float color) {
             }
         }
     };
+    // the ring, the pieces and the planet are flat triangles: drawn at twice the resolution, then laid down filtered
+    // (their edges anti-aliased)
+    p.beginLayer(cx - ra - 60 * u, pcy - R - 60 * u, 2 * (ra + 60 * u), 2 * (R + 60 * u));
     ringHalf(false);
     pieces(false);
     // the planet: a sphere of small facets, each corner lit by its normal; its bands follow its own axis (the ring's)
@@ -1158,6 +1161,7 @@ void Menu::drawOrbitLogo(float cx, float cy, float k, float color) {
     }
     ringHalf(true);
     pieces(true);
+    p.endLayer();
     // the name
     const std::string title = upper(GAME_TITLE);
     const float size = 60 * u;
