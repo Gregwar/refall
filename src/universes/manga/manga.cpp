@@ -201,6 +201,7 @@ const char* SFX_SHIIN = "\xE3\x82\xB7\xE3\x83\xBC\xE3\x83\xB3";           // シ
 bool MangaUniverse::init(int width, int height) {
     progInk_ = ugl::program(shaders::INK_VS, shaders::INK_FS, "manga ink");
     progText_ = ugl::program(shaders::TEXT_VS, shaders::TEXT_FS, "manga text");
+    progPaper_ = ugl::program(ugl::FULLSCREEN_VS, shaders::PAPER_FS, "manga paper");
 
     glGenVertexArrays(1, &inkVao_);
     glGenBuffers(1, &inkVbo_);
@@ -345,7 +346,7 @@ void MangaUniverse::resize(int width, int height) {
 }
 
 MangaUniverse::~MangaUniverse() {
-    for (GLuint p : {progInk_, progText_}) glDeleteProgram(p);
+    for (GLuint p : {progInk_, progText_, progPaper_}) glDeleteProgram(p);
     for (GLuint v : {inkVao_, textVao_}) glDeleteVertexArrays(1, &v);
     for (GLuint b : {inkVbo_, textVbo_}) glDeleteBuffers(1, &b);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
@@ -1961,6 +1962,15 @@ void MangaUniverse::render(const Frame& f, GLuint fbo) {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo);
     glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    // the paper's grain over it all (multiplied: dst * src * 2)
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_DST_COLOR, GL_SRC_COLOR);
+    glUseProgram(progPaper_);
+    ugl::set2f(progPaper_, "uRes", (float)width_, (float)height_);
+    ugl::set1f(progPaper_, "uScale", s_);
+    ugl::set1f(progPaper_, "uAmt", 1.f);
+    ugl::drawFullscreen();
+    glDisable(GL_BLEND);
 }
 
 // =====================================================================================================

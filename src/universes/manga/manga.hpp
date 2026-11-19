@@ -132,7 +132,7 @@ private:
     void drawSfx(const Sfx& s, float alpha);
 
     // ---- GL.
-    GLuint progInk_ = 0, progText_ = 0;
+    GLuint progInk_ = 0, progText_ = 0, progPaper_ = 0;
     GLuint inkVao_ = 0, inkVbo_ = 0, textVao_ = 0, textVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0;
     int samples_ = 4;
