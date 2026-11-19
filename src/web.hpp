@@ -18,6 +18,11 @@ void waitFrame();
 // distances), and the canvas following the page's size.
 void setupContext(GLFWwindow* win);
 void toggleFullscreen(GLFWwindow* win);
+// The universes' snapshots made for the site (worlds/*.jpg, by tools/web.sh): fetched in the background into
+// WORLDS_DIR, so the menu doesn't make them on the main thread (an instance's init: a hitch, and the music stutters).
+inline constexpr const char* WORLDS_DIR = "/refall/worlds";
+void fetchWorlds();
+bool worldsPending(); // still fetching
 
 } // namespace web
 #endif

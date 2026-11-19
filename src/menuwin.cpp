@@ -17,6 +17,7 @@
 #include "universes/registry.hpp"
 #include "menuworlds.hpp"
 #include "playlists.hpp"
+#include "web.hpp"
 
 namespace {
 using F = Painter::Font;
@@ -149,6 +150,15 @@ void Menu::renderWorlds(int w, int h) {
     }
     static const MusicState mu; // (the snapshots-only pool renders nothing)
     worlds_->setIdle(time_ - lastInput_ > 0.6f); // a universe's snapshot (100-500 ms) is never made under a key press
+#ifdef REFALL_WEB
+    // the site's snapshots first: none made here while they arrive, then the ones not found looked for again
+    static bool fetching = true;
+    if (fetching) {
+        fetching = web::worldsPending();
+        worlds_->setGenerate(!fetching, 0.4f);
+        if (!fetching) worlds_->retryMissing();
+    }
+#endif
     Worlds wd(*this);
     wd.wants();
     const float dt = (float)std::clamp(time_ - g_lastT, 0.0, 0.1);

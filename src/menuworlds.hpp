@@ -43,6 +43,7 @@ public:
     void setIdle(bool idle) { idle_ = idle; }
     void prefetch(const std::vector<std::string>& specs) { prefetch_ = specs; }
     int missing() const; // prefetch entries without a snapshot yet
+    void retryMissing(); // the snapshots not found on the disk looked for again (new files arrived)
     // A worker thread with its own OpenGL context makes the missing snapshots (an instance's init, 100 ms to seconds,
     // never on the main thread): `bind` makes that context current on the calling thread, `unbind` releases it. Set
     // once by the app; without it the missing snapshots are made on the main thread while the menu is idle.
