@@ -62,6 +62,18 @@ EM_JS(void, refall_set_scale, (double s), {
     GLFW3.onScaleChange();
 });
 
+// Whether the frames' pace says nothing now: the page hidden or without focus (the browser may slow its frames), or
+// less than 2 s since it came back (its first frames late)
+EM_JS(int, refall_pace_unreliable, (), {
+    if (Module.refallFocusAt === undefined) {
+        Module.refallFocusAt = performance.now();
+        const mark = () => { Module.refallFocusAt = performance.now(); };
+        for (const e of ["focus", "blur", "pageshow", "resize"]) addEventListener(e, mark);
+        document.addEventListener("visibilitychange", mark);
+    }
+    return document.visibilityState !== "visible" || !document.hasFocus() || performance.now() - Module.refallFocusAt < 2000 ? 1 : 0;
+});
+
 namespace {
 struct SceneRes {
     int level = -1;     // its step (-1: not met yet)
@@ -71,6 +83,10 @@ std::map<int, SceneRes> g_scenes;
 std::vector<double> g_levels; // the ratios, the sharpest first
 int g_level = 0, g_scene = -1000000, g_frames = 0, g_slow = 0;
 double g_last = 0, g_changed = -1e9, g_calm = 0, g_up = -1e9, g_window = 0;
+// what a frame costs, all told: sampled twice a second while a step up is possible (the frame's time from the browser
+// handing it over to its drawing finished, glFinish waiting for the GPU), the most of the half second's samples (ms)
+double g_resumed = 0, g_cost = -1;
+bool g_sample = false;
 
 void applyLevel(int level, double now) {
     g_level = level;
@@ -105,14 +121,22 @@ void adaptResolution(int scene) {
         if (sr.level != g_level) applyLevel(sr.level, now);
         return;
     }
-    // (a change's own hitch and a hidden page aren't counted)
-    if (now - g_changed < 0.6 || dt > 2.0) { g_window = now; g_frames = g_slow = 0; return; }
+    // (a change's own hitch, a hidden or unfocused page and its return aren't counted)
+    if (now - g_changed < 0.6 || dt > 2.0 || refall_pace_unreliable()) {
+        g_window = now;
+        g_frames = g_slow = 0;
+        g_cost = -1;
+        return;
+    }
     g_frames++;
     if (dt > 0.0205) g_slow++; // a frame past 1/60 s (a missed refresh)
     if (now - g_window < 0.5 || g_frames < 3) return; // half a second's frames
     const double late = (double)g_slow / g_frames;
+    const double cost = g_cost;
     g_frames = g_slow = 0;
+    g_cost = -1;
     g_window = now;
+    g_sample = g_level > 0; // (the next half second's sample)
     SceneRes& sr = g_scenes[scene];
     if (late > 0.15) { // (a song's load, a frame or two, stays under)
         if (now - g_up < 5.0) sr.wait = std::min(sr.wait * 2.0, 240.0); // the step up just tried was too much
@@ -121,9 +145,14 @@ void adaptResolution(int scene) {
         if (g_level + 1 < (int)g_levels.size()) applyLevel(std::min((int)g_levels.size() - 1, g_level + down), now);
     } else if (late > 0.03) {
         g_calm = now;
-    } else if (g_level > 0 && now - g_calm > sr.wait) {
-        g_up = g_calm = now;
-        applyLevel(g_level - 1, now);
+    } else if (g_level > 0) {
+        // a step up: soon (after 1.5 s of calm) when the frame's cost leaves room for its pixels (x1.38) within 11 ms
+        // (without a measure: tried after the scene's calm wait)
+        const bool roomy = cost >= 0 && cost / (0.85 * 0.85) < 11.0;
+        if ((roomy && now - g_calm > 1.5) || (cost < 0 && now - g_calm > sr.wait)) {
+            g_up = g_calm = now;
+            applyLevel(g_level - 1, now);
+        }
     }
 }
 
@@ -145,7 +174,16 @@ void persist(double now, bool force) {
     refall_sync();
 }
 
-void waitFrame() { refall_wait_frame(); }
+void waitFrame() {
+    if (g_sample && g_resumed > 0) {
+        g_sample = false;
+        glFinish();
+        const double ms = emscripten_get_now() - g_resumed;
+        if (ms < 1000.0) g_cost = std::max(g_cost, ms);
+    }
+    refall_wait_frame();
+    g_resumed = emscripten_get_now();
+}
 
 void setupContext(GLFWwindow* win) {
     const bool floats = refall_extension("EXT_color_buffer_float");
