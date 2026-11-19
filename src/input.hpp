@@ -100,6 +100,7 @@ private:
     int remapStep_ = -1, remapJid_ = -1;
     float remapCalm_ = 0;
     bool remapDone_ = false, padHold_ = false; // padHold_: after a remap, the pad ignored until all is let go
+    float padHoldT_ = 0; // (and for this long at least: the browser reports a press a frame late)
     std::vector<Source> remapNew_;
     std::vector<float> remapRest_[16]; // the axes at rest, per joystick, when the remap began
     std::string guidOf(int jid) const;

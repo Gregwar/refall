@@ -117,12 +117,14 @@ void Input::skipRemap() {
     }
     remapStep_ = -1;
     padHold_ = true;
+    padHoldT_ = 0.3f;
 }
 
 void Input::cancelRemap() {
     if (remapStep_ >= 0) std::printf("[input] remap cancelled\n");
     remapStep_ = -1;
     padHold_ = true;
+    padHoldT_ = 0.3f;
 }
 
 void Input::resetMapping() {
@@ -186,6 +188,7 @@ void Input::remapRead(float dt) {
             remapDone_ = true;
             remapStep_ = -1;
             padHold_ = true;
+    padHoldT_ = 0.3f;
         }
         return;
     }
@@ -433,9 +436,10 @@ void Input::update(float dt) {
     }
 
     if (padHold_) { // (the remap's last press doesn't act)
+        padHoldT_ -= dt;
         bool any = false;
         for (int i = 0; i < A_COUNT; i++) any |= pad[i];
-        if (any) std::memset(pad, 0, sizeof(pad));
+        if (any || padHoldT_ > 0.f) std::memset(pad, 0, sizeof(pad));
         else padHold_ = false;
     }
     bool padAny = false, keyAny = false;

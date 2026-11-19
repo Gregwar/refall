@@ -258,6 +258,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aOpt_ += (optSel_ - aOpt_) * k;
         aPad_ += (padSel_ - aPad_) * k;
         aYes_ += (optYes_ - aYes_) * k;
+        noteT_ = std::max(0.f, noteT_ - dt);
         aFree_ += (freeDiff_ - aFree_) * k;
         aDiff_ += (diff_ - aDiff_) * k;
         aStage_ += (stage_ - aStage_) * k;
@@ -347,6 +348,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         if (back) ch.kind = Choice::QUIT;
         break;
     case OPTIONS:
+        if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; } // (a key: back to the rows)
         if (optConfirm_) { // are you sure? YES / NO
             if (dx || dy) optYes_ = 1 - optYes_;
             if (ok && optYes_) ch.kind = optSel_ == 0 ? Choice::UNLOCK_ALL : Choice::RESET_ALL;
@@ -360,6 +362,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         break;
     case GAMEPAD:
         if (input_ && input_->remapping()) break; // (its keys are the app's: Esc cancels, Space skips)
+        if (noteT_ > 0.f) { if (ok || back || dx || dy) noteT_ = 0.f; break; }
         padSel_ = (padSel_ + dy + PAD_ITEMS * 8) % PAD_ITEMS;
         if (ok) ch.kind = padSel_ == 0 ? Choice::PAD_REMAP : Choice::PAD_DEFAULT;
         if (back) { open(OPTIONS); optSel_ = 2; aOpt_ = 2; }

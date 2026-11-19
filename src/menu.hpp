@@ -97,6 +97,8 @@ public:
     // difficulties and playlist (after a reset of the saved data).
     void resetPlace();
     void setInput(const Input* in) { input_ = in; } // (the gamepad page shows its remap)
+    // An options page's "done", in its panel for a moment (instead of a message over the menu).
+    void note(Screen s, const std::string& text) { screen_ = s; note_ = text; noteT_ = NOTE_TIME; }
     // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
     // petals open round it, then the world and the menu; a key hurries it to its end.
     static constexpr float INTRO_END = 6.f;
@@ -217,6 +219,10 @@ private:
     int padSel_ = 0;
     float aPad_ = 0;
     const Input* input_ = nullptr;
+    // a choice's "done" (STAGES UNLOCKED, GAMEPAD REMAPPED...), told in the options' panel for a moment
+    static constexpr float NOTE_TIME = 2.2f;
+    std::string note_;
+    float noteT_ = 0;
     int row_ = 1;              // campaign: 0 the difficulty row, 1 the stages
     int stage_ = 0, song_ = 0; // campaign cursor
     static constexpr float CELEBRATE_MOVE = 4.8f; // when the focus moves on to the next stage

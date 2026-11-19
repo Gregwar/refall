@@ -140,7 +140,11 @@ struct Worlds {
     void kalVoyages();
     void kalOptions();
     void kalGamepad();
-    void optionRows(const char* title, int n, const char* const* label, const std::string* what, float focus);
+    static constexpr float OPT_MID = 470, OPT_STEP = 90; // the options' panel: its middle, a row's step
+    void optionPanel(const char* title, int n);
+    void optionRows(int n, const char* const* label, float focus);
+    void optionLines(const std::vector<std::pair<std::string, float>>& lines, float size);
+    bool optionNote();
     void kalCampaign();
     void textField(float fx, float fy, float fw, float fh, const std::string& text, const char* placeholder);
 };
@@ -616,9 +620,10 @@ void Worlds::kalTitle() {
     menuItems(F::JOSEFIN, 740 + dy + less * 0.5f, 62, 30, hex(0xffffff), hex(0xffffff), 0.35f, menuA);
 }
 
-// The options' pages: a title, glass rows with what each does beneath, an underline under the focused one (eased);
-// the kaleidoscope behind tours as the title's.
-void Worlds::optionRows(const char* title, int n, const char* const* label, const std::string* what, float focus) {
+// The options' pages: a title, a glass panel of short rows, an underline under the focused one (eased); the
+// kaleidoscope behind tours as the title's. What a choice asks or tells (are you sure? the control a remap wants, a
+// "done") takes the rows' place in the panel, in their lettering.
+void Worlds::optionPanel(const char* title, int n) {
     std::string cur, next;
     float mix;
     tourAt(11.f, cur, next, mix);
@@ -626,13 +631,22 @@ void Worlds::optionRows(const char* title, int n, const char* const* label, cons
     p.frostSource();
     p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, title, X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
-    const float y0 = 420 - (n - 2) * 60, step = 150, size = 30, track = 0.35f;
-    p.glass(X(510), Y(y0 - 90), 900 * u, (step * n + 40) * u, 24 * u, u, 0.f, 0.5f);
-    for (int i = 0; i < n; i++) {
-        const float f = near1(focus, i), y = y0 + i * step;
-        p.text(F::JOSEFIN, label[i], X(960), Y(y), size * u, hex(0xffffff, 0.45f + 0.55f * f), 0, track);
-        p.text(F::JOSEFIN_LIGHT, what[i], X(960), Y(y + 50), 22 * u, hex(0xe0e0f0, 0.45f + 0.3f * f), 0, 0.12f);
-    }
+    const float h = std::max(n, 3) * OPT_STEP + 70;
+    p.glass(X(560), Y(OPT_MID - h * 0.5f), 800 * u, h * u, 24 * u, u, 0.f, 0.5f);
+}
+
+// lines of text centred in the panel, a row's step apart (alpha each)
+void Worlds::optionLines(const std::vector<std::pair<std::string, float>>& lines, float size) {
+    const float y0 = OPT_MID - (lines.size() - 1) * OPT_STEP * 0.5f + 10;
+    for (size_t i = 0; i < lines.size(); i++)
+        p.text(F::JOSEFIN, lines[i].first, X(960), Y(y0 + i * OPT_STEP), (i == 0 ? size : size * 0.8f) * u,
+               hex(0xffffff, lines[i].second), 0, 0.35f);
+}
+
+void Worlds::optionRows(int n, const char* const* label, float focus) {
+    const float size = 30, track = 0.35f, y0 = OPT_MID - (n - 1) * OPT_STEP * 0.5f + 10;
+    for (int i = 0; i < n; i++)
+        p.text(F::JOSEFIN, label[i], X(960), Y(y0 + i * OPT_STEP), size * u, hex(0xffffff, 0.45f + 0.55f * near1(focus, i)), 0, track);
     float inkL = 0, inkR = 0;
     for (int i = 0; i < n; i++) {
         float l, r;
@@ -641,60 +655,58 @@ void Worlds::optionRows(const char* title, int n, const char* const* label, cons
         inkL += near1(focus, i) * (start + l);
         inkR += near1(focus, i) * (start + r);
     }
-    const float ys = Y(y0 + focus * step) + 14 * u;
+    const float ys = Y(y0 + focus * OPT_STEP) + 14 * u;
     p.line(inkL, ys, inkR, ys, 1.6f * u, hex(0xffffff, 0.9f));
 }
 
-// The options: unlocking every stage (as --unlock) and forgetting the saved data (as --reset), either asking "are you
-// sure?" on a card over them (YES / NO), and the gamepad's page.
-void Worlds::kalOptions() {
-    const bool unlocked = m.progress_ && m.progress_->allUnlocked();
-    const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK EVERY STAGE", "RESET THE SAVED DATA", "GAMEPAD"};
-    const std::string WHAT[Menu::OPTION_ITEMS] = {unlocked ? "every stage of the main voyage is already open" : "opens every stage of the main voyage",
-                                                  "forgets the cleared stages, the best scores and the menu's place",
-                                                  "remaps the gamepad button by button, or restores its default"};
-    optionRows("OPTIONS", Menu::OPTION_ITEMS, LABEL, WHAT, m.aOpt_);
-    if (!m.optConfirm_) return;
-    // are you sure?
-    const float track = 0.35f;
-    p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, 0.45f));
-    p.frostSource();
-    p.glass(X(560), Y(380), 800 * u, 320 * u, 24 * u, u, 0.f, 0.55f);
-    p.text(F::JOSEFIN_LIGHT, "ARE YOU SURE?", X(960), Y(470), 52 * u, hex(0xffffff), 0, 0.2f);
-    p.text(F::JOSEFIN_LIGHT, m.optSel_ == 0 ? "every stage of the main voyage will be open" : "the progress and the menu's place will be lost",
-           X(960), Y(535), 22 * u, hex(0xe0e0f0, 0.75f), 0, 0.12f);
-    const char* ANS[2] = {"NO", "YES"}; // (optYes_: 0 NO, 1 YES; YES on the left)
-    const float ax[2] = {1110, 810};
-    for (int i = 0; i < 2; i++)
-        p.text(F::JOSEFIN, ANS[i], X(ax[i]), Y(630), 30 * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aYes_, i)), 0, track);
-    float l0, r0, l1, r1;
-    p.inkExtent(F::JOSEFIN, ANS[0], 30 * u, track, l0, r0);
-    p.inkExtent(F::JOSEFIN, ANS[1], 30 * u, track, l1, r1);
-    const float s0 = X(ax[0]) - p.width(F::JOSEFIN, ANS[0], 30 * u, track) * 0.5f, s1 = X(ax[1]) - p.width(F::JOSEFIN, ANS[1], 30 * u, track) * 0.5f;
-    const float k = std::clamp(m.aYes_, 0.f, 1.f);
-    p.line(s0 + l0 + (s1 + l1 - s0 - l0) * k, Y(630) + 14 * u, s0 + r0 + (s1 + r1 - s0 - r0) * k, Y(630) + 14 * u, 1.6f * u, hex(0xffffff, 0.9f));
+// "done": the panel tells it for a moment (a key goes back to the rows)
+bool Worlds::optionNote() {
+    if (m.noteT_ <= 0.f) return false;
+    const float a = std::min(1.f, m.noteT_ / 0.3f) * std::min(1.f, (Menu::NOTE_TIME - m.noteT_) / 0.2f + 0.2f);
+    optionLines({{m.note_, a}}, 30);
+    return true;
 }
 
-// The gamepad: remapping it control by control, or its default mapping back; while a remap runs, a card asking for
-// the next control.
+// The options: unlocking every stage (as --unlock), forgetting the saved data (as --reset), either asking "are you
+// sure?" first (YES / NO), and the gamepad's page.
+void Worlds::kalOptions() {
+    optionPanel("OPTIONS", Menu::OPTION_ITEMS);
+    if (optionNote()) return;
+    if (!m.optConfirm_) {
+        const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK STAGES", "RESET SAVED DATA", "GAMEPAD"};
+        optionRows(Menu::OPTION_ITEMS, LABEL, m.aOpt_);
+        return;
+    }
+    // are you sure? then YES / NO, the answer underlined
+    const float track = 0.35f, size = 30;
+    optionLines({{m.optSel_ == 0 ? "UNLOCK STAGES?" : "RESET SAVED DATA?", 1.f}}, size);
+    const float y = OPT_MID + OPT_STEP * 0.5f + 10;
+    const char* ANS[2] = {"NO", "YES"}; // (optYes_: 0 NO, 1 YES; YES on the left)
+    const float ax[2] = {1080, 840};
+    for (int i = 0; i < 2; i++)
+        p.text(F::JOSEFIN, ANS[i], X(ax[i]), Y(y), size * u, hex(0xffffff, 0.45f + 0.55f * near1(m.aYes_, i)), 0, track);
+    float l0, r0, l1, r1;
+    p.inkExtent(F::JOSEFIN, ANS[0], size * u, track, l0, r0);
+    p.inkExtent(F::JOSEFIN, ANS[1], size * u, track, l1, r1);
+    const float s0 = X(ax[0]) - p.width(F::JOSEFIN, ANS[0], size * u, track) * 0.5f, s1 = X(ax[1]) - p.width(F::JOSEFIN, ANS[1], size * u, track) * 0.5f;
+    const float k = std::clamp(m.aYes_, 0.f, 1.f);
+    p.line(s0 + l0 + (s1 + l1 - s0 - l0) * k, Y(y) + 14 * u, s0 + r0 + (s1 + r1 - s0 - r0) * k, Y(y) + 14 * u, 1.6f * u, hex(0xffffff, 0.9f));
+}
+
+// The gamepad: remapping it control by control, or its own mapping back; a remap asks for each control in the panel.
 void Worlds::kalGamepad() {
     const Input* in = m.input_;
-    const bool pad = in && in->gamepadConnected();
-    const char* LABEL[Menu::PAD_ITEMS] = {"REMAP BUTTON BY BUTTON", "RESTORE THE DEFAULT GAMEPAD"};
-    const std::string WHAT[Menu::PAD_ITEMS] = {
-        pad ? std::string("press each of the gamepad's controls in turn") : std::string("no gamepad connected"),
-        in && in->customMapping() ? std::string("forgets the remap: the gamepad's own mapping") : std::string("the gamepad uses its own mapping")};
-    optionRows("GAMEPAD", Menu::PAD_ITEMS, LABEL, WHAT, m.aPad_);
-    if (!in || !in->remapping()) return;
-    const int st = in->remapStep();
-    p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, 0.45f));
-    p.frostSource();
-    p.glass(X(510), Y(330), 900 * u, 420 * u, 24 * u, u, 0.f, 0.55f);
-    p.text(F::JOSEFIN, "PRESS", X(960), Y(410), 22 * u, hex(0xe0e0f0, 0.75f), 0, 0.35f);
-    p.text(F::JOSEFIN_LIGHT, Input::remapName(st), X(960), Y(500), 72 * u, hex(0xffffff), 0, 0.2f);
-    p.text(F::JOSEFIN_LIGHT, Input::remapUse(st), X(960), Y(560), 24 * u, hex(0xe0e0f0, 0.75f), 0, 0.2f);
-    p.text(F::JOSEFIN, std::to_string(st + 1) + " / " + std::to_string(Input::REMAP_COUNT), X(960), Y(640), 20 * u, hex(0xffffff, 0.6f), 0, 0.35f);
-    p.text(F::JOSEFIN, pad ? "SPACE SKIPS   ESC CANCELS" : "CONNECT A GAMEPAD   ESC CANCELS", X(960), Y(705), 17 * u, hex(0xffffff, 0.5f), 0, 0.35f);
+    optionPanel("GAMEPAD", Menu::PAD_ITEMS);
+    if (optionNote()) return;
+    if (in && in->remapping()) {
+        const int st = in->remapStep();
+        optionLines({{std::string("PRESS ") + Input::remapName(st), 1.f},
+                     {std::string(Input::remapUse(st)) + "   " + std::to_string(st + 1) + " / " + std::to_string(Input::REMAP_COUNT), 0.55f},
+                     {in->gamepadConnected() ? "SPACE SKIPS   ESC CANCELS" : "CONNECT A GAMEPAD   ESC CANCELS", 0.4f}}, 30);
+        return;
+    }
+    const char* LABEL[Menu::PAD_ITEMS] = {"REMAP", "RESTORE MAPPING"};
+    optionRows(Menu::PAD_ITEMS, LABEL, m.aPad_);
 }
 
 void Worlds::kalFree() {

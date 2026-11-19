@@ -1272,7 +1272,7 @@ std::vector<HudText> App::buildHud(float dt) {
             hud.push_back({std::string(lines[i].first) + "   " + lines[i].second, w * 0.5f, top + i * lineH, 1.8f * s, 0.8f,
                            false, true, HUD_DIALOG});
         // then its choices: the gamepad remapped button by button, or its default back, and BACK (lit in the accent)
-        const char* items[3] = {"REMAP GAMEPAD", "DEFAULT GAMEPAD", "BACK"};
+        const char* items[3] = {"REMAP GAMEPAD", "RESTORE MAPPING", "BACK"};
         const float y0 = top + (lines.size() - 1) * lineH + 60 * s;
         for (int i = 0; i < 3; i++)
             hud.push_back({items[i], w * 0.5f, y0 + 40.f * i * s, 2.f * s, ctrlSel_ == i ? 0.95f : 0.4f, ctrlSel_ == i, true, HUD_DIALOG});
@@ -1612,7 +1612,7 @@ int App::run() {
                 }
             }
             const bool remapped = remapKeys(); // (a remap takes the keys)
-            if (input_.remapDone()) menu_.open(Menu::GAMEPAD, "GAMEPAD REMAPPED", "saved for " + input_.gamepadName());
+            if (input_.remapDone()) menu_.note(Menu::GAMEPAD, "GAMEPAD REMAPPED");
             const Menu::Choice c = remapped ? Menu::Choice{} : menu_.update(input_, dt);
             fbSize(fbw, fbh);
             // (a choice leaves the menu at once: its screen may already have moved on, e.g. RETRY back on the Voyage's,
@@ -1776,7 +1776,7 @@ int App::run() {
                 if (input_.pressed(A_PAUSE) || input_.pressed(A_UI_BACK)) pauseControls_ = false;
                 else if (input_.pressed(A_UI_OK)) {
                     if (ctrlSel_ == 0) input_.startRemap();
-                    else if (ctrlSel_ == 1) { input_.resetMapping(); ctrlNote_ = "GAMEPAD RESTORED"; ctrlNoteT_ = 4.f; }
+                    else if (ctrlSel_ == 1) { input_.resetMapping(); ctrlNote_ = "MAPPING RESTORED"; ctrlNoteT_ = 4.f; }
                     else pauseControls_ = false;
                 }
             }
@@ -2360,13 +2360,13 @@ void App::applyOption(const Menu::Choice& c) {
             p.save();
         }
         std::printf("[campaign] every stage unlocked\n");
-        menu_.open(Menu::OPTIONS, "EVERY STAGE UNLOCKED", "the whole main voyage is open");
+        menu_.note(Menu::OPTIONS, "STAGES UNLOCKED");
     } else if (c.kind == Menu::Choice::PAD_REMAP) {
         input_.startRemap();
         return;
     } else if (c.kind == Menu::Choice::PAD_DEFAULT) {
         input_.resetMapping();
-        menu_.open(Menu::GAMEPAD, "GAMEPAD RESTORED", "its own mapping again");
+        menu_.note(Menu::GAMEPAD, "MAPPING RESTORED");
     } else if (c.kind == Menu::Choice::RESET_ALL) {
         menu_.selectVoyage("");
         progress_.reset();
