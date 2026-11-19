@@ -2396,7 +2396,7 @@ vec4 panda(vec2 q) {
     // (in profile the near ear's base cut straight where it sits on the head)
     float earN = max(length(qr - eN) - erN, mix(-1.0, dot(toHead * (qr - eN), vec2(0.682, -0.731)) - k * 0.038, ts));
     float earF = length(qr - eF) - erF;
-    float earOver = smoothstep(0.45, 0.55, ts);
+    float earOver = smoothstep(0.2, 0.7, ts);   // (over a long part of the turn: no sudden swap over the head)
     bool armOver = uWipe > 0.3 || uMunch > 0.3 || uArms > 0.4;
     bool farOver = uMunch > 0.3;
     bool farBehind = ts > 0.35;
@@ -2436,8 +2436,9 @@ vec4 panda(vec2 q) {
     headD = smin(headD, length(qh - k * vec2(0.225 * ts, -0.1)) - k * 0.04 * ts, 0.02 * k);   // the chin
     paint(headD, FUR);
     float headIn = fillP(headD + gLW * 0.2);
-    if (earOver > 0.0) {   // the near ear over the head in profile
-        float o = fillP(earN - gLW) * earOver;
+    if (earOver > 0.0) {   // the near ear over the head in profile: the head's edge slides back behind it as it turns
+        float wipe = dot(qr - eN, normalize(Hc - eN)) - mix(-erN, erN, earOver);
+        float o = fillP(max(earN - gLW, wipe));
         gCol = mix(gCol, lit(BLACK), o);
     }
 
