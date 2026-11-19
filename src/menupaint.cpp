@@ -410,37 +410,85 @@ void main() {
     uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
     vec3 c = uMix <= 0.0 ? src(uSeedA, uv) : uMix >= 1.0 ? src(uSeedB, uv) : mix(src(uSeedA, uv), src(uSeedB, uv), uMix);
-    // large shards over the small facets, slightly turned, each lit from its own side
-    vec2 sc, sf;
-    float se, ss;
-    vec2 g2 = mat2(0.921, -0.389, 0.389, 0.921) * q * 4.8 + vec2(0.37, 0.11);
-    facet(g2, sc, sf, se, ss);
-    float hs = h21(sc + 9.7);
-    vec2 L = vec2(cos(hs * 6.283), sin(hs * 6.283));
-    float lit = clamp(0.5 + dot(sf - 0.4, L) * 1.2, 0.0, 1.0) * (0.55 + 0.6 * h21(sc + 2.2));
-    // cut into gem: the world's light and the facets' read through the crystal's ramp, a little of its colour kept
-    float l = dot(c, vec3(0.299, 0.587, 0.114));
-    float gl = clamp(l * 0.45 + lit * 0.55 + (h21(cell + 9.1) - 0.5) * 0.3, 0.0, 1.0);
-    // the ramp's hue: the tint's, drawn toward the world's own colour where it has one, each shard leaning a little to
-    // one side of the hue wheel (a neighbouring hue), so a universe of one colour still shows a few
+    // SPACE: no glass, deep space on the whole screen (unmirrored): nebulae glowing in the stage's hue and two
+    // neighbours, crossed by dark dust; stars at three depths; a black hole up on the left, its accretion disk swirling,
+    // bending the sky behind it; asteroids drifting by, tumbling. The sky slides a little as the stages turn.
     vec3 tv = vivid(uTint, 1.6);
-    float cmax = max(c.r, max(c.g, c.b)), wsat = clamp((cmax - min(c.r, min(c.g, c.b))) / max(cmax, 0.05), 0.0, 1.0);
-    vec3 hue = mix(tv, vivid(c, 1.3), 0.4 * wsat);
-    float lean = h21(sc + 6.6) - 0.5;
-    hue = vivid(mix(hue, lean > 0.0 ? hue.brg : hue.gbr, abs(lean) * 0.45), 1.15);
-    c = mix(gem(gl, hue), c * (0.5 + 0.5 * uTint) * (0.4 + lit), 0.22);
-    c *= 0.92 + 0.16 * smoothstep(0.5, 0.0, edge);
-    c *= 0.92 + 0.16 * vec3(h21(cell + 1.3), h21(cell + 2.7), h21(cell + 4.1));
-    // some shards cut with a prism's rainbow
-    if (h21(sc + 4.4) > 0.7) {
-        float x = dot(sf, vec2(-L.y, L.x)) * 2.2 + uTime * 0.025 + hs * 3.0;
-        float band = smoothstep(0.55, 0.0, abs(fract(x * 0.5) - 0.5) * 2.0);
-        c += (0.5 + 0.5 * cos(6.2831853 * (x + vec3(0.0, 0.33, 0.67)))) * band * 0.14;
+    vec3 n2 = vivid(tv.gbr * 0.6 + tv * 0.4, 1.2), n3 = vivid(tv.brg * 0.6 + tv * 0.4, 1.2);
+    float asp = uRes.x / uRes.y;
+    vec2 sp = fc / uRes.y;
+    vec2 drift = vec2(uRot * 0.04 + uTime * 0.004, uTime * 0.0015);
+    vec2 bh = vec2(0.19 * asp, 0.26);
+    vec2 db = sp - bh;
+    float rb = length(db), rs = 0.045;
+    vec2 lens = db / max(rb, 1e-3) * (rs * rs * 2.2) / max(rb, rs * 0.8);
+    vec2 w = sp - lens + drift;
+    vec2 nw = w * 1.6 + vec2(mix(h21(vec2(uSeedA, 1.0)), h21(vec2(uSeedB, 1.0)), uMix) * 40.0, 0.0);
+    vec2 wa = vec2(vn(nw + uTime * 0.01), vn(nw + 5.2 - uTime * 0.008));
+    float neb = vn(nw * 1.3 + wa * 1.8) * 0.6 + vn(nw * 3.1 + wa) * 0.3 + vn(nw * 7.0) * 0.1;
+    float veil = pow(vn(nw * 0.7 - wa * 1.2 + 9.0), 2.0);
+    vec3 col = vec3(0.004, 0.005, 0.014);
+    col += tv * pow(smoothstep(0.35, 0.95, neb), 1.6) * 0.55;
+    col += n2 * pow(smoothstep(0.45, 1.0, veil * 1.3), 1.5) * 0.45;
+    col += n3 * smoothstep(0.6, 0.95, vn(nw * 2.2 + 13.0 + wa * 2.5)) * 0.25;
+    col *= 0.5 + 0.5 * smoothstep(0.25, 0.6, vn(nw * 2.6 - 4.0 + wa * 0.7));   // dust lanes
+    vec3 space = vec3(0.0); // (added after the brightness cap: the stars, the disk's light)
+    for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        float ssc = 55.0 + fi * 65.0;
+        vec2 sg = (w + drift * fi * 0.6) * ssc;
+        vec2 si = floor(sg), sf = fract(sg) - 0.5;
+        float sh = h21(si + fi * 31.0);
+        if (sh > 0.92 - fi * 0.02) {
+            vec2 off = (vec2(h21(si + 7.0), h21(si + 3.0)) - 0.5) * 0.6;
+            float dd = length(sf - off) * (uRes.y / ssc) * (1080.0 / uRes.y);
+            float twk = 0.6 + 0.4 * sin(uTime * (1.0 + 3.0 * h21(si)) + sh * 50.0);
+            vec3 scol = mix(vec3(1.0), mix(vec3(1.0, 0.8, 0.6), vec3(0.7, 0.8, 1.0), h21(si + 1.0)), 0.6);
+            space += scol * exp(-dd * dd / (1.0 + 1.6 * (1.0 - fi * 0.4))) * twk * (1.0 - fi * 0.25);
+        }
     }
+    {   // the accretion disk (tilted), brighter on the side coming toward us; its far half seen bent over the shadow
+        float ca = cos(-0.35), sa = sin(-0.35);
+        vec2 dl = mat2(ca, -sa, sa, ca) * db;
+        vec2 de = vec2(dl.x, dl.y / 0.28);
+        float rd = length(de), ang = atan(de.y, de.x);
+        float disk = smoothstep(rs * 1.5, rs * 1.9, rd) * (1.0 - smoothstep(rs * 3.2, rs * 5.2, rd));
+        float swirl = 0.55 + 0.45 * vn(vec2(ang * 3.0 - uTime * 0.03 / max(rd, 0.01), rd * 60.0));
+        float dopp = 0.5 + 0.5 * cos(ang);
+        vec3 hot = mix(vec3(1.0, 0.5, 0.18), mix(vec3(1.0, 0.95, 0.85), tv, 0.3), smoothstep(rs * 4.5, rs * 1.6, rd));
+        float front = step(0.0, dl.y);
+        float shadow = smoothstep(rs * 0.97, rs * 1.03, rb);
+        float arc = exp(-pow((rb - rs * 1.4) / (rs * 0.25), 2.0)) * (1.0 - front) * smoothstep(0.0, rs * 0.6, -dl.y);
+        space += hot * disk * swirl * (0.35 + 1.1 * dopp) * mix(shadow, 1.0, front) + hot * arc * 0.8;
+        space += vec3(1.0, 0.86, 0.7) * exp(-pow((rb - rs * 1.04) / (rs * 0.05), 2.0)) * 0.8 * shadow;
+        col *= shadow;
+        space += tv * 0.08 * exp(-rb / (rs * 3.0));
+    }
+    for (int i = 0; i < 6; i++) {   // asteroids, lit from the top left
+        float fi = float(i);
+        float speed = 0.01 + 0.012 * h21(vec2(fi, 2.0));
+        vec2 ac = vec2(mod(h21(vec2(fi, 5.0)) * asp * 1.5 + uTime * speed, asp * 1.5) - asp * 0.25, 0.1 + 0.8 * h21(vec2(fi, 9.0)));
+        float ar = 0.01 + 0.028 * h21(vec2(fi, 3.0));
+        vec2 da = sp - ac;
+        float ro = uTime * (0.1 + 0.25 * h21(vec2(fi, 6.0))) + fi;
+        vec2 dr = mat2(cos(ro), -sin(ro), sin(ro), cos(ro)) * da;
+        float lumpy = ar * (1.0 + 0.45 * (vn(vec2(atan(dr.y, dr.x) * 1.4 + fi * 7.0, fi)) - 0.5));
+        float inA = smoothstep(lumpy + 1.5 / uRes.y, lumpy - 1.5 / uRes.y, length(dr));
+        if (inA > 0.0) {
+            vec2 nr = da / ar;
+            float lt = clamp(0.4 - nr.x * 0.75 - nr.y * 0.35, 0.0, 1.0);
+            float crat = vn(dr / ar * 3.0 + fi * 11.0);
+            vec3 rock = mix(vec3(0.34, 0.3, 0.28), tv * 0.4, 0.15) * (0.08 + 0.92 * lt) * (0.7 + 0.55 * crat);
+            col = mix(col, rock, inA);
+            space *= 1.0 - inA;
+        }
+    }
+    c = col;
     c = mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uSat);  // a locked stage: its world greyed
     c *= 0.9 + 0.2 * uLevel;
     float lum = dot(c, vec3(0.299, 0.587, 0.114));
     c *= min(1.0, 0.45 / max(lum, 1e-3));                  // never bright behind the text (a white world stays a glow)
+    c += space * (0.4 + 0.6 * uSat);
     // (no lead: the shards meet edge to edge, told apart by their own light and hue alone)
     c *= 1.0 - 0.5 * smoothstep(0.45, 1.2, r);
     // light on the glass, in the frame's own space (it doesn't turn): a soft flare in the top right corner, and glints
