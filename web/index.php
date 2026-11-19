@@ -1,3 +1,30 @@
+<?php
+// Refall, the web version's page. Its threads need a cross-origin isolated page: these headers make it one (the
+// service worker below is the fallback where PHP's headers don't reach, e.g. a host serving only static files).
+header('Cross-Origin-Opener-Policy: same-origin');
+header('Cross-Origin-Embedder-Policy: require-corp');
+// PHP's own server (php -S HOST:PORT -t SITE SITE/index.php) runs this for every request: the other files go out
+// from here with the headers too (the workers' refall.js needs them; Apache's come from .htaccess).
+if (PHP_SAPI === 'cli-server') {
+    $path = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
+    $file = realpath(__DIR__ . $path);
+    if ($path !== '/' && $file !== false && is_file($file) && strpos($file, __DIR__ . DIRECTORY_SEPARATOR) === 0
+        && basename($file) !== 'index.php') {
+        $types = ['js' => 'text/javascript', 'wasm' => 'application/wasm', 'data' => 'application/octet-stream',
+                  'mp3' => 'audio/mpeg', 'png' => 'image/png', 'html' => 'text/html'];
+        $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+        header('Cross-Origin-Resource-Policy: same-origin');
+        header('Content-Type: ' . ($types[$ext] ?? 'application/octet-stream'));
+        header('Content-Length: ' . filesize($file));
+        readfile($file);
+        return;
+    }
+    if ($path !== '/' && $path !== '/index.php') {
+        http_response_code(404);
+        return;
+    }
+}
+?>
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,7 +32,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Refall</title>
 <link rel="icon" href="icon.png">
-<!-- threads need a cross-origin isolated page: this service worker adds the headers on hosts that can't (GitHub Pages) -->
+<!-- the same headers through a service worker, where the server sent none (it reloads the page once) -->
 <script src="coi-serviceworker.min.js"></script>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
