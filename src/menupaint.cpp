@@ -415,8 +415,9 @@ void main() {
     // the star in the corner, dark dust lanes through it; a dense field of stars, thicker in the clouds; asteroids
     // drifting by, tumbling. The sky slides a little as the stages turn.
     vec3 tv = vivid(uTint, 1.6);
-    vec3 n2 = vivid(tv.gbr * 0.6 + tv * 0.4, 1.2), n3 = vivid(tv.brg * 0.5 + vec3(0.2, 0.9, 1.0) * 0.5, 1.2);
-    vec3 warm = vec3(1.0, 0.72, 0.38);
+    // a space palette (deep violet blue, magenta pink, a touch of cyan, gold), the stage's hue blended into it
+    vec3 base = mix(vec3(0.32, 0.3, 0.95), tv, 0.3), n2 = mix(vec3(0.95, 0.32, 0.72), tv, 0.25);
+    vec3 n3 = vec3(0.3, 0.85, 1.0), warm = vec3(1.0, 0.7, 0.36);
     float asp = uRes.x / uRes.y;
     vec2 sp = fc / uRes.y;
     vec2 drift = vec2(uRot * 0.03 + uTime * 0.003, uTime * 0.001);
@@ -442,12 +443,12 @@ void main() {
     float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
     // its colours: cool on the left (the tint, a neighbour, cyan where it is thinnest), warm on the right
     float warmth = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (fb - 0.5));
-    vec3 cool = mix(tv * 0.9, n2, smoothstep(0.45, 0.8, q2.x));
+    vec3 cool = mix(base, n2, smoothstep(0.45, 0.8, q2.x));
     cool = mix(cool, n3, smoothstep(0.6, 0.9, q1.y) * 0.5);
     vec3 gc = mix(cool, warm, warmth);
-    vec3 col = vec3(0.006, 0.006, 0.02) + tv * 0.035 * dens;
-    col += gc * gas * 0.42;
-    col += mix(gc, vec3(1.0), 0.35) * wisp * 0.38;
+    vec3 col = vec3(0.006, 0.006, 0.022) + base * 0.04 * dens;
+    col += gc * gas * 0.5;
+    col += mix(gc, vec3(1.0), 0.35) * wisp * 0.45;
     col *= 0.45 + 0.55 * mix(1.0, dust, smoothstep(0.1, 0.5, dens));
     vec3 space = vec3(0.0); // (added after the brightness cap: the stars)
     for (int i = 0; i < 4; i++) {
@@ -456,7 +457,7 @@ void main() {
         vec2 sg = (w + drift * fi * 0.5) * ssc;
         vec2 si = floor(sg), sf = fract(sg) - 0.5;
         float sh = h21(si + fi * 31.0);
-        if (sh > 0.9 - fi * 0.04 - 0.12 * dens) {
+        if (sh > 0.955 - fi * 0.008 - 0.03 * dens) {
             vec2 off = (vec2(h21(si + 7.0), h21(si + 3.0)) - 0.5) * 0.6;
             float dd = length(sf - off) * (uRes.y / ssc) * (1080.0 / uRes.y);
             float twk = 0.65 + 0.35 * sin(uTime * (1.0 + 3.0 * h21(si)) + sh * 50.0);
