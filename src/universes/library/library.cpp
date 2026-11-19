@@ -1443,7 +1443,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progVeil_, "uColA", P.light ? 0.6f : 0.68f);
         // (the cards a little narrower than the columns, so more of the library shows)
         set4f(progVeil_, "uColL", layout::LEFT_COLUMN[0] + 0.9f, layout::LEFT_COLUMN[1] + 0.3f, layout::LEFT_COLUMN[2] - 0.5f, layout::LEFT_COLUMN[3] - 0.5f);
-        set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.4f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
+        set4f(progVeil_, "uColR", layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.9f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
         ugl::drawFullscreen();
     }
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
