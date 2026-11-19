@@ -596,7 +596,7 @@ void Worlds::kalTitle() {
     // taking their orbits one by one, then the world and the menu
     const float k = m.introT_ < 0.f ? 99.f : m.introT_;
     const float worldA = sstep((k - 2.8f) / 2.2f), menuA = sstep((k - 4.8f) / 0.9f);
-    if (worldA < 1.f) p.rrect(X(-100), Y(-100), X(2020) - X(-100), Y(1180) - Y(-100), 0, hex(0x000000, 1.f - worldA));
+    if (worldA < 1.f) p.rrect(-10.f, -10.f, m.fw_ + 20.f, m.fh_ + 20.f, 0.f, hex(0x000000, 1.f - worldA));
     p.frostSource();
     const float dy = TITLE_CY - 330.f;
     const float cx = X(960), cy = Y(TITLE_CY);
