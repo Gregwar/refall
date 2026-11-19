@@ -445,11 +445,11 @@ void main() {
     float warmth = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (fb - 0.5));
     vec3 cool = mix(base, n2, smoothstep(0.38, 0.62, vn(nw * 0.7 + 2.0 + q1 * 0.8)));
     cool = mix(cool, n3, smoothstep(0.6, 0.9, q1.y) * 0.5);
-    vec3 gc = mix(cool, warm, warmth);
+    vec3 gc = vivid(mix(cool, warm, warmth), 1.35);   // (kept saturated: never a grey)
     vec3 col = vec3(0.006, 0.006, 0.022) + base * 0.04 * dens;
-    col += gc * gas * 0.5;
-    col += mix(gc, vec3(1.0), 0.35) * wisp * 0.45;
-    col += mix(gc, vec3(1.0), 0.25) * pow(gas, 3.0) * 0.35;   // (the clouds' glowing cores)
+    col += gc * gas * 0.45;
+    col += mix(gc, vec3(1.0), 0.15) * wisp * 0.4;
+    col += mix(gc, vec3(1.0), 0.12) * pow(gas, 3.0) * 0.3;   // (the clouds' glowing cores)
     col *= 0.45 + 0.55 * mix(1.0, dust, smoothstep(0.1, 0.5, dens));
     vec3 space = vec3(0.0); // (added after the brightness cap: the stars)
     for (int i = 0; i < 4; i++) {
