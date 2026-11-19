@@ -35,6 +35,7 @@
 #include "songplan.hpp"
 #include "voyages.hpp"
 #include "voyageviewer.hpp"
+#include "web.hpp"
 #include "youtube.hpp"
 
 namespace fs = std::filesystem;
@@ -387,6 +388,10 @@ private:
     void swap() {
         if (streamVideo_ >= 0) streamFrame();
         if (headless_) return;
+#ifdef REFALL_WEB
+        web::waitFrame(); // (the browser shows the canvas and comes back at its next frame; a held frame too)
+        return;
+#endif
         if (held_) { glfwWaitEventsTimeout(1.0 / 30.0); return; }
         glfwSwapBuffers(win_);
         // Wait for the frame to be shown: otherwise the driver queues up to a few frames ahead under vsync (more
@@ -746,6 +751,10 @@ float App::phaseEnergy(int phase) const {
 }
 
 void App::toggleFullscreen() {
+#ifdef REFALL_WEB
+    web::toggleFullscreen(win_);
+    return;
+#endif
     GLFWmonitor* mon = glfwGetWindowMonitor(win_);
     if (mon) {
         glfwSetWindowMonitor(win_, nullptr, winX_, winY_, winW_, winH_, 0);
@@ -1351,17 +1360,24 @@ int App::run() {
     // on the discrete GPU when there are two; if that fails, again on the default one
     bool discrete = preferDiscreteGpu();
     // (GLFW's own reason when it fails: no display, a missing library...)
-    glfwSetErrorCallback([](int code, const char* what) { std::fprintf(stderr, "[glfw] error %d: %s\n", code, what); });
+    glfwSetErrorCallback([](int code, const char* what) {
+#ifdef REFALL_WEB
+        if (code == 0) return; // (the web port's notes on the desktop hints it ignores)
+#endif
+        std::fprintf(stderr, "[glfw] error %d: %s\n", code, what);
+    });
     for (;;) {
         if (!glfwInit()) {
             if (discrete) { undoDiscreteGpu(); discrete = false; continue; }
             std::fprintf(stderr, "glfwInit failed\n");
             return 1;
         }
+#ifndef REFALL_WEB // (the web build: WebGL 2)
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
         if (opt_.hidden) glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         if (shotMode) glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         GLFWmonitor* mon = opt_.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
@@ -1383,6 +1399,7 @@ int App::run() {
         return 1;
     }
     Input::loadMappings();
+#ifndef REFALL_WEB
     { // the window's icon: the REFALL logo (where the platform takes one; Wayland uses the desktop file's)
         std::vector<GLFWimage> icons;
         for (const IconImage& ic : ICON_IMAGES) icons.push_back({ic.size, ic.size, const_cast<unsigned char*>(ic.rgba)});
@@ -1391,16 +1408,26 @@ int App::run() {
 #endif
             glfwSetWindowIcon(win_, (int)icons.size(), icons.data());
     }
+#endif
     glfwMakeContextCurrent(win_);
     glfwSwapInterval(shotMode || opt_.hidden ? 0 : 1);
+#ifndef REFALL_WEB
     glfwSetWindowRefreshCallback(win_, [](GLFWwindow*) { g_refresh = true; }); // (a held frame is drawn again)
+#endif
     if (!gladLoadGL(glfwGetProcAddress)) { std::fprintf(stderr, "could not load OpenGL functions\n"); return 1; }
+#ifdef REFALL_WEB
+    web::setupContext(win_);
+#endif
     }
     glGetError();
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
     // The menu's universe snapshots are made on a worker thread with its own context (an instance's init can take
     // seconds): a hidden window's context, or a second EGL context when headless.
+#ifdef REFALL_WEB
+    if (false) { // (one WebGL context: the snapshots are made on the main thread while the menu is idle)
+#else
     if (opt_.menu || opt_.menuEnabled || !opt_.menuShot.empty() || !opt_.menuClip.empty() || opt_.viewer) {
+#endif
         if (headless_) {
             if (void* wc = headless::createWorkerContext())
                 WorldPool::setWorkerContext([wc] { return headless::makeWorkerCurrent(wc); }, [] { headless::makeWorkerCurrent(nullptr); });
@@ -1414,11 +1441,13 @@ int App::run() {
 
     campaign_.load(opt_.campaignPath);
     progress_.load(opt_.progressPath, &campaign_);
+#ifndef REFALL_WEB // (the web build: the campaign only, no voyages of the player's own, no free play)
     voyages_.load(VoyageStore::defaultDir(opt_.progressPath));
     voyages_.setMain(campaign_, opt_.progressPath);
     menu_.setVoyages(&voyages_, [this](const std::string& id) { return openVoyage(id); });
     playlists_.load(opt_.playlistsPath);
     menu_.setPlaylists(&playlists_);
+#endif
     menu_.setFreeDifficulty(opt_.difficulty);
     menu_.setFreeLevel(opt_.level);
     menu_.setCampaignDifficulty(opt_.difficultyGiven ? opt_.difficulty : DIFF_NORMAL);
@@ -1534,6 +1563,9 @@ int App::run() {
         }
 
         updateMenuMusic();
+#ifdef REFALL_WEB
+        web::persist(runTime_);
+#endif
 
         // ---- The menus.
         if (mode_ == MODE_MENU) {
@@ -1573,8 +1605,11 @@ int App::run() {
             if (!testShot_.empty()) { menu_.screenshot(testShot_, fbw, fbh); std::printf("[test] shot %s\n", testShot_.c_str()); testShot_.clear(); }
             swap();
             keepPlace(c.kind != Menu::Choice::NONE);
-            if (c.kind == Menu::Choice::QUIT) quit_ = true;
-            else if (c.kind != Menu::Choice::NONE) beginSession(c);
+            if (c.kind == Menu::Choice::QUIT) {
+#ifndef REFALL_WEB // (a page isn't quit)
+                quit_ = true;
+#endif
+            } else if (c.kind != Menu::Choice::NONE) beginSession(c);
             continue;
         }
 
@@ -2838,6 +2873,9 @@ int main(int argc, char** argv) {
     g_startTime = std::chrono::steady_clock::now();
     platform::standaloneStart();
     platform::lineBufferStdout();
+#ifdef REFALL_WEB
+    web::mountStorage();
+#endif
 #ifdef REFALL_VOYAGE_VIEWER
     return viewerMain(argc, argv);
 #endif

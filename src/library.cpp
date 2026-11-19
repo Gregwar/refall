@@ -25,8 +25,8 @@ void Library::scan(const std::vector<std::string>& paths) {
             for (auto& e : resolveYoutube(p)) files_.push_back(e);
             continue;
         }
-        if (isYoutubeEntry(p)) { // "ytdl:<id>": one cached / downloadable YouTube song
-            files_.push_back(youtubeEntryForId(p.substr(5, p.find('\t') - 5)));
+        if (isYoutubeEntry(p)) { // "ytdl:<id>[\t<title>]": one cached / downloadable YouTube song (its title looked up if not given)
+            files_.push_back(p.find('\t') != std::string::npos ? p : youtubeEntryForId(p.substr(5)));
             continue;
         }
         std::error_code ec;

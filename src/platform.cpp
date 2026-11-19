@@ -26,7 +26,9 @@ namespace platform {
 
 fs::path executableDir() {
     std::error_code ec;
-#if defined(_WIN32)
+#if defined(__EMSCRIPTEN__)
+    return "/refall"; // (the web build's preloaded files: the menu's music, the gamepad mappings)
+#elif defined(_WIN32)
     wchar_t buf[MAX_PATH * 4];
     DWORD n = GetModuleFileNameW(nullptr, buf, (DWORD)(sizeof(buf) / sizeof(buf[0])));
     if (n > 0) return fs::path(std::wstring(buf, n)).parent_path();
@@ -142,6 +144,13 @@ static const char* NUL_OUT = " >/dev/null 2>&1";
 static const char* NUL_ERR = " 2>/dev/null";
 #endif
 
+#if defined(__EMSCRIPTEN__)
+// The web build runs no other programs.
+int run(const std::string&) { return -1; }
+FILE* openRead(const std::string&) { return nullptr; }
+FILE* openWrite(const std::string&) { return nullptr; }
+int closeRead(FILE*) { return -1; }
+#else
 int run(const std::string& cmd) { return std::system(wrap(cmd + NUL_OUT).c_str()); }
 
 FILE* openRead(const std::string& cmd) {
@@ -167,6 +176,7 @@ int closeRead(FILE* f) {
     return pclose(f);
 #endif
 }
+#endif
 
 void lineBufferStdout() {
 #if defined(_WIN32)

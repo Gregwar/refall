@@ -794,12 +794,19 @@ void Renderer::sampleFrame() {
     const int prev = smp_.cur ^ 1;
     if (smp_.filled[prev]) {
         glBindBuffer(GL_PIXEL_PACK_BUFFER, smp_.pbo[prev]);
+#ifdef REFALL_WEB // (no mapped buffers in WebGL)
+        smp_.px.resize((size_t)sw * sh * 4);
+        glGetBufferSubData(GL_PIXEL_PACK_BUFFER, 0, (GLsizeiptr)sw * sh * 4, smp_.px.data());
+        smp_.pw = sw;
+        smp_.ph = sh;
+#else
         if (const void* m = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, (GLsizeiptr)sw * sh * 4, GL_MAP_READ_BIT)) {
             smp_.px.assign((const unsigned char*)m, (const unsigned char*)m + (size_t)sw * sh * 4);
             smp_.pw = sw;
             smp_.ph = sh;
             glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
         }
+#endif
         smp_.filled[prev] = false;
     }
     // this frame's

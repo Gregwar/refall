@@ -1,5 +1,6 @@
 # Build output (also holds test screenshots)
 build/
+build-web/
 
 # Songs are not versioned (copyrighted, large): put your own in audio/
 audio/*

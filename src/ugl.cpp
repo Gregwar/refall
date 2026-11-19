@@ -1,9 +1,82 @@
 #include "ugl.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
+#include <mutex>
+#include <string>
 
 namespace ugl {
+
+static bool webBlendExt = false, webClipExt = false;
+void setWebExtensions(bool blendFuncExtended, bool clipDistance) {
+    webBlendExt = blendFuncExtended;
+    webClipExt = clipDistance;
+}
+
+// GLSL 3.30 core -> GLSL ES 3.00: the same language but for the header (version, precisions, extensions); the
+// shaders keep to the part both share.
+std::string toGlslEs(const char* src, GLenum type) {
+    std::string s = src;
+    size_t v = s.find("#version");
+    if (v == std::string::npos) return s;
+    const size_t eol = s.find('\n', v);
+    std::string head = "#version 300 es\n";
+    const bool clip = s.find("gl_ClipDistance") != std::string::npos;
+    if (clip && webClipExt) head += "#extension GL_ANGLE_clip_cull_distance : require\n";
+    if (type == GL_FRAGMENT_SHADER && s.find("index = 1") != std::string::npos)
+        head += "#extension GL_EXT_blend_func_extended : require\n";
+    head += "precision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n"
+            "precision highp samplerCube;\nprecision highp sampler2DArray;\nprecision highp sampler2DShadow;\n"
+            "precision highp isampler2D;\nprecision highp usampler2D;\n";
+    s = s.substr(0, v) + head + (eol == std::string::npos ? std::string() : s.substr(eol + 1));
+    // words GLSL ES reserves that desktop drivers let pass as names: renamed (whole words)
+    static const char* RESERVED[] = {"half", "patch", "cast", "sample", "filter", "input", "output", "active", "common",
+                                     "partition", "resource"};
+    auto word = [](char c) { return std::isalnum((unsigned char)c) || c == '_'; };
+    for (const char* r : RESERVED) {
+        const size_t n = std::strlen(r);
+        for (size_t p = s.find(r); p != std::string::npos; p = s.find(r, p + 1)) {
+            if ((p > 0 && word(s[p - 1])) || (p + n < s.size() && word(s[p + n]))) continue;
+            s.replace(p, n, std::string("refall_") + r);
+            p += 7;
+        }
+    }
+    // no clip distances without the extension: the writes go to a throwaway variable
+    if (clip && !webClipExt)
+        for (size_t p; (p = s.find("gl_ClipDistance[0]")) != std::string::npos;) s.replace(p, 18, "refallClip0_");
+    if (clip && !webClipExt) {
+        const size_t m = s.find("void main");
+        if (m != std::string::npos) s.insert(m, "float refallClip0_;\n");
+    }
+    return s;
+}
+
+void shaderSource(GLuint shader, GLenum type, const char* src) {
+    static const char* dump = std::getenv("REFALL_GLSL_DUMP");
+    if (dump && *dump) { // every distinct shader once, named by its hash
+        static std::mutex m;
+        std::lock_guard<std::mutex> lock(m);
+        char name[64];
+        std::snprintf(name, sizeof(name), "%016zx.%s", std::hash<std::string>{}(src), type == GL_VERTEX_SHADER ? "vert" : "frag");
+        std::error_code ec;
+        std::filesystem::create_directories(dump, ec);
+        const std::filesystem::path f = std::filesystem::path(dump) / name;
+        if (!std::filesystem::exists(f, ec))
+            if (FILE* o = std::fopen(f.string().c_str(), "wb")) { std::fputs(src, o); std::fclose(o); }
+    }
+#ifdef REFALL_WEB
+    const std::string es = toGlslEs(src, type);
+    const char* c = es.c_str();
+    glShaderSource(shader, 1, &c, nullptr);
+#else
+    glShaderSource(shader, 1, &src, nullptr);
+#endif
+}
 
 const char* FULLSCREEN_VS = R"(#version 330 core
 out vec2 vUv;
@@ -23,7 +96,7 @@ void drawFullscreen() {
 
 static GLuint stage(GLenum type, const char* src, const char* name) {
     GLuint s = glCreateShader(type);
-    glShaderSource(s, 1, &src, nullptr);
+    shaderSource(s, type, src);
     glCompileShader(s);
     GLint ok = 0;
     glGetShaderiv(s, GL_COMPILE_STATUS, &ok);

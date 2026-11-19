@@ -158,6 +158,9 @@ private:
            flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     GLuint shadowFbo_ = 0, shadowTex_ = 0;
+    // a 1x1 shadow map for the shadow pass's own draws: their uShadow must name a shadow texture that isn't the one
+    // being drawn (WebGL refuses a sampler left on another kind of texture, or on the target)
+    GLuint shadowDummy_ = 0;
     ugl::Target sceneT_, seabedT_, reflT_;
     GLuint halfDepth_ = 0;
     int samples_ = 4, halfW_ = 1, halfH_ = 1;
