@@ -284,15 +284,13 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
         verts_.push_back({P[k][0], P[k][1], 0, 0, 0, 0, C[k].r, C[k].g, C[k].b, C[k].a * fade_, 0, 0, 0, 3.f});
 }
 
-void Painter::kaleido(GLuint a, GLuint b, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time, float level,
-                      float saturation, float duo, float loA, float hiA, float loB, float hiB) {
+void Painter::kaleido(float seedA, float seedB, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time,
+                      float level, float saturation, float duo) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
-uniform sampler2D uA, uB;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo;
-uniform vec2 uRangeA, uRangeB; // each frame's luminance range (5th and 95th percentiles), stretched to 0..1
-uniform int uSeg, uProcA, uProcB;
+uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB;
+uniform int uSeg;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) {
@@ -300,19 +298,23 @@ float vn(vec2 p) {
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y);
 }
-// no snapshot of the universe: a procedural pane of glass in the stage's hue, its neighbours and light streaks
-vec3 proc(vec2 uv) {
-    vec2 q = uv * 3.0 + vec2(uTime * 0.02, -uTime * 0.015);
+// a procedural pane of glass in the tint's hue, its neighbours and light streaks; each seed its own pattern (where in
+// the noise, its scale and its turn)
+vec3 proc(vec2 uv, float seed) {
+    vec2 o = vec2(h21(vec2(seed, 1.7)), h21(vec2(seed, 9.3))) * 97.0;
+    float a = h21(vec2(seed, 4.1)) * 6.2832, sc = 2.4 + 1.6 * h21(vec2(seed, 7.9));
+    uv = mat2(cos(a), -sin(a), sin(a), cos(a)) * (uv - 0.5) + 0.5;
+    vec2 q = uv * sc + o + vec2(uTime * 0.02, -uTime * 0.015);
     float n = vn(q) * 0.6 + vn(q * 2.1 + 5.0) * 0.3 + vn(q * 4.3 - 2.0) * 0.1;
-    float s = vn(uv * 5.0 - vec2(uTime * 0.01, 0.0));
+    float s = vn(uv * 5.0 + o.yx - vec2(uTime * 0.01, 0.0));
     vec3 hue2 = uTint.gbr * 0.75 + 0.1, hue3 = uTint.brg * 0.6 + 0.15;
     vec3 c = mix(uTint * 0.25, uTint, smoothstep(0.25, 0.65, n));
     c = mix(c, hue2, smoothstep(0.62, 0.85, n) * 0.7);
     c = mix(c, hue3, smoothstep(0.7, 0.95, s) * 0.5);
     return c + smoothstep(0.78, 1.0, n) * 0.25;
 }
-// a frame graded toward the tint: its luminance stretched to its full range, then a duotone between a deep and a bright
-// shade of the tint, mixed with its own (more saturated) colours
+// the glass graded toward the tint: its luminance stretched to its full range, then a duotone between a deep and a
+// bright shade of the tint, mixed with its own (more saturated) colours
 vec3 grade(vec3 c, vec2 range, vec2 uv) {
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     // (a stretch of at most x4, so the frame's 8-bit steps don't band; a little glassy noise for its flat areas)
@@ -323,7 +325,7 @@ vec3 grade(vec3 c, vec2 range, vec2 uv) {
     vec3 duo = mix(deep, bright, smoothstep(0.0, 1.0, ln));
     return mix(own, duo, uDuo);
 }
-vec3 src(sampler2D t, int isProc, vec2 uv, vec2 range) { return grade(isProc == 1 ? proc(uv) : texture(t, uv).rgb, isProc == 1 ? vec2(0.05, 0.7) : range, uv); }
+vec3 src(float seed, vec2 uv) { return grade(proc(uv, seed), vec2(0.05, 0.7), uv); }
 // A triangle grid: the facet a point falls in (`cell`), where in it (`f`), and its distance to the nearest edge (in grid
 // units) and which edge that is (0..2).
 void facet(vec2 g, out vec2 cell, out vec2 f, out float edge, out float side) {
@@ -366,8 +368,7 @@ void main() {
     vec2 uv = q * 0.85 + vec2(0.5 + 0.06 * sin(uTime * 0.05), 0.5 + 0.06 * cos(uTime * 0.04));
     uv += (vec2(h21(cell), h21(cell + 3.7)) - 0.5) * 0.035;
     uv = abs(fract(uv * 0.5) * 2.0 - 1.0);
-    vec3 c = uMix <= 0.0 ? src(uA, uProcA, uv, uRangeA) : uMix >= 1.0 ? src(uB, uProcB, uv, uRangeB)
-                          : mix(src(uA, uProcA, uv, uRangeA), src(uB, uProcB, uv, uRangeB), uMix);
+    vec3 c = uMix <= 0.0 ? src(uSeedA, uv) : uMix >= 1.0 ? src(uSeedB, uv) : mix(src(uSeedA, uv), src(uSeedB, uv), uMix);
     // large shards over the small facets, slightly turned, each lit from its own side
     vec2 sc, sf;
     float se, ss;
@@ -447,15 +448,8 @@ void main() {
     if (!direct) kalTgt_.bind();
     glDisable(GL_BLEND);
     glUseProgram(kalProg_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, a ? a : b);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, b ? b : a);
-    glActiveTexture(GL_TEXTURE0);
-    ugl::set1i(kalProg_, "uA", 0);
-    ugl::set1i(kalProg_, "uB", 1);
-    ugl::set1i(kalProg_, "uProcA", a ? 0 : 1);
-    ugl::set1i(kalProg_, "uProcB", b ? 0 : 1);
+    ugl::set1f(kalProg_, "uSeedA", seedA);
+    ugl::set1f(kalProg_, "uSeedB", seedB);
     ugl::set2f(kalProg_, "uRes", (float)lw, (float)lh);
     ugl::set2f(kalProg_, "uC", cx * sx, cy * sy);
     ugl::set1f(kalProg_, "uScale", (float)h_ / lh);
@@ -465,8 +459,6 @@ void main() {
     ugl::set1f(kalProg_, "uLevel", level);
     ugl::set1f(kalProg_, "uSat", saturation);
     ugl::set1f(kalProg_, "uDuo", duo);
-    ugl::set2f(kalProg_, "uRangeA", loA, hiA);
-    ugl::set2f(kalProg_, "uRangeB", loB, hiB);
     ugl::set1i(kalProg_, "uSeg", segs);
     glUniform3f(glGetUniformLocation(kalProg_, "uTint"), tint.r, tint.g, tint.b);
     ugl::drawFullscreen();

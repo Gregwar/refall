@@ -1,8 +1,7 @@
-// The menu: a kaleidoscope of the game's real universes. The focused song's universe is folded into a slowly turning
-// crystal kaleidoscope; the stages are faceted gem petals in a quiet rosette (one fine ring, no ornament)
+// The menu: a slowly turning crystal kaleidoscope of procedural glass, its own pattern for each stage and song of each
+// voyage, in their hues; the stages are faceted gem petals in a quiet rosette (one fine ring, no ornament)
 // around a polished dark medallion, each opening onto its songs as smaller gems; focus turns the rosette to bring the
 // chosen petal to the reading position (the right). Panels are frosted glass (Painter::glass).
-// Live universes come from a WorldPool (menuworlds.hpp): small frames, their own frame rate, snapshots otherwise.
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -15,9 +14,7 @@
 #include "library.hpp"
 #include "menu.hpp"
 #include "universes/registry.hpp"
-#include "menuworlds.hpp"
 #include "playlists.hpp"
-#include "web.hpp"
 
 namespace {
 using F = Painter::Font;
@@ -31,8 +28,8 @@ std::string roman(int n) {
 std::string upper(std::string s) { for (char& c : s) c = (char)std::toupper((unsigned char)c); return s; }
 std::string fmt1(float v) { char b[16]; std::snprintf(b, sizeof(b), "%.1f", v); return b; }
 std::string linesStr(int n) { return n < 0 ? std::string("-") : std::to_string(n); } // lines, "-" when unknown
-// The game's start picks where the title's tour of universes begins and how the kaleidoscope is turned
-// (REFALL_MENU_SEED=N: a given one, e.g. for screenshots).
+// The game's start picks the title's patterns, where its tour of universes' hues begins and how the kaleidoscope is
+// turned (REFALL_MENU_SEED=N: a given one, e.g. for screenshots).
 unsigned menuSeed() {
     static const unsigned seed = std::getenv("REFALL_MENU_SEED") ? (unsigned)std::atoi(std::getenv("REFALL_MENU_SEED")) : std::random_device{}();
     return seed;
@@ -42,18 +39,24 @@ unsigned menuSeed() {
 // menu (680..890) centred on the screen's height together.
 constexpr float TITLE_CY = 330.f + 540.f - 0.5f * (20.f + 890.f);
 
-// the kaleidoscope's crossfade between sources (one menu at a time)
+// the kaleidoscope's crossfade between patterns (one menu at a time)
 std::string g_cur, g_prev;
-float g_mix = 1.f;
-double g_lastT = 0;
+float g_curSeed = 0.f, g_prevSeed = 0.f, g_mix = 1.f;
+
+uint64_t mixHash(uint64_t h, uint64_t v) { return (h ^ v) * 1099511628211ull; }
+uint64_t strHash(uint64_t h, const std::string& s) {
+    for (char c : s) h = mixHash(h, (unsigned char)c);
+    return h;
+}
+// a pattern's seed, from a hash (the shader takes a float: a few thousand distinct ones)
+float seedOf(uint64_t h) { return (float)((h >> 20) % 4096) + 0.5f; }
 } // namespace
 
 struct Worlds {
     Menu& m;
     Painter& p;
-    WorldPool& pool;
     float u, t;
-    Worlds(Menu& mm) : m(mm), p(mm.paint_), pool(*mm.worlds_), u(mm.u_), t(mm.time_) {}
+    Worlds(Menu& mm) : m(mm), p(mm.paint_), u(mm.u_), t(mm.time_) {}
     float X(float v) const { return m.X(v); }
     float Y(float v) const { return m.Y(v); }
     int nStages() const { return m.camp_ ? m.camp_->size() : 0; }
@@ -123,7 +126,6 @@ struct Worlds {
         mix = sstep((std::fmod(t, period) - (period - 1.6f)) / 1.6f);
     }
 
-    void wants();
     void draw();
     // pieces
     void info(F head, F body, Col ink, Col dim, Col accent, int card);
@@ -141,53 +143,12 @@ struct Worlds {
 };
 
 void Menu::renderWorlds(int w, int h) {
-    if (!worlds_) {
-        worlds_ = std::make_unique<WorldPool>();
-        worlds_->setSnapshotsOnly(true); // cached snapshots; the missing ones made one at a time while the menu is idle
-        worlds_->setGenerate(true, 0.4f);
-        Worlds wd0(*this);
-        worlds_->prefetch(wd0.tour());
-    }
-    static const MusicState mu; // (the snapshots-only pool renders nothing)
-    worlds_->setIdle(time_ - lastInput_ > 0.6f); // a universe's snapshot (100-500 ms) is never made under a key press
-#ifdef REFALL_WEB
-    // the site's snapshots first: none made here while they arrive, then the ones not found looked for again
-    static bool fetching = true;
-    if (fetching) {
-        fetching = web::worldsPending();
-        worlds_->setGenerate(!fetching, 0.4f);
-        if (!fetching) worlds_->retryMissing();
-    }
-#endif
-    Worlds wd(*this);
-    wd.wants();
-    const float dt = (float)std::clamp(time_ - g_lastT, 0.0, 0.1);
-    g_lastT = time_;
-    worlds_->update(time_, dt, mu);
-    if (std::getenv("REFALL_MENU_STATS") && (worlds_->made || worlds_->snapped))
-        std::printf("[menu] worlds: %d made (%.0f ms), %d frames (%.1f ms), %d snapshots\n", worlds_->made, worlds_->makeMs,
-                    worlds_->rendered, worlds_->renderMs, worlds_->snapped);
     paint_.begin(w, h);
+    Worlds wd(*this);
     wd.draw();
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// what is on screen: which universes, live at what rate
-
-void Worlds::wants() {
-    if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) { // the focused stage's universes, and its neighbours'
-        const int fs = focusedStage();
-        for (int s : {fs, fs + 1, fs - 1})
-            if (s >= 0 && s < nStages())
-                for (int k2 = 0; k2 < nSongs(s); k2++) pool.want(spec(s, k2), 0);
-        return;
-    }
-    std::string cur, next;
-    float mix;
-    tourAt(11.f, cur, next, mix);
-    pool.want(cur, 0);
-    pool.want(next, 0);
-}
 
 void Worlds::draw() {
     if (m.screen_ == Menu::TITLE) kalTitle();
@@ -306,18 +267,16 @@ void Worlds::kalBackground(const std::string& cur) {
     lastT = t;
     Col tint{0.6f, 0.6f, 0.7f, 1.f};
     float lvl = 0.f, sat = 1.f, duo = 0.35f; // duo: how far the frames are graded toward the tint
-    std::string spec = cur;
+    // the pattern: each stage's (and each song's, its petal open) from the voyage's songs, so another voyage has others;
+    // elsewhere the title's tour, one every 11 s from the game's start seed
+    std::string key;
+    uint64_t h = 1469598103934665603ull;
     if (m.screen_ == Menu::CAMPAIGN && nStages() > 0) {
         const int fs = focusedStage();
-        if (m.petal_) spec = this->spec(fs, m.song_);
-        else { // a closed petal: the most colourful of its universes (among those with a snapshot)
-            spec = this->spec(fs, 0);
-            float best = -1.f;
-            for (int k2 = 0; k2 < nSongs(fs); k2++) {
-                float col, lo, hi;
-                if (pool.stats(this->spec(fs, k2), col, lo, hi) && col > best) { best = col; spec = this->spec(fs, k2); }
-            }
-        }
+        for (const CampaignStage& st : m.camp_->stages())
+            for (const CampaignSong& sg : st.songs) h = strHash(h, sg.id);
+        h = mixHash(mixHash(h, (uint64_t)fs + 1), m.petal_ ? (uint64_t)m.song_ + 1 : 0);
+        key = "S" + std::to_string(fs) + (m.petal_ ? "." + std::to_string(m.song_) : std::string());
         if (!open(fs)) { tint = hex(0x8c94a8); lvl = -1.3f; sat = 0.15f; duo = 0.f; } // locked: a cool, dim grey
         else {
             tint = m.petal_ ? songCol(fs, m.song_) : stageCol(fs);
@@ -331,16 +290,20 @@ void Worlds::kalBackground(const std::string& cur) {
         menuUniverseColor(m.camp_, cur, c);
         tint = rgb8(c);
     }
-    // the source: the image when it exists, else procedural glass ("#"), and a change of either folds in over 0.8 s
-    const std::string key = pool.tex(spec) ? spec : spec + "#";
+    if (key.empty()) {
+        const int i = (int)((t + 0.8f) / 11.f); // (the tour's universe shown: it turns at its crossfade's middle)
+        h = mixHash(mixHash(h, menuSeed()), (uint64_t)i + 1);
+        key = "T" + std::to_string(i);
+    }
+    // a change of pattern folds in over 0.8 s
     if (key != g_cur) {
         g_prev = g_cur;
+        g_prevSeed = g_curSeed;
         g_cur = key;
+        g_curSeed = seedOf(h);
         g_mix = g_prev.empty() ? 1.f : 0.f;
     }
     g_mix = std::min(1.f, g_mix + dt / 0.8f);
-    auto texOf = [&](const std::string& kk) -> GLuint { return kk.empty() || kk.back() == '#' ? 0 : pool.tex(kk); };
-    const GLuint a = texOf(g_prev.empty() ? g_cur : g_prev), b = texOf(g_cur);
     const float k = first ? 1.f : 1.f - std::exp(-dt / 0.7f);
     tintNow = mixc(tintNow, tint, k);
     lvlNow += (lvl - lvlNow) * k;
@@ -350,16 +313,8 @@ void Worlds::kalBackground(const std::string& cur) {
     cyNow += ((title ? TITLE_CY : head ? -80.f : 440.f) - cyNow) * k;
     satNow += (sat - satNow) * k;
     duoNow += (duo - duoNow) * k;
-    auto range = [&](const std::string& kk, float& lo, float& hi) {
-        float col;
-        lo = 0.f; hi = 1.f;
-        if (!kk.empty() && kk.back() != '#') pool.stats(kk, col, lo, hi);
-    };
-    float loA, hiA, loB, hiB;
-    range(g_prev.empty() ? g_cur : g_prev, loA, hiA);
-    range(g_cur, loB, hiB);
-    p.kaleido(a, b, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
-              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, loA, hiA, loB, hiB);
+    p.kaleido(g_prev.empty() ? g_curSeed : g_prevSeed, g_curSeed, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
+              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow);
 }
 
 // A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from

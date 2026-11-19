@@ -1421,12 +1421,12 @@ int App::run() {
     }
     glGetError();
     std::printf("[gl] %s · %s\n", (const char*)glGetString(GL_VENDOR), (const char*)glGetString(GL_RENDERER));
-    // The menu's universe snapshots are made on a worker thread with its own context (an instance's init can take
-    // seconds): a hidden window's context, or a second EGL context when headless.
-#ifdef REFALL_WEB
-    if (false) { // (one WebGL context: the snapshots are made on the main thread while the menu is idle)
+    // The voyage viewer's universe snapshots are made on a worker thread with its own context (an instance's init can
+    // take seconds): a hidden window's context, or a second EGL context when headless.
+#ifndef REFALL_WEB
+    if (opt_.viewer) {
 #else
-    if (opt_.menu || opt_.menuEnabled || !opt_.menuShot.empty() || !opt_.menuClip.empty() || opt_.viewer) {
+    if (false) {
 #endif
         if (headless_) {
             if (void* wc = headless::createWorkerContext())

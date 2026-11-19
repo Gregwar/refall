@@ -10,7 +10,6 @@
 #include <random>
 
 #include "library.hpp"
-#include "menuworlds.hpp"
 #include "stb_image_write.h"
 #include "ugl.hpp"
 #include "youtube.hpp"
@@ -255,10 +254,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         aOpen_ += ((petal_ ? 1.f : 0.f) - aOpen_) * (1.f - std::exp(-dt * 5.f)); // a petal opens a little slower
     }
     enterT_ += dt;
-    if (Choice r; updateDebrief(in, dt, r)) {
-        if (r.kind != Choice::NONE) worlds_.reset(); // (as any choice: the GPU's memory for the game)
-        return r;
-    }
+    if (Choice r; updateDebrief(in, dt, r)) return r;
     if (celebrate_ >= 0 && screen_ == CAMPAIGN) {
         celebrateT_ += dt;
         if (stage_ != celebrate_ || row_ != 1 || petal_) celebrate_ = -1; // the player moved: it ends (cleared)
@@ -543,10 +539,6 @@ Menu::Choice Menu::update(const Input& in, float dt) {
     }
     case DEBRIEF: break; // (updateDebrief)
     }
-    if (ch.kind != Choice::NONE) {
-        worlds_.reset(); // the live universes free their GPU memory for the game (snapshots stay on disk)
-        return ch;
-    }
     return ch;
 }
 
@@ -600,7 +592,7 @@ void Menu::render(int w, int h) {
         paint_.end();
         return;
     }
-    renderWorlds(w, h); // the live universes render first, then the painter draws
+    renderWorlds(w, h);
     drawMessage();
     drawEnterFade();
     paint_.end();

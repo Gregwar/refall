@@ -8,7 +8,6 @@
 #include <thread>
 
 #include "platform.hpp"
-#include "web.hpp"
 #include "universes/registry.hpp"
 
 namespace fs = std::filesystem;
@@ -233,9 +232,6 @@ bool WorldPool::loadSnap(const std::string& spec) {
     Snap& s = snaps_[spec];
     s.tried = true;
     std::ifstream f(path(spec), std::ios::binary);
-#ifdef REFALL_WEB
-    if (!f) f.open(std::string(web::WORLDS_DIR) + "/" + fs::path(path(spec)).filename().string(), std::ios::binary);
-#endif
     if (!f) return false;
     std::vector<unsigned char> px((size_t)SW * SH * 3);
     f.read((char*)px.data(), (std::streamsize)px.size());
@@ -384,15 +380,7 @@ bool WorldPool::makeSnapshot(const std::string& spec, double time, const MusicSt
     for (int i = 0; i < 10; i++) renderOne(l, spec, time + i * 0.1, 0.1f, music);
     snapshot(spec, l.tgt);
     l.tgt.destroy();
-#ifdef REFALL_WEB
-    std::printf("[menu] snapshot of %s made on the main thread (%.0f ms)\n", spec.c_str(), makeMs + renderMs);
-#endif
     return true;
-}
-
-void WorldPool::retryMissing() {
-    for (auto& [spec, s] : snaps_)
-        if (!s.ok) s.tried = false;
 }
 
 int WorldPool::missing() const {

@@ -20,7 +20,6 @@
 #include "title.hpp"
 #include "voyages.hpp"
 
-class WorldPool;
 inline std::string gameTitle(bool upperCase) {
     std::string s = GAME_TITLE;
     if (upperCase)
@@ -125,7 +124,7 @@ public:
     bool screenshot(const std::string& path, int w, int h);
 
 private:
-    // ---- drawing: the kaleidoscope (menuwin.cpp), on a painter, over live universes (menuworlds.hpp)
+    // ---- drawing: the kaleidoscope (menuwin.cpp), on a painter
     Painter paint_;
     void drawMessage();
     // the debrief (debrief.cpp)
@@ -141,8 +140,7 @@ private:
     bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
     void drawDebrief(int w, int h);
     void drawEnterFade();
-    friend struct Worlds; // the kaleidoscope (menuwin.cpp), with live universes
-    std::unique_ptr<WorldPool> worlds_;
+    friend struct Worlds; // the kaleidoscope (menuwin.cpp)
     void renderWorlds(int w, int h);
     float u_ = 1, sx_ = 0, sy_ = 0, fw_ = 1920, fh_ = 1080; // the 1920x1080 layout in the frame
     float X(float v) const { return sx_ + v * u_; }
