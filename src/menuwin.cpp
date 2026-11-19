@@ -924,9 +924,9 @@ void Worlds::kalVoyages() {
             p.rrect(x - 6 * u, y - 6 * u, w + 12 * u, h + 12 * u, 26 * u, withA(featured ? hex(0xffc860) : hex(0xffffff), 0.32f), 30 * u);
             p.setAdditive(false);
         }
-        p.rrect(x, y + 12 * u, w, h, 22 * u, hex(0x000000, 0.3f), 30 * u);
-        p.frost(x, y, w, h, 20 * u, mixc(hue, hex(0x0a0a12), sel ? 0.66f : 0.86f), 0.88f); // (dark enough for its colors and text to pop)
-        p.rrect(x, y, w, h * 0.45f, 20 * u, hex(0xffffff, 0.035f));
+        // frosted glass as the other panels (the focused one lit a little, in its hue)
+        p.glass(x, y, w, h, 20 * u, u, sel ? 0.35f : 0.f, 0.45f);
+        if (sel) p.rrect(x, y, w, h, 20 * u, withA(hue, 0.1f));
         p.rrectLine(x, y, w, h, 20 * u, (featured ? 2.6f : 1.4f) * u + 1.2f * g * u,
                     sel ? hex(0xffffff, 0.95f) : featured ? hex(0xe8c06a, 0.5f) : withA(hue, 0.35f));
         p.setFade(fade * (sel ? 1.f : 0.6f)); // the dull cards' contents dimmer

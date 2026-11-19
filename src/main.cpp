@@ -1614,10 +1614,12 @@ int App::run() {
             const bool remapped = remapKeys(); // (a remap takes the keys)
             if (input_.remapDone()) menu_.note(Menu::GAMEPAD, "GAMEPAD REMAPPED");
             const Menu::Choice c = remapped ? Menu::Choice{} : menu_.update(input_, dt);
+            const bool plays = c.kind == Menu::Choice::PLAY_FREE || c.kind == Menu::Choice::PLAY_CAMPAIGN;
+            // an option's choice before this frame is drawn (its "done" shows at once, the rows not seen again)
+            if (!plays && c.kind != Menu::Choice::NONE && c.kind != Menu::Choice::QUIT) applyOption(c);
             fbSize(fbw, fbh);
             // (a choice leaves the menu at once: its screen may already have moved on, e.g. RETRY back on the Voyage's,
             // so this last frame is black, as the leaving screen faded to, rather than a flash of the menu)
-            const bool plays = c.kind == Menu::Choice::PLAY_FREE || c.kind == Menu::Choice::PLAY_CAMPAIGN;
             if (plays) {
                 glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 glViewport(0, 0, fbw, fbh);
@@ -1638,7 +1640,6 @@ int App::run() {
                 quit_ = true;
 #endif
             } else if (plays) beginSession(c);
-            else if (c.kind != Menu::Choice::NONE) applyOption(c);
             continue;
         }
 
