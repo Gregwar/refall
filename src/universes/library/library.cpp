@@ -1552,7 +1552,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             return vec4(a.x, (float)height_ - b.y, b.x, (float)height_ - a.y);
         };
         const vec4 rl = rect(layout::LEFT_COLUMN[0] + 0.9f, layout::LEFT_COLUMN[1] + 0.3f, layout::LEFT_COLUMN[2] - 0.5f, layout::LEFT_COLUMN[3] - 0.5f);
-        const vec4 rr = rect(layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.4f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
+        const vec4 rr = rect(layout::RIGHT_COLUMN[0] + 0.5f, layout::RIGHT_COLUMN[1] - 0.9f, layout::RIGHT_COLUMN[2] - 0.9f, layout::RIGHT_COLUMN[3] - 0.5f);
         set4f(progFinal_, "uCardL", rl.x, rl.y, rl.z, rl.w);
         set4f(progFinal_, "uCardR", rr.x, rr.y, rr.z, rr.w);
         set3f(progFinal_, "uCardCol", P.card);
