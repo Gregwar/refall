@@ -1566,6 +1566,7 @@ int App::run() {
         updateMenuMusic();
 #ifdef REFALL_WEB
         web::persist(runTime_);
+        web::adaptResolution(mode_ == MODE_MENU ? -1 : R_.universe()); // (each universe its own resolution)
 #endif
 
         // ---- The menus.
