@@ -427,8 +427,8 @@ void main() {
     vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006), vn(nw * 1.1 + 5.2 - uTime * 0.005));
     vec2 q2 = vec2(vn(nw * 2.3 + q1 * 2.0 + 1.7), vn(nw * 2.3 + q1 * 2.0 + 9.2));
     vec2 ww = nw + q2 * 1.4;
-    float f = 0.0, amp = 0.5, frq = 1.0;
-    for (int i = 0; i < 5; i++) { f += amp * vn(ww * frq); frq *= 2.07; amp *= 0.5; }
+    float fb = 0.0, amp = 0.5, frq = 1.0;
+    for (int i = 0; i < 5; i++) { fb += amp * vn(ww * frq); frq *= 2.07; amp *= 0.5; }
     // filaments: the ridges of a finer warped noise
     float rg = 0.0; amp = 0.55; frq = 3.0;
     for (int i = 0; i < 4; i++) { float n = vn(ww * frq + 3.3); rg += amp * pow(1.0 - abs(2.0 * n - 1.0), 3.0); frq *= 2.1; amp *= 0.5; }
@@ -437,14 +437,14 @@ void main() {
     float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
     float rightC = exp(-dot((sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45), (sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45)));
     float dens = clamp(band * 0.7 + leftC * 0.8 + rightC * 0.7, 0.0, 1.3);
-    float gas = smoothstep(0.3, 0.85, f) * dens;
-    float wisp = rg * smoothstep(0.25, 0.7, f) * dens;
+    float gas = smoothstep(0.3, 0.85, fb) * dens;
+    float wisp = rg * smoothstep(0.25, 0.7, fb) * dens;
     float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
     // its colours: cool on the left (the tint, a neighbour, cyan where it is thinnest), warm on the right
-    float side = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (f - 0.5));
+    float warmth = smoothstep(0.35 * asp, 0.85 * asp, sp.x + 0.25 * (fb - 0.5));
     vec3 cool = mix(tv * 0.9, n2, smoothstep(0.45, 0.8, q2.x));
     cool = mix(cool, n3, smoothstep(0.6, 0.9, q1.y) * 0.5);
-    vec3 gc = mix(cool, warm, side);
+    vec3 gc = mix(cool, warm, warmth);
     vec3 col = vec3(0.006, 0.006, 0.02) + tv * 0.035 * dens;
     col += gc * gas * 0.42;
     col += mix(gc, vec3(1.0), 0.35) * wisp * 0.38;
