@@ -23,7 +23,7 @@
 // The pieces are plain, flat blocks of color, each of the seven types its own clean color: faint seams between its
 // cells and one bold line of the same brush around each piece (a stroke per straight run of its outline, seeded by
 // its place in the piece's shape, so it holds as the piece falls and locks). The falling piece is a locked one; the
-// ghost is its pencil sketch, a faint flat under a light line of the same hand. A hard drop draws a few short impact lines
+// ghost is its draft in grey graphite: a loose outline gone over twice, light hatching inside. A hard drop draws a few short impact lines
 // at the piece's feet. A cleared row breaks up into its color's dots, which burst out of the well sideways and fade
 // (0.5 s, real time even in slow motion).
 //
@@ -1348,7 +1348,8 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
         brushPx({a.x - 2.f * s_, a.y + 1.3f * s_}, {b.x + 2.f * s_, a.y + 1.3f * s_}, 2.6f, 0xF1009, 0.f, 1.f, 0.5f, tone(ink_), 0.9f, -1);
     }
 
-    // the ghost: the piece's pencil sketch, a faint flat under a light outline of the same hand
+    // the ghost: the piece roughed out in grey graphite, a draft: a loose outline gone over twice (the strokes not
+    // quite on each other), light diagonal hatching inside; seeded by the piece's shape, so it holds as it moves
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         Piece gp = p;
@@ -1356,14 +1357,24 @@ void MangaUniverse::drawBoard(const Game& g, float t) {
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
-            const vec3 c = tone(pencil_);
+            const vec3 c = tone(lerp(paper_, vec3{0.24f, 0.24f, 0.26f}, 0.75f)); // graphite on this page's paper
+            int mx = 99, my = 99;
+            for (auto& cc : gc) { mx = std::min(mx, cc[0]); my = std::min(my, cc[1]); }
             for (auto& cc : gc) {
                 if (cc[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)cc[0], (float)cc[1]);
                 const vec2 a = px({w.x - 0.5f, w.y + 0.5f}), b = px({w.x + 0.5f, w.y - 0.5f});
-                rectPx(a.x, a.y, b.x, b.y, c, 0.14f);
+                rectPx(a.x, a.y, b.x, b.y, c, 0.05f);
+                const uint64_t hs = splitmix64((uint64_t)p.type * 977 + (uint64_t)(cc[0] - mx) * 31 + (uint64_t)(cc[1] - my) * 7);
+                for (int k = 0; k < 3; k++) { // hatching, bottom-left to top-right, inside the cell
+                    const float f = (k + 0.5f) / 3.f, inset = 0.14f * (b.x - a.x);
+                    const vec2 h0{lerpf(a.x, b.x, f * 0.5f) + inset * 0.3f, lerpf(b.y, a.y, 0.5f + f * 0.5f) - inset * 0.3f};
+                    const vec2 h1{lerpf(a.x, b.x, 0.5f + f * 0.5f) - inset * 0.3f, lerpf(b.y, a.y, f * 0.5f) + inset * 0.3f};
+                    brushPx(h0, h1, 0.8f, hs + k, 0.f, 1.f, 0.6f, c, 0.38f, -1);
+                }
             }
-            inkOutline(gc, 4, Game::HIDDEN, 0.f, 0.f, 2.f, (uint64_t)p.type + 1, 0.4f, c, 0.95f);
+            inkOutline(gc, 4, Game::HIDDEN, 0.f, 0.f, 1.6f, (uint64_t)p.type + 1, 1.f, c, 0.85f);
+            inkOutline(gc, 4, Game::HIDDEN, 0.f, 0.f, 1.2f, (uint64_t)p.type + 101, 1.f, c, 0.55f);
         }
     }
 
