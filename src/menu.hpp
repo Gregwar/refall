@@ -83,10 +83,11 @@ public:
     // stage, free play's difficulty and playlist.
     struct Place {
         int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1, freeLevel = -1;
+        int music = -1; // the menu's music: 1 on, 0 off (-1: not said)
         std::string playlist, voyage; // voyage: the custom voyage open ("" the main one), whose stage `stage` is
         bool operator==(const Place& o) const {
             return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff && freeLevel == o.freeLevel &&
-                   playlist == o.playlist && voyage == o.voyage;
+                   music == o.music && playlist == o.playlist && voyage == o.voyage;
         }
         bool operator!=(const Place& o) const { return !(*this == o); }
     };
@@ -97,6 +98,7 @@ public:
     // difficulties and playlist (after a reset of the saved data).
     void resetPlace();
     void setInput(const Input* in) { input_ = in; } // (the gamepad page shows its remap)
+    bool music() const { return music_; } // the menu's music wanted (OPTIONS > MENU MUSIC)
     // An options page's "done", in its panel for a moment (instead of a message over the menu).
     void note(Screen s, const std::string& text) { screen_ = s; note_ = text; noteT_ = NOTE_TIME; }
     // The opening (the game's first launch, or after --reset): on black, the title's disc and its name come up, the
@@ -208,8 +210,9 @@ private:
     static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_OPTIONS = 2, TI_QUIT = 3;
 #endif
     // the options: 0 unlock every stage, 1 reset the saved data (either asks "are you sure?" first: YES / NO, NO
-    // focused), 2 the gamepad's page
-    static constexpr int OPTION_ITEMS = 3;
+    // focused), 2 the gamepad's page, 3 the menu's music on or off (kept with the menu's place)
+    static constexpr int OPTION_ITEMS = 4;
+    bool music_ = true;
     int optSel_ = 0, optYes_ = 0;
     float aOpt_ = 0, aYes_ = 0;
     bool optConfirm_ = false;

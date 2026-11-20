@@ -691,7 +691,8 @@ void Worlds::kalOptions() {
     optionPanel("OPTIONS", Menu::OPTION_ITEMS);
     if (optionNote()) return;
     if (!m.optConfirm_) {
-        const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK STAGES", "RESET SAVED DATA", "GAMEPAD"};
+        const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK STAGES", "RESET SAVED DATA", "GAMEPAD",
+                                                 m.music_ ? "MENU MUSIC: ON" : "MENU MUSIC: OFF"};
         optionRows(Menu::OPTION_ITEMS, LABEL, m.aOpt_);
         return;
     }

@@ -1546,7 +1546,7 @@ int App::run() {
         }
         savedPlace_ = lastPlace_ = menu_.place();
     }
-    if (menuEnabled_ && opt_.menuMusic) startMenuMusic();
+    if (menuEnabled_ && opt_.menuMusic && menu_.music()) startMenuMusic();
 
     const bool fixedStep = headless_ && !opt_.stream;
     double last = fixedStep ? 0.0 : clock();
@@ -2312,9 +2312,16 @@ void App::updateMenuMusic() {
             std::printf("[menu music] could not decode it: the menu stays silent\n");
         }
     }
+    // switched on in the options while it was never loaded (off at the start)
+    static bool started = false; // (once: a missing file isn't looked for again each frame)
+    if (musicLoad_.valid() || musicReady_) started = true;
+    if (!started && menuEnabled_ && opt_.menuMusic && menu_.music() && mode_ == MODE_MENU) {
+        started = true;
+        startMenuMusic();
+    }
     if (!musicReady_) return;
-    // (silent on a run's debrief, and while a cleared stage's petal turns and the next one unlocks)
-    const int want = mode_ != MODE_MENU || menu_.screen() == Menu::DEBRIEF || menu_.celebrating() ? 0 : 1;
+    // (silent on a run's debrief, while a cleared stage's petal turns and the next one unlocks, and when switched off)
+    const int want = mode_ != MODE_MENU || menu_.screen() == Menu::DEBRIEF || menu_.celebrating() || !menu_.music() ? 0 : 1;
     if (want == musicState_) return;
     static const char* NAMES[3] = {"faded out", "playing", "ducked"};
     if (want == 1 && musicState_ == 0 && audio_.bedGain() <= 0.f) audio_.rewindBed(); // back from a game: from the top
