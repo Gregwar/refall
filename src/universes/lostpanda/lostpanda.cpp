@@ -497,8 +497,8 @@ void LostPandaUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 lights_.push_back(l);
             }
         }
-        // the snack: a piece of bamboo (a whole little stalk for a quad) flying to the cub's paws (not once it has
-        // found its family: then it is only with them)
+        // red sparkles from the row to the cub (more for a quad; not once it has found its family: then it is only
+        // with them)
         if (firstRow >= 0 && noticeT_ <= 0.f) {
             Light l;
             l.kind = lines >= 4 ? 2 : 1;
@@ -1314,18 +1314,30 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
     for (Light& l : lights_) {
         if (l.age < 0.f) continue;
         if (l.kind > 0) {
-            // a snack: an arc from the row to the cub's paws, tumbling; caught at the end
+            // red sparkles: a little comet of them along an arc from the row to the cub, twinkling and turning,
+            // melting into it at the end
             const float u = saturate(l.age / l.life);
-            const float e = u * u * (3.f - 2.f * u);
-            const float iu = 1.f - e;
             const vec2 b = kidHead;
-            const vec2 p = V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * b.y);
+            auto at = [&](float uu) {
+                const float e = uu * uu * (3.f - 2.f * uu), iu = 1.f - e;
+                return V(iu * iu * l.a.x + 2.f * iu * e * l.ctl.x + e * e * b.x, iu * iu * l.a.y + 2.f * iu * e * l.ctl.y + e * e * b.y);
+            };
             const float a = smoothstepf(0.f, 0.08f, u) * (1.f - smoothstepf(0.9f, 1.f, u)) * world;
-            const float ang = l.seed * 6.f + l.age * 2.2f * (1.f - u);
-            sprite(u < 0.75f ? bgSprites_ : fgSprites_, p, l.size * (1.f - 0.35f * smoothstepf(0.8f, 1.f, u)), vec3(1.f), a, 5, ang);
+            const int n = l.kind == 2 ? 9 : 6;
+            for (int k = 0; k < n; k++) {
+                const float uk = u - k * 0.03f;
+                if (uk <= 0.f) break;
+                vec2 pk = at(uk);
+                const float wob = l.seed * 37.f + k * 2.3f;
+                pk.x += 0.18f * std::sin(l.age * 5.f + wob) * (k > 0);
+                pk.y += 0.18f * std::cos(l.age * 4.3f + wob) * (k > 0);
+                const float tw = 0.7f + 0.3f * std::sin(l.age * 14.f + wob);
+                const float sz = l.size * (1.9f - 0.13f * k) * (1.f - 0.4f * smoothstepf(0.85f, 1.f, u));
+                const vec3 red = k % 3 == 1 ? vec3(1.6f, 0.45f, 0.35f) : vec3(1.6f, 0.12f, 0.16f);
+                sprite(u < 0.15f ? bgSprites_ : fgSprites_, pk, sz, red, a * tw * (1.f - 0.07f * k), 7, l.age * 1.6f + wob);
+            }
             if (u > 0.92f && !l.fed) {
                 l.fed = true;
-                if (noticeT_ <= 0.f) munchT_ = std::max(munchT_, l.kind == 2 ? 2.4f : 1.5f);
                 joy_ = std::max(joy_, l.kind == 2 ? 0.7f : 0.3f);
                 if (l.kind == 2 && act_ != A_HUG) { act_ = A_HOP; actT_ = 0.f; actDur_ = 2.4f; }
             }

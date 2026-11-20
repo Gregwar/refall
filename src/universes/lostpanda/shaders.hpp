@@ -2657,6 +2657,17 @@ void main() {
         frag = vec4(col * a, a) * vB.a;
         return;
     }
+    if (mode == 7) {
+        // a sparkle: a four-pointed star of light, a bright core, a soft halo of its colour (param: its turn)
+        float a = vC.x;
+        vec2 q = mat2(cos(a), -sin(a), sin(a), cos(a)) * vLocal;
+        float star = exp(-abs(q.x) * 14.0) * max(0.0, 1.0 - abs(q.y)) + exp(-abs(q.y) * 14.0) * max(0.0, 1.0 - abs(q.x));
+        float core = exp(-r * r * 40.0), halo = exp(-r * r * 6.0) * 0.45;
+        float k = clamp(star * 0.9 + core + halo, 0.0, 1.5);
+        vec3 col = mix(c, vec3(1.0), clamp(core + star * 0.4, 0.0, 1.0) * 0.7);
+        frag = vec4(col * k * vB.a, clamp(k, 0.0, 1.0) * vB.a);
+        return;
+    }
     if (mode == 5) {
         // a snack: a short piece of bamboo with a node and a leaf, tumbling slowly (param: its angle)
         vec2 q = rot(vC.x) * vLocal;
@@ -2711,9 +2722,9 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the cells
-// One clean, solid cell per block, a short segment of a bamboo stalk in its piece's color: a soft cylindrical shading
-// across it (a sheen left of its middle), a node ring near its base, a faint fibre, a thin darker line of its own
-// color around it. The ghost is the outline alone; a cleared cell shrinks softly away.
+// One cell per block, a segment of a bamboo stalk in its piece's color seen a little from above: a cylinder with its
+// open top (a pale rim round a dark hollow), round across (dark at its sides, a sheen left of its middle), a node near
+// its base, a faint fibre, a thin darker line of its own color around it. The ghost is the outline alone; a cleared cell shrinks softly away.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, -
@@ -2746,7 +2757,11 @@ void main() {
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float shrink = 1.0 - 0.6 * smoothstep(0.0, 1.0, erase);
     vec2 q = vLocal / shrink;
-    float d = sdBox(q, vec2(0.44 - 0.12)) - 0.12;
+    // a segment of bamboo stalk seen a little from above: a cylinder narrower than the cell, its open top an ellipse
+    // (a pale rim round a dark hollow), its bottom rounded the same way
+    const float RX = 0.42, RY = 0.085, TOP = 0.37, BOT = -0.43;
+    float xr = clamp(q.x / RX, -1.0, 1.0), curve = RY * sqrt(max(0.0, 1.0 - xr * xr));
+    float d = max(abs(q.x) - RX, max(q.y - (TOP + curve), (BOT - curve) - q.y));
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2756,16 +2771,25 @@ void main() {
         frag = vec4(c * a, a);
         return;
     }
-    // a stalk: round across (lit a little from above), a sheen, a node ring near its base, a faint fibre
-    float cyl = sat(1.0 - sq(q.x / 0.46));
-    vec3 c = t * mix(0.74, 1.06, sqrt(cyl)) * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, mix(t, uLightC, 0.5) * 1.12, exp(-sq((q.x + 0.17) / 0.055)) * 0.4);
-    float ny = q.y + 0.29;
-    c = mix(c, t * 0.66, (1.0 - smoothstep(0.02, 0.02 + aa * 1.5, abs(ny))) * 0.75);
-    c = mix(c, mix(t, vec3(1.0), 0.3), (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(ny - 0.045))) * 0.45);
+    // the body: round across, dark at its sides, a sheen left of its middle, a little lighter up top
+    float cyl = sat(1.0 - xr * xr);
+    vec3 c = t * mix(0.52, 1.08, sqrt(cyl)) * mix(0.9, 1.04, smoothstep(BOT, TOP, q.y));
+    c = mix(c, mix(t, uLightC, 0.5) * 1.15, exp(-sq((q.x + 0.18) / 0.05)) * 0.45);
+    // a node near its base: a dark line round it (following the front of the round), a pale one just above
+    float ny = q.y - (-0.27 - curve);
+    c = mix(c, t * 0.55, (1.0 - smoothstep(0.016, 0.016 + aa * 1.5, abs(ny))) * 0.7);
+    c = mix(c, mix(t, vec3(1.0), 0.35), (1.0 - smoothstep(0.01, 0.01 + aa * 1.5, abs(ny - 0.035))) * 0.5);
     c *= 1.0 - 0.03 * smoothstep(0.35, 0.5, abs(fract(q.x * 7.0 + 0.5) - 0.5) * 2.0) * lod2(aa);
+    // the open top: the ellipse, a pale rim and inside it the dark hollow (lit on its far wall)
+    float e = length(vec2(q.x / RX, (q.y - TOP) / RY));
+    float top = 1.0 - smoothstep(1.0 - aa / RY, 1.0, e);
+    float hollow = 1.0 - smoothstep(0.72 - aa / RY, 0.72, e);
+    vec3 rim = mix(t, vec3(1.0), 0.35) * mix(0.9, 1.1, sat(0.5 - q.x));
+    vec3 inner = t * mix(0.25, 0.55, smoothstep(TOP - RY, TOP + RY, q.y));
+    c = mix(c, rim, top);
+    c = mix(c, inner, hollow);
     // its own thin darker edge
-    c = mix(c, t * 0.55, 1.0 - smoothstep(0.0, 0.035 + aa, -d));
+    c = mix(c, t * 0.5, (1.0 - smoothstep(0.0, 0.03 + aa, -d)) * (1.0 - top * 0.5));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     c = mix(c, uBridgeInk, uBridge);
