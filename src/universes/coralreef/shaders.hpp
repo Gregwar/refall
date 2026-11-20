@@ -862,6 +862,7 @@ float gLod;    // 1: the fine detail drawn .. 0: too small on screen for it
 vec2 gOff;     // the block's own offset into its species' texture
 vec2 gCol;     // its place in its colony (cells): the colony's own textures run on across its blocks
 vec2 gColOff;  // the colony's offset into them
+bool gAlt;     // the colony's species in its second form (half the colonies)
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 float smax(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0); return mix(b, a, h) + k * h * (1.0 - h); }
 vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
@@ -924,13 +925,13 @@ vec4 staghorn(vec2 q, float d) {
             vec2 sd = gColOff + cc * 7.13 + fi * 3.71;
             vec2 r = hash2(sd), r2 = hash2(sd.yx + 1.9), r3 = hash2(sd * 1.3 + 4.2);
             // in front: antlers rising, leaning apart
-            vec2 a = o + vec2(-0.22 + 0.44 * fi + (r.x - 0.5) * 0.2, -0.5 + r.y * 0.75);
-            front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 0.8 - (fi - 0.5) * 0.8, 0.38 + 0.12 * r2.y, 0.138, fi > 0.5 ? 1.0 : -1.0));
+            vec2 a = o + vec2(-0.22 + 0.44 * fi + (r.x - 0.5) * 0.2, -0.62 + r.y * 0.6);
+            front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 0.5) * 0.9, 0.36 + 0.12 * r2.y, 0.138, fi > 0.5 ? 1.0 : -1.0));
             // behind them, in their shade: more, any way
             if (k == 0) {
                 float ang = r3.x * 6.283;
-                vec2 b = vec2(r3.y - 0.5, r.x - 0.5) * 0.5 - vec2(cos(ang), sin(ang)) * 0.22;
-                back = max(back, antler(q, b, ang, 0.44, 0.11, r2.y > 0.5 ? 1.0 : -1.0));
+                vec2 b = vec2(r3.y - 0.5, r.x - 0.5) * 0.4 - vec2(cos(ang), sin(ang)) * 0.24;
+                back = max(back, antler(q, b, ang, 0.46, 0.12, r2.y > 0.5 ? 1.0 : -1.0));
             }
         }
     }
@@ -949,20 +950,27 @@ vec4 staghorn(vec2 q, float d) {
     return vec4(h, light, open, cover);
 }
 vec4 star(vec2 q) {
-    // one great corallite in the block, its fine septa radiating from its central pit out to the block's edges
-    vec2 c0 = (hash2(gOff + 1.7) - 0.5) * 0.22;
+    // one great corallite in the block, its fine septa radiating from its central pit out to the block's edges (in
+    // its second form a few smaller ones, packed, a valley between them)
+    vec2 c0 = (hash2(gOff + 1.7) - 0.5) * 0.22, id;
     vec2 v = q - c0;
-    float r = length(v), ang = atan(v.y, v.x);
-    float sept = cos(ang * 30.0 + 3.0 * vnoise(q * 4.0 + gOff) + 1.5 * vnoise(q * 11.0 + gOff.yx) + r * 4.0);
+    float r = length(v), n = 30.0, valley = 1.0, R = 0.75;
+    if (gAlt) {
+        vec4 w = voro(q * 2.1 + gOff, 0.7, id);
+        v = -w.zw / 2.1; r = w.x / 2.1; n = 18.0; R = 0.42;
+        valley = smoothstep(0.0, 0.25, w.y - w.x);
+    }
+    float ang = atan(v.y, v.x);
+    float sept = cos(ang * n + 3.0 * vnoise(q * 4.0 + gOff) + 1.5 * vnoise(q * 11.0 + gOff.yx) + r * 4.0);
     // (they fade out toward the pit, where they crowd closer than a few pixels)
-    float fade = smoothstep(2.0, 4.0, r * 6.283 / 30.0 / gAA) * gLod;
+    float fade = smoothstep(2.0, 4.0, r * 6.283 / n / gAA) * gLod;
     float pit = smoothstep(0.08, 0.015, r);
     float fuzz = vnoise(q * 34.0 + gOff) - 0.5;
     float sp = smoothstep(-0.6, 0.9, sept + fuzz * 0.8) * fade;
-    float h = 0.022 * sp + 0.06 * smoothstep(0.75, 0.05, r) - 0.04 * pit;
+    float h = (0.022 * sp + 0.06 * smoothstep(R, 0.05, r)) * mix(0.5, 1.0, valley) - 0.04 * pit;
     // (bright toward its heart, its outer septa deeper in tone)
-    float light = mix(0.45, 1.0, sp) * mix(0.55, 1.08, smoothstep(0.6, 0.1, r));
-    return vec4(h, light, mix(mix(0.45, 1.0, smoothstep(-0.8, 0.3, sept * fade + fuzz * 0.3)), 0.12, pit), 1.0);
+    float light = mix(0.45, 1.0, sp) * mix(0.55, 1.08, smoothstep(R * 0.8, R * 0.13, r)) * mix(0.6, 1.0, valley);
+    return vec4(h, light, mix(mix(0.45, 1.0, smoothstep(-0.8, 0.3, sept * fade + fuzz * 0.3)), 0.12, pit) * mix(0.5, 1.0, valley), 1.0);
 }
 vec4 porous(vec2 q) {
     vec2 id, id2;
@@ -976,6 +984,27 @@ vec4 porous(vec2 q) {
     float lumps = vnoise(q * 9.0 + gOff) - 0.5;
     float h = 0.016 * lip - 0.06 * pit - 0.02 * pit2 + 0.025 * lumps * gLod;
     return vec4(h, 0.7 + 0.3 * lip - 0.3 * max(pit, pit2) + 0.3 * lumps, mix(1.0, 0.16, max(pit, pit2 * 0.7)), 1.0);
+}
+// the porous coral's second form: cup corals, raised rings round deep cups, here and there on a lumpy crust
+vec4 cups(vec2 q) {
+    vec2 id;
+    vec4 v = voro(q * 3.5 + gOff, 0.8, id);
+    float ro = 0.3 + 0.08 * hash(id + 2.3), ri = ro * 0.5;
+    float has = step(0.2, hash(id + 6.6));
+    float ring = exp(-sq((v.x - (ro + ri) * 0.5) / ((ro - ri) * 0.55))) * has;
+    float cup = smoothstep(ri, ri * 0.4, v.x) * has;
+    float lumps = vnoise(q * 9.0 + gOff) - 0.5;
+    float h = 0.028 * ring - 0.05 * cup + 0.022 * lumps * gLod;
+    return vec4(h, 0.5 + 0.5 * ring - 0.3 * cup + 0.3 * lumps, mix(1.0, 0.12, cup) * mix(0.7, 1.0, max(ring, 1.0 - has)), 1.0);
+}
+// the tube coral's second form: knobs, packed round bumps
+vec4 knobs(vec2 q) {
+    vec2 id;
+    vec4 v = voro(q * 4.0 + gOff, 0.7, id);
+    float r = 0.4 + 0.12 * hash(id + 1.1);
+    float k = sqrt(max(1.0 - sq(v.x / r), 0.0));
+    float lumps = vnoise(q * 14.0 + gOff) - 0.5;
+    return vec4(0.04 * k + 0.008 * lumps * gLod, mix(0.25, 1.0, k), mix(0.2, 1.0, smoothstep(0.0, 0.45, k)), 1.0);
 }
 vec4 plate(vec2 q, float d) {
     // one plate over the whole colony: its swell, its cups, in the colony's own coordinates
@@ -1065,9 +1094,9 @@ vec4 surface(int sp, vec2 q, out float d) {
     vec4 s;
     if (sp == 0) s = staghorn(q, d);
     else if (sp == 1) s = star(q);
-    else if (sp == 2) s = porous(q);
+    else if (sp == 2) s = gAlt ? cups(q) : porous(q);
     else if (sp == 3) s = plate(q, dd);
-    else if (sp == 4) s = tubes(q);
+    else if (sp == 4) s = gAlt ? knobs(q) : tubes(q);
     else if (sp == 5) s = sponge(q);
     else s = brain(q);
     s.x = s.x * mix(0.3, 1.0, gLod) * mix(0.4, 1.0, t) + (dome * R + bulge) * (sp == 0 ? 0.4 : 1.0);
@@ -1091,6 +1120,7 @@ void main() {
     gLod = 1.0 - smoothstep(0.045, 0.1, gAA);
     gOff = hash2(vec2(vC.w * 91.7, vC.w * 13.3)) * 40.0 + 3.0;
     gColOff = hash2(vec2(vC.z * 57.3, vC.z * 21.1)) * 40.0 + 7.0;
+    gAlt = fract(vC.z * 7.31) > 0.5;
     float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
     vec3 t = vB.rgb;
     if (uPass < 0.5) {
@@ -1110,7 +1140,7 @@ void main() {
         // the ghost: a thin crust of coral along each of its cells' outlines (two cells share theirs)
         float rd = abs(sdBox(q, vec2(0.5 - 0.12)) - 0.12);
         float g1 = vnoise(q * 24.0 + gOff), g2 = vnoise(q * 9.0 + gOff.yx);
-        float w = 0.062 + 0.03 * (g1 - 0.5) + 0.03 * (g2 - 0.5);
+        float w = 0.072 + 0.035 * (g1 - 0.5) + 0.035 * (g2 - 0.5);
         float ring = 1.0 - smoothstep(w - gAA, w + gAA, rd);
         if (ring <= 0.003) discard;
         // its grains lit from above
@@ -1119,7 +1149,7 @@ void main() {
         float hx = 0.6 * sqrt(clamp(1.0 - abs(sdBox(q + vec2(e, 0.0), vec2(0.38)) - 0.12) / w, 0.0, 1.0)) + 0.25 * vnoise((q + vec2(e, 0.0)) * 40.0 + gOff);
         float hy = 0.6 * sqrt(clamp(1.0 - abs(sdBox(q + vec2(0.0, e), vec2(0.38)) - 0.12) / w, 0.0, 1.0)) + 0.25 * vnoise((q + vec2(0.0, e)) * 40.0 + gOff);
         vec3 n = normalize(vec3(-(hx - hh) / e * 0.012, -(hy - hh) / e * 0.012, 1.0));
-        vec3 alb = mix(t, vec3(0.62, 0.42, 0.29), 0.55);
+        vec3 alb = mix(t, vec3(0.72, 0.46, 0.3), 0.5) * (0.7 + 0.6 * vnoise(q * 64.0 + gOff));
         vec3 c = alb * (0.45 + 0.75 * clamp((dot(n, L) + 0.3) / 1.3, 0.0, 1.0)) * lightC;
         c += t * uGlow * 0.25;
         c = mix(c, uBridgeInk, uBridge);
@@ -1143,6 +1173,14 @@ void main() {
     float cs = plate_ ? 0.5 : hash(gOff), ks = vC.z;
     vec3 alb = t * (0.9 + 0.2 * cs) * mix(vec3(1.0), vec3(1.1, 0.92, 0.85), (ks - 0.5) * 0.5);
     alb *= mix(vec3(1.0), vec3(1.08, 0.94, 0.9), vnoise(tq * 2.2 + to.yx) - 0.3);
+    // (the second forms in their own tones: brown cup corals, orange knobs, a peach brain, a teal sponge)
+    if (gAlt) {
+        if (sp == 2) alb *= vec3(0.74, 0.56, 0.48);
+        else if (sp == 4) alb *= vec3(1.08, 0.86, 0.72);
+        else if (sp == 6) alb *= mix(vec3(1.0), vec3(1.13, 2.4, 3.9), 0.45);
+        else if (sp == 5) alb *= vec3(1.4, 1.5, 1.2);
+        else if (sp == 1) alb *= vec3(1.0, 0.92, 0.8);
+    }
     alb *= mix(0.5, 1.12, s.y);
     alb *= 1.0 + gLod * 0.32 * (vnoise(tq * 72.0 + to) - 0.5);
     // lit from above: the key light wrapped softly, the shade warmed by the light scattered in the tissue, the
