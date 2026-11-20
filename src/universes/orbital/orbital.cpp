@@ -118,7 +118,10 @@ Palette paletteOf(int v) {
     switch (v) {
     case 0: {
         // BLUE MARBLE: the day side under a high sun, blue oceans and white clouds, the terminator on the far horizon
-        p.sunDir = normalize(vec3(0.45f, 0.82f, 0.12f));
+        // (the sun seen low in the frame's upper left, its flare across; the planet lit by it high overhead)
+        p.litDir = normalize(vec3(0.45f, 0.82f, 0.12f));
+        p.sunDir = normalize(vec3(-0.878f, -0.053f, -0.474f));
+        p.keyDir = p.litDir;
         p.sunC = vec3(1.f, 0.98f, 0.94f) * 2.6f; p.sunGlow = L(0xfff0d0); p.keyC = p.sunC;
         p.earthC = L(0x3a64a8) * 0.32f; p.amb = L(0x0a0e18) * 0.6f; p.envUp = L(0x05070c); p.envDown = L(0x3a6ab0) * 0.7f;
         p.ocean = L(0x0a2c6e); p.shallow = L(0x1a8cb4); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
@@ -162,7 +165,9 @@ Palette paletteOf(int v) {
     default: {
         // RED PLANET: a rust world, dust in the thin air (blue at its sunset), colonies' lights on its night side
         p.planetType = 1.f;
-        p.sunDir = normalize(vec3(0.55f, 0.7f, 0.45f));
+        p.litDir = normalize(vec3(0.55f, 0.7f, 0.45f));
+        p.sunDir = normalize(vec3(-0.878f, -0.053f, -0.474f));
+        p.keyDir = p.litDir;
         p.sunC = vec3(1.f, 0.93f, 0.85f) * 2.4f; p.sunGlow = L(0xffd0a0); p.keyC = p.sunC;
         p.earthC = L(0x8a4a28) * 0.3f; p.amb = L(0x100a0a) * 0.6f; p.envUp = L(0x06040a); p.envDown = L(0x8a4a2a) * 0.6f;
         p.land = L(0xb05430); p.land2 = L(0xcc7c48); p.ocean = L(0x4a2a24); p.desert = L(0xe2a878); p.ice = L(0xfff4ec);
@@ -177,7 +182,7 @@ Palette paletteOf(int v) {
         break;
     }
     }
-    if (p.keyMoon < 0.5f) p.keyDir = p.sunDir;
+    if (p.keyMoon < 0.5f && dot(p.keyDir, p.keyDir) < 0.5f) p.keyDir = p.sunDir; // (the station lit by the sun seen, but where set)
     if (dot(p.litDir, p.litDir) < 0.5f) p.litDir = p.sunDir; // the planet lit by the sun seen (but at dawn)
     return p;
 }
