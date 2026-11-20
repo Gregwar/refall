@@ -180,12 +180,23 @@ private:
     vec3 boardToWorld(vec2 b, float dist) const; // a board point (board units) seen at that distance in the world
     bool toScreen(const vec3& w, vec2* ndc) const;
 
-    // ---- Board.
+    // ---- Board. Each block a chunk of living coral (its species the piece type's, see CELL_FS): its own seed (its
+    // variation of the species' texture) and its colony's (the piece it came with: the blocks of one colony grow
+    // into each other, a seam between two colonies), both kept through the falls and the clears.
     struct CellInst { float a[4], b[4], c[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase);
+    // nb: the sides it shares with blocks of its own colony (1 above, 2 below, 4 left, 8 right); place: its place in
+    // its colony (column + 8 x row up from the colony's lowest, both 0..3: the colony's textures run on across it)
+    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, int type = 0,
+              float seed = 0.5f, float colony = 0.5f, int nb = 0, int place = 0);
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int type; float t; };
+    float blockSeeds_[22][10] = {};          // the board's blocks' seeds (0: none yet)
+    float colonies_[22][10] = {};       // their colonies' seeds
+    int8_t seedType_[22][10] = {};      // the type the seeds were given for (+1; another type there: not ours)
+    int8_t places_[22][10] = {};        // their places in their colonies
+    float pieceSeeds_[4] = {0.13f, 0.37f, 0.61f, 0.89f}, pieceColony_ = 0.5f; // the falling piece's
+    Rng blockRng_{9157};                // the blocks' seeds (apart from the world's draws)
+    struct Fading { float x, y; int type; float t, seed, colony; int nb, place; };
     std::vector<Fading> fading_;
     struct Puff { vec2 p, v; float age, life, size; };
     std::vector<Puff> puffs_;

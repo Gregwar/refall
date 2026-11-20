@@ -17,12 +17,17 @@
 // to the deep, the reef recedes for the next game. Around a song the camera dives down onto its view as the light
 // comes down from the surface, and after it drifts back as the light sinks to the deep.
 //
-// The pieces: one clean rounded tile per cell, one saturated color per piece type, softly lit from above with a
-// faint ripple of light. A cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
+// The pieces: each cell a chunk of living coral filling it, its edges soft, rounded and irregular, a species per
+// piece type (staghorn, star coral, porous coral, plate coral, tube coral, sponge, brain coral; each in two forms, a
+// colony's one or the other), its relief lit softly from above with a faint ripple of light. A piece is one colony
+// (its blocks grow into each other, a dark seam between two colonies), each block its own variation, both kept
+// through the falls and the clears (see CELL_FS). The ghost is a thin crust of coral along the piece's outline. A
+// cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
 //
 // Cost: the world at a reduced resolution (at most 720 lines) with depth (the water, ~115k triangles of seabed, the
 // corals instanced per form, the fish, the billboards); the composite at full resolution integrates the light
-// shafts in ten steps a pixel.
+// shafts in ten steps a pixel. The blocks' relief is sampled three times a pixel (a full board: about 0.05 ms of an
+// RTX 4090 at 1080p, 0.16 ms at 4K).
 #include "universes/coralreef/coralreef.hpp"
 
 #include <algorithm>
@@ -88,25 +93,25 @@ const VariantDef VARIANTS[] = {
      0xf2e0bc, 0xe0c294, 0xa47c6c, 0x6e5470, 0xf07aa0, 0x66c45a,
      {0xff5f8a, 0xa45cff, 0xffd02a, 0xff8a2a, 0x2fe0a8, 0xff3fd0, 0x9cf03a, 0x3a9cff},
      0xffffff, 0xffd84a, 0x022a56, 0x86ecf2,
-     {0x8edcfc, 0xffe48a, 0xd6a4ff, 0xa6ec9c, 0xff9ca8, 0x98a8ff, 0xffb680}, 0.55f, 1.18f, 27.f, 1.f, 1.f, 0.08f, 0.f, 1.1f},
+     {0x7cc4b4, 0xf2c050, 0xf0a890, 0x9aa04c, 0xd0605c, 0x6a9cd0, 0xe87c48}, 0.55f, 1.18f, 27.f, 1.f, 1.f, 0.08f, 0.f, 1.1f},
     // A reef at golden hour: green-gold water, the sun low on one side, long warm shafts, warm corals.
     {"GOLDEN HOUR", 0x1aa2b4, 0x0a3a7c, 0xffc890, 0xffe2b0, 0xffcf88, 0x7a76c8, 0xffcc88, 0xffe2a4, 0xffcf84,
      0xf0dcc0, 0xdcb894, 0x8c6e6c, 0x6a5868, 0xff6a7a, 0xa0c048,
      {0xff5a5a, 0xa060ff, 0xffd23a, 0xff8a2a, 0x3ad0a0, 0xe048a8, 0xb0e048, 0x5a8cff},
      0xfff6e8, 0xffb84a, 0x0a1e46, 0xffcf84,
-     {0x92dcf4, 0xffe088, 0xd8a8fa, 0xb0e892, 0xff9ea4, 0x9eaafc, 0xffb478}, -1.15f, 0.62f, 23.f, 1.35f, 0.85f, 0.06f, 0.f, 1.12f},
+     {0x8cb8a8, 0xffcc44, 0xe8ac88, 0x989c4e, 0xd88474, 0x5a80a0, 0xe87c4c}, -1.15f, 0.62f, 23.f, 1.35f, 0.85f, 0.06f, 0.f, 1.12f},
     // The outer reef: deep cobalt water, crystal clear, a white sun high above.
     {"OUTER REEF", 0x1478d8, 0x062a80, 0x62bcff, 0xa4dcff, 0xf4fbff, 0x5a74d0, 0x90d4ff, 0xf0f8ff, 0xd8f0ff,
      0xd4deec, 0xb0bed6, 0x7c6c8a, 0x5a4c74, 0xd060c8, 0x48b890,
      {0xff6a7a, 0x9a5aff, 0xffd23a, 0xff7a30, 0x3ae0d0, 0xff4aa0, 0x8cf060, 0x4a8cff},
      0xffffff, 0x7af0ff, 0x02164a, 0x90d4ff,
-     {0x8edcfc, 0xffe48a, 0xd6a4ff, 0xa6ec9c, 0xff9ca8, 0x98a8ff, 0xffb680}, 0.3f, 1.3f, 31.f, 1.1f, 1.f, 0.08f, 0.f, 1.1f},
+     {0x7ab8c0, 0xe8c060, 0xe8a49a, 0x8c9a58, 0xc05a6a, 0x6a90d8, 0xe0784e}, 0.3f, 1.3f, 31.f, 1.1f, 1.f, 0.08f, 0.f, 1.1f},
     // A moonlit night dive: indigo water, moonlight shafts, the corals glowing in fluorescent colors.
     {"MOONLIT", 0x0c3a7a, 0x03102e, 0x2a5ab8, 0x3a6ad8, 0xb8ccff, 0x2a3a88, 0x6aa0ff, 0xa8c8ff, 0x8ab0ff,
      0x8a9ac8, 0x6a78a8, 0x3a3c5a, 0x2a2c48, 0xc04aa0, 0x2a9a7a,
      {0xff5a8a, 0xb060ff, 0xffe040, 0xffa030, 0x30ffe0, 0xff40d0, 0xa0ff40, 0x6a7aff},
      0xeef4ff, 0x6affe8, 0x01061a, 0x4a80ff,
-     {0x9ae4ff, 0xffec98, 0xdeb0ff, 0xb0f2a6, 0xffa8b6, 0xa4b4ff, 0xffc092}, 0.9f, 1.05f, 21.f, 0.75f, 0.7f, 0.9f, 1.f, 1.1f},
+     {0x60e0c8, 0xf0d860, 0xff9cb0, 0xa8d860, 0xff6a8a, 0x7a9cff, 0xffa060}, 0.9f, 1.05f, 21.f, 0.75f, 0.7f, 0.9f, 1.f, 1.1f},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
@@ -839,6 +844,24 @@ TransitionHints CoralReefUniverse::hints() const {
 void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
     (void)game;
     switch (ev.type) {
+    case GameEvent::Spawn:
+        // the new piece's colony and its four blocks' seeds (they stay theirs once it locks)
+        for (int i = 0; i < 4; i++) pieceSeeds_[i] = 0.02f + 0.96f * blockRng_.uniform();
+        pieceColony_ = 0.02f + 0.96f * blockRng_.uniform();
+        break;
+    case GameEvent::Lock: {
+        int minx = 99, maxy = -99;
+        for (const auto& c : ev.cells) { minx = std::min(minx, c.x); maxy = std::max(maxy, c.y); }
+        for (size_t i = 0; i < ev.cells.size() && i < 4; i++) {
+            const auto& c = ev.cells[i];
+            if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
+            blockSeeds_[c.y][c.x] = pieceSeeds_[i];
+            colonies_[c.y][c.x] = pieceColony_;
+            seedType_[c.y][c.x] = (int8_t)(c.type + 1);
+            places_[c.y][c.x] = (int8_t)(std::clamp(c.x - minx, 0, 7) + 8 * std::clamp(maxy - c.y, 0, 7));
+        }
+        break;
+    }
     case GameEvent::HardDrop: {
         // a few tiny bubbles squeezed out from under the piece, at its sides
         float yLo = 99.f, xLo = 99.f, xHi = -99.f;
@@ -869,10 +892,28 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
     case GameEvent::Clear: {
         // the row shrinks away; it bursts into bubbles in the water behind the well (see render: the seeds)
         std::vector<vec2> pts;
+        bool rows[Game::H] = {};
+        for (auto& cl : ev.cells)
+            if (cl.y >= 0 && cl.y < Game::H) rows[cl.y] = true;
+        auto ours = [&](int x, int y, int type) {
+            return x >= 0 && x < Game::W && y >= 0 && y < Game::H && blockSeeds_[y][x] > 0.f && seedType_[y][x] == type + 1;
+        };
         for (auto& cl : ev.cells) {
             if (cl.y < Game::HIDDEN) continue;
             const vec3 p = layout::cellPos((float)cl.x, (float)cl.y);
-            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f});
+            // (it keeps its seed, and its colony with the blocks of the rows cleared with it)
+            float sd = 0.f, co = 0.5f;
+            int nb = 0, place = 0;
+            if (ours(cl.x, cl.y, cl.type)) {
+                sd = blockSeeds_[cl.y][cl.x];
+                co = colonies_[cl.y][cl.x];
+                place = places_[cl.y][cl.x];
+                auto with = [&](int x, int y) { return ours(x, y, cl.type) && rows[y] && colonies_[y][x] == co; };
+                nb = (with(cl.x, cl.y - 1) ? 1 : 0) | (with(cl.x, cl.y + 1) ? 2 : 0) | (with(cl.x - 1, cl.y) ? 4 : 0) |
+                     (with(cl.x + 1, cl.y) ? 8 : 0);
+            }
+            if (sd <= 0.f) sd = 0.02f + 0.96f * blockRng_.uniform();
+            fading_.push_back({p.x, p.y, std::clamp(cl.type, 0, 6), 0.f, sd, co, nb, place});
             pts.push_back(V(p.x, p.y));
             // the bubbles burst out of the row sideways behind the well, then rise
             const float dist = camD_ * rng_.range(0.7f, 0.95f), sc = camD_ / 15.6f;
@@ -888,6 +929,23 @@ void CoralReefUniverse::onEvent(const GameEvent& ev, const Game& game) {
                 b.seed = rng_.uniform();
                 bubbles_.push_back(b);
             }
+        }
+        {   // the blocks' seeds follow their rows down
+            float ns[Game::H][Game::W] = {}, nc[Game::H][Game::W] = {};
+            int8_t nt[Game::H][Game::W] = {}, np[Game::H][Game::W] = {};
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (rows[y]) continue;
+                std::memcpy(ns[dst], blockSeeds_[y], sizeof(blockSeeds_[y]));
+                std::memcpy(nc[dst], colonies_[y], sizeof(colonies_[y]));
+                std::memcpy(nt[dst], seedType_[y], sizeof(seedType_[y]));
+                std::memcpy(np[dst], places_[y], sizeof(places_[y]));
+                dst--;
+            }
+            std::memcpy(blockSeeds_, ns, sizeof(blockSeeds_));
+            std::memcpy(colonies_, nc, sizeof(colonies_));
+            std::memcpy(seedType_, nt, sizeof(seedType_));
+            std::memcpy(places_, np, sizeof(places_));
         }
         if (!pts.empty()) {
             clearPts_.insert(clearPts_.end(), pts.begin(), pts.end());
@@ -1126,22 +1184,79 @@ vec3 CoralReefUniverse::mantaAt(float t, float enter) const {
 // Board
 // =====================================================================================================
 
-void CoralReefUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase) {
+void CoralReefUniverse::cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, int type,
+                             float seed, float colony, int nb, int place) {
     if (alpha <= 0.003f) return;
-    cells_.push_back({{x, y, half, 0.f}, {tint.x, tint.y, tint.z, alpha}, {(float)mode, erase, 0.f, 0.f}});
+    cells_.push_back({{x, y, half, (float)(nb + 16 * std::clamp(type, 0, 6) + 128 * (place & 63))}, {tint.x, tint.y, tint.z, alpha},
+                      {(float)mode, erase, colony, seed}});
 }
 
 void CoralReefUniverse::buildBoard(const Game& g) {
     auto tintOf = [&](int t) { return pal_.piece[std::clamp(t, 0, 6)]; };
     const float darken = 1.f - 0.45f * smoothstepf(0.f, 1.f, over_);
+    // a piece's block's neighbours among its own four
+    auto pieceMask = [](const int (&cs)[4][2], int i) {
+        int m = 0;
+        for (int j = 0; j < 4; j++) {
+            const int ddx = cs[j][0] - cs[i][0], ddy = cs[j][1] - cs[i][1];
+            if (ddx == 0 && ddy == -1) m |= 1;
+            if (ddx == 0 && ddy == 1) m |= 2;
+            if (ddx == -1 && ddy == 0) m |= 4;
+            if (ddx == 1 && ddy == 0) m |= 8;
+        }
+        return m;
+    };
+    // its place in the piece (column, row up from the lowest)
+    auto piecePlace = [](const int (&cs)[4][2], int i) {
+        int minx = 99, maxy = -99;
+        for (auto& c : cs) { minx = std::min(minx, c[0]); maxy = std::max(maxy, c[1]); }
+        return std::clamp(cs[i][0] - minx, 0, 7) + 8 * std::clamp(maxy - cs[i][1], 0, 7);
+    };
+    // a block of the board: its seeds and its colony's; the blocks it never saw lock (a board filled for a test)
+    // seeds from their place, gathered in colonies of up to four touching blocks of a type, as pieces would be
+    auto known = [&](int x, int y) { return blockSeeds_[y][x] > 0.f && seedType_[y][x] == g.cell(x, y).type + 1; };
+    float stray[Game::H][Game::W];
+    int strayPlace[Game::H][Game::W] = {};
+    for (auto& row : stray)
+        for (float& v : row) v = -1.f;
+    for (int y = Game::HIDDEN; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++) {
+            const int type = g.cell(x, y).type;
+            if (type < 0 || known(x, y) || stray[y][x] >= 0.f) continue;
+            const float co = 0.02f + 0.96f * std::fmod(std::sin(x * 39.346f + y * 11.135f) * 24634.6345f + 1e5f, 1.f);
+            int qx[4] = {x}, qy[4] = {y}, n = 1;
+            stray[y][x] = co;
+            for (int k = 0; k < n && n < 4; k++)
+                for (int dir = 0; dir < 4 && n < 4; dir++) {
+                    const int xx = qx[k] + (dir == 0) - (dir == 1), yy = qy[k] + (dir == 2) - (dir == 3);
+                    if (xx < 0 || xx >= Game::W || yy < Game::HIDDEN || yy >= Game::H || g.cell(xx, yy).type != type ||
+                        known(xx, yy) || stray[yy][xx] >= 0.f || g.rowOffset(yy) != g.rowOffset(y))
+                        continue;
+                    stray[yy][xx] = co;
+                    qx[n] = xx; qy[n] = yy; n++;
+                }
+            int minx = 99, maxy = -99;
+            for (int k = 0; k < n; k++) { minx = std::min(minx, qx[k]); maxy = std::max(maxy, qy[k]); }
+            for (int k = 0; k < n; k++) strayPlace[qy[k]][qx[k]] = (qx[k] - minx) + 8 * (maxy - qy[k]);
+        }
+    auto colonyAt = [&](int x, int y) { return known(x, y) ? colonies_[y][x] : stray[y][x]; };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f);
+            const float sd = known(x, y) ? blockSeeds_[y][x] : 0.02f + 0.96f * std::fmod(std::sin(x * 12.9898f + y * 78.233f) * 43758.5453f + 1e5f, 1.f);
+            const float co = colonyAt(x, y);
+            // (the blocks of its colony touching it; a row still closing up after a clear touches none)
+            auto with = [&](int xx, int yy) {
+                return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H && g.cell(xx, yy).type == c.type &&
+                       g.rowOffset(yy) == g.rowOffset(y) && colonyAt(xx, yy) == co;
+            };
+            const int nb = (with(x, y - 1) ? 1 : 0) | (with(x, y + 1) ? 2 : 0) | (with(x - 1, y) ? 4 : 0) | (with(x + 1, y) ? 8 : 0);
+            cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, c.type, sd, co, nb, known(x, y) ? places_[y][x] : strayPlace[y][x]);
         }
-    for (const Fading& f : fading_) cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T));
+    for (const Fading& f : fading_)
+        cell(f.x, f.y, 0.5f, tintOf(f.type), 1.f, 0, saturate(f.t / CLEAR_T), f.type, f.seed, f.colony, f.nb, f.place);
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
@@ -1151,17 +1266,19 @@ void CoralReefUniverse::buildBoard(const Game& g) {
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
-            for (auto& c : gc) {
+            for (int i = 0; i < 4; i++) {
+                const auto& c = gc[i];
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.6f, 1, 0.f);
+                cell(w.x, w.y, 0.5f, tintOf(p.type), 0.9f, 1, 0.f, p.type, pieceSeeds_[i], pieceColony_, pieceMask(gc, i), piecePlace(gc, i));
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
-        for (auto& c : cells) {
+        for (int i = 0; i < 4; i++) {
+            const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f);
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, p.type, pieceSeeds_[i], pieceColony_, pieceMask(cells, i), piecePlace(cells, i));
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
@@ -1174,9 +1291,11 @@ void CoralReefUniverse::buildBoard(const Game& g) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
-        for (auto& c : cells) {
+        for (int i = 0; i < 4; i++) {
+            const auto& c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f);
+            cell(px, py, 0.5f * sc, tintOf(type), alpha, 0, 0.f, type, 0.1f + 0.11f * type + 0.2f * i, 0.3f + 0.09f * type,
+                 pieceMask(cells, i), piecePlace(cells, i));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.35f : 1.f);
