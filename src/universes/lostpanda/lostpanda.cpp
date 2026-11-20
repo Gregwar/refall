@@ -91,14 +91,14 @@ vec3 lin(unsigned c) { return ugl::toLinear(hex(c)); }
 // A variant: the seven pieces, the HUD's accent, the lights' warmth.
 struct VariantDef {
     const char* name;
-    unsigned piece[7]; // the blocks: bamboo, dry (tan, gold, pale) and green (bright, deep, olive, young)
+    unsigned piece[7]; // the blocks: bamboo wood, blond (light, honey, cream) and green (sage, deep, olive, young)
     unsigned accent, light;
 };
 const VariantDef VARIANTS[] = {
-    {"LANTERN", {0xd8b779, 0x8cc63f, 0xc9a04c, 0x5ea83a, 0xead6a2, 0x9fae4a, 0xc7d66b}, 0xffc77a, 0xffc070},
-    {"SUNNY", {0xd8b779, 0x8cc63f, 0xc9a04c, 0x5ea83a, 0xead6a2, 0x9fae4a, 0xc7d66b}, 0xa8d8ff, 0xffd890},
-    {"BLOSSOM", {0xd8b779, 0x8cc63f, 0xc9a04c, 0x5ea83a, 0xead6a2, 0x9fae4a, 0xc7d66b}, 0xffb8cc, 0xffc8a0},
-    {"JADE", {0xd8b779, 0x8cc63f, 0xc9a04c, 0x5ea83a, 0xead6a2, 0x9fae4a, 0xc7d66b}, 0xa8e8c0, 0xffd070},
+    {"LANTERN", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xa8e8c0, 0xffd070},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
