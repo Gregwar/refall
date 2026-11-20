@@ -277,30 +277,45 @@ void main() {
     float rip = sin(ph);
     vec3 ns = normalize(n + vec3(rd.x, 0.0, rd.y) * cos(ph) * 0.22);
     vec3 sand = mix(uSandC, uSand2C, smoothstep(0.3, 0.8, fbm(p * 0.12 + 3.0)) * 0.7);
-    sand *= 0.97 + 0.05 * smoothstep(0.3, 1.0, rip);
+    sand *= 0.9 + 0.16 * smoothstep(-0.2, 1.0, rip);   // (the ripples' crests catch the light, their troughs in shade)
     sand *= 0.98 + 0.04 * hash(floor(p * 40.0)) * lodF;
     // patches of coarser and finer sand, darker and lighter drifts, a few shell bits: an uneven floor
     float patchN = fbm(p * 0.6 + 7.0), drift = fbm(p * 2.3 - 4.0);
-    sand *= 0.88 + 0.22 * smoothstep(0.25, 0.75, drift) * (0.6 + 0.4 * patchN);
-    // seen up close (a macro lens): the grains themselves, rounded, each its own tone
+    sand *= 0.84 + 0.3 * smoothstep(0.25, 0.75, drift) * (0.5 + 0.5 * patchN);
+    // seen up close (a macro lens): the grains, in three sizes laid over each other (fine everywhere, medium in
+    // drifts, coarse ones and shell bits scattered), each its own tone, never a pattern of equal dots; their mix and
+    // density follow broad patches and the ripples (coarser on the crests, finer in the troughs)
     float lodG = 1.0 - smoothstep(0.0004, 0.0016, px);
     if (lodG > 0.0) {
-        vec2 gq = p * 1400.0;
-        vec2 gi = floor(gq), gf = fract(gq);
-        float d1 = 8.0; vec2 best = vec2(0.0);
-        for (int y = -1; y <= 1; y++)
-            for (int x = -1; x <= 1; x++) {
-                vec2 g = vec2(x, y);
-                vec2 rr = g + hash2(gi + g) - gf;
-                float dd = dot(rr, rr) / sq(0.55 + 0.9 * hash(gi + g + 5.3));   // (each grain its own size)
-                if (dd < d1) { d1 = dd; best = gi + g; }
-            }
-        // grains of all sizes, packed tighter in some patches and sparse in others (bare gaps between)
-        float dense = smoothstep(0.2, 0.8, patchN + 0.3 * (hash(best + 9.7) - 0.5));
-        float grain = smoothstep(0.62, 0.12, sqrt(d1)) * step(0.35 - 0.3 * dense, hash(best + 2.9));
-        vec3 gc = mix(uSandC, uSand2C, hash(best)) * (0.85 + 0.3 * hash(best + 3.1));
-        gc = mix(gc, vec3(1.0, 0.82, 0.8), step(0.93, hash(best + 7.0)) * 0.5);
-        sand = mix(sand, mix(sand * 0.62, gc * (0.8 + 0.35 * grain), grain * 0.9 + 0.1), lodG);
+        float crest = smoothstep(-0.2, 0.9, rip);
+        vec3 acc = vec3(0.0);
+        float wsum = 0.0;
+        for (int k = 0; k < 3; k++) {
+            float fk = float(k);
+            float scale = k == 0 ? 3600.0 : k == 1 ? 1700.0 : 700.0;
+            // (each layer turned and offset its own way, so no grid lines up)
+            float an = 0.7 + 1.9 * fk;
+            vec2 gq = mat2(cos(an), -sin(an), sin(an), cos(an)) * p * scale + fk * 37.0;
+            vec2 gi = floor(gq), gf = fract(gq);
+            float d1 = 8.0; vec2 best = vec2(0.0);
+            for (int y = -1; y <= 1; y++)
+                for (int x = -1; x <= 1; x++) {
+                    vec2 g = vec2(x, y);
+                    vec2 rr = g + hash2(gi + g + fk * 11.0) - gf;
+                    float dd = dot(rr, rr) / sq(0.45 + 0.8 * hash(gi + g + 5.3 + fk));
+                    if (dd < d1) { d1 = dd; best = gi + g; }
+                }
+            // how many of this size here: the fine everywhere, the medium in drifts, the coarse on the crests
+            float here = k == 0 ? 0.9 : k == 1 ? smoothstep(0.3, 0.8, patchN) : smoothstep(0.45, 0.95, crest * patchN + 0.2 * drift);
+            float on = step(1.0 - here, hash(best + 2.9 + fk));
+            float gm = smoothstep(0.7, 0.2, sqrt(d1)) * on;
+            vec3 gc = mix(uSandC, uSand2C, hash(best + fk)) * (0.82 + 0.36 * hash(best + 3.1));
+            gc = mix(gc, vec3(1.0, 0.86, 0.82), step(0.96, hash(best + 7.0)) * 0.55 * float(k == 2));   // shell bits
+            acc += gc * gm;
+            wsum += gm;
+        }
+        vec3 grains = wsum > 0.0 ? acc / wsum : sand;
+        sand = mix(sand, mix(sand * 0.9, grains, min(1.0, wsum) * 0.55), lodG);
     }
     // rock: weathered reef limestone, pitted and lumpy, crusting over (pink coralline, green turf) as the reef matures
     float r1 = fbm(p * 1.1 + 9.0), r2 = vnoise(p * 4.3);
