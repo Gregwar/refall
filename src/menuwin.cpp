@@ -549,7 +549,8 @@ void Worlds::kalCampaign() {
         }
         // the stage's number, large, on a dark disc ringed in its hue
         {
-            const float r = 205 * u, nx = cx + std::cos(a) * r, ny = cy + std::sin(a) * r;
+            // (at the petal's widest, wherever its size stands)
+            const float r = lerpf((140 - 5 * f + 10 * op) * u, (246 + 52 * f + 12 * op) * u, 0.45f), nx = cx + std::cos(a) * r, ny = cy + std::sin(a) * r;
             const float rad = (19 + 12 * f) * u;
             const bool next = s == nextStage;
             if (next) {
