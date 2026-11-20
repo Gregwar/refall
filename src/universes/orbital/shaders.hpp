@@ -2,13 +2,13 @@
 // ORBITAL STATION's shaders (see orbital.cpp).
 //
 // SKY_FS ray-traces the planet below (terrain, oceans and their glint, clouds and their shadows, the terminator, the
-// cities' lights, an aurora), its atmosphere (the limb's glow, blue by day, red at the terminator, a thin airglow by
-// night), the sun, the moon and space, at a reduced resolution. BG_FS lays it under the station at full resolution
+// cities' lights, an aurora), its atmosphere (the limb seen edge-on in three layers: a hot thin line, white-orange
+// toward the sun, red at the terminator; blue by day; a thin green airglow above), the sun, the moon and space. BG_FS lays it under the station at full resolution
 // with the stars (measured in screen pixels through the sky projection's Jacobian, as GIANT TREE does). PART_FS lights
 // every solid of the station (instanced boxes and parametric cylinders, spheres, tori and bands: white hull panels,
 // gold foil, solar cells, radiators, lattice trusses, the forest ring's land), with the sun's shadow map, the
 // planet's light from below and its reflection. GLOW_FS draws the lights (lamps, thrusters, sparks); then the bloom,
-// the veil behind the well, the pieces (panels of colored light), the lettering.
+// COMP_FS's lens flare and grade, the veil behind the well, the pieces (panels of colored light), the lettering.
 // World positions are meters in the station's frame (y away from the planet), drawn relative to the eye.
 
 namespace orbital_shaders {

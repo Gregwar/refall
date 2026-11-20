@@ -15,6 +15,9 @@
 // The planet below (ray-traced at a reduced resolution): continents, oceans with the sun's glint, clouds and their
 // shadows, the terminator, the cities' lights, the limb's glowing air, an aurora by night; the sun, the moon, the
 // Milky Way and stars (the stars measured in screen pixels through the sky projection's Jacobian, as GIANT TREE does).
+// The framing is a film's: the sky turns with the camera's heading, so each variant's sun keeps its place on screen
+// (at dawn just over the limb left of the well, the lit crescent under it, the night with its cities across), seen
+// through a lens (a starburst, a halo, ghosts, an anamorphic streak) and a light grade (warm highlights, deep blacks).
 // The station is instanced solids (boxes and parametric cylinders, spheres, tori and bands) with their own
 // materials (insulation blankets, gold foil, solar cells, radiators, lattice trusses, the ring's land), lit by the sun
 // with its shadow map, by the planet's light from below and its reflection; lamps, windows and thrusters glow (4x
