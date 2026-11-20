@@ -106,9 +106,13 @@ private:
     // ---- Pieces.
     struct CellInst { float a[4], b[4], c[4]; };
     std::vector<CellInst> cells_;
-    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow = 0.f);
+    void cell(float x, float y, float half, const vec3& tint, float alpha, int mode, float erase, float glow = 0.f, float seed = 0.f);
+    // each block's own grain and tone (a seed): the falling piece's, drawn as it spawns, kept by the stack (moved down
+    // with its rows)
+    float seeds_[22][10] = {};
+    float pieceSeeds_[4] = {0.13f, 0.37f, 0.61f, 0.89f};
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int type; float t; };
+    struct Fading { float x, y; int type; float t; float seed = 0.f; };
     std::vector<Fading> fading_;
     struct SpriteInst { float a[4], b[4], c[4]; };
     std::vector<SpriteInst> sprites_, bgSprites_, fgSprites_;

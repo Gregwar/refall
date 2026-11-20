@@ -2123,7 +2123,11 @@ R"(        bandC = surfaceBand(w, p);
     if (COUNTRY && air) c = grassFront(p, w, c, 1.35);
     if (air) c = rain(p, c, uRain);
     if (CITY && air && w.x < 1251.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
-    c += uSunCol * uDrop * 0.05 * smoothstep(4.0, -10.0, p.y);
+    // the drop: the night warms through: a golden wash over the whole world (its shadows lifted), a strong glow up
+    // from the ground
+    vec3 warm = mix(uSunCol, vec3(1.0, 0.72, 0.42), 0.55);
+    c = mix(c, c * (1.0 + warm * 0.85) + warm * 0.035, uDrop * 0.7);
+    c += warm * uDrop * 0.16 * smoothstep(4.0, -10.0, p.y);
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(max(c, 0.0), 1.0);
@@ -2686,6 +2690,12 @@ out vec4 frag;
 uniform float uBridge;
 uniform vec3 uBridgeInk, uLightC;
 float lod2(float aa) { return smoothstep(0.08, 0.03, aa); }
+// a 1D value noise (the fibres: irregular across, each block its own `s`)
+float n1(float x, float s) {
+    float i = floor(x), f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(fract(sin(i * 127.1 + s * 311.7) * 43758.5453), fract(sin((i + 1.0) * 127.1 + s * 311.7) * 43758.5453), f);
+}
 void main() {
     int mode = int(vC.x + 0.5);
     float erase = vC.y;
@@ -2694,7 +2704,7 @@ void main() {
     vec2 q = vLocal / shrink;
     // a square block of bamboo wood: its corners just rounded, fibres running up it (each block its own, from its
     // place), a faint node across, a bevel (lit along its top and left, shaded along its bottom and right)
-    float d = sdBox(q, vec2(0.455 - 0.07)) - 0.07;
+    float d = sdBox(q, vec2(0.5 - 0.1)) - 0.1;   // (touching its neighbours, stacked: only the corners round off)
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2705,21 +2715,37 @@ void main() {
         return;
     }
     vec2 sd = floor(vA.xy * 1.7 + 0.5);
-    float h0 = fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
-    float gx = q.x * 9.0 + h0 * 13.0;
-    float fib = 0.5 + 0.5 * sin(gx * 2.1 + sin(q.y * 3.0 + h0 * 6.0) * 0.8) * 0.6 + 0.4 * sin(gx * 5.3 + h0 * 4.0) * 0.5;
-    float streak = smoothstep(0.86, 1.0, fract(gx * 0.37 + h0 * 3.1));
-    vec3 c = t * (0.84 + 0.24 * fib) * mix(0.92, 1.05, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, t * 0.66, streak * 0.55 * lod2(aa));
+    float h0 = vC.w > 0.0 ? vC.w : fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
+    // each block its own tone: a little lighter or darker, a little warmer or cooler
+    float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7);
+    t *= (0.88 + 0.22 * h1) * vec3(1.0 + 0.06 * (h2 - 0.5), 1.0, 1.0 - 0.08 * (h2 - 0.5));
+    // fibres: irregular in width and spacing, wandering a little as they run up, a few darker streaks of varying
+    // weight, now and then one broken off; a small knot on some blocks
+    float gx = q.x * 9.0 + 0.55 * n1(q.y * 2.3 + h0 * 9.0, h0) + 0.25 * n1(q.y * 6.1, h0 + 3.0);
+    float fib = 0.5 * n1(gx * 1.3, h0) + 0.3 * n1(gx * 3.7 + 5.0, h0) + 0.2 * n1(gx * 9.3 + 2.0, h0);
+    float sn = n1(gx * 2.2 + 11.0, h0);
+    float streak = smoothstep(0.78, 0.97, sn) * (0.4 + 0.6 * n1(gx * 0.7 + 3.0, h0));
+    streak *= smoothstep(0.15, 0.35, n1(q.y * 3.0 + gx * 0.5, h0 + 7.0));   // (broken here and there)
+    float cyl = sat(1.0 - sq(q.x / 0.5));
+    vec3 c = t * (0.87 + 0.2 * fib) * mix(0.88, 1.02, sqrt(cyl)) * mix(0.94, 1.03, smoothstep(-0.45, 0.45, q.y));
+    c = mix(c, t * 0.7, streak * 0.45 * lod2(aa));
+    // a few pale fibres too
+    c = mix(c, mix(t, vec3(1.0), 0.3), smoothstep(0.85, 0.98, n1(gx * 1.7 + 23.0, h0)) * 0.35 * lod2(aa));
+    vec2 kp = vec2(fract(h0 * 3.7) - 0.5, fract(h0 * 5.3) - 0.5) * 0.5;
+    float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.7, fract(h0 * 9.1));
+    c = mix(c, t * 0.6, knot * 0.6);
     // a faint node across (some blocks)
     float nodeY = -0.2 + 0.4 * fract(h0 * 7.13);
     c = mix(c, t * 0.78, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY))) * 0.5 * step(0.4, h0));
-    // the bevel
+    // its top face, seen a little from above: a pale band along the top, its lower edge bowed a touch; a little
+    // shade along its bottom; a thin darker line round it
+    float yt = 0.3 - 0.025 * sqrt(cyl);
+    float topF = smoothstep(yt - 0.05, yt + 0.12, q.y);
+    c = mix(c, mix(t, vec3(1.0), 0.2) * mix(0.96, 1.04, sqrt(cyl)), topF * 0.6);
+    c *= mix(0.86, 1.0, smoothstep(-0.45, -0.34, q.y));
     float edge = -d;
-    float bev = 1.0 - smoothstep(0.0, 0.075, edge);
-    float lit = sat(0.5 + (q.y - q.x) * 1.4);
-    c = mix(c, mix(t * 0.55, mix(t, vec3(1.0), 0.45), lit), bev * 0.9);
-    c = mix(c, t * 0.45, 1.0 - smoothstep(0.0, 0.012 + aa, edge));
+    c *= mix(0.74, 1.0, smoothstep(0.0, 0.07, edge));   // (a soft darker rim: the blocks read apart though touching)
+    c = mix(c, t * 0.35, 1.0 - smoothstep(0.0, 0.01 + aa, edge));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     c = mix(c, uBridgeInk, uBridge);
