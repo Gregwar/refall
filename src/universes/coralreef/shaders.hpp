@@ -1032,12 +1032,12 @@ vec4 plate(vec2 q, float d) {
 }
 vec4 tubes(vec2 q) {
     vec2 id;
-    vec4 v = voro(q * 3.5 + gOff, 0.6, id);
+    vec4 v = voro(q * 3.9 + gOff, 0.55, id);
     // each tube: a wall from its hole out to its rim, rounded on top, the dark gaps between the tubes
-    float ro = 0.38 + 0.12 * hash(id + 2.3), ri = ro * (0.16 + 0.14 * hash(id + 5.1));
+    float ro = 0.42 + 0.1 * hash(id + 2.3), ri = ro * (0.14 + 0.12 * hash(id + 5.1));
     float wall = smoothstep(ro + 0.03, ro - 0.05, v.x) * smoothstep(ri - 0.03, ri + 0.05, v.x);
     float x = clamp((v.x - ri) / (ro - ri), 0.0, 1.0);
-    float top = sqrt(max(1.0 - sq(2.0 * x - 1.0), 0.0));
+    float top = smoothstep(0.0, 0.4, x) * smoothstep(1.0, 0.7, x);
     float hole = smoothstep(ri, ri * 0.4, v.x);
     float h = 0.03 * wall * (0.6 + 0.4 * sqrt(top)) - 0.05 * hole;
     return vec4(h, mix(0.3, 1.0, wall * (0.6 + 0.4 * sqrt(top))), mix(0.35, 1.0, wall) * (1.0 - 0.85 * hole), 1.0);
