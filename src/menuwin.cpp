@@ -322,13 +322,27 @@ void Worlds::kalBackground(const std::string& cur) {
     cxNow += ((title || head ? 960.f : 720.f) - cxNow) * k;
     cyNow += ((title ? TITLE_CY : head ? -80.f : 440.f) - cyNow) * k;
     satNow += (sat - satNow) * k;
+    // the camera: each screen looks at its own part of space, a glide of about a second between them (the stages'
+    // wheel never moves it)
+    static float camNow[2] = {0.f, 0.f};
+    float camT[2] = {0.f, 0.f};
+    switch (m.screen_) {
+    case Menu::CAMPAIGN: camT[0] = 0.55f; camT[1] = 0.12f; break;
+    case Menu::VOYAGES: camT[0] = 0.35f; camT[1] = -0.3f; break;
+    case Menu::FREE: camT[0] = -0.5f; camT[1] = 0.18f; break;
+    case Menu::OPTIONS: camT[0] = -0.2f; camT[1] = 0.45f; break;
+    case Menu::GAMEPAD: camT[0] = -0.05f; camT[1] = 0.7f; break;
+    default: break;
+    }
+    const float kc = first ? 1.f : 1.f - std::exp(-dt / 0.45f);
+    for (int i = 0; i < 2; i++) camNow[i] += (camT[i] - camNow[i]) * kc;
     // the nebula's shape and density: the pattern's, reached over some 2 s so it changes in place, calmly
     static float morphNow = -1.f;
     const float morph = std::fmod(g_curSeed * 0.6180339f, 1.f) * 6.f;
     morphNow = morphNow < 0.f ? morph : morphNow + (morph - morphNow) * (1.f - std::exp(-dt / 2.f));
     duoNow += (duo - duoNow) * k;
     p.kaleido(g_prev.empty() ? g_curSeed : g_prevSeed, g_curSeed, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
-              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, (menuSeed() % 997) / 997.f, morphNow);
+              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, (menuSeed() % 997) / 997.f, morphNow, camNow[0], camNow[1]);
 }
 
 // A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from

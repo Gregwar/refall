@@ -33,7 +33,7 @@ public:
     // flare in the top right corner; `saturation` < 1 greys them (a locked stage).
     void kaleido(float seedA, float seedB, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time,
                  float level, float saturation = 1.f, float duo = 0.f, float launch = 0.f,
-                 float morph = 0.f);
+                 float morph = 0.f, float camX = 0.f, float camY = 0.f);
     // An arc of a circle (radians, 0 = right, clockwise on screen), with round ends.
     void arc(float cx, float cy, float r, float a0, float a1, float width, Col c, float soft = 1.f);
     ~Painter();

@@ -326,11 +326,12 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
 }
 
 void Painter::kaleido(float seedA, float seedB, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time,
-                      float level, float saturation, float duo, float launch, float morph) {
+                      float level, float saturation, float duo, float launch, float morph, float camX, float camY) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform vec2 uRes, uC;
 uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB, uLaunch, uMorph;
+uniform vec2 uCam;   // the camera's place in space (heights): each screen its own
 uniform int uSeg;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -421,7 +422,7 @@ void main() {
     float asp = uRes.x / uRes.y;
     vec2 sp = fc / uRes.y;
     vec2 drift = vec2(uTime * 0.003, uTime * 0.001);
-    vec2 w = sp + drift;
+    vec2 w = sp + drift + uCam;   // (the nebula at depth 1; the far stars move less, the asteroids more)
     float seedOff = uLaunch * 30.0;
     vec2 nw = w * 1.4 + vec2(seedOff, 0.0);
     // domain warping: the gas curls round itself
@@ -457,7 +458,7 @@ void main() {
     for (int i = 0; i < 4; i++) {
         float fi = float(i);
         float ssc = 45.0 + fi * 60.0;
-        vec2 sg = (w + drift * fi * 0.5) * ssc;
+        vec2 sg = (sp + drift * (1.0 + fi * 0.5) + uCam * (0.35 + 0.2 * fi)) * ssc;
         vec2 si = floor(sg), sf = fract(sg) - 0.5;
         float sh = h21(si + fi * 31.0);
         if (sh > 0.955 - fi * 0.008 - 0.03 * dens) {
@@ -476,7 +477,7 @@ void main() {
         float speed = 0.008 + 0.01 * h21(vec2(fi, 2.0));
         vec2 ac = vec2(mod(h21(vec2(fi, 5.0)) * asp * 1.5 + uTime * speed, asp * 1.5) - asp * 0.25, 0.1 + 0.8 * h21(vec2(fi, 9.0)));
         float ar = 0.009 + 0.026 * h21(vec2(fi, 3.0));
-        vec2 da = sp - ac;
+        vec2 da = sp + uCam * 1.6 - ac;
         float ro = uTime * (0.08 + 0.2 * h21(vec2(fi, 6.0))) + fi;
         vec2 dr = mat2(cos(ro), -sin(ro), sin(ro), cos(ro)) * da;
         float lumpy = ar * (1.0 + 0.45 * (vn(vec2(atan(dr.y, dr.x) * 1.4 + fi * 7.0, fi)) - 0.5));
@@ -548,6 +549,7 @@ void main() {
     ugl::set1f(kalProg_, "uSeedB", seedB);
     ugl::set1f(kalProg_, "uLaunch", launch);
     ugl::set1f(kalProg_, "uMorph", morph);
+    ugl::set2f(kalProg_, "uCam", camX, camY);
     ugl::set2f(kalProg_, "uRes", (float)lw, (float)lh);
     ugl::set2f(kalProg_, "uC", cx * sx, cy * sy);
     ugl::set1f(kalProg_, "uScale", (float)h_ / lh);
