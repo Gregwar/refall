@@ -2138,7 +2138,9 @@ R"(        bandC = surfaceBand(w, p);
         vec3 tone = mix(vec3(0.62, 0.28, 0.72), vec3(1.0, 0.5, 0.62), smoothstep(0.02, 0.35, lum));
         c = mix(c, lum * tone * 1.95, uDrop * 0.6);
     }
-    c = max(mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, uWorldSat), 0.0);
+    // (the city greyer still: lost in its streets; full in a drop)
+    float sat = uWorldSat * mix(1.0, 0.55, zCity(w.x) * (1.0 - uDrop));
+    c = max(mix(vec3(dot(c, vec3(0.299, 0.587, 0.114))), c, sat), 0.0);
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
     frag = vec4(max(c, 0.0), 1.0);
