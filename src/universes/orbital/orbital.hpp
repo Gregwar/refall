@@ -157,6 +157,10 @@ private:
     float camF_ = -1.f, camFv_ = 0.f;  // framing radius (log space, a spring)
     vec3 camA_{0.f}, camAv_{0.f};
     float camAlt_ = orbital::ALT;
+    float camAz_ = 0.55f;              // the camera's heading (the sky turns with it: the sun keeps its place on screen)
+    // The lens flare: the sun's place on screen (uv), its strength (0: off screen, behind the planet or eclipsed).
+    vec2 sunUv_{0.f, 0.f};
+    float flare_ = 0.f;
     void updateCamera(float dt);
     vec2 toBoard(const vec3& w) const;
     float minPx_ = 0.001f;

@@ -129,7 +129,7 @@ Palette paletteOf(int v) {
     }
     case 1: {
         // ORBITAL DAWN: the sun rising over the limb, a red and gold line of air, the night below with its cities
-        p.sunDir = normalize(vec3(-0.89f, -0.25f, -0.38f));
+        p.sunDir = normalize(vec3(-0.786f, -0.24f, -0.571f));
         p.sunC = vec3(1.f, 0.86f, 0.66f) * 2.8f; p.sunGlow = L(0xffa860); p.keyC = p.sunC;
         p.earthC = L(0x1a2846) * 0.3f; p.amb = L(0x0c0a16) * 0.7f; p.envUp = L(0x06050c); p.envDown = L(0x1a2a50) * 0.6f;
         p.ocean = L(0x061a48); p.shallow = L(0x14609a); p.land = L(0x24582a); p.land2 = L(0x8c7448); p.desert = L(0xe0b880);
@@ -184,6 +184,7 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
+constexpr float AZ_REF = 0.55f;     // the camera's reference heading (the variants' skies are set for it)
 constexpr float CLEAR_T = 0.36f;    // a cleared row flares and shrinks into light in this long (real time)
 constexpr float FLOW_T = 1.1f;      // its light flies out to the seat in this long
 constexpr int MAX_MOTES = 1200;
@@ -877,6 +878,7 @@ void OrbitalUniverse::updateCamera(float dt) {
     }
     const float F = camF_;
     orient(F);
+    camAz_ = az;
     const vec3 dirA = normalize(fwd + right * (sx * tanH_ * aspect_) + upv * (sy * tanH_));
     const float D = F / tanH_ * (1.f + 0.7f * away_ * away_);
     eye_ = camA_ - dirA * D;
@@ -979,6 +981,17 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         if (!palSet_) { basePal_ = target; palSet_ = true; }
         else lerpPalette(basePal_, target, 1.f - std::exp(-dt * 1.0f));
         pal_ = basePal_;
+        // the sky turns with the camera's heading: each variant's sun (moon, pole) is set for the reference heading
+        // (AZ_REF), so the composition holds as the camera swings round the growing station (the sun just over the
+        // limb left of the well at dawn); the solar wings, the shadows and the planet's light all follow
+        const float a0 = AZ_REF, a1 = camAz_;
+        const vec3 r0(std::cos(a0), 0.f, -std::sin(a0)), f0(-std::sin(a0), 0.f, -std::cos(a0));
+        const vec3 r1(std::cos(a1), 0.f, -std::sin(a1)), f1(-std::sin(a1), 0.f, -std::cos(a1));
+        auto turn = [&](vec3& v) { v = r1 * dot(v, r0) + f1 * dot(v, f0) + vec3(0.f, v.y, 0.f); };
+        turn(pal_.sunDir);
+        turn(pal_.keyDir);
+        turn(pal_.moonDir);
+        turn(pal_.pole);
     }
     const float bridge = smoothstepf(0.f, 1.f, saturate(bridge_.amount));
     const float world = 1.f - smoothstepf(0.f, 0.7f, bridge);
@@ -1335,6 +1348,26 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         ugl::drawFullscreen();
     }
 
+    // ---- The sun's place on screen for the lens flare: in front of the camera, not behind the planet (eased out as
+    // it sinks under the limb's air), faded at the frame's edges; what the station hides of it COMP_FS measures.
+    {
+        const vec3 sd = normalize(pal_.sunDir), E = eye_ - EARTH_C;
+        const float z = dot(sd, look_);
+        float k = 0.f;
+        if (z > 0.05f) {
+            const vec2 ndc{dot(sd, camR_) / z / (tanH_ * aspect_), dot(sd, camU_) / z / tanH_};
+            sunUv_ = vec2{ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f};
+            k = (1.f - smoothstepf(0.95f, 1.3f, std::fabs(ndc.x))) * (1.f - smoothstepf(0.95f, 1.3f, std::fabs(ndc.y)));
+            const float b = dot(E, sd);
+            if (b < 0.f) {
+                // the sun's height over the limb (its ray's closest pass over the ground, less the bright air) as an angle
+                const float hm = std::sqrt(std::max(dot(E, E) - b * b, 0.f)) - R_PLANET - 15000.f;
+                k *= smoothstepf(-pal_.sunSize, pal_.sunSize * 1.5f, hm / -b);
+            }
+        }
+        flare_ = k * sunVis * world;
+    }
+
     // =========================================================== the sun's shadow map
     vec3 shC = camA_;
     float shR = camF_ * 1.6f;
@@ -1510,6 +1543,10 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     set1f(progComp_, "uBloomK", pal_.bloom * (1.f + 0.25f * wp_ + 0.3f * life_ + 0.2f * swell_) * world);
     set1f(progComp_, "uSat", 1.08f);
+    set2f(progComp_, "uSunUv", sunUv_.x, sunUv_.y);
+    set1f(progComp_, "uFlare", flare_ * (1.f + 0.15f * wp_ + 0.25f * life_));
+    set3f(progComp_, "uFlareC", lerp(pal_.sunGlow, vec3(1.f), 0.35f));
+    set1f(progComp_, "uAspect", aspect_);
     ugl::drawFullscreen();
 
     glEnable(GL_BLEND);

@@ -1000,14 +1000,66 @@ void main() {
     frag = vec4(c, 1.0);
 }
 )";
+// The composite: the station's frame, its bloom, the lens flare, a light grade (the world only: the veil, the pieces
+// and the lettering come after). The flare is the sun seen through a camera's glass: a hot core, a starburst of
+// rays, a faint halo ring, a few ghosts (the lens' reflections, along the line from the sun through the screen's
+// center, each its own tint) and an anamorphic streak across; it fades out as the station passes in front of the
+// sun (the core's brightness measured in the frame itself, five taps).
 inline const char* COMP_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform sampler2D uScene, uBloomT, uBloom2;
 uniform float uBloomK, uSat;
+uniform vec2 uSunUv;
+uniform float uFlare, uAspect;
+uniform vec3 uFlareC;
+float lum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+vec3 flare(vec2 uv) {
+    // how much of the sun's disc shows (the sky draws it at some 6x the sun's light)
+    vec2 tx = vec2(1.0 / uAspect, 1.0) * 0.004;
+    float seen = 0.0;
+    seen += smoothstep(0.6, 2.5, lum(texture(uScene, uSunUv).rgb));
+    seen += smoothstep(0.6, 2.5, lum(texture(uScene, uSunUv + vec2(tx.x, 0.0)).rgb));
+    seen += smoothstep(0.6, 2.5, lum(texture(uScene, uSunUv - vec2(tx.x, 0.0)).rgb));
+    seen += smoothstep(0.6, 2.5, lum(texture(uScene, uSunUv + vec2(0.0, tx.y)).rgb));
+    seen += smoothstep(0.6, 2.5, lum(texture(uScene, uSunUv - vec2(0.0, tx.y)).rgb));
+    float k = uFlare * seen / 5.0;
+    if (k <= 0.001) return vec3(0.0);
+    vec2 asp = vec2(uAspect, 1.0);
+    vec2 p = (uv - uSunUv) * asp;
+    float r = length(p);
+    float a = atan(p.y, p.x);
+    vec3 c = vec3(0.0);
+    // the core and its glow
+    c += uFlareC * (exp(-r * 70.0) * 2.2 + exp(-r * 16.0) * 0.35 + 0.012 / (0.012 + r * r * 6.0) * 0.25);
+    // the starburst: two sets of rays (6 long, 9 shorter, a slow turn), thinning out with the distance
+    float rays = pow(max(cos(a * 3.0 + 0.4), 0.0), 120.0) * exp(-r * 8.0) * 0.8
+               + pow(max(cos(a * 4.5 + 1.9), 0.0), 160.0) * exp(-r * 11.0) * 0.55
+               + pow(abs(cos(a * 17.0 + 0.7) * cos(a * 11.0 + 2.1)), 30.0) * exp(-r * 16.0) * 0.35;
+    c += uFlareC * vec3(1.0, 0.92, 0.8) * rays * smoothstep(0.004, 0.03, r);
+    // a halo ring, its rim faintly split into colors
+    vec3 rr = vec3(0.205, 0.2, 0.195);
+    c += vec3(exp(-sq((r - rr.r) / 0.03)), exp(-sq((r - rr.g) / 0.03)), exp(-sq((r - rr.b) / 0.03))) * vec3(1.0, 0.8, 0.6) * 0.035;
+    // the anamorphic streak across
+    c += uFlareC * vec3(0.9, 0.85, 1.0) * exp(-abs(p.y) * 260.0) * exp(-abs(p.x) * 4.0) * 0.3;
+    // the ghosts, along the line from the sun through the screen's center (t: 0 the sun, 1 the center)
+    vec2 axis = (vec2(0.5) - uSunUv);
+    for (int i = 0; i < 6; i++) {
+        float t = i == 0 ? 0.42 : i == 1 ? 0.78 : i == 2 ? 1.22 : i == 3 ? 1.55 : i == 4 ? 1.9 : 2.35;
+        float R = i == 0 ? 0.05 : i == 1 ? 0.025 : i == 2 ? 0.075 : i == 3 ? 0.035 : i == 4 ? 0.12 : 0.05;
+        vec3 tint = i == 0 ? vec3(1.0, 0.6, 0.3) : i == 1 ? vec3(0.5, 0.8, 1.0) : i == 2 ? vec3(0.9, 0.7, 0.4)
+                  : i == 3 ? vec3(0.4, 1.0, 0.7) : i == 4 ? vec3(0.8, 0.5, 0.9) : vec3(1.0, 0.75, 0.5);
+        vec2 g = (uv - (uSunUv + axis * t)) * asp;
+        float dg = length(g);
+        float disc = smoothstep(R, R * 0.7, dg) * (0.35 + 0.65 * smoothstep(R * 0.3, R, dg));
+        c += tint * disc * 0.045;
+    }
+    return c * k;
+}
 void main() {
     vec3 c = texture(uScene, vUv).rgb + texture(uBloomT, vUv).rgb * uBloomK + texture(uBloom2, vUv).rgb * uBloomK * 0.6;
-    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c += flare(vUv);
+    float l = lum(c);
     c = max(mix(vec3(l), c, uSat), 0.0);
     frag = vec4(c, 1.0);
 }
