@@ -507,19 +507,20 @@ TransitionHints LibraryUniverse::hints() const {
 // The board's cells
 // =====================================================================================================
 
-// A cell of the board: a bit of a packed shelf, two or three books standing on their spines, flush at the front, each
-// its own width, height, depth, shade and spine design, and nothing behind them (no shelf back: seen in perspective,
-// a panel behind them would show past their outline, above a shorter one or beside them). They are the room's books (the same construction and shading, M_BOOK: the spine's
-// designs, the boards round a cream page block that shows on their tops, seen a little from above), in their piece's
-// full color and a little stockier, closer to a cube, so they fill the cell. All from the cell's seed: a cell keeps its
-// books through falls and clears. along / up / out: its frame (a toppling cell turns it), k its size, fade its
-// dissolve into light (0 none .. 1 gone), covered: a cell above it (its books' tops in its shade, toward the back).
+// A cell of the board: a bit of a packed shelf, two or three books standing on their spines, flush at the front, all
+// of one height and depth, each its own width, shade and spine design, and nothing behind them (no shelf back: seen in
+// perspective, a panel behind them would show past their outline). They are the room's books (the same construction
+// and shading, M_BOOK: the spine's designs, the boards round a cream page block that shows on their tops, seen from
+// above), in their piece's full color and a little stockier, closer to a cube, so they fill the cell. All from the
+// cell's seed: a cell keeps its books through falls and clears. along / up / out: its frame (a toppling cell turns it),
+// k its size, fade its dissolve into light (0 none .. 1 gone), covered: a cell above it (its books' tops in its shade,
+// toward the back).
 void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade,
                                uint32_t seed, bool covered) {
     const float sw = k * (1.f + 0.05f * fade);
     const vec3 outD = cross(along, up);
     const float H = 0.468f * sw;          // the cell's half side
-    const float D = 0.62f * sw;           // the deepest book
+    const float D = 0.62f * sw;           // the books' depth
     const vec3 col = pieceColor(type);
     auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd) {
         Inst in;
@@ -531,9 +532,9 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
         in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = covered ? -20.f : -10.f;
         out.push_back(in);
     };
-    // the books, left to right: two (more often) or three, of uneven widths; a little short of the cell's height (seen
-    // from a little above, their tops show under the cell above: the cream page block between the boards), now and
-    // then a shorter one; a little uneven in depth
+    // the books, left to right: two (more often) or three, of a little uneven widths, all of one height and depth (their
+    // tops one clean line: the rows read at a glance), a little short of the cell's height (seen from above, their
+    // tops show under the cell above: the cream page block between the boards)
     Rng r(0x5E1F0ull ^ ((uint64_t)seed * 2654435761ull));
     const int n = r.chance(0.6f) ? 2 : 3;
     float w[3], tot = 0.f;
@@ -542,8 +543,7 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
     float x0 = -H;
     for (int i = 0; i < n; i++) {
         const float bw = (2.f * H - gap * (n - 1)) * w[i] / tot;
-        const float bh = 2.f * H * (r.chance(0.2f) ? r.range(0.72f, 0.8f) : r.range(0.84f, 0.92f));
-        const float bd = D * r.range(0.84f, 1.f);
+        const float bh = 2.f * H * 0.88f, bd = D;
         // (the room's spine designs; more of the labels, bands and caps)
         const int style = (int)"0001144423"[r.next() % 10] - '0';
         const vec3 bc = col * r.range(0.9f, 1.07f);
