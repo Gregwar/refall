@@ -2862,6 +2862,16 @@ void main() {
             n[i] = (s & 1) == 0 ? 1.0 : -1.0;
             n[(i + 1) % 3] = (s & 2) == 0 ? 1.0 : -1.0;
             plane(n, 2.0 * B - (i == 2 ? CV : CH + wear), o, d, t1, n1v, t2, n2v, tOut);
+            if (i == 0) {
+                // (the edges from front to back, its outline's corners, rounded: two more facets either side of
+                // the chamfer, tangent to the arc of radius R it is tangent to)
+                const float R = 1.7071 * CH;
+                for (int k = 0; k < 2; k++) {
+                    vec2 cs = k == 0 ? vec2(0.9239, 0.3827) : vec2(0.3827, 0.9239);
+                    vec3 m = vec3(cs.x * n.x, cs.y * n.y, 0.0);
+                    plane(m, (B - R) * (cs.x + cs.y) + R, o, d, t1, n1v, t2, n2v, tOut);
+                }
+            }
         }
     for (int s = 0; s < 8; s++) {
         vec3 n = vec3((s & 1) == 0 ? 1.0 : -1.0, (s & 2) == 0 ? 1.0 : -1.0, (s & 4) == 0 ? 1.0 : -1.0);
