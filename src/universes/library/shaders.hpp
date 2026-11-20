@@ -190,6 +190,109 @@ uniform float uDropT, uDropK, uDropSpan, uGroupN;
 
 float levelOn(float k) { int i = int(clamp(k, 0.0, 7.0) + 0.5); return uLevelOn[i]; }
 
+// A cell of the board as a bit of a packed shelf seen from the front: uv its front face (-1..1, y up), pn a pixel
+// in uv, col its piece's color, seed its own look (a cell keeps its seed through falls and clears, so its books never
+// change). Two layouts: three books standing upright (now and then four; widths a little uneven, now and then a
+// shorter one leaving the shelf's dark back showing above it), or a pile of three lying on their sides. Each book
+// takes its own shade of the piece's color and its spine's marks: a standing one a pale cap at its head with a dark
+// title (or two thin pale bands), sometimes a small label lower down or a band at its foot; a lying one a long pale
+// label (the pile's top book always), or bands near its ends, or nothing. Thin dark gaps between the books; flat toon
+// shading, a lighter edge on each spine's lit side (left when standing, the top when lying).
+vec3 shelfCell(vec2 uv, vec2 pn, vec3 col, float seed) {
+    col = mix(vec3(dot(col, vec3(0.3, 0.55, 0.15))), col, 0.86);         // a touch softer: toon pastels
+    vec3 back = col * vec3(0.16, 0.16, 0.22) + vec3(0.01, 0.01, 0.03);   // the shelf's back, in the books' shadow
+    vec3 cream = vec3(1.0, 0.97, 0.9);
+    float detail = 1.0 - smoothstep(0.09, 0.2, max(pn.x, pn.y));         // a small preview drops the fine marks
+    bool lying = hash12(vec2(seed, 1.7)) < 0.4;
+    // in the books' frame: a across the books (x standing, y lying: the pile from its foot up), b along them
+    vec2 ab = lying ? uv.yx : uv;
+    vec2 pab = lying ? pn.yx : pn;
+    float gw = max(0.06, pab.x * 1.1);    // a gap between two books
+    // three books, now and then four (standing), or a big one beside a slim one
+    float hn = hash12(vec2(seed, 2.3));
+    int n = lying ? 3 : hn < 0.18 ? 4 : hn < 0.3 ? 2 : 3;
+    float w[4];
+    float tot = 0.0;
+    for (int i = 0; i < 4; i++) { w[i] = i < n ? 0.8 + 0.4 * hash12(vec2(seed, 3.0 + float(i))) : 0.0; tot += w[i]; }
+    if (n == 2) { w[0] = hn < 0.24 ? 2.0 : 1.0; w[1] = 3.0 - w[0]; tot = 3.0; }
+    // which book: its span across [a0, a1]
+    int k = n - 1;
+    float a0 = -1.0, a1 = 1.0, x0 = -1.0;
+    for (int i = 0; i < 4; i++) {
+        float x1 = i == n - 1 ? 1.0 : x0 + 2.0 * w[i] / tot;
+        if (ab.x < x1 || i == n - 1) { k = i; a0 = x0; a1 = x1; break; }
+        x0 = x1;
+    }
+    float r0 = hash12(vec2(seed * 7.13 + float(k), 11.0));
+    float r1 = hash12(vec2(seed * 7.13 + float(k), 12.0));
+    float r2 = hash12(vec2(seed * 7.13 + float(k), 13.0));
+    float r3 = hash12(vec2(seed * 7.13 + float(k), 14.0));
+    float sty = hash12(vec2(seed * 3.7 + float(k), 15.0));
+    // its span along [b0, b1]: a standing one stands on the shelf (now and then a shorter one), a lying one may stop
+    // a little short of one end (not the pile's foot book)
+    float b0 = -1.0, b1 = 1.0;
+    if (!lying) b1 = r3 < 0.16 ? 0.9 - 0.1 * r1 : 1.0;
+    else if (k > 0 && r3 < 0.3) { if (r1 < 0.5) b0 += 0.08 + 0.08 * r2; else b1 -= 0.08 + 0.08 * r2; }
+    // the gaps: only between books (the cell's own edges have the ink outline)
+    float ea = min(a0 < -0.999 ? 9.0 : ab.x - a0, a1 > 0.999 ? 9.0 : a1 - ab.x);
+    float eb = min(b0 < -0.999 ? 9.0 : ab.y - b0, b1 > 0.999 ? 9.0 : b1 - ab.y);
+    float m = smoothstep(gw * 0.5 - pab.x * 0.6, gw * 0.5 + pab.x * 0.6, ea) * smoothstep(gw * 0.5 - pab.y * 0.6, gw * 0.5 + pab.y * 0.6, eb);
+    // its own shade of the color: lighter or deeper, now and then a paler or a richer one
+    vec3 bc = col * (0.88 + 0.2 * r0);
+    bc = mix(bc, bc * bc * 1.2, step(0.8, r2) * 0.3);
+    bc = mix(bc, vec3(1.0), step(r2, 0.18) * 0.18);
+    bool big = n == 2 && a1 - a0 > 1.0;
+    if (n == 2 && !big) bc = mix(bc, cream, 0.62);       // the slim one beside a big one: a pale binding
+    vec3 pale = mix(bc, cream, 0.7);
+    vec3 ink = bc * vec3(0.3, 0.3, 0.38);
+    // in the book: s across it (0..1, from its lit side), dh / df how far from its head / foot (uv)
+    float s = (ab.x - a0) / (a1 - a0);
+    if (lying) s = 1.0 - s;
+    bool headHi = !lying || r1 < 0.5;
+    float dh = headHi ? b1 - ab.y : ab.y - b0, df = headHi ? ab.y - b0 : b1 - ab.y;
+    float ps = pab.x / (a1 - a0), pb = pab.y;
+    #define BAND(d, d0, d1) (smoothstep(d0 - pb, d0 + pb, d) * (1.0 - smoothstep(d1 - pb, d1 + pb, d)))
+    #define ACROSS(s0, s1) (smoothstep(s0 - ps, s0 + ps, s) * (1.0 - smoothstep(s1 - ps, s1 + ps, s)))
+    vec3 c = bc;
+    if (big) {
+        // a big book: a pale label high on its spine, a dark title on it
+        c = mix(c, mix(bc, cream, 0.8), BAND(dh, 0.16, 0.42) * ACROSS(0.14, 0.86));
+        c = mix(c, ink, BAND(dh, 0.25, 0.32) * ACROSS(0.24, 0.76) * 0.55 * detail);
+    } else if (!lying) {
+        if (sty < 0.78) {
+            // a pale cap at its head, a dark title across it
+            c = mix(c, pale, BAND(dh, 0.05, 0.29) * ACROSS(0.12, 0.88));
+            c = mix(c, ink, (BAND(dh, 0.12, 0.17) + BAND(dh, 0.21, 0.25) * step(0.5, r2)) * ACROSS(0.26, 0.74) * 0.55 * detail);
+        } else {
+            // two thin pale bands at its head
+            c = mix(c, pale, min(BAND(dh, 0.07, 0.13) + BAND(dh, 0.2, 0.26), 1.0) * mix(0.6, 0.9, detail));
+        }
+        // now and then a small label lower down, or a thin band at its foot
+        if (r1 > 0.72) c = mix(c, mix(bc, cream, 0.55), BAND(dh, 1.0, 1.14) * ACROSS(0.24, 0.76) * detail);
+        else if (r1 < 0.25) c = mix(c, pale, BAND(df, 0.1, 0.16) * ACROSS(0.0, 1.0) * mix(0.5, 0.85, detail));
+    } else {
+        float len = b1 - b0, mid = (b0 + b1) * 0.5;
+        if (k == n - 1 || sty < 0.25) {
+            // a long pale label along its spine (a margin of the binding at its ends), a dark title on it
+            float lab = smoothstep(0.08 - pb, 0.08 + pb, len * 0.5 - abs(ab.y - mid));
+            c = mix(c, pale, lab * ACROSS(0.13, 0.87));
+            float tt = BAND(dh, 0.3, 0.3 + 0.5 * (0.6 + 0.4 * r2));
+            c = mix(c, ink, tt * ACROSS(0.42, 0.6) * 0.5 * detail);
+        } else if (sty < 0.6) {
+            // thin pale bands near both ends
+            float bands = BAND(dh, 0.08, 0.14) + BAND(dh, 0.2, 0.26) + BAND(df, 0.08, 0.14) + BAND(df, 0.2, 0.26);
+            c = mix(c, pale, min(bands, 1.0) * mix(0.6, 0.9, detail));
+        }
+    }
+    #undef BAND
+    #undef ACROSS
+    // flat toon shading: a lighter edge on its lit side, a darker one opposite
+    c = mix(c, mix(c, vec3(1.0), 0.12), 1.0 - smoothstep(0.12 - ps, 0.12 + ps, s));
+    c = mix(c, c * 0.88, smoothstep(0.88 - ps, 0.88 + ps, s));
+    return mix(back, c, m);
+}
+)"
+R"(
 // A toon cumulus field at p (sky units).
 float cloudAt(vec2 p) {
     float n = fbm(vec2(p.x * 0.035, p.y * 0.1) + 4.0) + 0.18 * fbm(p * 0.25 + 9.0);
@@ -275,7 +378,8 @@ void main() {
     float spec = 0.0, rough = 20.0, ao = 1.0;
     float seed = vCol.a;
     vec2 bend = vec2(0.0);
-    float px = max(fwidth(q.x), fwidth(q.y));
+    vec2 pq = vec2(fwidth(q.x), fwidth(q.y)) + 1e-6;   // a pixel on this face
+    float px = max(pq.x, pq.y);
     float outA = 1.0;
     float lineK = 1.0;  // how much of the ink outline this surface gets
     vec3 lineC = vec3(-1.0);
@@ -364,30 +468,18 @@ void main() {
             outA = (1.0 - f) * (1.0 - f * 0.5);
         }
     } else if (mat == 12) {
-        // a cell of the board: one clean toy block, a bound volume with its spine toward us: a bright bevel band at
-        // its head, a shaded one at its foot, two cream rules, its pages down its right side; inked edges
+        // a cell of the board: a bit of a packed shelf, its books' spines toward us (shelfCell); the books' tops
+        // above, a deep shade on its other sides; inked edges
         lineK = 1.0;
-        lineC = vCol.rgb * vec3(0.18, 0.18, 0.24) + vec3(0.0, 0.0, 0.015);
+        lineC = vCol.rgb * vec3(0.16, 0.16, 0.22) + vec3(0.01, 0.01, 0.03);
         if (face == 2 && vLN.z > 0.0) {
-            vec2 e = sz - abs(q);
-            float pr = px + 0.004;
-            float top = (1.0 - smoothstep(0.075 - pr, 0.075 + pr, e.y)) * step(0.0, q.y);
-            float bot = (1.0 - smoothstep(0.06 - pr, 0.06 + pr, e.y)) * step(q.y, 0.0);
-            alb = mix(alb, mix(alb, vec3(1.0), 0.42), top);
-            alb = mix(alb, alb * 0.68, bot);
-            float rule = (1.0 - smoothstep(0.016, 0.016 + pr, abs(q.y - sz.y * 0.6))) + (1.0 - smoothstep(0.016, 0.016 + pr, abs(q.y + sz.y * 0.6)));
-            alb = mix(alb, mix(alb, vec3(1.0, 0.97, 0.88), 0.7), clamp(rule, 0.0, 1.0) * 0.85);
-            float pe = smoothstep(sz.x * 0.74 - pr, sz.x * 0.74 + pr, q.x) * (1.0 - smoothstep(sz.x * 0.9 - pr, sz.x * 0.9 + pr, q.x));
-            pe *= smoothstep(sz.y * 0.84 + pr, sz.y * 0.84 - pr, abs(q.y));
-            alb = mix(alb, uPaper, pe * 0.95);
-            spec = 0.35; rough = 30.0;
-        } else if (face == 0 && vLN.x > 0.0) {
-            float covers = 1.0 - smoothstep(0.02, 0.03, sz.y - abs(q.y));
-            alb = mix(uPaper * 0.92, alb * 0.85, covers);
-        } else if (face == 1 && vLN.y > 0.0) {
-            alb = mix(alb, vec3(1.0), 0.22);   // its top: the light band
+            alb = shelfCell(q / sz, pq / sz, vCol.rgb, seed);
+            spec = 0.0;
         } else {
-            alb *= 0.8;
+            // its top and sides: the shelf in the books' shadow (seen through the gaps, they read as the dark lines
+            // between the cells)
+            alb = lineC * (face == 1 && vLN.y > 0.0 ? 0.9 : 0.7);
+            lineK = 0.0;
         }
         if (vMat.w > 0.0) {
             float f = vMat.w;
