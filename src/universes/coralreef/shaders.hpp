@@ -808,27 +808,34 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- pieces: one chunk of living coral per cell
-// Each block a chunk of real coral filling its cell, its edges soft, rounded and irregular, touching its neighbours
-// like a living stack. Its species is its piece type's, each with its own relief, a height field over the cell:
-//   0 (I) staghorn: branching antlers (capsule SDFs: a trunk, a side branch, a forked tip), a second layer behind
-//         them in the shade, the dark between them the reef's depth;
-//   1 (O) star coral: corallites packed like cells (Worley), each a dome of radiating septa round a central pit;
-//   2 (T) porous coral: round pits of every size (Worley) in a pitted, lumpy crust;
-//   3 (S) plate coral: one smooth encrusting plate over the whole colony (no seams between its blocks), a raised lip
-//         along its wavy free edge, a few cup-like dimples;
-//   4 (Z) tube coral: tubes packed tight, each a pale ring round a dark hole;
-//   5 (J) sponge: deep irregular holes (a domain-warped Worley), fine pores between them;
-//   6 (L) brain coral: meandering ridges and grooves (the contour lines of a domain-warped noise).
+// Each block a chunk of real coral filling its cell, a rounded cushion, its edges soft and irregular, touching its
+// neighbours like a living stack. Its species is its piece type's, each with its own relief, a height field over the
+// cell, and each in two forms (half the colonies take the second, in its own tone):
+//   0 (I) staghorn: branching antlers (capsule SDFs: a trunk, a side branch, a forked tip; round, lit on their upper
+//         side) laid out over the whole colony, a second layer behind them in the shade, the reef's dark between;
+//   1 (O) star coral: a pincushion, its spikes radiating from a glowing heart (jittered cells in its polar
+//         coordinates); the second form finer, a deeper gold;
+//   2 (T) porous coral: round pits of every size (Worley) in a lumpy crust; the second form brown cup corals, raised
+//         rings round deep cups;
+//   3 (S) plate coral: one encrusting plate over the whole colony (no seams between its blocks), a raised bright lip
+//         along its wavy free edge, cups, a spongy crust;
+//   4 (Z) tube coral: tubes packed tight, pale discs round small dark mouths; the second form orange knobs;
+//   5 (J) sponge: deep irregular holes (a domain-warped Worley), fine pores between them; the second form teal;
+//   6 (L) brain coral: meandering ridges and narrow grooves, oriented waves (a Gabor noise) that run on in long
+//         parallel meanders and close into a labyrinth where they meet; the second form peach.
 // Each block its own variation (its seed: its offset into the texture, a little of its tone), a piece one colony
-// (its blocks' shared sides reach under each other, the swell between them a soft valley; between two colonies a
-// dark seam). The relief is lit from above (a key light, a soft wrap and a bounce of the block's own color into the
-// shade, as light scatters in the living tissue), the pits and grooves in ambient occlusion, a fine sugary grain all
-// over; normals from the height field by finite differences a pixel apart (three samples a pixel). The detail fades
-// out when a block is small on screen. A first pass lays a soft contact shadow under the stack (a soft glow at
-// night), the second the blocks. The ghost is a thin crust of coral along the piece's cells' outlines.
+// (its seed and each block's place in it: the plate's, the staghorn's and the edges' wobble run on across its
+// blocks; its blocks' shared sides reach under each other, the swell between them a soft valley; between two
+// colonies a dark seam). The relief is lit from above (a key light, a soft wrap and a bounce of the block's own color
+// into the shade, as light scatters in the living tissue), the pits and grooves and the cushion's rim in ambient
+// occlusion, a sugary grain all over; normals from the height field by finite differences a pixel apart (three
+// samples a pixel). The detail fades out when a block is small on screen. A first pass lays a soft contact shadow
+// under the stack (a soft glow at night), the second the blocks. The ghost is a thin crust of coral along the
+// piece's cells' outlines.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec4 aA; // x, y, half, the sides shared with its colony (1 up, 2 down, 4 left, 8 right) + 16 x type
+layout(location = 1) in vec4 aA; // x, y, half, code: the sides it shares with its colony (1 up, 2 down, 4 left, 8 right)
+                                 // + 16 x its type + 128 x its place in its colony (column + 8 x row)
 layout(location = 2) in vec4 aB; // tint rgb, alpha
 layout(location = 3) in vec4 aC; // mode (0 block, 1 ghost), erase 0..1, the colony's seed, the block's seed
 uniform mat4 uVP;
@@ -885,9 +892,9 @@ vec4 voro(vec2 p, float jit, out vec2 id) {
 // the chunk's outline: the signed distance (cell units, < 0 inside) to a rounded square, its sides shared with its
 // colony reaching past the cell (under its neighbour), its free sides inside it, wobbling (a wobble of the colony's,
 // running on along a free side from one of its blocks to the next)
-float outline(vec2 q, float shared, float free, float r, float wob, float freq) {
-    float eR = (gNb & 8) != 0 ? shared : free, eL = (gNb & 4) != 0 ? shared : free;
-    float eU = (gNb & 1) != 0 ? shared : free, eD = (gNb & 2) != 0 ? shared : free;
+float outline(vec2 q, float joint, float free, float r, float wob, float freq) {
+    float eR = (gNb & 8) != 0 ? joint : free, eL = (gNb & 4) != 0 ? joint : free;
+    float eU = (gNb & 1) != 0 ? joint : free, eD = (gNb & 2) != 0 ? joint : free;
     vec2 c = vec2(eR - eL, eU - eD) * 0.5, b = vec2(eR + eL, eU + eD) * 0.5;
     vec2 d = abs(q - c) - b + r;
     float sd = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
@@ -1091,10 +1098,10 @@ vec4 brain(vec2 q) {
 // the block's whole surface: its species' relief over the chunk's rounded swell
 vec4 surface(int sp, vec2 q, out float d) {
     bool flat_ = sp == 3;
-    float shared = 0.535, free = flat_ ? 0.43 : 0.465;
+    float joint = 0.535, free = flat_ ? 0.43 : 0.465;
     float wob = flat_ ? 0.26 : 0.04, wf = flat_ ? 1.8 : 5.0;
     float rc = sp == 1 ? 0.3 : 0.24;
-    d = outline(q, shared + wob * 0.6, free, rc, wob, wf);
+    d = outline(q, joint + wob * 0.6, free, rc, wob, wf);
     // the swell: a rounded cushion, its shoulders falling off to its free edges (its shared sides far out: a soft
     // valley between two blocks of a colony; none on the plate)
     float R = flat_ ? 0.06 : 0.2;
