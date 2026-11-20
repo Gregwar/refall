@@ -142,6 +142,26 @@ void lerpPalette(Palette& a, const Palette& b, float k) {
     for (int i = 0; i < PAL_FLOATS; i++) pa[i] += (pb[i] - pa[i]) * k;
 }
 
+// The alternative block looks: a piece's seed (from its serial), a prop's height (style 1, quantized down as the
+// stack's height texture holds it, so a block never shadows itself), and the links of a piece's cells to each other
+// (L R U D UL UR DL DR) with each cell's place in the piece (from its leftmost column and its top row), packed as the
+// tile shader reads them (+ BOARD_BIT on the board).
+constexpr int BOARD_BIT = 4096;
+float pieceSeedOf(int serial) { return (float)((splitmix64((uint64_t)serial * 0x9E3779B1ull + 0x5313ull) >> 40) * (1.0 / 16777216.0)); }
+float propHeight(float ps) { return std::floor((0.2f + 0.6f * ps) * 255.f) / 255.f; }
+const int LDX[8] = {-1, 1, 0, 0, -1, 1, -1, 1}, LDY[8] = {0, 0, -1, 1, -1, -1, 1, 1};
+void pieceLinks(const int cells[4][2], int pack[4]) {
+    int mx = 99, my = 99;
+    for (int i = 0; i < 4; i++) { mx = std::min(mx, cells[i][0]); my = std::min(my, cells[i][1]); }
+    for (int i = 0; i < 4; i++) {
+        int m = 0;
+        for (int d = 0; d < 8; d++)
+            for (int j = 0; j < 4; j++)
+                if (cells[j][0] == cells[i][0] + LDX[d] && cells[j][1] == cells[i][1] + LDY[d]) m |= 1 << d;
+        pack[i] = m + 256 * (std::min(cells[i][0] - mx, 3) + 4 * std::min(cells[i][1] - my, 3));
+    }
+}
+
 } // namespace
 
 // =====================================================================================================
@@ -191,6 +211,13 @@ bool SmokeUniverse::init(int width, int height) {
     glBindVertexArray(0);
 
     buildNoise();
+    if (const char* b = std::getenv("REFALL_SMOKE_BLOCK")) blockStyle_ = std::clamp(std::atoi(b), 0, 6);
+    glGenTextures(1, &occTex_);
+    glBindTexture(GL_TEXTURE_2D, occTex_);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, Game::W, Game::H, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
     pal_ = cur_ = paletteOf(0);
     // the dust in the air: motes scattered through the front of the smoke
     Rng r(0x5E0Cull);
@@ -283,6 +310,7 @@ void SmokeUniverse::resize(int width, int height) {
     const float hh = cam.dist * std::tan(cam.fovDeg * 0.5f * PI / 180.f), hw = hh * aspect;
     viewH_ = v2(hw, hh);
     viewC_ = v2(cam.target.x, cam.target.y);
+    camDist_ = cam.dist;
     vp_ = mat4::ortho(viewC_.x - hw, viewC_.x + hw, viewC_.y - hh, viewC_.y + hh, -1.f, 1.f);
     px_ = 2.f * hh / height_;
     createTargets();
@@ -313,6 +341,7 @@ SmokeUniverse::~SmokeUniverse() {
     for (GLuint b : {quadVbo_, tileVbo_, spriteVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
     if (volTex_) glDeleteTextures(1, &volTex_);
     if (noiseTex_) glDeleteTextures(1, &noiseTex_);
+    if (occTex_) glDeleteTextures(1, &occTex_);
 }
 
 // =====================================================================================================
@@ -469,6 +498,20 @@ void SmokeUniverse::landDust(const Game& game) {
 void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
     switch (ev.type) {
     case GameEvent::Lock:
+        if (blockStyle_ && ev.cells.size() == 4) {
+            // the piece keeps the look it had falling: its serial, its links, its place in it, its seed
+            int cells[4][2], pack[4];
+            for (int i = 0; i < 4; i++) { cells[i][0] = ev.cells[i].x; cells[i][1] = ev.cells[i].y; }
+            pieceLinks(cells, pack);
+            for (int i = 0; i < 4; i++) {
+                const int x = cells[i][0], y = cells[i][1];
+                if (y < 0 || y >= Game::H || x < 0 || x >= Game::W) continue;
+                ids_[y][x] = serial_;
+                links_[y][x] = (unsigned char)(pack[i] & 255);
+                rel_[y][x] = (unsigned char)(pack[i] >> 8);
+                pseed_[y][x] = pieceSeedOf(serial_);
+            }
+        }
         // only a hard drop kicks up dust (a piece set down slowly makes none); thrown when the frame starts
         if (lastDrop_ >= 0 && !ev.cells.empty()) {
             landed_ = ev.cells;
@@ -480,6 +523,7 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
     case GameEvent::HardDrop:
         lastDrop_ = ev.count; // the lock that follows pushes the smoke
         break;
+    case GameEvent::Spawn: serial_++; break;
     case GameEvent::Clear: {
         for (auto& c : ev.cells)
             if (std::find(landedFull_.begin(), landedFull_.end(), c.y) == landedFull_.end()) landedFull_.push_back(c.y);
@@ -495,7 +539,37 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
             d.seed = rowSeed;
             d.big = quadClear ? 1.6f : 1.f + 0.1f * (ev.count - 1);
             d.cx = layout::cellPos(4.5f, (float)c.y).x;
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) {
+                d.pack = links_[c.y][c.x] + 256 * rel_[c.y][c.x] + BOARD_BIT;
+                d.pseed = pseed_[c.y][c.x];
+            }
             dying_.push_back(d);
+        }
+        if (blockStyle_) {
+            // the rows above step down (the pieces' links across a cleared row cut)
+            bool cleared[Game::H] = {};
+            for (auto& c : ev.cells)
+                if (c.y >= 0 && c.y < Game::H) cleared[c.y] = true;
+            for (int y = 0; y < Game::H; y++) {
+                if (!cleared[y]) continue;
+                for (int x = 0; x < Game::W; x++) {
+                    if (y > 0) links_[y - 1][x] &= (unsigned char)~(8 | 64 | 128);
+                    if (y + 1 < Game::H) links_[y + 1][x] &= (unsigned char)~(4 | 16 | 32);
+                }
+            }
+            int dst = Game::H - 1;
+            for (int y = Game::H - 1; y >= 0; y--) {
+                if (cleared[y]) continue;
+                for (int x = 0; x < Game::W; x++) {
+                    ids_[dst][x] = ids_[y][x];
+                    links_[dst][x] = links_[y][x];
+                    rel_[dst][x] = rel_[y][x];
+                    pseed_[dst][x] = pseed_[y][x];
+                }
+                dst--;
+            }
+            for (; dst >= 0; dst--)
+                for (int x = 0; x < Game::W; x++) { ids_[dst][x] = 0; links_[dst][x] = 0; rel_[dst][x] = 0; pseed_[dst][x] = 0.f; }
         }
         if (quadClear) {
             // the smoke is blown outward, the light opens
@@ -516,6 +590,10 @@ void SmokeUniverse::onEvent(const GameEvent& ev, const Game&) {
             d.x = p.x; d.y = p.y; d.t = 0.f; d.type = std::clamp(c.type, 0, 6); d.over = true;
             d.delay = (c.y - top) * 0.09f + rng_.range(0.f, 0.05f);
             d.seed = rng_.uniform();
+            if (c.y >= 0 && c.y < Game::H && c.x >= 0 && c.x < Game::W) {
+                d.pack = links_[c.y][c.x] + 256 * rel_[c.y][c.x] + BOARD_BIT;
+                d.pseed = pseed_[c.y][c.x];
+            }
             dying_.push_back(d);
         }
         overT_ = 0.f;
@@ -616,29 +694,87 @@ void SmokeUniverse::tile(float x, float y, float hw, float hh, const vec3& c, fl
     tiles_.push_back({{x, y, hw, hh}, {c.x, c.y, c.z, alpha}, {(float)kind, age, angle, 0.f}, {e0, e1, e2, e3}});
 }
 
+// The pieces of the stack when the board was set without a lock (a test fill, a restart): cells of a type grouped
+// by four, linked to each other.
+void SmokeUniverse::syncIds(const Game& g) {
+    int wrong = 0;
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if ((g.cell(x, y).type >= 0) != (ids_[y][x] != 0)) wrong++;
+    if (!wrong) return;
+    for (int y = 0; y < Game::H; y++)
+        for (int x = 0; x < Game::W; x++)
+            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; links_[y][x] = 0; rel_[y][x] = 0; }
+    for (int y = Game::H - 1; y >= 0; y--)
+        for (int x = 0; x < Game::W; x++) {
+            if (g.cell(x, y).type < 0 || ids_[y][x]) continue;
+            const int id = nextId_++, type = g.cell(x, y).type;
+            int group[4][2], n = 0;
+            group[n][0] = x; group[n][1] = y; n++;
+            ids_[y][x] = id;
+            // from the bottom up, a square of four on a pair of columns first (the test fill's blobs), else the first
+            // four reached
+            auto freeOf = [&](int cx, int cy) { return cx < Game::W && cy >= 0 && !ids_[cy][cx] && g.cell(cx, cy).type == type; };
+            if (x % 2 == 0 && freeOf(x + 1, y) && freeOf(x, y - 1) && freeOf(x + 1, y - 1))
+                for (int k = 1; k < 4; k++) {
+                    group[n][0] = x + (k & 1); group[n][1] = y - (k >> 1); n++;
+                    ids_[y - (k >> 1)][x + (k & 1)] = id;
+                }
+            for (int i = 0; i < n && n < 4; i++)
+                for (int d = 0; d < 4 && n < 4; d++) {
+                    const int nx = group[i][0] + LDX[d], ny = group[i][1] + LDY[d];
+                    if (nx < 0 || ny < 0 || nx >= Game::W || ny >= Game::H || ids_[ny][nx] || g.cell(nx, ny).type != type) continue;
+                    ids_[ny][nx] = id;
+                    group[n][0] = nx; group[n][1] = ny; n++;
+                }
+            int cells[4][2], pack[4];
+            for (int i = 0; i < 4; i++) { cells[i][0] = group[i % n][0]; cells[i][1] = group[i % n][1]; }
+            pieceLinks(cells, pack);
+            for (int i = 0; i < n; i++) {
+                const int cx = group[i][0], cy = group[i][1];
+                links_[cy][cx] = (unsigned char)(pack[i] & 255);
+                rel_[cy][cx] = (unsigned char)(pack[i] >> 8);
+                pseed_[cy][cx] = pieceSeedOf(id);
+            }
+        }
+}
+
 void SmokeUniverse::buildBoard(const Game& g) {
     // The shadows the blocks cast on the glass, away from the lamp (drawn first, under every block).
     std::vector<Tile> blocks;
+    fallN_ = 0;
     const vec3 lp = lampPos();
     auto shadowOff = [&](float x, float y) {
         vec2 d = v2(x - lp.x, y - lp.y);
         const float l = std::max(1e-3f, std::sqrt(d.x * d.x + d.y * d.y));
         return d * (0.2f / l);
     };
-    auto block = [&](float x, float y, float s, const vec3& c, float alpha, float light, float age, bool shadow) {
-        if (shadow) {
+    // pack: the cell's links and place in its piece (+ BOARD_BIT on the board), ps its piece's seed (the block looks)
+    auto block = [&](float x, float y, float s, const vec3& c, float alpha, float light, float age, bool shadow, int pack = 0,
+                     float ps = 0.f) {
+        if (shadow && blockStyle_ == 1) {
+            // a prop's hard shadow on the glass: its column cast away from the lamp (the tile covers its whole length)
+            const float h = propHeight(ps), lz = std::max(lp.z, h + 0.5f);
+            vec2 d = v2(x - lp.x, y - lp.y);
+            const float l = std::max(1e-3f, std::sqrt(d.x * d.x + d.y * d.y));
+            const vec2 o = d * ((l + 0.75f) * h / (lz - h) / l);
+            tile(x + 0.5f * o.x, y + 0.5f * o.y, 0.5f * s + 0.5f * std::fabs(o.x) + 0.05f, 0.5f * s + 0.5f * std::fabs(o.y) + 0.05f,
+                 vec3(0.f), alpha, 3, s, h, x, y);
+        } else if (shadow && blockStyle_ != 3 && blockStyle_ != 5) {
             const vec2 o = shadowOff(x, y);
             tile(x + o.x, y + o.y, 0.62f * s, 0.62f * s, vec3(0.f), alpha, 3, s);
         }
-        blocks.push_back({{x, y, 0.5f * s, 0.5f * s}, {c.x, c.y, c.z, alpha}, {0.f, -1.f, 0.f, 0.f}, {s, light, age, 0.f}});
+        blocks.push_back({{x, y, 0.5f * s, 0.5f * s}, {c.x, c.y, c.z, alpha}, {0.f, -1.f, 0.f, (float)pack}, {s, light, age, ps}});
     };
+    auto cellPack = [&](int x, int y) { return links_[y][x] + 256 * rel_[y][x] + BOARD_BIT; };
+    if (blockStyle_) syncIds(g);
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
             const float age = c.flash > 0.f ? (1.f - c.flash) * Game::LOCK_FX_SECONDS : -1.f;
-            block(p.x, p.y, 1.f, cur_.piece[c.type], 1.f, 1.f, age, true);
+            block(p.x, p.y, 1.f, cur_.piece[c.type], 1.f, 1.f, age, true, cellPack(x, y), pseed_[y][x]);
         }
     // Cleared blocks burning off into smoke; a topped-out stack going dark.
     for (const Dying& d : dying_) {
@@ -646,11 +782,11 @@ void SmokeUniverse::buildBoard(const Game& g) {
         if (d.over) {
             const float k = smoothstepf(0.f, 0.7f, t);
             const float a = 1.f - smoothstepf(5.f, 8.f, d.t);
-            block(d.x, d.y, 1.f, cur_.piece[d.type], a, lerpf(1.f, 0.1f, k), -1.f, true);
+            block(d.x, d.y, 1.f, cur_.piece[d.type], a, lerpf(1.f, 0.1f, k), -1.f, true, d.pack, d.pseed);
             continue;
         }
         if (t < 0.f) {
-            block(d.x, d.y, 1.f, cur_.piece[d.type], 1.f, 1.f, -1.f, true);
+            block(d.x, d.y, 1.f, cur_.piece[d.type], 1.f, 1.f, -1.f, true, d.pack, d.pseed);
             continue;
         }
         // the block turns to smoke: eaten from its edges inward by the noise, lifting a hair as it goes (its smoke is
@@ -658,7 +794,8 @@ void SmokeUniverse::buildBoard(const Game& g) {
         const float k = saturate(t / 0.42f);
         if (k >= 1.f) continue;
         const vec3 c = cur_.piece[d.type];
-        blocks.push_back({{d.x, d.y + 0.08f * k, 0.5f, 0.5f}, {c.x, c.y, c.z, 1.f}, {2.f, -1.f, 0.f, 0.f}, {1.f, k, d.seed * 7.f + d.x * 0.37f, 0.f}});
+        blocks.push_back({{d.x, d.y + 0.08f * k, 0.5f, 0.5f}, {c.x, c.y, c.z, 1.f}, {2.f, -1.f, 0.f, (float)d.pack},
+                          {1.f, k, d.seed * 7.f + d.x * 0.37f, d.pseed}});
     }
     // The falling piece and its ghost.
     if (g.hasPiece()) {
@@ -666,44 +803,54 @@ void SmokeUniverse::buildBoard(const Game& g) {
         int cells[4][2];
         g.pieceCells(p, cells);
         const vec3 col = cur_.piece[p.type];
+        int pack[4];
+        pieceLinks(cells, pack);
+        const float ps = pieceSeedOf(serial_);
         Piece gp = p;
         gp.y = g.ghostY();
         if (gp.y > p.y) {
             int gc[4][2];
             g.pieceCells(gp, gc);
-            for (auto& c : gc) {
+            for (int i = 0; i < 4; i++) {
+                const int* c = gc[i];
                 if (c[1] < Game::HIDDEN) continue;
                 const vec3 w = layout::cellPos((float)c[0], (float)c[1]);
-                blocks.push_back({{w.x, w.y, 0.5f, 0.5f}, {col.x, col.y, col.z, 0.9f}, {1.f, -1.f, 0.f, 0.f}, {1.f, 0.f, 0.f, 0.f}});
+                blocks.push_back({{w.x, w.y, 0.5f, 0.5f}, {col.x, col.y, col.z, 0.9f}, {1.f, -1.f, 0.f, (float)pack[i]}, {1.f, 0.f, 0.f, ps}});
             }
         }
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
-        for (auto& c : cells) {
+        for (int i = 0; i < 4; i++) {
+            const int* c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            block(w.x, w.y, 1.f, col, 1.f, 1.f, -1.f, true);
+            fall_[fallN_++] = vec3(w.x, w.y, propHeight(ps));
+            block(w.x, w.y, 1.f, col, 1.f, 1.f, -1.f, true, pack[i] + BOARD_BIT, ps);
         }
     }
     // Previews.
-    auto preview = [&](int type, vec2 center, float sc, float alpha) {
+    auto preview = [&](int type, vec2 center, float sc, float alpha, float ps) {
         if (type < 0) return;
         Piece p{type, 0, 0, 0};
-        int cells[4][2];
+        int cells[4][2], pack[4];
         g.pieceCells(p, cells);
+        pieceLinks(cells, pack);
         float minx = 9, maxx = -9, miny = 9, maxy = -9;
         for (auto& c : cells) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
-        for (auto& c : cells) {
+        for (int i = 0; i < 4; i++) {
+            const int* c = cells[i];
             const vec2 pos = v2(center.x + (c[0] - (minx + maxx) * 0.5f) * sc, center.y - (c[1] - (miny + maxy) * 0.5f) * sc);
-            block(pos.x, pos.y, sc, cur_.piece[type], alpha, 1.f, -1.f, false);
+            block(pos.x, pos.y, sc, cur_.piece[type], alpha, 1.f, -1.f, false, pack[i], ps);
         }
     };
-    preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f);
+    // (the next pieces with the seeds they will have once spawned)
+    preview(g.holdType(), v2(layout::HOLD_CENTER.x, layout::HOLD_CENTER.y), layout::previewScale(0), g.holdUsed() ? 0.4f : 1.f,
+            0.13f + 0.11f * std::max(0, g.holdType()));
     for (int i = 0; i < 3; i++) {
         const vec3 c = layout::nextCenter(i);
-        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f);
+        if (g.next(i) >= 0) preview(g.next(i), v2(c.x, c.y), layout::previewScale(i), 1.f, pieceSeedOf(serial_ + 1 + i));
     }
     tiles_.insert(tiles_.end(), blocks.begin(), blocks.end());
 }
@@ -1049,6 +1196,39 @@ void SmokeUniverse::render(const Frame& f, GLuint fbo) {
         set1f(progTile_, "uSlow", slow_);
         set1f(progTile_, "uBridge", saturate(bridge_.amount));
         set3f(progTile_, "uBridgeInk", bridge_.ink);
+        set1i(progTile_, "uBlock", blockStyle_);
+        // (the samplers on their own units even unused: a 3D and a 2D one on the same unit fail the draw)
+        set1i(progTile_, "uSmokeT", 1);
+        set1i(progTile_, "uOcc", 2);
+        set1i(progTile_, "uVol", 3);
+        if (blockStyle_) {
+            set1f(progTile_, "uTime", worldTime_);
+            set1f(progTile_, "uConeTrue", cone);
+            set1f(progTile_, "uLampOn", lightOn);
+            set3f(progTile_, "uEye", vec3(viewC_.x, viewC_.y, camDist_));
+            set4f(progTile_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, smokeT_.tex);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, occTex_);
+            if (blockStyle_ == 1) {
+                // the stack's heights, for the shadows the props cast on each other
+                unsigned char occ[Game::H][Game::W];
+                for (int y = 0; y < Game::H; y++)
+                    for (int x = 0; x < Game::W; x++)
+                        occ[y][x] = game.cell(x, y).type >= 0 && !bare_ ? (unsigned char)std::lround(propHeight(pseed_[y][x]) * 255.f) : 0;
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, Game::W, Game::H, GL_RED, GL_UNSIGNED_BYTE, occ);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+                float fl[12] = {};
+                for (int i = 0; i < fallN_; i++) { fl[i * 3] = fall_[i].x; fl[i * 3 + 1] = fall_[i].y; fl[i * 3 + 2] = fall_[i].z; }
+                glUniform3fv(glGetUniformLocation(progTile_, "uFall"), 4, fl);
+                set1i(progTile_, "uFallN", bare_ ? 0 : fallN_);
+            }
+            glActiveTexture(GL_TEXTURE3);
+            glBindTexture(GL_TEXTURE_3D, volTex_);
+            glActiveTexture(GL_TEXTURE0);
+        }
         glBindVertexArray(tileVao_);
         glBindBuffer(GL_ARRAY_BUFFER, tileVbo_);
         glBufferData(GL_ARRAY_BUFFER, tiles_.size() * sizeof(Tile), tiles_.data(), GL_STREAM_DRAW);
