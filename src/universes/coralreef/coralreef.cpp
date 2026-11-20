@@ -17,12 +17,17 @@
 // to the deep, the reef recedes for the next game. Around a song the camera dives down onto its view as the light
 // comes down from the surface, and after it drifts back as the light sinks to the deep.
 //
-// The pieces: one clean rounded tile per cell, one saturated color per piece type, softly lit from above with a
-// faint ripple of light. A cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
+// The pieces: each cell a chunk of living coral filling it, its edges soft, rounded and irregular, a species per
+// piece type (staghorn, star coral, porous coral, plate coral, tube coral, sponge, brain coral; each in two forms, a
+// colony's one or the other), its relief lit softly from above with a faint ripple of light. A piece is one colony
+// (its blocks grow into each other, a dark seam between two colonies), each block its own variation, both kept
+// through the falls and the clears (see CELL_FS). The ghost is a thin crust of coral along the piece's outline. A
+// cleared row shrinks away in place; its bubbles and seeds travel in the world behind.
 //
 // Cost: the world at a reduced resolution (at most 720 lines) with depth (the water, ~115k triangles of seabed, the
 // corals instanced per form, the fish, the billboards); the composite at full resolution integrates the light
-// shafts in ten steps a pixel.
+// shafts in ten steps a pixel. The blocks' relief is sampled three times a pixel (a full board: about 0.05 ms of an
+// RTX 4090 at 1080p, 0.16 ms at 4K).
 #include "universes/coralreef/coralreef.hpp"
 
 #include <algorithm>
