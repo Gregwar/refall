@@ -326,11 +326,11 @@ void Painter::tri(float x0, float y0, float x1, float y1, float x2, float y2, Co
 }
 
 void Painter::kaleido(float seedA, float seedB, float mixAB, float cx, float cy, float rot, int segs, Col tint, float time,
-                      float level, float saturation, float duo, float launch) {
+                      float level, float saturation, float duo, float launch, float morph) {
     static const char* KFS = R"(#version 330 core
 out vec4 o;
 uniform vec2 uRes, uC;
-uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB, uLaunch;
+uniform float uMix, uRot, uTime, uLevel, uScale, uSat, uDuo, uSeedA, uSeedB, uLaunch, uMorph;
 uniform int uSeg;
 uniform vec3 uTint;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -425,7 +425,9 @@ void main() {
     float seedOff = uLaunch * 30.0;
     vec2 nw = w * 1.4 + vec2(seedOff, 0.0);
     // domain warping: the gas curls round itself
-    vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006), vn(nw * 1.1 + 5.2 - uTime * 0.005));
+    // (uMorph: the stage's, eased over seconds: the gas curls and thickens differently in place, never sliding)
+    vec2 mo = vec2(cos(uMorph * 1.3), sin(uMorph * 0.9)) * 1.6;
+    vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006 + mo), vn(nw * 1.1 + 5.2 - uTime * 0.005 - mo.yx));
     vec2 q2 = vec2(vn(nw * 2.3 + q1 * 2.0 + 1.7), vn(nw * 2.3 + q1 * 2.0 + 9.2));
     vec2 ww = nw + q2 * 1.4;
     float fb = 0.0, amp = 0.5, frq = 1.0;
@@ -437,7 +439,7 @@ void main() {
     float band = exp(-pow((sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33, 2.0));
     float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
     float rightC = exp(-dot((sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45), (sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45)));
-    float dens = clamp(band * 0.7 + leftC * 0.8 + rightC * 0.7, 0.0, 1.3);
+    float dens = clamp((band * 0.7 + leftC * 0.8 + rightC * 0.7) * (0.65 + 0.6 * (0.5 + 0.5 * sin(uMorph * 2.3))), 0.0, 1.3);
     float gas = smoothstep(0.3, 0.85, fb) * dens;
     float wisp = rg * smoothstep(0.25, 0.7, fb) * dens;
     float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
@@ -545,6 +547,7 @@ void main() {
     ugl::set1f(kalProg_, "uSeedA", seedA);
     ugl::set1f(kalProg_, "uSeedB", seedB);
     ugl::set1f(kalProg_, "uLaunch", launch);
+    ugl::set1f(kalProg_, "uMorph", morph);
     ugl::set2f(kalProg_, "uRes", (float)lw, (float)lh);
     ugl::set2f(kalProg_, "uC", cx * sx, cy * sy);
     ugl::set1f(kalProg_, "uScale", (float)h_ / lh);
