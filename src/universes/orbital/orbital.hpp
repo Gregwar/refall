@@ -172,14 +172,16 @@ private:
     std::vector<Mote> motes_;
 
     // ---- Pieces.
-    struct CellInst { float a[4], b[4], c[4]; };
+    // A cell: (x, y, half, neighbour mask), (tint, alpha), (mode, erase, glow, drain), (piece seed, type, -, -).
+    struct CellInst { float a[4], b[4], c[4], d[4]; };
     std::vector<CellInst> cells_;
     int ids_[22][10] = {};
     int nextId_ = 1;
     void syncIds(const Game& g);
-    void cell(float x, float y, float half, int mask, const vec3& tint, float alpha, int mode, float erase, float glow);
+    void cell(float x, float y, float half, int mask, int type, float seed, float alpha, int mode, float erase, float glow);
+    static float seedOf(int id) { return id ? std::fmod((float)id * 0.6180339f, 1.f) : 0.5f; } // a piece's circuit
     void buildBoard(const Game& g);
-    struct Fading { float x, y; int type, mask; float t; };
+    struct Fading { float x, y; int type, mask; float t, seed; };
     std::vector<Fading> fading_, overCells_;
     struct SpriteInst { float a[4], b[4], c[4]; };
     std::vector<SpriteInst> sprites_;
