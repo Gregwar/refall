@@ -38,7 +38,7 @@ public:
     static constexpr int F_COUNT_ = 4; // the features that grow in (world.hpp's Feature)
     enum Mat {
         M_PLASTER = 0, M_WOOD = 1, M_CASE = 2, M_BOOK = 3, M_FLOOR = 4, M_CONCRETE = 5, M_STEEL = 6, M_EMIT = 7, M_WINDOW = 8,
-        M_GLASS = 9, M_SKY = 10, M_TOY = 11, M_CELL = 12, M_BACKDROP = 13, M_ROUNDWIN = 14
+        M_GLASS = 9, M_SKY = 10, M_TOY = 11, M_BACKDROP = 13, M_ROUNDWIN = 14
     };
     struct Lamp {
         vec3 p, col;

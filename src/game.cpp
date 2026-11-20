@@ -341,8 +341,13 @@ void Game::debugFillBoard(uint64_t seed) {
     over_ = false;
     const int well = (int)(r.next() % W);
     int h = 5 + (int)(r.next() % 4);
+    // Test hook: REFALL_FILL_HEIGHT=N fills the columns about N rows high instead (1..18: a universe's look as its
+    // stack grows; the same draws, so the same colors and well).
+    static const int fillH = std::getenv("REFALL_FILL_HEIGHT") ? std::clamp(std::atoi(std::getenv("REFALL_FILL_HEIGHT")), 1, 18) : 0;
+    const int lo = fillH ? std::max(1, fillH - 2) : 3, hi = fillH ? fillH + 1 : 10;
+    if (fillH) h = fillH;
     for (int x = 0; x < W; x++) {
-        h = std::clamp(h + (int)(r.next() % 5) - 2, 3, 10);
+        h = std::clamp(h + (int)(r.next() % 5) - 2, lo, hi);
         if (x == well) continue;
         for (int k = 0; k < h; k++) {
             // 2x2-ish blobs of one color, offset per column pair, like locked pieces.

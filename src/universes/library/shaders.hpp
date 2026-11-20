@@ -2,8 +2,8 @@
 // LIBRARY's shaders (see library.cpp).
 //
 // SOLID_VS / SOLID_FS draw everything solid, instanced, as toon: boxes, cylinders and the hemisphere, with their
-// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), the board's cells (each a few books
-// against a dark shelf back), planks, painted plaster and metal,
+// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), the board's cells (each a few of the
+// same books), planks, painted plaster and metal,
 // lights, round toy shapes (bushes, pots, shades, globes, the rug), the round windows (the sky through a cross of
 // bars), the backdrop (the sky, stars at night); the furniture that comes later scaled in from its floor by its
 // feature's growth (uFeat). Cel lit (the sun in three bands with its shadow map, a cool colored shade,
@@ -390,19 +390,6 @@ void main() {
             float f = vMat.w;
             emit += (vCol.rgb * 1.4 + 0.25) * (2.2 * f);
             outA = (1.0 - f) * (1.0 - f * 0.5);
-        }
-    } else if (mat == 12) {
-        // a cell's shelf back (its books are M_BOOK, in front of it): flat, dark, in its piece's color; seen in the thin
-        // gaps between the books and above a shorter one
-        lineK = 1.0;
-        lineC = vCol.rgb * vec3(0.12, 0.11, 0.16) + vec3(0.01, 0.008, 0.025);
-        alb = vCol.rgb * vec3(0.2, 0.19, 0.26) + vec3(0.012, 0.01, 0.03);
-        spec = 0.0;
-        if (vMat.w > 0.0) {
-            float f = vMat.w;
-            emit += (vCol.rgb * 1.3 + 0.25) * (2.0 * f);
-            outA = (1.0 - f) * (1.0 - f * 0.5);
-            lineK *= 1.0 - f;
         }
     } else if (mat == 4) {
         // floor: big toy tiles in two clear colors (p0 = 1: long planks, else a checker), crisp grout

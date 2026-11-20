@@ -1,10 +1,10 @@
 // LIBRARY: the blocks are books, and every cleared line brings three big books to a small, cosy library room that
 // fills with the game (complete at about 50 lines, one song).
 //
-// The board stays a clean game board over a deep saturated ground, its cells a packed shelf: each cell a row of book
-// spines seen from the front in its piece's color family (three or four standing, a big one beside a slim one, or a
-// pile of three lying; each book its own shade, a pale label or thin bands, thin dark gaps between them: the shader's
-// shelfCell), and each cell keeps its books through falls and clears (its seed follows it). When a row
+// The board stays a clean game board over a deep saturated ground, its cells a packed shelf: each cell two or three
+// real books standing on their spines in its piece's color (the room's books, a little stockier: pushCell), seen in a
+// real perspective from above the well's middle (their tops' pages show, more the lower they are), and each cell keeps
+// its books through falls and clears (its seed follows it). When a row
 // clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
 // the HUD), turning over once on the way. Each lands in the next free place (the order of the runs in world.cpp) with
@@ -21,8 +21,9 @@
 // Game over: the blocks topple out of the bottom of the well. Around a song the camera comes in to the dim room as
 // its lamps come on one by one (the setup), and draws back as they go out one by one (the teardown).
 //
-// Layout contract: the board is drawn through the reference camera raised a little and shifted back down (the board
-// plane keeps its pixels, the books' tops show); the room has its own camera behind it.
+// Layout contract: the board is drawn through a camera closer than the reference one and raised above the well, its
+// field widened and its image shifted so the board plane keeps the reference pixels (the books' tops and inner sides
+// show); the room has its own camera behind it.
 #include "universes/library/library.hpp"
 
 #include <chrono>
@@ -507,8 +508,8 @@ TransitionHints LibraryUniverse::hints() const {
 // =====================================================================================================
 
 // A cell of the board: a bit of a packed shelf, two or three books standing on their spines, flush at the front, each
-// its own width, height, depth, shade and spine design, against a dark shelf back (seen in the thin gaps between
-// them, and above a shorter one). They are the room's books (the same construction and shading, M_BOOK: the spine's
+// its own width, height, depth, shade and spine design, and nothing behind them (no shelf back: seen in perspective,
+// a panel behind them would show past their outline, above a shorter one or beside them). They are the room's books (the same construction and shading, M_BOOK: the spine's
 // designs, the boards round a cream page block that shows on their tops, seen a little from above), in their piece's
 // full color and a little stockier, closer to a cube, so they fill the cell. All from the cell's seed: a cell keeps its
 // books through falls and clears. along / up / out: its frame (a toppling cell turns it), k its size, fade its
@@ -518,7 +519,7 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
     const float sw = k * (1.f + 0.05f * fade);
     const vec3 outD = cross(along, up);
     const float H = 0.468f * sw;          // the cell's half side
-    const float D = 0.62f * sw;           // the deepest book (the shelf back just behind it)
+    const float D = 0.62f * sw;           // the deepest book
     const vec3 col = pieceColor(type);
     auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd) {
         Inst in;
@@ -538,7 +539,7 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
     float w[3], tot = 0.f;
     for (int i = 0; i < n; i++) tot += (w[i] = r.range(0.78f, 1.22f));
     const float gap = 0.018f * sw;
-    float x0 = -H, top = 0.f;
+    float x0 = -H;
     for (int i = 0; i < n; i++) {
         const float bw = (2.f * H - gap * (n - 1)) * w[i] / tot;
         const float bh = 2.f * H * (r.chance(0.2f) ? r.range(0.72f, 0.8f) : r.range(0.84f, 0.92f));
@@ -550,11 +551,7 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
         put(c + along * (x0 + bw * 0.5f) + up * (bh * 0.5f - H) - outD * (bd * 0.5f), along * (bw * 0.5f), up * (bh * 0.5f),
             outD * (bd * 0.5f), bc, M_BOOK, (float)style, bs);
         x0 += bw + gap;
-        top = std::max(top, bh);
     }
-    // the shelf back, behind them, as high as the tallest (above it, the well's ground or the HUD's card)
-    const float bt = 0.03f * sw;
-    put(c + up * (top * 0.5f - H) - outD * (D + bt), along * H, up * (top * 0.5f), outD * bt, col, M_CELL, 0.f, 0.f);
 }
 
 uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
