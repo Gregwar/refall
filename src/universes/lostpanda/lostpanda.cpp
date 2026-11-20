@@ -2,7 +2,7 @@
 // in the city at night, alone under the rain. Every cleared line is a few steps further on its way home, through one
 // world the camera follows it through, never cutting: the rainy street becomes the shopping street, a cartoon night
 // city in layers of parallax (a moon, misty skyscrapers, towers, an elevated line, brick buildings with warm windows
-// and neon signs, people hurrying by under umbrellas, black silhouettes at the front); the cub goes down the subway's
+// and neon signs, black silhouettes at the front); the cub goes down the subway's
 // stairs (the world cut away like a cross-section, the street still above, pipes and cables in the earth between);
 // waits on the platform (tiles, graffiti, vending machines, commuters) while a silver train glides in, steps in;
 // the train pulls out (the camera holds back a moment, then catches up), gathers speed hard and runs flat out under
@@ -95,10 +95,10 @@ struct VariantDef {
     unsigned accent, light;
 };
 const VariantDef VARIANTS[] = {
-    {"LANTERN", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xffc77a, 0xffc070},
-    {"SUNNY", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xa8d8ff, 0xffd890},
-    {"BLOSSOM", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xffb8cc, 0xffc8a0},
-    {"JADE", {0xdcc38c, 0x9dbd6c, 0xcfa962, 0x7fa552, 0xe8d6a8, 0xa6ad62, 0xc3d186}, 0xa8e8c0, 0xffd070},
+    {"LANTERN", {0xcdb683, 0x93a862, 0xd9b66c, 0x6f9150, 0xddcba0, 0x9c9e5c, 0xb9c47e}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0xcdb683, 0x93a862, 0xd9b66c, 0x6f9150, 0xddcba0, 0x9c9e5c, 0xb9c47e}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0xcdb683, 0x93a862, 0xd9b66c, 0x6f9150, 0xddcba0, 0x9c9e5c, 0xb9c47e}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0xcdb683, 0x93a862, 0xd9b66c, 0x6f9150, 0xddcba0, 0x9c9e5c, 0xb9c47e}, 0xa8e8c0, 0xffd070},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }

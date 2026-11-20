@@ -848,44 +848,6 @@ vec3 cityFront(vec2 p, vec2 w, vec3 c, float k) {
     return mix(c, sc, fillA(d) * city);
 }
 
-// ---- passers-by under umbrellas (layer k), on the shopping street
-vec3 passers(vec2 p, vec3 c, float k, vec3 rim) {
-    float amt = 0.75 * zShop(p.x + uD) * uRain;
-    if (amt <= 0.01) return c;
-    for (int g = 0; g < 2; g++) {
-        float dir = g == 0 ? 1.0 : -1.0;
-        float speed = 1.05 + 0.2 * float(g);
-        float u = p.x + uD * k - dir * uTime * speed * (1.0 - 0.6 * uSlow) + float(g) * 4.3;
-        float cw = 8.5;
-        float id = floor(u / cw);
-        float h = hash1(id + float(g) * 17.0);
-        if (h > amt) continue;
-        float sx = (u / cw - id) * cw - cw * 0.5 - (hash1(id + 3.0) - 0.5) * 3.0;
-        vec2 q = vec2(sx * dir, p.y - GY0 - 0.1);
-        float s = 0.9 + 0.25 * hash1(id + 5.0);
-        q /= s;
-        float ph = (uTime * speed * (1.0 - 0.6 * uSlow) * 2.0 + h * 10.0) * 1.1;
-        float sw = sin(ph) * 0.4;
-        q.y -= 0.08 * abs(cos(ph));                                                   // a light bob with each step
-        // a walker in a coat: legs under a flared coat, a round head, one arm up holding the umbrella just overhead
-        float d = min(sdSeg(q, vec2(0.0, 2.8), vec2(sw * 0.75, 0.25)), sdSeg(q, vec2(0.0, 2.8), vec2(-sw * 0.75, 0.25))) - 0.3;
-        d = min(d, sdBox(q - vec2(0.0, 4.25), vec2(0.5 - (q.y - 4.25) * 0.15, 1.5)) - 0.4);   // rounded shoulders, flared hem
-        d = min(d, length(q - vec2(0.1, 6.65)) - 0.64);
-        d = min(d, sdSeg(q, vec2(0.3, 5.3), vec2(0.85, 6.05)) - 0.19);                     // the arm, the hand in front
-        vec2 uq = q - vec2(0.85, 7.6);
-        uq = mat2(0.985, 0.17, -0.17, 0.985) * uq;                                    // tilted a little forward
-        float dome = max(length(uq * vec2(1.0, 1.75)) - 2.05, -uq.y);
-        float scal = length(vec2(mod(uq.x + 2.05, 1.025) - 0.5125, uq.y + 0.3)) - 0.42;   // the scalloped hem
-        dome = max(dome, -scal);
-        float um = min(dome, sdBox(uq - vec2(0.0, -0.8), vec2(0.045, 0.8)));
-        um = min(um, length(uq - vec2(0.0, 1.2)) - 0.1);                               // the ferrule on top
-        vec3 uc = hash1(id + 9.0) < 0.35 ? vec3(0.45, 0.06, 0.08) : (hash1(id + 10.0) < 0.5 ? vec3(0.04, 0.05, 0.07) : vec3(0.1, 0.16, 0.22));
-        c = lay(c, vec3(0.022, 0.024, 0.032) + rim * 0.06 * smoothstep(-0.25, 0.0, d), fillA(d * s));
-        c = lay(c, uc * (0.7 + 0.5 * smoothstep(-0.6, 0.6, uq.y)) + rim * 0.08 * exp(-abs(dome) * 6.0), fillA(um * s));
-    }
-    return c;
-}
-
 // ---- out of the city, in the same drawn style: thin inked outlines (a dark shade of each thing's own color, hazed
 // with its layer), flat shading in two tones, small details, layers of parallax (the far ones slowest, the silhouettes
 // at the very front fastest); the light of the hour on all of it (dawn, morning, gold, sunset)
@@ -1529,7 +1491,6 @@ vec3 airScene(vec2 p, vec2 w) {
         float sh = sq(sat(vnoise(vec2((sq0.x + uD * 0.15) * 0.35, uTime * 0.05)) * 1.4 - 0.45));
         c += uSunCol * sh * 0.5 * shz * smoothstep(-12.0, 4.0, p.y);
     }
-    if (CITY) c = passers(layerP(p, 0.8), c, 0.8, vec3(1.0, 0.6, 0.5));
     if (COUNTRY) c = bambooClump(layerP(p, 0.5), c, 0.5, GY0 + 1.0, 1.0, 0.5, vec3(0.42, 0.55, 0.2), vec3(0.74, 0.84, 0.3), 0.06, 5.0, 1.0);
     // the meadow behind the path: grass and flowers (fields, forest, glade), the stream coming to the little bridge
     if (COUNTRY) {
@@ -2722,9 +2683,9 @@ void main() {
 )";
 
 // ------------------------------------------------------------------------------------------------ the cells
-// One cell per block, a square of bamboo wood in its piece's colour: its corners just rounded, its fibres running up it
-// (each block its own), a faint node across some, a bevel (lit on its top and left, shaded on its bottom and right),
-// a thin darker line round it. The ghost is the outline alone; a cleared cell shrinks softly away.
+// One cell per block, a block of bamboo in its piece's colour seen a little from above: square, its corners well
+// rounded, its top face a pale band, round across (darker at its sides), fibres running up it (each block its own), a
+// wavy node near its base, a thin darker line round it. The ghost is the outline alone; a cleared cell shrinks softly away.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, -
@@ -2757,9 +2718,11 @@ void main() {
     float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
     float shrink = 1.0 - 0.6 * smoothstep(0.0, 1.0, erase);
     vec2 q = vLocal / shrink;
-    // a square block of bamboo wood: its corners just rounded, fibres running up it (each block its own, from its
-    // place), a faint node across, a bevel (lit along its top and left, shaded along its bottom and right)
-    float d = sdBox(q, vec2(0.455 - 0.07)) - 0.07;
+    // a block of bamboo seen a little from above: square with well rounded corners, a gap round it; its top face a
+    // pale band (its lower edge bowed); round across (darker toward its sides); fibres running up it (each block its
+    // own, from its place), a wavy node near its base, a thin darker line round it
+    const float HB = 0.43, RC = 0.1;
+    float d = sdBox(q, vec2(HB - RC)) - RC;
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2771,20 +2734,26 @@ void main() {
     }
     vec2 sd = floor(vA.xy * 1.7 + 0.5);
     float h0 = fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
+    float xr = clamp(q.x / HB, -1.0, 1.0), cyl = sat(1.0 - xr * xr);
     float gx = q.x * 9.0 + h0 * 13.0;
-    float fib = 0.5 + 0.5 * sin(gx * 2.1 + sin(q.y * 3.0 + h0 * 6.0) * 0.8) * 0.6 + 0.4 * sin(gx * 5.3 + h0 * 4.0) * 0.5;
-    float streak = smoothstep(0.86, 1.0, fract(gx * 0.37 + h0 * 3.1));
-    vec3 c = t * (0.84 + 0.24 * fib) * mix(0.92, 1.05, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, t * 0.66, streak * 0.55 * lod2(aa));
-    // a faint node across (some blocks)
-    float nodeY = -0.2 + 0.4 * fract(h0 * 7.13);
-    c = mix(c, t * 0.78, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY))) * 0.5 * step(0.4, h0));
-    // the bevel
-    float edge = -d;
-    float bev = 1.0 - smoothstep(0.0, 0.075, edge);
-    float lit = sat(0.5 + (q.y - q.x) * 1.4);
-    c = mix(c, mix(t * 0.55, mix(t, vec3(1.0), 0.45), lit), bev * 0.9);
-    c = mix(c, t * 0.45, 1.0 - smoothstep(0.0, 0.012 + aa, edge));
+    float fib = 0.5 + 0.3 * sin(gx * 2.1 + sin(q.y * 3.0 + h0 * 6.0) * 0.8) + 0.2 * sin(gx * 5.3 + h0 * 4.0);
+    float streak = smoothstep(0.88, 1.0, fract(gx * 0.37 + h0 * 3.1));
+    vec3 c = t * mix(0.6, 1.06, sqrt(cyl)) * (0.88 + 0.18 * fib);
+    c = mix(c, mix(t, uLightC, 0.4) * 1.1, exp(-sq((q.x + 0.12) / 0.07)) * 0.25);
+    c = mix(c, t * 0.62, streak * 0.45 * lod2(aa));
+    // the node near its base: a wavy dark line, a pale one just above
+    float ny = q.y - (-0.27 + 0.018 * sin(q.x * 13.0 + h0 * 6.0));
+    float hasNode = step(0.3, fract(h0 * 5.7));   // (most blocks, not all)
+    c = mix(c, t * 0.6, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(ny))) * 0.35 * hasNode);
+    c = mix(c, mix(t, vec3(1.0), 0.3), (1.0 - smoothstep(0.01, 0.01 + aa * 1.5, abs(ny - 0.028))) * 0.22 * hasNode);
+    // the top face: a pale band above a bowed edge, a little darker at its back
+    float yt = 0.3 - 0.035 * sqrt(cyl);
+    float topF = smoothstep(yt - aa, yt + aa, q.y);
+    vec3 topC = mix(t, vec3(1.0), 0.28) * mix(0.95, 1.05, sqrt(cyl)) * mix(1.0, 0.9, smoothstep(yt, HB, q.y));
+    c = mix(c, topC, topF);
+    c = mix(c, t * 0.7, (1.0 - smoothstep(0.008, 0.008 + aa * 1.5, abs(q.y - yt))) * 0.5);
+    // its thin darker line
+    c = mix(c, t * 0.45, 1.0 - smoothstep(0.0, 0.016 + aa, -d));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     c = mix(c, uBridgeInk, uBridge);
