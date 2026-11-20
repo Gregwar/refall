@@ -367,7 +367,7 @@ vec3 DocksUniverse::blockColor(int type, float ps) const {
     static const unsigned REAL[7] = {0x3d8fb4, 0xd2a12e, 0x80508e, 0x4e8a4c, 0xae3a2e, 0x34508e, 0xcc6a2a};
     static const unsigned BOLD[7] = {0x2aa8de, 0xffc61e, 0xeeeeea, 0x20a048, 0xd2301c, 0x1c48a8, 0xff7400};
     static const unsigned FADED[7] = {0x6aa0b4, 0xd2b060, 0x9a7a9e, 0x7a9a6a, 0xb0604c, 0x5a6a94, 0xcc8a52};
-    static const unsigned NIGHT[7] = {0x2f86b0, 0xe0aa2a, 0x8a52a0, 0x3a9a50, 0xc0362a, 0x3456b0, 0xe06a20};
+    static const unsigned NIGHT[7] = {0x70b8d8, 0xeccb6e, 0xae8cc8, 0x7cbf88, 0xe08478, 0x7f90d6, 0xeea070};
     const unsigned* t = blockStyle_ == 3 ? BOLD : blockStyle_ == 4 ? FADED : blockStyle_ == 5 ? NIGHT : REAL;
     vec3 c = lin(t[type]);
     if (blockStyle_ == 3) return c;

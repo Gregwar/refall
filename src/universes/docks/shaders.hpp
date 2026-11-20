@@ -550,8 +550,9 @@ void main() {
                 float frame = max(1.0 - smoothstep(0.06, 0.06 + pw, min(cl, cr)), max(1.0 - smoothstep(0.07, 0.07 + pw, ct),
                                   1.0 - smoothstep(0.06, 0.06 + pw, cb)));
                 bend.x = 0.8 * cg.y * rib * (1.0 - frame);
-                alb *= 0.5 * mix(1.0, 0.6 + 0.4 * cg.x, rib * (1.0 - frame));
-                alb = mix(alb, base * 0.3, frame);
+                alb = mix(alb, vec3(0.6), 0.2);         // pastel: a little white in the paint
+                alb *= mix(1.0, 0.72 + 0.28 * cg.x, rib * (1.0 - frame));
+                alb = mix(alb, base * 0.55, frame);
                 // ambient occlusion toward the piece's outline (deep gaps), a seam between its containers
                 float ao = mix(0.12, 1.0, smoothstep(0.0, 0.2, od));
                 alb *= ao;
@@ -565,7 +566,7 @@ void main() {
                 float flank = max(cg.y, 0.0) * rib * (1.0 - frame);
                 float crest = (1.0 - abs(cg.y)) * cg.x * rib * (1.0 - frame);
                 float lip = (1.0 - smoothstep(0.0, 0.022 + pw, ct)) * smoothstep(0.06, 0.07 + pw, min(cl, cr));
-                vec3 tint = mix(base * 1.8, vec3(1.0), 0.5);
+                vec3 tint = mix(base * 1.4, vec3(1.0), 0.62) * 0.72;
                 sheen = uSodium * tint * (flank * (0.4 * up + 2.4 * sweep) + crest * (0.05 + 0.8 * sweep) + lip * (0.6 + 1.5 * sweep)) * ao;
                 spec = 0.9;
                 rough = 70.0;
