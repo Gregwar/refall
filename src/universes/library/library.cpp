@@ -66,8 +66,6 @@ const vec3 UP(0.f, 1.f, 0.f);
 vec3 hex(unsigned v) { return {((v >> 16) & 255) / 255.f, ((v >> 8) & 255) / 255.f, (v & 255) / 255.f}; }
 vec3 lin(unsigned v) { return ugl::toLinear(hex(v)); }
 uint32_t hash32(uint64_t x) { return (uint32_t)(splitmix64(x) >> 32); }
-// A cell's look (its books' layout, the shader's shelfCell) from its seed.
-float lookOf(uint32_t seed) { return (float)(seed & 1023) / 97.f; }
 
 // A variant (sRGB), one mood of the same cosy room: the seven bindings (I O T S Z J L, the board's; the shelved books
 // are these, muted); the wood (bookcases, furniture), the bookcases' backs, the walls, their wainscot, the walls'
@@ -120,7 +118,7 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float BOARD_EYE_Y = 4.5f;  // the board camera's height (the books' tops show)
+constexpr float BOARD_EYE_Y = 8.f;   // the board camera's height (seen a little from above: the books' tops show)
 constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (the stack above waits 0.3 s)
 
 // Test hooks: REFALL_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
@@ -501,20 +499,55 @@ TransitionHints LibraryUniverse::hints() const {
 // The board's cells
 // =====================================================================================================
 
+// A cell of the board: a bit of a packed shelf, two or three books standing on their spines, flush at the front, each
+// its own width, height, depth, shade and spine design, against a dark shelf back (seen in the thin gaps between
+// them, and above a shorter one). They are the room's books (the same construction and shading, M_BOOK: the spine's
+// designs, the boards round a cream page block that shows on their tops, seen a little from above), in their piece's
+// full color and a little stockier, closer to a cube, so they fill the cell. All from the cell's seed: a cell keeps its
+// books through falls and clears. along / up / out: its frame (a toppling cell turns it), k its size, fade its
+// dissolve into light (0 none .. 1 gone).
 void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade,
-                               float seed) {
-    const float sw = 1.f + 0.05f * fade;
-    const vec3 X = along * (0.468f * k * sw), Y = up * (0.468f * k * sw), Z = cross(along, up) * (0.16f * k * sw);
-    const vec3 cc = c - Z;
+                               uint32_t seed) {
+    const float sw = k * (1.f + 0.05f * fade);
+    const vec3 outD = cross(along, up);
+    const float H = 0.468f * sw;          // the cell's half side
+    const float D = 0.5f * sw;            // the deepest book (the shelf back just behind it)
     const vec3 col = pieceColor(type);
-    Inst in;
-    in.c[0] = cc.x; in.c[1] = cc.y; in.c[2] = cc.z; in.c[3] = (float)M_CELL;
-    in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = 0.f;
-    in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.f;
-    in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fade;
-    in.col[0] = col.x; in.col[1] = col.y; in.col[2] = col.z; in.col[3] = seed;
-    in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = -10.f;
-    out.push_back(in);
+    auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd) {
+        Inst in;
+        in.c[0] = cc.x; in.c[1] = cc.y; in.c[2] = cc.z; in.c[3] = (float)mat;
+        in.x[0] = X.x; in.x[1] = X.y; in.x[2] = X.z; in.x[3] = p0;
+        in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.f;
+        in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fade;
+        in.col[0] = cl.x; in.col[1] = cl.y; in.col[2] = cl.z; in.col[3] = sd;
+        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = -10.f;
+        out.push_back(in);
+    };
+    // the books, left to right: two (more often) or three, of uneven widths; a little short of the cell's height (seen
+    // from a little above, their tops show under the cell above: the cream page block between the boards), now and
+    // then a shorter one; a little uneven in depth
+    Rng r(0x5E1F0ull ^ ((uint64_t)seed * 2654435761ull));
+    const int n = r.chance(0.6f) ? 2 : 3;
+    float w[3], tot = 0.f;
+    for (int i = 0; i < n; i++) tot += (w[i] = r.range(0.78f, 1.22f));
+    const float gap = 0.018f * sw;
+    float x0 = -H, top = 0.f;
+    for (int i = 0; i < n; i++) {
+        const float bw = (2.f * H - gap * (n - 1)) * w[i] / tot;
+        const float bh = 2.f * H * (r.chance(0.2f) ? r.range(0.72f, 0.8f) : r.range(0.84f, 0.92f));
+        const float bd = D * r.range(0.84f, 1.f);
+        // (the room's spine designs; more of the labels, bands and caps)
+        const int style = (int)"0001144423"[r.next() % 10] - '0';
+        const vec3 bc = col * r.range(0.9f, 1.07f);
+        const float bs = (float)(r.next() % 1000) / 97.f;
+        put(c + along * (x0 + bw * 0.5f) + up * (bh * 0.5f - H) - outD * (bd * 0.5f), along * (bw * 0.5f), up * (bh * 0.5f),
+            outD * (bd * 0.5f), bc, M_BOOK, (float)style, bs);
+        x0 += bw + gap;
+        top = std::max(top, bh);
+    }
+    // the shelf back, behind them, as high as the tallest (above it, the well's ground or the HUD's card)
+    const float bt = 0.03f * sw;
+    put(c + up * (top * 0.5f - H) - outD * (D + bt), along * H, up * (top * 0.5f), outD * bt, col, M_CELL, 0.f, 0.f);
 }
 
 uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
@@ -536,7 +569,7 @@ uint32_t LibraryUniverse::cellSeed(int x, int y, int type) {
 bool LibraryUniverse::place(Group& g) {
     Rng r(0xB00Cull ^ ((uint64_t)g.seed * 2654435761ull));
     const float h = r.range(0.58f, 0.84f), t = r.range(0.23f, 0.37f), d = r.range(0.4f, 0.5f);
-    g.style = r.irange(0, 3);
+    g.style = r.irange(0, 4);
     g.tone = r.range(0.9f, 1.06f);
     const float askew = r.range(-0.18f, 0.18f);
     while (runIdx_ < (int)runs_.size()) {
@@ -747,7 +780,7 @@ void LibraryUniverse::buildBoard(const Game& g) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, lookOf(cellSeed(x, y, c.type)));
+            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, cellSeed(x, y, c.type));
         }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
@@ -756,7 +789,7 @@ void LibraryUniverse::buildBoard(const Game& g) {
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
         for (int i = 0; i < 4; i++)
             pushCell(cells_, p.type, layout::cellPos(cells[i][0] + dx, cells[i][1] + dy), X, UP, 1.f, 0.f,
-                     lookOf(hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i)));
+                     hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i));
         // the ghost: a fine outline where it lands
         Piece gp = p;
         gp.y = g.ghostY();
@@ -799,7 +832,7 @@ void LibraryUniverse::buildBoard(const Game& g) {
         for (int i = 0; i < 4; i++) {
             const float ox = cells[i][0] - (minx + maxx) * 0.5f, oy = cells[i][1] - (miny + maxy) * 0.5f;
             pushCell(cells_, type, vec3(center.x + ox * sc, center.y - oy * sc, 0.f), X, UP, sc * 0.95f, 0.f,
-                     lookOf(hash32((spawn << 3) + (uint64_t)i)));
+                     hash32((spawn << 3) + (uint64_t)i));
         }
     };
     if (!g.over()) {
@@ -1191,9 +1224,9 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
         if (it->t > FX_T) { it = fx_.erase(it); continue; }
         if (!f.bare && it->t > 0.f) {
             const float s = saturate(it->t / FX_T);
-            pushCell(fxInst_, it->type, it->p, vec3(1, 0, 0), UP, 1.f, std::max(0.02f, s), lookOf(it->seed));
+            pushCell(fxInst_, it->type, it->p, vec3(1, 0, 0), UP, 1.f, std::max(0.02f, s), it->seed);
         } else if (!f.bare) {
-            pushCell(cells_, it->type, it->p, vec3(1, 0, 0), UP, 1.f, 0.f, lookOf(it->seed));
+            pushCell(cells_, it->type, it->p, vec3(1, 0, 0), UP, 1.f, 0.f, it->seed);
         }
         ++it;
     }
@@ -1208,7 +1241,7 @@ void LibraryUniverse::render(const Frame& f, GLuint fbo) {
             const vec3 p = t.p + vec3(t.v.x * tt, t.v.y * tt - 7.f * tt * tt, t.v.z * tt);
             const float r = t.rotV * tt;
             const vec3 al(std::cos(r), std::sin(r), 0.f), up(-std::sin(r), std::cos(r), 0.f);
-            pushCell(cells_, t.type, p, al, up, 1.f, 0.f, lookOf(t.seed));
+            pushCell(cells_, t.type, p, al, up, 1.f, 0.f, t.seed);
         }
         ++it;
     }
