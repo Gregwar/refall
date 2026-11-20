@@ -34,10 +34,10 @@
 // Around a song: the setup powers the station up from the core outward as the camera eases in; the teardown powers it
 // down from the rim inward as the camera draws back.
 //
-// The pieces are the station's modules: gunmetal frames round each piece's outline, dark insets, and one circuit of
-// cyan light per piece running through its cells (its style by the piece's type, its frame and glow slightly
-// tinted; a piece keeps its id through falls and clears, see syncIds). Cleared rows flare and shrink into their
-// light, which flies out to the module's seat.
+// The pieces are the station's modules, flat and spare: flat gunmetal frames round each piece's outline, flat navy
+// insets, and one circuit of thin cyan lines per piece running through its cells (its style by the piece's type, its
+// hubs' markers touched by the piece's color; a piece keeps its id through falls and clears, see syncIds). Cleared
+// rows flare and shrink into their light, which flies out to the module's seat.
 //
 // Layout contract: the board is drawn flat (orthographic at the reference camera's scale); only the world behind it
 // has its own 3D camera.
@@ -1589,7 +1589,6 @@ void OrbitalUniverse::render(const Frame& f, GLuint fbo) {
         glUseProgram(progCell_);
         setMat(progCell_, "uVP", vp_);
         set1f(progCell_, "uTime", time_);
-        set3f(progCell_, "uLightC", lerp(pal_.lamp, vec3(1.f), 0.5f));
         set1f(progCell_, "uBridge", smoothstepf(0.2f, 0.9f, bridge));
         set3f(progCell_, "uBridgeInk", bridge_.ink);
         glBindVertexArray(cellVao_);
