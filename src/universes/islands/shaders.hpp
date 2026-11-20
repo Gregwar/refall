@@ -480,14 +480,16 @@ void main() {
         if (along > -L) {
             // a white wedge narrowing behind the stern, the two arms of the V (straight, tapering to a point)
             float al = max(along, 0.0);
-            // (each faded out once thinner than a pixel: no broken dashes far away)
-            float len = min(wl * (sailing ? 0.25 : 0.3), 6.0 + L * 2.0) * (0.4 + 0.6 * sk);
-            float tw = B * 0.4 * (1.0 - al / max(len, 1e-3));
+            // (each faded out once thinner than a pixel: no broken dashes far away; seen from low down, the camera
+            // near the water, the wedge shorter and the arms gone: long thin shapes there crossed the whole view)
+            float low = smoothstep(6.0, 45.0, alt);
+            float len = min(wl * (sailing ? 0.25 : 0.3), 6.0 + L * 2.0) * (0.4 + 0.6 * sk) * mix(0.35, 1.0, low);
+            float tw = B * 0.45 * (1.0 - al / max(len, 1e-3));
             float trail = step(abs(across), tw) * step(-L * 0.5, along) * step(foot * 0.5, B * 0.4);
             float armL = min(wl * 0.25, 5.0 + L * 1.5) * sk;
             float aw = 0.12 + B * 0.12;
             float arm = abs(abs(across) - al * 0.36 - B * 0.4);
-            float v = step(arm, aw * (1.0 - al / max(armL, 1e-3))) * step(0.0, along) * step(foot * 0.7, aw);
+            float v = step(arm, aw * (1.0 - al / max(armL, 1e-3))) * step(0.0, along) * step(foot * 0.7, aw) * step(25.0, alt);
             foam = max(foam, max(trail, v * step(0.15, sk)));
         }
     }
