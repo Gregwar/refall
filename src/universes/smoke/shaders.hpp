@@ -386,8 +386,8 @@ float propShadow(vec3 P) {
     vec2 dir = d2 / dist;
     float slope = (uLPos.z - P.z) / dist;
     float lit = 1.0;
-    for (int i = 1; i <= 22; i++) {
-        float t = float(i) * 0.14;
+    for (int i = 1; i <= 44; i++) {
+        float t = float(i) * 0.075;
         vec2 q = P.xy + dir * t;
         float z = P.z + slope * t;
         if (z > 0.8) break;
@@ -403,9 +403,9 @@ float propShadow(vec3 P) {
     return lit;
 }
 
-// A block in one of the looks: q cell-local (-0.5..0.5), s its scale, px a pixel in q's units, m its links, rel its
-// place in its piece, ps the piece's seed. Returns premultiplied color and coverage.
-vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int m, vec2 rel, float ps, bool board) {
+// A block in one of the looks: q cell-local (-0.5..0.5), s its scale, px a pixel in q's units, wpos the point (board),
+// cc the cell's center, m its links, rel its place in its piece, ps the piece's seed. Returns premultiplied color and coverage.
+vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, vec2 cc, float lightK, int m, vec2 rel, float ps, bool board) {
     vec3 tint = pc * uTint;
     float on = uKeyGain * lightK;
     if (uBlock == 1) {
@@ -568,7 +568,7 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int 
     // drawn toward the eye, the inner walls between), the glass faintly tinted, a bright glassy rim and a soft halo,
     // and inside a curl of the piece's smoke drifting slowly (each cube its own seed and phase).
     const float F = 0.47, B = 0.41;
-    vec2 o = clamp((uEye.xy - wpos) * 0.009, vec2(-0.07), vec2(0.07)) + vec2(0.0, -0.02);
+    vec2 o = clamp((uEye.xy - cc) * 0.009, vec2(-0.07), vec2(0.07)) + vec2(0.0, -0.02);
     float sdF = sdRound(q, vec2(F), 0.05);
     float cov = 1.0 - smoothstep(-px, px, sdF);
     vec3 c = mix(pc * uTint, gel(pc), 0.3);
@@ -649,7 +649,7 @@ void main() {
     bool board = (pk & 4096) != 0;
     if (kind == 0 && uBlock > 0) {
         float s = v3.x;
-        vec4 r = blockLook(p / s, s, px / s, pc, v0.xy, v3.y, links, rel, v3.w, board);
+        vec4 r = blockLook(p / s, s, px / s, pc, vWorld, v0.xy, v3.y, links, rel, v3.w, board);
         vec3 col = r.rgb;
         float age = v3.z;
         if (age >= 0.0) col += mix(pc, uKey, 0.5) * exp(-age * 5.0) * 0.45 * r.a;
@@ -676,7 +676,7 @@ void main() {
         // the ghost: the piece's outline as a hairline in the light (6: the cube, colorless, a faint gray smoke inside)
         float f = 1.0 - uBridge;
         if (uBlock == 6) {
-            vec4 r = blockLook(p, 1.0, px, vec3(0.5), v0.xy, 1.0, 0, rel, v3.w, false);
+            vec4 r = blockLook(p, 1.0, px, vec3(0.5), vWorld, v0.xy, 1.0, 0, rel, v3.w, false);
             frag = vec4(r.rgb, r.a) * 0.28 * alpha * f;
             return;
         }
@@ -734,7 +734,7 @@ void main() {
         float rim = smoothstep(th - 0.12, th, field) * (1.0 - keep); // the frayed rim, already smoke
         vec3 col = satin(p, 1.0, pc, v0.xy, 1.0);
         if (uBlock > 0) {
-            vec4 r = blockLook(p, 1.0, px, pc, v0.xy, 1.0, links, rel, v3.w, board);
+            vec4 r = blockLook(p, 1.0, px, pc, vWorld, v0.xy, 1.0, links, rel, v3.w, board);
             col = r.rgb / max(r.a, 1e-3);
             cov = r.a;
         }

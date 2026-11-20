@@ -702,9 +702,9 @@ void SmokeUniverse::syncIds(const Game& g) {
         for (int x = 0; x < Game::W; x++)
             if ((g.cell(x, y).type >= 0) != (ids_[y][x] != 0)) wrong++;
     if (!wrong) return;
+    // (all of it again: a cell kept from before could hold links to cells that are gone)
     for (int y = 0; y < Game::H; y++)
-        for (int x = 0; x < Game::W; x++)
-            if (g.cell(x, y).type < 0) { ids_[y][x] = 0; links_[y][x] = 0; rel_[y][x] = 0; }
+        for (int x = 0; x < Game::W; x++) { ids_[y][x] = 0; links_[y][x] = 0; rel_[y][x] = 0; }
     for (int y = Game::H - 1; y >= 0; y--)
         for (int x = 0; x < Game::W; x++) {
             if (g.cell(x, y).type < 0 || ids_[y][x]) continue;
