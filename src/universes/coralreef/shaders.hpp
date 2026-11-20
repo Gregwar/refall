@@ -890,6 +890,7 @@ vec2 gOff;     // the block's own offset into its species' texture
 vec2 gCol;     // its place in its colony (cells): the colony's own textures run on across its blocks
 vec2 gColOff;  // the colony's offset into them
 bool gAlt;     // the colony's species in its second form (half the colonies)
+bool gShard;   // a chunk of a burst block (mode 2): a broken piece, its outline its own jagged shape
 float sdBox(vec2 p, vec2 b) { vec2 d = abs(p) - b; return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0); }
 float smax(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (a - b) / k, 0.0, 1.0); return mix(b, a, h) + k * h * (1.0 - h); }
 vec2 rot(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
@@ -913,6 +914,21 @@ vec4 voro(vec2 p, float jit, out vec2 id) {
 // colony reaching past the cell (under its neighbour), its free sides inside it, wobbling (a wobble of the colony's,
 // running on along a free side from one of its blocks to the next)
 float outline(vec2 q, float joint, float free, float r, float wob, float freq) {
+    if (gShard) {
+        // a broken piece: a lopsided polygon (4 to 7 sides, each its own angle and reach), its edges chipped
+        float hs = fract(vC.w * 173.13);
+        int n = 4 + int(hs * 3.99);
+        float a0 = hs * 37.0, sd = -8.0;
+        for (int k = 0; k < 7; k++) {
+            if (k >= n) break;
+            float hk = fract(sin(float(k) * 12.9898 + vC.w * 78.233) * 43758.5453);
+            float a = a0 + (float(k) + 0.7 * (hk - 0.5)) * 6.2832 / float(n);
+            float reach = 0.22 + 0.26 * fract(hk * 7.13);
+            sd = max(sd, dot(q, vec2(cos(a), sin(a))) - reach);
+        }
+        vec2 p = q * 6.0 + gOff;
+        return sd + 0.05 * (vnoise(p) - 0.5) + 0.03 * (vnoise(p * 2.7) - 0.5);
+    }
     float eR = (gNb & 8) != 0 ? joint : free, eL = (gNb & 4) != 0 ? joint : free;
     float eU = (gNb & 1) != 0 ? joint : free, eD = (gNb & 2) != 0 ? joint : free;
     vec2 c = vec2(eR - eL, eU - eD) * 0.5, b = vec2(eR + eL, eU + eD) * 0.5;
@@ -1161,6 +1177,7 @@ void main() {
     gOff = hash2(vec2(vC.w * 91.7, vC.w * 13.3)) * 40.0 + 3.0;
     gColOff = hash2(vec2(vC.z * 57.3, vC.z * 21.1)) * 40.0 + 7.0;
     gAlt = fract(vC.z * 7.31) > 0.5;
+    gShard = mode == 2;
     float shrink = 1.0 - 0.7 * smoothstep(0.0, 1.0, erase);
     vec3 t = vB.rgb;
     if (uPass < 0.5) {

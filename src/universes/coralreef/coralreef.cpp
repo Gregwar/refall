@@ -1279,7 +1279,7 @@ void CoralReefUniverse::buildBoard(const Game& g) {
     for (const Chunk& ch : chunks_) {
         if (ch.age < 0.04f) continue;
         const float k = ch.age / ch.life;
-        cell(ch.p.x, ch.p.y, ch.half * (1.f - 0.35f * k * k), tintOf(ch.type), 1.f - smoothstepf(0.55f, 1.f, k), 0, 0.f, ch.type, ch.seed,
+        cell(ch.p.x, ch.p.y, ch.half * (1.f - 0.35f * k * k), tintOf(ch.type), 1.f - smoothstepf(0.55f, 1.f, k), 2, 0.f, ch.type, ch.seed,
              ch.colony, 0, 0);
     }
     if (g.hasPiece() && !g.over()) {
