@@ -26,7 +26,7 @@ void Menu::openDebrief(const Debrief& d) {
     debrief_ = d;
     debT_ = 0;
     leaveT_ = -1;
-    debSel_ = d.retryStage.kind != Choice::NONE ? 1 : 0; // (RETRY STAGE the default)
+    debSel_ = d.retryStage.kind != Choice::NONE && !d.songFirst ? 1 : 0; // (RETRY STAGE, or RETRY SONG once chosen in the run)
     debRetry_ = false;
     msgT_ = 0;
     msg_.clear();
@@ -61,8 +61,9 @@ bool Menu::updateDebrief(const Input& in, float dt, Choice& out) {
         if (choice) { // RETRY SONG, RETRY STAGE or MENU
             if (debT_ > INPUT_AFTER) {
                 const int d = in.repeatSteps(A_UI_RIGHT) + in.repeatSteps(A_UI_DOWN) - in.repeatSteps(A_UI_LEFT) - in.repeatSteps(A_UI_UP);
-                if (d) { debSel_ = std::clamp(debSel_ + d, 0, 2); lastInput_ = time_; }
-                if (in.pressed(A_UI_OK) || in.pressed(A_UI_ENTER)) { leaveT_ = 0; debRetry_ = debSel_ < 2; }
+                const int items = debrief_.retryStage.kind != Choice::NONE ? 3 : 2;
+                if (d) { debSel_ = std::clamp(debSel_ + d, 0, items - 1); lastInput_ = time_; }
+                if (in.pressed(A_UI_OK) || in.pressed(A_UI_ENTER)) { leaveT_ = 0; debRetry_ = debSel_ < items - 1; }
                 else if (in.pressed(A_UI_BACK)) { leaveT_ = 0; debRetry_ = false; }
             }
         } else {
@@ -143,13 +144,15 @@ void Menu::drawDebrief(int w, int h) {
     if (!debrief_.note.empty())
         p.text(F::JOSEFIN, debrief_.note, cx, Y(crowded ? 974 : 990), 17 * u, withA(gold, 0.85f * (debrief_.clear ? at(COLOR_AT + 1.2f) : a3)), 0, 0.3f);
     if (debrief_.retry.kind != Choice::NONE) { // RETRY SONG, RETRY STAGE or MENU, the chosen one underlined
-        static const char* ITEMS[3] = {"RETRY SONG", "RETRY STAGE", "MENU"};
+        const bool stage = debrief_.retryStage.kind != Choice::NONE;
+        const int n = stage ? 3 : 2;
+        const char* ITEMS[3] = {debrief_.retryIsStage ? "RETRY STAGE" : "RETRY SONG", stage ? "RETRY STAGE" : "MENU", "MENU"};
         const float a4 = sstep((t - INPUT_AFTER + 0.4f) / 0.5f) * out, gap = 90 * u, y = Y(crowded ? 1038 : 1018), size = 26 * u;
         // (laid out by their widths, an even gap between them, centred as a row)
-        float w[3], total = 2 * gap;
-        for (int i = 0; i < 3; i++) total += w[i] = p.width(F::JOSEFIN, ITEMS[i], size, 0.35f);
+        float w[3], total = (n - 1) * gap;
+        for (int i = 0; i < n; i++) total += w[i] = p.width(F::JOSEFIN, ITEMS[i], size, 0.35f);
         float left = cx - total * 0.5f;
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < n; i++) {
             const float x = left + w[i] * 0.5f;
             left += w[i] + gap;
             const bool on = i == debSel_;

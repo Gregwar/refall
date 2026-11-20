@@ -42,6 +42,8 @@ public:
         enum Kind { NONE, QUIT, PLAY_FREE, PLAY_CAMPAIGN, UNLOCK_ALL, RESET_ALL, PAD_REMAP, PAD_DEFAULT } kind = NONE;
         int difficulty = DIFF_HARD;
         int stage = 0, song = 0; // PLAY_CAMPAIGN: where the run starts
+        bool stageRun = false;   // PLAY_CAMPAIGN: a run of the stage (from its first song, or RETRY SONG within one)
+        bool songPick = false;   // PLAY_CAMPAIGN: RETRY SONG chosen in this run: the next game over's default
         std::string playlist;    // PLAY_FREE: the playlist chosen ("" : the command line's songs or the default)
         int level = 1;           // PLAY_FREE: the level the game starts at
     };
@@ -61,7 +63,9 @@ public:
         std::string heading, detail, note;
         int score = 0, lines = 0;
         Choice retry;      // RETRY SONG: the song the game ended on (NONE: no choice, any key leaves)
-        Choice retryStage; // RETRY STAGE: the stage from its first song
+        Choice retryStage; // RETRY STAGE: the stage from its first song (NONE: a run started on a later song, not offered)
+        bool songFirst = false; // RETRY SONG the default (chosen before in this run), else RETRY STAGE
+        bool retryIsStage = false; // `retry` is the stage's (the game ended on its first song): RETRY STAGE alone
     };
     void openDebrief(const Debrief& d);
     const Debrief& debrief() const { return debrief_; }
@@ -154,7 +158,7 @@ private:
     // the game's logo, the ringed planet (menuwin.cpp): its opening `k` seconds in (99: open), its colours from silver
     // (0, a game over) to full (1)
     void drawOrbitLogo(float cx, float cy, float k, float color);
-    int debSel_ = 0;                               // the game over's choice: 0 RETRY SONG, 1 RETRY STAGE (the default), 2 MENU
+    int debSel_ = 0;                               // the game over's choice: RETRY SONG, RETRY STAGE (when offered), MENU
     bool debRetry_ = false;                        // a RETRY chosen: the debrief fades out, then the run starts again
     bool updateDebrief(const Input& in, float dt, Choice& out); // true while it shows
     void drawDebrief(int w, int h);

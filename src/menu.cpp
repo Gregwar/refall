@@ -511,6 +511,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                     ch.difficulty = diff_;
                     ch.stage = stage_;
                     ch.song = 0;
+                    ch.stageRun = true;
                 } else if (in.pressed(A_UI_ALT) && unlocked) {
                     petal_ = true; // its songs, to start from a later one (practice)
                     song_ = std::min(song_, (int)camp_->stages()[stage_].songs.size() - 1);
@@ -522,6 +523,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
                     ch.difficulty = diff_;
                     ch.stage = stage_;
                     ch.song = song_;
+                    ch.stageRun = song_ == 0; // (a later song: practice, its game over offers RETRY SONG only)
                 }
                 if (back || in.pressed(A_UI_ALT)) petal_ = false;
             }
