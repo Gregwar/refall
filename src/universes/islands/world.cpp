@@ -337,13 +337,14 @@ std::vector<float> buildMesh(int mesh) {
         }
         break;
     }
-    case M_SPHERE: sphere(m, 18, 12); break;
-    case M_LUMP: sphere(m, 14, 9); break;
-    case M_DOME: sphere(m, 18, 10, 0.f); break;
+    // (low poly: few facets, each flat shaded)
+    case M_SPHERE: sphere(m, 10, 7); break;
+    case M_LUMP: sphere(m, 7, 5); break;
+    case M_DOME: sphere(m, 10, 6, 0.f); break;
     case M_CYL:
     case M_CONE:
     case M_FRUSTUM: {
-        const int S = 16;
+        const int S = 9;
         const float rt = mesh == M_CYL ? 0.5f : mesh == M_CONE ? 0.f : 0.32f;
         const float slope = (0.5f - rt);
         for (int i = 0; i < S; i++) {
@@ -563,9 +564,17 @@ std::vector<float> buildTerrain(const Island& I, int n) {
     std::vector<float> h((size_t)n * n);
     std::vector<Ground> gr((size_t)n * n);
     const float step = 2.f * I.ext / (n - 1);
+    // the grid's vertices jittered (not on the border): the facets of the flat shading irregular, low poly
+    auto jit = [&](int i, int j, uint32_t k) {
+        if (i == 0 || j == 0 || i == n - 1 || j == n - 1) return 0.f;
+        return (hashf(I.seed * 7919u + (uint32_t)(j * n + i) * 2654435761u + k) - 0.5f) * 0.62f * step;
+    };
+    std::vector<float> px((size_t)n * n), pz((size_t)n * n);
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
-            const float x = -I.ext + i * step, z = -I.ext + j * step;
+            const float x = -I.ext + i * step + jit(i, j, 1u), z = -I.ext + j * step + jit(i, j, 2u);
+            px[(size_t)j * n + i] = x;
+            pz[(size_t)j * n + i] = z;
             Ground g = groundAt(I, x, z);
             // the grid's border sinks into the deep, so no edge shows
             const float e = std::max(std::fabs(x), std::fabs(z)) / I.ext;
@@ -577,7 +586,7 @@ std::vector<float> buildTerrain(const Island& I, int n) {
     auto H = [&](int i, int j) { return h[(size_t)std::clamp(j, 0, n - 1) * n + std::clamp(i, 0, n - 1)]; };
     for (int j = 0; j < n; j++)
         for (int i = 0; i < n; i++) {
-            const float x = -I.ext + i * step, z = -I.ext + j * step;
+            const float x = px[(size_t)j * n + i], z = pz[(size_t)j * n + i];
             const Ground& g = gr[(size_t)j * n + i];
             const vec3 nr = normalize(vec3(H(i - 1, j) - H(i + 1, j), 2.f * step, H(i, j - 1) - H(i, j + 1)));
             // a cavity term: lower than the neighbourhood is darker

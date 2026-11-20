@@ -3,13 +3,11 @@
 //
 // The world is drawn relative to the eye (the camera at the origin, so every float stays small) and bent by the
 // sea's curvature (each vertex dropped by curv * d^2 / 2, d its horizontal distance; the curvature grows with the
-// altitude, so the horizon curves only from high up). Passes: the sun's shadow map; the seabed (the terrain under
-// the water, at half resolution: its color and distance) for the water to see through; the reflection (the world
-// above the water, mirrored, at half resolution); the main pass (sky, terrain, objects, then the sea as one
-// fullscreen pass: the curved surface hit per pixel, its waves, the seabed seen through it with the absorption of
-// its thickness, the sky and the islands reflected with fresnel, the sun's glint, foam on the shores and the reefs,
-// the boats' wakes, the clouds' shadows), the clouds (soft lit puffs), additive glows; then the well and its sea
-// glass pieces through the layout's camera, a filmic tone map, the HUD.
+// altitude, so the horizon curves only from high up). All of it flattened low poly: flat facets, flat colors.
+// Passes: the sun's shadow map; the seabed (the terrain's distance, at half resolution) for the sea's depth; the main
+// pass (sky, terrain, objects, then the sea as one fullscreen pass: the curved surface hit per pixel, its flat bands
+// of color by the depth, white glints, the foam line at the shores, the boats' wakes), the clouds (faceted puffs),
+// additive glows; then the well and its low poly tiles through the layout's camera, a filmic tone map, the HUD.
 #include <string>
 
 namespace islands_shaders {
@@ -106,10 +104,6 @@ void main() {
     float sd = dot(rd, uSunDir);
     float disc = smoothstep(0.99955, 0.99975, sd) * smoothstep(-0.01, 0.01, e);
     c += uSunCol * disc * 6.0;
-    // high thin cirrus, a few streaks
-    vec2 cp = rd.xz / max(rd.y + 0.12, 0.05) * 0.6;
-    float ci = smoothstep(0.55, 0.9, fbm(cp * vec2(0.6, 2.2) + uTime * 0.002)) * smoothstep(0.02, 0.25, e);
-    c = mix(c, c + vec3(0.18, 0.16, 0.14) * (0.5 + 0.5 * uSunCol), ci * 0.35 * (1.0 - uNight * 0.7));
     // stars at nightfall
     if (uStars > 0.01 && e > 0.0) {
         vec3 sp = rd * 260.0;
@@ -132,105 +126,73 @@ layout(location = 3) in float aAo;
 uniform mat4 uVP;
 uniform vec3 uOff;      // the island's center, relative to the eye
 uniform float uCurv;
-uniform float uMirror;  // 1: the reflection (mirrored about the sea)
-out vec3 vRel, vLocal, vNrm;
-out vec4 vAttr;
-out float vAo;
+out vec3 vRel, vLocal;
+flat out vec3 vFace;    // the facet's own vertex (its provoking one): its materials, its tone
+flat out vec4 vAttr;
+flat out float vAo;
 void main() {
     vec3 rel = aPos + uOff;
     rel.y -= 0.5 * uCurv * dot(rel.xz, rel.xz);
     vLocal = aPos;
     vRel = rel;
-    vNrm = aNrm;
+    vFace = aPos;
     vAttr = aAttr;
     vAo = aAo;
     gl_Position = uVP * vec4(rel, 1.0);
 }
 )";
 
+// Low poly: each triangle of the (jittered) grid one flat facet, its normal from the screen derivatives, one
+// material and one flat color (the island's palette, a small tone of its own), no texture.
 inline const char* TERRAIN_FS = R"(#version 330 core
-in vec3 vRel, vLocal, vNrm;
-in vec4 vAttr;
-in float vAo;
+in vec3 vRel, vLocal;
+flat in vec3 vFace;
+flat in vec4 vAttr;
+flat in float vAo;
 layout(location = 0) out vec4 frag;
-uniform int uMode;        // 0 main, 1 the seabed (under the water), 2 the reflection (above it)
+uniform int uMode;        // 0 main, 1 the seabed (its distance only, for the sea's bands), 3 the shadow map
 uniform vec3 uSand, uSandWet, uGrass, uJungle, uRock, uCliff, uSeabed, uReefA, uReefB, uDry;
 uniform float uSeed, uIsleR, uFallA, uFallW, uDryK;
 uniform vec3 uFoam;
 void main() {
     if (uMode == 3) { frag = vec4(0.0); return; }
-    float h = vLocal.y;
-    if (uMode == 1 && h > 0.15) discard;
-    if (uMode == 2 && h < -0.1) discard;
-    vec3 N = normalize(vNrm);
-    vec2 lp = vLocal.xz + uSeed * 37.0;
     float dist = length(vRel);
-    float fine = 1.0 - smoothstep(150.0, 1200.0, dist);
-    vec3 col;
-    float rough = 1.0;
-    if (h < 0.0) {
-        // the seabed: white sand with ripples, the reef's coral patches
-        float rip = 0.5 + 0.5 * sin(dot(lp, vec2(0.9, 0.4)) + 2.0 * n2(lp * 0.15));
-        col = uSeabed * (0.92 + 0.08 * rip * fine + 0.1 * (n2(lp * 0.05) - 0.5));
-        float rf = vAttr.w;
-        if (rf > 0.01) {
-            float pn = n2(lp * 0.35), pm = n2(lp * 0.09 + 3.0);
-            vec3 coral = mix(uReefA, uReefB, smoothstep(0.35, 0.65, pm));
-            coral *= 0.7 + 0.5 * pn;
-            col = mix(col, coral, smoothstep(0.1, 0.6, rf) * (0.55 + 0.45 * smoothstep(0.3, 0.6, pn)));
-        }
-        // seagrass and darker sand farther out
-        col = mix(col, col * vec3(0.62, 0.72, 0.6), smoothstep(-6.0, -14.0, h) * 0.6 * smoothstep(0.4, 0.7, n2(lp * 0.02 + 7.0)));
-    } else {
-        float sandK = vAttr.x, vegK = vAttr.y, rockK = vAttr.z;
-        vec3 sand = mix(uSandWet, uSand, smoothstep(0.15, 0.9, h)) * (0.94 + 0.08 * n2(lp * 0.7) * fine);
-        // the canopy: lumpy crowns, darker gaps (a dense jungle seen from above), or a dry maquis
-        float cn = n2(lp * 0.16), cn2 = n2(lp * 0.045 + 5.0);
-        vec3 veg = mix(uGrass, uJungle, smoothstep(0.3, 0.75, cn2 + 0.25 * smoothstep(4.0, 40.0, h)));
-        veg = mix(veg, uDry, uDryK * smoothstep(0.35, 0.7, n2(lp * 0.03 + 2.0)));
-        veg *= 0.72 + 0.4 * cn * mix(0.5, 1.0, fine);
-        // rock: strata along the height (warped), rain streaks down the faces, moss on the ledges
-        float ar = atan(vLocal.z, vLocal.x) * uIsleR;
-        float strata = fract(h * 0.11 + n2(lp * 0.012) * 1.6);
-        float band = smoothstep(0.0, 0.06, strata) * smoothstep(0.62, 0.5, strata);
-        float streak = n2(vec2(ar * 0.35, h * 0.015)) * 0.6 + n2(vec2(ar * 1.1, h * 0.04)) * 0.4;
-        vec3 rock = mix(uRock, uCliff, smoothstep(0.4, 0.8, 1.0 - N.y));
-        rock *= (0.7 + 0.22 * band + 0.25 * n2(lp * 0.25)) * (0.78 + 0.32 * streak);
-        rock = mix(rock, uJungle * 0.9, smoothstep(0.45, 0.8, N.y) * smoothstep(0.35, 0.7, n2(lp * 0.08)) * 0.8);
-        col = mix(sand, veg, smoothstep(0.25, 0.75, vegK) * (1.0 - smoothstep(0.6, 0.9, sandK) * 0.8));
-        col = mix(col, rock, smoothstep(0.2, 0.7, rockK));
-        rough = mix(1.0, 0.85, sandK);
-        // a waterfall down the cliff: white water streaming, a little foam
-        if (uFallW > 0.0) {
-            float a = atan(vLocal.z, vLocal.x);
-            float da = a - uFallA;
-            da = mod(da + 3.14159265, 6.2831853) - 3.14159265;
-            float x = da / uFallW;
-            if (abs(x) < 1.3 && rockK > 0.25) {
-                float streak = n2(vec2(x * 7.0, h * 0.18 + uTime * 2.2)) * 0.6 + n2(vec2(x * 15.0, h * 0.5 + uTime * 4.0)) * 0.4;
-                float k = (1.0 - smoothstep(0.55, 1.25, abs(x))) * smoothstep(0.3, 0.6, rockK);
-                col = mix(col, mix(uFoam * 0.75, uFoam * 1.1, streak), k * (0.75 + 0.25 * streak));
-            }
-        }
-    }
-    // the light: sun and soft shadow, the clouds' shadows, the sky ambient, the sea's bounce
-    vec3 world = vRel + uEye;
-    float ndl = max(dot(N, uSunDir), 0.0);
-    float sh = uMode == 0 ? shadowAt(vRel, ndl) : 1.0;
-    float cs = cloudShadow(world.xz);
-    vec3 amb = uAmb * (0.6 + 0.4 * N.y) * vAo + uBounce * (0.5 - 0.5 * N.y);
-    vec3 lit = col * (uSunCol * ndl * sh * cs * rough + amb);
+    float h = vFace.y;
     if (uMode == 1) {
-        // caustics on the seabed, rippling with the waves
-        vec2 cp = world.xz * 0.45;
-        float c1 = n2(cp + vec2(uTime * 0.35, uTime * 0.2)), c2 = n2(cp * 1.3 - vec2(uTime * 0.25, -uTime * 0.3));
-        float caus = pow(1.0 - abs(c1 - c2), 6.0);
-        lit += col * uSunCol * caus * 0.8 * ndl * cs * smoothstep(-12.0, -0.5, h) * fine;
-        frag = vec4(lit, dist);
+        // (the land above the water: its distance negative)
+        frag = vec4(0.0, 0.0, 0.0, vLocal.y > 0.15 ? -dist : dist);
         return;
     }
+    vec3 N = normalize(cross(dFdx(vRel), dFdy(vRel)));
+    if (dot(N, vRel) > 0.0) N = -N;
+    vec2 fp = vFace.xz + uSeed * 37.0;
+    float tone = h21(fp * 0.137);
+    float sandK = vAttr.x, vegK = vAttr.y, rockK = vAttr.z;
+    vec3 col;
+    if (h < 0.0) col = uSeabed;
+    else if (rockK > 0.45) {
+        // the cliffs: flat dark brown walls, the gentler rock lighter
+        col = mix(uRock, uCliff, smoothstep(0.3, 0.7, 1.0 - N.y)) * (0.94 + 0.12 * tone);
+    } else if (vegK > 0.5 && sandK < 0.75) {
+        // the greens: two tones, the darker higher up, or the dry maquis
+        float k = step(0.8, tone * 0.5 + smoothstep(6.0, 60.0, h));
+        vec3 veg = mix(uGrass, uJungle, k * 0.7);
+        veg = mix(veg, uDry, uDryK * step(0.55, h21(fp * 0.031 + 2.0)));
+        col = veg * (0.95 + 0.1 * tone);
+    } else col = mix(uSandWet, uSand, step(0.5, h)) * (0.95 + 0.1 * tone);
+    // a waterfall down the cliff: flat white water, bands streaming down
+    if (uFallW > 0.0 && rockK > 0.25) {
+        float a = atan(vLocal.z, vLocal.x);
+        float da = mod(a - uFallA + 3.14159265, 6.2831853) - 3.14159265;
+        if (abs(da / uFallW) < 0.8) col = mix(uFoam, uFoam * vec3(0.72, 0.86, 0.95), step(0.6, fract(vLocal.y * 0.08 + uTime * 0.9)));
+    }
+    // the light: per facet, the sun (crisp shadows), the sky ambient, the sea's bounce
+    float ndl = max(dot(N, uSunDir), 0.0);
+    float sh = shadowAt(vRel, ndl);
+    vec3 amb = uAmb * (0.6 + 0.4 * N.y) * (0.7 + 0.3 * vAo) + uBounce * (0.5 - 0.5 * N.y);
+    vec3 lit = col * (uSunCol * ndl * sh + amb);
     vec3 rd = vRel / max(dist, 1e-3);
-    frag = vec4(fogged(lit, dist, rd), uMode == 2 ? 1.0 : 0.0);
+    frag = vec4(fogged(lit, dist, rd), 0.0);
 }
 )";
 
@@ -329,72 +291,41 @@ float n3(vec3 p) {
 }
 void main() {
     vec3 world = vRel + uEye;
-    if (uMode == 2 && world.y < -0.05) discard;
     if (uMode == 3) { frag = vec4(0.0); return; }
     int mat = int(vMat + 0.5);
-    vec3 N = normalize(vNrm);
-    if (!gl_FrontFacing && (mat == 8 || mat == 9 || mat == 16)) N = -N;
+    // low poly: each triangle one flat facet (its normal from the screen derivatives, toward the eye), flat colors
+    vec3 N = normalize(cross(dFdx(vRel), dFdy(vRel)));
+    if (dot(N, vRel) > 0.0) N = -N;
     float dist = length(vRel);
     vec3 V = -vRel / max(dist, 1e-3);
     vec3 alb = vCol;
-    float spec = 0.0, shin = 16.0, emit = 0.0, trans = 0.0;
+    float spec = 0.0, emit = 0.0, trans = 0.0;
     vec3 emitCol = vec3(0.0);
-    vec3 face = abs(vObj) / max(vSize * 0.5, vec3(1e-4));
-    if (mat == 0) {             // white render: a soft trowel cloud
-        alb *= 0.93 + 0.07 * nb(vObj.xy * 1.3 + vObj.z * 0.7 + vSeed * 9.0);
-    } else if (mat == 1) {      // glass: the sky in it, the room's light at dusk
-        alb = vec3(0.05, 0.08, 0.1);
-        spec = 1.0;
-        shin = 120.0;
-        float fr = pow(1.0 - max(dot(N, V), 0.0), 4.0);
-        vec3 R = reflect(-V, N);
-        alb += skyCol(R) * (0.25 + 0.6 * fr);
+    if (mat == 1) {             // glass: a flat dark blue pane, the room's light at dusk
+        alb = mix(vec3(0.06, 0.12, 0.2), skyCol(reflect(-V, N)) * 0.6, 0.5);
         float on = uLights * step(0.5, vParam);
-        emitCol = uRoomNight * (0.7 + 0.3 * nb(vObj.xy * 0.7 + vSeed)) * on * (vParam > 1.5 ? 4.0 : 1.0);
+        emitCol = uRoomNight * on * (vParam > 1.5 ? 4.0 : 1.0);
         emit = 1.0;
-    } else if (mat == 2) {      // deck: boards along its length, their seams
+    } else if (mat == 2) {      // deck: flat planks, every other one a shade darker
         vec2 ext = vSize.x > vSize.z ? vec2(vObj.x, vObj.z) : vec2(vObj.z, vObj.x);
-        float b = ext.y / 0.16;
-        float bi = floor(b), bf = fract(b);
-        alb *= 0.86 + 0.16 * hb(vec2(bi, vSeed)) + 0.06 * nb(vec2(ext.x * 2.0, bi));
-        alb *= 1.0 - 0.35 * smoothstep(0.1, 0.0, min(bf, 1.0 - bf)) * step(0.5, N.y);
-    } else if (mat == 3) {      // weathered wood
-        alb *= 0.85 + 0.2 * nb(vec2(vObj.y * 9.0, vObj.x * 0.6 + vSeed));
-    } else if (mat == 4) {      // thatch: straw streaks down the slope
-        float st = nb(vec2(atan(vObj.z, vObj.x) * 30.0, vObj.y * 1.5 + vSeed * 5.0));
-        alb *= 0.75 + 0.4 * st;
-        alb *= 0.85 + 0.15 * smoothstep(0.0, 0.3, fract(vObj.y * 2.2));
-    } else if (mat == 5) {      // the pool: turquoise water, caustic light, a glow at night
-        vec2 p = world.xz * 1.6;
-        float c1 = nb(p + uTime * 0.6), c2 = nb(p * 1.3 - uTime * 0.5);
-        float caus = pow(1.0 - abs(c1 - c2), 5.0);
-        alb = uWater * (0.8 + 0.6 * caus);
-        spec = 1.0;
-        shin = 200.0;
-        float fr = pow(1.0 - max(dot(N, V), 0.0), 5.0);
-        alb = mix(alb, skyCol(reflect(-V, N)), fr * 0.6);
-        emitCol = uWaterGlow * uLights * (0.8 + 0.4 * caus);
+        alb *= 0.9 + 0.1 * step(0.5, fract(ext.y / 0.32)) * step(0.5, N.y);
+    } else if (mat == 4) {      // thatch: flat rings down the slope
+        alb *= 0.86 + 0.14 * step(0.5, fract(vObj.y * 2.2));
+    } else if (mat == 5) {      // the pool: flat turquoise, a glow at night
+        alb = uWater;
+        emitCol = uWaterGlow * uLights;
         emit = 1.0;
-    } else if (mat == 7) {      // foliage: a clump of leaves (param: 0 jungle, 1 olive, 2 cypress, 3 hedge)
-        // leaf clusters: lit tufts and dark gaps between them, their own little normals
-        vec3 lp = vObj * (vParam > 1.5 && vParam < 2.5 ? 1.4 : 0.75) + vSeed * 17.0;
-        float c1 = n3(lp), c2 = n3(lp * 2.7 + 5.0);
-        float tuft = smoothstep(0.3, 0.75, c1 * 0.65 + c2 * 0.35);
-        vec3 base = vParam < 0.5 ? mix(uFoliage, uFoliage2, fract(vSeed * 3.7)) : vParam > 2.5 ? uFoliage * 1.1 : vCol;
-        alb = base * (0.45 + 0.8 * tuft);
-        N = normalize(N + (vec3(n3(lp + 1.3), n3(lp + 7.1), n3(lp + 3.9)) - 0.5) * 1.1);
-        alb = mix(alb, base * vec3(1.25, 1.3, 0.8), smoothstep(0.6, 1.0, tuft) * 0.35);
-        trans = 0.35;
-    } else if (mat == 8) {      // the palm: trunk rings, fronds green to yellow toward their tips
-        if (vAux.x < 0.5) {
-            float ring = smoothstep(0.3, 0.0, abs(fract(vAux.y * 38.0) - 0.5) - 0.2);
-            alb = uTrunk * (0.8 + 0.25 * ring + 0.1 * nb(vObj.xy * 4.0));
-        } else if (vAux.x < 1.5) {
-            alb = mix(uLeaf, uLeaf2, smoothstep(0.4, 1.0, vAux.y) * 0.7 + 0.2 * fract(vSeed * 5.3));
-            alb *= 0.85 + 0.25 * nb(vec2(vAux.y * 30.0, vSeed * 9.0));
-            trans = 0.6;
+    } else if (mat == 7) {      // foliage: a faceted blob, one green per tree (param: 0 jungle, 1 olive, 2 cypress, 3 hedge)
+        vec3 base = vParam < 0.5 ? mix(uFoliage, uFoliage2, step(0.5, fract(vSeed * 3.7))) : vParam > 2.5 ? uFoliage * 1.1 : vCol;
+        alb = base * (0.92 + 0.16 * fract(vSeed * 13.1));
+        trans = 0.2;
+    } else if (mat == 8) {      // the palm: a flat trunk, fronds green to yellow toward their tips
+        if (vAux.x < 0.5) alb = uTrunk;
+        else if (vAux.x < 1.5) {
+            alb = mix(uLeaf, uLeaf2, step(0.7, vAux.y) * 0.6 + 0.2 * step(0.5, fract(vSeed * 5.3)));
+            trans = 0.4;
         } else alb = vec3(0.32, 0.24, 0.1);
-    } else if (mat == 9) {      // sail: cloth, the light through it (the fleet's: bands of the cleared row's colors)
+    } else if (mat == 9) {      // sail: flat cloth (the fleet's: bands of the cleared row's colors)
         if (vParam > 0.5) {
             float code = vParam - 1.0;
             float n = code < 8.0 ? 1.0 : code < 64.0 ? 2.0 : code < 512.0 ? 3.0 : 4.0;
@@ -404,90 +335,84 @@ void main() {
             vec3 c = uSailPal[0];
             for (int k = 0; k < 7; k++) if (k == ti) c = uSailPal[k];
             alb = c;
-            alb *= 1.0 - 0.18 * smoothstep(0.012, 0.0, abs(fract(vAux.y * n * 1.02) - 0.5) - 0.488) * step(1.5, n);
         }
-        alb *= 0.92 + 0.08 * smoothstep(0.02, 0.0, abs(fract(vAux.y * 7.0) - 0.5) - 0.47);
-        trans = 0.7;
+        trans = 0.5;
     } else if (mat == 10) {     // a hull: its paint, a stripe along the sheer, the deck
-        if (vAux.x > 0.5) alb = vec3(0.62, 0.45, 0.28) * (0.85 + 0.15 * nb(vObj.xz * 3.0));
+        if (vAux.x > 0.5) alb = vec3(0.62, 0.45, 0.28);
         else {
             float y = vObj.y / max(vSize.y, 1e-3);
             vec3 stripe = vParam > 2.5 ? vec3(0.6, 0.08, 0.08) : vParam > 1.5 ? vec3(0.04, 0.32, 0.4) : vec3(0.04, 0.08, 0.2);
-            alb = mix(alb, stripe, smoothstep(-0.18, -0.15, y) * smoothstep(-0.05, -0.08, y) * step(0.5, vParam));
-            spec = 0.6;
-            shin = 60.0;
+            alb = mix(alb, stripe, step(-0.165, y) * step(y, -0.065) * step(0.5, vParam));
         }
     } else if (mat == 11) {     // canvas: an umbrella's stripes
         float a = atan(vObj.z, vObj.x);
         alb = mix(vCol, vec3(0.97, 0.95, 0.9), step(0.5, fract(a / 6.2831853 * 8.0)));
-    } else if (mat == 12) {     // rock
-        alb = vec3(0.5, 0.46, 0.4) * (0.75 + 0.4 * nb(vObj.xz * 0.8 + vObj.y + vSeed * 7.0));
+    } else if (mat == 12) {     // rock: a faceted boulder
+        alb = vec3(0.46, 0.4, 0.34) * (0.85 + 0.25 * fract(vSeed * 7.7));
     } else if (mat == 13) {     // a lamp
         emitCol = vCol * 4.0;
         emit = 1.0;
     } else if (mat == 14) {     // metal (masts, rails)
-        spec = 0.8;
-        shin = 40.0;
+        spec = 0.3;
     } else if (mat == 15) {     // the lighthouse: white with red bands
         float y = vObj.y / vSize.y + 0.5;
         alb = mix(vec3(0.95), vec3(0.75, 0.1, 0.08), step(0.5, fract(y * 3.0 + 0.25)) * step(0.15, y));
     } else if (mat == 16) {     // a seabird: white, a grey back, dark tips
-        alb = vParam < 0.5 && vCol.r < 0.3 ? vCol : mix(vec3(0.95), vec3(0.55, 0.58, 0.62), step(0.5, vAux.x) * smoothstep(0.2, 0.6, vAux.y));
-        alb = mix(alb, vec3(0.08), step(0.5, vAux.x) * smoothstep(0.85, 0.95, vAux.y));
-    } else if (mat == 17) {     // roof tiles: rows
-        alb *= 0.82 + 0.2 * smoothstep(0.0, 0.25, fract(vObj.y * 4.0 / max(vSize.y, 0.1))) + 0.08 * nb(vObj.xz * 3.0);
+        alb = vParam < 0.5 && vCol.r < 0.3 ? vCol : mix(vec3(0.95), vec3(0.55, 0.58, 0.62), step(0.5, vAux.x) * step(0.4, vAux.y));
+        alb = mix(alb, vec3(0.08), step(0.5, vAux.x) * step(0.9, vAux.y));
+    } else if (mat == 17) {     // roof tiles: flat rows
+        alb *= 0.88 + 0.12 * step(0.5, fract(vObj.y * 4.0 / max(vSize.y, 0.1)));
     }
     float ndl = dot(N, uSunDir);
-    float sh = uMode == 0 ? shadowAt(vRel + N * 0.05, max(ndl, 0.0)) : 1.0;
-    float cs = cloudShadow(world.xz);
+    float sh = shadowAt(vRel + N * 0.05, max(ndl, 0.0));
     float diff = max(ndl, 0.0) + trans * max(-ndl, 0.0) * 0.6;
-    // occlusion near the ground (the instance's base) and inside the clumps
-    float ao = mat == 7 ? 0.55 + 0.45 * smoothstep(-0.5, 0.4, vObj.y / max(vSize.y, 0.1)) : 1.0;
-    ao *= 0.7 + 0.3 * smoothstep(0.0, 1.5, world.y);
-    vec3 amb = uAmb * (0.65 + 0.35 * N.y) * ao + uBounce * (0.5 - 0.5 * N.y);
-    vec3 col = alb * (uSunCol * diff * sh * cs + amb);
-    if (spec > 0.0) {
-        vec3 H = normalize(uSunDir + V);
-        col += uSunCol * pow(max(dot(N, H), 0.0), shin) * spec * sh * cs * 0.6;
-    }
-    // backlit leaves glow
-    if (trans > 0.0) col += alb * uSunCol * pow(max(dot(-V, uSunDir), 0.0), 4.0) * trans * 0.5 * sh;
+    vec3 amb = uAmb * (0.65 + 0.35 * N.y) + uBounce * (0.5 - 0.5 * N.y);
+    vec3 col = alb * (uSunCol * diff * sh + amb);
+    if (spec > 0.0) col += uSunCol * pow(max(dot(N, normalize(uSunDir + V)), 0.0), 40.0) * spec * sh;
     col += emitCol * emit;
-    frag = vec4(fogged(col, dist, -V), uMode == 2 ? 1.0 : 0.0);
+    frag = vec4(fogged(col, dist, -V), 0.0);
 }
 )";
 
 // ---------------------------------------------------------------- the sea (fullscreen: the curved surface per pixel)
+// Flattened: flat bands of color by the depth under the surface (the foam line at the shore, the turquoise
+// shallows, a teal ledge, the deep blue), the open sea a mosaic of big flat triangles a shade apart, sparse white
+// angular glints drifting, the boats' wakes as crisp white shapes.
 inline const char* WATER_FS = R"(#version 330 core
 in vec2 vUv;
 out vec4 frag;
 uniform mat4 uInvVP, uVP;
-uniform sampler2D uSeabed, uRefl;
-uniform vec3 uShallow, uDeep, uSigma, uFoam;
-uniform float uWave, uScatterK, uSparkle, uReflOn, uCalm;
+uniform sampler2D uSeabed;
+uniform vec3 uShallow, uDeep, uFoam;
+uniform float uWave, uSparkle, uCalm;
 uniform vec2 uInvRes;
 uniform vec4 uBoats[24];     // x z, heading, speed
 uniform vec4 uBoatsB[24];    // length, beam, kind, -
 uniform int uNumBoats;
 uniform vec4 uFalls[4];      // x z, radius, -
 uniform int uNumFalls;
-// the waves: long swells and a choppy ripple, all directional sines (each bent a little by a slower one), each
-// faded out once a pixel covers it (no glitter aliasing); their slopes (x, z)
-vec2 waves(vec2 p, float t, float foot) {
-    vec2 g = vec2(0.0);
-    const int N = 11;
-    vec2 dirs[11] = vec2[11](vec2(0.94, 0.34), vec2(0.62, -0.78), vec2(-0.2, 0.98), vec2(0.82, 0.57), vec2(-0.71, 0.7),
-                             vec2(0.99, -0.12), vec2(0.36, 0.93), vec2(-0.88, 0.47), vec2(0.55, -0.83), vec2(0.17, -0.98), vec2(-0.45, -0.89));
-    float lens[11] = float[11](46.0, 27.0, 15.0, 9.1, 6.3, 4.1, 2.9, 2.1, 1.5, 1.05, 0.72);
-    float amps[11] = float[11](0.06, 0.07, 0.08, 0.09, 0.1, 0.1, 0.1, 0.1, 0.09, 0.08, 0.07);
-    for (int i = 0; i < N; i++) {
-        float k = 6.2831 / lens[i];
-        float fade = 1.0 - smoothstep(lens[i] * 0.12, lens[i] * 0.45, foot);
-        if (fade <= 0.0) continue;
-        float ph = dot(dirs[i], p) * k + t * sqrt(9.81 * k) * 0.8 + float(i) * 1.7 + 2.0 * sin(dot(dirs[(i + 3) % N], p) * k * 0.21 + float(i));
-        g += dirs[i] * (amps[i] * cos(ph) * fade);
-    }
-    return g * uWave;
+// a crisp edge (antialiased over a pixel) of a value against its threshold
+float edge(float v, float th) { float w = clamp(fwidth(v) * 0.75, 1e-5, th * 0.4); return smoothstep(th - w, th + w, v); }
+// the glints of one scale: in each cell (of size S, world) now and then a white sliver, or two in a V, flattened on
+// the water, drifting with the swell, growing and shrinking over its life; fades out once it shrinks under a pixel
+float glints(vec2 p, float S, float foot, float t) {
+    if (foot > S * 0.035) return 0.0;
+    p += vec2(0.6, 0.25) * t * S * 0.05;
+    vec2 id = floor(p / S);
+    float h = h21(id + S);
+    if (h > 0.3 + 0.12 * uWave) return 0.0;
+    float life = fract(t * (0.05 + 0.04 * h21(id + 3.1)) + h * 7.0);
+    float k = sin(life * 3.14159) * (1.0 - smoothstep(S * 0.015, S * 0.035, foot));
+    vec2 c = (id + 0.25 + 0.5 * vec2(h21(id + 1.7), h21(id + 5.3))) * S;
+    float an = 0.35 + 0.5 * (h21(id + 9.1) - 0.5);
+    vec2 q = p - c;
+    q = vec2(cos(an) * q.x + sin(an) * q.y, -sin(an) * q.x + cos(an) * q.y) / (S * 0.26 * k + 1e-4);
+    // a sliver: long along x, its width tapering from the head (-0.5) to a point (0.5)
+    float g = step(abs(q.x), 0.5) * step(abs(q.y), 0.16 * (0.5 - q.x));
+    // and a shorter one meeting its head, in a V
+    vec2 q2 = vec2(0.86 * q.x + 0.5 * q.y + 0.38, -0.5 * q.x + 0.86 * q.y + 0.2) * 1.7;
+    g = max(g, step(h21(id + 2.2), 0.6) * step(abs(q2.x), 0.5) * step(abs(q2.y), 0.16 * (0.5 - q2.x)));
+    return g;
 }
 void main() {
     vec4 w = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
@@ -505,20 +430,42 @@ void main() {
     vec4 clip = uVP * vec4(P, 1.0);
     gl_FragDepth = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
     vec2 wp = P.xz + uEye.xz;
-    // a pixel's footprint on the sea (stretched at grazing angles): the waves smaller than it fade out
+    // a pixel's footprint on the sea (stretched at grazing angles)
     float foot = t * 0.9 * uInvRes.y / max(-dy, 0.04);
-    float near = 1.0 - smoothstep(60.0 + alt * 2.0, 600.0 + alt * 6.0, t);
     float mid = 1.0 - smoothstep(800.0 + alt * 4.0, 6000.0 + alt * 8.0, t);
-    vec2 g = waves(wp, uTime, foot) * (1.0 - 0.75 * uCalm);
-    // the unresolved waves roughen the surface instead: the glint spreads and dims
-    float rough = clamp(foot / 3.0, 0.0, 1.0);
-    // the boats' wakes: a turbulent white trail, the Kelvin V spreading behind, the bow's spray
-    float foamW = 0.0;
-    vec2 gw = vec2(0.0);
+    // the depth under the surface (from the seabed's distance along the ray)
+    // (filtered by hand: no terrain there is the deep, not a distance of 0; the land, its distance)
+    vec2 hp = gl_FragCoord.xy * 0.5 - 0.5;
+    ivec2 h0 = ivec2(floor(hp));
+    vec2 hf = hp - vec2(h0);
+    ivec2 hm = textureSize(uSeabed, 0) - 1;
+    vec4 d4;
+    for (int i = 0; i < 4; i++) {
+        float a = texelFetch(uSeabed, clamp(h0 + ivec2(i % 2, i / 2), ivec2(0), hm), 0).a;
+        d4[i] = a == 0.0 ? 1e5 : abs(a);
+    }
+    float sbd = mix(mix(d4.x, d4.y, hf.x), mix(d4.z, d4.w, hf.x), hf.y);
+    float thick = sbd > t ? sbd - t : 1e4;
+    float depthV = min(thick * (-dy), 60.0);
+    // the bands: deep blue, a teal ledge, the turquoise shallows
+    vec3 ledge = mix(uShallow, uDeep, 0.5);
+    vec3 col = uDeep;
+    col = mix(col, ledge, 1.0 - edge(depthV, 9.0));
+    col = mix(col, uShallow, 1.0 - edge(depthV, 3.2));
+    // the open sea: big flat triangles, a shade apart (faded out far, where they would shimmer)
+    vec2 tp = wp / 46.0;
+    vec2 ti = floor(tp), tf = fract(tp);
+    float tri = h21(ti * 1.37 + step(tf.x, tf.y) * 0.5);
+    col *= 1.0 + (tri - 0.5) * 0.07 * (1.0 - smoothstep(4.0, 16.0, foot)) * edge(depthV, 3.2);
+    // lit by the sky (flat: no glint, no reflection)
+    float light = dot(uSunCol, vec3(0.3, 0.5, 0.2)) * 0.5 + dot(uAmb, vec3(0.3, 0.5, 0.2)) * 0.8;
+    col *= light;
+    col = mix(col, uSkyHor * light * 0.9, 0.12);
+    // white: the foam line at the shore (its width breathing slowly), the boats' wakes, the falls' feet
+    float foam = (1.0 - edge(depthV, 0.55 + 0.15 * sin(uTime * 0.9 + wp.x * 0.02 + wp.y * 0.015))) * mid;
     for (int i = 0; i < 24; i++) {
         if (i >= uNumBoats) break;
-        vec2 bp = uBoats[i].xy;
-        vec2 d = wp - bp;
+        vec2 d = wp - uBoats[i].xy;
         float L = uBoatsB[i].x;
         float sp = uBoats[i].w;
         bool sailing = uBoatsB[i].z < 1.5;  // (sailboats leave a lighter, shorter wake than motorboats)
@@ -531,66 +478,28 @@ void main() {
         float B = uBoatsB[i].y;
         float sk = clamp(sp / 12.0, 0.0, 1.0);
         if (along > -L) {
+            // a white wedge narrowing behind the stern, the two arms of the V (straight, tapering to a point)
             float al = max(along, 0.0);
-            float fade = exp(-al / (wl * 0.35));
-            float wdt = B * 0.5 + al * 0.06;
-            float trail = exp(-across * across / (wdt * wdt)) * fade * smoothstep(-L * 0.6, 0.0, along);
-            float arm = abs(across) - al * 0.36 - B * 0.4;
-            float v = exp(-arm * arm / (0.6 + al * 0.05)) * fade * smoothstep(-2.0, 2.0, along);
-            float bow = exp(-pow(abs(across) - B * 0.55, 2.0) / 0.25) * smoothstep(-L, -L * 0.7, along) * smoothstep(0.0, -L * 0.3, along);
-            float n = n2(wp * 1.4 + uTime * 0.8);
-            foamW = max(foamW, (trail * (0.55 + 0.45 * n) * (0.4 + 0.6 * sk) * (sailing ? 0.45 : 1.0) + v * 0.5 * sk * (sailing ? 0.5 : 1.0) * smoothstep(0.3, 0.7, n) + bow * 0.6 * (0.3 + 0.7 * sk)));
-            gw += sd * sign(across) * v * 0.15 * sk;
+            // (each faded out once thinner than a pixel: no broken dashes far away)
+            float len = min(wl * (sailing ? 0.25 : 0.3), 6.0 + L * 2.0) * (0.4 + 0.6 * sk);
+            float tw = B * 0.4 * (1.0 - al / max(len, 1e-3));
+            float trail = step(abs(across), tw) * step(-L * 0.5, along) * step(foot * 0.5, B * 0.4);
+            float armL = min(wl * 0.25, 5.0 + L * 1.5) * sk;
+            float aw = 0.12 + B * 0.12;
+            float arm = abs(abs(across) - al * 0.36 - B * 0.4);
+            float v = step(arm, aw * (1.0 - al / max(armL, 1e-3))) * step(0.0, along) * step(foot * 0.7, aw);
+            foam = max(foam, max(trail, v * step(0.15, sk)));
         }
     }
-    g += gw;
-    vec3 Nw = normalize(vec3(-g.x, 1.0, -g.y));
-    // the seabed seen through the water, bent a little by the waves
-    vec2 uv = gl_FragCoord.xy * uInvRes;
-    vec2 uvR = uv + Nw.xz * 0.025 * near;
-    vec4 sb = texture(uSeabed, uvR);
-    if (sb.a > 0.0 && sb.a < t) sb = texture(uSeabed, uv);
-    float thick = sb.a > t ? sb.a - t : 1e4;
-    float depthV = thick * (-dy);
-    vec3 T = exp(-uSigma * thick);
-    float light = dot(uSunCol, vec3(0.3, 0.5, 0.2)) * 0.5 + dot(uAmb, vec3(0.3, 0.5, 0.2)) * 0.8;
-    vec3 scatter = mix(uShallow, uDeep, 1.0 - exp(-thick / uScatterK)) * light;
-    vec3 refr = (sb.a > t ? sb.rgb : vec3(0.0)) * T + scatter * (1.0 - T);
-    // the sky reflected, and the islands (the mirrored pass)
-    vec3 R = reflect(rd, Nw);
-    R.y = abs(R.y);
-    vec3 refl = skyCol(R);
-    if (uReflOn > 0.5) {
-        vec4 rf = texture(uRefl, uv + Nw.xz * vec2(0.05, 0.08) * (0.4 + 0.6 * near));
-        refl = mix(refl, rf.rgb, rf.a);
-    }
-    float F = 0.02 + 0.98 * pow(1.0 - max(dot(Nw, -rd), 0.0), 5.0);
-    F = mix(F, 1.0, smoothstep(0.0, -0.002, dy + uDip * 0.6) * 0.0);
-    float cs = cloudShadow(wp);
-    vec3 col = mix(refr, refl, F);
-    // the sun's glint: a tight core and a broad sheen, sparkles at a peak
-    float sg = max(dot(R, uSunDir), 0.0);
-    float shin = mix(1400.0, 60.0, rough);
-    float hiK = 1.0 - 0.6 * smoothstep(40.0, 600.0, alt);
-    col += uSunCol * (pow(sg, shin) * mix(7.0, 0.5, rough) * hiK + pow(sg, mix(120.0, 18.0, rough)) * 0.3) * cs;
-    // at a peak, the glints sparkle with the beat (small, near, only where the sun glints)
-    float spk = smoothstep(0.82, 0.97, n2(wp * 0.7 + floor(uTime * 6.0) * 3.1)) * pow(sg, 24.0) * near * (1.0 - rough);
-    col += uSunCol * spk * 2.5 * uSparkle * cs;
-    // foam: the shore's wash and the surf breaking on the reefs, swirling, pushed toward the beach
-    float fn = n2(wp * 0.55 + vec2(uTime * 0.15, 0.0)) * 0.6 + n2(wp * 1.9 - uTime * 0.3) * 0.4;
-    float shore = 1.0 - smoothstep(0.02, 0.12 + 0.12 * fn, depthV);
-    float bands = smoothstep(0.7, 0.97, sin(depthV * 14.0 - uTime * 1.6 + fn * 4.0) * 0.5 + 0.5) * (1.0 - smoothstep(0.1, 0.45, depthV)) * smoothstep(0.01, 0.06, depthV);
-    float surf = smoothstep(0.62, 0.9, fn) * (1.0 - smoothstep(0.35, 0.9, depthV)) * smoothstep(0.2, 0.4, depthV) * 0.35;
-    float foam = max(max(shore * (0.6 + 0.4 * fn), bands * 0.5), surf) * mid;
-    // the waterfalls' white water at their feet
     for (int i = 0; i < 4; i++) {
         if (i >= uNumFalls) break;
-        float d = length(wp - uFalls[i].xy) / uFalls[i].z;
-        foam = max(foam, (1.0 - smoothstep(0.3, 1.0, d)) * (0.6 + 0.4 * n2(wp * 0.8 + uTime)));
+        foam = max(foam, step(length(wp - uFalls[i].xy), uFalls[i].z * 0.6));
     }
-    foam = max(foam, foamW);
-    vec3 foamLit = uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) * cs + uAmb * 0.9);
-    col = mix(col, foamLit, clamp(foam, 0.0, 1.0) * 0.92);
+    // the glints over the open water, two scales (the bigger one only from a little height: skimming the waves, it filled the view)
+    float gl = max(glints(wp, 7.0, foot, uTime), glints(wp, 26.0, foot, uTime * 0.8) * step(15.0, alt)) * edge(depthV, 1.5) * (1.0 - uCalm);
+    foam = max(foam, gl);
+    vec3 foamLit = uFoam * (uSunCol * (0.55 * max(uSunDir.y, 0.1) + 0.3) + uAmb * 0.9);
+    col = mix(col, foamLit, clamp(foam, 0.0, 1.0));
     frag = vec4(fogged(col, t, rd), 0.0);
 }
 )";
@@ -624,25 +533,45 @@ flat in float vR, vCy;
 out vec4 frag;
 uniform vec3 uRight, uUp, uFwd;
 uniform vec3 uCloudLit, uCloudShade;
+// Low poly: each puff a faceted ball seen from the camera: a heptagon outline, a ring of triangles (pointing out,
+// pointing in, alternately) round an inner heptagon fanned from its center; each facet flat shaded by its own
+// normal; the cluster's bottom cut flat.
 void main() {
+    const float NS = 7.0, S = 6.2831853 / NS, RI = 0.58;
     float r = length(vQ);
-    float edge = 0.62 + 0.3 * n2(vQ * 2.6 + vP.x * 13.0) + 0.08 * n2(vQ * 7.0 + vP.x * 3.0);
-    float a = 1.0 - smoothstep(edge - 0.28, edge, r);
-    if (a < 0.003) discard;
-    // a sphere's normal from the sprite, toward the camera
-    float z = sqrt(max(1.0 - min(r, 1.0), 0.0));
-    vec3 N = normalize(uRight * vQ.x + uUp * vQ.y - uFwd * z * 1.2);
-    float ndl = dot(N, uSunDir) * 0.5 + 0.5;
-    // the flat, shaded base
+    float ang = atan(vQ.y, vQ.x) + vP.x * 6.2831853;
+    ang = mod(ang, 6.2831853);
+    float k = floor(ang / S), u = ang - k * S;
+    // the outline: the heptagon through the outer vertices (at k S)
+    float ro = cos(S * 0.5) / cos(u - S * 0.5);
+    float aa = fwidth(r) * 1.2;
+    float a = 1.0 - smoothstep(ro * 0.96 - aa, ro * 0.96, r);
     float wy = vRel.y + uEye.y;
-    float base = smoothstep(vP.z - vR * 0.15, vP.z + vR * 0.55, wy);
-    vec3 col = mix(uCloudShade, uCloudLit, pow(ndl, 1.3) * (0.45 + 0.55 * base));
-    col *= mix(0.8, 1.0, vP.w);
-    // the silver lining against the sun
+    a *= smoothstep(vP.z - vR * 0.02, vP.z + vR * 0.02, wy);
+    if (a < 0.003) discard;
+    // which facet: the point in the frame of its sector (the outer vertices at 0 and S, radius 1; the inner one at
+    // S/2, radius RI)
+    vec2 p = r * vec2(cos(u), sin(u));
+    vec2 O0 = vec2(1.0, 0.0), O1 = vec2(cos(S), sin(S)), I0 = RI * vec2(cos(S * 0.5), sin(S * 0.5));
+    float fa;     // the facet's direction (sector angle)
+    float tilt;   // how far its normal leans out
+    float ri = RI * cos(S * 0.5) / cos(mod(u + S * 0.5, S) - S * 0.5);
+    if (r < ri) {
+        // the inner heptagon, fanned from the center (its vertices at (k + 1/2) S)
+        fa = (u < S * 0.5 ? k : k + 1.0) * S;
+        tilt = 0.32;
+    } else {
+        vec2 e0 = I0 - O0, e1 = O1 - I0;
+        bool outTri = (e0.x * (p.y - O0.y) - e0.y * (p.x - O0.x)) <= 0.0 && (e1.x * (p.y - I0.y) - e1.y * (p.x - I0.x)) <= 0.0;
+        if (outTri) { fa = (k + 0.5) * S; tilt = 0.88; }
+        else { fa = (u < S * 0.5 ? k : k + 1.0) * S; tilt = 0.72; }
+    }
+    fa -= vP.x * 6.2831853;
+    vec3 N = normalize((uRight * cos(fa) + uUp * sin(fa)) * tilt - uFwd * (1.0 - tilt * 0.6));
+    float ndl = dot(N, uSunDir) * 0.5 + 0.5;
+    vec3 col = mix(uCloudShade, uCloudLit, 0.25 + 0.75 * ndl);
+    col *= mix(0.9, 1.0, vP.w);
     vec3 rd = normalize(vRel);
-    float back = pow(max(dot(rd, uSunDir), 0.0), 6.0);
-    col += uSunCol * back * (1.0 - smoothstep(0.3, 1.0, a)) * 0.9;
-    col += uSunCol * 0.05 * ndl;
     float dist = length(vRel);
     col = mix(col, hazeCol(rd), hazeK(dist, rd) * 0.9);
     a *= vP.y;
@@ -706,8 +635,10 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- the pieces: sea glass, one tumbled tile per cell
-// Instance: a = center xyz, size (board units); b = color rgb, seed; c = dull, glow, alpha, -.
+// ---------------------------------------------------------------- the pieces: low poly tiles, one per cell
+// Instance: a = center xyz, size (board units); b = color rgb, seed; c = dull, glow, alpha, neighbours (a mask of
+// the cells of the same piece around it: 1 left, 2 right, 4 up, 8 down, 16 up left, 32 up right, 64 down left,
+// 128 down right).
 inline const char* GLASS_VS = R"(#version 330 core
 layout(location = 0) in vec2 aCorner;
 layout(location = 1) in vec4 iA;
@@ -726,6 +657,10 @@ void main() {
     gl_Position = uVP * vec4(iA.xy + aCorner * 0.5 * iA.w, iA.z, 1.0);
 }
 )";
+// A flat slab, its top face in the piece's color, beveled by flat facets (lit from the top left: the upper and
+// left bevels light, the right and lower ones dark), its outer corners chamfered, a crisp deep outline. Where its
+// neighbour is of the same piece the slab runs on into it (no bevel, no gap): the piece reads as one block, its
+// cells by the faint fold across each top face.
 inline const char* GLASS_FS = R"(#version 330 core
 in vec2 vP;
 flat in vec3 vCol;
@@ -733,61 +668,60 @@ flat in float vSeed;
 flat in vec4 vE;
 out vec4 frag;
 uniform vec3 uKeyDir, uKeyCol, uAmbTop, uAmbBot;
-float hb(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float nb(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hb(i), hb(i + vec2(1, 0)), f.x), mix(hb(i + vec2(0, 1)), hb(i + vec2(1, 1)), f.x), f.y);
-}
+bool has(int m, int b) { return (m / b) % 2 == 1; }
 void main() {
     vec2 p = vP;
-    float s1 = fract(vSeed * 7.13), s2 = fract(vSeed * 3.71);
-    // a painted driftwood board, one per cell: sun-bleached grain under worn paint, the paint chipped at the
-    // edges and corners, two old nail holes (one clean silhouette, its corners softly worn)
-    const float HS = 0.46, RAD = 0.07;
-    vec2 q = abs(p) - (HS - RAD);
-    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - RAD;
-    float aa = max(fwidth(d), 1e-4) * 0.8;
-    float cov = 1.0 - smoothstep(-aa, aa, d);
-    if (cov <= 0.001) discard;
-    vec2 gq = (q.x > 0.0 || q.y > 0.0) ? normalize(max(q, 0.0) + 1e-6) * sign(p) : (q.x > q.y ? vec2(sign(p.x), 0.0) : vec2(0.0, sign(p.y)));
-    // the grain: long streaks along the board (each board its own direction and figure), a knot now and then
-    vec2 gp = (fract(vSeed * 5.1) > 0.5 ? p.yx : p) + vec2(s1, s2) * 7.0;
-    float warp = nb(gp * vec2(1.2, 4.0)) * 0.55;
-    float rings = abs(fract(gp.y * 9.0 + warp) - 0.5) * 2.0;
-    float streak = nb(vec2(gp.x * 1.6, gp.y * 34.0 + warp * 4.0));
-    float grain = smoothstep(0.15, 0.0, rings) * 0.6 + streak * 0.4;
-    // the wood (grey, bleached) and its paint, worn thin along the grain
-    vec3 wood = mix(vec3(0.62, 0.57, 0.5), vec3(0.8, 0.76, 0.68), streak) * (0.85 + 0.15 * nb(gp * 3.0));
-    float inner = -d;
-    float chipN = nb(p * 15.0 + s2 * 30.0) * 0.6 + nb(p * 38.0 + s1 * 20.0) * 0.4;
-    float chip = smoothstep(0.6, 0.67, chipN + (0.045 - inner) * 5.0);      // chipped back to the wood here and there at the edges
-    float wear = smoothstep(0.55, 0.85, streak) * 0.35 + smoothstep(0.62, 0.75, nb(p * 6.0 + s1 * 11.0)) * 0.25;
-    vec3 paint = vCol * (0.9 + 0.12 * nb(p * 4.0 + s2 * 5.0));
-    vec3 alb = mix(paint, mix(paint, wood, 0.55), wear * (0.4 + 0.6 * grain));
-    alb = mix(alb, wood, chip);
-    // two nail holes
-    for (int i = 0; i < 2; i++) {
-        vec2 nc = vec2(i == 0 ? -0.31 : 0.31, 0.02 * (s1 - 0.5));
-        float nd = length(p - nc);
-        alb *= 1.0 - 0.55 * smoothstep(0.03, 0.018, nd);
-        alb = mix(alb, vec3(0.42, 0.26, 0.16), 0.35 * smoothstep(0.06, 0.03, nd) * (1.0 - smoothstep(0.03, 0.02, nd)));
+    int m = int(vE.w + 0.5);
+    const float G = 0.035, B = 0.15, C = 0.09;
+    bool l = has(m, 1), r = has(m, 2), u = has(m, 4), d = has(m, 8);
+    // the distances to the open sides' edges (inset by the gap), a merged side never nearer than the top
+    float sL = l ? 9.0 : p.x + 0.5 - G, sR = r ? 9.0 : 0.5 - G - p.x;
+    float sU = u ? 9.0 : 0.5 - G - p.y, sD = d ? 9.0 : p.y + 0.5 - G;
+    float s = min(min(sL, sR), min(sU, sD));
+    // the outer corners chamfered
+    float ch = min(min(sL + sU, sR + sU), min(sL + sD, sR + sD)) - C;
+    // the inner corners (both sides of the piece, not the diagonal): the bevels meet in a fold, a notch at the
+    // corner where the gaps cross
+    vec2 cU = vec2(p.x + 0.5 - G, 0.5 - G - p.y), cR = vec2(0.5 - G - p.x, 0.5 - G - p.y);
+    vec2 cD = vec2(p.x + 0.5 - G, p.y + 0.5 - G), cE = vec2(0.5 - G - p.x, p.y + 0.5 - G);
+    float hIn = 9.0, cov = min(s, ch * 0.7071);
+    vec2 inN = vec2(0.0);
+    if (l && u && !has(m, 16)) { float h = max(cU.x, cU.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cU.x > cU.y ? vec2(-1, 0) : vec2(0, 1); } }
+    if (r && u && !has(m, 32)) { float h = max(cR.x, cR.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cR.x > cR.y ? vec2(1, 0) : vec2(0, 1); } }
+    if (l && d && !has(m, 64)) { float h = max(cD.x, cD.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cD.x > cD.y ? vec2(-1, 0) : vec2(0, -1); } }
+    if (r && d && !has(m, 128)) { float h = max(cE.x, cE.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cE.x > cE.y ? vec2(1, 0) : vec2(0, -1); } }
+    float aa = max(fwidth(p.x), 1e-4) * 0.8;
+    float a = smoothstep(-aa, aa, cov);
+    if (a <= 0.001) discard;
+    // the facet: the top, or the bevel of the nearest edge (a chamfer's own diagonal facet at an outer corner)
+    vec2 fn = vec2(0.0);
+    float hb = min(min(s, ch * 0.7071), hIn);
+    if (hb < B) {
+        if (hIn <= min(s, ch * 0.7071)) fn = inN;
+        else if (ch * 0.7071 < s) fn = normalize(vec2(sL < sR ? -1.0 : 1.0, sD < sU ? -1.0 : 1.0));
+        else if (s == sL) fn = vec2(-1, 0);
+        else if (s == sR) fn = vec2(1, 0);
+        else if (s == sU) fn = vec2(0, 1);
+        else fn = vec2(0, -1);
     }
-    // its relief: rounded worn edges, the grain grooves, the chips stepped down (lit by the scene's sun)
-    float edge = 1.0 - smoothstep(0.0, 0.07, inner);
-    vec3 n = normalize(vec3(gq * edge * 0.9 + vec2(0.0, (grain - 0.5) * 0.12) * (1.0 - chip * 0.5), 1.0));
+    vec3 n = normalize(vec3(fn * 1.5, 1.0));
+    // the top face folded once along its diagonal (low poly), a little tone of its own per cell
+    if (hb >= B) n = normalize(vec3(p.y > p.x ? vec2(-0.06, 0.06) : vec2(0.06, -0.06), 1.0));
+    vec3 alb = vCol * (0.97 + 0.06 * fract(vSeed * 7.13));
     vec3 L = normalize(uKeyDir);
     float diff = max(dot(n, L), 0.0);
     vec3 amb = mix(uAmbBot, uAmbTop, n.y * 0.5 + 0.5);
-    vec3 col = alb * (amb * 0.75 + uKeyCol * (0.45 + 0.55 * diff));
-    col *= 1.0 - 0.25 * chip * smoothstep(0.02, 0.0, abs(chipN + (0.045 - inner) * 5.0 - 0.635)); // the chips rims
-    // the outline: crisp, in a deeper tone of its own color
-    col = mix(col, pow(vCol, vec3(1.6)) * 0.35, smoothstep(-0.01, 0.0, d) * 0.8);
+    vec3 col = alb * (amb * 0.75 + uKeyCol * (0.42 + 0.62 * diff));
+    // the lit bevels catch the light (a pale sheen of the key on the upper one, less on the left one)
+    col = mix(col, uKeyCol * 0.95, max(fn.y, 0.0) * 0.28 + max(-fn.x, 0.0) * 0.12);
+    // the outline along the outer edges: crisp, in a deeper tone of its own color
+    float ol = 1.0 - smoothstep(0.012, 0.012 + aa * 2.0, min(min(s, ch * 0.7071), hIn));
+    col = mix(col, pow(vCol, vec3(1.6)) * 0.3, ol * 0.85);
     // states: dulled (game over), glowing (a cleared row), held (dim)
     float g = dot(col, vec3(0.3, 0.55, 0.15));
     col = mix(col, vec3(g * 0.55 + 0.08), vE.x);
     col = mix(col, mix(vCol, vec3(1.0), 0.6) * 1.6, vE.y);
-    frag = vec4(col, cov * vE.z);
+    frag = vec4(col, a * vE.z);
 }
 )";
 
