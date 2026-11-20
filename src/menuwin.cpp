@@ -140,7 +140,8 @@ struct Worlds {
     void kalVoyages();
     void kalOptions();
     void kalGamepad();
-    static constexpr float OPT_MID = 470, OPT_STEP = 90; // the options' panel: its middle, a row's step
+    static constexpr float OPT_TOP = 250, OPT_STEP = 90; // the options' panel: its top (clear of the title's), a row's step
+    float optMid = 470; // its middle (from its height)
     void optionPanel(const char* title, int n);
     void optionRows(int n, const char* const* label, float focus);
     void optionLines(const std::vector<std::pair<std::string, float>>& lines, float size);
@@ -650,19 +651,20 @@ void Worlds::optionPanel(const char* title, int n) {
     p.glass(X(660), Y(90), 600 * u, 130 * u, 24 * u, u, 0.f, 0.45f);
     p.text(F::JOSEFIN_LIGHT, title, X(960), Y(178), 72 * u, hex(0xffffff), 0, 0.22f);
     const float h = std::max(n, 3) * OPT_STEP + 70;
-    p.glass(X(560), Y(OPT_MID - h * 0.5f), 800 * u, h * u, 24 * u, u, 0.f, 0.5f);
+    optMid = OPT_TOP + h * 0.5f;
+    p.glass(X(560), Y(OPT_TOP), 800 * u, h * u, 24 * u, u, 0.f, 0.5f);
 }
 
 // lines of text centred in the panel, a row's step apart (alpha each)
 void Worlds::optionLines(const std::vector<std::pair<std::string, float>>& lines, float size) {
-    const float y0 = OPT_MID - (lines.size() - 1) * OPT_STEP * 0.5f + 10;
+    const float y0 = optMid - (lines.size() - 1) * OPT_STEP * 0.5f + 10;
     for (size_t i = 0; i < lines.size(); i++)
         p.text(F::JOSEFIN, lines[i].first, X(960), Y(y0 + i * OPT_STEP), (i == 0 ? size : size * 0.8f) * u,
                hex(0xffffff, lines[i].second), 0, 0.35f);
 }
 
 void Worlds::optionRows(int n, const char* const* label, float focus) {
-    const float size = 30, track = 0.35f, y0 = OPT_MID - (n - 1) * OPT_STEP * 0.5f + 10;
+    const float size = 30, track = 0.35f, y0 = optMid - (n - 1) * OPT_STEP * 0.5f + 10;
     for (int i = 0; i < n; i++)
         p.text(F::JOSEFIN, label[i], X(960), Y(y0 + i * OPT_STEP), size * u, hex(0xffffff, 0.45f + 0.55f * near1(focus, i)), 0, track);
     float inkL = 0, inkR = 0;
@@ -700,7 +702,7 @@ void Worlds::kalOptions() {
     // are you sure? then YES / NO, the answer underlined
     const float track = 0.35f, size = 30;
     optionLines({{m.optSel_ == 0 ? "UNLOCK STAGES?" : "RESET SAVED DATA?", 1.f}}, size);
-    const float y = OPT_MID + OPT_STEP * 0.5f + 10;
+    const float y = optMid + OPT_STEP * 0.5f + 10;
     const char* ANS[2] = {"NO", "YES"}; // (optYes_: 0 NO, 1 YES; YES on the left)
     const float ax[2] = {1080, 840};
     for (int i = 0; i < 2; i++)
