@@ -1174,19 +1174,19 @@ void main() {
 )";
 
 // ---------------------------------------------------------------- pieces: the station's modules
-// Each piece one module (its cells merge, the mask tells a cell which of its 8 neighbours are of its piece): a
-// gunmetal frame round the piece's outline (brushed, beveled: lit from the top left on its outer slope, shadowed on
-// its inner one), a dark recessed inset inside it, and through the inset one circuit per piece, glowing cyan. The
-// circuit is drawn cell by cell from the mask alone, so it follows the piece's shape and goes on across its cells:
-// a bus of parallel traces (offsets symmetric about the cell's middle, the same for every cell of the piece, so the
-// traces meet across the cells' edges) runs straight through a cell with two opposite neighbours, bends round a
-// chamfered corner in a cell with two adjacent ones, and runs into a hub (a glowing pad, a chip) in an end cell or
-// a junction, each trace ending in a dot. Its style follows the piece's type (they stay told apart, with the
-// frame's and the glow's slight tint): I a row of dark chips bridged by bars of light, O an octagonal core across
-// its four cells and lit corners, T a dense bus fanning into a chip, S and Z a bus between two glowing pads, J a
-// node in every cell, L a wide bus; the piece's seed varies its bus. A cleared line splits the piece (the cut cells
-// lose their neighbour: their bus ends in a pad). The ghost is the frame's outline and a trace of its circuit; a
-// cleared cell flares and shrinks into its light; game over drains the color and the circuit's light.
+// Each piece one module (its cells merge, the mask tells a cell which of its 8 neighbours are of its piece), flat
+// and spare, a HUD's drawing of it: a flat gunmetal frame round the piece's outline (a hairline lighter along its
+// outer edge), a flat navy inset inside it (the frame's one flat shadow along its top left wall), and through the
+// inset one circuit per piece, thin flat cyan lines. The circuit is drawn cell by cell from the mask alone, so it
+// follows the piece's shape and goes on across its cells: a bus of one or two traces (symmetric about the cell's
+// middle, so the traces meet across the cells' edges) runs straight through a cell with two opposite neighbours,
+// bends round a 45° chamfer in a cell with two adjacent ones, and runs into a hub (a ringed pad, a square chip) in
+// an end cell or a junction, the hub's core a marker touched by the piece's color. Its style follows the piece's
+// type (they stay told apart): I a chip in every cell, O an octagonal core across its four cells and small cyan
+// plates at its corners, T a double bus into a chip, S and Z a line between two pads, J a pad in every cell, L a
+// double bus. A cleared line splits the piece (the cut cells lose their neighbour: their bus ends in a pad). The
+// ghost is a line along the frame and a trace of its circuit; a cleared cell flashes cyan and shrinks; game over
+// drains the color.
 inline const char* CELL_VS = R"(#version 330 core
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec4 aA; // x, y, half, mask
@@ -1218,7 +1218,6 @@ flat in vec4 vC;
 flat in vec4 vD;
 out vec4 frag;
 uniform float uTime;
-uniform vec3 uLightC;
 uniform float uBridge;
 uniform vec3 uBridgeInk;
 // mask bits: 0 left, 1 right, 2 down, 3 up; 4..7 the diagonals (-x-y, +x-y, -x+y, +x+y)
@@ -1255,76 +1254,67 @@ float boxSdf(vec2 p, vec2 b, float r) {
     vec2 k = abs(p) - b + r;
     return length(max(k, 0.0)) + min(max(k.x, k.y), 0.0) - r;
 }
-// A cell's part of the circuit: the distance to the nearest trace, to the nearest dot's disc, to the hub (< 0
-// inside), the hub's kind (0 none, 1 a glowing pad, 2 a chip of light, 3 a dark metal chip, 4 the O's core) and the
-// traces' half width.
-struct Circuit { float line, dot, pad; int hub; float width; };
-Circuit circuit(vec2 p, int mk, int type, float seed) {
+// A cell's part of the circuit: the distance to the nearest trace, to the hub (< 0 inside), the hub's kind (0 none,
+// 1 a pad, 2 a chip, 4 the O's core) and its size, and the traces' half width.
+struct Circuit { float line, pad; int hub; float hubR, width; };
+Circuit circuit(vec2 p, int mk, int type) {
     Circuit C;
-    C.line = 9.0; C.dot = 9.0; C.pad = 9.0; C.hub = 0; C.width = 0.024;
+    C.line = 9.0; C.pad = 9.0; C.hub = 0; C.hubR = 0.12; C.width = 0.02;
     bool cs[4] = bool[4](has(mk, 0), has(mk, 1), has(mk, 2), has(mk, 3));
     int deg = int(cs[0]) + int(cs[1]) + int(cs[2]) + int(cs[3]);
-    // the bus: n traces, s apart (the seed adds or takes one, widens it)
-    float n = 3.0, s = 0.075, ch = 0.1;
+    // the bus: n traces, s apart
+    float n = 1.0, s = 0.1, ch = 0.12;
     bool every = false; // a hub in every cell
-    float hubR = 0.14;
-    if (type == 0) { n = 2.0; s = 0.1; every = true; C.width = 0.03; C.hub = 3; hubR = 0.15; }
-    else if (type == 2) { n = seed < 0.5 ? 4.0 : 5.0; s = 0.058; C.hub = 2; C.width = 0.013; }
-    else if (type == 3 || type == 4) { n = 3.0; s = seed < 0.5 ? 0.07 : 0.08; C.hub = 1; }
-    else if (type == 5) { n = 2.0; s = seed < 0.5 ? 0.06 : 0.07; every = true; C.hub = 1; hubR = 0.17; }
-    else if (type == 6) { n = seed < 0.5 ? 3.0 : 4.0; s = 0.07; C.hub = 1; }
+    if (type == 0) { every = true; C.hub = 2; C.hubR = 0.11; }
+    else if (type == 2) { n = 2.0; s = 0.1; C.hub = 2; C.width = 0.016; }
+    else if (type == 3 || type == 4) { C.hub = 1; }
+    else if (type == 5) { every = true; C.hub = 1; C.hubR = 0.1; }
+    else if (type == 6) { n = 2.0; s = 0.12; C.hub = 1; C.width = 0.016; }
     if (type == 1) {
-        // O: a core at the middle of its four cells (the corner where this cell meets the three others), lit corners
+        // O: an octagonal core at the middle of its four cells (the corner where this cell meets the three others)
         C.hub = 4;
         for (int q = 0; q < 4; q++) {
             vec2 k = vec2(q == 1 || q == 3 ? 0.5 : -0.5, q >= 2 ? 0.5 : -0.5);
             bool hx = k.x < 0.0 ? cs[0] : cs[1], vy = k.y < 0.0 ? cs[2] : cs[3];
-            if (hx && vy && has(mk, 4 + q)) C.pad = min(C.pad, octSdf(p - k, 0.4));
+            if (hx && vy && has(mk, 4 + q)) C.pad = min(C.pad, octSdf(p - k, 0.34));
         }
-        if (C.pad > 8.0) { C.hub = 1; C.pad = length(p) - 0.12; } // a lone cell (a cleared line cut it)
+        if (C.pad > 8.0) { C.hub = 1; C.pad = length(p) - C.hubR; } // a lone cell (a cleared line cut it)
         return C;
     }
-    float lanes[5];
-    for (int k = 0; k < 5; k++) lanes[k] = (float(k) - (n - 1.0) * 0.5) * s;
+    float lanes[2];
+    for (int k = 0; k < 2; k++) lanes[k] = (float(k) - (n - 1.0) * 0.5) * s;
     bool straight = deg == 2 && ((cs[0] && cs[1]) || (cs[2] && cs[3]));
     if (deg == 2 && !every && !straight) {
-        // a corner: the bus bends round a chamfer, the inner traces inside (mirrored to the right and up sides)
+        // a corner: the bus bends round a 45° chamfer (mirrored to the right and up sides)
         vec2 q = vec2(cs[0] ? -p.x : p.x, cs[2] ? -p.y : p.y);
-        for (int k = 0; k < 5; k++) {
+        for (int k = 0; k < 2; k++) {
             if (float(k) >= n) break;
             float o = lanes[k];
             vec2 a = vec2(0.6, o), b = vec2(o + ch, o), c = vec2(o, o + ch), d = vec2(o, 0.6);
             C.line = min(C.line, min(segD(q, a, b), min(segD(q, b, c), segD(q, c, d))));
         }
-        // a via at the bend (some pieces)
-        if (seed > 0.35) C.dot = length(q - vec2(lanes[0] + ch * 0.5, lanes[0] + ch * 0.5)) - 0.026;
         return C;
     }
     if (straight && !every) {
         vec2 q = cs[0] ? p : vec2(p.y, -p.x);
-        for (int k = 0; k < 5; k++) {
+        for (int k = 0; k < 2; k++) {
             if (float(k) >= n) break;
             C.line = min(C.line, abs(q.y - lanes[k]));
         }
-        // a via on one of its traces, one in two cells (the piece's seed picks which)
-        float pick = fract(seed * 7.13 + float(mk) * 0.37);
-        if (pick > 0.5) C.dot = length(q - vec2((pick - 0.75) * 0.6, lanes[int(pick * 13.0) % int(n)])) - 0.024;
         return C;
     }
     // a hub: an end cell, a junction (or every cell, for I and J): each connected side's traces run into it
-    if (C.hub == 2 && deg < 3) C.hub = 1; // T's end cells: a pad
-    C.pad = C.hub == 3 ? boxSdf(p, vec2(hubR), 0.03) : C.hub == 2 ? boxSdf(p, vec2(0.17), 0.04) : length(p) - hubR;
+    if (C.hub == 2 && deg < 3 && !every) C.hub = 1; // T's end cells: a pad
+    C.pad = C.hub == 2 ? boxSdf(p, vec2(C.hubR), 0.025) : length(p) - C.hubR;
     for (int sd = 0; sd < 4; sd++) {
         if (!cs[sd]) continue;
         vec2 q = toSide(p, sd);
-        for (int k = 0; k < 5; k++) {
+        for (int k = 0; k < 2; k++) {
             if (float(k) >= n) break;
-            float o = lanes[k];
-            float xe = C.hub == 1 ? sqrt(max(hubR * hubR - o * o, 0.0)) + 0.04 : (C.hub == 3 ? hubR : 0.17) + 0.035;
-            C.line = min(C.line, segD(q, vec2(0.6, o), vec2(xe, o)));
-            C.dot = min(C.dot, length(q - vec2(xe, o)) - 0.024);
+            C.line = min(C.line, segD(q, vec2(0.6, lanes[k]), vec2(C.hubR * 0.5, lanes[k])));
         }
     }
+    C.line = max(C.line, -C.pad); // (the traces stop at the hub's edge)
     return C;
 }
 void main() {
@@ -1337,157 +1327,62 @@ void main() {
         if ((hx && abs(vLocal.x) > 0.5) || (vy && abs(vLocal.y) > 0.5)) discard;
     }
     int type = int(vD.y + 0.5);
-    float seed = vD.x;
     float erase = vC.y;
     float g = 0.035 + erase * 0.25;
     vec2 p = vLocal;
     float sd = shapeSdf(p, mk, g);
     float inside = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd);
     float e = -sd;
+    // the palette: gunmetal, navy, cyan; the piece's color (normalized: the same strength for every hue) only as a
+    // touch in the circuit and a marker at its hub
     vec3 tint = vB.rgb;
-    // the circuit's light: cyan, a touch of the piece's color (normalized: the same strength for every hue)
     vec3 tn = tint / max(max(tint.r, max(tint.g, tint.b)), 1e-3);
-    vec3 glowC = mix(vec3(0.03, 0.5, 0.8), tn * 0.7, 0.2);
-    vec3 hotC = mix(glowC, vec3(0.75, 0.95, 1.0), 0.45);
-    const float FRAME = 0.17; // the frame's width (cell units); inside it the inset
-    Circuit C = circuit(p, mk, type, seed);
-    float inset = smoothstep(FRAME - aa, FRAME + aa, e);
-    C.width = max(C.width, aa * 1.1); // (the previews, small: a trace a pixel wide at least)
-    float line = 1.0 - smoothstep(C.width - aa, C.width + aa, C.line);
-    float lineGlow = exp(-max(C.line - C.width, 0.0) / 0.06);
-    float lineCore = 1.0 - smoothstep(0.0, C.width * 0.6 + aa * 0.5, C.line);
-    float dotM = 1.0 - smoothstep(-aa, aa, C.dot);
-    float dotGlow = exp(-max(C.dot, 0.0) / 0.02);
+    const vec3 METAL = vec3(0.1, 0.118, 0.145), EDGE = vec3(0.19, 0.215, 0.255), NAVY = vec3(0.008, 0.013, 0.03);
+    const vec3 SHADE = vec3(0.003, 0.005, 0.012);
+    vec3 inkC = mix(vec3(0.07, 0.5, 0.85), tn * 0.6, 0.15);
+    vec3 markC = mix(vec3(0.07, 0.5, 0.85), tn * 0.8, 0.4);
+    const float FRAME = 0.15; // the frame's width (cell units); inside it the inset
+    Circuit C = circuit(p, mk, type);
+    float inset = smoothstep(FRAME - aa * 0.5, FRAME + aa * 0.5, e);
+    C.width = max(C.width, aa * 0.8); // (the previews, small: a trace near a pixel wide)
+    float line = 1.0 - smoothstep(C.width - aa * 0.5, C.width + aa * 0.5, C.line);
+    // a hub's outline (ring) and its marker (the core)
+    float rw = max(0.018, aa * 0.8);
+    float ring = 1.0 - smoothstep(rw - aa * 0.5, rw + aa * 0.5, abs(C.pad + rw));
+    float core = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, C.pad + (C.hub == 4 ? 0.17 : C.hubR * 0.55));
     if (mode == 1) {
-        // the ghost: the frame's outline and a faint trace of its circuit
-        float lineD = abs(e - 0.05);
-        float rim = (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, lineD)) * inside;
-        float rimGlow = exp(-lineD / 0.03) * inside;
-        float circ = max(line, dotM) * inset * 0.35;
-        float a = (rim * 0.8 + rimGlow * 0.15 + inside * 0.04 + circ) * vB.a;
-        vec3 c = mix(hotC, uBridgeInk, uBridge);
+        // the ghost: a crisp line along the frame, a faint fill and a faint trace of its circuit
+        float rim = (1.0 - smoothstep(0.014 - aa * 0.5, 0.014 + aa * 0.5, abs(e - 0.04))) * inside;
+        float circ = max(line, ring) * inset * 0.35;
+        float a = (rim * 0.85 + inside * 0.05 + circ) * vB.a;
+        vec3 c = mix(mix(inkC, vec3(0.75, 0.9, 1.0), 0.4), uBridgeInk, uBridge);
         frag = vec4(c * a, a);
         return;
     }
-    // the shape's slope: its normal (outward) from the distance's gradient
-    float eps = 0.004;
-    vec2 n2 = vec2(shapeSdf(p + vec2(eps, 0.0), mk, g) - sd, shapeSdf(p + vec2(0.0, eps), mk, g) - sd);
-    n2 = n2 / max(length(n2), 1e-5);
-    const vec2 L = vec2(-0.6, 0.8);
-    float facing = dot(n2, L); // > 0: an outward slope facing the light
-    // brushed gunmetal: fine streaks along x and a grain, tinted slightly by the piece
-    float streak = vnoise(vec2(p.x * 5.0 + seed * 17.0, p.y * 140.0 + seed * 31.0)) * 0.6
-                 + vnoise(vec2(p.x * 1.5 + seed * 7.0, p.y * 40.0)) * 0.4;
-    float grain = hash(floor((p + seed * 3.0) * 70.0));
-    vec3 metal = mix(vec3(0.13, 0.14, 0.155), vec3(0.12) * tn + 0.04, 0.2) * (0.6 + 0.4 * streak + 0.45 * grain);
-    float lightG = 0.5 + 0.5 * dot(L, p * 1.4);
-    metal *= mix(0.8, 1.2, lightG);
-    // the frame's profile: an outer bevel (0 .. 0.05) catching the light (or in shade), a lit ridge, the flat top,
-    // a darker groove, the inner bevel down into the inset
-    float outerB = 1.0 - smoothstep(0.01, 0.06, e);
-    float innerB = smoothstep(FRAME - 0.04, FRAME - 0.006, e) * (1.0 - inset);
-    vec3 col = metal;
-    col *= 1.0 + outerB * facing * 2.6;
-    col *= 1.0 - innerB * facing * 1.2;
-    col += vec3(0.45, 0.5, 0.55) * pow(max(1.0 - abs(e - 0.062) / 0.01, 0.0), 4.0) * (0.25 + 0.75 * max(facing, 0.0)) * 0.4;
-    col *= 1.0 - 0.45 * pow(max(1.0 - abs(e - (FRAME - 0.045)) / 0.008, 0.0), 2.0);
-    col *= mix(0.35, 1.0, smoothstep(0.0, 0.012, e)); // the dark seam at the very edge
-    // a rivet in the frame at each outer corner
-    {
+    // the frame: one flat gunmetal, a hairline lighter along its outer edge
+    vec3 col = mix(METAL, EDGE, 1.0 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, e));
+    // the O's corners: small flat plates of the circuit's tone where the outline turns
+    bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
+    if (type == 1 && corner) {
         vec2 q = abs(p);
-        bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
-        float rd = length(q - vec2(0.355)) - 0.02;
-        if (corner && type != 1) {
-            float rv = 1.0 - smoothstep(-aa, aa, rd);
-            vec2 rn = (q - vec2(0.355)) * sign(p) / 0.02;
-            col = mix(col, metal * (0.7 + 1.6 * max(dot(rn, L), 0.0)), rv);
-            col *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.012, abs(rd - 0.006))) * (1.0 - rv);
-        }
+        col = mix(col, inkC, smoothstep(0.72 - aa * 0.5, 0.72 + aa * 0.5, q.x + q.y) * smoothstep(0.045 - aa * 0.5, 0.045 + aa * 0.5, e));
     }
-    // the O's lit corners, small cyan plates in the frame where the outline turns
-    if (type == 1) {
-        vec2 q = abs(p);
-        bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
-        float tri = smoothstep(0.7 - aa, 0.7 + aa, q.x + q.y) * smoothstep(0.012, 0.025, e) * (1.0 - inset);
-        if (corner) col = mix(col, glowC * 0.9, tri * 0.85);
-    }
-    // the inset: dark, a faint panel grain, its walls shading it near the frame (top left in shadow)
-    vec3 deep = vec3(0.012, 0.018, 0.034) + glowC * 0.006;
-    deep *= 0.85 + 0.3 * vnoise(p * 9.0 + seed * 13.0);
-    float wall = exp(-(e - FRAME) / 0.03);
-    deep *= 1.0 - 0.5 * wall * max(-facing, 0.0) * 0.0;
-    deep += vec3(0.08, 0.09, 0.1) * wall * 0.25 * max(-facing, 0.0);
-    // the music lifts the circuit (and a slow pulse runs across the stack)
-    float pulse = 0.85 + 0.15 * sin(dot(vWorld, vec2(0.9, 1.3)) - uTime * 2.2);
-    float lift = (1.0 + 0.3 * vC.z) * pulse * (1.0 - vC.w);
-    vec3 light = vec3(0.0);
-    // the hub
-    if (C.hub == 1) {
-        // a glowing pad: a disc of light (white at its heart) in a dark socket, a bright metal ring round it
-        float lit = C.pad + 0.035;
-        float disc = 1.0 - smoothstep(-aa, aa, lit);
-        float socket = 1.0 - smoothstep(-aa, aa, C.pad);
-        float ring = 1.0 - smoothstep(0.008 - aa, 0.008 + aa, abs(C.pad - 0.012));
-        deep = mix(deep, vec3(0.004, 0.006, 0.01), socket);
-        deep = mix(deep, vec3(0.16, 0.17, 0.19) * (0.6 + 0.6 * max(dot(normalize(p + 1e-4), L), 0.0)), ring);
-        light += mix(glowC * 1.3, hotC * 1.4, smoothstep(-0.02, -0.09, lit)) * disc + glowC * exp(-max(lit, 0.0) / 0.02) * 0.35 * (1.0 - disc);
-    } else if (C.hub == 2) {
-        float edge = 1.0 - smoothstep(0.012 - aa, 0.012 + aa, abs(C.pad));
-        float in2 = 1.0 - smoothstep(-aa, aa, C.pad);
-        deep = mix(deep, vec3(0.02, 0.025, 0.035), in2);
-        light += hotC * edge * 1.5 + glowC * exp(-abs(C.pad) / 0.025) * 0.3 + glowC * in2 * (0.3 + 0.1 * sin(uTime * 2.0 + seed * 9.0));
-    } else if (C.hub == 3) {
-        // a chip: a dark metal plate sunk in the inset, its upper left lip in shade, its lower right one lit
-        float in2 = 1.0 - smoothstep(-aa, aa, C.pad);
-        vec2 cn = normalize(p + 1e-4);
-        float lip = 1.0 - smoothstep(0.0, 0.022, abs(C.pad + 0.011));
-        deep = mix(deep, metal * 0.45, in2);
-        deep = mix(deep, metal * (0.5 + 1.1 * max(dot(cn, -L), 0.0)), lip * in2);
-        light += glowC * in2 * 0.02 * (0.5 + 0.5 * sin(uTime * 1.3 + seed * 20.0));
-    } else if (C.hub == 4) {
-        // the O's core: a plate of metal (its four panels' seams), an octagonal well, a core of light in it
-        vec2 q = abs(p);
-        float seam = 0.0;
-        if (p.x < 0.0 ? has(mk, 0) : has(mk, 1)) seam = max(seam, 1.0 - smoothstep(0.006, 0.006 + aa, 0.5 - q.x));
-        if (p.y < 0.0 ? has(mk, 2) : has(mk, 3)) seam = max(seam, 1.0 - smoothstep(0.006, 0.006 + aa, 0.5 - q.y));
-        float well = 1.0 - smoothstep(-aa, aa, C.pad);
-        float lip = 1.0 - smoothstep(0.0, 0.025, abs(C.pad - 0.012));
-        vec3 plate = metal * 0.85 * (1.0 - 0.6 * seam);
-        deep = mix(plate, metal * (0.4 + 1.2 * max(dot(n2, L), 0.0)), lip);
-        deep = mix(deep, vec3(0.006, 0.009, 0.016), well);
-        float disc = 1.0 - smoothstep(-aa, aa, C.pad + 0.07);
-        float ring = 1.0 - smoothstep(0.01 - aa, 0.01 + aa, abs(C.pad + 0.035));
-        float bands = 0.85 + 0.15 * step(0.5, fract(C.pad * 22.0)); // the core's fine rings
-        light += mix(glowC * 1.15, hotC * 1.25, smoothstep(-0.15, -0.3, C.pad)) * disc * bands + glowC * ring * 1.3
-               + glowC * exp(-abs(C.pad + 0.07) / 0.03) * 0.3 * well;
-    }
-    // the board's fine print: dim short traces and pads on a grid of quarter cells, off the circuit
-    {
-        vec2 sg = (p + 0.5) * 4.0, si = floor(sg), sf = fract(sg) - 0.5;
-        float h = hash(si + seed * 37.0 + float(mk & 15) * 3.1);
-        float fine = 9.0;
-        if (h > 0.55) fine = h > 0.8 ? abs(sf.y + (h - 0.9) * 2.0) + max(abs(sf.x) - 0.5, 0.0) : abs(sf.x) + max(abs(sf.y) - 0.42, 0.0);
-        if (h > 0.55 && h < 0.62) fine = length(sf) - 0.1;
-        float fl = (1.0 - smoothstep(0.035, 0.035 + aa * 4.0, fine)) * smoothstep(0.05, 0.09, C.line) * smoothstep(0.05, 0.08, C.pad);
-        light += glowC * fl * 0.3;
-    }
-    light += glowC * line * 1.05 + hotC * lineCore * 0.3 + glowC * lineGlow * 0.26;
-    light += mix(glowC, hotC, 0.6) * dotM + glowC * dotGlow * 0.18;
+    // the inset: flat navy, the frame's one flat shadow along its top left wall
+    float eL = -shapeSdf(p + vec2(-0.035, 0.035), mk, g);
+    vec3 deep = mix(NAVY, SHADE, 1.0 - smoothstep(FRAME - aa * 0.5, FRAME + aa * 0.5, eL));
+    // the circuit: flat traces, the hub's outline in the circuit's tone round its marker (the piece's touch)
+    float lift = 1.0 + 0.15 * vC.z;
+    float hubIn = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, C.pad);
+    deep = mix(deep, SHADE, hubIn);
+    deep = mix(deep, inkC * lift, max(line, ring));
+    deep = mix(deep, markC * lift, core);
     col = mix(col, deep, inset);
-    col += light * inset * lift;
-    // a soft spill of the circuit's light on the frame's inner bevel
-    col += glowC * innerB * 0.05 * lift;
-    // a slow sheen drifting over the stack
-    float sheen = pow(max(0.0, 0.5 + 0.5 * sin((vWorld.x * 0.45 + vWorld.y * 0.8) * 0.6 - uTime * 0.35)), 12.0);
-    col += uLightC * sheen * 0.06 * (1.0 - inset);
-    float drain = vC.w;
-    col = mix(col, vec3(dot(col, vec3(0.3, 0.5, 0.2))) * 0.3, drain);
-    if (erase > 0.0) col = mix(col, hotC * 1.6, smoothstep(0.0, 0.5, erase));
+    // game over drains the color; a cleared cell flashes to the circuit's tone as it shrinks
+    col = mix(col, vec3(dot(col, vec3(0.3, 0.5, 0.2))) * 0.3, vC.w);
+    if (erase > 0.0) col = mix(col, mix(inkC, vec3(0.75, 0.9, 1.0), 0.4) * 1.3, smoothstep(0.0, 0.5, erase));
     col = mix(col, uBridgeInk, uBridge);
     float a = inside * vB.a * (1.0 - smoothstep(0.6, 1.0, erase));
-    // a soft cyan halo just outside the outline (added light)
-    vec3 halo = glowC * exp(-max(sd, 0.0) / 0.025) * (1.0 - inside) * 0.05 * vB.a * lift * (1.0 - uBridge);
-    frag = vec4(col * a + halo, a);
+    frag = vec4(col * a, a);
 }
 )";
 
