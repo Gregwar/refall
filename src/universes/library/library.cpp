@@ -1,8 +1,10 @@
 // LIBRARY: the blocks are books, and every cleared line brings three big books to a small, cosy library room that
 // fills with the game (complete at about 50 lines, one song).
 //
-// The board stays a clean game board: each cell is one toy block in its piece's color, a bound volume with its
-// spine toward us (a bevel, two rules, its pages showing down one side), over a deep saturated ground. When a row
+// The board stays a clean game board over a deep saturated ground, its cells a packed shelf: each cell a row of book
+// spines seen from the front in its piece's color family (three or four standing, a big one beside a slim one, or a
+// pile of three lying; each book its own shade, a pale label or thin bands, thin dark gaps between them: the shader's
+// shelfCell), and each cell keeps its books through falls and clears (its seed follows it). When a row
 // clears, its blocks dissolve into light where they stand, and three of its cells send a book to the room: from behind
 // the cells' places on the board, at a depth behind the well, only ever going deeper (never in front of the board or
 // the HUD), turning over once on the way. Each lands in the next free place (the order of the runs in world.cpp) with

@@ -2,7 +2,8 @@
 // LIBRARY's shaders (see library.cpp).
 //
 // SOLID_VS / SOLID_FS draw everything solid, instanced, as toon: boxes, cylinders and the hemisphere, with their
-// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), planks, painted plaster and metal,
+// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), the board's cells (shelfCell: a row
+// of book spines on each), planks, painted plaster and metal,
 // lights, round toy shapes (bushes, pots, shades, globes, the rug), the round windows (the sky through a cross of
 // bars), the backdrop (the sky, stars at night); the furniture that comes later scaled in from its floor by its
 // feature's growth (uFeat). Cel lit (the sun in three bands with its shadow map, a cool colored shade,
@@ -200,14 +201,14 @@ float levelOn(float k) { int i = int(clamp(k, 0.0, 7.0) + 0.5); return uLevelOn[
 // shading, a lighter edge on each spine's lit side (left when standing, the top when lying).
 vec3 shelfCell(vec2 uv, vec2 pn, vec3 col, float seed) {
     col = mix(vec3(dot(col, vec3(0.3, 0.55, 0.15))), col, 0.82);         // a touch softer: toon pastels
-    vec3 back = col * vec3(0.16, 0.16, 0.22) + vec3(0.01, 0.01, 0.03);   // the shelf's back, in the books' shadow
+    vec3 back = col * vec3(0.13, 0.12, 0.17) + vec3(0.01, 0.008, 0.025);   // the shelf's back, in the books' shadow
     vec3 cream = vec3(1.0, 0.97, 0.9);
     float detail = 1.0 - smoothstep(0.09, 0.2, max(pn.x, pn.y));         // a small preview drops the fine marks
     bool lying = hash12(vec2(seed, 1.7)) < 0.37;
     // in the books' frame: a across the books (x standing, y lying: the pile from its foot up), b along them
     vec2 ab = lying ? uv.yx : uv;
     vec2 pab = lying ? pn.yx : pn;
-    float gw = max(0.06, pab.x * 1.1);    // a gap between two books
+    float gw = max(0.08, pab.x * 1.35);    // a gap between two books
     // three books, now and then four (standing), or a big one beside a slim one
     float hn = hash12(vec2(seed, 2.3));
     int n = lying ? 3 : hn < 0.18 ? 4 : hn < 0.3 ? 2 : 3;
@@ -276,8 +277,11 @@ vec3 shelfCell(vec2 uv, vec2 pn, vec3 col, float seed) {
             // a long pale label along its spine (a margin of the binding at its ends), a dark title on it
             float lab = smoothstep(0.08 - pb, 0.08 + pb, len * 0.5 - abs(ab.y - mid));
             c = mix(c, pale, lab * ACROSS(0.15, 0.85));
-            float tt = BAND(dh, 0.3, 0.3 + 0.5 * (0.6 + 0.4 * r2));
-            c = mix(c, ink, tt * ACROSS(0.42, 0.6) * 0.5 * detail);
+            // the title: a line of a few words along the label
+            float tl = 0.6 + 0.5 * r2;
+            float words = step(0.22, fract(dh * 2.2 + r0));
+            float tt = BAND(dh, 0.26, 0.26 + tl) * mix(1.0, words, smoothstep(0.09, 0.06, pb));
+            c = mix(c, ink, tt * ACROSS(0.43, 0.59) * 0.5 * detail);
         } else if (sty < 0.6) {
             // thin pale bands near both ends
             float bands = BAND(dh, 0.08, 0.14) + BAND(dh, 0.2, 0.26) + BAND(df, 0.08, 0.14) + BAND(df, 0.2, 0.26);
@@ -471,7 +475,7 @@ void main() {
         // a cell of the board: a bit of a packed shelf, its books' spines toward us (shelfCell); the books' tops
         // above, a deep shade on its other sides; inked edges
         lineK = 1.0;
-        lineC = vCol.rgb * vec3(0.16, 0.16, 0.22) + vec3(0.01, 0.01, 0.03);
+        lineC = vCol.rgb * vec3(0.13, 0.12, 0.17) + vec3(0.01, 0.008, 0.025);
         if (face == 2 && vLN.z > 0.0) {
             alb = shelfCell(q / sz, pq / sz, vCol.rgb, seed);
             spec = 0.0;

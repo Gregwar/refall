@@ -79,7 +79,7 @@ private:
     int8_t typeGrid_[22][10];
     uint32_t spawnN_ = 1;
     uint32_t cellSeed(int x, int y, int type);
-    // a cell of the board: one clean block, a bound volume (spine toward us)
+    // a cell of the board: a shallow box, its front a bit of a packed shelf (the shader draws its books from seed)
     void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, float seed);
 
     // ---- The collection: three big books for every cleared line, placed in the order they came along runs (a shelf,
