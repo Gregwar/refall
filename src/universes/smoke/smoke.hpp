@@ -45,6 +45,22 @@ private:
     void tile(float x, float y, float hw, float hh, const vec3& c, float alpha, int kind, float e0 = 1.f, float e1 = 0.f,
               float e2 = 0.f, float e3 = 0.f, float angle = 0.f, float age = -1.f);
 
+    // ---- The alternative block looks (REFALL_SMOKE_BLOCK=1..6; 0, the default, the satin blocks): 1 props lit by the
+    // spotlight, 2 acrylic, 3 neon tubes, 4 boxes of smoke, 5 stage lenses, 6 glass cubes holding smoke. Each cell
+    // remembers its piece (its serial), its links to the cells of the same piece (L R U D UL UR DL DR, set when it
+    // locks, cut by a clear), its place in the piece and the piece's seed: a block looks the same falling, locked and
+    // after rows fall.
+    int blockStyle_ = 0;
+    int ids_[22][10] = {};
+    unsigned char links_[22][10] = {}, rel_[22][10] = {};
+    float pseed_[22][10] = {};
+    int serial_ = 1, nextId_ = 1 << 20;
+    GLuint occTex_ = 0; // the stack's heights (style 1: the hard shadows the props cast on each other)
+    float camDist_ = 36.f;
+    vec3 fall_[4];  // the falling piece's cells (board xy, prop height): style 1's shadows
+    int fallN_ = 0;
+    void syncIds(const Game& g);
+
     void simulate(const Game& game, const MusicState& music, float dt, float wdt);
     void buildBoard(const Game& game);
     void buildFx();
@@ -106,7 +122,7 @@ private:
     std::vector<int> landedFull_;
     int landedDrop_ = 0;
     void landDust(const Game& game);
-    struct Dying { float x, y, t, delay; int type; bool over; float seed; float big = 1.f, cx = 0.f; }; // big: the plume's size (a quad), cx: the row's middle
+    struct Dying { float x, y, t, delay; int type; bool over; float seed; float big = 1.f, cx = 0.f; int pack = 0; float pseed = 0.f; }; // pack, pseed: its links, place and piece seed (the block looks) // big: the plume's size (a quad), cx: the row's middle
     std::vector<Dying> dying_;
     struct Mote { vec3 p; float phase, size; };
     std::vector<Mote> moteList_;
