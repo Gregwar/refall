@@ -84,10 +84,11 @@ public:
     struct Place {
         int titleItem = -1, voyageDiff = -1, stage = -1, freeDiff = -1, freeLevel = -1;
         int music = -1; // the menu's music: 1 on, 0 off (-1: not said)
+        int theme = -1; // the menu's backdrop: 0 space, 1 the crystal kaleidoscope (-1: not said)
         std::string playlist, voyage; // voyage: the custom voyage open ("" the main one), whose stage `stage` is
         bool operator==(const Place& o) const {
             return titleItem == o.titleItem && voyageDiff == o.voyageDiff && stage == o.stage && freeDiff == o.freeDiff && freeLevel == o.freeLevel &&
-                   music == o.music && playlist == o.playlist && voyage == o.voyage;
+                   music == o.music && theme == o.theme && playlist == o.playlist && voyage == o.voyage;
         }
         bool operator!=(const Place& o) const { return !(*this == o); }
     };
@@ -210,9 +211,11 @@ private:
     static constexpr int TI_VOYAGE = 0, TI_FREE = 1, TI_OPTIONS = 2, TI_QUIT = 3;
 #endif
     // the options: 0 unlock every stage, 1 reset the saved data (either asks "are you sure?" first: YES / NO, NO
-    // focused), 2 the gamepad's page, 3 the menu's music on or off (kept with the menu's place)
-    static constexpr int OPTION_ITEMS = 4;
+    // focused), 2 the gamepad's page, 3 the menu's music on or off, 4 its theme (space or the kaleidoscope; both kept
+    // with the menu's place)
+    static constexpr int OPTION_ITEMS = 5;
     bool music_ = true;
+    int theme_ = 0;
     int optSel_ = 0, optYes_ = 0;
     float aOpt_ = 0, aYes_ = 0;
     bool optConfirm_ = false;

@@ -342,7 +342,7 @@ void Worlds::kalBackground(const std::string& cur) {
     morphNow = morphNow < 0.f ? morph : morphNow + (morph - morphNow) * (1.f - std::exp(-dt / 2.f));
     duoNow += (duo - duoNow) * k;
     p.kaleido(g_prev.empty() ? g_curSeed : g_prevSeed, g_curSeed, g_prev.empty() ? 1.f : sstep(g_mix), X(cxNow), Y(cyNow), t * 0.025f + (m.aStage_ + m.aStageTurns_) * (TAU / 12.f) * 0.5f + (menuSeed() >> 8) % 1000 * (TAU / 1000.f), 12,
-              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, (menuSeed() % 997) / 997.f, morphNow, camNow[0], camNow[1]);
+              mixc(tintNow, hex(0xffffff), 0.15f), t, lvlNow, satNow, duoNow, (menuSeed() % 997) / 997.f, morphNow, camNow[0], camNow[1], m.theme_);
 }
 
 // A cut gem in the shape of a kite: four facets round a table at its waist, each lit by how it faces the light (from
@@ -692,7 +692,8 @@ void Worlds::kalOptions() {
     if (optionNote()) return;
     if (!m.optConfirm_) {
         const char* LABEL[Menu::OPTION_ITEMS] = {"UNLOCK STAGES", "RESET SAVED DATA", "GAMEPAD",
-                                                 m.music_ ? "MENU MUSIC: ON" : "MENU MUSIC: OFF"};
+                                                 m.music_ ? "MENU MUSIC: ON" : "MENU MUSIC: OFF",
+                                                 m.theme_ ? "MENU THEME: KALEIDOSCOPE" : "MENU THEME: SPACE"};
         optionRows(Menu::OPTION_ITEMS, LABEL, m.aOpt_);
         return;
     }

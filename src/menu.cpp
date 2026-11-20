@@ -157,6 +157,7 @@ Menu::Place Menu::place() const {
     if (plSel_ < (int)ch.size()) p.playlist = ch[plSel_].url;
     p.voyage = voyageId_;
     p.music = music_ ? 1 : 0;
+    p.theme = theme_;
     return p;
 }
 
@@ -167,6 +168,7 @@ void Menu::restore(const Place& p, bool difficulties) {
     if (difficulties && p.freeDiff >= 0 && p.freeDiff < DIFF_COUNT) freeDiff_ = p.freeDiff;
     if (p.freeLevel >= 1) setFreeLevel(p.freeLevel);
     if (p.music >= 0) music_ = p.music != 0;
+    if (p.theme >= 0) theme_ = p.theme == 1 ? 1 : 0;
     if (p.stage >= 0 && camp_ && camp_->size() > 0) {
         int last = 0; // the last unlocked stage: the saved one if it still is, else that one
         for (int s = 0; s < camp_->size(); s++)
@@ -203,6 +205,7 @@ bool Menu::loadPlace(const std::string& path, Place& p) {
         else if (k == "free-playlist") p.playlist = v;
         else if (k == "voyage") p.voyage = v;
         else if (k == "menu-music") p.music = std::atoi(v.c_str());
+        else if (k == "menu-theme") p.theme = std::atoi(v.c_str());
     }
     std::fclose(f);
     return true;
@@ -215,8 +218,8 @@ bool Menu::savePlace(const std::string& path, const Place& p) {
     FILE* f = std::fopen(tmp.c_str(), "w");
     if (!f) return false;
     std::fprintf(f, "# Refall: where the menu was (--reset forgets it)\ntitle\t%d\nvoyage-difficulty\t%d\nvoyage-stage\t%d\n"
-                    "free-difficulty\t%d\nfree-level\t%d\nfree-playlist\t%s\nvoyage\t%s\nmenu-music\t%d\n",
-                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.freeLevel, p.playlist.c_str(), p.voyage.c_str(), p.music < 0 ? 1 : p.music);
+                    "free-difficulty\t%d\nfree-level\t%d\nfree-playlist\t%s\nvoyage\t%s\nmenu-music\t%d\nmenu-theme\t%d\n",
+                 p.titleItem, p.voyageDiff, p.stage + 1, p.freeDiff, p.freeLevel, p.playlist.c_str(), p.voyage.c_str(), p.music < 0 ? 1 : p.music, p.theme < 0 ? 0 : p.theme);
     std::fclose(f);
     std::filesystem::rename(tmp, path, ec);
     return !ec;
@@ -361,6 +364,7 @@ Menu::Choice Menu::update(const Input& in, float dt) {
         optSel_ = (optSel_ + dy + OPTION_ITEMS * 8) % OPTION_ITEMS;
         if (ok && optSel_ == 2) open(GAMEPAD);
         else if (ok && optSel_ == 3) music_ = !music_; // (at once, no question)
+        else if (ok && optSel_ == 4) theme_ = 1 - theme_;
         else if (ok) { optConfirm_ = true; optYes_ = 0; aYes_ = 0; }
         if (back) open(TITLE);
         break;
