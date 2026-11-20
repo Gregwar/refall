@@ -279,6 +279,9 @@ void main() {
     vec3 sand = mix(uSandC, uSand2C, smoothstep(0.3, 0.8, fbm(p * 0.12 + 3.0)) * 0.7);
     sand *= 0.97 + 0.05 * smoothstep(0.3, 1.0, rip);
     sand *= 0.98 + 0.04 * hash(floor(p * 40.0)) * lodF;
+    // patches of coarser and finer sand, darker and lighter drifts, a few shell bits: an uneven floor
+    float patchN = fbm(p * 0.6 + 7.0), drift = fbm(p * 2.3 - 4.0);
+    sand *= 0.88 + 0.22 * smoothstep(0.25, 0.75, drift) * (0.6 + 0.4 * patchN);
     // seen up close (a macro lens): the grains themselves, rounded, each its own tone
     float lodG = 1.0 - smoothstep(0.0004, 0.0016, px);
     if (lodG > 0.0) {
@@ -288,11 +291,13 @@ void main() {
         for (int y = -1; y <= 1; y++)
             for (int x = -1; x <= 1; x++) {
                 vec2 g = vec2(x, y);
-                vec2 rr = g + 0.15 + 0.7 * hash2(gi + g) - gf;
-                float dd = dot(rr, rr);
+                vec2 rr = g + hash2(gi + g) - gf;
+                float dd = dot(rr, rr) / sq(0.55 + 0.9 * hash(gi + g + 5.3));   // (each grain its own size)
                 if (dd < d1) { d1 = dd; best = gi + g; }
             }
-        float grain = smoothstep(0.5, 0.15, sqrt(d1));
+        // grains of all sizes, packed tighter in some patches and sparse in others (bare gaps between)
+        float dense = smoothstep(0.2, 0.8, patchN + 0.3 * (hash(best + 9.7) - 0.5));
+        float grain = smoothstep(0.62, 0.12, sqrt(d1)) * step(0.35 - 0.3 * dense, hash(best + 2.9));
         vec3 gc = mix(uSandC, uSand2C, hash(best)) * (0.85 + 0.3 * hash(best + 3.1));
         gc = mix(gc, vec3(1.0, 0.82, 0.8), step(0.93, hash(best + 7.0)) * 0.5);
         sand = mix(sand, mix(sand * 0.62, gc * (0.8 + 0.35 * grain), grain * 0.9 + 0.1), lodG);
@@ -1210,9 +1215,11 @@ void main() {
     float nl = dot(n, L);
     float wrap = clamp((nl + 0.25) / 1.25, 0.0, 1.0);
     // (and the block's underside in the shade of its own swell)
-    float ao = mix(0.1, 1.0, s.z) * (plate_ ? 1.0 : mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y)));
-    alb = mix(vec3(dot(alb, vec3(0.3, 0.55, 0.15))), alb, 0.85);
-    vec3 c = alb * (0.12 + 1.45 * pow(wrap, 1.7)) * lightC * ao;
+    // (lifted: the blocks read clear against the dark well, the pits still shaded)
+    float ao = mix(0.32, 1.0, s.z) * (plate_ ? 1.0 : mix(0.82, 1.0, smoothstep(-0.55, 0.15, q.y)));
+    alb = mix(vec3(dot(alb, vec3(0.3, 0.55, 0.15))), alb, 0.92);
+    alb = mix(alb, vec3(1.0), 0.08);
+    vec3 c = alb * (0.3 + 1.35 * pow(wrap, 1.4)) * lightC * ao;
     c += alb * alb * 0.6 * (1.0 - wrap) * ao * 0.5;
     c += alb * 0.22 * pow(clamp(nl, 0.0, 1.0), 8.0) * s.z;
     // a faint ripple of light drifting over the stack
