@@ -23,8 +23,8 @@
 // faceted trees and rocks, the sea in flat bands of color by its depth (a foam line at the shore, the turquoise
 // shallows, a teal ledge, the deep blue) with a few white angular glints and crisp white wakes, a plain gradient
 // sky, faceted clouds.
-// The pieces are low poly tiles: one flat slab per cell in its piece's color, beveled by flat facets lit from the
-// top left, running on into the cells of the same piece (one block a piece), on the deep backing of the well.
+// The pieces are low poly cubes: one chamfered cube per cell in its piece's color, seen in perspective, flat shaded by
+// the scene's sun, its corners nudged by its seed, running on into the cells of the same piece (one block a piece).
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
@@ -287,7 +287,7 @@ bool IslandsUniverse::init(int width, int height) {
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    // ---- sprites: glows, cloud puffs, glass tiles (one quad, instanced)
+    // ---- sprites: glows, cloud puffs (one quad, instanced)
     const float quadV[12] = {-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1};
     glGenBuffers(1, &quadVbo_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
@@ -308,7 +308,56 @@ bool IslandsUniverse::init(int width, int height) {
     };
     sprite(glowVao_, glowVbo_, 2);
     sprite(cloudVao_, cloudVbo_, 2);
-    sprite(glassVao_, glassVbo_, 3);
+    // ---- the pieces' cubes: one chamfered cube, instanced. Each vertex its corner's signs and the axes the chamfer
+    // pulls it in along: every corner of the box gives three (one on each face meeting there); the faces, the edges'
+    // chamfers and the corners' triangles join them.
+    {
+        std::vector<float> cv;
+        auto V = [&](int sx, int sy, int sz, int axis) {
+            const float v[6] = {(float)sx, (float)sy, (float)sz, axis == 0 ? 0.f : 1.f, axis == 1 ? 0.f : 1.f, axis == 2 ? 0.f : 1.f};
+            cv.insert(cv.end(), v, v + 6);
+        };
+        auto corner = [](int a, int sa, int b, int sb, int c, int sc, int* s) { s[a] = sa; s[b] = sb; s[c] = sc; };
+        int q[4][3];
+        for (int a = 0; a < 3; a++) {
+            const int b = (a + 1) % 3, c = (a + 2) % 3;
+            for (int sa = -1; sa <= 1; sa += 2) {
+                // the face
+                const int uv[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+                for (int k = 0; k < 4; k++) corner(a, sa, b, uv[k][0], c, uv[k][1], q[k]);
+                for (int k : {0, 1, 2, 0, 2, 3}) V(q[k][0], q[k][1], q[k][2], a);
+                // the chamfer along the edge with the next axis' faces (along the third axis)
+                for (int sb = -1; sb <= 1; sb += 2) {
+                    int e0[3], e1[3];
+                    corner(a, sa, b, sb, c, -1, e0);
+                    corner(a, sa, b, sb, c, 1, e1);
+                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], a); V(e1[0], e1[1], e1[2], b);
+                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], b); V(e0[0], e0[1], e0[2], b);
+                }
+            }
+        }
+        for (int sx = -1; sx <= 1; sx += 2)
+            for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                    for (int a = 0; a < 3; a++) V(sx, sy, sz, a);
+        cubeCount_ = (int)(cv.size() / 6);
+        glGenVertexArrays(1, &glassVao_);
+        glGenBuffers(1, &cubeVbo_);
+        glGenBuffers(1, &glassVbo_);
+        glBindVertexArray(glassVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, cv.size() * sizeof(float), cv.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+        glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
+        for (int i = 0; i < 3; i++) {
+            glEnableVertexAttribArray(2 + i);
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(2 + i, 1);
+        }
+    }
 
     glGenVertexArrays(1, &flatVao_);
     glGenBuffers(1, &flatVbo_);
@@ -366,6 +415,7 @@ void IslandsUniverse::resize(int width, int height) {
     height_ = std::max(1, height);
     const layout::Camera ref = layout::camera(width_, height_);
     bvp_ = ref.vp;
+    beye_ = ref.eye;
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
     halfW_ = std::max(1, width_ / 2);
     halfH_ = std::max(1, height_ / 2);
@@ -419,7 +469,7 @@ IslandsUniverse::~IslandsUniverse() {
     }
     for (int l = 0; l < isl::LOD_COUNT; l++) glDeleteBuffers(1, &idx_[l]);
     for (GLuint v : {glowVao_, cloudVao_, glassVao_, flatVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, cubeVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -2382,24 +2432,36 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, flat_.size() * sizeof(float), flat_.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(flat_.size() / 11));
         if (!glass_.empty()) {
-            // the glass: its color blends over the backing, its alpha marks the pieces (kept out of the grade)
+            // the cubes (depth tested among themselves): their color blends over the backing, their alpha marks the
+            // pieces (kept out of the grade)
+            glEnable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             glUseProgram(progGlass_);
             setMat(progGlass_, "uVP", bvp_);
-            set3f(progGlass_, "uKeyDir", normalize(vec3(-0.5f, 0.62f, 0.62f)));
-            // lit by the scene's sun (golden in the drop, warm at dusk), and by its sky; at night by warm lanterns
+            set3f(progGlass_, "uEyeB", beye_);
+            // lit by the scene's sun as the world's camera sees it (board x right, y up, z toward the eye), kept a
+            // little in front and above so the faces toward the eye and the tops never sink into the dark
+            const vec3 sd = sky_.sunDir;
+            vec3 l(dot(sd, right_), dot(sd, up_), -dot(sd, fwd_));
+            l.y = std::max(l.y, 0.3f);
+            l.z = std::max(l.z, 0.45f);
+            l = normalize(l);
+            set3f(progGlass_, "uKeyDir", l);
+            // the sun's color (golden in the drop, warm at dusk; at night warm lanterns), scaled so that the faces
+            // toward the eye show the piece's own color; the sky for the shade
             const vec3 sc = sky_.sunCol;
             const vec3 tint = sc / std::max(std::max(sc.x, sc.y), std::max(sc.z, 1e-3f));
             vec3 key = lerp(vec3(1.f), tint, 0.65f) * lerpf(0.82f, 1.f, saturate(sc.y / 1.5f));
             key = lerp(key, vec3(1.f, 0.78f, 0.55f) * 0.85f, night_ * 0.7f);
-            set3f(progGlass_, "uKeyCol", key);
+            set3f(progGlass_, "uKeyCol", key * (0.66f / std::max(l.z, 0.3f)));
             const vec3 st = sky_.top / std::max(std::max(sky_.top.x, sky_.top.y), std::max(sky_.top.z, 1e-3f));
-            set3f(progGlass_, "uAmbTop", lerp(vec3(0.38f, 0.4f, 0.44f), st * 0.42f, 0.5f));
-            set3f(progGlass_, "uAmbBot", vec3(0.2f, 0.2f, 0.22f));
+            set3f(progGlass_, "uAmb", lerp(vec3(0.34f, 0.35f, 0.38f), st * 0.38f, 0.5f));
             glBindVertexArray(glassVao_);
             glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
             glBufferData(GL_ARRAY_BUFFER, glass_.size() * sizeof(GlassInst), glass_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, (GLsizei)glass_.size());
+            glDrawArraysInstanced(GL_TRIANGLES, 0, cubeCount_, (GLsizei)glass_.size());
+            glDisable(GL_DEPTH_TEST);
         }
         glDisable(GL_BLEND);
     }
@@ -2454,7 +2516,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_islands() {
     static const UniverseEntry e{
-        "ISLANDS", "a flight over an endless tropical archipelago in flattened low poly, like drone footage; the pieces are low poly tiles",
+        "ISLANDS", "a flight over an endless tropical archipelago in flattened low poly, like drone footage; the pieces are low poly cubes",
         [] { return std::unique_ptr<Universe>(new IslandsUniverse()); },
         // bright, airy, flowing songs suit the flight best; it fits most songs
         [](const SongLook& l) { return 0.85f + 0.2f * l.brightness + 0.1f * l.airWeight; },

@@ -7,7 +7,7 @@
 // Passes: the sun's shadow map; the seabed (the terrain's distance, at half resolution) for the sea's depth; the main
 // pass (sky, terrain, objects, then the sea as one fullscreen pass: the curved surface hit per pixel, its flat bands
 // of color by the depth, white glints, the foam line at the shores, the boats' wakes), the clouds (faceted puffs),
-// additive glows; then the well and its low poly tiles through the layout's camera, a filmic tone map, the HUD.
+// additive glows; then the well and its low poly cubes through the layout's camera, a filmic tone map, the HUD.
 #include <string>
 
 namespace islands_shaders {
@@ -635,93 +635,59 @@ void main() {
 }
 )";
 
-// ---------------------------------------------------------------- the pieces: low poly tiles, one per cell
-// Instance: a = center xyz, size (board units); b = color rgb, seed; c = dull, glow, alpha, neighbours (a mask of
-// the cells of the same piece around it: 1 left, 2 right, 4 up, 8 down, 16 up left, 32 up right, 64 down left,
-// 128 down right).
+// ---------------------------------------------------------------- the pieces: low poly cubes, one per cell
+// The mesh: a chamfered cube, each vertex given as its corner's signs (aS) and which axes it is pulled in along by
+// the chamfer (aK). Instance: a = center xyz, size (board units); b = color rgb, seed; c = dull, glow, alpha,
+// neighbours (a mask of the cells of the same piece around it: 1 left, 2 right, 4 up, 8 down).
 inline const char* GLASS_VS = R"(#version 330 core
-layout(location = 0) in vec2 aCorner;
-layout(location = 1) in vec4 iA;
-layout(location = 2) in vec4 iB;
-layout(location = 3) in vec4 iC;
+layout(location = 0) in vec3 aS;
+layout(location = 1) in vec3 aK;
+layout(location = 2) in vec4 iA;
+layout(location = 3) in vec4 iB;
+layout(location = 4) in vec4 iC;
 uniform mat4 uVP;
-out vec2 vP;
+out vec3 vPos;
 flat out vec3 vCol;
-flat out float vSeed;
 flat out vec4 vE;
+float hv(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 void main() {
-    vP = aCorner * 0.5;
+    // its front face on the board's plane, its depth behind; a side shared with a cell of the same piece runs on to
+    // the cell's edge (no gap, no chamfer: the piece one block), an open side inset by the gap and chamfered
+    const float G = 0.04, C = 0.1, D = 0.8;
+    int m = int(iC.w + 0.5);
+    bool mx = aS.x < 0.0 ? (m % 2) == 1 : ((m / 2) % 2) == 1;
+    bool my = aS.y > 0.0 ? ((m / 4) % 2) == 1 : ((m / 8) % 2) == 1;
+    vec3 p;
+    p.x = aS.x * (mx ? 0.5 : 0.5 - G - aK.x * C);
+    p.y = aS.y * (my ? 0.5 : 0.5 - G - aK.y * C);
+    p.z = -D * 0.5 + aS.z * (D * 0.5 - aK.z * C);
+    // a little irregular, like the islands' facets: the corners away from the piece's other cells nudged by the
+    // cell's seed (the same corner the same nudge on every facet it bounds)
+    if (!mx && !my) p += (vec3(hv(aS * 3.1 + aK * 1.7 + iB.a * 91.0), hv(aS * 5.3 + aK * 2.9 + iB.a * 57.0), hv(aS * 7.7 + aK * 4.3 + iB.a * 33.0)) - 0.5) * vec3(0.035, 0.035, 0.07);
+    vPos = iA.xyz + p * iA.w;
     vCol = iB.rgb;
-    vSeed = iB.a;
     vE = iC;
-    gl_Position = uVP * vec4(iA.xy + aCorner * 0.5 * iA.w, iA.z, 1.0);
+    gl_Position = uVP * vec4(vPos, 1.0);
 }
 )";
-// A flat slab, its top face in the piece's color, beveled by flat facets (lit from the top left: the upper and
-// left bevels light, the right and lower ones dark), its outer corners chamfered, a crisp deep outline. Where its
-// neighbour is of the same piece the slab runs on into it (no bevel, no gap): the piece reads as one block, its
-// cells by the faint fold across each top face.
+// Flat shaded like the islands: each facet one flat color, its normal from the screen derivatives, lit by the scene's
+// sun (seen from the board's camera) and its sky.
 inline const char* GLASS_FS = R"(#version 330 core
-in vec2 vP;
+in vec3 vPos;
 flat in vec3 vCol;
-flat in float vSeed;
 flat in vec4 vE;
 out vec4 frag;
-uniform vec3 uKeyDir, uKeyCol, uAmbTop, uAmbBot;
-bool has(int m, int b) { return (m / b) % 2 == 1; }
+uniform vec3 uKeyDir, uKeyCol, uAmb, uEyeB;
 void main() {
-    vec2 p = vP;
-    int m = int(vE.w + 0.5);
-    const float G = 0.035, B = 0.15, C = 0.09;
-    bool l = has(m, 1), r = has(m, 2), u = has(m, 4), d = has(m, 8);
-    // the distances to the open sides' edges (inset by the gap), a merged side never nearer than the top
-    float sL = l ? 9.0 : p.x + 0.5 - G, sR = r ? 9.0 : 0.5 - G - p.x;
-    float sU = u ? 9.0 : 0.5 - G - p.y, sD = d ? 9.0 : p.y + 0.5 - G;
-    float s = min(min(sL, sR), min(sU, sD));
-    // the outer corners chamfered
-    float ch = min(min(sL + sU, sR + sU), min(sL + sD, sR + sD)) - C;
-    // the inner corners (both sides of the piece, not the diagonal): the bevels meet in a fold, a notch at the
-    // corner where the gaps cross
-    vec2 cU = vec2(p.x + 0.5 - G, 0.5 - G - p.y), cR = vec2(0.5 - G - p.x, 0.5 - G - p.y);
-    vec2 cD = vec2(p.x + 0.5 - G, p.y + 0.5 - G), cE = vec2(0.5 - G - p.x, p.y + 0.5 - G);
-    float hIn = 9.0, cov = min(s, ch * 0.7071);
-    vec2 inN = vec2(0.0);
-    if (l && u && !has(m, 16)) { float h = max(cU.x, cU.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cU.x > cU.y ? vec2(-1, 0) : vec2(0, 1); } }
-    if (r && u && !has(m, 32)) { float h = max(cR.x, cR.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cR.x > cR.y ? vec2(1, 0) : vec2(0, 1); } }
-    if (l && d && !has(m, 64)) { float h = max(cD.x, cD.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cD.x > cD.y ? vec2(-1, 0) : vec2(0, -1); } }
-    if (r && d && !has(m, 128)) { float h = max(cE.x, cE.y); cov = min(cov, h); if (h < hIn) { hIn = h; inN = cE.x > cE.y ? vec2(1, 0) : vec2(0, -1); } }
-    float aa = max(fwidth(p.x), 1e-4) * 0.8;
-    float a = smoothstep(-aa, aa, cov);
-    if (a <= 0.001) discard;
-    // the facet: the top, or the bevel of the nearest edge (a chamfer's own diagonal facet at an outer corner)
-    vec2 fn = vec2(0.0);
-    float hb = min(min(s, ch * 0.7071), hIn);
-    if (hb < B) {
-        if (hIn <= min(s, ch * 0.7071)) fn = inN;
-        else if (ch * 0.7071 < s) fn = normalize(vec2(sL < sR ? -1.0 : 1.0, sD < sU ? -1.0 : 1.0));
-        else if (s == sL) fn = vec2(-1, 0);
-        else if (s == sR) fn = vec2(1, 0);
-        else if (s == sU) fn = vec2(0, 1);
-        else fn = vec2(0, -1);
-    }
-    vec3 n = normalize(vec3(fn * 1.5, 1.0));
-    // the top face folded once along its diagonal (low poly), a little tone of its own per cell
-    if (hb >= B) n = normalize(vec3(p.y > p.x ? vec2(-0.06, 0.06) : vec2(0.06, -0.06), 1.0));
-    vec3 alb = vCol * (0.97 + 0.06 * fract(vSeed * 7.13));
-    vec3 L = normalize(uKeyDir);
-    float diff = max(dot(n, L), 0.0);
-    vec3 amb = mix(uAmbBot, uAmbTop, n.y * 0.5 + 0.5);
-    vec3 col = alb * (amb * 0.75 + uKeyCol * (0.42 + 0.62 * diff));
-    // the lit bevels catch the light (a pale sheen of the key on the upper one, less on the left one)
-    col = mix(col, uKeyCol * 0.95, max(fn.y, 0.0) * 0.28 + max(-fn.x, 0.0) * 0.12);
-    // the outline along the outer edges: crisp, in a deeper tone of its own color
-    float ol = 1.0 - smoothstep(0.012, 0.012 + aa * 2.0, min(min(s, ch * 0.7071), hIn));
-    col = mix(col, pow(vCol, vec3(1.6)) * 0.3, ol * 0.85);
+    vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));
+    if (dot(n, uEyeB - vPos) < 0.0) n = -n;
+    float diff = max(dot(n, uKeyDir), 0.0);
+    vec3 col = vCol * (uAmb * (0.75 + 0.25 * n.y) + uKeyCol * diff);
     // states: dulled (game over), glowing (a cleared row), held (dim)
     float g = dot(col, vec3(0.3, 0.55, 0.15));
     col = mix(col, vec3(g * 0.55 + 0.08), vE.x);
     col = mix(col, mix(vCol, vec3(1.0), 0.6) * 1.6, vE.y);
-    frag = vec4(col, a * vE.z);
+    frag = vec4(col, vE.z);
 }
 )";
 

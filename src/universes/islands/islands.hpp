@@ -1,6 +1,6 @@
 #pragma once
 // ISLANDS: one continuous flight over an endless tropical archipelago, like drone footage, behind the well, in
-// flattened low poly; the pieces are low poly tiles (see islands.cpp).
+// flattened low poly; the pieces are low poly cubes (see islands.cpp).
 #include <memory>
 #include <string>
 #include <vector>
@@ -56,6 +56,8 @@ private:
 
     mat4 view_, proj_, vp_, invVp_, lightVp_;
     mat4 bvp_;                             // the board's (the layout's)
+    vec3 beye_;                            // its eye (board space)
+    int cubeCount_ = 0;                    // the pieces' cube mesh (vertices)
 
     // ---- Life: boats, the seaplane, the birds, the clouds, the lanterns.
     struct Boat {
@@ -159,7 +161,7 @@ private:
     int meshCount_[isl::M_COUNT] = {};
     GLuint idx_[isl::LOD_COUNT] = {};
     int idxCount_[isl::LOD_COUNT] = {};
-    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, glassVao_ = 0, glassVbo_ = 0, flatVao_ = 0,
+    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, glassVao_ = 0, glassVbo_ = 0, cubeVbo_ = 0, flatVao_ = 0,
            flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     GLuint shadowFbo_ = 0, shadowTex_ = 0;
