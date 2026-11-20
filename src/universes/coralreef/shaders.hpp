@@ -928,7 +928,7 @@ vec4 staghorn(vec2 q, float d) {
             vec2 a = o + vec2(-0.3 + 0.3 * fi + (r.x - 0.5) * 0.2, -0.62 + r.y * 0.6);
             if (i < 2 || k == 0) front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 1.0) * 0.6, 0.36 + 0.12 * r2.y, 0.13, r3.y > 0.5 ? 1.0 : -1.0));
             // behind them, in their shade: more, any way
-            if (k == 0 && i < 2) {
+            if (k == 0) {
                 float ang = r3.x * 6.283;
                 vec2 b = vec2(r3.y - 0.5, r.x - 0.5) * 0.4 - vec2(cos(ang), sin(ang)) * 0.24;
                 back = max(back, antler(q, b, ang, 0.46, 0.12, r2.y > 0.5 ? 1.0 : -1.0));
@@ -1084,11 +1084,12 @@ vec4 surface(int sp, vec2 q, out float d) {
     bool flat_ = sp == 3;
     float shared = 0.535, free = flat_ ? 0.43 : 0.465;
     float wob = flat_ ? 0.26 : 0.04, wf = flat_ ? 1.8 : 5.0;
-    d = outline(q, shared + wob * 0.6, free, 0.18, wob, wf);
+    float rc = sp == 1 ? 0.3 : 0.24;
+    d = outline(q, shared + wob * 0.6, free, rc, wob, wf);
     // the swell: a rounded cushion, its shoulders falling off to its free edges (its shared sides far out: a soft
     // valley between two blocks of a colony; none on the plate)
     float R = flat_ ? 0.06 : 0.2;
-    float dd = outline(q, flat_ ? 1.4 : 0.535, free, 0.22, wob, wf);
+    float dd = outline(q, flat_ ? 1.4 : 0.535, free, rc + 0.04, wob, wf);
     float t = clamp(-dd / R, 0.0, 1.0);
     float dome = sqrt(1.0 - sq(1.0 - t));
     // and the whole block bulging a little, a pillow
@@ -1131,6 +1132,8 @@ void main() {
         vec2 q = (vLocal - uHaloOff) / shrink;
         float d = sdBox(q, vec2(0.47 - 0.13)) - 0.13;
         float a = (1.0 - smoothstep(-0.06, 0.2, d)) * uHaloA * vB.a * (1.0 - smoothstep(0.3, 1.0, erase)) * (1.0 - uBridge);
+        // (lighter under the staghorn, open between its branches)
+        if (sp == 0) a *= 0.4;
         vec3 c = mix(uHaloC, t * 0.8, uGlow);
         frag = vec4(c * a, a);
         return;
