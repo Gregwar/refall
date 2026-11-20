@@ -2123,15 +2123,19 @@ R"(        bandC = surfaceBand(w, p);
     if (COUNTRY && air) c = grassFront(p, w, c, 1.35);
     if (air) c = rain(p, c, uRain);
     if (CITY && air && w.x < 1251.0) c = bokeh(p, c, uRain * 0.9 + uDrop * 0.3, vec3(1.0, 0.7, 0.4), vec3(0.5, 0.7, 1.0));
-    // the drop: the scene's hues turn (its brightness kept): the hue wheel rotated in YIQ, the night's violets going
-    // rose and the lamps' ambers gold, a little more saturated
+    // the drop: the scene's colours turn (its brightness kept), toward one rose palette
     {
         const mat3 toYIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
         const mat3 toRGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
         vec3 yiq = toYIQ * c;
-        float ang = uDrop * 2.1, cs = cos(ang), sn = sin(ang);
-        yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.6 * uDrop);
+        // a moderate turn (violets toward rose, ambers toward gold), then a split tone: the shadows a deep magenta
+        // blue, the lights a warm rose: one coherent palette, not a rainbow
+        float ang = uDrop * 0.55, cs = cos(ang), sn = sin(ang);
+        yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.15 * uDrop);
         c = max(toRGB * yiq, 0.0);
+        float lum = dot(c, vec3(0.299, 0.587, 0.114));
+        vec3 tone = mix(vec3(0.55, 0.3, 0.75), vec3(1.0, 0.62, 0.55), smoothstep(0.02, 0.35, lum));
+        c = mix(c, lum * tone * 1.9, uDrop * 0.35);
     }
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
