@@ -2718,7 +2718,7 @@ uniform float uPass, uBridge, uEyeX, uEyeD, uTilt;
 uniform vec3 uBridgeInk, uLightC;
 // the cube (cell units): its half side, its chamfers' leg (across the fibres, at its top and bottom; along them, at
 // its upright edges: a hair), its corners' cut (|x| + |y| + |z| <= 3 B - CK)
-const float B = 0.478, CH = 0.1, CV = 0.04, CK = 0.21;
+const float B = 0.478, CH = 0.1, CV = 0.04, CK = 0.235;
 // a 1D value noise (the fibres: irregular across, each block its own `s`)
 float n1(float x, float s) {
     float i = floor(x), f = fract(x);
@@ -2762,21 +2762,24 @@ vec3 longGrain(vec3 t, float u, float v, float h0, float aa) {
     // (each strand's contrast wandering along it: they fade in and out, never ruled lines)
     float w2 = 0.4 + 0.9 * n1(v * 3.5 + floor(g * 29.0) * 1.91, h0 + 11.0);
     float w3 = 0.3 + 1.0 * n1(v * 5.0 + floor(g * 47.0) * 0.73, h0 + 12.0);
-    float k = 1.0 + 0.16 * broad + 0.14 * s1 * lod(14.0, aa) + 0.26 * s2 * w2 * lod(29.0, aa) + 0.3 * s3 * w3 * lod(47.0, aa);
+    // (a green block is the cane's skin: smoother, its strands softer, lighter streaks in broad soft bands)
+    float skin = smoothstep(0.0, 0.05, t.g - t.r);
+    float sk = 1.0 - 0.45 * skin;
+    float k = 1.0 + (0.12 + 0.08 * skin) * broad + 0.1 * s1 * lod(14.0, aa) + sk * (0.24 * s2 * w2 * lod(29.0, aa) + 0.34 * s3 * w3 * lod(47.0, aa));
     // (and short streaks among them: the fibres' flecks; more of them, darker, near its cut ends)
     float ends = smoothstep(0.25, 0.42, abs(v));
     float fl = vn2(vec2(g * 85.0, v * 7.0), h0 + 13.0) - 0.5;
-    k += (0.16 + 0.12 * ends) * fl * lod(85.0, aa);
+    k += (0.16 + 0.12 * ends) * sk * fl * lod(85.0, aa);
     vec3 c = t * k;
     float chk = smoothstep(0.62, 0.8, vn2(vec2(g * 40.0, v * 14.0), h0 + 14.0)) * ends;
     c = mix(c, t * 0.5, chk * 0.5 * lod(40.0, aa));
     // dark strands: thin, broken along their length
     float df = 30.0 + 10.0 * h4;
     float dk = smoothstep(0.7, 0.9, n1s(g * df + 11.0, h0 + 5.0)) * smoothstep(0.3, 0.55, n1(v * 2.6 + floor(g * df) * 1.37, h0 + 7.0));
-    c = mix(c, t * 0.42, dk * 0.6 * lod(df, aa));
+    c = mix(c, t * 0.42, dk * 0.6 * sk * lod(df, aa));
     // bright strands, longer
     float bk = smoothstep(0.8, 0.96, n1(g * 31.0 + 23.0, h0 + 9.0)) * smoothstep(0.25, 0.5, n1(v * 3.0 + floor(g * 31.0) * 2.1, h0 + 4.0));
-    c = mix(c, mix(t, vec3(1.0), 0.45) * 1.1, bk * 0.5 * lod(31.0, aa));
+    c = mix(c, mix(t, vec3(1.0), 0.3) * 1.08, bk * 0.45 * lod(31.0, aa));
     // a crack up part of it: a dark split, the pale fresh wood showing in its middle where it gapes
     float cu = (h3 - 0.5) * 0.7;
     float jag = 0.006 * (n1(v * 40.0, h0 + 5.0) - 0.5) + 0.01 * (n1(v * 7.0, h0 + 6.0) - 0.5);
@@ -2784,28 +2787,31 @@ vec3 longGrain(vec3 t, float u, float v, float h0, float aa) {
     float along = smoothstep(cy0, cy0 + 0.08, v) * smoothstep(cy1, cy1 - 0.08, v);
     float cw = (0.003 + 0.011 * h1) * along * (0.45 + 0.8 * n1(v * 9.0, h0 + 3.0));
     float dc = abs(u - cu - jag);
-    float crack = (1.0 - smoothstep(cw, cw + aa, dc)) * step(0.5, h2) * along;
-    float halo = (1.0 - smoothstep(cw, cw * 3.0 + aa * 2.0, dc)) * step(0.5, h2) * along;
+    float crack = (1.0 - smoothstep(cw, cw + aa, dc)) * step(0.72, h2) * along;
+    float halo = (1.0 - smoothstep(cw, cw * 3.0 + aa * 2.0, dc)) * step(0.72, h2) * along;
     c *= 1.0 - 0.15 * halo;
     c = mix(c, mix(t * 0.35, mix(t, vec3(0.95, 0.88, 0.72), 0.55), smoothstep(0.008, 0.014, cw) * smoothstep(cw * 0.6, 0.0, dc)), crack * 0.85);
     // the pores of a node: a row of small dark specks across, on some
     // (pits of all sizes, a little taller than wide, strewn about the line, in clusters)
     float ny = -0.25 + 0.5 * fract(h0 * 7.13);
-    float pc = floor(u * 30.0);
+    float pc = floor(u * 40.0);
     float ph = fract(sin(pc * 91.3 + h0 * 37.1) * 43758.5453), pj = fract(ph * 13.7) - 0.5;
-    vec2 pd = vec2((fract(u * 30.0) - 0.5) / 30.0, v - ny - pj * 0.03);
-    float pr = 0.004 + 0.008 * fract(ph * 7.1);
-    float pore = (1.0 - smoothstep(pr, pr + aa, length(pd * vec2(1.0, 0.6)))) * step(0.4, ph)
-                 * step(0.35, n1(u * 4.0, h0 + 8.0)) * step(0.55, h5);
+    vec2 pd = vec2((fract(u * 40.0) - 0.5 - 0.3 * (fract(ph * 3.3) - 0.5)) / 40.0, v - ny - pj * 0.035);
+    float pr = 0.003 + 0.007 * fract(ph * 7.1);
+    float pore = (1.0 - smoothstep(pr, pr + aa, length(pd * vec2(0.8 + 0.6 * fract(ph * 5.7), 0.7)))) * step(0.3, ph)
+                 * step(0.3, n1(u * 5.0, h0 + 8.0)) * step(0.78, h5);
     c = mix(c, t * 0.3, pore * 0.75 * lod(34.0, aa));
     return c;
 }
 // end grain: the fibres cut across (a fine stipple of pores on a paler ground)
 vec3 endGrain(vec3 t, vec2 p, float h0, float aa) {
-    vec3 g = mix(t, vec3(0.93, 0.86, 0.72), 0.18);
-    float s = vn2(p * 24.0, h0) - 0.5, s2 = vn2(p * 60.0, h0 + 1.0) - 0.5;
-    float pit = smoothstep(0.62, 0.8, vn2(p * 75.0, h0 + 2.0));
-    float f = (1.0 + 0.2 * s + 0.4 * s2 * lod(60.0, aa)) * (1.0 - 0.35 * pit * lod(75.0, aa));
+    vec3 g = mix(t, vec3(0.93, 0.86, 0.6), 0.25);
+    // (the pores: a dot in each cell of a fine grid, jittered, of all sizes)
+    float s = vn2(p * 18.0, h0) - 0.5, s2 = vn2(p * 40.0, h0 + 1.0) - 0.5;
+    vec2 pc = floor(p * 48.0), pf = fract(p * 48.0) - 0.5;
+    float ph = h21(pc, h0 + 2.0);
+    float pit = 1.0 - smoothstep(0.12 + 0.2 * ph, 0.12 + 0.2 * ph + aa * 48.0, length(pf - 0.25 * (vec2(ph, fract(ph * 7.3)) - 0.5)));
+    float f = (1.0 + 0.15 * s + 0.25 * s2 * lod(40.0, aa)) * (1.0 - 0.35 * pit * lod(48.0, aa));
     return g * f;
 }
 
@@ -2859,19 +2865,24 @@ void main() {
         vec3 n = vec3((s & 1) == 0 ? 1.0 : -1.0, (s & 2) == 0 ? 1.0 : -1.0, (s & 4) == 0 ? 1.0 : -1.0);
         plane(n, 3.0 * B - CK, o, d, t1, n1v, t2, n2v, tOut);
     }
+    // (the silhouette's coverage from the chord's length across a pixel; capped, as a face seen edge on, in the
+    // middle column, sends the chord's change through the roof)
     float gap = tOut - t1;
-    float cover = clamp(gap / max(fwidth(gap), 1e-5) + 0.5, 0.0, 1.0);
+    float cover = clamp(gap / clamp(fwidth(gap), 1e-5, 30.0 * aa) + 0.5, 0.0, 1.0);
     if (cover <= 0.0) discard;
     vec3 x = o + d * t1;
     // the facets' seams softened (over a pixel at least: the edges just rounded)
-    float sw = clamp((t1 - t2) / max(max(fwidth(t1 - t2), 0.012), 1e-5) * 0.5 + 0.5, 0.5, 1.0);
+    float sw = clamp((t1 - t2) / clamp(fwidth(t1 - t2), 0.012, 0.05) * 0.5 + 0.5, 0.5, 1.0);
     vec3 n = normalize(mix(normalize(n2v), normalize(n1v), sw));
 
     // ---- its tone, its grain
     float h0 = abs(vC.w) > 0.0 ? abs(vC.w) : 0.5;
     float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7);
-    vec3 t = vB.rgb * (0.88 + 0.22 * h1);
-    t = mix(t, vec3(dot(t, vec3(0.3, 0.55, 0.15))), 0.2 * h2);
+    // (each block its own: lighter or darker, greyer (weathered) or warmer (honeyed))
+    vec3 t = vB.rgb * (0.86 + 0.24 * h1);
+    float h6 = fract(h0 * 53.3);
+    t = mix(t, vec3(dot(t, vec3(0.3, 0.55, 0.15))), 0.32 * h2 * h2);
+    t *= mix(vec3(1.0), vec3(1.04, 1.0, 0.86), smoothstep(0.6, 1.0, h6));
     vec2 nh = normalize(n.xz + vec2(0.0, 1e-4));
     float u = dot(x.xz, vec2(nh.y, -nh.x)) + 1.7 * nh.x;
     vec3 alb = longGrain(t, u, x.y, h0, aa);
@@ -2882,7 +2893,7 @@ void main() {
     vec3 L = normalize(vec3(-0.28, 0.6, 1.0));
     float ndl = max(dot(n, L), 0.0);
     vec3 V = -d;
-    float spec = pow(max(dot(n, normalize(L + V)), 0.0), 24.0);
+    float spec = pow(max(dot(n, normalize(L + V)), 0.0), 16.0);
     // the grooves: the faces turned to a touching neighbour in its shade; the front darker toward its foot
     // (a face pressed to its neighbour, seen only down the narrow gap, in deep shade; a chamfer turned to it a little)
     float ao = 1.0;
@@ -2894,7 +2905,7 @@ void main() {
     ao *= mix(0.84, 1.0, smoothstep(-0.5, -0.15, x.y)) * (0.95 + 0.08 * smoothstep(-0.2, 0.5, x.y));
     // (the front not quite flat: a hair darker toward its upright edges, the right one most, away from the key)
     ao *= 1.0 - smoothstep(0.7, 0.95, n.z) * (0.06 * smoothstep(0.15, 0.45, -x.x) + 0.12 * smoothstep(0.1, 0.45, x.x));
-    vec3 c = alb * (0.56 + 0.6 * ndl) * ao + vec3(0.06) * spec * ao;
+    vec3 c = alb * (0.56 + 0.6 * ndl) * ao + vec3(0.09) * spec * ao;
     c *= uLightC;
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
