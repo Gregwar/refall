@@ -127,15 +127,16 @@ void Menu::enterVoyage(std::string id) {
 }
 
 std::vector<PlaylistEntry> Menu::plChoices() const {
-    // the game's own playlist first (featured), then the player's, the most recent first
+    // the game's own playlist first (featured), the built-in electro one, then the player's, the most recent first
     std::vector<PlaylistEntry> v;
-    PlaylistEntry featured{DEFAULT_PLAYLIST, GAME_TITLE, 0, 0};
+    PlaylistEntry featured{DEFAULT_PLAYLIST, GAME_TITLE, 0, 0}, electro{ELECTRO_PLAYLIST, ELECTRO_PLAYLIST_TITLE, 0, 0};
     if (playlists_)
         for (const PlaylistEntry& e : playlists_->list()) {
             if (e.url == DEFAULT_PLAYLIST) featured.count = e.count;
+            else if (e.url == ELECTRO_PLAYLIST) electro.count = e.count;
             else v.push_back(e);
         }
-    v.insert(v.begin(), featured);
+    v.insert(v.begin(), {featured, electro});
     return v;
 }
 
@@ -426,7 +427,8 @@ Menu::Choice Menu::update(const Input& in, float dt) {
             plSel_ = std::clamp(plSel_ + dx, 0, nCh - 1);
             if (dy < 0) freeRow_ = 0;
             if (dy > 0) freeRow_ = 2;
-            if (in.pressed(A_UI_DELETE) && plSel_ < (int)choices.size() && choices[plSel_].url != DEFAULT_PLAYLIST) {
+            if (in.pressed(A_UI_DELETE) && plSel_ < (int)choices.size() && choices[plSel_].url != DEFAULT_PLAYLIST &&
+                choices[plSel_].url != ELECTRO_PLAYLIST) {
                 playlists_->remove(choices[plSel_].url);
                 playlists_->save();
                 plMsg_ = "REMOVED " + asciiFold(choices[plSel_].title);

@@ -6,6 +6,9 @@
 
 // Songs played when none are given (refall and refall-scope).
 inline constexpr const char* DEFAULT_PLAYLIST = "https://www.youtube.com/playlist?list=PLPWC9IDC1n_Q";
+// Free play's other built-in playlist, offered after the game's own (it can't be removed).
+inline constexpr const char* ELECTRO_PLAYLIST = "https://www.youtube.com/playlist?list=PLa1E0oX0lRB9N1s0k6wK3oVI2WYYJu5HQ";
+inline constexpr const char* ELECTRO_PLAYLIST_TITLE = "Electro House 2026";
 
 // True for http(s) URLs.
 bool isUrl(const std::string& s);
