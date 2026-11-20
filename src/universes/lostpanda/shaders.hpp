@@ -2129,8 +2129,8 @@ R"(        bandC = surfaceBand(w, p);
         const mat3 toYIQ = mat3(0.299, 0.596, 0.211, 0.587, -0.274, -0.523, 0.114, -0.322, 0.312);
         const mat3 toRGB = mat3(1.0, 1.0, 1.0, 0.956, -0.272, -1.106, 0.621, -0.647, 1.703);
         vec3 yiq = toYIQ * c;
-        float ang = uDrop * 1.1, cs = cos(ang), sn = sin(ang);
-        yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.25 * uDrop);
+        float ang = uDrop * 2.1, cs = cos(ang), sn = sin(ang);
+        yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.6 * uDrop);
         c = max(toRGB * yiq, 0.0);
     }
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);

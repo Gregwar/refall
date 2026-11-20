@@ -1070,7 +1070,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         }
     }
     wasDrop_ = isDrop;
-    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 0.8f : 0.3f, dt);
+    dropAmt_ = approach(dropAmt_, isDrop ? 1.f : 0.f, isDrop ? 2.5f : 0.6f, dt); // (the drop's colours come in on its first bars)
     swell_ = approach(swell_, 0.f, 0.5f, dt);
     joy_ = approach(joy_, 0.f, 0.22f, dt);
     double beat;
@@ -1451,7 +1451,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set1f(pw, "uBeat", (float)std::fmod(beat, 4096.0));
         set1f(pw, "uPeak", wp);
         set1f(pw, "uMid", wm);
-        set1f(pw, "uDrop", dropAmt_ * 0.8f + swell_ * 0.3f);
+        set1f(pw, "uDrop", std::min(1.f, dropAmt_ + swell_ * 0.3f));
         set1f(pw, "uKick", kickS_);
         set1f(pw, "uRain", look.rain);
         set1f(pw, "uStars", look.stars);
@@ -1571,7 +1571,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         set4f(progVeil_, "uView", viewC_.x, viewC_.y, viewH_.x, viewH_.y);
         set3f(progVeil_, "uVeil", lerp(look.veil, bridge_.color, bridge));
         set3f(progVeil_, "uRail", lerp(lin(vd.light) * 0.35f, bridge_.ink * 0.4f, bridge));
-        set1f(progVeil_, "uWellA", 0.8f + 0.14f * smoothstepf(0.1f, 0.6f, ugl::luma(look.skyHor)));
+        set1f(progVeil_, "uWellA", 0.9f + 0.07f * smoothstepf(0.1f, 0.6f, ugl::luma(look.skyHor)));
         set1f(progVeil_, "uColA", 0.5f * world);
         set1f(progVeil_, "uRailA", 0.5f);
         set1f(progVeil_, "uPx", pxPerUnit_);
