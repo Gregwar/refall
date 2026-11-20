@@ -2134,8 +2134,8 @@ R"(        bandC = surfaceBand(w, p);
         yiq.yz = mat2(cs, sn, -sn, cs) * yiq.yz * (1.0 + 0.15 * uDrop);
         c = max(toRGB * yiq, 0.0);
         float lum = dot(c, vec3(0.299, 0.587, 0.114));
-        vec3 tone = mix(vec3(0.55, 0.3, 0.75), vec3(1.0, 0.62, 0.55), smoothstep(0.02, 0.35, lum));
-        c = mix(c, lum * tone * 1.9, uDrop * 0.35);
+        vec3 tone = mix(vec3(0.62, 0.28, 0.72), vec3(1.0, 0.5, 0.62), smoothstep(0.02, 0.35, lum));
+        c = mix(c, lum * tone * 1.95, uDrop * 0.6);
     }
     c = mix(c, c * vec3(0.3, 0.32, 0.4), uOver * 0.75);
     c = mix(uBridgeCol, c, uWorldA);
