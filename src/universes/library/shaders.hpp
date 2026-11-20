@@ -2,7 +2,8 @@
 // LIBRARY's shaders (see library.cpp).
 //
 // SOLID_VS / SOLID_FS draw everything solid, instanced, as toon: boxes, cylinders and the hemisphere, with their
-// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), planks, painted plaster and metal,
+// materials: painted wood, the bookcases' backs, the books (spines, pages, covers), the board's cells (each a few of the
+// same books), planks, painted plaster and metal,
 // lights, round toy shapes (bushes, pots, shades, globes, the rug), the round windows (the sky through a cross of
 // bars), the backdrop (the sky, stars at night); the furniture that comes later scaled in from its floor by its
 // feature's growth (uFeat). Cel lit (the sun in three bands with its shadow map, a cool colored shade,
@@ -190,6 +191,7 @@ uniform float uDropT, uDropK, uDropSpan, uGroupN;
 
 float levelOn(float k) { int i = int(clamp(k, 0.0, 7.0) + 0.5); return uLevelOn[i]; }
 
+
 // A toon cumulus field at p (sky units).
 float cloudAt(vec2 p) {
     float n = fbm(vec2(p.x * 0.035, p.y * 0.1) + 4.0) + 0.18 * fbm(p * 0.25 + 9.0);
@@ -275,10 +277,12 @@ void main() {
     float spec = 0.0, rough = 20.0, ao = 1.0;
     float seed = vCol.a;
     vec2 bend = vec2(0.0);
-    float px = max(fwidth(q.x), fwidth(q.y));
+    vec2 pq = vec2(fwidth(q.x), fwidth(q.y)) + 1e-6;   // a pixel on this face
+    float px = max(pq.x, pq.y);
     float outA = 1.0;
     float lineK = 1.0;  // how much of the ink outline this surface gets
     vec3 lineC = vec3(-1.0);
+    vec4 inkOver = vec4(0.0); // an ink of its own over the shaded surface (rgb, amount): the board's cell outlines
 
     if (mat == 0) {
         // plaster: flat, clean color
@@ -304,16 +308,19 @@ void main() {
         emit += uLed * wash * 0.16 * uShelfLight * on * alb / max(dot(alb, vec3(0.333)), 0.05);
         lineK = 0.0;
     } else if (mat == 3) {
-        // a book: the spine toward +z, pages at the ends and at -z, covers on the x sides. p0: its spine's design,
-        // p1: its glow (shelved, the drop), p2: a cleared book's fade into light (0 none .. 1 gone)
+        // a book (the room's, and the board's: a cell's two or three): the spine toward +z, pages at the ends and at
+        // -z, covers on the x sides. p0: its spine's design, p1: its glow (shelved, the drop), p2: a cleared book's
+        // fade into light (0 none .. 1 gone)
         vec3 L = vL;
         vec3 h = vHalf;
         int sty = int(vMat.y + 0.5);
         vec3 ink = vec3(0.02, 0.025, 0.07);
         vec3 gold = vec3(1.0, 0.75, 0.2);
-        float rim = 0.08 * min(h.x * 2.0, h.z * 2.0);
+        float rim = max(0.08 * min(h.x * 2.0, h.z * 2.0), px * 1.1);   // the boards' thickness (a pixel at least)
         float detail = 1.0 - smoothstep(0.25, 0.7, px / max(min(h.x, h.y), 1e-4) * 2.0);
         lineK = 0.7;
+        vec3 base = alb;
+        bool cellBook = uBoard > 0.5 && vE.y >= 0.0;   // a book of a board's cell (vE.y: its outline's sides)
         if (face == 2 && vLN.z > 0.0) {
             float u = L.x, v = L.y;   // u across the thickness, v along the length
             float pu = fwidth(u) + 1e-4, pv = fwidth(v) + 1e-4;
@@ -330,13 +337,20 @@ void main() {
                 alb = mix(alb, ink, RECT(0.18, 0.18 + 0.22 * (0.5 + 0.5 * r), 0.25) * detail * 0.8);
             } else if (sty == 2) {
                 float lo = smoothstep(-0.25 - pv, -0.25 + pv, v);
-                alb = mix(alb * 0.6, alb, lo);
+                alb = mix(alb * 0.75, alb, lo);
                 alb = mix(alb, gold, RECT(-0.36, -0.28, 2.0) * detail);
-            } else {
-                float dt = 1.0 - smoothstep(0.42 - pu, 0.42 + pu, length(vec2(u, (v - 0.35) * h.y / max(h.x, 1e-3))));
+            } else if (sty == 3) {
+                float dt = 1.0 - smoothstep(0.36 - pu, 0.36 + pu, length(vec2(u, (v - 0.35) * h.y / max(h.x, 1e-3))));
                 alb = mix(alb, light, dt * detail);
                 alb = mix(alb, band, RECT(-0.72, -0.62, 2.0) * detail);
+            } else {
+                // a pale cap at its head, a dark title across it; a thin band at its foot
+                alb = mix(alb, mix(alb, vec3(1.0, 0.96, 0.88), 0.75), RECT(0.56, 0.9, 0.76) * detail);
+                alb = mix(alb, ink, RECT(0.68, 0.77, 0.42) * detail * 0.6);
+                alb = mix(alb, light, RECT(-0.84, -0.76, 2.0) * detail);
             }
+            // (on the board, quieter: a cell reads as one block first, as books second)
+            if (cellBook) alb = mix(base, alb, 0.4);
             spec = 0.15; rough = 18.0;
             emit += alb * vMat.z * 1.2 + uLed * vMat.z * 0.25;
         } else if (face == 1 || (face == 2 && vLN.z < 0.0)) {
@@ -345,11 +359,53 @@ void main() {
             float covers = 1.0 - smoothstep(rim * 0.8, rim, ax);
             float spineSide = face == 1 ? step(h.z - rim * 1.2, L.z * h.z) : 0.0;
             float pages = (1.0 - covers) * (1.0 - spineSide);
-            alb = mix(alb, uPaper, pages);
+            // (a hint of its leaves: fine lines along the boards, while they are a few pixels apart)
+            float lf = 0.5 + 0.5 * cos(L.x * h.x * 6.2832 / 0.075);
+            vec3 paper = cellBook ? mix(uPaper, base, 0.45) * 0.88 : uPaper;   // (on the board, tinted: quieter)
+            alb = mix(alb, paper * (1.0 - (cellBook ? 0.05 : 0.12) * lf * (1.0 - smoothstep(0.025, 0.04, px))), pages);
             emit += uPaper * vMat.z * 0.4 * pages;
         } else {
             alb *= 0.92;
             emit += alb * vMat.z * 0.6;
+        }
+        if (cellBook) {
+            // on the board, packed on a shelf (vE.w < -15: a cell above it): soft occlusion. Its top darker toward the
+            // back (under the cell above, deep in its shade); its spine darker at its foot; its covers, down the narrow
+            // gaps, in shade (on the cell's outline, the gap between two cells: deep, the darkest between two pieces)
+            float covered = vE.w < -15.0 ? 1.0 : 0.0;
+            int fl = int(vE.y + 0.5);
+            bool outL = (fl & 1) != 0, outR = (fl & 2) != 0;          // its sides on the cell's outline
+            bool sameL = (fl & 4) != 0, sameR = (fl & 8) != 0, sameD = (fl & 16) != 0, sameU = (fl & 32) != 0;
+            if (face == 1 && vLN.y > 0.0) {
+                float back = 0.5 - 0.5 * L.z;
+                alb *= mix(1.0, mix(0.86, 0.5, covered), smoothstep(0.1, 1.0, back));
+            } else if (face == 2 && vLN.z > 0.0) {
+                float foot = 1.0 - smoothstep(0.0, 0.12, (L.y + 1.0) * h.y);
+                float head = (1.0 - smoothstep(0.0, 0.1, (1.0 - L.y) * h.y)) * covered;
+                alb *= (1.0 - 0.18 * foot) * (1.0 - 0.1 * head);
+            } else if (face == 0) {
+                bool outer = vLN.x < 0.0 ? outL : outR;
+                bool same = vLN.x < 0.0 ? sameL : sameR;
+                alb *= outer ? (same ? 0.42 : 0.26) : 0.74 * mix(0.6, 1.0, 0.5 + 0.5 * L.z);
+            }
+            // the ink, its own: the cell's outline crisp (wider and darker where it meets another piece or the empty
+            // well), the seams between its own books faint. (Front: left, right, foot, head; top: left, right, back,
+            // front; in pixels from each edge.)
+            lineK = 0.0;
+            if ((face == 2 && vLN.z > 0.0) || (face == 1 && vLN.y > 0.0)) {
+                vec2 e0 = (q + sz) / pq, e1 = (sz - q) / pq;   // to the low and high edges, in pixels
+                float wc = uLineW * 1.0, wp = uLineW * 2.6, ws = uLineW * 0.7;
+                #define EDGE(d, w) (1.0 - smoothstep((w) * 0.5, (w) * 0.5 + 1.0, d))
+                float ink = 0.0;
+                ink = max(ink, outL ? EDGE(e0.x, sameL ? wc : wp) * (sameL ? 0.6 : 1.0) : EDGE(e0.x, ws) * 0.3);
+                ink = max(ink, outR ? EDGE(e1.x, sameR ? wc : wp) * (sameR ? 0.6 : 1.0) : EDGE(e1.x, ws) * 0.3);
+                bool sameLow = face == 2 ? sameD : sameU;   // the front's foot, the top's back
+                ink = max(ink, EDGE(e0.y, sameLow ? wc : wp) * (sameLow ? 0.6 : 1.0));
+                ink = max(ink, EDGE(e1.y, ws) * 0.3);       // the front's head, the top's front: within the books
+                #undef EDGE
+                ink *= smoothstep(1.5, 5.0, min(sz.x / pq.x, sz.y / pq.y));   // (a face too small to carry it)
+                inkOver = vec4(vCol.rgb * vec3(0.1, 0.09, 0.15) + vec3(0.006, 0.004, 0.02), ink * (1.0 - vMat.w));
+            }
         }
         if (uWorld > 0.5) {
             float up = dot(vAX, vec3(0, 1, 0)) * L.x + dot(vAY, vec3(0, 1, 0)) * L.y;
@@ -362,38 +418,6 @@ void main() {
             float f = vMat.w;
             emit += (vCol.rgb * 1.4 + 0.25) * (2.2 * f);
             outA = (1.0 - f) * (1.0 - f * 0.5);
-        }
-    } else if (mat == 12) {
-        // a cell of the board: one clean toy block, a bound volume with its spine toward us: a bright bevel band at
-        // its head, a shaded one at its foot, two cream rules, its pages down its right side; inked edges
-        lineK = 1.0;
-        lineC = vCol.rgb * vec3(0.18, 0.18, 0.24) + vec3(0.0, 0.0, 0.015);
-        if (face == 2 && vLN.z > 0.0) {
-            vec2 e = sz - abs(q);
-            float pr = px + 0.004;
-            float top = (1.0 - smoothstep(0.075 - pr, 0.075 + pr, e.y)) * step(0.0, q.y);
-            float bot = (1.0 - smoothstep(0.06 - pr, 0.06 + pr, e.y)) * step(q.y, 0.0);
-            alb = mix(alb, mix(alb, vec3(1.0), 0.42), top);
-            alb = mix(alb, alb * 0.68, bot);
-            float rule = (1.0 - smoothstep(0.016, 0.016 + pr, abs(q.y - sz.y * 0.6))) + (1.0 - smoothstep(0.016, 0.016 + pr, abs(q.y + sz.y * 0.6)));
-            alb = mix(alb, mix(alb, vec3(1.0, 0.97, 0.88), 0.7), clamp(rule, 0.0, 1.0) * 0.85);
-            float pe = smoothstep(sz.x * 0.74 - pr, sz.x * 0.74 + pr, q.x) * (1.0 - smoothstep(sz.x * 0.9 - pr, sz.x * 0.9 + pr, q.x));
-            pe *= smoothstep(sz.y * 0.84 + pr, sz.y * 0.84 - pr, abs(q.y));
-            alb = mix(alb, uPaper, pe * 0.95);
-            spec = 0.35; rough = 30.0;
-        } else if (face == 0 && vLN.x > 0.0) {
-            float covers = 1.0 - smoothstep(0.02, 0.03, sz.y - abs(q.y));
-            alb = mix(uPaper * 0.92, alb * 0.85, covers);
-        } else if (face == 1 && vLN.y > 0.0) {
-            alb = mix(alb, vec3(1.0), 0.22);   // its top: the light band
-        } else {
-            alb *= 0.8;
-        }
-        if (vMat.w > 0.0) {
-            float f = vMat.w;
-            emit += (vCol.rgb * 1.3 + 0.25) * (2.0 * f);
-            outA = (1.0 - f) * (1.0 - f * 0.5);
-            lineK *= 1.0 - f;
         }
     } else if (mat == 4) {
         // floor: big toy tiles in two clear colors (p0 = 1: long planks, else a checker), crisp grout
@@ -530,6 +554,7 @@ R"(            float seam = smoothstep(0.0, 0.04 + px / w, min(pl.x, 1.0 - pl.x)
         vec3 lc = lineC.x >= 0.0 ? lineC : uLineCol * (0.3 + 0.7 * alb);
         c = mix(c, lc, ol * lineK * (uWorld > 0.5 ? 0.6 : 0.85));
     }
+    c = mix(c, inkOver.rgb, inkOver.a);
     if (uBoard < 0.5) c = applyFog(c, vP);
     if (uPremul > 0.5) frag = vec4(c * outA, outA);
     else frag = vec4(c, uStackA);
