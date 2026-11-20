@@ -761,6 +761,21 @@ void LostPandaUniverse::buildBoard(const Game& g) {
         }
         return m;
     };
+    // the piece once it rests on the stack (still sliding, not yet locked): it touches the blocks under and beside it
+    // already, their shade and its own shown at once (not only when it locks)
+    int rest[4][2];
+    bool resting = false;
+    if (g.hasPiece() && !g.over()) {
+        const Piece& p = g.piece();
+        resting = g.ghostY() == p.y && std::fabs(g.pieceVisualY() - p.y) < 0.05f && std::fabs(g.pieceVisualX() - p.x) < 0.05f;
+        if (resting) g.pieceCells(p, rest);
+    }
+    auto pieceAt = [&](int xx, int yy) {
+        if (!resting) return false;
+        for (auto& c : rest)
+            if (c[0] == xx && c[1] == yy) return true;
+        return false;
+    };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
@@ -770,8 +785,8 @@ void LostPandaUniverse::buildBoard(const Game& g) {
             if (sd <= 0.f) sd = 0.02f + 0.96f * std::fmod(std::sin(x * 12.9898f + y * 78.233f) * 43758.5453f + 1e5f, 1.f);
             // (the blocks touching it: its grooves in their shade; a row still closing up after a clear touches none)
             auto at = [&](int xx, int yy) {
-                return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H && g.cell(xx, yy).type >= 0 &&
-                       g.rowOffset(yy) == g.rowOffset(y);
+                return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H &&
+                       ((g.cell(xx, yy).type >= 0 && g.rowOffset(yy) == g.rowOffset(y)) || (pieceAt(xx, yy) && g.rowOffset(y) == 0.f));
             };
             const int nb = (at(x, y - 1) ? 1 : 0) | (at(x, y + 1) ? 2 : 0) | (at(x - 1, y) ? 4 : 0) | (at(x + 1, y) ? 8 : 0);
             cell(p.x, p.y, 0.5f, tintOf(c.type) * darken, 1.f, 0, 0.f, 0.f, sd, nb);
@@ -797,7 +812,15 @@ void LostPandaUniverse::buildBoard(const Game& g) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
             const vec3 w = layout::cellPos(c[0] + dx, c[1] + dy);
-            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, 0.f, pieceSeeds_[i], pieceMask(cells, i));
+            int nb = pieceMask(cells, i);
+            if (resting) {
+                auto stack = [&](int xx, int yy) {
+                    return xx >= 0 && xx < Game::W && yy >= Game::HIDDEN && yy < Game::H && g.cell(xx, yy).type >= 0 && g.rowOffset(yy) == 0.f;
+                };
+                nb |= (stack(c[0], c[1] - 1) ? 1 : 0) | (stack(c[0], c[1] + 1) ? 2 : 0) | (stack(c[0] - 1, c[1]) ? 4 : 0) |
+                      (stack(c[0] + 1, c[1]) ? 8 : 0);
+            }
+            cell(w.x, w.y, 0.5f, tintOf(p.type), 1.f, 0, 0.f, 0.f, pieceSeeds_[i], nb);
         }
     }
     auto preview = [&](int type, vec2 center, float sc, float alpha) {
