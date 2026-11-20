@@ -426,7 +426,7 @@ void main() {
     vec2 nw = w * 1.4 + vec2(seedOff, 0.0);
     // domain warping: the gas curls round itself
     // (uMorph: the stage's, eased over seconds: the gas curls and thickens differently in place, never sliding)
-    vec2 mo = vec2(cos(uMorph * 1.3), sin(uMorph * 0.9)) * 1.6;
+    vec2 mo = vec2(cos(uMorph * 1.3), sin(uMorph * 0.9)) * 0.7;
     vec2 q1 = vec2(vn(nw * 1.1 + uTime * 0.006 + mo), vn(nw * 1.1 + 5.2 - uTime * 0.005 - mo.yx));
     vec2 q2 = vec2(vn(nw * 2.3 + q1 * 2.0 + 1.7), vn(nw * 2.3 + q1 * 2.0 + 9.2));
     vec2 ww = nw + q2 * 1.4;
@@ -439,8 +439,8 @@ void main() {
     float band = exp(-pow((sp.y - (0.62 - 0.32 * sp.x / asp + 0.08 * sin(sp.x * 2.3 + seedOff))) / 0.33, 2.0));
     float leftC = exp(-dot((sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42), (sp - vec2(0.22 * asp, 0.48)) / vec2(0.55, 0.42)));
     float rightC = exp(-dot((sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45), (sp - vec2(0.8 * asp, 0.3)) / vec2(0.5, 0.45)));
-    float dens = clamp((band * 0.7 + leftC * 0.8 + rightC * 0.7) * (0.65 + 0.6 * (0.5 + 0.5 * sin(uMorph * 2.3))), 0.0, 1.3);
-    float gas = smoothstep(0.3, 0.85, fb) * dens;
+    float dens = clamp((band * 0.7 + leftC * 0.8 + rightC * 0.7) * (1.05 + 0.25 * (0.5 + 0.5 * sin(uMorph * 2.3))), 0.0, 1.4);
+    float gas = smoothstep(0.26, 0.82, fb) * dens;
     float wisp = rg * smoothstep(0.25, 0.7, fb) * dens;
     float dust = smoothstep(0.42, 0.72, vn(ww * 2.6 - 4.0 + q1));
     // its colours: cool on the left (the tint, a neighbour, cyan where it is thinnest), warm on the right
