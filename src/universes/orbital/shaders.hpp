@@ -1307,7 +1307,7 @@ void main() {
     if (type == 1) {
         vec2 q = abs(p);
         bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
-        float tri = smoothstep(0.79 - aa, 0.79 + aa, q.x + q.y) * smoothstep(0.012, 0.025, e) * (1.0 - inset);
+        float tri = smoothstep(0.7 - aa, 0.7 + aa, q.x + q.y) * smoothstep(0.012, 0.025, e) * (1.0 - inset);
         if (corner) col = mix(col, glowC * 0.9, tri * 0.85);
     }
     // the inset: dark, a faint panel grain, its walls shading it near the frame (top left in shadow)
@@ -1356,8 +1356,8 @@ void main() {
         deep = mix(deep, vec3(0.006, 0.009, 0.016), well);
         float disc = 1.0 - smoothstep(-aa, aa, C.pad + 0.07);
         float ring = 1.0 - smoothstep(0.01 - aa, 0.01 + aa, abs(C.pad + 0.035));
-        float grid = step(0.5, fract((p.x + p.y) * 7.0)) * 0.12;
-        light += mix(glowC * 1.2, hotC * 1.3, smoothstep(-0.07, -0.25, C.pad)) * disc * (0.9 + grid) + hotC * ring
+        float bands = 0.85 + 0.15 * step(0.5, fract(C.pad * 22.0)); // the core's fine rings
+        light += mix(glowC * 1.15, hotC * 1.25, smoothstep(-0.15, -0.3, C.pad)) * disc * bands + glowC * ring * 1.3
                + glowC * exp(-abs(C.pad + 0.07) / 0.03) * 0.3 * well;
     }
     // the board's fine print: dim short traces and pads on a grid of quarter cells, off the circuit
