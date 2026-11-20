@@ -920,25 +920,26 @@ vec4 staghorn(vec2 q, float d) {
     for (int k = 0; k < 2; k++) {
         vec2 cc = gCol - vec2(0.0, float(k));
         vec2 o = vec2(0.0, -float(k));
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 2; i++) {
             float fi = float(i);
             vec2 sd = gColOff + cc * 7.13 + fi * 3.71;
             vec2 r = hash2(sd), r2 = hash2(sd.yx + 1.9), r3 = hash2(sd * 1.3 + 4.2);
             // in front: antlers rising, leaning apart
-            vec2 a = o + vec2(-0.3 + 0.3 * fi + (r.x - 0.5) * 0.2, -0.62 + r.y * 0.6);
-            if (i < 2 || k == 0) front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 1.0) * 0.6, 0.36 + 0.12 * r2.y, 0.13, r3.y > 0.5 ? 1.0 : -1.0));
-            // behind them, in their shade: more, any way
+            vec2 a = o + vec2(-0.22 + 0.44 * fi + (r.x - 0.5) * 0.2, -0.58 + r.y * 0.9);
+            front = max(front, antler(q, a, 1.571 + (r2.x - 0.5) * 1.0 - (fi - 0.5) * 0.9, 0.44 + 0.16 * r2.y, 0.155, r3.y > 0.5 ? 1.0 : -1.0));
+            // behind them, in their shade: more, leaning further
             if (k == 0) {
-                float ang = r3.x * 6.283;
+                float ang = 1.571 + (r3.x - 0.5) * 2.4;
                 vec2 b = vec2(r3.y - 0.5, r.x - 0.5) * 0.4 - vec2(cos(ang), sin(ang)) * 0.24;
-                back = max(back, antler(q, b, ang, 0.46, 0.12, r2.y > 0.5 ? 1.0 : -1.0));
+                back = max(back, antler(q, b, ang, 0.5, 0.14, r2.y > 0.5 ? 1.0 : -1.0));
             }
         }
     }
     vec2 c = q + gCol + gColOff;
-    float lump = gLod * (0.02 * (vnoise(c * 16.0) - 0.5) + 0.01 * (vnoise(c * 40.0) - 0.5));
+    float lump = gLod * (0.016 * (vnoise(c * 12.0) - 0.5) + 0.005 * (vnoise(c * 34.0) - 0.5));
     front += lump; back += lump;
-    float hF = sqrt(max(front, 0.0) * max(0.25 - front, 0.0)) + 0.08, hB = sqrt(max(back, 0.0) * max(0.22 - back, 0.0));
+    // (round branches: a parabolic profile across, so a branch is lit on its upper side, shaded on its lower)
+    float hF = max(front, 0.0) * max(0.31 - front, 0.0) / 0.155 * 1.3 + 0.08, hB = max(back, 0.0) * max(0.28 - back, 0.0) / 0.14 * 1.3;
     float inF = smoothstep(-gAA, gAA, front), inB = smoothstep(-gAA, gAA, back);
     float h = mix(mix(-0.04, hB, inB), hF, inF);
     // the back's in the front's shade where they cross; the gaps the reef's dark depth
@@ -961,15 +962,17 @@ vec4 star(vec2 q) {
         valley = smoothstep(0.0, 0.25, w.y - w.x);
     }
     float ang = atan(v.y, v.x);
-    float sept = cos(ang * n + 3.0 * vnoise(q * 4.0 + gOff) + 1.5 * vnoise(q * 11.0 + gOff.yx) + r * 4.0);
+    float sept = cos(ang * n + 4.0 * vnoise(q * 4.0 + gOff) + 2.0 * vnoise(q * 11.0 + gOff.yx) + r * 4.0);
+    // (broken here and there along their length, spiky)
+    sept = mix(sept, -0.2, smoothstep(0.45, 0.8, vnoise(vec2(ang * 3.0, r * 14.0) + gOff)) * 0.8);
     // (they fade out toward the pit, where they crowd closer than a few pixels)
     float fade = smoothstep(2.0, 4.0, r * 6.283 / n / gAA) * gLod;
-    float pit = smoothstep(0.08, 0.015, r);
-    float fuzz = vnoise(q * 34.0 + gOff) - 0.5;
+    float pit = smoothstep(0.06, 0.01, r) * 0.35;
+    float fuzz = vnoise(q * 26.0 + gOff) - 0.5;
     float sp = smoothstep(-0.7, 0.9, sept + fuzz * 1.3) * fade;
     float h = (0.022 * sp + 0.06 * smoothstep(R, 0.05, r)) * mix(0.5, 1.0, valley) - 0.04 * pit;
     // (bright toward its heart, its outer septa deeper in tone)
-    float light = mix(0.45, 1.0, sp) * mix(0.55, 1.08, smoothstep(R * 0.8, R * 0.13, r)) * mix(0.6, 1.0, valley);
+    float light = mix(0.45, 1.0, sp) * mix(0.45, 1.15, smoothstep(R * 0.85, R * 0.05, r)) * mix(0.6, 1.0, valley);
     return vec4(h, light, mix(mix(0.45, 1.0, smoothstep(-0.8, 0.3, sept * fade + fuzz * 0.3)), 0.12, pit) * mix(0.5, 1.0, valley), 1.0);
 }
 vec4 porous(vec2 q) {
@@ -1012,7 +1015,7 @@ vec4 plate(vec2 q, float d) {
     vec2 c = q + gCol + gColOff;
     float sw = fbm(c * 1.2) + 0.5 * fbm(c * 4.5) - 0.25;
     // its raised lip along the free edge
-    float lip = smoothstep(0.0, -0.025, d) * smoothstep(-0.12, -0.04, d);
+    float lip = smoothstep(0.0, -0.025, d) * smoothstep(-0.15, -0.05, d);
     vec4 v = voro(c * 2.6, 0.8, id);
     float has = step(hash(id + 7.7), 0.4);
     float rad = 0.1 + 0.14 * hash(id + 1.3);
@@ -1023,8 +1026,8 @@ vec4 plate(vec2 q, float d) {
     vec4 w = voro(c * 10.0, 0.9, id2);
     float pore = smoothstep(0.24, 0.08, w.x) * step(0.45, hash(id2)) * gLod;
     float grain = vnoise(c * 24.0) - 0.5;
-    float h = 0.022 * sw + 0.04 * lip + 0.012 * rim - 0.05 * cup - 0.012 * pore + 0.014 * grain * gLod;
-    return vec4(h, 0.4 + 0.85 * lip + 0.3 * rim - 0.3 * cup + 0.5 * (sw - 0.5) - 0.3 * pore + 0.4 * grain * gLod,
+    float h = 0.022 * sw + 0.06 * lip + 0.012 * rim - 0.05 * cup - 0.012 * pore + 0.014 * grain * gLod;
+    return vec4(h, 0.32 + 1.0 * lip + 0.3 * rim - 0.3 * cup + 0.5 * (sw - 0.5) - 0.3 * pore + 0.4 * grain * gLod,
                 mix(1.0, 0.12, cup) * mix(0.75, 1.0, lip) * (1.0 - 0.6 * pore), 1.0);
 }
 vec4 tubes(vec2 q) {
@@ -1074,7 +1077,7 @@ vec4 brain(vec2 q) {
     g = g / (abs(g) + 0.4) * 1.4;
     float fade = gLod;
     // rounded ridges, narrow grooves
-    float ridge = mix(0.7, sqrt(clamp((g + 0.75) / 1.6, 0.0, 1.0)), fade);
+    float ridge = mix(0.75, sqrt(clamp((g + 0.95) / 1.5, 0.0, 1.0)), fade);
     float h = 0.03 * ridge;
     return vec4(h, 0.3 + 0.7 * ridge, mix(0.15, 1.0, ridge), 1.0);
 }
@@ -1104,7 +1107,8 @@ vec4 surface(int sp, vec2 q, out float d) {
     else s = brain(q);
     s.x = s.x * mix(0.3, 1.0, gLod) * mix(0.4, 1.0, t) + (dome * R + bulge) * (sp == 0 ? 0.4 : 1.0);
     // a fine sugary grain over it all
-    s.x += gLod * 0.005 * (vnoise((flat_ ? q + gCol + gColOff : q + gOff.yx) * 62.0) - 0.5);
+    vec2 gq = flat_ ? q + gCol + gColOff : q + gOff.yx;
+    s.x += gLod * (0.006 * (vnoise(gq * 26.0) - 0.5) + 0.004 * (vnoise(gq * 55.0) - 0.5));
     // its rim rolling away into the shade, all round
     s.z *= mix(0.22, 1.0, pow(clamp(-dd / (flat_ ? 0.1 : 0.36), 0.0, 1.0), 0.7));
     if (sp != 0) s.w = 1.0 - smoothstep(-gAA, gAA, d);
@@ -1187,7 +1191,7 @@ void main() {
         else if (sp == 1) alb *= vec3(1.0, 0.92, 0.8);
     }
     alb *= mix(0.5, 1.12, s.y);
-    alb *= 1.0 + gLod * 0.32 * (vnoise(tq * 72.0 + to) - 0.5);
+    alb *= 1.0 + gLod * (0.3 * (vnoise(tq * 30.0 + to) - 0.5) + 0.25 * (vnoise(tq * 64.0 + to) - 0.5));
     // lit from above: the key light wrapped softly, the shade warmed by the light scattered in the tissue, the
     // pits and grooves occluded
     float nl = dot(n, L);
@@ -1195,7 +1199,7 @@ void main() {
     // (and the block's underside in the shade of its own swell)
     float ao = mix(0.1, 1.0, s.z) * (plate_ ? 1.0 : mix(0.72, 1.0, smoothstep(-0.55, 0.15, q.y)));
     alb = mix(vec3(dot(alb, vec3(0.3, 0.55, 0.15))), alb, 0.85);
-    vec3 c = alb * (0.15 + 1.4 * pow(wrap, 1.6)) * lightC * ao;
+    vec3 c = alb * (0.12 + 1.45 * pow(wrap, 1.7)) * lightC * ao;
     c += alb * alb * 0.6 * (1.0 - wrap) * ao * 0.5;
     c += alb * 0.22 * pow(clamp(nl, 0.0, 1.0), 8.0) * s.z;
     // a faint ripple of light drifting over the stack
