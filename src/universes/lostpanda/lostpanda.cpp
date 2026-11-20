@@ -95,10 +95,10 @@ struct VariantDef {
     unsigned accent, light;
 };
 const VariantDef VARIANTS[] = {
-    {"LANTERN", {0xcaa972, 0x869656, 0xd2aa58, 0x76864f, 0xd4b47a, 0x86844b, 0xbea274}, 0xffc77a, 0xffc070},
-    {"SUNNY", {0xcaa972, 0x869656, 0xd2aa58, 0x76864f, 0xd4b47a, 0x86844b, 0xbea274}, 0xa8d8ff, 0xffd890},
-    {"BLOSSOM", {0xcaa972, 0x869656, 0xd2aa58, 0x76864f, 0xd4b47a, 0x86844b, 0xbea274}, 0xffb8cc, 0xffc8a0},
-    {"JADE", {0xcaa972, 0x869656, 0xd2aa58, 0x76864f, 0xd4b47a, 0x86844b, 0xbea274}, 0xa8e8c0, 0xffd070},
+    {"LANTERN", {0xcaa972, 0x8c9a58, 0xd2aa58, 0x7d8c52, 0xd4b47a, 0x8c894d, 0xbea274}, 0xffc77a, 0xffc070},
+    {"SUNNY", {0xcaa972, 0x8c9a58, 0xd2aa58, 0x7d8c52, 0xd4b47a, 0x8c894d, 0xbea274}, 0xa8d8ff, 0xffd890},
+    {"BLOSSOM", {0xcaa972, 0x8c9a58, 0xd2aa58, 0x7d8c52, 0xd4b47a, 0x8c894d, 0xbea274}, 0xffb8cc, 0xffc8a0},
+    {"JADE", {0xcaa972, 0x8c9a58, 0xd2aa58, 0x7d8c52, 0xd4b47a, 0x8c894d, 0xbea274}, 0xa8e8c0, 0xffd070},
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 int wrapV(int v) { return ((v % VARIANT_COUNT) + VARIANT_COUNT) % VARIANT_COUNT; }
@@ -1615,7 +1615,7 @@ void LostPandaUniverse::render(const Frame& f, GLuint fbo) {
         // the eye the cubes are seen from: over the well's middle, far off, looking down a little
         set1f(progCell_, "uEyeX", 0.f);
         set1f(progCell_, "uEyeD", 110.f);
-        set1f(progCell_, "uTilt", 0.08f);
+        set1f(progCell_, "uTilt", 0.06f);
         glBindVertexArray(cellVao_);
         glBindBuffer(GL_ARRAY_BUFFER, cellVbo_);
         glBufferData(GL_ARRAY_BUFFER, cells_.size() * sizeof(CellInst), cells_.data(), GL_STREAM_DRAW);

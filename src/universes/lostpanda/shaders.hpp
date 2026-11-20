@@ -2718,7 +2718,7 @@ uniform float uPass, uBridge, uEyeX, uEyeD, uTilt;
 uniform vec3 uBridgeInk, uLightC;
 // the cube (cell units): its half side, its chamfers' leg (across the fibres, at its top and bottom; along them, at
 // its upright edges: a hair), its corners' cut (|x| + |y| + |z| <= 3 B - CK)
-const float B = 0.478, CH = 0.1, CV = 0.04, CK = 0.235;
+const float B = 0.478, CH = 0.11, CV = 0.04, CK = 0.2;
 // a 1D value noise (the fibres: irregular across, each block its own `s`)
 float n1(float x, float s) {
     float i = floor(x), f = fract(x);
@@ -2735,7 +2735,7 @@ float vn2(vec2 p, float s) {
 float lod(float f, float aa) { return smoothstep(0.8, 0.4, f * aa); }
 // a strand's value: one per period, its edges sharp (a fibre beside the next)
 float n1s(float x, float s) {
-    float i = floor(x), f = smoothstep(0.3, 0.7, fract(x));
+    float i = floor(x), f = smoothstep(0.2, 0.8, fract(x));
     return mix(fract(sin(i * 127.1 + s * 311.7) * 43758.5453), fract(sin((i + 1.0) * 127.1 + s * 311.7) * 43758.5453), f);
 }
 
@@ -2765,18 +2765,20 @@ vec3 longGrain(vec3 t, float u, float v, float h0, float aa) {
     // (a green block is the cane's skin: smoother, its strands softer, lighter streaks in broad soft bands)
     float skin = smoothstep(0.0, 0.05, t.g - t.r);
     float sk = 1.0 - 0.45 * skin;
-    float k = 1.0 + (0.12 + 0.08 * skin) * broad + 0.1 * s1 * lod(14.0, aa) + sk * (0.24 * s2 * w2 * lod(29.0, aa) + 0.34 * s3 * w3 * lod(47.0, aa));
+    float k = 1.0 + (0.12 + 0.08 * skin) * broad + 0.1 * s1 * lod(14.0, aa) + sk * (0.18 * s2 * w2 * lod(29.0, aa) + 0.38 * s3 * w3 * lod(47.0, aa));
     // (and short streaks among them: the fibres' flecks; more of them, darker, near its cut ends)
     float ends = smoothstep(0.25, 0.42, abs(v));
     float fl = vn2(vec2(g * 85.0, v * 7.0), h0 + 13.0) - 0.5;
-    k += (0.16 + 0.12 * ends) * sk * fl * lod(85.0, aa);
+    k += (0.22 + 0.12 * ends) * sk * fl * lod(85.0, aa);
+    // (soft blotches over it, lighter and darker)
+    k *= 1.0 + 0.1 * (vn2(vec2(u * 3.0, v * 2.2), h0 + 15.0) - 0.5);
     vec3 c = t * k;
     float chk = smoothstep(0.62, 0.8, vn2(vec2(g * 40.0, v * 14.0), h0 + 14.0)) * ends;
     c = mix(c, t * 0.5, chk * 0.5 * lod(40.0, aa));
     // dark strands: thin, broken along their length
     float df = 30.0 + 10.0 * h4;
     float dk = smoothstep(0.7, 0.9, n1s(g * df + 11.0, h0 + 5.0)) * smoothstep(0.3, 0.55, n1(v * 2.6 + floor(g * df) * 1.37, h0 + 7.0));
-    c = mix(c, t * 0.42, dk * 0.6 * sk * lod(df, aa));
+    c = mix(c, t * 0.42, dk * 0.75 * sk * lod(df, aa));
     // bright strands, longer
     float bk = smoothstep(0.8, 0.96, n1(g * 31.0 + 23.0, h0 + 9.0)) * smoothstep(0.25, 0.5, n1(v * 3.0 + floor(g * 31.0) * 2.1, h0 + 4.0));
     c = mix(c, mix(t, vec3(1.0), 0.3) * 1.08, bk * 0.45 * lod(31.0, aa));
@@ -2872,7 +2874,7 @@ void main() {
     if (cover <= 0.0) discard;
     vec3 x = o + d * t1;
     // the facets' seams softened (over a pixel at least: the edges just rounded)
-    float sw = clamp((t1 - t2) / clamp(fwidth(t1 - t2), 0.012, 0.05) * 0.5 + 0.5, 0.5, 1.0);
+    float sw = clamp((t1 - t2) / clamp(fwidth(t1 - t2), 0.028, 0.06) * 0.5 + 0.5, 0.5, 1.0);
     vec3 n = normalize(mix(normalize(n2v), normalize(n1v), sw));
 
     // ---- its tone, its grain
@@ -2900,12 +2902,13 @@ void main() {
     vec4 toward = vec4(n.y, -n.y, -n.x, n.x);
     for (int i = 0; i < 4; i++) {
         float f = float((nb & (1 << i)) != 0);
-        ao *= 1.0 - f * (0.75 * smoothstep(0.75, 0.98, toward[i]) + (i == 0 ? 0.05 : 0.12) * smoothstep(0.3, 0.7, toward[i]));
+        ao *= 1.0 - f * (0.9 * smoothstep(0.75, 0.98, toward[i]) + (i == 0 ? 0.05 : 0.1) * smoothstep(0.3, 0.7, toward[i]));
     }
     ao *= mix(0.84, 1.0, smoothstep(-0.5, -0.15, x.y)) * (0.95 + 0.08 * smoothstep(-0.2, 0.5, x.y));
     // (the front not quite flat: a hair darker toward its upright edges, the right one most, away from the key)
     ao *= 1.0 - smoothstep(0.7, 0.95, n.z) * (0.06 * smoothstep(0.15, 0.45, -x.x) + 0.12 * smoothstep(0.1, 0.45, x.x));
-    vec3 c = alb * (0.56 + 0.6 * ndl) * ao + vec3(0.09) * spec * ao;
+    // (and the light thrown back up from below, on the bottom chamfers)
+    vec3 c = alb * (0.56 + 0.6 * ndl + 0.04 * smoothstep(0.2, 0.7, -n.y)) * ao + vec3(0.09) * spec * ao;
     c *= uLightC;
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
