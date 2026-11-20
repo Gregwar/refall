@@ -452,10 +452,10 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, vec2 cc, float lig
         float beam = max(spotC(vec3(wpos, 0.3), 0.04, uConeTrue), board ? 0.0 : 0.6) * on;
         vec3 l2 = normalize(uLPos - vec3(wpos, 0.0));
         float facing = max(dot(-gin, l2.xy), 0.0);
-        vec3 col = tint * (0.11 + 0.1 * edge) + sm * vivid(tint) * 1.8;
-        col += tint * beam * (0.18 + 0.9 * edge);
+        vec3 col = tint * (0.17 + 0.12 * edge) + sm * vivid(tint) * 2.2;
+        col += tint * beam * (0.24 + 1.0 * edge);
         float rim = exp(-pow((D - gap - 0.016) / 0.011, 2.0));
-        col += mix(tint, vec3(1.0), 0.55) * rim * (0.18 + (0.4 + 2.2 * beam) * facing) * (0.5 + 0.5 * lightK);
+        col += mix(tint, vec3(1.0), 0.55) * rim * (0.26 + (0.5 + 2.4 * beam) * facing) * (0.5 + 0.5 * lightK);
         float bev = exp(-pow((D - gap - 0.085) / 0.012, 2.0));
         col += tint * bev * (0.06 + 0.5 * beam * (1.0 - facing));
         // the lamp's reflection, a soft streak across the face
