@@ -2709,7 +2709,9 @@ void main() {
     vec2 q = vLocal / shrink;
     // a square block of bamboo wood: its corners just rounded, fibres running up it (each block its own, from its
     // place), a faint node across, a bevel (lit along its top and left, shaded along its bottom and right)
-    float d = sdBox(q, vec2(0.5 - 0.17)) - 0.17;   // (touching its neighbours, stacked: only the corners round off)
+    // a bamboo cube seen straight on, its edges chamfered: its outline an octagon of short cut corners; a gap round it
+    const float HB = 0.48, CH = 0.11;
+    float d = max(sdBox(q, vec2(HB - 0.035)) - 0.035, (abs(q.x) + abs(q.y) - (2.0 * HB - CH)) * 0.7071);
     float inside = 1.0 - smoothstep(-aa, aa, d * shrink);
     vec3 t = vB.rgb;
     if (mode == 1) {
@@ -2722,50 +2724,55 @@ void main() {
     vec2 sd = floor(vA.xy * 1.7 + 0.5);
     float h0 = vC.w != 0.0 ? abs(vC.w) : fract(sin(dot(sd, vec2(12.9898, 78.233))) * 43758.5453);
     float covered = vC.w < 0.0 ? 1.0 : 0.0;   // (a block resting on it)
-    // each block its own tone: a little lighter or darker, a little warmer or cooler
-    float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7);
-    t *= (0.88 + 0.22 * h1) * vec3(1.0 + 0.06 * (h2 - 0.5), 1.0, 1.0 - 0.08 * (h2 - 0.5));
-    // fibres, strong and irregular: each block its own density and contrast, wandering as they run, darker streaks
-    // of varying weight broken here and there, pale ones; some blocks cut across the grain (it runs sideways); a knot
-    // now and then
-    float h3 = fract(h0 * 63.1), h4 = fract(h0 * 91.7), h5 = fract(h0 * 27.9);
-    vec2 g = h3 > 0.78 ? vec2(q.y, -q.x) : q;   // (across the grain: about one block in five)
-    float dens = 7.0 + 6.0 * h4;
-    float gx = g.x * dens + 0.22 * n1(g.y * 1.6 + h0 * 9.0, h0) + 0.08 * n1(g.y * 5.1, h0 + 3.0);   // (straight, barely wandering)
-    float fib = 0.5 * n1(gx * 1.3, h0) + 0.3 * n1(gx * 3.7 + 5.0, h0) + 0.2 * n1(gx * 9.3 + 2.0, h0);
-    float sn = n1(gx * 2.2 + 11.0, h0);
-    float streak = smoothstep(0.7, 0.95, sn) * (0.4 + 0.6 * n1(gx * 0.7 + 3.0, h0));
-    streak *= smoothstep(0.12, 0.32, n1(g.y * 3.0 + gx * 0.5, h0 + 7.0));
-    float pale = smoothstep(0.8, 0.97, n1(gx * 1.7 + 23.0, h0)) * smoothstep(0.1, 0.3, n1(g.y * 2.0 + gx, h0 + 2.0));
-    float contrast = 0.32 + 0.22 * h5;
-    // its shading: round across, but each block its own (how round, which side catches more light)
-    float cyl = sat(1.0 - sq(q.x / 0.5));
-    float side = (h1 - 0.5) * 0.24;
-    vec3 c = t * (1.0 - contrast * 0.5 + contrast * fib) * mix(0.8 + 0.12 * h2, 1.03, sqrt(cyl)) * (1.0 + side * q.x * 2.0)
-             * mix(0.93, 1.04, smoothstep(-0.45, 0.45, q.y));
-    c = mix(c, t * 0.55, streak * (0.5 + 0.3 * h5) * lod2(aa));
-    c = mix(c, mix(t, vec3(1.0), 0.35), pale * 0.45 * lod2(aa));
-    vec2 kp = vec2(fract(h0 * 3.7) - 0.5, fract(h0 * 5.3) - 0.5) * 0.5;
-    float knot = exp(-dot((q - kp) / vec2(0.05, 0.09), (q - kp) / vec2(0.05, 0.09))) * step(0.68, fract(h0 * 9.1));
-    c = mix(c, t * 0.55, knot * 0.65);
-    // a node across (some blocks, along the grain's blocks only)
-    float nodeY = -0.25 + 0.5 * fract(h0 * 7.13);
-    c = mix(c, t * 0.72, (1.0 - smoothstep(0.012, 0.012 + aa * 1.5, abs(q.y - nodeY + 0.008 * sin(q.x * 9.0 + h0 * 5.0)))) * 0.55
-                             * step(0.45, h0) * step(h3, 0.78));
-    // its top face, seen a little from above: a soft pale band along the top (each block its own), a little shade
-    // along its bottom
-    float yt = 0.3 - 0.025 * sqrt(cyl);
-    float topF = smoothstep(yt - 0.05, yt + 0.12, q.y);
-    c = mix(c, mix(t, vec3(1.0), 0.2) * mix(0.96, 1.04, sqrt(cyl)), topF * (0.4 + 0.35 * h4));
-    c *= mix(0.82 + 0.08 * h2, 1.0, smoothstep(-0.45, -0.32, q.y));
+    float h1 = fract(h0 * 17.31), h2 = fract(h0 * 41.7), h3 = fract(h0 * 63.1), h4 = fract(h0 * 91.7), h5 = fract(h0 * 27.9);
+    // each block its own tone: lighter or darker, warmer or greyer
+    t *= (0.86 + 0.24 * h1);
+    t = mix(t, vec3(dot(t, vec3(0.3, 0.55, 0.15))), 0.25 * h2);
+    // the face: dense fine fibres running up it (bright and dark streaks of varying width, wandering a hair), now and
+    // then a long crack, a row of small pores across (a node) on some
+    float gx = q.x * (15.0 + 8.0 * h4) + 0.25 * n1(q.y * 2.0 + h0 * 9.0, h0);
+    float fine = 0.55 * n1(gx, h0) + 0.3 * n1(gx * 2.3 + 5.0, h0) + 0.15 * n1(gx * 5.1 + 2.0, h0);
+    float broad = n1(q.x * 6.0 + h0 * 13.0, h0 + 2.0);
+    float dark = smoothstep(0.62, 0.92, n1(gx * 0.9 + 11.0, h0)) * smoothstep(0.15, 0.4, n1(q.y * 2.5 + gx * 0.2, h0 + 7.0));
+    float bright = smoothstep(0.8, 0.97, n1(gx * 0.7 + 23.0, h0)) * smoothstep(0.1, 0.35, n1(q.y * 2.1 + gx * 0.3, h0 + 4.0));
+    vec3 c = t * (0.72 + 0.4 * fine) * (0.8 + 0.34 * broad);
+    c = mix(c, t * 0.5, dark * (0.6 + 0.3 * h5) * lod2(aa));
+    c = mix(c, mix(t, vec3(1.0), 0.4), bright * 0.65 * lod2(aa));
+    // a crack: a thin dark line up part of it, a little jagged
+    float cx = (h3 - 0.5) * 0.6 + 0.012 * (n1(q.y * 30.0, h0 + 5.0) - 0.5);
+    float cy0 = -0.4 + 0.5 * h4, cy1 = cy0 + 0.25 + 0.4 * h5;
+    float crack = (1.0 - smoothstep(0.004, 0.004 + aa * 1.2, abs(q.x - cx))) * step(cy0, q.y) * step(q.y, cy1) * step(0.55, h2);
+    c = mix(c, t * 0.35, crack * 0.6);
+    // the pores of a node: a row of small dark specks
+    float ny = -0.15 + 0.35 * fract(h0 * 7.13);
+    vec2 pg = vec2(q.x * 30.0, (q.y - ny) * 30.0);
+    float pore = (1.0 - smoothstep(0.1, 0.22, length(fract(pg) - 0.5))) * step(abs(q.y - ny), 0.025) * step(0.5, n1(pg.x * 0.37, h0 + 8.0)) * step(0.5, h1);
+    c = mix(c, t * 0.35, pore * 0.7 * lod2(aa));
+    // the shade cast by the block resting on it; a little shade along its bottom
+    c *= 1.0 - covered * 0.3 * smoothstep(0.2, 0.45, q.y);
+    c *= mix(0.9, 1.0, smoothstep(-0.47, -0.3, q.y));
+    // the chamfers: bands along its top and bottom (and narrower on its sides) cut across the fibres, the end grain
+    // showing: lighter, stippled; the top one catches the light
+    float bandW = 0.11;
+    float topB = smoothstep(HB - bandW - aa, HB - bandW + aa, q.y);
+    float botB = smoothstep(HB - bandW - aa, HB - bandW + aa, -q.y);
+    float sideB = smoothstep(HB - 0.045 - aa, HB - 0.045 + aa, abs(q.x));
+    float cornerB = smoothstep(-0.06 - aa, -0.06 + aa, d + 0.0) * 0.0;
+    vec2 eg = q * 70.0;
+    float stip = 0.7 + 0.3 * fract(sin(dot(floor(eg), vec2(12.9898, 78.233)) + h0) * 43758.5453);
+    vec3 endG = mix(t, vec3(1.0), 0.18) * stip;
+    c = mix(c, endG * 1.05, topB);
+    c = mix(c, endG * 0.78, botB);
+    c = mix(c, endG * 0.85, sideB * (1.0 - topB) * (1.0 - botB));
+    // the cut corners lighter along the top, darker below
+    float diag = smoothstep(0.0, 0.03, (abs(q.x) + abs(q.y)) - (2.0 * HB - CH - 0.07));
+    c = mix(c, endG * (q.y > 0.0 ? 1.0 : 0.75), diag * 0.8);
+    // a dark contour round it (the gap's shade), irregular in width
     float edge = -d;
-    // the shade cast on its top by the block resting on it
-    c *= 1.0 - covered * 0.32 * smoothstep(0.2, 0.5, q.y);
-    // a dark contour shadow round it, irregular: its width wandering along the edge (each block its own)
     float around = atan(q.y, q.x);
-    float rimW = 0.05 + 0.07 * n1(around * 2.5 + h0 * 11.0, h0 + 17.0) + 0.03 * n1(around * 7.0, h0 + 19.0);
-    c *= mix(0.42, 1.0, smoothstep(0.0, rimW, edge));
-    c = mix(c, t * 0.35, 1.0 - smoothstep(0.0, 0.01 + aa, edge));
+    float rimW = 0.03 + 0.04 * n1(around * 2.5 + h0 * 11.0, h0 + 17.0);
+    c *= mix(0.5, 1.0, smoothstep(0.0, rimW, edge));
+    c = mix(c, t * 0.25, 1.0 - smoothstep(0.0, 0.008 + aa, edge));
     c += t * vC.z * 0.6;
     c = mix(c, mix(t, vec3(1.0), 0.5), smoothstep(0.0, 0.6, erase) * 0.5);
     c = mix(c, uBridgeInk, uBridge);
