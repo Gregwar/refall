@@ -45,12 +45,12 @@ private:
     void tile(float x, float y, float hw, float hh, const vec3& c, float alpha, int kind, float e0 = 1.f, float e1 = 0.f,
               float e2 = 0.f, float e3 = 0.f, float angle = 0.f, float age = -1.f);
 
-    // ---- The block looks (REFALL_SMOKE_BLOCK=0..6; 6, the default, the glass cubes): 0 the satin blocks, 1 props lit by the
+    // ---- The block looks (REFALL_SMOKE_BLOCK=0..6; 2, the default, the acrylic): 0 the satin blocks, 1 props lit by the
     // spotlight, 2 acrylic, 3 neon tubes, 4 boxes of smoke, 5 stage lenses, 6 glass cubes holding smoke. Each cell
     // remembers its piece (its serial), its links to the cells of the same piece (L R U D UL UR DL DR, set when it
     // locks, cut by a clear), its place in the piece and the piece's seed: a block looks the same falling, locked and
     // after rows fall.
-    int blockStyle_ = 6;
+    int blockStyle_ = 2;
     int ids_[22][10] = {};
     unsigned char links_[22][10] = {}, rel_[22][10] = {};
     float pseed_[22][10] = {};
