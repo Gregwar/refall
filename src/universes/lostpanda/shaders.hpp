@@ -2833,9 +2833,9 @@ void main() {
         return;
     }
     if (mode == 1) {
-        // the ghost: the front's outline (an octagon of short cut corners), faint inside
+        // the ghost: the cube's outline seen straight on (a square, its corners rounded), faint inside
         float aa = max(length(fwidth(vLocal)) * 0.7071, 1e-4);
-        float d = max(sdBox(q, vec2(B - 0.03)) - 0.03, (abs(q.x) + abs(q.y) - (2.0 * B - CH)) * 0.7071);
+        float d = sdBox(q, vec2(B - 0.15)) - 0.15;
         float inside = 1.0 - smoothstep(-aa, aa, d);
         float ring = 1.0 - smoothstep(0.02, 0.02 + aa * 1.5, abs(d + 0.03));
         float a = (ring * 0.75 + inside * 0.06) * vB.a;
