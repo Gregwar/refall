@@ -205,18 +205,6 @@ vec4 trainInside(vec2 w, vec3 behind) {
             vec2 s0 = rot(-0.07 * sin(uTrainT * 0.9 + sid * 0.7) * uSway) * vec2(sx, l.y - 6.15);
             float strap = min(sdBox(s0 - vec2(0.0, -0.3), vec2(0.035, 0.3)), abs(length(s0 - vec2(0.0, -0.74)) - 0.13) - 0.035);
             wc = mix(wc, vec3(0.45, 0.43, 0.38), fillA(strap) * inRange);
-            // passengers: silhouettes on the benches or standing (none at the cub's door)
-            for (int k = 0; k < 4; k++) {
-                float fk = float(k);
-                float px = ci == 0 ? (k == 0 ? 5.4 : (k == 1 ? 7.4 : (k == 2 ? 9.6 : 14.6))) : (k == 0 ? 1.8 : (k == 1 ? 3.3 : (k == 2 ? 6.6 : 8.8)));
-                float hp = hash1(fk * 3.7 + float(ci) * 11.0);
-                if (hp > 0.75) continue;
-                vec2 mq = vec2(l.x - px, l.y - (hp < 0.4 ? 1.5 : 0.35));
-                float pd = hp < 0.4 ? min(sdBox(mq - vec2(0.0, 0.85), vec2(0.3, 0.6)) - 0.12, length(mq - vec2(0.0, 1.9)) - 0.3)
-                                    : min(min(sdBox(mq - vec2(0.0, 2.3), vec2(0.28, 0.8)) - 0.12, length(mq - vec2(0.0, 3.5)) - 0.3),
-                                          min(sdSeg(mq, vec2(-0.12, 1.5), vec2(-0.14, 0.0)), sdSeg(mq, vec2(0.12, 1.5), vec2(0.14, 0.0))) - 0.11);
-                wc = mix(wc, vec3(0.05, 0.04, 0.04), fillA(pd));
-            }
             wc *= uTrainLit;
             col = mix(col, wc, wallA);
             a = max(a, wallA);
@@ -1782,7 +1770,7 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
     }
     if (cv == 2) {
         // the hall: pale tiles (grimier low down), graffiti, a band of color, the station's name, posters, vending
-        // machines, benches, a ticket machine, commuters waiting, strip lights hanging from the ceiling, the track bed
+        // machines, benches, a ticket machine, strip lights hanging from the ceiling, the track bed
         float yy = w.y - PLAT_Y;
         vec3 c = tiles(w, vec3(0.3, 0.285, 0.24)) * (0.75 + 0.25 * smoothstep(0.8, 3.0, yy));
         c = mix(c, vec3(0.025, 0.07, 0.07), fillA(abs(yy - 3.9) - 0.4));
@@ -1847,20 +1835,6 @@ vec3 interior(int cv, vec2 w, float fl, float ce) {
         c = mix(c, lc * 1.8, tube);
         c += lc * exp(-sq(sdBox(vec2(lx, w.y - (ce - 0.45)), vec2(2.2, 0.0)) / 0.5)) * 0.12;
         c = mix(c, vec3(0.015, 0.016, 0.018), smoothstep(0.9, 0.7, yy));
-        // commuters waiting on the platform: silhouettes, swaying a little (none where the cub boards)
-        float cid = floor(w.x / 7.0);
-        if (hash1(cid + 61.0) < 0.5 && abs((cid + 0.5) * 7.0 - 128.0) > 8.0) {
-            float hc = hash1(cid + 62.0);
-            vec2 mq = vec2(w.x - (cid + 0.5) * 7.0 - (hc - 0.5) * 3.0, yy);
-            mq.x += 0.05 * sin(uTime * 0.7 + hc * 9.0) * mq.y;
-            float sz = 0.9 + 0.2 * hash1(cid + 63.0);
-            mq /= sz;
-            float body = sdBox(mq - vec2(0.0, 1.95), vec2(0.36 - (mq.y - 1.95) * 0.05, 0.75)) - 0.12;
-            body = min(body, length(mq - vec2(0.0, 3.15)) - 0.32);
-            body = min(body, min(sdSeg(mq, vec2(-0.14, 1.2), vec2(-0.16, 0.02)), sdSeg(mq, vec2(0.14, 1.2), vec2(0.17, 0.02))) - 0.12);
-            if (hc > 0.6) body = min(body, sdBox(mq - vec2(0.45, 1.5), vec2(0.18, 0.25)));       // a bag
-            c = mix(c, vec3(0.025, 0.022, 0.03), fillA(body * sz));
-        }
         return c * (0.3 + 0.7 * L);
     }
     if (cv == 5) {
