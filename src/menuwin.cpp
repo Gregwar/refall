@@ -379,7 +379,6 @@ void Worlds::wheel(float cx, float cy, float R, float rot, float alpha) {
     (void)rot;
     const float k = R / 300.f, A = alpha; // (drawn for petals reaching to 300)
     p.circle(cx, cy, 330 * k * u, hex(0x02040a, 0.32f * A), 110 * k * u);
-    p.ring(cx, cy, 318 * k * u, 1.f * u, hex(0xf0dcb0, 0.35f * A));
 }
 
 // A big polished dark disc (radius R) in a gold ring: a deep glass, a faint hue of `hue` in it, a curved gloss on its top
@@ -418,21 +417,10 @@ void Worlds::kalCampaign() {
     const float wk = 12.f / std::max(12, n);
     p.frostSource();
     wheel(cx, cy, 300, base);
-    // the order of the journey: an arc from petal to petal (1 -> 12), gold as far as the stages are open
+    // the stage to play next (its number glows)
     int nextStage = -1;
     for (int s = 0; s < n && nextStage < 0; s++)
         if (open(s) && !cleared(s)) nextStage = s;
-    {
-        const float r = 296 * u;
-        for (int s = 0; s + 1 < n; s++) {
-            const bool o = open(s + 1);
-            const float a0 = ang((float)s) + 0.06f * wk, a1 = ang((float)s + 1) - 0.06f * wk;
-            if (o) p.arc(cx, cy, r, a0, a1, 2.2f * u, hex(0xe8c06a, 0.7f));
-            else
-                for (int i = 0; i < 6; i += 2)
-                    p.arc(cx, cy, r, lerpf(a0, a1, i / 6.f), lerpf(a0, a1, (i + 1) / 6.f), 1.5f * u, hex(0xb0b0c0, 0.3f));
-        }
-    }
     // A stage just cleared (see Menu::celebrateClear) is drawn last, over a shade on everything else: it shakes,
     // faster and faster, then turns into its cleared look at once, a white copy of its contour spreading out as a wave.
     const int celS = m.celebrate_ >= 0 && m.celebrate_ < n && open(m.celebrate_) && cleared(m.celebrate_) ? m.celebrate_ : -1;
@@ -460,19 +448,20 @@ void Worlds::kalCampaign() {
         const float pulse = 0.75f + 0.25f * std::sin(t * 2.4f);
         if (f > 0.05f) {
             p.setAdditive(true);
-            p.glow(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, (110 + 60 * op) * u, withA(c, 0.25f * f));
+            p.glow(cx + std::cos(a) * 205 * u, cy + std::sin(a) * 205 * u, (130 + 60 * op) * u, withA(c, 0.5f * f));
             p.setAdditive(false);
         }
         // three clear states: locked (grey), open but not cleared (its hue dimmed, like unlit glass), cleared (its
         // full hue lit, a gold rim, a gold number disc)
         const Col pcOpen = mixc(c, hex(0x14141c), 0.5f), pcClear = mixc(c, hex(0xffffff), 0.12f * op);
-        const Col pc = !o ? c : mixc(pcOpen, pcClear, ck);
+        // (the focused one lit up, standing out of the wheel)
+        const Col pc = mixc(!o ? c : mixc(pcOpen, pcClear, ck), hex(0xffffff), 0.18f * f * (1.f - op));
         const Col edgeCl = mixc(hex(0x08080c, 0.9f), hex(0xe8c06a, 0.95f), ck);
-        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 22 * f + 26 * op) * u, (0.2f + 0.03f * f + 0.1f * op) * wk, pc,
+        kite(cx, cy, a, (135 + 10 * op) * u, (262 + 34 * f + 14 * op) * u, (0.2f + 0.05f * f + 0.08f * op) * wk, pc,
              !o ? 0.95f : lerpf(0.85f, 0.97f, ck), true,
              focusClosed && (!cel || cT > TURN + 1.f) ? hex(0xffffff, 0.95f * pulse) : o ? edgeCl : hex(0x8a90a0, 0.6f));
         if (focusClosed && f > 0.5f) { // the focused petal calls: arcs spreading from its tip
-            const float tip = (262 + 22 * f + 26 * op) * u;
+            const float tip = (262 + 34 * f + 14 * op) * u;
             for (int w = 0; w < 3; w++) {
                 const float k = std::fmod(t * 0.7f + w / 3.f, 1.f);
                 p.arc(cx, cy, tip + (8 + 26 * k) * u, a - 0.1f * wk, a + 0.1f * wk, 2 * u, withA(mixc(c, hex(0xffffff), 0.5f), 0.8f * std::sin(k * PI) * f));
@@ -488,7 +477,7 @@ void Worlds::kalCampaign() {
             p.setAdditive(true);
             const float sw = std::exp(-std::pow((cT - TURN - 0.1f) / 0.35f, 2.f));
             p.glow(cx + std::cos(a) * 215 * u, cy + std::sin(a) * 215 * u, (140 + 80 * sw) * u, withA(c, 0.6f * sw));
-            const float r0 = (135 + 10 * op) * u, r1 = (262 + 22 * f + 26 * op) * u, ha = (0.2f + 0.03f * f + 0.1f * op) * wk;
+            const float r0 = (135 + 10 * op) * u, r1 = (262 + 34 * f + 14 * op) * u, ha = (0.2f + 0.05f * f + 0.08f * op) * wk;
             const float rm = lerpf(r0, r1, 0.45f);
             float px[4] = {cx + std::cos(a) * r0, cx + std::cos(a - ha) * rm, cx + std::cos(a) * r1, cx + std::cos(a + ha) * rm};
             float py[4] = {cy + std::sin(a) * r0, cy + std::sin(a - ha) * rm, cy + std::sin(a) * r1, cy + std::sin(a + ha) * rm};
@@ -519,8 +508,8 @@ void Worlds::kalCampaign() {
             const bool b = o && beaten(s, k);
             const Col sc = o ? songCol(s, k) : hex(0x4a4c55);
             if (op < 0.98f) {
-                const float da = 0.042f * wk * (k - mid), r = 278 * u;
-                p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(b ? sc : mixc(sc, hex(0x101018), 0.5f), (1.f - op) * (o ? 1.f : 0.6f)));
+                const float da = 0.07f * wk * (k - mid), r = (284 + 22 * f) * u;
+                p.circle(cx + std::cos(a + da) * r, cy + std::sin(a + da) * r, 4.2f * u, withA(sc, (1.f - op) * (!o ? 0.4f : b ? 1.f : 0.3f)));
             }
             if (op > 0.02f) {
                 const float da = fanStep(ns) * (k - mid) * op;
