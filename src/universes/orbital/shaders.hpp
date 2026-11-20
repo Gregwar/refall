@@ -1333,14 +1333,14 @@ void main() {
     float sd = shapeSdf(p, mk, g);
     float inside = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, sd);
     float e = -sd;
-    // the palette: gunmetal, navy, cyan; the piece's color (normalized: the same strength for every hue) only as a
-    // touch in the circuit and a marker at its hub
+    // the palette: gunmetal and navy; the piece's own neon (its color normalized: the same strength for every hue)
+    // lights its circuit, its hub's marker and the frame's outer hairline
     vec3 tint = vB.rgb;
     vec3 tn = tint / max(max(tint.r, max(tint.g, tint.b)), 1e-3);
     const vec3 METAL = vec3(0.1, 0.118, 0.145), EDGE = vec3(0.19, 0.215, 0.255), NAVY = vec3(0.008, 0.013, 0.03);
     const vec3 SHADE = vec3(0.003, 0.005, 0.012);
-    vec3 inkC = mix(vec3(0.07, 0.5, 0.85), tn * 0.6, 0.15);
-    vec3 markC = mix(vec3(0.07, 0.5, 0.85), tn * 0.8, 0.4);
+    vec3 inkC = tn * 0.95;
+    vec3 markC = mix(tn, vec3(1.0), 0.35);
     const float FRAME = 0.15; // the frame's width (cell units); inside it the inset
     Circuit C = circuit(p, mk, type);
     float inset = smoothstep(FRAME - aa * 0.5, FRAME + aa * 0.5, e);
@@ -1360,7 +1360,7 @@ void main() {
         return;
     }
     // the frame: one flat gunmetal, a hairline lighter along its outer edge
-    vec3 col = mix(METAL, EDGE, 1.0 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, e));
+    vec3 col = mix(METAL, mix(EDGE, tn * 0.75, 0.7), 1.0 - smoothstep(0.022 - aa * 0.5, 0.022 + aa * 0.5, e));
     // the O's corners: small flat plates of the circuit's tone where the outline turns
     bool corner = (p.x < 0.0 ? !has(mk, 0) : !has(mk, 1)) && (p.y < 0.0 ? !has(mk, 2) : !has(mk, 3));
     if (type == 1 && corner) {
