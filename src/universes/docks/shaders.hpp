@@ -256,6 +256,14 @@ out vec4 frag;
 uniform float uClipY, uWaterY, uStackA, uDeckLights;
 uniform vec3 uWinCol, uQuayLine;
 uniform float uBay; // the well's footprint painted on the quay (0: the world alone, a break)
+uniform int uBlock;     // the well's containers' look (1..5, see mat 10)
+uniform float uCellGap; // the gap round a piece (cell units)
+uniform vec3 uSodium;   // the port's lamps' light, on the ribs (look 5)
+// A trapezoidal corrugation along x (period 1): x its height (0 inner .. 1 outer), y its slope (1 rising, -1 falling).
+vec2 corrug(float x) {
+    float f = fract(x);
+    return vec2(smoothstep(0.0, 0.2, f) - smoothstep(0.5, 0.7, f), f < 0.2 ? 1.0 : f < 0.5 ? 0.0 : f < 0.7 ? -1.0 : 0.0);
+}
 void main() {
     if (vP.y < uClipY) discard;
     int mat = int(vMat.x + 0.5);
@@ -271,6 +279,7 @@ void main() {
     float spec = 0.12, rough = 24.0;
     float seed = vCol.a;
     vec2 bend = vec2(0.0);
+    vec3 sheen = vec3(0.0); // light added after the stack's paint (look 5)
     float px = max(fwidth(q.x), fwidth(q.y));
     if (mat == 1) {
         // a shipping container: corner posts and rails, corrugated walls, the doors at its ends
@@ -324,6 +333,261 @@ void main() {
         if (face != 1) alb *= mix(mix(0.42, 0.62, stack), 1.0, smoothstep(-sz.y, -sz.y + 0.4, q.y));
         if (face == 0) alb *= 0.6;
         alb = saturateC(alb, mix(uSat, 1.0, stack));
+    } else if (mat == 10) {
+        // the well's containers in an alternative look (uBlock 1..5): vMat.y packs the cell's links to its piece (L R U
+        // D UL UR DL DR) and its place in its row of the piece, vMat.z the piece's seed, vMat.w the cell's size
+        int m = int(vMat.y + 0.5);
+        int mask = m & 255, runI = (m >> 8) & 3, runN = max((m >> 10) & 7, 1);
+        float S = max(vMat.w, 1e-3), ps = vMat.z;
+        float g = uCellGap;
+        bool jL = (mask & 1) != 0, jR = (mask & 2) != 0, jU = (mask & 4) != 0, jD = (mask & 8) != 0;
+        bool jUL = (mask & 16) != 0, jUR = (mask & 32) != 0, jDL = (mask & 64) != 0, jDR = (mask & 128) != 0;
+        vec2 gA = vec2(jL ? 0.0 : g, jD ? 0.0 : g), gB = vec2(jR ? 0.0 : g, jU ? 0.0 : g); // the gaps left/bottom, right/top
+        vec2 off = 0.5 * (gA - gB);
+        // c: the cell's own frame (cell units, -0.5 .. 0.5, y up); the sides and the roof read their edge's
+        vec2 c;
+        if (face == 2) c = off + q / S;
+        else if (face == 0) c = vec2(vLN.x > 0.0 ? 0.5 - gB.x : -0.5 + gA.x, off.y + q.y / S);
+        else c = vec2(off.x + q.x / S, vLN.y > 0.0 ? 0.5 - gB.y : -0.5 + gA.y);
+        float pw = px / S;
+        // the distance to the piece's outline (round its inner corners), to the cell's own edges
+        float od = min(min(jL ? 9.0 : c.x + 0.5 - g, jR ? 9.0 : 0.5 - g - c.x), min(jU ? 9.0 : 0.5 - g - c.y, jD ? 9.0 : c.y + 0.5 - g));
+        if (jL && jU && !jUL) od = min(od, length(max(vec2(c.x + 0.5 - g, 0.5 - g - c.y), 0.0)));
+        if (jR && jU && !jUR) od = min(od, length(max(vec2(0.5 - g - c.x, 0.5 - g - c.y), 0.0)));
+        if (jL && jD && !jDL) od = min(od, length(max(vec2(c.x + 0.5 - g, c.y + 0.5 - g), 0.0)));
+        if (jR && jD && !jDR) od = min(od, length(max(vec2(0.5 - g - c.x, c.y + 0.5 - g), 0.0)));
+        float cl = c.x + 0.5 - gA.x, cr = 0.5 - gB.x - c.x, cb = c.y + 0.5 - gA.y, ct = 0.5 - gB.y - c.y;
+        float ce = min(min(cl, cr), min(cb, ct));
+        float rib = 1.0 - smoothstep(0.04, 0.08, pw);    // the fine detail fades out when small (the previews)
+        vec3 base = alb;
+        float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
+        spec = 0.2;
+        rough = 30.0;
+        if (face == 2) {
+            if (uBlock == 1) {
+                // container ends: a frame of posts, header and sill; two corrugated door leaves, their locking bars,
+                // cam keepers and handles; corner castings; a faint stencilled number
+                vec2 cg = corrug(c.x / 0.105 + 0.3);
+                bend.x = 0.55 * cg.y * rib;
+                alb *= mix(1.0, 0.86 + 0.14 * cg.x, rib);
+                float frame = max(1.0 - smoothstep(0.07, 0.07 + pw, min(cl, cr)), max(1.0 - smoothstep(0.085, 0.085 + pw, ct),
+                                  1.0 - smoothstep(0.065, 0.065 + pw, cb)));
+                bend.x *= 1.0 - frame;
+                alb = mix(alb, base * 0.62, frame);
+                alb += base * 0.4 * (1.0 - smoothstep(0.0, 0.015 + pw, ct));      // the header's lit lip
+                // the leaves' seam
+                alb *= 1.0 - 0.55 * (1.0 - smoothstep(0.006, 0.006 + pw, abs(c.x))) * (1.0 - frame);
+                // the locking bars: two per leaf
+                float bx = min(abs(abs(c.x) - 0.115), abs(abs(c.x) - 0.3));
+                float inDoor = 1.0 - frame;
+                float bar = (1.0 - smoothstep(0.013, 0.013 + pw, bx)) * inDoor;
+                float barSh = (1.0 - smoothstep(0.0, 0.02 + pw, bx - 0.013)) * step(0.0, (abs(c.x) - 0.115) * sign(c.x)) * inDoor;
+                alb *= 1.0 - 0.3 * barSh * rib;
+                alb = mix(alb, vec3(0.42, 0.42, 0.4) * 0.5 + base * 0.35, bar * mix(0.5, 1.0, rib));
+                // the cam keepers (top and bottom of each bar) and the handles
+                float kx = bx, ky = abs(abs(c.y) - 0.34);
+                float keeper = (1.0 - smoothstep(0.03, 0.03 + pw, kx)) * (1.0 - smoothstep(0.022, 0.022 + pw, ky)) * inDoor;
+                float hy = abs(c.y + 0.06), hx = abs(abs(c.x) - 0.115 + 0.05) ;
+                float hx2 = abs(abs(c.x) - 0.3 + 0.05);
+                float handle = (1.0 - smoothstep(0.016, 0.016 + pw, hy)) * (1.0 - smoothstep(0.05, 0.05 + pw, min(hx, hx2))) * inDoor;
+                alb = mix(alb, vec3(0.05, 0.05, 0.055), keeper * rib);
+                alb = mix(alb, vec3(0.3, 0.3, 0.29) * 0.6, handle * rib);
+                // the stencil: two short rows of characters on the right leaf
+                vec2 sp = vec2((c.x - 0.04) / 0.032, (c.y - 0.2) / 0.05);
+                float row = floor(sp.y), col = floor(sp.x);
+                float glyph = step(0.0, sp.x) * step(col, row < 0.5 ? 6.0 : 3.0) * step(0.0, sp.y) * step(sp.y, 1.9)
+                    * step(0.3, hash12(vec2(col, row) + seed * 37.0)) * step(0.2, fract(sp.x)) * step(fract(sp.y), 0.62);
+                alb = mix(alb, vec3(0.85), glyph * 0.45 * rib);
+                // the corner castings: dark steel, an oval hole
+                vec2 cc = vec2(min(cl, cr), min(cb, ct));
+                float cast = (1.0 - smoothstep(0.11, 0.11 + pw, cc.x)) * (1.0 - smoothstep(0.095, 0.095 + pw, cc.y));
+                vec2 ho = (cc - vec2(0.055, 0.048)) / vec2(0.032, 0.02);
+                alb = mix(alb, vec3(0.07, 0.07, 0.075) + base * 0.08, cast);
+                alb *= 1.0 - 0.85 * cast * (1.0 - smoothstep(0.8, 1.0, length(ho))) * rib;
+                // grime: a little, low
+                alb *= 0.9 + 0.12 * fbm(c * 3.0 + seed * 11.0) ;
+                alb *= 0.82 + 0.18 * smoothstep(-0.5, 0.1, c.y);
+                // the piece: its outline in shadow, a hair of dark between its containers
+                alb *= mix(0.12, 1.0, smoothstep(0.0, 0.065, od));
+                alb *= 1.0 - 0.5 * (1.0 - smoothstep(0.0, 0.01 + pw, ce));
+                spec = 0.25;
+            } else if (uBlock == 2) {
+                // the long sides: a row of the piece one container (2 cells a 20 ft, 4 a 40 ft), its corrugation
+                // running on, posts and castings at its ends only; rails top and bottom
+                float rx = float(runI) + c.x + 0.5;                 // along the container, 0 .. runN
+                float rl = jL ? 9.0 : cl, rr = jR ? 9.0 : cr;
+                float endD = min(rl, rr);
+                vec2 cg = corrug(rx / 0.1);
+                float rails = max(1.0 - smoothstep(0.075, 0.075 + pw, ct), 1.0 - smoothstep(0.075, 0.075 + pw, cb));
+                float posts = 1.0 - smoothstep(0.06, 0.06 + pw, endD);
+                float frame = max(rails, posts);
+                bend.x = 0.7 * cg.y * rib * (1.0 - frame);
+                alb *= mix(1.0, 0.74 + 0.26 * cg.x, rib * (1.0 - frame));
+                alb = mix(alb, base * 0.6, frame);
+                alb += base * 0.45 * (1.0 - smoothstep(0.0, 0.016 + pw, ct));     // the top rail's lit lip
+                alb *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.03 + pw, cb - 0.075)) * (1.0 - frame); // under the bottom rail's lip
+                bend.y = 0.5 * (1.0 - smoothstep(0.0, 0.02, ct - 0.06)) * step(ct, 0.075);
+                // the corner castings, at the ends only
+                vec2 cc = vec2(endD, min(cb, ct));
+                float cast = (1.0 - smoothstep(0.1, 0.1 + pw, cc.x)) * (1.0 - smoothstep(0.095, 0.095 + pw, cc.y));
+                vec2 ho = (cc - vec2(0.05, 0.048)) / vec2(0.03, 0.02);
+                alb = mix(alb, vec3(0.07, 0.07, 0.075) + base * 0.08, cast);
+                alb *= 1.0 - 0.85 * cast * (1.0 - smoothstep(0.8, 1.0, length(ho))) * rib;
+                // the lettering: the owner's name along a long one, the number near its right end
+                float N = float(runN);
+                if (runN >= 2) {
+                    float lx = rx - N * 0.5;
+                    // block capitals: each a left stem and, by the piece's seed, a top, middle, bottom bar, a right stem
+                    float nl = runN >= 4 ? 6.0 : runN == 3 ? 5.0 : 4.0;
+                    float lw = 0.15, lh = 0.2;
+                    vec2 lp = vec2((lx + nl * lw * 0.5) / lw, (c.y + lh * 0.5) / lh);
+                    float li = floor(lp.x);
+                    vec2 lf = vec2(fract(lp.x) / 0.72, lp.y);
+                    float st = 0.2;
+                    float h0 = hash12(vec2(li, 1.7) + ps * 91.0), h1 = hash12(vec2(li, 4.3) + ps * 91.0);
+                    float stroke = step(lf.x, st);
+                    stroke = max(stroke, step(0.5, h0) * step(1.0 - st * 0.7, lf.y));
+                    stroke = max(stroke, step(0.3, h1) * step(abs(lf.y - 0.5), st * 0.4) * step(lf.x, 0.85));
+                    stroke = max(stroke, step(h0, 0.75) * step(lf.y, st * 0.7));
+                    stroke = max(stroke, step(0.6, h1) * step(1.0 - st, lf.x));
+                    float letter = step(0.0, lp.x) * step(li, nl - 1.0) * step(0.0, lf.y) * step(lf.y, 1.0) * step(lf.x, 1.0) * stroke;
+                    alb = mix(alb, vec3(0.86, 0.86, 0.84), letter * 0.55 * rib);
+                } else {
+                    // a short one: its doors' bars (it is seen end on)
+                    float bx = min(abs(abs(c.x) - 0.12), abs(abs(c.x) - 0.3));
+                    float bar = (1.0 - smoothstep(0.013, 0.013 + pw, bx)) * (1.0 - frame);
+                    alb = mix(alb, vec3(0.2) + base * 0.3, bar * rib);
+                    alb *= 1.0 - 0.55 * (1.0 - smoothstep(0.006, 0.006 + pw, abs(c.x))) * (1.0 - frame);
+                }
+                vec2 sp = vec2((rx - (N - 0.42)) / 0.03, (c.y - 0.22) / 0.05);
+                float glyph = step(0.0, sp.x) * step(sp.x, 9.0) * step(0.0, sp.y) * step(sp.y, 1.9)
+                    * step(0.3, hash12(floor(sp) + ps * 37.0)) * step(0.2, fract(sp.x)) * step(fract(sp.y), 0.62);
+                alb = mix(alb, vec3(0.85), glyph * 0.4 * rib);
+                alb *= 0.9 + 0.12 * fbm(vec2(rx, c.y) * 3.0 + ps * 11.0);
+                // the piece's outline in shadow; a dark seam between two containers stacked
+                alb *= mix(0.12, 1.0, smoothstep(0.0, 0.065, od));
+                alb *= 1.0 - 0.6 * (1.0 - smoothstep(0.0, 0.012 + pw, min(cb, ct)));
+                alb *= 1.0 - 0.6 * (1.0 - smoothstep(0.0, 0.012 + pw, endD));
+            } else if (uBlock == 3) {
+                // flat, bold: clean flat ribs, a few graphic details, a crisp ink outline round each piece
+                float pitch = 0.1;
+                float fr = fract(c.x / pitch + 0.25);
+                float band = smoothstep(0.5 - pw / pitch, 0.5 + pw / pitch, fr) - smoothstep(1.0 - pw / pitch, 1.0, fr);
+                alb *= 1.0 - 0.1 * band * rib;
+                float frame = max(1.0 - smoothstep(0.06, 0.06 + pw, min(cl, cr)), max(1.0 - smoothstep(0.07, 0.07 + pw, ct),
+                                  1.0 - smoothstep(0.06, 0.06 + pw, cb)));
+                alb = mix(alb, base * 0.72, frame);
+                // two door bars
+                float bar = (1.0 - smoothstep(0.02, 0.02 + pw, abs(abs(c.x) - 0.17))) * (1.0 - frame);
+                alb = mix(alb, base * 0.6, bar);
+                // the castings: small dark squares
+                vec2 cc = vec2(min(cl, cr), min(cb, ct));
+                float cast = (1.0 - smoothstep(0.085, 0.085 + pw, cc.x)) * (1.0 - smoothstep(0.08, 0.08 + pw, cc.y));
+                alb = mix(alb, vec3(0.04, 0.04, 0.05), cast * 0.9);
+                // between the containers of a piece a thin line, round the piece the ink
+                alb = mix(alb, base * 0.45, 1.0 - smoothstep(0.008, 0.008 + pw, ce));
+                alb = mix(alb, vec3(0.012, 0.012, 0.02), 1.0 - smoothstep(0.05, 0.05 + pw, od));
+                spec = 0.06;
+            } else if (uBlock == 4) {
+                // weathered: sun-faded paint, rust streaks running down from the rails and castings, rust patches,
+                // scratches, dents, a repainted patch; each container its own by its seed
+                vec2 cg = corrug(c.x / 0.11 + 0.3);
+                float frame = max(1.0 - smoothstep(0.07, 0.07 + pw, min(cl, cr)), max(1.0 - smoothstep(0.08, 0.08 + pw, ct),
+                                  1.0 - smoothstep(0.065, 0.065 + pw, cb)));
+                // faded toward the top, more on some
+                float fade = (0.15 + 0.35 * seed) * smoothstep(-0.6, 0.5, c.y);
+                alb = mix(alb, vec3(lum) * 1.1 + 0.035, fade);
+                // a repainted patch, a near shade
+                vec2 pc = vec2(hash12(vec2(seed, 3.1)), hash12(vec2(seed, 7.7))) * 0.5 - 0.25;
+                float patch = step(0.55, hash12(vec2(seed, 1.3))) * step(abs(c.x - pc.x), 0.14) * step(abs(c.y - pc.y), 0.1);
+                alb = mix(alb, base * vec3(1.05, 0.95, 0.9) * 0.86, patch);
+                // dents: a few, small
+                vec2 dp = c * 5.0 + seed * 17.0;
+                float d0 = vnoise(dp);
+                float dent = smoothstep(0.5, 0.8, vnoise(c * 2.5 + seed * 31.0));
+                bend += vec2(vnoise(dp + vec2(0.03, 0.0)) - d0, vnoise(dp + vec2(0.0, 0.03)) - d0) / 0.03 * 0.18 * dent * rib;
+                bend.x += 0.5 * cg.y * rib * (1.0 - frame);
+                alb *= mix(1.0, 0.85 + 0.15 * cg.x, rib * (1.0 - frame));
+                alb = mix(alb, alb * 0.66, frame);
+                // the doors' seam and bars
+                alb *= 1.0 - 0.5 * (1.0 - smoothstep(0.006, 0.006 + pw, abs(c.x))) * (1.0 - frame);
+                float bx = min(abs(abs(c.x) - 0.12), abs(abs(c.x) - 0.31));
+                float bar = (1.0 - smoothstep(0.013, 0.013 + pw, bx)) * (1.0 - frame);
+                alb = mix(alb, vec3(0.16, 0.08, 0.05), bar * rib);
+                // rust: streaks down from the header (and the bars' keepers), patches at the edges and the foot
+                const vec3 RUST = vec3(0.30, 0.085, 0.025), RUSTD = vec3(0.09, 0.03, 0.012);
+                float sx = vnoise(vec2(c.x * 34.0 + seed * 40.0, 0.5));
+                float run = smoothstep(0.5, 0.9, sx) * exp(-max(0.42 - c.y, 0.0) * mix(1.5, 5.0, vnoise(vec2(c.x * 9.0, seed * 5.0))));
+                run += (1.0 - smoothstep(0.0, 0.03, bx)) * smoothstep(0.1, 0.3, c.y) * 0.5;
+                float rustP = smoothstep(0.66, 0.8, fbm(c * 5.0 + seed * 23.0) + 0.22 * (1.0 - smoothstep(0.0, 0.12, ce))
+                                         + 0.2 * (1.0 - smoothstep(-0.5, -0.3, c.y)) - 0.12 * seed);
+                alb = mix(alb, mix(RUST, alb * 0.6, 0.2), clamp(run * 0.9, 0.0, 1.0) * rib);
+                alb = mix(alb, mix(RUST, RUSTD, smoothstep(0.7, 0.95, fbm(c * 9.0 + seed * 5.0))), rustP);
+                // scratches: bare steel
+                for (int i = 0; i < 3; i++) {
+                    vec2 a = vec2(hash12(vec2(seed * 13.0, float(i))), hash12(vec2(float(i), seed * 7.0))) - 0.5;
+                    float an = hash12(vec2(seed + float(i), 2.0)) * 3.14159;
+                    vec2 dir = vec2(cos(an), sin(an));
+                    vec2 r = c - a;
+                    float along = dot(r, dir), across = abs(dot(r, vec2(-dir.y, dir.x)));
+                    float sc = (1.0 - smoothstep(0.004, 0.004 + pw, across)) * step(abs(along), 0.12);
+                    alb = mix(alb, vec3(0.32, 0.3, 0.28), sc * 0.7 * rib);
+                }
+                // castings, rusted
+                vec2 cc = vec2(min(cl, cr), min(cb, ct));
+                float cast = (1.0 - smoothstep(0.11, 0.11 + pw, cc.x)) * (1.0 - smoothstep(0.095, 0.095 + pw, cc.y));
+                alb = mix(alb, mix(vec3(0.06), RUSTD, 0.6), cast);
+                alb *= 0.85 + 0.2 * fbm(c * 2.0 + seed * 3.0);
+                // the piece: a strong dark outline, its containers apart by a seam
+                alb *= mix(0.12, 1.0, smoothstep(0.01, 0.06, od));
+                alb *= 1.0 - 0.6 * (1.0 - smoothstep(0.0, 0.012 + pw, ce));
+                spec = 0.12;
+                rough = 14.0;
+            } else {
+                // under the port's lights: painted steel with a sheen; the ribs catch the sodium light, a highlight
+                // sweeps along the stack; the gaps between the pieces in deep shadow
+                vec2 cg = corrug(c.x / 0.125 + 0.3);
+                float frame = max(1.0 - smoothstep(0.06, 0.06 + pw, min(cl, cr)), max(1.0 - smoothstep(0.07, 0.07 + pw, ct),
+                                  1.0 - smoothstep(0.06, 0.06 + pw, cb)));
+                bend.x = 0.8 * cg.y * rib * (1.0 - frame);
+                alb *= 0.5 * mix(1.0, 0.6 + 0.4 * cg.x, rib * (1.0 - frame));
+                alb = mix(alb, base * 0.3, frame);
+                // ambient occlusion toward the piece's outline (deep gaps), a seam between its containers
+                float ao = mix(0.12, 1.0, smoothstep(0.0, 0.2, od));
+                alb *= ao;
+                alb *= 1.0 - 0.75 * (1.0 - smoothstep(0.0, 0.014 + pw, ce));
+                // the sodium light: on the flanks of the ribs facing it (brighter up the stack, toward the lamps), the
+                // header's lip, the posts' edges; and a highlight sweeping along the stack
+                vec3 W = vP;
+                float ph = fract((W.x * 0.7 + W.y * 0.35 - uTime * 2.2) / 18.0) - 0.5;
+                float sweep = exp(-ph * ph * 18.0 * 18.0 / 3.0);
+                float up = 0.55 + 0.45 * smoothstep(-9.0, 9.0, W.y);
+                float flank = max(cg.y, 0.0) * rib * (1.0 - frame);
+                float crest = (1.0 - abs(cg.y)) * cg.x * rib * (1.0 - frame);
+                float lip = (1.0 - smoothstep(0.0, 0.022 + pw, ct)) * smoothstep(0.06, 0.07 + pw, min(cl, cr));
+                vec3 tint = mix(base * 1.8, vec3(1.0), 0.5);
+                sheen = uSodium * tint * (flank * (0.4 * up + 2.4 * sweep) + crest * (0.05 + 0.8 * sweep) + lip * (0.6 + 1.5 * sweep)) * ao;
+                spec = 0.9;
+                rough = 70.0;
+            }
+        } else if (face == 0) {
+            // the long sides seen at the edges of the stack: corrugated, in the shade
+            if (uBlock == 3) alb = vec3(0.012, 0.012, 0.02);
+            else {
+                vec2 cg = corrug(q.x / S / 0.1);
+                bend.x = 0.0;
+                alb *= (0.86 + 0.14 * cg.x) * 0.5;
+                alb *= mix(0.4, 1.0, smoothstep(0.0, 0.06, min(cb, ct)));
+                if (uBlock == 4) alb = mix(alb, vec3(0.1, 0.03, 0.012), smoothstep(0.55, 0.7, fbm(vec2(q.x / S, c.y) * 5.0 + seed * 9.0)));
+            }
+        } else {
+            // the roof
+            if (uBlock == 3) alb = mix(base * 0.8, vec3(0.012, 0.012, 0.02), 1.0 - smoothstep(0.05, 0.05 + pw, min(cl, cr)));
+            else {
+                alb *= 0.8 + 0.08 * sin(c.x * 60.0 + seed * 7.0) * rib;
+                alb *= mix(0.4, 1.0, smoothstep(0.0, 0.06, min(cl, cr)));
+            }
+        }
     } else if (mat == 2) {
         // concrete: slabs, tyre marks, the painted lines
         vec2 g = vP.xz;
@@ -426,12 +690,12 @@ void main() {
     }
     vec3 Nb = normalize(N + T * bend.x + B * bend.y);
     vec3 c = shade(vP, Nb, alb, spec, rough) + emit;
-    if (mat == 1 && uStackA > 0.5) {
+    if ((mat == 1 || mat == 10) && uStackA > 0.5) {
         // the stack's containers in their own paint: the hour's light sets how bright they are, not their hue, and
         // they stand a little brighter than the port's
         const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
         float lit = dot(c, LUM) / max(dot(alb, LUM), 1e-4);
-        c = mix(c, alb * lit, 0.65) * 1.12;
+        c = mix(c, alb * lit, 0.65) * 1.12 + sheen;
     }
     c = applyFog(c, vP);
     frag = vec4(c, uStackA);
