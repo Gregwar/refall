@@ -19,8 +19,12 @@
 // back up into the sky.
 // Every cleared row releases a flock of seabirds beside the well (at dusk, it lights lanterns along the shore too).
 //
-// The pieces are polished sea glass: one tumbled tile per cell, one luminous color per piece type, frosted, the
-// light gathering inside, on the deep backing of the well.
+// The look is flattened low poly: the terrain a jittered grid of flat facets (one material and one flat color each),
+// faceted trees and rocks, the sea in flat bands of color by its depth (a foam line at the shore, the turquoise
+// shallows, a teal ledge, the deep blue) with a few white angular glints and crisp white wakes, a plain gradient
+// sky, faceted clouds.
+// The pieces are low poly cubes: one chamfered cube per cell in its piece's color, seen in perspective, flat shaded by
+// the scene's sun, its corners nudged by its seed, running on into the cells of the same piece (one block a piece).
 #include "universes/islands/islands.hpp"
 
 #include <algorithm>
@@ -114,23 +118,23 @@ struct VariantDef {
 };
 const VariantDef VARIANTS[] = {
     // white sand cays and villas over turquoise shallows, deep blue offshore
-    {"CARIBBEAN", 0xeadcbc, 0xc8b08a, 0x5a9a36, 0x2a6e2a, 0x746a5e, 0x5a5048, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa49a5a, 0.12f,
-     0x2cc8cc, 0x062a66, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
+    {"CARIBBEAN", 0xf2dfa8, 0xd8c08a, 0x6cc040, 0x3e9a34, 0x7a5e48, 0x5a4234, 0xe6dcc0, 0xc4806c, 0x6e9048, 0xa4a052, 0.12f,
+     0x3ccad2, 0x2366b6, {0.85f, 0.16f, 0.1f}, 9.f, 1.f,
      0x4f9a2e, 0xc2b848, 0x8c7658, 0x3e8c30, 0x2a6a28, 0.42f, 0,
      0x0a1e32, {0x22d0d6, 0xf7c332, 0xa760e8, 0x3fcf6e, 0xf0475e, 0x3466f0, 0xff8c2e}, 0xff7a5a},
     // jagged jungle peaks in emerald lagoons, overwater bungalows of thatch
-    {"POLYNESIA", 0xeadcbc, 0xc6ae88, 0x3e9430, 0x175822, 0x5a524a, 0x463e38, 0xe4dcc2, 0xcc8670, 0x80689c, 0x8a9a50, 0.05f,
-     0x22d4bc, 0x04245c, {0.8f, 0.13f, 0.09f}, 10.f, 1.1f,
+    {"POLYNESIA", 0xf0dca8, 0xd4bc88, 0x58b838, 0x2a8a30, 0x6a5444, 0x4e3a2e, 0xe4dcc2, 0xcc8670, 0x80689c, 0x8aa648, 0.05f,
+     0x36d2c2, 0x1d5cac, {0.8f, 0.13f, 0.09f}, 10.f, 1.1f,
      0x3e902a, 0xb4c040, 0x806c50, 0x2e8228, 0x1c5a22, 0.5f, 0,
      0x081e2a, {0x2ae6c4, 0xffd23c, 0xd25ad8, 0x6ad13c, 0xff5646, 0x2a58d8, 0xff9a36}, 0xff6a4a},
     // white villages, olive trees and cypresses on pale limestone, a deep blue sea
-    {"MEDITERRANEAN", 0xe2d4b2, 0xc0ac88, 0x7c7a3a, 0x3e5026, 0xc6ae8c, 0xa08466, 0xdcd6c4, 0x8c8c62, 0x5c7046, 0xb8945a, 0.7f,
-     0x24a8d4, 0x041c52, {0.75f, 0.12f, 0.075f}, 7.f, 0.9f,
+    {"MEDITERRANEAN", 0xecdcb0, 0xccb48a, 0x9aac46, 0x5a8034, 0xb8946c, 0x86624a, 0xdcd6c4, 0x8c8c62, 0x5c7046, 0xc8a456, 0.45f,
+     0x34b2da, 0x1c56ae, {0.75f, 0.12f, 0.075f}, 7.f, 0.9f,
      0x6a8a3a, 0xa8a050, 0x7a6450, 0x6a7a44, 0x3c4e2a, 0.3f, 0,
      0x0a1836, {0x2ec8ec, 0xf4cc46, 0x9070e4, 0x5cc04c, 0xec5044, 0x1e50dc, 0xf28c3a}, 0x2a5ae0},
     // the whole flight in the golden hour, into the sunset and the night, the lanterns lit along the shores
-    {"SUNSET", 0xead4b4, 0xc4a480, 0x5e9a36, 0x286428, 0x76665a, 0x5c4e46, 0xe6d8c0, 0xc47e6a, 0x6e844a, 0xa49a5a, 0.1f,
-     0x28bcc4, 0x082a68, {0.85f, 0.16f, 0.1f}, 9.f, 0.85f,
+    {"SUNSET", 0xf0d8a8, 0xd0b084, 0x66b23c, 0x348a30, 0x76604c, 0x58443a, 0xe6d8c0, 0xc47e6a, 0x6e844a, 0xa4a052, 0.1f,
+     0x34c0ca, 0x1f5eac, {0.85f, 0.16f, 0.1f}, 9.f, 0.85f,
      0x4c922e, 0xc8b048, 0x86704e, 0x3a8030, 0x26622a, 0.45f, 1,
      0x121432, {0x2cd8e2, 0xffd84a, 0xb86cf2, 0x48d87c, 0xff4f6e, 0x4a78ff, 0xff9a3c}, 0xffae4a},
 };
@@ -283,7 +287,7 @@ bool IslandsUniverse::init(int width, int height) {
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    // ---- sprites: glows, cloud puffs, glass tiles (one quad, instanced)
+    // ---- sprites: glows, cloud puffs (one quad, instanced)
     const float quadV[12] = {-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1};
     glGenBuffers(1, &quadVbo_);
     glBindBuffer(GL_ARRAY_BUFFER, quadVbo_);
@@ -304,7 +308,56 @@ bool IslandsUniverse::init(int width, int height) {
     };
     sprite(glowVao_, glowVbo_, 2);
     sprite(cloudVao_, cloudVbo_, 2);
-    sprite(glassVao_, glassVbo_, 3);
+    // ---- the pieces' cubes: one chamfered cube, instanced. Each vertex its corner's signs and the axes the chamfer
+    // pulls it in along: every corner of the box gives three (one on each face meeting there); the faces, the edges'
+    // chamfers and the corners' triangles join them.
+    {
+        std::vector<float> cv;
+        auto V = [&](int sx, int sy, int sz, int axis) {
+            const float v[6] = {(float)sx, (float)sy, (float)sz, axis == 0 ? 0.f : 1.f, axis == 1 ? 0.f : 1.f, axis == 2 ? 0.f : 1.f};
+            cv.insert(cv.end(), v, v + 6);
+        };
+        auto corner = [](int a, int sa, int b, int sb, int c, int sc, int* s) { s[a] = sa; s[b] = sb; s[c] = sc; };
+        int q[4][3];
+        for (int a = 0; a < 3; a++) {
+            const int b = (a + 1) % 3, c = (a + 2) % 3;
+            for (int sa = -1; sa <= 1; sa += 2) {
+                // the face
+                const int uv[4][2] = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+                for (int k = 0; k < 4; k++) corner(a, sa, b, uv[k][0], c, uv[k][1], q[k]);
+                for (int k : {0, 1, 2, 0, 2, 3}) V(q[k][0], q[k][1], q[k][2], a);
+                // the chamfer along the edge with the next axis' faces (along the third axis)
+                for (int sb = -1; sb <= 1; sb += 2) {
+                    int e0[3], e1[3];
+                    corner(a, sa, b, sb, c, -1, e0);
+                    corner(a, sa, b, sb, c, 1, e1);
+                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], a); V(e1[0], e1[1], e1[2], b);
+                    V(e0[0], e0[1], e0[2], a); V(e1[0], e1[1], e1[2], b); V(e0[0], e0[1], e0[2], b);
+                }
+            }
+        }
+        for (int sx = -1; sx <= 1; sx += 2)
+            for (int sy = -1; sy <= 1; sy += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                    for (int a = 0; a < 3; a++) V(sx, sy, sz, a);
+        cubeCount_ = (int)(cv.size() / 6);
+        glGenVertexArrays(1, &glassVao_);
+        glGenBuffers(1, &cubeVbo_);
+        glGenBuffers(1, &glassVbo_);
+        glBindVertexArray(glassVao_);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVbo_);
+        glBufferData(GL_ARRAY_BUFFER, cv.size() * sizeof(float), cv.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+        glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
+        for (int i = 0; i < 3; i++) {
+            glEnableVertexAttribArray(2 + i);
+            glVertexAttribPointer(2 + i, 4, GL_FLOAT, GL_FALSE, sizeof(float) * 12, (void*)(sizeof(float) * 4 * i));
+            glVertexAttribDivisor(2 + i, 1);
+        }
+    }
 
     glGenVertexArrays(1, &flatVao_);
     glGenBuffers(1, &flatVbo_);
@@ -362,20 +415,18 @@ void IslandsUniverse::resize(int width, int height) {
     height_ = std::max(1, height);
     const layout::Camera ref = layout::camera(width_, height_);
     bvp_ = ref.vp;
+    beye_ = ref.eye;
     sceneT_.create(width_, height_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
     halfW_ = std::max(1, width_ / 2);
     halfH_ = std::max(1, height_ / 2);
     seabedT_.create(halfW_, halfH_, GL_RGBA32F, GL_RGBA, GL_FLOAT, false);
-    reflT_.create(halfW_, halfH_, GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false);
-    // the half-resolution passes share one depth buffer
+    // the half-resolution pass's depth buffer
     if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
     glGenRenderbuffers(1, &halfDepth_);
     glBindRenderbuffer(GL_RENDERBUFFER, halfDepth_);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, halfW_, halfH_);
-    for (ugl::Target* t : {&seabedT_, &reflT_}) {
-        glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, halfDepth_);
-    }
+    glBindFramebuffer(GL_FRAMEBUFFER, seabedT_.fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, halfDepth_);
     if (msFbo_) {
         glDeleteFramebuffers(1, &msFbo_);
         glDeleteRenderbuffers(1, &msColor_);
@@ -402,7 +453,6 @@ IslandsUniverse::~IslandsUniverse() {
     for (unsigned b : vbos) glDeleteBuffers(1, &b);
     sceneT_.destroy();
     seabedT_.destroy();
-    reflT_.destroy();
     if (halfDepth_) glDeleteRenderbuffers(1, &halfDepth_);
     if (msFbo_) glDeleteFramebuffers(1, &msFbo_);
     if (msColor_) glDeleteRenderbuffers(1, &msColor_);
@@ -419,7 +469,7 @@ IslandsUniverse::~IslandsUniverse() {
     }
     for (int l = 0; l < isl::LOD_COUNT; l++) glDeleteBuffers(1, &idx_[l]);
     for (GLuint v : {glowVao_, cloudVao_, glassVao_, flatVao_, shapeVao_}) glDeleteVertexArrays(1, &v);
-    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
+    for (GLuint b : {quadVbo_, glowVbo_, cloudVbo_, glassVbo_, cubeVbo_, flatVbo_, shapeVbo_}) glDeleteBuffers(1, &b);
 }
 
 // =====================================================================================================
@@ -1374,8 +1424,9 @@ void IslandsUniverse::gatherIslands() {
         const float dc = std::sqrt(dx * dx + dz * dz + eye_.y * eye_.y);
         const float dmin = std::max(0.f, dc - I.ext * 1.2f);
         if (dmin > far_) continue;
-        // the level of detail: the vertex spacing grows with the distance
-        const float spacing = std::max(std::max(1.2f, I.ext / 190.f), dmin * 0.009f);
+        // the level of detail: the vertex spacing grows with the distance (coarse even near: the facets of the
+        // flat shading stay big, low poly)
+        const float spacing = std::max(std::max(3.f, I.ext / 44.f), dmin * 0.012f);
         const float need = 2.f * I.ext / spacing;
         int want = 0;
         while (want < isl::LOD_COUNT - 1 && (float)(isl::LOD_N[want] - 1) < need) want++;
@@ -1415,7 +1466,9 @@ void IslandsUniverse::syncCells(const Game& g) {
         for (int x = 0; x < Game::W; x++) {
             const bool full = g.cell(x, y).type >= 0;
             if (full && seeds_[y][x] == 0.f) seeds_[y][x] = 0.001f + isl::hashf((uint32_t)(x * 131 + y * 977 + (int)(time_ * 10.f)));
-            if (!full) seeds_[y][x] = 0.f;
+            // (a cell of no known piece, or not the one locked there (the board filled anew): alone)
+            if (full && (ids_[y][x] == 0 || (ids_[y][x] > 0 && ids_[y][x] % 8 != g.cell(x, y).type + 1))) ids_[y][x] = -1 - (y * Game::W + x);
+            if (!full) { seeds_[y][x] = 0.f; ids_[y][x] = 0; }
         }
 }
 
@@ -1431,11 +1484,15 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
         float x0 = 99.f, x1 = -99.f;
         for (auto& c : ev.cells)
             if (c.y == maxY) { x0 = std::min(x0, (float)c.x); x1 = std::max(x1, (float)c.x); }
-        // each cell keeps the glass it fell with (its own seed: a new one here changed its look as it settled)
+        // each cell keeps the tile it fell with (its own seed: a new one here changed its look as it settled), and
+        // its piece (its tile runs on into the piece's other cells; the cells of a bigger lock, a filled board,
+        // each alone)
+        lockCount_++;
         for (size_t i = 0; i < ev.cells.size(); i++) {
             const auto& c = ev.cells[i];
             if (c.y < 0 || c.y >= Game::H || c.x < 0 || c.x >= Game::W) continue;
             seeds_[c.y][c.x] = i < 4 ? pieceSeeds_[i] : 0.001f + isl::hashf((uint32_t)(c.x * 31 + c.y * 131 + (int)(time_ * 100.f)));
+            ids_[c.y][c.x] = ev.cells.size() <= 4 ? lockCount_ * 8 + std::clamp(c.type, 0, 6) + 1 : -1 - (c.y * Game::W + c.x);
         }
         if (maxY >= Game::HIDDEN && hardPending_) {
             // a puff of fine sand pushed out from under the piece
@@ -1464,18 +1521,21 @@ void IslandsUniverse::onEvent(const GameEvent& ev, const Game& game) {
             for (auto& c : ev.cells) {
                 if (c.y != y) continue;
                 clearing_.push_back({c.x, y, std::clamp(c.type, 0, 6), seeds_[y][c.x] > 0.f ? seeds_[y][c.x] : 0.5f, 0.f,
-                                     0.018f * std::fabs(c.x - 4.5f) + 0.025f * rowK});
+                                     0.018f * std::fabs(c.x - 4.5f) + 0.025f * rowK, gridMask(c.x, y)});
             }
             rowK++;
         }
         float ns[Game::H][Game::W] = {};
+        int ni[Game::H][Game::W] = {};
         int dst = Game::H - 1;
         for (int y = Game::H - 1; y >= 0; y--) {
             if (rows[y]) continue;
             std::memcpy(ns[dst], seeds_[y], sizeof(seeds_[y]));
+            std::memcpy(ni[dst], ids_[y], sizeof(ids_[y]));
             dst--;
         }
         std::memcpy(seeds_, ns, sizeof(seeds_));
+        std::memcpy(ids_, ni, sizeof(ids_));
         // the world: a flock of seabirds per clear (bigger with the rows), lanterns along the shore at dusk
         // a sailboat launched for each cleared row (its sails in the row's colors), a big catamaran for a quad
         if (ev.count >= 4) {
@@ -1519,6 +1579,21 @@ void IslandsUniverse::line(float x0, float y0, float x1, float y1, float z, floa
     }
 }
 
+// The neighbours of a cell of the same piece, as the tiles' mask (1 left, 2 right, 4 up, 8 down, 16 up left, 32 up
+// right, 64 down left, 128 down right; up on screen: the row above).
+template <class F> static float neighbourMask(int x, int y, F same) {
+    const int d[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
+    int m = 0;
+    for (int k = 0; k < 8; k++)
+        if (same(x + d[k][0], y + d[k][1])) m |= 1 << k;
+    return (float)m;
+}
+float IslandsUniverse::gridMask(int x, int y) const {
+    const int id = ids_[y][x];
+    if (id <= 0) return 0.f;
+    return neighbourMask(x, y, [&](int a, int b) { return a >= 0 && a < Game::W && b >= 0 && b < Game::H && ids_[b][a] == id; });
+}
+
 void IslandsUniverse::buildBoard(const Game& g) {
     glass_.clear();
     flat_.clear();
@@ -1540,7 +1615,7 @@ void IslandsUniverse::buildBoard(const Game& g) {
         if (overT_ < 0.f) return 0.f;
         return smoothstepf(0.f, 0.5f, overT_ - 0.05f * (float)(y - Game::HIDDEN));
     };
-    auto tile = [&](const vec3& c, float sc, int type, float seed, float dull, float glowK, float alpha, bool shadow) {
+    auto tile = [&](const vec3& c, float sc, int type, float seed, float dull, float glowK, float alpha, bool shadow, float mask) {
         const vec3 col = pieceCol(type);
         if (shadow) {
             // its contact shadow, toward the sun's side
@@ -1549,20 +1624,20 @@ void IslandsUniverse::buildBoard(const Game& g) {
         GlassInst gi;
         gi.a[0] = c.x; gi.a[1] = c.y; gi.a[2] = c.z; gi.a[3] = sc;
         gi.b[0] = col.x; gi.b[1] = col.y; gi.b[2] = col.z; gi.b[3] = seed;
-        gi.c[0] = dull; gi.c[1] = glowK; gi.c[2] = alpha; gi.c[3] = 0.f;
+        gi.c[0] = dull; gi.c[1] = glowK; gi.c[2] = alpha; gi.c[3] = mask;
         glass_.push_back(gi);
     };
     for (int y = Game::HIDDEN; y < Game::H; y++)
         for (int x = 0; x < Game::W; x++) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
-            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, seeds_[y][x] > 0.f ? seeds_[y][x] : 0.3f, dullAt(y), 0.f, 1.f, true);
+            tile(layout::cellPos((float)x, y - g.rowOffset(y)), 1.f, c.type, seeds_[y][x] > 0.f ? seeds_[y][x] : 0.3f, dullAt(y), 0.f, 1.f, true, gridMask(x, y));
         }
     // the cleared rows: the glass brightens and melts away, under half a second
     for (const ClearCell& cc : clearing_) {
         const float u = saturate((cc.t - cc.delay) / 0.32f);
         const float gk = smoothstepf(0.f, 0.3f, u) * (1.f - smoothstepf(0.5f, 1.f, u));
-        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, cc.seed, 0.f, gk * 0.7f, 1.f - smoothstepf(0.45f, 1.f, u), false);
+        tile(layout::cellPos((float)cc.x, (float)cc.y), 1.f - 0.35f * u * u, cc.type, cc.seed, 0.f, gk * 0.7f, 1.f - smoothstepf(0.45f, 1.f, u), false, cc.mask);
     }
     // the falling piece and its ghost
     if (g.hasPiece() && !g.over()) {
@@ -1570,10 +1645,15 @@ void IslandsUniverse::buildBoard(const Game& g) {
         int cells[4][2];
         g.pieceCells(pc, cells);
         const float dx = g.pieceVisualX() - pc.x, dy = g.pieceVisualY() - pc.y;
+        auto inPiece = [&](int x, int y) {
+            for (auto& c : cells)
+                if (c[0] == x && c[1] == y) return true;
+            return false;
+        };
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             if (c[1] < Game::HIDDEN - 1) continue;
-            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, pieceSeeds_[i], 0.f, 0.f, 1.f, true);
+            tile(layout::cellPos(c[0] + dx, c[1] + dy), 1.f, pc.type, pieceSeeds_[i], 0.f, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
         Piece gp = pc;
         gp.y = g.ghostY();
@@ -1633,10 +1713,15 @@ void IslandsUniverse::buildBoard(const Game& g) {
             minx = std::min(minx, (float)c[0]); maxx = std::max(maxx, (float)c[0]);
             miny = std::min(miny, (float)c[1]); maxy = std::max(maxy, (float)c[1]);
         }
+        auto inPiece = [&](int x, int y) {
+            for (auto& c : cells)
+                if (c[0] == x && c[1] == y) return true;
+            return false;
+        };
         for (int i = 0; i < 4; i++) {
             const auto& c = cells[i];
             const float px = center.x + (c[0] - (minx + maxx) * 0.5f) * sc, py = center.y - (c[1] - (miny + maxy) * 0.5f) * sc;
-            tile(vec3(px, py, 0.f), sc, type, 0.11f + 0.17f * i + 0.05f * type, dim, 0.f, 1.f, true);
+            tile(vec3(px, py, 0.f), sc, type, 0.11f + 0.17f * i + 0.05f * type, dim, 0.f, 1.f, true, neighbourMask(c[0], c[1], inPiece));
         }
     };
     preview(g.holdType(), vec2{layout::HOLD_CENTER.x, layout::HOLD_CENTER.y}, layout::previewScale(0), g.holdUsed() ? 0.55f : 0.f);
@@ -1978,13 +2063,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     proj_ = mat4::perspective(fov_ * PI / 180.f, (float)width_ / height_, near_, far_);
     vp_ = proj_ * view_;
     invVp_ = inverse(vp_);
-    {
-        // the mirror about the sea: y -> -y - 2 alt (relative to the eye)
-        mat4 M = mat4::identity();
-        M.at(1, 1) = -1.f;
-        M.at(1, 3) = -2.f * alt_;
-        mirVp_ = vp_ * M;
-    }
 
     // ---- The geometry of the frame: islands, boats, the seaplane, birds, clouds, glows.
     gatherIslands();
@@ -2179,7 +2257,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, shadowTex_);
         set1i(p, "uShadow", 1);
-        set1f(p, "uSoft", 2.2f / SHADOW_SIZE * std::clamp(400.f / shadowR, 0.4f, 2.5f));
+        set1f(p, "uSoft", 0.9f / SHADOW_SIZE * std::clamp(400.f / shadowR, 0.4f, 2.5f));
         set1f(p, "uShadowOn", shadowOn ? 1.f : 0.f);
         glActiveTexture(GL_TEXTURE0);
     };
@@ -2206,7 +2284,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         bindShadow(p);
     };
 
-    // ---- The seabed (half resolution): the terrain under the water, its color and distance.
+    // ---- The seabed (half resolution): the terrain under the water, its distance (the sea's bands by depth).
     seabedT_.bind();
     glClearColor(0.f, 0.f, 0.f, 0.f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -2215,21 +2293,6 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     bindShadow(progTerrain_);
     setMat(progTerrain_, "uVP", vp_);
     drawTerrain(progTerrain_, 1, false);
-    // ---- The reflection (half resolution): the islands above the water, mirrored.
-    const bool reflOn = alt_ < 900.f;
-    if (reflOn) {
-        reflT_.bind();
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glUseProgram(progTerrain_);
-        setMat(progTerrain_, "uVP", mirVp_);
-        drawTerrain(progTerrain_, 2, false);
-        glUseProgram(progObj_);
-        objUniforms(progObj_);
-        setMat(progObj_, "uVP", mirVp_);
-        set1i(progObj_, "uMode", 2);
-        drawObjects(progObj_);
-    }
-
     // ---- The main pass (multisampled): the sky, the islands, their content, the sea, the clouds, the glows.
     glBindFramebuffer(GL_FRAMEBUFFER, msFbo_);
     glViewport(0, 0, width_, height_);
@@ -2261,19 +2324,12 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, seabedT_.tex);
     set1i(progWater_, "uSeabed", 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, reflT_.tex);
-    set1i(progWater_, "uRefl", 2);
-    glActiveTexture(GL_TEXTURE0);
     ugl::set2f(progWater_, "uInvRes", 1.f / width_, 1.f / height_);
     set3f(progWater_, "uShallow", lin(V.shallow));
     set3f(progWater_, "uDeep", lin(V.deep));
-    set3f(progWater_, "uSigma", vec3(V.sigma[0], V.sigma[1], V.sigma[2]));
     set3f(progWater_, "uFoam", vec3(0.96f, 0.98f, 1.f));
-    set1f(progWater_, "uScatterK", V.scatterK);
     set1f(progWater_, "uWave", V.wave * (0.75f + 0.25f * lv_ + 0.2f * energy_));
     set1f(progWater_, "uSparkle", sparkle_);
-    set1f(progWater_, "uReflOn", reflOn ? 1.f : 0.f);
     set1f(progWater_, "uCalm", slow_);
     {
         // the nearest boats' wakes
@@ -2376,24 +2432,36 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
         glBufferData(GL_ARRAY_BUFFER, flat_.size() * sizeof(float), flat_.data(), GL_STREAM_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(flat_.size() / 11));
         if (!glass_.empty()) {
-            // the glass: its color blends over the backing, its alpha marks the pieces (kept out of the grade)
+            // the cubes (depth tested among themselves): their color blends over the backing, their alpha marks the
+            // pieces (kept out of the grade)
+            glEnable(GL_DEPTH_TEST);
+            glDepthMask(GL_TRUE);
             glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             glUseProgram(progGlass_);
             setMat(progGlass_, "uVP", bvp_);
-            set3f(progGlass_, "uKeyDir", normalize(vec3(-0.5f, 0.62f, 0.62f)));
-            // lit by the scene's sun (golden in the drop, warm at dusk), and by its sky; at night by warm lanterns
+            set3f(progGlass_, "uEyeB", beye_);
+            // lit by the scene's sun as the world's camera sees it (board x right, y up, z toward the eye), kept a
+            // little in front and above so the faces toward the eye and the tops never sink into the dark
+            const vec3 sd = sky_.sunDir;
+            vec3 l(dot(sd, right_), dot(sd, up_), -dot(sd, fwd_));
+            l.y = std::max(l.y, 0.3f);
+            l.z = std::max(l.z, 0.45f);
+            l = normalize(l);
+            set3f(progGlass_, "uKeyDir", l);
+            // the sun's color (golden in the drop, warm at dusk; at night warm lanterns), scaled so that the faces
+            // toward the eye show the piece's own color; the sky for the shade
             const vec3 sc = sky_.sunCol;
             const vec3 tint = sc / std::max(std::max(sc.x, sc.y), std::max(sc.z, 1e-3f));
             vec3 key = lerp(vec3(1.f), tint, 0.65f) * lerpf(0.82f, 1.f, saturate(sc.y / 1.5f));
             key = lerp(key, vec3(1.f, 0.78f, 0.55f) * 0.85f, night_ * 0.7f);
-            set3f(progGlass_, "uKeyCol", key);
+            set3f(progGlass_, "uKeyCol", key * (0.66f / std::max(l.z, 0.3f)));
             const vec3 st = sky_.top / std::max(std::max(sky_.top.x, sky_.top.y), std::max(sky_.top.z, 1e-3f));
-            set3f(progGlass_, "uAmbTop", lerp(vec3(0.38f, 0.4f, 0.44f), st * 0.42f, 0.5f));
-            set3f(progGlass_, "uAmbBot", vec3(0.2f, 0.2f, 0.22f));
+            set3f(progGlass_, "uAmb", lerp(vec3(0.34f, 0.35f, 0.38f), st * 0.38f, 0.5f));
             glBindVertexArray(glassVao_);
             glBindBuffer(GL_ARRAY_BUFFER, glassVbo_);
             glBufferData(GL_ARRAY_BUFFER, glass_.size() * sizeof(GlassInst), glass_.data(), GL_STREAM_DRAW);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, (GLsizei)glass_.size());
+            glDrawArraysInstanced(GL_TRIANGLES, 0, cubeCount_, (GLsizei)glass_.size());
+            glDisable(GL_DEPTH_TEST);
         }
         glDisable(GL_BLEND);
     }
@@ -2410,7 +2478,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
     glBindTexture(GL_TEXTURE_2D, sceneT_.tex);
     set1i(progFinal_, "uScene", 0);
     set1f(progFinal_, "uExposure", lerpf(0.95f, 1.5f, night_) * (1.f + 0.07f * swell_));
-    set1f(progFinal_, "uSat", 1.06f);
+    set1f(progFinal_, "uSat", 1.14f);
     set1f(progFinal_, "uSlow", slow_ * 0.45f);
     set3f(progFinal_, "uSlowTint", vec3(0.84f, 0.92f, 1.08f));
     set1f(progFinal_, "uDim", dimT_);
@@ -2448,7 +2516,7 @@ void IslandsUniverse::render(const Frame& f, GLuint fbo) {
 
 const UniverseEntry& universe_islands() {
     static const UniverseEntry e{
-        "ISLANDS", "a flight over an endless tropical archipelago, like drone footage; the pieces are polished sea glass",
+        "ISLANDS", "a flight over an endless tropical archipelago in flattened low poly, like drone footage; the pieces are low poly cubes",
         [] { return std::unique_ptr<Universe>(new IslandsUniverse()); },
         // bright, airy, flowing songs suit the flight best; it fits most songs
         [](const SongLook& l) { return 0.85f + 0.2f * l.brightness + 0.1f * l.airWeight; },

@@ -1,6 +1,6 @@
 #pragma once
-// ISLANDS: one continuous flight over an endless tropical archipelago, like drone footage, behind the well; the
-// pieces are polished sea glass (see islands.cpp).
+// ISLANDS: one continuous flight over an endless tropical archipelago, like drone footage, behind the well, in
+// flattened low poly; the pieces are low poly cubes (see islands.cpp).
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,8 +54,10 @@ private:
     void fly(float dt, float wdt, const std::string& section);
     float floorAhead(const vec3& from, float yaw, float v) const;
 
-    mat4 view_, proj_, vp_, invVp_, mirVp_, lightVp_;
+    mat4 view_, proj_, vp_, invVp_, lightVp_;
     mat4 bvp_;                             // the board's (the layout's)
+    vec3 beye_;                            // its eye (board space)
+    int cubeCount_ = 0;                    // the pieces' cube mesh (vertices)
 
     // ---- Life: boats, the seaplane, the birds, the clouds, the lanterns.
     struct Boat {
@@ -125,12 +127,16 @@ private:
 
     // ---- The well.
     float seeds_[22][10] = {};
-    float pieceSeeds_[4] = {0.17f, 0.3f, 0.43f, 0.56f}; // the falling piece's cells' glass, kept when it locks
+    float pieceSeeds_[4] = {0.17f, 0.3f, 0.43f, 0.56f}; // the falling piece's cells' tiles, kept when it locks
+    int ids_[22][10] = {};      // each cell's piece (its lock's number * 8 + its type + 1; 0 empty, < 0 alone): its tile
+                                // runs on into its piece's other cells
+    int lockCount_ = 0;
+    float gridMask(int x, int y) const;
     void syncCells(const Game& g);
     void buildBoard(const Game& g);
     struct GlassInst { float a[4], b[4], c[4]; };
     std::vector<GlassInst> glass_;
-    struct ClearCell { int x, y, type; float seed, t, delay; };
+    struct ClearCell { int x, y, type; float seed, t, delay, mask; };
     std::vector<ClearCell> clearing_;
     struct Grain { vec3 p, v; float t, life, size; };
     std::vector<Grain> grains_;
@@ -155,14 +161,14 @@ private:
     int meshCount_[isl::M_COUNT] = {};
     GLuint idx_[isl::LOD_COUNT] = {};
     int idxCount_[isl::LOD_COUNT] = {};
-    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, glassVao_ = 0, glassVbo_ = 0, flatVao_ = 0,
+    GLuint quadVbo_ = 0, glowVao_ = 0, glowVbo_ = 0, cloudVao_ = 0, cloudVbo_ = 0, glassVao_ = 0, glassVbo_ = 0, cubeVbo_ = 0, flatVao_ = 0,
            flatVbo_ = 0, shapeVao_ = 0, shapeVbo_ = 0;
     GLuint msFbo_ = 0, msColor_ = 0, msDepth_ = 0;
     GLuint shadowFbo_ = 0, shadowTex_ = 0;
     // a 1x1 shadow map for the shadow pass's own draws: their uShadow must name a shadow texture that isn't the one
     // being drawn (WebGL refuses a sampler left on another kind of texture, or on the target)
     GLuint shadowDummy_ = 0;
-    ugl::Target sceneT_, seabedT_, reflT_;
+    ugl::Target sceneT_, seabedT_;
     GLuint halfDepth_ = 0;
     int samples_ = 4, halfW_ = 1, halfH_ = 1;
     static constexpr int SHADOW_SIZE = 4096;
