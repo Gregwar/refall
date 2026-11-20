@@ -146,6 +146,28 @@ if (PHP_SAPI === 'cli-server') {
     const e = new Event("gamepadconnected"); // (the game listens once it runs)
     e.gamepad = vpad;
     dispatchEvent(e);
+    watchPads();
+  }
+  // a real gamepad in use (a button pressed, a stick pushed) hides the touch pad; touching the screen brings it back
+  function watchPads() {
+    const pad = document.getElementById("pad"), real = navigator.getGamepads ? () => Array.from(navigator.getGamepads()) : () => [];
+    const seen = new Map();
+    (function poll() {
+      for (const g of real()) {
+        if (!g || g === vpad) continue;
+        const busy = g.buttons.some((b) => b.pressed) || g.axes.some((a) => Math.abs(a) > 0.5);
+        if (busy && seen.get(g.index) !== g.timestamp && pad.classList.contains("on")) {
+          // (release any touch button still held, so nothing sticks while the pad is hidden)
+          for (let b = 0; b < vpad.buttons.length; b++) if (vpad.buttons[b].pressed) setButton(b, false);
+          for (const el of pad.querySelectorAll(".down")) el.classList.remove("down");
+          document.getElementById("dpad").dispatchEvent(new Event("pointercancel"));
+          pad.classList.remove("on");
+        }
+        seen.set(g.index, g.timestamp);
+      }
+      requestAnimationFrame(poll);
+    })();
+    addEventListener("touchstart", () => pad.classList.add("on"), { passive: true, capture: true });
   }
   cover.addEventListener("click", start);
   addEventListener("keydown", (e) => { if (!started) { e.preventDefault(); start(); } });
