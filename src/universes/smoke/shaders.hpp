@@ -576,7 +576,7 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int 
     float beam = max(spotC(vec3(wpos, 0.4), 0.3, uConeTrue * 1.15), board ? 0.0 : 0.6) * on;
     float lit = 0.25 + 0.75 * lightK;
     // the halo round the cube
-    vec3 halo = c * exp(-max(sdF, 0.0) / 0.03) * 0.15 * lit;
+    vec3 halo = c * exp(-max(sdF, 0.0) / 0.035) * 0.26 * lit;
     if (cov <= 0.0) return vec4(halo, 0.0);
     // where the point lies between the front face (f 0) and the far one (f 1): the inner wall it sees
     float fxp = (F - q.x) / max((F - B) - o.x, 1e-3), fxn = (q.x + F) / max((F - B) + o.x, 1e-3);
@@ -588,9 +588,9 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int 
     if (f < 1.0) {
         // an inner wall, lit by the lamp when it faces it (the walls face inward: -wn)
         float wl = max(dot(-wn, l3.xy), 0.0);
-        col = c * (0.15 + 0.12 * wl + 0.3 * wl * beam) + c * 0.04 * f;
+        col = c * (0.3 + 0.16 * wl + 0.3 * wl * beam) + c * 0.05 * f;
     } else {
-        col = c * 0.075;
+        col = c * 0.17;
     }
     // inside: a curl of smoke, two layers at two depths (a little parallax), the densest in the middle
     float t = uTime * 0.045;
@@ -607,7 +607,7 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int 
         dens += smoothstep(0.36, 0.62, n.r) * (0.15 + 1.3 * sheet * sheet) * (i == 0 ? 0.62 : 0.46);
     }
     dens *= smoothstep(0.56, 0.2, length(q - o * 0.5));
-    vec3 wisp = mix(c, vec3(1.0), 0.3) * (0.6 + 0.6 * beam);
+    vec3 wisp = mix(c, vec3(1.0), 0.38) * (1.0 + 0.5 * beam);
     col = mix(col, wisp, clamp(dens, 0.0, 1.0) * 0.85);
     // the edges: the front's bright rim (the side toward the lamp brighter), the far face's thinner one, the corner
     // edges joining them
@@ -627,8 +627,8 @@ vec4 blockLook(vec2 q, float s, float px, vec3 pc, vec2 wpos, float lightK, int 
     // glints at the front's upper corners
     float glint = exp(-dot(abs(q) - vec2(F - 0.035), abs(q) - vec2(F - 0.035)) / 0.0009) * step(0.0, q.y);
     vec3 edgeC = mix(c, vec3(1.0), 0.4);
-    col += edgeC * (rimF * rimL * (0.5 + 0.7 * beam) + (rimB * 0.25 + rimC * 0.3) * (0.4 + 0.5 * beam)) * lit;
-    col += vec3(1.0) * glint * (0.35 + 0.6 * beam) * lit;
+    col += edgeC * (rimF * rimL * (0.85 + 0.8 * beam) + (rimB * 0.4 + rimC * 0.45) * (0.6 + 0.5 * beam)) * lit;
+    col += vec3(1.0) * glint * (0.5 + 0.6 * beam) * lit;
     // the front glass: a faint sheen across it
     col += vec3(1.0) * 0.03 * smoothstep(0.2, 0.0, abs(q.x + q.y - 0.25)) * lit;
     col *= 0.3 + 0.7 * lit;
