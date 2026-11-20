@@ -53,7 +53,7 @@ private:
     // remembers its piece (its serial), its links to the cells of the same piece (L R U D UL UR DL DR, set when it
     // locks, cut by a clear) and its piece's seed: a container looks the same falling, locked and after rows fall.
     enum { M_CELL = 10 };
-    int blockStyle_ = 0;
+    int blockStyle_ = 5; // the containers' look: 5 the night sheen (the game's); REFALL_DOCKS_BLOCK=0..4 the others
     int ids_[22][10] = {};
     unsigned char links_[22][10] = {};
     float pseed_[22][10] = {};
