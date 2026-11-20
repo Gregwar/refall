@@ -80,7 +80,8 @@ private:
     uint32_t spawnN_ = 1;
     uint32_t cellSeed(int x, int y, int type);
     // a cell of the board: a bit of a packed shelf, two or three of the room's books standing on their spines (from its seed)
-    void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, uint32_t seed);
+    void pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade, uint32_t seed,
+                  bool covered = false);
 
     // ---- The collection: three big books for every cleared line, placed in the order they came along runs (a shelf,
     // or a row of piles on the floor), never moved again.

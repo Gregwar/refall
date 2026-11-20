@@ -362,6 +362,23 @@ void main() {
             alb *= 0.92;
             emit += alb * vMat.z * 0.6;
         }
+        if (uBoard > 0.5) {
+            // on the board, packed on a shelf (vE.w < -15: a cell above it): soft occlusion. Its top darker toward the
+            // back (under the cell above, deep in its shade); its spine darker at its foot and along its edges against
+            // its neighbours; its covers, down the narrow gaps, in shade, deeper toward the back
+            float covered = vE.w < -15.0 ? 1.0 : 0.0;
+            if (face == 1 && vLN.y > 0.0) {
+                float back = 0.5 - 0.5 * L.z;
+                alb *= mix(1.0, mix(0.86, 0.5, covered), smoothstep(0.1, 1.0, back));
+            } else if (face == 2 && vLN.z > 0.0) {
+                float foot = 1.0 - smoothstep(0.0, 0.12, (L.y + 1.0) * h.y);
+                float side = 1.0 - smoothstep(0.0, 0.045, (1.0 - abs(L.x)) * h.x);
+                float head = (1.0 - smoothstep(0.0, 0.1, (1.0 - L.y) * h.y)) * covered;
+                alb *= (1.0 - 0.25 * foot) * (1.0 - 0.16 * side) * (1.0 - 0.12 * head);
+            } else if (face == 0) {
+                alb *= 0.74 * mix(0.6, 1.0, 0.5 + 0.5 * L.z);
+            }
+        }
         if (uWorld > 0.5) {
             float up = dot(vAX, vec3(0, 1, 0)) * L.x + dot(vAY, vec3(0, 1, 0)) * L.y;
             emit += alb * uLed * uShelfLight * levelOn(vE.z) * (0.04 + 0.12 * step(0.2, up));

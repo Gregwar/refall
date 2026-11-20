@@ -118,7 +118,11 @@ const VariantDef VARIANTS[] = {
 };
 constexpr int VARIANT_COUNT = (int)(sizeof(VARIANTS) / sizeof(VARIANTS[0]));
 
-constexpr float BOARD_EYE_Y = 8.f;   // the board camera's height (seen a little from above: the books' tops show)
+// The board's camera: closer than the reference one (a real perspective: the books' tops show, more the lower they are;
+// the columns off the middle show their inner sides) and above the well's middle, its image shifted so the board plane
+// keeps the reference pixels exactly (the cells stay the game's cells).
+constexpr float BOARD_EYE_Y = 15.f;  // its height (above the top row: even the falling piece shows its books' tops)
+constexpr float BOARD_EYE_D = 22.f;  // its distance from the board plane (the reference's is some 35)
 constexpr float FX_T = 0.27f;        // a cleared row dissolves in this long (the stack above waits 0.3 s)
 
 // Test hooks: REFALL_LIBRARY_LINES=N adds N lines (their books already in place: for screenshots),
@@ -347,8 +351,9 @@ bool LibraryUniverse::init(int width, int height) {
     return glGetError() == GL_NO_ERROR;
 }
 
-// The board: the reference camera raised to BOARD_EYE_Y and looking straight ahead, its image shifted back down so
-// the board plane keeps the reference pixels.
+// The board: a camera at BOARD_EYE_D from the board plane (its field widened so that plane keeps the reference's
+// scale), raised to BOARD_EYE_Y and looking straight ahead, its image shifted back down so the board plane keeps the
+// reference pixels.
 void LibraryUniverse::resize(int width, int height) {
     width_ = std::max(1, width);
     height_ = std::max(1, height);
@@ -356,11 +361,13 @@ void LibraryUniverse::resize(int width, int height) {
     const layout::Camera ref = layout::camera(width_, height_);
     const float half = ref.fovDeg * 0.5f * PI / 180.f;
     const float focal = 1.f / std::tan(half);
-    eyeB_ = vec3(ref.target.x, BOARD_EYE_Y, ref.target.z + ref.dist);
+    const float eyeD = std::min(BOARD_EYE_D, ref.dist);
+    eyeB_ = vec3(ref.target.x, BOARD_EYE_Y, ref.target.z + eyeD);
     const mat4 view = mat4::lookAt(eyeB_, eyeB_ + vec3(0.f, 0.f, -1.f), UP);
     mat4 shift = mat4::identity();
     shift.at(1, 3) = focal * (BOARD_EYE_Y - ref.target.y) / ref.dist;
-    vpB_ = shift * mat4::perspective(2.f * half, aspect_, 0.5f, 400.f) * view;
+    const float halfB = std::atan(std::tan(half) * ref.dist / eyeD);
+    vpB_ = shift * mat4::perspective(2.f * halfB, aspect_, 0.5f, 400.f) * view;
     const float hh = ref.dist * std::tan(half);
     viewH_ = vec2{hh * aspect_, hh};
     viewC_ = vec2{ref.target.x, ref.target.y};
@@ -505,13 +512,13 @@ TransitionHints LibraryUniverse::hints() const {
 // designs, the boards round a cream page block that shows on their tops, seen a little from above), in their piece's
 // full color and a little stockier, closer to a cube, so they fill the cell. All from the cell's seed: a cell keeps its
 // books through falls and clears. along / up / out: its frame (a toppling cell turns it), k its size, fade its
-// dissolve into light (0 none .. 1 gone).
+// dissolve into light (0 none .. 1 gone), covered: a cell above it (its books' tops in its shade, toward the back).
 void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, const vec3& along, const vec3& up, float k, float fade,
-                               uint32_t seed) {
+                               uint32_t seed, bool covered) {
     const float sw = k * (1.f + 0.05f * fade);
     const vec3 outD = cross(along, up);
     const float H = 0.468f * sw;          // the cell's half side
-    const float D = 0.5f * sw;            // the deepest book (the shelf back just behind it)
+    const float D = 0.62f * sw;           // the deepest book (the shelf back just behind it)
     const vec3 col = pieceColor(type);
     auto put = [&](const vec3& cc, const vec3& X, const vec3& Y, const vec3& Z, const vec3& cl, int mat, float p0, float sd) {
         Inst in;
@@ -520,7 +527,7 @@ void LibraryUniverse::pushCell(std::vector<Inst>& out, int type, const vec3& c, 
         in.y[0] = Y.x; in.y[1] = Y.y; in.y[2] = Y.z; in.y[3] = 0.f;
         in.z[0] = Z.x; in.z[1] = Z.y; in.z[2] = Z.z; in.z[3] = fade;
         in.col[0] = cl.x; in.col[1] = cl.y; in.col[2] = cl.z; in.col[3] = sd;
-        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = -10.f;
+        in.e[0] = -100.f; in.e[1] = -1.f; in.e[2] = -1.f; in.e[3] = covered ? -20.f : -10.f;
         out.push_back(in);
     };
     // the books, left to right: two (more often) or three, of uneven widths; a little short of the cell's height (seen
@@ -780,16 +787,21 @@ void LibraryUniverse::buildBoard(const Game& g) {
             const Cell& c = g.cell(x, y);
             if (c.type < 0) continue;
             const vec3 p = layout::cellPos((float)x, y - g.rowOffset(y));
-            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, cellSeed(x, y, c.type));
+            pushCell(cells_, c.type, p, X, UP, 1.f, 0.f, cellSeed(x, y, c.type), y > 0 && g.cell(x, y - 1).type >= 0);
         }
     if (g.hasPiece() && !g.over()) {
         const Piece& p = g.piece();
         int cells[4][2];
         g.pieceCells(p, cells);
         const float dx = g.pieceVisualX() - p.x, dy = g.pieceVisualY() - p.y;
+        auto inPiece = [&](int x, int y) {
+            for (auto& c : cells)
+                if (c[0] == x && c[1] == y) return true;
+            return false;
+        };
         for (int i = 0; i < 4; i++)
             pushCell(cells_, p.type, layout::cellPos(cells[i][0] + dx, cells[i][1] + dy), X, UP, 1.f, 0.f,
-                     hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i));
+                     hash32(((uint64_t)spawnN_ << 3) + (uint64_t)i), inPiece(cells[i][0], cells[i][1] - 1));
         // the ghost: a fine outline where it lands
         Piece gp = p;
         gp.y = g.ghostY();
